@@ -1,50 +1,123 @@
 # ElitLig Mobil
 
-Türkiye'nin profesyonel halı saha ligi ElitLig'in mobil uygulaması.
-Expo + React Native + TypeScript + Expo Router + TanStack Query.
+ElitLig'in mobil uygulaması — Expo + React Native + TypeScript + Expo Router +
+TanStack Query. Veriyi `elitlig-server` API'sinden alır; web sitesiyle (`elitlig-client`)
+aynı uçları ve aynı kapsam mantığını kullanır.
 
 ## Kurulum
 
 ```bash
-npm install
+npm install --legacy-peer-deps
 npx expo start
 ```
 
-Telefonuna **Expo Go** uygulamasını indir, terminaldeki QR kodu okut — uygulama anında telefonda açılır.
+Telefona **Expo Go** kurup terminaldeki QR kodu okutmanız yeterli.
 
-## Yapı
+> `--legacy-peer-deps`: Expo 54'ün web bağımlılıklarından gelen `react-dom`
+> sürüm çakışması yüzünden gerekli. Mobil çalışma zamanını etkilemez.
+
+## Mimari
+
+Uygulamanın omurgası web sitesindekiyle aynı: **şehir → lig → sezon** kapsamı.
+Fikstür, puan durumu, oyuncu sıralaması ve haberler hep seçili kapsamı gösterir.
+Seçim cihazda saklanır, kullanıcı uygulamayı kendi ligiyle açar.
 
 ```
-app/                Ekranlar (Expo Router — dosya = rota)
-  _layout.tsx       Kök layout (React Query provider, dark tema)
+app/                       Ekranlar (Expo Router — dosya = rota)
+  _layout.tsx              Sağlayıcılar: React Query, Auth, Scope
   (tabs)/
-    index.tsx       Maçlar (fikstür + canlı skor)  ← ilk ekran
-    standings.tsx   Puan durumu (sıradaki adım)
-    teams.tsx       Takımlar
-    profile.tsx     Profil
-components/         Yeniden kullanılabilir parçalar (MatchCard)
+    index.tsx              Maçlar — canlı / fikstür / sonuçlar
+    standings.tsx          Puan durumu
+    players.tsx            Oyuncu sıralamaları
+    news.tsx               Haber akışı
+    profile.tsx            Profil / oturum
+  mac/[id].tsx             Maç detayı — skor, akış, kadrolar (canlı)
+  takim/[id].tsx           Takım profili
+  oyuncu/[id].tsx          Oyuncu profili
+  haber/[id].tsx           Haber detayı
+  giris.tsx                Giriş (modal)
+
+components/                MatchCard, ScopeBar, TeamCrest, States, ScreenHeader
+providers/
+  ScopeProvider.tsx        Şehir/lig/sezon seçimi + kalıcılık
+  AuthProvider.tsx         Oturum, jeton, 401 davranışı
+hooks/
+  useLiveMatch.ts          Socket.io + anlık görüntü + canlı sayaç
+  useTeamLogos.ts          Maç kaydındaki takım adını logoya/id'ye çözer
 lib/
-  api.ts            API katmanı — backend adresi ve mock veri burada
-  types.ts          Ortak veri tipleri (webprojesiyle paylaşılabilir)
-constants/theme.ts  Renk / tipografi / boşluk token'ları
+  config.ts                app.json → expo.extra'dan yapılandırma
+  http.ts                  Tek HTTP katmanı (timeout, retry, dedupe, auth)
+  types.ts                 Sunucunun gerçek yanıt şekilleri
+  match.ts                 mac_durumu ve olay_kodu yorumlama
+  format.ts                Tarih, skor, para, görsel adresi
+  api/                     Uç bazlı modüller (meta, matches, standings, ...)
+constants/theme.ts         Renk / tipografi / boşluk token'ları
 ```
 
-## Backend'e bağlama
+## Kullanılan sunucu uçları
 
-`lib/api.ts` içinde:
+| Ekran | Uç |
+| --- | --- |
+| Kapsam seçici | `GET /api/meta/cities`, `/leagues`, `/seasons`, `/default-scope` |
+| Maçlar | `GET /maclar?league_id&season_id` |
+| Maç detayı | `GET /maclar/:id?include=timeline`, `GET /maclar/:id/kadro` |
+| Canlı maç | `GET /api/live-matches/:id/snapshot` + Socket.io |
+| Puan durumu | `GET /api/standings?cityId&leagueId&seasonId` |
+| Oyuncu sıralaması | `GET /api/oyuncu-listesi?cityId&leagueId&seasonId&sort` |
+| Oyuncu profili | `GET /api/players/:id` |
+| Takım profili | `GET /takimlar/:id`, `GET /maclar?team_id=` |
+| Haberler | `GET /api/news/feed`, `GET /api/news/:publicId` |
+| Oturum | `POST /api/users/login`, `GET /api/users/verify`, `POST /api/users/logout` |
 
-1. `API_URL`'i Node.js backend adresinize çevirin
-2. `USE_MOCK = false` yapın
+Uçlara dair iki not:
 
-Backend'in `GET /matches` endpoint'i `lib/types.ts` içindeki `Match[]` şeklinde
-JSON döndürmelidir. Geliştirmede telefondan localhost'a erişmek için
-bilgisayarın yerel IP'sini kullanın (ör. `http://192.168.1.20:3000`).
+- **Puan durumu**: hangi puanın gösterileceğine sunucu karar verir
+  (`display_points`), sezon standart ya da güç dengesi olabilir. İstemci
+  sıralamayı yeniden hesaplamaz.
+- **Oyuncu sıralaması**: bu uç ham SQL kullandığı için alan adları Players
+  modelinden farklıdır (`name`, `image`, `teamId`, `teamName`) ve toplamlar
+  **dize** olarak döner.
+
+## Canlı maç
+
+Sözleşme "olay geldi → anlık görüntüyü tazele" biçimindedir; doğruluk kaynağı
+her zaman snapshot ucudur, soket yalnızca haber verir (web istemcisiyle aynı
+model). Soket kurulamazsa 25 saniyede bir yoklamaya düşülür. Uygulama arka
+plana alındığında hem soket hem yoklama durur.
+
+Süre sunucudan "temel süre + temelin alındığı an" olarak gelir, dakika
+istemcide ilerletilir; cihaz saati sapmışsa fark yanıttaki `serverNow` ile
+düzeltilir.
+
+## Yapılandırma
+
+Adresler `app.json` → `expo.extra` altında:
+
+```json
+"extra": {
+  "apiBaseUrl": "https://...",
+  "socketUrl": "https://...",
+  "liveSocketEnabled": true,
+  "liveFallbackPollMs": 25000,
+  "defaultCityId": 1
+}
+```
+
+Geliştirmede telefondan bilgisayara erişmek için `apiBaseUrl`'i yerel IP yapın
+(`http://192.168.1.20:3000`) — telefon `localhost`u kendi cihazı sanar.
+
+## Oturum
+
+Sunucu tarayıcı için httpOnly çerez kullanır; mobilde çerez taşınmadığından
+login yanıtındaki jeton `expo-secure-store` ile cihazın güvenli deposuna yazılır
+ve her isteğe `Authorization: Bearer` olarak eklenir. 401 gelirse oturum sessizce
+kapatılır, uygulama misafir moduna düşer — maçlar ve puan durumu girişsiz de
+görünür.
 
 ## Yol haritası
 
-- [ ] Puan durumu ekranı (`GET /standings`)
-- [ ] Maç detay sayfası (kadro, istatistik, dakika dakika)
-- [ ] Canlı skor için WebSocket (Socket.io) — şimdilik 30 sn'de bir yenileme var
+- [ ] Maç istatistikleri sekmesi (`?include=stats`)
+- [ ] Takım kadrosu ve sezonluk oyuncu istatistikleri
+- [ ] Push bildirimleri (maç başladı / gol) — sunucuda `routes/pushRoutes.js` var
+- [ ] Favori takım ve maç hatırlatıcısı
 - [ ] Spikerli canlı yayın oynatıcı (expo-video, HLS)
-- [ ] Push bildirimleri (maç başladı / gol)
-- [ ] Giriş & takım kaydı
