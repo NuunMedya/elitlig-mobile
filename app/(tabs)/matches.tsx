@@ -17,6 +17,7 @@ import { ScreenHeader } from "@/components/ScreenHeader";
 import { EmptyState, ErrorState, Loading } from "@/components/States";
 import { TeamCrest } from "@/components/TeamCrest";
 import { colors, radius, spacing, type } from "@/constants/theme";
+import { YoutubeBanner } from "@/components/YoutubeBanner";
 import { useTeamLogos } from "@/hooks/useTeamLogos";
 import { getMatches } from "@/lib/api/matches";
 import { formatDayHeading, formatTime } from "@/lib/format";
@@ -131,6 +132,12 @@ export default function MatchesScreen() {
           </Pressable>
         )}
       </View>
+
+      {tab === "live" && (
+        <View style={{ paddingHorizontal: spacing.md }}>
+          <YoutubeBanner cityLabel={scope.cityLabel} live={buckets.live.length > 0} />
+        </View>
+      )}
 
       {scope.loading || (query.isLoading && scope.ready) ? (
         <Loading />

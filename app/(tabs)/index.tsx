@@ -17,6 +17,7 @@ import { ScreenHeader } from "@/components/ScreenHeader";
 import { EmptyState, Loading } from "@/components/States";
 import { TeamCrest } from "@/components/TeamCrest";
 import { colors, radius, spacing, type } from "@/constants/theme";
+import { YoutubeBanner } from "@/components/YoutubeBanner";
 import { useTeamLogos } from "@/hooks/useTeamLogos";
 import { getMatches } from "@/lib/api/matches";
 import { getNewsFeed } from "@/lib/api/news";
@@ -115,6 +116,7 @@ export default function OverviewScreen() {
         >
           {live.length > 0 && (
             <Section title="Canlı" href="/matches" accent>
+              <YoutubeBanner cityLabel={scope.cityLabel} live />
               {live.map((match) => (
                 <MatchCard
                   key={match.id}

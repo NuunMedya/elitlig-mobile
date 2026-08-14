@@ -1,10 +1,13 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Link } from "expo-router";
-import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { openLink } from "@/lib/links";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { colors, radius, spacing, type } from "@/constants/theme";
 import { useAuth } from "@/providers/AuthProvider";
+import { useScope } from "@/providers/ScopeProvider";
+import { youtubeChannelUrl } from "@/lib/youtube";
 
 /**
  * Menü — sekme çubuğuna sığmayan her şeyin evi.
@@ -15,6 +18,8 @@ import { useAuth } from "@/providers/AuthProvider";
  */
 export default function MenuScreen() {
   const auth = useAuth();
+  const scope = useScope();
+  const channelUrl = youtubeChannelUrl(scope.cityLabel);
   const user = auth?.user ?? null;
 
   return (
@@ -46,10 +51,17 @@ export default function MenuScreen() {
         <View style={styles.group}>
           <MenuItem href="/sehir" icon="map-outline" label="Şehir değiştir" />
           <MenuItem href="/news" icon="newspaper-outline" label="Haberler" />
+          {channelUrl ? (
+            <MenuItem
+              icon="logo-youtube"
+              label="YouTube Kanalı"
+              onPress={() => openLink(channelUrl)}
+            />
+          ) : null}
           <MenuItem
             icon="globe-outline"
             label="elitlig.com"
-            onPress={() => Linking.openURL("https://elitlig.com")}
+            onPress={() => openLink("https://elitlig.com")}
             last
           />
         </View>
