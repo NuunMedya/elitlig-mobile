@@ -2,6 +2,17 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { Tabs } from "expo-router";
 import { colors, type } from "@/constants/theme";
 
+/**
+ * Alt menü. Pasif sekmede çizgili (outline), aktif sekmede dolu ikon —
+ * kullanıcı hangi sekmede olduğunu ikondan da anlar.
+ */
+function tabIcon(name: keyof typeof Ionicons.glyphMap) {
+  const outline = `${name}-outline` as keyof typeof Ionicons.glyphMap;
+  return ({ color, size, focused }: { color: string; size: number; focused: boolean }) => (
+    <Ionicons name={focused ? name : outline} size={size} color={color} />
+  );
+}
+
 export default function TabsLayout() {
   return (
     <Tabs
@@ -18,37 +29,28 @@ export default function TabsLayout() {
     >
       <Tabs.Screen
         name="index"
-        options={{
-          title: "Genel Bakış",
-          tabBarIcon: ({ color, size }) => <Ionicons name="home" size={size} color={color} />,
-        }}
+        options={{ title: "Genel Bakış", tabBarIcon: tabIcon("home") }}
       />
       <Tabs.Screen
         name="matches"
-        options={{
-          title: "Maçlar",
-          tabBarIcon: ({ color, size }) => <Ionicons name="football" size={size} color={color} />,
-        }}
+        options={{ title: "Maçlar", tabBarIcon: tabIcon("football") }}
       />
       <Tabs.Screen
         name="players"
-        options={{
-          title: "Oyuncular",
-          tabBarIcon: ({ color, size }) => <Ionicons name="stats-chart" size={size} color={color} />,
-        }}
+        options={{ title: "Oyuncular", tabBarIcon: tabIcon("shirt") }}
       />
       <Tabs.Screen
         name="standings"
-        options={{
-          title: "Puan Tablosu",
-          tabBarIcon: ({ color, size }) => <Ionicons name="podium" size={size} color={color} />,
-        }}
+        options={{ title: "Puan Tablosu", tabBarIcon: tabIcon("podium") }}
       />
       <Tabs.Screen
         name="menu"
         options={{
           title: "Menü",
-          tabBarIcon: ({ color, size }) => <Ionicons name="menu" size={size} color={color} />,
+          // ellipsis'in outline çifti yok; iki durumda da aynı ikon kalır.
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="ellipsis-horizontal" size={size} color={color} />
+          ),
         }}
       />
       {/* Sekme çubuğunda görünmez; Menü üzerinden ulaşılır. */}
