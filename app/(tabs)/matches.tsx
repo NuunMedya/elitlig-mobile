@@ -1,63 +1,95 @@
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
+import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
-import { Pressable, RefreshControl, SectionList, StyleSheet, Text, View } from "react-native";
+import {
+  Pressable,
+  RefreshControl,
+  SectionList,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { MatchCard } from "@/components/MatchCard";
 import { ScopeBar } from "@/components/ScopeBar";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { EmptyState, ErrorState, Loading } from "@/components/States";
+import { TeamCrest } from "@/components/TeamCrest";
 import { colors, radius, spacing, type } from "@/constants/theme";
 import { useTeamLogos } from "@/hooks/useTeamLogos";
 import { getMatches } from "@/lib/api/matches";
-import { formatDayHeading } from "@/lib/format";
+import { formatDayHeading, formatTime } from "@/lib/format";
 import { matchState } from "@/lib/match";
 import { queryKeys } from "@/lib/queryKeys";
 import { useScope } from "@/providers/ScopeProvider";
 import type { ApiMatch } from "@/lib/types";
 
-type Tab = "live" | "fixtures" | "results";
+type Tab = "results" | "fixtures" | "live";
 
 const TABS: { key: Tab; label: string }[] = [
-  { key: "live", label: "Canlı" },
-  { key: "fixtures", label: "Fikstür" },
   { key: "results", label: "Sonuçlar" },
+  { key: "fixtures", label: "Fikstür" },
+  { key: "live", label: "Canlı" },
 ];
 
 /**
- * Ana ekran: seçili lig ve sezonun maçları.
+ * Maç Merkezi — sitedeki Maçlar sayfasının mobil karşılığı.
  *
- * Tek bir /maclar isteği çekilip üç sekmeye burada ayrılır. Ayrı ayrı
- * /fixtures + /results + /live çağırmak mobil bağlantıda üç ağ turu demek
- * olurdu; kapsamdaki maç sayısı bir sezonla sınırlı olduğu için tek istek
- * hem daha hızlı hem de sekmeler arası geçişi anında yapıyor.
+ * Üstte Canlı / Planlanan / Tamamlanan sayaçları, altın aktif sekme hapları,
+ * takım arama kutusu; liste tarihe göre gruplanır (sağda "N maç"), satırlar
+ * sitedeki gibi ortalanır: TAKIM amblem SKOR amblem TAKIM.
+ *
+ * Tek /maclar isteği üç sekmeye burada ayrılır; limit sezonun tamamını
+ * kapsayacak kadar geniştir — ilk haftadan son maça kadar hepsi listelenir.
  */
 export default function MatchesScreen() {
   const scope = useScope();
   const teams = useTeamLogos();
-  const [tab, setTab] = useState<Tab>("fixtures");
+  const [tab, setTab] = useState<Tab>("results");
+  const [search, setSearch] = useState("");
 
-  const scopeKey = { cityId: scope.cityId ?? undefined, leagueId: scope.leagueId ?? undefined, seasonId: scope.seasonId ?? undefined };
+  const scopeKey = {
+    cityId: scope.cityId ?? undefined,
+    leagueId: scope.leagueId ?? undefined,
+    seasonId: scope.seasonId ?? undefined,
+  };
 
   const query = useQuery({
     queryKey: queryKeys.matches(scopeKey),
-    queryFn: () => getMatches({ leagueId: scope.leagueId!, seasonId: scope.seasonId!, limit: 300 }),
+    queryFn: () =>
+      getMatches({ leagueId: scope.leagueId!, seasonId: scope.seasonId!, limit: 1000 }),
     enabled: scope.ready,
-    // Canlı maç varsa liste kendini tazelesin; detay ekranı ayrıca sokete bağlanır.
     refetchInterval: 60_000,
   });
 
   const buckets = useMemo(() => split(query.data ?? []), [query.data]);
-  const visible = buckets[tab];
+
+  const visible = useMemo(() => {
+    const list = buckets[tab];
+    const q = search.trim().toLocaleLowerCase("tr-TR");
+    if (!q) return list;
+    return list.filter(
+      (m) =>
+        m.first_team_name.toLocaleLowerCase("tr-TR").includes(q) ||
+        m.second_team_name.toLocaleLowerCase("tr-TR").includes(q)
+    );
+  }, [buckets, tab, search]);
 
   const sections = useMemo(() => groupByDay(visible, tab), [visible, tab]);
-
-  // Canlı maç varken kullanıcıyı oraya çekmek için sekmede sayı gösterilir.
-  const liveCount = buckets.live.length;
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader title="Maçlar" />
       <ScopeBar />
+
+      <View style={styles.counters}>
+        <Counter label="CANLI" value={buckets.live.length} accent={buckets.live.length > 0} />
+        <View style={styles.counterDivider} />
+        <Counter label="PLANLANAN" value={buckets.fixtures.length} />
+        <View style={styles.counterDivider} />
+        <Counter label="TAMAMLANAN" value={buckets.results.length} />
+      </View>
 
       <View style={styles.tabs}>
         {TABS.map((item) => {
@@ -74,11 +106,30 @@ export default function MatchesScreen() {
             >
               <Text style={[styles.tabText, active && styles.tabTextActive]}>
                 {item.label}
-                {item.key === "live" && liveCount > 0 ? ` (${liveCount})` : ""}
+                {item.key === "live" && buckets.live.length > 0
+                  ? ` (${buckets.live.length})`
+                  : ""}
               </Text>
             </Pressable>
           );
         })}
+      </View>
+
+      <View style={styles.searchBox}>
+        <Ionicons name="search" size={16} color={colors.muted} />
+        <TextInput
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Takım ara..."
+          placeholderTextColor={colors.muted}
+          style={styles.searchInput}
+          autoCorrect={false}
+        />
+        {search.length > 0 && (
+          <Pressable onPress={() => setSearch("")} hitSlop={8}>
+            <Ionicons name="close-circle" size={16} color={colors.muted} />
+          </Pressable>
+        )}
       </View>
 
       {scope.loading || (query.isLoading && scope.ready) ? (
@@ -95,15 +146,22 @@ export default function MatchesScreen() {
         <SectionList
           sections={sections}
           keyExtractor={(item) => String(item.id)}
-          renderItem={({ item }) => (
-            <MatchCard
+          renderItem={({ item, index, section }) => (
+            <MatchRow
               match={item}
+              first={index === 0}
+              last={index === section.data.length - 1}
               homeLogo={teams.logoFor(item.home_team_id, item.first_team_name)}
               awayLogo={teams.logoFor(item.away_team_id, item.second_team_name)}
             />
           )}
           renderSectionHeader={({ section }) =>
-            section.title ? <Text style={styles.sectionTitle}>{section.title}</Text> : null
+            section.title ? (
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>{section.title}</Text>
+                <Text style={styles.sectionCount}>{section.data.length} maç</Text>
+              </View>
+            ) : null
           }
           contentContainerStyle={styles.list}
           stickySectionHeadersEnabled={false}
@@ -114,10 +172,78 @@ export default function MatchesScreen() {
               tintColor={colors.turf}
             />
           }
-          ListEmptyComponent={<EmptyForTab tab={tab} />}
+          ListEmptyComponent={<EmptyForTab tab={tab} searching={search.length > 0} />}
         />
       )}
     </SafeAreaView>
+  );
+}
+
+/** Sitedeki satır düzeni: TAKIM amblem SKOR amblem TAKIM, ortalanmış. */
+function MatchRow({
+  match,
+  first,
+  last,
+  homeLogo,
+  awayLogo,
+}: {
+  match: ApiMatch;
+  first: boolean;
+  last: boolean;
+  homeLogo?: string | null;
+  awayLogo?: string | null;
+}) {
+  const router = useRouter();
+  const state = matchState(match);
+  const played = state !== "scheduled";
+
+  return (
+    <Pressable
+      onPress={() => router.push(`/mac/${match.id}`)}
+      style={({ pressed }) => [
+        styles.row,
+        first && styles.rowFirst,
+        last && styles.rowLast,
+        pressed && styles.rowPressed,
+      ]}
+    >
+      <Text style={[styles.team, styles.teamHome]} numberOfLines={1}>
+        {match.first_team_name.toLocaleUpperCase("tr-TR")}
+      </Text>
+      <TeamCrest name={match.first_team_name} logo={homeLogo} size={26} />
+      {played ? (
+        <Text style={[styles.rowScore, state === "live" && styles.rowScoreLive]}>
+          {match.first_team_score ?? 0} - {match.second_team_score ?? 0}
+        </Text>
+      ) : (
+        <View style={styles.timePill}>
+          <Text style={styles.timeText}>{formatTime(match.time) || "—"}</Text>
+        </View>
+      )}
+      <TeamCrest name={match.second_team_name} logo={awayLogo} size={26} />
+      <Text style={[styles.team, styles.teamAway]} numberOfLines={1}>
+        {match.second_team_name.toLocaleUpperCase("tr-TR")}
+      </Text>
+    </Pressable>
+  );
+}
+
+function Counter({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: number;
+  accent?: boolean;
+}) {
+  return (
+    <View style={styles.counter}>
+      <Text style={styles.counterLabel}>{label}</Text>
+      <Text style={[styles.counterValue, accent && styles.counterValueAccent]}>
+        {value}
+      </Text>
+    </View>
   );
 }
 
@@ -134,7 +260,6 @@ function split(matches: ApiMatch[]) {
     else results.push(match);
   });
 
-  // Sunucu listeyi yeniden eskiye sıralar: yaklaşan maçlarda tersi istenir.
   fixtures.sort(byKickoff("asc"));
   results.sort(byKickoff("desc"));
   live.sort(byKickoff("asc"));
@@ -161,10 +286,22 @@ function groupByDay(matches: ApiMatch[], tab: Tab) {
     map.set(key, list);
   });
 
-  return Array.from(map, ([date, data]) => ({ title: formatDayHeading(date), data }));
+  return Array.from(map, ([date, data]) => ({
+    title: formatDayHeading(date).toLocaleUpperCase("tr-TR"),
+    data,
+  }));
 }
 
-function EmptyForTab({ tab }: { tab: Tab }) {
+function EmptyForTab({ tab, searching }: { tab: Tab; searching: boolean }) {
+  if (searching) {
+    return (
+      <EmptyState
+        icon="search-outline"
+        title="Eşleşen maç yok"
+        body="Farklı bir takım adı deneyin."
+      />
+    );
+  }
   if (tab === "live") {
     return (
       <EmptyState
@@ -197,6 +334,40 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.pitch,
   },
+  counters: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.faint,
+    borderRadius: radius.md,
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+    paddingVertical: spacing.sm,
+  },
+  counter: {
+    flex: 1,
+    alignItems: "center",
+    gap: 2,
+  },
+  counterDivider: {
+    width: StyleSheet.hairlineWidth,
+    alignSelf: "stretch",
+    backgroundColor: colors.faint,
+  },
+  counterLabel: {
+    ...type.caption,
+    fontSize: 10,
+    color: colors.muted,
+  },
+  counterValue: {
+    ...type.subtitle,
+    color: colors.line,
+    fontVariant: ["tabular-nums"],
+  },
+  counterValueAccent: {
+    color: colors.live,
+  },
   tabs: {
     flexDirection: "row",
     gap: spacing.sm,
@@ -206,12 +377,15 @@ const styles = StyleSheet.create({
   tab: {
     flex: 1,
     paddingVertical: spacing.sm,
-    borderRadius: radius.sm,
+    borderRadius: radius.pill,
     backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.faint,
     alignItems: "center",
   },
   tabActive: {
-    backgroundColor: colors.turfDim,
+    backgroundColor: colors.goldDim,
+    borderColor: colors.yellow,
   },
   tabPressed: {
     opacity: 0.8,
@@ -221,17 +395,101 @@ const styles = StyleSheet.create({
     color: colors.muted,
   },
   tabTextActive: {
-    color: colors.turf,
+    color: colors.line,
+  },
+  searchBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.faint,
+    borderRadius: radius.pill,
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  searchInput: {
+    ...type.small,
+    color: colors.line,
+    flex: 1,
+    padding: 0,
   },
   list: {
     paddingHorizontal: spacing.md,
     paddingBottom: spacing.xl,
-    flexGrow: 1,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
   },
   sectionTitle: {
     ...type.caption,
+    color: colors.turf,
+  },
+  sectionCount: {
+    ...type.caption,
     color: colors.muted,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.sm,
+  },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md - 2,
+    borderWidth: 1,
+    borderColor: colors.faint,
+    borderBottomWidth: 0,
+  },
+  rowFirst: {
+    borderTopLeftRadius: radius.md,
+    borderTopRightRadius: radius.md,
+  },
+  rowLast: {
+    borderBottomWidth: 1,
+    borderBottomLeftRadius: radius.md,
+    borderBottomRightRadius: radius.md,
+  },
+  rowPressed: {
+    backgroundColor: colors.surfaceRaised,
+  },
+  team: {
+    ...type.small,
+    color: colors.line,
+    fontWeight: "700",
+    flex: 1,
+  },
+  teamHome: {
+    textAlign: "right",
+  },
+  teamAway: {
+    textAlign: "left",
+  },
+  rowScore: {
+    ...type.body,
+    color: colors.turf,
+    fontWeight: "800",
+    minWidth: 52,
+    textAlign: "center",
+    fontVariant: ["tabular-nums"],
+  },
+  rowScoreLive: {
+    color: colors.live,
+  },
+  timePill: {
+    minWidth: 52,
+    alignItems: "center",
+    backgroundColor: colors.goldDim,
+    borderRadius: radius.pill,
+    paddingVertical: 3,
+  },
+  timeText: {
+    ...type.caption,
+    color: colors.line,
   },
 });
