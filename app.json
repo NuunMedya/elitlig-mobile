@@ -15,7 +15,10 @@
       "package": "com.elitlig.app",
       "edgeToEdgeEnabled": true
     },
-    "plugins": ["expo-router", "expo-secure-store"],
+    "plugins": [
+      "expo-router",
+      "expo-secure-store"
+    ],
     "experiments": {
       "typedRoutes": true
     },
@@ -24,7 +27,12 @@
       "socketUrl": "https://elitlig-api-88a866b7a4da.herokuapp.com",
       "liveSocketEnabled": true,
       "liveFallbackPollMs": 25000,
-      "defaultCityId": 1
-    }
+      "defaultCityId": 1,
+      "router": {},
+      "eas": {
+        "projectId": "41ea7390-0047-4d2c-bb8b-94d3d4b20c83"
+      }
+    },
+    "owner": "elitlig"
   }
 }
