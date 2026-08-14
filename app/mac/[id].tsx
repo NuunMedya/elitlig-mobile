@@ -2,18 +2,22 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { openLink } from "@/lib/links";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { DetailHeader } from "@/components/ScreenHeader";
+import { YoutubeBanner } from "@/components/YoutubeBanner";
 import { ErrorState, Loading } from "@/components/States";
-import { TeamCrest } from "@/components/TeamCrest";
+import { PlayerAvatar, TeamCrest } from "@/components/TeamCrest";
 import { colors, radius, spacing, type } from "@/constants/theme";
 import { useLiveClock, useLiveMatch } from "@/hooks/useLiveMatch";
 import { useTeamLogos } from "@/hooks/useTeamLogos";
 import { getMatch, getMatchKadro } from "@/lib/api/matches";
-import { formatClock, formatDateLong, formatTime } from "@/lib/format";
+import { formatClock, formatDateLong, formatTime, mediaUrl } from "@/lib/format";
 import { eventKind, goalDetail, isTimelineEvent, matchState } from "@/lib/match";
+import { buildContributions, buildStatRows, buildTopPlayers } from "@/lib/matchStats";
 import { queryKeys } from "@/lib/queryKeys";
+import type { ContribRow, StatRow, TopPlayer } from "@/lib/matchStats";
 import type { ApiMatch, ApiMatchEvent, KadroPlayer, KadroResponse } from "@/lib/types";
 
 type Tab = "summary" | "lineup";
@@ -93,6 +97,10 @@ export default function MatchDetailScreen() {
   const awayTeamId =
     match.away_team_id ?? kadroQuery.data?.meta?.away_team_id ?? teams.idFor(null, match.second_team_name);
 
+  const statRows = buildStatRows(events, Number(homeTeamId) || null, Number(awayTeamId) || null);
+  const bestPlayers = buildTopPlayers(events, kadroQuery.data);
+  const contributions = buildContributions(events, kadroQuery.data);
+
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <DetailHeader title={match.league_name} subtitle={match.match_season ?? undefined} />
@@ -123,15 +131,17 @@ export default function MatchDetailScreen() {
           awayTeamId={awayTeamId}
         />
 
+        {live && <YoutubeBanner cityLabel={match.city} live />}
+
         <View style={styles.tabs}>
           <TabButton label="Özet" active={tab === "summary"} onPress={() => setTab("summary")} />
           <TabButton label="Kadrolar" active={tab === "lineup"} onPress={() => setTab("lineup")} />
         </View>
 
         {tab === "summary" ? (
-          <Summary match={match} timeline={timeline} homeTeamId={homeTeamId} nameOf={nameOf} />
+          <Summary match={match} timeline={timeline} homeTeamId={homeTeamId} nameOf={nameOf} stats={statRows} best={bestPlayers} />
         ) : (
-          <Lineups match={match} kadro={kadroQuery.data} loading={kadroQuery.isLoading} />
+          <Lineups match={match} kadro={kadroQuery.data} loading={kadroQuery.isLoading} contrib={contributions} />
         )}
       </ScrollView>
     </SafeAreaView>
@@ -264,15 +274,82 @@ function Summary({
   timeline,
   homeTeamId,
   nameOf,
+  stats,
+  best,
 }: {
   match: ApiMatch;
   timeline: ApiMatchEvent[];
   homeTeamId: number | null;
   nameOf: (playerId?: number | null) => string | null;
+  stats: StatRow[];
+  best: TopPlayer[];
 }) {
+  const mvpId = match.match_mvp ? Number(match.match_mvp) : null;
+  const mvpName = mvpId ? nameOf(mvpId) : null;
+  const videoUrl = mediaUrl(match.match_video);
+  const router = useRouter();
+
+  const headline = match.match_title?.trim();
+  const heroImage = mediaUrl(match.match_picture);
+
   return (
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>Maç Akışı</Text>
+      {headline || heroImage ? (
+        <View style={styles.hero}>
+          {heroImage ? <Image source={{ uri: heroImage }} style={styles.heroImage} /> : null}
+          {headline ? (
+            <View style={styles.heroBody}>
+              <Text style={styles.heroKicker}>MAÇ MANŞETİ</Text>
+              <Text style={styles.heroTitle}>{headline}</Text>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+
+      {mvpId && mvpName ? (
+        <Pressable
+          onPress={() => router.push(`/oyuncu/${mvpId}`)}
+          style={({ pressed }) => [styles.mvpCard, pressed && styles.pressedRow]}
+        >
+          <Ionicons name="star" size={18} color={colors.yellow} />
+          <View style={styles.mvpBody}>
+            <Text style={styles.mvpKicker}>MAÇIN YILDIZI</Text>
+            <Text style={styles.mvpName}>{mvpName.toLocaleUpperCase("tr-TR")}</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color={colors.muted} />
+        </Pressable>
+      ) : null}
+
+      {videoUrl ? (
+        <Pressable
+          onPress={() => openLink(videoUrl)}
+          style={({ pressed }) => [styles.videoButton, pressed && styles.pressedRow]}
+        >
+          <Ionicons name="play-circle" size={20} color="#FF0000" />
+          <Text style={styles.videoText}>Maç videosunu izle</Text>
+          <Ionicons name="open-outline" size={16} color={colors.muted} />
+        </Pressable>
+      ) : null}
+
+      <Text style={styles.sectionTitle}>Maç Olay Özeti</Text>
+      <View style={styles.statCard}>
+        {stats.map((row) => (
+          <StatLine key={row.label} row={row} />
+        ))}
+      </View>
+
+      {best.length > 0 ? (
+        <>
+          <Text style={[styles.sectionTitle, styles.sectionSpacer]}>En İyi Oyuncular</Text>
+          <View style={styles.bestGrid}>
+            {best.map((player, index) => (
+              <BestPlayerCard key={player.playerId} player={player} rank={index + 1} />
+            ))}
+          </View>
+        </>
+      ) : null}
+
+      <Text style={[styles.sectionTitle, styles.sectionSpacer]}>Maç Akışı</Text>
 
       {timeline.length === 0 ? (
         <Text style={styles.placeholder}>Bu maç için henüz olay girilmemiş.</Text>
@@ -293,6 +370,67 @@ function Summary({
           <Text style={styles.note}>{match.post_manset || match.match_comment}</Text>
         </>
       ) : null}
+    </View>
+  );
+}
+
+/** Sitedeki ızgara satırı: sol ev, sağ deplasman, altta iki renkli oran çubuğu. */
+function StatLine({ row }: { row: StatRow }) {
+  const total = row.home + row.away;
+  const homeShare = total > 0 ? row.home / total : 0.5;
+
+  return (
+    <View style={styles.statLine}>
+      <View style={styles.statValues}>
+        <Text style={[styles.statValue, row.home >= row.away && styles.statValueLead]}>
+          {row.home}
+        </Text>
+        <Text style={styles.statLabel}>{row.label}</Text>
+        <Text style={[styles.statValue, row.away >= row.home && styles.statValueLead]}>
+          {row.away}
+        </Text>
+      </View>
+      <View style={styles.statBar}>
+        <View style={[styles.statBarHome, { flex: Math.max(homeShare, 0.02) }]} />
+        <View style={[styles.statBarAway, { flex: Math.max(1 - homeShare, 0.02) }]} />
+      </View>
+    </View>
+  );
+}
+
+function BestPlayerCard({ player, rank }: { player: TopPlayer; rank: number }) {
+  const router = useRouter();
+
+  return (
+    <Pressable
+      onPress={() => router.push(`/oyuncu/${player.playerId}`)}
+      style={({ pressed }) => [
+        styles.bestCard,
+        rank === 1 && styles.bestCardFirst,
+        pressed && styles.pressedRow,
+      ]}
+    >
+      <View style={styles.bestRank}>
+        <Text style={styles.bestRankText}>{rank}</Text>
+      </View>
+      <PlayerAvatar name={player.name} image={player.image} size={40} />
+      <Text style={styles.bestName} numberOfLines={1}>
+        {player.name.toLocaleUpperCase("tr-TR")}
+      </Text>
+      <View style={styles.bestStats}>
+        <BestStat label="GOL" value={String(player.goals)} />
+        <BestStat label="ASİST" value={String(player.assists)} />
+        <BestStat label="PUAN" value={player.rating != null ? player.rating.toFixed(1) : "—"} />
+      </View>
+    </Pressable>
+  );
+}
+
+function BestStat({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.bestStat}>
+      <Text style={styles.bestStatValue}>{value}</Text>
+      <Text style={styles.bestStatLabel}>{label}</Text>
     </View>
   );
 }
@@ -348,10 +486,12 @@ function Lineups({
   match,
   kadro,
   loading,
+  contrib,
 }: {
   match: ApiMatch;
   kadro: KadroResponse | undefined;
   loading: boolean;
+  contrib: { home: ContribRow[]; away: ContribRow[] };
 }) {
   if (loading) return <Loading />;
 
@@ -368,8 +508,64 @@ function Lineups({
 
   return (
     <View style={styles.section}>
+      <Text style={styles.sectionTitle}>Oyuncu Katkıları</Text>
+      <ContribTable team={match.first_team_name} rows={contrib.home} homeSide />
+      <ContribTable team={match.second_team_name} rows={contrib.away} />
+
+      <Text style={[styles.sectionTitle, styles.sectionSpacer]}>İlk 11 ve Yedekler</Text>
       <TeamLineup title={match.first_team_name} rows={home} />
       <TeamLineup title={match.second_team_name} rows={away} />
+    </View>
+  );
+}
+
+/** Sitedeki "Takım Kadroları" tablosu: yeşil/kırmızı başlık, G · A · K · PUAN. */
+function ContribTable({
+  team,
+  rows,
+  homeSide,
+}: {
+  team: string;
+  rows: ContribRow[];
+  homeSide?: boolean;
+}) {
+  const router = useRouter();
+  if (!rows.length) return null;
+
+  return (
+    <View style={styles.contribCard}>
+      <View style={[styles.contribHead, { backgroundColor: homeSide ? colors.green : colors.live }]}>
+        <Text style={styles.contribTeam} numberOfLines={1}>
+          {team.toLocaleUpperCase("tr-TR")}
+        </Text>
+        <Text style={styles.contribCol}>G</Text>
+        <Text style={styles.contribCol}>A</Text>
+        <Text style={styles.contribCol}>K</Text>
+        <Text style={[styles.contribCol, styles.contribColWide]}>PUAN</Text>
+      </View>
+      {rows.map((row, index) => (
+        <Pressable
+          key={`${row.playerId ?? "guest"}-${index}`}
+          disabled={!row.playerId || row.guest}
+          onPress={() => router.push(`/oyuncu/${row.playerId}`)}
+          style={({ pressed }) => [
+            styles.contribRow,
+            index % 2 === 1 && styles.contribRowAlt,
+            pressed && styles.pressedRow,
+          ]}
+        >
+          <Text style={styles.contribName} numberOfLines={1}>
+            {row.name}
+            {row.guest ? " · misafir" : ""}
+          </Text>
+          <Text style={[styles.contribNum, row.goals > 0 && styles.contribNumLead]}>{row.goals}</Text>
+          <Text style={[styles.contribNum, row.assists > 0 && styles.contribNumLead]}>{row.assists}</Text>
+          <Text style={styles.contribNum}>{row.cards}</Text>
+          <Text style={[styles.contribNum, styles.contribColWide, styles.contribRating]}>
+            {row.rating != null ? row.rating.toFixed(1) : "—"}
+          </Text>
+        </Pressable>
+      ))}
     </View>
   );
 }
@@ -546,6 +742,246 @@ const styles = StyleSheet.create({
     ...type.caption,
     color: colors.muted,
     paddingBottom: spacing.xs,
+  },
+  hero: {
+    backgroundColor: "#17131F",
+    borderRadius: radius.md,
+    overflow: "hidden",
+    marginBottom: spacing.sm,
+  },
+  heroImage: {
+    width: "100%",
+    height: 160,
+  },
+  heroBody: {
+    padding: spacing.md,
+  },
+  heroKicker: {
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 1,
+    color: colors.yellow,
+    marginBottom: spacing.xs,
+  },
+  heroTitle: {
+    ...type.subtitle,
+    color: "#FFFFFF",
+    lineHeight: 22,
+  },
+  contribCard: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.faint,
+    borderRadius: radius.md,
+    overflow: "hidden",
+    marginBottom: spacing.sm,
+  },
+  contribHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    gap: spacing.xs,
+  },
+  contribTeam: {
+    ...type.caption,
+    color: "#FFFFFF",
+    flex: 1,
+  },
+  contribCol: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    width: 26,
+    textAlign: "center",
+  },
+  contribColWide: {
+    width: 40,
+  },
+  contribRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    gap: spacing.xs,
+  },
+  contribRowAlt: {
+    backgroundColor: colors.surfaceRaised,
+  },
+  contribName: {
+    ...type.small,
+    color: colors.line,
+    fontWeight: "600",
+    flex: 1,
+  },
+  contribNum: {
+    ...type.small,
+    color: colors.muted,
+    width: 26,
+    textAlign: "center",
+    fontVariant: ["tabular-nums"],
+  },
+  contribNumLead: {
+    color: colors.line,
+    fontWeight: "800",
+  },
+  contribRating: {
+    color: colors.turf,
+    fontWeight: "800",
+  },
+  statCard: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.faint,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  statLine: {
+    paddingVertical: spacing.xs + 2,
+  },
+  statValues: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  statValue: {
+    ...type.small,
+    color: colors.muted,
+    fontWeight: "800",
+    width: 28,
+    textAlign: "center",
+    fontVariant: ["tabular-nums"],
+  },
+  statValueLead: {
+    color: colors.line,
+  },
+  statLabel: {
+    ...type.caption,
+    color: colors.muted,
+    letterSpacing: 0,
+  },
+  statBar: {
+    flexDirection: "row",
+    height: 4,
+    borderRadius: 2,
+    overflow: "hidden",
+    marginTop: 4,
+    gap: 2,
+  },
+  statBarHome: {
+    backgroundColor: colors.green,
+    borderRadius: 2,
+  },
+  statBarAway: {
+    backgroundColor: colors.live,
+    borderRadius: 2,
+  },
+  bestGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+  },
+  bestCard: {
+    flexBasis: "47%",
+    flexGrow: 1,
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.faint,
+    borderRadius: radius.md,
+    padding: spacing.md,
+  },
+  bestCardFirst: {
+    borderColor: colors.yellow,
+    backgroundColor: colors.goldDim + "55",
+  },
+  bestRank: {
+    alignSelf: "flex-start",
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: colors.turfDim,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bestRankText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: colors.turf,
+  },
+  bestName: {
+    ...type.caption,
+    color: colors.line,
+    letterSpacing: 0,
+  },
+  bestStats: {
+    flexDirection: "row",
+    gap: spacing.md,
+    marginTop: 2,
+  },
+  bestStat: {
+    alignItems: "center",
+  },
+  bestStatValue: {
+    ...type.small,
+    color: colors.turf,
+    fontWeight: "800",
+    fontVariant: ["tabular-nums"],
+  },
+  bestStatLabel: {
+    fontSize: 8,
+    fontWeight: "700",
+    color: colors.muted,
+    letterSpacing: 0.5,
+  },
+  mvpCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.goldDim + "88",
+    borderWidth: 1,
+    borderColor: colors.yellow,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    marginBottom: spacing.sm,
+  },
+  mvpBody: {
+    flex: 1,
+  },
+  mvpKicker: {
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    color: colors.muted,
+  },
+  mvpName: {
+    ...type.small,
+    color: colors.line,
+    fontWeight: "800",
+  },
+  videoButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.faint,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    marginBottom: spacing.sm,
+  },
+  videoText: {
+    ...type.small,
+    color: colors.line,
+    fontWeight: "700",
+    flex: 1,
+  },
+  pressedRow: {
+    opacity: 0.7,
   },
   sectionSpacer: {
     paddingTop: spacing.md,
