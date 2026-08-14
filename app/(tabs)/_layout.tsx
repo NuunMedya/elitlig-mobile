@@ -1,10 +1,16 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { Tabs } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Redirect, Tabs } from "expo-router";
+import { useEffect, useState } from "react";
 import { colors, type } from "@/constants/theme";
+import { INTRO_SEEN_KEY } from "@/lib/storage";
 
 /**
- * Alt menü. Pasif sekmede çizgili (outline), aktif sekmede dolu ikon —
- * kullanıcı hangi sekmede olduğunu ikondan da anlar.
+ * Alt menü. Pasif sekmede çizgili (outline), aktif sekmede dolu ikon.
+ *
+ * İlk açılışta (şehir seçim ekranı henüz görülmemişse) sekmeler yerine
+ * /sehir harita ekranına yönlendirilir — web'deki "Haritada şehirleri
+ * keşfet" girişinin karşılığı.
  */
 function tabIcon(name: keyof typeof Ionicons.glyphMap) {
   const outline = `${name}-outline` as keyof typeof Ionicons.glyphMap;
@@ -14,6 +20,17 @@ function tabIcon(name: keyof typeof Ionicons.glyphMap) {
 }
 
 export default function TabsLayout() {
+  const [introSeen, setIntroSeen] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    AsyncStorage.getItem(INTRO_SEEN_KEY)
+      .then((value) => setIntroSeen(Boolean(value)))
+      .catch(() => setIntroSeen(true)); // Depolama okunamazsa girişte takılı kalma.
+  }, []);
+
+  if (introSeen === null) return null; // Bayrak okunana dek kısa boşluk.
+  if (!introSeen) return <Redirect href="/sehir" />;
+
   return (
     <Tabs
       screenOptions={{
@@ -47,7 +64,6 @@ export default function TabsLayout() {
         name="menu"
         options={{
           title: "Menü",
-          // ellipsis'in outline çifti yok; iki durumda da aynı ikon kalır.
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="ellipsis-horizontal" size={size} color={color} />
           ),

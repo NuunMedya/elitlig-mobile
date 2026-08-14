@@ -1,6 +1,6 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "expo-router";
+import { useRouter } from "expo-router";
 import { useMemo } from "react";
 import {
   Pressable,
@@ -28,18 +28,17 @@ import { useScope } from "@/providers/ScopeProvider";
 import type { ApiMatch } from "@/lib/types";
 
 /**
- * Genel Bakış — uygulamanın vitrini.
+ * Genel Bakış — uygulamanın vitrini; web anasayfasının mobil karşılığı.
  *
- * Tek bakışta: canlı maçlar, sıradaki fikstür, puan tablosunun tepesi ve son
- * haberler. Her bölümün "Tümü" bağlantısı ilgili sekmeye götürür.
- *
- * Maç sorgusu, Maçlar sekmesiyle AYNI anahtarı (queryKeys.matches) kullanır:
- * böylece iki ekran tek cache'i paylaşır ve sekmeler arası geçiş ek istek
- * atmaz.
+ * Tek bakışta: canlı maçlar, sıradaki fikstür, puan tablosunun tepesi
+ * (sitedeki "Lig Tablosu" kartıyla aynı kolonlar: O · AV · P) ve son
+ * haberler. Maç sorgusu Maçlar sekmesiyle aynı anahtarı kullanır, cache
+ * paylaşılır.
  */
 export default function OverviewScreen() {
   const scope = useScope();
   const teams = useTeamLogos();
+  const router = useRouter();
 
   const scopeKey = {
     cityId: scope.cityId ?? undefined,
@@ -72,9 +71,10 @@ export default function OverviewScreen() {
     enabled: scope.ready,
   });
 
-  const { live, upcoming } = useMemo(() => pickMatches(matchesQuery.data ?? []), [
-    matchesQuery.data,
-  ]);
+  const { live, upcoming } = useMemo(
+    () => pickMatches(matchesQuery.data ?? []),
+    [matchesQuery.data]
+  );
   const topRows = (standingsQuery.data ?? []).slice(0, 5);
   const latestNews = (newsQuery.data?.items ?? []).slice(0, 3);
 
@@ -141,27 +141,36 @@ export default function OverviewScreen() {
             )}
           </Section>
 
-          <Section title="Puan Tablosu" href="/standings">
+          <Section title="Puan Durumu" href="/standings">
             {topRows.length > 0 ? (
               <View style={styles.tableCard}>
+                <View style={styles.tableHead}>
+                  <Text style={[styles.headCell, styles.headTeam]}>TAKIM</Text>
+                  <Text style={[styles.headCell, styles.numCol]}>O</Text>
+                  <Text style={[styles.headCell, styles.numCol]}>AV</Text>
+                  <Text style={[styles.headCell, styles.pointsCol]}>P</Text>
+                </View>
                 {topRows.map((row, index) => (
-                  <Link key={row.team_id} href={`/takim/${row.team_id}`} asChild>
-                    <Pressable
-                      style={({ pressed }) => [
-                        styles.tableRow,
-                        index < topRows.length - 1 && styles.tableRowBorder,
-                        pressed && styles.pressed,
-                      ]}
-                    >
-                      <Text style={styles.tablePos}>{index + 1}</Text>
-                      <TeamCrest name={row.team_name} logo={row.logo} size={24} />
-                      <Text style={styles.tableName} numberOfLines={1}>
-                        {row.team_name}
-                      </Text>
-                      <Text style={styles.tablePlayed}>{row.played}</Text>
-                      <Text style={styles.tablePoints}>{row.display_points}</Text>
-                    </Pressable>
-                  </Link>
+                  <Pressable
+                    key={row.team_id}
+                    onPress={() => router.push(`/takim/${row.team_id}`)}
+                    style={({ pressed }) => [
+                      styles.tableRow,
+                      index % 2 === 1 && styles.tableRowAlt,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Text style={styles.tablePos}>{index + 1}</Text>
+                    <TeamCrest name={row.team_name} logo={row.logo} size={24} />
+                    <Text style={styles.tableName} numberOfLines={1}>
+                      {row.team_name.toLocaleUpperCase("tr-TR")}
+                    </Text>
+                    <Text style={[styles.tableNum, styles.numCol]}>{row.played}</Text>
+                    <Text style={[styles.tableNum, styles.numCol]}>{row.goal_diff}</Text>
+                    <Text style={[styles.tablePoints, styles.pointsCol]}>
+                      {row.display_points}
+                    </Text>
+                  </Pressable>
                 ))}
               </View>
             ) : (
@@ -172,10 +181,12 @@ export default function OverviewScreen() {
           <Section title="Son Haberler" href="/news">
             {latestNews.length > 0 ? (
               latestNews.map((item) => (
-                <Link key={`${item.kind}-${item.id}`} href={`/haber/${item.id}`} asChild>
-                  <Pressable
-                    style={({ pressed }) => [styles.newsCard, pressed && styles.pressed]}
-                  >
+                <Pressable
+                  key={`${item.kind}-${item.id}`}
+                  onPress={() => router.push(`/haber/${item.id}`)}
+                  style={({ pressed }) => [styles.newsCard, pressed && styles.pressed]}
+                >
+                  <View style={styles.newsBadge}>
                     <Ionicons
                       name={
                         item.kind === "transfer"
@@ -184,20 +195,20 @@ export default function OverviewScreen() {
                             ? "alert-circle-outline"
                             : "newspaper-outline"
                       }
-                      size={18}
+                      size={16}
                       color={colors.turf}
                     />
-                    <View style={styles.newsBody}>
-                      <Text style={styles.newsTitle} numberOfLines={2}>
-                        {item.title}
-                      </Text>
-                      {item.published_at ? (
-                        <Text style={styles.newsMeta}>{timeAgo(item.published_at)}</Text>
-                      ) : null}
-                    </View>
-                    <Ionicons name="chevron-forward" size={16} color={colors.faint} />
-                  </Pressable>
-                </Link>
+                  </View>
+                  <View style={styles.newsBody}>
+                    <Text style={styles.newsTitle} numberOfLines={2}>
+                      {item.title}
+                    </Text>
+                    {item.published_at ? (
+                      <Text style={styles.newsMeta}>{timeAgo(item.published_at)}</Text>
+                    ) : null}
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={colors.muted} />
+                </Pressable>
               ))
             ) : (
               <Text style={styles.emptyLine}>Henüz haber yok.</Text>
@@ -236,21 +247,25 @@ function Section({
   children,
 }: {
   title: string;
-  href: string;
+  href: "/matches" | "/standings" | "/news";
   accent?: boolean;
   children: React.ReactNode;
 }) {
+  const router = useRouter();
+
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
         <Text style={[styles.sectionTitle, accent && styles.sectionTitleAccent]}>
           {title}
         </Text>
-        <Link href={href} asChild>
-          <Pressable hitSlop={8} style={({ pressed }) => pressed && styles.pressed}>
-            <Text style={styles.sectionLink}>Tümü</Text>
-          </Pressable>
-        </Link>
+        <Pressable
+          hitSlop={8}
+          onPress={() => router.push(href)}
+          style={({ pressed }) => pressed && styles.pressed}
+        >
+          <Text style={styles.sectionLink}>Tümü</Text>
+        </Pressable>
       </View>
       {children}
     </View>
@@ -290,7 +305,33 @@ const styles = StyleSheet.create({
   tableCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.faint,
     overflow: "hidden",
+  },
+  tableHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm + 2,
+    paddingBottom: spacing.xs,
+  },
+  headCell: {
+    ...type.caption,
+    color: colors.muted,
+  },
+  headTeam: {
+    flex: 1,
+    marginLeft: 18 + spacing.sm + 24 + spacing.sm,
+  },
+  numCol: {
+    width: 30,
+    textAlign: "right",
+  },
+  pointsCol: {
+    width: 34,
+    textAlign: "right",
   },
   tableRow: {
     flexDirection: "row",
@@ -299,36 +340,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
   },
-  tableRowBorder: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.faint,
+  tableRowAlt: {
+    backgroundColor: colors.surfaceRaised,
   },
   tablePos: {
     ...type.small,
-    color: colors.muted,
+    color: colors.turf,
+    fontWeight: "800",
     width: 18,
     textAlign: "center",
     fontVariant: ["tabular-nums"],
   },
   tableName: {
-    ...type.body,
+    ...type.small,
     color: colors.line,
     flex: 1,
-    fontWeight: "600",
+    fontWeight: "700",
   },
-  tablePlayed: {
+  tableNum: {
     ...type.small,
     color: colors.muted,
-    width: 24,
-    textAlign: "right",
     fontVariant: ["tabular-nums"],
   },
   tablePoints: {
     ...type.body,
     color: colors.turf,
     fontWeight: "800",
-    width: 32,
-    textAlign: "right",
     fontVariant: ["tabular-nums"],
   },
   newsCard: {
@@ -337,9 +374,19 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     backgroundColor: colors.surface,
     borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.faint,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
     marginBottom: spacing.sm,
+  },
+  newsBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.sm,
+    backgroundColor: colors.turfDim,
+    alignItems: "center",
+    justifyContent: "center",
   },
   newsBody: {
     flex: 1,

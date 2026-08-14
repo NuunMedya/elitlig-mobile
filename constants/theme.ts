@@ -1,30 +1,38 @@
 /**
- * ElitLig tasarım sistemi — "Gece Maçı" teması.
- * Işıklandırılmış halı saha atmosferi: koyu zemin, çim yeşili vurgu, saha çizgisi beyazı.
+ * ElitLig tasarım sistemi — web sitesiyle ortak kimlik.
+ *
+ * Site: açık lavanta zemin, beyaz kartlar, elitlig moru vurgu, altın skor
+ * rozetleri, yeşil aksiyon butonları. Token adları değişmedi; yalnızca
+ * değerler siteye çekildi — böylece tüm ekranlar tek dosyayla yeni kimliğe
+ * geçer. ("turf" artık marka moru demektir.)
  */
 export const colors = {
-  /** Ana arka plan — gece sahası */
-  pitch: "#0B1310",
-  /** Kart / yüzey rengi */
-  surface: "#141E19",
-  /** Yüzey üstü ince ayrım (satır arası) */
-  surfaceRaised: "#1B2822",
-  /** Çim yeşili — marka vurgusu */
-  turf: "#31C86B",
+  /** Ana arka plan — açık lavanta */
+  pitch: "#F5F3FB",
+  /** Kart / yüzey rengi — beyaz */
+  surface: "#FFFFFF",
+  /** Yüzey üstü ince ayrım — açık mor satır */
+  surfaceRaised: "#F4EFFB",
+  /** Marka vurgusu — elitlig moru (eski adıyla turf) */
+  turf: "#6D28D9",
   /** Vurgunun soluk tonu (rozet zemini) */
-  turfDim: "#17301F",
+  turfDim: "#EDE7FA",
   /** Canlı maç kırmızısı */
-  live: "#FF4D4D",
-  /** Sarı kart */
-  yellow: "#F5C518",
-  /** Kırmızı kart */
-  red: "#E53935",
-  /** Saha çizgisi beyazı — birincil metin */
-  line: "#F2F7F4",
+  live: "#E5484D",
+  /** Altın — skor rozetleri, öne çıkarmalar (sarı kart için de kullanılır) */
+  yellow: "#E8B00A",
+  /** Kırmızı kart / tehlike */
+  red: "#D92D20",
+  /** Birincil metin — koyu mürekkep */
+  line: "#17131F",
   /** İkincil metin */
-  muted: "#8AA096",
-  /** Çok silik metin / ayraçlar */
-  faint: "#3A4A42",
+  muted: "#736E82",
+  /** Çok silik metin / ayraçlar / kenarlıklar */
+  faint: "#E4DFF1",
+  /** Aksiyon yeşili — giriş / kayıt butonları */
+  green: "#178A50",
+  /** Altın rozet zemini — skor hapları */
+  goldDim: "#FAEDC4",
 } as const;
 
 export const spacing = {

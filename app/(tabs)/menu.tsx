@@ -44,6 +44,7 @@ export default function MenuScreen() {
         </Link>
 
         <View style={styles.group}>
+          <MenuItem href="/sehir" icon="map-outline" label="Şehir değiştir" />
           <MenuItem href="/news" icon="newspaper-outline" label="Haberler" />
           <MenuItem
             icon="globe-outline"

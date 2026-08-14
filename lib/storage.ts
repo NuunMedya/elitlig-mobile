@@ -40,3 +40,6 @@ export async function clearToken(): Promise<void> {
   }
   memoryFallback = null;
 }
+
+/** İlk açılıştaki şehir seçim ekranının görüldüğünü işaretleyen bayrak. */
+export const INTRO_SEEN_KEY = "elitlig.intro.v1";
