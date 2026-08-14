@@ -19,15 +19,15 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Maçlar",
-          tabBarIcon: ({ color, size }) => <Ionicons name="football" size={size} color={color} />,
+          title: "Genel Bakış",
+          tabBarIcon: ({ color, size }) => <Ionicons name="home" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
-        name="standings"
+        name="matches"
         options={{
-          title: "Puan Durumu",
-          tabBarIcon: ({ color, size }) => <Ionicons name="podium" size={size} color={color} />,
+          title: "Maçlar",
+          tabBarIcon: ({ color, size }) => <Ionicons name="football" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
@@ -38,19 +38,22 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="news"
+        name="standings"
         options={{
-          title: "Haberler",
-          tabBarIcon: ({ color, size }) => <Ionicons name="newspaper" size={size} color={color} />,
+          title: "Puan Tablosu",
+          tabBarIcon: ({ color, size }) => <Ionicons name="podium" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
-        name="profile"
+        name="menu"
         options={{
-          title: "Profil",
-          tabBarIcon: ({ color, size }) => <Ionicons name="person" size={size} color={color} />,
+          title: "Menü",
+          tabBarIcon: ({ color, size }) => <Ionicons name="menu" size={size} color={color} />,
         }}
       />
+      {/* Sekme çubuğunda görünmez; Menü üzerinden ulaşılır. */}
+      <Tabs.Screen name="news" options={{ href: null }} />
+      <Tabs.Screen name="profile" options={{ href: null }} />
     </Tabs>
   );
 }

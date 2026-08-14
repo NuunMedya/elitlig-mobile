@@ -40,7 +40,7 @@ export default function StandingsScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      <ScreenHeader title="Puan Durumu" />
+      <ScreenHeader title="Puan Tablosu" />
       <ScopeBar />
 
       {scope.loading || (query.isLoading && scope.ready) ? (

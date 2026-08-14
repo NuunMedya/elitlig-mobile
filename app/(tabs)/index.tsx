@@ -1,194 +1,259 @@
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
-import { Pressable, RefreshControl, SectionList, StyleSheet, Text, View } from "react-native";
+import { Link } from "expo-router";
+import { useMemo } from "react";
+import {
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MatchCard } from "@/components/MatchCard";
 import { ScopeBar } from "@/components/ScopeBar";
 import { ScreenHeader } from "@/components/ScreenHeader";
-import { EmptyState, ErrorState, Loading } from "@/components/States";
+import { EmptyState, Loading } from "@/components/States";
+import { TeamCrest } from "@/components/TeamCrest";
 import { colors, radius, spacing, type } from "@/constants/theme";
 import { useTeamLogos } from "@/hooks/useTeamLogos";
 import { getMatches } from "@/lib/api/matches";
-import { formatDayHeading } from "@/lib/format";
+import { getNewsFeed } from "@/lib/api/news";
+import { getStandings } from "@/lib/api/standings";
+import { timeAgo } from "@/lib/format";
 import { matchState } from "@/lib/match";
 import { queryKeys } from "@/lib/queryKeys";
 import { useScope } from "@/providers/ScopeProvider";
 import type { ApiMatch } from "@/lib/types";
 
-type Tab = "live" | "fixtures" | "results";
-
-const TABS: { key: Tab; label: string }[] = [
-  { key: "live", label: "Canlı" },
-  { key: "fixtures", label: "Fikstür" },
-  { key: "results", label: "Sonuçlar" },
-];
-
 /**
- * Ana ekran: seçili lig ve sezonun maçları.
+ * Genel Bakış — uygulamanın vitrini.
  *
- * Tek bir /maclar isteği çekilip üç sekmeye burada ayrılır. Ayrı ayrı
- * /fixtures + /results + /live çağırmak mobil bağlantıda üç ağ turu demek
- * olurdu; kapsamdaki maç sayısı bir sezonla sınırlı olduğu için tek istek
- * hem daha hızlı hem de sekmeler arası geçişi anında yapıyor.
+ * Tek bakışta: canlı maçlar, sıradaki fikstür, puan tablosunun tepesi ve son
+ * haberler. Her bölümün "Tümü" bağlantısı ilgili sekmeye götürür.
+ *
+ * Maç sorgusu, Maçlar sekmesiyle AYNI anahtarı (queryKeys.matches) kullanır:
+ * böylece iki ekran tek cache'i paylaşır ve sekmeler arası geçiş ek istek
+ * atmaz.
  */
-export default function MatchesScreen() {
+export default function OverviewScreen() {
   const scope = useScope();
   const teams = useTeamLogos();
-  const [tab, setTab] = useState<Tab>("fixtures");
 
-  const scopeKey = { cityId: scope.cityId ?? undefined, leagueId: scope.leagueId ?? undefined, seasonId: scope.seasonId ?? undefined };
+  const scopeKey = {
+    cityId: scope.cityId ?? undefined,
+    leagueId: scope.leagueId ?? undefined,
+    seasonId: scope.seasonId ?? undefined,
+  };
 
-  const query = useQuery({
+  const matchesQuery = useQuery({
     queryKey: queryKeys.matches(scopeKey),
-    queryFn: () => getMatches({ leagueId: scope.leagueId!, seasonId: scope.seasonId!, limit: 300 }),
+    queryFn: () =>
+      getMatches({ leagueId: scope.leagueId!, seasonId: scope.seasonId!, limit: 300 }),
     enabled: scope.ready,
-    // Canlı maç varsa liste kendini tazelesin; detay ekranı ayrıca sokete bağlanır.
     refetchInterval: 60_000,
   });
 
-  const buckets = useMemo(() => split(query.data ?? []), [query.data]);
-  const visible = buckets[tab];
+  const standingsQuery = useQuery({
+    queryKey: queryKeys.standings(scopeKey),
+    queryFn: () =>
+      getStandings({
+        cityId: scope.cityId!,
+        leagueId: scope.leagueId!,
+        seasonId: scope.seasonId!,
+      }),
+    enabled: scope.ready,
+  });
 
-  const sections = useMemo(() => groupByDay(visible, tab), [visible, tab]);
+  const newsQuery = useQuery({
+    queryKey: queryKeys.newsFeed(scopeKey),
+    queryFn: () => getNewsFeed(scopeKey),
+    enabled: scope.ready,
+  });
 
-  // Canlı maç varken kullanıcıyı oraya çekmek için sekmede sayı gösterilir.
-  const liveCount = buckets.live.length;
+  const { live, upcoming } = useMemo(() => pickMatches(matchesQuery.data ?? []), [
+    matchesQuery.data,
+  ]);
+  const topRows = (standingsQuery.data ?? []).slice(0, 5);
+  const latestNews = (newsQuery.data?.items ?? []).slice(0, 3);
+
+  const refreshing =
+    matchesQuery.isRefetching || standingsQuery.isRefetching || newsQuery.isRefetching;
+  const refetchAll = () => {
+    matchesQuery.refetch();
+    standingsQuery.refetch();
+    newsQuery.refetch();
+  };
+
+  const initialLoading =
+    scope.loading || (scope.ready && matchesQuery.isLoading && standingsQuery.isLoading);
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      <ScreenHeader title="Maçlar" />
+      <ScreenHeader title="Genel Bakış" />
       <ScopeBar />
 
-      <View style={styles.tabs}>
-        {TABS.map((item) => {
-          const active = item.key === tab;
-          return (
-            <Pressable
-              key={item.key}
-              onPress={() => setTab(item.key)}
-              style={({ pressed }) => [
-                styles.tab,
-                active && styles.tabActive,
-                pressed && styles.tabPressed,
-              ]}
-            >
-              <Text style={[styles.tabText, active && styles.tabTextActive]}>
-                {item.label}
-                {item.key === "live" && liveCount > 0 ? ` (${liveCount})` : ""}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-
-      {scope.loading || (query.isLoading && scope.ready) ? (
+      {initialLoading ? (
         <Loading />
-      ) : query.isError ? (
-        <ErrorState error={query.error} onRetry={query.refetch} />
       ) : !scope.ready ? (
         <EmptyState
-          icon="options-outline"
+          icon="filter-outline"
           title="Lig seçilmedi"
-          body="Yukarıdan şehir, lig ve sezon seçerek başlayın."
+          body="Yukarıdan şehir, lig ve sezon seçince özet burada belirir."
         />
       ) : (
-        <SectionList
-          sections={sections}
-          keyExtractor={(item) => String(item.id)}
-          renderItem={({ item }) => (
-            <MatchCard
-              match={item}
-              homeLogo={teams.logoFor(item.home_team_id, item.first_team_name)}
-              awayLogo={teams.logoFor(item.away_team_id, item.second_team_name)}
-            />
-          )}
-          renderSectionHeader={({ section }) =>
-            section.title ? <Text style={styles.sectionTitle}>{section.title}</Text> : null
-          }
-          contentContainerStyle={styles.list}
-          stickySectionHeadersEnabled={false}
+        <ScrollView
+          contentContainerStyle={styles.content}
           refreshControl={
             <RefreshControl
-              refreshing={query.isRefetching}
-              onRefresh={query.refetch}
+              refreshing={refreshing}
+              onRefresh={refetchAll}
               tintColor={colors.turf}
             />
           }
-          ListEmptyComponent={<EmptyForTab tab={tab} />}
-        />
+        >
+          {live.length > 0 && (
+            <Section title="Canlı" href="/matches" accent>
+              {live.map((match) => (
+                <MatchCard
+                  key={match.id}
+                  match={match}
+                  homeLogo={teams.logoFor(match.home_team_id, match.first_team_name)}
+                  awayLogo={teams.logoFor(match.away_team_id, match.second_team_name)}
+                />
+              ))}
+            </Section>
+          )}
+
+          <Section title="Sıradaki Maçlar" href="/matches">
+            {upcoming.length > 0 ? (
+              upcoming.map((match) => (
+                <MatchCard
+                  key={match.id}
+                  match={match}
+                  homeLogo={teams.logoFor(match.home_team_id, match.first_team_name)}
+                  awayLogo={teams.logoFor(match.away_team_id, match.second_team_name)}
+                />
+              ))
+            ) : (
+              <Text style={styles.emptyLine}>Yaklaşan maç bulunmuyor.</Text>
+            )}
+          </Section>
+
+          <Section title="Puan Tablosu" href="/standings">
+            {topRows.length > 0 ? (
+              <View style={styles.tableCard}>
+                {topRows.map((row, index) => (
+                  <Link key={row.team_id} href={`/takim/${row.team_id}`} asChild>
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.tableRow,
+                        index < topRows.length - 1 && styles.tableRowBorder,
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      <Text style={styles.tablePos}>{index + 1}</Text>
+                      <TeamCrest name={row.team_name} logo={row.logo} size={24} />
+                      <Text style={styles.tableName} numberOfLines={1}>
+                        {row.team_name}
+                      </Text>
+                      <Text style={styles.tablePlayed}>{row.played}</Text>
+                      <Text style={styles.tablePoints}>{row.display_points}</Text>
+                    </Pressable>
+                  </Link>
+                ))}
+              </View>
+            ) : (
+              <Text style={styles.emptyLine}>Puan tablosu henüz boş.</Text>
+            )}
+          </Section>
+
+          <Section title="Son Haberler" href="/news">
+            {latestNews.length > 0 ? (
+              latestNews.map((item) => (
+                <Link key={`${item.kind}-${item.id}`} href={`/haber/${item.id}`} asChild>
+                  <Pressable
+                    style={({ pressed }) => [styles.newsCard, pressed && styles.pressed]}
+                  >
+                    <Ionicons
+                      name={
+                        item.kind === "transfer"
+                          ? "swap-horizontal"
+                          : item.kind === "penalty"
+                            ? "alert-circle-outline"
+                            : "newspaper-outline"
+                      }
+                      size={18}
+                      color={colors.turf}
+                    />
+                    <View style={styles.newsBody}>
+                      <Text style={styles.newsTitle} numberOfLines={2}>
+                        {item.title}
+                      </Text>
+                      {item.published_at ? (
+                        <Text style={styles.newsMeta}>{timeAgo(item.published_at)}</Text>
+                      ) : null}
+                    </View>
+                    <Ionicons name="chevron-forward" size={16} color={colors.faint} />
+                  </Pressable>
+                </Link>
+              ))
+            ) : (
+              <Text style={styles.emptyLine}>Henüz haber yok.</Text>
+            )}
+          </Section>
+        </ScrollView>
       )}
     </SafeAreaView>
   );
 }
 
-/** Maçları duruma göre üçe ayırır. */
-function split(matches: ApiMatch[]) {
+/** Canlı maçlar + tarihe göre en yakın 3 zamanlanmış maç. */
+function pickMatches(matches: ApiMatch[]) {
   const live: ApiMatch[] = [];
-  const fixtures: ApiMatch[] = [];
-  const results: ApiMatch[] = [];
+  const scheduled: ApiMatch[] = [];
 
-  matches.forEach((match) => {
+  for (const match of matches) {
     const state = matchState(match);
     if (state === "live") live.push(match);
-    else if (state === "scheduled") fixtures.push(match);
-    else results.push(match);
-  });
+    else if (state === "scheduled") scheduled.push(match);
+  }
 
-  // Sunucu listeyi yeniden eskiye sıralar: yaklaşan maçlarda tersi istenir.
-  fixtures.sort(byKickoff("asc"));
-  results.sort(byKickoff("desc"));
-  live.sort(byKickoff("asc"));
+  scheduled.sort(
+    (a, b) =>
+      new Date(`${a.date}T${a.time || "00:00:00"}`).getTime() -
+      new Date(`${b.date}T${b.time || "00:00:00"}`).getTime()
+  );
 
-  return { live, fixtures, results };
+  return { live, upcoming: scheduled.slice(0, 3) };
 }
 
-const byKickoff = (direction: "asc" | "desc") => (a: ApiMatch, b: ApiMatch) => {
-  const at = Date.parse(`${String(a.date).slice(0, 10)}T${a.time || "00:00:00"}`);
-  const bt = Date.parse(`${String(b.date).slice(0, 10)}T${b.time || "00:00:00"}`);
-  const diff = (Number.isFinite(at) ? at : 0) - (Number.isFinite(bt) ? bt : 0);
-  return direction === "asc" ? diff : -diff;
-};
-
-/** Gün başlıkları. Canlı sekmesinde tarih anlamsız olduğu için gruplanmaz. */
-function groupByDay(matches: ApiMatch[], tab: Tab) {
-  if (tab === "live") return [{ title: "", data: matches }];
-
-  const map = new Map<string, ApiMatch[]>();
-  matches.forEach((match) => {
-    const key = String(match.date).slice(0, 10);
-    const list = map.get(key) ?? [];
-    list.push(match);
-    map.set(key, list);
-  });
-
-  return Array.from(map, ([date, data]) => ({ title: formatDayHeading(date), data }));
-}
-
-function EmptyForTab({ tab }: { tab: Tab }) {
-  if (tab === "live") {
-    return (
-      <EmptyState
-        icon="radio-outline"
-        title="Şu anda canlı maç yok"
-        body="Maç başladığında skor burada anlık olarak akar."
-      />
-    );
-  }
-  if (tab === "fixtures") {
-    return (
-      <EmptyState
-        icon="calendar-outline"
-        title="Yaklaşan maç yok"
-        body="Fikstür açıklandığında burada görünecek."
-      />
-    );
-  }
+function Section({
+  title,
+  href,
+  accent,
+  children,
+}: {
+  title: string;
+  href: string;
+  accent?: boolean;
+  children: React.ReactNode;
+}) {
   return (
-    <EmptyState
-      icon="trophy-outline"
-      title="Henüz oynanmış maç yok"
-      body="Sezon başladığında sonuçlar burada listelenir."
-    />
+    <View style={styles.section}>
+      <View style={styles.sectionHeader}>
+        <Text style={[styles.sectionTitle, accent && styles.sectionTitleAccent]}>
+          {title}
+        </Text>
+        <Link href={href} asChild>
+          <Pressable hitSlop={8} style={({ pressed }) => pressed && styles.pressed}>
+            <Text style={styles.sectionLink}>Tümü</Text>
+          </Pressable>
+        </Link>
+      </View>
+      {children}
+    </View>
   );
 }
 
@@ -197,41 +262,104 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.pitch,
   },
-  tabs: {
-    flexDirection: "row",
-    gap: spacing.sm,
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.sm,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.sm,
-    backgroundColor: colors.surface,
-    alignItems: "center",
-  },
-  tabActive: {
-    backgroundColor: colors.turfDim,
-  },
-  tabPressed: {
-    opacity: 0.8,
-  },
-  tabText: {
-    ...type.caption,
-    color: colors.muted,
-  },
-  tabTextActive: {
-    color: colors.turf,
-  },
-  list: {
+  content: {
     paddingHorizontal: spacing.md,
     paddingBottom: spacing.xl,
-    flexGrow: 1,
+  },
+  section: {
+    marginTop: spacing.md,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: spacing.sm,
   },
   sectionTitle: {
     ...type.caption,
     color: colors.muted,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.sm,
+    textTransform: "uppercase",
+  },
+  sectionTitleAccent: {
+    color: colors.live,
+  },
+  sectionLink: {
+    ...type.caption,
+    color: colors.turf,
+  },
+  tableCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    overflow: "hidden",
+  },
+  tableRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+  },
+  tableRowBorder: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.faint,
+  },
+  tablePos: {
+    ...type.small,
+    color: colors.muted,
+    width: 18,
+    textAlign: "center",
+    fontVariant: ["tabular-nums"],
+  },
+  tableName: {
+    ...type.body,
+    color: colors.line,
+    flex: 1,
+    fontWeight: "600",
+  },
+  tablePlayed: {
+    ...type.small,
+    color: colors.muted,
+    width: 24,
+    textAlign: "right",
+    fontVariant: ["tabular-nums"],
+  },
+  tablePoints: {
+    ...type.body,
+    color: colors.turf,
+    fontWeight: "800",
+    width: 32,
+    textAlign: "right",
+    fontVariant: ["tabular-nums"],
+  },
+  newsCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    marginBottom: spacing.sm,
+  },
+  newsBody: {
+    flex: 1,
+  },
+  newsTitle: {
+    ...type.body,
+    color: colors.line,
+    fontWeight: "600",
+  },
+  newsMeta: {
+    ...type.caption,
+    color: colors.muted,
+    marginTop: 2,
+  },
+  emptyLine: {
+    ...type.small,
+    color: colors.muted,
+    paddingVertical: spacing.sm,
+  },
+  pressed: {
+    opacity: 0.7,
   },
 });
