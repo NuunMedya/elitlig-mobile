@@ -5,6 +5,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { colors } from "@/constants/theme";
 import { ApiError } from "@/lib/http";
 import { AuthProvider } from "@/providers/AuthProvider";
+import { FavoriteProvider } from "@/providers/FavoriteProvider";
 import { ScopeProvider } from "@/providers/ScopeProvider";
 
 const queryClient = new QueryClient({
@@ -27,6 +28,7 @@ export default function RootLayout() {
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <ScopeProvider>
+            <FavoriteProvider>
             <StatusBar style="dark" />
             <Stack
               screenOptions={{
@@ -37,6 +39,7 @@ export default function RootLayout() {
               <Stack.Screen name="(tabs)" />
               <Stack.Screen name="giris" options={{ presentation: "modal" }} />
             </Stack>
+            </FavoriteProvider>
           </ScopeProvider>
         </AuthProvider>
       </QueryClientProvider>

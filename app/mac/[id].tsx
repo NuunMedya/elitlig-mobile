@@ -466,7 +466,7 @@ function EventRow({
 
   return (
     <View style={[styles.eventRow, !home && styles.eventRowAway]}>
-      <Text style={styles.eventMinute}>{event.dakika != null ? `${event.dakika}'` : "—"}</Text>
+      <Text style={styles.eventMinute}>{event.dakika ? `${event.dakika}'` : "—"}</Text>
       <Ionicons name={visual.icon} size={15} color={visual.color} />
       <View style={styles.eventText}>
         <Text style={[styles.eventName, !home && styles.eventNameAway]} numberOfLines={1}>

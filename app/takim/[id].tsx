@@ -1,13 +1,15 @@
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams } from "expo-router";
 import { useMemo } from "react";
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { RefreshControl, ScrollView, StyleSheet, Text, View, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MatchCard } from "@/components/MatchCard";
 import { DetailHeader } from "@/components/ScreenHeader";
 import { ErrorState, Loading } from "@/components/States";
 import { TeamCrest } from "@/components/TeamCrest";
 import { colors, radius, spacing, type } from "@/constants/theme";
+import { useFavorite } from "@/providers/FavoriteProvider";
 import { useTeamLogos } from "@/hooks/useTeamLogos";
 import { getTeamMatches } from "@/lib/api/matches";
 import { getTeam } from "@/lib/api/teams";
@@ -27,6 +29,7 @@ export default function TeamDetailScreen() {
   const teamId = Number(id);
   const validId = Number.isFinite(teamId) && teamId > 0;
   const logos = useTeamLogos();
+  const { isFavorite, toggleFavorite } = useFavorite();
 
   const teamQuery = useQuery({
     queryKey: queryKeys.team(teamId),
@@ -82,6 +85,20 @@ export default function TeamDetailScreen() {
         <View style={styles.hero}>
           <TeamCrest name={team.team_name} logo={team.logo} size={72} />
           <Text style={styles.teamName}>{team.team_name}</Text>
+          <Pressable
+            onPress={() => toggleFavorite({ id: teamId, name: team.team_name })}
+            hitSlop={10}
+            style={({ pressed }) => [styles.favBtn, pressed && { opacity: 0.7 }]}
+          >
+            <Ionicons
+              name={isFavorite(teamId) ? "star" : "star-outline"}
+              size={18}
+              color={isFavorite(teamId) ? colors.yellow : colors.muted}
+            />
+            <Text style={[styles.favText, isFavorite(teamId) && styles.favTextActive]}>
+              {isFavorite(teamId) ? "Takımım" : "Takımım yap"}
+            </Text>
+          </Pressable>
           {team.city ? <Text style={styles.teamMeta}>{team.city}</Text> : null}
         </View>
 
@@ -174,6 +191,24 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.sm,
     paddingVertical: spacing.md,
+  },
+  favBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: colors.surfaceRaised,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    marginTop: 8,
+  },
+  favText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.muted,
+  },
+  favTextActive: {
+    color: colors.line,
   },
   teamName: {
     ...type.title,
