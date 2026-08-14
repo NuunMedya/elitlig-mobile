@@ -1,7 +1,17 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "expo-router";
-import { FlatList, Image, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
+import { useRouter } from "expo-router";
+import { useMemo, useState } from "react";
+import {
+  FlatList,
+  Image,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ScopeBar } from "@/components/ScopeBar";
 import { ScreenHeader } from "@/components/ScreenHeader";
@@ -13,15 +23,25 @@ import { queryKeys } from "@/lib/queryKeys";
 import { useScope } from "@/providers/ScopeProvider";
 import type { NewsItem } from "@/lib/types";
 
+type Filter = "all" | NewsItem["kind"];
+
+const FILTERS: { key: Filter; label: string }[] = [
+  { key: "all", label: "Tümü" },
+  { key: "news", label: "Haberler" },
+  { key: "transfer", label: "Transferler" },
+  { key: "penalty", label: "Cezalar" },
+];
+
 /**
- * Haber akışı — /api/news/feed
+ * Haber akışı — sitedeki "Duyurular & Haberler" bölümünün mobil karşılığı.
  *
- * Uç, editör haberlerini, tamamlanan transferleri ve disiplin kararlarını tek
- * listede birleştirip yayın tarihine göre sıralar; sabitlenen haberler başa
- * gelir. Yalnızca `kind === "news"` olanların detay sayfası vardır.
+ * İki görsel katman vardır: editör haberleri (kind=news) kapaklı büyük
+ * kartlarla, üretilmiş duyurular (transfer, disiplin) sitedeki gibi renkli
+ * rozetli kompakt satırlarla gösterilir. Üstteki çiplerle türe göre süzülür.
  */
 export default function NewsScreen() {
   const scope = useScope();
+  const [filter, setFilter] = useState<Filter>("all");
   const scopeKey = {
     cityId: scope.cityId ?? undefined,
     leagueId: scope.leagueId ?? undefined,
@@ -36,11 +56,41 @@ export default function NewsScreen() {
   });
 
   const items = query.data?.items ?? [];
+  const visible = useMemo(
+    () => (filter === "all" ? items : items.filter((item) => item.kind === filter)),
+    [items, filter]
+  );
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader title="Haberler" />
       <ScopeBar />
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filters}
+        style={styles.filtersWrap}
+      >
+        {FILTERS.map((item) => {
+          const active = item.key === filter;
+          return (
+            <Pressable
+              key={item.key}
+              onPress={() => setFilter(item.key)}
+              style={({ pressed }) => [
+                styles.filterChip,
+                active && styles.filterChipActive,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Text style={[styles.filterText, active && styles.filterTextActive]}>
+                {item.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
 
       {query.isLoading ? (
         <Loading />
@@ -48,9 +98,11 @@ export default function NewsScreen() {
         <ErrorState error={query.error} onRetry={query.refetch} />
       ) : (
         <FlatList
-          data={items}
+          data={visible}
           keyExtractor={(item) => `${item.kind}-${item.id}`}
-          renderItem={({ item }) => <FeedCard item={item} />}
+          renderItem={({ item }) =>
+            item.kind === "news" ? <NewsCard item={item} /> : <AnnouncementRow item={item} />
+          }
           contentContainerStyle={styles.list}
           refreshControl={
             <RefreshControl
@@ -63,7 +115,7 @@ export default function NewsScreen() {
             <EmptyState
               icon="newspaper-outline"
               title="Haber yok"
-              body="Bu kapsamda henüz yayınlanmış bir haber bulunmuyor."
+              body="Bu kapsamda bu türde yayınlanmış bir içerik bulunmuyor."
             />
           }
         />
@@ -72,33 +124,28 @@ export default function NewsScreen() {
   );
 }
 
-const KIND_META: Record<NewsItem["kind"], { icon: keyof typeof Ionicons.glyphMap; label: string; color: string }> = {
-  news: { icon: "newspaper-outline", label: "Haber", color: colors.turf },
-  transfer: { icon: "swap-horizontal-outline", label: "Transfer", color: "#5AA9E6" },
-  penalty: { icon: "warning-outline", label: "Disiplin", color: colors.yellow },
-};
-
-function FeedCard({ item }: { item: NewsItem }) {
-  const meta = KIND_META[item.kind] ?? KIND_META.news;
+/** Editör haberi — kapaklı büyük kart; detay sayfası vardır. */
+function NewsCard({ item }: { item: NewsItem }) {
+  const router = useRouter();
   const cover = mediaUrl(item.cover_image_url);
   const summary = item.summary?.trim() || stripHtml(item.content, 160);
 
-  const body = (
-    <View style={styles.card}>
+  return (
+    <Pressable
+      onPress={() => router.push(`/haber/${item.id}`)}
+      style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+    >
       {cover ? <Image source={{ uri: cover }} style={styles.cover} resizeMode="cover" /> : null}
-
       <View style={styles.cardBody}>
         <View style={styles.badgeRow}>
-          <View style={[styles.badge, { backgroundColor: `${meta.color}22` }]}>
-            <Ionicons name={meta.icon} size={12} color={meta.color} />
-            <Text style={[styles.badgeText, { color: meta.color }]}>
-              {item.category_label || meta.label}
+          <View style={[styles.pill, styles.pillNews]}>
+            <Text style={styles.pillText}>
+              {(item.category_label || "HABER").toLocaleUpperCase("tr-TR")}
             </Text>
           </View>
           {item.pinned ? <Ionicons name="pin" size={13} color={colors.muted} /> : null}
           <Text style={styles.time}>{timeAgo(item.published_at)}</Text>
         </View>
-
         <Text style={styles.title} numberOfLines={2}>
           {item.title}
         </Text>
@@ -108,16 +155,24 @@ function FeedCard({ item }: { item: NewsItem }) {
           </Text>
         ) : null}
       </View>
-    </View>
+    </Pressable>
   );
+}
 
-  // Transfer ve disiplin kayıtları üretilmiş duyurulardır; ayrı detayları yoktur.
-  if (item.kind !== "news") return body;
+/** Üretilmiş duyuru — sitedeki kompakt satır: renkli hap + başlık + zaman. */
+function AnnouncementRow({ item }: { item: NewsItem }) {
+  const penalty = item.kind === "penalty";
 
   return (
-    <Link href={`/haber/${item.id}`} asChild>
-      <Pressable style={({ pressed }) => pressed && styles.pressed}>{body}</Pressable>
-    </Link>
+    <View style={styles.row}>
+      <View style={[styles.pill, penalty ? styles.pillPenalty : styles.pillTransfer]}>
+        <Text style={styles.pillText}>{penalty ? "CEZA" : "TRANSFER"}</Text>
+      </View>
+      <Text style={styles.rowTitle} numberOfLines={2}>
+        {item.title}
+      </Text>
+      <Text style={styles.rowTime}>{timeAgo(item.published_at)}</Text>
+    </View>
   );
 }
 
@@ -126,6 +181,34 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.pitch,
   },
+  filtersWrap: {
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  filters: {
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.sm,
+  },
+  filterChip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.faint,
+  },
+  filterChipActive: {
+    backgroundColor: colors.turf,
+    borderColor: colors.turf,
+  },
+  filterText: {
+    ...type.caption,
+    color: colors.muted,
+  },
+  filterTextActive: {
+    color: colors.surface,
+  },
   list: {
     paddingHorizontal: spacing.md,
     paddingBottom: spacing.xl,
@@ -133,8 +216,10 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.faint,
     borderRadius: radius.md,
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
     overflow: "hidden",
   },
   pressed: {
@@ -154,17 +239,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.sm,
   },
-  badge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
+  pill: {
     borderRadius: radius.pill,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 3,
   },
-  badgeText: {
-    ...type.caption,
-    letterSpacing: 0.3,
+  pillNews: {
+    backgroundColor: colors.turf,
+  },
+  pillTransfer: {
+    backgroundColor: "#2F3A56",
+  },
+  pillPenalty: {
+    backgroundColor: "#B4232A",
+  },
+  pillText: {
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+    color: "#FFFFFF",
   },
   time: {
     ...type.caption,
@@ -181,5 +274,28 @@ const styles = StyleSheet.create({
     ...type.small,
     color: colors.muted,
     lineHeight: 20,
+  },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.faint,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    marginBottom: spacing.sm,
+  },
+  rowTitle: {
+    ...type.small,
+    color: colors.line,
+    fontWeight: "600",
+    flex: 1,
+  },
+  rowTime: {
+    ...type.caption,
+    color: colors.muted,
+    letterSpacing: 0,
   },
 });
