@@ -78,6 +78,21 @@ export default function OverviewScreen() {
     [matchesQuery.data]
   );
   const topRows = (standingsQuery.data ?? []).slice(0, 5);
+
+  // Sezon Panosu — sitedeki özet şerit; puan tablosu + maç listesinden türetilir.
+  const season = useMemo(() => {
+    const rows = standingsQuery.data ?? [];
+    if (!rows.length) return null;
+    const teams = rows.length;
+    const played = rows.reduce((sum, row) => sum + Number(row.played || 0), 0) / 2;
+    const goals = rows.reduce((sum, row) => sum + Number(row.goals_for || 0), 0);
+    return {
+      teams,
+      played: Math.round(played),
+      goals,
+      perMatch: played > 0 ? (goals / played).toFixed(1) : "0.0",
+    };
+  }, [standingsQuery.data]);
   const latestNews = (newsQuery.data?.items ?? []).slice(0, 3);
 
   const refreshing =
@@ -116,6 +131,18 @@ export default function OverviewScreen() {
           }
         >
           <MyTeamCard matches={matchesQuery.data ?? []} />
+
+          {season && (
+            <View style={styles.seasonBoard}>
+              <SeasonStat label="TAKIM" value={String(season.teams)} />
+              <View style={styles.seasonDivider} />
+              <SeasonStat label="MAÇ" value={String(season.played)} />
+              <View style={styles.seasonDivider} />
+              <SeasonStat label="GOL" value={String(season.goals)} />
+              <View style={styles.seasonDivider} />
+              <SeasonStat label="GOL/MAÇ" value={season.perMatch} />
+            </View>
+          )}
 
           {live.length > 0 && (
             <Section title="Canlı" href="/matches" accent>
@@ -225,6 +252,15 @@ export default function OverviewScreen() {
   );
 }
 
+function SeasonStat({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.seasonStat}>
+      <Text style={styles.seasonValue}>{value}</Text>
+      <Text style={styles.seasonLabel}>{label}</Text>
+    </View>
+  );
+}
+
 /** Canlı maçlar + tarihe göre en yakın 3 zamanlanmış maç. */
 function pickMatches(matches: ApiMatch[]) {
   const live: ApiMatch[] = [];
@@ -288,6 +324,37 @@ const styles = StyleSheet.create({
   },
   section: {
     marginTop: spacing.md,
+  },
+  seasonBoard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.faint,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm + 2,
+    marginTop: spacing.sm,
+  },
+  seasonStat: {
+    flex: 1,
+    alignItems: "center",
+    gap: 2,
+  },
+  seasonDivider: {
+    width: StyleSheet.hairlineWidth,
+    alignSelf: "stretch",
+    backgroundColor: colors.faint,
+  },
+  seasonValue: {
+    ...type.subtitle,
+    color: colors.turf,
+    fontVariant: ["tabular-nums"],
+  },
+  seasonLabel: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: colors.muted,
+    letterSpacing: 0.6,
   },
   sectionHeader: {
     flexDirection: "row",

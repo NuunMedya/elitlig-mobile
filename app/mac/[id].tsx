@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { addMatchToCalendar } from "@/lib/calendar";
 import { openLink } from "@/lib/links";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { DetailHeader } from "@/components/ScreenHeader";
@@ -132,6 +133,16 @@ export default function MatchDetailScreen() {
         />
 
         {live && <YoutubeBanner cityLabel={match.city} live />}
+
+        {matchState(match) === "scheduled" && (
+          <Pressable
+            onPress={() => addMatchToCalendar(match)}
+            style={({ pressed }) => [styles.calendarBtn, pressed && styles.pressedRow]}
+          >
+            <Ionicons name="calendar-outline" size={18} color={colors.turf} />
+            <Text style={styles.calendarText}>Takvime ekle</Text>
+          </Pressable>
+        )}
 
         <View style={styles.tabs}>
           <TabButton label="Özet" active={tab === "summary"} onPress={() => setTab("summary")} />
@@ -742,6 +753,21 @@ const styles = StyleSheet.create({
     ...type.caption,
     color: colors.muted,
     paddingBottom: spacing.xs,
+  },
+  calendarBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.turfDim,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm + 2,
+    marginBottom: spacing.sm,
+  },
+  calendarText: {
+    ...type.small,
+    color: colors.turf,
+    fontWeight: "800",
   },
   hero: {
     backgroundColor: "#17131F",
