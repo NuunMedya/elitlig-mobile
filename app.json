@@ -5,19 +5,32 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "scheme": "elitlig",
-    "userInterfaceStyle": "dark",
-    "backgroundColor": "#0B1310",
+    "userInterfaceStyle": "automatic",
+    "backgroundColor": "#17102B",
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.elitlig.app"
     },
     "android": {
       "package": "com.elitlig.app",
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#6D28D9"
+      }
     },
     "plugins": [
       "expo-router",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 240,
+          "resizeMode": "contain",
+          "backgroundColor": "#17102B"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
@@ -33,6 +46,7 @@
         "projectId": "41ea7390-0047-4d2c-bb8b-94d3d4b20c83"
       }
     },
-    "owner": "elitlig"
+    "owner": "elitlig",
+    "icon": "./assets/images/icon.png"
   }
 }
