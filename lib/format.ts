@@ -85,6 +85,9 @@ export function formatAge(birthDate?: string | null): string {
 export function mediaUrl(value?: string | null): string | null {
   const raw = String(value ?? "").trim();
   if (!raw || raw === "none" || raw === "null") return null;
+  // Sunucunun yer tutucu görselleri (default_player.png vb.) soluk ve bilgisiz;
+  // bunlar yerine baş harfli yedek gösterilsin diye adres yok sayılır.
+  if (/\/default[_-][a-z]*\.(png|jpe?g|webp)$/i.test(raw)) return null;
   if (/^https?:\/\//i.test(raw)) return raw;
 
   const path = raw.replace(/^\.{0,2}\//, "");
