@@ -58,6 +58,10 @@ export default function MenuScreen() {
               onPress={() => openLink(channelUrl)}
             />
           ) : null}
+          <MenuItem href="/kurallar" icon="book-outline" label="Lig Kuralları" />
+          <MenuItem href="/cezalar" icon="alert-circle-outline" label="Cezalar" />
+          <MenuItem href="/arsiv" icon="archive-outline" label="Arşiv" />
+          <MenuItem href="/iletisim" icon="mail-outline" label="İletişim" />
           <MenuItem
             icon="globe-outline"
             label="elitlig.com"
