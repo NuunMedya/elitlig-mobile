@@ -300,8 +300,15 @@ function Summary({
   const videoUrl = mediaUrl(match.match_video);
   const router = useRouter();
 
-  const headline = match.match_title?.trim();
+  const rawHeadline = match.match_title?.trim();
   const heroImage = mediaUrl(match.match_picture);
+  // "TAKIM1 vs TAKIM2" gibi otomatik başlıklar skorbordu tekrarlar; gizlenir.
+  const squash = (value: string) =>
+    value.toLocaleLowerCase("tr-TR").replace(/[\s·|-]+/g, " ").replace(/\bvs\.?\b/g, "vs").trim();
+  const trivialTitle =
+    !!rawHeadline &&
+    squash(rawHeadline) === squash(`${match.first_team_name} vs ${match.second_team_name}`);
+  const headline = trivialTitle ? null : rawHeadline;
 
   return (
     <View style={styles.section}>
@@ -385,26 +392,38 @@ function Summary({
   );
 }
 
-/** Sitedeki ızgara satırı: sol ev, sağ deplasman, altta iki renkli oran çubuğu. */
+/**
+ * Sitedeki ızgara satırı: sol ev, sağ deplasman, altta oran çubuğu.
+ * Dürüst çubuk kuralları: iki taraf da sıfırsa nötr ince çizgi; tek taraf
+ * sıfırsa çubuğun tamamı diğer tarafın rengi; ikisi de doluysa oranlı bölünür.
+ */
 function StatLine({ row }: { row: StatRow }) {
   const total = row.home + row.away;
-  const homeShare = total > 0 ? row.home / total : 0.5;
+  const lead = (mine: number, theirs: number) => total > 0 && mine >= theirs;
 
   return (
     <View style={styles.statLine}>
       <View style={styles.statValues}>
-        <Text style={[styles.statValue, row.home >= row.away && styles.statValueLead]}>
+        <Text style={[styles.statValue, lead(row.home, row.away) && styles.statValueLead]}>
           {row.home}
         </Text>
         <Text style={styles.statLabel}>{row.label}</Text>
-        <Text style={[styles.statValue, row.away >= row.home && styles.statValueLead]}>
+        <Text style={[styles.statValue, lead(row.away, row.home) && styles.statValueLead]}>
           {row.away}
         </Text>
       </View>
-      <View style={styles.statBar}>
-        <View style={[styles.statBarHome, { flex: Math.max(homeShare, 0.02) }]} />
-        <View style={[styles.statBarAway, { flex: Math.max(1 - homeShare, 0.02) }]} />
-      </View>
+      {total === 0 ? (
+        <View style={styles.statBarEmpty} />
+      ) : (
+        <View style={styles.statBar}>
+          {row.home > 0 ? (
+            <View style={[styles.statBarHome, { flex: row.home }]} />
+          ) : null}
+          {row.away > 0 ? (
+            <View style={[styles.statBarAway, { flex: row.away }]} />
+          ) : null}
+        </View>
+      )}
     </View>
   );
 }
@@ -438,9 +457,10 @@ function BestPlayerCard({ player, rank }: { player: TopPlayer; rank: number }) {
 }
 
 function BestStat({ label, value }: { label: string; value: string }) {
+  const empty = value === "—";
   return (
     <View style={styles.bestStat}>
-      <Text style={styles.bestStatValue}>{value}</Text>
+      <Text style={[styles.bestStatValue, empty && styles.bestStatEmpty]}>{value}</Text>
       <Text style={styles.bestStatLabel}>{label}</Text>
     </View>
   );
@@ -889,19 +909,22 @@ const styles = StyleSheet.create({
   },
   statBar: {
     flexDirection: "row",
-    height: 4,
-    borderRadius: 2,
+    height: 5,
+    borderRadius: 3,
     overflow: "hidden",
-    marginTop: 4,
-    gap: 2,
+    marginTop: 5,
+  },
+  statBarEmpty: {
+    height: 5,
+    borderRadius: 3,
+    marginTop: 5,
+    backgroundColor: colors.faint,
   },
   statBarHome: {
     backgroundColor: colors.green,
-    borderRadius: 2,
   },
   statBarAway: {
     backgroundColor: colors.live,
-    borderRadius: 2,
   },
   bestGrid: {
     flexDirection: "row",
@@ -955,6 +978,9 @@ const styles = StyleSheet.create({
     color: colors.turf,
     fontWeight: "800",
     fontVariant: ["tabular-nums"],
+  },
+  bestStatEmpty: {
+    color: colors.muted,
   },
   bestStatLabel: {
     fontSize: 8,

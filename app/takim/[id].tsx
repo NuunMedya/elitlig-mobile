@@ -1,35 +1,53 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
-import { useLocalSearchParams } from "expo-router";
-import { useMemo } from "react";
-import { RefreshControl, ScrollView, StyleSheet, Text, View, Pressable } from "react-native";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useMemo, useState } from "react";
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { MatchCard } from "@/components/MatchCard";
 import { DetailHeader } from "@/components/ScreenHeader";
-import { ErrorState, Loading } from "@/components/States";
-import { TeamCrest } from "@/components/TeamCrest";
+import { EmptyState, ErrorState, Loading } from "@/components/States";
+import { PlayerAvatar, TeamCrest } from "@/components/TeamCrest";
 import { colors, radius, spacing, type } from "@/constants/theme";
-import { useFavorite } from "@/providers/FavoriteProvider";
 import { useTeamLogos } from "@/hooks/useTeamLogos";
 import { getTeamMatches } from "@/lib/api/matches";
+import { getPlayerRankings } from "@/lib/api/players";
+import { getStandings } from "@/lib/api/standings";
 import { getTeam } from "@/lib/api/teams";
+import { addMatchToCalendar } from "@/lib/calendar";
+import { formatDateShort, formatTime } from "@/lib/format";
 import { matchState } from "@/lib/match";
 import { queryKeys } from "@/lib/queryKeys";
-import type { ApiMatch } from "@/lib/types";
+import { useFavorite } from "@/providers/FavoriteProvider";
+import { useScope } from "@/providers/ScopeProvider";
+import type { ApiMatch, PlayerRankRow, StandingRow } from "@/lib/types";
 
 /**
- * Takım profili.
+ * Takım profili — sitedeki takım sayfasının (alt sekmeleriyle) mobil hali.
  *
- * `/maclar?team_id=` ucu takımın TÜM lig ve sezonlardaki maçlarını döndürür
- * (sunucu bu filtre için sayfa limitini kaldırır), bu yüzden ekran kapsam
- * seçiminden bağımsız çalışır: son maçlar ve yaklaşan maçlar bir arada.
+ * Üstte kimlik + bu sezon kartı (sıra, puan, form — puan tablosundan) ve tüm
+ * zamanlar şeridi; altta üç sekme: Sonuçlar (takım gözünden G/B/M rozetli),
+ * Fikstür (takvime ekle kısayollu) ve Kadro (sezon katkılarıyla, oyuncu
+ * sıralamalarından teamId süzülerek). Sezonluk bölümler takım geçerli
+ * kapsamda değilse kendini gizler; maç listesi kapsamdan bağımsızdır.
  */
+
+type Tab = "results" | "fixtures" | "squad";
+
 export default function TeamDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const teamId = Number(id);
   const validId = Number.isFinite(teamId) && teamId > 0;
+  const router = useRouter();
+  const scope = useScope();
   const logos = useTeamLogos();
   const { isFavorite, toggleFavorite } = useFavorite();
+  const [tab, setTab] = useState<Tab>("results");
+
+  const scopeKey = {
+    cityId: scope.cityId ?? undefined,
+    leagueId: scope.leagueId ?? undefined,
+    seasonId: scope.seasonId ?? undefined,
+  };
 
   const teamQuery = useQuery({
     queryKey: queryKeys.team(teamId),
@@ -44,9 +62,44 @@ export default function TeamDetailScreen() {
     staleTime: 60_000,
   });
 
-  const { upcoming, recent } = useMemo(() => splitByState(matchesQuery.data ?? []), [
-    matchesQuery.data,
-  ]);
+  const standingsQuery = useQuery({
+    queryKey: queryKeys.standings(scopeKey),
+    queryFn: () =>
+      getStandings({ cityId: scope.cityId!, leagueId: scope.leagueId!, seasonId: scope.seasonId! }),
+    enabled: scope.ready,
+  });
+
+  const squadQuery = useQuery({
+    queryKey: queryKeys.playerRankings(scopeKey, "topScorers"),
+    queryFn: () => getPlayerRankings(scopeKey, "topScorers"),
+    enabled: scope.ready,
+    staleTime: 5 * 60_000,
+  });
+
+  const team = teamQuery.data;
+  const teamName = team?.team_name ?? "";
+
+  const standing = useMemo(() => {
+    const rows = standingsQuery.data ?? [];
+    const index = rows.findIndex((row) => Number(row.team_id) === teamId);
+    return index >= 0 ? { row: rows[index] as StandingRow, position: index + 1 } : null;
+  }, [standingsQuery.data, teamId]);
+
+  const { upcoming, recent } = useMemo(
+    () => splitByState(matchesQuery.data ?? []),
+    [matchesQuery.data]
+  );
+
+  const squad = useMemo(() => {
+    const players = squadQuery.data?.players ?? [];
+    return players
+      .filter((player) => Number(player.teamId) === teamId)
+      .sort(
+        (a, b) =>
+          (Number(b.points) || 0) - (Number(a.points) || 0) ||
+          (Number(b.goals) || 0) - (Number(a.goals) || 0)
+      );
+  }, [squadQuery.data, teamId]);
 
   if (teamQuery.isLoading) {
     return (
@@ -57,7 +110,7 @@ export default function TeamDetailScreen() {
     );
   }
 
-  if (teamQuery.isError || !teamQuery.data) {
+  if (teamQuery.isError || !team) {
     return (
       <SafeAreaView style={styles.screen} edges={["top"]}>
         <DetailHeader title="Takım" />
@@ -65,8 +118,6 @@ export default function TeamDetailScreen() {
       </SafeAreaView>
     );
   }
-
-  const team = teamQuery.data;
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
@@ -77,106 +128,360 @@ export default function TeamDetailScreen() {
         refreshControl={
           <RefreshControl
             refreshing={matchesQuery.isRefetching}
-            onRefresh={matchesQuery.refetch}
+            onRefresh={() => {
+              matchesQuery.refetch();
+              standingsQuery.refetch();
+              squadQuery.refetch();
+            }}
             tintColor={colors.turf}
           />
         }
       >
+        {/* Kimlik */}
         <View style={styles.hero}>
-          <TeamCrest name={team.team_name} logo={team.logo} size={72} />
+          <TeamCrest name={team.team_name} logo={team.logo} size={76} />
           <Text style={styles.teamName}>{team.team_name}</Text>
+          {team.city ? <Text style={styles.teamMeta}>{team.city}</Text> : null}
           <Pressable
             onPress={() => toggleFavorite({ id: teamId, name: team.team_name })}
             hitSlop={10}
-            style={({ pressed }) => [styles.favBtn, pressed && { opacity: 0.7 }]}
+            style={({ pressed }) => [
+              styles.favBtn,
+              isFavorite(teamId) && styles.favBtnActive,
+              pressed && styles.pressed,
+            ]}
           >
             <Ionicons
               name={isFavorite(teamId) ? "star" : "star-outline"}
-              size={18}
+              size={16}
               color={isFavorite(teamId) ? colors.yellow : colors.muted}
             />
             <Text style={[styles.favText, isFavorite(teamId) && styles.favTextActive]}>
               {isFavorite(teamId) ? "Takımım" : "Takımım yap"}
             </Text>
           </Pressable>
-          {team.city ? <Text style={styles.teamMeta}>{team.city}</Text> : null}
         </View>
 
-        {/* Takım tablosundaki toplamlar tüm sezonların birikimidir; sezonluk
-            değerler için puan durumu ekranına bakılır. */}
-        <View style={styles.stats}>
-          <Stat label="Maç" value={team.total_matches} />
-          <Stat label="G" value={team.team_wins} />
-          <Stat label="B" value={team.team_draws} />
-          <Stat label="M" value={team.team_losses} />
-          <Stat label="A" value={team.goals_scored} />
-          <Stat label="Y" value={team.goals_conceded} />
+        {/* Bu sezon: puan tablosundan */}
+        {standing ? (
+          <View style={styles.seasonCard}>
+            <Text style={styles.cardKicker}>BU SEZON · {scope.leagueLabel}</Text>
+            <View style={styles.seasonRow}>
+              <SeasonStat label="SIRA" value={`${standing.position}.`} highlight />
+              <SeasonStat label="PUAN" value={String(standing.row.display_points)} highlight />
+              <SeasonStat label="O" value={String(standing.row.played)} />
+              <SeasonStat label="AV" value={String(standing.row.goal_diff)} />
+              {standing.row.last5 ? <FormChips last5={standing.row.last5} /> : null}
+            </View>
+          </View>
+        ) : null}
+
+        {/* Tüm zamanlar */}
+        <View style={styles.statsCard}>
+          <Text style={styles.cardKicker}>TÜM ZAMANLAR</Text>
+          <View style={styles.statsRow}>
+            <Stat label="Maç" value={team.total_matches} />
+            <Stat label="G" value={team.team_wins} />
+            <Stat label="B" value={team.team_draws} />
+            <Stat label="M" value={team.team_losses} />
+            <Stat label="A" value={team.goals_scored} />
+            <Stat label="Y" value={team.goals_conceded} />
+          </View>
+        </View>
+
+        {/* Sekmeler */}
+        <View style={styles.tabs}>
+          <TabButton label="Sonuçlar" active={tab === "results"} onPress={() => setTab("results")} />
+          <TabButton label="Fikstür" active={tab === "fixtures"} onPress={() => setTab("fixtures")} />
+          <TabButton label="Kadro" active={tab === "squad"} onPress={() => setTab("squad")} />
         </View>
 
         {matchesQuery.isLoading ? (
           <Loading />
-        ) : (
+        ) : tab === "results" ? (
+          recent.length ? (
+            recent.map((match) => (
+              <MatchRow
+                key={match.id}
+                match={match}
+                teamId={teamId}
+                teamName={teamName}
+                logoFor={logos.logoFor}
+                onPress={() => router.push(`/mac/${match.id}`)}
+              />
+            ))
+          ) : (
+            <EmptyState
+              icon="football-outline"
+              title="Sonuç yok"
+              body="Bu takımın oynanmış maçı bulunmuyor."
+            />
+          )
+        ) : tab === "fixtures" ? (
+          upcoming.length ? (
+            upcoming.map((match) => (
+              <FixtureRow
+                key={match.id}
+                match={match}
+                teamId={teamId}
+                teamName={teamName}
+                logoFor={logos.logoFor}
+                onPress={() => router.push(`/mac/${match.id}`)}
+              />
+            ))
+          ) : (
+            <EmptyState
+              icon="calendar-outline"
+              title="Yaklaşan maç yok"
+              body="Fikstüre maç eklendiğinde burada görünecek."
+            />
+          )
+        ) : squadQuery.isLoading ? (
+          <Loading />
+        ) : squad.length ? (
           <>
-            {upcoming.length ? (
-              <>
-                <Text style={styles.sectionTitle}>Yaklaşan Maçlar</Text>
-                {upcoming.slice(0, 5).map((match) => (
-                  <MatchCard
-                    key={match.id}
-                    match={match}
-                    homeLogo={logos.logoFor(match.home_team_id, match.first_team_name)}
-                    awayLogo={logos.logoFor(match.away_team_id, match.second_team_name)}
-                  />
-                ))}
-              </>
-            ) : null}
-
-            <Text style={styles.sectionTitle}>Son Maçlar</Text>
-            {recent.length ? (
-              recent.slice(0, 15).map((match) => (
-                <MatchCard
-                  key={match.id}
-                  match={match}
-                  homeLogo={logos.logoFor(match.home_team_id, match.first_team_name)}
-                  awayLogo={logos.logoFor(match.away_team_id, match.second_team_name)}
-                />
-              ))
-            ) : (
-              <Text style={styles.placeholder}>Bu takımın oynanmış maçı bulunmuyor.</Text>
-            )}
+            <Text style={styles.squadHint}>
+              Bu sezon forma giyen oyuncular · {scope.seasonLabel}
+            </Text>
+            {squad.map((player, index) => (
+              <SquadRow
+                key={player.id}
+                player={player}
+                rank={index + 1}
+                onPress={() => router.push(`/oyuncu/${player.id}`)}
+              />
+            ))}
           </>
+        ) : (
+          <EmptyState
+            icon="shirt-outline"
+            title="Kadro verisi yok"
+            body="Seçili sezonda bu takım için oyuncu kaydı bulunmuyor. Üstteki seçicilerden takımın oynadığı lig ve sezonu seçmeyi deneyin."
+          />
         )}
       </ScrollView>
     </SafeAreaView>
   );
 }
 
+/* ===================== Yardımcılar ===================== */
+
 function splitByState(matches: ApiMatch[]) {
   const upcoming: ApiMatch[] = [];
   const recent: ApiMatch[] = [];
-
-  matches.forEach((match) => {
-    if (matchState(match) === "scheduled") upcoming.push(match);
-    else recent.push(match);
-  });
-
-  const kickoff = (match: ApiMatch) =>
-    Date.parse(`${String(match.date).slice(0, 10)}T${match.time || "00:00:00"}`) || 0;
-
-  upcoming.sort((a, b) => kickoff(a) - kickoff(b));
-  recent.sort((a, b) => kickoff(b) - kickoff(a));
-
+  for (const match of matches) {
+    const state = matchState(match);
+    if (state === "scheduled") upcoming.push(match);
+    else if (state === "finished") recent.push(match);
+  }
+  const timeOf = (m: ApiMatch) =>
+    new Date(`${String(m.date).slice(0, 10)}T${m.time || "00:00:00"}`).getTime();
+  upcoming.sort((a, b) => timeOf(a) - timeOf(b));
+  recent.sort((a, b) => timeOf(b) - timeOf(a));
   return { upcoming, recent };
 }
 
-function Stat({ label, value }: { label: string; value?: number | null }) {
+/** Maçı bu takımın gözünden okur: rakip, skorlar, sonuç. */
+function perspective(match: ApiMatch, teamId: number, teamName: string) {
+  const home =
+    Number(match.home_team_id) === teamId || match.first_team_name === teamName;
+  const ours = home ? match.first_team_score : match.second_team_score;
+  const theirs = home ? match.second_team_score : match.first_team_score;
+  const opponentName = home ? match.second_team_name : match.first_team_name;
+  const opponentId = home ? match.away_team_id : match.home_team_id;
+  const result =
+    ours == null || theirs == null ? null : ours > theirs ? "W" : ours < theirs ? "L" : "D";
+  return { home, ours, theirs, opponentName, opponentId, result };
+}
+
+/* ===================== Parçalar ===================== */
+
+function SeasonStat({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+  return (
+    <View style={styles.seasonStat}>
+      <Text style={[styles.seasonValue, highlight && styles.seasonValueHi]}>{value}</Text>
+      <Text style={styles.seasonLabel}>{label}</Text>
+    </View>
+  );
+}
+
+function FormChips({ last5 }: { last5: string }) {
+  return (
+    <View style={styles.form}>
+      {last5
+        .slice(-5)
+        .split("")
+        .map((result, index) => (
+          <View
+            key={`${result}-${index}`}
+            style={[
+              styles.chip,
+              result === "W" ? styles.chipWin : result === "L" ? styles.chipLoss : styles.chipDraw,
+            ]}
+          >
+            <Text style={styles.chipText}>
+              {result === "W" ? "G" : result === "L" ? "M" : "B"}
+            </Text>
+          </View>
+        ))}
+    </View>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: number | string | null | undefined }) {
   return (
     <View style={styles.stat}>
-      <Text style={styles.statValue}>{value ?? 0}</Text>
+      <Text style={styles.statValue}>{value ?? "—"}</Text>
       <Text style={styles.statLabel}>{label}</Text>
     </View>
   );
 }
+
+function TabButton({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.tab, active && styles.tabActive, pressed && styles.pressed]}
+    >
+      <Text style={[styles.tabText, active && styles.tabTextActive]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function MatchRow({
+  match,
+  teamId,
+  teamName,
+  logoFor,
+  onPress,
+}: {
+  match: ApiMatch;
+  teamId: number;
+  teamName: string;
+  logoFor: (id?: number | null, name?: string | null) => string | null;
+  onPress: () => void;
+}) {
+  const view = perspective(match, teamId, teamName);
+
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.matchRow, pressed && styles.pressed]}>
+      <View
+        style={[
+          styles.resultBadge,
+          view.result === "W"
+            ? styles.chipWin
+            : view.result === "L"
+              ? styles.chipLoss
+              : styles.chipDraw,
+        ]}
+      >
+        <Text style={styles.resultBadgeText}>
+          {view.result === "W" ? "G" : view.result === "L" ? "M" : "B"}
+        </Text>
+      </View>
+      <TeamCrest name={view.opponentName} logo={logoFor(view.opponentId, view.opponentName)} size={30} />
+      <View style={styles.matchBody}>
+        <Text style={styles.opponent} numberOfLines={1}>
+          {String(view.opponentName ?? "").toLocaleUpperCase("tr-TR")}
+        </Text>
+        <Text style={styles.matchMeta} numberOfLines={1}>
+          {formatDateShort(match.date)}
+          {match.match_field ? ` · ${match.match_field}` : ""}
+          {view.home ? " · İç saha" : " · Deplasman"}
+        </Text>
+      </View>
+      <Text style={styles.score}>
+        {view.ours ?? "-"}
+        <Text style={styles.scoreDash}> - </Text>
+        {view.theirs ?? "-"}
+      </Text>
+    </Pressable>
+  );
+}
+
+function FixtureRow({
+  match,
+  teamId,
+  teamName,
+  logoFor,
+  onPress,
+}: {
+  match: ApiMatch;
+  teamId: number;
+  teamName: string;
+  logoFor: (id?: number | null, name?: string | null) => string | null;
+  onPress: () => void;
+}) {
+  const view = perspective(match, teamId, teamName);
+
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.matchRow, pressed && styles.pressed]}>
+      <View style={styles.dateBox}>
+        <Text style={styles.dateText}>{formatDateShort(match.date)}</Text>
+        <Text style={styles.timeText}>{formatTime(match.time)}</Text>
+      </View>
+      <TeamCrest name={view.opponentName} logo={logoFor(view.opponentId, view.opponentName)} size={30} />
+      <View style={styles.matchBody}>
+        <Text style={styles.opponent} numberOfLines={1}>
+          {String(view.opponentName ?? "").toLocaleUpperCase("tr-TR")}
+        </Text>
+        <Text style={styles.matchMeta} numberOfLines={1}>
+          {match.match_field ?? "Saha bilgisi yok"}
+          {view.home ? " · İç saha" : " · Deplasman"}
+        </Text>
+      </View>
+      <Pressable
+        onPress={() => addMatchToCalendar(match)}
+        hitSlop={8}
+        style={({ pressed }) => [styles.calBtn, pressed && styles.pressed]}
+      >
+        <Ionicons name="calendar-outline" size={18} color={colors.turf} />
+      </Pressable>
+    </Pressable>
+  );
+}
+
+function SquadRow({
+  player,
+  rank,
+  onPress,
+}: {
+  player: PlayerRankRow;
+  rank: number;
+  onPress: () => void;
+}) {
+  const num = (value: number | string | null | undefined) => Number(value ?? 0) || 0;
+
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.matchRow, pressed && styles.pressed]}>
+      <Text style={styles.squadRank}>{rank}</Text>
+      <PlayerAvatar name={player.name} image={player.image} size={34} />
+      <View style={styles.matchBody}>
+        <Text style={styles.opponent} numberOfLines={1}>
+          {player.name.toLocaleUpperCase("tr-TR")}
+        </Text>
+        <Text style={styles.matchMeta}>{num(player.matches)} maç</Text>
+      </View>
+      <SquadStat label="G" value={num(player.goals)} />
+      <SquadStat label="A" value={num(player.assists)} />
+      <View style={styles.pointsBadge}>
+        <Text style={styles.pointsValue}>{num(player.points)}</Text>
+        <Text style={styles.pointsLabel}>PUAN</Text>
+      </View>
+    </Pressable>
+  );
+}
+
+function SquadStat({ label, value }: { label: string; value: number }) {
+  return (
+    <View style={styles.squadStat}>
+      <Text style={[styles.squadStatValue, value > 0 && styles.squadStatLead]}>{value}</Text>
+      <Text style={styles.squadStatLabel}>{label}</Text>
+    </View>
+  );
+}
+
+/* ===================== Stiller ===================== */
 
 const styles = StyleSheet.create({
   screen: {
@@ -189,18 +494,34 @@ const styles = StyleSheet.create({
   },
   hero: {
     alignItems: "center",
-    gap: spacing.sm,
+    gap: spacing.xs,
     paddingVertical: spacing.md,
+  },
+  teamName: {
+    ...type.title,
+    color: colors.line,
+    textAlign: "center",
+    marginTop: spacing.xs,
+  },
+  teamMeta: {
+    ...type.small,
+    color: colors.muted,
   },
   favBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: colors.surfaceRaised,
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    marginTop: 8,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.faint,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  favBtnActive: {
+    borderColor: colors.yellow,
+    backgroundColor: colors.goldDim + "55",
   },
   favText: {
     fontSize: 12,
@@ -210,44 +531,239 @@ const styles = StyleSheet.create({
   favTextActive: {
     color: colors.line,
   },
-  teamName: {
-    ...type.title,
-    color: colors.line,
-    textAlign: "center",
-  },
-  teamMeta: {
-    ...type.small,
-    color: colors.muted,
-  },
-  stats: {
-    flexDirection: "row",
+  seasonCard: {
     backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.turf,
     borderRadius: radius.md,
-    paddingVertical: spacing.md,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  cardKicker: {
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    color: colors.turf,
+    marginBottom: spacing.sm,
+  },
+  seasonRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+  },
+  seasonStat: {
+    alignItems: "center",
+  },
+  seasonValue: {
+    ...type.subtitle,
+    color: colors.line,
+    fontVariant: ["tabular-nums"],
+  },
+  seasonValueHi: {
+    color: colors.turf,
+  },
+  seasonLabel: {
+    fontSize: 8,
+    fontWeight: "700",
+    color: colors.muted,
+    letterSpacing: 0.5,
+    marginTop: 1,
+  },
+  form: {
+    flexDirection: "row",
+    gap: 3,
+    marginLeft: "auto",
+  },
+  chip: {
+    width: 15,
+    height: 15,
+    borderRadius: 4,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  chipWin: { backgroundColor: colors.green },
+  chipDraw: { backgroundColor: "#B9B5C6" },
+  chipLoss: { backgroundColor: colors.live },
+  chipText: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: colors.surface,
+  },
+  statsCard: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.faint,
+    borderRadius: radius.md,
+    padding: spacing.md,
     marginBottom: spacing.md,
   },
+  statsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
   stat: {
-    flex: 1,
     alignItems: "center",
-    gap: 2,
+    flex: 1,
   },
   statValue: {
     ...type.subtitle,
     color: colors.line,
+    fontVariant: ["tabular-nums"],
   },
   statLabel: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: colors.muted,
+    letterSpacing: 0.4,
+    marginTop: 1,
+  },
+  tabs: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  tab: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: spacing.sm + 2,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.faint,
+  },
+  tabActive: {
+    backgroundColor: colors.turf,
+    borderColor: colors.turf,
+  },
+  tabText: {
     ...type.caption,
     color: colors.muted,
   },
-  sectionTitle: {
-    ...type.caption,
-    color: colors.muted,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.sm,
+  tabTextActive: {
+    color: colors.surface,
   },
-  placeholder: {
+  matchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.faint,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    marginBottom: spacing.sm,
+  },
+  resultBadge: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  resultBadgeText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: colors.surface,
+  },
+  matchBody: {
+    flex: 1,
+  },
+  opponent: {
     ...type.small,
-    color: colors.faint,
-    paddingVertical: spacing.md,
+    color: colors.line,
+    fontWeight: "700",
+  },
+  matchMeta: {
+    ...type.caption,
+    color: colors.muted,
+    letterSpacing: 0,
+    marginTop: 1,
+  },
+  score: {
+    ...type.subtitle,
+    color: colors.line,
+    fontVariant: ["tabular-nums"],
+  },
+  scoreDash: {
+    color: colors.muted,
+  },
+  dateBox: {
+    alignItems: "center",
+    minWidth: 52,
+  },
+  dateText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: colors.line,
+  },
+  timeText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: colors.muted,
+    marginTop: 1,
+  },
+  calBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.turfDim,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  squadHint: {
+    ...type.caption,
+    color: colors.muted,
+    letterSpacing: 0,
+    marginBottom: spacing.sm,
+  },
+  squadRank: {
+    ...type.small,
+    color: colors.muted,
+    width: 20,
+    textAlign: "center",
+    fontVariant: ["tabular-nums"],
+  },
+  squadStat: {
+    alignItems: "center",
+    width: 24,
+  },
+  squadStatValue: {
+    ...type.small,
+    color: colors.muted,
+    fontWeight: "700",
+    fontVariant: ["tabular-nums"],
+  },
+  squadStatLead: {
+    color: colors.line,
+    fontWeight: "800",
+  },
+  squadStatLabel: {
+    fontSize: 8,
+    fontWeight: "700",
+    color: colors.muted,
+  },
+  pointsBadge: {
+    alignItems: "center",
+    backgroundColor: colors.turfDim,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    minWidth: 46,
+  },
+  pointsValue: {
+    ...type.small,
+    color: colors.turf,
+    fontWeight: "800",
+    fontVariant: ["tabular-nums"],
+  },
+  pointsLabel: {
+    fontSize: 7,
+    fontWeight: "800",
+    color: colors.turf,
+    letterSpacing: 0.5,
+  },
+  pressed: {
+    opacity: 0.7,
   },
 });
