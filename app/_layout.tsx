@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { isDark } from "@/constants/theme";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { colors } from "@/constants/theme";
 import { ApiError } from "@/lib/http";
@@ -29,7 +30,7 @@ export default function RootLayout() {
         <AuthProvider>
           <ScopeProvider>
             <FavoriteProvider>
-            <StatusBar style="dark" />
+            <StatusBar style={isDark ? "light" : "dark"} />
             <Stack
               screenOptions={{
                 headerShown: false,

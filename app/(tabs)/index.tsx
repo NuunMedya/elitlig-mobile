@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useMemo } from "react";
 import {
+  Image,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -16,18 +17,21 @@ import { MyTeamCard } from "@/components/MyTeamCard";
 import { ScopeBar } from "@/components/ScopeBar";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { EmptyState, Loading } from "@/components/States";
-import { TeamCrest } from "@/components/TeamCrest";
+import { PlayerAvatar, TeamCrest } from "@/components/TeamCrest";
 import { colors, radius, spacing, type } from "@/constants/theme";
 import { YoutubeBanner } from "@/components/YoutubeBanner";
 import { useTeamLogos } from "@/hooks/useTeamLogos";
 import { getMatches } from "@/lib/api/matches";
+import { getPlayerRankings } from "@/lib/api/players";
 import { getNewsFeed } from "@/lib/api/news";
 import { getStandings } from "@/lib/api/standings";
-import { timeAgo } from "@/lib/format";
+import { formatDateShort, mediaUrl, timeAgo } from "@/lib/format";
+import { openLink } from "@/lib/links";
+import { youtubeChannelUrl } from "@/lib/youtube";
 import { matchState } from "@/lib/match";
 import { queryKeys } from "@/lib/queryKeys";
 import { useScope } from "@/providers/ScopeProvider";
-import type { ApiMatch } from "@/lib/types";
+import type { ApiMatch, NewsItem, PlayerRankRow } from "@/lib/types";
 
 /**
  * Genel Bakış — uygulamanın vitrini; web anasayfasının mobil karşılığı.
@@ -73,7 +77,21 @@ export default function OverviewScreen() {
     enabled: scope.ready,
   });
 
-  const { live, upcoming } = useMemo(
+  const scorersQuery = useQuery({
+    queryKey: queryKeys.playerRankings(scopeKey, "topScorers"),
+    queryFn: () => getPlayerRankings(scopeKey, "topScorers"),
+    enabled: scope.ready,
+    staleTime: 5 * 60_000,
+  });
+
+  const valuableQuery = useQuery({
+    queryKey: queryKeys.playerRankings(scopeKey, "mostValuable"),
+    queryFn: () => getPlayerRankings(scopeKey, "mostValuable"),
+    enabled: scope.ready,
+    staleTime: 5 * 60_000,
+  });
+
+  const { live, upcoming, recent } = useMemo(
     () => pickMatches(matchesQuery.data ?? []),
     [matchesQuery.data]
   );
@@ -93,7 +111,30 @@ export default function OverviewScreen() {
       perMatch: played > 0 ? (goals / played).toFixed(1) : "0.0",
     };
   }, [standingsQuery.data]);
-  const latestNews = (newsQuery.data?.items ?? []).slice(0, 3);
+  const feedItems = newsQuery.data?.items ?? [];
+  // Manşet: sabitlenmiş ya da en yeni editör haberi (kapaklıysa öne çıkar).
+  const headline = useMemo(() => {
+    const editorNews = feedItems.filter((item) => item.kind === "news");
+    return editorNews.find((item) => item.pinned) ?? editorNews[0] ?? null;
+  }, [feedItems]);
+  // Duyurular: son transfer/ceza kayıtları; manşetle aynı haberi tekrarlama.
+  const announcements = useMemo(
+    () => feedItems.filter((item) => item.kind !== "news").slice(0, 3),
+    [feedItems]
+  );
+  const latestNews = feedItems
+    .filter((item) => item.kind === "news" && item.id !== headline?.id)
+    .slice(0, 2);
+
+  // Liderler: gol kralı sunucu sırasıyla; en değerli puana göre yeniden dizilir.
+  const topScorer = scorersQuery.data?.players?.[0] ?? null;
+  const mostValuable = useMemo(() => {
+    const players = valuableQuery.data?.players ?? [];
+    if (!players.length) return null;
+    return [...players].sort(
+      (a, b) => (Number(b.points) || 0) - (Number(a.points) || 0)
+    )[0];
+  }, [valuableQuery.data]);
 
   const refreshing =
     matchesQuery.isRefetching || standingsQuery.isRefetching || newsQuery.isRefetching;
@@ -132,6 +173,20 @@ export default function OverviewScreen() {
         >
           <MyTeamCard matches={matchesQuery.data ?? []} />
 
+          <View style={styles.quickRow}>
+            <QuickChip icon="calendar-outline" label="Fikstür" onPress={() => router.push("/matches")} />
+            <QuickChip icon="podium-outline" label="Puan Durumu" onPress={() => router.push("/standings")} />
+            {youtubeChannelUrl(scope.cityLabel) ? (
+              <QuickChip
+                icon="logo-youtube"
+                label="YouTube"
+                onPress={() => openLink(youtubeChannelUrl(scope.cityLabel)!)}
+              />
+            ) : null}
+          </View>
+
+          {headline ? <HeadlineCard item={headline} /> : null}
+
           {season && (
             <View style={styles.seasonBoard}>
               <SeasonStat label="TAKIM" value={String(season.teams)} />
@@ -142,6 +197,33 @@ export default function OverviewScreen() {
               <View style={styles.seasonDivider} />
               <SeasonStat label="GOL/MAÇ" value={season.perMatch} />
             </View>
+          )}
+
+          {recent.length > 0 && (
+            <Section title="Son Sonuçlar" href="/matches">
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.resultsRow}
+              >
+                {recent.map((match) => (
+                  <ResultCard key={match.id} match={match} />
+                ))}
+              </ScrollView>
+            </Section>
+          )}
+
+          {(topScorer || mostValuable) && (
+            <Section title="İstatistik Liderleri" href="/players">
+              <View style={styles.leadersRow}>
+                {mostValuable ? (
+                  <LeaderCard kicker="EN DEĞERLİ" player={mostValuable} value={String(Number(mostValuable.points) || 0)} unit="PUAN" />
+                ) : null}
+                {topScorer ? (
+                  <LeaderCard kicker="GOL KRALI" player={topScorer} value={String(Number(topScorer.goals) || 0)} unit="GOL" />
+                ) : null}
+              </View>
+            </Section>
           )}
 
           {live.length > 0 && (
@@ -210,6 +292,29 @@ export default function OverviewScreen() {
             )}
           </Section>
 
+          {announcements.length > 0 && (
+            <Section title="Duyurular" href="/news">
+              {announcements.map((item) => (
+                <View key={`${item.kind}-${item.id}`} style={styles.annRow}>
+                  <View
+                    style={[
+                      styles.annPill,
+                      item.kind === "penalty" ? styles.annPillPenalty : styles.annPillTransfer,
+                    ]}
+                  >
+                    <Text style={styles.annPillText}>
+                      {item.kind === "penalty" ? "CEZA" : "TRANSFER"}
+                    </Text>
+                  </View>
+                  <Text style={styles.annTitle} numberOfLines={2}>
+                    {item.title}
+                  </Text>
+                  <Text style={styles.annTime}>{timeAgo(item.published_at)}</Text>
+                </View>
+              ))}
+            </Section>
+          )}
+
           <Section title="Son Haberler" href="/news">
             {latestNews.length > 0 ? (
               latestNews.map((item) => (
@@ -261,24 +366,133 @@ function SeasonStat({ label, value }: { label: string; value: string }) {
   );
 }
 
-/** Canlı maçlar + tarihe göre en yakın 3 zamanlanmış maç. */
+/** Canlı + en yakın 3 zamanlanmış + son oynanan 6 maç. */
 function pickMatches(matches: ApiMatch[]) {
   const live: ApiMatch[] = [];
   const scheduled: ApiMatch[] = [];
+  const finished: ApiMatch[] = [];
 
   for (const match of matches) {
     const state = matchState(match);
     if (state === "live") live.push(match);
     else if (state === "scheduled") scheduled.push(match);
+    else if (state === "finished") finished.push(match);
   }
 
-  scheduled.sort(
-    (a, b) =>
-      new Date(`${a.date}T${a.time || "00:00:00"}`).getTime() -
-      new Date(`${b.date}T${b.time || "00:00:00"}`).getTime()
-  );
+  const timeOf = (m: ApiMatch) =>
+    new Date(`${String(m.date).slice(0, 10)}T${m.time || "00:00:00"}`).getTime();
 
-  return { live, upcoming: scheduled.slice(0, 3) };
+  scheduled.sort((a, b) => timeOf(a) - timeOf(b));
+  finished.sort((a, b) => timeOf(b) - timeOf(a));
+
+  return { live, upcoming: scheduled.slice(0, 3), recent: finished.slice(0, 6) };
+}
+
+/** Ana ekran hızlı erişim düğmesi. */
+function QuickChip({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.quickChip, pressed && styles.pressed]}
+    >
+      <Ionicons name={icon} size={16} color={colors.turf} />
+      <Text style={styles.quickText}>{label}</Text>
+    </Pressable>
+  );
+}
+
+/** Manşet — sitedeki kahraman haber kartının mobil hali. */
+function HeadlineCard({ item }: { item: NewsItem }) {
+  const router = useRouter();
+  const cover = mediaUrl(item.cover_image_url);
+
+  return (
+    <Pressable
+      onPress={() => router.push(`/haber/${item.id}`)}
+      style={({ pressed }) => [styles.headline, pressed && styles.pressed]}
+    >
+      {cover ? <Image source={{ uri: cover }} style={styles.headlineImage} /> : null}
+      <View style={styles.headlineBody}>
+        <Text style={styles.headlineKicker}>MANŞET</Text>
+        <Text style={styles.headlineTitle} numberOfLines={3}>
+          {item.title}
+        </Text>
+        <Text style={styles.headlineMeta}>{timeAgo(item.published_at)}</Text>
+      </View>
+    </Pressable>
+  );
+}
+
+/** Son sonuç kartı — yatay şeritte kompakt skor. */
+function ResultCard({ match }: { match: ApiMatch }) {
+  const router = useRouter();
+
+  return (
+    <Pressable
+      onPress={() => router.push(`/mac/${match.id}`)}
+      style={({ pressed }) => [styles.resultCard, pressed && styles.pressed]}
+    >
+      <Text style={styles.resultDate}>{formatDateShort(match.date)}</Text>
+      <ResultLine name={match.first_team_name} score={match.first_team_score} win={(match.first_team_score ?? 0) > (match.second_team_score ?? 0)} />
+      <ResultLine name={match.second_team_name} score={match.second_team_score} win={(match.second_team_score ?? 0) > (match.first_team_score ?? 0)} />
+    </Pressable>
+  );
+}
+
+function ResultLine({ name, score, win }: { name: string; score: number | null; win: boolean }) {
+  return (
+    <View style={styles.resultLine}>
+      <Text style={[styles.resultName, win && styles.resultNameWin]} numberOfLines={1}>
+        {name}
+      </Text>
+      <Text style={[styles.resultScore, win && styles.resultNameWin]}>{score ?? "-"}</Text>
+    </View>
+  );
+}
+
+/** İstatistik lideri kartı — En Değerli / Gol Kralı. */
+function LeaderCard({
+  kicker,
+  player,
+  value,
+  unit,
+}: {
+  kicker: string;
+  player: PlayerRankRow;
+  value: string;
+  unit: string;
+}) {
+  const router = useRouter();
+
+  return (
+    <Pressable
+      onPress={() => router.push(`/oyuncu/${player.id}`)}
+      style={({ pressed }) => [styles.leaderCard, pressed && styles.pressed]}
+    >
+      <Text style={styles.leaderKicker}>{kicker}</Text>
+      <PlayerAvatar name={player.name} image={player.image} size={44} />
+      <Text style={styles.leaderName} numberOfLines={1}>
+        {player.name.toLocaleUpperCase("tr-TR")}
+      </Text>
+      {player.teamName ? (
+        <Text style={styles.leaderTeam} numberOfLines={1}>
+          {player.teamName}
+        </Text>
+      ) : null}
+      <View style={styles.leaderBadge}>
+        <Text style={styles.leaderValue}>{value}</Text>
+        <Text style={styles.leaderUnit}>{unit}</Text>
+      </View>
+    </Pressable>
+  );
 }
 
 function Section({
@@ -288,7 +502,7 @@ function Section({
   children,
 }: {
   title: string;
-  href: "/matches" | "/standings" | "/news";
+  href: "/matches" | "/standings" | "/news" | "/players";
   accent?: boolean;
   children: React.ReactNode;
 }) {
@@ -324,6 +538,190 @@ const styles = StyleSheet.create({
   },
   section: {
     marginTop: spacing.md,
+  },
+  quickRow: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  quickChip: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.faint,
+    borderRadius: radius.pill,
+    paddingVertical: spacing.sm + 2,
+  },
+  quickText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.line,
+  },
+  headline: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.faint,
+    borderRadius: radius.md,
+    overflow: "hidden",
+    marginTop: spacing.md,
+  },
+  headlineImage: {
+    width: "100%",
+    height: 170,
+    backgroundColor: colors.surfaceRaised,
+  },
+  headlineBody: {
+    padding: spacing.md,
+    gap: 4,
+  },
+  headlineKicker: {
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 1,
+    color: colors.yellow,
+  },
+  headlineTitle: {
+    ...type.subtitle,
+    color: colors.line,
+    lineHeight: 22,
+  },
+  headlineMeta: {
+    ...type.caption,
+    color: colors.muted,
+    letterSpacing: 0,
+  },
+  resultsRow: {
+    gap: spacing.sm,
+  },
+  resultCard: {
+    width: 150,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.faint,
+    borderRadius: radius.md,
+    padding: spacing.sm + 2,
+    gap: 4,
+  },
+  resultDate: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: colors.muted,
+    letterSpacing: 0.4,
+  },
+  resultLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.sm,
+  },
+  resultName: {
+    ...type.caption,
+    color: colors.muted,
+    letterSpacing: 0,
+    flex: 1,
+  },
+  resultNameWin: {
+    color: colors.line,
+    fontWeight: "800",
+  },
+  resultScore: {
+    ...type.small,
+    color: colors.muted,
+    fontWeight: "800",
+    fontVariant: ["tabular-nums"],
+  },
+  leadersRow: {
+    flexDirection: "row",
+    gap: spacing.sm,
+  },
+  leaderCard: {
+    flex: 1,
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.faint,
+    borderRadius: radius.md,
+    padding: spacing.md,
+  },
+  leaderKicker: {
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    color: colors.turf,
+  },
+  leaderName: {
+    ...type.caption,
+    color: colors.line,
+    letterSpacing: 0,
+  },
+  leaderTeam: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: colors.muted,
+  },
+  leaderBadge: {
+    alignItems: "center",
+    backgroundColor: colors.turfDim,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 3,
+    marginTop: 2,
+  },
+  leaderValue: {
+    ...type.subtitle,
+    color: colors.turf,
+    fontVariant: ["tabular-nums"],
+  },
+  leaderUnit: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: colors.turf,
+    letterSpacing: 0.5,
+  },
+  annRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.faint,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    marginBottom: spacing.sm,
+  },
+  annPill: {
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 3,
+  },
+  annPillTransfer: {
+    backgroundColor: "#2F3A56",
+  },
+  annPillPenalty: {
+    backgroundColor: "#B4232A",
+  },
+  annPillText: {
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+    color: "#FFFFFF",
+  },
+  annTitle: {
+    ...type.small,
+    color: colors.line,
+    fontWeight: "600",
+    flex: 1,
+  },
+  annTime: {
+    ...type.caption,
+    color: colors.muted,
+    letterSpacing: 0,
   },
   seasonBoard: {
     flexDirection: "row",

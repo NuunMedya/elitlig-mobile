@@ -1,7 +1,8 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useRouter } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { colors, spacing, type } from "@/constants/theme";
+import { colors, isDark, spacing, type } from "@/constants/theme";
+import { toggleTheme } from "@/lib/themeToggle";
 
 /** Sekme ekranlarının tepesi: marka + sayfa adı. */
 export function ScreenHeader({ title, right }: { title: string; right?: React.ReactNode }) {
@@ -12,6 +13,17 @@ export function ScreenHeader({ title, right }: { title: string; right?: React.Re
         <Text style={styles.title}>{title}</Text>
       </View>
       {right}
+      <Pressable
+        onPress={toggleTheme}
+        hitSlop={10}
+        style={({ pressed }) => [styles.themeBtn, pressed && styles.pressed]}
+      >
+        <Ionicons
+          name={isDark ? "sunny-outline" : "moon-outline"}
+          size={20}
+          color={colors.muted}
+        />
+      </Pressable>
     </View>
   );
 }
@@ -82,6 +94,16 @@ const styles = StyleSheet.create({
   detailSubtitle: {
     ...type.caption,
     color: colors.muted,
+  },
+  themeBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.faint,
+    alignItems: "center",
+    justifyContent: "center",
   },
   pressed: {
     opacity: 0.6,

@@ -1,12 +1,19 @@
+import { Appearance } from "react-native";
+import { getStoredTheme } from "./themePreference";
+
 /**
- * ElitLig tasarım sistemi — web sitesiyle ortak kimlik.
+ * ElitLig tasarım sistemi — web sitesiyle ortak kimlik, iki tema.
  *
- * Site: açık lavanta zemin, beyaz kartlar, elitlig moru vurgu, altın skor
- * rozetleri, yeşil aksiyon butonları. Token adları değişmedi; yalnızca
- * değerler siteye çekildi — böylece tüm ekranlar tek dosyayla yeni kimliğe
- * geçer. ("turf" artık marka moru demektir.)
+ * Aydınlık: sitenin gündüz yüzü (açık lavanta zemin, beyaz kartlar).
+ * Karanlık: sitenin koyu başlık dünyası (mor-siyah zemin, koyu kartlar,
+ * parlaklaştırılmış mor vurgu — koyu zeminde #6D28D9 sönük kaldığı için
+ * #A78BFA kullanılır).
+ *
+ * Tema, uygulama açılışında telefonun sistem ayarından okunur. Token adları
+ * her iki temada aynıdır; ekranlar hangi temada olduklarını bilmez.
  */
-export const colors = {
+
+const light = {
   /** Ana arka plan — açık lavanta */
   pitch: "#F5F3FB",
   /** Kart / yüzey rengi — beyaz */
@@ -33,7 +40,29 @@ export const colors = {
   green: "#178A50",
   /** Altın rozet zemini — skor hapları */
   goldDim: "#FAEDC4",
-} as const;
+};
+
+const dark: typeof light = {
+  pitch: "#0F0C16",
+  surface: "#1A1524",
+  surfaceRaised: "#251D35",
+  turf: "#A78BFA",
+  turfDim: "#2B2144",
+  live: "#F1606A",
+  yellow: "#F0BE2E",
+  red: "#F97066",
+  line: "#F2EFF9",
+  muted: "#9A93AC",
+  faint: "#2F2744",
+  green: "#3DBE7E",
+  goldDim: "#3A2F10",
+};
+
+/** Kullanıcı tercihi (güneş/ay düğmesi) varsa o, yoksa sistem teması. */
+const override = getStoredTheme();
+export const isDark = override ? override === "dark" : Appearance.getColorScheme() === "dark";
+
+export const colors: typeof light = isDark ? dark : light;
 
 export const spacing = {
   xs: 4,

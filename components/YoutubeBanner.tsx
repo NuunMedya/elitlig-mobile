@@ -1,7 +1,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Pressable, StyleSheet, Text } from "react-native";
 import { openLink } from "@/lib/links";
-import { colors, radius, spacing, type } from "@/constants/theme";
+import { colors, isDark, radius, spacing, type } from "@/constants/theme";
 import { youtubeChannelUrl, youtubeLiveUrl } from "@/lib/youtube";
 
 /**
@@ -39,9 +39,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
-    backgroundColor: "#FDECEC",
+    backgroundColor: isDark ? "#33191C" : "#FDECEC",
     borderWidth: 1,
-    borderColor: "#F6C9C9",
+    borderColor: isDark ? "#57262B" : "#F6C9C9",
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
