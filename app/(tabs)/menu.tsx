@@ -1,70 +1,125 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { Link } from "expo-router";
+import { useRouter } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { openLink } from "@/lib/links";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { colors, radius, spacing, type } from "@/constants/theme";
+import { openLink } from "@/lib/links";
+import { instagramUrl } from "@/lib/socials";
+import { youtubeChannelUrl } from "@/lib/youtube";
 import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
-import { youtubeChannelUrl } from "@/lib/youtube";
 
 /**
  * Menü — sekme çubuğuna sığmayan her şeyin evi.
  *
- * Haberler ve Profil rotaları yaşamaya devam eder (app/(tabs) altında,
- * href: null ile sekmeden gizli); buradan ulaşılır. Yeni sayfalar eklendikçe
- * (ayarlar, hakkında, iletişim...) bu liste büyür.
+ * Satırlar üç grupta toplanır: Keşfet, Bilgi, Bizi Takip Et. Tüm satırlar tek
+ * tip MenuRow bileşenidir ve yönlendirme router.push ile yapılır — Link
+ * kullanılmaz, çünkü Link + asChild sarmalaması satır düzenini bozuyordu.
  */
 export default function MenuScreen() {
   const auth = useAuth();
   const scope = useScope();
-  const channelUrl = youtubeChannelUrl(scope.cityLabel);
+  const router = useRouter();
   const user = auth?.user ?? null;
+  const channelUrl = youtubeChannelUrl(scope.cityLabel);
+  const igUrl = instagramUrl(scope.cityLabel);
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader title="Menü" />
 
       <ScrollView contentContainerStyle={styles.content}>
-        <Link href="/profile" asChild>
-          <Pressable style={({ pressed }) => [styles.userCard, pressed && styles.pressed]}>
-            <View style={styles.avatar}>
-              <Ionicons
-                name={user ? "person" : "person-outline"}
-                size={22}
-                color={colors.turf}
-              />
-            </View>
-            <View style={styles.userBody}>
-              <Text style={styles.userTitle}>
-                {user ? user.fullName ?? user.username : "Giriş yap"}
-              </Text>
-              <Text style={styles.userMeta}>
-                {user ? "Profilini görüntüle" : "Takımını takip et, profilini yönet"}
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={colors.faint} />
-          </Pressable>
-        </Link>
+        <Pressable
+          onPress={() => router.push("/profile")}
+          style={({ pressed }) => [styles.userCard, pressed && styles.pressed]}
+        >
+          <View style={styles.avatar}>
+            <Ionicons
+              name={user ? "person" : "person-outline"}
+              size={24}
+              color={colors.turf}
+            />
+          </View>
+          <View style={styles.userBody}>
+            <Text style={styles.userTitle}>
+              {user ? user.fullName ?? user.username : "Giriş yap"}
+            </Text>
+            <Text style={styles.userMeta}>
+              {user ? "Profilini görüntüle" : "Takımını takip et, profilini yönet"}
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+        </Pressable>
 
+        <Text style={styles.groupTitle}>KEŞFET</Text>
         <View style={styles.group}>
-          <MenuItem href="/sehir" icon="map-outline" label="Şehir değiştir" />
-          <MenuItem href="/news" icon="newspaper-outline" label="Haberler" />
+          <MenuRow
+            icon="map-outline"
+            label="Şehir değiştir"
+            note={scope.cityLabel || "Bölgeni seç"}
+            onPress={() => router.push("/sehir")}
+          />
+          <MenuRow
+            icon="newspaper-outline"
+            label="Haberler"
+            note="Manşetler, transferler, duyurular"
+            onPress={() => router.push("/news")}
+          />
+          <MenuRow
+            icon="archive-outline"
+            label="Arşiv"
+            note="Tamamlanan lig ve sezonlar"
+            onPress={() => router.push("/arsiv")}
+            last
+          />
+        </View>
+
+        <Text style={styles.groupTitle}>BİLGİ</Text>
+        <View style={styles.group}>
+          <MenuRow
+            icon="book-outline"
+            label="Lig Kuralları"
+            note="Resmî müsabaka kuralları"
+            onPress={() => router.push("/kurallar")}
+          />
+          <MenuRow
+            icon="alert-circle-outline"
+            label="Cezalar"
+            note="Disiplin kayıtları"
+            onPress={() => router.push("/cezalar")}
+          />
+          <MenuRow
+            icon="mail-outline"
+            label="İletişim"
+            note="Telefon, WhatsApp, e-posta"
+            onPress={() => router.push("/iletisim")}
+            last
+          />
+        </View>
+
+        <Text style={styles.groupTitle}>BİZİ TAKİP ET</Text>
+        <View style={styles.group}>
+          {igUrl ? (
+            <MenuRow
+              icon="logo-instagram"
+              label="Instagram"
+              note={`${scope.cityLabel} hesabı`}
+              onPress={() => openLink(igUrl)}
+            />
+          ) : null}
           {channelUrl ? (
-            <MenuItem
+            <MenuRow
               icon="logo-youtube"
-              label="YouTube Kanalı"
+              label="YouTube"
+              note="Canlı yayınlar ve maç özetleri"
               onPress={() => openLink(channelUrl)}
             />
           ) : null}
-          <MenuItem href="/kurallar" icon="book-outline" label="Lig Kuralları" />
-          <MenuItem href="/cezalar" icon="alert-circle-outline" label="Cezalar" />
-          <MenuItem href="/arsiv" icon="archive-outline" label="Arşiv" />
-          <MenuItem href="/iletisim" icon="mail-outline" label="İletişim" />
-          <MenuItem
+          <MenuRow
             icon="globe-outline"
             label="elitlig.com"
+            note="Web sitemiz"
             onPress={() => openLink("https://elitlig.com")}
             last
           />
@@ -76,38 +131,38 @@ export default function MenuScreen() {
   );
 }
 
-function MenuItem({
-  href,
+function MenuRow({
   icon,
   label,
+  note,
   onPress,
   last,
 }: {
-  href?: string;
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
-  onPress?: () => void;
+  note?: string;
+  onPress: () => void;
   last?: boolean;
 }) {
-  const row = (
+  return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [styles.item, !last && styles.itemBorder, pressed && styles.pressed]}
+      style={({ pressed }) => [styles.row, !last && styles.rowBorder, pressed && styles.pressed]}
     >
-      <Ionicons name={icon} size={20} color={colors.turf} />
-      <Text style={styles.itemLabel}>{label}</Text>
-      <Ionicons name="chevron-forward" size={16} color={colors.faint} />
+      <View style={styles.iconBox}>
+        <Ionicons name={icon} size={18} color={colors.turf} />
+      </View>
+      <View style={styles.rowBody}>
+        <Text style={styles.rowLabel}>{label}</Text>
+        {note ? (
+          <Text style={styles.rowNote} numberOfLines={1}>
+            {note}
+          </Text>
+        ) : null}
+      </View>
+      <Ionicons name="chevron-forward" size={16} color={colors.muted} />
     </Pressable>
   );
-
-  if (href) {
-    return (
-      <Link href={href} asChild>
-        {row}
-      </Link>
-    );
-  }
-  return row;
 }
 
 const styles = StyleSheet.create({
@@ -122,16 +177,17 @@ const styles = StyleSheet.create({
   userCard: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
-    backgroundColor: colors.surfaceRaised,
+    gap: spacing.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.faint,
     borderRadius: radius.md,
     padding: spacing.md,
-    marginBottom: spacing.md,
   },
   avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: colors.turfDim,
     alignItems: "center",
     justifyContent: "center",
@@ -148,33 +204,58 @@ const styles = StyleSheet.create({
     color: colors.muted,
     marginTop: 2,
   },
+  groupTitle: {
+    ...type.caption,
+    color: colors.muted,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
+    marginLeft: spacing.xs,
+  },
   group: {
     backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.faint,
     borderRadius: radius.md,
     overflow: "hidden",
   },
-  item: {
+  row: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
+    gap: spacing.md,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md - 2,
+    paddingVertical: spacing.sm + 4,
   },
-  itemBorder: {
+  rowBorder: {
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.faint,
   },
-  itemLabel: {
+  iconBox: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.sm + 1,
+    backgroundColor: colors.turfDim,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  rowBody: {
+    flex: 1,
+  },
+  rowLabel: {
     ...type.body,
     color: colors.line,
-    flex: 1,
     fontWeight: "600",
+  },
+  rowNote: {
+    ...type.caption,
+    color: colors.muted,
+    letterSpacing: 0,
+    marginTop: 1,
   },
   version: {
     ...type.caption,
-    color: colors.faint,
+    color: colors.muted,
     textAlign: "center",
-    marginTop: spacing.lg,
+    marginTop: spacing.xl,
   },
   pressed: {
     opacity: 0.7,
