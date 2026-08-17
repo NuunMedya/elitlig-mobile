@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MatchCard } from "@/components/MatchCard";
 import { MyTeamCard } from "@/components/MyTeamCard";
+import { WeekSeven } from "@/components/WeekSeven";
 import { ScopeBar } from "@/components/ScopeBar";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { EmptyState, Loading } from "@/components/States";
@@ -225,6 +226,8 @@ export default function OverviewScreen() {
               </View>
             </Section>
           )}
+
+          <WeekSeven />
 
           {live.length > 0 && (
             <Section title="Canlı" href="/matches" accent>
