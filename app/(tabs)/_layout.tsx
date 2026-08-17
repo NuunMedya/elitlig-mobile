@@ -35,12 +35,21 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.turf,
-        tabBarInactiveTintColor: colors.muted,
-        tabBarLabelStyle: { ...type.caption, letterSpacing: 0 },
+        // Koyu marka çerçevesi: her iki temada da sitenin koyu moru;
+        // aktif sekme mor hap içinde beyaz yanar.
+        tabBarActiveTintColor: "#FFFFFF",
+        tabBarInactiveTintColor: "#9A8FB8",
+        tabBarActiveBackgroundColor: colors.turf,
+        tabBarLabelStyle: { ...type.caption, letterSpacing: 0, fontSize: 10 },
         tabBarStyle: {
-          backgroundColor: colors.surface,
-          borderTopColor: colors.faint,
+          backgroundColor: "#17102B",
+          borderTopWidth: 0,
+        },
+        tabBarItemStyle: {
+          borderRadius: 16,
+          marginHorizontal: 4,
+          marginVertical: 6,
+          overflow: "hidden",
         },
       }}
     >
