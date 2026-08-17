@@ -73,6 +73,18 @@ export default function MenuScreen() {
             onPress={() => router.push("/arena")}
           />
           <MenuRow
+            icon="football-outline"
+            label="Top Sektir"
+            note="Flappy usulü: düşürme!"
+            onPress={() => router.push("/sektir")}
+          />
+          <MenuRow
+            icon="help-circle-outline"
+            label="Kim Bu?"
+            note="Gizemli oyuncuyu bil"
+            onPress={() => router.push("/kimbu")}
+          />
+          <MenuRow
             icon="newspaper-outline"
             label="Haberler"
             note="Manşetler, transferler, duyurular"
