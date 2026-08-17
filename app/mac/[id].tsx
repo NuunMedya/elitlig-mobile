@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
-import { addMatchToCalendar } from "@/lib/calendar";
 import { openLink } from "@/lib/links";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { DetailHeader } from "@/components/ScreenHeader";
@@ -133,16 +132,6 @@ export default function MatchDetailScreen() {
         />
 
         {live && <YoutubeBanner cityLabel={match.city} live />}
-
-        {matchState(match) === "scheduled" && (
-          <Pressable
-            onPress={() => addMatchToCalendar(match)}
-            style={({ pressed }) => [styles.calendarBtn, pressed && styles.pressedRow]}
-          >
-            <Ionicons name="calendar-outline" size={18} color={colors.turf} />
-            <Text style={styles.calendarText}>Takvime ekle</Text>
-          </Pressable>
-        )}
 
         <View style={styles.tabs}>
           <TabButton label="Özet" active={tab === "summary"} onPress={() => setTab("summary")} />
@@ -300,15 +289,8 @@ function Summary({
   const videoUrl = mediaUrl(match.match_video);
   const router = useRouter();
 
-  const rawHeadline = match.match_title?.trim();
+  const headline = match.match_title?.trim();
   const heroImage = mediaUrl(match.match_picture);
-  // "TAKIM1 vs TAKIM2" gibi otomatik başlıklar skorbordu tekrarlar; gizlenir.
-  const squash = (value: string) =>
-    value.toLocaleLowerCase("tr-TR").replace(/[\s·|-]+/g, " ").replace(/\bvs\.?\b/g, "vs").trim();
-  const trivialTitle =
-    !!rawHeadline &&
-    squash(rawHeadline) === squash(`${match.first_team_name} vs ${match.second_team_name}`);
-  const headline = trivialTitle ? null : rawHeadline;
 
   return (
     <View style={styles.section}>
@@ -392,38 +374,26 @@ function Summary({
   );
 }
 
-/**
- * Sitedeki ızgara satırı: sol ev, sağ deplasman, altta oran çubuğu.
- * Dürüst çubuk kuralları: iki taraf da sıfırsa nötr ince çizgi; tek taraf
- * sıfırsa çubuğun tamamı diğer tarafın rengi; ikisi de doluysa oranlı bölünür.
- */
+/** Sitedeki ızgara satırı: sol ev, sağ deplasman, altta iki renkli oran çubuğu. */
 function StatLine({ row }: { row: StatRow }) {
   const total = row.home + row.away;
-  const lead = (mine: number, theirs: number) => total > 0 && mine >= theirs;
+  const homeShare = total > 0 ? row.home / total : 0.5;
 
   return (
     <View style={styles.statLine}>
       <View style={styles.statValues}>
-        <Text style={[styles.statValue, lead(row.home, row.away) && styles.statValueLead]}>
+        <Text style={[styles.statValue, row.home >= row.away && styles.statValueLead]}>
           {row.home}
         </Text>
         <Text style={styles.statLabel}>{row.label}</Text>
-        <Text style={[styles.statValue, lead(row.away, row.home) && styles.statValueLead]}>
+        <Text style={[styles.statValue, row.away >= row.home && styles.statValueLead]}>
           {row.away}
         </Text>
       </View>
-      {total === 0 ? (
-        <View style={styles.statBarEmpty} />
-      ) : (
-        <View style={styles.statBar}>
-          {row.home > 0 ? (
-            <View style={[styles.statBarHome, { flex: row.home }]} />
-          ) : null}
-          {row.away > 0 ? (
-            <View style={[styles.statBarAway, { flex: row.away }]} />
-          ) : null}
-        </View>
-      )}
+      <View style={styles.statBar}>
+        <View style={[styles.statBarHome, { flex: Math.max(homeShare, 0.02) }]} />
+        <View style={[styles.statBarAway, { flex: Math.max(1 - homeShare, 0.02) }]} />
+      </View>
     </View>
   );
 }
@@ -457,10 +427,9 @@ function BestPlayerCard({ player, rank }: { player: TopPlayer; rank: number }) {
 }
 
 function BestStat({ label, value }: { label: string; value: string }) {
-  const empty = value === "—";
   return (
     <View style={styles.bestStat}>
-      <Text style={[styles.bestStatValue, empty && styles.bestStatEmpty]}>{value}</Text>
+      <Text style={styles.bestStatValue}>{value}</Text>
       <Text style={styles.bestStatLabel}>{label}</Text>
     </View>
   );
@@ -497,7 +466,7 @@ function EventRow({
 
   return (
     <View style={[styles.eventRow, !home && styles.eventRowAway]}>
-      <Text style={styles.eventMinute}>{event.dakika ? `${event.dakika}'` : "—"}</Text>
+      <Text style={styles.eventMinute}>{event.dakika != null ? `${event.dakika}'` : "—"}</Text>
       <Ionicons name={visual.icon} size={15} color={visual.color} />
       <View style={styles.eventText}>
         <Text style={[styles.eventName, !home && styles.eventNameAway]} numberOfLines={1}>
@@ -774,21 +743,6 @@ const styles = StyleSheet.create({
     color: colors.muted,
     paddingBottom: spacing.xs,
   },
-  calendarBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: spacing.sm,
-    backgroundColor: colors.turfDim,
-    borderRadius: radius.md,
-    paddingVertical: spacing.sm + 2,
-    marginBottom: spacing.sm,
-  },
-  calendarText: {
-    ...type.small,
-    color: colors.turf,
-    fontWeight: "800",
-  },
   hero: {
     backgroundColor: "#17131F",
     borderRadius: radius.md,
@@ -909,22 +863,19 @@ const styles = StyleSheet.create({
   },
   statBar: {
     flexDirection: "row",
-    height: 5,
-    borderRadius: 3,
+    height: 4,
+    borderRadius: 2,
     overflow: "hidden",
-    marginTop: 5,
-  },
-  statBarEmpty: {
-    height: 5,
-    borderRadius: 3,
-    marginTop: 5,
-    backgroundColor: colors.faint,
+    marginTop: 4,
+    gap: 2,
   },
   statBarHome: {
     backgroundColor: colors.green,
+    borderRadius: 2,
   },
   statBarAway: {
     backgroundColor: colors.live,
+    borderRadius: 2,
   },
   bestGrid: {
     flexDirection: "row",
@@ -978,9 +929,6 @@ const styles = StyleSheet.create({
     color: colors.turf,
     fontWeight: "800",
     fontVariant: ["tabular-nums"],
-  },
-  bestStatEmpty: {
-    color: colors.muted,
   },
   bestStatLabel: {
     fontSize: 8,
