@@ -35,7 +35,7 @@ const light = {
   /** İkincil metin — nötr koyu gri */
   muted: "#63606E",
   /** Ayraçlar / kenarlıklar — beyaz zeminde kartları ayıran nötr gri */
-  faint: "#E4E2EB",
+  faint: "#D7D4DF",
   /** Aksiyon yeşili — giriş / kayıt butonları */
   green: "#178A50",
   /** Altın rozet zemini — skor hapları */
@@ -53,7 +53,7 @@ const dark: typeof light = {
   red: "#F97066",
   line: "#F2EFF9",
   muted: "#9A93AC",
-  faint: "#2F2744",
+  faint: "#3A3153",
   green: "#3DBE7E",
   goldDim: "#3A2F10",
 };

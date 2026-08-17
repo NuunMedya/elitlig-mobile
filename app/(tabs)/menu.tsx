@@ -226,7 +226,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm + 4,
   },
   rowBorder: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: 1,
     borderBottomColor: colors.faint,
   },
   iconBox: {

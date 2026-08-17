@@ -339,7 +339,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
   },
   divider: {
-    width: StyleSheet.hairlineWidth,
+    width: 1,
     alignSelf: "stretch",
     backgroundColor: colors.faint,
   },
@@ -430,7 +430,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   infoRowBorder: {
-    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopWidth: 1,
     borderTopColor: colors.faint,
   },
   infoLabel: {

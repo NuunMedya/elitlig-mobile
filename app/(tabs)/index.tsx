@@ -739,7 +739,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   seasonDivider: {
-    width: StyleSheet.hairlineWidth,
+    width: 1,
     alignSelf: "stretch",
     backgroundColor: colors.faint,
   },
