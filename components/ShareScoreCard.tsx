@@ -8,7 +8,7 @@ import { PlayerAvatar, TeamCrest } from "@/components/TeamCrest";
 import { colors, radius, spacing } from "@/constants/theme";
 import { instagramUrl } from "@/lib/socials";
 import { useScope } from "@/providers/ScopeProvider";
-import type { StatRow, TopPlayer } from "@/lib/matchStats";
+import type { ContribRow, StatRow, TopPlayer } from "@/lib/matchStats";
 import type { ApiMatch } from "@/lib/types";
 
 /**
@@ -42,6 +42,7 @@ export function ShareScoreCard({
   awayScore,
   mvp,
   stats,
+  contributions,
   homeLogo,
   awayLogo,
 }: {
@@ -51,6 +52,7 @@ export function ShareScoreCard({
   awayScore: number | null;
   mvp: TopPlayer | null;
   stats: StatRow[];
+  contributions?: { home: ContribRow[]; away: ContribRow[] };
   homeLogo: string | null;
   awayLogo: string | null;
 }) {
@@ -173,6 +175,8 @@ export function ShareScoreCard({
                     awayScore={awayScore}
                     mvp={mvp}
                     stats={stats}
+                    contributions={contributions}
+                    dateLabel={dateLabel}
                     homeLogo={homeLogo}
                     awayLogo={awayLogo}
                   />
@@ -261,12 +265,21 @@ function MatchDayBody({
 
 /* ============ MAÇ SONU gövdesi ============ */
 
+/** "Doğukan YILDIRIM" → "D. YILDIRIM" */
+function shortName(full: string) {
+  const parts = String(full ?? "").trim().split(/\s+/);
+  if (parts.length < 2) return String(full ?? "").toLocaleUpperCase("tr-TR");
+  return `${parts[0][0]}. ${parts[parts.length - 1]}`.toLocaleUpperCase("tr-TR");
+}
+
 function FullTimeBody({
   match,
   homeScore,
   awayScore,
   mvp,
   stats,
+  contributions,
+  dateLabel,
   homeLogo,
   awayLogo,
 }: {
@@ -275,18 +288,36 @@ function FullTimeBody({
   awayScore: number | null;
   mvp: TopPlayer | null;
   stats: StatRow[];
+  contributions?: { home: ContribRow[]; away: ContribRow[] };
+  dateLabel: string;
   homeLogo: string | null;
   awayLogo: string | null;
 }) {
   const wanted: Record<string, string> = {
     Goller: "GOL",
     Asistler: "ASİST",
-    "Sarı Kart": "SARI KART",
+    "Sarı Kart": "SARI",
+    "Kırmızı Kart": "KIRMIZI",
   };
-  const rows = (stats ?? []).filter((row) => wanted[row.label]).slice(0, 3);
+  const rows = (stats ?? [])
+    .filter((row) => wanted[row.label])
+    .filter((row) => row.label !== "Kırmızı Kart" || row.home + row.away > 0)
+    .slice(0, 4);
+
+  const scorers = (list?: ContribRow[]) =>
+    (list ?? []).filter((p) => p.goals > 0).slice(0, 4);
+  const homeScorers = scorers(contributions?.home);
+  const awayScorers = scorers(contributions?.away);
+  const venue = match.match_field
+    ? String(match.match_field).toLocaleUpperCase("tr-TR")
+    : "";
 
   return (
     <>
+      <Text style={styles.subMeta}>
+        {venue ? `${venue} · ` : ""}
+        {dateLabel}
+      </Text>
       <View style={styles.mainCard}>
         <View style={styles.vsRow}>
           <View style={styles.vsSide}>
@@ -307,6 +338,27 @@ function FullTimeBody({
             </Text>
           </View>
         </View>
+        {homeScorers.length > 0 || awayScorers.length > 0 ? (
+          <View style={styles.scorersRow}>
+            <View style={styles.scorersCol}>
+              {homeScorers.map((p) => (
+                <Text key={`h-${p.playerId}-${p.name}`} style={styles.scorerLine} numberOfLines={1}>
+                  ⚽ {shortName(p.name)}
+                  {p.goals > 1 ? ` ×${p.goals}` : ""}
+                </Text>
+              ))}
+            </View>
+            <View style={[styles.scorersCol, styles.scorersColRight]}>
+              {awayScorers.map((p) => (
+                <Text key={`a-${p.playerId}-${p.name}`} style={styles.scorerLine} numberOfLines={1}>
+                  {shortName(p.name)}
+                  {p.goals > 1 ? ` ×${p.goals}` : ""} ⚽
+                </Text>
+              ))}
+            </View>
+          </View>
+        ) : null}
+
         {mvp ? (
           <>
             <View style={styles.cardDivider} />
@@ -554,8 +606,35 @@ const styles = StyleSheet.create({
     color: GRAY,
     marginTop: 3,
   },
+  subMeta: {
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+    color: GRAY,
+    marginTop: -6,
+    marginBottom: spacing.sm,
+  },
+  scorersRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+    paddingHorizontal: 4,
+  },
+  scorersCol: {
+    flex: 1,
+    gap: 2,
+  },
+  scorersColRight: {
+    alignItems: "flex-end",
+  },
+  scorerLine: {
+    fontSize: 8,
+    fontWeight: "700",
+    color: INK,
+  },
   statPair: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "900",
     color: INK,
     fontVariant: ["tabular-nums"],

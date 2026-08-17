@@ -141,6 +141,7 @@ export default function MatchDetailScreen() {
             awayScore={snapshot?.awayScore ?? match.second_team_score}
             mvp={bestPlayers[0] ?? null}
             stats={statRows}
+            contributions={contributions}
             homeLogo={teams.logoFor(match.home_team_id, match.first_team_name)}
             awayLogo={teams.logoFor(match.away_team_id, match.second_team_name)}
           />
