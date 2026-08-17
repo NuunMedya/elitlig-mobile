@@ -1,8 +1,9 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Redirect, Tabs } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useEffect, useState } from "react";
-import { colors, type } from "@/constants/theme";
+import { colors, isDark, type } from "@/constants/theme";
 import { INTRO_SEEN_KEY } from "@/lib/storage";
 
 /**
@@ -20,6 +21,7 @@ function tabIcon(name: keyof typeof Ionicons.glyphMap) {
 }
 
 export default function TabsLayout() {
+  const insets = useSafeAreaInsets();
   const [introSeen, setIntroSeen] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -38,17 +40,22 @@ export default function TabsLayout() {
         // Koyu marka çerçevesi: her iki temada da sitenin koyu moru;
         // aktif sekme mor hap içinde beyaz yanar.
         tabBarActiveTintColor: "#FFFFFF",
-        tabBarInactiveTintColor: "#9A8FB8",
+        tabBarInactiveTintColor: isDark ? "#9A8FB8" : colors.muted,
         tabBarActiveBackgroundColor: colors.turf,
         tabBarLabelStyle: { ...type.caption, letterSpacing: 0, fontSize: 10 },
+        // Yükseklik cihazın alt güvenli alanına göre hesaplanır; böylece
+        // etiketler home göstergesinin altına itilmez.
         tabBarStyle: {
-          backgroundColor: "#17102B",
-          borderTopWidth: 0,
+          backgroundColor: isDark ? "#17102B" : colors.surface,
+          borderTopWidth: isDark ? 0 : 1,
+          borderTopColor: colors.faint,
+          height: 60 + insets.bottom,
+          paddingTop: 6,
+          paddingBottom: insets.bottom > 0 ? insets.bottom : 8,
         },
         tabBarItemStyle: {
           borderRadius: 16,
           marginHorizontal: 4,
-          marginVertical: 6,
           overflow: "hidden",
         },
       }}
