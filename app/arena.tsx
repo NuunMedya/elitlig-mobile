@@ -27,6 +27,12 @@ import type { PlayerRankRow } from "@/lib/types";
  */
 
 const BEST_KEY = "elitlig.arena.best.v1";
+const HISTORY_KEY = "elitlig.arena.history.v1";
+
+interface HistoryEntry {
+  streak: number;
+  date: string;
+}
 const REVEAL_MS = 850;
 
 const METRICS = [
@@ -80,9 +86,29 @@ export default function ArenaScreen() {
   }, [rankingsQuery.data]);
 
   const [best, setBest] = useState(0);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
   useEffect(() => {
     AsyncStorage.getItem(BEST_KEY).then((v) => setBest(Number(v) || 0));
+    AsyncStorage.getItem(HISTORY_KEY).then((v) => {
+      try {
+        setHistory(JSON.parse(v ?? "[]"));
+      } catch {
+        setHistory([]);
+      }
+    });
   }, []);
+
+  /** Biten seriyi geçmişe yazar (en iyi 20 tutulur). */
+  const record = (finished: number) => {
+    if (finished <= 0) return;
+    setHistory((current) => {
+      const next = [...current, { streak: finished, date: new Date().toISOString() }]
+        .sort((a, b) => b.streak - a.streak)
+        .slice(0, 20);
+      AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(next));
+      return next;
+    });
+  };
 
   const [streak, setStreak] = useState(0);
   const [phase, setPhase] = useState<Phase>("guess");
@@ -152,6 +178,7 @@ export default function ArenaScreen() {
       timer.current = setTimeout(advance, REVEAL_MS);
     } else {
       setPhase("wrong");
+      record(streak);
       timer.current = setTimeout(() => setPhase("over"), REVEAL_MS);
     }
   };
@@ -209,10 +236,10 @@ export default function ArenaScreen() {
             ]}
           >
             <PlayerAvatar name={bottom.name} image={bottom.image} size={44} />
-            <Text style={styles.playerName} numberOfLines={1}>
+            <Text style={[styles.playerName, styles.playerNameBottom]} numberOfLines={1}>
               {bottom.name.toLocaleUpperCase("tr-TR")}
             </Text>
-            <Text style={styles.teamName} numberOfLines={1}>
+            <Text style={[styles.teamName, styles.teamNameBottom]} numberOfLines={1}>
               {bottom.team}
             </Text>
             <Text style={[styles.valueHidden, phase !== "guess" && styles.valueRevealed]}>
@@ -254,6 +281,26 @@ export default function ArenaScreen() {
           <Text style={styles.hint}>
             Üstteki oyuncunun değeri açık; alttakinin {metricLabel} sayısı daha mı fazla, daha mı az?
           </Text>
+
+          {history.length > 0 ? (
+            <View style={styles.historyCard}>
+              <Text style={styles.historyTitle}>REKOR LİSTEM</Text>
+              {history.slice(0, 5).map((entry, index) => (
+                <View key={`${entry.date}-${index}`} style={styles.historyRow}>
+                  <Text style={styles.historyRank}>
+                    {index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : `${index + 1}.`}
+                  </Text>
+                  <Text style={styles.historyStreak}>🔥 {entry.streak}</Text>
+                  <Text style={styles.historyDate}>
+                    {new Date(entry.date).toLocaleDateString("tr-TR", {
+                      day: "numeric",
+                      month: "short",
+                    })}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
         </ScrollView>
       )}
     </SafeAreaView>
@@ -411,6 +458,12 @@ const styles = StyleSheet.create({
     color: "#D9CBF6",
     letterSpacing: 0,
   },
+  playerNameBottom: {
+    color: colors.turf,
+  },
+  teamNameBottom: {
+    color: colors.muted,
+  },
   valueOpen: {
     fontSize: 24,
     fontWeight: "900",
@@ -483,6 +536,43 @@ const styles = StyleSheet.create({
     textAlign: "center",
     letterSpacing: 0,
     marginTop: spacing.md,
+  },
+  historyCard: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.faint,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginTop: spacing.md,
+  },
+  historyTitle: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    color: colors.turf,
+    marginBottom: spacing.sm,
+  },
+  historyRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingVertical: 5,
+  },
+  historyRank: {
+    width: 28,
+    fontSize: 13,
+    textAlign: "center",
+  },
+  historyStreak: {
+    ...type.small,
+    fontWeight: "800",
+    color: colors.line,
+    flex: 1,
+  },
+  historyDate: {
+    ...type.caption,
+    color: colors.muted,
+    letterSpacing: 0,
   },
   overBox: {
     alignItems: "center",
