@@ -2,6 +2,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useRouter } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { colors, isDark, spacing, type } from "@/constants/theme";
+import { CallCenterButton } from "@/components/CallCenterButton";
 import { toggleTheme } from "@/lib/themeToggle";
 
 /** Sekme ekranlarının tepesi: marka + sayfa adı. */
@@ -13,6 +14,7 @@ export function ScreenHeader({ title, right }: { title: string; right?: React.Re
         <Text style={styles.title}>{title}</Text>
       </View>
       {right}
+      <CallCenterButton />
       <Pressable
         onPress={toggleTheme}
         hitSlop={10}
@@ -66,7 +68,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   titles: {
-    flexShrink: 1,
+    flex: 1,
   },
   brand: {
     ...type.caption,
