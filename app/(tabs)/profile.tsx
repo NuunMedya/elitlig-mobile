@@ -126,6 +126,31 @@ export default function ProfileScreen() {
             <Ionicons name="chevron-forward" size={18} color={colors.muted} />
           </Pressable>
 
+          {/* Teklifler ve sözleşmeler kapıları */}
+          <Pressable
+            onPress={() => router.push("/tekliflerim")}
+            style={({ pressed }) => [styles.card, styles.navRow, pressed && styles.pressed]}
+          >
+            <Ionicons name="swap-horizontal-outline" size={18} color={colors.turf} />
+            <View style={styles.heroBody}>
+              <Text style={styles.navTitle}>Transfer Tekliflerim</Text>
+              <Text style={styles.heroMeta}>Gelen teklifleri gör, kabul et ya da reddet</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+          </Pressable>
+
+          <Pressable
+            onPress={() => router.push("/sozlesmelerim")}
+            style={({ pressed }) => [styles.card, styles.navRow, pressed && styles.pressed]}
+          >
+            <Ionicons name="document-text-outline" size={18} color={colors.turf} />
+            <View style={styles.heroBody}>
+              <Text style={styles.navTitle}>Sözleşmelerim</Text>
+              <Text style={styles.heroMeta}>Aktif ve geçmiş sözleşmelerin</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+          </Pressable>
+
           {/* Son maçlar */}
           {me.recentMatches.length > 0 ? (
             <View style={styles.card}>

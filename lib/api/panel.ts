@@ -121,3 +121,79 @@ export interface MyMatchesResponse {
 }
 
 export const getMyMatches = () => get<MyMatchesResponse>("/api/match-center/matches");
+
+/**
+ * Transfer teklifleri — routes/transferOffers.js.
+ *
+ * :offerId sayısal id değil public_id (UUID). Her aksiyon gövdesinde
+ * teklifin güncel sürümü (expectedVersion) zorunludur; uyuşmazsa sunucu
+ * 409 TRANSFER_OFFER_VERSION_CONFLICT döndürür ve teklif yeniden yüklenir.
+ */
+
+import { post } from "../http";
+
+export interface Paged<T> {
+  items: T[];
+  page: number;
+  totalItems: number;
+  totalPages: number;
+  hasNextPage: boolean;
+}
+
+export interface OfferTeam {
+  id: number;
+  team_name: string;
+  logo: string | null;
+}
+
+export interface TransferOffer {
+  public_id: string;
+  status: string;
+  sent_at: string | null;
+  expires_at: string | null;
+  viewed_at: string | null;
+  version: number;
+  current_version?: number;
+  requires_admin_approval?: boolean;
+  admin_status?: string | null;
+  awaiting_admin_approval?: boolean;
+  team?: OfferTeam;
+  actions?: {
+    accept?: boolean;
+    reject?: boolean;
+    requestRevision?: boolean;
+  };
+  contract?: { public_id: string; status: string } | null;
+}
+
+export const getOfferInbox = (page = 1) =>
+  get<Paged<TransferOffer>>("/api/transfer-offers/inbox", { page, limit: 50 });
+
+export const getOffer = (offerId: string) =>
+  get<{ offer: TransferOffer }>(`/api/transfer-offers/${offerId}`);
+
+export const acceptOffer = (offerId: string, expectedVersion: number) =>
+  post<{ contract: { public_id: string; status: string } }>(
+    `/api/transfer-offers/${offerId}/accept`,
+    { expectedVersion }
+  );
+
+export const rejectOffer = (offerId: string, expectedVersion: number, reason: string) =>
+  post<{ message?: string }>(`/api/transfer-offers/${offerId}/reject`, {
+    expectedVersion,
+    reason,
+  });
+
+/** Sözleşmeler — routes/contracts.js. scope=player şart (double rolü tuzağı). */
+
+export interface Contract {
+  public_id: string;
+  status: string;
+  contract_start_date: string | null;
+  contract_end_date: string | null;
+  player?: { id: number; player_name: string; player_img: string | null };
+  team?: OfferTeam;
+}
+
+export const getMyContracts = (page = 1) =>
+  get<Paged<Contract>>("/api/contracts", { scope: "player", page, limit: 50 });
