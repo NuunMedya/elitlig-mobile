@@ -85,6 +85,12 @@ export default function MenuScreen() {
             onPress={() => router.push("/kimbu")}
           />
           <MenuRow
+            icon="today-outline"
+            label="Günün Testi"
+            note="Herkese aynı 10 soru!"
+            onPress={() => router.push("/gunun")}
+          />
+          <MenuRow
             icon="flag-outline"
             label="Slalom"
             note="Konilerden kaç, hız artar!"
