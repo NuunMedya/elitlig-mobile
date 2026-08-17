@@ -1,7 +1,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Redirect } from "expo-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -16,7 +16,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { DetailHeader } from "@/components/ScreenHeader";
 import { EmptyState, ErrorState, Loading } from "@/components/States";
 import { colors, radius, spacing, type } from "@/constants/theme";
@@ -41,6 +41,8 @@ import { useAuth } from "@/providers/AuthProvider";
 export default function MessagesScreen() {
   const auth = useAuth();
   const queryClient = useQueryClient();
+  const insets = useSafeAreaInsets();
+  const scrollRef = useRef<ScrollView>(null);
   const [openThreadId, setOpenThreadId] = useState<number | null>(null);
   const [reply, setReply] = useState("");
   const [composeOpen, setComposeOpen] = useState(false);
@@ -52,7 +54,9 @@ export default function MessagesScreen() {
     queryKey: ["panel", "messages"],
     queryFn: getMyMessages,
     enabled: Boolean(auth.user),
-    staleTime: 30_000,
+    staleTime: 5_000,
+    // Ekran açıkken sessiz yoklama: yeni mesajlar bildirimsiz de düşer.
+    refetchInterval: 8_000,
     retry: false,
   });
 
@@ -64,6 +68,7 @@ export default function MessagesScreen() {
     onSuccess: () => {
       setReply("");
       refresh();
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 150);
     },
     onError: (error) =>
       Alert.alert("Gönderilemedi", error instanceof Error ? error.message : "Bilinmeyen hata."),
@@ -88,6 +93,13 @@ export default function MessagesScreen() {
   }
 
   const threads = query.data?.threads ?? [];
+  const openThreadForEffect = threads.find((t) => t.id === openThreadId) ?? null;
+  useEffect(() => {
+    if (openThreadForEffect) {
+      const t = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
+      return () => clearTimeout(t);
+    }
+  }, [openThreadId, openThreadForEffect?.messages.length]);
   const categories = query.data?.categories ?? {};
   const openThread = threads.find((t) => t.id === openThreadId) ?? null;
 
@@ -156,7 +168,7 @@ export default function MessagesScreen() {
         animationType="slide"
         onRequestClose={() => setOpenThreadId(null)}
       >
-        <SafeAreaView style={styles.screen} edges={["top", "bottom"]}>
+        <View style={[styles.screen, { paddingTop: insets.top + spacing.sm }]}>
           <KeyboardAvoidingView
             style={styles.flex}
             behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -174,9 +186,11 @@ export default function MessagesScreen() {
             </View>
 
             <ScrollView
+              ref={scrollRef}
               contentContainerStyle={styles.bubbles}
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode="on-drag"
+              onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
             >
               {openThread?.messages.map((message) => {
                 const mine = message.direction === "to_admin";
@@ -185,6 +199,14 @@ export default function MessagesScreen() {
                     key={message.id}
                     style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleTheirs]}
                   >
+                    {!mine ? (
+                      <View style={styles.adminRow}>
+                        <Ionicons name="shield-checkmark" size={11} color={colors.turf} />
+                        <Text style={styles.adminName}>
+                          {message.sender || "ElitLig"} · Yönetici
+                        </Text>
+                      </View>
+                    ) : null}
                     <Text style={[styles.bubbleText, mine && styles.bubbleTextMine]}>
                       {message.body}
                     </Text>
@@ -222,8 +244,9 @@ export default function MessagesScreen() {
             ) : (
               <Text style={styles.closedNote}>Bu konu kapatılmış; yeni başvuru açabilirsin.</Text>
             )}
+            <View style={{ height: insets.bottom }} />
           </KeyboardAvoidingView>
-        </SafeAreaView>
+        </View>
       </Modal>
 
       {/* Yeni başvuru */}
@@ -396,9 +419,23 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   bubbles: {
+    flexGrow: 1,
+    justifyContent: "flex-end",
     paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
     paddingBottom: spacing.md,
     gap: spacing.sm,
+  },
+  adminRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginBottom: 3,
+  },
+  adminName: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: colors.turf,
   },
   bubble: {
     maxWidth: "84%",
@@ -441,12 +478,14 @@ const styles = StyleSheet.create({
   },
   replyInput: {
     flex: 1,
-    maxHeight: 100,
+    maxHeight: 110,
+    minHeight: 42,
+    backgroundColor: colors.surfaceRaised,
     borderWidth: 1,
     borderColor: colors.faint,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
+    borderRadius: 21,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
     ...type.small,
     color: colors.line,
   },
