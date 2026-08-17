@@ -85,6 +85,12 @@ export default function MenuScreen() {
             onPress={() => router.push("/kimbu")}
           />
           <MenuRow
+            icon="flag-outline"
+            label="Slalom"
+            note="Konilerden kaç, hız artar!"
+            onPress={() => router.push("/slalom")}
+          />
+          <MenuRow
             icon="newspaper-outline"
             label="Haberler"
             note="Manşetler, transferler, duyurular"
