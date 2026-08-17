@@ -5,6 +5,7 @@ import { useState } from "react";
 import {
   Alert,
   FlatList,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -172,7 +173,11 @@ export default function MessagesScreen() {
               </View>
             </View>
 
-            <ScrollView contentContainerStyle={styles.bubbles}>
+            <ScrollView
+              contentContainerStyle={styles.bubbles}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+            >
               {openThread?.messages.map((message) => {
                 const mine = message.direction === "to_admin";
                 return (
@@ -228,8 +233,12 @@ export default function MessagesScreen() {
         animationType="fade"
         onRequestClose={() => setComposeOpen(false)}
       >
-        <View style={styles.backdrop}>
-          <View style={styles.sheet}>
+        <Pressable style={styles.backdrop} onPress={Keyboard.dismiss}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            style={styles.kav}
+          >
+          <Pressable style={styles.sheet} onPress={() => {}}>
             <Text style={styles.sheetTitle}>Yeni Başvuru</Text>
             <View style={styles.catRow}>
               {Object.entries(categories).map(([key, label]) => (
@@ -284,8 +293,9 @@ export default function MessagesScreen() {
                 </Text>
               </Pressable>
             </View>
-          </View>
-        </View>
+          </Pressable>
+          </KeyboardAvoidingView>
+        </Pressable>
       </Modal>
     </SafeAreaView>
   );
@@ -461,6 +471,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     padding: spacing.lg,
+  },
+  kav: {
+    alignSelf: "stretch",
   },
   sheet: {
     alignSelf: "stretch",

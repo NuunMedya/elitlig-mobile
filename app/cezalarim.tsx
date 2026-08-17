@@ -5,7 +5,10 @@ import { useState } from "react";
 import {
   Alert,
   FlatList,
+  Keyboard,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -197,8 +200,12 @@ export default function PenaltiesScreen() {
         animationType="fade"
         onRequestClose={() => setCompose(null)}
       >
-        <View style={styles.backdrop}>
-          <View style={styles.sheet}>
+        <Pressable style={styles.backdrop} onPress={Keyboard.dismiss}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            style={styles.kav}
+          >
+          <Pressable style={styles.sheet} onPress={() => {}}>
             <Text style={styles.sheetTitle}>
               {compose?.kind === "defense" ? "Savunma" : "İtiraz"} yaz
             </Text>
@@ -240,8 +247,9 @@ export default function PenaltiesScreen() {
                 </Text>
               </Pressable>
             </View>
-          </View>
-        </View>
+          </Pressable>
+          </KeyboardAvoidingView>
+        </Pressable>
       </Modal>
     </SafeAreaView>
   );
@@ -413,6 +421,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     padding: spacing.lg,
+  },
+  kav: {
+    alignSelf: "stretch",
   },
   sheet: {
     alignSelf: "stretch",

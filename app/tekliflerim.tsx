@@ -5,7 +5,10 @@ import { useState } from "react";
 import {
   Alert,
   FlatList,
+  Keyboard,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -204,8 +207,12 @@ export default function OffersScreen() {
         animationType="fade"
         onRequestClose={() => setRejecting(null)}
       >
-        <View style={styles.backdrop}>
-          <View style={styles.sheet}>
+        <Pressable style={styles.backdrop} onPress={Keyboard.dismiss}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            style={styles.kav}
+          >
+          <Pressable style={styles.sheet} onPress={() => {}}>
             <Text style={styles.sheetTitle}>Teklifi reddet</Text>
             <Text style={styles.sheetBody}>
               {rejecting?.team?.team_name ?? "Takım"} teklifini reddediyorsun. Kısa bir gerekçe yaz:
@@ -244,8 +251,9 @@ export default function OffersScreen() {
                 </Text>
               </Pressable>
             </View>
-          </View>
-        </View>
+          </Pressable>
+          </KeyboardAvoidingView>
+        </Pressable>
       </Modal>
     </SafeAreaView>
   );
@@ -358,6 +366,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     padding: spacing.lg,
+  },
+  kav: {
+    alignSelf: "stretch",
   },
   sheet: {
     alignSelf: "stretch",
