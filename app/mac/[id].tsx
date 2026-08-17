@@ -374,9 +374,9 @@ function Summary({
       {timeline.length === 0 ? (
         <Text style={styles.placeholder}>Bu maç için henüz olay girilmemiş.</Text>
       ) : (
-        timeline.map((event) => (
+        timeline.map((event, index) => (
           <EventRow
-            key={event.id}
+            key={`${event.id ?? "olay"}-${index}`}
             event={event}
             home={Number(event.takim_id) === Number(homeTeamId)}
             nameOf={nameOf}

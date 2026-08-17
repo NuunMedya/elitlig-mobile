@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -7,11 +7,14 @@ import { DetailHeader } from "@/components/ScreenHeader";
 import { ErrorState, Loading } from "@/components/States";
 import { PlayerAvatar, TeamCrest } from "@/components/TeamCrest";
 import { colors, radius, spacing, type } from "@/constants/theme";
+import { getMatchKadro, getTeamMatches } from "@/lib/api/matches";
 import { getPlayer, getPlayerRankings } from "@/lib/api/players";
 import { getTeam } from "@/lib/api/teams";
-import { formatAge, formatMoney } from "@/lib/format";
+import { formatAge, formatDateShort, formatMoney } from "@/lib/format";
 import { queryKeys } from "@/lib/queryKeys";
+import { matchState } from "@/lib/match";
 import { useScope } from "@/providers/ScopeProvider";
+import type { ApiMatch, KadroPlayer } from "@/lib/types";
 
 /**
  * Oyuncu profili — GET /api/players/:id
@@ -59,6 +62,31 @@ export default function PlayerDetailScreen() {
   const assists = useMemo(() => {
     const row = rankingsQuery.data?.players?.find((item) => Number(item.id) === playerId);
     return row ? Number(row.assists) || 0 : null;
+  }, [rankingsQuery.data, playerId]);
+
+  // Lig içi sıralamalar — zaten çekilen listeden türetilir, ek istek yok.
+  const ranks = useMemo(() => {
+    const players = rankingsQuery.data?.players ?? [];
+    if (players.length === 0) return null;
+    const me = players.find((item) => Number(item.id) === playerId);
+    if (!me) return null;
+    const rankBy = (key: "points" | "goals") => {
+      const sorted = [...players].sort(
+        (a, b) => (Number(b[key]) || 0) - (Number(a[key]) || 0)
+      );
+      const index = sorted.findIndex((item) => Number(item.id) === playerId);
+      return index >= 0 ? index + 1 : null;
+    };
+    const teamMates = players
+      .filter((item) => Number(item.teamId) === Number(me.teamId))
+      .sort((a, b) => (Number(b.points) || 0) - (Number(a.points) || 0));
+    const teamIndex = teamMates.findIndex((item) => Number(item.id) === playerId);
+    return {
+      points: rankBy("points"),
+      goals: rankBy("goals"),
+      team: teamIndex >= 0 ? teamIndex + 1 : null,
+      total: players.length,
+    };
   }, [rankingsQuery.data, playerId]);
 
   if (playerQuery.isLoading) {
@@ -164,6 +192,15 @@ export default function PlayerDetailScreen() {
           <MetricPill label="Kırmızı Kart" value={String(red)} tone={red > 0 ? "red" : undefined} />
         </View>
 
+        {/* Lig içi sıralamalar */}
+        {ranks ? (
+          <View style={styles.rankRow}>
+            {ranks.points ? <RankPill label="PUAN SIRALAMASI" value={`${ranks.points}.`} /> : null}
+            {ranks.goals ? <RankPill label="GOL KRALLIĞI" value={`${ranks.goals}.`} /> : null}
+            {ranks.team ? <RankPill label="TAKIMINDA" value={`${ranks.team}.`} /> : null}
+          </View>
+        ) : null}
+
         {/* Galibiyet dengesi */}
         {decided > 0 ? (
           <View style={styles.card}>
@@ -186,6 +223,15 @@ export default function PlayerDetailScreen() {
           </View>
         ) : null}
 
+        {/* Son maçları — takım maçlarının kadrolarından süzülür */}
+        {player.team_id ? (
+          <RecentAppearances
+            playerId={playerId}
+            teamId={Number(player.team_id)}
+            onOpen={(id) => router.push(`/mac/${id}`)}
+          />
+        ) : null}
+
         {/* Bilgiler — yalnızca dolu alanlar */}
         {infoRows.length > 0 ? (
           <View style={styles.card}>
@@ -203,6 +249,126 @@ export default function PlayerDetailScreen() {
         ) : null}
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function RankPill({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.rankPill}>
+      <Text style={styles.rankValue}>{value}</Text>
+      <Text style={styles.rankLabel}>{label}</Text>
+    </View>
+  );
+}
+
+/**
+ * Oyuncunun son çıktığı maçlar — takımının son maçlarının kadroları taranır,
+ * oyuncunun bulunduğu maçlar tarih/rakip/skor/G-B-M ve o maçtaki puanıyla
+ * listelenir. Kadro sorguları maç detayıyla aynı önbelleği paylaşır.
+ */
+function RecentAppearances({
+  playerId,
+  teamId,
+  onOpen,
+}: {
+  playerId: number;
+  teamId: number;
+  onOpen: (matchId: number) => void;
+}) {
+  const teamMatchesQuery = useQuery({
+    queryKey: queryKeys.teamMatches(teamId),
+    queryFn: () => getTeamMatches(teamId),
+    enabled: teamId > 0,
+    staleTime: 60_000,
+  });
+
+  const recent = useMemo(() => {
+    const timeOf = (m: ApiMatch) =>
+      new Date(`${String(m.date).slice(0, 10)}T${m.time || "00:00:00"}`).getTime();
+    return (teamMatchesQuery.data ?? [])
+      .filter((m) => matchState(m) === "finished")
+      .sort((a, b) => timeOf(b) - timeOf(a))
+      .slice(0, 6);
+  }, [teamMatchesQuery.data]);
+
+  const kadroQueries = useQueries({
+    queries: recent.map((m) => ({
+      queryKey: [...queryKeys.match(Number(m.id)), "kadro"] as const,
+      queryFn: () => getMatchKadro(Number(m.id)),
+      staleTime: 60 * 60_000,
+    })),
+  });
+
+  const rows = useMemo(() => {
+    const findMe = (players?: KadroPlayer[]) =>
+      (players ?? []).find(
+        (p) => Number(p.playerId ?? p.oyuncu_id ?? p.id) === playerId
+      );
+    const out: {
+      match: ApiMatch;
+      puan: number | null;
+      result: "G" | "B" | "M";
+      opponent: string;
+      score: string;
+    }[] = [];
+    recent.forEach((m, index) => {
+      const kadro = kadroQueries[index]?.data;
+      if (!kadro) return;
+      const me = findMe(kadro.home) ?? findMe(kadro.away);
+      if (!me) return;
+      const isHome = Number(m.home_team_id) === teamId;
+      const ours = isHome ? m.first_team_score : m.second_team_score;
+      const theirs = isHome ? m.second_team_score : m.first_team_score;
+      const result =
+        ours == null || theirs == null ? "B" : ours > theirs ? "G" : ours < theirs ? "M" : "B";
+      out.push({
+        match: m,
+        puan: me.puan != null ? Number(me.puan) : null,
+        result,
+        opponent: String(isHome ? m.second_team_name : m.first_team_name ?? ""),
+        score: `${ours ?? "-"} - ${theirs ?? "-"}`,
+      });
+    });
+    return out;
+  }, [recent, kadroQueries, playerId, teamId]);
+
+  if (rows.length === 0) return null;
+
+  return (
+    <View style={styles.card}>
+      <Text style={styles.cardKicker}>SON MAÇLARI</Text>
+      {rows.map(({ match, puan, result, opponent, score }) => (
+        <Pressable
+          key={match.id}
+          onPress={() => onOpen(Number(match.id))}
+          style={({ pressed }) => [styles.appearRow, pressed && styles.pressed]}
+        >
+          <Text style={styles.appearDate}>{formatDateShort(match.date)}</Text>
+          <View
+            style={[
+              styles.appearChip,
+              result === "G"
+                ? styles.appearWin
+                : result === "M"
+                  ? styles.appearLoss
+                  : styles.appearDraw,
+            ]}
+          >
+            <Text style={styles.appearChipText}>{result}</Text>
+          </View>
+          <Text style={styles.appearOpponent} numberOfLines={1}>
+            {opponent.toLocaleUpperCase("tr-TR")}
+          </Text>
+          <Text style={styles.appearScore}>{score}</Text>
+          {puan != null ? (
+            <View style={styles.appearPoints}>
+              <Text style={styles.appearPointsText}>{puan}</Text>
+            </View>
+          ) : null}
+        </Pressable>
+      ))}
+      <Text style={styles.appearHint}>Sağdaki mor rozet o maçtaki puanı · dokun, maça git</Text>
+    </View>
   );
 }
 
@@ -444,5 +610,92 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.7,
+  },
+  rankRow: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  rankPill: {
+    flex: 1,
+    alignItems: "center",
+    gap: 2,
+    backgroundColor: colors.turfDim,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm + 2,
+  },
+  rankValue: {
+    ...type.subtitle,
+    color: colors.turf,
+    fontVariant: ["tabular-nums"],
+  },
+  rankLabel: {
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+    color: colors.turf,
+  },
+  appearRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.surfaceRaised,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  appearDate: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: colors.muted,
+    width: 46,
+  },
+  appearChip: {
+    width: 18,
+    height: 18,
+    borderRadius: 5,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  appearWin: { backgroundColor: colors.green },
+  appearDraw: { backgroundColor: "#B9B5C6" },
+  appearLoss: { backgroundColor: colors.live },
+  appearChipText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: colors.surface,
+  },
+  appearOpponent: {
+    ...type.caption,
+    color: colors.line,
+    letterSpacing: 0,
+    flex: 1,
+  },
+  appearScore: {
+    ...type.small,
+    color: colors.line,
+    fontWeight: "800",
+    fontVariant: ["tabular-nums"],
+  },
+  appearPoints: {
+    minWidth: 30,
+    alignItems: "center",
+    backgroundColor: colors.turf,
+    borderRadius: radius.pill,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  appearPointsText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: colors.surface,
+    fontVariant: ["tabular-nums"],
+  },
+  appearHint: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: colors.muted,
+    marginTop: spacing.sm,
   },
 });
