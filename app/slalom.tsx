@@ -70,7 +70,7 @@ export default function SlalomScreen() {
     setPhase(p);
   };
 
-  const speedFactor = () => Math.min(2.6, 1 + scoreRef.current * 0.02);
+  const speedFactor = () => Math.min(4.0, 1 + scoreRef.current * 0.02);
 
   const gameOver = () => {
     if (loop.current) clearInterval(loop.current);
@@ -159,7 +159,7 @@ export default function SlalomScreen() {
   };
 
   const ballY = area.current.h * BALL_Y_RATIO;
-  const factor = Math.min(2.6, 1 + score * 0.02);
+  const factor = Math.min(4.0, 1 + score * 0.02);
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
