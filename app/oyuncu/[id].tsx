@@ -10,7 +10,7 @@ import { colors, radius, spacing, type } from "@/constants/theme";
 import { getMatchKadro, getTeamMatches } from "@/lib/api/matches";
 import { getPlayer, getPlayerRankings } from "@/lib/api/players";
 import { getTeam } from "@/lib/api/teams";
-import { formatAge, formatDateShort, formatMoney } from "@/lib/format";
+import { formatDateShort } from "@/lib/format";
 import { queryKeys } from "@/lib/queryKeys";
 import { matchState } from "@/lib/match";
 import { useScope } from "@/providers/ScopeProvider";
@@ -120,19 +120,6 @@ export default function PlayerDetailScreen() {
   const winRate = decided > 0 ? Math.round((wins / decided) * 100) : null;
   const perMatch = played > 0 ? (goals / played).toFixed(2) : "0.00";
 
-  // formatAge/formatMoney boş değerde "—" döndürür; tireli satır gizlensin.
-  const clean = (value: string) => (value && value !== "—" ? value : null);
-  const age = clean(formatAge(player.birth_date));
-  const money = clean(
-    formatMoney(player.market_value ?? player.value, player.market_value_currency ?? undefined)
-  );
-  const infoRows = [
-    age ? { label: "Yaş", value: age } : null,
-    player.nationality?.trim() ? { label: "Uyruk", value: player.nationality.trim() } : null,
-    player.city?.trim() ? { label: "Şehir", value: player.city.trim() } : null,
-    money ? { label: "Piyasa değeri", value: money } : null,
-  ].filter(Boolean) as { label: string; value: string }[];
-
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <DetailHeader title={player.player_name} subtitle={player.player_position ?? undefined} />
@@ -190,6 +177,7 @@ export default function PlayerDetailScreen() {
           <MetricPill label="Gol / Maç" value={perMatch} />
           <MetricPill label="Sarı Kart" value={String(yellow)} tone={yellow > 0 ? "yellow" : undefined} />
           <MetricPill label="Kırmızı Kart" value={String(red)} tone={red > 0 ? "red" : undefined} />
+          <MetricPill label="Puan / Maç" value={played > 0 ? (points / played).toFixed(1) : "0.0"} />
         </View>
 
         {/* Lig içi sıralamalar */}
@@ -200,6 +188,17 @@ export default function PlayerDetailScreen() {
             {ranks.team ? <RankPill label="TAKIMINDA" value={`${ranks.team}.`} /> : null}
           </View>
         ) : null}
+
+        {/* Başarılar — eşiklerden otomatik türetilen rozetler */}
+        <Achievements
+          goals={goals}
+          played={played}
+          yellow={yellow}
+          red={red}
+          winRate={winRate}
+          pointsRank={ranks?.points ?? null}
+          goalsRank={ranks?.goals ?? null}
+        />
 
         {/* Galibiyet dengesi */}
         {decided > 0 ? (
@@ -232,23 +231,52 @@ export default function PlayerDetailScreen() {
           />
         ) : null}
 
-        {/* Bilgiler — yalnızca dolu alanlar */}
-        {infoRows.length > 0 ? (
-          <View style={styles.card}>
-            <Text style={styles.cardKicker}>BİLGİLER</Text>
-            {infoRows.map((row, index) => (
-              <View
-                key={row.label}
-                style={[styles.infoRow, index > 0 && styles.infoRowBorder]}
-              >
-                <Text style={styles.infoLabel}>{row.label}</Text>
-                <Text style={styles.infoValue}>{row.value}</Text>
-              </View>
-            ))}
-          </View>
-        ) : null}
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+/** Eşiklerden otomatik kazanılan rozetler; hiçbiri yoksa bölüm görünmez. */
+function Achievements({
+  goals,
+  played,
+  yellow,
+  red,
+  winRate,
+  pointsRank,
+  goalsRank,
+}: {
+  goals: number;
+  played: number;
+  yellow: number;
+  red: number;
+  winRate: number | null;
+  pointsRank: number | null;
+  goalsRank: number | null;
+}) {
+  const badges: string[] = [];
+  if (pointsRank === 1) badges.push("👑 Puan Lideri");
+  if (goalsRank === 1) badges.push("⚽ Gol Kralı");
+  if (goals >= 100) badges.push("💯 100 Gol Kulübü");
+  else if (goals >= 50) badges.push("🎯 50+ Gol");
+  if (played >= 100) badges.push("🏟️ 100+ Maç");
+  else if (played >= 50) badges.push("🛡️ 50+ Maç");
+  if (winRate != null && winRate >= 60 && played >= 10) badges.push("🔥 %60+ Galibiyet");
+  if (yellow === 0 && red === 0 && played >= 10) badges.push("🤝 Centilmen");
+
+  if (badges.length === 0) return null;
+
+  return (
+    <View style={styles.card}>
+      <Text style={styles.cardKicker}>BAŞARILAR</Text>
+      <View style={styles.badgeWrap}>
+        {badges.map((badge) => (
+          <View key={badge} style={styles.badge}>
+            <Text style={styles.badgeText}>{badge}</Text>
+          </View>
+        ))}
+      </View>
+    </View>
   );
 }
 
@@ -257,6 +285,30 @@ function RankPill({ label, value }: { label: string; value: string }) {
     <View style={styles.rankPill}>
       <Text style={styles.rankValue}>{value}</Text>
       <Text style={styles.rankLabel}>{label}</Text>
+    </View>
+  );
+}
+
+/** Son maç puanlarından mini çubuk grafik (soldan sağa eskiden yeniye). */
+function PointsSpark({ values }: { values: number[] }) {
+  if (values.length < 2) return null;
+  const max = Math.max(...values, 1);
+  return (
+    <View style={styles.spark}>
+      {values.map((value, index) => (
+        <View key={index} style={styles.sparkCol}>
+          <View
+            style={[
+              styles.sparkBar,
+              {
+                height: Math.max(6, Math.round((value / max) * 40)),
+              },
+              index === values.length - 1 && styles.sparkBarLast,
+            ]}
+          />
+          <Text style={styles.sparkValue}>{value}</Text>
+        </View>
+      ))}
     </View>
   );
 }
@@ -337,6 +389,12 @@ function RecentAppearances({
   return (
     <View style={styles.card}>
       <Text style={styles.cardKicker}>SON MAÇLARI</Text>
+      <PointsSpark
+        values={rows
+          .map((row) => row.puan)
+          .filter((value): value is number => value != null)
+          .reverse()}
+      />
       {rows.map(({ match, puan, result, opponent, score }) => (
         <Pressable
           key={match.id}
@@ -697,5 +755,49 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: colors.muted,
     marginTop: spacing.sm,
+  },
+  badgeWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+  },
+  badge: {
+    backgroundColor: colors.goldDim,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 5,
+  },
+  badgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: colors.line,
+  },
+  spark: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
+    paddingHorizontal: spacing.xs,
+  },
+  sparkCol: {
+    flex: 1,
+    alignItems: "center",
+    gap: 3,
+  },
+  sparkBar: {
+    width: "70%",
+    maxWidth: 26,
+    borderRadius: 4,
+    backgroundColor: colors.turfDim,
+  },
+  sparkBarLast: {
+    backgroundColor: colors.turf,
+  },
+  sparkValue: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: colors.muted,
+    fontVariant: ["tabular-nums"],
   },
 });
