@@ -133,12 +133,14 @@ export default function MatchDetailScreen() {
           awayTeamId={awayTeamId}
         />
 
-        {matchState(match) === "finished" ? (
+        {matchState(match) === "finished" || matchState(match) === "scheduled" ? (
           <ShareScoreCard
+            mode={matchState(match) === "finished" ? "fulltime" : "matchday"}
             match={match}
             homeScore={snapshot?.homeScore ?? match.first_team_score}
             awayScore={snapshot?.awayScore ?? match.second_team_score}
             mvp={bestPlayers[0] ?? null}
+            stats={statRows}
             homeLogo={teams.logoFor(match.home_team_id, match.first_team_name)}
             awayLogo={teams.logoFor(match.away_team_id, match.second_team_name)}
           />
