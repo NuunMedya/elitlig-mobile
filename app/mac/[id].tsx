@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { addMatchToCalendar } from "@/lib/calendar";
 import { openLink } from "@/lib/links";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { DetailHeader } from "@/components/ScreenHeader";
@@ -12,8 +13,8 @@ import { PlayerAvatar, TeamCrest } from "@/components/TeamCrest";
 import { colors, radius, spacing, type } from "@/constants/theme";
 import { useLiveClock, useLiveMatch } from "@/hooks/useLiveMatch";
 import { useTeamLogos } from "@/hooks/useTeamLogos";
-import { getMatch, getMatchKadro } from "@/lib/api/matches";
-import { formatClock, formatDateLong, formatTime, mediaUrl } from "@/lib/format";
+import { getMatch, getMatchKadro, getTeamMatches } from "@/lib/api/matches";
+import { formatClock, formatDateLong, formatDateShort, formatTime, mediaUrl } from "@/lib/format";
 import { eventKind, goalDetail, isTimelineEvent, matchState } from "@/lib/match";
 import { buildContributions, buildStatRows, buildTopPlayers } from "@/lib/matchStats";
 import { queryKeys } from "@/lib/queryKeys";
@@ -132,6 +133,16 @@ export default function MatchDetailScreen() {
         />
 
         {live && <YoutubeBanner cityLabel={match.city} live />}
+
+        {matchState(match) === "scheduled" && (
+          <Pressable
+            onPress={() => addMatchToCalendar(match)}
+            style={({ pressed }) => [styles.calendarBtn, pressed && styles.pressedRow]}
+          >
+            <Ionicons name="calendar-outline" size={18} color={colors.turf} />
+            <Text style={styles.calendarText}>Takvime ekle</Text>
+          </Pressable>
+        )}
 
         <View style={styles.tabs}>
           <TabButton label="Özet" active={tab === "summary"} onPress={() => setTab("summary")} />
@@ -289,8 +300,15 @@ function Summary({
   const videoUrl = mediaUrl(match.match_video);
   const router = useRouter();
 
-  const headline = match.match_title?.trim();
+  const rawHeadline = match.match_title?.trim();
   const heroImage = mediaUrl(match.match_picture);
+  // "TAKIM1 vs TAKIM2" gibi otomatik başlıklar skorbordu tekrarlar; gizlenir.
+  const squash = (value: string) =>
+    value.toLocaleLowerCase("tr-TR").replace(/[\s·|-]+/g, " ").replace(/\bvs\.?\b/g, "vs").trim();
+  const trivialTitle =
+    !!rawHeadline &&
+    squash(rawHeadline) === squash(`${match.first_team_name} vs ${match.second_team_name}`);
+  const headline = trivialTitle ? null : rawHeadline;
 
   return (
     <View style={styles.section}>
@@ -349,6 +367,8 @@ function Summary({
         </>
       ) : null}
 
+      <HeadToHead match={match} />
+
       <Text style={[styles.sectionTitle, styles.sectionSpacer]}>Maç Akışı</Text>
 
       {timeline.length === 0 ? (
@@ -374,26 +394,205 @@ function Summary({
   );
 }
 
-/** Sitedeki ızgara satırı: sol ev, sağ deplasman, altta iki renkli oran çubuğu. */
+/**
+ * Sitedeki ızgara satırı: sol ev, sağ deplasman, altta oran çubuğu.
+ * Dürüst çubuk kuralları: iki taraf da sıfırsa nötr ince çizgi; tek taraf
+ * sıfırsa çubuğun tamamı diğer tarafın rengi; ikisi de doluysa oranlı bölünür.
+ */
 function StatLine({ row }: { row: StatRow }) {
   const total = row.home + row.away;
-  const homeShare = total > 0 ? row.home / total : 0.5;
+  const lead = (mine: number, theirs: number) => total > 0 && mine >= theirs;
 
   return (
     <View style={styles.statLine}>
       <View style={styles.statValues}>
-        <Text style={[styles.statValue, row.home >= row.away && styles.statValueLead]}>
+        <Text style={[styles.statValue, lead(row.home, row.away) && styles.statValueLead]}>
           {row.home}
         </Text>
         <Text style={styles.statLabel}>{row.label}</Text>
-        <Text style={[styles.statValue, row.away >= row.home && styles.statValueLead]}>
+        <Text style={[styles.statValue, lead(row.away, row.home) && styles.statValueLead]}>
           {row.away}
         </Text>
       </View>
-      <View style={styles.statBar}>
-        <View style={[styles.statBarHome, { flex: Math.max(homeShare, 0.02) }]} />
-        <View style={[styles.statBarAway, { flex: Math.max(1 - homeShare, 0.02) }]} />
+      {total === 0 ? (
+        <View style={styles.statBarEmpty} />
+      ) : (
+        <View style={styles.statBar}>
+          {row.home > 0 ? (
+            <View style={[styles.statBarHome, { flex: row.home }]} />
+          ) : null}
+          {row.away > 0 ? (
+            <View style={[styles.statBarAway, { flex: row.away }]} />
+          ) : null}
+        </View>
+      )}
+    </View>
+  );
+}
+
+/**
+ * Geçmiş Karşılaşmalar (H2H) — iki takımın aralarındaki son maçlar.
+ *
+ * Veri, ev sahibi takımın maç listesinden süzülür; ayrıca iki takımın genel
+ * son 5 form çipleri gösterilir. Aralarında oynanmış maç yoksa bölüm hiç
+ * görünmez. Takım kimlikleri (id) eksik eski kayıtlarda da sessizce gizlenir.
+ */
+function HeadToHead({ match }: { match: ApiMatch }) {
+  const router = useRouter();
+  const homeId = Number(match.home_team_id) || null;
+  const awayId = Number(match.away_team_id) || null;
+
+  const homeQuery = useQuery({
+    queryKey: queryKeys.teamMatches(homeId ?? 0),
+    queryFn: () => getTeamMatches(homeId!),
+    enabled: Boolean(homeId),
+    staleTime: 60_000,
+  });
+  const awayQuery = useQuery({
+    queryKey: queryKeys.teamMatches(awayId ?? 0),
+    queryFn: () => getTeamMatches(awayId!),
+    enabled: Boolean(awayId),
+    staleTime: 60_000,
+  });
+
+  const data = useMemo(() => {
+    if (!homeId || !awayId) return null;
+    const timeOf = (m: ApiMatch) =>
+      new Date(`${String(m.date).slice(0, 10)}T${m.time || "00:00:00"}`).getTime();
+    const finished = (m: ApiMatch) => matchState(m) === "finished";
+    const involvesBoth = (m: ApiMatch) => {
+      const a = Number(m.home_team_id);
+      const b = Number(m.away_team_id);
+      return (a === homeId && b === awayId) || (a === awayId && b === homeId);
+    };
+
+    const meetings = (homeQuery.data ?? [])
+      .filter((m) => Number(m.id) !== Number(match.id) && finished(m) && involvesBoth(m))
+      .sort((a, b) => timeOf(b) - timeOf(a))
+      .slice(0, 6);
+
+    let homeWins = 0;
+    let awayWins = 0;
+    for (const m of meetings) {
+      const hs = m.first_team_score;
+      const as = m.second_team_score;
+      if (hs == null || as == null) continue;
+      const homeIsFirst = Number(m.home_team_id) === homeId;
+      const ours = homeIsFirst ? hs : as;
+      const theirs = homeIsFirst ? as : hs;
+      if (ours > theirs) homeWins += 1;
+      else if (theirs > ours) awayWins += 1;
+    }
+
+    const formOf = (list: ApiMatch[] | undefined, teamId: number) =>
+      (list ?? [])
+        .filter((m) => finished(m) && Number(m.id) !== Number(match.id))
+        .sort((a, b) => timeOf(b) - timeOf(a))
+        .slice(0, 5)
+        .reverse()
+        .map((m) => {
+          const isFirst = Number(m.home_team_id) === teamId;
+          const ours = isFirst ? m.first_team_score : m.second_team_score;
+          const theirs = isFirst ? m.second_team_score : m.first_team_score;
+          if (ours == null || theirs == null) return "B";
+          return ours > theirs ? "G" : ours < theirs ? "M" : "B";
+        });
+
+    return {
+      meetings,
+      homeWins,
+      awayWins,
+      homeForm: formOf(homeQuery.data, homeId),
+      awayForm: formOf(awayQuery.data, awayId),
+    };
+  }, [homeQuery.data, awayQuery.data, homeId, awayId, match.id]);
+
+  if (!data || data.meetings.length === 0) return null;
+
+  return (
+    <>
+      <Text style={[styles.sectionTitle, styles.sectionSpacer]}>Geçmiş Karşılaşmalar</Text>
+      <View style={styles.h2hCard}>
+        <View style={styles.h2hHead}>
+          <View style={styles.h2hTeam}>
+            <Text style={styles.h2hName} numberOfLines={1}>
+              {match.first_team_name}
+            </Text>
+            <FormChipsRow letters={data.homeForm} />
+          </View>
+          <View style={styles.h2hCenter}>
+            <Text style={styles.h2hScore}>
+              {data.homeWins} - {data.awayWins}
+            </Text>
+            <Text style={styles.h2hSub}>son {data.meetings.length} maç</Text>
+          </View>
+          <View style={[styles.h2hTeam, styles.h2hTeamRight]}>
+            <Text style={styles.h2hName} numberOfLines={1}>
+              {match.second_team_name}
+            </Text>
+            <FormChipsRow letters={data.awayForm} />
+          </View>
+        </View>
+
+        {data.meetings.map((m) => {
+          const homeIsFirst = Number(m.home_team_id) === homeId;
+          const ours = homeIsFirst ? m.first_team_score : m.second_team_score;
+          const theirs = homeIsFirst ? m.second_team_score : m.first_team_score;
+          const result =
+            ours == null || theirs == null ? "B" : ours > theirs ? "G" : ours < theirs ? "M" : "B";
+          return (
+            <Pressable
+              key={m.id}
+              onPress={() => router.push(`/mac/${m.id}`)}
+              style={({ pressed }) => [styles.h2hRow, pressed && styles.h2hPressed]}
+            >
+              <Text style={styles.h2hDate}>{formatDateShort(m.date)}</Text>
+              <View
+                style={[
+                  styles.h2hChip,
+                  result === "G"
+                    ? styles.h2hChipWin
+                    : result === "M"
+                      ? styles.h2hChipLoss
+                      : styles.h2hChipDraw,
+                ]}
+              >
+                <Text style={styles.h2hChipText}>{result}</Text>
+              </View>
+              <Text style={styles.h2hMatch} numberOfLines={1}>
+                {m.first_team_name} – {m.second_team_name}
+              </Text>
+              <Text style={styles.h2hRowScore}>
+                {m.first_team_score ?? "-"} - {m.second_team_score ?? "-"}
+              </Text>
+            </Pressable>
+          );
+        })}
+        <Text style={styles.h2hHint}>Rozetler {match.first_team_name} gözünden · satıra dokun, maça git</Text>
       </View>
+    </>
+  );
+}
+
+function FormChipsRow({ letters }: { letters: string[] }) {
+  if (letters.length === 0) return null;
+  return (
+    <View style={styles.h2hChips}>
+      {letters.map((letter, index) => (
+        <View
+          key={`${letter}-${index}`}
+          style={[
+            styles.h2hChip,
+            letter === "G"
+              ? styles.h2hChipWin
+              : letter === "M"
+                ? styles.h2hChipLoss
+                : styles.h2hChipDraw,
+          ]}
+        >
+          <Text style={styles.h2hChipText}>{letter}</Text>
+        </View>
+      ))}
     </View>
   );
 }
@@ -427,9 +626,10 @@ function BestPlayerCard({ player, rank }: { player: TopPlayer; rank: number }) {
 }
 
 function BestStat({ label, value }: { label: string; value: string }) {
+  const empty = value === "—";
   return (
     <View style={styles.bestStat}>
-      <Text style={styles.bestStatValue}>{value}</Text>
+      <Text style={[styles.bestStatValue, empty && styles.bestStatEmpty]}>{value}</Text>
       <Text style={styles.bestStatLabel}>{label}</Text>
     </View>
   );
@@ -466,7 +666,7 @@ function EventRow({
 
   return (
     <View style={[styles.eventRow, !home && styles.eventRowAway]}>
-      <Text style={styles.eventMinute}>{event.dakika != null ? `${event.dakika}'` : "—"}</Text>
+      <Text style={styles.eventMinute}>{event.dakika ? `${event.dakika}'` : "—"}</Text>
       <Ionicons name={visual.icon} size={15} color={visual.color} />
       <View style={styles.eventText}>
         <Text style={[styles.eventName, !home && styles.eventNameAway]} numberOfLines={1}>
@@ -743,6 +943,21 @@ const styles = StyleSheet.create({
     color: colors.muted,
     paddingBottom: spacing.xs,
   },
+  calendarBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.turfDim,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm + 2,
+    marginBottom: spacing.sm,
+  },
+  calendarText: {
+    ...type.small,
+    color: colors.turf,
+    fontWeight: "800",
+  },
   hero: {
     backgroundColor: "#17131F",
     borderRadius: radius.md,
@@ -863,19 +1078,22 @@ const styles = StyleSheet.create({
   },
   statBar: {
     flexDirection: "row",
-    height: 4,
-    borderRadius: 2,
+    height: 5,
+    borderRadius: 3,
     overflow: "hidden",
-    marginTop: 4,
-    gap: 2,
+    marginTop: 5,
+  },
+  statBarEmpty: {
+    height: 5,
+    borderRadius: 3,
+    marginTop: 5,
+    backgroundColor: colors.faint,
   },
   statBarHome: {
     backgroundColor: colors.green,
-    borderRadius: 2,
   },
   statBarAway: {
     backgroundColor: colors.live,
-    borderRadius: 2,
   },
   bestGrid: {
     flexDirection: "row",
@@ -929,6 +1147,9 @@ const styles = StyleSheet.create({
     color: colors.turf,
     fontWeight: "800",
     fontVariant: ["tabular-nums"],
+  },
+  bestStatEmpty: {
+    color: colors.muted,
   },
   bestStatLabel: {
     fontSize: 8,
@@ -1073,5 +1294,98 @@ const styles = StyleSheet.create({
     color: colors.turf,
     minWidth: 26,
     textAlign: "right",
+  },
+  h2hCard: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.faint,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  h2hHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  h2hTeam: {
+    flex: 1,
+    gap: 4,
+  },
+  h2hTeamRight: {
+    alignItems: "flex-end",
+  },
+  h2hName: {
+    ...type.small,
+    color: colors.line,
+    fontWeight: "800",
+  },
+  h2hCenter: {
+    alignItems: "center",
+  },
+  h2hScore: {
+    ...type.subtitle,
+    color: colors.turf,
+    fontVariant: ["tabular-nums"],
+  },
+  h2hSub: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: colors.muted,
+  },
+  h2hChips: {
+    flexDirection: "row",
+    gap: 3,
+  },
+  h2hChip: {
+    width: 16,
+    height: 16,
+    borderRadius: 4,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  h2hChipWin: { backgroundColor: colors.green },
+  h2hChipDraw: { backgroundColor: "#B9B5C6" },
+  h2hChipLoss: { backgroundColor: colors.live },
+  h2hChipText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: colors.surface,
+  },
+  h2hRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.surfaceRaised,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+  },
+  h2hDate: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: colors.muted,
+    width: 48,
+  },
+  h2hMatch: {
+    ...type.caption,
+    color: colors.line,
+    letterSpacing: 0,
+    flex: 1,
+  },
+  h2hRowScore: {
+    ...type.small,
+    color: colors.line,
+    fontWeight: "800",
+    fontVariant: ["tabular-nums"],
+  },
+  h2hHint: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: colors.muted,
+  },
+  h2hPressed: {
+    opacity: 0.7,
   },
 });
