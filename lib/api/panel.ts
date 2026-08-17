@@ -89,3 +89,35 @@ export interface PanelMeResponse {
 }
 
 export const getPanelMe = () => get<PanelMeResponse>("/api/panel/me");
+
+/**
+ * Maçlarım — routes/matchCenter.js.
+ *
+ * Oyuncu, takımının tüm maçlarını görür; in_squad kadroda olup olmadığını
+ * söyler. upcoming/past ayrımı saate değil maç durumuna bakar. Oyuncu
+ * profili bağlı değilse sunucu 403 PLAYER_PROFILE_REQUIRED döndürür.
+ */
+
+export interface MyMatch {
+  id: number;
+  date: string;
+  time: string | null;
+  first_team_name: string;
+  second_team_name: string;
+  first_team_score: number | null;
+  second_team_score: number | null;
+  match_field?: string | null;
+  is_home: boolean;
+  opponent_team_id: number | null;
+  opponent_name: string | null;
+  in_squad: boolean;
+  can_review: boolean;
+}
+
+export interface MyMatchesResponse {
+  upcoming: MyMatch[];
+  past: MyMatch[];
+  player_id: number;
+}
+
+export const getMyMatches = () => get<MyMatchesResponse>("/api/match-center/matches");

@@ -113,6 +113,19 @@ export default function ProfileScreen() {
             </View>
           ) : null}
 
+          {/* Maçlarım kapısı */}
+          <Pressable
+            onPress={() => router.push("/maclarim")}
+            style={({ pressed }) => [styles.card, styles.navRow, pressed && styles.pressed]}
+          >
+            <Ionicons name="calendar-outline" size={18} color={colors.turf} />
+            <View style={styles.heroBody}>
+              <Text style={styles.navTitle}>Maçlarım</Text>
+              <Text style={styles.heroMeta}>Yaklaşan ve oynanan tüm maçların</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+          </Pressable>
+
           {/* Son maçlar */}
           {me.recentMatches.length > 0 ? (
             <View style={styles.card}>
@@ -425,6 +438,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.md,
+  },
+  navRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+  },
+  navTitle: {
+    ...type.small,
+    fontWeight: "800",
+    color: colors.line,
   },
   teamName: {
     ...type.small,
