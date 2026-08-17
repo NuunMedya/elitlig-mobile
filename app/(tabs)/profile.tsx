@@ -151,6 +151,30 @@ export default function ProfileScreen() {
             <Ionicons name="chevron-forward" size={18} color={colors.muted} />
           </Pressable>
 
+          <Pressable
+            onPress={() => router.push("/cezalarim")}
+            style={({ pressed }) => [styles.card, styles.navRow, pressed && styles.pressed]}
+          >
+            <Ionicons name="shield-half-outline" size={18} color={colors.turf} />
+            <View style={styles.heroBody}>
+              <Text style={styles.navTitle}>Cezalarım ve Savunma</Text>
+              <Text style={styles.heroMeta}>Disiplin dosyaların, savunma ve itiraz</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+          </Pressable>
+
+          <Pressable
+            onPress={() => router.push("/mesajlarim")}
+            style={({ pressed }) => [styles.card, styles.navRow, pressed && styles.pressed]}
+          >
+            <Ionicons name="chatbubbles-outline" size={18} color={colors.turf} />
+            <View style={styles.heroBody}>
+              <Text style={styles.navTitle}>Mesajlarım</Text>
+              <Text style={styles.heroMeta}>Yönetimle yazış, başvuru gönder</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+          </Pressable>
+
           {/* Son maçlar */}
           {me.recentMatches.length > 0 ? (
             <View style={styles.card}>
@@ -204,7 +228,9 @@ export default function ProfileScreen() {
                 </View>
               ))
             )}
-            <Text style={styles.soonLine}>Mesajlaşma ekranı yakında uygulamada.</Text>
+            <Pressable onPress={() => router.push("/mesajlarim")} hitSlop={8}>
+              <Text style={styles.soonLine}>Tümünü aç ve yanıtla →</Text>
+            </Pressable>
           </View>
 
           {/* Bekleyen talepler */}
