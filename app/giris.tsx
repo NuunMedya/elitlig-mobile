@@ -63,7 +63,10 @@ export default function LoginScreen() {
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <View style={styles.header}>
             <Text style={styles.brand}>ELİTLİG</Text>
-            <Pressable onPress={() => router.back()} hitSlop={12}>
+            <Pressable
+              onPress={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)"))}
+              hitSlop={12}
+            >
               <Ionicons name="close" size={26} color={colors.line} />
             </Pressable>
           </View>
