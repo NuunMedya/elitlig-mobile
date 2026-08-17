@@ -7,6 +7,7 @@ import { addMatchToCalendar } from "@/lib/calendar";
 import { openLink } from "@/lib/links";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { DetailHeader } from "@/components/ScreenHeader";
+import { ShareScoreCard } from "@/components/ShareScoreCard";
 import { YoutubeBanner } from "@/components/YoutubeBanner";
 import { ErrorState, Loading } from "@/components/States";
 import { PlayerAvatar, TeamCrest } from "@/components/TeamCrest";
@@ -131,6 +132,17 @@ export default function MatchDetailScreen() {
           homeTeamId={homeTeamId}
           awayTeamId={awayTeamId}
         />
+
+        {matchState(match) === "finished" ? (
+          <ShareScoreCard
+            match={match}
+            homeScore={snapshot?.homeScore ?? match.first_team_score}
+            awayScore={snapshot?.awayScore ?? match.second_team_score}
+            mvp={bestPlayers[0] ?? null}
+            homeLogo={teams.logoFor(match.home_team_id, match.first_team_name)}
+            awayLogo={teams.logoFor(match.away_team_id, match.second_team_name)}
+          />
+        ) : null}
 
         {live && <YoutubeBanner cityLabel={match.city} live />}
 
@@ -455,15 +467,30 @@ function HeadToHead({ match }: { match: ApiMatch }) {
     staleTime: 60_000,
   });
 
+  const homeName = String(match.first_team_name ?? "").trim().toLocaleLowerCase("tr-TR");
+  const awayName = String(match.second_team_name ?? "").trim().toLocaleLowerCase("tr-TR");
+
   const data = useMemo(() => {
-    if (!homeId || !awayId) return null;
+    if (!homeName || !awayName) return null;
+    const norm = (value?: string | null) =>
+      String(value ?? "").trim().toLocaleLowerCase("tr-TR");
     const timeOf = (m: ApiMatch) =>
       new Date(`${String(m.date).slice(0, 10)}T${m.time || "00:00:00"}`).getTime();
     const finished = (m: ApiMatch) => matchState(m) === "finished";
+    // Kimlik numarası varsa onunla, yoksa takım adlarıyla eşleştirilir.
     const involvesBoth = (m: ApiMatch) => {
       const a = Number(m.home_team_id);
       const b = Number(m.away_team_id);
-      return (a === homeId && b === awayId) || (a === awayId && b === homeId);
+      if (homeId && awayId && a && b) {
+        return (a === homeId && b === awayId) || (a === awayId && b === homeId);
+      }
+      const f = norm(m.first_team_name);
+      const sName = norm(m.second_team_name);
+      return (f === homeName && sName === awayName) || (f === awayName && sName === homeName);
+    };
+    const isHomeSide = (m: ApiMatch) => {
+      if (homeId && Number(m.home_team_id)) return Number(m.home_team_id) === homeId;
+      return norm(m.first_team_name) === homeName;
     };
 
     const meetings = (homeQuery.data ?? [])
@@ -477,21 +504,21 @@ function HeadToHead({ match }: { match: ApiMatch }) {
       const hs = m.first_team_score;
       const as = m.second_team_score;
       if (hs == null || as == null) continue;
-      const homeIsFirst = Number(m.home_team_id) === homeId;
+      const homeIsFirst = isHomeSide(m);
       const ours = homeIsFirst ? hs : as;
       const theirs = homeIsFirst ? as : hs;
       if (ours > theirs) homeWins += 1;
       else if (theirs > ours) awayWins += 1;
     }
 
-    const formOf = (list: ApiMatch[] | undefined, teamId: number) =>
+    const formOf = (list: ApiMatch[] | undefined, teamName: string) =>
       (list ?? [])
         .filter((m) => finished(m) && Number(m.id) !== Number(match.id))
         .sort((a, b) => timeOf(b) - timeOf(a))
         .slice(0, 5)
         .reverse()
         .map((m) => {
-          const isFirst = Number(m.home_team_id) === teamId;
+          const isFirst = norm(m.first_team_name) === teamName;
           const ours = isFirst ? m.first_team_score : m.second_team_score;
           const theirs = isFirst ? m.second_team_score : m.first_team_score;
           if (ours == null || theirs == null) return "B";
@@ -502,10 +529,10 @@ function HeadToHead({ match }: { match: ApiMatch }) {
       meetings,
       homeWins,
       awayWins,
-      homeForm: formOf(homeQuery.data, homeId),
-      awayForm: formOf(awayQuery.data, awayId),
+      homeForm: formOf(homeQuery.data, homeName),
+      awayForm: formOf(awayQuery.data, awayName),
     };
-  }, [homeQuery.data, awayQuery.data, homeId, awayId, match.id]);
+  }, [homeQuery.data, awayQuery.data, homeId, awayId, homeName, awayName, match.id]);
 
   if (!data || data.meetings.length === 0) return null;
 
@@ -535,7 +562,10 @@ function HeadToHead({ match }: { match: ApiMatch }) {
         </View>
 
         {data.meetings.map((m) => {
-          const homeIsFirst = Number(m.home_team_id) === homeId;
+          const homeIsFirst =
+            homeId && Number(m.home_team_id)
+              ? Number(m.home_team_id) === homeId
+              : String(m.first_team_name ?? "").trim().toLocaleLowerCase("tr-TR") === homeName;
           const ours = homeIsFirst ? m.first_team_score : m.second_team_score;
           const theirs = homeIsFirst ? m.second_team_score : m.first_team_score;
           const result =
