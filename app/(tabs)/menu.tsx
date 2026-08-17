@@ -61,6 +61,12 @@ export default function MenuScreen() {
             onPress={() => router.push("/sehir")}
           />
           <MenuRow
+            icon="trophy-outline"
+            label="Türkiye Sıralaması"
+            note="Tüm şehirlerin liderleri"
+            onPress={() => router.push("/turkiye")}
+          />
+          <MenuRow
             icon="game-controller-outline"
             label="Arena"
             note="Seri Modu · rekoru kovala"
