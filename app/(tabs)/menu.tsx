@@ -61,6 +61,12 @@ export default function MenuScreen() {
             onPress={() => router.push("/sehir")}
           />
           <MenuRow
+            icon="game-controller-outline"
+            label="Arena"
+            note="Seri Modu · rekoru kovala"
+            onPress={() => router.push("/arena")}
+          />
+          <MenuRow
             icon="newspaper-outline"
             label="Haberler"
             note="Manşetler, transferler, duyurular"
