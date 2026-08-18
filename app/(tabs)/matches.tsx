@@ -1,10 +1,12 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
+  Animated,
   Pressable,
   RefreshControl,
+  ScrollView,
   SectionList,
   StyleSheet,
   Text,
@@ -23,7 +25,9 @@ import { getMatches } from "@/lib/api/matches";
 import { formatDayHeading, formatTime } from "@/lib/format";
 import { matchState } from "@/lib/match";
 import { queryKeys } from "@/lib/queryKeys";
+import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
+import { getPanelMe } from "@/lib/api/panel";
 import type { ApiMatch } from "@/lib/types";
 
 type Tab = "results" | "fixtures" | "live";
@@ -47,8 +51,20 @@ const TABS: { key: Tab; label: string }[] = [
 export default function MatchesScreen() {
   const scope = useScope();
   const teams = useTeamLogos();
+  const auth  = useAuth();
   const [tab, setTab] = useState<Tab>("results");
   const [search, setSearch] = useState("");
+  const [myTeamOnly, setMyTeamOnly] = useState(false);
+
+  const panelQ = useQuery({
+    queryKey: ["panel","me"],
+    queryFn: getPanelMe,
+    enabled: Boolean(auth.user),
+    staleTime: 60_000,
+    retry: false,
+  });
+  const myTeamId   = panelQ.data?.playerTeam?.id ?? panelQ.data?.team?.id ?? null;
+  const myTeamName = panelQ.data?.playerTeam?.team_name ?? panelQ.data?.team?.team_name ?? null;
 
   const scopeKey = {
     cityId: scope.cityId ?? undefined,
@@ -66,16 +82,37 @@ export default function MatchesScreen() {
 
   const buckets = useMemo(() => split(query.data ?? []), [query.data]);
 
+
+
+  // Haftalık: bu haftanın günleri
+  const weekDays = useMemo(() => {
+    const today = new Date();
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      return d;
+    });
+  }, []);
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+
   const visible = useMemo(() => {
-    const list = buckets[tab];
+    let list = buckets[tab];
     const q = search.trim().toLocaleLowerCase("tr-TR");
-    if (!q) return list;
-    return list.filter(
-      (m) =>
-        m.first_team_name.toLocaleLowerCase("tr-TR").includes(q) ||
-        m.second_team_name.toLocaleLowerCase("tr-TR").includes(q)
-    );
-  }, [buckets, tab, search]);
+    if (q) list = list.filter(m =>
+      m.first_team_name.toLocaleLowerCase("tr-TR").includes(q) ||
+      m.second_team_name.toLocaleLowerCase("tr-TR").includes(q));
+    if (myTeamOnly && (myTeamId || myTeamName)) {
+      list = list.filter(m =>
+        (myTeamId && (Number(m.home_team_id) === myTeamId || Number(m.away_team_id) === myTeamId)) ||
+        (myTeamName && (m.first_team_name === myTeamName || m.second_team_name === myTeamName)));
+    }
+    if (selectedDay) {
+      list = list.filter(m => String(m.date).slice(0,10) === selectedDay);
+    }
+    return list;
+  }, [buckets, tab, search, myTeamOnly, myTeamId, myTeamName, selectedDay]);
 
   const sections = useMemo(() => groupByDay(visible, tab), [visible, tab]);
 
@@ -132,6 +169,50 @@ export default function MatchesScreen() {
           </Pressable>
         )}
       </View>
+
+      {/* Haftalık takvim (fikstür sekmesinde) */}
+      {tab === "fixtures" && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.weekRow}>
+          <Pressable
+            onPress={() => setSelectedDay(null)}
+            style={[styles.dayChip, !selectedDay && styles.dayChipActive]}
+          >
+            <Text style={[styles.dayChipTxt, !selectedDay && styles.dayChipTxtActive]}>Tümü</Text>
+          </Pressable>
+          {weekDays.map((d) => {
+            const iso = d.toISOString().slice(0,10);
+            const active = selectedDay === iso;
+            const isToday = iso === new Date().toISOString().slice(0,10);
+            const hasMatch = buckets.fixtures.some(m => String(m.date).slice(0,10) === iso);
+            return (
+              <Pressable key={iso} onPress={() => setSelectedDay(active ? null : iso)}
+                style={[styles.dayChip, active && styles.dayChipActive, !hasMatch && styles.dayChipDim]}>
+                <Text style={[styles.dayChipDay, active && styles.dayChipTxtActive]}>
+                  {d.toLocaleDateString("tr-TR",{weekday:"short"}).toLocaleUpperCase("tr-TR")}
+                </Text>
+                <Text style={[styles.dayChipNum, active && styles.dayChipTxtActive, isToday && styles.dayToday]}>
+                  {d.getDate()}
+                </Text>
+                {hasMatch ? <View style={[styles.dayDot, active && styles.dayDotActive]} /> : null}
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      )}
+
+      {/* Takımımın Maçları filtresi */}
+      {auth.user && myTeamName ? (
+        <Pressable
+          onPress={() => setMyTeamOnly(!myTeamOnly)}
+          style={[styles.myTeamBtn, myTeamOnly && styles.myTeamBtnActive]}
+        >
+          <Ionicons name="football-outline" size={13} color={myTeamOnly ? colors.surface : colors.turf} />
+          <Text style={[styles.myTeamTxt, myTeamOnly && styles.myTeamTxtActive]}>
+            {myTeamName}
+          </Text>
+          {myTeamOnly ? <Ionicons name="close" size={13} color={colors.surface} /> : null}
+        </Pressable>
+      ) : null}
 
       {tab === "live" && (
         <View style={{ paddingHorizontal: spacing.md }}>
@@ -204,6 +285,12 @@ function MatchRow({
   const state = matchState(match);
   const played = state !== "scheduled";
 
+  const hs = Number(match.first_team_score ?? 0);
+  const as = Number(match.second_team_score ?? 0);
+  const homeWin = played && hs > as;
+  const awayWin = played && as > hs;
+  const isLive  = state === "live";
+
   return (
     <Pressable
       onPress={() => router.push(`/mac/${match.id}`)}
@@ -211,26 +298,49 @@ function MatchRow({
         styles.row,
         first && styles.rowFirst,
         last && styles.rowLast,
+        isLive && styles.rowLive,
         pressed && styles.rowPressed,
       ]}
     >
-      <Text style={[styles.team, styles.teamHome]} numberOfLines={1}>
-        {match.first_team_name.toLocaleUpperCase("tr-TR")}
-      </Text>
-      <TeamCrest name={match.first_team_name} logo={homeLogo} size={26} />
-      {played ? (
-        <Text style={[styles.rowScore, state === "live" && styles.rowScoreLive]}>
-          {match.first_team_score ?? 0} - {match.second_team_score ?? 0}
+      {/* Ev sahibi */}
+      <View style={styles.teamCol}>
+        <TeamCrest name={match.first_team_name} logo={homeLogo} size={28} />
+        <Text style={[styles.team, homeWin && styles.teamWin, awayWin && styles.teamLose]} numberOfLines={1}>
+          {match.first_team_name.toLocaleUpperCase("tr-TR")}
         </Text>
-      ) : (
-        <View style={styles.timePill}>
-          <Text style={styles.timeText}>{formatTime(match.time) || "—"}</Text>
-        </View>
-      )}
-      <TeamCrest name={match.second_team_name} logo={awayLogo} size={26} />
-      <Text style={[styles.team, styles.teamAway]} numberOfLines={1}>
-        {match.second_team_name.toLocaleUpperCase("tr-TR")}
-      </Text>
+      </View>
+
+      {/* Orta: skor veya saat + CANLI rozeti */}
+      <View style={styles.scoreCol}>
+        {isLive ? (
+          <View style={styles.liveBadge}>
+            <View style={styles.liveDot} />
+            <Text style={styles.liveTxt}>CANLI</Text>
+          </View>
+        ) : null}
+        {played ? (
+          <Text style={[styles.rowScore, isLive && styles.rowScoreLive]}>
+            {hs} - {as}
+          </Text>
+        ) : (
+          <View style={styles.timePill}>
+            <Text style={styles.timeText}>{formatTime(match.time) || "—"}</Text>
+          </View>
+        )}
+        {played && !isLive ? (
+          <Text style={styles.resultLabel}>
+            {homeWin ? "MS" : awayWin ? "MS" : "BER"}
+          </Text>
+        ) : null}
+      </View>
+
+      {/* Deplasman */}
+      <View style={[styles.teamCol, styles.teamColAway]}>
+        <TeamCrest name={match.second_team_name} logo={awayLogo} size={28} />
+        <Text style={[styles.team, awayWin && styles.teamWin, homeWin && styles.teamLose]} numberOfLines={1}>
+          {match.second_team_name.toLocaleUpperCase("tr-TR")}
+        </Text>
+      </View>
     </Pressable>
   );
 }
@@ -337,6 +447,21 @@ function EmptyForTab({ tab, searching }: { tab: Tab; searching: boolean }) {
 }
 
 const styles = StyleSheet.create({
+  weekRow: { paddingHorizontal: spacing.md, paddingBottom: spacing.sm, gap: spacing.sm },
+  dayChip: { alignItems: "center", paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, borderWidth: 1, borderColor: colors.faint, backgroundColor: colors.surface, minWidth: 44, gap: 2 },
+  dayChipActive: { backgroundColor: colors.turf, borderColor: colors.turf },
+  dayChipDim: { opacity: 0.4 },
+  dayChipTxt: { fontSize: 11, fontWeight: "700", color: colors.muted },
+  dayChipTxtActive: { color: "#FFF" },
+  dayChipDay: { fontSize: 9, fontWeight: "800", letterSpacing: 0.3, color: colors.muted },
+  dayChipNum: { fontSize: 14, fontWeight: "900", color: colors.line },
+  dayToday: { color: colors.turf },
+  dayDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.turf },
+  dayDotActive: { backgroundColor: "#FFF" },
+  myTeamBtn: { flexDirection: "row", alignItems: "center", gap: 5, alignSelf: "flex-start", marginHorizontal: spacing.md, marginBottom: spacing.sm, backgroundColor: colors.turfDim, borderRadius: radius.pill, paddingHorizontal: spacing.sm+4, paddingVertical: 6, borderWidth: 1, borderColor: colors.turf+"55" },
+  myTeamBtnActive: { backgroundColor: colors.turf },
+  myTeamTxt: { fontSize: 11, fontWeight: "800", color: colors.turf },
+  myTeamTxtActive: { color: "#FFF" },
   screen: {
     flex: 1,
     backgroundColor: colors.pitch,
@@ -442,6 +567,16 @@ const styles = StyleSheet.create({
     ...type.caption,
     color: colors.muted,
   },
+  teamCol: { flex: 1, alignItems: "center", gap: 4 },
+  teamColAway: { },
+  teamWin: { fontWeight: "900", color: colors.green },
+  teamLose: { color: colors.muted, fontWeight: "500" },
+  scoreCol: { alignItems: "center", gap: 2, paddingHorizontal: 4 },
+  liveBadge: { flexDirection: "row", alignItems: "center", gap: 3, backgroundColor: colors.live+"18", borderRadius: 6, paddingHorizontal: 5, paddingVertical: 2 },
+  liveDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: colors.live },
+  liveTxt: { fontSize: 8, fontWeight: "900", color: colors.live, letterSpacing: 0.5 },
+  rowLive: { borderColor: colors.live+"55", backgroundColor: colors.live+"08" },
+  resultLabel: { fontSize: 8, fontWeight: "700", color: colors.muted, letterSpacing: 0.3 },
   row: {
     flexDirection: "row",
     alignItems: "center",
