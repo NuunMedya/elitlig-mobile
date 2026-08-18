@@ -247,16 +247,16 @@ export default function MessagesScreen() {
             style={styles.flex}
             behavior={Platform.OS === "ios" ? "padding" : undefined}
           >
-            <View style={[styles.threadHead, { paddingTop: insets.top + spacing.sm }]}>
+            <View style={[styles.threadHead, { paddingTop: Math.max(insets.top, 44) + spacing.sm }]}>
               <Pressable onPress={() => setOpenThreadId(null)} hitSlop={10}>
                 <Ionicons name="chevron-back" size={22} color={colors.line} />
               </Pressable>
               <View style={styles.threadHeadBody}>
                 <Text style={styles.threadTitle} numberOfLines={1}>
-                  {openThread?.subject}
+                  ElitLig Yönetimi
                 </Text>
-                <Text style={styles.threadHeadMeta}>
-                  {openThread?.category_label}
+                <Text style={styles.threadHeadMeta} numberOfLines={1}>
+                  {openThread?.subject}
                   {openThread?.messages.length ? ` · ${openThread.messages.length} mesaj` : ""}
                 </Text>
               </View>
