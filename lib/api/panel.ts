@@ -1,4 +1,4 @@
-import { get } from "../http";
+import { get, patch, post } from "../http";
 
 /**
  * Panel uçları — routes/panel.js (girişli üyenin kendi verileri).
@@ -130,7 +130,6 @@ export const getMyMatches = () => get<MyMatchesResponse>("/api/match-center/matc
  * 409 TRANSFER_OFFER_VERSION_CONFLICT döndürür ve teklif yeniden yüklenir.
  */
 
-import { post } from "../http";
 
 export interface Paged<T> {
   items: T[];
@@ -321,7 +320,7 @@ export const getUnreadNotifCount = () =>
   get<{ count: number }>("/api/panel-notifications/unread-count");
 
 export const markNotifRead = (id: number) =>
-  post<{ success: boolean }>(`/api/panel-notifications/${id}/read`, {});
+  patch<{ success: boolean }>(`/api/panel-notifications/${id}/read`);
 
 export const markAllNotifsRead = () =>
-  post<{ success: boolean }>("/api/panel-notifications/read-all", {});
+  patch<{ success: boolean }>("/api/panel-notifications/read-all");

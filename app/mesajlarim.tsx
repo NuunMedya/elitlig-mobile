@@ -197,15 +197,21 @@ export default function MessagesScreen() {
                   </View>
 
                   <View style={styles.threadBody}>
+                    {/* Üst satır: kategori adı + zaman */}
                     <View style={styles.threadTopRow}>
                       <Text
                         style={[styles.threadSubject, item.unread > 0 && styles.threadSubjectUnread]}
                         numberOfLines={1}
                       >
-                        {item.subject}
+                        {item.category_label || "Genel Başvuru"}
                       </Text>
                       <Text style={styles.threadTime}>{smartDate(item.last_message_at)}</Text>
                     </View>
+                    {/* Orta satır: konu başlığı */}
+                    <Text style={styles.threadTopic} numberOfLines={1}>
+                      {item.subject}
+                    </Text>
+                    {/* Alt satır: son mesaj + okunmamış rozet */}
                     <View style={styles.threadBottomRow}>
                       <Text style={styles.threadPreview} numberOfLines={1}>
                         {item.last_message_preview}
@@ -534,6 +540,12 @@ const styles = StyleSheet.create({
   },
   threadSubjectUnread: {
     fontWeight: "800",
+  },
+  threadTopic: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: colors.line,
+    marginTop: 1,
   },
   threadPreview: {
     ...type.caption,
