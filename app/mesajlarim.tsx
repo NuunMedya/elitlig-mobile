@@ -26,7 +26,7 @@ import {
   sendPanelMessage,
   type PanelThread,
 } from "@/lib/api/panel";
-import { formatDateShort } from "@/lib/format";
+import { formatDateShort, formatTime } from "@/lib/format";
 import { useAuth } from "@/providers/AuthProvider";
 
 /**
@@ -37,6 +37,41 @@ import { useAuth } from "@/providers/AuthProvider";
  * gönderdiği sözlükten seçilir — ekranda sabit etiket yazılmaz (döküm
  * uyarısı). Kapanmış konulara yanıt alanı gösterilmez.
  */
+
+/** Kategori → ikon */
+function categoryIcon(cat: string): string {
+  const c = String(cat).toLowerCase();
+  if (c.includes("transfer") || c.includes("sozlesme")) return "swap-horizontal-outline";
+  if (c.includes("disiplin") || c.includes("ceza"))     return "shield-outline";
+  if (c.includes("fikstur") || c.includes("mac"))       return "calendar-outline";
+  if (c.includes("odeme") || c.includes("uyelik"))      return "card-outline";
+  if (c.includes("teknik") || c.includes("sorun"))      return "construct-outline";
+  if (c.includes("oneri"))                               return "bulb-outline";
+  return "chatbubble-outline";
+}
+
+/** Bugün ise saat, başka günse kısa tarih */
+function smartDate(iso: string): string {
+  try {
+    const d = new Date(iso);
+    const now = new Date();
+    if (d.toDateString() === now.toDateString()) {
+      return d.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
+    }
+    return formatDateShort(iso);
+  } catch {
+    return "";
+  }
+}
+
+/** Durum → renk */
+function statusColor(status: string): string {
+  if (status === "open")       return "#178A50";
+  if (status === "in_review")  return "#E8B00A";
+  if (status === "answered")   return "#3B72E8";
+  if (status === "closed")     return "#8B8797";
+  return "#8B8797";
+}
 
 export default function MessagesScreen() {
   const auth = useAuth();
@@ -135,25 +170,43 @@ export default function MessagesScreen() {
               renderItem={({ item }) => (
                 <Pressable
                   onPress={() => setOpenThreadId(item.id)}
-                  style={({ pressed }) => [styles.threadRow, pressed && styles.pressed]}
+                  style={({ pressed }) => [
+                    styles.threadRow,
+                    item.unread > 0 && styles.threadRowUnread,
+                    pressed && styles.pressed,
+                  ]}
                 >
-                  <View style={[styles.dot, item.unread > 0 && styles.dotUnread]} />
-                  <View style={styles.threadBody}>
-                    <Text
-                      style={[styles.threadSubject, item.unread > 0 && styles.threadSubjectUnread]}
-                      numberOfLines={1}
-                    >
-                      {item.subject}
-                    </Text>
-                    <Text style={styles.threadPreview} numberOfLines={1}>
-                      {item.last_message_preview}
-                    </Text>
-                    <Text style={styles.threadMeta}>
-                      {item.category_label} · {formatDateShort(item.last_message_at)}
-                    </Text>
+                  {/* Kategori ikonu */}
+                  <View style={styles.threadIcon}>
+                    <Ionicons name={categoryIcon(item.category_label) as any} size={18} color={colors.turf} />
                   </View>
-                  <View style={styles.statusChip}>
-                    <Text style={styles.statusText}>{item.status_label}</Text>
+
+                  <View style={styles.threadBody}>
+                    <View style={styles.threadTopRow}>
+                      <Text
+                        style={[styles.threadSubject, item.unread > 0 && styles.threadSubjectUnread]}
+                        numberOfLines={1}
+                      >
+                        {item.subject}
+                      </Text>
+                      <Text style={styles.threadTime}>{smartDate(item.last_message_at)}</Text>
+                    </View>
+                    <View style={styles.threadBottomRow}>
+                      <Text style={styles.threadPreview} numberOfLines={1}>
+                        {item.last_message_preview}
+                      </Text>
+                      {item.unread > 0 ? (
+                        <View style={styles.unreadBadge}>
+                          <Text style={styles.unreadText}>{item.unread}</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                    <View style={[styles.statusChipInline, { backgroundColor: statusColor(item.status) + "18" }]}>
+                      <View style={[styles.statusDot, { backgroundColor: statusColor(item.status) }]} />
+                      <Text style={[styles.statusInlineText, { color: statusColor(item.status) }]}>
+                        {item.status_label}
+                      </Text>
+                    </View>
                   </View>
                 </Pressable>
               )}
@@ -177,11 +230,23 @@ export default function MessagesScreen() {
               <Pressable onPress={() => setOpenThreadId(null)} hitSlop={10}>
                 <Ionicons name="chevron-back" size={22} color={colors.line} />
               </Pressable>
-              <Text style={styles.threadTitle} numberOfLines={1}>
-                {openThread?.subject}
-              </Text>
-              <View style={styles.statusChip}>
-                <Text style={styles.statusText}>{openThread?.status_label}</Text>
+              <View style={styles.threadHeadBody}>
+                <Text style={styles.threadTitle} numberOfLines={1}>
+                  {openThread?.subject}
+                </Text>
+                <Text style={styles.threadHeadMeta}>
+                  {openThread?.category_label}
+                  {openThread?.messages.length ? ` · ${openThread.messages.length} mesaj` : ""}
+                </Text>
+              </View>
+              <View style={[
+                styles.statusChip,
+                { backgroundColor: statusColor(openThread?.status ?? "") + "18" }
+              ]}>
+                <View style={[styles.statusDot, { backgroundColor: statusColor(openThread?.status ?? "") }]} />
+                <Text style={[styles.statusText, { color: statusColor(openThread?.status ?? "") }]}>
+                  {openThread?.status_label}
+                </Text>
               </View>
             </View>
 
@@ -211,7 +276,7 @@ export default function MessagesScreen() {
                       {message.body}
                     </Text>
                     <Text style={[styles.bubbleDate, mine && styles.bubbleDateMine]}>
-                      {formatDateShort(message.created_at)}
+                      {smartDate(message.created_at)}
                     </Text>
                   </View>
                 );
@@ -352,6 +417,79 @@ const styles = StyleSheet.create({
   list: {
     paddingHorizontal: spacing.md,
     paddingBottom: spacing.xl,
+  },
+  threadRowUnread: {
+    borderColor: colors.turf + "66",
+  },
+  threadIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: colors.turfDim,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  threadTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  threadBottomRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  threadTime: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: colors.muted,
+    marginLeft: "auto",
+    flexShrink: 0,
+  },
+  unreadBadge: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: colors.turf,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+    marginLeft: "auto",
+    flexShrink: 0,
+  },
+  unreadText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: colors.surface,
+  },
+  statusChipInline: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderRadius: radius.pill,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    alignSelf: "flex-start",
+    marginTop: 2,
+  },
+  statusDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+  },
+  statusInlineText: {
+    fontSize: 9,
+    fontWeight: "800",
+  },
+  threadHeadBody: {
+    flex: 1,
+  },
+  threadHeadMeta: {
+    ...type.caption,
+    color: colors.muted,
+    letterSpacing: 0,
+    marginTop: 1,
   },
   threadRow: {
     flexDirection: "row",
