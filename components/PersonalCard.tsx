@@ -74,7 +74,7 @@ export function PersonalCard({
               {teamName.toLocaleUpperCase("tr-TR")}
             </Text>
           </View>
-          <Ionicons name="chevron-forward" size={18} color={colors.turf} />
+          <Ionicons name="chevron-forward" size={18} color="#7C3AED" />
         </Pressable>
       ) : null}
     </View>
@@ -170,10 +170,10 @@ const styles = StyleSheet.create({
   teamRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#DDD5F7",
     borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: "#C8C5D0",
+    borderColor: "#C4B8EF",
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
   },
@@ -185,12 +185,12 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: "800",
     letterSpacing: 0.8,
-    color: colors.turf,
+    color: "#5B21B6",
   },
   teamRowName: {
     fontSize: 15,
     fontWeight: "900",
-    color: colors.line,
+    color: "#2D1B69",
     letterSpacing: -0.3,
   },
   countdown: {
