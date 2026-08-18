@@ -47,7 +47,14 @@ export default function TurkeyRankingsScreen() {
   const [period, setPeriod] = useState<"recent" | "alltime">("recent");
   const [shareOpen, setShareOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [fmt, setFmt] = useState<"story" | "post">("story");
   const shotRef = useRef<View>(null);
+
+  const CARD_W = 272;
+  const FORMATS = {
+    story: { label: "Hikâye 9:16", height: Math.round((CARD_W * 16) / 9) },
+    post:  { label: "Gönderi 3:4", height: Math.round((CARD_W * 4) / 3) },
+  } as const;
 
   const share = async () => {
     if (busy) return;
@@ -223,8 +230,25 @@ export default function TurkeyRankingsScreen() {
         onRequestClose={() => setShareOpen(false)}
       >
         <View style={styles.backdrop}>
+          {/* Boy seçici */}
+          <View style={styles.fmtRow}>
+            {(["story", "post"] as const).map((key) => (
+              <Pressable
+                key={key}
+                onPress={() => setFmt(key)}
+                style={({ pressed }) => [
+                  styles.fmtPill,
+                  fmt === key && styles.fmtPillActive,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={styles.fmtText}>{FORMATS[key].label}</Text>
+              </Pressable>
+            ))}
+          </View>
+
           <ViewShot ref={shotRef} options={{ format: "png", quality: 1 }}>
-            <View style={styles.shareFrame}>
+            <View style={[styles.shareFrame, { height: FORMATS[fmt].height }]}>
               <LinearGradient
                 colors={["#6D28D9", "#4C1D95"]}
                 start={{ x: 0, y: 0 }}
@@ -243,35 +267,39 @@ export default function TurkeyRankingsScreen() {
                   <Text style={styles.shareCorner}>ELİTLİG MOBİL</Text>
                 </View>
                 <Text style={styles.shareKicker}>
-                  TÜRKİYE GENELİ  •  {period === "recent" ? "BU SEZON" : "TÜM ZAMANLAR"}
+                  🇹🇷 TÜRKİYE  •  {period === "recent" ? "BU SEZON" : "TÜM ZAMANLAR"}
                 </Text>
                 <Text style={styles.shareHeadline}>
                   {category.label.toLocaleUpperCase("tr-TR")}
                 </Text>
 
                 <View style={styles.shareListCard}>
-                  {players.slice(0, 5).map((p, index) => (
+                  {players.slice(0, 5).map((pl, index) => (
                     <View
-                      key={p.id}
+                      key={pl.id}
                       style={[styles.shareRow, index > 0 && styles.shareRowBorder]}
                     >
                       <Text style={styles.shareRank}>
                         {index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : `${index + 1}.`}
                       </Text>
-                      <PlayerAvatar name={p.name} image={p.image} size={24} />
+                      <PlayerAvatar name={pl.name} image={pl.image} size={26} />
                       <View style={styles.shareRowBody}>
                         <Text style={styles.shareName} numberOfLines={1}>
-                          {p.name.toLocaleUpperCase("tr-TR")}
+                          {pl.name.toLocaleUpperCase("tr-TR")}
                         </Text>
                         <Text style={styles.shareTeam} numberOfLines={1}>
-                          {p.teamName ?? ""}
+                          {[pl.teamName, pl.city].filter(Boolean).join(" · ")}
                         </Text>
                       </View>
-                      <Text style={styles.shareValue}>{category.display(p)}</Text>
+                      <View style={styles.shareValueBox}>
+                        <Text style={styles.shareValue}>{category.display(pl)}</Text>
+                        <Text style={styles.shareUnit}>{category.unit}</Text>
+                      </View>
                     </View>
                   ))}
                 </View>
 
+                <View style={styles.shareSpacer} />
                 <View style={styles.shareFooter}>
                   <Text style={styles.shareSite}>ELİTLİG.COM</Text>
                 </View>
@@ -294,6 +322,7 @@ export default function TurkeyRankingsScreen() {
               <Text style={styles.goText}>{busy ? "Hazırlanıyor…" : "Paylaş"}</Text>
             </Pressable>
           </View>
+          <Text style={styles.saveHint}>İndirmek için: Paylaş → "Görüntüyü Kaydet"</Text>
         </View>
       </Modal>
     </SafeAreaView>
@@ -352,6 +381,26 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     gap: spacing.md,
   },
+  fmtRow: {
+    flexDirection: "row",
+    gap: spacing.sm,
+  },
+  fmtPill: {
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.45)",
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  fmtPillActive: {
+    backgroundColor: colors.turf,
+    borderColor: colors.turf,
+  },
+  fmtText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#FFFFFF",
+  },
   shareFrame: {
     width: 272,
     backgroundColor: "#0B0A0E",
@@ -365,12 +414,16 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 8,
   },
   shareBody: {
+    flex: 1,
     borderBottomLeftRadius: 8,
     borderBottomRightRadius: 8,
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm + 2,
     paddingBottom: spacing.sm,
     overflow: "hidden",
+  },
+  shareSpacer: {
+    flex: 1,
   },
   shareWatermark: {
     position: "absolute",
@@ -463,6 +516,20 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: "800",
     letterSpacing: 2,
+    color: "#8B8797",
+  },
+  saveHint: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "rgba(255,255,255,0.75)",
+  },
+  shareValueBox: {
+    alignItems: "flex-end",
+  },
+  shareUnit: {
+    fontSize: 7,
+    fontWeight: "800",
+    letterSpacing: 0.5,
     color: "#8B8797",
   },
   shareActions: {
