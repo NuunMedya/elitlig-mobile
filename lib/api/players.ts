@@ -10,13 +10,14 @@ import type { ApiPlayer, PlayerListResponse, PlayerSort, Scope } from "../types"
  * yayınlanmış maçlar sayılır.
  */
 export const getPlayerRankings = (
-  scope: Partial<Pick<Scope, "cityId" | "leagueId" | "seasonId">>,
+  scope: Partial<Pick<Scope, "cityId" | "leagueId" | "seasonId">> & { startDate?: string },
   sort: PlayerSort = "topScorers"
 ) =>
   get<PlayerListResponse>("/api/oyuncu-listesi", {
     cityId: scope.cityId,
     leagueId: scope.leagueId,
     seasonId: scope.seasonId,
+    startDate: scope.startDate,
     sort,
   });
 

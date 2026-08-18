@@ -44,6 +44,7 @@ const JUNK = /hükmen|hukmen|antpl/i;
 export default function TurkeyRankingsScreen() {
   const router = useRouter();
   const [category, setCategory] = useState(CATEGORIES[0]);
+  const [period, setPeriod] = useState<"recent" | "alltime">("recent");
   const [shareOpen, setShareOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const shotRef = useRef<View>(null);
@@ -63,10 +64,18 @@ export default function TurkeyRankingsScreen() {
     }
   };
 
+  // "Bu Sezon": filtre yanıtından en yüksek 8 sezon ID'si seçilir → yaklaşık son 6 ay.
+  /** Son 6 ay: bugünden 180 gün öncesi (YYYY-MM-DD). */
+  const startDate = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 180);
+    return d.toISOString().slice(0, 10);
+  }, []);
+
   const query = useQuery({
-    // Kapsamsız anahtar: ülke geneli (şehir/lig/sezon = null)
-    queryKey: queryKeys.playerRankings({}, category.sort),
-    queryFn: () => getPlayerRankings({}, category.sort),
+    queryKey: ["turkey", period, category.sort, startDate],
+    queryFn: () =>
+      getPlayerRankings(period === "recent" ? { startDate } : {}, category.sort),
     staleTime: 10 * 60_000,
   });
 
@@ -109,6 +118,25 @@ export default function TurkeyRankingsScreen() {
             );
           })}
         </ScrollView>
+      </View>
+
+      {/* Dönem toggle */}
+      <View style={styles.periodRow}>
+        {([ ["recent", "Bu Sezon"], ["alltime", "Tüm Zamanlar"] ] as const).map(([key, label]) => (
+          <Pressable
+            key={key}
+            onPress={() => setPeriod(key)}
+            style={({ pressed }) => [
+              styles.periodBtn,
+              period === key && styles.periodBtnActive,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Text style={[styles.periodText, period === key && styles.periodTextActive]}>
+              {label}
+            </Text>
+          </Pressable>
+        ))}
       </View>
 
       {players.length > 0 ? (
@@ -214,7 +242,9 @@ export default function TurkeyRankingsScreen() {
                   <Text style={styles.shareBrand}>elitlig</Text>
                   <Text style={styles.shareCorner}>ELİTLİG MOBİL</Text>
                 </View>
-                <Text style={styles.shareKicker}>TÜRKİYE GENELİ  •  TÜM ŞEHİRLER</Text>
+                <Text style={styles.shareKicker}>
+                  TÜRKİYE GENELİ  •  {period === "recent" ? "BU SEZON" : "TÜM ZAMANLAR"}
+                </Text>
                 <Text style={styles.shareHeadline}>
                   {category.label.toLocaleUpperCase("tr-TR")}
                 </Text>
@@ -271,6 +301,32 @@ export default function TurkeyRankingsScreen() {
 }
 
 const styles = StyleSheet.create({
+  periodRow: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  periodBtn: {
+    flex: 1,
+    alignItems: "center",
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.faint,
+    paddingVertical: spacing.sm + 2,
+  },
+  periodBtnActive: {
+    backgroundColor: colors.turf,
+    borderColor: colors.turf,
+  },
+  periodText: {
+    ...type.caption,
+    color: colors.muted,
+  },
+  periodTextActive: {
+    color: colors.surface,
+  },
   shareTrigger: {
     flexDirection: "row",
     alignItems: "center",
