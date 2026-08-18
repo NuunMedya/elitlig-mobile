@@ -207,6 +207,21 @@ function TabButton({
   );
 }
 
+
+/** YouTube video ID'sini URL'den cikarir. */
+function extractYouTubeId(url: string): string | null {
+  const patterns = [
+    /[?&]v=([^&#]+)/,
+    /youtu[.]be[/]([^?&#]+)/,
+    /youtube[.]com[/]embed[/]([^?&#]+)/,
+  ];
+  for (const pat of patterns) {
+    const m = url.match(pat);
+    if (m?.[1]) return m[1];
+  }
+  return null;
+}
+
 function Scoreboard({
   match,
   homeScore,
@@ -353,15 +368,47 @@ function Summary({
         </Pressable>
       ) : null}
 
-      {videoUrl ? (
-        <Pressable
-          onPress={() => openLink(videoUrl)}
-          style={({ pressed }) => [styles.videoButton, pressed && styles.pressedRow]}
-        >
-          <Ionicons name="play-circle" size={20} color="#FF0000" />
-          <Text style={styles.videoText}>Maç videosunu izle</Text>
-          <Ionicons name="open-outline" size={16} color={colors.muted} />
-        </Pressable>
+      {videoUrl ? (() => {
+        const ytId = extractYouTubeId(videoUrl);
+        const thumb = ytId ? `https://img.youtube.com/vi/${ytId}/hqdefault.jpg` : null;
+        return (
+          <Pressable
+            onPress={() => openLink(videoUrl)}
+            style={({ pressed }) => [styles.ytCard, pressed && styles.pressedRow]}
+          >
+            {thumb ? (
+              <View style={styles.ytThumbWrap}>
+                <Image source={{ uri: thumb }} style={styles.ytThumb} resizeMode="cover" />
+                <View style={styles.ytPlayBtn}>
+                  <Ionicons name="play" size={28} color="#FFFFFF" />
+                </View>
+              </View>
+            ) : (
+              <View style={[styles.ytThumbWrap, styles.ytThumbFallback]}>
+                <Ionicons name="logo-youtube" size={40} color="#FF0000" />
+              </View>
+            )}
+            <View style={styles.ytBody}>
+              <View style={styles.ytBadge}>
+                <Ionicons name="logo-youtube" size={12} color="#FF0000" />
+                <Text style={styles.ytBadgeText}>YouTube</Text>
+              </View>
+              <Text style={styles.ytTitle}>
+                {match.match_title?.trim() || `${match.first_team_name} vs ${match.second_team_name}`}
+              </Text>
+              <Text style={styles.ytSub}>İzlemek için dokun →</Text>
+            </View>
+          </Pressable>
+        );
+      })() : null}
+
+      {match.post_rapor ? (
+        <>
+          <Text style={[styles.sectionTitle, styles.sectionSpacer]}>Maç Raporu</Text>
+          <View style={styles.reportCard}>
+            <Text style={styles.reportText}>{match.post_rapor}</Text>
+          </View>
+        </>
       ) : null}
 
       <Text style={styles.sectionTitle}>Maç Olay Özeti</Text>
@@ -1310,6 +1357,77 @@ const styles = StyleSheet.create({
     ...type.small,
     color: colors.line,
     fontWeight: "800",
+  },
+  ytCard: {
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.faint,
+    overflow: "hidden",
+    marginBottom: spacing.sm,
+  },
+  ytThumbWrap: {
+    width: "100%",
+    height: 180,
+    backgroundColor: "#0F0F0F",
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  },
+  ytThumb: {
+    width: "100%",
+    height: "100%",
+  },
+  ytThumbFallback: {
+    backgroundColor: "#1A1A1A",
+  },
+  ytPlayBtn: {
+    position: "absolute",
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "rgba(0,0,0,0.65)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  ytBody: {
+    padding: spacing.md,
+    gap: 4,
+  },
+  ytBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  ytBadgeText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#FF0000",
+    letterSpacing: 0.5,
+  },
+  ytTitle: {
+    ...type.body,
+    fontWeight: "800",
+    color: colors.line,
+    lineHeight: 20,
+  },
+  ytSub: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: colors.muted,
+  },
+  reportCard: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.faint,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  reportText: {
+    ...type.body,
+    color: colors.line,
+    lineHeight: 24,
   },
   videoButton: {
     flexDirection: "row",
