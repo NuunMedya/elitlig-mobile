@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MatchCard } from "@/components/MatchCard";
-import { DailyTestBanner } from "@/components/DailyTestBanner";
+import { FeatureBand } from "@/components/FeatureBand";
 import { MyTeamCard } from "@/components/MyTeamCard";
 import { WeekSeven } from "@/components/WeekSeven";
 import { ScopeBar } from "@/components/ScopeBar";
@@ -199,19 +199,9 @@ export default function OverviewScreen() {
           ) : null}
           {!auth.user ? <MyTeamCard matches={matchesQuery.data ?? []} /> : null}
 
-          <DailyTestBanner />
+          <FeatureBand />
 
-          <View style={styles.quickRow}>
-            <QuickChip icon="calendar-outline" label="Fikstür" onPress={() => router.push("/matches")} />
-            <QuickChip icon="podium-outline" label="Puan Durumu" onPress={() => router.push("/standings")} />
-            {youtubeChannelUrl(scope.cityLabel) ? (
-              <QuickChip
-                icon="logo-youtube"
-                label="YouTube"
-                onPress={() => openLink(youtubeChannelUrl(scope.cityLabel)!)}
-              />
-            ) : null}
-          </View>
+          {/* QuickChip satırı FeatureBand ile değiştirildi */}
 
           {headline ? <HeadlineCard item={headline} /> : null}
 
