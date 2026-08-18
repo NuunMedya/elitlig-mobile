@@ -59,15 +59,7 @@ export function PersonalCard({
       {/* Selam */}
       <View style={styles.greetRow}>
         <Text style={styles.greet}>Merhaba, {firstName} 👋</Text>
-        {teamName ? (
-          <Pressable
-            onPress={() => teamId ? router.push(`/takim/${teamId}`) : null}
-            style={({ pressed }) => [styles.teamChip, pressed && styles.pressed]}
-          >
-            {teamLogo ? <TeamCrest name={teamName} logo={teamLogo} size={20} /> : null}
-            <Text style={styles.teamChipText} numberOfLines={1}>{teamName}</Text>
-          </Pressable>
-        ) : null}
+
       </View>
 
       {/* Takımım satırı */}
@@ -82,7 +74,7 @@ export function PersonalCard({
               {teamName.toLocaleUpperCase("tr-TR")}
             </Text>
           </View>
-          <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.7)" />
+          <Ionicons name="chevron-forward" size={18} color={colors.turf} />
         </Pressable>
       ) : null}
     </View>
@@ -146,7 +138,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.faint,
+    borderColor: "#C8C5D0",
   },
   greetRow: {
     flexDirection: "row",
@@ -178,8 +170,10 @@ const styles = StyleSheet.create({
   teamRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.turf,
+    backgroundColor: "#FFFFFF",
     borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: "#C8C5D0",
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
   },
@@ -191,12 +185,12 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: "800",
     letterSpacing: 0.8,
-    color: "rgba(255,255,255,0.65)",
+    color: colors.turf,
   },
   teamRowName: {
     fontSize: 15,
     fontWeight: "900",
-    color: "#FFFFFF",
+    color: colors.line,
     letterSpacing: -0.3,
   },
   countdown: {
