@@ -24,13 +24,19 @@ import type { PlayerRankRow, PlayerSort } from "@/lib/types";
  * antpl vb.) sıralamadan ayıklanır. Satıra dokunmak oyuncu profilini açar.
  */
 
-const CATEGORIES: { sort: PlayerSort; label: string; unit: string; value: (p: PlayerRankRow) => string }[] = [
-  { sort: "mostValuable", label: "En Değerli", unit: "PUAN", value: (p) => String(Number(p.points) || 0) },
-  { sort: "topScorers", label: "Gol Kralı", unit: "GOL", value: (p) => String(Number(p.goals) || 0) },
-  { sort: "goalsPerMatch", label: "Gol / Maç", unit: "ORT", value: (p) => Number(p.goalsPerMatch ?? 0).toFixed(2) },
-  { sort: "mostMatches", label: "En Çok Maç", unit: "MAÇ", value: (p) => String(Number(p.matches) || 0) },
-  { sort: "pointsPerMatch", label: "Puan / Maç", unit: "ORT", value: (p) => Number(p.pointsPerMatch ?? 0).toFixed(2) },
-  { sort: "mostCards", label: "En Çok Kart", unit: "KART", value: (p) => String(Number(p.cards) || 0) },
+const CATEGORIES: {
+  sort: PlayerSort;
+  label: string;
+  unit: string;
+  value: (p: PlayerRankRow) => number;
+  display: (p: PlayerRankRow) => string;
+}[] = [
+  { sort: "mostValuable",  label: "En Değerli",   unit: "GOL",   value: (p) => Number(p.goals) || 0,          display: (p) => String(Number(p.goals) || 0) },
+  { sort: "topScorers",    label: "Gol Kralı",     unit: "GOL",   value: (p) => Number(p.goals) || 0,          display: (p) => String(Number(p.goals) || 0) },
+  { sort: "goalsPerMatch", label: "Gol / Maç",     unit: "ORT",   value: (p) => Number(p.goalsPerMatch) || 0,  display: (p) => Number(p.goalsPerMatch ?? 0).toFixed(2) },
+  { sort: "mostMatches",   label: "En Çok Maç",    unit: "MAÇ",   value: (p) => Number(p.matches) || 0,        display: (p) => String(Number(p.matches) || 0) },
+  { sort: "pointsPerMatch",label: "Puan / Maç",    unit: "ORT",   value: (p) => Number(p.pointsPerMatch) || 0, display: (p) => Number(p.pointsPerMatch ?? 0).toFixed(2) },
+  { sort: "mostCards",     label: "En Çok Kart",   unit: "KART",  value: (p) => Number(p.cards) || 0,          display: (p) => String(Number(p.cards) || 0) },
 ];
 
 const JUNK = /hükmen|hukmen|antpl/i;
@@ -65,8 +71,12 @@ export default function TurkeyRankingsScreen() {
   });
 
   const players = useMemo(
-    () => (query.data?.players ?? []).filter((p) => p.name && !JUNK.test(p.name)).slice(0, 50),
-    [query.data]
+    () =>
+      (query.data?.players ?? [])
+        .filter((p) => p.name && !JUNK.test(p.name))
+        .sort((a, b) => category.value(b) - category.value(a))
+        .slice(0, 50),
+    [query.data, category]
   );
   const podium = players.slice(0, 3);
   const rest = players.slice(3);
@@ -146,7 +156,7 @@ export default function TurkeyRankingsScreen() {
                       {p.teamName ?? ""}
                     </Text>
                     <Text style={[styles.podiumValue, first && styles.podiumValueFirst]}>
-                      {category.value(p)}
+                      {category.display(p)}
                     </Text>
                     <Text style={styles.podiumUnit}>{category.unit}</Text>
                   </Pressable>
@@ -170,7 +180,7 @@ export default function TurkeyRankingsScreen() {
                 </Text>
               </View>
               <View style={styles.rowValueBox}>
-                <Text style={styles.rowValue}>{category.value(item)}</Text>
+                <Text style={styles.rowValue}>{category.display(item)}</Text>
                 <Text style={styles.rowUnit}>{category.unit}</Text>
               </View>
             </Pressable>
@@ -227,7 +237,7 @@ export default function TurkeyRankingsScreen() {
                           {p.teamName ?? ""}
                         </Text>
                       </View>
-                      <Text style={styles.shareValue}>{category.value(p)}</Text>
+                      <Text style={styles.shareValue}>{category.display(p)}</Text>
                     </View>
                   ))}
                 </View>
