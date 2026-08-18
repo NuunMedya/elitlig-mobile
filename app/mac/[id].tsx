@@ -328,6 +328,7 @@ function Summary({
   const mvpId = match.match_mvp ? Number(match.match_mvp) : null;
   const mvpName = mvpId ? nameOf(mvpId) : null;
   const videoUrl = mediaUrl(match.match_video);
+  const [heroError, setHeroError] = useState(false);
   const router = useRouter();
 
   const rawHeadline = match.match_title?.trim();
@@ -344,7 +345,13 @@ function Summary({
     <View style={styles.section}>
       {headline || heroImage ? (
         <View style={styles.hero}>
-          {heroImage ? <Image source={{ uri: heroImage }} style={styles.heroImage} /> : null}
+          {heroImage && !heroError ? (
+              <Image
+                source={{ uri: heroImage }}
+                style={styles.heroImage}
+                onError={() => setHeroError(true)}
+              />
+            ) : null}
           {headline ? (
             <View style={styles.heroBody}>
               <Text style={styles.heroKicker}>MAÇ MANŞETİ</Text>
@@ -368,45 +375,49 @@ function Summary({
         </Pressable>
       ) : null}
 
-      {videoUrl ? (() => {
-        const ytId = extractYouTubeId(videoUrl);
-        const thumb = ytId ? `https://img.youtube.com/vi/${ytId}/hqdefault.jpg` : null;
-        return (
-          <Pressable
-            onPress={() => openLink(videoUrl)}
-            style={({ pressed }) => [styles.ytCard, pressed && styles.pressedRow]}
-          >
-            {thumb ? (
-              <View style={styles.ytThumbWrap}>
-                <Image source={{ uri: thumb }} style={styles.ytThumb} resizeMode="cover" />
-                <View style={styles.ytPlayBtn}>
-                  <Ionicons name="play" size={28} color="#FFFFFF" />
-                </View>
-              </View>
-            ) : (
-              <View style={[styles.ytThumbWrap, styles.ytThumbFallback]}>
-                <Ionicons name="logo-youtube" size={40} color="#FF0000" />
-              </View>
-            )}
-            <View style={styles.ytBody}>
-              <View style={styles.ytBadge}>
-                <Ionicons name="logo-youtube" size={12} color="#FF0000" />
-                <Text style={styles.ytBadgeText}>YouTube</Text>
-              </View>
-              <Text style={styles.ytTitle}>
-                {match.match_title?.trim() || `${match.first_team_name} vs ${match.second_team_name}`}
-              </Text>
-              <Text style={styles.ytSub}>İzlemek için dokun →</Text>
-            </View>
-          </Pressable>
-        );
-      })() : null}
-
-      {match.post_rapor ? (
+      {(videoUrl || match.post_rapor) ? (
         <>
-          <Text style={[styles.sectionTitle, styles.sectionSpacer]}>Maç Raporu</Text>
-          <View style={styles.reportCard}>
-            <Text style={styles.reportText}>{match.post_rapor}</Text>
+          <Text style={[styles.sectionTitle, styles.sectionSpacer]}>Maç İçeriği</Text>
+          <View style={styles.contentRow}>
+            {/* Sol: küçük YouTube kartı */}
+            {videoUrl ? (() => {
+              const ytId = extractYouTubeId(videoUrl);
+              const thumb = ytId ? `https://img.youtube.com/vi/${ytId}/hqdefault.jpg` : null;
+              return (
+                <Pressable
+                  onPress={() => openLink(videoUrl)}
+                  style={({ pressed }) => [styles.ytMini, pressed && styles.pressedRow]}
+                >
+                  <View style={styles.ytMiniThumb}>
+                    {thumb ? (
+                      <Image source={{ uri: thumb }} style={styles.ytMiniImg} resizeMode="cover" />
+                    ) : (
+                      <Ionicons name="logo-youtube" size={28} color="#FF0000" />
+                    )}
+                    <View style={styles.ytMiniPlay}>
+                      <Ionicons name="play" size={14} color="#FFFFFF" />
+                    </View>
+                  </View>
+                  <View style={styles.ytMiniBadge}>
+                    <Ionicons name="logo-youtube" size={10} color="#FF0000" />
+                    <Text style={styles.ytMiniBadgeText}>İzle</Text>
+                  </View>
+                </Pressable>
+              );
+            })() : null}
+
+            {/* Sağ: maç özeti */}
+            <View style={styles.summaryBox}>
+              <View style={styles.summaryHead}>
+                <Ionicons name="document-text-outline" size={13} color={colors.turf} />
+                <Text style={styles.summaryKicker}>MAÇ ÖZETİ</Text>
+              </View>
+              {match.post_rapor ? (
+                <Text style={styles.summaryText} numberOfLines={5}>{match.post_rapor}</Text>
+              ) : (
+                <Text style={styles.summaryEmpty}>Maç özeti henüz eklenmemiş.</Text>
+              )}
+            </View>
           </View>
         </>
       ) : null}
@@ -1358,76 +1369,84 @@ const styles = StyleSheet.create({
     color: colors.line,
     fontWeight: "800",
   },
-  ytCard: {
-    borderRadius: radius.md,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.faint,
-    overflow: "hidden",
+  contentRow: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    alignItems: "flex-start",
     marginBottom: spacing.sm,
   },
-  ytThumbWrap: {
-    width: "100%",
-    height: 180,
-    backgroundColor: "#0F0F0F",
+  ytMini: {
+    width: 110,
+    gap: 6,
+    flexShrink: 0,
+  },
+  ytMiniThumb: {
+    width: 110,
+    height: 70,
+    borderRadius: radius.sm,
+    backgroundColor: "#111",
+    overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
   },
-  ytThumb: {
+  ytMiniImg: {
     width: "100%",
     height: "100%",
   },
-  ytThumbFallback: {
-    backgroundColor: "#1A1A1A",
-  },
-  ytPlayBtn: {
+  ytMiniPlay: {
     position: "absolute",
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "rgba(0,0,0,0.65)",
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "rgba(0,0,0,0.6)",
     alignItems: "center",
     justifyContent: "center",
   },
-  ytBody: {
-    padding: spacing.md,
+  ytMiniBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: 4,
+    backgroundColor: "#FF000015",
+    borderRadius: radius.pill,
+    paddingVertical: 3,
   },
-  ytBadge: {
+  ytMiniBadgeText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#FF0000",
+  },
+  summaryBox: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.faint,
+    borderRadius: radius.sm,
+    padding: spacing.sm,
+    gap: 5,
+  },
+  summaryHead: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
   },
-  ytBadgeText: {
-    fontSize: 10,
+  summaryKicker: {
+    fontSize: 9,
     fontWeight: "800",
-    color: "#FF0000",
-    letterSpacing: 0.5,
+    letterSpacing: 0.8,
+    color: colors.turf,
   },
-  ytTitle: {
-    ...type.body,
-    fontWeight: "800",
+  summaryText: {
+    ...type.small,
     color: colors.line,
-    lineHeight: 20,
+    lineHeight: 18,
   },
-  ytSub: {
-    fontSize: 11,
-    fontWeight: "600",
+  summaryEmpty: {
+    ...type.caption,
     color: colors.muted,
-  },
-  reportCard: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.faint,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  reportText: {
-    ...type.body,
-    color: colors.line,
-    lineHeight: 24,
+    letterSpacing: 0,
+    fontStyle: "italic",
   },
   videoButton: {
     flexDirection: "row",
