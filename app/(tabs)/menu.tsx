@@ -1,4 +1,5 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -8,6 +9,7 @@ import { openLink } from "@/lib/links";
 import { instagramUrl } from "@/lib/socials";
 import { youtubeChannelUrl } from "@/lib/youtube";
 import { useAuth } from "@/providers/AuthProvider";
+import { getUnreadNotifCount } from "@/lib/api/panel";
 import { useScope } from "@/providers/ScopeProvider";
 
 /**
@@ -22,6 +24,15 @@ export default function MenuScreen() {
   const scope = useScope();
   const router = useRouter();
   const user = auth?.user ?? null;
+  const notifQ = useQuery({
+    queryKey: ["panel", "notif-count"],
+    queryFn: getUnreadNotifCount,
+    enabled: Boolean(user),
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+    retry: false,
+  });
+  const unreadNotifs = notifQ.data?.count ?? 0;
   const channelUrl = youtubeChannelUrl(scope.cityLabel);
   const igUrl = instagramUrl(scope.cityLabel);
 
@@ -59,6 +70,13 @@ export default function MenuScreen() {
             label="Şehir değiştir"
             note={scope.cityLabel || "Bölgeni seç"}
             onPress={() => router.push("/sehir")}
+          />
+          <MenuRow
+            icon="notifications-outline"
+            label="Bildirimler"
+            note="Teklifler, cezalar, mesajlar"
+            badge={unreadNotifs > 0 ? String(unreadNotifs) : undefined}
+            onPress={() => router.push("/bildirimler")}
           />
           <MenuRow
             icon="trophy-outline"
@@ -174,15 +192,12 @@ export default function MenuScreen() {
 }
 
 function MenuRow({
-  icon,
-  label,
-  note,
-  onPress,
-  last,
+  icon, label, note, badge, onPress, last,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   note?: string;
+  badge?: string;
   onPress: () => void;
   last?: boolean;
 }) {
@@ -196,13 +211,15 @@ function MenuRow({
       </View>
       <View style={styles.rowBody}>
         <Text style={styles.rowLabel}>{label}</Text>
-        {note ? (
-          <Text style={styles.rowNote} numberOfLines={1}>
-            {note}
-          </Text>
-        ) : null}
+        {note ? <Text style={styles.rowNote} numberOfLines={1}>{note}</Text> : null}
       </View>
-      <Ionicons name="chevron-forward" size={16} color={colors.muted} />
+      {badge ? (
+        <View style={styles.menuBadge}>
+          <Text style={styles.menuBadgeText}>{badge}</Text>
+        </View>
+      ) : (
+        <Ionicons name="chevron-forward" size={16} color={colors.muted} />
+      )}
     </Pressable>
   );
 }
@@ -259,6 +276,20 @@ const styles = StyleSheet.create({
     borderColor: colors.faint,
     borderRadius: radius.md,
     overflow: "hidden",
+  },
+  menuBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: colors.live,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 5,
+  },
+  menuBadgeText: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#FFFFFF",
   },
   row: {
     flexDirection: "row",

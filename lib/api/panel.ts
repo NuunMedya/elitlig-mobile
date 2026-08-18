@@ -290,3 +290,38 @@ export const sendPanelMessage = (subject: string, body: string, category: string
 
 export const replyPanelThread = (threadId: number, body: string) =>
   post<{ item: unknown }>(`/api/panel/me/messages/${threadId}/reply`, { body });
+
+/**
+ * Panel bildirimleri — routes/panelNotifications.js.
+ * Girişli kullanıcının okunmamış bildirim sayısı ve listesi.
+ */
+
+export interface PanelNotification {
+  id: number;
+  type: string;
+  title: string;
+  description: string | null;
+  entity_type: string | null;
+  entity_public_id: string | null;
+  is_read: boolean;
+  read_at: string | null;
+  createdAt: string;
+}
+
+export interface PanelNotificationsResponse {
+  items: PanelNotification[];
+  page: number;
+  totalItems: number;
+}
+
+export const getPanelNotifications = (page = 1) =>
+  get<PanelNotificationsResponse>("/api/panel-notifications", { page, limit: 50 });
+
+export const getUnreadNotifCount = () =>
+  get<{ count: number }>("/api/panel-notifications/unread-count");
+
+export const markNotifRead = (id: number) =>
+  post<{ success: boolean }>(`/api/panel-notifications/${id}/read`, {});
+
+export const markAllNotifsRead = () =>
+  post<{ success: boolean }>("/api/panel-notifications/read-all", {});
