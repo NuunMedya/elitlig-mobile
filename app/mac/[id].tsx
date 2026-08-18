@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { addMatchToCalendar } from "@/lib/calendar";
 import { openLink } from "@/lib/links";
+import { youtubeChannelUrl } from "@/lib/youtube";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { DetailHeader } from "@/components/ScreenHeader";
 import { ShareScoreCard } from "@/components/ShareScoreCard";
@@ -375,17 +376,19 @@ function Summary({
         </Pressable>
       ) : null}
 
-      {(videoUrl || match.post_rapor) ? (
-        <>
-          <Text style={[styles.sectionTitle, styles.sectionSpacer]}>Maç İçeriği</Text>
-          <View style={styles.contentRow}>
-            {/* Sol: küçük YouTube kartı */}
-            {videoUrl ? (() => {
-              const ytId = extractYouTubeId(videoUrl);
-              const thumb = ytId ? `https://img.youtube.com/vi/${ytId}/hqdefault.jpg` : null;
-              return (
+      {(() => {
+        const channelUrl = youtubeChannelUrl(match.city);
+        const ytLink = videoUrl || channelUrl;
+        const ytId = videoUrl ? extractYouTubeId(videoUrl) : null;
+        const thumb = ytId ? `https://img.youtube.com/vi/${ytId}/hqdefault.jpg` : null;
+        return (
+          <>
+            <Text style={[styles.sectionTitle, styles.sectionSpacer]}>Maç İçeriği</Text>
+            <View style={styles.contentRow}>
+              {/* Sol: YouTube (spesifik video ya da kanal) */}
+              {ytLink ? (
                 <Pressable
-                  onPress={() => openLink(videoUrl)}
+                  onPress={() => openLink(ytLink)}
                   style={({ pressed }) => [styles.ytMini, pressed && styles.pressedRow]}
                 >
                   <View style={styles.ytMiniThumb}>
@@ -394,17 +397,18 @@ function Summary({
                     ) : (
                       <Ionicons name="logo-youtube" size={28} color="#FF0000" />
                     )}
-                    <View style={styles.ytMiniPlay}>
-                      <Ionicons name="play" size={14} color="#FFFFFF" />
-                    </View>
+                    {videoUrl ? (
+                      <View style={styles.ytMiniPlay}>
+                        <Ionicons name="play" size={14} color="#FFFFFF" />
+                      </View>
+                    ) : null}
                   </View>
                   <View style={styles.ytMiniBadge}>
                     <Ionicons name="logo-youtube" size={10} color="#FF0000" />
-                    <Text style={styles.ytMiniBadgeText}>İzle</Text>
+                    <Text style={styles.ytMiniBadgeText}>{videoUrl ? "İzle" : "Kanal"}</Text>
                   </View>
                 </Pressable>
-              );
-            })() : null}
+              ) : null}
 
             {/* Sağ: maç özeti */}
             <View style={styles.summaryBox}>
@@ -420,7 +424,8 @@ function Summary({
             </View>
           </View>
         </>
-      ) : null}
+        );
+      })()}
 
       <Text style={styles.sectionTitle}>Maç Olay Özeti</Text>
       <View style={styles.statCard}>
