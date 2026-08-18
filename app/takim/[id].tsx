@@ -176,6 +176,19 @@ export default function TeamDetailScreen() {
           </View>
         ) : null}
 
+        {/* Takım Analizi */}
+        {standing ? (
+          <View style={styles.analysisCard}>
+            <View style={styles.analysisHeader}>
+              <Ionicons name="bar-chart-outline" size={14} color={colors.turf} />
+              <Text style={styles.analysisKicker}>TAKİM ANALİZİ</Text>
+            </View>
+            <Text style={styles.analysisText}>
+              {buildAnalysis(standing.row, team.team_name, standing.position)}
+            </Text>
+          </View>
+        ) : null}
+
         {/* Tüm zamanlar */}
         <View style={styles.statsCard}>
           <Text style={styles.cardKicker}>TÜM ZAMANLAR</Text>
@@ -483,6 +496,59 @@ function SquadStat({ label, value }: { label: string; value: number }) {
 
 /* ===================== Stiller ===================== */
 
+/** Takım performansını otomatik Türkçe metne dönüştürür. */
+function buildAnalysis(row: StandingRow, teamName: string, position: number): string {
+  const { played, wins, draws, losses, goals_for, goals_against, goal_diff, last5 } = row;
+  if (!played) return `${teamName} henüz bu sezonda maç oynamamış.`;
+
+  const winRate = Math.round((wins / played) * 100);
+  const teamLabel = teamName;
+
+  // Form dizisi
+  const form = last5 ? String(last5).split("") : [];
+  const lastWin  = form.filter((f) => f === "G").length;
+  const lastLoss = form.filter((f) => f === "M").length;
+
+  // Giriş cümlesi
+  let text = `${teamLabel} bu sezon ${played} maç oynadı; ${wins} galibiyet, ${draws} beraberlik, ${losses} mağlubiyet aldı. `;
+
+  // Puan + sıra
+  text += `Ligde ${position}. sırada yer alıyor. `;
+
+  // Gol dengesi
+  if (goal_diff > 0) {
+    text += `${goals_for} gol atıp ${goals_against} gol yiyerek +${goal_diff} averajla avantajlı konumda. `;
+  } else if (goal_diff < 0) {
+    text += `${goals_for} gol atıp ${goals_against} gol yiyerek ${goal_diff} averajla geride. `;
+  } else {
+    text += `${goals_for} gol atıp ${goals_against} gol yedi, averajı dengede. `;
+  }
+
+  // Galibiyet oranı yorumu
+  if (winRate === 100) {
+    text += "Mükemmel bir galibiyet oranıyla sezona damga vuruyor! 🔥";
+  } else if (winRate >= 70) {
+    text += `%${winRate} galibiyet oranıyla güçlü bir sezonu sürdürüyor. 💪`;
+  } else if (winRate >= 50) {
+    text += `%${winRate} galibiyet oranıyla ligde rekabetçi konumunu koruyor.`;
+  } else if (winRate >= 30) {
+    text += `%${winRate} galibiyet oranıyla iyileşme arayan bir grafik çiziyor.`;
+  } else {
+    text += "Zorlu bir dönemden geçiyor; toparlanma adına kritik maçlar önünde.";
+  }
+
+  // Son form notu
+  if (form.length >= 3) {
+    if (lastWin >= 3) {
+      text += ` Son maçlardaki ${lastWin} galibiyet serisi moralleri yüksek tutmaya devam ediyor. ✅`;
+    } else if (lastLoss >= 3) {
+      text += ` Ancak son ${lastLoss} mağlubiyetle form kaybı yaşıyor. ⚠️`;
+    }
+  }
+
+  return text.trim();
+}
+
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
@@ -530,6 +596,29 @@ const styles = StyleSheet.create({
   },
   favTextActive: {
     color: colors.line,
+  },
+  analysisCard: {
+    backgroundColor: colors.turfDim,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  analysisHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  analysisKicker: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    color: colors.turf,
+  },
+  analysisText: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: colors.line,
+    lineHeight: 20,
   },
   seasonCard: {
     backgroundColor: colors.surface,
