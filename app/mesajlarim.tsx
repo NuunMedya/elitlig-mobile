@@ -243,11 +243,13 @@ export default function MessagesScreen() {
         onRequestClose={() => setOpenThreadId(null)}
       >
         <View style={[styles.screen, { paddingBottom: insets.bottom }]}>
+          {/* Durum çubuğu alanı — Modal içinde insets güvenilmez, elle ekliyoruz */}
+          <View style={{ height: Math.max(insets.top, 44) }} />
           <KeyboardAvoidingView
             style={styles.flex}
             behavior={Platform.OS === "ios" ? "padding" : undefined}
           >
-            <View style={[styles.threadHead, { paddingTop: Math.max(insets.top, 44) + spacing.sm }]}>
+            <View style={styles.threadHead}>
               <Pressable onPress={() => setOpenThreadId(null)} hitSlop={10}>
                 <Ionicons name="chevron-back" size={22} color={colors.line} />
               </Pressable>
