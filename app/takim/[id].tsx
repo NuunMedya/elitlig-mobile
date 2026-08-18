@@ -190,6 +190,47 @@ export default function TeamDetailScreen() {
           </View>
         ) : null}
 
+        {/* Takımın Yıldızları */}
+        {squad.length > 0 ? (
+          <>
+            <Text style={styles.sectionLabel}>TAKIM YILDIZLARI</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.starsRow}>
+              {squad.slice(0, 5).map((player, index) => (
+                <Pressable
+                  key={player.id}
+                  onPress={() => router.push(`/oyuncu/${player.id}`)}
+                  style={({ pressed }) => [styles.starCard, pressed && styles.pressed]}
+                >
+                  {/* Sıra rozeti */}
+                  <View style={[styles.starRank, index === 0 && styles.starRankGold]}>
+                    <Text style={styles.starRankTxt}>
+                      {index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : `${index + 1}.`}
+                    </Text>
+                  </View>
+
+                  <PlayerAvatar name={player.name} image={player.image} size={52} />
+
+                  <Text style={styles.starName} numberOfLines={2}>
+                    {player.name.toLocaleUpperCase("tr-TR")}
+                  </Text>
+
+                  <View style={styles.starStats}>
+                    <View style={styles.starStat}>
+                      <Text style={styles.starStatVal}>{player.goals ?? 0}</Text>
+                      <Text style={styles.starStatLbl}>GOL</Text>
+                    </View>
+                    <View style={styles.starDivider} />
+                    <View style={styles.starStat}>
+                      <Text style={styles.starStatVal}>{player.points ?? 0}</Text>
+                      <Text style={styles.starStatLbl}>PUAN</Text>
+                    </View>
+                  </View>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </>
+        ) : null}
+
         {/* H2H Karşılaştır */}
         {(standingsQuery.data ?? []).length > 1 ? (
           <>
@@ -604,6 +645,83 @@ function buildAnalysis(row: StandingRow, teamName: string, position: number): st
 }
 
 const styles = StyleSheet.create({
+  sectionLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    color: colors.muted,
+    marginBottom: spacing.sm,
+  },
+  starsRow: {
+    gap: spacing.sm,
+    paddingBottom: spacing.sm,
+  },
+  starCard: {
+    width: 110,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.faint,
+    padding: spacing.sm,
+    alignItems: "center",
+    gap: 5,
+  },
+  starRank: {
+    position: "absolute",
+    top: 6,
+    left: 6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: colors.surfaceRaised,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  starRankGold: { backgroundColor: "#FEF3C7" },
+  starRankTxt: { fontSize: 11 },
+  starName: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: colors.line,
+    textAlign: "center",
+    letterSpacing: -0.1,
+    lineHeight: 12,
+  },
+  starPos: {
+    fontSize: 8,
+    fontWeight: "600",
+    color: colors.muted,
+    textAlign: "center",
+  },
+  starStats: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.turfDim,
+    borderRadius: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+    gap: 6,
+    width: "100%",
+    justifyContent: "center",
+  },
+  starStat: { alignItems: "center", gap: 1 },
+  starStatVal: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: colors.turf,
+    fontVariant: ["tabular-nums"],
+  },
+  starStatLbl: {
+    fontSize: 6,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+    color: colors.muted,
+  },
+  starDivider: {
+    width: 1,
+    height: 20,
+    backgroundColor: colors.faint,
+  },
   h2hBtn: { flexDirection:"row", alignItems:"center", gap:spacing.sm, backgroundColor:colors.turfDim, borderRadius:radius.md, padding:spacing.md, marginBottom:spacing.sm },
   h2hBtnText: { flex:1, fontSize:14, fontWeight:"800", color:colors.turf },
   h2hOverlay: { flex:1, backgroundColor:"rgba(0,0,0,0.6)", justifyContent:"flex-end" },
