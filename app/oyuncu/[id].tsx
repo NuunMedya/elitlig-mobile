@@ -325,15 +325,78 @@ export default function PlayerDetailScreen() {
                       {player.player_position?<Text style={styles.sPPos}>{positionIcon(player.player_position)} {player.player_position}</Text>:null}
                     </View>
                   </View>
+                  {/* Ana 4 stat */}
                   <View style={styles.sStats}>
-                    {([{l:"GOL",v:String(goals)},{l:"MAÇ",v:String(played)},{l:"PUAN",v:String(points)},{l:"GOL/MAÇ",v:perMatch}]).map(st=>(
+                    {([
+                      {l:"GOL",    v:String(goals)},
+                      {l:"MAÇ",    v:String(played)},
+                      {l:"PUAN",   v:String(points)},
+                      {l:"GOL/MAÇ",v:perMatch},
+                    ]).map(st=>(
                       <View key={st.l} style={styles.sStat}>
                         <Text style={styles.sStatV}>{st.v}</Text>
                         <Text style={styles.sStatL}>{st.l}</Text>
                       </View>
                     ))}
                   </View>
-                  {trRank?<View style={styles.sTr}><Text style={styles.sTrT}>🇹🇷 Türkiye {trRank.rank}. sıra</Text></View>:null}
+
+                  {/* İkincil istatistikler */}
+                  <View style={styles.sSecRow}>
+                    {assists != null && assists > 0 ? (
+                      <View style={styles.sSecItem}>
+                        <Text style={styles.sSecV}>{assists}</Text>
+                        <Text style={styles.sSecL}>ASİST</Text>
+                      </View>
+                    ) : null}
+                    {winRate != null ? (
+                      <View style={styles.sSecItem}>
+                        <Text style={styles.sSecV}>%{winRate}</Text>
+                        <Text style={styles.sSecL}>GALİBİYET</Text>
+                      </View>
+                    ) : null}
+                    {yellow > 0 ? (
+                      <View style={styles.sSecItem}>
+                        <Text style={styles.sSecV}>{yellow}</Text>
+                        <Text style={styles.sSecL}>SARI</Text>
+                      </View>
+                    ) : null}
+                    {red > 0 ? (
+                      <View style={styles.sSecItem}>
+                        <Text style={[styles.sSecV, {color:"#DC2626"}]}>{red}</Text>
+                        <Text style={styles.sSecL}>KIRMIZI</Text>
+                      </View>
+                    ) : null}
+                    {wins > 0 || draws > 0 || losses > 0 ? (
+                      <View style={styles.sSecItem}>
+                        <Text style={styles.sSecV}>{wins}-{draws}-{losses}</Text>
+                        <Text style={styles.sSecL}>G-B-M</Text>
+                      </View>
+                    ) : null}
+                  </View>
+
+                  {/* Lig içi sıralar */}
+                  {ranks ? (
+                    <View style={styles.sRanks}>
+                      {ranks.goals != null ? (
+                        <View style={styles.sRankChip}>
+                          <Text style={styles.sRankTxt}>⚽ {ranks.goals}. / {ranks.total} (gol)</Text>
+                        </View>
+                      ) : null}
+                      {ranks.points != null ? (
+                        <View style={styles.sRankChip}>
+                          <Text style={styles.sRankTxt}>🏅 {ranks.points}. / {ranks.total} (puan)</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  ) : null}
+
+                  {/* Türkiye sırası */}
+                  {trRank ? (
+                    <View style={styles.sTr}>
+                      <Text style={styles.sTrT}>🇹🇷 Türkiye Geneli {trRank.rank}. / {trRank.total}</Text>
+                    </View>
+                  ) : null}
+
                   <View style={{flex:1}}/>
                   <Text style={styles.sFtr}>ELİTLİG.COM</Text>
                 </LinearGradient>
@@ -642,6 +705,13 @@ const styles = StyleSheet.create({
   sTr: { backgroundColor:"rgba(109,40,217,0.08)", borderRadius:8, paddingHorizontal:8, paddingVertical:4, alignSelf:"flex-start" as const },
   sTrT: { fontSize:9, fontWeight:"800", color:"#5B21B6" },
   sFtr: { fontSize:7.5, fontWeight:"800", letterSpacing:2.5, color:"#9188A4", textAlign:"center" as const },
+  sSecRow: { flexDirection:"row", flexWrap:"wrap", gap:4 },
+  sSecItem: { backgroundColor:"rgba(255,255,255,0.7)", borderRadius:8, paddingHorizontal:8, paddingVertical:4, alignItems:"center" as const, minWidth:48 },
+  sSecV: { fontSize:12, fontWeight:"900", color:"#5B21B6", fontVariant:["tabular-nums"] as any },
+  sSecL: { fontSize:6, fontWeight:"800", letterSpacing:0.5, color:"#9188A4" },
+  sRanks: { flexDirection:"row", flexWrap:"wrap", gap:4 },
+  sRankChip: { backgroundColor:"rgba(109,40,217,0.08)", borderRadius:6, paddingHorizontal:7, paddingVertical:3 },
+  sRankTxt: { fontSize:8, fontWeight:"700", color:"#5B21B6" },
   sActions: { flexDirection:"row", gap:spacing.sm, width:"100%" },
   sActBtn: { flex:1, flexDirection:"row", alignItems:"center", justifyContent:"center", gap:6, borderRadius:radius.pill, paddingVertical:spacing.sm+2 },
   sClose: { backgroundColor:"rgba(255,255,255,0.1)" },
