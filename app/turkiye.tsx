@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Alert, FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import ViewShot, { captureRef } from "react-native-view-shot";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -72,10 +72,51 @@ export default function TurkeyRankingsScreen() {
     return d.toISOString().slice(0, 10);
   }, []);
 
+  /**
+   * "Bu Sezon" modu — her ilden ayrı çekim + birleştirme.
+   * Her il kendi startDate'iyle sorgulanır; ilden en iyi 10 oyuncu
+   * alınır, sonra seçili kategoriye göre birleşik sıralama yapılır.
+   * Böylece büyük il (Ankara) küçük ili ezmez.
+   */
+  const fetchPerCity = useCallback(
+    async (sort: typeof category.sort) => {
+      // 1) Filtre için il listesini çek
+      const base = await getPlayerRankings({}, sort);
+      const cityList = base.filters?.cities ?? [];
+      if (cityList.length === 0) return base;
+
+      // 2) Her il için paralel çekim (startDate + cityId)
+      const results = await Promise.all(
+        cityList.map((city) =>
+          getPlayerRankings({ cityId: city.id, startDate }, sort)
+            .then((r) => r.players.slice(0, 10)) // ilden en iyi 10
+            .catch(() => [] as typeof base.players)
+        )
+      );
+
+      // 3) Birleştir: oyuncu tekrarı varsa (çift kayıt) ilk kaydı tut
+      const seen = new Set<number>();
+      const merged: typeof base.players = [];
+      for (const group of results) {
+        for (const player of group) {
+          const id = Number(player.id);
+          if (!seen.has(id)) {
+            seen.add(id);
+            merged.push(player);
+          }
+        }
+      }
+      return { ...base, players: merged };
+    },
+    [startDate, category.sort]
+  );
+
   const query = useQuery({
     queryKey: ["turkey", period, category.sort, startDate],
     queryFn: () =>
-      getPlayerRankings(period === "recent" ? { startDate } : {}, category.sort),
+      period === "recent"
+        ? fetchPerCity(category.sort)
+        : getPlayerRankings({}, category.sort),
     staleTime: 10 * 60_000,
   });
 
@@ -92,7 +133,7 @@ export default function TurkeyRankingsScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      <DetailHeader title="Türkiye Sıralaması" subtitle="Tüm şehirler · tüm zamanlar" />
+      <DetailHeader title="🇹🇷 Türkiye Sıralaması" subtitle="Tüm şehirler · son 6 ay" />
 
       {/* Kategori sekmeleri */}
       <View>
@@ -181,7 +222,7 @@ export default function TurkeyRankingsScreen() {
                       {p.name.toLocaleUpperCase("tr-TR")}
                     </Text>
                     <Text style={styles.podiumTeam} numberOfLines={1}>
-                      {p.teamName ?? ""}
+                      {[p.teamName, p.city].filter(Boolean).join(" · ")}
                     </Text>
                     <Text style={[styles.podiumValue, first && styles.podiumValueFirst]}>
                       {category.display(p)}
@@ -204,7 +245,7 @@ export default function TurkeyRankingsScreen() {
                   {item.name.toLocaleUpperCase("tr-TR")}
                 </Text>
                 <Text style={styles.rowTeam} numberOfLines={1}>
-                  {item.teamName ?? ""}
+                  {[item.teamName, item.city].filter(Boolean).join(" · ")}
                 </Text>
               </View>
               <View style={styles.rowValueBox}>

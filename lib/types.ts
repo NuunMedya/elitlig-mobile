@@ -302,6 +302,8 @@ export interface PlayerRankRow {
   points: number | string;
   goalsPerMatch: number | string;
   pointsPerMatch: number | string;
+  city?: string | null;
+  cityId?: number | null;
 }
 
 export type PlayerSort =
