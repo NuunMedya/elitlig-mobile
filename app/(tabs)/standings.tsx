@@ -28,9 +28,10 @@ import type { StandingRow } from "@/lib/types";
 /**
  * Puan Durumu — sitedeki Lig Tablosu sayfasının mobil karşılığı.
  *
- * Üstte özet kartları, altında tam tablo; son 5 formu renkli çiplerle.
- * Güç dengesi sezonlarında tablo üstünde açılır-kapanır bilgi kutusu:
- * sitedeki açıklama, katsayı tablosu ve seviye rozetleriyle birebir.
+ * Üstte özet kartları (Lider · En Golcü · En Az Gol Yiyen · Formda), altında
+ * tam tablo. Son 5 formu sunucudan gelir ("WDLWW"); sitedeki gibi galibiyet
+ * yeşil, beraberlik gri, mağlubiyet kırmızı çiplerle gösterilir. Hangi puanın
+ * gösterileceğine sunucu karar verir (`display_points`).
  */
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -74,6 +75,8 @@ export default function StandingsScreen() {
   const powerBalance = rows[0]?.standings_type === "gucdengesi";
   const highlights = useMemo(() => computeHighlights(rows), [rows]);
   const [infoOpen, setInfoOpen] = useState(false);
+  const top3 = rows.slice(0, 3);
+  const rest  = rows.slice(3);
 
   const toggleInfo = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -97,7 +100,7 @@ export default function StandingsScreen() {
         />
       ) : (
         <FlatList
-          data={rows}
+          data={rest}
           keyExtractor={(item) => String(item.team_id)}
           ListHeaderComponent={
             <>
@@ -107,12 +110,48 @@ export default function StandingsScreen() {
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={styles.cards}
                 >
-                  <StatCard kicker="LİDER" row={highlights.leader} detail={`${highlights.leader.display_points} puan`} />
-                  <StatCard kicker="EN GOLCÜ" row={highlights.topScorer} detail={`${highlights.topScorer.goals_for} gol attı`} />
-                  <StatCard kicker="EN AZ GOL YİYEN" row={highlights.bestDefense} detail={`${highlights.bestDefense.goals_against} gol yedi`} />
-                  <StatCard kicker="FORMDA" row={highlights.inForm} detail={`Son 5: ${highlights.inForm.last5.slice(-5)}`} />
+                  <StatCard icon="trophy" accent={colors.yellow} kicker="LİDER" row={highlights.leader} detail={`${highlights.leader.display_points} puan`} />
+                  <StatCard icon="football" accent={colors.green} kicker="EN GOLCÜ" row={highlights.topScorer} detail={`${highlights.topScorer.goals_for} gol attı`} />
+                  <StatCard icon="shield-checkmark" accent={colors.turf} kicker="EN AZ GOL YİYEN" row={highlights.bestDefense} detail={`${highlights.bestDefense.goals_against} gol yedi`} />
+                  <StatCard icon="flame" accent="#E8B00A" kicker="FORMDA" row={highlights.inForm} detail={`Son 5: ${highlights.inForm.last5?.slice(-5) ?? ""}`} />
                 </ScrollView>
               )}
+              {/* Podyum */}
+              {top3.length > 0 && (
+                <View style={styles.podium}>
+                  {top3[1] != null && (
+                    <Pressable style={[styles.podCard, styles.podSilver]} onPress={() => router.push(`/takim/${top3[1].team_id}`)}>
+                      <Text style={styles.podMedal}>🥈</Text>
+                      <TeamCrest name={top3[1].team_name} logo={top3[1].logo} size={36} />
+                      <Text style={styles.podName} numberOfLines={2}>{top3[1].team_name.toLocaleUpperCase("tr-TR")}</Text>
+                      <Text style={styles.podPts}>{top3[1].display_points}</Text>
+                      <Text style={styles.podUnit}>PUAN</Text>
+                      {top3[1].last5 ? <Form last5={top3[1].last5} /> : null}
+                    </Pressable>
+                  )}
+                  {top3[0] != null && (
+                    <Pressable style={[styles.podCard, styles.podGold]} onPress={() => router.push(`/takim/${top3[0].team_id}`)}>
+                      <Text style={styles.podMedal}>🥇</Text>
+                      <TeamCrest name={top3[0].team_name} logo={top3[0].logo} size={50} />
+                      <Text style={styles.podName} numberOfLines={2}>{top3[0].team_name.toLocaleUpperCase("tr-TR")}</Text>
+                      <Text style={[styles.podPts, styles.podPtsGold]}>{top3[0].display_points}</Text>
+                      <Text style={styles.podUnit}>PUAN</Text>
+                      {top3[0].last5 ? <Form last5={top3[0].last5} /> : null}
+                    </Pressable>
+                  )}
+                  {top3[2] != null && (
+                    <Pressable style={[styles.podCard, styles.podBronze]} onPress={() => router.push(`/takim/${top3[2].team_id}`)}>
+                      <Text style={styles.podMedal}>🥉</Text>
+                      <TeamCrest name={top3[2].team_name} logo={top3[2].logo} size={36} />
+                      <Text style={styles.podName} numberOfLines={2}>{top3[2].team_name.toLocaleUpperCase("tr-TR")}</Text>
+                      <Text style={styles.podPts}>{top3[2].display_points}</Text>
+                      <Text style={styles.podUnit}>PUAN</Text>
+                      {top3[2].last5 ? <Form last5={top3[2].last5} /> : null}
+                    </Pressable>
+                  )}
+                </View>
+              )}
+
               {powerBalance && (
                 <View style={styles.infoWrap}>
                   <Pressable
@@ -176,8 +215,7 @@ export default function StandingsScreen() {
           renderItem={({ item, index }) => (
             <Row
               row={item}
-              position={index + 1}
-              zebra={index % 2 === 1}
+              position={index + 4}
               onPress={() => router.push(`/takim/${item.team_id}`)}
             />
           )}
@@ -218,25 +256,20 @@ function computeHighlights(rows: StandingRow[]) {
   };
 }
 
-function StatCard({
-  kicker,
-  row,
-  detail,
-}: {
-  kicker: string;
-  row: StandingRow;
-  detail: string;
+function StatCard({ icon, accent, kicker, row, detail }: {
+  icon: string; accent: string; kicker: string; row: StandingRow; detail: string;
 }) {
   return (
-    <View style={styles.card}>
-      <Text style={styles.cardKicker}>{kicker}</Text>
+    <View style={[styles.card, { borderTopColor: accent, borderTopWidth: 3 }]}>
+      <View style={styles.cardIconRow}>
+        <Ionicons name={icon as any} size={11} color={accent} />
+        <Text style={[styles.cardKicker, { color: accent }]}>{kicker}</Text>
+      </View>
       <View style={styles.cardBody}>
-        <TeamCrest name={row.team_name} logo={row.logo} size={28} />
+        <TeamCrest name={row.team_name} logo={row.logo} size={32} />
         <View style={styles.cardText}>
-          <Text style={styles.cardTeam} numberOfLines={1}>
-            {row.team_name.toLocaleUpperCase("tr-TR")}
-          </Text>
-          <Text style={styles.cardDetail}>{detail}</Text>
+          <Text style={styles.cardTeam} numberOfLines={2}>{row.team_name.toLocaleUpperCase("tr-TR")}</Text>
+          <Text style={[styles.cardDetail, { color: accent }]}>{detail}</Text>
         </View>
       </View>
     </View>
@@ -257,30 +290,14 @@ function TableHead({ powerBalance }: { powerBalance: boolean }) {
   );
 }
 
-function Row({
-  row,
-  position,
-  zebra,
-  onPress,
-}: {
-  row: StandingRow;
-  position: number;
-  zebra: boolean;
-  onPress: () => void;
-}) {
+function Row({ row, position, onPress }: { row: StandingRow; position: number; onPress: () => void }) {
+  const TOP = ["#E8B00A","#9AA1B5","#CD7F32"] as const;
+  const tc = position <= 3 ? TOP[position-1] : null;
   return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.row,
-        zebra && styles.rowZebra,
-        position <= 3 && styles.rowTop,
-        pressed && styles.rowPressed,
-      ]}
-    >
-      <Text style={[styles.cell, styles.posCell, position <= 3 && styles.posTop]}>
-        {position}
-      </Text>
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}>
+      <View style={[styles.posBadge, tc != null && { backgroundColor: tc+"22" }]}>
+        <Text style={[styles.posNum, tc != null && { color: tc, fontWeight:"900" as const }]}>{position}</Text>
+      </View>
 
       <View style={[styles.teamCell, styles.teamBox]}>
         <TeamCrest name={row.team_name} logo={row.logo} size={26} />
@@ -335,39 +352,25 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingBottom: spacing.md,
   },
-  card: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.faint,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    width: 190,
-  },
-  cardKicker: {
-    ...type.caption,
-    fontSize: 10,
-    color: colors.muted,
-  },
-  cardBody: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    marginTop: spacing.sm,
-  },
-  cardText: {
-    flex: 1,
-  },
-  cardTeam: {
-    ...type.small,
-    color: colors.line,
-    fontWeight: "800",
-  },
-  cardDetail: {
-    ...type.caption,
-    color: colors.turf,
-    marginTop: 2,
-    letterSpacing: 0,
-  },
+  card: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.faint, borderRadius: radius.md, padding: spacing.md, width: 200 },
+  cardIconRow: { flexDirection: "row", alignItems: "center", gap: 4, marginBottom: spacing.sm },
+  cardKicker: { fontSize: 9, fontWeight: "800", letterSpacing: 0.8 },
+  cardBody: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  cardText: { flex: 1 },
+  cardTeam: { ...type.small, color: colors.line, fontWeight: "800", lineHeight: 16 },
+  cardDetail: { fontSize: 11, fontWeight: "700", marginTop: 3 },
+  podium:    { flexDirection: "row", alignItems: "flex-end", gap: spacing.sm, marginBottom: spacing.md },
+  podCard:   { flex: 1, alignItems: "center", gap: 4, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.faint, borderRadius: radius.md, paddingVertical: spacing.md, paddingHorizontal: 6 },
+  podGold:   { borderColor: colors.yellow, backgroundColor: "#FFFBEB", paddingVertical: spacing.lg },
+  podSilver: { borderColor: "#9AA1B5", backgroundColor: "#F8F9FB" },
+  podBronze: { borderColor: "#CD7F32", backgroundColor: "#FDF8F4" },
+  podMedal:  { fontSize: 20 },
+  podName:   { fontSize: 9, fontWeight: "800", color: colors.line, textAlign: "center" },
+  podPts:    { fontSize: 18, fontWeight: "900", color: colors.turf, fontVariant: ["tabular-nums"] },
+  podPtsGold:{ fontSize: 22, color: "#92660A" },
+  podUnit:   { fontSize: 7, fontWeight: "800", letterSpacing: 0.5, color: colors.muted },
+  posBadge: { width: 28, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center", marginRight: 4 },
+  posNum:   { ...type.small, color: colors.muted, fontVariant: ["tabular-nums"] },
   infoWrap: {
     backgroundColor: colors.turfDim,
     borderRadius: radius.md,
@@ -479,21 +482,7 @@ const styles = StyleSheet.create({
     ...type.caption,
     color: colors.muted,
   },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: spacing.sm + 2,
-    paddingHorizontal: spacing.sm,
-    borderRadius: radius.sm,
-    backgroundColor: colors.surface,
-    marginBottom: 2,
-  },
-  rowZebra: {
-    backgroundColor: colors.surfaceRaised,
-  },
-  rowTop: {
-    backgroundColor: colors.goldDim + "66",
-  },
+  row: { flexDirection: "row", alignItems: "center", paddingVertical: spacing.sm + 2, paddingHorizontal: spacing.sm, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.faint, marginBottom: spacing.sm },
   rowPressed: {
     opacity: 0.7,
   },
@@ -534,9 +523,9 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   chip: {
-    width: 14,
-    height: 14,
-    borderRadius: 4,
+    width: 16,
+    height: 16,
+    borderRadius: 5,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -564,5 +553,12 @@ const styles = StyleSheet.create({
   points: {
     color: colors.turf,
     fontWeight: "800",
+  },
+  footnote: {
+    ...type.caption,
+    color: colors.muted,
+    lineHeight: 18,
+    paddingTop: spacing.md,
+    letterSpacing: 0,
   },
 });
