@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MatchCard } from "@/components/MatchCard";
+import { DailyTestBanner } from "@/components/DailyTestBanner";
 import { MyTeamCard } from "@/components/MyTeamCard";
 import { WeekSeven } from "@/components/WeekSeven";
 import { ScopeBar } from "@/components/ScopeBar";
@@ -197,6 +198,8 @@ export default function OverviewScreen() {
             />
           ) : null}
           {!auth.user ? <MyTeamCard matches={matchesQuery.data ?? []} /> : null}
+
+          <DailyTestBanner />
 
           <View style={styles.quickRow}>
             <QuickChip icon="calendar-outline" label="Fikstür" onPress={() => router.push("/matches")} />
