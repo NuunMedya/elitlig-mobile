@@ -1,12 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams } from "expo-router";
-import { useState } from "react";
-import { FlatList, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useRef, useState } from "react";
+import { FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { DetailHeader } from "@/components/ScreenHeader";
 import { EmptyState, ErrorState, Loading } from "@/components/States";
 import { colors, radius, spacing, type } from "@/constants/theme";
 import { getArenaLeaderboard, getMyArenaRank, type ArenaGame } from "@/lib/api/arena";
+import { LinearGradient } from "expo-linear-gradient";
+import Ionicons from "@expo/vector-icons/Ionicons";
+import * as Sharing from "expo-sharing";
+import ViewShot from "react-native-view-shot";
 import { formatDateShort } from "@/lib/format";
 import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
@@ -25,6 +29,24 @@ export default function ArenaLeaderboardScreen() {
   const [game, setGame] = useState<ArenaGame>(initial);
   const [period, setPeriod] = useState<"weekly" | "alltime">("weekly");
   const [scopeMode, setScopeMode] = useState<"city" | "turkey">("city");
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareFmt, setShareFmt] = useState<"story"|"post">("story");
+  const [shareBusy, setShareBusy] = useState(false);
+  const shotRef = useRef<any>(null);
+  const CW = 272;
+  const SFMTS = {
+    story: { label: "Hikâye 9:16", h: Math.round(CW*16/9) },
+    post:  { label: "Gönderi 3:4", h: Math.round(CW*4/3) },
+  } as const;
+  const doShare = async () => {
+    if (shareBusy) return;
+    setShareBusy(true);
+    try {
+      const uri = await shotRef.current?.capture?.();
+      if (uri) await Sharing.shareAsync(uri, { mimeType: "image/png" });
+    } catch {} finally { setShareBusy(false); }
+  };
+  const curGame = GAMES.find(g => g.key === game);
   const scope = useScope();
   const auth = useAuth();
   const cityId = scopeMode === "city" && scope.cityId ? Number(scope.cityId) : undefined;
@@ -79,6 +101,11 @@ export default function ArenaLeaderboardScreen() {
         />
       </View>
 
+      <Pressable onPress={() => setShareOpen(true)} style={({pressed})=>[styles.shareBtn, pressed&&styles.pressed]}>
+        <Ionicons name="share-social-outline" size={15} color={colors.turf} />
+        <Text style={styles.shareBtnTxt}>Tabloyu Paylaş</Text>
+      </Pressable>
+
       {auth.user && (myRank != null || myScore != null) ? (
         <View style={styles.mePill}>
           <Text style={styles.meText}>
@@ -126,6 +153,56 @@ export default function ArenaLeaderboardScreen() {
           }}
         />
       )}
+      <Modal visible={shareOpen} animationType="slide" onRequestClose={()=>setShareOpen(false)} transparent>
+        <View style={styles.shareOverlay}>
+          <View style={styles.shareSheet}>
+            <View style={styles.sFmtRow}>
+              {(["story","post"] as const).map(k=>(
+                <Pressable key={k} onPress={()=>setShareFmt(k)} style={({pressed})=>[styles.sFmtPill,shareFmt===k&&styles.sFmtActive,pressed&&styles.pressed]}>
+                  <Text style={styles.sFmtTxt}>{SFMTS[k].label}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <ViewShot ref={shotRef} options={{format:"png",quality:1}}>
+              <View style={[styles.sCard,{height:SFMTS[shareFmt].h}]}>
+                <LinearGradient colors={["#6D28D9","#4C1D95"]} style={styles.sStrip}/>
+                <LinearGradient colors={["#CDBFE8","#EFEAF7","#FFF"]} start={{x:0.2,y:0}} end={{x:0.5,y:1}} style={styles.sBody}>
+                  <Text style={styles.sWm}>elitlig</Text>
+                  <View style={styles.sTopRow}>
+                    <Text style={styles.sBrand}>elitlig</Text>
+                    <Text style={styles.sBrandR}>REKOR TABLOSU</Text>
+                  </View>
+                  <Text style={styles.sKicker}>{curGame?.emoji} {curGame?.label?.toLocaleUpperCase("tr-TR")} · {period==="weekly"?"HAFTALIK":"TÜM ZAMANLAR"}</Text>
+                  <View style={styles.sList}>
+                    {entries.slice(0,5).map((e,i)=>(
+                      <View key={e.userId} style={[styles.sRow, i>0&&styles.sRowBorder]}>
+                        <Text style={styles.sRank}>{i===0?"🥇":i===1?"🥈":i===2?"🥉":`${i+1}.`}</Text>
+                        <Text style={styles.sName} numberOfLines={1}>{e.name}</Text>
+                        <View style={styles.sValBox}>
+                          <Text style={styles.sVal}>{e.score}</Text>
+                          <Text style={styles.sUnit}>PUAN</Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                  <View style={{flex:1}}/>
+                  <Text style={styles.sFtr}>ELİTLİG.COM</Text>
+                </LinearGradient>
+              </View>
+            </ViewShot>
+            <View style={styles.sActions}>
+              <Pressable onPress={()=>setShareOpen(false)} style={({pressed})=>[styles.sActBtn,styles.sClose,pressed&&styles.pressed]}>
+                <Text style={styles.sCloseTxt}>Kapat</Text>
+              </Pressable>
+              <Pressable onPress={doShare} style={({pressed})=>[styles.sActBtn,styles.sGo,pressed&&styles.pressed]}>
+                <Ionicons name="share-social" size={15} color="#FFF"/>
+                <Text style={styles.sGoTxt}>{shareBusy?"Hazırlanıyor…":"Paylaş"}</Text>
+              </Pressable>
+            </View>
+            <Text style={styles.sHint}>İndirmek için: Paylaş → "Görüntüyü Kaydet"</Text>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -175,5 +252,37 @@ const styles = StyleSheet.create({
   scoreBox: { alignItems: "flex-end" },
   score: { ...type.body, fontWeight: "800", color: colors.line, fontVariant: ["tabular-nums"] },
   date: { fontSize: 9, fontWeight: "600", color: colors.muted },
+  shareBtn: { flexDirection:"row", alignItems:"center", justifyContent:"center", gap:6, backgroundColor:colors.turfDim, borderRadius:radius.pill, paddingVertical:spacing.sm+2, marginHorizontal:spacing.md, marginBottom:spacing.sm },
+  shareBtnTxt: { fontSize:12, fontWeight:"800", color:colors.turf },
+  shareOverlay: { flex:1, backgroundColor:"rgba(0,0,0,0.75)", justifyContent:"flex-end" },
+  shareSheet: { backgroundColor:"#1A1524", borderTopLeftRadius:20, borderTopRightRadius:20, padding:spacing.md, gap:spacing.md, alignItems:"center" as const, paddingBottom:36 },
+  sFmtRow: { flexDirection:"row", gap:8 },
+  sFmtPill: { borderRadius:20, borderWidth:1, borderColor:"rgba(255,255,255,0.35)", paddingHorizontal:14, paddingVertical:7 },
+  sFmtActive: { backgroundColor:colors.turf, borderColor:colors.turf },
+  sFmtTxt: { fontSize:12, fontWeight:"800", color:"#FFF" },
+  sCard: { width:272, backgroundColor:"#0B0A0E", borderRadius:14, padding:7, overflow:"hidden" },
+  sStrip: { height:7, borderTopLeftRadius:8, borderTopRightRadius:8 },
+  sBody: { flex:1, borderBottomLeftRadius:8, borderBottomRightRadius:8, paddingHorizontal:spacing.md, paddingTop:spacing.sm, paddingBottom:spacing.sm, overflow:"hidden", gap:6 },
+  sWm: { position:"absolute", right:-28, bottom:16, fontSize:60, fontWeight:"900", color:"#6D28D9", opacity:0.06, transform:[{rotate:"-12deg"}] },
+  sTopRow: { flexDirection:"row", alignItems:"center", justifyContent:"space-between" },
+  sBrand: { fontSize:13, fontWeight:"900", color:"#6D28D9" },
+  sBrandR: { fontSize:7, fontWeight:"800", letterSpacing:1.2, color:"#6D28D9", opacity:0.7 },
+  sKicker: { fontSize:9, fontWeight:"800", letterSpacing:0.6, color:"#6D28D9", opacity:0.85 },
+  sList: { backgroundColor:"#FFF", borderRadius:12, borderWidth:1, borderColor:"#E2D9F5", paddingVertical:2, paddingHorizontal:spacing.sm },
+  sRow: { flexDirection:"row", alignItems:"center", gap:8, paddingVertical:6 },
+  sRowBorder: { borderTopWidth:1, borderTopColor:"#F2EDFB" },
+  sRank: { width:22, fontSize:13, textAlign:"center" as const },
+  sName: { flex:1, fontSize:10.5, fontWeight:"800", color:"#100D16" },
+  sValBox: { alignItems:"flex-end" as const, gap:1 },
+  sVal: { fontSize:14, fontWeight:"900", color:"#5B21B6", fontVariant:["tabular-nums"] as any },
+  sUnit: { fontSize:6.5, fontWeight:"800", letterSpacing:0.8, color:"#9B92AA" },
+  sFtr: { fontSize:7.5, fontWeight:"800", letterSpacing:2.5, color:"#9188A4", textAlign:"center" as const },
+  sActions: { flexDirection:"row", gap:spacing.sm, width:"100%" },
+  sActBtn: { flex:1, flexDirection:"row", alignItems:"center", justifyContent:"center", gap:6, borderRadius:radius.pill, paddingVertical:spacing.sm+2 },
+  sClose: { backgroundColor:"rgba(255,255,255,0.1)" },
+  sCloseTxt: { fontSize:14, fontWeight:"700", color:"#FFF" },
+  sGo: { backgroundColor:colors.turf },
+  sGoTxt: { fontSize:14, fontWeight:"800", color:"#FFF" },
+  sHint: { fontSize:11, fontWeight:"600", color:"rgba(255,255,255,0.5)" },
   pressed: { opacity: 0.7 },
 });

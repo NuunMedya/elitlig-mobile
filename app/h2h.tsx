@@ -32,6 +32,11 @@ export default function H2HScreen() {
   const aId = Number(awayId);
   const [shareOpen, setShareOpen] = useState(false);
   const [shareBusy, setShareBusy] = useState(false);
+  const [shareFmt, setShareFmt] = useState<"story"|"post">("story");
+  const FMTS = {
+    story: { label: "Hikâye 9:16", h: Math.round(300 * 16 / 9) },
+    post:  { label: "Gönderi 3:4", h: Math.round(300 * 4  / 3) },
+  } as const;
   const shotRef = useRef<any>(null);
   const doShare = async () => {
     if (shareBusy) return;
@@ -248,8 +253,15 @@ export default function H2HScreen() {
       <Modal visible={shareOpen} animationType="slide" onRequestClose={() => setShareOpen(false)} transparent>
         <View style={styles.shareOverlay}>
           <View style={styles.shareSheet}>
+            <View style={styles.fmtRow}>
+              {(["story","post"] as const).map(k=>(
+                <Pressable key={k} onPress={()=>setShareFmt(k)} style={({pressed})=>[styles.fmtPill, shareFmt===k&&styles.fmtPillActive, pressed&&styles.pressed]}>
+                  <Text style={styles.fmtTxt}>{FMTS[k].label}</Text>
+                </Pressable>
+              ))}
+            </View>
             <ViewShot ref={shotRef} options={{ format: "png", quality: 1 }}>
-              <View style={styles.shareCard}>
+              <View style={[styles.shareCard, { height: FMTS[shareFmt].h }]}>
                 <LinearGradient colors={["#6D28D9", "#4C1D95"]} style={styles.shareStrip} />
                 <LinearGradient colors={["#CDBFE8", "#EFEAF7", "#FFF"]} start={{ x: 0.2, y: 0 }} end={{ x: 0.5, y: 1 }} style={styles.shareBody}>
                   <Text style={styles.shareWm}>elitlig</Text>
@@ -381,9 +393,13 @@ const styles = StyleSheet.create({
   shareIconBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.turfDim, alignItems: "center", justifyContent: "center" },
   shareOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.75)", justifyContent: "flex-end" },
   shareSheet: { backgroundColor: "#1A1524", borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: spacing.md, gap: spacing.md, alignItems: "center" as const, paddingBottom: 36 },
+  fmtRow: { flexDirection: "row", gap: 8 },
+  fmtPill: { borderRadius: 20, borderWidth: 1, borderColor: "rgba(255,255,255,0.35)", paddingHorizontal: 14, paddingVertical: 7 },
+  fmtPillActive: { backgroundColor: colors.turf, borderColor: colors.turf },
+  fmtTxt: { fontSize: 12, fontWeight: "800", color: "#FFF" },
   shareCard: { width: 300, backgroundColor: "#0B0A0E", borderRadius: 14, padding: 7, overflow: "hidden" },
   shareStrip: { height: 7, borderTopLeftRadius: 8, borderTopRightRadius: 8 },
-  shareBody: { borderBottomLeftRadius: 8, borderBottomRightRadius: 8, padding: spacing.md, gap: 8, overflow: "hidden" },
+  shareBody: { flex: 1, borderBottomLeftRadius: 8, borderBottomRightRadius: 8, padding: spacing.md, gap: 8, overflow: "hidden" },
   shareWm: { position: "absolute", right: -28, bottom: 16, fontSize: 56, fontWeight: "900", color: "#6D28D9", opacity: 0.06, transform: [{ rotate: "-12deg" }] },
   shareTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   shareBrand: { fontSize: 13, fontWeight: "900", color: "#6D28D9" },
