@@ -1,7 +1,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { addMatchToCalendar } from "@/lib/calendar";
 import { openLink } from "@/lib/links";
@@ -266,7 +266,7 @@ function Scoreboard({
               {homeScore ?? 0} - {awayScore ?? 0}
             </Text>
           ) : (
-            <Text style={styles.kickoff}>{formatTime(match.time)}</Text>
+            <Countdown matchDate={String(match.date ?? "")} matchTime={match.time ? String(match.time) : null} />
           )}
         </View>
 
@@ -854,6 +854,57 @@ function PlayerRow({ row, dim }: { row: KadroPlayer; dim?: boolean }) {
   );
 }
 
+/**
+ * Canlı geri sayım — yaklaşan maçlarda skor yerine gösterilir.
+ * Her saniye güncellenir; maç saati geçmişse sıfır gösterir.
+ */
+function Countdown({ matchDate, matchTime }: { matchDate: string; matchTime: string | null }) {
+  const target = useMemo(() => {
+    try {
+      const base = String(matchDate).slice(0, 10);
+      const time = matchTime ? String(matchTime).slice(0, 5) : "00:00";
+      return new Date(`${base}T${time}:00`).getTime();
+    } catch {
+      return null;
+    }
+  }, [matchDate, matchTime]);
+
+  const calc = () => {
+    if (!target) return { h: 0, m: 0, s: 0 };
+    const diff = Math.max(0, target - Date.now());
+    const h = Math.floor(diff / 3_600_000);
+    const m = Math.floor((diff % 3_600_000) / 60_000);
+    const sec = Math.floor((diff % 60_000) / 1_000);
+    return { h, m, s: sec };
+  };
+
+  const [tick, setTick] = useState(calc);
+  useEffect(() => {
+    const id = setInterval(() => setTick(calc()), 1_000);
+    return () => clearInterval(id);
+  }, [target]);
+
+  const pad = (n: number) => String(n).padStart(2, "0");
+
+  return (
+    <View style={styles.countdown}>
+      {[
+        { value: pad(tick.h), label: "SAAT" },
+        { value: pad(tick.m), label: "DAK" },
+        { value: pad(tick.s), label: "SAN" },
+      ].map((item, i) => (
+        <View key={item.label} style={styles.countdownGroup}>
+          {i > 0 && <Text style={styles.countdownSep}>:</Text>}
+          <View style={styles.countdownBox}>
+            <Text style={styles.countdownNum}>{item.value}</Text>
+          </View>
+          <Text style={styles.countdownLabel}>{item.label}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
@@ -921,6 +972,50 @@ const styles = StyleSheet.create({
   },
   scoreLive: {
     color: colors.turf,
+  },
+  countdown: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "center",
+    gap: 4,
+  },
+  countdownGroup: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 4,
+  },
+  countdownSep: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: colors.turf,
+    paddingBottom: 12,
+    opacity: 0.5,
+  },
+  countdownBox: {
+    backgroundColor: colors.turfDim,
+    borderRadius: 10,
+    width: 52,
+    height: 52,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.faint,
+  },
+  countdownNum: {
+    fontSize: 24,
+    fontWeight: "900",
+    color: colors.turf,
+    fontVariant: ["tabular-nums"],
+    letterSpacing: -1,
+  },
+  countdownLabel: {
+    fontSize: 8,
+    fontWeight: "800",
+    color: colors.muted,
+    letterSpacing: 0.8,
+    textAlign: "center",
+    width: 52,
+    marginTop: 3,
   },
   kickoff: {
     ...type.title,
