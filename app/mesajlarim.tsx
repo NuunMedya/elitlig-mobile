@@ -16,7 +16,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { DetailHeader } from "@/components/ScreenHeader";
 import { EmptyState, ErrorState, Loading } from "@/components/States";
 import { colors, radius, spacing, type } from "@/constants/theme";
@@ -240,11 +240,10 @@ export default function MessagesScreen() {
       <Modal
         visible={Boolean(openThread)}
         animationType="slide"
+        presentationStyle="pageSheet"
         onRequestClose={() => setOpenThreadId(null)}
       >
-        <View style={[styles.screen, { paddingBottom: insets.bottom }]}>
-          {/* Durum çubuğu alanı — Modal içinde insets güvenilmez, elle ekliyoruz */}
-          <View style={{ height: Math.max(insets.top, 44) }} />
+        <SafeAreaView style={styles.screen} edges={["top", "bottom"]}>
           <KeyboardAvoidingView
             style={styles.flex}
             behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -333,7 +332,7 @@ export default function MessagesScreen() {
               <Text style={styles.closedNote}>Bu konu kapatılmış; yeni başvuru açabilirsin.</Text>
             )}
           </KeyboardAvoidingView>
-        </View>
+        </SafeAreaView>
       </Modal>
 
       {/* Yeni başvuru */}
@@ -571,6 +570,10 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "800",
     color: colors.line,
+  },
+  statusBarSpacer: {
+    height: Platform.OS === "ios" ? 60 : 28,
+    backgroundColor: colors.pitch,
   },
   threadHead: {
     flexDirection: "row",
