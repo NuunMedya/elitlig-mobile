@@ -211,6 +211,7 @@ export default function TeamDetailScreen() {
                       <Ionicons name="close" size={20} color={colors.line} />
                     </Pressable>
                   </View>
+                  <ScrollView style={{ maxHeight: 480 }} showsVerticalScrollIndicator={false}>
                   {(standingsQuery.data ?? [])
                     .filter((row) => Number(row.team_id) !== teamId)
                     .map((row) => (
@@ -235,6 +236,7 @@ export default function TeamDetailScreen() {
                         <Text style={styles.h2hTeamPts}>{row.display_points} puan</Text>
                       </Pressable>
                     ))}
+                  </ScrollView>
                 </View>
               </View>
             </Modal>
