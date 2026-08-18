@@ -236,12 +236,12 @@ export default function MessagesScreen() {
         animationType="slide"
         onRequestClose={() => setOpenThreadId(null)}
       >
-        <SafeAreaView style={styles.screen} edges={["top", "bottom"]}>
+        <View style={[styles.screen, { paddingBottom: insets.bottom }]}>
           <KeyboardAvoidingView
             style={styles.flex}
             behavior={Platform.OS === "ios" ? "padding" : undefined}
           >
-            <View style={styles.threadHead}>
+            <View style={[styles.threadHead, { paddingTop: insets.top + spacing.sm }]}>
               <Pressable onPress={() => setOpenThreadId(null)} hitSlop={10}>
                 <Ionicons name="chevron-back" size={22} color={colors.line} />
               </Pressable>
@@ -325,7 +325,7 @@ export default function MessagesScreen() {
               <Text style={styles.closedNote}>Bu konu kapatılmış; yeni başvuru açabilirsin.</Text>
             )}
           </KeyboardAvoidingView>
-        </SafeAreaView>
+        </View>
       </Modal>
 
       {/* Yeni başvuru */}
