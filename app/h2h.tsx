@@ -1,13 +1,16 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useMemo } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useMemo, useRef, useState } from "react";
+import { Image, Modal, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { TeamCrest } from "@/components/TeamCrest";
 import { colors, radius, spacing, type } from "@/constants/theme";
 import { getTeamMatches } from "@/lib/api/matches";
 import { getStandings } from "@/lib/api/standings";
+import { LinearGradient } from "expo-linear-gradient";
+import * as Sharing from "expo-sharing";
+import ViewShot from "react-native-view-shot";
 import { formatDateShort } from "@/lib/format";
 import { matchState } from "@/lib/match";
 import { queryKeys } from "@/lib/queryKeys";
@@ -27,6 +30,17 @@ export default function H2HScreen() {
 
   const hId = Number(homeId);
   const aId = Number(awayId);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareBusy, setShareBusy] = useState(false);
+  const shotRef = useRef<any>(null);
+  const doShare = async () => {
+    if (shareBusy) return;
+    setShareBusy(true);
+    try {
+      const uri = await shotRef.current?.capture?.();
+      if (uri) await Sharing.shareAsync(uri, { mimeType: "image/png" });
+    } catch {} finally { setShareBusy(false); }
+  };
 
   const homeMatchesQ = useQuery({
     queryKey: queryKeys.teamMatches(hId),
@@ -120,7 +134,9 @@ export default function H2HScreen() {
           <Ionicons name="chevron-back" size={22} color={colors.line} />
         </Pressable>
         <Text style={styles.headerTitle}>H2H Karşılaştırma</Text>
-        <View style={{ width: 22 }} />
+        <Pressable onPress={() => setShareOpen(true)} hitSlop={10} style={styles.shareIconBtn}>
+          <Ionicons name="share-social-outline" size={20} color={colors.turf} />
+        </Pressable>
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
@@ -228,6 +244,93 @@ export default function H2HScreen() {
           </View>
         )}
       </ScrollView>
+
+      <Modal visible={shareOpen} animationType="slide" onRequestClose={() => setShareOpen(false)} transparent>
+        <View style={styles.shareOverlay}>
+          <View style={styles.shareSheet}>
+            <ViewShot ref={shotRef} options={{ format: "png", quality: 1 }}>
+              <View style={styles.shareCard}>
+                <LinearGradient colors={["#6D28D9", "#4C1D95"]} style={styles.shareStrip} />
+                <LinearGradient colors={["#CDBFE8", "#EFEAF7", "#FFF"]} start={{ x: 0.2, y: 0 }} end={{ x: 0.5, y: 1 }} style={styles.shareBody}>
+                  <Text style={styles.shareWm}>elitlig</Text>
+                  <View style={styles.shareTopRow}>
+                    <Text style={styles.shareBrand}>elitlig</Text>
+                    <Text style={styles.shareBrandR}>H2H KARŞILAŞTIRMA</Text>
+                  </View>
+
+                  {/* İki takım */}
+                  <View style={styles.shareTeamsRow}>
+                    <View style={styles.shareTeamCol}>
+                      <TeamCrest name={String(homeName)} logo={homeRow?.logo} size={40} />
+                      <Text style={styles.shareTeamName} numberOfLines={2}>{String(homeName).toLocaleUpperCase("tr-TR")}</Text>
+                      {homePos ? <Text style={styles.shareTeamPos}>{homePos}. sıra</Text> : null}
+                    </View>
+                    <View style={styles.shareVsCol}>
+                      <Text style={styles.shareVs}>VS</Text>
+                      <Text style={styles.shareMeetCount}>{stats.total} maç</Text>
+                    </View>
+                    <View style={[styles.shareTeamCol, { alignItems: "flex-end" }]}>
+                      <TeamCrest name={String(awayName)} logo={awayRow?.logo} size={40} />
+                      <Text style={[styles.shareTeamName, { textAlign: "right" }]} numberOfLines={2}>{String(awayName).toLocaleUpperCase("tr-TR")}</Text>
+                      {awayPos ? <Text style={[styles.shareTeamPos, { textAlign: "right" }]}>{awayPos}. sıra</Text> : null}
+                    </View>
+                  </View>
+
+                  {/* Skor */}
+                  <View style={styles.shareStat}>
+                    <Text style={[styles.shareStatVal, { color: colors.green }]}>{stats.hw}</Text>
+                    <View style={styles.shareStatMid}>
+                      <Text style={styles.shareStatLabel}>GALİBİYET · BER · GALİBİYET</Text>
+                      <Text style={styles.shareDrawVal}>{stats.d}</Text>
+                    </View>
+                    <Text style={[styles.shareStatVal, { color: colors.live }]}>{stats.aw}</Text>
+                  </View>
+
+                  {/* Gol */}
+                  <View style={styles.shareGoals}>
+                    <Text style={styles.shareGoalVal}>{stats.hg}</Text>
+                    <Text style={styles.shareGoalLabel}>TOPLAM GOL</Text>
+                    <Text style={styles.shareGoalVal}>{stats.ag}</Text>
+                  </View>
+
+                  {/* Form */}
+                  <View style={styles.shareFormRow}>
+                    <View style={styles.shareFormChips}>
+                      {homeForm.map((r, i) => (
+                        <View key={i} style={[styles.shareChip, { backgroundColor: r==="W"?colors.green:r==="L"?colors.live:"#B9B5C6" }]}>
+                          <Text style={styles.shareChipTxt}>{r==="W"?"G":r==="L"?"M":"B"}</Text>
+                        </View>
+                      ))}
+                    </View>
+                    <Text style={styles.shareFormLabel}>FORM</Text>
+                    <View style={styles.shareFormChips}>
+                      {awayForm.map((r, i) => (
+                        <View key={i} style={[styles.shareChip, { backgroundColor: r==="W"?colors.green:r==="L"?colors.live:"#B9B5C6" }]}>
+                          <Text style={styles.shareChipTxt}>{r==="W"?"G":r==="L"?"M":"B"}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+
+                  <Text style={styles.shareFooter}>ELİTLİG.COM</Text>
+                </LinearGradient>
+              </View>
+            </ViewShot>
+
+            <View style={styles.shareActions}>
+              <Pressable onPress={() => setShareOpen(false)} style={({ pressed }) => [styles.sActBtn, styles.sClose, pressed && styles.pressed]}>
+                <Text style={styles.sCloseTxt}>Kapat</Text>
+              </Pressable>
+              <Pressable onPress={doShare} style={({ pressed }) => [styles.sActBtn, styles.sGo, pressed && styles.pressed]}>
+                <Ionicons name="share-social" size={15} color="#FFF" />
+                <Text style={styles.sGoTxt}>{shareBusy ? "Hazırlanıyor…" : "Paylaş"}</Text>
+              </Pressable>
+            </View>
+            <Text style={styles.sHint}>İndirmek için: Paylaş → "Görüntüyü Kaydet"</Text>
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -275,4 +378,42 @@ const styles = StyleSheet.create({
   empty: { alignItems: "center", gap: spacing.sm, paddingVertical: spacing.xl },
   emptyText: { ...type.small, color: colors.muted, textAlign: "center" },
   pressed: { opacity: 0.7 },
+  shareIconBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.turfDim, alignItems: "center", justifyContent: "center" },
+  shareOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.75)", justifyContent: "flex-end" },
+  shareSheet: { backgroundColor: "#1A1524", borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: spacing.md, gap: spacing.md, alignItems: "center" as const, paddingBottom: 36 },
+  shareCard: { width: 300, backgroundColor: "#0B0A0E", borderRadius: 14, padding: 7, overflow: "hidden" },
+  shareStrip: { height: 7, borderTopLeftRadius: 8, borderTopRightRadius: 8 },
+  shareBody: { borderBottomLeftRadius: 8, borderBottomRightRadius: 8, padding: spacing.md, gap: 8, overflow: "hidden" },
+  shareWm: { position: "absolute", right: -28, bottom: 16, fontSize: 56, fontWeight: "900", color: "#6D28D9", opacity: 0.06, transform: [{ rotate: "-12deg" }] },
+  shareTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  shareBrand: { fontSize: 13, fontWeight: "900", color: "#6D28D9" },
+  shareBrandR: { fontSize: 7, fontWeight: "800", letterSpacing: 1, color: "#6D28D9", opacity: 0.7 },
+  shareTeamsRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  shareTeamCol: { flex: 1, alignItems: "flex-start", gap: 3 },
+  shareTeamName: { fontSize: 10, fontWeight: "900", color: "#0A0812", letterSpacing: -0.2 },
+  shareTeamPos: { fontSize: 8, fontWeight: "700", color: "#6D28D9" },
+  shareVsCol: { alignItems: "center" },
+  shareVs: { fontSize: 16, fontWeight: "900", color: "#9188A4" },
+  shareMeetCount: { fontSize: 8, fontWeight: "700", color: "#9188A4" },
+  shareStat: { flexDirection: "row", alignItems: "center", backgroundColor: "rgba(255,255,255,0.75)", borderRadius: 10, padding: 10 },
+  shareStatVal: { fontSize: 28, fontWeight: "900", fontVariant: ["tabular-nums"] as any, width: 44, textAlign: "center" as const },
+  shareStatMid: { flex: 1, alignItems: "center", gap: 2 },
+  shareStatLabel: { fontSize: 7, fontWeight: "800", color: "#9188A4", letterSpacing: 0.3 },
+  shareDrawVal: { fontSize: 22, fontWeight: "900", color: "#9188A4", fontVariant: ["tabular-nums"] as any },
+  shareGoals: { flexDirection: "row", alignItems: "center", backgroundColor: "rgba(255,255,255,0.6)", borderRadius: 8, padding: 8 },
+  shareGoalVal: { fontSize: 18, fontWeight: "900", color: "#5B21B6", fontVariant: ["tabular-nums"] as any, flex: 1, textAlign: "center" as const },
+  shareGoalLabel: { fontSize: 7, fontWeight: "800", letterSpacing: 0.5, color: "#9188A4", textAlign: "center" as const },
+  shareFormRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  shareFormChips: { flexDirection: "row", gap: 3, flex: 1 },
+  shareFormLabel: { fontSize: 8, fontWeight: "800", color: "#9188A4", letterSpacing: 0.5 },
+  shareChip: { width: 20, height: 20, borderRadius: 5, alignItems: "center", justifyContent: "center" },
+  shareChipTxt: { fontSize: 9, fontWeight: "900", color: "#FFF" },
+  shareFooter: { fontSize: 7.5, fontWeight: "800", letterSpacing: 2.5, color: "#9188A4", textAlign: "center" as const },
+  shareActions: { flexDirection: "row", gap: spacing.sm, width: "100%" },
+  sActBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderRadius: radius.pill, paddingVertical: spacing.sm + 2 },
+  sClose: { backgroundColor: "rgba(255,255,255,0.1)" },
+  sCloseTxt: { fontSize: 14, fontWeight: "700", color: "#FFF" },
+  sGo: { backgroundColor: colors.turf },
+  sGoTxt: { fontSize: 14, fontWeight: "800", color: "#FFF" },
+  sHint: { fontSize: 11, fontWeight: "600", color: "rgba(255,255,255,0.5)" },
 });

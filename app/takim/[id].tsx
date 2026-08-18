@@ -665,6 +665,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     padding: spacing.md,
     gap: spacing.sm,
+    marginBottom: spacing.md,
   },
   analysisHeader: {
     flexDirection: "row",
