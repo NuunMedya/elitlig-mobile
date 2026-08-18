@@ -86,8 +86,8 @@ export default function MenuScreen() {
           />
           <MenuRow
             icon="podium-outline"
-            label="Arena Sıralamaları"
-            note="Rekorlarda kim önde?"
+            label="Rekor Tablosu"
+            note="Oyun rekorları lider tablosu"
             onPress={() => router.push("/siralama")}
           />
           <MenuRow

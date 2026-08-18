@@ -49,7 +49,7 @@ export default function ArenaLeaderboardScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      <DetailHeader title="Arena Sıralamaları" subtitle="Rekorlarda kim önde?" />
+      <DetailHeader title="Rekor Tablosu" subtitle="Oyunlarda kim önde?" />
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.gameTabs} style={styles.gameTabsWrap}>
         {GAMES.map((item) => (
