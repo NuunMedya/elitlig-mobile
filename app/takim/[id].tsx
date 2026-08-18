@@ -2,7 +2,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { DetailHeader } from "@/components/ScreenHeader";
 import { EmptyState, ErrorState, Loading } from "@/components/States";
@@ -34,6 +34,7 @@ import type { ApiMatch, PlayerRankRow, StandingRow } from "@/lib/types";
 type Tab = "results" | "fixtures" | "squad";
 
 export default function TeamDetailScreen() {
+  const [h2hOpen, setH2hOpen] = useState(false);
   const { id } = useLocalSearchParams<{ id: string }>();
   const teamId = Number(id);
   const validId = Number.isFinite(teamId) && teamId > 0;
@@ -187,6 +188,57 @@ export default function TeamDetailScreen() {
               {buildAnalysis(standing.row, team.team_name, standing.position)}
             </Text>
           </View>
+        ) : null}
+
+        {/* H2H Karşılaştır */}
+        {(standingsQuery.data ?? []).length > 1 ? (
+          <>
+            <Pressable
+              onPress={() => setH2hOpen(true)}
+              style={({ pressed }) => [styles.h2hBtn, pressed && styles.pressed]}
+            >
+              <Ionicons name="swap-horizontal-outline" size={16} color={colors.turf} />
+              <Text style={styles.h2hBtnText}>H2H Karşılaştır</Text>
+              <Ionicons name="chevron-down" size={14} color={colors.muted} />
+            </Pressable>
+
+            <Modal visible={h2hOpen} animationType="slide" onRequestClose={() => setH2hOpen(false)} transparent>
+              <View style={styles.h2hOverlay}>
+                <View style={styles.h2hSheet}>
+                  <View style={styles.h2hSheetHead}>
+                    <Text style={styles.h2hSheetTitle}>Rakip Seç</Text>
+                    <Pressable onPress={() => setH2hOpen(false)} hitSlop={10}>
+                      <Ionicons name="close" size={20} color={colors.line} />
+                    </Pressable>
+                  </View>
+                  {(standingsQuery.data ?? [])
+                    .filter((row) => Number(row.team_id) !== teamId)
+                    .map((row) => (
+                      <Pressable
+                        key={row.team_id}
+                        onPress={() => {
+                          setH2hOpen(false);
+                          router.push({
+                            pathname: "/h2h",
+                            params: {
+                              homeId: String(teamId),
+                              homeName: team.team_name,
+                              awayId: String(row.team_id),
+                              awayName: row.team_name,
+                            },
+                          });
+                        }}
+                        style={({ pressed }) => [styles.h2hTeamRow, pressed && styles.pressed]}
+                      >
+                        <TeamCrest name={row.team_name} logo={row.logo} size={26} />
+                        <Text style={styles.h2hTeamName} numberOfLines={1}>{row.team_name}</Text>
+                        <Text style={styles.h2hTeamPts}>{row.display_points} puan</Text>
+                      </Pressable>
+                    ))}
+                </View>
+              </View>
+            </Modal>
+          </>
         ) : null}
 
         {/* Tüm zamanlar */}
@@ -550,6 +602,15 @@ function buildAnalysis(row: StandingRow, teamName: string, position: number): st
 }
 
 const styles = StyleSheet.create({
+  h2hBtn: { flexDirection:"row", alignItems:"center", gap:spacing.sm, backgroundColor:colors.turfDim, borderRadius:radius.md, padding:spacing.md, marginBottom:spacing.sm },
+  h2hBtnText: { flex:1, fontSize:14, fontWeight:"800", color:colors.turf },
+  h2hOverlay: { flex:1, backgroundColor:"rgba(0,0,0,0.6)", justifyContent:"flex-end" },
+  h2hSheet: { backgroundColor:colors.surface, borderTopLeftRadius:20, borderTopRightRadius:20, paddingHorizontal:spacing.md, paddingBottom:36, maxHeight:"75%" as any },
+  h2hSheetHead: { flexDirection:"row", alignItems:"center", justifyContent:"space-between", paddingVertical:spacing.md, borderBottomWidth:1, borderBottomColor:colors.faint, marginBottom:spacing.sm },
+  h2hSheetTitle: { fontSize:16, fontWeight:"800", color:colors.line },
+  h2hTeamRow: { flexDirection:"row", alignItems:"center", gap:spacing.sm, paddingVertical:spacing.sm+2, borderBottomWidth:1, borderBottomColor:colors.faint },
+  h2hTeamName: { flex:1, fontSize:13, fontWeight:"700", color:colors.line },
+  h2hTeamPts: { fontSize:12, fontWeight:"800", color:colors.turf },
   screen: {
     flex: 1,
     backgroundColor: colors.pitch,
