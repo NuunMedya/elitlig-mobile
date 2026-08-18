@@ -106,6 +106,24 @@ export default function PlayerDetailScreen() {
     };
   }, [rankingsQuery.data, playerId]);
 
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareFmt, setShareFmt] = useState<"story"|"post">("story");
+  const [shareBusy, setShareBusy] = useState(false);
+  const shotRef = useRef<any>(null);
+  const CW = 272;
+  const FMTS = {
+    story: { label: "Hikaye 9:16", h: Math.round(CW*16/9) },
+    post:  { label: "Gonderi 3:4", h: Math.round(CW*4/3)  },
+  } as const;
+  const doShare = async () => {
+    if (shareBusy) return;
+    setShareBusy(true);
+    try {
+      const uri = await shotRef.current?.capture?.();
+      if (uri) await Sharing.shareAsync(uri, { mimeType:"image/png" });
+    } catch {} finally { setShareBusy(false); }
+  };
+
   if (playerQuery.isLoading) {
     return (
       <SafeAreaView style={styles.screen} edges={["top"]}>
@@ -136,23 +154,6 @@ export default function PlayerDetailScreen() {
   const decided = wins + draws + losses;
   const winRate = decided > 0 ? Math.round((wins / decided) * 100) : null;
   const perMatch = played > 0 ? (goals / played).toFixed(2) : "0.00";
-  const [shareOpen, setShareOpen] = useState(false);
-  const [shareFmt, setShareFmt] = useState<"story"|"post">("story");
-  const [shareBusy, setShareBusy] = useState(false);
-  const shotRef = useRef<any>(null);
-  const CW = 272;
-  const FMTS = {
-    story: { label: "Hikaye 9:16", h: Math.round(CW*16/9) },
-    post:  { label: "Gonderi 3:4", h: Math.round(CW*4/3)  },
-  } as const;
-  const doShare = async () => {
-    if (shareBusy) return;
-    setShareBusy(true);
-    try {
-      const uri = await shotRef.current?.capture?.();
-      if (uri) await Sharing.shareAsync(uri, { mimeType:"image/png" });
-    } catch {} finally { setShareBusy(false); }
-  };
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
