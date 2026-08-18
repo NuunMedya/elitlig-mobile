@@ -1,7 +1,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { DetailHeader } from "@/components/ScreenHeader";
 import { colors, radius, spacing, type } from "@/constants/theme";
@@ -107,7 +107,7 @@ export default function NotificationSettingsScreen() {
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <DetailHeader title="Bildirim Ayarları" subtitle="Hangi bildirimleri almak istediğini seç" />
 
-      <View style={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.infoCard}>
           <Ionicons name="information-circle-outline" size={16} color={colors.turf} />
           <Text style={styles.infoText}>
@@ -142,7 +142,7 @@ export default function NotificationSettingsScreen() {
             </View>
           </View>
         ))}
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
