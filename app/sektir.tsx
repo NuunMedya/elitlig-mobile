@@ -7,7 +7,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import ViewShot, { captureRef } from "react-native-view-shot";
 import { DetailHeader } from "@/components/ScreenHeader";
 import { colors, radius, spacing, type } from "@/constants/theme";
+import { submitArenaScore } from "@/lib/api/arena";
 import { instagramUrl } from "@/lib/socials";
+import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
 
 /**
@@ -35,6 +37,7 @@ type Phase = "ready" | "playing" | "over";
 
 export default function SektirScreen() {
   const scope = useScope();
+  const auth = useAuth();
   const [phase, setPhase] = useState<Phase>("ready");
   const [score, setScore] = useState(0);
   const [best, setBest] = useState(0);
@@ -71,6 +74,7 @@ export default function SektirScreen() {
     if (loop.current) clearInterval(loop.current);
     loop.current = null;
     const finished = scoreRef.current;
+    if (auth.user && finished > 0) submitArenaScore("sektir", finished).catch(() => {});
     if (finished > 0) {
       setBest((current) => {
         if (finished > current) {

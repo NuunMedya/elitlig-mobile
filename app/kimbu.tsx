@@ -10,9 +10,11 @@ import { DetailHeader } from "@/components/ScreenHeader";
 import { EmptyState, Loading } from "@/components/States";
 import { PlayerAvatar } from "@/components/TeamCrest";
 import { colors, radius, spacing, type } from "@/constants/theme";
+import { submitArenaScore } from "@/lib/api/arena";
 import { getPlayerRankings } from "@/lib/api/players";
 import { queryKeys } from "@/lib/queryKeys";
 import { instagramUrl } from "@/lib/socials";
+import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
 import type { PlayerRankRow } from "@/lib/types";
 
@@ -45,6 +47,7 @@ type QPhase = "guess" | "reveal";
 
 export default function KimBuScreen() {
   const scope = useScope();
+  const auth = useAuth();
 
   const query = useQuery({
     queryKey: queryKeys.playerRankings({}, "topScorers"),
@@ -135,6 +138,7 @@ export default function KimBuScreen() {
       if (qIndex + 1 >= round.length) {
         setFinished(true);
         const final = total + (correct ? Math.max(0, potential) : 0);
+        if (auth.user && final > 0) submitArenaScore("kimbu", final).catch(() => {});
         setBest((b) => {
           if (final > b) {
             AsyncStorage.setItem(BEST_KEY, String(final));

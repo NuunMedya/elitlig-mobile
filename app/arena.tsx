@@ -10,9 +10,11 @@ import { DetailHeader } from "@/components/ScreenHeader";
 import { EmptyState, Loading } from "@/components/States";
 import { PlayerAvatar } from "@/components/TeamCrest";
 import { colors, radius, spacing, type } from "@/constants/theme";
+import { submitArenaScore } from "@/lib/api/arena";
 import { getPlayerRankings } from "@/lib/api/players";
 import { queryKeys } from "@/lib/queryKeys";
 import { instagramUrl } from "@/lib/socials";
+import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
 import type { PlayerRankRow } from "@/lib/types";
 
@@ -54,6 +56,7 @@ type Phase = "guess" | "correct" | "wrong" | "over";
 
 export default function ArenaScreen() {
   const scope = useScope();
+  const auth = useAuth();
   const scopeKey = {
     cityId: scope.cityId ?? undefined,
     leagueId: scope.leagueId ?? undefined,
@@ -179,6 +182,7 @@ export default function ArenaScreen() {
     } else {
       setPhase("wrong");
       record(streak);
+      if (auth.user && streak > 0) submitArenaScore("seri", streak).catch(() => {});
       timer.current = setTimeout(() => setPhase("over"), REVEAL_MS);
     }
   };
