@@ -59,6 +59,19 @@ export default function PlayerDetailScreen() {
     staleTime: 5 * 60_000,
   });
 
+  // Türkiye geneli sıralama (kapsamsız)
+  const trRankQuery = useQuery({
+    queryKey: queryKeys.playerRankings({}, "topScorers"),
+    queryFn: () => getPlayerRankings({}, "topScorers"),
+    enabled: validId,
+    staleTime: 10 * 60_000,
+  });
+  const trRank = useMemo(() => {
+    const list = trRankQuery.data?.players ?? [];
+    const idx = list.findIndex((p) => Number(p.id) === playerId);
+    return idx >= 0 ? { rank: idx + 1, total: list.length } : null;
+  }, [trRankQuery.data, playerId]);
+
   const assists = useMemo(() => {
     const row = rankingsQuery.data?.players?.find((item) => Number(item.id) === playerId);
     return row ? Number(row.assists) || 0 : null;
@@ -128,15 +141,21 @@ export default function PlayerDetailScreen() {
         {/* Kimlik */}
         <View style={styles.hero}>
           <View style={styles.avatarRing}>
-            <PlayerAvatar name={player.player_name} image={player.player_img} size={92} />
+            <PlayerAvatar name={player.player_name} image={player.player_img} size={100} />
           </View>
           <Text style={styles.name}>{player.player_name}</Text>
           <View style={styles.chipRow}>
             {player.player_position ? (
               <View style={styles.positionChip}>
                 <Text style={styles.positionText}>
+                  {positionIcon(player.player_position)}{" "}
                   {player.player_position.toLocaleUpperCase("tr-TR")}
                 </Text>
+              </View>
+            ) : null}
+            {trRank ? (
+              <View style={styles.trChip}>
+                <Text style={styles.trChipText}>🇹🇷 {trRank.rank}. / {trRank.total}</Text>
               </View>
             ) : null}
             {team ? (
@@ -171,6 +190,28 @@ export default function PlayerDetailScreen() {
           ) : null}
           <MainStat label="PUAN" value={String(points)} highlight />
         </View>
+
+        {/* Kariyer özeti */}
+        {played > 0 ? (
+          <View style={styles.careerCard}>
+            <Text style={styles.cardKicker}>KARİYER ÖZETI</Text>
+            <View style={styles.careerRow}>
+              <CareerStat label="Gol/Maç" value={perMatch} />
+              <CareerStat label="Puan/Maç" value={played > 0 ? (points / played).toFixed(1) : "0.0"} />
+              <CareerStat label="Top Maç" value={String(played)} />
+              <CareerStat label="Katkı" value={assists != null ? String(goals + assists) : String(goals)} />
+            </View>
+            {/* Kariyer çubuğu: gol / asist / puan görsel dağılımı */}
+            <View style={styles.contribBar}>
+              {goals > 0 ? <View style={[styles.barSegment, styles.barGoal, { flex: goals }]} /> : null}
+              {assists != null && assists > 0 ? <View style={[styles.barSegment, styles.barAssist, { flex: assists }]} /> : null}
+            </View>
+            <View style={styles.barLegendRow}>
+              <View style={styles.barLegendItem}><View style={[styles.barLegendDot, { backgroundColor: colors.green }]} /><Text style={styles.barLegendLabel}>{goals} Gol</Text></View>
+              {assists != null ? <View style={styles.barLegendItem}><View style={[styles.barLegendDot, { backgroundColor: colors.turf }]} /><Text style={styles.barLegendLabel}>{assists} Asist</Text></View> : null}
+            </View>
+          </View>
+        ) : null}
 
         {/* İkincil metrikler */}
         <View style={styles.pillRow}>
@@ -276,6 +317,26 @@ function Achievements({
           </View>
         ))}
       </View>
+    </View>
+  );
+}
+
+/** Mevki → emoji */
+function positionIcon(pos: string): string {
+  const p = String(pos).toLowerCase();
+  if (p.includes("kaleci") || p.includes("kale")) return "🧤";
+  if (p.includes("defans") || p.includes("bek"))  return "🛡️";
+  if (p.includes("orta"))                          return "⚙️";
+  if (p.includes("kanat"))                         return "⚡";
+  if (p.includes("forvet") || p.includes("9"))     return "⚽";
+  return "🏃";
+}
+
+function CareerStat({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.careerStat}>
+      <Text style={styles.careerStatValue}>{value}</Text>
+      <Text style={styles.careerStatLabel}>{label}</Text>
     </View>
   );
 }
@@ -481,6 +542,80 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: spacing.md,
     paddingBottom: spacing.xl,
+  },
+  trChip: {
+    backgroundColor: colors.turfDim,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 4,
+  },
+  trChipText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: colors.turf,
+  },
+  careerCard: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.faint,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  careerRow: {
+    flexDirection: "row",
+  },
+  contribBar: {
+    flexDirection: "row",
+    height: 6,
+    borderRadius: 3,
+    overflow: "hidden",
+    backgroundColor: colors.surfaceRaised,
+  },
+  barSegment: {
+    height: 6,
+  },
+  barGoal: {
+    backgroundColor: colors.green,
+  },
+  barAssist: {
+    backgroundColor: colors.turf,
+  },
+  barLegendRow: {
+    flexDirection: "row",
+    gap: spacing.md,
+  },
+  barLegendItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  barLegendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  barLegendLabel: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: colors.muted,
+  },
+  careerStat: {
+    flex: 1,
+    alignItems: "center",
+    gap: 2,
+  },
+  careerStatValue: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: colors.line,
+    fontVariant: ["tabular-nums"],
+  },
+  careerStatLabel: {
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+    color: colors.muted,
   },
   hero: {
     alignItems: "center",
