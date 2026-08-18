@@ -1,6 +1,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQuery } from "@tanstack/react-query";
+import { submitArenaScore } from "@/lib/api/arena";
 import * as Sharing from "expo-sharing";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -12,6 +13,7 @@ import { colors, radius, spacing, type } from "@/constants/theme";
 import { getPlayerRankings } from "@/lib/api/players";
 import { queryKeys } from "@/lib/queryKeys";
 import { instagramUrl } from "@/lib/socials";
+import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
 import type { PlayerRankRow } from "@/lib/types";
 
@@ -107,6 +109,7 @@ type Phase = "intro" | "playing" | "reveal" | "done";
 
 export default function DailyQuizScreen() {
   const scope = useScope();
+  const auth = useAuth();
   const day = new Date().toISOString().slice(0, 10);
   const dayLabel = new Date()
     .toLocaleDateString("tr-TR", { day: "numeric", month: "long" })
@@ -210,6 +213,7 @@ export default function DailyQuizScreen() {
     const finalCorrect = correctCount + (lastGain > 0 ? 1 : 0);
     setPhase("done");
     if (official) {
+      if (auth.user && finalScore > 0) submitArenaScore("gunun", finalScore).catch(() => {});
       const result = { score: finalScore, correct: finalCorrect };
       setTodayResult(result);
       AsyncStorage.setItem(DAY_KEY(day), JSON.stringify(result));

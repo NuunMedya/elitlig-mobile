@@ -12,10 +12,11 @@ import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
 
 const GAMES: { key: ArenaGame; label: string; emoji: string }[] = [
-  { key: "seri", label: "Seri Modu", emoji: "🔥" },
-  { key: "sektir", label: "Top Sektir", emoji: "⚽" },
-  { key: "kimbu", label: "Kim Bu?", emoji: "🕵️" },
-  { key: "slalom", label: "Slalom", emoji: "🚩" },
+  { key: "seri",   label: "Seri Modu",    emoji: "🔥" },
+  { key: "sektir", label: "Top Sektir",   emoji: "⚽" },
+  { key: "kimbu",  label: "Kim Bu?",      emoji: "🕵️" },
+  { key: "slalom", label: "Slalom",       emoji: "🚩" },
+  { key: "gunun",  label: "Günün Testi",  emoji: "🧠" },
 ];
 
 export default function ArenaLeaderboardScreen() {
