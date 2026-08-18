@@ -31,7 +31,7 @@ const CATEGORIES: {
   value: (p: PlayerRankRow) => number;
   display: (p: PlayerRankRow) => string;
 }[] = [
-  { sort: "mostValuable",  label: "En Değerli",   unit: "GOL",   value: (p) => Number(p.goals) || 0,          display: (p) => String(Number(p.goals) || 0) },
+  { sort: "mostValuable",  label: "En Değerli",   unit: "PUAN",  value: (p) => Number(p.points) || 0,         display: (p) => String(Number(p.points) || 0) },
   { sort: "topScorers",    label: "Gol Kralı",     unit: "GOL",   value: (p) => Number(p.goals) || 0,          display: (p) => String(Number(p.goals) || 0) },
   { sort: "goalsPerMatch", label: "Gol / Maç",     unit: "ORT",   value: (p) => Number(p.goalsPerMatch) || 0,  display: (p) => Number(p.goalsPerMatch ?? 0).toFixed(2) },
   { sort: "mostMatches",   label: "En Çok Maç",    unit: "MAÇ",   value: (p) => Number(p.matches) || 0,        display: (p) => String(Number(p.matches) || 0) },
