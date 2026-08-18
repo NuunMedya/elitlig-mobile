@@ -72,6 +72,12 @@ export default function MenuScreen() {
             onPress={() => router.push("/sehir")}
           />
           <MenuRow
+            icon="settings-outline"
+            label="Bildirim Ayarları"
+            note="Hangi bildirimleri alacağını seç"
+            onPress={() => router.push("/bildirim-ayarlari")}
+          />
+          <MenuRow
             icon="notifications-outline"
             label="Bildirimler"
             note="Teklifler, cezalar, mesajlar"

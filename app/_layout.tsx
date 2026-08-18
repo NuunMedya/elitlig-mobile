@@ -1,3 +1,4 @@
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -23,10 +24,18 @@ const queryClient = new QueryClient({
   },
 });
 
+function PushSetup() {
+  // @ts-ignore
+  const getToken = () => { try { return require("expo-secure-store").getItemAsync("elitlig_token"); } catch { return null; } };
+  usePushNotifications(null);
+  return null;
+}
+
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
+          <PushSetup />
         <AuthProvider>
           <ScopeProvider>
             <FavoriteProvider>
