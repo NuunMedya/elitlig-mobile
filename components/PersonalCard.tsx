@@ -55,12 +55,7 @@ export function PersonalCard({
     : null;
 
   return (
-    <LinearGradient
-      colors={[colors.turf, "#4C1D95"]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={styles.card}
-    >
+    <View style={styles.card}>
       {/* Selam */}
       <View style={styles.greetRow}>
         <Text style={styles.greet}>Merhaba, {firstName} 👋</Text>
@@ -75,28 +70,22 @@ export function PersonalCard({
         ) : null}
       </View>
 
-      {/* Sıradaki maç */}
-      {nextMatch ? (
+      {/* Takımım satırı */}
+      {teamName ? (
         <Pressable
-          onPress={() => router.push(`/mac/${nextMatch.id}`)}
-          style={({ pressed }) => [styles.matchBox, pressed && styles.pressed]}
+          onPress={() => teamId ? router.push(`/takim/${teamId}`) : null}
+          style={({ pressed }) => [styles.teamRow, pressed && styles.pressed]}
         >
-          <Text style={styles.matchLabel}>Sıradaki Maç</Text>
-          <Text style={styles.matchOpponent} numberOfLines={1}>
-            vs {String(opponent ?? "").toLocaleUpperCase("tr-TR")}
-          </Text>
-          <CountdownInline
-            matchDate={String(nextMatch.date ?? "").slice(0, 10)}
-            matchTime={nextMatch.time ? String(nextMatch.time).slice(0, 5) : null}
-          />
+          <View style={styles.teamRowLeft}>
+            <Text style={styles.teamRowLabel}>TAKIMIM</Text>
+            <Text style={styles.teamRowName} numberOfLines={1}>
+              {teamName.toLocaleUpperCase("tr-TR")}
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.7)" />
         </Pressable>
-      ) : (
-        <View style={styles.matchBox}>
-          <Text style={styles.matchLabel}>Takımına ait maç yok</Text>
-          <Text style={styles.matchOpponent}>{scope.cityLabel}</Text>
-        </View>
-      )}
-    </LinearGradient>
+      ) : null}
+    </View>
   );
 }
 
@@ -153,8 +142,11 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: radius.md,
     padding: spacing.md,
-    gap: spacing.md,
+    gap: spacing.sm,
     marginBottom: spacing.sm,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.faint,
   },
   greetRow: {
     flexDirection: "row",
@@ -165,14 +157,14 @@ const styles = StyleSheet.create({
   greet: {
     fontSize: 16,
     fontWeight: "800",
-    color: "#FFFFFF",
+    color: colors.line,
     flex: 1,
   },
   teamChip: {
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    backgroundColor: "rgba(255,255,255,0.15)",
+    backgroundColor: colors.turfDim,
     borderRadius: radius.pill,
     paddingHorizontal: spacing.sm + 2,
     paddingVertical: 4,
@@ -180,23 +172,29 @@ const styles = StyleSheet.create({
   teamChipText: {
     fontSize: 11,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: colors.turf,
     maxWidth: 120,
   },
-  matchBox: {
-    backgroundColor: "rgba(255,255,255,0.1)",
+  teamRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.turf,
     borderRadius: radius.sm,
-    padding: spacing.sm + 2,
-    gap: 4,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
   },
-  matchLabel: {
+  teamRowLeft: {
+    flex: 1,
+    gap: 1,
+  },
+  teamRowLabel: {
     fontSize: 9,
     fontWeight: "800",
     letterSpacing: 0.8,
     color: "rgba(255,255,255,0.65)",
   },
-  matchOpponent: {
-    fontSize: 14,
+  teamRowName: {
+    fontSize: 15,
     fontWeight: "900",
     color: "#FFFFFF",
     letterSpacing: -0.3,

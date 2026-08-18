@@ -196,7 +196,7 @@ export default function OverviewScreen() {
               matches={matchesQuery.data ?? []}
             />
           ) : null}
-          <MyTeamCard matches={matchesQuery.data ?? []} />
+          {!auth.user ? <MyTeamCard matches={matchesQuery.data ?? []} /> : null}
 
           <View style={styles.quickRow}>
             <QuickChip icon="calendar-outline" label="Fikstür" onPress={() => router.push("/matches")} />
