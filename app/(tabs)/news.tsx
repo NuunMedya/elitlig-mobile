@@ -1,4 +1,5 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
@@ -100,8 +101,12 @@ export default function NewsScreen() {
         <FlatList
           data={visible}
           keyExtractor={(item) => `${item.kind}-${item.id}`}
-          renderItem={({ item }) =>
-            item.kind === "news" ? <NewsCard item={item} /> : <AnnouncementRow item={item} />
+          renderItem={({ item, index }) =>
+            item.kind === "news"
+              ? (index === 0 && filter === "all")
+                ? <HeroCard item={item} />
+                : <NewsCard item={item} />
+              : <AnnouncementRow item={item} />
           }
           contentContainerStyle={styles.list}
           refreshControl={
@@ -124,11 +129,52 @@ export default function NewsScreen() {
   );
 }
 
+/** İlk haber — tam genişlik hero; gradient başlık. */
+function HeroCard({ item }: { item: NewsItem }) {
+  const router = useRouter();
+  const cover = mediaUrl(item.cover_image_url);
+  const mins  = Math.max(1, Math.ceil(stripHtml(item.content, 99999).split(" ").length / 200));
+
+  return (
+    <Pressable
+      onPress={() => router.push(`/haber/${item.id}`)}
+      style={({ pressed }) => [styles.hero, pressed && styles.pressed]}
+    >
+      {cover ? (
+        <Image source={{ uri: cover }} style={styles.heroCover} resizeMode="cover" />
+      ) : (
+        <View style={[styles.heroCover, styles.heroCoverFallback]} />
+      )}
+      <LinearGradient
+        colors={["transparent", "rgba(0,0,0,0.82)"]}
+        style={styles.heroGrad}
+      >
+        <View style={styles.heroMeta}>
+          <View style={[styles.pill, styles.pillNews]}>
+            <Text style={styles.pillText}>
+              {(item.category_label || "HABER").toLocaleUpperCase("tr-TR")}
+            </Text>
+          </View>
+          {item.pinned ? (
+            <View style={[styles.pill, styles.pillBreaking]}>
+              <Text style={styles.pillText}>SON DAKİKA</Text>
+            </View>
+          ) : null}
+          <Text style={styles.heroTime}>{timeAgo(item.published_at)}</Text>
+          <Text style={styles.heroReadTime}>{mins} dk okuma</Text>
+        </View>
+        <Text style={styles.heroTitle} numberOfLines={3}>{item.title}</Text>
+      </LinearGradient>
+    </Pressable>
+  );
+}
+
 /** Editör haberi — kapaklı büyük kart; detay sayfası vardır. */
 function NewsCard({ item }: { item: NewsItem }) {
   const router = useRouter();
   const cover = mediaUrl(item.cover_image_url);
   const summary = item.summary?.trim() || stripHtml(item.content, 160);
+  const mins = Math.max(1, Math.ceil(stripHtml(item.content, 99999).split(" ").length / 200));
 
   return (
     <Pressable
@@ -143,35 +189,37 @@ function NewsCard({ item }: { item: NewsItem }) {
               {(item.category_label || "HABER").toLocaleUpperCase("tr-TR")}
             </Text>
           </View>
-          {item.pinned ? <Ionicons name="pin" size={13} color={colors.muted} /> : null}
+          {item.pinned ? (
+            <View style={[styles.pill, styles.pillBreaking]}>
+              <Text style={styles.pillText}>SON DAKİKA</Text>
+            </View>
+          ) : null}
           <Text style={styles.time}>{timeAgo(item.published_at)}</Text>
+          <Text style={styles.readTime}>{mins} dk</Text>
         </View>
-        <Text style={styles.title} numberOfLines={2}>
-          {item.title}
-        </Text>
-        {summary ? (
-          <Text style={styles.summary} numberOfLines={3}>
-            {summary}
-          </Text>
-        ) : null}
+        <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
+        {summary ? <Text style={styles.summary} numberOfLines={2}>{summary}</Text> : null}
       </View>
     </Pressable>
   );
 }
 
-/** Üretilmiş duyuru — sitedeki kompakt satır: renkli hap + başlık + zaman. */
+/** Üretilmiş duyuru — renkli sol şerit + ikon + başlık + zaman. */
 function AnnouncementRow({ item }: { item: NewsItem }) {
-  const penalty = item.kind === "penalty";
+  const penalty  = item.kind === "penalty";
+  const accent   = penalty ? "#B4232A" : colors.turf;
+  const icon     = penalty ? "shield-outline" : "swap-horizontal-outline";
 
   return (
-    <View style={styles.row}>
-      <View style={[styles.pill, penalty ? styles.pillPenalty : styles.pillTransfer]}>
-        <Text style={styles.pillText}>{penalty ? "CEZA" : "TRANSFER"}</Text>
+    <View style={[styles.row, { borderLeftColor: accent, borderLeftWidth: 3 }]}>
+      <Ionicons name={icon as any} size={16} color={accent} />
+      <Text style={styles.rowTitle} numberOfLines={2}>{item.title}</Text>
+      <View style={styles.rowRight}>
+        <View style={[styles.pill, penalty ? styles.pillPenalty : styles.pillTransfer]}>
+          <Text style={styles.pillText}>{penalty ? "CEZA" : "TRANSFER"}</Text>
+        </View>
+        <Text style={styles.rowTime}>{timeAgo(item.published_at)}</Text>
       </View>
-      <Text style={styles.rowTitle} numberOfLines={2}>
-        {item.title}
-      </Text>
-      <Text style={styles.rowTime}>{timeAgo(item.published_at)}</Text>
     </View>
   );
 }
@@ -213,6 +261,61 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingBottom: spacing.xl,
     flexGrow: 1,
+  },
+  hero: {
+    borderRadius: radius.md,
+    overflow: "hidden",
+    marginBottom: spacing.sm,
+    height: 240,
+  },
+  heroCover: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  heroCoverFallback: {
+    backgroundColor: colors.turfDim,
+  },
+  heroGrad: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "flex-end",
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  heroMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    flexWrap: "wrap",
+  },
+  heroTime: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "rgba(255,255,255,0.75)",
+    marginLeft: "auto",
+  },
+  heroReadTime: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "rgba(255,255,255,0.6)",
+  },
+  heroTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#FFFFFF",
+    lineHeight: 24,
+    letterSpacing: -0.3,
+  },
+  pillBreaking: {
+    backgroundColor: colors.live,
+  },
+  readTime: {
+    ...type.caption,
+    color: colors.muted,
+    letterSpacing: 0,
+    marginLeft: "auto",
+  },
+  rowRight: {
+    alignItems: "flex-end",
+    gap: 3,
   },
   card: {
     backgroundColor: colors.surface,

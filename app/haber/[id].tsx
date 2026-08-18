@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams } from "expo-router";
-import { Image, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Image, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { DetailHeader } from "@/components/ScreenHeader";
 import { ErrorState, Loading } from "@/components/States";
 import { colors, radius, spacing, type } from "@/constants/theme";
@@ -55,10 +56,25 @@ export default function NewsDetailScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         {cover ? <Image source={{ uri: cover }} style={styles.cover} resizeMode="cover" /> : null}
 
+        <View style={styles.metaRow}>
+          <View style={styles.metaLeft}>
+            <Text style={styles.date}>{formatDateLong(item.published_at)}</Text>
+            <Text style={styles.readTime}>
+              {Math.max(1, Math.ceil(stripHtml(item.content, 99999).split(" ").length / 200))} dk okuma
+            </Text>
+          </View>
+          <Pressable
+            onPress={() => Share.share({ title: item.title, message: item.title })}
+            style={({ pressed }) => [styles.shareBtn, pressed && styles.pressed]}
+          >
+            <Ionicons name="share-outline" size={18} color={colors.turf} />
+          </Pressable>
+        </View>
+
         <Text style={styles.title}>{item.title}</Text>
-        <Text style={styles.date}>{formatDateLong(item.published_at)}</Text>
 
         {item.summary ? <Text style={styles.summary}>{item.summary}</Text> : null}
+        {item.summary ? <View style={styles.divider} /> : null}
 
         {paragraphs.length ? (
           paragraphs.map((paragraph, index) => (
@@ -95,6 +111,35 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xl,
     gap: spacing.md,
   },
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  metaLeft: {
+    gap: 2,
+  },
+  readTime: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: colors.muted,
+  },
+  shareBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: colors.turfDim,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pressed: {
+    opacity: 0.7,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: colors.faint,
+    marginVertical: spacing.sm,
+  },
   cover: {
     width: "100%",
     height: 200,
@@ -120,7 +165,7 @@ const styles = StyleSheet.create({
   paragraph: {
     ...type.body,
     color: colors.line,
-    lineHeight: 24,
+    lineHeight: 26,
   },
   placeholder: {
     ...type.small,
