@@ -1,6 +1,6 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Redirect } from "expo-router";
+import { Redirect, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   Alert,
@@ -89,6 +89,7 @@ function friendlyStatus(serverLabel: string): string {
 }
 
 export default function MessagesScreen() {
+  const router = useRouter();
   const auth = useAuth();
   const queryClient = useQueryClient();
   const insets = useSafeAreaInsets();
@@ -184,7 +185,7 @@ export default function MessagesScreen() {
               contentContainerStyle={styles.list}
               renderItem={({ item }) => (
                 <Pressable
-                  onPress={() => setOpenThreadId(item.id)}
+                  onPress={() => router.push(`/mesaj/${item.id}`)}
                   style={({ pressed }) => [
                     styles.threadRow,
                     item.unread > 0 && styles.threadRowUnread,
@@ -236,104 +237,7 @@ export default function MessagesScreen() {
         </>
       )}
 
-      {/* Konu detayı */}
-      <Modal
-        visible={Boolean(openThread)}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setOpenThreadId(null)}
-      >
-        <SafeAreaView style={styles.screen} edges={["top", "bottom"]}>
-          <KeyboardAvoidingView
-            style={styles.flex}
-            behavior={Platform.OS === "ios" ? "padding" : undefined}
-          >
-            <View style={styles.threadHead}>
-              <Pressable onPress={() => setOpenThreadId(null)} hitSlop={10}>
-                <Ionicons name="chevron-back" size={22} color={colors.line} />
-              </Pressable>
-              <View style={styles.threadHeadBody}>
-                <Text style={styles.threadTitle} numberOfLines={1}>
-                  ElitLig Yönetimi
-                </Text>
-                <Text style={styles.threadHeadMeta} numberOfLines={1}>
-                  {openThread?.subject}
-                  {openThread?.messages.length ? ` · ${openThread.messages.length} mesaj` : ""}
-                </Text>
-              </View>
-              <View style={[
-                styles.statusChip,
-                { backgroundColor: statusColor(openThread?.status ?? "") + "18" }
-              ]}>
-                <View style={[styles.statusDot, { backgroundColor: statusColor(openThread?.status ?? "") }]} />
-                <Text style={[styles.statusText, { color: statusColor(openThread?.status ?? "") }]}>
-                  {friendlyStatus(openThread?.status_label ?? "")}
-                </Text>
-              </View>
-            </View>
-
-            <ScrollView
-              ref={scrollRef}
-              contentContainerStyle={styles.bubbles}
-              keyboardShouldPersistTaps="handled"
-              keyboardDismissMode="on-drag"
-              onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
-            >
-              {openThread?.messages.map((message) => {
-                const mine = message.direction === "to_admin";
-                return (
-                  <View
-                    key={message.id}
-                    style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleTheirs]}
-                  >
-                    {!mine ? (
-                      <View style={styles.adminRow}>
-                        <Ionicons name="shield-checkmark" size={11} color={colors.turf} />
-                        <Text style={styles.adminName}>
-                          {message.sender || "ElitLig"} · Yönetici
-                        </Text>
-                      </View>
-                    ) : null}
-                    <Text style={[styles.bubbleText, mine && styles.bubbleTextMine]}>
-                      {message.body}
-                    </Text>
-                    <Text style={[styles.bubbleDate, mine && styles.bubbleDateMine]}>
-                      {smartDate(message.created_at)}
-                    </Text>
-                  </View>
-                );
-              })}
-            </ScrollView>
-
-            {openThread && openThread.status !== "closed" ? (
-              <View style={styles.replyRow}>
-                <TextInput
-                  value={reply}
-                  onChangeText={setReply}
-                  placeholder="Yanıt yaz…"
-                  placeholderTextColor={colors.muted}
-                  style={styles.replyInput}
-                  multiline
-                />
-                <Pressable
-                  onPress={() =>
-                    openThread && replyMutation.mutate({ threadId: openThread.id, body: reply.trim() })
-                  }
-                  disabled={reply.trim().length < 2 || replyMutation.isPending}
-                  style={({ pressed }) => [
-                    styles.sendBtn,
-                    (pressed || reply.trim().length < 2) && styles.pressed,
-                  ]}
-                >
-                  <Ionicons name="send" size={16} color={colors.surface} />
-                </Pressable>
-              </View>
-            ) : (
-              <Text style={styles.closedNote}>Bu konu kapatılmış; yeni başvuru açabilirsin.</Text>
-            )}
-          </KeyboardAvoidingView>
-        </SafeAreaView>
-      </Modal>
+      {/* Thread detayı → app/mesaj/[id].tsx route'una taşındı */}
 
       {/* Yeni başvuru */}
       <Modal
