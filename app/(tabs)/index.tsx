@@ -31,7 +31,10 @@ import { openLink } from "@/lib/links";
 import { youtubeChannelUrl } from "@/lib/youtube";
 import { matchState } from "@/lib/match";
 import { queryKeys } from "@/lib/queryKeys";
+import { PersonalCard } from "@/components/PersonalCard";
+import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
+import { getPanelMe } from "@/lib/api/panel";
 import type { ApiMatch, NewsItem, PlayerRankRow } from "@/lib/types";
 
 /**
@@ -44,6 +47,18 @@ import type { ApiMatch, NewsItem, PlayerRankRow } from "@/lib/types";
  */
 export default function OverviewScreen() {
   const scope = useScope();
+  const auth  = useAuth();
+
+  // Girişli kullanıcının panel özeti (takım + sıradaki maç için)
+  const panelQuery = useQuery({
+    queryKey: ["panel", "me"],
+    queryFn: getPanelMe,
+    enabled: Boolean(auth.user),
+    staleTime: 60_000,
+    retry: false,
+  });
+  const panelTeam    = panelQuery.data?.playerTeam ?? panelQuery.data?.team ?? null;
+  const panelMatches = panelQuery.data?.recentMatches ?? [];
   const teams = useTeamLogos();
   const router = useRouter();
 
@@ -172,6 +187,15 @@ export default function OverviewScreen() {
             />
           }
         >
+          {auth.user ? (
+            <PersonalCard
+              userName={auth.user.fullName ?? auth.user.username}
+              teamName={panelTeam?.team_name ?? null}
+              teamLogo={panelTeam ? (panelTeam as any).logo ?? null : null}
+              teamId={panelTeam?.id ?? null}
+              matches={matchesQuery.data ?? []}
+            />
+          ) : null}
           <MyTeamCard matches={matchesQuery.data ?? []} />
 
           <View style={styles.quickRow}>
@@ -553,16 +577,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.faint,
+    backgroundColor: colors.turfDim,
     borderRadius: radius.pill,
     paddingVertical: spacing.sm + 2,
   },
   quickText: {
     fontSize: 12,
     fontWeight: "700",
-    color: colors.line,
+    color: colors.turf,
   },
   headline: {
     backgroundColor: colors.surface,
@@ -765,7 +787,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     ...type.caption,
-    color: colors.muted,
+    color: colors.turf,
     textTransform: "uppercase",
   },
   sectionTitleAccent: {
@@ -796,6 +818,7 @@ const styles = StyleSheet.create({
   },
   headTeam: {
     flex: 1,
+    // Sıra numarası + amblem hizasını atlayıp takım adının üstüne gelir.
     marginLeft: 18 + spacing.sm + 24 + spacing.sm,
   },
   numCol: {
