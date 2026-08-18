@@ -73,6 +73,21 @@ function statusColor(status: string): string {
   return "#8B8797";
 }
 
+/** Sunucunun kısa durum etiketini daha açıklayıcıya çevir */
+function friendlyStatus(serverLabel: string): string {
+  const map: Record<string, string> = {
+    "Açık":        "Bekliyor",
+    "İncelemede":  "İnceleniyor",
+    "Yanıtlandı":  "Yanıtlandı",
+    "Kapalı":      "Kapatıldı",
+    "open":        "Bekliyor",
+    "in_review":   "İnceleniyor",
+    "answered":    "Yanıtlandı",
+    "closed":      "Kapatıldı",
+  };
+  return map[serverLabel] ?? serverLabel;
+}
+
 export default function MessagesScreen() {
   const auth = useAuth();
   const queryClient = useQueryClient();
@@ -204,7 +219,7 @@ export default function MessagesScreen() {
                     <View style={[styles.statusChipInline, { backgroundColor: statusColor(item.status) + "18" }]}>
                       <View style={[styles.statusDot, { backgroundColor: statusColor(item.status) }]} />
                       <Text style={[styles.statusInlineText, { color: statusColor(item.status) }]}>
-                        {item.status_label}
+                        {friendlyStatus(item.status_label)}
                       </Text>
                     </View>
                   </View>
@@ -221,7 +236,7 @@ export default function MessagesScreen() {
         animationType="slide"
         onRequestClose={() => setOpenThreadId(null)}
       >
-        <View style={[styles.screen, { paddingTop: insets.top + spacing.sm }]}>
+        <SafeAreaView style={styles.screen} edges={["top", "bottom"]}>
           <KeyboardAvoidingView
             style={styles.flex}
             behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -245,7 +260,7 @@ export default function MessagesScreen() {
               ]}>
                 <View style={[styles.statusDot, { backgroundColor: statusColor(openThread?.status ?? "") }]} />
                 <Text style={[styles.statusText, { color: statusColor(openThread?.status ?? "") }]}>
-                  {openThread?.status_label}
+                  {friendlyStatus(openThread?.status_label ?? "")}
                 </Text>
               </View>
             </View>
@@ -309,9 +324,8 @@ export default function MessagesScreen() {
             ) : (
               <Text style={styles.closedNote}>Bu konu kapatılmış; yeni başvuru açabilirsin.</Text>
             )}
-            <View style={{ height: insets.bottom }} />
           </KeyboardAvoidingView>
-        </View>
+        </SafeAreaView>
       </Modal>
 
       {/* Yeni başvuru */}
