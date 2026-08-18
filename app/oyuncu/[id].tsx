@@ -299,6 +299,59 @@ export default function PlayerDetailScreen() {
         ) : null}
 
       </ScrollView>
+
+      <Modal visible={shareOpen} animationType="slide" onRequestClose={()=>setShareOpen(false)} transparent>
+        <View style={styles.sOverlay}>
+          <View style={styles.sSheet}>
+            <View style={styles.sFmtRow}>
+              {(["story","post"] as const).map(k=>(
+                <Pressable key={k} onPress={()=>setShareFmt(k)} style={({pressed})=>[styles.sFmtPill,shareFmt===k&&styles.sFmtActive,pressed&&styles.pressed]}>
+                  <Text style={styles.sFmtTxt}>{FMTS[k].label}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <ViewShot ref={shotRef} options={{format:"png",quality:1}}>
+              <View style={[styles.sCard,{height:FMTS[shareFmt].h}]}>
+                <LinearGradient colors={["#6D28D9","#4C1D95"]} style={styles.sStrip}/>
+                <LinearGradient colors={["#CDBFE8","#EFEAF7","#FFF"]} start={{x:0.2,y:0}} end={{x:0.5,y:1}} style={styles.sBody}>
+                  <Text style={styles.sWm}>elitlig</Text>
+                  <View style={styles.sHead}><Text style={styles.sBrand}>elitlig</Text><Text style={styles.sBrandR}>ELİTLİG MOBİL</Text></View>
+                  <Text style={styles.sKick}>⚽ OYUNCU PROFİLİ</Text>
+                  <View style={styles.sAvRow}>
+                    <PlayerAvatar name={player.player_name} image={player.player_img} size={60}/>
+                    <View style={styles.sNameCol}>
+                      <Text style={styles.sPName} numberOfLines={2}>{player.player_name.toLocaleUpperCase("tr-TR")}</Text>
+                      {team?<Text style={styles.sPTeam} numberOfLines={1}>{team.team_name}</Text>:null}
+                      {player.player_position?<Text style={styles.sPPos}>{positionIcon(player.player_position)} {player.player_position}</Text>:null}
+                    </View>
+                  </View>
+                  <View style={styles.sStats}>
+                    {([{l:"GOL",v:String(goals)},{l:"MAÇ",v:String(played)},{l:"PUAN",v:String(points)},{l:"GOL/MAÇ",v:perMatch}]).map(st=>(
+                      <View key={st.l} style={styles.sStat}>
+                        <Text style={styles.sStatV}>{st.v}</Text>
+                        <Text style={styles.sStatL}>{st.l}</Text>
+                      </View>
+                    ))}
+                  </View>
+                  {trRank?<View style={styles.sTr}><Text style={styles.sTrT}>🇹🇷 Türkiye {trRank.rank}. sıra</Text></View>:null}
+                  <View style={{flex:1}}/>
+                  <Text style={styles.sFtr}>ELİTLİG.COM</Text>
+                </LinearGradient>
+              </View>
+            </ViewShot>
+            <View style={styles.sActions}>
+              <Pressable onPress={()=>setShareOpen(false)} style={({pressed})=>[styles.sActBtn,styles.sClose,pressed&&styles.pressed]}>
+                <Text style={styles.sCloseTxt}>Kapat</Text>
+              </Pressable>
+              <Pressable onPress={doShare} style={({pressed})=>[styles.sActBtn,styles.sGo,pressed&&styles.pressed]}>
+                <Ionicons name="share-social" size={15} color="#FFF"/>
+                <Text style={styles.sGoTxt}>{shareBusy?"Hazırlanıyor…":"Paylaş"}</Text>
+              </Pressable>
+            </View>
+            <Text style={styles.sHint}>İndirmek için: Paylaş → "Görüntüyü Kaydet"</Text>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
