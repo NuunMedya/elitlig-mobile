@@ -35,8 +35,8 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
+          <AuthProvider>
           <PushSetup />
-        <AuthProvider>
           <ScopeProvider>
             <FavoriteProvider>
             <StatusBar style={isDark ? "light" : "dark"} />
