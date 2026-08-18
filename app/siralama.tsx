@@ -51,7 +51,7 @@ export default function ArenaLeaderboardScreen() {
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <DetailHeader title="Arena Sıralamaları" subtitle="Rekorlarda kim önde?" />
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.gameTabs}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.gameTabs} style={styles.gameTabsWrap}>
         {GAMES.map((item) => (
           <Pressable
             key={item.key}
@@ -149,11 +149,12 @@ function TogglePair({ left, right, value, onChange }: {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.pitch },
-  gameTabs: { paddingHorizontal: spacing.md, gap: spacing.sm, paddingBottom: spacing.sm },
-  gameTab: { borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.faint, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  gameTabsWrap: { flexGrow: 0, flexShrink: 0 },
+  gameTabs: { paddingHorizontal: spacing.md, gap: spacing.sm, paddingBottom: spacing.sm, alignItems: "center" as const, height: 44 },
+  gameTab: { borderRadius: 20, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.faint, paddingHorizontal: spacing.md, paddingVertical: 7, height: 36, justifyContent: "center" as const, alignItems: "center" as const },
   gameTabActive: { backgroundColor: colors.turf, borderColor: colors.turf },
-  gameTabText: { ...type.caption, color: colors.muted },
-  gameTabTextActive: { color: colors.surface },
+  gameTabText: { fontSize: 13, fontWeight: "700" as const, color: colors.muted },
+  gameTabTextActive: { color: colors.surface, fontWeight: "800" as const },
   filterRow: { flexDirection: "row", gap: spacing.sm, paddingHorizontal: spacing.md, marginBottom: spacing.sm },
   toggle: { flex: 1, flexDirection: "row", backgroundColor: colors.surfaceRaised, borderRadius: radius.pill, padding: 3 },
   toggleHalf: { flex: 1, alignItems: "center", borderRadius: radius.pill, paddingVertical: 6, paddingHorizontal: 4 },
