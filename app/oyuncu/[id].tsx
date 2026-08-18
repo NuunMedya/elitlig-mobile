@@ -1,15 +1,19 @@
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useMemo } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useMemo, useRef, useState } from "react";
+import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { DetailHeader } from "@/components/ScreenHeader";
 import { ErrorState, Loading } from "@/components/States";
 import { PlayerAvatar, TeamCrest } from "@/components/TeamCrest";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { colors, radius, spacing, type } from "@/constants/theme";
 import { getMatchKadro, getTeamMatches } from "@/lib/api/matches";
 import { getPlayer, getPlayerRankings } from "@/lib/api/players";
 import { getTeam } from "@/lib/api/teams";
+import { LinearGradient } from "expo-linear-gradient";
+import * as Sharing from "expo-sharing";
+import ViewShot from "react-native-view-shot";
 import { formatDateShort } from "@/lib/format";
 import { queryKeys } from "@/lib/queryKeys";
 import { matchState } from "@/lib/match";
@@ -132,12 +136,33 @@ export default function PlayerDetailScreen() {
   const decided = wins + draws + losses;
   const winRate = decided > 0 ? Math.round((wins / decided) * 100) : null;
   const perMatch = played > 0 ? (goals / played).toFixed(2) : "0.00";
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareFmt, setShareFmt] = useState<"story"|"post">("story");
+  const [shareBusy, setShareBusy] = useState(false);
+  const shotRef = useRef<any>(null);
+  const CW = 272;
+  const FMTS = {
+    story: { label: "Hikaye 9:16", h: Math.round(CW*16/9) },
+    post:  { label: "Gonderi 3:4", h: Math.round(CW*4/3)  },
+  } as const;
+  const doShare = async () => {
+    if (shareBusy) return;
+    setShareBusy(true);
+    try {
+      const uri = await shotRef.current?.capture?.();
+      if (uri) await Sharing.shareAsync(uri, { mimeType:"image/png" });
+    } catch {} finally { setShareBusy(false); }
+  };
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <DetailHeader title={player.player_name} subtitle={player.player_position ?? undefined} />
 
       <ScrollView contentContainerStyle={styles.content}>
+        <Pressable onPress={()=>setShareOpen(true)} style={({pressed})=>[styles.shareBtn,pressed&&styles.pressed]}>
+          <Ionicons name="share-social-outline" size={16} color={colors.turf} />
+          <Text style={styles.shareBtnText}>Profili Paylas</Text>
+        </Pressable>
         {/* Kimlik */}
         <View style={styles.hero}>
           <View style={styles.avatarRing}>
@@ -535,6 +560,41 @@ function Legend({ color, label }: { color: string; label: string }) {
 }
 
 const styles = StyleSheet.create({
+  shareBtn: { flexDirection:"row", alignItems:"center", justifyContent:"center", gap:6, backgroundColor:colors.turfDim, borderRadius:radius.pill, paddingVertical:spacing.sm+2, marginBottom:spacing.md },
+  shareBtnText: { fontSize:13, fontWeight:"800", color:colors.turf },
+  sOverlay: { flex:1, backgroundColor:"rgba(0,0,0,0.75)", justifyContent:"flex-end" },
+  sSheet: { backgroundColor:"#1A1524", borderTopLeftRadius:20, borderTopRightRadius:20, padding:spacing.md, gap:spacing.md, alignItems:"center" as const, paddingBottom:36 },
+  sFmtRow: { flexDirection:"row", gap:spacing.sm },
+  sFmtPill: { borderRadius:radius.pill, borderWidth:1, borderColor:"rgba(255,255,255,0.35)", paddingHorizontal:spacing.md, paddingVertical:spacing.sm },
+  sFmtActive: { backgroundColor:colors.turf, borderColor:colors.turf },
+  sFmtTxt: { fontSize:12, fontWeight:"800", color:"#FFF" },
+  sCard: { width:272, backgroundColor:"#0B0A0E", borderRadius:14, padding:7, overflow:"hidden" },
+  sStrip: { height:7, borderTopLeftRadius:8, borderTopRightRadius:8 },
+  sBody: { flex:1, borderBottomLeftRadius:8, borderBottomRightRadius:8, paddingHorizontal:spacing.md, paddingTop:spacing.sm, paddingBottom:spacing.sm, overflow:"hidden", gap:6 },
+  sWm: { position:"absolute", right:-28, bottom:16, fontSize:60, fontWeight:"900", color:"#6D28D9", opacity:0.06, transform:[{rotate:"-12deg"}] },
+  sHead: { flexDirection:"row", alignItems:"center", justifyContent:"space-between" },
+  sBrand: { fontSize:13, fontWeight:"900", color:"#6D28D9" },
+  sBrandR: { fontSize:7, fontWeight:"800", letterSpacing:1.2, color:"#6D28D9", opacity:0.7 },
+  sKick: { fontSize:8, fontWeight:"800", letterSpacing:0.8, color:"#6D28D9", opacity:0.85 },
+  sAvRow: { flexDirection:"row", alignItems:"center", gap:spacing.sm, backgroundColor:"rgba(255,255,255,0.7)", borderRadius:10, padding:8 },
+  sNameCol: { flex:1, gap:2 },
+  sPName: { fontSize:13, fontWeight:"900", color:"#0A0812", letterSpacing:-0.3, lineHeight:16 },
+  sPTeam: { fontSize:9, fontWeight:"700", color:"#6D28D9" },
+  sPPos: { fontSize:9, fontWeight:"600", color:"#8B8797" },
+  sStats: { flexDirection:"row", backgroundColor:"rgba(255,255,255,0.7)", borderRadius:10, padding:8 },
+  sStat: { flex:1, alignItems:"center" as const, gap:1 },
+  sStatV: { fontSize:16, fontWeight:"900", color:"#5B21B6", fontVariant:["tabular-nums"] as any, letterSpacing:-0.5 },
+  sStatL: { fontSize:6.5, fontWeight:"800", letterSpacing:0.5, color:"#9188A4" },
+  sTr: { backgroundColor:"rgba(109,40,217,0.08)", borderRadius:8, paddingHorizontal:8, paddingVertical:4, alignSelf:"flex-start" as const },
+  sTrT: { fontSize:9, fontWeight:"800", color:"#5B21B6" },
+  sFtr: { fontSize:7.5, fontWeight:"800", letterSpacing:2.5, color:"#9188A4", textAlign:"center" as const },
+  sActions: { flexDirection:"row", gap:spacing.sm, width:"100%" },
+  sActBtn: { flex:1, flexDirection:"row", alignItems:"center", justifyContent:"center", gap:6, borderRadius:radius.pill, paddingVertical:spacing.sm+2 },
+  sClose: { backgroundColor:"rgba(255,255,255,0.1)" },
+  sCloseTxt: { fontSize:14, fontWeight:"700", color:"#FFF" },
+  sGo: { backgroundColor:colors.turf },
+  sGoTxt: { fontSize:14, fontWeight:"800", color:"#FFF" },
+  sHint: { fontSize:11, fontWeight:"600", color:"rgba(255,255,255,0.5)" },
   screen: {
     flex: 1,
     backgroundColor: colors.pitch,
