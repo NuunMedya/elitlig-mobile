@@ -129,9 +129,13 @@ export default function MatchesScreen() {
         <Counter label="TAMAMLANAN" value={buckets.results.length} />
       </View>
 
-      <View style={styles.tabs}>
+      <View style={styles.tabsWrap}>
         {TABS.map((item) => {
           const active = item.key === tab;
+          const hasLive = item.key === "live" && buckets.live.length > 0;
+          const icon = item.key === "results" ? "checkmark-circle-outline"
+            : item.key === "fixtures" ? "calendar-outline"
+            : "radio-button-on-outline";
           return (
             <Pressable
               key={item.key}
@@ -142,12 +146,15 @@ export default function MatchesScreen() {
                 pressed && styles.tabPressed,
               ]}
             >
+              <Ionicons
+                name={icon as any}
+                size={14}
+                color={active ? colors.turf : colors.muted}
+              />
               <Text style={[styles.tabText, active && styles.tabTextActive]}>
                 {item.label}
-                {item.key === "live" && buckets.live.length > 0
-                  ? ` (${buckets.live.length})`
-                  : ""}
               </Text>
+              {hasLive ? <View style={styles.liveDotTab} /> : null}
             </Pressable>
           );
         })}
@@ -500,34 +507,50 @@ const styles = StyleSheet.create({
   counterValueAccent: {
     color: colors.live,
   },
-  tabs: {
+  tabsWrap: {
     flexDirection: "row",
-    gap: spacing.sm,
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.sm,
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+    backgroundColor: colors.surfaceRaised,
+    borderRadius: radius.pill,
+    padding: 3,
+    gap: 2,
   },
   tab: {
     flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
     paddingVertical: spacing.sm,
     borderRadius: radius.pill,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.faint,
-    alignItems: "center",
   },
   tabActive: {
-    backgroundColor: colors.goldDim,
-    borderColor: colors.yellow,
+    backgroundColor: colors.surface,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
   },
   tabPressed: {
-    opacity: 0.8,
+    opacity: 0.75,
   },
   tabText: {
-    ...type.caption,
+    fontSize: 12,
+    fontWeight: "700",
     color: colors.muted,
   },
   tabTextActive: {
-    color: colors.line,
+    color: colors.turf,
+    fontWeight: "800",
+  },
+  liveDotTab: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.live,
+    marginLeft: -2,
   },
   searchBox: {
     flexDirection: "row",
