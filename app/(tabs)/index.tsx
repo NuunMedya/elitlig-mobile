@@ -235,8 +235,6 @@ export default function OverviewScreen() {
             </Section>
           )}
 
-          <WeekSeven />
-
           {live.length > 0 && (
             <Section title="Canlı" href="/matches" accent>
               <YoutubeBanner cityLabel={scope.cityLabel} live />
@@ -265,6 +263,8 @@ export default function OverviewScreen() {
               <Text style={styles.emptyLine}>Yaklaşan maç bulunmuyor.</Text>
             )}
           </Section>
+
+          <WeekSeven />
 
           <Section title="Puan Durumu" href="/standings">
             {topRows.length > 0 ? (
