@@ -74,7 +74,7 @@ export function PersonalCard({
               {teamName.toLocaleUpperCase("tr-TR")}
             </Text>
           </View>
-          <Ionicons name="chevron-forward" size={18} color="#7C3AED" />
+          <Ionicons name="chevron-forward" size={18} color="#6D28D9" />
         </Pressable>
       ) : null}
     </View>
@@ -136,9 +136,9 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     gap: spacing.sm,
     marginBottom: spacing.sm,
-    backgroundColor: colors.surface,
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#C8C5D0",
+    borderColor: "#E8E4F4",
   },
   greetRow: {
     flexDirection: "row",
@@ -149,7 +149,7 @@ const styles = StyleSheet.create({
   greet: {
     fontSize: 16,
     fontWeight: "800",
-    color: colors.line,
+    color: "#1A1025",
     flex: 1,
   },
   teamChip: {
@@ -170,10 +170,10 @@ const styles = StyleSheet.create({
   teamRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#DDD5F7",
+    backgroundColor: "#F0EAFE",
     borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: "#C4B8EF",
+    borderWidth: 1.5,
+    borderColor: "#6D28D9",
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
   },
@@ -185,12 +185,12 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: "800",
     letterSpacing: 0.8,
-    color: "#5B21B6",
+    color: "#6D28D9",
   },
   teamRowName: {
     fontSize: 15,
     fontWeight: "900",
-    color: "#2D1B69",
+    color: "#2D1569",
     letterSpacing: -0.3,
   },
   countdown: {
