@@ -264,8 +264,6 @@ export default function OverviewScreen() {
             )}
           </Section>
 
-          <WeekSeven />
-
           <Section title="Puan Durumu" href="/standings">
             {topRows.length > 0 ? (
               <View style={styles.tableCard}>
@@ -302,6 +300,8 @@ export default function OverviewScreen() {
               <Text style={styles.emptyLine}>Puan tablosu henüz boş.</Text>
             )}
           </Section>
+
+          <WeekSeven />
 
           <Section title="Son Haberler" href="/news">
             {latestNews.length > 0 ? (
