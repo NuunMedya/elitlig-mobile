@@ -87,9 +87,15 @@ export const StatBar = memo(function StatBar({
   const equal = homeShare === awayShare;
   const homeLeads = homeShare > awayShare;
 
-  const homeFill = tone === "brand" ? colors.brandAccent : equal ? colors.textTertiary : homeLeads ? colors.brandAccent : colors.borderStrong;
-  const awayFill = tone === "brand" ? colors.brandAccent : equal ? colors.textTertiary : homeLeads ? colors.borderStrong : colors.brandAccent;
-  const neutralFill = tone === "neutral";
+  /** Dolgu rengi: üstün taraf vurgulanır, eşitlikte iki taraf da nötr kalır. */
+  const fillFor = (leading: boolean): string => {
+    if (tone === "brand") return colors.brandAccent;
+    if (tone === "neutral") return colors.borderStrong;
+    if (equal) return colors.textTertiary;
+    return leading ? colors.brandAccent : colors.borderStrong;
+  };
+  const homeFill = fillFor(homeLeads);
+  const awayFill = fillFor(!homeLeads);
 
   return (
     <View
@@ -116,7 +122,7 @@ export const StatBar = memo(function StatBar({
             style={[
               styles.fill,
               styles.fillLeft,
-              { width: homeWidth, backgroundColor: neutralFill ? colors.borderStrong : homeFill },
+              { width: homeWidth, backgroundColor: homeFill },
             ]}
           />
         </View>
@@ -124,7 +130,7 @@ export const StatBar = memo(function StatBar({
           <Animated.View
             style={[
               styles.fill,
-              { width: awayWidth, backgroundColor: neutralFill ? colors.borderStrong : awayFill },
+              { width: awayWidth, backgroundColor: awayFill },
             ]}
           />
         </View>

@@ -22,7 +22,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import { colors, hairline, layout, radius, space, textScale, touchSlop, type } from "@/theme";
+import { colors, hairline, haptics, layout, radius, space, textScale, touchSlop, type } from "@/theme";
 import { toneColors, type Tone } from "./Badge";
 import { Touchable } from "./Pressable";
 
@@ -78,6 +78,7 @@ export const KeyValueRow = React.memo(function KeyValueRow({
 
   const handleLongPress = useCallback(() => {
     if (!copyable || !isText) return;
+    haptics.light();
     onCopy?.(String(value));
   }, [copyable, isText, onCopy, value]);
 
@@ -129,7 +130,7 @@ export const KeyValueRow = React.memo(function KeyValueRow({
     return (
       <Touchable
         feedback="row"
-        haptic="light"
+        haptic="none"
         onLongPress={handleLongPress}
         delayLongPress={350}
         accessibilityRole="button"

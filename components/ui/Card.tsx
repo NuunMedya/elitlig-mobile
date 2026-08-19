@@ -82,14 +82,21 @@ export const Card = React.memo(function Card({
         </View>
       ) : null}
 
-      <View
-        style={[
-          { paddingHorizontal: pad, paddingBottom: pad, paddingTop: title || action ? space.sm : pad },
-          contentStyle,
-        ]}
-      >
-        {children}
-      </View>
+      {children != null ? (
+        <View
+          style={[
+            {
+              paddingHorizontal: pad,
+              paddingBottom: pad,
+              // Başlık varsa gövdeyle arasında 8px nefes boşluğu kalır (§4.2).
+              paddingTop: title || action ? space.sm : pad,
+            },
+            contentStyle,
+          ]}
+        >
+          {children}
+        </View>
+      ) : null}
 
       {footer ? (
         <View style={[styles.footer, { paddingHorizontal: pad, paddingVertical: space.m }]}>

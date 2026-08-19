@@ -14,8 +14,18 @@
 import { memo, useCallback, useEffect, useRef } from "react";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
-import { colors, duration, easing, layout, radius, space, textScale, touchSlop, type } from "@/theme";
-import { animateNextLayout } from "@/theme/motion";
+import {
+  animateNextLayout,
+  colors,
+  duration,
+  easing,
+  layout,
+  radius,
+  space,
+  textScale,
+  touchSlop,
+  type,
+} from "@/theme";
 import { haptics } from "@/lib/haptics";
 import { mediaUrl } from "@/lib/format";
 import { TeamLogo } from "./TeamLogo";

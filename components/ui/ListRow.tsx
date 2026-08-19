@@ -187,14 +187,13 @@ export const ListRow = React.memo(function ListRow({
   return (
     <Touchable
       feedback="row"
-      haptic={haptic === "selection" ? "selection" : haptic}
-      onPress={handlePress}
+      haptic={haptic}
+      onPress={onPress || toggle ? handlePress : undefined}
       onLongPress={onLongPress}
       disabled={disabled}
       testID={testID}
       accessibilityRole={toggle ? "switch" : "button"}
-      accessibilityLabel={subtitle ? `${title}. ${subtitle}` : title}
-      accessibilityHint={value}
+      accessibilityLabel={[title, subtitle, value].filter(Boolean).join(". ")}
       accessibilityState={{ disabled: Boolean(disabled), checked: toggle?.value }}
       style={containerStyle}
     >

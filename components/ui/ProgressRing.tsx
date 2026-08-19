@@ -16,22 +16,13 @@ import { Animated, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import { colors, easing, palette, ratingColors, textScale, type } from "@/theme";
 import { useReduceMotion } from "./LiveBadge";
+import type { Tone } from "./Badge";
 
 /**
- * Ton kümesi — ortak `Tone` tipi `components/ui/types.ts` ile geldiğinde bu
- * takma ad ona bağlanır. "rating" özel durumdur: renk `ratingValue`'dan gelir.
+ * Ton kümesi: kütüphanenin ortak `Tone` sözlüğü (bkz. `Badge.tsx`) + "rating".
+ * "rating" özel durumdur — renk tondan değil `ratingValue`'dan gelir.
  */
-export type ProgressRingTone =
-  | "brand"
-  | "live"
-  | "win"
-  | "draw"
-  | "loss"
-  | "warn"
-  | "danger"
-  | "info"
-  | "neutral"
-  | "rating";
+export type ProgressRingTone = Tone | "rating";
 
 export interface ProgressRingProps {
   /** 0–1 */
@@ -50,16 +41,14 @@ export interface ProgressRingProps {
   ratingValue?: number;
 }
 
-const TONE_COLOR: Record<Exclude<ProgressRingTone, "rating">, string> = {
+const TONE_COLOR: Record<Tone, string> = {
+  neutral: colors.textTertiary,
   brand: colors.brandAccent,
   live: colors.live,
   win: colors.win,
-  draw: colors.draw,
-  loss: colors.loss,
   warn: colors.warn,
   danger: colors.danger,
   info: colors.info,
-  neutral: colors.textTertiary,
 };
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);

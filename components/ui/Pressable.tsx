@@ -176,8 +176,11 @@ export const Touchable = React.memo(function Touchable({
 
   const handlePress = useCallback(
     (event: GestureResponderEvent) => {
+      // Haptik yalnız gerçek bir eylem varsa: yalnızca uzun basma dinleyen bir
+      // öğeye dokunmak hiçbir şey yapmaz, dolayısıyla titreşim de vermemeli.
+      if (!onPress) return;
       fireHaptic(haptic);
-      onPress?.(event);
+      onPress(event);
     },
     [haptic, onPress],
   );

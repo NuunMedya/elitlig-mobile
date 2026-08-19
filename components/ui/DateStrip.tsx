@@ -16,9 +16,10 @@
  * yeniden render edilmez.
  */
 
-import { memo, useCallback, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { FlatList, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import type { LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { colors, layout, radius, space, textScale, touchSlop, type } from "@/theme";
 import { haptics } from "@/lib/haptics";
@@ -41,7 +42,6 @@ export interface DateStripProps {
 const WEEKDAYS = ["Paz", "Pzt", "Sal", "Çar", "Per", "Cum", "Cmt"] as const;
 
 const CELL_WIDTH = 44;
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 const pad = (value: number) => String(value).padStart(2, "0");
 
@@ -78,14 +78,21 @@ export const DateStrip = memo(function DateStrip({
 }: DateStripProps) {
   const listRef = useRef<FlatList<DayItem>>(null);
   const centeredRef = useRef(false);
+  /** Kaydırma konumu yalnız görünürlük hesabı için tutulur — state DEĞİL,
+      çünkü her kaydırma karesinde yeniden render etmek şeridi tökezletir. */
+  const offsetRef = useRef(0);
   const [listWidth, setListWidth] = useState(0);
 
   const todayIso = useMemo(() => toIsoDate(new Date()), []);
 
   const days = useMemo<DayItem[]>(() => {
     const today = fromIsoDate(todayIso);
-    const start = range?.start ? fromIsoDate(range.start) : new Date(today.getTime() - 14 * DAY_MS);
-    const end = range?.end ? fromIsoDate(range.end) : new Date(today.getTime() + 28 * DAY_MS);
+    // Gün eklemek/çıkarmak milisaniyeyle değil TAKVİMLE yapılır: yaz saati
+    // uygulayan bir saat diliminde 14×86400000 çıkarmak günü kaydırır.
+    const shift = (days: number) =>
+      new Date(today.getFullYear(), today.getMonth(), today.getDate() + days);
+    const start = range?.start ? fromIsoDate(range.start) : shift(-14);
+    const end = range?.end ? fromIsoDate(range.end) : shift(28);
 
     const items: DayItem[] = [];
     const cursor = new Date(start.getFullYear(), start.getMonth(), start.getDate());
@@ -120,13 +127,29 @@ export const DateStrip = memo(function DateStrip({
     [days.length],
   );
 
-  const handleLayout = useCallback(
-    (width: number) => {
-      setListWidth(width);
-      if (!centeredRef.current) centerOn(selectedIndex, width);
-    },
-    [centerOn, selectedIndex],
-  );
+  const handleLayout = useCallback((event: LayoutChangeEvent) => {
+    setListWidth(event.nativeEvent.layout.width);
+  }, []);
+
+  const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    offsetRef.current = event.nativeEvent.contentOffset.x;
+  }, []);
+
+  /**
+   * İlk yerleşimde seçili gün ortalanır (animasyonsuz). Sonrasında yalnız
+   * seçili gün EKRANDA GÖRÜNMÜYORSA ortalanır — kullanıcının kendi kaydırdığı
+   * şeridi her dokunuşta yerinden oynatmak yön duygusunu bozuyor.
+   */
+  useEffect(() => {
+    if (listWidth <= 0 || selectedIndex < 0) return;
+    if (!centeredRef.current) {
+      centerOn(selectedIndex, listWidth);
+      return;
+    }
+    const start = selectedIndex * CELL_WIDTH;
+    const visible = start >= offsetRef.current && start + CELL_WIDTH <= offsetRef.current + listWidth;
+    if (!visible) centerOn(selectedIndex, listWidth);
+  }, [centerOn, listWidth, selectedIndex]);
 
   const handleSelect = useCallback(
     (iso: string) => {
@@ -181,7 +204,9 @@ export const DateStrip = memo(function DateStrip({
           windowSize={5}
           removeClippedSubviews={Platform.OS === "android"}
           extraData={value}
-          onLayout={(event) => handleLayout(event.nativeEvent.layout.width)}
+          onLayout={handleLayout}
+          onScroll={handleScroll}
+          scrollEventThrottle={32}
         />
         {/* Sol kenardaki maske: şeridin devam ettiğini gösterir. */}
         <LinearGradient

@@ -1,0 +1,165 @@
+/**
+ * EmptyState — "burada henüz bir şey yok" ekranı (§4.18).
+ *
+ * NEDEN ÖNEMLİ: bu uygulamada boş liste normaldir (bugün maç yok, favori
+ * eklenmemiş, ceza kaydı yok). Boş ekran bir HATA gibi görünmemeli; sakin bir
+ * ikon, tek cümlelik açıklama ve varsa TEK bir çıkış yolu sunmalı.
+ *
+ * NEDEN İKON DAİRE İÇİNDE: koyu zeminde yalnız başına duran ince çizgili bir
+ * ikon "yüzer" ve kazara bırakılmış gibi durur. 56px'lik `surface2` daire ona
+ * bir yer verir; ikon rengi `textDisabled`'dır — dikkat çekmesi değil, boşluğu
+ * açıklaması istenir.
+ *
+ * ESKİ API KORUNUR: `components/States.tsx` içindeki EmptyState `icon/title/body`
+ * imzasıyla çağrılıyor; buradaki bileşen aynı üç prop'la sorunsuz çalışır,
+ * eylem ve varyantlar isteğe bağlı eklerdir.
+ */
+
+import Ionicons from "@expo/vector-icons/Ionicons";
+import React from "react";
+import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import { colors, radius, space, textScale, type } from "@/theme";
+import { Button, type ButtonProps } from "./Button";
+import { Touchable } from "./Pressable";
+
+export interface EmptyStateProps {
+  icon?: keyof typeof Ionicons.glyphMap;
+  /** Özel görsel (illüstrasyon) — verilirse ikon yerine bu çizilir. */
+  illustration?: React.ReactNode;
+  title: string;
+  body?: string;
+  /**
+   * Birincil eylem — ekranda tek tane olmalı. `haptic` verilmezse düğmenin
+   * kendi varsayılanı (birincil → orta şiddet) çalışır; "Tekrar dene" gibi
+   * düzeltici eylemlerde `light` tercih edilir (§5.3).
+   */
+  action?: { label: string; onPress: () => void; haptic?: ButtonProps["haptic"] };
+  /** İkincil metin bağlantı. */
+  secondaryAction?: { label: string; onPress: () => void };
+  /** Liste içinde mi tam ekran mı — dikey boşluk farkı. */
+  variant?: "screen" | "inline";
+  /** Daha da dar: sekme içi küçük bölümler için. */
+  compact?: boolean;
+  style?: StyleProp<ViewStyle>;
+}
+
+export const EmptyState = React.memo(function EmptyState({
+  icon = "calendar-outline",
+  illustration,
+  title,
+  body,
+  action,
+  secondaryAction,
+  variant = "screen",
+  compact = false,
+  style,
+}: EmptyStateProps) {
+  return (
+    <View
+      style={[
+        styles.container,
+        variant === "screen" ? styles.screen : styles.inline,
+        compact ? styles.compact : null,
+        style,
+      ]}
+    >
+      {illustration ?? (
+        <View style={styles.iconCircle}>
+          <Ionicons name={icon} size={36} color={colors.textDisabled} />
+        </View>
+      )}
+
+      <Text style={styles.title} {...textScale.dense}>
+        {title}
+      </Text>
+
+      {body ? (
+        <Text style={styles.body} {...textScale.long}>
+          {body}
+        </Text>
+      ) : null}
+
+      {action ? (
+        <Button
+          label={action.label}
+          onPress={action.onPress}
+          variant="primary"
+          size="md"
+          haptic={action.haptic}
+          style={styles.action}
+        />
+      ) : null}
+
+      {secondaryAction ? (
+        <Touchable
+          feedback="icon"
+          haptic="light"
+          onPress={secondaryAction.onPress}
+          accessibilityRole="button"
+          accessibilityLabel={secondaryAction.label}
+          style={styles.secondary}
+        >
+          <Text style={styles.secondaryLabel} {...textScale.dense}>
+            {secondaryAction.label}
+          </Text>
+        </Touchable>
+      ) : null}
+    </View>
+  );
+});
+
+const styles = StyleSheet.create({
+  container: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: space.xxl,
+    gap: space.sm,
+  },
+  /** Tam ekran: dikeyde ortalanır. */
+  screen: {
+    flex: 1,
+    paddingVertical: space.xxxl,
+  },
+  /** Liste içinde: 48px dikey boşlukla akışta kalır. */
+  inline: {
+    paddingVertical: 48,
+  },
+  compact: {
+    paddingVertical: space.xl,
+  },
+  iconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface2,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: space.xs,
+  },
+  title: {
+    ...type.h3,
+    color: colors.textPrimary,
+    textAlign: "center",
+  },
+  /** 280px tavanı: uzun açıklama ekranın iki kenarına yapışmasın. */
+  body: {
+    ...type.bodySm,
+    color: colors.textSecondary,
+    textAlign: "center",
+    maxWidth: 280,
+  },
+  action: {
+    marginTop: space.md,
+    borderRadius: radius.pill,
+  },
+  secondary: {
+    marginTop: space.xs,
+    paddingVertical: space.sm,
+    paddingHorizontal: space.md,
+  },
+  secondaryLabel: {
+    ...type.bodySm,
+    fontWeight: "700",
+    color: colors.brandAccent,
+  },
+});

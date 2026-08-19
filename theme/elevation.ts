@@ -12,7 +12,7 @@
  */
 
 import { Platform, StyleSheet, type ViewStyle } from "react-native";
-import type { Palette } from "./palette";
+import { dark, type Palette } from "./palette";
 
 export type ElevationLevel = 0 | 1 | 2 | 3 | 4;
 
@@ -46,7 +46,9 @@ export function elevation(level: ElevationLevel, p: Palette, isDarkTheme: boolea
     borderColor: p.border,
     ...Platform.select({
       ios: {
-        shadowColor: "#0B0D12",
+        // Gölge rengi nötr siyah değil koyu tema zeminidir (#0B0D12): saf siyah
+        // gölge açık zeminde grileşip kirli görünür, zemin tonu ise soğuk kalır.
+        shadowColor: dark.bg,
         shadowOpacity: shadow.o,
         shadowRadius: shadow.r,
         shadowOffset: { width: 0, height: shadow.y },
