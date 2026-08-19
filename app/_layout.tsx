@@ -25,9 +25,7 @@ const queryClient = new QueryClient({
 });
 
 function PushSetup() {
-  // @ts-ignore
-  const getToken = () => { try { return require("expo-secure-store").getItemAsync("elitlig_token"); } catch { return null; } };
-  usePushNotifications(null);
+  usePushNotifications();
   return null;
 }
 

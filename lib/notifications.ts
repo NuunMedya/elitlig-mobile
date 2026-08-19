@@ -23,21 +23,30 @@ export const CHANNELS = {
 
 export type NotifCategory = keyof typeof CHANNELS;
 
-/** Bildirim tıklanınca gidilecek route */
+/**
+ * Bildirim tıklanınca gidilecek route.
+ *
+ * Sunucu iki tip payload gönderir:
+ *  - Maç pushları (services/matchNotifications.js): { kind, match_id }
+ *  - Panel bildirimleri (models/PanelNotification.js): { type, entity_type, entity_public_id }
+ */
 export function routeFromNotif(data: Record<string, unknown>): string | null {
-  const type = String(data?.type ?? "");
-  const id   = data?.id;
+  const kind = String(data?.kind ?? "");
+  const matchId = data?.match_id ?? data?.id;
 
-  if (type === "match_scheduled" || type === "match_reminder" || type === "match_result") {
-    return id ? `/mac/${id}` : "/matches";
+  if (kind === "match_fixture" || kind === "match_reminder" || kind === "match_result") {
+    return matchId ? `/mac/${matchId}` : "/(tabs)/matches";
   }
-  if (type === "daily_challenge") return "/gunun";
-  if (type === "arena_reminder")  return "/arena";
-  if (type === "transfer_offer")  return "/tekliflerim";
-  if (type === "penalty")         return "/cezalarim";
-  if (type === "message")         return id ? `/mesaj/${id}` : "/mesajlarim";
-  if (type === "contract_update") return "/sozlesmelerim";
-  if (type === "breaking_news")   return id ? `/haber/${id}` : "/news";
+  if (kind === "daily_quiz" || kind === "daily_challenge") return "/gunun";
+  if (kind === "arena_reminder") return "/arena";
+
+  const type = String(data?.type ?? "").toUpperCase();
+  if (type.startsWith("TRANSFER_")) return "/tekliflerim";
+  if (type.startsWith("CONTRACT_")) return "/sozlesmelerim";
+  if (type.startsWith("PENALTY_")) return "/cezalarim";
+  if (type.startsWith("PANEL_MESSAGE")) return "/mesajlarim";
+  if (type.startsWith("TEAM_INVITE") || type.startsWith("TEAM_APPLICATION")) return "/davetler";
+  if (type) return "/bildirimler";
   return null;
 }
 
@@ -79,9 +88,12 @@ export async function registerForPushNotifications(): Promise<string | null> {
       );
     }
 
-    const tokenData = await Notifications.getExpoPushTokenAsync({
-      projectId: "com.elitlig.app",
-    });
+    const Constants = (await import("expo-constants")).default;
+    const projectId =
+      Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
+    const tokenData = await Notifications.getExpoPushTokenAsync(
+      projectId ? { projectId } : undefined
+    );
 
     return tokenData.data;
   } catch (err) {
@@ -102,6 +114,8 @@ export async function setupNotificationHandlers(): Promise<void> {
         const silent = category === "game";
         return {
           shouldShowAlert: true,
+          shouldShowBanner: true,
+          shouldShowList: true,
           shouldPlaySound: !silent,
           shouldSetBadge: true,
         };

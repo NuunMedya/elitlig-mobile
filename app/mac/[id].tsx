@@ -1072,7 +1072,7 @@ const styles = StyleSheet.create({
   },
   scoreText: {
     ...type.score,
-    fontSize: 30,
+    fontSize: 28,
     color: colors.line,
   },
   scoreLive: {
@@ -1090,7 +1090,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   countdownSep: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "900",
     color: colors.turf,
     paddingBottom: 12,
@@ -1107,7 +1107,7 @@ const styles = StyleSheet.create({
     borderColor: colors.faint,
   },
   countdownNum: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: "900",
     color: colors.turf,
     fontVariant: ["tabular-nums"],
@@ -1587,12 +1587,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   eventNameHome: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700",
     color: colors.line,
   },
   eventNameAway: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700",
     color: colors.line,
     textAlign: "right",

@@ -77,7 +77,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.turf + "55",
   },
-  emoji: { fontSize: 24 },
+  emoji: { fontSize: 22 },
   body: { flex: 1, gap: 2 },
   label: {
     fontSize: 8,
@@ -87,7 +87,7 @@ const styles = StyleSheet.create({
   },
   labelDone: { color: colors.turf },
   title: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "900",
     color: "#FFFFFF",
     letterSpacing: -0.2,
@@ -107,7 +107,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.turf,
   },
   pillText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "800",
     color: "#FFFFFF",
   },

@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
   },
   title: {
     ...type.title,
-    fontSize: 26,
+    fontSize: 24,
     color: colors.line,
     marginTop: spacing.xs,
   },

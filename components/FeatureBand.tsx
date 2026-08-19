@@ -86,7 +86,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     position: "relative",
   },
-  emoji: { fontSize: 24 },
+  emoji: { fontSize: 22 },
   doneBadge: {
     position: "absolute",
     top: -4,

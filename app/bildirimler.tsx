@@ -160,7 +160,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.turfDim,
     borderRadius: radius.pill,
   },
-  readAllText: { fontSize: 12, fontWeight: "800", color: colors.turf },
+  readAllText: { fontSize: 11, fontWeight: "800", color: colors.turf },
   list: { paddingHorizontal: spacing.md, paddingBottom: spacing.xl },
   row: {
     flexDirection: "row",

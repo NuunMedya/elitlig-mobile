@@ -199,3 +199,9 @@ export const post = <T>(path: string, body?: unknown, options?: Omit<RequestOpti
 
 export const patch = <T>(path: string, body?: unknown, options?: Omit<RequestOptions, "body" | "method">) =>
   request<T>(path, { ...options, body, method: "PATCH" });
+
+export const put = <T>(path: string, body?: unknown, options?: Omit<RequestOptions, "body" | "method">) =>
+  request<T>(path, { ...options, body, method: "PUT" });
+
+export const del = <T>(path: string, body?: unknown, options?: Omit<RequestOptions, "body" | "method">) =>
+  request<T>(path, { ...options, body, method: "DELETE" });

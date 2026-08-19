@@ -90,7 +90,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   score: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "900",
     color: "#FFFFFF",
     letterSpacing: -0.5,

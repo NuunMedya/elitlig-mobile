@@ -388,7 +388,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   scoreText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "800",
     color: colors.turf,
     fontVariant: ["tabular-nums"],
@@ -397,7 +397,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.goldDim,
   },
   bestText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "800",
     color: "#8A6A06",
   },
@@ -405,7 +405,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FBEDEE",
   },
   levelText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "800",
     color: colors.live,
     fontVariant: ["tabular-nums"],
@@ -483,7 +483,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(10, 40, 24, 0.55)",
   },
   overlayTitle: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: "900",
     letterSpacing: 2,
     color: "#FFFFFF",
@@ -536,7 +536,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.turf,
   },
   retryText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "800",
     color: colors.surface,
   },
@@ -544,7 +544,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.turfDim,
   },
   challengeText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "800",
     color: colors.turf,
   },
@@ -566,7 +566,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   shareBrand: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "900",
     color: "#FFFFFF",
   },
@@ -595,7 +595,7 @@ const styles = StyleSheet.create({
     marginVertical: spacing.md,
   },
   shareChallenge: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "700",
     color: "#D9CBF6",
   },
@@ -610,7 +610,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.35)",
   },
   closeText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "700",
     color: "#FFFFFF",
   },

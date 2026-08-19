@@ -151,7 +151,7 @@ const styles = StyleSheet.create({
   },
   score: {
     ...type.score,
-    fontSize: 20,
+    fontSize: 18,
     color: colors.line,
     minWidth: 24,
     textAlign: "right",
