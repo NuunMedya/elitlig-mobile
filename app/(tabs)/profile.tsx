@@ -20,6 +20,36 @@ import { useAuth } from "@/providers/AuthProvider";
  * sunucunun onboarding metni gösterilir; talep akışları sonraki fazda.
  */
 
+function pendingLabel(type: string, targetType: string): { icon: string; title: string; desc: string } {
+  const t = String(type).toLowerCase();
+  const tt = String(targetType).toLowerCase();
+  if (t.includes("transfer")) return { icon: "swap-horizontal-outline", title: "Transfer Talebi", desc: "Takım değişikliği onay bekliyor" };
+  if (t.includes("contract") || tt.includes("contract")) return { icon: "document-text-outline", title: "Sözleşme Talebi", desc: "Sözleşme güncellemesi onay bekliyor" };
+  if (t.includes("squad") || tt.includes("squad")) return { icon: "people-outline", title: "Kadro Değişikliği", desc: "Kadro güncellemesi onay bekliyor" };
+  if (t.includes("photo")) return { icon: "camera-outline", title: "Fotoğraf Talebi", desc: "Profil fotoğrafı onay bekliyor" };
+  return { icon: "hourglass-outline", title: "Bekleyen Talep", desc: "Onay bekleniyor" };
+}
+
+function pendingRoute(type: string): string | null {
+  const t = String(type).toLowerCase();
+  if (t.includes("transfer")) return "/tekliflerim";
+  if (t.includes("contract")) return "/sozlesmelerim";
+  return null;
+}
+
+function statusColor(status: string): string {
+  if (status === "approved") return "#178A50";
+  if (status === "rejected") return "#DC2626";
+  return "#E8B00A";
+}
+
+function statusLabel(status: string): string {
+  if (status === "approved") return "Onaylandı";
+  if (status === "rejected") return "Reddedildi";
+  if (status === "pending")  return "Bekliyor";
+  return status;
+}
+
 export default function ProfileScreen() {
   const auth = useAuth();
   const router = useRouter();
@@ -236,16 +266,36 @@ export default function ProfileScreen() {
           {/* Bekleyen talepler */}
           {me.pendingChanges.length > 0 ? (
             <View style={styles.card}>
-              <Text style={styles.cardKicker}>BEKLEYEN TALEPLERİM</Text>
-              {me.pendingChanges.map((change) => (
-                <View key={change.id} style={styles.changeRow}>
-                  <Ionicons name="hourglass-outline" size={14} color={colors.yellow} />
-                  <Text style={styles.changeText} numberOfLines={1}>
-                    {change.type} · {change.target_type}
-                  </Text>
-                  <Text style={styles.changeStatus}>{change.status}</Text>
+              <View style={styles.cardKickerRow}>
+                <Text style={styles.cardKicker}>BEKLEYEN TALEPLERİM</Text>
+                <View style={styles.pendingBadge}>
+                  <Text style={styles.pendingBadgeTxt}>{me.pendingChanges.length}</Text>
                 </View>
-              ))}
+              </View>
+              {me.pendingChanges.map((change) => {
+                const label = pendingLabel(change.type, change.target_type);
+                const route = pendingRoute(change.type);
+                return (
+                  <Pressable
+                    key={change.id}
+                    onPress={() => route && router.push(route as any)}
+                    style={({ pressed }) => [styles.changeRow, pressed && styles.pressed]}
+                  >
+                    <View style={styles.changeIcon}>
+                      <Ionicons name={label.icon as any} size={16} color={colors.yellow} />
+                    </View>
+                    <View style={styles.changeBody}>
+                      <Text style={styles.changeText} numberOfLines={1}>{label.title}</Text>
+                      <Text style={styles.changeDesc} numberOfLines={1}>{label.desc}</Text>
+                    </View>
+                    <View style={[styles.changeChip, { backgroundColor: statusColor(change.status) + "18" }]}>
+                      <Text style={[styles.changeChipTxt, { color: statusColor(change.status) }]}>
+                        {statusLabel(change.status)}
+                      </Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
             </View>
           ) : null}
 
@@ -334,6 +384,53 @@ const styles = StyleSheet.create({
     color: colors.muted,
     letterSpacing: 0,
     lineHeight: 16,
+  },
+  cardKickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: spacing.sm,
+  },
+  pendingBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: colors.yellow,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 5,
+  },
+  pendingBadgeTxt: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#000",
+  },
+  changeIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.yellow + "18",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  changeBody: {
+    flex: 1,
+    gap: 2,
+  },
+  changeDesc: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: colors.muted,
+  },
+  changeChip: {
+    borderRadius: radius.pill,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+  },
+  changeChipTxt: {
+    fontSize: 9,
+    fontWeight: "800",
   },
   card: {
     backgroundColor: colors.surface,
