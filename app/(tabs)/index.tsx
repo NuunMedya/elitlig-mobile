@@ -313,13 +313,6 @@ export default function OverviewScreen() {
             )}
           </Section>
 
-          {/* Maç Fotoğrafları Sliderı */}
-          {matchesQuery.data && matchesQuery.data.some(m => m.match_picture) ? (
-            <Section title="Son Maçlar" href="/matches">
-              <MatchPhotoSlider matches={matchesQuery.data ?? []} />
-            </Section>
-          ) : null}
-
           <Section title="Son Haberler" href="/news">
             {latestNews.length > 0 ? (
               latestNews.map((item) => (
