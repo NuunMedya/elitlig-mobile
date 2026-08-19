@@ -23,6 +23,7 @@ import { colors, radius, spacing, type } from "@/constants/theme";
 import { getStandings } from "@/lib/api/standings";
 import { queryKeys } from "@/lib/queryKeys";
 import { useScope } from "@/providers/ScopeProvider";
+import { useFavorite } from "@/providers/FavoriteProvider";
 import type { StandingRow } from "@/lib/types";
 
 /**
@@ -57,6 +58,7 @@ const LEVEL_COLORS = ["#9AA1B5", "#3F4454", "#3B72E8", "#22A45D", "#F59E0B", "#E
 export default function StandingsScreen() {
   const scope = useScope();
   const router = useRouter();
+  const { isFavorite } = useFavorite();
   const scopeKey = {
     cityId: scope.cityId ?? undefined,
     leagueId: scope.leagueId ?? undefined,
@@ -216,6 +218,8 @@ export default function StandingsScreen() {
             <Row
               row={item}
               position={index + 4}
+              totalRows={rows.length}
+              isFav={isFavorite(item.team_id)}
               onPress={() => router.push(`/takim/${item.team_id}`)}
             />
           )}
@@ -279,9 +283,10 @@ function StatCard({ icon, accent, kicker, row, detail }: {
 function TableHead({ powerBalance }: { powerBalance: boolean }) {
   return (
     <View style={styles.head}>
+      <View style={styles.zoneBarEmpty} />
       <Text style={[styles.headCell, styles.posCell]}>#</Text>
       <Text style={[styles.headCell, styles.teamCell]}>TAKIM</Text>
-      <Text style={[styles.headCell, styles.numCell]}>O</Text>
+      <Text style={[styles.headCell, styles.formCell]}>FORM</Text>
       <Text style={[styles.headCell, styles.numCell]}>AV</Text>
       <Text style={[styles.headCell, styles.numCell, styles.pointCell]}>
         {powerBalance ? "GP" : "P"}
@@ -290,11 +295,29 @@ function TableHead({ powerBalance }: { powerBalance: boolean }) {
   );
 }
 
-function Row({ row, position, onPress }: { row: StandingRow; position: number; onPress: () => void }) {
-  const TOP = ["#E8B00A","#9AA1B5","#CD7F32"] as const;
-  const tc = position <= 3 ? TOP[position-1] : null;
+function Row({ row, position, totalRows, isFav, onPress }: {
+  row: StandingRow; position: number; totalRows: number; isFav: boolean; onPress: () => void;
+}) {
+  const TOP   = ["#E8B00A","#9AA1B5","#CD7F32"] as const;
+  const tc    = position <= 3 ? TOP[position-1] : null;
+  // Sıralama zonu rengi
+  const zoneColor = position <= 3 ? "#178A50"
+    : totalRows > 6 && position >= totalRows - 2 ? "#DC2626"
+    : null;
+  const goalDiff = Number(row.goal_diff ?? 0);
+
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}>
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.row,
+        isFav && styles.rowFav,
+        pressed && styles.rowPressed,
+      ]}
+    >
+      {/* Sol zone çizgisi */}
+      {zoneColor ? <View style={[styles.zoneBar, { backgroundColor: zoneColor }]} /> : <View style={styles.zoneBarEmpty} />}
+
       <View style={[styles.posBadge, tc != null && { backgroundColor: tc+"22" }]}>
         <Text style={[styles.posNum, tc != null && { color: tc, fontWeight:"900" as const }]}>{position}</Text>
       </View>
@@ -302,15 +325,33 @@ function Row({ row, position, onPress }: { row: StandingRow; position: number; o
       <View style={[styles.teamCell, styles.teamBox]}>
         <TeamCrest name={row.team_name} logo={row.logo} size={26} />
         <View style={styles.teamText}>
-          <Text style={styles.teamName} numberOfLines={1}>
-            {row.team_name.toLocaleUpperCase("tr-TR")}
-          </Text>
-          {row.last5 ? <Form last5={row.last5} /> : null}
+          <View style={styles.teamNameRow}>
+            <Text style={[styles.teamName, isFav && styles.teamNameFav]} numberOfLines={1}>
+              {row.team_name.toLocaleUpperCase("tr-TR")}
+            </Text>
+            {isFav ? <Ionicons name="star" size={10} color={colors.yellow} /> : null}
+          </View>
+          <View style={styles.gbmRow}>
+            <Text style={styles.gbmG}>{row.wins}G</Text>
+            <Text style={styles.gbmB}>{row.draws}B</Text>
+            <Text style={styles.gbmM}>{row.losses}M</Text>
+          </View>
         </View>
       </View>
 
-      <Text style={[styles.cell, styles.numCell]}>{row.played}</Text>
-      <Text style={[styles.cell, styles.numCell]}>{row.goal_diff}</Text>
+      {row.last5 ? (
+        <View style={styles.formCell}>
+          <Form last5={row.last5} />
+        </View>
+      ) : <View style={styles.formCell} />}
+
+      <Text style={[
+        styles.cell, styles.numCell,
+        goalDiff > 0 && styles.diffPos,
+        goalDiff < 0 && styles.diffNeg,
+      ]}>
+        {goalDiff > 0 ? "+" : ""}{goalDiff}
+      </Text>
       <Text style={[styles.cell, styles.numCell, styles.pointCell, styles.points]}>
         {row.display_points}
       </Text>
@@ -482,6 +523,18 @@ const styles = StyleSheet.create({
     ...type.caption,
     color: colors.muted,
   },
+  zoneBar: { width:3, alignSelf:"stretch", borderRadius:2, marginRight:4 },
+  zoneBarEmpty: { width:3, marginRight:4 },
+  rowFav: { backgroundColor: colors.goldDim },
+  teamNameRow: { flexDirection:"row", alignItems:"center", gap:3 },
+  teamNameFav: { color:colors.yellow },
+  gbmRow: { flexDirection:"row", gap:5, marginTop:1 },
+  gbmG: { fontSize:9, fontWeight:"800", color:colors.green },
+  gbmB: { fontSize:9, fontWeight:"700", color:colors.muted },
+  gbmM: { fontSize:9, fontWeight:"800", color:colors.live },
+  formCell: { width:68, alignItems:"flex-start" },
+  diffPos: { color:colors.green, fontWeight:"800" as const },
+  diffNeg: { color:colors.live, fontWeight:"800" as const },
   row: { flexDirection: "row", alignItems: "center", paddingVertical: spacing.sm + 2, paddingHorizontal: spacing.sm, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.faint, marginBottom: spacing.sm },
   rowPressed: {
     opacity: 0.7,
