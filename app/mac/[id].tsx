@@ -757,21 +757,63 @@ function EventRow({
     kind === "substitution"
       ? [nameOf(event.oyuncu_giren_id), nameOf(event.oyuncu_cikan_id)]
           .filter(Boolean)
-          .join(" ↔ ") || "Oyuncu değişikliği"
+          .join(" → ") || "Oyuncu değişikliği"
       : nameOf(event.oyuncu_id) || event.aciklama || "";
 
+  const bgColor = kind === "goal" ? colors.green + "12"
+    : kind === "ownGoal" ? colors.live + "12"
+    : kind === "yellow" ? colors.yellow + "12"
+    : kind === "red" ? colors.live + "12"
+    : "transparent";
+
   return (
-    <View style={[styles.eventRow, !home && styles.eventRowAway]}>
-      <Text style={styles.eventMinute}>{event.dakika ? `${event.dakika}'` : "—"}</Text>
-      <Ionicons name={visual.icon} size={15} color={visual.color} />
-      <View style={styles.eventText}>
-        <Text style={[styles.eventName, !home && styles.eventNameAway]} numberOfLines={1}>
-          {label}
-        </Text>
-        {kind === "ownGoal" ? (
-          <Text style={[styles.eventDetail, !home && styles.eventNameAway]}>kendi kalesine</Text>
-        ) : detail ? (
-          <Text style={[styles.eventDetail, !home && styles.eventNameAway]}>{detail}</Text>
+    <View style={styles.eventTimeline}>
+      {/* Ev sahibi tarafı */}
+      <View style={styles.eventSide}>
+        {home ? (
+          <View style={[styles.eventBubble, { backgroundColor: bgColor }]}>
+            <View style={styles.eventIconWrap}>
+              <Ionicons name={visual.icon} size={14} color={visual.color} />
+            </View>
+            <View style={styles.eventTextBlock}>
+              <Text style={styles.eventNameHome} numberOfLines={1}>{label}</Text>
+              {kind === "ownGoal" ? (
+                <Text style={styles.eventDetailHome}>kendi kalesine</Text>
+              ) : detail ? (
+                <Text style={styles.eventDetailHome}>{detail}</Text>
+              ) : null}
+            </View>
+          </View>
+        ) : null}
+      </View>
+
+      {/* Merkez dakika */}
+      <View style={styles.eventCenter}>
+        <View style={styles.eventLine} />
+        <View style={[styles.eventMinuteBadge, { borderColor: visual.color }]}>
+          <Text style={[styles.eventMinuteText, { color: visual.color }]}>
+            {event.dakika ? `${event.dakika}'` : "—"}
+          </Text>
+        </View>
+        <View style={styles.eventLine} />
+      </View>
+
+      {/* Deplasman tarafı */}
+      <View style={styles.eventSide}>
+        {!home ? (
+          <View style={[styles.eventBubble, styles.eventBubbleAway, { backgroundColor: bgColor }]}>
+            <View style={styles.eventTextBlock}>
+              <Text style={styles.eventNameAway} numberOfLines={1}>{label}</Text>
+              {kind === "ownGoal" ? (
+                <Text style={styles.eventDetailAway}>kendi kalesine</Text>
+              ) : detail ? (
+                <Text style={styles.eventDetailAway}>{detail}</Text>
+              ) : null}
+            </View>
+            <View style={styles.eventIconWrap}>
+              <Ionicons name={visual.icon} size={14} color={visual.color} />
+            </View>
+          </View>
         ) : null}
       </View>
     </View>
@@ -1487,40 +1529,84 @@ const styles = StyleSheet.create({
     color: colors.line,
     lineHeight: 21,
   },
-  eventRow: {
+  eventTimeline: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.sm,
-    borderRadius: radius.sm,
-    backgroundColor: colors.surface,
-    marginBottom: 2,
+    marginBottom: 4,
   },
-  eventRowAway: {
-    // Deplasman olayları sağa yaslanır; iki takımı ayırt etmenin en sade yolu.
-    flexDirection: "row-reverse",
-  },
-  eventMinute: {
-    ...type.caption,
-    color: colors.muted,
-    width: 30,
-    textAlign: "center",
-  },
-  eventText: {
+  eventSide: {
     flex: 1,
   },
-  eventName: {
-    ...type.small,
+  eventCenter: {
+    alignItems: "center",
+    width: 44,
+    gap: 0,
+  },
+  eventLine: {
+    width: 1,
+    flex: 1,
+    minHeight: 8,
+    backgroundColor: colors.faint,
+  },
+  eventMinuteBadge: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    backgroundColor: colors.surface,
+  },
+  eventMinuteText: {
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+  },
+  eventBubble: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: radius.md,
+    marginRight: 4,
+  },
+  eventBubbleAway: {
+    marginRight: 0,
+    marginLeft: 4,
+    justifyContent: "flex-end",
+  },
+  eventIconWrap: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: colors.surfaceRaised,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  eventTextBlock: {
+    flex: 1,
+  },
+  eventNameHome: {
+    fontSize: 12,
+    fontWeight: "700",
     color: colors.line,
   },
   eventNameAway: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.line,
     textAlign: "right",
   },
-  eventDetail: {
-    ...type.caption,
-    color: colors.faint,
-    letterSpacing: 0,
+  eventDetailHome: {
+    fontSize: 10,
+    color: colors.muted,
+    marginTop: 1,
+  },
+  eventDetailAway: {
+    fontSize: 10,
+    color: colors.muted,
+    textAlign: "right",
+    marginTop: 1,
   },
   lineupBlock: {
     marginBottom: spacing.lg,
