@@ -204,7 +204,11 @@ export default function OverviewScreen() {
 
           {/* QuickChip satırı FeatureBand ile değiştirildi */}
 
-          {headline ? <HeadlineCard item={headline} /> : null}
+          {matchesQuery.data && matchesQuery.data.some(m => m.match_picture) ? (
+            <Section title="Son Maçlar" href="/matches">
+              <MatchPhotoSlider matches={matchesQuery.data ?? []} />
+            </Section>
+          ) : headline ? <HeadlineCard item={headline} /> : null}
 
           {season && (
             <View style={styles.seasonBoard}>
@@ -350,11 +354,7 @@ export default function OverviewScreen() {
             )}
           </Section>
 
-          {matchesQuery.data && matchesQuery.data.some(m => m.match_picture) ? (
-            <Section title="Son Maçlar" href="/matches">
-              <MatchPhotoSlider matches={matchesQuery.data ?? []} />
-            </Section>
-          ) : null}
+          {headline ? <HeadlineCard item={headline} /> : null}
 
           {announcements.length > 0 && (
             <Section title="Duyurular" href="/news">
