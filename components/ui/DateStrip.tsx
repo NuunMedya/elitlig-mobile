@@ -1,0 +1,382 @@
+/**
+ * Yatay tarih şeridi — maç listesinin gün seçicisi.
+ *
+ * NEDEN ŞERİT: kullanıcı çoğunlukla "bugün ± birkaç gün" arasında geziniyor;
+ * takvim açtırmak bu sık işlemi üç dokunuşa çıkarıyordu. Şerit tek dokunuşla
+ * gün değiştirir, aylık takvim yalnız uzak tarihler için sağdaki düğmede kalır.
+ *
+ * TARİH MATEMATİĞİ: değerler "YYYY-MM-DD" metnidir ve YEREL saatle çözülür.
+ * `new Date("2026-08-19")` UTC gece yarısı demektir; UTC-… saat diliminde bir
+ * gün geriye kayar. Bu yüzden ayrıştırma elle yapılır (Date(y, m-1, d)).
+ *
+ * PERFORMANS: hücreler sabit 44px genişliktedir → `getItemLayout` sabittir ve
+ * seçili güne `scrollToOffset` ile ORTALAYARAK gidilir (spec §4.14). Gün
+ * listesi ve etiketleri bir kez hesaplanır (`useMemo`); hücre `memo` ile
+ * sarılıdır ve yalnız ilkel prop alır, böylece 43 hücrelik şerit kaydırırken
+ * yeniden render edilmez.
+ */
+
+import { memo, useCallback, useMemo, useRef, useState } from "react";
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { FlatList, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { colors, layout, radius, space, textScale, touchSlop, type } from "@/theme";
+import { haptics } from "@/lib/haptics";
+
+export interface DateStripProps {
+  /** "YYYY-MM-DD" */
+  value: string;
+  onChange: (iso: string) => void;
+  /** Maç olan günler — nokta gösterilir */
+  markers?: Record<string, { count: number; live?: boolean }>;
+  /** Kaydırılabilir aralık (varsayılan: -14 … +28 gün) */
+  range?: { start: string; end: string };
+  /** Takvim düğmesi — aylık takvim açar */
+  onOpenCalendar?: () => void;
+  /** "Bugün"e dön düğmesi; seçili gün bugün değilse görünür */
+  showTodayButton?: boolean;
+}
+
+/** getDay() sırasıyla Türkçe gün kısaltmaları (0 = Pazar). */
+const WEEKDAYS = ["Paz", "Pzt", "Sal", "Çar", "Per", "Cum", "Cmt"] as const;
+
+const CELL_WIDTH = 44;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const pad = (value: number) => String(value).padStart(2, "0");
+
+/** Yerel saatle "YYYY-MM-DD". */
+export function toIsoDate(date: Date): string {
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+/** "YYYY-MM-DD" → yerel gece yarısı; geçersizse bugün. */
+function fromIsoDate(iso: string): Date {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso ?? ""));
+  if (!match) return new Date();
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+}
+
+interface DayItem {
+  iso: string;
+  /** Ayın günü — "19" */
+  day: string;
+  /** "Per" ya da bugünse "BUGÜN" */
+  weekday: string;
+  isToday: boolean;
+  /** Ekran okuyucu metni — "19 Ağustos Çarşamba" */
+  speech: string;
+}
+
+export const DateStrip = memo(function DateStrip({
+  value,
+  onChange,
+  markers,
+  range,
+  onOpenCalendar,
+  showTodayButton = true,
+}: DateStripProps) {
+  const listRef = useRef<FlatList<DayItem>>(null);
+  const centeredRef = useRef(false);
+  const [listWidth, setListWidth] = useState(0);
+
+  const todayIso = useMemo(() => toIsoDate(new Date()), []);
+
+  const days = useMemo<DayItem[]>(() => {
+    const today = fromIsoDate(todayIso);
+    const start = range?.start ? fromIsoDate(range.start) : new Date(today.getTime() - 14 * DAY_MS);
+    const end = range?.end ? fromIsoDate(range.end) : new Date(today.getTime() + 28 * DAY_MS);
+
+    const items: DayItem[] = [];
+    const cursor = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+    // Gün gün ilerlerken saat toplamak yaz saati geçişinde kayma yapar; bu
+    // yüzden takvim günü artırılır.
+    while (cursor.getTime() <= end.getTime() && items.length < 400) {
+      const iso = toIsoDate(cursor);
+      const isToday = iso === todayIso;
+      items.push({
+        iso,
+        day: String(cursor.getDate()),
+        weekday: isToday ? "BUGÜN" : WEEKDAYS[cursor.getDay()],
+        isToday,
+        speech: cursor.toLocaleDateString("tr-TR", { day: "numeric", month: "long", weekday: "long" }),
+      });
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    return items;
+  }, [range?.start, range?.end, todayIso]);
+
+  const selectedIndex = useMemo(() => days.findIndex((item) => item.iso === value), [days, value]);
+
+  /** Seçili günü şeridin ortasına getirir; ilk yerleşimde animasyonsuz. */
+  const centerOn = useCallback(
+    (index: number, width: number) => {
+      if (index < 0 || width <= 0) return;
+      const maxOffset = Math.max(0, days.length * CELL_WIDTH - width);
+      const offset = Math.min(maxOffset, Math.max(0, index * CELL_WIDTH - (width - CELL_WIDTH) / 2));
+      listRef.current?.scrollToOffset({ offset, animated: centeredRef.current });
+      centeredRef.current = true;
+    },
+    [days.length],
+  );
+
+  const handleLayout = useCallback(
+    (width: number) => {
+      setListWidth(width);
+      if (!centeredRef.current) centerOn(selectedIndex, width);
+    },
+    [centerOn, selectedIndex],
+  );
+
+  const handleSelect = useCallback(
+    (iso: string) => {
+      if (iso === value) return;
+      haptics.select();
+      onChange(iso);
+    },
+    [onChange, value],
+  );
+
+  const handleToday = useCallback(() => {
+    haptics.select();
+    if (todayIso !== value) onChange(todayIso);
+    const index = days.findIndex((item) => item.iso === todayIso);
+    centerOn(index, listWidth);
+  }, [centerOn, days, listWidth, onChange, todayIso, value]);
+
+  const handleCalendar = useCallback(() => {
+    haptics.light();
+    onOpenCalendar?.();
+  }, [onOpenCalendar]);
+
+  const renderItem = useCallback(
+    ({ item }: { item: DayItem }) => {
+      const marker = markers?.[item.iso];
+      return (
+        <DayCell
+          item={item}
+          selected={item.iso === value}
+          hasMatches={Boolean(marker && marker.count > 0)}
+          live={Boolean(marker?.live)}
+          onPress={handleSelect}
+        />
+      );
+    },
+    [handleSelect, markers, value],
+  );
+
+  return (
+    <View style={styles.wrap}>
+      <View style={styles.listBox}>
+        <FlatList
+          ref={listRef}
+          data={days}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          keyExtractor={keyExtractor}
+          renderItem={renderItem}
+          getItemLayout={getItemLayout}
+          initialNumToRender={12}
+          maxToRenderPerBatch={12}
+          windowSize={5}
+          removeClippedSubviews={Platform.OS === "android"}
+          extraData={value}
+          onLayout={(event) => handleLayout(event.nativeEvent.layout.width)}
+        />
+        {/* Sol kenardaki maske: şeridin devam ettiğini gösterir. */}
+        <LinearGradient
+          colors={[colors.bg, "transparent"]}
+          start={GRADIENT_START}
+          end={GRADIENT_END}
+          style={styles.mask}
+          pointerEvents="none"
+        />
+      </View>
+
+      {showTodayButton && value !== todayIso ? (
+        <Pressable
+          onPress={handleToday}
+          style={styles.todayButton}
+          hitSlop={touchSlop(32)}
+          accessibilityRole="button"
+          accessibilityLabel="Bugüne dön"
+        >
+          <Text style={styles.todayText} {...textScale.badge}>
+            BUGÜN
+          </Text>
+        </Pressable>
+      ) : null}
+
+      {onOpenCalendar ? (
+        <Pressable
+          onPress={handleCalendar}
+          style={styles.calendarButton}
+          hitSlop={touchSlop(40)}
+          accessibilityRole="button"
+          accessibilityLabel="Takvimi aç"
+        >
+          <Ionicons name="calendar-outline" size={18} color={colors.textSecondary} />
+        </Pressable>
+      ) : null}
+    </View>
+  );
+});
+
+const DayCell = memo(function DayCell({
+  item,
+  selected,
+  hasMatches,
+  live,
+  onPress,
+}: {
+  item: DayItem;
+  selected: boolean;
+  hasMatches: boolean;
+  live: boolean;
+  onPress: (iso: string) => void;
+}) {
+  const handlePress = useCallback(() => onPress(item.iso), [onPress, item.iso]);
+
+  return (
+    <Pressable
+      style={[styles.cell, selected && styles.cellSelected]}
+      onPress={handlePress}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      accessibilityLabel={item.isToday ? `Bugün, ${item.speech}` : item.speech}
+    >
+      <Text
+        style={[styles.weekday, item.isToday && styles.weekdayToday, selected && styles.onBrand]}
+        numberOfLines={1}
+        {...textScale.badge}
+      >
+        {item.weekday}
+      </Text>
+      <Text
+        style={[styles.day, item.isToday && !selected && styles.dayToday, selected && styles.onBrand]}
+        {...textScale.badge}
+      >
+        {item.day}
+      </Text>
+      <View style={styles.underlineRow}>
+        {item.isToday && !selected ? <View style={styles.todayUnderline} /> : null}
+      </View>
+      <View style={styles.dotRow}>
+        {hasMatches ? (
+          <View style={[styles.dot, live && styles.dotLive, selected && styles.dotOnBrand]} />
+        ) : null}
+      </View>
+    </Pressable>
+  );
+});
+
+const keyExtractor = (item: DayItem) => item.iso;
+
+const getItemLayout = (_data: ArrayLike<DayItem> | null | undefined, index: number) => ({
+  length: CELL_WIDTH,
+  offset: CELL_WIDTH * index,
+  index,
+});
+
+const GRADIENT_START = { x: 0, y: 0 } as const;
+const GRADIENT_END = { x: 1, y: 0 } as const;
+
+const styles = StyleSheet.create({
+  wrap: {
+    height: layout.dateStripHeight,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.bg,
+    paddingRight: space.sm,
+  },
+  listBox: {
+    flex: 1,
+    height: "100%",
+    justifyContent: "center",
+  },
+  mask: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 12,
+  },
+  cell: {
+    width: CELL_WIDTH,
+    height: 46,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.md,
+    paddingTop: 2,
+  },
+  cellSelected: {
+    backgroundColor: colors.brand,
+  },
+  weekday: {
+    ...type.micro,
+    color: colors.textTertiary,
+  },
+  weekdayToday: {
+    color: colors.brandAccent,
+    letterSpacing: 0.2,
+  },
+  day: {
+    ...type.tableNumStrong,
+    color: colors.textPrimary,
+    marginTop: 1,
+  },
+  dayToday: {
+    color: colors.brandAccent,
+  },
+  onBrand: {
+    color: colors.textOnBrand,
+  },
+  underlineRow: {
+    height: 2,
+    marginTop: 2,
+    justifyContent: "center",
+  },
+  todayUnderline: {
+    width: 14,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: colors.brandAccent,
+  },
+  dotRow: {
+    height: 4,
+    marginTop: 2,
+    justifyContent: "center",
+  },
+  dot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.brandAccent,
+  },
+  dotLive: {
+    backgroundColor: colors.live,
+  },
+  dotOnBrand: {
+    backgroundColor: colors.textOnBrand,
+  },
+  todayButton: {
+    height: 32,
+    paddingHorizontal: space.sm,
+    marginLeft: space.xs,
+    borderRadius: radius.pill,
+    backgroundColor: colors.brandDim,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  todayText: {
+    ...type.micro,
+    color: colors.brandAccent,
+  },
+  calendarButton: {
+    width: 40,
+    height: 40,
+    marginLeft: space.xs,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+});
