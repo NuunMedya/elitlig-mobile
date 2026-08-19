@@ -331,11 +331,6 @@ function Row({ row, position, totalRows, isFav, onPress }: {
             </Text>
             {isFav ? <Ionicons name="star" size={10} color={colors.yellow} /> : null}
           </View>
-          <View style={styles.gbmRow}>
-            <Text style={styles.gbmG}>{row.wins}G</Text>
-            <Text style={styles.gbmB}>{row.draws}B</Text>
-            <Text style={styles.gbmM}>{row.losses}M</Text>
-          </View>
         </View>
       </View>
 
@@ -371,7 +366,7 @@ function Form({ last5 }: { last5: string }) {
         .slice(-5)
         .split("")
         .map((result, index) => (
-          <View key={`${result}-${index}`} style={[styles.chip, styleOf(result)]}>
+          <View key={`${result}-${index}`} style={[styles.chip, styles.chipSmall, styleOf(result)]}>
             <Text style={styles.chipText}>{letterOf(result)}</Text>
           </View>
         ))}
@@ -528,11 +523,7 @@ const styles = StyleSheet.create({
   rowFav: { backgroundColor: colors.goldDim },
   teamNameRow: { flexDirection:"row", alignItems:"center", gap:3 },
   teamNameFav: { color:colors.yellow },
-  gbmRow: { flexDirection:"row", gap:5, marginTop:1 },
-  gbmG: { fontSize:9, fontWeight:"800", color:colors.green },
-  gbmB: { fontSize:9, fontWeight:"700", color:colors.muted },
-  gbmM: { fontSize:9, fontWeight:"800", color:colors.live },
-  formCell: { width:68, alignItems:"flex-start" },
+  formCell: { width:60, alignItems:"flex-start" as const },
   diffPos: { color:colors.green, fontWeight:"800" as const },
   diffNeg: { color:colors.live, fontWeight:"800" as const },
   row: { flexDirection: "row", alignItems: "center", paddingVertical: spacing.sm + 2, paddingHorizontal: spacing.sm, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.faint, marginBottom: spacing.sm },
@@ -575,6 +566,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 3,
   },
+  chipSmall: { width:14, height:14, borderRadius:4 },
   chip: {
     width: 16,
     height: 16,
@@ -597,8 +589,8 @@ const styles = StyleSheet.create({
     color: colors.surface,
   },
   numCell: {
-    width: 30,
-    textAlign: "center",
+    width: 32,
+    textAlign: "center" as const,
   },
   pointCell: {
     width: 34,
