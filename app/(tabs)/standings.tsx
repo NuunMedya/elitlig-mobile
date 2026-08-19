@@ -286,7 +286,6 @@ function TableHead({ powerBalance }: { powerBalance: boolean }) {
       <View style={styles.zoneBarEmpty} />
       <Text style={[styles.headCell, styles.posCell]}>#</Text>
       <Text style={[styles.headCell, styles.teamCell]}>TAKIM</Text>
-      <Text style={[styles.headCell, styles.formCell]}>FORM</Text>
       <Text style={[styles.headCell, styles.numCell]}>AV</Text>
       <Text style={[styles.headCell, styles.numCell, styles.pointCell]}>
         {powerBalance ? "GP" : "P"}
@@ -331,14 +330,11 @@ function Row({ row, position, totalRows, isFav, onPress }: {
             </Text>
             {isFav ? <Ionicons name="star" size={10} color={colors.yellow} /> : null}
           </View>
+          {row.last5 ? <Form last5={row.last5} /> : null}
         </View>
       </View>
 
-      {row.last5 ? (
-        <View style={styles.formCell}>
-          <Form last5={row.last5} />
-        </View>
-      ) : <View style={styles.formCell} />}
+
 
       <Text style={[
         styles.cell, styles.numCell,
@@ -523,7 +519,6 @@ const styles = StyleSheet.create({
   rowFav: { backgroundColor: colors.goldDim },
   teamNameRow: { flexDirection:"row", alignItems:"center", gap:3 },
   teamNameFav: { color:colors.yellow },
-  formCell: { width:60, alignItems:"flex-start" as const },
   diffPos: { color:colors.green, fontWeight:"800" as const },
   diffNeg: { color:colors.live, fontWeight:"800" as const },
   row: { flexDirection: "row", alignItems: "center", paddingVertical: spacing.sm + 2, paddingHorizontal: spacing.sm, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.faint, marginBottom: spacing.sm },
