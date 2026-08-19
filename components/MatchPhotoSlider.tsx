@@ -2,7 +2,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { colors, radius, spacing, type } from "@/constants/theme";
-import { mediaUrl } from "@/lib/media";
+import { mediaUrl } from "@/lib/format";
 import { matchState } from "@/lib/match";
 import type { ApiMatch } from "@/lib/types";
 

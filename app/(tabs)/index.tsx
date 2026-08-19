@@ -315,7 +315,7 @@ export default function OverviewScreen() {
 
           {/* Maç Fotoğrafları Sliderı */}
           {matchesQuery.data && matchesQuery.data.some(m => m.match_picture) ? (
-            <Section title="Maç Fotoğrafları" href="/matches">
+            <Section title="Son Maçlar" href="/matches">
               <MatchPhotoSlider matches={matchesQuery.data ?? []} />
             </Section>
           ) : null}
@@ -356,6 +356,12 @@ export default function OverviewScreen() {
               <Text style={styles.emptyLine}>Henüz haber yok.</Text>
             )}
           </Section>
+
+          {matchesQuery.data && matchesQuery.data.some(m => m.match_picture) ? (
+            <Section title="Son Maçlar" href="/matches">
+              <MatchPhotoSlider matches={matchesQuery.data ?? []} />
+            </Section>
+          ) : null}
 
           {announcements.length > 0 && (
             <Section title="Duyurular" href="/news">
