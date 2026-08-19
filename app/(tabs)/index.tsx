@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MatchCard } from "@/components/MatchCard";
 import { FeatureBand } from "@/components/FeatureBand";
+import { MatchPhotoSlider } from "@/components/MatchPhotoSlider";
 import { MyTeamCard } from "@/components/MyTeamCard";
 import { WeekSeven } from "@/components/WeekSeven";
 import { ScopeBar } from "@/components/ScopeBar";
@@ -312,28 +313,12 @@ export default function OverviewScreen() {
             )}
           </Section>
 
-          {announcements.length > 0 && (
-            <Section title="Duyurular" href="/news">
-              {announcements.map((item) => (
-                <View key={`${item.kind}-${item.id}`} style={styles.annRow}>
-                  <View
-                    style={[
-                      styles.annPill,
-                      item.kind === "penalty" ? styles.annPillPenalty : styles.annPillTransfer,
-                    ]}
-                  >
-                    <Text style={styles.annPillText}>
-                      {item.kind === "penalty" ? "CEZA" : "TRANSFER"}
-                    </Text>
-                  </View>
-                  <Text style={styles.annTitle} numberOfLines={2}>
-                    {item.title}
-                  </Text>
-                  <Text style={styles.annTime}>{timeAgo(item.published_at)}</Text>
-                </View>
-              ))}
+          {/* Maç Fotoğrafları Sliderı */}
+          {matchesQuery.data && matchesQuery.data.some(m => m.match_picture) ? (
+            <Section title="Maç Fotoğrafları" href="/matches">
+              <MatchPhotoSlider matches={matchesQuery.data ?? []} />
             </Section>
-          )}
+          ) : null}
 
           <Section title="Son Haberler" href="/news">
             {latestNews.length > 0 ? (
@@ -371,6 +356,30 @@ export default function OverviewScreen() {
               <Text style={styles.emptyLine}>Henüz haber yok.</Text>
             )}
           </Section>
+
+          {announcements.length > 0 && (
+            <Section title="Duyurular" href="/news">
+              {announcements.map((item) => (
+                <View key={`${item.kind}-${item.id}`} style={styles.annRow}>
+                  <View
+                    style={[
+                      styles.annPill,
+                      item.kind === "penalty" ? styles.annPillPenalty : styles.annPillTransfer,
+                    ]}
+                  >
+                    <Text style={styles.annPillText}>
+                      {item.kind === "penalty" ? "CEZA" : "TRANSFER"}
+                    </Text>
+                  </View>
+                  <Text style={styles.annTitle} numberOfLines={2}>
+                    {item.title}
+                  </Text>
+                  <Text style={styles.annTime}>{timeAgo(item.published_at)}</Text>
+                </View>
+              ))}
+            </Section>
+          )}
+
         </ScrollView>
       )}
     </SafeAreaView>

@@ -34,7 +34,9 @@ function pendingRoute(type: string): string | null {
   const t = String(type).toLowerCase();
   if (t.includes("transfer")) return "/tekliflerim";
   if (t.includes("contract")) return "/sozlesmelerim";
-  return null;
+  if (t.includes("squad") || t.includes("kadro")) return "/maclarim";
+  if (t.includes("penalty") || t.includes("ceza")) return "/cezalarim";
+  return null; // fotoğraf vb. → modal
 }
 
 function statusColor(status: string): string {
@@ -232,7 +234,18 @@ export default function ProfileScreen() {
                 return (
                   <Pressable
                     key={change.id}
-                    onPress={() => router.push((route ?? "/tekliflerim") as any)}
+                    onPress={() => {
+                      if (route) {
+                        router.push(route as any);
+                      } else {
+                        const { Alert } = require("react-native");
+                        Alert.alert(
+                          "Talep İnceleniyor",
+                          `"${label.title}" talebiniz yönetim tarafından inceleniyor. Onaylandığında bildirim alacaksınız.`,
+                          [{ text: "Tamam" }]
+                        );
+                      }
+                    }}
                     style={({ pressed }) => [styles.changeRow, pressed && styles.pressed]}
                   >
                     <View style={styles.changeIcon}>
