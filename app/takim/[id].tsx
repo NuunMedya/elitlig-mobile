@@ -173,12 +173,12 @@ export default function TeamDetailScreen() {
             ]}
           >
             <Ionicons
-              name={isFavorite(teamId) ? "star" : "star-outline"}
+              name={isFavorite(teamId) ? "heart" : "heart-outline"}
               size={16}
               color={isFavorite(teamId) ? colors.yellow : colors.muted}
             />
             <Text style={[styles.favText, isFavorite(teamId) && styles.favTextActive]}>
-              {isFavorite(teamId) ? "Takımım" : "Takımım yap"}
+              {isFavorite(teamId) ? "Favorilerden Çıkar" : "Favorilere Ekle"}
             </Text>
           </Pressable>
         </View>

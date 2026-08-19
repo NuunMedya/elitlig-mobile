@@ -48,6 +48,7 @@ export default function RootLayout() {
                     animation: "fade",
                   }}
                 >
+                  <Stack.Screen name="favorilerim" />
                   <Stack.Screen name="hosgeldin" options={{ animation: "none" }} />
                   <Stack.Screen name="(tabs)" />
                   <Stack.Screen name="giris" options={{ presentation: "modal" }} />

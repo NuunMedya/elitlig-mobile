@@ -78,6 +78,12 @@ export default function MenuScreen() {
             onPress={() => router.push("/bildirim-ayarlari")}
           />
           <MenuRow
+            icon="star-outline"
+            label="Favori Takımlarım"
+            note="Takip ettiğin takımlar ve bildirimleri"
+            onPress={() => router.push("/favorilerim")}
+          />
+          <MenuRow
             icon="notifications-outline"
             label="Bildirimler"
             note="Teklifler, cezalar, mesajlar"

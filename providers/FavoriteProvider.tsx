@@ -10,31 +10,34 @@ import {
 } from "react";
 
 /**
- * Favori takım — giriş gerektirmeyen kişiselleştirme.
- *
- * Kullanıcı bir takımı yıldızlar; seçim cihazda saklanır ve Genel Bakış
- * "Takımım" kartıyla açılır. Tek takım tutulur (halı saha kullanıcısı kendi
- * takımının oyuncusudur); ileride çoklu takip gerekirse yapı diziye çevrilir.
+ * Favori takımlar — çoklu takip listesi.
+ * Kullanıcı istediği kadar takımı favoriye ekleyebilir.
+ * Seçimler cihazda saklanır, bildirimler için de kullanılır.
  */
 
-const STORAGE_KEY = "elitlig.favoriteTeam.v1";
+const STORAGE_KEY = "elitlig.favoriteTeams.v2";
 
-interface FavoriteTeam {
+export interface FavoriteTeam {
   id: number;
   name: string;
+  logo?: string | null;
 }
 
 interface FavoriteContextValue {
-  favorite: FavoriteTeam | null;
+  favorites: FavoriteTeam[];
   isFavorite: (teamId?: number | null) => boolean;
+  addFavorite: (team: FavoriteTeam) => void;
+  removeFavorite: (teamId: number) => void;
   toggleFavorite: (team: FavoriteTeam) => void;
-  clearFavorite: () => void;
+  clearFavorites: () => void;
+  // Geriye dönük uyumluluk
+  favorite: FavoriteTeam | null;
 }
 
 const FavoriteContext = createContext<FavoriteContextValue | null>(null);
 
 export function FavoriteProvider({ children }: { children: ReactNode }) {
-  const [favorite, setFavorite] = useState<FavoriteTeam | null>(null);
+  const [favorites, setFavorites] = useState<FavoriteTeam[]>([]);
   const [restored, setRestored] = useState(false);
 
   useEffect(() => {
@@ -42,38 +45,59 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
       .then((raw) => {
         if (!raw) return;
         try {
-          const stored = JSON.parse(raw) as FavoriteTeam;
-          if (stored?.id) setFavorite(stored);
-        } catch {
-          // Bozuk kayıt yok sayılır.
-        }
+          const stored = JSON.parse(raw);
+          // v1 uyumluluğu: eski tek nesne formatını dizi formatına çevir
+          if (Array.isArray(stored)) {
+            setFavorites(stored.filter((t) => t?.id));
+          } else if (stored?.id) {
+            setFavorites([stored]);
+          }
+        } catch {}
       })
       .finally(() => setRestored(true));
   }, []);
 
   useEffect(() => {
     if (!restored) return;
-    if (favorite) {
-      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(favorite)).catch(() => {});
-    } else {
-      AsyncStorage.removeItem(STORAGE_KEY).catch(() => {});
-    }
-  }, [favorite, restored]);
-
-  const toggleFavorite = useCallback((team: FavoriteTeam) => {
-    setFavorite((current) => (current?.id === team.id ? null : team));
-  }, []);
-
-  const clearFavorite = useCallback(() => setFavorite(null), []);
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(favorites)).catch(() => {});
+  }, [favorites, restored]);
 
   const isFavorite = useCallback(
-    (teamId?: number | null) => favorite != null && Number(teamId) === favorite.id,
-    [favorite]
+    (teamId?: number | null) => favorites.some((t) => t.id === Number(teamId)),
+    [favorites]
   );
 
+  const addFavorite = useCallback((team: FavoriteTeam) => {
+    setFavorites((prev) =>
+      prev.some((t) => t.id === team.id) ? prev : [...prev, team]
+    );
+  }, []);
+
+  const removeFavorite = useCallback((teamId: number) => {
+    setFavorites((prev) => prev.filter((t) => t.id !== teamId));
+  }, []);
+
+  const toggleFavorite = useCallback((team: FavoriteTeam) => {
+    setFavorites((prev) =>
+      prev.some((t) => t.id === team.id)
+        ? prev.filter((t) => t.id !== team.id)
+        : [...prev, team]
+    );
+  }, []);
+
+  const clearFavorites = useCallback(() => setFavorites([]), []);
+
   const value = useMemo(
-    () => ({ favorite, isFavorite, toggleFavorite, clearFavorite }),
-    [favorite, isFavorite, toggleFavorite, clearFavorite]
+    () => ({
+      favorites,
+      isFavorite,
+      addFavorite,
+      removeFavorite,
+      toggleFavorite,
+      clearFavorites,
+      favorite: favorites[0] ?? null, // geriye dönük uyumluluk
+    }),
+    [favorites, isFavorite, addFavorite, removeFavorite, toggleFavorite, clearFavorites]
   );
 
   return <FavoriteContext.Provider value={value}>{children}</FavoriteContext.Provider>;
