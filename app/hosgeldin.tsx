@@ -15,14 +15,20 @@ export default function HosgeldinScreen() {
 
   useEffect(() => {
     Animated.sequence([
-      Animated.timing(logoAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
-      Animated.timing(textAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
-      Animated.timing(btnAnim,  { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.timing(logoAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+      Animated.timing(textAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.timing(btnAnim,  { toValue: 1, duration: 200, useNativeDriver: true }),
     ]).start();
+
+    // 2 saniye sonra otomatik geç
+    const timer = setTimeout(() => {
+      router.replace("/(tabs)");
+    }, 2200);
+
+    return () => clearTimeout(timer);
   }, []);
 
-  const finish = async () => {
-    await AsyncStorage.setItem(ONBOARDING_KEY, "1");
+  const finish = () => {
     router.replace("/(tabs)");
   };
 

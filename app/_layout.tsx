@@ -1,6 +1,4 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
-import { useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -26,32 +24,6 @@ const queryClient = new QueryClient({
   },
 });
 
-const ONBOARDING_KEY = "elitlig.onboarding.done.v1";
-
-function OnboardingGate({ children }: { children: React.ReactNode }) {
-  const [ready, setReady] = useState(false);
-  const [showOnboarding, setShowOnboarding] = useState(false);
-
-  useEffect(() => {
-    AsyncStorage.getItem(ONBOARDING_KEY).then((val) => {
-      setShowOnboarding(!val);
-      setReady(true);
-    });
-  }, []);
-
-  if (!ready) return null;
-  if (showOnboarding) {
-    const { Redirect } = require("expo-router");
-    return (
-      <>
-        {children}
-        <Redirect href="/hosgeldin" />
-      </>
-    );
-  }
-  return <>{children}</>;
-}
-
 function PushSetup() {
   // @ts-ignore
   const getToken = () => { try { return require("expo-secure-store").getItemAsync("elitlig_token"); } catch { return null; } };
@@ -63,26 +35,26 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
-        <OnboardingGate>
-          <AuthProvider>
+        <AuthProvider>
             <PushSetup />
             <ScopeProvider>
               <FavoriteProvider>
                 <StatusBar style={isDark ? "light" : "dark"} />
                 <Stack
+                  initialRouteName="hosgeldin"
                   screenOptions={{
                     headerShown: false,
                     contentStyle: { backgroundColor: colors.pitch },
+                    animation: "fade",
                   }}
                 >
+                  <Stack.Screen name="hosgeldin" options={{ animation: "none" }} />
                   <Stack.Screen name="(tabs)" />
-                  <Stack.Screen name="hosgeldin" />
                   <Stack.Screen name="giris" options={{ presentation: "modal" }} />
                 </Stack>
               </FavoriteProvider>
             </ScopeProvider>
           </AuthProvider>
-        </OnboardingGate>
       </QueryClientProvider>
     </SafeAreaProvider>
   );
