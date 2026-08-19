@@ -1,7 +1,10 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { LinearGradient } from "expo-linear-gradient";
+import * as Sharing from "expo-sharing";
+import ViewShot from "react-native-view-shot";
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { DetailHeader } from "@/components/ScreenHeader";
@@ -14,7 +17,7 @@ import { getPlayerRankings } from "@/lib/api/players";
 import { getStandings } from "@/lib/api/standings";
 import { getTeam } from "@/lib/api/teams";
 import { addMatchToCalendar } from "@/lib/calendar";
-import { formatDateShort, formatTime } from "@/lib/format";
+import { formatDateShort, mediaUrl, formatTime } from "@/lib/format";
 import { matchState } from "@/lib/match";
 import { queryKeys } from "@/lib/queryKeys";
 import { useFavorite } from "@/providers/FavoriteProvider";
@@ -35,6 +38,23 @@ type Tab = "results" | "fixtures" | "squad";
 
 export default function TeamDetailScreen() {
   const [h2hOpen, setH2hOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareFmt, setShareFmt] = useState<"story"|"post">("story");
+  const [shareBusy, setShareBusy] = useState(false);
+  const shotRef = useRef<any>(null);
+  const CW = 272;
+  const FMTS = {
+    story: { label: "Hikaye 9:16", h: Math.round(CW*16/9) },
+    post:  { label: "Gonderi 3:4", h: Math.round(CW*4/3) },
+  } as const;
+  const doShare = async () => {
+    if (shareBusy) return;
+    setShareBusy(true);
+    try {
+      const uri = await shotRef.current?.capture?.();
+      if (uri) await Sharing.shareAsync(uri, { mimeType:"image/png" });
+    } catch {} finally { setShareBusy(false); }
+  };
   const { id } = useLocalSearchParams<{ id: string }>();
   const teamId = Number(id);
   const validId = Number.isFinite(teamId) && teamId > 0;
@@ -231,6 +251,15 @@ export default function TeamDetailScreen() {
           </>
         ) : null}
 
+        {/* Takım Paylaş butonu */}
+        <Pressable
+          onPress={() => setShareOpen(true)}
+          style={({pressed}) => [styles.shareBtn, pressed && styles.pressed]}
+        >
+          <Ionicons name="share-social-outline" size={16} color={colors.turf} />
+          <Text style={styles.shareBtnText}>Takımı Paylaş</Text>
+        </Pressable>
+
         {/* H2H Karşılaştır */}
         {(standingsQuery.data ?? []).length > 1 ? (
           <>
@@ -368,6 +397,118 @@ export default function TeamDetailScreen() {
           />
         )}
       </ScrollView>
+
+      <Modal visible={shareOpen} animationType="slide" onRequestClose={()=>setShareOpen(false)} transparent>
+        <View style={styles.shareOverlay}>
+          <View style={styles.shareSheet}>
+            {/* Format seçici */}
+            <View style={styles.sFmtRow}>
+              {(["story","post"] as const).map(k=>(
+                <Pressable key={k} onPress={()=>setShareFmt(k)} style={({pressed})=>[styles.sFmtPill,shareFmt===k&&styles.sFmtActive,pressed&&styles.pressed]}>
+                  <Text style={styles.sFmtTxt}>{FMTS[k].label}</Text>
+                </Pressable>
+              ))}
+            </View>
+
+            {/* Kart */}
+            <ViewShot ref={shotRef} options={{format:"png",quality:1}}>
+              <View style={[styles.sCard,{height:FMTS[shareFmt].h}]}>
+                <LinearGradient colors={["#6D28D9","#4C1D95"]} style={styles.sStrip}/>
+                <LinearGradient colors={["#CDBFE8","#EFEAF7","#FFF"]} start={{x:0.2,y:0}} end={{x:0.5,y:1}} style={styles.sBody}>
+                  <Text style={styles.sWm}>elitlig</Text>
+
+                  {/* Başlık */}
+                  <View style={styles.sTopRow}>
+                    <Text style={styles.sBrand}>elitlig</Text>
+                    <Text style={styles.sBrandR}>TAKIM İSTATİSTİKLERİ</Text>
+                  </View>
+
+                  {/* Takım */}
+                  <View style={styles.sTeamRow}>
+                    <TeamCrest name={team.team_name} logo={team.logo ? mediaUrl(team.logo) : undefined} size={52}/>
+                    <View style={styles.sTeamInfo}>
+                      <Text style={styles.sTeamName} numberOfLines={2}>{team.team_name.toLocaleUpperCase("tr-TR")}</Text>
+                      {standing ? (
+                        <View style={styles.sRankRow}>
+                          <Text style={styles.sRankBadge}>{standing.position}. SIRA</Text>
+                          <Text style={styles.sPoints}>{standing.row.display_points} PUAN</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  </View>
+
+                  {/* Ana istatistikler */}
+                  {standing ? (
+                    <View style={styles.sStats}>
+                      {[
+                        {l:"GALİBİYET", v:String(standing.row.wins)},
+                        {l:"BERABERLİK", v:String(standing.row.draws)},
+                        {l:"MAĞLUBİYET", v:String(standing.row.losses)},
+                        {l:"OYNANAN", v:String(standing.row.played)},
+                      ].map(st=>(
+                        <View key={st.l} style={styles.sStat}>
+                          <Text style={styles.sStatV}>{st.v}</Text>
+                          <Text style={styles.sStatL}>{st.l}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : null}
+
+                  {/* Gol durumu */}
+                  {standing ? (
+                    <View style={styles.sGoals}>
+                      <View style={styles.sGoalItem}>
+                        <Text style={styles.sGoalV}>{standing.row.goals_for}</Text>
+                        <Text style={styles.sGoalL}>ATILAN</Text>
+                      </View>
+                      <View style={styles.sGoalDiv}/>
+                      <View style={styles.sGoalItem}>
+                        <Text style={[styles.sGoalV,{color:"#DC2626"}]}>{standing.row.goals_against}</Text>
+                        <Text style={styles.sGoalL}>YENİLEN</Text>
+                      </View>
+                      <View style={styles.sGoalDiv}/>
+                      <View style={styles.sGoalItem}>
+                        <Text style={[styles.sGoalV,{color: standing.row.goal_diff>=0?"#178A50":"#DC2626"}]}>
+                          {standing.row.goal_diff>0?"+":""}{standing.row.goal_diff}
+                        </Text>
+                        <Text style={styles.sGoalL}>AVERAJ</Text>
+                      </View>
+                    </View>
+                  ) : null}
+
+                  {/* Form */}
+                  {standing?.row.last5 ? (
+                    <View style={styles.sFormRow}>
+                      <Text style={styles.sFormLabel}>SON FORM</Text>
+                      {standing.row.last5.split("").map((c,i)=>(
+                        <View key={i} style={[styles.sFormChip,{backgroundColor:c==="W"?"#178A50":c==="L"?"#DC2626":"#9188A4"}]}>
+                          <Text style={styles.sFormTxt}>{c==="W"?"G":c==="L"?"M":"B"}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : null}
+
+                  <View style={{flex:1}}/>
+                  <Text style={styles.sFtr}>ELİTLİG.COM</Text>
+                </LinearGradient>
+              </View>
+            </ViewShot>
+
+            {/* Aksiyonlar */}
+            <View style={styles.sActions}>
+              <Pressable onPress={()=>setShareOpen(false)} style={({pressed})=>[styles.sActBtn,styles.sClose,pressed&&styles.pressed]}>
+                <Text style={styles.sCloseTxt}>Kapat</Text>
+              </Pressable>
+              <Pressable onPress={doShare} style={({pressed})=>[styles.sActBtn,styles.sGo,pressed&&styles.pressed]}>
+                <Ionicons name="share-social" size={15} color="#FFF"/>
+                <Text style={styles.sGoTxt}>{shareBusy?"Hazirlaniyor":"Paylas"}</Text>
+              </Pressable>
+            </View>
+            <Text style={styles.sHint}>Indirmek icin: Paylas - Goruntüyu Kaydet</Text>
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -722,6 +863,48 @@ const styles = StyleSheet.create({
     height: 20,
     backgroundColor: colors.faint,
   },
+  shareBtn: { flexDirection:"row", alignItems:"center", justifyContent:"center", gap:6, backgroundColor:colors.turfDim, borderRadius:radius.pill, paddingVertical:spacing.sm+2, marginBottom:spacing.sm },
+  shareBtnText: { fontSize:13, fontWeight:"800", color:colors.turf },
+  shareOverlay: { flex:1, backgroundColor:"rgba(0,0,0,0.75)", justifyContent:"flex-end" },
+  shareSheet: { backgroundColor:"#1A1524", borderTopLeftRadius:20, borderTopRightRadius:20, padding:spacing.md, gap:spacing.md, alignItems:"center" as const, paddingBottom:36 },
+  sFmtRow: { flexDirection:"row", gap:8 },
+  sFmtPill: { borderRadius:20, borderWidth:1, borderColor:"rgba(255,255,255,0.35)", paddingHorizontal:14, paddingVertical:7 },
+  sFmtActive: { backgroundColor:colors.turf, borderColor:colors.turf },
+  sFmtTxt: { fontSize:12, fontWeight:"800", color:"#FFF" },
+  sCard: { width:272, backgroundColor:"#0B0A0E", borderRadius:14, padding:7, overflow:"hidden" },
+  sStrip: { height:7, borderTopLeftRadius:8, borderTopRightRadius:8 },
+  sBody: { flex:1, borderBottomLeftRadius:8, borderBottomRightRadius:8, paddingHorizontal:spacing.md, paddingTop:spacing.sm, paddingBottom:spacing.sm, overflow:"hidden", gap:6 },
+  sWm: { position:"absolute", right:-28, bottom:16, fontSize:60, fontWeight:"900", color:"#6D28D9", opacity:0.06, transform:[{rotate:"-12deg"}] },
+  sTopRow: { flexDirection:"row", alignItems:"center", justifyContent:"space-between" },
+  sBrand: { fontSize:13, fontWeight:"900", color:"#6D28D9" },
+  sBrandR: { fontSize:7, fontWeight:"800", letterSpacing:1, color:"#6D28D9", opacity:0.7 },
+  sTeamRow: { flexDirection:"row", alignItems:"center", gap:spacing.sm, backgroundColor:"rgba(255,255,255,0.7)", borderRadius:10, padding:8 },
+  sTeamInfo: { flex:1, gap:4 },
+  sTeamName: { fontSize:12, fontWeight:"900", color:"#0A0812", letterSpacing:-0.3, lineHeight:15 },
+  sRankRow: { flexDirection:"row", alignItems:"center", gap:6 },
+  sRankBadge: { fontSize:8, fontWeight:"800", color:"#FFF", backgroundColor:"#6D28D9", borderRadius:4, paddingHorizontal:5, paddingVertical:2 },
+  sPoints: { fontSize:10, fontWeight:"900", color:"#5B21B6" },
+  sStats: { flexDirection:"row", backgroundColor:"rgba(255,255,255,0.7)", borderRadius:10, padding:8 },
+  sStat: { flex:1, alignItems:"center" as const, gap:1 },
+  sStatV: { fontSize:16, fontWeight:"900", color:"#5B21B6", fontVariant:["tabular-nums"] as any },
+  sStatL: { fontSize:5.5, fontWeight:"800", letterSpacing:0.3, color:"#9188A4", textAlign:"center" as const },
+  sGoals: { flexDirection:"row", backgroundColor:"rgba(255,255,255,0.65)", borderRadius:8, padding:7 },
+  sGoalItem: { flex:1, alignItems:"center" as const, gap:1 },
+  sGoalV: { fontSize:14, fontWeight:"900", color:"#5B21B6", fontVariant:["tabular-nums"] as any },
+  sGoalL: { fontSize:6, fontWeight:"800", letterSpacing:0.4, color:"#9188A4" },
+  sGoalDiv: { width:1, backgroundColor:"rgba(0,0,0,0.08)" },
+  sFormRow: { flexDirection:"row", alignItems:"center", gap:4 },
+  sFormLabel: { fontSize:7, fontWeight:"800", letterSpacing:0.5, color:"#9188A4", marginRight:2 },
+  sFormChip: { width:20, height:20, borderRadius:5, alignItems:"center" as const, justifyContent:"center" as const },
+  sFormTxt: { fontSize:9, fontWeight:"900", color:"#FFF" },
+  sFtr: { fontSize:7.5, fontWeight:"800", letterSpacing:2.5, color:"#9188A4", textAlign:"center" as const },
+  sActions: { flexDirection:"row", gap:spacing.sm, width:"100%" },
+  sActBtn: { flex:1, flexDirection:"row", alignItems:"center", justifyContent:"center", gap:6, borderRadius:radius.pill, paddingVertical:spacing.sm+2 },
+  sClose: { backgroundColor:"rgba(255,255,255,0.1)" },
+  sCloseTxt: { fontSize:14, fontWeight:"700", color:"#FFF" },
+  sGo: { backgroundColor:colors.turf },
+  sGoTxt: { fontSize:14, fontWeight:"800", color:"#FFF" },
+  sHint: { fontSize:11, fontWeight:"600", color:"rgba(255,255,255,0.5)" },
   h2hBtn: { flexDirection:"row", alignItems:"center", gap:spacing.sm, backgroundColor:colors.turfDim, borderRadius:radius.md, padding:spacing.md, marginBottom:spacing.sm },
   h2hBtnText: { flex:1, fontSize:14, fontWeight:"800", color:colors.turf },
   h2hOverlay: { flex:1, backgroundColor:"rgba(0,0,0,0.6)", justifyContent:"flex-end" },
