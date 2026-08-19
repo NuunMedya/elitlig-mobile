@@ -200,15 +200,13 @@ export default function OverviewScreen() {
           ) : null}
           {!auth.user ? <MyTeamCard matches={matchesQuery.data ?? []} /> : null}
 
-          <FeatureBand />
-
-          {/* QuickChip satırı FeatureBand ile değiştirildi */}
-
           {matchesQuery.data && matchesQuery.data.some(m => m.match_picture) ? (
             <Section title="Son Maçlar" href="/matches">
               <MatchPhotoSlider matches={matchesQuery.data ?? []} />
             </Section>
           ) : headline ? <HeadlineCard item={headline} /> : null}
+
+          <FeatureBand />
 
           {season && (
             <View style={styles.seasonBoard}>
