@@ -220,19 +220,7 @@ export default function OverviewScreen() {
             </View>
           )}
 
-          {recent.length > 0 && (
-            <Section title="Son Sonuçlar" href="/matches">
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.resultsRow}
-              >
-                {recent.map((match) => (
-                  <ResultCard key={match.id} match={match} />
-                ))}
-              </ScrollView>
-            </Section>
-          )}
+
 
           {(topScorer || mostValuable) && (
             <Section title="İstatistik Liderleri" href="/players">
