@@ -147,7 +147,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   greet: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "800",
     color: "#1A1025",
     flex: 1,
@@ -188,7 +188,7 @@ const styles = StyleSheet.create({
     color: "#6D28D9",
   },
   teamRowName: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "900",
     color: "#2D1569",
     letterSpacing: -0.3,
@@ -205,7 +205,7 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   sep: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "900",
     color: "rgba(255,255,255,0.5)",
     paddingBottom: 8,
@@ -219,7 +219,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   countNum: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: "900",
     color: "#FFFFFF",
     fontVariant: ["tabular-nums"],

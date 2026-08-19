@@ -569,7 +569,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm + 2,
   },
   quickText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700",
     color: colors.turf,
   },

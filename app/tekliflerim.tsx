@@ -337,7 +337,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.green,
   },
   acceptText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "800",
     color: colors.surface,
   },
@@ -345,7 +345,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FBEDEE",
   },
   rejectText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "800",
     color: colors.live,
   },
@@ -356,7 +356,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceRaised,
   },
   cancelText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "700",
     color: colors.line,
   },

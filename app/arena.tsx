@@ -433,7 +433,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   streakText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "800",
     color: colors.turf,
   },
@@ -441,7 +441,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.goldDim,
   },
   bestText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "800",
     color: "#8A6A06",
   },
@@ -469,7 +469,7 @@ const styles = StyleSheet.create({
     color: colors.muted,
   },
   valueOpen: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: "900",
     color: colors.yellow,
     fontVariant: ["tabular-nums"],
@@ -499,7 +499,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FBEDEE",
   },
   valueHidden: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: "900",
     color: colors.turf,
     fontVariant: ["tabular-nums"],
@@ -529,7 +529,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.live,
   },
   guessText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "800",
     color: "#FFFFFF",
     letterSpacing: 0.5,
@@ -564,7 +564,7 @@ const styles = StyleSheet.create({
   },
   historyRank: {
     width: 28,
-    fontSize: 13,
+    fontSize: 12,
     textAlign: "center",
   },
   historyStreak: {
@@ -614,7 +614,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.turf,
   },
   retryText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "800",
     color: colors.surface,
   },
@@ -622,7 +622,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.turfDim,
   },
   shareText2: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "800",
     color: colors.turf,
   },
@@ -644,7 +644,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   shareBrand: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "900",
     color: "#FFFFFF",
   },
@@ -673,7 +673,7 @@ const styles = StyleSheet.create({
     marginVertical: spacing.md,
   },
   shareChallenge: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "700",
     color: "#D9CBF6",
   },
@@ -688,7 +688,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.14)",
   },
   closeText2: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "700",
     color: "#FFFFFF",
   },

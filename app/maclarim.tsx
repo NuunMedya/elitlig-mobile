@@ -1,14 +1,21 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Redirect, useRouter } from "expo-router";
 import { useState } from "react";
-import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { DetailHeader } from "@/components/ScreenHeader";
 import { EmptyState, ErrorState, Loading } from "@/components/States";
 import { colors, radius, spacing, type } from "@/constants/theme";
 import { getMyMatches, type MyMatch } from "@/lib/api/panel";
+import {
+  AVAILABILITY_LABELS,
+  getMyAvailability,
+  setMyAvailability,
+  type AvailabilityStatus,
+} from "@/lib/api/team";
 import { formatDateShort, formatTime } from "@/lib/format";
+import { ApiError } from "@/lib/http";
 import { useAuth } from "@/providers/AuthProvider";
 
 /**
@@ -19,6 +26,10 @@ import { useAuth } from "@/providers/AuthProvider";
  * rakip, ev/deplasman bilgisi ve kadro rozeti (⚽ kadrodaydın) vardır;
  * oynananlarda skor ve G/B/M sonucu gösterilir. Satır maç detayına gider.
  * Oyuncu profili bağlı değilse sunucunun 403'ü nazikçe karşılanır.
+ *
+ * Yaklaşan maçlarda müsaitlik yoklaması vardır (routes/matchAvailability.js):
+ * Geliyorum / Belirsiz / Gelemiyorum. Seçim iyimser güncellenir; sunucu
+ * reddederse eski seçim geri gelir.
  */
 
 type Tab = "upcoming" | "past";
@@ -121,7 +132,11 @@ function MatchRow({
     match.opponent_name ?? (match.is_home ? match.second_team_name : match.first_team_name);
 
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
+    <View style={styles.row}>
+      <Pressable
+        onPress={onPress}
+        style={({ pressed }) => [styles.rowInner, pressed && styles.pressed]}
+      >
       <View style={styles.rowLeft}>
         <Text style={styles.rowDate}>{formatDateShort(match.date)}</Text>
         <Text style={styles.rowTime}>{match.time ? formatTime(match.time) : ""}</Text>
@@ -164,7 +179,80 @@ function MatchRow({
       ) : (
         <Ionicons name="chevron-forward" size={16} color={colors.muted} />
       )}
-    </Pressable>
+      </Pressable>
+
+      {/* Yaklaşan maçta müsaitlik yoklaması */}
+      {!past ? <AvailabilityRow matchId={match.id} /> : null}
+    </View>
+  );
+}
+
+/** Müsaitlik seçenekleri sabit sırada; renk seçime göre değişir. */
+const AVAILABILITY_OPTIONS: { status: AvailabilityStatus; color: string }[] = [
+  { status: "coming", color: colors.green },
+  { status: "maybe", color: colors.yellow },
+  { status: "not_coming", color: colors.live },
+];
+
+function AvailabilityRow({ matchId }: { matchId: number }) {
+  const queryClient = useQueryClient();
+  const queryKey = ["takim", "availability-mine", matchId] as const;
+
+  const query = useQuery({
+    queryKey,
+    queryFn: () => getMyAvailability(matchId),
+    staleTime: 60_000,
+    retry: false,
+  });
+
+  const mutation = useMutation({
+    mutationFn: (status: AvailabilityStatus) => setMyAvailability(matchId, status),
+    // İyimser güncelleme: seçim anında boyanır, hata olursa geri alınır.
+    onMutate: async (status) => {
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<{ status: AvailabilityStatus | null }>(queryKey);
+      queryClient.setQueryData(queryKey, { status });
+      return { previous };
+    },
+    onError: (error, _status, context) => {
+      if (context?.previous) queryClient.setQueryData(queryKey, context.previous);
+      Alert.alert(
+        "Yanıt kaydedilemedi",
+        error instanceof ApiError ? error.userMessage : "Bilinmeyen hata."
+      );
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey });
+    },
+  });
+
+  const current = query.data?.status ?? null;
+
+  return (
+    <View style={styles.availRow}>
+      <Text style={styles.availLabel}>Yoklama</Text>
+      {AVAILABILITY_OPTIONS.map((option) => {
+        const active = current === option.status;
+        return (
+          <Pressable
+            key={option.status}
+            onPress={() => {
+              if (!active) mutation.mutate(option.status);
+            }}
+            disabled={mutation.isPending}
+            style={({ pressed }) => [
+              styles.availBtn,
+              active && { backgroundColor: option.color, borderColor: option.color },
+              pressed && styles.pressed,
+            ]}
+          >
+            <Text style={[styles.availBtnText, active && styles.availBtnTextActive]}>
+              {AVAILABILITY_LABELS[option.status]}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
   );
 }
 
@@ -205,15 +293,17 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xl,
   },
   row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.faint,
     borderRadius: radius.md,
     padding: spacing.md,
     marginBottom: spacing.sm,
+  },
+  rowInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
   },
   rowLeft: {
     width: 52,
@@ -283,6 +373,38 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: colors.line,
     fontVariant: ["tabular-nums"],
+  },
+  availRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs + 2,
+    marginTop: spacing.sm + 2,
+    borderTopWidth: 1,
+    borderTopColor: colors.faint,
+    paddingTop: spacing.sm + 2,
+  },
+  availLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: colors.muted,
+    marginRight: 2,
+  },
+  availBtn: {
+    flex: 1,
+    alignItems: "center",
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.faint,
+    backgroundColor: colors.surfaceRaised,
+    paddingVertical: 5,
+  },
+  availBtnText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: colors.muted,
+  },
+  availBtnTextActive: {
+    color: colors.surface,
   },
   pressed: {
     opacity: 0.7,

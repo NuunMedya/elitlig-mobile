@@ -32,7 +32,16 @@ interface AuthContextValue {
   isManagement: boolean;
 }
 
-const MANAGEMENT_ROLES = ["admin", "editor", "moderator"];
+// Sunucudaki gerçek yönetim rolleri (middleware/requirePermission kapsamı).
+const MANAGEMENT_ROLES = [
+  "admin",
+  "editor",
+  "il_yoneticisi",
+  "lig_yoneticisi",
+  "mac_yoneticisi",
+  "disiplin_kurulu",
+  "sosyal_medya_yoneticisi",
+];
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 

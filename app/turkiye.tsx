@@ -369,7 +369,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   shareTriggerText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "800",
     color: colors.turf,
   },
@@ -397,7 +397,7 @@ const styles = StyleSheet.create({
     borderColor: colors.turf,
   },
   fmtText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "800",
     color: "#FFFFFF",
   },
@@ -441,7 +441,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   shareBrand: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "900",
     color: "#6D28D9",
   },
@@ -459,7 +459,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   shareHeadline: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "900",
     letterSpacing: -0.3,
     color: "#100D16",
@@ -486,7 +486,7 @@ const styles = StyleSheet.create({
   },
   shareRank: {
     width: 24,
-    fontSize: 12,
+    fontSize: 11,
     textAlign: "center",
   },
   shareRowBody: {
@@ -503,7 +503,7 @@ const styles = StyleSheet.create({
     color: "#8B8797",
   },
   shareValue: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "900",
     color: "#6D28D9",
     fontVariant: ["tabular-nums"],
@@ -549,7 +549,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.14)",
   },
   closeText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "700",
     color: "#FFFFFF",
   },
@@ -557,7 +557,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.turf,
   },
   goText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "800",
     color: colors.surface,
   },
@@ -616,7 +616,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.lg,
   },
   podiumRank: {
-    fontSize: 18,
+    fontSize: 17,
   },
   podiumName: {
     fontSize: 10,
@@ -637,7 +637,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   podiumValueFirst: {
-    fontSize: 20,
+    fontSize: 18,
   },
   podiumUnit: {
     fontSize: 7,

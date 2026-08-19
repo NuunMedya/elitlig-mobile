@@ -165,7 +165,7 @@ const styles = StyleSheet.create({
   bubbleDate: { fontSize: 10, color: colors.muted, marginTop: 3 },
   bubbleDateMine: { color: "rgba(255,255,255,0.65)" },
   replyRow: { flexDirection: "row", alignItems: "flex-end", gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderTopWidth: 1, borderTopColor: colors.faint },
-  replyInput: { flex: 1, backgroundColor: colors.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colors.faint, paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 2, maxHeight: 100, color: colors.line, fontSize: 14 },
+  replyInput: { flex: 1, backgroundColor: colors.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colors.faint, paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 2, maxHeight: 100, color: colors.line, fontSize: 13 },
   sendBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.turf, alignItems: "center", justifyContent: "center" },
   closedNote: { ...type.small, color: colors.muted, textAlign: "center", padding: spacing.md },
   pressed: { opacity: 0.6 },

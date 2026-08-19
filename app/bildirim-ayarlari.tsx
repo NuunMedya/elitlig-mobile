@@ -1,6 +1,8 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { patch } from "@/lib/http";
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { DetailHeader } from "@/components/ScreenHeader";
@@ -92,15 +94,39 @@ const SECTIONS = [
   { title: "📰 HABERLER", keys: ["breaking_news"] },
 ];
 
+const PREFS_STORAGE_KEY = "elitlig.notifPrefs.v1";
+
 export default function NotificationSettingsScreen() {
   const router = useRouter();
   const [prefs, setPrefs] = useState<Record<string, boolean>>(
     Object.fromEntries(SETTINGS.map((s) => [s.key, s.defaultOn]))
   );
 
+  // Kayıtlı tercihleri geri yükle.
+  useEffect(() => {
+    AsyncStorage.getItem(PREFS_STORAGE_KEY)
+      .then((raw) => {
+        if (!raw) return;
+        try {
+          const stored = JSON.parse(raw);
+          if (stored && typeof stored === "object") {
+            setPrefs((prev) => ({ ...prev, ...stored }));
+          }
+        } catch {}
+      })
+      .catch(() => {});
+  }, []);
+
   const toggle = (key: string, value: boolean) => {
-    setPrefs((prev) => ({ ...prev, [key]: value }));
-    // TODO: sunucuya kaydet + AsyncStorage
+    setPrefs((prev) => {
+      const next = { ...prev, [key]: value };
+      AsyncStorage.setItem(PREFS_STORAGE_KEY, JSON.stringify(next)).catch(() => {});
+      return next;
+    });
+    // Sunucunun bildiği tek tercih: günlük test push'u (PATCH notification-preferences).
+    if (key === "daily_challenge") {
+      patch("/api/users/me/notification-preferences", { dailyQuiz: value }).catch(() => {});
+    }
   };
 
   return (
@@ -157,7 +183,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     padding: spacing.md,
   },
-  infoText: { flex: 1, fontSize: 12, fontWeight: "600", color: colors.line, lineHeight: 18 },
+  infoText: { flex: 1, fontSize: 11, fontWeight: "600", color: colors.line, lineHeight: 18 },
   section: { gap: spacing.sm },
   sectionTitle: { fontSize: 10, fontWeight: "800", letterSpacing: 0.8, color: colors.muted },
   sectionCard: {
@@ -177,6 +203,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   rowBody: { flex: 1 },
-  rowLabel: { fontSize: 13, fontWeight: "700", color: colors.line },
+  rowLabel: { fontSize: 12, fontWeight: "700", color: colors.line },
   rowDesc: { fontSize: 11, fontWeight: "500", color: colors.muted, marginTop: 2 },
 });

@@ -577,7 +577,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   signOutText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "700",
     color: colors.live,
   },

@@ -14,12 +14,12 @@ import { getStoredTheme } from "./themePreference";
  */
 
 const light = {
-  /** Ana arka plan — saf beyaz saha */
-  pitch: "#FFFFFF",
+  /** Ana arka plan — lavanta esintili açık zemin; beyaz kartlar üstünde ayrışır */
+  pitch: "#F6F5FA",
   /** Kart / yüzey rengi — beyaz */
   surface: "#FFFFFF",
   /** Yüzey üstü ince ayrım — nötr açık gri satır */
-  surfaceRaised: "#F5F4F8",
+  surfaceRaised: "#F1EFF6",
   /** Marka vurgusu — derin elitlig moru (pastel değil, iddialı) */
   turf: "#6D28D9",
   /** Vurgunun soluk tonu (rozet zemini) */
@@ -81,10 +81,10 @@ export const radius = {
 
 export const type = {
   /** Skorlar ve büyük rakamlar için */
-  score: { fontSize: 26, fontWeight: "800" as const, letterSpacing: -0.5 },
-  title: { fontSize: 20, fontWeight: "800" as const },
-  subtitle: { fontSize: 16, fontWeight: "800" as const },
-  body: { fontSize: 15, fontWeight: "600" as const },
-  small: { fontSize: 13, fontWeight: "600" as const },
-  caption: { fontSize: 12, fontWeight: "700" as const, letterSpacing: 0.6 },
+  score: { fontSize: 24, fontWeight: "800" as const, letterSpacing: -0.5 },
+  title: { fontSize: 18, fontWeight: "800" as const },
+  subtitle: { fontSize: 15, fontWeight: "800" as const },
+  body: { fontSize: 14, fontWeight: "600" as const },
+  small: { fontSize: 12, fontWeight: "600" as const },
+  caption: { fontSize: 11, fontWeight: "700" as const, letterSpacing: 0.6 },
 } as const;

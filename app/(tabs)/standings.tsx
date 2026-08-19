@@ -58,7 +58,13 @@ const LEVEL_COLORS = ["#9AA1B5", "#3F4454", "#3B72E8", "#22A45D", "#F59E0B", "#E
 export default function StandingsScreen() {
   const scope = useScope();
   const router = useRouter();
-  const { isFavorite } = useFavorite();
+  const {
+    isFavorite,
+    isFavoriteLeague,
+    toggleFavoriteLeague,
+    isFavoriteSeason,
+    toggleFavoriteSeason,
+  } = useFavorite();
   const scopeKey = {
     cityId: scope.cityId ?? undefined,
     leagueId: scope.leagueId ?? undefined,
@@ -89,6 +95,59 @@ export default function StandingsScreen() {
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader title="Puan Durumu" />
       <ScopeBar />
+
+      {scope.ready && (
+        <View style={styles.favRow}>
+          {scope.leagueId != null && (
+            <Pressable
+              onPress={() =>
+                toggleFavoriteLeague({ id: scope.leagueId!, name: scope.leagueLabel || "Lig" })
+              }
+              style={({ pressed }) => [
+                styles.favChip,
+                isFavoriteLeague(scope.leagueId) && styles.favChipActive,
+                pressed && { opacity: 0.7 },
+              ]}
+            >
+              <Ionicons
+                name={isFavoriteLeague(scope.leagueId) ? "star" : "star-outline"}
+                size={13}
+                color={isFavoriteLeague(scope.leagueId) ? colors.yellow : colors.muted}
+              />
+              <Text
+                style={[styles.favChipText, isFavoriteLeague(scope.leagueId) && styles.favChipTextActive]}
+                numberOfLines={1}
+              >
+                {isFavoriteLeague(scope.leagueId) ? "Lig favoride" : "Ligi favoriye al"}
+              </Text>
+            </Pressable>
+          )}
+          {scope.seasonId != null && (
+            <Pressable
+              onPress={() =>
+                toggleFavoriteSeason({ id: scope.seasonId!, name: scope.seasonLabel || "Sezon" })
+              }
+              style={({ pressed }) => [
+                styles.favChip,
+                isFavoriteSeason(scope.seasonId) && styles.favChipActive,
+                pressed && { opacity: 0.7 },
+              ]}
+            >
+              <Ionicons
+                name={isFavoriteSeason(scope.seasonId) ? "star" : "star-outline"}
+                size={13}
+                color={isFavoriteSeason(scope.seasonId) ? colors.yellow : colors.muted}
+              />
+              <Text
+                style={[styles.favChipText, isFavoriteSeason(scope.seasonId) && styles.favChipTextActive]}
+                numberOfLines={1}
+              >
+                {isFavoriteSeason(scope.seasonId) ? "Sezon favoride" : "Sezonu favoriye al"}
+              </Text>
+            </Pressable>
+          )}
+        </View>
+      )}
 
       {scope.loading || (query.isLoading && scope.ready) ? (
         <Loading />
@@ -371,6 +430,30 @@ function Form({ last5 }: { last5: string }) {
 }
 
 const styles = StyleSheet.create({
+  favRow: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+  },
+  favChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.faint,
+    backgroundColor: colors.surface,
+    maxWidth: "50%",
+  },
+  favChipActive: {
+    borderColor: colors.yellow,
+    backgroundColor: colors.goldDim,
+  },
+  favChipText: { fontSize: 11, fontWeight: "700", color: colors.muted },
+  favChipTextActive: { color: colors.line },
   screen: {
     flex: 1,
     backgroundColor: colors.pitch,
@@ -396,10 +479,10 @@ const styles = StyleSheet.create({
   podGold:   { borderColor: colors.yellow, backgroundColor: "#FFFBEB", paddingVertical: spacing.lg },
   podSilver: { borderColor: "#9AA1B5", backgroundColor: "#F8F9FB" },
   podBronze: { borderColor: "#CD7F32", backgroundColor: "#FDF8F4" },
-  podMedal:  { fontSize: 20 },
+  podMedal:  { fontSize: 18 },
   podName:   { fontSize: 9, fontWeight: "800", color: colors.line, textAlign: "center" },
-  podPts:    { fontSize: 18, fontWeight: "900", color: colors.turf, fontVariant: ["tabular-nums"] },
-  podPtsGold:{ fontSize: 22, color: "#92660A" },
+  podPts:    { fontSize: 17, fontWeight: "900", color: colors.turf, fontVariant: ["tabular-nums"] },
+  podPtsGold:{ fontSize: 20, color: "#92660A" },
   podUnit:   { fontSize: 7, fontWeight: "800", letterSpacing: 0.5, color: colors.muted },
   posBadge: { width: 28, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center", marginRight: 4 },
   posNum:   { ...type.small, color: colors.muted, fontVariant: ["tabular-nums"] },

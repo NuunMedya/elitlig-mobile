@@ -461,7 +461,7 @@ const styles = StyleSheet.create({
   dayChipTxt: { fontSize: 11, fontWeight: "700", color: colors.muted },
   dayChipTxtActive: { color: "#FFF" },
   dayChipDay: { fontSize: 9, fontWeight: "800", letterSpacing: 0.3, color: colors.muted },
-  dayChipNum: { fontSize: 14, fontWeight: "900", color: colors.line },
+  dayChipNum: { fontSize: 13, fontWeight: "900", color: colors.line },
   dayToday: { color: colors.turf },
   dayDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.turf },
   dayDotActive: { backgroundColor: "#FFF" },
@@ -537,7 +537,7 @@ const styles = StyleSheet.create({
     opacity: 0.75,
   },
   tabText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700",
     color: colors.muted,
   },

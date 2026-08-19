@@ -335,7 +335,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   newBtnText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "800",
     color: colors.surface,
   },
@@ -655,7 +655,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceRaised,
   },
   cancelText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "700",
     color: colors.line,
   },
@@ -663,7 +663,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.turf,
   },
   solidText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "800",
     color: colors.surface,
   },

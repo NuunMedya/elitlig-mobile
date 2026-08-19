@@ -73,7 +73,8 @@ export default function LoginScreen() {
 
           <Text style={styles.title}>Giriş yap</Text>
           <Text style={styles.subtitle}>
-            Hesabınız yoksa elitlig.com üzerinden üye olabilirsiniz.
+            Üye, oyuncu, takım başkanı ve yönetim hesapları buradan giriş
+            yapabilir. Hesabınız yoksa elitlig.com üzerinden üye olabilirsiniz.
           </Text>
 
           <View style={styles.field}>

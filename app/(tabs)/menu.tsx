@@ -63,6 +63,45 @@ export default function MenuScreen() {
           <Ionicons name="chevron-forward" size={18} color={colors.muted} />
         </Pressable>
 
+        {user ? (
+          <>
+            <Text style={styles.groupTitle}>PANELİM</Text>
+            <View style={styles.group}>
+              {auth.isManagement && (
+                <MenuRow
+                  icon="shield-checkmark-outline"
+                  label="Yönetim Paneli"
+                  note="Maç, mesaj ve saha yönetimi"
+                  onPress={() => router.push("/yonetim")}
+                />
+              )}
+              {(user.managed_team_id ||
+                user.profile_type === "takim_baskani" ||
+                user.profile_type === "double") && (
+                <MenuRow
+                  icon="people-outline"
+                  label="Takım Panelim"
+                  note="Kadro, kasa, davetler, maç merkezi"
+                  onPress={() => router.push("/takimim")}
+                />
+              )}
+              <MenuRow
+                icon="chatbubbles-outline"
+                label="Mesajlarım"
+                note="Yönetimle yazışmaların"
+                onPress={() => router.push("/mesajlarim")}
+              />
+              <MenuRow
+                icon="git-pull-request-outline"
+                label="Davet ve Başvurular"
+                note="Takım davetleri ve başvuruların"
+                onPress={() => router.push("/davetler")}
+                last
+              />
+            </View>
+          </>
+        ) : null}
+
         <Text style={styles.groupTitle}>KEŞFET</Text>
         <View style={styles.group}>
           <MenuRow

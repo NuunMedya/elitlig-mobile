@@ -21,7 +21,7 @@ import type { ApiMatch, StandingRow } from "@/lib/types";
  * puan durumu paylaşılan cache'ten) — kart ek istek maliyeti getirmez.
  */
 export function MyTeamCard({ matches }: { matches: ApiMatch[] }) {
-  const { favorite, clearFavorite } = useFavorite();
+  const { favorite, removeFavorite } = useFavorite();
   const scope = useScope();
   const router = useRouter();
 
@@ -83,7 +83,7 @@ export function MyTeamCard({ matches }: { matches: ApiMatch[] }) {
             {favorite.name.toLocaleUpperCase("tr-TR")}
           </Text>
         </View>
-        <Pressable onPress={clearFavorite} hitSlop={10}>
+        <Pressable onPress={() => removeFavorite(favorite.id)} hitSlop={10}>
           <Ionicons name="star" size={20} color={colors.yellow} />
         </Pressable>
       </View>
