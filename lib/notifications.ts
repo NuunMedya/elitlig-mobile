@@ -98,12 +98,13 @@ const MATCH_KINDS = new Set([
   "match_reminder",
   "match_start",
   "match_goal",
+  "match_card",
   "match_halftime",
   "match_result",
 ]);
 
 /** Canlı akış bildirimleri maç detayını doğrudan "Canlı" sekmesinde açar. */
-const LIVE_MATCH_KINDS = new Set(["match_start", "match_goal", "match_halftime"]);
+const LIVE_MATCH_KINDS = new Set(["match_start", "match_goal", "match_card", "match_halftime"]);
 
 /** Panel bildiriminin entity_type'ı — kanonik biçim büyük harf. */
 function targetFromEntity(
