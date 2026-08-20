@@ -1,435 +1,1015 @@
-import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
+import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useMemo, useRef, useState } from "react";
-import { Image, Modal, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
+import * as Sharing from "expo-sharing";
+import { memo, useCallback, useMemo, useRef, useState } from "react";
+import { FlatList, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { TeamCrest } from "@/components/TeamCrest";
-import { colors, radius, spacing, type } from "@/constants/theme";
+import ViewShot, { captureRef } from "react-native-view-shot";
+import {
+  Badge,
+  BottomSheet,
+  Button,
+  EmptyState,
+  ErrorState,
+  FormChips,
+  ScreenHeader,
+  SectionHeader,
+  SegmentedControl,
+  SkeletonCard,
+  SkeletonListRow,
+  StatBar,
+  TeamLogo,
+  Touchable,
+  useHeaderScroll,
+  useRefresh,
+  useToast,
+  type SegmentedItem,
+} from "@/components/ui";
 import { getTeamMatches } from "@/lib/api/matches";
 import { getStandings } from "@/lib/api/standings";
-import { LinearGradient } from "expo-linear-gradient";
-import * as Sharing from "expo-sharing";
-import ViewShot from "react-native-view-shot";
 import { formatDateShort } from "@/lib/format";
 import { matchState } from "@/lib/match";
 import { queryKeys } from "@/lib/queryKeys";
 import { useScope } from "@/providers/ScopeProvider";
-import type { ApiMatch } from "@/lib/types";
+import { colors, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
+import type { ApiMatch, StandingRow } from "@/lib/types";
 
 /**
- * H2H — İki takımın geçmiş karşılaşmaları + form + skor özeti.
- * Params: homeId, homeName, awayId, awayName
+ * H2H — iki takımın karşılaştırması.
+ *
+ * NEDEN AYRI EKRAN OLARAK KALDI: maç detayının H2H segmenti YALNIZ o maçın iki
+ * takımını karşılaştırır. Bu ekran ise takım profilindeki "H2H karşılaştır"
+ * kapısından herhangi iki takım için açılır (aralarında oynanmış maç olması
+ * bile gerekmez). Rota parametreleri değişmedi:
+ *   /h2h?homeId=&homeName=&awayId=&awayName=
+ *
+ * VERİ MANTIĞI KORUNDU (eski sürümle birebir):
+ *   • Karşılaşmalar EV SAHİBİ takımın maç listesinden süzülür; kimlik varsa
+ *     `home_team_id`/`away_team_id`, yoksa takım ADI eşleşmesi kullanılır —
+ *     eski kayıtlarda takım kimliği boş gelebiliyor.
+ *   • Yalnız BİTMİŞ maçlar sayılır; galibiyet/gol dağılımı ev sahibi gözünden
+ *     okunur.
+ *   • Form, her takımın KENDİ maç listesinden son 5 bitmiş maçtır.
+ *   • Sıra ve puan, ekrandaki kapsamın puan tablosundan gelir.
+ *
+ * DEĞİŞEN SUNUM: eski ekran her şeyi tek `ScrollView` içinde çiziyor ve
+ * karşılaşmaları 8'le kırpıyordu. Artık liste sanaldır (`FlatList`), bu yüzden
+ * kırpma kalktı: iki takımın TÜM geçmişi görülebiliyor.
  */
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Yardımcılar
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/** expo-router aynı anahtarı dizi olarak da verebilir; ilkini al. */
+function firstParam(value: string | string[] | undefined): string {
+  if (Array.isArray(value)) return value[0] ?? "";
+  return value ?? "";
+}
+
+/** Türkçe katlamalı ad normalizasyonu (I/İ tuzağı). */
+function normalizeName(value?: string | null): string {
+  return String(value ?? "").trim().toLocaleLowerCase("tr-TR");
+}
+
+function kickoffAt(item: ApiMatch): number {
+  const day = String(item.date ?? "").slice(0, 10);
+  const time = item.time ? String(item.time) : "00:00:00";
+  const stamp = new Date(`${day}T${time}`).getTime();
+  return Number.isFinite(stamp) ? stamp : 0;
+}
+
+/** Bakılan takım bu maçta "birinci takım" tarafında mı? */
+function sideIsFirst(item: ApiMatch, teamId: number | null, nameLower: string): boolean {
+  if (teamId && Number(item.home_team_id)) return Number(item.home_team_id) === teamId;
+  return normalizeName(item.first_team_name) === nameLower;
+}
+
+/** Maçın, bakılan takım gözünden sonucu. */
+function resultFor(item: ApiMatch, teamId: number | null, nameLower: string): "G" | "B" | "M" {
+  const first = sideIsFirst(item, teamId, nameLower);
+  const ours = first ? item.first_team_score : item.second_team_score;
+  const theirs = first ? item.second_team_score : item.first_team_score;
+  if (ours == null || theirs == null) return "B";
+  if (ours > theirs) return "G";
+  if (ours < theirs) return "M";
+  return "B";
+}
+
+/** Son 5 bitmiş maçın form dizgesi — FormChips G/B/M harflerini de çözer. */
+function formString(
+  matches: ApiMatch[] | undefined,
+  teamId: number | null,
+  nameLower: string,
+): string {
+  return (matches ?? [])
+    .filter((item) => matchState(item) === "finished")
+    .sort((a, b) => kickoffAt(b) - kickoffAt(a))
+    .slice(0, 5)
+    .reverse()
+    .map((item) => resultFor(item, teamId, nameLower))
+    .join("");
+}
+
+const matchKey = (item: ApiMatch) => String(item.id);
+
+/* ══════════════════════════════════════════════════════════════════════════
+   EKRAN
+   ══════════════════════════════════════════════════════════════════════════ */
+
 export default function H2HScreen() {
-  const { homeId, homeName, awayId, awayName } = useLocalSearchParams<{
-    homeId: string; homeName: string; awayId: string; awayName: string;
+  const params = useLocalSearchParams<{
+    homeId?: string;
+    homeName?: string;
+    awayId?: string;
+    awayName?: string;
   }>();
-  const scope = useScope();
   const router = useRouter();
+  const scope = useScope();
+  const toast = useToast();
+  const { scrollY, scrollProps } = useHeaderScroll();
 
-  const hId = Number(homeId);
-  const aId = Number(awayId);
   const [shareOpen, setShareOpen] = useState(false);
-  const [shareBusy, setShareBusy] = useState(false);
-  const [shareFmt, setShareFmt] = useState<"story"|"post">("story");
-  const FMTS = {
-    story: { label: "Hikâye 9:16", h: Math.round(300 * 16 / 9) },
-    post:  { label: "Gönderi 3:4", h: Math.round(300 * 4  / 3) },
-  } as const;
-  const shotRef = useRef<any>(null);
-  const doShare = async () => {
-    if (shareBusy) return;
-    setShareBusy(true);
-    try {
-      const uri = await shotRef.current?.capture?.();
-      if (uri) await Sharing.shareAsync(uri, { mimeType: "image/png" });
-    } catch {} finally { setShareBusy(false); }
-  };
 
-  const homeMatchesQ = useQuery({
-    queryKey: queryKeys.teamMatches(hId),
-    queryFn: () => getTeamMatches(hId),
-    enabled: Boolean(hId),
+  const homeId = Number(firstParam(params.homeId)) || null;
+  const awayId = Number(firstParam(params.awayId)) || null;
+  const homeName = firstParam(params.homeName);
+  const awayName = firstParam(params.awayName);
+  const homeLower = normalizeName(homeName);
+  const awayLower = normalizeName(awayName);
+
+  /** Kimlik de ad da yoksa karşılaştırılacak bir şey yok. */
+  const hasTargets = Boolean((homeId || homeLower) && (awayId || awayLower));
+
+  const homeMatchesQuery = useQuery({
+    queryKey: queryKeys.teamMatches(homeId ?? 0),
+    queryFn: () => getTeamMatches(homeId as number),
+    enabled: Boolean(homeId),
     staleTime: 60_000,
   });
-  const awayMatchesQ = useQuery({
-    queryKey: queryKeys.teamMatches(aId),
-    queryFn: () => getTeamMatches(aId),
-    enabled: Boolean(aId),
+
+  const awayMatchesQuery = useQuery({
+    queryKey: queryKeys.teamMatches(awayId ?? 0),
+    queryFn: () => getTeamMatches(awayId as number),
+    enabled: Boolean(awayId),
     staleTime: 60_000,
   });
-  const standingsQ = useQuery({
-    queryKey: queryKeys.standings({ cityId: scope.cityId ?? undefined, leagueId: scope.leagueId ?? undefined, seasonId: scope.seasonId ?? undefined }),
-    queryFn: () => getStandings({ cityId: scope.cityId!, leagueId: scope.leagueId!, seasonId: scope.seasonId! }),
+
+  const standingsQuery = useQuery({
+    queryKey: queryKeys.standings({
+      cityId: scope.cityId ?? undefined,
+      leagueId: scope.leagueId ?? undefined,
+      seasonId: scope.seasonId ?? undefined,
+    }),
+    queryFn: () =>
+      getStandings({ cityId: scope.cityId!, leagueId: scope.leagueId!, seasonId: scope.seasonId! }),
     enabled: scope.ready,
     staleTime: 5 * 60_000,
   });
 
-  const homeLower = String(homeName ?? "").trim().toLocaleLowerCase("tr-TR");
-  const awayLower = String(awayName ?? "").trim().toLocaleLowerCase("tr-TR");
-  const norm = (v?: string | null) => String(v ?? "").trim().toLocaleLowerCase("tr-TR");
-
-  const involves = (m: ApiMatch) => {
-    const a = Number(m.home_team_id), b = Number(m.away_team_id);
-    if (hId && aId && a && b)
-      return (a === hId && b === aId) || (a === aId && b === hId);
-    const f = norm(m.first_team_name), s = norm(m.second_team_name);
-    return (f === homeLower && s === awayLower) || (f === awayLower && s === homeLower);
-  };
-  const timeOf = (m: ApiMatch) => new Date(`${String(m.date).slice(0, 10)}T${m.time || "00:00:00"}`).getTime();
-
+  /* ---- Karşılaşmalar: ev sahibinin listesinden süzülür ---- */
   const meetings = useMemo(() => {
-    if (!homeMatchesQ.data) return [];
-    return homeMatchesQ.data
-      .filter((m) => matchState(m) === "finished" && involves(m))
-      .sort((a, b) => timeOf(b) - timeOf(a))
-      .slice(0, 8);
-  }, [homeMatchesQ.data, hId, aId]);
+    const list = homeMatchesQuery.data ?? [];
+    const involves = (item: ApiMatch) => {
+      const first = Number(item.home_team_id);
+      const second = Number(item.away_team_id);
+      if (homeId && awayId && first && second) {
+        return (first === homeId && second === awayId) || (first === awayId && second === homeId);
+      }
+      const firstName = normalizeName(item.first_team_name);
+      const secondName = normalizeName(item.second_team_name);
+      return (
+        (firstName === homeLower && secondName === awayLower) ||
+        (firstName === awayLower && secondName === homeLower)
+      );
+    };
 
-  // Kazanma istatistikleri
-  const stats = useMemo(() => {
-    let hw = 0, aw = 0, d = 0, hg = 0, ag = 0;
-    for (const m of meetings) {
-      const isHomeSide = hId ? Number(m.home_team_id) === hId : norm(m.first_team_name) === homeLower;
-      const fs = Number(m.first_team_score ?? 0);
-      const ss = Number(m.second_team_score ?? 0);
-      const homeScore = isHomeSide ? fs : ss;
-      const awayScore = isHomeSide ? ss : fs;
-      hg += homeScore; ag += awayScore;
-      if (homeScore > awayScore) hw++;
-      else if (homeScore < awayScore) aw++;
-      else d++;
+    return list
+      .filter((item) => matchState(item) === "finished" && involves(item))
+      .sort((a, b) => kickoffAt(b) - kickoffAt(a));
+  }, [awayId, awayLower, homeId, homeLower, homeMatchesQuery.data]);
+
+  /* ---- Galibiyet ve gol dağılımı (ev sahibi gözünden) ---- */
+  const tally = useMemo(() => {
+    let homeWins = 0;
+    let draws = 0;
+    let awayWins = 0;
+    let homeGoals = 0;
+    let awayGoals = 0;
+
+    for (const item of meetings) {
+      const first = item.first_team_score;
+      const second = item.second_team_score;
+      if (first == null || second == null) continue;
+      const homeIsFirst = sideIsFirst(item, homeId, homeLower);
+      const ours = homeIsFirst ? first : second;
+      const theirs = homeIsFirst ? second : first;
+      homeGoals += ours;
+      awayGoals += theirs;
+      if (ours > theirs) homeWins += 1;
+      else if (ours < theirs) awayWins += 1;
+      else draws += 1;
     }
-    return { hw, aw, d, hg, ag, total: meetings.length };
-  }, [meetings]);
 
-  // Form (son 5 maç)
-  const form = (matches: ApiMatch[] | undefined, teamId: number, teamName: string) => {
-    if (!matches) return [];
-    return matches
-      .filter((m) => matchState(m) === "finished")
-      .sort((a, b) => timeOf(b) - timeOf(a))
-      .slice(0, 5)
-      .map((m) => {
-        const isHome = teamId ? Number(m.home_team_id) === teamId : norm(m.first_team_name) === norm(teamName);
-        const fs = Number(m.first_team_score ?? 0), ss = Number(m.second_team_score ?? 0);
-        const mine = isHome ? fs : ss, opp = isHome ? ss : fs;
-        return mine > opp ? "W" : mine < opp ? "L" : "D";
-      });
-  };
+    return { homeWins, draws, awayWins, homeGoals, awayGoals };
+  }, [homeId, homeLower, meetings]);
 
-  const homeForm = form(homeMatchesQ.data, hId, String(homeName));
-  const awayForm = form(awayMatchesQ.data, aId, String(awayName));
+  const homeForm = useMemo(
+    () => formString(homeMatchesQuery.data, homeId, homeLower),
+    [homeId, homeLower, homeMatchesQuery.data],
+  );
+  const awayForm = useMemo(
+    () => formString(awayMatchesQuery.data, awayId, awayLower),
+    [awayId, awayLower, awayMatchesQuery.data],
+  );
 
-  // Puan tablosundaki bilgiler
-  const rows = standingsQ.data ?? [];
-  const homeRow = rows.find((r) => Number(r.team_id) === hId);
-  const awayRow = rows.find((r) => Number(r.team_id) === aId);
-  const homePos = homeRow ? rows.indexOf(homeRow) + 1 : null;
-  const awayPos = awayRow ? rows.indexOf(awayRow) + 1 : null;
+  /* ---- Puan tablosu satırları: sıra, puan, amblem ---- */
+  const rows = standingsQuery.data ?? [];
+  const homeStanding = useMemo(() => findRow(rows, homeId, homeLower), [homeId, homeLower, rows]);
+  const awayStanding = useMemo(() => findRow(rows, awayId, awayLower), [awayId, awayLower, rows]);
 
-  const formColor = (r: string) => r === "W" ? colors.green : r === "L" ? colors.live : "#B9B5C6";
-  const formLetter = (r: string) => r === "W" ? "G" : r === "L" ? "M" : "B";
+  const refresh = useRefresh(
+    useCallback(async () => {
+      await Promise.all([
+        homeMatchesQuery.refetch(),
+        awayMatchesQuery.refetch(),
+        standingsQuery.refetch(),
+      ]);
+    }, [awayMatchesQuery, homeMatchesQuery, standingsQuery]),
+    { refreshing: homeMatchesQuery.isRefetching || awayMatchesQuery.isRefetching },
+  );
+
+  /* ---- Geri çağrılar: satırlar memo'lu, kimlikleri sabit kalmalı ---- */
+  const openMatch = useCallback((matchId: number) => router.push(`/mac/${matchId}`), [router]);
+  const openHome = useCallback(() => {
+    if (homeId) router.push(`/takim/${homeId}`);
+  }, [homeId, router]);
+  const openAway = useCallback(() => {
+    if (awayId) router.push(`/takim/${awayId}`);
+  }, [awayId, router]);
+  const openShare = useCallback(() => setShareOpen(true), []);
+  const closeShare = useCallback(() => setShareOpen(false), []);
+  const shareFailed = useCallback(
+    () => toast.show({ message: "Paylaşım açılamadı.", tone: "danger", icon: "alert-circle" }),
+    [toast],
+  );
+
+  const renderItem = useCallback(
+    ({ item }: { item: ApiMatch }) => (
+      <MeetingRow meeting={item} result={resultFor(item, homeId, homeLower)} onOpen={openMatch} />
+    ),
+    [homeId, homeLower, openMatch],
+  );
+
+  const loading =
+    (homeMatchesQuery.isLoading || awayMatchesQuery.isLoading) && meetings.length === 0;
+  const failed = homeMatchesQuery.isError && !homeMatchesQuery.data;
+
+  const header = (
+    <ScreenHeader
+      title="H2H"
+      overline="KARŞILAŞTIRMA"
+      subtitle={hasTargets ? `${homeName} – ${awayName}` : undefined}
+      scrollY={scrollY}
+      back
+      actions={
+        hasTargets
+          ? [
+              {
+                icon: "share-social-outline",
+                onPress: openShare,
+                accessibilityLabel: "Karşılaştırmayı paylaş",
+              },
+            ]
+          : undefined
+      }
+    />
+  );
+
+  if (!hasTargets) {
+    return (
+      <SafeAreaView style={styles.screen} edges={["top"]}>
+        {header}
+        <EmptyState
+          icon="git-compare-outline"
+          title="Karşılaştırma bilgisi eksik"
+          body="Bu ekran iki takımla açılır. Takım sayfasındaki “H2H karşılaştır” düğmesini kullan."
+          action={{ label: "Geri dön", onPress: () => router.back() }}
+        />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={10}>
-          <Ionicons name="chevron-back" size={22} color={colors.line} />
-        </Pressable>
-        <Text style={styles.headerTitle}>H2H Karşılaştırma</Text>
-        <Pressable onPress={() => setShareOpen(true)} hitSlop={10} style={styles.shareIconBtn}>
-          <Ionicons name="share-social-outline" size={20} color={colors.turf} />
-        </Pressable>
-      </View>
+      {header}
 
-      <ScrollView contentContainerStyle={styles.content}>
-        {/* Takım başlıkları */}
-        <View style={styles.teamsRow}>
-          <Pressable onPress={() => router.push(`/takim/${hId}`)} style={styles.teamCol}>
-            <TeamCrest name={String(homeName)} logo={homeRow?.logo} size={52} />
-            <Text style={styles.teamName} numberOfLines={2}>{String(homeName).toLocaleUpperCase("tr-TR")}</Text>
-            {homePos ? <Text style={styles.teamPos}>{homePos}. sıra · {homeRow?.display_points ?? 0} puan</Text> : null}
-          </Pressable>
-
-          <View style={styles.vsCol}>
-            <Text style={styles.vsText}>VS</Text>
-            {stats.total > 0 ? (
-              <Text style={styles.meetCount}>{stats.total} karşılaşma</Text>
-            ) : null}
-          </View>
-
-          <Pressable onPress={() => router.push(`/takim/${aId}`)} style={[styles.teamCol, styles.teamColRight]}>
-            <TeamCrest name={String(awayName)} logo={awayRow?.logo} size={52} />
-            <Text style={styles.teamName} numberOfLines={2}>{String(awayName).toLocaleUpperCase("tr-TR")}</Text>
-            {awayPos ? <Text style={styles.teamPos}>{awayPos}. sıra · {awayRow?.display_points ?? 0} puan</Text> : null}
-          </Pressable>
+      {loading ? (
+        <View style={styles.loading}>
+          <SkeletonCard lines={3} />
+          <SkeletonListRow count={6} avatar={false} />
         </View>
+      ) : failed ? (
+        <ErrorState error={homeMatchesQuery.error} onRetry={homeMatchesQuery.refetch} />
+      ) : (
+        <FlatList
+          {...scrollProps}
+          data={meetings}
+          renderItem={renderItem}
+          keyExtractor={matchKey}
+          refreshControl={refresh.control}
+          contentContainerStyle={styles.listContent}
+          initialNumToRender={10}
+          windowSize={9}
+          ListHeaderComponent={
+            <View style={styles.headerBlock}>
+              {/* ————— İki takım ————— */}
+              <View style={styles.versus}>
+                <TeamColumn
+                  name={homeName}
+                  logo={homeStanding?.logo ?? null}
+                  rank={rankOf(rows, homeStanding)}
+                  points={homeStanding?.display_points ?? null}
+                  form={homeForm}
+                  onPress={homeId ? openHome : undefined}
+                />
 
-        {/* Skor özeti */}
-        {stats.total > 0 && (
-          <View style={styles.scoreCard}>
-            <View style={styles.scoreCol}>
-              <Text style={styles.scoreNum}>{stats.hw}</Text>
-              <Text style={styles.scoreLabel}>GALİBİYET</Text>
-            </View>
-            <View style={styles.scoreCol}>
-              <Text style={[styles.scoreNum, styles.drawNum]}>{stats.d}</Text>
-              <Text style={styles.scoreLabel}>BERABERLİK</Text>
-            </View>
-            <View style={styles.scoreCol}>
-              <Text style={[styles.scoreNum, styles.awayNum]}>{stats.aw}</Text>
-              <Text style={styles.scoreLabel}>GALİBİYET</Text>
-            </View>
-          </View>
-        )}
-
-        {/* Gol istatistikleri */}
-        {stats.total > 0 && (
-          <View style={styles.statRow}>
-            <Text style={styles.statVal}>{stats.hg}</Text>
-            <Text style={styles.statLabel}>Toplam Gol</Text>
-            <Text style={styles.statVal}>{stats.ag}</Text>
-          </View>
-        )}
-
-        {/* Form karşılaştırması */}
-        <View style={styles.formCard}>
-          <Text style={styles.sectionTitle}>Son Form</Text>
-          <View style={styles.formRow}>
-            <View style={styles.formChips}>
-              {homeForm.map((r, i) => (
-                <View key={i} style={[styles.chip, { backgroundColor: formColor(r) }]}>
-                  <Text style={styles.chipText}>{formLetter(r)}</Text>
-                </View>
-              ))}
-            </View>
-            <View style={styles.formChips}>
-              {awayForm.map((r, i) => (
-                <View key={i} style={[styles.chip, { backgroundColor: formColor(r) }]}>
-                  <Text style={styles.chipText}>{formLetter(r)}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-        </View>
-
-        {/* Geçmiş maçlar */}
-        {meetings.length > 0 ? (
-          <>
-            <Text style={styles.sectionTitle}>Geçmiş Karşılaşmalar</Text>
-            {meetings.map((m) => {
-              const isHomeSide = hId ? Number(m.home_team_id) === hId : norm(m.first_team_name) === homeLower;
-              const fs = m.first_team_score, ss = m.second_team_score;
-              const hScore = isHomeSide ? fs : ss;
-              const aScore = isHomeSide ? ss : fs;
-              const result = Number(hScore) > Number(aScore) ? "W" : Number(hScore) < Number(aScore) ? "L" : "D";
-              return (
-                <Pressable
-                  key={m.id}
-                  onPress={() => router.push(`/mac/${m.id}`)}
-                  style={({ pressed }) => [styles.meetRow, pressed && styles.pressed]}
-                >
-                  <Text style={styles.meetDate}>{formatDateShort(String(m.date))}</Text>
-                  <Text style={styles.meetScore} numberOfLines={1}>
-                    {m.first_team_name} {fs ?? "-"} – {ss ?? "-"} {m.second_team_name}
+                <View style={styles.versusMiddle}>
+                  <Text style={styles.versusCount} {...textScale.dense}>
+                    {meetings.length}
                   </Text>
-                  <View style={[styles.meetChip, { backgroundColor: formColor(result) }]}>
-                    <Text style={styles.meetChipText}>{formLetter(result)}</Text>
-                  </View>
-                </Pressable>
-              );
-            })}
-          </>
-        ) : (
-          <View style={styles.empty}>
-            <Ionicons name="football-outline" size={32} color={colors.muted} />
-            <Text style={styles.emptyText}>Bu iki takım daha önce karşılaşmamış.</Text>
-          </View>
-        )}
-      </ScrollView>
+                  <Text style={styles.overline} {...textScale.badge}>
+                    KARŞILAŞMA
+                  </Text>
+                </View>
 
-      <Modal visible={shareOpen} animationType="slide" onRequestClose={() => setShareOpen(false)} transparent>
-        <View style={styles.shareOverlay}>
-          <View style={styles.shareSheet}>
-            <View style={styles.fmtRow}>
-              {(["story","post"] as const).map(k=>(
-                <Pressable key={k} onPress={()=>setShareFmt(k)} style={({pressed})=>[styles.fmtPill, shareFmt===k&&styles.fmtPillActive, pressed&&styles.pressed]}>
-                  <Text style={styles.fmtTxt}>{FMTS[k].label}</Text>
-                </Pressable>
-              ))}
-            </View>
-            <ViewShot ref={shotRef} options={{ format: "png", quality: 1 }}>
-              <View style={[styles.shareCard, { height: FMTS[shareFmt].h }]}>
-                <LinearGradient colors={["#6D28D9", "#4C1D95"]} style={styles.shareStrip} />
-                <LinearGradient colors={["#CDBFE8", "#EFEAF7", "#FFF"]} start={{ x: 0.2, y: 0 }} end={{ x: 0.5, y: 1 }} style={styles.shareBody}>
-                  <Text style={styles.shareWm}>elitlig</Text>
-                  <View style={styles.shareTopRow}>
-                    <Text style={styles.shareBrand}>elitlig</Text>
-                    <Text style={styles.shareBrandR}>H2H KARŞILAŞTIRMA</Text>
-                  </View>
-
-                  {/* İki takım */}
-                  <View style={styles.shareTeamsRow}>
-                    <View style={styles.shareTeamCol}>
-                      <TeamCrest name={String(homeName)} logo={homeRow?.logo} size={40} />
-                      <Text style={styles.shareTeamName} numberOfLines={2}>{String(homeName).toLocaleUpperCase("tr-TR")}</Text>
-                      {homePos ? <Text style={styles.shareTeamPos}>{homePos}. sıra</Text> : null}
-                    </View>
-                    <View style={styles.shareVsCol}>
-                      <Text style={styles.shareVs}>VS</Text>
-                      <Text style={styles.shareMeetCount}>{stats.total} maç</Text>
-                    </View>
-                    <View style={[styles.shareTeamCol, { alignItems: "flex-end" }]}>
-                      <TeamCrest name={String(awayName)} logo={awayRow?.logo} size={40} />
-                      <Text style={[styles.shareTeamName, { textAlign: "right" }]} numberOfLines={2}>{String(awayName).toLocaleUpperCase("tr-TR")}</Text>
-                      {awayPos ? <Text style={[styles.shareTeamPos, { textAlign: "right" }]}>{awayPos}. sıra</Text> : null}
-                    </View>
-                  </View>
-
-                  {/* Skor */}
-                  <View style={styles.shareStat}>
-                    <Text style={[styles.shareStatVal, { color: colors.green }]}>{stats.hw}</Text>
-                    <View style={styles.shareStatMid}>
-                      <Text style={styles.shareStatLabel}>GALİBİYET · BER · GALİBİYET</Text>
-                      <Text style={styles.shareDrawVal}>{stats.d}</Text>
-                    </View>
-                    <Text style={[styles.shareStatVal, { color: colors.live }]}>{stats.aw}</Text>
-                  </View>
-
-                  {/* Gol */}
-                  <View style={styles.shareGoals}>
-                    <Text style={styles.shareGoalVal}>{stats.hg}</Text>
-                    <Text style={styles.shareGoalLabel}>TOPLAM GOL</Text>
-                    <Text style={styles.shareGoalVal}>{stats.ag}</Text>
-                  </View>
-
-                  {/* Form */}
-                  <View style={styles.shareFormRow}>
-                    <View style={styles.shareFormChips}>
-                      {homeForm.map((r, i) => (
-                        <View key={i} style={[styles.shareChip, { backgroundColor: r==="W"?colors.green:r==="L"?colors.live:"#B9B5C6" }]}>
-                          <Text style={styles.shareChipTxt}>{r==="W"?"G":r==="L"?"M":"B"}</Text>
-                        </View>
-                      ))}
-                    </View>
-                    <Text style={styles.shareFormLabel}>FORM</Text>
-                    <View style={styles.shareFormChips}>
-                      {awayForm.map((r, i) => (
-                        <View key={i} style={[styles.shareChip, { backgroundColor: r==="W"?colors.green:r==="L"?colors.live:"#B9B5C6" }]}>
-                          <Text style={styles.shareChipTxt}>{r==="W"?"G":r==="L"?"M":"B"}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-
-                  <Text style={styles.shareFooter}>ELİTLİG.COM</Text>
-                </LinearGradient>
+                <TeamColumn
+                  name={awayName}
+                  logo={awayStanding?.logo ?? null}
+                  rank={rankOf(rows, awayStanding)}
+                  points={awayStanding?.display_points ?? null}
+                  form={awayForm}
+                  onPress={awayId ? openAway : undefined}
+                  align="right"
+                />
               </View>
-            </ViewShot>
 
-            <View style={styles.shareActions}>
-              <Pressable onPress={() => setShareOpen(false)} style={({ pressed }) => [styles.sActBtn, styles.sClose, pressed && styles.pressed]}>
-                <Text style={styles.sCloseTxt}>Kapat</Text>
-              </Pressable>
-              <Pressable onPress={doShare} style={({ pressed }) => [styles.sActBtn, styles.sGo, pressed && styles.pressed]}>
-                <Ionicons name="share-social" size={15} color="#FFF" />
-                <Text style={styles.sGoTxt}>{shareBusy ? "Hazırlanıyor…" : "Paylaş"}</Text>
-              </Pressable>
+              {meetings.length > 0 ? (
+                <>
+                  {/* ————— Galibiyet dağılımı ————— */}
+                  <View style={styles.tally}>
+                    <TallyCell value={tally.homeWins} label="GALİBİYET" color={colors.win} />
+                    <TallyCell
+                      value={tally.draws}
+                      label="BERABERLİK"
+                      color={colors.textSecondary}
+                    />
+                    <TallyCell value={tally.awayWins} label="GALİBİYET" color={colors.live} />
+                  </View>
+
+                  {/* ————— Karşılaştırma çubukları ————— */}
+                  <View style={styles.barsCard}>
+                    <StatBar label="Galibiyet" home={tally.homeWins} away={tally.awayWins} />
+                    <StatBar label="Atılan gol" home={tally.homeGoals} away={tally.awayGoals} />
+                  </View>
+
+                  <SectionHeader
+                    title="Geçmiş karşılaşmalar"
+                    meta={`rozetler ${homeName} gözünden`}
+                  />
+                </>
+              ) : null}
             </View>
-            <Text style={styles.sHint}>İndirmek için: Paylaş → "Görüntüyü Kaydet"</Text>
-          </View>
-        </View>
-      </Modal>
+          }
+          ListEmptyComponent={
+            <EmptyState
+              icon="git-compare-outline"
+              variant="inline"
+              title="Karşılaşma yok"
+              body="Bu iki takım daha önce tamamlanmış bir maçta karşılaşmamış. Form karşılaştırması yukarıda."
+            />
+          }
+        />
+      )}
 
+      <ShareSheet
+        visible={shareOpen}
+        onClose={closeShare}
+        homeName={homeName}
+        awayName={awayName}
+        homeLogo={homeStanding?.logo ?? null}
+        awayLogo={awayStanding?.logo ?? null}
+        homeRank={rankOf(rows, homeStanding)}
+        awayRank={rankOf(rows, awayStanding)}
+        homeForm={homeForm}
+        awayForm={awayForm}
+        tally={tally}
+        meetings={meetings.length}
+        onError={shareFailed}
+      />
     </SafeAreaView>
   );
 }
 
+/** Puan tablosunda takımın satırı — kimlik yoksa ada göre bulunur. */
+function findRow(rows: StandingRow[], teamId: number | null, nameLower: string): StandingRow | null {
+  if (teamId) {
+    const byId = rows.find((row) => Number(row.team_id) === teamId);
+    if (byId) return byId;
+  }
+  if (!nameLower) return null;
+  return rows.find((row) => normalizeName(row.team_name) === nameLower) ?? null;
+}
+
+/** Satırın tablodaki sırası (1 tabanlı); satır yoksa null. */
+function rankOf(rows: StandingRow[], row: StandingRow | null): number | null {
+  if (!row) return null;
+  const index = rows.indexOf(row);
+  return index >= 0 ? index + 1 : null;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Parçalar
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const TeamColumn = memo(function TeamColumn({
+  name,
+  logo,
+  rank,
+  points,
+  form,
+  onPress,
+  align = "left",
+}: {
+  name: string;
+  logo: string | null;
+  rank: number | null;
+  points: number | null;
+  form: string;
+  onPress?: () => void;
+  align?: "left" | "right";
+}) {
+  const body = (
+    <>
+      <TeamLogo name={name} logo={logo} size={layout.crestXl} />
+      <Text style={styles.teamName} numberOfLines={2} {...textScale.dense}>
+        {upperTR(name)}
+      </Text>
+      {rank != null ? (
+        <View style={styles.teamMeta}>
+          <Badge label={`${rank}. sıra`} tone="brand" size="xs" />
+          {points != null ? <Badge label={`${points} puan`} tone="neutral" size="xs" /> : null}
+        </View>
+      ) : null}
+      <FormChips form={form} size="xs" />
+    </>
+  );
+
+  if (!onPress) {
+    return <View style={[styles.teamColumn, align === "right" && styles.teamColumnRight]}>{body}</View>;
+  }
+
+  return (
+    <Touchable
+      feedback="card"
+      haptic="selection"
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${name} takım sayfası`}
+      style={[styles.teamColumn, align === "right" && styles.teamColumnRight]}
+    >
+      {body}
+    </Touchable>
+  );
+});
+
+const TallyCell = memo(function TallyCell({
+  value,
+  label,
+  color,
+}: {
+  value: number;
+  label: string;
+  color: string;
+}) {
+  return (
+    <View style={styles.tallyCell}>
+      <Text style={[styles.tallyValue, { color }]} {...textScale.dense}>
+        {value}
+      </Text>
+      <Text style={styles.overline} {...textScale.badge}>
+        {label}
+      </Text>
+    </View>
+  );
+});
+
+const MeetingRow = memo(function MeetingRow({
+  meeting,
+  result,
+  onOpen,
+}: {
+  meeting: ApiMatch;
+  result: "G" | "B" | "M";
+  onOpen: (matchId: number) => void;
+}) {
+  const open = useCallback(() => onOpen(Number(meeting.id)), [meeting.id, onOpen]);
+
+  const first = meeting.first_team_score ?? null;
+  const second = meeting.second_team_score ?? null;
+
+  return (
+    <Touchable
+      feedback="row"
+      haptic="selection"
+      onPress={open}
+      style={styles.meetRow}
+      accessibilityRole="button"
+      accessibilityLabel={`${meeting.first_team_name} ${first ?? "-"} ${second ?? "-"} ${meeting.second_team_name}`}
+    >
+      <Text style={styles.meetDate} {...textScale.dense}>
+        {formatDateShort(meeting.date)}
+      </Text>
+
+      <View
+        style={[
+          styles.meetChip,
+          result === "G"
+            ? styles.meetChipWin
+            : result === "M"
+              ? styles.meetChipLoss
+              : styles.meetChipDraw,
+        ]}
+      >
+        <Text style={styles.meetChipText} {...textScale.badge}>
+          {result}
+        </Text>
+      </View>
+
+      <Text style={styles.meetTeams} numberOfLines={1} {...textScale.dense}>
+        {meeting.first_team_name} – {meeting.second_team_name}
+      </Text>
+
+      <Text style={styles.meetScore} {...textScale.dense}>
+        {first ?? "-"}–{second ?? "-"}
+      </Text>
+    </Touchable>
+  );
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   PAYLAŞIM KARTI — iki boyda, tema renkleriyle
+   ══════════════════════════════════════════════════════════════════════════ */
+
+type ShareFormat = "story" | "post";
+
+const SHARE_WIDTH = 264;
+const SHARE_FORMATS: Record<ShareFormat, { label: string; height: number }> = {
+  story: { label: "Hikâye 9:16", height: Math.round((SHARE_WIDTH * 16) / 9) },
+  post: { label: "Gönderi 3:4", height: Math.round((SHARE_WIDTH * 4) / 3) },
+};
+
+const SHARE_ITEMS: SegmentedItem<ShareFormat>[] = [
+  { key: "story", label: SHARE_FORMATS.story.label },
+  { key: "post", label: SHARE_FORMATS.post.label },
+];
+
+function ShareSheet({
+  visible,
+  onClose,
+  homeName,
+  awayName,
+  homeLogo,
+  awayLogo,
+  homeRank,
+  awayRank,
+  homeForm,
+  awayForm,
+  tally,
+  meetings,
+  onError,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  homeName: string;
+  awayName: string;
+  homeLogo: string | null;
+  awayLogo: string | null;
+  homeRank: number | null;
+  awayRank: number | null;
+  homeForm: string;
+  awayForm: string;
+  tally: { homeWins: number; draws: number; awayWins: number; homeGoals: number; awayGoals: number };
+  meetings: number;
+  onError: () => void;
+}) {
+  const [format, setFormat] = useState<ShareFormat>("story");
+  const [busy, setBusy] = useState(false);
+  const shotRef = useRef<View>(null);
+
+  const share = useCallback(async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const uri = await captureRef(shotRef, { format: "png", quality: 1 });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, { mimeType: "image/png" });
+      } else {
+        onError();
+      }
+    } catch {
+      onError();
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, onError]);
+
+  return (
+    <BottomSheet visible={visible} onClose={onClose} title="Karşılaştırmayı paylaş" snap="full">
+      <SegmentedControl items={SHARE_ITEMS} value={format} onChange={setFormat} />
+
+      <View style={styles.shareCardWrap}>
+        <ViewShot ref={shotRef} options={{ format: "png", quality: 1 }}>
+          <View style={[styles.shareCard, { height: SHARE_FORMATS[format].height }]}>
+            <LinearGradient colors={[colors.brand, colors.brandStrong]} style={styles.shareStrip} />
+
+            <View style={styles.shareBody}>
+              <View style={styles.shareTop}>
+                <Text style={styles.shareBrand} {...textScale.badge}>
+                  elitlig
+                </Text>
+                <Text style={styles.shareKicker} {...textScale.badge}>
+                  {upperTR("H2H karşılaştırma")}
+                </Text>
+              </View>
+
+              <View style={styles.shareTeams}>
+                <View style={styles.shareTeam}>
+                  <TeamLogo name={homeName} logo={homeLogo} size={40} />
+                  <Text style={styles.shareTeamName} numberOfLines={2} {...textScale.badge}>
+                    {upperTR(homeName)}
+                  </Text>
+                  {homeRank != null ? (
+                    <Text style={styles.shareTeamRank} {...textScale.badge}>
+                      {homeRank}. sıra
+                    </Text>
+                  ) : null}
+                </View>
+
+                <View style={styles.shareVersus}>
+                  <Text style={styles.shareVersusText} {...textScale.badge}>
+                    VS
+                  </Text>
+                  <Text style={styles.shareVersusMeta} {...textScale.badge}>
+                    {meetings} maç
+                  </Text>
+                </View>
+
+                <View style={[styles.shareTeam, styles.shareTeamRight]}>
+                  <TeamLogo name={awayName} logo={awayLogo} size={40} />
+                  <Text
+                    style={[styles.shareTeamName, styles.shareTextRight]}
+                    numberOfLines={2}
+                    {...textScale.badge}
+                  >
+                    {upperTR(awayName)}
+                  </Text>
+                  {awayRank != null ? (
+                    <Text
+                      style={[styles.shareTeamRank, styles.shareTextRight]}
+                      {...textScale.badge}
+                    >
+                      {awayRank}. sıra
+                    </Text>
+                  ) : null}
+                </View>
+              </View>
+
+              <View style={styles.shareTally}>
+                <ShareStat label="GALİBİYET" value={tally.homeWins} tone={colors.win} />
+                <ShareStat label="BERABERLİK" value={tally.draws} tone={colors.textSecondary} />
+                <ShareStat label="GALİBİYET" value={tally.awayWins} tone={colors.live} />
+              </View>
+
+              <View style={styles.shareGoals}>
+                <ShareStat label="ATILAN GOL" value={tally.homeGoals} />
+                <ShareStat label="ATILAN GOL" value={tally.awayGoals} />
+              </View>
+
+              <View style={styles.shareForm}>
+                <FormChips form={homeForm} size="xs" />
+                <Text style={styles.shareFormLabel} {...textScale.badge}>
+                  FORM
+                </Text>
+                <FormChips form={awayForm} size="xs" />
+              </View>
+
+              <View style={styles.shareSpacer} />
+
+              <Text style={styles.shareFooter} {...textScale.badge}>
+                ELİTLİG.COM
+              </Text>
+            </View>
+          </View>
+        </ViewShot>
+      </View>
+
+      <Button
+        label={busy ? "Hazırlanıyor" : "Paylaş"}
+        icon="share-social"
+        onPress={share}
+        loading={busy}
+        fullWidth
+      />
+      <Text style={styles.shareHint} {...textScale.dense}>
+        İndirmek için: Paylaş → Görüntüyü Kaydet
+      </Text>
+    </BottomSheet>
+  );
+}
+
+const ShareStat = memo(function ShareStat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone?: string;
+}) {
+  return (
+    <View style={styles.shareStat}>
+      <Text style={[styles.shareStatValue, tone ? { color: tone } : null]} {...textScale.badge}>
+        {value}
+      </Text>
+      <Text style={styles.shareStatLabel} {...textScale.badge}>
+        {label}
+      </Text>
+    </View>
+  );
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Stiller
+   ══════════════════════════════════════════════════════════════════════════ */
+
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.pitch },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
-  headerTitle: { ...type.subtitle, color: colors.line },
-  content: { padding: spacing.md, gap: spacing.md },
-  teamsRow: { flexDirection: "row", alignItems: "flex-start" },
-  teamCol: { flex: 1, alignItems: "center", gap: 6 },
-  teamColRight: { alignItems: "center" },
-  teamName: { ...type.small, fontWeight: "800", color: colors.line, textAlign: "center" },
-  teamPos: { fontSize: 10, fontWeight: "600", color: colors.muted, textAlign: "center" },
-  vsCol: { alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.sm, paddingTop: 12 },
-  vsText: { fontSize: 17, fontWeight: "900", color: colors.muted },
-  meetCount: { fontSize: 10, fontWeight: "700", color: colors.muted, marginTop: 2 },
-  scoreCard: {
+  screen: {
+    flex: 1,
+    backgroundColor: colors.bg,
+  },
+  loading: {
+    paddingHorizontal: layout.screenPadding,
+    paddingTop: space.md,
+    gap: space.md,
+  },
+  listContent: {
+    paddingHorizontal: layout.screenPadding,
+    paddingBottom: space.giant,
+  },
+  headerBlock: {
+    gap: space.md,
+    paddingTop: space.md,
+    paddingBottom: space.sm,
+  },
+  overline: {
+    ...type.micro,
+    color: colors.textTertiary,
+  },
+
+  /* — İki takım — */
+  versus: {
     flexDirection: "row",
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.faint,
-    borderRadius: radius.md,
+    alignItems: "flex-start",
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    padding: space.md,
+  },
+  teamColumn: {
+    flex: 1,
+    alignItems: "center",
+    gap: space.xs,
+    paddingVertical: space.xs,
+  },
+  teamColumnRight: {
+    alignItems: "center",
+  },
+  teamName: {
+    ...type.label,
+    color: colors.textPrimary,
+    textAlign: "center",
+  },
+  teamMeta: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: space.xs,
+  },
+  versusMiddle: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: space.sm,
+    paddingTop: space.lg,
+    gap: space.xxs,
+  },
+  versusCount: {
+    ...type.scoreLg,
+    color: colors.textPrimary,
+  },
+
+  /* — Galibiyet dağılımı — */
+  tally: {
+    flexDirection: "row",
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
     overflow: "hidden",
   },
-  scoreCol: { flex: 1, alignItems: "center", paddingVertical: spacing.md, gap: 4 },
-  scoreNum: { fontSize: 32, fontWeight: "900", color: colors.green, fontVariant: ["tabular-nums"] },
-  drawNum: { color: colors.muted },
-  awayNum: { color: colors.live },
-  scoreLabel: { fontSize: 8, fontWeight: "800", letterSpacing: 0.5, color: colors.muted },
-  statRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.md, borderWidth: 1, borderColor: colors.faint },
-  statVal: { fontSize: 18, fontWeight: "900", color: colors.turf },
-  statLabel: { fontSize: 10, fontWeight: "700", color: colors.muted },
-  formCard: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.md, borderWidth: 1, borderColor: colors.faint, gap: spacing.sm },
-  sectionTitle: { ...type.small, fontWeight: "800", color: colors.muted, letterSpacing: 0.5 },
-  formRow: { flexDirection: "row", justifyContent: "space-between" },
-  formChips: { flexDirection: "row", gap: 4 },
-  chip: { width: 22, height: 22, borderRadius: 6, alignItems: "center", justifyContent: "center" },
-  chipText: { fontSize: 10, fontWeight: "900", color: "#FFF" },
-  meetRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.sm + 2, borderWidth: 1, borderColor: colors.faint },
-  meetDate: { fontSize: 10, fontWeight: "600", color: colors.muted, width: 52 },
-  meetScore: { flex: 1, fontSize: 11, fontWeight: "700", color: colors.line },
-  meetChip: { width: 22, height: 22, borderRadius: 6, alignItems: "center", justifyContent: "center" },
-  meetChipText: { fontSize: 10, fontWeight: "900", color: "#FFF" },
-  empty: { alignItems: "center", gap: spacing.sm, paddingVertical: spacing.xl },
-  emptyText: { ...type.small, color: colors.muted, textAlign: "center" },
-  pressed: { opacity: 0.7 },
-  shareIconBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.turfDim, alignItems: "center", justifyContent: "center" },
-  shareOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.75)", justifyContent: "flex-end" },
-  shareSheet: { backgroundColor: "#1A1524", borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: spacing.md, gap: spacing.md, alignItems: "center" as const, paddingBottom: 36 },
-  fmtRow: { flexDirection: "row", gap: 8 },
-  fmtPill: { borderRadius: 20, borderWidth: 1, borderColor: "rgba(255,255,255,0.35)", paddingHorizontal: 14, paddingVertical: 7 },
-  fmtPillActive: { backgroundColor: colors.turf, borderColor: colors.turf },
-  fmtTxt: { fontSize: 11, fontWeight: "800", color: "#FFF" },
-  shareCard: { width: 300, backgroundColor: "#0B0A0E", borderRadius: 14, padding: 7, overflow: "hidden" },
-  shareStrip: { height: 7, borderTopLeftRadius: 8, borderTopRightRadius: 8 },
-  shareBody: { flex: 1, borderBottomLeftRadius: 8, borderBottomRightRadius: 8, padding: spacing.md, gap: 8, overflow: "hidden" },
-  shareWm: { position: "absolute", right: -28, bottom: 16, fontSize: 56, fontWeight: "900", color: "#6D28D9", opacity: 0.06, transform: [{ rotate: "-12deg" }] },
-  shareTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  shareBrand: { fontSize: 12, fontWeight: "900", color: "#6D28D9" },
-  shareBrandR: { fontSize: 7, fontWeight: "800", letterSpacing: 1, color: "#6D28D9", opacity: 0.7 },
-  shareTeamsRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  shareTeamCol: { flex: 1, alignItems: "flex-start", gap: 3 },
-  shareTeamName: { fontSize: 10, fontWeight: "900", color: "#0A0812", letterSpacing: -0.2 },
-  shareTeamPos: { fontSize: 8, fontWeight: "700", color: "#6D28D9" },
-  shareVsCol: { alignItems: "center" },
-  shareVs: { fontSize: 15, fontWeight: "900", color: "#9188A4" },
-  shareMeetCount: { fontSize: 8, fontWeight: "700", color: "#9188A4" },
-  shareStat: { flexDirection: "row", alignItems: "center", backgroundColor: "rgba(255,255,255,0.75)", borderRadius: 10, padding: 10 },
-  shareStatVal: { fontSize: 26, fontWeight: "900", fontVariant: ["tabular-nums"] as any, width: 44, textAlign: "center" as const },
-  shareStatMid: { flex: 1, alignItems: "center", gap: 2 },
-  shareStatLabel: { fontSize: 7, fontWeight: "800", color: "#9188A4", letterSpacing: 0.3 },
-  shareDrawVal: { fontSize: 20, fontWeight: "900", color: "#9188A4", fontVariant: ["tabular-nums"] as any },
-  shareGoals: { flexDirection: "row", alignItems: "center", backgroundColor: "rgba(255,255,255,0.6)", borderRadius: 8, padding: 8 },
-  shareGoalVal: { fontSize: 17, fontWeight: "900", color: "#5B21B6", fontVariant: ["tabular-nums"] as any, flex: 1, textAlign: "center" as const },
-  shareGoalLabel: { fontSize: 7, fontWeight: "800", letterSpacing: 0.5, color: "#9188A4", textAlign: "center" as const },
-  shareFormRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  shareFormChips: { flexDirection: "row", gap: 3, flex: 1 },
-  shareFormLabel: { fontSize: 8, fontWeight: "800", color: "#9188A4", letterSpacing: 0.5 },
-  shareChip: { width: 20, height: 20, borderRadius: 5, alignItems: "center", justifyContent: "center" },
-  shareChipTxt: { fontSize: 9, fontWeight: "900", color: "#FFF" },
-  shareFooter: { fontSize: 7.5, fontWeight: "800", letterSpacing: 2.5, color: "#9188A4", textAlign: "center" as const },
-  shareActions: { flexDirection: "row", gap: spacing.sm, width: "100%" },
-  sActBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderRadius: radius.pill, paddingVertical: spacing.sm + 2 },
-  sClose: { backgroundColor: "rgba(255,255,255,0.1)" },
-  sCloseTxt: { fontSize: 13, fontWeight: "700", color: "#FFF" },
-  sGo: { backgroundColor: colors.turf },
-  sGoTxt: { fontSize: 13, fontWeight: "800", color: "#FFF" },
-  sHint: { fontSize: 11, fontWeight: "600", color: "rgba(255,255,255,0.5)" },
+  tallyCell: {
+    flex: 1,
+    alignItems: "center",
+    gap: space.xxs,
+    paddingVertical: space.md,
+  },
+  tallyValue: {
+    ...type.scoreLg,
+  },
+
+  /* — Karşılaştırma çubukları — */
+  barsCard: {
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    padding: space.md,
+    gap: space.md,
+  },
+
+  /* — Karşılaşma satırı — */
+  meetRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    minHeight: 48,
+    paddingHorizontal: space.md,
+    backgroundColor: colors.surface1,
+    borderBottomWidth: hairline,
+    borderBottomColor: colors.separator,
+  },
+  meetDate: {
+    ...type.caption,
+    color: colors.textTertiary,
+    width: 52,
+  },
+  meetChip: {
+    width: 18,
+    height: 18,
+    borderRadius: radius.sm,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  meetChipWin: {
+    backgroundColor: colors.win,
+  },
+  meetChipDraw: {
+    backgroundColor: colors.draw,
+  },
+  meetChipLoss: {
+    backgroundColor: colors.loss,
+  },
+  meetChipText: {
+    ...type.micro,
+    color: colors.textOnBrand,
+  },
+  meetTeams: {
+    ...type.bodySm,
+    color: colors.textPrimary,
+    flex: 1,
+  },
+  meetScore: {
+    ...type.tableNumStrong,
+    color: colors.textPrimary,
+  },
+
+  /* — Paylaşım kartı — */
+  shareCardWrap: {
+    alignItems: "center",
+    paddingVertical: space.md,
+  },
+  shareCard: {
+    width: SHARE_WIDTH,
+    backgroundColor: colors.surface1,
+    borderRadius: radius.lg,
+    overflow: "hidden",
+  },
+  shareStrip: {
+    height: 6,
+  },
+  shareBody: {
+    flex: 1,
+    padding: space.md,
+    gap: space.sm,
+  },
+  shareTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  shareBrand: {
+    ...type.label,
+    color: colors.brand,
+  },
+  shareKicker: {
+    ...type.micro,
+    color: colors.textTertiary,
+  },
+  shareTeams: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: space.sm,
+  },
+  shareTeam: {
+    flex: 1,
+    gap: space.xxs,
+  },
+  shareTeamRight: {
+    alignItems: "flex-end",
+  },
+  shareTeamName: {
+    ...type.caption,
+    color: colors.textPrimary,
+  },
+  shareTeamRank: {
+    ...type.micro,
+    color: colors.brand,
+  },
+  shareTextRight: {
+    textAlign: "right",
+  },
+  shareVersus: {
+    alignItems: "center",
+    gap: space.xxs,
+    paddingTop: space.sm,
+  },
+  shareVersusText: {
+    ...type.h2,
+    color: colors.textSecondary,
+  },
+  shareVersusMeta: {
+    ...type.micro,
+    color: colors.textTertiary,
+  },
+  shareTally: {
+    flexDirection: "row",
+    backgroundColor: colors.surface2,
+    borderRadius: radius.md,
+    paddingVertical: space.sm,
+  },
+  shareGoals: {
+    flexDirection: "row",
+    backgroundColor: colors.surface2,
+    borderRadius: radius.md,
+    paddingVertical: space.sm,
+  },
+  shareStat: {
+    flex: 1,
+    alignItems: "center",
+    gap: space.xxs,
+  },
+  shareStatValue: {
+    ...type.scoreMd,
+    color: colors.textPrimary,
+  },
+  shareStatLabel: {
+    ...type.micro,
+    color: colors.textTertiary,
+  },
+  shareForm: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: space.sm,
+  },
+  shareFormLabel: {
+    ...type.micro,
+    color: colors.textTertiary,
+  },
+  shareSpacer: {
+    flex: 1,
+  },
+  shareFooter: {
+    ...type.micro,
+    color: colors.textTertiary,
+    textAlign: "center",
+  },
+  shareHint: {
+    ...type.caption,
+    color: colors.textTertiary,
+    textAlign: "center",
+    marginTop: space.sm,
+  },
 });

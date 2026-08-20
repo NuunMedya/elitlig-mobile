@@ -1,26 +1,70 @@
+/**
+ * SLALOM — sonsuz koşu: top sahada ileri koşar, konilerden kaçınılır.
+ *
+ * OYUN (bu yenilemede DEĞİŞMEDİ): koşu illüzyonu ters çevrilmiştir — top sabit
+ * yükseklikte durur, koniler üstten aşağı akar. Ekranın sol/sağ yarısına BASILI
+ * TUTMAK topu o yöne kaydırır. Atlatılan her koni +1; skor arttıkça akış
+ * hızlanır ve koniler sıklaşır. Koniye çarpınca oyun biter. `step`, `start`,
+ * çarpışma kutuları, üretim aralıkları ve hız çarpanı birebir korundu.
+ *
+ * SUNUM MİMARİSİ:
+ *   · HUD sahanın DIŞINDA ince bir şerit: skor solda (tabular), rekor ve hız
+ *     çarpanı sağda. Saha içine konsaydı akan koniler rakamların üstünden geçer,
+ *     skor okunmaz olurdu.
+ *   · GİRİŞ — sahanın üstünde giriş kartı: oyun adı, tek cümlelik kural, kişisel
+ *     rekor, büyük "Başla". Katman `box-none`, yani kartın DIŞINA basmak yine
+ *     alttaki kontrol yarılarına düşer ve oyunu başlatır (eski alışkanlık).
+ *   · BİTİŞ — sahayı kaplayan tam ekran kart. `Modal` DEĞİL sıradan bir katman:
+ *     paylaşım önizlemesi zaten `Modal`, iOS'ta iki modalı üst üste bindirmek
+ *     güvenilir değil. Kart katman olunca paylaşım sorunsuz üstüne biner.
+ *
+ * NEDEN HAM `Pressable` (tasarım sisteminin `Touchable`'ı değil): kontrol
+ * yarıları BASILI TUTMA ile çalışır; `onPressIn`/`onPressOut` arasındaki gecikme
+ * doğrudan topun tepkime süresidir. `Touchable`'ın ölçek animasyonu ve haptiği
+ * bu iki olayın arasına girip oyunu hantallaştırırdı. Bu, kılavuzdaki "oyun içi
+ * dokunma alanı" istisnasıdır; kartlardaki her basılabilir öğe yine
+ * `Touchable`/`Button`.
+ *
+ * PAYLAŞIM KARTI SABİT KOYU PALETTEN: kart görüntü olarak dışarı çıkar; aktif
+ * temaya bağlansaydı açık temadaki kullanıcıda beyaz bir kâğıt olurdu.
+ */
+
 import Ionicons from "@expo/vector-icons/Ionicons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
-import { useEffect, useRef, useState } from "react";
-import { Alert, Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import ViewShot, { captureRef } from "react-native-view-shot";
-import { DetailHeader } from "@/components/ScreenHeader";
-import { colors, radius, spacing, type } from "@/constants/theme";
+import {
+  Badge,
+  Button,
+  ScreenHeader,
+  Touchable,
+  useToast,
+  withAlpha,
+} from "@/components/ui";
 import { submitArenaScore } from "@/lib/api/arena";
 import { instagramUrl } from "@/lib/socials";
 import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
+import {
+  colors,
+  dark as inkPalette,
+  elevate,
+  hairline,
+  haptics,
+  layout,
+  radius,
+  space,
+  textScale,
+  type,
+  upperTR,
+} from "@/theme";
 
-/**
- * SLALOM — sonsuz koşu: top sahada ileri koşar, konilerden kaçınılır.
- *
- * Koşu illüzyonu ters çevrilmiştir: top sabit yükseklikte durur, koniler
- * üstten aşağı akar. Ekranın sol/sağ yarısına BASILI TUTMAK topu o yöne
- * kaydırır. Atlatılan her koni +1; skor arttıkça akış hızlanır ve koniler
- * sıklaşır (⚡ göstergesi çarpanı söyler). Koniye çarpınca oyun biter;
- * rekor cihazda saklanır ve koyu meydan okuma kartıyla paylaşılır.
- */
+/* ==================== SABİTLER (oyun mantığı — dokunulmadı) ==================== */
 
 const BEST_KEY = "elitlig.slalom.best.v1";
 const TICK_MS = 16;
@@ -43,7 +87,13 @@ interface Cone {
 
 type Phase = "ready" | "playing" | "over";
 
+/** Skorun sunucuya gidişi — bitiş kartında tek satırla anlatılır. */
+type SubmitState = "idle" | "guest" | "sending" | "sent" | "failed";
+
+/* ================================= EKRAN ================================= */
+
 export default function SlalomScreen() {
+  const router = useRouter();
   const scope = useScope();
   const auth = useAuth();
   const [phase, setPhase] = useState<Phase>("ready");
@@ -61,6 +111,10 @@ export default function SlalomScreen() {
   const phaseRef = useRef<Phase>("ready");
   const loop = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  /* — Sunum durumu: oyun döngüsüne karışmaz — */
+  const [submit, setSubmit] = useState<SubmitState>("idle");
+  const [shareOpen, setShareOpen] = useState(false);
+
   useEffect(() => {
     AsyncStorage.getItem(BEST_KEY).then((v) => setBest(Number(v) || 0));
     return () => {
@@ -75,11 +129,31 @@ export default function SlalomScreen() {
 
   const speedFactor = () => Math.min(2.6, 1 + scoreRef.current * 0.02);
 
+  /**
+   * Skoru rekor tablosuna yollar. Tetikleme koşulu eskisiyle birebir aynı
+   * (oturum var + skor > 0); tek fark, sonucun sessizce yutulmak yerine bitiş
+   * kartında görünmesi ve tekrar denenebilmesi.
+   */
+  const submitScore = (value: number) => {
+    if (value <= 0) {
+      setSubmit("idle");
+      return;
+    }
+    if (!auth.user) {
+      setSubmit("guest");
+      return;
+    }
+    setSubmit("sending");
+    submitArenaScore("slalom", value)
+      .then(() => setSubmit("sent"))
+      .catch(() => setSubmit("failed"));
+  };
+
   const gameOver = () => {
     if (loop.current) clearInterval(loop.current);
     loop.current = null;
     const finished = scoreRef.current;
-    if (auth.user && finished > 0) submitArenaScore("slalom", finished).catch(() => {});
+    submitScore(finished);
     if (finished > 0) {
       setBest((current) => {
         if (finished > current) {
@@ -89,6 +163,7 @@ export default function SlalomScreen() {
         return current;
       });
     }
+    haptics.warning();
     setPhaseBoth("over");
   };
 
@@ -135,6 +210,8 @@ export default function SlalomScreen() {
         cone.passed = true;
         scoreRef.current += 1;
         setScore(scoreRef.current);
+        // Puan haptiği; `haptics` kendi içinde 300ms kısar, döngüyü yormaz.
+        haptics.light();
       }
     }
     cones.current = cones.current.filter((c) => c.y < h + CONE_H);
@@ -149,6 +226,7 @@ export default function SlalomScreen() {
     sinceSpawn.current = 0;
     scoreRef.current = 0;
     setScore(0);
+    setSubmit("idle");
     setPhaseBoth("playing");
     if (loop.current) clearInterval(loop.current);
     loop.current = setInterval(step, TICK_MS);
@@ -159,25 +237,63 @@ export default function SlalomScreen() {
     cones.current = [];
     setScore(0);
     scoreRef.current = 0;
+    setSubmit("idle");
+    setShareOpen(false);
     setTick((t) => t + 1);
   };
 
   const ballY = area.current.h * BALL_Y_RATIO;
   const factor = Math.min(2.6, 1 + score * 0.02);
+  const isRecord = score > 0 && score >= best;
+
+  const openBoard = () => router.push({ pathname: "/siralama", params: { game: "slalom" } });
+  const openSignIn = () => router.push("/giris");
+
+  const headerActions = useMemo(
+    () => [
+      {
+        icon: "trophy-outline" as keyof typeof Ionicons.glyphMap,
+        onPress: () => router.push({ pathname: "/siralama", params: { game: "slalom" } }),
+        accessibilityLabel: "Rekor tablosu",
+      },
+    ],
+    [router]
+  );
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      <DetailHeader title="Slalom" subtitle="Basılı tut, konilerden kaç!" />
+      <ScreenHeader
+        title="Slalom"
+        overline={upperTR("Elitlig Arena")}
+        subtitle="Basılı tut, konilerden kaç"
+        back
+        actions={headerActions}
+      />
 
-      <View style={styles.scoreRow}>
-        <View style={styles.scorePill}>
-          <Text style={styles.scoreText}>🚩 {score}</Text>
+      {/* — HUD: skor solda (tabular), rekor ve hız çarpanı sağda — */}
+      <View style={styles.hud}>
+        <View style={styles.hudScoreBox}>
+          <Text style={styles.hudLabel} {...textScale.badge}>
+            {upperTR("Koni")}
+          </Text>
+          <Text style={styles.hudScore} {...textScale.dense}>
+            {score}
+          </Text>
         </View>
-        <View style={[styles.scorePill, styles.bestPill]}>
-          <Text style={styles.bestText}>🏆 REKOR: {best}</Text>
-        </View>
-        <View style={[styles.scorePill, styles.levelPill]}>
-          <Text style={styles.levelText}>⚡ x{factor.toFixed(1)}</Text>
+
+        <View style={styles.hudRight}>
+          <View style={styles.hudPill}>
+            <Ionicons name="trophy" size={11} color={colors.star} />
+            <Text style={styles.hudPillText} {...textScale.badge}>
+              {best}
+            </Text>
+          </View>
+          <View style={[styles.hudPill, styles.hudPillLive]}>
+            <Ionicons name="flash" size={11} color={colors.live} />
+            <Text style={styles.hudPillLiveText} {...textScale.badge}>
+              {`x${factor.toFixed(1)}`}
+            </Text>
+          </View>
         </View>
       </View>
 
@@ -194,7 +310,7 @@ export default function SlalomScreen() {
           }
         }}
       >
-        {/* Çim şeritleri */}
+        {/* Çim şeritleri — saha yeşili tokenı, şeritler kazanç yeşiliyle aydınlatılır. */}
         {Array.from({ length: 6 }).map((_, i) => (
           <View
             key={i}
@@ -206,8 +322,8 @@ export default function SlalomScreen() {
           />
         ))}
         {/* Kenar çizgileri */}
-        <View style={[styles.sideline, { left: 4 }]} />
-        <View style={[styles.sideline, { right: 4 }]} />
+        <View style={[styles.sideline, styles.sidelineLeft]} />
+        <View style={[styles.sideline, styles.sidelineRight]} />
 
         {/* Koniler */}
         {cones.current.map((cone) => (
@@ -231,10 +347,12 @@ export default function SlalomScreen() {
           ⚽
         </Text>
 
-        {/* Kontroller: sol/sağ yarı, basılı tut */}
+        {/* Kontroller: sol/sağ yarı, basılı tut — ham Pressable, gerekçesi dosya başında. */}
         <View style={styles.controls}>
           <Pressable
             style={styles.controlHalf}
+            accessibilityRole="button"
+            accessibilityLabel="Sola kaydır"
             onPressIn={() => {
               if (phaseRef.current === "ready") start();
               dir.current = -1;
@@ -245,6 +363,8 @@ export default function SlalomScreen() {
           />
           <Pressable
             style={styles.controlHalf}
+            accessibilityRole="button"
+            accessibilityLabel="Sağa kaydır"
             onPressIn={() => {
               if (phaseRef.current === "ready") start();
               dir.current = 1;
@@ -255,40 +375,227 @@ export default function SlalomScreen() {
           />
         </View>
 
-        {phase === "ready" ? (
-          <View style={styles.overlay} pointerEvents="none">
-            <Text style={styles.overlayTitle}>SLALOM</Text>
-            <Text style={styles.overlayBody}>Sol/sağ yarıya basılı tut, topu kaydır</Text>
-            <Text style={styles.overlayHint}>Başlamak için dokun · hız sürekli artar ⚡</Text>
-          </View>
-        ) : null}
+        {phase === "ready" ? <StartOverlay best={best} onStart={start} /> : null}
 
         {phase === "over" ? (
-          <GameOver score={score} best={best} onRestart={restart} scopeCity={scope.cityLabel} />
+          <ResultOverlay
+            score={score}
+            best={best}
+            isRecord={isRecord}
+            submit={submit}
+            onRetrySubmit={() => submitScore(score)}
+            onSignIn={openSignIn}
+            onRestart={restart}
+            onBoard={openBoard}
+            onShare={() => setShareOpen(true)}
+          />
         ) : null}
       </View>
+
+      <ShareSheet
+        visible={shareOpen}
+        onClose={() => setShareOpen(false)}
+        score={score}
+        isRecord={isRecord}
+        cityLabel={scope.cityLabel}
+      />
     </SafeAreaView>
   );
 }
 
-function GameOver({
+/* ============================== GİRİŞ KARTI ============================== */
+
+/**
+ * `box-none`: katmanın kendisi dokunuşu yutmaz; kartın DIŞINA basmak alttaki
+ * kontrol yarılarına düşer ve oyunu başlatır. Kartın üstünde ise tek bir
+ * belirgin eylem vardır — "Başla".
+ */
+function StartOverlay({ best, onStart }: { best: number; onStart: () => void }) {
+  return (
+    <View style={styles.overlay} pointerEvents="box-none">
+      <View style={styles.startCard}>
+        <View style={styles.startIcon}>
+          <Ionicons name="flag" size={22} color={colors.warn} />
+        </View>
+
+        <Text style={styles.startOverline} {...textScale.badge}>
+          {upperTR("Elitlig Arena")}
+        </Text>
+        <Text style={styles.startTitle} {...textScale.dense}>
+          Slalom
+        </Text>
+        <Text style={styles.startRule} {...textScale.long}>
+          Sol ya da sağ yarıya basılı tut, konileri sıyır; her turda akış biraz daha hızlanır.
+        </Text>
+
+        <View style={styles.startBest}>
+          <Ionicons name="trophy" size={13} color={colors.star} />
+          <Text style={styles.startBestText} {...textScale.dense}>
+            {best > 0 ? `Rekorun ${best} koni` : "Henüz rekorun yok"}
+          </Text>
+        </View>
+
+        <Button label="Başla" icon="play" size="lg" fullWidth onPress={onStart} />
+      </View>
+    </View>
+  );
+}
+
+/* ============================== BİTİŞ KARTI ============================== */
+
+function ResultOverlay({
   score,
   best,
+  isRecord,
+  submit,
+  onRetrySubmit,
+  onSignIn,
   onRestart,
-  scopeCity,
+  onBoard,
+  onShare,
 }: {
   score: number;
   best: number;
+  isRecord: boolean;
+  submit: SubmitState;
+  onRetrySubmit: () => void;
+  onSignIn: () => void;
   onRestart: () => void;
-  scopeCity: string;
+  onBoard: () => void;
+  onShare: () => void;
 }) {
-  const [shareOpen, setShareOpen] = useState(false);
+  return (
+    <View style={styles.resultScrim}>
+      <View style={styles.resultCard}>
+        {isRecord ? (
+          <Badge label={upperTR("Yeni rekor")} tone="warn" icon="trophy" variant="soft" />
+        ) : null}
+
+        <Text style={styles.resultTitle} {...textScale.dense}>
+          {isRecord ? "Rekorunu kırdın!" : "Koniye çarptın"}
+        </Text>
+
+        <Text style={styles.resultScore} {...textScale.dense}>
+          {score}
+        </Text>
+        <Text style={styles.resultUnit} {...textScale.badge}>
+          {upperTR("koni")}
+        </Text>
+
+        <Text style={styles.resultBest} {...textScale.dense}>
+          {`Rekorun ${best} koni`}
+        </Text>
+
+        <SubmitLine state={submit} onRetry={onRetrySubmit} onSignIn={onSignIn} />
+
+        <View style={styles.resultActions}>
+          <Button label="Tekrar oyna" icon="refresh" size="lg" fullWidth onPress={onRestart} />
+          <View style={styles.resultRow}>
+            <Button
+              label="Rekor tablosu"
+              icon="trophy-outline"
+              variant="secondary"
+              onPress={onBoard}
+              style={styles.flex}
+            />
+            <Button
+              label="Meydan oku"
+              icon="share-social"
+              variant="ghost"
+              onPress={onShare}
+              style={styles.flex}
+            />
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+/* ========================= SKOR GÖNDERİM SATIRI ========================= */
+
+function SubmitLine({
+  state,
+  onRetry,
+  onSignIn,
+}: {
+  state: SubmitState;
+  onRetry: () => void;
+  onSignIn: () => void;
+}) {
+  if (state === "idle") return null;
+
+  if (state === "guest") {
+    return (
+      <Touchable
+        feedback="button"
+        haptic="light"
+        onPress={onSignIn}
+        style={styles.submitLine}
+        accessibilityRole="button"
+        accessibilityLabel="Giriş yap, skorun rekor tablosuna yazılsın"
+      >
+        <Ionicons name="log-in-outline" size={13} color={colors.brandAccent} />
+        <Text style={styles.submitLink} {...textScale.dense}>
+          Giriş yap, skorun tabloya yazılsın
+        </Text>
+      </Touchable>
+    );
+  }
+
+  if (state === "failed") {
+    return (
+      <Touchable
+        feedback="button"
+        haptic="light"
+        onPress={onRetry}
+        style={styles.submitLine}
+        accessibilityRole="button"
+        accessibilityLabel="Skor gönderilemedi, tekrar dene"
+      >
+        <Ionicons name="refresh" size={13} color={colors.danger} />
+        <Text style={styles.submitFail} {...textScale.dense}>
+          Skor gönderilemedi · tekrar dene
+        </Text>
+      </Touchable>
+    );
+  }
+
+  return (
+    <View style={styles.submitLine}>
+      <Ionicons
+        name={state === "sent" ? "checkmark-circle" : "cloud-upload-outline"}
+        size={13}
+        color={state === "sent" ? colors.win : colors.textTertiary}
+      />
+      <Text style={styles.submitInfo} {...textScale.dense}>
+        {state === "sent" ? "Rekor tablosuna yazıldı" : "Rekor tablosuna gönderiliyor…"}
+      </Text>
+    </View>
+  );
+}
+
+/* ============================ PAYLAŞIM KARTI ============================ */
+
+function ShareSheet({
+  visible,
+  onClose,
+  score,
+  isRecord,
+  cityLabel,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  score: number;
+  isRecord: boolean;
+  cityLabel: string;
+}) {
+  const toast = useToast();
   const [busy, setBusy] = useState(false);
   const shotRef = useRef<View>(null);
-  const isRecord = score > 0 && score >= best;
 
   const igHandle = (() => {
-    const url = instagramUrl(scopeCity);
+    const url = instagramUrl(cityLabel);
     const handle = url?.split("instagram.com/")[1]?.replace(/\/+$/, "");
     return handle ? `@${handle}` : "elitlig.com";
   })();
@@ -302,138 +609,146 @@ function GameOver({
         await Sharing.shareAsync(uri, { mimeType: "image/png" });
       }
     } catch {
-      Alert.alert("Bir sorun oldu", "Görsel oluşturulamadı, tekrar dener misin?");
+      toast.show({ message: "Görsel oluşturulamadı, tekrar dener misin?", tone: "danger" });
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <View style={styles.overBox}>
-      <Text style={styles.overTitle}>{isRecord ? "🏆 YENİ REKOR!" : "Koniye çarptın!"}</Text>
-      <Text style={styles.overScore}>🚩 {score}</Text>
-      <Text style={styles.overSub}>Rekorun: {best}</Text>
-      <View style={styles.overButtons}>
-        <Pressable
-          onPress={onRestart}
-          style={({ pressed }) => [styles.overBtn, styles.retryBtn, pressed && styles.pressed]}
-        >
-          <Ionicons name="refresh" size={16} color={colors.surface} />
-          <Text style={styles.retryText}>Tekrar Oyna</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setShareOpen(true)}
-          style={({ pressed }) => [styles.overBtn, styles.challengeBtn, pressed && styles.pressed]}
-        >
-          <Ionicons name="share-social" size={16} color={colors.turf} />
-          <Text style={styles.challengeText}>Meydan Oku</Text>
-        </Pressable>
-      </View>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={styles.shareBackdrop}>
+        <ViewShot ref={shotRef} options={{ format: "png", quality: 1 }}>
+          <LinearGradient
+            colors={[inkPalette.brandDim, inkPalette.bg]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.shareCard}
+          >
+            <Text style={styles.shareBrand} {...textScale.badge}>
+              elitlig
+            </Text>
+            <Text style={styles.shareGame} {...textScale.badge}>
+              {upperTR("Arena · Slalom")}
+            </Text>
 
-      <Modal
-        visible={shareOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShareOpen(false)}
-      >
-        <View style={styles.backdrop}>
-          <ViewShot ref={shotRef} options={{ format: "png", quality: 1 }}>
-            <View style={styles.shareCard}>
-              <Text style={styles.shareBrand}>elitlig</Text>
-              <Text style={styles.shareArena}>ARENA · SLALOM</Text>
-              <Text style={styles.shareScore}>🚩 {score}</Text>
-              <Text style={styles.shareLabel}>KONİ{isRecord ? " · YENİ REKOR 🏆" : ""}</Text>
-              <View style={styles.shareDivider} />
-              <Text style={styles.shareChallenge}>"Geç de görelim" 😏</Text>
-              <Text style={styles.shareFooter}>ELİTLİG.COM · {igHandle}</Text>
-            </View>
-          </ViewShot>
-          <View style={styles.overButtons}>
-            <Pressable
-              onPress={() => setShareOpen(false)}
-              style={({ pressed }) => [styles.overBtn, styles.closeBtn, pressed && styles.pressed]}
-            >
-              <Text style={styles.closeText}>Kapat</Text>
-            </Pressable>
-            <Pressable
-              onPress={share}
-              style={({ pressed }) => [styles.overBtn, styles.retryBtn, pressed && styles.pressed]}
-            >
-              <Ionicons name="share-social" size={16} color={colors.surface} />
-              <Text style={styles.retryText}>{busy ? "Hazırlanıyor…" : "Paylaş"}</Text>
-            </Pressable>
-          </View>
+            <Text style={styles.shareScore} {...textScale.badge}>
+              {score}
+            </Text>
+            <Text style={styles.shareUnit} {...textScale.badge}>
+              {upperTR(isRecord ? "koni · yeni rekor" : "koni")}
+            </Text>
+
+            <View style={styles.shareDivider} />
+
+            <Text style={styles.shareTaunt} {...textScale.badge}>
+              Geç de görelim
+            </Text>
+            <Text style={styles.shareFooter} {...textScale.badge}>
+              {upperTR(`elitlig.com · ${igHandle}`)}
+            </Text>
+          </LinearGradient>
+        </ViewShot>
+
+        <View style={styles.shareActions}>
+          <Button label="Kapat" variant="secondary" onPress={onClose} />
+          <Button
+            label="Paylaş"
+            icon="share-social"
+            loading={busy}
+            onPress={() => {
+              void share();
+            }}
+          />
         </View>
-      </Modal>
-    </View>
+      </View>
+    </Modal>
   );
 }
 
+/* ================================ STİLLER ================================ */
+
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: colors.pitch,
-  },
-  scoreRow: {
+  screen: { flex: 1, backgroundColor: colors.bg },
+  flex: { flex: 1 },
+
+  /* — HUD şeridi — */
+  hud: {
     flexDirection: "row",
-    justifyContent: "center",
-    gap: spacing.sm,
-    paddingHorizontal: spacing.md,
-    marginBottom: spacing.sm,
+    alignItems: "center",
+    paddingHorizontal: layout.screenPadding,
+    paddingVertical: space.sm,
+    borderBottomWidth: hairline,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.surface1,
   },
-  scorePill: {
-    backgroundColor: colors.turfDim,
+  hudScoreBox: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: space.s,
+  },
+  hudLabel: {
+    ...type.micro,
+    color: colors.textTertiary,
+  },
+  hudScore: {
+    ...type.scoreMd,
+    color: colors.textPrimary,
+  },
+  hudRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.s,
+  },
+  hudPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
     borderRadius: radius.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingHorizontal: space.m,
+    paddingVertical: space.xs,
+    backgroundColor: colors.surface3,
   },
-  scoreText: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: colors.turf,
-    fontVariant: ["tabular-nums"],
+  hudPillText: {
+    ...type.tableNumStrong,
+    color: colors.textPrimary,
   },
-  bestPill: {
-    backgroundColor: colors.goldDim,
+  hudPillLive: {
+    backgroundColor: colors.liveDim,
   },
-  bestText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#8A6A06",
-  },
-  levelPill: {
-    backgroundColor: "#FBEDEE",
-  },
-  levelText: {
-    fontSize: 11,
-    fontWeight: "800",
+  hudPillLiveText: {
+    ...type.tableNumStrong,
     color: colors.live,
-    fontVariant: ["tabular-nums"],
   },
+
+  /* — Saha (oyun tuvali) — */
   arena: {
     flex: 1,
-    marginHorizontal: spacing.md,
-    marginBottom: spacing.md,
-    borderRadius: radius.md,
-    backgroundColor: "#0F4A2C",
+    margin: layout.screenPadding,
+    borderRadius: radius.lg,
+    backgroundColor: colors.pitchGreen,
+    borderWidth: hairline,
+    borderColor: colors.border,
     overflow: "hidden",
   },
   stripe: {
     position: "absolute",
     left: 0,
     right: 0,
-    backgroundColor: "#0F4A2C",
   },
   stripeAlt: {
-    backgroundColor: "#125534",
+    backgroundColor: withAlpha(colors.win, 0.12),
   },
   sideline: {
     position: "absolute",
     top: 0,
     bottom: 0,
     width: 2,
-    backgroundColor: "#3E7D58",
+    backgroundColor: withAlpha(colors.win, 0.4),
   },
+  sidelineLeft: { left: 4 },
+  sidelineRight: { right: 4 },
   cone: {
     position: "absolute",
     top: 0,
@@ -450,13 +765,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: CONE_H - 7,
     borderLeftColor: "transparent",
     borderRightColor: "transparent",
-    borderBottomColor: "#F08C14",
+    borderBottomColor: colors.warn,
   },
   coneBase: {
     width: CONE_W,
     height: 5,
     borderRadius: 2,
-    backgroundColor: "#D97706",
+    backgroundColor: colors.danger,
     marginTop: 1,
   },
   ball: {
@@ -475,146 +790,194 @@ const styles = StyleSheet.create({
   controlHalf: {
     flex: 1,
   },
+
+  /* — Giriş kartı — */
   overlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: "center",
     justifyContent: "center",
-    gap: spacing.sm,
-    backgroundColor: "rgba(10, 40, 24, 0.55)",
+    padding: space.lg,
   },
-  overlayTitle: {
-    fontSize: 26,
-    fontWeight: "900",
-    letterSpacing: 2,
-    color: "#FFFFFF",
+  startCard: {
+    alignSelf: "stretch",
+    maxWidth: 360,
+    borderRadius: radius.xl,
+    // Yüzen kart (§yükselti 4): koyu temada yüzey+kenarlık, açık temada gölge.
+    ...elevate(4),
+    padding: space.xl,
+    gap: space.s,
+    alignItems: "center",
   },
-  overlayBody: {
+  startIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.warnDim,
+    marginBottom: space.xxs,
+  },
+  startOverline: {
+    ...type.micro,
+    color: colors.brandAccent,
+  },
+  startTitle: {
+    ...type.display,
+    color: colors.textPrimary,
+  },
+  startRule: {
     ...type.body,
-    color: "#E7F3EC",
+    color: colors.textSecondary,
+    textAlign: "center",
+    marginBottom: space.xs,
+  },
+  startBest: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+    backgroundColor: colors.surface3,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.md,
+    paddingVertical: space.s,
+    marginBottom: space.m,
+  },
+  startBestText: {
+    ...type.bodySm,
     fontWeight: "700",
+    color: colors.textPrimary,
   },
-  overlayHint: {
-    ...type.caption,
-    color: "#B9D8C6",
-    letterSpacing: 0,
-  },
-  overBox: {
+
+  /* — Bitiş kartı — */
+  resultScrim: {
     ...StyleSheet.absoluteFillObject,
     alignItems: "center",
     justifyContent: "center",
-    gap: 4,
-    backgroundColor: "rgba(255,255,255,0.9)",
+    padding: space.lg,
+    backgroundColor: colors.overlay,
   },
-  overTitle: {
-    ...type.subtitle,
-    color: colors.line,
+  resultCard: {
+    alignSelf: "stretch",
+    maxWidth: 360,
+    borderRadius: radius.xl,
+    // Yüzen kart (§yükselti 4): koyu temada yüzey+kenarlık, açık temada gölge.
+    ...elevate(4),
+    paddingHorizontal: space.xl,
+    paddingVertical: space.xl,
+    alignItems: "center",
+    gap: space.xs,
   },
-  overScore: {
-    fontSize: 46,
-    fontWeight: "900",
-    color: colors.turf,
+  resultTitle: {
+    ...type.h1,
+    color: colors.textPrimary,
+    marginTop: space.xs,
   },
-  overSub: {
-    ...type.small,
-    color: colors.muted,
+  resultScore: {
+    ...type.scoreHero,
+    color: colors.brandAccent,
+    marginTop: space.xs,
   },
-  overButtons: {
+  resultUnit: {
+    ...type.micro,
+    color: colors.textTertiary,
+  },
+  resultBest: {
+    ...type.bodySm,
+    color: colors.textSecondary,
+    marginTop: space.xs,
+  },
+  resultActions: {
+    alignSelf: "stretch",
+    gap: space.m,
+    marginTop: space.lg,
+  },
+  resultRow: {
     flexDirection: "row",
-    gap: spacing.sm,
-    marginTop: spacing.md,
+    gap: space.m,
   },
-  overBtn: {
+
+  /* — Skor gönderim satırı — */
+  submitLine: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm + 3,
+    gap: space.xs,
+    marginTop: space.sm,
+    paddingVertical: space.xs,
   },
-  retryBtn: {
-    backgroundColor: colors.turf,
+  submitInfo: {
+    ...type.caption,
+    fontWeight: "600",
+    letterSpacing: 0,
+    color: colors.textTertiary,
   },
-  retryText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: colors.surface,
+  submitLink: {
+    ...type.caption,
+    fontWeight: "700",
+    letterSpacing: 0,
+    color: colors.brandAccent,
   },
-  challengeBtn: {
-    backgroundColor: colors.turfDim,
+  submitFail: {
+    ...type.caption,
+    fontWeight: "700",
+    letterSpacing: 0,
+    color: colors.danger,
   },
-  challengeText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: colors.turf,
-  },
-  backdrop: {
+
+  /* — Paylaşım kartı (sabit koyu palet) — */
+  shareBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.65)",
+    backgroundColor: colors.overlay,
     alignItems: "center",
     justifyContent: "center",
-    padding: spacing.lg,
-    gap: spacing.md,
+    padding: space.xl,
+    gap: space.lg,
   },
   shareCard: {
-    width: 264,
-    backgroundColor: "#18102C",
-    borderRadius: 16,
-    paddingVertical: spacing.xl,
-    paddingHorizontal: spacing.lg,
+    width: 268,
+    borderRadius: radius.xl,
+    borderWidth: hairline,
+    borderColor: inkPalette.brandBorder,
+    paddingVertical: space.xxl,
+    paddingHorizontal: space.xl,
     alignItems: "center",
-    gap: 4,
+    gap: space.xxs,
   },
   shareBrand: {
-    fontSize: 15,
-    fontWeight: "900",
-    color: "#FFFFFF",
+    ...type.h2,
+    color: inkPalette.textPrimary,
   },
-  shareArena: {
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 1.5,
-    color: "#B9A6E4",
+  shareGame: {
+    ...type.micro,
+    color: inkPalette.brandAccent,
   },
   shareScore: {
-    fontSize: 46,
-    fontWeight: "900",
-    color: "#F0BE2E",
-    marginTop: spacing.sm,
+    ...type.scoreHero,
+    fontSize: 56,
+    lineHeight: 60,
+    color: inkPalette.warn,
+    marginTop: space.sm,
   },
-  shareLabel: {
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 1,
-    color: "#FFFFFF",
+  shareUnit: {
+    ...type.micro,
+    color: inkPalette.textPrimary,
   },
   shareDivider: {
     alignSelf: "stretch",
-    height: 1,
-    backgroundColor: "rgba(255,255,255,0.18)",
-    marginVertical: spacing.md,
+    height: hairline,
+    backgroundColor: withAlpha(inkPalette.textPrimary, 0.2),
+    marginVertical: space.md,
   },
-  shareChallenge: {
-    fontSize: 12,
+  shareTaunt: {
+    ...type.bodySm,
     fontWeight: "700",
-    color: "#D9CBF6",
+    color: inkPalette.textSecondary,
   },
   shareFooter: {
-    fontSize: 8,
-    fontWeight: "700",
-    letterSpacing: 1,
-    color: "#8878B8",
-    marginTop: spacing.sm,
+    ...type.micro,
+    color: inkPalette.textTertiary,
+    marginTop: space.sm,
   },
-  closeBtn: {
-    backgroundColor: "rgba(0,0,0,0.35)",
-  },
-  closeText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#FFFFFF",
-  },
-  pressed: {
-    opacity: 0.7,
+  shareActions: {
+    flexDirection: "row",
+    gap: space.m,
   },
 });

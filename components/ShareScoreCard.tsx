@@ -2,10 +2,10 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Sharing from "expo-sharing";
 import { useRef, useState } from "react";
-import { Alert, Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Modal, StyleSheet, Text, View } from "react-native";
 import ViewShot, { captureRef } from "react-native-view-shot";
-import { PlayerAvatar, TeamCrest } from "@/components/TeamCrest";
-import { colors, radius, spacing } from "@/constants/theme";
+import { Avatar, TeamLogo, Touchable, withAlpha } from "@/components/ui";
+import { colors, dark as darkPalette, radius, space, textScale, type } from "@/theme";
 import { instagramUrl } from "@/lib/socials";
 import { useScope } from "@/providers/ScopeProvider";
 import type { ContribRow, StatRow, TopPlayer } from "@/lib/matchStats";
@@ -18,6 +18,30 @@ import type { ApiMatch } from "@/lib/types";
  * seçilen oranda yeniden akar (içerik üstte, alt bilgi dipte). Paylaş, kartı
  * PNG yakalayıp sistem menüsünü açar; oradaki "Görüntüyü Kaydet" ile galeriye
  * indirme de mümkündür (ayrı izin gerektirmez).
+ *
+ * ————— SABİT HEX NEDEN BURADA KALIYOR (bilinçli istisna) —————
+ * Aşağıdaki PURPLE / PURPLE_DARK / INK / GRAY / CARD_BORDER ve kart içindeki
+ * beyaz-lila gradyan, EKRANIN değil DIŞA AKTARILAN PNG'NİN renkleridir.
+ * Kullanıcı kartı Instagram'a atar; oradaki görselin, paylaşanın telefonunda
+ * koyu tema açık olup olmamasına göre değişmesi kabul edilemez — İçerik Havuzu
+ * şablonu her paylaşımda BİREBİR aynı görünmelidir. Bu yüzden kart tuvali
+ * temadan bağımsız sabit bir palet kullanır ve `colors.*` okumaz.
+ *
+ * BİLİNEN AÇIK (geçiş öncesinden devralındı): karttaki `TeamLogo`/`Avatar`,
+ * logo bulunamadığında baş harfleri UYGULAMA paletiyle çizer — koyu temada
+ * beyaz kartın üstünde koyu bir amblem kutusu çıkar. Logolu maçlarda görünmez,
+ * çözümü de bu dosyada değil (`components/ui`de sabit renk seçeneği gerekir),
+ * bu yüzden burada değiştirilmedi.
+ *
+ * KART GEOMETRİSİ DE DONDURULDU: tuval 264px genişliğe göre ayarlandığı için
+ * kart içi boşluklar yeni ölçeğe DEĞER OLARAK birebir taşındı
+ * (eski `spacing.md` = 16 → `space.lg` = 16). Yoğunluk için daraltmak
+ * şablonun oranlarını bozardı.
+ *
+ * UYGULAMA KABUĞU İSE TOKENLI: tetikleyici düğme, boy hapları, alt eylemler ve
+ * perde `@/theme` tokenlarından beslenir; kartın hep koyu bir perde üstünde
+ * durması gerektiği için perde ve üstündeki beyaz metin, koyu paletten
+ * (`darkPalette`) türetilir — böylece açık temada da kontrast korunur.
  */
 
 const CARD_W = 264;
@@ -27,11 +51,24 @@ const FORMATS = {
 } as const;
 type Fmt = keyof typeof FORMATS;
 
+/*
+ * KART TUVALİ PALETİ — dışa aktarılan PNG'nin renkleri (bkz. dosya başlığı).
+ * Temayla DEĞİŞMEZ: paylaşılan görsel her cihazda birebir aynı görünmelidir.
+ * Kurumsal mor burada da `palette.brand`ın açık tema değeriyle aynıdır (#6D28D9),
+ * ama bilerek kopyalanmıştır — palet koyu temada #7C3AED'e kaydığında paylaşım
+ * görselinin peşinden sürüklenmesini istemiyoruz.
+ */
 const PURPLE = "#6D28D9";
 const PURPLE_DARK = "#4C1D95";
 const INK = "#100D16";
 const GRAY = "#8B8797";
 const CARD_BORDER = "#D9CBF2";
+/** Kartın dış çerçevesi (7px kenarlık etkisi veren zemin). */
+const FRAME_INK = "#0B0A0E";
+/** Kart gövdesinin lila→beyaz gradyanı. */
+const BODY_GRADIENT = ["#CDBFE8", "#EFEAF7", "#FFFFFF"] as const;
+/** Kart içi kutuların beyaz zemini. */
+const CARD_WHITE = "#FFFFFF";
 
 type Mode = "matchday" | "fulltime";
 
@@ -105,32 +142,39 @@ export function ShareScoreCard({
 
   return (
     <>
-      <Pressable
+      <Touchable
+        feedback="button"
+        haptic="light"
         onPress={() => setOpen(true)}
-        style={({ pressed }) => [styles.trigger, pressed && styles.pressed]}
+        accessibilityRole="button"
+        accessibilityLabel={mode === "matchday" ? "Maç gününü paylaş" : "Sonucu paylaş"}
+        style={styles.trigger}
       >
-        <Ionicons name="share-social" size={15} color={colors.surface} />
-        <Text style={styles.triggerText}>
+        <Ionicons name="share-social" size={15} color={colors.textOnBrand} />
+        <Text style={styles.triggerText} {...textScale.dense}>
           {mode === "matchday" ? "Maç Gününü Paylaş" : "Sonucu Paylaş"}
         </Text>
-      </Pressable>
+      </Touchable>
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
         <View style={styles.backdrop}>
           {/* Boy seçici */}
           <View style={styles.fmtRow}>
             {(Object.keys(FORMATS) as Fmt[]).map((key) => (
-              <Pressable
+              <Touchable
                 key={key}
+                feedback="chip"
+                haptic="selection"
                 onPress={() => setFmt(key)}
-                style={({ pressed }) => [
-                  styles.fmtPill,
-                  fmt === key && styles.fmtPillActive,
-                  pressed && styles.pressed,
-                ]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: fmt === key }}
+                accessibilityLabel={FORMATS[key].label}
+                style={[styles.fmtPill, fmt === key && styles.fmtPillActive]}
               >
-                <Text style={styles.fmtText}>{FORMATS[key].label}</Text>
-              </Pressable>
+                <Text style={styles.fmtText} {...textScale.badge}>
+                  {FORMATS[key].label}
+                </Text>
+              </Touchable>
             ))}
           </View>
 
@@ -143,7 +187,7 @@ export function ShareScoreCard({
                 style={styles.topStrip}
               />
               <LinearGradient
-                colors={["#CDBFE8", "#EFEAF7", "#FFFFFF"]}
+                colors={BODY_GRADIENT}
                 start={{ x: 0.2, y: 0 }}
                 end={{ x: 0.5, y: 1 }}
                 style={styles.body}
@@ -193,19 +237,33 @@ export function ShareScoreCard({
           </ViewShot>
 
           <View style={styles.actions}>
-            <Pressable
+            <Touchable
+              feedback="button"
+              haptic="light"
               onPress={() => setOpen(false)}
-              style={({ pressed }) => [styles.actionBtn, styles.closeBtn, pressed && styles.pressed]}
+              accessibilityRole="button"
+              accessibilityLabel="Kapat"
+              style={[styles.actionBtn, styles.closeBtn]}
             >
-              <Text style={styles.closeText}>Kapat</Text>
-            </Pressable>
-            <Pressable
+              <Text style={styles.closeText} {...textScale.dense}>
+                Kapat
+              </Text>
+            </Touchable>
+            <Touchable
+              feedback="button"
+              haptic="medium"
               onPress={share}
-              style={({ pressed }) => [styles.actionBtn, styles.shareBtn, pressed && styles.pressed]}
+              disabled={busy}
+              accessibilityRole="button"
+              accessibilityLabel="Paylaş"
+              accessibilityState={{ busy }}
+              style={[styles.actionBtn, styles.shareBtn]}
             >
-              <Ionicons name="share-social" size={16} color={colors.surface} />
-              <Text style={styles.shareText}>{busy ? "Hazırlanıyor…" : "Paylaş"}</Text>
-            </Pressable>
+              <Ionicons name="share-social" size={16} color={colors.textOnBrand} />
+              <Text style={styles.shareText} {...textScale.dense}>
+                {busy ? "Hazırlanıyor…" : "Paylaş"}
+              </Text>
+            </Touchable>
           </View>
           <Text style={styles.saveHint}>İndirmek için: Paylaş → "Görüntüyü Kaydet"</Text>
         </View>
@@ -234,14 +292,14 @@ function MatchDayBody({
       <View style={styles.mainCard}>
         <View style={styles.vsRow}>
           <View style={styles.vsSide}>
-            <TeamCrest name={match.first_team_name} logo={homeLogo} size={64} />
+            <TeamLogo name={match.first_team_name} logo={homeLogo} size={64} />
             <Text style={styles.vsName} numberOfLines={2}>
               {String(match.first_team_name ?? "").toLocaleUpperCase("tr-TR")}
             </Text>
           </View>
           <Text style={styles.vsMark}>VS</Text>
           <View style={styles.vsSide}>
-            <TeamCrest name={match.second_team_name} logo={awayLogo} size={64} />
+            <TeamLogo name={match.second_team_name} logo={awayLogo} size={64} />
             <Text style={styles.vsName} numberOfLines={2}>
               {String(match.second_team_name ?? "").toLocaleUpperCase("tr-TR")}
             </Text>
@@ -321,7 +379,7 @@ function FullTimeBody({
       <View style={styles.mainCard}>
         <View style={styles.vsRow}>
           <View style={styles.vsSide}>
-            <TeamCrest name={match.first_team_name} logo={homeLogo} size={56} />
+            <TeamLogo name={match.first_team_name} logo={homeLogo} size={56} />
             <Text style={styles.vsName} numberOfLines={2}>
               {String(match.first_team_name ?? "").toLocaleUpperCase("tr-TR")}
             </Text>
@@ -332,7 +390,7 @@ function FullTimeBody({
             {awayScore ?? "-"}
           </Text>
           <View style={styles.vsSide}>
-            <TeamCrest name={match.second_team_name} logo={awayLogo} size={56} />
+            <TeamLogo name={match.second_team_name} logo={awayLogo} size={56} />
             <Text style={styles.vsName} numberOfLines={2}>
               {String(match.second_team_name ?? "").toLocaleUpperCase("tr-TR")}
             </Text>
@@ -363,7 +421,7 @@ function FullTimeBody({
           <>
             <View style={styles.cardDivider} />
             <View style={styles.mvpRow}>
-              <PlayerAvatar name={mvp.name} image={mvp.image} size={22} />
+              <Avatar name={mvp.name} image={mvp.image} size={22} />
               <Text style={styles.mvpLine}>
                 MAÇIN YILDIZI{"  "}
                 <Text style={styles.mvpName}>{mvp.name.toLocaleUpperCase("tr-TR")}</Text>
@@ -403,52 +461,93 @@ function InfoBox({ value, label, small }: { value: string; label: string; small?
 }
 
 const styles = StyleSheet.create({
+  /* ————— Uygulama kabuğu: tokenlı, temayla hareket eder ————— */
   trigger: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    backgroundColor: colors.turf,
+    gap: space.s,
+    backgroundColor: colors.brand,
     borderRadius: radius.pill,
-    paddingVertical: spacing.sm + 2,
-    marginTop: spacing.sm,
+    paddingVertical: space.m,
+    marginTop: space.sm,
   },
   triggerText: {
-    fontSize: 13,
+    ...type.bodySm,
     fontWeight: "800",
-    color: colors.surface,
+    color: colors.textOnBrand,
   },
+  /**
+   * Perde HER İKİ TEMADA DA koyudur: üstünde duran kart her zaman açık renkli
+   * bir tuvaldir, açık temanın soluk perdesi onu zeminden ayıramazdı.
+   */
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.65)",
+    backgroundColor: withAlpha(darkPalette.bg, 0.65),
     alignItems: "center",
     justifyContent: "center",
-    padding: spacing.lg,
-    gap: spacing.md,
+    padding: space.xxl,
+    gap: space.lg,
   },
   fmtRow: {
     flexDirection: "row",
-    gap: spacing.sm,
+    gap: space.sm,
   },
   fmtPill: {
     borderRadius: radius.pill,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.45)",
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    borderColor: withAlpha(colors.textOnStatus, 0.45),
+    paddingHorizontal: space.lg,
+    paddingVertical: space.sm,
   },
   fmtPillActive: {
-    backgroundColor: colors.turf,
-    borderColor: colors.turf,
+    backgroundColor: colors.brand,
+    borderColor: colors.brand,
   },
   fmtText: {
-    fontSize: 12,
+    ...type.label,
     fontWeight: "800",
-    color: "#FFFFFF",
+    color: colors.textOnStatus,
   },
+  actions: {
+    flexDirection: "row",
+    gap: space.lg,
+  },
+  actionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: space.s,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.xxxl,
+    paddingVertical: space.md,
+  },
+  closeBtn: {
+    backgroundColor: withAlpha(colors.textOnStatus, 0.14),
+  },
+  closeText: {
+    ...type.bodySm,
+    fontWeight: "700",
+    color: colors.textOnStatus,
+  },
+  shareBtn: {
+    backgroundColor: colors.brand,
+  },
+  shareText: {
+    ...type.bodySm,
+    fontWeight: "800",
+    color: colors.textOnBrand,
+  },
+  saveHint: {
+    ...type.caption,
+    fontWeight: "600",
+    color: withAlpha(colors.textOnStatus, 0.75),
+  },
+
+  /* ————— Kart tuvali: sabit palet + dondurulmuş geometri ————— */
   frame: {
     width: CARD_W,
-    backgroundColor: "#0B0A0E",
+    backgroundColor: FRAME_INK,
     borderRadius: 14,
     padding: 7,
     overflow: "hidden",
@@ -462,16 +561,16 @@ const styles = StyleSheet.create({
     flex: 1,
     borderBottomLeftRadius: 8,
     borderBottomRightRadius: 8,
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm + 2,
-    paddingBottom: spacing.sm,
+    paddingHorizontal: space.lg,
+    paddingTop: space.m,
+    paddingBottom: space.sm,
     overflow: "hidden",
   },
   spacer: {
     flex: 1,
   },
   spacerSm: {
-    height: spacing.lg,
+    height: space.xxl,
   },
   watermark: {
     position: "absolute",
@@ -504,7 +603,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 0.6,
     color: PURPLE,
-    marginTop: spacing.sm,
+    marginTop: space.sm,
   },
   headline: {
     fontSize: 19,
@@ -512,26 +611,26 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
     color: INK,
     marginTop: 2,
-    marginBottom: spacing.sm + 2,
+    marginBottom: space.m,
   },
   mainCard: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: CARD_WHITE,
     borderWidth: 1,
     borderColor: CARD_BORDER,
     borderRadius: 14,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.sm,
+    paddingVertical: space.lg,
+    paddingHorizontal: space.sm,
   },
   vsRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: spacing.xs,
+    gap: space.xs,
   },
   vsSide: {
     flex: 1,
     alignItems: "center",
-    gap: spacing.sm,
+    gap: space.sm,
   },
   vsName: {
     fontSize: 10,
@@ -556,8 +655,8 @@ const styles = StyleSheet.create({
   cardDivider: {
     height: 1,
     backgroundColor: CARD_BORDER,
-    marginVertical: spacing.sm,
-    marginHorizontal: spacing.sm,
+    marginVertical: space.sm,
+    marginHorizontal: space.sm,
   },
   mvpRow: {
     flexDirection: "row",
@@ -577,17 +676,17 @@ const styles = StyleSheet.create({
   },
   boxRow: {
     flexDirection: "row",
-    gap: spacing.sm,
-    marginTop: spacing.sm,
+    gap: space.sm,
+    marginTop: space.sm,
   },
   infoBox: {
     flex: 1,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: CARD_WHITE,
     borderWidth: 1,
     borderColor: CARD_BORDER,
     borderRadius: 12,
-    paddingVertical: spacing.sm + 2,
-    paddingHorizontal: 6,
+    paddingVertical: space.m,
+    paddingHorizontal: space.s,
     alignItems: "flex-start",
   },
   boxValue: {
@@ -612,14 +711,14 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
     color: GRAY,
     marginTop: -6,
-    marginBottom: spacing.sm,
+    marginBottom: space.sm,
   },
   scorersRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    gap: spacing.sm,
-    marginTop: spacing.sm,
-    paddingHorizontal: 4,
+    gap: space.sm,
+    marginTop: space.sm,
+    paddingHorizontal: space.xs,
   },
   scorersCol: {
     flex: 1,
@@ -647,7 +746,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: GRAY,
     textAlign: "center",
-    marginTop: spacing.sm,
+    marginTop: space.sm,
   },
   footer: {
     alignItems: "center",
@@ -663,42 +762,5 @@ const styles = StyleSheet.create({
     fontSize: 8,
     fontWeight: "700",
     color: PURPLE,
-  },
-  saveHint: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: "rgba(255,255,255,0.75)",
-  },
-  actions: {
-    flexDirection: "row",
-    gap: spacing.md,
-  },
-  actionBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.sm + 3,
-  },
-  closeBtn: {
-    backgroundColor: "rgba(255,255,255,0.14)",
-  },
-  closeText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#FFFFFF",
-  },
-  shareBtn: {
-    backgroundColor: colors.turf,
-  },
-  shareText: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: colors.surface,
-  },
-  pressed: {
-    opacity: 0.75,
   },
 });

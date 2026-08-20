@@ -1,32 +1,83 @@
+/**
+ * ELİTLİG ARENA — Seri Modu ("daha fazla mı, daha az mı?").
+ *
+ * OYUN: kapsamdaki oyuncu sıralamasından iki oyuncu çekilir; üsttekinin değeri
+ * (GOL / MAÇ / PUAN — turdan tura değişir) açık, alttakinin gizlidir. Doğru
+ * bildikçe seri uzar, tek yanlışta biter. Sorular gerçek lig verisinden sonsuz
+ * üretilir; sistem oyuncuları (HÜKMEN vb.) havuza alınmaz.
+ *
+ * OYUN MANTIĞI BU YENİLEMEDE DEĞİŞMEDİ: havuz kurulumu (`pool`), el dağıtımı
+ * (`draw`/`start`/`advance`), tahmin değerlendirmesi (`guess`), rekor ve geçmiş
+ * yazımı birebir korundu. Yenilenen yalnız SUNUM katmanıdır.
+ *
+ * SUNUM MİMARİSİ — tek durum makinesi, üç yüz:
+ *   1. GİRİŞ — `started` yalnız bir sunum kapısıdır, oyunun `phase` durumuna
+ *      dokunmaz. Havuz gelir gelmez ilk el arka planda kurulur (eski davranış);
+ *      kullanıcı "Başla"ya basana kadar üstünde giriş kartı durur. Böylece oyun
+ *      adı, tek cümlelik kural ve kişisel rekor okunmadan el harcanmaz.
+ *   2. OYUN — üstte ince HUD şeridi (skor solda, tabular; rekor ve o turun
+ *      metriği sağda), ortada iki oyuncu kartı, altta SABİT tahmin çubuğu.
+ *      Çubuk kaydırma alanının DIŞINDADIR: uzayan rekor listesi tahmin
+ *      düğmelerini ekrandan itemez.
+ *   3. BİTİŞ — `BottomSheet`. Tam ekran kart yerine sheet seçildi; arkadaki son
+ *      el görünür kalır, "neyi bilemedim" sorusu cevapsız kalmaz.
+ *
+ * PAYLAŞIM KARTI NEDEN SABİT PALETTEN: kart bir görüntü olarak uygulamadan
+ * çıkar. Aktif temaya bağlansaydı aynı rekor, açık temadaki kullanıcıda beyaz
+ * bir kâğıt olurdu. Bu yüzden `dark` paleti doğrudan içe aktarılır — renkler
+ * yine tokenlardan gelir, yalnız kullanıcının tema seçiminden bağımsızdır.
+ *
+ * İKİ MODAL ÜST ÜSTE AÇILMAZ: bitiş sheet'i de paylaşım önizlemesi de `Modal`
+ * kullanır; iOS'ta iki modalı üst üste bindirmek güvenilir değildir. Sheet
+ * `!shareOpen` koşuluyla geri çekilir, paylaşım kapanınca geri gelir.
+ */
+
 import Ionicons from "@expo/vector-icons/Ionicons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQuery } from "@tanstack/react-query";
+import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Modal, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import ViewShot, { captureRef } from "react-native-view-shot";
-import { DetailHeader } from "@/components/ScreenHeader";
-import { EmptyState, Loading } from "@/components/States";
-import { PlayerAvatar } from "@/components/TeamCrest";
-import { colors, radius, spacing, type } from "@/constants/theme";
+import {
+  Avatar,
+  Badge,
+  BottomSheet,
+  Button,
+  EmptyState,
+  ErrorState,
+  ScreenHeader,
+  SectionHeader,
+  Skeleton,
+  Touchable,
+  useToast,
+  withAlpha,
+} from "@/components/ui";
 import { submitArenaScore } from "@/lib/api/arena";
 import { getPlayerRankings } from "@/lib/api/players";
 import { queryKeys } from "@/lib/queryKeys";
 import { instagramUrl } from "@/lib/socials";
+import type { PlayerRankRow } from "@/lib/types";
 import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
-import type { PlayerRankRow } from "@/lib/types";
+import {
+  colors,
+  dark as inkPalette,
+  elevate,
+  hairline,
+  haptics,
+  layout,
+  radius,
+  space,
+  textScale,
+  type,
+  upperTR,
+} from "@/theme";
 
-/**
- * ELİTLİG ARENA — Seri Modu ("daha fazla mı, daha az mı?").
- *
- * Kapsamdaki oyuncu sıralamasından iki oyuncu çekilir; üsttekinin değeri
- * (GOL / MAÇ / PUAN — turdan tura değişir) açık, alttakinin gizlidir.
- * Doğru bildikçe seri uzar; tek yanlışta oyun biter. Rekor cihazda saklanır
- * ve koyu bir rekor kartıyla paylaşılabilir. Sorular gerçek lig verisinden
- * sonsuz üretilir; sistem oyuncuları (HÜKMEN vb.) havuza alınmaz.
- */
+/* ========================= SABİTLER (oyun mantığı) ========================= */
 
 const BEST_KEY = "elitlig.arena.best.v1";
 const HISTORY_KEY = "elitlig.arena.history.v1";
@@ -54,7 +105,16 @@ interface Contender {
 
 type Phase = "guess" | "correct" | "wrong" | "over";
 
+/** Skorun sunucuya gidişi — bitiş kartında tek satırla anlatılır. */
+type SubmitState = "idle" | "guest" | "sending" | "sent" | "failed";
+
+/** Alt oyuncu kartının okunuşu: değer gizli mi, doğru mu bilindi mi. */
+type RevealState = "known" | "hidden" | "correct" | "wrong";
+
+/* ================================ EKRAN ================================ */
+
 export default function ArenaScreen() {
+  const router = useRouter();
   const scope = useScope();
   const auth = useAuth();
   const scopeKey = {
@@ -123,6 +183,11 @@ export default function ArenaScreen() {
     if (timer.current) clearTimeout(timer.current);
   }, []);
 
+  /* — Sunum durumu: oyunun durum makinesine karışmaz — */
+  const [started, setStarted] = useState(false);
+  const [submit, setSubmit] = useState<SubmitState>("idle");
+  const [shareOpen, setShareOpen] = useState(false);
+
   /** Değerleri eşit olmayan yeni bir rakip + metrik seçer. */
   const draw = (anchor: Contender | null): { next: Contender; m: MetricKey } | null => {
     if (pool.length < 2) return null;
@@ -165,6 +230,26 @@ export default function ArenaScreen() {
     setPhase("guess");
   };
 
+  /**
+   * Skoru rekor tablosuna yollar. Tetikleme koşulu eskisiyle birebir aynı
+   * (oturum var + seri > 0); tek fark, sonucun artık sessizce yutulmak yerine
+   * bitiş kartında bir satır olarak görünmesi ve tekrar denenebilmesi.
+   */
+  const submitScore = (value: number) => {
+    if (value <= 0) {
+      setSubmit("idle");
+      return;
+    }
+    if (!auth.user) {
+      setSubmit("guest");
+      return;
+    }
+    setSubmit("sending");
+    submitArenaScore("seri", value)
+      .then(() => setSubmit("sent"))
+      .catch(() => setSubmit("failed"));
+  };
+
   const guess = (higher: boolean) => {
     if (phase !== "guess" || !top || !bottom) return;
     const a = top.values[metric];
@@ -178,158 +263,503 @@ export default function ArenaScreen() {
         setBest(s);
         AsyncStorage.setItem(BEST_KEY, String(s));
       }
+      haptics.light();
       timer.current = setTimeout(advance, REVEAL_MS);
     } else {
       setPhase("wrong");
       record(streak);
-      if (auth.user && streak > 0) submitArenaScore("seri", streak).catch(() => {});
+      submitScore(streak);
+      haptics.warning();
       timer.current = setTimeout(() => setPhase("over"), REVEAL_MS);
     }
   };
 
   const metricLabel = METRICS.find((m) => m.key === metric)?.label ?? "";
+  const isRecord = streak > 0 && streak >= best;
 
-  return (
-    <SafeAreaView style={styles.screen} edges={["top"]}>
-      <DetailHeader title="Arena · Seri Modu" subtitle="Daha fazla mı, daha az mı?" />
+  const openBoard = () => router.push({ pathname: "/siralama", params: { game: "seri" } });
+  const openSignIn = () => router.push("/giris");
 
-      {rankingsQuery.isLoading ? (
-        <Loading />
-      ) : pool.length < 2 ? (
+  /** Yeni el: sunum kapısı açık kalır, oyun sıfırdan kurulur. */
+  const restart = () => {
+    setSubmit("idle");
+    setShareOpen(false);
+    start();
+  };
+
+  const beginGame = () => {
+    setSubmit("idle");
+    setStarted(true);
+    start();
+  };
+
+  const headerActions = useMemo(
+    () => [
+      {
+        icon: "trophy-outline" as keyof typeof Ionicons.glyphMap,
+        onPress: () => router.push({ pathname: "/siralama", params: { game: "seri" } }),
+        accessibilityLabel: "Rekor tablosu",
+      },
+    ],
+    [router]
+  );
+
+  const bottomReveal: RevealState =
+    phase === "guess" ? "hidden" : phase === "correct" ? "correct" : "wrong";
+
+  /**
+   * NEDEN ALT BİLEŞENLER `React.memo` DEĞİL: her tahminde `phase` değişiyor ve
+   * ekrandaki her şey zaten yeniden çiziliyor. Memo defterini tutmak burada
+   * kazanç değil, sabit maliyettir (§bkz. components/ui/README "Tuzaklar").
+   */
+  const body = (() => {
+    if (rankingsQuery.isLoading) return <PoolSkeleton />;
+
+    if (rankingsQuery.isError && pool.length === 0) {
+      return (
+        <ErrorState
+          error={rankingsQuery.error}
+          onRetry={() => {
+            void rankingsQuery.refetch();
+          }}
+        />
+      );
+    }
+
+    if (pool.length < 2) {
+      return (
         <EmptyState
           icon="game-controller-outline"
           title="Havuz hazır değil"
-          body="Bu kapsamda yeterli oyuncu verisi yok. Üstten farklı bir lig/sezon seçmeyi dene."
+          body="Bu kapsamda yeterli oyuncu verisi yok. Üstten farklı bir lig ya da sezon seçmeyi dene."
+          action={{ label: "Rekor tablosu", onPress: openBoard, haptic: "light" }}
         />
-      ) : !top || !bottom ? (
-        <Loading />
-      ) : (
-        <ScrollView contentContainerStyle={styles.content}>
-          {/* Seri şeridi */}
-          <View style={styles.streakRow}>
-            <View style={styles.streakPill}>
-              <Text style={styles.streakText}>🔥 SERİ: {streak}</Text>
-            </View>
-            <View style={[styles.streakPill, styles.bestPill]}>
-              <Text style={styles.bestText}>🏆 REKOR: {best}</Text>
-            </View>
-          </View>
+      );
+    }
 
-          {/* Üst oyuncu — değeri açık */}
-          <View style={styles.cardTop}>
-            <PlayerAvatar name={top.name} image={top.image} size={44} />
-            <Text style={styles.playerName} numberOfLines={1}>
-              {top.name.toLocaleUpperCase("tr-TR")}
+    if (!top || !bottom) return <PoolSkeleton />;
+
+    if (!started) return <StartCard best={best} onStart={beginGame} />;
+
+    return (
+      <>
+        {/* — HUD: skor solda (tabular), rekor ve tur metriği sağda — */}
+        <View style={styles.hud}>
+          <View style={styles.hudScoreBox}>
+            <Text style={styles.hudLabel} {...textScale.badge}>
+              {upperTR("Seri")}
             </Text>
-            <Text style={styles.teamName} numberOfLines={1}>
-              {top.team}
-            </Text>
-            <Text style={styles.valueOpen}>
-              {top.values[metric]} {metricLabel}
+            <Text style={styles.hudScore} {...textScale.dense}>
+              {streak}
             </Text>
           </View>
 
-          <Text style={styles.versus}>— peki —</Text>
+          <View style={styles.hudRight}>
+            <View style={styles.hudPill}>
+              <Ionicons name="trophy" size={11} color={colors.star} />
+              <Text style={styles.hudPillText} {...textScale.badge}>
+                {best}
+              </Text>
+            </View>
+            <View style={[styles.hudPill, styles.hudPillBrand]}>
+              <Text style={styles.hudPillBrandText} {...textScale.badge}>
+                {metricLabel}
+              </Text>
+            </View>
+          </View>
+        </View>
 
-          {/* Alt oyuncu — değeri gizli / açıklanıyor */}
-          <View
-            style={[
-              styles.cardBottom,
-              phase === "correct" && styles.cardRight,
-              (phase === "wrong" || phase === "over") && styles.cardWrong,
-            ]}
-          >
-            <PlayerAvatar name={bottom.name} image={bottom.image} size={44} />
-            <Text style={[styles.playerName, styles.playerNameBottom]} numberOfLines={1}>
-              {bottom.name.toLocaleUpperCase("tr-TR")}
+        <ScrollView
+          style={styles.flex}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+        >
+          <ContenderCard
+            name={top.name}
+            team={top.team}
+            image={top.image}
+            metricLabel={metricLabel}
+            value={top.values[metric]}
+            state="known"
+          />
+
+          <View style={styles.connector}>
+            <View style={styles.connectorLine} />
+            <Text style={styles.connectorText} {...textScale.badge}>
+              {upperTR(`${metricLabel} sayısı?`)}
             </Text>
-            <Text style={[styles.teamName, styles.teamNameBottom]} numberOfLines={1}>
-              {bottom.team}
-            </Text>
-            <Text style={[styles.valueHidden, phase !== "guess" && styles.valueRevealed]}>
-              {phase === "guess" ? `? ${metricLabel}` : `${bottom.values[metric]} ${metricLabel}`}
-            </Text>
+            <View style={styles.connectorLine} />
           </View>
 
-          {phase === "over" ? (
-            <GameOver streak={streak} best={best} onRestart={start} scopeCity={scope.cityLabel} />
-          ) : (
-            <View style={styles.buttons}>
-              <Pressable
-                onPress={() => guess(true)}
-                disabled={phase !== "guess"}
-                style={({ pressed }) => [
-                  styles.guessBtn,
-                  styles.moreBtn,
-                  (pressed || phase !== "guess") && styles.pressed,
-                ]}
-              >
-                <Ionicons name="arrow-up" size={18} color="#FFFFFF" />
-                <Text style={styles.guessText}>DAHA FAZLA</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => guess(false)}
-                disabled={phase !== "guess"}
-                style={({ pressed }) => [
-                  styles.guessBtn,
-                  styles.lessBtn,
-                  (pressed || phase !== "guess") && styles.pressed,
-                ]}
-              >
-                <Ionicons name="arrow-down" size={18} color="#FFFFFF" />
-                <Text style={styles.guessText}>DAHA AZ</Text>
-              </Pressable>
-            </View>
-          )}
+          <ContenderCard
+            name={bottom.name}
+            team={bottom.team}
+            image={bottom.image}
+            metricLabel={metricLabel}
+            value={phase === "guess" ? null : bottom.values[metric]}
+            state={bottomReveal}
+          />
 
-          <Text style={styles.hint}>
-            Üstteki oyuncunun değeri açık; alttakinin {metricLabel} sayısı daha mı fazla, daha mı az?
+          <Text style={styles.hint} {...textScale.dense}>
+            Üstteki oyuncunun {metricLabel.toLocaleLowerCase("tr-TR")} sayısı açık. Alttaki daha mı
+            fazla, daha mı az?
           </Text>
 
           {history.length > 0 ? (
-            <View style={styles.historyCard}>
-              <Text style={styles.historyTitle}>REKOR LİSTEM</Text>
-              {history.slice(0, 5).map((entry, index) => (
-                <View key={`${entry.date}-${index}`} style={styles.historyRow}>
-                  <Text style={styles.historyRank}>
-                    {index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : `${index + 1}.`}
-                  </Text>
-                  <Text style={styles.historyStreak}>🔥 {entry.streak}</Text>
-                  <Text style={styles.historyDate}>
-                    {new Date(entry.date).toLocaleDateString("tr-TR", {
-                      day: "numeric",
-                      month: "short",
-                    })}
-                  </Text>
-                </View>
-              ))}
+            <View style={styles.historyBlock}>
+              <SectionHeader title="Rekor listem" meta={`${history.length} seri`} />
+              <View style={styles.historyBox}>
+                {history.slice(0, 5).map((entry, index) => (
+                  <View
+                    key={`${entry.date}-${index}`}
+                    style={[styles.historyRow, index > 0 ? styles.historyRowBorder : null]}
+                  >
+                    <View style={[styles.historyRank, index === 0 ? styles.historyRankTop : null]}>
+                      <Text
+                        style={[
+                          styles.historyRankText,
+                          index === 0 ? styles.historyRankTextTop : null,
+                        ]}
+                        {...textScale.badge}
+                      >
+                        {index + 1}
+                      </Text>
+                    </View>
+                    <Text style={styles.historyStreak} {...textScale.dense}>
+                      {entry.streak}
+                    </Text>
+                    <Text style={styles.historyUnit} {...textScale.badge}>
+                      seri
+                    </Text>
+                    <View style={styles.flex} />
+                    <Text style={styles.historyDate} {...textScale.badge}>
+                      {new Date(entry.date).toLocaleDateString("tr-TR", {
+                        day: "numeric",
+                        month: "short",
+                      })}
+                    </Text>
+                  </View>
+                ))}
+              </View>
             </View>
           ) : null}
         </ScrollView>
-      )}
+
+        {/* — Sabit tahmin çubuğu: liste uzasa da başparmağın altında kalır — */}
+        <View style={styles.guessBar}>
+          <Touchable
+            feedback="button"
+            onPress={() => guess(true)}
+            disabled={phase !== "guess"}
+            style={[styles.guessBtn, styles.guessMore, phase !== "guess" ? styles.guessOff : null]}
+            accessibilityRole="button"
+            accessibilityLabel={`Alttaki oyuncunun ${metricLabel} sayısı daha fazla`}
+          >
+            <Ionicons name="arrow-up" size={18} color={colors.win} />
+            <Text style={styles.guessMoreText} {...textScale.dense}>
+              {upperTR("Daha fazla")}
+            </Text>
+          </Touchable>
+
+          <Touchable
+            feedback="button"
+            onPress={() => guess(false)}
+            disabled={phase !== "guess"}
+            style={[styles.guessBtn, styles.guessLess, phase !== "guess" ? styles.guessOff : null]}
+            accessibilityRole="button"
+            accessibilityLabel={`Alttaki oyuncunun ${metricLabel} sayısı daha az`}
+          >
+            <Ionicons name="arrow-down" size={18} color={colors.loss} />
+            <Text style={styles.guessLessText} {...textScale.dense}>
+              {upperTR("Daha az")}
+            </Text>
+          </Touchable>
+        </View>
+      </>
+    );
+  })();
+
+  return (
+    <SafeAreaView style={styles.screen} edges={["top"]}>
+      <ScreenHeader
+        title="Arena"
+        overline={upperTR("Seri modu")}
+        subtitle="Daha fazla mı, daha az mı?"
+        back
+        actions={headerActions}
+      />
+
+      {body}
+
+      {/* Bitiş kartı — paylaşım önizlemesi açıkken geri çekilir (bkz. dosya başı). */}
+      <BottomSheet visible={phase === "over" && !shareOpen} onClose={restart} snap="content">
+        <View style={styles.over}>
+          {isRecord ? (
+            <Badge label={upperTR("Yeni rekor")} tone="warn" icon="trophy" variant="soft" />
+          ) : null}
+
+          <Text style={styles.overTitle} {...textScale.dense}>
+            {isRecord ? "Rekorunu kırdın!" : "Seri bitti"}
+          </Text>
+
+          <Text style={styles.overScore} {...textScale.dense}>
+            {streak}
+          </Text>
+          <Text style={styles.overUnit} {...textScale.badge}>
+            {upperTR("doğru seri")}
+          </Text>
+
+          <Text style={styles.overBest} {...textScale.dense}>
+            {`Rekorun ${best} seri`}
+          </Text>
+
+          <SubmitLine
+            state={submit}
+            onRetry={() => submitScore(streak)}
+            onSignIn={openSignIn}
+          />
+
+          <View style={styles.overActions}>
+            <Button label="Tekrar oyna" icon="refresh" size="lg" fullWidth onPress={restart} />
+            <View style={styles.overRow}>
+              <Button
+                label="Rekor tablosu"
+                icon="trophy-outline"
+                variant="secondary"
+                onPress={openBoard}
+                style={styles.flex}
+              />
+              <Button
+                label="Meydan oku"
+                icon="share-social"
+                variant="ghost"
+                onPress={() => setShareOpen(true)}
+                style={styles.flex}
+              />
+            </View>
+          </View>
+        </View>
+      </BottomSheet>
+
+      <ShareSheet
+        visible={shareOpen}
+        onClose={() => setShareOpen(false)}
+        streak={streak}
+        isRecord={isRecord}
+        cityLabel={scope.cityLabel}
+      />
     </SafeAreaView>
   );
 }
 
-/** Oyun sonu: skor, tekrar oyna ve rekor paylaşım kartı. */
-function GameOver({
-  streak,
-  best,
-  onRestart,
-  scopeCity,
+/* ============================ GİRİŞ KARTI ============================ */
+
+/** Oyun adı, tek cümlelik kural, kişisel rekor ve tek büyük eylem. */
+function StartCard({ best, onStart }: { best: number; onStart: () => void }) {
+  return (
+    <View style={styles.startWrap}>
+      <LinearGradient
+        colors={[withAlpha(colors.brand, 0.22), colors.surface1]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0.9, y: 1 }}
+        style={styles.startCard}
+      >
+        <View style={styles.startIcon}>
+          <Ionicons name="flame" size={22} color={colors.brandAccent} />
+        </View>
+
+        <Text style={styles.startOverline} {...textScale.badge}>
+          {upperTR("Elitlig Arena")}
+        </Text>
+        <Text style={styles.startTitle} {...textScale.dense}>
+          Seri Modu
+        </Text>
+        <Text style={styles.startRule} {...textScale.long}>
+          İki oyuncudan alttakinin sayısı daha mı fazla, daha mı az — yanlışa kadar seriyi uzat.
+        </Text>
+
+        <View style={styles.startBest}>
+          <Ionicons name="trophy" size={13} color={colors.star} />
+          <Text style={styles.startBestText} {...textScale.dense}>
+            {best > 0 ? `Rekorun ${best} seri` : "Henüz rekorun yok"}
+          </Text>
+        </View>
+
+        <Button label="Başla" icon="play" size="lg" fullWidth onPress={onStart} />
+      </LinearGradient>
+    </View>
+  );
+}
+
+/* ============================ OYUNCU KARTI ============================ */
+
+function ContenderCard({
+  name,
+  team,
+  image,
+  metricLabel,
+  value,
+  state,
 }: {
-  streak: number;
-  best: number;
-  onRestart: () => void;
-  scopeCity: string;
+  name: string;
+  team: string;
+  image: string | null;
+  metricLabel: string;
+  /** null → değer henüz gizli. */
+  value: number | null;
+  state: RevealState;
 }) {
-  const [shareOpen, setShareOpen] = useState(false);
+  const boxStyle =
+    state === "known"
+      ? styles.cardKnown
+      : state === "correct"
+        ? styles.cardCorrect
+        : state === "wrong"
+          ? styles.cardWrong
+          : styles.cardHidden;
+
+  const valueColor =
+    state === "known"
+      ? styles.valueKnown
+      : state === "correct"
+        ? styles.valueCorrect
+        : state === "wrong"
+          ? styles.valueWrong
+          : styles.valueHidden;
+
+  return (
+    <View
+      style={[styles.card, boxStyle]}
+      accessibilityRole="summary"
+      accessibilityLabel={`${name}, ${team}. ${value == null ? "Değeri gizli" : `${value} ${metricLabel}`}`}
+    >
+      <Avatar
+        name={name}
+        image={image}
+        size={40}
+        ring={state === "known" ? "brand" : "none"}
+      />
+
+      <View style={styles.cardBody}>
+        <Text style={styles.cardName} numberOfLines={1} {...textScale.dense}>
+          {upperTR(name)}
+        </Text>
+        <Text style={styles.cardTeam} numberOfLines={1} {...textScale.dense}>
+          {team || "—"}
+        </Text>
+      </View>
+
+      <View style={styles.cardValue}>
+        <Text style={[styles.value, valueColor]} {...textScale.dense}>
+          {value == null ? "?" : value}
+        </Text>
+        <Text style={styles.valueUnit} {...textScale.badge}>
+          {metricLabel}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+/* ======================= SKOR GÖNDERİM SATIRI ======================= */
+
+function SubmitLine({
+  state,
+  onRetry,
+  onSignIn,
+}: {
+  state: SubmitState;
+  onRetry: () => void;
+  onSignIn: () => void;
+}) {
+  if (state === "idle") return null;
+
+  if (state === "guest") {
+    return (
+      <Touchable
+        feedback="button"
+        haptic="light"
+        onPress={onSignIn}
+        style={styles.submitLine}
+        accessibilityRole="button"
+        accessibilityLabel="Giriş yap, skorun rekor tablosuna yazılsın"
+      >
+        <Ionicons name="log-in-outline" size={13} color={colors.brandAccent} />
+        <Text style={styles.submitLink} {...textScale.dense}>
+          Giriş yap, skorun tabloya yazılsın
+        </Text>
+      </Touchable>
+    );
+  }
+
+  if (state === "failed") {
+    return (
+      <Touchable
+        feedback="button"
+        haptic="light"
+        onPress={onRetry}
+        style={styles.submitLine}
+        accessibilityRole="button"
+        accessibilityLabel="Skor gönderilemedi, tekrar dene"
+      >
+        <Ionicons name="refresh" size={13} color={colors.danger} />
+        <Text style={styles.submitFail} {...textScale.dense}>
+          Skor gönderilemedi · tekrar dene
+        </Text>
+      </Touchable>
+    );
+  }
+
+  return (
+    <View style={styles.submitLine}>
+      <Ionicons
+        name={state === "sent" ? "checkmark-circle" : "cloud-upload-outline"}
+        size={13}
+        color={state === "sent" ? colors.win : colors.textTertiary}
+      />
+      <Text style={styles.submitInfo} {...textScale.dense}>
+        {state === "sent" ? "Rekor tablosuna yazıldı" : "Rekor tablosuna gönderiliyor…"}
+      </Text>
+    </View>
+  );
+}
+
+/* ========================== İSKELET / PAYLAŞIM ========================== */
+
+function PoolSkeleton() {
+  return (
+    <View style={styles.loading}>
+      <Skeleton width="100%" height={72} radius="lg" />
+      <Skeleton width="45%" height={12} radius="xs" style={styles.loadingCenter} />
+      <Skeleton width="100%" height={72} radius="lg" />
+      <Skeleton width="70%" height={12} radius="xs" style={styles.loadingCenter} />
+    </View>
+  );
+}
+
+/**
+ * Meydan okuma kartı — ViewShot ile PNG'ye çevrilip paylaşılır.
+ * Renkler `inkPalette` (sabit koyu palet) üstünden gelir; bkz. dosya başı.
+ */
+function ShareSheet({
+  visible,
+  onClose,
+  streak,
+  isRecord,
+  cityLabel,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  streak: number;
+  isRecord: boolean;
+  cityLabel: string;
+}) {
+  const toast = useToast();
   const [busy, setBusy] = useState(false);
   const shotRef = useRef<View>(null);
-  const isRecord = streak > 0 && streak >= best;
 
   const igHandle = (() => {
-    const url = instagramUrl(scopeCity);
+    const url = instagramUrl(cityLabel);
     const handle = url?.split("instagram.com/")[1]?.replace(/\/+$/, "");
     return handle ? `@${handle}` : "elitlig.com";
   })();
@@ -343,356 +773,471 @@ function GameOver({
         await Sharing.shareAsync(uri, { mimeType: "image/png" });
       }
     } catch {
-      Alert.alert("Bir sorun oldu", "Görsel oluşturulamadı, tekrar dener misin?");
+      toast.show({ message: "Görsel oluşturulamadı, tekrar dener misin?", tone: "danger" });
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <View style={styles.overBox}>
-      <Text style={styles.overTitle}>{isRecord ? "🏆 YENİ REKOR!" : "Seri bitti!"}</Text>
-      <Text style={styles.overScore}>🔥 {streak}</Text>
-      <Text style={styles.overSub}>Rekorun: {best}</Text>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={styles.shareBackdrop}>
+        <ViewShot ref={shotRef} options={{ format: "png", quality: 1 }}>
+          <LinearGradient
+            colors={[inkPalette.brandDim, inkPalette.bg]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.shareCard}
+          >
+            <Text style={styles.shareBrand} {...textScale.badge}>
+              elitlig
+            </Text>
+            <Text style={styles.shareGame} {...textScale.badge}>
+              {upperTR("Arena · Seri Modu")}
+            </Text>
 
-      <View style={styles.overButtons}>
-        <Pressable
-          onPress={onRestart}
-          style={({ pressed }) => [styles.overBtn, styles.retryBtn, pressed && styles.pressed]}
-        >
-          <Ionicons name="refresh" size={16} color={colors.surface} />
-          <Text style={styles.retryText}>Tekrar Oyna</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setShareOpen(true)}
-          style={({ pressed }) => [styles.overBtn, styles.shareBtn2, pressed && styles.pressed]}
-        >
-          <Ionicons name="share-social" size={16} color={colors.turf} />
-          <Text style={styles.shareText2}>Meydan Oku</Text>
-        </Pressable>
-      </View>
+            <Text style={styles.shareScore} {...textScale.badge}>
+              {streak}
+            </Text>
+            <Text style={styles.shareUnit} {...textScale.badge}>
+              {upperTR(isRecord ? "seri · yeni rekor" : "seri")}
+            </Text>
 
-      <Modal
-        visible={shareOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShareOpen(false)}
-      >
-        <View style={styles.backdrop}>
-          <ViewShot ref={shotRef} options={{ format: "png", quality: 1 }}>
-            <View style={styles.shareCard}>
-              <Text style={styles.shareBrand}>elitlig</Text>
-              <Text style={styles.shareArena}>ARENA · SERİ MODU</Text>
-              <Text style={styles.shareStreak}>🔥 {streak}</Text>
-              <Text style={styles.shareLabel}>SERİ{isRecord ? " · YENİ REKOR 🏆" : ""}</Text>
-              <View style={styles.shareDivider} />
-              <Text style={styles.shareChallenge}>"Geç de görelim" 😏</Text>
-              <Text style={styles.shareFooter}>ELİTLİG.COM · {igHandle}</Text>
-            </View>
-          </ViewShot>
-          <View style={styles.overButtons}>
-            <Pressable
-              onPress={() => setShareOpen(false)}
-              style={({ pressed }) => [styles.overBtn, styles.closeBtn2, pressed && styles.pressed]}
-            >
-              <Text style={styles.closeText2}>Kapat</Text>
-            </Pressable>
-            <Pressable
-              onPress={share}
-              style={({ pressed }) => [styles.overBtn, styles.retryBtn, pressed && styles.pressed]}
-            >
-              <Ionicons name="share-social" size={16} color={colors.surface} />
-              <Text style={styles.retryText}>{busy ? "Hazırlanıyor…" : "Paylaş"}</Text>
-            </Pressable>
-          </View>
+            <View style={styles.shareDivider} />
+
+            <Text style={styles.shareTaunt} {...textScale.badge}>
+              Geç de görelim
+            </Text>
+            <Text style={styles.shareFooter} {...textScale.badge}>
+              {upperTR(`elitlig.com · ${igHandle}`)}
+            </Text>
+          </LinearGradient>
+        </ViewShot>
+
+        <View style={styles.shareActions}>
+          <Button label="Kapat" variant="secondary" onPress={onClose} />
+          <Button
+            label="Paylaş"
+            icon="share-social"
+            loading={busy}
+            onPress={() => {
+              void share();
+            }}
+          />
         </View>
-      </Modal>
-    </View>
+      </View>
+    </Modal>
   );
 }
 
+/* ================================ STİLLER ================================ */
+
 const styles = StyleSheet.create({
-  screen: {
+  screen: { flex: 1, backgroundColor: colors.bg },
+  flex: { flex: 1 },
+
+  /* — Yükleme — */
+  loading: {
+    padding: layout.screenPadding,
+    gap: space.md,
+  },
+  loadingCenter: { alignSelf: "center" },
+
+  /* — Giriş kartı — */
+  startWrap: {
     flex: 1,
-    backgroundColor: colors.pitch,
-  },
-  content: {
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.xl,
-  },
-  streakRow: {
-    flexDirection: "row",
     justifyContent: "center",
-    gap: spacing.sm,
-    marginBottom: spacing.md,
+    padding: layout.screenPadding,
   },
-  streakPill: {
-    backgroundColor: colors.turfDim,
+  startCard: {
+    borderRadius: radius.xl,
+    // Yüzen kart (§yükselti 4); marka çerçevesi kasıtlı olarak korunur.
+    ...elevate(4),
+    borderColor: colors.brandBorder,
+    padding: space.xl,
+    gap: space.s,
+    alignItems: "center",
+  },
+  startIcon: {
+    width: 46,
+    height: 46,
     borderRadius: radius.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  streakText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: colors.turf,
-  },
-  bestPill: {
-    backgroundColor: colors.goldDim,
-  },
-  bestText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: "#8A6A06",
-  },
-  cardTop: {
-    backgroundColor: colors.turf,
-    borderRadius: radius.md,
-    padding: spacing.md,
     alignItems: "center",
-    gap: 4,
+    justifyContent: "center",
+    backgroundColor: colors.brandDim,
+    marginBottom: space.xxs,
   },
-  playerName: {
+  startOverline: {
+    ...type.micro,
+    color: colors.brandAccent,
+  },
+  startTitle: {
+    ...type.display,
+    color: colors.textPrimary,
+  },
+  startRule: {
     ...type.body,
-    fontWeight: "800",
-    color: "#FFFFFF",
-  },
-  teamName: {
-    ...type.caption,
-    color: "#D9CBF6",
-    letterSpacing: 0,
-  },
-  playerNameBottom: {
-    color: colors.turf,
-  },
-  teamNameBottom: {
-    color: colors.muted,
-  },
-  valueOpen: {
-    fontSize: 22,
-    fontWeight: "900",
-    color: colors.yellow,
-    fontVariant: ["tabular-nums"],
-    marginTop: 2,
-  },
-  versus: {
-    ...type.small,
-    color: colors.muted,
+    color: colors.textSecondary,
     textAlign: "center",
-    marginVertical: spacing.sm,
+    marginBottom: space.xs,
   },
-  cardBottom: {
-    backgroundColor: colors.surface,
-    borderWidth: 2,
-    borderColor: colors.turf,
-    borderRadius: radius.md,
-    padding: spacing.md,
+  startBest: {
+    flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: space.xs,
+    backgroundColor: colors.surface3,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.md,
+    paddingVertical: space.s,
+    marginBottom: space.m,
   },
-  cardRight: {
-    borderColor: colors.green,
-    backgroundColor: "#EAF7F0",
+  startBestText: {
+    ...type.bodySm,
+    fontWeight: "700",
+    color: colors.textPrimary,
+  },
+
+  /* — HUD şeridi — */
+  hud: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: layout.screenPadding,
+    paddingVertical: space.sm,
+    borderBottomWidth: hairline,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.surface1,
+  },
+  hudScoreBox: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: space.s,
+  },
+  hudLabel: {
+    ...type.micro,
+    color: colors.textTertiary,
+  },
+  hudScore: {
+    ...type.scoreMd,
+    color: colors.textPrimary,
+  },
+  hudRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.s,
+  },
+  hudPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.m,
+    paddingVertical: space.xs,
+    backgroundColor: colors.surface3,
+  },
+  hudPillText: {
+    ...type.tableNumStrong,
+    color: colors.textPrimary,
+  },
+  hudPillBrand: {
+    backgroundColor: colors.brandDim,
+  },
+  hudPillBrandText: {
+    ...type.micro,
+    color: colors.brandAccent,
+  },
+
+  /* — Oyun alanı — */
+  content: {
+    padding: layout.screenPadding,
+    paddingBottom: space.xxl,
+  },
+  card: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    borderRadius: radius.lg,
+    borderWidth: hairline,
+    paddingHorizontal: space.md,
+    paddingVertical: space.md,
+  },
+  cardKnown: {
+    backgroundColor: colors.brandDim,
+    borderColor: colors.brandBorder,
+  },
+  cardHidden: {
+    backgroundColor: colors.surface1,
+    borderColor: colors.border,
+  },
+  cardCorrect: {
+    backgroundColor: colors.winDim,
+    borderColor: colors.win,
   },
   cardWrong: {
-    borderColor: colors.live,
-    backgroundColor: "#FBEDEE",
+    backgroundColor: colors.lossDim,
+    borderColor: colors.loss,
   },
-  valueHidden: {
-    fontSize: 22,
-    fontWeight: "900",
-    color: colors.turf,
-    fontVariant: ["tabular-nums"],
-    marginTop: 2,
+  cardBody: { flex: 1, gap: space.xxs },
+  cardName: {
+    ...type.h3,
+    color: colors.textPrimary,
   },
-  valueRevealed: {
-    color: colors.line,
+  cardTeam: {
+    ...type.caption,
+    fontWeight: "600",
+    letterSpacing: 0,
+    color: colors.textSecondary,
   },
-  buttons: {
+  cardValue: {
+    alignItems: "flex-end",
+    minWidth: 54,
+  },
+  value: {
+    ...type.scoreLg,
+  },
+  valueKnown: { color: colors.brandAccent },
+  valueHidden: { color: colors.textTertiary },
+  valueCorrect: { color: colors.win },
+  valueWrong: { color: colors.loss },
+  valueUnit: {
+    ...type.micro,
+    color: colors.textTertiary,
+  },
+
+  connector: {
     flexDirection: "row",
-    gap: spacing.sm,
-    marginTop: spacing.md,
+    alignItems: "center",
+    gap: space.m,
+    paddingVertical: space.md,
+  },
+  connectorLine: {
+    flex: 1,
+    height: hairline,
+    backgroundColor: colors.separator,
+  },
+  connectorText: {
+    ...type.micro,
+    color: colors.textTertiary,
+  },
+
+  hint: {
+    ...type.caption,
+    fontWeight: "500",
+    letterSpacing: 0,
+    color: colors.textTertiary,
+    textAlign: "center",
+    marginTop: space.lg,
+  },
+
+  /* — Rekor listesi — */
+  historyBlock: { marginTop: space.lg },
+  historyBox: {
+    backgroundColor: colors.surface1,
+    borderRadius: radius.md,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    paddingHorizontal: space.md,
+  },
+  historyRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    paddingVertical: space.m,
+  },
+  historyRowBorder: {
+    borderTopWidth: hairline,
+    borderTopColor: colors.separator,
+  },
+  historyRank: {
+    width: 20,
+    height: 20,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface3,
+  },
+  historyRankTop: {
+    backgroundColor: colors.warnDim,
+  },
+  historyRankText: {
+    ...type.micro,
+    color: colors.textSecondary,
+  },
+  historyRankTextTop: {
+    color: colors.star,
+  },
+  historyStreak: {
+    ...type.tableNumStrong,
+    color: colors.textPrimary,
+  },
+  historyUnit: {
+    ...type.micro,
+    color: colors.textTertiary,
+  },
+  historyDate: {
+    ...type.caption,
+    fontWeight: "600",
+    letterSpacing: 0,
+    color: colors.textTertiary,
+  },
+
+  /* — Sabit tahmin çubuğu — */
+  guessBar: {
+    flexDirection: "row",
+    gap: space.m,
+    paddingHorizontal: layout.screenPadding,
+    paddingTop: space.md,
+    paddingBottom: space.lg,
+    borderTopWidth: hairline,
+    borderTopColor: colors.border,
+    backgroundColor: colors.surface1,
   },
   guessBtn: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    borderRadius: radius.pill,
-    paddingVertical: spacing.md,
-  },
-  moreBtn: {
-    backgroundColor: colors.green,
-  },
-  lessBtn: {
-    backgroundColor: colors.live,
-  },
-  guessText: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: "#FFFFFF",
-    letterSpacing: 0.5,
-  },
-  hint: {
-    ...type.caption,
-    color: colors.muted,
-    textAlign: "center",
-    letterSpacing: 0,
-    marginTop: spacing.md,
-  },
-  historyCard: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.faint,
+    gap: space.s,
+    height: 52,
     borderRadius: radius.md,
-    padding: spacing.md,
-    marginTop: spacing.md,
+    borderWidth: hairline,
   },
-  historyTitle: {
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.8,
-    color: colors.turf,
-    marginBottom: spacing.sm,
+  guessMore: {
+    backgroundColor: colors.winDim,
+    borderColor: colors.win,
   },
-  historyRow: {
-    flexDirection: "row",
+  guessLess: {
+    backgroundColor: colors.lossDim,
+    borderColor: colors.loss,
+  },
+  guessOff: { opacity: 0.45 },
+  guessMoreText: {
+    ...type.h3,
+    color: colors.win,
+  },
+  guessLessText: {
+    ...type.h3,
+    color: colors.loss,
+  },
+
+  /* — Bitiş kartı — */
+  over: {
     alignItems: "center",
-    gap: spacing.sm,
-    paddingVertical: 5,
-  },
-  historyRank: {
-    width: 28,
-    fontSize: 12,
-    textAlign: "center",
-  },
-  historyStreak: {
-    ...type.small,
-    fontWeight: "800",
-    color: colors.line,
-    flex: 1,
-  },
-  historyDate: {
-    ...type.caption,
-    color: colors.muted,
-    letterSpacing: 0,
-  },
-  overBox: {
-    alignItems: "center",
-    marginTop: spacing.md,
-    gap: 4,
+    gap: space.xs,
+    paddingTop: space.sm,
+    paddingBottom: space.md,
   },
   overTitle: {
-    ...type.subtitle,
-    color: colors.line,
+    ...type.h1,
+    color: colors.textPrimary,
+    marginTop: space.xs,
   },
   overScore: {
-    fontSize: 44,
-    fontWeight: "900",
-    color: colors.turf,
+    ...type.scoreHero,
+    color: colors.brandAccent,
+    marginTop: space.xs,
   },
-  overSub: {
-    ...type.small,
-    color: colors.muted,
+  overUnit: {
+    ...type.micro,
+    color: colors.textTertiary,
   },
-  overButtons: {
+  overBest: {
+    ...type.bodySm,
+    color: colors.textSecondary,
+    marginTop: space.xs,
+  },
+  overActions: {
+    alignSelf: "stretch",
+    gap: space.m,
+    marginTop: space.lg,
+  },
+  overRow: {
     flexDirection: "row",
-    gap: spacing.sm,
-    marginTop: spacing.md,
+    gap: space.m,
   },
-  overBtn: {
+
+  submitLine: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm + 3,
+    gap: space.xs,
+    marginTop: space.sm,
+    paddingVertical: space.xs,
   },
-  retryBtn: {
-    backgroundColor: colors.turf,
+  submitInfo: {
+    ...type.caption,
+    fontWeight: "600",
+    letterSpacing: 0,
+    color: colors.textTertiary,
   },
-  retryText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: colors.surface,
+  submitLink: {
+    ...type.caption,
+    fontWeight: "700",
+    letterSpacing: 0,
+    color: colors.brandAccent,
   },
-  shareBtn2: {
-    backgroundColor: colors.turfDim,
+  submitFail: {
+    ...type.caption,
+    fontWeight: "700",
+    letterSpacing: 0,
+    color: colors.danger,
   },
-  shareText2: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: colors.turf,
-  },
-  backdrop: {
+
+  /* — Paylaşım kartı (sabit koyu palet) — */
+  shareBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.65)",
+    backgroundColor: colors.overlay,
     alignItems: "center",
     justifyContent: "center",
-    padding: spacing.lg,
-    gap: spacing.md,
+    padding: space.xl,
+    gap: space.lg,
   },
   shareCard: {
-    width: 264,
-    backgroundColor: "#18102C",
-    borderRadius: 16,
-    paddingVertical: spacing.xl,
-    paddingHorizontal: spacing.lg,
+    width: 268,
+    borderRadius: radius.xl,
+    borderWidth: hairline,
+    borderColor: inkPalette.brandBorder,
+    paddingVertical: space.xxl,
+    paddingHorizontal: space.xl,
     alignItems: "center",
-    gap: 4,
+    gap: space.xxs,
   },
   shareBrand: {
-    fontSize: 15,
-    fontWeight: "900",
-    color: "#FFFFFF",
+    ...type.h2,
+    color: inkPalette.textPrimary,
   },
-  shareArena: {
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 1.5,
-    color: "#B9A6E4",
+  shareGame: {
+    ...type.micro,
+    color: inkPalette.brandAccent,
   },
-  shareStreak: {
-    fontSize: 52,
-    fontWeight: "900",
-    color: "#F0BE2E",
-    marginTop: spacing.sm,
+  shareScore: {
+    ...type.scoreHero,
+    fontSize: 56,
+    lineHeight: 60,
+    color: inkPalette.warn,
+    marginTop: space.sm,
   },
-  shareLabel: {
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 1,
-    color: "#FFFFFF",
+  shareUnit: {
+    ...type.micro,
+    color: inkPalette.textPrimary,
   },
   shareDivider: {
     alignSelf: "stretch",
-    height: 1,
-    backgroundColor: "rgba(255,255,255,0.18)",
-    marginVertical: spacing.md,
+    height: hairline,
+    backgroundColor: withAlpha(inkPalette.textPrimary, 0.2),
+    marginVertical: space.md,
   },
-  shareChallenge: {
-    fontSize: 12,
+  shareTaunt: {
+    ...type.bodySm,
     fontWeight: "700",
-    color: "#D9CBF6",
+    color: inkPalette.textSecondary,
   },
   shareFooter: {
-    fontSize: 8,
-    fontWeight: "700",
-    letterSpacing: 1,
-    color: "#8878B8",
-    marginTop: spacing.sm,
+    ...type.micro,
+    color: inkPalette.textTertiary,
+    marginTop: space.sm,
   },
-  closeBtn2: {
-    backgroundColor: "rgba(255,255,255,0.14)",
-  },
-  closeText2: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#FFFFFF",
-  },
-  pressed: {
-    opacity: 0.7,
+  shareActions: {
+    flexDirection: "row",
+    gap: space.m,
   },
 });

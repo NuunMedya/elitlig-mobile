@@ -1,27 +1,61 @@
+/**
+ * MAÇ MERKEZİ — başkanın maç günü ekranı.
+ * `/takimim/mac-merkezi?tab=<yaklasan|oynanan>`
+ *
+ * NE: `GET /api/match-center/team/matches` takımın maçlarını duruma göre ikiye
+ * ayırır (saate değil `mac_durumu`'na bakar: canlıya/yayına geçmemiş maç, saati
+ * geçse bile "yaklaşan" sayılır). Segment seçimi `?tab=` ile URL'de taşınır.
+ *
+ * YAKLAŞAN MAÇ: kart açıldığında takımın yoklama dağılımı TEMBEL yüklenir
+ * (`GET /api/match-availability/:matchId/team` — başkana özel). Dört sayaç
+ * rozeti (Geliyor / Belirsiz / Gelmiyor / Yanıtsız) ve gelemeyecek oyuncuların
+ * adları gösterilir. Yoklama isteği düşerse düz metin değil `ErrorState`
+ * çizilir; "Tekrar dene" düğmesi yalnız o kartın sorgusunu yeniler.
+ *
+ * OYNANAN MAÇ: "Maç Karnesi" alt sayfası altı görevliyi 1-10 arası puanlar
+ * (`PUT /api/match-center/matches/:matchId/review`). Sunucu altı alanı da
+ * zorunlu tutar (400 INVALID_SCORE), bu yüzden Stepper'lar 1-10 sınırlıdır ve
+ * varsayılan 5'ten başlar. Mevcut değerlendirme `my-review` ile ön doldurulur;
+ * ikinci kayıt upsert'tir, yani karne güncellenebilir.
+ *
+ * NEDEN KARNE DÜĞMESİ HER OYNANAN MAÇTA: bu liste zaten YALNIZ yönetilen
+ * takımın maçlarını döndürür; sunucu tarafında başkan kendi takımının her
+ * oynanmış maçını değerlendirebilir (`managesThisMatch`). Yetki hatası
+ * doğmadığı için düğme kilitlenmez.
+ */
+
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Redirect } from "expo-router";
-import { useEffect, useState } from "react";
-import {
-  Alert,
-  FlatList,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { FlatList, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { DetailHeader } from "@/components/ScreenHeader";
-import { EmptyState, ErrorState, Loading } from "@/components/States";
-import { colors, radius, spacing, type } from "@/constants/theme";
 import {
+  Badge,
+  BottomSheet,
+  Button,
+  EmptyState,
+  ErrorState,
+  Input,
+  ScreenHeader,
+  SegmentedControl,
+  Skeleton,
+  SkeletonMatchRow,
+  Stepper,
+  Touchable,
+  refreshControlProps,
+  toneColors,
+  useHeaderScroll,
+  useRefresh,
+  useToast,
+  type SegmentedItem,
+  type Tone,
+} from "@/components/ui";
+import {
+  REVIEW_SCORE_FIELDS,
   getMyMatchReview,
   getTeamAvailability,
   getTeamMatches,
-  REVIEW_SCORE_FIELDS,
   submitMatchReview,
   type MatchReviewScores,
   type TeamMatch,
@@ -29,241 +63,20 @@ import {
 import { formatDateShort, formatTime } from "@/lib/format";
 import { ApiError } from "@/lib/http";
 import { useAuth } from "@/providers/AuthProvider";
+import { colors, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
 
-/**
- * Maç Merkezi — başkanın fikstür görünümü.
- *
- * GET /api/match-center/team/matches maçları duruma göre yaklaşan/oynanan
- * ayırır (saate değil mac_durumu'na bakar). Yaklaşan maç kartı açıldığında
- * takımın yoklama dağılımı tembel yüklenir (GET /api/match-availability/
- * :matchId/team — başkana özel). Oynanan maçlarda "Maç Karnesi" ile maç
- * görevlileri ve rakip 1-10 arası puanlanır (PUT /api/match-center/matches/
- * :matchId/review); mevcut değerlendirme my-review'dan ön doldurulur.
- */
+/* ══════════════════════════════════════════════════════════════════════════
+   Sabitler ve saf yardımcılar
+   ══════════════════════════════════════════════════════════════════════════ */
 
-type Tab = "upcoming" | "past";
+type CenterTab = "yaklasan" | "oynanan";
 
-export default function MatchCenterScreen() {
-  const auth = useAuth();
-  const [tab, setTab] = useState<Tab>("upcoming");
-  const [expandedId, setExpandedId] = useState<number | null>(null);
-  const [reviewing, setReviewing] = useState<TeamMatch | null>(null);
+const TAB_ITEMS: SegmentedItem<CenterTab>[] = [
+  { key: "yaklasan", label: "Yaklaşan" },
+  { key: "oynanan", label: "Oynanan" },
+];
 
-  const query = useQuery({
-    queryKey: ["takim", "matches"],
-    queryFn: getTeamMatches,
-    enabled: Boolean(auth.user),
-    staleTime: 60_000,
-    retry: false,
-  });
-
-  if (!auth.user) {
-    return <Redirect href="/giris" />;
-  }
-
-  const noAccess =
-    query.isError && query.error instanceof ApiError && query.error.status === 403;
-
-  const rows = tab === "upcoming" ? query.data?.upcoming ?? [] : query.data?.past ?? [];
-
-  return (
-    <SafeAreaView style={styles.screen} edges={["top"]}>
-      <DetailHeader title="Maç Merkezi" subtitle="Takımının fikstürü, yoklama ve karne" />
-
-      <View style={styles.tabs}>
-        {(
-          [
-            ["upcoming", "Yaklaşan"],
-            ["past", "Oynanan"],
-          ] as const
-        ).map(([key, label]) => (
-          <Pressable
-            key={key}
-            onPress={() => setTab(key)}
-            style={({ pressed }) => [
-              styles.tab,
-              tab === key && styles.tabActive,
-              pressed && styles.pressed,
-            ]}
-          >
-            <Text style={[styles.tabText, tab === key && styles.tabTextActive]}>{label}</Text>
-          </Pressable>
-        ))}
-      </View>
-
-      {query.isLoading ? (
-        <Loading />
-      ) : noAccess ? (
-        <EmptyState
-          icon="shield-outline"
-          title="Takım başkanlığı gerekli"
-          body="Maç merkezi yalnızca takımının yönetimini üstlenen başkanlara açıktır."
-        />
-      ) : query.isError ? (
-        <ErrorState error={query.error} onRetry={query.refetch} />
-      ) : rows.length === 0 ? (
-        <EmptyState
-          icon="calendar-outline"
-          title={tab === "upcoming" ? "Yaklaşan maç yok" : "Oynanan maç yok"}
-          body={
-            tab === "upcoming"
-              ? "Takımının programına maç eklendiğinde burada görünür."
-              : "Takımının oynadığı maçlar burada listelenir."
-          }
-        />
-      ) : (
-        <FlatList
-          data={rows}
-          keyExtractor={(item) => String(item.id)}
-          contentContainerStyle={styles.list}
-          renderItem={({ item }) =>
-            tab === "upcoming" ? (
-              <UpcomingCard
-                match={item}
-                expanded={expandedId === item.id}
-                onToggle={() => setExpandedId(expandedId === item.id ? null : item.id)}
-              />
-            ) : (
-              <PastCard match={item} onReview={() => setReviewing(item)} />
-            )
-          }
-        />
-      )}
-
-      {reviewing ? (
-        <ReviewModal match={reviewing} onClose={() => setReviewing(null)} />
-      ) : null}
-    </SafeAreaView>
-  );
-}
-
-/** Yaklaşan maç kartı: açılınca yoklama özeti yüklenir. */
-function UpcomingCard({
-  match,
-  expanded,
-  onToggle,
-}: {
-  match: TeamMatch;
-  expanded: boolean;
-  onToggle: () => void;
-}) {
-  const availability = useQuery({
-    queryKey: ["takim", "availability", match.id],
-    queryFn: () => getTeamAvailability(match.id),
-    // Tembel yükleme: yalnızca kart açıldığında istenir.
-    enabled: expanded,
-    staleTime: 30_000,
-    retry: false,
-  });
-
-  const counts = availability.data?.counts;
-  const notComing = (availability.data?.players ?? []).filter(
-    (player) => player.status === "not_coming"
-  );
-
-  return (
-    <View style={styles.card}>
-      <Pressable onPress={onToggle} style={({ pressed }) => [styles.cardHead, pressed && styles.pressed]}>
-        <View style={styles.dateCol}>
-          <Text style={styles.dateText}>{formatDateShort(match.date)}</Text>
-          <Text style={styles.timeText}>{match.time ? formatTime(match.time) : ""}</Text>
-        </View>
-        <View style={styles.cardBody}>
-          <Text style={styles.opponent} numberOfLines={1}>
-            {String(match.opponent_name ?? "").toLocaleUpperCase("tr-TR")}
-          </Text>
-          <Text style={styles.meta} numberOfLines={1}>
-            {match.is_home ? "Ev sahibi" : "Deplasman"}
-            {match.match_field ? ` · ${match.match_field}` : ""}
-          </Text>
-        </View>
-        <Ionicons
-          name={expanded ? "chevron-up" : "chevron-down"}
-          size={16}
-          color={colors.muted}
-        />
-      </Pressable>
-
-      {expanded ? (
-        <View style={styles.availBox}>
-          {availability.isLoading ? (
-            <Text style={styles.availLoading}>Yoklama yükleniyor…</Text>
-          ) : availability.isError ? (
-            <Text style={styles.availLoading}>
-              {availability.error instanceof ApiError
-                ? availability.error.userMessage
-                : "Yoklama yüklenemedi."}
-            </Text>
-          ) : counts ? (
-            <>
-              <View style={styles.countRow}>
-                <CountChip color={colors.green} label={`Geliyor ${counts.coming}`} />
-                <CountChip color={colors.yellow} label={`Belirsiz ${counts.maybe}`} />
-                <CountChip color={colors.live} label={`Gelmiyor ${counts.not_coming}`} />
-                <CountChip color={colors.muted} label={`Yanıtsız ${counts.unanswered}`} />
-              </View>
-              {notComing.length > 0 ? (
-                <Text style={styles.notComing} numberOfLines={3}>
-                  Gelemeyenler: {notComing.map((player) => player.name).join(", ")}
-                </Text>
-              ) : null}
-            </>
-          ) : null}
-        </View>
-      ) : null}
-    </View>
-  );
-}
-
-function CountChip({ color, label }: { color: string; label: string }) {
-  return (
-    <View style={[styles.countChip, { backgroundColor: color + "18" }]}>
-      <Text style={[styles.countChipText, { color }]}>{label}</Text>
-    </View>
-  );
-}
-
-/** Oynanan maç kartı: skor + sonuç + karne düğmesi. */
-function PastCard({ match, onReview }: { match: TeamMatch; onReview: () => void }) {
-  const ours = match.is_home ? match.first_team_score : match.second_team_score;
-  const theirs = match.is_home ? match.second_team_score : match.first_team_score;
-  const result =
-    ours == null || theirs == null ? null : ours > theirs ? "G" : ours < theirs ? "M" : "B";
-  const resultColor =
-    result === "G" ? colors.green : result === "M" ? colors.live : "#B9B5C6";
-
-  return (
-    <View style={styles.card}>
-      <View style={styles.cardHead}>
-        <View style={styles.dateCol}>
-          <Text style={styles.dateText}>{formatDateShort(match.date)}</Text>
-        </View>
-        <View style={styles.cardBody}>
-          <Text style={styles.opponent} numberOfLines={1}>
-            {String(match.opponent_name ?? "").toLocaleUpperCase("tr-TR")}
-          </Text>
-          <Text style={styles.meta}>{match.is_home ? "Ev sahibi" : "Deplasman"}</Text>
-        </View>
-        {result ? (
-          <View style={[styles.resultChip, { backgroundColor: resultColor }]}>
-            <Text style={styles.resultText}>{result}</Text>
-          </View>
-        ) : null}
-        <Text style={styles.score}>
-          {ours ?? "-"} - {theirs ?? "-"}
-        </Text>
-      </View>
-      <Pressable
-        onPress={onReview}
-        style={({ pressed }) => [styles.reviewBtn, pressed && styles.pressed]}
-      >
-        <Ionicons name="clipboard-outline" size={14} color={colors.turf} />
-        <Text style={styles.reviewBtnText}>Maç Karnesi</Text>
-      </Pressable>
-    </View>
-  );
-}
-
+/** Karne varsayılanı — sunucu altı alanı da zorunlu tutar. */
 const DEFAULT_SCORES: MatchReviewScores = {
   announcer_score: 5,
   director_score: 5,
@@ -273,9 +86,404 @@ const DEFAULT_SCORES: MatchReviewScores = {
   opponent_score: 5,
 };
 
-/** Maç karnesi penceresi: 6 puan (1-10) + yorum. */
-function ReviewModal({ match, onClose }: { match: TeamMatch; onClose: () => void }) {
+function resolveTab(raw: string | string[] | undefined): CenterTab {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  return value === "oynanan" ? "oynanan" : "yaklasan";
+}
+
+/** Takımımızın attığı / yediği gol — ev sahibi olup olmamaya göre. */
+function ourScore(match: TeamMatch): { ours: number | null; theirs: number | null } {
+  return match.is_home
+    ? { ours: match.first_team_score, theirs: match.second_team_score }
+    : { ours: match.second_team_score, theirs: match.first_team_score };
+}
+
+type MatchResult = "G" | "B" | "M" | null;
+
+function resultOf(match: TeamMatch): MatchResult {
+  const { ours, theirs } = ourScore(match);
+  if (ours == null || theirs == null) return null;
+  if (ours > theirs) return "G";
+  if (ours < theirs) return "M";
+  return "B";
+}
+
+const RESULT_TONE: Record<"G" | "B" | "M", Tone> = {
+  G: "win",
+  B: "neutral",
+  M: "danger",
+};
+
+const RESULT_LABEL: Record<"G" | "B" | "M", string> = {
+  G: "Galibiyet",
+  B: "Beraberlik",
+  M: "Mağlubiyet",
+};
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Ekran
+   ══════════════════════════════════════════════════════════════════════════ */
+
+export default function MatchCenterScreen() {
+  const auth = useAuth();
+  const router = useRouter();
+  const params = useLocalSearchParams<{ tab?: string }>();
+  const { scrollY, scrollProps } = useHeaderScroll();
+
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [reviewing, setReviewing] = useState<TeamMatch | null>(null);
+
+  const tab = resolveTab(params.tab);
+
+  const query = useQuery({
+    queryKey: ["takim", "matches"],
+    queryFn: getTeamMatches,
+    enabled: Boolean(auth.user),
+    staleTime: 60_000,
+    retry: false,
+  });
+
+  const refresh = useRefresh(query.refetch, { refreshing: query.isRefetching });
+  const refreshControl = (
+    <RefreshControl {...refreshControlProps(refresh.refreshing, refresh.onRefresh)} />
+  );
+
+  const rows = useMemo(
+    () => (tab === "yaklasan" ? query.data?.upcoming ?? [] : query.data?.past ?? []),
+    [query.data, tab]
+  );
+
+  const changeTab = useCallback(
+    (next: CenterTab) => {
+      setExpandedId(null);
+      scrollY.setValue(0);
+      router.setParams({ tab: next });
+    },
+    [router, scrollY]
+  );
+
+  const toggleExpanded = useCallback((matchId: number) => {
+    setExpandedId((prev) => (prev === matchId ? null : matchId));
+  }, []);
+
+  const openMatch = useCallback((matchId: number) => router.push(`/mac/${matchId}`), [router]);
+  const openReview = useCallback((match: TeamMatch) => setReviewing(match), []);
+  const closeReview = useCallback(() => setReviewing(null), []);
+
+  const renderItem = useCallback(
+    ({ item }: { item: TeamMatch }) =>
+      tab === "yaklasan" ? (
+        <UpcomingCard
+          match={item}
+          expanded={expandedId === item.id}
+          onToggle={toggleExpanded}
+          onOpenMatch={openMatch}
+        />
+      ) : (
+        <PastCard match={item} onReview={openReview} onOpenMatch={openMatch} />
+      ),
+    [expandedId, openMatch, openReview, tab, toggleExpanded]
+  );
+
+  if (!auth.user) {
+    return <Redirect href="/giris" />;
+  }
+
+  const noAccess =
+    query.isError && query.error instanceof ApiError && query.error.status === 403;
+
+  const header = (
+    <ScreenHeader
+      title="Maç Merkezi"
+      subtitle="Fikstür, yoklama ve maç karnesi"
+      back
+      scrollY={scrollY}
+      bottom={
+        <View style={styles.headerBottom}>
+          <SegmentedControl items={TAB_ITEMS} value={tab} onChange={changeTab} />
+        </View>
+      }
+    />
+  );
+
+  if (query.isLoading && !query.data) {
+    return (
+      <SafeAreaView style={styles.screen} edges={["top"]}>
+        {header}
+        <View style={styles.loading}>
+          <SkeletonMatchRow count={6} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (noAccess) {
+    return (
+      <SafeAreaView style={styles.screen} edges={["top"]}>
+        {header}
+        <EmptyState
+          icon="shield-outline"
+          title="Takım başkanlığı gerekli"
+          body="Maç merkezi yalnızca takımının yönetimini üstlenen başkanlara açıktır."
+        />
+      </SafeAreaView>
+    );
+  }
+
+  if (query.isError && !query.data) {
+    return (
+      <SafeAreaView style={styles.screen} edges={["top"]}>
+        {header}
+        <ErrorState error={query.error} onRetry={query.refetch} />
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.screen} edges={["top"]}>
+      {header}
+
+      <FlatList
+        {...scrollProps}
+        data={rows}
+        keyExtractor={(item) => String(item.id)}
+        renderItem={renderItem}
+        contentContainerStyle={styles.content}
+        refreshControl={refreshControl}
+        initialNumToRender={8}
+        ListHeaderComponent={
+          query.isError ? (
+            <ErrorState
+              error={query.error}
+              onRetry={query.refetch}
+              variant="banner"
+              style={styles.banner}
+            />
+          ) : null
+        }
+        ListEmptyComponent={
+          <EmptyState
+            icon="calendar-outline"
+            title={tab === "yaklasan" ? "Yaklaşan maç yok" : "Oynanan maç yok"}
+            body={
+              tab === "yaklasan"
+                ? "Takımının programına maç eklendiğinde burada görünür."
+                : "Takımının oynadığı maçlar sonuçlandıkça burada listelenir."
+            }
+            variant="inline"
+          />
+        }
+      />
+
+      {reviewing ? <ReviewSheet match={reviewing} onClose={closeReview} /> : null}
+    </SafeAreaView>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Yaklaşan maç kartı
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const UpcomingCard = React.memo(function UpcomingCard({
+  match,
+  expanded,
+  onToggle,
+  onOpenMatch,
+}: {
+  match: TeamMatch;
+  expanded: boolean;
+  onToggle: (matchId: number) => void;
+  onOpenMatch: (matchId: number) => void;
+}) {
+  const handleToggle = useCallback(() => onToggle(match.id), [match.id, onToggle]);
+  const handleOpen = useCallback(() => onOpenMatch(match.id), [match.id, onOpenMatch]);
+
+  /** Tembel yükleme: yalnızca kart açıldığında istenir. */
+  const availability = useQuery({
+    queryKey: ["takim", "availability", match.id],
+    queryFn: () => getTeamAvailability(match.id),
+    enabled: expanded,
+    staleTime: 30_000,
+    retry: false,
+  });
+
+  const counts = availability.data?.counts;
+  const notComing = useMemo(
+    () => (availability.data?.players ?? []).filter((player) => player.status === "not_coming"),
+    [availability.data]
+  );
+
+  const venue = [match.is_home ? "Ev sahibi" : "Deplasman", match.match_field]
+    .filter(Boolean)
+    .join(" · ");
+
+  return (
+    <View style={styles.card}>
+      <Touchable
+        feedback="row"
+        haptic="selection"
+        onPress={handleToggle}
+        accessibilityRole="button"
+        accessibilityLabel={`${match.opponent_name ?? "Rakip"} maçının yoklamasını ${expanded ? "kapat" : "aç"}`}
+        style={styles.cardHead}
+      >
+        <View style={styles.dateCol}>
+          <Text style={styles.dateText} numberOfLines={1} {...textScale.dense}>
+            {formatDateShort(match.date)}
+          </Text>
+          <Text style={styles.timeText} numberOfLines={1} {...textScale.dense}>
+            {match.time ? formatTime(match.time) : "—"}
+          </Text>
+        </View>
+
+        <View style={styles.cardBody}>
+          <Text style={styles.opponent} numberOfLines={1} {...textScale.dense}>
+            {upperTR(String(match.opponent_name ?? "Rakip belirlenmedi"))}
+          </Text>
+          <Text style={styles.meta} numberOfLines={1} {...textScale.dense}>
+            {venue}
+          </Text>
+        </View>
+
+        <Ionicons
+          name={expanded ? "chevron-up" : "chevron-down"}
+          size={16}
+          color={colors.textTertiary}
+        />
+      </Touchable>
+
+      {expanded ? (
+        <View style={styles.panel}>
+          {availability.isLoading ? (
+            <View style={styles.availLoading}>
+              <Skeleton width="60%" height={14} radius="sm" />
+              <Skeleton width="90%" height={14} radius="sm" />
+            </View>
+          ) : availability.isError ? (
+            <ErrorState
+              error={availability.error}
+              onRetry={availability.refetch}
+              variant="inline"
+            />
+          ) : counts ? (
+            <>
+              <View style={styles.countRow}>
+                <Badge label={`Geliyor ${counts.coming}`} tone="win" size="sm" />
+                <Badge label={`Belirsiz ${counts.maybe}`} tone="warn" size="sm" />
+                <Badge label={`Gelmiyor ${counts.not_coming}`} tone="danger" size="sm" />
+                <Badge label={`Yanıtsız ${counts.unanswered}`} tone="neutral" size="sm" />
+              </View>
+
+              {notComing.length > 0 ? (
+                <Text style={styles.notComing} numberOfLines={4} {...textScale.long}>
+                  <Text style={styles.notComingLead}>Gelemeyenler: </Text>
+                  {notComing.map((player) => player.name).join(", ")}
+                </Text>
+              ) : (
+                <Text style={styles.panelNote} {...textScale.long}>
+                  Kadrondan gelemeyeceğini bildiren yok.
+                </Text>
+              )}
+            </>
+          ) : null}
+
+          <Button
+            label="Maç detayı"
+            variant="secondary"
+            size="sm"
+            icon="football-outline"
+            onPress={handleOpen}
+            fullWidth
+          />
+        </View>
+      ) : null}
+    </View>
+  );
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Oynanan maç kartı
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const PastCard = React.memo(function PastCard({
+  match,
+  onReview,
+  onOpenMatch,
+}: {
+  match: TeamMatch;
+  onReview: (match: TeamMatch) => void;
+  onOpenMatch: (matchId: number) => void;
+}) {
+  const handleReview = useCallback(() => onReview(match), [match, onReview]);
+  const handleOpen = useCallback(() => onOpenMatch(match.id), [match.id, onOpenMatch]);
+
+  const { ours, theirs } = ourScore(match);
+  const result = resultOf(match);
+  const palette = toneColors(result ? RESULT_TONE[result] : "neutral");
+
+  return (
+    <View style={styles.card}>
+      <Touchable
+        feedback="row"
+        haptic="selection"
+        onPress={handleOpen}
+        accessibilityRole="button"
+        accessibilityLabel={`${match.opponent_name ?? "Rakip"} maçının detayı`}
+        style={styles.cardHead}
+      >
+        <View style={styles.dateCol}>
+          <Text style={styles.dateText} numberOfLines={1} {...textScale.dense}>
+            {formatDateShort(match.date)}
+          </Text>
+          <Text style={styles.timeText} numberOfLines={1} {...textScale.dense}>
+            {match.is_home ? "Ev sahibi" : "Deplasman"}
+          </Text>
+        </View>
+
+        <View style={styles.cardBody}>
+          <Text style={styles.opponent} numberOfLines={1} {...textScale.dense}>
+            {upperTR(String(match.opponent_name ?? "Rakip"))}
+          </Text>
+          <Text style={styles.meta} numberOfLines={1} {...textScale.dense}>
+            {result ? RESULT_LABEL[result] : "Sonuç girilmedi"}
+          </Text>
+        </View>
+
+        {result ? (
+          <View style={[styles.resultChip, { backgroundColor: palette.solidBg }]}>
+            <Text style={[styles.resultText, { color: palette.solidFg }]} {...textScale.badge}>
+              {result}
+            </Text>
+          </View>
+        ) : null}
+
+        <Text style={styles.score} numberOfLines={1} {...textScale.dense}>
+          {ours ?? "-"}–{theirs ?? "-"}
+        </Text>
+      </Touchable>
+
+      <View style={styles.cardFooter}>
+        <Button
+          label="Maç Karnesi"
+          variant="secondary"
+          size="sm"
+          icon="clipboard-outline"
+          onPress={handleReview}
+          fullWidth
+        />
+      </View>
+    </View>
+  );
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Maç karnesi alt sayfası
+   ══════════════════════════════════════════════════════════════════════════ */
+
+function ReviewSheet({ match, onClose }: { match: TeamMatch; onClose: () => void }) {
   const queryClient = useQueryClient();
+  const toast = useToast();
+
   const [scores, setScores] = useState<MatchReviewScores>(DEFAULT_SCORES);
   const [comment, setComment] = useState("");
   const [prefilled, setPrefilled] = useState(false);
@@ -287,7 +495,7 @@ function ReviewModal({ match, onClose }: { match: TeamMatch; onClose: () => void
     retry: false,
   });
 
-  // Mevcut değerlendirme geldiğinde bir kez ön doldurulur.
+  /** Mevcut değerlendirme geldiğinde BİR KEZ ön doldurulur. */
   useEffect(() => {
     if (prefilled || !myReview.data) return;
     const review = myReview.data.review;
@@ -308,330 +516,279 @@ function ReviewModal({ match, onClose }: { match: TeamMatch; onClose: () => void
   const submitMutation = useMutation({
     mutationFn: () => submitMatchReview(match.id, scores, comment.trim() || undefined),
     onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ["takim", "my-review", match.id] });
-      Alert.alert("Karne kaydedildi", result.message);
+      void queryClient.invalidateQueries({ queryKey: ["takim", "my-review", match.id] });
+      toast.show({ message: result.message, tone: "success" });
       onClose();
     },
     onError: (error: unknown) => {
-      Alert.alert(
-        "Kaydedilemedi",
-        error instanceof ApiError ? error.userMessage : "Bilinmeyen hata."
-      );
+      toast.show({
+        message: error instanceof ApiError ? error.userMessage : "Karne kaydedilemedi.",
+        tone: "danger",
+      });
     },
   });
 
-  const bump = (key: keyof MatchReviewScores, delta: number) => {
-    setScores((prev) => ({
-      ...prev,
-      [key]: Math.min(10, Math.max(1, prev[key] + delta)),
-    }));
-  };
+  const setScore = useCallback((key: keyof MatchReviewScores, value: number) => {
+    setScores((prev) => ({ ...prev, [key]: value }));
+  }, []);
+
+  const submit = useCallback(() => submitMutation.mutate(), [submitMutation]);
+
+  const existing = Boolean(myReview.data?.review);
+  const loading = myReview.isLoading && !prefilled;
 
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.backdrop}>
-        <View style={styles.sheet}>
-          <View style={styles.sheetHead}>
-            <View style={styles.cardBody}>
-              <Text style={styles.sheetTitle}>Maç Karnesi</Text>
-              <Text style={styles.meta} numberOfLines={1}>
-                {match.opponent_name ?? ""} · {formatDateShort(match.date)}
-              </Text>
-            </View>
-            <Pressable onPress={onClose} hitSlop={10}>
-              <Ionicons name="close" size={20} color={colors.muted} />
-            </Pressable>
-          </View>
-
-          {myReview.isLoading && !prefilled ? (
-            <Text style={styles.availLoading}>Mevcut değerlendirme yükleniyor…</Text>
-          ) : (
-            <ScrollView style={styles.sheetScroll} keyboardShouldPersistTaps="handled">
-              {REVIEW_SCORE_FIELDS.map((field) => (
-                <View key={field.key} style={styles.scoreRow}>
-                  <Text style={styles.scoreLabel}>{field.label}</Text>
-                  <View style={styles.stepper}>
-                    <Pressable
-                      onPress={() => bump(field.key, -1)}
-                      hitSlop={6}
-                      style={({ pressed }) => [styles.stepBtn, pressed && styles.pressed]}
-                    >
-                      <Ionicons name="remove" size={15} color={colors.turf} />
-                    </Pressable>
-                    <Text style={styles.scoreValue}>{scores[field.key]}</Text>
-                    <Pressable
-                      onPress={() => bump(field.key, 1)}
-                      hitSlop={6}
-                      style={({ pressed }) => [styles.stepBtn, pressed && styles.pressed]}
-                    >
-                      <Ionicons name="add" size={15} color={colors.turf} />
-                    </Pressable>
-                  </View>
-                </View>
-              ))}
-
-              <Text style={styles.fieldLabel}>YORUM (İSTEĞE BAĞLI)</Text>
-              <TextInput
-                value={comment}
-                onChangeText={setComment}
-                placeholder="Organizasyonla ilgili notun…"
-                placeholderTextColor={colors.muted}
-                style={styles.input}
-                multiline
-              />
-            </ScrollView>
-          )}
-
-          <Pressable
-            onPress={() => submitMutation.mutate()}
-            disabled={submitMutation.isPending}
-            style={({ pressed }) => [styles.submitBtn, pressed && styles.pressed]}
-          >
-            <Ionicons name="checkmark" size={15} color={colors.surface} />
-            <Text style={styles.submitText}>
-              {submitMutation.isPending ? "Gönderiliyor…" : "Karneyi Kaydet"}
+    <BottomSheet
+      visible
+      onClose={onClose}
+      title="Maç Karnesi"
+      snap="content"
+      footer={
+        <Button
+          label={existing ? "Karneyi güncelle" : "Karneyi kaydet"}
+          icon="checkmark"
+          onPress={submit}
+          loading={submitMutation.isPending}
+          disabled={loading || submitMutation.isPending}
+          haptic="success"
+          fullWidth
+        />
+      }
+    >
+      <View style={styles.sheetBody}>
+        <View style={styles.sheetHead}>
+          <View style={styles.cardBody}>
+            <Text style={styles.sheetTitle} numberOfLines={1} {...textScale.dense}>
+              {match.opponent_name ?? "Rakip"}
             </Text>
-          </Pressable>
+            <Text style={styles.meta} numberOfLines={1} {...textScale.dense}>
+              {formatDateShort(match.date)}
+              {match.match_field ? ` · ${match.match_field}` : ""}
+            </Text>
+          </View>
+          {existing ? <Badge label="KAYITLI" tone="win" size="xs" /> : null}
         </View>
+
+        {loading ? (
+          <View style={styles.availLoading}>
+            <Skeleton width="100%" height={32} radius="md" />
+            <Skeleton width="100%" height={32} radius="md" />
+            <Skeleton width="100%" height={32} radius="md" />
+          </View>
+        ) : (
+          <>
+            <Text style={styles.fieldLabel} {...textScale.badge}>
+              {upperTR("Puanlama (1-10)")}
+            </Text>
+
+            {REVIEW_SCORE_FIELDS.map((field) => (
+              <ScoreRow
+                key={field.key}
+                field={field.key}
+                label={field.label}
+                value={scores[field.key]}
+                onChange={setScore}
+              />
+            ))}
+
+            <Text style={styles.fieldLabel} {...textScale.badge}>
+              {upperTR("Yorum (isteğe bağlı)")}
+            </Text>
+            <Input
+              value={comment}
+              onChangeText={setComment}
+              placeholder="Organizasyonla ilgili notun…"
+              multiline
+              maxLength={1000}
+              hint="En fazla 1000 karakter."
+            />
+          </>
+        )}
       </View>
-    </Modal>
+    </BottomSheet>
   );
 }
+
+/** Tek puanlama satırı — etiket solda, Stepper sağda. */
+const ScoreRow = React.memo(function ScoreRow({
+  field,
+  label,
+  value,
+  onChange,
+}: {
+  field: keyof MatchReviewScores;
+  label: string;
+  value: number;
+  onChange: (field: keyof MatchReviewScores, value: number) => void;
+}) {
+  const handleChange = useCallback((next: number) => onChange(field, next), [field, onChange]);
+
+  return (
+    <View style={styles.scoreRow}>
+      <Text style={styles.scoreLabel} numberOfLines={1} {...textScale.dense}>
+        {label}
+      </Text>
+      <Stepper
+        value={value}
+        onChange={handleChange}
+        min={1}
+        max={10}
+        size="sm"
+        accessibilityLabel={`${label} puanı`}
+      />
+    </View>
+  );
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Stiller
+   ══════════════════════════════════════════════════════════════════════════ */
 
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: colors.pitch,
+    backgroundColor: colors.bg,
   },
-  tabs: {
-    flexDirection: "row",
-    gap: spacing.sm,
-    paddingHorizontal: spacing.md,
-    marginBottom: spacing.sm,
+  headerBottom: {
+    paddingHorizontal: layout.screenPadding,
+    paddingBottom: space.sm,
   },
-  tab: {
-    flex: 1,
-    alignItems: "center",
-    borderRadius: radius.pill,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.faint,
-    paddingVertical: spacing.sm + 2,
+  content: {
+    paddingHorizontal: layout.screenPadding,
+    paddingTop: space.sm,
+    paddingBottom: space.xxxl,
   },
-  tabActive: {
-    backgroundColor: colors.turf,
-    borderColor: colors.turf,
+  loading: {
+    paddingHorizontal: layout.screenPadding,
   },
-  tabText: {
-    ...type.small,
-    fontWeight: "700",
-    color: colors.muted,
+  banner: {
+    marginBottom: space.sm,
   },
-  tabTextActive: {
-    color: colors.surface,
-  },
-  list: {
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.xl,
-  },
+
+  /* Maç kartı */
   card: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.faint,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
+    borderRadius: radius.lg,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    backgroundColor: colors.surface1,
+    marginBottom: space.sm,
+    overflow: "hidden",
   },
   cardHead: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
+    gap: space.md,
+    minHeight: layout.listRowHeightTwoLine,
+    paddingHorizontal: layout.rowPaddingH,
+    paddingVertical: space.sm,
   },
   dateCol: {
-    width: 52,
+    width: 56,
+    gap: 2,
   },
   dateText: {
-    ...type.small,
-    fontWeight: "800",
-    color: colors.line,
+    ...type.bodySm,
+    fontWeight: "700",
+    color: colors.textPrimary,
   },
   timeText: {
     ...type.caption,
-    color: colors.muted,
-    letterSpacing: 0,
-    marginTop: 1,
+    color: colors.textTertiary,
   },
   cardBody: {
     flex: 1,
+    gap: 2,
   },
   opponent: {
-    ...type.small,
-    fontWeight: "800",
-    color: colors.line,
+    ...type.body,
+    fontWeight: "700",
+    color: colors.textPrimary,
   },
   meta: {
     ...type.caption,
-    color: colors.muted,
-    letterSpacing: 0,
-    marginTop: 2,
-  },
-  availBox: {
-    marginTop: spacing.sm + 2,
-    borderTopWidth: 1,
-    borderTopColor: colors.faint,
-    paddingTop: spacing.sm + 2,
-    gap: spacing.sm,
-  },
-  availLoading: {
-    ...type.caption,
-    color: colors.muted,
-    letterSpacing: 0,
-  },
-  countRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.xs + 2,
-  },
-  countChip: {
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
-  },
-  countChipText: {
-    fontSize: 10,
-    fontWeight: "800",
-  },
-  notComing: {
-    ...type.caption,
-    color: colors.live,
-    letterSpacing: 0,
-    lineHeight: 15,
+    color: colors.textSecondary,
   },
   resultChip: {
-    width: 18,
-    height: 18,
-    borderRadius: 5,
+    width: 20,
+    height: 20,
+    borderRadius: radius.xs,
     alignItems: "center",
     justifyContent: "center",
   },
   resultText: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: colors.surface,
+    ...type.micro,
   },
   score: {
-    ...type.small,
-    fontWeight: "800",
-    color: colors.line,
-    fontVariant: ["tabular-nums"],
+    ...type.scoreSm,
+    color: colors.textPrimary,
+    minWidth: 38,
+    textAlign: "right",
   },
-  reviewBtn: {
+  cardFooter: {
+    paddingHorizontal: layout.rowPaddingH,
+    paddingBottom: space.md,
+  },
+
+  /* Açılan yoklama paneli */
+  panel: {
+    borderTopWidth: hairline,
+    borderTopColor: colors.separator,
+    paddingHorizontal: layout.rowPaddingH,
+    paddingVertical: space.md,
+    gap: space.md,
+  },
+  availLoading: {
+    gap: space.sm,
+  },
+  countRow: {
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 5,
-    borderRadius: radius.pill,
-    backgroundColor: colors.turfDim,
-    paddingVertical: spacing.sm,
-    marginTop: spacing.sm + 2,
+    flexWrap: "wrap",
+    gap: space.s,
   },
-  reviewBtnText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: colors.turf,
+  notComing: {
+    ...type.caption,
+    color: colors.textSecondary,
   },
-  backdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: spacing.lg,
+  notComingLead: {
+    color: colors.danger,
+    fontWeight: "700",
   },
-  sheet: {
-    alignSelf: "stretch",
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
-    gap: spacing.sm,
-    maxHeight: "88%",
+  panelNote: {
+    ...type.caption,
+    color: colors.textTertiary,
+  },
+
+  /* Karne alt sayfası */
+  sheetBody: {
+    gap: space.xs,
+    paddingBottom: space.sm,
   },
   sheetHead: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
+    gap: space.sm,
+    paddingBottom: space.sm,
   },
   sheetTitle: {
-    ...type.subtitle,
-    color: colors.line,
+    ...type.h2,
+    color: colors.textPrimary,
   },
-  sheetScroll: {
-    flexGrow: 0,
+  fieldLabel: {
+    ...type.micro,
+    color: colors.textTertiary,
+    marginTop: space.md,
+    marginBottom: space.xs,
   },
   scoreRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: spacing.xs + 2,
+    gap: space.md,
+    minHeight: 44,
   },
   scoreLabel: {
-    ...type.small,
-    fontWeight: "700",
-    color: colors.line,
-  },
-  stepper: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-  },
-  stepBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: colors.turfDim,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  scoreValue: {
-    ...type.small,
-    fontWeight: "800",
-    color: colors.line,
-    width: 22,
-    textAlign: "center",
-    fontVariant: ["tabular-nums"],
-  },
-  fieldLabel: {
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.8,
-    color: colors.turf,
-    marginTop: spacing.sm,
-    marginBottom: spacing.xs,
-  },
-  input: {
-    minHeight: 60,
-    borderWidth: 1,
-    borderColor: colors.faint,
-    borderRadius: radius.sm,
-    padding: spacing.sm,
-    ...type.small,
-    color: colors.line,
-    textAlignVertical: "top",
-  },
-  submitBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 5,
-    borderRadius: radius.pill,
-    backgroundColor: colors.green,
-    paddingVertical: spacing.sm + 3,
-  },
-  submitText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: colors.surface,
-  },
-  pressed: {
-    opacity: 0.6,
+    ...type.bodySm,
+    color: colors.textPrimary,
+    flex: 1,
   },
 });

@@ -400,16 +400,14 @@ export default function ProfileTabScreen() {
         title: "Kariyerim",
         data: [
           {
-            // BÜTÜNLEŞTİRME NOTU: bu satır eski `(tabs)/profile.tsx`
-            // ekranındaki "Maçlarım" kapısının karşılığıdır. O ekran silindiği
-            // için /maclarim rotasının başka girişi kalmamıştı. Şartname bu
-            // içeriği ileride /oyuncum?tab=maclarim altına taşıyor; o ekran
-            // açılınca burası tek satırda oraya çevrilmeli.
+            // BÜTÜNLEŞTİRME NOTU: eski `/maclarim` ekranı Oyuncu Paneli'nin
+            // Maçlarım segmentine taşındı (yoklama ve kadro rozeti dâhil),
+            // rota dosyası silindi. Kapı artık doğrudan oraya açılıyor.
             key: "maclarim",
             icon: "football",
             title: "Maçlarım",
             subtitle: "Kadroda yer aldığın maçlar ve performansın",
-            action: { kind: "route", route: "/maclarim" },
+            action: { kind: "route", route: "/oyuncum?tab=maclarim" },
           },
           {
             key: "tekliflerim",

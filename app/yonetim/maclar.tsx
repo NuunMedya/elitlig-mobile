@@ -1,63 +1,173 @@
+/**
+ * MAÇ YÖNETİMİ — seçili kapsamdaki (şehir → lig → sezon) tüm maçlar, taslaklar
+ * dahil (`includeDraft=1`).
+ *
+ * DÜZEN: durum çipleri + arama üstte sabit; liste `MatchRow` satırlarından
+ * kurulu bir `SectionList`. CANLI maçlar HER ZAMAN en üstte, kendi bölümünde
+ * durur ve o bölüm varken liste hızlı yoklamaya (20 sn) geçer — yönetici skor
+ * girerken listeyi elle tazelemek zorunda kalmasın.
+ *
+ * NEDEN BÖLÜM BAŞLIĞI "GÜN + DURUM": satırın kendisi taslak mı zamanlanmış mı
+ * söyleyemez (`MatchRow` üye gözüyle çizer: saat / MS / CANLI). Bu yüzden
+ * gruplama (durum, gün) çiftiyle yapılır; başlığın adı GÜN, metası DURUM olur.
+ * Bir durum çipi seçiliyken başlıklar saf gün başlığına iner.
+ *
+ * NEDEN SATIRA DOKUNUNCA ALT SAYFA: skor girişi, durum değişimi ve maç
+ * sayfasına geçiş aynı maçın üç farklı işidir; ayrı ekranlara dağıtmak maç
+ * gününde her işlem için üç dokunuş ekler. Alt sayfa maçın bağlamını koruyarak
+ * üçünü de tek yerde toplar.
+ *
+ * GERİ ALINAMAYAN EYLEMLER ONAYLI: "Yayınlandı" puan durumunu hesaplatır ve
+ * üyeye bildirim düşürür; "Taslak" maçı üye tarafından gizler. İkisi de Alert
+ * ile doğrulanır. Skor kaydı da puan durumunu etkilediği için sonuç Toast ile
+ * açıkça söylenir.
+ *
+ * VERİ MANTIĞI KORUNDU: liste tek sorgudur (durum sunucuda değil istemcide
+ * süzülür) — çipler arasında geçiş ağa çıkmadan anında olur ve her çipin sayacı
+ * aynı veriden okunur.
+ */
+
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Redirect, useRouter } from "expo-router";
-import { useMemo, useState } from "react";
-import {
-  Alert,
-  FlatList,
-  Keyboard,
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
+import { memo, useCallback, useMemo, useState } from "react";
+import { Alert, SectionList, StyleSheet, Text, View } from "react-native";
+import type { SectionListData, SectionListRenderItemInfo } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { DetailHeader } from "@/components/ScreenHeader";
-import { EmptyState, ErrorState, Loading } from "@/components/States";
-import { colors, radius, spacing, type } from "@/constants/theme";
-import { getAdminMatches, MATCH_STATUS_LABELS, patchMatchScore, patchMatchStatus } from "@/lib/api/admin";
-import { formatDateShort, formatTime } from "@/lib/format";
-import { ApiError } from "@/lib/http";
+
+import {
+  Badge,
+  BottomSheet,
+  Button,
+  Chip,
+  ChipGroup,
+  EmptyState,
+  ErrorState,
+  Input,
+  MatchRow,
+  ScreenHeader,
+  SectionHeader,
+  SkeletonMatchRow,
+  Stepper,
+  errorMessage,
+  matchRowHeight,
+  useHeaderScroll,
+  useRefresh,
+  useToast,
+  type Tone,
+} from "@/components/ui";
+import { useAppActive } from "@/hooks/useLiveFavoriteCount";
+import { useTeamLogos } from "@/hooks/useTeamLogos";
+import {
+  getAdminMatches,
+  MATCH_STATUS_LABELS,
+  patchMatchScore,
+  patchMatchStatus,
+} from "@/lib/api/admin";
+import { formatDayHeading, formatTime } from "@/lib/format";
 import type { ApiMatch, MacDurumu } from "@/lib/types";
 import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
+import { colors, layout, space, textScale, type } from "@/theme";
 
-/**
- * Maç Yönetimi — seçili kapsamdaki (şehir → lig → sezon) tüm maçlar,
- * taslaklar dahil (includeDraft=1). Satıra dokununca hızlı işlem penceresi
- * açılır: skor girişi, durum değiştirme ve maç sayfasına geçiş.
- */
+/* ═══════════════════════════ SABİTLER VE YARDIMCILAR ═══════════════════════ */
 
 const STATUS_ORDER: MacDurumu[] = ["taslak", "zamanlanmis", "canli", "yayinlanmis"];
 
-/** Durum → renk (rozetler ve durum düğmeleri). */
-function statusColor(status: MacDurumu | null): string {
-  if (status === "taslak") return colors.muted;
-  if (status === "zamanlanmis") return colors.turf;
-  if (status === "canli") return colors.live;
-  if (status === "yayinlanmis") return colors.green;
-  return colors.muted;
+/** Durum → ton. Renk YALNIZ durumu taşır; başka hiçbir yerde anlam yüklenmez. */
+const STATUS_TONE: Record<MacDurumu, Tone> = {
+  taslak: "neutral",
+  zamanlanmis: "info",
+  canli: "live",
+  yayinlanmis: "win",
+};
+
+/** Onay isteyen geçişler: biri yayına çıkarır, diğeri yayından geri çeker. */
+const CONFIRM_STATUS: Partial<Record<MacDurumu, { title: string; body: string; action: string }>> = {
+  yayinlanmis: {
+    title: "Maçı yayınla",
+    body: "Maç yayınlanınca skor kesinleşir, puan durumu yeniden hesaplanır ve üyelere sonuç bildirimi gider.",
+    action: "Yayınla",
+  },
+  taslak: {
+    title: "Taslağa al",
+    body: "Maç taslağa alınınca üye tarafında görünmez olur ve puan durumundan düşer.",
+    action: "Taslağa al",
+  },
+};
+
+/** Satır ve başlık ölçüleri — `getItemLayout` yalnız bunlardan kurulur. */
+const ROW_HEIGHT = matchRowHeight("default", "none");
+const SECTION_HEADER_HEIGHT = 32;
+const SECTION_GAP = space.md;
+
+/** Canlı bölüm varken hızlı, yokken sakin yoklama. */
+const LIVE_POLL_MS = 20_000;
+const IDLE_POLL_MS = 60_000;
+
+/** Sunucu durumu boş bırakabilir (eski kayıtlar); o maçlar ayrı bir kovaya düşer. */
+const UNKNOWN_STATUS = "bilinmiyor";
+
+/** Rota parametresi tek değer ya da dizi olarak gelebilir. */
+function firstParam(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
 }
 
-/** Hata → kullanıcı mesajı (ApiError.userMessage varsa o). */
-const errorText = (error: unknown) =>
-  error instanceof ApiError ? error.userMessage : "Beklenmeyen bir hata oluştu.";
+function resolveStatus(raw: unknown): MacDurumu | null {
+  const key = typeof raw === "string" ? raw.trim() : "";
+  return (STATUS_ORDER as string[]).includes(key) ? (key as MacDurumu) : null;
+}
+
+/** Maç kaydındaki tarih "2026-08-18T00:00:00.000Z" da olabilir; gün kısmı alınır. */
+const matchDay = (match: ApiMatch) => String(match.date ?? "").slice(0, 10);
+
+/** Aynı gün içindeki sıralama saate göredir. */
+const startKey = (match: ApiMatch) => `${matchDay(match)}T${match.time ?? "00:00:00"}`;
+
+const statusKey = (match: ApiMatch): string => match.mac_durumu ?? UNKNOWN_STATUS;
+
+const statusLabel = (status: MacDurumu | null): string =>
+  status ? MATCH_STATUS_LABELS[status] : "Durumsuz";
+
+/* ══════════════════════════════ BÖLÜM TİPLERİ ══════════════════════════════ */
+
+interface MatchSectionMeta {
+  key: string;
+  /** Başlık: gün ("Bugün", "21 Ağustos Perşembe") ya da "Canlı". */
+  title: string;
+  /** Meta: durum + adet ("Zamanlandı · 4 maç"). */
+  meta: string;
+}
+
+type MatchSection = MatchSectionMeta & { data: ApiMatch[] };
+
+/* ══════════════════════════════════ EKRAN ═════════════════════════════════ */
 
 export default function AdminMatchesScreen() {
-  const router = useRouter();
   const auth = useAuth();
   const scope = useScope();
+  const router = useRouter();
+  const toast = useToast();
+  const teams = useTeamLogos();
+  const appActive = useAppActive();
   const queryClient = useQueryClient();
+  const params = useLocalSearchParams<{ durum?: string | string[] }>();
+  const { scrollY, scrollProps } = useHeaderScroll();
 
-  const [statusFilter, setStatusFilter] = useState<MacDurumu | null>(null);
+  /** Durum süzgeci ROTADA taşınır: paylaşılan bağlantı doğru çipe düşer. */
+  const status = resolveStatus(firstParam(params.durum));
+
   const [search, setSearch] = useState("");
-  const [selected, setSelected] = useState<ApiMatch | null>(null);
-  const [homeScore, setHomeScore] = useState("");
-  const [awayScore, setAwayScore] = useState("");
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [homeScore, setHomeScore] = useState(0);
+  const [awayScore, setAwayScore] = useState(0);
 
-  const queryKey = ["admin", "matches", scope.cityId, scope.leagueId, scope.seasonId] as const;
+  /* ───────────────────────────── VERİ ───────────────────────────── */
+
+  const queryKey = useMemo(
+    () => ["admin", "matches", "list", scope.cityId, scope.leagueId, scope.seasonId] as const,
+    [scope.cityId, scope.leagueId, scope.seasonId],
+  );
 
   const matchesQuery = useQuery({
     queryKey,
@@ -70,67 +180,257 @@ export default function AdminMatchesScreen() {
     enabled: Boolean(auth.user) && auth.isManagement && scope.ready,
     staleTime: 10_000,
     retry: false,
+    /**
+     * Canlı maç varken 20 sn, yokken 60 sn; uygulama arkadayken hiç yoklanmaz.
+     * İŞLEV BİÇİMİ ŞART: aralık listenin kendi verisine bağlı, bu yüzden sabit
+     * bir sayı yazılamaz (sorgu kurulurken canlı maç olup olmadığı bilinmez).
+     */
+    refetchInterval: (query) => {
+      if (!appActive) return false;
+      const rows = query.state.data ?? [];
+      return rows.some((item) => item.mac_durumu === "canli") ? LIVE_POLL_MS : IDLE_POLL_MS;
+    },
   });
 
-  const refresh = () => queryClient.invalidateQueries({ queryKey: ["admin", "matches"] });
+  const matches = useMemo(() => matchesQuery.data ?? [], [matchesQuery.data]);
 
-  const openMatch = (match: ApiMatch) => {
-    setSelected(match);
-    setHomeScore(match.first_team_score == null ? "" : String(match.first_team_score));
-    setAwayScore(match.second_team_score == null ? "" : String(match.second_team_score));
-  };
+  /** Arama tüm listeye uygulanır; çip sayaçları da bu süzülmüş kümeden okunur. */
+  const searched = useMemo(() => {
+    const term = search.trim().toLocaleLowerCase("tr-TR");
+    if (!term) return matches;
+    return matches.filter(
+      (match) =>
+        match.first_team_name.toLocaleLowerCase("tr-TR").includes(term) ||
+        match.second_team_name.toLocaleLowerCase("tr-TR").includes(term),
+    );
+  }, [matches, search]);
 
-  const closeModal = () => {
-    setSelected(null);
-    Keyboard.dismiss();
-  };
+  const counts = useMemo(() => {
+    const map = new Map<string, number>();
+    searched.forEach((match) => {
+      const key = statusKey(match);
+      map.set(key, (map.get(key) ?? 0) + 1);
+    });
+    return map;
+  }, [searched]);
 
+  const visible = useMemo(
+    () => (status ? searched.filter((match) => match.mac_durumu === status) : searched),
+    [searched, status],
+  );
+
+  const refetch = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ["admin", "matches"] });
+  }, [queryClient]);
+
+  const refresh = useRefresh(refetch, { refreshing: matchesQuery.isRefetching });
+
+  /* ─────────────────────────── BÖLÜMLER ─────────────────────────── */
+
+  const sections = useMemo<MatchSection[]>(() => {
+    const live = visible.filter((match) => match.mac_durumu === "canli");
+    const rest = visible.filter((match) => match.mac_durumu !== "canli");
+
+    const result: MatchSection[] = [];
+
+    if (live.length) {
+      result.push({
+        key: "canli",
+        title: "Canlı",
+        meta: `${live.length} maç · otomatik yenileniyor`,
+        data: [...live].sort((a, b) => startKey(a).localeCompare(startKey(b))),
+      });
+    }
+
+    // (durum, gün) çiftine göre kovalama — anahtar sıralaması aşağıda kurulur.
+    const buckets = new Map<string, ApiMatch[]>();
+    rest.forEach((match) => {
+      const key = `${statusKey(match)}|${matchDay(match)}`;
+      const bucket = buckets.get(key);
+      if (bucket) bucket.push(match);
+      else buckets.set(key, [match]);
+    });
+
+    /** Durum sırası: önce ele alınması gerekenler, sonra biten işler. */
+    const order = ["taslak", "zamanlanmis", "yayinlanmis", UNKNOWN_STATUS];
+
+    const keys = [...buckets.keys()].sort((a, b) => {
+      const [statusA, dayA] = a.split("|");
+      const [statusB, dayB] = b.split("|");
+      const rankA = order.indexOf(statusA);
+      const rankB = order.indexOf(statusB);
+      if (rankA !== rankB) return (rankA < 0 ? order.length : rankA) - (rankB < 0 ? order.length : rankB);
+      // Yayınlanmış maçlar en yeniden eskiye; bekleyen işler yakın günden uzağa.
+      return statusA === "yayinlanmis" ? dayB.localeCompare(dayA) : dayA.localeCompare(dayB);
+    });
+
+    keys.forEach((key) => {
+      const [bucketStatus, day] = key.split("|");
+      const data = (buckets.get(key) ?? []).sort((a, b) => startKey(a).localeCompare(startKey(b)));
+      const label = statusLabel(resolveStatus(bucketStatus));
+      result.push({
+        key,
+        title: formatDayHeading(day),
+        meta: `${label} · ${data.length} maç`,
+        data,
+      });
+    });
+
+    return result;
+  }, [visible]);
+
+  /* ──────────────────────────── EYLEMLER ──────────────────────────── */
+
+  const selected = useMemo(
+    () => matches.find((match) => Number(match.id) === selectedId) ?? null,
+    [matches, selectedId],
+  );
+
+  const openSheet = useCallback(
+    (matchId: number) => {
+      const match = matches.find((item) => Number(item.id) === matchId);
+      setHomeScore(Number(match?.first_team_score ?? 0));
+      setAwayScore(Number(match?.second_team_score ?? 0));
+      setSelectedId(matchId);
+    },
+    [matches],
+  );
+
+  const closeSheet = useCallback(() => setSelectedId(null), []);
+
+  /**
+   * GERİ BİLDİRİM KANALI: Toast, yerel `Modal` katmanının ALTINDA kalır — alt
+   * sayfa açıkken görünmez. Bu yüzden alt sayfadan tetiklenen hatalar Alert
+   * (yerel katman, her zaman üstte), alt sayfayı KAPATAN başarılar Toast ile
+   * bildirilir. Kapatmayan başarılar için geri bildirim ekranın kendisidir:
+   * durum çipi seçili hâle geçer.
+   */
   const scoreMutation = useMutation({
     mutationFn: (input: { id: number; home: number; away: number }) =>
       patchMatchScore(input.id, input.home, input.away),
     onSuccess: () => {
-      refresh();
-      closeModal();
-      Alert.alert("Skor güncellendi", "Puan durumu yeniden hesaplandı.");
+      refetch();
+      closeSheet();
+      toast.show({ message: "Skor kaydedildi. Puan durumu yeniden hesaplandı.", tone: "success" });
     },
-    onError: (error) => Alert.alert("Skor kaydedilemedi", errorText(error)),
+    onError: (error) => Alert.alert("Skor kaydedilemedi", errorMessage(error)),
   });
 
   const statusMutation = useMutation({
     mutationFn: (input: { id: number; status: MacDurumu }) =>
       patchMatchStatus(input.id, input.status),
-    onSuccess: (result) => {
-      refresh();
-      // Pencerede güncel durumu göster; kapatmadan başka işlem yapılabilir.
-      setSelected((prev) => (prev && prev.id === result.match.id ? result.match : prev));
-    },
-    onError: (error) => Alert.alert("Durum değiştirilemedi", errorText(error)),
+    // Alt sayfa açık kalır: yeni durum çipi anında seçili görünür, üstelik
+    // yönetici aynı maçta arka arkaya işlem yapabilir.
+    onSuccess: () => refetch(),
+    onError: (error) => Alert.alert("Durum değiştirilemedi", errorMessage(error)),
   });
 
-  const submitScore = () => {
-    if (!selected) return;
-    const home = Number.parseInt(homeScore, 10);
-    const away = Number.parseInt(awayScore, 10);
-    if (!Number.isFinite(home) || !Number.isFinite(away) || home < 0 || away < 0) {
-      Alert.alert("Eksik skor", "Her iki takım için de geçerli bir sayı girin.");
-      return;
-    }
-    scoreMutation.mutate({ id: selected.id, home, away });
-  };
-
-  const matches = matchesQuery.data ?? [];
-
-  const filtered = useMemo(() => {
-    const term = search.trim().toLocaleLowerCase("tr-TR");
-    return matches.filter((match) => {
-      if (statusFilter && match.mac_durumu !== statusFilter) return false;
-      if (!term) return true;
-      return (
-        match.first_team_name.toLocaleLowerCase("tr-TR").includes(term) ||
-        match.second_team_name.toLocaleLowerCase("tr-TR").includes(term)
+  const changeStatus = useCallback(
+    (next: MacDurumu) => {
+      if (!selected) return;
+      const id = Number(selected.id);
+      const confirm = CONFIRM_STATUS[next];
+      if (!confirm) {
+        statusMutation.mutate({ id, status: next });
+        return;
+      }
+      Alert.alert(
+        confirm.title,
+        `${selected.first_team_name} – ${selected.second_team_name}\n\n${confirm.body}`,
+        [
+          { text: "Vazgeç", style: "cancel" },
+          {
+            text: confirm.action,
+            style: next === "taslak" ? "destructive" : "default",
+            onPress: () => statusMutation.mutate({ id, status: next }),
+          },
+        ],
       );
-    });
-  }, [matches, statusFilter, search]);
+    },
+    [selected, statusMutation],
+  );
+
+  const saveScore = useCallback(() => {
+    if (!selected) return;
+    scoreMutation.mutate({ id: Number(selected.id), home: homeScore, away: awayScore });
+  }, [awayScore, homeScore, scoreMutation, selected]);
+
+  const openMatchPage = useCallback(() => {
+    if (!selected) return;
+    const id = Number(selected.id);
+    closeSheet();
+    router.push(`/mac/${id}`);
+  }, [closeSheet, router, selected]);
+
+  const selectStatus = useCallback(
+    (next: MacDurumu | null) => {
+      router.setParams({ durum: next ?? "" });
+    },
+    [router],
+  );
+
+  /* ───────────────────────────── ÇİZİM ───────────────────────────── */
+
+  const renderItem = useCallback(
+    ({ item, index, section }: SectionListRenderItemInfo<ApiMatch, MatchSectionMeta>) => {
+      const last = index === section.data.length - 1;
+      const position = index === 0 ? (last ? "single" : "first") : last ? "last" : "middle";
+      return (
+        <AdminMatchRow
+          match={item}
+          homeLogo={teams.logoFor(item.home_team_id, item.first_team_name)}
+          awayLogo={teams.logoFor(item.away_team_id, item.second_team_name)}
+          position={position}
+          onOpen={openSheet}
+        />
+      );
+    },
+    [openSheet, teams],
+  );
+
+  const renderSectionHeader = useCallback(
+    ({ section }: { section: SectionListData<ApiMatch, MatchSectionMeta> }) => (
+      <SectionHeader title={section.title} meta={section.meta} />
+    ),
+    [],
+  );
+
+  const renderSectionFooter = useCallback(() => <View style={styles.sectionGap} />, []);
+
+  /**
+   * SectionList düz indeks uzayı: her bölüm için [başlık, ...satırlar, altlık].
+   * Altlık bir indeks tüketir (VirtualizedSectionList kuralı) ve burada gerçek
+   * bir yüksekliği vardır (bölümler arası boşluk).
+   */
+  const getItemLayout = useCallback(
+    (data: SectionListData<ApiMatch, MatchSectionMeta>[] | null, index: number) => {
+      let offset = 0;
+      let cursor = 0;
+
+      for (const section of data ?? []) {
+        if (index === cursor) return { length: SECTION_HEADER_HEIGHT, offset, index };
+        offset += SECTION_HEADER_HEIGHT;
+        cursor += 1;
+
+        const count = section.data.length;
+        if (index < cursor + count) {
+          const within = index - cursor;
+          return { length: ROW_HEIGHT, offset: offset + within * ROW_HEIGHT, index };
+        }
+        offset += count * ROW_HEIGHT;
+        cursor += count;
+
+        if (index === cursor) return { length: SECTION_GAP, offset, index };
+        offset += SECTION_GAP;
+        cursor += 1;
+      }
+
+      return { length: 0, offset, index };
+    },
+    [],
+  );
+
+  /* ─────────────────────────────── KAPI ─────────────────────────────── */
 
   if (!auth.user) {
     return <Redirect href="/giris" />;
@@ -139,416 +439,331 @@ export default function AdminMatchesScreen() {
     return <Redirect href="/yonetim" />;
   }
 
+  const scopeLabel =
+    [scope.cityLabel, scope.leagueLabel, scope.seasonLabel].filter(Boolean).join(" · ") ||
+    "Kapsam seçilmedi";
+
+  const loading = matchesQuery.isLoading || (!scope.ready && scope.loading);
+  const failed = matchesQuery.isError && matches.length === 0;
+
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      <DetailHeader
+      <ScreenHeader
         title="Maç Yönetimi"
-        subtitle={[scope.cityLabel, scope.leagueLabel, scope.seasonLabel].filter(Boolean).join(" · ")}
+        subtitle={scopeLabel}
+        back
+        scrollY={scrollY}
+        bottom={
+          <View style={styles.controls}>
+            <ChipGroup>
+              <Chip
+                label="Tümü"
+                count={searched.length}
+                selected={status === null}
+                onPress={() => selectStatus(null)}
+              />
+              {STATUS_ORDER.map((item) => (
+                <Chip
+                  key={item}
+                  label={MATCH_STATUS_LABELS[item]}
+                  count={counts.get(item) ?? 0}
+                  tone={STATUS_TONE[item]}
+                  selected={status === item}
+                  onPress={() => selectStatus(status === item ? null : item)}
+                />
+              ))}
+            </ChipGroup>
+
+            <Input
+              variant="search"
+              size="sm"
+              value={search}
+              onChangeText={setSearch}
+              placeholder="Takım adı ara…"
+              autoCorrect={false}
+              containerStyle={styles.search}
+              accessibilityLabel="Takım adına göre ara"
+            />
+          </View>
+        }
       />
 
-      {/* Durum filtresi */}
-      <View style={styles.chips}>
-        <Pressable
-          onPress={() => setStatusFilter(null)}
-          style={({ pressed }) => [
-            styles.chip,
-            statusFilter === null && styles.chipActive,
-            pressed && styles.pressed,
-          ]}
-        >
-          <Text style={[styles.chipText, statusFilter === null && styles.chipTextActive]}>Tümü</Text>
-        </Pressable>
-        {STATUS_ORDER.map((status) => (
-          <Pressable
-            key={status}
-            onPress={() => setStatusFilter((prev) => (prev === status ? null : status))}
-            style={({ pressed }) => [
-              styles.chip,
-              statusFilter === status && styles.chipActive,
-              pressed && styles.pressed,
-            ]}
-          >
-            <Text style={[styles.chipText, statusFilter === status && styles.chipTextActive]}>
-              {MATCH_STATUS_LABELS[status]}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-
-      {/* Takım adına göre arama */}
-      <View style={styles.searchRow}>
-        <Ionicons name="search-outline" size={16} color={colors.muted} />
-        <TextInput
-          value={search}
-          onChangeText={setSearch}
-          placeholder="Takım adı ara…"
-          placeholderTextColor={colors.muted}
-          style={styles.searchInput}
-        />
-        {search ? (
-          <Pressable onPress={() => setSearch("")} hitSlop={8}>
-            <Ionicons name="close-circle" size={16} color={colors.muted} />
-          </Pressable>
-        ) : null}
-      </View>
-
-      {matchesQuery.isLoading || (!scope.ready && scope.loading) ? (
-        <Loading />
-      ) : matchesQuery.isError ? (
-        <ErrorState error={matchesQuery.error} onRetry={matchesQuery.refetch} />
-      ) : filtered.length === 0 ? (
+      {!scope.ready && !scope.loading ? (
         <EmptyState
-          icon="football-outline"
-          title="Maç bulunamadı"
-          body="Bu kapsam ve filtrede maç yok. Filtreyi değiştirmeyi deneyin."
+          icon="options-outline"
+          title="Kapsam seçilmedi"
+          body="Maçları yönetmek için şehir, lig ve sezon seçin."
+          action={{ label: "Kapsam seç", onPress: () => scope.openScopeSheet("city") }}
         />
+      ) : loading ? (
+        <View style={styles.skeleton}>
+          <SkeletonMatchRow count={7} />
+        </View>
+      ) : failed ? (
+        <ErrorState error={matchesQuery.error} onRetry={refetch} />
       ) : (
-        <FlatList
-          data={filtered}
-          keyExtractor={(item) => String(item.id)}
+        <SectionList<ApiMatch, MatchSectionMeta>
+          {...scrollProps}
+          sections={sections}
+          keyExtractor={keyExtractor}
+          renderItem={renderItem}
+          renderSectionHeader={renderSectionHeader}
+          renderSectionFooter={renderSectionFooter}
+          getItemLayout={getItemLayout}
+          stickySectionHeadersEnabled={false}
           contentContainerStyle={styles.list}
-          renderItem={({ item }) => {
-            const hasScore = item.first_team_score != null && item.second_team_score != null;
-            return (
-              <Pressable
-                onPress={() => openMatch(item)}
-                style={({ pressed }) => [styles.row, pressed && styles.pressed]}
-              >
-                <View style={styles.rowBody}>
-                  <Text style={styles.teams} numberOfLines={1}>
-                    {item.first_team_name}
-                    <Text style={styles.vs}>  –  </Text>
-                    {item.second_team_name}
-                  </Text>
-                  <Text style={styles.meta}>
-                    {formatDateShort(item.date)} · {formatTime(item.time)}
-                    {item.match_field ? ` · ${item.match_field}` : ""}
-                  </Text>
-                </View>
-                {hasScore ? (
-                  <View style={styles.scorePill}>
-                    <Text style={styles.scoreText}>
-                      {item.first_team_score} - {item.second_team_score}
-                    </Text>
-                  </View>
-                ) : null}
-                <View
-                  style={[styles.statusPill, { backgroundColor: statusColor(item.mac_durumu) + "1F" }]}
-                >
-                  <Text style={[styles.statusPillText, { color: statusColor(item.mac_durumu) }]}>
-                    {item.mac_durumu ? MATCH_STATUS_LABELS[item.mac_durumu] : "—"}
-                  </Text>
-                </View>
-              </Pressable>
-            );
-          }}
+          refreshControl={refresh.control}
+          initialNumToRender={12}
+          maxToRenderPerBatch={12}
+          windowSize={8}
+          removeClippedSubviews
+          keyboardShouldPersistTaps="handled"
+          ListHeaderComponent={
+            matchesQuery.isError ? (
+              <ErrorState
+                error={matchesQuery.error}
+                onRetry={refetch}
+                variant="banner"
+                style={styles.banner}
+              />
+            ) : null
+          }
+          ListEmptyComponent={
+            <EmptyState
+              icon="football-outline"
+              title="Maç bulunamadı"
+              body={
+                search
+                  ? "Aramanızla eşleşen maç yok. Farklı bir takım adı deneyin."
+                  : "Bu kapsam ve durumda maç yok. Durum çipini değiştirmeyi deneyin."
+              }
+              action={
+                status || search
+                  ? {
+                      label: "Süzgeci temizle",
+                      onPress: () => {
+                        setSearch("");
+                        selectStatus(null);
+                      },
+                    }
+                  : undefined
+              }
+            />
+          }
         />
       )}
 
-      {/* Hızlı işlem penceresi */}
-      <Modal visible={selected !== null} transparent animationType="fade" onRequestClose={closeModal}>
-        <Pressable style={styles.backdrop} onPress={closeModal}>
-          <Pressable style={styles.sheet} onPress={() => {}}>
-            {selected ? (
-              <>
-                <Text style={styles.sheetTitle} numberOfLines={2}>
-                  {selected.first_team_name} – {selected.second_team_name}
+      {/* Eylem alt sayfası: skor · durum · maç sayfası */}
+      <BottomSheet
+        visible={selected !== null}
+        onClose={closeSheet}
+        title={selected ? `${selected.first_team_name} – ${selected.second_team_name}` : undefined}
+        snap="content"
+      >
+        {selected ? (
+          <View style={styles.sheet}>
+            <View style={styles.sheetMetaRow}>
+              <Badge
+                label={statusLabel(selected.mac_durumu).toLocaleUpperCase("tr-TR")}
+                tone={selected.mac_durumu ? STATUS_TONE[selected.mac_durumu] : "neutral"}
+                size="xs"
+              />
+              <Text style={styles.sheetMeta} numberOfLines={1} {...textScale.dense}>
+                {[
+                  formatDayHeading(matchDay(selected)),
+                  formatTime(selected.time),
+                  selected.match_field,
+                  selected.league_name,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </Text>
+            </View>
+
+            {/* Skor girişi — tabular Stepper, sabit genişlik, basılı tutunca hızlanır. */}
+            <Text style={styles.sheetLabel} {...textScale.dense}>
+              SKOR
+            </Text>
+            <View style={styles.scoreRow}>
+              <View style={styles.scoreSide}>
+                <Text style={styles.scoreTeam} numberOfLines={1} {...textScale.dense}>
+                  {selected.first_team_name}
                 </Text>
-                <Text style={styles.sheetMeta}>
-                  {formatDateShort(selected.date)} · {formatTime(selected.time)}
+                <Stepper
+                  value={homeScore}
+                  onChange={setHomeScore}
+                  min={0}
+                  max={99}
+                  repeatOnHold
+                  accessibilityLabel={`${selected.first_team_name} skoru`}
+                />
+              </View>
+              <View style={styles.scoreSide}>
+                <Text style={styles.scoreTeam} numberOfLines={1} {...textScale.dense}>
+                  {selected.second_team_name}
                 </Text>
+                <Stepper
+                  value={awayScore}
+                  onChange={setAwayScore}
+                  min={0}
+                  max={99}
+                  repeatOnHold
+                  accessibilityLabel={`${selected.second_team_name} skoru`}
+                />
+              </View>
+            </View>
 
-                {/* Skor girişi */}
-                <Text style={styles.sectionLabel}>Skor</Text>
-                <View style={styles.scoreRow}>
-                  <TextInput
-                    value={homeScore}
-                    onChangeText={setHomeScore}
-                    keyboardType="number-pad"
-                    maxLength={2}
-                    placeholder="0"
-                    placeholderTextColor={colors.muted}
-                    style={styles.scoreInput}
-                  />
-                  <Text style={styles.scoreDash}>–</Text>
-                  <TextInput
-                    value={awayScore}
-                    onChangeText={setAwayScore}
-                    keyboardType="number-pad"
-                    maxLength={2}
-                    placeholder="0"
-                    placeholderTextColor={colors.muted}
-                    style={styles.scoreInput}
-                  />
-                  <Pressable
-                    onPress={submitScore}
-                    disabled={scoreMutation.isPending}
-                    style={({ pressed }) => [
-                      styles.saveBtn,
-                      (pressed || scoreMutation.isPending) && styles.pressed,
-                    ]}
-                  >
-                    <Text style={styles.saveText}>
-                      {scoreMutation.isPending ? "Kaydediliyor…" : "Skoru Kaydet"}
-                    </Text>
-                  </Pressable>
-                </View>
+            <Button
+              label="Skoru kaydet"
+              icon="save-outline"
+              onPress={saveScore}
+              loading={scoreMutation.isPending}
+              disabled={
+                homeScore === Number(selected.first_team_score ?? 0) &&
+                awayScore === Number(selected.second_team_score ?? 0)
+              }
+              haptic="medium"
+              fullWidth
+            />
 
-                {/* Durum değiştirme */}
-                <Text style={styles.sectionLabel}>Durum</Text>
-                <View style={styles.statusRow}>
-                  {STATUS_ORDER.map((status) => {
-                    const active = selected.mac_durumu === status;
-                    return (
-                      <Pressable
-                        key={status}
-                        disabled={active || statusMutation.isPending}
-                        onPress={() => statusMutation.mutate({ id: selected.id, status })}
-                        style={({ pressed }) => [
-                          styles.statusBtn,
-                          active && { backgroundColor: statusColor(status), borderColor: statusColor(status) },
-                          pressed && styles.pressed,
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.statusBtnText,
-                            active && styles.statusBtnTextActive,
-                          ]}
-                        >
-                          {MATCH_STATUS_LABELS[status]}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
+            {/* Durum değiştirme */}
+            <Text style={styles.sheetLabel} {...textScale.dense}>
+              DURUM
+            </Text>
+            <ChipGroup scrollable={false} contentPadding={0}>
+              {STATUS_ORDER.map((item) => (
+                <Chip
+                  key={item}
+                  label={MATCH_STATUS_LABELS[item]}
+                  tone={STATUS_TONE[item]}
+                  selected={selected.mac_durumu === item}
+                  disabled={selected.mac_durumu === item || statusMutation.isPending}
+                  onPress={() => changeStatus(item)}
+                />
+              ))}
+            </ChipGroup>
+            <Text style={styles.sheetNote} {...textScale.long}>
+              &quot;Canlı&quot; durumu üyelere maç başladı bildirimi gönderir. &quot;Yayınlandı&quot;
+              ve &quot;Taslak&quot; puan durumunu değiştirdiği için onay ister.
+            </Text>
 
-                {/* Maç sayfası */}
-                <Pressable
-                  onPress={() => {
-                    closeModal();
-                    router.push(`/mac/${selected.id}`);
-                  }}
-                  style={({ pressed }) => [styles.linkBtn, pressed && styles.pressed]}
-                >
-                  <Ionicons name="open-outline" size={15} color={colors.turf} />
-                  <Text style={styles.linkText}>Maç sayfasını aç</Text>
-                </Pressable>
-              </>
-            ) : null}
-          </Pressable>
-        </Pressable>
-      </Modal>
+            <Button
+              label="Maç sayfasını aç"
+              variant="secondary"
+              icon="open-outline"
+              onPress={openMatchPage}
+              fullWidth
+            />
+          </View>
+        ) : null}
+      </BottomSheet>
     </SafeAreaView>
   );
 }
 
+const keyExtractor = (item: ApiMatch) => String(item.id);
+
+/* ═══════════════════════════════ ALT PARÇALAR ══════════════════════════════ */
+
+/**
+ * Satır sarmalayıcı. `MatchRow` memo'lu; `onPress` her çizimde yeniden
+ * üretilseydi memo işe yaramazdı. İşleyici maç id'sini burada bağlanır.
+ * Yönetimde yıldız sütunu yoktur — favori üyeye ait bir kavramdır.
+ */
+const AdminMatchRow = memo(function AdminMatchRow({
+  match,
+  homeLogo,
+  awayLogo,
+  position,
+  onOpen,
+}: {
+  match: ApiMatch;
+  homeLogo: string | null;
+  awayLogo: string | null;
+  position: "single" | "first" | "middle" | "last";
+  onOpen: (matchId: number) => void;
+}) {
+  const matchId = Number(match.id);
+  const handlePress = useCallback(() => onOpen(matchId), [matchId, onOpen]);
+
+  return (
+    <MatchRow
+      match={match}
+      homeLogo={homeLogo}
+      awayLogo={awayLogo}
+      position={position}
+      showFavorite={false}
+      onPress={handlePress}
+      flashOnScoreChange
+    />
+  );
+});
+
+/* ═════════════════════════════════ STİLLER ═════════════════════════════════ */
+
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: colors.pitch,
+    backgroundColor: colors.bg,
   },
-  chips: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.xs + 2,
-    paddingHorizontal: spacing.md,
-    marginBottom: spacing.sm,
+  controls: {
+    gap: space.sm,
+    paddingBottom: space.sm,
   },
-  chip: {
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.faint,
-    backgroundColor: colors.surface,
-    paddingHorizontal: spacing.sm + 2,
-    paddingVertical: 5,
+  search: {
+    paddingHorizontal: layout.screenPadding,
   },
-  chipActive: {
-    backgroundColor: colors.turf,
-    borderColor: colors.turf,
-  },
-  chipText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: colors.muted,
-  },
-  chipTextActive: {
-    color: colors.surface,
-  },
-  searchRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    marginHorizontal: spacing.md,
-    marginBottom: spacing.sm,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.faint,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  searchInput: {
-    flex: 1,
-    padding: 0,
-    ...type.small,
-    color: colors.line,
+  skeleton: {
+    paddingHorizontal: layout.screenPadding,
+    paddingTop: space.sm,
   },
   list: {
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.xl,
+    paddingHorizontal: layout.screenPadding,
+    paddingBottom: space.giant,
+    flexGrow: 1,
   },
-  row: {
+  banner: {
+    marginBottom: space.sm,
+  },
+  sectionGap: {
+    height: SECTION_GAP,
+  },
+
+  /* Eylem alt sayfası */
+  sheet: {
+    gap: space.md,
+    paddingBottom: space.sm,
+  },
+  sheetMetaRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.faint,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  rowBody: {
-    flex: 1,
-  },
-  teams: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: colors.line,
-  },
-  vs: {
-    color: colors.muted,
-    fontWeight: "600",
-  },
-  meta: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: colors.muted,
-    marginTop: 2,
-  },
-  scorePill: {
-    backgroundColor: colors.goldDim,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
-  },
-  scoreText: {
-    fontSize: 11,
-    fontWeight: "900",
-    color: colors.line,
-  },
-  statusPill: {
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
-  },
-  statusPillText: {
-    fontSize: 9,
-    fontWeight: "800",
-  },
-  backdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: spacing.lg,
-  },
-  sheet: {
-    alignSelf: "stretch",
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
-    gap: spacing.sm,
-  },
-  sheetTitle: {
-    ...type.subtitle,
-    color: colors.line,
+    gap: space.sm,
   },
   sheetMeta: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: colors.muted,
-  },
-  sectionLabel: {
     ...type.caption,
-    color: colors.muted,
-    marginTop: spacing.xs,
+    color: colors.textSecondary,
+    flex: 1,
+  },
+  sheetLabel: {
+    ...type.micro,
+    color: colors.textTertiary,
+  },
+  sheetNote: {
+    ...type.caption,
+    color: colors.textTertiary,
   },
   scoreRow: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
+    gap: space.md,
   },
-  scoreInput: {
-    width: 52,
-    height: 44,
-    textAlign: "center",
-    fontSize: 15,
-    fontWeight: "800",
-    color: colors.line,
-    borderWidth: 1,
-    borderColor: colors.faint,
-    borderRadius: radius.sm,
-    backgroundColor: colors.surfaceRaised,
-  },
-  scoreDash: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: colors.muted,
-  },
-  saveBtn: {
+  scoreSide: {
     flex: 1,
     alignItems: "center",
-    justifyContent: "center",
-    height: 44,
-    borderRadius: radius.pill,
-    backgroundColor: colors.turf,
+    gap: space.sm,
   },
-  saveText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: colors.surface,
-  },
-  statusRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.sm,
-  },
-  statusBtn: {
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.faint,
-    backgroundColor: colors.surfaceRaised,
-    paddingHorizontal: spacing.sm + 2,
-    paddingVertical: 6,
-  },
-  statusBtnText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: colors.line,
-  },
-  statusBtnTextActive: {
-    color: colors.surface,
-    fontWeight: "800",
-  },
-  linkBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 5,
-    marginTop: spacing.xs,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.turf + "55",
-  },
-  linkText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: colors.turf,
-  },
-  pressed: {
-    opacity: 0.6,
+  scoreTeam: {
+    ...type.caption,
+    color: colors.textSecondary,
+    textAlign: "center",
   },
 });

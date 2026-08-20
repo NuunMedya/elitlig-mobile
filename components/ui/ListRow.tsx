@@ -112,7 +112,7 @@ export const ListRow = React.memo(function ListRow({
         </View>
       );
     }
-    return <View style={styles.leading}>{leading}</View>;
+    return <View style={styles.leadingNode}>{leading}</View>;
   }, [disabled, leading]);
 
   const content = (
@@ -235,6 +235,20 @@ const styles = StyleSheet.create({
   leading: {
     width: 24,
     height: 24,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  /**
+   * Çağıranın verdiği HAZIR düğüm için yuva: ikon yuvasının aksine SABİT
+   * değil, en az 24px. Sabit 24px'te 24'ten geniş bir düğüm (sıra numarası +
+   * `crestLg` amblem gibi bileşik sol içerikler) yuvadan iki yana taşıyor,
+   * solda satırın iç boşluğunu aşıp kenardan dışarı çıkıyor, sağda başlığın
+   * üstüne biniyordu. `minWidth`/`minHeight` ile 24'e kadar olan düğümlerin
+   * hizası aynı kalır, daha genişleri kendi yerini alır.
+   */
+  leadingNode: {
+    minWidth: 24,
+    minHeight: 24,
     alignItems: "center",
     justifyContent: "center",
   },

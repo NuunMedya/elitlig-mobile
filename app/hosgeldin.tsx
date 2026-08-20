@@ -1,158 +1,238 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useRouter } from "expo-router";
-import { useEffect, useRef } from "react";
-import { Animated, Image, Pressable, StyleSheet, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { colors, radius, spacing } from "@/constants/theme";
+/**
+ * KARŞILAMA — uygulamanın ilk karesi (2,2 saniye).
+ *
+ * NE: marka işareti belirir, başlık ve alt başlık sırayla açılır, en altta
+ * ince bir ilerleme çubuğu otomatik geçişin ne kadar kaldığını gösterir.
+ *
+ * SÜRELER KORUNUR (davranış sözleşmesi):
+ *   · giriş animasyonu 500 + 300 + 200 ms (logo → metin → düğmeler)
+ *   · otomatik geçiş `AUTO_ADVANCE_MS` = 2200 ms sonra `/(tabs)`
+ * İlerleme çubuğu da 2200 ms sürer; yani çubuk dolduğu an ekran değişir.
+ * Kullanıcı beklemek istemezse "Keşfetmeye Başla" ile hemen geçer.
+ *
+ * NEDEN İKİ AYRI EFEKT: geçiş zamanlayıcısı BİR KEZ kurulur ve hiçbir şeye
+ * bağlı değildir (bkz. aşağıdaki `useEffect`), giriş animasyonu ise "hareketi
+ * azalt" ayarına bağlıdır. Tek efekte konsalardı, ayar geç okunduğunda
+ * zamanlayıcı sıfırlanır ve açılış uzardı.
+ *
+ * NEDEN SABİT RENK YOK: eski sürüm mor bir zemine (#17102B) sabitlenmişti ve
+ * açık temada da mor kalıyordu. Artık zemin `colors.bg` → `colors.brandDim`
+ * geçişidir; marka hissi her iki temada da korunur, kimse ekranını yakmaz.
+ */
 
-const ONBOARDING_KEY = "elitlig.onboarding.done.v1";
+import { useRouter } from "expo-router";
+import { LinearGradient } from "expo-linear-gradient";
+import { useCallback, useEffect, useRef } from "react";
+import { Animated, Easing, Image, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Button, useReduceMotion, withAlpha } from "@/components/ui";
+import { colors, radius, space, textScale, type, upperTR } from "@/theme";
+
+/** Otomatik geçiş süresi. İlerleme çubuğu bu süreyi birebir çizer. */
+const AUTO_ADVANCE_MS = 2200;
+
+/** Marka işaretinin kenar uzunluğu. */
+const LOGO_SIZE = 104;
 
 export default function HosgeldinScreen() {
   const router = useRouter();
-  const logoAnim  = useRef(new Animated.Value(0)).current;
-  const textAnim  = useRef(new Animated.Value(0)).current;
-  const btnAnim   = useRef(new Animated.Value(0)).current;
+  const { width } = useWindowDimensions();
+  const reduceMotion = useReduceMotion();
 
+  const logoAnim = useRef(new Animated.Value(0)).current;
+  const textAnim = useRef(new Animated.Value(0)).current;
+  const btnAnim = useRef(new Animated.Value(0)).current;
+  const progress = useRef(new Animated.Value(0)).current;
+
+  /**
+   * Çubuğun piksel genişliği. `scaleX` görünümü MERKEZDEN büyütür; sola
+   * yaslamak için aynı ilerlemeden türetilen bir `translateX` ile telafi
+   * edilir (ikisi de yerel sürücüde çalışır, JS iş parçacığı boşta kalır).
+   */
+  const barWidth = Math.max(1, width - space.xl * 2);
+
+  /* Otomatik geçiş + ilerleme çubuğu — bir kez kurulur, hiç sıfırlanmaz. */
   useEffect(() => {
-    Animated.sequence([
-      Animated.timing(logoAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
-      Animated.timing(textAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
-      Animated.timing(btnAnim,  { toValue: 1, duration: 200, useNativeDriver: true }),
-    ]).start();
+    const bar = Animated.timing(progress, {
+      toValue: 1,
+      duration: AUTO_ADVANCE_MS,
+      easing: Easing.linear,
+      useNativeDriver: true,
+    });
+    bar.start();
 
-    // 2 saniye sonra otomatik geç
-    const timer = setTimeout(() => {
-      router.replace("/(tabs)");
-    }, 2200);
-
-    return () => clearTimeout(timer);
+    const timer = setTimeout(() => router.replace("/(tabs)"), AUTO_ADVANCE_MS);
+    return () => {
+      clearTimeout(timer);
+      bar.stop();
+    };
+    // Bilerek boş: süre sabittir, yeniden kurulursa açılış uzar.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const finish = () => {
-    router.replace("/(tabs)");
-  };
+  /* Giriş animasyonu — "hareketi azalt" açıksa her şey anında yerinde. */
+  useEffect(() => {
+    if (reduceMotion) {
+      logoAnim.setValue(1);
+      textAnim.setValue(1);
+      btnAnim.setValue(1);
+      return;
+    }
+    const entrance = Animated.sequence([
+      Animated.timing(logoAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+      Animated.timing(textAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.timing(btnAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
+    ]);
+    entrance.start();
+    return () => entrance.stop();
+  }, [reduceMotion, logoAnim, textAnim, btnAnim]);
+
+  const finish = useCallback(() => router.replace("/(tabs)"), [router]);
+  const openLogin = useCallback(() => router.push("/giris"), [router]);
 
   const logoStyle = {
     opacity: logoAnim,
-    transform: [{ scale: logoAnim.interpolate({ inputRange: [0,1], outputRange: [0.7,1] }) }],
+    transform: [
+      { scale: logoAnim.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }) },
+    ],
   };
-  const textStyle  = { opacity: textAnim };
-  const btnStyle   = { opacity: btnAnim };
+  const textStyle = {
+    opacity: textAnim,
+    transform: [
+      { translateY: textAnim.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) },
+    ],
+  };
+  const btnStyle = { opacity: btnAnim };
+  const barStyle = {
+    transform: [
+      { translateX: progress.interpolate({ inputRange: [0, 1], outputRange: [-barWidth / 2, 0] }) },
+      { scaleX: progress },
+    ],
+  };
 
   return (
-    <SafeAreaView style={styles.screen} edges={["top", "bottom"]}>
-      <View style={styles.center}>
-        {/* Logo */}
-        <Animated.View style={[styles.logoWrap, logoStyle]}>
-          <Image
-            source={require("../assets/images/icon.png")}
-            style={styles.logoImg}
-            resizeMode="contain"
+    <LinearGradient
+      colors={[colors.bg, colors.brandDim]}
+      start={{ x: 0.5, y: 0 }}
+      end={{ x: 0.5, y: 1 }}
+      style={styles.fill}
+    >
+      <SafeAreaView style={styles.fill} edges={["top", "bottom"]}>
+        <View style={styles.center}>
+          {/* Marka işareti — arkasındaki mor hâle logoyu zeminden ayırır. */}
+          <Animated.View style={[styles.logoWrap, logoStyle]}>
+            <View style={styles.glow} pointerEvents="none" />
+            <Image
+              source={require("../assets/images/icon.png")}
+              style={styles.logo}
+              resizeMode="contain"
+              accessible
+              accessibilityLabel="Elitlig"
+            />
+          </Animated.View>
+
+          <Animated.View style={[styles.textBlock, textStyle]}>
+            <Text style={styles.overline} {...textScale.badge}>
+              {upperTR("Elitlig")}
+            </Text>
+            <Text style={styles.title} {...textScale.dense}>
+              Halı Sahanın{"\n"}Dijital Ligi'ne{"\n"}Hoş Geldin
+            </Text>
+            <Text style={styles.subtitle} {...textScale.dense}>
+              Puan tablosu, fikstür, oyuncu istatistikleri{"\n"}ve çok daha fazlası tek yerde.
+            </Text>
+          </Animated.View>
+        </View>
+
+        <Animated.View style={[styles.footer, btnStyle]}>
+          <Button label="Keşfetmeye Başla" onPress={finish} fullWidth size="lg" />
+          <Button
+            label="Hesabım var, giriş yap"
+            onPress={openLogin}
+            variant="ghost"
+            fullWidth
+            haptic="light"
           />
+
+          {/* İlerleme: otomatik geçişe kalan süre. Dekor değil, bilgi. */}
+          <View
+            style={styles.track}
+            accessibilityRole="progressbar"
+            accessibilityLabel="Uygulama açılıyor"
+          >
+            <Animated.View style={[styles.bar, barStyle]} />
+          </View>
         </Animated.View>
-
-        {/* Başlık */}
-        <Animated.View style={[styles.textBlock, textStyle]}>
-          <Text style={styles.title}>Halı Sahanın{"\n"}Dijital Ligi'ne{"\n"}Hoş Geldin</Text>
-          <Text style={styles.subtitle}>
-            Puan tablosu, fikstür, oyuncu istatistikleri{"\n"}ve çok daha fazlası tek yerde.
-          </Text>
-        </Animated.View>
-      </View>
-
-      {/* Butonlar */}
-      <Animated.View style={[styles.buttons, btnStyle]}>
-        <Pressable
-          onPress={finish}
-          style={({ pressed }) => [styles.btnPrimary, pressed && styles.pressed]}
-        >
-          <Text style={styles.btnPrimaryTxt}>Keşfetmeye Başla</Text>
-        </Pressable>
-
-        <Pressable
-          onPress={() => router.push("/giris")}
-          style={({ pressed }) => [styles.btnGhost, pressed && styles.pressed]}
-        >
-          <Text style={styles.btnGhostTxt}>Hesabım var, giriş yap</Text>
-        </Pressable>
-      </Animated.View>
-    </SafeAreaView>
+      </SafeAreaView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: "#17102B",
-  },
+  fill: { flex: 1 },
+
   center: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: spacing.xl,
-    gap: 32,
+    paddingHorizontal: space.xl,
+    gap: space.xxxl,
   },
+
   logoWrap: {
     alignItems: "center",
+    justifyContent: "center",
   },
-  logoImg: {
-    width: 110,
-    height: 110,
-    borderRadius: 24,
+  glow: {
+    position: "absolute",
+    width: LOGO_SIZE * 2.2,
+    height: LOGO_SIZE * 2.2,
+    borderRadius: LOGO_SIZE * 1.1,
+    backgroundColor: withAlpha(colors.brand, 0.14),
   },
+  logo: {
+    width: LOGO_SIZE,
+    height: LOGO_SIZE,
+    borderRadius: radius.xxl,
+  },
+
   textBlock: {
     alignItems: "center",
-    gap: 10,
+    gap: space.sm,
   },
-  eyebrow: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: colors.turf,
-    letterSpacing: 1.5,
-    textAlign: "center",
-    marginBottom: 4,
+  overline: {
+    ...type.micro,
+    color: colors.brandAccent,
   },
   title: {
-    fontSize: 28,
-    fontWeight: "900",
-    color: "#FFFFFF",
+    ...type.display,
+    fontSize: 26,
+    lineHeight: 34,
+    color: colors.textPrimary,
     textAlign: "center",
-    lineHeight: 38,
-    letterSpacing: -0.5,
   },
   subtitle: {
-    fontSize: 12,
-    fontWeight: "500",
-    color: "rgba(255,255,255,0.5)",
+    ...type.bodySm,
+    color: colors.textSecondary,
     textAlign: "center",
-    lineHeight: 21,
+    lineHeight: 20,
   },
-  buttons: {
-    paddingHorizontal: spacing.xl,
-    paddingBottom: spacing.lg,
-    gap: spacing.sm,
+
+  footer: {
+    paddingHorizontal: space.xl,
+    paddingBottom: space.lg,
+    gap: space.sm,
   },
-  btnPrimary: {
-    backgroundColor: colors.turf,
+  track: {
+    height: 2,
     borderRadius: radius.pill,
-    paddingVertical: 16,
-    alignItems: "center",
+    marginTop: space.sm,
+    overflow: "hidden",
+    backgroundColor: colors.border,
   },
-  btnPrimaryTxt: {
-    fontSize: 15,
-    fontWeight: "900",
-    color: "#FFFFFF",
-  },
-  btnGhost: {
-    paddingVertical: 12,
-    alignItems: "center",
-  },
-  btnGhostTxt: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "rgba(255,255,255,0.5)",
-  },
-  pressed: {
-    opacity: 0.7,
+  bar: {
+    height: 2,
+    borderRadius: radius.pill,
+    backgroundColor: colors.brandAccent,
   },
 });

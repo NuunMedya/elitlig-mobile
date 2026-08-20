@@ -1,29 +1,45 @@
+/**
+ * GİRİŞ — POST /api/users/login
+ *
+ * NE: marka başlığı, iki alan (kullanıcı adı + şifre), tek birincil düğme ve
+ * gerektiğinde tek bir hata kutusu. Modal olarak açılır (bkz. app/_layout.tsx),
+ * bu yüzden sağ üstte geri oku değil KAPAT düğmesi vardır.
+ *
+ * HATA METNİ SUNUCUDAN GELİR: onaylanmamış hesaplara sunucu 403 döner ve
+ * nedenini mesajda yazar ("Onay bekleyin" gibi); o mesaj olduğu gibi gösterilir,
+ * çünkü kullanıcıya ne yapması gerektiğini asıl o anlatır. 401/403 dışındaki
+ * durumlarda `ApiError.userMessage` (genel, güvenli metin) kullanılır.
+ *
+ * YÖNLENDİRME KORUNUR: girişten sonra yığında geri dönülecek bir ekran varsa
+ * oraya dönülür (kullanıcı korumalı bir sayfadan buraya yollanmıştır); yoksa
+ * Profil SEKMESİ açılır. Bu davranış değiştirilmemelidir.
+ *
+ * KLAVYE: iOS'ta içerik klavyenin üstüne itilir, "İleri" tuşu şifre alanına
+ * atlar, "Git" tuşu formu gönderir; boşluğa dokunmak klavyeyi kapatır ama
+ * düğmeye ilk dokunuş kaybolmaz (`keyboardShouldPersistTaps="handled"`).
+ */
+
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
+  type TextInput,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { colors, radius, spacing, type } from "@/constants/theme";
+import { Button, Input, ScreenHeader, Touchable, toneColors } from "@/components/ui";
 import { ApiError } from "@/lib/http";
 import { useAuth } from "@/providers/AuthProvider";
+import { colors, hairline, layout, radius, space, textScale, touchSlop, type } from "@/theme";
 
-/**
- * Giriş ekranı — POST /api/users/login
- *
- * Sunucu onaylanmamış hesaplara 403 döner ve nedenini mesajda yazar; o mesaj
- * olduğu gibi gösterilir, çünkü kullanıcıya ne yapması gerektiğini o anlatır
- * ("Onay bekleyin" gibi).
- */
+/** Hata kutusunun tonu tek yerden okunur — kendi kırmızısını yazan yok. */
+const DANGER = toneColors("danger");
+
 export default function LoginScreen() {
   const { signIn, signingIn } = useAuth();
   const router = useRouter();
@@ -33,9 +49,30 @@ export default function LoginScreen() {
   const [secure, setSecure] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const passwordRef = useRef<TextInput>(null);
+
   const canSubmit = username.trim().length > 0 && password.length > 0 && !signingIn;
 
-  const submit = async () => {
+  /* Alan düzeltilince eski hata kalmasın: kullanıcı zaten yanıtı uyguluyor. */
+  const changeUsername = useCallback((value: string) => {
+    setUsername(value);
+    setError(null);
+  }, []);
+
+  const changePassword = useCallback((value: string) => {
+    setPassword(value);
+    setError(null);
+  }, []);
+
+  const toggleSecure = useCallback(() => setSecure((value) => !value), []);
+  const focusPassword = useCallback(() => passwordRef.current?.focus(), []);
+
+  const close = useCallback(() => {
+    if (router.canGoBack()) router.back();
+    else router.replace("/(tabs)");
+  }, [router]);
+
+  const submit = useCallback(async () => {
     if (!canSubmit) return;
     setError(null);
     try {
@@ -55,95 +92,99 @@ export default function LoginScreen() {
           : "Giriş yapılamadı."
       );
     }
-  };
+  }, [canSubmit, password, router, signIn, username]);
 
   return (
     <SafeAreaView style={styles.screen} edges={["top", "bottom"]}>
+      <ScreenHeader
+        title="Giriş yap"
+        overline="ELİTLİG"
+        actions={[{ icon: "close", onPress: close, accessibilityLabel: "Kapat" }]}
+      />
+
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <View style={styles.header}>
-            <Text style={styles.brand}>ELİTLİG</Text>
-            <Pressable
-              onPress={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)"))}
-              hitSlop={12}
-            >
-              <Ionicons name="close" size={26} color={colors.line} />
-            </Pressable>
-          </View>
-
-          <Text style={styles.title}>Giriş yap</Text>
-          <Text style={styles.subtitle}>
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          showsVerticalScrollIndicator={false}
+        >
+          <Text style={styles.lede} {...textScale.long}>
             Üye, oyuncu, takım başkanı ve yönetim hesapları buradan giriş
             yapabilir. Hesabınız yoksa elitlig.com üzerinden üye olabilirsiniz.
           </Text>
 
-          <View style={styles.field}>
-            <Text style={styles.label}>Kullanıcı adı</Text>
-            <TextInput
+          <View style={styles.form}>
+            <Input
+              label="Kullanıcı adı"
               value={username}
-              onChangeText={setUsername}
+              onChangeText={changeUsername}
+              leadingIcon="person-outline"
               autoCapitalize="none"
               autoCorrect={false}
               autoComplete="username"
               placeholder="kullanici.adi"
-              placeholderTextColor={colors.faint}
-              style={styles.input}
               returnKeyType="next"
+              submitBehavior="submit"
+              onSubmitEditing={focusPassword}
+              editable={!signingIn}
+            />
+
+            <Input
+              ref={passwordRef}
+              label="Şifre"
+              value={password}
+              onChangeText={changePassword}
+              leadingIcon="lock-closed-outline"
+              secureTextEntry={secure}
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="current-password"
+              placeholder="••••••••"
+              returnKeyType="go"
+              onSubmitEditing={submit}
+              editable={!signingIn}
+              trailing={
+                <Touchable
+                  feedback="icon"
+                  haptic="none"
+                  onPress={toggleSecure}
+                  hitSlop={touchSlop(20)}
+                  accessibilityRole="button"
+                  accessibilityLabel={secure ? "Şifreyi göster" : "Şifreyi gizle"}
+                >
+                  <Ionicons
+                    name={secure ? "eye-outline" : "eye-off-outline"}
+                    size={18}
+                    color={colors.textTertiary}
+                  />
+                </Touchable>
+              }
             />
           </View>
 
-          <View style={styles.field}>
-            <Text style={styles.label}>Şifre</Text>
-            <View style={styles.passwordRow}>
-              <TextInput
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={secure}
-                autoCapitalize="none"
-                autoComplete="current-password"
-                placeholder="••••••••"
-                placeholderTextColor={colors.faint}
-                style={[styles.input, styles.passwordInput]}
-                returnKeyType="go"
-                onSubmitEditing={submit}
-              />
-              <Pressable onPress={() => setSecure((value) => !value)} hitSlop={10} style={styles.eye}>
-                <Ionicons
-                  name={secure ? "eye-outline" : "eye-off-outline"}
-                  size={20}
-                  color={colors.muted}
-                />
-              </Pressable>
-            </View>
-          </View>
-
           {error ? (
-            <View style={styles.errorBox}>
-              <Ionicons name="alert-circle-outline" size={16} color={colors.live} />
-              <Text style={styles.errorText}>{error}</Text>
+            <View style={styles.errorBox} accessibilityRole="alert">
+              <Ionicons name="alert-circle" size={16} color={DANGER.fg} />
+              <Text style={styles.errorText} {...textScale.long}>
+                {error}
+              </Text>
             </View>
           ) : null}
 
-          <Pressable
+          <Button
+            label="Giriş yap"
             onPress={submit}
+            loading={signingIn}
             disabled={!canSubmit}
-            style={({ pressed }) => [
-              styles.submit,
-              !canSubmit && styles.submitDisabled,
-              pressed && styles.pressed,
-            ]}
-          >
-            {signingIn ? (
-              <ActivityIndicator color={colors.pitch} />
-            ) : (
-              <Text style={styles.submitText}>Giriş yap</Text>
-            )}
-          </Pressable>
+            size="lg"
+            fullWidth
+          />
 
-          <Text style={styles.footnote}>
+          <Text style={styles.footnote} {...textScale.long}>
             Şifrenizi unuttuysanız elitlig.com üzerinden sıfırlama isteği gönderin.
           </Text>
         </ScrollView>
@@ -153,98 +194,50 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: colors.pitch,
-  },
-  flex: {
-    flex: 1,
-  },
+  screen: { flex: 1, backgroundColor: colors.bg },
+  flex: { flex: 1 },
+
   content: {
-    padding: spacing.md,
-    gap: spacing.md,
+    paddingHorizontal: layout.screenPadding,
+    paddingTop: space.sm,
+    paddingBottom: space.giant,
+    gap: space.lg,
   },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+
+  lede: {
+    ...type.bodySm,
+    color: colors.textSecondary,
+    lineHeight: 19,
   },
-  brand: {
-    ...type.caption,
-    color: colors.turf,
+
+  form: {
+    gap: space.md,
   },
-  title: {
-    ...type.title,
-    color: colors.line,
-  },
-  subtitle: {
-    ...type.small,
-    color: colors.muted,
-    marginTop: -spacing.sm,
-    lineHeight: 20,
-  },
-  field: {
-    gap: spacing.xs,
-  },
-  label: {
-    ...type.caption,
-    color: colors.muted,
-  },
-  input: {
-    ...type.body,
-    color: colors.line,
-    backgroundColor: colors.surface,
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-  },
-  passwordRow: {
-    justifyContent: "center",
-  },
-  passwordInput: {
-    paddingRight: spacing.xl + spacing.md,
-  },
-  eye: {
-    position: "absolute",
-    right: spacing.md,
-  },
+
   errorBox: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: spacing.sm,
-    backgroundColor: "rgba(255,77,77,0.12)",
-    borderRadius: radius.sm,
-    padding: spacing.md,
+    gap: space.sm,
+    backgroundColor: DANGER.dim,
+    borderRadius: radius.md,
+    borderWidth: hairline,
+    borderColor: DANGER.fg,
+    paddingHorizontal: space.md,
+    paddingVertical: space.m,
   },
   errorText: {
-    ...type.small,
-    color: colors.live,
+    ...type.bodySm,
+    color: DANGER.fg,
     flex: 1,
-    lineHeight: 20,
+    lineHeight: 19,
   },
-  submit: {
-    backgroundColor: colors.turf,
-    borderRadius: radius.pill,
-    paddingVertical: spacing.md,
-    alignItems: "center",
-    marginTop: spacing.sm,
-  },
-  submitDisabled: {
-    opacity: 0.4,
-  },
-  pressed: {
-    opacity: 0.8,
-  },
-  submitText: {
-    ...type.body,
-    color: colors.pitch,
-    fontWeight: "800",
-  },
+
   footnote: {
     ...type.caption,
-    color: colors.faint,
+    fontWeight: "600",
     letterSpacing: 0,
+    color: colors.textTertiary,
     textAlign: "center",
-    lineHeight: 18,
+    lineHeight: 17,
   },
 });

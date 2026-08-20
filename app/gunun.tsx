@@ -1,32 +1,74 @@
-import Ionicons from "@expo/vector-icons/Ionicons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useQuery } from "@tanstack/react-query";
-import { submitArenaScore } from "@/lib/api/arena";
-import * as Sharing from "expo-sharing";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import ViewShot, { captureRef } from "react-native-view-shot";
-import { DetailHeader } from "@/components/ScreenHeader";
-import { EmptyState, Loading } from "@/components/States";
-import { colors, radius, spacing, type } from "@/constants/theme";
-import { getPlayerRankings } from "@/lib/api/players";
-import { queryKeys } from "@/lib/queryKeys";
-import { instagramUrl } from "@/lib/socials";
-import { useAuth } from "@/providers/AuthProvider";
-import { useScope } from "@/providers/ScopeProvider";
-import type { PlayerRankRow } from "@/lib/types";
-
 /**
  * GÜNÜN TESTİ — günlük 10 soru; o gün HERKESE AYNI sorular.
  *
- * Sorular, günün tarihinden türetilen sabit tohumlu bir rastgele sayı
- * üreteciyle Türkiye havuzundan (ilk 80 golcü) kurulur; böylece aynı gün
- * testi çözen herkes aynı sorularla yarışır ve skorlar doğrudan kıyaslanır.
- * Soru başına 12 saniye; doğru 10 puan + kalan süreden hız bonusu.
- * Günde bir resmî hak vardır (cihazda saklanır); sonrası antrenman sayılır
- * ve skoru güne yazılmaz. Sonuç koyu meydan okuma kartıyla paylaşılır.
+ * OYUN MANTIĞI KORUNDU (dokunulmadı): sorular günün tarihinden türetilen sabit
+ * tohumlu üreteçle Türkiye havuzundan (ilk 80 golcü) kurulur; soru başına 12
+ * saniye, doğru 10 puan + kalan sürenin yarısı kadar hız bonusu; günde bir
+ * resmî hak cihazda saklanır, sonrası antrenmandır ve güne yazılmaz.
+ *
+ * BU DOSYADA YENİLENEN YALNIZ SUNUM:
+ *   • Süre artık çubuk değil HALKA (`ProgressRing`): rakam ile yay aynı yerde,
+ *     son 4 saniyede ton kırmızıya döner.
+ *   • İlerleme şeridi 10 kutucuktur; geçmiş sorular doğru/yanlış rengiyle
+ *     kalır, böylece "kaçıncı sorudayım" ile "nasıl gidiyorum" tek bakışta
+ *     okunur.
+ *   • Şık düğmeleri dokunsaldır (doğru → success, yanlış → error titreşimi) ve
+ *     cevap açıldığında dolu renkle işaretlenir; seçilmeyen şıklar söner.
+ *   • Sonuç ekranı dört sayı verir: doğru · süre · puan · sıralama.
+ *   • Paylaşım kartı tema tokenlarıyla yeniden çizildi ve modal yerine
+ *     `BottomSheet` içine taşındı; hata artık Alert değil toast.
+ *
+ * SUNUM İÇİN EKLENEN İKİ DURUM — SKORA ETKİSİ YOKTUR:
+ *   `marks`     → soru başına doğru/yanlış işareti, yalnız ilerleme şeridi için.
+ *   `elapsedMs` → turun süresi; `start()` anındaki damgadan hesaplanır.
+ *
+ * SIRALAMA UCU: `getMyArenaRank` dönem parametresini iletmiyor ve dönüşü
+ * `Record<string, unknown>`. "Bu hafta" için dönem şart olduğundan
+ * `/api/arena/leaderboard/me` burada tiplenerek çağrılır — aynı kalıp
+ * `app/(tabs)/oyunlar.tsx` içinde de var (arena.ts başka bir ajanın dosyası).
  */
+
+import Ionicons from "@expo/vector-icons/Ionicons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useQuery } from "@tanstack/react-query";
+import * as Sharing from "expo-sharing";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import ViewShot, { captureRef } from "react-native-view-shot";
+import {
+  Badge,
+  BottomSheet,
+  Button,
+  EmptyState,
+  ErrorState,
+  ProgressRing,
+  ScreenHeader,
+  Skeleton,
+  Touchable,
+  useToast,
+} from "@/components/ui";
+import { submitArenaScore } from "@/lib/api/arena";
+import { getPlayerRankings } from "@/lib/api/players";
+import { get } from "@/lib/http";
+import { queryKeys } from "@/lib/queryKeys";
+import { instagramUrl } from "@/lib/socials";
+import type { PlayerRankRow } from "@/lib/types";
+import { useAuth } from "@/providers/AuthProvider";
+import { useScope } from "@/providers/ScopeProvider";
+import {
+  colors,
+  hairline,
+  haptics,
+  layout,
+  radius,
+  space,
+  textScale,
+  type,
+  upperTR,
+} from "@/theme";
+
+/* ═════════════════════════ OYUN SABİTLERİ (değişmedi) ═════════════════════ */
 
 const ROUND = 10;
 const SECONDS = 12;
@@ -107,18 +149,121 @@ function buildQuestions(pool: PlayerRankRow[], day: string): Question[] {
 
 type Phase = "intro" | "playing" | "reveal" | "done";
 
+/** İlerleme şeridi işareti — yalnız görsel. */
+type Mark = "correct" | "wrong";
+
+/* ═════════════════════════ SUNUCU SÖZLEŞMESİ ═════════════════════════ */
+
+interface DailyStandingEntry {
+  rank: number;
+  score: number;
+}
+
+interface DailyStanding {
+  /** Bu dönemde skoru olan FARKLI oyuncu sayısı (sunucu DISTINCT sayar). */
+  totalPlayers: number;
+  /** Kullanıcının kendi kaydı — hiç oynamadıysa null. */
+  entry: DailyStandingEntry | null;
+}
+
+/* ═════════════════════════ SAF YARDIMCILAR ═════════════════════════ */
+
+/** 1240 → "1.240" (binlik ayracı Türkçe nokta). */
+function formatCount(value: number): string {
+  return String(Math.round(value)).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
+
+/** 84_000 → "1:24" — tur süresi. */
+function formatDuration(ms: number): string {
+  const total = Math.max(0, Math.round(ms / 1000));
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+}
+
+/** Kalan süreye göre halka tonu — son 4 saniye kırmızı. */
+function timeTone(secondsLeft: number): "brand" | "warn" | "danger" {
+  if (secondsLeft <= 4) return "danger";
+  if (secondsLeft <= 7) return "warn";
+  return "brand";
+}
+
+/* ═════════════════════════ KÜÇÜK PARÇALAR ═════════════════════════ */
+
+/**
+ * Sonuç sayısı — üçlü şeritte tek hücre.
+ * NEDEN İLKEL PROP: hücre memo'lu; nesne geçilseydi her render yeni referans
+ * alır ve memo hiçbir şey kazandırmazdı.
+ */
+const StatCell = React.memo(function StatCell({
+  value,
+  label,
+  accent,
+}: {
+  value: string;
+  label: string;
+  /** Öne çıkan sayı (puan, sıralama) mor okunur. */
+  accent?: boolean;
+}) {
+  return (
+    <View style={styles.statCell}>
+      <Text style={accent ? styles.statValueAccent : styles.statValue} {...textScale.dense}>
+        {value}
+      </Text>
+      <Text style={styles.statLabel} numberOfLines={1} {...textScale.badge}>
+        {label}
+      </Text>
+    </View>
+  );
+});
+
+/** Kural rozeti — giriş kartındaki üç küçük bilgi. */
+const Fact = React.memo(function Fact({
+  icon,
+  label,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+}) {
+  return (
+    <View style={styles.fact}>
+      <Ionicons name={icon} size={12} color={colors.brandAccent} />
+      <Text style={styles.factText} numberOfLines={1} {...textScale.badge}>
+        {label}
+      </Text>
+    </View>
+  );
+});
+
+/* ═════════════════════════ EKRAN ═════════════════════════ */
+
 export default function DailyQuizScreen() {
   const scope = useScope();
   const auth = useAuth();
+
+  /**
+   * GÜN ANAHTARI: `toISOString()` (UTC) ile üretilir ve `(tabs)/oyunlar.tsx`
+   * ile BİREBİR aynı olmalıdır — yerel takvime geçmek gece yarısı ile 03:00
+   * arasında "bugün oynanmadı" gösterirdi.
+   */
   const day = new Date().toISOString().slice(0, 10);
-  const dayLabel = new Date()
-    .toLocaleDateString("tr-TR", { day: "numeric", month: "long" })
-    .toLocaleUpperCase("tr-TR");
+  const dayLabel = new Date().toLocaleDateString("tr-TR", { day: "numeric", month: "long" });
 
   const query = useQuery({
     queryKey: queryKeys.playerRankings({}, "topScorers"),
     queryFn: () => getPlayerRankings({}, "topScorers"),
     staleTime: 10 * 60_000,
+  });
+
+  const standingQuery = useQuery({
+    queryKey: ["arena", "me", "weekly", "gunun"],
+    queryFn: () =>
+      get<DailyStanding>(
+        "/api/arena/leaderboard/me",
+        { game: "gunun", period: "weekly" },
+        { retry: false }
+      ),
+    enabled: Boolean(auth.user),
+    staleTime: 60_000,
+    retry: false,
   });
 
   const pool = useMemo(
@@ -143,6 +288,10 @@ export default function DailyQuizScreen() {
   const [official, setOfficial] = useState(true);
   const [todayResult, setTodayResult] = useState<{ score: number; correct: number } | null>(null);
   const [best, setBest] = useState(0);
+  /* — Yalnız sunum: ilerleme şeridi ve tur süresi — */
+  const [marks, setMarks] = useState<Mark[]>([]);
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const startedAt = useRef(0);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -181,6 +330,9 @@ export default function DailyQuizScreen() {
     setCorrectCount(0);
     setQIndex(0);
     setChosen(null);
+    setMarks([]);
+    setElapsedMs(0);
+    startedAt.current = Date.now();
     setPhase("playing");
     startTimer();
   };
@@ -191,6 +343,10 @@ export default function DailyQuizScreen() {
     setPhase("reveal");
     const question = questions[qIndex];
     const isCorrect = index != null && question?.options[index]?.correct;
+    /* Yalnız geri bildirim: titreşim ve ilerleme şeridi işareti. */
+    if (isCorrect) haptics.success();
+    else haptics.error();
+    setMarks((prev) => [...prev, isCorrect ? "correct" : "wrong"]);
     if (isCorrect) {
       const bonus = Math.floor(secondsLeft / 2);
       setScore((s) => s + 10 + bonus);
@@ -211,9 +367,19 @@ export default function DailyQuizScreen() {
   const finish = (lastGain: number) => {
     const finalScore = score + lastGain;
     const finalCorrect = correctCount + (lastGain > 0 ? 1 : 0);
+    setElapsedMs(startedAt.current > 0 ? Date.now() - startedAt.current : 0);
     setPhase("done");
     if (official) {
-      if (auth.user && finalScore > 0) submitArenaScore("gunun", finalScore).catch(() => {});
+      if (auth.user && finalScore > 0) {
+        // Skor yazıldıktan SONRA sıralama tazelenir; sonuç ekranı taze sıra gösterir.
+        void submitArenaScore("gunun", finalScore)
+          .then(() => {
+            void standingQuery.refetch();
+          })
+          .catch(() => {
+            // Gönderim başarısızsa oyun akışı bozulmaz; sıra eski hâlinde kalır.
+          });
+      }
       const result = { score: finalScore, correct: finalCorrect };
       setTodayResult(result);
       AsyncStorage.setItem(DAY_KEY(day), JSON.stringify(result));
@@ -228,35 +394,83 @@ export default function DailyQuizScreen() {
   };
 
   const question = questions[qIndex];
+  const myRank = standingQuery.data?.entry?.rank ?? null;
+  const players = standingQuery.data?.totalPlayers ?? null;
+
+  /** İlerleme şeridi hücresinin rengi: geçmiş → sonuç, şimdiki → mor, sonraki → boş. */
+  const stripStyle = (index: number) => {
+    const mark = marks[index];
+    if (mark === "correct") return styles.stripCorrect;
+    if (mark === "wrong") return styles.stripWrong;
+    if (index === qIndex && phase !== "intro" && phase !== "done") return styles.stripCurrent;
+    return null;
+  };
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      <DetailHeader title="Günün Testi" subtitle={`${dayLabel} · herkese aynı 10 soru`} />
+      <ScreenHeader
+        title="Günün Testi"
+        overline={upperTR(dayLabel)}
+        subtitle="Herkese aynı 10 soru"
+        back
+      />
 
       {query.isLoading ? (
-        <Loading />
+        <View style={styles.loading}>
+          <Skeleton width="100%" height={72} radius="lg" />
+          <Skeleton width="100%" height={104} radius="lg" />
+          <Skeleton width="100%" height={52} radius="md" />
+          <Skeleton width="100%" height={52} radius="md" />
+          <Skeleton width="100%" height={52} radius="md" />
+        </View>
+      ) : query.isError ? (
+        <ErrorState error={query.error} onRetry={query.refetch} />
       ) : questions.length < ROUND ? (
         <EmptyState
           icon="calendar-outline"
           title="Test hazırlanamadı"
           body="Soru havuzu şu an yüklenemedi, birazdan tekrar dene."
+          action={{ label: "Tekrar dene", onPress: () => query.refetch(), haptic: "light" }}
         />
       ) : phase === "intro" ? (
-        <View style={styles.center}>
-          <Text style={styles.introEmoji}>🧠</Text>
-          <Text style={styles.introTitle}>GÜNÜN TESTİ</Text>
-          <Text style={styles.introBody}>
-            Bugün testi çözen herkes aynı 10 soruyla yarışıyor. Soru başına {SECONDS} saniye;
-            doğru 10 puan + hız bonusu.
-          </Text>
+        /* ——— 1) GİRİŞ ——— */
+        <ScrollView contentContainerStyle={styles.pageContent} showsVerticalScrollIndicator={false}>
+          <View style={styles.hero}>
+            <View style={styles.heroIcon}>
+              <Ionicons name="bulb" size={22} color={colors.brandAccent} />
+            </View>
+            <Text style={styles.heroTitle} {...textScale.dense}>
+              Bugünün 10 sorusu hazır
+            </Text>
+            <Text style={styles.heroBody} {...textScale.long}>
+              Testi bugün çözen herkes aynı sorularla yarışır. Soru başına {SECONDS} saniye; her
+              doğru 10 puan, kalan süreden hız bonusu eklenir.
+            </Text>
+            <View style={styles.heroFacts}>
+              <Fact icon="help-circle" label={`${ROUND} soru`} />
+              <Fact icon="time" label={`${SECONDS} sn/soru`} />
+              <Fact icon="flash" label="Hız bonusu" />
+            </View>
+          </View>
+
           {todayResult ? (
             <>
-              <View style={styles.todayCard}>
-                <Text style={styles.todayLabel}>BUGÜNKÜ SONUCUN</Text>
-                <Text style={styles.todayScore}>
-                  {todayResult.score} PUAN · {todayResult.correct}/{ROUND}
-                </Text>
+              <View style={styles.resultCard}>
+                <View style={styles.todayHead}>
+                  <Ionicons name="checkmark-circle" size={13} color={colors.win} />
+                  <Text style={styles.todayLabel} {...textScale.badge}>
+                    {upperTR("Bugünkü sonucun")}
+                  </Text>
+                </View>
+                <View style={styles.statRow}>
+                  <StatCell value={`${todayResult.correct}/${ROUND}`} label="doğru" />
+                  <View style={styles.statDivider} />
+                  <StatCell value={formatCount(todayResult.score)} label="puan" accent />
+                  <View style={styles.statDivider} />
+                  <StatCell value={myRank != null ? `#${myRank}` : "—"} label="sıralama" />
+                </View>
               </View>
+
               <ResultActions
                 score={todayResult.score}
                 correct={todayResult.correct}
@@ -265,26 +479,80 @@ export default function DailyQuizScreen() {
                 onRetry={() => start(false)}
                 retryLabel="Antrenman Turu"
               />
-              <Text style={styles.hint}>Antrenman skoru güne yazılmaz — resmî hak günde bir.</Text>
+
+              <Text style={styles.hint} {...textScale.long}>
+                Antrenman skoru güne yazılmaz — resmî hak günde bir.
+              </Text>
             </>
           ) : (
-            <Pressable
+            <Button
+              label="Bugünün testine başla"
+              icon="play"
+              size="lg"
+              fullWidth
+              haptic="medium"
               onPress={() => start(true)}
-              style={({ pressed }) => [styles.startBtn, pressed && styles.pressed]}
-            >
-              <Ionicons name="play" size={16} color={colors.surface} />
-              <Text style={styles.startText}>Bugünün Testine Başla</Text>
-            </Pressable>
+            />
           )}
-          {best > 0 ? <Text style={styles.bestLine}>🏆 En iyi günün: {best} puan</Text> : null}
-        </View>
+
+          {best > 0 ? (
+            <View style={styles.bestRow}>
+              <Ionicons name="trophy" size={12} color={colors.star} />
+              <Text style={styles.bestText} {...textScale.badge}>
+                En iyi günün: {formatCount(best)} puan
+              </Text>
+            </View>
+          ) : null}
+
+          {!auth.user ? (
+            <Text style={styles.hint} {...textScale.long}>
+              Skorun rekor tablosuna yazılsın diye giriş yapabilirsin.
+            </Text>
+          ) : null}
+        </ScrollView>
       ) : phase === "done" ? (
-        <View style={styles.center}>
-          <Text style={styles.introEmoji}>{correctCount >= 8 ? "🏆" : correctCount >= 5 ? "👏" : "💪"}</Text>
-          <Text style={styles.doneScore}>{score} PUAN</Text>
-          <Text style={styles.doneSub}>
-            {correctCount}/{ROUND} doğru{official ? "" : " · antrenman"}
-          </Text>
+        /* ——— 3) SONUÇ ——— */
+        <ScrollView contentContainerStyle={styles.pageContent} showsVerticalScrollIndicator={false}>
+          <View style={styles.resultCard}>
+            <ProgressRing
+              value={correctCount / ROUND}
+              size={96}
+              thickness={7}
+              tone={correctCount >= 8 ? "win" : correctCount >= 5 ? "brand" : "warn"}
+              label={`${correctCount}/${ROUND}`}
+              sublabel="doğru"
+            />
+
+            <Text style={styles.resultScore} {...textScale.dense}>
+              {formatCount(score)}
+            </Text>
+            <View style={styles.resultUnitRow}>
+              <Text style={styles.resultUnit} {...textScale.badge}>
+                {upperTR("puan")}
+              </Text>
+              {!official ? <Badge label="Antrenman" tone="warn" size="xs" /> : null}
+            </View>
+
+            {/* Doğru sayısı halkanın ortasında yazıyor; şerit onu tekrarlamaz. */}
+            <View style={styles.statRow}>
+              <StatCell value={formatDuration(elapsedMs)} label="süre" />
+              <View style={styles.statDivider} />
+              <StatCell value={formatCount(score)} label="puan" />
+              <View style={styles.statDivider} />
+              <StatCell value={myRank != null ? `#${myRank}` : "—"} label="sıralama" accent />
+            </View>
+
+            {!auth.user ? (
+              <Text style={styles.resultMeta} numberOfLines={2} {...textScale.dense}>
+                Sıralamaya girmek için giriş yapman yeterli.
+              </Text>
+            ) : players != null ? (
+              <Text style={styles.resultMeta} numberOfLines={2} {...textScale.dense}>
+                Bu hafta {formatCount(players)} kişi Günün Testi'nde yarıştı.
+              </Text>
+            ) : null}
+          </View>
+
           <ResultActions
             score={score}
             correct={correctCount}
@@ -293,58 +561,93 @@ export default function DailyQuizScreen() {
             onRetry={() => start(false)}
             retryLabel="Antrenman Turu"
           />
-        </View>
-      ) : (
-        <ScrollView contentContainerStyle={styles.content}>
-          <View style={styles.statusRow}>
-            <Text style={styles.statusText}>
-              SORU {qIndex + 1}/{ROUND}
-            </Text>
-            <Text style={styles.scoreText}>PUAN: {score}</Text>
-          </View>
 
-          {/* Süre çubuğu */}
-          <View style={styles.timerTrack}>
-            <View
-              style={[
-                styles.timerFill,
-                { width: `${(secondsLeft / SECONDS) * 100}%` },
-                secondsLeft <= 4 && styles.timerDanger,
-              ]}
+          {!official ? (
+            <Text style={styles.hint} {...textScale.long}>
+              Antrenman skoru güne yazılmaz.
+            </Text>
+          ) : null}
+        </ScrollView>
+      ) : (
+        /* ——— 2) OYUN ——— */
+        <ScrollView contentContainerStyle={styles.pageContent} showsVerticalScrollIndicator={false}>
+          <View style={styles.hud}>
+            <ProgressRing
+              value={secondsLeft / SECONDS}
+              size={58}
+              thickness={5}
+              tone={timeTone(secondsLeft)}
+              label={String(secondsLeft)}
+              sublabel="sn"
+              /* Saniyede bir tıkladığı için yay animasyonu kapalı: değer
+                 doğrudan yerine oturur, hem daha doğru hem daha ucuz. */
+              animate={false}
             />
+
+            <View style={styles.hudBody}>
+              <View style={styles.hudTop}>
+                <Text style={styles.hudLabel} {...textScale.badge}>
+                  {upperTR(`Soru ${qIndex + 1}/${ROUND}`)}
+                </Text>
+                {!official ? <Badge label="Antrenman" tone="warn" size="xs" /> : null}
+                <View style={styles.flex} />
+                <Text style={styles.hudScore} {...textScale.dense}>
+                  {formatCount(score)} puan
+                </Text>
+              </View>
+
+              <View style={styles.strip}>
+                {questions.map((item, index) => (
+                  <View key={`${item.prompt}-${index}`} style={[styles.stripCell, stripStyle(index)]} />
+                ))}
+              </View>
+            </View>
           </View>
-          <Text style={styles.timerText}>⏱ {secondsLeft} sn</Text>
 
           <View style={styles.questionCard}>
-            <Text style={styles.prompt}>{question.prompt}</Text>
+            <Text style={styles.prompt} {...textScale.long}>
+              {question.prompt}
+            </Text>
           </View>
 
           <View style={styles.options}>
             {question.options.map((option, index) => {
               const revealed = phase === "reveal";
               const isChosen = chosen === index;
+              const right = revealed && option.correct;
+              const wrong = revealed && isChosen && !option.correct;
               return (
-                <Pressable
+                <Touchable
                   key={`${option.label}-${index}`}
+                  feedback="button"
+                  /* Titreşim şıkta değil `answer()` içinde: doğru/yanlış ayrı
+                     ton çalar ve süre dolduğunda da tetiklenir. */
+                  haptic="none"
                   onPress={() => phase === "playing" && answer(index)}
                   disabled={phase !== "playing"}
-                  style={({ pressed }) => [
+                  accessibilityRole="button"
+                  accessibilityLabel={option.label}
+                  accessibilityState={{ disabled: phase !== "playing" }}
+                  style={[
                     styles.option,
-                    revealed && option.correct && styles.optionRight,
-                    revealed && isChosen && !option.correct && styles.optionWrong,
-                    pressed && styles.pressed,
+                    right ? styles.optionRight : null,
+                    wrong ? styles.optionWrong : null,
+                    revealed && !right && !wrong ? styles.optionMuted : null,
                   ]}
                 >
                   <Text
-                    style={[
-                      styles.optionText,
-                      revealed && (option.correct || (isChosen && !option.correct)) && styles.optionTextLight,
-                    ]}
-                    numberOfLines={1}
+                    style={[styles.optionText, right || wrong ? styles.optionTextOn : null]}
+                    numberOfLines={2}
+                    {...textScale.dense}
                   >
                     {option.label}
                   </Text>
-                </Pressable>
+                  {right ? (
+                    <Ionicons name="checkmark-circle" size={18} color={colors.textOnStatus} />
+                  ) : wrong ? (
+                    <Ionicons name="close-circle" size={18} color={colors.textOnStatus} />
+                  ) : null}
+                </Touchable>
               );
             })}
           </View>
@@ -353,6 +656,8 @@ export default function DailyQuizScreen() {
     </SafeAreaView>
   );
 }
+
+/* ═════════════════════════ SONUÇ EYLEMLERİ + PAYLAŞIM ═════════════════════ */
 
 function ResultActions({
   score,
@@ -369,367 +674,441 @@ function ResultActions({
   onRetry: () => void;
   retryLabel: string;
 }) {
+  const toast = useToast();
   const [shareOpen, setShareOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const shotRef = useRef<View>(null);
 
-  const igHandle = (() => {
+  const igHandle = useMemo(() => {
     const url = instagramUrl(scopeCity);
     const handle = url?.split("instagram.com/")[1]?.replace(/\/+$/, "");
     return handle ? `@${handle}` : "elitlig.com";
-  })();
+  }, [scopeCity]);
 
-  const share = async () => {
+  const openShare = useCallback(() => setShareOpen(true), []);
+  const closeShare = useCallback(() => setShareOpen(false), []);
+
+  const share = useCallback(async () => {
     if (busy) return;
     setBusy(true);
     try {
       const uri = await captureRef(shotRef, { format: "png", quality: 1 });
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(uri, { mimeType: "image/png" });
+      } else {
+        toast.show({ message: "Bu cihazda paylaşım kapalı.", tone: "warn" });
       }
     } catch {
-      Alert.alert("Bir sorun oldu", "Görsel oluşturulamadı, tekrar dener misin?");
+      toast.show({ message: "Görsel oluşturulamadı, tekrar dener misin?", tone: "danger" });
     } finally {
       setBusy(false);
     }
-  };
+  }, [busy, toast]);
 
   return (
     <>
       <View style={styles.actionRow}>
-        <Pressable
+        <Button
+          label={retryLabel}
+          icon="refresh"
+          variant="secondary"
           onPress={onRetry}
-          style={({ pressed }) => [styles.actionBtn, styles.retryBtn, pressed && styles.pressed]}
-        >
-          <Ionicons name="refresh" size={15} color={colors.turf} />
-          <Text style={styles.retryText}>{retryLabel}</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setShareOpen(true)}
-          style={({ pressed }) => [styles.actionBtn, styles.shareBtn, pressed && styles.pressed]}
-        >
-          <Ionicons name="share-social" size={15} color={colors.surface} />
-          <Text style={styles.shareText}>Meydan Oku</Text>
-        </Pressable>
+          style={styles.actionButton}
+        />
+        <Button
+          label="Meydan Oku"
+          icon="share-social"
+          onPress={openShare}
+          style={styles.actionButton}
+        />
       </View>
 
-      <Modal
-        visible={shareOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShareOpen(false)}
-      >
-        <View style={styles.backdrop}>
+      <BottomSheet visible={shareOpen} onClose={closeShare} title="Sonucunu paylaş" snap="full">
+        <View style={styles.shareWrap}>
           <ViewShot ref={shotRef} options={{ format: "png", quality: 1 }}>
             <View style={styles.shareCard}>
-              <Text style={styles.shareBrand}>elitlig</Text>
-              <Text style={styles.shareArena}>ARENA · GÜNÜN TESTİ</Text>
-              <Text style={styles.shareDay}>{dayLabel}</Text>
-              <Text style={styles.shareScore}>
-                {correct}/{10}
-              </Text>
-              <Text style={styles.shareLabel}>{score} PUAN</Text>
-              <View style={styles.shareDivider} />
-              <Text style={styles.shareChallenge}>Aynı sorular seni bekliyor 😏</Text>
-              <Text style={styles.shareFooter}>ELİTLİG.COM · {igHandle}</Text>
+              <View style={styles.shareStrip} />
+
+              <View style={styles.shareBody}>
+                <View style={styles.shareTop}>
+                  <Text style={styles.shareBrand} {...textScale.badge}>
+                    elitlig
+                  </Text>
+                  <Text style={styles.shareKicker} {...textScale.badge}>
+                    {upperTR("Günün Testi")}
+                  </Text>
+                </View>
+
+                <Text style={styles.shareDay} {...textScale.badge}>
+                  {upperTR(dayLabel)}
+                </Text>
+
+                <Text style={styles.shareScore} {...textScale.badge}>
+                  {correct}/{ROUND}
+                </Text>
+                <Text style={styles.shareUnit} {...textScale.badge}>
+                  {upperTR(`${formatCount(score)} puan`)}
+                </Text>
+
+                <View style={styles.shareDivider} />
+
+                <Text style={styles.shareChallenge} {...textScale.badge}>
+                  Aynı sorular seni bekliyor
+                </Text>
+
+                <View style={styles.flex} />
+
+                <Text style={styles.shareFooter} {...textScale.badge}>
+                  {upperTR(`elitlig.com · ${igHandle}`)}
+                </Text>
+              </View>
             </View>
           </ViewShot>
-          <View style={styles.actionRow}>
-            <Pressable
-              onPress={() => setShareOpen(false)}
-              style={({ pressed }) => [styles.actionBtn, styles.closeBtn, pressed && styles.pressed]}
-            >
-              <Text style={styles.closeText}>Kapat</Text>
-            </Pressable>
-            <Pressable
-              onPress={share}
-              style={({ pressed }) => [styles.actionBtn, styles.shareBtn, pressed && styles.pressed]}
-            >
-              <Ionicons name="share-social" size={15} color={colors.surface} />
-              <Text style={styles.shareText}>{busy ? "Hazırlanıyor…" : "Paylaş"}</Text>
-            </Pressable>
-          </View>
         </View>
-      </Modal>
+
+        <Button
+          label={busy ? "Hazırlanıyor" : "Paylaş"}
+          icon="share-social"
+          onPress={share}
+          loading={busy}
+          fullWidth
+        />
+        <Text style={styles.shareHint} {...textScale.dense}>
+          İndirmek için: Paylaş → Görüntüyü Kaydet
+        </Text>
+      </BottomSheet>
     </>
   );
 }
 
+/* ═════════════════════════ STİLLER ═════════════════════════ */
+
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: colors.pitch,
+  screen: { flex: 1, backgroundColor: colors.bg },
+  flex: { flex: 1 },
+
+  loading: {
+    padding: layout.screenPadding,
+    gap: space.md,
   },
-  content: {
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.xl,
+  pageContent: {
+    padding: layout.screenPadding,
+    paddingBottom: space.giant,
+    gap: space.md,
   },
-  center: {
-    flex: 1,
+
+  /* — Giriş kartı — */
+  hero: {
+    backgroundColor: colors.surface1,
+    borderRadius: radius.lg,
+    borderWidth: hairline,
+    borderColor: colors.brandBorder,
+    padding: space.lg,
+    gap: space.sm,
+    alignItems: "center",
+  },
+  heroIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: spacing.xl,
-    gap: spacing.sm,
+    backgroundColor: colors.brandDim,
   },
-  introEmoji: {
-    fontSize: 44,
-  },
-  introTitle: {
-    fontSize: 20,
-    fontWeight: "900",
-    letterSpacing: 1,
-    color: colors.turf,
-  },
-  introBody: {
-    ...type.small,
-    color: colors.muted,
+  heroTitle: {
+    ...type.h1,
+    color: colors.textPrimary,
     textAlign: "center",
-    lineHeight: 20,
   },
-  todayCard: {
+  heroBody: {
+    ...type.body,
+    color: colors.textSecondary,
+    textAlign: "center",
+  },
+  heroFacts: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: space.sm,
+    marginTop: space.xxs,
+  },
+  fact: {
+    flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.turfDim,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    marginTop: spacing.sm,
-    gap: 2,
+    gap: space.xs,
+    backgroundColor: colors.surface3,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.m,
+    paddingVertical: space.s,
+  },
+  factText: {
+    ...type.caption,
+    color: colors.textSecondary,
+  },
+
+  /* — Sonuç / bugünkü sonuç kartı — */
+  resultCard: {
+    backgroundColor: colors.surface1,
+    borderRadius: radius.lg,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    padding: space.lg,
+    gap: space.md,
+    alignItems: "center",
+  },
+  todayHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
   },
   todayLabel: {
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 0.8,
-    color: colors.turf,
+    ...type.micro,
+    color: colors.win,
   },
-  todayScore: {
-    ...type.subtitle,
-    color: colors.turf,
-    fontVariant: ["tabular-nums"],
+  resultScore: {
+    ...type.scoreHero,
+    color: colors.brandAccent,
   },
-  startBtn: {
+  resultUnitRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    backgroundColor: colors.turf,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-    marginTop: spacing.md,
+    gap: space.sm,
+    marginTop: -space.sm,
   },
-  startText: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: colors.surface,
+  resultUnit: {
+    ...type.micro,
+    color: colors.textTertiary,
   },
-  bestLine: {
+  resultMeta: {
     ...type.caption,
-    color: colors.muted,
-    letterSpacing: 0,
-    marginTop: spacing.sm,
-  },
-  hint: {
-    fontSize: 10,
     fontWeight: "600",
-    color: colors.muted,
+    letterSpacing: 0,
+    color: colors.textTertiary,
     textAlign: "center",
   },
-  statusRow: {
+
+  statRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: spacing.sm,
+    alignItems: "center",
+    alignSelf: "stretch",
   },
-  statusText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: colors.muted,
+  statCell: {
+    flex: 1,
+    alignItems: "center",
+    gap: space.xxs,
   },
-  scoreText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: colors.turf,
-    fontVariant: ["tabular-nums"],
+  statDivider: {
+    width: hairline,
+    alignSelf: "stretch",
+    backgroundColor: colors.separator,
   },
-  timerTrack: {
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.turfDim,
-    overflow: "hidden",
+  statValue: {
+    ...type.scoreSm,
+    color: colors.textPrimary,
   },
-  timerFill: {
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.turf,
+  statValueAccent: {
+    ...type.scoreSm,
+    color: colors.brandAccent,
   },
-  timerDanger: {
-    backgroundColor: colors.live,
+  statLabel: {
+    ...type.caption,
+    fontWeight: "600",
+    letterSpacing: 0,
+    color: colors.textTertiary,
   },
-  timerText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: colors.muted,
+
+  hint: {
+    ...type.caption,
+    fontWeight: "600",
+    letterSpacing: 0,
+    color: colors.textTertiary,
     textAlign: "center",
-    marginTop: 4,
-    marginBottom: spacing.sm,
-    fontVariant: ["tabular-nums"],
   },
+  bestRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: space.xs,
+  },
+  bestText: {
+    ...type.caption,
+    color: colors.textSecondary,
+  },
+
+  /* — Oyun başlığı (süre halkası + ilerleme) — */
+  hud: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    backgroundColor: colors.surface1,
+    borderRadius: radius.lg,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    padding: space.md,
+  },
+  hudBody: { flex: 1, gap: space.sm },
+  hudTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+  },
+  hudLabel: {
+    ...type.micro,
+    color: colors.textSecondary,
+  },
+  hudScore: {
+    ...type.tableNumStrong,
+    color: colors.brandAccent,
+  },
+  strip: {
+    flexDirection: "row",
+    gap: space.xxs,
+  },
+  stripCell: {
+    flex: 1,
+    height: 4,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface3,
+  },
+  stripCurrent: { backgroundColor: colors.brandAccent },
+  stripCorrect: { backgroundColor: colors.win },
+  stripWrong: { backgroundColor: colors.loss },
+
+  /* — Soru kartı — */
   questionCard: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.faint,
-    borderRadius: radius.md,
-    padding: spacing.lg,
-    marginBottom: spacing.md,
-    minHeight: 90,
+    backgroundColor: colors.surface1,
+    borderRadius: radius.lg,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.xl,
+    minHeight: 108,
+    alignItems: "center",
     justifyContent: "center",
   },
   prompt: {
-    ...type.body,
-    fontWeight: "800",
-    color: colors.line,
+    ...type.display,
+    color: colors.textPrimary,
     textAlign: "center",
-    lineHeight: 22,
   },
-  options: {
-    gap: spacing.sm,
-  },
+
+  /* — Şıklar — */
+  options: { gap: space.m },
   option: {
-    backgroundColor: colors.surface,
-    borderWidth: 2,
-    borderColor: colors.turf,
-    borderRadius: radius.pill,
-    paddingVertical: spacing.md,
+    minHeight: 54,
+    flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: spacing.md,
+    justifyContent: "center",
+    gap: space.sm,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.md,
+    borderRadius: radius.md,
+    borderWidth: hairline,
+    borderColor: colors.brandBorder,
+    backgroundColor: colors.surface1,
   },
   optionRight: {
-    backgroundColor: colors.green,
-    borderColor: colors.green,
+    backgroundColor: colors.win,
+    borderColor: colors.win,
   },
   optionWrong: {
-    backgroundColor: colors.live,
-    borderColor: colors.live,
+    backgroundColor: colors.loss,
+    borderColor: colors.loss,
+  },
+  /* Cevap açıldığında seçilmeyen şıklar geri çekilir. */
+  optionMuted: {
+    opacity: 0.5,
+    borderColor: colors.border,
   },
   optionText: {
-    ...type.small,
-    fontWeight: "800",
-    color: colors.line,
+    ...type.h3,
+    color: colors.textPrimary,
+    textAlign: "center",
+    flexShrink: 1,
   },
-  optionTextLight: {
-    color: "#FFFFFF",
-  },
-  doneScore: {
-    fontSize: 42,
-    fontWeight: "900",
-    color: colors.turf,
-    fontVariant: ["tabular-nums"],
-  },
-  doneSub: {
-    ...type.small,
-    color: colors.muted,
-  },
+  optionTextOn: { color: colors.textOnStatus },
+
+  /* — Eylemler — */
   actionRow: {
     flexDirection: "row",
-    gap: spacing.sm,
-    marginTop: spacing.md,
+    gap: space.sm,
   },
-  actionBtn: {
-    flexDirection: "row",
+  actionButton: { flex: 1 },
+
+  /* — Paylaşım kartı — */
+  shareWrap: {
     alignItems: "center",
-    justifyContent: "center",
-    gap: 5,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm + 3,
-  },
-  retryBtn: {
-    backgroundColor: colors.turfDim,
-  },
-  retryText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: colors.turf,
-  },
-  shareBtn: {
-    backgroundColor: colors.turf,
-  },
-  shareText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: colors.surface,
-  },
-  closeBtn: {
-    backgroundColor: "rgba(0,0,0,0.35)",
-  },
-  closeText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#FFFFFF",
-  },
-  backdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.65)",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: spacing.lg,
-    gap: spacing.md,
+    paddingVertical: space.md,
   },
   shareCard: {
     width: 264,
-    backgroundColor: "#18102C",
-    borderRadius: 16,
-    paddingVertical: spacing.xl,
-    paddingHorizontal: spacing.lg,
+    height: 396,
+    backgroundColor: colors.surface1,
+    borderRadius: radius.lg,
+    overflow: "hidden",
+  },
+  shareStrip: {
+    height: 6,
+    backgroundColor: colors.brand,
+  },
+  shareBody: {
+    flex: 1,
+    padding: space.md,
     alignItems: "center",
-    gap: 3,
+    gap: space.xs,
+  },
+  shareTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    alignSelf: "stretch",
   },
   shareBrand: {
-    fontSize: 15,
-    fontWeight: "900",
-    color: "#FFFFFF",
+    ...type.label,
+    color: colors.brand,
   },
-  shareArena: {
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 1.5,
-    color: "#B9A6E4",
+  shareKicker: {
+    ...type.micro,
+    color: colors.textTertiary,
   },
   shareDay: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#8878B8",
+    ...type.micro,
+    color: colors.textSecondary,
+    marginTop: space.sm,
   },
   shareScore: {
-    fontSize: 46,
-    fontWeight: "900",
-    color: "#F0BE2E",
-    marginTop: spacing.sm,
-    fontVariant: ["tabular-nums"],
+    ...type.scoreHero,
+    fontSize: 52,
+    lineHeight: 58,
+    color: colors.brandAccent,
+    marginTop: space.sm,
   },
-  shareLabel: {
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 1,
-    color: "#FFFFFF",
+  shareUnit: {
+    ...type.label,
+    color: colors.textPrimary,
   },
   shareDivider: {
     alignSelf: "stretch",
-    height: 1,
-    backgroundColor: "rgba(255,255,255,0.18)",
-    marginVertical: spacing.md,
+    height: hairline,
+    backgroundColor: colors.separator,
+    marginVertical: space.md,
   },
   shareChallenge: {
-    fontSize: 11,
+    ...type.caption,
     fontWeight: "700",
-    color: "#D9CBF6",
+    letterSpacing: 0,
+    color: colors.textSecondary,
+    textAlign: "center",
   },
   shareFooter: {
-    fontSize: 8,
-    fontWeight: "700",
-    letterSpacing: 1,
-    color: "#8878B8",
-    marginTop: spacing.sm,
+    ...type.micro,
+    color: colors.textTertiary,
+    textAlign: "center",
   },
-  pressed: {
-    opacity: 0.7,
+  shareHint: {
+    ...type.caption,
+    color: colors.textTertiary,
+    textAlign: "center",
+    marginTop: space.sm,
   },
 });

@@ -1,48 +1,269 @@
+/**
+ * MAÇ DETAYI — uygulamanın en çok açılan ekranı ve gol bildiriminin varış noktası.
+ *
+ * NE: tek bir maçın her yüzü. Üstte sabit bir tabela (armalar + skor + durum),
+ * altında altı segment: Özet · Canlı · Kadrolar · İstatistik · H2H · Puan.
+ *
+ * NEDEN SABİT TABELA: ekran canlı maçta açık kalıyor; kullanıcı istatistiğe
+ * ya da kadroya inerken skoru kaybetmemeli. Bu yüzden hero, daralan başlığın
+ * (ScreenHeader 96→48) hemen altında SABİT durur ve yalnız segment içeriği
+ * kaydırılır. Segment şeridi hero'ya yapışıktır.
+ *
+ * NEDEN URL PARAMETRESİ: `/mac/<id>?tab=canli` gol ve "maç başladı"
+ * bildirimlerinin varış noktasıdır. Segment ekran durumunda değil ROTADA
+ * taşınır; bildirime dokunan kullanıcı doğrudan canlı akışa düşer. Parametre
+ * tanınmazsa ya da maç canlı değilse SESSİZCE "ozet" gösterilir (hata yok,
+ * uyarı yok) — bildirim geldiğinde maç bitmiş olabilir.
+ *
+ * VERİ KAYNAKLARI (üçü birleşir, öncelik sırası korunmuştur):
+ *   1. maç kaydı        — lig, saha, tarih, kesinleşmiş skor, manşet, video
+ *   2. kadro ucu        — oyuncu adları/fotoğrafları çözülmüş kadrolar
+ *   3. canlı görüntü    — YALNIZ maç canlıyken: skor, sayaç, olaylar
+ * Canlı görüntü varken skor ve olaylar ondan okunur; maç kaydındaki skor
+ * ancak maç yayınlandıktan sonra kesinleşir.
+ *
+ * PERFORMANS: canlı sayaç saniyede bir tikliyor. Bu tik EKRANI değil yalnız
+ * `MatchClock` bileşenini yeniden çizsin diye `useLiveClock` ekran gövdesinde
+ * DEĞİL o bileşenin içinde çağrılır. Aynı gerekçeyle geri sayım da kendi
+ * bileşenindedir. Segmentlerin hepsi sanal liste (FlatList/SectionList) ve
+ * satır bileşenleri memo'ludur.
+ */
+
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
-import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
-import { addMatchToCalendar } from "@/lib/calendar";
-import { openLink } from "@/lib/links";
-import { youtubeChannelUrl } from "@/lib/youtube";
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Animated,
+  FlatList,
+  Image,
+  RefreshControl,
+  SectionList,
+  Share,
+  StyleSheet,
+  Text,
+  View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+  type RefreshControlProps,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { DetailHeader } from "@/components/ScreenHeader";
+
+import { MatchPhotoSlider } from "@/components/MatchPhotoSlider";
 import { ShareScoreCard } from "@/components/ShareScoreCard";
 import { YoutubeBanner } from "@/components/YoutubeBanner";
-import { ErrorState, Loading } from "@/components/States";
-import { PlayerAvatar, TeamCrest } from "@/components/TeamCrest";
-import { colors, radius, spacing, type } from "@/constants/theme";
+import {
+  Avatar,
+  Badge,
+  Card,
+  EmptyState,
+  ErrorState,
+  FormChips,
+  KeyValueRow,
+  LiveBadge,
+  RatingPill,
+  ScreenHeader,
+  SectionHeader,
+  SkeletonCard,
+  SkeletonListRow,
+  SkeletonStandings,
+  StatBar,
+  Tabs,
+  TeamLogo,
+  Touchable,
+  refreshControlProps,
+  useHeaderScroll,
+  useReduceMotion,
+  useRefresh,
+  useToast,
+  type ScreenHeaderAction,
+  type TabItem,
+} from "@/components/ui";
 import { useLiveClock, useLiveMatch } from "@/hooks/useLiveMatch";
 import { useTeamLogos } from "@/hooks/useTeamLogos";
 import { getMatch, getMatchKadro, getTeamMatches } from "@/lib/api/matches";
+import { getStandings } from "@/lib/api/standings";
+import { addMatchToCalendar } from "@/lib/calendar";
 import { formatClock, formatDateLong, formatDateShort, formatTime, mediaUrl } from "@/lib/format";
-import { eventKind, goalDetail, isTimelineEvent, matchState } from "@/lib/match";
+import { openLink } from "@/lib/links";
+import { eventKind, goalDetail, isSubstitution, isTimelineEvent, matchState } from "@/lib/match";
 import { buildContributions, buildStatRows, buildTopPlayers } from "@/lib/matchStats";
 import { queryKeys } from "@/lib/queryKeys";
+import { youtubeChannelUrl } from "@/lib/youtube";
+import { useFavorite } from "@/providers/FavoriteProvider";
+import { useScope } from "@/providers/ScopeProvider";
+import {
+  colors,
+  duration,
+  easing,
+  hairline,
+  haptics,
+  layout,
+  radius,
+  space,
+  textScale,
+  type,
+} from "@/theme";
 import type { ContribRow, StatRow, TopPlayer } from "@/lib/matchStats";
-import type { ApiMatch, ApiMatchEvent, KadroPlayer, KadroResponse } from "@/lib/types";
+import type {
+  ApiMatch,
+  ApiMatchEvent,
+  KadroPlayer,
+  KadroResponse,
+  LiveSnapshot,
+  MatchState,
+  StandingRow,
+} from "@/lib/types";
 
-type Tab = "summary" | "lineup";
+/* ══════════════════════════════════════════════════════════════════════════
+   1) SEGMENTLER VE ROTA PARAMETRESİ
+   ══════════════════════════════════════════════════════════════════════════ */
+
+type MatchTab = "ozet" | "canli" | "kadro" | "istatistik" | "h2h" | "puan";
+
+const TAB_KEYS: readonly string[] = ["ozet", "canli", "kadro", "istatistik", "h2h", "puan"];
 
 /**
- * Maç detayı.
- *
- * Üç kaynak birleşir:
- *   - maç kaydı (lig, saha, tarih, kesinleşmiş skor, maç notu)
- *   - kadro ucu (oyuncu adları çözülmüş kadrolar)
- *   - canlı anlık görüntü (yalnızca maç canlıyken: skor, süre, olaylar)
- *
- * Canlı görüntü varken skor ve olaylar ondan okunur; maç kaydındaki skor
- * ancak maç yayınlandıktan sonra kesinleşir.
+ * Bildirimden/menüden gelen farklı yazımlar da doğru segmente düşsün.
+ * Sunucu tarafı ve web istemcisi İngilizce anahtar gönderebiliyor.
  */
-export default function MatchDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const matchId = Number(id);
-  const validId = Number.isFinite(matchId) && matchId > 0;
-  const teams = useTeamLogos();
-  const [tab, setTab] = useState<Tab>("summary");
+const TAB_ALIASES: Record<string, MatchTab> = {
+  summary: "ozet",
+  ozeti: "ozet",
+  live: "canli",
+  canliyayin: "canli",
+  lineup: "kadro",
+  lineups: "kadro",
+  kadrolar: "kadro",
+  stats: "istatistik",
+  istatistikler: "istatistik",
+  headtohead: "h2h",
+  gecmis: "h2h",
+  standings: "puan",
+  puandurumu: "puan",
+};
 
+/**
+ * Rota anahtarını normalleştirir.
+ *
+ * TUZAK: `"İSTATİSTİK".toLocaleLowerCase("tr")` noktasız ı üretir, düz
+ * `toLowerCase()` ise "İ" için birleşik nokta bırakır; ikisi de ASCII rota
+ * anahtarıyla eşleşmez. Önce I ailesi katlanır, sonra küçültülür.
+ */
+function normalizeKey(raw: unknown): string {
+  if (typeof raw !== "string") return "";
+  return raw.trim().replace(/[İIı]/g, "i").toLowerCase();
+}
+
+function resolveTab(raw: unknown): MatchTab {
+  const key = normalizeKey(raw);
+  if (TAB_KEYS.includes(key)) return key as MatchTab;
+  return TAB_ALIASES[key] ?? "ozet";
+}
+
+/** Sorgu parametresi tek değer ya da dizi olarak gelebilir. */
+function firstParam(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   2) KÜÇÜK YARDIMCILAR
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Hakem adı henüz `ApiMatch` sözleşmesinde yok; bazı kurulumlarda kayıt
+ * `hakem`/`referee` alanıyla geliyor. Alan varsa gösterilir, yoksa satır hiç
+ * çizilmez — `any` kullanmadan, tipi genişleterek okunur.
+ */
+type MatchExtras = { hakem?: string | null; referee?: string | null };
+
+function refereeOf(match: ApiMatch): string | null {
+  const extra = match as ApiMatch & MatchExtras;
+  const value = (extra.hakem ?? extra.referee ?? "").toString().trim();
+  return value.length > 0 ? value : null;
+}
+
+/** Maç kaydındaki tarih tam ISO da olabilir; gün kısmı ilk 10 karakterdir. */
+const dayOf = (match: Pick<ApiMatch, "date">) => String(match.date ?? "").slice(0, 10);
+
+/** Başlama anı (ms). Okunamayan tarihlerde 0 döner. */
+function kickoffAt(match: Pick<ApiMatch, "date" | "time">): number {
+  const stamp = Date.parse(`${dayOf(match)}T${match.time || "00:00:00"}`);
+  return Number.isFinite(stamp) ? stamp : 0;
+}
+
+/** Türkçe küçük harf (İ/I tuzağı) — takım adı karşılaştırmaları bununla yapılır. */
+const normalizeName = (value?: string | null) =>
+  String(value ?? "").trim().toLocaleLowerCase("tr-TR");
+
+const pad2 = (value: number) => String(value).padStart(2, "0");
+
+/**
+ * Devre arası tespiti. Sunucu `matchStatus` alanını her kurulumda aynı yazmıyor;
+ * bilinen değerler eşleşmezse "canlı ama sayaç durmuş, ilk devre tamamlanmış"
+ * durumu devre arası sayılır (`match_halftime` bildirimiyle aynı an).
+ */
+const HALFTIME_STATUSES = [
+  "devre_arasi",
+  "devrearasi",
+  "devre arasi",
+  "devre arası",
+  "halftime",
+  "half_time",
+  "ht",
+  "ara",
+];
+
+function isHalftime(snapshot: LiveSnapshot | undefined): boolean {
+  if (!snapshot) return false;
+  const status = String(snapshot.matchStatus ?? "").trim().toLowerCase();
+  if (HALFTIME_STATUSES.includes(status)) return true;
+  const timer = snapshot.timer;
+  if (!timer) return false;
+  return Boolean(snapshot.isLive && !timer.running && (timer.baseMs ?? 0) > 0);
+}
+
+/** Olay ailesi → ikon + renk. Zaman çizelgesinin tek görsel sözlüğü. */
+const EVENT_VISUAL: Record<
+  string,
+  { icon: keyof typeof Ionicons.glyphMap; color: string; label: string }
+> = {
+  goal: { icon: "football", color: colors.win, label: "Gol" },
+  ownGoal: { icon: "football-outline", color: colors.live, label: "Kendi kalesine" },
+  yellow: { icon: "square", color: colors.yellowCard, label: "Sarı kart" },
+  red: { icon: "square", color: colors.redCard, label: "Kırmızı kart" },
+  substitution: { icon: "swap-horizontal", color: colors.textSecondary, label: "Değişiklik" },
+  other: { icon: "ellipse-outline", color: colors.textTertiary, label: "Olay" },
+};
+
+const isGoalKind = (kind: string) => kind === "goal" || kind === "ownGoal";
+
+/* ══════════════════════════════════════════════════════════════════════════
+   3) EKRAN KABUĞU
+   ══════════════════════════════════════════════════════════════════════════ */
+
+export default function MatchDetailScreen() {
+  const params = useLocalSearchParams<{ id: string; tab?: string }>();
+  const router = useRouter();
+  const scope = useScope();
+  const toast = useToast();
+  const teams = useTeamLogos();
+  const { isFavoriteMatch, toggleFavoriteMatch } = useFavorite();
+  const { scrollY, scrollProps } = useHeaderScroll();
+
+  const matchId = Number(firstParam(params.id));
+  const validId = Number.isFinite(matchId) && matchId > 0;
+
+  /* ---- Segment: rotadan gelir, rotaya yazılır ---- */
+  const routeTab = resolveTab(firstParam(params.tab));
+  const [tab, setTab] = useState<MatchTab>(routeTab);
+
+  useEffect(() => {
+    setTab(routeTab);
+    scrollY.setValue(0);
+  }, [routeTab, scrollY]);
+
+  /* ---- Sorgular ---- */
   const matchQuery = useQuery({
     queryKey: queryKeys.match(matchId),
     queryFn: () => getMatch(matchId, ["timeline"]),
@@ -57,29 +278,253 @@ export default function MatchDetailScreen() {
   });
 
   const match = matchQuery.data;
-  const live = match ? matchState(match) === "live" : false;
+  const state: MatchState = match ? matchState(match) : "scheduled";
+  const live = state === "live";
 
   const { snapshot, realtime } = useLiveMatch(validId ? matchId : null, live);
-  const clockMs = useLiveClock(snapshot);
 
-  const events = (snapshot?.events ?? match?.timeline ?? []) as ApiMatchEvent[];
+  /**
+   * Takım kimlikleri. Eski maçlarda `home_team_id` boş olabilir; kadro ucu bu
+   * durumda kadrodaki ilk iki takımı ev/deplasman olarak çözer, o da yoksa ada
+   * göre eşleşme denenir.
+   */
+  const homeTeamId = useMemo(() => {
+    if (!match) return null;
+    const resolved =
+      match.home_team_id ??
+      kadroQuery.data?.meta?.home_team_id ??
+      teams.idFor(null, match.first_team_name);
+    return Number(resolved) || null;
+  }, [match, kadroQuery.data, teams]);
 
+  const awayTeamId = useMemo(() => {
+    if (!match) return null;
+    const resolved =
+      match.away_team_id ??
+      kadroQuery.data?.meta?.away_team_id ??
+      teams.idFor(null, match.second_team_name);
+    return Number(resolved) || null;
+  }, [match, kadroQuery.data, teams]);
+
+  /**
+   * "Canlı" segmenti YALNIZ maç canlıyken vardır. Bildirimden `?tab=canli` ile
+   * gelindiğinde maç verisi henüz yüklenmemiş olabilir; o yüzden düşüş, durum
+   * biliniyorken TÜRETİLİR — veri gelince segment kendiliğinden açılır.
+   */
+  const activeTab: MatchTab = tab === "canli" && !live ? "ozet" : tab;
+
+  const tabItems = useMemo<TabItem<MatchTab>[]>(() => {
+    const items: TabItem<MatchTab>[] = [{ key: "ozet", label: "Özet" }];
+    if (live) items.push({ key: "canli", label: "Canlı", badge: "dot" });
+    items.push(
+      { key: "kadro", label: "Kadrolar" },
+      { key: "istatistik", label: "İstatistik" },
+      { key: "h2h", label: "H2H" },
+      { key: "puan", label: "Puan" },
+    );
+    return items;
+  }, [live]);
+
+  const changeTab = useCallback(
+    (next: MatchTab) => {
+      setTab(next);
+      scrollY.setValue(0); // Yeni listenin tepesindeyiz; başlık yeniden açılsın.
+      router.setParams({ tab: next });
+    },
+    [router, scrollY],
+  );
+
+  /* ---- Geçmiş karşılaşmalar: Özet'teki fotoğraflar ve H2H segmenti için ---- */
+  const wantsTeamMatches = activeTab === "h2h" || activeTab === "ozet";
+
+  const homeMatchesQuery = useQuery({
+    queryKey: queryKeys.teamMatches(homeTeamId ?? 0),
+    queryFn: () => getTeamMatches(homeTeamId as number),
+    enabled: wantsTeamMatches && Boolean(homeTeamId),
+    staleTime: 60_000,
+  });
+
+  const awayMatchesQuery = useQuery({
+    queryKey: queryKeys.teamMatches(awayTeamId ?? 0),
+    queryFn: () => getTeamMatches(awayTeamId as number),
+    enabled: wantsTeamMatches && Boolean(awayTeamId),
+    staleTime: 60_000,
+  });
+
+  /* ---- Puan durumu: maçın KENDİ ligi/sezonu (ekrandaki kapsam değil) ---- */
+  const standingsScope = useMemo(
+    () => ({
+      cityId: match?.city_id ?? scope.cityId ?? undefined,
+      leagueId: match?.league_id ?? undefined,
+      seasonId: match?.season_id ?? undefined,
+    }),
+    [match?.city_id, match?.league_id, match?.season_id, scope.cityId],
+  );
+
+  const standingsQuery = useQuery({
+    queryKey: queryKeys.standings(standingsScope),
+    queryFn: () =>
+      getStandings({
+        cityId: standingsScope.cityId as number,
+        leagueId: standingsScope.leagueId as number,
+        seasonId: standingsScope.seasonId as number,
+      }),
+    enabled:
+      activeTab === "puan" && Boolean(standingsScope.leagueId && standingsScope.seasonId),
+    staleTime: 60_000,
+  });
+
+  /* ---- Olaylar ve türetilmiş veriler ---- */
+  const events = useMemo<ApiMatchEvent[]>(
+    () => snapshot?.events ?? match?.timeline ?? [],
+    [snapshot?.events, match?.timeline],
+  );
+
+  /** Zaman çizelgesi: eskiden yeniye (Özet). Canlı akış bunun tersini kullanır. */
   const timeline = useMemo(
     () =>
       events
         .filter(isTimelineEvent)
         .slice()
         .sort((a, b) => (a.dakika ?? 0) - (b.dakika ?? 0) || a.id - b.id),
-    [events]
+    [events],
+  );
+
+  const statRows = useMemo(
+    () => buildStatRows(events, homeTeamId, awayTeamId),
+    [events, homeTeamId, awayTeamId],
+  );
+  const bestPlayers = useMemo(
+    () => buildTopPlayers(events, kadroQuery.data),
+    [events, kadroQuery.data],
+  );
+  const contributions = useMemo(
+    () => buildContributions(events, kadroQuery.data),
+    [events, kadroQuery.data],
   );
 
   const nameOf = usePlayerNames(kadroQuery.data);
+  const substitutions = useSubstitutions(events);
+
+  const homeLogo = teams.logoFor(match?.home_team_id, match?.first_team_name);
+  const awayLogo = teams.logoFor(match?.away_team_id, match?.second_team_name);
+
+  const homeScore = snapshot?.homeScore ?? match?.first_team_score ?? null;
+  const awayScore = snapshot?.awayScore ?? match?.second_team_score ?? null;
+
+  const meetings = useHeadToHead({
+    match,
+    homeTeamId,
+    awayTeamId,
+    homeMatches: homeMatchesQuery.data,
+    awayMatches: awayMatchesQuery.data,
+  });
+
+  /* ---- Başlık eylemleri ---- */
+  const favorite = isFavoriteMatch(matchId);
+
+  const toggleStar = useCallback(() => {
+    if (!validId) return;
+    toggleFavoriteMatch(matchId);
+    toast.show({
+      message: favorite
+        ? "Maç favorilerden çıkarıldı."
+        : "Maç favorilere eklendi — gollerini bildirim olarak alacaksın.",
+      tone: favorite ? "neutral" : "success",
+      icon: favorite ? "star-outline" : "star",
+    });
+  }, [favorite, matchId, toast, toggleFavoriteMatch, validId]);
+
+  const addToCalendar = useCallback(() => {
+    if (!match) return;
+    void addMatchToCalendar(match);
+  }, [match]);
+
+  const shareMatch = useCallback(() => {
+    if (!match) return;
+    const score =
+      state === "scheduled"
+        ? `${formatDateShort(match.date)} ${formatTime(match.time)}`
+        : `${homeScore ?? 0} - ${awayScore ?? 0}`;
+    const lines = [
+      `${match.first_team_name} ${score} ${match.second_team_name}`,
+      [match.league_name, match.match_season].filter(Boolean).join(" · "),
+      match.match_field ? `Saha: ${match.match_field}` : null,
+      "ElitLig",
+    ].filter(Boolean) as string[];
+    void Share.share({ message: lines.join("\n") });
+  }, [awayScore, homeScore, match, state]);
+
+  const actions = useMemo<ScreenHeaderAction[]>(() => {
+    if (!match) return [];
+    const list: ScreenHeaderAction[] = [
+      {
+        icon: favorite ? "star" : "star-outline",
+        tone: favorite ? "warn" : undefined,
+        onPress: toggleStar,
+        accessibilityLabel: favorite ? "Maçı favorilerden çıkar" : "Maçı favoriye al",
+      },
+    ];
+    // Takvim yalnız oynanmamış maçta anlamlı.
+    if (state === "scheduled") {
+      list.push({
+        icon: "calendar-outline",
+        onPress: addToCalendar,
+        accessibilityLabel: "Maçı takvime ekle",
+      });
+    }
+    list.push({
+      icon: "share-social-outline",
+      onPress: shareMatch,
+      accessibilityLabel: "Maçı paylaş",
+    });
+    return list;
+  }, [addToCalendar, favorite, match, shareMatch, state, toggleStar]);
+
+  /* ---- Yenileme: açık olan segmentin kaynaklarını tazeler ---- */
+  const refetchAll = useCallback(() => {
+    void matchQuery.refetch();
+    void kadroQuery.refetch();
+    if (wantsTeamMatches) {
+      void homeMatchesQuery.refetch();
+      void awayMatchesQuery.refetch();
+    }
+    if (activeTab === "puan") void standingsQuery.refetch();
+  }, [
+    activeTab,
+    awayMatchesQuery,
+    homeMatchesQuery,
+    kadroQuery,
+    matchQuery,
+    standingsQuery,
+    wantsTeamMatches,
+  ]);
+
+  const refresh = useRefresh(refetchAll, { refreshing: matchQuery.isRefetching });
+
+  /* ---- Erken çıkışlar ---- */
+  if (!validId) {
+    return (
+      <SafeAreaView style={styles.screen} edges={["top"]}>
+        <ScreenHeader title="Maç" back />
+        <EmptyState
+          icon="alert-circle-outline"
+          title="Maç bulunamadı"
+          body="Bağlantıdaki maç numarası okunamadı."
+          action={{ label: "Maçlara dön", onPress: () => router.replace("/") }}
+        />
+      </SafeAreaView>
+    );
+  }
 
   if (matchQuery.isLoading) {
     return (
       <SafeAreaView style={styles.screen} edges={["top"]}>
-        <DetailHeader title="Maç" />
-        <Loading />
+        <ScreenHeader title="Maç" back />
+        <View style={styles.loading}>
+          <SkeletonCard lines={3} />
+          <SkeletonListRow count={6} />
+        </View>
       </SafeAreaView>
     );
   }
@@ -87,92 +532,1651 @@ export default function MatchDetailScreen() {
   if (matchQuery.isError || !match) {
     return (
       <SafeAreaView style={styles.screen} edges={["top"]}>
-        <DetailHeader title="Maç" />
+        <ScreenHeader title="Maç" back />
         <ErrorState error={matchQuery.error} onRetry={matchQuery.refetch} />
       </SafeAreaView>
     );
   }
 
-  // Eski maçlarda home_team_id boş olabilir; kadro ucu bu durumda kadrodaki
-  // ilk iki takımı ev/deplasman olarak çözer.
-  const homeTeamId =
-    match.home_team_id ?? kadroQuery.data?.meta?.home_team_id ?? teams.idFor(null, match.first_team_name);
-  const awayTeamId =
-    match.away_team_id ?? kadroQuery.data?.meta?.away_team_id ?? teams.idFor(null, match.second_team_name);
-
-  const statRows = buildStatRows(events, Number(homeTeamId) || null, Number(awayTeamId) || null);
-  const bestPlayers = buildTopPlayers(events, kadroQuery.data);
-  const contributions = buildContributions(events, kadroQuery.data);
+  const refreshControl = (
+    <RefreshControl {...refreshControlProps(refresh.refreshing, refresh.onRefresh)} />
+  );
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      <DetailHeader title={match.league_name} subtitle={match.match_season ?? undefined} />
-
-      <ScrollView
-        contentContainerStyle={styles.content}
-        refreshControl={
-          <RefreshControl
-            refreshing={matchQuery.isRefetching}
-            onRefresh={() => {
-              void matchQuery.refetch();
-              void kadroQuery.refetch();
-            }}
-            tintColor={colors.turf}
-          />
+      <ScreenHeader
+        title={`${match.first_team_name} – ${match.second_team_name}`}
+        overline={match.league_name}
+        subtitle={match.match_season ?? undefined}
+        back
+        scrollY={scrollY}
+        actions={actions}
+        bottom={
+          <View>
+            <MatchHero
+              match={match}
+              state={state}
+              live={live}
+              realtime={realtime}
+              snapshot={snapshot}
+              homeScore={homeScore}
+              awayScore={awayScore}
+              homeLogo={homeLogo}
+              awayLogo={awayLogo}
+              homeTeamId={homeTeamId}
+              awayTeamId={awayTeamId}
+            />
+            <Tabs items={tabItems} value={activeTab} onChange={changeTab} sticky />
+          </View>
         }
-      >
-        <Scoreboard
+      />
+
+      {activeTab === "ozet" ? (
+        <SummaryTab
           match={match}
-          homeScore={snapshot?.homeScore ?? match.first_team_score}
-          awayScore={snapshot?.awayScore ?? match.second_team_score}
+          state={state}
           live={live}
-          clockMs={clockMs}
+          timeline={timeline}
+          meetings={meetings}
+          homeTeamId={homeTeamId}
+          nameOf={nameOf}
+          bestPlayers={bestPlayers}
+          statRows={statRows}
+          contributions={contributions}
+          homeScore={homeScore}
+          awayScore={awayScore}
+          homeLogo={homeLogo}
+          awayLogo={awayLogo}
+          scrollProps={scrollProps}
+          refreshControl={refreshControl}
+        />
+      ) : activeTab === "canli" ? (
+        <LiveTab
+          match={match}
+          snapshot={snapshot}
           realtime={realtime}
-          homeLogo={teams.logoFor(match.home_team_id, match.first_team_name)}
-          awayLogo={teams.logoFor(match.away_team_id, match.second_team_name)}
+          timeline={timeline}
+          homeTeamId={homeTeamId}
+          nameOf={nameOf}
+          scrollProps={scrollProps}
+          refreshControl={refreshControl}
+        />
+      ) : activeTab === "kadro" ? (
+        <LineupTab
+          match={match}
+          kadro={kadroQuery.data}
+          loading={kadroQuery.isLoading}
+          error={kadroQuery.isError ? kadroQuery.error : null}
+          onRetry={kadroQuery.refetch}
+          contributions={contributions}
+          substitutions={substitutions}
+          scrollProps={scrollProps}
+          refreshControl={refreshControl}
+        />
+      ) : activeTab === "istatistik" ? (
+        <StatsTab
+          match={match}
+          statRows={statRows}
+          bestPlayers={bestPlayers}
+          homeLogo={homeLogo}
+          awayLogo={awayLogo}
+          scrollProps={scrollProps}
+          refreshControl={refreshControl}
+        />
+      ) : activeTab === "h2h" ? (
+        <HeadToHeadTab
+          match={match}
+          meetings={meetings}
           homeTeamId={homeTeamId}
           awayTeamId={awayTeamId}
+          homeMatches={homeMatchesQuery.data}
+          awayMatches={awayMatchesQuery.data}
+          loading={homeMatchesQuery.isLoading || awayMatchesQuery.isLoading}
+          homeLogo={homeLogo}
+          awayLogo={awayLogo}
+          scrollProps={scrollProps}
+          refreshControl={refreshControl}
         />
-
-        {matchState(match) === "finished" || matchState(match) === "scheduled" ? (
-          <ShareScoreCard
-            mode={matchState(match) === "finished" ? "fulltime" : "matchday"}
-            match={match}
-            homeScore={snapshot?.homeScore ?? match.first_team_score}
-            awayScore={snapshot?.awayScore ?? match.second_team_score}
-            mvp={bestPlayers[0] ?? null}
-            stats={statRows}
-            contributions={contributions}
-            homeLogo={teams.logoFor(match.home_team_id, match.first_team_name)}
-            awayLogo={teams.logoFor(match.away_team_id, match.second_team_name)}
-          />
-        ) : null}
-
-        {live && <YoutubeBanner cityLabel={match.city} live />}
-
-        {matchState(match) === "scheduled" && (
-          <Pressable
-            onPress={() => addMatchToCalendar(match)}
-            style={({ pressed }) => [styles.calendarBtn, pressed && styles.pressedRow]}
-          >
-            <Ionicons name="calendar-outline" size={18} color={colors.turf} />
-            <Text style={styles.calendarText}>Takvime ekle</Text>
-          </Pressable>
-        )}
-
-        <View style={styles.tabs}>
-          <TabButton label="Özet" active={tab === "summary"} onPress={() => setTab("summary")} />
-          <TabButton label="Kadrolar" active={tab === "lineup"} onPress={() => setTab("lineup")} />
-        </View>
-
-        {tab === "summary" ? (
-          <Summary match={match} timeline={timeline} homeTeamId={homeTeamId} nameOf={nameOf} stats={statRows} best={bestPlayers} />
-        ) : (
-          <Lineups match={match} kadro={kadroQuery.data} loading={kadroQuery.isLoading} contrib={contributions} />
-        )}
-      </ScrollView>
+      ) : (
+        <StandingsTab
+          rows={standingsQuery.data}
+          loading={standingsQuery.isLoading}
+          error={standingsQuery.isError ? standingsQuery.error : null}
+          onRetry={standingsQuery.refetch}
+          scoped={Boolean(standingsScope.leagueId && standingsScope.seasonId)}
+          homeTeamId={homeTeamId}
+          awayTeamId={awayTeamId}
+          scrollProps={scrollProps}
+          refreshControl={refreshControl}
+        />
+      )}
     </SafeAreaView>
   );
+}
+
+/** Her segmentin listesine geçen ortak kaydırma bağlantısı. */
+interface ScrollChrome {
+  onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  scrollEventThrottle: number;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   4) HERO — sabit tabela
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const MatchHero = memo(function MatchHero({
+  match,
+  state,
+  live,
+  realtime,
+  snapshot,
+  homeScore,
+  awayScore,
+  homeLogo,
+  awayLogo,
+  homeTeamId,
+  awayTeamId,
+}: {
+  match: ApiMatch;
+  state: MatchState;
+  live: boolean;
+  realtime: boolean;
+  snapshot: LiveSnapshot | undefined;
+  homeScore: number | null;
+  awayScore: number | null;
+  homeLogo: string | null;
+  awayLogo: string | null;
+  homeTeamId: number | null;
+  awayTeamId: number | null;
+}) {
+  const router = useRouter();
+  const played = state !== "scheduled";
+
+  const openHome = useCallback(() => {
+    if (homeTeamId) router.push(`/takim/${homeTeamId}`);
+  }, [homeTeamId, router]);
+  const openAway = useCallback(() => {
+    if (awayTeamId) router.push(`/takim/${awayTeamId}`);
+  }, [awayTeamId, router]);
+
+  const meta = [
+    formatDateLong(match.date),
+    formatTime(match.time),
+    match.match_field ?? null,
+    refereeOf(match) ? `Hakem: ${refereeOf(match)}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  return (
+    <View style={styles.hero}>
+      <View style={styles.heroTeams}>
+        <Touchable
+          style={styles.heroTeam}
+          feedback="row"
+          haptic="selection"
+          disabled={!homeTeamId}
+          onPress={openHome}
+          accessibilityRole="button"
+          accessibilityLabel={`${match.first_team_name} takım sayfası`}
+        >
+          <TeamLogo name={match.first_team_name} logo={homeLogo} size={44} />
+          <Text style={styles.heroTeamName} numberOfLines={2} {...textScale.dense}>
+            {match.first_team_name}
+          </Text>
+        </Touchable>
+
+        <View style={styles.heroCenter}>
+          {played ? (
+            <Text style={[styles.heroScore, live && styles.heroScoreLive]} {...textScale.dense}>
+              {homeScore ?? 0}
+              <Text style={styles.heroScoreDash}> - </Text>
+              {awayScore ?? 0}
+            </Text>
+          ) : (
+            <Text style={styles.heroKickoff} {...textScale.dense}>
+              {formatTime(match.time) || "—"}
+            </Text>
+          )}
+
+          {live ? (
+            <MatchClock snapshot={snapshot} />
+          ) : state === "finished" ? (
+            <Badge label="MS" tone="neutral" size="xs" />
+          ) : (
+            <Countdown target={kickoffAt(match)} />
+          )}
+        </View>
+
+        <Touchable
+          style={styles.heroTeam}
+          feedback="row"
+          haptic="selection"
+          disabled={!awayTeamId}
+          onPress={openAway}
+          accessibilityRole="button"
+          accessibilityLabel={`${match.second_team_name} takım sayfası`}
+        >
+          <TeamLogo name={match.second_team_name} logo={awayLogo} size={44} />
+          <Text style={styles.heroTeamName} numberOfLines={2} {...textScale.dense}>
+            {match.second_team_name}
+          </Text>
+        </Touchable>
+      </View>
+
+      {meta ? (
+        <Text style={styles.heroMeta} numberOfLines={1} {...textScale.dense}>
+          {meta}
+        </Text>
+      ) : null}
+
+      {live && !realtime ? <ReconnectStrip /> : null}
+    </View>
+  );
+});
+
+/**
+ * Canlı sayaç. `useLiveClock` SANİYEDE BİR tikler; bu yüzden ekran gövdesinde
+ * değil burada çağrılır — yeniden çizilen tek şey bu küçük rozettir.
+ */
+const MatchClock = memo(function MatchClock({ snapshot }: { snapshot: LiveSnapshot | undefined }) {
+  const clockMs = useLiveClock(snapshot);
+  const halftime = isHalftime(snapshot);
+  const minute = clockMs != null ? Math.floor(clockMs / 60_000) : null;
+
+  return (
+    <View style={styles.heroClock}>
+      <LiveBadge minute={halftime ? null : minute} halftime={halftime} size="md" />
+    </View>
+  );
+});
+
+/**
+ * Geri sayım — yaklaşan maçta başlama saatinin altında. Kendi bileşenidir,
+ * saniyelik tik ekranın geri kalanını çizmez.
+ */
+const Countdown = memo(function Countdown({ target }: { target: number }) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!target) return;
+    const timer = setInterval(() => setNow(Date.now()), 1_000);
+    return () => clearInterval(timer);
+  }, [target]);
+
+  if (!target) return null;
+  const diff = target - now;
+  if (diff <= 0) return <Text style={styles.heroCountdown}>Başlamak üzere</Text>;
+
+  const days = Math.floor(diff / 86_400_000);
+  const hours = Math.floor((diff % 86_400_000) / 3_600_000);
+  const minutes = Math.floor((diff % 3_600_000) / 60_000);
+  const seconds = Math.floor((diff % 60_000) / 1_000);
+
+  const label =
+    days > 0
+      ? `${days} gün ${hours} sa`
+      : hours > 0
+        ? `${hours} sa ${pad2(minutes)} dk`
+        : `${pad2(minutes)}:${pad2(seconds)}`;
+
+  return (
+    <Text style={styles.heroCountdown} {...textScale.dense}>
+      {label}
+    </Text>
+  );
+});
+
+/** Soket koptuğunda: veri akmaya devam ediyor ama yoklamayla. */
+const ReconnectStrip = memo(function ReconnectStrip() {
+  return (
+    <View style={styles.reconnect}>
+      <Ionicons name="cloud-offline-outline" size={13} color={colors.warn} />
+      <Text style={styles.reconnectText} numberOfLines={2} {...textScale.dense}>
+        Anlık bağlantı kurulamadı — yeniden bağlanılıyor. Skor kısa aralıklarla yenileniyor.
+      </Text>
+    </View>
+  );
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   5) ÖZET
+   ══════════════════════════════════════════════════════════════════════════ */
+
+function SummaryTab({
+  match,
+  state,
+  live,
+  timeline,
+  meetings,
+  homeTeamId,
+  nameOf,
+  bestPlayers,
+  statRows,
+  contributions,
+  homeScore,
+  awayScore,
+  homeLogo,
+  awayLogo,
+  scrollProps,
+  refreshControl,
+}: {
+  match: ApiMatch;
+  state: MatchState;
+  live: boolean;
+  timeline: ApiMatchEvent[];
+  meetings: ApiMatch[];
+  homeTeamId: number | null;
+  nameOf: (playerId?: number | null) => string | null;
+  bestPlayers: TopPlayer[];
+  statRows: StatRow[];
+  contributions: { home: ContribRow[]; away: ContribRow[] };
+  homeScore: number | null;
+  awayScore: number | null;
+  homeLogo: string | null;
+  awayLogo: string | null;
+  scrollProps: ScrollChrome;
+  refreshControl: React.ReactElement<RefreshControlProps>;
+}) {
+  const router = useRouter();
+
+  const mvpId = match.match_mvp ? Number(match.match_mvp) : null;
+  const mvpName = mvpId ? nameOf(mvpId) : null;
+
+  /**
+   * "TAKIM1 vs TAKIM2" gibi otomatik başlıklar tabelayı tekrar eder; gizlenir.
+   */
+  const headline = useMemo(() => {
+    const raw = match.match_title?.trim();
+    if (!raw) return null;
+    const squash = (value: string) =>
+      value.toLocaleLowerCase("tr-TR").replace(/[\s·|-]+/g, " ").replace(/\bvs\.?\b/g, "vs").trim();
+    const trivial = squash(raw) === squash(`${match.first_team_name} vs ${match.second_team_name}`);
+    return trivial ? null : raw;
+  }, [match.first_team_name, match.match_title, match.second_team_name]);
+
+  /** Fotoğraf şeridi: bu maç + aynı eşleşmenin geçmiş maçları (fotoğrafı olanlar). */
+  const photoMatches = useMemo(() => {
+    const seen = new Set<number>([Number(match.id)]);
+    const list: ApiMatch[] = [match];
+    for (const item of meetings) {
+      const id = Number(item.id);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      list.push(item);
+    }
+    return list;
+  }, [match, meetings]);
+
+  /** Şerit yalnız gerçekten fotoğraf varsa çizilir; bileşen boşsa null döner. */
+  const hasPhotos = useMemo(
+    () => photoMatches.some((item) => matchState(item) === "finished" && Boolean(item.match_picture)),
+    [photoMatches],
+  );
+
+  const videoUrl = mediaUrl(match.match_video);
+  const channelUrl = youtubeChannelUrl(match.city);
+  const watchUrl = videoUrl || channelUrl;
+  const videoId = videoUrl ? extractYouTubeId(videoUrl) : null;
+  const thumbnail = videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : null;
+
+  const openPlayer = useCallback(
+    (playerId: number) => router.push(`/oyuncu/${playerId}`),
+    [router],
+  );
+
+  const infoRows = useMemo(() => {
+    const referee = refereeOf(match);
+    const rows: { label: string; value: string }[] = [
+      { label: "Lig", value: match.league_name || "—" },
+    ];
+    if (match.match_season) rows.push({ label: "Sezon", value: match.match_season });
+    rows.push({ label: "Tarih", value: formatDateLong(match.date) || "—" });
+    rows.push({ label: "Başlama", value: formatTime(match.time) || "—" });
+    if (match.match_field) rows.push({ label: "Saha", value: match.match_field });
+    if (referee) rows.push({ label: "Hakem", value: referee });
+    if (match.city) rows.push({ label: "Şehir", value: match.city });
+    rows.push({
+      label: "Durum",
+      value: state === "live" ? "Canlı" : state === "finished" ? "Tamamlandı" : "Oynanmadı",
+    });
+    return rows;
+  }, [match, state]);
+
+  const renderEvent = useCallback(
+    ({ item }: { item: ApiMatchEvent }) => (
+      <TimelineRow
+        event={item}
+        home={Number(item.takim_id) === Number(homeTeamId)}
+        nameOf={nameOf}
+        onOpenPlayer={openPlayer}
+      />
+    ),
+    [homeTeamId, nameOf, openPlayer],
+  );
+
+  return (
+    <FlatList
+      {...scrollProps}
+      data={timeline}
+      keyExtractor={eventKey}
+      renderItem={renderEvent}
+      refreshControl={refreshControl}
+      contentContainerStyle={styles.listContent}
+      initialNumToRender={12}
+      windowSize={9}
+      ListHeaderComponent={
+        <View style={styles.block}>
+          {live ? (
+            <View style={styles.inset}>
+              <YoutubeBanner cityLabel={match.city} live />
+            </View>
+          ) : null}
+
+          {state !== "live" ? (
+            <View style={styles.inset}>
+              <ShareScoreCard
+                mode={state === "finished" ? "fulltime" : "matchday"}
+                match={match}
+                homeScore={homeScore}
+                awayScore={awayScore}
+                mvp={bestPlayers[0] ?? null}
+                stats={statRows}
+                contributions={contributions}
+                homeLogo={homeLogo}
+                awayLogo={awayLogo}
+              />
+            </View>
+          ) : null}
+
+          {headline ? (
+            <Card title="Maç manşeti" padding="md" style={styles.inset}>
+              <Text style={styles.headline} {...textScale.long}>
+                {headline}
+              </Text>
+            </Card>
+          ) : null}
+
+          {hasPhotos ? (
+            <View style={styles.photoBlock}>
+              <SectionHeader title="Maç fotoğrafları" />
+              <MatchPhotoSlider matches={photoMatches} />
+            </View>
+          ) : null}
+
+          {mvpId && mvpName ? (
+            <Touchable
+              feedback="card"
+              haptic="selection"
+              onPress={() => openPlayer(mvpId)}
+              style={styles.mvpRow}
+              accessibilityRole="button"
+              accessibilityLabel={`Maçın yıldızı ${mvpName}`}
+            >
+              <View style={styles.mvpIcon}>
+                <Ionicons name="star" size={16} color={colors.star} />
+              </View>
+              <View style={styles.mvpBody}>
+                <Text style={styles.overline} {...textScale.badge}>
+                  MAÇIN YILDIZI
+                </Text>
+                <Text style={styles.mvpName} numberOfLines={1} {...textScale.dense}>
+                  {mvpName}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
+            </Touchable>
+          ) : null}
+
+          {watchUrl || match.post_rapor ? (
+            <>
+              <SectionHeader title="Maç içeriği" />
+              <View style={styles.contentRow}>
+                {watchUrl ? (
+                  <Touchable
+                    feedback="card"
+                    haptic="light"
+                    onPress={() => void openLink(watchUrl)}
+                    style={styles.videoCard}
+                    accessibilityRole="link"
+                    accessibilityLabel={videoUrl ? "Maç videosunu izle" : "YouTube kanalına git"}
+                  >
+                    <View style={styles.videoThumb}>
+                      {thumbnail ? (
+                        <Image
+                          source={{ uri: thumbnail }}
+                          style={StyleSheet.absoluteFill}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <Ionicons name="logo-youtube" size={26} color={colors.live} />
+                      )}
+                      {videoUrl ? (
+                        <View style={styles.videoPlay}>
+                          <Ionicons name="play" size={13} color={colors.textOnStatus} />
+                        </View>
+                      ) : null}
+                    </View>
+                    <Text style={styles.videoLabel} {...textScale.badge}>
+                      {videoUrl ? "MAÇI İZLE" : "KANAL"}
+                    </Text>
+                  </Touchable>
+                ) : null}
+
+                <View style={styles.reportBox}>
+                  <Text style={styles.overline} {...textScale.badge}>
+                    MAÇ ÖZETİ
+                  </Text>
+                  {match.post_rapor ? (
+                    <Text style={styles.reportText} numberOfLines={6} {...textScale.long}>
+                      {match.post_rapor}
+                    </Text>
+                  ) : (
+                    <Text style={styles.reportEmpty} {...textScale.long}>
+                      Maç özeti henüz eklenmemiş.
+                    </Text>
+                  )}
+                </View>
+              </View>
+            </>
+          ) : null}
+
+          <SectionHeader title="Maç akışı" meta={timeline.length ? `${timeline.length} olay` : undefined} />
+        </View>
+      }
+      ListEmptyComponent={
+        <EmptyState
+          icon="time-outline"
+          variant="inline"
+          title="Olay yok"
+          body="Bu maç için henüz gol, kart ya da değişiklik girilmemiş."
+        />
+      }
+      ListFooterComponent={
+        <View style={styles.block}>
+          <SectionHeader title="Maç bilgileri" />
+          <View style={styles.group}>
+            {infoRows.map((row, index) => (
+              <KeyValueRow
+                key={row.label}
+                label={row.label}
+                value={row.value}
+                position={rowPosition(index, infoRows.length)}
+              />
+            ))}
+          </View>
+
+          {match.post_manset || match.match_comment ? (
+            <>
+              <SectionHeader title="Maç notu" />
+              <View style={styles.noteBox}>
+                <Text style={styles.noteText} {...textScale.long}>
+                  {match.post_manset || match.match_comment}
+                </Text>
+              </View>
+            </>
+          ) : null}
+        </View>
+      }
+    />
+  );
+}
+
+/**
+ * Zaman çizelgesi satırı — ortada dakika, olay hangi takımınsa o yanda.
+ * İki sütunlu düzen "kim yaptı" sorusunu okumadan yanıtlar.
+ */
+const TimelineRow = memo(function TimelineRow({
+  event,
+  home,
+  nameOf,
+  onOpenPlayer,
+}: {
+  event: ApiMatchEvent;
+  home: boolean;
+  nameOf: (playerId?: number | null) => string | null;
+  onOpenPlayer: (playerId: number) => void;
+}) {
+  const kind = eventKind(event);
+  const visual = EVENT_VISUAL[kind] ?? EVENT_VISUAL.other;
+  const detail = kind === "goal" ? goalDetail(event) : kind === "ownGoal" ? "kendi kalesine" : null;
+
+  const label =
+    kind === "substitution"
+      ? [nameOf(event.oyuncu_giren_id), nameOf(event.oyuncu_cikan_id)].filter(Boolean).join(" → ") ||
+        "Oyuncu değişikliği"
+      : nameOf(event.oyuncu_id) || event.aciklama || visual.label;
+
+  const playerId = Number(event.oyuncu_id) || null;
+  const open = useCallback(() => {
+    if (playerId) onOpenPlayer(playerId);
+  }, [onOpenPlayer, playerId]);
+
+  const bubble = (
+    <Touchable
+      feedback="row"
+      haptic="selection"
+      disabled={!playerId}
+      onPress={open}
+      style={[styles.tlBubble, home ? styles.tlBubbleHome : styles.tlBubbleAway]}
+      accessibilityRole={playerId ? "button" : "text"}
+      accessibilityLabel={`${event.dakika ?? "?"}. dakika ${visual.label}: ${label}`}
+    >
+      {home ? <Ionicons name={visual.icon} size={14} color={visual.color} /> : null}
+      <View style={styles.tlTexts}>
+        <Text
+          style={[styles.tlName, home ? styles.tlAlignLeft : styles.tlAlignRight]}
+          numberOfLines={1}
+          {...textScale.dense}
+        >
+          {label}
+        </Text>
+        {detail ? (
+          <Text
+            style={[styles.tlDetail, home ? styles.tlAlignLeft : styles.tlAlignRight]}
+            numberOfLines={1}
+            {...textScale.dense}
+          >
+            {detail}
+          </Text>
+        ) : null}
+      </View>
+      {home ? null : <Ionicons name={visual.icon} size={14} color={visual.color} />}
+    </Touchable>
+  );
+
+  return (
+    <View style={styles.tlRow}>
+      <View style={styles.tlSide}>{home ? bubble : null}</View>
+
+      <View style={styles.tlCenter}>
+        <View style={styles.tlLine} />
+        <View style={[styles.tlMinute, { borderColor: visual.color }]}>
+          <Text style={[styles.tlMinuteText, { color: visual.color }]} {...textScale.badge}>
+            {event.dakika != null ? `${event.dakika}'` : "—"}
+          </Text>
+        </View>
+        <View style={styles.tlLine} />
+      </View>
+
+      <View style={styles.tlSide}>{home ? null : bubble}</View>
+    </View>
+  );
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   6) CANLI — dakika dakika akış (yalnız maç canlıyken)
+   ══════════════════════════════════════════════════════════════════════════ */
+
+function LiveTab({
+  match,
+  snapshot,
+  realtime,
+  timeline,
+  homeTeamId,
+  nameOf,
+  scrollProps,
+  refreshControl,
+}: {
+  match: ApiMatch;
+  snapshot: LiveSnapshot | undefined;
+  realtime: boolean;
+  timeline: ApiMatchEvent[];
+  homeTeamId: number | null;
+  nameOf: (playerId?: number | null) => string | null;
+  scrollProps: ScrollChrome;
+  refreshControl: React.ReactElement<RefreshControlProps>;
+}) {
+  /** Akış ters okunur: en yeni olay en üstte. */
+  const feed = useMemo(() => timeline.slice().reverse(), [timeline]);
+  const flashId = useGoalFlash(timeline);
+
+  const renderItem = useCallback(
+    ({ item }: { item: ApiMatchEvent }) => (
+      <LiveEventRow
+        event={item}
+        homeSide={Number(item.takim_id) === Number(homeTeamId)}
+        teamName={
+          Number(item.takim_id) === Number(homeTeamId)
+            ? match.first_team_name
+            : match.second_team_name
+        }
+        nameOf={nameOf}
+        flash={flashId != null && Number(item.id) === flashId}
+      />
+    ),
+    [flashId, homeTeamId, match.first_team_name, match.second_team_name, nameOf],
+  );
+
+  return (
+    <FlatList
+      {...scrollProps}
+      data={feed}
+      keyExtractor={eventKey}
+      renderItem={renderItem}
+      refreshControl={refreshControl}
+      contentContainerStyle={styles.listContent}
+      initialNumToRender={14}
+      windowSize={9}
+      ListHeaderComponent={
+        <View style={styles.block}>
+          <View style={styles.liveStatus}>
+            <View style={styles.liveStatusLeft}>
+              <View style={[styles.liveDot, realtime ? styles.liveDotOn : styles.liveDotOff]} />
+              <Text style={styles.liveStatusText} {...textScale.dense}>
+                {realtime ? "Anlık bağlantı açık" : "Yoklama yedeği çalışıyor"}
+              </Text>
+            </View>
+            <LiveElapsed snapshot={snapshot} />
+          </View>
+
+          {!realtime ? (
+            <View style={styles.inset}>
+              <ReconnectStrip />
+            </View>
+          ) : null}
+
+          <SectionHeader title="Olay akışı" meta="en yeni üstte" />
+        </View>
+      }
+      ListEmptyComponent={
+        <EmptyState
+          icon="pulse-outline"
+          variant="inline"
+          title="Akış boş"
+          body="Maç başladı ama henüz kayda değer bir olay yok. İlk gol geldiğinde burada belirir."
+        />
+      }
+    />
+  );
+}
+
+/** Canlı akış başlığındaki büyük sayaç — saniyelik tik yalnız burada. */
+const LiveElapsed = memo(function LiveElapsed({
+  snapshot,
+}: {
+  snapshot: LiveSnapshot | undefined;
+}) {
+  const clockMs = useLiveClock(snapshot);
+  const halftime = isHalftime(snapshot);
+
+  return (
+    <Text style={styles.liveElapsed} {...textScale.dense}>
+      {halftime ? "Devre arası" : formatClock(clockMs) || "—"}
+    </Text>
+  );
+});
+
+/**
+ * Canlı akış satırı. Gol olayında satır vurgulanır; YENİ gelen golde ayrıca
+ * kısa bir flaş çalar (üç darbe, hareket azaltma açıksa flaş yok).
+ */
+const LiveEventRow = memo(function LiveEventRow({
+  event,
+  homeSide,
+  teamName,
+  nameOf,
+  flash,
+}: {
+  event: ApiMatchEvent;
+  homeSide: boolean;
+  teamName: string;
+  nameOf: (playerId?: number | null) => string | null;
+  flash: boolean;
+}) {
+  const kind = eventKind(event);
+  const visual = EVENT_VISUAL[kind] ?? EVENT_VISUAL.other;
+  const goal = isGoalKind(kind);
+  const glow = useRef(new Animated.Value(0)).current;
+  const reduceMotion = useReduceMotion();
+
+  useEffect(() => {
+    // Vurgu zaten satır zemininde var; flaş yalnızca hareket açıkken oynar.
+    if (!flash || reduceMotion) return;
+    const pulse = Animated.sequence([
+      Animated.timing(glow, {
+        toValue: 1,
+        duration: duration.base,
+        easing: easing.decelerate,
+        useNativeDriver: true,
+      }),
+      Animated.timing(glow, {
+        toValue: 0,
+        duration: duration.base * 2,
+        easing: easing.decelerate,
+        useNativeDriver: true,
+      }),
+    ]);
+    const loop = Animated.loop(pulse, { iterations: 3 });
+    loop.start();
+    return () => {
+      loop.stop();
+      glow.setValue(0);
+    };
+  }, [flash, glow, reduceMotion]);
+
+  const label =
+    kind === "substitution"
+      ? [nameOf(event.oyuncu_giren_id), nameOf(event.oyuncu_cikan_id)].filter(Boolean).join(" → ") ||
+        "Oyuncu değişikliği"
+      : nameOf(event.oyuncu_id) || event.aciklama || visual.label;
+
+  const detail = kind === "goal" ? goalDetail(event) : kind === "ownGoal" ? "kendi kalesine" : null;
+
+  return (
+    <View style={[styles.feedRow, goal && styles.feedRowGoal]}>
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.feedFlash,
+          // Tam opak dolgu metni yutar; flaş bir "parlama" kadar kalır.
+          { opacity: glow.interpolate({ inputRange: [0, 1], outputRange: [0, 0.3] }) },
+        ]}
+      />
+
+      <View style={styles.feedMinute}>
+        <Text style={styles.feedMinuteText} {...textScale.badge}>
+          {event.dakika != null ? `${event.dakika}'` : "—"}
+        </Text>
+      </View>
+
+      <View style={[styles.feedIcon, goal && styles.feedIconGoal]}>
+        <Ionicons name={visual.icon} size={15} color={visual.color} />
+      </View>
+
+      <View style={styles.feedBody}>
+        <Text style={[styles.feedName, goal && styles.feedNameGoal]} numberOfLines={1} {...textScale.dense}>
+          {label}
+        </Text>
+        <Text style={styles.feedMeta} numberOfLines={1} {...textScale.dense}>
+          {[visual.label, detail, teamName].filter(Boolean).join(" · ")}
+        </Text>
+      </View>
+
+      <View style={[styles.feedSide, homeSide ? styles.feedSideHome : styles.feedSideAway]} />
+    </View>
+  );
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   7) KADROLAR
+   ══════════════════════════════════════════════════════════════════════════ */
+
+interface LineupSection {
+  title: string;
+  meta?: string;
+  data: KadroPlayer[];
+}
+
+function LineupTab({
+  match,
+  kadro,
+  loading,
+  error,
+  onRetry,
+  contributions,
+  substitutions,
+  scrollProps,
+  refreshControl,
+}: {
+  match: ApiMatch;
+  kadro: KadroResponse | undefined;
+  loading: boolean;
+  error: unknown;
+  onRetry: () => void;
+  contributions: { home: ContribRow[]; away: ContribRow[] };
+  substitutions: Map<number, SubInfo>;
+  scrollProps: ScrollChrome;
+  refreshControl: React.ReactElement<RefreshControlProps>;
+}) {
+  const router = useRouter();
+
+  /** Oyuncu katkıları id ile aranır: satırın sağındaki G/A/K rozetleri buradan. */
+  const contribById = useMemo(() => {
+    const map = new Map<number, ContribRow>();
+    for (const row of [...contributions.home, ...contributions.away]) {
+      if (row.playerId) map.set(Number(row.playerId), row);
+    }
+    return map;
+  }, [contributions]);
+
+  const sections = useMemo<LineupSection[]>(() => {
+    const build = (teamName: string, rows: KadroPlayer[] | undefined): LineupSection[] => {
+      const list = rows ?? [];
+      if (!list.length) return [];
+      const starters = list.filter((row) => row.role === "starter");
+      const subs = list.filter((row) => row.role !== "starter");
+      const result: LineupSection[] = [];
+      if (starters.length) {
+        result.push({ title: teamName, meta: `İlk 11 · ${starters.length}`, data: starters });
+      }
+      if (subs.length) {
+        result.push({ title: `${teamName} · Yedekler`, meta: String(subs.length), data: subs });
+      }
+      return result;
+    };
+    return [
+      ...build(match.first_team_name, kadro?.home),
+      ...build(match.second_team_name, kadro?.away),
+    ];
+  }, [kadro, match.first_team_name, match.second_team_name]);
+
+  const openPlayer = useCallback(
+    (playerId: number) => router.push(`/oyuncu/${playerId}`),
+    [router],
+  );
+
+  const renderItem = useCallback(
+    ({ item }: { item: KadroPlayer }) => {
+      const playerId = Number(item.playerId ?? item.oyuncu_id) || null;
+      return (
+        <LineupPlayerRow
+          player={item}
+          contrib={playerId ? contribById.get(playerId) ?? null : null}
+          sub={playerId ? substitutions.get(playerId) ?? null : null}
+          onOpen={openPlayer}
+        />
+      );
+    },
+    [contribById, openPlayer, substitutions],
+  );
+
+  const renderSectionHeader = useCallback(
+    ({ section }: { section: LineupSection }) => (
+      <SectionHeader title={section.title} meta={section.meta} sticky />
+    ),
+    [],
+  );
+
+  if (loading) {
+    return (
+      <View style={styles.loading}>
+        <SkeletonListRow count={8} avatar />
+      </View>
+    );
+  }
+
+  if (error && !kadro) {
+    return <ErrorState error={error} onRetry={onRetry} />;
+  }
+
+  if (!sections.length) {
+    return (
+      <EmptyState
+        icon="people-outline"
+        title="Kadrolar açıklanmadı"
+        body="Takımlar kadrolarını girdiğinde ilk 11 ve yedekler burada görünür."
+      />
+    );
+  }
+
+  return (
+    <SectionList
+      {...scrollProps}
+      sections={sections}
+      keyExtractor={playerKey}
+      renderItem={renderItem}
+      renderSectionHeader={renderSectionHeader}
+      refreshControl={refreshControl}
+      contentContainerStyle={styles.listContent}
+      stickySectionHeadersEnabled
+      initialNumToRender={14}
+      windowSize={9}
+    />
+  );
+}
+
+/** Oyuncu değişikliği bilgisi: kaçıncı dakikada girdi / çıktı. */
+interface SubInfo {
+  in?: number | null;
+  out?: number | null;
+}
+
+const LineupPlayerRow = memo(function LineupPlayerRow({
+  player,
+  contrib,
+  sub,
+  onOpen,
+}: {
+  player: KadroPlayer;
+  contrib: ContribRow | null;
+  sub: SubInfo | null;
+  onOpen: (playerId: number) => void;
+}) {
+  const playerId = Number(player.playerId ?? player.oyuncu_id) || null;
+  // Misafir oyuncuların kalıcı profili yoktur.
+  const linkable = Boolean(playerId) && !player.isGuest;
+  const name = player.playerName || player.guestName || "İsimsiz oyuncu";
+  const rating = player.puan != null ? Number(player.puan) : null;
+  const shirt = player.number === "" || player.number == null ? "-" : String(player.number);
+
+  const open = useCallback(() => {
+    if (playerId) onOpen(playerId);
+  }, [onOpen, playerId]);
+
+  return (
+    <Touchable
+      feedback="row"
+      haptic="selection"
+      disabled={!linkable}
+      onPress={open}
+      style={styles.playerRow}
+      accessibilityRole={linkable ? "button" : "text"}
+      accessibilityLabel={`${name}${player.position ? `, ${player.position}` : ""}`}
+    >
+      <Text style={styles.shirt} {...textScale.dense}>
+        {shirt}
+      </Text>
+
+      <Avatar name={name} image={player.playerImg} size={28} />
+
+      <View style={styles.playerTexts}>
+        <Text style={styles.playerName} numberOfLines={1} {...textScale.dense}>
+          {name}
+          {player.captain ? " (K)" : ""}
+        </Text>
+        <Text style={styles.playerMeta} numberOfLines={1} {...textScale.dense}>
+          {[player.position || null, player.isGuest ? "misafir" : null].filter(Boolean).join(" · ") ||
+            " "}
+        </Text>
+      </View>
+
+      {/* Katkı rozetleri: gol / asist / kart */}
+      <View style={styles.contribRow}>
+        {contrib && contrib.goals > 0 ? (
+          <ContribBadge icon="football" color={colors.win} count={contrib.goals} />
+        ) : null}
+        {contrib && contrib.assists > 0 ? (
+          <ContribBadge icon="navigate" color={colors.info} count={contrib.assists} />
+        ) : null}
+        {contrib && contrib.cards > 0 ? (
+          <ContribBadge icon="square" color={colors.yellowCard} count={contrib.cards} />
+        ) : null}
+      </View>
+
+      {/* Değişiklik okları */}
+      {sub?.in != null ? (
+        <View style={styles.subMark}>
+          <Ionicons name="arrow-up" size={11} color={colors.win} />
+          <Text style={[styles.subMinute, { color: colors.win }]} {...textScale.badge}>
+            {sub.in}&apos;
+          </Text>
+        </View>
+      ) : null}
+      {sub?.out != null ? (
+        <View style={styles.subMark}>
+          <Ionicons name="arrow-down" size={11} color={colors.loss} />
+          <Text style={[styles.subMinute, { color: colors.loss }]} {...textScale.badge}>
+            {sub.out}&apos;
+          </Text>
+        </View>
+      ) : null}
+
+      <RatingPill value={rating != null && Number.isFinite(rating) && rating > 0 ? rating : null} size="sm" />
+    </Touchable>
+  );
+});
+
+const ContribBadge = memo(function ContribBadge({
+  icon,
+  color,
+  count,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  color: string;
+  count: number;
+}) {
+  return (
+    <View style={styles.contribBadge}>
+      <Ionicons name={icon} size={11} color={color} />
+      {count > 1 ? (
+        <Text style={styles.contribCount} {...textScale.badge}>
+          {count}
+        </Text>
+      ) : null}
+    </View>
+  );
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   8) İSTATİSTİK
+   ══════════════════════════════════════════════════════════════════════════ */
+
+function StatsTab({
+  match,
+  statRows,
+  bestPlayers,
+  homeLogo,
+  awayLogo,
+  scrollProps,
+  refreshControl,
+}: {
+  match: ApiMatch;
+  statRows: StatRow[];
+  bestPlayers: TopPlayer[];
+  homeLogo: string | null;
+  awayLogo: string | null;
+  scrollProps: ScrollChrome;
+  refreshControl: React.ReactElement<RefreshControlProps>;
+}) {
+  const router = useRouter();
+  const meaningful = useMemo(
+    () => statRows.some((row) => row.home > 0 || row.away > 0),
+    [statRows],
+  );
+
+  const renderItem = useCallback(
+    ({ item, index }: { item: StatRow; index: number }) => (
+      <View
+        style={[
+          styles.statCard,
+          index === 0 && styles.statCardFirst,
+          index === statRows.length - 1 && styles.statCardLast,
+        ]}
+      >
+        <StatBar label={item.label} home={item.home} away={item.away} />
+      </View>
+    ),
+    [statRows.length],
+  );
+
+  const openPlayer = useCallback(
+    (playerId: number) => router.push(`/oyuncu/${playerId}`),
+    [router],
+  );
+
+  return (
+    <FlatList
+      {...scrollProps}
+      data={meaningful ? statRows : []}
+      keyExtractor={statKey}
+      renderItem={renderItem}
+      refreshControl={refreshControl}
+      contentContainerStyle={styles.listContent}
+      ListHeaderComponent={
+        <View style={styles.block}>
+          <View style={styles.statHead}>
+            <View style={styles.statHeadTeam}>
+              <TeamLogo name={match.first_team_name} logo={homeLogo} size={layout.crestMd} />
+              <Text style={styles.statHeadName} numberOfLines={1} {...textScale.dense}>
+                {match.first_team_name}
+              </Text>
+            </View>
+            <Text style={styles.statHeadVs} {...textScale.badge}>
+              VS
+            </Text>
+            <View style={[styles.statHeadTeam, styles.statHeadTeamRight]}>
+              <Text style={styles.statHeadName} numberOfLines={1} {...textScale.dense}>
+                {match.second_team_name}
+              </Text>
+              <TeamLogo name={match.second_team_name} logo={awayLogo} size={layout.crestMd} />
+            </View>
+          </View>
+          <SectionHeader title="Karşılaştırma" />
+        </View>
+      }
+      ListEmptyComponent={
+        <EmptyState
+          icon="stats-chart-outline"
+          variant="inline"
+          title="İstatistik yok"
+          body="Maç olayları girildikçe şut, faul, kart ve korner karşılaştırmaları burada oluşur."
+        />
+      }
+      ListFooterComponent={
+        bestPlayers.length ? (
+          <View style={styles.block}>
+            <SectionHeader title="En iyi oyuncular" />
+            <View style={styles.group}>
+              {bestPlayers.map((player, index) => (
+                <TopPlayerRow
+                  key={player.playerId}
+                  player={player}
+                  rank={index + 1}
+                  position={rowPosition(index, bestPlayers.length)}
+                  onOpen={openPlayer}
+                />
+              ))}
+            </View>
+          </View>
+        ) : null
+      }
+    />
+  );
+}
+
+const TopPlayerRow = memo(function TopPlayerRow({
+  player,
+  rank,
+  position,
+  onOpen,
+}: {
+  player: TopPlayer;
+  rank: number;
+  position: "single" | "first" | "middle" | "last";
+  onOpen: (playerId: number) => void;
+}) {
+  const open = useCallback(() => onOpen(player.playerId), [onOpen, player.playerId]);
+
+  return (
+    <Touchable
+      feedback="row"
+      haptic="selection"
+      onPress={open}
+      // Grup zaten köşeleri kırpıyor; satıra düşen tek iş üstündeki ayraç.
+      style={[styles.topRow, position !== "first" && position !== "single" && styles.topRowBorder]}
+      accessibilityRole="button"
+      accessibilityLabel={`${rank}. ${player.name}`}
+    >
+      <Text style={styles.topRank} {...textScale.dense}>
+        {rank}
+      </Text>
+      <Avatar name={player.name} image={player.image} size={32} />
+      <View style={styles.topTexts}>
+        <Text style={styles.topName} numberOfLines={1} {...textScale.dense}>
+          {player.name}
+        </Text>
+        <Text style={styles.topMeta} numberOfLines={1} {...textScale.dense}>
+          {`${player.goals} gol · ${player.assists} asist`}
+        </Text>
+      </View>
+      <RatingPill value={player.rating} size="md" best={rank === 1} />
+    </Touchable>
+  );
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   9) H2H — geçmiş karşılaşmalar
+   ══════════════════════════════════════════════════════════════════════════ */
+
+function HeadToHeadTab({
+  match,
+  meetings,
+  homeTeamId,
+  awayTeamId,
+  homeMatches,
+  awayMatches,
+  loading,
+  homeLogo,
+  awayLogo,
+  scrollProps,
+  refreshControl,
+}: {
+  match: ApiMatch;
+  meetings: ApiMatch[];
+  homeTeamId: number | null;
+  awayTeamId: number | null;
+  homeMatches: ApiMatch[] | undefined;
+  awayMatches: ApiMatch[] | undefined;
+  loading: boolean;
+  homeLogo: string | null;
+  awayLogo: string | null;
+  scrollProps: ScrollChrome;
+  refreshControl: React.ReactElement<RefreshControlProps>;
+}) {
+  const router = useRouter();
+  const homeName = normalizeName(match.first_team_name);
+  const awayName = normalizeName(match.second_team_name);
+
+  /** Galibiyet dağılımı — rozetler EV SAHİBİ gözünden okunur. */
+  const tally = useMemo(() => {
+    let homeWins = 0;
+    let draws = 0;
+    let awayWins = 0;
+    let homeGoals = 0;
+    let awayGoals = 0;
+
+    for (const item of meetings) {
+      const first = item.first_team_score;
+      const second = item.second_team_score;
+      if (first == null || second == null) continue;
+      const homeIsFirst = sideIsHome(item, homeTeamId, homeName);
+      const ours = homeIsFirst ? first : second;
+      const theirs = homeIsFirst ? second : first;
+      homeGoals += ours;
+      awayGoals += theirs;
+      if (ours > theirs) homeWins += 1;
+      else if (ours < theirs) awayWins += 1;
+      else draws += 1;
+    }
+    return { homeWins, draws, awayWins, homeGoals, awayGoals };
+  }, [homeName, homeTeamId, meetings]);
+
+  const homeForm = useFormString(homeMatches, match.id, homeTeamId, homeName);
+  const awayForm = useFormString(awayMatches, match.id, awayTeamId, awayName);
+
+  // MeetingRow memo'lu: `onOpen` her render'da yeniden üretilmemeli.
+  const openMatch = useCallback((id: number) => router.push(`/mac/${id}`), [router]);
+
+  const renderItem = useCallback(
+    ({ item }: { item: ApiMatch }) => (
+      <MeetingRow meeting={item} result={resultFor(item, homeTeamId, homeName)} onOpen={openMatch} />
+    ),
+    [homeName, homeTeamId, openMatch],
+  );
+
+  if (loading && meetings.length === 0) {
+    return (
+      <View style={styles.loading}>
+        <SkeletonCard lines={3} />
+        <SkeletonListRow count={5} />
+      </View>
+    );
+  }
+
+  return (
+    <FlatList
+      {...scrollProps}
+      data={meetings}
+      keyExtractor={matchKey}
+      renderItem={renderItem}
+      refreshControl={refreshControl}
+      contentContainerStyle={styles.listContent}
+      ListHeaderComponent={
+        <View style={styles.block}>
+          <View style={styles.h2hHead}>
+            <View style={styles.h2hTeam}>
+              <TeamLogo name={match.first_team_name} logo={homeLogo} size={layout.crestLg} />
+              <Text style={styles.h2hName} numberOfLines={1} {...textScale.dense}>
+                {match.first_team_name}
+              </Text>
+              <FormChips form={homeForm} size="xs" />
+            </View>
+
+            <View style={styles.h2hMiddle}>
+              <Text style={styles.h2hCount} {...textScale.dense}>
+                {meetings.length}
+              </Text>
+              <Text style={styles.overline} {...textScale.badge}>
+                KARŞILAŞMA
+              </Text>
+            </View>
+
+            <View style={[styles.h2hTeam, styles.h2hTeamRight]}>
+              <TeamLogo name={match.second_team_name} logo={awayLogo} size={layout.crestLg} />
+              <Text style={styles.h2hName} numberOfLines={1} {...textScale.dense}>
+                {match.second_team_name}
+              </Text>
+              <FormChips form={awayForm} size="xs" />
+            </View>
+          </View>
+
+          {meetings.length > 0 ? (
+            <>
+              <View style={styles.h2hTally}>
+                <TallyCell value={tally.homeWins} label="GALİBİYET" color={colors.win} />
+                <TallyCell value={tally.draws} label="BERABERLİK" color={colors.textSecondary} />
+                <TallyCell value={tally.awayWins} label="GALİBİYET" color={colors.live} />
+              </View>
+
+              <View style={styles.barsCard}>
+                <StatBar label="Galibiyet" home={tally.homeWins} away={tally.awayWins} />
+                <StatBar label="Atılan gol" home={tally.homeGoals} away={tally.awayGoals} />
+              </View>
+
+              <SectionHeader title="Son karşılaşmalar" meta="rozetler ev sahibi gözünden" />
+            </>
+          ) : null}
+        </View>
+      }
+      ListEmptyComponent={
+        <EmptyState
+          icon="git-compare-outline"
+          variant="inline"
+          title="Karşılaşma yok"
+          body="Bu iki takım daha önce tamamlanmış bir maçta karşılaşmamış."
+        />
+      }
+    />
+  );
+}
+
+const TallyCell = memo(function TallyCell({
+  value,
+  label,
+  color,
+}: {
+  value: number;
+  label: string;
+  color: string;
+}) {
+  return (
+    <View style={styles.tallyCell}>
+      <Text style={[styles.tallyValue, { color }]} {...textScale.dense}>
+        {value}
+      </Text>
+      <Text style={styles.overline} {...textScale.badge}>
+        {label}
+      </Text>
+    </View>
+  );
+});
+
+const MeetingRow = memo(function MeetingRow({
+  meeting,
+  result,
+  onOpen,
+}: {
+  meeting: ApiMatch;
+  result: "G" | "B" | "M";
+  onOpen: (matchId: number) => void;
+}) {
+  const open = useCallback(() => onOpen(Number(meeting.id)), [meeting.id, onOpen]);
+
+  return (
+    <Touchable
+      feedback="row"
+      haptic="selection"
+      onPress={open}
+      style={styles.meetRow}
+      accessibilityRole="button"
+      accessibilityLabel={`${meeting.first_team_name} ${meeting.first_team_score ?? "-"} ${meeting.second_team_score ?? "-"} ${meeting.second_team_name}`}
+    >
+      <Text style={styles.meetDate} {...textScale.dense}>
+        {formatDateShort(meeting.date)}
+      </Text>
+      <View
+        style={[
+          styles.meetChip,
+          result === "G"
+            ? styles.meetChipWin
+            : result === "M"
+              ? styles.meetChipLoss
+              : styles.meetChipDraw,
+        ]}
+      >
+        <Text style={styles.meetChipText} {...textScale.badge}>
+          {result}
+        </Text>
+      </View>
+      <Text style={styles.meetTeams} numberOfLines={1} {...textScale.dense}>
+        {meeting.first_team_name} – {meeting.second_team_name}
+      </Text>
+      <Text style={styles.meetScore} {...textScale.dense}>
+        {meeting.first_team_score ?? "-"}-{meeting.second_team_score ?? "-"}
+      </Text>
+    </Touchable>
+  );
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   10) PUAN DURUMU — maçın ligi, iki takım vurgulu
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const STANDING_ROW_HEIGHT = 48;
+/** `getItemLayout` satırın DIŞ ölçüsünü ister: yükseklik + alttaki 4px boşluk. */
+const STANDING_ROW_STRIDE = STANDING_ROW_HEIGHT + space.xs;
+
+function StandingsTab({
+  rows,
+  loading,
+  error,
+  onRetry,
+  scoped,
+  homeTeamId,
+  awayTeamId,
+  scrollProps,
+  refreshControl,
+}: {
+  rows: StandingRow[] | undefined;
+  loading: boolean;
+  error: unknown;
+  onRetry: () => void;
+  scoped: boolean;
+  homeTeamId: number | null;
+  awayTeamId: number | null;
+  scrollProps: ScrollChrome;
+  refreshControl: React.ReactElement<RefreshControlProps>;
+}) {
+  const router = useRouter();
+  const list = rows ?? [];
+  const powerBalance = list[0]?.standings_type === "gucdengesi";
+
+  const openTeam = useCallback((teamId: number) => router.push(`/takim/${teamId}`), [router]);
+
+  const renderItem = useCallback(
+    ({ item, index }: { item: StandingRow; index: number }) => (
+      <StandingItem
+        rank={index + 1}
+        row={item}
+        highlighted={
+          Number(item.team_id) === Number(homeTeamId) || Number(item.team_id) === Number(awayTeamId)
+        }
+        onPress={openTeam}
+      />
+    ),
+    [awayTeamId, homeTeamId, openTeam],
+  );
+
+  if (!scoped) {
+    return (
+      <EmptyState
+        icon="podium-outline"
+        title="Puan tablosu yok"
+        body="Bu maç bir lig/sezona bağlı olmadığı için tablo gösterilemiyor."
+      />
+    );
+  }
+
+  if (loading) return <SkeletonStandings count={10} />;
+  if (error && list.length === 0) return <ErrorState error={error} onRetry={onRetry} />;
+
+  return (
+    <FlatList
+      {...scrollProps}
+      data={list}
+      keyExtractor={standingKey}
+      renderItem={renderItem}
+      getItemLayout={standingLayout}
+      refreshControl={refreshControl}
+      contentContainerStyle={styles.listContent}
+      initialNumToRender={16}
+      windowSize={8}
+      ListHeaderComponent={
+        <View style={styles.stHead}>
+          <Text style={styles.stHeadRank} {...textScale.badge}>
+            #
+          </Text>
+          <Text style={styles.stHeadTeam} {...textScale.badge}>
+            TAKIM
+          </Text>
+          <Text style={styles.stHeadNum} {...textScale.badge}>
+            O
+          </Text>
+          <Text style={styles.stHeadNum} {...textScale.badge}>
+            AV
+          </Text>
+          <Text style={styles.stHeadNum} {...textScale.badge}>
+            {powerBalance ? "GP" : "P"}
+          </Text>
+        </View>
+      }
+      ListEmptyComponent={
+        <EmptyState
+          icon="podium-outline"
+          variant="inline"
+          title="Tablo boş"
+          body="Bu sezonda henüz maç oynanmamış."
+        />
+      }
+    />
+  );
+}
+
+const StandingItem = memo(function StandingItem({
+  rank,
+  row,
+  highlighted,
+  onPress,
+}: {
+  rank: number;
+  row: StandingRow;
+  highlighted: boolean;
+  onPress: (teamId: number) => void;
+}) {
+  const open = useCallback(() => onPress(Number(row.team_id)), [onPress, row.team_id]);
+  const diff = Number(row.goal_diff ?? 0);
+
+  return (
+    <Touchable
+      feedback="row"
+      haptic="selection"
+      onPress={open}
+      style={[styles.stRow, highlighted && styles.stRowActive]}
+      accessibilityRole="button"
+      accessibilityLabel={`${rank}. ${row.team_name}, ${row.display_points} puan`}
+    >
+      <Text style={styles.stRank} {...textScale.dense}>
+        {rank}
+      </Text>
+      <TeamLogo name={row.team_name} logo={row.logo} size={layout.crestMd} />
+      <Text
+        style={[styles.stName, highlighted && styles.stNameActive]}
+        numberOfLines={1}
+        {...textScale.dense}
+      >
+        {row.team_name}
+      </Text>
+      <Text style={[styles.stNum, styles.stMuted]} {...textScale.dense}>
+        {row.played}
+      </Text>
+      <Text
+        style={[styles.stNum, diff > 0 ? styles.stPos : diff < 0 ? styles.stNeg : styles.stMuted]}
+        {...textScale.dense}
+      >
+        {diff > 0 ? `+${diff}` : diff}
+      </Text>
+      <Text style={[styles.stNum, styles.stPoints]} {...textScale.dense}>
+        {row.display_points}
+      </Text>
+    </Touchable>
+  );
+});
+
+const standingKey = (row: StandingRow) => String(row.team_id);
+const standingLayout = (_data: ArrayLike<StandingRow> | null | undefined, index: number) => ({
+  length: STANDING_ROW_STRIDE,
+  offset: STANDING_ROW_STRIDE * index,
+  index,
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   11) ORTAK HOOK'LAR VE ANAHTAR ÜRETİCİLER
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const eventKey = (event: ApiMatchEvent, index: number) => `${event.id ?? "olay"}-${index}`;
+const matchKey = (item: ApiMatch) => String(item.id);
+const statKey = (row: StatRow) => row.label;
+/** Aynı index iki bölümde de geçtiği için anahtar TAKIMI da taşır. */
+const playerKey = (player: KadroPlayer, index: number) =>
+  `${player.team_id ?? player.takim_id ?? "t"}-${player.playerId ?? player.oyuncu_id ?? "misafir"}-${index}`;
+
+/** Gruplanmış satır listesinde köşe/ayraç konumu. */
+function rowPosition(index: number, total: number): "single" | "first" | "middle" | "last" {
+  if (total <= 1) return "single";
+  if (index === 0) return "first";
+  if (index === total - 1) return "last";
+  return "middle";
 }
 
 /** Olay satırlarındaki oyuncu adları kadro ucundan çözülür. */
@@ -189,1559 +2193,827 @@ function usePlayerNames(kadro: KadroResponse | undefined) {
   }, [kadro]);
 }
 
-function TabButton({
-  label,
-  active,
-  onPress,
-}: {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [styles.tab, active && styles.tabActive, pressed && styles.pressed]}
-    >
-      <Text style={[styles.tabText, active && styles.tabTextActive]}>{label}</Text>
-    </Pressable>
-  );
+/** Oyuncu id → giriş/çıkış dakikası. Kadro satırındaki oklar buradan çizilir. */
+function useSubstitutions(events: ApiMatchEvent[]): Map<number, SubInfo> {
+  return useMemo(() => {
+    const map = new Map<number, SubInfo>();
+    for (const event of events) {
+      if (!isSubstitution(event)) continue;
+      const entered = Number(event.oyuncu_giren_id) || null;
+      const left = Number(event.oyuncu_cikan_id) || null;
+      if (entered) map.set(entered, { ...(map.get(entered) ?? {}), in: event.dakika });
+      if (left) map.set(left, { ...(map.get(left) ?? {}), out: event.dakika });
+    }
+    return map;
+  }, [events]);
 }
 
+/**
+ * Yeni gelen golü bulur.
+ *
+ * İLK YÜKLEMEDE FLAŞ YOK: ekran açıldığında geçmiş goller "yeni" sayılsaydı
+ * bitmiş bir maçı açan herkes titreşim alırdı. İlk turda yalnız kayıt tutulur.
+ */
+function useGoalFlash(events: ApiMatchEvent[]): number | null {
+  const [flashId, setFlashId] = useState<number | null>(null);
+  const seenRef = useRef<Set<number> | null>(null);
 
-/** YouTube video ID'sini URL'den cikarir. */
+  useEffect(() => {
+    const goalIds = events
+      .filter((event) => isGoalKind(eventKind(event)))
+      .map((event) => Number(event.id))
+      .filter((id) => Number.isFinite(id));
+
+    const known = seenRef.current;
+    const next = new Set(goalIds);
+    seenRef.current = next;
+
+    if (known == null) return; // ilk tur: yalnız kayıt
+    const fresh = goalIds.find((id) => !known.has(id));
+    if (fresh == null) return;
+
+    haptics.goal();
+    setFlashId(fresh);
+    const timer = setTimeout(() => setFlashId(null), 4_000);
+    return () => clearTimeout(timer);
+  }, [events]);
+
+  return flashId;
+}
+
+/**
+ * İki takımın aralarındaki tamamlanmış maçlar.
+ *
+ * Kimlik numarası varsa onunla, yoksa takım adlarıyla eşleştirilir — eski
+ * kayıtlarda `home_team_id` boş olabiliyor (app/h2h.tsx ile aynı kural).
+ */
+function useHeadToHead({
+  match,
+  homeTeamId,
+  awayTeamId,
+  homeMatches,
+  awayMatches,
+}: {
+  match: ApiMatch | undefined;
+  homeTeamId: number | null;
+  awayTeamId: number | null;
+  homeMatches: ApiMatch[] | undefined;
+  awayMatches: ApiMatch[] | undefined;
+}): ApiMatch[] {
+  return useMemo(() => {
+    if (!match) return [];
+    const homeName = normalizeName(match.first_team_name);
+    const awayName = normalizeName(match.second_team_name);
+    if (!homeName || !awayName) return [];
+
+    const involvesBoth = (item: ApiMatch) => {
+      const first = Number(item.home_team_id);
+      const second = Number(item.away_team_id);
+      if (homeTeamId && awayTeamId && first && second) {
+        return (
+          (first === homeTeamId && second === awayTeamId) ||
+          (first === awayTeamId && second === homeTeamId)
+        );
+      }
+      const a = normalizeName(item.first_team_name);
+      const b = normalizeName(item.second_team_name);
+      return (a === homeName && b === awayName) || (a === awayName && b === homeName);
+    };
+
+    // Ev sahibinin listesi yeterlidir; eksikse deplasmanınki tamamlar.
+    const pool = [...(homeMatches ?? []), ...(awayMatches ?? [])];
+    const unique = new Map<number, ApiMatch>();
+    for (const item of pool) {
+      const id = Number(item.id);
+      if (!id || id === Number(match.id)) continue;
+      if (matchState(item) !== "finished") continue;
+      if (!involvesBoth(item)) continue;
+      unique.set(id, item);
+    }
+
+    return Array.from(unique.values())
+      .sort((a, b) => kickoffAt(b) - kickoffAt(a))
+      .slice(0, 10);
+  }, [awayMatches, awayTeamId, homeMatches, homeTeamId, match]);
+}
+
+/** Takımın son 5 maçının form dizisi ("GBMGG") — FormChips bunu okur. */
+function useFormString(
+  matches: ApiMatch[] | undefined,
+  currentMatchId: number,
+  teamId: number | null,
+  teamName: string,
+): string {
+  return useMemo(() => {
+    const list = (matches ?? [])
+      .filter((item) => matchState(item) === "finished" && Number(item.id) !== Number(currentMatchId))
+      .sort((a, b) => kickoffAt(b) - kickoffAt(a))
+      .slice(0, 5)
+      .reverse();
+
+    return list.map((item) => resultFor(item, teamId, teamName)).join("");
+  }, [currentMatchId, matches, teamId, teamName]);
+}
+
+/** Bir maçta bakılan takım ev sahibi tarafta mı? */
+function sideIsHome(item: ApiMatch, teamId: number | null, teamName: string): boolean {
+  if (teamId && Number(item.home_team_id)) return Number(item.home_team_id) === teamId;
+  return normalizeName(item.first_team_name) === teamName;
+}
+
+/** Bir maçın bakılan takım gözünden sonucu. */
+function resultFor(item: ApiMatch, teamId: number | null, teamName: string): "G" | "B" | "M" {
+  const homeSide = sideIsHome(item, teamId, teamName);
+  const ours = homeSide ? item.first_team_score : item.second_team_score;
+  const theirs = homeSide ? item.second_team_score : item.first_team_score;
+  if (ours == null || theirs == null) return "B";
+  if (ours > theirs) return "G";
+  if (ours < theirs) return "M";
+  return "B";
+}
+
+/** YouTube video kimliğini adresten çıkarır. */
 function extractYouTubeId(url: string): string | null {
-  const patterns = [
-    /[?&]v=([^&#]+)/,
-    /youtu[.]be[/]([^?&#]+)/,
-    /youtube[.]com[/]embed[/]([^?&#]+)/,
-  ];
-  for (const pat of patterns) {
-    const m = url.match(pat);
-    if (m?.[1]) return m[1];
+  const patterns = [/[?&]v=([^&#]+)/, /youtu[.]be[/]([^?&#]+)/, /youtube[.]com[/]embed[/]([^?&#]+)/];
+  for (const pattern of patterns) {
+    const found = url.match(pattern);
+    if (found?.[1]) return found[1];
   }
   return null;
 }
 
-function Scoreboard({
-  match,
-  homeScore,
-  awayScore,
-  live,
-  clockMs,
-  realtime,
-  homeLogo,
-  awayLogo,
-  homeTeamId,
-  awayTeamId,
-}: {
-  match: ApiMatch;
-  homeScore: number | null;
-  awayScore: number | null;
-  live: boolean;
-  clockMs: number | null;
-  realtime: boolean;
-  homeLogo?: string | null;
-  awayLogo?: string | null;
-  homeTeamId: number | null;
-  awayTeamId: number | null;
-}) {
-  const router = useRouter();
-  const state = matchState(match);
-  const played = state !== "scheduled";
-
-  return (
-    <View style={styles.board}>
-      <View style={styles.boardStatus}>
-        {live ? (
-          <View style={styles.liveBadge}>
-            <View style={styles.liveDot} />
-            <Text style={styles.liveText}>{clockMs != null ? formatClock(clockMs) : "CANLI"}</Text>
-          </View>
-        ) : (
-          <Text style={styles.boardStatusText}>
-            {state === "finished" ? "Maç sonucu" : `${formatTime(match.time)} · Fikstür`}
-          </Text>
-        )}
-      </View>
-
-      <View style={styles.boardTeams}>
-        <Pressable
-          style={styles.boardTeam}
-          onPress={() => homeTeamId && router.push(`/takim/${homeTeamId}`)}
-        >
-          <TeamCrest name={match.first_team_name} logo={homeLogo} size={56} />
-          <Text style={styles.boardTeamName} numberOfLines={2}>
-            {match.first_team_name}
-          </Text>
-        </Pressable>
-
-        <View style={styles.boardScore}>
-          {played ? (
-            <Text style={[styles.scoreText, live && styles.scoreLive]}>
-              {homeScore ?? 0} - {awayScore ?? 0}
-            </Text>
-          ) : (
-            <Countdown matchDate={String(match.date ?? "")} matchTime={match.time ? String(match.time) : null} />
-          )}
-        </View>
-
-        <Pressable
-          style={styles.boardTeam}
-          onPress={() => awayTeamId && router.push(`/takim/${awayTeamId}`)}
-        >
-          <TeamCrest name={match.second_team_name} logo={awayLogo} size={56} />
-          <Text style={styles.boardTeamName} numberOfLines={2}>
-            {match.second_team_name}
-          </Text>
-        </Pressable>
-      </View>
-
-      <View style={styles.boardMeta}>
-        <Text style={styles.boardMetaText}>{formatDateLong(match.date)}</Text>
-        {match.match_field ? <Text style={styles.boardMetaText}>· {match.match_field}</Text> : null}
-      </View>
-
-      {live && !realtime ? (
-        <Text style={styles.pollingNote}>
-          Anlık bağlantı kurulamadı; skor kısa aralıklarla yenileniyor.
-        </Text>
-      ) : null}
-    </View>
-  );
-}
-
-function Summary({
-  match,
-  timeline,
-  homeTeamId,
-  nameOf,
-  stats,
-  best,
-}: {
-  match: ApiMatch;
-  timeline: ApiMatchEvent[];
-  homeTeamId: number | null;
-  nameOf: (playerId?: number | null) => string | null;
-  stats: StatRow[];
-  best: TopPlayer[];
-}) {
-  const mvpId = match.match_mvp ? Number(match.match_mvp) : null;
-  const mvpName = mvpId ? nameOf(mvpId) : null;
-  const videoUrl = mediaUrl(match.match_video);
-  const [heroError, setHeroError] = useState(false);
-  const router = useRouter();
-
-  const rawHeadline = match.match_title?.trim();
-  const heroImage = mediaUrl(match.match_picture);
-  // "TAKIM1 vs TAKIM2" gibi otomatik başlıklar skorbordu tekrarlar; gizlenir.
-  const squash = (value: string) =>
-    value.toLocaleLowerCase("tr-TR").replace(/[\s·|-]+/g, " ").replace(/\bvs\.?\b/g, "vs").trim();
-  const trivialTitle =
-    !!rawHeadline &&
-    squash(rawHeadline) === squash(`${match.first_team_name} vs ${match.second_team_name}`);
-  const headline = trivialTitle ? null : rawHeadline;
-
-  return (
-    <View style={styles.section}>
-      {headline || heroImage ? (
-        <View style={styles.hero}>
-          {heroImage && !heroError ? (
-              <Image
-                source={{ uri: heroImage }}
-                style={styles.heroImage}
-                onError={() => setHeroError(true)}
-              />
-            ) : null}
-          {headline ? (
-            <View style={styles.heroBody}>
-              <Text style={styles.heroKicker}>MAÇ MANŞETİ</Text>
-              <Text style={styles.heroTitle}>{headline}</Text>
-            </View>
-          ) : null}
-        </View>
-      ) : null}
-
-      {mvpId && mvpName ? (
-        <Pressable
-          onPress={() => router.push(`/oyuncu/${mvpId}`)}
-          style={({ pressed }) => [styles.mvpCard, pressed && styles.pressedRow]}
-        >
-          <Ionicons name="star" size={18} color={colors.yellow} />
-          <View style={styles.mvpBody}>
-            <Text style={styles.mvpKicker}>MAÇIN YILDIZI</Text>
-            <Text style={styles.mvpName}>{mvpName.toLocaleUpperCase("tr-TR")}</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={16} color={colors.muted} />
-        </Pressable>
-      ) : null}
-
-      {(() => {
-        const channelUrl = youtubeChannelUrl(match.city);
-        const ytLink = videoUrl || channelUrl;
-        const ytId = videoUrl ? extractYouTubeId(videoUrl) : null;
-        const thumb = ytId ? `https://img.youtube.com/vi/${ytId}/hqdefault.jpg` : null;
-        return (
-          <>
-            <Text style={[styles.sectionTitle, styles.sectionSpacer]}>Maç İçeriği</Text>
-            <View style={styles.contentRow}>
-              {/* Sol: YouTube (spesifik video ya da kanal) */}
-              {ytLink ? (
-                <Pressable
-                  onPress={() => openLink(ytLink)}
-                  style={({ pressed }) => [styles.ytMini, pressed && styles.pressedRow]}
-                >
-                  <View style={styles.ytMiniThumb}>
-                    {thumb ? (
-                      <Image source={{ uri: thumb }} style={styles.ytMiniImg} resizeMode="cover" />
-                    ) : (
-                      <Ionicons name="logo-youtube" size={28} color="#FF0000" />
-                    )}
-                    {videoUrl ? (
-                      <View style={styles.ytMiniPlay}>
-                        <Ionicons name="play" size={14} color="#FFFFFF" />
-                      </View>
-                    ) : null}
-                  </View>
-                  <View style={styles.ytMiniBadge}>
-                    <Ionicons name="logo-youtube" size={10} color="#FF0000" />
-                    <Text style={styles.ytMiniBadgeText}>{videoUrl ? "İzle" : "Kanal"}</Text>
-                  </View>
-                </Pressable>
-              ) : null}
-
-            {/* Sağ: maç özeti */}
-            <View style={styles.summaryBox}>
-              <View style={styles.summaryHead}>
-                <Ionicons name="document-text-outline" size={13} color={colors.turf} />
-                <Text style={styles.summaryKicker}>MAÇ ÖZETİ</Text>
-              </View>
-              {match.post_rapor ? (
-                <Text style={styles.summaryText} numberOfLines={5}>{match.post_rapor}</Text>
-              ) : (
-                <Text style={styles.summaryEmpty}>Maç özeti henüz eklenmemiş.</Text>
-              )}
-            </View>
-          </View>
-        </>
-        );
-      })()}
-
-      <Text style={styles.sectionTitle}>Maç Olay Özeti</Text>
-      <View style={styles.statCard}>
-        {stats.map((row) => (
-          <StatLine key={row.label} row={row} />
-        ))}
-      </View>
-
-      {best.length > 0 ? (
-        <>
-          <Text style={[styles.sectionTitle, styles.sectionSpacer]}>En İyi Oyuncular</Text>
-          <View style={styles.bestGrid}>
-            {best.map((player, index) => (
-              <BestPlayerCard key={player.playerId} player={player} rank={index + 1} />
-            ))}
-          </View>
-        </>
-      ) : null}
-
-      <HeadToHead match={match} />
-
-      <Text style={[styles.sectionTitle, styles.sectionSpacer]}>Maç Akışı</Text>
-
-      {timeline.length === 0 ? (
-        <Text style={styles.placeholder}>Bu maç için henüz olay girilmemiş.</Text>
-      ) : (
-        timeline.map((event, index) => (
-          <EventRow
-            key={`${event.id ?? "olay"}-${index}`}
-            event={event}
-            home={Number(event.takim_id) === Number(homeTeamId)}
-            nameOf={nameOf}
-          />
-        ))
-      )}
-
-      {match.post_manset || match.match_comment ? (
-        <>
-          <Text style={[styles.sectionTitle, styles.sectionSpacer]}>Maç Notu</Text>
-          <Text style={styles.note}>{match.post_manset || match.match_comment}</Text>
-        </>
-      ) : null}
-    </View>
-  );
-}
-
-/**
- * Sitedeki ızgara satırı: sol ev, sağ deplasman, altta oran çubuğu.
- * Dürüst çubuk kuralları: iki taraf da sıfırsa nötr ince çizgi; tek taraf
- * sıfırsa çubuğun tamamı diğer tarafın rengi; ikisi de doluysa oranlı bölünür.
- */
-function StatLine({ row }: { row: StatRow }) {
-  const total = row.home + row.away;
-  const lead = (mine: number, theirs: number) => total > 0 && mine >= theirs;
-
-  return (
-    <View style={styles.statLine}>
-      <View style={styles.statValues}>
-        <Text style={[styles.statValue, lead(row.home, row.away) && styles.statValueLead]}>
-          {row.home}
-        </Text>
-        <Text style={styles.statLabel}>{row.label}</Text>
-        <Text style={[styles.statValue, lead(row.away, row.home) && styles.statValueLead]}>
-          {row.away}
-        </Text>
-      </View>
-      {total === 0 ? (
-        <View style={styles.statBarEmpty} />
-      ) : (
-        <View style={styles.statBar}>
-          {row.home > 0 ? (
-            <View style={[styles.statBarHome, { flex: row.home }]} />
-          ) : null}
-          {row.away > 0 ? (
-            <View style={[styles.statBarAway, { flex: row.away }]} />
-          ) : null}
-        </View>
-      )}
-    </View>
-  );
-}
-
-/**
- * Geçmiş Karşılaşmalar (H2H) — iki takımın aralarındaki son maçlar.
- *
- * Veri, ev sahibi takımın maç listesinden süzülür; ayrıca iki takımın genel
- * son 5 form çipleri gösterilir. Aralarında oynanmış maç yoksa bölüm hiç
- * görünmez. Takım kimlikleri (id) eksik eski kayıtlarda da sessizce gizlenir.
- */
-function HeadToHead({ match }: { match: ApiMatch }) {
-  const router = useRouter();
-  const homeId = Number(match.home_team_id) || null;
-  const awayId = Number(match.away_team_id) || null;
-
-  const homeQuery = useQuery({
-    queryKey: queryKeys.teamMatches(homeId ?? 0),
-    queryFn: () => getTeamMatches(homeId!),
-    enabled: Boolean(homeId),
-    staleTime: 60_000,
-  });
-  const awayQuery = useQuery({
-    queryKey: queryKeys.teamMatches(awayId ?? 0),
-    queryFn: () => getTeamMatches(awayId!),
-    enabled: Boolean(awayId),
-    staleTime: 60_000,
-  });
-
-  const homeName = String(match.first_team_name ?? "").trim().toLocaleLowerCase("tr-TR");
-  const awayName = String(match.second_team_name ?? "").trim().toLocaleLowerCase("tr-TR");
-
-  const data = useMemo(() => {
-    if (!homeName || !awayName) return null;
-    const norm = (value?: string | null) =>
-      String(value ?? "").trim().toLocaleLowerCase("tr-TR");
-    const timeOf = (m: ApiMatch) =>
-      new Date(`${String(m.date).slice(0, 10)}T${m.time || "00:00:00"}`).getTime();
-    const finished = (m: ApiMatch) => matchState(m) === "finished";
-    // Kimlik numarası varsa onunla, yoksa takım adlarıyla eşleştirilir.
-    const involvesBoth = (m: ApiMatch) => {
-      const a = Number(m.home_team_id);
-      const b = Number(m.away_team_id);
-      if (homeId && awayId && a && b) {
-        return (a === homeId && b === awayId) || (a === awayId && b === homeId);
-      }
-      const f = norm(m.first_team_name);
-      const sName = norm(m.second_team_name);
-      return (f === homeName && sName === awayName) || (f === awayName && sName === homeName);
-    };
-    const isHomeSide = (m: ApiMatch) => {
-      if (homeId && Number(m.home_team_id)) return Number(m.home_team_id) === homeId;
-      return norm(m.first_team_name) === homeName;
-    };
-
-    const meetings = (homeQuery.data ?? [])
-      .filter((m) => Number(m.id) !== Number(match.id) && finished(m) && involvesBoth(m))
-      .sort((a, b) => timeOf(b) - timeOf(a))
-      .slice(0, 6);
-
-    let homeWins = 0;
-    let awayWins = 0;
-    for (const m of meetings) {
-      const hs = m.first_team_score;
-      const as = m.second_team_score;
-      if (hs == null || as == null) continue;
-      const homeIsFirst = isHomeSide(m);
-      const ours = homeIsFirst ? hs : as;
-      const theirs = homeIsFirst ? as : hs;
-      if (ours > theirs) homeWins += 1;
-      else if (theirs > ours) awayWins += 1;
-    }
-
-    const formOf = (list: ApiMatch[] | undefined, teamName: string) =>
-      (list ?? [])
-        .filter((m) => finished(m) && Number(m.id) !== Number(match.id))
-        .sort((a, b) => timeOf(b) - timeOf(a))
-        .slice(0, 5)
-        .reverse()
-        .map((m) => {
-          const isFirst = norm(m.first_team_name) === teamName;
-          const ours = isFirst ? m.first_team_score : m.second_team_score;
-          const theirs = isFirst ? m.second_team_score : m.first_team_score;
-          if (ours == null || theirs == null) return "B";
-          return ours > theirs ? "G" : ours < theirs ? "M" : "B";
-        });
-
-    return {
-      meetings,
-      homeWins,
-      awayWins,
-      homeForm: formOf(homeQuery.data, homeName),
-      awayForm: formOf(awayQuery.data, awayName),
-    };
-  }, [homeQuery.data, awayQuery.data, homeId, awayId, homeName, awayName, match.id]);
-
-  if (!data || data.meetings.length === 0) return null;
-
-  return (
-    <>
-      <Text style={[styles.sectionTitle, styles.sectionSpacer]}>Geçmiş Karşılaşmalar</Text>
-      <View style={styles.h2hCard}>
-        <View style={styles.h2hHead}>
-          <View style={styles.h2hTeam}>
-            <Text style={styles.h2hName} numberOfLines={1}>
-              {match.first_team_name}
-            </Text>
-            <FormChipsRow letters={data.homeForm} />
-          </View>
-          <View style={styles.h2hCenter}>
-            <Text style={styles.h2hScore}>
-              {data.homeWins} - {data.awayWins}
-            </Text>
-            <Text style={styles.h2hSub}>son {data.meetings.length} maç</Text>
-          </View>
-          <View style={[styles.h2hTeam, styles.h2hTeamRight]}>
-            <Text style={styles.h2hName} numberOfLines={1}>
-              {match.second_team_name}
-            </Text>
-            <FormChipsRow letters={data.awayForm} />
-          </View>
-        </View>
-
-        {data.meetings.map((m) => {
-          const homeIsFirst =
-            homeId && Number(m.home_team_id)
-              ? Number(m.home_team_id) === homeId
-              : String(m.first_team_name ?? "").trim().toLocaleLowerCase("tr-TR") === homeName;
-          const ours = homeIsFirst ? m.first_team_score : m.second_team_score;
-          const theirs = homeIsFirst ? m.second_team_score : m.first_team_score;
-          const result =
-            ours == null || theirs == null ? "B" : ours > theirs ? "G" : ours < theirs ? "M" : "B";
-          return (
-            <Pressable
-              key={m.id}
-              onPress={() => router.push(`/mac/${m.id}`)}
-              style={({ pressed }) => [styles.h2hRow, pressed && styles.h2hPressed]}
-            >
-              <Text style={styles.h2hDate}>{formatDateShort(m.date)}</Text>
-              <View
-                style={[
-                  styles.h2hChip,
-                  result === "G"
-                    ? styles.h2hChipWin
-                    : result === "M"
-                      ? styles.h2hChipLoss
-                      : styles.h2hChipDraw,
-                ]}
-              >
-                <Text style={styles.h2hChipText}>{result}</Text>
-              </View>
-              <Text style={styles.h2hMatch} numberOfLines={1}>
-                {m.first_team_name} – {m.second_team_name}
-              </Text>
-              <Text style={styles.h2hRowScore}>
-                {m.first_team_score ?? "-"} - {m.second_team_score ?? "-"}
-              </Text>
-            </Pressable>
-          );
-        })}
-        <Text style={styles.h2hHint}>Rozetler {match.first_team_name} gözünden · satıra dokun, maça git</Text>
-      </View>
-    </>
-  );
-}
-
-function FormChipsRow({ letters }: { letters: string[] }) {
-  if (letters.length === 0) return null;
-  return (
-    <View style={styles.h2hChips}>
-      {letters.map((letter, index) => (
-        <View
-          key={`${letter}-${index}`}
-          style={[
-            styles.h2hChip,
-            letter === "G"
-              ? styles.h2hChipWin
-              : letter === "M"
-                ? styles.h2hChipLoss
-                : styles.h2hChipDraw,
-          ]}
-        >
-          <Text style={styles.h2hChipText}>{letter}</Text>
-        </View>
-      ))}
-    </View>
-  );
-}
-
-function BestPlayerCard({ player, rank }: { player: TopPlayer; rank: number }) {
-  const router = useRouter();
-
-  return (
-    <Pressable
-      onPress={() => router.push(`/oyuncu/${player.playerId}`)}
-      style={({ pressed }) => [
-        styles.bestCard,
-        rank === 1 && styles.bestCardFirst,
-        pressed && styles.pressedRow,
-      ]}
-    >
-      <View style={styles.bestRank}>
-        <Text style={styles.bestRankText}>{rank}</Text>
-      </View>
-      <PlayerAvatar name={player.name} image={player.image} size={40} />
-      <Text style={styles.bestName} numberOfLines={1}>
-        {player.name.toLocaleUpperCase("tr-TR")}
-      </Text>
-      <View style={styles.bestStats}>
-        <BestStat label="GOL" value={String(player.goals)} />
-        <BestStat label="ASİST" value={String(player.assists)} />
-        <BestStat label="PUAN" value={player.rating != null ? player.rating.toFixed(1) : "—"} />
-      </View>
-    </Pressable>
-  );
-}
-
-function BestStat({ label, value }: { label: string; value: string }) {
-  const empty = value === "—";
-  return (
-    <View style={styles.bestStat}>
-      <Text style={[styles.bestStatValue, empty && styles.bestStatEmpty]}>{value}</Text>
-      <Text style={styles.bestStatLabel}>{label}</Text>
-    </View>
-  );
-}
-
-const EVENT_ICON: Record<string, { icon: keyof typeof Ionicons.glyphMap; color: string }> = {
-  goal: { icon: "football", color: colors.turf },
-  ownGoal: { icon: "football-outline", color: colors.live },
-  yellow: { icon: "square", color: colors.yellow },
-  red: { icon: "square", color: colors.red },
-  substitution: { icon: "swap-horizontal", color: colors.muted },
-  other: { icon: "ellipse-outline", color: colors.muted },
-};
-
-function EventRow({
-  event,
-  home,
-  nameOf,
-}: {
-  event: ApiMatchEvent;
-  home: boolean;
-  nameOf: (playerId?: number | null) => string | null;
-}) {
-  const kind = eventKind(event);
-  const visual = EVENT_ICON[kind] ?? EVENT_ICON.other;
-  const detail = kind === "goal" ? goalDetail(event) : null;
-
-  const label =
-    kind === "substitution"
-      ? [nameOf(event.oyuncu_giren_id), nameOf(event.oyuncu_cikan_id)]
-          .filter(Boolean)
-          .join(" → ") || "Oyuncu değişikliği"
-      : nameOf(event.oyuncu_id) || event.aciklama || "";
-
-  const bgColor = kind === "goal" ? colors.green + "12"
-    : kind === "ownGoal" ? colors.live + "12"
-    : kind === "yellow" ? colors.yellow + "12"
-    : kind === "red" ? colors.live + "12"
-    : "transparent";
-
-  return (
-    <View style={styles.eventTimeline}>
-      {/* Ev sahibi tarafı */}
-      <View style={styles.eventSide}>
-        {home ? (
-          <View style={[styles.eventBubble, { backgroundColor: bgColor }]}>
-            <View style={styles.eventIconWrap}>
-              <Ionicons name={visual.icon} size={14} color={visual.color} />
-            </View>
-            <View style={styles.eventTextBlock}>
-              <Text style={styles.eventNameHome} numberOfLines={1}>{label}</Text>
-              {kind === "ownGoal" ? (
-                <Text style={styles.eventDetailHome}>kendi kalesine</Text>
-              ) : detail ? (
-                <Text style={styles.eventDetailHome}>{detail}</Text>
-              ) : null}
-            </View>
-          </View>
-        ) : null}
-      </View>
-
-      {/* Merkez dakika */}
-      <View style={styles.eventCenter}>
-        <View style={styles.eventLine} />
-        <View style={[styles.eventMinuteBadge, { borderColor: visual.color }]}>
-          <Text style={[styles.eventMinuteText, { color: visual.color }]}>
-            {event.dakika ? `${event.dakika}'` : "—"}
-          </Text>
-        </View>
-        <View style={styles.eventLine} />
-      </View>
-
-      {/* Deplasman tarafı */}
-      <View style={styles.eventSide}>
-        {!home ? (
-          <View style={[styles.eventBubble, styles.eventBubbleAway, { backgroundColor: bgColor }]}>
-            <View style={styles.eventTextBlock}>
-              <Text style={styles.eventNameAway} numberOfLines={1}>{label}</Text>
-              {kind === "ownGoal" ? (
-                <Text style={styles.eventDetailAway}>kendi kalesine</Text>
-              ) : detail ? (
-                <Text style={styles.eventDetailAway}>{detail}</Text>
-              ) : null}
-            </View>
-            <View style={styles.eventIconWrap}>
-              <Ionicons name={visual.icon} size={14} color={visual.color} />
-            </View>
-          </View>
-        ) : null}
-      </View>
-    </View>
-  );
-}
-
-function Lineups({
-  match,
-  kadro,
-  loading,
-  contrib,
-}: {
-  match: ApiMatch;
-  kadro: KadroResponse | undefined;
-  loading: boolean;
-  contrib: { home: ContribRow[]; away: ContribRow[] };
-}) {
-  if (loading) return <Loading />;
-
-  const home = kadro?.home ?? [];
-  const away = kadro?.away ?? [];
-
-  if (!home.length && !away.length) {
-    return (
-      <View style={styles.section}>
-        <Text style={styles.placeholder}>Kadrolar henüz açıklanmadı.</Text>
-      </View>
-    );
-  }
-
-  return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>Oyuncu Katkıları</Text>
-      <ContribTable team={match.first_team_name} rows={contrib.home} homeSide />
-      <ContribTable team={match.second_team_name} rows={contrib.away} />
-
-      <Text style={[styles.sectionTitle, styles.sectionSpacer]}>İlk 11 ve Yedekler</Text>
-      <TeamLineup title={match.first_team_name} rows={home} />
-      <TeamLineup title={match.second_team_name} rows={away} />
-    </View>
-  );
-}
-
-/** Sitedeki "Takım Kadroları" tablosu: yeşil/kırmızı başlık, G · A · K · PUAN. */
-function ContribTable({
-  team,
-  rows,
-  homeSide,
-}: {
-  team: string;
-  rows: ContribRow[];
-  homeSide?: boolean;
-}) {
-  const router = useRouter();
-  if (!rows.length) return null;
-
-  return (
-    <View style={styles.contribCard}>
-      <View style={[styles.contribHead, { backgroundColor: homeSide ? colors.green : colors.live }]}>
-        <Text style={styles.contribTeam} numberOfLines={1}>
-          {team.toLocaleUpperCase("tr-TR")}
-        </Text>
-        <Text style={styles.contribCol}>G</Text>
-        <Text style={styles.contribCol}>A</Text>
-        <Text style={styles.contribCol}>K</Text>
-        <Text style={[styles.contribCol, styles.contribColWide]}>PUAN</Text>
-      </View>
-      {rows.map((row, index) => (
-        <Pressable
-          key={`${row.playerId ?? "guest"}-${index}`}
-          disabled={!row.playerId || row.guest}
-          onPress={() => router.push(`/oyuncu/${row.playerId}`)}
-          style={({ pressed }) => [
-            styles.contribRow,
-            index % 2 === 1 && styles.contribRowAlt,
-            pressed && styles.pressedRow,
-          ]}
-        >
-          <Text style={styles.contribName} numberOfLines={1}>
-            {row.name}
-            {row.guest ? " · misafir" : ""}
-          </Text>
-          <Text style={[styles.contribNum, row.goals > 0 && styles.contribNumLead]}>{row.goals}</Text>
-          <Text style={[styles.contribNum, row.assists > 0 && styles.contribNumLead]}>{row.assists}</Text>
-          <Text style={styles.contribNum}>{row.cards}</Text>
-          <Text style={[styles.contribNum, styles.contribColWide, styles.contribRating]}>
-            {row.rating != null ? row.rating.toFixed(1) : "—"}
-          </Text>
-        </Pressable>
-      ))}
-    </View>
-  );
-}
-
-function TeamLineup({ title, rows }: { title: string; rows: KadroPlayer[] }) {
-  const starters = rows.filter((row) => row.role === "starter");
-  const subs = rows.filter((row) => row.role !== "starter");
-
-  return (
-    <View style={styles.lineupBlock}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-
-      {starters.map((row, index) => (
-        <PlayerRow key={`${row.playerId ?? "guest"}-${index}`} row={row} />
-      ))}
-
-      {subs.length ? (
-        <>
-          <Text style={styles.subsTitle}>Yedekler</Text>
-          {subs.map((row, index) => (
-            <PlayerRow key={`sub-${row.playerId ?? "guest"}-${index}`} row={row} dim />
-          ))}
-        </>
-      ) : null}
-    </View>
-  );
-}
-
-function PlayerRow({ row, dim }: { row: KadroPlayer; dim?: boolean }) {
-  const router = useRouter();
-  const name = row.playerName || row.guestName || "İsimsiz oyuncu";
-  const rating = row.puan != null ? Number(row.puan) : null;
-  // Misafir oyuncuların kalıcı profili yoktur.
-  const linkable = Boolean(row.playerId) && !row.isGuest;
-
-  return (
-    <Pressable
-      style={({ pressed }) => [styles.playerRow, pressed && linkable && styles.pressed]}
-      disabled={!linkable}
-      onPress={() => router.push(`/oyuncu/${row.playerId}`)}
-    >
-      <Text style={styles.shirt}>{row.number === "" || row.number == null ? "-" : row.number}</Text>
-      <Text style={[styles.playerName, dim && styles.playerNameDim]} numberOfLines={1}>
-        {name}
-        {row.captain ? " (K)" : ""}
-        {row.isGuest ? " · misafir" : ""}
-      </Text>
-      {row.position ? <Text style={styles.position}>{row.position}</Text> : null}
-      {rating != null && Number.isFinite(rating) && rating > 0 ? (
-        <Text style={styles.rating}>{rating.toFixed(1)}</Text>
-      ) : null}
-    </Pressable>
-  );
-}
-
-/**
- * Canlı geri sayım — yaklaşan maçlarda skor yerine gösterilir.
- * Her saniye güncellenir; maç saati geçmişse sıfır gösterir.
- */
-function Countdown({ matchDate, matchTime }: { matchDate: string; matchTime: string | null }) {
-  const target = useMemo(() => {
-    try {
-      const base = String(matchDate).slice(0, 10);
-      const time = matchTime ? String(matchTime).slice(0, 5) : "00:00";
-      return new Date(`${base}T${time}:00`).getTime();
-    } catch {
-      return null;
-    }
-  }, [matchDate, matchTime]);
-
-  const calc = () => {
-    if (!target) return { h: 0, m: 0, s: 0 };
-    const diff = Math.max(0, target - Date.now());
-    const h = Math.floor(diff / 3_600_000);
-    const m = Math.floor((diff % 3_600_000) / 60_000);
-    const sec = Math.floor((diff % 60_000) / 1_000);
-    return { h, m, s: sec };
-  };
-
-  const [tick, setTick] = useState(calc);
-  useEffect(() => {
-    const id = setInterval(() => setTick(calc()), 1_000);
-    return () => clearInterval(id);
-  }, [target]);
-
-  const pad = (n: number) => String(n).padStart(2, "0");
-
-  return (
-    <View style={styles.countdown}>
-      {[
-        { value: pad(tick.h), label: "SAAT" },
-        { value: pad(tick.m), label: "DAK" },
-        { value: pad(tick.s), label: "SAN" },
-      ].map((item, i) => (
-        <View key={item.label} style={styles.countdownGroup}>
-          {i > 0 && <Text style={styles.countdownSep}>:</Text>}
-          <View style={styles.countdownBox}>
-            <Text style={styles.countdownNum}>{item.value}</Text>
-          </View>
-          <Text style={styles.countdownLabel}>{item.label}</Text>
-        </View>
-      ))}
-    </View>
-  );
-}
+/* ══════════════════════════════════════════════════════════════════════════
+   12) STİLLER
+   ══════════════════════════════════════════════════════════════════════════ */
 
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: colors.pitch,
+    backgroundColor: colors.bg,
   },
-  content: {
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.xl,
+  loading: {
+    padding: layout.screenPadding,
+    gap: space.md,
   },
-  board: {
-    backgroundColor: colors.surface,
+  listContent: {
+    paddingBottom: space.giant,
+  },
+  /**
+   * Segment gövdesindeki kart kümesi. Yatay boşluk BLOĞUN DEĞİL kartların
+   * kendisindedir (`inset`) — çünkü SectionHeader kendi `screenPadding`'ini
+   * zaten çiziyor; blok da paylaşsaydı başlıklar kartlardan içeride kalırdı.
+   */
+  block: {
+    paddingTop: space.md,
+    gap: space.md,
+  },
+  inset: {
+    marginHorizontal: layout.screenPadding,
+  },
+  group: {
+    backgroundColor: colors.surface1,
     borderRadius: radius.lg,
-    padding: spacing.md,
-    gap: spacing.md,
+    marginHorizontal: layout.screenPadding,
+    overflow: "hidden",
   },
-  boardStatus: {
-    alignItems: "center",
+  overline: {
+    ...type.micro,
+    color: colors.textTertiary,
   },
-  boardStatusText: {
-    ...type.caption,
-    color: colors.muted,
+
+  /* ---- Hero ---- */
+  hero: {
+    backgroundColor: colors.surface1,
+    paddingHorizontal: layout.screenPadding,
+    paddingTop: space.m,
+    paddingBottom: space.sm,
+    gap: space.s,
   },
-  liveBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
-    borderRadius: radius.pill,
-    backgroundColor: "rgba(255,77,77,0.15)",
-  },
-  liveDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.live,
-  },
-  liveText: {
-    ...type.caption,
-    color: colors.live,
-  },
-  boardTeams: {
+  heroTeams: {
     flexDirection: "row",
     alignItems: "flex-start",
   },
-  boardTeam: {
+  heroTeam: {
     flex: 1,
     alignItems: "center",
-    gap: spacing.sm,
+    gap: space.xs,
+    paddingVertical: space.xxs,
+    borderRadius: radius.md,
   },
-  boardTeamName: {
-    ...type.small,
-    color: colors.line,
+  heroTeamName: {
+    ...type.caption,
+    color: colors.textPrimary,
     textAlign: "center",
-    fontWeight: "600",
+    minHeight: 28,
   },
-  boardScore: {
-    paddingHorizontal: spacing.sm,
-    paddingTop: spacing.md,
-  },
-  scoreText: {
-    ...type.score,
-    fontSize: 28,
-    color: colors.line,
-  },
-  scoreLive: {
-    color: colors.turf,
-  },
-  countdown: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    justifyContent: "center",
-    gap: 4,
-  },
-  countdownGroup: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    gap: 4,
-  },
-  countdownSep: {
-    fontSize: 20,
-    fontWeight: "900",
-    color: colors.turf,
-    paddingBottom: 12,
-    opacity: 0.5,
-  },
-  countdownBox: {
-    backgroundColor: colors.turfDim,
-    borderRadius: 10,
-    width: 52,
-    height: 52,
+  heroCenter: {
+    minWidth: 104,
     alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: colors.faint,
+    justifyContent: "flex-start",
+    gap: space.xs,
+    paddingTop: space.s,
   },
-  countdownNum: {
-    fontSize: 22,
-    fontWeight: "900",
-    color: colors.turf,
-    fontVariant: ["tabular-nums"],
-    letterSpacing: -1,
+  heroScore: {
+    ...type.scoreHero,
+    color: colors.textPrimary,
   },
-  countdownLabel: {
-    fontSize: 8,
-    fontWeight: "800",
-    color: colors.muted,
-    letterSpacing: 0.8,
-    textAlign: "center",
-    width: 52,
-    marginTop: 3,
+  heroScoreLive: {
+    color: colors.brandAccent,
   },
-  kickoff: {
-    ...type.title,
-    color: colors.muted,
+  heroScoreDash: {
+    color: colors.textTertiary,
   },
-  boardMeta: {
-    flexDirection: "row",
-    justifyContent: "center",
-    flexWrap: "wrap",
-    gap: spacing.xs,
+  heroKickoff: {
+    ...type.scoreLg,
+    color: colors.textPrimary,
   },
-  boardMetaText: {
+  heroClock: {
+    alignItems: "center",
+  },
+  heroCountdown: {
     ...type.caption,
-    color: colors.muted,
-    letterSpacing: 0,
+    color: colors.textSecondary,
   },
-  pollingNote: {
+  heroMeta: {
     ...type.caption,
-    color: colors.faint,
+    color: colors.textSecondary,
     textAlign: "center",
-    letterSpacing: 0,
   },
-  tabs: {
+
+  /* ---- Yeniden bağlanma şeridi ---- */
+  reconnect: {
     flexDirection: "row",
-    gap: spacing.sm,
-    paddingVertical: spacing.md,
+    alignItems: "center",
+    gap: space.sm,
+    backgroundColor: colors.warnDim,
+    borderRadius: radius.md,
+    paddingHorizontal: space.m,
+    paddingVertical: space.sm,
   },
-  tab: {
+  reconnectText: {
+    ...type.caption,
+    color: colors.warn,
     flex: 1,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.sm,
-    backgroundColor: colors.surface,
-    alignItems: "center",
   },
-  tabActive: {
-    backgroundColor: colors.turfDim,
+
+  /* ---- Özet ---- */
+  headline: {
+    ...type.body,
+    color: colors.textPrimary,
   },
-  tabText: {
-    ...type.caption,
-    color: colors.muted,
+  /** Fotoğraf şeridi ekranın iki kenarına kadar akar; kendi iç boşluğu var. */
+  photoBlock: {
+    gap: space.sm,
   },
-  tabTextActive: {
-    color: colors.turf,
-  },
-  pressed: {
-    opacity: 0.8,
-  },
-  section: {
-    gap: spacing.sm,
-  },
-  sectionTitle: {
-    ...type.caption,
-    color: colors.muted,
-    paddingBottom: spacing.xs,
-  },
-  calendarBtn: {
+  mvpRow: {
+    marginHorizontal: layout.screenPadding,
     flexDirection: "row",
     alignItems: "center",
+    gap: space.m,
+    backgroundColor: colors.surface1,
+    borderRadius: radius.lg,
+    paddingHorizontal: space.md,
+    paddingVertical: space.m,
+  },
+  mvpIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: radius.pill,
+    backgroundColor: colors.warnDim,
+    alignItems: "center",
     justifyContent: "center",
-    gap: spacing.sm,
-    backgroundColor: colors.turfDim,
-    borderRadius: radius.md,
-    paddingVertical: spacing.sm + 2,
-    marginBottom: spacing.sm,
   },
-  calendarText: {
-    ...type.small,
-    color: colors.turf,
-    fontWeight: "800",
+  mvpBody: {
+    flex: 1,
+    gap: space.xxs,
   },
-  hero: {
-    backgroundColor: "#17131F",
+  mvpName: {
+    ...type.h3,
+    color: colors.textPrimary,
+  },
+  contentRow: {
+    marginHorizontal: layout.screenPadding,
+    flexDirection: "row",
+    gap: space.md,
+  },
+  videoCard: {
+    width: 92,
+    gap: space.xs,
+  },
+  videoThumb: {
+    height: 62,
     borderRadius: radius.md,
+    backgroundColor: colors.surface3,
+    alignItems: "center",
+    justifyContent: "center",
     overflow: "hidden",
-    marginBottom: spacing.sm,
   },
-  heroImage: {
-    width: "100%",
-    height: 160,
-  },
-  heroBody: {
-    padding: spacing.md,
-  },
-  heroKicker: {
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 1,
-    color: colors.yellow,
-    marginBottom: spacing.xs,
-  },
-  heroTitle: {
-    ...type.subtitle,
-    color: "#FFFFFF",
-    lineHeight: 22,
-  },
-  contribCard: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.faint,
-    borderRadius: radius.md,
-    overflow: "hidden",
-    marginBottom: spacing.sm,
-  },
-  contribHead: {
-    flexDirection: "row",
+  videoPlay: {
+    width: 24,
+    height: 24,
+    borderRadius: radius.pill,
+    backgroundColor: colors.live,
     alignItems: "center",
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    gap: spacing.xs,
+    justifyContent: "center",
   },
-  contribTeam: {
-    ...type.caption,
-    color: "#FFFFFF",
-    flex: 1,
-  },
-  contribCol: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: "#FFFFFF",
-    width: 26,
+  videoLabel: {
+    ...type.micro,
+    color: colors.textSecondary,
     textAlign: "center",
   },
-  contribColWide: {
-    width: 40,
+  reportBox: {
+    flex: 1,
+    backgroundColor: colors.surface1,
+    borderRadius: radius.lg,
+    padding: space.md,
+    gap: space.xs,
+  },
+  reportText: {
+    ...type.bodySm,
+    color: colors.textSecondary,
+  },
+  reportEmpty: {
+    ...type.bodySm,
+    color: colors.textTertiary,
+  },
+  noteBox: {
+    marginHorizontal: layout.screenPadding,
+    backgroundColor: colors.surface1,
+    borderRadius: radius.lg,
+    padding: space.md,
+  },
+  noteText: {
+    ...type.bodySm,
+    color: colors.textSecondary,
+  },
+
+  /* ---- Zaman çizelgesi ---- */
+  tlRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: layout.screenPadding,
+  },
+  tlSide: {
+    flex: 1,
+  },
+  tlBubble: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    borderRadius: radius.md,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.s,
+  },
+  tlBubbleHome: {
+    justifyContent: "flex-start",
+  },
+  tlBubbleAway: {
+    justifyContent: "flex-end",
+  },
+  tlTexts: {
+    flexShrink: 1,
+  },
+  tlName: {
+    ...type.bodySm,
+    color: colors.textPrimary,
+  },
+  tlDetail: {
+    ...type.caption,
+    color: colors.textTertiary,
+  },
+  tlAlignLeft: {
+    textAlign: "left",
+  },
+  tlAlignRight: {
+    textAlign: "right",
+  },
+  tlCenter: {
+    width: 44,
+    alignItems: "center",
+  },
+  tlLine: {
+    width: 1,
+    height: 10,
+    backgroundColor: colors.separator,
+  },
+  tlMinute: {
+    minWidth: 34,
+    paddingHorizontal: space.xs,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    alignItems: "center",
+    backgroundColor: colors.surface1,
+  },
+  tlMinuteText: {
+    ...type.micro,
+  },
+
+  /* ---- Canlı akış ---- */
+  liveStatus: {
+    marginHorizontal: layout.screenPadding,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: colors.surface1,
+    borderRadius: radius.lg,
+    paddingHorizontal: space.md,
+    paddingVertical: space.m,
+  },
+  liveStatusLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+  },
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  liveDotOn: {
+    backgroundColor: colors.win,
+  },
+  liveDotOff: {
+    backgroundColor: colors.warn,
+  },
+  liveStatusText: {
+    ...type.caption,
+    color: colors.textSecondary,
+  },
+  liveElapsed: {
+    ...type.scoreSm,
+    color: colors.brandAccent,
+  },
+  feedRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.m,
+    marginHorizontal: layout.screenPadding,
+    marginTop: space.sm,
+    paddingHorizontal: space.md,
+    paddingVertical: space.m,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface1,
+    overflow: "hidden",
+  },
+  feedRowGoal: {
+    backgroundColor: colors.winDim,
+  },
+  feedFlash: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: colors.win,
+  },
+  feedMinute: {
+    width: 34,
+    alignItems: "center",
+  },
+  feedMinuteText: {
+    ...type.micro,
+    color: colors.textSecondary,
+  },
+  feedIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface3,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  feedIconGoal: {
+    backgroundColor: colors.surface1,
+  },
+  feedBody: {
+    flex: 1,
+    gap: space.xxs,
+  },
+  feedName: {
+    ...type.body,
+    color: colors.textPrimary,
+  },
+  feedNameGoal: {
+    ...type.h3,
+    color: colors.textPrimary,
+  },
+  feedMeta: {
+    ...type.caption,
+    color: colors.textSecondary,
+  },
+  feedSide: {
+    width: 3,
+    alignSelf: "stretch",
+    borderRadius: 2,
+  },
+  feedSideHome: {
+    backgroundColor: colors.brandAccent,
+  },
+  feedSideAway: {
+    backgroundColor: colors.borderStrong,
+  },
+
+  /* ---- Kadrolar ---- */
+  playerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.m,
+    marginHorizontal: layout.screenPadding,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    backgroundColor: colors.surface1,
+    borderRadius: radius.md,
+    marginTop: space.xs,
+    minHeight: layout.listRowHeight,
+  },
+  shirt: {
+    ...type.tableNum,
+    color: colors.textTertiary,
+    width: 20,
+    textAlign: "center",
+  },
+  playerTexts: {
+    flex: 1,
+    gap: space.xxs,
+  },
+  playerName: {
+    ...type.bodySm,
+    color: colors.textPrimary,
+  },
+  playerMeta: {
+    ...type.caption,
+    color: colors.textTertiary,
   },
   contribRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    gap: spacing.xs,
+    gap: space.xs,
   },
-  contribRowAlt: {
-    backgroundColor: colors.surfaceRaised,
+  contribBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 1,
   },
-  contribName: {
-    ...type.small,
-    color: colors.line,
-    fontWeight: "600",
+  contribCount: {
+    ...type.micro,
+    color: colors.textSecondary,
+  },
+  subMark: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 1,
+  },
+  subMinute: {
+    ...type.micro,
+  },
+
+  /* ---- İstatistik ---- */
+  statHead: {
+    marginHorizontal: layout.screenPadding,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    backgroundColor: colors.surface1,
+    borderRadius: radius.lg,
+    paddingHorizontal: space.md,
+    paddingVertical: space.m,
+  },
+  statHeadTeam: {
     flex: 1,
-  },
-  contribNum: {
-    ...type.small,
-    color: colors.muted,
-    width: 26,
-    textAlign: "center",
-    fontVariant: ["tabular-nums"],
-  },
-  contribNumLead: {
-    color: colors.line,
-    fontWeight: "800",
-  },
-  contribRating: {
-    color: colors.turf,
-    fontWeight: "800",
-  },
-  statCard: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.faint,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  statLine: {
-    paddingVertical: spacing.xs + 2,
-  },
-  statValues: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    gap: space.sm,
   },
-  statValue: {
-    ...type.small,
-    color: colors.muted,
-    fontWeight: "800",
-    width: 28,
-    textAlign: "center",
-    fontVariant: ["tabular-nums"],
-  },
-  statValueLead: {
-    color: colors.line,
-  },
-  statLabel: {
-    ...type.caption,
-    color: colors.muted,
-    letterSpacing: 0,
-  },
-  statBar: {
-    flexDirection: "row",
-    height: 5,
-    borderRadius: 3,
-    overflow: "hidden",
-    marginTop: 5,
-  },
-  statBarEmpty: {
-    height: 5,
-    borderRadius: 3,
-    marginTop: 5,
-    backgroundColor: colors.faint,
-  },
-  statBarHome: {
-    backgroundColor: colors.green,
-  },
-  statBarAway: {
-    backgroundColor: colors.live,
-  },
-  bestGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.sm,
-  },
-  bestCard: {
-    flexBasis: "47%",
-    flexGrow: 1,
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.faint,
-    borderRadius: radius.md,
-    padding: spacing.md,
-  },
-  bestCardFirst: {
-    borderColor: colors.yellow,
-    backgroundColor: colors.goldDim + "55",
-  },
-  bestRank: {
-    alignSelf: "flex-start",
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: colors.turfDim,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  bestRankText: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: colors.turf,
-  },
-  bestName: {
-    ...type.caption,
-    color: colors.line,
-    letterSpacing: 0,
-  },
-  bestStats: {
-    flexDirection: "row",
-    gap: spacing.md,
-    marginTop: 2,
-  },
-  bestStat: {
-    alignItems: "center",
-  },
-  bestStatValue: {
-    ...type.small,
-    color: colors.turf,
-    fontWeight: "800",
-    fontVariant: ["tabular-nums"],
-  },
-  bestStatEmpty: {
-    color: colors.muted,
-  },
-  bestStatLabel: {
-    fontSize: 8,
-    fontWeight: "700",
-    color: colors.muted,
-    letterSpacing: 0.5,
-  },
-  mvpCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    backgroundColor: colors.goldDim + "88",
-    borderWidth: 1,
-    borderColor: colors.yellow,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 2,
-    marginBottom: spacing.sm,
-  },
-  mvpBody: {
-    flex: 1,
-  },
-  mvpKicker: {
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 0.8,
-    color: colors.muted,
-  },
-  mvpName: {
-    ...type.small,
-    color: colors.line,
-    fontWeight: "800",
-  },
-  contentRow: {
-    flexDirection: "row",
-    gap: spacing.sm,
-    alignItems: "flex-start",
-    marginBottom: spacing.sm,
-  },
-  ytMini: {
-    width: 110,
-    gap: 6,
-    flexShrink: 0,
-  },
-  ytMiniThumb: {
-    width: 110,
-    height: 70,
-    borderRadius: radius.sm,
-    backgroundColor: "#111",
-    overflow: "hidden",
-    alignItems: "center",
-    justifyContent: "center",
-    position: "relative",
-  },
-  ytMiniImg: {
-    width: "100%",
-    height: "100%",
-  },
-  ytMiniPlay: {
-    position: "absolute",
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  ytMiniBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-    backgroundColor: "#FF000015",
-    borderRadius: radius.pill,
-    paddingVertical: 3,
-  },
-  ytMiniBadgeText: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: "#FF0000",
-  },
-  summaryBox: {
-    flex: 1,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.faint,
-    borderRadius: radius.sm,
-    padding: spacing.sm,
-    gap: 5,
-  },
-  summaryHead: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  summaryKicker: {
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 0.8,
-    color: colors.turf,
-  },
-  summaryText: {
-    ...type.small,
-    color: colors.line,
-    lineHeight: 18,
-  },
-  summaryEmpty: {
-    ...type.caption,
-    color: colors.muted,
-    letterSpacing: 0,
-    fontStyle: "italic",
-  },
-  videoButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.faint,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 2,
-    marginBottom: spacing.sm,
-  },
-  videoText: {
-    ...type.small,
-    color: colors.line,
-    fontWeight: "700",
-    flex: 1,
-  },
-  pressedRow: {
-    opacity: 0.7,
-  },
-  sectionSpacer: {
-    paddingTop: spacing.md,
-  },
-  placeholder: {
-    ...type.small,
-    color: colors.faint,
-    paddingVertical: spacing.md,
-  },
-  note: {
-    ...type.small,
-    color: colors.line,
-    lineHeight: 21,
-  },
-  eventTimeline: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 4,
-  },
-  eventSide: {
-    flex: 1,
-  },
-  eventCenter: {
-    alignItems: "center",
-    width: 44,
-    gap: 0,
-  },
-  eventLine: {
-    width: 1,
-    flex: 1,
-    minHeight: 8,
-    backgroundColor: colors.faint,
-  },
-  eventMinuteBadge: {
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 4,
-    paddingVertical: 2,
-    backgroundColor: colors.surface,
-  },
-  eventMinuteText: {
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 0.3,
-  },
-  eventBubble: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: radius.md,
-    marginRight: 4,
-  },
-  eventBubbleAway: {
-    marginRight: 0,
-    marginLeft: 4,
+  statHeadTeamRight: {
     justifyContent: "flex-end",
   },
-  eventIconWrap: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: colors.surfaceRaised,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
-  eventTextBlock: {
-    flex: 1,
-  },
-  eventNameHome: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: colors.line,
-  },
-  eventNameAway: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: colors.line,
-    textAlign: "right",
-  },
-  eventDetailHome: {
-    fontSize: 10,
-    color: colors.muted,
-    marginTop: 1,
-  },
-  eventDetailAway: {
-    fontSize: 10,
-    color: colors.muted,
-    textAlign: "right",
-    marginTop: 1,
-  },
-  lineupBlock: {
-    marginBottom: spacing.lg,
-  },
-  subsTitle: {
+  statHeadName: {
     ...type.caption,
-    color: colors.muted,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.xs,
+    color: colors.textPrimary,
+    flexShrink: 1,
   },
-  playerRow: {
+  statHeadVs: {
+    ...type.micro,
+    color: colors.textTertiary,
+  },
+  /** Karşılaştırma barları TEK kart gibi okunsun diye satırlar bitişiktir;
+   *  yalnız ilk ve son satır köşe yuvarlar. */
+  statCard: {
+    backgroundColor: colors.surface1,
+    marginHorizontal: layout.screenPadding,
+    paddingHorizontal: space.md,
+  },
+  statCardFirst: {
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    paddingTop: space.xs,
+  },
+  statCardLast: {
+    borderBottomLeftRadius: radius.lg,
+    borderBottomRightRadius: radius.lg,
+    paddingBottom: space.xs,
+  },
+  barsCard: {
+    backgroundColor: colors.surface1,
+    borderRadius: radius.lg,
+    marginHorizontal: layout.screenPadding,
+    paddingHorizontal: space.md,
+    paddingVertical: space.xs,
+  },
+  topRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.sm,
-    borderRadius: radius.sm,
-    backgroundColor: colors.surface,
-    marginBottom: 2,
+    gap: space.m,
+    paddingHorizontal: space.md,
+    paddingVertical: space.m,
   },
-  shirt: {
-    ...type.caption,
-    color: colors.muted,
-    width: 22,
+  topRowBorder: {
+    borderTopWidth: hairline,
+    borderTopColor: colors.separator,
+  },
+  topRank: {
+    ...type.tableNumStrong,
+    color: colors.textTertiary,
+    width: 16,
     textAlign: "center",
   },
-  playerName: {
-    ...type.small,
-    color: colors.line,
+  topTexts: {
     flex: 1,
+    gap: space.xxs,
   },
-  playerNameDim: {
-    color: colors.muted,
+  topName: {
+    ...type.bodySm,
+    color: colors.textPrimary,
   },
-  position: {
+  topMeta: {
     ...type.caption,
-    color: colors.faint,
+    color: colors.textSecondary,
   },
-  rating: {
-    ...type.caption,
-    color: colors.turf,
-    minWidth: 26,
-    textAlign: "right",
-  },
-  h2hCard: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.faint,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    gap: spacing.sm,
-  },
+
+  /* ---- H2H ---- */
   h2hHead: {
+    marginHorizontal: layout.screenPadding,
     flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    marginBottom: spacing.xs,
+    alignItems: "flex-start",
+    backgroundColor: colors.surface1,
+    borderRadius: radius.lg,
+    padding: space.md,
   },
   h2hTeam: {
     flex: 1,
-    gap: 4,
+    alignItems: "center",
+    gap: space.xs,
   },
   h2hTeamRight: {
-    alignItems: "flex-end",
-  },
-  h2hName: {
-    ...type.small,
-    color: colors.line,
-    fontWeight: "800",
-  },
-  h2hCenter: {
     alignItems: "center",
   },
-  h2hScore: {
-    ...type.subtitle,
-    color: colors.turf,
-    fontVariant: ["tabular-nums"],
+  h2hName: {
+    ...type.caption,
+    color: colors.textPrimary,
+    textAlign: "center",
   },
-  h2hSub: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: colors.muted,
+  h2hMiddle: {
+    minWidth: 72,
+    alignItems: "center",
+    gap: space.xxs,
+    paddingTop: space.s,
   },
-  h2hChips: {
+  h2hCount: {
+    ...type.scoreLg,
+    color: colors.brandAccent,
+  },
+  h2hTally: {
+    marginHorizontal: layout.screenPadding,
     flexDirection: "row",
-    gap: 3,
+    backgroundColor: colors.surface1,
+    borderRadius: radius.lg,
+    overflow: "hidden",
   },
-  h2hChip: {
-    width: 16,
-    height: 16,
-    borderRadius: 4,
+  tallyCell: {
+    flex: 1,
+    alignItems: "center",
+    gap: space.xxs,
+    paddingVertical: space.md,
+  },
+  tallyValue: {
+    ...type.scoreLg,
+  },
+  meetRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.m,
+    marginHorizontal: layout.screenPadding,
+    marginTop: space.xs,
+    paddingHorizontal: space.md,
+    paddingVertical: space.m,
+    backgroundColor: colors.surface1,
+    borderRadius: radius.md,
+  },
+  meetDate: {
+    ...type.caption,
+    color: colors.textTertiary,
+    width: 48,
+  },
+  meetChip: {
+    width: 20,
+    height: 20,
+    borderRadius: radius.xs,
     alignItems: "center",
     justifyContent: "center",
   },
-  h2hChipWin: { backgroundColor: colors.green },
-  h2hChipDraw: { backgroundColor: "#B9B5C6" },
-  h2hChipLoss: { backgroundColor: colors.live },
-  h2hChipText: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: colors.surface,
+  meetChipWin: {
+    backgroundColor: colors.win,
   },
-  h2hRow: {
+  meetChipDraw: {
+    backgroundColor: colors.draw,
+  },
+  meetChipLoss: {
+    backgroundColor: colors.loss,
+  },
+  meetChipText: {
+    ...type.micro,
+    color: colors.textOnStatus,
+  },
+  meetTeams: {
+    flex: 1,
+    ...type.bodySm,
+    color: colors.textPrimary,
+  },
+  meetScore: {
+    ...type.tableNumStrong,
+    color: colors.textPrimary,
+  },
+
+  /* ---- Puan durumu ---- */
+  stHead: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
-    backgroundColor: colors.surfaceRaised,
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
+    gap: space.sm,
+    paddingHorizontal: layout.screenPadding + space.md,
+    paddingVertical: space.sm,
   },
-  h2hDate: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: colors.muted,
-    width: 48,
+  stHeadRank: {
+    ...type.micro,
+    color: colors.textTertiary,
+    width: 18,
+    textAlign: "center",
   },
-  h2hMatch: {
-    ...type.caption,
-    color: colors.line,
-    letterSpacing: 0,
+  stHeadTeam: {
+    ...type.micro,
+    color: colors.textTertiary,
+    flex: 1,
+    marginLeft: layout.crestMd + space.sm,
+  },
+  stHeadNum: {
+    ...type.micro,
+    color: colors.textTertiary,
+    width: 28,
+    textAlign: "center",
+  },
+  stRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    height: STANDING_ROW_HEIGHT,
+    marginHorizontal: layout.screenPadding,
+    paddingHorizontal: space.md,
+    backgroundColor: colors.surface1,
+    borderRadius: radius.md,
+    marginBottom: space.xs,
+  },
+  stRowActive: {
+    backgroundColor: colors.brandDim,
+    borderWidth: 1,
+    borderColor: colors.brandBorder,
+  },
+  stRank: {
+    ...type.tableNum,
+    color: colors.textTertiary,
+    width: 18,
+    textAlign: "center",
+  },
+  stName: {
+    ...type.bodySm,
+    color: colors.textPrimary,
     flex: 1,
   },
-  h2hRowScore: {
-    ...type.small,
-    color: colors.line,
-    fontWeight: "800",
-    fontVariant: ["tabular-nums"],
+  stNameActive: {
+    ...type.h3,
+    color: colors.textPrimary,
   },
-  h2hHint: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: colors.muted,
+  stNum: {
+    ...type.tableNum,
+    width: 28,
+    textAlign: "center",
   },
-  h2hPressed: {
-    opacity: 0.7,
+  stMuted: {
+    color: colors.textSecondary,
+  },
+  stPos: {
+    color: colors.win,
+  },
+  stNeg: {
+    color: colors.loss,
+  },
+  stPoints: {
+    ...type.tableNumStrong,
+    color: colors.textPrimary,
   },
 });

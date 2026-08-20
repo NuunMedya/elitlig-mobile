@@ -1,62 +1,514 @@
+/**
+ * TÜRKİYE SIRALAMASI — tüm şehirlerin birleşik istatistik liderleri.
+ *
+ * NE: altı kategori sekmesi (Tabs) + dönem segmenti + ilk üçün podyumu +
+ * yoğun liste. Satıra dokunmak oyuncu profilini açar; sağ üstteki paylaş
+ * düğmesi ilk beşi bir kartta paylaşılabilir hâle getirir.
+ *
+ * VERİ: sıralama ucu kapsam parametresi verilmeyince ülke genelini döndürür;
+ * bu ekran o davranışı kullanır. "Bu Sezon" son 180 günü (yaklaşık son sezon)
+ * `startDate` ile daraltır. Sistem oyuncuları (HÜKMEN, antpl vb.) `JUNK` ile
+ * ayıklanır, aksi hâlde gol krallığını hükmen maçları kazanır.
+ *
+ * NEDEN SEKME (ÇİP DEĞİL): altı kategori var ve hepsi AYNI listenin farklı
+ * sıralaması — yani içerik gezinmesi, filtre değil. `Tabs` sığmayınca kayar,
+ * aktif sekmeyi kendi ortalar ve başlığın altında sabit durur.
+ *
+ * İLK ÜÇ NEDEN AYRI: sıralama ekranında asıl soru "kim birinci"dir; podyum
+ * bunu tek bakışta verir, kalan 47 satır ise yoğun liste olarak akar.
+ *
+ * ESKİ KAPILAR KAPATILDI: `components/ScreenHeader` → `components/ui`
+ * `ScreenHeader`, `components/States` → `components/ui`, `components/TeamCrest`
+ * `PlayerAvatar` → `components/ui` `Avatar`, `constants/theme` → `@/theme`,
+ * ham `Pressable` + elle yazılmış modal → `ListRow` / `Tabs` / `BottomSheet`.
+ */
+
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
-import { useMemo, useRef, useState } from "react";
-import { Alert, FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import ViewShot, { captureRef } from "react-native-view-shot";
+import React, { useCallback, useMemo, useRef, useState } from "react";
+import { FlatList, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { DetailHeader } from "@/components/ScreenHeader";
-import { EmptyState, ErrorState, Loading } from "@/components/States";
-import { PlayerAvatar } from "@/components/TeamCrest";
-import { colors, radius, spacing, type } from "@/constants/theme";
+import ViewShot, { captureRef } from "react-native-view-shot";
+import {
+  Avatar,
+  BottomSheet,
+  Button,
+  EmptyState,
+  ErrorState,
+  ListRow,
+  ScreenHeader,
+  SectionHeader,
+  SegmentedControl,
+  SkeletonListRow,
+  Tabs,
+  Touchable,
+  refreshControlProps,
+  useHeaderScroll,
+  useRefresh,
+  useToast,
+  type SegmentedItem,
+  type TabItem,
+} from "@/components/ui";
 import { getPlayerRankings } from "@/lib/api/players";
-import { queryKeys } from "@/lib/queryKeys";
 import type { PlayerRankRow, PlayerSort } from "@/lib/types";
+import {
+  colors,
+  hairline,
+  layout,
+  radius,
+  space,
+  textScale,
+  type,
+  upperTR,
+} from "@/theme";
 
-/**
- * Türkiye Sıralaması — tüm şehirlerin birleşik istatistik liderleri.
- *
- * Sıralama ucu kapsam parametresi verilmeyince ülke genelini döndürür; bu
- * ekran o davranışı kullanır. Altı kategori sekmesi vardır; her kategoride
- * ilk 3 podyumda, kalanlar listede gösterilir. Sistem oyuncuları (HÜKMEN,
- * antpl vb.) sıralamadan ayıklanır. Satıra dokunmak oyuncu profilini açar.
- */
+/* ═════════════════════════ SABİTLER (saf veri) ═════════════════════════ */
 
-const CATEGORIES: {
+interface Category {
   sort: PlayerSort;
   label: string;
+  /** Sağdaki rakamın birimi: "GOL", "PUAN". */
   unit: string;
-  value: (p: PlayerRankRow) => number;
-  display: (p: PlayerRankRow) => string;
-}[] = [
-  { sort: "mostValuable",  label: "En Değerli",   unit: "PUAN",  value: (p) => Number(p.points) || 0,         display: (p) => String(Number(p.points) || 0) },
-  { sort: "topScorers",    label: "Gol Kralı",     unit: "GOL",   value: (p) => Number(p.goals) || 0,          display: (p) => String(Number(p.goals) || 0) },
-  { sort: "goalsPerMatch", label: "Gol / Maç",     unit: "ORT",   value: (p) => Number(p.goalsPerMatch) || 0,  display: (p) => Number(p.goalsPerMatch ?? 0).toFixed(2) },
-  { sort: "mostMatches",   label: "En Çok Maç",    unit: "MAÇ",   value: (p) => Number(p.matches) || 0,        display: (p) => String(Number(p.matches) || 0) },
-  { sort: "pointsPerMatch",label: "Puan / Maç",    unit: "ORT",   value: (p) => Number(p.pointsPerMatch) || 0, display: (p) => Number(p.pointsPerMatch ?? 0).toFixed(2) },
-  { sort: "mostCards",     label: "En Çok Kart",   unit: "KART",  value: (p) => Number(p.cards) || 0,          display: (p) => String(Number(p.cards) || 0) },
+  /** Sıralama anahtarı — sunucu sırası bozuksa da liste tutarlı kalsın diye. */
+  value: (player: PlayerRankRow) => number;
+  /** Ekrana yazılan biçim (ortalamalar iki basamak). */
+  display: (player: PlayerRankRow) => string;
+}
+
+const CATEGORIES: Category[] = [
+  { sort: "mostValuable",   label: "En Değerli",  unit: "PUAN", value: (p) => Number(p.points) || 0,         display: (p) => String(Number(p.points) || 0) },
+  { sort: "topScorers",     label: "Gol Kralı",   unit: "GOL",  value: (p) => Number(p.goals) || 0,          display: (p) => String(Number(p.goals) || 0) },
+  { sort: "goalsPerMatch",  label: "Gol / Maç",   unit: "ORT",  value: (p) => Number(p.goalsPerMatch) || 0,  display: (p) => Number(p.goalsPerMatch ?? 0).toFixed(2) },
+  { sort: "mostMatches",    label: "En Çok Maç",  unit: "MAÇ",  value: (p) => Number(p.matches) || 0,        display: (p) => String(Number(p.matches) || 0) },
+  { sort: "pointsPerMatch", label: "Puan / Maç",  unit: "ORT",  value: (p) => Number(p.pointsPerMatch) || 0, display: (p) => Number(p.pointsPerMatch ?? 0).toFixed(2) },
+  { sort: "mostCards",      label: "En Çok Kart", unit: "KART", value: (p) => Number(p.cards) || 0,          display: (p) => String(Number(p.cards) || 0) },
 ];
 
+const TAB_ITEMS: TabItem<PlayerSort>[] = CATEGORIES.map((item) => ({
+  key: item.sort,
+  label: item.label,
+}));
+
+/** Sistem oyuncuları — sıralamada yerleri yok. */
 const JUNK = /hükmen|hukmen|antpl/i;
+
+/** Listede tutulan en fazla satır: 50'den sonrası kimseyi ilgilendirmiyor. */
+const MAX_ROWS = 50;
+
+type Period = "recent" | "alltime";
+
+const PERIOD_ITEMS: SegmentedItem<Period>[] = [
+  { key: "recent", label: "Bu Sezon" },
+  { key: "alltime", label: "Tüm Zamanlar" },
+];
+
+/** Podyum basamağı renkleri — altın, gümüş, bronz karşılığı tokenlar. */
+const PODIUM_TONES = [colors.star, colors.textTertiary, colors.warn] as const;
+
+/* — Paylaşım kartı — */
+type ShareFormat = "story" | "post";
+
+const SHARE_WIDTH = 272;
+const SHARE_FORMATS: Record<ShareFormat, { label: string; height: number }> = {
+  story: { label: "Hikâye 9:16", height: Math.round((SHARE_WIDTH * 16) / 9) },
+  post: { label: "Gönderi 3:4", height: Math.round((SHARE_WIDTH * 4) / 3) },
+};
+
+const SHARE_ITEMS: SegmentedItem<ShareFormat>[] = [
+  { key: "story", label: SHARE_FORMATS.story.label },
+  { key: "post", label: SHARE_FORMATS.post.label },
+];
+
+/* ═════════════════════════ SAF YARDIMCILAR ═════════════════════════ */
+
+/** "Takım · Şehir" — ikisi de boşsa tire. */
+function metaOf(player: PlayerRankRow): string {
+  const parts = [player.teamName, player.city].filter(Boolean);
+  return parts.length > 0 ? parts.join(" · ") : "—";
+}
+
+/* ═════════════════════════ PODYUM ═════════════════════════ */
+
+/**
+ * NEDEN İLKEL PROP: basamak memo'lu; `PlayerRankRow` her sorgu dönüşünde yeni
+ * referans alır, ilkel değerlerde ise yalnız gerçekten değişen basamak
+ * yeniden çizilir.
+ */
+const PodiumStep = React.memo(function PodiumStep({
+  place,
+  id,
+  name,
+  image,
+  meta,
+  display,
+  unit,
+  onOpen,
+}: {
+  /** 1, 2 veya 3. */
+  place: number;
+  id: number;
+  name: string;
+  image: string | null;
+  meta: string;
+  display: string;
+  unit: string;
+  onOpen: (playerId: number) => void;
+}) {
+  const tone = PODIUM_TONES[place - 1] ?? colors.textTertiary;
+  const first = place === 1;
+  const press = useCallback(() => onOpen(id), [id, onOpen]);
+
+  return (
+    <Touchable
+      feedback="card"
+      haptic="light"
+      onPress={press}
+      style={[styles.step, first ? styles.stepFirst : null]}
+      accessibilityRole="button"
+      accessibilityLabel={`${place}. sıra: ${name}, ${display} ${unit}`}
+    >
+      <Avatar
+        name={name}
+        image={image}
+        size={first ? 48 : 40}
+        ring={first ? "brand" : "none"}
+      />
+
+      {/* NEDEN DOLU DEĞİL ÇERÇEVE: altın/bronz dolgunun üstünde beyaz rakam
+          açık temada okunmuyor. Basamak rengi çerçevede yaşar, rakam her iki
+          temada da birincil metin rengiyle net kalır. */}
+      <View style={[styles.stepMedal, { borderColor: tone }]}>
+        <Text style={styles.stepMedalText} {...textScale.badge}>
+          {place}
+        </Text>
+      </View>
+
+      <Text style={styles.stepName} numberOfLines={1} {...textScale.dense}>
+        {name}
+      </Text>
+      <Text style={styles.stepMeta} numberOfLines={1} {...textScale.badge}>
+        {meta}
+      </Text>
+
+      <View style={[styles.stepValue, first ? styles.stepValueFirst : null]}>
+        <Text style={styles.stepValueText} {...textScale.dense}>
+          {display}
+        </Text>
+        <Text style={styles.stepValueUnit} {...textScale.badge}>
+          {unit}
+        </Text>
+      </View>
+    </Touchable>
+  );
+});
+
+/* ═════════════════════════ LİSTE SATIRI ═════════════════════════ */
+
+const RankRow = React.memo(function RankRow({
+  id,
+  rank,
+  name,
+  image,
+  meta,
+  display,
+  unit,
+  position,
+  onOpen,
+}: {
+  id: number;
+  rank: number;
+  name: string;
+  image: string | null;
+  meta: string;
+  display: string;
+  unit: string;
+  position: "single" | "first" | "middle" | "last";
+  onOpen: (playerId: number) => void;
+}) {
+  const press = useCallback(() => onOpen(id), [id, onOpen]);
+
+  return (
+    <ListRow
+      leading={
+        /* `ListRow` sol yuvası 24px'tir ve içeriği ORTALAR. Sıra + amblem
+           ikilisi bu yuvadan taşar; toplam genişlik 46px'te tutuluyor ki
+           taşma satır iç boşluğunu (12px) ve başlıkla arasındaki boşluğu
+           (10px) aşmasın — yani hiçbir şeyin üstüne binmesin. */
+        <View style={styles.rowLeading}>
+          <Text style={styles.rowRank} {...textScale.dense}>
+            {rank}
+          </Text>
+          <Avatar name={name} image={image} size={layout.crestMd} />
+        </View>
+      }
+      title={name}
+      subtitle={meta}
+      position={position}
+      onPress={press}
+      chevron={false}
+      trailing={
+        <View style={styles.rowValue}>
+          <Text style={styles.rowValueText} {...textScale.dense}>
+            {display}
+          </Text>
+          <Text style={styles.rowValueUnit} {...textScale.badge}>
+            {unit}
+          </Text>
+        </View>
+      }
+    />
+  );
+});
+
+/* ═════════════════════════ EKRAN ═════════════════════════ */
 
 export default function TurkeyRankingsScreen() {
   const router = useRouter();
-  const [category, setCategory] = useState(CATEGORIES[0]);
-  const [period, setPeriod] = useState<"recent" | "alltime">("recent");
+  const { scrollY, scrollProps } = useHeaderScroll();
+
+  const [sort, setSort] = useState<PlayerSort>(CATEGORIES[0].sort);
+  const [period, setPeriod] = useState<Period>("recent");
   const [shareOpen, setShareOpen] = useState(false);
+
+  const category = useMemo(
+    () => CATEGORIES.find((item) => item.sort === sort) ?? CATEGORIES[0],
+    [sort]
+  );
+
+  /** "Bu Sezon": bugünden 180 gün öncesi (YYYY-MM-DD) — yaklaşık son sezon. */
+  const startDate = useMemo(() => {
+    const date = new Date();
+    date.setDate(date.getDate() - 180);
+    return date.toISOString().slice(0, 10);
+  }, []);
+
+  const query = useQuery({
+    queryKey: ["turkey", period, category.sort, startDate],
+    queryFn: () => getPlayerRankings(period === "recent" ? { startDate } : {}, category.sort),
+    staleTime: 10 * 60_000,
+  });
+
+  const players = useMemo(
+    () =>
+      (query.data?.players ?? [])
+        .filter((player) => player.name && !JUNK.test(player.name))
+        .sort((a, b) => category.value(b) - category.value(a))
+        .slice(0, MAX_ROWS),
+    [query.data, category]
+  );
+
+  const podium = useMemo(() => players.slice(0, 3), [players]);
+  const rest = useMemo(() => players.slice(3), [players]);
+
+  const refresh = useRefresh(query.refetch, { refreshing: query.isRefetching });
+  const refreshControl = useMemo(
+    () => <RefreshControl {...refreshControlProps(refresh.refreshing, refresh.onRefresh)} />,
+    [refresh.refreshing, refresh.onRefresh]
+  );
+
+  const openPlayer = useCallback(
+    (playerId: number) => router.push(`/oyuncu/${playerId}`),
+    [router]
+  );
+
+  const openShare = useCallback(() => setShareOpen(true), []);
+  const closeShare = useCallback(() => setShareOpen(false), []);
+
+  const headerActions = useMemo(
+    () =>
+      players.length > 0
+        ? [
+            {
+              icon: "share-social-outline" as keyof typeof Ionicons.glyphMap,
+              onPress: openShare,
+              accessibilityLabel: "Sıralamayı paylaş",
+            },
+          ]
+        : undefined,
+    [players.length, openShare]
+  );
+
+  const tabs = useMemo(
+    () => (
+      <View style={styles.tabBand}>
+        <Tabs items={TAB_ITEMS} value={sort} onChange={setSort} distribute="scroll" />
+      </View>
+    ),
+    [sort]
+  );
+
+  const renderItem = useCallback(
+    ({ item, index }: { item: PlayerRankRow; index: number }) => (
+      <RankRow
+        id={item.id}
+        rank={index + 4}
+        name={item.name}
+        image={item.image ?? null}
+        meta={metaOf(item)}
+        display={category.display(item)}
+        unit={category.unit}
+        position={
+          rest.length === 1
+            ? "single"
+            : index === 0
+              ? "first"
+              : index === rest.length - 1
+                ? "last"
+                : "middle"
+        }
+        onOpen={openPlayer}
+      />
+    ),
+    [category, openPlayer, rest.length]
+  );
+
+  const listHeader = (
+    <View style={styles.listHeader}>
+      {/* Bayat veri ekranda kalsın: hata bandı listeyi silmez. */}
+      {query.isError && players.length > 0 ? (
+        <ErrorState error={query.error} variant="banner" />
+      ) : null}
+
+      <SegmentedControl items={PERIOD_ITEMS} value={period} onChange={setPeriod} size="sm" />
+
+      {podium.length > 0 ? (
+        <>
+          <View style={styles.podium}>
+            {/* 2 · 1 · 3 sırası: birinci ortada ve bir tık yukarıda durur. */}
+            {podium[1] ? (
+              <PodiumStep
+                place={2}
+                id={podium[1].id}
+                name={podium[1].name}
+                image={podium[1].image ?? null}
+                meta={metaOf(podium[1])}
+                display={category.display(podium[1])}
+                unit={category.unit}
+                onOpen={openPlayer}
+              />
+            ) : (
+              <View style={styles.step} />
+            )}
+
+            <PodiumStep
+              place={1}
+              id={podium[0].id}
+              name={podium[0].name}
+              image={podium[0].image ?? null}
+              meta={metaOf(podium[0])}
+              display={category.display(podium[0])}
+              unit={category.unit}
+              onOpen={openPlayer}
+            />
+
+            {podium[2] ? (
+              <PodiumStep
+                place={3}
+                id={podium[2].id}
+                name={podium[2].name}
+                image={podium[2].image ?? null}
+                meta={metaOf(podium[2])}
+                display={category.display(podium[2])}
+                unit={category.unit}
+                onOpen={openPlayer}
+              />
+            ) : (
+              <View style={styles.step} />
+            )}
+          </View>
+
+          {rest.length > 0 ? (
+            <SectionHeader title={category.label} meta={`${players.length} oyuncu`} />
+          ) : null}
+        </>
+      ) : null}
+    </View>
+  );
+
+  return (
+    <SafeAreaView style={styles.screen} edges={["top"]}>
+      <ScreenHeader
+        title="Türkiye Sıralaması"
+        overline="🇹🇷 TÜM ŞEHİRLER"
+        subtitle={period === "recent" ? "Son 6 ayın liderleri" : "Tüm zamanların liderleri"}
+        back
+        scrollY={scrollY}
+        actions={headerActions}
+        bottom={tabs}
+      />
+
+      {query.isLoading ? (
+        <View style={styles.loading}>
+          <SkeletonListRow count={8} />
+        </View>
+      ) : query.isError && players.length === 0 ? (
+        <ErrorState error={query.error} onRetry={query.refetch} />
+      ) : (
+        <FlatList
+          {...scrollProps}
+          data={rest}
+          keyExtractor={(item) => String(item.id)}
+          renderItem={renderItem}
+          ListHeaderComponent={listHeader}
+          contentContainerStyle={styles.list}
+          showsVerticalScrollIndicator={false}
+          refreshControl={refreshControl}
+          ListEmptyComponent={
+            players.length === 0 ? (
+              <EmptyState
+                icon="trophy-outline"
+                title="Sıralama boş"
+                body="Bu kategoride henüz veri yok. Başka bir dönem dener misin?"
+                variant="inline"
+              />
+            ) : null
+          }
+        />
+      )}
+
+      <ShareSheet
+        visible={shareOpen}
+        onClose={closeShare}
+        categoryLabel={category.label}
+        unit={category.unit}
+        period={period}
+        players={players}
+        display={category.display}
+      />
+    </SafeAreaView>
+  );
+}
+
+/* ═════════════════════════ PAYLAŞIM KARTI ═════════════════════════ */
+
+function ShareSheet({
+  visible,
+  onClose,
+  categoryLabel,
+  unit,
+  period,
+  players,
+  display,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  categoryLabel: string;
+  unit: string;
+  period: Period;
+  players: PlayerRankRow[];
+  display: (player: PlayerRankRow) => string;
+}) {
+  const toast = useToast();
+  const [format, setFormat] = useState<ShareFormat>("story");
   const [busy, setBusy] = useState(false);
-  const [fmt, setFmt] = useState<"story" | "post">("story");
   const shotRef = useRef<View>(null);
 
-  const CARD_W = 272;
-  const FORMATS = {
-    story: { label: "Hikâye 9:16", height: Math.round((CARD_W * 16) / 9) },
-    post:  { label: "Gönderi 3:4", height: Math.round((CARD_W * 4) / 3) },
-  } as const;
+  const top = useMemo(() => players.slice(0, 5), [players]);
 
-  const share = async () => {
+  const share = useCallback(async () => {
     if (busy) return;
     setBusy(true);
     try {
@@ -65,636 +517,317 @@ export default function TurkeyRankingsScreen() {
         await Sharing.shareAsync(uri, { mimeType: "image/png" });
       }
     } catch {
-      Alert.alert("Bir sorun oldu", "Görsel oluşturulamadı, tekrar dener misin?");
+      toast.show({ message: "Görsel oluşturulamadı, tekrar dener misin?", tone: "danger" });
     } finally {
       setBusy(false);
     }
-  };
-
-  // "Bu Sezon": filtre yanıtından en yüksek 8 sezon ID'si seçilir → yaklaşık son 6 ay.
-  /** Son 6 ay: bugünden 180 gün öncesi (YYYY-MM-DD). */
-  const startDate = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 180);
-    return d.toISOString().slice(0, 10);
-  }, []);
-
-  const query = useQuery({
-    queryKey: ["turkey", period, category.sort, startDate],
-    queryFn: () =>
-      getPlayerRankings(period === "recent" ? { startDate } : {}, category.sort),
-    staleTime: 10 * 60_000,
-  });
-
-  const players = useMemo(
-    () =>
-      (query.data?.players ?? [])
-        .filter((p) => p.name && !JUNK.test(p.name))
-        .sort((a, b) => category.value(b) - category.value(a))
-        .slice(0, 50),
-    [query.data, category]
-  );
-  const podium = players.slice(0, 3);
-  const rest = players.slice(3);
+  }, [busy, toast]);
 
   return (
-    <SafeAreaView style={styles.screen} edges={["top"]}>
-      <DetailHeader title="🇹🇷 Türkiye Sıralaması" subtitle="Tüm şehirler · son 6 ay" />
+    <BottomSheet visible={visible} onClose={onClose} title="Sıralamayı paylaş" snap="full">
+      <SegmentedControl items={SHARE_ITEMS} value={format} onChange={setFormat} />
 
-      {/* Kategori sekmeleri */}
-      <View>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.tabs}
-        >
-          {CATEGORIES.map((item) => {
-            const active = item.sort === category.sort;
-            return (
-              <Pressable
-                key={item.sort}
-                onPress={() => setCategory(item)}
-                style={({ pressed }) => [
-                  styles.tab,
-                  active && styles.tabActive,
-                  pressed && styles.pressed,
-                ]}
-              >
-                <Text style={[styles.tabText, active && styles.tabTextActive]}>{item.label}</Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-      </View>
+      <View style={styles.shareWrap}>
+        <ViewShot ref={shotRef} options={{ format: "png", quality: 1 }}>
+          <View style={[styles.shareCard, { height: SHARE_FORMATS[format].height }]}>
+            <LinearGradient
+              colors={[colors.brand, colors.brandStrong]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.shareStrip}
+            />
 
-      {/* Dönem toggle */}
-      <View style={styles.periodRow}>
-        {([ ["recent", "Bu Sezon"], ["alltime", "Tüm Zamanlar"] ] as const).map(([key, label]) => (
-          <Pressable
-            key={key}
-            onPress={() => setPeriod(key)}
-            style={({ pressed }) => [
-              styles.periodBtn,
-              period === key && styles.periodBtnActive,
-              pressed && styles.pressed,
-            ]}
-          >
-            <Text style={[styles.periodText, period === key && styles.periodTextActive]}>
-              {label}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
+            <View style={styles.shareBody}>
+              <View style={styles.shareTop}>
+                <Text style={styles.shareBrand} {...textScale.badge}>
+                  elitlig
+                </Text>
+                <Text style={styles.shareCorner} {...textScale.badge}>
+                  {upperTR("Elitlig Mobil")}
+                </Text>
+              </View>
 
-      {players.length > 0 ? (
-        <Pressable
-          onPress={() => setShareOpen(true)}
-          style={({ pressed }) => [styles.shareTrigger, pressed && styles.pressed]}
-        >
-          <Ionicons name="share-social" size={14} color={colors.turf} />
-          <Text style={styles.shareTriggerText}>Sıralamayı Paylaş</Text>
-        </Pressable>
-      ) : null}
+              <Text style={styles.shareKicker} numberOfLines={1} {...textScale.badge}>
+                {upperTR(`🇹🇷 Türkiye · ${period === "recent" ? "bu sezon" : "tüm zamanlar"}`)}
+              </Text>
+              <Text style={styles.shareTitle} numberOfLines={1} {...textScale.badge}>
+                {upperTR(categoryLabel)}
+              </Text>
 
-      {query.isLoading ? (
-        <Loading />
-      ) : query.isError ? (
-        <ErrorState error={query.error} onRetry={query.refetch} />
-      ) : players.length === 0 ? (
-        <EmptyState icon="trophy-outline" title="Veri yok" body="Sıralama şu an boş görünüyor." />
-      ) : (
-        <FlatList
-          data={rest}
-          keyExtractor={(item) => String(item.id)}
-          contentContainerStyle={styles.list}
-          ListHeaderComponent={
-            <View style={styles.podium}>
-              {[podium[1], podium[0], podium[2]].filter(Boolean).map((p) => {
-                const rank = podium.indexOf(p) + 1;
-                const first = rank === 1;
-                return (
-                  <Pressable
-                    key={p.id}
-                    onPress={() => router.push(`/oyuncu/${p.id}`)}
-                    style={({ pressed }) => [
-                      styles.podiumCard,
-                      first && styles.podiumFirst,
-                      pressed && styles.pressed,
-                    ]}
+              <View style={styles.shareList}>
+                {top.map((player, index) => (
+                  <View
+                    key={player.id}
+                    style={[styles.shareRow, index > 0 ? styles.shareRowBorder : null]}
                   >
-                    <Text style={styles.podiumRank}>{rank === 1 ? "🥇" : rank === 2 ? "🥈" : "🥉"}</Text>
-                    <PlayerAvatar name={p.name} image={p.image} size={first ? 56 : 44} />
-                    <Text style={styles.podiumName} numberOfLines={1}>
-                      {p.name.toLocaleUpperCase("tr-TR")}
+                    <Text style={styles.shareRank} {...textScale.badge}>
+                      {index + 1}
                     </Text>
-                    <Text style={styles.podiumTeam} numberOfLines={1}>
-                      {[p.teamName, p.city].filter(Boolean).join(" · ")}
-                    </Text>
-                    <Text style={[styles.podiumValue, first && styles.podiumValueFirst]}>
-                      {category.display(p)}
-                    </Text>
-                    <Text style={styles.podiumUnit}>{category.unit}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          }
-          renderItem={({ item, index }) => (
-            <Pressable
-              onPress={() => router.push(`/oyuncu/${item.id}`)}
-              style={({ pressed }) => [styles.row, pressed && styles.pressed]}
-            >
-              <Text style={styles.rowRank}>{index + 4}</Text>
-              <PlayerAvatar name={item.name} image={item.image} size={34} />
-              <View style={styles.rowBody}>
-                <Text style={styles.rowName} numberOfLines={1}>
-                  {item.name.toLocaleUpperCase("tr-TR")}
-                </Text>
-                <Text style={styles.rowTeam} numberOfLines={1}>
-                  {[item.teamName, item.city].filter(Boolean).join(" · ")}
-                </Text>
-              </View>
-              <View style={styles.rowValueBox}>
-                <Text style={styles.rowValue}>{category.display(item)}</Text>
-                <Text style={styles.rowUnit}>{category.unit}</Text>
-              </View>
-            </Pressable>
-          )}
-        />
-      )}
-      {/* Paylaşım penceresi — İçerik Havuzu dili */}
-      <Modal
-        visible={shareOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShareOpen(false)}
-      >
-        <View style={styles.backdrop}>
-          {/* Boy seçici */}
-          <View style={styles.fmtRow}>
-            {(["story", "post"] as const).map((key) => (
-              <Pressable
-                key={key}
-                onPress={() => setFmt(key)}
-                style={({ pressed }) => [
-                  styles.fmtPill,
-                  fmt === key && styles.fmtPillActive,
-                  pressed && styles.pressed,
-                ]}
-              >
-                <Text style={styles.fmtText}>{FORMATS[key].label}</Text>
-              </Pressable>
-            ))}
-          </View>
-
-          <ViewShot ref={shotRef} options={{ format: "png", quality: 1 }}>
-            <View style={[styles.shareFrame, { height: FORMATS[fmt].height }]}>
-              <LinearGradient
-                colors={["#6D28D9", "#4C1D95"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.shareStrip}
-              />
-              <LinearGradient
-                colors={["#CDBFE8", "#EFEAF7", "#FFFFFF"]}
-                start={{ x: 0.2, y: 0 }}
-                end={{ x: 0.5, y: 1 }}
-                style={styles.shareBody}
-              >
-                <Text style={styles.shareWatermark}>elitlig</Text>
-                <View style={styles.shareHeadRow}>
-                  <Text style={styles.shareBrand}>elitlig</Text>
-                  <Text style={styles.shareCorner}>ELİTLİG MOBİL</Text>
-                </View>
-                <Text style={styles.shareKicker}>
-                  🇹🇷 TÜRKİYE  •  {period === "recent" ? "BU SEZON" : "TÜM ZAMANLAR"}
-                </Text>
-                <Text style={styles.shareHeadline}>
-                  {category.label.toLocaleUpperCase("tr-TR")}
-                </Text>
-
-                <View style={styles.shareListCard}>
-                  {players.slice(0, 5).map((pl, index) => (
-                    <View
-                      key={pl.id}
-                      style={[styles.shareRow, index > 0 && styles.shareRowBorder]}
-                    >
-                      <Text style={styles.shareRank}>
-                        {index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : `${index + 1}.`}
+                    <Avatar name={player.name} image={player.image ?? null} size={24} />
+                    <View style={styles.flex}>
+                      <Text style={styles.shareName} numberOfLines={1} {...textScale.badge}>
+                        {player.name}
                       </Text>
-                      <PlayerAvatar name={pl.name} image={pl.image} size={26} />
-                      <View style={styles.shareRowBody}>
-                        <Text style={styles.shareName} numberOfLines={1}>
-                          {pl.name.toLocaleUpperCase("tr-TR")}
-                        </Text>
-                        <Text style={styles.shareTeam} numberOfLines={1}>
-                          {[pl.teamName, pl.city].filter(Boolean).join(" · ")}
-                        </Text>
-                      </View>
-                      <View style={styles.shareValueBox}>
-                        <Text style={styles.shareValue}>{category.display(pl)}</Text>
-                        <Text style={styles.shareUnit}>{category.unit}</Text>
-                      </View>
+                      <Text style={styles.shareMeta} numberOfLines={1} {...textScale.badge}>
+                        {metaOf(player)}
+                      </Text>
                     </View>
-                  ))}
-                </View>
+                    <View style={styles.shareValueBox}>
+                      <Text style={styles.shareValue} {...textScale.badge}>
+                        {display(player)}
+                      </Text>
+                      <Text style={styles.shareUnit} {...textScale.badge}>
+                        {unit}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
 
-                <View style={styles.shareSpacer} />
-                <View style={styles.shareFooter}>
-                  <Text style={styles.shareSite}>ELİTLİG.COM</Text>
-                </View>
-              </LinearGradient>
+              <View style={styles.flex} />
+
+              <Text style={styles.shareFooter} {...textScale.badge}>
+                {upperTR("elitlig.com")}
+              </Text>
             </View>
-          </ViewShot>
-
-          <View style={styles.shareActions}>
-            <Pressable
-              onPress={() => setShareOpen(false)}
-              style={({ pressed }) => [styles.actionBtn, styles.closeBtn, pressed && styles.pressed]}
-            >
-              <Text style={styles.closeText}>Kapat</Text>
-            </Pressable>
-            <Pressable
-              onPress={share}
-              style={({ pressed }) => [styles.actionBtn, styles.goBtn, pressed && styles.pressed]}
-            >
-              <Ionicons name="share-social" size={16} color={colors.surface} />
-              <Text style={styles.goText}>{busy ? "Hazırlanıyor…" : "Paylaş"}</Text>
-            </Pressable>
           </View>
-          <Text style={styles.saveHint}>İndirmek için: Paylaş → "Görüntüyü Kaydet"</Text>
-        </View>
-      </Modal>
-    </SafeAreaView>
+        </ViewShot>
+      </View>
+
+      <Button
+        label={busy ? "Hazırlanıyor" : "Paylaş"}
+        icon="share-social"
+        onPress={share}
+        loading={busy}
+        fullWidth
+      />
+      <Text style={styles.shareHint} {...textScale.dense}>
+        İndirmek için: Paylaş → Görüntüyü Kaydet
+      </Text>
+    </BottomSheet>
   );
 }
 
+/* ═════════════════════════ STİLLER ═════════════════════════ */
+
 const styles = StyleSheet.create({
-  periodRow: {
-    flexDirection: "row",
-    gap: spacing.sm,
-    paddingHorizontal: spacing.md,
-    marginBottom: spacing.sm,
+  screen: { flex: 1, backgroundColor: colors.bg },
+  flex: { flex: 1 },
+
+  tabBand: {
+    paddingBottom: space.xs,
   },
-  periodBtn: {
+  loading: {
+    padding: layout.screenPadding,
+  },
+  list: {
+    paddingHorizontal: layout.screenPadding,
+    paddingBottom: space.giant,
+  },
+  listHeader: {
+    gap: space.md,
+    paddingTop: space.md,
+    paddingBottom: space.sm,
+  },
+
+  /* — Podyum — */
+  podium: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    gap: space.sm,
+    backgroundColor: colors.surface1,
+    borderRadius: radius.lg,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    paddingHorizontal: space.md,
+    paddingTop: space.lg,
+    paddingBottom: space.md,
+  },
+  step: {
     flex: 1,
     alignItems: "center",
+    gap: space.xxs,
+  },
+  /* Birinci bir tık yukarıda durur — podyum basamağı hissi. */
+  stepFirst: {
+    marginBottom: space.m,
+  },
+  stepMedal: {
+    minWidth: 20,
+    height: 20,
     borderRadius: radius.pill,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.faint,
-    paddingVertical: spacing.sm + 2,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: space.xs,
+    marginTop: -space.m,
+    backgroundColor: colors.surface1,
+    borderWidth: 1.5,
   },
-  periodBtnActive: {
-    backgroundColor: colors.turf,
-    borderColor: colors.turf,
+  stepMedalText: {
+    ...type.micro,
+    color: colors.textPrimary,
   },
-  periodText: {
+  stepName: {
     ...type.caption,
-    color: colors.muted,
+    fontWeight: "800",
+    letterSpacing: 0,
+    color: colors.textPrimary,
+    textAlign: "center",
+    marginTop: space.xxs,
   },
-  periodTextActive: {
-    color: colors.surface,
+  stepMeta: {
+    ...type.micro,
+    fontWeight: "600",
+    letterSpacing: 0,
+    color: colors.textTertiary,
+    textAlign: "center",
   },
-  shareTrigger: {
+  stepValue: {
+    alignItems: "center",
+    borderRadius: radius.sm,
+    backgroundColor: colors.surface3,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xs,
+    marginTop: space.xs,
+  },
+  stepValueFirst: {
+    backgroundColor: colors.brandDim,
+  },
+  stepValueText: {
+    ...type.tableNumStrong,
+    color: colors.textPrimary,
+  },
+  stepValueUnit: {
+    ...type.micro,
+    color: colors.textTertiary,
+  },
+
+  /* — Liste satırı — */
+  rowLeading: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    alignSelf: "center",
-    backgroundColor: colors.turfDim,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    marginBottom: spacing.sm,
+    gap: space.xs,
   },
-  shareTriggerText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: colors.turf,
+  rowRank: {
+    ...type.tableNum,
+    color: colors.textTertiary,
+    width: 18,
+    textAlign: "center",
   },
-  backdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.65)",
+  rowValue: {
+    alignItems: "flex-end",
+    minWidth: 44,
+  },
+  rowValueText: {
+    ...type.scoreSm,
+    color: colors.textPrimary,
+  },
+  rowValueUnit: {
+    ...type.micro,
+    color: colors.textTertiary,
+  },
+
+  /* — Paylaşım kartı — */
+  shareWrap: {
     alignItems: "center",
-    justifyContent: "center",
-    padding: spacing.lg,
-    gap: spacing.md,
+    paddingVertical: space.md,
   },
-  fmtRow: {
-    flexDirection: "row",
-    gap: spacing.sm,
-  },
-  fmtPill: {
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.45)",
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  fmtPillActive: {
-    backgroundColor: colors.turf,
-    borderColor: colors.turf,
-  },
-  fmtText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#FFFFFF",
-  },
-  shareFrame: {
-    width: 272,
-    backgroundColor: "#0B0A0E",
-    borderRadius: 14,
-    padding: 7,
+  shareCard: {
+    width: SHARE_WIDTH,
+    backgroundColor: colors.surface1,
+    borderRadius: radius.lg,
     overflow: "hidden",
   },
   shareStrip: {
-    height: 7,
-    borderTopLeftRadius: 8,
-    borderTopRightRadius: 8,
+    height: 6,
   },
   shareBody: {
     flex: 1,
-    borderBottomLeftRadius: 8,
-    borderBottomRightRadius: 8,
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm + 2,
-    paddingBottom: spacing.sm,
-    overflow: "hidden",
+    padding: space.md,
+    gap: space.xs,
   },
-  shareSpacer: {
-    flex: 1,
-  },
-  shareWatermark: {
-    position: "absolute",
-    right: -30,
-    bottom: 14,
-    fontSize: 70,
-    fontWeight: "900",
-    color: "#6D28D9",
-    opacity: 0.07,
-    transform: [{ rotate: "-14deg" }],
-  },
-  shareHeadRow: {
+  shareTop: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
   shareBrand: {
-    fontSize: 14,
-    fontWeight: "900",
-    color: "#6D28D9",
+    ...type.label,
+    color: colors.brand,
   },
   shareCorner: {
-    fontSize: 8,
-    fontWeight: "800",
-    letterSpacing: 1,
-    color: "#6D28D9",
+    ...type.micro,
+    color: colors.textTertiary,
   },
   shareKicker: {
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 0.6,
-    color: "#6D28D9",
-    marginTop: spacing.sm,
+    ...type.micro,
+    color: colors.brandAccent,
+    marginTop: space.sm,
   },
-  shareHeadline: {
-    fontSize: 18,
-    fontWeight: "900",
-    letterSpacing: -0.3,
-    color: "#100D16",
-    marginTop: 2,
-    marginBottom: spacing.sm,
+  shareTitle: {
+    ...type.h2,
+    color: colors.textPrimary,
   },
-  shareListCard: {
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#D9CBF2",
-    borderRadius: 14,
-    paddingVertical: 4,
-    paddingHorizontal: spacing.sm,
+  shareList: {
+    backgroundColor: colors.surface2,
+    borderRadius: radius.md,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    paddingHorizontal: space.sm,
+    marginTop: space.sm,
   },
   shareRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingVertical: 7,
+    gap: space.sm,
+    paddingVertical: space.s,
   },
   shareRowBorder: {
-    borderTopWidth: 1,
-    borderTopColor: "#EFE9FA",
+    borderTopWidth: hairline,
+    borderTopColor: colors.separator,
   },
   shareRank: {
-    width: 24,
-    fontSize: 11,
+    ...type.tableNumStrong,
+    color: colors.textTertiary,
+    minWidth: 14,
     textAlign: "center",
   },
-  shareRowBody: {
-    flex: 1,
-  },
   shareName: {
-    fontSize: 10,
+    ...type.caption,
     fontWeight: "800",
-    color: "#100D16",
+    letterSpacing: 0,
+    color: colors.textPrimary,
   },
-  shareTeam: {
-    fontSize: 8,
+  shareMeta: {
+    ...type.micro,
     fontWeight: "600",
-    color: "#8B8797",
-  },
-  shareValue: {
-    fontSize: 12,
-    fontWeight: "900",
-    color: "#6D28D9",
-    fontVariant: ["tabular-nums"],
-  },
-  shareFooter: {
-    alignItems: "center",
-    marginTop: spacing.sm + 2,
-  },
-  shareSite: {
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 2,
-    color: "#8B8797",
-  },
-  saveHint: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: "rgba(255,255,255,0.75)",
+    letterSpacing: 0,
+    color: colors.textTertiary,
   },
   shareValueBox: {
     alignItems: "flex-end",
   },
+  shareValue: {
+    ...type.tableNumStrong,
+    color: colors.brandAccent,
+  },
   shareUnit: {
-    fontSize: 7,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-    color: "#8B8797",
+    ...type.micro,
+    color: colors.textTertiary,
   },
-  shareActions: {
-    flexDirection: "row",
-    gap: spacing.md,
-  },
-  actionBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.sm + 3,
-  },
-  closeBtn: {
-    backgroundColor: "rgba(255,255,255,0.14)",
-  },
-  closeText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#FFFFFF",
-  },
-  goBtn: {
-    backgroundColor: colors.turf,
-  },
-  goText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: colors.surface,
-  },
-  screen: {
-    flex: 1,
-    backgroundColor: colors.pitch,
-  },
-  tabs: {
-    paddingHorizontal: spacing.md,
-    gap: spacing.sm,
-    paddingBottom: spacing.sm,
-  },
-  tab: {
-    borderRadius: radius.pill,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.faint,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  tabActive: {
-    backgroundColor: colors.turf,
-    borderColor: colors.turf,
-  },
-  tabText: {
-    ...type.caption,
-    color: colors.muted,
-  },
-  tabTextActive: {
-    color: colors.surface,
-  },
-  list: {
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.xl,
-  },
-  podium: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    gap: spacing.sm,
-    marginBottom: spacing.md,
-  },
-  podiumCard: {
-    flex: 1,
-    alignItems: "center",
-    gap: 3,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.faint,
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
-    paddingHorizontal: 6,
-  },
-  podiumFirst: {
-    borderColor: colors.yellow,
-    backgroundColor: colors.goldDim + "44",
-    paddingVertical: spacing.lg,
-  },
-  podiumRank: {
-    fontSize: 17,
-  },
-  podiumName: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: colors.line,
+  shareFooter: {
+    ...type.micro,
+    color: colors.textTertiary,
     textAlign: "center",
+    marginTop: space.sm,
   },
-  podiumTeam: {
-    fontSize: 8,
+  shareHint: {
+    ...type.caption,
     fontWeight: "600",
-    color: colors.muted,
-    textAlign: "center",
-  },
-  podiumValue: {
-    ...type.subtitle,
-    color: colors.turf,
-    fontVariant: ["tabular-nums"],
-    marginTop: 2,
-  },
-  podiumValueFirst: {
-    fontSize: 18,
-  },
-  podiumUnit: {
-    fontSize: 7,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-    color: colors.muted,
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.faint,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  rowRank: {
-    ...type.small,
-    color: colors.muted,
-    width: 24,
-    textAlign: "center",
-    fontVariant: ["tabular-nums"],
-  },
-  rowBody: {
-    flex: 1,
-  },
-  rowName: {
-    ...type.small,
-    fontWeight: "700",
-    color: colors.line,
-  },
-  rowTeam: {
-    ...type.caption,
-    color: colors.muted,
     letterSpacing: 0,
-    marginTop: 1,
-  },
-  rowValueBox: {
-    alignItems: "center",
-    minWidth: 48,
-  },
-  rowValue: {
-    ...type.body,
-    fontWeight: "800",
-    color: colors.turf,
-    fontVariant: ["tabular-nums"],
-  },
-  rowUnit: {
-    fontSize: 7,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-    color: colors.muted,
-  },
-  pressed: {
-    opacity: 0.7,
+    color: colors.textTertiary,
+    textAlign: "center",
+    marginTop: space.sm,
   },
 });

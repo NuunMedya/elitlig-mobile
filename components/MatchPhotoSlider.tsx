@@ -1,16 +1,34 @@
+/**
+ * Maç Fotoğrafları Sliderı.
+ *
+ * Fotoğrafı olan tamamlanmış maçları yatay kaydırmalı kart olarak gösterir;
+ * her karta dokunulduğunda maç detayına gider.
+ *
+ * TOKEN GEÇİŞİ: `@/constants/theme` kapısı kapatıldı; renk/uzay/tipografi
+ * `@/theme`ten, basma geri bildirimi `Touchable`dan geliyor.
+ *
+ * NEDEN KOYU GRADYAN TEMAYA BAĞLI DEĞİL: yazı bir FOTOĞRAFIN üstünde duruyor,
+ * uygulamanın zemininin üstünde değil. Açık temada `scrimGradientBottom` beyaza
+ * döner ve beyaz yazı kaybolurdu. Bu yüzden perde, koyu paletin zemin renginden
+ * (`darkPalette.bg`) saydamlıkla TÜRETİLİR — sabit hex yazılmaz ama iki temada
+ * da koyu kalır; yazı `textOnStatus` (dolgu üstü metin) tokenıyla okunur.
+ */
+
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { colors, radius, spacing, type } from "@/constants/theme";
+import { Image, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Touchable, withAlpha } from "@/components/ui";
+import { colors, dark as darkPalette, radius, space, textScale, type } from "@/theme";
 import { mediaUrl } from "@/lib/format";
 import { matchState } from "@/lib/match";
 import type { ApiMatch } from "@/lib/types";
 
-/**
- * Maç Fotoğrafları Sliderı
- * Fotoğrafı olan tamamlanmış maçları yatay kaydırmalı kart olarak gösterir.
- * Her karta dokunulduğunda maç detayına gider.
- */
+const CARD_W = 260;
+const CARD_H = 160;
+
+/** Fotoğraf üstü okunabilirlik perdesi — koyu paletin zemininden türetilir. */
+const SCRIM = [withAlpha(darkPalette.bg, 0), withAlpha(darkPalette.bg, 0.85)] as const;
+
 export function MatchPhotoSlider({ matches }: { matches: ApiMatch[] }) {
   const router = useRouter();
 
@@ -26,81 +44,77 @@ export function MatchPhotoSlider({ matches }: { matches: ApiMatch[] }) {
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.row}
       decelerationRate="fast"
-      snapToInterval={CARD_W + spacing.sm}
+      snapToInterval={CARD_W + space.sm}
       snapToAlignment="start"
     >
       {withPhoto.map((match) => {
         const photo = mediaUrl(match.match_picture);
         const hs = match.first_team_score ?? "-";
         const as = match.second_team_score ?? "-";
+        const teams = `${match.first_team_name} - ${match.second_team_name}`;
 
         return (
-          <Pressable
+          <Touchable
             key={match.id}
+            feedback="card"
+            haptic="selection"
             onPress={() => router.push(`/mac/${match.id}`)}
-            style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+            accessibilityRole="button"
+            accessibilityLabel={`${teams}, ${hs} - ${as}. Maç detayını aç`}
+            style={styles.card}
           >
             {photo ? (
               <Image source={{ uri: photo }} style={styles.photo} resizeMode="cover" />
             ) : (
               <View style={[styles.photo, styles.photoFallback]} />
             )}
-            <LinearGradient
-              colors={["transparent", "rgba(0,0,0,0.85)"]}
-              style={styles.gradient}
-            >
-              <Text style={styles.score}>{hs} – {as}</Text>
-              <Text style={styles.teams} numberOfLines={1}>
-                {match.first_team_name} vs {match.second_team_name}
+            <LinearGradient colors={SCRIM} style={styles.gradient}>
+              <Text style={styles.score} {...textScale.dense}>
+                {hs} – {as}
               </Text>
-
+              <Text style={styles.teams} numberOfLines={1} {...textScale.dense}>
+                {teams}
+              </Text>
             </LinearGradient>
-          </Pressable>
+          </Touchable>
         );
       })}
     </ScrollView>
   );
 }
 
-const CARD_W = 260;
-
 const styles = StyleSheet.create({
   row: {
-    paddingHorizontal: spacing.md,
-    gap: spacing.sm,
-    paddingBottom: spacing.sm,
+    paddingHorizontal: space.md,
+    gap: space.sm,
+    paddingBottom: space.sm,
   },
   card: {
     width: CARD_W,
-    height: 160,
-    borderRadius: radius.md,
+    height: CARD_H,
+    borderRadius: radius.lg,
     overflow: "hidden",
-    backgroundColor: colors.surfaceRaised,
+    backgroundColor: colors.surface2,
   },
   photo: {
     ...StyleSheet.absoluteFillObject,
   },
+  /** Fotoğraf çözülemezse kart boş kalmasın: sönük marka zemini. */
   photoFallback: {
-    backgroundColor: colors.turfDim,
+    backgroundColor: colors.brandDim,
   },
   gradient: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: "flex-end",
-    padding: spacing.sm + 2,
-    gap: 2,
+    padding: space.m,
+    gap: space.xxs,
   },
   score: {
-    fontSize: 20,
-    fontWeight: "900",
-    color: "#FFFFFF",
-    letterSpacing: -0.5,
-    fontVariant: ["tabular-nums"],
+    ...type.scoreMd,
+    color: colors.textOnStatus,
   },
   teams: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "rgba(255,255,255,0.85)",
+    ...type.caption,
+    color: withAlpha(colors.textOnStatus, 0.85),
   },
-
-  pressed: { opacity: 0.85 },
 });
