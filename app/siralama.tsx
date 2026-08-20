@@ -1,55 +1,216 @@
-import { useQuery } from "@tanstack/react-query";
-import { useLocalSearchParams } from "expo-router";
-import { useRef, useState } from "react";
-import { FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { DetailHeader } from "@/components/ScreenHeader";
-import { EmptyState, ErrorState, Loading } from "@/components/States";
-import { colors, radius, spacing, type } from "@/constants/theme";
-import { getArenaLeaderboard, getMyArenaRank, type ArenaGame } from "@/lib/api/arena";
-import { LinearGradient } from "expo-linear-gradient";
+/**
+ * REKOR TABLOSU — beş oyunun haftalık ve tüm zamanlar sıralaması.
+ *
+ * NE: oyun seçicisi (çip şeridi) + iki filtre segmenti (dönem, kapsam) +
+ * podyum (ilk üç) + yoğun liste (`ListRow`). Kullanıcının kendi satırı hem
+ * listede vurgulanır hem de listenin dışında kalıyorsa üstte sabit bir kartla
+ * gösterilir — "ben neredeyim" sorusu kaydırmadan yanıtlanır.
+ *
+ * NEDEN ÇİP + SEGMENT: beş oyun bir segmente sığmaz (segment 2–4 seçenek
+ * içindir), o yüzden oyun seçimi kaydırılabilir çip şerididir ve başlığın
+ * altında sabit durur. Dönem ve kapsam ise ikişer seçenek olduğu için
+ * `SegmentedControl`dür.
+ *
+ * PAYLAŞIM KARTI KORUNDU: aynı içerik (marka, oyun + dönem satırı, ilk beş,
+ * alt bilgi) ve iki boy (hikâye 9:16 / gönderi 3:4). Değişen yalnız kabuk:
+ * elle yazılmış modal + sabit hex yerine `BottomSheet`, `SegmentedControl`,
+ * `Button` ve tema tokenları.
+ *
+ * ESKİ KAPILAR KAPATILDI: `components/ScreenHeader` → `components/ui`
+ * `ScreenHeader`, `components/States` → `components/ui`, `constants/theme` →
+ * `@/theme`, ham `Pressable` → `Touchable`/`Chip`/`ListRow`.
+ */
+
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { useQuery } from "@tanstack/react-query";
+import { LinearGradient } from "expo-linear-gradient";
+import { useLocalSearchParams } from "expo-router";
 import * as Sharing from "expo-sharing";
-import ViewShot from "react-native-view-shot";
+import React, { useCallback, useMemo, useRef, useState } from "react";
+import { FlatList, RefreshControl, StyleSheet, Text, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import ViewShot, { captureRef } from "react-native-view-shot";
+import {
+  Avatar,
+  Badge,
+  BottomSheet,
+  Button,
+  Chip,
+  ChipGroup,
+  EmptyState,
+  ErrorState,
+  ListRow,
+  ScreenHeader,
+  SectionHeader,
+  SegmentedControl,
+  SkeletonListRow,
+  refreshControlProps,
+  useHeaderScroll,
+  useRefresh,
+  type SegmentedItem,
+} from "@/components/ui";
+import { getArenaLeaderboard, getMyArenaRank, type ArenaEntry, type ArenaGame } from "@/lib/api/arena";
 import { formatDateShort } from "@/lib/format";
 import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
+import {
+  colors,
+  hairline,
+  layout,
+  radius,
+  space,
+  textScale,
+  type,
+  upperTR,
+} from "@/theme";
 
-const GAMES: { key: ArenaGame; label: string; emoji: string }[] = [
-  { key: "seri",   label: "Seri Modu",    emoji: "🔥" },
-  { key: "sektir", label: "Top Sektir",   emoji: "⚽" },
-  { key: "kimbu",  label: "Kim Bu?",      emoji: "🕵️" },
-  { key: "slalom", label: "Slalom",       emoji: "🚩" },
-  { key: "gunun",  label: "Günün Testi",  emoji: "🧠" },
+/* ═════════════════════════ SABİTLER (saf veri) ═════════════════════════ */
+
+interface GameMeta {
+  key: ArenaGame;
+  label: string;
+  /** İkonlar `(tabs)/oyunlar.tsx` ile birebir aynı — oyun kimliği sabit kalsın. */
+  icon: keyof typeof Ionicons.glyphMap;
+  /** Skor birimi: "24 seri", "180 puan". */
+  unit: string;
+}
+
+const GAMES: GameMeta[] = [
+  { key: "seri", label: "Arena", icon: "flame", unit: "seri" },
+  { key: "sektir", label: "Top Sektir", icon: "football", unit: "sekme" },
+  { key: "kimbu", label: "Kim Bu?", icon: "search", unit: "puan" },
+  { key: "slalom", label: "Slalom", icon: "flag", unit: "koni" },
+  { key: "gunun", label: "Günün Testi", icon: "bulb", unit: "puan" },
 ];
+
+type Period = "weekly" | "alltime";
+type ScopeMode = "city" | "turkey";
+
+const PERIOD_ITEMS: SegmentedItem<Period>[] = [
+  { key: "weekly", label: "Haftalık" },
+  { key: "alltime", label: "Tüm Zamanlar" },
+];
+
+/** Podyum basamağı renkleri — altın, gümüş, bronz karşılığı tokenlar. */
+const PODIUM_TONES = [colors.star, colors.textTertiary, colors.warn] as const;
+
+/* — Paylaşım kartı — */
+type ShareFormat = "story" | "post";
+
+const SHARE_WIDTH = 272;
+const SHARE_FORMATS: Record<ShareFormat, { label: string; height: number }> = {
+  story: { label: "Hikâye 9:16", height: Math.round((SHARE_WIDTH * 16) / 9) },
+  post: { label: "Gönderi 3:4", height: Math.round((SHARE_WIDTH * 4) / 3) },
+};
+
+const SHARE_ITEMS: SegmentedItem<ShareFormat>[] = [
+  { key: "story", label: SHARE_FORMATS.story.label },
+  { key: "post", label: SHARE_FORMATS.post.label },
+];
+
+/* ═════════════════════════ SAF YARDIMCILAR ═════════════════════════ */
+
+/** 1240 → "1.240" (binlik ayracı Türkçe nokta). */
+function formatCount(value: number): string {
+  return String(Math.round(value)).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
+
+function readNumber(source: unknown, key: string): number | null {
+  if (typeof source !== "object" || source === null) return null;
+  const value = Number((source as Record<string, unknown>)[key]);
+  return Number.isFinite(value) ? value : null;
+}
+
+/**
+ * `getMyArenaRank` dönüşü `Record<string, unknown>`: sunucu alanı kimi zaman
+ * kökte (`rank`), kimi zaman `entry` nesnesinde veriyor. İkisine de bakılır ve
+ * hiçbir yerde `any` kullanılmaz.
+ */
+function readMyField(data: unknown, key: "rank" | "score" | "best"): number | null {
+  const root = readNumber(data, key);
+  if (root != null) return root;
+  if (typeof data === "object" && data !== null) {
+    return readNumber((data as Record<string, unknown>).entry, key);
+  }
+  return null;
+}
+
+/* ═════════════════════════ PODYUM ═════════════════════════ */
+
+/**
+ * Podyum basamağı.
+ * NEDEN İLKEL PROP: satır memo'lu; `ArenaEntry` nesnesi her sorgu dönüşünde
+ * yeni referans alır, ilkel değerlerde ise yalnız gerçekten değişen basamak
+ * yeniden çizilir.
+ */
+const PodiumStep = React.memo(function PodiumStep({
+  place,
+  name,
+  teamName,
+  score,
+  unit,
+  mine,
+}: {
+  /** 1, 2 veya 3. */
+  place: number;
+  name: string;
+  teamName: string | null;
+  score: number;
+  unit: string;
+  mine: boolean;
+}) {
+  const tone = PODIUM_TONES[place - 1] ?? colors.textTertiary;
+  const first = place === 1;
+
+  return (
+    <View style={[styles.step, first ? styles.stepFirst : null]}>
+      <Avatar name={name} size={first ? 48 : 40} ring={mine ? "brand" : "none"} />
+
+      {/* NEDEN DOLU DEĞİL ÇERÇEVE: altın/bronz dolgunun üstünde beyaz rakam
+          açık temada okunmuyor. Basamak rengi çerçevede yaşar, rakam her iki
+          temada da birincil metin rengiyle net kalır. */}
+      <View style={[styles.stepMedal, { borderColor: tone }]}>
+        <Text style={styles.stepMedalText} {...textScale.badge}>
+          {place}
+        </Text>
+      </View>
+
+      <Text style={styles.stepName} numberOfLines={1} {...textScale.dense}>
+        {mine ? `${name} (sen)` : name}
+      </Text>
+      <Text style={styles.stepTeam} numberOfLines={1} {...textScale.badge}>
+        {teamName ?? "—"}
+      </Text>
+
+      <View style={[styles.stepScore, first ? styles.stepScoreFirst : null]}>
+        <Text style={styles.stepScoreText} {...textScale.dense}>
+          {formatCount(score)}
+        </Text>
+        <Text style={styles.stepScoreUnit} {...textScale.badge}>
+          {unit}
+        </Text>
+      </View>
+    </View>
+  );
+});
+
+/* ═════════════════════════ EKRAN ═════════════════════════ */
 
 export default function ArenaLeaderboardScreen() {
   const params = useLocalSearchParams<{ game?: string }>();
   const initial = GAMES.find((g) => g.key === params.game)?.key ?? "seri";
+
   const [game, setGame] = useState<ArenaGame>(initial);
-  const [period, setPeriod] = useState<"weekly" | "alltime">("weekly");
-  const [scopeMode, setScopeMode] = useState<"city" | "turkey">("city");
+  const [period, setPeriod] = useState<Period>("weekly");
+  const [scopeMode, setScopeMode] = useState<ScopeMode>("city");
   const [shareOpen, setShareOpen] = useState(false);
-  const [shareFmt, setShareFmt] = useState<"story"|"post">("story");
-  const [shareBusy, setShareBusy] = useState(false);
-  const shotRef = useRef<any>(null);
-  const CW = 272;
-  const SFMTS = {
-    story: { label: "Hikâye 9:16", h: Math.round(CW*16/9) },
-    post:  { label: "Gönderi 3:4", h: Math.round(CW*4/3) },
-  } as const;
-  const doShare = async () => {
-    if (shareBusy) return;
-    setShareBusy(true);
-    try {
-      const uri = await shotRef.current?.capture?.();
-      if (uri) await Sharing.shareAsync(uri, { mimeType: "image/png" });
-    } catch {} finally { setShareBusy(false); }
-  };
-  const curGame = GAMES.find(g => g.key === game);
+
   const scope = useScope();
   const auth = useAuth();
+  const { scrollY, scrollProps } = useHeaderScroll();
+
   const cityId = scopeMode === "city" && scope.cityId ? Number(scope.cityId) : undefined;
+  const meta = GAMES.find((item) => item.key === game) ?? GAMES[0];
 
   const boardQuery = useQuery({
     queryKey: ["arena", "board", game, period, cityId ?? "tr"],
@@ -65,224 +226,602 @@ export default function ArenaLeaderboardScreen() {
     retry: false,
   });
 
-  const entries = boardQuery.data?.entries ?? [];
-  const me = meQuery.data as { rank?: number; score?: number; best?: number } | undefined;
-  const myRank = me?.rank ?? null;
-  const myScore = me?.score ?? me?.best ?? null;
+  const entries = useMemo(() => boardQuery.data?.entries ?? [], [boardQuery.data]);
+  const myRank = readMyField(meQuery.data, "rank");
+  const myScore = readMyField(meQuery.data, "score") ?? readMyField(meQuery.data, "best");
+  const myId = auth.user ? Number(auth.user.id) : null;
 
-  return (
-    <SafeAreaView style={styles.screen} edges={["top"]}>
-      <DetailHeader title="Rekor Tablosu" subtitle="Oyunlarda kim önde?" />
+  /** İlk üç podyuma çıkar; kalanlar yoğun listede kalır. */
+  const podium = useMemo(() => entries.slice(0, 3), [entries]);
+  const rest = useMemo(() => entries.slice(3), [entries]);
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.gameTabs} style={styles.gameTabsWrap}>
+  /** Kendi satırım listede görünüyor mu — görünmüyorsa üstte sabit kart. */
+  const meInList = useMemo(
+    () => (myId == null ? false : entries.some((entry) => Number(entry.userId) === myId)),
+    [entries, myId]
+  );
+
+  const scopeItems = useMemo<SegmentedItem<ScopeMode>[]>(
+    () => [
+      { key: "city", label: scope.cityLabel || "Şehrim" },
+      { key: "turkey", label: "Türkiye" },
+    ],
+    [scope.cityLabel]
+  );
+
+  const refresh = useRefresh(boardQuery.refetch, { refreshing: boardQuery.isRefetching });
+  const refreshControl = useMemo(
+    () => <RefreshControl {...refreshControlProps(refresh.refreshing, refresh.onRefresh)} />,
+    [refresh.refreshing, refresh.onRefresh]
+  );
+
+  const openShare = useCallback(() => setShareOpen(true), []);
+  const closeShare = useCallback(() => setShareOpen(false), []);
+
+  const headerActions = useMemo(
+    () => [
+      {
+        icon: "share-social-outline" as keyof typeof Ionicons.glyphMap,
+        onPress: openShare,
+        accessibilityLabel: "Tabloyu paylaş",
+      },
+    ],
+    [openShare]
+  );
+
+  /** Oyun çipleri — başlığın altında sabit şerit. */
+  const gameStrip = useMemo(
+    () => (
+      <ChipGroup style={styles.chipStrip}>
         {GAMES.map((item) => (
-          <Pressable
+          <Chip
             key={item.key}
+            label={item.label}
+            icon={item.icon}
+            selected={item.key === game}
             onPress={() => setGame(item.key)}
-            style={({ pressed }) => [styles.gameTab, game === item.key && styles.gameTabActive, pressed && styles.pressed]}
-          >
-            <Text style={[styles.gameTabText, game === item.key && styles.gameTabTextActive]}>
-              {item.emoji} {item.label}
-            </Text>
-          </Pressable>
+          />
         ))}
-      </ScrollView>
+      </ChipGroup>
+    ),
+    [game]
+  );
 
-      <View style={styles.filterRow}>
-        <TogglePair
-          left="Haftalık" right="Tüm Zamanlar"
-          value={period === "weekly" ? "left" : "right"}
-          onChange={(s) => setPeriod(s === "left" ? "weekly" : "alltime")}
+  const renderItem = useCallback(
+    ({ item, index }: { item: ArenaEntry; index: number }) => {
+      const mine = myId != null && Number(item.userId) === myId;
+      return (
+        <ListRow
+          leading={
+            <Text style={styles.rowRank} {...textScale.dense}>
+              {item.rank}
+            </Text>
+          }
+          title={mine ? `${item.name} (sen)` : item.name}
+          subtitle={item.teamName ?? undefined}
+          highlighted={mine}
+          position={
+            rest.length === 1 ? "single" : index === 0 ? "first" : index === rest.length - 1 ? "last" : "middle"
+          }
+          trailing={
+            <View style={styles.rowScore}>
+              <Text style={styles.rowScoreValue} {...textScale.dense}>
+                {formatCount(item.score)}
+              </Text>
+              <Text style={styles.rowScoreMeta} numberOfLines={1} {...textScale.badge}>
+                {formatDateShort(item.date)}
+              </Text>
+            </View>
+          }
         />
-        <TogglePair
-          left={scope.cityLabel || "Şehrim"} right="Türkiye"
-          value={scopeMode === "city" ? "left" : "right"}
-          onChange={(s) => setScopeMode(s === "left" ? "city" : "turkey")}
-        />
+      );
+    },
+    [myId, rest.length]
+  );
+
+  const listHeader = (
+    <View style={styles.listHeader}>
+      {boardQuery.isError ? <ErrorState error={boardQuery.error} variant="banner" /> : null}
+
+      <View style={styles.filters}>
+        <SegmentedControl items={PERIOD_ITEMS} value={period} onChange={setPeriod} size="sm" />
+        <SegmentedControl items={scopeItems} value={scopeMode} onChange={setScopeMode} size="sm" />
       </View>
 
-      <Pressable onPress={() => setShareOpen(true)} style={({pressed})=>[styles.shareBtn, pressed&&styles.pressed]}>
-        <Ionicons name="share-social-outline" size={15} color={colors.turf} />
-        <Text style={styles.shareBtnTxt}>Tabloyu Paylaş</Text>
-      </Pressable>
-
-      {auth.user && (myRank != null || myScore != null) ? (
-        <View style={styles.mePill}>
-          <Text style={styles.meText}>
-            SENİN SIRAN: {myRank != null ? `#${myRank}` : "—"}{myScore != null ? ` · ${myScore}` : ""}
-          </Text>
+      {/* Kendi sıran listede yoksa üstte sabit kart olarak gösterilir. */}
+      {auth.user && !meInList && (myRank != null || myScore != null) ? (
+        <View style={styles.meCard}>
+          <View style={styles.meBadge}>
+            <Text style={styles.meBadgeText} {...textScale.badge}>
+              {myRank != null ? `#${myRank}` : "—"}
+            </Text>
+          </View>
+          <View style={styles.flex}>
+            <Text style={styles.meTitle} numberOfLines={1} {...textScale.dense}>
+              Senin sıran
+            </Text>
+            <Text style={styles.meMeta} numberOfLines={1} {...textScale.badge}>
+              {myScore != null
+                ? `${formatCount(myScore)} ${meta.unit} · ${period === "weekly" ? "bu hafta" : "tüm zamanlar"}`
+                : "Bu listede henüz skorun yok"}
+            </Text>
+          </View>
+          <Badge label={meta.label} tone="brand" size="xs" />
         </View>
       ) : null}
 
+      {podium.length > 0 ? (
+        <>
+          <View style={styles.podium}>
+            {/* 2 · 1 · 3 sırası: birinci ortada ve bir tık yukarıda durur. */}
+            {podium[1] ? (
+              <PodiumStep
+                place={2}
+                name={podium[1].name}
+                teamName={podium[1].teamName ?? null}
+                score={podium[1].score}
+                unit={meta.unit}
+                mine={myId != null && Number(podium[1].userId) === myId}
+              />
+            ) : (
+              <View style={styles.step} />
+            )}
+
+            <PodiumStep
+              place={1}
+              name={podium[0].name}
+              teamName={podium[0].teamName ?? null}
+              score={podium[0].score}
+              unit={meta.unit}
+              mine={myId != null && Number(podium[0].userId) === myId}
+            />
+
+            {podium[2] ? (
+              <PodiumStep
+                place={3}
+                name={podium[2].name}
+                teamName={podium[2].teamName ?? null}
+                score={podium[2].score}
+                unit={meta.unit}
+                mine={myId != null && Number(podium[2].userId) === myId}
+              />
+            ) : (
+              <View style={styles.step} />
+            )}
+          </View>
+
+          {rest.length > 0 ? (
+            <SectionHeader title="Sıralama" meta={`${formatCount(entries.length)} oyuncu`} />
+          ) : null}
+        </>
+      ) : null}
+    </View>
+  );
+
+  return (
+    <SafeAreaView style={styles.screen} edges={["top"]}>
+      <ScreenHeader
+        title="Rekor Tablosu"
+        subtitle="Oyunlarda kim önde?"
+        back
+        scrollY={scrollY}
+        actions={headerActions}
+        bottom={gameStrip}
+      />
+
       {boardQuery.isLoading ? (
-        <Loading />
-      ) : boardQuery.isError ? (
+        <View style={styles.loading}>
+          <SkeletonListRow count={8} />
+        </View>
+      ) : boardQuery.isError && entries.length === 0 ? (
         <ErrorState error={boardQuery.error} onRetry={boardQuery.refetch} />
-      ) : entries.length === 0 ? (
-        <EmptyState
-          icon="trophy-outline"
-          title="Henüz skor yok"
-          body={auth.user
-            ? "İlk rekoru gönderen sen ol — oyna, skorun otomatik sıralamaya yazılsın!"
-            : "Oyna ve giriş yap; skorun otomatik sıralamaya yazılsın."}
-        />
       ) : (
         <FlatList
-          data={entries}
+          {...scrollProps}
+          data={rest}
           keyExtractor={(item) => `${item.userId}-${item.rank}`}
+          renderItem={renderItem}
           contentContainerStyle={styles.list}
-          renderItem={({ item }) => {
-            const mine = Number(item.userId) === Number(auth.user?.id);
-            return (
-              <View style={[styles.row, mine && styles.rowMine]}>
-                <Text style={styles.rank}>
-                  {item.rank === 1 ? "🥇" : item.rank === 2 ? "🥈" : item.rank === 3 ? "🥉" : item.rank}
-                </Text>
-                <View style={styles.rowBody}>
-                  <Text style={[styles.name, mine && styles.nameMine]} numberOfLines={1}>
-                    {item.name}{mine ? " (sen)" : ""}
-                  </Text>
-                  {item.teamName ? <Text style={styles.team} numberOfLines={1}>{item.teamName}</Text> : null}
-                </View>
-                <View style={styles.scoreBox}>
-                  <Text style={[styles.score, mine && styles.nameMine]}>{item.score}</Text>
-                  <Text style={styles.date}>{formatDateShort(item.date)}</Text>
-                </View>
-              </View>
-            );
-          }}
+          showsVerticalScrollIndicator={false}
+          refreshControl={refreshControl}
+          ListHeaderComponent={listHeader}
+          ListEmptyComponent={
+            entries.length === 0 ? (
+              <EmptyState
+                icon="trophy-outline"
+                title="Henüz skor yok"
+                body={
+                  auth.user
+                    ? "İlk rekoru gönderen sen ol — oyna, skorun otomatik sıralamaya yazılsın."
+                    : "Oyna ve giriş yap; skorun otomatik sıralamaya yazılsın."
+                }
+                variant="inline"
+              />
+            ) : null
+          }
         />
       )}
-      <Modal visible={shareOpen} animationType="slide" onRequestClose={()=>setShareOpen(false)} transparent>
-        <View style={styles.shareOverlay}>
-          <View style={styles.shareSheet}>
-            <View style={styles.sFmtRow}>
-              {(["story","post"] as const).map(k=>(
-                <Pressable key={k} onPress={()=>setShareFmt(k)} style={({pressed})=>[styles.sFmtPill,shareFmt===k&&styles.sFmtActive,pressed&&styles.pressed]}>
-                  <Text style={styles.sFmtTxt}>{SFMTS[k].label}</Text>
-                </Pressable>
-              ))}
-            </View>
-            <ViewShot ref={shotRef} options={{format:"png",quality:1}}>
-              <View style={[styles.sCard,{height:SFMTS[shareFmt].h}]}>
-                <LinearGradient colors={["#6D28D9","#4C1D95"]} style={styles.sStrip}/>
-                <LinearGradient colors={["#CDBFE8","#EFEAF7","#FFF"]} start={{x:0.2,y:0}} end={{x:0.5,y:1}} style={styles.sBody}>
-                  <Text style={styles.sWm}>elitlig</Text>
-                  <View style={styles.sTopRow}>
-                    <Text style={styles.sBrand}>elitlig</Text>
-                    <Text style={styles.sBrandR}>REKOR TABLOSU</Text>
-                  </View>
-                  <Text style={styles.sKicker}>{curGame?.emoji} {curGame?.label?.toLocaleUpperCase("tr-TR")} · {period==="weekly"?"HAFTALIK":"TÜM ZAMANLAR"}</Text>
-                  <View style={styles.sList}>
-                    {entries.slice(0,5).map((e,i)=>(
-                      <View key={e.userId} style={[styles.sRow, i>0&&styles.sRowBorder]}>
-                        <Text style={styles.sRank}>{i===0?"🥇":i===1?"🥈":i===2?"🥉":`${i+1}.`}</Text>
-                        <Text style={styles.sName} numberOfLines={1}>{e.name}</Text>
-                        <View style={styles.sValBox}>
-                          <Text style={styles.sVal}>{e.score}</Text>
-                          <Text style={styles.sUnit}>PUAN</Text>
-                        </View>
-                      </View>
-                    ))}
-                  </View>
-                  <View style={{flex:1}}/>
-                  <Text style={styles.sFtr}>ELİTLİG.COM</Text>
-                </LinearGradient>
-              </View>
-            </ViewShot>
-            <View style={styles.sActions}>
-              <Pressable onPress={()=>setShareOpen(false)} style={({pressed})=>[styles.sActBtn,styles.sClose,pressed&&styles.pressed]}>
-                <Text style={styles.sCloseTxt}>Kapat</Text>
-              </Pressable>
-              <Pressable onPress={doShare} style={({pressed})=>[styles.sActBtn,styles.sGo,pressed&&styles.pressed]}>
-                <Ionicons name="share-social" size={15} color="#FFF"/>
-                <Text style={styles.sGoTxt}>{shareBusy?"Hazırlanıyor…":"Paylaş"}</Text>
-              </Pressable>
-            </View>
-            <Text style={styles.sHint}>İndirmek için: Paylaş → "Görüntüyü Kaydet"</Text>
-          </View>
-        </View>
-      </Modal>
+
+      <ShareSheet
+        visible={shareOpen}
+        onClose={closeShare}
+        gameLabel={meta.label}
+        unit={meta.unit}
+        period={period}
+        scopeLabel={scopeMode === "city" ? scope.cityLabel || "Şehrim" : "Türkiye"}
+        entries={entries}
+      />
     </SafeAreaView>
   );
 }
 
-function TogglePair({ left, right, value, onChange }: {
-  left: string; right: string; value: "left" | "right"; onChange: (s: "left" | "right") => void;
+/* ═════════════════════════ PAYLAŞIM KARTI ═════════════════════════ */
+
+function ShareSheet({
+  visible,
+  onClose,
+  gameLabel,
+  unit,
+  period,
+  scopeLabel,
+  entries,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  gameLabel: string;
+  unit: string;
+  period: Period;
+  scopeLabel: string;
+  entries: ArenaEntry[];
 }) {
+  const [format, setFormat] = useState<ShareFormat>("story");
+  const [busy, setBusy] = useState(false);
+  const shotRef = useRef<View>(null);
+
+  const top = useMemo(() => entries.slice(0, 5), [entries]);
+
+  const share = useCallback(async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const uri = await captureRef(shotRef, { format: "png", quality: 1 });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, { mimeType: "image/png" });
+      }
+    } catch {
+      // Görsel üretilemezse panel açık kalır; kullanıcı tekrar deneyebilir.
+    } finally {
+      setBusy(false);
+    }
+  }, [busy]);
+
   return (
-    <View style={styles.toggle}>
-      {([ ["left", left], ["right", right] ] as const).map(([side, label]) => (
-        <Pressable key={side} onPress={() => onChange(side)}
-          style={({ pressed }) => [styles.toggleHalf, value === side && styles.toggleActive, pressed && styles.pressed]}
-        >
-          <Text style={[styles.toggleText, value === side && styles.toggleTextActive]} numberOfLines={1}>
-            {label}
-          </Text>
-        </Pressable>
-      ))}
-    </View>
+    <BottomSheet visible={visible} onClose={onClose} title="Tabloyu paylaş" snap="full">
+      <SegmentedControl items={SHARE_ITEMS} value={format} onChange={setFormat} />
+
+      <View style={styles.shareWrap}>
+        <ViewShot ref={shotRef} options={{ format: "png", quality: 1 }}>
+          <View style={[styles.shareCard, { height: SHARE_FORMATS[format].height }]}>
+            <LinearGradient
+              colors={[colors.brand, colors.brandStrong]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.shareStrip}
+            />
+
+            <View style={styles.shareBody}>
+              <View style={styles.shareTop}>
+                <Text style={styles.shareBrand} {...textScale.badge}>
+                  elitlig
+                </Text>
+                <Text style={styles.shareKicker} {...textScale.badge}>
+                  {upperTR("Rekor Tablosu")}
+                </Text>
+              </View>
+
+              <Text style={styles.shareTitle} numberOfLines={1} {...textScale.badge}>
+                {upperTR(`${gameLabel} · ${period === "weekly" ? "haftalık" : "tüm zamanlar"}`)}
+              </Text>
+              <Text style={styles.shareScopeLabel} numberOfLines={1} {...textScale.badge}>
+                {upperTR(scopeLabel)}
+              </Text>
+
+              <View style={styles.shareList}>
+                {top.map((entry, index) => (
+                  <View
+                    key={`${entry.userId}-${entry.rank}`}
+                    style={[styles.shareRow, index > 0 ? styles.shareRowBorder : null]}
+                  >
+                    <Text style={styles.shareRank} {...textScale.badge}>
+                      {index + 1}
+                    </Text>
+                    <Text style={styles.shareName} numberOfLines={1} {...textScale.badge}>
+                      {entry.name}
+                    </Text>
+                    <View style={styles.shareValueBox}>
+                      <Text style={styles.shareValue} {...textScale.badge}>
+                        {formatCount(entry.score)}
+                      </Text>
+                      <Text style={styles.shareUnit} {...textScale.badge}>
+                        {upperTR(unit)}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+
+              <View style={styles.flex} />
+
+              <Text style={styles.shareFooter} {...textScale.badge}>
+                {upperTR("elitlig.com")}
+              </Text>
+            </View>
+          </View>
+        </ViewShot>
+      </View>
+
+      <Button
+        label={busy ? "Hazırlanıyor" : "Paylaş"}
+        icon="share-social"
+        onPress={share}
+        loading={busy}
+        fullWidth
+      />
+      <Text style={styles.shareHint} {...textScale.dense}>
+        İndirmek için: Paylaş → Görüntüyü Kaydet
+      </Text>
+    </BottomSheet>
   );
 }
 
+/* ═════════════════════════ STİLLER ═════════════════════════ */
+
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.pitch },
-  gameTabsWrap: { flexGrow: 0, flexShrink: 0 },
-  gameTabs: { paddingHorizontal: spacing.md, gap: spacing.sm, paddingBottom: spacing.sm, alignItems: "center" as const, height: 44 },
-  gameTab: { borderRadius: 20, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.faint, paddingHorizontal: spacing.md, paddingVertical: 7, height: 36, justifyContent: "center" as const, alignItems: "center" as const },
-  gameTabActive: { backgroundColor: colors.turf, borderColor: colors.turf },
-  gameTabText: { fontSize: 12, fontWeight: "700" as const, color: colors.muted },
-  gameTabTextActive: { color: colors.surface, fontWeight: "800" as const },
-  filterRow: { flexDirection: "row", gap: spacing.sm, paddingHorizontal: spacing.md, marginBottom: spacing.sm },
-  toggle: { flex: 1, flexDirection: "row", backgroundColor: colors.surfaceRaised, borderRadius: radius.pill, padding: 3 },
-  toggleHalf: { flex: 1, alignItems: "center", borderRadius: radius.pill, paddingVertical: 6, paddingHorizontal: 4 },
-  toggleActive: { backgroundColor: colors.turf },
-  toggleText: { fontSize: 10, fontWeight: "800", color: colors.muted },
-  toggleTextActive: { color: colors.surface },
-  mePill: { alignSelf: "center", backgroundColor: colors.goldDim, borderRadius: radius.pill, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, marginBottom: spacing.sm },
-  meText: { fontSize: 11, fontWeight: "800", color: "#8A6A06", fontVariant: ["tabular-nums"] },
-  list: { paddingHorizontal: spacing.md, paddingBottom: spacing.xl },
-  row: { flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.faint, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, marginBottom: spacing.sm },
-  rowMine: { borderColor: colors.turf, backgroundColor: colors.turfDim },
-  rank: { width: 30, fontSize: 13, fontWeight: "800", color: colors.muted, textAlign: "center", fontVariant: ["tabular-nums"] },
-  rowBody: { flex: 1 },
-  name: { ...type.small, fontWeight: "700", color: colors.line },
-  nameMine: { color: colors.turf, fontWeight: "800" },
-  team: { ...type.caption, color: colors.muted, letterSpacing: 0, marginTop: 1 },
-  scoreBox: { alignItems: "flex-end" },
-  score: { ...type.body, fontWeight: "800", color: colors.line, fontVariant: ["tabular-nums"] },
-  date: { fontSize: 9, fontWeight: "600", color: colors.muted },
-  shareBtn: { flexDirection:"row", alignItems:"center", justifyContent:"center", gap:6, backgroundColor:colors.turfDim, borderRadius:radius.pill, paddingVertical:spacing.sm+2, marginHorizontal:spacing.md, marginBottom:spacing.sm },
-  shareBtnTxt: { fontSize: 11, fontWeight:"800", color:colors.turf },
-  shareOverlay: { flex:1, backgroundColor:"rgba(0,0,0,0.75)", justifyContent:"flex-end" },
-  shareSheet: { backgroundColor:"#1A1524", borderTopLeftRadius:20, borderTopRightRadius:20, padding:spacing.md, gap:spacing.md, alignItems:"center" as const, paddingBottom:36 },
-  sFmtRow: { flexDirection:"row", gap:8 },
-  sFmtPill: { borderRadius:20, borderWidth:1, borderColor:"rgba(255,255,255,0.35)", paddingHorizontal:14, paddingVertical:7 },
-  sFmtActive: { backgroundColor:colors.turf, borderColor:colors.turf },
-  sFmtTxt: { fontSize: 11, fontWeight:"800", color:"#FFF" },
-  sCard: { width:272, backgroundColor:"#0B0A0E", borderRadius:14, padding:7, overflow:"hidden" },
-  sStrip: { height:7, borderTopLeftRadius:8, borderTopRightRadius:8 },
-  sBody: { flex:1, borderBottomLeftRadius:8, borderBottomRightRadius:8, paddingHorizontal:spacing.md, paddingTop:spacing.sm, paddingBottom:spacing.sm, overflow:"hidden", gap:6 },
-  sWm: { position:"absolute", right:-28, bottom:16, fontSize:60, fontWeight:"900", color:"#6D28D9", opacity:0.06, transform:[{rotate:"-12deg"}] },
-  sTopRow: { flexDirection:"row", alignItems:"center", justifyContent:"space-between" },
-  sBrand: { fontSize: 12, fontWeight:"900", color:"#6D28D9" },
-  sBrandR: { fontSize:7, fontWeight:"800", letterSpacing:1.2, color:"#6D28D9", opacity:0.7 },
-  sKicker: { fontSize:9, fontWeight:"800", letterSpacing:0.6, color:"#6D28D9", opacity:0.85 },
-  sList: { backgroundColor:"#FFF", borderRadius:12, borderWidth:1, borderColor:"#E2D9F5", paddingVertical:2, paddingHorizontal:spacing.sm },
-  sRow: { flexDirection:"row", alignItems:"center", gap:8, paddingVertical:6 },
-  sRowBorder: { borderTopWidth:1, borderTopColor:"#F2EDFB" },
-  sRank: { width:22, fontSize: 12, textAlign:"center" as const },
-  sName: { flex:1, fontSize:10.5, fontWeight:"800", color:"#100D16" },
-  sValBox: { alignItems:"flex-end" as const, gap:1 },
-  sVal: { fontSize: 13, fontWeight:"900", color:"#5B21B6", fontVariant:["tabular-nums"] as any },
-  sUnit: { fontSize:6.5, fontWeight:"800", letterSpacing:0.8, color:"#9B92AA" },
-  sFtr: { fontSize:7.5, fontWeight:"800", letterSpacing:2.5, color:"#9188A4", textAlign:"center" as const },
-  sActions: { flexDirection:"row", gap:spacing.sm, width:"100%" },
-  sActBtn: { flex:1, flexDirection:"row", alignItems:"center", justifyContent:"center", gap:6, borderRadius:radius.pill, paddingVertical:spacing.sm+2 },
-  sClose: { backgroundColor:"rgba(255,255,255,0.1)" },
-  sCloseTxt: { fontSize: 13, fontWeight:"700", color:"#FFF" },
-  sGo: { backgroundColor:colors.turf },
-  sGoTxt: { fontSize: 13, fontWeight:"800", color:"#FFF" },
-  sHint: { fontSize:11, fontWeight:"600", color:"rgba(255,255,255,0.5)" },
-  pressed: { opacity: 0.7 },
+  screen: { flex: 1, backgroundColor: colors.bg },
+  flex: { flex: 1 },
+
+  chipStrip: {
+    paddingBottom: space.sm,
+  },
+  loading: {
+    padding: layout.screenPadding,
+  },
+  list: {
+    paddingHorizontal: layout.screenPadding,
+    paddingBottom: space.giant,
+  },
+  listHeader: {
+    gap: space.md,
+    paddingTop: space.md,
+    paddingBottom: space.sm,
+  },
+  filters: {
+    gap: space.sm,
+  },
+
+  /* — Kendi sıran (liste dışındaysa) — */
+  meCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    backgroundColor: colors.surface1,
+    borderRadius: radius.lg,
+    borderWidth: hairline,
+    borderColor: colors.brandBorder,
+    paddingHorizontal: space.md,
+    paddingVertical: space.m,
+  },
+  meBadge: {
+    minWidth: 44,
+    height: 32,
+    borderRadius: radius.md,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: space.sm,
+    backgroundColor: colors.brandDim,
+  },
+  meBadgeText: {
+    ...type.tableNumStrong,
+    color: colors.brandAccent,
+  },
+  meTitle: {
+    ...type.h3,
+    color: colors.textPrimary,
+  },
+  meMeta: {
+    ...type.caption,
+    fontWeight: "600",
+    letterSpacing: 0,
+    color: colors.textTertiary,
+  },
+
+  /* — Podyum — */
+  podium: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    gap: space.sm,
+    backgroundColor: colors.surface1,
+    borderRadius: radius.lg,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    paddingHorizontal: space.md,
+    paddingTop: space.lg,
+    paddingBottom: space.md,
+  },
+  step: {
+    flex: 1,
+    alignItems: "center",
+    gap: space.xxs,
+  },
+  /* Birinci bir tık yukarıda durur — podyum basamağı hissi. */
+  stepFirst: {
+    marginBottom: space.m,
+  },
+  stepMedal: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: space.xs,
+    marginTop: -space.m,
+    backgroundColor: colors.surface1,
+    borderWidth: 1.5,
+  },
+  stepMedalText: {
+    ...type.micro,
+    color: colors.textPrimary,
+  },
+  stepName: {
+    ...type.caption,
+    fontWeight: "800",
+    letterSpacing: 0,
+    color: colors.textPrimary,
+    textAlign: "center",
+    marginTop: space.xxs,
+  },
+  stepTeam: {
+    ...type.micro,
+    fontWeight: "600",
+    letterSpacing: 0,
+    color: colors.textTertiary,
+    textAlign: "center",
+  },
+  stepScore: {
+    alignItems: "center",
+    borderRadius: radius.sm,
+    backgroundColor: colors.surface3,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xs,
+    marginTop: space.xs,
+  },
+  stepScoreFirst: {
+    backgroundColor: colors.brandDim,
+  },
+  stepScoreText: {
+    ...type.tableNumStrong,
+    color: colors.textPrimary,
+  },
+  stepScoreUnit: {
+    ...type.micro,
+    color: colors.textTertiary,
+  },
+
+  /* — Liste satırı — */
+  rowRank: {
+    ...type.tableNumStrong,
+    color: colors.textSecondary,
+    minWidth: 24,
+    textAlign: "center",
+  },
+  rowScore: {
+    alignItems: "flex-end",
+    gap: space.xxs,
+  },
+  rowScoreValue: {
+    ...type.scoreSm,
+    color: colors.textPrimary,
+  },
+  rowScoreMeta: {
+    ...type.micro,
+    fontWeight: "600",
+    letterSpacing: 0,
+    color: colors.textTertiary,
+  },
+
+  /* — Paylaşım kartı — */
+  shareWrap: {
+    alignItems: "center",
+    paddingVertical: space.md,
+  },
+  shareCard: {
+    width: SHARE_WIDTH,
+    backgroundColor: colors.surface1,
+    borderRadius: radius.lg,
+    overflow: "hidden",
+  },
+  shareStrip: {
+    height: 6,
+  },
+  shareBody: {
+    flex: 1,
+    padding: space.md,
+    gap: space.xs,
+  },
+  shareTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  shareBrand: {
+    ...type.label,
+    color: colors.brand,
+  },
+  shareKicker: {
+    ...type.micro,
+    color: colors.textTertiary,
+  },
+  shareTitle: {
+    ...type.micro,
+    color: colors.brandAccent,
+    marginTop: space.sm,
+  },
+  shareScopeLabel: {
+    ...type.micro,
+    color: colors.textTertiary,
+  },
+  shareList: {
+    backgroundColor: colors.surface2,
+    borderRadius: radius.md,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    paddingHorizontal: space.sm,
+    marginTop: space.sm,
+  },
+  shareRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    paddingVertical: space.s,
+  },
+  shareRowBorder: {
+    borderTopWidth: hairline,
+    borderTopColor: colors.separator,
+  },
+  shareRank: {
+    ...type.tableNumStrong,
+    color: colors.textTertiary,
+    width: 16,
+    textAlign: "center",
+  },
+  shareName: {
+    ...type.caption,
+    fontWeight: "800",
+    letterSpacing: 0,
+    color: colors.textPrimary,
+    flex: 1,
+  },
+  shareValueBox: {
+    alignItems: "flex-end",
+  },
+  shareValue: {
+    ...type.tableNumStrong,
+    color: colors.brandAccent,
+  },
+  shareUnit: {
+    ...type.micro,
+    color: colors.textTertiary,
+  },
+  shareFooter: {
+    ...type.micro,
+    color: colors.textTertiary,
+    textAlign: "center",
+  },
+  shareHint: {
+    ...type.caption,
+    color: colors.textTertiary,
+    textAlign: "center",
+    marginTop: space.sm,
+  },
 });

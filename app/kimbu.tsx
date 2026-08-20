@@ -1,34 +1,69 @@
+/**
+ * KİM BU? — gizemli oyuncu bilmecesi.
+ *
+ * OYUN MANTIĞI KORUNDU (dokunulmadı): Türkiye havuzundan (ilk 80 golcü) 10
+ * gizemli oyuncu seçilir; her soru 30 puanla başlar, açılan her ipucu 10 puan
+ * götürür. Doğru tahmin kalan puanı yazar, yanlış tahmin soruyu yakar ve doğru
+ * cevabı gösterir. İpuçları sırayla: takım → maç/gol → Türkiye gol sırası.
+ *
+ * BU DOSYADA YENİLENEN YALNIZ SUNUM:
+ *   • PUAN DÜŞÜŞÜ artık iki yerde birden okunur: ortadaki halka (kalan puan /
+ *     30) ve altındaki üç kutucuk (her kutucuk bir ipucu = −10 puan). Kutucuk
+ *     söndükçe "ne kaybettiğini" görürsün.
+ *   • İpucu kartları kilitli/açık ayrımını ikon ve renkle söyler; kilitli
+ *     satırda bedeli yazar.
+ *   • Şıklar dokunsaldır (doğru → success, yanlış → error) ve cevap açıldığında
+ *     dolu renkle işaretlenir; seçilmeyen şıklar söner.
+ *   • Sonuç ekranı halka + üç sayı (doğru · puan · rekor) ile özetler.
+ *   • Paylaşım kartı tema tokenlarıyla yeniden çizildi ve modal yerine
+ *     `BottomSheet` içine taşındı; hata artık Alert değil toast.
+ *
+ * ESKİ KAPILAR KAPATILDI: `components/ScreenHeader` → `components/ui`
+ * `ScreenHeader`, `components/States` → `components/ui`, `TeamCrest`in
+ * `PlayerAvatar`ı → `components/ui` `Avatar`, `constants/theme` → `@/theme`.
+ */
+
 import Ionicons from "@expo/vector-icons/Ionicons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQuery } from "@tanstack/react-query";
 import * as Sharing from "expo-sharing";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import ViewShot, { captureRef } from "react-native-view-shot";
-import { DetailHeader } from "@/components/ScreenHeader";
-import { EmptyState, Loading } from "@/components/States";
-import { PlayerAvatar } from "@/components/TeamCrest";
-import { colors, radius, spacing, type } from "@/constants/theme";
+import {
+  Avatar,
+  Badge,
+  BottomSheet,
+  Button,
+  EmptyState,
+  ErrorState,
+  ProgressRing,
+  ScreenHeader,
+  Skeleton,
+  Touchable,
+  useToast,
+} from "@/components/ui";
 import { submitArenaScore } from "@/lib/api/arena";
 import { getPlayerRankings } from "@/lib/api/players";
 import { queryKeys } from "@/lib/queryKeys";
 import { instagramUrl } from "@/lib/socials";
+import type { PlayerRankRow } from "@/lib/types";
 import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
-import type { PlayerRankRow } from "@/lib/types";
+import {
+  colors,
+  hairline,
+  haptics,
+  layout,
+  radius,
+  space,
+  textScale,
+  type,
+  upperTR,
+} from "@/theme";
 
-/**
- * KİM BU? — gizemli oyuncu bilmecesi.
- *
- * Türkiye havuzundan (kapsamsız sıralama) 10 gizemli oyuncu seçilir. Her
- * soru 30 puanla başlar; oyuncu istediği kadar ipucu açabilir (ipucu başına
- * -10). Doğru tahmin kalan puanı kazandırır; yanlış tahmin soruyu yakar ve
- * doğru cevap gösterilir. İpuçları: takımı → maç/gol sayısı → Türkiye gol
- * sıralamasındaki yeri. Tur sonunda toplam puan rekola karşılaştırılır ve
- * koyu meydan okuma kartıyla paylaşılabilir. Sistem oyuncuları ayıklanır;
- * havuz tanınır kalsın diye ilk 80 golcüden kurulur.
- */
+/* ═════════════════════════ OYUN SABİTLERİ (değişmedi) ═════════════════════ */
 
 const BEST_KEY = "elitlig.kimbu.best.v1";
 const ROUND = 10;
@@ -37,6 +72,9 @@ const HINT_COST = 10;
 const REVEAL_MS = 1300;
 const JUNK = /hükmen|hukmen|antpl/i;
 
+/** Kaç ipucu var — puan kutucukları da bu sayıdan türer. */
+const HINT_COUNT = 3;
+
 interface Mystery {
   secret: PlayerRankRow;
   options: PlayerRankRow[];
@@ -44,6 +82,89 @@ interface Mystery {
 }
 
 type QPhase = "guess" | "reveal";
+
+/* ═════════════════════════ SAF YARDIMCILAR ═════════════════════════ */
+
+/** 1240 → "1.240" (binlik ayracı Türkçe nokta). */
+function formatCount(value: number): string {
+  return String(Math.round(value)).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
+
+/** Kalan puana göre halka tonu — düştükçe uyarıya döner. */
+function pointsTone(potential: number): "brand" | "warn" | "danger" {
+  if (potential <= 0) return "danger";
+  if (potential <= HINT_COST) return "warn";
+  return "brand";
+}
+
+/* ═════════════════════════ KÜÇÜK PARÇALAR ═════════════════════════ */
+
+/** Sonuç şeridinde tek hücre (doğru · puan · rekor). */
+const StatCell = React.memo(function StatCell({
+  value,
+  label,
+  accent,
+}: {
+  value: string;
+  label: string;
+  accent?: boolean;
+}) {
+  return (
+    <View style={styles.statCell}>
+      <Text style={accent ? styles.statValueAccent : styles.statValue} {...textScale.dense}>
+        {value}
+      </Text>
+      <Text style={styles.statLabel} numberOfLines={1} {...textScale.badge}>
+        {label}
+      </Text>
+    </View>
+  );
+});
+
+/**
+ * İPUCU SATIRI — kilitliyken bedelini, açıkken metnini gösterir.
+ * Basılabilir DEĞİLDİR: ipucu açma tek kapıdan (aşağıdaki düğme) geçsin ki
+ * "yanlışlıkla dokundum, 10 puan gitti" olmasın.
+ */
+const HintRow = React.memo(function HintRow({
+  index,
+  text,
+  open,
+  first,
+}: {
+  index: number;
+  text: string;
+  open: boolean;
+  /** İlk satırda üst ayraç çizilmez. */
+  first: boolean;
+}) {
+  return (
+    <View style={[styles.hintRow, first ? null : styles.hintRowBorder]}>
+      <Ionicons
+        name={open ? "bulb" : "lock-closed"}
+        size={14}
+        color={open ? colors.warn : colors.textTertiary}
+      />
+      {open ? (
+        <Text style={styles.hintText} numberOfLines={2} {...textScale.dense}>
+          {text}
+        </Text>
+      ) : (
+        <>
+          <Text style={styles.hintLocked} numberOfLines={1} {...textScale.dense}>
+            {`${index + 1}. ipucu`}
+          </Text>
+          <View style={styles.flex} />
+          <Text style={styles.hintCost} {...textScale.badge}>
+            {`−${HINT_COST}`}
+          </Text>
+        </>
+      )}
+    </View>
+  );
+});
+
+/* ═════════════════════════ EKRAN ═════════════════════════ */
 
 export default function KimBuScreen() {
   const scope = useScope();
@@ -130,6 +251,9 @@ export default function KimBuScreen() {
     setChosen(id);
     setPhase("reveal");
     const correct = Number(id) === Number(current.secret.id);
+    /* Yalnız geri bildirim — skora etkisi yok. */
+    if (correct) haptics.success();
+    else haptics.error();
     if (correct) {
       setTotal((t) => t + Math.max(0, potential));
       setCorrectCount((c) => c + 1);
@@ -155,17 +279,30 @@ export default function KimBuScreen() {
     }, REVEAL_MS);
   };
 
+  const revealed = phase === "reveal";
+  const guessedRight =
+    revealed && current != null && Number(chosen) === Number(current.secret.id);
+
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      <DetailHeader title="Kim Bu?" subtitle="Az ipucu, çok puan" />
+      <ScreenHeader title="Kim Bu?" subtitle="Az ipucu, çok puan" back />
 
       {query.isLoading ? (
-        <Loading />
+        <View style={styles.loading}>
+          <Skeleton width="100%" height={64} radius="lg" />
+          <Skeleton width="100%" height={168} radius="lg" />
+          <Skeleton width="100%" height={124} radius="lg" />
+          <Skeleton width="100%" height={50} radius="md" />
+          <Skeleton width="100%" height={50} radius="md" />
+        </View>
+      ) : query.isError ? (
+        <ErrorState error={query.error} onRetry={query.refetch} />
       ) : pool.length < 12 ? (
         <EmptyState
           icon="help-circle-outline"
           title="Havuz hazır değil"
           body="Oyuncu verisi şu an yüklenemedi, birazdan tekrar dene."
+          action={{ label: "Tekrar dene", onPress: () => query.refetch(), haptic: "light" }}
         />
       ) : finished ? (
         <RoundOver
@@ -174,88 +311,146 @@ export default function KimBuScreen() {
           best={best}
           onRestart={buildRound}
           scopeCity={scope.cityLabel}
+          signedIn={Boolean(auth.user)}
         />
       ) : !current ? (
-        <Loading />
+        <View style={styles.loading}>
+          <Skeleton width="100%" height={64} radius="lg" />
+          <Skeleton width="100%" height={168} radius="lg" />
+        </View>
       ) : (
-        <ScrollView contentContainerStyle={styles.content}>
-          <View style={styles.statusRow}>
-            <View style={styles.statusPill}>
-              <Text style={styles.statusText}>SORU {qIndex + 1}/{round.length}</Text>
-            </View>
-            <View style={[styles.statusPill, styles.pointsPill]}>
-              <Text style={styles.pointsText}>PUAN: {total}</Text>
-            </View>
-            <View style={[styles.statusPill, styles.bestPill]}>
-              <Text style={styles.bestText}>🏆 {best}</Text>
-            </View>
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          {/* — Durum şeridi — */}
+          <View style={styles.hud}>
+            <StatCell value={`${qIndex + 1}/${round.length}`} label="soru" />
+            <View style={styles.statDivider} />
+            <StatCell value={formatCount(total)} label="puan" accent />
+            <View style={styles.statDivider} />
+            <StatCell value={best > 0 ? formatCount(best) : "—"} label="rekor" />
           </View>
 
-          {/* Gizemli oyuncu kartı */}
+          {/* — Gizemli oyuncu + puan düşüşü — */}
           <View style={styles.mysteryCard}>
-            {phase === "reveal" ? (
-              <PlayerAvatar name={current.secret.name} image={current.secret.image} size={72} />
+            {revealed ? (
+              <Avatar
+                name={current.secret.name}
+                image={current.secret.image}
+                size={72}
+                ring={guessedRight ? "brand" : "none"}
+              />
             ) : (
-              <View style={styles.mysteryAvatar}>
-                <Text style={styles.mysteryMark}>?</Text>
+              <View style={styles.mysteryMarkBox}>
+                <Text style={styles.mysteryMark} {...textScale.badge}>
+                  ?
+                </Text>
               </View>
             )}
-            <Text style={styles.potential}>
-              {phase === "reveal"
-                ? current.secret.name.toLocaleUpperCase("tr-TR")
-                : `BU SORU: ${Math.max(0, potential)} PUAN`}
-            </Text>
+
+            {revealed ? (
+              <>
+                <Text style={styles.secretName} numberOfLines={1} {...textScale.dense}>
+                  {upperTR(current.secret.name)}
+                </Text>
+                <Badge
+                  label={guessedRight ? `Doğru · +${Math.max(0, potential)} puan` : "Bilemedin"}
+                  tone={guessedRight ? "win" : "danger"}
+                  size="sm"
+                />
+              </>
+            ) : (
+              <>
+                <ProgressRing
+                  value={potential / START_POINTS}
+                  size={72}
+                  thickness={6}
+                  tone={pointsTone(potential)}
+                  label={String(Math.max(0, potential))}
+                  sublabel="puan"
+                />
+
+                {/* Puan düşüşü: her kutucuk bir ipucu = −10 puan. */}
+                <View style={styles.dropRow}>
+                  {Array.from({ length: HINT_COUNT }, (_, index) => (
+                    <View
+                      key={index}
+                      style={[styles.dropCell, index < hintsOpen ? styles.dropCellSpent : null]}
+                    />
+                  ))}
+                </View>
+                <Text style={styles.dropHint} numberOfLines={1} {...textScale.badge}>
+                  {hintsOpen === 0
+                    ? upperTR("Hiç ipucu açmadın")
+                    : upperTR(`${hintsOpen} ipucu · −${hintsOpen * HINT_COST} puan`)}
+                </Text>
+              </>
+            )}
           </View>
 
-          {/* İpuçları */}
+          {/* — İpuçları — */}
           <View style={styles.hintsCard}>
             {current.hints.map((hint, index) => (
-              <View key={index} style={[styles.hintRow, index > 0 && styles.hintRowBorder]}>
-                {index < hintsOpen || phase === "reveal" ? (
-                  <Text style={styles.hintText}>💡 {hint}</Text>
-                ) : (
-                  <Text style={styles.hintLocked}>🔒 İpucu {index + 1}</Text>
-                )}
-              </View>
+              <HintRow
+                key={`${index}-${hint}`}
+                index={index}
+                text={hint}
+                open={index < hintsOpen || revealed}
+                first={index === 0}
+              />
             ))}
-            {phase === "guess" && hintsOpen < 3 ? (
-              <Pressable
+
+            {phase === "guess" && hintsOpen < HINT_COUNT ? (
+              <Button
+                label={`İpucu aç · −${HINT_COST} puan`}
+                icon="bulb-outline"
+                variant="secondary"
+                size="sm"
+                fullWidth
+                haptic="light"
                 onPress={openHint}
-                style={({ pressed }) => [styles.hintBtn, pressed && styles.pressed]}
-              >
-                <Ionicons name="bulb-outline" size={14} color={colors.turf} />
-                <Text style={styles.hintBtnText}>İpucu aç (−{HINT_COST} puan)</Text>
-              </Pressable>
+                style={styles.hintButton}
+              />
             ) : null}
           </View>
 
-          {/* Şıklar */}
+          {/* — Şıklar — */}
           <View style={styles.options}>
             {current.options.map((option) => {
               const isSecret = Number(option.id) === Number(current.secret.id);
               const isChosen = Number(option.id) === Number(chosen);
+              const right = revealed && isSecret;
+              const wrong = revealed && isChosen && !isSecret;
               return (
-                <Pressable
+                <Touchable
                   key={option.id}
+                  feedback="button"
+                  /* Titreşim şıkta değil `answer()` içinde: doğru ve yanlış
+                     ayrı ton çalar. */
+                  haptic="none"
                   onPress={() => answer(Number(option.id))}
                   disabled={phase !== "guess"}
-                  style={({ pressed }) => [
+                  accessibilityRole="button"
+                  accessibilityLabel={option.name}
+                  accessibilityState={{ disabled: phase !== "guess" }}
+                  style={[
                     styles.option,
-                    phase === "reveal" && isSecret && styles.optionRight,
-                    phase === "reveal" && isChosen && !isSecret && styles.optionWrong,
-                    pressed && styles.pressed,
+                    right ? styles.optionRight : null,
+                    wrong ? styles.optionWrong : null,
+                    revealed && !right && !wrong ? styles.optionMuted : null,
                   ]}
                 >
                   <Text
-                    style={[
-                      styles.optionText,
-                      phase === "reveal" && (isSecret || (isChosen && !isSecret)) && styles.optionTextLight,
-                    ]}
+                    style={[styles.optionText, right || wrong ? styles.optionTextOn : null]}
                     numberOfLines={1}
+                    {...textScale.dense}
                   >
-                    {option.name.toLocaleUpperCase("tr-TR")}
+                    {upperTR(option.name)}
                   </Text>
-                </Pressable>
+                  {right ? (
+                    <Ionicons name="checkmark-circle" size={18} color={colors.textOnStatus} />
+                  ) : wrong ? (
+                    <Ionicons name="close-circle" size={18} color={colors.textOnStatus} />
+                  ) : null}
+                </Touchable>
               );
             })}
           </View>
@@ -265,367 +460,454 @@ export default function KimBuScreen() {
   );
 }
 
+/* ═════════════════════════ TUR SONU + PAYLAŞIM ═════════════════════════ */
+
 function RoundOver({
   total,
   correct,
   best,
   onRestart,
   scopeCity,
+  signedIn,
 }: {
   total: number;
   correct: number;
   best: number;
   onRestart: () => void;
   scopeCity: string;
+  signedIn: boolean;
 }) {
+  const toast = useToast();
   const [shareOpen, setShareOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const shotRef = useRef<View>(null);
   const isRecord = total > 0 && total >= best;
 
-  const igHandle = (() => {
+  const igHandle = useMemo(() => {
     const url = instagramUrl(scopeCity);
     const handle = url?.split("instagram.com/")[1]?.replace(/\/+$/, "");
     return handle ? `@${handle}` : "elitlig.com";
-  })();
+  }, [scopeCity]);
 
-  const share = async () => {
+  const openShare = useCallback(() => setShareOpen(true), []);
+  const closeShare = useCallback(() => setShareOpen(false), []);
+
+  const share = useCallback(async () => {
     if (busy) return;
     setBusy(true);
     try {
       const uri = await captureRef(shotRef, { format: "png", quality: 1 });
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(uri, { mimeType: "image/png" });
+      } else {
+        toast.show({ message: "Bu cihazda paylaşım kapalı.", tone: "warn" });
       }
     } catch {
-      Alert.alert("Bir sorun oldu", "Görsel oluşturulamadı, tekrar dener misin?");
+      toast.show({ message: "Görsel oluşturulamadı, tekrar dener misin?", tone: "danger" });
     } finally {
       setBusy(false);
     }
-  };
+  }, [busy, toast]);
 
   return (
-    <View style={styles.overWrap}>
-      <Text style={styles.overTitle}>{isRecord ? "🏆 YENİ REKOR!" : "Tur bitti!"}</Text>
-      <Text style={styles.overScore}>{total} PUAN</Text>
-      <Text style={styles.overSub}>
-        {correct}/{ROUND} doğru · Rekorun: {best}
-      </Text>
-      <View style={styles.overButtons}>
-        <Pressable
-          onPress={onRestart}
-          style={({ pressed }) => [styles.overBtn, styles.retryBtn, pressed && styles.pressed]}
-        >
-          <Ionicons name="refresh" size={16} color={colors.surface} />
-          <Text style={styles.retryText}>Yeni Tur</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setShareOpen(true)}
-          style={({ pressed }) => [styles.overBtn, styles.challengeBtn, pressed && styles.pressed]}
-        >
-          <Ionicons name="share-social" size={16} color={colors.turf} />
-          <Text style={styles.challengeText}>Meydan Oku</Text>
-        </Pressable>
+    <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <View style={styles.overCard}>
+        <ProgressRing
+          value={correct / ROUND}
+          size={96}
+          thickness={7}
+          tone={correct >= 8 ? "win" : correct >= 5 ? "brand" : "warn"}
+          label={`${correct}/${ROUND}`}
+          sublabel="doğru"
+        />
+
+        <Text style={styles.overScore} {...textScale.dense}>
+          {formatCount(total)}
+        </Text>
+        <View style={styles.overUnitRow}>
+          <Text style={styles.overUnit} {...textScale.badge}>
+            {upperTR("puan")}
+          </Text>
+          {isRecord ? <Badge label="Yeni rekor" tone="warn" size="xs" icon="trophy" /> : null}
+        </View>
+
+        {/* Puan yukarıda büyük yazıyor; şerit onu tekrarlamaz. */}
+        <View style={styles.statRow}>
+          <StatCell value={`${correct}/${ROUND}`} label="doğru" />
+          <View style={styles.statDivider} />
+          <StatCell value={best > 0 ? formatCount(best) : "—"} label="rekor" accent />
+        </View>
+
+        {!signedIn ? (
+          <Text style={styles.overMeta} numberOfLines={2} {...textScale.dense}>
+            Skorun rekor tablosuna yazılsın diye giriş yapabilirsin.
+          </Text>
+        ) : null}
       </View>
 
-      <Modal
-        visible={shareOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShareOpen(false)}
-      >
-        <View style={styles.backdrop}>
+      <View style={styles.actionRow}>
+        <Button
+          label="Yeni Tur"
+          icon="refresh"
+          onPress={onRestart}
+          haptic="medium"
+          style={styles.actionButton}
+        />
+        <Button
+          label="Meydan Oku"
+          icon="share-social"
+          variant="secondary"
+          onPress={openShare}
+          style={styles.actionButton}
+        />
+      </View>
+
+      <BottomSheet visible={shareOpen} onClose={closeShare} title="Turunu paylaş" snap="full">
+        <View style={styles.shareWrap}>
           <ViewShot ref={shotRef} options={{ format: "png", quality: 1 }}>
             <View style={styles.shareCard}>
-              <Text style={styles.shareBrand}>elitlig</Text>
-              <Text style={styles.shareArena}>ARENA · KİM BU?</Text>
-              <Text style={styles.shareScore}>{total}</Text>
-              <Text style={styles.shareLabel}>
-                PUAN · {correct}/{ROUND} DOĞRU{isRecord ? " · REKOR 🏆" : ""}
-              </Text>
-              <View style={styles.shareDivider} />
-              <Text style={styles.shareChallenge}>"Geç de görelim" 😏</Text>
-              <Text style={styles.shareFooter}>ELİTLİG.COM · {igHandle}</Text>
+              <View style={styles.shareStrip} />
+
+              <View style={styles.shareBody}>
+                <View style={styles.shareTop}>
+                  <Text style={styles.shareBrand} {...textScale.badge}>
+                    elitlig
+                  </Text>
+                  <Text style={styles.shareKicker} {...textScale.badge}>
+                    {upperTR("Kim Bu?")}
+                  </Text>
+                </View>
+
+                <Text style={styles.shareScore} {...textScale.badge}>
+                  {formatCount(total)}
+                </Text>
+                <Text style={styles.shareUnit} {...textScale.badge}>
+                  {upperTR(`puan · ${correct}/${ROUND} doğru${isRecord ? " · rekor" : ""}`)}
+                </Text>
+
+                <View style={styles.shareDivider} />
+
+                <Text style={styles.shareChallenge} {...textScale.badge}>
+                  Geç de görelim
+                </Text>
+
+                <View style={styles.flex} />
+
+                <Text style={styles.shareFooter} {...textScale.badge}>
+                  {upperTR(`elitlig.com · ${igHandle}`)}
+                </Text>
+              </View>
             </View>
           </ViewShot>
-          <View style={styles.overButtons}>
-            <Pressable
-              onPress={() => setShareOpen(false)}
-              style={({ pressed }) => [styles.overBtn, styles.closeBtn, pressed && styles.pressed]}
-            >
-              <Text style={styles.closeText}>Kapat</Text>
-            </Pressable>
-            <Pressable
-              onPress={share}
-              style={({ pressed }) => [styles.overBtn, styles.retryBtn, pressed && styles.pressed]}
-            >
-              <Ionicons name="share-social" size={16} color={colors.surface} />
-              <Text style={styles.retryText}>{busy ? "Hazırlanıyor…" : "Paylaş"}</Text>
-            </Pressable>
-          </View>
         </View>
-      </Modal>
-    </View>
+
+        <Button
+          label={busy ? "Hazırlanıyor" : "Paylaş"}
+          icon="share-social"
+          onPress={share}
+          loading={busy}
+          fullWidth
+        />
+        <Text style={styles.shareHint} {...textScale.dense}>
+          İndirmek için: Paylaş → Görüntüyü Kaydet
+        </Text>
+      </BottomSheet>
+    </ScrollView>
   );
 }
 
+/* ═════════════════════════ STİLLER ═════════════════════════ */
+
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: colors.pitch,
+  screen: { flex: 1, backgroundColor: colors.bg },
+  flex: { flex: 1 },
+
+  loading: {
+    padding: layout.screenPadding,
+    gap: space.md,
   },
   content: {
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.xl,
+    padding: layout.screenPadding,
+    paddingBottom: space.giant,
+    gap: space.md,
   },
-  statusRow: {
+
+  /* — Durum şeridi — */
+  hud: {
     flexDirection: "row",
-    justifyContent: "center",
-    gap: spacing.sm,
-    marginBottom: spacing.md,
+    alignItems: "center",
+    backgroundColor: colors.surface1,
+    borderRadius: radius.lg,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    paddingVertical: space.m,
   },
-  statusPill: {
-    backgroundColor: colors.surfaceRaised,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+  statRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "stretch",
   },
-  statusText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: colors.muted,
+  statCell: {
+    flex: 1,
+    alignItems: "center",
+    gap: space.xxs,
   },
-  pointsPill: {
-    backgroundColor: colors.turfDim,
+  statDivider: {
+    width: hairline,
+    alignSelf: "stretch",
+    backgroundColor: colors.separator,
   },
-  pointsText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: colors.turf,
-    fontVariant: ["tabular-nums"],
+  statValue: {
+    ...type.scoreSm,
+    color: colors.textPrimary,
   },
-  bestPill: {
-    backgroundColor: colors.goldDim,
+  statValueAccent: {
+    ...type.scoreSm,
+    color: colors.brandAccent,
   },
-  bestText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#8A6A06",
+  statLabel: {
+    ...type.caption,
+    fontWeight: "600",
+    letterSpacing: 0,
+    color: colors.textTertiary,
   },
+
+  /* — Gizemli oyuncu kartı — */
   mysteryCard: {
     alignItems: "center",
-    gap: spacing.sm,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.faint,
-    borderRadius: radius.md,
-    paddingVertical: spacing.lg,
-    marginBottom: spacing.sm,
+    gap: space.sm,
+    backgroundColor: colors.surface1,
+    borderRadius: radius.lg,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    paddingVertical: space.lg,
+    paddingHorizontal: space.md,
   },
-  mysteryAvatar: {
+  mysteryMarkBox: {
     width: 72,
     height: 72,
-    borderRadius: 36,
-    backgroundColor: colors.turfDim,
+    borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: colors.brandDim,
+    borderWidth: hairline,
+    borderColor: colors.brandBorder,
   },
   mysteryMark: {
-    fontSize: 36,
-    fontWeight: "900",
-    color: colors.turf,
+    ...type.scoreHero,
+    color: colors.brandAccent,
   },
-  potential: {
-    ...type.small,
-    fontWeight: "800",
-    color: colors.turf,
+  secretName: {
+    ...type.h2,
+    color: colors.textPrimary,
+    textAlign: "center",
   },
+
+  /* — Puan düşüşü göstergesi — */
+  dropRow: {
+    flexDirection: "row",
+    gap: space.xs,
+    alignSelf: "stretch",
+    paddingHorizontal: space.xxl,
+  },
+  dropCell: {
+    flex: 1,
+    height: 4,
+    borderRadius: radius.pill,
+    backgroundColor: colors.brandAccent,
+  },
+  /* Harcanan ipucu: kutucuk söner — kaybedilen 10 puanın karşılığı. */
+  dropCellSpent: {
+    backgroundColor: colors.surface3,
+  },
+  dropHint: {
+    ...type.micro,
+    color: colors.textTertiary,
+  },
+
+  /* — İpucu kartı — */
   hintsCard: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.faint,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-    gap: 2,
+    backgroundColor: colors.surface1,
+    borderRadius: radius.lg,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    paddingHorizontal: space.md,
+    paddingVertical: space.xs,
   },
   hintRow: {
-    paddingVertical: 7,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    minHeight: 40,
+    paddingVertical: space.s,
   },
   hintRowBorder: {
-    borderTopWidth: 1,
-    borderTopColor: colors.faint,
+    borderTopWidth: hairline,
+    borderTopColor: colors.separator,
   },
   hintText: {
-    ...type.small,
-    color: colors.line,
-    fontWeight: "600",
+    ...type.body,
+    color: colors.textPrimary,
+    flexShrink: 1,
   },
   hintLocked: {
-    ...type.small,
-    color: colors.muted,
+    ...type.body,
+    color: colors.textTertiary,
   },
-  hintBtn: {
+  hintCost: {
+    ...type.caption,
+    fontWeight: "800",
+    letterSpacing: 0,
+    color: colors.warn,
+  },
+  hintButton: {
+    marginTop: space.xs,
+    marginBottom: space.sm,
+  },
+
+  /* — Şıklar — */
+  options: { gap: space.m },
+  option: {
+    minHeight: 52,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    backgroundColor: colors.turfDim,
-    borderRadius: radius.pill,
-    paddingVertical: spacing.sm,
-    marginTop: spacing.sm,
-  },
-  hintBtnText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: colors.turf,
-  },
-  options: {
-    gap: spacing.sm,
-  },
-  option: {
-    backgroundColor: colors.surface,
-    borderWidth: 2,
-    borderColor: colors.turf,
-    borderRadius: radius.pill,
-    paddingVertical: spacing.md,
-    alignItems: "center",
+    gap: space.sm,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.md,
+    borderRadius: radius.md,
+    borderWidth: hairline,
+    borderColor: colors.brandBorder,
+    backgroundColor: colors.surface1,
   },
   optionRight: {
-    backgroundColor: colors.green,
-    borderColor: colors.green,
+    backgroundColor: colors.win,
+    borderColor: colors.win,
   },
   optionWrong: {
-    backgroundColor: colors.live,
-    borderColor: colors.live,
+    backgroundColor: colors.loss,
+    borderColor: colors.loss,
+  },
+  optionMuted: {
+    opacity: 0.5,
+    borderColor: colors.border,
   },
   optionText: {
-    ...type.small,
-    fontWeight: "800",
-    color: colors.line,
+    ...type.h3,
+    color: colors.textPrimary,
+    textAlign: "center",
+    flexShrink: 1,
   },
-  optionTextLight: {
-    color: "#FFFFFF",
-  },
-  overWrap: {
-    flex: 1,
+  optionTextOn: { color: colors.textOnStatus },
+
+  /* — Tur sonu — */
+  overCard: {
     alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-    padding: spacing.lg,
-  },
-  overTitle: {
-    ...type.subtitle,
-    color: colors.line,
+    gap: space.md,
+    backgroundColor: colors.surface1,
+    borderRadius: radius.lg,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    padding: space.lg,
   },
   overScore: {
-    fontSize: 44,
-    fontWeight: "900",
-    color: colors.turf,
-    fontVariant: ["tabular-nums"],
+    ...type.scoreHero,
+    color: colors.brandAccent,
   },
-  overSub: {
-    ...type.small,
-    color: colors.muted,
-  },
-  overButtons: {
-    flexDirection: "row",
-    gap: spacing.sm,
-    marginTop: spacing.md,
-  },
-  overBtn: {
+  overUnitRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm + 3,
+    gap: space.sm,
+    marginTop: -space.sm,
   },
-  retryBtn: {
-    backgroundColor: colors.turf,
+  overUnit: {
+    ...type.micro,
+    color: colors.textTertiary,
   },
-  retryText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: colors.surface,
+  overMeta: {
+    ...type.caption,
+    fontWeight: "600",
+    letterSpacing: 0,
+    color: colors.textTertiary,
+    textAlign: "center",
   },
-  challengeBtn: {
-    backgroundColor: colors.turfDim,
+
+  actionRow: {
+    flexDirection: "row",
+    gap: space.sm,
   },
-  challengeText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: colors.turf,
-  },
-  backdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.65)",
+  actionButton: { flex: 1 },
+
+  /* — Paylaşım kartı — */
+  shareWrap: {
     alignItems: "center",
-    justifyContent: "center",
-    padding: spacing.lg,
-    gap: spacing.md,
+    paddingVertical: space.md,
   },
   shareCard: {
     width: 264,
-    backgroundColor: "#18102C",
-    borderRadius: 16,
-    paddingVertical: spacing.xl,
-    paddingHorizontal: spacing.lg,
+    height: 396,
+    backgroundColor: colors.surface1,
+    borderRadius: radius.lg,
+    overflow: "hidden",
+  },
+  shareStrip: {
+    height: 6,
+    backgroundColor: colors.brand,
+  },
+  shareBody: {
+    flex: 1,
+    padding: space.md,
     alignItems: "center",
-    gap: 4,
+    gap: space.xs,
+  },
+  shareTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    alignSelf: "stretch",
   },
   shareBrand: {
-    fontSize: 15,
-    fontWeight: "900",
-    color: "#FFFFFF",
+    ...type.label,
+    color: colors.brand,
   },
-  shareArena: {
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 1.5,
-    color: "#B9A6E4",
+  shareKicker: {
+    ...type.micro,
+    color: colors.textTertiary,
   },
   shareScore: {
-    fontSize: 48,
-    fontWeight: "900",
-    color: "#F0BE2E",
-    marginTop: spacing.sm,
-    fontVariant: ["tabular-nums"],
+    ...type.scoreHero,
+    fontSize: 52,
+    lineHeight: 58,
+    color: colors.brandAccent,
+    marginTop: space.xxl,
   },
-  shareLabel: {
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 0.8,
-    color: "#FFFFFF",
+  shareUnit: {
+    ...type.micro,
+    color: colors.textPrimary,
+    textAlign: "center",
   },
   shareDivider: {
     alignSelf: "stretch",
-    height: 1,
-    backgroundColor: "rgba(255,255,255,0.18)",
-    marginVertical: spacing.md,
+    height: hairline,
+    backgroundColor: colors.separator,
+    marginVertical: space.md,
   },
   shareChallenge: {
-    fontSize: 12,
+    ...type.caption,
     fontWeight: "700",
-    color: "#D9CBF6",
+    letterSpacing: 0,
+    color: colors.textSecondary,
+    textAlign: "center",
   },
   shareFooter: {
-    fontSize: 8,
-    fontWeight: "700",
-    letterSpacing: 1,
-    color: "#8878B8",
-    marginTop: spacing.sm,
+    ...type.micro,
+    color: colors.textTertiary,
+    textAlign: "center",
   },
-  closeBtn: {
-    backgroundColor: "rgba(0,0,0,0.35)",
-  },
-  closeText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#FFFFFF",
-  },
-  pressed: {
-    opacity: 0.7,
+  shareHint: {
+    ...type.caption,
+    color: colors.textTertiary,
+    textAlign: "center",
+    marginTop: space.sm,
   },
 });

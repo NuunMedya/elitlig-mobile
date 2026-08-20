@@ -1,27 +1,71 @@
+/**
+ * TOP SEKTİR — Flappy usulü top sektirme oyunu.
+ *
+ * FİZİK (bu yenilemede DEĞİŞMEDİ): yerçekimi topu aşağı çeker; her dokunuş
+ * topu yukarı sektirir ve +1 sekme yazar. Skor arttıkça yerçekimi ağırlaşır ve
+ * her sekmede top yanlara daha sert savrulur (duvarlardan ve tavandan seker —
+ * tavana yapışarak hile yapılamaz). Top çim şeridine düşerse oyun biter.
+ * Döngü ~60fps'lik bir zamanlayıcıyla, değerler ref'lerde tutularak işler.
+ * `step`, `tap`, `gameOver` ve sabitler birebir korundu.
+ *
+ * SUNUM MİMARİSİ:
+ *   · HUD tuvalin DIŞINDA, ince bir şerit: skor solda (tabular), rekor ve
+ *     yerçekimi çarpanı sağda. Tuvalin içine konsaydı top rozetlerin arkasına
+ *     girer ve okunmaz olurdu.
+ *   · GİRİŞ — tuvalin üstünde giriş kartı: oyun adı, tek cümlelik kural,
+ *     kişisel rekor, büyük "Başla". Kart `pointerEvents="box-none"` bir katmanda
+ *     durur; eski "başlamak için ekrana dokun" alışkanlığı da çalışmaya devam
+ *     eder (dokunuş tuvale kadar kabarır).
+ *   · BİTİŞ — tuvali kaplayan tam ekran kart. `Modal` DEĞİL sıradan bir katman:
+ *     paylaşım önizlemesi zaten `Modal`, ikisini üst üste bindirmek iOS'ta
+ *     güvenilir değil. Bitiş kartı katman olunca paylaşım sorunsuz üstüne biner.
+ *
+ * NEDEN HAM `Pressable` (tasarım sisteminin `Touchable`'ı değil): tuval her
+ * karede yeniden çizilir ve dokunuş → sekme gecikmesi oyunun kendisidir.
+ * `Touchable`'ın ölçek/opaklık animasyonu ve haptik gecikmesi burada oyunu
+ * bozardı. Bu, kılavuzdaki "oyun içi dokunma alanı" istisnasıdır; kartlardaki
+ * ve düğmelerdeki her basılabilir öğe yine `Touchable`/`Button`.
+ *
+ * PAYLAŞIM KARTI SABİT KOYU PALETTEN: kart görüntü olarak dışarı çıkar; aktif
+ * temaya bağlansaydı açık temadaki kullanıcıda beyaz bir kâğıt olurdu.
+ */
+
 import Ionicons from "@expo/vector-icons/Ionicons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
-import { useEffect, useRef, useState } from "react";
-import { Alert, Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import ViewShot, { captureRef } from "react-native-view-shot";
-import { DetailHeader } from "@/components/ScreenHeader";
-import { colors, radius, spacing, type } from "@/constants/theme";
+import {
+  Badge,
+  Button,
+  ScreenHeader,
+  Touchable,
+  useToast,
+  withAlpha,
+} from "@/components/ui";
 import { submitArenaScore } from "@/lib/api/arena";
 import { instagramUrl } from "@/lib/socials";
 import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
+import {
+  colors,
+  dark as inkPalette,
+  elevate,
+  hairline,
+  haptics,
+  layout,
+  radius,
+  space,
+  textScale,
+  type,
+  upperTR,
+} from "@/theme";
 
-/**
- * TOP SEKTİR — Flappy usulü top sektirme oyunu.
- *
- * Fizik: yerçekimi topu aşağı çeker; her dokunuş topu yukarı sektirir ve
- * +1 sekme yazar. Skor arttıkça yerçekimi ağırlaşır ve her sekmede top
- * yanlara daha sert savrulur (duvarlardan ve tavandan seker — tavana
- * yapışarak hile yapılamaz). Top çim şeridine düşerse oyun biter. Rekor
- * cihazda saklanır; skor koyu meydan okuma kartıyla paylaşılabilir.
- * Döngü ~60fps'lik bir zamanlayıcıyla, değerler ref'lerde tutularak işler.
- */
+/* ====================== SABİTLER (fizik — dokunulmadı) ====================== */
 
 const BEST_KEY = "elitlig.sektir.best.v1";
 const BALL = 56; // top çapı (emoji kutusu)
@@ -35,7 +79,13 @@ const DRIFT_BASE = 110;
 
 type Phase = "ready" | "playing" | "over";
 
+/** Skorun sunucuya gidişi — bitiş kartında tek satırla anlatılır. */
+type SubmitState = "idle" | "guest" | "sending" | "sent" | "failed";
+
+/* ================================= EKRAN ================================= */
+
 export default function SektirScreen() {
+  const router = useRouter();
   const scope = useScope();
   const auth = useAuth();
   const [phase, setPhase] = useState<Phase>("ready");
@@ -49,6 +99,10 @@ export default function SektirScreen() {
   const scoreRef = useRef(0);
   const phaseRef = useRef<Phase>("ready");
   const loop = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  /* — Sunum durumu: fizik döngüsüne karışmaz — */
+  const [submit, setSubmit] = useState<SubmitState>("idle");
+  const [shareOpen, setShareOpen] = useState(false);
 
   useEffect(() => {
     AsyncStorage.getItem(BEST_KEY).then((v) => setBest(Number(v) || 0));
@@ -70,11 +124,31 @@ export default function SektirScreen() {
     vel.current = { x: 0, y: 0 };
   };
 
+  /**
+   * Skoru rekor tablosuna yollar. Tetikleme koşulu eskisiyle birebir aynı
+   * (oturum var + skor > 0); tek fark, sonucun sessizce yutulmak yerine bitiş
+   * kartında görünmesi ve tekrar denenebilmesi.
+   */
+  const submitScore = (value: number) => {
+    if (value <= 0) {
+      setSubmit("idle");
+      return;
+    }
+    if (!auth.user) {
+      setSubmit("guest");
+      return;
+    }
+    setSubmit("sending");
+    submitArenaScore("sektir", value)
+      .then(() => setSubmit("sent"))
+      .catch(() => setSubmit("failed"));
+  };
+
   const gameOver = () => {
     if (loop.current) clearInterval(loop.current);
     loop.current = null;
     const finished = scoreRef.current;
-    if (auth.user && finished > 0) submitArenaScore("sektir", finished).catch(() => {});
+    submitScore(finished);
     if (finished > 0) {
       setBest((current) => {
         if (finished > current) {
@@ -84,6 +158,7 @@ export default function SektirScreen() {
         return current;
       });
     }
+    haptics.warning();
     setPhaseBoth("over");
   };
 
@@ -125,6 +200,7 @@ export default function SektirScreen() {
       resetBall();
       scoreRef.current = 0;
       setScore(0);
+      setSubmit("idle");
       setPhaseBoth("playing");
       if (loop.current) clearInterval(loop.current);
       loop.current = setInterval(step, TICK_MS);
@@ -135,6 +211,8 @@ export default function SektirScreen() {
     vel.current.x += (Math.random() * 2 - 1) * drift;
     scoreRef.current += 1;
     setScore(scoreRef.current);
+    // Puan haptiği; `haptics` kendi içinde 300ms kısar, sekme spam'i titremez.
+    haptics.light();
   };
 
   const restart = () => {
@@ -142,30 +220,71 @@ export default function SektirScreen() {
     resetBall();
     scoreRef.current = 0;
     setScore(0);
+    setSubmit("idle");
+    setShareOpen(false);
     setTick((t) => t + 1);
   };
 
   const gravityLevel = Math.min(2.2, 1 + score * 0.025);
+  const isRecord = score > 0 && score >= best;
+
+  const openBoard = () => router.push({ pathname: "/siralama", params: { game: "sektir" } });
+  const openSignIn = () => router.push("/giris");
+
+  const headerActions = useMemo(
+    () => [
+      {
+        icon: "trophy-outline" as keyof typeof Ionicons.glyphMap,
+        onPress: () => router.push({ pathname: "/siralama", params: { game: "sektir" } }),
+        accessibilityLabel: "Rekor tablosu",
+      },
+    ],
+    [router]
+  );
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      <DetailHeader title="Top Sektir" subtitle="Düşürme! Her dokunuş +1" />
+      <ScreenHeader
+        title="Top Sektir"
+        overline={upperTR("Elitlig Arena")}
+        subtitle="Düşürme! Her dokunuş +1"
+        back
+        actions={headerActions}
+      />
 
-      <View style={styles.scoreRow}>
-        <View style={styles.scorePill}>
-          <Text style={styles.scoreText}>⚽ {score}</Text>
+      {/* — HUD: skor solda (tabular), rekor ve yerçekimi çarpanı sağda — */}
+      <View style={styles.hud}>
+        <View style={styles.hudScoreBox}>
+          <Text style={styles.hudLabel} {...textScale.badge}>
+            {upperTR("Sekme")}
+          </Text>
+          <Text style={styles.hudScore} {...textScale.dense}>
+            {score}
+          </Text>
         </View>
-        <View style={[styles.scorePill, styles.bestPill]}>
-          <Text style={styles.bestText}>🏆 REKOR: {best}</Text>
-        </View>
-        <View style={[styles.scorePill, styles.levelPill]}>
-          <Text style={styles.levelText}>⚡ x{gravityLevel.toFixed(1)}</Text>
+
+        <View style={styles.hudRight}>
+          <View style={styles.hudPill}>
+            <Ionicons name="trophy" size={11} color={colors.star} />
+            <Text style={styles.hudPillText} {...textScale.badge}>
+              {best}
+            </Text>
+          </View>
+          <View style={[styles.hudPill, styles.hudPillLive]}>
+            <Ionicons name="flash" size={11} color={colors.live} />
+            <Text style={styles.hudPillLiveText} {...textScale.badge}>
+              {`x${gravityLevel.toFixed(1)}`}
+            </Text>
+          </View>
         </View>
       </View>
 
+      {/* Tuval — ham Pressable, gerekçesi dosya başında. */}
       <Pressable
         style={styles.arena}
         onPress={tap}
+        accessibilityRole="button"
+        accessibilityLabel="Topu sektir"
         onLayout={(e) => {
           area.current = {
             w: e.nativeEvent.layout.width,
@@ -177,8 +296,17 @@ export default function SektirScreen() {
           }
         }}
       >
-        {/* Çim şeritleri */}
-        <View style={styles.ground}>
+        {/* Gökyüzü derinliği — tuval zemini surface1, üstte hafif marka tintı. */}
+        <LinearGradient
+          colors={[withAlpha(colors.brand, 0.14), colors.surface1]}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
+
+        {/* Çim şeritleri — saha yeşili tokenı, şeritler kazanç yeşiliyle aydınlatılır. */}
+        <View style={styles.ground} pointerEvents="none">
           {Array.from({ length: 4 }).map((_, i) => (
             <View key={i} style={[styles.groundStripe, i % 2 === 1 && styles.groundStripeAlt]} />
           ))}
@@ -195,45 +323,226 @@ export default function SektirScreen() {
           ⚽
         </Text>
 
-        {phase === "ready" ? (
-          <View style={styles.overlay} pointerEvents="none">
-            <Text style={styles.overlayTitle}>TOP SEKTİR</Text>
-            <Text style={styles.overlayBody}>Başlamak için dokun — top düşmesin!</Text>
-            <Text style={styles.overlayHint}>Skor arttıkça yerçekimi ağırlaşır ⚡</Text>
-          </View>
-        ) : null}
+        {phase === "ready" ? <StartOverlay best={best} onStart={tap} /> : null}
 
         {phase === "over" ? (
-          <GameOver
+          <ResultOverlay
             score={score}
             best={best}
+            isRecord={isRecord}
+            submit={submit}
+            onRetrySubmit={() => submitScore(score)}
+            onSignIn={openSignIn}
             onRestart={restart}
-            scopeCity={scope.cityLabel}
+            onBoard={openBoard}
+            onShare={() => setShareOpen(true)}
           />
         ) : null}
       </Pressable>
+
+      <ShareSheet
+        visible={shareOpen}
+        onClose={() => setShareOpen(false)}
+        score={score}
+        isRecord={isRecord}
+        cityLabel={scope.cityLabel}
+      />
     </SafeAreaView>
   );
 }
 
-function GameOver({
+/* ============================== GİRİŞ KARTI ============================== */
+
+/**
+ * `box-none`: katmanın kendisi dokunuşu yutmaz. Kartın boşluğuna dokunmak
+ * tuvale kabarır ve oyunu başlatır — eski "ekrana dokun" alışkanlığı korunur.
+ */
+function StartOverlay({ best, onStart }: { best: number; onStart: () => void }) {
+  return (
+    <View style={styles.overlay} pointerEvents="box-none">
+      <View style={styles.startCard}>
+        <View style={styles.startIcon}>
+          <Ionicons name="football" size={22} color={colors.win} />
+        </View>
+
+        <Text style={styles.startOverline} {...textScale.badge}>
+          {upperTR("Elitlig Arena")}
+        </Text>
+        <Text style={styles.startTitle} {...textScale.dense}>
+          Top Sektir
+        </Text>
+        <Text style={styles.startRule} {...textScale.long}>
+          Topu çime düşürme; her dokunuş bir sekme yazar, skor arttıkça yerçekimi ağırlaşır.
+        </Text>
+
+        <View style={styles.startBest}>
+          <Ionicons name="trophy" size={13} color={colors.star} />
+          <Text style={styles.startBestText} {...textScale.dense}>
+            {best > 0 ? `Rekorun ${best} sekme` : "Henüz rekorun yok"}
+          </Text>
+        </View>
+
+        <Button label="Başla" icon="play" size="lg" fullWidth onPress={onStart} />
+      </View>
+    </View>
+  );
+}
+
+/* ============================== BİTİŞ KARTI ============================== */
+
+function ResultOverlay({
   score,
   best,
+  isRecord,
+  submit,
+  onRetrySubmit,
+  onSignIn,
   onRestart,
-  scopeCity,
+  onBoard,
+  onShare,
 }: {
   score: number;
   best: number;
+  isRecord: boolean;
+  submit: SubmitState;
+  onRetrySubmit: () => void;
+  onSignIn: () => void;
   onRestart: () => void;
-  scopeCity: string;
+  onBoard: () => void;
+  onShare: () => void;
 }) {
-  const [shareOpen, setShareOpen] = useState(false);
+  return (
+    <View style={styles.resultScrim}>
+      <View style={styles.resultCard}>
+        {isRecord ? (
+          <Badge label={upperTR("Yeni rekor")} tone="warn" icon="trophy" variant="soft" />
+        ) : null}
+
+        <Text style={styles.resultTitle} {...textScale.dense}>
+          {isRecord ? "Rekorunu kırdın!" : "Top düştü"}
+        </Text>
+
+        <Text style={styles.resultScore} {...textScale.dense}>
+          {score}
+        </Text>
+        <Text style={styles.resultUnit} {...textScale.badge}>
+          {upperTR("sekme")}
+        </Text>
+
+        <Text style={styles.resultBest} {...textScale.dense}>
+          {`Rekorun ${best} sekme`}
+        </Text>
+
+        <SubmitLine state={submit} onRetry={onRetrySubmit} onSignIn={onSignIn} />
+
+        <View style={styles.resultActions}>
+          <Button label="Tekrar oyna" icon="refresh" size="lg" fullWidth onPress={onRestart} />
+          <View style={styles.resultRow}>
+            <Button
+              label="Rekor tablosu"
+              icon="trophy-outline"
+              variant="secondary"
+              onPress={onBoard}
+              style={styles.flex}
+            />
+            <Button
+              label="Meydan oku"
+              icon="share-social"
+              variant="ghost"
+              onPress={onShare}
+              style={styles.flex}
+            />
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+/* ========================= SKOR GÖNDERİM SATIRI ========================= */
+
+function SubmitLine({
+  state,
+  onRetry,
+  onSignIn,
+}: {
+  state: SubmitState;
+  onRetry: () => void;
+  onSignIn: () => void;
+}) {
+  if (state === "idle") return null;
+
+  if (state === "guest") {
+    return (
+      <Touchable
+        feedback="button"
+        haptic="light"
+        onPress={onSignIn}
+        style={styles.submitLine}
+        accessibilityRole="button"
+        accessibilityLabel="Giriş yap, skorun rekor tablosuna yazılsın"
+      >
+        <Ionicons name="log-in-outline" size={13} color={colors.brandAccent} />
+        <Text style={styles.submitLink} {...textScale.dense}>
+          Giriş yap, skorun tabloya yazılsın
+        </Text>
+      </Touchable>
+    );
+  }
+
+  if (state === "failed") {
+    return (
+      <Touchable
+        feedback="button"
+        haptic="light"
+        onPress={onRetry}
+        style={styles.submitLine}
+        accessibilityRole="button"
+        accessibilityLabel="Skor gönderilemedi, tekrar dene"
+      >
+        <Ionicons name="refresh" size={13} color={colors.danger} />
+        <Text style={styles.submitFail} {...textScale.dense}>
+          Skor gönderilemedi · tekrar dene
+        </Text>
+      </Touchable>
+    );
+  }
+
+  return (
+    <View style={styles.submitLine}>
+      <Ionicons
+        name={state === "sent" ? "checkmark-circle" : "cloud-upload-outline"}
+        size={13}
+        color={state === "sent" ? colors.win : colors.textTertiary}
+      />
+      <Text style={styles.submitInfo} {...textScale.dense}>
+        {state === "sent" ? "Rekor tablosuna yazıldı" : "Rekor tablosuna gönderiliyor…"}
+      </Text>
+    </View>
+  );
+}
+
+/* ============================ PAYLAŞIM KARTI ============================ */
+
+function ShareSheet({
+  visible,
+  onClose,
+  score,
+  isRecord,
+  cityLabel,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  score: number;
+  isRecord: boolean;
+  cityLabel: string;
+}) {
+  const toast = useToast();
   const [busy, setBusy] = useState(false);
   const shotRef = useRef<View>(null);
-  const isRecord = score > 0 && score >= best;
 
   const igHandle = (() => {
-    const url = instagramUrl(scopeCity);
+    const url = instagramUrl(cityLabel);
     const handle = url?.split("instagram.com/")[1]?.replace(/\/+$/, "");
     return handle ? `@${handle}` : "elitlig.com";
   })();
@@ -247,122 +556,127 @@ function GameOver({
         await Sharing.shareAsync(uri, { mimeType: "image/png" });
       }
     } catch {
-      Alert.alert("Bir sorun oldu", "Görsel oluşturulamadı, tekrar dener misin?");
+      toast.show({ message: "Görsel oluşturulamadı, tekrar dener misin?", tone: "danger" });
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <View style={styles.overBox}>
-      <Text style={styles.overTitle}>{isRecord ? "🏆 YENİ REKOR!" : "Top düştü!"}</Text>
-      <Text style={styles.overScore}>⚽ {score}</Text>
-      <Text style={styles.overSub}>Rekorun: {best}</Text>
-      <View style={styles.overButtons}>
-        <Pressable
-          onPress={onRestart}
-          style={({ pressed }) => [styles.overBtn, styles.retryBtn, pressed && styles.pressed]}
-        >
-          <Ionicons name="refresh" size={16} color={colors.surface} />
-          <Text style={styles.retryText}>Tekrar Oyna</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setShareOpen(true)}
-          style={({ pressed }) => [styles.overBtn, styles.shareBtn, pressed && styles.pressed]}
-        >
-          <Ionicons name="share-social" size={16} color={colors.turf} />
-          <Text style={styles.shareBtnText}>Meydan Oku</Text>
-        </Pressable>
-      </View>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={styles.shareBackdrop}>
+        <ViewShot ref={shotRef} options={{ format: "png", quality: 1 }}>
+          <LinearGradient
+            colors={[inkPalette.brandDim, inkPalette.bg]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.shareCard}
+          >
+            <Text style={styles.shareBrand} {...textScale.badge}>
+              elitlig
+            </Text>
+            <Text style={styles.shareGame} {...textScale.badge}>
+              {upperTR("Arena · Top Sektir")}
+            </Text>
 
-      <Modal
-        visible={shareOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShareOpen(false)}
-      >
-        <View style={styles.backdrop}>
-          <ViewShot ref={shotRef} options={{ format: "png", quality: 1 }}>
-            <View style={styles.shareCard}>
-              <Text style={styles.shareBrand}>elitlig</Text>
-              <Text style={styles.shareArena}>ARENA · TOP SEKTİR</Text>
-              <Text style={styles.shareScore}>⚽ {score}</Text>
-              <Text style={styles.shareLabel}>SEKME{isRecord ? " · YENİ REKOR 🏆" : ""}</Text>
-              <View style={styles.shareDivider} />
-              <Text style={styles.shareChallenge}>"Geç de görelim" 😏</Text>
-              <Text style={styles.shareFooter}>ELİTLİG.COM · {igHandle}</Text>
-            </View>
-          </ViewShot>
-          <View style={styles.overButtons}>
-            <Pressable
-              onPress={() => setShareOpen(false)}
-              style={({ pressed }) => [styles.overBtn, styles.closeBtn, pressed && styles.pressed]}
-            >
-              <Text style={styles.closeText}>Kapat</Text>
-            </Pressable>
-            <Pressable
-              onPress={share}
-              style={({ pressed }) => [styles.overBtn, styles.retryBtn, pressed && styles.pressed]}
-            >
-              <Ionicons name="share-social" size={16} color={colors.surface} />
-              <Text style={styles.retryText}>{busy ? "Hazırlanıyor…" : "Paylaş"}</Text>
-            </Pressable>
-          </View>
+            <Text style={styles.shareScore} {...textScale.badge}>
+              {score}
+            </Text>
+            <Text style={styles.shareUnit} {...textScale.badge}>
+              {upperTR(isRecord ? "sekme · yeni rekor" : "sekme")}
+            </Text>
+
+            <View style={styles.shareDivider} />
+
+            <Text style={styles.shareTaunt} {...textScale.badge}>
+              Geç de görelim
+            </Text>
+            <Text style={styles.shareFooter} {...textScale.badge}>
+              {upperTR(`elitlig.com · ${igHandle}`)}
+            </Text>
+          </LinearGradient>
+        </ViewShot>
+
+        <View style={styles.shareActions}>
+          <Button label="Kapat" variant="secondary" onPress={onClose} />
+          <Button
+            label="Paylaş"
+            icon="share-social"
+            loading={busy}
+            onPress={() => {
+              void share();
+            }}
+          />
         </View>
-      </Modal>
-    </View>
+      </View>
+    </Modal>
   );
 }
 
+/* ================================ STİLLER ================================ */
+
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: colors.pitch,
-  },
-  scoreRow: {
+  screen: { flex: 1, backgroundColor: colors.bg },
+  flex: { flex: 1 },
+
+  /* — HUD şeridi — */
+  hud: {
     flexDirection: "row",
-    justifyContent: "center",
-    gap: spacing.sm,
-    paddingHorizontal: spacing.md,
-    marginBottom: spacing.sm,
+    alignItems: "center",
+    paddingHorizontal: layout.screenPadding,
+    paddingVertical: space.sm,
+    borderBottomWidth: hairline,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.surface1,
   },
-  scorePill: {
-    backgroundColor: colors.turfDim,
+  hudScoreBox: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: space.s,
+  },
+  hudLabel: {
+    ...type.micro,
+    color: colors.textTertiary,
+  },
+  hudScore: {
+    ...type.scoreMd,
+    color: colors.textPrimary,
+  },
+  hudRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.s,
+  },
+  hudPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
     borderRadius: radius.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingHorizontal: space.m,
+    paddingVertical: space.xs,
+    backgroundColor: colors.surface3,
   },
-  scoreText: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: colors.turf,
-    fontVariant: ["tabular-nums"],
+  hudPillText: {
+    ...type.tableNumStrong,
+    color: colors.textPrimary,
   },
-  bestPill: {
-    backgroundColor: colors.goldDim,
+  hudPillLive: {
+    backgroundColor: colors.liveDim,
   },
-  bestText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#8A6A06",
-  },
-  levelPill: {
-    backgroundColor: "#FBEDEE",
-  },
-  levelText: {
-    fontSize: 11,
-    fontWeight: "800",
+  hudPillLiveText: {
+    ...type.tableNumStrong,
     color: colors.live,
-    fontVariant: ["tabular-nums"],
   },
+
+  /* — Tuval — */
   arena: {
     flex: 1,
-    marginHorizontal: spacing.md,
-    marginBottom: spacing.md,
-    borderRadius: radius.md,
-    backgroundColor: "#EFF7FF",
-    borderWidth: 1,
-    borderColor: colors.faint,
+    margin: layout.screenPadding,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
     overflow: "hidden",
   },
   ground: {
@@ -372,13 +686,11 @@ const styles = StyleSheet.create({
     bottom: 0,
     height: GROUND,
     flexDirection: "row",
+    backgroundColor: colors.pitchGreen,
   },
-  groundStripe: {
-    flex: 1,
-    backgroundColor: "#0F4A2C",
-  },
+  groundStripe: { flex: 1 },
   groundStripeAlt: {
-    backgroundColor: "#125534",
+    backgroundColor: withAlpha(colors.win, 0.12),
   },
   groundLine: {
     position: "absolute",
@@ -386,7 +698,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 3,
-    backgroundColor: "#3E7D58",
+    backgroundColor: withAlpha(colors.win, 0.45),
   },
   ball: {
     position: "absolute",
@@ -397,147 +709,195 @@ const styles = StyleSheet.create({
     height: BALL,
     textAlign: "center",
   },
+
+  /* — Giriş kartı — */
   overlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: "center",
     justifyContent: "center",
-    gap: spacing.sm,
+    padding: space.lg,
     paddingBottom: GROUND,
   },
-  overlayTitle: {
-    fontSize: 24,
-    fontWeight: "900",
-    letterSpacing: 1,
-    color: colors.turf,
+  startCard: {
+    alignSelf: "stretch",
+    maxWidth: 360,
+    borderRadius: radius.xl,
+    // Yüzen kart (§yükselti 4): koyu temada yüzey+kenarlık, açık temada gölge.
+    ...elevate(4),
+    padding: space.xl,
+    gap: space.s,
+    alignItems: "center",
   },
-  overlayBody: {
+  startIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.winDim,
+    marginBottom: space.xxs,
+  },
+  startOverline: {
+    ...type.micro,
+    color: colors.brandAccent,
+  },
+  startTitle: {
+    ...type.display,
+    color: colors.textPrimary,
+  },
+  startRule: {
     ...type.body,
-    color: colors.line,
+    color: colors.textSecondary,
+    textAlign: "center",
+    marginBottom: space.xs,
+  },
+  startBest: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+    backgroundColor: colors.surface3,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.md,
+    paddingVertical: space.s,
+    marginBottom: space.m,
+  },
+  startBestText: {
+    ...type.bodySm,
     fontWeight: "700",
+    color: colors.textPrimary,
   },
-  overlayHint: {
-    ...type.caption,
-    color: colors.muted,
-    letterSpacing: 0,
-  },
-  overBox: {
+
+  /* — Bitiş kartı — */
+  resultScrim: {
     ...StyleSheet.absoluteFillObject,
     alignItems: "center",
     justifyContent: "center",
-    gap: 4,
-    backgroundColor: "rgba(255,255,255,0.88)",
-    paddingBottom: GROUND,
+    padding: space.lg,
+    backgroundColor: colors.overlay,
   },
-  overTitle: {
-    ...type.subtitle,
-    color: colors.line,
+  resultCard: {
+    alignSelf: "stretch",
+    maxWidth: 360,
+    borderRadius: radius.xl,
+    // Yüzen kart (§yükselti 4): koyu temada yüzey+kenarlık, açık temada gölge.
+    ...elevate(4),
+    paddingHorizontal: space.xl,
+    paddingVertical: space.xl,
+    alignItems: "center",
+    gap: space.xs,
   },
-  overScore: {
-    fontSize: 46,
-    fontWeight: "900",
-    color: colors.turf,
+  resultTitle: {
+    ...type.h1,
+    color: colors.textPrimary,
+    marginTop: space.xs,
   },
-  overSub: {
-    ...type.small,
-    color: colors.muted,
+  resultScore: {
+    ...type.scoreHero,
+    color: colors.brandAccent,
+    marginTop: space.xs,
   },
-  overButtons: {
+  resultUnit: {
+    ...type.micro,
+    color: colors.textTertiary,
+  },
+  resultBest: {
+    ...type.bodySm,
+    color: colors.textSecondary,
+    marginTop: space.xs,
+  },
+  resultActions: {
+    alignSelf: "stretch",
+    gap: space.m,
+    marginTop: space.lg,
+  },
+  resultRow: {
     flexDirection: "row",
-    gap: spacing.sm,
-    marginTop: spacing.md,
+    gap: space.m,
   },
-  overBtn: {
+
+  /* — Skor gönderim satırı — */
+  submitLine: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm + 3,
+    gap: space.xs,
+    marginTop: space.sm,
+    paddingVertical: space.xs,
   },
-  retryBtn: {
-    backgroundColor: colors.turf,
+  submitInfo: {
+    ...type.caption,
+    fontWeight: "600",
+    letterSpacing: 0,
+    color: colors.textTertiary,
   },
-  retryText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: colors.surface,
+  submitLink: {
+    ...type.caption,
+    fontWeight: "700",
+    letterSpacing: 0,
+    color: colors.brandAccent,
   },
-  shareBtn: {
-    backgroundColor: colors.turfDim,
+  submitFail: {
+    ...type.caption,
+    fontWeight: "700",
+    letterSpacing: 0,
+    color: colors.danger,
   },
-  shareBtnText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: colors.turf,
-  },
-  backdrop: {
+
+  /* — Paylaşım kartı (sabit koyu palet) — */
+  shareBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.65)",
+    backgroundColor: colors.overlay,
     alignItems: "center",
     justifyContent: "center",
-    padding: spacing.lg,
-    gap: spacing.md,
+    padding: space.xl,
+    gap: space.lg,
   },
   shareCard: {
-    width: 264,
-    backgroundColor: "#18102C",
-    borderRadius: 16,
-    paddingVertical: spacing.xl,
-    paddingHorizontal: spacing.lg,
+    width: 268,
+    borderRadius: radius.xl,
+    borderWidth: hairline,
+    borderColor: inkPalette.brandBorder,
+    paddingVertical: space.xxl,
+    paddingHorizontal: space.xl,
     alignItems: "center",
-    gap: 4,
+    gap: space.xxs,
   },
   shareBrand: {
-    fontSize: 15,
-    fontWeight: "900",
-    color: "#FFFFFF",
+    ...type.h2,
+    color: inkPalette.textPrimary,
   },
-  shareArena: {
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 1.5,
-    color: "#B9A6E4",
+  shareGame: {
+    ...type.micro,
+    color: inkPalette.brandAccent,
   },
   shareScore: {
-    fontSize: 48,
-    fontWeight: "900",
-    color: "#F0BE2E",
-    marginTop: spacing.sm,
+    ...type.scoreHero,
+    fontSize: 56,
+    lineHeight: 60,
+    color: inkPalette.warn,
+    marginTop: space.sm,
   },
-  shareLabel: {
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 1,
-    color: "#FFFFFF",
+  shareUnit: {
+    ...type.micro,
+    color: inkPalette.textPrimary,
   },
   shareDivider: {
     alignSelf: "stretch",
-    height: 1,
-    backgroundColor: "rgba(255,255,255,0.18)",
-    marginVertical: spacing.md,
+    height: hairline,
+    backgroundColor: withAlpha(inkPalette.textPrimary, 0.2),
+    marginVertical: space.md,
   },
-  shareChallenge: {
-    fontSize: 12,
+  shareTaunt: {
+    ...type.bodySm,
     fontWeight: "700",
-    color: "#D9CBF6",
+    color: inkPalette.textSecondary,
   },
   shareFooter: {
-    fontSize: 8,
-    fontWeight: "700",
-    letterSpacing: 1,
-    color: "#8878B8",
-    marginTop: spacing.sm,
+    ...type.micro,
+    color: inkPalette.textTertiary,
+    marginTop: space.sm,
   },
-  closeBtn: {
-    backgroundColor: "rgba(0,0,0,0.35)",
-  },
-  closeText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#FFFFFF",
-  },
-  pressed: {
-    opacity: 0.7,
+  shareActions: {
+    flexDirection: "row",
+    gap: space.m,
   },
 });

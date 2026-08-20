@@ -1,12 +1,23 @@
-import { useState } from "react";
-import { Image, StyleSheet, Text, View } from "react-native";
-import { colors, radius, spacing } from "@/constants/theme";
-import { initials, mediaUrl } from "@/lib/format";
-
 /**
- * Takım amblemi. Logolar veritabanında farklı biçimlerde duruyor ve bir kısmı
- * eksik; her durumda takım baş harfleriyle okunur bir yedek gösterilir.
+ * ESKİ KAPI — `components/ui` TeamLogo / Avatar üzerine ince uyumluluk katmanı.
+ *
+ * NEDEN DURUYOR: `TeamCrest` ve `PlayerAvatar` adları geçiş öncesi yazılmış
+ * dosyalarda hâlâ içe aktarılıyor. Bu dosya artık kendi görselini ÇİZMEZ;
+ * yalnız eski prop imzasını yenisine çevirir. Böylece amblem davranışı
+ * (yedek baş harfler, hata sonrası yeniden deneme, memo'lu render) tek yerde —
+ * `components/ui/TeamLogo.tsx` ve `components/ui/Avatar.tsx` içinde — yaşar.
+ *
+ * GÖRSEL SONUÇ: TeamLogo/Avatar ile BİREBİR aynıdır; köşe yarıçapı, yedek
+ * metin rengi ve zemin artık yeni paletten gelir.
+ *
+ * YENİ KOD BU DOSYAYI KULLANMAZ:
+ *   import { TeamLogo, Avatar } from "@/components/ui";
+ * Son çağıran da geçtiğinde bu dosya silinecek.
  */
+
+import { Avatar, TeamLogo } from "@/components/ui";
+
+/** Takım amblemi — eski imza; içi `TeamLogo`. */
 export function TeamCrest({
   name,
   logo,
@@ -16,55 +27,10 @@ export function TeamCrest({
   logo?: string | null;
   size?: number;
 }) {
-  const [failed, setFailed] = useState(false);
-  const uri = failed ? null : mediaUrl(logo);
-
-  const box = {
-    width: size,
-    height: size,
-    borderRadius: size / 4,
-  };
-
-  if (!uri) {
-    return (
-      <View style={[styles.fallback, box]}>
-        <Text style={[styles.initials, { fontSize: size * 0.36 }]} numberOfLines={1}>
-          {initials(name)}
-        </Text>
-      </View>
-    );
-  }
-
-  return (
-    <Image
-      source={{ uri }}
-      style={[styles.image, box]}
-      resizeMode="contain"
-      onError={() => setFailed(true)}
-    />
-  );
+  return <TeamLogo name={name} logo={logo} size={size} />;
 }
 
-const styles = StyleSheet.create({
-  image: {
-    backgroundColor: colors.surfaceRaised,
-  },
-  fallback: {
-    backgroundColor: colors.surfaceRaised,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: colors.faint,
-  },
-  initials: {
-    color: colors.muted,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-    paddingHorizontal: spacing.xs,
-  },
-});
-
-/** Oyuncu fotoğrafı — aynı yedek mantığı, yuvarlak biçim. */
+/** Oyuncu fotoğrafı — eski imza; içi `Avatar` (yuvarlak, halkasız). */
 export function PlayerAvatar({
   name,
   image,
@@ -74,24 +40,5 @@ export function PlayerAvatar({
   image?: string | null;
   size?: number;
 }) {
-  const [failed, setFailed] = useState(false);
-  const uri = failed ? null : mediaUrl(image);
-  const box = { width: size, height: size, borderRadius: radius.pill };
-
-  if (!uri) {
-    return (
-      <View style={[styles.fallback, box]}>
-        <Text style={[styles.initials, { fontSize: size * 0.36 }]}>{initials(name)}</Text>
-      </View>
-    );
-  }
-
-  return (
-    <Image
-      source={{ uri }}
-      style={[styles.image, box]}
-      resizeMode="cover"
-      onError={() => setFailed(true)}
-    />
-  );
+  return <Avatar name={name} image={image} size={size} />;
 }
