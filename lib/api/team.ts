@@ -443,3 +443,186 @@ export const submitMatchReview = (
     ...scores,
     comment,
   });
+
+/* ═════════════════════ MAÇ AL — SAHA TALEBİ ═════════════════════
+ *
+ * routes/matchRequests.js üye tarafı. Başkan saha panosundan boş saatleri
+ * seçip talep gönderir; yönetici onaylayınca slot "dolu" olur ve takıma
+ * MATCH_REQUEST bildirimi düşer (services/matchRequestService.js → notify).
+ *
+ * Pano hücrelerinin şekli yönetim tarafıyla AYNIDIR; tipler admin.ts'ten
+ * yeniden kullanılır ki iki taraf birbirinden ayrışmasın.
+ */
+
+import type { AdminBoardCell, AdminVenue, WeekOption } from "./admin";
+
+export interface TeamVenuesResponse {
+  items: AdminVenue[];
+  weeks: WeekOption[];
+  today: string;
+}
+
+export interface TeamBoardResponse {
+  venue: AdminVenue;
+  cells: AdminBoardCell[];
+  weeks: WeekOption[];
+  week_start: string;
+  today: string;
+  booking_window: { start: string; end: string };
+  /** Panoyu isteyen başkanın takımı — kendi taleplerini ayırt etmek için. */
+  teamId: number | null;
+}
+
+export type MatchRequestStatus = "pending" | "approved" | "rejected" | "cancelled";
+
+export interface MatchRequestSlot {
+  date: string;
+  hour: number;
+  minute: number;
+  label?: string;
+  status?: string;
+}
+
+export interface MyMatchRequest {
+  public_id: string;
+  status: MatchRequestStatus;
+  note: string | null;
+  admin_note: string | null;
+  created_at: string;
+  venue_name: string;
+  venue_public_id: string | null;
+  venue_location: string;
+  slots: MatchRequestSlot[];
+}
+
+export interface MyMatchRequestsResponse {
+  items: MyMatchRequest[];
+}
+
+export const MATCH_REQUEST_STATUS_LABELS: Record<MatchRequestStatus, string> = {
+  pending: "Yanıt bekliyor",
+  approved: "Onaylandı",
+  rejected: "Reddedildi",
+  cancelled: "Geri çekildi",
+};
+
+/** GET /api/match-requests/venues — üyenin ilindeki aktif sahalar. */
+export const getVenues = () => get<TeamVenuesResponse>("/api/match-requests/venues");
+
+/** GET /api/match-requests/venues/:publicId/board?weekStart= */
+export const getVenueBoard = (publicId: string, weekStart?: string) =>
+  get<TeamBoardResponse>(`/api/match-requests/venues/${publicId}/board`, { weekStart });
+
+/** GET /api/match-requests/mine — takımın gönderdiği talepler. */
+export const getMyMatchRequests = (status?: MatchRequestStatus | "all") =>
+  get<MyMatchRequestsResponse>("/api/match-requests/mine", { status });
+
+/**
+ * POST /api/match-requests — seçilen saatler için talep gönder.
+ * Sunucu saatleri ızgara içinde ve rezervasyon penceresinde olmaya zorlar.
+ */
+export const createMatchRequest = (body: {
+  venueId: string;
+  slots: { date: string; hour: number; minute: number }[];
+  note?: string;
+}) => post<{ message: string; item: MyMatchRequest }>("/api/match-requests", body);
+
+/** DELETE /api/match-requests/:publicId — bekleyen talebi geri çek. */
+export const cancelMatchRequest = (publicId: string) =>
+  del<{ message: string; cancelled: boolean }>(`/api/match-requests/${publicId}`);
+
+/* ═════════════════════ MAÇ KADROSU (MAÇ BAZLI) ═════════════════════
+ *
+ * "İdeal kadro" (PUT /api/team-management/lineup) takımın genel dizilişidir;
+ * BURASI tek bir maçın kadrosudur ve maça özeldir: kim ilk 11'de, kim yedek,
+ * kaptan kim, misafir oyuncu var mı. Maç canlı akışa geçtikten sonra sunucu
+ * 409 MATCH_ALREADY_LIVE döndürür — o noktadan sonra kadro reji tarafındadır.
+ */
+
+export interface MatchPlanPlayer {
+  playerId: number | null;
+  isGuest: boolean;
+  guestName: string | null;
+  jerseyNumber: number | null;
+  position: string | null;
+  starter: boolean;
+  captain: boolean;
+  slot: string | null;
+}
+
+export interface MatchPlan {
+  formation: string | null;
+  kit_color: string | null;
+  kit_secondary_color: string | null;
+  goal_music_url: string | null;
+  tactics: string | null;
+  lineup: MatchPlanPlayer[] | null;
+  status: string | null;
+}
+
+/** GET /api/match-center/team/matches/:matchId */
+export interface TeamMatchDetailResponse {
+  match: TeamMatch;
+  team_id: number;
+  plan: MatchPlan | null;
+  /** Sunucudaki kadro satırları (mac_kadrolari) — plan yoksa buradan türetilir. */
+  lineup: {
+    id: number;
+    oyuncu_id: number | null;
+    oyuncu_adi?: string | null;
+    forma_no: number | null;
+    ilk11_mi: boolean | number | null;
+    mevki?: string | null;
+  }[];
+}
+
+export const getTeamMatchPlan = (matchId: number) =>
+  get<TeamMatchDetailResponse>(`/api/match-center/team/matches/${matchId}`);
+
+/**
+ * PUT /api/match-center/team/matches/:matchId/plan
+ *
+ * Sunucu doğrulaması: diziliş geçerli olmalı, forma renkleri #RRGGBB,
+ * kadro 1-20 oyuncu, forma numaraları benzersiz, aynı oyuncu iki kez olamaz,
+ * en fazla bir kaptan.
+ */
+export const saveTeamMatchPlan = (
+  matchId: number,
+  body: {
+    formation: string;
+    kitColor: string;
+    kitSecondaryColor?: string;
+    goalMusicUrl?: string;
+    tactics?: string;
+    lineup: MatchPlanPlayer[];
+  }
+) => put<{ message: string; plan: MatchPlan }>(`/api/match-center/team/matches/${matchId}/plan`, body);
+
+/** POST .../guest-players — kadroya takımsız misafir oyuncu ekler. */
+export const createGuestPlayer = (matchId: number, body: { name: string; position?: string }) =>
+  post<{ message: string; player: { id: number; player_name: string } }>(
+    `/api/match-center/team/matches/${matchId}/guest-players`,
+    body
+  );
+
+/**
+ * Diziliş sözlüğü — sunucudaki constants/formations.js ile BİREBİR aynı.
+ * Ayrışırsa başkan burada seçtiği dizilişte 400 INVALID_FORMATION alır.
+ * Saha düzeni 8 kişiliktir (1 kaleci + 7 saha oyuncusu).
+ */
+export const FORMATIONS: Record<string, string[]> = {
+  "3-3-1": ["GK", "DEF1", "DEF2", "DEF3", "MID1", "MID2", "MID3", "FWD1"],
+  "3-2-2": ["GK", "DEF1", "DEF2", "DEF3", "MID1", "MID2", "FWD1", "FWD2"],
+  "2-3-2": ["GK", "DEF1", "DEF2", "MID1", "MID2", "MID3", "FWD1", "FWD2"],
+  "2-2-3": ["GK", "DEF1", "DEF2", "MID1", "MID2", "FWD1", "FWD2", "FWD3"],
+  "3-1-3": ["GK", "DEF1", "DEF2", "DEF3", "MID1", "FWD1", "FWD2", "FWD3"],
+  "2-4-1": ["GK", "DEF1", "DEF2", "MID1", "MID2", "MID3", "MID4", "FWD1"],
+  "4-2-1": ["GK", "DEF1", "DEF2", "DEF3", "DEF4", "MID1", "MID2", "FWD1"],
+  "4-1-2": ["GK", "DEF1", "DEF2", "DEF3", "DEF4", "MID1", "FWD1", "FWD2"],
+  "1-3-3": ["GK", "DEF1", "MID1", "MID2", "MID3", "FWD1", "FWD2", "FWD3"],
+};
+
+export const FORMATION_NAMES = Object.keys(FORMATIONS);
+export const DEFAULT_FORMATION = "3-3-1";
+/** Sahaya çıkabilecek en fazla oyuncu (kaleci dahil). */
+export const MAX_STARTERS = 8;

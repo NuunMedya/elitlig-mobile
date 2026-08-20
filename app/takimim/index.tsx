@@ -86,6 +86,14 @@ const NAV_ITEMS: NavItem[] = [
     tone: "brand",
   },
   {
+    key: "mac-al",
+    href: "/takimim/mac-al",
+    icon: "calendar",
+    title: "Maç Al",
+    subtitle: "Saha panosundan boş saat seç, talep gönder",
+    tone: "brand",
+  },
+  {
     key: "mac-merkezi",
     href: "/takimim/mac-merkezi",
     icon: "football",

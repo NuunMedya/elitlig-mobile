@@ -167,6 +167,10 @@ export default function MatchCenterScreen() {
   }, []);
 
   const openMatch = useCallback((matchId: number) => router.push(`/mac/${matchId}`), [router]);
+  const editSquad = useCallback(
+    (matchId: number) => router.push(`/takimim/mac/${matchId}`),
+    [router]
+  );
   const openReview = useCallback((match: TeamMatch) => setReviewing(match), []);
   const closeReview = useCallback(() => setReviewing(null), []);
 
@@ -178,11 +182,12 @@ export default function MatchCenterScreen() {
           expanded={expandedId === item.id}
           onToggle={toggleExpanded}
           onOpenMatch={openMatch}
+          onEditSquad={editSquad}
         />
       ) : (
         <PastCard match={item} onReview={openReview} onOpenMatch={openMatch} />
       ),
-    [expandedId, openMatch, openReview, tab, toggleExpanded]
+    [editSquad, expandedId, openMatch, openReview, tab, toggleExpanded]
   );
 
   if (!auth.user) {
@@ -289,14 +294,17 @@ const UpcomingCard = React.memo(function UpcomingCard({
   expanded,
   onToggle,
   onOpenMatch,
+  onEditSquad,
 }: {
   match: TeamMatch;
   expanded: boolean;
   onToggle: (matchId: number) => void;
   onOpenMatch: (matchId: number) => void;
+  onEditSquad: (matchId: number) => void;
 }) {
   const handleToggle = useCallback(() => onToggle(match.id), [match.id, onToggle]);
   const handleOpen = useCallback(() => onOpenMatch(match.id), [match.id, onOpenMatch]);
+  const handleSquad = useCallback(() => onEditSquad(match.id), [match.id, onEditSquad]);
 
   /** Tembel yükleme: yalnızca kart açıldığında istenir. */
   const availability = useQuery({
@@ -387,6 +395,14 @@ const UpcomingCard = React.memo(function UpcomingCard({
             </>
           ) : null}
 
+          {/* Kadro girişi yaklaşan maçın ASIL işi; maç detayı ikincil kalır. */}
+          <Button
+            label="Maç kadrosunu gir"
+            size="sm"
+            icon="people-outline"
+            onPress={handleSquad}
+            fullWidth
+          />
           <Button
             label="Maç detayı"
             variant="secondary"

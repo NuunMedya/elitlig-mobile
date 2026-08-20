@@ -294,28 +294,73 @@ export function categoryForNotif(data: Record<string, unknown> | null | undefine
 }
 
 /** Bildirim izni iste + token al (EAS Build sonrası çalışır) */
-export async function registerForPushNotifications(): Promise<string | null> {
+/**
+ * Push kaydının SONUCU — neden çalışmadığı ekranda gösterilebilsin diye.
+ *
+ * Eskiden bu fonksiyon her hatayı yutup `null` dönüyordu; "bildirim gelmiyor"
+ * şikâyetinde izin mi reddedildi, Expo Go'da mı çalışılıyor, token mu alınamadı,
+ * sunucuya mı yazılamadı ayırt edilemiyordu. Artık her durum adlandırılmıştır ve
+ * Bildirim Tercihleri ekranı bunu kullanıcıya gösterir.
+ */
+export type PushRegistrationState =
+  | "hazir"           // token alındı
+  | "izin-yok"        // kullanıcı bildirimlere izin vermedi
+  | "simulator"       // gerçek cihaz değil (emülatör/simülatör)
+  | "expo-go"         // Expo Go: uzak bildirim desteklenmiyor, derleme gerekir
+  | "proje-yok"       // EAS projectId okunamadı
+  | "hata";           // beklenmeyen hata
+
+export interface PushRegistration {
+  state: PushRegistrationState;
+  token: string | null;
+  /** Kullanıcıya gösterilecek Türkçe açıklama. */
+  message: string;
+  /** Geliştirici için ham hata metni. */
+  detail?: string;
+}
+
+/**
+ * Expo Go'da uzak bildirim SDK 53'ten beri desteklenmiyor: token istendiğinde
+ * modül hata fırlatır. Bunu "kurulum hatası" gibi göstermek yanıltıcı olurdu.
+ */
+function isExpoGo(): boolean {
   try {
-    // EAS Build'de çalışır
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const Constants = require("expo-constants").default;
+    return Constants?.appOwnership === "expo" || Constants?.executionEnvironment === "storeClient";
+  } catch {
+    return false;
+  }
+}
+
+/** Bildirim izni iste, kanalları kur, Expo push token'ı al. */
+export async function registerForPush(): Promise<PushRegistration> {
+  try {
     const Notifications = await import("expo-notifications");
     const Device = await import("expo-device");
 
     if (!Device.isDevice) {
-      console.log("[Notif] Gerçek cihaz değil, token atlanıyor");
-      return null;
+      return {
+        state: "simulator",
+        token: null,
+        message: "Emülatörde push bildirimi çalışmaz. Gerçek bir cihazda deneyin.",
+      };
     }
 
     const { status: existing } = await Notifications.getPermissionsAsync();
     let finalStatus = existing;
-
     if (existing !== "granted") {
       const { status } = await Notifications.requestPermissionsAsync();
       finalStatus = status;
     }
 
     if (finalStatus !== "granted") {
-      console.log("[Notif] İzin reddedildi");
-      return null;
+      return {
+        state: "izin-yok",
+        token: null,
+        message:
+          "Bildirim izni verilmedi. Telefon ayarlarından ElitLig için bildirimlere izin verin.",
+      };
     }
 
     // Android kanal kurulumu. Kimlikler sunucunun gönderdiği channelId ile
@@ -336,15 +381,49 @@ export async function registerForPushNotifications(): Promise<string | null> {
     const Constants = (await import("expo-constants")).default;
     const projectId =
       Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
-    const tokenData = await Notifications.getExpoPushTokenAsync(
-      projectId ? { projectId } : undefined
-    );
 
-    return tokenData.data;
-  } catch (err) {
-    console.log("[Notif] Token alınamadı (Expo Go'da beklenen):", err);
-    return null;
+    if (!projectId) {
+      return {
+        state: "proje-yok",
+        token: null,
+        message:
+          "Uygulama kimliği (EAS projectId) okunamadı; bu derlemede push bildirimi alınamaz.",
+      };
+    }
+
+    const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
+    return {
+      state: "hazir",
+      token: tokenData.data,
+      message: "Bildirimler açık. Bu cihaz bildirim almaya hazır.",
+    };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    if (isExpoGo()) {
+      return {
+        state: "expo-go",
+        token: null,
+        message:
+          "Expo Go uygulamasında push bildirimi desteklenmiyor. Bildirimleri görmek için " +
+          "uygulamanın kendi derlemesini (APK / TestFlight) yükleyin.",
+        detail,
+      };
+    }
+    return {
+      state: "hata",
+      token: null,
+      message: "Bildirim kaydı yapılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.",
+      detail,
+    };
   }
+}
+
+/**
+ * Eski imza — yalnızca token döndürür.
+ * Yeni kod `registerForPush()` kullanmalı; bu sarmalayıcı çağrı yerlerini kırmamak içindir.
+ */
+export async function registerForPushNotifications(): Promise<string | null> {
+  return (await registerForPush()).token;
 }
 
 /** Bildirim handler'larını kur (ön planda iken banner + ses) */
