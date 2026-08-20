@@ -1,22 +1,62 @@
+/**
+ * SAHA YÖNETİMİ — iki segment, tek ekran.
+ *
+ *   TALEPLER : takımların maç alma talepleri. Not yazarak onaylanır/reddedilir;
+ *              talebin istediği saatler kendi durum renkleriyle görünür.
+ *   SAHALAR  : saha listesi → seçilen sahanın HAFTALIK SLOT PANOSU. Gün satırı,
+ *              saat çipleri, hafta gezinmesi.
+ *
+ * NEDEN PANO GÜN SATIRI + SAAT ÇİPİ: web panelindeki 7×N'lik ızgara telefonda
+ * ya okunmaz kadar küçülüyor ya da yatay kaydırma gerektiriyor. Gün satırı
+ * (dikey) + saat çipi (sarmalayan yatay) aynı bilgiyi tek eksende, başparmakla
+ * dokunulabilir boyutta verir.
+ *
+ * RENK YALNIZ DURUM TAŞIR: açık (yeşil) · kapalı (nötr) · rakip bekleniyor
+ * (uyarı) · maç alındı (marka). Eşleme `toneColors` sözlüğünden gelir, ekran
+ * kendi renk tablosunu yazmaz. Renk tek başına anlam taşımasın diye panonun
+ * üstünde açıklama şeridi ve çipin altında adet rozeti bulunur.
+ *
+ * GERİ ALINAMAYAN EYLEM ONAYLI: dolu bir saati boşaltmak fikstür maçını da
+ * geri alır — Alert ile doğrulanır. Saati kapatma/açma tek dokunuşla yapılır
+ * ama alt sayfadan geçer, yanlışlıkla tetiklenmez.
+ *
+ * VERİ MANTIĞI KORUNDU: talep listesi durum süzgeciyle sunucudan gelir; pano
+ * `weekStart` ile sayfalanır ve sunucunun izin verdiği hafta aralığının dışına
+ * çıkılmaz.
+ */
+
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Redirect } from "expo-router";
-import { useMemo, useState } from "react";
-import {
-  Alert,
-  FlatList,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
+import { memo, useCallback, useMemo, useState } from "react";
+import { Alert, FlatList, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { DetailHeader } from "@/components/ScreenHeader";
-import { EmptyState, ErrorState, Loading } from "@/components/States";
-import { colors, radius, spacing, type } from "@/constants/theme";
+
+import {
+  Badge,
+  BottomSheet,
+  Button,
+  Chip,
+  ChipGroup,
+  EmptyState,
+  ErrorState,
+  Input,
+  ListRow,
+  ScreenHeader,
+  SegmentedControl,
+  SkeletonCard,
+  SkeletonListRow,
+  TeamLogo,
+  Touchable,
+  errorMessage,
+  toneColors,
+  useHeaderScroll,
+  useRefresh,
+  useToast,
+  withAlpha,
+  type SegmentedItem,
+  type Tone,
+} from "@/components/ui";
 import {
   getAdminBoard,
   getAdminRequests,
@@ -30,57 +70,91 @@ import {
   type AdminMatchRequest,
   type AdminVenue,
   type RequestStatus,
+  type SlotStatus,
+  type VenueGridDay,
 } from "@/lib/api/admin";
-import { formatDateShort } from "@/lib/format";
-import { ApiError } from "@/lib/http";
+import { formatDateShort, mediaUrl } from "@/lib/format";
 import { useAuth } from "@/providers/AuthProvider";
+import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
 
-/**
- * Saha Yönetimi — iki sekme:
- *
- *   Talepler : takımların maç alma talepleri; not ekleyerek onayla / reddet.
- *   Sahalar  : saha listesi; seçilen sahanın haftalık programı gün gün açılır,
- *              hücreler duruma göre renklenir, dokununca kapatılır / açılır.
- *              Takım yazılı hücreler istenirse boşaltılır.
- *
- * Hücre durumları sunucudaki SLOT_STATUSES ile birebir:
- *   open (yeşil çerçeve) · closed (gri) · awaiting (sarı) · booked (mor).
- */
+/* ═══════════════════════════ SABİTLER VE YARDIMCILAR ═══════════════════════ */
 
-type Tab = "requests" | "venues";
+type VenueTab = "talepler" | "sahalar";
 
-const REQUEST_FILTERS: (RequestStatus | null)[] = [null, "pending", "approved", "rejected"];
+const TAB_ITEMS: SegmentedItem<VenueTab>[] = [
+  { key: "talepler", label: "Talepler" },
+  { key: "sahalar", label: "Sahalar" },
+];
 
-/** Talep durumu → renk. */
-function requestColor(status: RequestStatus): string {
-  if (status === "pending") return colors.yellow;
-  if (status === "approved") return colors.green;
-  if (status === "rejected") return colors.red;
-  return colors.muted;
+const REQUEST_FILTERS: RequestStatus[] = ["pending", "approved", "rejected", "cancelled"];
+
+/** Talep durumu → ton. */
+const REQUEST_TONE: Record<RequestStatus, Tone> = {
+  pending: "warn",
+  approved: "win",
+  rejected: "danger",
+  cancelled: "neutral",
+};
+
+/** Hücre durumu → ton. Panonun tüm rengi bu tablodan çıkar. */
+const SLOT_TONE: Record<SlotStatus, Tone> = {
+  open: "win",
+  closed: "neutral",
+  awaiting: "warn",
+  booked: "brand",
+};
+
+/** Panonun üstündeki açıklama şeridi — sunucudaki durum adlarıyla birebir. */
+const LEGEND: SlotStatus[] = ["open", "closed", "awaiting", "booked"];
+
+function firstParam(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
 }
 
-const errorText = (error: unknown) =>
-  error instanceof ApiError ? error.userMessage : "Beklenmeyen bir hata oluştu.";
+function resolveTab(raw: string | string[] | undefined): VenueTab {
+  return firstParam(raw) === "sahalar" ? "sahalar" : "talepler";
+}
+
+function resolveRequestStatus(raw: unknown): RequestStatus | null {
+  const key = typeof raw === "string" ? raw.trim() : "";
+  return (REQUEST_FILTERS as string[]).includes(key) ? (key as RequestStatus) : null;
+}
 
 /** "2026-08-17" + gün → ISO tarih (hafta gezinmesi için). */
 const addDaysISO = (iso: string, days: number) =>
-  new Date(Date.parse(`${iso}T00:00:00Z`) + days * 86400000).toISOString().slice(0, 10);
+  new Date(Date.parse(`${iso}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+
+const cellKey = (cell: { date: string; hour: number; minute: number }) =>
+  `${cell.date}-${cell.hour}-${cell.minute}`;
+
+/* ══════════════════════════════════ EKRAN ═════════════════════════════════ */
 
 export default function AdminVenuesScreen() {
   const auth = useAuth();
+  const router = useRouter();
+  const toast = useToast();
   const queryClient = useQueryClient();
+  const params = useLocalSearchParams<{ tab?: string | string[]; durum?: string | string[] }>();
+  const { scrollY, scrollProps } = useHeaderScroll();
 
-  const [tab, setTab] = useState<Tab>("requests");
+  /** Segment ve talep süzgeci ROTADA taşınır. */
+  const tab = resolveTab(params.tab);
+  const requestFilter = resolveRequestStatus(firstParam(params.durum));
 
-  /* ---------- Talepler sekmesi ---------- */
-  const [requestFilter, setRequestFilter] = useState<RequestStatus | null>(null);
-  const [review, setReview] = useState<{ request: AdminMatchRequest; decision: "approve" | "reject" } | null>(null);
+  const canQuery = Boolean(auth.user) && auth.isManagement;
+
+  /* ─────────────────────────── TALEPLER ─────────────────────────── */
+
+  const [review, setReview] = useState<{
+    request: AdminMatchRequest;
+    decision: "approve" | "reject";
+  } | null>(null);
   const [adminNote, setAdminNote] = useState("");
 
   const requestsQuery = useQuery({
-    queryKey: ["admin", "match-requests", requestFilter],
+    queryKey: ["admin", "match-requests", "list", requestFilter],
     queryFn: () => getAdminRequests({ status: requestFilter ?? "all" }),
-    enabled: Boolean(auth.user) && auth.isManagement && tab === "requests",
+    enabled: canQuery && tab === "talepler",
     staleTime: 10_000,
     retry: false,
   });
@@ -91,128 +165,235 @@ export default function AdminVenuesScreen() {
     onSuccess: (result) => {
       setReview(null);
       setAdminNote("");
-      queryClient.invalidateQueries({ queryKey: ["admin", "match-requests"] });
-      queryClient.invalidateQueries({ queryKey: ["admin", "venue-board"] });
-      Alert.alert("Tamam", result.message);
+      void queryClient.invalidateQueries({ queryKey: ["admin", "match-requests"] });
+      void queryClient.invalidateQueries({ queryKey: ["admin", "venue-board"] });
+      toast.show({ message: result.message, tone: "success" });
     },
-    onError: (error) => Alert.alert("İşlem yapılamadı", errorText(error)),
+    // Hata alt sayfa AÇIKKEN düşer; Toast yerel Modal'ın altında kalacağı için
+    // sebep Alert ile söylenir. Başarıda sayfa kapandığından Toast görünür.
+    onError: (error) => Alert.alert("İşlem yapılamadı", errorMessage(error)),
   });
 
-  /* ---------- Sahalar sekmesi ---------- */
-  const [selectedVenue, setSelectedVenue] = useState<AdminVenue | null>(null);
+  const openReview = useCallback((request: AdminMatchRequest, decision: "approve" | "reject") => {
+    setAdminNote("");
+    setReview({ request, decision });
+  }, []);
+
+  const closeReview = useCallback(() => setReview(null), []);
+
+  /* ──────────────────────────── SAHALAR ──────────────────────────── */
+
+  const [venue, setVenue] = useState<AdminVenue | null>(null);
   const [weekStart, setWeekStart] = useState<string | undefined>(undefined);
+  const [cell, setCell] = useState<AdminBoardCell | null>(null);
+  const [slotNote, setSlotNote] = useState("");
 
   const venuesQuery = useQuery({
     queryKey: ["admin", "venues"],
     queryFn: getAdminVenues,
-    enabled: Boolean(auth.user) && auth.isManagement && tab === "venues",
+    enabled: canQuery && tab === "sahalar",
     staleTime: 30_000,
     retry: false,
   });
 
   const boardQuery = useQuery({
-    queryKey: ["admin", "venue-board", selectedVenue?.public_id, weekStart ?? null],
-    queryFn: () => getAdminBoard(selectedVenue?.public_id as string, weekStart),
-    enabled: Boolean(auth.user) && auth.isManagement && Boolean(selectedVenue),
+    queryKey: ["admin", "venue-board", venue?.public_id ?? null, weekStart ?? null],
+    // Tür daraltması sorgu içinde yapılır; `enabled` zaten sahasız çalıştırmaz.
+    queryFn: () => {
+      if (!venue) throw new Error("Saha seçilmedi.");
+      return getAdminBoard(venue.public_id, weekStart);
+    },
+    enabled: canQuery && tab === "sahalar" && Boolean(venue),
     staleTime: 10_000,
     retry: false,
   });
 
-  const refreshBoard = () => queryClient.invalidateQueries({ queryKey: ["admin", "venue-board"] });
+  const board = boardQuery.data;
+
+  const refreshBoard = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ["admin", "venue-board"] });
+  }, [queryClient]);
 
   const slotMutation = useMutation({
-    mutationFn: (input: { publicId: string; date: string; hour: number; minute: number; status: "open" | "closed" }) =>
-      setSlotStatus(input.publicId, input),
-    onSuccess: refreshBoard,
-    onError: (error) => Alert.alert("Saat güncellenemedi", errorText(error)),
+    mutationFn: (input: {
+      publicId: string;
+      date: string;
+      hour: number;
+      minute: number;
+      status: "open" | "closed";
+      note?: string;
+    }) => setSlotStatus(input.publicId, input),
+    onSuccess: (result) => {
+      setCell(null);
+      setSlotNote("");
+      refreshBoard();
+      toast.show({ message: result.message, tone: "success" });
+    },
+    // Hata alt sayfa AÇIKKEN düşer; Toast yerel Modal'ın altında kalacağı için
+    // sebep Alert ile söylenir. Başarıda sayfa kapandığından Toast görünür.
+    onError: (error) => Alert.alert("İşlem yapılamadı", errorMessage(error)),
   });
 
   const releaseMutation = useMutation({
     mutationFn: (input: { publicId: string; date: string; hour: number; minute: number }) =>
       releaseSlot(input.publicId, { date: input.date, hour: input.hour, minute: input.minute }),
     onSuccess: (result) => {
+      setCell(null);
       refreshBoard();
-      Alert.alert("Tamam", result.message);
+      void queryClient.invalidateQueries({ queryKey: ["admin", "matches"] });
+      toast.show({ message: result.message, tone: "success" });
     },
-    onError: (error) => Alert.alert("Saat boşaltılamadı", errorText(error)),
+    // Hata alt sayfa AÇIKKEN düşer; Toast yerel Modal'ın altında kalacağı için
+    // sebep Alert ile söylenir. Başarıda sayfa kapandığından Toast görünür.
+    onError: (error) => Alert.alert("İşlem yapılamadı", errorMessage(error)),
   });
 
-  const board = boardQuery.data;
-
-  /* Hücreler gün gün gruplanır: dikey gün listesi, yatay saat çipleri. */
-  const cellsByDay = useMemo(() => {
+  /** Hücreler gün gün gruplanır: dikey gün listesi, yatay saat çipleri. */
+  const days = useMemo(() => {
     if (!board) return [];
     const map = new Map<string, AdminBoardCell[]>();
-    board.cells.forEach((cell) => {
-      const group = map.get(cell.date) ?? [];
-      group.push(cell);
-      map.set(cell.date, group);
+    board.cells.forEach((item) => {
+      const group = map.get(item.date);
+      if (group) group.push(item);
+      else map.set(item.date, [item]);
     });
     return board.venue.grid.days.map((day) => ({ day, cells: map.get(day.date) ?? [] }));
   }, [board]);
 
-  const onCellPress = (cell: AdminBoardCell) => {
-    if (!selectedVenue) return;
-    const label = `${formatDateShort(cell.date)} ${cell.label}`;
+  /* Hafta gezinmesi: sunucunun izin verdiği hafta aralığında kal. */
+  const currentWeek = board?.week_start;
+  const weekOptions = useMemo(() => board?.weeks ?? [], [board]);
+  const canPrev = Boolean(currentWeek && weekOptions.length && currentWeek > weekOptions[0].start);
+  const canNext = Boolean(
+    currentWeek && weekOptions.length && currentWeek < weekOptions[weekOptions.length - 1].start,
+  );
+  const weekLabel = currentWeek
+    ? (weekOptions.find((week) => week.start === currentWeek)?.label ?? currentWeek)
+    : "…";
 
-    if (cell.status === "open") {
-      Alert.alert("Saati kapat", `${label} saati talebe kapatılsın mı?`, [
-        { text: "Vazgeç", style: "cancel" },
-        {
-          text: "Kapat",
-          style: "destructive",
-          onPress: () =>
-            slotMutation.mutate({
-              publicId: selectedVenue.public_id,
-              date: cell.date,
-              hour: cell.hour,
-              minute: cell.minute,
-              status: "closed",
-            }),
-        },
-      ]);
-      return;
-    }
+  const goPrevWeek = useCallback(() => {
+    if (currentWeek) setWeekStart(addDaysISO(currentWeek, -7));
+  }, [currentWeek]);
 
-    if (cell.status === "closed") {
-      Alert.alert("Saati aç", `${label} saati yeniden talebe açılsın mı?`, [
-        { text: "Vazgeç", style: "cancel" },
-        {
-          text: "Aç",
-          onPress: () =>
-            slotMutation.mutate({
-              publicId: selectedVenue.public_id,
-              date: cell.date,
-              hour: cell.hour,
-              minute: cell.minute,
-              status: "open",
-            }),
-        },
-      ]);
-      return;
-    }
+  const goNextWeek = useCallback(() => {
+    if (currentWeek) setWeekStart(addDaysISO(currentWeek, 7));
+  }, [currentWeek]);
 
-    // awaiting / booked: takımlar gösterilir, istenirse saat boşaltılır.
+  // Saha listesi ile pano ayrı listelerdir; geçişte başlık yeniden açılsın.
+  const openVenue = useCallback(
+    (item: AdminVenue) => {
+      scrollY.setValue(0);
+      setWeekStart(undefined);
+      setVenue(item);
+    },
+    [scrollY],
+  );
+
+  const closeVenue = useCallback(() => {
+    scrollY.setValue(0);
+    setVenue(null);
+    setWeekStart(undefined);
+  }, [scrollY]);
+
+  const openCell = useCallback((item: AdminBoardCell) => {
+    setSlotNote(item.note ?? "");
+    setCell(item);
+  }, []);
+
+  const closeCell = useCallback(() => setCell(null), []);
+
+  const applySlotStatus = useCallback(
+    (next: "open" | "closed") => {
+      if (!venue || !cell) return;
+      slotMutation.mutate({
+        publicId: venue.public_id,
+        date: cell.date,
+        hour: cell.hour,
+        minute: cell.minute,
+        status: next,
+        note: slotNote.trim() || undefined,
+      });
+    },
+    [cell, slotMutation, slotNote, venue],
+  );
+
+  const confirmRelease = useCallback(() => {
+    if (!venue || !cell) return;
     const teams = [cell.home?.team_name, cell.away?.team_name].filter(Boolean).join(" – ");
     Alert.alert(
-      SLOT_STATUS_LABELS[cell.status] ?? cell.status,
-      `${label}\n${teams}${cell.pending_count ? `\nBekleyen talep: ${cell.pending_count}` : ""}`,
+      "Saati boşalt",
+      `${formatDateShort(cell.date)} ${cell.label}${teams ? `\n${teams}` : ""}\n\nSaat tamamen boşaltılacak; bu saate açılmış fikstür maçı da geri alınır.`,
       [
-        { text: "Kapat", style: "cancel" },
+        { text: "Vazgeç", style: "cancel" },
         {
-          text: "Saati boşalt",
+          text: "Boşalt",
           style: "destructive",
           onPress: () =>
             releaseMutation.mutate({
-              publicId: selectedVenue.public_id,
+              publicId: venue.public_id,
               date: cell.date,
               hour: cell.hour,
               minute: cell.minute,
             }),
         },
-      ]
+      ],
     );
-  };
+  }, [cell, releaseMutation, venue]);
+
+  /* ──────────────────────────── GEZİNME ──────────────────────────── */
+
+  const changeTab = useCallback(
+    (next: VenueTab) => {
+      scrollY.setValue(0);
+      router.setParams({ tab: next });
+    },
+    [router, scrollY],
+  );
+
+  const selectRequestFilter = useCallback(
+    (next: RequestStatus | null) => {
+      router.setParams({ durum: next ?? "" });
+    },
+    [router],
+  );
+
+  /** Hücredeki bekleyen talepleri Talepler segmentinde incelemeye geç. */
+  const goToPendingRequests = useCallback(() => {
+    setCell(null);
+    router.setParams({ tab: "talepler", durum: "pending" });
+  }, [router]);
+
+  const requestRefresh = useRefresh(requestsQuery.refetch, {
+    refreshing: requestsQuery.isRefetching,
+  });
+  const venueRefresh = useRefresh(venuesQuery.refetch, { refreshing: venuesQuery.isRefetching });
+  const boardRefresh = useRefresh(boardQuery.refetch, { refreshing: boardQuery.isRefetching });
+
+  /* ───────────────────────────── ÇİZİM ───────────────────────────── */
+
+  const renderRequest = useCallback(
+    ({ item }: { item: AdminMatchRequest }) => (
+      <RequestCard request={item} onReview={openReview} busy={reviewMutation.isPending} />
+    ),
+    [openReview, reviewMutation.isPending],
+  );
+
+  const renderVenue = useCallback(
+    ({ item, index }: { item: AdminVenue; index: number }) => {
+      const total = venuesQuery.data?.items.length ?? 0;
+      const position =
+        total <= 1 ? "single" : index === 0 ? "first" : index === total - 1 ? "last" : "middle";
+      return <VenueRow venue={item} position={position} onPress={openVenue} />;
+    },
+    [openVenue, venuesQuery.data?.items.length],
+  );
+
+  const renderDay = useCallback(
+    ({ item }: { item: { day: VenueGridDay; cells: AdminBoardCell[] } }) => (
+      <DayRow day={item.day} cells={item.cells} onPressCell={openCell} />
+    ),
+    [openCell],
+  );
 
   if (!auth.user) {
     return <Redirect href="/giris" />;
@@ -221,760 +402,877 @@ export default function AdminVenuesScreen() {
     return <Redirect href="/yonetim" />;
   }
 
-  /* Hafta gezinmesi: sunucunun izin verdiği hafta aralığında kal. */
-  const currentWeek = board?.week_start;
-  const weekOptions = board?.weeks ?? [];
-  const canPrev = Boolean(currentWeek && weekOptions.length && currentWeek > weekOptions[0].start);
-  const canNext = Boolean(
-    currentWeek && weekOptions.length && currentWeek < weekOptions[weekOptions.length - 1].start
-  );
+  const requests = requestsQuery.data?.items ?? [];
+  const venues = venuesQuery.data?.items ?? [];
+  const pendingCount = requests.filter((item) => item.status === "pending").length;
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      <DetailHeader title="Saha Yönetimi" subtitle="Maç talepleri ve saha programı" />
-
-      {/* Sekme seçici */}
-      <View style={styles.tabs}>
-        {(
-          [
-            { key: "requests", label: "Talepler" },
-            { key: "venues", label: "Sahalar" },
-          ] as { key: Tab; label: string }[]
-        ).map((item) => (
-          <Pressable
-            key={item.key}
-            onPress={() => setTab(item.key)}
-            style={({ pressed }) => [
-              styles.tabBtn,
-              tab === item.key && styles.tabBtnActive,
-              pressed && styles.pressed,
-            ]}
-          >
-            <Text style={[styles.tabText, tab === item.key && styles.tabTextActive]}>{item.label}</Text>
-          </Pressable>
-        ))}
-      </View>
-
-      {tab === "requests" ? (
-        <>
-          {/* Talep durum filtresi */}
-          <View style={styles.chips}>
-            {REQUEST_FILTERS.map((status) => (
-              <Pressable
-                key={status ?? "all"}
-                onPress={() => setRequestFilter(status)}
-                style={({ pressed }) => [
-                  styles.chip,
-                  requestFilter === status && styles.chipActive,
-                  pressed && styles.pressed,
-                ]}
-              >
-                <Text style={[styles.chipText, requestFilter === status && styles.chipTextActive]}>
-                  {status === null ? "Tümü" : REQUEST_STATUS_LABELS[status]}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-
-          {requestsQuery.isLoading ? (
-            <Loading />
-          ) : requestsQuery.isError ? (
-            <ErrorState error={requestsQuery.error} onRetry={requestsQuery.refetch} />
-          ) : (requestsQuery.data?.items.length ?? 0) === 0 ? (
-            <EmptyState
-              icon="calendar-outline"
-              title="Talep yok"
-              body="Bu filtrede maç alma talebi bulunmuyor."
-            />
-          ) : (
-            <FlatList
-              data={requestsQuery.data?.items ?? []}
-              keyExtractor={(item) => item.public_id}
-              contentContainerStyle={styles.list}
-              renderItem={({ item }) => (
-                <View style={styles.card}>
-                  <View style={styles.cardTop}>
-                    <Text style={styles.cardTitle} numberOfLines={1}>
-                      {item.team_name}
-                    </Text>
-                    <View style={[styles.tag, { backgroundColor: requestColor(item.status) + "1F" }]}>
-                      <Text style={[styles.tagText, { color: requestColor(item.status) }]}>
-                        {REQUEST_STATUS_LABELS[item.status]}
-                      </Text>
-                    </View>
-                  </View>
-                  <Text style={styles.cardMeta}>
-                    {item.venue_name} · {formatDateShort(item.created_at)}
-                  </Text>
-                  {item.note ? <Text style={styles.cardNote}>“{item.note}”</Text> : null}
-
-                  {/* İstenen saatler */}
-                  <View style={styles.slotChips}>
-                    {item.slots.map((slot) => (
-                      <View
-                        key={`${slot.date}-${slot.hour}-${slot.minute}`}
-                        style={[
-                          styles.slotChip,
-                          slot.status === "approved" && styles.slotChipApproved,
-                          slot.status === "rejected" && styles.slotChipRejected,
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.slotChipText,
-                            slot.status === "approved" && { color: colors.green },
-                            slot.status === "rejected" && { color: colors.muted },
-                          ]}
-                        >
-                          {slot.label}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-
-                  {item.admin_note ? (
-                    <Text style={styles.adminNoteText}>Yönetici notu: {item.admin_note}</Text>
-                  ) : null}
-
-                  {item.status === "pending" ? (
-                    <View style={styles.actions}>
-                      <Pressable
-                        onPress={() => {
-                          setAdminNote("");
-                          setReview({ request: item, decision: "reject" });
-                        }}
-                        style={({ pressed }) => [styles.btn, styles.rejectBtn, pressed && styles.pressed]}
-                      >
-                        <Text style={styles.rejectText}>Reddet</Text>
-                      </Pressable>
-                      <Pressable
-                        onPress={() => {
-                          setAdminNote("");
-                          setReview({ request: item, decision: "approve" });
-                        }}
-                        style={({ pressed }) => [styles.btn, styles.approveBtn, pressed && styles.pressed]}
-                      >
-                        <Text style={styles.approveText}>Onayla</Text>
-                      </Pressable>
-                    </View>
-                  ) : null}
-                </View>
-              )}
-            />
-          )}
-        </>
-      ) : selectedVenue ? (
-        /* ---------- Saha programı (haftalık tablo) ---------- */
-        <View style={styles.flex}>
-          <View style={styles.boardHead}>
-            <Pressable
-              onPress={() => {
-                setSelectedVenue(null);
-                setWeekStart(undefined);
-              }}
-              hitSlop={12}
-            >
-              <Ionicons name="chevron-back" size={22} color={colors.line} />
-            </Pressable>
-            <View style={styles.flex}>
-              <Text style={styles.boardTitle} numberOfLines={1}>
-                {selectedVenue.name}
-              </Text>
-              <Text style={styles.boardMeta} numberOfLines={1}>
-                {selectedVenue.open_label} – {selectedVenue.close_label} · {selectedVenue.slot_minutes} dk
-              </Text>
+      <ScreenHeader
+        title="Saha Yönetimi"
+        subtitle={venue && tab === "sahalar" ? venue.name : "Maç talepleri ve saha programı"}
+        back
+        scrollY={scrollY}
+        bottom={
+          <View style={styles.controls}>
+            <View style={styles.segmentWrap}>
+              <SegmentedControl<VenueTab> items={TAB_ITEMS} value={tab} onChange={changeTab} />
             </View>
-          </View>
 
-          {/* Hafta gezinmesi */}
-          <View style={styles.weekNav}>
-            <Pressable
-              disabled={!canPrev}
-              onPress={() => currentWeek && setWeekStart(addDaysISO(currentWeek, -7))}
-              style={({ pressed }) => [styles.weekBtn, (!canPrev || pressed) && styles.pressed]}
+            {tab === "talepler" ? (
+              <ChipGroup>
+                <Chip
+                  label="Tümü"
+                  selected={requestFilter === null}
+                  onPress={() => selectRequestFilter(null)}
+                />
+                {REQUEST_FILTERS.map((item) => (
+                  <Chip
+                    key={item}
+                    label={REQUEST_STATUS_LABELS[item]}
+                    tone={REQUEST_TONE[item]}
+                    count={item === "pending" && pendingCount > 0 ? pendingCount : undefined}
+                    selected={requestFilter === item}
+                    onPress={() => selectRequestFilter(requestFilter === item ? null : item)}
+                  />
+                ))}
+              </ChipGroup>
+            ) : null}
+          </View>
+        }
+      />
+
+      {/* ───────────────────────── TALEPLER ───────────────────────── */}
+      {tab === "talepler" ? (
+        requestsQuery.isLoading ? (
+          <View style={styles.skeleton}>
+            <SkeletonCard lines={3} />
+            <SkeletonCard lines={3} />
+          </View>
+        ) : requestsQuery.isError && requests.length === 0 ? (
+          <ErrorState error={requestsQuery.error} onRetry={requestsQuery.refetch} />
+        ) : (
+          <FlatList
+            {...scrollProps}
+            data={requests}
+            keyExtractor={requestKey}
+            renderItem={renderRequest}
+            contentContainerStyle={styles.list}
+            refreshControl={requestRefresh.control}
+            initialNumToRender={8}
+            keyboardShouldPersistTaps="handled"
+            ListEmptyComponent={
+              <EmptyState
+                icon="calendar-outline"
+                title="Talep yok"
+                body="Bu durumda maç alma talebi bulunmuyor."
+                action={
+                  requestFilter
+                    ? { label: "Tümünü göster", onPress: () => selectRequestFilter(null) }
+                    : undefined
+                }
+              />
+            }
+          />
+        )
+      ) : /* ───────────────────────── SAHALAR ───────────────────────── */
+      venue ? (
+        <View style={styles.flex}>
+          {/* Saha başlığı + hafta gezinmesi */}
+          <View style={styles.boardHead}>
+            <Touchable
+              feedback="icon"
+              haptic="light"
+              onPress={closeVenue}
+              accessibilityRole="button"
+              accessibilityLabel="Saha listesine dön"
+              style={styles.boardBack}
             >
-              <Ionicons name="chevron-back" size={15} color={colors.line} />
-              <Text style={styles.weekBtnText}>önceki</Text>
-            </Pressable>
-            <Text style={styles.weekLabel}>
-              {currentWeek
-                ? weekOptions.find((week) => week.start === currentWeek)?.label ?? currentWeek
-                : "…"}
+              <Ionicons name="chevron-back" size={18} color={colors.textSecondary} />
+              <Text style={styles.boardBackText} {...textScale.dense}>
+                Sahalar
+              </Text>
+            </Touchable>
+            <Text style={styles.boardMeta} numberOfLines={1} {...textScale.dense}>
+              {venue.open_label} – {venue.close_label} · {venue.slot_minutes} dk
             </Text>
-            <Pressable
-              disabled={!canNext}
-              onPress={() => currentWeek && setWeekStart(addDaysISO(currentWeek, 7))}
-              style={({ pressed }) => [styles.weekBtn, (!canNext || pressed) && styles.pressed]}
-            >
-              <Text style={styles.weekBtnText}>sonraki</Text>
-              <Ionicons name="chevron-forward" size={15} color={colors.line} />
-            </Pressable>
           </View>
 
-          {/* Renk açıklaması */}
+          <View style={styles.weekNav}>
+            <Touchable
+              feedback="icon"
+              haptic="selection"
+              onPress={goPrevWeek}
+              disabled={!canPrev}
+              accessibilityRole="button"
+              accessibilityLabel="Önceki hafta"
+              accessibilityState={{ disabled: !canPrev }}
+              style={[styles.weekButton, canPrev ? null : styles.weekButtonDisabled]}
+            >
+              <Ionicons
+                name="chevron-back"
+                size={16}
+                color={canPrev ? colors.textPrimary : colors.textDisabled}
+              />
+            </Touchable>
+
+            <Text style={styles.weekLabel} numberOfLines={1} {...textScale.dense}>
+              {weekLabel}
+            </Text>
+
+            <Touchable
+              feedback="icon"
+              haptic="selection"
+              onPress={goNextWeek}
+              disabled={!canNext}
+              accessibilityRole="button"
+              accessibilityLabel="Sonraki hafta"
+              accessibilityState={{ disabled: !canNext }}
+              style={[styles.weekButton, canNext ? null : styles.weekButtonDisabled]}
+            >
+              <Ionicons
+                name="chevron-forward"
+                size={16}
+                color={canNext ? colors.textPrimary : colors.textDisabled}
+              />
+            </Touchable>
+          </View>
+
+          {/* Renk açıklaması — renk tek başına anlam taşımasın diye. */}
           <View style={styles.legend}>
-            <View style={[styles.legendDot, { borderColor: colors.green }]} />
-            <Text style={styles.legendText}>Açık</Text>
-            <View style={[styles.legendDot, { backgroundColor: colors.faint, borderColor: colors.faint }]} />
-            <Text style={styles.legendText}>Kapalı</Text>
-            <View style={[styles.legendDot, { backgroundColor: colors.yellow, borderColor: colors.yellow }]} />
-            <Text style={styles.legendText}>Rakip bekliyor</Text>
-            <View style={[styles.legendDot, { backgroundColor: colors.turf, borderColor: colors.turf }]} />
-            <Text style={styles.legendText}>Maç alındı</Text>
+            {LEGEND.map((item) => {
+              const tone = toneColors(SLOT_TONE[item]);
+              return (
+                <View key={item} style={styles.legendItem}>
+                  <View
+                    style={[
+                      styles.legendDot,
+                      { backgroundColor: tone.dim, borderColor: withAlpha(tone.fg, 0.6) },
+                    ]}
+                  />
+                  <Text style={styles.legendText} {...textScale.badge}>
+                    {SLOT_STATUS_LABELS[item]}
+                  </Text>
+                </View>
+              );
+            })}
           </View>
 
           {boardQuery.isLoading ? (
-            <Loading />
-          ) : boardQuery.isError ? (
+            <View style={styles.skeleton}>
+              <SkeletonCard lines={4} />
+              <SkeletonCard lines={4} />
+            </View>
+          ) : boardQuery.isError && !board ? (
             <ErrorState error={boardQuery.error} onRetry={boardQuery.refetch} />
-          ) : cellsByDay.length === 0 ? (
-            <EmptyState
-              icon="calendar-outline"
-              title="Program yok"
-              body="Bu hafta için sahada açık gün bulunmuyor."
-            />
           ) : (
-            <ScrollView contentContainerStyle={styles.boardList}>
-              {cellsByDay.map(({ day, cells }) => (
-                <View key={day.date} style={styles.dayCard}>
-                  <View style={styles.dayHead}>
-                    <Text style={styles.dayTitle}>
-                      {day.label} · {day.date_label}
-                    </Text>
-                    {day.is_today ? (
-                      <View style={styles.todayTag}>
-                        <Text style={styles.todayText}>Bugün</Text>
-                      </View>
-                    ) : null}
-                  </View>
-                  <View style={styles.slotWrap}>
-                    {cells.map((cell) => {
-                      const booked = cell.status === "booked";
-                      const awaiting = cell.status === "awaiting";
-                      const closed = cell.status === "closed";
-                      return (
-                        <Pressable
-                          key={`${cell.date}-${cell.hour}-${cell.minute}`}
-                          disabled={cell.is_past || !cell.is_bookable}
-                          onPress={() => onCellPress(cell)}
-                          style={({ pressed }) => [
-                            styles.slotCell,
-                            booked && styles.slotBooked,
-                            awaiting && styles.slotAwaiting,
-                            closed && styles.slotClosed,
-                            (cell.is_past || !cell.is_bookable) && styles.slotDisabled,
-                            pressed && styles.pressed,
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.slotCellText,
-                              booked && { color: colors.surface },
-                              awaiting && { color: colors.line },
-                              closed && { color: colors.muted },
-                            ]}
-                          >
-                            {cell.label}
-                          </Text>
-                          {cell.pending_count > 0 ? (
-                            <View style={styles.pendingBadge}>
-                              <Text style={styles.pendingText}>{cell.pending_count}</Text>
-                            </View>
-                          ) : null}
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                </View>
-              ))}
-            </ScrollView>
+            <FlatList
+              {...scrollProps}
+              data={days}
+              keyExtractor={dayKey}
+              renderItem={renderDay}
+              contentContainerStyle={styles.list}
+              refreshControl={boardRefresh.control}
+              initialNumToRender={7}
+              ListEmptyComponent={
+                <EmptyState
+                  icon="calendar-outline"
+                  title="Program yok"
+                  body="Bu hafta için sahada açık gün bulunmuyor."
+                />
+              }
+            />
           )}
         </View>
       ) : venuesQuery.isLoading ? (
-        <Loading />
-      ) : venuesQuery.isError ? (
+        <View style={styles.skeleton}>
+          <SkeletonListRow count={5} />
+        </View>
+      ) : venuesQuery.isError && venues.length === 0 ? (
         <ErrorState error={venuesQuery.error} onRetry={venuesQuery.refetch} />
-      ) : (venuesQuery.data?.items.length ?? 0) === 0 ? (
-        <EmptyState
-          icon="location-outline"
-          title="Saha yok"
-          body="Henüz tanımlı bir saha bulunmuyor. Sahalar web panelinden eklenir."
-        />
       ) : (
         <FlatList
-          data={venuesQuery.data?.items ?? []}
-          keyExtractor={(item) => item.public_id}
+          {...scrollProps}
+          data={venues}
+          keyExtractor={venueKey}
+          renderItem={renderVenue}
           contentContainerStyle={styles.list}
-          renderItem={({ item }) => (
-            <Pressable
-              onPress={() => {
-                setWeekStart(undefined);
-                setSelectedVenue(item);
-              }}
-              style={({ pressed }) => [styles.card, styles.venueRow, pressed && styles.pressed]}
-            >
-              <View style={styles.venueIcon}>
-                <Ionicons name="location-outline" size={20} color={colors.turf} />
-              </View>
-              <View style={styles.flex}>
-                <Text style={styles.cardTitle} numberOfLines={1}>
-                  {item.name}
-                </Text>
-                <Text style={styles.cardMeta} numberOfLines={1}>
-                  {[item.city, item.location].filter(Boolean).join(" · ") || "Konum belirtilmemiş"}
-                </Text>
-                <Text style={styles.cardMeta}>
-                  {item.open_label} – {item.close_label} · {item.slot_minutes} dk dilim
-                </Text>
-              </View>
-              {item.status === "passive" ? (
-                <View style={[styles.tag, { backgroundColor: colors.surfaceRaised }]}>
-                  <Text style={[styles.tagText, { color: colors.muted }]}>Pasif</Text>
-                </View>
-              ) : null}
-              <Ionicons name="chevron-forward" size={16} color={colors.muted} />
-            </Pressable>
-          )}
+          refreshControl={venueRefresh.control}
+          initialNumToRender={10}
+          ListEmptyComponent={
+            <EmptyState
+              icon="location-outline"
+              title="Saha yok"
+              body="Henüz tanımlı bir saha bulunmuyor. Sahalar web panelinden eklenir."
+            />
+          }
         />
       )}
 
-      {/* Onay / ret penceresi: isteğe bağlı yönetici notu */}
-      <Modal
+      {/* Onay / ret alt sayfası */}
+      <BottomSheet
         visible={review !== null}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setReview(null)}
+        onClose={closeReview}
+        title={review?.decision === "approve" ? "Talebi onayla" : "Talebi reddet"}
+        snap="content"
       >
-        <Pressable style={styles.backdrop} onPress={() => setReview(null)}>
-          <Pressable style={styles.sheet} onPress={() => {}}>
-            {review ? (
-              <>
-                <Text style={styles.sheetTitle}>
-                  {review.decision === "approve" ? "Talebi onayla" : "Talebi reddet"}
-                </Text>
-                <Text style={styles.sheetMeta}>
-                  {review.request.team_name} · {review.request.venue_name}
-                </Text>
-                <TextInput
-                  value={adminNote}
-                  onChangeText={setAdminNote}
-                  placeholder="Yönetici notu (isteğe bağlı)…"
-                  placeholderTextColor={colors.muted}
-                  style={styles.noteInput}
-                  multiline
-                />
-                <View style={styles.actions}>
-                  <Pressable
-                    onPress={() => setReview(null)}
-                    style={({ pressed }) => [styles.btn, styles.cancelBtn, pressed && styles.pressed]}
-                  >
-                    <Text style={styles.cancelText}>Vazgeç</Text>
-                  </Pressable>
-                  <Pressable
-                    disabled={reviewMutation.isPending}
-                    onPress={() =>
-                      reviewMutation.mutate({
-                        publicId: review.request.public_id,
-                        decision: review.decision,
-                        adminNote: adminNote.trim() || undefined,
-                      })
-                    }
-                    style={({ pressed }) => [
-                      styles.btn,
-                      review.decision === "approve" ? styles.approveBtn : styles.rejectBtn,
-                      (pressed || reviewMutation.isPending) && styles.pressed,
-                    ]}
-                  >
-                    <Text style={review.decision === "approve" ? styles.approveText : styles.rejectText}>
-                      {reviewMutation.isPending
-                        ? "Gönderiliyor…"
-                        : review.decision === "approve"
-                          ? "Onayla"
-                          : "Reddet"}
-                    </Text>
-                  </Pressable>
+        {review ? (
+          <View style={styles.sheet}>
+            <Text style={styles.sheetMeta} {...textScale.dense}>
+              {review.request.team_name} · {review.request.venue_name}
+            </Text>
+            <View style={styles.slotWrap}>
+              {review.request.slots.map((slot) => (
+                <View key={cellKey(slot)} style={styles.slotStatic}>
+                  <Text style={styles.slotStaticText} {...textScale.badge}>
+                    {formatDateShort(slot.date)} {slot.label}
+                  </Text>
                 </View>
-              </>
+              ))}
+            </View>
+
+            <Input
+              label="Yönetici notu (isteğe bağlı)"
+              value={adminNote}
+              onChangeText={setAdminNote}
+              placeholder={
+                review.decision === "approve"
+                  ? "Takıma iletilecek not…"
+                  : "Ret gerekçesi takıma iletilir…"
+              }
+              multiline
+            />
+
+            <Text style={styles.sheetNote} {...textScale.long}>
+              {review.decision === "approve"
+                ? "Onayladığınızda talep edilen saatler bu takıma yazılır ve saha panosunda görünür."
+                : "Reddedilen talep takımın panelinde gerekçesiyle birlikte görünür."}
+            </Text>
+
+            <View style={styles.sheetActions}>
+              <Button
+                label="Vazgeç"
+                variant="ghost"
+                onPress={closeReview}
+                style={styles.sheetButton}
+              />
+              <Button
+                label={review.decision === "approve" ? "Onayla" : "Reddet"}
+                variant={review.decision === "approve" ? "primary" : "danger"}
+                icon={review.decision === "approve" ? "checkmark" : "close"}
+                loading={reviewMutation.isPending}
+                haptic="medium"
+                onPress={() =>
+                  reviewMutation.mutate({
+                    publicId: review.request.public_id,
+                    decision: review.decision,
+                    adminNote: adminNote.trim() || undefined,
+                  })
+                }
+                style={styles.sheetButton}
+              />
+            </View>
+          </View>
+        ) : null}
+      </BottomSheet>
+
+      {/* Hücre alt sayfası: saat detayı ve eylemleri */}
+      <BottomSheet
+        visible={cell !== null}
+        onClose={closeCell}
+        title={cell ? `${formatDateShort(cell.date)} · ${cell.label}` : undefined}
+        snap="content"
+      >
+        {cell ? (
+          <View style={styles.sheet}>
+            <View style={styles.sheetMetaRow}>
+              <Badge
+                label={SLOT_STATUS_LABELS[cell.status] ?? cell.status}
+                tone={SLOT_TONE[cell.status]}
+                size="xs"
+              />
+              {cell.is_past ? <Badge label="Geçmiş" tone="neutral" size="xs" /> : null}
+              {venue ? (
+                <Text style={styles.sheetMeta} numberOfLines={1} {...textScale.dense}>
+                  {venue.name}
+                </Text>
+              ) : null}
+            </View>
+
+            {cell.home || cell.away ? (
+              <View style={styles.teamsRow}>
+                <SlotTeam name={cell.home?.team_name} logo={cell.home?.team_logo} />
+                <Text style={styles.teamsDash} {...textScale.dense}>
+                  –
+                </Text>
+                <SlotTeam name={cell.away?.team_name} logo={cell.away?.team_logo} />
+              </View>
             ) : null}
-          </Pressable>
-        </Pressable>
-      </Modal>
+
+            {cell.requests.length > 0 ? (
+              <View style={styles.pendingBox}>
+                <Text style={styles.sheetLabel} {...textScale.dense}>
+                  BEKLEYEN TALEPLER
+                </Text>
+                {cell.requests.map((item) => (
+                  <View key={item.public_id} style={styles.pendingRow}>
+                    <TeamLogo name={item.team_name} logo={mediaUrl(item.team_logo)} size={20} />
+                    <Text style={styles.pendingName} numberOfLines={1} {...textScale.dense}>
+                      {item.team_name}
+                    </Text>
+                    <Badge
+                      label={REQUEST_STATUS_LABELS[item.status] ?? item.status}
+                      tone={REQUEST_TONE[item.status] ?? "neutral"}
+                      size="xs"
+                    />
+                  </View>
+                ))}
+                <Button
+                  label="Talepleri incele"
+                  variant="secondary"
+                  size="sm"
+                  icon="open-outline"
+                  onPress={goToPendingRequests}
+                  fullWidth
+                />
+              </View>
+            ) : null}
+
+            {cell.status === "open" || cell.status === "closed" ? (
+              <>
+                <Input
+                  label="Saat notu (isteğe bağlı)"
+                  value={slotNote}
+                  onChangeText={setSlotNote}
+                  placeholder="Bakım, turnuva, özel kullanım…"
+                  size="sm"
+                />
+                <Button
+                  label={cell.status === "open" ? "Saati talebe kapat" : "Saati talebe aç"}
+                  variant={cell.status === "open" ? "danger" : "primary"}
+                  icon={cell.status === "open" ? "lock-closed-outline" : "lock-open-outline"}
+                  loading={slotMutation.isPending}
+                  disabled={cell.is_past}
+                  haptic="medium"
+                  onPress={() => applySlotStatus(cell.status === "open" ? "closed" : "open")}
+                  fullWidth
+                />
+              </>
+            ) : (
+              <Button
+                label="Saati boşalt"
+                variant="danger"
+                icon="trash-outline"
+                loading={releaseMutation.isPending}
+                haptic="medium"
+                onPress={confirmRelease}
+                fullWidth
+              />
+            )}
+
+            {cell.is_past ? (
+              <Text style={styles.sheetNote} {...textScale.long}>
+                Geçmiş saatler talebe kapatılamaz; yalnızca içeriği görüntülenir.
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
+      </BottomSheet>
     </SafeAreaView>
   );
 }
 
+const requestKey = (item: AdminMatchRequest) => item.public_id;
+const venueKey = (item: AdminVenue) => item.public_id;
+const dayKey = (item: { day: VenueGridDay }) => item.day.date;
+
+/* ═══════════════════════════════ ALT PARÇALAR ══════════════════════════════ */
+
+/** Talep kartı — takım, saha, istenen saatler, notlar ve karar düğmeleri. */
+const RequestCard = memo(function RequestCard({
+  request,
+  onReview,
+  busy,
+}: {
+  request: AdminMatchRequest;
+  onReview: (request: AdminMatchRequest, decision: "approve" | "reject") => void;
+  busy: boolean;
+}) {
+  const approve = useCallback(() => onReview(request, "approve"), [onReview, request]);
+  const reject = useCallback(() => onReview(request, "reject"), [onReview, request]);
+
+  return (
+    <View style={styles.card}>
+      <View style={styles.cardTop}>
+        <TeamLogo name={request.team_name} logo={mediaUrl(request.team_logo)} size={28} />
+        <View style={styles.cardTitles}>
+          <Text style={styles.cardTitle} numberOfLines={1} {...textScale.dense}>
+            {request.team_name}
+          </Text>
+          <Text style={styles.cardMeta} numberOfLines={1} {...textScale.dense}>
+            {request.venue_name} · {formatDateShort(request.created_at)}
+          </Text>
+        </View>
+        <Badge
+          label={REQUEST_STATUS_LABELS[request.status] ?? request.status}
+          tone={REQUEST_TONE[request.status] ?? "neutral"}
+          size="xs"
+        />
+      </View>
+
+      {request.note ? (
+        <Text style={styles.cardNote} numberOfLines={3} {...textScale.long}>
+          “{request.note}”
+        </Text>
+      ) : null}
+
+      {/* İstenen saatler — her saatin kendi kararı olabilir. */}
+      <View style={styles.slotWrap}>
+        {request.slots.map((slot) => {
+          const tone = toneColors(
+            slot.status === "approved" ? "win" : slot.status === "rejected" ? "danger" : "neutral",
+          );
+          return (
+            <View
+              key={cellKey(slot)}
+              style={[
+                styles.slotStatic,
+                { backgroundColor: tone.dim, borderColor: withAlpha(tone.fg, 0.4) },
+              ]}
+            >
+              <Text style={[styles.slotStaticText, { color: tone.fg }]} {...textScale.badge}>
+                {formatDateShort(slot.date)} {slot.label}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
+
+      {request.admin_note ? (
+        <Text style={styles.cardAdminNote} {...textScale.long}>
+          Yönetici notu: {request.admin_note}
+        </Text>
+      ) : null}
+
+      {request.status === "pending" ? (
+        <View style={styles.cardActions}>
+          <Button
+            label="Reddet"
+            variant="ghost"
+            size="sm"
+            disabled={busy}
+            onPress={reject}
+            style={styles.cardButton}
+          />
+          <Button
+            label="Onayla"
+            size="sm"
+            icon="checkmark"
+            disabled={busy}
+            onPress={approve}
+            style={styles.cardButton}
+          />
+        </View>
+      ) : null}
+    </View>
+  );
+});
+
+/** Saha listesi satırı. */
+const VenueRow = memo(function VenueRow({
+  venue,
+  position,
+  onPress,
+}: {
+  venue: AdminVenue;
+  position: "single" | "first" | "middle" | "last";
+  onPress: (venue: AdminVenue) => void;
+}) {
+  const handlePress = useCallback(() => onPress(venue), [onPress, venue]);
+  const leading = useMemo(() => ({ icon: "location" as const }), []);
+
+  return (
+    <ListRow
+      leading={leading}
+      title={venue.name}
+      subtitle={[venue.city, venue.location].filter(Boolean).join(" · ") || "Konum belirtilmemiş"}
+      value={`${venue.open_label}–${venue.close_label}`}
+      badge={
+        venue.status === "passive" ? <Badge label="Pasif" tone="neutral" size="xs" /> : undefined
+      }
+      position={position}
+      onPress={handlePress}
+    />
+  );
+});
+
+/** Pano gün satırı — başlık + sarmalayan saat çipleri. */
+const DayRow = memo(function DayRow({
+  day,
+  cells,
+  onPressCell,
+}: {
+  day: VenueGridDay;
+  cells: AdminBoardCell[];
+  onPressCell: (cell: AdminBoardCell) => void;
+}) {
+  return (
+    <View style={styles.dayCard}>
+      <View style={styles.dayHead}>
+        <Text style={styles.dayTitle} numberOfLines={1} {...textScale.dense}>
+          {day.label}
+        </Text>
+        <Text style={styles.dayDate} numberOfLines={1} {...textScale.dense}>
+          {day.date_label}
+        </Text>
+        {day.is_today ? <Badge label="Bugün" tone="brand" size="xs" /> : null}
+      </View>
+
+      {cells.length === 0 ? (
+        <Text style={styles.dayEmpty} {...textScale.dense}>
+          Bu gün sahada dilim yok.
+        </Text>
+      ) : (
+        <View style={styles.slotWrap}>
+          {cells.map((item) => (
+            <SlotCell key={cellKey(item)} cell={item} onPress={onPressCell} />
+          ))}
+        </View>
+      )}
+    </View>
+  );
+});
+
+/** Tek saat çipi. Renk durumdan, adet rozeti bekleyen talepten gelir. */
+const SlotCell = memo(function SlotCell({
+  cell,
+  onPress,
+}: {
+  cell: AdminBoardCell;
+  onPress: (cell: AdminBoardCell) => void;
+}) {
+  const handlePress = useCallback(() => onPress(cell), [cell, onPress]);
+  const tone = toneColors(SLOT_TONE[cell.status]);
+  const muted = cell.is_past || !cell.is_bookable;
+
+  return (
+    <Touchable
+      feedback="chip"
+      haptic="selection"
+      onPress={handlePress}
+      accessibilityRole="button"
+      accessibilityLabel={`${cell.label}, ${SLOT_STATUS_LABELS[cell.status] ?? cell.status}${
+        cell.pending_count > 0 ? `, ${cell.pending_count} bekleyen talep` : ""
+      }`}
+      style={[
+        styles.slotCell,
+        { backgroundColor: tone.dim, borderColor: withAlpha(tone.fg, 0.45) },
+        muted ? styles.slotCellMuted : null,
+      ]}
+    >
+      <Text
+        style={[styles.slotCellText, { color: muted ? colors.textDisabled : tone.fg }]}
+        {...textScale.badge}
+      >
+        {cell.label}
+      </Text>
+      {cell.pending_count > 0 ? (
+        <Badge label={cell.pending_count} tone="warn" variant="solid" size="xs" />
+      ) : null}
+    </Touchable>
+  );
+});
+
+/** Hücre alt sayfasındaki takım kutusu. */
+const SlotTeam = memo(function SlotTeam({
+  name,
+  logo,
+}: {
+  name?: string | null;
+  logo?: string | null;
+}) {
+  return (
+    <View style={styles.slotTeam}>
+      <TeamLogo name={name ?? "?"} logo={mediaUrl(logo)} size={28} />
+      <Text style={styles.slotTeamName} numberOfLines={1} {...textScale.dense}>
+        {name || "Rakip bekleniyor"}
+      </Text>
+    </View>
+  );
+});
+
+/* ═════════════════════════════════ STİLLER ═════════════════════════════════ */
+
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: colors.pitch,
+    backgroundColor: colors.bg,
   },
   flex: {
     flex: 1,
   },
-  tabs: {
-    flexDirection: "row",
-    marginHorizontal: spacing.md,
-    marginBottom: spacing.sm,
-    backgroundColor: colors.surfaceRaised,
-    borderRadius: radius.pill,
-    padding: 3,
-    gap: 3,
+  controls: {
+    gap: space.sm,
+    paddingBottom: space.sm,
   },
-  tabBtn: {
-    flex: 1,
-    alignItems: "center",
-    paddingVertical: spacing.sm,
-    borderRadius: radius.pill,
+  segmentWrap: {
+    paddingHorizontal: layout.screenPadding,
   },
-  tabBtnActive: {
-    backgroundColor: colors.turf,
-  },
-  tabText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: colors.muted,
-  },
-  tabTextActive: {
-    color: colors.surface,
-    fontWeight: "800",
-  },
-  chips: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.xs + 2,
-    paddingHorizontal: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  chip: {
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.faint,
-    backgroundColor: colors.surface,
-    paddingHorizontal: spacing.sm + 2,
-    paddingVertical: 5,
-  },
-  chipActive: {
-    backgroundColor: colors.turf,
-    borderColor: colors.turf,
-  },
-  chipText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: colors.muted,
-  },
-  chipTextActive: {
-    color: colors.surface,
+  skeleton: {
+    paddingHorizontal: layout.screenPadding,
+    paddingTop: space.sm,
+    gap: space.sm,
   },
   list: {
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.xl,
+    paddingHorizontal: layout.screenPadding,
+    paddingTop: space.sm,
+    paddingBottom: space.giant,
+    gap: space.sm,
+    flexGrow: 1,
   },
+
+  /* Talep kartı */
   card: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.faint,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
+    gap: space.sm,
+    padding: space.md,
+    borderRadius: radius.lg,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    backgroundColor: colors.surface1,
   },
   cardTop: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
+    gap: space.sm,
+  },
+  cardTitles: {
+    flex: 1,
+    gap: 2,
   },
   cardTitle: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: "800",
-    color: colors.line,
+    ...type.h3,
+    color: colors.textPrimary,
   },
   cardMeta: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: colors.muted,
-    marginTop: 2,
+    ...type.caption,
+    color: colors.textSecondary,
   },
   cardNote: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: colors.line,
+    ...type.bodySm,
+    color: colors.textSecondary,
     fontStyle: "italic",
-    marginTop: spacing.xs,
   },
-  slotChips: {
+  cardAdminNote: {
+    ...type.caption,
+    color: colors.textTertiary,
+  },
+  cardActions: {
+    flexDirection: "row",
+    gap: space.sm,
+  },
+  cardButton: {
+    flex: 1,
+  },
+
+  /* Saat çipleri */
+  slotWrap: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: spacing.xs + 2,
-    marginTop: spacing.sm,
+    gap: space.s,
   },
-  slotChip: {
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.faint,
-    backgroundColor: colors.surfaceRaised,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
+  slotStatic: {
+    borderRadius: radius.md,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    backgroundColor: colors.surface3,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xs,
   },
-  slotChipApproved: {
-    borderColor: colors.green,
-    backgroundColor: colors.green + "14",
+  slotStaticText: {
+    ...type.micro,
+    color: colors.textSecondary,
   },
-  slotChipRejected: {
-    opacity: 0.55,
-  },
-  slotChipText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: colors.line,
-  },
-  adminNoteText: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: colors.muted,
-    marginTop: spacing.xs,
-  },
-  actions: {
-    flexDirection: "row",
-    gap: spacing.sm,
-    marginTop: spacing.sm,
-  },
-  btn: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: radius.pill,
-    paddingVertical: spacing.sm + 2,
-  },
-  approveBtn: {
-    backgroundColor: colors.green,
-  },
-  approveText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: "#FFFFFF",
-  },
-  rejectBtn: {
-    backgroundColor: colors.red + "1F",
-  },
-  rejectText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: colors.red,
-  },
-  cancelBtn: {
-    backgroundColor: colors.surfaceRaised,
-  },
-  cancelText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: colors.line,
-  },
-  tag: {
-    borderRadius: radius.pill,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-  },
-  tagText: {
-    fontSize: 9,
-    fontWeight: "800",
-  },
-  venueRow: {
+  slotCell: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
-  },
-  venueIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.turfDim,
-    alignItems: "center",
+    gap: space.xs,
+    minWidth: 62,
+    height: 34,
     justifyContent: "center",
+    borderRadius: radius.md,
+    borderWidth: hairline,
+    paddingHorizontal: space.sm,
   },
+  slotCellMuted: {
+    opacity: 0.45,
+  },
+  slotCellText: {
+    ...type.caption,
+  },
+
+  /* Pano */
   boardHead: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.sm,
+    gap: space.sm,
+    paddingHorizontal: layout.screenPadding,
+    paddingBottom: space.sm,
   },
-  boardTitle: {
-    ...type.subtitle,
-    color: colors.line,
+  boardBack: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xxs,
+  },
+  boardBackText: {
+    ...type.caption,
+    color: colors.textSecondary,
   },
   boardMeta: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: colors.muted,
-    marginTop: 1,
+    ...type.caption,
+    color: colors.textTertiary,
+    marginLeft: "auto",
   },
   weekNav: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    marginHorizontal: spacing.md,
-    marginBottom: spacing.sm,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.faint,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs + 2,
+    gap: space.sm,
+    marginHorizontal: layout.screenPadding,
+    padding: space.xs,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface2,
   },
-  weekBtn: {
-    flexDirection: "row",
+  weekButton: {
+    width: 32,
+    height: 32,
     alignItems: "center",
-    gap: 2,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
+    justifyContent: "center",
+    borderRadius: radius.sm,
+    backgroundColor: colors.surface3,
   },
-  weekBtnText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: colors.line,
+  weekButtonDisabled: {
+    opacity: 0.4,
   },
   weekLabel: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: colors.line,
+    ...type.label,
+    color: colors.textPrimary,
+    flex: 1,
+    textAlign: "center",
   },
   legend: {
     flexDirection: "row",
-    alignItems: "center",
     flexWrap: "wrap",
-    gap: spacing.xs + 1,
-    paddingHorizontal: spacing.md,
-    marginBottom: spacing.sm,
+    alignItems: "center",
+    gap: space.md,
+    paddingHorizontal: layout.screenPadding,
+    paddingVertical: space.sm,
+  },
+  legendItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
   },
   legendDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 3,
-    borderWidth: 1.5,
-    marginLeft: spacing.xs,
+    width: 12,
+    height: 12,
+    borderRadius: radius.xs,
+    borderWidth: hairline,
   },
   legendText: {
-    fontSize: 9,
-    fontWeight: "700",
-    color: colors.muted,
+    ...type.micro,
+    color: colors.textTertiary,
   },
-  boardList: {
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.xl,
-    gap: spacing.sm,
-  },
+
+  /* Gün kartı */
   dayCard: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.faint,
-    borderRadius: radius.md,
-    padding: spacing.md,
+    gap: space.sm,
+    padding: space.md,
+    borderRadius: radius.lg,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    backgroundColor: colors.surface1,
   },
   dayHead: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
-    marginBottom: spacing.sm,
+    gap: space.sm,
   },
   dayTitle: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: colors.line,
+    ...type.h3,
+    color: colors.textPrimary,
   },
-  todayTag: {
-    backgroundColor: colors.turfDim,
-    borderRadius: radius.pill,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-  },
-  todayText: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: colors.turf,
-  },
-  slotWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.xs + 2,
-  },
-  slotCell: {
-    borderRadius: radius.sm,
-    borderWidth: 1.5,
-    borderColor: colors.green,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 5,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  slotBooked: {
-    backgroundColor: colors.turf,
-    borderColor: colors.turf,
-  },
-  slotAwaiting: {
-    backgroundColor: colors.yellow + "33",
-    borderColor: colors.yellow,
-  },
-  slotClosed: {
-    backgroundColor: colors.surfaceRaised,
-    borderColor: colors.faint,
-  },
-  slotDisabled: {
-    opacity: 0.35,
-  },
-  slotCellText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: colors.green,
-  },
-  pendingBadge: {
-    minWidth: 15,
-    height: 15,
-    borderRadius: 8,
-    backgroundColor: colors.live,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 3,
-  },
-  pendingText: {
-    fontSize: 8,
-    fontWeight: "900",
-    color: "#FFFFFF",
-  },
-  backdrop: {
+  dayDate: {
+    ...type.caption,
+    color: colors.textTertiary,
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: spacing.lg,
   },
+  dayEmpty: {
+    ...type.caption,
+    color: colors.textTertiary,
+  },
+
+  /* Alt sayfalar */
   sheet: {
-    alignSelf: "stretch",
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
-    gap: spacing.sm,
+    gap: space.md,
+    paddingBottom: space.sm,
   },
-  sheetTitle: {
-    ...type.subtitle,
-    color: colors.line,
+  sheetMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
   },
   sheetMeta: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: colors.muted,
+    ...type.caption,
+    color: colors.textSecondary,
+    flex: 1,
   },
-  noteInput: {
-    minHeight: 70,
-    borderWidth: 1,
-    borderColor: colors.faint,
-    borderRadius: radius.sm,
-    padding: spacing.sm,
-    ...type.small,
-    color: colors.line,
-    textAlignVertical: "top",
+  sheetLabel: {
+    ...type.micro,
+    color: colors.textTertiary,
   },
-  pressed: {
-    opacity: 0.6,
+  sheetNote: {
+    ...type.caption,
+    color: colors.textTertiary,
+  },
+  sheetActions: {
+    flexDirection: "row",
+    gap: space.sm,
+  },
+  sheetButton: {
+    flex: 1,
+  },
+  teamsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+  },
+  teamsDash: {
+    ...type.label,
+    color: colors.textTertiary,
+  },
+  slotTeam: {
+    flex: 1,
+    alignItems: "center",
+    gap: space.xs,
+  },
+  slotTeamName: {
+    ...type.caption,
+    color: colors.textPrimary,
+    textAlign: "center",
+  },
+  pendingBox: {
+    gap: space.sm,
+    padding: space.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface2,
+  },
+  pendingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+  },
+  pendingName: {
+    ...type.bodySm,
+    color: colors.textPrimary,
+    flex: 1,
   },
 });

@@ -79,6 +79,17 @@ export default function RootLayout() {
                   <Stack.Screen name="bildirim-tercihleri" />
                   <Stack.Screen name="hesabim" />
 
+                  {/* Kariyer belgeleri ve oyuncu paneli.
+                      Bunlar bildirimden DERİN BAĞLANTIYLA açılır (TRANSFER_*,
+                      CONTRACT_*, PENALTY_* → lib/notifications.ts), bu yüzden
+                      yığında adlarıyla anılırlar. Rota adı dosya yolunun
+                      kendisidir: klasör altındaki `index.tsx` "klasör/index"
+                      olarak kaydolur. */}
+                  <Stack.Screen name="oyuncum/index" />
+                  <Stack.Screen name="teklif/[id]" />
+                  <Stack.Screen name="sozlesme/[id]" />
+                  <Stack.Screen name="ceza/[id]" />
+
                   {/* Modal olanlar: bir görevi bitirip kapanan, yığına ait olmayan ekranlar. */}
                   <Stack.Screen name="ara" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
                   <Stack.Screen name="giris" options={{ presentation: "modal", animation: "slide_from_bottom" }} />

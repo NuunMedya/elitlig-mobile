@@ -152,7 +152,12 @@ const TYPE_PREFIX_TARGETS: ReadonlyArray<
   ["TEAM_INVITE", () => ({ pathname: "/davetler" })],
   ["TEAM_APPLICATION", () => ({ pathname: "/davetler" })],
   ["MATCH_REQUEST", (id, ctx) => targetFromEntity("MATCH_REQUEST", id, ctx) ?? { pathname: "/bildirimler" }],
-  ["WEEKLY_AWARD_SET", () => ({ pathname: "/haftanin-enleri" })],
+  // BÜTÜNLEŞTİRME DÜZELTMESİ: `/haftanin-enleri` diye bir rota YOK; bildirime
+  // dokunan üye boş ekrana düşüyordu. Haftanın enlerinin mobildeki en yakın
+  // karşılığı Ligler > İstatistik segmentidir (lig enleri: gol kralı, en golcü,
+  // formda takım). Ayrı bir "Haftanın Enleri" ekranı açılırsa hedef tek satırda
+  // oraya çevrilir.
+  ["WEEKLY_AWARD_SET", () => ({ pathname: "/(tabs)/ligler", params: { tab: "istatistik" } })],
   ["PASSWORD_RESET", () => ({ pathname: "/yonetim" })],
   // Hesap/üyelik akışları kendi ekranına sahip değil; bildirim merkezinde okunur.
   ["MEMBERSHIP_", () => ({ pathname: "/bildirimler" })],

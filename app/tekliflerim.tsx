@@ -1,57 +1,124 @@
-import Ionicons from "@expo/vector-icons/Ionicons";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Redirect, useRouter } from "expo-router";
-import { useState } from "react";
-import {
-  Alert,
-  FlatList,
-  Keyboard,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { DetailHeader } from "@/components/ScreenHeader";
-import { EmptyState, ErrorState, Loading } from "@/components/States";
-import { TeamCrest } from "@/components/TeamCrest";
-import { colors, radius, spacing, type } from "@/constants/theme";
-import {
-  acceptOffer,
-  getOfferInbox,
-  rejectOffer,
-  type TransferOffer,
-} from "@/lib/api/panel";
-import { formatDateShort, mediaUrl } from "@/lib/format";
-import { ApiError } from "@/lib/http";
-import { useAuth } from "@/providers/AuthProvider";
-
 /**
- * Transfer Tekliflerim — oyuncuya gelen teklifler (Faz 3).
+ * TRANSFER TEKLİFLERİM — oyuncuya gelen tekliflerin gelen kutusu.
  *
- * Gelen kutusu listelenir; Kabul/Reddet aksiyonları sunucunun actions
- * bayraklarına göre görünür. Her aksiyon teklifin güncel sürümünü
- * (expectedVersion) gönderir; 409 sürüm çakışmasında liste tazelenir ve
- * kullanıcı bilgilendirilir. Reddetmede kısa bir gerekçe istenir.
+ * NE DEĞİŞTİ: eski ekran her teklifi bir kart olarak çiziyor, Kabul/Reddet
+ * düğmelerini ve ret gerekçesi penceresini satır içinde taşıyordu. Bir kart
+ * ~140px yer kaplıyordu; beş teklifte ekran doluyordu ve "hangi teklif ne
+ * durumda" sorusu ancak kaydırarak yanıtlanıyordu. Artık liste YOĞUN
+ * (`ListRow`, 64px) ve karar verme işi teklif belgesinin açıldığı
+ * `/teklif/[id]` ekranına taşındı (şartname §5, satır 11).
+ *
+ * NEDEN DURUM ÇİPLERİ: teklif kaydı hiç silinmez; kabul/ret/geri çekilme
+ * sonrası da listede kalır. Birkaç sezon sonra gelen kutusunun büyük kısmı
+ * kapanmış tekliflerden oluşur. Çipler hem süzgeç hem sayaçtır (rozetli sayı),
+ * böylece "cevap bekleyen kaç teklifim var" tek bakışta okunur. Seçim URL
+ * parametresiyle taşınır (`?durum=`) — bildirimden gelen derin bağlantı da
+ * doğrudan doğru süzgeçle açılabilsin.
+ *
+ * SUNUCU SÖZLEŞMESİ (korunuyor): `GET /api/transfer-offers/inbox`, kayıt
+ * anahtarı sayısal id değil `public_id`'dir; ekranlar arası gezinme de bu
+ * anahtarla yapılır (bildirimlerin `entity_public_id` alanıyla aynı değer).
  */
 
-const STATUS_LABELS: Record<string, string> = {
-  pending: "Bekliyor",
-  accepted: "Kabul edildi",
-  rejected: "Reddedildi",
-  withdrawn: "Geri çekildi",
-  expired: "Süresi doldu",
+import { useQuery } from "@tanstack/react-query";
+import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
+import React, { useCallback, useMemo } from "react";
+import { FlatList, StyleSheet, Text, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  Badge,
+  Chip,
+  ChipGroup,
+  EmptyState,
+  ErrorState,
+  ListRow,
+  ScreenHeader,
+  SkeletonListRow,
+  TeamLogo,
+  useHeaderScroll,
+  useRefresh,
+  type Tone,
+} from "@/components/ui";
+import { getOfferInbox, type TransferOffer } from "@/lib/api/panel";
+import { formatDateShort, mediaUrl } from "@/lib/format";
+import { useAuth } from "@/providers/AuthProvider";
+import { colors, layout, space, textScale, type } from "@/theme";
+
+/* ============================ SABİTLER / TİPLER ============================ */
+
+/** Sunucudaki OFFER_STATUSES (constants/transfer.js) → etiket ve ton. */
+const STATUS_META: Record<string, { label: string; tone: Tone }> = {
+  DRAFT: { label: "Taslak", tone: "neutral" },
+  SENT: { label: "Bekliyor", tone: "warn" },
+  REVISION_REQUESTED: { label: "Revizyon istendi", tone: "info" },
+  ACCEPTED: { label: "Kabul edildi", tone: "win" },
+  REJECTED: { label: "Reddedildi", tone: "danger" },
+  WITHDRAWN: { label: "Geri çekildi", tone: "neutral" },
+  EXPIRED: { label: "Süresi doldu", tone: "neutral" },
+  CANCELLED: { label: "İptal edildi", tone: "neutral" },
 };
+
+const statusMeta = (status: string): { label: string; tone: Tone } =>
+  STATUS_META[status] ?? { label: status, tone: "neutral" };
+
+type OfferFilter = "tumu" | "bekleyen" | "revizyon" | "kabul" | "ret" | "kapanan";
+
+interface FilterDef {
+  key: OfferFilter;
+  label: string;
+  /** Hangi sunucu durumları bu çipe düşer. */
+  match: (status: string) => boolean;
+}
+
+const FILTERS: FilterDef[] = [
+  { key: "tumu", label: "Tümü", match: () => true },
+  { key: "bekleyen", label: "Bekleyen", match: (s) => s === "SENT" || s === "DRAFT" },
+  { key: "revizyon", label: "Revizyon", match: (s) => s === "REVISION_REQUESTED" },
+  { key: "kabul", label: "Kabul", match: (s) => s === "ACCEPTED" },
+  { key: "ret", label: "Ret", match: (s) => s === "REJECTED" },
+  {
+    key: "kapanan",
+    label: "Kapanan",
+    match: (s) => s === "WITHDRAWN" || s === "EXPIRED" || s === "CANCELLED",
+  },
+];
+
+const FILTER_KEYS = FILTERS.map((item) => item.key);
+
+/** Sorgu parametresi tek değer ya da dizi olarak gelebilir. */
+function firstParam(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function resolveFilter(raw: unknown): OfferFilter {
+  const key = String(raw ?? "").trim().toLowerCase();
+  return (FILTER_KEYS as string[]).includes(key) ? (key as OfferFilter) : "tumu";
+}
+
+/** Son gün yaklaştı mı? (24 saat içinde kapanan teklif ayrı vurgulanır.) */
+function isUrgent(offer: TransferOffer): boolean {
+  if (offer.status !== "SENT" || !offer.expires_at) return false;
+  const left = new Date(offer.expires_at).getTime() - Date.now();
+  return left > 0 && left <= 24 * 60 * 60 * 1000;
+}
+
+/** Grup içi konum — ListRow köşe ve ayracını buradan alır. */
+function rowPosition(index: number, total: number): "single" | "first" | "middle" | "last" {
+  if (total <= 1) return "single";
+  if (index === 0) return "first";
+  if (index === total - 1) return "last";
+  return "middle";
+}
+
+/* ================================= EKRAN ================================== */
 
 export default function OffersScreen() {
   const auth = useAuth();
-  const queryClient = useQueryClient();
-  const [rejecting, setRejecting] = useState<TransferOffer | null>(null);
-  const [reason, setReason] = useState("");
+  const router = useRouter();
+  const params = useLocalSearchParams<{ durum?: string }>();
+  const { scrollY, scrollProps } = useHeaderScroll();
+
+  const filter = resolveFilter(firstParam(params.durum));
 
   const query = useQuery({
     queryKey: ["panel", "offers"],
@@ -61,70 +128,109 @@ export default function OffersScreen() {
     retry: false,
   });
 
-  const refreshAll = () => {
-    queryClient.invalidateQueries({ queryKey: ["panel", "offers"] });
-    queryClient.invalidateQueries({ queryKey: ["panel", "contracts"] });
-    queryClient.invalidateQueries({ queryKey: ["panel", "me"] });
-  };
+  const refresh = useRefresh(query.refetch, { refreshing: query.isRefetching });
 
-  const handleError = (error: unknown) => {
-    if (error instanceof ApiError && error.status === 409) {
-      Alert.alert("Teklif güncellendi", "Bu teklifte değişiklik yapılmış. Liste tazelendi, lütfen tekrar bak.");
-      refreshAll();
-      return;
+  const items = useMemo(() => query.data?.items ?? [], [query.data]);
+
+  /** Her çipin sayacı — tek geçişte hesaplanır. */
+  const counts = useMemo(() => {
+    const result: Record<OfferFilter, number> = {
+      tumu: items.length,
+      bekleyen: 0,
+      revizyon: 0,
+      kabul: 0,
+      ret: 0,
+      kapanan: 0,
+    };
+    for (const offer of items) {
+      for (const def of FILTERS) {
+        if (def.key !== "tumu" && def.match(offer.status)) result[def.key] += 1;
+      }
     }
-    Alert.alert("İşlem yapılamadı", error instanceof Error ? error.message : "Bilinmeyen hata.");
-  };
+    return result;
+  }, [items]);
 
-  const acceptMutation = useMutation({
-    mutationFn: (offer: TransferOffer) =>
-      acceptOffer(offer.public_id, offer.current_version ?? offer.version),
-    onSuccess: () => {
-      Alert.alert("Teklif kabul edildi 🎉", "Sözleşmen oluşturuldu; Sözleşmelerim'de görebilirsin.");
-      refreshAll();
-    },
-    onError: handleError,
-  });
+  const visible = useMemo(() => {
+    const def = FILTERS.find((item) => item.key === filter) ?? FILTERS[0];
+    return items.filter((offer) => def.match(offer.status));
+  }, [filter, items]);
 
-  const rejectMutation = useMutation({
-    mutationFn: (input: { offer: TransferOffer; reason: string }) =>
-      rejectOffer(
-        input.offer.public_id,
-        input.offer.current_version ?? input.offer.version,
-        input.reason
-      ),
-    onSuccess: () => {
-      setRejecting(null);
-      setReason("");
-      refreshAll();
+  /** Cevap bekleyen teklif sayısı — başlık altındaki özet cümlesi. */
+  const waiting = counts.bekleyen + counts.revizyon;
+
+  const selectFilter = useCallback(
+    (next: OfferFilter) => {
+      scrollY.setValue(0);
+      router.setParams({ durum: next });
     },
-    onError: handleError,
-  });
+    [router, scrollY],
+  );
+
+  const openOffer = useCallback(
+    (publicId: string) => router.push(`/teklif/${publicId}`),
+    [router],
+  );
+
+  const renderItem = useCallback(
+    ({ item, index }: { item: TransferOffer; index: number }) => (
+      <OfferRow
+        offer={item}
+        position={rowPosition(index, visible.length)}
+        onPress={openOffer}
+      />
+    ),
+    [openOffer, visible.length],
+  );
+
+  const listHeader = useMemo(
+    () => (
+      <View style={styles.headerBlock}>
+        <ChipGroup style={styles.chips}>
+          {FILTERS.map((def) => (
+            <FilterChip
+              key={def.key}
+              def={def}
+              count={counts[def.key]}
+              selected={def.key === filter}
+              onSelect={selectFilter}
+            />
+          ))}
+        </ChipGroup>
+
+        {waiting > 0 ? (
+          <Text style={styles.summary} {...textScale.long}>
+            {waiting} teklif senden cevap bekliyor. Teklife dokunup belgeyi
+            aç: kabul, ret ve revizyon istekleri orada.
+          </Text>
+        ) : null}
+
+        {/* Liste dolu ama sorgu hata verdiyse veri silinmez, hata şerit olur. */}
+        {query.isError && items.length > 0 ? (
+          <ErrorState error={query.error} onRetry={query.refetch} variant="banner" />
+        ) : null}
+      </View>
+    ),
+    [counts, filter, items.length, query.error, query.isError, query.refetch, selectFilter, waiting],
+  );
 
   if (!auth.user) {
     return <Redirect href="/giris" />;
   }
 
-  const confirmAccept = (offer: TransferOffer) => {
-    Alert.alert(
-      "Teklifi kabul et",
-      `${offer.team?.team_name ?? "Takım"} teklifini kabul etmek üzeresin. Sözleşme oluşturulacak.`,
-      [
-        { text: "Vazgeç", style: "cancel" },
-        { text: "Kabul et", onPress: () => acceptMutation.mutate(offer) },
-      ]
-    );
-  };
-
-  const items = query.data?.items ?? [];
-
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      <DetailHeader title="Transfer Tekliflerim" subtitle="Takımlardan gelen teklifler" />
+      <ScreenHeader
+        title="Transfer Tekliflerim"
+        subtitle="Takımlardan gelen teklifler"
+        back
+        scrollY={scrollY}
+      />
 
       {query.isLoading ? (
-        <Loading />
-      ) : query.isError ? (
+        <View style={styles.loading}>
+          <SkeletonListRow count={6} />
+        </View>
+      ) : query.isError && items.length === 0 ? (
         <ErrorState error={query.error} onRetry={query.refetch} />
       ) : items.length === 0 ? (
         <EmptyState
@@ -134,275 +240,147 @@ export default function OffersScreen() {
         />
       ) : (
         <FlatList
-          data={items}
+          {...scrollProps}
+          data={visible}
           keyExtractor={(item) => item.public_id}
-          contentContainerStyle={styles.list}
-          renderItem={({ item }) => (
-            <View style={styles.card}>
-              <View style={styles.cardHead}>
-                <TeamCrest
-                  name={item.team?.team_name ?? "?"}
-                  logo={mediaUrl(item.team?.logo ?? null)}
-                  size={36}
-                />
-                <View style={styles.cardBody}>
-                  <Text style={styles.teamName} numberOfLines={1}>
-                    {item.team?.team_name ?? "Takım"}
-                  </Text>
-                  <Text style={styles.meta}>
-                    {item.sent_at ? `Gönderildi: ${formatDateShort(item.sent_at)}` : ""}
-                    {item.expires_at ? ` · Son gün: ${formatDateShort(item.expires_at)}` : ""}
-                  </Text>
-                </View>
-                <View
-                  style={[
-                    styles.statusChip,
-                    item.status === "accepted" && styles.statusOk,
-                    (item.status === "rejected" || item.status === "expired") && styles.statusBad,
-                  ]}
-                >
-                  <Text style={styles.statusText}>
-                    {STATUS_LABELS[item.status] ?? item.status}
-                  </Text>
-                </View>
-              </View>
-
-              {item.awaiting_admin_approval ? (
-                <Text style={styles.adminNote}>⏳ Yönetici onayı bekleniyor</Text>
-              ) : null}
-
-              {item.actions?.accept || item.actions?.reject ? (
-                <View style={styles.actionRow}>
-                  {item.actions?.reject ? (
-                    <Pressable
-                      onPress={() => setRejecting(item)}
-                      style={({ pressed }) => [styles.btn, styles.rejectBtn, pressed && styles.pressed]}
-                    >
-                      <Text style={styles.rejectText}>Reddet</Text>
-                    </Pressable>
-                  ) : null}
-                  {item.actions?.accept ? (
-                    <Pressable
-                      onPress={() => confirmAccept(item)}
-                      disabled={acceptMutation.isPending}
-                      style={({ pressed }) => [styles.btn, styles.acceptBtn, pressed && styles.pressed]}
-                    >
-                      <Ionicons name="checkmark" size={15} color={colors.surface} />
-                      <Text style={styles.acceptText}>
-                        {acceptMutation.isPending ? "İşleniyor…" : "Kabul et"}
-                      </Text>
-                    </Pressable>
-                  ) : null}
-                </View>
-              ) : null}
-            </View>
-          )}
+          renderItem={renderItem}
+          ListHeaderComponent={listHeader}
+          ListEmptyComponent={
+            <EmptyState
+              icon="funnel-outline"
+              title="Bu süzgeçte teklif yok"
+              body="Başka bir durum çipini seçebilirsin."
+              variant="inline"
+              compact
+            />
+          }
+          contentContainerStyle={styles.content}
+          refreshControl={refresh.control}
+          initialNumToRender={12}
         />
       )}
-
-      {/* Ret gerekçesi penceresi */}
-      <Modal
-        visible={Boolean(rejecting)}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setRejecting(null)}
-      >
-        <Pressable style={styles.backdrop} onPress={Keyboard.dismiss}>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === "ios" ? "padding" : undefined}
-            style={styles.kav}
-          >
-          <Pressable style={styles.sheet} onPress={() => {}}>
-            <Text style={styles.sheetTitle}>Teklifi reddet</Text>
-            <Text style={styles.sheetBody}>
-              {rejecting?.team?.team_name ?? "Takım"} teklifini reddediyorsun. Kısa bir gerekçe yaz:
-            </Text>
-            <TextInput
-              value={reason}
-              onChangeText={setReason}
-              placeholder="Örn. Mevcut takımımda kalmak istiyorum"
-              placeholderTextColor={colors.muted}
-              style={styles.input}
-              multiline
-            />
-            <View style={styles.sheetActions}>
-              <Pressable
-                onPress={() => {
-                  setRejecting(null);
-                  setReason("");
-                }}
-                style={({ pressed }) => [styles.btn, styles.cancelBtn, pressed && styles.pressed]}
-              >
-                <Text style={styles.cancelText}>Vazgeç</Text>
-              </Pressable>
-              <Pressable
-                onPress={() =>
-                  rejecting && rejectMutation.mutate({ offer: rejecting, reason: reason.trim() })
-                }
-                disabled={reason.trim().length < 3 || rejectMutation.isPending}
-                style={({ pressed }) => [
-                  styles.btn,
-                  styles.rejectSolid,
-                  (pressed || reason.trim().length < 3) && styles.pressed,
-                ]}
-              >
-                <Text style={styles.acceptText}>
-                  {rejectMutation.isPending ? "Gönderiliyor…" : "Reddet"}
-                </Text>
-              </Pressable>
-            </View>
-          </Pressable>
-          </KeyboardAvoidingView>
-        </Pressable>
-      </Modal>
     </SafeAreaView>
   );
 }
 
+/* ============================== ALT BİLEŞENLER ============================= */
+
+/** Süzgeç çipi — memo'lu; `onSelect` sabit olduğu için satır yeniden çizilmez. */
+const FilterChip = React.memo(function FilterChip({
+  def,
+  count,
+  selected,
+  onSelect,
+}: {
+  def: FilterDef;
+  count: number;
+  selected: boolean;
+  onSelect: (key: OfferFilter) => void;
+}) {
+  const handlePress = useCallback(() => onSelect(def.key), [def.key, onSelect]);
+  return (
+    <Chip
+      label={def.label}
+      count={count}
+      selected={selected}
+      onPress={handlePress}
+      size="sm"
+    />
+  );
+});
+
+/**
+ * Tek teklif satırı.
+ *
+ * Vurgulu (`highlighted`) hâl iki durumda açılır: teklif hiç görüntülenmemişse
+ * (sunucu `viewed_at` yazana kadar) ya da oyuncunun karar vermesi bekleniyorsa.
+ * Böylece "yeni/aksiyon" ile "arşiv" satırları aynı listede karışmaz.
+ */
+const OfferRow = React.memo(function OfferRow({
+  offer,
+  position,
+  onPress,
+}: {
+  offer: TransferOffer;
+  position: "single" | "first" | "middle" | "last";
+  onPress: (publicId: string) => void;
+}) {
+  const handlePress = useCallback(() => onPress(offer.public_id), [offer.public_id, onPress]);
+
+  const meta = statusMeta(offer.status);
+  const urgent = isUrgent(offer);
+  const needsAction = Boolean(offer.actions?.accept || offer.actions?.reject);
+
+  const subtitle = [
+    offer.sent_at ? `Gönderildi ${formatDateShort(offer.sent_at)}` : null,
+    offer.expires_at ? `Son gün ${formatDateShort(offer.expires_at)}` : null,
+    offer.awaiting_admin_approval ? "Yönetici onayı bekliyor" : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  const leading = useMemo(
+    () => (
+      <TeamLogo
+        name={offer.team?.team_name ?? "?"}
+        logo={mediaUrl(offer.team?.logo ?? null)}
+        size={layout.crestLg}
+      />
+    ),
+    [offer.team?.logo, offer.team?.team_name],
+  );
+
+  const badge = (
+    <Badge
+      label={urgent ? "SON GÜN" : meta.label}
+      tone={urgent ? "live" : meta.tone}
+      size="xs"
+    />
+  );
+
+  return (
+    <ListRow
+      leading={leading}
+      title={offer.team?.team_name ?? "Takım"}
+      subtitle={subtitle || undefined}
+      badge={badge}
+      highlighted={needsAction || !offer.viewed_at}
+      position={position}
+      onPress={handlePress}
+    />
+  );
+});
+
+/* ================================ STİLLER ================================= */
+
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: colors.pitch,
+    backgroundColor: colors.bg,
   },
-  list: {
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.xl,
+  content: {
+    paddingHorizontal: layout.screenPadding,
+    paddingBottom: space.giant,
   },
-  card: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.faint,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
+  loading: {
+    paddingHorizontal: layout.screenPadding,
+    paddingTop: space.md,
   },
-  cardHead: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
+  headerBlock: {
+    gap: space.sm,
+    paddingBottom: space.md,
   },
-  cardBody: {
-    flex: 1,
+  /**
+   * Çip şeridi ekran kenarına kadar kayabilsin: olumsuz kenar boşluğu listenin
+   * iç boşluğunu iptal eder, çiplerin kendi iç boşluğunu ChipGroup verir.
+   */
+  chips: {
+    marginHorizontal: -layout.screenPadding,
   },
-  teamName: {
-    ...type.small,
-    fontWeight: "800",
-    color: colors.line,
-  },
-  meta: {
+  summary: {
     ...type.caption,
-    color: colors.muted,
-    letterSpacing: 0,
-    marginTop: 2,
-  },
-  statusChip: {
-    backgroundColor: colors.surfaceRaised,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
-  },
-  statusOk: {
-    backgroundColor: "#EAF7F0",
-  },
-  statusBad: {
-    backgroundColor: "#FBEDEE",
-  },
-  statusText: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: colors.line,
-  },
-  adminNote: {
-    ...type.caption,
-    color: colors.yellow,
-    letterSpacing: 0,
-    marginTop: spacing.sm,
-    fontWeight: "700",
-  },
-  actionRow: {
-    flexDirection: "row",
-    gap: spacing.sm,
-    marginTop: spacing.md,
-  },
-  btn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 5,
-    borderRadius: radius.pill,
-    paddingVertical: spacing.sm + 3,
-  },
-  acceptBtn: {
-    backgroundColor: colors.green,
-  },
-  acceptText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: colors.surface,
-  },
-  rejectBtn: {
-    backgroundColor: "#FBEDEE",
-  },
-  rejectText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: colors.live,
-  },
-  rejectSolid: {
-    backgroundColor: colors.live,
-  },
-  cancelBtn: {
-    backgroundColor: colors.surfaceRaised,
-  },
-  cancelText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: colors.line,
-  },
-  backdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: spacing.lg,
-  },
-  kav: {
-    alignSelf: "stretch",
-  },
-  sheet: {
-    alignSelf: "stretch",
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
-    gap: spacing.sm,
-  },
-  sheetTitle: {
-    ...type.subtitle,
-    color: colors.line,
-  },
-  sheetBody: {
-    ...type.caption,
-    color: colors.muted,
+    color: colors.textSecondary,
     letterSpacing: 0,
     lineHeight: 16,
-  },
-  input: {
-    minHeight: 70,
-    borderWidth: 1,
-    borderColor: colors.faint,
-    borderRadius: radius.sm,
-    padding: spacing.sm,
-    ...type.small,
-    color: colors.line,
-    textAlignVertical: "top",
-  },
-  sheetActions: {
-    flexDirection: "row",
-    gap: spacing.sm,
-    marginTop: spacing.xs,
-  },
-  pressed: {
-    opacity: 0.6,
   },
 });

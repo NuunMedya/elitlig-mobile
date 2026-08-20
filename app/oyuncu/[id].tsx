@@ -1,39 +1,421 @@
-import { useQueries, useQuery } from "@tanstack/react-query";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { useMemo, useRef, useState } from "react";
-import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { DetailHeader } from "@/components/ScreenHeader";
-import { ErrorState, Loading } from "@/components/States";
-import { PlayerAvatar, TeamCrest } from "@/components/TeamCrest";
+/**
+ * OYUNCU PROFİLİ — `/oyuncu/[id]?tab=<genel|istatistik|maclar|kariyer>`
+ *
+ * NE: eski tek sütunlu, 1100 satırlık kaydırma şeridi dört segmente bölündü.
+ * Bir oyuncu sayfasına gelen üç farklı soru vardı ve üçü de aynı akışın içine
+ * gömülüydü: "bu oyuncu kim / bu sezon ne yaptı" (Genel), "rakamları nedir"
+ * (İstatistik), "hangi maçlarda oynadı, kaç aldı" (Maçlar), "nereden geldi"
+ * (Kariyer). Artık her soru kendi segmentinde ve yalnız o segmentin sorgusu
+ * açılır.
+ *
+ * VERİ KAYNAKLARI (hepsi herkese açık uçlar):
+ *   GET /api/players/:id                     kimlik + kariyer toplamları
+ *   GET /api/players/:id/season-stats        sezon sezon tablo (kanonik uç)
+ *   GET /api/players/:id/statistics          ayrıntılı toplamlar (asist, kurtarış…)
+ *   GET /api/players/:id/market-value(+/history)  piyasa değeri ve seyri
+ *   GET /oyuncu-istatistikleri/oyuncu/:id    maç maç kayıt + takım geçmişi
+ *   GET /api/oyuncu-listesi                  kapsam içi sıralama (asist + sıra)
+ *   GET /api/teams/:id                       amblem ve takım adı
+ *
+ * NEDEN `/oyuncu-istatistikleri/oyuncu/:id`: eski ekran "son maçlar" listesini
+ * takımın maçlarını çekip HER MAÇIN KADROSUNU ayrı ayrı sorgulayarak kuruyordu
+ * (1 + 6 istek, yalnız 6 maç, gol bilgisi yok). Bu uç aynı bilgiyi tek istekte,
+ * TÜM maçlar için ve gol/kart/rakip/skor ile birlikte veriyor. Oyuncunun takım
+ * geçmişi de (`profile.history.teams`) buradan gelir — Kariyer segmenti bunun
+ * üstünde durur.
+ *
+ * İLETİŞİM BİLGİSİ: sunucu `phone`/`email` alanlarını yanıta YALNIZCA yetkili
+ * görüntüleyiciye ekler (yönetim, oyuncunun kendisi, takımının başkanı —
+ * routes/Players.js publicPlayer). Ekran bu kuralı yeniden uygulamaz; alan
+ * geldiyse gösterir, gelmediyse bölüm hiç çizilmez.
+ *
+ * BOŞ ALAN İLKESİ (eski ekrandan korundu): veri yoksa satır tire ile sırıtmaz,
+ * satırın kendisi çizilmez.
+ */
+
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { colors, radius, spacing, type } from "@/constants/theme";
-import { getMatchKadro, getTeamMatches } from "@/lib/api/matches";
+import { useQuery } from "@tanstack/react-query";
+import { LinearGradient } from "expo-linear-gradient";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import * as Sharing from "expo-sharing";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FlatList, ScrollView, StyleSheet, Text, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import ViewShot from "react-native-view-shot";
+import {
+  Avatar,
+  Badge,
+  BottomSheet,
+  Button,
+  Card,
+  Chip,
+  EmptyState,
+  ErrorState,
+  FormChips,
+  ListRow,
+  ProgressRing,
+  RatingPill,
+  ScreenHeader,
+  SectionHeader,
+  SkeletonCard,
+  SkeletonListRow,
+  SkeletonTable,
+  Tabs,
+  TeamLogo,
+  Touchable,
+  useHeaderScroll,
+  useRefresh,
+  type FormResult,
+  type TabItem,
+  type Tone,
+} from "@/components/ui";
+import { getMatchKadro } from "@/lib/api/matches";
 import { getPlayer, getPlayerRankings } from "@/lib/api/players";
 import { getTeam } from "@/lib/api/teams";
-import { LinearGradient } from "expo-linear-gradient";
-import * as Sharing from "expo-sharing";
-import ViewShot from "react-native-view-shot";
-import { formatDateShort } from "@/lib/format";
+import { formatAge, formatDateShort, formatMoney, mediaUrl } from "@/lib/format";
+import { get } from "@/lib/http";
+import { openLink } from "@/lib/links";
 import { queryKeys } from "@/lib/queryKeys";
-import { matchState } from "@/lib/match";
 import { useScope } from "@/providers/ScopeProvider";
-import type { ApiMatch, KadroPlayer } from "@/lib/types";
+import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
+
+/* ══════════════════════════════════════════════════════════════════════════
+   1) EKRANA ÖZGÜ UÇ TANIMLARI
+
+   `lib/api/players.ts` bu ekranın sorumluluğunda değil; profil sayfasının
+   ihtiyacı olan dört uç burada, ekranla birlikte yaşar. Ortak bir ihtiyaç
+   doğduğunda tek blok hâlinde api katmanına taşınabilir.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/** GET /api/players/:id/season-stats — services/playerSeasonStats.js. */
+interface SeasonStatRow {
+  season_id: number | null;
+  season_label: string;
+  matches: number;
+  goals: number;
+  /** Maç puanlarının toplamı (DECIMAL); ortalama = points / matches. */
+  points: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  yellow_cards: number;
+}
+
+const getSeasonStats = (playerId: number) =>
+  get<SeasonStatRow[]>(`/api/players/${playerId}/season-stats`);
+
+/** GET /api/players/:id/statistics — controllers/playerStatisticsController.js. */
+interface DetailedStatistics {
+  kadroda_bulundugu_mac_sayisi: number;
+  oynadigi_mac_sayisi: number;
+  ilk11_basladigi_mac_sayisi: number;
+  yedek_basladigi_mac_sayisi: number;
+  sonradan_oyuna_girdigi_mac_sayisi: number;
+  kaptan_oldugu_mac_sayisi: number;
+  toplam_puan: number;
+  ortalama_puan: number;
+  toplam_gol: number;
+  sag_ayak_golu: number;
+  sol_ayak_golu: number;
+  kafa_golu: number;
+  penalti_golu: number;
+  frikik_golu: number;
+  uzaktan_sag_ayak_golu: number;
+  uzaktan_sol_ayak_golu: number;
+  asist: number;
+  kurtaris: number;
+  yaratilan_pozisyon: number;
+  kritik_blok: number;
+  kazanilan_hava_topu: number;
+  kazanilan_ikili_mucadele: number;
+  faul: number;
+  sari_kart: number;
+  kirmizi_kart: number;
+  sakatlik: number;
+}
+
+interface DetailedStatsResponse {
+  success: boolean;
+  playerId: number;
+  statistics: DetailedStatistics;
+  averages: {
+    gol_ortalamasi: number;
+    asist_ortalamasi: number;
+    puan_ortalamasi: number;
+    kurtaris_ortalamasi: number;
+  };
+}
+
+const getDetailedStats = (playerId: number) =>
+  get<DetailedStatsResponse>(`/api/players/${playerId}/statistics`);
+
+/** GET /api/players/:id/market-value — services/marketValue/read.js. */
+interface MarketValue {
+  playerId: number;
+  currentValue: number;
+  previousValue: number | null;
+  changeAmount: number;
+  changePercentage: number;
+  globalRank: number | null;
+  cityRank: number | null;
+  positionRank: number | null;
+  percentile: number | null;
+  positionGroup: string | null;
+  lastCalculatedAt: string | null;
+  currency: string;
+}
+
+const getMarketValue = (playerId: number) =>
+  get<MarketValue>(`/api/players/${playerId}/market-value`);
+
+interface MarketValueHistoryRow {
+  id: number;
+  current_value: number | string | null;
+  createdAt: string;
+}
+
+const getMarketValueHistory = (playerId: number) =>
+  get<{ items: MarketValueHistoryRow[] }>(`/api/players/${playerId}/market-value/history`, {
+    limit: 16,
+  });
 
 /**
- * Oyuncu profili — GET /api/players/:id
- *
- * Tasarım ilkeleri: boş alanlar tire olarak sırıtmaz, satır hiç görünmez;
- * G/B/M kuru rakam değil oranlı renk çubuğudur; asist bu uçta olmadığından
- * kapsamdaki sıralama listesinden zenginleştirilir (bulunamazsa gizlenir).
- * İletişim alanları yanıta yalnızca yetkili görüntüleyici için eklenir.
+ * GET /oyuncu-istatistikleri/oyuncu/:id — services/playerProfileStats.js.
+ * Maç maç kayıt (`mergedStatistics`) + takım/lig/sezon geçmişi (`profile.history`).
  */
+interface HistoryTeam {
+  id: number | null;
+  name: string | null;
+  logo: string | null;
+  match_count: number;
+  league_names: string[];
+  season_names: string[];
+}
+
+interface AppearanceTeam {
+  id: number | null;
+  name: string | null;
+  logo: string | null;
+}
+
+interface AppearanceMatch {
+  id: number | null;
+  date: string | null;
+  time: string | null;
+  status: string | null;
+  home_team_id: number | null;
+  away_team_id: number | null;
+  home_team_name: string | null;
+  away_team_name: string | null;
+  home_team_score: number | null;
+  away_team_score: number | null;
+  league_name: string | null;
+  season_name: string | null;
+}
+
+interface Appearance {
+  match_id: number;
+  team_id: number | null;
+  number_of_goals: number;
+  goals_minutes: string | null;
+  yellow_card: number;
+  red_card: number;
+  goal_to_himself: number;
+  /** Maç puanı (0–10). 0 = puanlanmamış. */
+  points: number;
+  played: boolean;
+  lineup_is_starting: boolean | null;
+  lineup_is_captain: boolean | null;
+  played_for_team: AppearanceTeam | null;
+  opponent_team: AppearanceTeam | null;
+  season: { id: number | null; name: string | null } | null;
+  league: { id: number | null; name: string | null } | null;
+  match: AppearanceMatch | null;
+}
+
+interface ProfileStatsResponse {
+  player_id: number;
+  profile: { history: { teams: HistoryTeam[] } };
+  mergedStatistics: Appearance[];
+}
+
+const getProfileStats = (playerId: number) =>
+  get<ProfileStatsResponse>(`/oyuncu-istatistikleri/oyuncu/${playerId}`);
+
+/* Ekrana özgü önbellek anahtarları — paylaşılan olanlar `queryKeys` içinde. */
+const key = {
+  seasonStats: (id: number) => ["players", "season-stats", id] as const,
+  detailedStats: (id: number) => ["players", "detailed-stats", id] as const,
+  marketValue: (id: number) => ["players", "market-value", id] as const,
+  marketHistory: (id: number) => ["players", "market-history", id] as const,
+  profileStats: (id: number) => ["players", "profile-stats", id] as const,
+};
+
+/* ══════════════════════════════════════════════════════════════════════════
+   2) SEGMENTLER VE ROTA PARAMETRESİ
+   ══════════════════════════════════════════════════════════════════════════ */
+
+type PlayerTab = "genel" | "istatistik" | "maclar" | "kariyer";
+
+const TAB_ITEMS: TabItem<PlayerTab>[] = [
+  { key: "genel", label: "Genel" },
+  { key: "istatistik", label: "İstatistik" },
+  { key: "maclar", label: "Maçlar" },
+  { key: "kariyer", label: "Kariyer" },
+];
+
+const TAB_KEYS = TAB_ITEMS.map((item) => item.key);
+
+/**
+ * TUZAK (ligler.tsx ile aynı): `"İSTATİSTİK".toLocaleLowerCase("tr")` noktasız
+ * ı üretir, düz `toLowerCase()` ise "İ" için birleşik nokta bırakır; ikisi de
+ * ASCII rota anahtarıyla eşleşmez. Önce I ailesi katlanır, sonra küçültülür.
+ */
+function normalizeKey(raw: unknown): string {
+  if (typeof raw !== "string") return "";
+  return raw.trim().replace(/[İIı]/g, "i").toLowerCase();
+}
+
+/** Bildirimden/derin bağlantıdan gelen farklı yazımlar da doğru segmente düşer. */
+const TAB_ALIASES: Record<string, PlayerTab> = {
+  ozet: "genel",
+  profil: "genel",
+  overview: "genel",
+  stats: "istatistik",
+  istatistikler: "istatistik",
+  matches: "maclar",
+  mac: "maclar",
+  career: "kariyer",
+  gecmis: "kariyer",
+  transferler: "kariyer",
+};
+
+function resolveTab(raw: unknown): PlayerTab {
+  const normalized = normalizeKey(raw);
+  if ((TAB_KEYS as string[]).includes(normalized)) return normalized as PlayerTab;
+  return TAB_ALIASES[normalized] ?? "genel";
+}
+
+/** Sorgu parametresi tek değer ya da dizi olarak gelebilir. */
+function firstParam(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   3) SAF YARDIMCILAR
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const num = (value: unknown): number => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+/** Maç puanı 0 ise "puanlanmamış" demektir; reyting hapı boş görünsün. */
+const ratingOf = (points: number): number | null => (points > 0 ? points : null);
+
+/**
+ * `active` sütunu BOOLEAN; MySQL sürücüsüne göre true, 1 ya da "1" gelebiliyor.
+ * Alan hiç gelmediyse sunucu varsayılanı (aktif) kabul edilir.
+ */
+const isActive = (value: unknown): boolean => {
+  if (value == null) return true;
+  return value === true || value === 1 || value === "1" || value === "true";
+};
+
+/** Oyuncunun o maçtaki sonucu — kendi takımı esas alınır. */
+function appearanceResult(row: Appearance): FormResult | null {
+  const match = row.match;
+  if (!match || match.home_team_score == null || match.away_team_score == null) return null;
+  const isHome = match.home_team_id != null && match.home_team_id === row.team_id;
+  const ours = isHome ? match.home_team_score : match.away_team_score;
+  const theirs = isHome ? match.away_team_score : match.home_team_score;
+  if (ours > theirs) return "W";
+  if (ours < theirs) return "L";
+  return "D";
+}
+
+/** Rakip adı: kayıt takım nesnesi taşımıyorsa maçın adlarından türetilir. */
+function opponentName(row: Appearance): string {
+  if (row.opponent_team?.name) return row.opponent_team.name;
+  const match = row.match;
+  if (!match) return "";
+  const isHome = match.home_team_id != null && match.home_team_id === row.team_id;
+  return String((isHome ? match.away_team_name : match.home_team_name) ?? "");
+}
+
+/** Kendi takımı - rakip sırasıyla skor. */
+function appearanceScore(row: Appearance): string | null {
+  const match = row.match;
+  if (!match || match.home_team_score == null || match.away_team_score == null) return null;
+  const isHome = match.home_team_id != null && match.home_team_id === row.team_id;
+  return isHome
+    ? `${match.home_team_score}-${match.away_team_score}`
+    : `${match.away_team_score}-${match.home_team_score}`;
+}
+
+const timeOf = (row: Appearance): number => {
+  const raw = row.match?.date;
+  if (!raw) return 0;
+  const parsed = Date.parse(String(raw).slice(0, 10));
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+/** Yeniden eskiye sıralı, gerçekten oynanmış maçlar. */
+function playedAppearances(rows: Appearance[] | undefined): Appearance[] {
+  return (rows ?? [])
+    .filter((row) => row.played !== false && row.match != null)
+    .sort((a, b) => timeOf(b) - timeOf(a));
+}
+
+/** Mevki → emoji (eski ekrandan korundu; mevki metni sunucudan serbest gelir). */
+function positionIcon(position: string): string {
+  const value = position.toLocaleLowerCase("tr-TR");
+  if (value.includes("kaleci") || value.includes("kale")) return "🧤";
+  if (value.includes("defans") || value.includes("bek") || value.includes("stoper")) return "🛡️";
+  if (value.includes("kanat")) return "⚡";
+  if (value.includes("orta")) return "⚙️";
+  if (value.includes("forvet") || value.includes("santra")) return "⚽";
+  return "🏃";
+}
+
+/** Grup içi konum — ListRow köşe yuvarlaması ve ayracı buradan gelir. */
+function rowPosition(index: number, total: number): "single" | "first" | "middle" | "last" {
+  if (total === 1) return "single";
+  if (index === 0) return "first";
+  if (index === total - 1) return "last";
+  return "middle";
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   4) EKRAN KABUĞU
+   ══════════════════════════════════════════════════════════════════════════ */
+
 export default function PlayerDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const playerId = Number(id);
-  const validId = Number.isFinite(playerId) && playerId > 0;
+  const params = useLocalSearchParams<{ id: string; tab?: string }>();
   const router = useRouter();
-  const scope = useScope();
+  const { scrollY, scrollProps } = useHeaderScroll();
+
+  const playerId = Number(params.id);
+  const validId = Number.isFinite(playerId) && playerId > 0;
+
+  const [tab, setTab] = useState<PlayerTab>(() => resolveTab(firstParam(params.tab)));
+  const [shareOpen, setShareOpen] = useState(false);
+
+  // Rota parametresi sonradan değişirse (derin bağlantı) görünüm ona uyar.
+  const routeTab = resolveTab(firstParam(params.tab));
+  useEffect(() => {
+    setTab(routeTab);
+    scrollY.setValue(0);
+  }, [routeTab, scrollY]);
+
+  const changeTab = useCallback(
+    (next: PlayerTab) => {
+      setTab(next);
+      scrollY.setValue(0); // Yeni içeriğin tepesindeyiz; başlık yeniden açılsın.
+      router.setParams({ tab: next });
+    },
+    [router, scrollY],
+  );
 
   const playerQuery = useQuery({
     queryKey: queryKeys.player(playerId),
@@ -50,85 +432,42 @@ export default function PlayerDetailScreen() {
     staleTime: 10 * 60_000,
   });
 
-  // Asist bilgisi oyuncu ucunda yok; kapsamdaki sıralamadan bulunur.
-  const scopeKey = {
-    cityId: scope.cityId ?? undefined,
-    leagueId: scope.leagueId ?? undefined,
-    seasonId: scope.seasonId ?? undefined,
-  };
-  const rankingsQuery = useQuery({
-    queryKey: queryKeys.playerRankings(scopeKey, "topScorers"),
-    queryFn: () => getPlayerRankings(scopeKey, "topScorers"),
-    enabled: scope.ready && validId,
-    staleTime: 5 * 60_000,
-  });
+  const openShare = useCallback(() => setShareOpen(true), []);
+  const closeShare = useCallback(() => setShareOpen(false), []);
 
-  // Türkiye geneli sıralama (kapsamsız)
-  const trRankQuery = useQuery({
-    queryKey: queryKeys.playerRankings({}, "topScorers"),
-    queryFn: () => getPlayerRankings({}, "topScorers"),
-    enabled: validId,
-    staleTime: 10 * 60_000,
-  });
-  const trRank = useMemo(() => {
-    const list = trRankQuery.data?.players ?? [];
-    const idx = list.findIndex((p) => Number(p.id) === playerId);
-    return idx >= 0 ? { rank: idx + 1, total: list.length } : null;
-  }, [trRankQuery.data, playerId]);
+  const actions = useMemo(
+    () => [
+      {
+        icon: "share-social-outline" as const,
+        onPress: openShare,
+        accessibilityLabel: "Oyuncu kartını paylaş",
+      },
+    ],
+    [openShare],
+  );
 
-  const assists = useMemo(() => {
-    const row = rankingsQuery.data?.players?.find((item) => Number(item.id) === playerId);
-    return row ? Number(row.assists) || 0 : null;
-  }, [rankingsQuery.data, playerId]);
-
-  // Lig içi sıralamalar — zaten çekilen listeden türetilir, ek istek yok.
-  const ranks = useMemo(() => {
-    const players = rankingsQuery.data?.players ?? [];
-    if (players.length === 0) return null;
-    const me = players.find((item) => Number(item.id) === playerId);
-    if (!me) return null;
-    const rankBy = (key: "points" | "goals") => {
-      const sorted = [...players].sort(
-        (a, b) => (Number(b[key]) || 0) - (Number(a[key]) || 0)
-      );
-      const index = sorted.findIndex((item) => Number(item.id) === playerId);
-      return index >= 0 ? index + 1 : null;
-    };
-    const teamMates = players
-      .filter((item) => Number(item.teamId) === Number(me.teamId))
-      .sort((a, b) => (Number(b.points) || 0) - (Number(a.points) || 0));
-    const teamIndex = teamMates.findIndex((item) => Number(item.id) === playerId);
-    return {
-      points: rankBy("points"),
-      goals: rankBy("goals"),
-      team: teamIndex >= 0 ? teamIndex + 1 : null,
-      total: players.length,
-    };
-  }, [rankingsQuery.data, playerId]);
-
-  const [shareOpen, setShareOpen] = useState(false);
-  const [shareFmt, setShareFmt] = useState<"story"|"post">("story");
-  const [shareBusy, setShareBusy] = useState(false);
-  const shotRef = useRef<any>(null);
-  const CW = 272;
-  const FMTS = {
-    story: { label: "Hikaye 9:16", h: Math.round(CW*16/9) },
-    post:  { label: "Gonderi 3:4", h: Math.round(CW*4/3)  },
-  } as const;
-  const doShare = async () => {
-    if (shareBusy) return;
-    setShareBusy(true);
-    try {
-      const uri = await shotRef.current?.capture?.();
-      if (uri) await Sharing.shareAsync(uri, { mimeType:"image/png" });
-    } catch {} finally { setShareBusy(false); }
-  };
+  if (!validId) {
+    return (
+      <SafeAreaView style={styles.screen} edges={["top"]}>
+        <ScreenHeader title="Oyuncu" back />
+        <EmptyState
+          icon="help-circle-outline"
+          title="Oyuncu bulunamadı"
+          body="Bağlantıdaki oyuncu numarası geçersiz."
+          action={{ label: "Geri dön", onPress: () => router.back() }}
+        />
+      </SafeAreaView>
+    );
+  }
 
   if (playerQuery.isLoading) {
     return (
       <SafeAreaView style={styles.screen} edges={["top"]}>
-        <DetailHeader title="Oyuncu" />
-        <Loading />
+        <ScreenHeader title="Oyuncu" back />
+        <View style={styles.loadingBody}>
+          <SkeletonCard lines={3} />
+          <SkeletonTable count={4} columns={5} />
+        </View>
       </SafeAreaView>
     );
   }
@@ -136,987 +475,2226 @@ export default function PlayerDetailScreen() {
   if (playerQuery.isError || !player) {
     return (
       <SafeAreaView style={styles.screen} edges={["top"]}>
-        <DetailHeader title="Oyuncu" />
+        <ScreenHeader title="Oyuncu" back />
         <ErrorState error={playerQuery.error} onRetry={playerQuery.refetch} />
       </SafeAreaView>
     );
   }
 
-  const team = teamQuery.data;
-  const played = Number(player.total_matches ?? 0);
-  const goals = Number(player.total_goals ?? 0);
-  const points = Number(player.total_points ?? 0);
-  const yellow = Number(player.total_yellow_cards ?? 0);
-  const red = Number(player.total_red_cards ?? 0);
-  const wins = Number(player.wins ?? 0);
-  const draws = Number(player.draws ?? 0);
-  const losses = Number(player.losses ?? 0);
-  const decided = wins + draws + losses;
-  const winRate = decided > 0 ? Math.round((wins / decided) * 100) : null;
-  const perMatch = played > 0 ? (goals / played).toFixed(2) : "0.00";
+  const team = teamQuery.data ?? null;
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      <DetailHeader title={player.player_name} subtitle={player.player_position ?? undefined} />
+      <ScreenHeader
+        title={player.player_name}
+        subtitle={player.player_position ?? undefined}
+        back
+        actions={actions}
+        scrollY={scrollY}
+        bottom={<Tabs items={TAB_ITEMS} value={tab} onChange={changeTab} sticky />}
+      />
 
-      <ScrollView contentContainerStyle={styles.content}>
-        <Pressable onPress={()=>setShareOpen(true)} style={({pressed})=>[styles.shareBtn,pressed&&styles.pressed]}>
-          <Ionicons name="share-social-outline" size={16} color={colors.turf} />
-          <Text style={styles.shareBtnText}>Profili Paylas</Text>
-        </Pressable>
-        {/* Kimlik */}
-        <View style={styles.hero}>
-          <View style={styles.avatarRing}>
-            <PlayerAvatar name={player.player_name} image={player.player_img} size={100} />
-          </View>
-          <Text style={styles.name}>{player.player_name}</Text>
-          <View style={styles.chipRow}>
-            {player.player_position ? (
-              <View style={styles.positionChip}>
-                <Text style={styles.positionText}>
-                  {positionIcon(player.player_position)}{" "}
-                  {player.player_position.toLocaleUpperCase("tr-TR")}
-                </Text>
-              </View>
-            ) : null}
-            {trRank ? (
-              <View style={styles.trChip}>
-                <Text style={styles.trChipText}>🇹🇷 {trRank.rank}. / {trRank.total}</Text>
-              </View>
-            ) : null}
-            {team ? (
-              <Pressable
-                style={({ pressed }) => [styles.teamChip, pressed && styles.pressed]}
-                onPress={() => router.push(`/takim/${team.id}`)}
-              >
-                <TeamCrest name={team.team_name} logo={team.logo} size={18} />
-                <Text style={styles.teamChipText} numberOfLines={1}>
-                  {team.team_name}
-                </Text>
-              </Pressable>
-            ) : (
-              <View style={styles.teamChip}>
-                <Text style={styles.teamChipText}>Takımsız</Text>
-              </View>
-            )}
-          </View>
-        </View>
-
-        {/* Ana metrikler */}
-        <View style={styles.mainCard}>
-          <MainStat label="MAÇ" value={String(played)} />
-          <View style={styles.divider} />
-          <MainStat label="GOL" value={String(goals)} />
-          <View style={styles.divider} />
-          {assists != null ? (
-            <>
-              <MainStat label="ASİST" value={String(assists)} />
-              <View style={styles.divider} />
-            </>
-          ) : null}
-          <MainStat label="PUAN" value={String(points)} highlight />
-        </View>
-
-        {/* Kariyer özeti */}
-        {played > 0 ? (
-          <View style={styles.careerCard}>
-            <Text style={styles.cardKicker}>KARİYER ÖZETI</Text>
-            <View style={styles.careerRow}>
-              <CareerStat label="Gol/Maç" value={perMatch} />
-              <CareerStat label="Puan/Maç" value={played > 0 ? (points / played).toFixed(1) : "0.0"} />
-              <CareerStat label="Top Maç" value={String(played)} />
-              <CareerStat label="Katkı" value={assists != null ? String(goals + assists) : String(goals)} />
-            </View>
-            {/* Kariyer çubuğu: gol / asist / puan görsel dağılımı */}
-            <View style={styles.contribBar}>
-              {goals > 0 ? <View style={[styles.barSegment, styles.barGoal, { flex: goals }]} /> : null}
-              {assists != null && assists > 0 ? <View style={[styles.barSegment, styles.barAssist, { flex: assists }]} /> : null}
-            </View>
-            <View style={styles.barLegendRow}>
-              <View style={styles.barLegendItem}><View style={[styles.barLegendDot, { backgroundColor: colors.green }]} /><Text style={styles.barLegendLabel}>{goals} Gol</Text></View>
-              {assists != null ? <View style={styles.barLegendItem}><View style={[styles.barLegendDot, { backgroundColor: colors.turf }]} /><Text style={styles.barLegendLabel}>{assists} Asist</Text></View> : null}
-            </View>
-          </View>
-        ) : null}
-
-        {/* İkincil metrikler */}
-        <View style={styles.pillRow}>
-          <MetricPill label="Gol / Maç" value={perMatch} />
-          <MetricPill label="Sarı Kart" value={String(yellow)} tone={yellow > 0 ? "yellow" : undefined} />
-          <MetricPill label="Kırmızı Kart" value={String(red)} tone={red > 0 ? "red" : undefined} />
-          <MetricPill label="Puan / Maç" value={played > 0 ? (points / played).toFixed(1) : "0.0"} />
-        </View>
-
-        {/* Lig içi sıralamalar */}
-        {ranks ? (
-          <View style={styles.rankRow}>
-            {ranks.points ? <RankPill label="PUAN SIRALAMASI" value={`${ranks.points}.`} /> : null}
-            {ranks.goals ? <RankPill label="GOL KRALLIĞI" value={`${ranks.goals}.`} /> : null}
-            {ranks.team ? <RankPill label="TAKIMINDA" value={`${ranks.team}.`} /> : null}
-          </View>
-        ) : null}
-
-        {/* Başarılar — eşiklerden otomatik türetilen rozetler */}
-        <Achievements
-          goals={goals}
-          played={played}
-          yellow={yellow}
-          red={red}
-          winRate={winRate}
-          pointsRank={ranks?.points ?? null}
-          goalsRank={ranks?.goals ?? null}
+      {tab === "genel" ? (
+        <GeneralTab
+          playerId={playerId}
+          playerName={player.player_name}
+          playerImage={player.player_img ?? null}
+          position={player.player_position ?? null}
+          birthDate={player.birth_date ?? null}
+          nationality={player.nationality ?? null}
+          active={isActive(player.active)}
+          totalMatches={num(player.total_matches)}
+          totalGoals={num(player.total_goals)}
+          totalPoints={num(player.total_points)}
+          wins={num(player.wins)}
+          draws={num(player.draws)}
+          losses={num(player.losses)}
+          phone={player.phone ?? null}
+          email={player.email ?? null}
+          teamId={player.team_id ?? null}
+          teamName={team?.team_name ?? null}
+          teamLogo={team?.logo ?? null}
+          refetchPlayer={playerQuery.refetch}
+          isRefetching={playerQuery.isRefetching}
+          scrollProps={scrollProps}
         />
+      ) : tab === "istatistik" ? (
+        <StatsTab
+          playerId={playerId}
+          totalMatches={num(player.total_matches)}
+          totalGoals={num(player.total_goals)}
+          totalPoints={num(player.total_points)}
+          totalYellow={num(player.total_yellow_cards)}
+          totalRed={num(player.total_red_cards)}
+          scrollProps={scrollProps}
+        />
+      ) : tab === "maclar" ? (
+        <MatchesTab playerId={playerId} scrollProps={scrollProps} />
+      ) : (
+        <CareerTab
+          playerId={playerId}
+          currentTeamId={player.team_id ?? null}
+          scrollProps={scrollProps}
+        />
+      )}
 
-        {/* Galibiyet dengesi */}
-        {decided > 0 ? (
-          <View style={styles.card}>
-            <View style={styles.cardHead}>
-              <Text style={styles.cardKicker}>GALİBİYET DENGESİ</Text>
-              {winRate != null ? (
-                <Text style={styles.winRate}>%{winRate} galibiyet</Text>
-              ) : null}
-            </View>
-            <View style={styles.balanceBar}>
-              {wins > 0 ? <View style={[styles.barWin, { flex: wins }]} /> : null}
-              {draws > 0 ? <View style={[styles.barDraw, { flex: draws }]} /> : null}
-              {losses > 0 ? <View style={[styles.barLoss, { flex: losses }]} /> : null}
-            </View>
-            <View style={styles.balanceLegend}>
-              <Legend color={colors.green} label={`${wins} Galibiyet`} />
-              <Legend color="#B9B5C6" label={`${draws} Beraberlik`} />
-              <Legend color={colors.live} label={`${losses} Mağlubiyet`} />
-            </View>
-          </View>
-        ) : null}
-
-        {/* Son maçları — takım maçlarının kadrolarından süzülür */}
-        {player.team_id ? (
-          <RecentAppearances
-            playerId={playerId}
-            teamId={Number(player.team_id)}
-            onOpen={(id) => router.push(`/mac/${id}`)}
-          />
-        ) : null}
-
-      </ScrollView>
-
-      <Modal visible={shareOpen} animationType="slide" onRequestClose={()=>setShareOpen(false)} transparent>
-        <View style={styles.sOverlay}>
-          <View style={styles.sSheet}>
-            <View style={styles.sFmtRow}>
-              {(["story","post"] as const).map(k=>(
-                <Pressable key={k} onPress={()=>setShareFmt(k)} style={({pressed})=>[styles.sFmtPill,shareFmt===k&&styles.sFmtActive,pressed&&styles.pressed]}>
-                  <Text style={styles.sFmtTxt}>{FMTS[k].label}</Text>
-                </Pressable>
-              ))}
-            </View>
-            <ViewShot ref={shotRef} options={{format:"png",quality:1}}>
-              <View style={[styles.sCard,{height:FMTS[shareFmt].h}]}>
-                <LinearGradient colors={["#6D28D9","#4C1D95"]} style={styles.sStrip}/>
-                <LinearGradient colors={["#CDBFE8","#EFEAF7","#FFF"]} start={{x:0.2,y:0}} end={{x:0.5,y:1}} style={styles.sBody}>
-                  <Text style={styles.sWm}>elitlig</Text>
-                  <View style={styles.sHead}><Text style={styles.sBrand}>elitlig</Text><Text style={styles.sBrandR}>ELİTLİG MOBİL</Text></View>
-                  <Text style={styles.sKick}>⚽ OYUNCU PROFİLİ</Text>
-                  <View style={styles.sAvRow}>
-                    <PlayerAvatar name={player.player_name} image={player.player_img} size={60}/>
-                    <View style={styles.sNameCol}>
-                      <Text style={styles.sPName} numberOfLines={2}>{player.player_name.toLocaleUpperCase("tr-TR")}</Text>
-                      {team?<Text style={styles.sPTeam} numberOfLines={1}>{team.team_name}</Text>:null}
-                      {player.player_position?<Text style={styles.sPPos}>{positionIcon(player.player_position)} {player.player_position}</Text>:null}
-                    </View>
-                  </View>
-                  {/* Ana 4 stat */}
-                  <View style={styles.sStats}>
-                    {([
-                      {l:"GOL",    v:String(goals)},
-                      {l:"MAÇ",    v:String(played)},
-                      {l:"PUAN",   v:String(points)},
-                      {l:"GOL/MAÇ",v:perMatch},
-                    ]).map(st=>(
-                      <View key={st.l} style={styles.sStat}>
-                        <Text style={styles.sStatV}>{st.v}</Text>
-                        <Text style={styles.sStatL}>{st.l}</Text>
-                      </View>
-                    ))}
-                  </View>
-
-                  {/* İkincil istatistikler */}
-                  <View style={styles.sSecRow}>
-                    {assists != null && assists > 0 ? (
-                      <View style={styles.sSecItem}>
-                        <Text style={styles.sSecV}>{assists}</Text>
-                        <Text style={styles.sSecL}>ASİST</Text>
-                      </View>
-                    ) : null}
-                    {winRate != null ? (
-                      <View style={styles.sSecItem}>
-                        <Text style={styles.sSecV}>%{winRate}</Text>
-                        <Text style={styles.sSecL}>GALİBİYET</Text>
-                      </View>
-                    ) : null}
-                    {yellow > 0 ? (
-                      <View style={styles.sSecItem}>
-                        <Text style={styles.sSecV}>{yellow}</Text>
-                        <Text style={styles.sSecL}>SARI</Text>
-                      </View>
-                    ) : null}
-                    {red > 0 ? (
-                      <View style={styles.sSecItem}>
-                        <Text style={[styles.sSecV, {color:"#DC2626"}]}>{red}</Text>
-                        <Text style={styles.sSecL}>KIRMIZI</Text>
-                      </View>
-                    ) : null}
-                    {wins > 0 || draws > 0 || losses > 0 ? (
-                      <View style={styles.sSecItem}>
-                        <Text style={styles.sSecV}>{wins}-{draws}-{losses}</Text>
-                        <Text style={styles.sSecL}>G-B-M</Text>
-                      </View>
-                    ) : null}
-                  </View>
-
-                  {/* Lig içi sıralar */}
-                  {ranks ? (
-                    <View style={styles.sRanks}>
-                      {ranks.goals != null ? (
-                        <View style={styles.sRankChip}>
-                          <Text style={styles.sRankTxt}>⚽ {ranks.goals}. / {ranks.total} (gol)</Text>
-                        </View>
-                      ) : null}
-                      {ranks.points != null ? (
-                        <View style={styles.sRankChip}>
-                          <Text style={styles.sRankTxt}>🏅 {ranks.points}. / {ranks.total} (puan)</Text>
-                        </View>
-                      ) : null}
-                    </View>
-                  ) : null}
-
-                  {/* Türkiye sırası */}
-                  {trRank ? (
-                    <View style={styles.sTr}>
-                      <Text style={styles.sTrT}>🇹🇷 Türkiye Geneli {trRank.rank}. / {trRank.total}</Text>
-                    </View>
-                  ) : null}
-
-                  <View style={{flex:1}}/>
-                  <Text style={styles.sFtr}>ELİTLİG.COM</Text>
-                </LinearGradient>
-              </View>
-            </ViewShot>
-            <View style={styles.sActions}>
-              <Pressable onPress={()=>setShareOpen(false)} style={({pressed})=>[styles.sActBtn,styles.sClose,pressed&&styles.pressed]}>
-                <Text style={styles.sCloseTxt}>Kapat</Text>
-              </Pressable>
-              <Pressable onPress={doShare} style={({pressed})=>[styles.sActBtn,styles.sGo,pressed&&styles.pressed]}>
-                <Ionicons name="share-social" size={15} color="#FFF"/>
-                <Text style={styles.sGoTxt}>{shareBusy?"Hazırlanıyor…":"Paylaş"}</Text>
-              </Pressable>
-            </View>
-            <Text style={styles.sHint}>İndirmek için: Paylaş → "Görüntüyü Kaydet"</Text>
-          </View>
-        </View>
-      </Modal>
+      <ShareSheet
+        visible={shareOpen}
+        onClose={closeShare}
+        playerName={player.player_name}
+        playerImage={player.player_img ?? null}
+        position={player.player_position ?? null}
+        teamName={team?.team_name ?? null}
+        matches={num(player.total_matches)}
+        goals={num(player.total_goals)}
+        points={num(player.total_points)}
+        wins={num(player.wins)}
+        draws={num(player.draws)}
+        losses={num(player.losses)}
+      />
     </SafeAreaView>
   );
 }
 
-/** Eşiklerden otomatik kazanılan rozetler; hiçbiri yoksa bölüm görünmez. */
-function Achievements({
-  goals,
-  played,
-  yellow,
-  red,
-  winRate,
-  pointsRank,
-  goalsRank,
-}: {
-  goals: number;
-  played: number;
-  yellow: number;
-  red: number;
-  winRate: number | null;
-  pointsRank: number | null;
-  goalsRank: number | null;
-}) {
-  const badges: string[] = [];
-  if (pointsRank === 1) badges.push("👑 Puan Lideri");
-  if (goalsRank === 1) badges.push("⚽ Gol Kralı");
-  if (goals >= 100) badges.push("💯 100 Gol Kulübü");
-  else if (goals >= 50) badges.push("🎯 50+ Gol");
-  if (played >= 100) badges.push("🏟️ 100+ Maç");
-  else if (played >= 50) badges.push("🛡️ 50+ Maç");
-  if (winRate != null && winRate >= 60 && played >= 10) badges.push("🔥 %60+ Galibiyet");
-  if (yellow === 0 && red === 0 && played >= 10) badges.push("🤝 Centilmen");
-
-  if (badges.length === 0) return null;
-
-  return (
-    <View style={styles.card}>
-      <Text style={styles.cardKicker}>BAŞARILAR</Text>
-      <View style={styles.badgeWrap}>
-        {badges.map((badge) => (
-          <View key={badge} style={styles.badge}>
-            <Text style={styles.badgeText}>{badge}</Text>
-          </View>
-        ))}
-      </View>
-    </View>
-  );
+/** Her segmentin listesine geçen ortak kaydırma bağlantısı. */
+interface ScrollChrome {
+  onScroll: (event: Parameters<ReturnType<typeof useHeaderScroll>["scrollProps"]["onScroll"]>[0]) => void;
+  scrollEventThrottle: number;
 }
 
-/** Mevki → emoji */
-function positionIcon(pos: string): string {
-  const p = String(pos).toLowerCase();
-  if (p.includes("kaleci") || p.includes("kale")) return "🧤";
-  if (p.includes("defans") || p.includes("bek"))  return "🛡️";
-  if (p.includes("orta"))                          return "⚙️";
-  if (p.includes("kanat"))                         return "⚡";
-  if (p.includes("forvet") || p.includes("9"))     return "⚽";
-  return "🏃";
-}
+/* ══════════════════════════════════════════════════════════════════════════
+   5) GENEL — kimlik, sezon özeti, piyasa değeri, son 5 maç
+   ══════════════════════════════════════════════════════════════════════════ */
 
-function CareerStat({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.careerStat}>
-      <Text style={styles.careerStatValue}>{value}</Text>
-      <Text style={styles.careerStatLabel}>{label}</Text>
-    </View>
-  );
-}
-
-function RankPill({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.rankPill}>
-      <Text style={styles.rankValue}>{value}</Text>
-      <Text style={styles.rankLabel}>{label}</Text>
-    </View>
-  );
-}
-
-/** Son maç puanlarından mini çubuk grafik (soldan sağa eskiden yeniye). */
-function PointsSpark({ values }: { values: number[] }) {
-  if (values.length < 2) return null;
-  const max = Math.max(...values, 1);
-  return (
-    <View style={styles.spark}>
-      {values.map((value, index) => (
-        <View key={index} style={styles.sparkCol}>
-          <View
-            style={[
-              styles.sparkBar,
-              {
-                height: Math.max(6, Math.round((value / max) * 40)),
-              },
-              index === values.length - 1 && styles.sparkBarLast,
-            ]}
-          />
-          <Text style={styles.sparkValue}>{value}</Text>
-        </View>
-      ))}
-    </View>
-  );
-}
-
-/**
- * Oyuncunun son çıktığı maçlar — takımının son maçlarının kadroları taranır,
- * oyuncunun bulunduğu maçlar tarih/rakip/skor/G-B-M ve o maçtaki puanıyla
- * listelenir. Kadro sorguları maç detayıyla aynı önbelleği paylaşır.
- */
-function RecentAppearances({
-  playerId,
-  teamId,
-  onOpen,
-}: {
+interface GeneralTabProps {
   playerId: number;
-  teamId: number;
-  onOpen: (matchId: number) => void;
-}) {
-  const teamMatchesQuery = useQuery({
-    queryKey: queryKeys.teamMatches(teamId),
-    queryFn: () => getTeamMatches(teamId),
-    enabled: teamId > 0,
-    staleTime: 60_000,
+  playerName: string;
+  playerImage: string | null;
+  position: string | null;
+  birthDate: string | null;
+  nationality: string | null;
+  active: boolean;
+  totalMatches: number;
+  totalGoals: number;
+  totalPoints: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  phone: string | null;
+  email: string | null;
+  teamId: number | null;
+  teamName: string | null;
+  teamLogo: string | null;
+  refetchPlayer: () => unknown;
+  isRefetching: boolean;
+  scrollProps: ScrollChrome;
+}
+
+function GeneralTab({
+  playerId,
+  playerName,
+  playerImage,
+  position,
+  birthDate,
+  nationality,
+  active,
+  totalMatches,
+  totalGoals,
+  totalPoints,
+  wins,
+  draws,
+  losses,
+  phone,
+  email,
+  teamId,
+  teamName,
+  teamLogo,
+  refetchPlayer,
+  isRefetching,
+  scrollProps,
+}: GeneralTabProps) {
+  const router = useRouter();
+  const scope = useScope();
+  const refresh = useRefresh(refetchPlayer, { refreshing: isRefetching });
+
+  /* Asist oyuncu ucunda yok; kapsam içi sıralama listesinden zenginleştirilir
+     (bulunamazsa rakam hiç gösterilmez — eski ekranın kuralı korundu). */
+  const scopeKey = useMemo(
+    () => ({
+      cityId: scope.cityId ?? undefined,
+      leagueId: scope.leagueId ?? undefined,
+      seasonId: scope.seasonId ?? undefined,
+    }),
+    [scope.cityId, scope.leagueId, scope.seasonId],
+  );
+
+  const rankingsQuery = useQuery({
+    queryKey: queryKeys.playerRankings(scopeKey, "topScorers"),
+    queryFn: () => getPlayerRankings(scopeKey, "topScorers"),
+    enabled: scope.ready,
+    staleTime: 5 * 60_000,
   });
 
-  const recent = useMemo(() => {
-    const timeOf = (m: ApiMatch) =>
-      new Date(`${String(m.date).slice(0, 10)}T${m.time || "00:00:00"}`).getTime();
-    return (teamMatchesQuery.data ?? [])
-      .filter((m) => matchState(m) === "finished")
-      .sort((a, b) => timeOf(b) - timeOf(a))
-      .slice(0, 6);
-  }, [teamMatchesQuery.data]);
-
-  const kadroQueries = useQueries({
-    queries: recent.map((m) => ({
-      queryKey: [...queryKeys.match(Number(m.id)), "kadro"] as const,
-      queryFn: () => getMatchKadro(Number(m.id)),
-      staleTime: 60 * 60_000,
-    })),
+  /* Türkiye geneli sıralama (kapsamsız) — eski ekrandaki 🇹🇷 rozetinin kaynağı. */
+  const trRankQuery = useQuery({
+    queryKey: queryKeys.playerRankings({}, "topScorers"),
+    queryFn: () => getPlayerRankings({}, "topScorers"),
+    staleTime: 10 * 60_000,
   });
 
-  const rows = useMemo(() => {
-    const findMe = (players?: KadroPlayer[]) =>
-      (players ?? []).find(
-        (p) => Number(p.playerId ?? p.oyuncu_id ?? p.id) === playerId
-      );
-    const out: {
-      match: ApiMatch;
-      puan: number | null;
-      result: "G" | "B" | "M";
-      opponent: string;
-      score: string;
-    }[] = [];
-    recent.forEach((m, index) => {
-      const kadro = kadroQueries[index]?.data;
-      if (!kadro) return;
-      const me = findMe(kadro.home) ?? findMe(kadro.away);
-      if (!me) return;
-      const isHome = Number(m.home_team_id) === teamId;
-      const ours = isHome ? m.first_team_score : m.second_team_score;
-      const theirs = isHome ? m.second_team_score : m.first_team_score;
-      const result =
-        ours == null || theirs == null ? "B" : ours > theirs ? "G" : ours < theirs ? "M" : "B";
-      out.push({
-        match: m,
-        puan: me.puan != null ? Number(me.puan) : null,
-        result,
-        opponent: String(isHome ? m.second_team_name : m.first_team_name ?? ""),
-        score: `${ours ?? "-"} - ${theirs ?? "-"}`,
-      });
-    });
-    return out;
-  }, [recent, kadroQueries, playerId, teamId]);
+  const profileQuery = useQuery({
+    queryKey: key.profileStats(playerId),
+    queryFn: () => getProfileStats(playerId),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
 
-  if (rows.length === 0) return null;
+  const marketQuery = useQuery({
+    queryKey: key.marketValue(playerId),
+    queryFn: () => getMarketValue(playerId),
+    staleTime: 30 * 60_000,
+    retry: false,
+  });
+
+  const historyQuery = useQuery({
+    queryKey: key.marketHistory(playerId),
+    queryFn: () => getMarketValueHistory(playerId),
+    enabled: marketQuery.isSuccess,
+    staleTime: 30 * 60_000,
+    retry: false,
+  });
+
+  const assists = useMemo(() => {
+    const row = rankingsQuery.data?.players?.find((item) => Number(item.id) === playerId);
+    return row ? num(row.assists) : null;
+  }, [rankingsQuery.data, playerId]);
+
+  const trRank = useMemo(() => {
+    const list = trRankQuery.data?.players ?? [];
+    const index = list.findIndex((item) => Number(item.id) === playerId);
+    return index >= 0 ? { rank: index + 1, total: list.length } : null;
+  }, [trRankQuery.data, playerId]);
+
+  /* Lig içi sıralamalar — zaten çekilen listeden türetilir, ek istek yok. */
+  const ranks = useMemo(() => {
+    const players = rankingsQuery.data?.players ?? [];
+    if (players.length === 0) return null;
+    const me = players.find((item) => Number(item.id) === playerId);
+    if (!me) return null;
+    const rankBy = (field: "points" | "goals") => {
+      const sorted = [...players].sort((a, b) => num(b[field]) - num(a[field]));
+      const index = sorted.findIndex((item) => Number(item.id) === playerId);
+      return index >= 0 ? index + 1 : null;
+    };
+    const mates = players
+      .filter((item) => Number(item.teamId) === Number(me.teamId))
+      .sort((a, b) => num(b.points) - num(a.points));
+    const mateIndex = mates.findIndex((item) => Number(item.id) === playerId);
+    return {
+      points: rankBy("points"),
+      goals: rankBy("goals"),
+      team: mateIndex >= 0 ? mateIndex + 1 : null,
+      total: players.length,
+    };
+  }, [rankingsQuery.data, playerId]);
+
+  const recent = useMemo(
+    () => playedAppearances(profileQuery.data?.mergedStatistics).slice(0, 5),
+    [profileQuery.data],
+  );
+
+  /* Form şeridi soldan sağa eskiden yeniye okunur. */
+  const form = useMemo<FormResult[]>(
+    () =>
+      recent
+        .map(appearanceResult)
+        .filter((value): value is FormResult => value != null)
+        .reverse(),
+    [recent],
+  );
+
+  /* Forma numarası oyuncu kaydında yok; en son maçın kadrosundan okunur.
+     Kadro sorgusu maç detayıyla aynı önbelleği paylaşır, ek maliyeti yok. */
+  const lastMatchId = recent[0]?.match?.id ?? null;
+  const kadroQuery = useQuery({
+    queryKey: [...queryKeys.match(Number(lastMatchId)), "kadro"] as const,
+    queryFn: () => getMatchKadro(Number(lastMatchId)),
+    enabled: lastMatchId != null,
+    staleTime: 60 * 60_000,
+    retry: false,
+  });
+
+  const jersey = useMemo(() => {
+    const kadro = kadroQuery.data;
+    if (!kadro) return null;
+    const all = [...(kadro.home ?? []), ...(kadro.away ?? [])];
+    const me = all.find((row) => Number(row.playerId ?? row.oyuncu_id ?? row.id) === playerId);
+    const parsed = Number(me?.number);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }, [kadroQuery.data, playerId]);
+
+  const decided = wins + draws + losses;
+  const winRate = decided > 0 ? wins / decided : null;
+  const averageRating = totalMatches > 0 ? totalPoints / totalMatches : null;
+  const age = formatAge(birthDate);
+
+  const openTeam = useCallback(() => {
+    if (teamId) router.push(`/takim/${teamId}`);
+  }, [router, teamId]);
+
+  const openMatch = useCallback(
+    (matchId: number) => router.push(`/mac/${matchId}`),
+    [router],
+  );
+
+  const market = marketQuery.data ?? null;
 
   return (
-    <View style={styles.card}>
-      <Text style={styles.cardKicker}>SON MAÇLARI</Text>
-      <PointsSpark
-        values={rows
-          .map((row) => row.puan)
-          .filter((value): value is number => value != null)
-          .reverse()}
-      />
-      {rows.map(({ match, puan, result, opponent, score }) => (
-        <Pressable
-          key={match.id}
-          onPress={() => onOpen(Number(match.id))}
-          style={({ pressed }) => [styles.appearRow, pressed && styles.pressed]}
-        >
-          <Text style={styles.appearDate}>{formatDateShort(match.date)}</Text>
-          <View
-            style={[
-              styles.appearChip,
-              result === "G"
-                ? styles.appearWin
-                : result === "M"
-                  ? styles.appearLoss
-                  : styles.appearDraw,
-            ]}
+    <ScrollView
+      {...scrollProps}
+      contentContainerStyle={styles.content}
+      refreshControl={refresh.control}
+    >
+      {/* ————— Kimlik ————— */}
+      <View style={styles.hero}>
+        <Avatar
+          name={playerName}
+          image={mediaUrl(playerImage)}
+          size={76}
+          ring="brand"
+          jersey={jersey}
+        />
+
+        <Text style={styles.heroName} numberOfLines={2} {...textScale.dense}>
+          {playerName}
+        </Text>
+
+        <View style={styles.heroBadges}>
+          {position ? (
+            <Badge label={`${positionIcon(position)} ${position}`} tone="brand" size="sm" />
+          ) : null}
+          {/* Sunucuda ayrı bir "doğrulanmış" alanı yok; aktif oyuncu kaydı
+              lisanslı/doğrulanmış kaydın kendisidir (models/players.js). */}
+          <Badge
+            label={active ? "AKTİF" : "PASİF"}
+            tone={active ? "win" : "neutral"}
+            icon={active ? "checkmark-circle" : undefined}
+            size="sm"
+          />
+          {trRank ? (
+            <Badge label={`TR ${trRank.rank}.`} tone="info" size="sm" />
+          ) : null}
+        </View>
+
+        {/* Takım satırı — dokununca takım profiline iner. */}
+        {teamName ? (
+          <Touchable
+            feedback="card"
+            haptic="selection"
+            onPress={openTeam}
+            accessibilityRole="button"
+            accessibilityLabel={`${teamName} takım sayfası`}
+            style={styles.heroTeam}
           >
-            <Text style={styles.appearChipText}>{result}</Text>
-          </View>
-          <Text style={styles.appearOpponent} numberOfLines={1}>
-            {opponent.toLocaleUpperCase("tr-TR")}
-          </Text>
-          <Text style={styles.appearScore}>{score}</Text>
-          {puan != null ? (
-            <View style={styles.appearPoints}>
-              <Text style={styles.appearPointsText}>{puan}</Text>
+            <TeamLogo name={teamName} logo={mediaUrl(teamLogo)} size={layout.crestLg} />
+            <View style={styles.heroTeamBody}>
+              <Text style={styles.heroTeamLabel} {...textScale.badge}>
+                KULÜBÜ
+              </Text>
+              <Text style={styles.heroTeamName} numberOfLines={1} {...textScale.dense}>
+                {teamName}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
+          </Touchable>
+        ) : (
+          <Badge label="TAKIMSIZ" tone="neutral" size="sm" />
+        )}
+
+        {/* Kimlik künyesi — boş alan satırı hiç çizilmez. */}
+        <View style={styles.metaRow}>
+          {age !== "—" ? <MetaChip label="Yaş" value={age} /> : null}
+          {nationality ? <MetaChip label="Uyruk" value={nationality} /> : null}
+          {jersey != null ? <MetaChip label="Forma" value={`#${jersey}`} /> : null}
+          {form.length ? (
+            <View style={styles.formBox}>
+              <Text style={styles.metaLabel} {...textScale.badge}>
+                SON {form.length}
+              </Text>
+              <FormChips form={form} limit={5} size="xs" />
             </View>
           ) : null}
-        </Pressable>
-      ))}
-      <Text style={styles.appearHint}>Sağdaki mor rozet o maçtaki puanı · dokun, maça git</Text>
-    </View>
+        </View>
+      </View>
+
+      {/* ————— Sezon özeti: büyük rakamlar ————— */}
+      <View style={styles.bigRow}>
+        <BigStat label="MAÇ" value={String(totalMatches)} />
+        <View style={styles.bigDivider} />
+        <BigStat label="GOL" value={String(totalGoals)} />
+        {assists != null ? (
+          <>
+            <View style={styles.bigDivider} />
+            <BigStat label="ASİST" value={String(assists)} />
+          </>
+        ) : null}
+        <View style={styles.bigDivider} />
+        <BigStat
+          label="ORT. PUAN"
+          value={averageRating != null ? averageRating.toFixed(1) : "—"}
+          tone="brand"
+        />
+      </View>
+
+      {/* ————— Galibiyet dengesi ————— */}
+      {decided > 0 ? (
+        <Card title="Galibiyet dengesi" style={styles.card}>
+          <View style={styles.balanceRow}>
+            <ProgressRing
+              value={winRate ?? 0}
+              size={64}
+              thickness={6}
+              tone="win"
+              label={winRate != null ? `%${Math.round(winRate * 100)}` : "—"}
+              sublabel="galibiyet"
+            />
+            <View style={styles.balanceStats}>
+              <BalanceLine label="Galibiyet" value={wins} total={decided} tone="win" />
+              <BalanceLine label="Beraberlik" value={draws} total={decided} tone="neutral" />
+              <BalanceLine label="Mağlubiyet" value={losses} total={decided} tone="danger" />
+            </View>
+          </View>
+        </Card>
+      ) : null}
+
+      {/* ————— Piyasa değeri ————— */}
+      {market ? (
+        <MarketValueCard market={market} history={historyQuery.data?.items ?? []} />
+      ) : null}
+
+      {/* ————— Lig içi sıralamalar ————— */}
+      {ranks ? (
+        <>
+          <SectionHeader title="Lig içi sıralama" meta={`${ranks.total} oyuncu`} />
+          <View style={styles.rankRow}>
+            {ranks.points != null ? (
+              <RankTile label="PUAN" value={`${ranks.points}.`} />
+            ) : null}
+            {ranks.goals != null ? (
+              <RankTile label="GOL KRALLIĞI" value={`${ranks.goals}.`} />
+            ) : null}
+            {ranks.team != null ? (
+              <RankTile label="TAKIMINDA" value={`${ranks.team}.`} />
+            ) : null}
+          </View>
+        </>
+      ) : null}
+
+      {/* ————— Başarı rozetleri ————— */}
+      <Achievements
+        goals={totalGoals}
+        matches={totalMatches}
+        winRate={winRate}
+        pointsRank={ranks?.points ?? null}
+        goalsRank={ranks?.goals ?? null}
+      />
+
+      {/* ————— Son 5 maç ————— */}
+      <SectionHeader title="Son maçlar" meta={recent.length ? `${recent.length} maç` : undefined} />
+      {profileQuery.isLoading ? (
+        <SkeletonListRow count={4} />
+      ) : recent.length === 0 ? (
+        <EmptyState
+          icon="football-outline"
+          title="Kayıtlı maç yok"
+          body="Oyuncunun yayınlanmış bir maç kaydı bulunmuyor."
+          variant="inline"
+          compact
+        />
+      ) : (
+        <View style={styles.group}>
+          {recent.map((row, index) => (
+            <AppearanceRow
+              key={row.match_id}
+              row={row}
+              position={rowPosition(index, recent.length)}
+              onPress={openMatch}
+            />
+          ))}
+        </View>
+      )}
+
+      {/* ————— İletişim: yalnız yetkili görüntüleyende alanlar yanıta girer ————— */}
+      {phone || email ? (
+        <>
+          <SectionHeader title="İletişim" meta="Yalnız yetkili görür" />
+          <View style={styles.group}>
+            {phone ? (
+              <ListRow
+                leading={{ icon: "call", tone: "brand" }}
+                title="Telefon"
+                value={phone}
+                position={email ? "first" : "single"}
+                onPress={() => openLink(`tel:${phone}`)}
+              />
+            ) : null}
+            {email ? (
+              <ListRow
+                leading={{ icon: "mail", tone: "brand" }}
+                title="E-posta"
+                value={email}
+                position={phone ? "last" : "single"}
+                onPress={() => openLink(`mailto:${email}`)}
+              />
+            ) : null}
+          </View>
+        </>
+      ) : null}
+    </ScrollView>
   );
 }
 
-function MainStat({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+/* ══════════════════════════════════════════════════════════════════════════
+   6) İSTATİSTİK — sezon tablosu + kariyer toplamı + ayrıntı kırılımı
+   ══════════════════════════════════════════════════════════════════════════ */
+
+interface StatsTabProps {
+  playerId: number;
+  totalMatches: number;
+  totalGoals: number;
+  totalPoints: number;
+  totalYellow: number;
+  totalRed: number;
+  scrollProps: ScrollChrome;
+}
+
+function StatsTab({
+  playerId,
+  totalMatches,
+  totalGoals,
+  totalPoints,
+  totalYellow,
+  totalRed,
+  scrollProps,
+}: StatsTabProps) {
+  const seasonQuery = useQuery({
+    queryKey: key.seasonStats(playerId),
+    queryFn: () => getSeasonStats(playerId),
+    staleTime: 5 * 60_000,
+  });
+
+  const detailQuery = useQuery({
+    queryKey: key.detailedStats(playerId),
+    queryFn: () => getDetailedStats(playerId),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+
+  /* Kırmızı kart sezon ucunda yok; maç maç kayıttan sezon kırılımı çıkarılır. */
+  const profileQuery = useQuery({
+    queryKey: key.profileStats(playerId),
+    queryFn: () => getProfileStats(playerId),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+
+  const refresh = useRefresh(seasonQuery.refetch, { refreshing: seasonQuery.isRefetching });
+
+  const redBySeason = useMemo(() => {
+    const map = new Map<string, number>();
+    playedAppearances(profileQuery.data?.mergedStatistics).forEach((row) => {
+      const id = row.season?.id;
+      if (id == null) return;
+      map.set(String(id), (map.get(String(id)) ?? 0) + num(row.red_card));
+    });
+    return map;
+  }, [profileQuery.data]);
+
+  const seasons = seasonQuery.data ?? [];
+  const stats = detailQuery.data?.statistics ?? null;
+
+  /* Ayrıntı satırları: sıfır olan hiç çizilmez (boş alan tire ile sırıtmaz). */
+  const detailRows = useMemo(() => {
+    if (!stats) return [];
+    const candidates: { label: string; value: number }[] = [
+      { label: "Asist", value: stats.asist },
+      { label: "İlk 11 başlangıcı", value: stats.ilk11_basladigi_mac_sayisi },
+      { label: "Sonradan oyuna girdiği", value: stats.sonradan_oyuna_girdigi_mac_sayisi },
+      { label: "Kaptanlık", value: stats.kaptan_oldugu_mac_sayisi },
+      { label: "Kurtarış", value: stats.kurtaris },
+      { label: "Yaratılan pozisyon", value: stats.yaratilan_pozisyon },
+      { label: "Kritik blok", value: stats.kritik_blok },
+      { label: "Kazanılan hava topu", value: stats.kazanilan_hava_topu },
+      { label: "Kazanılan ikili mücadele", value: stats.kazanilan_ikili_mucadele },
+      { label: "Faul", value: stats.faul },
+      { label: "Sakatlık", value: stats.sakatlik },
+    ];
+    return candidates.filter((item) => num(item.value) > 0);
+  }, [stats]);
+
+  const goalTypes = useMemo(() => {
+    if (!stats) return [];
+    const candidates: { label: string; value: number }[] = [
+      { label: "Sağ ayak", value: stats.sag_ayak_golu },
+      { label: "Sol ayak", value: stats.sol_ayak_golu },
+      { label: "Kafa", value: stats.kafa_golu },
+      { label: "Penaltı", value: stats.penalti_golu },
+      { label: "Frikik", value: stats.frikik_golu },
+      { label: "Uzaktan (sağ)", value: stats.uzaktan_sag_ayak_golu },
+      { label: "Uzaktan (sol)", value: stats.uzaktan_sol_ayak_golu },
+    ];
+    return candidates.filter((item) => num(item.value) > 0);
+  }, [stats]);
+
+  if (seasonQuery.isLoading) {
+    return (
+      <View style={styles.loadingBody}>
+        <SkeletonTable count={5} columns={6} />
+      </View>
+    );
+  }
+
+  if (seasonQuery.isError) {
+    return <ErrorState error={seasonQuery.error} onRetry={seasonQuery.refetch} />;
+  }
+
+  const careerAverage = totalMatches > 0 ? totalPoints / totalMatches : null;
+  const maxGoalType = goalTypes.reduce((acc, item) => Math.max(acc, item.value), 0);
+
   return (
-    <View style={styles.mainStat}>
-      <Text style={[styles.mainValue, highlight && styles.mainValueHi]}>{value}</Text>
-      <Text style={styles.mainLabel}>{label}</Text>
+    <ScrollView
+      {...scrollProps}
+      contentContainerStyle={styles.content}
+      refreshControl={refresh.control}
+    >
+      <SectionHeader title="Sezon sezon" meta={`${seasons.length} sezon`} />
+
+      {seasons.length === 0 ? (
+        <EmptyState
+          icon="stats-chart-outline"
+          title="Sezon kaydı yok"
+          body="Oyuncunun yayınlanmış maçı olduğunda sezon tablosu burada oluşur."
+          variant="inline"
+        />
+      ) : (
+        <View style={styles.table}>
+          {/* Başlık satırı — tüm sayısal sütunlar sabit genişlikte ve tabular. */}
+          <View style={styles.tableHead}>
+            <Text style={[styles.thText, styles.colSeason]} {...textScale.badge}>
+              SEZON
+            </Text>
+            <Text style={[styles.thText, styles.colNum]} {...textScale.badge}>
+              M
+            </Text>
+            <Text style={[styles.thText, styles.colNum]} {...textScale.badge}>
+              G
+            </Text>
+            <Text style={[styles.thText, styles.colNum]} {...textScale.badge}>
+              SK
+            </Text>
+            <Text style={[styles.thText, styles.colNum]} {...textScale.badge}>
+              KK
+            </Text>
+            <Text style={[styles.thText, styles.colRating]} {...textScale.badge}>
+              Ø
+            </Text>
+          </View>
+
+          {seasons.map((season) => (
+            <SeasonRow
+              key={`${season.season_id ?? "yok"}-${season.season_label}`}
+              row={season}
+              red={redBySeason.get(String(season.season_id)) ?? 0}
+            />
+          ))}
+
+          {/* Kariyer toplamı — oyuncu kaydındaki kanonik toplamlar. */}
+          <View style={[styles.tableRow, styles.totalRow]}>
+            <Text style={[styles.tdStrong, styles.colSeason]} numberOfLines={1} {...textScale.dense}>
+              KARİYER
+            </Text>
+            <Text style={[styles.tdNumStrong, styles.colNum]} {...textScale.dense}>
+              {totalMatches}
+            </Text>
+            <Text style={[styles.tdNumStrong, styles.colNum]} {...textScale.dense}>
+              {totalGoals}
+            </Text>
+            <Text style={[styles.tdNumStrong, styles.colNum]} {...textScale.dense}>
+              {totalYellow}
+            </Text>
+            <Text style={[styles.tdNumStrong, styles.colNum]} {...textScale.dense}>
+              {totalRed}
+            </Text>
+            <View style={styles.colRating}>
+              <RatingPill value={careerAverage} size="sm" />
+            </View>
+          </View>
+        </View>
+      )}
+
+      <Text style={styles.tableNote} {...textScale.long}>
+        M maç · G gol · SK sarı kart · KK kırmızı kart · Ø maç puanı ortalaması.
+        Yalnızca yayınlanmış maçlar sayılır.
+      </Text>
+
+      {/* ————— Gol kırılımı ————— */}
+      {goalTypes.length ? (
+        <>
+          <SectionHeader title="Golleri nasıl attı" meta={`${totalGoals} gol`} />
+          <View style={styles.card}>
+            {goalTypes.map((item) => (
+              <View key={item.label} style={styles.goalTypeRow}>
+                <Text style={styles.goalTypeLabel} numberOfLines={1} {...textScale.dense}>
+                  {item.label}
+                </Text>
+                <View style={styles.goalTypeTrack}>
+                  <View
+                    style={[
+                      styles.goalTypeFill,
+                      { flex: maxGoalType > 0 ? item.value / maxGoalType : 0 },
+                    ]}
+                  />
+                  <View style={{ flex: maxGoalType > 0 ? 1 - item.value / maxGoalType : 1 }} />
+                </View>
+                <Text style={styles.goalTypeValue} {...textScale.dense}>
+                  {item.value}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </>
+      ) : null}
+
+      {/* ————— Ayrıntılı toplamlar ————— */}
+      {detailRows.length ? (
+        <>
+          <SectionHeader title="Ayrıntılı istatistik" />
+          <View style={styles.group}>
+            {detailRows.map((item, index) => (
+              <ListRow
+                key={item.label}
+                title={item.label}
+                value={String(item.value)}
+                chevron={false}
+                position={rowPosition(index, detailRows.length)}
+              />
+            ))}
+          </View>
+        </>
+      ) : null}
+
+      {detailQuery.isError && seasons.length > 0 ? (
+        <ErrorState
+          error={detailQuery.error}
+          onRetry={detailQuery.refetch}
+          variant="banner"
+          style={styles.banner}
+        />
+      ) : null}
+    </ScrollView>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   7) MAÇLAR — oynadığı tüm maçlar, reyting ve gol/kart işaretleriyle
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/** Satır yüksekliği sabittir; `getItemLayout` bundan kurulur. */
+const APPEARANCE_ROW_HEIGHT = 56;
+
+function MatchesTab({ playerId, scrollProps }: { playerId: number; scrollProps: ScrollChrome }) {
+  const router = useRouter();
+
+  const profileQuery = useQuery({
+    queryKey: key.profileStats(playerId),
+    queryFn: () => getProfileStats(playerId),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+
+  const refresh = useRefresh(profileQuery.refetch, { refreshing: profileQuery.isRefetching });
+
+  const rows = useMemo(
+    () => playedAppearances(profileQuery.data?.mergedStatistics),
+    [profileQuery.data],
+  );
+
+  const openMatch = useCallback((matchId: number) => router.push(`/mac/${matchId}`), [router]);
+
+  const renderItem = useCallback(
+    ({ item, index }: { item: Appearance; index: number }) => (
+      <AppearanceRow row={item} position={rowPosition(index, rows.length)} onPress={openMatch} />
+    ),
+    [openMatch, rows.length],
+  );
+
+  const keyExtractor = useCallback((item: Appearance) => String(item.match_id), []);
+
+  const getItemLayout = useCallback(
+    (_data: ArrayLike<Appearance> | null | undefined, index: number) => ({
+      length: APPEARANCE_ROW_HEIGHT,
+      offset: APPEARANCE_ROW_HEIGHT * index,
+      index,
+    }),
+    [],
+  );
+
+  if (profileQuery.isLoading) {
+    return (
+      <View style={styles.loadingBody}>
+        <SkeletonListRow count={8} />
+      </View>
+    );
+  }
+
+  if (profileQuery.isError) {
+    return (
+      <EmptyState
+        icon="football-outline"
+        title="Maç kaydı yok"
+        body="Bu oyuncu için kayıtlı maç istatistiği bulunamadı."
+        action={{ label: "Tekrar dene", onPress: () => profileQuery.refetch(), haptic: "light" }}
+      />
+    );
+  }
+
+  if (rows.length === 0) {
+    return (
+      <EmptyState
+        icon="football-outline"
+        title="Henüz maç yok"
+        body="Oyuncu yayınlanmış bir maçta forma giydiğinde listesi burada oluşur."
+      />
+    );
+  }
+
+  /* Başlık listenin İÇİNDE değil ÜSTÜNDE duruyor: `getItemLayout` sabit satır
+     yüksekliğinden kuruluyor ve liste başlığı bu hesabı bozardı. */
+  return (
+    <View style={styles.tabBody}>
+      <View style={styles.tabHeading}>
+        <SectionHeader title="Oynadığı maçlar" meta={`${rows.length} maç`} />
+      </View>
+
+      <FlatList
+        {...scrollProps}
+        data={rows}
+        renderItem={renderItem}
+        keyExtractor={keyExtractor}
+        getItemLayout={getItemLayout}
+        contentContainerStyle={styles.listContent}
+        refreshControl={refresh.control}
+        initialNumToRender={14}
+        windowSize={9}
+      />
     </View>
   );
 }
 
-function MetricPill({
+/* ══════════════════════════════════════════════════════════════════════════
+   8) KARİYER — takım geçmişi, transferler, disiplin kayıtları
+   ══════════════════════════════════════════════════════════════════════════ */
+
+function CareerTab({
+  playerId,
+  currentTeamId,
+  scrollProps,
+}: {
+  playerId: number;
+  currentTeamId: number | null;
+  scrollProps: ScrollChrome;
+}) {
+  const router = useRouter();
+
+  const profileQuery = useQuery({
+    queryKey: key.profileStats(playerId),
+    queryFn: () => getProfileStats(playerId),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+
+  const refresh = useRefresh(profileQuery.refetch, { refreshing: profileQuery.isRefetching });
+
+  const appearances = useMemo(
+    () => playedAppearances(profileQuery.data?.mergedStatistics),
+    [profileQuery.data],
+  );
+
+  const teams = profileQuery.data?.profile?.history?.teams ?? [];
+
+  /**
+   * Transferler: sunucuda herkese açık bir transfer geçmişi ucu yok. Maç maç
+   * kayıt, oyuncunun HANGİ TAKIM ADINA oynadığını taşıdığı için takım
+   * değişimleri kronolojik sırayla buradan çıkarılır — uydurma değil, oynanmış
+   * maçların kanıtladığı geçişler.
+   */
+  const transfers = useMemo(() => {
+    const ascending = [...appearances].sort((a, b) => timeOf(a) - timeOf(b));
+    const list: { key: string; from: AppearanceTeam | null; to: AppearanceTeam; date: string | null }[] = [];
+    let previous: AppearanceTeam | null = null;
+    ascending.forEach((row) => {
+      const team = row.played_for_team;
+      if (!team?.id) return;
+      if (previous?.id === team.id) return;
+      list.push({
+        key: `${row.match_id}-${team.id}`,
+        from: previous,
+        to: team,
+        date: row.match?.date ?? null,
+      });
+      previous = team;
+    });
+    return list.reverse();
+  }, [appearances]);
+
+  /** Disiplin: kart görülen maçlar (herkese açık ceza ucu oyuncuya göre süzülemiyor). */
+  const discipline = useMemo(
+    () => appearances.filter((row) => num(row.yellow_card) > 0 || num(row.red_card) > 0),
+    [appearances],
+  );
+
+  const openTeam = useCallback((teamId: number) => router.push(`/takim/${teamId}`), [router]);
+  const openMatch = useCallback((matchId: number) => router.push(`/mac/${matchId}`), [router]);
+
+  if (profileQuery.isLoading) {
+    return (
+      <View style={styles.loadingBody}>
+        <SkeletonCard lines={3} />
+        <SkeletonListRow count={5} />
+      </View>
+    );
+  }
+
+  if (profileQuery.isError || (teams.length === 0 && appearances.length === 0)) {
+    return (
+      <EmptyState
+        icon="time-outline"
+        title="Kariyer kaydı yok"
+        body="Oyuncunun yayınlanmış maçı olduğunda takım geçmişi burada oluşur."
+        action={
+          profileQuery.isError
+            ? { label: "Tekrar dene", onPress: () => profileQuery.refetch(), haptic: "light" }
+            : undefined
+        }
+      />
+    );
+  }
+
+  return (
+    <ScrollView
+      {...scrollProps}
+      contentContainerStyle={styles.content}
+      refreshControl={refresh.control}
+    >
+      {/* ————— Takım geçmişi ————— */}
+      <SectionHeader title="Takım geçmişi" meta={`${teams.length} kulüp`} />
+      <View style={styles.timeline}>
+        {teams.map((team, index) => (
+          <TimelineTeam
+            key={`${team.id ?? "yok"}-${index}`}
+            team={team}
+            current={team.id != null && team.id === currentTeamId}
+            first={index === 0}
+            last={index === teams.length - 1}
+            onPress={openTeam}
+          />
+        ))}
+      </View>
+
+      {/* ————— Transferler ————— */}
+      {transfers.length > 1 ? (
+        <>
+          <SectionHeader title="Transferler" meta={`${transfers.length - 1} geçiş`} />
+          <View style={styles.group}>
+            {transfers
+              .filter((item) => item.from != null)
+              .map((item, index, list) => (
+                <ListRow
+                  key={item.key}
+                  leading={{ icon: "swap-horizontal", tone: "info" }}
+                  title={`${item.from?.name ?? "?"} → ${item.to.name ?? "?"}`}
+                  subtitle={item.date ? formatDateShort(item.date) : undefined}
+                  chevron={false}
+                  position={rowPosition(index, list.length)}
+                />
+              ))}
+          </View>
+          <Text style={styles.tableNote} {...textScale.long}>
+            Geçişler, oyuncunun forma giydiği maçlardan çıkarılır: ilk kez başka
+            bir kulüp adına oynadığı maçın tarihi geçiş tarihi sayılır.
+          </Text>
+        </>
+      ) : null}
+
+      {/* ————— Disiplin ————— */}
+      <SectionHeader
+        title="Disiplin kayıtları"
+        meta={discipline.length ? `${discipline.length} maç` : undefined}
+      />
+      {discipline.length === 0 ? (
+        <EmptyState
+          icon="shield-checkmark-outline"
+          title="Kart görmedi"
+          body="Oyuncunun kayıtlı sarı veya kırmızı kartı yok."
+          variant="inline"
+          compact
+        />
+      ) : (
+        <View style={styles.group}>
+          {discipline.slice(0, 20).map((row, index, list) => (
+            <ListRow
+              key={row.match_id}
+              leading={{
+                icon: num(row.red_card) > 0 ? "close-circle" : "square",
+                tone: num(row.red_card) > 0 ? "danger" : "warn",
+              }}
+              title={opponentName(row) || "Maç"}
+              subtitle={row.match?.date ? formatDateShort(row.match.date) : undefined}
+              badge={
+                <View style={styles.cardBadges}>
+                  {num(row.yellow_card) > 0 ? (
+                    <Badge label={`${row.yellow_card} SK`} tone="warn" size="xs" />
+                  ) : null}
+                  {num(row.red_card) > 0 ? (
+                    <Badge label={`${row.red_card} KK`} tone="danger" size="xs" />
+                  ) : null}
+                </View>
+              }
+              position={rowPosition(index, Math.min(list.length, 20))}
+              onPress={() => openMatch(row.match_id)}
+            />
+          ))}
+        </View>
+      )}
+    </ScrollView>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   9) ALT BİLEŞENLER
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/** Büyük özet rakamı — `type.display` ile okunur, tabular hizalı. */
+const BigStat = React.memo(function BigStat({
   label,
   value,
   tone,
 }: {
   label: string;
   value: string;
-  tone?: "yellow" | "red";
+  tone?: "brand";
 }) {
   return (
-    <View style={styles.metricPill}>
+    <View style={styles.bigStat}>
       <Text
-        style={[
-          styles.metricValue,
-          tone === "yellow" && { color: colors.yellow },
-          tone === "red" && { color: colors.live },
-        ]}
+        style={[styles.bigValue, tone === "brand" && styles.bigValueBrand]}
+        {...textScale.dense}
       >
         {value}
       </Text>
-      <Text style={styles.metricLabel}>{label}</Text>
+      <Text style={styles.bigLabel} numberOfLines={1} {...textScale.badge}>
+        {label}
+      </Text>
     </View>
+  );
+});
+
+/** Kimlik künyesindeki küçük etiket–değer kutusu. */
+const MetaChip = React.memo(function MetaChip({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <View style={styles.metaChip}>
+      <Text style={styles.metaLabel} {...textScale.badge}>
+        {label.toLocaleUpperCase("tr-TR")}
+      </Text>
+      <Text style={styles.metaValue} {...textScale.dense}>
+        {value}
+      </Text>
+    </View>
+  );
+});
+
+/** Galibiyet dengesinin tek satırı: oranlı çubuk + sayı. */
+const BalanceLine = React.memo(function BalanceLine({
+  label,
+  value,
+  total,
+  tone,
+}: {
+  label: string;
+  value: number;
+  total: number;
+  tone: Tone;
+}) {
+  const share = total > 0 ? value / total : 0;
+  const fill =
+    tone === "win" ? colors.win : tone === "danger" ? colors.loss : colors.draw;
+
+  return (
+    <View style={styles.balanceLine}>
+      <Text style={styles.balanceLabel} numberOfLines={1} {...textScale.dense}>
+        {label}
+      </Text>
+      <View style={styles.balanceTrack}>
+        <View style={[styles.balanceFill, { flex: share, backgroundColor: fill }]} />
+        <View style={{ flex: 1 - share }} />
+      </View>
+      <Text style={styles.balanceValue} {...textScale.dense}>
+        {value}
+      </Text>
+    </View>
+  );
+});
+
+/** Lig içi sıralama kutusu. */
+const RankTile = React.memo(function RankTile({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <View style={styles.rankTile}>
+      <Text style={styles.rankValue} {...textScale.dense}>
+        {value}
+      </Text>
+      <Text style={styles.rankLabel} numberOfLines={1} {...textScale.badge}>
+        {label}
+      </Text>
+    </View>
+  );
+});
+
+/**
+ * Piyasa değeri kartı — değer, değişim, sıralar ve son 16 ölçümün seyri.
+ * Grafik SVG değil basit bir sütun şeridi: 16 nokta için kütüphane maliyeti
+ * gereksiz, üstelik tema renkleriyle boyanabiliyor.
+ */
+const MarketValueCard = React.memo(function MarketValueCard({
+  market,
+  history,
+}: {
+  market: MarketValue;
+  history: MarketValueHistoryRow[];
+}) {
+  const series = useMemo(() => {
+    const values = [...history]
+      .reverse()
+      .map((item) => num(item.current_value))
+      .filter((value) => value > 0);
+    return values.slice(-16);
+  }, [history]);
+
+  const max = series.reduce((acc, value) => Math.max(acc, value), 0);
+  const rising = market.changeAmount > 0;
+  const falling = market.changeAmount < 0;
+
+  return (
+    <Card title="Piyasa değeri" style={styles.card}>
+      <View style={styles.marketTop}>
+        <Text style={styles.marketValue} {...textScale.dense}>
+          {formatMoney(market.currentValue, market.currency)}
+        </Text>
+        {market.changeAmount !== 0 ? (
+          <Badge
+            label={`${rising ? "+" : ""}${market.changePercentage.toFixed(1)}%`}
+            tone={rising ? "win" : falling ? "danger" : "neutral"}
+            icon={rising ? "trending-up" : "trending-down"}
+            size="sm"
+          />
+        ) : null}
+      </View>
+
+      {series.length > 1 ? (
+        <View style={styles.spark}>
+          {series.map((value, index) => (
+            <View
+              key={`${index}-${value}`}
+              style={[
+                styles.sparkBar,
+                { height: Math.max(4, Math.round((value / (max || 1)) * 40)) },
+                index === series.length - 1 && styles.sparkBarLast,
+              ]}
+            />
+          ))}
+        </View>
+      ) : null}
+
+      <View style={styles.marketRanks}>
+        {market.globalRank != null ? (
+          <MetaChip label="Türkiye" value={`${market.globalRank}.`} />
+        ) : null}
+        {market.cityRank != null ? (
+          <MetaChip label="Şehir" value={`${market.cityRank}.`} />
+        ) : null}
+        {market.positionRank != null ? (
+          <MetaChip label="Mevki" value={`${market.positionRank}.`} />
+        ) : null}
+        {market.percentile != null ? (
+          <MetaChip label="Yüzdelik" value={`%${Math.round(market.percentile)}`} />
+        ) : null}
+      </View>
+    </Card>
+  );
+});
+
+/**
+ * Eşiklerden otomatik kazanılan rozetler (eski ekrandan korundu).
+ * Hiçbir eşik tutmuyorsa bölüm hiç çizilmez.
+ */
+const Achievements = React.memo(function Achievements({
+  goals,
+  matches,
+  winRate,
+  pointsRank,
+  goalsRank,
+}: {
+  goals: number;
+  matches: number;
+  winRate: number | null;
+  pointsRank: number | null;
+  goalsRank: number | null;
+}) {
+  const badges = useMemo(() => {
+    const list: { label: string; tone: Tone }[] = [];
+    if (pointsRank === 1) list.push({ label: "👑 Puan lideri", tone: "warn" });
+    if (goalsRank === 1) list.push({ label: "⚽ Gol kralı", tone: "warn" });
+    if (goals >= 100) list.push({ label: "💯 100 gol kulübü", tone: "brand" });
+    else if (goals >= 50) list.push({ label: "🎯 50+ gol", tone: "brand" });
+    if (matches >= 100) list.push({ label: "🏟️ 100+ maç", tone: "info" });
+    else if (matches >= 50) list.push({ label: "🛡️ 50+ maç", tone: "info" });
+    if (winRate != null && winRate >= 0.6 && matches >= 10) {
+      list.push({ label: "🔥 %60+ galibiyet", tone: "win" });
+    }
+    return list;
+  }, [goals, goalsRank, matches, pointsRank, winRate]);
+
+  if (badges.length === 0) return null;
+
+  /* NEDEN Chip DEĞİL Badge: rozetler basılabilir değil; `Chip` onPress'siz
+     kullanıldığında kendini devre dışı sayıp soluk boyanıyor. */
+  return (
+    <>
+      <SectionHeader title="Başarılar" />
+      <View style={styles.badgeWrap}>
+        {badges.map((badge) => (
+          <Badge key={badge.label} label={badge.label} tone={badge.tone} size="sm" />
+        ))}
+      </View>
+    </>
+  );
+});
+
+/** Tek maç satırı: tarih · rakip · skor · gol/kart · reyting. */
+const AppearanceRow = React.memo(function AppearanceRow({
+  row,
+  position,
+  onPress,
+}: {
+  row: Appearance;
+  position: "single" | "first" | "middle" | "last";
+  onPress: (matchId: number) => void;
+}) {
+  const handlePress = useCallback(() => onPress(row.match_id), [onPress, row.match_id]);
+
+  const result = appearanceResult(row);
+  const score = appearanceScore(row);
+  const goals = num(row.number_of_goals);
+  const ownGoals = num(row.goal_to_himself);
+  const yellow = num(row.yellow_card);
+  const red = num(row.red_card);
+
+  const resultColor =
+    result === "W" ? colors.win : result === "L" ? colors.loss : colors.draw;
+
+  return (
+    <Touchable
+      feedback="row"
+      haptic="selection"
+      onPress={handlePress}
+      accessibilityRole="button"
+      accessibilityLabel={`${opponentName(row)} maçı, skor ${score ?? "yok"}`}
+      style={[
+        styles.appearRow,
+        position === "first" && styles.groupFirst,
+        position === "last" && styles.groupLast,
+        position === "single" && styles.groupSingle,
+        position !== "last" && position !== "single" && styles.groupDivider,
+      ]}
+    >
+      {/* Sonuç rayı — G/B/M rengini satırın soluna taşır. */}
+      <View style={[styles.resultRail, { backgroundColor: result ? resultColor : colors.border }]} />
+
+      <View style={styles.appearDateBox}>
+        <Text style={styles.appearDate} {...textScale.dense}>
+          {row.match?.date ? formatDateShort(row.match.date) : "—"}
+        </Text>
+        {row.lineup_is_starting ? (
+          <Text style={styles.appearRole} {...textScale.badge}>
+            İLK 11
+          </Text>
+        ) : null}
+      </View>
+
+      <View style={styles.appearBody}>
+        <Text style={styles.appearOpponent} numberOfLines={1} {...textScale.dense}>
+          {opponentName(row).toLocaleUpperCase("tr-TR")}
+        </Text>
+        <View style={styles.appearMarks}>
+          {goals > 0 ? <Mark icon="football" tone={colors.win} count={goals} /> : null}
+          {ownGoals > 0 ? <Mark icon="football-outline" tone={colors.loss} count={ownGoals} /> : null}
+          {yellow > 0 ? <Mark icon="square" tone={colors.yellowCard} count={yellow} /> : null}
+          {red > 0 ? <Mark icon="square" tone={colors.redCard} count={red} /> : null}
+          {row.lineup_is_captain ? <Mark icon="ribbon" tone={colors.brandAccent} count={0} /> : null}
+        </View>
+      </View>
+
+      <Text style={styles.appearScore} {...textScale.dense}>
+        {score ?? "—"}
+      </Text>
+
+      <RatingPill value={ratingOf(num(row.points))} size="sm" hideEmpty />
+    </Touchable>
+  );
+});
+
+/** Gol/kart işareti — sayı 1'den büyükse yanına adet yazılır. */
+const Mark = React.memo(function Mark({
+  icon,
+  tone,
+  count,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  tone: string;
+  count: number;
+}) {
+  return (
+    <View style={styles.mark}>
+      <Ionicons name={icon} size={10} color={tone} />
+      {count > 1 ? (
+        <Text style={[styles.markCount, { color: tone }]} {...textScale.badge}>
+          {count}
+        </Text>
+      ) : null}
+    </View>
+  );
+});
+
+/** Sezon tablosunun tek satırı. */
+const SeasonRow = React.memo(function SeasonRow({
+  row,
+  red,
+}: {
+  row: SeasonStatRow;
+  red: number;
+}) {
+  const average = row.matches > 0 ? row.points / row.matches : null;
+
+  return (
+    <View style={styles.tableRow}>
+      <View style={styles.colSeason}>
+        <Text style={styles.tdStrong} numberOfLines={1} {...textScale.dense}>
+          {row.season_label}
+        </Text>
+        <Text style={styles.tdSub} numberOfLines={1} {...textScale.badge}>
+          {row.wins}G · {row.draws}B · {row.losses}M
+        </Text>
+      </View>
+      <Text style={[styles.tdNum, styles.colNum]} {...textScale.dense}>
+        {row.matches}
+      </Text>
+      <Text style={[styles.tdNum, styles.colNum]} {...textScale.dense}>
+        {row.goals}
+      </Text>
+      <Text style={[styles.tdNum, styles.colNum]} {...textScale.dense}>
+        {row.yellow_cards}
+      </Text>
+      <Text style={[styles.tdNum, styles.colNum]} {...textScale.dense}>
+        {red}
+      </Text>
+      <View style={styles.colRating}>
+        <RatingPill value={average} size="sm" />
+      </View>
+    </View>
+  );
+});
+
+/** Kariyer zaman çizelgesinin tek kulübü. */
+const TimelineTeam = React.memo(function TimelineTeam({
+  team,
+  current,
+  first,
+  last,
+  onPress,
+}: {
+  team: HistoryTeam;
+  current: boolean;
+  first: boolean;
+  last: boolean;
+  onPress: (teamId: number) => void;
+}) {
+  const handlePress = useCallback(() => {
+    if (team.id != null) onPress(team.id);
+  }, [onPress, team.id]);
+
+  const seasons = team.season_names?.filter(Boolean) ?? [];
+  const leagues = team.league_names?.filter(Boolean) ?? [];
+
+  return (
+    <Touchable
+      feedback="row"
+      haptic="selection"
+      onPress={team.id != null ? handlePress : undefined}
+      accessibilityRole="button"
+      accessibilityLabel={`${team.name ?? "Takım"}, ${team.match_count} maç`}
+      style={styles.timelineRow}
+    >
+      {/* Sol sütun: nokta + bağlantı çizgisi. */}
+      <View style={styles.timelineRail}>
+        <View style={[styles.timelineLine, first && styles.timelineLineHidden]} />
+        <View style={[styles.timelineDot, current && styles.timelineDotCurrent]} />
+        <View style={[styles.timelineLine, last && styles.timelineLineHidden]} />
+      </View>
+
+      <TeamLogo name={team.name} logo={mediaUrl(team.logo)} size={layout.crestLg} />
+
+      <View style={styles.timelineBody}>
+        <View style={styles.timelineHeadRow}>
+          <Text style={styles.timelineName} numberOfLines={1} {...textScale.dense}>
+            {team.name ?? "Takım"}
+          </Text>
+          {current ? <Badge label="GÜNCEL" tone="win" size="xs" /> : null}
+        </View>
+        {leagues.length ? (
+          <Text style={styles.timelineMeta} numberOfLines={1} {...textScale.dense}>
+            {leagues.join(" · ")}
+          </Text>
+        ) : null}
+        {seasons.length ? (
+          <Text style={styles.timelineMeta} numberOfLines={1} {...textScale.badge}>
+            {seasons.join(", ")}
+          </Text>
+        ) : null}
+      </View>
+
+      <Text style={styles.timelineCount} {...textScale.dense}>
+        {team.match_count}
+      </Text>
+    </Touchable>
+  );
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   10) PAYLAŞ KARTI
+
+   NEDEN SABİT RENK: bu kart ekran arayüzü değil, dışa aktarılan bir GÖRSELDİR.
+   Koyu temadaki kullanıcı Instagram'a koyu zeminli, okunmaz bir kart
+   göndermesin diye kartın paleti temadan bağımsız sabittir. Uygulama
+   arayüzünün hiçbir yerinde sabit renk kullanılmaz; istisna burada başlar ve
+   burada biter.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const SHARE = {
+  ink: "#0A0812",
+  brand: "#6D28D9",
+  brandDeep: "#4C1D95",
+  brandText: "#5B21B6",
+  paperTop: "#CDBFE8",
+  paperMid: "#EFEAF7",
+  paperBottom: "#FFFFFF",
+  muted: "#9188A4",
+  panel: "rgba(255,255,255,0.72)",
+} as const;
+
+const SHARE_WIDTH = 272;
+const SHARE_FORMATS = {
+  story: { label: "Hikâye 9:16", height: Math.round((SHARE_WIDTH * 16) / 9) },
+  post: { label: "Gönderi 3:4", height: Math.round((SHARE_WIDTH * 4) / 3) },
+} as const;
+
+type ShareFormat = keyof typeof SHARE_FORMATS;
+
+function ShareSheet({
+  visible,
+  onClose,
+  playerName,
+  playerImage,
+  position,
+  teamName,
+  matches,
+  goals,
+  points,
+  wins,
+  draws,
+  losses,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  playerName: string;
+  playerImage: string | null;
+  position: string | null;
+  teamName: string | null;
+  matches: number;
+  goals: number;
+  points: number;
+  wins: number;
+  draws: number;
+  losses: number;
+}) {
+  const [format, setFormat] = useState<ShareFormat>("story");
+  const [busy, setBusy] = useState(false);
+  const shotRef = useRef<ViewShot | null>(null);
+
+  const share = useCallback(async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const uri = await shotRef.current?.capture?.();
+      if (uri) await Sharing.shareAsync(uri, { mimeType: "image/png" });
+    } catch {
+      // Paylaşım iptal edilebilir ya da cihazda paylaşım sayfası olmayabilir;
+      // kullanıcı zaten sayfayı görüyor, ayrıca uyarı göstermeye gerek yok.
+    } finally {
+      setBusy(false);
+    }
+  }, [busy]);
+
+  const average = matches > 0 ? (points / matches).toFixed(1) : "0.0";
+  const perMatch = matches > 0 ? (goals / matches).toFixed(2) : "0.00";
+  const decided = wins + draws + losses;
+
+  return (
+    <BottomSheet
+      visible={visible}
+      onClose={onClose}
+      title="Oyuncu kartını paylaş"
+      snap="full"
+      footer={
+        <View style={styles.shareActions}>
+          <Button label="Kapat" variant="secondary" onPress={onClose} style={styles.shareButton} />
+          <Button
+            label={busy ? "Hazırlanıyor…" : "Paylaş"}
+            icon="share-social"
+            loading={busy}
+            onPress={share}
+            style={styles.shareButton}
+          />
+        </View>
+      }
+    >
+      <View style={styles.shareBodyWrap}>
+        <View style={styles.shareFormats}>
+          {(Object.keys(SHARE_FORMATS) as ShareFormat[]).map((item) => (
+            <Chip
+              key={item}
+              label={SHARE_FORMATS[item].label}
+              selected={format === item}
+              size="sm"
+              onPress={() => setFormat(item)}
+            />
+          ))}
+        </View>
+
+        <ViewShot ref={shotRef} options={{ format: "png", quality: 1 }}>
+          <View style={[styles.shareCard, { height: SHARE_FORMATS[format].height }]}>
+            <LinearGradient colors={[SHARE.brand, SHARE.brandDeep]} style={styles.shareStrip} />
+            <LinearGradient
+              colors={[SHARE.paperTop, SHARE.paperMid, SHARE.paperBottom]}
+              start={{ x: 0.2, y: 0 }}
+              end={{ x: 0.5, y: 1 }}
+              style={styles.shareBody}
+            >
+              <View style={styles.shareHead}>
+                <Text style={styles.shareBrand}>elitlig</Text>
+                <Text style={styles.shareBrandRight}>ELİTLİG MOBİL</Text>
+              </View>
+
+              <Text style={styles.shareKicker}>⚽ OYUNCU PROFİLİ</Text>
+
+              <View style={styles.shareIdentity}>
+                <Avatar name={playerName} image={mediaUrl(playerImage)} size={56} />
+                <View style={styles.shareIdentityBody}>
+                  <Text style={styles.shareName} numberOfLines={2}>
+                    {playerName.toLocaleUpperCase("tr-TR")}
+                  </Text>
+                  {teamName ? (
+                    <Text style={styles.shareTeam} numberOfLines={1}>
+                      {teamName}
+                    </Text>
+                  ) : null}
+                  {position ? <Text style={styles.sharePosition}>{position}</Text> : null}
+                </View>
+              </View>
+
+              <View style={styles.shareStats}>
+                {[
+                  { label: "MAÇ", value: String(matches) },
+                  { label: "GOL", value: String(goals) },
+                  { label: "ORT", value: average },
+                  { label: "GOL/MAÇ", value: perMatch },
+                ].map((item) => (
+                  <View key={item.label} style={styles.shareStat}>
+                    <Text style={styles.shareStatValue}>{item.value}</Text>
+                    <Text style={styles.shareStatLabel}>{item.label}</Text>
+                  </View>
+                ))}
+              </View>
+
+              {decided > 0 ? (
+                <View style={styles.shareSecondary}>
+                  <Text style={styles.shareSecondaryText}>
+                    {wins}G · {draws}B · {losses}M
+                  </Text>
+                </View>
+              ) : null}
+
+              <View style={styles.shareSpacer} />
+              <Text style={styles.shareFooter}>ELİTLİG.COM</Text>
+            </LinearGradient>
+          </View>
+        </ViewShot>
+
+        <Text style={styles.shareHint} {...textScale.long}>
+          Görseli kaydetmek için: Paylaş → &quot;Görüntüyü Kaydet&quot;
+        </Text>
+      </View>
+    </BottomSheet>
   );
 }
 
-function Legend({ color, label }: { color: string; label: string }) {
-  return (
-    <View style={styles.legend}>
-      <View style={[styles.legendDot, { backgroundColor: color }]} />
-      <Text style={styles.legendText}>{label}</Text>
-    </View>
-  );
-}
+/* ══════════════════════════════════════════════════════════════════════════
+   11) STİLLER
+   ══════════════════════════════════════════════════════════════════════════ */
 
 const styles = StyleSheet.create({
-  shareBtn: { flexDirection:"row", alignItems:"center", justifyContent:"center", gap:6, backgroundColor:colors.turfDim, borderRadius:radius.pill, paddingVertical:spacing.sm+2, marginBottom:spacing.md },
-  shareBtnText: { fontSize: 12, fontWeight:"800", color:colors.turf },
-  sOverlay: { flex:1, backgroundColor:"rgba(0,0,0,0.75)", justifyContent:"flex-end" },
-  sSheet: { backgroundColor:"#1A1524", borderTopLeftRadius:20, borderTopRightRadius:20, padding:spacing.md, gap:spacing.md, alignItems:"center" as const, paddingBottom:36 },
-  sFmtRow: { flexDirection:"row", gap:spacing.sm },
-  sFmtPill: { borderRadius:radius.pill, borderWidth:1, borderColor:"rgba(255,255,255,0.35)", paddingHorizontal:spacing.md, paddingVertical:spacing.sm },
-  sFmtActive: { backgroundColor:colors.turf, borderColor:colors.turf },
-  sFmtTxt: { fontSize: 11, fontWeight:"800", color:"#FFF" },
-  sCard: { width:272, backgroundColor:"#0B0A0E", borderRadius:14, padding:7, overflow:"hidden" },
-  sStrip: { height:7, borderTopLeftRadius:8, borderTopRightRadius:8 },
-  sBody: { flex:1, borderBottomLeftRadius:8, borderBottomRightRadius:8, paddingHorizontal:spacing.md, paddingTop:spacing.sm, paddingBottom:spacing.sm, overflow:"hidden", gap:6 },
-  sWm: { position:"absolute", right:-28, bottom:16, fontSize:60, fontWeight:"900", color:"#6D28D9", opacity:0.06, transform:[{rotate:"-12deg"}] },
-  sHead: { flexDirection:"row", alignItems:"center", justifyContent:"space-between" },
-  sBrand: { fontSize: 12, fontWeight:"900", color:"#6D28D9" },
-  sBrandR: { fontSize:7, fontWeight:"800", letterSpacing:1.2, color:"#6D28D9", opacity:0.7 },
-  sKick: { fontSize:8, fontWeight:"800", letterSpacing:0.8, color:"#6D28D9", opacity:0.85 },
-  sAvRow: { flexDirection:"row", alignItems:"center", gap:spacing.sm, backgroundColor:"rgba(255,255,255,0.7)", borderRadius:10, padding:8 },
-  sNameCol: { flex:1, gap:2 },
-  sPName: { fontSize: 12, fontWeight:"900", color:"#0A0812", letterSpacing:-0.3, lineHeight:16 },
-  sPTeam: { fontSize:9, fontWeight:"700", color:"#6D28D9" },
-  sPPos: { fontSize:9, fontWeight:"600", color:"#8B8797" },
-  sStats: { flexDirection:"row", backgroundColor:"rgba(255,255,255,0.7)", borderRadius:10, padding:8 },
-  sStat: { flex:1, alignItems:"center" as const, gap:1 },
-  sStatV: { fontSize: 15, fontWeight:"900", color:"#5B21B6", fontVariant:["tabular-nums"] as any, letterSpacing:-0.5 },
-  sStatL: { fontSize:6.5, fontWeight:"800", letterSpacing:0.5, color:"#9188A4" },
-  sTr: { backgroundColor:"rgba(109,40,217,0.08)", borderRadius:8, paddingHorizontal:8, paddingVertical:4, alignSelf:"flex-start" as const },
-  sTrT: { fontSize:9, fontWeight:"800", color:"#5B21B6" },
-  sFtr: { fontSize:7.5, fontWeight:"800", letterSpacing:2.5, color:"#9188A4", textAlign:"center" as const },
-  sSecRow: { flexDirection:"row", flexWrap:"wrap", gap:4 },
-  sSecItem: { backgroundColor:"rgba(255,255,255,0.7)", borderRadius:8, paddingHorizontal:8, paddingVertical:4, alignItems:"center" as const, minWidth:48 },
-  sSecV: { fontSize: 11, fontWeight:"900", color:"#5B21B6", fontVariant:["tabular-nums"] as any },
-  sSecL: { fontSize:6, fontWeight:"800", letterSpacing:0.5, color:"#9188A4" },
-  sRanks: { flexDirection:"row", flexWrap:"wrap", gap:4 },
-  sRankChip: { backgroundColor:"rgba(109,40,217,0.08)", borderRadius:6, paddingHorizontal:7, paddingVertical:3 },
-  sRankTxt: { fontSize:8, fontWeight:"700", color:"#5B21B6" },
-  sActions: { flexDirection:"row", gap:spacing.sm, width:"100%" },
-  sActBtn: { flex:1, flexDirection:"row", alignItems:"center", justifyContent:"center", gap:6, borderRadius:radius.pill, paddingVertical:spacing.sm+2 },
-  sClose: { backgroundColor:"rgba(255,255,255,0.1)" },
-  sCloseTxt: { fontSize: 13, fontWeight:"700", color:"#FFF" },
-  sGo: { backgroundColor:colors.turf },
-  sGoTxt: { fontSize: 13, fontWeight:"800", color:"#FFF" },
-  sHint: { fontSize:11, fontWeight:"600", color:"rgba(255,255,255,0.5)" },
   screen: {
     flex: 1,
-    backgroundColor: colors.pitch,
+    backgroundColor: colors.bg,
   },
   content: {
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.xl,
+    paddingHorizontal: layout.screenPadding,
+    paddingBottom: space.giant,
+    gap: space.sm,
   },
-  trChip: {
-    backgroundColor: colors.turfDim,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.sm + 2,
-    paddingVertical: 4,
+  listContent: {
+    paddingHorizontal: layout.screenPadding,
+    paddingBottom: space.giant,
   },
-  trChipText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: colors.turf,
+  tabBody: {
+    flex: 1,
   },
-  careerCard: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.faint,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    gap: spacing.sm,
+  tabHeading: {
+    paddingHorizontal: layout.screenPadding,
   },
-  careerRow: {
+  loadingBody: {
+    paddingHorizontal: layout.screenPadding,
+    paddingTop: space.md,
+    gap: space.md,
+  },
+  banner: {
+    marginTop: space.sm,
+  },
+
+  /* — Kimlik — */
+  hero: {
+    alignItems: "center",
+    gap: space.sm,
+    paddingTop: space.md,
+    paddingBottom: space.sm,
+  },
+  heroName: {
+    ...type.display,
+    color: colors.textPrimary,
+    textAlign: "center",
+  },
+  heroBadges: {
     flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: space.s,
   },
-  contribBar: {
+  heroTeam: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    alignSelf: "stretch",
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    paddingHorizontal: space.md,
+    paddingVertical: space.m,
+  },
+  heroTeamBody: {
+    flex: 1,
+    gap: 1,
+  },
+  heroTeamLabel: {
+    ...type.micro,
+    color: colors.brandAccent,
+  },
+  heroTeamName: {
+    ...type.h3,
+    color: colors.textPrimary,
+  },
+  metaRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: space.s,
+  },
+  metaChip: {
+    alignItems: "center",
+    backgroundColor: colors.surface2,
+    borderRadius: radius.md,
+    paddingHorizontal: space.m,
+    paddingVertical: space.xs,
+    minWidth: 56,
+  },
+  metaLabel: {
+    ...type.micro,
+    color: colors.textTertiary,
+  },
+  metaValue: {
+    ...type.tableNumStrong,
+    color: colors.textPrimary,
+  },
+  formBox: {
+    alignItems: "center",
+    gap: 2,
+    backgroundColor: colors.surface2,
+    borderRadius: radius.md,
+    paddingHorizontal: space.m,
+    paddingVertical: space.xs,
+  },
+
+  /* — Büyük rakamlar — */
+  bigRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    paddingVertical: space.md,
+  },
+  bigDivider: {
+    width: hairline,
+    alignSelf: "stretch",
+    backgroundColor: colors.separator,
+  },
+  bigStat: {
+    flex: 1,
+    alignItems: "center",
+    gap: 2,
+  },
+  bigValue: {
+    ...type.display,
+    fontVariant: ["tabular-nums"],
+    color: colors.textPrimary,
+  },
+  bigValueBrand: {
+    color: colors.brandAccent,
+  },
+  bigLabel: {
+    ...type.micro,
+    color: colors.textTertiary,
+  },
+
+  /* — Kart, grup — */
+  card: {
+    marginTop: space.xs,
+  },
+  group: {
+    borderRadius: radius.lg,
+    overflow: "hidden",
+  },
+  groupFirst: {
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+  },
+  groupLast: {
+    borderBottomLeftRadius: radius.lg,
+    borderBottomRightRadius: radius.lg,
+  },
+  groupSingle: {
+    borderRadius: radius.lg,
+  },
+  groupDivider: {
+    borderBottomWidth: hairline,
+    borderBottomColor: colors.separator,
+  },
+
+  /* — Galibiyet dengesi — */
+  balanceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+  },
+  balanceStats: {
+    flex: 1,
+    gap: space.s,
+  },
+  balanceLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+  },
+  balanceLabel: {
+    ...type.caption,
+    color: colors.textSecondary,
+    width: 74,
+  },
+  balanceTrack: {
+    flex: 1,
     flexDirection: "row",
     height: 6,
     borderRadius: 3,
     overflow: "hidden",
-    backgroundColor: colors.surfaceRaised,
+    backgroundColor: colors.surface3,
   },
-  barSegment: {
+  balanceFill: {
     height: 6,
   },
-  barGoal: {
-    backgroundColor: colors.green,
+  balanceValue: {
+    ...type.tableNumStrong,
+    color: colors.textPrimary,
+    minWidth: 22,
+    textAlign: "right",
   },
-  barAssist: {
-    backgroundColor: colors.turf,
-  },
-  barLegendRow: {
-    flexDirection: "row",
-    gap: spacing.md,
-  },
-  barLegendItem: {
+
+  /* — Piyasa değeri — */
+  marketTop: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: space.sm,
   },
-  barLegendDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  barLegendLabel: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: colors.muted,
-  },
-  careerStat: {
-    flex: 1,
-    alignItems: "center",
-    gap: 2,
-  },
-  careerStatValue: {
-    fontSize: 17,
-    fontWeight: "900",
-    color: colors.line,
-    fontVariant: ["tabular-nums"],
-  },
-  careerStatLabel: {
-    fontSize: 8,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-    color: colors.muted,
-  },
-  hero: {
-    alignItems: "center",
-    gap: spacing.sm,
-    paddingVertical: spacing.md,
-  },
-  avatarRing: {
-    borderWidth: 3,
-    borderColor: colors.turf,
-    borderRadius: 999,
-    padding: 3,
-  },
-  name: {
-    ...type.title,
-    color: colors.line,
-    textAlign: "center",
-  },
-  chipRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-  },
-  positionChip: {
-    backgroundColor: colors.turf,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.sm + 2,
-    paddingVertical: 4,
-  },
-  positionText: {
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-    color: colors.surface,
-  },
-  teamChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.faint,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.sm + 2,
-    paddingVertical: 4,
-    maxWidth: 220,
-  },
-  teamChipText: {
-    ...type.caption,
-    color: colors.line,
-    letterSpacing: 0,
-  },
-  mainCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.faint,
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  mainStat: {
-    flex: 1,
-    alignItems: "center",
-    gap: 2,
-  },
-  mainValue: {
-    ...type.score,
-    fontSize: 20,
-    color: colors.line,
-    fontVariant: ["tabular-nums"],
-  },
-  mainValueHi: {
-    color: colors.turf,
-  },
-  mainLabel: {
-    fontSize: 9,
-    fontWeight: "700",
-    color: colors.muted,
-    letterSpacing: 0.6,
-  },
-  divider: {
-    width: 1,
-    alignSelf: "stretch",
-    backgroundColor: colors.faint,
-  },
-  pillRow: {
-    flexDirection: "row",
-    gap: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  metricPill: {
-    flex: 1,
-    alignItems: "center",
-    gap: 2,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.faint,
-    borderRadius: radius.md,
-    paddingVertical: spacing.sm + 2,
-  },
-  metricValue: {
-    ...type.subtitle,
-    color: colors.line,
-    fontVariant: ["tabular-nums"],
-  },
-  metricLabel: {
-    fontSize: 9,
-    fontWeight: "700",
-    color: colors.muted,
-    letterSpacing: 0.3,
-  },
-  card: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.faint,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  cardHead: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: spacing.sm,
-  },
-  cardKicker: {
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 0.8,
-    color: colors.turf,
-  },
-  winRate: {
-    ...type.caption,
-    color: colors.green,
-    letterSpacing: 0,
-  },
-  balanceBar: {
-    flexDirection: "row",
-    height: 8,
-    borderRadius: 4,
-    overflow: "hidden",
-  },
-  barWin: { backgroundColor: colors.green },
-  barDraw: { backgroundColor: "#B9B5C6" },
-  barLoss: { backgroundColor: colors.live },
-  balanceLegend: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: spacing.sm,
-  },
-  legend: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-  },
-  legendDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  legendText: {
-    ...type.caption,
-    color: colors.muted,
-    letterSpacing: 0,
-  },
-  infoRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: spacing.sm,
-  },
-  infoRowBorder: {
-    borderTopWidth: 1,
-    borderTopColor: colors.faint,
-  },
-  infoLabel: {
-    ...type.small,
-    color: colors.muted,
-  },
-  infoValue: {
-    ...type.small,
-    color: colors.line,
-    fontWeight: "700",
-  },
-  pressed: {
-    opacity: 0.7,
-  },
-  rankRow: {
-    flexDirection: "row",
-    gap: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  rankPill: {
-    flex: 1,
-    alignItems: "center",
-    gap: 2,
-    backgroundColor: colors.turfDim,
-    borderRadius: radius.md,
-    paddingVertical: spacing.sm + 2,
-  },
-  rankValue: {
-    ...type.subtitle,
-    color: colors.turf,
-    fontVariant: ["tabular-nums"],
-  },
-  rankLabel: {
-    fontSize: 8,
-    fontWeight: "800",
-    letterSpacing: 0.4,
-    color: colors.turf,
-  },
-  appearRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    backgroundColor: colors.surfaceRaised,
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
-    marginTop: spacing.sm,
-  },
-  appearDate: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: colors.muted,
-    width: 46,
-  },
-  appearChip: {
-    width: 18,
-    height: 18,
-    borderRadius: 5,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  appearWin: { backgroundColor: colors.green },
-  appearDraw: { backgroundColor: "#B9B5C6" },
-  appearLoss: { backgroundColor: colors.live },
-  appearChipText: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: colors.surface,
-  },
-  appearOpponent: {
-    ...type.caption,
-    color: colors.line,
-    letterSpacing: 0,
+  marketValue: {
+    ...type.scoreLg,
+    color: colors.textPrimary,
     flex: 1,
   },
-  appearScore: {
-    ...type.small,
-    color: colors.line,
-    fontWeight: "800",
-    fontVariant: ["tabular-nums"],
-  },
-  appearPoints: {
-    minWidth: 30,
-    alignItems: "center",
-    backgroundColor: colors.turf,
-    borderRadius: radius.pill,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  appearPointsText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: colors.surface,
-    fontVariant: ["tabular-nums"],
-  },
-  appearHint: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: colors.muted,
-    marginTop: spacing.sm,
-  },
-  badgeWrap: {
+  marketRanks: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: spacing.sm,
-  },
-  badge: {
-    backgroundColor: colors.goldDim,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.sm + 2,
-    paddingVertical: 5,
-  },
-  badgeText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: colors.line,
+    gap: space.s,
+    marginTop: space.sm,
   },
   spark: {
     flexDirection: "row",
     alignItems: "flex-end",
-    gap: spacing.sm,
-    marginTop: spacing.sm,
-    marginBottom: spacing.xs,
-    paddingHorizontal: spacing.xs,
-  },
-  sparkCol: {
-    flex: 1,
-    alignItems: "center",
     gap: 3,
+    height: 44,
+    marginTop: space.md,
   },
   sparkBar: {
-    width: "70%",
-    maxWidth: 26,
-    borderRadius: 4,
-    backgroundColor: colors.turfDim,
+    flex: 1,
+    borderRadius: 2,
+    backgroundColor: colors.brandDim,
   },
   sparkBarLast: {
-    backgroundColor: colors.turf,
+    backgroundColor: colors.brand,
   },
-  sparkValue: {
+
+  /* — Sıralama kutuları — */
+  rankRow: {
+    flexDirection: "row",
+    gap: space.sm,
+  },
+  rankTile: {
+    flex: 1,
+    alignItems: "center",
+    gap: 2,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    paddingVertical: space.m,
+  },
+  rankValue: {
+    ...type.scoreMd,
+    color: colors.brandAccent,
+  },
+  rankLabel: {
+    ...type.micro,
+    color: colors.textTertiary,
+  },
+
+  /* — Maç satırı — */
+  appearRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    height: APPEARANCE_ROW_HEIGHT,
+    paddingRight: space.md,
+    backgroundColor: colors.surface1,
+  },
+  resultRail: {
+    width: 3,
+    alignSelf: "stretch",
+  },
+  appearDateBox: {
+    width: 52,
+    paddingLeft: space.s,
+  },
+  appearDate: {
+    ...type.tableNum,
+    color: colors.textSecondary,
+  },
+  appearRole: {
+    ...type.micro,
+    color: colors.brandAccent,
+  },
+  appearBody: {
+    flex: 1,
+    gap: 2,
+  },
+  appearOpponent: {
+    ...type.bodySm,
+    fontWeight: "700",
+    color: colors.textPrimary,
+  },
+  appearMarks: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.s,
+  },
+  mark: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+  },
+  markCount: {
+    ...type.micro,
+  },
+  appearScore: {
+    ...type.scoreSm,
+    color: colors.textPrimary,
+    minWidth: 34,
+    textAlign: "right",
+  },
+
+  /* — Sezon tablosu — */
+  table: {
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    overflow: "hidden",
+  },
+  tableHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.surface3,
+    paddingHorizontal: space.md,
+    paddingVertical: space.s,
+    gap: space.xs,
+  },
+  thText: {
+    ...type.micro,
+    color: colors.textTertiary,
+    textAlign: "center",
+  },
+  tableRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: space.md,
+    paddingVertical: space.m,
+    gap: space.xs,
+    borderTopWidth: hairline,
+    borderTopColor: colors.separator,
+  },
+  totalRow: {
+    backgroundColor: colors.surface2,
+  },
+  colSeason: {
+    flex: 1,
+    textAlign: "left",
+  },
+  colNum: {
+    width: 30,
+    textAlign: "center",
+  },
+  colRating: {
+    width: 40,
+    alignItems: "flex-end",
+  },
+  tdStrong: {
+    ...type.bodySm,
+    fontWeight: "700",
+    color: colors.textPrimary,
+  },
+  tdSub: {
+    ...type.micro,
+    color: colors.textTertiary,
+    letterSpacing: 0.2,
+  },
+  tdNum: {
+    ...type.tableNum,
+    color: colors.textSecondary,
+  },
+  tdNumStrong: {
+    ...type.tableNumStrong,
+    color: colors.textPrimary,
+  },
+  tableNote: {
+    ...type.caption,
+    color: colors.textTertiary,
+    paddingHorizontal: space.xs,
+    paddingTop: space.xs,
+  },
+
+  /* — Gol kırılımı — */
+  goalTypeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    paddingVertical: space.xs,
+  },
+  goalTypeLabel: {
+    ...type.caption,
+    color: colors.textSecondary,
+    width: 96,
+  },
+  goalTypeTrack: {
+    flex: 1,
+    flexDirection: "row",
+    height: 6,
+    borderRadius: 3,
+    overflow: "hidden",
+    backgroundColor: colors.surface3,
+  },
+  goalTypeFill: {
+    height: 6,
+    backgroundColor: colors.brand,
+  },
+  goalTypeValue: {
+    ...type.tableNumStrong,
+    color: colors.textPrimary,
+    minWidth: 20,
+    textAlign: "right",
+  },
+
+  /* — Kariyer zaman çizelgesi — */
+  timeline: {
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    overflow: "hidden",
+  },
+  timelineRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    paddingRight: space.md,
+    paddingVertical: space.m,
+  },
+  timelineRail: {
+    width: 24,
+    alignSelf: "stretch",
+    alignItems: "center",
+  },
+  timelineLine: {
+    flex: 1,
+    width: hairline * 2,
+    backgroundColor: colors.border,
+  },
+  timelineLineHidden: {
+    backgroundColor: "transparent",
+  },
+  timelineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: radius.pill,
+    backgroundColor: colors.textTertiary,
+    marginVertical: 2,
+  },
+  timelineDotCurrent: {
+    backgroundColor: colors.brand,
+    width: 10,
+    height: 10,
+  },
+  timelineBody: {
+    flex: 1,
+    gap: 1,
+  },
+  timelineHeadRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.s,
+  },
+  timelineName: {
+    ...type.h3,
+    color: colors.textPrimary,
+    flexShrink: 1,
+  },
+  timelineMeta: {
+    ...type.caption,
+    color: colors.textTertiary,
+  },
+  timelineCount: {
+    ...type.tableNumStrong,
+    color: colors.textSecondary,
+    minWidth: 24,
+    textAlign: "right",
+  },
+  cardBadges: {
+    flexDirection: "row",
+    gap: space.xs,
+  },
+  badgeWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: space.s,
+    paddingVertical: space.xs,
+  },
+
+  /* — Paylaş kartı (sabit palet: dışa aktarılan görsel) — */
+  shareBodyWrap: {
+    alignItems: "center",
+    gap: space.md,
+    paddingBottom: space.md,
+  },
+  shareFormats: {
+    flexDirection: "row",
+    gap: space.sm,
+  },
+  shareCard: {
+    width: SHARE_WIDTH,
+    backgroundColor: SHARE.ink,
+    borderRadius: radius.xl,
+    padding: 7,
+    overflow: "hidden",
+  },
+  shareStrip: {
+    height: 7,
+    borderTopLeftRadius: radius.md,
+    borderTopRightRadius: radius.md,
+  },
+  shareBody: {
+    flex: 1,
+    borderBottomLeftRadius: radius.md,
+    borderBottomRightRadius: radius.md,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    gap: space.s,
+    overflow: "hidden",
+  },
+  shareHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  shareBrand: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: SHARE.brand,
+  },
+  shareBrandRight: {
+    fontSize: 7,
+    fontWeight: "800",
+    letterSpacing: 1.2,
+    color: SHARE.brand,
+    opacity: 0.7,
+  },
+  shareKicker: {
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    color: SHARE.brand,
+    opacity: 0.85,
+  },
+  shareIdentity: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    backgroundColor: SHARE.panel,
+    borderRadius: radius.lg,
+    padding: space.sm,
+  },
+  shareIdentityBody: {
+    flex: 1,
+    gap: 2,
+  },
+  shareName: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "800",
+    color: SHARE.ink,
+  },
+  shareTeam: {
     fontSize: 9,
     fontWeight: "700",
-    color: colors.muted,
+    color: SHARE.brand,
+  },
+  sharePosition: {
+    fontSize: 9,
+    fontWeight: "600",
+    color: SHARE.muted,
+  },
+  shareStats: {
+    flexDirection: "row",
+    backgroundColor: SHARE.panel,
+    borderRadius: radius.lg,
+    padding: space.sm,
+  },
+  shareStat: {
+    flex: 1,
+    alignItems: "center",
+    gap: 1,
+  },
+  shareStatValue: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: SHARE.brandText,
     fontVariant: ["tabular-nums"],
+  },
+  shareStatLabel: {
+    fontSize: 7,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+    color: SHARE.muted,
+  },
+  shareSecondary: {
+    alignSelf: "flex-start",
+    backgroundColor: SHARE.panel,
+    borderRadius: radius.md,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xs,
+  },
+  shareSecondaryText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: SHARE.brandText,
+    fontVariant: ["tabular-nums"],
+  },
+  shareSpacer: {
+    flex: 1,
+  },
+  shareFooter: {
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 2.5,
+    color: SHARE.muted,
+    textAlign: "center",
+  },
+  shareActions: {
+    flexDirection: "row",
+    gap: space.sm,
+    alignSelf: "stretch",
+  },
+  shareButton: {
+    flex: 1,
+  },
+  shareHint: {
+    ...type.caption,
+    color: colors.textTertiary,
   },
 });

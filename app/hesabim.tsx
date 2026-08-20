@@ -165,7 +165,8 @@ function pendingRoute(changeType: string): string | null {
   if (t.includes("transfer")) return "/tekliflerim";
   if (t.includes("contract")) return "/sozlesmelerim";
   if (t.includes("penalty") || t.includes("ceza")) return "/cezalarim";
-  if (t.includes("squad") || t.includes("kadro")) return "/maclarim";
+  // `/maclarim` rotası kaldırıldı; içerik Oyuncu Paneli'nin Maçlarım segmentine taşındı.
+  if (t.includes("squad") || t.includes("kadro")) return "/oyuncum?tab=maclarim";
   return null;
 }
 

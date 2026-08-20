@@ -1,62 +1,192 @@
-import Ionicons from "@expo/vector-icons/Ionicons";
-import { useQuery } from "@tanstack/react-query";
-import { Redirect, useRouter, type Href } from "expo-router";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { DetailHeader } from "@/components/ScreenHeader";
-import { colors, radius, spacing, type } from "@/constants/theme";
-import { getAdminMessages, ROLE_LABELS } from "@/lib/api/admin";
-import { useAuth } from "@/providers/AuthProvider";
-
 /**
- * Yönetim Paneli — yönetim rollerine açılan giriş ekranı.
+ * YÖNETİM PANELİ — yönetim rollerine açılan giriş ekranı.
  *
- * Kartlar üç alt ekrana götürür: Maç Yönetimi, Mesaj Yönetimi (okunmamış
- * rozetiyle) ve Saha Yönetimi. Yetkisiz üyeler nazik bir uyarı görür;
- * misafirler giriş ekranına yönlendirilir.
+ * NE: rol etiketli bir kimlik bandı ve üç bölüm kartı (Maç / Mesaj / Saha).
+ * Her kart, o bölümde BEKLEYEN İŞİ sayar: okunmamış üye başvurusu, onay
+ * bekleyen saha talebi ve şu an oynanan maç.
+ *
+ * NEDEN ROZET: eski ekran yalnız mesaj rozetini gösteriyordu; yönetici hangi
+ * bölümde iş olduğunu anlamak için üç ekranı da tek tek açmak zorundaydı.
+ * Panelin tek işi "nereye bakmalıyım" sorusunu bir bakışta yanıtlamaktır, bu
+ * yüzden üç sayaç da burada toplanır ve kartın altında CÜMLEYLE de yazılır
+ * (rozet rengi tek başına anlam taşımaz, §erişilebilirlik).
+ *
+ * NEDEN AYRI ÜÇ SORGU: üç uç birbirinden bağımsız ve biri 403 dönse bile
+ * (rolün o yetkisi yoksa) diğer iki sayaç çizilmeli. `retry: false` ile yetki
+ * hatası sessizce sayacı gizler, ekranı düşürmez.
+ *
+ * NEDEN KAPSAM (scope) SAYACI ETKİLER: canlı maç sayacı, Maç Yönetimi ekranının
+ * göstereceği listeyle AYNI kapsamdan okunur; yoksa panelde "1 canlı maç"
+ * yazarken listede hiç maç görünmeme çelişkisi doğar.
  */
 
-interface PanelCard {
-  href: Href;
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Redirect, useRouter } from "expo-router";
+import { memo, useCallback, useMemo } from "react";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+
+import {
+  Avatar,
+  Badge,
+  EmptyState,
+  ErrorState,
+  ScreenHeader,
+  SectionHeader,
+  Skeleton,
+  Touchable,
+  useHeaderScroll,
+  useRefresh,
+  type Tone,
+} from "@/components/ui";
+import { useAppActive } from "@/hooks/useLiveFavoriteCount";
+import { getAdminMatches, getAdminMessages, getAdminRequests, ROLE_LABELS } from "@/lib/api/admin";
+import { useAuth } from "@/providers/AuthProvider";
+import { useScope } from "@/providers/ScopeProvider";
+import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
+
+/* ═══════════════════════════ SABİTLER VE TİPLER ═══════════════════════════ */
+
+/** Sayaçların tazelenme aralığı — uygulama arkadayken hiç yoklanmaz. */
+const POLL_MS = 30_000;
+
+type SectionKey = "maclar" | "mesajlar" | "sahalar";
+
+interface PanelSection {
+  key: SectionKey;
+  route: string;
   icon: keyof typeof Ionicons.glyphMap;
   title: string;
   body: string;
+  /** Bekleyen iş sayısı; `null` = sayaç okunamadı (yetki yok / hata). */
+  pending: number | null;
+  /** Sayacın cümle hâli — "3 okunmamış başvuru". */
+  pendingLabel: string;
+  /** Rozet ve vurgu tonu; renk YALNIZ durum taşır. */
+  tone: Tone;
+  loading: boolean;
 }
 
-const CARDS: PanelCard[] = [
-  {
-    href: "/yonetim/maclar",
-    icon: "football-outline",
-    title: "Maç Yönetimi",
-    body: "Skor gir, durum değiştir, taslakları yönet",
-  },
-  {
-    href: "/yonetim/mesajlar",
-    icon: "chatbubbles-outline",
-    title: "Mesaj Yönetimi",
-    body: "Üye başvurularını yanıtla ve kapat",
-  },
-  {
-    href: "/yonetim/sahalar",
-    icon: "location-outline",
-    title: "Saha Yönetimi",
-    body: "Maç taleplerini incele, saha programını düzenle",
-  },
-];
+/* ══════════════════════════════════ EKRAN ═════════════════════════════════ */
 
-export default function YonetimIndexScreen() {
-  const router = useRouter();
+export default function AdminHomeScreen() {
   const auth = useAuth();
+  const scope = useScope();
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const appActive = useAppActive();
+  const { scrollY, scrollProps } = useHeaderScroll();
 
-  // Okunmamış başvuru rozeti: mesaj listesi zaten sayaçları döndürüyor,
-  // ayrı bir uç gerekmez. Yetki yoksa sorgu hiç çalışmaz.
+  const canQuery = Boolean(auth.user) && auth.isManagement;
+  const poll = appActive ? POLL_MS : false;
+
+  /* — Bekleyen iş sayaçları — */
+
   const messagesQuery = useQuery({
     queryKey: ["admin", "messages", "badge"],
     queryFn: () => getAdminMessages({ limit: 100 }),
-    enabled: Boolean(auth.user) && auth.isManagement,
-    staleTime: 30_000,
+    enabled: canQuery,
+    staleTime: 15_000,
+    refetchInterval: poll,
     retry: false,
   });
+
+  const requestsQuery = useQuery({
+    queryKey: ["admin", "match-requests", "badge"],
+    queryFn: () => getAdminRequests({ status: "pending" }),
+    enabled: canQuery,
+    staleTime: 15_000,
+    refetchInterval: poll,
+    retry: false,
+  });
+
+  const liveQuery = useQuery({
+    queryKey: ["admin", "matches", "live-badge", scope.leagueId, scope.seasonId],
+    queryFn: () =>
+      getAdminMatches({
+        leagueId: scope.leagueId ?? undefined,
+        seasonId: scope.seasonId ?? undefined,
+        status: "canli",
+        limit: 50,
+      }),
+    enabled: canQuery,
+    staleTime: 10_000,
+    refetchInterval: poll,
+    retry: false,
+  });
+
+  const refreshAll = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ["admin"] });
+  }, [queryClient]);
+
+  const refresh = useRefresh(refreshAll, {
+    refreshing:
+      messagesQuery.isRefetching || requestsQuery.isRefetching || liveQuery.isRefetching,
+  });
+
+  /* — Kartlar — */
+
+  const unread = messagesQuery.data?.counts.unread ?? null;
+  const pendingRequests = requestsQuery.data?.items.length ?? null;
+  const liveMatches = liveQuery.data?.length ?? null;
+
+  const sections = useMemo<PanelSection[]>(
+    () => [
+      {
+        key: "maclar",
+        route: "/yonetim/maclar",
+        icon: "football-outline",
+        title: "Maç Yönetimi",
+        body: "Skor gir, durum değiştir, taslakları yayınla",
+        pending: liveMatches,
+        pendingLabel:
+          liveMatches && liveMatches > 0
+            ? `${liveMatches} maç şu an oynanıyor`
+            : "Şu an oynanan maç yok",
+        tone: "live",
+        loading: liveQuery.isLoading,
+      },
+      {
+        key: "mesajlar",
+        route: "/yonetim/mesajlar",
+        icon: "chatbubbles-outline",
+        title: "Mesaj Yönetimi",
+        body: "Üye başvurularını yanıtla, önceliklendir, kapat",
+        pending: unread,
+        pendingLabel:
+          unread && unread > 0 ? `${unread} okunmamış başvuru` : "Okunmamış başvuru yok",
+        tone: "warn",
+        loading: messagesQuery.isLoading,
+      },
+      {
+        key: "sahalar",
+        route: "/yonetim/sahalar",
+        icon: "location-outline",
+        title: "Saha Yönetimi",
+        body: "Maç taleplerini incele, haftalık programı düzenle",
+        pending: pendingRequests,
+        pendingLabel:
+          pendingRequests && pendingRequests > 0
+            ? `${pendingRequests} talep onay bekliyor`
+            : "Onay bekleyen talep yok",
+        tone: "info",
+        loading: requestsQuery.isLoading,
+      },
+    ],
+    [
+      liveMatches,
+      liveQuery.isLoading,
+      messagesQuery.isLoading,
+      pendingRequests,
+      requestsQuery.isLoading,
+      unread,
+    ],
+  );
+
+  const openSection = useCallback((route: string) => router.push(route), [router]);
+
+  /* — Kapı: misafir giriş ekranına, yetkisiz üye nazik uyarıya — */
 
   if (!auth.user) {
     return <Redirect href="/giris" />;
@@ -65,189 +195,231 @@ export default function YonetimIndexScreen() {
   if (!auth.isManagement) {
     return (
       <SafeAreaView style={styles.screen} edges={["top"]}>
-        <DetailHeader title="Yönetim Paneli" />
-        <View style={styles.center}>
-          <Ionicons name="lock-closed-outline" size={40} color={colors.faint} />
-          <Text style={styles.centerTitle}>Yetkiniz yok</Text>
-          <Text style={styles.centerBody}>
-            Bu bölüm yalnızca ElitLig yönetim rollerine açıktır. Yetkiniz olduğunu
-            düşünüyorsanız yönetimle iletişime geçin.
-          </Text>
-        </View>
+        <ScreenHeader title="Yönetim Paneli" back />
+        <EmptyState
+          icon="lock-closed-outline"
+          title="Bu bölüm yönetime açık"
+          body="Yönetim paneli yalnızca ElitLig yönetim rollerine açıktır. Yetkiniz olduğunu düşünüyorsanız yönetimle iletişime geçin."
+          action={{ label: "İletişim", onPress: () => router.push("/iletisim") }}
+        />
       </SafeAreaView>
     );
   }
 
   const roleLabel = ROLE_LABELS[auth.user.role] ?? auth.user.role;
-  const unreadThreads = messagesQuery.data?.counts.unread ?? 0;
+  /** Üç sorgunun da düşmesi ağ/oturum sorununu gösterir; biri düşerse sessiz kal. */
+  const allFailed = messagesQuery.isError && requestsQuery.isError && liveQuery.isError;
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      <DetailHeader title="Yönetim Paneli" subtitle="ElitLig yönetim araçları" />
+      <ScreenHeader title="Yönetim Paneli" back scrollY={scrollY} />
 
-      <ScrollView contentContainerStyle={styles.content}>
-        {/* Yönetici kimlik şeridi */}
+      <ScrollView
+        {...scrollProps}
+        contentContainerStyle={styles.content}
+        refreshControl={refresh.control}
+      >
+        {/* Kimlik bandı — kim olarak işlem yapıldığı her zaman görünür. */}
         <View style={styles.identity}>
-          <View style={styles.identityIcon}>
-            <Ionicons name="shield-checkmark-outline" size={20} color={colors.turf} />
-          </View>
+          <Avatar name={auth.user.fullName ?? auth.user.username} size={48} ring="brand" />
           <View style={styles.identityBody}>
-            <Text style={styles.identityName} numberOfLines={1}>
+            <Text style={styles.identityName} numberOfLines={1} {...textScale.dense}>
               {auth.user.fullName || auth.user.username}
             </Text>
-            <View style={styles.roleChip}>
-              <Text style={styles.roleText}>{roleLabel}</Text>
+            <Text style={styles.identityHandle} numberOfLines={1} {...textScale.dense}>
+              @{auth.user.username}
+            </Text>
+            <View style={styles.roleRow}>
+              <Badge label={roleLabel.toLocaleUpperCase("tr-TR")} tone="brand" size="xs" />
+              {scope.cityLabel ? (
+                <Badge label={scope.cityLabel.toLocaleUpperCase("tr-TR")} tone="neutral" size="xs" />
+              ) : null}
             </View>
           </View>
+          <Ionicons name="shield-checkmark" size={20} color={colors.brandAccent} />
         </View>
 
-        {CARDS.map((card) => {
-          const showBadge = card.href === "/yonetim/mesajlar" && unreadThreads > 0;
-          return (
-            <Pressable
-              key={card.title}
-              onPress={() => router.push(card.href)}
-              style={({ pressed }) => [styles.card, pressed && styles.pressed]}
-            >
-              <View style={styles.cardIcon}>
-                <Ionicons name={card.icon} size={22} color={colors.turf} />
-              </View>
-              <View style={styles.cardBody}>
-                <View style={styles.cardTitleRow}>
-                  <Text style={styles.cardTitle}>{card.title}</Text>
-                  {showBadge ? (
-                    <View style={styles.badge}>
-                      <Text style={styles.badgeText}>{unreadThreads}</Text>
-                    </View>
-                  ) : null}
-                </View>
-                <Text style={styles.cardText}>{card.body}</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={colors.muted} />
-            </Pressable>
-          );
-        })}
+        {allFailed ? (
+          <ErrorState
+            error={messagesQuery.error}
+            onRetry={refreshAll}
+            variant="banner"
+            style={styles.banner}
+          />
+        ) : null}
+
+        <SectionHeader title="Bölümler" />
+
+        <View style={styles.cards}>
+          {sections.map((section) => (
+            <SectionCard key={section.key} section={section} onPress={openSection} />
+          ))}
+        </View>
+
+        <Text style={styles.footnote} {...textScale.long}>
+          Sayaçlar ekran açıkken kendiliğinden tazelenir. Yaptığınız her işlem üye tarafında anında
+          görünür; bu yüzden geri alınamayan eylemler onay ister.
+        </Text>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
+/* ═══════════════════════════════ ALT PARÇALAR ══════════════════════════════ */
+
+/**
+ * Bölüm kartı. `section` nesnesi `useMemo`'lu olduğu için referansı sabittir;
+ * memo bu sayede yalnız sayaç değiştiğinde yeniden çizer.
+ */
+const SectionCard = memo(function SectionCard({
+  section,
+  onPress,
+}: {
+  section: PanelSection;
+  onPress: (route: string) => void;
+}) {
+  const handlePress = useCallback(() => onPress(section.route), [onPress, section.route]);
+  const active = section.pending != null && section.pending > 0;
+
+  return (
+    <Touchable
+      feedback="card"
+      haptic="selection"
+      onPress={handlePress}
+      accessibilityRole="button"
+      accessibilityLabel={`${section.title}. ${section.pendingLabel}`}
+      style={styles.card}
+    >
+      <View style={styles.cardIcon}>
+        <Ionicons name={section.icon} size={20} color={colors.brandAccent} />
+      </View>
+
+      <View style={styles.cardBody}>
+        <Text style={styles.cardTitle} numberOfLines={1} {...textScale.dense}>
+          {section.title}
+        </Text>
+        <Text style={styles.cardText} numberOfLines={2} {...textScale.dense}>
+          {section.body}
+        </Text>
+
+        {section.loading ? (
+          <Skeleton width="55%" height={12} radius="xs" style={styles.cardPendingSkeleton} />
+        ) : section.pending == null ? null : (
+          <Text
+            style={[styles.cardPending, active ? styles.cardPendingActive : null]}
+            numberOfLines={1}
+            {...textScale.dense}
+          >
+            {section.pendingLabel}
+          </Text>
+        )}
+      </View>
+
+      {active ? (
+        <Badge label={section.pending ?? 0} tone={section.tone} variant="solid" size="sm" />
+      ) : null}
+      <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
+    </Touchable>
+  );
+});
+
+/* ═════════════════════════════════ STİLLER ═════════════════════════════════ */
+
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: colors.pitch,
+    backgroundColor: colors.bg,
   },
   content: {
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.xl,
-    gap: spacing.sm,
+    paddingHorizontal: layout.screenPadding,
+    paddingBottom: space.giant,
   },
-  center: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: spacing.xl,
-    gap: spacing.sm,
-  },
-  centerTitle: {
-    ...type.subtitle,
-    color: colors.line,
-  },
-  centerBody: {
-    ...type.small,
-    color: colors.muted,
-    textAlign: "center",
-  },
+
+  /* Kimlik bandı */
   identity: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
-    backgroundColor: colors.turfDim,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    marginBottom: spacing.xs,
-  },
-  identityIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.surface,
-    alignItems: "center",
-    justifyContent: "center",
+    gap: space.md,
+    marginTop: space.sm,
+    padding: space.md,
+    borderRadius: radius.lg,
+    borderWidth: hairline,
+    borderColor: colors.brandBorder,
+    backgroundColor: colors.brandDim,
   },
   identityBody: {
     flex: 1,
-    gap: 3,
+    gap: 2,
   },
   identityName: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: colors.line,
+    ...type.h2,
+    color: colors.textPrimary,
   },
-  roleChip: {
-    alignSelf: "flex-start",
-    backgroundColor: colors.turf,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
+  identityHandle: {
+    ...type.caption,
+    color: colors.textSecondary,
   },
-  roleText: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: colors.surface,
+  roleRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: space.xs,
+    marginTop: space.xs,
+  },
+
+  banner: {
+    marginTop: space.sm,
+  },
+
+  /* Bölüm kartları */
+  cards: {
+    gap: space.sm,
   },
   card: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.faint,
-    borderRadius: radius.md,
-    padding: spacing.md,
+    gap: space.md,
+    padding: space.md,
+    borderRadius: radius.lg,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    backgroundColor: colors.surface1,
   },
   cardIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: colors.turfDim,
+    width: 40,
+    height: 40,
+    borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: colors.brandDim,
   },
   cardBody: {
     flex: 1,
-  },
-  cardTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
+    gap: 2,
   },
   cardTitle: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: colors.line,
-  },
-  badge: {
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: colors.live,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 4,
-  },
-  badgeText: {
-    fontSize: 10,
-    fontWeight: "900",
-    color: "#FFFFFF",
+    ...type.h3,
+    color: colors.textPrimary,
   },
   cardText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: colors.muted,
-    marginTop: 2,
+    ...type.caption,
+    color: colors.textSecondary,
   },
-  pressed: {
-    opacity: 0.6,
+  cardPending: {
+    ...type.caption,
+    color: colors.textTertiary,
+    marginTop: space.xxs,
+  },
+  cardPendingActive: {
+    color: colors.textPrimary,
+  },
+  cardPendingSkeleton: {
+    marginTop: space.xs,
+  },
+
+  footnote: {
+    ...type.caption,
+    color: colors.textTertiary,
+    marginTop: space.lg,
+    paddingHorizontal: space.xxs,
   },
 });
