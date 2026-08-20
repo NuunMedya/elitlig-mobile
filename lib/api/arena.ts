@@ -1,6 +1,6 @@
 import { get, post } from "../http";
 
-export type ArenaGame = "seri" | "sektir" | "kimbu" | "slalom" | "gunun";
+export type ArenaGame = "seri" | "sektir" | "kimbu" | "slalom" | "gunun" | "penalti";
 
 export interface ArenaEntry {
   rank: number;

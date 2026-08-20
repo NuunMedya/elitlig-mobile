@@ -37,6 +37,7 @@ import { useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import type { GestureResponderEvent } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import ViewShot, { captureRef } from "react-native-view-shot";
 import {
@@ -75,9 +76,99 @@ const TICK_MS = 16;
 // Fizik sabitleri (piksel/saniye)
 const GRAVITY_BASE = 1350;
 const BOUNCE_VY = -540;
-const DRIFT_BASE = 110;
+
+/**
+ * YÖN KONTROLÜ: topun neresine dokunduğun yönü belirler.
+ *
+ * Gerçek sektirmede topun sol yanına vurursan sağa, sağ yanına vurursan sola
+ * gider. Eski sürümde yatay hız RASTGELE savruluyordu; oyuncu topu yönetemiyor,
+ * yalnız ekrana basıp şansı bekliyordu. Artık dokunuşun top merkezine olan
+ * uzaklığı hızın yönünü ve şiddetini veriyor: kenara yakın vuruş sert savurur,
+ * ortadan vuruş dik yükseltir.
+ */
+const TOUCH_PUSH = 7.2;   // piksel/saniye, dokunuş kaymasının katsayısı
+const MAX_PUSH = 260;     // tek vuruşun ekleyebileceği en büyük yatay hız
+const HIT_RADIUS = BALL * 0.95; // topa "değdi" sayılan yarıçap (cömert)
+
+/** Engeller — skor ilerledikçe açılır. */
+const OB_BAR_H = 12;      // bariyer kalınlığı
+const OB_HOOP_H = 14;     // çember halkası kalınlığı
+const OB_SPEED_BASE = 55; // yatay kayma hızı (piksel/saniye)
+const HOOP_BONUS = 3;     // çemberden geçişin puanı
 
 type Phase = "ready" | "playing" | "over";
+
+/**
+ * Engel — iki tür, tek veri yapısı.
+ *
+ *   bar   : dolu bariyer. Değdirirsen oyun biter; etrafından dolaşman gerekir.
+ *   hoop  : ortası açık çember. Halkanın kendisi dolu, ortasından geçmek
+ *           HOOP_BONUS puan kazandırır (yukarı doğru geçişte, bir kez).
+ *
+ * `gap` yalnız çemberde anlamlıdır: toplam genişliğin ortasındaki açıklık.
+ */
+interface Obstacle {
+  id: number;
+  kind: "bar" | "hoop";
+  /** Engelin merkez y'si (top merkezi bu çizgiyi geçerse çarpışma sınanır). */
+  y: number;
+  /** Sol kenar. */
+  x: number;
+  w: number;
+  /** Çemberin ortasındaki açıklık; bariyerde 0. */
+  gap: number;
+  vx: number;
+  /** Çember bonusu bir turda bir kez verilir. */
+  passed: boolean;
+}
+
+/**
+ * Skora göre sahada olması gereken engeller.
+ *
+ * Zorluk kademeli açılır: ilk beş sekme temiz, sonra bir bariyer, sonra çember,
+ * sonra ikinci bariyer. Böylece oyuncu önce kontrolü öğrenir.
+ */
+function obstaclesForScore(score: number, w: number, h: number): Obstacle[] {
+  const list: Obstacle[] = [];
+  if (score >= 5) {
+    list.push({
+      id: 1,
+      kind: "bar",
+      y: h * 0.52,
+      x: w * 0.1,
+      w: Math.max(70, w * 0.34),
+      gap: 0,
+      vx: OB_SPEED_BASE,
+      passed: false,
+    });
+  }
+  if (score >= 12) {
+    const hoopW = Math.min(w * 0.55, 170);
+    list.push({
+      id: 2,
+      kind: "hoop",
+      y: h * 0.26,
+      x: (w - hoopW) / 2,
+      w: hoopW,
+      gap: Math.max(64, hoopW * 0.52),
+      vx: -OB_SPEED_BASE * 0.8,
+      passed: false,
+    });
+  }
+  if (score >= 22) {
+    list.push({
+      id: 3,
+      kind: "bar",
+      y: h * 0.7,
+      x: w * 0.55,
+      w: Math.max(60, w * 0.28),
+      gap: 0,
+      vx: -OB_SPEED_BASE * 1.2,
+      passed: false,
+    });
+  }
+  return list;
+}
 
 /** Skorun sunucuya gidişi — bitiş kartında tek satırla anlatılır. */
 type SubmitState = "idle" | "guest" | "sending" | "sent" | "failed";
@@ -98,6 +189,12 @@ export default function SektirScreen() {
   const vel = useRef({ x: 0, y: 0 });
   const scoreRef = useRef(0);
   const phaseRef = useRef<Phase>("ready");
+  const obstacles = useRef<Obstacle[]>([]);
+  /** Bir önceki karenin top merkezi — çarpışma "çizgiyi geçti mi" ile sınanır. */
+  const prevCenterY = useRef(0);
+  /** Çemberden geçişin kısa parıltısı (sunum). */
+  const [hoopFlash, setHoopFlash] = useState(0);
+  const hoopFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loop = useRef<ReturnType<typeof setInterval> | null>(null);
 
   /* — Sunum durumu: fizik döngüsüne karışmaz — */
@@ -108,6 +205,7 @@ export default function SektirScreen() {
     AsyncStorage.getItem(BEST_KEY).then((v) => setBest(Number(v) || 0));
     return () => {
       if (loop.current) clearInterval(loop.current);
+      if (hoopFlashTimer.current) clearTimeout(hoopFlashTimer.current);
     };
   }, []);
 
@@ -122,6 +220,9 @@ export default function SektirScreen() {
       y: area.current.h * 0.35,
     };
     vel.current = { x: 0, y: 0 };
+    prevCenterY.current = pos.current.y + BALL / 2;
+    obstacles.current = [];
+    setHoopFlash(0);
   };
 
   /**
@@ -190,13 +291,104 @@ export default function SektirScreen() {
     if (pos.current.y >= floor) {
       pos.current.y = floor;
       gameOver();
+      return;
     }
+
+    /* ─────────────── ENGELLER ─────────────── */
+
+    // Skor eşiği geçildiyse yeni engel sahaya girer (var olanlar korunur).
+    const wanted = obstaclesForScore(scoreRef.current, w, h);
+    if (wanted.length > obstacles.current.length) {
+      const existing = new Set(obstacles.current.map((item) => item.id));
+      obstacles.current = [
+        ...obstacles.current,
+        ...wanted.filter((item) => !existing.has(item.id)),
+      ];
+    }
+
+    // Yatay kayma; duvarda yön değiştirir. Hız skorla birlikte artar.
+    const speedScale = 1 + scoreRef.current * 0.02;
+    obstacles.current.forEach((obstacle) => {
+      obstacle.x += obstacle.vx * speedScale * dt;
+      if (obstacle.x <= 0) {
+        obstacle.x = 0;
+        obstacle.vx = Math.abs(obstacle.vx);
+      } else if (obstacle.x + obstacle.w >= w) {
+        obstacle.x = w - obstacle.w;
+        obstacle.vx = -Math.abs(obstacle.vx);
+      }
+    });
+
+    /* Çarpışma: topun MERKEZİ engelin çizgisini bu karede geçti mi?
+       Yüksek hızda tünelleme olmasın diye konum farkı değil, çizgiyi kesme
+       sınanır (önceki merkez ile şimdiki merkez engelin iki yanındaysa). */
+    const centerY = pos.current.y + BALL / 2;
+    const centerX = pos.current.x + BALL / 2;
+    const goingUp = centerY < prevCenterY.current;
+
+    for (const obstacle of obstacles.current) {
+      const crossed =
+        (prevCenterY.current - obstacle.y) * (centerY - obstacle.y) <= 0 &&
+        Math.abs(centerY - prevCenterY.current) > 0;
+      if (!crossed) continue;
+
+      const left = obstacle.x;
+      const right = obstacle.x + obstacle.w;
+      const reach = BALL * 0.42; // topun yarıçapı kadar tolerans
+
+      if (obstacle.kind === "bar") {
+        if (centerX > left - reach && centerX < right + reach) {
+          prevCenterY.current = centerY;
+          gameOver();
+          return;
+        }
+        continue;
+      }
+
+      // Çember: iki dolu halka ucu + ortada açıklık.
+      const gapLeft = left + (obstacle.w - obstacle.gap) / 2;
+      const gapRight = gapLeft + obstacle.gap;
+
+      const hitLeftArc = centerX > left - reach && centerX < gapLeft + reach * 0.4;
+      const hitRightArc = centerX > gapRight - reach * 0.4 && centerX < right + reach;
+
+      if (hitLeftArc || hitRightArc) {
+        prevCenterY.current = centerY;
+        gameOver();
+        return;
+      }
+
+      // Ortadan yukarı geçiş: bonus. Aşağı geçişte puan verilmez ki
+      // top çemberde salınıp puan basmasın.
+      if (centerX >= gapLeft && centerX <= gapRight && goingUp && !obstacle.passed) {
+        obstacle.passed = true;
+        scoreRef.current += HOOP_BONUS;
+        setScore(scoreRef.current);
+        setHoopFlash(Date.now());
+        if (hoopFlashTimer.current) clearTimeout(hoopFlashTimer.current);
+        hoopFlashTimer.current = setTimeout(() => setHoopFlash(0), 700);
+        haptics.success();
+      } else if (centerX >= gapLeft && centerX <= gapRight && !goingUp) {
+        // Aşağı inerken açıklıktan geçti: bir sonraki yukarı geçiş yine sayar.
+        obstacle.passed = false;
+      }
+    }
+
+    prevCenterY.current = centerY;
     setTick((t) => t + 1);
   };
 
-  const tap = () => {
+  /**
+   * Vuruş. `touchX` verilirse topun neresine değildiğine göre yön hesaplanır.
+   *
+   * Başlangıç ekranındaki "Başla" düğmesi koordinatsız çağırır: o vuruş
+   * merkezden kabul edilir, top dosdoğru yükselir.
+   */
+  const hit = (touchX?: number, touchY?: number) => {
     if (phaseRef.current === "over") return;
-    if (phaseRef.current === "ready") {
+
+    const starting = phaseRef.current === "ready";
+    if (starting) {
       resetBall();
       scoreRef.current = 0;
       setScore(0);
@@ -205,15 +397,44 @@ export default function SektirScreen() {
       if (loop.current) clearInterval(loop.current);
       loop.current = setInterval(step, TICK_MS);
     }
-    // Sektir: yukarı it + skorla artan yatay savrulma
+
+    const centerX = pos.current.x + BALL / 2;
+    const centerY = pos.current.y + BALL / 2;
+
+    /* TOPA DEĞMEDİYSE VURUŞ YOK: oyunun becerisi burada. Boş ekrana basmak
+       topu havada tutmaz; nişan almak gerekir. Başlangıç vuruşu muaftır. */
+    if (!starting && touchX != null && touchY != null) {
+      const dx = touchX - centerX;
+      const dy = touchY - centerY;
+      if (Math.hypot(dx, dy) > HIT_RADIUS) {
+        haptics.light();
+        return;
+      }
+    }
+
     vel.current.y = BOUNCE_VY;
-    const drift = DRIFT_BASE * (1 + scoreRef.current * 0.045);
-    vel.current.x += (Math.random() * 2 - 1) * drift;
+
+    // Topun solundan vurursan sağa, sağından vurursan sola gider.
+    if (touchX != null) {
+      const offset = centerX - touchX;
+      const push = Math.max(-MAX_PUSH, Math.min(MAX_PUSH, offset * TOUCH_PUSH));
+      vel.current.x += push;
+    }
+
     scoreRef.current += 1;
     setScore(scoreRef.current);
     // Puan haptiği; `haptics` kendi içinde 300ms kısar, sekme spam'i titremez.
     haptics.light();
   };
+
+  /** Tuval dokunuşu — konumu oyuna taşır. */
+  const tap = (event?: GestureResponderEvent) => {
+    const touch = event?.nativeEvent;
+    hit(touch?.locationX, touch?.locationY);
+  };
+
+  /** Başlangıç düğmesi: konumsuz vuruş. */
+  const startTap = () => hit();
 
   const restart = () => {
     setPhaseBoth("ready");
@@ -313,6 +534,54 @@ export default function SektirScreen() {
           <View style={styles.groundLine} />
         </View>
 
+        {/* Engeller — bariyerler dolu, çemberin ortası açıktır. */}
+        {obstacles.current.map((obstacle) =>
+          obstacle.kind === "bar" ? (
+            <View
+              key={obstacle.id}
+              pointerEvents="none"
+              style={[
+                styles.bar,
+                {
+                  width: obstacle.w,
+                  transform: [
+                    { translateX: obstacle.x },
+                    { translateY: obstacle.y - OB_BAR_H / 2 },
+                  ],
+                },
+              ]}
+            />
+          ) : (
+            <View
+              key={obstacle.id}
+              pointerEvents="none"
+              style={[
+                styles.hoopRow,
+                {
+                  width: obstacle.w,
+                  transform: [
+                    { translateX: obstacle.x },
+                    { translateY: obstacle.y - OB_HOOP_H / 2 },
+                  ],
+                },
+              ]}
+            >
+              <View style={[styles.hoopArc, { width: (obstacle.w - obstacle.gap) / 2 }]} />
+              <View style={[styles.hoopGap, { width: obstacle.gap }]} />
+              <View style={[styles.hoopArc, { width: (obstacle.w - obstacle.gap) / 2 }]} />
+            </View>
+          )
+        )}
+
+        {/* Çemberden geçiş parıltısı */}
+        {hoopFlash ? (
+          <View pointerEvents="none" style={styles.hoopFlash}>
+            <Text style={styles.hoopFlashText} allowFontScaling={false}>
+              {`+${HOOP_BONUS}`}
+            </Text>
+          </View>
+        ) : null}
+
         {/* Top */}
         <Text
           style={[
@@ -323,7 +592,7 @@ export default function SektirScreen() {
           ⚽
         </Text>
 
-        {phase === "ready" ? <StartOverlay best={best} onStart={tap} /> : null}
+        {phase === "ready" ? <StartOverlay best={best} onStart={startTap} /> : null}
 
         {phase === "over" ? (
           <ResultOverlay
@@ -372,7 +641,9 @@ function StartOverlay({ best, onStart }: { best: number; onStart: () => void }) 
           Top Sektir
         </Text>
         <Text style={styles.startRule} {...textScale.long}>
-          Topu çime düşürme; her dokunuş bir sekme yazar, skor arttıkça yerçekimi ağırlaşır.
+          Topa dokunarak havada tut. Solundan vurursan sağa, sağından vurursan sola gider —
+          boşa vurursan sekme olmaz. 5. sekmeden sonra kırmızı bariyerler çıkar (değme!),
+          12'den sonra sarı çemberin ortasından geçersen +3 puan.
         </Text>
 
         <View style={styles.startBest}>
@@ -700,6 +971,46 @@ const styles = StyleSheet.create({
     height: 3,
     backgroundColor: withAlpha(colors.win, 0.45),
   },
+  bar: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    height: OB_BAR_H,
+    borderRadius: OB_BAR_H / 2,
+    backgroundColor: colors.danger,
+    // Bariyer "değme = biter" anlamı taşır; kenarlık onu zeminden ayırır.
+    borderWidth: 1,
+    borderColor: withAlpha(colors.danger, 0.55),
+  },
+  hoopRow: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    height: OB_HOOP_H,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  hoopArc: {
+    height: OB_HOOP_H,
+    borderRadius: OB_HOOP_H / 2,
+    backgroundColor: colors.warn,
+  },
+  /* Açıklık görünür olmalı: oyuncu nereden geçeceğini seçebilsin. */
+  hoopGap: {
+    height: 2,
+    alignSelf: "center",
+    backgroundColor: withAlpha(colors.warn, 0.35),
+  },
+  hoopFlash: {
+    position: "absolute",
+    top: "18%",
+    alignSelf: "center",
+    paddingHorizontal: space.md,
+    paddingVertical: space.xs,
+    borderRadius: radius.pill,
+    backgroundColor: withAlpha(colors.win, 0.9),
+  },
+  hoopFlashText: { ...type.h3, color: colors.textOnStatus },
   ball: {
     position: "absolute",
     top: 0,

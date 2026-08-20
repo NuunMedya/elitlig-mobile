@@ -74,10 +74,11 @@ const BEST_KEYS: Record<ArenaGame, string> = {
   kimbu: "elitlig.kimbu.best.v1",
   slalom: "elitlig.slalom.best.v1",
   gunun: "elitlig.gunun.best.v1",
+  penalti: "elitlig.penalti.best.v1",
 };
 
 /** Sorgu ve depolama okumalarının sabit sırası. */
-const GAME_ORDER: ArenaGame[] = ["gunun", "seri", "sektir", "kimbu", "slalom"];
+const GAME_ORDER: ArenaGame[] = ["gunun", "penalti", "seri", "sektir", "kimbu", "slalom"];
 
 /** Günün Testi'nin o güne ait sonucu — `app/gunun.tsx` ile aynı anahtar. */
 const dailyResultKey = (day: string) => `elitlig.gunun.${day}.v1`;
@@ -96,6 +97,15 @@ interface GameMeta {
 }
 
 const GRID_GAMES: GameMeta[] = [
+  {
+    key: "penalti",
+    route: "/penalti",
+    title: "Penaltı",
+    blurb: "Nişan al, vuruş gücünü tuttur, kaleciyi geç. Üç ıska hakkın var.",
+    icon: "golf",
+    tone: "brand",
+    unit: "gol",
+  },
   {
     key: "seri",
     route: "/arena",
