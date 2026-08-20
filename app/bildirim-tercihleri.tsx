@@ -33,7 +33,6 @@ import { useRouter } from "expo-router";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
   Linking,
-  Platform,
   RefreshControl,
   SectionList,
   StyleSheet,
@@ -67,8 +66,11 @@ import type {
   NotificationPreferences,
 } from "@/lib/api/notifications";
 import { preferenceSections } from "@/lib/api/notifications";
-import { post } from "@/lib/http";
-import { registerForPushNotifications } from "@/lib/notifications";
+import {
+  pushStatusTone,
+  serverSyncMessage,
+  usePushStatus,
+} from "@/hooks/usePushStatus";
 import { queryKeys } from "@/lib/queryKeys";
 import { useAuth } from "@/providers/AuthProvider";
 import { colors, layout, radius, space, textScale, type } from "@/theme";
@@ -166,7 +168,11 @@ export default function NotificationPreferencesScreen() {
     [mutate],
   );
 
-  /* ────────────────────────── CİHAZ İZNİ ────────────────────────── */
+  /* ────────────────────────── CİHAZ İZNİ VE TEŞHİS ────────────────────────── */
+
+  const push = usePushStatus();
+  const { retry: pushRetry } = push;
+
 
   const [permission, setPermission] = useState<PermissionState>("unknown");
   const [asking, setAsking] = useState(false);
@@ -206,19 +212,12 @@ export default function NotificationPreferencesScreen() {
         // Modül yoksa sessizce geç.
       }
 
-      const token = await registerForPushNotifications();
-      if (token) {
-        /**
-         * Token'ı burada kaydetmezsek cihaz bir sonraki SOĞUK AÇILIŞA kadar
-         * bildirim alamaz: usePushNotifications yalnız uygulama açılırken
-         * çalışıyor. İzin verildiği an kaydetmek için doğru yer burasıdır.
-         */
-        try {
-          await post("/api/users/push-token", { token, platform: Platform.OS });
-        } catch {
-          // Token kaydı başarısızsa tercih ekranı yine de çalışmalı.
-        }
-      }
+      /**
+       * Kayıt ve sunucuya yazım TEK yerden yürür (hooks/usePushStatus).
+       * İzin verildiği an çalıştırılır: aksi hâlde cihaz bir sonraki SOĞUK
+       * AÇILIŞA kadar bildirim alamaz.
+       */
+      await pushRetry(true);
     } finally {
       setAsking(false);
     }
@@ -298,7 +297,6 @@ export default function NotificationPreferencesScreen() {
   }
 
   const permissionBlocked = permission === "blocked";
-  const permissionMissing = permission === "undetermined" || permissionBlocked;
 
   const listHeader = (
     <View style={styles.intro}>
@@ -318,26 +316,69 @@ export default function NotificationPreferencesScreen() {
         </View>
       </Card>
 
-      {permissionMissing ? (
-        <View style={styles.permission}>
-          <View style={styles.introRow}>
-            <Ionicons name="notifications-off-outline" size={16} color={colors.warn} />
-            <Text style={styles.permissionText} {...textScale.long}>
-              {permissionBlocked
-                ? "Telefonun ElitLig bildirimlerini engelliyor. Aşağıdaki anahtarlar ancak sistem ayarlarından izin verince çalışır."
-                : "Bildirimlere henüz izin vermedin. İzin vermeden hiçbir bildirim telefonuna düşmez."}
-            </Text>
-          </View>
+      {/* TEŞHİS: "bildirim gelmiyor" şikâyetinin nedenini görünür kılar.
+          Üç kapı da açık olmadan bildirim düşmez: cihaz izni, cihaz kimliği
+          (Expo push token) ve o kimliğin sunucuya yazılması. */}
+      <View style={[styles.permission, push.state === "hazir" && push.server === "yazildi" && styles.permissionOk]}>
+        <View style={styles.introRow}>
+          <Ionicons
+            name={
+              push.busy
+                ? "sync-outline"
+                : push.state === "hazir" && push.server === "yazildi"
+                  ? "checkmark-circle-outline"
+                  : push.state === "izin-yok"
+                    ? "notifications-off-outline"
+                    : "alert-circle-outline"
+            }
+            size={16}
+            color={
+              pushStatusTone(push) === "win"
+                ? colors.win
+                : pushStatusTone(push) === "danger"
+                  ? colors.danger
+                  : colors.warn
+            }
+          />
+          <Text style={styles.permissionText} {...textScale.long}>
+            {push.busy ? "Bildirim durumu kontrol ediliyor…" : push.message}
+          </Text>
+        </View>
+
+        {!push.busy && push.state === "hazir" ? (
+          <Text style={styles.permissionSub} {...textScale.long}>
+            {serverSyncMessage(push)}
+          </Text>
+        ) : null}
+
+        {!push.busy && push.state !== "hazir" ? (
           <Button
-            label={permissionBlocked ? "Ayarları aç" : "Bildirimlere izin ver"}
-            onPress={permissionBlocked ? openSystemSettings : askPermission}
+            label={
+              permissionBlocked || push.state === "izin-yok"
+                ? "Ayarları aç"
+                : "Tekrar dene"
+            }
+            onPress={
+              permissionBlocked || push.state === "izin-yok"
+                ? openSystemSettings
+                : askPermission
+            }
             loading={asking}
             size="sm"
             variant="secondary"
             fullWidth
           />
-        </View>
-      ) : null}
+        ) : push.server === "hata" ? (
+          <Button
+            label="Cihazı yeniden kaydet"
+            onPress={askPermission}
+            loading={asking}
+            size="sm"
+            variant="secondary"
+            fullWidth
+          />
+        ) : null}
+      </View>
     </View>
   );
 
@@ -454,6 +495,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     padding: space.md,
   },
+  permissionOk: { borderColor: colors.win, backgroundColor: colors.winDim },
+  permissionSub: { ...type.caption, color: colors.textSecondary, lineHeight: 16 },
   permissionText: {
     ...type.bodySm,
     color: colors.textPrimary,

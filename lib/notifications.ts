@@ -4,31 +4,26 @@
  * EAS Build (TestFlight/Production) sonrası aktif olur.
  * Expo Go'da push token çalışmaz; in-app bildirimler çalışır.
  *
- * ANDROID'DE NEDEN TEK KANAL VAR:
+ * ANDROID KANALLARI:
  * Uzak bildirimin hangi kanala düşeceği GÖNDERİM anında belirlenir; istemci
  * sonradan değiştiremez (arka planda gelen push'u expo-notifications native
- * tarafta karşılayıp gösterir, JS hiç çalışmaz). Sunucu bugün her push'u sabit
- * `channelId: "default"` ile yolluyor — elitlig-server/services/expoPush.js:62
- * `sendToTokens(tokens, { title, body, data, channelId = "default" })`; tek
- * çağıran NotificationService.dispatch'in taşıdığı `notification` nesnelerinde
- * (matchNotifications.js, scheduledNotifications.js, models/PanelNotification.js)
- * channelId alanı yok, yani varsayılan her zaman devrede. app.json'daki
- * expo-notifications eklentisi de `defaultChannel: "default"` diyor.
+ * tarafta karşılayıp gösterir, JS hiç çalışmaz). Bu yüzden kanal kimlikleri
+ * sunucuyla BİREBİR aynı olmak zorundadır:
+ * elitlig-server/services/NotificationService.js → channelFor(notification)
+ *   match_goal                → "goal"
+ *   diğer match_* (başladı, devre, sonuç, fikstür, hatırlatma) → "match"
+ *   daily_quiz / arena        → "game"
+ *   NEWS* türleri             → "news"
+ *   diğer panel bildirimleri  → "panel"
+ *   tanınmayan                → "default"
+ * Bir kimlik burada yaratılmazsa o bildirim expo'nun İngilizce yedek kanalına
+ * (expo_notifications_fallback_notification_channel) düşer — bu yüzden altı
+ * kanalın hepsi açılır, "default" dahil.
  *
- * Bu yüzden burada yalnızca "default" kanalı yaratılır. Daha önce yaratılan
- * goal/match/panel/game/news kanalları tek bir bildirim bile almıyordu:
- * kullanıcı Ayarlar > Bildirimler'de onları açsa da kapatsa da hiçbir şey
- * değişmiyordu, gerçek bildirimler ise "default" kanalı hiç yaratılmadığı için
- * expo'nun İngilizce yedek kanalına (expo_notifications_fallback_notification_channel,
- * IMPORTANCE_HIGH) düşüyordu. Çalışmayan beş anahtar göstermek yerine tek
- * gerçek kanal gösterilir; eski ölü kanallar silinir.
- *
- * KATEGORİ BAZLI KANALLARI GERİ AÇMAK İÇİN (sunucu işi, istemci tek başına
- * yapamaz): NotificationService.dispatch → expoPush.sendToTokens yoluna
- * `channelId` taşıyın ve yukarıdaki üç üreticinin her `notification` nesnesine
- * `categoryForNotif` ile birebir aynı eşlemeyi yazın — match_goal → "goal",
- * diğer match_* → "match", oyun/quiz → "game", haber → "news", panel → "panel".
- * Sunucu bunu göndermeye başladıktan sonra kanal listesi tekrar genişletilebilir.
+ * NEDEN GOL AYRI KANAL: kanal ayarları (ses, titreşim, "rahatsız etme"
+ * istisnası) Android'de kullanıcının elindedir ve kanal yaratıldıktan sonra
+ * kod değiştiremez. Ayrı kanal, üyeye "sadece golleri aç, gerisini sustur"
+ * hakkını verir; tek kanalda bu ayrım mümkün değildi.
  */
 
 import { Platform } from "react-native";
@@ -36,31 +31,24 @@ import { Platform } from "react-native";
 import type { AndroidImportance } from "expo-notifications";
 
 /**
- * Sunucunun gerçekten kullandığı tek Android kanalı.
- *
- * `id` mutlaka expoPush.js'in gönderdiği değerle ve app.json'daki
- * `defaultChannel` ile aynı kalmalı; ayrışırsa bildirimler yine expo'nun
- * yedek kanalına düşer.
+ * Android bildirim kanalları — kimlikler sunucudaki channelFor() ile aynı.
  *
  * `importance` expo-notifications `AndroidImportance` ölçeğidir:
- * NONE 2 · MIN 3 · LOW 4 · DEFAULT 5 · HIGH 6 · MAX 7. HIGH seçildi çünkü
- * bugünkü fiili davranış zaten bu (yedek kanal IMPORTANCE_HIGH ile yaratılıyor);
- * daha düşüğü seçmek gol bildiriminin öne çıkmasını bozardı. Kısmak isteyen
- * kullanıcı artık Ayarlar'dan gerçekten kısabilir.
+ * NONE 2 · MIN 3 · LOW 4 · DEFAULT 5 · HIGH 6 · MAX 7.
+ * Gol MAX: kullanıcının anında görmek istediği tek tür. Oyun ve haber LOW:
+ * bildirim gölgesinde birikir ama titreşimle bölmez.
  */
-export const DEFAULT_CHANNEL = {
-  id: "default",
-  name: "ElitLig Bildirimleri",
-  importance: 6,
-  vibration: [0, 250, 250, 250],
+export const CHANNELS = {
+  GOAL:    { id: "goal",    name: "Goller",              importance: 7, vibration: [0, 120, 80, 120, 80, 240] },
+  MATCH:   { id: "match",   name: "Maç Bildirimleri",    importance: 6, vibration: [0, 250, 250, 250] },
+  PANEL:   { id: "panel",   name: "Panel Bildirimleri",  importance: 5, vibration: [0, 200, 150, 200] },
+  GAME:    { id: "game",    name: "Oyun Hatırlatmaları", importance: 4, vibration: [0, 180] },
+  NEWS:    { id: "news",    name: "Haberler",            importance: 4, vibration: [0, 180] },
+  /* Sunucu tanımadığı bir tür için bu kanala düşer; yaratılmazsa o bildirim
+     expo'nun İngilizce yedek kanalına gider. */
+  DEFAULT: { id: "default", name: "Diğer Bildirimler",   importance: 5, vibration: [0, 250, 250, 250] },
 } as const;
 
-/**
- * Önceki sürümlerin yarattığı, hiçbir bildirim almayan kanallar. Android'de
- * kanallar uygulama silinene kadar Ayarlar'da durur; sürüm yükselten
- * kullanıcıda ölü anahtar kalmasın diye temizlenir.
- */
-const LEGACY_CHANNEL_IDS = ["goal", "match", "panel", "game", "news"] as const;
 
 /**
  * Bildirim türü. Ön plandaki ses kararı için kullanılır; Android kanalı
@@ -110,12 +98,13 @@ const MATCH_KINDS = new Set([
   "match_reminder",
   "match_start",
   "match_goal",
+  "match_card",
   "match_halftime",
   "match_result",
 ]);
 
 /** Canlı akış bildirimleri maç detayını doğrudan "Canlı" sekmesinde açar. */
-const LIVE_MATCH_KINDS = new Set(["match_start", "match_goal", "match_halftime"]);
+const LIVE_MATCH_KINDS = new Set(["match_start", "match_goal", "match_card", "match_halftime"]);
 
 /** Panel bildiriminin entity_type'ı — kanonik biçim büyük harf. */
 function targetFromEntity(
@@ -306,45 +295,86 @@ export function categoryForNotif(data: Record<string, unknown> | null | undefine
 }
 
 /** Bildirim izni iste + token al (EAS Build sonrası çalışır) */
-export async function registerForPushNotifications(): Promise<string | null> {
+/**
+ * Push kaydının SONUCU — neden çalışmadığı ekranda gösterilebilsin diye.
+ *
+ * Eskiden bu fonksiyon her hatayı yutup `null` dönüyordu; "bildirim gelmiyor"
+ * şikâyetinde izin mi reddedildi, Expo Go'da mı çalışılıyor, token mu alınamadı,
+ * sunucuya mı yazılamadı ayırt edilemiyordu. Artık her durum adlandırılmıştır ve
+ * Bildirim Tercihleri ekranı bunu kullanıcıya gösterir.
+ */
+export type PushRegistrationState =
+  | "hazir"           // token alındı
+  | "izin-yok"        // kullanıcı bildirimlere izin vermedi
+  | "simulator"       // gerçek cihaz değil (emülatör/simülatör)
+  | "expo-go"         // Expo Go: uzak bildirim desteklenmiyor, derleme gerekir
+  | "proje-yok"       // EAS projectId okunamadı
+  | "hata";           // beklenmeyen hata
+
+export interface PushRegistration {
+  state: PushRegistrationState;
+  token: string | null;
+  /** Kullanıcıya gösterilecek Türkçe açıklama. */
+  message: string;
+  /** Geliştirici için ham hata metni. */
+  detail?: string;
+}
+
+/**
+ * Expo Go'da uzak bildirim SDK 53'ten beri desteklenmiyor: token istendiğinde
+ * modül hata fırlatır. Bunu "kurulum hatası" gibi göstermek yanıltıcı olurdu.
+ */
+function isExpoGo(): boolean {
   try {
-    // EAS Build'de çalışır
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const Constants = require("expo-constants").default;
+    return Constants?.appOwnership === "expo" || Constants?.executionEnvironment === "storeClient";
+  } catch {
+    return false;
+  }
+}
+
+/** Bildirim izni iste, kanalları kur, Expo push token'ı al. */
+export async function registerForPush(): Promise<PushRegistration> {
+  try {
     const Notifications = await import("expo-notifications");
     const Device = await import("expo-device");
 
     if (!Device.isDevice) {
-      console.log("[Notif] Gerçek cihaz değil, token atlanıyor");
-      return null;
+      return {
+        state: "simulator",
+        token: null,
+        message: "Emülatörde push bildirimi çalışmaz. Gerçek bir cihazda deneyin.",
+      };
     }
 
     const { status: existing } = await Notifications.getPermissionsAsync();
     let finalStatus = existing;
-
     if (existing !== "granted") {
       const { status } = await Notifications.requestPermissionsAsync();
       finalStatus = status;
     }
 
     if (finalStatus !== "granted") {
-      console.log("[Notif] İzin reddedildi");
-      return null;
+      return {
+        state: "izin-yok",
+        token: null,
+        message:
+          "Bildirim izni verilmedi. Telefon ayarlarından ElitLig için bildirimlere izin verin.",
+      };
     }
 
-    // Android kanal kurulumu. Yalnızca sunucunun gerçekten kullandığı kanal
-    // yaratılır; yaratılmazsa bildirimler expo'nun İngilizce yedek kanalına
-    // düşer ve kullanıcının kanal ayarları o kanala işler.
+    // Android kanal kurulumu. Kimlikler sunucunun gönderdiği channelId ile
+    // birebir aynı olmalı; ayrışan bir kimlik expo'nun yedek kanalına düşer ve
+    // kullanıcının o kategori için yaptığı ayar hiçbir işe yaramaz.
     if (Platform.OS === "android") {
-      await Notifications.setNotificationChannelAsync(DEFAULT_CHANNEL.id, {
-        name: DEFAULT_CHANNEL.name,
-        importance: DEFAULT_CHANNEL.importance as AndroidImportance,
-        vibrationPattern: [...DEFAULT_CHANNEL.vibration],
-      });
-
-      // Eski sürümlerin bıraktığı, hiçbir bildirim almayan kanalları kaldır.
-      // Zaten yoksa Android sessizce geçer; hata olursa token kaydı durmamalı.
       await Promise.all(
-        LEGACY_CHANNEL_IDS.map((id) =>
-          Notifications.deleteNotificationChannelAsync(id).catch(() => undefined)
+        Object.values(CHANNELS).map((channel) =>
+          Notifications.setNotificationChannelAsync(channel.id, {
+            name: channel.name,
+            importance: channel.importance as AndroidImportance,
+            vibrationPattern: [...channel.vibration],
+          }).catch(() => undefined)
         )
       );
     }
@@ -352,15 +382,49 @@ export async function registerForPushNotifications(): Promise<string | null> {
     const Constants = (await import("expo-constants")).default;
     const projectId =
       Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
-    const tokenData = await Notifications.getExpoPushTokenAsync(
-      projectId ? { projectId } : undefined
-    );
 
-    return tokenData.data;
-  } catch (err) {
-    console.log("[Notif] Token alınamadı (Expo Go'da beklenen):", err);
-    return null;
+    if (!projectId) {
+      return {
+        state: "proje-yok",
+        token: null,
+        message:
+          "Uygulama kimliği (EAS projectId) okunamadı; bu derlemede push bildirimi alınamaz.",
+      };
+    }
+
+    const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
+    return {
+      state: "hazir",
+      token: tokenData.data,
+      message: "Bildirimler açık. Bu cihaz bildirim almaya hazır.",
+    };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    if (isExpoGo()) {
+      return {
+        state: "expo-go",
+        token: null,
+        message:
+          "Expo Go uygulamasında push bildirimi desteklenmiyor. Bildirimleri görmek için " +
+          "uygulamanın kendi derlemesini (APK / TestFlight) yükleyin.",
+        detail,
+      };
+    }
+    return {
+      state: "hata",
+      token: null,
+      message: "Bildirim kaydı yapılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.",
+      detail,
+    };
   }
+}
+
+/**
+ * Eski imza — yalnızca token döndürür.
+ * Yeni kod `registerForPush()` kullanmalı; bu sarmalayıcı çağrı yerlerini kırmamak içindir.
+ */
+export async function registerForPushNotifications(): Promise<string | null> {
+  return (await registerForPush()).token;
 }
 
 /** Bildirim handler'larını kur (ön planda iken banner + ses) */

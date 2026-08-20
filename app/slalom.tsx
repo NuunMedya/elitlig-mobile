@@ -78,12 +78,29 @@ const MOVE_SPEED = 260; // topun yatay hızı px/sn
 const SPAWN_BASE_MS = 950;
 const SPAWN_MIN_MS = 420;
 
+/**
+ * Koni — artık bir SLALOM KAPISI.
+ *
+ * Gerçek slalomda kapılar dönüşümlü geçilir: biri soldan, sonraki sağdan.
+ * Eski sürümde koniler rastgele yerlerde beliriyordu ve tek beceri "çarpma"ydı;
+ * oyuncu ekranın bir kenarında durup çoğu koniyi ıskalayabiliyordu. Artık her
+ * koninin GEÇİLMESİ GEREKEN bir tarafı var, taraf sırayla değişiyor ve yanlış
+ * taraftan geçmek can götürüyor.
+ */
 interface Cone {
   id: number;
   x: number;
   y: number;
+  /** Topun koninin HANGİ yanından geçmesi gerektiği. */
+  side: "left" | "right";
+  /** Kapı sonuçlandı mı (puan ya da ıska). */
   passed: boolean;
+  /** Yanlış taraftan geçildiyse — kırmızı işaretle gösterilir. */
+  missed: boolean;
 }
+
+/** Üç ıska hakkı: slalomda kapı kaçırmak diskalifiye ama oyun bunu kademeli yapar. */
+const MAX_MISSES = 3;
 
 type Phase = "ready" | "playing" | "over";
 
@@ -107,6 +124,13 @@ export default function SlalomScreen() {
   const cones = useRef<Cone[]>([]);
   const sinceSpawn = useRef(0);
   const coneSeq = useRef(1);
+  /** Sıradaki kapının tarafı — her üretimde değişir. */
+  const nextSide = useRef<"left" | "right">("left");
+  const missRef = useRef(0);
+  const [misses, setMisses] = useState(0);
+  /** Kısa "ıska" uyarısı (sunum). */
+  const [missFlash, setMissFlash] = useState(0);
+  const missTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scoreRef = useRef(0);
   const phaseRef = useRef<Phase>("ready");
   const loop = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -119,6 +143,7 @@ export default function SlalomScreen() {
     AsyncStorage.getItem(BEST_KEY).then((v) => setBest(Number(v) || 0));
     return () => {
       if (loop.current) clearInterval(loop.current);
+      if (missTimer.current) clearTimeout(missTimer.current);
     };
   }, []);
 
@@ -182,16 +207,33 @@ export default function SlalomScreen() {
     const interval = Math.max(SPAWN_MIN_MS, SPAWN_BASE_MS / factor);
     if (sinceSpawn.current >= interval) {
       sinceSpawn.current = 0;
+      /**
+       * Kapı yerleşimi: geçilecek tarafta MUTLAKA yer kalmalı.
+       * "left" kapısı sahanın sağ yarısına doğru konur ki solundan geçilebilsin;
+       * "right" kapısı sol yarıya konur. Aksi hâlde kapı kenara yapışır ve
+       * doğru taraftan geçmek fiziksel olarak imkânsız olurdu.
+       */
       const spawn = (offset = 0) => {
+        const side = nextSide.current;
+        const margin = BALL * 1.35; // topun sığacağı en dar koridor
+        const min = side === "left" ? margin : Math.max(0, w * 0.08);
+        const max =
+          side === "left"
+            ? Math.max(min, w - CONE_W - w * 0.08)
+            : Math.max(min, w - CONE_W - margin);
         cones.current.push({
           id: coneSeq.current++,
-          x: Math.random() * (w - CONE_W),
+          x: min + Math.random() * Math.max(1, max - min),
           y: -CONE_H - offset,
+          side,
           passed: false,
+          missed: false,
         });
+        nextSide.current = side === "left" ? "right" : "left";
       };
       spawn();
-      if (scoreRef.current > 15 && Math.random() < 0.35) spawn(CONE_H * 2);
+      // Yüksek skorda ikinci kapı: sırayı bozmadan hemen ardından gelir.
+      if (scoreRef.current > 15 && Math.random() < 0.35) spawn(CONE_H * 2.6);
     }
 
     // Koni akışı + çarpışma + sayaç
@@ -205,13 +247,32 @@ export default function SlalomScreen() {
         gameOver();
         return;
       }
-      // Atlatma: koni topun hizasını geçti
+      // Kapı sonuçlandı: koni topun hizasını geçti.
       if (!cone.passed && cone.y > ballY + BALL) {
         cone.passed = true;
-        scoreRef.current += 1;
-        setScore(scoreRef.current);
-        // Puan haptiği; `haptics` kendi içinde 300ms kısar, döngüyü yormaz.
-        haptics.light();
+        const ballCenter = ballX.current + BALL / 2;
+        const coneCenter = cone.x + CONE_W / 2;
+        const correct =
+          cone.side === "left" ? ballCenter < coneCenter : ballCenter > coneCenter;
+
+        if (correct) {
+          scoreRef.current += 1;
+          setScore(scoreRef.current);
+          // Puan haptiği; `haptics` kendi içinde 300ms kısar, döngüyü yormaz.
+          haptics.light();
+        } else {
+          cone.missed = true;
+          missRef.current += 1;
+          setMisses(missRef.current);
+          setMissFlash(Date.now());
+          if (missTimer.current) clearTimeout(missTimer.current);
+          missTimer.current = setTimeout(() => setMissFlash(0), 650);
+          haptics.warning();
+          if (missRef.current >= MAX_MISSES) {
+            gameOver();
+            return;
+          }
+        }
       }
     }
     cones.current = cones.current.filter((c) => c.y < h + CONE_H);
@@ -225,6 +286,10 @@ export default function SlalomScreen() {
     cones.current = [];
     sinceSpawn.current = 0;
     scoreRef.current = 0;
+    nextSide.current = "left";
+    missRef.current = 0;
+    setMisses(0);
+    setMissFlash(0);
     setScore(0);
     setSubmit("idle");
     setPhaseBoth("playing");
@@ -237,6 +302,10 @@ export default function SlalomScreen() {
     cones.current = [];
     setScore(0);
     scoreRef.current = 0;
+    nextSide.current = "left";
+    missRef.current = 0;
+    setMisses(0);
+    setMissFlash(0);
     setSubmit("idle");
     setShareOpen(false);
     setTick((t) => t + 1);
@@ -288,6 +357,17 @@ export default function SlalomScreen() {
               {best}
             </Text>
           </View>
+          {/* Kalan hak: üç kapı kaçırınca tur biter. */}
+          <View style={styles.hudPill}>
+            {Array.from({ length: MAX_MISSES }).map((_, index) => (
+              <Ionicons
+                key={index}
+                name={index < MAX_MISSES - misses ? "ellipse" : "ellipse-outline"}
+                size={9}
+                color={index < MAX_MISSES - misses ? colors.win : colors.textTertiary}
+              />
+            ))}
+          </View>
           <View style={[styles.hudPill, styles.hudPillLive]}>
             <Ionicons name="flash" size={11} color={colors.live} />
             <Text style={styles.hudPillLiveText} {...textScale.badge}>
@@ -326,6 +406,8 @@ export default function SlalomScreen() {
         <View style={[styles.sideline, styles.sidelineRight]} />
 
         {/* Koniler */}
+        {/* Kapılar: ok, topun koninin HANGİ yanından geçmesi gerektiğini söyler.
+            Iskalanan kapı kırmızıya döner ki oyuncu hatasını görsün. */}
         {cones.current.map((cone) => (
           <View
             key={cone.id}
@@ -334,8 +416,30 @@ export default function SlalomScreen() {
           >
             <View style={styles.coneTriangle} />
             <View style={styles.coneBase} />
+            <View
+              style={[
+                styles.coneSide,
+                cone.side === "left" ? styles.coneSideLeft : styles.coneSideRight,
+                cone.missed && styles.coneSideMissed,
+              ]}
+            >
+              <Ionicons
+                name={cone.side === "left" ? "arrow-back" : "arrow-forward"}
+                size={11}
+                color={cone.missed ? colors.textOnStatus : colors.textPrimary}
+              />
+            </View>
           </View>
         ))}
+
+        {/* Iska uyarısı */}
+        {missFlash ? (
+          <View pointerEvents="none" style={styles.missFlash}>
+            <Text style={styles.missFlashText} allowFontScaling={false}>
+              Kapı kaçtı!
+            </Text>
+          </View>
+        ) : null}
 
         {/* Top */}
         <Text
@@ -425,7 +529,9 @@ function StartOverlay({ best, onStart }: { best: number; onStart: () => void }) 
           Slalom
         </Text>
         <Text style={styles.startRule} {...textScale.long}>
-          Sol ya da sağ yarıya basılı tut, konileri sıyır; her turda akış biraz daha hızlanır.
+          Gerçek slalom: kapıları sırayla bir SOLDAN bir SAĞDAN geç. Her koninin yanındaki
+          ok hangi taraftan geçeceğini söyler. Koniye çarparsan tur biter; yanlış taraftan
+          geçersen bir hak gider — üç hakkın var.
         </Text>
 
         <View style={styles.startBest}>
@@ -749,6 +855,32 @@ const styles = StyleSheet.create({
   },
   sidelineLeft: { left: 4 },
   sidelineRight: { right: 4 },
+  /* Kapı yön işareti — koninin geçilecek yanında durur. */
+  coneSide: {
+    position: "absolute",
+    top: CONE_H * 0.15,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface3,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  coneSideLeft: { left: -22 },
+  coneSideRight: { right: -22 },
+  coneSideMissed: { backgroundColor: colors.danger, borderColor: colors.danger },
+  missFlash: {
+    position: "absolute",
+    top: "12%",
+    alignSelf: "center",
+    paddingHorizontal: space.md,
+    paddingVertical: space.xs,
+    borderRadius: radius.pill,
+    backgroundColor: colors.danger,
+  },
+  missFlashText: { ...type.label, color: colors.textOnStatus },
   cone: {
     position: "absolute",
     top: 0,

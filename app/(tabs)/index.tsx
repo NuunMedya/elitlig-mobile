@@ -35,6 +35,7 @@ import { SectionList, StyleSheet, Text, View } from "react-native";
 import type { SectionListData, SectionListRenderItemInfo } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { MessagesButton } from "@/components/MessagesButton";
 import { ScopeChip } from "@/components/ScopeChip";
 import {
   BottomSheet,
@@ -634,6 +635,7 @@ export default function MatchesScreen() {
           Maçlar
         </Text>
         <View style={[styles.headerSide, styles.headerActions]}>
+          <MessagesButton />
           <Touchable
             feedback="icon"
             haptic="light"

@@ -79,6 +79,10 @@ export default function RootLayout() {
                   <Stack.Screen name="bildirim-tercihleri" />
                   <Stack.Screen name="hesabim" />
 
+                  {/* Takım paneli alt ekranları — detay geçişi. */}
+                  <Stack.Screen name="takimim/mac-al" />
+                  <Stack.Screen name="takimim/mac/[matchId]" />
+
                   {/* Kariyer belgeleri ve oyuncu paneli.
                       Bunlar bildirimden DERİN BAĞLANTIYLA açılır (TRANSFER_*,
                       CONTRACT_*, PENALTY_* → lib/notifications.ts), bu yüzden

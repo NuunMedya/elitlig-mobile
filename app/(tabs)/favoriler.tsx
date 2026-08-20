@@ -66,6 +66,7 @@ import { formatDayHeading, formatTime } from "@/lib/format";
 import { matchState } from "@/lib/match";
 import { queryKeys } from "@/lib/queryKeys";
 import type { ApiMatch } from "@/lib/types";
+import { useUnreadCount } from "@/hooks/useUnreadCount";
 import { useAuth } from "@/providers/AuthProvider";
 import { useFavorite, type FavoriteScope, type FavoriteTeam } from "@/providers/FavoriteProvider";
 import { useScope } from "@/providers/ScopeProvider";
@@ -323,6 +324,7 @@ const FavoriteScopeRow = React.memo(function FavoriteScopeRow({
 
 export default function FavorilerScreen() {
   const router = useRouter();
+  const unread = useUnreadCount();
   const params = useLocalSearchParams<{ tab?: string }>();
   const auth = useAuth();
   const toast = useToast();
@@ -598,10 +600,32 @@ export default function FavorilerScreen() {
     [live.count, favorites.length, favoriteLeagues.length, favoriteSeasons.length]
   );
 
+  /* Mesaj kısayolu her ana ekranın başlığında: yazışma sık kullanılan bir iş,
+     Profil altında üç dokunuş uzakta kalmamalı. */
+  const headerActions = useMemo(
+    () =>
+      auth.user
+        ? [
+            {
+              icon:
+                unread.messages > 0
+                  ? ("chatbubble-ellipses" as const)
+                  : ("chatbubble-ellipses-outline" as const),
+              onPress: () => router.push("/mesajlarim"),
+              badge: unread.messages > 0 ? unread.messages : undefined,
+              accessibilityLabel:
+                unread.messages > 0 ? `Mesajlar, ${unread.messages} okunmamış` : "Mesajlar",
+            },
+          ]
+        : undefined,
+    [auth.user, unread.messages, router]
+  );
+
   const header = (
     <ScreenHeader
       title="Favoriler"
       scrollY={scrollY}
+      actions={headerActions}
       bottom={
         <View style={styles.segmentWrap}>
           <SegmentedControl<FavTab> items={segments} value={tab} onChange={setTab} />

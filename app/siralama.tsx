@@ -78,6 +78,7 @@ interface GameMeta {
 const GAMES: GameMeta[] = [
   { key: "seri", label: "Arena", icon: "flame", unit: "seri" },
   { key: "sektir", label: "Top Sektir", icon: "football", unit: "sekme" },
+  { key: "penalti", label: "Penaltı", icon: "golf", unit: "gol" },
   { key: "kimbu", label: "Kim Bu?", icon: "search", unit: "puan" },
   { key: "slalom", label: "Slalom", icon: "flag", unit: "koni" },
   { key: "gunun", label: "Günün Testi", icon: "bulb", unit: "puan" },
