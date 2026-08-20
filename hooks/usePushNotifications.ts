@@ -25,6 +25,7 @@ export function usePushNotifications() {
   const auth = useAuth();
   const signedIn = Boolean(auth.user);
   const isManagement = auth.isManagement;
+  const initializing = auth.initializing;
 
   const listenerRef = useRef<{ remove?: () => void } | null>(null);
   const coldStartHandled = useRef(false);
@@ -50,6 +51,14 @@ export function usePushNotifications() {
 
   /* ---------- Bildirime dokunma ---------- */
   useEffect(() => {
+    /* OTURUM GERİ YÜKLENENE KADAR BEKLE. Soğuk açılışta bu etki, AuthProvider
+       kayıtlı jetonu doğrulamadan önce çalışır; o an `auth.user` boş,
+       `isManagement` false'tur. Yanıt o anda tüketilseydi iki şey bozulurdu:
+       korumalı hedefler /giris'e düşerdi ve MATCH_REQUEST bildirimi yönetim
+       kullanıcısını da takım ekranına götürürdü. `coldStartHandled` yanıtın
+       ikinci kez okunmasını engellediği için bu bir daha düzelmezdi. */
+    if (initializing) return;
+
     let cancelled = false;
 
     const openFrom = (data: Record<string, unknown> | undefined, key: string) => {
@@ -91,5 +100,5 @@ export function usePushNotifications() {
       cancelled = true;
       listenerRef.current?.remove?.();
     };
-  }, [isManagement]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [initializing, isManagement]); // eslint-disable-line react-hooks/exhaustive-deps
 }
