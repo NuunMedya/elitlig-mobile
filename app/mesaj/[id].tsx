@@ -192,24 +192,41 @@ export default function ThreadDetailScreen() {
     });
   }, [queryClient, threadId]);
 
-  /** Aynı konu için okundu isteği bir kez gider. */
-  const markedRef = useRef<number | null>(null);
+  /** Sunucuya okundu bildirilen MESAJ kimlikleri — aynı istek iki kez gitmesin. */
+  const markedIdsRef = useRef<Set<number>>(new Set());
 
   useEffect(() => {
-    if (!Number.isInteger(threadId) || markedRef.current === threadId) return;
-    if (!thread || thread.unread === 0) return;
-
-    markedRef.current = threadId;
-    clearUnreadLocally();
+    if (!Number.isInteger(threadId) || !thread || thread.unread === 0) return;
 
     /**
-     * SUNUCU TARAFI: üye yüzünde okundu işaretleme için lib/api/panel.ts'te
-     * henüz bir yardımcı yok (yönetim yüzünde `PATCH /api/admin/messages/
-     * :id/read` var). Simetrik uç çağrılır; sunucu bu yolu tanımıyorsa istek
-     * sessizce düşer — ekran yerel sıfırlamayla zaten doğru görünür. Uç
-     * doğrulanınca bu çağrı panel.ts'e taşınmalı.
+     * SUNUCU UCU KONU DEĞİL TEK MESAJ KİMLİĞİ BEKLER: routes/panel.js
+     * `PATCH /api/panel/me/messages/:messageId/read` → markRead() gelen id'yi
+     * findByPk ile arar ve `recipient_user_id !== user.id` ise 403 döner.
+     * Konu kimliği (thread.id) KÖK mesajın kimliğidir; üyenin açtığı başvuruda
+     * kökün recipient_user_id'si NULL'dur, yani konu kimliğiyle yapılan çağrı
+     * her seferinde 403 alır ve rozet ilk yoklamada geri yanar. Bu yüzden
+     * gerçekten okunmamış olan yönetim yanıtlarının (direction === "to_member")
+     * KENDİ kimlikleri gönderilir — sunucunun `unread` saydığı küme de tam
+     * budur (services/panelMessageService.js, buildThread).
      */
-    void patch(`/api/panel/me/messages/${threadId}/read`).catch(() => {});
+    const unreadIds = thread.messages
+      .filter((message) => message.direction === "to_member" && !message.read)
+      .map((message) => message.id)
+      .filter((id) => id > 0 && !markedIdsRef.current.has(id));
+
+    if (unreadIds.length === 0) return;
+
+    // İstekten ÖNCE işaretle: 8 sn'lik yoklama aynı mesaj için istek yağdırmasın.
+    unreadIds.forEach((id) => markedIdsRef.current.add(id));
+    clearUnreadLocally();
+
+    for (const id of unreadIds) {
+      void patch(`/api/panel/me/messages/${id}/read`).catch((error: unknown) => {
+        // Arka plan işi; kullanıcıya toast gösterilmez ama sessizce de yutulmaz —
+        // yanlış kimlikle giden okundu isteği yoksa bir daha fark edilmez.
+        if (__DEV__) console.warn("[mesaj] okundu işaretlenemedi", id, error);
+      });
+    }
   }, [clearUnreadLocally, thread, threadId]);
 
   /* ────────────────────────── YANIT (İYİMSER) ────────────────────────── */

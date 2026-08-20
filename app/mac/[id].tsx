@@ -2234,9 +2234,21 @@ function useGoalFlash(events: ApiMatchEvent[]): number | null {
 
     haptics.goal();
     setFlashId(fresh);
+  }, [events]);
+
+  /**
+   * Vurguyu ayrı efekt sıfırlar.
+   *
+   * Zamanlayıcı yukarıdaki tespit efektinde kurulsaydı: o efekt `events` her
+   * değiştiğinde yeniden koşar, temizleyici bekleyen zamanlayıcıyı iptal eder
+   * ve yeni gol olmadığı için (`fresh == null`) bir daha kurulmazdı — `flashId`
+   * bir sonraki gole kadar dolu kalırdı.
+   */
+  useEffect(() => {
+    if (flashId == null) return;
     const timer = setTimeout(() => setFlashId(null), 4_000);
     return () => clearTimeout(timer);
-  }, [events]);
+  }, [flashId]);
 
   return flashId;
 }

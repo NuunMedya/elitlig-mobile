@@ -294,6 +294,16 @@ export default function DailyQuizScreen() {
   const startedAt = useRef(0);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /**
+   * ZAMAN AŞIMI YOLU İÇİN GÜNCEL `answer`.
+   * NEDEN REF: sayaç geri çağrısı, kurulduğu render'ın `answer`'ını kapatır.
+   * Sayaç her soruda `answer` içinden yeniden kurulduğu için, N. soruda çalışan
+   * kapanışın `qIndex`'i bir gerideydi; süre dolunca `setQIndex(qIndex + 1)`
+   * aynı sayıyı yazıyor ve test o soruda sonsuza dek kilitleniyordu (`finish`
+   * hiç çağrılmaz → gün sonucu yazılmaz, skor sunucuya gitmez). Ref her
+   * commit'te tazelendiğinden zaman aşımı daima GÜNCEL `answer`'ı çağırır.
+   */
+  const answerRef = useRef<(index: number | null) => void>(() => {});
 
   useEffect(() => {
     AsyncStorage.getItem(BEST_KEY).then((v) => setBest(Number(v) || 0));
@@ -316,7 +326,7 @@ export default function DailyQuizScreen() {
     timer.current = setInterval(() => {
       setSecondsLeft((s) => {
         if (s <= 1) {
-          answer(null);
+          answerRef.current(null);
           return 0;
         }
         return s - 1;
@@ -363,6 +373,11 @@ export default function DailyQuizScreen() {
       }
     }, 900);
   };
+
+  /* Bağımlılık listesi YOK: sayaç her zaman en son `answer`'ı görsün. */
+  useEffect(() => {
+    answerRef.current = answer;
+  });
 
   const finish = (lastGain: number) => {
     const finalScore = score + lastGain;
