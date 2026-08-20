@@ -10,17 +10,17 @@
  * İlerleme çubuğu da 2200 ms sürer; yani çubuk dolduğu an ekran değişir.
  * Kullanıcı beklemek istemezse "Keşfetmeye Başla" ile hemen geçer.
  *
- * NEDEN İKİ AYRI EFEKT: geçiş zamanlayıcısı BİR KEZ kurulur ve hiçbir şeye
- * bağlı değildir (bkz. aşağıdaki `useEffect`), giriş animasyonu ise "hareketi
- * azalt" ayarına bağlıdır. Tek efekte konsalardı, ayar geç okunduğunda
- * zamanlayıcı sıfırlanır ve açılış uzardı.
+ * NEDEN İKİ AYRI EFEKT: geçiş zamanlayıcısı ekranın ODAĞINA bağlıdır (bkz.
+ * aşağıdaki `useFocusEffect`), giriş animasyonu ise "hareketi azalt" ayarına.
+ * Tek efekte konsalardı, ayar geç okunduğunda zamanlayıcı sıfırlanır ve
+ * açılış uzardı.
  *
  * NEDEN SABİT RENK YOK: eski sürüm mor bir zemine (#17102B) sabitlenmişti ve
  * açık temada da mor kalıyordu. Artık zemin `colors.bg` → `colors.brandDim`
  * geçişidir; marka hissi her iki temada da korunur, kimse ekranını yakmaz.
  */
 
-import { useRouter } from "expo-router";
+import { useFocusEffect, useNavigation, useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { useCallback, useEffect, useRef } from "react";
 import { Animated, Easing, Image, StyleSheet, Text, View, useWindowDimensions } from "react-native";
@@ -36,6 +36,7 @@ const LOGO_SIZE = 104;
 
 export default function HosgeldinScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
   const { width } = useWindowDimensions();
   const reduceMotion = useReduceMotion();
 
@@ -51,24 +52,42 @@ export default function HosgeldinScreen() {
    */
   const barWidth = Math.max(1, width - space.xl * 2);
 
-  /* Otomatik geçiş + ilerleme çubuğu — bir kez kurulur, hiç sıfırlanmaz. */
-  useEffect(() => {
-    const bar = Animated.timing(progress, {
-      toValue: 1,
-      duration: AUTO_ADVANCE_MS,
-      easing: Easing.linear,
-      useNativeDriver: true,
-    });
-    bar.start();
+  /**
+   * Otomatik geçiş + ilerleme çubuğu — YALNIZ ekran odaktayken işler.
+   *
+   * NEDEN ODAĞA BAĞLI: "Hesabım var, giriş yap" giriş modalını yığına PUSH
+   * eder; hosgeldin unmount OLMAZ, dolayısıyla sıradan bir `useEffect`
+   * temizliği koşmaz ve zamanlayıcı ateşlenmeye devam ederdi. Ateşlendiğinde
+   * odaktaki rota `giris` olduğu için `router.replace` kök yığında odaktaki
+   * rotayı hedefler ve giriş modalının KENDİSİNİ `(tabs)` ile değiştirir:
+   * kullanıcı formu doldururken ekran elinden alınır, bir daha da bu düğmeye
+   * ulaşamaz. Odak kaybında iptal ediyor, geri dönüldüğünde sıfırdan
+   * kuruyoruz — böylece çubuk her zaman kalan gerçek süreyi çizer.
+   */
+  useFocusEffect(
+    useCallback(() => {
+      progress.setValue(0);
+      const bar = Animated.timing(progress, {
+        toValue: 1,
+        duration: AUTO_ADVANCE_MS,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      });
+      bar.start();
 
-    const timer = setTimeout(() => router.replace("/(tabs)"), AUTO_ADVANCE_MS);
-    return () => {
-      clearTimeout(timer);
-      bar.stop();
-    };
-    // Bilerek boş: süre sabittir, yeniden kurulursa açılış uzar.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+      const timer = setTimeout(() => {
+        // Odak olayı gezinmeden bir kare sonra düşebilir; son kontrol canlı
+        // durumdan okunur (`isFocused` anlık gezinme durumuna bakar).
+        if (!navigation.isFocused()) return;
+        router.replace("/(tabs)");
+      }, AUTO_ADVANCE_MS);
+
+      return () => {
+        clearTimeout(timer);
+        bar.stop();
+      };
+    }, [navigation, progress, router])
+  );
 
   /* Giriş animasyonu — "hareketi azalt" açıksa her şey anında yerinde. */
   useEffect(() => {

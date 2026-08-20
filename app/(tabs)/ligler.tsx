@@ -23,7 +23,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FlatList,
   Image,
@@ -162,12 +162,30 @@ export default function LeaguesScreen() {
   }, [routeTab, scrollY]);
 
   // `leagueId` parametresi kapsamı o lige çevirir (maç listesindeki lig başlığı).
+  //
+  // TUZAK: parametre TEK SEFERLİK bir komuttur, kalıcı bir kısıt değil. Efekt
+  // `scope` nesnesine bağlanırsa (kimliği her kapsam değişiminde yenilenir)
+  // kullanıcının sonraki lig seçimi anında rotadaki eski değere geri çevrilir;
+  // şehir değişiminde ise ScopeProvider'ın "seçili lig listede yok → ilk lige
+  // kay" düzeltmesiyle karşılıklı setState döngüsüne girilir. Bu yüzden yalnız
+  // kararlı `selectLeague` referansına bağlanır, uygulanan değer ref'te
+  // işaretlenir ve parametre rotadan düşürülür.
   const routeLeagueId = Number(firstParam(params.leagueId));
+  const { selectLeague, leagueId: scopeLeagueId } = scope;
+  const appliedLeagueRef = useRef<number | null>(null);
   useEffect(() => {
-    if (!Number.isFinite(routeLeagueId) || routeLeagueId <= 0) return;
-    if (routeLeagueId === scope.leagueId) return;
-    scope.selectLeague(routeLeagueId);
-  }, [routeLeagueId, scope]);
+    if (!Number.isFinite(routeLeagueId) || routeLeagueId <= 0) {
+      // Parametre düştü: bir sonraki derin bağlantı aynı ligi yeniden uygulayabilsin.
+      appliedLeagueRef.current = null;
+      return;
+    }
+    if (appliedLeagueRef.current === routeLeagueId) return;
+    appliedLeagueRef.current = routeLeagueId;
+    router.setParams({ leagueId: undefined });
+    // Zaten o ligdeysek dokunma: `selectLeague` sezonu sıfırlar, kullanıcının
+    // seçtiği (ör. arşiv) sezon boşuna kaybolur.
+    if (routeLeagueId !== scopeLeagueId) selectLeague(routeLeagueId);
+  }, [routeLeagueId, scopeLeagueId, selectLeague, router]);
 
   const changeTab = useCallback(
     (next: LeagueTab) => {
@@ -738,10 +756,14 @@ function PlayersTab({ scrollProps, onPickScope }: TabProps) {
 
   if (!scope.ready && !scope.loading) return <ScopeMissing onPress={onPickScope} />;
 
+  // Kapsam meta sorguları uçarken `query` devre dışıdır (`isLoading === false`);
+  // bu durumu iskelete katmazsak liste boş sanılıp "Oyuncu listesi boş" çizilir.
+  const busy = query.isLoading || scope.loading;
+
   return (
     <FlatList
       {...scrollProps}
-      data={query.isLoading ? [] : rows}
+      data={busy ? [] : rows}
       keyExtractor={playerKey}
       renderItem={renderItem}
       getItemLayout={playerLayout}
@@ -778,7 +800,7 @@ function PlayersTab({ scrollProps, onPickScope }: TabProps) {
         </View>
       }
       ListEmptyComponent={
-        query.isLoading ? (
+        busy ? (
           <View>
             {SKELETON_ROWS.map((key) => (
               <SkeletonListRow key={key} />

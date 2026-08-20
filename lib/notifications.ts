@@ -4,18 +4,31 @@
  * EAS Build (TestFlight/Production) sonrası aktif olur.
  * Expo Go'da push token çalışmaz; in-app bildirimler çalışır.
  *
- * Kategoriler (Android kanalları):
- * - GOAL     : GOL — kendi kanalı, en yüksek öncelik ve ayrı titreşim deseni
- * - MATCH    : Fikstür, hatırlatma, maç başladı/devre arası/sonuç
- * - PANEL    : Transfer teklifi, ceza, mesaj, sözleşme, davet
- * - GAME     : Günün Testi, Arena hatırlatmaları
- * - NEWS     : Sadece pinned/önemli haberler
+ * ANDROID'DE NEDEN TEK KANAL VAR:
+ * Uzak bildirimin hangi kanala düşeceği GÖNDERİM anında belirlenir; istemci
+ * sonradan değiştiremez (arka planda gelen push'u expo-notifications native
+ * tarafta karşılayıp gösterir, JS hiç çalışmaz). Sunucu bugün her push'u sabit
+ * `channelId: "default"` ile yolluyor — elitlig-server/services/expoPush.js:62
+ * `sendToTokens(tokens, { title, body, data, channelId = "default" })`; tek
+ * çağıran NotificationService.dispatch'in taşıdığı `notification` nesnelerinde
+ * (matchNotifications.js, scheduledNotifications.js, models/PanelNotification.js)
+ * channelId alanı yok, yani varsayılan her zaman devrede. app.json'daki
+ * expo-notifications eklentisi de `defaultChannel: "default"` diyor.
  *
- * NEDEN GOL AYRI KANAL: Android'de kanal ayarları (ses, titreşim, "rahatsız
- * etme" istisnası) kullanıcının elindedir ve kanal oluştuktan sonra kod
- * değiştiremez. Gol, kullanıcının anında görmek istediği tek bildirim türü;
- * fikstür duyurusuyla aynı kanalda olursa ya ikisi birden susturulur ya da
- * ikisi birden bağırır. Ayrı kanal, kullanıcıya "sadece golleri aç" hakkını verir.
+ * Bu yüzden burada yalnızca "default" kanalı yaratılır. Daha önce yaratılan
+ * goal/match/panel/game/news kanalları tek bir bildirim bile almıyordu:
+ * kullanıcı Ayarlar > Bildirimler'de onları açsa da kapatsa da hiçbir şey
+ * değişmiyordu, gerçek bildirimler ise "default" kanalı hiç yaratılmadığı için
+ * expo'nun İngilizce yedek kanalına (expo_notifications_fallback_notification_channel,
+ * IMPORTANCE_HIGH) düşüyordu. Çalışmayan beş anahtar göstermek yerine tek
+ * gerçek kanal gösterilir; eski ölü kanallar silinir.
+ *
+ * KATEGORİ BAZLI KANALLARI GERİ AÇMAK İÇİN (sunucu işi, istemci tek başına
+ * yapamaz): NotificationService.dispatch → expoPush.sendToTokens yoluna
+ * `channelId` taşıyın ve yukarıdaki üç üreticinin her `notification` nesnesine
+ * `categoryForNotif` ile birebir aynı eşlemeyi yazın — match_goal → "goal",
+ * diğer match_* → "match", oyun/quiz → "game", haber → "news", panel → "panel".
+ * Sunucu bunu göndermeye başladıktan sonra kanal listesi tekrar genişletilebilir.
  */
 
 import { Platform } from "react-native";
@@ -23,22 +36,37 @@ import { Platform } from "react-native";
 import type { AndroidImportance } from "expo-notifications";
 
 /**
- * Bildirim kanalları (Android).
+ * Sunucunun gerçekten kullandığı tek Android kanalı.
  *
- * `importance` değerleri expo-notifications `AndroidImportance` ölçeğidir:
- * NONE 2 · MIN 3 · LOW 4 · DEFAULT 5 · HIGH 6 · MAX 7.
- * (Eski kodda 1–5'lik bir ölçek varsayılmıştı; NEWS=2 kanalı Android'de
- * "hiç gösterme" anlamına geliyordu — düzeltildi.)
+ * `id` mutlaka expoPush.js'in gönderdiği değerle ve app.json'daki
+ * `defaultChannel` ile aynı kalmalı; ayrışırsa bildirimler yine expo'nun
+ * yedek kanalına düşer.
+ *
+ * `importance` expo-notifications `AndroidImportance` ölçeğidir:
+ * NONE 2 · MIN 3 · LOW 4 · DEFAULT 5 · HIGH 6 · MAX 7. HIGH seçildi çünkü
+ * bugünkü fiili davranış zaten bu (yedek kanal IMPORTANCE_HIGH ile yaratılıyor);
+ * daha düşüğü seçmek gol bildiriminin öne çıkmasını bozardı. Kısmak isteyen
+ * kullanıcı artık Ayarlar'dan gerçekten kısabilir.
  */
-export const CHANNELS = {
-  GOAL:  { id: "goal",  name: "Goller",              importance: 7, vibration: [0, 120, 80, 120, 80, 240] },
-  MATCH: { id: "match", name: "Maç Bildirimleri",    importance: 6, vibration: [0, 250, 250, 250] },
-  PANEL: { id: "panel", name: "Panel Bildirimleri",  importance: 5, vibration: [0, 200, 150, 200] },
-  GAME:  { id: "game",  name: "Oyun Hatırlatmaları", importance: 4, vibration: [0, 180] },
-  NEWS:  { id: "news",  name: "Haberler",            importance: 4, vibration: [0, 180] },
+export const DEFAULT_CHANNEL = {
+  id: "default",
+  name: "ElitLig Bildirimleri",
+  importance: 6,
+  vibration: [0, 250, 250, 250],
 } as const;
 
-export type NotifCategory = keyof typeof CHANNELS;
+/**
+ * Önceki sürümlerin yarattığı, hiçbir bildirim almayan kanallar. Android'de
+ * kanallar uygulama silinene kadar Ayarlar'da durur; sürüm yükselten
+ * kullanıcıda ölü anahtar kalmasın diye temizlenir.
+ */
+const LEGACY_CHANNEL_IDS = ["goal", "match", "panel", "game", "news"] as const;
+
+/**
+ * Bildirim türü. Ön plandaki ses kararı için kullanılır; Android kanalı
+ * DEĞİLDİR (kanal gönderim anında sunucuda seçilir, bkz. dosya başlığı).
+ */
+export type NotifCategory = "GOAL" | "MATCH" | "PANEL" | "GAME" | "NEWS";
 
 /* =============================================================================
    BİLDİRİMDEN ROTAYA
@@ -260,10 +288,16 @@ export function notificationIdFromNotif(
   return Number.isInteger(raw) && raw > 0 ? raw : null;
 }
 
-/** Android kanal seçimi — sunucu channelId göndermediğinde istemci türetir. */
-export function channelForNotif(data: Record<string, unknown> | null | undefined): NotifCategory {
+/**
+ * Bildirimin türünü payload'dan çıkarır.
+ *
+ * Yalnızca uygulama ÖN PLANDAYKEN ses çalınıp çalınmayacağına karar vermek için
+ * kullanılır. Android kanalını belirlemez; sunucu kategori bazlı channelId
+ * göndermeye başlarsa eşleme buradan birebir kopyalanmalıdır (bkz. dosya başlığı).
+ */
+export function categoryForNotif(data: Record<string, unknown> | null | undefined): NotifCategory {
   const kind = String(data?.kind ?? "").toLowerCase();
-  // Gol önce bakılır: kendi kanalı var, MATCH'e düşmemeli.
+  // Gol önce bakılır: kendi türü var, MATCH'e düşmemeli.
   if (kind === "match_goal") return "GOAL";
   if (MATCH_KINDS.has(kind)) return "MATCH";
   if (kind === "news") return "NEWS";
@@ -296,16 +330,21 @@ export async function registerForPushNotifications(): Promise<string | null> {
       return null;
     }
 
-    // Android kanal kurulumu — kanal ayarları ilk oluşturmada donar, sonradan
-    // kod değiştiremez; bu yüzden gol kanalı en baştan ayrı yaratılır.
+    // Android kanal kurulumu. Yalnızca sunucunun gerçekten kullandığı kanal
+    // yaratılır; yaratılmazsa bildirimler expo'nun İngilizce yedek kanalına
+    // düşer ve kullanıcının kanal ayarları o kanala işler.
     if (Platform.OS === "android") {
+      await Notifications.setNotificationChannelAsync(DEFAULT_CHANNEL.id, {
+        name: DEFAULT_CHANNEL.name,
+        importance: DEFAULT_CHANNEL.importance as AndroidImportance,
+        vibrationPattern: [...DEFAULT_CHANNEL.vibration],
+      });
+
+      // Eski sürümlerin bıraktığı, hiçbir bildirim almayan kanalları kaldır.
+      // Zaten yoksa Android sessizce geçer; hata olursa token kaydı durmamalı.
       await Promise.all(
-        Object.values(CHANNELS).map((channel) =>
-          Notifications.setNotificationChannelAsync(channel.id, {
-            name: channel.name,
-            importance: channel.importance as AndroidImportance,
-            vibrationPattern: [...channel.vibration],
-          })
+        LEGACY_CHANNEL_IDS.map((id) =>
+          Notifications.deleteNotificationChannelAsync(id).catch(() => undefined)
         )
       );
     }
@@ -332,9 +371,9 @@ export async function setupNotificationHandlers(): Promise<void> {
     Notifications.setNotificationHandler({
       handleNotification: async (notif) => {
         const data = notif.request.content.data as Record<string, unknown> | undefined;
-        const channel = channelForNotif(data);
+        const category = categoryForNotif(data);
         // Oyun ve haber bildirimleri ön planda sessiz; gol her zaman sesli.
-        const silent = channel === "GAME" || channel === "NEWS";
+        const silent = category === "GAME" || category === "NEWS";
         return {
           shouldShowAlert: true,
           shouldShowBanner: true,
