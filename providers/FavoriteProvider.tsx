@@ -18,16 +18,22 @@ import {
 import { useAuth } from "@/providers/AuthProvider";
 
 /**
- * Favoriler — takım, lig ve sezon takibi.
+ * Favoriler — takım, lig, sezon ve MAÇ takibi.
  *
- * Kullanıcı istediği kadar takımı, ligi ve sezonu favoriye ekleyebilir.
- * Seçimler her zaman cihazda saklanır (misafir de kullanabilir); giriş
- * yapılmışsa sunucuya da yazılır — push bildirimleri (fikstür, maç sonucu)
- * sunucudaki kayda göre hedeflenir (routes/favorites.js).
+ * Kullanıcı istediği kadar takımı, ligi, sezonu ve tek tek maçı favoriye
+ * ekleyebilir. Seçimler her zaman cihazda saklanır (misafir de kullanabilir);
+ * giriş yapılmışsa sunucuya da yazılır — push bildirimleri (fikstür, maç
+ * sonucu, GOL, maç başladı) sunucudaki kayda göre hedeflenir
+ * (routes/favorites.js + MatchFollower).
+ *
+ * NEDEN MAÇ FAVORİSİ AYRI: takımı takip etmeden tek bir maçı izlemek isteyen
+ * kullanıcı var (derbi, rakip maçı). Maçı yıldızlayan üye O MAÇIN gollerini ve
+ * başlangıcını alır; takım favorisi ise takımın bütün sezonunu kapsar.
  */
 
 const STORAGE_KEY = "elitlig.favoriteTeams.v2";
 const SCOPE_STORAGE_KEY = "elitlig.favoriteScopes.v1";
+const MATCH_STORAGE_KEY = "elitlig.favoriteMatches.v1";
 
 export interface FavoriteTeam {
   id: number;
@@ -55,6 +61,12 @@ interface FavoriteContextValue {
   favoriteSeasons: FavoriteScope[];
   isFavoriteSeason: (seasonId?: number | null) => boolean;
   toggleFavoriteSeason: (season: FavoriteScope) => void;
+  /** Maç favorileri — yalnız id tutulur, maç kaydı sorgudan gelir. */
+  favoriteMatches: number[];
+  isFavoriteMatch: (matchId?: number | null) => boolean;
+  addFavoriteMatch: (matchId: number) => void;
+  removeFavoriteMatch: (matchId: number) => void;
+  toggleFavoriteMatch: (matchId: number) => void;
   // Geriye dönük uyumluluk
   favorite: FavoriteTeam | null;
 }
@@ -68,6 +80,19 @@ function syncServer(action: "follow" | "unfollow", kind: FavoriteKind, id: numbe
   call(kind, id).catch(() => {});
 }
 
+/** Bozuk/yinelenen kayıtları eleyen sayısal id listesi okuyucusu. */
+function parseIdList(raw: string | null): number[] {
+  if (!raw) return [];
+  try {
+    const stored: unknown = JSON.parse(raw);
+    if (!Array.isArray(stored)) return [];
+    const ids = stored.map((value) => Number(value)).filter((id) => Number.isInteger(id) && id > 0);
+    return Array.from(new Set(ids));
+  } catch {
+    return [];
+  }
+}
+
 export function FavoriteProvider({ children }: { children: ReactNode }) {
   const auth = useAuth();
   const signedIn = Boolean(auth.user);
@@ -75,12 +100,17 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
   const [favorites, setFavorites] = useState<FavoriteTeam[]>([]);
   const [leagues, setLeagues] = useState<FavoriteScope[]>([]);
   const [seasons, setSeasons] = useState<FavoriteScope[]>([]);
+  const [matches, setMatches] = useState<number[]>([]);
   const [restored, setRestored] = useState(false);
   const syncedUserRef = useRef<string | null>(null);
 
   useEffect(() => {
-    Promise.all([AsyncStorage.getItem(STORAGE_KEY), AsyncStorage.getItem(SCOPE_STORAGE_KEY)])
-      .then(([teamsRaw, scopesRaw]) => {
+    Promise.all([
+      AsyncStorage.getItem(STORAGE_KEY),
+      AsyncStorage.getItem(SCOPE_STORAGE_KEY),
+      AsyncStorage.getItem(MATCH_STORAGE_KEY),
+    ])
+      .then(([teamsRaw, scopesRaw, matchesRaw]) => {
         if (teamsRaw) {
           try {
             const stored = JSON.parse(teamsRaw);
@@ -96,6 +126,8 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
             if (Array.isArray(stored?.seasons)) setSeasons(stored.seasons.filter((s: FavoriteScope) => s?.id));
           } catch {}
         }
+        const storedMatches = parseIdList(matchesRaw);
+        if (storedMatches.length) setMatches(storedMatches);
       })
       .finally(() => setRestored(true));
   }, []);
@@ -109,6 +141,11 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
     if (!restored) return;
     AsyncStorage.setItem(SCOPE_STORAGE_KEY, JSON.stringify({ leagues, seasons })).catch(() => {});
   }, [leagues, seasons, restored]);
+
+  useEffect(() => {
+    if (!restored) return;
+    AsyncStorage.setItem(MATCH_STORAGE_KEY, JSON.stringify(matches)).catch(() => {});
+  }, [matches, restored]);
 
   // Girişte bir kez: cihazdaki favorileri sunucuya taşı (sunucuda olmayanlar
   // eklenir), böylece push hedeflemesi cihaz listesiyle örtüşür.
@@ -127,6 +164,7 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
         const serverTeams = new Set(server.teamIds);
         const serverLeagues = new Set(server.leagueIds);
         const serverSeasons = new Set(server.seasonIds);
+        const serverMatches = new Set(server.matchIds);
         favorites.forEach((t) => {
           if (!serverTeams.has(t.id)) followFavorite("teams", t.id).catch(() => {});
         });
@@ -136,6 +174,15 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
         seasons.forEach((s) => {
           if (!serverSeasons.has(s.id)) followFavorite("seasons", s.id).catch(() => {});
         });
+        matches.forEach((id) => {
+          if (!serverMatches.has(id)) followFavorite("matches", id).catch(() => {});
+        });
+        // Maçta takım/ligden farklı olarak yalnız id tutulur; ad/amblem
+        // aramaya gerek olmadığı için sunucudaki yıldızlar cihaza da indirilir
+        // (web'den yıldızlanan maç telefonda da yıldızlı görünür).
+        if (server.matchIds.length) {
+          setMatches((prev) => Array.from(new Set([...prev, ...server.matchIds])));
+        }
       } catch {
         // Sunucuya ulaşılamadıysa sonraki girişte tekrar denenir.
         syncedUserRef.current = null;
@@ -197,6 +244,29 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
     });
   }, [signedIn]);
 
+  const isFavoriteMatch = useCallback(
+    (matchId?: number | null) => matches.includes(Number(matchId)),
+    [matches]
+  );
+
+  const addFavoriteMatch = useCallback((matchId: number) => {
+    setMatches((prev) => (prev.includes(matchId) ? prev : [...prev, matchId]));
+    syncServer("follow", "matches", matchId, signedIn);
+  }, [signedIn]);
+
+  const removeFavoriteMatch = useCallback((matchId: number) => {
+    setMatches((prev) => prev.filter((id) => id !== matchId));
+    syncServer("unfollow", "matches", matchId, signedIn);
+  }, [signedIn]);
+
+  const toggleFavoriteMatch = useCallback((matchId: number) => {
+    setMatches((prev) => {
+      const exists = prev.includes(matchId);
+      syncServer(exists ? "unfollow" : "follow", "matches", matchId, signedIn);
+      return exists ? prev.filter((id) => id !== matchId) : [...prev, matchId];
+    });
+  }, [signedIn]);
+
   const value = useMemo(
     () => ({
       favorites,
@@ -211,6 +281,11 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
       favoriteSeasons: seasons,
       isFavoriteSeason,
       toggleFavoriteSeason,
+      favoriteMatches: matches,
+      isFavoriteMatch,
+      addFavoriteMatch,
+      removeFavoriteMatch,
+      toggleFavoriteMatch,
       favorite: favorites[0] ?? null, // geriye dönük uyumluluk
     }),
     [
@@ -226,6 +301,11 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
       seasons,
       isFavoriteSeason,
       toggleFavoriteSeason,
+      matches,
+      isFavoriteMatch,
+      addFavoriteMatch,
+      removeFavoriteMatch,
+      toggleFavoriteMatch,
     ]
   );
 

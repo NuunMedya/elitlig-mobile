@@ -25,6 +25,9 @@ import type { MetaLeague, MetaOption, MetaSeason } from "@/lib/types";
 
 const STORAGE_KEY = "elitlig.scope.v1";
 
+/** Kapsam sayfasının üç adımı — ScopeSheet bu sırayı izler. */
+export type ScopeStep = "city" | "league" | "season";
+
 interface StoredScope {
   cityId: number;
   leagueId: number | null;
@@ -47,6 +50,16 @@ interface ScopeContextValue {
   selectCity: (cityId: number) => void;
   selectLeague: (leagueId: number) => void;
   selectSeason: (seasonId: number) => void;
+  /**
+   * Kapsam seçici alt sayfası. Tek örnek app/_layout.tsx'te mount edilir;
+   * ekranlar (ScopeChip, boş durum kartları) yalnız açma/kapama çağırır —
+   * böylece her ekran kendi modalını yaratmaz.
+   */
+  sheetOpen: boolean;
+  /** Sayfa hangi adımda açılacak (varsayılan "city"). */
+  sheetStep: ScopeStep;
+  openScopeSheet: (step?: ScopeStep) => void;
+  closeScopeSheet: () => void;
 }
 
 const ScopeContext = createContext<ScopeContextValue | null>(null);
@@ -56,6 +69,8 @@ export function ScopeProvider({ children }: { children: ReactNode }) {
   const [leagueId, setLeagueId] = useState<number | null>(null);
   const [seasonId, setSeasonId] = useState<number | null>(null);
   const [restored, setRestored] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [sheetStep, setSheetStep] = useState<ScopeStep>("city");
 
   // 1) Cihazda saklı seçimi geri yükle.
   useEffect(() => {
@@ -165,6 +180,13 @@ export function ScopeProvider({ children }: { children: ReactNode }) {
 
   const selectSeason = useCallback((next: number) => setSeasonId(next), []);
 
+  const openScopeSheet = useCallback((step: ScopeStep = "city") => {
+    setSheetStep(step);
+    setSheetOpen(true);
+  }, []);
+
+  const closeScopeSheet = useCallback(() => setSheetOpen(false), []);
+
   const labelOf = (options: MetaOption[] | undefined, id: number | null) =>
     options?.find((option) => option.id === id)?.label ?? "";
 
@@ -188,6 +210,10 @@ export function ScopeProvider({ children }: { children: ReactNode }) {
       selectCity,
       selectLeague,
       selectSeason,
+      sheetOpen,
+      sheetStep,
+      openScopeSheet,
+      closeScopeSheet,
     }),
     [
       cityId,
@@ -203,6 +229,10 @@ export function ScopeProvider({ children }: { children: ReactNode }) {
       selectCity,
       selectLeague,
       selectSeason,
+      sheetOpen,
+      sheetStep,
+      openScopeSheet,
+      closeScopeSheet,
     ]
   );
 

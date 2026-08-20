@@ -44,4 +44,17 @@ export const queryKeys = {
   news: (publicId: string) => ["news", "detail", publicId] as const,
 
   session: () => ["auth", "session"] as const,
+
+  /* ---- Favoriler (sunucu tarafı) ---- */
+  favoritesMe: () => ["favorites", "me"] as const,
+  /** Bir maçı kaç kişinin takip ettiği — oturum gerektirmez. */
+  matchFollowerCount: (matchId: number) => ["favorites", "match-count", matchId] as const,
+  /** Favori kapsamdaki canlı maçlar (sekme rozeti) — kapsamdan bağımsızdır. */
+  liveFavoriteMatches: () => ["matches", "live", "favorites"] as const,
+
+  /* ---- Panel rozetleri ve tercihler ---- */
+  /** app/mesajlarim.tsx ile AYNI anahtar: iki ekran tek önbelleği paylaşır. */
+  panelMessages: () => ["panel", "messages"] as const,
+  unreadNotifCount: () => ["panel", "notif-count"] as const,
+  notificationPreferences: () => ["notifications", "preferences"] as const,
 } as const;

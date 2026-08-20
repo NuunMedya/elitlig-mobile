@@ -1,90 +1,28 @@
-import { Appearance } from "react-native";
-import { getStoredTheme } from "./themePreference";
-
 /**
- * ElitLig tasarım sistemi — web sitesiyle ortak kimlik, iki tema.
+ * ESKİ TEMA GİRİŞİ — artık yalnızca `@/theme` paketine açılan bir kapı.
  *
- * Aydınlık: sitenin gündüz yüzü (açık lavanta zemin, beyaz kartlar).
- * Karanlık: sitenin koyu başlık dünyası (mor-siyah zemin, koyu kartlar,
- * parlaklaştırılmış mor vurgu — koyu zeminde #6D28D9 sönük kaldığı için
- * #A78BFA kullanılır).
+ * NEDEN BU DOSYA DURUYOR: kod tabanında 58 ekran/bileşen dosyası
+ * `@/constants/theme` yolundan `{ colors, radius, spacing, type, isDark }`
+ * içe aktarıyor (~1542 renk, ~326 tipografi kullanımı). Tasarım sistemi
+ * `theme/` klasörüne taşındı; ama import yollarını ve token adlarını tek
+ * seferde değiştirmek gereksiz risk. Bu dosya yeni sistemi olduğu gibi yeniden
+ * dışa aktarır, böylece:
+ *   - eski adlar (colors.line, colors.turf, spacing.md, type.title …) çalışır,
+ *   - yeni adlar (colors.textPrimary, space.md, type.h1 …) da AYNI nesnelerden
+ *     okunabilir — birleşik sözlük,
+ *   - renkler ve tipografi hiçbir ekran dosyasına dokunmadan yenilenir.
  *
- * Tema, uygulama açılışında telefonun sistem ayarından okunur. Token adları
- * her iki temada aynıdır; ekranlar hangi temada olduklarını bilmez.
+ * KADEMELİ GEÇİŞ PLANI:
+ *   1) Bu adım: `theme/` yazıldı, `constants/theme` yeniden dışa aktarıyor.
+ *      Tüm ekranlar derleniyor, görünüm yeni palete geçti.
+ *   2) Ekran ekran: import yolu `@/theme`'e çekilir, eski token adları
+ *      yenileriyle değiştirilir (colors.line → colors.textPrimary,
+ *      spacing.md → space.lg gibi — DİKKAT: space.md=12, spacing.md=16).
+ *   3) Son ekran da geçince `theme/legacy.ts` ve bu dosya silinir.
+ *
+ * Tema seçimi mantığı değişmedi: `getStoredTheme()` varsa o, yoksa
+ * `Appearance.getColorScheme()`; palet modül yüklenirken donar ve tema
+ * değişimi `lib/themeToggle.ts` ile yeniden yükleme yapar.
  */
 
-const light = {
-  /** Ana arka plan — lavanta esintili açık zemin; beyaz kartlar üstünde ayrışır */
-  pitch: "#F6F5FA",
-  /** Kart / yüzey rengi — beyaz */
-  surface: "#FFFFFF",
-  /** Yüzey üstü ince ayrım — nötr açık gri satır */
-  surfaceRaised: "#F1EFF6",
-  /** Marka vurgusu — derin elitlig moru (pastel değil, iddialı) */
-  turf: "#6D28D9",
-  /** Vurgunun soluk tonu (rozet zemini) */
-  turfDim: "#EFE9FE",
-  /** Canlı maç kırmızısı */
-  live: "#E5484D",
-  /** Altın — skor rozetleri, öne çıkarmalar (sarı kart için de kullanılır) */
-  yellow: "#E8B00A",
-  /** Kırmızı kart / tehlike */
-  red: "#D92D20",
-  /** Birincil metin — simsiyaha yakın mürekkep */
-  line: "#0A090D",
-  /** İkincil metin — nötr koyu gri */
-  muted: "#63606E",
-  /** Ayraçlar / kenarlıklar — beyaz zeminde kartları ayıran nötr gri */
-  faint: "#D7D4DF",
-  /** Aksiyon yeşili — giriş / kayıt butonları */
-  green: "#178A50",
-  /** Altın rozet zemini — skor hapları */
-  goldDim: "#FAEDC4",
-};
-
-const dark: typeof light = {
-  pitch: "#0F0C16",
-  surface: "#1A1524",
-  surfaceRaised: "#251D35",
-  turf: "#A78BFA",
-  turfDim: "#2B2144",
-  live: "#F1606A",
-  yellow: "#F0BE2E",
-  red: "#F97066",
-  line: "#F2EFF9",
-  muted: "#9A93AC",
-  faint: "#3A3153",
-  green: "#3DBE7E",
-  goldDim: "#3A2F10",
-};
-
-/** Kullanıcı tercihi (güneş/ay düğmesi) varsa o, yoksa sistem teması. */
-const override = getStoredTheme();
-export const isDark = override ? override === "dark" : Appearance.getColorScheme() === "dark";
-
-export const colors: typeof light = isDark ? dark : light;
-
-export const spacing = {
-  xs: 4,
-  sm: 8,
-  md: 16,
-  lg: 24,
-  xl: 32,
-} as const;
-
-export const radius = {
-  sm: 8,
-  md: 14,
-  lg: 20,
-  pill: 999,
-} as const;
-
-export const type = {
-  /** Skorlar ve büyük rakamlar için */
-  score: { fontSize: 24, fontWeight: "800" as const, letterSpacing: -0.5 },
-  title: { fontSize: 18, fontWeight: "800" as const },
-  subtitle: { fontSize: 15, fontWeight: "800" as const },
-  body: { fontSize: 14, fontWeight: "600" as const },
-  small: { fontSize: 12, fontWeight: "600" as const },
-  caption: { fontSize: 11, fontWeight: "700" as const, letterSpacing: 0.6 },
-} as const;
+export * from "@/theme";
