@@ -106,7 +106,11 @@ export interface UseRefreshOptions {
 export function useRefresh(
   onRefresh: () => unknown,
   options: UseRefreshOptions = {},
-): { refreshing: boolean; onRefresh: () => void; control: React.ReactElement } {
+): {
+  refreshing: boolean;
+  onRefresh: () => void;
+  control: React.ReactElement<RefreshControlProps>;
+} {
   const { refreshing: controlled, minVisible = MIN_VISIBLE_MS, haptic = true, progressViewOffset = 0 } = options;
 
   const [internal, setInternal] = useState(false);
@@ -125,11 +129,20 @@ export function useRefresh(
       .finally(() => setInternal(false));
   }, [controlled, haptic, onRefresh]);
 
+  /**
+   * DİKKAT — burada SARMALAYICI bileşen (`<Refresh />`) DEĞİL, doğrudan
+   * `RefreshControl` üretilir. React Native, Android'de `refreshControl`
+   * düğümünü `cloneElement(node, { style }, <içerik>)` ile kopyalar; araya bir
+   * sarmalayıcı girerse `style` ve `children` o sarmalayıcıya gider,
+   * `RefreshControl` çocuksuz kalır ve AndroidSwipeRefreshLayout "tek çocuk
+   * bekliyorum" diye çalışma anında düşer. Ayrıca düğümün tipi böylece
+   * `ReactElement<RefreshControlProps>` olur ve liste bileşenlerinin
+   * `refreshControl` prop'una dönüşüm (cast) olmadan verilebilir.
+   */
   const control = useMemo(
     () => (
-      <Refresh
-        refreshing={busy}
-        onRefresh={handleRefresh}
+      <RefreshControl
+        {...refreshControlProps(busy, handleRefresh)}
         progressViewOffset={progressViewOffset}
       />
     ),

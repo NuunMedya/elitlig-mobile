@@ -41,7 +41,10 @@ export default function LoginScreen() {
     try {
       await signIn(username, password);
       if (router.canGoBack()) router.back();
-      else router.replace("/(tabs)/profile");
+      // Eski `(tabs)/profile` ekranı kaldırıldı; girişten sonra yığında geri
+      // dönülecek bir şey yoksa Profil SEKMESİ açılır (hesap detayı oradaki
+      // kimlik kartından /hesabim ile açılıyor).
+      else router.replace("/(tabs)/profil");
     } catch (caught) {
       setError(
         caught instanceof ApiError
