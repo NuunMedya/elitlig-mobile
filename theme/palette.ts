@@ -6,28 +6,51 @@
  * işidir. Böylece palet, testlerde ve sunucu tarafı yardımcılarında tema
  * kurulumuna ihtiyaç duymadan kullanılabilir.
  *
- * Renk felsefesi (neden böyle):
- *  1. Zemin gerçekten koyudur (#08090D) — nötr-soğuk, mor tonu yok. Skor
- *     uygulamasında zemin görünmez olmalı, veri görünmelidir. Zemin bir tık
- *     daha derine indi ki kart yüzeyleri (surface1) zeminden AYRIŞSIN: eski
- *     #0B0D12 / #11141B farkı OLED ekranda neredeyse görünmüyordu.
- *  2. Mor asla geniş yüzey doldurmaz. Kurumsal mor #6D28D9 korunur ama yalnız
- *     aksan olarak: aktif sekme, birincil buton, favori rozeti, 9+ reyting.
- *  3. Yüzey katmanları renkle değil aydınlıkla ayrılır; koyu temada gölge
- *     görünmediği için +%2–4 aydınlık farkı ve 1px kenarlık kullanılır.
- *  4. Durum rengi tek başına anlam taşımaz; kazanan takım kalın + textPrimary,
+ * RENK FELSEFESİ (yeniden tasarım — iki renk, iki iş):
+ *
+ *  1. İKİ VURGU RENGİ, İKİ AYRI GÖREV. Bu paletin tek kuralı budur:
+ *       MERCAN (`brand`)  = AKSİYON ve SEÇİLİ DURUM. Birincil buton, aktif
+ *                           sekme, seçili chip, favori yıldızı, bölüm işareti.
+ *       MAVİ   (`accent`) = VERİ. İstatistik barı, ilerleme, ev sahibi tarafı,
+ *                           öne çıkan rakam, sparkline.
+ *     Bir ekranda mercan kaplı alan o ekranın %5'ini geçmez. Mavi dekorasyon
+ *     için, mercan veri için ASLA kullanılmaz. Bu ayrım ihlal edilirse ekran
+ *     "iki vurgu rengi yarışıyor" görüntüsüne düşer.
+ *
+ *  2. AÇIK TEMA BİRİNCİLDİR. Zemin (`bg` #F2F4F7) sıcak krem değil SOĞUK
+ *     gri-mavi kağıttır. Koyu temadaki lacivert, açık temada kağıdın içindeki
+ *     soğuk alt ton olarak yaşar; ısıtılmış krem ucuz görünür.
+ *
+ *  3. GÖLGE DEĞİL ÇİZGİ. Varsayılan kart `surface1` + 1px `border`; gölge
+ *     yalnız yüzen katmanlara (sheet, sticky şerit, dropdown) ayrılmıştır.
+ *     Bkz. theme/elevation.ts.
+ *
+ *  4. GRADIENT NEREDEYSE YASAK. Tek istisna hero/kapak görsellerinin üstündeki
+ *     okunabilirlik scrim'i (`scrimGradientTop` → `scrimGradientBottom`).
+ *
+ *  5. KONTRAST HESAPLANDI, VARSAYILMADI. Üç token brief'teki ham değerinden
+ *     koyulaştırıldı çünkü WCAG AA'yı geçmiyordu — ayrıntı aşağıda ilgili
+ *     satırların yanında.
+ *
+ *  6. Durum rengi tek başına anlam taşımaz; kazanan takım kalın + textPrimary,
  *     kaybeden textTertiary olur. Yeşil/kırmızı yalnız form çipi, reyting ve
  *     delta rakamlarındadır.
- *  5. Her token her iki temada da tanımlıdır; ekran hangi temada olduğunu bilmez.
+ *
+ *  7. Her token her iki temada da tanımlıdır; ekran hangi temada olduğunu bilmez.
+ *
+ * KURUMSAL MOR NEREDE: #6D28D9 arayüzden tamamen kalktı, yalnız marka
+ * varlıklarında (logo, splash görseli, app ikonu) yaşamaya devam ediyor.
+ * Arayüzde mor bir yüzey görürseniz o bir hatadır.
  */
 
 export interface Palette {
   /* — Yüzey mimarisi — */
-  bg: string;            // ekran zemini (en alt katman)
+  bg: string;            // ekran zemini — "kağıt"
   surface1: string;      // satır/kart zemini
   surface2: string;      // yüzey üstü (basılı hâl, ikinci seviye)
-  surface3: string;      // input, chip zemini, tablo başlığı
+  surface3: string;      // input, boş alan, iskelet, chip zemini
   elevated: string;      // bottom sheet, modal, menü
+  inverse: string;       // koyu blok: hero, canlı skor şeridi, paylaşım kartı
   overlay: string;       // scrim (rgba)
   pressed: string;       // Pressable basılı zemin
   ripple: string;        // Android ripple (rgba)
@@ -35,39 +58,41 @@ export interface Palette {
   /* — Metin katmanları — */
   textPrimary: string;
   textSecondary: string;
-  textTertiary: string;
+  textTertiary: string;  // etiket, meta
   textDisabled: string;
-  textOnBrand: string;   // mor dolgu üstündeki metin
+  textOnBrand: string;   // mercan dolgu üstündeki metin
   textOnStatus: string;  // canlı/yeşil dolgu üstündeki metin
+  onDark: string;        // koyu blok üstündeki metin
+  onDarkMuted: string;   // koyu blok üstündeki ikincil metin
 
   /* — Kenarlık / ayraç — */
   border: string;        // hairline ayraçlar, normal kenarlık
   borderStrong: string;  // odaklı input, seçili çerçeve
   separator: string;     // liste içi ayraç (border'dan bir tık sönük)
 
-  /* — Marka — */
-  brand: string;         // dolgu (buton, aktif sekme)
-  brandStrong: string;   // basılı/gradient ucu
-  brandAccent: string;   // metin + ikon üstünde okunur mor
-  brandDim: string;      // rozet/chip zemini
-  brandBorder: string;   // mor çerçeve
+  /* — MERCAN: aksiyon ve seçili durum — */
+  brand: string;         // dolgu (buton, aktif sekme, seçili chip)
+  brandStrong: string;   // basılı hâl
+  brandAccent: string;   // mercanın METİN sürümü — dolgu için KULLANMA
+  brandDim: string;      // rozet/chip zemini (tint)
+  brandBorder: string;   // mercan çerçeve
 
-  /* — Aksan (enerji) —
-     Markanın yanında duran İKİNCİ renk: mor kimliktir, aksan HAREKETTİR.
-     Yalnız "şimdi bir şey oluyor / burada bir sayı var" noktalarında kullanılır:
-     panel metrikleri, ilerleme çubuğu, mesaj balonu, öne çıkan rakam. Geniş
-     yüzey doldurmaz — mor gibi o da yalnız vurgu rengidir. */
-  accent: string;        // dolgu (rozet, ilerleme, balon)
-  accentStrong: string;  // basılı hâl / gradient ucu
-  accentText: string;    // koyu zeminde okunur aksan metni
-  accentDim: string;     // rozet/chip zemini
-  accentBorder: string;  // aksan çerçevesi
-  textOnAccent: string;  // aksan dolgusu üstündeki metin
+  /* — MAVİ: veri — */
+  accent: string;        // istatistik barı, ilerleme, ev sahibi
+  accentStrong: string;  // basılı hâl
+  accentText: string;    // metin sürümü
+  accentDim: string;     // tint zemin
+  accentBorder: string;
+  textOnAccent: string;  // mavi dolgu üstündeki metin
+
+  /* — Verinin karşıtı — */
+  slate: string;         // deplasman barı: mavinin rakibi, nötr
+  slateSoft: string;     // bar rayı, pasif segment
 
   /* — Durum — */
   live: string;
   liveDim: string;
-  liveGlow: string;      // nabız halkası (rgba)
+  liveGlow: string;      // dakika halkası izi (rgba)
   win: string;
   winDim: string;
   draw: string;
@@ -84,11 +109,13 @@ export interface Palette {
   /* — Futbol semantiği — */
   yellowCard: string;
   redCard: string;
-  star: string;          // favori (dolu)
+  star: string;          // favori (dolu) — aksiyon olduğu için MERCAN
   starEmpty: string;     // favori (boş)
-  pitch: string;         // saha grafiği zemini (harita/diziliş)
+  pitch: string;         // saha zemini — YEŞİL DEĞİL, sunken yüzey
+  chalk: string;         // saha çizgisi (koyu saha üstünde beyaz tebeşir)
+  chalkInk: string;      // kağıt üstünde tebeşir (orta yuvarlak yayı, ayraç)
 
-  /* — Reyting skalası (SofaScore mantığı) — */
+  /* — Reyting skalası — */
   ratingPoor: string;    // < 6.0
   ratingFair: string;    // 6.0 – 6.99
   ratingGood: string;    // 7.0 – 7.99
@@ -102,12 +129,12 @@ export interface Palette {
   ratingEliteBg: string;
   ratingNoneBg: string;
 
-  /* — Sıralama bölgeleri — */
-  zoneChampion: string;          // şampiyon / 1. sıra
-  zonePromotion: string;         // doğrudan yükselme
-  zonePlayoff: string;           // play-off
-  zoneRelegationPlayoff: string; // düşme play-off'u
-  zoneRelegation: string;        // düşme
+  /* — Sıralama bölgeleri — satır boyanmaz, sol kenarda 3px işaret olur — */
+  zoneChampion: string;
+  zonePromotion: string;
+  zonePlayoff: string;
+  zoneRelegationPlayoff: string;
+  zoneRelegation: string;
 
   /* — Yardımcı — */
   skeletonBase: string;
@@ -119,155 +146,184 @@ export interface Palette {
   scrimGradientBottom: string;
 }
 
-/** Koyu tema — birincil tema. */
-export const dark: Palette = {
-  bg:        "#08090D",
-  surface1:  "#0F1117",
-  surface2:  "#151821",
-  surface3:  "#1B1F2A",
-  elevated:  "#212632",
-  overlay:   "rgba(3, 4, 7, 0.76)",
-  pressed:   "#181C25",
-  ripple:    "rgba(255, 255, 255, 0.07)",
-
-  textPrimary:   "#EEF1F6",
-  textSecondary: "#98A1B2",
-  textTertiary:  "#6B7383",
-  textDisabled:  "#464D5C",
-  textOnBrand:   "#FFFFFF",
-  textOnStatus:  "#FFFFFF",
-
-  border:       "#202632",
-  borderStrong: "#2E3646",
-  separator:    "#191E27",
-
-  brand:       "#7C3AED",   // koyu zeminde #6D28D9 sönük kalır; dolgu için bir tık parlak
-  brandStrong: "#6D28D9",   // KURUMSAL MOR — gradient ucu, basılı hâl
-  brandAccent: "#A78BFA",   // metin/ikon
-  brandDim:    "#1E1233",
-  brandBorder: "#3A2566",
-
-  // Elektrik yeşili: koyu zeminde en yüksek algısal parlaklığa sahip ton.
-  // Mor ile aynı ekranda çakışmaz çünkü mor DOLGU, aksan RAKAM/ÇİZGİ olur.
-  accent:       "#C9F73D",
-  accentStrong: "#A8D420",
-  accentText:   "#D6FA63",
-  accentDim:    "#1B2110",
-  accentBorder: "#33401A",
-  textOnAccent: "#101408",
-
-  live:     "#FF3B4E",
-  liveDim:  "#2A1016",
-  liveGlow: "rgba(255, 59, 78, 0.30)",
-
-  win:    "#22C55E",  winDim:    "#0C2A1A",
-  draw:   "#8B93A3",  drawDim:   "#1A1E28",
-  loss:   "#F04438",  lossDim:   "#2A1315",
-  warn:   "#F5A524",  warnDim:   "#2A1F0A",
-  danger: "#F04438",  dangerDim: "#2A1315",
-  info:   "#4C8DF6",  infoDim:   "#0F1D33",
-
-  yellowCard: "#F5C518",
-  redCard:    "#E5484D",
-  star:       "#F5C518",
-  starEmpty:  "#565E6E",
-  pitch:      "#0E2A1B",
-
-  ratingPoor:  "#E5484D", ratingPoorBg:  "#2A1315",
-  ratingFair:  "#D9922B", ratingFairBg:  "#2A1F0A",
-  ratingGood:  "#27A25B", ratingGoodBg:  "#0C2A1A",
-  ratingGreat: "#0E8B45", ratingGreatBg: "#08220F",
-  ratingElite: "#8B5CF6", ratingEliteBg: "#1E1233",
-  ratingNone:  "#6B7383", ratingNoneBg:  "#1B1F2A",
-
-  zoneChampion:          "#FFC53D",
-  zonePromotion:         "#22C55E",
-  zonePlayoff:           "#4C8DF6",
-  zoneRelegationPlayoff: "#F5A524",
-  zoneRelegation:        "#F04438",
-
-  skeletonBase:      "#151821",
-  skeletonHighlight: "#222835",
-  tabBar:            "#0B0D12",
-  tabBarBorder:      "#191D26",
-  chartGrid:         "#1C212C",
-  scrimGradientTop:    "rgba(8, 9, 13, 0.00)",
-  scrimGradientBottom: "rgba(8, 9, 13, 0.94)",
-};
-
-/** Açık tema — aynı token adları, gündüz değerleri. */
+/**
+ * Açık tema — BİRİNCİL tema, cilalanan tema budur.
+ *
+ * Kontrast düzeltmeleri (ham brief değeri → buradaki değer, kağıt #F2F4F7 üstü):
+ *   · ink-muted   #767D8E = 3,74:1 ✗  →  #656C7D = 4,77:1 ✓ (AA metin)
+ *   · slate bar   #99A1B3 = 2,35:1 ✗  →  #7C8598 = 3,36:1 ✓ (AA grafik)
+ *   · mercan metin #EE7F55 = 2,44:1 ✗ →  #B0512A = 4,70:1 ✓ (AA metin)
+ * Ayrıca mercan DOLGU üstünde beyaz metin 2,69:1 ile geçmiyor; bu yüzden
+ * `textOnBrand` beyaz değil mürekkeptir (6,83:1). Koyu metinli mercan buton
+ * hem geçer hem editoryal durur.
+ */
 export const light: Palette = {
-  bg:        "#F4F5F8",
-  surface1:  "#FFFFFF",
-  surface2:  "#FAFBFC",
-  surface3:  "#F0F2F6",
-  elevated:  "#FFFFFF",
-  overlay:   "rgba(11, 13, 18, 0.45)",
-  pressed:   "#EEF0F5",
-  ripple:    "rgba(11, 13, 18, 0.06)",
+  bg:       "#F2F4F7",
+  surface1: "#FFFFFF",
+  surface2: "#F8F9FB",
+  surface3: "#EAEDF2",
+  elevated: "#FFFFFF",
+  inverse:  "#12141C",
+  overlay:  "rgba(18, 20, 28, 0.56)",
+  pressed:  "#EAEDF2",
+  ripple:   "rgba(18, 20, 28, 0.06)",
 
-  textPrimary:   "#0B0D12",
-  textSecondary: "#5A6270",
-  textTertiary:  "#858D9C",
-  textDisabled:  "#AEB5C0",
-  textOnBrand:   "#FFFFFF",
+  textPrimary:   "#12141C",
+  textSecondary: "#454B5C",
+  textTertiary:  "#656C7D",   // brief #767D8E → koyulaştırıldı (AA)
+  textDisabled:  "#A7AEBD",
+  textOnBrand:   "#12141C",   // mercan üstünde BEYAZ DEĞİL mürekkep (AA)
   textOnStatus:  "#FFFFFF",
+  onDark:        "#FFFFFF",
+  onDarkMuted:   "rgba(255, 255, 255, 0.64)",
 
-  border:       "#E5E8EE",
-  borderStrong: "#CDD3DE",
-  separator:    "#ECEEF3",
+  border:       "#E2E6EC",
+  borderStrong: "#CFD5DE",
+  separator:    "#EBEEF3",
 
-  brand:       "#6D28D9",   // KURUMSAL MOR — açık zeminde birebir
-  brandStrong: "#5B21B6",
-  brandAccent: "#6D28D9",
-  brandDim:    "#F1EAFE",
-  brandBorder: "#DCCBFB",
+  brand:       "#EE7F55",
+  brandStrong: "#D96B42",
+  brandAccent: "#B0512A",     // yalnız METİN/ikon; dolgu olarak kullanma
+  brandDim:    "#FDF0EA",
+  brandBorder: "#F6D3C3",
 
-  // Açık zeminde neon yeşil okunmaz; aynı aksan zeytin/çim tonuna iner.
-  accent:       "#5B8C0A",
-  accentStrong: "#456A07",
-  accentText:   "#3F6206",
-  accentDim:    "#F0F7E0",
-  accentBorder: "#D8E8B4",
+  accent:       "#2743F0",
+  accentStrong: "#1C31BE",
+  accentText:   "#2743F0",
+  accentDim:    "#E9ECFE",
+  accentBorder: "#C3CBFB",
   textOnAccent: "#FFFFFF",
 
-  live:     "#E11D2E",
-  liveDim:  "#FDECEE",
-  liveGlow: "rgba(225, 29, 46, 0.22)",
+  slate:     "#7C8598",       // brief #99A1B3 → koyulaştırıldı (grafik 3:1)
+  slateSoft: "#99A1B3",
 
-  win:    "#128A4B",  winDim:    "#E7F6EE",
-  draw:   "#6B7280",  drawDim:   "#F0F2F6",
-  loss:   "#D92D20",  lossDim:   "#FDECEA",
+  live:     "#E0374A",
+  liveDim:  "#FDECEE",
+  liveGlow: "rgba(224, 55, 74, 0.20)",
+
+  win:    "#14966B",  winDim:    "#E4F5EE",
+  draw:   "#9AA2B1",  drawDim:   "#EFF1F5",
+  loss:   "#D0455A",  lossDim:   "#FCEBEE",
   warn:   "#B45309",  warnDim:   "#FEF3E2",
-  danger: "#D92D20",  dangerDim: "#FDECEA",
-  info:   "#1D4ED8",  infoDim:   "#E8EFFD",
+  danger: "#D0455A",  dangerDim: "#FCEBEE",
+  info:   "#2743F0",  infoDim:   "#E9ECFE",
 
   yellowCard: "#E8B00A",
-  redCard:    "#D92D20",
-  star:       "#E8B00A",
-  starEmpty:  "#B9BFCA",
-  pitch:      "#E6F3EA",
+  redCard:    "#D0455A",
+  star:       "#EE7F55",
+  starEmpty:  "#CFD5DE",
+  pitch:      "#EAEDF2",
+  chalk:      "rgba(255, 255, 255, 0.55)",
+  chalkInk:   "rgba(18, 20, 28, 0.08)",
 
-  ratingPoor:  "#D92D20", ratingPoorBg:  "#FDECEA",
-  ratingFair:  "#B47212", ratingFairBg:  "#FEF3E2",
-  ratingGood:  "#1F8F4E", ratingGoodBg:  "#E7F6EE",
-  ratingGreat: "#10703C", ratingGreatBg: "#DCF0E4",
-  ratingElite: "#6D28D9", ratingEliteBg: "#F1EAFE",
-  ratingNone:  "#858D9C", ratingNoneBg:  "#F0F2F6",
+  ratingPoor:  "#D0455A", ratingPoorBg:  "#FCEBEE",
+  ratingFair:  "#B45309", ratingFairBg:  "#FEF3E2",
+  ratingGood:  "#14966B", ratingGoodBg:  "#E4F5EE",
+  ratingGreat: "#0E7052", ratingGreatBg: "#DCF0E8",
+  ratingElite: "#2743F0", ratingEliteBg: "#E9ECFE",
+  ratingNone:  "#656C7D", ratingNoneBg:  "#EAEDF2",
 
   zoneChampion:          "#E0A106",
-  zonePromotion:         "#128A4B",
-  zonePlayoff:           "#1D4ED8",
+  zonePromotion:         "#14966B",
+  zonePlayoff:           "#2743F0",
   zoneRelegationPlayoff: "#B45309",
-  zoneRelegation:        "#D92D20",
+  zoneRelegation:        "#D0455A",
 
-  skeletonBase:      "#ECEEF3",
-  skeletonHighlight: "#F7F8FA",
+  skeletonBase:      "#EAEDF2",
+  skeletonHighlight: "#F5F7FA",
   tabBar:            "#FFFFFF",
-  tabBarBorder:      "#E5E8EE",
-  chartGrid:         "#ECEEF3",
-  scrimGradientTop:    "rgba(255, 255, 255, 0.00)",
-  scrimGradientBottom: "rgba(255, 255, 255, 0.92)",
+  tabBarBorder:      "#E2E6EC",
+  chartGrid:         "#EAEDF2",
+  scrimGradientTop:    "rgba(18, 20, 28, 0.00)",
+  scrimGradientBottom: "rgba(18, 20, 28, 0.88)",
+};
+
+/**
+ * Koyu tema — açık temanın negatifi değil, AYNI SİSTEMİN koyu hâli.
+ *
+ * Kağıdın soğuk gri-mavi alt tonu koyuda da sürer (#0E1016 nötr-soğuk, mor
+ * tonu yok). Mercan aynı hex'te kalır — koyu zeminde 6,4:1 ile zaten okunur.
+ * Mavi ise #2743F0 olarak koyu zeminde sönük kalır, bir tık açılır.
+ */
+export const dark: Palette = {
+  bg:       "#0E1016",
+  surface1: "#171A22",
+  surface2: "#1D212A",
+  surface3: "#242934",
+  elevated: "#2A303C",
+  inverse:  "#F2F4F7",
+  overlay:  "rgba(6, 7, 10, 0.76)",
+  pressed:  "#1D212A",
+  ripple:   "rgba(255, 255, 255, 0.07)",
+
+  textPrimary:   "#F2F4F7",
+  textSecondary: "#A8B0BF",
+  textTertiary:  "#848C9B",   // AA için açıldı: #79808F kart üstünde 4,39:1
+  textDisabled:  "#525968",
+  textOnBrand:   "#12141C",   // mercan koyuda da açık bir dolgudur
+  textOnStatus:  "#FFFFFF",
+  onDark:        "#FFFFFF",
+  onDarkMuted:   "rgba(255, 255, 255, 0.64)",
+
+  border:       "#262B36",
+  borderStrong: "#343A48",
+  separator:    "#1F242E",
+
+  brand:       "#EE7F55",
+  brandStrong: "#D96B42",
+  brandAccent: "#F09B77",     // koyuda metin sürümü AÇILIR (koyulaşmaz)
+  brandDim:    "#2A1A12",
+  brandBorder: "#4A2A1B",
+
+  accent:       "#6E80FF",    // #2743F0 koyu zeminde okunmaz
+  accentStrong: "#5566E8",
+  accentText:   "#8E9CFF",
+  accentDim:    "#161B3A",
+  accentBorder: "#2C3566",
+  textOnAccent: "#0E1016",
+
+  slate:     "#8A93A6",
+  slateSoft: "#5C6474",
+
+  live:     "#FF4759",
+  liveDim:  "#2E1218",
+  liveGlow: "rgba(255, 71, 89, 0.28)",
+
+  win:    "#25B37F",  winDim:    "#0D2C21",
+  draw:   "#8A93A6",  drawDim:   "#1F242E",
+  loss:   "#F0637A",  lossDim:   "#2E1218",
+  warn:   "#F5A524",  warnDim:   "#2C2009",
+  danger: "#F0637A",  dangerDim: "#2E1218",
+  info:   "#6E80FF",  infoDim:   "#161B3A",
+
+  yellowCard: "#F5C518",
+  redCard:    "#F0637A",
+  star:       "#EE7F55",
+  starEmpty:  "#525968",
+  pitch:      "#1A1F29",
+  chalk:      "rgba(255, 255, 255, 0.10)",
+  chalkInk:   "rgba(255, 255, 255, 0.06)",
+
+  ratingPoor:  "#F0637A", ratingPoorBg:  "#2E1218",
+  ratingFair:  "#E0921F", ratingFairBg:  "#2C2009",
+  ratingGood:  "#25B37F", ratingGoodBg:  "#0D2C21",
+  ratingGreat: "#149C6B", ratingGreatBg: "#0A2318",
+  ratingElite: "#6E80FF", ratingEliteBg: "#161B3A",
+  ratingNone:  "#79808F", ratingNoneBg:  "#242934",
+
+  zoneChampion:          "#F5C518",
+  zonePromotion:         "#25B37F",
+  zonePlayoff:           "#6E80FF",
+  zoneRelegationPlayoff: "#F5A524",
+  zoneRelegation:        "#F0637A",
+
+  skeletonBase:      "#1D212A",
+  skeletonHighlight: "#272D38",
+  tabBar:            "#12151C",
+  tabBarBorder:      "#1F242E",
+  chartGrid:         "#242934",
+  scrimGradientTop:    "rgba(14, 16, 22, 0.00)",
+  scrimGradientBottom: "rgba(14, 16, 22, 0.94)",
 };
 
 /** Tema adı — depolanan tercih ve sistem ayarı bu iki değere indirgenir. */

@@ -238,11 +238,11 @@ pitch "#1A1F29" · chalk "rgba(255,255,255,0.10)"
 
 | Çift | Ölçüm | Karar |
 | --- | --- | --- |
-| `#767D8E` üzeri `#F2F4F7` | **3,67:1 — AA'yı geçmiyor** | `--ink-muted` **#656C7D**'ye koyulaştırıldı → **4,68:1** ✅ |
-| Beyaz üzeri `#EE7F55` | **2,69:1 — geçmiyor** | Mercan dolgu üstündeki metin **ink #12141C** → **6,87:1** ✅ |
-| `#EE7F55` metin üzeri kağıt | **2,39:1 — geçmiyor** | Mercan **metin olarak kullanılmaz**; gerekirse `brandAccent #B0512A` → **4,60:1** ✅ |
-| `#2743F0` üzeri kağıt | 5,94:1 | ✅ metin ve bar olarak serbest |
-| `#99A1B3` bar üzeri kağıt | 2,31:1 | Deplasman barı **#7C8598** → 3,30:1 ✅ (grafik eşiği 3:1) |
+| `#767D8E` üzeri `#F2F4F7` | **3,74:1 — AA'yı geçmiyor** | `--ink-muted` **#656C7D**'ye koyulaştırıldı → **4,77:1** ✅ |
+| Beyaz üzeri `#EE7F55` | **2,69:1 — geçmiyor** | Mercan dolgu üstündeki metin **ink #12141C** → **6,83:1** ✅ |
+| `#EE7F55` metin üzeri kağıt | **2,44:1 — geçmiyor** | Mercan **metin olarak kullanılmaz**; gerekirse `brandAccent #B0512A` → **4,70:1** ✅ |
+| `#2743F0` üzeri kağıt | 6,06:1 | ✅ metin ve bar olarak serbest |
+| `#99A1B3` bar üzeri kağıt | 2,35:1 | Deplasman barı **#7C8598** → 3,36:1 ✅ (grafik eşiği 3:1) |
 | Beyaz üzeri `#2743F0` | 6,68:1 | ✅ |
 
 > Bunlar brief'in kendi kuralının ("geçmiyorsa koyulaştır") uygulanmasıdır;
@@ -605,25 +605,25 @@ bitirmez (hız %35 düşer, 600ms dokunulmazlık, 3 çarpma = tur biter).
 
 ---
 
-## 6. Onay gereken kararlar
+## 6. Alınan kararlar (onaylandı)
 
-**A. Kurumsal mor kalkıyor.** `#6D28D9`, `palette.ts` içinde "KURUMSAL MOR"
+**A. Kurumsal mor — KARAR: logoda kalır, arayüzden çıkar.** `#6D28D9`, `palette.ts` içinde "KURUMSAL MOR"
 diye işaretli ve splash/logo ile ilişkili. Brief mercan+mavi istiyor; ikisi
 aynı üründe yaşayamaz (brief §9: "aynı ekranda iki farklı vurgu rengi
 yarışması"). **Mor tamamen kaldırılıyor.** Marka varlıkları (logo, splash,
 `app.json` ikonları) bu turda değişmez — onlar da güncellenecekse ayrı iş.
 
-**B. Yazı ailesi.** Brief Archivo + Inter istiyor; repo bilinçli olarak sistem
+**B. Yazı ailesi — KARAR: Archivo + Inter eklendi (`expo-font`).** Brief Archivo + Inter istiyor; repo bilinçli olarak sistem
 fontu kullanıyor. Seçenek 1: sistem fontu + brief'in ölçeği (0 bağımlılık,
 0 risk). Seçenek 2: `expo-font` + `assets/fonts/` altına Archivo/Inter .ttf
 (1 bağımlılık, açılışta ~120KB, splash arkasında yüklenirse FOUT yok).
 
-**C. Oyun çizim katmanı.** Seçenek 1: `react-native-svg` (kurulu, 0 bağımlılık,
+**C. Oyun çizim katmanı — KARAR: `react-native-svg`, yeni bağımlılık yok.** Seçenek 1: `react-native-svg` (kurulu, 0 bağımlılık,
 ölçülen düğüm sayıları için yeterli). Seçenek 2: `@shopify/react-native-skia`
 + `react-native-reanimated` (gerçek canvas, bol parçacık, ~2 büyük bağımlılık,
 EAS derleme ayarı gerekir).
 
-**D. Olmayan veri.** Topla oynama %, xG ve ısı haritası sunucuda yok. Öneri:
+**D. Olmayan veri — KARAR: kaldırılır, gerçek olay istatistikleri gruplanır.** Topla oynama %, xG ve ısı haritası sunucuda yok. Öneri:
 bunları kaldırıp gerçek olay istatistiklerini (Kurtarış, Fırsat, İkili Müc.,
 Hava Topu, Blok, Faul) üç grupta göstermek. Alternatif: `elitlig-server`'a yeni
 uç eklemek — ayrı ve büyük bir iş.

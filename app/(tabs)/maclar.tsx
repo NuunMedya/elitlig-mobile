@@ -62,7 +62,16 @@ import { matchState } from "@/lib/match";
 import { queryKeys } from "@/lib/queryKeys";
 import { useFavorite } from "@/providers/FavoriteProvider";
 import { useScope } from "@/providers/ScopeProvider";
-import { colors, layout, radius, space, textScale, touchSlop, type } from "@/theme";
+import {
+  colors,
+  fonts,
+  layout,
+  radius,
+  space,
+  textScale,
+  touchSlop,
+  type,
+} from "@/theme";
 import type { ApiMatch } from "@/lib/types";
 
 /* ═══════════════════════ SABİTLER VE KÜÇÜK YARDIMCILAR ═══════════════════════ */
@@ -1161,11 +1170,11 @@ const styles = StyleSheet.create({
   },
   calDayToday: {
     color: colors.brandAccent,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
   },
   calDayTextSelected: {
     color: colors.textOnBrand,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
   },
   // Nokta her hücrede yer tutar; böylece maçlı/maçsız günlerde rakam zıplamaz.
   calDot: {

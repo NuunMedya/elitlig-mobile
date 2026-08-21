@@ -67,6 +67,7 @@ import {
   colors,
   dark as inkPalette,
   elevate,
+  fonts,
   hairline,
   haptics,
   layout,
@@ -893,7 +894,7 @@ const styles = StyleSheet.create({
   },
   startBestText: {
     ...type.bodySm,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     color: colors.textPrimary,
   },
 
@@ -984,7 +985,7 @@ const styles = StyleSheet.create({
   },
   cardTeam: {
     ...type.caption,
-    fontWeight: "600",
+    fontFamily: fonts.semibold,
     letterSpacing: 0,
     color: colors.textSecondary,
   },
@@ -1022,7 +1023,7 @@ const styles = StyleSheet.create({
 
   hint: {
     ...type.caption,
-    fontWeight: "500",
+    fontFamily: fonts.medium,
     letterSpacing: 0,
     color: colors.textTertiary,
     textAlign: "center",
@@ -1076,7 +1077,7 @@ const styles = StyleSheet.create({
   },
   historyDate: {
     ...type.caption,
-    fontWeight: "600",
+    fontFamily: fonts.semibold,
     letterSpacing: 0,
     color: colors.textTertiary,
   },
@@ -1165,19 +1166,19 @@ const styles = StyleSheet.create({
   },
   submitInfo: {
     ...type.caption,
-    fontWeight: "600",
+    fontFamily: fonts.semibold,
     letterSpacing: 0,
     color: colors.textTertiary,
   },
   submitLink: {
     ...type.caption,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     letterSpacing: 0,
     color: colors.brandAccent,
   },
   submitFail: {
     ...type.caption,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     letterSpacing: 0,
     color: colors.danger,
   },
@@ -1228,7 +1229,7 @@ const styles = StyleSheet.create({
   },
   shareTaunt: {
     ...type.bodySm,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     color: inkPalette.textSecondary,
   },
   shareFooter: {

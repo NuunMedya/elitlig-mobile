@@ -56,6 +56,7 @@ import { getPlayerRankings } from "@/lib/api/players";
 import type { PlayerRankRow, PlayerSort } from "@/lib/types";
 import {
   colors,
+  fonts,
   hairline,
   layout,
   radius,
@@ -670,7 +671,7 @@ const styles = StyleSheet.create({
   },
   stepName: {
     ...type.caption,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
     letterSpacing: 0,
     color: colors.textPrimary,
     textAlign: "center",
@@ -678,7 +679,7 @@ const styles = StyleSheet.create({
   },
   stepMeta: {
     ...type.micro,
-    fontWeight: "600",
+    fontFamily: fonts.semibold,
     letterSpacing: 0,
     color: colors.textTertiary,
     textAlign: "center",
@@ -795,13 +796,13 @@ const styles = StyleSheet.create({
   },
   shareName: {
     ...type.caption,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
     letterSpacing: 0,
     color: colors.textPrimary,
   },
   shareMeta: {
     ...type.micro,
-    fontWeight: "600",
+    fontFamily: fonts.semibold,
     letterSpacing: 0,
     color: colors.textTertiary,
   },
@@ -824,7 +825,7 @@ const styles = StyleSheet.create({
   },
   shareHint: {
     ...type.caption,
-    fontWeight: "600",
+    fontFamily: fonts.semibold,
     letterSpacing: 0,
     color: colors.textTertiary,
     textAlign: "center",

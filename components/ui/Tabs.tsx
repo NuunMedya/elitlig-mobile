@@ -31,6 +31,7 @@ import {
   colors,
   duration,
   easing,
+  fonts,
   hairline,
   haptics,
   layout,
@@ -234,11 +235,11 @@ const styles = StyleSheet.create({
   label: {
     ...type.label,
     color: colors.textSecondary,
-    fontWeight: "600",
+    fontFamily: fonts.semibold,
   },
   labelActive: {
     color: colors.textPrimary,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
   },
   indicator: {
     position: "absolute",

@@ -77,7 +77,17 @@ import { get } from "@/lib/http";
 import { openLink } from "@/lib/links";
 import { queryKeys } from "@/lib/queryKeys";
 import { useScope } from "@/providers/ScopeProvider";
-import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
+import {
+  colors,
+  fonts,
+  hairline,
+  layout,
+  light,
+  radius,
+  space,
+  textScale,
+  type,
+} from "@/theme";
 
 /* ══════════════════════════════════════════════════════════════════════════
    1) EKRANA ÖZGÜ UÇ TANIMLARI
@@ -1901,14 +1911,16 @@ const TimelineTeam = React.memo(function TimelineTeam({
    ══════════════════════════════════════════════════════════════════════════ */
 
 const SHARE = {
-  ink: "#0A0812",
-  brand: "#6D28D9",
-  brandDeep: "#4C1D95",
-  brandText: "#5B21B6",
-  paperTop: "#CDBFE8",
-  paperMid: "#EFEAF7",
-  paperBottom: "#FFFFFF",
-  muted: "#9188A4",
+  ink: light.inverse,
+  /** Yalnız DOLGU. Mercan metin olarak kağıt üstünde AA'yı geçmez. */
+  brand: light.brand,
+  brandDeep: light.brandStrong,
+  /** Mercanın metin sürümü (koyu mercan, 4,70:1). */
+  brandText: light.brandAccent,
+  paperTop: light.brandDim,
+  paperMid: light.bg,
+  paperBottom: light.surface1,
+  muted: light.textTertiary,
   panel: "rgba(255,255,255,0.72)",
 } as const;
 
@@ -2357,7 +2369,7 @@ const styles = StyleSheet.create({
   },
   appearOpponent: {
     ...type.bodySm,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     color: colors.textPrimary,
   },
   appearMarks: {
@@ -2427,7 +2439,7 @@ const styles = StyleSheet.create({
   },
   tdStrong: {
     ...type.bodySm,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     color: colors.textPrimary,
   },
   tdSub: {
@@ -2594,19 +2606,19 @@ const styles = StyleSheet.create({
   },
   shareBrand: {
     fontSize: 12,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
     color: SHARE.brand,
   },
   shareBrandRight: {
     fontSize: 7,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
     letterSpacing: 1.2,
     color: SHARE.brand,
     opacity: 0.7,
   },
   shareKicker: {
     fontSize: 8,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
     letterSpacing: 0.8,
     color: SHARE.brand,
     opacity: 0.85,
@@ -2626,17 +2638,17 @@ const styles = StyleSheet.create({
   shareName: {
     fontSize: 12,
     lineHeight: 16,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
     color: SHARE.ink,
   },
   shareTeam: {
     fontSize: 9,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     color: SHARE.brand,
   },
   sharePosition: {
     fontSize: 9,
-    fontWeight: "600",
+    fontFamily: fonts.semibold,
     color: SHARE.muted,
   },
   shareStats: {
@@ -2652,13 +2664,13 @@ const styles = StyleSheet.create({
   },
   shareStatValue: {
     fontSize: 15,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
     color: SHARE.brandText,
     fontVariant: ["tabular-nums"],
   },
   shareStatLabel: {
     fontSize: 7,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
     letterSpacing: 0.5,
     color: SHARE.muted,
   },
@@ -2671,7 +2683,7 @@ const styles = StyleSheet.create({
   },
   shareSecondaryText: {
     fontSize: 10,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
     color: SHARE.brandText,
     fontVariant: ["tabular-nums"],
   },
@@ -2680,7 +2692,7 @@ const styles = StyleSheet.create({
   },
   shareFooter: {
     fontSize: 8,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
     letterSpacing: 2.5,
     color: SHARE.muted,
     textAlign: "center",

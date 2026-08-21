@@ -35,7 +35,17 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Button, Input, ScreenHeader, Touchable, toneColors } from "@/components/ui";
 import { ApiError } from "@/lib/http";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, hairline, layout, radius, space, textScale, touchSlop, type } from "@/theme";
+import {
+  colors,
+  fonts,
+  hairline,
+  layout,
+  radius,
+  space,
+  textScale,
+  touchSlop,
+  type,
+} from "@/theme";
 
 /** Hata kutusunun tonu tek yerden okunur — kendi kırmızısını yazan yok. */
 const DANGER = toneColors("danger");
@@ -234,7 +244,7 @@ const styles = StyleSheet.create({
 
   footnote: {
     ...type.caption,
-    fontWeight: "600",
+    fontFamily: fonts.semibold,
     letterSpacing: 0,
     color: colors.textTertiary,
     textAlign: "center",

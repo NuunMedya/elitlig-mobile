@@ -21,7 +21,15 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import React from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
-import { colors, hairline, radius, space, textScale, type } from "@/theme";
+import {
+  colors,
+  fonts,
+  hairline,
+  radius,
+  space,
+  textScale,
+  type,
+} from "@/theme";
 import { ApiError } from "@/lib/http";
 import { EmptyState } from "./EmptyState";
 import { Touchable } from "./Pressable";
@@ -137,7 +145,7 @@ const styles = StyleSheet.create({
   },
   bannerActionText: {
     ...type.caption,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
     color: colors.danger,
   },
 });

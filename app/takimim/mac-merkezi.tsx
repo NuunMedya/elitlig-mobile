@@ -63,7 +63,17 @@ import {
 import { formatDateShort, formatTime } from "@/lib/format";
 import { ApiError } from "@/lib/http";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
+import {
+  colors,
+  fonts,
+  hairline,
+  layout,
+  radius,
+  space,
+  textScale,
+  type,
+  upperTR,
+} from "@/theme";
 
 /* ══════════════════════════════════════════════════════════════════════════
    Sabitler ve saf yardımcılar
@@ -714,7 +724,7 @@ const styles = StyleSheet.create({
   },
   dateText: {
     ...type.bodySm,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     color: colors.textPrimary,
   },
   timeText: {
@@ -727,7 +737,7 @@ const styles = StyleSheet.create({
   },
   opponent: {
     ...type.body,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     color: colors.textPrimary,
   },
   meta: {
@@ -777,7 +787,7 @@ const styles = StyleSheet.create({
   },
   notComingLead: {
     color: colors.danger,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
   },
   panelNote: {
     ...type.caption,

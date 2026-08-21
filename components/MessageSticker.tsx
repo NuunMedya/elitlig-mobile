@@ -301,7 +301,7 @@ const styles = StyleSheet.create({
       ios: {
         // Koyu zeminde gölge görünmez; balon yüzeyi zaten `elevated`. Gölge
         // yalnız açık temada işe yarar ve orada da yumuşak kalır.
-        shadowColor: "#000",
+        shadowColor: colors.inverse,
         shadowOpacity: 0.18,
         shadowRadius: 12,
         shadowOffset: { width: 0, height: 4 },

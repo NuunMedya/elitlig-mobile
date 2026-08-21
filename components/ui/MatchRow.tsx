@@ -27,7 +27,17 @@ import { memo, useCallback, useEffect, useMemo, useRef } from "react";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from "react-native";
 import type { StyleProp, ViewStyle } from "react-native";
-import { colors, duration, layout, radius, space, textScale, touchSlop, type } from "@/theme";
+import {
+  colors,
+  duration,
+  fonts,
+  layout,
+  radius,
+  space,
+  textScale,
+  touchSlop,
+  type,
+} from "@/theme";
 import { haptics } from "@/lib/haptics";
 import { formatScore, formatTime } from "@/lib/format";
 import { matchState } from "@/lib/match";
@@ -488,7 +498,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   teamNameWinner: {
-    fontWeight: "700",
+    fontFamily: fonts.bold,
   },
   teamNameDim: {
     color: colors.textTertiary,

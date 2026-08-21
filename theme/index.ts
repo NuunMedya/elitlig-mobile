@@ -15,7 +15,6 @@
  * `palette` = takma adsız, saf yeni palet.
  */
 
-import { Appearance } from "react-native";
 import type { ViewStyle } from "react-native";
 import { getStoredTheme } from "@/constants/themePreference";
 import { paletteFor, type Palette, type ThemeName } from "./palette";
@@ -27,6 +26,7 @@ export * from "./legacy";
 export * from "./rating";
 export * from "./zones";
 export * from "./typography";
+export * from "./fonts";
 export * from "./space";
 export * from "./elevation";
 export * from "./motion";
@@ -34,8 +34,14 @@ export * from "./motion";
 /** Kullanıcı tercihi (güneş/ay düğmesi) varsa o, yoksa sistem teması. */
 const override = getStoredTheme();
 
-export const isDark: boolean =
-  override ? override === "dark" : Appearance.getColorScheme() === "dark";
+/**
+ * VARSAYILAN TEMA AÇIKTIR. Yeniden tasarımda cilalanan tema açık temadır;
+ * koyu tema ikinci sınıf değil ama varsayılan değil. Bu yüzden burada SİSTEM
+ * ayarına bakılmaz — yalnız kullanıcının açık tercihi koyuya geçirir. Sistem
+ * ayarına uyulsaydı, koyu telefonlu kullanıcıların çoğu ürünün asıl yüzünü
+ * hiç görmezdi.
+ */
+export const isDark: boolean = override === "dark";
 
 /** Aktif tema adı — bileşenler yerine altyapı (StatusBar, harita) içindir. */
 export const themeName: ThemeName = isDark ? "dark" : "light";

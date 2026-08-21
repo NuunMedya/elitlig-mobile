@@ -81,7 +81,17 @@ import { formatDateShort, formatTime, mediaUrl } from "@/lib/format";
 import { ApiError, get } from "@/lib/http";
 import { openLink } from "@/lib/links";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
+import {
+  colors,
+  fonts,
+  hairline,
+  layout,
+  radius,
+  space,
+  textScale,
+  type,
+  upperTR,
+} from "@/theme";
 
 /* ══════════════════════════════════════════════════════════════════════════
    1) EKRANA ÖZGÜ UÇ: /api/panel/me/statistics
@@ -1936,7 +1946,7 @@ const styles = StyleSheet.create({
   },
   matchOpponent: {
     ...type.bodySm,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     color: colors.textPrimary,
   },
   matchMeta: {
@@ -2093,7 +2103,7 @@ const styles = StyleSheet.create({
   },
   tdStrong: {
     ...type.bodySm,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     color: colors.textPrimary,
   },
   tdSub: {

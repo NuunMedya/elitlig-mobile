@@ -55,6 +55,7 @@ import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
 import {
   colors,
+  fonts,
   hairline,
   layout,
   radius,
@@ -631,7 +632,7 @@ const styles = StyleSheet.create({
   },
   meMeta: {
     ...type.caption,
-    fontWeight: "600",
+    fontFamily: fonts.semibold,
     letterSpacing: 0,
     color: colors.textTertiary,
   },
@@ -676,7 +677,7 @@ const styles = StyleSheet.create({
   },
   stepName: {
     ...type.caption,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
     letterSpacing: 0,
     color: colors.textPrimary,
     textAlign: "center",
@@ -684,7 +685,7 @@ const styles = StyleSheet.create({
   },
   stepTeam: {
     ...type.micro,
-    fontWeight: "600",
+    fontFamily: fonts.semibold,
     letterSpacing: 0,
     color: colors.textTertiary,
     textAlign: "center",
@@ -726,7 +727,7 @@ const styles = StyleSheet.create({
   },
   rowScoreMeta: {
     ...type.micro,
-    fontWeight: "600",
+    fontFamily: fonts.semibold,
     letterSpacing: 0,
     color: colors.textTertiary,
   },
@@ -798,7 +799,7 @@ const styles = StyleSheet.create({
   },
   shareName: {
     ...type.caption,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
     letterSpacing: 0,
     color: colors.textPrimary,
     flex: 1,

@@ -59,7 +59,17 @@ import type { Tone } from "@/components/ui";
 import type { ArenaGame } from "@/lib/api/arena";
 import { get } from "@/lib/http";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
+import {
+  colors,
+  fonts,
+  hairline,
+  layout,
+  radius,
+  space,
+  textScale,
+  type,
+  upperTR,
+} from "@/theme";
 
 /* ===================== SABİTLER (saf veri) ===================== */
 
@@ -761,7 +771,7 @@ const styles = StyleSheet.create({
   },
   weekLabel: {
     ...type.caption,
-    fontWeight: "600",
+    fontFamily: fonts.semibold,
     letterSpacing: 0,
     color: colors.textTertiary,
   },
@@ -798,7 +808,7 @@ const styles = StyleSheet.create({
   },
   dailySub: {
     ...type.caption,
-    fontWeight: "600",
+    fontFamily: fonts.semibold,
     letterSpacing: 0,
     color: withAlpha(colors.textOnBrand, 0.78),
   },
@@ -810,7 +820,7 @@ const styles = StyleSheet.create({
   },
   dailyPillText: {
     ...type.caption,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
     letterSpacing: 0.2,
     color: colors.textOnBrand,
   },
@@ -854,7 +864,7 @@ const styles = StyleSheet.create({
   },
   gameBlurb: {
     ...type.caption,
-    fontWeight: "500",
+    fontFamily: fonts.medium,
     letterSpacing: 0,
     color: colors.textSecondary,
     flex: 1,
@@ -868,14 +878,14 @@ const styles = StyleSheet.create({
   },
   gameBest: {
     ...type.caption,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
     letterSpacing: 0,
     color: colors.textPrimary,
     flexShrink: 1,
   },
   gameCta: {
     ...type.caption,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     letterSpacing: 0,
     color: colors.textTertiary,
   },

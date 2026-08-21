@@ -66,7 +66,15 @@ import {
 import { formatDateShort } from "@/lib/format";
 import { ApiError } from "@/lib/http";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, layout, radius, space, textScale, type } from "@/theme";
+import {
+  colors,
+  fonts,
+  layout,
+  radius,
+  space,
+  textScale,
+  type,
+} from "@/theme";
 
 /* ============================ SABİTLER / TİPLER ============================ */
 
@@ -824,7 +832,7 @@ const styles = StyleSheet.create({
   windowDeadline: {
     ...type.caption,
     color: colors.warn,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
     letterSpacing: 0,
   },
   submission: {
@@ -840,7 +848,7 @@ const styles = StyleSheet.create({
   submissionTitle: {
     ...type.bodySm,
     color: colors.textPrimary,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     flex: 1,
   },
   submissionBody: {
@@ -885,7 +893,7 @@ const styles = StyleSheet.create({
   timelineTitle: {
     ...type.bodySm,
     color: colors.textPrimary,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
   },
   timelineDesc: {
     ...type.caption,

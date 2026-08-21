@@ -52,7 +52,15 @@ import { type Contract } from "@/lib/api/panel";
 import { formatDateShort, formatMoney, mediaUrl } from "@/lib/format";
 import { get } from "@/lib/http";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, layout, radius, space, textScale, type } from "@/theme";
+import {
+  colors,
+  fonts,
+  layout,
+  radius,
+  space,
+  textScale,
+  type,
+} from "@/theme";
 
 /* ============================ SUNUCU BİÇİMLERİ ============================= */
 
@@ -625,7 +633,7 @@ const styles = StyleSheet.create({
   timelineTitle: {
     ...type.bodySm,
     color: colors.textPrimary,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
   },
   timelineDesc: {
     ...type.caption,

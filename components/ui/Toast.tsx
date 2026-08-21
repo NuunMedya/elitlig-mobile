@@ -41,7 +41,18 @@ import {
   type PanResponderInstance,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { colors, duration, easing, elevate, layout, radius, space, textScale, type } from "@/theme";
+import {
+  colors,
+  duration,
+  easing,
+  elevate,
+  fonts,
+  layout,
+  radius,
+  space,
+  textScale,
+  type,
+} from "@/theme";
 import { fireHaptic, Touchable, type HapticKind } from "./Pressable";
 
 export type ToastTone = "neutral" | "success" | "warn" | "danger" | "live";
@@ -353,7 +364,7 @@ const styles = StyleSheet.create({
   },
   actionLabel: {
     ...type.caption,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
     color: colors.brandAccent,
   },
   closeButton: {

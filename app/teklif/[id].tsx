@@ -68,7 +68,15 @@ import { formatDateShort, formatMoney, mediaUrl } from "@/lib/format";
 import { ApiError, post } from "@/lib/http";
 import { queryKeys } from "@/lib/queryKeys";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, layout, radius, space, textScale, type } from "@/theme";
+import {
+  colors,
+  fonts,
+  layout,
+  radius,
+  space,
+  textScale,
+  type,
+} from "@/theme";
 
 /* ============================ SUNUCU BİÇİMLERİ ============================= */
 
@@ -1380,7 +1388,7 @@ const styles = StyleSheet.create({
   cardLineValue: {
     ...type.caption,
     color: colors.textPrimary,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     letterSpacing: 0,
     flex: 1,
     textAlign: "right",
@@ -1402,7 +1410,7 @@ const styles = StyleSheet.create({
   revisionValue: {
     ...type.bodySm,
     color: colors.textPrimary,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
   },
   timelineRow: {
     flexDirection: "row",
@@ -1436,7 +1444,7 @@ const styles = StyleSheet.create({
   timelineTitle: {
     ...type.bodySm,
     color: colors.textPrimary,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
   },
   timelineDesc: {
     ...type.caption,

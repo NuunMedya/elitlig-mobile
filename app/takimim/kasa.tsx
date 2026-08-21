@@ -55,7 +55,16 @@ import {
 import { formatDateShort, formatMoney, mediaUrl } from "@/lib/format";
 import { ApiError } from "@/lib/http";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
+import {
+  colors,
+  fonts,
+  hairline,
+  layout,
+  radius,
+  space,
+  textScale,
+  type,
+} from "@/theme";
 
 /* ══════════════════════════════════════════════════════════════════════════
    Sabitler ve saf yardımcılar
@@ -596,7 +605,7 @@ const styles = StyleSheet.create({
   },
   ffpTitle: {
     ...type.label,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
   },
   ffpNet: {
     ...type.caption,
@@ -682,7 +691,7 @@ const styles = StyleSheet.create({
   },
   rowTitle: {
     ...type.bodySm,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     color: colors.textPrimary,
   },
   rowMeta: {

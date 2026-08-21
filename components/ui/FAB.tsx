@@ -27,7 +27,18 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import { colors, duration, easing, elevate, layout, radius, space, textScale, type } from "@/theme";
+import {
+  colors,
+  duration,
+  easing,
+  elevate,
+  fonts,
+  layout,
+  radius,
+  space,
+  textScale,
+  type,
+} from "@/theme";
 import { useReduceMotion } from "./LiveBadge";
 import { Touchable } from "./Pressable";
 
@@ -156,6 +167,6 @@ const styles = StyleSheet.create({
   },
   label: {
     ...type.label,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
   },
 });

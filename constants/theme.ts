@@ -20,9 +20,10 @@
  *      spacing.md → space.lg gibi — DİKKAT: space.md=12, spacing.md=16).
  *   3) Son ekran da geçince `theme/legacy.ts` ve bu dosya silinir.
  *
- * Tema seçimi mantığı değişmedi: `getStoredTheme()` varsa o, yoksa
- * `Appearance.getColorScheme()`; palet modül yüklenirken donar ve tema
- * değişimi `lib/themeToggle.ts` ile yeniden yükleme yapar.
+ * TEMA SEÇİMİ (yeniden tasarımda değişti): varsayılan AÇIK temadır ve sistem
+ * ayarına BAKILMAZ; yalnız kullanıcının açık tercihi koyuya geçirir. Palet
+ * modül yüklenirken donar, tema değişimi `lib/themeToggle.ts` ile yeniden
+ * yükleme yapar.
  */
 
 export * from "@/theme";

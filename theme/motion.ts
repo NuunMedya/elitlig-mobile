@@ -13,19 +13,23 @@
 import { Easing, LayoutAnimation, Platform } from "react-native";
 import * as Haptics from "expo-haptics";
 
+/**
+ * ÜÇ SÜRE (yeniden tasarım): mikro 120 · geçiş 220 · katman 320. Diğer değerler
+ * bu üçünün etrafındaki özel durumlardır.
+ */
 export const duration = {
   instant: 0,
-  fast:    120,   // basılı çıkışı, opaklık
-  base:    180,   // sekme göstergesi, chip seçimi
+  fast:    120,   // MİKRO: basılı çıkışı, opaklık
+  base:    220,   // GEÇİŞ: sekme göstergesi, chip seçimi, bar dolumu
   medium:  240,   // sheet giriş, toast
-  slow:    320,   // hero daralma tamamlanışı
+  slow:    320,   // KATMAN: sheet, hero daralma tamamlanışı
   flash:   900,   // skor değişim parlaması
   pulse:  1400,   // canlı nabız döngüsü
   shimmer:1100,   // iskelet parlaması
 } as const;
 
 export const easing = {
-  standard:   Easing.bezier(0.2, 0, 0, 1),   // giriş+çıkış
+  standard:   Easing.bezier(0.2, 0.8, 0.25, 1), // giriş+çıkış (tek eğri)
   decelerate: Easing.out(Easing.cubic),      // giriş
   accelerate: Easing.in(Easing.cubic),       // çıkış
   emphasized: Easing.bezier(0.05, 0.7, 0.1, 1),

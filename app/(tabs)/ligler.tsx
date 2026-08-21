@@ -73,6 +73,7 @@ import { useScope } from "@/providers/ScopeProvider";
 import {
   colors,
   defaultZoneRules,
+  fonts,
   layout,
   palette,
   radius,
@@ -1495,12 +1496,12 @@ const styles = StyleSheet.create({
   stRank: { ...type.tableNum, color: colors.textSecondary, width: 20, textAlign: "center" },
   stNameBox: { flex: 1, gap: 3 },
   stNameRow: { flexDirection: "row", alignItems: "center", gap: 4 },
-  stName: { ...type.body, color: colors.textPrimary, fontWeight: "700", flexShrink: 1 },
+  stName: { ...type.body, color: colors.textPrimary, fontFamily: fonts.bold, flexShrink: 1 },
   stNameFav: { color: colors.brandAccent },
   stNum: { ...type.tableNum, width: 30, textAlign: "center" },
   stMuted: { color: colors.textSecondary },
-  stPos: { color: colors.win, fontWeight: "700" },
-  stNeg: { color: colors.loss, fontWeight: "700" },
+  stPos: { color: colors.win, fontFamily: fonts.bold },
+  stNeg: { color: colors.loss, fontFamily: fonts.bold },
   stPoints: { ...type.tableNumStrong, color: colors.textPrimary, width: 30, textAlign: "center" },
 
   /* — Oyuncular — */

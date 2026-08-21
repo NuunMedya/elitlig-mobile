@@ -41,7 +41,17 @@ import {
 import { INTRO_SEEN_KEY } from "@/lib/storage";
 import type { MetaOption } from "@/lib/types";
 import { useScope } from "@/providers/ScopeProvider";
-import { colors, hairline, haptics, layout, radius, space, textScale, type } from "@/theme";
+import {
+  colors,
+  fonts,
+  hairline,
+  haptics,
+  layout,
+  radius,
+  space,
+  textScale,
+  type,
+} from "@/theme";
 
 /** Türkçe küçük harf — arama karşılaştırmasının tek yeri. */
 const norm = (value: string) => value.trim().toLocaleLowerCase("tr-TR");
@@ -283,7 +293,7 @@ const styles = StyleSheet.create({
   },
   mapHint: {
     ...type.caption,
-    fontWeight: "600",
+    fontFamily: fonts.semibold,
     letterSpacing: 0,
     color: colors.textTertiary,
     textAlign: "center",

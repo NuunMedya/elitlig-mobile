@@ -28,7 +28,15 @@ import {
   type SegmentedItem,
 } from "@/components/ui";
 import { useScope, type ScopeStep } from "@/providers/ScopeProvider";
-import { colors, hairline, layout, space, textScale, type } from "@/theme";
+import {
+  colors,
+  fonts,
+  hairline,
+  layout,
+  space,
+  textScale,
+  type,
+} from "@/theme";
 
 /** Arama kutusunun görüneceği eşik — altında kutu gereksiz yer kaplar. */
 const SEARCH_THRESHOLD = 12;
@@ -270,6 +278,6 @@ const styles = StyleSheet.create({
   },
   rowLabelSelected: {
     color: colors.brandAccent,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
   },
 });

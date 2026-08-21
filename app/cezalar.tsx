@@ -55,7 +55,14 @@ import { queryKeys } from "@/lib/queryKeys";
 import type { NewsItem } from "@/lib/types";
 import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
-import { colors, layout, space, textScale, type } from "@/theme";
+import {
+  colors,
+  fonts,
+  layout,
+  space,
+  textScale,
+  type,
+} from "@/theme";
 
 /* ============================ SABİTLER / TİPLER ============================ */
 
@@ -469,7 +476,7 @@ const styles = StyleSheet.create({
   },
   summaryStrong: {
     color: colors.textPrimary,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
   },
   sheet: {
     gap: space.md,
