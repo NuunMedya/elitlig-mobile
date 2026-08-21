@@ -203,6 +203,16 @@ export default function MatchCenterScreen() {
       subtitle="Fikstür, yoklama ve maç karnesi"
       back
       scrollY={scrollY}
+      /* Maç talepleri ayrı bir ekranda yaşıyor ("Maç Al"); buraya gelen başkan
+         çoğu zaman bir sonraki maçı ALMAK için geliyor. Başlıktaki kısayol o
+         geçişi panelin köküne dönmeden yapar. */
+      actions={[
+        {
+          icon: "add-circle-outline",
+          accessibilityLabel: "Maç al ve taleplerim",
+          onPress: () => router.push("/takimim/mac-al"),
+        },
+      ]}
       bottom={
         <View style={styles.headerBottom}>
           <SegmentedControl items={TAB_ITEMS} value={tab} onChange={changeTab} />

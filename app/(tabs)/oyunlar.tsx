@@ -635,6 +635,11 @@ export default function OyunlarScreen() {
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader
         title="Oyunlar"
+        back
+        /* Bu ekran sekme çubuğunda yuvası olmayan bir sekmedir (href: null) ve
+           Menü'den açılır. Sekme gezgininde geri yığını olmayabilir; o durumda
+           geldiği yere, yani Menü'ye dönülür. */
+        onBack={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)/menu"))}
         subtitle="Rekor kır, sıralamaya gir"
         scrollY={scrollY}
         actions={headerActions}

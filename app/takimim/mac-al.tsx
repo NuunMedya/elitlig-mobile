@@ -11,16 +11,25 @@
  * uygun olanı onaylıyor. Bu yüzden hücreler açma/kapama mantığıyla seçiliyor.
  *
  * DURUM RENKLERİ panonun kendi sözleşmesinden gelir:
- *   open      → seçilebilir (yeşil kenarlık)
- *   awaiting  → bir takım istemiş, rakip bekleniyor (sarı)
+ *   open      → boş saat, seçilebilir (yeşil)
+ *   awaiting  → bir takım almış, rakip bekleniyor — SEÇİLEBİLİR (sarı)
  *   booked    → maç alınmış (mor)
  *   closed    → yönetici kapatmış (gri)
+ *
+ * "AWAITING" HÜCRESİ SEÇİLEBİLİR: amatör ligde saatlerin çoğunu bir takım açar,
+ * ikinci takım rakip olarak katılır — talebin onaylanması seni o maçın rakibi
+ * yapar. Bu ekranın önceki sürümü yalnız `open` hücreleri seçilebilir
+ * kılıyordu ve akışın en çok kullanılan yolu mobilde kapalıydı.
+ *
+ * HÜCRE İÇİNDE AÇIKLAMA: renk tek başına anlam taşımaz. Her hücre durumunu
+ * tek satırla söyler ("Yıldızspor · rakip bekleniyor", "Talebiniz bekliyor",
+ * "3 takım istedi"); kullanıcı lejanta bakmak zorunda kalmaz.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Redirect } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { Redirect, useLocalSearchParams } from "expo-router";
+import React, { useCallback, useMemo, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
@@ -38,7 +47,7 @@ import {
   useRefresh,
   useToast,
 } from "@/components/ui";
-import type { AdminBoardCell, SlotStatus } from "@/lib/api/admin";
+import type { SlotStatus } from "@/lib/api/admin";
 import {
   cancelMatchRequest,
   createMatchRequest,
@@ -47,6 +56,7 @@ import {
   getVenues,
   MATCH_REQUEST_STATUS_LABELS,
   type MyMatchRequest,
+  type TeamBoardCell,
 } from "@/lib/api/team";
 import { ApiError } from "@/lib/http";
 import { useAuth } from "@/providers/AuthProvider";
@@ -77,6 +87,95 @@ function dayLabel(iso: string): string {
   return `${day} ${rest}`;
 }
 
+/**
+ * Hücrenin TAKIM tarafındaki görünümü — web'deki `cellView` ile birebir.
+ *
+ * BURADAKİ ASIL KURAL: `awaiting` (bir takım saati almış, rakip bekliyor)
+ * hücreleri SEÇİLEBİLİR. Mobil sürüm bunu kaçırıyordu — yalnız `open`
+ * hücreler seçilebiliyordu — ve bu, "Maç Al" akışının en sık kullanılan yolunu
+ * kapatıyordu: amatör ligde saatlerin çoğunu bir takım açar, ikinci takım
+ * rakip olarak katılır. Yönetici talebi onayladığında takım o maçın rakibi
+ * olur.
+ *
+ * Dönen `hint` boş olabilir; hücrede ikinci satır yalnız doluysa çizilir.
+ */
+interface CellView {
+  selectable: boolean;
+  /** Hücrenin altındaki tek satırlık açıklama. */
+  hint: string;
+  /** Kenarlık rengi — durum rengini EZEBİLİR (kendi maçın/talebin gibi). */
+  tone: string;
+  /** Kendi takımını ilgilendiren hücre: dolgu ile ayrışır. */
+  mine: boolean;
+}
+
+function cellView(cell: TeamBoardCell, selected: boolean, teamId: number | null): CellView {
+  const sides = [cell.home, cell.away].filter(Boolean) as NonNullable<TeamBoardCell["home"]>[];
+  const names = sides.map((side) => side.team_name).join(" – ");
+
+  // Geçmiş gün ya da rezervasyon penceresi dışı: yalnız bilgi.
+  if (cell.is_past || !cell.is_bookable) {
+    return { selectable: false, hint: names, tone: colors.textDisabled, mine: false };
+  }
+
+  const mineSide =
+    teamId != null ? sides.find((side) => Number(side.team_id) === Number(teamId)) : undefined;
+  const rivalSide = mineSide ? sides.find((side) => side !== mineSide) : undefined;
+
+  // Yöneticinin kapattığı saat takım için de doludur.
+  if (cell.status === "closed") {
+    return { selectable: false, hint: "Dolu", tone: colors.textTertiary, mine: false };
+  }
+
+  if (cell.status === "booked") {
+    return mineSide
+      ? {
+          selectable: false,
+          hint: `Maçınız${rivalSide ? ` · ${rivalSide.team_name}` : ""}`,
+          tone: colors.brandAccent,
+          mine: true,
+        }
+      : { selectable: false, hint: names ? `Dolu · ${names}` : "Dolu", tone: colors.brandAccent, mine: false };
+  }
+
+  if (cell.status === "awaiting") {
+    if (mineSide) {
+      return {
+        selectable: false,
+        hint: "Saat sizin · rakip bekleniyor",
+        tone: colors.brandAccent,
+        mine: true,
+      };
+    }
+    if (cell.my_request) {
+      return { selectable: false, hint: "Talebiniz bekliyor", tone: colors.info, mine: true };
+    }
+    if (selected) {
+      return { selectable: true, hint: "Rakibi olacaksınız", tone: colors.accent, mine: false };
+    }
+    return {
+      selectable: true,
+      hint: `${sides[0]?.team_name ?? "Bir takım"} · rakip bekleniyor`,
+      tone: colors.warn,
+      mine: false,
+    };
+  }
+
+  // status === "open"
+  if (cell.my_request) {
+    return { selectable: false, hint: "Talebiniz bekliyor", tone: colors.info, mine: true };
+  }
+  if (selected) {
+    return { selectable: true, hint: "Seçildi", tone: colors.accent, mine: false };
+  }
+  return {
+    selectable: true,
+    hint: cell.pending_count > 0 ? `${cell.pending_count} takım istedi` : "",
+    tone: colors.win,
+    mine: false,
+  };
+}
+
 function statusColor(status: SlotStatus): string {
   switch (status) {
     case "open":
@@ -95,7 +194,16 @@ export default function MacAlScreen() {
   const toast = useToast();
   const queryClient = useQueryClient();
 
-  const [tab, setTab] = useState<Tab>("pano");
+  /* Derin bağlantı: MATCH_REQUEST bildirimi `?tab=taleplerim&request=<id>` ile
+     buraya düşer. Sekme başlangıç değerini parametreden alır; `request`
+     ilgili kartı vurgular ki kullanıcı hangi talep için geldiğini görsün. */
+  const params = useLocalSearchParams<{ tab?: string; request?: string }>();
+  const highlightId = Array.isArray(params.request) ? params.request[0] : params.request;
+
+  const [tab, setTab] = useState<Tab>(() => {
+    const raw = Array.isArray(params.tab) ? params.tab[0] : params.tab;
+    return raw === "taleplerim" ? "taleplerim" : "pano";
+  });
   const [venueId, setVenueId] = useState<string | null>(null);
   const [weekStart, setWeekStart] = useState<string | undefined>(undefined);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -168,22 +276,31 @@ export default function MacAlScreen() {
     },
   });
 
-  const toggleCell = useCallback((cell: AdminBoardCell) => {
-    if (cell.status !== "open" || !cell.is_bookable) return;
-    haptics.select();
-    setSelected((prev) => {
-      const next = new Set(prev);
-      const key = cellKey(cell);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  }, []);
+  /** Panonun döndürdüğü kendi takım kimliği — "bu saat benim mi" kararı bunda. */
+  const myTeamId = boardQuery.data?.teamId ?? null;
+
+  const toggleCell = useCallback(
+    (cell: TeamBoardCell) => {
+      // Seçilebilirlik kararı tek yerden gelir (bkz. cellView): `open` VE
+      // `awaiting` hücreler seçilebilir; kendi saatin ya da bekleyen talebin
+      // olan hücre seçilemez — bu yüzden takım kimliği şart.
+      if (!cellView(cell, false, myTeamId).selectable) return;
+      haptics.select();
+      setSelected((prev) => {
+        const next = new Set(prev);
+        const key = cellKey(cell);
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
+        return next;
+      });
+    },
+    [myTeamId],
+  );
 
   /** Hücreler güne göre gruplanır; pano gün satırları hâlinde çizilir. */
   const days = useMemo(() => {
     const cells = boardQuery.data?.cells ?? [];
-    const map = new Map<string, AdminBoardCell[]>();
+    const map = new Map<string, TeamBoardCell[]>();
     cells.forEach((cell) => {
       const list = map.get(cell.date);
       if (list) list.push(cell);
@@ -290,8 +407,8 @@ export default function MacAlScreen() {
                 <View style={styles.legend}>
                   {(
                     [
-                      ["open", "Uygun"],
-                      ["awaiting", "Rakip bekleniyor"],
+                      ["open", "Boş"],
+                      ["awaiting", "Rakip bekleniyor · seçilebilir"],
                       ["booked", "Dolu"],
                       ["closed", "Kapalı"],
                     ] as [SlotStatus, string][]
@@ -319,34 +436,15 @@ export default function MacAlScreen() {
                     <Card key={day.date} padding="sm" style={styles.dayCard}>
                       <Text style={styles.dayTitle}>{dayLabel(day.date)}</Text>
                       <View style={styles.slotWrap}>
-                        {day.cells.map((cell) => {
-                          const key = cellKey(cell);
-                          const isSelected = selected.has(key);
-                          const selectable = cell.status === "open" && cell.is_bookable;
-                          return (
-                            <Touchable
-                              key={key}
-                              feedback={selectable ? "chip" : "none"}
-                              onPress={selectable ? () => toggleCell(cell) : undefined}
-                              accessibilityLabel={`${cell.label} ${
-                                selectable ? "uygun" : "seçilemez"
-                              }`}
-                              style={[
-                                styles.slot,
-                                { borderColor: statusColor(cell.status) },
-                                !selectable && styles.slotDisabled,
-                                isSelected && styles.slotSelected,
-                              ]}
-                            >
-                              <Text
-                                style={[styles.slotText, isSelected && styles.slotTextSelected]}
-                                allowFontScaling={false}
-                              >
-                                {cell.label}
-                              </Text>
-                            </Touchable>
-                          );
-                        })}
+                        {day.cells.map((cell) => (
+                          <SlotCell
+                            key={cellKey(cell)}
+                            cell={cell}
+                            selected={selected.has(cellKey(cell))}
+                            teamId={myTeamId}
+                            onToggle={toggleCell}
+                          />
+                        ))}
                       </View>
                     </Card>
                   ))
@@ -358,8 +456,9 @@ export default function MacAlScreen() {
                       {selected.size} saat seçildi
                     </Text>
                     <Text style={styles.submitHint} {...textScale.long}>
-                      Birden fazla saat seçebilirsin; yönetici uygun olanı onaylar. Onaylanan saat
-                      takımına maç olarak yazılır ve bildirim gelir.
+                      Birden fazla saat seçebilirsin; yönetici uygun olanı onaylar. Onaylanan
+                      saat takımına maç olarak yazılır ve bildirim gelir. Rakip bekleyen bir
+                      saati seçtiysen o maçın rakibi olursun.
                     </Text>
                     <Input
                       value={note}
@@ -405,6 +504,7 @@ export default function MacAlScreen() {
                 <RequestCard
                   key={request.public_id}
                   request={request}
+                  highlighted={request.public_id === highlightId}
                   onWithdraw={() => withdraw.mutate(request.public_id)}
                   withdrawing={withdraw.isPending}
                 />
@@ -417,14 +517,76 @@ export default function MacAlScreen() {
   );
 }
 
+/* ═══════════════════════════ PANO HÜCRESİ ═══════════════════════════ */
+
+/**
+ * Saha panosunun tek hücresi: saat + tek satırlık durum açıklaması.
+ *
+ * NEDEN AÇIKLAMA SATIRI VAR: eski hücre yalnız saati ve bir kenarlık rengini
+ * gösteriyordu. "Sarı ne demekti?" sorusunun yanıtı lejantta kalıyordu ve
+ * kullanıcı en kritik ayrımı — "bu saatte bir takım rakip bekliyor, tıklarsam
+ * rakibi olurum" — hiç göremiyordu. Renk sinyali tek başına anlam taşımaz
+ * (§1.0/4); açıklama satırı o anlamı hücrenin içine koyar.
+ */
+const SlotCell = React.memo(function SlotCell({
+  cell,
+  selected,
+  teamId,
+  onToggle,
+}: {
+  cell: TeamBoardCell;
+  selected: boolean;
+  teamId: number | null;
+  onToggle: (cell: TeamBoardCell) => void;
+}) {
+  const view = cellView(cell, selected, teamId);
+  const handlePress = useCallback(() => onToggle(cell), [cell, onToggle]);
+
+  return (
+    <Touchable
+      feedback={view.selectable ? "chip" : "none"}
+      onPress={view.selectable ? handlePress : undefined}
+      accessibilityRole="button"
+      accessibilityState={{ selected, disabled: !view.selectable }}
+      accessibilityLabel={`${cell.label}${view.hint ? `, ${view.hint}` : ""}`}
+      style={[
+        styles.slot,
+        { borderColor: view.tone },
+        !view.selectable && styles.slotDisabled,
+        view.mine && styles.slotMine,
+        selected && styles.slotSelected,
+      ]}
+    >
+      <Text
+        style={[styles.slotText, selected && styles.slotTextSelected]}
+        allowFontScaling={false}
+      >
+        {cell.label}
+      </Text>
+      {view.hint ? (
+        <Text
+          style={[styles.slotHint, selected && styles.slotHintSelected]}
+          numberOfLines={1}
+          allowFontScaling={false}
+        >
+          {view.hint}
+        </Text>
+      ) : null}
+    </Touchable>
+  );
+});
+
 /* ═══════════════════════════ TALEP KARTI ═══════════════════════════ */
 
 function RequestCard({
   request,
+  highlighted,
   onWithdraw,
   withdrawing,
 }: {
   request: MyMatchRequest;
+  /** Bildirimden gelinen talep: kart mor çerçeveyle işaretlenir. */
+  highlighted?: boolean;
   onWithdraw: () => void;
   withdrawing: boolean;
 }) {
@@ -438,7 +600,7 @@ function RequestCard({
           : colors.warn;
 
   return (
-    <Card padding="md" style={styles.requestCard}>
+    <Card padding="md" style={[styles.requestCard, highlighted ? styles.requestCardActive : null]}>
       <View style={styles.requestHead}>
         <Text style={styles.requestVenue} numberOfLines={1}>
           {request.venue_name}
@@ -504,19 +666,26 @@ const styles = StyleSheet.create({
   dayCard: { gap: space.sm },
   dayTitle: { ...type.label, color: colors.textPrimary },
   slotWrap: { flexDirection: "row", flexWrap: "wrap", gap: space.s },
+  /* Hücre artık iki satırlı (saat + açıklama); genişlik açıklamayı taşıyacak
+     kadar büyüdü ama satıra hâlâ iki hücre sığıyor. */
   slot: {
     borderWidth: 1,
-    borderRadius: radius.sm,
-    paddingHorizontal: space.sm,
+    borderRadius: radius.md,
+    paddingHorizontal: space.m,
     paddingVertical: space.s,
-    minWidth: 58,
-    alignItems: "center",
+    minWidth: 96,
+    maxWidth: 168,
+    gap: 1,
     backgroundColor: colors.surface2,
   },
-  slotDisabled: { opacity: 0.45 },
-  slotSelected: { backgroundColor: colors.brand, borderColor: colors.brand },
-  slotText: { ...type.caption, color: colors.textPrimary },
+  slotDisabled: { opacity: 0.5 },
+  /** Kendi takımını ilgilendiren hücre: sönük değil, hafif dolgulu. */
+  slotMine: { opacity: 1, backgroundColor: colors.surface3 },
+  slotSelected: { backgroundColor: colors.brand, borderColor: colors.brand, opacity: 1 },
+  slotText: { ...type.label, color: colors.textPrimary },
   slotTextSelected: { color: colors.textOnBrand },
+  slotHint: { ...type.micro, color: colors.textTertiary, letterSpacing: 0 },
+  slotHintSelected: { color: colors.textOnBrand },
 
   submitCard: { gap: space.sm },
   submitTitle: { ...type.h3, color: colors.textPrimary },
@@ -524,6 +693,8 @@ const styles = StyleSheet.create({
   submitActions: { flexDirection: "row", justifyContent: "flex-end", gap: space.sm },
 
   requestCard: { gap: space.sm },
+  /** Bildirimden gelinen kart: "aradığın bu" demek için mor çerçeve. */
+  requestCardActive: { borderColor: colors.brandBorder, borderWidth: 1 },
   requestHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.sm },
   requestVenue: { ...type.h3, color: colors.textPrimary, flex: 1 },
   requestStatus: { ...type.caption },

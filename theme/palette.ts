@@ -7,8 +7,10 @@
  * kurulumuna ihtiyaç duymadan kullanılabilir.
  *
  * Renk felsefesi (neden böyle):
- *  1. Zemin gerçekten koyudur (#0B0D12) — nötr-soğuk, mor tonu yok. Skor
- *     uygulamasında zemin görünmez olmalı, veri görünmelidir.
+ *  1. Zemin gerçekten koyudur (#08090D) — nötr-soğuk, mor tonu yok. Skor
+ *     uygulamasında zemin görünmez olmalı, veri görünmelidir. Zemin bir tık
+ *     daha derine indi ki kart yüzeyleri (surface1) zeminden AYRIŞSIN: eski
+ *     #0B0D12 / #11141B farkı OLED ekranda neredeyse görünmüyordu.
  *  2. Mor asla geniş yüzey doldurmaz. Kurumsal mor #6D28D9 korunur ama yalnız
  *     aksan olarak: aktif sekme, birincil buton, favori rozeti, 9+ reyting.
  *  3. Yüzey katmanları renkle değil aydınlıkla ayrılır; koyu temada gölge
@@ -49,6 +51,18 @@ export interface Palette {
   brandAccent: string;   // metin + ikon üstünde okunur mor
   brandDim: string;      // rozet/chip zemini
   brandBorder: string;   // mor çerçeve
+
+  /* — Aksan (enerji) —
+     Markanın yanında duran İKİNCİ renk: mor kimliktir, aksan HAREKETTİR.
+     Yalnız "şimdi bir şey oluyor / burada bir sayı var" noktalarında kullanılır:
+     panel metrikleri, ilerleme çubuğu, mesaj balonu, öne çıkan rakam. Geniş
+     yüzey doldurmaz — mor gibi o da yalnız vurgu rengidir. */
+  accent: string;        // dolgu (rozet, ilerleme, balon)
+  accentStrong: string;  // basılı hâl / gradient ucu
+  accentText: string;    // koyu zeminde okunur aksan metni
+  accentDim: string;     // rozet/chip zemini
+  accentBorder: string;  // aksan çerçevesi
+  textOnAccent: string;  // aksan dolgusu üstündeki metin
 
   /* — Durum — */
   live: string;
@@ -107,13 +121,13 @@ export interface Palette {
 
 /** Koyu tema — birincil tema. */
 export const dark: Palette = {
-  bg:        "#0B0D12",
-  surface1:  "#11141B",
-  surface2:  "#161A23",
-  surface3:  "#1C212C",
-  elevated:  "#222834",
-  overlay:   "rgba(5, 7, 11, 0.72)",
-  pressed:   "#1A1F29",
+  bg:        "#08090D",
+  surface1:  "#0F1117",
+  surface2:  "#151821",
+  surface3:  "#1B1F2A",
+  elevated:  "#212632",
+  overlay:   "rgba(3, 4, 7, 0.76)",
+  pressed:   "#181C25",
   ripple:    "rgba(255, 255, 255, 0.07)",
 
   textPrimary:   "#EEF1F6",
@@ -133,12 +147,21 @@ export const dark: Palette = {
   brandDim:    "#1E1233",
   brandBorder: "#3A2566",
 
+  // Elektrik yeşili: koyu zeminde en yüksek algısal parlaklığa sahip ton.
+  // Mor ile aynı ekranda çakışmaz çünkü mor DOLGU, aksan RAKAM/ÇİZGİ olur.
+  accent:       "#C9F73D",
+  accentStrong: "#A8D420",
+  accentText:   "#D6FA63",
+  accentDim:    "#1B2110",
+  accentBorder: "#33401A",
+  textOnAccent: "#101408",
+
   live:     "#FF3B4E",
   liveDim:  "#2A1016",
   liveGlow: "rgba(255, 59, 78, 0.30)",
 
   win:    "#22C55E",  winDim:    "#0C2A1A",
-  draw:   "#8B93A3",  drawDim:   "#1B202A",
+  draw:   "#8B93A3",  drawDim:   "#1A1E28",
   loss:   "#F04438",  lossDim:   "#2A1315",
   warn:   "#F5A524",  warnDim:   "#2A1F0A",
   danger: "#F04438",  dangerDim: "#2A1315",
@@ -155,7 +178,7 @@ export const dark: Palette = {
   ratingGood:  "#27A25B", ratingGoodBg:  "#0C2A1A",
   ratingGreat: "#0E8B45", ratingGreatBg: "#08220F",
   ratingElite: "#8B5CF6", ratingEliteBg: "#1E1233",
-  ratingNone:  "#6B7383", ratingNoneBg:  "#1C212C",
+  ratingNone:  "#6B7383", ratingNoneBg:  "#1B1F2A",
 
   zoneChampion:          "#FFC53D",
   zonePromotion:         "#22C55E",
@@ -163,13 +186,13 @@ export const dark: Palette = {
   zoneRelegationPlayoff: "#F5A524",
   zoneRelegation:        "#F04438",
 
-  skeletonBase:      "#161A23",
-  skeletonHighlight: "#232A36",
-  tabBar:            "#0E1117",
-  tabBarBorder:      "#1B212C",
-  chartGrid:         "#1E2430",
-  scrimGradientTop:    "rgba(11, 13, 18, 0.00)",
-  scrimGradientBottom: "rgba(11, 13, 18, 0.92)",
+  skeletonBase:      "#151821",
+  skeletonHighlight: "#222835",
+  tabBar:            "#0B0D12",
+  tabBarBorder:      "#191D26",
+  chartGrid:         "#1C212C",
+  scrimGradientTop:    "rgba(8, 9, 13, 0.00)",
+  scrimGradientBottom: "rgba(8, 9, 13, 0.94)",
 };
 
 /** Açık tema — aynı token adları, gündüz değerleri. */
@@ -199,6 +222,14 @@ export const light: Palette = {
   brandAccent: "#6D28D9",
   brandDim:    "#F1EAFE",
   brandBorder: "#DCCBFB",
+
+  // Açık zeminde neon yeşil okunmaz; aynı aksan zeytin/çim tonuna iner.
+  accent:       "#5B8C0A",
+  accentStrong: "#456A07",
+  accentText:   "#3F6206",
+  accentDim:    "#F0F7E0",
+  accentBorder: "#D8E8B4",
+  textOnAccent: "#FFFFFF",
 
   live:     "#E11D2E",
   liveDim:  "#FDECEE",

@@ -17,7 +17,8 @@ import { useEffect, useRef } from "react";
 import { AppState, type AppStateStatus } from "react-native";
 import { useRouter } from "expo-router";
 import { runPushRegistration } from "@/hooks/usePushStatus";
-import { routeFromNotif, setupNotificationHandlers } from "@/lib/notifications";
+import { markDelivered } from "@/lib/notificationLedger";
+import { notificationIdFromNotif, routeFromNotif, setupNotificationHandlers } from "@/lib/notifications";
 import { useAuth } from "@/providers/AuthProvider";
 
 export function usePushNotifications() {
@@ -28,6 +29,7 @@ export function usePushNotifications() {
   const initializing = auth.initializing;
 
   const listenerRef = useRef<{ remove?: () => void } | null>(null);
+  const receivedRef = useRef<{ remove?: () => void } | null>(null);
   const coldStartHandled = useRef(false);
   /** Aynı bildirime iki kez yönlendirmeyi engeller (soğuk başlatma + dinleyici). */
   const lastHandled = useRef<string | null>(null);
@@ -72,12 +74,25 @@ export function usePushNotifications() {
       try {
         const Notifications = await import("expo-notifications");
 
+        /* TESLİMAT DEFTERİ: uzak push gerçekten geldiyse kimliği yazılır.
+           Yerel köprü (hooks/useNotificationBridge.ts) yazılmış kimlikleri
+           atlar; aksi hâlde push zinciri çalışan cihazlarda aynı bildirim
+           telefonda iki kez belirirdi. */
+        receivedRef.current = Notifications.addNotificationReceivedListener((notification) => {
+          markDelivered(
+            notificationIdFromNotif(
+              notification.request.content.data as Record<string, unknown>,
+            ),
+          );
+        });
+
         // Uygulama arka plandayken/açıkken gelen dokunuşlar.
         listenerRef.current = Notifications.addNotificationResponseReceivedListener((response) => {
-          openFrom(
-            response.notification.request.content.data as Record<string, unknown>,
-            response.notification.request.identifier
-          );
+          const data = response.notification.request.content.data as Record<string, unknown>;
+          // Dokunulan bildirim de gösterilmiş sayılır: köprü onu tekrar
+          // göstermeye çalışmasın.
+          markDelivered(notificationIdFromNotif(data));
+          openFrom(data, response.notification.request.identifier);
         });
 
         // Kapalıyken bildirime dokunulup açıldıysa: yanıt burada bekliyor.
@@ -99,6 +114,7 @@ export function usePushNotifications() {
     return () => {
       cancelled = true;
       listenerRef.current?.remove?.();
+      receivedRef.current?.remove?.();
     };
   }, [initializing, isManagement]); // eslint-disable-line react-hooks/exhaustive-deps
 }

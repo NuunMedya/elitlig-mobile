@@ -444,6 +444,279 @@ export const submitMatchReview = (
     comment,
   });
 
+/* ═════════════════════ SEZON KADROSU (KADRO KURAL SETİ) ═════════════════════
+ *
+ * routes/teamSeasonRoster.js — takım başkanı yalnız kendi takımına erişir.
+ *   GET    /api/teams/:teamId/seasons                          katıldığı sezonlar
+ *   GET    /api/teams/:teamId/seasons/:seasonId/roster         sezon kadrosu üyeleri
+ *   GET    /api/teams/:teamId/seasons/:seasonId/roster/status  limitler ve haklar
+ *   POST   /api/teams/:teamId/seasons/:seasonId/roster/players oyuncu ekle
+ *   DELETE .../roster/players/:playerId                        oyuncu çıkar
+ *
+ * "TAKIM KADROSU" İLE "SEZON KADROSU" AYNI ŞEY DEĞİLDİR:
+ *   · Takım kadrosu (`/api/team-management/roster`) kulübün oyuncu listesidir;
+ *     forma numarası, mevki, diziliş orada yaşar.
+ *   · Sezon kadrosu bir SEZONA kayıt olmaktır: kural setine (limit, lisans,
+ *     transfer hakkı) tabidir ve bir oyuncuyu eklemek transfer hakkı TÜKETİR.
+ *     Çıkarmak hakkı geri VERMEZ.
+ * Bu ayrım mobilde hiç yoktu; başkan sezon kadrosunu yalnız web'den yönetebiliyordu.
+ *
+ * ÜYE KAYDI OYUNCU ADI TAŞIMAZ: sunucu ham model satırı döndürüyor (player_id,
+ * is_licensed, membership_status). Ad ve fotoğraf takım kadrosundan eşleştirilir
+ * — web paneli de aynı eşleştirmeyi yapar.
+ */
+
+export interface TeamSeasonOption {
+  participation_id: number;
+  season_id: number;
+  league_id: number | null;
+  source: string | null;
+  registered_at: string | null;
+  season: {
+    id: number;
+    season_name: string;
+    league_name: string | null;
+    season_year: number | string | null;
+    roster_rule_set_id: number | null;
+    is_archived: boolean;
+  };
+}
+
+export type SeasonMembershipStatus = "active" | "pending" | "removed" | string;
+
+export interface SeasonRosterMember {
+  id: number;
+  team_season_roster_id: number;
+  player_id: number;
+  is_licensed: boolean;
+  membership_status: SeasonMembershipStatus;
+  createdAt?: string;
+}
+
+/** Limit gösterimi: sınırsız / yok / değişken / sayısal tavan. */
+export interface RosterCap {
+  unlimited?: boolean;
+  none?: boolean;
+  variable?: boolean;
+  cap?: number | null;
+  used?: number;
+}
+
+export interface SeasonRosterStatus {
+  /** Sezona kural seti bağlı değilse false — kadro yönetimi yine çalışır. */
+  applies: boolean;
+  message?: string;
+  roster?: { activeCount: number; licensedCount: number };
+  ruleSet?: { id: number; name: string; version: number };
+  activePeriod?: { id: number; order: number; name: string | null };
+  general?: RosterCap;
+  licensed?: RosterCap;
+  transferRights?: {
+    unlimited: boolean;
+    none: boolean;
+    used: number;
+    granted: number | null;
+    available: number | null;
+  };
+  licenseRules?: {
+    valid_from_type: string | null;
+    valid_from_date: string | null;
+    valid_from_months: number | null;
+    league_categories: string[];
+  };
+}
+
+export const getTeamSeasons = (teamId: number) =>
+  get<{ seasons: TeamSeasonOption[] }>(`/api/teams/${teamId}/seasons`);
+
+export const getSeasonRoster = (teamId: number, seasonId: number) =>
+  get<{ members: SeasonRosterMember[] }>(`/api/teams/${teamId}/seasons/${seasonId}/roster`);
+
+export const getSeasonRosterStatus = (teamId: number, seasonId: number) =>
+  get<SeasonRosterStatus>(`/api/teams/${teamId}/seasons/${seasonId}/roster/status`);
+
+/**
+ * Sezon kadrosuna oyuncu ekler.
+ *
+ * `autoApprove: true` — başkan kendi kadrosundan seçtiği için ayrı bir onay
+ * adımı yoktur (web paneli de aynı bayrağı gönderir).
+ */
+export const addSeasonRosterPlayer = (
+  teamId: number,
+  seasonId: number,
+  body: { playerId: number; isLicensed?: boolean }
+) =>
+  post<{ member: SeasonRosterMember; pending: boolean }>(
+    `/api/teams/${teamId}/seasons/${seasonId}/roster/players`,
+    { ...body, autoApprove: true }
+  );
+
+export const removeSeasonRosterPlayer = (teamId: number, seasonId: number, playerId: number) =>
+  del<{ removed?: boolean }>(
+    `/api/teams/${teamId}/seasons/${seasonId}/roster/players/${playerId}`
+  );
+
+/**
+ * Kadro kuralı hata kodları → Türkçe cümle.
+ * Sunucudaki RULE_ERROR_MESSAGES ile birebir aynı olmalıdır; kod tanınmazsa
+ * sunucunun kendi mesajına düşülür.
+ */
+export const ROSTER_RULE_ERRORS: Record<string, string> = {
+  ROSTER_LIMIT_EXCEEDED: "Genel kadro limiti aşıldığı için işlem yapılamadı.",
+  NO_TRANSFER_RIGHT: "Transfer hakkın bulunmadığı için oyuncu eklenemedi.",
+  LICENSED_ROSTER_LIMIT_EXCEEDED: "Lisanslı oyuncu limiti aşıldı.",
+  DUPLICATE_ROSTER_MEMBER: "Oyuncu bu sezon kadrosunda zaten var.",
+  TEAM_FORBIDDEN: "Bu takımın kadrosuna erişim yetkin yok.",
+};
+
+/** Limit değerini insan okur biçime çevirir. */
+export function capLabel(value?: RosterCap | null): string {
+  if (!value) return "—";
+  if (value.unlimited) return "Limitsiz";
+  if (value.none) return "Yok";
+  if (value.variable) return "Değişken";
+  if (value.cap != null) return String(value.cap);
+  return "—";
+}
+
+/* ═════════════════════ RAKİP ANALİZİ VE SİMÜLASYON ═════════════════════
+ *
+ * routes/matchCenter.js:
+ *   GET  /team/matches/:matchId/analysis     karar-destek raporu
+ *   POST /team/matches/:matchId/simulations  Poisson skor tahmini
+ *
+ * Web panelindeki "Rakip Analizi" sekmesinin mobil karşılığıdır. Rapor
+ * TAMAMEN sunucuda üretilir (services/matchAnalysisService.js): puan durumu,
+ * son 8 yayınlanmış maç, ikili maç geçmişi ve oyuncu istatistikleri. İstemci
+ * hiçbir sayıyı kendisi hesaplamaz — iki tarafın farklı sonuç üretmesi
+ * "hangisi doğru" sorusunu doğururdu.
+ *
+ * Simülasyon DETERMİNİSTİKTİR: aynı kadro ve senaryoda aynı tahmini verir,
+ * rastgelelik yoktur. Bu yüzden sonuç önbelleğe alınabilir.
+ */
+
+/** Bir takımın son maçlardan türeyen form profili. */
+export interface AnalysisForm {
+  played: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  scored: number;
+  conceded: number;
+  avg_scored: number;
+  avg_conceded: number;
+  clean_sheets: number;
+  failed_to_score: number;
+  /** Eskiden yeniye: ["W","D","L",...] */
+  form: ("W" | "D" | "L")[];
+  points_per_match: number;
+}
+
+/** Puan tablosundaki satırın analiz için sadeleştirilmiş hâli. */
+export interface AnalysisStanding {
+  played: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  goals_for: number;
+  goals_against: number;
+  goal_diff: number;
+  points: number;
+  position: number | null;
+  team_count: number | null;
+  last5: string;
+  power_index: number;
+}
+
+export interface AnalysisRecentMatch {
+  match_id: number;
+  date: string;
+  is_home: boolean;
+  opponent: string;
+  score: string;
+  goals_for: number;
+  goals_against: number;
+  result: "W" | "D" | "L";
+}
+
+export interface AnalysisKeyPlayer {
+  id: number;
+  name: string;
+  position: string | null;
+  image: string | null;
+  matches: number;
+  goals: number;
+  assists: number;
+  rating: number | null;
+  yellow_cards: number;
+  red_cards: number;
+}
+
+export interface MatchAnalysis {
+  generated_at: string;
+  basis: string;
+  opponent: {
+    id: number | null;
+    name: string;
+    logo: string | null;
+    city: string | null;
+    league: string | null;
+  };
+  team: { id: number; name: string | null; logo: string | null };
+  is_home: boolean;
+  standings: { opponent: AnalysisStanding | null; team: AnalysisStanding | null };
+  form: { opponent: AnalysisForm; team: AnalysisForm };
+  recent: { opponent: AnalysisRecentMatch[]; team: AnalysisRecentMatch[] };
+  head_to_head: {
+    played: number;
+    team_wins: number;
+    draws: number;
+    opponent_wins: number;
+    matches: AnalysisRecentMatch[];
+  };
+  key_players: AnalysisKeyPlayer[];
+  discipline: { opponent: { yellow_cards: number; red_cards: number } };
+  summary: string;
+  strengths: string[];
+  weaknesses: string[];
+  watch_outs: string[];
+  disclaimer: string;
+}
+
+/** Simülasyon senaryoları — sunucudaki SCENARIOS sözlüğüyle birebir. */
+export type SimulationScenario = "balanced" | "offensive" | "defensive";
+
+export const SIMULATION_SCENARIOS: {
+  key: SimulationScenario;
+  label: string;
+  description: string;
+}[] = [
+  { key: "balanced", label: "Dengeli", description: "Hücum ve savunma dengede tutulur." },
+  { key: "offensive", label: "Hücum", description: "Daha çok gol beklenir; savunma açığı artar." },
+  { key: "defensive", label: "Savunma", description: "Yenilen gol düşer; gol üretimi de azalır." },
+];
+
+export interface MatchSimulation {
+  scenario: SimulationScenario;
+  scenario_label: string;
+  probabilities: { win: number; draw: number; loss: number };
+  expected_goals: { team: number; opponent: number };
+  predicted_score: string;
+  scorelines: { score: string; probability: number }[];
+  markets: { both_teams_score: number; over_2_5: number; clean_sheet: number };
+  factors?: unknown;
+  basis: string;
+  disclaimer: string;
+}
+
+export const getMatchAnalysis = (matchId: number) =>
+  get<MatchAnalysis>(`/api/match-center/team/matches/${matchId}/analysis`);
+
+export const simulateMatch = (
+  matchId: number,
+  body: { scenario?: SimulationScenario; squadCompleteness?: number } = {}
+) => post<MatchSimulation>(`/api/match-center/team/matches/${matchId}/simulations`, body);
+
 /* ═════════════════════ MAÇ AL — SAHA TALEBİ ═════════════════════
  *
  * routes/matchRequests.js üye tarafı. Başkan saha panosundan boş saatleri
@@ -456,6 +729,21 @@ export const submitMatchReview = (
 
 import type { AdminBoardCell, AdminVenue, WeekOption } from "./admin";
 
+/**
+ * Panonun TAKIM tarafındaki hücresi.
+ *
+ * Yönetim tarafıyla aynı gövdedir, iki farkla (services/matchRequestService.js
+ * → `scope === "admin"` dalı):
+ *   · `requests` / `league_id` / `season_id` / `match_id` YOKTUR — başka
+ *     takımların talepleri başkana gösterilmez.
+ *   · `my_request` VARDIR — bu hücrede kendi takımının bekleyen talebi.
+ * Tip ayrı tutulur ki ekran, olmayan alanları okumaya kalkmasın.
+ */
+export interface TeamBoardCell
+  extends Omit<AdminBoardCell, "requests" | "league_id" | "season_id" | "match_id"> {
+  my_request: { public_id: string; status: MatchRequestStatus; slot_status: string } | null;
+}
+
 export interface TeamVenuesResponse {
   items: AdminVenue[];
   weeks: WeekOption[];
@@ -464,7 +752,7 @@ export interface TeamVenuesResponse {
 
 export interface TeamBoardResponse {
   venue: AdminVenue;
-  cells: AdminBoardCell[];
+  cells: TeamBoardCell[];
   weeks: WeekOption[];
   week_start: string;
   today: string;

@@ -2,8 +2,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { MessageSticker } from "@/components/MessageSticker";
 import { ScopeSheet } from "@/components/ScopeSheet";
 import { ToastProvider } from "@/components/ui";
+import { useNotificationBridge } from "@/hooks/useNotificationBridge";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { ApiError } from "@/lib/http";
 import { AuthProvider } from "@/providers/AuthProvider";
@@ -22,9 +24,15 @@ import { colors, isDark } from "@/theme";
  *   Favorite         → rozetler (canlı favori sayısı) favorileri okur.
  *   Toast            → en altta: her ekranın üstünde tek katman.
  *
- * TEK ÖRNEK KURALI: `<ScopeSheet />` burada BİR KEZ mount edilir. Beş ekranın
- * her birinin kendi modalını yaratması hem belleği hem de "hangi sayfa açık"
- * durumunu çoğaltıyordu; artık açma/kapama ScopeProvider üstünden yapılır.
+ * TEK ÖRNEK KURALI — iki kaplama burada BİR KEZ mount edilir:
+ *   `<ScopeSheet />`     Beş ekranın her birinin kendi modalını yaratması hem
+ *                        belleği hem de "hangi sayfa açık" durumunu
+ *                        çoğaltıyordu; açma/kapama ScopeProvider üstünden.
+ *   `<MessageSticker />` Yüzen mesaj balonu her ekranda görünmeli ama ekran
+ *                        değiştikçe yeniden yaratılmamalı — kullanıcının
+ *                        sürüklediği konum ekranlar arasında korunuyor.
+ * İkisi de Stack'in DIŞINDA ve SONRASINDA durur: yığındaki hiçbir ekran
+ * bunların üstünü örtemez.
  */
 
 const queryClient = new QueryClient({
@@ -41,8 +49,21 @@ const queryClient = new QueryClient({
   },
 });
 
-function PushSetup() {
+/**
+ * Bildirim altyapısı — iki bağımsız yol, tek yerde.
+ *
+ *   usePushNotifications  Uzak push: token kaydı, dokunma yönlendirmesi,
+ *                         soğuk açılış yanıtı.
+ *   useNotificationBridge Yerel köprü: push zinciri kurulu olmasa bile
+ *                         bildirimleri telefonda gösterir (bkz. o dosyanın
+ *                         başlığı). İkisi `lib/notificationLedger.ts` üstünden
+ *                         haberleşir ve aynı bildirimi iki kez göstermez.
+ *
+ * Hiçbir şey çizmez; yalnız kancaları kökte bir kez çalıştırmak içindir.
+ */
+function NotificationSetup() {
   usePushNotifications();
+  useNotificationBridge();
   return null;
 }
 
@@ -51,7 +72,7 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <PushSetup />
+          <NotificationSetup />
           <ScopeProvider>
             <FavoriteProvider>
               <ToastProvider>
@@ -101,6 +122,11 @@ export default function RootLayout() {
 
                 {/* Kapsam seçici — uygulamada TEK örnek. */}
                 <ScopeSheet />
+
+                {/* Mesaj balonu — her ekranın üstünde duran tek örnek.
+                    Stack'in DIŞINDA ve SONRASINDA mount edilir: ekran değişse
+                    de yeniden yaratılmaz, konumu ve sürükleme durumu korunur. */}
+                <MessageSticker />
               </ToastProvider>
             </FavoriteProvider>
           </ScopeProvider>

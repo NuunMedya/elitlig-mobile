@@ -225,6 +225,11 @@ export default function LeaguesScreen() {
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader
         title="Ligler"
+        back
+        /* Bu ekran sekme çubuğunda yuvası olmayan bir sekmedir (href: null) ve
+           Menü'den açılır. Sekme gezgininde geri yığını olmayabilir; o durumda
+           geldiği yere, yani Menü'ye dönülür. */
+        onBack={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)/menu"))}
         scrollY={scrollY}
         actions={actions}
         bottom={

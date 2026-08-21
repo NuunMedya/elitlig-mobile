@@ -24,26 +24,38 @@ Seçim cihazda saklanır, kullanıcı uygulamayı kendi ligiyle açar.
 
 ```
 app/                       Ekranlar (Expo Router — dosya = rota)
-  _layout.tsx              Sağlayıcılar: React Query, Auth, Scope
-  (tabs)/
-    index.tsx              Maçlar — canlı / fikstür / sonuçlar
-    standings.tsx          Puan durumu
-    players.tsx            Oyuncu sıralamaları
-    news.tsx               Haber akışı
-    profile.tsx            Profil / oturum
+  _layout.tsx              Sağlayıcılar + tek örnek kaplamalar (ScopeSheet,
+                           MessageSticker) + bildirim kancaları
+  (tabs)/                  Altı sekme + çubukta yuvası olmayan üç ekran
+    index.tsx              GENEL BAKIŞ — vitrin maçı, kısayollar, özetler
+    maclar.tsx             MAÇLAR — gün şeridi, lig grupları, segmentler
+    takimlar.tsx           TAKIMLAR — kart görünümü + puan tablosu
+    oyuncular.tsx          OYUNCULAR — podyum + sıralamalar
+    profil.tsx             PROFİL — kimlik ve tercihler
+    menu.tsx               MENÜ — oyunlar, lig, kulüp, bilgi
+    ligler.tsx             (href: null) Puan/fikstür/istatistik/haber/arşiv
+    favoriler.tsx          (href: null) Favori takım, lig, maç
+    oyunlar.tsx            (href: null) Oyun merkezi
+  takimim/                 Takım paneli: kadro, maç merkezi, maç al, kasa
+  yonetim/                 Yönetim paneli: maçlar, sahalar, mesajlar
   mac/[id].tsx             Maç detayı — skor, akış, kadrolar (canlı)
   takim/[id].tsx           Takım profili
   oyuncu/[id].tsx          Oyuncu profili
   haber/[id].tsx           Haber detayı
   giris.tsx                Giriş (modal)
 
-components/                MatchCard, ScopeBar, TeamCrest, States, ScreenHeader
+components/                ScopeChip, MessageSticker, TeamCrest, TurkeyMap …
+components/ui/             Tasarım sistemi bileşenleri (MatchRow, ListRow,
+                           MetricTile, ActionTile, SpotlightCard, …)
+theme/                     Palet, tipografi, uzay, yükselti, hareket
 providers/
   ScopeProvider.tsx        Şehir/lig/sezon seçimi + kalıcılık
   AuthProvider.tsx         Oturum, jeton, 401 davranışı
 hooks/
   useLiveMatch.ts          Socket.io + anlık görüntü + canlı sayaç
   useTeamLogos.ts          Maç kaydındaki takım adını logoya/id'ye çözer
+  usePushNotifications.ts  Uzak push: token kaydı + dokunma yönlendirmesi
+  useNotificationBridge.ts Yerel köprü: push olmadan da bildirim gösterir
 lib/
   config.ts                app.json → expo.extra'dan yapılandırma
   http.ts                  Tek HTTP katmanı (timeout, retry, dedupe, auth)
@@ -51,7 +63,8 @@ lib/
   match.ts                 mac_durumu ve olay_kodu yorumlama
   format.ts                Tarih, skor, para, görsel adresi
   api/                     Uç bazlı modüller (meta, matches, standings, ...)
-constants/theme.ts         Renk / tipografi / boşluk token'ları
+  notifications.ts         Bildirim → rota çözümü, Android kanalları
+  notificationLedger.ts    "Bu bildirim zaten gösterildi mi?" defteri
 ```
 
 ## Kullanılan sunucu uçları
@@ -106,6 +119,46 @@ Adresler `app.json` → `expo.extra` altında:
 Geliştirmede telefondan bilgisayara erişmek için `apiBaseUrl`'i yerel IP yapın
 (`http://192.168.1.20:3000`) — telefon `localhost`u kendi cihazı sanar.
 
+## Bildirimler
+
+Bildirimin telefonda görünmesi için **iki bağımsız yol** vardır. İkisi
+`lib/notificationLedger.ts` üstünden haberleşir; aynı bildirim iki kez
+gösterilmez.
+
+**1. Uzak push (asıl yol).** Sunucu bildirimi üretir
+(`models/PanelNotification.js` afterCreate → `services/NotificationService.js`
+→ Expo Push API). Zincirin çalışması için şunlar gerekir:
+
+- Uygulamanın **kendi derlemesi** (EAS Build / TestFlight). *Expo Go'da uzak
+  bildirim SDK 53'ten beri desteklenmez* — burada hiçbir kod düzeltmesi işe
+  yaramaz.
+- EAS projesinde **push kimlikleri**: Android için FCM v1 servis hesabı
+  (`eas credentials` → Android → *FCM V1 service account key*), iOS için APNs
+  anahtarı. Bunlar tanımlı değilse Expo mesajı kabul eder ama teslim edemez;
+  sunucu tarafında hata görünmez.
+- Kullanıcının izin vermiş olması ve cihaz token'ının sunucuya yazılmış olması
+  (`POST /api/users/push-token`).
+
+**2. Yerel köprü (yedek yol).** `hooks/useNotificationBridge.ts` uygulama
+açıkken bildirim merkezini yoklar ve yeni kayıtları **yerel** bildirim olarak
+gösterir. Yerel bildirim yalnız işletim sistemi iznine ihtiyaç duyar; FCM,
+APNs, EAS projectId ya da teslimat sunucusu gerekmez. Sınırı açıktır:
+**uygulama tamamen kapalıyken JavaScript çalışmaz**, dolayısıyla köprü de
+çalışmaz — o durumda teslimat bir sonraki açılışta olur. Köprü push'un yerine
+geçmez, yokluğunda devreye girer.
+
+**Teşhis.** Profil → Bildirim Tercihleri ekranındaki kart üç kapıyı ayrı ayrı
+gösterir (cihaz izni · cihaz kimliği · sunucuya kayıt) ve bir **test bildirimi**
+düğmesi taşır. Test bildirimi yereldir: görünüyorsa sorun teslimat
+zincirindedir (yukarıdaki push kimlikleri), görünmüyorsa sorun cihazdadır
+(izin, "rahatsız etmeyin", susturulmuş kanal).
+
+**Android kanalları.** Kanal kimlikleri istemci ve sunucuda BİREBİR aynı olmak
+zorundadır: `goal · match · panel · game · news · default`. İstemci tarafı
+`lib/notifications.ts` → `CHANNELS`, sunucu tarafı
+`services/NotificationService.js` → `channelFor()`. Ayrışan bir kimlik,
+bildirimi Expo'nun İngilizce yedek kanalına düşürür.
+
 ## Oturum
 
 Sunucu tarayıcı için httpOnly çerez kullanır; mobilde çerez taşınmadığından
@@ -118,6 +171,6 @@ görünür.
 
 - [ ] Maç istatistikleri sekmesi (`?include=stats`)
 - [ ] Takım kadrosu ve sezonluk oyuncu istatistikleri
-- [ ] Push bildirimleri (maç başladı / gol) — sunucuda `routes/pushRoutes.js` var
+- [ ] EAS projesine FCM v1 / APNs kimliklerinin tanımlanması (bkz. Bildirimler)
 - [ ] Favori takım ve maç hatırlatıcısı
 - [ ] Spikerli canlı yayın oynatıcı (expo-video, HLS)

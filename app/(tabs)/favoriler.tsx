@@ -66,7 +66,6 @@ import { formatDayHeading, formatTime } from "@/lib/format";
 import { matchState } from "@/lib/match";
 import { queryKeys } from "@/lib/queryKeys";
 import type { ApiMatch } from "@/lib/types";
-import { useUnreadCount } from "@/hooks/useUnreadCount";
 import { useAuth } from "@/providers/AuthProvider";
 import { useFavorite, type FavoriteScope, type FavoriteTeam } from "@/providers/FavoriteProvider";
 import { useScope } from "@/providers/ScopeProvider";
@@ -324,7 +323,6 @@ const FavoriteScopeRow = React.memo(function FavoriteScopeRow({
 
 export default function FavorilerScreen() {
   const router = useRouter();
-  const unread = useUnreadCount();
   const params = useLocalSearchParams<{ tab?: string }>();
   const auth = useAuth();
   const toast = useToast();
@@ -600,32 +598,18 @@ export default function FavorilerScreen() {
     [live.count, favorites.length, favoriteLeagues.length, favoriteSeasons.length]
   );
 
-  /* Mesaj kısayolu her ana ekranın başlığında: yazışma sık kullanılan bir iş,
-     Profil altında üç dokunuş uzakta kalmamalı. */
-  const headerActions = useMemo(
-    () =>
-      auth.user
-        ? [
-            {
-              icon:
-                unread.messages > 0
-                  ? ("chatbubble-ellipses" as const)
-                  : ("chatbubble-ellipses-outline" as const),
-              onPress: () => router.push("/mesajlarim"),
-              badge: unread.messages > 0 ? unread.messages : undefined,
-              accessibilityLabel:
-                unread.messages > 0 ? `Mesajlar, ${unread.messages} okunmamış` : "Mesajlar",
-            },
-          ]
-        : undefined,
-    [auth.user, unread.messages, router]
-  );
-
   const header = (
     <ScreenHeader
       title="Favoriler"
+      back
+      /* Bu ekran sekme çubuğunda yuvası olmayan bir sekmedir (href: null) ve
+         Menü'den açılır. Sekme gezgininde geri yığını olmayabilir; o durumda
+         geldiği yere, yani Menü'ye dönülür. */
+      onBack={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)/menu"))}
       scrollY={scrollY}
-      actions={headerActions}
+      /* BAŞLIKTA MESAJ DÜĞMESİ YOK: yazışmaya artık her ekranda duran yüzen
+         mesaj balonundan ulaşılıyor (components/MessageSticker.tsx). İkisini
+         birden çizmek aynı hedefe iki kapı açar ve rozet iki yerde sayılırdı. */
       bottom={
         <View style={styles.segmentWrap}>
           <SegmentedControl<FavTab> items={segments} value={tab} onChange={setTab} />
