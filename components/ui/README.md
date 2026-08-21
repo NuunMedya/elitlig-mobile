@@ -22,7 +22,15 @@ Tokenlar AYRI kapıdan: `import { colors, space, type, radius, layout, elevate, 
 | `LeagueGroupHeader` | Maç listesinde lig grubu başlığı (katlanır, favori yıldızlı) |
 | `DateStrip` | Fikstür tarih seçici (varsayılan −14…+28 gün, bugün ortalanır) |
 | `TeamLogo` · `Avatar` | Takım amblemi / oyuncu-kullanıcı avatarı (eski `TeamCrest` yerine) |
-| `LiveBadge` · `RatingPill` · `FormChips` · `StatBar` · `ProgressRing` | Canlı nabız · puan hapı · son 5 maç · karşılaştırma çubuğu · yüzde halkası |
+| `LiveBadge` · `RatingPill` · `FormChips` · `ProgressRing` | Canlı nabız · puan hapı · son 5 maç · yüzde halkası |
+| `StatBar` | Ev/deplasman karşılaştırması. Tek 4px şerit, ORTADAN bölünür; ev daima mavi, deplasman daima slate — renk kazanana göre DEĞİŞMEZ |
+| `MinuteRing` | **İmza öğesi.** Canlı dakika + 90'lık ilerleme halkası. Nabız atan kırmızı noktanın yerini alır |
+| `ChalkArc` | **İmza öğesi.** Skor bloğunun arkasındaki %4 opaklıkta orta yuvarlak yayı. Mutlak konumlu katman |
+| `SectionHeader` | **İmza öğesi.** Başlığın solunda 2×12px mercan kale direği; `leading` verilirse çizilmez |
+| `PitchView` | Kadroyu GÖSTEREN saha (8 kişilik). Düzenleme için `components/PitchLineup.tsx` — ikisi ayrı bileşendir |
+| `EventIcon` | Maç olaylarının SVG ikon sözlüğü (gol, kart, değişiklik, asist, VAR). Ionicons'ta dikey kart yok; hepsi burada |
+| `Sparkline` | Tek satırlık gidişat çizgisi (son 10 maç reytingi). Eksen/ızgara/etiket yok |
+| `HeroCarousel` | Açılış manşet şeridi. 16:10, yapışkan kaydırma, 6sn otomatik geçiş, dokununca KALICI durur |
 | `Skeleton*` | İLK yükleme. Hazır şablonlar: `SkeletonMatchRow/ListRow/Table/Standings/Card/Hero/ListFooter` |
 | `EmptyState` · `ErrorState` | Veri yok / hata. `ErrorState variant="banner"` ekranda BAYAT VERİ varken (veriyi silme) |
 | `Refresh` / `useRefresh` | Aşağı çekip yenileme |

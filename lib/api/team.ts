@@ -42,6 +42,33 @@ export const POSITION_LABELS: Record<string, string> = Object.fromEntries(
 export const positionLabel = (value?: string | null): string =>
   value ? POSITION_LABELS[value] ?? String(value) : "";
 
+/** Pozisyon kodu → hat. Saha görünümü oyuncuyu bu hatta yerleştirir. */
+export const POSITION_LINES: Record<string, string> = Object.fromEntries(
+  POSITIONS.map((item) => [item.code, item.line])
+);
+
+/**
+ * Bir kadro satırının hattını çözer.
+ *
+ * Kadro ucu pozisyonu KOD olarak döndürür ("STP"), ama eski maçlarda serbest
+ * metin de olabiliyor ("Stoper", "kaleci"). İkisini de karşılar; hiçbiri
+ * tutmazsa orta sahaya düşer — bilinmeyen bir oyuncuyu kaleye koymak, orta
+ * sahaya koymaktan daha yanlıştır.
+ */
+export function positionLine(value?: string | null): "GK" | "DEF" | "MID" | "FWD" {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "MID";
+
+  const byCode = POSITION_LINES[raw.toLocaleUpperCase("tr-TR")];
+  if (byCode) return byCode as "GK" | "DEF" | "MID" | "FWD";
+
+  const lower = raw.toLocaleLowerCase("tr-TR");
+  if (lower.includes("kaleci") || lower === "gk") return "GK";
+  if (lower.includes("bek") || lower.includes("stoper") || lower.includes("defans")) return "DEF";
+  if (lower.includes("forvet") || lower.includes("santrafor")) return "FWD";
+  return "MID";
+}
+
 /* ===================== TAKIM PANELİ (dashboard) ===================== */
 
 /** GET /api/team-management/dashboard — db.Teams satırı aynen döner. */

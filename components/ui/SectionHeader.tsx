@@ -9,6 +9,14 @@
  * YAPIŞKAN KULLANIM: `sticky` verildiğinde zemin OPAK `bg` olur ve alta
  * hairline eklenir; şeffaf bırakılırsa altından kayan satırlar başlığın
  * içinden geçer.
+ *
+ * İMZA ÖĞESİ — KALE DİREĞİ. Başlığın solunda 2×12px mercan dikey işaret durur.
+ * Bu, ürünün "tebeşir çizgisi" dilinin en çok tekrar eden parçasıdır: saha
+ * çizgileri dekor değil YAPISAL AYRAÇ olarak kullanılır ve bir bölümün nerede
+ * başladığını renk değil GEOMETRİ söyler. Mercan burada aksiyon rengi olarak
+ * değil işaret olarak durur; toplam alanı birkaç pikseldir, %5 kuralını
+ * zorlamaz. `leading` (lig amblemi) verildiğinde işaret çizilmez — iki sol
+ * gösterge yan yana gelirse ikisi de anlamını kaybeder.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -43,6 +51,8 @@ export interface SectionHeaderProps {
   sticky?: boolean;
   /** varsayılan true */
   uppercase?: boolean;
+  /** Kale direği işareti. Varsayılan true; `leading` varsa yok sayılır. */
+  mark?: boolean;
   style?: StyleProp<ViewStyle>;
   testID?: string;
 }
@@ -57,6 +67,7 @@ export const SectionHeader = React.memo(function SectionHeader({
   action,
   sticky,
   uppercase = true,
+  mark = true,
   style,
   testID,
 }: SectionHeaderProps) {
@@ -91,7 +102,11 @@ export const SectionHeader = React.memo(function SectionHeader({
           <Ionicons name="chevron-forward" size={12} color={colors.textTertiary} />
         </Animated.View>
       ) : null}
-      {leading ? <View style={styles.leading}>{leading}</View> : null}
+      {leading ? (
+        <View style={styles.leading}>{leading}</View>
+      ) : mark ? (
+        <View style={styles.mark} />
+      ) : null}
       <Text style={styles.title} numberOfLines={1} {...textScale.dense}>
         {label}
       </Text>
@@ -181,6 +196,13 @@ const styles = StyleSheet.create({
     height: 20,
     alignItems: "center",
     justifyContent: "center",
+  },
+  /** Kale direği: 2×12px mercan dikey işaret (imza öğesi). */
+  mark: {
+    width: 2,
+    height: 12,
+    borderRadius: 1,
+    backgroundColor: colors.brand,
   },
   title: {
     ...type.micro,

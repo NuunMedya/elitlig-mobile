@@ -1,23 +1,35 @@
 /**
- * Karşılaştırmalı çift bar — ev sahibi / deplasman istatistiği.
+ * StatBar — ev sahibi / deplasman karşılaştırma barı.
  *
- * DÜZEN: `[sayı] ——— etiket ——— [sayı]`, altında 4px tek şerit. Şerit ortadan
- * ikiye ayrılır; sol yarım SAĞDAN SOLA, sağ yarım SOLDAN SAĞA dolar. Böylece
- * iki takımın payı ortadaki eksene göre karşılıklı okunur (SofaScore kalıbı).
+ * DÜZEN (yeniden tasarım):
  *
- * RENK: üstün olan taraf `brandAccent`, diğeri `borderStrong`. Eşitlikte ikisi
- * de `textTertiary` — "kimse önde değil" bilgisi renkle de verilir. Renk tek
- * başına anlam taşımaz: sayılar zaten iki uçta yazılıdır.
+ *     7                 FIRSAT YARATMA                 4
+ *     ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬│▬▬▬▬▬▬▬▬▬▬▬
  *
- * ANİMASYON: genişlik animasyonu yerel sürücüyle yapılamaz
- * (`useNativeDriver: false`), bu yüzden liste kaydırması bitmeden başlatılmaz
- * (`InteractionManager.runAfterInteractions`). "Hareketi azalt" açıksa bar
- * doğrudan son genişliğinde çizilir.
+ * Tek bir 4px şerit, ORTADAN bölünmüş. Sol yarı ev sahibi ve sağdan sola
+ * (merkezden dışa) dolar, sağ yarı deplasman ve soldan sağa dolar. Değerler
+ * DIŞ kenarlarda, etiket ortada 11px büyük harf.
+ *
+ * NEDEN İKİ AYRI BAR DEĞİL: her takıma bir bar vermek, gözü iki ayrı ölçek
+ * arasında gidip gelmeye zorlar ve "hangisi önde" sorusu okumayla değil
+ * hesapla yanıtlanır. Ortadan bölünmüş tek bar bu soruyu bir bakışta yanıtlar:
+ * merkez ekseni hangi tarafa kaymışsa o taraf öndedir.
+ *
+ * RENK — SABİT TARAF RENGİ, KAZANANA GÖRE DEĞİL: ev sahibi daima mavi
+ * (`accent`, veri rengi), deplasman daima `slate`. Rengi kazanana göre
+ * değiştirmek, aynı ekrandaki on iki barda rengin on iki kez taraf
+ * değiştirmesi demekti; okuyucu her satırda rengin ne anlama geldiğini
+ * yeniden öğreniyordu. Önde olanı KALIN RAKAM söyler, renk değil.
+ *
+ * ANİMASYON: bar görünür alana girince 400ms'de BİR KEZ dolar. Genişlik
+ * animasyonu yerel sürücüyle yapılamaz (`useNativeDriver: false`), bu yüzden
+ * liste kaydırması bitmeden başlatılmaz. "Hareketi azalt" açıksa bar doğrudan
+ * son genişliğinde çizilir.
  */
 
 import { memo, useEffect, useMemo, useRef } from "react";
 import { Animated, InteractionManager, StyleSheet, Text, View } from "react-native";
-import { colors, easing, space, textScale, type } from "@/theme";
+import { colors, easing, hairline, space, textScale, type, upperTR } from "@/theme";
 import { useReduceMotion } from "./LiveBadge";
 
 export interface StatBarProps {
@@ -28,9 +40,12 @@ export interface StatBarProps {
   unit?: string;
   /** Yüzde olarak göster (topla 100 varsayımı) */
   asPercent?: boolean;
-  /** Renk: kazanan taraf vurgulanır (varsayılan) veya sabit marka rengi */
-  tone?: "winner" | "brand" | "neutral";
-  /** Girişte 0'dan büyüyen animasyon */
+  /**
+   * Renk davranışı. Varsayılan "sides": ev mavi, deplasman slate (önerilen).
+   * "neutral" iki tarafı da sönük çizer — bir tarafın verisi yokken kullanılır.
+   */
+  tone?: "sides" | "neutral";
+  /** Girişte merkezden büyüyen animasyon */
   animate?: boolean;
 }
 
@@ -48,7 +63,7 @@ export const StatBar = memo(function StatBar({
   away,
   unit,
   asPercent = false,
-  tone = "winner",
+  tone = "sides",
   animate = true,
 }: StatBarProps) {
   const reduceMotion = useReduceMotion();
@@ -68,7 +83,7 @@ export const StatBar = memo(function StatBar({
       Animated.timing(progress, {
         toValue: 1,
         duration: 400,
-        easing: easing.decelerate,
+        easing: easing.standard,
         useNativeDriver: false,
       }).start();
     });
@@ -87,15 +102,8 @@ export const StatBar = memo(function StatBar({
   const equal = homeShare === awayShare;
   const homeLeads = homeShare > awayShare;
 
-  /** Dolgu rengi: üstün taraf vurgulanır, eşitlikte iki taraf da nötr kalır. */
-  const fillFor = (leading: boolean): string => {
-    if (tone === "brand") return colors.brandAccent;
-    if (tone === "neutral") return colors.borderStrong;
-    if (equal) return colors.textTertiary;
-    return leading ? colors.brandAccent : colors.borderStrong;
-  };
-  const homeFill = fillFor(homeLeads);
-  const awayFill = fillFor(!homeLeads);
+  const homeFill = tone === "neutral" ? colors.slateSoft : colors.accent;
+  const awayFill = tone === "neutral" ? colors.slateSoft : colors.slate;
 
   return (
     <View
@@ -109,30 +117,21 @@ export const StatBar = memo(function StatBar({
           {formatValue(home, unit, asPercent)}
         </Text>
         <Text style={styles.label} numberOfLines={1} {...textScale.dense}>
-          {label}
+          {upperTR(label)}
         </Text>
         <Text style={[styles.value, styles.valueRight, !equal && !homeLeads && styles.valueStrong]} {...textScale.dense}>
           {formatValue(away, unit, asPercent)}
         </Text>
       </View>
 
+      {/* Tek şerit, ortada 1px ayraç. İki yarı da MERKEZDEN dışa doğru dolar. */}
       <View style={styles.track}>
         <View style={styles.half}>
-          <Animated.View
-            style={[
-              styles.fill,
-              styles.fillLeft,
-              { width: homeWidth, backgroundColor: homeFill },
-            ]}
-          />
+          <Animated.View style={[styles.fill, styles.fillLeft, { width: homeWidth, backgroundColor: homeFill }]} />
         </View>
+        <View style={styles.axis} />
         <View style={styles.half}>
-          <Animated.View
-            style={[
-              styles.fill,
-              { width: awayWidth, backgroundColor: awayFill },
-            ]}
-          />
+          <Animated.View style={[styles.fill, { width: awayWidth, backgroundColor: awayFill }]} />
         </View>
       </View>
     </View>
@@ -169,21 +168,25 @@ const styles = StyleSheet.create({
   },
   track: {
     flexDirection: "row",
-    gap: space.xxs,
+    alignItems: "center",
     height: 4,
   },
   half: {
     flex: 1,
     height: 4,
     backgroundColor: colors.surface3,
-    borderRadius: 2,
     overflow: "hidden",
+  },
+  /** Merkez ekseni — iki yarının hangi noktadan ölçüldüğünü söyler. */
+  axis: {
+    width: hairline,
+    height: 8,
+    backgroundColor: colors.borderStrong,
   },
   fill: {
     height: 4,
-    borderRadius: 2,
   },
-  // Sol yarım sağdan sola dolar: dolgu yarımın sağ kenarına yapışır.
+  // Sol yarım merkezden sola dolar: dolgu yarımın sağ kenarına yapışır.
   fillLeft: {
     alignSelf: "flex-end",
   },
