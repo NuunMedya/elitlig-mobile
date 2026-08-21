@@ -594,6 +594,21 @@ export const simulateMatch = (
 
 import type { AdminBoardCell, AdminVenue, WeekOption } from "./admin";
 
+/**
+ * Panonun TAKIM tarafındaki hücresi.
+ *
+ * Yönetim tarafıyla aynı gövdedir, iki farkla (services/matchRequestService.js
+ * → `scope === "admin"` dalı):
+ *   · `requests` / `league_id` / `season_id` / `match_id` YOKTUR — başka
+ *     takımların talepleri başkana gösterilmez.
+ *   · `my_request` VARDIR — bu hücrede kendi takımının bekleyen talebi.
+ * Tip ayrı tutulur ki ekran, olmayan alanları okumaya kalkmasın.
+ */
+export interface TeamBoardCell
+  extends Omit<AdminBoardCell, "requests" | "league_id" | "season_id" | "match_id"> {
+  my_request: { public_id: string; status: MatchRequestStatus; slot_status: string } | null;
+}
+
 export interface TeamVenuesResponse {
   items: AdminVenue[];
   weeks: WeekOption[];
@@ -602,7 +617,7 @@ export interface TeamVenuesResponse {
 
 export interface TeamBoardResponse {
   venue: AdminVenue;
-  cells: AdminBoardCell[];
+  cells: TeamBoardCell[];
   weeks: WeekOption[];
   week_start: string;
   today: string;

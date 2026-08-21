@@ -135,10 +135,17 @@ function targetFromEntity(
         : { pathname: "/mesajlarim" };
 
     case "MATCH_REQUEST":
-      // Aynı bildirim hem yönetime hem takım başkanına gider; ekran role göre ayrışır.
+      /* Aynı bildirim hem yönetime hem takım başkanına gider; ekran role göre
+         ayrışır. BAŞKAN TARAFI DÜZELTİLDİ: hedef eskiden /takimim/mac-merkezi
+         idi, ama maç talepleri orada DEĞİL — Maç Al ekranının "Taleplerim"
+         sekmesinde yaşıyor. Bildirime dokunan başkan, talebiyle ilgisi olmayan
+         bir maç listesine düşüyordu. */
       return ctx.isManagement
         ? { pathname: "/yonetim/maclar", ...(entityId ? { params: { request: entityId } } : {}) }
-        : { pathname: "/takimim/mac-merkezi", ...(entityId ? { params: { request: entityId } } : {}) };
+        : {
+            pathname: "/takimim/mac-al",
+            params: { tab: "taleplerim", ...(entityId ? { request: entityId } : {}) },
+          };
 
     // Sunucuda entity_type henüz yazılmıyor (teamJoinRequestService.js); eklendiğinde
     // burası çalışmaya başlar, eklenene dek type öneki devreye girer.
