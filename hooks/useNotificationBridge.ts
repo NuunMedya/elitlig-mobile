@@ -42,6 +42,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { AppState, type AppStateStatus } from "react-native";
 
 import { getPanelNotifications, type PanelNotification } from "@/lib/api/panel";
+import { ApiError } from "@/lib/http";
 import { deliveredIds, markManyDelivered } from "@/lib/notificationLedger";
 import { categoryForNotif } from "@/lib/notifications";
 import { queryKeys } from "@/lib/queryKeys";
@@ -114,8 +115,16 @@ export function useNotificationBridge(): void {
   /** Aynı anda iki tur çalışmasın (yoklama + ön plana geliş çakışabilir). */
   const running = useRef(false);
 
+  /**
+   * Panel rolü olmayan hesapta bildirim merkezi 403 döner. Bu kalıcı bir
+   * durumdur (oturum boyunca değişmez), ama yoklama devam ederse 45 saniyede
+   * bir boşa istek atılır. İlk 403'te köprü bu oturum için kapanır; sonraki
+   * girişte hook yeniden kurulduğu için bayrak sıfırlanır.
+   */
+  const forbidden = useRef(false);
+
   const runRound = useCallback(async () => {
-    if (!userId || running.current) return;
+    if (!userId || running.current || forbidden.current) return;
     running.current = true;
 
     try {
@@ -168,10 +177,12 @@ export function useNotificationBridge(): void {
       if (fresh.length) {
         void queryClient.invalidateQueries({ queryKey: queryKeys.unreadNotifCount() });
       }
-    } catch {
-      // Ağ hatası, 403 (panel rolü yok) ya da başka bir aksaklık: köprü sessizce
-      // bekler. Bir sonraki turda yeniden dener; kullanıcıya hata gösterilmez —
-      // bu, arka planda çalışan bir yardımcıdır, ekranın kendisi değil.
+    } catch (error) {
+      /* 403: hesabın panel rolü yok — bir daha denemeye gerek yok.
+         Diğer hatalar (ağ, 5xx) geçicidir; köprü sessizce bekler ve bir
+         sonraki turda yeniden dener. Kullanıcıya hata gösterilmez; bu arka
+         planda çalışan bir yardımcıdır, ekranın kendisi değil. */
+      if (error instanceof ApiError && error.status === 403) forbidden.current = true;
     } finally {
       running.current = false;
     }
@@ -179,6 +190,9 @@ export function useNotificationBridge(): void {
 
   useEffect(() => {
     if (!signedIn) return;
+
+    // Yeni oturum: önceki hesabın 403'ü yeni hesabı susturmasın.
+    forbidden.current = false;
 
     // Açılışta ve her ön plana gelişte hemen bir tur.
     void runRound();

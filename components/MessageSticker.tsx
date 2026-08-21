@@ -242,7 +242,12 @@ export const MessageSticker = React.memo(function MessageSticker() {
         styles.wrapper,
         {
           top,
-          [position.side]: EDGE_GAP,
+          /* İKİ KENAR DA AÇIKÇA YAZILIR. Hesaplanmış tek anahtar
+             (`[position.side]: EDGE_GAP`) kullanılsaydı kenar değiştiğinde
+             önceki anahtar stil nesnesinden düşerdi; RN'in stil farkı alma
+             davranışına güvenmek yerine karşı kenar `undefined` verilir. */
+          left: position.side === "left" ? EDGE_GAP : undefined,
+          right: position.side === "right" ? EDGE_GAP : undefined,
           transform: [{ translateX }, { translateY }],
         },
       ]}
