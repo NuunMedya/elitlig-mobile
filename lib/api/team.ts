@@ -444,6 +444,144 @@ export const submitMatchReview = (
     comment,
   });
 
+/* ═════════════════════ RAKİP ANALİZİ VE SİMÜLASYON ═════════════════════
+ *
+ * routes/matchCenter.js:
+ *   GET  /team/matches/:matchId/analysis     karar-destek raporu
+ *   POST /team/matches/:matchId/simulations  Poisson skor tahmini
+ *
+ * Web panelindeki "Rakip Analizi" sekmesinin mobil karşılığıdır. Rapor
+ * TAMAMEN sunucuda üretilir (services/matchAnalysisService.js): puan durumu,
+ * son 8 yayınlanmış maç, ikili maç geçmişi ve oyuncu istatistikleri. İstemci
+ * hiçbir sayıyı kendisi hesaplamaz — iki tarafın farklı sonuç üretmesi
+ * "hangisi doğru" sorusunu doğururdu.
+ *
+ * Simülasyon DETERMİNİSTİKTİR: aynı kadro ve senaryoda aynı tahmini verir,
+ * rastgelelik yoktur. Bu yüzden sonuç önbelleğe alınabilir.
+ */
+
+/** Bir takımın son maçlardan türeyen form profili. */
+export interface AnalysisForm {
+  played: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  scored: number;
+  conceded: number;
+  avg_scored: number;
+  avg_conceded: number;
+  clean_sheets: number;
+  failed_to_score: number;
+  /** Eskiden yeniye: ["W","D","L",...] */
+  form: ("W" | "D" | "L")[];
+  points_per_match: number;
+}
+
+/** Puan tablosundaki satırın analiz için sadeleştirilmiş hâli. */
+export interface AnalysisStanding {
+  played: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  goals_for: number;
+  goals_against: number;
+  goal_diff: number;
+  points: number;
+  position: number | null;
+  team_count: number | null;
+  last5: string;
+  power_index: number;
+}
+
+export interface AnalysisRecentMatch {
+  match_id: number;
+  date: string;
+  is_home: boolean;
+  opponent: string;
+  score: string;
+  goals_for: number;
+  goals_against: number;
+  result: "W" | "D" | "L";
+}
+
+export interface AnalysisKeyPlayer {
+  id: number;
+  name: string;
+  position: string | null;
+  image: string | null;
+  matches: number;
+  goals: number;
+  assists: number;
+  rating: number | null;
+  yellow_cards: number;
+  red_cards: number;
+}
+
+export interface MatchAnalysis {
+  generated_at: string;
+  basis: string;
+  opponent: {
+    id: number | null;
+    name: string;
+    logo: string | null;
+    city: string | null;
+    league: string | null;
+  };
+  team: { id: number; name: string | null; logo: string | null };
+  is_home: boolean;
+  standings: { opponent: AnalysisStanding | null; team: AnalysisStanding | null };
+  form: { opponent: AnalysisForm; team: AnalysisForm };
+  recent: { opponent: AnalysisRecentMatch[]; team: AnalysisRecentMatch[] };
+  head_to_head: {
+    played: number;
+    team_wins: number;
+    draws: number;
+    opponent_wins: number;
+    matches: AnalysisRecentMatch[];
+  };
+  key_players: AnalysisKeyPlayer[];
+  discipline: { opponent: { yellow_cards: number; red_cards: number } };
+  summary: string;
+  strengths: string[];
+  weaknesses: string[];
+  watch_outs: string[];
+  disclaimer: string;
+}
+
+/** Simülasyon senaryoları — sunucudaki SCENARIOS sözlüğüyle birebir. */
+export type SimulationScenario = "balanced" | "offensive" | "defensive";
+
+export const SIMULATION_SCENARIOS: {
+  key: SimulationScenario;
+  label: string;
+  description: string;
+}[] = [
+  { key: "balanced", label: "Dengeli", description: "Hücum ve savunma dengede tutulur." },
+  { key: "offensive", label: "Hücum", description: "Daha çok gol beklenir; savunma açığı artar." },
+  { key: "defensive", label: "Savunma", description: "Yenilen gol düşer; gol üretimi de azalır." },
+];
+
+export interface MatchSimulation {
+  scenario: SimulationScenario;
+  scenario_label: string;
+  probabilities: { win: number; draw: number; loss: number };
+  expected_goals: { team: number; opponent: number };
+  predicted_score: string;
+  scorelines: { score: string; probability: number }[];
+  markets: { both_teams_score: number; over_2_5: number; clean_sheet: number };
+  factors?: unknown;
+  basis: string;
+  disclaimer: string;
+}
+
+export const getMatchAnalysis = (matchId: number) =>
+  get<MatchAnalysis>(`/api/match-center/team/matches/${matchId}/analysis`);
+
+export const simulateMatch = (
+  matchId: number,
+  body: { scenario?: SimulationScenario; squadCompleteness?: number } = {}
+) => post<MatchSimulation>(`/api/match-center/team/matches/${matchId}/simulations`, body);
+
 /* ═════════════════════ MAÇ AL — SAHA TALEBİ ═════════════════════
  *
  * routes/matchRequests.js üye tarafı. Başkan saha panosundan boş saatleri

@@ -1,6 +1,6 @@
 /**
- * KADRO YÖNETİMİ — takıma özgü oyuncu bilgileri.
- * `/takimim/kadro?grup=<mevki|rol>`
+ * KADRO YÖNETİMİ — takıma özgü oyuncu bilgileri ve takımın ideal dizilişi.
+ * `/takimim/kadro?gorunum=<kadro|dizilis>&grup=<mevki|rol>`
  *
  * NE: kulübün oyuncu listesi ve her oyuncunun TAKIMA ÖZGÜ alanları (forma
  * numarası, takım mevkisi, kadro rolü). Bu alanlar oyuncunun kişisel profilini
@@ -22,15 +22,25 @@
  *  - DELETE /api/team-management/roster/:playerId — aktif sözleşmeli oyuncuda
  *    önce 409 PLAYER_HAS_ACTIVE_CONTRACT döner; kullanıcı fesih onayı verirse
  *    aynı çağrı `?force=true` ile tekrarlanır.
+ *  - PUT /api/team-management/lineup — { formation, assignments[] }. İlk 8
+ *    rolü SUNUCUDA bu uçtan türer; kadro tablosundan `starter` seçilemez.
+ *
+ * DİZİLİŞ SEGMENTİ (yeni): mobilde ideal kadro hiç düzenlenemiyordu, ekran
+ * "İlk 8 düzenlemesi elitlig.com panelinden yapılır" diyordu. Artık web
+ * panelindeki sahanın karşılığı burada: `components/PitchLineup.tsx` iki
+ * dokunuşla (boş yuva → havuzdan oyuncu) diziliş kurar. Aynı bileşen maç
+ * kadrosu ekranında da kullanılır; iki yer tek etkileşim modeli paylaşır.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
+import type { RefreshControlProps } from "react-native";
 import {
   Alert,
   RefreshControl,
+  ScrollView,
   SectionList,
   StyleSheet,
   Text,
@@ -38,6 +48,7 @@ import {
   type SectionListRenderItemInfo,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { PitchBench, PitchLineup, type PitchPlayer } from "@/components/PitchLineup";
 import {
   Avatar,
   Badge,
@@ -61,14 +72,19 @@ import {
   type Tone,
 } from "@/components/ui";
 import {
+  DEFAULT_FORMATION,
+  FORMATIONS,
+  MAX_STARTERS,
   POSITIONS,
   getTeamRoster,
   positionLabel,
   releaseRosterPlayer,
+  saveLineup,
   updateRosterPlayer,
   type RosterPlayer,
   type RosterPlayerPatch,
   type SquadRole,
+  type TeamRosterResponse,
 } from "@/lib/api/team";
 import { mediaUrl } from "@/lib/format";
 import { ApiError } from "@/lib/http";
@@ -84,6 +100,14 @@ type GroupMode = "mevki" | "rol";
 const GROUP_ITEMS: SegmentedItem<GroupMode>[] = [
   { key: "mevki", label: "Mevkiye göre" },
   { key: "rol", label: "Role göre" },
+];
+
+/** Ekranın iki ana görünümü. Seçim `?gorunum=` ile rotada taşınır. */
+type ViewMode = "kadro" | "dizilis";
+
+const VIEW_ITEMS: SegmentedItem<ViewMode>[] = [
+  { key: "kadro", label: "Kadro", icon: "people-outline" },
+  { key: "dizilis", label: "Diziliş", icon: "grid-outline" },
 ];
 
 const ROLE_LABELS: Record<SquadRole, string> = {
@@ -140,6 +164,12 @@ function resolveGroup(raw: string | string[] | undefined): GroupMode {
   return value === "rol" ? "rol" : "mevki";
 }
 
+/** Rota parametresinden görünüm — tanınmayan değer sessizce "kadro" olur. */
+function resolveView(value: string | string[] | undefined): ViewMode {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return raw === "dizilis" ? "dizilis" : "kadro";
+}
+
 /* ══════════════════════════════════════════════════════════════════════════
    Ekran
    ══════════════════════════════════════════════════════════════════════════ */
@@ -147,12 +177,13 @@ function resolveGroup(raw: string | string[] | undefined): GroupMode {
 export default function SquadManagementScreen() {
   const auth = useAuth();
   const router = useRouter();
-  const params = useLocalSearchParams<{ grup?: string }>();
+  const params = useLocalSearchParams<{ grup?: string; gorunum?: string }>();
   const { scrollY, scrollProps } = useHeaderScroll();
 
   const [editing, setEditing] = useState<RosterPlayer | null>(null);
 
   const group = resolveGroup(params.grup);
+  const view = resolveView(params.gorunum);
 
   const query = useQuery({
     queryKey: ["takim", "roster"],
@@ -212,6 +243,14 @@ export default function SquadManagementScreen() {
     [router, scrollY]
   );
 
+  const changeView = useCallback(
+    (next: ViewMode) => {
+      scrollY.setValue(0);
+      router.setParams({ gorunum: next });
+    },
+    [router, scrollY]
+  );
+
   const openEditor = useCallback((player: RosterPlayer) => setEditing(player), []);
   const closeEditor = useCallback(() => setEditing(null), []);
   const openInvites = useCallback(() => router.push("/davetler"), [router]);
@@ -252,7 +291,17 @@ export default function SquadManagementScreen() {
       bottom={
         roster.length > 0 ? (
           <View style={styles.headerBottom}>
-            <SegmentedControl items={GROUP_ITEMS} value={group} onChange={changeGroup} />
+            <SegmentedControl items={VIEW_ITEMS} value={view} onChange={changeView} />
+            {/* Gruplama YALNIZ kadro listesinde anlamlı; diziliş görünümünde
+                iki segmentli çubuk üst üste binip 76px yer yerdi. */}
+            {view === "kadro" ? (
+              <SegmentedControl
+                items={GROUP_ITEMS}
+                value={group}
+                onChange={changeGroup}
+                size="sm"
+              />
+            ) : null}
           </View>
         ) : undefined
       }
@@ -306,6 +355,22 @@ export default function SquadManagementScreen() {
     );
   }
 
+  if (view === "dizilis" && query.data) {
+    return (
+      <SafeAreaView style={styles.screen} edges={["top"]}>
+        {header}
+        {/* `key`: diziliş taslağı bileşenin YEREL durumudur. Sunucu kadrosu
+            değiştiğinde (oyuncu eklendi/çıkarıldı) taslak baştan kurulmalı;
+            aksi hâlde kadroda olmayan bir oyuncu sahada asılı kalırdı. */}
+        <LineupEditor
+          key={`${query.data.roster.length}-${query.data.settings?.formation ?? ""}`}
+          data={query.data}
+          refreshControl={refreshControl}
+        />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       {header}
@@ -339,6 +404,267 @@ export default function SquadManagementScreen() {
     </SafeAreaView>
   );
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   DİZİLİŞ — takımın ideal kadrosu
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Takımın ideal dizilişini kuran görünüm.
+ *
+ * SUNUCU SÖZLEŞMESİ: `PUT /api/team-management/lineup` gövdesi
+ * `{ formation, assignments: [{ playerId, slot }] }`. Sunucu bu kayda göre
+ * oyuncuların `squad_role` alanını `starter` yapar; kadro tablosundan
+ * `starter` seçilemez (bkz. dosya başlığı). Yani "İlk 8" burada belirlenir.
+ *
+ * NEDEN YEREL TASLAK: sahadaki her dokunuş sunucuya gitseydi diziliş kurmak
+ * 8 ayrı istek olurdu ve yarım kalmış bir diziliş kaydedilirdi. Değişiklikler
+ * bellekte birikir, "Kaydet" tek istekte gönderir. Kaydedilmemiş değişiklik
+ * varken düğme etkin olur ve başlıkta sayaç görünür.
+ *
+ * DİZİLİŞ DEĞİŞTİRİLİRSE: slot adları dizilişten dizilişe farklı olduğu için
+ * (3-3-1'de MID3 var, 2-2-3'te yok) yerleşim korunmaya ÇALIŞILIR: aynı adlı
+ * slotlar taşınır, karşılığı olmayanlar havuza döner. Tümünü silmek
+ * kullanıcının emeğini boşa çıkarırdı; sessizce yanlış slota taşımak ise daha
+ * kötü olurdu.
+ */
+const LineupEditor = React.memo(function LineupEditor({
+  data,
+  refreshControl,
+}: {
+  data: TeamRosterResponse;
+  /* RN'in `refreshControl` prop'u `ReactElement<RefreshControlProps>` bekler;
+     tipi burada daraltmazsak ScrollView'a geçerken uyuşmazlık verir. */
+  refreshControl: React.ReactElement<RefreshControlProps>;
+}) {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+
+  const roster = data.roster;
+
+  /** Sunucudaki diziliş sözlüğü varsa o, yoksa istemcideki sabit liste. */
+  const formations = useMemo(
+    () => (Object.keys(data.formations ?? {}).length ? data.formations : FORMATIONS),
+    [data.formations],
+  );
+
+  const formationNames = useMemo(() => Object.keys(formations), [formations]);
+
+  const initialFormation =
+    data.settings?.formation && formations[data.settings.formation]
+      ? data.settings.formation
+      : (formationNames[0] ?? DEFAULT_FORMATION);
+
+  const [formation, setFormation] = useState(initialFormation);
+  const [assignments, setAssignments] = useState<Record<string, number>>(() => {
+    const initial: Record<string, number> = {};
+    roster.forEach((player) => {
+      if (player.squad_role === "starter" && player.lineup_slot) {
+        initial[player.lineup_slot] = player.id;
+      }
+    });
+    return initial;
+  });
+  const [activeSlot, setActiveSlot] = useState<string | null>(null);
+  const [dirty, setDirty] = useState(false);
+
+  const slots = useMemo(() => formations[formation] ?? [], [formation, formations]);
+
+  const playerById = useMemo(() => {
+    const map = new Map<number, RosterPlayer>();
+    roster.forEach((player) => map.set(player.id, player));
+    return map;
+  }, [roster]);
+
+  const toPitchPlayer = useCallback(
+    (player: RosterPlayer): PitchPlayer => ({
+      id: player.id,
+      name: player.player_name,
+      jerseyNumber: player.jersey_number,
+    }),
+    [],
+  );
+
+  /** slot → PitchPlayer. Kadrodan düşmüş bir kimlik varsa yuva boş görünür. */
+  const pitchAssignments = useMemo(() => {
+    const result: Record<string, PitchPlayer | undefined> = {};
+    Object.entries(assignments).forEach(([slot, playerId]) => {
+      const player = playerById.get(playerId);
+      if (player) result[slot] = toPitchPlayer(player);
+    });
+    return result;
+  }, [assignments, playerById, toPitchPlayer]);
+
+  const assignedIds = useMemo(() => new Set(Object.values(assignments)), [assignments]);
+
+  const bench = useMemo(
+    () => roster.filter((player) => !assignedIds.has(player.id)).map(toPitchPlayer),
+    [assignedIds, roster, toPitchPlayer],
+  );
+
+  const benchSubtitle = useCallback(
+    (player: PitchPlayer) => {
+      const source = playerById.get(player.id);
+      if (!source) return undefined;
+      return [
+        positionLabel(source.team_position) || source.profile_position || "Mevki yok",
+        source.jersey_number ? `#${source.jersey_number}` : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+    },
+    [playerById],
+  );
+
+  /* ------------------------------ eylemler ------------------------------- */
+
+  const changeFormation = useCallback(
+    (next: string) => {
+      setFormation(next);
+      setActiveSlot(null);
+      setDirty(true);
+      // Karşılığı olan slotları taşı, olmayanları havuza bırak.
+      const nextSlots = new Set(formations[next] ?? []);
+      setAssignments((prev) =>
+        Object.fromEntries(Object.entries(prev).filter(([slot]) => nextSlots.has(slot))),
+      );
+    },
+    [formations],
+  );
+
+  const selectSlot = useCallback((slot: string) => {
+    setActiveSlot((current) => (current === slot ? null : slot));
+  }, []);
+
+  const clearSlot = useCallback((slot: string) => {
+    setDirty(true);
+    setActiveSlot(null);
+    setAssignments((prev) => {
+      const next = { ...prev };
+      delete next[slot];
+      return next;
+    });
+  }, []);
+
+  const placePlayer = useCallback(
+    (player: PitchPlayer) => {
+      if (!activeSlot) return;
+      setDirty(true);
+      setAssignments((prev) => {
+        // Oyuncu başka bir yuvadaysa oradan düşer: aynı kişi iki yerde olamaz.
+        const next = Object.fromEntries(
+          Object.entries(prev).filter(([, id]) => id !== player.id),
+        );
+        next[activeSlot] = player.id;
+        return next;
+      });
+      setActiveSlot(null);
+    },
+    [activeSlot],
+  );
+
+  const filled = Object.keys(pitchAssignments).length;
+
+  const save = useMutation({
+    mutationFn: () =>
+      saveLineup(
+        formation,
+        Object.entries(assignments).map(([slot, playerId]) => ({ slot, playerId })),
+      ),
+    onSuccess: () => {
+      setDirty(false);
+      toast.show({ message: "İdeal kadron kaydedildi.", tone: "success" });
+      // Kadro listesindeki `squad_role` ve `lineup_slot` sunucuda değişti.
+      void queryClient.invalidateQueries({ queryKey: ["takim", "roster"] });
+      void queryClient.invalidateQueries({ queryKey: ["takim", "dashboard"] });
+    },
+    onError: (error) => {
+      toast.show({
+        message: error instanceof ApiError ? error.userMessage : "İdeal kadro kaydedilemedi.",
+        tone: "danger",
+      });
+    },
+  });
+
+  return (
+    <ScrollView
+      contentContainerStyle={styles.lineupContent}
+      refreshControl={refreshControl}
+      keyboardShouldPersistTaps="handled"
+    >
+      {/* Diziliş seçimi */}
+      <Text style={styles.fieldLabel} {...textScale.badge}>
+        {upperTR("Diziliş")}
+      </Text>
+      <ChipGroup>
+        {formationNames.map((name) => (
+          <FormationChip
+            key={name}
+            name={name}
+            selected={name === formation}
+            onPress={changeFormation}
+          />
+        ))}
+      </ChipGroup>
+
+      <View style={styles.lineupMeta}>
+        <Text style={styles.lineupCount} {...textScale.dense}>
+          Sahada {filled}/{Math.min(slots.length, MAX_STARTERS)}
+        </Text>
+        {dirty ? (
+          <Text style={styles.lineupDirty} {...textScale.dense}>
+            Kaydedilmemiş değişiklik var
+          </Text>
+        ) : null}
+      </View>
+
+      <PitchLineup
+        slots={slots}
+        assignments={pitchAssignments}
+        activeSlot={activeSlot}
+        onSelectSlot={selectSlot}
+        onClearSlot={clearSlot}
+      />
+
+      <PitchBench
+        players={bench}
+        activeSlot={activeSlot}
+        onPick={placePlayer}
+        subtitleOf={benchSubtitle}
+        emptyLabel="Kadrodaki herkes sahada."
+      />
+
+      <Button
+        label="İdeal kadroyu kaydet"
+        icon="save-outline"
+        onPress={() => save.mutate()}
+        loading={save.isPending}
+        disabled={!dirty || save.isPending}
+        fullWidth
+      />
+
+      <Text style={styles.lineupHint} {...textScale.long}>
+        Sahaya yerleştirdiğin oyuncular kadro tablosunda “İlk Kadro” rolüne
+        geçer; bu rol yalnız buradan değişir. Maça özel kadro (kaptan, misafir
+        oyuncu, forma rengi) Maç Merkezi’ndeki maç kartından girilir.
+      </Text>
+    </ScrollView>
+  );
+});
+
+/** Diziliş çipi — memo'lu olsun diye adı geri verir. */
+const FormationChip = React.memo(function FormationChip({
+  name,
+  selected,
+  onPress,
+}: {
+  name: string;
+  selected: boolean;
+  onPress: (name: string) => void;
+}) {
+  const handlePress = useCallback(() => onPress(name), [name, onPress]);
+  return <Chip label={name} selected={selected} onPress={handlePress} size="sm" />;
+});
 
 /* ══════════════════════════════════════════════════════════════════════════
    Alt bileşenler
@@ -679,8 +1005,9 @@ function PlayerEditorSheet({
           ))}
         </ChipGroup>
         <Text style={styles.fieldHint} {...textScale.long}>
-          İlk 8 rolü sunucuda takımın diziliş kaydına bağlıdır; bu uçtan
-          değiştirilemez. İlk 8 düzenlemesi şimdilik elitlig.com panelinden yapılır.
+          İlk 8 rolü sunucuda takımın diziliş kaydına bağlıdır; bu alandan
+          değiştirilemez. Oyuncuyu ilk sekize almak için üstteki “Diziliş”
+          görünümünde sahaya yerleştir.
         </Text>
       </View>
     </BottomSheet>
@@ -726,6 +1053,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   headerBottom: {
+    gap: space.s,
     paddingHorizontal: layout.screenPadding,
     paddingBottom: space.sm,
   },
@@ -738,6 +1066,32 @@ const styles = StyleSheet.create({
   },
   sectionGap: {
     height: space.md,
+  },
+
+  /* Diziliş görünümü */
+  lineupContent: {
+    paddingHorizontal: layout.screenPadding,
+    paddingTop: space.md,
+    paddingBottom: space.huge,
+    gap: space.md,
+  },
+  lineupMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: space.sm,
+  },
+  lineupCount: {
+    ...type.label,
+    color: colors.textSecondary,
+  },
+  lineupDirty: {
+    ...type.caption,
+    color: colors.warn,
+  },
+  lineupHint: {
+    ...type.caption,
+    color: colors.textTertiary,
   },
 
   /* Özet */

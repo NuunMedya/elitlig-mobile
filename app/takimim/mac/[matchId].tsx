@@ -1,5 +1,11 @@
 /**
- * MAÇ KADROSU — tek bir maçın kadrosunu ve dizilişini girme ekranı.
+ * MAÇ MERKEZİ (tek maç) — kadro/diziliş girme ve rakip analizi.
+ *
+ * İKİ SEKME: "Kadro" (bu maçın kadrosu, dizilişi, forma rengi, taktiği) ve
+ * "Rakip Analizi" (sunucudan gelen karar-destek raporu + skor simülasyonu,
+ * bkz. components/MatchAnalysisView.tsx). Web panelindeki Maç Merkezi'nin
+ * "Kadro & Ayarlar / Rakip Analizi" ayrımıyla birebir aynıdır; analiz mobilde
+ * hiç yoktu.
  *
  * "İdeal kadro" (Kadro Yönetimi) takımın genel tercihidir; BURASI maça özeldir:
  * bu maçta kim ilk 8'de, kim yedek, kaptan kim, kadroda misafir oyuncu var mı.
@@ -14,6 +20,14 @@
  *   · maç canlıya geçtiyse 409 MATCH_ALREADY_LIVE
  * Bu kuralların hepsi burada da uygulanır ki kullanıcı sunucu hatasını
  * beklemeden uyarıyı görsün; sunucu yine de son sözü söyler.
+ *
+ * SAHA GÖRÜNÜMÜ: ilk sekiz artık listede değil, sahada kurulur
+ * (`components/PitchLineup.tsx` — Kadro Yönetimi'ndeki ideal kadroyla AYNI
+ * bileşen ve aynı iki dokunuşluk etkileşim). Neden: "kim ilk sekizde" sorusu
+ * bir liste sorusu değil, bir YERLEŞİM sorusudur; düz listede kaleci ile
+ * forvet aynı görünüyordu ve `slot` alanı hiç doldurulmuyordu — reji ekranı
+ * da diziliş bilgisini bu alandan okuyor. Yedekler ve kadro dışı oyuncular
+ * liste olarak kalır: onların yerleşimi yok, yalnız sırası var.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -22,6 +36,8 @@ import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { MatchAnalysisView } from "@/components/MatchAnalysisView";
+import { PitchBench, PitchLineup, type PitchPlayer } from "@/components/PitchLineup";
 import {
   Avatar,
   BottomSheet,
@@ -34,14 +50,17 @@ import {
   Input,
   ScreenHeader,
   SectionHeader,
+  SegmentedControl,
   SkeletonListRow,
   Stepper,
   Touchable,
   useToast,
+  type SegmentedItem,
 } from "@/components/ui";
 import {
   createGuestPlayer,
   DEFAULT_FORMATION,
+  FORMATIONS,
   FORMATION_NAMES,
   getTeamMatchPlan,
   getTeamRoster,
@@ -63,6 +82,19 @@ interface Entry extends MatchPlanPlayer {
   displayName: string;
   photo?: string | null;
 }
+
+/**
+ * Ekranın iki sekmesi — web panelindeki "Kadro & Ayarlar / Rakip Analizi"
+ * ayrımının birebir karşılığı. Analiz ayrı bir ekrana konmadı: başkan kadroyu
+ * kurarken analize bakıp geri dönüyor; iki ayrı ekran her geçişte kadro
+ * taslağını yeniden yüklerdi.
+ */
+type MatchTab = "kadro" | "analiz";
+
+const MATCH_TABS: SegmentedItem<MatchTab>[] = [
+  { key: "kadro", label: "Kadro", icon: "people-outline" },
+  { key: "analiz", label: "Rakip Analizi", icon: "analytics-outline" },
+];
 
 const DEFAULT_KIT = "#6D28D9";
 const HEX = /^#[0-9a-fA-F]{6}$/;
@@ -103,6 +135,7 @@ export default function MacKadrosuScreen() {
   const [guestOpen, setGuestOpen] = useState(false);
   const [guestName, setGuestName] = useState("");
   const [hydrated, setHydrated] = useState(false);
+  const [tab, setTab] = useState<MatchTab>("kadro");
 
   /* Sunucudaki planı bir kez forma yükle. Sonraki tazelemeler kullanıcının
      yaptığı düzenlemeyi EZMEMELİ — bu yüzden hydrated bayrağı var. */
@@ -148,8 +181,44 @@ export default function MacKadrosuScreen() {
 
   /* ─────────────────────────── türetilmiş durum ─────────────────────────── */
 
+  const [activeSlot, setActiveSlot] = useState<string | null>(null);
+
   const starters = useMemo(() => entries.filter((entry) => entry.starter), [entries]);
   const subs = useMemo(() => entries.filter((entry) => !entry.starter), [entries]);
+
+  /* ── Saha ────────────────────────────────────────────────────────────────
+     Yuvalar dizilişten gelir; bir yuvada duran oyuncu HEM `starter` HEM de
+     `slot` taşır. Sunucu ikisini birlikte bekliyor: `starter` kadro kartını,
+     `slot` reji ekranındaki yerleşimi belirliyor. */
+  const slots = useMemo(() => FORMATIONS[formation] ?? [], [formation]);
+
+  const toPitchPlayer = useCallback(
+    (entry: Entry): PitchPlayer => ({
+      id: Number(entry.playerId),
+      name: entry.displayName,
+      jerseyNumber: entry.jerseyNumber,
+    }),
+    [],
+  );
+
+  const pitchAssignments = useMemo(() => {
+    const result: Record<string, PitchPlayer | undefined> = {};
+    entries.forEach((entry) => {
+      if (entry.starter && entry.slot && slots.includes(entry.slot)) {
+        result[entry.slot] = toPitchPlayer(entry);
+      }
+    });
+    return result;
+  }, [entries, slots, toPitchPlayer]);
+
+  /** Sahada olmayan herkes — yedekler ve yuvası atanmamış ilk kadro oyuncuları. */
+  const pitchBench = useMemo(
+    () =>
+      entries
+        .filter((entry) => !(entry.starter && entry.slot && slots.includes(entry.slot)))
+        .map(toPitchPlayer),
+    [entries, slots, toPitchPlayer],
+  );
   const inSquad = useMemo(
     () => new Set(entries.filter((entry) => !entry.isGuest).map((entry) => entry.playerId)),
     [entries]
@@ -217,6 +286,42 @@ export default function MacKadrosuScreen() {
       })
     );
   }, []);
+
+  const selectSlot = useCallback((slot: string) => {
+    setActiveSlot((current) => (current === slot ? null : slot));
+  }, []);
+
+  /** Yuvadan çıkarılan oyuncu kadrodan DÜŞMEZ, yedeğe iner. */
+  const clearSlot = useCallback((slot: string) => {
+    setActiveSlot(null);
+    setEntries((prev) =>
+      prev.map((entry) =>
+        entry.slot === slot ? { ...entry, slot: null, starter: false } : entry,
+      ),
+    );
+  }, []);
+
+  /** Havuzdan seçilen oyuncuyu seçili yuvaya yerleştirir. */
+  const placeOnPitch = useCallback(
+    (player: PitchPlayer) => {
+      if (!activeSlot) return;
+      haptics.select();
+      setEntries((prev) =>
+        prev.map((entry) => {
+          // Yuva başka birindeyse o kişi yedeğe iner: bir yuva tek kişiliktir.
+          if (entry.slot === activeSlot && Number(entry.playerId) !== player.id) {
+            return { ...entry, slot: null, starter: false };
+          }
+          if (Number(entry.playerId) === player.id) {
+            return { ...entry, slot: activeSlot, starter: true };
+          }
+          return entry;
+        }),
+      );
+      setActiveSlot(null);
+    },
+    [activeSlot],
+  );
 
   /** Kaptan tekildir: yeni kaptan seçilince eskisi düşer. */
   const setCaptain = useCallback((target: Entry) => {
@@ -307,12 +412,26 @@ export default function MacKadrosuScreen() {
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader
-        title="Maç Kadrosu"
+        title="Maç Merkezi"
         subtitle={match ? `${match.opponent_name ?? "Rakip"} · ${match.date ?? ""}` : undefined}
         back
+        bottom={
+          <View style={styles.headerBottom}>
+            <SegmentedControl items={MATCH_TABS} value={tab} onChange={setTab} />
+          </View>
+        }
       />
 
-      {planQuery.isLoading ? (
+      {tab === "analiz" ? (
+        <MatchAnalysisView
+          matchId={matchId}
+          /* Simülasyon kadroya göre hesaplanıyor: kadro hiç girilmemişse
+             tahmin yanıltıcı olur. Kaydedilmiş bir plan ya da reji tarafında
+             açılmış kadro satırları varsa yeterli sayılır. */
+          canSimulate={Boolean(planQuery.data?.plan?.lineup?.length || entries.length)}
+          onNeedPlan={() => setTab("kadro")}
+        />
+      ) : planQuery.isLoading ? (
         <View style={styles.loading}>
           <SkeletonListRow />
         </View>
@@ -331,6 +450,19 @@ export default function MacKadrosuScreen() {
                 onPress={() => {
                   haptics.select();
                   setFormation(name);
+                  setActiveSlot(null);
+                  /* Yeni dizilişte karşılığı olmayan yuvalardaki oyuncular
+                     yedeğe iner; slot adları dizilişten dizilişe değişiyor
+                     (3-3-1'de MID3 var, 2-2-3'te yok). Kadrodan düşürmek
+                     kullanıcının emeğini boşa çıkarırdı. */
+                  const nextSlots = new Set(FORMATIONS[name] ?? []);
+                  setEntries((prev) =>
+                    prev.map((entry) =>
+                      entry.slot && !nextSlots.has(entry.slot)
+                        ? { ...entry, slot: null, starter: false }
+                        : entry,
+                    ),
+                  );
                 }}
               />
             ))}
@@ -361,25 +493,41 @@ export default function MacKadrosuScreen() {
             ))}
           </View>
 
-          {/* İlk kadro */}
+          {/* İlk kadro — sahada kurulur */}
           <SectionHeader
             title="İLK KADRO"
-            meta={`${starters.length}/${MAX_STARTERS}`}
+            meta={`${starters.length}/${Math.min(slots.length, MAX_STARTERS)}`}
           />
-          {starters.length ? (
-            starters.map((entry) => (
-              <SquadRow
-                key={`s-${entry.isGuest ? entry.displayName : entry.playerId}`}
-                entry={entry}
-                onEdit={() => setEditing(entry)}
-                onToggleStarter={() => patchEntry(entry, { starter: false })}
-                onCaptain={() => setCaptain(entry)}
-                onRemove={() => removeEntry(entry)}
-              />
-            ))
-          ) : (
-            <Text style={styles.hint}>Aşağıdan oyuncu ekleyerek ilk kadroyu oluştur.</Text>
-          )}
+
+          <PitchLineup
+            slots={slots}
+            assignments={pitchAssignments}
+            activeSlot={activeSlot}
+            onSelectSlot={selectSlot}
+            onClearSlot={clearSlot}
+          />
+
+          <PitchBench
+            players={pitchBench}
+            activeSlot={activeSlot}
+            onPick={placeOnPitch}
+            emptyLabel="Kadrodaki herkes sahada."
+          />
+
+          {/* Sahadaki oyuncuların ayrıntısı (forma no, mevki, kaptan) satırdan
+              düzenlenir: sahadaki yuva 52px, bu bilgiler oraya sığmaz. */}
+          {starters.length
+            ? starters.map((entry) => (
+                <SquadRow
+                  key={`s-${entry.isGuest ? entry.displayName : entry.playerId}`}
+                  entry={entry}
+                  onEdit={() => setEditing(entry)}
+                  onToggleStarter={() => patchEntry(entry, { starter: false, slot: null })}
+                  onCaptain={() => setCaptain(entry)}
+                  onRemove={() => removeEntry(entry)}
+                />
+              ))
+            : null}
 
           {/* Yedekler */}
           <SectionHeader title="YEDEKLER" meta={String(subs.length)} />
@@ -392,7 +540,10 @@ export default function MacKadrosuScreen() {
                 onToggleStarter={() =>
                   starters.length >= MAX_STARTERS
                     ? toast.show({ message: `İlk kadro dolu (${MAX_STARTERS}).`, tone: "warn" })
-                    : patchEntry(entry, { starter: true })
+                    : /* Yuvasız ilk kadro: sahada yeri yok ama kadro kartında
+                         ilk sekizde. Sunucu yuvasız `starter` kabul ediyor;
+                         kullanıcı isterse sonra sahadan yerleştirir. */
+                      patchEntry(entry, { starter: true })
                 }
                 onCaptain={() => setCaptain(entry)}
                 onRemove={() => removeEntry(entry)}
@@ -597,6 +748,10 @@ function SquadRow({
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
+  headerBottom: {
+    paddingHorizontal: space.md,
+    paddingBottom: space.sm,
+  },
   loading: { padding: space.md },
   content: { padding: space.md, gap: space.sm, paddingBottom: space.giant },
 
