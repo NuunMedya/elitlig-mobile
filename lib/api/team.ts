@@ -444,6 +444,141 @@ export const submitMatchReview = (
     comment,
   });
 
+/* ═════════════════════ SEZON KADROSU (KADRO KURAL SETİ) ═════════════════════
+ *
+ * routes/teamSeasonRoster.js — takım başkanı yalnız kendi takımına erişir.
+ *   GET    /api/teams/:teamId/seasons                          katıldığı sezonlar
+ *   GET    /api/teams/:teamId/seasons/:seasonId/roster         sezon kadrosu üyeleri
+ *   GET    /api/teams/:teamId/seasons/:seasonId/roster/status  limitler ve haklar
+ *   POST   /api/teams/:teamId/seasons/:seasonId/roster/players oyuncu ekle
+ *   DELETE .../roster/players/:playerId                        oyuncu çıkar
+ *
+ * "TAKIM KADROSU" İLE "SEZON KADROSU" AYNI ŞEY DEĞİLDİR:
+ *   · Takım kadrosu (`/api/team-management/roster`) kulübün oyuncu listesidir;
+ *     forma numarası, mevki, diziliş orada yaşar.
+ *   · Sezon kadrosu bir SEZONA kayıt olmaktır: kural setine (limit, lisans,
+ *     transfer hakkı) tabidir ve bir oyuncuyu eklemek transfer hakkı TÜKETİR.
+ *     Çıkarmak hakkı geri VERMEZ.
+ * Bu ayrım mobilde hiç yoktu; başkan sezon kadrosunu yalnız web'den yönetebiliyordu.
+ *
+ * ÜYE KAYDI OYUNCU ADI TAŞIMAZ: sunucu ham model satırı döndürüyor (player_id,
+ * is_licensed, membership_status). Ad ve fotoğraf takım kadrosundan eşleştirilir
+ * — web paneli de aynı eşleştirmeyi yapar.
+ */
+
+export interface TeamSeasonOption {
+  participation_id: number;
+  season_id: number;
+  league_id: number | null;
+  source: string | null;
+  registered_at: string | null;
+  season: {
+    id: number;
+    season_name: string;
+    league_name: string | null;
+    season_year: number | string | null;
+    roster_rule_set_id: number | null;
+    is_archived: boolean;
+  };
+}
+
+export type SeasonMembershipStatus = "active" | "pending" | "removed" | string;
+
+export interface SeasonRosterMember {
+  id: number;
+  team_season_roster_id: number;
+  player_id: number;
+  is_licensed: boolean;
+  membership_status: SeasonMembershipStatus;
+  createdAt?: string;
+}
+
+/** Limit gösterimi: sınırsız / yok / değişken / sayısal tavan. */
+export interface RosterCap {
+  unlimited?: boolean;
+  none?: boolean;
+  variable?: boolean;
+  cap?: number | null;
+  used?: number;
+}
+
+export interface SeasonRosterStatus {
+  /** Sezona kural seti bağlı değilse false — kadro yönetimi yine çalışır. */
+  applies: boolean;
+  message?: string;
+  roster?: { activeCount: number; licensedCount: number };
+  ruleSet?: { id: number; name: string; version: number };
+  activePeriod?: { id: number; order: number; name: string | null };
+  general?: RosterCap;
+  licensed?: RosterCap;
+  transferRights?: {
+    unlimited: boolean;
+    none: boolean;
+    used: number;
+    granted: number | null;
+    available: number | null;
+  };
+  licenseRules?: {
+    valid_from_type: string | null;
+    valid_from_date: string | null;
+    valid_from_months: number | null;
+    league_categories: string[];
+  };
+}
+
+export const getTeamSeasons = (teamId: number) =>
+  get<{ seasons: TeamSeasonOption[] }>(`/api/teams/${teamId}/seasons`);
+
+export const getSeasonRoster = (teamId: number, seasonId: number) =>
+  get<{ members: SeasonRosterMember[] }>(`/api/teams/${teamId}/seasons/${seasonId}/roster`);
+
+export const getSeasonRosterStatus = (teamId: number, seasonId: number) =>
+  get<SeasonRosterStatus>(`/api/teams/${teamId}/seasons/${seasonId}/roster/status`);
+
+/**
+ * Sezon kadrosuna oyuncu ekler.
+ *
+ * `autoApprove: true` — başkan kendi kadrosundan seçtiği için ayrı bir onay
+ * adımı yoktur (web paneli de aynı bayrağı gönderir).
+ */
+export const addSeasonRosterPlayer = (
+  teamId: number,
+  seasonId: number,
+  body: { playerId: number; isLicensed?: boolean }
+) =>
+  post<{ member: SeasonRosterMember; pending: boolean }>(
+    `/api/teams/${teamId}/seasons/${seasonId}/roster/players`,
+    { ...body, autoApprove: true }
+  );
+
+export const removeSeasonRosterPlayer = (teamId: number, seasonId: number, playerId: number) =>
+  del<{ removed?: boolean }>(
+    `/api/teams/${teamId}/seasons/${seasonId}/roster/players/${playerId}`
+  );
+
+/**
+ * Kadro kuralı hata kodları → Türkçe cümle.
+ * Sunucudaki RULE_ERROR_MESSAGES ile birebir aynı olmalıdır; kod tanınmazsa
+ * sunucunun kendi mesajına düşülür.
+ */
+export const ROSTER_RULE_ERRORS: Record<string, string> = {
+  ROSTER_LIMIT_EXCEEDED: "Genel kadro limiti aşıldığı için işlem yapılamadı.",
+  NO_TRANSFER_RIGHT: "Transfer hakkın bulunmadığı için oyuncu eklenemedi.",
+  LICENSED_ROSTER_LIMIT_EXCEEDED: "Lisanslı oyuncu limiti aşıldı.",
+  DUPLICATE_ROSTER_MEMBER: "Oyuncu bu sezon kadrosunda zaten var.",
+  TEAM_FORBIDDEN: "Bu takımın kadrosuna erişim yetkin yok.",
+};
+
+/** Limit değerini insan okur biçime çevirir. */
+export function capLabel(value?: RosterCap | null): string {
+  if (!value) return "—";
+  if (value.unlimited) return "Limitsiz";
+  if (value.none) return "Yok";
+  if (value.variable) return "Değişken";
+  if (value.cap != null) return String(value.cap);
+  return "—";
+}
+
 /* ═════════════════════ RAKİP ANALİZİ VE SİMÜLASYON ═════════════════════
  *
  * routes/matchCenter.js:

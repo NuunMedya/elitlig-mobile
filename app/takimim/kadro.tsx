@@ -12,6 +12,11 @@
  * gruplama mevkiye çevrildi, eski rol görünümü segmentle korundu. Seçim
  * `?grup=` ile URL'de taşınır (derin bağlantı ve geri tuşu tutarlı kalsın).
  *
+ * PİYASA DEĞERİ: her satırda sunucudan gelen değer (ETL) ve son hesaplamaya
+ * göre değişim gösterilir. Değerler TEK sorguda, takım kapsamında çekilir
+ * (N+1 yok); hesaplanmamış oyuncuda sütun hiç çizilmez. Web panelindeki
+ * MarketValueBadge'in karşılığıdır.
+ *
  * DÜZENLEME: satıra dokununca alt sayfa açılır. Forma numarası Stepper ile
  * (0 = numarasız → sunucuya `null` gider), mevki 11 kısaltmalı çipten biri,
  * kadro rolü Yedek/Kadro Dışı arasından seçilir.
@@ -25,11 +30,16 @@
  *  - PUT /api/team-management/lineup — { formation, assignments[] }. İlk 8
  *    rolü SUNUCUDA bu uçtan türer; kadro tablosundan `starter` seçilemez.
  *
- * DİZİLİŞ SEGMENTİ (yeni): mobilde ideal kadro hiç düzenlenemiyordu, ekran
- * "İlk 8 düzenlemesi elitlig.com panelinden yapılır" diyordu. Artık web
- * panelindeki sahanın karşılığı burada: `components/PitchLineup.tsx` iki
- * dokunuşla (boş yuva → havuzdan oyuncu) diziliş kurar. Aynı bileşen maç
- * kadrosu ekranında da kullanılır; iki yer tek etkileşim modeli paylaşır.
+ * ÜÇ GÖRÜNÜM (`?gorunum=`):
+ *   kadro   Oyuncu listesi ve takıma özgü alanlar (bu dosyanın çekirdeği).
+ *   dizilis Takımın İDEAL kadrosu — `components/PitchLineup.tsx` ile sahada
+ *           iki dokunuşla kurulur (boş yuva → havuzdan oyuncu). Aynı bileşen
+ *           maç kadrosu ekranında da kullanılır; iki yer tek etkileşim modeli
+ *           paylaşır. Öncesinde mobilde ideal kadro hiç düzenlenemiyordu.
+ *   sezon   SEZON kadrosu — kural setine tabi kayıt (limit, lisans, transfer
+ *           hakkı). Takım kadrosuyla karıştırılmamalı: takım kadrosu kulübün
+ *           oyuncu listesi, sezon kadrosu o sezona kayıttır ve bir oyuncu
+ *           eklemek transfer hakkı tüketir. Bu da mobilde hiç yoktu.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -58,11 +68,14 @@ import {
   ChipGroup,
   EmptyState,
   ErrorState,
+  MetricGrid,
+  MetricTile,
   ScreenHeader,
   SectionHeader,
   SegmentedControl,
   SkeletonListRow,
   Stepper,
+  Toggle,
   Touchable,
   refreshControlProps,
   useHeaderScroll,
@@ -76,16 +89,25 @@ import {
   FORMATIONS,
   MAX_STARTERS,
   POSITIONS,
+  ROSTER_RULE_ERRORS,
+  addSeasonRosterPlayer,
+  capLabel,
+  getSeasonRoster,
+  getSeasonRosterStatus,
   getTeamRoster,
+  getTeamSeasons,
   positionLabel,
   releaseRosterPlayer,
+  removeSeasonRosterPlayer,
   saveLineup,
   updateRosterPlayer,
   type RosterPlayer,
   type RosterPlayerPatch,
+  type SeasonRosterMember,
   type SquadRole,
   type TeamRosterResponse,
 } from "@/lib/api/team";
+import { getMarketValues, formatEtlShort } from "@/lib/api/marketValue";
 import { mediaUrl } from "@/lib/format";
 import { ApiError } from "@/lib/http";
 import { useAuth } from "@/providers/AuthProvider";
@@ -103,11 +125,12 @@ const GROUP_ITEMS: SegmentedItem<GroupMode>[] = [
 ];
 
 /** Ekranın iki ana görünümü. Seçim `?gorunum=` ile rotada taşınır. */
-type ViewMode = "kadro" | "dizilis";
+type ViewMode = "kadro" | "dizilis" | "sezon";
 
 const VIEW_ITEMS: SegmentedItem<ViewMode>[] = [
   { key: "kadro", label: "Kadro", icon: "people-outline" },
   { key: "dizilis", label: "Diziliş", icon: "grid-outline" },
+  { key: "sezon", label: "Sezon", icon: "calendar-outline" },
 ];
 
 const ROLE_LABELS: Record<SquadRole, string> = {
@@ -167,7 +190,9 @@ function resolveGroup(raw: string | string[] | undefined): GroupMode {
 /** Rota parametresinden görünüm — tanınmayan değer sessizce "kadro" olur. */
 function resolveView(value: string | string[] | undefined): ViewMode {
   const raw = Array.isArray(value) ? value[0] : value;
-  return raw === "dizilis" ? "dizilis" : "kadro";
+  if (raw === "dizilis") return "dizilis";
+  if (raw === "sezon") return "sezon";
+  return "kadro";
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -199,6 +224,31 @@ export default function SquadManagementScreen() {
   );
 
   const roster = useMemo(() => query.data?.roster ?? [], [query.data]);
+
+  /* PİYASA DEĞERLERİ — TEK sorguda, takım kapsamında (N+1 yok; web paneli de
+     aynı yolu kullanır). Uç herkese açık ve kadro olmadan anlamsız olduğu için
+     yalnız takım kimliği çözüldüğünde açılır. Hata hâlinde satırlar değer
+     sütunu olmadan çizilir — kadro yönetimi buna bağlı değil. */
+  const teamId = query.data?.team?.id ?? null;
+
+  const marketQuery = useQuery({
+    queryKey: ["takim", "market-values", teamId],
+    queryFn: () => getMarketValues({ teamId: teamId as number }),
+    enabled: Boolean(teamId),
+    staleTime: 10 * 60_000,
+    retry: false,
+  });
+
+  const marketByPlayer = useMemo(() => {
+    const map = new Map<number, { value: number; change: number }>();
+    (marketQuery.data?.items ?? []).forEach((item) => {
+      map.set(Number(item.playerId), {
+        value: item.currentValue,
+        change: item.changeAmount,
+      });
+    });
+    return map;
+  }, [marketQuery.data]);
 
   const sections = useMemo<RosterSection[]>(() => {
     if (roster.length === 0) return [];
@@ -260,10 +310,12 @@ export default function SquadManagementScreen() {
       <PlayerRow
         player={item}
         position={rowPosition(index, section.data.length)}
+        marketValue={marketByPlayer.get(item.id)?.value ?? null}
+        marketChange={marketByPlayer.get(item.id)?.change ?? null}
         onPress={openEditor}
       />
     ),
-    [openEditor]
+    [marketByPlayer, openEditor]
   );
 
   const renderSectionHeader = useCallback(
@@ -292,8 +344,9 @@ export default function SquadManagementScreen() {
         roster.length > 0 ? (
           <View style={styles.headerBottom}>
             <SegmentedControl items={VIEW_ITEMS} value={view} onChange={changeView} />
-            {/* Gruplama YALNIZ kadro listesinde anlamlı; diziliş görünümünde
-                iki segmentli çubuk üst üste binip 76px yer yerdi. */}
+            {/* Gruplama YALNIZ kadro listesinde anlamlı; diziliş ve sezon
+                görünümlerinde iki segmentli çubuk üst üste binip 76px yer
+                yerdi. */}
             {view === "kadro" ? (
               <SegmentedControl
                 items={GROUP_ITEMS}
@@ -367,6 +420,15 @@ export default function SquadManagementScreen() {
           data={query.data}
           refreshControl={refreshControl}
         />
+      </SafeAreaView>
+    );
+  }
+
+  if (view === "sezon" && query.data) {
+    return (
+      <SafeAreaView style={styles.screen} edges={["top"]}>
+        {header}
+        <SeasonRosterEditor data={query.data} refreshControl={refreshControl} />
       </SafeAreaView>
     );
   }
@@ -667,6 +729,391 @@ const FormationChip = React.memo(function FormationChip({
 });
 
 /* ══════════════════════════════════════════════════════════════════════════
+   SEZON KADROSU — kural setine tabi sezon kaydı
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Sezon kadrosu görünümü.
+ *
+ * "TAKIM KADROSU" DEĞİLDİR: takım kadrosu kulübün oyuncu listesidir; sezon
+ * kadrosu bir SEZONA kayıt olmaktır. Kural seti (genel limit, lisanslı oyuncu
+ * limiti, transfer hakkı) buna uygulanır ve bir oyuncuyu eklemek transfer
+ * hakkı TÜKETİR — çıkarmak hakkı geri vermez. Bu ayrım mobilde hiç yoktu;
+ * başkan sezon kadrosunu yalnız elitlig.com panelinden yönetebiliyordu.
+ *
+ * KURAL SETİ YOKSA EKRAN YİNE ÇALIŞIR: sunucu `applies: false` döndüğünde
+ * limit kartları çizilmez, ekleme/çıkarma serbesttir. Kural seti tanımlanmamış
+ * bir sezonda ekranı kilitlemek, yönetimin henüz kural yazmadığı ligleri
+ * kullanılamaz hâle getirirdi.
+ *
+ * HATA MESAJLARI: sunucu limit ihlallerini kodla döndürüyor
+ * (ROSTER_LIMIT_EXCEEDED, NO_TRANSFER_RIGHT…). Kod tanınıyorsa Türkçe cümleye
+ * çevrilir; tanınmıyorsa sunucunun kendi mesajı gösterilir — sessizce genel bir
+ * "işlem başarısız" demek, başkanın neden ekleyemediğini gizlerdi.
+ */
+const SeasonRosterEditor = React.memo(function SeasonRosterEditor({
+  data,
+  refreshControl,
+}: {
+  data: TeamRosterResponse;
+  refreshControl: React.ReactElement<RefreshControlProps>;
+}) {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const teamId = data.team.id;
+
+  const [seasonId, setSeasonId] = useState<number | null>(null);
+  const [licensed, setLicensed] = useState(false);
+
+  const seasonsQuery = useQuery({
+    queryKey: ["takim", "seasons", teamId],
+    queryFn: () => getTeamSeasons(teamId),
+    enabled: Number.isInteger(teamId) && teamId > 0,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+
+  const seasons = useMemo(() => seasonsQuery.data?.seasons ?? [], [seasonsQuery.data]);
+
+  /* Sunucu sezonları yeniden eskiye sıralı veriyor; seçim yapılmadıysa en
+     güncel sezon açılır — başkanın %90 ihtiyacı odur. */
+  const activeSeasonId = seasonId ?? seasons[0]?.season_id ?? null;
+
+  const membersQuery = useQuery({
+    queryKey: ["takim", "season-roster", teamId, activeSeasonId],
+    queryFn: () => getSeasonRoster(teamId, activeSeasonId as number),
+    enabled: Boolean(activeSeasonId),
+    staleTime: 30_000,
+    retry: false,
+  });
+
+  const statusQuery = useQuery({
+    queryKey: ["takim", "season-roster-status", teamId, activeSeasonId],
+    queryFn: () => getSeasonRosterStatus(teamId, activeSeasonId as number),
+    enabled: Boolean(activeSeasonId),
+    staleTime: 30_000,
+    retry: false,
+  });
+
+  const invalidate = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ["takim", "season-roster", teamId, activeSeasonId] });
+    void queryClient.invalidateQueries({ queryKey: ["takim", "season-roster-status", teamId, activeSeasonId] });
+  }, [activeSeasonId, queryClient, teamId]);
+
+  /** Sunucu hata kodunu Türkçe cümleye çevirir; tanınmazsa sunucu mesajı. */
+  const ruleError = useCallback((error: unknown, fallback: string) => {
+    if (error instanceof ApiError) {
+      return (error.code && ROSTER_RULE_ERRORS[error.code]) || error.userMessage || fallback;
+    }
+    return fallback;
+  }, []);
+
+  const addMutation = useMutation({
+    mutationFn: (playerId: number) =>
+      addSeasonRosterPlayer(teamId, activeSeasonId as number, { playerId, isLicensed: licensed }),
+    onSuccess: () => {
+      toast.show({ message: "Oyuncu sezon kadrosuna eklendi.", tone: "success" });
+      invalidate();
+    },
+    onError: (error) => {
+      toast.show({ message: ruleError(error, "Oyuncu eklenemedi."), tone: "danger" });
+    },
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: (playerId: number) =>
+      removeSeasonRosterPlayer(teamId, activeSeasonId as number, playerId),
+    onSuccess: () => {
+      toast.show({ message: "Oyuncu sezon kadrosundan çıkarıldı.", tone: "success" });
+      invalidate();
+    },
+    onError: (error) => {
+      toast.show({ message: ruleError(error, "Oyuncu çıkarılamadı."), tone: "danger" });
+    },
+  });
+
+  /* Üye kaydı oyuncu adı taşımıyor (ham model satırı); ad ve fotoğraf takım
+     kadrosundan eşleştirilir — web paneli de aynı eşleştirmeyi yapar. */
+  const playerById = useMemo(() => {
+    const map = new Map<number, RosterPlayer>();
+    data.roster.forEach((player) => map.set(player.id, player));
+    return map;
+  }, [data.roster]);
+
+  const members = useMemo(
+    () => (membersQuery.data?.members ?? []).filter((member) => member.membership_status !== "removed"),
+    [membersQuery.data],
+  );
+
+  const memberIds = useMemo(() => new Set(members.map((member) => member.player_id)), [members]);
+
+  const addable = useMemo(
+    () => data.roster.filter((player) => !memberIds.has(player.id)),
+    [data.roster, memberIds],
+  );
+
+  const status = statusQuery.data;
+  const busy = addMutation.isPending || removeMutation.isPending;
+
+  const confirmRemove = useCallback(
+    (member: SeasonRosterMember) => {
+      const name = playerById.get(member.player_id)?.player_name ?? "Oyuncu";
+      Alert.alert(
+        "Sezon kadrosundan çıkar",
+        `${name} bu sezonun kadrosundan çıkarılacak. Tüketilen transfer hakkı GERİ GELMEZ.`,
+        [
+          { text: "Vazgeç", style: "cancel" },
+          {
+            text: "Çıkar",
+            style: "destructive",
+            onPress: () => removeMutation.mutate(member.player_id),
+          },
+        ],
+      );
+    },
+    [playerById, removeMutation],
+  );
+
+  if (!seasons.length) {
+    return (
+      <ScrollView contentContainerStyle={styles.lineupContent} refreshControl={refreshControl}>
+        <EmptyState
+          icon="calendar-outline"
+          title={seasonsQuery.isLoading ? "Sezonlar yükleniyor" : "Sezon kaydı yok"}
+          body={
+            seasonsQuery.isError
+              ? "Sezon listesi alınamadı. Aşağı çekerek yenileyebilirsin."
+              : "Takımın henüz bir sezona kayıtlı görünmüyor. Fikstüre maç işlendiğinde sezon burada listelenir."
+          }
+          variant="inline"
+        />
+      </ScrollView>
+    );
+  }
+
+  return (
+    <ScrollView
+      contentContainerStyle={styles.lineupContent}
+      refreshControl={refreshControl}
+      keyboardShouldPersistTaps="handled"
+    >
+      {/* Sezon seçimi */}
+      <Text style={styles.fieldLabel} {...textScale.badge}>
+        {upperTR("Sezon")}
+      </Text>
+      <ChipGroup>
+        {seasons.map((item) => (
+          <SeasonChip
+            key={item.season_id}
+            id={item.season_id}
+            label={item.season.season_name}
+            selected={item.season_id === activeSeasonId}
+            onPress={setSeasonId}
+          />
+        ))}
+      </ChipGroup>
+
+      {/* Limitler ve haklar */}
+      {status?.applies ? (
+        <MetricGrid columns={2}>
+          <MetricTile
+            label="Kadro"
+            value={`${status.general?.used ?? members.length} / ${capLabel(status.general)}`}
+            hint="aktif oyuncu"
+            icon="people-outline"
+          />
+          <MetricTile
+            label="Lisanslı"
+            value={`${status.licensed?.used ?? 0} / ${capLabel(status.licensed)}`}
+            hint="lisanslı oyuncu"
+            icon="id-card-outline"
+          />
+          <MetricTile
+            label="Transfer hakkı"
+            value={
+              status.transferRights?.unlimited
+                ? "Limitsiz"
+                : status.transferRights?.none
+                  ? "Yok"
+                  : String(status.transferRights?.available ?? "—")
+            }
+            hint={`${status.transferRights?.used ?? 0} kullanıldı`}
+            tone={status.transferRights?.available === 0 ? "warn" : "accent"}
+            icon="swap-horizontal-outline"
+          />
+          <MetricTile
+            label="Dönem"
+            value={status.activePeriod?.name || `#${status.activePeriod?.order ?? "—"}`}
+            hint={status.ruleSet?.name}
+            icon="calendar-outline"
+          />
+        </MetricGrid>
+      ) : status ? (
+        <Text style={styles.lineupHint} {...textScale.long}>
+          {status.message ?? "Bu sezon için kadro kural seti tanımlanmamış; limit uygulanmıyor."}
+        </Text>
+      ) : null}
+
+      {/* Kadrodakiler */}
+      <SectionHeader title="Sezon kadrosu" meta={`${members.length} oyuncu`} />
+      {membersQuery.isLoading ? (
+        <SkeletonListRow count={4} avatar />
+      ) : members.length ? (
+        members.map((member) => {
+          const player = playerById.get(member.player_id);
+          return (
+            <SeasonMemberRow
+              key={member.id}
+              member={member}
+              name={player?.player_name ?? `Oyuncu #${member.player_id}`}
+              subtitle={
+                [
+                  positionLabel(player?.team_position) || player?.profile_position || "Mevki yok",
+                  member.is_licensed ? "Lisanslı" : null,
+                  member.membership_status === "pending" ? "Onay bekliyor" : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")
+              }
+              disabled={busy}
+              onRemove={confirmRemove}
+            />
+          );
+        })
+      ) : (
+        <EmptyState
+          icon="people-outline"
+          title="Sezon kadrosu boş"
+          body="Aşağıdaki listeden oyuncularını bu sezonun kadrosuna ekleyebilirsin."
+          variant="inline"
+        />
+      )}
+
+      {/* Eklenebilecekler */}
+      <SectionHeader title="Kadroya ekle" meta={`${addable.length} oyuncu`} />
+
+      <View style={styles.licensedRow}>
+        <View style={styles.licensedTexts}>
+          <Text style={styles.licensedTitle} {...textScale.dense}>
+            Lisanslı olarak ekle
+          </Text>
+          <Text style={styles.lineupHint} {...textScale.long}>
+            Lisanslı oyuncuların ayrı bir limiti vardır. Emin değilsen kapalı bırak.
+          </Text>
+        </View>
+        <Toggle value={licensed} onValueChange={setLicensed} accessibilityLabel="Lisanslı olarak ekle" />
+      </View>
+
+      {addable.length ? (
+        addable.map((player) => (
+          <SeasonAddRow
+            key={player.id}
+            player={player}
+            disabled={busy || !activeSeasonId}
+            onAdd={addMutation.mutate}
+          />
+        ))
+      ) : (
+        <Text style={styles.lineupHint} {...textScale.long}>
+          Takım kadrondaki herkes bu sezonun kadrosunda.
+        </Text>
+      )}
+    </ScrollView>
+  );
+});
+
+/** Sezon çipi — memo'lu olsun diye kimliği geri verir. */
+const SeasonChip = React.memo(function SeasonChip({
+  id,
+  label,
+  selected,
+  onPress,
+}: {
+  id: number;
+  label: string;
+  selected: boolean;
+  onPress: (id: number) => void;
+}) {
+  const handlePress = useCallback(() => onPress(id), [id, onPress]);
+  return <Chip label={label} selected={selected} onPress={handlePress} size="sm" />;
+});
+
+/** Sezon kadrosundaki bir üye. */
+const SeasonMemberRow = React.memo(function SeasonMemberRow({
+  member,
+  name,
+  subtitle,
+  disabled,
+  onRemove,
+}: {
+  member: SeasonRosterMember;
+  name: string;
+  subtitle: string;
+  disabled: boolean;
+  onRemove: (member: SeasonRosterMember) => void;
+}) {
+  const handleRemove = useCallback(() => onRemove(member), [member, onRemove]);
+  return (
+    <View style={styles.seasonRow}>
+      <View style={styles.seasonTexts}>
+        <Text style={styles.seasonName} numberOfLines={1} {...textScale.dense}>
+          {name}
+        </Text>
+        <Text style={styles.seasonMeta} numberOfLines={1} {...textScale.dense}>
+          {subtitle}
+        </Text>
+      </View>
+      <Touchable
+        feedback="icon"
+        haptic="light"
+        onPress={handleRemove}
+        disabled={disabled}
+        accessibilityRole="button"
+        accessibilityLabel={`${name} sezon kadrosundan çıkar`}
+        style={styles.seasonAction}
+      >
+        <Ionicons name="remove-circle-outline" size={20} color={colors.danger} />
+      </Touchable>
+    </View>
+  );
+});
+
+/** Sezon kadrosuna eklenebilecek takım oyuncusu. */
+const SeasonAddRow = React.memo(function SeasonAddRow({
+  player,
+  disabled,
+  onAdd,
+}: {
+  player: RosterPlayer;
+  disabled: boolean;
+  onAdd: (playerId: number) => void;
+}) {
+  const handleAdd = useCallback(() => onAdd(player.id), [onAdd, player.id]);
+  return (
+    <Touchable
+      feedback="row"
+      haptic="selection"
+      onPress={handleAdd}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={`${player.player_name} sezon kadrosuna ekle`}
+      style={styles.seasonRow}
+    >
+      <View style={styles.seasonTexts}>
+        <Text style={styles.seasonName} numberOfLines={1} {...textScale.dense}>
+          {player.player_name}
+        </Text>
+        <Text style={styles.seasonMeta} numberOfLines={1} {...textScale.dense}>
+          {positionLabel(player.team_position) || player.profile_position || "Mevki yok"}
+          {player.jersey_number ? ` · #${player.jersey_number}` : ""}
+        </Text>
+      </View>
+      <Ionicons name="add-circle-outline" size={20} color={colors.brandAccent} />
+    </Touchable>
+  );
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
    Alt bileşenler
    ══════════════════════════════════════════════════════════════════════════ */
 
@@ -736,10 +1183,16 @@ const StatTile = React.memo(function StatTile({
 const PlayerRow = React.memo(function PlayerRow({
   player,
   position,
+  marketValue,
+  marketChange,
   onPress,
 }: {
   player: RosterPlayer;
   position: "single" | "first" | "middle" | "last";
+  /** Sunucudan gelen piyasa değeri (ETL); yoksa satırda gösterilmez. */
+  marketValue?: number | null;
+  /** Son hesaplamaya göre değişim — işaretine göre renklenir. */
+  marketChange?: number | null;
   onPress: (player: RosterPlayer) => void;
 }) {
   const handlePress = useCallback(() => onPress(player), [onPress, player]);
@@ -780,6 +1233,30 @@ const PlayerRow = React.memo(function PlayerRow({
           {meta}
         </Text>
       </View>
+
+      {/* Piyasa değeri sözleşme rozetinin YERİNE geçmez, üstüne biner:
+          rozet oyuncunun kulüple bağını, değer piyasadaki karşılığını söyler.
+          Değer yoksa (henüz hesaplanmamış oyuncu) sütun hiç çizilmez ve
+          rozet eski yerinde kalır. */}
+      {marketValue != null ? (
+        <View style={styles.marketBox}>
+          <Text style={styles.marketValue} numberOfLines={1} {...textScale.badge}>
+            {formatEtlShort(marketValue)}
+          </Text>
+          {marketChange ? (
+            <Text
+              style={[
+                styles.marketChange,
+                { color: marketChange > 0 ? colors.win : colors.loss },
+              ]}
+              numberOfLines={1}
+              {...textScale.badge}
+            >
+              {marketChange > 0 ? "▲" : "▼"} {formatEtlShort(Math.abs(marketChange))}
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
 
       {player.has_active_contract ? (
         <Badge label="SÖZLEŞMELİ" tone="win" size="xs" />
@@ -1092,6 +1569,63 @@ const styles = StyleSheet.create({
   lineupHint: {
     ...type.caption,
     color: colors.textTertiary,
+  },
+
+  /* Piyasa değeri sütunu */
+  marketBox: {
+    alignItems: "flex-end",
+    minWidth: 46,
+  },
+  marketValue: {
+    ...type.tableNumStrong,
+    color: colors.accentText,
+  },
+  marketChange: {
+    ...type.micro,
+    letterSpacing: 0,
+  },
+
+  /* Sezon kadrosu */
+  licensedRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    paddingVertical: space.s,
+  },
+  licensedTexts: {
+    flex: 1,
+    gap: 2,
+  },
+  licensedTitle: {
+    ...type.h3,
+    color: colors.textPrimary,
+  },
+  seasonRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    minHeight: layout.listRowHeight,
+    paddingHorizontal: space.md,
+    backgroundColor: colors.surface1,
+    borderRadius: radius.md,
+    borderWidth: hairline,
+    borderColor: colors.border,
+  },
+  seasonTexts: {
+    flex: 1,
+    gap: 1,
+    paddingVertical: space.s,
+  },
+  seasonName: {
+    ...type.bodySm,
+    color: colors.textPrimary,
+  },
+  seasonMeta: {
+    ...type.caption,
+    color: colors.textTertiary,
+  },
+  seasonAction: {
+    padding: space.xs,
   },
 
   /* Özet */
