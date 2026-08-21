@@ -10,7 +10,14 @@
  * oyuncu olmayan biri "Sözleşmelerim"i, yönetici olmayan biri "Yönetim
  * Paneli"ni görüyordu. Artık satırlar kullanıcının gerçekten sahip olduğu
  * rollere göre üretilir (KULÜBÜM ve KARİYERİM grupları koşulludur) ve en sık
- * kullanılan grup en üste alınır. Oyunlar bu ekrandan çıktı — kendi sekmesi var.
+ * kullanılan grup en üste alınır.
+ *
+ * MENÜ SEKMESİYLE İŞ BÖLÜMÜ: Keşfet (haberler, arşiv, şehirler, rekorlar),
+ * Bilgi (kurallar, cezalar, iletişim) ve sosyal bağlantılar bu ekrandan çıkıp
+ * MENÜ sekmesine taşındı. Profil'de KİMLİK ve TERCİH kalır — "ben kimim, neyi
+ * nasıl görmek istiyorum"; Menü'de KEŞİF ve ARAÇ durur — "uygulamada başka ne
+ * var". Aynı satırın iki sekmede birden bulunması kullanıcıya "hangisi doğru
+ * yer" sorusunu sordurur ve iki listeyi de şişirir.
  *
  * NEDEN SectionList: satırlar sabit bir menü gibi görünse de sayıları role ve
  * rozetlere göre değişir; SectionList + memo'lu satır, ScrollView + map'e göre
@@ -69,8 +76,6 @@ import { getPanelMe } from "@/lib/api/panel";
 import { mediaUrl } from "@/lib/format";
 import { openLink } from "@/lib/links";
 import { queryKeys } from "@/lib/queryKeys";
-import { instagramUrl } from "@/lib/socials";
-import { youtubeChannelUrl } from "@/lib/youtube";
 import { useAuth } from "@/providers/AuthProvider";
 import { useFavorite } from "@/providers/FavoriteProvider";
 import { useScope } from "@/providers/ScopeProvider";
@@ -326,8 +331,6 @@ export default function ProfileTabScreen() {
 
   /* ------------------------------ SATIRLAR ------------------------------- */
 
-  const igUrl = instagramUrl(scope.cityLabel);
-  const channelUrl = youtubeChannelUrl(scope.cityLabel);
   const favoriteScopeCount = favorite.favoriteLeagues.length + favorite.favoriteSeasons.length;
 
   const sections = useMemo<MenuSection[]>(() => {
@@ -495,99 +498,10 @@ export default function ProfileTabScreen() {
     }
     result.push({ key: "tercihler", title: "Tercihler", data: prefs });
 
-    /* 5 — KEŞFET */
-    result.push({
-      key: "kesfet",
-      title: "Keşfet",
-      data: [
-        {
-          key: "sehirler",
-          icon: "map",
-          title: "Şehirler ve Sıralama",
-          subtitle: "Haritadan şehir seç, liderleri gör",
-          action: { kind: "route", route: "/sehir" },
-        },
-        {
-          key: "haberler",
-          icon: "newspaper",
-          title: "Haberler",
-          subtitle: "Manşetler, transferler, duyurular",
-          action: { kind: "route", route: "/(tabs)/ligler?tab=haberler" },
-        },
-        {
-          key: "arsiv",
-          icon: "archive",
-          title: "Arşiv",
-          subtitle: "Tamamlanan lig ve sezonlar",
-          action: { kind: "route", route: "/(tabs)/ligler?tab=arsiv" },
-        },
-        {
-          key: "rekorlar",
-          icon: "podium",
-          title: "Rekor Tablosu",
-          subtitle: "Oyun rekorları lider tablosu",
-          action: { kind: "route", route: "/siralama" },
-        },
-      ],
-    });
-
-    /* 6 — BİLGİ */
-    result.push({
-      key: "bilgi",
-      title: "Bilgi",
-      data: [
-        {
-          key: "kurallar",
-          icon: "book",
-          title: "Lig Kuralları",
-          subtitle: "Resmî müsabaka kuralları",
-          action: { kind: "route", route: "/kurallar" },
-        },
-        {
-          key: "cezalar",
-          icon: "hammer",
-          title: "Cezalar",
-          subtitle: "Disiplin talimatı ve kayıtlar",
-          action: { kind: "route", route: "/cezalar" },
-        },
-        {
-          key: "iletisim",
-          icon: "mail",
-          title: "İletişim",
-          subtitle: "Telefon, WhatsApp, e-posta",
-          action: { kind: "route", route: "/iletisim" },
-        },
-      ],
-    });
-
-    /* 7 — BİZİ TAKİP ET: şehir hesabı yoksa satır hiç çizilmez. */
-    const social: MenuItem[] = [];
-    if (igUrl) {
-      social.push({
-        key: "instagram",
-        icon: "logo-instagram",
-        title: "Instagram",
-        subtitle: `${scope.cityLabel} hesabı`,
-        action: { kind: "link", url: igUrl },
-      });
-    }
-    if (channelUrl) {
-      social.push({
-        key: "youtube",
-        icon: "logo-youtube",
-        title: "YouTube",
-        subtitle: "Canlı yayınlar ve maç özetleri",
-        action: { kind: "link", url: channelUrl },
-      });
-    }
-    social.push({
-      key: "site",
-      icon: "globe",
-      title: "elitlig.com",
-      subtitle: "Web sitemiz",
-      action: { kind: "link", url: SITE_URL },
-    });
-    result.push({ key: "sosyal", title: "Bizi takip et", data: social });
+    /* NOT: Keşfet · Bilgi · Bizi takip et grupları MENÜ sekmesine taşındı.
+       Profil artık yalnız KİMLİK ve TERCİH taşır; keşif ve araç niteliğindeki
+       her şey Menü'nün evidir. Aynı satırı iki sekmede birden göstermek
+       kullanıcıya "hangisi doğru yer" sorusunu sordurur. */
 
     /* 8 — Çıkış: kendi başına, kırmızı, başlıksız grup. */
     if (user) {
@@ -609,10 +523,8 @@ export default function ProfileTabScreen() {
     return result;
   }, [
     auth.isManagement,
-    channelUrl,
     favorite.favorites.length,
     favoriteScopeCount,
-    igUrl,
     isPlayer,
     isPresident,
     scope.cityLabel,

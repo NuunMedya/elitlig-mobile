@@ -45,42 +45,47 @@ export const spacing = {
 
 /** Yerleşim sabitleri — ekran ve satır ölçüleri tek yerde toplanır. */
 export const layout = {
-  screenPadding: 12,       // eski 16 → 12: yoğunluk için kenar boşluğu daralır
+  /* YOĞUNLUK KARARI: her satır ~4px kısaldı. 844px'lik bir ekranda bu, liste
+     başına 1–2 satır daha demek; altı sekmeli çubukta kaybedilen dikey alanı
+     geri kazandırır. Alt sınır 44px dokunma hedefidir, altına inilmez. */
+  screenPadding: 12,
   rowPaddingH: 12,
-  rowGap: 8,
-  sectionGap: 16,
-  listRowHeight: 52,       // tek satırlı ListRow
-  listRowHeightTwoLine: 64,
-  matchRowHeight: 60,      // iki takım satırı + padding
-  matchRowHeightCompact: 48,
-  headerHeightExpanded: 96,
-  headerHeightCollapsed: 48,
-  tabBarHeight: 56,        // + insets.bottom
-  tabStripHeight: 42,
-  dateStripHeight: 58,
+  rowGap: 6,
+  sectionGap: 14,
+  listRowHeight: 48,       // tek satırlı ListRow (eski 52)
+  listRowHeightTwoLine: 58,// (eski 64)
+  matchRowHeight: 56,      // iki takım satırı + padding (eski 60)
+  matchRowHeightCompact: 44,
+  headerHeightExpanded: 88,
+  headerHeightCollapsed: 44,
+  tabBarHeight: 54,        // + insets.bottom — altı sekme sığsın diye 56'dan indi
+  tabStripHeight: 38,
+  dateStripHeight: 52,
   minTouch: 44,            // erişilebilirlik alt sınırı (hitSlop ile tamamlanır)
   crestSm: 20,
   crestMd: 24,
-  crestLg: 32,
-  crestXl: 56,
-  starColumnWidth: 32,
-  timeColumnWidth: 44,
+  crestLg: 30,
+  crestXl: 52,
+  starColumnWidth: 30,
+  timeColumnWidth: 42,
   scoreColumnWidth: 30,
 } as const;
 
 /**
- * Köşe yarıçapları. Eski `md=14 / lg=20` kart estetiğine göre büyüktü; yoğun
- * liste düzeninde kart ve satır grubu 10, sheet 14 olur. `pill` yalnız chip,
- * rozet ve avatar içindir.
+ * Köşe yarıçapları.
+ *
+ * Satır grubu 8, kart 12, sheet/hero 16, vitrin kartı 22. Yarıçap yükseltiyle
+ * birlikte artar: kart zeminden ne kadar "kalkıyorsa" köşesi o kadar yumuşar.
+ * `pill` yalnız chip, rozet ve avatar içindir.
  */
 export const radius = {
   none: 0,
   xs:   4,   // rozet, form çipi
   sm:   6,   // amblem kutusu, küçük çip
   md:   8,   // input, chip, satır grubu
-  lg:  10,   // kart
-  xl:  14,   // bottom sheet, hero kartı
-  xxl: 20,
+  lg:  12,   // kart (eski 10 → 12: yumuşak ama hâlâ "veri kartı")
+  xl:  16,   // bottom sheet, hero kartı
+  xxl: 22,   // tam genişlik vitrin kartı
   pill: 999,
 } as const;
 

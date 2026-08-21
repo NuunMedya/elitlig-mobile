@@ -43,6 +43,16 @@ export type { SurfaceProps } from "./Surface";
 export { Card } from "./Card";
 export type { CardProps } from "./Card";
 
+/* — Yoğun düzenin yeni yapı taşları (yenilenen tasarım) — */
+export { MetricTile, MetricGrid } from "./MetricTile";
+export type { MetricTileProps, MetricGridProps, MetricTone } from "./MetricTile";
+
+export { ActionTile, ActionRow } from "./ActionTile";
+export type { ActionTileProps, ActionRowProps } from "./ActionTile";
+
+export { SpotlightCard } from "./SpotlightCard";
+export type { SpotlightCardProps, SpotlightTeam } from "./SpotlightCard";
+
 export { Divider } from "./Divider";
 export type { DividerProps } from "./Divider";
 

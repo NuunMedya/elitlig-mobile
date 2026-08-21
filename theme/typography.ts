@@ -4,8 +4,11 @@
  * Kurallar (neden böyle):
  *  - Aile: sistem yazı tipi (iOS SF Pro, Android Roboto). Özel font YÜKLENMEZ;
  *    açılış maliyeti ve skor listesinde FOUT kabul edilemez.
- *  - Ağırlık tavanı "800". Android'de "900" ile "800" aynı faceye düşer,
- *    ayrım kaybolur.
+ *  - METİN ağırlık tavanı "700"; "800" yalnız SKOR ölçeğindedir. Android'de
+ *    "900" ile "800" aynı faceye düşer, ayrım kaybolur — bu yüzden 900 hiç yok.
+ *  - Hiyerarşi ağırlıkla değil TRACKING ile kurulur: başlıklar negatif
+ *    (-0.4…-0.1), büyük harf etiketler pozitif (+0.4…+0.9) tracking alır.
+ *    Kalabalık bir ekranda "her şey kalın" olduğunda hiçbir şey öne çıkmaz.
  *  - TÜM rakamlar tabular (`fontVariant: ["tabular-nums"]`). Aksi hâlde canlı
  *    skor 1 → 10 olduğunda satır kayar.
  *  - Mikro ölçek yalnız BÜYÜK HARF etiketlerde (CANLI, MS, DEVRE, "O AV P").
@@ -21,30 +24,41 @@ import type { TextStyle } from "react-native";
 /** Tabular rakam karışımı — skor/dakika/puan içeren her token bunu alır. */
 const numeric: Pick<TextStyle, "fontVariant"> = { fontVariant: ["tabular-nums"] };
 
-/** Yeni ölçek — 10–20px metin, ayrı skor ölçeği. */
+/** Ölçek — 10–19px metin, ayrı skor ölçeği, ayrı panel metriği. */
 export const scale = {
-  /* Metin ölçeği — 10–20px */
-  display: { fontSize: 20, lineHeight: 24, fontWeight: "800", letterSpacing: -0.3 },
-  h1:      { fontSize: 18, lineHeight: 22, fontWeight: "800", letterSpacing: -0.2 },
-  h2:      { fontSize: 16, lineHeight: 20, fontWeight: "700", letterSpacing: -0.1 },
-  h3:      { fontSize: 15, lineHeight: 19, fontWeight: "700", letterSpacing: 0 },
-  bodyLg:  { fontSize: 15, lineHeight: 21, fontWeight: "500", letterSpacing: 0 },
-  body:    { fontSize: 14, lineHeight: 20, fontWeight: "500", letterSpacing: 0 },
-  bodySm:  { fontSize: 13, lineHeight: 18, fontWeight: "500", letterSpacing: 0 },
-  label:   { fontSize: 12, lineHeight: 16, fontWeight: "600", letterSpacing: 0.1 },
-  caption: { fontSize: 11, lineHeight: 14, fontWeight: "600", letterSpacing: 0.2 },
-  micro:   { fontSize: 10, lineHeight: 13, fontWeight: "700", letterSpacing: 0.6 },
+  /* Metin ölçeği — 10–19px.
+     AĞIRLIK TAVANI 700'e İNDİ: eski ölçekte h1/h2/display "800" idi ve koyu
+     zeminde sistem yazı tipinin 800 kesimi tıknaz, "ucuz" bir izlenim
+     bırakıyordu. Minimal görünüm ağırlıkla değil HİYERARŞİYLE kurulur:
+     başlık 700 + sıkı tracking, üstündeki etiket 600 + geniş tracking.
+     800 yalnız SKOR ölçeğinde kalır — orada kalınlık okunurluk içindir. */
+  display: { fontSize: 19, lineHeight: 23, fontWeight: "700", letterSpacing: -0.4 },
+  h1:      { fontSize: 17, lineHeight: 21, fontWeight: "700", letterSpacing: -0.3 },
+  h2:      { fontSize: 15, lineHeight: 19, fontWeight: "700", letterSpacing: -0.2 },
+  h3:      { fontSize: 14, lineHeight: 18, fontWeight: "600", letterSpacing: -0.1 },
+  bodyLg:  { fontSize: 14, lineHeight: 20, fontWeight: "400", letterSpacing: 0 },
+  body:    { fontSize: 13, lineHeight: 18, fontWeight: "400", letterSpacing: 0 },
+  bodySm:  { fontSize: 12, lineHeight: 17, fontWeight: "400", letterSpacing: 0 },
+  label:   { fontSize: 12, lineHeight: 15, fontWeight: "600", letterSpacing: 0 },
+  caption: { fontSize: 11, lineHeight: 14, fontWeight: "500", letterSpacing: 0.1 },
+  micro:   { fontSize: 10, lineHeight: 12, fontWeight: "600", letterSpacing: 0.4 },
+  /* Üst etiket — kart ve bölüm başlıklarının üstündeki küçük büyük-harf satır.
+     Hiyerarşinin "ağırlık yerine tracking" ayağı budur. */
+  overline: { fontSize: 10, lineHeight: 12, fontWeight: "700", letterSpacing: 0.9 },
 
   /* Skor ölçeği — ayrı, tamamı tabular */
-  scoreHero: { fontSize: 34, lineHeight: 38, fontWeight: "800", letterSpacing: -1.2, ...numeric },
-  scoreLg:   { fontSize: 22, lineHeight: 26, fontWeight: "800", letterSpacing: -0.6, ...numeric },
-  scoreMd:   { fontSize: 18, lineHeight: 22, fontWeight: "800", letterSpacing: -0.4, ...numeric },
-  scoreSm:   { fontSize: 15, lineHeight: 18, fontWeight: "700", letterSpacing: -0.2, ...numeric },
+  scoreHero: { fontSize: 32, lineHeight: 34, fontWeight: "800", letterSpacing: -1.4, ...numeric },
+  scoreLg:   { fontSize: 21, lineHeight: 24, fontWeight: "800", letterSpacing: -0.8, ...numeric },
+  scoreMd:   { fontSize: 17, lineHeight: 20, fontWeight: "700", letterSpacing: -0.5, ...numeric },
+  scoreSm:   { fontSize: 14, lineHeight: 17, fontWeight: "700", letterSpacing: -0.2, ...numeric },
 
   /* Sayısal yardımcılar */
-  clock:          { fontSize: 12, lineHeight: 14, fontWeight: "700", letterSpacing: 0, ...numeric },
-  tableNum:       { fontSize: 13, lineHeight: 16, fontWeight: "600", letterSpacing: 0, ...numeric },
-  tableNumStrong: { fontSize: 13, lineHeight: 16, fontWeight: "800", letterSpacing: 0, ...numeric },
+  clock:          { fontSize: 11, lineHeight: 13, fontWeight: "600", letterSpacing: 0, ...numeric },
+  tableNum:       { fontSize: 12, lineHeight: 15, fontWeight: "500", letterSpacing: 0, ...numeric },
+  tableNumStrong: { fontSize: 12, lineHeight: 15, fontWeight: "700", letterSpacing: 0, ...numeric },
+  /* Panel kartlarındaki büyük tek rakam (kadro sayısı, kasa, puan). */
+  metric:         { fontSize: 22, lineHeight: 25, fontWeight: "700", letterSpacing: -0.8, ...numeric },
+  metricSm:       { fontSize: 16, lineHeight: 19, fontWeight: "700", letterSpacing: -0.4, ...numeric },
 } as const satisfies Record<string, TextStyle>;
 
 /**

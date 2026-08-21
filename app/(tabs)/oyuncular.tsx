@@ -1,0 +1,485 @@
+/**
+ * OYUNCULAR — seçili kapsamdaki oyuncu sıralamaları.
+ *
+ * NEDEN AYRI SEKME: gol krallığı ve oyuncu istatistiği, bir amatör ligde
+ * kullanıcıların en sık baktığı ikinci şeydir (birincisi skorlar). Eskiden
+ * Ligler sekmesinin dört segmentinden biriydi ve segment seçimi ekran
+ * değişince sıfırlandığı için her defasında yeniden bulunuyordu.
+ *
+ * SIRALAMA ÖLÇÜTÜ ÇİPLERDE, SÜTUNLAR SABİT: hangi ölçüte göre sıralandığından
+ * bağımsız olarak her satır aynı üç rakamı gösterir (maç · gol · asist) ve
+ * sağdaki büyük rakam SEÇİLİ ölçüttür. Böylece "gol krallığında kaç maç
+ * oynamış?" sorusu satırdan ayrılmadan yanıtlanır; eski düzende yalnız seçili
+ * ölçüt görünüyordu ve karşılaştırma için oyuncu profiline girmek gerekiyordu.
+ *
+ * PODYUM: ilk üç, listenin üstünde tek satırlık bir podyum olarak çizilir.
+ * Sıralama ekranının işi "kim önde" sorusunu BİR BAKIŞTA yanıtlamaktır; ilk
+ * üçü liste satırı olarak vermek bunu üç ayrı okumaya böler. Podyum yalnız
+ * arama boşken ve en az üç oyuncu varken görünür.
+ *
+ * PERFORMANS: satır yüksekliği sabit (56px) → `getItemLayout`. Satır bileşeni
+ * memo'lu ve yalnız ilkel prop alır.
+ */
+
+import { useQuery } from "@tanstack/react-query";
+import { useRouter } from "expo-router";
+import React, { useCallback, useMemo, useState } from "react";
+import { FlatList, RefreshControl, StyleSheet, Text, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+
+import { ScopeChip } from "@/components/ScopeChip";
+import {
+  Avatar,
+  Chip,
+  ChipGroup,
+  EmptyState,
+  ErrorState,
+  Input,
+  ScreenHeader,
+  SkeletonListRow,
+  Touchable,
+  refreshControlProps,
+  useHeaderScroll,
+  useRefresh,
+} from "@/components/ui";
+import { getPlayerRankings } from "@/lib/api/players";
+import { queryKeys } from "@/lib/queryKeys";
+import type { PlayerRankRow, PlayerSort } from "@/lib/types";
+import { useScope } from "@/providers/ScopeProvider";
+import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
+
+/** Sunucu sayıları kimi uçlarda string döndürüyor; tek dönüştürücüden geçer. */
+const num = (value: number | string | null | undefined) => Number(value ?? 0) || 0;
+
+interface SortDef {
+  key: PlayerSort;
+  label: string;
+  /** Sağdaki büyük rakam. */
+  metric: (row: PlayerRankRow) => string;
+  unit: string;
+}
+
+const SORTS: SortDef[] = [
+  { key: "mostValuable", label: "En Değerliler", metric: (r) => String(num(r.points)), unit: "puan" },
+  { key: "topScorers", label: "Gol Krallığı", metric: (r) => String(num(r.goals)), unit: "gol" },
+  { key: "mostMatches", label: "En Çok Maç", metric: (r) => String(num(r.matches)), unit: "maç" },
+  { key: "pointsPerMatch", label: "Puan / Maç", metric: (r) => num(r.pointsPerMatch).toFixed(2), unit: "puan" },
+  { key: "goalsPerMatch", label: "Gol / Maç", metric: (r) => num(r.goalsPerMatch).toFixed(2), unit: "gol" },
+  { key: "mostCards", label: "Kartlar", metric: (r) => String(num(r.cards)), unit: "kart" },
+];
+
+const ROW_HEIGHT = 56;
+const SKELETON_ROWS = ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8"] as const;
+
+/** Podyum sırasına göre madalya rengi. */
+const MEDAL = [colors.star, colors.textSecondary, colors.warn];
+
+const normalize = (value: string) => value.trim().toLocaleLowerCase("tr-TR");
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Satır
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const PlayerRow = React.memo(function PlayerRow({
+  playerId,
+  rank,
+  name,
+  image,
+  teamName,
+  matches,
+  goals,
+  assists,
+  metric,
+  unit,
+  onPress,
+}: {
+  playerId: number;
+  rank: number;
+  name: string;
+  image: string | null;
+  teamName: string;
+  matches: number;
+  goals: number;
+  assists: number;
+  metric: string;
+  unit: string;
+  onPress: (playerId: number) => void;
+}) {
+  const handlePress = useCallback(() => onPress(playerId), [onPress, playerId]);
+
+  return (
+    <Touchable style={styles.row} onPress={handlePress} feedback="row" haptic="selection">
+      <Text style={styles.rank} {...textScale.dense}>
+        {rank}
+      </Text>
+      <Avatar name={name} image={image} size={32} />
+
+      <View style={styles.rowBody}>
+        <Text style={styles.name} numberOfLines={1} {...textScale.dense}>
+          {name}
+        </Text>
+        {/* Üç sabit sütun: ölçüt ne olursa olsun aynı üç rakam. */}
+        <Text style={styles.meta} numberOfLines={1} {...textScale.dense}>
+          {teamName || "Takımsız"} · {matches} maç · {goals} gol · {assists} asist
+        </Text>
+      </View>
+
+      <View style={styles.metricBox}>
+        <Text style={styles.metricValue} {...textScale.dense}>
+          {metric}
+        </Text>
+        <Text style={styles.metricUnit} {...textScale.badge}>
+          {unit}
+        </Text>
+      </View>
+    </Touchable>
+  );
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Podyum — ilk üç
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const Podium = React.memo(function Podium({
+  players,
+  metricOf,
+  unit,
+  onPress,
+}: {
+  players: PlayerRankRow[];
+  metricOf: (row: PlayerRankRow) => string;
+  unit: string;
+  onPress: (playerId: number) => void;
+}) {
+  return (
+    <View style={styles.podium}>
+      {players.map((player, index) => (
+        <Touchable
+          key={player.id}
+          style={styles.podiumCell}
+          onPress={() => onPress(player.id)}
+          feedback="card"
+          haptic="selection"
+          accessibilityRole="button"
+          accessibilityLabel={`${index + 1}. ${player.name}, ${metricOf(player)} ${unit}`}
+        >
+          <View style={[styles.podiumRing, { borderColor: MEDAL[index] }]}>
+            <Avatar name={player.name} image={player.image ?? null} size={44} />
+          </View>
+          <Text style={[styles.podiumRank, { color: MEDAL[index] }]} {...textScale.badge}>
+            {index + 1}.
+          </Text>
+          <Text style={styles.podiumName} numberOfLines={1} {...textScale.dense}>
+            {player.name}
+          </Text>
+          <Text style={styles.podiumMetric} numberOfLines={1} {...textScale.dense}>
+            {metricOf(player)} {unit}
+          </Text>
+        </Touchable>
+      ))}
+    </View>
+  );
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Ekran
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const keyExtractor = (item: PlayerRankRow) => String(item.id);
+const getItemLayout = (_data: ArrayLike<PlayerRankRow> | null | undefined, index: number) => ({
+  length: ROW_HEIGHT,
+  offset: ROW_HEIGHT * index,
+  index,
+});
+
+export default function PlayersScreen() {
+  const scope = useScope();
+  const router = useRouter();
+  const { scrollY, scrollProps } = useHeaderScroll();
+
+  const [sort, setSort] = useState<PlayerSort>("topScorers");
+  const [search, setSearch] = useState("");
+
+  const active = SORTS.find((item) => item.key === sort) ?? SORTS[0];
+
+  const scopeKey = {
+    cityId: scope.cityId ?? undefined,
+    leagueId: scope.leagueId ?? undefined,
+    seasonId: scope.seasonId ?? undefined,
+  };
+
+  const query = useQuery({
+    queryKey: queryKeys.playerRankings(scopeKey, sort),
+    queryFn: () => getPlayerRankings(scopeKey, sort),
+    enabled: scope.ready,
+    staleTime: 60_000,
+  });
+
+  const refresh = useRefresh(query.refetch, { refreshing: query.isRefetching });
+
+  const rows = useMemo(() => {
+    const players = query.data?.players ?? [];
+    const term = normalize(search);
+    const filtered = term
+      ? players.filter(
+          (player) =>
+            normalize(player.name).includes(term) ||
+            normalize(player.teamName ?? "").includes(term),
+        )
+      : players;
+    /* "En Değerliler"de sunucu piyasa değerine göre sıralar ama yanıt bu alanı
+       taşımaz; ekranda puan gösterildiği için liste puana göre yeniden dizilir. */
+    if (sort !== "mostValuable") return filtered;
+    return [...filtered].sort((a, b) => num(b.points) - num(a.points));
+  }, [query.data, search, sort]);
+
+  const openPlayer = useCallback(
+    (playerId: number) => router.push(`/oyuncu/${playerId}`),
+    [router],
+  );
+
+  const busy = query.isLoading || scope.loading;
+  const searching = Boolean(search.trim());
+  const showPodium = !searching && !busy && rows.length >= 3;
+
+  const renderItem = useCallback(
+    ({ item, index }: { item: PlayerRankRow; index: number }) => (
+      <PlayerRow
+        playerId={item.id}
+        rank={index + 1}
+        name={item.name}
+        image={item.image ?? null}
+        teamName={item.teamName ?? ""}
+        matches={num(item.matches)}
+        goals={num(item.goals)}
+        assists={num(item.assists)}
+        metric={active.metric(item)}
+        unit={active.unit}
+        onPress={openPlayer}
+      />
+    ),
+    [active, openPlayer],
+  );
+
+  /* Podyum çizildiyse ilk üç listeden düşülür; aksi hâlde aynı üç oyuncu
+     ekranda iki kez görünür ve sıralama "1,2,3,1,2,3" gibi okunur. */
+  const listData = useMemo(
+    () => (showPodium ? rows.slice(3) : rows),
+    [rows, showPodium],
+  );
+
+  const renderOffsetItem = useCallback(
+    ({ item, index }: { item: PlayerRankRow; index: number }) =>
+      renderItem({ item, index: showPodium ? index + 3 : index }),
+    [renderItem, showPodium],
+  );
+
+  return (
+    <SafeAreaView style={styles.screen} edges={["top"]}>
+      <ScreenHeader
+        title="Oyuncular"
+        overline={scope.leagueLabel || "ELİTLİG"}
+        scrollY={scrollY}
+        actions={[
+          {
+            icon: "search-outline",
+            accessibilityLabel: "Ara",
+            onPress: () => router.push("/ara"),
+          },
+        ]}
+        bottom={
+          <View style={styles.headerBottom}>
+            <ScopeChip />
+          </View>
+        }
+      />
+
+      {!scope.ready && !scope.loading ? (
+        <EmptyState
+          icon="options-outline"
+          title="Lig seçilmedi"
+          body="Şehir, lig ve sezon seçince oyuncu sıralaması dolar."
+          action={{ label: "Kapsam seç", onPress: () => scope.openScopeSheet("city") }}
+        />
+      ) : (
+        <FlatList
+          {...scrollProps}
+          data={busy ? [] : listData}
+          keyExtractor={keyExtractor}
+          renderItem={renderOffsetItem}
+          getItemLayout={getItemLayout}
+          initialNumToRender={12}
+          windowSize={8}
+          removeClippedSubviews
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.listContent}
+          refreshControl={
+            <RefreshControl {...refreshControlProps(refresh.refreshing, refresh.onRefresh)} />
+          }
+          ListHeaderComponent={
+            <View style={styles.listHeader}>
+              <ChipGroup>
+                {SORTS.map((item) => (
+                  <Chip
+                    key={item.key}
+                    label={item.label}
+                    selected={item.key === sort}
+                    onPress={() => setSort(item.key)}
+                  />
+                ))}
+              </ChipGroup>
+
+              <View style={styles.searchBox}>
+                <Input
+                  variant="search"
+                  size="sm"
+                  value={search}
+                  onChangeText={setSearch}
+                  placeholder="Oyuncu veya takım ara"
+                  autoCorrect={false}
+                />
+              </View>
+
+              {query.isError ? <ErrorState error={query.error} variant="banner" /> : null}
+
+              {showPodium ? (
+                <Podium
+                  players={rows.slice(0, 3)}
+                  metricOf={active.metric}
+                  unit={active.unit}
+                  onPress={openPlayer}
+                />
+              ) : null}
+            </View>
+          }
+          ListEmptyComponent={
+            busy ? (
+              <View>
+                {SKELETON_ROWS.map((key) => (
+                  <SkeletonListRow key={key} />
+                ))}
+              </View>
+            ) : query.isError ? (
+              <ErrorState error={query.error} onRetry={query.refetch} variant="inline" />
+            ) : searching ? (
+              <EmptyState
+                icon="search-outline"
+                title="Eşleşme yok"
+                body="Aramaya uyan oyuncu bulunamadı."
+                variant="inline"
+              />
+            ) : (
+              <EmptyState
+                icon="people-outline"
+                title="Oyuncu listesi boş"
+                body="Bu sezonda yayınlanmış maç kadrosu bulunmuyor."
+                variant="inline"
+              />
+            )
+          }
+        />
+      )}
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: colors.bg,
+  },
+  headerBottom: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    paddingHorizontal: layout.screenPadding,
+    paddingBottom: space.sm,
+  },
+  listContent: {
+    paddingBottom: space.xxxl,
+  },
+  listHeader: {
+    gap: space.sm,
+    paddingBottom: space.sm,
+  },
+  searchBox: {
+    paddingHorizontal: layout.screenPadding,
+  },
+
+  /* — Satır — */
+  row: {
+    height: ROW_HEIGHT,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.m,
+    paddingHorizontal: layout.screenPadding,
+    borderBottomWidth: hairline,
+    borderBottomColor: colors.separator,
+  },
+  rank: {
+    ...type.tableNum,
+    color: colors.textTertiary,
+    width: 20,
+    textAlign: "center",
+  },
+  rowBody: {
+    flex: 1,
+    gap: 2,
+  },
+  name: {
+    ...type.h3,
+    color: colors.textPrimary,
+  },
+  meta: {
+    ...type.caption,
+    color: colors.textTertiary,
+  },
+  metricBox: {
+    alignItems: "flex-end",
+    minWidth: 42,
+  },
+  metricValue: {
+    ...type.metricSm,
+    color: colors.accentText,
+  },
+  metricUnit: {
+    ...type.overline,
+    color: colors.textDisabled,
+  },
+
+  /* — Podyum — */
+  podium: {
+    flexDirection: "row",
+    gap: space.sm,
+    paddingHorizontal: layout.screenPadding,
+    paddingTop: space.xs,
+  },
+  podiumCell: {
+    flex: 1,
+    alignItems: "center",
+    gap: space.xs,
+    paddingVertical: space.m,
+    backgroundColor: colors.surface1,
+    borderRadius: radius.lg,
+    borderWidth: hairline,
+    borderColor: colors.border,
+  },
+  podiumRing: {
+    padding: 2,
+    borderRadius: radius.pill,
+    borderWidth: 1.5,
+  },
+  podiumRank: {
+    ...type.overline,
+  },
+  podiumName: {
+    ...type.caption,
+    color: colors.textPrimary,
+    textAlign: "center",
+    paddingHorizontal: space.xs,
+  },
+  podiumMetric: {
+    ...type.caption,
+    color: colors.textTertiary,
+  },
+});
