@@ -624,6 +624,11 @@ export default function FavorilerScreen() {
   const header = (
     <ScreenHeader
       title="Favoriler"
+      back
+      /* Bu ekran sekme çubuğunda yuvası olmayan bir sekmedir (href: null) ve
+         Menü'den açılır. Sekme gezgininde geri yığını olmayabilir; o durumda
+         geldiği yere, yani Menü'ye dönülür. */
+      onBack={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)/menu"))}
       scrollY={scrollY}
       actions={headerActions}
       bottom={

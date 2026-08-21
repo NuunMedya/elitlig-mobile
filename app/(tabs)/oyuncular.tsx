@@ -391,7 +391,6 @@ const styles = StyleSheet.create({
   headerBottom: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.sm,
     paddingHorizontal: layout.screenPadding,
     paddingBottom: space.sm,
   },

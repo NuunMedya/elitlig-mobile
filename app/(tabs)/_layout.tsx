@@ -84,18 +84,31 @@ export default function TabsLayout() {
         tabBarActiveTintColor: colors.brandAccent,
         tabBarInactiveTintColor: colors.textTertiary,
         tabBarActiveBackgroundColor: colors.tabBar,
-        // Altı yuvada etiket 12px olsaydı "Oyuncular" kırpılırdı; 10px + sıfır
-        // harf aralığı en uzun etiketi bile tek satırda tutar.
-        tabBarLabelStyle: { ...type.micro, letterSpacing: 0, marginTop: 1 },
+        /* Altı yuvada bir sekmeye ~65px düşüyor. En uzun etiket "Oyuncular";
+           10px punto + NEGATİF harf aralığı + sıfır yatay dolgu ile tek satıra
+           sığar. Varsayılan `micro` aralığı (+0.4) ile son harf kırpılıyordu. */
+        tabBarLabelStyle: {
+          ...type.micro,
+          letterSpacing: -0.4,
+          marginTop: 2,
+          marginBottom: 0,
+          marginHorizontal: 0,
+          paddingHorizontal: 0,
+        },
         tabBarStyle: {
           backgroundColor: colors.tabBar,
           borderTopWidth: 1,
           borderTopColor: colors.tabBarBorder,
+          /* ÖLÇÜ: ikon kutusu 28px (21px glif + yazı tipi satır yüksekliği),
+             etiket 12px, aralarında 2px = 42px içerik. Çubuk 62px ve dikey
+             iç boşluk 6+6 → 50px kullanılabilir alan. Daha dar bir hesapta
+             (8+8 pay, ayrıca öğe başına 5px varsayılan dolgu) etiketin alt
+             kesimi kırpılıyordu; öğe dolgusu da bu yüzden sıfırlanır. */
           height: layout.tabBarHeight + insets.bottom,
-          paddingTop: 7,
-          paddingBottom: insets.bottom > 0 ? insets.bottom : 5,
+          paddingTop: 6,
+          paddingBottom: insets.bottom > 0 ? insets.bottom : 6,
         },
-        tabBarItemStyle: { paddingTop: 0, paddingHorizontal: 0 },
+        tabBarItemStyle: { paddingTop: 0, paddingBottom: 0, paddingHorizontal: 0 },
       }}
     >
       <Tabs.Screen

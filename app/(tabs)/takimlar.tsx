@@ -334,8 +334,14 @@ export default function TeamsScreen() {
           { icon: "search-outline", accessibilityLabel: "Ara", onPress: () => router.push("/ara") },
         ]}
         bottom={
+          /* Kapsam çipi ile segment AYNI SATIRDA DEĞİL: çip gerçek veriyle
+             "Ankara · 1.Lig · 25/26" kadar uzayabiliyor ve yanındaki segmentin
+             etiketlerini kırpıyordu ("Puan Ta…"). Alt alta iki satır 30px daha
+             yer kaplar ama iki denetim de tam okunur kalır. */
           <View style={styles.headerBottom}>
-            <ScopeChip />
+            <View style={styles.scopeRow}>
+              <ScopeChip />
+            </View>
             <SegmentedControl items={VIEWS} value={view} onChange={setView} size="sm" />
           </View>
         }
@@ -411,11 +417,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   headerBottom: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.sm,
+    gap: space.s,
     paddingHorizontal: layout.screenPadding,
     paddingBottom: space.sm,
+  },
+  scopeRow: {
+    flexDirection: "row",
+    alignItems: "center",
   },
   listContent: {
     paddingBottom: space.xxxl,
