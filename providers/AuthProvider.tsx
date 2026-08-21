@@ -11,6 +11,8 @@ import {
 } from "react";
 import * as authApi from "@/lib/api/auth";
 import { ApiError, configureAuth } from "@/lib/http";
+import { resetPushSync } from "@/hooks/usePushStatus";
+import { clearLedger } from "@/lib/notificationLedger";
 import { clearToken, loadToken, saveToken } from "@/lib/storage";
 import type { AuthUser } from "@/lib/types";
 
@@ -58,6 +60,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     tokenRef.current = null;
     setUser(null);
     await clearToken();
+
+    /* BİLDİRİM DURUMUNU DA UNUT.
+       Teslimat defteri bildirim kimliklerini tutuyor; aynı cihaza başka bir üye
+       girerse onun bildirimleri "zaten gösterildi" sanılıp yutulurdu. Push
+       senkron işareti de sıfırlanır ki yeni oturumda cihaz token'ı mutlaka
+       yeniden yazılsın — aksi hâlde token eski üyenin hesabında kalırdı. */
+    resetPushSync();
+    await clearLedger();
   }, []);
 
   // Jeton kaynağını ve 401 davranışını bir kez bağla.

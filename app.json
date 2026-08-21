@@ -6,10 +6,15 @@
     "orientation": "portrait",
     "scheme": "elitlig",
     "userInterfaceStyle": "automatic",
-    "backgroundColor": "#17102B",
+    "backgroundColor": "#08090D",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.elitlig.app"
+      "bundleIdentifier": "com.elitlig.app",
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
+      }
     },
     "android": {
       "package": "com.elitlig.app",
@@ -26,7 +31,8 @@
         "expo-notifications",
         {
           "color": "#6D28D9",
-          "defaultChannel": "default"
+          "defaultChannel": "default",
+          "icon": "./assets/images/notification-icon.png"
         }
       ],
       [
@@ -35,7 +41,7 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 240,
           "resizeMode": "contain",
-          "backgroundColor": "#17102B"
+          "backgroundColor": "#08090D"
         }
       ]
     ],

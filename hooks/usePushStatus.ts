@@ -36,6 +36,25 @@ const INITIAL: PushStatus = {
 let current: PushStatus = INITIAL;
 const listeners = new Set<(value: PushStatus) => void>();
 
+/**
+ * Sunucuya EN SON BAŞARIYLA yazılan token.
+ *
+ * NEDEN: kayıt, uygulama her ön plana geldiğinde çalışıyor (kullanıcı izni
+ * sonradan verebilir, Expo token'ı yenilenebilir). Aynı token her seferinde
+ * yeniden POST edilirse uygulama arka plandan her dönüşte gereksiz bir yazma
+ * isteği atar. Token değişmediği ve son yazım başarılı olduğu sürece istek
+ * atlanır; kullanıcı çıkış yaptığında `resetPushSync()` ile sıfırlanır ki
+ * aynı cihaza giren yeni üye için kayıt mutlaka tekrarlansın.
+ */
+let syncedToken: string | null = null;
+
+/** Çıkışta çağrılır: bir sonraki girişte token yeniden yazılsın. */
+export function resetPushSync(): void {
+  syncedToken = null;
+  current = { ...INITIAL };
+  listeners.forEach((listener) => listener(current));
+}
+
 function publish(patch: Partial<PushStatus>) {
   current = { ...current, ...patch };
   listeners.forEach((listener) => listener(current));
@@ -64,11 +83,19 @@ export async function runPushRegistration(signedIn: boolean): Promise<PushStatus
     return current;
   }
 
+  // Aynı token zaten yazıldıysa ağa çıkma.
+  if (syncedToken === result.token && current.server === "yazildi") {
+    publish({ server: "yazildi", serverDetail: undefined });
+    return current;
+  }
+
   try {
     // http katmanı Authorization başlığını AuthProvider'dan otomatik ekler.
     await post("/api/users/push-token", { token: result.token, platform: Platform.OS });
+    syncedToken = result.token;
     publish({ server: "yazildi", serverDetail: undefined });
   } catch (error) {
+    syncedToken = null;
     publish({
       server: "hata",
       serverDetail: error instanceof Error ? error.message : String(error),

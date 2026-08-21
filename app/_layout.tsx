@@ -5,6 +5,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { MessageSticker } from "@/components/MessageSticker";
 import { ScopeSheet } from "@/components/ScopeSheet";
 import { ToastProvider } from "@/components/ui";
+import { useNotificationBridge } from "@/hooks/useNotificationBridge";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { ApiError } from "@/lib/http";
 import { AuthProvider } from "@/providers/AuthProvider";
@@ -48,8 +49,21 @@ const queryClient = new QueryClient({
   },
 });
 
-function PushSetup() {
+/**
+ * Bildirim altyapısı — iki bağımsız yol, tek yerde.
+ *
+ *   usePushNotifications  Uzak push: token kaydı, dokunma yönlendirmesi,
+ *                         soğuk açılış yanıtı.
+ *   useNotificationBridge Yerel köprü: push zinciri kurulu olmasa bile
+ *                         bildirimleri telefonda gösterir (bkz. o dosyanın
+ *                         başlığı). İkisi `lib/notificationLedger.ts` üstünden
+ *                         haberleşir ve aynı bildirimi iki kez göstermez.
+ *
+ * Hiçbir şey çizmez; yalnız kancaları kökte bir kez çalıştırmak içindir.
+ */
+function NotificationSetup() {
   usePushNotifications();
+  useNotificationBridge();
   return null;
 }
 
@@ -58,7 +72,7 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <PushSetup />
+          <NotificationSetup />
           <ScopeProvider>
             <FavoriteProvider>
               <ToastProvider>

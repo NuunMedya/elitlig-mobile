@@ -240,6 +240,60 @@ export default function NotificationPreferencesScreen() {
     void Linking.openSettings();
   }, []);
 
+  /**
+   * TEST BİLDİRİMİ — hangi katmanın bozuk olduğunu kesin olarak söyler.
+   *
+   * Bu YEREL bir bildirimdir: sunucuya, Expo'ya, FCM/APNs'e hiç uğramaz.
+   * Sonuç iki şeyden birini kanıtlar:
+   *   · Görünüyorsa → telefon izni ve uygulama tarafı SAĞLAM. Bildirim
+   *     gelmiyorsa sorun teslimat zincirindedir (Expo/FCM/APNs kimlikleri ya
+   *     da cihaz kaydı) — üstteki teşhis satırı hangisi olduğunu söyler.
+   *   · Görünmüyorsa → sorun cihazdadır: izin kapalı, "rahatsız etmeyin" açık
+   *     ya da kanal susturulmuş.
+   * Bu ayrım olmadan "bildirim gelmiyor" şikâyeti teşhis edilemiyordu.
+   */
+  const [testing, setTesting] = useState(false);
+
+  const sendTestNotification = useCallback(async () => {
+    setTesting(true);
+    try {
+      const Notifications = await import("expo-notifications");
+
+      const status = await Notifications.getPermissionsAsync();
+      if (!status.granted) {
+        toast.show({
+          message: "Önce bildirim izni vermelisin.",
+          tone: "warn",
+        });
+        return;
+      }
+
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: "ElitLig test bildirimi",
+          body: "Bunu gördüysen telefonun bildirimlere hazır.",
+          // Veri yükü boş bırakılmaz: dokunulduğunda routeFromNotif çözemezse
+          // uygulama normal açılışını yapar, bu doğru davranıştır.
+          data: { kind: "test" },
+        },
+        trigger: null,
+      });
+
+      toast.show({
+        message: "Test bildirimi gönderildi. Bildirim gölgesini kontrol et.",
+        tone: "success",
+      });
+    } catch {
+      toast.show({
+        message:
+          "Test bildirimi gönderilemedi. Bu derlemede bildirim modülü çalışmıyor olabilir (Expo Go).",
+        tone: "danger",
+      });
+    } finally {
+      setTesting(false);
+    }
+  }, [toast]);
+
   const goToSignIn = useCallback(() => router.push("/giris"), [router]);
 
   /* ────────────────────────── BÖLÜMLER ────────────────────────── */
@@ -378,6 +432,25 @@ export default function NotificationPreferencesScreen() {
             fullWidth
           />
         ) : null}
+
+        {/* Yerel köprü: push zinciri kurulu olmasa bile bildirimlerin
+            görünmesini sağlayan yedek yol (hooks/useNotificationBridge.ts).
+            Kullanıcının "neden bazen geç geliyor" sorusunun yanıtı burada. */}
+        <Text style={styles.permissionSub} {...textScale.long}>
+          Uygulama açıkken bildirimler yedek yoldan da gelir: bildirim merkezine
+          düşen her yeni kayıt telefonda gösterilir. Uygulama tamamen kapalıyken
+          yalnız push bildirimi çalışır.
+        </Text>
+
+        <Button
+          label="Test bildirimi gönder"
+          onPress={sendTestNotification}
+          loading={testing}
+          size="sm"
+          variant="ghost"
+          icon="notifications-outline"
+          fullWidth
+        />
       </View>
     </View>
   );
