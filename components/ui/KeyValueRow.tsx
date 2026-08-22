@@ -22,7 +22,18 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import { colors, hairline, haptics, layout, radius, space, textScale, touchSlop, type } from "@/theme";
+import {
+  colors,
+  fonts,
+  hairline,
+  haptics,
+  layout,
+  radius,
+  space,
+  textScale,
+  touchSlop,
+  type,
+} from "@/theme";
 import { toneColors, type Tone } from "./Badge";
 import { Touchable } from "./Pressable";
 
@@ -192,7 +203,7 @@ const styles = StyleSheet.create({
   },
   value: {
     ...type.bodySm,
-    fontWeight: "600",
+    fontFamily: fonts.semibold,
     textAlign: "right",
     flexShrink: 1,
     maxWidth: "62%",

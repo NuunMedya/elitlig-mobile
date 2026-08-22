@@ -18,7 +18,14 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import React from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
-import { colors, radius, space, textScale, type } from "@/theme";
+import {
+  colors,
+  fonts,
+  radius,
+  space,
+  textScale,
+  type,
+} from "@/theme";
 import { Button, type ButtonProps } from "./Button";
 import { Touchable } from "./Pressable";
 
@@ -159,7 +166,7 @@ const styles = StyleSheet.create({
   },
   secondaryLabel: {
     ...type.bodySm,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     color: colors.brandAccent,
   },
 });

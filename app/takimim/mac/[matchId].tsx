@@ -96,12 +96,20 @@ const MATCH_TABS: SegmentedItem<MatchTab>[] = [
   { key: "analiz", label: "Rakip Analizi", icon: "analytics-outline" },
 ];
 
-const DEFAULT_KIT = "#6D28D9";
+/**
+ * FORMA RENKLERİ — bunlar tasarım tokenı DEĞİL, ALAN VERİSİDİR: kullanıcının
+ * seçip sunucuya hex olarak yazdığı takım forma rengi. Bu yüzden paletten
+ * gelmezler ve gelmemeleri gerekir; palet değişince bir takımın forması
+ * değişmemelidir. Uygulamadaki çıplak hex istisnası burasıdır.
+ *
+ * Liste amatör ligde gerçekten görülen sekiz forma rengidir; kurumsal renkle
+ * ilişkisi yoktur.
+ */
+const DEFAULT_KIT = "#1D4ED8";
 const HEX = /^#[0-9a-fA-F]{6}$/;
 
-/** Hazır forma renkleri — elle hex yazdırmak yerine. */
 const KIT_COLORS = [
-  "#6D28D9", "#E11D2E", "#1D4ED8", "#128A4B",
+  "#1D4ED8", "#E11D2E", "#128A4B", "#8C1C33",
   "#111827", "#F5F5F5", "#E0A106", "#EA580C",
 ];
 

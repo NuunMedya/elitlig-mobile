@@ -55,6 +55,7 @@ import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
 import {
   colors,
+  fonts,
   hairline,
   layout,
   radius,
@@ -503,12 +504,8 @@ function ShareSheet({
       <View style={styles.shareWrap}>
         <ViewShot ref={shotRef} options={{ format: "png", quality: 1 }}>
           <View style={[styles.shareCard, { height: SHARE_FORMATS[format].height }]}>
-            <LinearGradient
-              colors={[colors.brand, colors.brandStrong]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.shareStrip}
-            />
+            {/* Düz dolgu — gradient yalnız okunabilirlik scrim'i için. */}
+            <View style={styles.shareStrip} />
 
             <View style={styles.shareBody}>
               <View style={styles.shareTop}>
@@ -631,7 +628,7 @@ const styles = StyleSheet.create({
   },
   meMeta: {
     ...type.caption,
-    fontWeight: "600",
+    fontFamily: fonts.semibold,
     letterSpacing: 0,
     color: colors.textTertiary,
   },
@@ -676,7 +673,7 @@ const styles = StyleSheet.create({
   },
   stepName: {
     ...type.caption,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
     letterSpacing: 0,
     color: colors.textPrimary,
     textAlign: "center",
@@ -684,7 +681,7 @@ const styles = StyleSheet.create({
   },
   stepTeam: {
     ...type.micro,
-    fontWeight: "600",
+    fontFamily: fonts.semibold,
     letterSpacing: 0,
     color: colors.textTertiary,
     textAlign: "center",
@@ -726,7 +723,7 @@ const styles = StyleSheet.create({
   },
   rowScoreMeta: {
     ...type.micro,
-    fontWeight: "600",
+    fontFamily: fonts.semibold,
     letterSpacing: 0,
     color: colors.textTertiary,
   },
@@ -743,6 +740,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   shareStrip: {
+    backgroundColor: colors.brand,
     height: 6,
   },
   shareBody: {
@@ -798,7 +796,7 @@ const styles = StyleSheet.create({
   },
   shareName: {
     ...type.caption,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
     letterSpacing: 0,
     color: colors.textPrimary,
     flex: 1,

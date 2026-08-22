@@ -32,7 +32,14 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import React, { useCallback, useMemo } from "react";
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ScopeChip } from "@/components/ScopeChip";
@@ -43,12 +50,14 @@ import {
   EmptyState,
   ErrorState,
   FormChips,
+  HeroCarousel,
   MatchRow,
   MetricGrid,
   MetricTile,
   ScreenHeader,
   SectionHeader,
   SkeletonCard,
+  SkeletonHero,
   SkeletonMatchRow,
   SpotlightCard,
   TeamLogo,
@@ -56,14 +65,16 @@ import {
   refreshControlProps,
   useHeaderScroll,
   useRefresh,
+  type HeroSlide,
 } from "@/components/ui";
 import { useTeamLogos } from "@/hooks/useTeamLogos";
 import { useUnreadCount } from "@/hooks/useUnreadCount";
 import { getLiveMatches, getMatches } from "@/lib/api/matches";
 import { getMyMatchRequests, getTeamDashboard, getTeamMatches } from "@/lib/api/team";
 import { getStandings } from "@/lib/api/standings";
-import { formatDayHeading } from "@/lib/format";
+import { formatDayHeading, mediaUrl, timeAgo } from "@/lib/format";
 import { matchState } from "@/lib/match";
+import { getNewsFeed } from "@/lib/api/news";
 import { queryKeys } from "@/lib/queryKeys";
 import type { ApiMatch, StandingRow } from "@/lib/types";
 import { useAuth } from "@/providers/AuthProvider";
@@ -189,6 +200,7 @@ export default function OverviewScreen() {
 
   const today = useMemo(() => todayIso(), []);
   const go = useCallback((route: string) => router.push(route as never), [router]);
+  const { width } = useWindowDimensions();
 
   const scopeKey = {
     cityId: scope.cityId ?? undefined,
@@ -218,6 +230,19 @@ export default function OverviewScreen() {
       }),
     enabled: scope.ready,
     staleTime: 60_000,
+  });
+
+  /*
+    MANŞET KAYNAĞI — haber akışı. Editör haberleri, tamamlanan transferler ve
+    disiplin kararları tek uçtan geliyor; karusel bunların KAPAK GÖRSELİ OLAN
+    ilk beşini gösterir. Görselsiz bir manşet 16:10'luk bir kutuda boş koyu
+    blok demektir, o yüzden elenirler.
+  */
+  const newsQuery = useQuery({
+    queryKey: queryKeys.newsFeed(scopeKey),
+    queryFn: () => getNewsFeed(scopeKey),
+    enabled: scope.ready,
+    staleTime: 5 * 60_000,
   });
 
   const standingsQuery = useQuery({
@@ -383,6 +408,32 @@ export default function OverviewScreen() {
     return null;
   }, [allMatches, favorite.favorites, liveMatches, team, teamMatchesQuery.data, today, todayMatches]);
 
+  /**
+   * Karusel slaytları.
+   *
+   * MANŞET TAM CÜMLEDİR: haberin kendi başlığı kullanılır, "Bunu görmelisiniz"
+   * gibi bir tıklama tuzağı üretilmez. Başlık iki satırda bitmiyorsa zaten
+   * manşet değildir; kart onu kırpar, biz kısaltmayız.
+   *
+   * EN FAZLA BEŞ: karusel bir akış değil bir VİTRİNDİR. Beşten fazlası
+   * gösterge segmentlerini okunmaz inceliğe indiriyor ve kimse sonuna kadar
+   * kaydırmıyor. Kalan haberler kendi sekmesinde duruyor.
+   */
+  const heroSlides = useMemo<HeroSlide[]>(() => {
+    const items = newsQuery.data?.items ?? [];
+    return items
+      .filter((item) => Boolean(item.cover_image_url))
+      .slice(0, 5)
+      .map((item) => ({
+        key: item.id,
+        image: mediaUrl(item.cover_image_url),
+        eyebrow: item.category_label ?? item.category ?? null,
+        headline: item.title,
+        meta: [scope.leagueLabel, timeAgo(item.published_at)].filter(Boolean).join(" · "),
+        onPress: () => go(`/haber/${item.id}`),
+      }));
+  }, [newsQuery.data, scope.leagueLabel, go]);
+
   /* ------------------------------- ÇİZİM ---------------------------------- */
 
   const openMatch = useCallback((id: number) => router.push(`/mac/${id}`), [router]);
@@ -430,6 +481,20 @@ export default function OverviewScreen() {
           <RefreshControl {...refreshControlProps(refresh.refreshing, refresh.onRefresh)} />
         }
       >
+        {/* ── 0) MANŞET KARUSELİ ────────────────────────────────────────── */}
+        {newsQuery.isLoading && !heroSlides.length ? (
+          <View style={[styles.heroBox, styles.heroSkeleton]}>
+            <SkeletonHero />
+          </View>
+        ) : heroSlides.length ? (
+          <HeroCarousel
+            slides={heroSlides}
+            width={width}
+            inset={layout.screenPadding}
+            style={styles.heroBox}
+          />
+        ) : null}
+
         {/* ── 1) VİTRİN ─────────────────────────────────────────────────── */}
         <View style={styles.spotlightBox}>
           {scopeBusy && !spotlight ? (
@@ -714,6 +779,15 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingBottom: space.huge,
+  },
+  /* Karusel tam genişlik kaydırır; kenar boşluğu içeride `inset` ile verilir. */
+  heroBox: {
+    paddingTop: space.md,
+    paddingBottom: space.sm,
+  },
+  /* İskelet kaydırmıyor; kenar boşluğunu kendisi taşır. */
+  heroSkeleton: {
+    paddingHorizontal: layout.screenPadding,
   },
   spotlightBox: {
     paddingHorizontal: layout.screenPadding,

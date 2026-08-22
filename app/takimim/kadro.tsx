@@ -111,7 +111,17 @@ import { getMarketValues, formatEtlShort } from "@/lib/api/marketValue";
 import { mediaUrl } from "@/lib/format";
 import { ApiError } from "@/lib/http";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
+import {
+  colors,
+  fonts,
+  hairline,
+  layout,
+  radius,
+  space,
+  textScale,
+  type,
+  upperTR,
+} from "@/theme";
 
 /* ══════════════════════════════════════════════════════════════════════════
    Sabitler ve saf yardımcılar
@@ -1698,7 +1708,7 @@ const styles = StyleSheet.create({
   },
   rowName: {
     ...type.body,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     color: colors.textPrimary,
   },
   rowMeta: {

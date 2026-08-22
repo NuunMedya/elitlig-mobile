@@ -35,7 +35,6 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQuery } from "@tanstack/react-query";
-import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -67,6 +66,7 @@ import {
   colors,
   dark as inkPalette,
   elevate,
+  fonts,
   hairline,
   haptics,
   layout,
@@ -558,12 +558,9 @@ export default function ArenaScreen() {
 function StartCard({ best, onStart }: { best: number; onStart: () => void }) {
   return (
     <View style={styles.startWrap}>
-      <LinearGradient
-        colors={[withAlpha(colors.brand, 0.22), colors.surface1]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0.9, y: 1 }}
-        style={styles.startCard}
-      >
+      {/* Düz yüzey: kartın altındaki mercan gradyanı hiçbir bilgi taşımıyordu
+          ve mercanı ekranın büyük bir kısmına yayarak %5 kuralını deliyordu. */}
+      <View style={styles.startCard}>
         <View style={styles.startIcon}>
           <Ionicons name="flame" size={22} color={colors.brandAccent} />
         </View>
@@ -586,7 +583,7 @@ function StartCard({ best, onStart }: { best: number; onStart: () => void }) {
         </View>
 
         <Button label="Başla" icon="play" size="lg" fullWidth onPress={onStart} />
-      </LinearGradient>
+      </View>
     </View>
   );
 }
@@ -783,12 +780,10 @@ function ShareSheet({
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.shareBackdrop}>
         <ViewShot ref={shotRef} options={{ format: "png", quality: 1 }}>
-          <LinearGradient
-            colors={[inkPalette.brandDim, inkPalette.bg]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.shareCard}
-          >
+          {/* Düz koyu yüzey. Gradient bu üründe yalnız görsel üstü
+              okunabilirlik scrim'i için meşrudur; fotoğrafsız bir kartta
+              dekorasyondan başka bir şey değil. */}
+          <View style={styles.shareCard}>
             <Text style={styles.shareBrand} {...textScale.badge}>
               elitlig
             </Text>
@@ -811,7 +806,7 @@ function ShareSheet({
             <Text style={styles.shareFooter} {...textScale.badge}>
               {upperTR(`elitlig.com · ${igHandle}`)}
             </Text>
-          </LinearGradient>
+          </View>
         </ViewShot>
 
         <View style={styles.shareActions}>
@@ -853,6 +848,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.xl,
     // Yüzen kart (§yükselti 4); marka çerçevesi kasıtlı olarak korunur.
     ...elevate(4),
+    backgroundColor: colors.surface1,
     borderColor: colors.brandBorder,
     padding: space.xl,
     gap: space.s,
@@ -893,7 +889,7 @@ const styles = StyleSheet.create({
   },
   startBestText: {
     ...type.bodySm,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     color: colors.textPrimary,
   },
 
@@ -984,7 +980,7 @@ const styles = StyleSheet.create({
   },
   cardTeam: {
     ...type.caption,
-    fontWeight: "600",
+    fontFamily: fonts.semibold,
     letterSpacing: 0,
     color: colors.textSecondary,
   },
@@ -1022,7 +1018,7 @@ const styles = StyleSheet.create({
 
   hint: {
     ...type.caption,
-    fontWeight: "500",
+    fontFamily: fonts.medium,
     letterSpacing: 0,
     color: colors.textTertiary,
     textAlign: "center",
@@ -1076,7 +1072,7 @@ const styles = StyleSheet.create({
   },
   historyDate: {
     ...type.caption,
-    fontWeight: "600",
+    fontFamily: fonts.semibold,
     letterSpacing: 0,
     color: colors.textTertiary,
   },
@@ -1165,19 +1161,19 @@ const styles = StyleSheet.create({
   },
   submitInfo: {
     ...type.caption,
-    fontWeight: "600",
+    fontFamily: fonts.semibold,
     letterSpacing: 0,
     color: colors.textTertiary,
   },
   submitLink: {
     ...type.caption,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     letterSpacing: 0,
     color: colors.brandAccent,
   },
   submitFail: {
     ...type.caption,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     letterSpacing: 0,
     color: colors.danger,
   },
@@ -1192,6 +1188,7 @@ const styles = StyleSheet.create({
     gap: space.lg,
   },
   shareCard: {
+    backgroundColor: inkPalette.bg,
     width: 268,
     borderRadius: radius.xl,
     borderWidth: hairline,
@@ -1228,7 +1225,7 @@ const styles = StyleSheet.create({
   },
   shareTaunt: {
     ...type.bodySm,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     color: inkPalette.textSecondary,
   },
   shareFooter: {

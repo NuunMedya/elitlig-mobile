@@ -34,7 +34,7 @@ export class ApiError extends Error {
     if (this.status === 403) return "Bu içeriği görme yetkiniz yok.";
     if (this.status === 404) return "Kayıt bulunamadı.";
     if (this.status >= 500) return "Sunucuya şu anda ulaşılamıyor. Az sonra tekrar deneyin.";
-    return this.message || "Beklenmeyen bir hata oluştu.";
+    return this.message || "Sunucu yanıtı okunamadı. Tekrar dene.";
   }
 }
 

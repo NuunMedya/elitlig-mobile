@@ -14,7 +14,7 @@ export async function toggleTheme(): Promise<void> {
   try {
     await AsyncStorage.setItem(THEME_STORAGE_KEY, isDark ? "light" : "dark");
   } catch {
-    Alert.alert("Kaydedilemedi", "Tema tercihi kaydedilirken bir sorun oluştu.");
+    Alert.alert("Tema kaydedilemedi", "Tercih cihaza yazılamadı. Tekrar dene; sürerse uygulamayı kapatıp aç.");
     return;
   }
 

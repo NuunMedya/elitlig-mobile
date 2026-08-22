@@ -31,6 +31,7 @@ import {
   colors,
   duration,
   easing,
+  fonts,
   haptics,
   isDark,
   radius,
@@ -244,7 +245,7 @@ const styles = StyleSheet.create({
   },
   labelActive: {
     color: colors.textPrimary,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
   },
   dot: {
     width: 5,

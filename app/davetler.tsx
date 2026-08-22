@@ -84,7 +84,15 @@ import { ApiError } from "@/lib/http";
 import { queryKeys } from "@/lib/queryKeys";
 import type { ApiTeam } from "@/lib/types";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, layout, radius, space, textScale, type } from "@/theme";
+import {
+  colors,
+  fonts,
+  layout,
+  radius,
+  space,
+  textScale,
+  type,
+} from "@/theme";
 
 /* ============================ SABİTLER / TİPLER ============================ */
 
@@ -1150,7 +1158,7 @@ const styles = StyleSheet.create({
   adTeam: {
     ...type.bodySm,
     color: colors.textPrimary,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
   },
   adMeta: {
     ...type.caption,

@@ -24,7 +24,16 @@ import {
   type TextStyle,
   type ViewStyle,
 } from "react-native";
-import { colors, hairline, radius, space, textScale, touchSlop, type } from "@/theme";
+import {
+  colors,
+  fonts,
+  hairline,
+  radius,
+  space,
+  textScale,
+  touchSlop,
+  type,
+} from "@/theme";
 import { Touchable, type HapticKind } from "./Pressable";
 
 export interface ButtonProps {
@@ -160,11 +169,11 @@ const styles = StyleSheet.create({
   },
   labelSm: {
     ...type.label,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
   },
   labelMd: {
     ...type.bodySm,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
   },
   labelLg: {
     ...type.h3,

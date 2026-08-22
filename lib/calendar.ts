@@ -43,7 +43,7 @@ export async function addMatchToCalendar(match: ApiMatch): Promise<void> {
 
     Alert.alert("Takvime eklendi", "Maç, 1 saat öncesinden hatırlatmalı olarak eklendi.");
   } catch {
-    Alert.alert("Eklenemedi", "Takvim etkinliği oluşturulurken bir sorun oluştu.");
+    Alert.alert("Takvime eklenemedi", "Takvim izni verilmiş olsa da kayıt yazılamadı. Tekrar dene.");
   }
 }
 

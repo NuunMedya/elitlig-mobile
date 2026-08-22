@@ -45,10 +45,15 @@ export const spacing = {
 
 /** Yerleşim sabitleri — ekran ve satır ölçüleri tek yerde toplanır. */
 export const layout = {
-  /* YOĞUNLUK KARARI: her satır ~4px kısaldı. 844px'lik bir ekranda bu, liste
-     başına 1–2 satır daha demek; altı sekmeli çubukta kaybedilen dikey alanı
-     geri kazandırır. Alt sınır 44px dokunma hedefidir, altına inilmez. */
-  screenPadding: 12,
+  /* YATAY KENAR 20px (yeniden tasarım). Kenar boşluğu ürünün "nefes"idir;
+     12px kenar, içeriği ekrana yapıştırıp hazır şablon görüntüsü veriyordu.
+     İSTİSNA: 8 sütunlu puan tablosu 360px'lik ekrana 20px kenarla sığmıyor —
+     o düzenler `screenPaddingDense` kullanır. Dikey ölçüler değişmedi; her
+     satır ~4px kısa tutulur ki 844px'lik ekrana 1–2 satır daha girsin. Alt
+     sınır 44px dokunma hedefidir, altına inilmez. */
+  screenPadding: 20,
+  /** Yoğun tablo düzenleri (puan durumu, istatistik ızgarası) için dar kenar. */
+  screenPaddingDense: 12,
   rowPaddingH: 12,
   rowGap: 6,
   sectionGap: 14,
@@ -74,18 +79,18 @@ export const layout = {
 /**
  * Köşe yarıçapları.
  *
- * Satır grubu 8, kart 12, sheet/hero 16, vitrin kartı 22. Yarıçap yükseltiyle
- * birlikte artar: kart zeminden ne kadar "kalkıyorsa" köşesi o kadar yumuşar.
- * `pill` yalnız chip, rozet ve avatar içindir.
+ * KURAL: iç eleman DAİMA dış elemandan küçük yarıçaplıdır. Karışık yarıçap
+ * (16px kartın içinde 16px kutu) kenarları paralel göstermez ve amatör durur.
+ * Kart 16, kart içindeki her şey 10, chip/rozet pill, avatar dairesel.
  */
 export const radius = {
   none: 0,
-  xs:   4,   // rozet, form çipi
-  sm:   6,   // amblem kutusu, küçük çip
-  md:   8,   // input, chip, satır grubu
-  lg:  12,   // kart (eski 10 → 12: yumuşak ama hâlâ "veri kartı")
-  xl:  16,   // bottom sheet, hero kartı
-  xxl: 22,   // tam genişlik vitrin kartı
+  xs:   4,   // form çipi, mikro rozet
+  sm:   6,   // amblem kutusu
+  md:  10,   // KART İÇİ ELEMAN: input, chip zemini, satır grubu, bar
+  lg:  16,   // KART
+  xl:  16,   // bottom sheet, hero kartı — kartla aynı, ayrı bir dil kurmaz
+  xxl: 20,   // tam genişlik vitrin kartı
   pill: 999,
 } as const;
 

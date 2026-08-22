@@ -17,7 +17,14 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { StyleSheet, Text } from "react-native";
 import { Touchable, withAlpha } from "@/components/ui";
 import { openLink } from "@/lib/links";
-import { colors, radius, space, textScale, type } from "@/theme";
+import {
+  colors,
+  fonts,
+  radius,
+  space,
+  textScale,
+  type,
+} from "@/theme";
 import { youtubeChannelUrl, youtubeLiveUrl } from "@/lib/youtube";
 
 /** YouTube kurumsal kırmızısı — üçüncü taraf marka rengi, temadan bağımsızdır. */
@@ -69,7 +76,7 @@ const styles = StyleSheet.create({
   text: {
     ...type.bodySm,
     color: colors.textPrimary,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     flex: 1,
   },
 });

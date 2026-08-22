@@ -53,6 +53,7 @@ import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
 import {
   colors,
+  fonts,
   hairline,
   haptics,
   layout,
@@ -667,7 +668,7 @@ const styles = StyleSheet.create({
   },
   statLabel: {
     ...type.caption,
-    fontWeight: "600",
+    fontFamily: fonts.semibold,
     letterSpacing: 0,
     color: colors.textTertiary,
   },
@@ -756,7 +757,7 @@ const styles = StyleSheet.create({
   },
   hintCost: {
     ...type.caption,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
     letterSpacing: 0,
     color: colors.warn,
   },
@@ -826,7 +827,7 @@ const styles = StyleSheet.create({
   },
   overMeta: {
     ...type.caption,
-    fontWeight: "600",
+    fontFamily: fonts.semibold,
     letterSpacing: 0,
     color: colors.textTertiary,
     textAlign: "center",
@@ -894,7 +895,7 @@ const styles = StyleSheet.create({
   },
   shareChallenge: {
     ...type.caption,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     letterSpacing: 0,
     color: colors.textSecondary,
     textAlign: "center",

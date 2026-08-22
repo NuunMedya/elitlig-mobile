@@ -7,7 +7,10 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "check:tokens": "node --experimental-strip-types --no-warnings scripts/check-tokens.mjs",
+    "check:games": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/check-games.mjs",
+    "check": "npm run check:tokens && npm run check:games && npm run typecheck"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -17,6 +20,7 @@
     "expo-calendar": "~15.0.8",
     "expo-constants": "~18.0.13",
     "expo-device": "~8.0.10",
+    "expo-font": "^57.0.1",
     "expo-haptics": "~15.0.7",
     "expo-image-picker": "~17.0.11",
     "expo-linear-gradient": "~15.0.8",

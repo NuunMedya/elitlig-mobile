@@ -40,7 +40,14 @@ import {
 import { getMyPenalties, type Penalty } from "@/lib/api/panel";
 import { formatDateShort } from "@/lib/format";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, layout, space, textScale, type } from "@/theme";
+import {
+  colors,
+  fonts,
+  layout,
+  space,
+  textScale,
+  type,
+} from "@/theme";
 
 /* ============================ SABİTLER / TİPLER ============================ */
 
@@ -259,7 +266,7 @@ export default function PenaltiesScreen() {
         <EmptyState
           icon="shield-checkmark-outline"
           title="Dosya yok"
-          body="Taraf olduğun bir disiplin dosyası yok — böyle devam! 🤝"
+          body="Taraf olduğun bir disiplin dosyası yok."
         />
       ) : (
         <FlatList
@@ -390,7 +397,7 @@ const styles = StyleSheet.create({
   urgent: {
     ...type.caption,
     color: colors.warn,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     letterSpacing: 0,
     lineHeight: 16,
   },

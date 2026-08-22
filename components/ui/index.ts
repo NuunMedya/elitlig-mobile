@@ -129,11 +129,30 @@ export type { DateStripProps } from "./DateStrip";
 export { StatBar } from "./StatBar";
 export type { StatBarProps } from "./StatBar";
 
+export { Sparkline } from "./Sparkline";
+export type { SparklineProps } from "./Sparkline";
+
+export { EventIcon } from "./EventIcon";
+export type { EventIconProps, EventIconKind } from "./EventIcon";
+
+export { PitchView } from "./PitchView";
+export type { PitchViewProps, PitchPlayerView } from "./PitchView";
+
+export { HeroCarousel, HERO_AUTOPLAY_MS } from "./HeroCarousel";
+export type { HeroCarouselProps, HeroSlide } from "./HeroCarousel";
+
 export { FormChips } from "./FormChips";
 export type { FormChipsProps, FormResult } from "./FormChips";
 
 export { ProgressRing } from "./ProgressRing";
 export type { ProgressRingProps, ProgressRingTone } from "./ProgressRing";
+
+/* — İmza öğeleri: tebeşir çizgisi sistemi — */
+export { MinuteRing } from "./MinuteRing";
+export type { MinuteRingProps } from "./MinuteRing";
+
+export { ChalkArc } from "./ChalkArc";
+export type { ChalkArcProps } from "./ChalkArc";
 
 /* — Yükleme, boşluk, hata — */
 export {

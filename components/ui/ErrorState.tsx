@@ -21,7 +21,15 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import React from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
-import { colors, hairline, radius, space, textScale, type } from "@/theme";
+import {
+  colors,
+  fonts,
+  hairline,
+  radius,
+  space,
+  textScale,
+  type,
+} from "@/theme";
 import { ApiError } from "@/lib/http";
 import { EmptyState } from "./EmptyState";
 import { Touchable } from "./Pressable";
@@ -40,7 +48,8 @@ export function errorMessage(error: unknown, offline?: boolean): string {
   if (offline) return "İnternet bağlantısı yok. Bağlanınca kaldığın yerden devam edersin.";
   if (error instanceof ApiError) return error.userMessage;
   if (error instanceof Error && error.message) return error.message;
-  return "Beklenmeyen bir hata oluştu.";
+  // Buraya düşen hata tanınmıyor demektir; yine de NE YAPILACAĞINI söyler.
+  return "Veri okunamadı. Tekrar dene; sürerse birkaç dakika sonra yeniden aç.";
 }
 
 /** Başlık: çevrimdışı ve sunucu hatası aynı şey değildir, ayrı okunur. */
@@ -137,7 +146,7 @@ const styles = StyleSheet.create({
   },
   bannerActionText: {
     ...type.caption,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
     color: colors.danger,
   },
 });

@@ -62,7 +62,15 @@ import { getNews } from "@/lib/api/news";
 import { formatDateLong, mediaUrl, stripHtml } from "@/lib/format";
 import { queryKeys } from "@/lib/queryKeys";
 import type { NewsItem } from "@/lib/types";
-import { colors, layout, radius, space, textScale, type } from "@/theme";
+import {
+  colors,
+  fonts,
+  layout,
+  radius,
+  space,
+  textScale,
+  type,
+} from "@/theme";
 
 /* ============================ SABİTLER / TİPLER ============================ */
 
@@ -492,7 +500,7 @@ const styles = StyleSheet.create({
     ...type.bodyLg,
     color: colors.textSecondary,
     lineHeight: 23,
-    fontWeight: "600",
+    fontFamily: fonts.semibold,
   },
   paragraph: {
     ...type.bodyLg,

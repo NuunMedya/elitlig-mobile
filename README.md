@@ -11,6 +11,12 @@ npm install --legacy-peer-deps
 npx expo start
 ```
 
+Değişiklikten sonra:
+
+```bash
+npm run check   # tasarım sistemi + oyun fiziği + typecheck
+```
+
 Telefona **Expo Go** kurup terminaldeki QR kodu okutmanız yeterli.
 
 > `--legacy-peer-deps`: Expo 54'ün web bağımlılıklarından gelen `react-dom`
@@ -47,7 +53,11 @@ app/                       Ekranlar (Expo Router — dosya = rota)
 components/                ScopeChip, MessageSticker, TeamCrest, TurkeyMap …
 components/ui/             Tasarım sistemi bileşenleri (MatchRow, ListRow,
                            MetricTile, ActionTile, SpotlightCard, …)
-theme/                     Palet, tipografi, uzay, yükselti, hareket
+theme/                     Palet, tipografi, uzay, yükselti, hareket, font
+lib/game/                  Oyun motoru: sabit adımlı döngü, girdi, fizik,
+                           ayarlar (TUNING), oyun paleti
+scripts/check-tokens.mjs   Tasarım sistemi denetimi (kontrast, punto, hex…)
+scripts/check-games.mjs    Oyun fiziği denetimi (yön, Magnus, kare hızı…)
 providers/
   ScopeProvider.tsx        Şehir/lig/sezon seçimi + kalıcılık
   AuthProvider.tsx         Oturum, jeton, 401 davranışı
@@ -166,6 +176,23 @@ login yanıtındaki jeton `expo-secure-store` ile cihazın güvenli deposuna yaz
 ve her isteğe `Authorization: Bearer` olarak eklenir. 401 gelirse oturum sessizce
 kapatılır, uygulama misafir moduna düşer — maçlar ve puan durumu girişsiz de
 görünür.
+
+## Tasarım sistemi
+
+Renk, tipografi ve uzay `theme/` altındadır ve iki kural taşır:
+
+- **Mercan `brand` yalnız AKSİYON ve SEÇİLİ DURUM**, **mavi `accent` yalnız
+  VERİ** içindir. Bir ekranda mercan alanı o ekranın %5'ini geçmemelidir.
+- **Gölge değil çizgi.** Varsayılan kart `surface1` + 1px `border`; gölge
+  yalnız gerçekten yüzen katmanlara (sheet, FAB, toast) ayrılmıştır.
+
+Metin tavanı 16px'tir; üstü yalnız skor ölçeğine (`scoreLg` 28, `scoreHero` 40)
+ve sayfa başlığına aittir. `fontWeight` KULLANILMAZ — özel fontlarda RN ağırlık
+uygulamaz, ağırlık ailenin adıyla seçilir (`fontFamily: fonts.semibold`).
+
+Bu kuralların ölçülebilir olanları `npm run check:tokens` ile sınanır; gözle
+denetlemeye gerek yoktur. Ayrıntılı gerekçeler `docs/tasarim-plani.md`
+dosyasındadır.
 
 ## Yol haritası
 

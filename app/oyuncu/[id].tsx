@@ -39,7 +39,14 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FlatList, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  FlatList,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import ViewShot from "react-native-view-shot";
 import {
@@ -60,6 +67,7 @@ import {
   SkeletonCard,
   SkeletonListRow,
   SkeletonTable,
+  Sparkline,
   Tabs,
   TeamLogo,
   Touchable,
@@ -77,7 +85,17 @@ import { get } from "@/lib/http";
 import { openLink } from "@/lib/links";
 import { queryKeys } from "@/lib/queryKeys";
 import { useScope } from "@/providers/ScopeProvider";
-import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
+import {
+  colors,
+  fonts,
+  hairline,
+  layout,
+  light,
+  radius,
+  space,
+  textScale,
+  type,
+} from "@/theme";
 
 /* ══════════════════════════════════════════════════════════════════════════
    1) EKRANA ÖZGÜ UÇ TANIMLARI
@@ -368,15 +386,6 @@ function playedAppearances(rows: Appearance[] | undefined): Appearance[] {
 }
 
 /** Mevki → emoji (eski ekrandan korundu; mevki metni sunucudan serbest gelir). */
-function positionIcon(position: string): string {
-  const value = position.toLocaleLowerCase("tr-TR");
-  if (value.includes("kaleci") || value.includes("kale")) return "🧤";
-  if (value.includes("defans") || value.includes("bek") || value.includes("stoper")) return "🛡️";
-  if (value.includes("kanat")) return "⚡";
-  if (value.includes("orta")) return "⚙️";
-  if (value.includes("forvet") || value.includes("santra")) return "⚽";
-  return "🏃";
-}
 
 /** Grup içi konum — ListRow köşe yuvarlaması ve ayracı buradan gelir. */
 function rowPosition(index: number, total: number): "single" | "first" | "middle" | "last" {
@@ -615,7 +624,10 @@ function GeneralTab({
 }: GeneralTabProps) {
   const router = useRouter();
   const scope = useScope();
+  const { width } = useWindowDimensions();
   const refresh = useRefresh(refetchPlayer, { refreshing: isRefetching });
+  /* Sparkline ölçüyü kendi hesaplamaz; ekran kenarları düşülür. */
+  const trendWidth = width - layout.screenPadding * 2;
 
   /* Asist oyuncu ucunda yok; kapsam içi sıralama listesinden zenginleştirilir
      (bulunamazsa rakam hiç gösterilmez — eski ekranın kuralı korundu). */
@@ -635,7 +647,7 @@ function GeneralTab({
     staleTime: 5 * 60_000,
   });
 
-  /* Türkiye geneli sıralama (kapsamsız) — eski ekrandaki 🇹🇷 rozetinin kaynağı. */
+  /* Türkiye geneli sıralama (kapsamsız) — hero'daki "TR n." rozetinin kaynağı. */
   const trRankQuery = useQuery({
     queryKey: queryKeys.playerRankings({}, "topScorers"),
     queryFn: () => getPlayerRankings({}, "topScorers"),
@@ -703,6 +715,23 @@ function GeneralTab({
     [profileQuery.data],
   );
 
+  /*
+    FORM GRAFİĞİ — son 10 maçın puan seyri, eskiden yeniye.
+
+    Puanlanmamış maçlar (points = 0) DİZİYE HİÇ GİRMEZ; sıfır olarak
+    çizilseydi grafik her puanlanmamış maçta tabana çakılır ve oyuncu kötü
+    oynamış gibi görünürdü. Beş gerçek puan yoksa grafik hiç çizilmez —
+    üç noktalı bir "seyir" seyir değildir.
+  */
+  const ratingTrend = useMemo(() => {
+    const values = playedAppearances(profileQuery.data?.mergedStatistics)
+      .slice(0, 10)
+      .map((row) => ratingOf(num(row.points)))
+      .filter((value): value is number => value != null)
+      .reverse();
+    return values.length >= 5 ? values : [];
+  }, [profileQuery.data]);
+
   /* Form şeridi soldan sağa eskiden yeniye okunur. */
   const form = useMemo<FormResult[]>(
     () =>
@@ -755,35 +784,55 @@ function GeneralTab({
       contentContainerStyle={styles.content}
       refreshControl={refresh.control}
     >
-      {/* ————— Kimlik ————— */}
+      {/*
+        ————— Kimlik —————
+
+        DÜZEN: fotoğraf SOLDA, künye SAĞDA. Eski hâl her şeyi ortalıyordu ve
+        ad, rozetler, künye alt alta dizilince blok ekranın üçte birini
+        kaplıyordu; asıl veri (sezon rakamları) kaydırmadan görünmüyordu.
+
+        FOTOĞRAF KARE: 88px dairesel bir fotoğraf, hemen altındaki dairesel
+        TAKIM AMBLEMİYLE aynı silueti paylaşıyor ve ikisi bir an karışıyordu.
+        16px yarıçaplı kare oyuncuyu kulüpten ayırır.
+      */}
       <View style={styles.hero}>
-        <Avatar
-          name={playerName}
-          image={mediaUrl(playerImage)}
-          size={76}
-          ring="brand"
-          jersey={jersey}
-        />
-
-        <Text style={styles.heroName} numberOfLines={2} {...textScale.dense}>
-          {playerName}
-        </Text>
-
-        <View style={styles.heroBadges}>
-          {position ? (
-            <Badge label={`${positionIcon(position)} ${position}`} tone="brand" size="sm" />
-          ) : null}
-          {/* Sunucuda ayrı bir "doğrulanmış" alanı yok; aktif oyuncu kaydı
-              lisanslı/doğrulanmış kaydın kendisidir (models/players.js). */}
-          <Badge
-            label={active ? "AKTİF" : "PASİF"}
-            tone={active ? "win" : "neutral"}
-            icon={active ? "checkmark-circle" : undefined}
-            size="sm"
+        <View style={styles.heroTop}>
+          <Avatar
+            name={playerName}
+            image={mediaUrl(playerImage)}
+            size={88}
+            shape="square"
+            jersey={jersey}
           />
-          {trRank ? (
-            <Badge label={`TR ${trRank.rank}.`} tone="info" size="sm" />
-          ) : null}
+
+          <View style={styles.heroIdentity}>
+            <Text style={styles.heroName} numberOfLines={2} {...textScale.dense}>
+              {playerName}
+            </Text>
+
+            {/* Künye tek satır, 11px: pozisyon · forma · yaş · uyruk. */}
+            <Text style={styles.heroMeta} numberOfLines={2} {...textScale.dense}>
+              {[
+                position || null,
+                jersey != null ? `#${jersey}` : null,
+                age !== "—" ? `${age} yaş` : null,
+                nationality || null,
+              ]
+                .filter(Boolean)
+                .join(" · ") || "Künye girilmedi"}
+            </Text>
+
+            <View style={styles.heroBadges}>
+              {/* Sunucuda ayrı bir "doğrulanmış" alanı yok; aktif oyuncu kaydı
+                  lisanslı/doğrulanmış kaydın kendisidir (models/players.js). */}
+              <Badge
+                label={active ? "AKTİF" : "PASİF"}
+                tone={active ? "win" : "neutral"}
+                size="xs"
+              />
+              {trRank ? <Badge label={`TR ${trRank.rank}.`} tone="info" size="xs" /> : null}
+            </View>
+          </View>
         </View>
 
         {/* Takım satırı — dokununca takım profiline iner. */}
@@ -811,20 +860,17 @@ function GeneralTab({
           <Badge label="TAKIMSIZ" tone="neutral" size="sm" />
         )}
 
-        {/* Kimlik künyesi — boş alan satırı hiç çizilmez. */}
-        <View style={styles.metaRow}>
-          {age !== "—" ? <MetaChip label="Yaş" value={age} /> : null}
-          {nationality ? <MetaChip label="Uyruk" value={nationality} /> : null}
-          {jersey != null ? <MetaChip label="Forma" value={`#${jersey}`} /> : null}
-          {form.length ? (
+        {/* Son maçların sonucu — künye yukarı taşındığı için burada yalnız bu kalır. */}
+        {form.length ? (
+          <View style={styles.metaRow}>
             <View style={styles.formBox}>
               <Text style={styles.metaLabel} {...textScale.badge}>
                 SON {form.length}
               </Text>
               <FormChips form={form} limit={5} size="xs" />
             </View>
-          ) : null}
-        </View>
+          </View>
+        ) : null}
       </View>
 
       {/* ————— Sezon özeti: büyük rakamlar ————— */}
@@ -845,6 +891,21 @@ function GeneralTab({
           tone="brand"
         />
       </View>
+
+      {/* ————— Form grafiği: son maçların puan seyri ————— */}
+      {ratingTrend.length ? (
+        <View style={styles.trend}>
+          <View style={styles.trendHead}>
+            <Text style={styles.metaLabel} {...textScale.badge}>
+              SON {ratingTrend.length} MAÇ PUANI
+            </Text>
+            <Text style={styles.trendRange} {...textScale.dense}>
+              {Math.min(...ratingTrend).toFixed(1)} – {Math.max(...ratingTrend).toFixed(1)}
+            </Text>
+          </View>
+          <Sparkline values={ratingTrend} width={trendWidth} height={36} />
+        </View>
+      ) : null}
 
       {/* ————— Galibiyet dengesi ————— */}
       {decided > 0 ? (
@@ -1018,7 +1079,7 @@ function StatsTab({
     if (!stats) return [];
     const candidates: { label: string; value: number }[] = [
       { label: "Asist", value: stats.asist },
-      { label: "İlk 11 başlangıcı", value: stats.ilk11_basladigi_mac_sayisi },
+      { label: "İlk kadro başlangıcı", value: stats.ilk11_basladigi_mac_sayisi },
       { label: "Sonradan oyuna girdiği", value: stats.sonradan_oyuna_girdigi_mac_sayisi },
       { label: "Kaptanlık", value: stats.kaptan_oldugu_mac_sayisi },
       { label: "Kurtarış", value: stats.kurtaris },
@@ -1662,15 +1723,19 @@ const Achievements = React.memo(function Achievements({
   goalsRank: number | null;
 }) {
   const badges = useMemo(() => {
+    /* EMOJİ YOK: rozetlerin başında 👑 ⚽ 💯 gibi emojiler vardı. Emoji
+       cihazın yazı tipine göre değişir, renk tokenlarına uymaz ve ekran
+       okuyucuda "yüz" diye okunur. Anlamı metnin kendisi taşır; görsel
+       ağırlık gerekiyorsa Badge'in kendi Ionicons ikonu kullanılır. */
     const list: { label: string; tone: Tone }[] = [];
-    if (pointsRank === 1) list.push({ label: "👑 Puan lideri", tone: "warn" });
-    if (goalsRank === 1) list.push({ label: "⚽ Gol kralı", tone: "warn" });
-    if (goals >= 100) list.push({ label: "💯 100 gol kulübü", tone: "brand" });
-    else if (goals >= 50) list.push({ label: "🎯 50+ gol", tone: "brand" });
-    if (matches >= 100) list.push({ label: "🏟️ 100+ maç", tone: "info" });
-    else if (matches >= 50) list.push({ label: "🛡️ 50+ maç", tone: "info" });
+    if (pointsRank === 1) list.push({ label: "Puan lideri", tone: "warn" });
+    if (goalsRank === 1) list.push({ label: "Gol kralı", tone: "warn" });
+    if (goals >= 100) list.push({ label: "100 gol kulübü", tone: "brand" });
+    else if (goals >= 50) list.push({ label: "50+ gol", tone: "brand" });
+    if (matches >= 100) list.push({ label: "100+ maç", tone: "info" });
+    else if (matches >= 50) list.push({ label: "50+ maç", tone: "info" });
     if (winRate != null && winRate >= 0.6 && matches >= 10) {
-      list.push({ label: "🔥 %60+ galibiyet", tone: "win" });
+      list.push({ label: "%60+ galibiyet", tone: "win" });
     }
     return list;
   }, [goals, goalsRank, matches, pointsRank, winRate]);
@@ -1901,14 +1966,16 @@ const TimelineTeam = React.memo(function TimelineTeam({
    ══════════════════════════════════════════════════════════════════════════ */
 
 const SHARE = {
-  ink: "#0A0812",
-  brand: "#6D28D9",
-  brandDeep: "#4C1D95",
-  brandText: "#5B21B6",
-  paperTop: "#CDBFE8",
-  paperMid: "#EFEAF7",
-  paperBottom: "#FFFFFF",
-  muted: "#9188A4",
+  ink: light.inverse,
+  /** Yalnız DOLGU. Mercan metin olarak kağıt üstünde AA'yı geçmez. */
+  brand: light.brand,
+  brandDeep: light.brandStrong,
+  /** Mercanın metin sürümü (koyu mercan, 4,70:1). */
+  brandText: light.brandAccent,
+  paperTop: light.brandDim,
+  paperMid: light.bg,
+  paperBottom: light.surface1,
+  muted: light.textTertiary,
   panel: "rgba(255,255,255,0.72)",
 } as const;
 
@@ -2003,19 +2070,18 @@ function ShareSheet({
 
         <ViewShot ref={shotRef} options={{ format: "png", quality: 1 }}>
           <View style={[styles.shareCard, { height: SHARE_FORMATS[format].height }]}>
-            <LinearGradient colors={[SHARE.brand, SHARE.brandDeep]} style={styles.shareStrip} />
-            <LinearGradient
-              colors={[SHARE.paperTop, SHARE.paperMid, SHARE.paperBottom]}
-              start={{ x: 0.2, y: 0 }}
-              end={{ x: 0.5, y: 1 }}
-              style={styles.shareBody}
-            >
+            {/* Düz dolgu — gradient yalnız okunabilirlik scrim'i için. */}
+            <View style={styles.shareStrip} />
+            {/* Düz kağıt: kartın üç duraklı gradyanı hiçbir bilgi taşımıyordu
+                ve bu üründe gradient yalnız görsel üstü okunabilirlik scrim'i
+                için meşru. */}
+            <View style={styles.shareBody}>
               <View style={styles.shareHead}>
                 <Text style={styles.shareBrand}>elitlig</Text>
                 <Text style={styles.shareBrandRight}>ELİTLİG MOBİL</Text>
               </View>
 
-              <Text style={styles.shareKicker}>⚽ OYUNCU PROFİLİ</Text>
+              <Text style={styles.shareKicker}>OYUNCU PROFİLİ</Text>
 
               <View style={styles.shareIdentity}>
                 <Avatar name={playerName} image={mediaUrl(playerImage)} size={56} />
@@ -2056,7 +2122,7 @@ function ShareSheet({
 
               <View style={styles.shareSpacer} />
               <Text style={styles.shareFooter}>ELİTLİG.COM</Text>
-            </LinearGradient>
+            </View>
           </View>
         </ViewShot>
 
@@ -2103,21 +2169,49 @@ const styles = StyleSheet.create({
 
   /* — Kimlik — */
   hero: {
-    alignItems: "center",
-    gap: space.sm,
+    gap: space.md,
     paddingTop: space.md,
     paddingBottom: space.sm,
   },
+  /* Fotoğraf solda, künye sağda — blok ekranın üçte birini kaplamasın. */
+  heroTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.lg,
+  },
+  heroIdentity: {
+    flex: 1,
+    gap: space.s,
+  },
   heroName: {
-    ...type.display,
+    ...type.h1,
     color: colors.textPrimary,
-    textAlign: "center",
+  },
+  heroMeta: {
+    ...type.caption,
+    color: colors.textSecondary,
   },
   heroBadges: {
     flexDirection: "row",
     flexWrap: "wrap",
-    justifyContent: "center",
     gap: space.s,
+  },
+  /* Form grafiği: kutu değil, hairline ile ayrılmış bir şerit. */
+  trend: {
+    gap: space.s,
+    paddingTop: space.md,
+    paddingBottom: space.sm,
+    borderTopWidth: hairline,
+    borderTopColor: colors.border,
+  },
+  trendHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  trendRange: {
+    ...type.tableNum,
+    color: colors.textTertiary,
   },
   heroTeam: {
     flexDirection: "row",
@@ -2357,7 +2451,7 @@ const styles = StyleSheet.create({
   },
   appearOpponent: {
     ...type.bodySm,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     color: colors.textPrimary,
   },
   appearMarks: {
@@ -2427,7 +2521,7 @@ const styles = StyleSheet.create({
   },
   tdStrong: {
     ...type.bodySm,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     color: colors.textPrimary,
   },
   tdSub: {
@@ -2574,11 +2668,13 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   shareStrip: {
+    backgroundColor: SHARE.brand,
     height: 7,
     borderTopLeftRadius: radius.md,
     borderTopRightRadius: radius.md,
   },
   shareBody: {
+    backgroundColor: SHARE.paperBottom,
     flex: 1,
     borderBottomLeftRadius: radius.md,
     borderBottomRightRadius: radius.md,
@@ -2594,19 +2690,19 @@ const styles = StyleSheet.create({
   },
   shareBrand: {
     fontSize: 12,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
     color: SHARE.brand,
   },
   shareBrandRight: {
     fontSize: 7,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
     letterSpacing: 1.2,
     color: SHARE.brand,
     opacity: 0.7,
   },
   shareKicker: {
     fontSize: 8,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
     letterSpacing: 0.8,
     color: SHARE.brand,
     opacity: 0.85,
@@ -2626,17 +2722,17 @@ const styles = StyleSheet.create({
   shareName: {
     fontSize: 12,
     lineHeight: 16,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
     color: SHARE.ink,
   },
   shareTeam: {
     fontSize: 9,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     color: SHARE.brand,
   },
   sharePosition: {
     fontSize: 9,
-    fontWeight: "600",
+    fontFamily: fonts.semibold,
     color: SHARE.muted,
   },
   shareStats: {
@@ -2652,13 +2748,13 @@ const styles = StyleSheet.create({
   },
   shareStatValue: {
     fontSize: 15,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
     color: SHARE.brandText,
     fontVariant: ["tabular-nums"],
   },
   shareStatLabel: {
     fontSize: 7,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
     letterSpacing: 0.5,
     color: SHARE.muted,
   },
@@ -2671,7 +2767,7 @@ const styles = StyleSheet.create({
   },
   shareSecondaryText: {
     fontSize: 10,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
     color: SHARE.brandText,
     fontVariant: ["tabular-nums"],
   },
@@ -2680,7 +2776,7 @@ const styles = StyleSheet.create({
   },
   shareFooter: {
     fontSize: 8,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
     letterSpacing: 2.5,
     color: SHARE.muted,
     textAlign: "center",

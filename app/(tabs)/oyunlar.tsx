@@ -59,7 +59,17 @@ import type { Tone } from "@/components/ui";
 import type { ArenaGame } from "@/lib/api/arena";
 import { get } from "@/lib/http";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
+import {
+  colors,
+  fonts,
+  hairline,
+  layout,
+  radius,
+  space,
+  textScale,
+  type,
+  upperTR,
+} from "@/theme";
 
 /* ===================== SABİTLER (saf veri) ===================== */
 
@@ -350,12 +360,9 @@ const DailyTestCard = React.memo(function DailyTestCard({
       accessibilityRole="button"
       accessibilityLabel={`Günün Testi. ${title}. ${subtitle}`}
     >
-      <LinearGradient
-        colors={[colors.brand, colors.brandStrong]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.dailyFill}
-      >
+      {/* Düz mercan dolgu: gradyan kartın mercan alanını büyütüyor ama
+          hiçbir şey söylemiyordu. */}
+      <View style={styles.dailyFill}>
         <View style={styles.dailyIcon}>
           <Ionicons
             name={ready && done ? "checkmark" : "bulb"}
@@ -381,7 +388,7 @@ const DailyTestCard = React.memo(function DailyTestCard({
             {ready && done ? "Tekrar" : "Oyna"}
           </Text>
         </View>
-      </LinearGradient>
+      </View>
     </Touchable>
   );
 });
@@ -424,12 +431,8 @@ const GameCard = React.memo(function GameCard({
       accessibilityRole="button"
       accessibilityLabel={`${meta.title}. ${meta.blurb}${best != null ? ` Rekorun ${best} ${meta.unit}.` : ""}`}
     >
-      <LinearGradient
-        colors={fill}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0.9, y: 1 }}
-        style={styles.gameFill}
-      >
+      {/* Düz yüzey — oyun kartlarının rengi ton rozetinden okunur. */}
+      <View style={[styles.gameFill, { backgroundColor: fill[fill.length - 1] }]}>
         <View style={styles.gameTop}>
           <View style={[styles.gameIcon, { backgroundColor: tone.dim }]}>
             <Ionicons name={meta.icon} size={18} color={tone.fg} />
@@ -460,7 +463,7 @@ const GameCard = React.memo(function GameCard({
             </Text>
           )}
         </View>
-      </LinearGradient>
+      </View>
     </Touchable>
   );
 });
@@ -761,7 +764,7 @@ const styles = StyleSheet.create({
   },
   weekLabel: {
     ...type.caption,
-    fontWeight: "600",
+    fontFamily: fonts.semibold,
     letterSpacing: 0,
     color: colors.textTertiary,
   },
@@ -773,6 +776,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   dailyFill: {
+    backgroundColor: colors.brand,
     flexDirection: "row",
     alignItems: "center",
     gap: space.md,
@@ -798,7 +802,7 @@ const styles = StyleSheet.create({
   },
   dailySub: {
     ...type.caption,
-    fontWeight: "600",
+    fontFamily: fonts.semibold,
     letterSpacing: 0,
     color: withAlpha(colors.textOnBrand, 0.78),
   },
@@ -810,7 +814,7 @@ const styles = StyleSheet.create({
   },
   dailyPillText: {
     ...type.caption,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
     letterSpacing: 0.2,
     color: colors.textOnBrand,
   },
@@ -854,7 +858,7 @@ const styles = StyleSheet.create({
   },
   gameBlurb: {
     ...type.caption,
-    fontWeight: "500",
+    fontFamily: fonts.medium,
     letterSpacing: 0,
     color: colors.textSecondary,
     flex: 1,
@@ -868,14 +872,14 @@ const styles = StyleSheet.create({
   },
   gameBest: {
     ...type.caption,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
     letterSpacing: 0,
     color: colors.textPrimary,
     flexShrink: 1,
   },
   gameCta: {
     ...type.caption,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     letterSpacing: 0,
     color: colors.textTertiary,
   },

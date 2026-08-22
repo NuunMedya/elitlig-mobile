@@ -320,7 +320,7 @@ export default function AccountScreen() {
           {
             kind: "kv",
             key: "ilk11",
-            label: "İlk 11 başlangıcı",
+            label: "İlk kadro başlangıcı",
             value: String(me.stats.starts ?? 0),
             numeric: true,
           },

@@ -1,11 +1,25 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { LinearGradient } from "expo-linear-gradient";
 import * as Sharing from "expo-sharing";
 import { useRef, useState } from "react";
 import { Alert, Modal, StyleSheet, Text, View } from "react-native";
 import ViewShot, { captureRef } from "react-native-view-shot";
-import { Avatar, TeamLogo, Touchable, withAlpha } from "@/components/ui";
-import { colors, dark as darkPalette, radius, space, textScale, type } from "@/theme";
+import {
+  Avatar,
+  EventIcon,
+  TeamLogo,
+  Touchable,
+  withAlpha,
+} from "@/components/ui";
+import {
+  colors,
+  dark as darkPalette,
+  fonts,
+  light,
+  radius,
+  space,
+  textScale,
+  type,
+} from "@/theme";
 import { instagramUrl } from "@/lib/socials";
 import { useScope } from "@/providers/ScopeProvider";
 import type { ContribRow, StatRow, TopPlayer } from "@/lib/matchStats";
@@ -20,7 +34,7 @@ import type { ApiMatch } from "@/lib/types";
  * indirme de mümkündür (ayrı izin gerektirmez).
  *
  * ————— SABİT HEX NEDEN BURADA KALIYOR (bilinçli istisna) —————
- * Aşağıdaki PURPLE / PURPLE_DARK / INK / GRAY / CARD_BORDER ve kart içindeki
+ * Aşağıdaki CORAL / CORAL_TEXT / INK / GRAY / CARD_BORDER ve kart içindeki
  * beyaz-lila gradyan, EKRANIN değil DIŞA AKTARILAN PNG'NİN renkleridir.
  * Kullanıcı kartı Instagram'a atar; oradaki görselin, paylaşanın telefonunda
  * koyu tema açık olup olmamasına göre değişmesi kabul edilemez — İçerik Havuzu
@@ -54,21 +68,24 @@ type Fmt = keyof typeof FORMATS;
 /*
  * KART TUVALİ PALETİ — dışa aktarılan PNG'nin renkleri (bkz. dosya başlığı).
  * Temayla DEĞİŞMEZ: paylaşılan görsel her cihazda birebir aynı görünmelidir.
- * Kurumsal mor burada da `palette.brand`ın açık tema değeriyle aynıdır (#6D28D9),
- * ama bilerek kopyalanmıştır — palet koyu temada #7C3AED'e kaydığında paylaşım
- * görselinin peşinden sürüklenmesini istemiyoruz.
+ * Bu yüzden aktif palet (`colors`) değil, DONMUŞ AÇIK PALET (`light`) okunur —
+ * koyu temadaki kullanıcı Instagram'a koyu zeminli bir kart göndermez, ama
+ * değerler yine de token'dan gelir; burada da çıplak hex yoktur.
+ *
+ * MERCAN İKİ AYRI TOKEN: `CORAL` yalnız DOLGUDUR (üst şerit). Mercan METİN
+ * olarak kağıt üstünde 2,44:1 verir ve AA'yı geçmez; metin için koyu mercan
+ * (`light.brandAccent`, 4,70:1) kullanılır.
  */
-const PURPLE = "#6D28D9";
-const PURPLE_DARK = "#4C1D95";
-const INK = "#100D16";
-const GRAY = "#8B8797";
-const CARD_BORDER = "#D9CBF2";
+const CORAL = light.brand;
+/** Mercanın metin sürümü — kağıt üstünde AA geçen tek mercan. */
+const CORAL_TEXT = light.brandAccent;
+const INK = light.inverse;
+const GRAY = light.textTertiary;
+const CARD_BORDER = light.brandBorder;
 /** Kartın dış çerçevesi (7px kenarlık etkisi veren zemin). */
-const FRAME_INK = "#0B0A0E";
-/** Kart gövdesinin lila→beyaz gradyanı. */
-const BODY_GRADIENT = ["#CDBFE8", "#EFEAF7", "#FFFFFF"] as const;
+const FRAME_INK = light.inverse;
 /** Kart içi kutuların beyaz zemini. */
-const CARD_WHITE = "#FFFFFF";
+const CARD_WHITE = light.surface1;
 
 type Mode = "matchday" | "fulltime";
 
@@ -134,7 +151,7 @@ export function ShareScoreCard({
         Alert.alert("Paylaşım kullanılamıyor", "Bu cihazda paylaşım menüsü açılamadı.");
       }
     } catch {
-      Alert.alert("Bir sorun oldu", "Görsel oluşturulamadı, tekrar dener misin?");
+      Alert.alert("Görsel oluşturulamadı", "Kartı yeniden oluşturmayı dene; sürerse uygulamayı kapatıp aç.");
     } finally {
       setBusy(false);
     }
@@ -180,18 +197,10 @@ export function ShareScoreCard({
 
           <ViewShot ref={shotRef} options={{ format: "png", quality: 1 }}>
             <View style={[styles.frame, { height: FORMATS[fmt].height }]}>
-              <LinearGradient
-                colors={[PURPLE, PURPLE_DARK]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.topStrip}
-              />
-              <LinearGradient
-                colors={BODY_GRADIENT}
-                start={{ x: 0.2, y: 0 }}
-                end={{ x: 0.5, y: 1 }}
-                style={styles.body}
-              >
+              {/* Düz dolgu — gradient yalnız okunabilirlik scrim'i için. */}
+              <View style={styles.topStrip} />
+              {/* Düz kağıt zemin. */}
+              <View style={styles.body}>
                 <Text style={styles.watermark}>elitlig</Text>
 
                 <View style={styles.headRow}>
@@ -232,7 +241,7 @@ export function ShareScoreCard({
                   <Text style={styles.footerSite}>ELİTLİG.COM</Text>
                   {igHandle ? <Text style={styles.footerHandle}>{igHandle}</Text> : null}
                 </View>
-              </LinearGradient>
+              </View>
             </View>
           </ViewShot>
 
@@ -398,20 +407,29 @@ function FullTimeBody({
         </View>
         {homeScorers.length > 0 || awayScorers.length > 0 ? (
           <View style={styles.scorersRow}>
+            {/* EMOJİ TOP YERİNE SVG: emoji cihazın yazı tipine göre değişir,
+                yani aynı paylaşım kartı iki telefonda iki farklı görünürdü —
+                dışa aktarılan bir görselde bu kabul edilemez. */}
             <View style={styles.scorersCol}>
               {homeScorers.map((p) => (
-                <Text key={`h-${p.playerId}-${p.name}`} style={styles.scorerLine} numberOfLines={1}>
-                  ⚽ {shortName(p.name)}
-                  {p.goals > 1 ? ` ×${p.goals}` : ""}
-                </Text>
+                <View key={`h-${p.playerId}-${p.name}`} style={styles.scorerRow}>
+                  <EventIcon kind="goal" size={10} color={INK} />
+                  <Text style={styles.scorerLine} numberOfLines={1}>
+                    {shortName(p.name)}
+                    {p.goals > 1 ? ` ×${p.goals}` : ""}
+                  </Text>
+                </View>
               ))}
             </View>
             <View style={[styles.scorersCol, styles.scorersColRight]}>
               {awayScorers.map((p) => (
-                <Text key={`a-${p.playerId}-${p.name}`} style={styles.scorerLine} numberOfLines={1}>
-                  {shortName(p.name)}
-                  {p.goals > 1 ? ` ×${p.goals}` : ""} ⚽
-                </Text>
+                <View key={`a-${p.playerId}-${p.name}`} style={styles.scorerRowRight}>
+                  <Text style={styles.scorerLine} numberOfLines={1}>
+                    {shortName(p.name)}
+                    {p.goals > 1 ? ` ×${p.goals}` : ""}
+                  </Text>
+                  <EventIcon kind="goal" size={10} color={INK} />
+                </View>
               ))}
             </View>
           </View>
@@ -474,7 +492,7 @@ const styles = StyleSheet.create({
   },
   triggerText: {
     ...type.bodySm,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
     color: colors.textOnBrand,
   },
   /**
@@ -506,7 +524,7 @@ const styles = StyleSheet.create({
   },
   fmtText: {
     ...type.label,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
     color: colors.textOnStatus,
   },
   actions: {
@@ -527,7 +545,7 @@ const styles = StyleSheet.create({
   },
   closeText: {
     ...type.bodySm,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     color: colors.textOnStatus,
   },
   shareBtn: {
@@ -535,12 +553,12 @@ const styles = StyleSheet.create({
   },
   shareText: {
     ...type.bodySm,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
     color: colors.textOnBrand,
   },
   saveHint: {
     ...type.caption,
-    fontWeight: "600",
+    fontFamily: fonts.semibold,
     color: withAlpha(colors.textOnStatus, 0.75),
   },
 
@@ -553,11 +571,13 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   topStrip: {
+    backgroundColor: CORAL,
     height: 7,
     borderTopLeftRadius: 8,
     borderTopRightRadius: 8,
   },
   body: {
+    backgroundColor: CARD_WHITE,
     flex: 1,
     borderBottomLeftRadius: 8,
     borderBottomRightRadius: 8,
@@ -577,8 +597,8 @@ const styles = StyleSheet.create({
     right: -34,
     bottom: 18,
     fontSize: 78,
-    fontWeight: "900",
-    color: PURPLE,
+    fontFamily: fonts.bold,
+    color: CORAL_TEXT,
     opacity: 0.07,
     transform: [{ rotate: "-14deg" }],
   },
@@ -589,25 +609,25 @@ const styles = StyleSheet.create({
   },
   brand: {
     fontSize: 15,
-    fontWeight: "900",
-    color: PURPLE,
+    fontFamily: fonts.bold,
+    color: CORAL_TEXT,
   },
   corner: {
     fontSize: 8,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
     letterSpacing: 1,
-    color: PURPLE,
+    color: CORAL_TEXT,
   },
   kicker: {
     fontSize: 9,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
     letterSpacing: 0.6,
-    color: PURPLE,
+    color: CORAL_TEXT,
     marginTop: space.sm,
   },
   headline: {
     fontSize: 19,
-    fontWeight: "900",
+    fontFamily: fonts.bold,
     letterSpacing: -0.3,
     color: INK,
     marginTop: 2,
@@ -634,18 +654,18 @@ const styles = StyleSheet.create({
   },
   vsName: {
     fontSize: 10,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
     color: INK,
     textAlign: "center",
   },
   vsMark: {
     fontSize: 18,
-    fontWeight: "900",
-    color: PURPLE,
+    fontFamily: fonts.bold,
+    color: CORAL_TEXT,
   },
   score: {
     fontSize: 29,
-    fontWeight: "900",
+    fontFamily: fonts.bold,
     color: INK,
     fontVariant: ["tabular-nums"],
   },
@@ -666,13 +686,13 @@ const styles = StyleSheet.create({
   },
   mvpLine: {
     fontSize: 9,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     color: GRAY,
     letterSpacing: 0.3,
   },
   mvpName: {
     color: INK,
-    fontWeight: "900",
+    fontFamily: fonts.bold,
   },
   boxRow: {
     flexDirection: "row",
@@ -691,7 +711,7 @@ const styles = StyleSheet.create({
   },
   boxValue: {
     fontSize: 17,
-    fontWeight: "900",
+    fontFamily: fonts.bold,
     color: INK,
   },
   boxValueSmall: {
@@ -700,14 +720,14 @@ const styles = StyleSheet.create({
   },
   boxLabel: {
     fontSize: 7,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
     letterSpacing: 0.6,
     color: GRAY,
     marginTop: 3,
   },
   subMeta: {
     fontSize: 8,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
     letterSpacing: 0.6,
     color: GRAY,
     marginTop: -6,
@@ -724,17 +744,28 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
   },
+  scorerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+  },
+  scorerRowRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 3,
+  },
   scorersColRight: {
     alignItems: "flex-end",
   },
   scorerLine: {
     fontSize: 8,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     color: INK,
   },
   statPair: {
     fontSize: 14,
-    fontWeight: "900",
+    fontFamily: fonts.bold,
     color: INK,
     fontVariant: ["tabular-nums"],
   },
@@ -743,7 +774,7 @@ const styles = StyleSheet.create({
   },
   liveNote: {
     fontSize: 9,
-    fontWeight: "700",
+    fontFamily: fonts.bold,
     color: GRAY,
     textAlign: "center",
     marginTop: space.sm,
@@ -754,13 +785,13 @@ const styles = StyleSheet.create({
   },
   footerSite: {
     fontSize: 9,
-    fontWeight: "800",
+    fontFamily: fonts.bold,
     letterSpacing: 2,
     color: GRAY,
   },
   footerHandle: {
     fontSize: 8,
-    fontWeight: "700",
-    color: PURPLE,
+    fontFamily: fonts.bold,
+    color: CORAL_TEXT,
   },
 });
