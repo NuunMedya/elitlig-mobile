@@ -15,7 +15,7 @@
  * `palette` = takma adsız, saf yeni palet.
  */
 
-import type { ViewStyle } from "react-native";
+import { Appearance, type ViewStyle } from "react-native";
 import { getStoredTheme } from "@/constants/themePreference";
 import { paletteFor, type Palette, type ThemeName } from "./palette";
 import { withLegacy, type LegacyPalette } from "./legacy";

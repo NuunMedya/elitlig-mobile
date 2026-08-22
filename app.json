@@ -53,9 +53,9 @@
       "typedRoutes": true
     },
     "extra": {
-      "apiBaseUrl": "http://127.0.0.1:8098",
+      "apiBaseUrl": "https://elitlig-api-88a866b7a4da.herokuapp.com",
       "socketUrl": "https://elitlig-api-88a866b7a4da.herokuapp.com",
-      "liveSocketEnabled": false,
+      "liveSocketEnabled": true,
       "liveFallbackPollMs": 25000,
       "defaultCityId": 1,
       "router": {},
