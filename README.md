@@ -251,6 +251,41 @@ dışta durup iki kenarda sabit bir ritim kurar.
 Önceki iki satırlı düzen (ev üstte, deplasman altta, skor sağda) satır başına
 56px istiyordu ve skorun yeri takım adının uzunluğuna göre kayıyordu.
 
+### Maç detayı — sahne
+
+Maç detayı, uygulamanın geri kalanı gibi bir LİSTE değil, tek bir maçın
+sahnesidir; kendi kâğıdı ve kendi ışığı vardır.
+
+**Atmosfer.** Sayfanın arkasında, üst 300px'i kaplayan üç katman durur
+(`MatchAtmosphere`):
+
+1. **Taban** (`matchTint`) — sahnenin mor rengi, her zaman.
+2. **Doku** — maçın kapak fotoğrafı, %28 opaklıkta. Tam opaklıkta serilseydi
+   sahnenin rengi fotoğrafın rengi olurdu ve başlık şeridindeki beyaz metnin
+   okunurluğu, o maça hangi fotoğrafın yüklendiğine bağlı kalırdı. Bu ligdeki
+   maçların çoğunda kapak yok; "fotoğrafsız" hâl istisna değil VARSAYILAN.
+3. **Yıkama** (`matchWash`) — tepede saydam (doku görünsün), dipte kâğıdın
+   kendisi. Son durak `matchCanvas` ile birebir aynı; bir tık farklı olsa
+   atmosferin bittiği yerde yatay bir dikiş çizgisi görünür.
+
+**Kâğıt.** `matchCanvas` uygulama kâğıdından ayrıdır: açık temada neredeyse
+BEYAZ (#FBFAFE), koyu temada DERİN MOR (#100826). Üstteki mor atmosfer ancak
+sakin bir zeminde "ışık" gibi okunur — lavanta kâğıt üstünde sayfa baştan aşağı
+mor bir sise dönüyordu.
+
+**Denetim.** `check-tokens` başlık metninin (`onDark`, `onDarkMuted`,
+`brandOnDark`) atmosfer tabanıyla, sayfa metinlerinin de `matchCanvas` ile
+kontrastını ölçer. Taban bir tık açılırsa maç başlığı okunmaz olur ve bu,
+yalnız kapak fotoğrafı olan maçlarda fark edilirdi.
+
+**Oyuncu adı hijyeni.** Kadro kayıtlarının bir bölümünde oyuncu adı takım
+adıyla birlikte girilmiş ("Yusuf YILDIRIM İNFERNO FK"). Bu ad ekranda beş ayrı
+yerde okunuyor: skor bloğu golcüleri, zaman çizelgesi, saha dizilişi etiketi,
+en iyi oyuncular ve kadro satırı. `stripTeamSuffix` ekini atar ve temizlik
+KADRO YÜKÜNÜN KENDİSİNDE, bir kez yapılır — böylece `lib/matchStats`
+türetmeleri de temiz adı görür. Ek yalnız sonda ve kelime sınırında eşleşirse
+atılır: "Ali FENERBAHÇELİ", takım adı "FENERBAHÇE" olsa bile korunur.
+
 ## Bilgi mimarisi — tek kapı kuralı
 
 Bir hedefe uygulamada **tek bir mantıklı yerden** ulaşılır. İki hub ekranı

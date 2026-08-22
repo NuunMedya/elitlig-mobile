@@ -923,6 +923,127 @@ görüldü: sekme öğesi bir flex sütunu ve dikey alan daralınca React Naviga
 etiket artık çubuk yüksekliği ne olursa olsun bütün kalıyor. Çubuk yine de
 56px'e alındı ve aktif gösterge çizgisi kırpılmasın diye üst dolgu 6px oldu.
 
+### 7.7 Altıncı geçiş — maç detayı, baştan
+
+Bu geçiş tek bir ekrana ayrıldı: maç detayı. İstenen "her detayı titizlikle
+düşünülmüş, profesyonel, ilgi çekici" bir sayfaydı; yazıların birbirine
+girmediği, kapak fotoğrafından ve morun tonlarından beslenen bir arka planın
+olduğu, çerçevelerin/kartların/kadroların/timeline'ın/istatistiklerin her
+birinin ayrı ayrı çözüldüğü bir çalışma.
+
+**A. Sahne — atmosfer katmanı.**
+
+Sayfanın arkasına üç katmanlı bir atmosfer serildi (`MatchAtmosphere`): mor
+taban + kapak fotoğrafı (%28 doku) + dipte kâğıda inen dikey yıkama. Kâğıdın
+kendisi de uygulamanınkinden ayrıldı (`matchCanvas`): açık temada neredeyse
+beyaz, koyuda derin mor.
+
+Fotoğrafın DÜŞÜK opaklıkta ve mor bir tabanın ÜSTÜNDE olması bir tasarım
+kararı değil, bir garanti: başlık şeridindeki beyaz metnin okunurluğu, o maça
+hangi fotoğrafın yüklendiğine bağlı olamaz. İlk denemede yıkamanın en üst
+durağı opaktı — fotoğraf hiç görünmüyordu; ikinci denemede saydam yapıldı —
+bu kez parlak bir fotoğrafta başlık kaybolurdu. Taban + doku + yıkama sırası
+ikisini birden çözer.
+
+**B. Adların birbirine girmesi — kaynağında çözüldü.**
+
+Şikâyetin somut karşılığı buydu: kadro kayıtlarının bir bölümünde oyuncu adı
+takım adıyla girilmiş ("Yusuf YILDIRIM İNFERNO FK"). Bu ad ekranda BEŞ yerde
+okunuyordu ve her birinde satırı taşırıyordu — sahada etiket "FK" görünüyordu
+(son kelime alınıyor, o da takım ekinin son kelimesi), zaman çizelgesinde
+"Y. YILDIRIM İNFERNO FK" satıra sığmıyordu, en iyi oyuncular listesinde tam ad
+kırpılıyordu.
+
+`stripTeamSuffix` eki atar; temizlik KADRO YÜKÜNÜN KENDİSİNDE bir kez yapılır,
+böylece `lib/matchStats` türetmeleri de temiz adı görür. Ek yalnız sonda ve
+kelime sınırında eşleşirse atılır — "Ali FENERBAHÇELİ" korunur.
+
+**C. Skor tablosu.**
+
+Golcüler skor bloğunun İÇİNDEN çıkarıldı. 9-5 biten bir maçta blok, ortasından
+dokuz satırlık düzensiz bir metin dökümüyle yarılıyor ve skorun kendisi o
+dökümün içinde kayboluyordu. Blok artık yalnız skoru söylüyor; kazanan taraf
+vurgulu, kaybeden sönük. Künye tek bir kırpılan dizeyken ikonlu parçalara
+ayrıldı — eskiden en sondaki bilgi (çoğu zaman hakem) hiç görünmüyordu.
+
+Blok bir ara YARI SAYDAM "cam" kart olarak denendi ve okunmadı: kart, yıkamanın
+orta bölgesinde (açık lavanta) duruyor ve metni beyaz. Sayfanın en önemli tek
+bilgisi arkasındaki dokunun insafına bırakılamaz — kart kendi mürekkep zeminini
+basar, sahneyle bağı ışıklı çerçevesinden gelir.
+
+**D. Goller kartı — hiza bir kolon meselesidir.**
+
+Özet'in ilk kartı. Dakikalar SABİT genişlikte tabular bir kolonda; adın
+uzunluğu ne olursa olsun bütün dakikalar aynı dikey çizgiye oturur. Ad
+kırpılabilir, dakika kırpılamaz. Aynı oyuncunun birden çok golü tek satırda
+toplanır ("C. MAR 12' 29' 33'") — üst üste üç kez aynı adı okumak liste değil
+gürültüdür.
+
+**E. Zaman çizelgesi.**
+
+Ray SÜREKLİ hâle geldi: çizgi her satırda 10px'lik iki parçaydı ve aralarında
+boşluk kalıyordu, on altı satır boyunca kesik bir nokta dizisi görünüyordu.
+Artık satırın tamamını kaplayan mutlak konumlu bir katman; arka arkaya gelen
+satırlar kesintisiz tek bir ray üretir.
+
+Koşan skor gol kartının içinden alınıp RAYIN ÜSTÜNE taşındı: skorlar tek bir
+dikey sütunda dizilir ve çizelge, aşağı inildikçe maçın nasıl geliştiğini kendi
+başına anlatır. Kartlar da içerikleri kadar genişledi — `flex: 1` taşıyan
+sütunda kart tüm yarıyı kaplıyor, tek bir ad 170px'lik boş bir kutunun ucunda
+asılı duruyordu. Satır yüksekliği 44 → 34; on dört olay ~700px yerine ~530px.
+
+**F. Kadro — iki takım, tek saha.**
+
+Segment düğmesiyle sırayla tek takım gösteriliyordu; kadro ekranı "diziliş"
+değil iki ayrı oyuncu listesi gibi okunuyordu. Artık iki kadro TEK sahada karşı
+karşıya: deplasman üstte aynalanmış, ev sahibi altta, saha 3:2 oranında.
+Takımlar avatar halkasının renginden ayrılır (mor / mavi), saha üstünde ve
+altında birer takım şeridi diziliş ile birlikte durur.
+
+İlk ölçüde iki forvet hattı %8 aralıktaydı — 43px, yani bir yuvanın kendi
+yüksekliği kadar; etiketler birbirinin avatarına giriyordu. %16'ya çıkarıldı.
+Etiketin `maxWidth`'i de yuva genişliğine eşitti ve "SÜTLÜPINAR" kırpılıyordu;
+etiket ortalanmış olduğu için yuvadan taşması yerleşimi kaydırmaz.
+
+Sahanın tonu zümrütten TEAL'a çekildi: doygun yeşil, mor sistemin yanında
+yabancı duruyordu.
+
+**G. İstatistik.**
+
+Her grup kendi bölüm başlığını ve kendi kartını alıyordu; amatör ligde çoğu
+maçta yalnız "Goller" girilmiş oluyor ve ekran "Hücum" başlığı + tek satırlık
+kart + ekran boyu boşluk hâline geliyordu. Bütün satırlar tek karta alındı,
+grup adları kartın içinde ince birer üst-satır oldu. Üstüne bir RENK CETVELİ
+eklendi: barlar iki renkle çizilir ama hangi rengin hangi takım olduğu hiçbir
+yerde yazmıyordu.
+
+**H. Künye ve içerik.**
+
+Yedi satırlık etiket/değer tablosu (266px), ikonlu kutular ızgarasına döndü —
+aynı bilgi yarı yükseklikte, tek bakışta taranıyor. Başlıkta zaten görünen
+alanlar (lig, sezon) künyeden düştü: künye TEKRAR etmez, TAMAMLAR.
+
+"Maç içeriği" ikiye ayrıldı: gerçek video varsa 16:9 afiş, yalnız kanal
+bağlantısı varsa TEK SATIR. Önceden ikisi de aynı kutuya giriyordu ve videosu
+olmayan maçlarda ekranın yarısını, ortasında küçük bir YouTube işareti olan boş
+bir afiş kaplıyordu.
+
+Oynanmamış maçta "Maç akışı" bölümü tümden gizlendi — başlamamış bir maçın
+akışı olamaz; bölüm yine de çiziliyor ve altında ekran boyu bir "Olay yok"
+boşluğu açıyordu.
+
+Puan sekmesindeki tablo bitişik satırlara döndü (48px kart yığını → 40px
+tablo): yirmi takım "üst üste yığılmış yirmi kart" gibi okunuyordu.
+
+**I. Denetimde bulunan gerçek hata.**
+
+Atmosfer kontrast çiftleri eklenince `check-tokens` `onDarkMuted` için
+1,95:1 dedi — oysa gerçek değer 5,59:1. Sebep: `luminance` yalnız hex okuyordu
+ve `parseInt("rgba(...)", 16)` NaN veriyor. Yani denetim, palette bilerek yarı
+saydam tutulan renkleri (`onDarkMuted`, `chalk`, `glassBorder`) SESSİZCE
+anlamsız sayılarla ölçüyordu. Kontrast matematiğine alfa yedirme eklendi;
+beyaz/siyah 21,00, aynı renk 1,00, %10 beyaz üstünde mor 1,31 veriyor.
+
 ### 7.2 Kalıcı denetim
 
 ```bash
