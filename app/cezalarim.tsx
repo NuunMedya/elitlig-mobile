@@ -266,7 +266,7 @@ export default function PenaltiesScreen() {
         <EmptyState
           icon="shield-checkmark-outline"
           title="Dosya yok"
-          body="Taraf olduğun bir disiplin dosyası yok — böyle devam! 🤝"
+          body="Taraf olduğun bir disiplin dosyası yok."
         />
       ) : (
         <FlatList

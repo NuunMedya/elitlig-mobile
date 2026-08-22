@@ -386,15 +386,6 @@ function playedAppearances(rows: Appearance[] | undefined): Appearance[] {
 }
 
 /** Mevki → emoji (eski ekrandan korundu; mevki metni sunucudan serbest gelir). */
-function positionIcon(position: string): string {
-  const value = position.toLocaleLowerCase("tr-TR");
-  if (value.includes("kaleci") || value.includes("kale")) return "🧤";
-  if (value.includes("defans") || value.includes("bek") || value.includes("stoper")) return "🛡️";
-  if (value.includes("kanat")) return "⚡";
-  if (value.includes("orta")) return "⚙️";
-  if (value.includes("forvet") || value.includes("santra")) return "⚽";
-  return "🏃";
-}
 
 /** Grup içi konum — ListRow köşe yuvarlaması ve ayracı buradan gelir. */
 function rowPosition(index: number, total: number): "single" | "first" | "middle" | "last" {
@@ -656,7 +647,7 @@ function GeneralTab({
     staleTime: 5 * 60_000,
   });
 
-  /* Türkiye geneli sıralama (kapsamsız) — eski ekrandaki 🇹🇷 rozetinin kaynağı. */
+  /* Türkiye geneli sıralama (kapsamsız) — hero'daki "TR n." rozetinin kaynağı. */
   const trRankQuery = useQuery({
     queryKey: queryKeys.playerRankings({}, "topScorers"),
     queryFn: () => getPlayerRankings({}, "topScorers"),
@@ -1732,15 +1723,19 @@ const Achievements = React.memo(function Achievements({
   goalsRank: number | null;
 }) {
   const badges = useMemo(() => {
+    /* EMOJİ YOK: rozetlerin başında 👑 ⚽ 💯 gibi emojiler vardı. Emoji
+       cihazın yazı tipine göre değişir, renk tokenlarına uymaz ve ekran
+       okuyucuda "yüz" diye okunur. Anlamı metnin kendisi taşır; görsel
+       ağırlık gerekiyorsa Badge'in kendi Ionicons ikonu kullanılır. */
     const list: { label: string; tone: Tone }[] = [];
-    if (pointsRank === 1) list.push({ label: "👑 Puan lideri", tone: "warn" });
-    if (goalsRank === 1) list.push({ label: "⚽ Gol kralı", tone: "warn" });
-    if (goals >= 100) list.push({ label: "💯 100 gol kulübü", tone: "brand" });
-    else if (goals >= 50) list.push({ label: "🎯 50+ gol", tone: "brand" });
-    if (matches >= 100) list.push({ label: "🏟️ 100+ maç", tone: "info" });
-    else if (matches >= 50) list.push({ label: "🛡️ 50+ maç", tone: "info" });
+    if (pointsRank === 1) list.push({ label: "Puan lideri", tone: "warn" });
+    if (goalsRank === 1) list.push({ label: "Gol kralı", tone: "warn" });
+    if (goals >= 100) list.push({ label: "100 gol kulübü", tone: "brand" });
+    else if (goals >= 50) list.push({ label: "50+ gol", tone: "brand" });
+    if (matches >= 100) list.push({ label: "100+ maç", tone: "info" });
+    else if (matches >= 50) list.push({ label: "50+ maç", tone: "info" });
     if (winRate != null && winRate >= 0.6 && matches >= 10) {
-      list.push({ label: "🔥 %60+ galibiyet", tone: "win" });
+      list.push({ label: "%60+ galibiyet", tone: "win" });
     }
     return list;
   }, [goals, goalsRank, matches, pointsRank, winRate]);
@@ -2087,7 +2082,7 @@ function ShareSheet({
                 <Text style={styles.shareBrandRight}>ELİTLİG MOBİL</Text>
               </View>
 
-              <Text style={styles.shareKicker}>⚽ OYUNCU PROFİLİ</Text>
+              <Text style={styles.shareKicker}>OYUNCU PROFİLİ</Text>
 
               <View style={styles.shareIdentity}>
                 <Avatar name={playerName} image={mediaUrl(playerImage)} size={56} />

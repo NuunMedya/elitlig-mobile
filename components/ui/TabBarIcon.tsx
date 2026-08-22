@@ -18,10 +18,9 @@
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
-import React, { useEffect, useRef } from "react";
-import { Animated, Easing, StyleSheet, Text, View } from "react-native";
-import { colors, duration, radius, textScale, type } from "@/theme";
-import { useReduceMotion } from "./LiveBadge";
+import React from "react";
+import { StyleSheet, Text, View } from "react-native";
+import { colors, radius, textScale, type } from "@/theme";
 
 export interface TabBarIconProps {
   /** Dolu varyantın adı — odaksızken sonuna "-outline" eklenir. */
@@ -48,35 +47,12 @@ export const TabBarIcon = React.memo(function TabBarIcon({
   badge,
   indicator = false,
 }: TabBarIconProps) {
-  const reduceMotion = useReduceMotion();
-  const pulse = useRef(new Animated.Value(0)).current;
+  /* NABIZ KALDIRILDI: canlı rozeti sekme çubuğunda sürekli nabız atıyordu.
+     Sekme çubuğu her ekranda görünür — yani bu, uygulamanın tamamında hiç
+     durmayan bir hareketti. Canlı bilgisi durağan bir noktayla da okunuyor
+     ve o nokta yalnız gerçekten canlı maç varken çizilir; bilgi kaybı yok,
+     gürültü kaybı var. */
   const isLive = badge === "live";
-
-  useEffect(() => {
-    if (!isLive || reduceMotion) {
-      pulse.setValue(0);
-      return;
-    }
-    const half = duration.pulse / 2;
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, {
-          toValue: 1,
-          duration: half,
-          easing: Easing.inOut(Easing.quad),
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulse, {
-          toValue: 0,
-          duration: half,
-          easing: Easing.inOut(Easing.quad),
-          useNativeDriver: true,
-        }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [isLive, pulse, reduceMotion]);
 
   const iconName = (focused ? name : `${name}-outline`) as keyof typeof Ionicons.glyphMap;
   const hasCount = typeof badge === "number" && badge > 0;
@@ -90,19 +66,7 @@ export const TabBarIcon = React.memo(function TabBarIcon({
       <View style={styles.iconBox}>
         <Ionicons name={iconName} size={size} color={color} />
 
-        {isLive ? (
-          <Animated.View
-            style={[
-              styles.liveDot,
-              {
-                opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 0.35] }),
-                transform: [
-                  { scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.35] }) },
-                ],
-              },
-            ]}
-          />
-        ) : null}
+        {isLive ? <View style={styles.liveDot} /> : null}
 
         {badge === "dot" ? <View style={styles.dot} /> : null}
 

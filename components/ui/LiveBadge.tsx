@@ -1,21 +1,24 @@
 /**
- * CANLI rozeti — nabız atan nokta + dakika.
+ * CANLI rozeti — nokta + dakika. Liste satırları için.
  *
- * NEDEN NABIZ: Skor listesinde "canlı" bilgisi tek başına renkle verilemez;
- * kırmızı bir nokta durağan kaldığında bitmiş maçtaki kırmızı kart ikonundan
- * ayırt edilemiyor. Nabız, hareketle "bu satır şu anda değişiyor" der.
+ * NABIZ KALDIRILDI (yeniden tasarım). Eskiden nokta sürekli nabız atıyordu ve
+ * gerekçesi "canlı bilgisi tek başına renkle verilemez"di. Doğru gerekçe, yanlış
+ * çözüm: ekranda sürekli hareket eden bir öğe, kullanıcının gözünü listeye
+ * değil o öğeye çeker ve on maçlık bir listede on ayrı nabız bir gürültüye
+ * dönüşür. Bilgi taşımayan hareket, bu üründe yasaktır.
  *
- * NEDEN REANIMATED YOK: projede reanimated kurulu değil. Döngü, RN çekirdeğinin
- * `Animated.loop`'u ile ve `useNativeDriver: true` ile kurulur — opaklık ve
- * ölçek JS thread'ine hiç uğramaz, canlı liste 60fps'i korur.
+ * CANLILIĞI ARTIK DAKİKA TAŞIYOR: rozet dakikayı yazar ve dakika kendiliğinden
+ * ilerler — "bu satır şu anda değişiyor" bilgisini veren şey budur. Maç
+ * detayının tabelasında ise `MinuteRing` kullanılır: aynı bilgiye ek olarak
+ * 90 dakikanın ne kadarının geçtiğini de gösterir.
  *
- * ERİŞİLEBİLİRLİK: "Reduce Motion" açıksa animasyon hiç başlatılmaz; nokta
- * sabit `live` renginde kalır, bilgi kaybolmaz (§5.8).
+ * Kırmızı kart ikonuyla karışma endişesi de yersizdi: kart ikonu DİKDÖRTGEN,
+ * canlı işareti DAİREDİR ve yanında dakika yazar.
  */
 
-import { memo, useEffect, useRef, useState } from "react";
-import { AccessibilityInfo, Animated, Easing, StyleSheet, Text, View } from "react-native";
-import { colors, duration, space, textScale, type } from "@/theme";
+import { memo, useEffect, useState } from "react";
+import { AccessibilityInfo, StyleSheet, Text, View } from "react-native";
+import { colors, space, textScale, type } from "@/theme";
 
 export interface LiveBadgeProps {
   /** Dakika verilirse "67'" gösterir, yoksa "CANLI" */
@@ -69,29 +72,6 @@ export const LiveBadge = memo(function LiveBadge({
   size = "sm",
   compact = false,
 }: LiveBadgeProps) {
-  const pulse = useRef(new Animated.Value(0)).current;
-  const reduceMotion = useReduceMotion();
-
-  useEffect(() => {
-    if (halftime || reduceMotion) {
-      pulse.setValue(0);
-      return;
-    }
-    const half = duration.pulse / 2;
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: half, easing: Easing.out(Easing.ease), useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0, duration: half, easing: Easing.in(Easing.ease), useNativeDriver: true }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [halftime, reduceMotion, pulse]);
-
-  const dotOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 0.25] });
-  const ringScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 2.2] });
-  const ringOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0] });
-
   const label = halftime
     ? "İY"
     : minute != null
@@ -106,10 +86,7 @@ export const LiveBadge = memo(function LiveBadge({
       accessibilityLabel={speech(minute, addedTime, halftime)}
     >
       <View style={styles.dotBox}>
-        {size === "md" && !halftime ? (
-          <Animated.View style={[styles.ring, { transform: [{ scale: ringScale }], opacity: ringOpacity }]} />
-        ) : null}
-        <Animated.View style={[styles.dot, halftime && styles.dotHalftime, { opacity: dotOpacity }]} />
+        <View style={[styles.dot, halftime && styles.dotHalftime]} />
       </View>
       {compact ? null : (
         <Text
@@ -151,13 +128,7 @@ const styles = StyleSheet.create({
   dotHalftime: {
     backgroundColor: colors.textTertiary,
   },
-  ring: {
-    position: "absolute",
-    width: DOT,
-    height: DOT,
-    borderRadius: DOT / 2,
-    backgroundColor: colors.liveGlow,
-  },
+
   text: {
     ...type.micro,
     color: colors.live,

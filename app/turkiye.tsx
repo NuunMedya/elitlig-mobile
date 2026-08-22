@@ -433,7 +433,7 @@ export default function TurkeyRankingsScreen() {
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader
         title="Türkiye Sıralaması"
-        overline="🇹🇷 TÜM ŞEHİRLER"
+        overline="TÜM ŞEHİRLER"
         subtitle={period === "recent" ? "Son 6 ayın liderleri" : "Tüm zamanların liderleri"}
         back
         scrollY={scrollY}
@@ -549,7 +549,7 @@ function ShareSheet({
               </View>
 
               <Text style={styles.shareKicker} numberOfLines={1} {...textScale.badge}>
-                {upperTR(`🇹🇷 Türkiye · ${period === "recent" ? "bu sezon" : "tüm zamanlar"}`)}
+                {upperTR(`Türkiye · ${period === "recent" ? "bu sezon" : "tüm zamanlar"}`)}
               </Text>
               <Text style={styles.shareTitle} numberOfLines={1} {...textScale.badge}>
                 {upperTR(categoryLabel)}

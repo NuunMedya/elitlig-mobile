@@ -4,7 +4,13 @@ import * as Sharing from "expo-sharing";
 import { useRef, useState } from "react";
 import { Alert, Modal, StyleSheet, Text, View } from "react-native";
 import ViewShot, { captureRef } from "react-native-view-shot";
-import { Avatar, TeamLogo, Touchable, withAlpha } from "@/components/ui";
+import {
+  Avatar,
+  EventIcon,
+  TeamLogo,
+  Touchable,
+  withAlpha,
+} from "@/components/ui";
 import {
   colors,
   dark as darkPalette,
@@ -413,20 +419,29 @@ function FullTimeBody({
         </View>
         {homeScorers.length > 0 || awayScorers.length > 0 ? (
           <View style={styles.scorersRow}>
+            {/* EMOJİ TOP YERİNE SVG: emoji cihazın yazı tipine göre değişir,
+                yani aynı paylaşım kartı iki telefonda iki farklı görünürdü —
+                dışa aktarılan bir görselde bu kabul edilemez. */}
             <View style={styles.scorersCol}>
               {homeScorers.map((p) => (
-                <Text key={`h-${p.playerId}-${p.name}`} style={styles.scorerLine} numberOfLines={1}>
-                  ⚽ {shortName(p.name)}
-                  {p.goals > 1 ? ` ×${p.goals}` : ""}
-                </Text>
+                <View key={`h-${p.playerId}-${p.name}`} style={styles.scorerRow}>
+                  <EventIcon kind="goal" size={10} color={INK} />
+                  <Text style={styles.scorerLine} numberOfLines={1}>
+                    {shortName(p.name)}
+                    {p.goals > 1 ? ` ×${p.goals}` : ""}
+                  </Text>
+                </View>
               ))}
             </View>
             <View style={[styles.scorersCol, styles.scorersColRight]}>
               {awayScorers.map((p) => (
-                <Text key={`a-${p.playerId}-${p.name}`} style={styles.scorerLine} numberOfLines={1}>
-                  {shortName(p.name)}
-                  {p.goals > 1 ? ` ×${p.goals}` : ""} ⚽
-                </Text>
+                <View key={`a-${p.playerId}-${p.name}`} style={styles.scorerRowRight}>
+                  <Text style={styles.scorerLine} numberOfLines={1}>
+                    {shortName(p.name)}
+                    {p.goals > 1 ? ` ×${p.goals}` : ""}
+                  </Text>
+                  <EventIcon kind="goal" size={10} color={INK} />
+                </View>
               ))}
             </View>
           </View>
@@ -738,6 +753,17 @@ const styles = StyleSheet.create({
   scorersCol: {
     flex: 1,
     gap: 2,
+  },
+  scorerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+  },
+  scorerRowRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 3,
   },
   scorersColRight: {
     alignItems: "flex-end",

@@ -6,6 +6,9 @@
  *   2. Ekranda 16px üstü tipografi var mı (skor ve sayfa başlığı hariç)?
  *   3. Kodda çıplak hex kaldı mı (alan verisi ve dış marka renkleri hariç)?
  *   4. `fontWeight` sızmış mı (özel fontlarda çalışmaz, aile adı kullanılır)?
+ *   5. Emoji ikon kaldı mı (brief §9 yasağı)?
+ *   6. Sonsuz döngülü animasyon kaldı mı (iskelet parıltısı hariç)?
+ *   7. "Bir şeyler ters gitti" tarzı belirsiz hata metni kaldı mı?
  *
  * Çalıştırma:  npm run check:tokens
  * Çıkış kodu 1 ise en az bir kural ihlal edilmiştir.
@@ -142,6 +145,51 @@ for (const hit of grep('"#[0-9A-Fa-f]\\{3,8\\}"', "app components")) {
 
 for (const hit of grep("fontWeight:", "app components theme")) {
   note(`fontWeight · ${hit.trim()}`);
+}
+
+/*
+ * Emoji ikon — brief §9 yasağı.
+ *
+ * Aralık DAR TUTULUR: kutu çizgileri (─ ═), oklar (→) ve tipografik işaretler
+ * emoji değildir ve bu kod tabanında yorum başlıklarında yoğun kullanılır.
+ * Yalnız gerçek piktogram blokları taranır. Yorum içerikleri de ayıklanır —
+ * bir açıklamada emojiden BAHSETMEK, emoji KULLANMAK değildir.
+ */
+const EMOJI = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE0F}]/u;
+
+/** Satırdan yorum parçalarını çıkarır; kalan şey gerçekten koddur. */
+const stripComments = (line) =>
+  line
+    .replace(/\{?\/\*[\s\S]*?\*\/\}?/g, "")
+    .replace(/\/\*.*$/, "")
+    .replace(/^\s*\*.*$/, "")
+    .replace(/\/\/.*$/, "");
+
+for (const path of execSync("find app components -name '*.tsx'", { encoding: "utf8" })
+  .trim()
+  .split("\n")) {
+  readFileSync(path, "utf8")
+    .split("\n")
+    .forEach((line, i) => {
+      const code = stripComments(line);
+      if (EMOJI.test(code)) note(`emoji ikon · ${path}:${i + 1}: ${code.trim().slice(0, 70)}`);
+    });
+}
+
+/* Sonsuz animasyon döngüsü — yalnız iskelet parıltısı meşru. */
+for (const hit of grep("Animated.loop", "app components")) {
+  const [file] = hit.split(":");
+  if (file.endsWith("Skeleton.tsx")) continue;
+  // `iterations` verilmişse döngü sonludur (gol parlaması gibi) — sorun değil.
+  if (/iterations/.test(hit)) continue;
+  note(`sonsuz animasyon · ${hit.trim()}`);
+}
+
+/* Belirsiz hata metni — brief §9. */
+for (const hit of grep("ters gitti\\|Beklenmeyen bir hata\\|Bir sorun oldu", "app components lib")) {
+  const trimmed = hit.trim();
+  if (/^\S+:\d+:\s*\*/.test(trimmed)) continue; // yorum satırı
+  note(`belirsiz hata metni · ${trimmed.slice(0, 90)}`);
 }
 
 /* ────────────────────────────────── rapor ────────────────────────────────── */
