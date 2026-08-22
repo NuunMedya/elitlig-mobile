@@ -41,7 +41,6 @@
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
@@ -881,12 +880,10 @@ function ShareSheet({
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.shareBackdrop}>
         <ViewShot ref={shotRef} options={{ format: "png", quality: 1 }}>
-          <LinearGradient
-            colors={[inkPalette.brandDim, inkPalette.bg]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.shareCard}
-          >
+          {/* Düz koyu yüzey. Gradient bu üründe yalnız görsel üstü
+              okunabilirlik scrim'i için meşrudur; fotoğrafsız bir kartta
+              dekorasyondan başka bir şey değil. */}
+          <View style={styles.shareCard}>
             <Text style={styles.shareBrand} {...textScale.badge}>
               elitlig
             </Text>
@@ -909,7 +906,7 @@ function ShareSheet({
             <Text style={styles.shareFooter} {...textScale.badge}>
               {upperTR(`elitlig.com · ${igHandle}`)}
             </Text>
-          </LinearGradient>
+          </View>
         </ViewShot>
 
         <View style={styles.shareActions}>
@@ -1139,6 +1136,7 @@ const styles = StyleSheet.create({
     gap: space.lg,
   },
   shareCard: {
+    backgroundColor: inkPalette.bg,
     width: 268,
     borderRadius: radius.xl,
     borderWidth: hairline,

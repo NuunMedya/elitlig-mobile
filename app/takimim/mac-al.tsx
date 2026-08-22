@@ -151,7 +151,8 @@ function cellView(cell: TeamBoardCell, selected: boolean, teamId: number | null)
       return { selectable: false, hint: "Talebiniz bekliyor", tone: colors.info, mine: true };
     }
     if (selected) {
-      return { selectable: true, hint: "Rakibi olacaksınız", tone: colors.accent, mine: false };
+      // Seçili durum MERCANDIR: mavi bu üründe yalnız veri rengidir.
+      return { selectable: true, hint: "Rakibi olacaksınız", tone: colors.brand, mine: false };
     }
     return {
       selectable: true,
@@ -166,7 +167,7 @@ function cellView(cell: TeamBoardCell, selected: boolean, teamId: number | null)
     return { selectable: false, hint: "Talebiniz bekliyor", tone: colors.info, mine: true };
   }
   if (selected) {
-    return { selectable: true, hint: "Seçildi", tone: colors.accent, mine: false };
+    return { selectable: true, hint: "Seçildi", tone: colors.brand, mine: false };
   }
   return {
     selectable: true,

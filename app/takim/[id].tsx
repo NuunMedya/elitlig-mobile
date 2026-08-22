@@ -24,7 +24,6 @@
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -2328,10 +2327,8 @@ function TeamShareSheet({
       <View style={styles.shareCardWrap}>
         <ViewShot ref={shotRef} options={{ format: "png", quality: 1 }}>
           <View style={[styles.shareCard, { height: SHARE_FORMATS[format].height }]}>
-            <LinearGradient
-              colors={[colors.brand, colors.brandStrong]}
-              style={styles.shareStrip}
-            />
+            {/* Düz dolgu — gradient yalnız okunabilirlik scrim'i için. */}
+            <View style={styles.shareStrip} />
             <View style={styles.shareBody}>
               <View style={styles.shareTop}>
                 <Text style={styles.shareBrand} {...textScale.badge}>
@@ -2741,6 +2738,7 @@ const styles = StyleSheet.create({
   },
   shareStrip: {
     height: 8,
+    backgroundColor: colors.brand,
   },
   shareBody: {
     flex: 1,

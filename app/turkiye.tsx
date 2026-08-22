@@ -25,7 +25,6 @@
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
-import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
 import React, { useCallback, useMemo, useRef, useState } from "react";
@@ -531,12 +530,9 @@ function ShareSheet({
       <View style={styles.shareWrap}>
         <ViewShot ref={shotRef} options={{ format: "png", quality: 1 }}>
           <View style={[styles.shareCard, { height: SHARE_FORMATS[format].height }]}>
-            <LinearGradient
-              colors={[colors.brand, colors.brandStrong]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.shareStrip}
-            />
+            {/* Düz dolgu: gradient bu üründe yalnız görsel üstü okunabilirlik
+                scrim'i için meşru; 7px'lik bir şeritte hiçbir işe yaramıyor. */}
+            <View style={styles.shareStrip} />
 
             <View style={styles.shareBody}>
               <View style={styles.shareTop}>
@@ -742,6 +738,7 @@ const styles = StyleSheet.create({
   },
   shareStrip: {
     height: 6,
+    backgroundColor: colors.brand,
   },
   shareBody: {
     flex: 1,

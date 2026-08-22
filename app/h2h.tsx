@@ -632,7 +632,8 @@ function ShareSheet({
       <View style={styles.shareCardWrap}>
         <ViewShot ref={shotRef} options={{ format: "png", quality: 1 }}>
           <View style={[styles.shareCard, { height: SHARE_FORMATS[format].height }]}>
-            <LinearGradient colors={[colors.brand, colors.brandStrong]} style={styles.shareStrip} />
+            {/* Düz dolgu — gradient yalnız okunabilirlik scrim'i için. */}
+            <View style={styles.shareStrip} />
 
             <View style={styles.shareBody}>
               <View style={styles.shareTop}>
@@ -907,6 +908,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   shareStrip: {
+    backgroundColor: colors.brand,
     height: 6,
   },
   shareBody: {

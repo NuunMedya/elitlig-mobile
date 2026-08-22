@@ -176,6 +176,24 @@ for (const path of execSync("find app components -name '*.tsx'", { encoding: "ut
     });
 }
 
+/*
+ * Gradient — brief §2.3: neredeyse yasak. Tek meşru kullanım, görsel üstündeki
+ * okunabilirlik scrim'i ve kaydırma kenarındaki solma maskesi. Dosya bazında
+ * izin verilir çünkü bir dosyada gradient VARSA amacı bellidir.
+ */
+const GRADIENT_ALLOWED = new Set([
+  "app/haber/[id].tsx",        // kapak görseli scrim'i
+  "components/ui/HeroCarousel.tsx", // manşet görseli scrim'i
+  "components/ui/DateStrip.tsx",    // kaydırma kenarı solma maskesi
+  "components/ui/Skeleton.tsx",     // iskelet parıltısı (brief istisnası)
+  "components/MatchPhotoSlider.tsx", // maç fotoğrafı scrim'i
+]);
+for (const hit of grep("<LinearGradient", "app components")) {
+  const file = hit.split(":")[0];
+  if (GRADIENT_ALLOWED.has(file)) continue;
+  note(`gradient · ${hit.trim().slice(0, 90)}`);
+}
+
 /* Sonsuz animasyon döngüsü — yalnız iskelet parıltısı meşru. */
 for (const hit of grep("Animated.loop", "app components")) {
   const [file] = hit.split(":");

@@ -360,12 +360,9 @@ const DailyTestCard = React.memo(function DailyTestCard({
       accessibilityRole="button"
       accessibilityLabel={`Günün Testi. ${title}. ${subtitle}`}
     >
-      <LinearGradient
-        colors={[colors.brand, colors.brandStrong]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.dailyFill}
-      >
+      {/* Düz mercan dolgu: gradyan kartın mercan alanını büyütüyor ama
+          hiçbir şey söylemiyordu. */}
+      <View style={styles.dailyFill}>
         <View style={styles.dailyIcon}>
           <Ionicons
             name={ready && done ? "checkmark" : "bulb"}
@@ -391,7 +388,7 @@ const DailyTestCard = React.memo(function DailyTestCard({
             {ready && done ? "Tekrar" : "Oyna"}
           </Text>
         </View>
-      </LinearGradient>
+      </View>
     </Touchable>
   );
 });
@@ -434,12 +431,8 @@ const GameCard = React.memo(function GameCard({
       accessibilityRole="button"
       accessibilityLabel={`${meta.title}. ${meta.blurb}${best != null ? ` Rekorun ${best} ${meta.unit}.` : ""}`}
     >
-      <LinearGradient
-        colors={fill}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0.9, y: 1 }}
-        style={styles.gameFill}
-      >
+      {/* Düz yüzey — oyun kartlarının rengi ton rozetinden okunur. */}
+      <View style={[styles.gameFill, { backgroundColor: fill[fill.length - 1] }]}>
         <View style={styles.gameTop}>
           <View style={[styles.gameIcon, { backgroundColor: tone.dim }]}>
             <Ionicons name={meta.icon} size={18} color={tone.fg} />
@@ -470,7 +463,7 @@ const GameCard = React.memo(function GameCard({
             </Text>
           )}
         </View>
-      </LinearGradient>
+      </View>
     </Touchable>
   );
 });
@@ -783,6 +776,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   dailyFill: {
+    backgroundColor: colors.brand,
     flexDirection: "row",
     alignItems: "center",
     gap: space.md,

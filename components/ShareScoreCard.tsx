@@ -1,5 +1,4 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { LinearGradient } from "expo-linear-gradient";
 import * as Sharing from "expo-sharing";
 import { useRef, useState } from "react";
 import { Alert, Modal, StyleSheet, Text, View } from "react-native";
@@ -35,7 +34,7 @@ import type { ApiMatch } from "@/lib/types";
  * indirme de mümkündür (ayrı izin gerektirmez).
  *
  * ————— SABİT HEX NEDEN BURADA KALIYOR (bilinçli istisna) —————
- * Aşağıdaki CORAL_TEXT / CORAL_DEEP / INK / GRAY / CARD_BORDER ve kart içindeki
+ * Aşağıdaki CORAL / CORAL_TEXT / INK / GRAY / CARD_BORDER ve kart içindeki
  * beyaz-lila gradyan, EKRANIN değil DIŞA AKTARILAN PNG'NİN renkleridir.
  * Kullanıcı kartı Instagram'a atar; oradaki görselin, paylaşanın telefonunda
  * koyu tema açık olup olmamasına göre değişmesi kabul edilemez — İçerik Havuzu
@@ -78,7 +77,6 @@ type Fmt = keyof typeof FORMATS;
  * (`light.brandAccent`, 4,70:1) kullanılır.
  */
 const CORAL = light.brand;
-const CORAL_DEEP = light.brandStrong;
 /** Mercanın metin sürümü — kağıt üstünde AA geçen tek mercan. */
 const CORAL_TEXT = light.brandAccent;
 const INK = light.inverse;
@@ -86,8 +84,6 @@ const GRAY = light.textTertiary;
 const CARD_BORDER = light.brandBorder;
 /** Kartın dış çerçevesi (7px kenarlık etkisi veren zemin). */
 const FRAME_INK = light.inverse;
-/** Kart gövdesinin mercan tint → kağıt → beyaz gradyanı. */
-const BODY_GRADIENT = [light.brandDim, light.bg, light.surface1] as const;
 /** Kart içi kutuların beyaz zemini. */
 const CARD_WHITE = light.surface1;
 
@@ -201,18 +197,10 @@ export function ShareScoreCard({
 
           <ViewShot ref={shotRef} options={{ format: "png", quality: 1 }}>
             <View style={[styles.frame, { height: FORMATS[fmt].height }]}>
-              <LinearGradient
-                colors={[CORAL, CORAL_DEEP]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.topStrip}
-              />
-              <LinearGradient
-                colors={BODY_GRADIENT}
-                start={{ x: 0.2, y: 0 }}
-                end={{ x: 0.5, y: 1 }}
-                style={styles.body}
-              >
+              {/* Düz dolgu — gradient yalnız okunabilirlik scrim'i için. */}
+              <View style={styles.topStrip} />
+              {/* Düz kağıt zemin. */}
+              <View style={styles.body}>
                 <Text style={styles.watermark}>elitlig</Text>
 
                 <View style={styles.headRow}>
@@ -253,7 +241,7 @@ export function ShareScoreCard({
                   <Text style={styles.footerSite}>ELİTLİG.COM</Text>
                   {igHandle ? <Text style={styles.footerHandle}>{igHandle}</Text> : null}
                 </View>
-              </LinearGradient>
+              </View>
             </View>
           </ViewShot>
 
@@ -583,11 +571,13 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   topStrip: {
+    backgroundColor: CORAL,
     height: 7,
     borderTopLeftRadius: 8,
     borderTopRightRadius: 8,
   },
   body: {
+    backgroundColor: CARD_WHITE,
     flex: 1,
     borderBottomLeftRadius: 8,
     borderBottomRightRadius: 8,

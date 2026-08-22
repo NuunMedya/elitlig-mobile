@@ -18,7 +18,6 @@
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { LinearGradient } from "expo-linear-gradient";
 import React from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { colors, hairline, radius, space, textScale, type, upperTR } from "@/theme";
@@ -91,13 +90,11 @@ export const SpotlightCard = React.memo(function SpotlightCard({
   const homeWins = hasScore && (home.score as number) > (away.score as number);
   const awayWins = hasScore && (away.score as number) > (home.score as number);
 
+  /* Düz yüzey: surface2 → surface1 gradyanı iki komşu tondan ibaretti, yani
+     görünmüyordu ama her karede bir gradient katmanı çiziyordu. Bu üründe
+     gradient yalnız görsel üstü okunabilirlik scrim'i için meşru. */
   const content = (
-    <LinearGradient
-      colors={[colors.surface2, colors.surface1]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={styles.gradient}
-    >
+    <View style={styles.gradient}>
       <View style={styles.head}>
         {live ? <LiveBadge minute={minute} size="sm" /> : null}
         <Text style={styles.eyebrow} numberOfLines={1} {...textScale.badge}>
@@ -133,7 +130,7 @@ export const SpotlightCard = React.memo(function SpotlightCard({
           ) : null}
         </View>
       ) : null}
-    </LinearGradient>
+    </View>
   );
 
   if (!onPress) {
@@ -167,6 +164,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   gradient: {
+    backgroundColor: colors.surface1,
     padding: space.md,
     gap: space.m,
   },

@@ -157,7 +157,7 @@ const Slot = React.memo(function Slot({
           <Ionicons
             name="add"
             size={16}
-            color={active ? colors.textOnAccent : colors.textSecondary}
+            color={active ? colors.brandAccent : colors.textSecondary}
           />
           <Text
             style={[styles.slotName, active ? styles.slotNameActive : styles.slotNameEmpty]}
@@ -277,10 +277,18 @@ const styles = StyleSheet.create({
     backgroundColor: colors.brand,
     borderColor: colors.brandStrong,
   },
-  /** Seçili yuva aksanla işaretlenir: "havuzdan seçtiğin buraya gidecek". */
+  /**
+   * Seçili yuva: "havuzdan seçtiğin buraya gidecek".
+   *
+   * SEÇİM MERCANDIR, MAVİ DEĞİL. Mavi bu üründe yalnız VERİ rengidir; seçili
+   * durum bir aksiyonun devamıdır. Dolu yuvadan ayrışması için dolgu değil
+   * TİNT + kalın mercan çerçeve kullanılır: dolu yuva mercanla DOLU, bekleyen
+   * yuva mercanla ÇERÇEVELİ.
+   */
   slotActive: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accentStrong,
+    backgroundColor: colors.brandDim,
+    borderColor: colors.brand,
+    borderWidth: 2,
   },
   slotNumber: {
     ...type.tableNumStrong,
@@ -297,7 +305,7 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   slotNameActive: {
-    color: colors.textOnAccent,
+    color: colors.brandAccent,
   },
 });
 

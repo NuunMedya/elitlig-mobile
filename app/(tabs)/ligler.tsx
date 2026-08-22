@@ -423,7 +423,7 @@ function StandingsTab({ scrollProps, onPickScope }: TabProps) {
       getItemLayout={standingLayout}
       initialNumToRender={14}
       windowSize={8}
-      contentContainerStyle={styles.listContent}
+      contentContainerStyle={styles.standingsContent}
       refreshControl={
         <RefreshControl {...refreshControlProps(refresh.refreshing, refresh.onRefresh)} />
       }
@@ -1474,7 +1474,16 @@ const styles = StyleSheet.create({
     paddingTop: space.md,
   },
 
-  /* — Puan tablosu — */
+  /* — Puan tablosu —
+     DAR KENAR: bu tablo sekiz sütun taşıyor (bölge, sıra, arma, ad, O/AV/P,
+     son 5) ve 360px'lik bir ekranda 20px kenarla takım adına 97px kalıyor.
+     `screenPaddingDense` ile 113px'e çıkıyor — yoğun tablo düzenleri için
+     ayrılan istisna tam olarak budur. Diğer beş sekme normal kenarı kullanır. */
+  standingsContent: {
+    paddingHorizontal: layout.screenPaddingDense,
+    paddingBottom: layout.tabBarHeight + space.xxl,
+    flexGrow: 1,
+  },
   stHead: {
     flexDirection: "row",
     alignItems: "center",

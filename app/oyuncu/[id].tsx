@@ -2070,13 +2070,12 @@ function ShareSheet({
 
         <ViewShot ref={shotRef} options={{ format: "png", quality: 1 }}>
           <View style={[styles.shareCard, { height: SHARE_FORMATS[format].height }]}>
-            <LinearGradient colors={[SHARE.brand, SHARE.brandDeep]} style={styles.shareStrip} />
-            <LinearGradient
-              colors={[SHARE.paperTop, SHARE.paperMid, SHARE.paperBottom]}
-              start={{ x: 0.2, y: 0 }}
-              end={{ x: 0.5, y: 1 }}
-              style={styles.shareBody}
-            >
+            {/* Düz dolgu — gradient yalnız okunabilirlik scrim'i için. */}
+            <View style={styles.shareStrip} />
+            {/* Düz kağıt: kartın üç duraklı gradyanı hiçbir bilgi taşımıyordu
+                ve bu üründe gradient yalnız görsel üstü okunabilirlik scrim'i
+                için meşru. */}
+            <View style={styles.shareBody}>
               <View style={styles.shareHead}>
                 <Text style={styles.shareBrand}>elitlig</Text>
                 <Text style={styles.shareBrandRight}>ELİTLİG MOBİL</Text>
@@ -2123,7 +2122,7 @@ function ShareSheet({
 
               <View style={styles.shareSpacer} />
               <Text style={styles.shareFooter}>ELİTLİG.COM</Text>
-            </LinearGradient>
+            </View>
           </View>
         </ViewShot>
 
@@ -2669,11 +2668,13 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   shareStrip: {
+    backgroundColor: SHARE.brand,
     height: 7,
     borderTopLeftRadius: radius.md,
     borderTopRightRadius: radius.md,
   },
   shareBody: {
+    backgroundColor: SHARE.paperBottom,
     flex: 1,
     borderBottomLeftRadius: radius.md,
     borderBottomRightRadius: radius.md,
