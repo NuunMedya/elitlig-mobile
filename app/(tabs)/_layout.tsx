@@ -52,7 +52,7 @@ function tabIcon(name: React.ComponentProps<typeof TabBarIcon>["name"], badge?: 
       name={name}
       color={color}
       focused={focused}
-      size={21}
+      size={20}
       indicator
       badge={badge && badge > 0 ? badge : undefined}
     />
@@ -100,9 +100,9 @@ export default function TabsLayout() {
           borderTopWidth: 1,
           borderTopColor: colors.tabBarBorder,
           /* ÖLÇÜ: ikon kutusu 21px glif, etiket 13px satır yüksekliği,
-             aralarında 2px = 43px içerik (ikon kutusu glifin kendisinden
-             büyüktür: yazı tipi satır kutusu ~28px). Çubuk 60px ve dikey iç
-             boşluk 4+4 → 52px kullanılabilir alan. Öğe başına gelen 5px varsayılan
+             aralarında 2px = 40px içerik (ikon kutusu glifin kendisinden
+             büyüktür: yazı tipi satır kutusu ~26px). Çubuk 58px ve dikey iç
+             boşluk 4+4 → 50px kullanılabilir alan. Öğe başına gelen 5px varsayılan
              dolgu etiketin alt kesimini kırptığı için sıfırlanır. */
           height: layout.tabBarHeight + insets.bottom,
           paddingTop: 4,

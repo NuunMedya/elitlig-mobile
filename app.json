@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "scheme": "elitlig",
     "userInterfaceStyle": "automatic",
-    "backgroundColor": "#F4F6FA",
+    "backgroundColor": "#F5F3FB",
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.elitlig.app",
@@ -30,7 +30,7 @@
       [
         "expo-notifications",
         {
-          "color": "#EE7F55",
+          "color": "#7C3AED",
           "defaultChannel": "default",
           "icon": "./assets/images/notification-icon.png"
         }
@@ -41,9 +41,9 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 240,
           "resizeMode": "contain",
-          "backgroundColor": "#F4F6FA",
+          "backgroundColor": "#F5F3FB",
           "dark": {
-            "backgroundColor": "#0B0D13"
+            "backgroundColor": "#0C0718"
           }
         }
       ],

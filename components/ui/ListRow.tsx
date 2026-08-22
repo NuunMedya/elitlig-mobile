@@ -20,6 +20,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { useCallback, useMemo } from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { colors, elevate, hairline, layout, radius, space, textScale, type } from "@/theme";
+import { GradientFill } from "./GradientFill";
 import { Toggle } from "./Toggle";
 import { toneColors, type Tone } from "./Badge";
 import { Touchable } from "./Pressable";
@@ -115,8 +116,23 @@ export const ListRow = React.memo(function ListRow({
     return <View style={styles.leadingNode}>{leading}</View>;
   }, [disabled, leading]);
 
+  const gradientCorners =
+    position === "single"
+      ? styles.cornersAll
+      : position === "first"
+        ? styles.cornersTop
+        : position === "last"
+          ? styles.cornersBottom
+          : null;
+
   const content = (
     <>
+      {/*
+        Işıklı yüzey. Köşe yarıçapı SATIRIN GRUP İÇİNDEKİ KONUMUNDAN gelir:
+        kapsayıcıya `overflow: "hidden"` vermek yüzen rozetleri kırpardı, bu
+        yüzden gradyan kendi köşelerini taşır.
+      */}
+      <GradientFill style={gradientCorners ?? undefined} />
       {leadingNode}
 
       <View style={styles.texts}>
@@ -217,6 +233,17 @@ const styles = StyleSheet.create({
   single: {
     borderRadius: radius.lg,
     ...elevate(1),
+  },
+  cornersAll: {
+    borderRadius: radius.lg,
+  },
+  cornersTop: {
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+  },
+  cornersBottom: {
+    borderBottomLeftRadius: radius.lg,
+    borderBottomRightRadius: radius.lg,
   },
   first: {
     borderTopLeftRadius: radius.lg,

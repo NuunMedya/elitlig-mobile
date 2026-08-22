@@ -1,8 +1,10 @@
 /**
  * Yükselti ve ayraç stratejisi.
  *
- * KURAL: ÇİZGİ ÖNCE, GÖLGE SONRA — ama gölge VAR. Varsayılan kart `surface1`
- * zemin + 1px `border` kenarlık + ÇOK GENİŞ, ÇOK SÖNÜK bir gölgedir.
+ * KURAL: ÜÇ KATMAN — gradyan yüzey + 1px kenarlık + mor gölge. Varsayılan
+ * kart `gradientCard` geçişi (bkz. `GradientFill`) üstüne 1px `border` ve
+ * geniş, mor tonlu bir gölge alır. `elevate()` bu üçlünün zemin+kenarlık+gölge
+ * kısmını verir; gradyan katmanını çağıran serer.
  *
  * NEDEN DEĞİŞTİ: önceki sürüm "gölge değil çizgi" diyerek kart gölgesini
  * tamamen kaldırmıştı. Gerekçe doğruydu (her yuvarlak köşenin altına koyu bir
@@ -12,10 +14,14 @@
  * HİSSEDİLMESİDİR: y ofseti küçük, yarıçap büyük, opaklık 0.04–0.06.
  *
  * Reçeteler (açık tema):
- *   seviye 1 (kart)     opaklık .045 · yarıçap 14 · y 3   · android 1
- *   seviye 2 (yükseltilmiş) .06 · 20 · 6  · android 3
- *   seviye 3 (yüzen)    .10  · 24 · 10 · android 8
- *   seviye 4 (sheet)    .16  · 32 · 16 · android 16
+ *   seviye 1 (kart)     opaklık .08 · yarıçap 16 · y 4  · android 2
+ *   seviye 2 (yükseltilmiş) .11 · 22 · 8  · android 4
+ *   seviye 3 (yüzen)    .16 · 28 · 12 · android 8
+ *   seviye 4 (sheet)    .22 · 36 · 18 · android 16
+ *
+ * GÖLGE MORDUR. `shadowColor` derin mordur (#3B1E6E), siyah değil: lavanta
+ * kâğıdın üstünde siyah gölge grileşip kirli görünüyordu. Mor gölge kartın
+ * ışıklı gradyanıyla aynı aileden olduğu için yüzey "ışık alıyor" gibi durur.
  *
  * Koyu temada gölge görünmez (siyah üstüne siyah); orada katmanlar yüzey farkı
  * + kenarlıkla ayrılır ve 3. seviyeden itibaren üst kenara 1px iç ışık eklenir.
@@ -34,10 +40,10 @@ export type ElevationLevel = 0 | 1 | 2 | 3 | 4;
 /** Verilen seviyenin zemin + kenarlık (+ yüzen katmanlarda gölge) stilini üretir. */
 /** Seviye başına gölge reçetesi: opaklık · yarıçap · y ofseti · android kotu. */
 const SHADOW: Record<Exclude<ElevationLevel, 0>, { o: number; r: number; y: number; e: number }> = {
-  1: { o: 0.045, r: 14, y: 3, e: 1 },
-  2: { o: 0.06, r: 20, y: 6, e: 3 },
-  3: { o: 0.1, r: 24, y: 10, e: 8 },
-  4: { o: 0.16, r: 32, y: 16, e: 16 },
+  1: { o: 0.08, r: 16, y: 4, e: 2 },
+  2: { o: 0.11, r: 22, y: 8, e: 4 },
+  3: { o: 0.16, r: 28, y: 12, e: 8 },
+  4: { o: 0.22, r: 36, y: 18, e: 16 },
 };
 
 /** Koyu temada yalnız gerçekten yüzen katmanlar gölge alır; kart almaz. */

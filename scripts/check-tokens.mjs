@@ -76,13 +76,15 @@ const PAIRS = (p) => [
   [p.textPrimary, p.surface1, 4.5, "birincil metin / kart"],
   [p.textSecondary, p.bg, 4.5, "ikincil metin / zemin"],
   [p.textSecondary, p.surface1, 4.5, "ikincil metin / kart"],
+  [p.textSecondary, p.gradientCard[1], 4.5, "ikincil metin / kart gradyanının koyu ucu"],
   [p.textTertiary, p.bg, 4.5, "etiket metni / zemin"],
   [p.textTertiary, p.surface1, 4.5, "etiket metni / kart"],
-  [p.textOnBrand, p.brand, 4.5, "buton metni / mercan dolgu"],
+  [p.textOnBrand, p.brand, 4.5, "buton metni / mor dolgu"],
+  [p.textOnBrand, p.gradientBrand[0], 4.5, "buton metni / mor gradyanın açık ucu"],
   [p.onInverse, p.inverse, 4.5, "seçili chip metni / ters blok"],
   [p.textOnAccent, p.accent, 4.5, "metin / mavi dolgu"],
-  [p.brandAccent, p.bg, 4.5, "mercan metin / zemin"],
-  [p.brandAccent, p.surface1, 4.5, "mercan metin / kart"],
+  [p.brandAccent, p.bg, 4.5, "marka metni / zemin"],
+  [p.brandAccent, p.surface1, 4.5, "marka metni / kart"],
   [p.accentText, p.bg, 4.5, "mavi metin / zemin"],
   [p.live, p.bg, 3.0, "canlı halkası / zemin"],
   // Mürekkep blok iki temada da koyudur; üstündeki metin onun karanlık
@@ -91,7 +93,10 @@ const PAIRS = (p) => [
   [p.onDark, p.gradientInk[0], 4.5, "blok metni / mürekkep blok"],
   [p.onDark, p.inkBlock, 4.5, "blok metni / düz mürekkep yüzey"],
   [p.liveOnDark, p.inkBlock, 4.5, "canlı metni / düz mürekkep yüzey"],
-  [p.brand, p.gradientInk[0], 4.5, "mercan etiket / mürekkep blok"],
+  [p.brandOnDark, p.gradientInk[0], 4.5, "marka etiketi / mürekkep blok"],
+  [p.brandOnDark, p.inkBlock, 4.5, "marka etiketi / düz mürekkep yüzey"],
+  [p.textPrimary, p.gradientCard[1], 4.5, "birincil metin / kart gradyanının koyu ucu"],
+  [p.textTertiary, p.gradientCard[1], 4.5, "etiket metni / kart gradyanının koyu ucu"],
   [p.onPitch, p.gradientPitch[0], 4.5, "oyuncu adı / saha"],
   [p.accent, p.surface3, 3.0, "veri barı (ev) / ray"],
   [p.slate, p.surface3, 3.0, "veri barı (deplasman) / ray"],
@@ -109,7 +114,7 @@ const PAIRS = (p) => [
  * duvara çevirdi (bkz. theme/typography.ts başlığı). Yerine ölçülebilir üç
  * gerçek kural konur:
  *   1. OKUNABİLİRLİK TABANI — hiçbir token 10px'in altına inmez; gövde ve
- *      ikincil metin sırasıyla 14 ve 12'nin altına inmez. 10px'e YALNIZ
+ *      ikincil metin sırasıyla 13 ve 11'in altına inmez. 9px'e YALNIZ
  *      büyük-harf rozet/etiket tokenları (`micro`, `overline`) inebilir:
  *      büyük harf, o puntoda okunurluğu ayakta tutan şeydir.
  *   2. TAVAN — metin 28px'i, skor 48px'i geçmez (telefonda taşar).
@@ -120,10 +125,10 @@ const PAIRS = (p) => [
  */
 const TEXT_MAX = 28;
 const SCORE_MAX = 48;
-const ABSOLUTE_MIN = 11;
+const ABSOLUTE_MIN = 10;
 /** 10px'e inmesine izin verilen tokenlar — daima büyük harf kullanılırlar. */
 const UPPERCASE_TOKENS = new Set(["micro", "overline"]);
-const UPPERCASE_MIN = 10;
+const UPPERCASE_MIN = 9;
 /** Skor/metrik ailesi: metin tavanı bunlara uygulanmaz. */
 const NUMERIC_TOKENS = new Set([
   "scoreHero", "scoreLg", "scoreMd", "scoreSm", "metric", "metricSm",
@@ -134,7 +139,7 @@ const NUMERIC_TOKENS = new Set([
  */
 const HIERARCHY = ["display", "h1", "h2", "h3", "body", "bodySm", "caption", "micro"];
 /** Belirli tokenların taban değerleri — arayüzün okunurluğu bunlara bağlı. */
-const MIN_SIZE = { body: 14, bodySm: 12, bodyLg: 14, label: 12, caption: 11 };
+const MIN_SIZE = { body: 13, bodySm: 11, bodyLg: 13, label: 12, caption: 10 };
 
 /** Çıplak hex'e izin verilen dosyalar ve gerekçeleri. */
 const HEX_ALLOWED = {

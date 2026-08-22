@@ -20,6 +20,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import React from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { colors, elevate, radius, space, textScale, type } from "@/theme";
+import { GradientFill } from "./GradientFill";
 import { Touchable } from "./Pressable";
 
 export interface ActionTileProps {
@@ -66,6 +67,7 @@ export const ActionTile = React.memo(function ActionTile({
       style={[styles.tile, disabled ? styles.disabled : null, style]}
       testID={testID}
     >
+      <GradientFill radius="lg" />
       <Ionicons name={icon} size={20} color={disabled ? colors.textDisabled : TONE_ICON[tone]} />
       <Text style={styles.label} numberOfLines={1} {...textScale.badge}>
         {label}

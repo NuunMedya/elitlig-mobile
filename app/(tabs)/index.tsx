@@ -582,13 +582,13 @@ export default function OverviewScreen() {
                 badge={unread.messages}
                 onPress={() => go("/mesajlarim")}
               />
-              <ActionTile icon="star" label="Favoriler" tone="warn" onPress={() => go("/(tabs)/favoriler")} />
+              <ActionTile icon="star" label="Favoriler" onPress={() => go("/(tabs)/favoriler")} />
             </ActionRow>
           ) : (
             <ActionRow columns={4}>
               <ActionTile icon="radio" label="Canlı" tone="live" onPress={() => go("/canli")} />
               <ActionTile icon="trophy" label="Ligler" onPress={() => go("/(tabs)/ligler")} />
-              <ActionTile icon="star" label="Favoriler" tone="warn" onPress={() => go("/(tabs)/favoriler")} />
+              <ActionTile icon="star" label="Favoriler" onPress={() => go("/(tabs)/favoriler")} />
               <ActionTile
                 icon="game-controller"
                 label="Oyunlar"

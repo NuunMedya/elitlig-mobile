@@ -769,6 +769,56 @@ hedefine tamamlanır.
   çiziliyordu; `Avatar` artık `onPitch` kipinde daima beyaz disk + mürekkep
   baş harf kullanıyor (kale direği ve top için verilen kararın aynısı).
 
+### 7.5 Dördüncü geçiş — mor sistem ve tek satırlı maç
+
+**A. Renk sistemi mora geçti.** Mercan/gri-mavi palet, açık mor ↔ koyu mor
+geçişli bir sisteme çevrildi. Değişen sadece marka rengi değil, sistemin
+tonudur:
+
+| | önce | sonra |
+| --- | --- | --- |
+| kâğıt | #F4F6FA soğuk gri-mavi | **#F5F3FB lavanta** |
+| mürekkep | #12141C nötr | **#1A1033 mor mürekkep** |
+| marka | #EE7F55 mercan | **#7C3AED mor** |
+| marka üstü metin | mürekkep (mercan beyazı geçmiyordu) | **beyaz** (5,70:1) |
+| kart | düz `surface1` | **`gradientCard` beyaz → lavanta** |
+| gölge | mürekkep #0B1020 | **mor #3B1E6E** |
+| koyu tema zemini | #0B0D13 | **#0C0718 mor gece** |
+
+İki yeni token gerekti:
+
+- **`brandOnDark`** (#C4B5FD) — koyu mor bloğun üstünde `brand` mor üstüne mor
+  olurdu (~1,8:1). Kimlik bloklarındaki marka etiketleri bu açık lavantayı
+  kullanır. Denetim bunu iki temada da sınar.
+- **`gradientCard`** — varsayılan kart yüzeyi. `components/ui/GradientFill.tsx`
+  bunu mutlak konumlu tek bir katman olarak serer: yerleşimi etkilemez, köşe
+  yarıçapını çağırandan alır (kapsayıcıya `overflow: "hidden"` vermek yüzen
+  rozetleri kırpardı). Card, ListRow, MatchRow, MetricTile, ActionTile ve
+  seçili gün hücresi bu katmanı taşır.
+
+`gradientBrand`ın açık durağı #A855F7'den **#9333EA**'ya koyulaştırıldı: beyaz
+metinle 3,96:1 veriyordu, AA geçmiyordu.
+
+**B. Maç satırı tek satıra indi.** `logo · ev · SKOR · dep · logo`. Satır
+yüksekliği 56 → **40**; bir ekrana neredeyse iki kat maç giriyor. Skor ortada
+sabit genişlikli bir blokta durduğu için okuma ekseni liste boyunca sabittir —
+iki satırlı düzende skor sağdaydı ve takım adının uzunluğuna göre kayıyordu.
+`TeamLine` bileşeni ve iki satırlı skor sütunu tamamen kaldırıldı.
+
+**C. Ölçek bir kademe daha indi.** Gövde 14 → **13**, kart başlığı 16 → **15**,
+sayfa başlığı 19 → **17**, kimlik 22 → **19**, skor 38 → **30**. Satır
+yükseklikleri 46/58 → **40/50**, kart yarıçapı 14 → **13**, ekran kenarı
+16 → **14**. Denetimin okunabilirlik tabanları buna göre güncellendi
+(gövde ≥ 13, ikincil ≥ 11, mutlak taban 10; 9px yalnız büyük-harf tokenlara).
+
+**D. Bu geçişte düzeltilenler.**
+
+- Favoriler kısayolu `warn` (kahverengi-turuncu) tonundaydı; mor sistemde
+  yabancı duruyordu → marka tonu. Favori yıldızı zaten bir AKSİYONDUR.
+- Sekme çubuğu 56px'e inince etiketler yine kırpıldı → 58px.
+- `app.json` içindeki splash/uygulama zemini ve bildirim rengi eski palete
+  bağlıydı → mor değerlerle eşitlendi.
+
 ### 7.2 Kalıcı denetim
 
 ```bash
