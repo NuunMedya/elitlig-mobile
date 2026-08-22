@@ -256,7 +256,7 @@ export default function AccountScreen() {
     (action: AccountAction) => {
       switch (action.kind) {
         case "route":
-          router.push(action.route as never);
+          router.push(action.route);
           return;
         case "link":
           void openLink(action.url);
@@ -272,7 +272,7 @@ export default function AccountScreen() {
     (change: PanelPendingChange) => {
       const route = pendingRoute(change.type);
       if (route) {
-        router.push(route as never);
+        router.push(route);
         return;
       }
       const label = pendingLabel(change.type, change.target_type);

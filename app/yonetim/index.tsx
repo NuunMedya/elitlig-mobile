@@ -184,7 +184,7 @@ export default function AdminHomeScreen() {
     ],
   );
 
-  const openSection = useCallback((route: string) => router.push(route as never), [router]);
+  const openSection = useCallback((route: string) => router.push(route), [router]);
 
   /* — Kapı: misafir giriş ekranına, yetkisiz üye nazik uyarıya — */
 

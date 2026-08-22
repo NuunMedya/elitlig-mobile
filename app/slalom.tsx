@@ -96,8 +96,6 @@ const PLAYER_Y = 0.78;
 const HORIZON = 0.3;
 /** Oyuncu yarıçapı. */
 const PLAYER_R = 15;
-/** Koridor kenarının koridor koordinatındaki yeri (oyuncu tavanı 1.0). */
-const EDGE = 1.2;
 
 /**
  * TASARLANMIŞ DESENLER — her biri bir "kapı dizisi".
@@ -541,27 +539,23 @@ const Track = memo(function Track({
         return i % 2 === 0 ? (
           <Path
             key={i}
-            d={`M ${laneX(-EDGE, w, a.scale * fov, shift)} ${a.y}
-                L ${laneX(EDGE, w, a.scale * fov, shift)} ${a.y}
-                L ${laneX(EDGE, w, b.scale * fov, shift)} ${b.y}
-                L ${laneX(-EDGE, w, b.scale * fov, shift)} ${b.y} Z`}
+            d={`M ${laneX(-1.15, w, a.scale * fov, shift)} ${a.y}
+                L ${laneX(1.15, w, a.scale * fov, shift)} ${a.y}
+                L ${laneX(1.15, w, b.scale * fov, shift)} ${b.y}
+                L ${laneX(-1.15, w, b.scale * fov, shift)} ${b.y} Z`}
             fill={paint.turfAlt}
           />
         ) : null;
       })}
 
-      {/* Koridor kenarları — tebeşir.
-
-          GENİŞLİK 1.2: oyuncu en uçta (lane = ±1) YARIÇAPIYLA BİRLİKTE
-          çizginin içinde kalmalı. 1.05'te top kenardan ~8px taşıyor ve
-          "pistin dışına çıkmış" gibi duruyordu (tarayıcıda ölçüldü). */}
+      {/* Koridor kenarları — tebeşir. */}
       <Path
-        d={`M ${laneX(-EDGE, w, far.scale * fov, shift)} ${far.y} L ${laneX(-EDGE, w, near.scale * fov, shift)} ${near.y}`}
+        d={`M ${laneX(-1.05, w, far.scale * fov, shift)} ${far.y} L ${laneX(-1.05, w, near.scale * fov, shift)} ${near.y}`}
         stroke={paint.chalk}
         strokeWidth={2}
       />
       <Path
-        d={`M ${laneX(EDGE, w, far.scale * fov, shift)} ${far.y} L ${laneX(EDGE, w, near.scale * fov, shift)} ${near.y}`}
+        d={`M ${laneX(1.05, w, far.scale * fov, shift)} ${far.y} L ${laneX(1.05, w, near.scale * fov, shift)} ${near.y}`}
         stroke={paint.chalk}
         strokeWidth={2}
       />
