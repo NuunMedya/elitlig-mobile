@@ -80,7 +80,7 @@ import type { ApiMatch, StandingRow } from "@/lib/types";
 import { useAuth } from "@/providers/AuthProvider";
 import { useFavorite } from "@/providers/FavoriteProvider";
 import { useScope } from "@/providers/ScopeProvider";
-import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
+import { colors, elevate, hairline, layout, radius, space, textScale, type } from "@/theme";
 
 /** Takım başkanı sayılan profil tipleri (sunucudaki `profile_type` değerleri). */
 const PRESIDENT_PROFILES = new Set(["takim_baskani", "double"]);
@@ -783,7 +783,7 @@ const styles = StyleSheet.create({
   /* Karusel tam genişlik kaydırır; kenar boşluğu içeride `inset` ile verilir. */
   heroBox: {
     paddingTop: space.md,
-    paddingBottom: space.sm,
+    paddingBottom: space.m,
   },
   /* İskelet kaydırmıyor; kenar boşluğunu kendisi taşır. */
   heroSkeleton: {
@@ -791,35 +791,34 @@ const styles = StyleSheet.create({
   },
   spotlightBox: {
     paddingHorizontal: layout.screenPadding,
-    paddingTop: space.m,
+    paddingTop: space.md,
   },
   shortcuts: {
     paddingHorizontal: layout.screenPadding,
-    paddingTop: space.md,
+    paddingTop: space.xl,
   },
+  /* Bölümler arası nefes: başlık 18px'e büyüdü, ritim de onunla büyür. */
   block: {
-    paddingTop: space.lg,
+    paddingTop: space.xxl,
   },
   blockBody: {
     paddingHorizontal: layout.screenPadding,
-    paddingTop: space.xs,
+    paddingTop: space.sm,
   },
 
   /* — Mini puan tablosu — */
   miniTable: {
     marginHorizontal: layout.screenPadding,
     borderRadius: radius.lg,
-    borderWidth: hairline,
-    borderColor: colors.border,
-    backgroundColor: colors.surface1,
     overflow: "hidden",
+    ...elevate(1),
   },
   miniRow: {
-    height: 40,
+    height: 48,
     flexDirection: "row",
     alignItems: "center",
-    gap: space.sm,
-    paddingHorizontal: space.m,
+    gap: space.md,
+    paddingHorizontal: space.md,
     borderBottomWidth: hairline,
     borderBottomColor: colors.separator,
   },
@@ -829,18 +828,18 @@ const styles = StyleSheet.create({
   miniRank: {
     ...type.tableNum,
     color: colors.textTertiary,
-    width: 16,
+    width: 20,
     textAlign: "center",
   },
   miniName: {
-    ...type.bodySm,
+    ...type.h4,
     color: colors.textPrimary,
     flex: 1,
   },
   miniPoints: {
     ...type.tableNumStrong,
     color: colors.textPrimary,
-    minWidth: 20,
+    minWidth: 24,
     textAlign: "right",
   },
 
@@ -848,25 +847,24 @@ const styles = StyleSheet.create({
   guestCard: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.m,
+    gap: space.md,
     marginHorizontal: layout.screenPadding,
-    marginTop: space.lg,
-    padding: space.md,
-    backgroundColor: colors.surface1,
+    marginTop: space.xxl,
+    padding: space.lg,
     borderRadius: radius.lg,
-    borderWidth: hairline,
+    ...elevate(1),
     borderColor: colors.brandBorder,
   },
   guestTexts: {
     flex: 1,
-    gap: 2,
+    gap: 3,
   },
   guestTitle: {
     ...type.h3,
     color: colors.textPrimary,
   },
   guestBody: {
-    ...type.caption,
+    ...type.bodySm,
     color: colors.textTertiary,
   },
 });

@@ -43,7 +43,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { colors, radius, space, textScale, type, upperTR } from "@/theme";
+import { colors, elevate, radius, space, textScale, type, upperTR } from "@/theme";
 import { useReduceMotion } from "./LiveBadge";
 import { Touchable } from "./Pressable";
 
@@ -297,14 +297,16 @@ const Segments = memo(function Segments({
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: radius.lg,
+    borderRadius: radius.xxl,
     overflow: "hidden",
     backgroundColor: colors.inverse,
     justifyContent: "flex-end",
+    ...elevate(2),
+    borderWidth: 0,
   },
   cardBody: {
-    padding: space.lg,
-    gap: space.xs,
+    padding: space.xl,
+    gap: space.s,
   },
   eyebrowRow: {
     flexDirection: "row",
@@ -331,17 +333,17 @@ const styles = StyleSheet.create({
     color: colors.onDark,
   },
   meta: {
-    ...type.caption,
+    ...type.bodySm,
     color: colors.onDarkMuted,
   },
   segments: {
     flexDirection: "row",
-    gap: space.xs,
-    paddingTop: space.sm,
+    gap: space.s,
+    paddingTop: space.md,
   },
   segmentTrack: {
-    height: 2,
-    borderRadius: 1,
+    height: 3,
+    borderRadius: 1.5,
     backgroundColor: colors.border,
     overflow: "hidden",
   },
@@ -350,8 +352,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.borderStrong,
   },
   segmentFill: {
-    height: 2,
-    borderRadius: 1,
+    height: 3,
+    borderRadius: 1.5,
     backgroundColor: colors.brand,
   },
 });
