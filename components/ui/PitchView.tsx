@@ -195,7 +195,10 @@ const PitchLines = memo(function PitchLines({ width, height }: { width: number; 
           key={i}
           style={[
             styles.mowStripe,
-            { top: (height / 6) * i, height: height / 6, opacity: i % 2 === 0 ? 1 : 0 },
+            /* Satır içi `opacity`, stil sayfasındaki değeri EZER: burada 1
+               yazıldığında biçme şeritleri %3 yerine tam tebeşir opaklığında
+               çiziliyor ve saha zebra desenine dönüyordu. */
+            { top: (height / 6) * i, height: height / 6, opacity: i % 2 === 0 ? 0.14 : 0 },
           ]}
         />
       ))}
@@ -293,6 +296,8 @@ const PitchSlot = memo(function PitchSlot({
 
         {player.events?.length ? (
           <View style={styles.events}>
+            {/* Koyu pul: beyaz olay ikonu beyaz avatarın kenarında kayboluyordu. */}
+            <View style={styles.eventsBacking} pointerEvents="none" />
             {player.events.slice(0, 3).map((kind, i) => (
               <EventIcon key={`${kind}-${i}`} kind={kind} size={13} onDark />
             ))}
@@ -339,7 +344,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: colors.chalk,
-    opacity: 0.14,
   },
   slot: {
     position: "absolute",
@@ -372,10 +376,19 @@ const styles = StyleSheet.create({
   },
   events: {
     position: "absolute",
-    top: -4,
-    right: -8,
+    top: -5,
+    right: -9,
     flexDirection: "row",
-    gap: 1,
+    alignItems: "center",
+    gap: 2,
+    paddingHorizontal: 3,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+    overflow: "hidden",
+  },
+  eventsBacking: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: colors.overlay,
   },
   /*
    * Ad derin sahanın üstünde durur: beyaz metin + koyu kapsül. Kapsül olmadan
