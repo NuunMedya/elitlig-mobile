@@ -499,8 +499,16 @@ export default function MatchesScreen() {
 
   const renderItem = useCallback(
     ({ item, index, section }: SectionListRenderItemInfo<ApiMatch, LeagueSectionMeta>) => {
+      /*
+       * İLK SATIR "first" DEĞİL: bölümün üstünde zaten `LeagueGroupHeader`
+       * duruyor ve ÜST köşeleri o yuvarlıyor. İlk satır da üst köşelerini
+       * yuvarlarsa başlıkla satırın birleştiği yerde iki yandan içeri kaçan
+       * bir kertik oluşuyor — grup tek kart değil, üst üste iki kart gibi
+       * okunuyordu. Yuvarlak köşe grubun DIŞ sınırına aittir: üstte başlık,
+       * altta son satır.
+       */
       const last = index === section.data.length - 1;
-      const position = index === 0 ? (last ? "single" : "first") : last ? "last" : "middle";
+      const position = last ? "last" : "middle";
       return (
         <MatchListItem
           match={item}

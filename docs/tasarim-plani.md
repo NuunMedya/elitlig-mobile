@@ -819,6 +819,110 @@ yükseklikleri 46/58 → **40/50**, kart yarıçapı 14 → **13**, ekran kenar�
 - `app.json` içindeki splash/uygulama zemini ve bildirim rengi eski palete
   bağlıydı → mor değerlerle eşitlendi.
 
+### 7.6 Beşinci geçiş — geçiş yönü, tek hiza, üç punto daha küçük
+
+Geri bildirim üç başlıktaydı: **geçişlerin yönü ve tonu "boru" gibi**, **sadece
+kartlar değil TÜM içerik tertipli/ferah olmalı**, **fontlar 3–4 punto daha
+küçük**.
+
+**A. Gradyanın tek ekseni: yatay, sağdan sola.**
+
+`GradientFill`in dikey ve köşegen kipleri KALDIRILDI — seçenek olarak kalsa
+yeniden kullanılırdı. Eksen artık dosyada sabit: `{x:1,y:0.5} → {x:0,y:0.5}`.
+Aynı düzeltme `GradientFill` dışında kalan altı yüzeye de uygulandı: maç
+hero'su, takım hero'su, oyuncu kimlik kartı, `Button` (birincil dolgu),
+`SpotlightCard`, `Skeleton` parıltısı ve "Günün Testi" kartı — hepsi köşegen
+ya da dikeydi.
+
+Bir daha kaymasın diye denetime **eksen kuralı** eklendi: `colors.gradient*`
+ile boyanan her `<LinearGradient>`in `start`/`end` noktası ölçülür; `y` iki
+uçta da 0.5 olmalı ve `start.x > end.x`. Kural yalnız YÜZEY gradyanlarına
+bakar, dolayısıyla muafiyet listesi tutmaya gerek yok: okunabilirlik scrim'i,
+kaydırma kenarı maskesi ve saha (`gradientPitch`) `colors.gradient*` yüzey
+kalıbına girmez ya da açıkça atlanır — sahadaki dikey geçiş ışık değil
+DERİNLİKtir.
+
+**B. Duraklar birbirine yakın tonda; kâğıt bir kademe koyulaştı.**
+
+Duraklar arasındaki fark bir kademeye indirildi (`gradientCard`
+#FFFFFF → #F8F4FE). Ama bu tek başına kartın SAĞ UCUNU kâğıda karıştırdı:
+kâğıt #F5F3FB, geçişin koyu ucu #F8F4FE — üç puanlık fark. Kartlar "sağa doğru
+taşıyormuş" gibi duruyordu. Kâğıt **#ECE7F7**'ye indi; kartın iki ucu da
+kâğıdın üstünde kaldı. `border`/`borderStrong` de buna göre koyulaştı (saç
+teli, zemine göre görünür kalmak zorunda — denetim bunu ölçüyor) ve `surface3`
+tablo başlığı şeridi olarak ayrışsın diye #E3DCF4 oldu.
+
+**C. Ölçek üç punto daha indi.**
+
+| | dördüncü geçiş | beşinci geçiş |
+| --- | --- | --- |
+| gövde (`body`) | 13 | **11** |
+| ikincil (`bodySm`) | 11 | **10** |
+| satır başlığı (`h3`) | 14 | **12** |
+| kart başlığı (`h2`) | 15 | **13** |
+| sayfa başlığı (`h1`) | 17 | **14** |
+| kimlik (`display`) | 19 | **15** |
+| skor (`scoreHero`) | 30 | **24** |
+| liste satırı | 40 | **38** |
+| maç satırı | 40 | **38** |
+
+Denetimin tabanları da indi (gövde ≥ 11, ikincil ≥ 10, mutlak taban 9; 8px
+yalnız `micro`/`overline`). **Boşluk da metinle birlikte küçüldü**: `EmptyState`
+48+48 dikey boşluk ve 42px ikon taşıyordu; 11px gövdeyle bu, "yok" mesajını
+ekranın üçte birine yayıyordu (takım sayfasında iki boş bölüm arka arkaya
+gelince 300px hiçbir şey söylemeyen alan). 24+24 ve 34px ikona indi.
+
+**D. TEK HİZA — bu geçişin asıl işi.**
+
+"Tertipli değil" hissinin kaynağı fontlar değil, aynı ekranda birden fazla sol
+kenarın olmasıydı. Bulunan ve düzeltilenler:
+
+| ekran | ne oluyordu |
+| --- | --- |
+| Genel Bakış | maç satırları ekranın iki ucuna dayanıyor, mini puan tablosu 16px içeriden başlıyordu → ikisi de `rowGroup` kabında |
+| Genel Bakış | manşet karuseli `pagingEnabled` (390px sayfa) ile `snapToInterval` (358px kart) çakışıyor, liste açılışta 16px kayıyor ve ilk kart ekranın soluna yapışıyordu → `pagingEnabled` kaldırıldı |
+| Menü | `SectionList` yatay dolgu vermiyor, `ListRow` kendi boşluğunu taşımıyor → satırlar iki uca dayanıyordu |
+| Takım detayı | yedi `Card` ve kimlik bloğu kenar boşluğu taşımıyordu |
+| Maç detayı | skor bloğu tam genişlikte ama alt köşeleri yuvarlaktı |
+| Maçlar | bölümün ilk satırı da üst köşelerini yuvarlıyor, grup başlığıyla arasında kertik oluşuyordu |
+| Maç satırı | yıldız sütunu 22px, saat sütunu 36px → skor merkezden 7px kayıyordu; `showFavorite={false}` olduğunda sütun tamamen kalkıp 18px kayıyordu → ikisi de 36px, sütun her hâlükârda çiziliyor |
+
+**E. Gürültü temizliği.**
+
+- **Tekrarlanan birim etiketleri.** Sıralama listelerinde her satırın sağında
+  "PUAN" / "gol" yazıyordu — yirmi satırda yirmi kez. Birim bir kez sütun
+  başlığında (`CardHead` / `RankHead`) söyleniyor; satırın erişilebilirlik
+  etiketi taşıyor.
+- **İkon gökkuşağı.** Menüdeki on bir satır yedi ayrı tonda ikon taşıyordu ve
+  hiçbir renk bir şey söylemiyordu. Ton yalnız gerçekten durum bildiren üç
+  yerde kaldı: Canlı Maçlar (`live`), Ligler (`brand`), YouTube (`danger`).
+- **Tekrarlanan başlık.** Oyuncu ve takım detayında `ScreenHeader` alt başlığı,
+  hemen altındaki kimlik kartının ilk iki satırını birebir tekrarlıyordu.
+- **Slab CTA'lar.** "Sonucu Paylaş" ve "Favoriye ekle" tam genişlikte mor
+  bloklardı; sayfa içerikle değil bir eylem çağrısıyla açılıyordu. İkisi de
+  kendi boyunda hap oldu.
+- **Boş kutular.** Maç özeti yokken "Maç özeti henüz eklenmemiş." yazan bir
+  kutu çiziliyordu; kaldırıldı, video kartı yalnız kaldığında satırın tamamını
+  alıyor.
+- **Seçili filtre siyahtı.** `Chip`in seçili hâli `inverse` (neredeyse siyah)
+  kullanıyordu — marka mercanken doğruydu, mor sistemde temaya ait olmayan bir
+  leke. Artık `gradientBrand` dolgu.
+- **Tarih şeridi.** Bugünün etiketi "BUGÜN"dü: 8 puntoda ~34px, hücre 42px,
+  seçili dolgu 34px — tek bu hücrede etiket dolgunun her yanına dayanıyor ve
+  kırpılmış görünüyordu. Etiket artık her hücrede aynı (üç harf gün); bugün
+  renginden ve altındaki çizgiden okunur. Seçili dolgu da hücreyi tamamen
+  kaplamıyor, 4px içeriden başlıyor.
+
+**F. Sekme çubuğu — kök neden bulundu.**
+
+Etiketler dört ayrı yükseklikte (62 → 58 → 56 → 54) kırpılmaya devam ediyordu
+ve her seferinde çubuk yükseltilerek "çözülüyordu". Tarayıcıda ölçüldüğünde
+etiket kutusunun 9px punto ve 13px satır yüksekliğiyle **5px'e sıkıştığı**
+görüldü: sekme öğesi bir flex sütunu ve dikey alan daralınca React Navigation
+önce metni eziyor. Çözüm yükseklik değil, **`height: 13` + `flexShrink: 0`** —
+etiket artık çubuk yüksekliği ne olursa olsun bütün kalıyor. Çubuk yine de
+56px'e alındı ve aktif gösterge çizgisi kırpılmasın diye üst dolgu 6px oldu.
+
 ### 7.2 Kalıcı denetim
 
 ```bash

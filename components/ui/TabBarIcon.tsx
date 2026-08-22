@@ -90,8 +90,8 @@ const styles = StyleSheet.create({
   /** Aktif göstergesi: ikonun 2px üstünde, sekme genişliğinin ortasında. */
   indicator: {
     position: "absolute",
-    top: -7,
-    width: 20,
+    top: -4,
+    width: 18,
     height: 2,
     borderRadius: radius.pill,
     backgroundColor: "transparent",
@@ -129,8 +129,8 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: -7,
     right: -12,
-    minWidth: 16,
-    height: 16,
+    minWidth: 14,
+    height: 14,
     paddingHorizontal: 3,
     borderRadius: radius.pill,
     backgroundColor: colors.live,

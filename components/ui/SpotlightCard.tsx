@@ -25,9 +25,15 @@ import { LiveBadge } from "./LiveBadge";
 import { Touchable } from "./Pressable";
 import { TeamLogo } from "./TeamLogo";
 
-/** Mürekkep kartın ışık yönü — köşegen. */
-const GRADIENT_START = { x: 0, y: 0 } as const;
-const GRADIENT_END = { x: 1, y: 1 } as const;
+/**
+ * Mürekkep kartın ışık yönü — YATAY, SAĞDAN SOLA.
+ *
+ * Köşegen ışık kartı silindir gibi yuvarlıyordu; ayrıca aynı ekrandaki
+ * `Card`/`ListRow` yüzeyleri sağdan sola ışıdığı için iki ayrı ışık kaynağı
+ * okunuyordu. Tek eksen, tek kaynak.
+ */
+const GRADIENT_START = { x: 1, y: 0.5 } as const;
+const GRADIENT_END = { x: 0, y: 0.5 } as const;
 
 export interface SpotlightTeam {
   name: string;
@@ -71,7 +77,7 @@ export const SpotlightCard = React.memo(function SpotlightCard({
 
   const side = (team: SpotlightTeam, winner: boolean) => (
     <View style={styles.side}>
-      <TeamLogo logo={team.logo} name={team.name} size={26} />
+      <TeamLogo logo={team.logo} name={team.name} size={22} />
       <Text
         style={[styles.teamName, winner ? styles.teamNameWinner : null]}
         numberOfLines={1}
@@ -143,7 +149,7 @@ export const SpotlightCard = React.memo(function SpotlightCard({
             {footnote}
           </Text>
           {onPress ? (
-            <Ionicons name="chevron-forward" size={13} color={colors.onDarkMuted} />
+            <Ionicons name="chevron-forward" size={12} color={colors.onDarkMuted} />
           ) : null}
         </View>
       ) : null}
@@ -222,7 +228,7 @@ const styles = StyleSheet.create({
   score: {
     ...type.scoreLg,
     color: colors.onDarkMuted,
-    minWidth: 26,
+    minWidth: 24,
     textAlign: "right",
   },
   scoreWinner: {

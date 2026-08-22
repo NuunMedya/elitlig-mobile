@@ -803,7 +803,12 @@ const MatchHero = memo(function MatchHero({
       />
 
       {/* İmza öğesi: skor bloğunun arkasında tebeşir orta yuvarlak yayı. */}
-      <ChalkArc width={width} height={HERO_ARC_HEIGHT} color={colors.chalk} />
+      {/* Yay kartın genişliğine çizilir; blok artık iki yandan 16px içeride. */}
+      <ChalkArc
+        width={width - layout.screenPadding * 2}
+        height={HERO_ARC_HEIGHT}
+        color={colors.chalk}
+      />
 
       <View style={styles.heroTeams}>
         <Touchable
@@ -890,11 +895,17 @@ const MatchHero = memo(function MatchHero({
 });
 
 /** Skor bloğunun arkasındaki yayın yüksekliği — armalar + skor + golcüler. */
-const HERO_ARC_HEIGHT = 132;
+const HERO_ARC_HEIGHT = 112;
 
-/** Mürekkep bloğun gradyan yönü — YATAY, bkz. MatchHero içindeki gerekçe. */
-const HERO_GRADIENT_START = { x: 0, y: 0 } as const;
-const HERO_GRADIENT_END = { x: 1, y: 0 } as const;
+/**
+ * Mürekkep bloğun gradyan yönü — YATAY ve SAĞDAN SOLA.
+ *
+ * Yön, `GradientFill` ile birebir aynı olmak zorunda: aynı ekranda kimi yüzey
+ * sağdan sola, kimi soldan sağa ışırsa göz ikisini iki ayrı ışık kaynağı gibi
+ * okur ve yüzeyler birbirine ait görünmez.
+ */
+const HERO_GRADIENT_START = { x: 1, y: 0.5 } as const;
+const HERO_GRADIENT_END = { x: 0, y: 0.5 } as const;
 
 /**
  * Bir takımın golcü sütunu.
@@ -952,7 +963,7 @@ const ScorerRow = memo(function ScorerRow({
    */
   return (
     <View style={[styles.scorerRow, side === "home" && styles.scorerRowHome]}>
-      <EventIcon kind={line.ownGoal ? "ownGoal" : "goal"} size={11} onDark />
+      <EventIcon kind={line.ownGoal ? "ownGoal" : "goal"} size={10} onDark />
       <Text
         style={[styles.scorerText, side === "home" && styles.scorerTextHome]}
         numberOfLines={1}
@@ -991,7 +1002,7 @@ const MatchClock = memo(function MatchClock({ snapshot }: { snapshot: LiveSnapsh
         minute={halftime ? null : added != null ? 90 : minute}
         addedTime={added}
         halftime={halftime}
-        size={38}
+        size={32}
         onDark
       />
     </View>
@@ -1038,7 +1049,7 @@ const Countdown = memo(function Countdown({ target }: { target: number }) {
 const ReconnectStrip = memo(function ReconnectStrip() {
   return (
     <View style={styles.reconnect}>
-      <Ionicons name="cloud-offline-outline" size={14} color={colors.onDarkMuted} />
+      <Ionicons name="cloud-offline-outline" size={13} color={colors.onDarkMuted} />
       <Text style={styles.reconnectText} numberOfLines={2} {...textScale.dense}>
         Anlık bağlantı kurulamadı — yeniden bağlanılıyor. Skor kısa aralıklarla yenileniyor.
       </Text>
@@ -1194,22 +1205,6 @@ function SummaryTab({
             </View>
           ) : null}
 
-          {state !== "live" ? (
-            <View style={styles.inset}>
-              <ShareScoreCard
-                mode={state === "finished" ? "fulltime" : "matchday"}
-                match={match}
-                homeScore={homeScore}
-                awayScore={awayScore}
-                mvp={bestPlayers[0] ?? null}
-                stats={statRows}
-                contributions={contributions}
-                homeLogo={homeLogo}
-                awayLogo={awayLogo}
-              />
-            </View>
-          ) : null}
-
           {headline ? (
             <Card title="Maç manşeti" padding="md" style={styles.inset}>
               <Text style={styles.headline} {...textScale.long}>
@@ -1249,6 +1244,24 @@ function SummaryTab({
             </Touchable>
           ) : null}
 
+          {/* Paylaşım kartı ÖZETİN ÜSTÜNDE DEĞİL ALTINDA: sayfa skorla ve maçın
+              kendi içeriğiyle açılmalı, bir eylem çağrısıyla değil. */}
+          {state !== "live" ? (
+            <View style={styles.inset}>
+              <ShareScoreCard
+                mode={state === "finished" ? "fulltime" : "matchday"}
+                match={match}
+                homeScore={homeScore}
+                awayScore={awayScore}
+                mvp={bestPlayers[0] ?? null}
+                stats={statRows}
+                contributions={contributions}
+                homeLogo={homeLogo}
+                awayLogo={awayLogo}
+              />
+            </View>
+          ) : null}
+
           {watchUrl || match.post_rapor ? (
             <>
               <SectionHeader title="Maç içeriği" />
@@ -1258,7 +1271,7 @@ function SummaryTab({
                     feedback="card"
                     haptic="light"
                     onPress={() => void openLink(watchUrl)}
-                    style={styles.videoCard}
+                    style={[styles.videoCard, match.post_rapor ? null : styles.videoCardSolo]}
                     accessibilityRole="link"
                     accessibilityLabel={videoUrl ? "Maç videosunu izle" : "YouTube kanalına git"}
                   >
@@ -1284,20 +1297,20 @@ function SummaryTab({
                   </Touchable>
                 ) : null}
 
-                <View style={styles.reportBox}>
-                  <Text style={styles.overline} {...textScale.badge}>
-                    MAÇ ÖZETİ
-                  </Text>
-                  {match.post_rapor ? (
+                {/* ÖZET YOKSA KUTU DA YOK. "Maç özeti henüz eklenmemiş."
+                    yazan boş bir kutu, video kartının yanında ekranın yarısını
+                    hiçbir bilgi vermeden kaplıyordu; yokluğu zaten yokluğuyla
+                    okunur. */}
+                {match.post_rapor ? (
+                  <View style={styles.reportBox}>
+                    <Text style={styles.overline} {...textScale.badge}>
+                      MAÇ ÖZETİ
+                    </Text>
                     <Text style={styles.reportText} numberOfLines={6} {...textScale.long}>
                       {match.post_rapor}
                     </Text>
-                  ) : (
-                    <Text style={styles.reportEmpty} {...textScale.long}>
-                      Maç özeti henüz eklenmemiş.
-                    </Text>
-                  )}
-                </View>
+                  </View>
+                ) : null}
               </View>
             </>
           ) : null}
@@ -1492,7 +1505,7 @@ const TimelineRow = memo(function TimelineRow({
         score ? `, skor ${score}` : ""
       }`}
     >
-      {home ? <EventIcon kind={kind} size={14} /> : null}
+      {home ? <EventIcon kind={kind} size={12} /> : null}
       <View style={styles.tlTexts}>
         <Text
           style={[
@@ -1515,7 +1528,7 @@ const TimelineRow = memo(function TimelineRow({
           </Text>
         ) : null}
       </View>
-      {home ? null : <EventIcon kind={kind} size={14} />}
+      {home ? null : <EventIcon kind={kind} size={12} />}
     </Touchable>
   );
 
@@ -2126,7 +2139,7 @@ const LineupPlayerRow = memo(function LineupPlayerRow({
         {shirt}
       </Text>
 
-      <Avatar name={name} image={player.playerImg} size={30} />
+      <Avatar name={name} image={player.playerImg} size={26} />
 
       <View style={styles.playerTexts}>
         <Text style={styles.playerName} numberOfLines={1} {...textScale.dense}>
@@ -2186,7 +2199,7 @@ const ContribBadge = memo(function ContribBadge({
 }) {
   return (
     <View style={styles.contribBadge}>
-      <Ionicons name={icon} size={12} color={color} />
+      <Ionicons name={icon} size={11} color={color} />
       {count > 1 ? (
         <Text style={styles.contribCount} {...textScale.badge}>
           {count}
@@ -3049,18 +3062,22 @@ const styles = StyleSheet.create({
     color: colors.textTertiary,
   },
 
-  /* ---- Hero: mürekkep blok ---- */
+  /* ---- Hero: mürekkep blok ----
+   *
+   * KENAR BOŞLUĞU SAYFANIN GERİ KALANIYLA AYNI. Blok daha önce ekranın iki
+   * ucuna dayanıyor, ama alt köşeleri yuvarlaktı: altındaki her kart 16px
+   * içeriden başlarken skor tablosu taşmış gibi duruyordu. Dört köşesi de
+   * yuvarlak, 16px içeriden bir kart olarak duruyor — ekranın tek bir hizası
+   * var ve gölgesi de ancak böyle okunuyor. */
   hero: {
     // Gradyan yüklenemezse düz mürekkep zemin altta durur.
     backgroundColor: colors.inkBlock,
-    paddingHorizontal: layout.screenPadding,
+    marginHorizontal: layout.screenPadding,
+    paddingHorizontal: space.md,
     paddingTop: space.md,
     paddingBottom: space.md,
     gap: space.sm,
-    // Alt köşeler yuvarlak: blok "sayfaya oturmuş bir panel" olur, ekranı
-    // ikiye bölen düz bir bant değil.
-    borderBottomLeftRadius: radius.xxl,
-    borderBottomRightRadius: radius.xxl,
+    borderRadius: radius.xxl,
     overflow: "hidden",
   },
   heroTeams: {
@@ -3081,10 +3098,10 @@ const styles = StyleSheet.create({
     fontFamily: type.label.fontFamily,
     color: colors.onDark,
     textAlign: "center",
-    minHeight: 32,
+    minHeight: 26,
   },
   heroCenter: {
-    minWidth: 108,
+    minWidth: 96,
     alignItems: "center",
     justifyContent: "flex-start",
     gap: space.s,
@@ -3299,6 +3316,13 @@ const styles = StyleSheet.create({
     width: 92,
     gap: space.xs,
   },
+  /* Özet metni yoksa kart tek başına kalıyor: 92px'lik bir kutu ve yanında
+     250px boşluk. Yalnızken satırın tamamını alır ve küçük resim gerçek bir
+     afiş şeridine dönüşür. */
+  videoCardSolo: {
+    width: undefined,
+    flex: 1,
+  },
   videoThumb: {
     height: 62,
     borderRadius: radius.md,
@@ -3330,10 +3354,6 @@ const styles = StyleSheet.create({
   reportText: {
     ...type.bodySm,
     color: colors.textSecondary,
-  },
-  reportEmpty: {
-    ...type.bodySm,
-    color: colors.textTertiary,
   },
   noteBox: {
     marginHorizontal: layout.screenPadding,
@@ -3399,7 +3419,7 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
   tlCenter: {
-    width: 48,
+    width: 44,
     alignItems: "center",
   },
   /* Dikey ray: satırların ortasından geçen sürekli çizgi hissini kurar. */
@@ -3409,7 +3429,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.border,
   },
   tlMinute: {
-    minWidth: 36,
+    minWidth: 32,
     paddingHorizontal: space.xs,
     paddingVertical: 2,
     borderRadius: radius.pill,

@@ -10,9 +10,9 @@
  *  - `danger` DOLU KIRMIZI DEĞİLDİR: sönük zemin + kırmızı metin. Yıkıcı eylem
  *    sessiz görünür; asıl uyarıyı onay sheet'i verir.
  *
- * ÖLÇÜ: 34 / 40 / 46. `sm` ve `md` 44px'in altındadır; ikisi de `touchSlop`
- * ile 44px'lik dokunma alanına tamamlanır (bkz. `hitSlop`). Kompakt düzende
- * 48–56px'lik düğmeler ekranın dörtte birini yiyordu.
+ * ÖLÇÜ: 30 / 36 / 42. Üçü de 44px'in altındadır ve `touchSlop` ile 44px'lik
+ * dokunma alanına tamamlanır (bkz. `hitSlop`). 11–12px etiketin etrafında
+ * 46px'lik bir kutu, düğmeyi metninden bağımsız bir blok gibi gösteriyordu.
  *
  * BASMA: hepsi opaklıkla söner (gradyan dolgu zemin değişimini gizlerdi).
  * `loading` sırasında GENİŞLİK KORUNUR — etiket görünmez olur ve göstergesi
@@ -43,15 +43,21 @@ import {
 } from "@/theme";
 import { Touchable, type HapticKind } from "./Pressable";
 
-/** Mercan dolgunun ışık yönü: sol üstten sağ alta. */
-const GRADIENT_START = { x: 0, y: 0 } as const;
-const GRADIENT_END = { x: 1, y: 1 } as const;
+/**
+ * Dolgunun ışık yönü — YATAY, SAĞDAN SOLA.
+ *
+ * Köşegendi (0,0 → 1,1); hap biçimli bir butonda köşegen geçiş yüzeyi
+ * silindire çeviriyor, yani "boru" görünümü veriyordu. Uygulamadaki her
+ * gradyan aynı eksende ışır (bkz. `GradientFill`).
+ */
+const GRADIENT_START = { x: 1, y: 0.5 } as const;
+const GRADIENT_END = { x: 0, y: 0.5 } as const;
 
 export interface ButtonProps {
   label: string;
   onPress: () => void;
   variant?: "primary" | "secondary" | "ghost" | "danger";
-  /** 34 / 40 / 46 — varsayılan "md". */
+  /** 30 / 36 / 42 — varsayılan "md". */
   size?: "sm" | "md" | "lg";
   icon?: keyof typeof Ionicons.glyphMap;
   iconPosition?: "left" | "right";
@@ -72,7 +78,7 @@ export interface ButtonProps {
   testID?: string;
 }
 
-const HEIGHTS = { sm: 34, md: 40, lg: 46 } as const;
+const HEIGHTS = { sm: 30, md: 36, lg: 42 } as const;
 
 export const Button = React.memo(function Button({
   label,
@@ -128,7 +134,7 @@ export const Button = React.memo(function Button({
   const iconNode = icon ? (
     <Ionicons
       name={icon}
-      size={size === "lg" ? 18 : 16}
+      size={size === "lg" ? 16 : 14}
       color={fg}
       style={loading ? styles.labelHidden : null}
     />

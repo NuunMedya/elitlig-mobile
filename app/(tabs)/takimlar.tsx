@@ -74,7 +74,7 @@ const VIEWS: SegmentedItem<ViewKey>[] = [
 /** Arama kutusu bu eşiğin altındaki listelerde gösterilmez. */
 const SEARCH_THRESHOLD = 20;
 
-const CARD_HEIGHT = 62;
+const CARD_HEIGHT = 54;
 const TABLE_ROW_HEIGHT = 38;
 
 /** Türkçe duyarlı, aksan/büyük-küçük farkını yok sayan arama karşılaştırması. */
@@ -117,7 +117,13 @@ const TeamCard = React.memo(function TeamCard({
   const handlePress = useCallback(() => onPress(teamId), [onPress, teamId]);
 
   return (
-    <Touchable style={styles.card} onPress={handlePress} feedback="row" haptic="selection">
+    <Touchable
+      style={styles.card}
+      onPress={handlePress}
+      feedback="row"
+      haptic="selection"
+      accessibilityLabel={`${rank}. ${teamName}, ${points} puan`}
+    >
       {/* Sıra rozeti: bölge rengi çerçevede, rakam nötr. Rakamı da renklendirmek
           zeminle birlikte iki sinyal üretir ve tabloyu alacalı gösterir. */}
       <View style={[styles.rankBox, zone ? { borderColor: zone } : null]}>
@@ -143,12 +149,13 @@ const TeamCard = React.memo(function TeamCard({
         </View>
       </View>
 
+      {/* SÜTUN BAŞLIĞI SATIRDA DEĞİL, LİSTENİN ÜSTÜNDE: "PUAN" her satırda
+          tekrarlanınca yirmi takımlık listede yirmi kez okunuyor ve sağ sütunu
+          gri bir gürültü şeridine çeviriyordu. Birim bir kez CardHead'de
+          söylenir; ekran okuyucu için satırın kendi etiketi taşır. */}
       <View style={styles.pointsBox}>
         <Text style={styles.pointsValue} {...textScale.dense}>
           {points}
-        </Text>
-        <Text style={styles.pointsLabel} {...textScale.badge}>
-          PUAN
         </Text>
       </View>
     </Touchable>
@@ -204,6 +211,25 @@ const TableRow = React.memo(function TableRow({
         {points}
       </Text>
     </Touchable>
+  );
+});
+
+/**
+ * Kart görünümünün sütun başlığı — tek satır, iki kelime.
+ *
+ * Sağdaki genişlik `pointsBox.minWidth` ile BİREBİR aynı olmak zorunda;
+ * aksi hâlde "PUAN" başlığı altındaki rakamların üstüne oturmaz.
+ */
+const CardHead = React.memo(function CardHead() {
+  return (
+    <View style={styles.cardHead}>
+      <Text style={styles.headLabel} {...textScale.badge}>
+        {upperTR("Takım")}
+      </Text>
+      <Text style={[styles.headLabel, styles.cardHeadPoints]} {...textScale.badge}>
+        {upperTR("Puan")}
+      </Text>
+    </View>
   );
 });
 
@@ -386,7 +412,7 @@ export default function TeamsScreen() {
                   />
                 </View>
               ) : null}
-              {view === "tablo" ? <TableHead /> : null}
+              {view === "tablo" ? <TableHead /> : <CardHead />}
             </>
           }
           ListEmptyComponent={
@@ -435,12 +461,18 @@ const styles = StyleSheet.create({
   },
 
   /* — Kart görünümü — */
+  /* Sıralama listesi TAM GENİŞLİKTE tek bir yüzeydir, satır satır kart değil.
+     Yirmi satırın her birine ayrı kart vermek listeyi merdivene çevirir; tek
+     yüzey + saç teli ayraç, tabloyu tarayarak okumayı kolaylaştırır. Zemin
+     açıkça verilmek zorunda: kâğıt (`bg`) lavantadır, zeminsiz satırlar
+     "bitmemiş" görünüyordu. */
   card: {
     height: CARD_HEIGHT,
     flexDirection: "row",
     alignItems: "center",
     gap: space.m,
     paddingHorizontal: layout.screenPadding,
+    backgroundColor: colors.surface1,
     borderBottomWidth: hairline,
     borderBottomColor: colors.separator,
   },
@@ -489,9 +521,19 @@ const styles = StyleSheet.create({
     ...type.metricSm,
     color: colors.textPrimary,
   },
-  pointsLabel: {
-    ...type.overline,
-    color: colors.textDisabled,
+  cardHead: {
+    height: 24,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: layout.screenPadding,
+    backgroundColor: colors.surface3,
+    borderBottomWidth: hairline,
+    borderBottomColor: colors.border,
+  },
+  cardHeadPoints: {
+    minWidth: 34,
+    textAlign: "right",
   },
 
   /* — Tablo görünümü —
@@ -517,6 +559,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: space.s,
     paddingRight: layout.screenPadding,
+    backgroundColor: colors.surface1,
     borderBottomWidth: hairline,
     borderBottomColor: colors.separator,
   },

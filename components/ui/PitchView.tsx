@@ -47,7 +47,7 @@ const LINE_ORDER = ["GK", "DEF", "MID", "FWD"] as const;
  *  yapıştırıyor; 3:4 hem "saha" okunuyor hem sekiz oyuncuyu rahat taşıyor. */
 const ASPECT = 4 / 3;
 
-const AVATAR = 36;
+const AVATAR = 30;
 
 /** Saha gradyanının yönü: üstten alta, kalenin derinliğini ima eder. */
 const GRADIENT_START = { x: 0.5, y: 0 } as const;
@@ -299,7 +299,7 @@ const PitchSlot = memo(function PitchSlot({
             {/* Koyu pul: beyaz olay ikonu beyaz avatarın kenarında kayboluyordu. */}
             <View style={styles.eventsBacking} pointerEvents="none" />
             {player.events.slice(0, 3).map((kind, i) => (
-              <EventIcon key={`${kind}-${i}`} kind={kind} size={11} onDark />
+              <EventIcon key={`${kind}-${i}`} kind={kind} size={10} onDark />
             ))}
           </View>
         ) : null}
@@ -312,7 +312,7 @@ const PitchSlot = memo(function PitchSlot({
   );
 });
 
-const SLOT_W = 62;
+const SLOT_W = 56;
 
 const styles = StyleSheet.create({
   formationRow: {
@@ -357,8 +357,8 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: -3,
     bottom: -3,
-    minWidth: 17,
-    height: 17,
+    minWidth: 15,
+    height: 15,
     paddingHorizontal: 3,
     borderRadius: 8.5,
     backgroundColor: colors.surface1,
@@ -368,8 +368,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   number: {
-    fontSize: 10,
-    lineHeight: 13,
+    fontSize: 9,
+    lineHeight: 12,
     fontFamily: type.tableNumStrong.fontFamily,
     fontVariant: ["tabular-nums"],
     color: colors.textPrimary,

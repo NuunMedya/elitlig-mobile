@@ -72,7 +72,7 @@ function SegmentedControlBase<T extends string>({
   style,
   testID,
 }: SegmentedControlProps<T>) {
-  const innerHeight = size === "sm" ? 26 : 32;
+  const innerHeight = size === "sm" ? 24 : 28;
   const index = Math.max(
     0,
     items.findIndex((item) => item.key === value),

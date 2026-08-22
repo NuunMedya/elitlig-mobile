@@ -98,9 +98,16 @@ import {
   type,
 } from "@/theme";
 
-/** Kimlik kartının gradyan yönü — köşegen ışık. */
-const HERO_GRADIENT_START = { x: 0, y: 0 } as const;
-const HERO_GRADIENT_END = { x: 1, y: 1 } as const;
+/**
+ * Mürekkep bloğun gradyan yönü — YATAY ve SAĞDAN SOLA.
+ *
+ * Köşegen ışık (0,0 → 1,1) buradaydı ve bloğa "boru" görünümü veriyordu:
+ * köşeden köşeye giden bir geçiş, dikdörtgen bir yüzeyi silindir gibi
+ * yuvarlıyor. Yön `GradientFill` ile birebir aynı olmak zorunda; aksi hâlde
+ * aynı ekrandaki yüzeyler iki ayrı ışık kaynağından aydınlanmış gibi durur.
+ */
+const HERO_GRADIENT_START = { x: 1, y: 0.5 } as const;
+const HERO_GRADIENT_END = { x: 0, y: 0.5 } as const;
 
 /* ══════════════════════════════════════════════════════════════════════════
    1) EKRANA ÖZGÜ UÇ TANIMLARI
@@ -507,9 +514,12 @@ export default function PlayerDetailScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
+      {/* Alt başlık YOK: mevki, hemen altındaki kimlik kartında zaten yazıyor.
+          İkisi arka arkaya durunca aynı iki satır ("Berkcan SIRT / Forvet")
+          ekranda üst üste iki kez okunuyordu. Ad şeritte kalır — kaydırınca
+          daralan başlıkta gereken tek bilgi odur. */}
       <ScreenHeader
         title={playerName}
-        subtitle={player.player_position ?? undefined}
         back
         actions={actions}
         scrollY={scrollY}
@@ -825,7 +835,7 @@ function GeneralTab({
           <Avatar
             name={playerName}
             image={mediaUrl(playerImage)}
-            size={72}
+            size={60}
             shape="square"
             jersey={jersey}
           />
@@ -879,7 +889,7 @@ function GeneralTab({
                 {teamName}
               </Text>
             </View>
-            <Ionicons name="chevron-forward" size={16} color={colors.onDarkMuted} />
+            <Ionicons name="chevron-forward" size={14} color={colors.onDarkMuted} />
           </Touchable>
         ) : (
           <Badge label="TAKIMSIZ" tone="neutral" size="sm" />

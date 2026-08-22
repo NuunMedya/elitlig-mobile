@@ -49,13 +49,14 @@ import { Touchable } from "./Pressable";
 
 /** Otomatik geçiş süresi. */
 const AUTOPLAY_MS = 6000;
-/** 16:10 — manşet görseli için yeterince geniş, listeyi ekrandan itmeyecek kadar alçak. */
 /*
- * 1:2 — kompakt manşet. 10:16 oranı 390px'lik ekranda 224px'lik bir kart
+ * 0.42 — kompakt manşet. 10:16 oranı 390px'lik ekranda 224px'lik bir kart
  * üretiyordu ve ana ekranın üçte birini tek başına yiyordu; manşet bir
- * "kapak" değil, listenin başındaki bir şerittir.
+ * "kapak" değil, listenin başındaki bir şerittir. Punto ölçeği küçüldükten
+ * sonra 1:2 (179px) de fazla geldi: metin bloğu 94px yer tutuyor, geri kalanı
+ * görsel. 0.42 → 150px, yani gövde + 56px görsel şeridi.
  */
-const ASPECT = 1 / 2;
+const ASPECT = 0.42;
 
 export interface HeroSlide {
   key: string;
@@ -157,9 +158,18 @@ export const HeroCarousel = memo(function HeroCarousel({
         renderItem={renderItem}
         getItemLayout={getItemLayout}
         horizontal
-        pagingEnabled
+        /*
+         * `pagingEnabled` YOK, BİLEREK: sayfa genişliği ekranın TAMAMIDIR
+         * (390px), kart ise kenar boşluğu düşülmüş 358px. İkisi birlikte
+         * verilince kaydırıcı açılışta kendini 390'lık sayfa sınırına
+         * yaslıyor, 16px kayıyor ve ilk kart ekranın soluna yapışık
+         * başlıyordu — aynı ekrandaki her şey 16px içeriden başlarken.
+         * Doğru kanca `snapToInterval`: kart genişliğinde durur.
+         */
         showsHorizontalScrollIndicator={false}
         snapToInterval={cardWidth}
+        snapToAlignment="start"
+        disableIntervalMomentum
         decelerationRate="fast"
         onScrollBeginDrag={onTouch}
         onMomentumScrollEnd={onScroll}

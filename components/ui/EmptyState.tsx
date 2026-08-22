@@ -72,7 +72,7 @@ export const EmptyState = React.memo(function EmptyState({
     >
       {illustration ?? (
         <View style={styles.iconCircle}>
-          <Ionicons name={icon} size={36} color={colors.textDisabled} />
+          <Ionicons name={icon} size={19} color={colors.textDisabled} />
         </View>
       )}
 
@@ -122,21 +122,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.xl,
     gap: space.s,
   },
-  /** Tam ekran: dikeyde ortalanır. */
+  /*
+   * BOŞLUK ÖLÇÜLERİ — punto ölçeğiyle birlikte küçüldü.
+   *
+   * Eskiden `screen` 32+32, `inline` 48+48 dikey boşluk taşıyordu ve ikon
+   * 42px'ti; başlık 15px, gövde 13px iken bu oran doğruydu. Ölçek 12/11'e
+   * inince aynı boşluklar "yok" mesajını ekranın üçte birine yayar oldu:
+   * takım sayfasında iki boş bölüm arka arkaya gelince 300px hiçbir şey
+   * söylemeyen alan çıkıyordu. Boşluk metinle birlikte küçülür.
+   */
   screen: {
     flex: 1,
-    paddingVertical: space.xxxl,
+    paddingVertical: space.xxl,
   },
-  /** Liste içinde: 48px dikey boşlukla akışta kalır. */
+  /** Liste içinde: akışta kalır, bölümü ezmez. */
   inline: {
-    paddingVertical: 48,
+    paddingVertical: space.xxl,
   },
+  /** `compact` bayrağı: kart içindeki dar yuvalar. */
   compact: {
-    paddingVertical: space.xl,
+    paddingVertical: space.md,
   },
   iconCircle: {
-    width: 48,
-    height: 48,
+    width: 34,
+    height: 34,
     borderRadius: radius.pill,
     backgroundColor: colors.surface2,
     alignItems: "center",

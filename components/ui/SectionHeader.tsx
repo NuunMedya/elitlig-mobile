@@ -116,7 +116,7 @@ export const SectionHeader = React.memo(function SectionHeader({
     <>
       {collapsible ? (
         <Animated.View style={chevronStyle}>
-          <Ionicons name="chevron-forward" size={group ? 12 : 14} color={colors.textTertiary} />
+          <Ionicons name="chevron-forward" size={group ? 11 : 13} color={colors.textTertiary} />
         </Animated.View>
       ) : null}
       {leading ? (
@@ -187,7 +187,7 @@ export const SectionHeader = React.memo(function SectionHeader({
           <Text style={styles.actionLabel} numberOfLines={1} {...textScale.dense}>
             {action.label}
           </Text>
-          <Ionicons name="chevron-forward" size={13} color={colors.brandAccent} />
+          <Ionicons name="chevron-forward" size={12} color={colors.brandAccent} />
         </Touchable>
       ) : null}
     </View>
@@ -209,14 +209,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: layout.screenPadding,
   },
   headerSection: {
-    minHeight: 34,
+    minHeight: 30,
   },
   headerGroup: {
-    minHeight: 28,
+    minHeight: 24,
     gap: space.s,
   },
   headerWithLeading: {
-    minHeight: 40,
+    minHeight: 34,
   },
   sticky: {
     backgroundColor: colors.bg,
@@ -224,16 +224,16 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.separator,
   },
   leading: {
-    width: 20,
-    height: 20,
+    width: 18,
+    height: 18,
     alignItems: "center",
     justifyContent: "center",
   },
   /** Kale direği: mercan dikey işaret (imza öğesi). Başlıkla birlikte büyüdü. */
   mark: {
-    width: 3,
-    height: 14,
-    borderRadius: 1.5,
+    width: 2,
+    height: 11,
+    borderRadius: 1,
     backgroundColor: colors.brand,
   },
   title: {

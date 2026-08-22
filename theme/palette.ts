@@ -20,10 +20,18 @@
  *     Mor zeminin üstünde mor bir vurgu okunmaz; bu yüzden koyu mor blokların
  *     üstündeki marka rengi ayrı bir tokendır: `brandOnDark` (açık lavanta).
  *
- *  3. KARTLAR IŞIKLIDIR. Varsayılan kart düz beyaz değil `gradientCard`
- *     geçişidir (üstte beyaz, altta lavanta) + 1px kenarlık + mor tonlu
- *     yumuşak gölge. Gölge rengi siyah değil `shadowColor` (derin mor):
- *     siyah gölge lavanta kâğıdın üstünde grileşip kirli görünür.
+ *  3. KARTLAR IŞIKLIDIR AMA GEÇİŞ GÖRÜNMEZ. Varsayılan kart `gradientCard`
+ *     geçişidir + 1px kenarlık + mor tonlu yumuşak gölge. Geçişin iki durağı
+ *     BİRBİRİNE ÇOK YAKINDIR (açık temada #FFFFFF → #F8F4FE): amaç yüzeyin
+ *     "boyanmış" görünmesi değil, ışık aldığını hissettirmektir. Keskin
+ *     geçişler yüzeyi iki parçaya bölüyordu.
+ *
+ *     YÖN DAİMA SAĞDAN SOLADIR. Dikey geçiş, geniş ve alçak bir kartın
+ *     üstünde silindir ("boru") etkisi yapıyordu; yatay geçiş yüzeyi düz
+ *     bırakır. Bkz. components/ui/GradientFill.tsx.
+ *
+ *     Gölge rengi siyah değil `shadowColor` (derin mor): siyah gölge lavanta
+ *     kâğıdın üstünde grileşip kirli görünür.
  *
  *  4. GRADYAN SAYILIDIR VE TOKENDIR. Serbest gradyan yoktur; yedi gradyanın
  *     her birinin bir İŞİ vardır: `gradientCard` kart yüzeyi, `gradientInk`
@@ -220,15 +228,18 @@ export interface Palette {
 /**
  * AÇIK MOR — birincil tema.
  *
- * Kâğıt (`bg` #F5F3FB) beyaz değil çok açık bir lavantadır; kart beyazdan
- * lavantaya ışıyan bir geçiştir. İkisi arasındaki fark küçüktür ama kartı
- * kâğıttan ayıran şey odur — gölge ve kenarlık tek başına yetmiyordu.
+ * Kâğıt (`bg` #ECE7F7) beyaz değil açık bir lavantadır; kart beyazdan
+ * lavantaya ışıyan bir geçiştir. Kâğıt daha önce #F5F3FB idi ve kartın geçiş
+ * SONU (#F8F4FE) ile arasında üç puanlık fark kalıyordu: kartın sağ ucu
+ * kâğıda karışıyor, kart "sağa doğru taşıyormuş" gibi duruyordu. Kâğıt bir
+ * kademe koyulaşınca kartın iki ucu da kâğıdın üstünde kalır ve ışıklı geçiş
+ * kartın TAMAMINDA okunur.
  */
 export const light: Palette = {
-  bg:       "#F5F3FB",
+  bg:       "#ECE7F7",
   surface1: "#FFFFFF",
   surface2: "#FAF8FE",
-  surface3: "#EFEAFA",
+  surface3: "#E3DCF4",
   elevated: "#FFFFFF",
   inverse:  "#1A0F2E",
   inkBlock: "#1E1235",
@@ -246,8 +257,8 @@ export const light: Palette = {
   onDarkMuted:   "rgba(255, 255, 255, 0.66)",
   onInverse:     "#FFFFFF",
 
-  border:       "#E6E0F5",
-  borderStrong: "#D2C7EC",
+  border:       "#DCD3F0",
+  borderStrong: "#C6B8E6",
   separator:    "#EFEAFA",
 
   brand:       "#7C3AED",
@@ -301,13 +312,13 @@ export const light: Palette = {
   zoneRelegationPlayoff: "#B45309",
   zoneRelegation:        "#DC2626",
 
-  gradientInk:     ["#3B1E6E", "#160C2B"],
-  gradientBrand:   ["#9333EA", "#6D28D9"],
-  gradientAccent:  ["#60A5FA", "#2563EB"],
-  gradientLive:    ["#F43F5E", "#BE123C"],
-  gradientPitch:   ["#17564A", "#0B2C26"],
-  gradientSurface: ["#FAF8FE", "#F1ECFC"],
-  gradientCard:    ["#FFFFFF", "#EFE8FC"],
+  gradientInk:     ["#33215A", "#241641"],
+  gradientBrand:   ["#8B46E8", "#7231D6"],
+  gradientAccent:  ["#3D74F0", "#2A5CDC"],
+  gradientLive:    ["#EE3355", "#D42546"],
+  gradientPitch:   ["#155249", "#0E3D36"],
+  gradientSurface: ["#FBF9FE", "#F6F2FD"],
+  gradientCard:    ["#FFFFFF", "#F8F4FE"],
 
   shadowColor:       "#3B1E6E",   // MOR gölge; siyah gölge lavantada kirlenir
   skeletonBase:      "#EDE7F9",
@@ -403,13 +414,13 @@ export const dark: Palette = {
   zoneRelegationPlayoff: "#FBBF24",
   zoneRelegation:        "#FB7185",
 
-  gradientInk:     ["#2E1A55", "#120A22"],
-  gradientBrand:   ["#9333EA", "#6D28D9"],
-  gradientAccent:  ["#7DB4FF", "#3B82F6"],
-  gradientLive:    ["#FB4E6D", "#C81E43"],
-  gradientPitch:   ["#134339", "#07211C"],
-  gradientSurface: ["#1B1030", "#150C26"],
-  gradientCard:    ["#221741", "#150C26"],
+  gradientInk:     ["#281A47", "#1B1032"],
+  gradientBrand:   ["#8B46E8", "#7231D6"],
+  gradientAccent:  ["#5E9CFB", "#3B82F6"],
+  gradientLive:    ["#F7476A", "#D42B4E"],
+  gradientPitch:   ["#124037", "#0B2E28"],
+  gradientSurface: ["#1D1234", "#180E2B"],
+  gradientCard:    ["#1C1233", "#170E29"],
 
   shadowColor:       "#000000",
   skeletonBase:      "#1B1030",

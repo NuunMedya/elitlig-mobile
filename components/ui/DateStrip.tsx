@@ -42,7 +42,7 @@ export interface DateStripProps {
 /** getDay() sırasıyla Türkçe gün kısaltmaları (0 = Pazar). */
 const WEEKDAYS = ["Paz", "Pzt", "Sal", "Çar", "Per", "Cum", "Cmt"] as const;
 
-const CELL_WIDTH = 46;
+const CELL_WIDTH = 42;
 
 const pad = (value: number) => String(value).padStart(2, "0");
 
@@ -62,7 +62,8 @@ interface DayItem {
   iso: string;
   /** Ayın günü — "19" */
   day: string;
-  /** "Per" ya da bugünse "BUGÜN" */
+  /** Her zaman kısa gün adı ("Per"). Bugün, rengiyle ve altındaki çizgiyle
+      ayrışır — bkz. `DayCell`. */
   weekday: string;
   isToday: boolean;
   /** Ekran okuyucu metni — "19 Ağustos Çarşamba" */
@@ -105,7 +106,14 @@ export const DateStrip = memo(function DateStrip({
       items.push({
         iso,
         day: String(cursor.getDate()),
-        weekday: isToday ? "BUGÜN" : WEEKDAYS[cursor.getDay()],
+        /* BUGÜNÜN ETİKETİ ARTIK "BUGÜN" DEĞİL, GÜNÜN KENDİSİ.
+           "BUGÜN" beş harf ve 8 puntoda ~34px yer tutuyordu; hücre 42px, seçili
+           dolgu 34px. Yani tek bu hücrede etiket dolgunun iki yanına da
+           dayanıyor, üstten de nefes payı bırakmıyor ve kırpılmış görünüyordu.
+           Şeritteki her hücre artık aynı biçimde: üç harf gün + rakam. Bugün
+           marka renginden ve altındaki çizgiden okunur; şeridin sağındaki
+           "BUGÜN" hap düğmesi zaten geri dönüşü sağlar. */
+        weekday: WEEKDAYS[cursor.getDay()],
         isToday,
         speech: cursor.toLocaleDateString("tr-TR", { day: "numeric", month: "long", weekday: "long" }),
       });
@@ -265,7 +273,7 @@ const DayCell = memo(function DayCell({
 
   return (
     <Pressable
-      style={[styles.cell, selected && styles.cellSelected]}
+      style={styles.cell}
       onPress={handlePress}
       accessibilityRole="button"
       accessibilityState={{ selected }}
@@ -273,7 +281,7 @@ const DayCell = memo(function DayCell({
     >
       {/* Seçili gün MARKA GRADYANIDIR: düz mor blok, ışıklı sistemde tek başına
           yassı duruyordu. */}
-      {selected ? <GradientFill tone="brand" radius="md" /> : null}
+      {selected ? <GradientFill tone="brand" radius="md" style={styles.cellFill} /> : null}
       <Text
         style={[styles.weekday, item.isToday && styles.weekdayToday, selected && styles.onBrand]}
         numberOfLines={1}
@@ -288,7 +296,9 @@ const DayCell = memo(function DayCell({
         {item.day}
       </Text>
       <View style={styles.underlineRow}>
-        {item.isToday && !selected ? <View style={styles.todayUnderline} /> : null}
+        {item.isToday ? (
+          <View style={[styles.todayUnderline, selected ? styles.todayUnderlineOnBrand : null]} />
+        ) : null}
       </View>
       <View style={styles.dotRow}>
         {hasMatches ? (
@@ -332,14 +342,21 @@ const styles = StyleSheet.create({
   },
   cell: {
     width: CELL_WIDTH,
-    height: 46,
+    height: 40,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: radius.md,
     paddingTop: 2,
   },
-  cellSelected: {
-    backgroundColor: colors.brand,
+  /* SEÇİLİ GÜN: dolgu hücrenin TAMAMINI kaplamaz. 42px'lik hücreler yan yana
+     dizildiği için tam dolgu, komşu günlere yapışık bir blok gibi duruyor ve
+     şeridi ağırlaştırıyordu. 4px yatay / 2px dikey içeri çekilince blok kendi
+     etrafında nefes alır; seçim yine tartışmasız okunur. */
+  cellFill: {
+    left: 4,
+    right: 4,
+    top: 2,
+    bottom: 2,
   },
   weekday: {
     ...type.micro,
@@ -371,6 +388,9 @@ const styles = StyleSheet.create({
     borderRadius: 1,
     backgroundColor: colors.brandAccent,
   },
+  todayUnderlineOnBrand: {
+    backgroundColor: colors.textOnBrand,
+  },
   dotRow: {
     height: 4,
     marginTop: 2,
@@ -389,7 +409,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.textOnBrand,
   },
   todayButton: {
-    height: 30,
+    height: 26,
     paddingHorizontal: space.sm,
     marginLeft: space.xs,
     borderRadius: radius.pill,

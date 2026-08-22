@@ -155,7 +155,7 @@ export const Badge = React.memo(function Badge({
         style,
       ]}
     >
-      {icon ? <Ionicons name={icon} size={size === "xs" ? 9 : 11} color={fg} /> : null}
+      {icon ? <Ionicons name={icon} size={size === "xs" ? 8 : 10} color={fg} /> : null}
       {text != null ? (
         <Text style={[styles.label, { color: fg }]} numberOfLines={1} {...textScale.badge}>
           {text}
@@ -175,13 +175,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.s,
   },
   boxXs: {
-    height: 16,
-    minWidth: 16,
+    height: 14,
+    minWidth: 14,
     paddingHorizontal: space.xs,
   },
   boxSm: {
-    height: 20,
-    minWidth: 20,
+    height: 17,
+    minWidth: 17,
   },
   /** Sayısal rozetler hap biçimindedir — "99+" da aynı yüksekliği korur. */
   pill: {

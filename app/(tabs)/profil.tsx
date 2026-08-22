@@ -448,7 +448,6 @@ export default function ProfileTabScreen() {
           icon: "star",
           title: "Favori Takımlarım",
           value: favorite.favorites.length ? String(favorite.favorites.length) : undefined,
-          tone: "warn",
           action: { kind: "route", route: "/(tabs)/favoriler?tab=takimlar" },
         },
         {
@@ -457,7 +456,6 @@ export default function ProfileTabScreen() {
           title: "Favori Liglerim",
           subtitle: "Lig ve sezonlar",
           value: favoriteScopeCount ? String(favoriteScopeCount) : undefined,
-          tone: "warn",
           action: { kind: "route", route: "/(tabs)/favoriler?tab=ligler" },
         },
       ],

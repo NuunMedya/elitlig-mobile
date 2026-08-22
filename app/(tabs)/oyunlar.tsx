@@ -72,9 +72,14 @@ import {
   upperTR,
 } from "@/theme";
 
-/** Günün Testi kartının gradyan yönü — köşegen ışık. */
-const DAILY_GRADIENT_START = { x: 0, y: 0 } as const;
-const DAILY_GRADIENT_END = { x: 1, y: 1 } as const;
+/**
+ * Günün Testi kartının gradyan yönü — YATAY, SAĞDAN SOLA.
+ *
+ * Köşegen ışıktı; kartı silindire çevirip "boru" görünümü veriyordu ve aynı
+ * ekrandaki diğer yüzeylerle farklı bir ışık kaynağı okunuyordu.
+ */
+const DAILY_GRADIENT_START = { x: 1, y: 0.5 } as const;
+const DAILY_GRADIENT_END = { x: 0, y: 0.5 } as const;
 
 /* ===================== SABİTLER (saf veri) ===================== */
 

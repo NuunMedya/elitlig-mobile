@@ -83,7 +83,7 @@ export const Card = React.memo(function Card({
               <Text style={styles.actionLabel} numberOfLines={1} {...textScale.dense}>
                 {action.label}
               </Text>
-              <Ionicons name="chevron-forward" size={14} color={colors.brandAccent} />
+              <Ionicons name="chevron-forward" size={12} color={colors.brandAccent} />
             </Touchable>
           ) : null}
         </View>
@@ -147,7 +147,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: space.sm,
-    minHeight: 36,
+    minHeight: 30,
   },
   headerTexts: {
     flex: 1,

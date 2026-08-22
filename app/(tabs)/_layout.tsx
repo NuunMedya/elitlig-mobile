@@ -52,7 +52,7 @@ function tabIcon(name: React.ComponentProps<typeof TabBarIcon>["name"], badge?: 
       name={name}
       color={color}
       focused={focused}
-      size={20}
+      size={19}
       indicator
       badge={badge && badge > 0 ? badge : undefined}
     />
@@ -85,11 +85,23 @@ export default function TabsLayout() {
         tabBarInactiveTintColor: colors.textTertiary,
         tabBarActiveBackgroundColor: colors.tabBar,
         /* Altı yuvada bir sekmeye ~65px düşüyor. En uzun etiket "Oyuncular";
-           10px punto + NEGATİF harf aralığı + sıfır yatay dolgu ile tek satıra
-           sığar. Varsayılan `micro` aralığı (+0.4) ile son harf kırpılıyordu. */
+           9px punto + NEGATİF harf aralığı + sıfır yatay dolgu ile tek satıra
+           sığar. Pozitif harf aralığıyla son harf kırpılıyordu. */
+        /* `micro` (8px) sekme etiketi için fazla küçük: alt çubuk ekranın en
+           uzak okunan yeridir. `caption` (9px) + negatif aralık, "Oyuncular"ı
+           tek satırda tutar. */
+        /* `height` + `flexShrink: 0` ZORUNLU: ölçümde etiket kutusu 9px punto
+           ile 5px'e sıkışıp alt kesimi tamamen kırpılıyordu — sekme öğesi bir
+           flex sütunu ve dikey alan daralınca React Navigation önce metni
+           eziyor. Satır yüksekliğini kutu yüksekliği olarak sabitleyip
+           küçülmeyi kapatmak, çubuk yüksekliği ne olursa olsun etiketi bütün
+           tutar. */
         tabBarLabelStyle: {
-          ...type.micro,
-          letterSpacing: -0.4,
+          ...type.caption,
+          fontFamily: type.label.fontFamily,
+          letterSpacing: -0.3,
+          height: type.caption.lineHeight,
+          flexShrink: 0,
           marginTop: 2,
           marginBottom: 0,
           marginHorizontal: 0,
@@ -99,16 +111,17 @@ export default function TabsLayout() {
           backgroundColor: colors.tabBar,
           borderTopWidth: 1,
           borderTopColor: colors.tabBarBorder,
-          /* ÖLÇÜ: ikon kutusu 21px glif, etiket 13px satır yüksekliği,
-             aralarında 2px = 40px içerik (ikon kutusu glifin kendisinden
-             büyüktür: yazı tipi satır kutusu ~26px). Çubuk 58px ve dikey iç
-             boşluk 4+4 → 50px kullanılabilir alan. Öğe başına gelen 5px varsayılan
-             dolgu etiketin alt kesimini kırptığı için sıfırlanır. */
+          /* ÖLÇÜ: üst dolgu 6px (aktif gösterge çizgisi ikonun 4px üstünde
+             durur, kırpılmasın), 19px ikon, 2px aralık, 13px etiket, 4px alt
+             dolgu = 44px. Çubuk 56px olduğu için 12px pay kalır; yazı tipi
+             ölçeği büyütülse bile etiket kırpılmaz. Öğe başına gelen 5px
+             varsayılan dolgu sıfırlanır. */
           height: layout.tabBarHeight + insets.bottom,
-          paddingTop: 4,
+          paddingTop: 6,
           paddingBottom: insets.bottom > 0 ? insets.bottom : 4,
         },
         tabBarItemStyle: { paddingTop: 0, paddingBottom: 0, paddingHorizontal: 0 },
+        tabBarIconStyle: { flexShrink: 0 },
       }}
     >
       <Tabs.Screen

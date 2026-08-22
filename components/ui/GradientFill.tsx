@@ -2,7 +2,7 @@
  * GradientFill — bir yüzeyin ARKASINA serilen tek katmanlı gradyan.
  *
  * NEDEN AYRI BİLEŞEN: mor sistemde kart, düz dolgu değil ışıklı bir geçiştir
- * (üstte açık, altta bir tık koyu). Bu geçişi her kartın kendi `StyleSheet`i
+ * (sağda açık, solda bir tık sönük). Bu geçişi her kartın kendi `StyleSheet`i
  * içinde tekrar kurmak yerine tek bir mutlak konumlu katman kullanılır:
  * çağıran yalnız `<GradientFill radius={...} />` yazar, gradyanın hangi
  * duraklardan geçtiğine palet karar verir.
@@ -38,38 +38,44 @@ const TONES: Record<GradientTone, readonly [string, string]> = {
 };
 
 /**
- * Işık yönü. Kart ve yüzeyler DİKEY (üstten gelen ışık), kimlik ve aksiyon
- * blokları KÖŞEGEN geçer — köşegen, düz bir dikdörtgeni hafifçe kabartır.
+ * IŞIK YÖNÜ: SAĞDAN SOLA, HER ZAMAN.
+ *
+ * NEDEN YATAY: dikey gradyan, geniş ve alçak bir kartın üstünde silindir
+ * ("boru") etkisi yapar — üst kenar açık, alt kenar koyu olunca yüzey düz
+ * durmaz, bükülmüş görünür. Yatay bir geçiş aynı yüzeyi düz bırakır ve
+ * ışığın bir yönden geldiğini söyler.
+ *
+ * NEDEN SAĞDAN: `colors[0]` `start` noktasına düşer; başlangıç sağda olduğu
+ * için gradyanın AÇIK ucu sağda, sönük ucu solda olur. Kartların içeriği
+ * soldan başladığı için metin, gradyanın en sakin tarafında oturur.
+ *
+ * TEK YÖN, İSTİSNASIZ: köşegen ve dikey seçenekler kaldırıldı. Bir ekranda
+ * üç farklı ışık yönü, hepsi doğru olsa bile "farklı yerlerden toplanmış"
+ * hissi veriyordu.
  */
-const VERTICAL_START = { x: 0.5, y: 0 } as const;
-const VERTICAL_END = { x: 0.5, y: 1 } as const;
-const DIAGONAL_START = { x: 0, y: 0 } as const;
-const DIAGONAL_END = { x: 1, y: 1 } as const;
+const START = { x: 1, y: 0.5 } as const;
+const END = { x: 0, y: 0.5 } as const;
 
 export interface GradientFillProps {
   /** Varsayılan "card". */
   tone?: GradientTone;
   /** Kutuyla AYNI köşe yarıçapı — çağıran `overflow: "hidden"` vermiyorsa şart. */
   radius?: keyof typeof radiusScale | number;
-  /** Köşegen ışık. Varsayılan: ink/brand/accent/live köşegen, card/surface dikey. */
-  diagonal?: boolean;
   style?: StyleProp<ViewStyle>;
 }
 
 export const GradientFill = memo(function GradientFill({
   tone = "card",
   radius,
-  diagonal,
   style,
 }: GradientFillProps) {
   const corner = typeof radius === "number" ? radius : radius ? radiusScale[radius] : undefined;
-  const slanted = diagonal ?? tone !== "card";
 
   return (
     <LinearGradient
       colors={TONES[tone]}
-      start={slanted ? DIAGONAL_START : VERTICAL_START}
-      end={slanted ? DIAGONAL_END : VERTICAL_END}
+      start={START}
+      end={END}
       style={[StyleSheet.absoluteFill, corner == null ? null : { borderRadius: corner }, style]}
       pointerEvents="none"
     />

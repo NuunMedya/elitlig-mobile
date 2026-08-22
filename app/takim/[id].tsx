@@ -739,9 +739,11 @@ export default function TeamDetailScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
+      {/* Alt başlık YOK: lig ve şehir, hemen altındaki kimlik bloğunda
+          "Ankara · FREELİG" olarak zaten yazıyor. İkisi arka arkaya durunca
+          takım adı ve ligi ekranda üst üste iki kez okunuyordu. */}
       <ScreenHeader
         title={teamLabel}
-        subtitle={team.current_league ?? team.city ?? undefined}
         back
         scrollY={scrollY}
         actions={headerActions}
@@ -942,7 +944,7 @@ const TeamHero = React.memo(function TeamHero({
       />
       {logo ? (
         <View style={styles.coverMark} pointerEvents="none">
-          <TeamLogo name={teamName} logo={logo} size={168} plain />
+          <TeamLogo name={teamName} logo={logo} size={140} plain />
         </View>
       ) : null}
       <ChalkArc width={width} height={COVER_HEIGHT} color={colors.chalk} />
@@ -1021,11 +1023,18 @@ const TeamHero = React.memo(function TeamHero({
    ══════════════════════════════════════════════════════════════════════════ */
 
 /** Kapak katmanının yüksekliği — ChalkArc yayı buna göre çizilir. */
-const COVER_HEIGHT = 164;
+const COVER_HEIGHT = 136;
 
-/** Mürekkep bloğun gradyan yönü — köşegen ışık. */
-const HERO_GRADIENT_START = { x: 0, y: 0 } as const;
-const HERO_GRADIENT_END = { x: 1, y: 1 } as const;
+/**
+ * Mürekkep bloğun gradyan yönü — YATAY ve SAĞDAN SOLA.
+ *
+ * Köşegen ışık (0,0 → 1,1) buradaydı ve bloğa "boru" görünümü veriyordu:
+ * köşeden köşeye giden bir geçiş, dikdörtgen bir yüzeyi silindir gibi
+ * yuvarlıyor. Yön `GradientFill` ile birebir aynı olmak zorunda; aksi hâlde
+ * aynı ekrandaki yüzeyler iki ayrı ışık kaynağından aydınlanmış gibi durur.
+ */
+const HERO_GRADIENT_START = { x: 1, y: 0.5 } as const;
+const HERO_GRADIENT_END = { x: 0, y: 0.5 } as const;
 
 const pad = (value: number) => String(value).padStart(2, "0");
 
@@ -1137,7 +1146,7 @@ function GeneralTab({
       {analysis ? (
         <>
           <SectionHeader title="Takım analizi" />
-          <Card padding="md">
+          <Card padding="md" style={styles.inset}>
             <Text style={styles.analysisText} {...textScale.long}>
               {analysis}
             </Text>
@@ -1196,9 +1205,9 @@ function GeneralTab({
       {/* Kadro özeti */}
       <SectionHeader title="Kadro özeti" />
       {squadLoading ? (
-        <SkeletonCard lines={2} />
+        <SkeletonCard lines={2} style={styles.inset} />
       ) : (
-        <Card padding="md">
+        <Card padding="md" style={styles.inset}>
           <View style={styles.lineRow}>
             {LINE_ORDER.filter((line) => line !== "OTHER" || lineCounts.OTHER > 0).map((line) => (
               <View key={line} style={styles.lineCell}>
@@ -1325,7 +1334,7 @@ const NextMatchCard = React.memo(function NextMatchCard({
   const live = matchState(match) === "live";
 
   return (
-    <Card padding="md" onPress={handleOpen}>
+    <Card padding="md" onPress={handleOpen} style={styles.inset}>
       <View style={styles.nextTop}>
         <TeamLogo name={view.opponentName} logo={logoFor(view.opponentId, view.opponentName)} size={layout.crestLg} />
         <View style={styles.nextInfo}>
@@ -1977,7 +1986,7 @@ function StatsTab({
       {career.matches > 0 ? (
         <>
           <SectionHeader title="Tüm zamanlar" meta={`${career.matches} maç`} />
-          <Card padding="md">
+          <Card padding="md" style={styles.inset}>
             <View style={styles.careerRow}>
               <CareerCell label="Maç" value={career.matches} />
               <CareerCell label="G" value={career.wins} tone={colors.win} />
@@ -2018,7 +2027,7 @@ function StatsTab({
 
           {/* Galibiyet oranı */}
           <SectionHeader title="Sezon dengesi" />
-          <Card padding="md">
+          <Card padding="md" style={styles.inset}>
             <View style={styles.ringRow}>
               <ProgressRing
                 value={winRate}
@@ -2038,7 +2047,7 @@ function StatsTab({
 
           {/* İç saha / deplasman dağılımı */}
           <SectionHeader title="İç saha · Deplasman" />
-          <Card padding="md">
+          <Card padding="md" style={styles.inset}>
             <View style={styles.barHead}>
               <Text style={styles.barSideLabel} {...textScale.badge}>
                 {upperTR("İç saha")}
@@ -2055,7 +2064,7 @@ function StatsTab({
 
           {/* Disiplin */}
           <SectionHeader title="Disiplin" meta={discipline.players ? `${discipline.players} oyuncu` : undefined} />
-          <Card padding="md">
+          <Card padding="md" style={styles.inset}>
             <View style={styles.cardRow}>
               <CardCount label="Sarı kart" value={discipline.yellow} tone={colors.yellowCard} />
               <CardCount label="Kırmızı kart" value={discipline.red} tone={colors.redCard} />
@@ -2490,6 +2499,17 @@ const styles = StyleSheet.create({
   content: {
     paddingBottom: space.huge,
   },
+  /*
+   * KART KENAR BOŞLUĞU — ekrandaki her yüzey aynı hizadan başlar.
+   *
+   * Bu ekranın kaydırıcısı yatay dolgu vermez; her öğe kendi boşluğunu taşır
+   * (`group`, `SectionHeader`, hero…). `Card` ise taşımıyordu, dolayısıyla
+   * "Kadro özeti", "Takım analizi", "Disiplin" gibi kartlar ekranın iki ucuna
+   * dayanıyor, üstlerindeki bölüm başlığı 16px içeriden başlıyordu.
+   */
+  inset: {
+    marginHorizontal: layout.screenPadding,
+  },
   group: {
     marginHorizontal: layout.screenPadding,
     borderRadius: radius.lg,
@@ -2497,22 +2517,25 @@ const styles = StyleSheet.create({
   },
 
   /* — Hero: mürekkep blok — */
+  /* Kimlik bloğu da diğer kartlarla aynı hizada, dört köşesi yuvarlak —
+     bkz. `inset`. Ekranın iki ucuna dayanan ama alt köşeleri yuvarlak bir
+     blok, altındaki her kart 16px içeriden başlarken taşmış görünüyordu. */
   hero: {
     // Gradyan yüklenemezse düz mürekkep zemin altta durur.
     backgroundColor: colors.inkBlock,
-    paddingHorizontal: layout.screenPadding,
+    marginHorizontal: layout.screenPadding,
+    paddingHorizontal: space.md,
     paddingTop: space.md,
     paddingBottom: space.md,
     gap: space.md,
-    borderBottomLeftRadius: radius.xxl,
-    borderBottomRightRadius: radius.xxl,
+    borderRadius: radius.xxl,
     overflow: "hidden",
   },
   /* Dev arma filigranı — kadrajdan taşar. Mürekkep üstünde %10 görünür. */
   coverMark: {
     position: "absolute",
-    top: -44,
-    left: -40,
+    top: -36,
+    left: -32,
     opacity: 0.1,
   },
   heroTop: {
@@ -2564,13 +2587,21 @@ const styles = StyleSheet.create({
     ...type.overline,
     color: colors.onDarkMuted,
   },
+  /*
+   * KİMLİK BLOĞUNUN EYLEMLERİ — SLAB DEĞİL, KENDİ BOYUNDA.
+   *
+   * "Favoriye ekle" `flex: 1` ile bloğun neredeyse tamamını kaplayan mor bir
+   * slab oluyordu: takım sayfası, takımın kendisiyle değil bir eylem
+   * çağrısıyla açılıyordu. İki düğme de kendi metni kadar yer tutar ve sola
+   * yaslanır; blokta asıl ağırlık arma ve takım adında kalır.
+   */
   heroActions: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.sm,
   },
   heroPrimary: {
-    flex: 1,
+    flexShrink: 1,
   },
 
   /* — Sıradaki maç — */

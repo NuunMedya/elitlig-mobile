@@ -40,7 +40,7 @@ import { openLink } from "@/lib/links";
 import { instagramUrl } from "@/lib/socials";
 import { youtubeChannelUrl } from "@/lib/youtube";
 import { useScope } from "@/providers/ScopeProvider";
-import { colors, space } from "@/theme";
+import { colors, layout, space } from "@/theme";
 
 /** Web sitesi — üyelik ve kurumsal sayfalar orada yaşıyor. */
 const SITE_URL = "https://elitlig.com";
@@ -89,6 +89,7 @@ const MenuRow = React.memo(function MenuRow({
       value={item.badge}
       leading={{ icon: item.icon, tone: item.tone }}
       onPress={handlePress}
+      style={styles.rowInset}
     />
   );
 });
@@ -114,6 +115,21 @@ export default function MenuScreen() {
     [go],
   );
 
+  /*
+   * RENK KURALI — İKON RENGİ ANLAM TAŞIR, SÜS DEĞİLDİR.
+   *
+   * Menü daha önce her satıra ayrı bir ton veriyordu: mor kupa, kırmızı
+   * anten, mavi karşılaştır, mavi kumanda, turuncu sütun, kırmızı çekiç,
+   * yeşil telefon. Yan yana dizilince on bir satırlık liste yedi renkli bir
+   * şerit oluyor ve hiçbir renk bir şey söylemiyordu — göz "hangisi önemli"
+   * sorusuna cevap bulamıyordu.
+   *
+   * Artık ton yalnız GERÇEKTEN durum bildiren yerlerde var:
+   *   · "Canlı Maçlar" → `live` (şu an oynanan maç varsa oraya gidilir)
+   *   · "Ligler"       → `brand` (bölümün ana kapısı)
+   *   · YouTube        → `danger` (markanın kendi rengi)
+   * Kalan satırlar `textSecondary` ikonla durur; liste tek sesle okunur.
+   */
   const sections = useMemo<MenuSection[]>(() => {
     const result: MenuSection[] = [];
 
@@ -143,7 +159,6 @@ export default function MenuScreen() {
           icon: "git-compare",
           title: "Takım Karşılaştır",
           subtitle: "İki takımı yan yana koy",
-          tone: "info",
           route: "/h2h",
         },
       ],
@@ -159,7 +174,6 @@ export default function MenuScreen() {
           icon: "game-controller",
           title: "Oyun Merkezi",
           subtitle: "Altı oyun, rozetler ve günlük seri",
-          tone: "info",
           route: "/(tabs)/oyunlar",
         },
         {
@@ -167,7 +181,6 @@ export default function MenuScreen() {
           icon: "podium",
           title: "Rekor Tablosu",
           subtitle: "Oyun rekorları lider tablosu",
-          tone: "warn",
           route: "/siralama",
         },
       ],
@@ -190,7 +203,6 @@ export default function MenuScreen() {
           icon: "hammer",
           title: "Cezalar",
           subtitle: "Disiplin talimatı ve kurul kararları",
-          tone: "danger",
           route: "/cezalar",
         },
         {
@@ -198,7 +210,6 @@ export default function MenuScreen() {
           icon: "call",
           title: "İletişim",
           subtitle: "Telefon, WhatsApp, e-posta",
-          tone: "win",
           route: "/iletisim",
         },
       ],
@@ -276,6 +287,19 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: space.xxxl,
+  },
+  /*
+   * SATIRLAR BÖLÜM BAŞLIĞIYLA AYNI HİZADAN BAŞLAR.
+   *
+   * `SectionList` yatay boşluk vermez ve `ListRow` kendi kenar boşluğunu
+   * taşımaz; ikisi bir araya gelince satırlar ekranın iki ucuna dayanıyor,
+   * başlıklar ise 16px içeriden başlıyordu. Aynı ekranda iki hiza olması
+   * menüyü "kutuları taşmış" gösteriyordu. Yuvarlak köşeler zaten satırın
+   * grup içindeki konumundan geliyor: kenar boşluğu eklenince grup, ekranın
+   * geri kalanıyla aynı genişlikte bir karta dönüşür.
+   */
+  rowInset: {
+    marginHorizontal: layout.screenPadding,
   },
   sectionGap: {
     height: space.md,

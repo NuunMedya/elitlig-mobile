@@ -68,7 +68,7 @@ export const ActionTile = React.memo(function ActionTile({
       testID={testID}
     >
       <GradientFill radius="lg" />
-      <Ionicons name={icon} size={20} color={disabled ? colors.textDisabled : TONE_ICON[tone]} />
+      <Ionicons name={icon} size={18} color={disabled ? colors.textDisabled : TONE_ICON[tone]} />
       <Text style={styles.label} numberOfLines={1} {...textScale.badge}>
         {label}
       </Text>
@@ -124,7 +124,7 @@ export const ActionRow = React.memo(function ActionRow({
 
 const styles = StyleSheet.create({
   tile: {
-    height: 66,
+    height: 58,
     alignItems: "center",
     justifyContent: "center",
     gap: space.s,
@@ -144,8 +144,8 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 5,
     right: 5,
-    minWidth: 16,
-    height: 16,
+    minWidth: 14,
+    height: 14,
     paddingHorizontal: 4,
     borderRadius: radius.pill,
     backgroundColor: colors.live,
