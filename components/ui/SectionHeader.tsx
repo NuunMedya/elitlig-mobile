@@ -1,9 +1,18 @@
 /**
- * SectionHeader — bölüm/grup başlığı, yapışkan kullanılabilir (§4.4).
+ * SectionHeader — bölüm/grup başlığı, yapışkan kullanılabilir.
  *
- * NEDEN MİKRO + BÜYÜK HARF: başlık burada bir "etiket"tir, bir manşet değil.
- * 10px büyük harf + geniş harf aralığı, altındaki veriyle yarışmadan grubu
- * ayırır; bu, skor uygulamalarının gün/lig başlıklarındaki standart dildir.
+ * İKİ BOY, İKİ İŞ (`size`):
+ *   · "section" (VARSAYILAN) — ekrandaki asıl bölüm başlığı. 18px, cümle
+ *     düzeni, birincil mürekkep. Bir bölümün nerede başladığını UZAKTAN
+ *     söyler.
+ *   · "group" — yoğun bir listenin içindeki grup etiketi (lig adı, gün).
+ *     11px büyük harf, ikincil mürekkep; altındaki veriyle yarışmaz.
+ *
+ * NEDEN DEĞİŞTİ: önceki sürümde TEK boy vardı ve o da "group" boyuydu — 10px
+ * büyük harf. Ekranın her başlığı aynı sönük etiket olunca sayfa "gri bir
+ * duvar" hâline geliyordu; kullanıcı nereye baktığını başlıktan değil ancak
+ * içeriği okuyarak anlayabiliyordu. Asıl bölüm başlığı manşet olmalıdır.
+ *
  * Türkçe büyük harf daima `upperTR()` ile yapılır (I/İ sorunu).
  *
  * YAPIŞKAN KULLANIM: `sticky` verildiğinde zemin OPAK `bg` olur ve alta
@@ -49,7 +58,12 @@ export interface SectionHeaderProps {
   action?: { label: string; onPress: () => void };
   /** SectionList'te sticky ise: opak zemin + alt kenarlık. */
   sticky?: boolean;
-  /** varsayılan true */
+  /**
+   * Başlığın boyu. "section" ekranın bölüm başlığı, "group" yoğun liste içi
+   * grup etiketi. Varsayılan "section".
+   */
+  size?: "section" | "group";
+  /** Büyük harfe çevir. Varsayılan: "group" boyunda true, "section"da false. */
   uppercase?: boolean;
   /** Kale direği işareti. Varsayılan true; `leading` varsa yok sayılır. */
   mark?: boolean;
@@ -66,7 +80,8 @@ export const SectionHeader = React.memo(function SectionHeader({
   onToggle,
   action,
   sticky,
-  uppercase = true,
+  size = "section",
+  uppercase,
   mark = true,
   style,
   testID,
@@ -93,13 +108,15 @@ export const SectionHeader = React.memo(function SectionHeader({
     [spin],
   );
 
-  const label = uppercase ? upperTR(title) : title;
+  const group = size === "group";
+  const upper = uppercase ?? group;
+  const label = upper ? upperTR(title) : title;
 
   const body = (
     <>
       {collapsible ? (
         <Animated.View style={chevronStyle}>
-          <Ionicons name="chevron-forward" size={12} color={colors.textTertiary} />
+          <Ionicons name="chevron-forward" size={group ? 13 : 16} color={colors.textTertiary} />
         </Animated.View>
       ) : null}
       {leading ? (
@@ -107,11 +124,19 @@ export const SectionHeader = React.memo(function SectionHeader({
       ) : mark ? (
         <View style={styles.mark} />
       ) : null}
-      <Text style={styles.title} numberOfLines={1} {...textScale.dense}>
+      <Text
+        style={[styles.title, group ? styles.titleGroup : styles.titleSection]}
+        numberOfLines={1}
+        {...textScale.dense}
+      >
         {label}
       </Text>
       {meta ? (
-        <Text style={styles.meta} numberOfLines={1} {...textScale.dense}>
+        <Text
+          style={[styles.meta, group ? styles.metaGroup : styles.metaSection]}
+          numberOfLines={1}
+          {...textScale.dense}
+        >
           {meta}
         </Text>
       ) : null}
@@ -120,6 +145,7 @@ export const SectionHeader = React.memo(function SectionHeader({
 
   const containerStyle: StyleProp<ViewStyle> = [
     styles.header,
+    group ? styles.headerGroup : styles.headerSection,
     leading ? styles.headerWithLeading : null,
     sticky ? styles.sticky : null,
     style,
@@ -161,7 +187,7 @@ export const SectionHeader = React.memo(function SectionHeader({
           <Text style={styles.actionLabel} numberOfLines={1} {...textScale.dense}>
             {action.label}
           </Text>
-          <Ionicons name="chevron-forward" size={12} color={colors.brandAccent} />
+          <Ionicons name="chevron-forward" size={15} color={colors.brandAccent} />
         </Touchable>
       ) : null}
     </View>
@@ -179,12 +205,18 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.s,
-    height: 32,
+    gap: space.m,
     paddingHorizontal: layout.screenPadding,
   },
+  headerSection: {
+    minHeight: 44,
+  },
+  headerGroup: {
+    minHeight: 34,
+    gap: space.s,
+  },
   headerWithLeading: {
-    height: 40,
+    minHeight: 48,
   },
   sticky: {
     backgroundColor: colors.bg,
@@ -192,27 +224,39 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.separator,
   },
   leading: {
-    width: 20,
-    height: 20,
+    width: 24,
+    height: 24,
     alignItems: "center",
     justifyContent: "center",
   },
-  /** Kale direği: 2×12px mercan dikey işaret (imza öğesi). */
+  /** Kale direği: mercan dikey işaret (imza öğesi). Başlıkla birlikte büyüdü. */
   mark: {
-    width: 2,
-    height: 12,
-    borderRadius: 1,
+    width: 3,
+    height: 18,
+    borderRadius: 2,
     backgroundColor: colors.brand,
   },
   title: {
-    ...type.micro,
-    color: colors.textSecondary,
     flexShrink: 1,
   },
+  titleSection: {
+    ...type.h2,
+    color: colors.textPrimary,
+  },
+  titleGroup: {
+    ...type.overline,
+    color: colors.textSecondary,
+  },
   meta: {
+    marginLeft: "auto",
+  },
+  metaSection: {
+    ...type.bodySm,
+    color: colors.textTertiary,
+  },
+  metaGroup: {
     ...type.micro,
     color: colors.textTertiary,
-    marginLeft: "auto",
   },
   action: {
     flexDirection: "row",
@@ -221,7 +265,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: layout.screenPadding,
   },
   actionLabel: {
-    ...type.caption,
+    ...type.label,
     color: colors.brandAccent,
   },
 });

@@ -14,7 +14,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import React from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
-import { colors, hairline, radius as radiusScale, space, textScale, type } from "@/theme";
+import { colors, elevate, hairline, radius as radiusScale, space, textScale, type } from "@/theme";
 import { Touchable } from "./Pressable";
 import { Surface, type SurfaceProps } from "./Surface";
 
@@ -23,7 +23,7 @@ export interface CardProps extends SurfaceProps {
   subtitle?: string;
   /** Sağ üstte metin + chevron; basılınca onPress. */
   action?: { label: string; onPress: () => void };
-  /** İçerik iç boşluğu — varsayılan "md" (12). */
+  /** İçerik iç boşluğu — varsayılan "lg" (16). */
   padding?: keyof typeof space;
   footer?: React.ReactNode;
   /** Kartın tamamı basılabilirse: ölçek 0.985 + surface2 zemin (§5.2). */
@@ -35,7 +35,7 @@ export const Card = React.memo(function Card({
   title,
   subtitle,
   action,
-  padding = "md",
+  padding = "lg",
   footer,
   onPress,
   children,
@@ -76,7 +76,7 @@ export const Card = React.memo(function Card({
               <Text style={styles.actionLabel} numberOfLines={1} {...textScale.dense}>
                 {action.label}
               </Text>
-              <Ionicons name="chevron-forward" size={12} color={colors.brandAccent} />
+              <Ionicons name="chevron-forward" size={15} color={colors.brandAccent} />
             </Touchable>
           ) : null}
         </View>
@@ -89,7 +89,7 @@ export const Card = React.memo(function Card({
               paddingHorizontal: pad,
               paddingBottom: pad,
               // Başlık varsa gövdeyle arasında 8px nefes boşluğu kalır (§4.2).
-              paddingTop: title || action ? space.sm : pad,
+              paddingTop: title || action ? space.m : pad,
             },
             contentStyle,
           ]}
@@ -140,7 +140,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: space.sm,
-    minHeight: 36,
+    minHeight: 44,
   },
   headerTexts: {
     flex: 1,
@@ -151,7 +151,7 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
   subtitle: {
-    ...type.caption,
+    ...type.bodySm,
     color: colors.textTertiary,
   },
   action: {
@@ -162,7 +162,7 @@ const styles = StyleSheet.create({
     paddingLeft: space.sm,
   },
   actionLabel: {
-    ...type.caption,
+    ...type.label,
     color: colors.brandAccent,
   },
   footer: {
@@ -174,9 +174,7 @@ const styles = StyleSheet.create({
    * olmalı), bu yüzden 1. seviye yüzey burada elle kurulur.
    */
   pressableSurface: {
-    backgroundColor: colors.surface1,
-    borderWidth: hairline,
-    borderColor: colors.border,
+    ...elevate(1),
   },
   noBorder: {
     borderWidth: 0,

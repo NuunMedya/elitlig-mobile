@@ -230,23 +230,27 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: space.xs,
     height: layout.tabStripHeight,
-    paddingHorizontal: space.md,
+    paddingHorizontal: space.lg,
   },
+  /*
+   * Aktif sekme AİLE DEĞİŞTİRMEZ, yalnız renk değiştirir. Önceki sürümde aktif
+   * etiket Archivo Bold'a geçiyordu; iki ailenin genişliği farklı olduğu için
+   * sekmeye her dokunuşta şerit yatayda zıplıyordu (görünür bir kusurdu).
+   */
   label: {
     ...type.label,
-    color: colors.textSecondary,
+    color: colors.textTertiary,
     fontFamily: fonts.semibold,
   },
   labelActive: {
     color: colors.textPrimary,
-    fontFamily: fonts.bold,
   },
   indicator: {
     position: "absolute",
     left: 0,
     bottom: 0,
-    height: 2,
-    borderRadius: 1,
+    height: 3,
+    borderRadius: 1.5,
     backgroundColor: colors.brand,
   },
 });

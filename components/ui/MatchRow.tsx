@@ -80,8 +80,8 @@ export interface MatchRowProps {
 /** Sabit satır yükseklikleri — `getItemLayout` bunlardan hesaplanır. */
 export const MATCH_ROW_HEIGHT = layout.matchRowHeight;
 export const MATCH_ROW_HEIGHT_COMPACT = layout.matchRowHeightCompact;
-/** Meta satırı (saha/lig) 12px ekler. */
-export const MATCH_ROW_META_HEIGHT = 12;
+/** Meta satırı (saha/lig) 16px ekler. */
+export const MATCH_ROW_META_HEIGHT = 16;
 
 /**
  * Satır yüksekliği. Bir listede varyant ve metaMode tüm satırlarda aynı olduğu
@@ -352,7 +352,7 @@ export const MatchRow = memo(function MatchRow({
           >
             <Ionicons
               name={isFavorite ? "star" : "star-outline"}
-              size={17}
+              size={19}
               color={isFavorite ? colors.star : colors.starEmpty}
             />
           </Pressable>
@@ -383,7 +383,7 @@ const TeamLine = memo(function TeamLine({
 }) {
   return (
     <View style={styles.teamLine}>
-      <TeamLogo name={name} logo={logo} size={20} dimmed={dimmed} />
+      <TeamLogo name={name} logo={logo} size={layout.crestSm} dimmed={dimmed} />
       {mine ? <View style={styles.rail} /> : null}
       <Text
         style={[
@@ -402,7 +402,7 @@ const TeamLine = memo(function TeamLine({
 });
 
 const ANDROID_RIPPLE = { color: colors.ripple } as const;
-const STAR_SLOP = touchSlop(17);
+const STAR_SLOP = touchSlop(19);
 
 const styles = StyleSheet.create({
   row: {
@@ -436,7 +436,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.live,
   },
   meta: {
-    ...type.micro,
+    ...type.caption,
+    lineHeight: MATCH_ROW_META_HEIGHT,
     color: colors.textTertiary,
     height: MATCH_ROW_META_HEIGHT,
     marginLeft: layout.timeColumnWidth,
@@ -451,11 +452,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   time: {
-    ...type.clock,
+    ...type.tableNum,
     color: colors.textSecondary,
   },
   minute: {
-    ...type.clock,
+    ...type.tableNumStrong,
     color: colors.live,
   },
   minuteDot: {
@@ -478,21 +479,21 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   teamLine: {
-    height: 24,
+    height: 28,
     flexDirection: "row",
     alignItems: "center",
-    gap: space.s,
+    gap: space.m,
   },
   /** Kullanıcının takımı — adın solunda 3px marka rayı. */
   rail: {
     width: 3,
-    height: 14,
+    height: 16,
     borderRadius: 1.5,
     backgroundColor: colors.brand,
     marginRight: -space.xxs,
   },
   teamName: {
-    ...type.body,
+    ...type.h4,
     color: colors.textPrimary,
     flexShrink: 1,
     flexGrow: 1,
@@ -514,14 +515,22 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     justifyContent: "center",
   },
+  /*
+   * Satır yüksekliği sabit olduğu için skorun SATIR YÜKSEKLİĞİ de sabittir
+   * (28 = takım satırı yüksekliği). Tokenın kendi lineHeight'ı burada
+   * kullanılmaz; kullanılsaydı canlı skor iki takım satırını iterdi.
+   * ÖNEMLİ: punto da 28'i aşmamalı, yoksa rakam kırpılır — bu yüzden canlı
+   * skor `scoreLg` (34) değil `scoreMd` (24) puntosunda, yalnız RENKLE
+   * ayrışır.
+   */
   score: {
     ...type.scoreMd,
-    lineHeight: 24,
+    lineHeight: 28,
     color: colors.textPrimary,
   },
   scoreLive: {
-    ...type.scoreLg,
-    lineHeight: 24,
+    ...type.scoreMd,
+    lineHeight: 28,
     color: colors.live,
   },
   scoreDim: {
@@ -536,7 +545,7 @@ const styles = StyleSheet.create({
   compactScore: {
     ...type.scoreSm,
     color: colors.textPrimary,
-    minWidth: 44,
+    minWidth: 48,
     textAlign: "center",
   },
   compactScoreLive: {
@@ -547,10 +556,10 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     justifyContent: "center",
   },
-  /** Ayraç saat sütununu atlar (12 + 44 = 56) ve yüksekliği etkilemez. */
+  /** Ayraç saat sütununu atlar (14 + 46 = 60) ve yüksekliği etkilemez. */
   divider: {
     position: "absolute",
-    left: 56,
+    left: layout.rowPaddingH + layout.timeColumnWidth,
     right: 0,
     bottom: 0,
     height: StyleSheet.hairlineWidth,

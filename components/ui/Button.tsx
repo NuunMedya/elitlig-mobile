@@ -1,19 +1,25 @@
 /**
- * Button — birincil ve ikincil eylem düğmesi (§4.30).
+ * Button — birincil ve ikincil eylem düğmesi.
  *
  * VARYANT FELSEFESİ:
- *  - `primary` mor dolgudur ve bir ekranda TEK TANE bulunur; mor burada
- *    "yapılacak iş" demektir (§1.0: mor geniş yüzey doldurmaz, aksan olur).
+ *  - `primary` mercan dolgudur ve bir ekranda TEK TANE bulunur. Dolgu düz renk
+ *    değil `gradientBrand` iki durağıdır: düz mercan geniş bir dikdörtgende
+ *    matlaşıp "boyanmış kutu" gibi görünüyordu; iki durak yüzeye hafif bir
+ *    ışık verip düğmeyi kabartıyor. Metni `textOnBrand` (mürekkep) — mercan
+ *    üstünde beyaz metin AA'yı geçmez.
  *  - `danger` DOLU KIRMIZI DEĞİLDİR: sönük zemin + kırmızı metin. Yıkıcı eylem
- *    sessiz görünür; asıl uyarıyı onay sheet'i verir. Dolu kırmızı bir düğme
- *    kullanıcıyı listede sürekli tedirgin eder.
+ *    sessiz görünür; asıl uyarıyı onay sheet'i verir.
  *
- * BASMA: `primary` zemin değiştirir (brandStrong), diğerleri opaklık düşürür
- * (§5.2). `loading` sırasında GENİŞLİK KORUNUR — etiket görünmez olur ve
- * göstergesi üstüne biner; düğmenin zıplaması yerleşimi bozar.
+ * ÖLÇÜ: 38 / 48 / 56. Önceki 32/40/48 üçlüsü 44px dokunma hedefinin altında
+ * kalıyordu ve büyümüş tipografiyle birlikte düğmeler "sıkışmış" görünüyordu.
+ *
+ * BASMA: hepsi opaklıkla söner (gradyan dolgu zemin değişimini gizlerdi).
+ * `loading` sırasında GENİŞLİK KORUNUR — etiket görünmez olur ve göstergesi
+ * üstüne biner; düğmenin zıplaması yerleşimi bozar.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { LinearGradient } from "expo-linear-gradient";
 import React from "react";
 import {
   ActivityIndicator,
@@ -26,7 +32,7 @@ import {
 } from "react-native";
 import {
   colors,
-  fonts,
+  elevate,
   hairline,
   radius,
   space,
@@ -36,11 +42,15 @@ import {
 } from "@/theme";
 import { Touchable, type HapticKind } from "./Pressable";
 
+/** Mercan dolgunun ışık yönü: sol üstten sağ alta. */
+const GRADIENT_START = { x: 0, y: 0 } as const;
+const GRADIENT_END = { x: 1, y: 1 } as const;
+
 export interface ButtonProps {
   label: string;
   onPress: () => void;
   variant?: "primary" | "secondary" | "ghost" | "danger";
-  /** 32 / 40 / 48 — varsayılan "md". */
+  /** 38 / 48 / 56 — varsayılan "md". */
   size?: "sm" | "md" | "lg";
   icon?: keyof typeof Ionicons.glyphMap;
   iconPosition?: "left" | "right";
@@ -56,7 +66,7 @@ export interface ButtonProps {
   testID?: string;
 }
 
-const HEIGHTS = { sm: 32, md: 40, lg: 48 } as const;
+const HEIGHTS = { sm: 38, md: 48, lg: 56 } as const;
 
 export const Button = React.memo(function Button({
   label,
@@ -79,7 +89,8 @@ export const Button = React.memo(function Button({
 
   const boxStyle: ViewStyle =
     variant === "primary"
-      ? { backgroundColor: colors.brand }
+      ? // Gradyan yüklenemezse (web/eski cihaz) düz mercan zemin altta durur.
+        { backgroundColor: colors.brand, ...elevate(1), borderWidth: 0 }
       : variant === "secondary"
         ? { backgroundColor: colors.surface2, borderWidth: hairline, borderColor: colors.border }
         : variant === "danger"
@@ -102,16 +113,19 @@ export const Button = React.memo(function Button({
   ];
 
   const iconNode = icon ? (
-    <Ionicons name={icon} size={size === "lg" ? 18 : 16} color={fg} style={loading ? styles.labelHidden : null} />
+    <Ionicons
+      name={icon}
+      size={size === "lg" ? 20 : size === "sm" ? 16 : 18}
+      color={fg}
+      style={loading ? styles.labelHidden : null}
+    />
   ) : null;
 
   const effectiveHaptic: HapticKind = haptic ?? (variant === "primary" ? "medium" : "light");
 
   return (
     <Touchable
-      // primary yalnız zemin değiştirir; diğerleri opaklıkla söner.
-      feedback={variant === "primary" ? "none" : "button"}
-      pressedStyle={variant === "primary" ? styles.primaryPressed : undefined}
+      feedback="button"
       haptic={isDisabled ? "none" : effectiveHaptic}
       onPress={onPress}
       disabled={isDisabled}
@@ -133,6 +147,16 @@ export const Button = React.memo(function Button({
         style,
       ]}
     >
+      {variant === "primary" ? (
+        <LinearGradient
+          colors={colors.gradientBrand}
+          start={GRADIENT_START}
+          end={GRADIENT_END}
+          style={styles.primaryFill}
+          pointerEvents="none"
+        />
+      ) : null}
+
       {iconPosition === "left" ? iconNode : null}
       <Text style={labelStyle} numberOfLines={1} {...textScale.dense}>
         {label}
@@ -161,19 +185,21 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     width: "100%",
   },
-  primaryPressed: {
-    backgroundColor: colors.brandStrong,
+  /** Gradyan dolgu — içeriğin ALTINDA, köşeleri kutuyla aynı. */
+  primaryFill: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: radius.md,
   },
   disabled: {
     opacity: 0.45,
   },
+  /* Düğme etiketleri tek ailede (Inter SemiBold) kalır: Archivo rakam ailesidir,
+     düğme metninde kullanılınca arayüz iki sesle konuşmuş oluyordu. */
   labelSm: {
-    ...type.label,
-    fontFamily: fonts.bold,
+    ...type.h4,
   },
   labelMd: {
-    ...type.bodySm,
-    fontFamily: fonts.bold,
+    ...type.h4,
   },
   labelLg: {
     ...type.h3,

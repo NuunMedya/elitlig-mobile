@@ -1781,7 +1781,7 @@ function LineupTab({
 
   const renderSectionHeader = useCallback(
     ({ section }: { section: LineupSection }) => (
-      <SectionHeader title={section.title} meta={section.meta} sticky />
+      <SectionHeader title={section.title} meta={section.meta} size="group" sticky />
     ),
     [],
   );

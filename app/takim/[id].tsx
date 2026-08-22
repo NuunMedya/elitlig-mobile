@@ -1662,7 +1662,12 @@ function SquadTab({
 
   const renderSectionHeader = useCallback(
     ({ section }: { section: SquadSection }) => (
-      <SectionHeader title={section.title} meta={`${section.data.length} oyuncu`} sticky />
+      <SectionHeader
+        title={section.title}
+        meta={`${section.data.length} oyuncu`}
+        size="group"
+        sticky
+      />
     ),
     [],
   );

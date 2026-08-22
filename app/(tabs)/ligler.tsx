@@ -575,7 +575,12 @@ function FixturesTab({ scrollProps, onPickScope }: TabProps) {
 
   const renderSectionHeader = useCallback(
     ({ section }: { section: DaySection }) => (
-      <SectionHeader title={section.title} meta={`${section.data.length} maç`} sticky />
+      <SectionHeader
+        title={section.title}
+        meta={`${section.data.length} maç`}
+        size="group"
+        sticky
+      />
     ),
     [],
   );

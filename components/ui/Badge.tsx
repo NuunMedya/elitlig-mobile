@@ -175,13 +175,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.s,
   },
   boxXs: {
-    height: 16,
-    minWidth: 16,
+    height: 18,
+    minWidth: 18,
     paddingHorizontal: space.xs,
   },
   boxSm: {
-    height: 20,
-    minWidth: 20,
+    height: 24,
+    minWidth: 24,
   },
   /** Sayısal rozetler hap biçimindedir — "99+" da aynı yüksekliği korur. */
   pill: {
@@ -191,9 +191,9 @@ const styles = StyleSheet.create({
     ...type.micro,
   },
   dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
   },
   floating: {
     position: "absolute",
