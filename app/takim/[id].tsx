@@ -936,7 +936,7 @@ const TeamHero = React.memo(function TeamHero({
       />
       {logo ? (
         <View style={styles.coverMark} pointerEvents="none">
-          <TeamLogo name={teamName} logo={logo} size={200} />
+          <TeamLogo name={teamName} logo={logo} size={200} plain />
         </View>
       ) : null}
       <ChalkArc width={width} height={COVER_HEIGHT} color={colors.chalk} />

@@ -31,6 +31,13 @@ export interface TeamLogoProps {
   dimmed?: boolean;
   /** Yükleme sırasında iskelet */
   loading?: boolean;
+  /**
+   * Zeminsiz/çerçevesiz çizim — kapak filigranı gibi dekoratif kullanımlar
+   * için. Normal ambleme her zaman açık bir zemin verilir (koyu blok üstünde
+   * bile arma okunur kalsın diye); filigranda o zemin, ekranda kocaman soluk
+   * bir DİKDÖRTGEN olarak görünüyordu.
+   */
+  plain?: boolean;
 }
 
 export const TeamLogo = memo(function TeamLogo({
@@ -40,6 +47,7 @@ export const TeamLogo = memo(function TeamLogo({
   shape = "rounded",
   dimmed = false,
   loading = false,
+  plain = false,
 }: TeamLogoProps) {
   const [failed, setFailed] = useState(false);
 
@@ -69,7 +77,7 @@ export const TeamLogo = memo(function TeamLogo({
   if (!uri) {
     return (
       <View
-        style={[styles.fallback, box, dimmed && styles.dimmed]}
+        style={[plain ? styles.plain : styles.fallback, box, dimmed && styles.dimmed]}
         accessibilityRole="image"
         accessibilityLabel={name ? `${name} amblemi` : "Takım amblemi"}
       >
@@ -83,7 +91,7 @@ export const TeamLogo = memo(function TeamLogo({
   return (
     <Image
       source={{ uri }}
-      style={[styles.image, box, dimmed && styles.dimmed]}
+      style={[plain ? styles.plain : styles.image, box, dimmed && styles.dimmed]}
       resizeMode="contain"
       onError={() => setFailed(true)}
       accessibilityRole="image"
@@ -95,6 +103,12 @@ export const TeamLogo = memo(function TeamLogo({
 const styles = StyleSheet.create({
   image: {
     backgroundColor: colors.surface2,
+  },
+  /** Filigran: zemin ve çerçeve yok, yalnız görselin kendisi. */
+  plain: {
+    backgroundColor: "transparent",
+    alignItems: "center",
+    justifyContent: "center",
   },
   fallback: {
     backgroundColor: colors.surface2,

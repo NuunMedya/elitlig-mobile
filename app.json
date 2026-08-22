@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "scheme": "elitlig",
     "userInterfaceStyle": "automatic",
-    "backgroundColor": "#F2F4F7",
+    "backgroundColor": "#F4F6FA",
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.elitlig.app",
@@ -41,9 +41,9 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 240,
           "resizeMode": "contain",
-          "backgroundColor": "#F2F4F7",
+          "backgroundColor": "#F4F6FA",
           "dark": {
-            "backgroundColor": "#0E1016"
+            "backgroundColor": "#0B0D13"
           }
         }
       ],
@@ -53,9 +53,9 @@
       "typedRoutes": true
     },
     "extra": {
-      "apiBaseUrl": "https://elitlig-api-88a866b7a4da.herokuapp.com",
+      "apiBaseUrl": "http://127.0.0.1:8098",
       "socketUrl": "https://elitlig-api-88a866b7a4da.herokuapp.com",
-      "liveSocketEnabled": true,
+      "liveSocketEnabled": false,
       "liveFallbackPollMs": 25000,
       "defaultCityId": 1,
       "router": {},

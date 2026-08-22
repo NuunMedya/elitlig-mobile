@@ -382,7 +382,9 @@ export default function OverviewScreen() {
     if (mine) return { match: mine, eyebrow: "Takımın sahada", live: true as const };
 
     if (liveMatches.length) {
-      return { match: liveMatches[0], eyebrow: "Canlı", live: true as const };
+      // Etiket "Canlı" OLAMAZ: kartın solundaki canlı rozeti zaten "CANLI"
+      // yazıyor ve ikisi yan yana "CANLI CANLI" olarak okunuyordu.
+      return { match: liveMatches[0], eyebrow: "Şu an oynanıyor", live: true as const };
     }
 
     const upcoming = teamMatchesQuery.data?.upcoming ?? [];

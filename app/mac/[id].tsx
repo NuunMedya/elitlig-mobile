@@ -569,10 +569,16 @@ export default function MatchDetailScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
+      {/*
+        BAŞLIK LİG ADINI TAŞIR, TAKIM ADLARINI DEĞİL. İki takım adı tek satıra
+        sığmıyor ve "ÇAYKARA FC – ŞANLI B…" gibi kırpılıyordu; üstelik hemen
+        altındaki mürekkep blok ikisini de armalarıyla birlikte zaten
+        gösteriyor. Başlık artık tekrar etmeyen bağlamı verir.
+      */}
       <ScreenHeader
-        title={`${match.first_team_name} – ${match.second_team_name}`}
-        overline={match.league_name}
-        subtitle={match.match_season ?? undefined}
+        title={match.league_name ?? "Maç detayı"}
+        overline="MAÇ"
+        subtitle={[match.match_season, match.match_field].filter(Boolean).join(" · ") || undefined}
         back
         scrollY={scrollY}
         actions={actions}
@@ -839,17 +845,9 @@ const MatchHero = memo(function MatchHero({
       */}
       {hasScorers ? (
         <View style={styles.scorers}>
-          <View style={styles.scorerColumn}>
-            {scorers.home.map((line) => (
-              <ScorerRow key={line.key} line={line} side="home" />
-            ))}
-          </View>
+          <ScorerColumn lines={scorers.home} side="home" />
           <View style={styles.scorerAxis} />
-          <View style={styles.scorerColumn}>
-            {scorers.away.map((line) => (
-              <ScorerRow key={line.key} line={line} side="away" />
-            ))}
-          </View>
+          <ScorerColumn lines={scorers.away} side="away" />
         </View>
       ) : null}
 
@@ -871,6 +869,54 @@ const HERO_ARC_HEIGHT = 160;
 const HERO_GRADIENT_START = { x: 0, y: 0 } as const;
 const HERO_GRADIENT_END = { x: 1, y: 0 } as const;
 
+/**
+ * Bir takımın golcü sütunu.
+ *
+ * EN ÇOK `SCORER_LIMIT` SATIR: amatör ligde 9-5 biten maçlar var ve tam liste
+ * skor bloğunu ekranın tamamına yayıyordu — skor, sekiz satırlık bir dökümün
+ * içinde kayboluyordu. Fazlası tek satırlık bir sayaca iner; tam döküm zaten
+ * "Maç akışı" sekmesindedir.
+ */
+const SCORER_LIMIT = 5;
+
+const ScorerColumn = memo(function ScorerColumn({
+  lines,
+  side,
+}: {
+  lines: ScorerLine[];
+  side: "home" | "away";
+}) {
+  const shown = lines.slice(0, SCORER_LIMIT);
+  const rest = lines.length - shown.length;
+
+  return (
+    <View style={styles.scorerColumn}>
+      {shown.map((line) => (
+        <ScorerRow key={line.key} line={line} side={side} />
+      ))}
+      {rest > 0 ? (
+        <Text
+          style={[styles.scorerMore, side === "home" && styles.scorerTextHome]}
+          {...textScale.badge}
+        >
+          {`+${rest} gol daha`}
+        </Text>
+      ) : null}
+    </View>
+  );
+});
+
+/**
+ * Golcü adını satıra sığdır: "Muhammed Enes YAZICIOĞLU" iki sütunlu bir bloğa
+ * sığmıyor. İlk adın baş harfi + soyadı ("M. YAZICIOĞLU") hem ayırt edici hem
+ * kısadır; tek kelimelik adlar olduğu gibi kalır.
+ */
+function scorerName(full: string): string {
+  const parts = full.trim().split(/\s+/).filter(Boolean);
+  if (parts.length < 2) return full;
+  return `${parts[0].slice(0, 1)}. ${parts.slice(1).join(" ")}`;
+}
+
 /** Tek golcü satırı: ev sahibinde top ikonu SAĞDA, deplasmanda SOLDA durur. */
 const ScorerRow = memo(function ScorerRow({
   line,
@@ -879,9 +925,15 @@ const ScorerRow = memo(function ScorerRow({
   line: ScorerLine;
   side: "home" | "away";
 }) {
-  const label = line.ownGoal ? `${line.name} (k.k.)` : line.name;
+  const label = line.ownGoal ? `${scorerName(line.name)} (k.k.)` : scorerName(line.name);
   const minute = line.minute != null ? `${line.minute}'` : "";
 
+  /*
+   * DAKİKA AYRI BİR `Text`: tek metin olduğunda uzun bir ad, satırı ele
+   * geçirip dakikayı da birlikte kırpıyordu ("ABDULLAH TOKSOY …") — yani gol
+   * satırının en önemli iki bilgisinden biri kayboluyordu. Ad kırpılabilir,
+   * dakika kırpılamaz.
+   */
   return (
     <View style={[styles.scorerRow, side === "home" && styles.scorerRowHome]}>
       <EventIcon kind={line.ownGoal ? "ownGoal" : "goal"} size={13} onDark />
@@ -890,8 +942,13 @@ const ScorerRow = memo(function ScorerRow({
         numberOfLines={1}
         {...textScale.dense}
       >
-        {label} {minute}
+        {label}
       </Text>
+      {minute ? (
+        <Text style={styles.scorerMinute} {...textScale.badge}>
+          {minute}
+        </Text>
+      ) : null}
     </View>
   );
 });
@@ -965,7 +1022,7 @@ const Countdown = memo(function Countdown({ target }: { target: number }) {
 const ReconnectStrip = memo(function ReconnectStrip() {
   return (
     <View style={styles.reconnect}>
-      <Ionicons name="cloud-offline-outline" size={13} color={colors.warn} />
+      <Ionicons name="cloud-offline-outline" size={16} color={colors.onDarkMuted} />
       <Text style={styles.reconnectText} numberOfLines={2} {...textScale.dense}>
         Anlık bağlantı kurulamadı — yeniden bağlanılıyor. Skor kısa aralıklarla yenileniyor.
       </Text>
@@ -1235,7 +1292,10 @@ function SummaryTab({
             action={
               timeline.length > 1
                 ? {
-                    label: order === "yeni" ? "Maç akışı" : "En yeni önce",
+                    // Etiket bölüm başlığıyla aynı olamaz: "Maç akışı" başlığının
+                    // yanında yine "Maç akışı" yazan bir düğme, ne yapacağını
+                    // söylemiyordu. Etiket artık GİDİLECEK sıralamayı söyler.
+                    label: order === "yeni" ? "Eskiden yeniye" : "Yeniden eskiye",
                     onPress: () => setOrder((current) => (current === "yeni" ? "akis" : "yeni")),
                   }
                 : undefined
@@ -2987,14 +3047,16 @@ const styles = StyleSheet.create({
     paddingVertical: space.xxs,
     borderRadius: radius.md,
   },
+  /* 14px (label) — 15px'te "ŞANLI BERKCAN GÜCÜ" ikinci satırda da kırpılıyordu.
+     İki satır + 14px, üç kelimelik takım adlarını tam gösteriyor. */
   heroTeamName: {
-    ...type.h4,
+    ...type.label,
     color: colors.onDark,
     textAlign: "center",
     minHeight: 40,
   },
   heroCenter: {
-    minWidth: 132,
+    minWidth: 118,
     alignItems: "center",
     justifyContent: "flex-start",
     gap: space.m,
@@ -3050,6 +3112,16 @@ const styles = StyleSheet.create({
     ...type.bodySm,
     color: colors.onDarkMuted,
     flexShrink: 1,
+  },
+  /** Dakika asla kırpılmaz: sabit genişlikli, tabular. */
+  scorerMinute: {
+    ...type.clock,
+    color: colors.onDarkMuted,
+  },
+  scorerMore: {
+    ...type.micro,
+    color: colors.onDarkMuted,
+    opacity: 0.8,
   },
   scorerTextHome: {
     textAlign: "right",
@@ -3136,18 +3208,22 @@ const styles = StyleSheet.create({
   },
 
   /* ---- Yeniden bağlanma şeridi ---- */
+  /* Şerit mürekkep bloğun İÇİNDE durur: açık bej bir kutu orada alarm gibi
+     parlıyordu. Tebeşir çerçeve + kısılmış beyaz, bilgiyi verir ama skoru
+     bastırmaz. */
   reconnect: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.sm,
-    backgroundColor: colors.warnDim,
     borderRadius: radius.md,
-    paddingHorizontal: space.m,
-    paddingVertical: space.sm,
+    borderWidth: 1,
+    borderColor: colors.chalk,
+    paddingHorizontal: space.md,
+    paddingVertical: space.m,
   },
   reconnectText: {
-    ...type.caption,
-    color: colors.warn,
+    ...type.bodySm,
+    color: colors.onDarkMuted,
     flex: 1,
   },
 
