@@ -296,13 +296,19 @@ const Segments = memo(function Segments({
 });
 
 const styles = StyleSheet.create({
+  /*
+   * SIRA ÖNEMLİ: `elevate(2)` kendi zeminini (surface2) taşır. Yayılım
+   * `backgroundColor`dan SONRA gelirse koyu kart zemini beyaza dönüyordu ve
+   * görseli olmayan manşet, üstü bembeyaz bir kutu olarak çiziliyordu.
+   * Gölge önce serilir, kartın kendi zemini üstüne yazar.
+   */
   card: {
+    ...elevate(2),
+    borderWidth: 0,
     borderRadius: radius.xxl,
     overflow: "hidden",
     backgroundColor: colors.inverse,
     justifyContent: "flex-end",
-    ...elevate(2),
-    borderWidth: 0,
   },
   cardBody: {
     padding: space.xl,

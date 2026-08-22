@@ -2208,12 +2208,13 @@ const styles = StyleSheet.create({
     gap: space.lg,
     padding: space.lg,
     marginTop: space.sm,
-    borderRadius: radius.xxl,
-    overflow: "hidden",
-    // Gradyan yüklenemezse düz mürekkep zemin altta durur.
-    backgroundColor: colors.inverse,
     ...elevate(2),
     borderWidth: 0,
+    borderRadius: radius.xxl,
+    overflow: "hidden",
+    // Gradyan yüklenemezse düz mürekkep zemin altta durur. `elevate` kendi
+    // zeminini taşıdığı için bu satır ondan SONRA gelmek zorunda.
+    backgroundColor: colors.inverse,
   },
   /* Fotoğraf solda, künye sağda — blok ekranın üçte birini kaplamasın. */
   heroTop: {

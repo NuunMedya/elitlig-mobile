@@ -985,11 +985,12 @@ const styles = StyleSheet.create({
   arena: {
     flex: 1,
     margin: layout.screenPadding,
-    borderRadius: radius.xl,
-    backgroundColor: colors.surface1,
-    overflow: "hidden",
     ...elevate(2),
     borderWidth: 0,
+    borderRadius: radius.xl,
+    overflow: "hidden",
+    // `elevate` kendi zeminini taşır; tuvalin zemini ondan SONRA yazılmalı.
+    backgroundColor: colors.surface1,
   },
   /* Engel, top ve çim artık SVG olarak çiziliyor (bkz. dosya başı);
      bu stiller kaldırıldı. Tuvalin kendisi sade bir yüzey. */

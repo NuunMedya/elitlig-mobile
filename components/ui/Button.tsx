@@ -96,7 +96,8 @@ export const Button = React.memo(function Button({
   const boxStyle: ViewStyle =
     variant === "primary"
       ? // Gradyan yüklenemezse (web/eski cihaz) düz mercan zemin altta durur.
-        { backgroundColor: colors.brand, ...elevate(1), borderWidth: 0 }
+        // SIRA ÖNEMLİ: `elevate` kendi zeminini taşır, mercan ondan SONRA gelmeli.
+        { ...elevate(1), borderWidth: 0, backgroundColor: colors.brand }
       : variant === "secondary"
         ? onDark
           // Cam pul: mürekkep bloğun üstünde beyazın %22'si + tebeşir çerçeve.

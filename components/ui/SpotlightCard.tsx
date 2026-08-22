@@ -175,10 +175,11 @@ export const SpotlightCard = React.memo(function SpotlightCard({
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: radius.xxl,
-    overflow: "hidden",
     ...elevate(2),
     borderWidth: 0,
+    borderRadius: radius.xxl,
+    overflow: "hidden",
+    backgroundColor: colors.inverse,
   },
   gradient: {
     // Gradyan yüklenemezse düz mürekkep zemin altta durur.
