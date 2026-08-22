@@ -1,32 +1,48 @@
 /**
- * SLALOM — sonsuz koşu: top sahada ileri koşar, konilerden kaçınılır.
+ * SLALOM — basılan noktanın yatay konumunun yön hızını belirlediği koşu.
  *
- * OYUN (bu yenilemede DEĞİŞMEDİ): koşu illüzyonu ters çevrilmiştir — top sabit
- * yükseklikte durur, koniler üstten aşağı akar. Ekranın sol/sağ yarısına BASILI
- * TUTMAK topu o yöne kaydırır. Atlatılan her koni +1; skor arttıkça akış
- * hızlanır ve koniler sıklaşır. Koniye çarpınca oyun biter. `step`, `start`,
- * çarpışma kutuları, üretim aralıkları ve hız çarpanı birebir korundu.
+ * ESKİ KONTROL NEDEN REDDEDİLDİ: ekranın sol/sağ YARISINA basılı tutmak topu
+ * sabit hızda o yöne kaydırıyordu. Yani üç durum vardı — tam sola, tam sağa,
+ * dur. Hassasiyet kademesi yoktu; dar bir kapıdan geçmekle geniş bir kapıdan
+ * geçmek aynı girdiyi istiyordu ve oyuncunun öğreneceği bir şey kalmıyordu.
  *
- * SUNUM MİMARİSİ:
- *   · HUD sahanın DIŞINDA ince bir şerit: skor solda (tabular), rekor ve hız
- *     çarpanı sağda. Saha içine konsaydı akan koniler rakamların üstünden geçer,
- *     skor okunmaz olurdu.
- *   · GİRİŞ — sahanın üstünde giriş kartı: oyun adı, tek cümlelik kural, kişisel
- *     rekor, büyük "Başla". Katman `box-none`, yani kartın DIŞINA basmak yine
- *     alttaki kontrol yarılarına düşer ve oyunu başlatır (eski alışkanlık).
- *   · BİTİŞ — sahayı kaplayan tam ekran kart. `Modal` DEĞİL sıradan bir katman:
- *     paylaşım önizlemesi zaten `Modal`, iOS'ta iki modalı üst üste bindirmek
- *     güvenilir değil. Kart katman olunca paylaşım sorunsuz üstüne biner.
+ * YENİ KONTROL EĞRİSİ (brief §5.3 birebir):
  *
- * NEDEN HAM `Pressable` (tasarım sisteminin `Touchable`'ı değil): kontrol
- * yarıları BASILI TUTMA ile çalışır; `onPressIn`/`onPressOut` arasındaki gecikme
- * doğrudan topun tepkime süresidir. `Touchable`'ın ölçek animasyonu ve haptiği
- * bu iki olayın arasına girip oyunu hantallaştırırdı. Bu, kılavuzdaki "oyun içi
- * dokunma alanı" istisnasıdır; kartlardaki her basılabilir öğe yine
- * `Touchable`/`Button`.
+ *     n        = clamp((touchX - centerX) / (width / 2), -1, 1)
+ *     steer    = sign(n) * |n|^1.7        ← merkez hassas, kenar agresif
+ *     targetVx = steer * MAX_LATERAL
+ *     vx       = approach(vx, targetVx, accel, decel, dt)
  *
- * PAYLAŞIM KARTI SABİT KOYU PALETTEN: kart görüntü olarak dışarı çıkar; aktif
- * temaya bağlansaydı açık temadaki kullanıcıda beyaz bir kâğıt olurdu.
+ * `1.7` üssü işin kalbi: merkezin yakınında girdi neredeyse doğrusal olarak
+ * KÜÇÜLÜR, kenara doğru hızla büyür. Ortaya yakın basmak milimetrik düzeltme,
+ * kenara basmak sert kaçış verir — ve bu fark ölçülebilir biçimde hissedilir.
+ * `approach` momentum ekler: hedefe ışınlanma yok, yön değiştirmenin ağırlığı
+ * var. Yavaşlama katsayısı hızlanmadan büyüktür; durmak, hızlanmaktan kolay
+ * olmalı ki kaçınma kontrol edilebilsin.
+ *
+ * PARMAK EKRANDA KALDIĞI SÜRECE OKUNUR — sadece basma anı değil. Parmağını
+ * kaydıran oyuncuyu görmezden gelen bir kontrol ölü hissettirir.
+ *
+ * DESENLER RASTGELE DEĞİL: koni dizilimi, tasarlanmış altı desenden seçilir.
+ * Rastgelelik adaletsiz hissettirir — oyuncu bir deseni öğrenip aşamaz, yalnız
+ * şansa küser. Altı desen dönüşümlü gelir ve mesafeyle sıkışır.
+ *
+ * ÇARPIŞMA OYUNU BİTİRMEZ: hız %35 düşer, combo sıfırlanır, 600ms
+ * dokunulmazlık verilir (yanıp sönme değil opaklık düşüşü — yanıp sönen bir
+ * öğe bu üründe yasak). Üç çarpışmada tur biter.
+ *
+ * FİZİK: `lib/game/loop.ts` sabit adımlı döngü. Eski `setInterval(16ms)`
+ * kurulumu kare hızına bağlıydı ve yavaş cihazda oyun başka bir oyundu.
+ *
+ * ÇİZİM: `react-native-svg`. Perspektif dokuyla değil GEOMETRİYLE kurulur —
+ * ufka doğru yakınsayan tebeşir çizgileri ve kayan biçme şeritleri. Doku
+ * denemesi hem ağır hem uygulamanın diline yabancı olurdu.
+ *
+ * NEDEN HAM `PanResponder`: kontrol sürekli konum okumasıdır; `Touchable`'ın
+ * ölçek animasyonu ve haptik gecikmesi araya girseydi oyun hantallaşırdı. Bu,
+ * kılavuzdaki "oyun içi dokunma alanı" istisnasıdır.
+ *
+ * PAYLAŞIM KARTI SABİT KOYU PALETTEN: kart görüntü olarak dışarı çıkar.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -34,9 +50,10 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import Svg, { Circle, Ellipse, G, Path, Rect } from "react-native-svg";
 import ViewShot, { captureRef } from "react-native-view-shot";
 import {
   Badge,
@@ -47,6 +64,10 @@ import {
   withAlpha,
 } from "@/components/ui";
 import { submitArenaScore } from "@/lib/api/arena";
+import { useHoldGesture } from "@/lib/game/input";
+import { approach, clamp, useGameLoop } from "@/lib/game/loop";
+import { paint } from "@/lib/game/paint";
+import { TUNING } from "@/lib/game/tuning";
 import { instagramUrl } from "@/lib/socials";
 import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
@@ -65,47 +86,48 @@ import {
   upperTR,
 } from "@/theme";
 
-/* ==================== SABİTLER (oyun mantığı — dokunulmadı) ==================== */
+/* ============================ SABİTLER VE TİPLER ============================ */
 
-const BEST_KEY = "elitlig.slalom.best.v1";
-const TICK_MS = 16;
-const BALL = 46;
-const CONE_W = 30;
-const CONE_H = 30;
-const BALL_Y_RATIO = 0.74; // topun sabit dikey konumu
+const BEST_KEY = "elitlig.slalom.best.v2";
+const T = TUNING.slalom;
 
-const FLOW_BASE = 210; // koni akış hızı px/sn
-const MOVE_SPEED = 260; // topun yatay hızı px/sn
-const SPAWN_BASE_MS = 950;
-const SPAWN_MIN_MS = 420;
+/** Oyuncunun sabit dikey konumu (kadraj payı). */
+const PLAYER_Y = 0.78;
+/** Ufuk çizgisinin yüksekliği — perspektif buradan yakınsar. */
+const HORIZON = 0.3;
+/** Oyuncu yarıçapı. */
+const PLAYER_R = 15;
 
 /**
- * Koni — artık bir SLALOM KAPISI.
+ * TASARLANMIŞ DESENLER — her biri bir "kapı dizisi".
  *
- * Gerçek slalomda kapılar dönüşümlü geçilir: biri soldan, sonraki sağdan.
- * Eski sürümde koniler rastgele yerlerde beliriyordu ve tek beceri "çarpma"ydı;
- * oyuncu ekranın bir kenarında durup çoğu koniyi ıskalayabiliyordu. Artık her
- * koninin GEÇİLMESİ GEREKEN bir tarafı var, taraf sırayla değişiyor ve yanlış
- * taraftan geçmek can götürüyor.
+ * Değerler koridor genişliğine göre -1..1 arası yatay konumlardır. Rastgele
+ * üretim yerine bunlar dönüşümlü gelir; oyuncu deseni tanır, tanıdığı için
+ * daha hızlı gitmeye cesaret eder ve oyun bir beceriye dönüşür.
  */
-interface Cone {
-  id: number;
-  x: number;
-  y: number;
-  /** Topun koninin HANGİ yanından geçmesi gerektiği. */
-  side: "left" | "right";
-  /** Kapı sonuçlandı mı (puan ya da ıska). */
-  passed: boolean;
-  /** Yanlış taraftan geçildiyse — kırmızı işaretle gösterilir. */
-  missed: boolean;
-}
-
-/** Üç ıska hakkı: slalomda kapı kaçırmak diskalifiye ama oyun bunu kademeli yapar. */
-const MAX_MISSES = 3;
+const PATTERNS: number[][] = [
+  [-0.55, 0.55, -0.55, 0.55],        // zikzak
+  [0, -0.7, 0, 0.7],                 // merkezden savrulan
+  [-0.8, -0.3, 0.3, 0.8],            // merdiven
+  [0.6, 0.6, -0.6, -0.6],            // ikişerli blok
+  [-0.2, 0.75, -0.75, 0.2],          // geniş salınım
+  [0, 0.45, -0.45, 0],               // dar süzülme
+];
 
 type Phase = "ready" | "playing" | "over";
 
-/** Skorun sunucuya gidişi — bitiş kartında tek satırla anlatılır. */
+/** Akıştaki tek koni. `z` 1 (ufuk) → 0 (oyuncu) arasında ilerler. */
+interface Cone {
+  id: number;
+  /** Koridor içindeki yatay konum, -1..1. */
+  lane: number;
+  z: number;
+  /** Sıyırma bonusu bir kez verilir. */
+  grazed: boolean;
+  /** Çarpışma bir kez sayılır. */
+  hit: boolean;
+}
+
 type SubmitState = "idle" | "guest" | "sending" | "sent" | "failed";
 
 /* ================================= EKRAN ================================= */
@@ -114,52 +136,54 @@ export default function SlalomScreen() {
   const router = useRouter();
   const scope = useScope();
   const auth = useAuth();
+
   const [phase, setPhase] = useState<Phase>("ready");
-  const [score, setScore] = useState(0);
+  const [distance, setDistance] = useState(0);
+  const [combo, setCombo] = useState(0);
+  const [lives, setLives] = useState<number>(T.lives);
   const [best, setBest] = useState(0);
-  const [, setTick] = useState(0);
+  const [, setFrame] = useState(0);
 
   const area = useRef({ w: 0, h: 0 });
-  const ballX = useRef(0);
-  const dir = useRef(0); // -1 sol, 0 dur, 1 sağ
-  const cones = useRef<Cone[]>([]);
-  const sinceSpawn = useRef(0);
-  const coneSeq = useRef(1);
-  /** Sıradaki kapının tarafı — her üretimde değişir. */
-  const nextSide = useRef<"left" | "right">("left");
-  const missRef = useRef(0);
-  const [misses, setMisses] = useState(0);
-  /** Kısa "ıska" uyarısı (sunum). */
-  const [missFlash, setMissFlash] = useState(0);
-  const missTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const scoreRef = useRef(0);
   const phaseRef = useRef<Phase>("ready");
-  const loop = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  /* — Sunum durumu: oyun döngüsüne karışmaz — */
+  /* — Kontrol — */
+  /** Parmağın ekrandaki yatay konumu; null = parmak kalkmış. */
+  const touchX = useRef<number | null>(null);
+  /** Kontrol eğrisinin çıktısı, -1..1. Gövde yatması ve kamera bundan gelir. */
+  const steer = useRef(0);
+  /** Oyuncunun yatay hızı (px/sn) ve koridordaki konumu (-1..1). */
+  const vx = useRef(0);
+  const lane = useRef(0);
+
+  /* — Dünya — */
+  const cones = useRef<Cone[]>([]);
+  const coneId = useRef(0);
+  const patternIndex = useRef(0);
+  const patternStep = useRef(0);
+  const spawnTimer = useRef(0);
+  const speed = useRef<number>(T.baseSpeed);
+  const travelled = useRef(0);
+  const comboRef = useRef(0);
+  const livesRef = useRef<number>(T.lives);
+  const invulnerable = useRef(0);
+  /** "Close" etiketinin kalan süresi. */
+  const grazeFlash = useRef(0);
+
   const [submit, setSubmit] = useState<SubmitState>("idle");
   const [shareOpen, setShareOpen] = useState(false);
 
   useEffect(() => {
-    AsyncStorage.getItem(BEST_KEY).then((v) => setBest(Number(v) || 0));
-    return () => {
-      if (loop.current) clearInterval(loop.current);
-      if (missTimer.current) clearTimeout(missTimer.current);
-    };
+    AsyncStorage.getItem(BEST_KEY).then((value) => setBest(Number(value) || 0));
   }, []);
 
-  const setPhaseBoth = (p: Phase) => {
-    phaseRef.current = p;
-    setPhase(p);
+  const setPhaseBoth = (next: Phase) => {
+    phaseRef.current = next;
+    setPhase(next);
   };
 
-  const speedFactor = () => Math.min(2.6, 1 + scoreRef.current * 0.02);
+  /* ─────────────────────────── skor gönderimi ─────────────────────────── */
 
-  /**
-   * Skoru rekor tablosuna yollar. Tetikleme koşulu eskisiyle birebir aynı
-   * (oturum var + skor > 0); tek fark, sonucun sessizce yutulmak yerine bitiş
-   * kartında görünmesi ve tekrar denenebilmesi.
-   */
   const submitScore = (value: number) => {
     if (value <= 0) {
       setSubmit("idle");
@@ -176,178 +200,204 @@ export default function SlalomScreen() {
   };
 
   const gameOver = () => {
-    if (loop.current) clearInterval(loop.current);
-    loop.current = null;
-    const finished = scoreRef.current;
+    if (phaseRef.current === "over") return;
+    setPhaseBoth("over");
+    const finished = Math.round(travelled.current);
     submitScore(finished);
     if (finished > 0) {
       setBest((current) => {
-        if (finished > current) {
-          AsyncStorage.setItem(BEST_KEY, String(finished));
-          return finished;
-        }
-        return current;
+        if (finished <= current) return current;
+        void AsyncStorage.setItem(BEST_KEY, String(finished));
+        return finished;
       });
     }
     haptics.warning();
-    setPhaseBoth("over");
   };
 
-  const step = () => {
-    const { w, h } = area.current;
-    const dt = TICK_MS / 1000;
-    const factor = speedFactor();
-    const ballY = h * BALL_Y_RATIO;
+  const resetRound = () => {
+    touchX.current = null;
+    steer.current = 0;
+    vx.current = 0;
+    lane.current = 0;
+    cones.current = [];
+    patternIndex.current = 0;
+    patternStep.current = 0;
+    spawnTimer.current = 0;
+    speed.current = T.baseSpeed;
+    travelled.current = 0;
+    comboRef.current = 0;
+    livesRef.current = T.lives;
+    invulnerable.current = 0;
+    grazeFlash.current = 0;
+    setDistance(0);
+    setCombo(0);
+    setLives(T.lives);
+  };
 
-    // Top hareketi
-    ballX.current += dir.current * MOVE_SPEED * dt;
-    ballX.current = Math.max(0, Math.min(w - BALL, ballX.current));
+  /* ─────────────────────────── fizik adımı ─────────────────────────── */
 
-    // Koni üretimi: skor arttıkça sıklaşır, bazen çift gelir
-    sinceSpawn.current += TICK_MS;
-    const interval = Math.max(SPAWN_MIN_MS, SPAWN_BASE_MS / factor);
-    if (sinceSpawn.current >= interval) {
-      sinceSpawn.current = 0;
-      /**
-       * Kapı yerleşimi: geçilecek tarafta MUTLAKA yer kalmalı.
-       * "left" kapısı sahanın sağ yarısına doğru konur ki solundan geçilebilsin;
-       * "right" kapısı sol yarıya konur. Aksi hâlde kapı kenara yapışır ve
-       * doğru taraftan geçmek fiziksel olarak imkânsız olurdu.
-       */
-      const spawn = (offset = 0) => {
-        const side = nextSide.current;
-        const margin = BALL * 1.35; // topun sığacağı en dar koridor
-        const min = side === "left" ? margin : Math.max(0, w * 0.08);
-        const max =
-          side === "left"
-            ? Math.max(min, w - CONE_W - w * 0.08)
-            : Math.max(min, w - CONE_W - margin);
-        cones.current.push({
-          id: coneSeq.current++,
-          x: min + Math.random() * Math.max(1, max - min),
-          y: -CONE_H - offset,
-          side,
-          passed: false,
-          missed: false,
-        });
-        nextSide.current = side === "left" ? "right" : "left";
-      };
-      spawn();
-      // Yüksek skorda ikinci kapı: sırayı bozmadan hemen ardından gelir.
-      if (scoreRef.current > 15 && Math.random() < 0.35) spawn(CONE_H * 2.6);
+  const step = (dt: number) => {
+    if (phaseRef.current !== "playing") return;
+    const { w } = area.current;
+    if (w <= 0) return;
+
+    /* KONTROL EĞRİSİ — briefin verdiği model birebir. */
+    const centerX = w / 2;
+    const n =
+      touchX.current == null ? 0 : clamp((touchX.current - centerX) / (w / 2), -1, 1);
+    steer.current = Math.sign(n) * Math.abs(n) ** T.steerExp;
+
+    const targetVx = steer.current * T.maxLateral;
+    vx.current = approach(vx.current, targetVx, T.accel, T.decel, dt);
+
+    // Koridor koordinatı: yarı genişlik 1 birim.
+    lane.current = clamp(lane.current + (vx.current * dt) / (w / 2), -1, 1);
+    // Kenara yaslanınca hız sıfırlanır; duvara yapışıp kaymak olmasın.
+    if (Math.abs(lane.current) >= 1) vx.current = 0;
+
+    /* İLERLEME — mesafeyle hızlanır ama tavanı vardır. */
+    speed.current = Math.min(
+      T.maxSpeed,
+      T.baseSpeed + travelled.current * T.speedGrowth,
+    );
+    travelled.current += (speed.current * dt) / 10;
+    invulnerable.current = Math.max(0, invulnerable.current - dt);
+    grazeFlash.current = Math.max(0, grazeFlash.current - dt);
+
+    /* ÜRETİM — desenden sıradaki kapı. Aralık hızla kısalır ki kapılar
+       mesafede sıkışsın; ama alt sınır var, oyun boğulmaz. */
+    const interval = Math.max(0.34, 0.9 - travelled.current * 0.0009);
+    spawnTimer.current -= dt;
+    if (spawnTimer.current <= 0) {
+      spawnTimer.current = interval;
+      const pattern = PATTERNS[patternIndex.current % PATTERNS.length];
+      const spread = T.gateWide - (T.gateWide - T.gateNarrow) * clamp(travelled.current / 900, 0, 1);
+      coneId.current += 1;
+      cones.current.push({
+        id: coneId.current,
+        lane: clamp(pattern[patternStep.current] * (1 / T.gateWide) * spread, -0.92, 0.92),
+        z: 1,
+        grazed: false,
+        hit: false,
+      });
+      patternStep.current += 1;
+      if (patternStep.current >= pattern.length) {
+        patternStep.current = 0;
+        patternIndex.current += 1;
+      }
     }
 
-    // Koni akışı + çarpışma + sayaç
-    const flow = FLOW_BASE * factor;
+    /* KONİLER — ufuktan oyuncuya akar. */
+    const flow = (speed.current / 900) * dt;
     for (const cone of cones.current) {
-      cone.y += flow * dt;
-      // Çarpışma: kutu yaklaşımı, hafif hoşgörülü
-      const dx = Math.abs(cone.x + CONE_W / 2 - (ballX.current + BALL / 2));
-      const dy = Math.abs(cone.y + CONE_H / 2 - (ballY + BALL / 2));
-      if (dx < (CONE_W + BALL) * 0.34 && dy < (CONE_H + BALL) * 0.36) {
-        gameOver();
-        return;
-      }
-      // Kapı sonuçlandı: koni topun hizasını geçti.
-      if (!cone.passed && cone.y > ballY + BALL) {
-        cone.passed = true;
-        const ballCenter = ballX.current + BALL / 2;
-        const coneCenter = cone.x + CONE_W / 2;
-        const correct =
-          cone.side === "left" ? ballCenter < coneCenter : ballCenter > coneCenter;
+      cone.z -= flow;
 
-        if (correct) {
-          scoreRef.current += 1;
-          setScore(scoreRef.current);
-          // Puan haptiği; `haptics` kendi içinde 300ms kısar, döngüyü yormaz.
-          haptics.light();
-        } else {
-          cone.missed = true;
-          missRef.current += 1;
-          setMisses(missRef.current);
-          setMissFlash(Date.now());
-          if (missTimer.current) clearTimeout(missTimer.current);
-          missTimer.current = setTimeout(() => setMissFlash(0), 650);
-          haptics.warning();
-          if (missRef.current >= MAX_MISSES) {
+      // Oyuncu düzlemine geldiğinde çarpışma/sıyırma sınanır.
+      if (cone.hit || cone.z > 0.14 || cone.z < -0.05) continue;
+
+      const gap = Math.abs(cone.lane - lane.current) * (area.current.w / 2);
+      if (gap < PLAYER_R + 12) {
+        cone.hit = true;
+        if (invulnerable.current <= 0) {
+          /* ÇARPIŞMA: oyun BİTMEZ. Hız düşer, combo sıfırlanır, kısa bir
+             dokunulmazlık verilir. Tek çarpmada bitirmek, öğrenmeyi
+             cezalandırıyordu. */
+          speed.current *= T.crashSpeedKeep;
+          travelled.current = Math.max(0, travelled.current - 20);
+          comboRef.current = 0;
+          setCombo(0);
+          invulnerable.current = T.invulnerable;
+          livesRef.current -= 1;
+          setLives(livesRef.current);
+          haptics.error();
+          if (livesRef.current <= 0) {
             gameOver();
             return;
           }
         }
+      } else if (!cone.grazed && gap < PLAYER_R + 12 + T.grazeDistance) {
+        /* SIYIRMA: riski ödüllendirir. Koniden uzak durmak güvenlidir ama
+           puan getirmez; oyunun gerilimi bu tercihten gelir. */
+        cone.grazed = true;
+        comboRef.current += 1;
+        setCombo(comboRef.current);
+        travelled.current += comboRef.current;
+        grazeFlash.current = 0.6;
+        haptics.light();
       }
     }
-    cones.current = cones.current.filter((c) => c.y < h + CONE_H);
-    setTick((t) => t + 1);
+
+    cones.current = cones.current.filter((cone) => cone.z > -0.06);
   };
 
+  /*
+    Mesafe HUD'u render'da güncellenir, fizik adımında DEĞİL: fizik saniyede
+    120 adım atıyor ve her adımda setState çağırmak React'ı boğuyordu. Render
+    saniyede ~60 kez çalışır ve zaten ekranı çizecektir.
+  */
+  const render = () => {
+    setDistance(Math.round(travelled.current));
+    setFrame((n) => (n + 1) % 1_000_000);
+  };
+  useGameLoop({ step, render, running: phase === "playing" });
+
+  /* ─────────────────────────── girdi ─────────────────────────── */
+
+  const gesture = useHoldGesture({
+    enabled: phase === "playing",
+    onHold: (x) => {
+      touchX.current = x;
+    },
+    // Parmak kalkınca hedef sıfırlanır: oyuncu yumuşakça merkezlenir.
+    onRelease: () => {
+      touchX.current = null;
+    },
+  });
+
   const start = () => {
-    const { w } = area.current;
-    ballX.current = (w - BALL) / 2;
-    dir.current = 0;
-    cones.current = [];
-    sinceSpawn.current = 0;
-    scoreRef.current = 0;
-    nextSide.current = "left";
-    missRef.current = 0;
-    setMisses(0);
-    setMissFlash(0);
-    setScore(0);
+    resetRound();
     setSubmit("idle");
     setPhaseBoth("playing");
-    if (loop.current) clearInterval(loop.current);
-    loop.current = setInterval(step, TICK_MS);
   };
 
   const restart = () => {
-    setPhaseBoth("ready");
-    cones.current = [];
-    setScore(0);
-    scoreRef.current = 0;
-    nextSide.current = "left";
-    missRef.current = 0;
-    setMisses(0);
-    setMissFlash(0);
+    resetRound();
     setSubmit("idle");
-    setShareOpen(false);
-    setTick((t) => t + 1);
+    setPhaseBoth("ready");
   };
 
-  const ballY = area.current.h * BALL_Y_RATIO;
-  const factor = Math.min(2.6, 1 + score * 0.02);
-  const isRecord = score > 0 && score >= best;
-
+  const isRecord = distance > 0 && distance >= best;
   const openBoard = () => router.push({ pathname: "/siralama", params: { game: "slalom" } });
   const openSignIn = () => router.push("/giris");
 
   const headerActions = useMemo(
     () => [
-      {
-        icon: "trophy-outline" as keyof typeof Ionicons.glyphMap,
-        onPress: () => router.push({ pathname: "/siralama", params: { game: "slalom" } }),
-        accessibilityLabel: "Rekor tablosu",
-      },
+      { icon: "trophy-outline" as const, onPress: openBoard, accessibilityLabel: "Rekor tablosu" },
     ],
-    [router]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
   );
+
+  const { w, h } = area.current;
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader
         title="Slalom"
         overline={upperTR("Elitlig Arena")}
-        subtitle="Basılı tut, konilerden kaç"
+        subtitle="Ortaya bas hassas dön, kenara bas sert kaç"
         back
         actions={headerActions}
       />
 
-      {/* — HUD: skor solda (tabular), rekor ve hız çarpanı sağda — */}
+      {/* HUD: mesafe solda, combo ve kalan hak sağda. */}
       <View style={styles.hud}>
         <View style={styles.hudScoreBox}>
           <Text style={styles.hudLabel} {...textScale.badge}>
-            {upperTR("Koni")}
+            {upperTR("Metre")}
           </Text>
           <Text style={styles.hudScore} {...textScale.dense}>
-            {score}
+            {distance}
           </Text>
         </View>
 
@@ -358,137 +408,67 @@ export default function SlalomScreen() {
               {best}
             </Text>
           </View>
-          {/* Kalan hak: üç kapı kaçırınca tur biter. */}
+          {combo > 0 ? (
+            <View style={[styles.hudPill, styles.hudPillLive]}>
+              <Text style={styles.hudPillLiveText} {...textScale.badge}>
+                {`${combo}× sıyırma`}
+              </Text>
+            </View>
+          ) : null}
           <View style={styles.hudPill}>
-            {Array.from({ length: MAX_MISSES }).map((_, index) => (
-              <Ionicons
-                key={index}
-                name={index < MAX_MISSES - misses ? "ellipse" : "ellipse-outline"}
-                size={9}
-                color={index < MAX_MISSES - misses ? colors.win : colors.textTertiary}
-              />
+            {Array.from({ length: T.lives }, (_, i) => (
+              <View key={i} style={[styles.life, i < lives && styles.lifeFull]} />
             ))}
-          </View>
-          <View style={[styles.hudPill, styles.hudPillLive]}>
-            <Ionicons name="flash" size={11} color={colors.live} />
-            <Text style={styles.hudPillLiveText} {...textScale.badge}>
-              {`x${factor.toFixed(1)}`}
-            </Text>
           </View>
         </View>
       </View>
 
       <View
         style={styles.arena}
-        onLayout={(e) => {
-          area.current = {
-            w: e.nativeEvent.layout.width,
-            h: e.nativeEvent.layout.height,
-          };
-          if (phaseRef.current === "ready") {
-            ballX.current = (area.current.w - BALL) / 2;
-            setTick((t) => t + 1);
-          }
-        }}
+        {...gesture.panHandlers}
+        onLayout={(e) =>
+          (area.current = { w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })
+        }
+        accessible
+        accessibilityRole="adjustable"
+        accessibilityLabel="Slalom pisti"
+        accessibilityHint="Ekrana basılı tut. Ortaya yakın basmak hassas, kenara basmak sert döndürür."
       >
-        {/* Çim şeritleri — saha yeşili tokenı, şeritler kazanç yeşiliyle aydınlatılır. */}
-        {Array.from({ length: 6 }).map((_, i) => (
-          <View
-            key={i}
-            style={[
-              styles.stripe,
-              { top: `${(i * 100) / 6}%`, height: `${100 / 6}%` },
-              i % 2 === 1 && styles.stripeAlt,
-            ]}
-          />
-        ))}
-        {/* Kenar çizgileri */}
-        <View style={[styles.sideline, styles.sidelineLeft]} />
-        <View style={[styles.sideline, styles.sidelineRight]} />
+        {w > 0 && h > 0 ? (
+          <Svg width={w} height={h} pointerEvents="none">
+            <Track w={w} h={h} steer={steer.current} scroll={travelled.current} />
+            {cones.current.map((cone) => (
+              <ConeSprite key={cone.id} cone={cone} w={w} h={h} steer={steer.current} />
+            ))}
+            <Player
+              w={w}
+              h={h}
+              lane={lane.current}
+              steer={steer.current}
+              faded={invulnerable.current > 0}
+            />
+            {/* Hız çizgileri: hız arttıkça kenarlarda belirir. */}
+            <SpeedLines w={w} h={h} speed={speed.current} />
+          </Svg>
+        ) : null}
 
-        {/* Koniler */}
-        {/* Kapılar: ok, topun koninin HANGİ yanından geçmesi gerektiğini söyler.
-            Iskalanan kapı kırmızıya döner ki oyuncu hatasını görsün. */}
-        {cones.current.map((cone) => (
-          <View
-            key={cone.id}
-            style={[styles.cone, { transform: [{ translateX: cone.x }, { translateY: cone.y }] }]}
-            pointerEvents="none"
-          >
-            <View style={styles.coneTriangle} />
-            <View style={styles.coneBase} />
-            <View
-              style={[
-                styles.coneSide,
-                cone.side === "left" ? styles.coneSideLeft : styles.coneSideRight,
-                cone.missed && styles.coneSideMissed,
-              ]}
-            >
-              <Ionicons
-                name={cone.side === "left" ? "arrow-back" : "arrow-forward"}
-                size={11}
-                color={cone.missed ? colors.textOnStatus : colors.textPrimary}
-              />
-            </View>
-          </View>
-        ))}
-
-        {/* Iska uyarısı */}
-        {missFlash ? (
-          <View pointerEvents="none" style={styles.missFlash}>
-            <Text style={styles.missFlashText} allowFontScaling={false}>
-              Kapı kaçtı!
+        {grazeFlash.current > 0 ? (
+          <View style={styles.grazeTag} pointerEvents="none">
+            <Text style={styles.grazeText} {...textScale.badge}>
+              {upperTR("Sıyırdın")}
             </Text>
           </View>
         ) : null}
-
-        {/* Top */}
-        <Text
-          style={[
-            styles.ball,
-            { transform: [{ translateX: ballX.current }, { translateY: ballY }] },
-          ]}
-        >
-          ⚽
-        </Text>
-
-        {/* Kontroller: sol/sağ yarı, basılı tut — ham Pressable, gerekçesi dosya başında. */}
-        <View style={styles.controls}>
-          <Pressable
-            style={styles.controlHalf}
-            accessibilityRole="button"
-            accessibilityLabel="Sola kaydır"
-            onPressIn={() => {
-              if (phaseRef.current === "ready") start();
-              dir.current = -1;
-            }}
-            onPressOut={() => {
-              if (dir.current === -1) dir.current = 0;
-            }}
-          />
-          <Pressable
-            style={styles.controlHalf}
-            accessibilityRole="button"
-            accessibilityLabel="Sağa kaydır"
-            onPressIn={() => {
-              if (phaseRef.current === "ready") start();
-              dir.current = 1;
-            }}
-            onPressOut={() => {
-              if (dir.current === 1) dir.current = 0;
-            }}
-          />
-        </View>
 
         {phase === "ready" ? <StartOverlay best={best} onStart={start} /> : null}
 
         {phase === "over" ? (
           <ResultOverlay
-            score={score}
+            score={distance}
             best={best}
             isRecord={isRecord}
             submit={submit}
-            onRetrySubmit={() => submitScore(score)}
+            onRetrySubmit={() => submitScore(distance)}
             onSignIn={openSignIn}
             onRestart={restart}
             onBoard={openBoard}
@@ -500,13 +480,195 @@ export default function SlalomScreen() {
       <ShareSheet
         visible={shareOpen}
         onClose={() => setShareOpen(false)}
-        score={score}
+        score={distance}
         isRecord={isRecord}
         cityLabel={scope.cityLabel}
       />
     </SafeAreaView>
   );
 }
+
+/* ============================== PİST ÇİZİMİ ============================== */
+
+/** Bir `z` derinliğinin ekrandaki y'si ve ölçeği. */
+function project(z: number, h: number): { y: number; scale: number } {
+  // z=1 ufuk, z=0 oyuncu düzlemi. Kare kök olmayan bir eğri derinliği
+  // hızlandırır: uzaktakiler yavaş, yakındakiler hızlı büyür.
+  const t = clamp(1 - z, 0, 1);
+  const y = h * HORIZON + (h * PLAYER_Y - h * HORIZON) * t * t;
+  const scale = 0.12 + t * t * 0.88;
+  return { y, scale };
+}
+
+/** Bir koridor konumunun (-1..1) ekrandaki x'i. */
+function laneX(lane: number, w: number, scale: number, shift: number): number {
+  return w / 2 + lane * (w / 2) * scale * 0.92 + shift;
+}
+
+/**
+ * Koridor — ufka doğru yakınsayan tebeşir çizgileri ve kayan biçme şeritleri.
+ * Doku yok: yalnız geometri, çok daha temiz ve çok daha ucuz.
+ */
+const Track = memo(function Track({
+  w,
+  h,
+  steer,
+  scroll,
+}: {
+  w: number;
+  h: number;
+  steer: number;
+  scroll: number;
+}) {
+  // Kamera karşı kayar (parallax): sağa dönerken dünya sola akar.
+  const shift = -steer * T.cameraShift;
+  const near = project(0, h);
+  const far = project(1, h);
+
+  // Hız arttıkça yatay ölçek %3 açılır — FOV genişleme hissi.
+  const fov = 1 + clamp(scroll / 2000, 0, 1) * 0.03;
+
+  return (
+    <G>
+      <Rect x={0} y={0} width={w} height={h} fill={paint.turf} />
+
+      {/* Biçme şeritleri: kaydıkça ufka doğru daralır. */}
+      {Array.from({ length: 9 }, (_, i) => {
+        const offset = ((scroll / 26 + i) % 9) / 9;
+        const a = project(1 - offset, h);
+        const b = project(1 - Math.min(1, offset + 0.055), h);
+        return i % 2 === 0 ? (
+          <Path
+            key={i}
+            d={`M ${laneX(-1.15, w, a.scale * fov, shift)} ${a.y}
+                L ${laneX(1.15, w, a.scale * fov, shift)} ${a.y}
+                L ${laneX(1.15, w, b.scale * fov, shift)} ${b.y}
+                L ${laneX(-1.15, w, b.scale * fov, shift)} ${b.y} Z`}
+            fill={paint.turfAlt}
+          />
+        ) : null;
+      })}
+
+      {/* Koridor kenarları — tebeşir. */}
+      <Path
+        d={`M ${laneX(-1.05, w, far.scale * fov, shift)} ${far.y} L ${laneX(-1.05, w, near.scale * fov, shift)} ${near.y}`}
+        stroke={paint.chalk}
+        strokeWidth={2}
+      />
+      <Path
+        d={`M ${laneX(1.05, w, far.scale * fov, shift)} ${far.y} L ${laneX(1.05, w, near.scale * fov, shift)} ${near.y}`}
+        stroke={paint.chalk}
+        strokeWidth={2}
+      />
+      {/* Orta çizgi — kesikli, kaydıkça akar. */}
+      <Path
+        d={`M ${laneX(0, w, far.scale * fov, shift)} ${far.y} L ${laneX(0, w, near.scale * fov, shift)} ${near.y}`}
+        stroke={paint.chalk}
+        strokeWidth={1.5}
+        strokeDasharray="10 18"
+        strokeDashoffset={-scroll * 2}
+        opacity={0.5}
+      />
+    </G>
+  );
+});
+
+/**
+ * Koni — gerçek 3B değil, ölçekli sprite. Zemin gölgesi mesafeyle küçülür;
+ * derinlik hissini veren şey gölgenin kendisidir, koninin değil.
+ */
+const ConeSprite = memo(function ConeSprite({
+  cone,
+  w,
+  h,
+  steer,
+}: {
+  cone: Cone;
+  w: number;
+  h: number;
+  steer: number;
+}) {
+  const { y, scale } = project(cone.z, h);
+  const x = laneX(cone.lane, w, scale, -steer * T.cameraShift);
+  const size = 30 * scale;
+  if (size < 1.5) return null;
+
+  const fill = cone.grazed ? paint.action : paint.miss;
+
+  return (
+    <G opacity={cone.hit ? 0.3 : 1}>
+      <Ellipse cx={x} cy={y} rx={size * 0.55} ry={size * 0.18} fill={paint.shadow} opacity={0.35} />
+      <Path
+        d={`M ${x} ${y - size} L ${x + size * 0.42} ${y} L ${x - size * 0.42} ${y} Z`}
+        fill={fill}
+      />
+      {/* Konideki beyaz bant — ölçekte de okunur kalan tek ayrıntı. */}
+      <Path
+        d={`M ${x - size * 0.26} ${y - size * 0.38} L ${x + size * 0.26} ${y - size * 0.38}`}
+        stroke={paint.surface}
+        strokeWidth={Math.max(1, size * 0.12)}
+      />
+    </G>
+  );
+});
+
+/**
+ * Oyuncu — top + gövde. Gövde `steer * 14°` yatar; bu, kontrolün ne kadar
+ * agresif olduğunu GÖSTEREN tek geri bildirimdir ve eğrinin öğrenilmesini
+ * sağlar. Dokunulmazlıkta yanıp sönmez, OPAKLIĞI DÜŞER.
+ */
+const Player = memo(function Player({
+  w,
+  h,
+  lane,
+  steer,
+  faded,
+}: {
+  w: number;
+  h: number;
+  lane: number;
+  steer: number;
+  faded: boolean;
+}) {
+  const y = h * PLAYER_Y;
+  const x = laneX(lane, w, 1, -steer * T.cameraShift);
+  const tilt = steer * T.tilt;
+
+  return (
+    <G opacity={faded ? 0.4 : 1} transform={`rotate(${tilt.toFixed(1)} ${x.toFixed(1)} ${y.toFixed(1)})`}>
+      <Ellipse cx={x} cy={y + PLAYER_R * 0.9} rx={PLAYER_R} ry={PLAYER_R * 0.32} fill={paint.shadow} opacity={0.4} />
+      <Circle cx={x} cy={y} r={PLAYER_R} fill={paint.surface} stroke={paint.ink} strokeWidth={1.5} />
+      <Circle cx={x} cy={y} r={PLAYER_R * 0.38} fill={paint.ink} opacity={0.85} />
+    </G>
+  );
+});
+
+/** Hız çizgileri — kenarlarda, hızla belirginleşen ince çizgiler. */
+const SpeedLines = memo(function SpeedLines({
+  w,
+  h,
+  speed,
+}: {
+  w: number;
+  h: number;
+  speed: number;
+}) {
+  const intensity = clamp((speed - T.baseSpeed) / (T.maxSpeed - T.baseSpeed), 0, 1);
+  if (intensity < 0.08) return null;
+
+  return (
+    <G opacity={intensity * 0.5}>
+      {[0.04, 0.1, 0.9, 0.96].map((ratio, i) => (
+        <Path
+          key={i}
+          d={`M ${w * ratio} ${h * 0.42} L ${w * ratio} ${h * 0.92}`}
+          stroke={paint.chalk}
+          strokeWidth={1.5}
+        />
+      ))}
+    </G>
+  );
+});
 
 /* ============================== GİRİŞ KARTI ============================== */
 
@@ -530,15 +692,15 @@ function StartOverlay({ best, onStart }: { best: number; onStart: () => void }) 
           Slalom
         </Text>
         <Text style={styles.startRule} {...textScale.long}>
-          Gerçek slalom: kapıları sırayla bir SOLDAN bir SAĞDAN geç. Her koninin yanındaki
-          ok hangi taraftan geçeceğini söyler. Koniye çarparsan tur biter; yanlış taraftan
-          geçersen bir hak gider — üç hakkın var.
+          Ekrana basılı tut: parmağın nerede duruyorsa oraya dönersin. Ortaya yakın basmak
+          hassas, kenara basmak sert döndürür. Koniyi sıyırıp geçmek puan katlar; çarpmak
+          hız ve combo kaybettirir. Üç çarpışmada tur biter.
         </Text>
 
         <View style={styles.startBest}>
           <Ionicons name="trophy" size={13} color={colors.star} />
           <Text style={styles.startBestText} {...textScale.dense}>
-            {best > 0 ? `Rekorun ${best} koni` : "Henüz rekorun yok"}
+            {best > 0 ? `Rekorun ${best} metre` : "Henüz rekorun yok"}
           </Text>
         </View>
 
@@ -839,90 +1001,37 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     overflow: "hidden",
   },
-  stripe: {
-    position: "absolute",
-    left: 0,
-    right: 0,
+  /* Pist, koniler ve oyuncu artık SVG olarak çizilir (bkz. dosya başı);
+     eski View tabanlı stiller kaldırıldı. */
+
+  /* Kalan hak göstergesi. */
+  life: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    borderWidth: hairline,
+    borderColor: colors.borderStrong,
   },
-  stripeAlt: {
-    backgroundColor: withAlpha(colors.win, 0.12),
+  lifeFull: {
+    backgroundColor: colors.live,
+    borderColor: colors.live,
   },
-  sideline: {
+
+  /* Sıyırma etiketi — riski ödüllendiren tek geri bildirim. */
+  grazeTag: {
     position: "absolute",
-    top: 0,
-    bottom: 0,
-    width: 2,
-    backgroundColor: withAlpha(colors.win, 0.4),
-  },
-  sidelineLeft: { left: 4 },
-  sidelineRight: { right: 4 },
-  /* Kapı yön işareti — koninin geçilecek yanında durur. */
-  coneSide: {
-    position: "absolute",
-    top: CONE_H * 0.15,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.surface3,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  coneSideLeft: { left: -22 },
-  coneSideRight: { right: -22 },
-  coneSideMissed: { backgroundColor: colors.danger, borderColor: colors.danger },
-  missFlash: {
-    position: "absolute",
-    top: "12%",
+    top: "14%",
     alignSelf: "center",
     paddingHorizontal: space.md,
     paddingVertical: space.xs,
     borderRadius: radius.pill,
-    backgroundColor: colors.danger,
+    backgroundColor: colors.brand,
   },
-  missFlashText: { ...type.label, color: colors.textOnStatus },
-  cone: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    width: CONE_W,
-    height: CONE_H,
-    alignItems: "center",
+  grazeText: {
+    ...type.overline,
+    color: colors.textOnBrand,
   },
-  coneTriangle: {
-    width: 0,
-    height: 0,
-    borderLeftWidth: CONE_W / 2 - 2,
-    borderRightWidth: CONE_W / 2 - 2,
-    borderBottomWidth: CONE_H - 7,
-    borderLeftColor: "transparent",
-    borderRightColor: "transparent",
-    borderBottomColor: colors.warn,
-  },
-  coneBase: {
-    width: CONE_W,
-    height: 5,
-    borderRadius: 2,
-    backgroundColor: colors.danger,
-    marginTop: 1,
-  },
-  ball: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    fontSize: BALL - 6,
-    width: BALL,
-    height: BALL,
-    textAlign: "center",
-  },
-  controls: {
-    ...StyleSheet.absoluteFillObject,
-    flexDirection: "row",
-  },
-  controlHalf: {
-    flex: 1,
-  },
+
 
   /* — Giriş kartı — */
   overlay: {

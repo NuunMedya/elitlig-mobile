@@ -1,30 +1,39 @@
 /**
- * TOP SEKTİR — Flappy usulü top sektirme oyunu.
+ * TOP SEKTİR — temas noktasının yönü belirlediği sektirme oyunu.
  *
- * FİZİK (bu yenilemede DEĞİŞMEDİ): yerçekimi topu aşağı çeker; her dokunuş
- * topu yukarı sektirir ve +1 sekme yazar. Skor arttıkça yerçekimi ağırlaşır ve
- * her sekmede top yanlara daha sert savrulur (duvarlardan ve tavandan seker —
- * tavana yapışarak hile yapılamaz). Top çim şeridine düşerse oyun biter.
- * Döngü ~60fps'lik bir zamanlayıcıyla, değerler ref'lerde tutularak işler.
- * `step`, `tap`, `gameOver` ve sabitler birebir korundu.
+ * FİZİK (bu sürümde BAŞTAN YAZILDI). Eski hâl `setInterval(16ms)` ile
+ * çalışıyor ve her tikte sabit bir `dt` varsayıyordu; yani fizik KARE HIZINA
+ * BAĞLIYDI ve aynı vuruş aynı sonucu vermiyordu. Artık `lib/game/loop.ts`
+ * içindeki sabit adımlı döngü kullanılıyor: fizik daima 1/120 sn adımlarla
+ * ilerliyor, render ara değerle çiziliyor.
  *
- * SUNUM MİMARİSİ:
- *   · HUD tuvalin DIŞINDA, ince bir şerit: skor solda (tabular), rekor ve
- *     yerçekimi çarpanı sağda. Tuvalin içine konsaydı top rozetlerin arkasına
- *     girer ve okunmaz olurdu.
- *   · GİRİŞ — tuvalin üstünde giriş kartı: oyun adı, tek cümlelik kural,
- *     kişisel rekor, büyük "Başla". Kart `pointerEvents="box-none"` bir katmanda
- *     durur; eski "başlamak için ekrana dokun" alışkanlığı da çalışmaya devam
- *     eder (dokunuş tuvale kadar kabarır).
- *   · BİTİŞ — tuvali kaplayan tam ekran kart. `Modal` DEĞİL sıradan bir katman:
- *     paylaşım önizlemesi zaten `Modal`, ikisini üst üste bindirmek iOS'ta
- *     güvenilir değil. Bitiş kartı katman olunca paylaşım sorunsuz üstüne biner.
+ * ÜÇ KURAL, OYUNUN TAMAMI:
  *
- * NEDEN HAM `Pressable` (tasarım sisteminin `Touchable`'ı değil): tuval her
- * karede yeniden çizilir ve dokunuş → sekme gecikmesi oyunun kendisidir.
- * `Touchable`'ın ölçek/opaklık animasyonu ve haptik gecikmesi burada oyunu
- * bozardı. Bu, kılavuzdaki "oyun içi dokunma alanı" istisnasıdır; kartlardaki
- * ve düğmelerdeki her basılabilir öğe yine `Touchable`/`Button`.
+ *  1. TEMAS NOKTASI YÖNÜ BELİRLER. Dokunuşun top merkezine olan yatay ofseti
+ *     `o` (-1 sol kenar, +1 sağ kenar) hem yatay hızı hem yükselişi hem de
+ *     DÖNÜŞÜ üretir. Sola vurursan sağa gider; kenardan vurursan az yükselir.
+ *
+ *  2. MAGNUS ETKİSİ. Dönen top havada eğri çizer (`ax += spin * vy * MAGNUS`).
+ *     Bu, oyunun derinliğidir: topu kenardan vurup kavisle halkanın içine
+ *     sokmak, dik vuruştan daha zor ve daha değerlidir.
+ *
+ *  3. HALKALAR YALNIZ YUKARI GEÇİŞTE SAYILIR. Aşağı düşerken halkadan geçmek
+ *     sayılsaydı oyun kendi kendini oynardı; puan, oyuncunun kararından
+ *     gelmeliydi.
+ *
+ * ÇİZİM: `react-native-svg`. Top gerçekten döner (panel çizgileri `spinAngle`
+ * kadar dönmüş çizilir) — yalnız kayan bir daire "dönüyor" okunmuyordu.
+ * Emoji top kaldırıldı: emoji cihazın yazı tipine göre değişir ve renk
+ * tokenlarına uymaz.
+ *
+ * SUNUM MİMARİSİ (korundu):
+ *   · HUD tuvalin DIŞINDA ince bir şerit: skor solda, çarpan sağda.
+ *   · GİRİŞ ve BİTİŞ kartları tuvalin üstünde katman; `Modal` değil, çünkü
+ *     paylaşım önizlemesi zaten `Modal` ve iOS'ta ikisi üst üste binmiyor.
+ *
+ * NEDEN HAM `PanResponder` (tasarım sisteminin `Touchable`'ı değil): dokunuş →
+ * sekme gecikmesi oyunun kendisidir. Bu, kılavuzdaki "oyun içi dokunma alanı"
+ * istisnasıdır; kartlardaki her basılabilir öğe yine `Touchable`/`Button`.
  *
  * PAYLAŞIM KARTI SABİT KOYU PALETTEN: kart görüntü olarak dışarı çıkar; aktif
  * temaya bağlansaydı açık temadaki kullanıcıda beyaz bir kâğıt olurdu.
@@ -35,10 +44,11 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import type { GestureResponderEvent } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import Svg, { Circle, Ellipse, G, Line, Path, Rect } from "react-native-svg";
 import ViewShot, { captureRef } from "react-native-view-shot";
 import {
   Badge,
@@ -49,6 +59,10 @@ import {
   withAlpha,
 } from "@/components/ui";
 import { submitArenaScore } from "@/lib/api/arena";
+import { applyHit, isSweetSpot, stepBall } from "@/lib/game/ballistics";
+import { clamp, useGameLoop } from "@/lib/game/loop";
+import { paint } from "@/lib/game/paint";
+import { TUNING } from "@/lib/game/tuning";
 import { instagramUrl } from "@/lib/socials";
 import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
@@ -67,108 +81,35 @@ import {
   upperTR,
 } from "@/theme";
 
-/* ====================== SABİTLER (fizik — dokunulmadı) ====================== */
+/* ============================ SABİTLER VE TİPLER ============================ */
 
 const BEST_KEY = "elitlig.sektir.best.v1";
-const BALL = 56; // top çapı (emoji kutusu)
-const GROUND = 64; // çim şeridi yüksekliği
-const TICK_MS = 16;
+const T = TUNING.sektir;
 
-// Fizik sabitleri (piksel/saniye)
-const GRAVITY_BASE = 1350;
-const BOUNCE_VY = -540;
-
-/**
- * YÖN KONTROLÜ: topun neresine dokunduğun yönü belirler.
- *
- * Gerçek sektirmede topun sol yanına vurursan sağa, sağ yanına vurursan sola
- * gider. Eski sürümde yatay hız RASTGELE savruluyordu; oyuncu topu yönetemiyor,
- * yalnız ekrana basıp şansı bekliyordu. Artık dokunuşun top merkezine olan
- * uzaklığı hızın yönünü ve şiddetini veriyor: kenara yakın vuruş sert savurur,
- * ortadan vuruş dik yükseltir.
- */
-const TOUCH_PUSH = 7.2;   // piksel/saniye, dokunuş kaymasının katsayısı
-const MAX_PUSH = 260;     // tek vuruşun ekleyebileceği en büyük yatay hız
-const HIT_RADIUS = BALL * 0.95; // topa "değdi" sayılan yarıçap (cömert)
-
-/** Engeller — skor ilerledikçe açılır. */
-const OB_BAR_H = 12;      // bariyer kalınlığı
-const OB_HOOP_H = 14;     // çember halkası kalınlığı
-const OB_SPEED_BASE = 55; // yatay kayma hızı (piksel/saniye)
-const HOOP_BONUS = 3;     // çemberden geçişin puanı
+/** Top yarıçapı (piksel). */
+const BALL_R = 22;
+/** Çim şeridinin yüksekliği — top buraya değerse tur biter. */
+const GROUND = 64;
 
 type Phase = "ready" | "playing" | "over";
 
-/**
- * Engel — iki tür, tek veri yapısı.
- *
- *   bar   : dolu bariyer. Değdirirsen oyun biter; etrafından dolaşman gerekir.
- *   hoop  : ortası açık çember. Halkanın kendisi dolu, ortasından geçmek
- *           HOOP_BONUS puan kazandırır (yukarı doğru geçişte, bir kez).
- *
- * `gap` yalnız çemberde anlamlıdır: toplam genişliğin ortasındaki açıklık.
- */
-interface Obstacle {
+/** Ekranda süzülen halka. Top merkezinden YUKARI geçerse çarpan artar. */
+interface Ring {
   id: number;
-  kind: "bar" | "hoop";
-  /** Engelin merkez y'si (top merkezi bu çizgiyi geçerse çarpışma sınanır). */
-  y: number;
-  /** Sol kenar. */
   x: number;
-  w: number;
-  /** Çemberin ortasındaki açıklık; bariyerde 0. */
-  gap: number;
+  y: number;
+  r: number;
   vx: number;
-  /** Çember bonusu bir turda bir kez verilir. */
-  passed: boolean;
+  /** Bir tur içinde bir kez sayılır. */
+  used: boolean;
 }
 
-/**
- * Skora göre sahada olması gereken engeller.
- *
- * Zorluk kademeli açılır: ilk beş sekme temiz, sonra bir bariyer, sonra çember,
- * sonra ikinci bariyer. Böylece oyuncu önce kontrolü öğrenir.
- */
-function obstaclesForScore(score: number, w: number, h: number): Obstacle[] {
-  const list: Obstacle[] = [];
-  if (score >= 5) {
-    list.push({
-      id: 1,
-      kind: "bar",
-      y: h * 0.52,
-      x: w * 0.1,
-      w: Math.max(70, w * 0.34),
-      gap: 0,
-      vx: OB_SPEED_BASE,
-      passed: false,
-    });
-  }
-  if (score >= 12) {
-    const hoopW = Math.min(w * 0.55, 170);
-    list.push({
-      id: 2,
-      kind: "hoop",
-      y: h * 0.26,
-      x: (w - hoopW) / 2,
-      w: hoopW,
-      gap: Math.max(64, hoopW * 0.52),
-      vx: -OB_SPEED_BASE * 0.8,
-      passed: false,
-    });
-  }
-  if (score >= 22) {
-    list.push({
-      id: 3,
-      kind: "bar",
-      y: h * 0.7,
-      x: w * 0.55,
-      w: Math.max(60, w * 0.28),
-      gap: 0,
-      vx: -OB_SPEED_BASE * 1.2,
-      passed: false,
-    });
-  }
-  return list;
+/** Tam isabet darbesi — topun etrafında tek seferlik beyaz halka. */
+interface Pulse {
+  x: number;
+  y: number;
+  /** 0 → 1 arasında ilerler, 1'de silinir. */
+  t: number;
 }
 
 /** Skorun sunucuya gidişi — bitiş kartında tek satırla anlatılır. */
@@ -180,57 +121,91 @@ export default function SektirScreen() {
   const router = useRouter();
   const scope = useScope();
   const auth = useAuth();
+
   const [phase, setPhase] = useState<Phase>("ready");
   const [score, setScore] = useState(0);
   const [best, setBest] = useState(0);
-  const [, setTick] = useState(0); // render tetikleyici
+  const [multiplier, setMultiplier] = useState(1);
+  const [, setFrame] = useState(0);
 
+  /* — Fizik durumu ref'lerde: her karede değişiyor, render'ı tetiklememeli — */
   const area = useRef({ w: 0, h: 0 });
   const pos = useRef({ x: 0, y: 0 });
+  /** Bir önceki fizik adımının konumu — render interpolasyonu için. */
+  const prev = useRef({ x: 0, y: 0 });
   const vel = useRef({ x: 0, y: 0 });
-  const scoreRef = useRef(0);
-  const phaseRef = useRef<Phase>("ready");
-  const obstacles = useRef<Obstacle[]>([]);
-  /** Bir önceki karenin top merkezi — çarpışma "çizgiyi geçti mi" ile sınanır. */
-  const prevCenterY = useRef(0);
-  /** Çemberden geçişin kısa parıltısı (sunum). */
-  const [hoopFlash, setHoopFlash] = useState(0);
-  const hoopFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const loop = useRef<ReturnType<typeof setInterval> | null>(null);
+  const spin = useRef(0);
+  const spinAngle = useRef(0);
+  /** Fizik modülüne verilen çalışma nesnesi — her karede yeniden ayrılmaz. */
+  const ball = useRef({ x: 0, y: 0, vx: 0, vy: 0, spin: 0 });
+  const trail = useRef<{ x: number; y: number }[]>([]);
+  const rings = useRef<Ring[]>([]);
+  const pulse = useRef<Pulse | null>(null);
+  const touches = useRef(0);
+  const ringId = useRef(0);
 
-  /* — Sunum durumu: fizik döngüsüne karışmaz — */
+  const phaseRef = useRef<Phase>("ready");
+  const scoreRef = useRef(0);
+  const multRef = useRef(1);
+  const comboRef = useRef(0);
+  const [combo, setCombo] = useState(0);
+
   const [submit, setSubmit] = useState<SubmitState>("idle");
   const [shareOpen, setShareOpen] = useState(false);
 
   useEffect(() => {
-    AsyncStorage.getItem(BEST_KEY).then((v) => setBest(Number(v) || 0));
-    return () => {
-      if (loop.current) clearInterval(loop.current);
-      if (hoopFlashTimer.current) clearTimeout(hoopFlashTimer.current);
-    };
+    AsyncStorage.getItem(BEST_KEY).then((value) => setBest(Number(value) || 0));
   }, []);
 
-  const setPhaseBoth = (p: Phase) => {
-    phaseRef.current = p;
-    setPhase(p);
+  const setPhaseBoth = (next: Phase) => {
+    phaseRef.current = next;
+    setPhase(next);
+  };
+
+  /* ─────────────────────────── kurulum ─────────────────────────── */
+
+  /** Yeni halka üretir. Zorluk arttıkça küçülür ve daha hızlı süzülür. */
+  const spawnRing = (level: number): Ring => {
+    const { w, h } = area.current;
+    const r = Math.max(T.ringMinRadius, T.ringRadius * T.ringShrink ** level);
+    const drift = T.ringDrift * T.ringDriftGrowth ** level;
+    ringId.current += 1;
+    return {
+      id: ringId.current,
+      x: r + Math.random() * Math.max(1, w - r * 2),
+      // Halkalar üst yarıda durur: topun yükseliş yayının içinde olmalılar.
+      y: h * 0.18 + Math.random() * h * 0.3,
+      r,
+      vx: (Math.random() < 0.5 ? -1 : 1) * drift,
+      used: false,
+    };
   };
 
   const resetBall = () => {
-    pos.current = {
-      x: (area.current.w - BALL) / 2,
-      y: area.current.h * 0.35,
-    };
+    const { w, h } = area.current;
+    pos.current = { x: w / 2, y: h * 0.42 };
+    prev.current = { ...pos.current };
     vel.current = { x: 0, y: 0 };
-    prevCenterY.current = pos.current.y + BALL / 2;
-    obstacles.current = [];
-    setHoopFlash(0);
+    spin.current = 0;
+    spinAngle.current = 0;
+    trail.current = [];
+    pulse.current = null;
   };
 
-  /**
-   * Skoru rekor tablosuna yollar. Tetikleme koşulu eskisiyle birebir aynı
-   * (oturum var + skor > 0); tek fark, sonucun sessizce yutulmak yerine bitiş
-   * kartında görünmesi ve tekrar denenebilmesi.
-   */
+  const resetRound = () => {
+    resetBall();
+    touches.current = 0;
+    scoreRef.current = 0;
+    multRef.current = 1;
+    comboRef.current = 0;
+    setScore(0);
+    setMultiplier(1);
+    setCombo(0);
+    rings.current = Array.from({ length: T.ringCount }, () => spawnRing(0));
+  };
+
+  /* ─────────────────────────── skor gönderimi ─────────────────────────── */
+
   const submitScore = (value: number) => {
     if (value <= 0) {
       setSubmit("idle");
@@ -247,238 +222,231 @@ export default function SektirScreen() {
   };
 
   const gameOver = () => {
-    if (loop.current) clearInterval(loop.current);
-    loop.current = null;
+    if (phaseRef.current === "over") return;
+    setPhaseBoth("over");
     const finished = scoreRef.current;
     submitScore(finished);
     if (finished > 0) {
       setBest((current) => {
-        if (finished > current) {
-          AsyncStorage.setItem(BEST_KEY, String(finished));
-          return finished;
-        }
-        return current;
+        if (finished <= current) return current;
+        void AsyncStorage.setItem(BEST_KEY, String(finished));
+        return finished;
       });
     }
     haptics.warning();
-    setPhaseBoth("over");
   };
 
-  const step = () => {
+  /* ─────────────────────────── fizik adımı ─────────────────────────── */
+
+  const step = (dt: number) => {
+    if (phaseRef.current !== "playing") return;
     const { w, h } = area.current;
-    const floor = h - GROUND - BALL;
-    const dt = TICK_MS / 1000;
-    // Zorluk: her sekmede yerçekimi %2.5 artar (en çok 2.2 kat)
-    const gravity = GRAVITY_BASE * Math.min(2.2, 1 + scoreRef.current * 0.025);
+    if (w <= 0 || h <= 0) return;
 
-    vel.current.y += gravity * dt;
-    pos.current.x += vel.current.x * dt;
-    pos.current.y += vel.current.y * dt;
+    prev.current = { x: pos.current.x, y: pos.current.y };
 
-    // Duvarlar: sönümlü sekme
-    if (pos.current.x <= 0) {
-      pos.current.x = 0;
-      vel.current.x = Math.abs(vel.current.x) * 0.85;
-    } else if (pos.current.x >= w - BALL) {
-      pos.current.x = w - BALL;
-      vel.current.x = -Math.abs(vel.current.x) * 0.85;
+    /* Yerçekimi, Magnus, sürtünme ve konum: hepsi `lib/game/ballistics.ts`
+       içinde. Fizik ekrandan ayrı durduğu için başsız doğrulanabiliyor
+       (bkz. scripts/check-games.mjs). */
+    ball.current.x = pos.current.x;
+    ball.current.y = pos.current.y;
+    ball.current.vx = vel.current.x;
+    ball.current.vy = vel.current.y;
+    ball.current.spin = spin.current;
+
+    stepBall(ball.current, dt);
+
+    pos.current.x = ball.current.x;
+    pos.current.y = ball.current.y;
+    vel.current.x = ball.current.vx;
+    vel.current.y = ball.current.vy;
+    spin.current = ball.current.spin;
+
+    // Görsel dönüş hızı: sn'de ~4 tur tepe dönüşte — okunur ama baş döndürmez.
+    spinAngle.current += spin.current * dt * 3;
+
+    // Yan duvarlar: sekerken hız kaybeder.
+    if (pos.current.x < BALL_R) {
+      pos.current.x = BALL_R;
+      vel.current.x = Math.abs(vel.current.x) * T.wallBounce;
+    } else if (pos.current.x > w - BALL_R) {
+      pos.current.x = w - BALL_R;
+      vel.current.x = -Math.abs(vel.current.x) * T.wallBounce;
     }
-    // Tavan: yukarı spam'i cezalandıran sert sekme
-    if (pos.current.y <= 0) {
-      pos.current.y = 0;
-      vel.current.y = Math.abs(vel.current.y) * 0.65 + 80;
+
+    // Tavan: yapışıp hile yapılamasın diye sert seker.
+    if (pos.current.y < BALL_R) {
+      pos.current.y = BALL_R;
+      vel.current.y = Math.abs(vel.current.y) * 0.5;
     }
-    // Zemin: oyun biter
-    if (pos.current.y >= floor) {
-      pos.current.y = floor;
+
+    // Çim: tur biter.
+    if (pos.current.y > h - GROUND - BALL_R) {
+      pos.current.y = h - GROUND - BALL_R;
       gameOver();
       return;
     }
 
-    /* ─────────────── ENGELLER ─────────────── */
-
-    // Skor eşiği geçildiyse yeni engel sahaya girer (var olanlar korunur).
-    const wanted = obstaclesForScore(scoreRef.current, w, h);
-    if (wanted.length > obstacles.current.length) {
-      const existing = new Set(obstacles.current.map((item) => item.id));
-      obstacles.current = [
-        ...obstacles.current,
-        ...wanted.filter((item) => !existing.has(item.id)),
-      ];
-    }
-
-    // Yatay kayma; duvarda yön değiştirir. Hız skorla birlikte artar.
-    const speedScale = 1 + scoreRef.current * 0.02;
-    obstacles.current.forEach((obstacle) => {
-      obstacle.x += obstacle.vx * speedScale * dt;
-      if (obstacle.x <= 0) {
-        obstacle.x = 0;
-        obstacle.vx = Math.abs(obstacle.vx);
-      } else if (obstacle.x + obstacle.w >= w) {
-        obstacle.x = w - obstacle.w;
-        obstacle.vx = -Math.abs(obstacle.vx);
-      }
-    });
-
-    /* Çarpışma: topun MERKEZİ engelin çizgisini bu karede geçti mi?
-       Yüksek hızda tünelleme olmasın diye konum farkı değil, çizgiyi kesme
-       sınanır (önceki merkez ile şimdiki merkez engelin iki yanındaysa). */
-    const centerY = pos.current.y + BALL / 2;
-    const centerX = pos.current.x + BALL / 2;
-    const goingUp = centerY < prevCenterY.current;
-
-    for (const obstacle of obstacles.current) {
-      const crossed =
-        (prevCenterY.current - obstacle.y) * (centerY - obstacle.y) <= 0 &&
-        Math.abs(centerY - prevCenterY.current) > 0;
-      if (!crossed) continue;
-
-      const left = obstacle.x;
-      const right = obstacle.x + obstacle.w;
-      const reach = BALL * 0.42; // topun yarıçapı kadar tolerans
-
-      if (obstacle.kind === "bar") {
-        if (centerX > left - reach && centerX < right + reach) {
-          prevCenterY.current = centerY;
-          gameOver();
-          return;
-        }
-        continue;
+    /* HALKALAR — süzülür, kenardan döner. Geçiş yalnız YUKARI hareket
+       hâlindeyken ve halka düzlemi bu adımda kesildiğinde sayılır. */
+    const rising = vel.current.y < 0;
+    for (const ring of rings.current) {
+      ring.x += ring.vx * dt;
+      if (ring.x < ring.r) {
+        ring.x = ring.r;
+        ring.vx = Math.abs(ring.vx);
+      } else if (ring.x > w - ring.r) {
+        ring.x = w - ring.r;
+        ring.vx = -Math.abs(ring.vx);
       }
 
-      // Çember: iki dolu halka ucu + ortada açıklık.
-      const gapLeft = left + (obstacle.w - obstacle.gap) / 2;
-      const gapRight = gapLeft + obstacle.gap;
-
-      const hitLeftArc = centerX > left - reach && centerX < gapLeft + reach * 0.4;
-      const hitRightArc = centerX > gapRight - reach * 0.4 && centerX < right + reach;
-
-      if (hitLeftArc || hitRightArc) {
-        prevCenterY.current = centerY;
-        gameOver();
-        return;
-      }
-
-      // Ortadan yukarı geçiş: bonus. Aşağı geçişte puan verilmez ki
-      // top çemberde salınıp puan basmasın.
-      if (centerX >= gapLeft && centerX <= gapRight && goingUp && !obstacle.passed) {
-        obstacle.passed = true;
-        scoreRef.current += HOOP_BONUS;
-        setScore(scoreRef.current);
-        setHoopFlash(Date.now());
-        if (hoopFlashTimer.current) clearTimeout(hoopFlashTimer.current);
-        hoopFlashTimer.current = setTimeout(() => setHoopFlash(0), 700);
-        haptics.success();
-      } else if (centerX >= gapLeft && centerX <= gapRight && !goingUp) {
-        // Aşağı inerken açıklıktan geçti: bir sonraki yukarı geçiş yine sayar.
-        obstacle.passed = false;
+      if (ring.used || !rising) continue;
+      const crossed = prev.current.y > ring.y && pos.current.y <= ring.y;
+      const inside = Math.abs(pos.current.x - ring.x) < ring.r - BALL_R;
+      if (crossed && inside) {
+        ring.used = true;
+        multRef.current += 1;
+        setMultiplier(multRef.current);
+        pulse.current = { x: ring.x, y: ring.y, t: 0 };
+        haptics.light();
       }
     }
 
-    prevCenterY.current = centerY;
-    setTick((t) => t + 1);
+    // Kullanılan halkalar yenileriyle değişir.
+    if (rings.current.some((ring) => ring.used)) {
+      const level = Math.floor(touches.current / 10);
+      rings.current = rings.current.map((ring) => (ring.used ? spawnRing(level) : ring));
+    }
+
+    // Tam isabet darbesi söner.
+    if (pulse.current) {
+      pulse.current.t += dt * 3.4;
+      if (pulse.current.t >= 1) pulse.current = null;
+    }
   };
 
+  /** Kare bütçesi — döngü kurulunca gerçek okuyucuyla değiştirilir. */
+  const budgetRef = useRef<() => number>(() => 1);
+
+  /* İz: her karede değil, render'da biriktirilir — fizik 120Hz, iz 60Hz yeter. */
+  const render = () => {
+    if (phaseRef.current === "playing") {
+      const max = Math.max(2, Math.round(T.trail * budgetRef.current()));
+      trail.current.push({ x: pos.current.x, y: pos.current.y });
+      while (trail.current.length > max) trail.current.shift();
+    }
+    setFrame((n) => (n + 1) % 1_000_000);
+  };
+
+  const loop = useGameLoop({ step, render, running: phase === "playing" });
+  budgetRef.current = loop.budget;
+
+  /* ─────────────────────────── vuruş ─────────────────────────── */
+
   /**
-   * Vuruş. `touchX` verilirse topun neresine değildiğine göre yön hesaplanır.
-   *
-   * Başlangıç ekranındaki "Başla" düğmesi koordinatsız çağırır: o vuruş
-   * merkezden kabul edilir, top dosdoğru yükselir.
+   * Topa vuruş. Briefteki model birebir:
+   *   o    = (touchX - ballX) / ballR, [-1, 1]
+   *   vx  -= o * HIT_X            → sola vurursan sağa gider
+   *   vy   = -LIFT * (1 - .35|o|) → kenardan vurursan az yükselir
+   *   spin = o * SPIN_K           → temas noktası dönüş üretir
    */
   const hit = (touchX?: number, touchY?: number) => {
     if (phaseRef.current === "over") return;
 
     const starting = phaseRef.current === "ready";
     if (starting) {
-      resetBall();
-      scoreRef.current = 0;
-      setScore(0);
-      setSubmit("idle");
+      resetRound();
       setPhaseBoth("playing");
-      if (loop.current) clearInterval(loop.current);
-      loop.current = setInterval(step, TICK_MS);
+      setSubmit("idle");
     }
 
-    const centerX = pos.current.x + BALL / 2;
-    const centerY = pos.current.y + BALL / 2;
+    /* Dokunuş topun uzağındaysa vuruş sayılmaz — ekrana rastgele basmak oyunu
+       oynamaz. Yarıçap cömerttir ama sonsuz değildir.
 
-    /* TOPA DEĞMEDİYSE VURUŞ YOK: oyunun becerisi burada. Boş ekrana basmak
-       topu havada tutmaz; nişan almak gerekir. Başlangıç vuruşu muaftır. */
+       İLK DOKUNUŞ MUAF: turu başlatan dokunuş nereye gelirse gelsin topu
+       havalandırır. Aksi hâlde oyun, oyuncunun daha görmediği bir topun
+       üstüne basmasını bekleyerek başlamadan biterdi. */
     if (!starting && touchX != null && touchY != null) {
-      const dx = touchX - centerX;
-      const dy = touchY - centerY;
-      if (Math.hypot(dx, dy) > HIT_RADIUS) {
-        haptics.light();
-        return;
-      }
+      const dist = Math.hypot(touchX - pos.current.x, touchY - pos.current.y);
+      if (dist > BALL_R * T.hitRadius) return;
     }
 
-    vel.current.y = BOUNCE_VY;
+    const offset =
+      touchX == null ? 0 : clamp((touchX - pos.current.x) / BALL_R, -1, 1);
 
-    // Topun solundan vurursan sağa, sağından vurursan sola gider.
-    if (touchX != null) {
-      const offset = centerX - touchX;
-      const push = Math.max(-MAX_PUSH, Math.min(MAX_PUSH, offset * TOUCH_PUSH));
-      vel.current.x += push;
+    ball.current.vx = vel.current.x;
+    ball.current.vy = vel.current.y;
+    applyHit(ball.current, offset);
+    vel.current.x = ball.current.vx;
+    vel.current.y = ball.current.vy;
+    spin.current = ball.current.spin;
+
+    touches.current += 1;
+
+    /* TATLI NOKTA: merkeze yakın vuruş combo'yu büyütür. Kenar vuruşu combo'yu
+       SIFIRLAMAZ ama çarpanı düşürür — ceza, ilerlemeyi silmek değil
+       yavaşlatmaktır; sıfırlama oyuncuyu risk almaktan tümüyle caydırıyordu. */
+    const perfect = isSweetSpot(offset);
+    if (perfect) {
+      comboRef.current += 1;
+      pulse.current = { x: pos.current.x, y: pos.current.y, t: 0 };
+      haptics.light();
+    } else if (multRef.current > 1) {
+      multRef.current -= 1;
+      setMultiplier(multRef.current);
     }
+    setCombo(comboRef.current);
 
-    scoreRef.current += 1;
+    scoreRef.current += multRef.current + (perfect ? 1 : 0);
     setScore(scoreRef.current);
-    // Puan haptiği; `haptics` kendi içinde 300ms kısar, sekme spam'i titremez.
-    haptics.light();
   };
 
-  /** Tuval dokunuşu — konumu oyuna taşır. */
-  const tap = (event?: GestureResponderEvent) => {
-    const touch = event?.nativeEvent;
-    hit(touch?.locationX, touch?.locationY);
+  const onTouch = (event: GestureResponderEvent) => {
+    hit(event.nativeEvent.locationX, event.nativeEvent.locationY);
   };
-
-  /** Başlangıç düğmesi: konumsuz vuruş. */
-  const startTap = () => hit();
 
   const restart = () => {
     setPhaseBoth("ready");
-    resetBall();
-    scoreRef.current = 0;
-    setScore(0);
     setSubmit("idle");
-    setShareOpen(false);
-    setTick((t) => t + 1);
+    resetRound();
   };
 
-  const gravityLevel = Math.min(2.2, 1 + score * 0.025);
   const isRecord = score > 0 && score >= best;
-
   const openBoard = () => router.push({ pathname: "/siralama", params: { game: "sektir" } });
   const openSignIn = () => router.push("/giris");
 
   const headerActions = useMemo(
     () => [
       {
-        icon: "trophy-outline" as keyof typeof Ionicons.glyphMap,
-        onPress: () => router.push({ pathname: "/siralama", params: { game: "sektir" } }),
+        icon: "trophy-outline" as const,
+        onPress: openBoard,
         accessibilityLabel: "Rekor tablosu",
       },
     ],
-    [router]
+    // openBoard router'a bağlı; router kimliği sabit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
   );
+
+  /* ─────────────────────────── çizim ─────────────────────────── */
+
+  const { w, h } = area.current;
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader
         title="Top Sektir"
         overline={upperTR("Elitlig Arena")}
-        subtitle="Düşürme! Her dokunuş +1"
+        subtitle="Topun neresine vurduğun yönü belirler"
         back
         actions={headerActions}
       />
 
-      {/* — HUD: skor solda (tabular), rekor ve yerçekimi çarpanı sağda — */}
+      {/* — HUD: skor solda, çarpan sağda. Başka hiçbir şey. — */}
       <View style={styles.hud}>
         <View style={styles.hudScoreBox}>
           <Text style={styles.hudLabel} {...textScale.badge}>
-            {upperTR("Sekme")}
+            {upperTR("Skor")}
           </Text>
           <Text style={styles.hudScore} {...textScale.dense}>
             {score}
@@ -492,10 +460,12 @@ export default function SektirScreen() {
               {best}
             </Text>
           </View>
-          <View style={[styles.hudPill, styles.hudPillLive]}>
-            <Ionicons name="flash" size={11} color={colors.live} />
-            <Text style={styles.hudPillLiveText} {...textScale.badge}>
-              {`x${gravityLevel.toFixed(1)}`}
+          <View style={[styles.hudPill, multiplier > 1 && styles.hudPillLive]}>
+            <Text
+              style={[styles.hudPillText, multiplier > 1 && styles.hudPillLiveText]}
+              {...textScale.badge}
+            >
+              {`×${multiplier}`}
             </Text>
           </View>
         </View>
@@ -504,96 +474,93 @@ export default function SektirScreen() {
       {/* Tuval — ham Pressable, gerekçesi dosya başında. */}
       <Pressable
         style={styles.arena}
-        onPress={tap}
+        onPress={onTouch}
         accessibilityRole="button"
-        accessibilityLabel="Topu sektir"
+        accessibilityLabel="Topa vur"
+        accessibilityHint="Topun soluna vurursan sağa, sağına vurursan sola gider"
         onLayout={(e) => {
           area.current = {
             w: e.nativeEvent.layout.width,
             h: e.nativeEvent.layout.height,
           };
           if (phaseRef.current === "ready") {
-            resetBall();
-            setTick((t) => t + 1);
+            resetRound();
+            setFrame((n) => n + 1);
           }
         }}
       >
-        {/* Gökyüzü derinliği — tuval zemini surface1, üstte hafif marka tintı. */}
-        <LinearGradient
-          colors={[withAlpha(colors.brand, 0.14), colors.surface1]}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
-        />
-
-        {/* Çim şeritleri — saha yeşili tokenı, şeritler kazanç yeşiliyle aydınlatılır. */}
-        <View style={styles.ground} pointerEvents="none">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <View key={i} style={[styles.groundStripe, i % 2 === 1 && styles.groundStripeAlt]} />
-          ))}
-          <View style={styles.groundLine} />
-        </View>
-
-        {/* Engeller — bariyerler dolu, çemberin ortası açıktır. */}
-        {obstacles.current.map((obstacle) =>
-          obstacle.kind === "bar" ? (
-            <View
-              key={obstacle.id}
-              pointerEvents="none"
-              style={[
-                styles.bar,
-                {
-                  width: obstacle.w,
-                  transform: [
-                    { translateX: obstacle.x },
-                    { translateY: obstacle.y - OB_BAR_H / 2 },
-                  ],
-                },
-              ]}
+        {w > 0 && h > 0 ? (
+          <Svg width={w} height={h} pointerEvents="none">
+            {/* Çim şeridi — iki tonlu biçme bandı, üstünde tebeşir çizgisi. */}
+            <Rect x={0} y={h - GROUND} width={w} height={GROUND} fill={paint.turf} />
+            {[0, 1, 2, 3].map((i) => (
+              <Rect
+                key={i}
+                x={0}
+                y={h - GROUND + (GROUND / 4) * i}
+                width={w}
+                height={GROUND / 4}
+                fill={i % 2 === 0 ? paint.turfAlt : "transparent"}
+              />
+            ))}
+            <Line
+              x1={0}
+              y1={h - GROUND}
+              x2={w}
+              y2={h - GROUND}
+              stroke={paint.chalkInk}
+              strokeWidth={1.5}
             />
-          ) : (
-            <View
-              key={obstacle.id}
-              pointerEvents="none"
-              style={[
-                styles.hoopRow,
-                {
-                  width: obstacle.w,
-                  transform: [
-                    { translateX: obstacle.x },
-                    { translateY: obstacle.y - OB_HOOP_H / 2 },
-                  ],
-                },
-              ]}
-            >
-              <View style={[styles.hoopArc, { width: (obstacle.w - obstacle.gap) / 2 }]} />
-              <View style={[styles.hoopGap, { width: obstacle.gap }]} />
-              <View style={[styles.hoopArc, { width: (obstacle.w - obstacle.gap) / 2 }]} />
-            </View>
-          )
-        )}
 
-        {/* Çemberden geçiş parıltısı */}
-        {hoopFlash ? (
-          <View pointerEvents="none" style={styles.hoopFlash}>
-            <Text style={styles.hoopFlashText} allowFontScaling={false}>
-              {`+${HOOP_BONUS}`}
-            </Text>
-          </View>
+            {/* Halkalar — yataydan hafif eğik elipsler. */}
+            {rings.current.map((ring) => (
+              <Ellipse
+                key={ring.id}
+                cx={ring.x}
+                cy={ring.y}
+                rx={ring.r}
+                ry={ring.r * 0.32}
+                stroke={paint.action}
+                strokeWidth={2}
+                fill="none"
+                opacity={0.7}
+                transform={`rotate(-8 ${ring.x} ${ring.y})`}
+              />
+            ))}
+
+            {/* Topun izi — hız arttıkça belirginleşir. */}
+            {trail.current.map((point, i) => (
+              <Circle
+                key={i}
+                cx={point.x}
+                cy={point.y}
+                r={BALL_R * (0.35 + (i / trail.current.length) * 0.45)}
+                fill={paint.action}
+                opacity={0.05 + (i / trail.current.length) * 0.1}
+              />
+            ))}
+
+            {/* Gölge: yükseklikle küçülür ve açılır. */}
+            <BallShadow x={pos.current.x} y={pos.current.y} groundY={h - GROUND} />
+
+            {/* Tam isabet / halka darbesi */}
+            {pulse.current ? (
+              <Circle
+                cx={pulse.current.x}
+                cy={pulse.current.y}
+                r={BALL_R + pulse.current.t * 46}
+                stroke={paint.action}
+                strokeWidth={2}
+                fill="none"
+                opacity={1 - pulse.current.t}
+              />
+            ) : null}
+
+            <Ball x={pos.current.x} y={pos.current.y} angle={spinAngle.current} />
+          </Svg>
         ) : null}
 
-        {/* Top */}
-        <Text
-          style={[
-            styles.ball,
-            { transform: [{ translateX: pos.current.x }, { translateY: pos.current.y }] },
-          ]}
-        >
-          ⚽
-        </Text>
-
-        {phase === "ready" ? <StartOverlay best={best} onStart={startTap} /> : null}
+        {phase === "ready" ? <StartOverlay best={best} onStart={() => hit()} /> : null}
 
         {phase === "over" ? (
           <ResultOverlay
@@ -621,6 +588,82 @@ export default function SektirScreen() {
   );
 }
 
+/* ============================== TOP VE GÖLGE ============================== */
+
+/**
+ * Top — daire + beşgen panel. Panel çizgileri `angle` kadar DÖNER; yalnız
+ * kayan bir daire "dönüyor" okunmuyordu ve Magnus etkisinin ne yaptığı
+ * görünmüyordu. Dönüş yönü kavisi doğruluyor: oyuncu neden kıvrıldığını görür.
+ */
+const Ball = memo(function Ball({ x, y, angle }: { x: number; y: number; angle: number }) {
+  const deg = (angle * 180) / Math.PI;
+  return (
+    <G transform={`rotate(${deg.toFixed(1)} ${x.toFixed(1)} ${y.toFixed(1)})`}>
+      <Circle cx={x} cy={y} r={BALL_R} fill={paint.surface} stroke={paint.ink} strokeWidth={1.5} />
+      {/* Merkez beşgen + üç dikiş: dönüşü okutan en az sayıda çizgi. */}
+      <Path
+        d={pentagon(x, y, BALL_R * 0.42)}
+        fill={paint.ink}
+        opacity={0.9}
+      />
+      {[0, 1, 2, 3, 4].map((i) => {
+        const a = (Math.PI * 2 * i) / 5 - Math.PI / 2;
+        const inner = BALL_R * 0.42;
+        return (
+          <Line
+            key={i}
+            x1={x + Math.cos(a) * inner}
+            y1={y + Math.sin(a) * inner}
+            x2={x + Math.cos(a) * BALL_R}
+            y2={y + Math.sin(a) * BALL_R}
+            stroke={paint.ink}
+            strokeWidth={1.5}
+            opacity={0.55}
+          />
+        );
+      })}
+    </G>
+  );
+});
+
+/** Beşgen yolu — topun merkez paneli. */
+function pentagon(cx: number, cy: number, r: number): string {
+  return (
+    Array.from({ length: 5 }, (_, i) => {
+      const a = (Math.PI * 2 * i) / 5 - Math.PI / 2;
+      return `${i === 0 ? "M" : "L"} ${(cx + Math.cos(a) * r).toFixed(1)} ${(cy + Math.sin(a) * r).toFixed(1)}`;
+    }).join(" ") + " Z"
+  );
+}
+
+/**
+ * Topun gölgesi — çim üstünde bir elips. Top yükseldikçe gölge KÜÇÜLÜR ve
+ * AÇILIR; alçaldıkça büyür ve koyulaşır. Derinlik hissini veren tek öğe budur
+ * ve iki satır matematiktir.
+ */
+const BallShadow = memo(function BallShadow({
+  x,
+  y,
+  groundY,
+}: {
+  x: number;
+  y: number;
+  groundY: number;
+}) {
+  const height = clamp((groundY - y) / Math.max(1, groundY), 0, 1);
+  const scale = 1 - height * 0.55;
+  return (
+    <Ellipse
+      cx={x}
+      cy={groundY + 6}
+      rx={BALL_R * scale}
+      ry={BALL_R * 0.3 * scale}
+      fill={paint.shadow}
+      opacity={0.25 + (1 - height) * 0.4}
+    />
+  );
+});
+
 /* ============================== GİRİŞ KARTI ============================== */
 
 /**
@@ -642,9 +685,9 @@ function StartOverlay({ best, onStart }: { best: number; onStart: () => void }) 
           Top Sektir
         </Text>
         <Text style={styles.startRule} {...textScale.long}>
-          Topa dokunarak havada tut. Solundan vurursan sağa, sağından vurursan sola gider —
-          boşa vurursan sekme olmaz. 5. sekmeden sonra kırmızı bariyerler çıkar (değme!),
-          12'den sonra sarı çemberin ortasından geçersen +3 puan.
+          Topun neresine vurduğun yönü belirler: soluna vurursan sağa, sağına vurursan sola
+          gider. Ortadan vuruş tam isabettir. Halkalardan YUKARI geçmek puan çarpanını
+          büyütür. Top çime değerse tur biter.
         </Text>
 
         <View style={styles.startBest}>
@@ -951,76 +994,8 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     overflow: "hidden",
   },
-  ground: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: GROUND,
-    flexDirection: "row",
-    backgroundColor: colors.pitchGreen,
-  },
-  groundStripe: { flex: 1 },
-  groundStripeAlt: {
-    backgroundColor: withAlpha(colors.win, 0.12),
-  },
-  groundLine: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 3,
-    backgroundColor: withAlpha(colors.win, 0.45),
-  },
-  bar: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    height: OB_BAR_H,
-    borderRadius: OB_BAR_H / 2,
-    backgroundColor: colors.danger,
-    // Bariyer "değme = biter" anlamı taşır; kenarlık onu zeminden ayırır.
-    borderWidth: 1,
-    borderColor: withAlpha(colors.danger, 0.55),
-  },
-  hoopRow: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    height: OB_HOOP_H,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  hoopArc: {
-    height: OB_HOOP_H,
-    borderRadius: OB_HOOP_H / 2,
-    backgroundColor: colors.warn,
-  },
-  /* Açıklık görünür olmalı: oyuncu nereden geçeceğini seçebilsin. */
-  hoopGap: {
-    height: 2,
-    alignSelf: "center",
-    backgroundColor: withAlpha(colors.warn, 0.35),
-  },
-  hoopFlash: {
-    position: "absolute",
-    top: "18%",
-    alignSelf: "center",
-    paddingHorizontal: space.md,
-    paddingVertical: space.xs,
-    borderRadius: radius.pill,
-    backgroundColor: withAlpha(colors.win, 0.9),
-  },
-  hoopFlashText: { ...type.h3, color: colors.textOnStatus },
-  ball: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    fontSize: BALL - 8,
-    width: BALL,
-    height: BALL,
-    textAlign: "center",
-  },
+  /* Engel, top ve çim artık SVG olarak çiziliyor (bkz. dosya başı);
+     bu stiller kaldırıldı. Tuvalin kendisi sade bir yüzey. */
 
   /* — Giriş kartı — */
   overlay: {

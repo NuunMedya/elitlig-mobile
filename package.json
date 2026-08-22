@@ -8,7 +8,9 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "check:tokens": "node --experimental-strip-types --no-warnings scripts/check-tokens.mjs"
+    "check:tokens": "node --experimental-strip-types --no-warnings scripts/check-tokens.mjs",
+    "check:games": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/check-games.mjs",
+    "check": "npm run check:tokens && npm run check:games && npm run typecheck"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
