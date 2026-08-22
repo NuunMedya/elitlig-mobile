@@ -58,7 +58,7 @@ export const TeamLogo = memo(function TeamLogo({
 
   // Yedek metin `micro` ağırlık/harf aralığını korur; yalnız punto ambleme göre
   // ölçeklenir — 56px'lik hero ambleminde 10px baş harf okunmuyor.
-  const initialsSize = useMemo(() => ({ fontSize: Math.max(9, Math.round(size * 0.36)) }), [size]);
+  const initialsSize = useMemo(() => ({ fontSize: Math.max(11, Math.round(size * 0.38)) }), [size]);
 
   const uri = failed || loading ? null : mediaUrl(logo);
 

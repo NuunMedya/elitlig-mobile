@@ -68,7 +68,7 @@ export const Avatar = memo(function Avatar({
         : { width: size + 8, height: size + 8, padding: 2, borderRadius: corner + 2 },
     [size, ring, corner],
   );
-  const initialsSize = useMemo(() => ({ fontSize: Math.max(9, Math.round(size * 0.36)) }), [size]);
+  const initialsSize = useMemo(() => ({ fontSize: Math.max(11, Math.round(size * 0.38)) }), [size]);
 
   return (
     <View
@@ -133,10 +133,10 @@ const styles = StyleSheet.create({
   },
   jersey: {
     position: "absolute",
-    top: -2,
-    left: -2,
-    width: 16,
-    height: 16,
+    top: -3,
+    left: -3,
+    width: 20,
+    height: 20,
     borderRadius: radius.pill,
     backgroundColor: colors.surface3,
     borderWidth: StyleSheet.hairlineWidth,
@@ -158,8 +158,8 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: 0,
     bottom: 0,
-    width: 10,
-    height: 10,
+    width: 12,
+    height: 12,
     borderRadius: radius.pill,
     borderWidth: 2,
     borderColor: colors.surface1,
