@@ -170,7 +170,7 @@ export const ListRow = React.memo(function ListRow({
         />
       ) : null}
       {showChevron ? (
-        <Ionicons name="chevron-forward" size={16} color={colors.textDisabled} />
+        <Ionicons name="chevron-forward" size={14} color={colors.textDisabled} />
       ) : null}
 
       {showDivider ? (
@@ -259,8 +259,8 @@ const styles = StyleSheet.create({
     borderLeftColor: colors.brand,
   },
   leading: {
-    width: 24,
-    height: 24,
+    width: 20,
+    height: 20,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -273,8 +273,8 @@ const styles = StyleSheet.create({
    * hizası aynı kalır, daha genişleri kendi yerini alır.
    */
   leadingNode: {
-    minWidth: 24,
-    minHeight: 24,
+    minWidth: 20,
+    minHeight: 20,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -310,8 +310,8 @@ const styles = StyleSheet.create({
     height: hairline,
     backgroundColor: colors.separator,
   },
-  /** Amblem/ikon sütununu atlayan ayraç: 12 + 24 + 8 = 44. */
+  /** Amblem/ikon sütununu atlayan ayraç: 12 + 20 + 8 = 40. */
   dividerInsetAvatar: {
-    left: layout.rowPaddingH + 24 + space.sm,
+    left: layout.rowPaddingH + 20 + space.sm,
   },
 });

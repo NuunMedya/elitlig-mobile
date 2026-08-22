@@ -46,7 +46,7 @@ import { getPlayerRankings } from "@/lib/api/players";
 import { queryKeys } from "@/lib/queryKeys";
 import type { PlayerRankRow, PlayerSort } from "@/lib/types";
 import { useScope } from "@/providers/ScopeProvider";
-import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
+import { colors, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
 
 /** Sunucu sayıları kimi uçlarda string döndürüyor; tek dönüştürücüden geçer. */
 const num = (value: number | string | null | undefined) => Number(value ?? 0) || 0;
@@ -108,7 +108,13 @@ const PlayerRow = React.memo(function PlayerRow({
   const handlePress = useCallback(() => onPress(playerId), [onPress, playerId]);
 
   return (
-    <Touchable style={styles.row} onPress={handlePress} feedback="row" haptic="selection">
+    <Touchable
+      style={styles.row}
+      onPress={handlePress}
+      feedback="row"
+      haptic="selection"
+      accessibilityLabel={`${rank}. ${name}, ${metric} ${unit}`}
+    >
       <Text style={styles.rank} {...textScale.dense}>
         {rank}
       </Text>
@@ -136,15 +142,34 @@ const PlayerRow = React.memo(function PlayerRow({
         </Text>
       </View>
 
+      {/* BİRİM SATIRDA DEĞİL, SÜTUN BAŞLIĞINDA: "gol" yirmi satırda yirmi kez
+          yazılınca sağ sütun gri bir gürültü şeridine dönüyordu. Birim bir kez
+          RankHead'de söylenir, satırın erişilebilirlik etiketi taşır. */}
       <View style={styles.metricBox}>
         <Text style={styles.metricValue} {...textScale.dense}>
           {metric}
         </Text>
-        <Text style={styles.metricUnit} {...textScale.badge}>
-          {unit}
-        </Text>
       </View>
     </Touchable>
+  );
+});
+
+/**
+ * Sıralama sütun başlığı — "OYUNCU … <BİRİM>".
+ *
+ * Sağdaki genişlik `metricBox.minWidth` ile BİREBİR aynı olmak zorunda;
+ * aksi hâlde başlık altındaki rakamların üstüne oturmaz.
+ */
+const RankHead = React.memo(function RankHead({ unit }: { unit: string }) {
+  return (
+    <View style={styles.rankHead}>
+      <Text style={styles.headLabel} {...textScale.badge}>
+        {upperTR("Oyuncu")}
+      </Text>
+      <Text style={[styles.headLabel, styles.rankHeadMetric]} {...textScale.badge}>
+        {upperTR(unit)}
+      </Text>
+    </View>
   );
 });
 
@@ -175,12 +200,18 @@ const Podium = React.memo(function Podium({
           accessibilityRole="button"
           accessibilityLabel={`${index + 1}. ${player.name}, ${metricOf(player)} ${unit}`}
         >
-          <View style={[styles.podiumRing, { borderColor: MEDAL[index] }]}>
-            <Avatar name={player.name} image={player.image ?? null} size={44} />
+          {/* Sıra rakamı halkanın altına oturur: madalya rengi zaten sırayı
+              söylüyor, ayrı bir satır olarak durunca kart bir satır uzuyordu. */}
+          <View style={styles.podiumAvatar}>
+            <View style={[styles.podiumRing, { borderColor: MEDAL[index] }]}>
+              <Avatar name={player.name} image={player.image ?? null} size={40} />
+            </View>
+            <View style={[styles.podiumRankBadge, { backgroundColor: MEDAL[index] }]}>
+              <Text style={styles.podiumRankText} {...textScale.badge}>
+                {index + 1}
+              </Text>
+            </View>
           </View>
-          <Text style={[styles.podiumRank, { color: MEDAL[index] }]} {...textScale.badge}>
-            {index + 1}.
-          </Text>
           <Text style={styles.podiumName} numberOfLines={1} {...textScale.dense}>
             {player.name}
           </Text>
@@ -362,6 +393,8 @@ export default function PlayersScreen() {
                   onPress={openPlayer}
                 />
               ) : null}
+
+              {rows.length > 0 ? <RankHead unit={active.unit} /> : null}
             </View>
           }
           ListEmptyComponent={
@@ -411,19 +444,21 @@ const styles = StyleSheet.create({
   },
   listHeader: {
     gap: space.sm,
-    paddingBottom: space.sm,
   },
   searchBox: {
     paddingHorizontal: layout.screenPadding,
   },
 
   /* — Satır — */
+  /* Sıralama listesi TAM GENİŞLİKTE tek bir yüzeydir (bkz. takimlar.tsx).
+     Zemin açıkça verilir: kâğıt lavantadır, zeminsiz satırlar boşlukta durur. */
   row: {
     height: ROW_HEIGHT,
     flexDirection: "row",
     alignItems: "center",
     gap: space.m,
     paddingHorizontal: layout.screenPadding,
+    backgroundColor: colors.surface1,
     borderBottomWidth: hairline,
     borderBottomColor: colors.separator,
   },
@@ -453,9 +488,23 @@ const styles = StyleSheet.create({
     ...type.metricSm,
     color: colors.accentText,
   },
-  metricUnit: {
+  rankHead: {
+    height: 24,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: layout.screenPadding,
+    backgroundColor: colors.surface3,
+    borderBottomWidth: hairline,
+    borderBottomColor: colors.border,
+  },
+  headLabel: {
     ...type.overline,
-    color: colors.textDisabled,
+    color: colors.textTertiary,
+  },
+  rankHeadMetric: {
+    minWidth: 42,
+    textAlign: "right",
   },
 
   /* — Podyum — */
@@ -475,13 +524,30 @@ const styles = StyleSheet.create({
     borderWidth: hairline,
     borderColor: colors.border,
   },
+  podiumAvatar: {
+    paddingBottom: 5,
+  },
   podiumRing: {
     padding: 2,
     borderRadius: radius.pill,
     borderWidth: 1.5,
   },
-  podiumRank: {
-    ...type.overline,
+  podiumRankBadge: {
+    position: "absolute",
+    bottom: 0,
+    alignSelf: "center",
+    minWidth: 14,
+    height: 14,
+    paddingHorizontal: 3,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1.5,
+    borderColor: colors.surface1,
+  },
+  podiumRankText: {
+    ...type.micro,
+    color: colors.textOnStatus,
   },
   podiumName: {
     ...type.caption,

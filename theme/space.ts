@@ -46,8 +46,12 @@ export const spacing = {
 /**
  * Yerleşim sabitleri — ekran ve satır ölçüleri tek yerde toplanır.
  *
- * ÇOK KOMPAKT RİTİM. 13px gövdeyle tek satır 40, iki satır 50, maç satırı 40
- * piksele oturur.
+ * ÇOK KOMPAKT RİTİM AMA FERAH. 11px gövdeyle tek satır 38, iki satır 46, maç
+ * satırı 38 piksele oturur — yani satır yükseklikleri puntoyla birlikte inmez,
+ * ORANI KORUR. Metin küçülürken kenar boşluğu (14 → 16) ve bölüm arası
+ * (12 → 18) BÜYÜDÜ: küçük metin, geniş beyaz alanın içinde pahalı görünür;
+ * sıkışık alanda ucuz. "Minimal" olan şey punto değil, boşluk/mürekkep
+ * oranıdır.
  *
  * MAÇ SATIRI TEK SATIRDIR: `logo · ev takım · SKOR · dep takım · logo`. Önceki
  * iki satırlı düzen (ev üstte, deplasman altta) satır başına 56px istiyordu;
@@ -61,52 +65,61 @@ export const spacing = {
  * düğmeleri (yıldız, geri) `touchSlop` ile 44px'e tamamlanmaya devam eder.
  */
 export const layout = {
-  /* YATAY KENAR 14px. */
-  screenPadding: 14,
+  /* YATAY KENAR 16px. Punto küçülürken kenar boşluğu BÜYÜDÜ: ferahlığı veren
+     şey puntonun kendisi değil, punto ile boşluk arasındaki orandır. */
+  screenPadding: 16,
   /** Yoğun tablo düzenleri (puan durumu, istatistik ızgarası) için dar kenar. */
-  screenPaddingDense: 10,
-  rowPaddingH: 10,
+  screenPaddingDense: 12,
+  rowPaddingH: 12,
   rowGap: 6,
-  sectionGap: 12,
-  listRowHeight: 40,        // tek satırlı ListRow
-  listRowHeightTwoLine: 50, // iki satırlı ListRow
-  /** Maç satırı ARTIK TEK SATIRDIR: logo · ev · skor · dep · logo. */
-  matchRowHeight: 40,
-  matchRowHeightCompact: 34,
-  headerHeightExpanded: 80,
-  headerHeightCollapsed: 44,
-  tabBarHeight: 58,        // + insets.bottom — 20px ikon + 12px etiket + iç boşluk
-  tabStripHeight: 36,
-  dateStripHeight: 48,
+  /** Bölümler arası nefes — ölçek inerken bu değer AÇILDI (12 → 18). */
+  sectionGap: 18,
+  listRowHeight: 38,        // tek satırlı ListRow
+  listRowHeightTwoLine: 46, // iki satırlı ListRow
+  /** Maç satırı TEK SATIRDIR: logo · ev · skor · dep · logo. */
+  matchRowHeight: 38,
+  matchRowHeightCompact: 32,
+  headerHeightExpanded: 72,
+  headerHeightCollapsed: 42,
+  tabBarHeight: 56,        // + insets.bottom — 6+19 ikon +2+13 etiket +4 = 44px içerik, 12px pay
+  tabStripHeight: 34,
+  dateStripHeight: 44,
   minTouch: 44,            // erişilebilirlik alt sınırı (hitSlop ile tamamlanır)
-  crestSm: 18,
-  crestMd: 22,
-  crestLg: 28,
-  crestXl: 46,
-  starColumnWidth: 24,
-  timeColumnWidth: 38,
-  scoreColumnWidth: 46,    // "12 – 10" tek blokta ortalanır
+  crestSm: 16,
+  crestMd: 20,
+  crestLg: 24,
+  crestXl: 40,
+  /* YILDIZ ve SAAT SÜTUNU AYNI GENİŞLİKTE OLMAK ZORUNDA.
+     Maç satırı [saat][ev yanı][skor][deplasman yanı][yıldız] dizilir ve iki
+     yan eşit `flex` alır. Kenar sütunları eşit değilse skor bloğu satırın
+     geometrik merkezinden farkın yarısı kadar kayar — 22/36'da 7px sağa.
+     Bir listede yirmi satır boyunca aynı 7px kayma, "okuma ekseni" diye bir
+     şeyin kalmaması demektir. Yıldız sütun içinde sağa yaslı durduğu için
+     genişlemesi yıldızın yerini değiştirmez, yalnız ekseni düzeltir. */
+  starColumnWidth: 36,
+  timeColumnWidth: 36,
+  scoreColumnWidth: 42,    // "12–10" tek blokta ortalanır
 } as const;
 
 /**
  * Köşe yarıçapları.
  *
  * KURAL: iç eleman DAİMA dış elemandan küçük yarıçaplıdır. Karışık yarıçap
- * (13px kartın içinde 13px kutu) kenarları paralel göstermez ve amatör durur.
- * Kart 13, kart içindeki her şey 9, chip/rozet pill, avatar dairesel.
+ * (12px kartın içinde 12px kutu) kenarları paralel göstermez ve amatör durur.
+ * Kart 12, kart içindeki her şey 8, chip/rozet pill, avatar dairesel.
  *
- * Yarıçaplar kart ölçüleriyle birlikte küçüldü: 40px'lik bir satırın üstünde
- * 14px köşe hâlâ şişkin duruyordu. 13/9 ikilisi ışıklı gradyan yüzeyi
- * yumuşatırken kompakt düzende dik kalır.
+ * Yarıçap ölçekle birlikte indi: 38px'lik bir satırın üstünde 13px köşe,
+ * yüksekliğin üçte birini yuvarlıyor ve satırı hap gibi gösteriyordu. 12/8
+ * ikilisi yüzeyi yumuşatırken dikdörtgen kimliğini korur.
  */
 export const radius = {
   none: 0,
   xs:   4,   // form çipi, mikro rozet
   sm:   6,   // amblem kutusu
-  md:   9,   // KART İÇİ ELEMAN: input, chip zemini, satır grubu, bar
-  lg:  13,   // KART
-  xl:  16,   // bottom sheet, hero kartı
-  xxl: 20,   // tam genişlik vitrin kartı
+  md:   8,   // KART İÇİ ELEMAN: input, chip zemini, satır grubu, bar
+  lg:  12,   // KART
+  xl:  14,   // bottom sheet, hero kartı
+  xxl: 18,   // tam genişlik vitrin kartı
   pill: 999,
 } as const;
 

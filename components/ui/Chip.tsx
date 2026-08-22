@@ -26,6 +26,7 @@ import {
 } from "react-native";
 import { colors, hairline, layout, radius, space, textScale, touchSlop, type } from "@/theme";
 import { toneColors, withAlpha, type Tone } from "./Badge";
+import { GradientFill } from "./GradientFill";
 import { Touchable } from "./Pressable";
 
 export interface ChipProps {
@@ -59,9 +60,13 @@ export const Chip = React.memo(function Chip({
   style,
   testID,
 }: ChipProps) {
-  const height = size === "sm" ? 26 : 32;
+  const height = size === "sm" ? 24 : 28;
 
-  const { boxStyle, fg } = useMemo(() => {
+  const { boxStyle, fg, fill } = useMemo<{
+    boxStyle: ViewStyle;
+    fg: string;
+    fill?: boolean;
+  }>(() => {
     if (disabled) {
       return {
         boxStyle: { backgroundColor: colors.surface2, borderColor: colors.border } as ViewStyle,
@@ -74,19 +79,21 @@ export const Chip = React.memo(function Chip({
         fg: colors.textSecondary,
       };
     }
-    /* SEÇİLİ FİLTRE MERCAN DEĞİL KOYU BLOKTUR.
-       Mercan AKSİYON rengidir: dokununca bir şey OLAN öğeler için. Bir filtre
-       chip'i ise bir DURUM bildirir. Seçili her filtreyi mercanla doldurmak,
-       bir lig şeridinde mercanı ekranın onda birine yayıyor ve gerçek aksiyon
-       (birincil buton) kalabalıkta kayboluyordu. Koyu blok seçimi en yüksek
-       kontrastla söyler ve mercanı asıl işine bırakır.
+    /* SEÇİLİ FİLTRE MOR GEÇİŞLİ DOLGUDUR.
+       Burada `inverse` (neredeyse siyah blok) kullanılıyordu; marka rengi
+       mercanken bu doğruydu, çünkü mercan AKSİYON rengiydi ve bir filtre bir
+       DURUM bildirir. Tema mora döndükten sonra siyah blok, mor bir şeridin
+       ortasında temaya ait olmayan bir leke gibi duruyor. Mor artık zaten
+       yüzey rengi; seçili chip'i markanın kendi geçişiyle doldurmak seçimi
+       en yüksek kontrastla söyler ve şeridi tek bir renk ailesinde tutar.
 
        Anlamlı tonlar (canlı, kazanç, uyarı…) sönük dolgu + kendi renginde
        metin alır — orada anlam RENKTEN okunur. */
     if (tone === "brand" || tone === "neutral") {
       return {
-        boxStyle: { backgroundColor: colors.inverse, borderColor: "transparent" } as ViewStyle,
-        fg: colors.onInverse,
+        boxStyle: { borderColor: "transparent", overflow: "hidden" } as ViewStyle,
+        fg: colors.textOnBrand,
+        fill: true,
       };
     }
     const t = toneColors(tone);
@@ -114,6 +121,8 @@ export const Chip = React.memo(function Chip({
         style,
       ]}
     >
+      {fill ? <GradientFill tone="brand" radius="pill" /> : null}
+
       {icon ? <Ionicons name={icon} size={size === "sm" ? 12 : 14} color={fg} /> : null}
 
       <Text

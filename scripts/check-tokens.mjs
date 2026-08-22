@@ -113,10 +113,11 @@ const PAIRS = (p) => [
  * Eski kural "hiçbir token 16px'i geçmesin" idi ve ürünü hiyerarşisiz bir gri
  * duvara çevirdi (bkz. theme/typography.ts başlığı). Yerine ölçülebilir üç
  * gerçek kural konur:
- *   1. OKUNABİLİRLİK TABANI — hiçbir token 10px'in altına inmez; gövde ve
- *      ikincil metin sırasıyla 13 ve 11'in altına inmez. 9px'e YALNIZ
+ *   1. OKUNABİLİRLİK TABANI — hiçbir token 9px'in altına inmez; gövde ve
+ *      ikincil metin sırasıyla 11 ve 10'un altına inmez. 8px'e YALNIZ
  *      büyük-harf rozet/etiket tokenları (`micro`, `overline`) inebilir:
- *      büyük harf, o puntoda okunurluğu ayakta tutan şeydir.
+ *      büyük harf, o puntoda okunurluğu ayakta tutan şeydir. Daha aşağısı
+ *      Türkçe için çalışmaz — ğ/ş kancası ve İ noktası kayboluyor.
  *   2. TAVAN — metin 28px'i, skor 48px'i geçmez (telefonda taşar).
  *   3. HİYERARŞİ MONOTON — h1 > h2 > h3 > body olmalı; iki komşu basamak
  *      eşitse hiyerarşi değil bulanıklık üretilmiş demektir.
@@ -125,10 +126,10 @@ const PAIRS = (p) => [
  */
 const TEXT_MAX = 28;
 const SCORE_MAX = 48;
-const ABSOLUTE_MIN = 10;
+const ABSOLUTE_MIN = 9;
 /** 10px'e inmesine izin verilen tokenlar — daima büyük harf kullanılırlar. */
 const UPPERCASE_TOKENS = new Set(["micro", "overline"]);
-const UPPERCASE_MIN = 9;
+const UPPERCASE_MIN = 8;
 /** Skor/metrik ailesi: metin tavanı bunlara uygulanmaz. */
 const NUMERIC_TOKENS = new Set([
   "scoreHero", "scoreLg", "scoreMd", "scoreSm", "metric", "metricSm",
@@ -139,7 +140,7 @@ const NUMERIC_TOKENS = new Set([
  */
 const HIERARCHY = ["display", "h1", "h2", "h3", "body", "bodySm", "caption", "micro"];
 /** Belirli tokenların taban değerleri — arayüzün okunurluğu bunlara bağlı. */
-const MIN_SIZE = { body: 13, bodySm: 11, bodyLg: 13, label: 12, caption: 10 };
+const MIN_SIZE = { body: 11, bodySm: 10, bodyLg: 11, label: 11, caption: 9 };
 
 /** Çıplak hex'e izin verilen dosyalar ve gerekçeleri. */
 const HEX_ALLOWED = {
@@ -271,6 +272,55 @@ for (const hit of grep("<LinearGradient", "app components")) {
     const bad = literals.filter((lit) => lit !== '"transparent"');
     if (bad.length) {
       note(`gradient · ${file}: durak dize sabiti ${bad.join(", ")} — tema tokenı kullan`);
+    }
+  }
+}
+
+/*
+ * Gradyan EKSENİ — YATAY ve SAĞDAN SOLA.
+ *
+ * Köşegen ışık (0,0 → 1,1) ve dikey geçiş, dikdörtgen bir yüzeyi silindire
+ * çevirir: kart "boru" gibi görünür. Ayrıca aynı ekranda iki farklı eksen
+ * varsa göz iki ayrı ışık kaynağı okur ve yüzeyler birbirine ait görünmez.
+ *
+ * KURAL YALNIZ YÜZEY GRADYANLARINA BAKAR: `colors={colors.gradient*}` ile
+ * boyanan kart/blok/dolgu yüzeyleri. Gradyanın başka meşru işleri de var ve
+ * onların ekseni işlerinden gelir, bu kuraldan değil:
+ *   · okunabilirlik scrim'i (manşet görselinin üstü) → DİKEY olmak zorunda
+ *   · kaydırma kenarı maskesi (tarih şeridi) → kaydırma yönünde olmak zorunda
+ *   · iskelet parıltısı → süpürme yönünde
+ * Bunlar `colors.gradient*` kullanmadığı için kuralın dışında kalır; muafiyet
+ * listesi tutmaya gerek yok.
+ *
+ * Muafiyet gereken tek yüzey SAHA: `gradientPitch` dikey uygulanır, çünkü
+ * oradaki geçiş ışık değil DERİNLİKtir (uzak kale ucu açık, yakın uç koyu).
+ */
+const PITCH_SURFACE = /colors\.gradientPitch/;
+const POINT = /const\s+(\w+)\s*=\s*\{\s*x:\s*([\d.]+),\s*y:\s*([\d.]+)\s*\}/g;
+const SURFACE_GRADIENT =
+  /<LinearGradient\b[^>]*?colors=\{(colors\.gradient\w+)\}[^>]*?start=\{(\w+)\}[^>]*?end=\{(\w+)\}/gs;
+
+for (const file of new Set(grep("<LinearGradient", "app components").map((h) => h.split(":")[0]))) {
+  const src = readFileSync(file, "utf8");
+  const points = new Map();
+  for (const m of src.matchAll(POINT)) points.set(m[1], { x: Number(m[2]), y: Number(m[3]) });
+
+  for (const use of src.matchAll(SURFACE_GRADIENT)) {
+    const [, token, startName, endName] = use;
+    if (PITCH_SURFACE.test(token)) continue; // saha: dikey geçiş derinliktir
+    const start = points.get(startName);
+    const end = points.get(endName);
+    if (!start || !end) continue; // satır içi nokta — ayrı kural yok, atla
+    if (start.y !== 0.5 || end.y !== 0.5) {
+      note(
+        `gradient ekseni · ${file}: ${token} dikey/köşegen ` +
+          `(y ${start.y}→${end.y}) — yüzey gradyanı yatay olmalı`,
+      );
+    } else if (!(start.x > end.x)) {
+      note(
+        `gradient ekseni · ${file}: ${token} soldan sağa ` +
+          `(x ${start.x}→${end.x}) — sağdan sola olmalı`,
+      );
     }
   }
 }

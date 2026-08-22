@@ -651,6 +651,7 @@ export default function OverviewScreen() {
             actionLabel="Tümü"
             onAction={() => go("/canli")}
           >
+            <View style={styles.rowGroup}>
             {liveMatches.slice(0, PREVIEW_LIMIT).map((match, index, list) => (
               <MatchRow
                 key={match.id}
@@ -672,6 +673,7 @@ export default function OverviewScreen() {
                 onPress={() => openMatch(match.id)}
               />
             ))}
+            </View>
           </Block>
         ) : null}
 
@@ -683,15 +685,16 @@ export default function OverviewScreen() {
           onAction={() => go("/(tabs)/maclar")}
         >
           {scopeBusy ? (
-            <>
+            <View style={styles.rowGroup}>
               <SkeletonMatchRow />
               <SkeletonMatchRow />
               <SkeletonMatchRow />
-            </>
+            </View>
           ) : matchesQuery.isError ? (
             <ErrorState error={matchesQuery.error} variant="banner" />
           ) : previewMatches.length ? (
-            previewMatches.slice(0, PREVIEW_LIMIT).map((match, index, list) => (
+            <View style={styles.rowGroup}>
+            {previewMatches.slice(0, PREVIEW_LIMIT).map((match, index, list) => (
               <MatchRow
                 key={match.id}
                 match={match}
@@ -711,7 +714,8 @@ export default function OverviewScreen() {
                 }
                 onPress={() => openMatch(match.id)}
               />
-            ))
+            ))}
+            </View>
           ) : (
             <EmptyState
               icon="calendar-outline"
@@ -809,6 +813,20 @@ const styles = StyleSheet.create({
   },
 
   /* — Mini puan tablosu — */
+  /*
+   * GRUP KABI — ekrandaki HER liste aynı kenar boşluğunda başlar.
+   *
+   * Maç satırları daha önce kapsız duruyordu: bölüm başlığı 16px içeriden
+   * başlıyor, altındaki satırlar ekranın iki ucuna kadar uzanıyordu. Mini puan
+   * tablosu ise kaplıydı. Aynı ekranda iki farklı hizanın olması listenin
+   * "dağınık" okunmasının asıl sebebiydi. Tek kap, tek hiza.
+   */
+  rowGroup: {
+    marginHorizontal: layout.screenPadding,
+    borderRadius: radius.lg,
+    overflow: "hidden",
+    ...elevate(1),
+  },
   miniTable: {
     marginHorizontal: layout.screenPadding,
     borderRadius: radius.lg,

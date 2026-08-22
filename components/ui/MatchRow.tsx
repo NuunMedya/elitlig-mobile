@@ -3,7 +3,7 @@
  *
  * DÜZEN — TEK SATIR, SİMETRİK:
  *
- *   ┌ 38 ┬────── flex ──────┬ 46 ┬────── flex ──────┬ 24 ┐
+ *   ┌ 36 ┬────── flex ──────┬ 42 ┬────── flex ──────┬ 22 ┐
  *   │19:30│ ◆ Kartalspor     │2–1 │ Yıldızspor ◆     │ ☆ │
  *   └─────┴──────────────────┴────┴──────────────────┴────┘
  *     saat   logo + ev (sağa)  skor  dep (sola) + logo  yıldız
@@ -90,8 +90,8 @@ export interface MatchRowProps {
 /** Sabit satır yükseklikleri — `getItemLayout` bunlardan hesaplanır. */
 export const MATCH_ROW_HEIGHT = layout.matchRowHeight;
 export const MATCH_ROW_HEIGHT_COMPACT = layout.matchRowHeightCompact;
-/** Meta satırı (saha/lig) 13px ekler. */
-export const MATCH_ROW_META_HEIGHT = 13;
+/** Meta satırı (saha/lig) 12px ekler. */
+export const MATCH_ROW_META_HEIGHT = 12;
 
 /**
  * Satır yüksekliği. Bir listede varyant ve metaMode tüm satırlarda aynı olduğu
@@ -189,7 +189,7 @@ export const MatchRow = memo(function MatchRow({
 
   const compact = variant === "compact";
   /** Kompakt varyant yalnız amblemi küçültür; düzen ikisinde de aynıdır. */
-  const crestSize = compact ? 14 : layout.crestSm;
+  const crestSize = compact ? 13 : layout.crestSm;
   const metaText =
     metaMode === "field" ? match.match_field : metaMode === "league" ? match.league_name : null;
   const hasMeta = metaMode !== "none" && Boolean(metaText);
@@ -362,14 +362,22 @@ export const MatchRow = memo(function MatchRow({
           >
             <Ionicons
               name={isFavorite ? "star" : "star-outline"}
-              size={15}
+              size={14}
               color={isFavorite ? colors.star : colors.starEmpty}
             />
           </Pressable>
-        ) : showFavorite ? (
-          /* Favori eylemi verilmediyse sütun boş kalır: satırlar arası hiza bozulmasın. */
+        ) : (
+          /*
+           * SÜTUN HER HÂLÜKÂRDA DURUR.
+           *
+           * Yıldız gizlendiğinde (`showFavorite={false}` — takım sayfasındaki
+           * fikstür ve son maç listeleri) sütun tamamen kaldırılıyordu; sağdaki
+           * 36px yok olunca skor bloğu 18px sağa kayıyor ve aynı uygulamada
+           * maçlar iki farklı okuma ekseninde diziliyordu. Boş sütun, ekseni
+           * favori gösterilse de gösterilmese de aynı yerde tutar.
+           */
           <View style={styles.starColumn} />
-        ) : null}
+        )}
       </View>
 
       {position !== "last" && position !== "single" ? <View style={styles.divider} /> : null}
@@ -378,7 +386,7 @@ export const MatchRow = memo(function MatchRow({
 });
 
 const ANDROID_RIPPLE = { color: colors.ripple } as const;
-const STAR_SLOP = touchSlop(15);
+const STAR_SLOP = touchSlop(14);
 
 const styles = StyleSheet.create({
   row: {
@@ -464,7 +472,7 @@ const styles = StyleSheet.create({
   /** Kullanıcının takımı — adın dışında ince marka rayı. */
   rail: {
     width: 2,
-    height: 12,
+    height: 10,
     borderRadius: 1,
     backgroundColor: colors.brand,
   },

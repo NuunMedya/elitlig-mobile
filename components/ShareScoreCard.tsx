@@ -480,18 +480,28 @@ function InfoBox({ value, label, small }: { value: string; label: string; small?
 
 const styles = StyleSheet.create({
   /* ————— Uygulama kabuğu: tokenlı, temayla hareket eder ————— */
+  /*
+   * TETİKLEYİCİ TAM GENİŞLİK DEĞİL, KENDİ BOYUNDA BİR HAP.
+   *
+   * Tam genişlikte mor bir slab, maç detayının en üstünde ekranın en yüksek
+   * sesli öğesi oluyordu: sayfa skorla değil bir CTA ile açılıyordu. Paylaşım
+   * ikincil bir iştir; kendi boyunda ortalanmış bir hap onu görünür tutar ama
+   * içeriğin önüne geçirmez.
+   */
   trigger: {
     flexDirection: "row",
+    alignSelf: "center",
     alignItems: "center",
     justifyContent: "center",
     gap: space.s,
     backgroundColor: colors.brand,
     borderRadius: radius.pill,
-    paddingVertical: space.m,
+    paddingVertical: space.s,
+    paddingHorizontal: space.lg,
     marginTop: space.sm,
   },
   triggerText: {
-    ...type.bodySm,
+    ...type.caption,
     fontFamily: fonts.bold,
     color: colors.textOnBrand,
   },

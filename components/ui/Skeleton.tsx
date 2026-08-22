@@ -149,8 +149,9 @@ export const Skeleton = React.memo(function Skeleton({
   );
 });
 
-const GRADIENT_START = { x: 0, y: 0 } as const;
-const GRADIENT_END = { x: 1, y: 0 } as const;
+/** Parıltı süpürmesi de aynı eksende: yatay, sağdan sola. */
+const GRADIENT_START = { x: 1, y: 0.5 } as const;
+const GRADIENT_END = { x: 0, y: 0.5 } as const;
 
 /**
  * Şablonların ortak sarmalayıcısı: gruba tek bir "yükleniyor" etiketi verir.
@@ -305,11 +306,15 @@ export const SkeletonStandings = React.memo(function SkeletonStandings({
 /** Kart iskeleti — başlık + `lines` kadar metin satırı. */
 export const SkeletonCard = React.memo(function SkeletonCard({
   lines = 3,
+  style,
 }: {
   lines?: number;
+  /** Çağıranın kenar boşluğu — iskelet, yerini tutacağı kartla aynı hizada
+      durmazsa yükleme bitince düzen zıplar. */
+  style?: StyleProp<ViewStyle>;
 }) {
   return (
-    <SkeletonGroup style={styles.card}>
+    <SkeletonGroup style={[styles.card, style]}>
       <Skeleton width="45%" height={14} radius="sm" />
       <View style={styles.cardLines}>
         {repeat(lines, (index) => (

@@ -179,10 +179,10 @@ görünür.
 
 ## Tasarım sistemi
 
-Renk, tipografi ve uzay `theme/` altındadır ve dört kural taşır:
+Renk, tipografi ve uzay `theme/` altındadır ve altı kural taşır:
 
 - **MOR MARKANIN KENDİSİDİR.** Kimlik, açık mor ile koyu mor arasındaki
-  geçiştir: kâğıt hafif lavanta (`bg` #F5F3FB), kartlar beyazdan lavantaya
+  geçiştir: kâğıt lavanta (`bg` #ECE7F7), kartlar beyazdan lavantaya
   ışıyan bir geçiş (`gradientCard`), kimlik blokları derin mor gradyan
   (`gradientInk`). Mürekkep de nötr siyah değil MOR mürekkeptir (#1A1033).
 - **İKİ VURGU, İKİ İŞ.** Mor `brand` yalnız AKSİYON ve SEÇİLİ DURUM, mavi
@@ -197,27 +197,51 @@ Renk, tipografi ve uzay `theme/` altındadır ve dört kural taşır:
   (`gradientCard` · `gradientInk` · `gradientBrand` · `gradientAccent` ·
   `gradientLive` · `gradientPitch` · `gradientSurface`). Elle yazılmış iki
   renk = denetim hatası.
+- **GRADYAN EKSENİ TEKTİR: YATAY, SAĞDAN SOLA.** Köşegen ya da dikey geçiş
+  dikdörtgen bir yüzeyi silindire çevirir — kart "boru" gibi görünür. Aynı
+  ekranda iki farklı eksen varsa göz iki ayrı ışık kaynağı okur ve yüzeyler
+  birbirine ait görünmez. `check-tokens` her `colors.gradient*` yüzeyinin
+  `start`/`end` noktasını ölçer: `y` iki uçta da 0.5, `start.x > end.x`.
+  Kural yalnız YÜZEY gradyanlarına bakar; ekseni işinden gelen üç gradyan
+  dışarıdadır — okunabilirlik scrim'i (dikey), kaydırma kenarı maskesi
+  (kaydırma yönünde) ve saha (`gradientPitch`, dikey; oradaki geçiş ışık
+  değil derinliktir).
+- **GEÇİŞ DURAKLARI BİRBİRİNE YAKIN TONDUR.** İki durak arasındaki fark
+  yaklaşık bir kademedir (`gradientCard` #FFFFFF → #F8F4FE). Keskin geçiş
+  yüzeyi ikiye böler; yakın ton "ışık" izlenimi verir. Kâğıt (`bg`) bu yüzden
+  geçişin KOYU ucundan da bir kademe koyudur — yoksa kartın sağ ucu kâğıda
+  karışır ve kart taşıyormuş gibi durur.
 - **`fontWeight` KULLANILMAZ** — özel fontlarda RN ağırlık uygulamaz, ağırlık
   ailenin adıyla seçilir (`fontFamily: fonts.semibold`).
 
 ### Tipografi ölçeği
 
-Metin 9–19, skor 14–30. Arayüzün varsayılanı **13px** (`body`), ikincil metin
-11 (`bodySm`), satır başlığı 14 (`h3`), kart başlığı 15 (`h2`), sayfa başlığı
-17 (`h1`), kimlik başlığı 19 (`display`). Satır ölçüleri: tek satır 40, iki
-satır 50, maç satırı 40.
+Metin 8–15, skor 12–24. Arayüzün varsayılanı **11px** (`body`), ikincil metin
+10 (`bodySm`), satır başlığı 12 (`h3`), kart başlığı 13 (`h2`), sayfa başlığı
+14 (`h1`), kimlik başlığı 15 (`display`). Satır ölçüleri: tek satır 38, iki
+satır 46, maç satırı 38.
 
-9px'e yalnız `micro` ve `overline` iner; ikisi de DAİMA büyük harf + geniş harf
+8px'e yalnız `micro` ve `overline` iner; ikisi de DAİMA büyük harf + geniş harf
 aralığı taşır — büyük harf, o puntoda okunurluğu ayakta tutan şeydir.
+
+Boşluk ölçüsü puntoyla birlikte küçülür: 15px başlığın etrafındaki 48px'lik
+boşluk, punto 11'e inince "yok" mesajını ekranın üçte birine yayar. Bu yüzden
+`EmptyState` dikey boşluğu ve ikon kutusu da bu geçişte daraltıldı.
 
 ### Maç satırı — tek satır
 
 ```
-┌ 38 ┬────── flex ──────┬ 46 ┬────── flex ──────┬ 24 ┐
+┌ 36 ┬────── flex ──────┬ 42 ┬────── flex ──────┬ 36 ┐
 │19:30│ ◆ Kartalspor     │2–1 │ Yıldızspor ◆     │ ☆ │
 └─────┴──────────────────┴────┴──────────────────┴────┘
   saat   logo + ev (sağa)  skor  dep (sola) + logo  yıldız
 ```
+
+**Kenar sütunları eşit genişliktedir (36/36) ve yıldız gizlense bile yerini
+korur.** İki yan eşit `flex` aldığı için skor bloğu ancak kenarlar eşitken
+satırın geometrik merkezine oturur; 36/22'de blok 7px, yıldız hiç
+çizilmediğinde 18px sağa kayıyordu — yani aynı uygulamada maçlar üç farklı
+okuma ekseninde diziliyordu.
 
 Ev sahibinin adı SAĞA, deplasmanınki SOLA yaslanır; ikisi de ortadaki sabit
 genişlikli skor bloğuna dayandığı için "ev – skor – deplasman" tek bir okuma

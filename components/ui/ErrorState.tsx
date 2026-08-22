@@ -124,7 +124,7 @@ export const ErrorState = React.memo(function ErrorState({
       body={errorBody(error, offline)}
       illustration={
         <View style={styles.iconCircle}>
-          <Ionicons name="cloud-offline-outline" size={30} color={colors.danger} />
+          <Ionicons name="cloud-offline-outline" size={26} color={colors.danger} />
         </View>
       }
       action={onRetry ? { label: "Tekrar dene", onPress: onRetry, haptic: "light" } : undefined}
@@ -136,8 +136,8 @@ export const ErrorState = React.memo(function ErrorState({
 const styles = StyleSheet.create({
   /** İkon dairesi boş durumla aynı ölçüde ama tonu `danger` — hata olduğu belli. */
   iconCircle: {
-    width: 48,
-    height: 48,
+    width: 42,
+    height: 42,
     borderRadius: radius.pill,
     backgroundColor: colors.dangerDim,
     alignItems: "center",
