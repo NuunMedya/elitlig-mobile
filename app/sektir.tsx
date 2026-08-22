@@ -598,11 +598,11 @@ const Ball = memo(function Ball({ x, y, angle }: { x: number; y: number; angle: 
   const deg = (angle * 180) / Math.PI;
   return (
     <G transform={`rotate(${deg.toFixed(1)} ${x.toFixed(1)} ${y.toFixed(1)})`}>
-      <Circle cx={x} cy={y} r={BALL_R} fill={paint.surface} stroke={paint.ink} strokeWidth={1.5} />
+      <Circle cx={x} cy={y} r={BALL_R} fill={paint.ball} stroke={paint.ballLine} strokeWidth={1.5} />
       {/* Merkez beşgen + üç dikiş: dönüşü okutan en az sayıda çizgi. */}
       <Path
         d={pentagon(x, y, BALL_R * 0.42)}
-        fill={paint.ink}
+        fill={paint.ballLine}
         opacity={0.9}
       />
       {[0, 1, 2, 3, 4].map((i) => {
@@ -615,7 +615,7 @@ const Ball = memo(function Ball({ x, y, angle }: { x: number; y: number; angle: 
             y1={y + Math.sin(a) * inner}
             x2={x + Math.cos(a) * BALL_R}
             y2={y + Math.sin(a) * BALL_R}
-            stroke={paint.ink}
+            stroke={paint.ballLine}
             strokeWidth={1.5}
             opacity={0.55}
           />

@@ -11,39 +11,27 @@
  * Kadro sekmesindeki `PitchView` ile aynı dünyadır; iki ekran arasında geçen
  * kullanıcı aynı sahayı görür.
  *
- * ÖN PLAN İKİ AİLEYE AYRILDI:
- *   `ink` / `inkMuted`  → AÇIK zemin üstüne çizilen şeyler (sektir oyununun
- *                         gökyüzü, HUD kartları).
- *   `onTurf` / `onTurfMuted` → ÇİM üstüne çizilen şeyler (kaleci, tebeşir).
- * Bu ayrım olmadan kaleci derin yeşilin üstünde mürekkeple çiziliyordu ve
- * 1,9:1 kontrastla neredeyse görünmüyordu.
+ * ÖN PLAN TEMADAN BAĞIMSIZDIR. Tuvalin üstündeki her şey (kaleci, direk, top,
+ * tebeşir) DAİMA aynı renktedir; `surface1`/`textPrimary` gibi temayla dönen
+ * tokenlar buradan kaldırıldı çünkü koyu temada kale direği koyu, top koyu
+ * oluyor ve derin yeşil sahada ikisi de kayboluyordu. Sahanın kuralları
+ * arayüzün değil futbolun kurallarıdır: direk beyazdır, top beyazdır.
+ *
+ * HUD (skor, rekor, kartlar) tuvalin DIŞINDADIR ve doğrudan `@/theme`
+ * tokenlarını kullanır; orada tema dönüşü doğru davranıştır.
  */
 
 import { colors } from "@/theme";
 import { withAlpha } from "@/components/ui";
 
 export const paint = {
-  /** Oyun tuvalinin zemini (çim dışı alanlar: gökyüzü, boşluk). */
-  ground: colors.bg,
-  /** Kart/HUD yüzeyi. */
-  surface: colors.surface1,
-  line: colors.border,
-
-  /* — AÇIK zemin üstündeki ön plan — */
-  ink: colors.textPrimary,
-  inkMuted: colors.textTertiary,
-
   /* — ÇİM üstündeki ön plan — */
-  /** Kaleci uzuvları, saha üstündeki metin. */
+  /** Kaleci uzuvları, koni konturu, saha üstündeki işaretler. */
   onTurf: colors.onPitch,
   onTurfMuted: withAlpha(colors.onPitch, 0.55),
 
   /** Aksiyon: nişan yayı, tam isabet halkası, aktif kapı, kaleci forması. */
   action: colors.brand,
-  actionPress: colors.brandStrong,
-
-  /** Veri: skor, combo, mesafe, ilerleme. */
-  data: colors.accent,
 
   /** Tebeşir çizgisi — çim üstünde beyaz. */
   chalk: withAlpha(colors.onPitch, 0.5),
@@ -55,11 +43,24 @@ export const paint = {
   turf: colors.pitchGreen,
   turfAlt: withAlpha(colors.onPitch, 0.03),
 
-  /** Kale direği ve ağı. */
-  post: colors.surface1,
+  /**
+   * Kale direği ve ağı — DAİMA BEYAZ.
+   *
+   * Önceki sürüm direği `surface1` ile çiziyordu; o token koyu temada KOYU bir
+   * yüzeydir ve kale, derin yeşil sahanın üstünde neredeyse görünmez oluyordu.
+   * Direk gerçek dünyada da beyazdır, temaya göre değişmez.
+   */
+  post: colors.onPitch,
   net: withAlpha(colors.onPitch, 0.3),
+
+  /**
+   * Top — DAİMA BEYAZ gövde + KOYU dikiş. Aynı gerekçe: `surface1` dolgulu bir
+   * top koyu temada koyu bir daireye dönüyordu. Beyaz gövde hem açık gökyüzünde
+   * (koyu dikiş sayesinde) hem derin yeşilde okunur.
+   */
+  ball: colors.onPitch,
+  ballLine: withAlpha(colors.gradientInk[1], 0.75),
 
   /** Uyarı/başarısızlık: kaçan atış, çarpışma. */
   miss: colors.live,
-  success: colors.win,
 } as const;

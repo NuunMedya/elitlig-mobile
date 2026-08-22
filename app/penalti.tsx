@@ -725,8 +725,8 @@ const FlyingBall = memo(function FlyingBall({ w, h, shot }: { w: number; h: numb
   return (
     <G>
       <Ellipse cx={x} cy={h * 0.82 + 4} rx={9 * scale} ry={3 * scale} fill={paint.shadow} opacity={0.3 * (1 - t)} />
-      <Circle cx={x} cy={y} r={11 * scale} fill={paint.surface} stroke={paint.ink} strokeWidth={1.5 * scale} />
-      <Circle cx={x} cy={y} r={4 * scale} fill={paint.ink} opacity={0.85} />
+      <Circle cx={x} cy={y} r={11 * scale} fill={paint.ball} stroke={paint.ballLine} strokeWidth={1.5 * scale} />
+      <Circle cx={x} cy={y} r={4 * scale} fill={paint.ballLine} opacity={0.85} />
     </G>
   );
 });
@@ -770,8 +770,8 @@ const SpotBall = memo(function SpotBall({
         />
       ) : null}
       <Ellipse cx={x} cy={y + 5} rx={10} ry={3} fill={paint.shadow} opacity={0.35} />
-      <Circle cx={x} cy={y} r={12} fill={paint.surface} stroke={paint.ink} strokeWidth={1.5} />
-      <Circle cx={x} cy={y} r={4.5} fill={paint.ink} opacity={0.85} />
+      <Circle cx={x} cy={y} r={12} fill={paint.ball} stroke={paint.ballLine} strokeWidth={1.5} />
+      <Circle cx={x} cy={y} r={4.5} fill={paint.ballLine} opacity={0.85} />
     </G>
   );
 });
