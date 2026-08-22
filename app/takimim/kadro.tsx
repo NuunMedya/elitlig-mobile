@@ -113,6 +113,7 @@ import { ApiError } from "@/lib/http";
 import { useAuth } from "@/providers/AuthProvider";
 import {
   colors,
+  elevate,
   fonts,
   hairline,
   layout,
@@ -1560,7 +1561,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: layout.screenPadding,
     paddingTop: space.md,
     paddingBottom: space.huge,
-    gap: space.md,
+    gap: space.lg,
   },
   lineupMeta: {
     flexDirection: "row",
@@ -1573,18 +1574,18 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   lineupDirty: {
-    ...type.caption,
+    ...type.bodySm,
     color: colors.warn,
   },
   lineupHint: {
-    ...type.caption,
+    ...type.bodySm,
     color: colors.textTertiary,
   },
 
   /* Piyasa değeri sütunu */
   marketBox: {
     alignItems: "flex-end",
-    minWidth: 46,
+    minWidth: 54,
   },
   marketValue: {
     ...type.tableNumStrong,
@@ -1616,15 +1617,13 @@ const styles = StyleSheet.create({
     gap: space.md,
     minHeight: layout.listRowHeight,
     paddingHorizontal: space.md,
-    backgroundColor: colors.surface1,
     borderRadius: radius.md,
-    borderWidth: hairline,
-    borderColor: colors.border,
+    ...elevate(1),
   },
   seasonTexts: {
     flex: 1,
-    gap: 1,
-    paddingVertical: space.s,
+    gap: 2,
+    paddingVertical: space.sm,
   },
   seasonName: {
     ...type.bodySm,
