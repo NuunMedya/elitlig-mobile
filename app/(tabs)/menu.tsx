@@ -278,6 +278,6 @@ const styles = StyleSheet.create({
     paddingBottom: space.xxxl,
   },
   sectionGap: {
-    height: space.lg,
+    height: space.md,
   },
 });

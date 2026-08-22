@@ -368,7 +368,7 @@ export default function MatchDetailScreen() {
     const items: TabItem<MatchTab>[] = [{ key: "ozet", label: "Özet" }];
     if (live) items.push({ key: "canli", label: "Canlı", badge: "dot" });
     items.push(
-      { key: "kadro", label: "Kadrolar" },
+      { key: "kadro", label: "Kadro" },
       { key: "istatistik", label: "İstatistik" },
       { key: "h2h", label: "H2H" },
       { key: "puan", label: "Puan" },

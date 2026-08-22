@@ -50,7 +50,12 @@ import { Touchable } from "./Pressable";
 /** Otomatik geçiş süresi. */
 const AUTOPLAY_MS = 6000;
 /** 16:10 — manşet görseli için yeterince geniş, listeyi ekrandan itmeyecek kadar alçak. */
-const ASPECT = 10 / 16;
+/*
+ * 1:2 — kompakt manşet. 10:16 oranı 390px'lik ekranda 224px'lik bir kart
+ * üretiyordu ve ana ekranın üçte birini tek başına yiyordu; manşet bir
+ * "kapak" değil, listenin başındaki bir şerittir.
+ */
+const ASPECT = 1 / 2;
 
 export interface HeroSlide {
   key: string;

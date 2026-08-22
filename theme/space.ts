@@ -72,7 +72,7 @@ export const layout = {
   matchRowHeightCompact: 44,
   headerHeightExpanded: 88,
   headerHeightCollapsed: 46,
-  tabBarHeight: 58,        // + insets.bottom — 21px ikon + 13px etiket + iç boşluk
+  tabBarHeight: 60,        // + insets.bottom — 21px ikon + 13px etiket + iç boşluk
   tabStripHeight: 38,
   dateStripHeight: 52,
   minTouch: 44,            // erişilebilirlik alt sınırı (hitSlop ile tamamlanır)

@@ -100,12 +100,13 @@ export default function TabsLayout() {
           borderTopWidth: 1,
           borderTopColor: colors.tabBarBorder,
           /* ÖLÇÜ: ikon kutusu 21px glif, etiket 13px satır yüksekliği,
-             aralarında 2px = 36px içerik. Çubuk 58px ve dikey iç boşluk
-             5+5 → 48px kullanılabilir alan. Öğe başına gelen 5px varsayılan
+             aralarında 2px = 43px içerik (ikon kutusu glifin kendisinden
+             büyüktür: yazı tipi satır kutusu ~28px). Çubuk 60px ve dikey iç
+             boşluk 4+4 → 52px kullanılabilir alan. Öğe başına gelen 5px varsayılan
              dolgu etiketin alt kesimini kırptığı için sıfırlanır. */
           height: layout.tabBarHeight + insets.bottom,
-          paddingTop: 5,
-          paddingBottom: insets.bottom > 0 ? insets.bottom : 5,
+          paddingTop: 4,
+          paddingBottom: insets.bottom > 0 ? insets.bottom : 4,
         },
         tabBarItemStyle: { paddingTop: 0, paddingBottom: 0, paddingHorizontal: 0 },
       }}

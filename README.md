@@ -195,15 +195,17 @@ Renk, tipografi ve uzay `theme/` altındadır ve dört kural taşır:
 
 ### Tipografi ölçeği
 
-Metin 11–28, skor 18–46. Arayüzün varsayılanı **15px** (`body`), ikincil metin
-13 (`bodySm`), satır başlığı 16 (`h3`), kart/bölüm başlığı 18 (`h2`), sayfa
-başlığı 22 (`h1`), kimlik başlığı 28 (`display`).
+Metin 10–22, skor 16–38. Arayüzün varsayılanı **14px** (`body`), ikincil metin
+12 (`bodySm`), satır başlığı 15 (`h3`), kart/bölüm başlığı 16 (`h2`), sayfa
+başlığı 19 (`h1`), kimlik başlığı 22 (`display`). Satır ölçüleri: tek satır 46,
+iki satır 58, maç satırı 56.
 
-> Önceki sürüm 16px'lik bir TAVAN koyuyordu (arayüz varsayılanı 12px, kart
-> başlığı 14px). Yoğunluk kazanılıyordu ama ürün, hiçbir şeyin öne çıkmadığı
-> gri bir metin duvarına dönüyordu. Yoğunluk artık küçük puntoyla değil
-> ritimle kurulur; satır ve kart ölçüleri de tipografiyle birlikte büyüdü
-> (tek satır 56, iki satır 68, maç satırı 66).
+> Ölçek iki uç arasında dengelendi. İlk sürüm 16px'lik bir TAVAN koyuyordu
+> (gövde 12, kart başlığı 14) ve ürün hiyerarşisiz gri bir metin duvarıydı.
+> İkincisi tavanı kaldırıp gövdeyi 15'e, kimliği 28'e çıkardı; okunurluk geldi
+> ama ekrana giren içerik belirgin biçimde azaldı. Bu sürüm hiyerarşiyi korur
+> (her basamak arasında net bir punto ve ağırlık farkı vardır) ama ölçeğin
+> tamamını bir tık aşağı çeker — ekrana yaklaşık %15 daha fazla satır girer.
 
 ### Mürekkep blok (`inkBlock`)
 
@@ -228,6 +230,39 @@ Bu kuralların ölçülebilir olanları `npm run check:tokens` ile sınanır: he
 temada WCAG AA kontrastı, ölçek sağlığı (taban, tavan, monoton hiyerarşi, satır
 yüksekliği), çıplak hex, `fontWeight`, emoji, gradyan durağı ve belirsiz hata
 metni. Ayrıntılı gerekçeler `docs/tasarim-plani.md` dosyasındadır.
+
+## Bilgi mimarisi — tek kapı kuralı
+
+Bir hedefe uygulamada **tek bir mantıklı yerden** ulaşılır. İki hub ekranı
+arasındaki iş bölümü şudur:
+
+| | Menü | Profil |
+| --- | --- | --- |
+| Kapsam | Herkese aynı görünen şeyler | Yalnız sana ait olanlar |
+| İçerik | Lig · Oyunlar · Bilgi · Sosyal | Kulübüm · Kariyerim · Favoriler · Tercihler |
+
+Bu ayrım uygulandığında kaldırılan tekrarlar:
+
+- **Menü ↔ Profil**: Yönetim Paneli, Takım Panelim (+4 alt sayfa), Mesajlarım,
+  Bildirimler, Favorilerim ikisinde birden vardı → yalnız Profil'de.
+- **Menü içindeki tekrar**: listedeki hedeflerin aynısını gösteren 8 kutuluk
+  kısayol ızgarası kaldırıldı; altı oyun tek "Oyun Merkezi" satırına,
+  Haberler/Arşiv `ligler` sekmelerine indi. Menü 34 satırdan 11'e düştü.
+- **Bildirim tercihleri** dört kapıdan (Profil · Hesabım · bildirim listesi
+  başı · boş durum) tek kapıya indi: **Profil → Tercihler**.
+- **Oyuncu sıralamaları** iki yerden çıkıyordu (`ligler` içindeki "Oyuncular"
+  segmenti + Oyuncular sekmesi); ikisi birebir aynı ekrandı → segment kaldırıldı,
+  kanonik kapı alt çubuktaki **Oyuncular** sekmesi.
+- **Oyuncu Profilim** ekranındaki Teklifler/Davetler/Disiplin/Mesajlar
+  kısayolları Profil'in "Kariyerim" ve "Kulübüm" bölümlerinin kopyasıydı →
+  kaldırıldı.
+- **Lig disiplin kararları** hem `ligler` → İstatistik altında hem Menü → Bilgi
+  altındaydı → yalnız **Menü → Bilgi → Cezalar**.
+
+İstisna: Genel Bakış'taki kısayol satırı ve bekleyen-iş kartları bir menü
+basamağı değil, özet ekranın detaya açılan kapılarıdır; ayrıca bir ekranın
+kendi içindeki bağlamsal bağlantılar (detay → liste, boş durum → ilgili ekran)
+tekrar sayılmaz.
 
 ## Yol haritası
 

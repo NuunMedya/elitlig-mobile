@@ -100,7 +100,7 @@ const TAB_ITEMS: TabItem<LeagueTab>[] = [
   { key: "puan", label: "Puan" },
   { key: "fikstur", label: "Fikstür" },
   { key: "istatistik", label: "İstatistik" },
-  { key: "haberler", label: "Haberler" },
+  { key: "haberler", label: "Haber" },
   { key: "arsiv", label: "Arşiv" },
 ];
 

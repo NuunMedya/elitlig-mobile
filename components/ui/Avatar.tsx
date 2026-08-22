@@ -36,6 +36,12 @@ export interface AvatarProps {
   ring?: "none" | "brand" | "live";
   /** Biçim. Varsayılan dairesel; kare biçim büyük profil fotoğrafı içindir. */
   shape?: "circle" | "square";
+  /**
+   * SAHA ÜSTÜNDE mi çiziliyor. Varsayılan yüzey (`surface2`) temayla döner ve
+   * koyu temada derin yeşil sahanın üstünde koyu bir disk oluyordu; oyuncu
+   * işareti orada formaya benzemeli, yani DAİMA AÇIK kalmalı.
+   */
+  onPitch?: boolean;
 }
 
 export const Avatar = memo(function Avatar({
@@ -47,6 +53,7 @@ export const Avatar = memo(function Avatar({
   badge,
   ring = "none",
   shape = "circle",
+  onPitch = false,
 }: AvatarProps) {
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [image]);
@@ -78,10 +85,19 @@ export const Avatar = memo(function Avatar({
       accessibilityLabel={name ? `${name} fotoğrafı` : "Profil fotoğrafı"}
     >
       {uri ? (
-        <Image source={{ uri }} style={[styles.image, box]} resizeMode="cover" onError={() => setFailed(true)} />
+        <Image
+          source={{ uri }}
+          style={[styles.image, onPitch && styles.onPitchSurface, box]}
+          resizeMode="cover"
+          onError={() => setFailed(true)}
+        />
       ) : (
-        <View style={[styles.fallback, box]}>
-          <Text style={[styles.initials, initialsSize]} numberOfLines={1} {...textScale.badge}>
+        <View style={[styles.fallback, onPitch && styles.onPitchSurface, box]}>
+          <Text
+            style={[styles.initials, onPitch && styles.onPitchInitials, initialsSize]}
+            numberOfLines={1}
+            {...textScale.badge}
+          >
             {initials(name)}
           </Text>
         </View>
@@ -119,6 +135,18 @@ const styles = StyleSheet.create({
   },
   image: {
     backgroundColor: colors.surface2,
+  },
+  /**
+   * Saha üstündeki disk DAİMA BEYAZDIR. `surface1` temayla döner ve koyu
+   * temada derin yeşilin üstünde koyu bir disk üretiyordu; oyuncu işareti
+   * orada beyaz formaya benzemeli. Rakam/baş harf de sabit mürekkeptir.
+   */
+  onPitchSurface: {
+    backgroundColor: colors.onPitch,
+    borderColor: colors.onPitch,
+  },
+  onPitchInitials: {
+    color: colors.gradientInk[1],
   },
   fallback: {
     backgroundColor: colors.surface2,

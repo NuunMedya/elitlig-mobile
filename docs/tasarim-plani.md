@@ -725,6 +725,50 @@ Buna üç yeni yapı eklendi:
   çeviren biçme şeridi opaklığı ve "Sistem" seçiliyken sistem ayarını hiç
   okumayan tema mantığı.
 
+### 7.4 Üçüncü geçiş — sadeleştirme ve kompaktlaştırma
+
+Kullanıcının iki isteği vardı: "aynı yere farklı menü basamaklarından
+erişiliyor, sadeleştir" ve "font ve kart boyutlarını baya küçült, daha fazla
+içerik sığsın".
+
+**A. Tek kapı kuralı.** Menü ile Profil arasındaki iş bölümü netleştirildi
+(keşif ↔ kişisel) ve kesişim sıfıra indirildi. Ayrıntılı liste README →
+"Bilgi mimarisi" bölümündedir. Özet: Menü 34 satırdan 11'e, bildirim
+tercihlerinin kapı sayısı 4'ten 1'e indi; `ligler` içindeki "Oyuncular"
+segmenti (Oyuncular sekmesinin birebir kopyası) ve Menü'nün kısayol ızgarası
+(kendi listesinin kopyası) kaldırıldı.
+
+**B. Kompakt ölçek.** İkinci geçişteki büyütme geri alındı ama ilk sürümün
+16px tavanına dönülmedi; ölçek ikisinin ortasına yerleşti:
+
+| | 1. sürüm | 2. sürüm | 3. sürüm |
+| --- | --- | --- | --- |
+| gövde | 13 | 15 | **14** |
+| satır başlığı | 13 | 16 | **15** |
+| kart başlığı | 14 | 18 | **16** |
+| sayfa başlığı | 16 | 22 | **19** |
+| tek satır yüksekliği | 48 | 56 | **46** |
+| maç satırı | 56 | 66 | **56** |
+| kart yarıçapı | 16 | 18 | **14** |
+| ekran kenarı | 20 | 20 | **16** |
+
+Manşet karuselinin oranı 10:16'dan 1:2'ye indi (390px ekranda 224px yerine
+195px). Düğme boyları 34/40/46; 44px'in altındakiler `touchSlop` ile dokunma
+hedefine tamamlanır.
+
+**C. Bu geçişte bulunan kusurlar.**
+
+- `Tabs` eşit dağıtım kipinde yalnız TOPLAM genişliğe bakıyordu; en geniş
+  etiket eşit yuvaya sığmadığında tek bir sekme üç noktaya düşüyordu
+  ("Kadrolar" → "Kadro…", "Sonuçlar" → "Sonuç…"). Karar artık etiketin DOĞAL
+  genişliğine bakar — kutunun genişliği eşit kipte zorlandığı için metin
+  ayrıca ölçülür — ve sığmıyorsa şerit kaydırmaya geçer.
+- Sekme çubuğu 58px'e inince etiketlerin alt kesimi kırpılıyordu; 60px + 4/4
+  dolgu ile ölçüldü.
+- Koyu temada saha üstündeki oyuncu diskleri `surface2` olduğu için KOYU
+  çiziliyordu; `Avatar` artık `onPitch` kipinde daima beyaz disk + mürekkep
+  baş harf kullanıyor (kale direği ve top için verilen kararın aynısı).
+
 ### 7.2 Kalıcı denetim
 
 ```bash

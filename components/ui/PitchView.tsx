@@ -284,7 +284,7 @@ const PitchSlot = memo(function PitchSlot({
       style={[styles.slot, { left: `${x}%`, top: `${y}%` }]}
     >
       <View>
-        <Avatar name={player.name} image={player.photo} size={AVATAR} />
+        <Avatar name={player.name} image={player.photo} size={AVATAR} onPitch />
 
         {player.number != null && player.number !== "" ? (
           <View style={styles.numberBadge}>
