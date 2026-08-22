@@ -72,6 +72,7 @@ const PAIRS = (p) => [
   [p.textTertiary, p.bg, 4.5, "etiket metni / zemin"],
   [p.textTertiary, p.surface1, 4.5, "etiket metni / kart"],
   [p.textOnBrand, p.brand, 4.5, "buton metni / mercan dolgu"],
+  [p.onInverse, p.inverse, 4.5, "seçili chip metni / ters blok"],
   [p.textOnAccent, p.accent, 4.5, "metin / mavi dolgu"],
   [p.brandAccent, p.bg, 4.5, "mercan metin / zemin"],
   [p.brandAccent, p.surface1, 4.5, "mercan metin / kart"],

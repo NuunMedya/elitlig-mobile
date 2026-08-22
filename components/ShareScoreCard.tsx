@@ -149,7 +149,7 @@ export function ShareScoreCard({
         Alert.alert("Paylaşım kullanılamıyor", "Bu cihazda paylaşım menüsü açılamadı.");
       }
     } catch {
-      Alert.alert("Bir sorun oldu", "Görsel oluşturulamadı, tekrar dener misin?");
+      Alert.alert("Görsel oluşturulamadı", "Kartı yeniden oluşturmayı dene; sürerse uygulamayı kapatıp aç.");
     } finally {
       setBusy(false);
     }

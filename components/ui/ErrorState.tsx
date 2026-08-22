@@ -48,7 +48,8 @@ export function errorMessage(error: unknown, offline?: boolean): string {
   if (offline) return "İnternet bağlantısı yok. Bağlanınca kaldığın yerden devam edersin.";
   if (error instanceof ApiError) return error.userMessage;
   if (error instanceof Error && error.message) return error.message;
-  return "Beklenmeyen bir hata oluştu.";
+  // Buraya düşen hata tanınmıyor demektir; yine de NE YAPILACAĞINI söyler.
+  return "Veri okunamadı. Tekrar dene; sürerse birkaç dakika sonra yeniden aç.";
 }
 
 /** Başlık: çevrimdışı ve sunucu hatası aynı şey değildir, ayrı okunur. */

@@ -74,12 +74,19 @@ export const Chip = React.memo(function Chip({
         fg: colors.textSecondary,
       };
     }
-    // Marka tonu dolu mor hap; anlamlı tonlar (canlı, kazanç, uyarı…) sönük
-    // dolgu + kendi renginde metin — anlam renkten okunmalı.
+    /* SEÇİLİ FİLTRE MERCAN DEĞİL KOYU BLOKTUR.
+       Mercan AKSİYON rengidir: dokununca bir şey OLAN öğeler için. Bir filtre
+       chip'i ise bir DURUM bildirir. Seçili her filtreyi mercanla doldurmak,
+       bir lig şeridinde mercanı ekranın onda birine yayıyor ve gerçek aksiyon
+       (birincil buton) kalabalıkta kayboluyordu. Koyu blok seçimi en yüksek
+       kontrastla söyler ve mercanı asıl işine bırakır.
+
+       Anlamlı tonlar (canlı, kazanç, uyarı…) sönük dolgu + kendi renginde
+       metin alır — orada anlam RENKTEN okunur. */
     if (tone === "brand" || tone === "neutral") {
       return {
-        boxStyle: { backgroundColor: colors.brand, borderColor: "transparent" } as ViewStyle,
-        fg: colors.textOnBrand,
+        boxStyle: { backgroundColor: colors.inverse, borderColor: "transparent" } as ViewStyle,
+        fg: colors.onInverse,
       };
     }
     const t = toneColors(tone);

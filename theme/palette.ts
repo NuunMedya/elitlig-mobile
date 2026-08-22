@@ -62,8 +62,15 @@ export interface Palette {
   textDisabled: string;
   textOnBrand: string;   // mercan dolgu üstündeki metin
   textOnStatus: string;  // canlı/yeşil dolgu üstündeki metin
-  onDark: string;        // koyu blok üstündeki metin
+  onDark: string;        // koyu blok üstündeki metin (scrim, hero) — İKİ TEMADA DA BEYAZ
   onDarkMuted: string;   // koyu blok üstündeki ikincil metin
+  /**
+   * `inverse` yüzeyi üstündeki metin. `onDark`tan FARKLIDIR: `onDark` fotoğraf
+   * scrim'i gibi daima koyu olan bir zemin içindir ve iki temada da beyazdır;
+   * `inverse` ise "zeminin tersi" demektir ve koyu temada AÇIK bir yüzeydir.
+   * Seçili filtre chip'i gibi ters blok öğeleri bunu kullanır.
+   */
+  onInverse: string;
 
   /* — Kenarlık / ayraç — */
   border: string;        // hairline ayraçlar, normal kenarlık
@@ -176,6 +183,7 @@ export const light: Palette = {
   textOnStatus:  "#FFFFFF",
   onDark:        "#FFFFFF",
   onDarkMuted:   "rgba(255, 255, 255, 0.64)",
+  onInverse:     "#FFFFFF",   // inverse = #12141C (koyu blok)
 
   border:       "#E2E6EC",
   borderStrong: "#CFD5DE",
@@ -264,6 +272,7 @@ export const dark: Palette = {
   textOnStatus:  "#FFFFFF",
   onDark:        "#FFFFFF",
   onDarkMuted:   "rgba(255, 255, 255, 0.64)",
+  onInverse:     "#12141C",   // inverse = #F2F4F7 (açık blok) → metin mürekkep
 
   border:       "#262B36",
   borderStrong: "#343A48",
