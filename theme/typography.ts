@@ -119,7 +119,14 @@ export const textScale = {
   long: { allowFontScaling: true, maxFontSizeMultiplier: 2 },
 } as const;
 
-/** Türkçe büyük harf — I/İ sorununu önler (CANLI, İY, MS rozetleri). */
-export function upperTR(value: string): string {
-  return value.toLocaleUpperCase("tr-TR");
+/**
+ * Türkçe büyük harf — I/İ sorununu önler (CANLI, İY, MS rozetleri).
+ *
+ * DEĞER TİPİ GEVŞEK TUTULUR: alan adları şemada zorunlu görünse de sunucu
+ * kısmi kayıt döndürdüğünde (200 gövdesinde hata, eksik sütun) buraya
+ * `undefined` geliyordu ve `undefined.toLocaleUpperCase` TÜM EKRANI
+ * çökertiyordu. Bir rozetin metni yüzünden sayfa kaybedilmez.
+ */
+export function upperTR(value: string | null | undefined): string {
+  return String(value ?? "").toLocaleUpperCase("tr-TR");
 }

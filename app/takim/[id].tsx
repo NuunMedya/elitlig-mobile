@@ -608,21 +608,27 @@ export default function TeamDetailScreen() {
       matchesQuery.isRefetching || standingsQuery.isRefetching || rankingsQuery.isRefetching,
   });
 
+  /*
+   * SAVUNMA: `team_name` şemada zorunlu ama sunucu kısmi bir kayıt
+   * döndürdüğünde ekran adsız kalıyordu. Ad tek yerde güvenli hâle getirilir.
+   */
+  const teamLabel = team?.team_name || "İsimsiz takım";
+
   const handleToggleFavorite = useCallback(() => {
     if (!team) return;
     const next = !favorite;
-    toggleFavorite({ id: teamId, name: team.team_name, logo: team.logo });
+    toggleFavorite({ id: teamId, name: teamLabel, logo: team.logo });
     toast.show(
       next
         ? {
-            message: `${team.team_name} favorilerinde · Maç bildirimleri gelecek`,
+            message: `${teamLabel} favorilerinde · Maç bildirimleri gelecek`,
             tone: "success",
             icon: "star",
             haptic: "success",
           }
-        : { message: `${team.team_name} favorilerden çıkarıldı`, tone: "neutral", icon: "star-outline" },
+        : { message: `${teamLabel} favorilerden çıkarıldı`, tone: "neutral", icon: "star-outline" },
     );
-  }, [team, favorite, teamId, toggleFavorite, toast]);
+  }, [team, teamLabel, favorite, teamId, toggleFavorite, toast]);
 
   const openMatch = useCallback((matchId: number) => router.push(`/mac/${matchId}`), [router]);
   const openPlayer = useCallback((playerId: number) => router.push(`/oyuncu/${playerId}`), [router]);
@@ -683,7 +689,7 @@ export default function TeamDetailScreen() {
     () =>
       team ? (
         <TeamHero
-          teamName={team.team_name}
+          teamName={teamLabel}
           logo={team.logo ?? null}
           city={team.city ?? null}
           league={team.current_league ?? null}
@@ -734,7 +740,7 @@ export default function TeamDetailScreen() {
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader
-        title={team.team_name}
+        title={teamLabel}
         subtitle={team.current_league ?? team.city ?? undefined}
         back
         scrollY={scrollY}
@@ -748,7 +754,7 @@ export default function TeamDetailScreen() {
           refreshControl={refresh.control}
           header={hero}
           teamId={teamId}
-          teamName={team.team_name}
+          teamName={teamLabel}
           nextMatch={nextMatch}
           recent={recent}
           lineCounts={lineCounts}
@@ -830,7 +836,7 @@ export default function TeamDetailScreen() {
       <TeamShareSheet
         visible={shareOpen}
         onClose={closeShare}
-        teamName={team.team_name}
+        teamName={teamLabel}
         logo={team.logo ?? null}
         rank={standing?.position ?? null}
         row={standing?.row ?? null}

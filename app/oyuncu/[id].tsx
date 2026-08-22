@@ -497,10 +497,18 @@ export default function PlayerDetailScreen() {
 
   const team = teamQuery.data ?? null;
 
+  /*
+   * SAVUNMA: `player_name` şemada zorunlu ama sunucu eksik/kısmi bir kayıt
+   * döndürdüğünde (ör. 200 ile hata gövdesi) ekran `undefined.toLocaleUpperCase`
+   * ile ÇÖKÜYORDU. Ad tek bir yerde güvenli hâle getirilir ve aşağıdaki tüm
+   * kullanımlar bunu alır.
+   */
+  const playerName = player.player_name || "İsimsiz oyuncu";
+
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader
-        title={player.player_name}
+        title={playerName}
         subtitle={player.player_position ?? undefined}
         back
         actions={actions}
@@ -511,7 +519,7 @@ export default function PlayerDetailScreen() {
       {tab === "genel" ? (
         <GeneralTab
           playerId={playerId}
-          playerName={player.player_name}
+          playerName={playerName}
           playerImage={player.player_img ?? null}
           position={player.player_position ?? null}
           birthDate={player.birth_date ?? null}
@@ -555,7 +563,7 @@ export default function PlayerDetailScreen() {
       <ShareSheet
         visible={shareOpen}
         onClose={closeShare}
-        playerName={player.player_name}
+        playerName={playerName}
         playerImage={player.player_img ?? null}
         position={player.player_position ?? null}
         teamName={team?.team_name ?? null}
@@ -1676,7 +1684,18 @@ const MarketValueCard = React.memo(function MarketValueCard({
   return (
     <Card title="Piyasa değeri" style={styles.card}>
       <View style={styles.marketTop}>
-        <Text style={styles.marketValue} {...textScale.dense}>
+        {/*
+          TEK SATIR: "206.900.000 ETL" 34px'te iki satıra taşıp kartın yarısını
+          kaplıyordu. Rakam satıra sığmıyorsa punto küçülür, satır BÖLÜNMEZ —
+          para birimi rakamdan koparsa değer okunmaz hâle gelir.
+        */}
+        <Text
+          style={styles.marketValue}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.6}
+          {...textScale.dense}
+        >
           {formatMoney(market.currentValue, market.currency)}
         </Text>
         {market.changeAmount !== 0 ? (

@@ -12,9 +12,12 @@ createServer((req, res) => {
   };
   if (req.method === "OPTIONS") { res.writeHead(204, cors); res.end(); return; }
   const url = API + req.url;
-  execFile("curl", ["-s", "--max-time", "30", url], { maxBuffer: 40 * 1024 * 1024 }, (err, stdout) => {
+  execFile("curl", ["-s", "-w", "\n%{http_code}", "--max-time", "30", url], { maxBuffer: 40 * 1024 * 1024 }, (err, stdout) => {
     if (err) { res.writeHead(502, cors); res.end("{}"); return; }
-    res.writeHead(200, { ...cors, "content-type": "application/json; charset=utf-8" });
-    res.end(stdout);
+    const cut = stdout.lastIndexOf("\n");
+    const body = stdout.slice(0, cut);
+    const status = Number(stdout.slice(cut + 1)) || 200;
+    res.writeHead(status, { ...cors, "content-type": "application/json; charset=utf-8" });
+    res.end(body);
   });
 }).listen(8098, "127.0.0.1", () => console.log("bridge on 8098"));
