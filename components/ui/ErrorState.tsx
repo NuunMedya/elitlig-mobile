@@ -59,6 +59,26 @@ function errorTitle(error: unknown, offline?: boolean): string {
   return "Yüklenemedi";
 }
 
+/** Karşılaştırma için sadeleştirir: nokta ve büyük/küçük harf farkını siler. */
+const flatten = (value: string) => value.replace(/[.!]+$/, "").trim().toLocaleLowerCase("tr-TR");
+
+/**
+ * Gövde metni — başlığın tekrarı OLAMAZ.
+ *
+ * Sunucunun 404 mesajı çoğu uçta "Kayıt bulunamadı"dır; başlık da öyle olduğu
+ * için ekranda aynı cümle iki kez, üst üste görünüyordu ve kullanıcıya hiçbir
+ * şey söylemiyordu. Aynıysa gövde, NE YAPILACAĞINI söyleyen cümleyle
+ * değiştirilir.
+ */
+function errorBody(error: unknown, offline?: boolean): string {
+  const message = errorMessage(error, offline);
+  if (flatten(message) !== flatten(errorTitle(error, offline))) return message;
+  if (error instanceof ApiError && error.status === 404) {
+    return "Bu içerik kaldırılmış ya da bağlantı hatalı olabilir.";
+  }
+  return "Tekrar dene; sürerse birkaç dakika sonra yeniden aç.";
+}
+
 export const ErrorState = React.memo(function ErrorState({
   error,
   onRetry,
@@ -75,7 +95,7 @@ export const ErrorState = React.memo(function ErrorState({
         accessibilityLabel={message}
         style={[styles.banner, style]}
       >
-        <Ionicons name="alert-circle-outline" size={14} color={colors.danger} />
+        <Ionicons name="alert-circle-outline" size={17} color={colors.danger} />
         <Text style={styles.bannerText} numberOfLines={1} {...textScale.dense}>
           {message}
         </Text>
@@ -101,7 +121,7 @@ export const ErrorState = React.memo(function ErrorState({
     <EmptyState
       variant={variant}
       title={errorTitle(error, offline)}
-      body={message}
+      body={errorBody(error, offline)}
       illustration={
         <View style={styles.iconCircle}>
           <Ionicons name="cloud-offline-outline" size={36} color={colors.danger} />
@@ -128,7 +148,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: space.sm,
-    height: 40,
+    minHeight: 46,
+    paddingVertical: space.s,
     paddingHorizontal: space.md,
     backgroundColor: colors.dangerDim,
     borderBottomWidth: hairline,
@@ -145,7 +166,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
   },
   bannerActionText: {
-    ...type.caption,
+    ...type.label,
     fontFamily: fonts.bold,
     color: colors.danger,
   },

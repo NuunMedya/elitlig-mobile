@@ -679,11 +679,57 @@ temiz ve uygulama çalışır durumda bırakıldı.
   tavanı, çıplak hex, emoji, gradient, sonsuz animasyon ve oyun fiziği
   sayıyla sınanıyor.
 
+### 7.3 İkinci geçiş — "premium" revizyonu
+
+Birinci geçişin üç kararı ürünü telefonda kötü gösteriyordu ve geri alındı.
+Gerekçeleri ve yerlerine konanlar:
+
+**1. 16px punto tavanı kaldırıldı.** Kural, yoğunluk adına arayüzün
+varsayılanını 12px'e, kart başlığını 14px'e, sayfa başlığını 16px'e
+indiriyordu. Sonuç, hiçbir şeyin öne çıkmadığı gri bir metin duvarıydı:
+kullanıcı nereye baktığını başlıktan değil ancak içeriği okuyarak
+anlayabiliyordu. Yeni ölçek 11–28 (metin) ve 18–46 (skor); gövde 15, satır
+başlığı 16, bölüm başlığı 18, sayfa başlığı 22. Satır ve kart ölçüleri de
+büyüdü. Denetim artık tavan yerine ÖLÇEK SAĞLIĞI sınıyor: okunabilirlik
+tabanı, tavan, monoton hiyerarşi, satır yüksekliği.
+
+**2. "Gölge değil çizgi" yumuşatıldı.** Gerekçe doğruydu (her yuvarlak köşenin
+altına koyu bir bulut koymak ürünü şablona çevirir) ama çözüm aşırıydı: beyaz
+kart, beyaza yakın kâğıdın üstünde yalnız 1px çizgiyle durunca hiçbir şey
+yüzmüyordu. Kart artık çizgi + ÇOK GENİŞ, ÇOK SÖNÜK bir gölge taşıyor
+(opaklık 0,045 · yarıçap 14 · y 3). Gölge görünmez, hissedilir.
+
+**3. Gradyan yasağı token setine çevrildi.** Serbest gradyan hâlâ yok ama
+paletteki altı gradyanın her birinin bir işi var. Denetim, gradyan duraklarının
+tema tokenından geldiğini sınıyor.
+
+Buna üç yeni yapı eklendi:
+
+- **Mürekkep blok (`inkBlock`)** — daima koyu imza yüzeyi. Maç skoru şeridi,
+  takım kapağı, oyuncu kimlik kartı, vitrin kartı ve manşet karuseli aynı
+  yüzeyi paylaşır. `inverse` ile karıştırılmamalı: `inverse` koyu temada AÇIK
+  bir yüzeydir ve beyaz metin taşıyan bloklar orada okunmuyordu.
+- **Gerçek saha** — `PitchView`, `PitchLineup` ve oyun tuvalleri artık derin
+  yeşil zemin + beyaz tebeşir kullanıyor. Eski gri saha, eski uyumluluk
+  katmanında `colors.pitch` EKRAN ZEMİNİ anlamına geldiği için kâğıttan ayırt
+  edilemiyordu. Tuvalin üstündeki her şey (direk, top, kaleci) temadan
+  bağımsız sabit renktedir.
+- **Tarayıcı önizlemesi** — 7.1'de "alınamıyor" denen ekran görüntüsü artık
+  alınabiliyor: uygulama `expo export --platform web` ile derlenip başsız
+  Chromium'da açılıyor. Aşağıdaki kusurlar bu yolla bulundu ve düzeltildi:
+  vitrin kartında "CANLI CANLI" tekrarı, kırpılan golcü adları, takım kapağını
+  soluk bir dikdörtgene çeviren arma filigranı, kendi zeminini ezen yükselti
+  yayılımı (manşet kartı bembeyaz çiziliyordu), sola kaçan boş-durum düğmesi,
+  başlığını tekrar eden hata metni, koyu temada görünmeyen kale direği,
+  penaltıda mürekkep üstüne mürekkep yazan "kurtardı" etiketi, sahayı zebraya
+  çeviren biçme şeridi opaklığı ve "Sistem" seçiliyken sistem ayarını hiç
+  okumayan tema mantığı.
+
 ### 7.2 Kalıcı denetim
 
 ```bash
 npm run check          # üçünü birden çalıştırır
-npm run check:tokens   # kontrast, punto tavanı, hex, emoji, gradient, animasyon
+npm run check:tokens   # kontrast, ölçek sağlığı, hex, emoji, gradyan, animasyon
 npm run check:games    # oyun fiziği: yön, Magnus, kare hızı, kontrol eğrisi
 npm run typecheck
 ```

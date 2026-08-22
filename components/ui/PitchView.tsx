@@ -7,26 +7,32 @@
  * seçimi mantığını ve düzenleme ekranına hiç kullanılmayan olay rozetlerini
  * taşımak demekti.
  *
- * SAHA YEŞİL DEĞİL. Zemin `surface3` (sunken yüzey), çizgiler `chalkInk`
- * tebeşiri. Gerçek çim yeşili telefonda iki sorun üretiyor: (1) beyaz forma
- * numaraları ve oyuncu adları yeşil üstünde okunurluğunu kaybediyor,
- * (2) uygulamanın geri kalanı soğuk gri-mavi bir kağıtken tek bir ekranın
- * doygun yeşile dönmesi "bu ekran başka bir uygulamadan" hissi veriyor.
- * Biçme şeritleri yalnız %2 opaklıkta iki tonla ima edilir — saha okunur,
- * ekran sakin kalır.
+ * SAHA DERİN YEŞİLDİR. Önceki sürüm sahayı gri bir yüzey yapıyordu ve iki
+ * sorun üretiyordu: (1) `colors.pitch` eski uyumluluk katmanında EKRAN ZEMİNİ
+ * anlamına geldiği için saha, üstünde durduğu kâğıtla neredeyse aynı renkti —
+ * kadro ekranı "boş bir dikdörtgene dağılmış avatarlar" gibi görünüyordu;
+ * (2) tebeşir çizgileri %8 opaklıkta gri üstünde gri kalıyor, saha geometrisi
+ * hiç okunmuyordu.
+ *
+ * Şimdi zemin `gradientPitch` (derin, doygunluğu düşük yeşil) ve çizgiler
+ * `chalk` (beyaz, %22). Doygun çim yeşilinden kaçınma gerekçesi hâlâ geçerli
+ * olduğu için yeşil KOYU ve SOĞUK tutulur: uygulamanın gri-mavi kâğıdıyla
+ * kavga etmez, üstündeki beyaz metin 12:1 üstü kontrast alır. Biçme şeritleri
+ * beyazın %3'ü ile ima edilir.
  *
  * LİG 8 KİŞİLİK: dizilişler 3-3-1, 2-3-2, 4-2-1 … (bkz. lib/api/team.ts →
  * FORMATIONS). 11 kişilik varsayımıyla yazılmış hiçbir yerleşim burada
  * çalışmaz; hatlar oyuncu sayısına göre kendiliğinden dağılır.
  *
- * DİKEY SAHA, TEK TAKIM: mobilde iki takımı aynı sahaya koymak 36px avatarları
+ * DİKEY SAHA, TEK TAKIM: mobilde iki takımı aynı sahaya koymak 42px avatarları
  * 22px'e indirmeyi gerektiriyordu ve isimler okunmaz oluyordu. Bunun yerine
  * takım başına bir segment kullanılır — okunurluk kazanır, bilgi kaybolmaz.
  */
 
+import { LinearGradient } from "expo-linear-gradient";
 import { memo, useMemo } from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
-import Svg, { Circle, Line, Rect } from "react-native-svg";
+import Svg, { Circle, Line, Path, Rect } from "react-native-svg";
 import { colors, hairline, radius, space, textScale, type } from "@/theme";
 import { positionLine } from "@/lib/api/team";
 import { Avatar } from "./Avatar";
@@ -41,7 +47,11 @@ const LINE_ORDER = ["GK", "DEF", "MID", "FWD"] as const;
  *  yapıştırıyor; 3:4 hem "saha" okunuyor hem sekiz oyuncuyu rahat taşıyor. */
 const ASPECT = 4 / 3;
 
-const AVATAR = 36;
+const AVATAR = 42;
+
+/** Saha gradyanının yönü: üstten alta, kalenin derinliğini ima eder. */
+const GRADIENT_START = { x: 0.5, y: 0 } as const;
+const GRADIENT_END = { x: 0.5, y: 1 } as const;
 
 export interface PitchPlayerView {
   /** Kadro satırının kimliği — liste anahtarı. */
@@ -124,6 +134,13 @@ export const PitchView = memo(function PitchView({
       ) : null}
 
       <View style={[styles.pitch, { width, height }]}>
+        <LinearGradient
+          colors={colors.gradientPitch}
+          start={GRADIENT_START}
+          end={GRADIENT_END}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
         <PitchLines width={width} height={height} />
 
         {placed.map(({ player, x, y }) => (
@@ -136,67 +153,108 @@ export const PitchView = memo(function PitchView({
 
 /**
  * Sahanın çizgileri — tebeşir. Yalnız geometri: kenar çizgisi, orta saha
- * çizgisi, orta yuvarlak, iki ceza sahası, iki kale alanı. Doku, resim ya da
- * gradient yok; hepsi tek `Svg` içinde tek geçişte çizilir.
+ * çizgisi, orta yuvarlak ve nokta, iki ceza sahası, iki kale alanı, iki
+ * penaltı noktası + yayı, dört köşe yayı. Doku ya da resim yok; hepsi tek
+ * `Svg` içinde tek geçişte çizilir.
+ *
+ * PENALTI VE KÖŞE YAYLARI NEDEN EKLENDİ: sahayı "saha" yapan şey dikdörtgenler
+ * değil bu iki eğridir. Onlar olmadan grafik, üstüne avatar konmuş bir kutu
+ * gibi görünüyordu.
  */
 const PitchLines = memo(function PitchLines({ width, height }: { width: number; height: number }) {
-  const c = colors.chalkInk;
-  const sw = 1;
-  const boxW = width * 0.56;
-  const boxH = height * 0.16;
+  const c = colors.chalk;
+  const sw = 1.25;
+  const inset = 10;
+  const boxW = width * 0.58;
+  const boxH = height * 0.155;
   const smallW = width * 0.28;
-  const smallH = height * 0.07;
-  const inset = 6;
+  const smallH = height * 0.068;
+  const centerR = width * 0.155;
+  const spotR = width * 0.11; // penaltı yayının yarıçapı
+  const cornerR = width * 0.055;
+
+  const left = inset;
+  const right = width - inset;
+  const top = inset;
+  const bottom = height - inset;
+  const midX = width / 2;
+
+  /** Ceza sahasının dışına taşan penaltı yayı — sahanın en tanınır detayı. */
+  const arc = (y: number, down: boolean) =>
+    `M ${midX - spotR * 0.86} ${y} A ${spotR} ${spotR} 0 0 ${down ? 1 : 0} ${midX + spotR * 0.86} ${y}`;
+
+  /** Köşe yayı — dört köşenin her birinde çeyrek daire. */
+  const corner = (x: number, y: number, dx: number, dy: number) =>
+    `M ${x + dx * cornerR} ${y} A ${cornerR} ${cornerR} 0 0 ${dx * dy > 0 ? 0 : 1} ${x} ${y + dy * cornerR}`;
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      {/* Biçme şeritleri: dört bant, %2 opaklıkta. Doku değil geometri. */}
-      {[0, 1, 2, 3].map((i) => (
+      {/* Biçme şeritleri: altı bant, beyazın %3'ü. Doku değil geometri. */}
+      {[0, 1, 2, 3, 4, 5].map((i) => (
         <View
           key={i}
           style={[
             styles.mowStripe,
-            { top: (height / 4) * i, height: height / 4, opacity: i % 2 === 0 ? 0.5 : 0 },
+            /* Satır içi `opacity`, stil sayfasındaki değeri EZER: burada 1
+               yazıldığında biçme şeritleri %3 yerine tam tebeşir opaklığında
+               çiziliyor ve saha zebra desenine dönüyordu. */
+            { top: (height / 6) * i, height: height / 6, opacity: i % 2 === 0 ? 0.14 : 0 },
           ]}
         />
       ))}
 
       <Svg width={width} height={height}>
+        {/* Kenar çizgisi */}
         <Rect
-          x={inset}
-          y={inset}
-          width={width - inset * 2}
-          height={height - inset * 2}
+          x={left}
+          y={top}
+          width={right - left}
+          height={bottom - top}
           stroke={c}
           strokeWidth={sw}
           fill="none"
         />
-        <Line x1={inset} y1={height / 2} x2={width - inset} y2={height / 2} stroke={c} strokeWidth={sw} />
-        <Circle cx={width / 2} cy={height / 2} r={width * 0.15} stroke={c} strokeWidth={sw} fill="none" />
-        <Circle cx={width / 2} cy={height / 2} r={1.5} fill={c} />
+
+        {/* Orta saha çizgisi + orta yuvarlak + orta nokta */}
+        <Line x1={left} y1={height / 2} x2={right} y2={height / 2} stroke={c} strokeWidth={sw} />
+        <Circle cx={midX} cy={height / 2} r={centerR} stroke={c} strokeWidth={sw} fill="none" />
+        <Circle cx={midX} cy={height / 2} r={2.5} fill={c} />
 
         {/* Ceza sahaları */}
-        <Rect x={(width - boxW) / 2} y={inset} width={boxW} height={boxH} stroke={c} strokeWidth={sw} fill="none" />
+        <Rect x={(width - boxW) / 2} y={top} width={boxW} height={boxH} stroke={c} strokeWidth={sw} fill="none" />
         <Rect
           x={(width - boxW) / 2}
-          y={height - inset - boxH}
+          y={bottom - boxH}
           width={boxW}
           height={boxH}
           stroke={c}
           strokeWidth={sw}
           fill="none"
         />
+
         {/* Kale alanları */}
-        <Rect x={(width - smallW) / 2} y={inset} width={smallW} height={smallH} stroke={c} strokeWidth={sw} fill="none" />
+        <Rect x={(width - smallW) / 2} y={top} width={smallW} height={smallH} stroke={c} strokeWidth={sw} fill="none" />
         <Rect
           x={(width - smallW) / 2}
-          y={height - inset - smallH}
+          y={bottom - smallH}
           width={smallW}
           height={smallH}
           stroke={c}
           strokeWidth={sw}
           fill="none"
         />
+
+        {/* Penaltı noktaları ve yayları */}
+        <Circle cx={midX} cy={top + boxH * 0.66} r={2} fill={c} />
+        <Circle cx={midX} cy={bottom - boxH * 0.66} r={2} fill={c} />
+        <Path d={arc(top + boxH, true)} stroke={c} strokeWidth={sw} fill="none" />
+        <Path d={arc(bottom - boxH, false)} stroke={c} strokeWidth={sw} fill="none" />
+
+        {/* Köşe yayları */}
+        <Path d={corner(left, top, 1, 1)} stroke={c} strokeWidth={sw} fill="none" />
+        <Path d={corner(right, top, -1, 1)} stroke={c} strokeWidth={sw} fill="none" />
+        <Path d={corner(left, bottom, 1, -1)} stroke={c} strokeWidth={sw} fill="none" />
+        <Path d={corner(right, bottom, -1, -1)} stroke={c} strokeWidth={sw} fill="none" />
       </Svg>
     </View>
   );
@@ -238,8 +296,10 @@ const PitchSlot = memo(function PitchSlot({
 
         {player.events?.length ? (
           <View style={styles.events}>
+            {/* Koyu pul: beyaz olay ikonu beyaz avatarın kenarında kayboluyordu. */}
+            <View style={styles.eventsBacking} pointerEvents="none" />
             {player.events.slice(0, 3).map((kind, i) => (
-              <EventIcon key={`${kind}-${i}`} kind={kind} size={11} />
+              <EventIcon key={`${kind}-${i}`} kind={kind} size={13} onDark />
             ))}
           </View>
         ) : null}
@@ -252,7 +312,7 @@ const PitchSlot = memo(function PitchSlot({
   );
 });
 
-const SLOT_W = 60;
+const SLOT_W = 72;
 
 const styles = StyleSheet.create({
   formationRow: {
@@ -272,8 +332,9 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   pitch: {
-    backgroundColor: colors.pitch,
-    borderRadius: radius.md,
+    // Gradyan yüklenemezse düz derin yeşil altta durur.
+    backgroundColor: colors.pitchGreen,
+    borderRadius: radius.lg,
     borderWidth: hairline,
     borderColor: colors.border,
     overflow: "hidden",
@@ -282,49 +343,67 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 0,
     right: 0,
-    backgroundColor: colors.chalkInk,
+    backgroundColor: colors.chalk,
   },
   slot: {
     position: "absolute",
     width: SLOT_W,
     marginLeft: -SLOT_W / 2,
-    marginTop: -(AVATAR + 14) / 2,
+    marginTop: -(AVATAR + 18) / 2,
     alignItems: "center",
-    gap: 2,
+    gap: 4,
   },
   numberBadge: {
     position: "absolute",
-    right: -3,
-    bottom: -3,
-    minWidth: 16,
-    height: 16,
-    paddingHorizontal: 3,
-    borderRadius: 8,
+    right: -4,
+    bottom: -4,
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 4,
+    borderRadius: 10,
     backgroundColor: colors.surface1,
-    borderWidth: hairline,
-    borderColor: colors.borderStrong,
+    borderWidth: 1.5,
+    borderColor: colors.surface1,
     alignItems: "center",
     justifyContent: "center",
   },
   number: {
-    fontSize: 9,
-    lineHeight: 12,
+    fontSize: 11,
+    lineHeight: 14,
     fontFamily: type.tableNumStrong.fontFamily,
     fontVariant: ["tabular-nums"],
     color: colors.textPrimary,
   },
   events: {
     position: "absolute",
-    top: -4,
-    right: -8,
+    top: -5,
+    right: -9,
     flexDirection: "row",
-    gap: 1,
+    alignItems: "center",
+    gap: 2,
+    paddingHorizontal: 3,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+    overflow: "hidden",
   },
+  eventsBacking: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: colors.overlay,
+  },
+  /*
+   * Ad derin sahanın üstünde durur: beyaz metin + koyu kapsül. Kapsül olmadan
+   * ad, biçme şeridinin açık bandına denk geldiğinde okunurluğunu kaybediyordu.
+   */
   name: {
-    ...type.overline,
-    letterSpacing: 0,
-    color: colors.textPrimary,
+    ...type.micro,
+    letterSpacing: 0.2,
+    color: colors.onPitch,
     textAlign: "center",
-    width: SLOT_W,
+    overflow: "hidden",
+    borderRadius: radius.xs,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    backgroundColor: colors.overlay,
+    maxWidth: SLOT_W,
   },
 });

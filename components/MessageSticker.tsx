@@ -299,9 +299,9 @@ const styles = StyleSheet.create({
     borderColor: colors.borderStrong,
     ...Platform.select({
       ios: {
-        // Koyu zeminde gölge görünmez; balon yüzeyi zaten `elevated`. Gölge
-        // yalnız açık temada işe yarar ve orada da yumuşak kalır.
-        shadowColor: colors.inverse,
+        // Gölge rengi `shadowColor` tokenıdır: `inverse` KOYU temada AÇIK bir
+        // yüzeydir ve orada gölge, balonun altına beyaz bir hale çiziyordu.
+        shadowColor: colors.shadowColor,
         shadowOpacity: 0.18,
         shadowRadius: 12,
         shadowOffset: { width: 0, height: 4 },

@@ -19,7 +19,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { useCallback, useMemo } from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
-import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
+import { colors, elevate, hairline, layout, radius, space, textScale, type } from "@/theme";
 import { Toggle } from "./Toggle";
 import { toneColors, type Tone } from "./Badge";
 import { Touchable } from "./Pressable";
@@ -154,7 +154,7 @@ export const ListRow = React.memo(function ListRow({
         />
       ) : null}
       {showChevron ? (
-        <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
+        <Ionicons name="chevron-forward" size={18} color={colors.textDisabled} />
       ) : null}
 
       {showDivider ? (
@@ -216,8 +216,7 @@ const styles = StyleSheet.create({
   },
   single: {
     borderRadius: radius.lg,
-    borderWidth: hairline,
-    borderColor: colors.border,
+    ...elevate(1),
   },
   first: {
     borderTopLeftRadius: radius.lg,
@@ -228,13 +227,13 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: radius.lg,
   },
   highlighted: {
-    backgroundColor: colors.surface2,
+    backgroundColor: colors.brandDim,
     borderLeftWidth: 3,
     borderLeftColor: colors.brand,
   },
   leading: {
-    width: 24,
-    height: 24,
+    width: 28,
+    height: 28,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -247,17 +246,17 @@ const styles = StyleSheet.create({
    * hizası aynı kalır, daha genişleri kendi yerini alır.
    */
   leadingNode: {
-    minWidth: 24,
-    minHeight: 24,
+    minWidth: 28,
+    minHeight: 28,
     alignItems: "center",
     justifyContent: "center",
   },
   texts: {
     flex: 1,
-    gap: 2,
+    gap: 3,
   },
   title: {
-    ...type.body,
+    ...type.h4,
     color: colors.textPrimary,
   },
   titleDestructive: {
@@ -267,13 +266,13 @@ const styles = StyleSheet.create({
     color: colors.textDisabled,
   },
   subtitle: {
-    ...type.caption,
-    color: colors.textSecondary,
+    ...type.bodySm,
+    color: colors.textTertiary,
   },
   value: {
-    ...type.bodySm,
+    ...type.body,
     color: colors.textSecondary,
-    maxWidth: 120,
+    maxWidth: 140,
     textAlign: "right",
   },
   divider: {
@@ -284,8 +283,8 @@ const styles = StyleSheet.create({
     height: hairline,
     backgroundColor: colors.separator,
   },
-  /** Amblem/ikon sütununu atlayan ayraç: 12 + 24 + 8 = 44 (§3.4). */
+  /** Amblem/ikon sütununu atlayan ayraç: 14 + 28 + 10 = 52. */
   dividerInsetAvatar: {
-    left: layout.rowPaddingH + 24 + space.sm,
+    left: layout.rowPaddingH + 28 + space.m,
   },
 });

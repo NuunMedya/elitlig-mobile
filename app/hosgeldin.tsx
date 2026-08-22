@@ -371,9 +371,11 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.bg,
   },
-  /* Tanıtım koyu blok üstünde: üç slayt ürünün "sahne" hâlidir. */
+  /* Tanıtım koyu blok üstünde: üç slayt ürünün "sahne" hâlidir.
+     DAİMA KOYU (`inkBlock`): `inverse` koyu temada açık bir yüzeydir ve
+     slaytların beyaz metni orada görünmüyordu. */
   dark: {
-    backgroundColor: colors.inverse,
+    backgroundColor: colors.inkBlock,
   },
 
   /* — Üç slayt — */

@@ -31,6 +31,7 @@
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
+import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -117,6 +118,7 @@ import {
   colors,
   duration,
   easing,
+  elevate,
   hairline,
   haptics,
   layout,
@@ -212,6 +214,33 @@ const dayOf = (match: Pick<ApiMatch, "date">) => String(match.date ?? "").slice(
 function kickoffAt(match: Pick<ApiMatch, "date" | "time">): number {
   const stamp = Date.parse(`${dayOf(match)}T${match.time || "00:00:00"}`);
   return Number.isFinite(stamp) ? stamp : 0;
+}
+
+/**
+ * Oyuncu adını dar bir sütuna sığdır: "Muhammed Enes YAZICIOĞLU" ne skor
+ * bloğunun iki sütununa ne de zaman tünelinin baloncuğuna sığıyor; ikisinde de
+ * "Muhammed…" diye kırpılıyor ve satır, kimin ne yaptığını söylemiyordu.
+ * İlk adın baş harfi + kalanı ("M. Enes YAZICIOĞLU") hem ayırt edici hem kısa;
+ * tek kelimelik adlar olduğu gibi kalır.
+ */
+function shortName(full: string): string {
+  const parts = full.trim().split(/\s+/).filter(Boolean);
+  if (parts.length < 2) return full;
+  return `${parts[0].slice(0, 1)}. ${parts.slice(1).join(" ")}`;
+}
+
+/**
+ * Zaman tünelinin baloncuğu için DAHA DA kısa ad: baş harf + SOYADI.
+ *
+ * Baloncuk, iki sütunlu düzende ~140px'tir ve 16px'lik "M. Ali GÜRER" oraya da
+ * sığmayıp "M. Ali GÜR…" oluyordu. Göbek adı düşer: "M. GÜRER". Televizyon
+ * grafiklerinin kullandığı biçim budur ve bir gol satırında ayırt edici olan
+ * da soyadıdır.
+ */
+function compactName(full: string): string {
+  const parts = full.trim().split(/\s+/).filter(Boolean);
+  if (parts.length < 2) return full;
+  return `${parts[0].slice(0, 1)}. ${parts[parts.length - 1]}`;
 }
 
 /** Türkçe küçük harf (İ/I tuzağı) — takım adı karşılaştırmaları bununla yapılır. */
@@ -567,10 +596,16 @@ export default function MatchDetailScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
+      {/*
+        BAŞLIK LİG ADINI TAŞIR, TAKIM ADLARINI DEĞİL. İki takım adı tek satıra
+        sığmıyor ve "ÇAYKARA FC – ŞANLI B…" gibi kırpılıyordu; üstelik hemen
+        altındaki mürekkep blok ikisini de armalarıyla birlikte zaten
+        gösteriyor. Başlık artık tekrar etmeyen bağlamı verir.
+      */}
       <ScreenHeader
-        title={`${match.first_team_name} – ${match.second_team_name}`}
-        overline={match.league_name}
-        subtitle={match.match_season ?? undefined}
+        title={match.league_name ?? "Maç detayı"}
+        overline="MAÇ"
+        subtitle={[match.match_season, match.match_field].filter(Boolean).join(" · ") || undefined}
         back
         scrollY={scrollY}
         actions={actions}
@@ -749,8 +784,26 @@ const MatchHero = memo(function MatchHero({
 
   return (
     <View style={styles.hero}>
-      {/* İmza öğesi: skor bloğunun arkasında %4 opaklıkta orta yuvarlak yayı. */}
-      <ChalkArc width={width} height={HERO_ARC_HEIGHT} />
+      {/*
+        MÜREKKEP BLOK. Skor, uygulamanın en önemli tek bilgisidir ve kendi
+        yüzeyini hak eder. Beyaz kart üstünde duran skor, altındaki liste
+        satırlarıyla aynı ağırlıkta görünüyordu; koyu blok onu ekrandan
+        AYIRIR ve sayfaya bir kimlik verir.
+
+        Gradyan YATAY (sol→sağ) uygulanır: blok, üstündeki başlık şeridiyle
+        aynı gradyanı paylaşabilsin ve dikeyde eklendiğinde dikiş izi
+        oluşmasın diye.
+      */}
+      <LinearGradient
+        colors={colors.gradientInk}
+        start={HERO_GRADIENT_START}
+        end={HERO_GRADIENT_END}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
+
+      {/* İmza öğesi: skor bloğunun arkasında tebeşir orta yuvarlak yayı. */}
+      <ChalkArc width={width} height={HERO_ARC_HEIGHT} color={colors.chalk} />
 
       <View style={styles.heroTeams}>
         <Touchable
@@ -762,7 +815,7 @@ const MatchHero = memo(function MatchHero({
           accessibilityRole="button"
           accessibilityLabel={`${match.first_team_name} takım sayfası`}
         >
-          <TeamLogo name={match.first_team_name} logo={homeLogo} size={48} />
+          <TeamLogo name={match.first_team_name} logo={homeLogo} size={layout.crestXl} />
           <Text style={styles.heroTeamName} numberOfLines={2} {...textScale.dense}>
             {match.first_team_name}
           </Text>
@@ -784,7 +837,12 @@ const MatchHero = memo(function MatchHero({
           {live ? (
             <MatchClock snapshot={snapshot} />
           ) : state === "finished" ? (
-            <Badge label="MS" tone="neutral" size="xs" />
+            // Mürekkep blok üstünde `Badge` sönük kalırdı: tebeşir çerçeveli pul.
+            <View style={styles.heroChip}>
+              <Text style={styles.heroChipText} {...textScale.badge}>
+                MS
+              </Text>
+            </View>
           ) : (
             <Countdown target={kickoffAt(match)} />
           )}
@@ -799,7 +857,7 @@ const MatchHero = memo(function MatchHero({
           accessibilityRole="button"
           accessibilityLabel={`${match.second_team_name} takım sayfası`}
         >
-          <TeamLogo name={match.second_team_name} logo={awayLogo} size={48} />
+          <TeamLogo name={match.second_team_name} logo={awayLogo} size={layout.crestXl} />
           <Text style={styles.heroTeamName} numberOfLines={2} {...textScale.dense}>
             {match.second_team_name}
           </Text>
@@ -814,17 +872,9 @@ const MatchHero = memo(function MatchHero({
       */}
       {hasScorers ? (
         <View style={styles.scorers}>
-          <View style={styles.scorerColumn}>
-            {scorers.home.map((line) => (
-              <ScorerRow key={line.key} line={line} side="home" />
-            ))}
-          </View>
+          <ScorerColumn lines={scorers.home} side="home" />
           <View style={styles.scorerAxis} />
-          <View style={styles.scorerColumn}>
-            {scorers.away.map((line) => (
-              <ScorerRow key={line.key} line={line} side="away" />
-            ))}
-          </View>
+          <ScorerColumn lines={scorers.away} side="away" />
         </View>
       ) : null}
 
@@ -840,7 +890,48 @@ const MatchHero = memo(function MatchHero({
 });
 
 /** Skor bloğunun arkasındaki yayın yüksekliği — armalar + skor + golcüler. */
-const HERO_ARC_HEIGHT = 132;
+const HERO_ARC_HEIGHT = 160;
+
+/** Mürekkep bloğun gradyan yönü — YATAY, bkz. MatchHero içindeki gerekçe. */
+const HERO_GRADIENT_START = { x: 0, y: 0 } as const;
+const HERO_GRADIENT_END = { x: 1, y: 0 } as const;
+
+/**
+ * Bir takımın golcü sütunu.
+ *
+ * EN ÇOK `SCORER_LIMIT` SATIR: amatör ligde 9-5 biten maçlar var ve tam liste
+ * skor bloğunu ekranın tamamına yayıyordu — skor, sekiz satırlık bir dökümün
+ * içinde kayboluyordu. Fazlası tek satırlık bir sayaca iner; tam döküm zaten
+ * "Maç akışı" sekmesindedir.
+ */
+const SCORER_LIMIT = 5;
+
+const ScorerColumn = memo(function ScorerColumn({
+  lines,
+  side,
+}: {
+  lines: ScorerLine[];
+  side: "home" | "away";
+}) {
+  const shown = lines.slice(0, SCORER_LIMIT);
+  const rest = lines.length - shown.length;
+
+  return (
+    <View style={styles.scorerColumn}>
+      {shown.map((line) => (
+        <ScorerRow key={line.key} line={line} side={side} />
+      ))}
+      {rest > 0 ? (
+        <Text
+          style={[styles.scorerMore, side === "home" && styles.scorerTextHome]}
+          {...textScale.badge}
+        >
+          {`+${rest} gol daha`}
+        </Text>
+      ) : null}
+    </View>
+  );
+});
 
 /** Tek golcü satırı: ev sahibinde top ikonu SAĞDA, deplasmanda SOLDA durur. */
 const ScorerRow = memo(function ScorerRow({
@@ -850,19 +941,30 @@ const ScorerRow = memo(function ScorerRow({
   line: ScorerLine;
   side: "home" | "away";
 }) {
-  const label = line.ownGoal ? `${line.name} (k.k.)` : line.name;
+  const label = line.ownGoal ? `${shortName(line.name)} (k.k.)` : shortName(line.name);
   const minute = line.minute != null ? `${line.minute}'` : "";
 
+  /*
+   * DAKİKA AYRI BİR `Text`: tek metin olduğunda uzun bir ad, satırı ele
+   * geçirip dakikayı da birlikte kırpıyordu ("ABDULLAH TOKSOY …") — yani gol
+   * satırının en önemli iki bilgisinden biri kayboluyordu. Ad kırpılabilir,
+   * dakika kırpılamaz.
+   */
   return (
     <View style={[styles.scorerRow, side === "home" && styles.scorerRowHome]}>
-      <EventIcon kind={line.ownGoal ? "ownGoal" : "goal"} size={11} />
+      <EventIcon kind={line.ownGoal ? "ownGoal" : "goal"} size={13} onDark />
       <Text
         style={[styles.scorerText, side === "home" && styles.scorerTextHome]}
         numberOfLines={1}
         {...textScale.dense}
       >
-        {label} {minute}
+        {label}
       </Text>
+      {minute ? (
+        <Text style={styles.scorerMinute} {...textScale.badge}>
+          {minute}
+        </Text>
+      ) : null}
     </View>
   );
 });
@@ -889,7 +991,8 @@ const MatchClock = memo(function MatchClock({ snapshot }: { snapshot: LiveSnapsh
         minute={halftime ? null : added != null ? 90 : minute}
         addedTime={added}
         halftime={halftime}
-        size={40}
+        size={48}
+        onDark
       />
     </View>
   );
@@ -935,7 +1038,7 @@ const Countdown = memo(function Countdown({ target }: { target: number }) {
 const ReconnectStrip = memo(function ReconnectStrip() {
   return (
     <View style={styles.reconnect}>
-      <Ionicons name="cloud-offline-outline" size={13} color={colors.warn} />
+      <Ionicons name="cloud-offline-outline" size={16} color={colors.onDarkMuted} />
       <Text style={styles.reconnectText} numberOfLines={2} {...textScale.dense}>
         Anlık bağlantı kurulamadı — yeniden bağlanılıyor. Skor kısa aralıklarla yenileniyor.
       </Text>
@@ -1205,7 +1308,10 @@ function SummaryTab({
             action={
               timeline.length > 1
                 ? {
-                    label: order === "yeni" ? "Maç akışı" : "En yeni önce",
+                    // Etiket bölüm başlığıyla aynı olamaz: "Maç akışı" başlığının
+                    // yanında yine "Maç akışı" yazan bir düğme, ne yapacağını
+                    // söylemiyordu. Etiket artık GİDİLECEK sıralamayı söyler.
+                    label: order === "yeni" ? "Eskiden yeniye" : "Yeniden eskiye",
                     onPress: () => setOrder((current) => (current === "yeni" ? "akis" : "yeni")),
                   }
                 : undefined
@@ -1348,11 +1454,22 @@ const TimelineRow = memo(function TimelineRow({
   const goal = isGoalKind(kind);
   const detail = kind === "goal" ? goalDetail(event) : kind === "ownGoal" ? "kendi kalesine" : null;
 
+  /*
+   * Adlar `compactName` ile kısaltılır (baş harf + soyadı): baloncuk, iki
+   * sütunlu düzende ~140px genişliktedir ve 16px'lik tam ad oraya sığmayıp
+   * "ABDULLAH…" diye kırpılıyordu — yani satırın söylediği tek şey
+   * kayboluyordu.
+   */
   const label =
     kind === "substitution"
-      ? [nameOf(event.oyuncu_giren_id), nameOf(event.oyuncu_cikan_id)].filter(Boolean).join(" → ") ||
-        "Oyuncu değişikliği"
-      : nameOf(event.oyuncu_id) || event.aciklama || EVENT_LABEL[kind] || "Olay";
+      ? [nameOf(event.oyuncu_giren_id), nameOf(event.oyuncu_cikan_id)]
+          .filter((value): value is string => Boolean(value))
+          .map(compactName)
+          .join(" → ") || "Oyuncu değişikliği"
+      : (() => {
+          const player = nameOf(event.oyuncu_id);
+          return player ? compactName(player) : event.aciklama || EVENT_LABEL[kind] || "Olay";
+        })();
 
   const playerId = Number(event.oyuncu_id) || null;
   const open = useCallback(() => {
@@ -1375,7 +1492,7 @@ const TimelineRow = memo(function TimelineRow({
         score ? `, skor ${score}` : ""
       }`}
     >
-      {home ? <EventIcon kind={kind} size={13} /> : null}
+      {home ? <EventIcon kind={kind} size={16} /> : null}
       <View style={styles.tlTexts}>
         <Text
           style={[
@@ -1398,7 +1515,7 @@ const TimelineRow = memo(function TimelineRow({
           </Text>
         ) : null}
       </View>
-      {home ? null : <EventIcon kind={kind} size={13} />}
+      {home ? null : <EventIcon kind={kind} size={16} />}
     </Touchable>
   );
 
@@ -1781,7 +1898,7 @@ function LineupTab({
 
   const renderSectionHeader = useCallback(
     ({ section }: { section: LineupSection }) => (
-      <SectionHeader title={section.title} meta={section.meta} sticky />
+      <SectionHeader title={section.title} meta={section.meta} size="group" sticky />
     ),
     [],
   );
@@ -2009,7 +2126,7 @@ const LineupPlayerRow = memo(function LineupPlayerRow({
         {shirt}
       </Text>
 
-      <Avatar name={name} image={player.playerImg} size={28} />
+      <Avatar name={name} image={player.playerImg} size={36} />
 
       <View style={styles.playerTexts}>
         <Text style={styles.playerName} numberOfLines={1} {...textScale.dense}>
@@ -2038,7 +2155,7 @@ const LineupPlayerRow = memo(function LineupPlayerRow({
       {/* Değişiklik okları */}
       {sub?.in != null ? (
         <View style={styles.subMark}>
-          <Ionicons name="arrow-up" size={11} color={colors.win} />
+          <Ionicons name="arrow-up" size={13} color={colors.win} />
           <Text style={[styles.subMinute, { color: colors.win }]} {...textScale.badge}>
             {sub.in}&apos;
           </Text>
@@ -2046,7 +2163,7 @@ const LineupPlayerRow = memo(function LineupPlayerRow({
       ) : null}
       {sub?.out != null ? (
         <View style={styles.subMark}>
-          <Ionicons name="arrow-down" size={11} color={colors.loss} />
+          <Ionicons name="arrow-down" size={13} color={colors.loss} />
           <Text style={[styles.subMinute, { color: colors.loss }]} {...textScale.badge}>
             {sub.out}&apos;
           </Text>
@@ -2069,7 +2186,7 @@ const ContribBadge = memo(function ContribBadge({
 }) {
   return (
     <View style={styles.contribBadge}>
-      <Ionicons name={icon} size={11} color={color} />
+      <Ionicons name={icon} size={14} color={color} />
       {count > 1 ? (
         <Text style={styles.contribCount} {...textScale.badge}>
           {count}
@@ -2932,13 +3049,18 @@ const styles = StyleSheet.create({
     color: colors.textTertiary,
   },
 
-  /* ---- Hero ---- */
+  /* ---- Hero: mürekkep blok ---- */
   hero: {
-    backgroundColor: colors.surface1,
+    // Gradyan yüklenemezse düz mürekkep zemin altta durur.
+    backgroundColor: colors.inkBlock,
     paddingHorizontal: layout.screenPadding,
-    paddingTop: space.md,
-    paddingBottom: space.m,
-    gap: space.m,
+    paddingTop: space.lg,
+    paddingBottom: space.lg,
+    gap: space.md,
+    // Alt köşeler yuvarlak: blok "sayfaya oturmuş bir panel" olur, ekranı
+    // ikiye bölen düz bir bant değil.
+    borderBottomLeftRadius: radius.xxl,
+    borderBottomRightRadius: radius.xxl,
     overflow: "hidden",
   },
   heroTeams: {
@@ -2948,30 +3070,44 @@ const styles = StyleSheet.create({
   heroTeam: {
     flex: 1,
     alignItems: "center",
-    gap: space.xs,
+    gap: space.sm,
     paddingVertical: space.xxs,
     borderRadius: radius.md,
   },
+  /* 14px (label) — 15px'te "ŞANLI BERKCAN GÜCÜ" ikinci satırda da kırpılıyordu.
+     İki satır + 14px, üç kelimelik takım adlarını tam gösteriyor. */
   heroTeamName: {
-    ...type.caption,
-    color: colors.textPrimary,
+    ...type.label,
+    color: colors.onDark,
     textAlign: "center",
-    minHeight: 28,
+    minHeight: 40,
   },
   heroCenter: {
-    minWidth: 116,
+    minWidth: 118,
     alignItems: "center",
     justifyContent: "flex-start",
-    gap: space.s,
-    paddingTop: space.xs,
+    gap: space.m,
+    paddingTop: space.sm,
   },
   heroScore: {
     ...type.scoreHero,
-    color: colors.textPrimary,
+    color: colors.onDark,
   },
   /* Tire skordan sönük: göz iki rakamı görsün, aradaki işareti değil. */
   heroScoreDash: {
-    color: colors.textTertiary,
+    color: colors.onDarkMuted,
+  },
+  /** "MS" pulu — mürekkep blok üstünde tebeşir çerçeveli. */
+  heroChip: {
+    paddingHorizontal: space.m,
+    paddingVertical: space.xxs,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.chalk,
+  },
+  heroChipText: {
+    ...type.micro,
+    color: colors.onDarkMuted,
   },
 
   /* ---- Gol atanlar: iki sütun, ortada eksen ---- */
@@ -2986,9 +3122,9 @@ const styles = StyleSheet.create({
   },
   /* Ortadaki hairline — iki sütunun hangi eksene yaslandığını söyler. */
   scorerAxis: {
-    width: hairline,
+    width: 1,
     alignSelf: "stretch",
-    backgroundColor: colors.separator,
+    backgroundColor: colors.chalk,
   },
   scorerRow: {
     flexDirection: "row",
@@ -3000,27 +3136,37 @@ const styles = StyleSheet.create({
     flexDirection: "row-reverse",
   },
   scorerText: {
-    ...type.caption,
-    color: colors.textSecondary,
+    ...type.bodySm,
+    color: colors.onDarkMuted,
     flexShrink: 1,
+  },
+  /** Dakika asla kırpılmaz: sabit genişlikli, tabular. */
+  scorerMinute: {
+    ...type.clock,
+    color: colors.onDarkMuted,
+  },
+  scorerMore: {
+    ...type.micro,
+    color: colors.onDarkMuted,
+    opacity: 0.8,
   },
   scorerTextHome: {
     textAlign: "right",
   },
   heroKickoff: {
     ...type.scoreLg,
-    color: colors.textPrimary,
+    color: colors.onDark,
   },
   heroClock: {
     alignItems: "center",
   },
   heroCountdown: {
-    ...type.caption,
-    color: colors.textSecondary,
+    ...type.bodySm,
+    color: colors.onDarkMuted,
   },
   heroMeta: {
     ...type.caption,
-    color: colors.textSecondary,
+    color: colors.onDarkMuted,
     textAlign: "center",
   },
 
@@ -3089,18 +3235,22 @@ const styles = StyleSheet.create({
   },
 
   /* ---- Yeniden bağlanma şeridi ---- */
+  /* Şerit mürekkep bloğun İÇİNDE durur: açık bej bir kutu orada alarm gibi
+     parlıyordu. Tebeşir çerçeve + kısılmış beyaz, bilgiyi verir ama skoru
+     bastırmaz. */
   reconnect: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.sm,
-    backgroundColor: colors.warnDim,
     borderRadius: radius.md,
-    paddingHorizontal: space.m,
-    paddingVertical: space.sm,
+    borderWidth: 1,
+    borderColor: colors.chalk,
+    paddingHorizontal: space.md,
+    paddingVertical: space.m,
   },
   reconnectText: {
-    ...type.caption,
-    color: colors.warn,
+    ...type.bodySm,
+    color: colors.onDarkMuted,
     flex: 1,
   },
 
@@ -3200,6 +3350,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: layout.screenPadding,
+    paddingVertical: space.xxs,
   },
   tlSide: {
     flex: 1,
@@ -3207,19 +3358,20 @@ const styles = StyleSheet.create({
   tlBubble: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.sm,
+    gap: space.m,
     borderRadius: radius.md,
-    paddingHorizontal: space.sm,
-    paddingVertical: space.s,
+    paddingHorizontal: space.m,
+    paddingVertical: space.sm,
   },
   tlBubbleHome: {
     justifyContent: "flex-start",
   },
-  /* Gol satırı zeminli kart olur: 90 dakikada olan tek önemli şey odur. */
+  /* Gol satırı zeminli kart olur: 90 dakikada olan tek önemli şey odur.
+     Yumuşak gölge, gol kartını akışın diğer satırlarından bir kat yukarı
+     kaldırır — çizgi tek başına bunu yapamıyordu. */
   tlBubbleGoal: {
-    backgroundColor: colors.surface1,
-    borderWidth: hairline,
-    borderColor: colors.border,
+    ...elevate(1),
+    borderRadius: radius.md,
   },
   tlBubbleAway: {
     justifyContent: "flex-end",
@@ -3228,15 +3380,15 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   tlName: {
-    ...type.bodySm,
-    color: colors.textPrimary,
+    ...type.body,
+    color: colors.textSecondary,
   },
   tlNameGoal: {
     ...type.h3,
     color: colors.textPrimary,
   },
   tlDetail: {
-    ...type.caption,
+    ...type.bodySm,
     color: colors.textTertiary,
   },
   tlAlignLeft: {
@@ -3246,26 +3398,27 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
   tlCenter: {
-    width: 44,
+    width: 56,
     alignItems: "center",
   },
+  /* Dikey ray: satırların ortasından geçen sürekli çizgi hissini kurar. */
   tlLine: {
-    width: 1,
-    height: 10,
-    backgroundColor: colors.separator,
+    width: 1.5,
+    height: 14,
+    backgroundColor: colors.border,
   },
   tlMinute: {
-    minWidth: 34,
-    paddingHorizontal: space.xs,
-    paddingVertical: 2,
+    minWidth: 42,
+    paddingHorizontal: space.s,
+    paddingVertical: 3,
     borderRadius: radius.pill,
-    borderWidth: hairline,
+    borderWidth: 1,
     borderColor: colors.border,
     alignItems: "center",
     backgroundColor: colors.surface1,
   },
   tlMinuteText: {
-    ...type.clock,
+    ...type.tableNumStrong,
     color: colors.textTertiary,
   },
   /* Golün dakikası da vurgulanır: çizginin üstünde dolu bir işaret olur. */
@@ -3281,9 +3434,9 @@ const styles = StyleSheet.create({
   tlBreak: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.md,
+    gap: space.lg,
     paddingHorizontal: layout.screenPadding,
-    paddingVertical: space.md,
+    paddingVertical: space.lg,
   },
   tlBreakLine: {
     flex: 1,
@@ -3400,19 +3553,20 @@ const styles = StyleSheet.create({
   playerRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.m,
+    gap: space.md,
     marginHorizontal: layout.screenPadding,
     paddingHorizontal: space.md,
-    paddingVertical: space.sm,
-    backgroundColor: colors.surface1,
+    paddingVertical: space.m,
     borderRadius: radius.md,
-    marginTop: space.xs,
+    marginTop: space.s,
     minHeight: layout.listRowHeight,
+    ...elevate(1),
   },
+  /** Forma numarası kendi kutusunda durur: sütun hizası rakam uzasa da bozulmaz. */
   shirt: {
-    ...type.tableNum,
+    ...type.tableNumStrong,
     color: colors.textTertiary,
-    width: 20,
+    width: 26,
     textAlign: "center",
   },
   playerTexts: {
@@ -3420,22 +3574,22 @@ const styles = StyleSheet.create({
     gap: space.xxs,
   },
   playerName: {
-    ...type.bodySm,
+    ...type.h4,
     color: colors.textPrimary,
   },
   playerMeta: {
-    ...type.caption,
+    ...type.bodySm,
     color: colors.textTertiary,
   },
   contribRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.xs,
+    gap: space.s,
   },
   contribBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 1,
+    gap: 2,
   },
   contribCount: {
     ...type.micro,

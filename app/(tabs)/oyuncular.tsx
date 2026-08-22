@@ -118,9 +118,21 @@ const PlayerRow = React.memo(function PlayerRow({
         <Text style={styles.name} numberOfLines={1} {...textScale.dense}>
           {name}
         </Text>
-        {/* Üç sabit sütun: ölçüt ne olursa olsun aynı üç rakam. */}
+        {/*
+          Meta satırı, SAĞDAKİ metriğin tekrarını taşımaz. Önceki hâlde
+          "24 gol" hem sağdaki büyük rakamdaydı hem meta satırındaydı; satır
+          da bu yüzden taşıp "… 2 asis" diye kırpılıyordu. Şimdi aktif ölçüt
+          meta'dan düşülür ve satır tek satıra sığar.
+        */}
         <Text style={styles.meta} numberOfLines={1} {...textScale.dense}>
-          {teamName || "Takımsız"} · {matches} maç · {goals} gol · {assists} asist
+          {[
+            teamName || "Takımsız",
+            unit === "maç" ? null : `${matches} maç`,
+            unit === "gol" ? null : `${goals} gol`,
+            `${assists} asist`,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
         </Text>
       </View>
 

@@ -17,16 +17,24 @@
  *     için, mercan veri için ASLA kullanılmaz. Bu ayrım ihlal edilirse ekran
  *     "iki vurgu rengi yarışıyor" görüntüsüne düşer.
  *
- *  2. AÇIK TEMA BİRİNCİLDİR. Zemin (`bg` #F2F4F7) sıcak krem değil SOĞUK
+ *  2. AÇIK TEMA BİRİNCİLDİR. Zemin (`bg` #F4F6FA) sıcak krem değil SOĞUK
  *     gri-mavi kağıttır. Koyu temadaki lacivert, açık temada kağıdın içindeki
  *     soğuk alt ton olarak yaşar; ısıtılmış krem ucuz görünür.
  *
- *  3. GÖLGE DEĞİL ÇİZGİ. Varsayılan kart `surface1` + 1px `border`; gölge
- *     yalnız yüzen katmanlara (sheet, sticky şerit, dropdown) ayrılmıştır.
- *     Bkz. theme/elevation.ts.
+ *  3. ÇİZGİ VE YUMUŞAK GÖLGE BİRLİKTE. Kart `surface1` + 1px `border` +
+ *     çok geniş/çok sönük bir gölgedir. Önceki sürüm gölgeyi tamamen
+ *     yasaklamıştı; kâğıt üstünde kâğıt görünmez oldu ve arayüz "ekrana
+ *     basılmış" gibi durdu. Bkz. theme/elevation.ts.
  *
- *  4. GRADIENT NEREDEYSE YASAK. Tek istisna hero/kapak görsellerinin üstündeki
- *     okunabilirlik scrim'i (`scrimGradientTop` → `scrimGradientBottom`).
+ *  4. GRADIENT SAYILIDIR VE TOKENDIR. Serbest gradyan yoktur; paletteki altı
+ *     gradyan dışında bir gradyan yazılmaz. Her birinin bir İŞİ vardır:
+ *     `gradientInk` kimlik bloğu, `gradientBrand` birincil aksiyon,
+ *     `gradientAccent` veri, `gradientLive` canlı, `gradientPitch` saha,
+ *     `gradientSurface` kartın üst ışığı. Görsel üstündeki okunabilirlik
+ *     scrim'i ayrıca `scrimGradientTop` → `scrimGradientBottom` ile kurulur.
+ *     Önceki sürüm gradyanı tamamen yasaklamıştı; sonuç, hiçbir yüzeyi
+ *     diğerinden ayırmayan düz gri bir arayüz oldu. Ölçülü gradyan derinlik
+ *     üretir, dekorasyon değildir.
  *
  *  5. KONTRAST HESAPLANDI, VARSAYILMADI. Üç token brief'teki ham değerinden
  *     koyulaştırıldı çünkü WCAG AA'yı geçmiyordu — ayrıntı aşağıda ilgili
@@ -71,6 +79,16 @@ export interface Palette {
    * Seçili filtre chip'i gibi ters blok öğeleri bunu kullanır.
    */
   onInverse: string;
+  /**
+   * DAİMA KOYU blok yüzeyi — maç skoru şeridi, takım kapağı, oyuncu kimlik
+   * kartı, manşet karuseli, paylaşım kartı.
+   *
+   * `inverse` İLE KARIŞTIRMA: `inverse` "zeminin tersi" demektir ve KOYU
+   * temada AÇIK bir yüzeydir. Üstüne `onDark` (beyaz) metin koyan her blok
+   * `inverse` kullandığında koyu temada beyaz üstüne beyaz yazıyordu.
+   * `inkBlock` iki temada da koyudur; `onDark` metni her zaman okunur.
+   */
+  inkBlock: string;
 
   /* — Kenarlık / ayraç — */
   border: string;        // hairline ayraçlar, normal kenarlık
@@ -100,6 +118,12 @@ export interface Palette {
   live: string;
   liveDim: string;
   liveGlow: string;      // dakika halkası izi (rgba)
+  /**
+   * Canlı kırmızısının MÜREKKEP BLOK üstündeki sürümü. `live` açık kâğıt için
+   * koyulaştırılmıştır ve koyu blokta 2,9:1'e düşüyordu; bu token iki temada
+   * da koyu zemin varsayar ve AA geçer.
+   */
+  liveOnDark: string;
   win: string;
   winDim: string;
   draw: string;
@@ -118,9 +142,17 @@ export interface Palette {
   redCard: string;
   star: string;          // favori (dolu) — aksiyon olduğu için MERCAN
   starEmpty: string;     // favori (boş)
-  pitch: string;         // saha zemini — YEŞİL DEĞİL, sunken yüzey
-  chalk: string;         // saha çizgisi (koyu saha üstünde beyaz tebeşir)
+  /**
+   * Saha zemini (düz dolgu yedeği). Asıl saha `gradientPitch` ile çizilir.
+   * DERİN YEŞİLDİR: önceki sürüm sahayı gri bir yüzey yapmıştı ve saha,
+   * üstünde durduğu kâğıttan ayırt edilemiyordu — kadro ekranı "boş bir
+   * dikdörtgenin üstüne dağılmış avatarlar" gibi görünüyordu.
+   */
+  pitch: string;
+  chalk: string;         // saha çizgisi — derin saha üstünde beyaz tebeşir
   chalkInk: string;      // kağıt üstünde tebeşir (orta yuvarlak yayı, ayraç)
+  /** Saha üstündeki oyuncu adı/numarası — iki temada da beyaz. */
+  onPitch: string;
 
   /* — Reyting skalası — */
   ratingPoor: string;    // < 6.0
@@ -143,7 +175,23 @@ export interface Palette {
   zoneRelegationPlayoff: string;
   zoneRelegation: string;
 
+  /* — Gradyanlar — derinlik ve okunabilirlik için; dekorasyon için değil — */
+  /** Koyu kimlik bloğu: maç skoru şeridi, hero kapağı, paylaşım kartı. */
+  gradientInk: readonly [string, string];
+  /** Birincil aksiyon dolgusu (mercan). Metni `textOnBrand`tır. */
+  gradientBrand: readonly [string, string];
+  /** Veri vurgusu: ilerleme barı, seçili veri bloğu. */
+  gradientAccent: readonly [string, string];
+  /** Canlı rozeti ve canlı skor şeridi. */
+  gradientLive: readonly [string, string];
+  /** Sahanın zemini — derin yeşil, üstünde beyaz tebeşir okunur. */
+  gradientPitch: readonly [string, string];
+  /** Kartın çok hafif üst ışığı; yüzeyi düz kâğıttan ayırır. */
+  gradientSurface: readonly [string, string];
+
   /* — Yardımcı — */
+  /** Gölge rengi — açık temada mürekkep, koyuda saf siyah. */
+  shadowColor: string;
   skeletonBase: string;
   skeletonHighlight: string;
   tabBar: string;
@@ -156,7 +204,7 @@ export interface Palette {
 /**
  * Açık tema — BİRİNCİL tema, cilalanan tema budur.
  *
- * Kontrast düzeltmeleri (ham brief değeri → buradaki değer, kağıt #F2F4F7 üstü):
+ * Kontrast düzeltmeleri (ham brief değeri → buradaki değer, kağıt #F4F6FA üstü):
  *   · ink-muted   #767D8E = 3,74:1 ✗  →  #656C7D = 4,77:1 ✓ (AA metin)
  *   · slate bar   #99A1B3 = 2,35:1 ✗  →  #7C8598 = 3,36:1 ✓ (AA grafik)
  *   · mercan metin #EE7F55 = 2,44:1 ✗ →  #B0512A = 4,70:1 ✓ (AA metin)
@@ -165,10 +213,10 @@ export interface Palette {
  * hem geçer hem editoryal durur.
  */
 export const light: Palette = {
-  bg:       "#F2F4F7",
+  bg:       "#F4F6FA",
   surface1: "#FFFFFF",
-  surface2: "#F8F9FB",
-  surface3: "#EAEDF2",
+  surface2: "#F8FAFC",
+  surface3: "#EDF0F6",
   elevated: "#FFFFFF",
   inverse:  "#12141C",
   overlay:  "rgba(18, 20, 28, 0.56)",
@@ -184,10 +232,11 @@ export const light: Palette = {
   onDark:        "#FFFFFF",
   onDarkMuted:   "rgba(255, 255, 255, 0.64)",
   onInverse:     "#FFFFFF",   // inverse = #12141C (koyu blok)
+  inkBlock:      "#161B27",
 
-  border:       "#E2E6EC",
-  borderStrong: "#CFD5DE",
-  separator:    "#EBEEF3",
+  border:       "#E4E9F0",
+  borderStrong: "#CDD4DF",
+  separator:    "#EDF0F5",
 
   brand:       "#EE7F55",
   brandStrong: "#D96B42",
@@ -205,9 +254,10 @@ export const light: Palette = {
   slate:     "#7C8598",       // brief #99A1B3 → koyulaştırıldı (grafik 3:1)
   slateSoft: "#99A1B3",
 
-  live:     "#E0374A",
-  liveDim:  "#FDECEE",
-  liveGlow: "rgba(224, 55, 74, 0.20)",
+  live:       "#E0374A",
+  liveDim:    "#FDECEE",
+  liveGlow:   "rgba(224, 55, 74, 0.20)",
+  liveOnDark: "#FF6B7A",
 
   win:    "#14966B",  winDim:    "#E4F5EE",
   draw:   "#9AA2B1",  drawDim:   "#EFF1F5",
@@ -220,9 +270,10 @@ export const light: Palette = {
   redCard:    "#D0455A",
   star:       "#EE7F55",
   starEmpty:  "#CFD5DE",
-  pitch:      "#EAEDF2",
-  chalk:      "rgba(255, 255, 255, 0.55)",
+  pitch:      "#123B34",
+  chalk:      "rgba(255, 255, 255, 0.22)",
   chalkInk:   "rgba(18, 20, 28, 0.08)",
+  onPitch:    "#FFFFFF",
 
   ratingPoor:  "#D0455A", ratingPoorBg:  "#FCEBEE",
   ratingFair:  "#B45309", ratingFairBg:  "#FEF3E2",
@@ -237,11 +288,19 @@ export const light: Palette = {
   zoneRelegationPlayoff: "#B45309",
   zoneRelegation:        "#D0455A",
 
-  skeletonBase:      "#EAEDF2",
-  skeletonHighlight: "#F5F7FA",
+  gradientInk:     ["#232939", "#0D0F16"],
+  gradientBrand:   ["#F59A72", "#E76F45"],
+  gradientAccent:  ["#3E58F5", "#1C31BE"],
+  gradientLive:    ["#F04A5C", "#C41E32"],
+  gradientPitch:   ["#17564A", "#0B2C26"],
+  gradientSurface: ["#FFFFFF", "#FAFBFD"],
+
+  shadowColor:       "#0B1020",
+  skeletonBase:      "#EAEEF4",
+  skeletonHighlight: "#F6F8FB",
   tabBar:            "#FFFFFF",
-  tabBarBorder:      "#E2E6EC",
-  chartGrid:         "#EAEDF2",
+  tabBarBorder:      "#E4E9F0",
+  chartGrid:         "#EAEEF4",
   scrimGradientTop:    "rgba(18, 20, 28, 0.00)",
   scrimGradientBottom: "rgba(18, 20, 28, 0.88)",
 };
@@ -254,11 +313,11 @@ export const light: Palette = {
  * Mavi ise #2743F0 olarak koyu zeminde sönük kalır, bir tık açılır.
  */
 export const dark: Palette = {
-  bg:       "#0E1016",
-  surface1: "#171A22",
-  surface2: "#1D212A",
-  surface3: "#242934",
-  elevated: "#2A303C",
+  bg:       "#0B0D13",
+  surface1: "#14181F",
+  surface2: "#1A1E27",
+  surface3: "#222731",
+  elevated: "#262C37",
   inverse:  "#F2F4F7",
   overlay:  "rgba(6, 7, 10, 0.76)",
   pressed:  "#1D212A",
@@ -273,10 +332,11 @@ export const dark: Palette = {
   onDark:        "#FFFFFF",
   onDarkMuted:   "rgba(255, 255, 255, 0.64)",
   onInverse:     "#12141C",   // inverse = #F2F4F7 (açık blok) → metin mürekkep
+  inkBlock:      "#12161F",
 
-  border:       "#262B36",
-  borderStrong: "#343A48",
-  separator:    "#1F242E",
+  border:       "#242A35",
+  borderStrong: "#333A48",
+  separator:    "#1C212B",
 
   brand:       "#EE7F55",
   brandStrong: "#D96B42",
@@ -294,9 +354,10 @@ export const dark: Palette = {
   slate:     "#8A93A6",
   slateSoft: "#5C6474",
 
-  live:     "#FF4759",
-  liveDim:  "#2E1218",
-  liveGlow: "rgba(255, 71, 89, 0.28)",
+  live:       "#FF4759",
+  liveDim:    "#2E1218",
+  liveGlow:   "rgba(255, 71, 89, 0.28)",
+  liveOnDark: "#FF6B7A",
 
   win:    "#25B37F",  winDim:    "#0D2C21",
   draw:   "#8A93A6",  drawDim:   "#1F242E",
@@ -309,9 +370,10 @@ export const dark: Palette = {
   redCard:    "#F0637A",
   star:       "#EE7F55",
   starEmpty:  "#525968",
-  pitch:      "#1A1F29",
-  chalk:      "rgba(255, 255, 255, 0.10)",
+  pitch:      "#0F312B",
+  chalk:      "rgba(255, 255, 255, 0.18)",
   chalkInk:   "rgba(255, 255, 255, 0.06)",
+  onPitch:    "#FFFFFF",
 
   ratingPoor:  "#F0637A", ratingPoorBg:  "#2E1218",
   ratingFair:  "#E0921F", ratingFairBg:  "#2C2009",
@@ -326,11 +388,19 @@ export const dark: Palette = {
   zoneRelegationPlayoff: "#F5A524",
   zoneRelegation:        "#F0637A",
 
-  skeletonBase:      "#1D212A",
-  skeletonHighlight: "#272D38",
-  tabBar:            "#12151C",
-  tabBarBorder:      "#1F242E",
-  chartGrid:         "#242934",
+  gradientInk:     ["#1D2330", "#080A0F"],
+  gradientBrand:   ["#F59A72", "#E0703F"],
+  gradientAccent:  ["#8291FF", "#4E5FE0"],
+  gradientLive:    ["#FF5C6D", "#D22A3E"],
+  gradientPitch:   ["#134339", "#07211C"],
+  gradientSurface: ["#181C25", "#14181F"],
+
+  shadowColor:       "#000000",
+  skeletonBase:      "#1A1E27",
+  skeletonHighlight: "#252B36",
+  tabBar:            "#0F1219",
+  tabBarBorder:      "#1C212B",
+  chartGrid:         "#222731",
   scrimGradientTop:    "rgba(14, 16, 22, 0.00)",
   scrimGradientBottom: "rgba(14, 16, 22, 0.94)",
 };

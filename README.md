@@ -179,20 +179,55 @@ görünür.
 
 ## Tasarım sistemi
 
-Renk, tipografi ve uzay `theme/` altındadır ve iki kural taşır:
+Renk, tipografi ve uzay `theme/` altındadır ve dört kural taşır:
 
 - **Mercan `brand` yalnız AKSİYON ve SEÇİLİ DURUM**, **mavi `accent` yalnız
   VERİ** içindir. Bir ekranda mercan alanı o ekranın %5'ini geçmemelidir.
-- **Gölge değil çizgi.** Varsayılan kart `surface1` + 1px `border`; gölge
-  yalnız gerçekten yüzen katmanlara (sheet, FAB, toast) ayrılmıştır.
+- **Çizgi ve yumuşak gölge birlikte.** Kart = `surface1` + 1px `border` + çok
+  geniş/çok sönük bir gölge (opaklık 0,045). Gölge görünmez ama hissedilir;
+  gölgesiz beyaz kart, beyaza yakın kâğıdın üstünde hiç yüzmüyordu.
+- **Gradyan serbest değil, TOKENDIR.** Paletteki altı gradyanın her birinin bir
+  işi vardır: `gradientInk` (kimlik bloğu), `gradientBrand` (birincil aksiyon),
+  `gradientAccent` (veri), `gradientLive`, `gradientPitch` (saha),
+  `gradientSurface`. Elle yazılmış iki renk = denetim hatası.
+- **`fontWeight` KULLANILMAZ** — özel fontlarda RN ağırlık uygulamaz, ağırlık
+  ailenin adıyla seçilir (`fontFamily: fonts.semibold`).
 
-Metin tavanı 16px'tir; üstü yalnız skor ölçeğine (`scoreLg` 28, `scoreHero` 40)
-ve sayfa başlığına aittir. `fontWeight` KULLANILMAZ — özel fontlarda RN ağırlık
-uygulamaz, ağırlık ailenin adıyla seçilir (`fontFamily: fonts.semibold`).
+### Tipografi ölçeği
 
-Bu kuralların ölçülebilir olanları `npm run check:tokens` ile sınanır; gözle
-denetlemeye gerek yoktur. Ayrıntılı gerekçeler `docs/tasarim-plani.md`
-dosyasındadır.
+Metin 11–28, skor 18–46. Arayüzün varsayılanı **15px** (`body`), ikincil metin
+13 (`bodySm`), satır başlığı 16 (`h3`), kart/bölüm başlığı 18 (`h2`), sayfa
+başlığı 22 (`h1`), kimlik başlığı 28 (`display`).
+
+> Önceki sürüm 16px'lik bir TAVAN koyuyordu (arayüz varsayılanı 12px, kart
+> başlığı 14px). Yoğunluk kazanılıyordu ama ürün, hiçbir şeyin öne çıkmadığı
+> gri bir metin duvarına dönüyordu. Yoğunluk artık küçük puntoyla değil
+> ritimle kurulur; satır ve kart ölçüleri de tipografiyle birlikte büyüdü
+> (tek satır 56, iki satır 68, maç satırı 66).
+
+### Mürekkep blok (`inkBlock`)
+
+Ürünün imzası, **daima koyu** bir yüzeydir: maç detayının skor şeridi, takım
+profilinin kapağı, oyuncu kimlik kartı, ana ekranın vitrin kartı ve manşet
+karuseli aynı bloğu paylaşır. Üstünde `onDark` metin, `chalk` çizgi ve
+`liveOnDark` canlı rengi kullanılır.
+
+`inkBlock` ile `inverse` AYNI ŞEY DEĞİLDİR: `inverse` "zeminin tersi"dir ve
+koyu temada AÇIK bir yüzeydir. Beyaz metin taşıyan bir blok `inverse`
+kullanırsa koyu temada beyaz üstüne beyaz yazar.
+
+### Saha
+
+`PitchView`, `PitchLineup` ve oyun tuvalleri aynı sahayı çizer: `gradientPitch`
+derin yeşil zemin, `chalk` beyaz tebeşir, `onPitch` beyaz oyuncu adı. Tuvalin
+üstündeki her şey (kale direği, top, kaleci) TEMADAN BAĞIMSIZ sabit renktedir —
+`surface1` ile çizilen bir direk koyu temada görünmez oluyordu. HUD tuvalin
+dışındadır ve normal tema tokenlarını kullanır.
+
+Bu kuralların ölçülebilir olanları `npm run check:tokens` ile sınanır: her iki
+temada WCAG AA kontrastı, ölçek sağlığı (taban, tavan, monoton hiyerarşi, satır
+yüksekliği), çıplak hex, `fontWeight`, emoji, gradyan durağı ve belirsiz hata
+metni. Ayrıntılı gerekçeler `docs/tasarim-plani.md` dosyasındadır.
 
 ## Yol haritası
 

@@ -7,14 +7,14 @@
  *
  * DARALMA NASIL ÇALIŞIR:
  *   0 → 56 px kaydırma arasında `progress` 0'dan 1'e gider.
- *   · yükseklik 96 → 48
+ *   · yükseklik 104 → 50
  *   · üst satır (geri + eylemler) YERİNDE KALIR, hiç kıpırdamaz
- *   · başlık bloğu yukarı ve sağa kayar, 18px'ten 16px'e "küçülür"
+ *   · başlık bloğu yukarı ve sağa kayar, 22px'ten 17px'e "küçülür"
  *   · overline ve alt başlık söner
  *   · alt kenarda hairline çizgi belirir, şeffaf başlıkta zemin opaklaşır
  *
  * NEDEN fontSize DEĞİL scale: yazı boyutunu animasyonla değiştirmek her karede
- * metin ölçümü (layout) tetikler. Bunun yerine 18/16 = 0.889 ölçek uygulanır ve
+ * metin ölçümü (layout) tetikler. Bunun yerine 17/22 = 0.773 ölçek uygulanır ve
  * ölçek merkeze doğru küçülttüğü için sola hizalama `translateX` ile geri
  * alınır — metnin sol kenarı sabit kalır, yalnızca boyu değişir.
  *
@@ -51,10 +51,10 @@ import { Touchable } from "./Pressable";
 
 /** Başlığın tamamen daralması için gereken kaydırma mesafesi. */
 const COLLAPSE_RANGE = 56;
-/** 16 / 18 — daralmış başlığın ölçeği (§4.27). */
-const TITLE_SCALE = 16 / 18;
+/** 17 / 22 — daralmış başlığın ölçeği. Açık başlık `type.h1` (22px). */
+const TITLE_SCALE = 17 / 22;
 /** Geri düğmesi + boşluk: daralınca başlık bu kadar sağa kayar. */
-const BACK_OFFSET = 40;
+const BACK_OFFSET = 44;
 /** Üst satırın (geri/eylem) yüksekliği; daralmış başlık da bu şeride oturur. */
 const BAR_HEIGHT = layout.headerHeightCollapsed;
 
@@ -177,7 +177,7 @@ export function ScreenHeader({
 
   const expandedHeight = Math.max(
     layout.headerHeightExpanded,
-    BAR_HEIGHT + blockHeight + space.m,
+    BAR_HEIGHT + blockHeight + space.lg,
   );
 
   const containerHeight = progress.interpolate({
@@ -210,12 +210,12 @@ export function ScreenHeader({
             <Touchable
               feedback="icon"
               onPress={handleBack}
-              hitSlop={touchSlop(40)}
+              hitSlop={touchSlop(44)}
               accessibilityRole="button"
               accessibilityLabel="Geri"
               style={styles.backButton}
             >
-              <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
+              <Ionicons name="chevron-back" size={26} color={colors.textPrimary} />
             </Touchable>
           ) : null}
 
@@ -227,14 +227,14 @@ export function ScreenHeader({
               feedback="icon"
               haptic="light"
               onPress={action.onPress}
-              hitSlop={touchSlop(36)}
+              hitSlop={touchSlop(40)}
               accessibilityRole="button"
               accessibilityLabel={action.accessibilityLabel}
               style={styles.action}
             >
               <Ionicons
                 name={action.icon}
-                size={20}
+                size={22}
                 color={action.tone ? toneColors(action.tone).fg : colors.textSecondary}
               />
               {action.badge != null ? (
@@ -262,7 +262,7 @@ export function ScreenHeader({
             const next = Math.round(e.nativeEvent.layout.height);
             setBlockHeight((current) => (current === next ? current : next));
           }}
-          style={[styles.titleBlock, { paddingRight: space.sm + (actions?.length ?? 0) * 40 }]}
+          style={[styles.titleBlock, { paddingRight: space.sm + (actions?.length ?? 0) * 44 }]}
         >
           {overline ? (
             <Animated.Text
@@ -339,8 +339,8 @@ const styles = StyleSheet.create({
     gap: space.xs,
   },
   backButton: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -348,8 +348,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   action: {
-    width: 36,
-    height: 36,
+    width: 40,
+    height: 40,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -369,7 +369,7 @@ const styles = StyleSheet.create({
     maxWidth: "100%",
   },
   overline: {
-    ...type.micro,
+    ...type.overline,
     color: colors.brandAccent,
   },
   title: {
@@ -377,7 +377,7 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
   subtitle: {
-    ...type.bodySm,
+    ...type.body,
     color: colors.textSecondary,
   },
   border: {

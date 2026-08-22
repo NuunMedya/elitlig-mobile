@@ -3,11 +3,13 @@
  *
  * Bu script gözle bakmadan yanıtlanabilecek soruları yanıtlar:
  *   1. Metin/zemin çiftleri WCAG AA'yı geçiyor mu (her iki temada)?
- *   2. Ekranda 16px üstü tipografi var mı (skor ve sayfa başlığı hariç)?
+ *   2. Tipografi ölçeği sağlıklı mı (taban, tavan, monoton hiyerarşi, satır
+ *      yüksekliği)?
  *   3. Kodda çıplak hex kaldı mı (alan verisi ve dış marka renkleri hariç)?
  *   4. `fontWeight` sızmış mı (özel fontlarda çalışmaz, aile adı kullanılır)?
  *   5. Emoji ikon kaldı mı (brief §9 yasağı)?
  *   6. Sonsuz döngülü animasyon kaldı mı (iskelet parıltısı hariç)?
+ *   6b. Gradyanların renkleri tema tokenından mı geliyor?
  *   7. "Bir şeyler ters gitti" tarzı belirsiz hata metni kaldı mı?
  *
  * Çalıştırma:  npm run check:tokens
@@ -31,8 +33,10 @@ function readScale() {
   for (const m of block.matchAll(/^ {2}(\w+):\s*\{([^}]*)\}/gm)) {
     const [, token, body] = m;
     const size = body.match(/fontSize:\s*(\d+)/);
+    const line = body.match(/lineHeight:\s*(\d+)/);
     out[token] = {
       fontSize: size ? Number(size[1]) : null,
+      lineHeight: line ? Number(line[1]) : null,
       fontFamily: /fontFamily:/.test(body) ? body.match(/fontFamily:\s*([\w.]+)/)[1] : null,
       hasWeight: /fontWeight:/.test(body),
     };
@@ -81,6 +85,14 @@ const PAIRS = (p) => [
   [p.brandAccent, p.surface1, 4.5, "mercan metin / kart"],
   [p.accentText, p.bg, 4.5, "mavi metin / zemin"],
   [p.live, p.bg, 3.0, "canlı halkası / zemin"],
+  // Mürekkep blok iki temada da koyudur; üstündeki metin onun karanlık
+  // durağına göre ölçülür.
+  [p.liveOnDark, p.gradientInk[0], 4.5, "canlı metni / mürekkep blok"],
+  [p.onDark, p.gradientInk[0], 4.5, "blok metni / mürekkep blok"],
+  [p.onDark, p.inkBlock, 4.5, "blok metni / düz mürekkep yüzey"],
+  [p.liveOnDark, p.inkBlock, 4.5, "canlı metni / düz mürekkep yüzey"],
+  [p.brand, p.gradientInk[0], 4.5, "mercan etiket / mürekkep blok"],
+  [p.onPitch, p.gradientPitch[0], 4.5, "oyuncu adı / saha"],
   [p.accent, p.surface3, 3.0, "veri barı (ev) / ray"],
   [p.slate, p.surface3, 3.0, "veri barı (deplasman) / ray"],
   [p.win, p.bg, 3.0, "kazandı çipi / zemin"],
@@ -90,10 +102,34 @@ const PAIRS = (p) => [
   [p.border, p.bg, 1.1, "hairline / zemin (görünür olmalı)"],
 ];
 
-/** 16px tavanının meşru istisnaları: skor ölçeği + sayfa başlığı + metrik. */
-const OVER_16_ALLOWED = new Set([
-  "scoreHero", "scoreLg", "scoreMd", "metric",
+/**
+ * TİPOGRAFİ ÖLÇEĞİ SAĞLIK KURALLARI.
+ *
+ * Eski kural "hiçbir token 16px'i geçmesin" idi ve ürünü hiyerarşisiz bir gri
+ * duvara çevirdi (bkz. theme/typography.ts başlığı). Yerine ölçülebilir üç
+ * gerçek kural konur:
+ *   1. OKUNABİLİRLİK TABANI — hiçbir token 11px'in altına inmez; gövde ve
+ *      ikincil metin sırasıyla 15 ve 13'ün altına inmez.
+ *   2. TAVAN — metin 28px'i, skor 48px'i geçmez (telefonda taşar).
+ *   3. HİYERARŞİ MONOTON — h1 > h2 > h3 > body olmalı; iki komşu basamak
+ *      eşitse hiyerarşi değil bulanıklık üretilmiş demektir.
+ *   4. SATIR YÜKSEKLİĞİ — her token lineHeight taşımalı ve punto × 1.08'in
+ *      altına inmemeli (skor blokları sıkı, gövde rahat).
+ */
+const TEXT_MAX = 28;
+const SCORE_MAX = 48;
+const ABSOLUTE_MIN = 11;
+/** Skor/metrik ailesi: metin tavanı bunlara uygulanmaz. */
+const NUMERIC_TOKENS = new Set([
+  "scoreHero", "scoreLg", "scoreMd", "scoreSm", "metric", "metricSm",
 ]);
+/**
+ * Büyükten küçüğe olması gereken PUNTO zinciri. `h4` bilerek dışarıdadır:
+ * o bir punto basamağı değil, `body` ile aynı puntonun kalın kesimidir.
+ */
+const HIERARCHY = ["display", "h1", "h2", "h3", "body", "bodySm", "caption", "micro"];
+/** Belirli tokenların taban değerleri — arayüzün okunurluğu bunlara bağlı. */
+const MIN_SIZE = { body: 15, bodySm: 13, bodyLg: 15, label: 13, caption: 12 };
 
 /** Çıplak hex'e izin verilen dosyalar ve gerekçeleri. */
 const HEX_ALLOWED = {
@@ -117,14 +153,38 @@ for (const [name, p] of [["açık", light], ["koyu", dark]]) {
 }
 
 for (const [token, style] of Object.entries(scale)) {
-  if (style.fontSize > 16 && !OVER_16_ALLOWED.has(token)) {
-    note(`tipografi · ${token} = ${style.fontSize}px > 16px tavanı`);
+  const max = NUMERIC_TOKENS.has(token) ? SCORE_MAX : TEXT_MAX;
+  if (style.fontSize > max) {
+    note(`tipografi · ${token} = ${style.fontSize}px > ${max}px tavanı`);
+  }
+  if (style.fontSize < ABSOLUTE_MIN) {
+    note(`tipografi · ${token} = ${style.fontSize}px < ${ABSOLUTE_MIN}px okunabilirlik tabanı`);
+  }
+  if (token in MIN_SIZE && style.fontSize < MIN_SIZE[token]) {
+    note(`tipografi · ${token} = ${style.fontSize}px < ${MIN_SIZE[token]}px (bu tokenın tabanı)`);
   }
   if (style.hasWeight) {
     note(`tipografi · ${token} fontWeight taşıyor; özel fontta çalışmaz, fontFamily kullan`);
   }
   if (!style.fontFamily) {
     note(`tipografi · ${token} fontFamily taşımıyor`);
+  }
+  if (!style.lineHeight) {
+    note(`tipografi · ${token} lineHeight taşımıyor`);
+  } else if (style.lineHeight < style.fontSize * 1.08) {
+    note(
+      `tipografi · ${token} lineHeight ${style.lineHeight} < punto × 1.08 (${(style.fontSize * 1.08).toFixed(1)})`,
+    );
+  }
+}
+
+for (let i = 1; i < HIERARCHY.length; i += 1) {
+  const [big, small] = [HIERARCHY[i - 1], HIERARCHY[i]];
+  if (!scale[big] || !scale[small]) continue;
+  if (scale[big].fontSize <= scale[small].fontSize) {
+    note(
+      `tipografi · hiyerarşi kırık: ${big} (${scale[big].fontSize}) ≤ ${small} (${scale[small].fontSize})`,
+    );
   }
 }
 
@@ -177,21 +237,31 @@ for (const path of execSync("find app components -name '*.tsx'", { encoding: "ut
 }
 
 /*
- * Gradient — brief §2.3: neredeyse yasak. Tek meşru kullanım, görsel üstündeki
- * okunabilirlik scrim'i ve kaydırma kenarındaki solma maskesi. Dosya bazında
- * izin verilir çünkü bir dosyada gradient VARSA amacı bellidir.
+ * Gradient — SERBEST DEĞİL, TOKENDIR.
+ *
+ * Eski kural gradyanı tamamen yasaklıyor, yalnız beş dosyaya izin veriyordu;
+ * sonuç hiçbir yüzeyin diğerinden ayrılmadığı düz bir arayüzdü. Yeni kural:
+ * gradyan serbesttir AMA durakları TEMADAN gelmek zorundadır.
+ *
+ * Ölçülen şey: `colors={...}` içinde `"transparent"` dışında bir dize sabiti
+ * olmamalı. Çıplak hex zaten ayrı bir kuralla yasak; ikisi birlikte "gradyan
+ * durakları tema tokenıdır" garantisini verir. Ek olarak dosya `@/theme`
+ * içe aktarmalıdır — yoksa duraklar tokendan gelemez.
  */
-const GRADIENT_ALLOWED = new Set([
-  "app/haber/[id].tsx",        // kapak görseli scrim'i
-  "components/ui/HeroCarousel.tsx", // manşet görseli scrim'i
-  "components/ui/DateStrip.tsx",    // kaydırma kenarı solma maskesi
-  "components/ui/Skeleton.tsx",     // iskelet parıltısı (brief istisnası)
-  "components/MatchPhotoSlider.tsx", // maç fotoğrafı scrim'i
-]);
 for (const hit of grep("<LinearGradient", "app components")) {
   const file = hit.split(":")[0];
-  if (GRADIENT_ALLOWED.has(file)) continue;
-  note(`gradient · ${hit.trim().slice(0, 90)}`);
+  const src = readFileSync(file, "utf8");
+  if (!/from "@\/theme"/.test(src)) {
+    note(`gradient · ${file}: @/theme içe aktarmıyor, durakları tokendan gelemez`);
+    continue;
+  }
+  for (const prop of src.matchAll(/colors=\{([^}]*)\}/g)) {
+    const literals = prop[1].match(/"[^"]*"/g) ?? [];
+    const bad = literals.filter((lit) => lit !== '"transparent"');
+    if (bad.length) {
+      note(`gradient · ${file}: durak dize sabiti ${bad.join(", ")} — tema tokenı kullan`);
+    }
+  }
 }
 
 /* Sonsuz animasyon döngüsü — yalnız iskelet parıltısı meşru. */
@@ -213,7 +283,7 @@ for (const hit of grep("ters gitti\\|Beklenmeyen bir hata\\|Bir sorun oldu", "ap
 /* ────────────────────────────────── rapor ────────────────────────────────── */
 
 if (fails.length === 0) {
-  console.log("Tasarım sistemi denetimi temiz: kontrast, punto tavanı, hex ve ağırlık kuralları geçti.");
+  console.log("Tasarım sistemi denetimi temiz: kontrast, tipografi ölçeği, hex, ağırlık ve gradyan kuralları geçti.");
   process.exit(0);
 }
 console.error(`Tasarım sistemi denetimi ${fails.length} ihlal buldu:\n`);

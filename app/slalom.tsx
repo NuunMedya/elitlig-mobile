@@ -610,7 +610,7 @@ const ConeSprite = memo(function ConeSprite({
       {/* Konideki beyaz bant — ölçekte de okunur kalan tek ayrıntı. */}
       <Path
         d={`M ${x - size * 0.26} ${y - size * 0.38} L ${x + size * 0.26} ${y - size * 0.38}`}
-        stroke={paint.surface}
+        stroke={paint.onTurf}
         strokeWidth={Math.max(1, size * 0.12)}
       />
     </G>
@@ -642,8 +642,8 @@ const Player = memo(function Player({
   return (
     <G opacity={faded ? 0.4 : 1} transform={`rotate(${tilt.toFixed(1)} ${x.toFixed(1)} ${y.toFixed(1)})`}>
       <Ellipse cx={x} cy={y + PLAYER_R * 0.9} rx={PLAYER_R} ry={PLAYER_R * 0.32} fill={paint.shadow} opacity={0.4} />
-      <Circle cx={x} cy={y} r={PLAYER_R} fill={paint.surface} stroke={paint.ink} strokeWidth={1.5} />
-      <Circle cx={x} cy={y} r={PLAYER_R * 0.38} fill={paint.ink} opacity={0.85} />
+      <Circle cx={x} cy={y} r={PLAYER_R} fill={paint.ball} stroke={paint.ballLine} strokeWidth={1.5} />
+      <Circle cx={x} cy={y} r={PLAYER_R * 0.38} fill={paint.ballLine} opacity={0.85} />
     </G>
   );
 });
@@ -998,11 +998,12 @@ const styles = StyleSheet.create({
   arena: {
     flex: 1,
     margin: layout.screenPadding,
-    borderRadius: radius.lg,
-    backgroundColor: colors.pitchGreen,
-    borderWidth: hairline,
-    borderColor: colors.border,
+    ...elevate(2),
+    borderWidth: 0,
+    borderRadius: radius.xl,
     overflow: "hidden",
+    // `elevate` kendi zeminini taşır; saha yeşili ondan SONRA yazılmalı.
+    backgroundColor: colors.pitchGreen,
   },
   /* Pist, koniler ve oyuncu artık SVG olarak çizilir (bkz. dosya başı);
      eski View tabanlı stiller kaldırıldı. */

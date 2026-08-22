@@ -43,7 +43,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { colors, radius, space, textScale, type, upperTR } from "@/theme";
+import { colors, elevate, radius, space, textScale, type, upperTR } from "@/theme";
 import { useReduceMotion } from "./LiveBadge";
 import { Touchable } from "./Pressable";
 
@@ -296,15 +296,26 @@ const Segments = memo(function Segments({
 });
 
 const styles = StyleSheet.create({
+  /*
+   * SIRA ÖNEMLİ: `elevate(2)` kendi zeminini (surface2) taşır. Yayılım
+   * `backgroundColor`dan SONRA gelirse koyu kart zemini beyaza dönüyordu ve
+   * görseli olmayan manşet, üstü bembeyaz bir kutu olarak çiziliyordu.
+   * Gölge önce serilir, kartın kendi zemini üstüne yazar.
+   */
   card: {
-    borderRadius: radius.lg,
+    ...elevate(2),
+    borderWidth: 0,
+    borderRadius: radius.xxl,
     overflow: "hidden",
-    backgroundColor: colors.inverse,
+    // DAİMA KOYU: kart, görselin üstüne beyaz metin koyar. Burada `inverse`
+    // kullanılıyordu ve `inverse` koyu temada AÇIK bir yüzey olduğu için
+    // manşet kartının görselsiz üst yarısı bembeyaz çiziliyordu.
+    backgroundColor: colors.inkBlock,
     justifyContent: "flex-end",
   },
   cardBody: {
-    padding: space.lg,
-    gap: space.xs,
+    padding: space.xl,
+    gap: space.s,
   },
   eyebrowRow: {
     flexDirection: "row",
@@ -331,17 +342,17 @@ const styles = StyleSheet.create({
     color: colors.onDark,
   },
   meta: {
-    ...type.caption,
+    ...type.bodySm,
     color: colors.onDarkMuted,
   },
   segments: {
     flexDirection: "row",
-    gap: space.xs,
-    paddingTop: space.sm,
+    gap: space.s,
+    paddingTop: space.md,
   },
   segmentTrack: {
-    height: 2,
-    borderRadius: 1,
+    height: 3,
+    borderRadius: 1.5,
     backgroundColor: colors.border,
     overflow: "hidden",
   },
@@ -350,8 +361,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.borderStrong,
   },
   segmentFill: {
-    height: 2,
-    borderRadius: 1,
+    height: 3,
+    borderRadius: 1.5,
     backgroundColor: colors.brand,
   },
 });

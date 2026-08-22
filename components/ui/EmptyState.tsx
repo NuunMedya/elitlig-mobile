@@ -144,23 +144,31 @@ const styles = StyleSheet.create({
     marginBottom: space.xs,
   },
   title: {
-    ...type.h3,
+    ...type.h2,
     color: colors.textPrimary,
     textAlign: "center",
   },
-  /** 280px tavanı: uzun açıklama ekranın iki kenarına yapışmasın. */
+  /** 300px tavanı: uzun açıklama ekranın iki kenarına yapışmasın. */
   body: {
-    ...type.bodySm,
+    ...type.body,
     color: colors.textSecondary,
     textAlign: "center",
-    maxWidth: 280,
+    maxWidth: 300,
   },
+  /*
+   * `alignSelf: "center"` ŞART: `Button` kendi tabanında `alignSelf:
+   * "flex-start"` taşır ve bu, kapsayıcının `alignItems: "center"` kuralını
+   * ezip düğmeyi sola yapıştırıyordu — ortalanmış bir metin bloğunun altında
+   * sola kaçmış bir düğme, ekranın tek bozuk hizasıydı.
+   */
   action: {
-    marginTop: space.md,
+    marginTop: space.lg,
+    alignSelf: "center",
     borderRadius: radius.pill,
   },
   secondary: {
-    marginTop: space.xs,
+    marginTop: space.s,
+    alignSelf: "center",
     paddingVertical: space.sm,
     paddingHorizontal: space.md,
   },

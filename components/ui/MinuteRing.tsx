@@ -37,8 +37,13 @@ export interface MinuteRingProps {
   halftime?: boolean;
   /** Dış çap. Varsayılan 36. */
   size?: number;
-  /** Halka kalınlığı. Varsayılan 1.5 — tebeşir inceliği. */
+  /** Halka kalınlığı. Varsayılan 2 — 40px halkada 1.5 çok cılız kalıyordu. */
   thickness?: number;
+  /**
+   * Mürekkep blok üstünde mi. `live` kırmızısı açık kâğıt için
+   * koyulaştırılmıştır; koyu blokta `liveOnDark` kullanılır.
+   */
+  onDark?: boolean;
 }
 
 export const MinuteRing = memo(function MinuteRing({
@@ -46,8 +51,10 @@ export const MinuteRing = memo(function MinuteRing({
   addedTime,
   halftime = false,
   size = 36,
-  thickness = 1.5,
+  thickness = 2,
+  onDark = false,
 }: MinuteRingProps) {
+  const ink = onDark ? colors.liveOnDark : colors.live;
   const played = halftime ? 45 : Math.max(0, Math.min(FULL_TIME, minute ?? 0));
   const progress = minute == null && !halftime ? 0 : played / FULL_TIME;
 
@@ -91,7 +98,7 @@ export const MinuteRing = memo(function MinuteRing({
           cx={size / 2}
           cy={size / 2}
           r={r}
-          stroke={colors.live}
+          stroke={ink}
           strokeWidth={thickness}
           strokeLinecap="round"
           strokeDasharray={`${circumference} ${circumference}`}
@@ -99,7 +106,7 @@ export const MinuteRing = memo(function MinuteRing({
           fill="none"
         />
       </Svg>
-      <Text style={styles.minute} numberOfLines={1} {...textScale.badge}>
+      <Text style={[styles.minute, { color: ink }]} numberOfLines={1} {...textScale.badge}>
         {text}
       </Text>
     </View>
@@ -118,6 +125,5 @@ const styles = StyleSheet.create({
   },
   minute: {
     ...type.clock,
-    color: colors.live,
   },
 });

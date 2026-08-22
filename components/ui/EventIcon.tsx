@@ -29,14 +29,20 @@ export type EventIconKind = EventKind | "assist" | "var";
 
 export interface EventIconProps {
   kind: EventIconKind;
-  /** Varsayılan 14 — 11px dakika metniyle aynı optik ağırlıkta durur. */
+  /** Varsayılan 15 — 12px dakika metniyle aynı optik ağırlıkta durur. */
   size?: number;
   /** Rengi elle vermek için; verilmezse olay tipinden gelir. */
   color?: string;
+  /**
+   * Mürekkep blok (maç skoru şeridi, saha) üstünde mi çiziliyor.
+   * Nötr tonlar (gol topu, değişiklik oku) burada mürekkep değil BEYAZ olur;
+   * kart renkleri iki zeminde de kendi rengini korur.
+   */
+  onDark?: boolean;
 }
 
 /** Olay tipinin varsayılan rengi. */
-function toneFor(kind: EventIconKind): string {
+function toneFor(kind: EventIconKind, onDark: boolean): string {
   switch (kind) {
     case "yellow":
       return colors.yellowCard;
@@ -45,16 +51,21 @@ function toneFor(kind: EventIconKind): string {
     case "ownGoal":
       return colors.live;
     case "substitution":
-      return colors.textTertiary;
+      return onDark ? colors.onDarkMuted : colors.textTertiary;
     case "assist":
-      return colors.accent;
+      return onDark ? colors.onDarkMuted : colors.accent;
     default:
-      return colors.textPrimary;
+      return onDark ? colors.onDark : colors.textPrimary;
   }
 }
 
-export const EventIcon = memo(function EventIcon({ kind, size = 14, color }: EventIconProps) {
-  const stroke = color ?? toneFor(kind);
+export const EventIcon = memo(function EventIcon({
+  kind,
+  size = 15,
+  color,
+  onDark = false,
+}: EventIconProps) {
+  const stroke = color ?? toneFor(kind, onDark);
   const sw = 1.5;
 
   return (

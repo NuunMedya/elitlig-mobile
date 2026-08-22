@@ -19,7 +19,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import React from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
-import { colors, hairline, radius, space, textScale, type } from "@/theme";
+import { colors, elevate, radius, space, textScale, type } from "@/theme";
 import { Touchable } from "./Pressable";
 
 export interface ActionTileProps {
@@ -66,7 +66,7 @@ export const ActionTile = React.memo(function ActionTile({
       style={[styles.tile, disabled ? styles.disabled : null, style]}
       testID={testID}
     >
-      <Ionicons name={icon} size={19} color={disabled ? colors.textDisabled : TONE_ICON[tone]} />
+      <Ionicons name={icon} size={24} color={disabled ? colors.textDisabled : TONE_ICON[tone]} />
       <Text style={styles.label} numberOfLines={1} {...textScale.badge}>
         {label}
       </Text>
@@ -122,30 +122,28 @@ export const ActionRow = React.memo(function ActionRow({
 
 const styles = StyleSheet.create({
   tile: {
-    height: 64,
+    height: 82,
     alignItems: "center",
     justifyContent: "center",
-    gap: space.s,
-    paddingHorizontal: space.xs,
-    backgroundColor: colors.surface1,
+    gap: space.sm,
+    paddingHorizontal: space.s,
     borderRadius: radius.lg,
-    borderWidth: hairline,
-    borderColor: colors.border,
+    ...elevate(1),
   },
   disabled: {
     opacity: 0.5,
   },
   label: {
-    ...type.caption,
+    ...type.bodySm,
     color: colors.textSecondary,
     textAlign: "center",
   },
   badge: {
     position: "absolute",
-    top: 5,
-    right: 5,
-    minWidth: 16,
-    height: 16,
+    top: 7,
+    right: 7,
+    minWidth: 18,
+    height: 18,
     paddingHorizontal: 4,
     borderRadius: radius.pill,
     backgroundColor: colors.live,
