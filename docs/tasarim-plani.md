@@ -640,3 +640,54 @@ temiz, ayrı commit.
 Expo Go ile telefonda çalışan bir uygulamanın ekran görüntüsü **alınamaz**.
 Öz eleştiriyi kod ve ölçü üzerinden yapacağım (kontrast hesabı, punto tavanı,
 mercan alan yüzdesi). Görüntü isterseniz siz alıp buraya bırakabilirsiniz.
+
+---
+
+## 7. Teslim durumu
+
+Aşağıdaki liste, planın hangi maddesinin kodda karşılığı olduğunu gösterir.
+Onay sonrası yedi aşama sırayla uygulandı; her aşama sonunda `npm run check`
+temiz ve uygulama çalışır durumda bırakıldı.
+
+| Aşama | Durum | Not |
+| --- | --- | --- |
+| Tokenlar | ✅ | Palet, tipografi, uzay, yükselti, hareket. Varsayılan tema açık. |
+| Komponentler | ✅ | İmza öğeleri (kale direği, ChalkArc, MinuteRing) + PitchView, EventIcon, Sparkline, HeroCarousel. |
+| Maç detayı | ✅ | Skor bloğu, gol atanlar, saha görünümü, gruplu istatistik, akış. |
+| Takım / oyuncu detayı | ✅ | Kimlik bloğu, form grafiği, kapak filigranı. |
+| Home + karusel | ✅ | Manşet karuseli haber akışından besleniyor. |
+| Lig sayfası | ✅ | Bölge rayı ve sticky başlık zaten doğruydu; dar kenar eklendi. |
+| Oyunlar | ✅ | Üçünün de motoru baştan yazıldı, on ölçümle doğrulandı. |
+
+### 7.1 Yapılmayanlar ve gerekçeleri
+
+- **Isı haritası** (oyuncu ve maç detayı): sunucu oyuncu konum verisi tutmuyor.
+  Uydurulmuş bir ısı haritası, gerçek verinin yanında duran sahte bir grafik
+  olurdu.
+- **Topla oynama yüzdesi ve xG**: şemada karşılıkları yok (§1.4). Yerlerine
+  gerçek olay istatistikleri üç blokta gruplandı.
+- **Benzer oyuncular** (§4.6): böyle bir uç ya da benzerlik ölçütü yok.
+- **Takım renginden türetilmiş kapak zemini** (§4.5): `ApiTeam.colors` alanı
+  şemada var ama biçimi tanımsız ve kod tabanında hiçbir yerde okunmuyor.
+- **Görünür klavye odak halkası** (§6): React Native'de dokunmatik arayüz için
+  klavye odağı kavramı yoktur; bu bir web platformu gereğidir. Uygulama Expo
+  Web'e de derleniyorsa ayrıca ele alınmalı. Ekran okuyucu erişilebilirliği
+  (etiket, rol, ipucu) yeni bileşenlerin hepsinde var.
+- **Ekran görüntüsüyle öz eleştiri** (§7.5): bu ortam başsız bir Linux
+  konteyneri; Expo Go ile telefonda çalışan bir uygulamanın görüntüsü
+  alınamıyor. Yerine ölçülebilir denetim yazıldı (bkz. 7.2) — kontrast, punto
+  tavanı, çıplak hex, emoji, gradient, sonsuz animasyon ve oyun fiziği
+  sayıyla sınanıyor.
+
+### 7.2 Kalıcı denetim
+
+```bash
+npm run check          # üçünü birden çalıştırır
+npm run check:tokens   # kontrast, punto tavanı, hex, emoji, gradient, animasyon
+npm run check:games    # oyun fiziği: yön, Magnus, kare hızı, kontrol eğrisi
+npm run typecheck
+```
+
+Bu betikler briefin "bitti sayılma kriterleri" listesinin ölçülebilir kısmını
+kalıcı hâle getirir: bir sonraki değişiklik kuralı bozarsa gözle fark
+edilmesini beklemek gerekmez.
