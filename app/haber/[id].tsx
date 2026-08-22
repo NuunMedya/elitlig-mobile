@@ -214,7 +214,7 @@ export default function NewsDetailScreen() {
     });
   }, [item, toast]);
 
-  const openLink = useCallback((href: string) => router.push(href), [router]);
+  const openLink = useCallback((href: string) => router.push(href as never), [router]);
 
   const headerActions = useMemo(
     () =>

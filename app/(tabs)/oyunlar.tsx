@@ -586,7 +586,9 @@ export default function OyunlarScreen() {
   );
 
   /* — Gezinme — */
-  const openGame = useCallback((route: string) => router.push(route), [router]);
+  // Rota çalışma zamanında seçiliyor; tipli rota birliğine `as never` ile geçilir
+  // (kod tabanının kalıbı — bkz. app/(tabs)/menu.tsx).
+  const openGame = useCallback((route: string) => router.push(route as never), [router]);
   const openDaily = useCallback(() => router.push("/gunun"), [router]);
   const openBoard = useCallback(() => router.push("/siralama"), [router]);
   const openTurkey = useCallback(() => router.push("/turkiye"), [router]);

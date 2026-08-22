@@ -125,6 +125,17 @@ export function ScreenHeader({
   const staticProgress = useRef(new Animated.Value(0)).current;
   /** Başlık metninin ölçülen kutusu — ölçek telafisi ve dikey ortalama için. */
   const [titleBox, setTitleBox] = useState({ width: 0, y: 0, height: 0 });
+  /**
+   * Başlık bloğunun (overline + başlık + alt başlık) ölçülen yüksekliği.
+   *
+   * NEDEN ÖLÇÜLÜYOR: açık başlığın yüksekliği eskiden 88px'e SABİTLENMİŞTİ ve
+   * bu, yalnız iki satırlık içeriğe yetiyordu. Üçü birden verilen ekranlarda
+   * (maç detayı, oyunlar) alt başlık kadrajın dışında kalıp KIRPILIYORDU —
+   * ekranda yarısı kesilmiş bir satır olarak görünüyordu. Artık yükseklik
+   * içerikten türetiliyor; 88px alt sınır olarak korunuyor ki iki satırlık
+   * başlıklarda düzen değişmesin.
+   */
+  const [blockHeight, setBlockHeight] = useState(0);
 
   const progress = useMemo(
     () =>
@@ -164,9 +175,14 @@ export function ScreenHeader({
   const scaleShift = (titleBox.width * (1 - TITLE_SCALE)) / 2;
   const titleSlide = (back ? BACK_OFFSET : 0) - scaleShift;
 
+  const expandedHeight = Math.max(
+    layout.headerHeightExpanded,
+    BAR_HEIGHT + blockHeight + space.m,
+  );
+
   const containerHeight = progress.interpolate({
     inputRange: [0, 1],
-    outputRange: [layout.headerHeightExpanded, layout.headerHeightCollapsed],
+    outputRange: [expandedHeight, layout.headerHeightCollapsed],
   });
   const fadeOut = progress.interpolate({ inputRange: [0, 0.7], outputRange: [1, 0], extrapolate: "clamp" });
   const appear = progress.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
@@ -242,6 +258,10 @@ export function ScreenHeader({
         {/* Başlık bloğu: daralınca yukarı-sağa kayar ve küçülür. */}
         <View
           pointerEvents="box-none"
+          onLayout={(e) => {
+            const next = Math.round(e.nativeEvent.layout.height);
+            setBlockHeight((current) => (current === next ? current : next));
+          }}
           style={[styles.titleBlock, { paddingRight: space.sm + (actions?.length ?? 0) * 40 }]}
         >
           {overline ? (

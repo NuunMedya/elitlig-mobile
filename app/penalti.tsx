@@ -70,6 +70,14 @@ import {
 const BEST_KEY = "elitlig.penalti.best.v2";
 const T = TUNING.penalti;
 
+/**
+ * Nişan duyarlılığı: sürüklemenin yatay bileşeni bu kadar ekran genişliğine
+ * bölünür. Büyük değer = daha az duyarlı. Tarayıcıda ölçülerek seçildi.
+ */
+const AIM_SPAN = 1.05;
+/** Aynısının dikey karşılığı: üst direğe çıkmak için gereken yukarı sürükleme. */
+const AIM_RISE = 0.55;
+
 /** Ağ örgüsünün düğüm sayısı. Az olursa dalga görünmez, çok olursa kare düşer. */
 const NET_COLS = 9;
 const NET_ROWS = 6;
@@ -325,10 +333,18 @@ export default function PenaltiScreen() {
       );
 
       /* Yön: yatay bileşen kale genişliğine eşlenir. Sürüklemenin YUKARI
-         bileşeni yüksekliği verir — aşağı sürüklemek topu yerden gönderir. */
+         bileşeni yüksekliği verir — aşağı sürüklemek topu yerden gönderir.
+
+         BÖLENLER GENİŞ TUTULUR (tarayıcıda ölçüldü): kale genişliğini
+         `w * 0.62`ye eşlemek, 96px'lik bir sürüklemede topu direğe
+         götürüyordu. Telefonda doğal bir fiske bundan çok daha uzun; o
+         ayarla atışların çoğu dışarı giderdi. `AIM_SPAN` ile kalenin bir
+         ucundan diğerine gitmek ekran genişliği kadar sürükleme ister —
+         yani nişan, gücün yanında ikinci bir beceri olarak kalır ama
+         cezalandırıcı olmaz. */
       const { w, h } = area.current;
-      const aimX = clamp(0.5 + result.dx / Math.max(1, w * 0.62), 0, 1);
-      const aimY = clamp(-result.dy / Math.max(1, h * 0.5), 0, 1);
+      const aimX = clamp(0.5 + result.dx / Math.max(1, w * AIM_SPAN), 0, 1);
+      const aimY = clamp(-result.dy / Math.max(1, h * AIM_RISE), 0, 1);
 
       shotRef.current = {
         t: 0,
