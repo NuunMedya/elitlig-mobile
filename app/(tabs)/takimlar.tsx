@@ -74,8 +74,8 @@ const VIEWS: SegmentedItem<ViewKey>[] = [
 /** Arama kutusu bu eşiğin altındaki listelerde gösterilmez. */
 const SEARCH_THRESHOLD = 20;
 
-const CARD_HEIGHT = 64;
-const TABLE_ROW_HEIGHT = 40;
+const CARD_HEIGHT = 76;
+const TABLE_ROW_HEIGHT = 46;
 
 /** Türkçe duyarlı, aksan/büyük-küçük farkını yok sayan arama karşılaştırması. */
 const normalize = (value: string) => value.trim().toLocaleLowerCase("tr-TR");
@@ -445,8 +445,8 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.separator,
   },
   rankBox: {
-    width: 24,
-    height: 24,
+    width: 28,
+    height: 28,
     borderRadius: radius.sm,
     borderWidth: 1.5,
     borderColor: colors.border,
@@ -477,13 +477,13 @@ const styles = StyleSheet.create({
     gap: space.s,
   },
   cardMeta: {
-    ...type.caption,
+    ...type.bodySm,
     color: colors.textTertiary,
     flexShrink: 1,
   },
   pointsBox: {
     alignItems: "flex-end",
-    minWidth: 34,
+    minWidth: 38,
   },
   pointsValue: {
     ...type.metricSm,
@@ -498,7 +498,7 @@ const styles = StyleSheet.create({
      Sütun genişlikleri TableHead ile birebir aynı olmalı; aksi hâlde başlık
      rakamların üstüne oturmaz ve tablo okunmaz hâle gelir. */
   tableHead: {
-    height: 28,
+    height: 34,
     flexDirection: "row",
     alignItems: "center",
     gap: space.s,
@@ -527,10 +527,12 @@ const styles = StyleSheet.create({
     marginRight: space.s,
     backgroundColor: "transparent",
   },
+  /* Sütun genişlikleri 14px tabular rakama göre ölçüldü: bir basamak ~8px.
+     İki basamak + eksi işareti (AV: "-12") yalnız `tNumWide` içinde sığar. */
   tRank: {
     ...type.tableNum,
     color: colors.textTertiary,
-    width: 18,
+    width: 22,
     textAlign: "center",
   },
   tName: {
@@ -544,11 +546,11 @@ const styles = StyleSheet.create({
   tNum: {
     ...type.tableNum,
     color: colors.textSecondary,
-    width: 20,
+    width: 24,
     textAlign: "center",
   },
   tNumWide: {
-    width: 28,
+    width: 32,
   },
   tPos: {
     color: colors.win,
