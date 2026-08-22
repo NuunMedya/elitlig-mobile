@@ -294,7 +294,7 @@ const PitchSlot = memo(function PitchSlot({
         {player.events?.length ? (
           <View style={styles.events}>
             {player.events.slice(0, 3).map((kind, i) => (
-              <EventIcon key={`${kind}-${i}`} kind={kind} size={13} />
+              <EventIcon key={`${kind}-${i}`} kind={kind} size={13} onDark />
             ))}
           </View>
         ) : null}
