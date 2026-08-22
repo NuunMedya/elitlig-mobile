@@ -126,9 +126,17 @@ export interface Palette {
   redCard: string;
   star: string;          // favori (dolu) — aksiyon olduğu için MERCAN
   starEmpty: string;     // favori (boş)
-  pitch: string;         // saha zemini — YEŞİL DEĞİL, sunken yüzey
-  chalk: string;         // saha çizgisi (koyu saha üstünde beyaz tebeşir)
+  /**
+   * Saha zemini (düz dolgu yedeği). Asıl saha `gradientPitch` ile çizilir.
+   * DERİN YEŞİLDİR: önceki sürüm sahayı gri bir yüzey yapmıştı ve saha,
+   * üstünde durduğu kâğıttan ayırt edilemiyordu — kadro ekranı "boş bir
+   * dikdörtgenin üstüne dağılmış avatarlar" gibi görünüyordu.
+   */
+  pitch: string;
+  chalk: string;         // saha çizgisi — derin saha üstünde beyaz tebeşir
   chalkInk: string;      // kağıt üstünde tebeşir (orta yuvarlak yayı, ayraç)
+  /** Saha üstündeki oyuncu adı/numarası — iki temada da beyaz. */
+  onPitch: string;
 
   /* — Reyting skalası — */
   ratingPoor: string;    // < 6.0
@@ -160,7 +168,7 @@ export interface Palette {
   gradientAccent: readonly [string, string];
   /** Canlı rozeti ve canlı skor şeridi. */
   gradientLive: readonly [string, string];
-  /** Saha grafiğinin zemini — düz dolgu sahayı karton gösteriyordu. */
+  /** Sahanın zemini — derin yeşil, üstünde beyaz tebeşir okunur. */
   gradientPitch: readonly [string, string];
   /** Kartın çok hafif üst ışığı; yüzeyi düz kâğıttan ayırır. */
   gradientSurface: readonly [string, string];
@@ -244,9 +252,10 @@ export const light: Palette = {
   redCard:    "#D0455A",
   star:       "#EE7F55",
   starEmpty:  "#CFD5DE",
-  pitch:      "#E9EDF4",
-  chalk:      "rgba(255, 255, 255, 0.55)",
+  pitch:      "#123B34",
+  chalk:      "rgba(255, 255, 255, 0.22)",
   chalkInk:   "rgba(18, 20, 28, 0.08)",
+  onPitch:    "#FFFFFF",
 
   ratingPoor:  "#D0455A", ratingPoorBg:  "#FCEBEE",
   ratingFair:  "#B45309", ratingFairBg:  "#FEF3E2",
@@ -265,7 +274,7 @@ export const light: Palette = {
   gradientBrand:   ["#F59A72", "#E76F45"],
   gradientAccent:  ["#3E58F5", "#1C31BE"],
   gradientLive:    ["#F04A5C", "#C41E32"],
-  gradientPitch:   ["#EEF1F6", "#E2E7EF"],
+  gradientPitch:   ["#17564A", "#0B2C26"],
   gradientSurface: ["#FFFFFF", "#FAFBFD"],
 
   shadowColor:       "#0B1020",
@@ -341,9 +350,10 @@ export const dark: Palette = {
   redCard:    "#F0637A",
   star:       "#EE7F55",
   starEmpty:  "#525968",
-  pitch:      "#181D26",
-  chalk:      "rgba(255, 255, 255, 0.10)",
+  pitch:      "#0F312B",
+  chalk:      "rgba(255, 255, 255, 0.18)",
   chalkInk:   "rgba(255, 255, 255, 0.06)",
+  onPitch:    "#FFFFFF",
 
   ratingPoor:  "#F0637A", ratingPoorBg:  "#2E1218",
   ratingFair:  "#E0921F", ratingFairBg:  "#2C2009",
@@ -362,7 +372,7 @@ export const dark: Palette = {
   gradientBrand:   ["#F59A72", "#E0703F"],
   gradientAccent:  ["#8291FF", "#4E5FE0"],
   gradientLive:    ["#FF5C6D", "#D22A3E"],
-  gradientPitch:   ["#1B2029", "#11151C"],
+  gradientPitch:   ["#134339", "#07211C"],
   gradientSurface: ["#181C25", "#14181F"],
 
   shadowColor:       "#000000",

@@ -28,10 +28,15 @@
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { LinearGradient } from "expo-linear-gradient";
 import React, { useMemo } from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { colors, hairline, radius, space, textScale, type } from "@/theme";
 import { Touchable } from "./ui";
+
+/** Saha gradyanının yönü: üstten alta. `PitchView` ile aynı dil. */
+const GRADIENT_START = { x: 0.5, y: 0 } as const;
+const GRADIENT_END = { x: 0.5, y: 1 } as const;
 
 /** Slot kimliğinden hat: "DEF2" → "DEF". */
 export const slotLine = (slot: string): string => slot.replace(/\d+$/, "");
@@ -156,8 +161,8 @@ const Slot = React.memo(function Slot({
         <>
           <Ionicons
             name="add"
-            size={16}
-            color={active ? colors.brandAccent : colors.textSecondary}
+            size={20}
+            color={active ? colors.brand : colors.onPitch}
           />
           <Text
             style={[styles.slotName, active ? styles.slotNameActive : styles.slotNameEmpty]}
@@ -185,11 +190,23 @@ export const PitchLineup = React.memo(function PitchLineup({
 
   return (
     <View style={[styles.pitch, style]} testID={testID}>
+      <LinearGradient
+        colors={colors.gradientPitch}
+        start={GRADIENT_START}
+        end={GRADIENT_END}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
+
       {/* Saha çizgileri — dekoratif; ekran okuyucudan gizli. */}
+      <View style={styles.touchline} pointerEvents="none" />
       <View style={styles.halfway} pointerEvents="none" />
       <View style={styles.centerCircle} pointerEvents="none" />
+      <View style={styles.centerSpot} pointerEvents="none" />
       <View style={[styles.penaltyBox, styles.penaltyBottom]} pointerEvents="none" />
       <View style={[styles.penaltyBox, styles.penaltyTop]} pointerEvents="none" />
+      <View style={[styles.goalBox, styles.goalBottom]} pointerEvents="none" />
+      <View style={[styles.goalBox, styles.goalTop]} pointerEvents="none" />
 
       {slots.map((slot) => {
         const point = coords[slot] ?? { x: 50, y: 50 };
@@ -210,53 +227,92 @@ export const PitchLineup = React.memo(function PitchLineup({
   );
 });
 
-const SLOT_SIZE = 52;
+const SLOT_SIZE = 58;
 
 const styles = StyleSheet.create({
   pitch: {
     // 3:4 dikey — bkz. dosya başlığı.
     aspectRatio: 3 / 4,
     width: "100%",
+    // Gradyan yüklenemezse düz derin yeşil altta durur.
     backgroundColor: colors.pitchGreen,
     borderRadius: radius.lg,
     borderWidth: hairline,
     borderColor: colors.border,
     overflow: "hidden",
   },
+  /** Kenar çizgisi — sahayı çerçeveler, yuvaların dışarı taşmadığını okutur. */
+  touchline: {
+    position: "absolute",
+    left: 10,
+    right: 10,
+    top: 10,
+    bottom: 10,
+    borderWidth: 1,
+    borderColor: colors.chalk,
+  },
   halfway: {
     position: "absolute",
-    left: 0,
-    right: 0,
+    left: 10,
+    right: 10,
     top: "50%",
-    height: hairline,
-    backgroundColor: "rgba(255,255,255,0.14)",
+    height: 1,
+    backgroundColor: colors.chalk,
   },
   centerCircle: {
     position: "absolute",
     left: "50%",
     top: "50%",
-    width: 68,
-    height: 68,
-    marginLeft: -34,
-    marginTop: -34,
+    width: 84,
+    height: 84,
+    marginLeft: -42,
+    marginTop: -42,
     borderRadius: radius.pill,
-    borderWidth: hairline,
-    borderColor: "rgba(255,255,255,0.14)",
+    borderWidth: 1,
+    borderColor: colors.chalk,
+  },
+  centerSpot: {
+    position: "absolute",
+    left: "50%",
+    top: "50%",
+    width: 5,
+    height: 5,
+    marginLeft: -2.5,
+    marginTop: -2.5,
+    borderRadius: 2.5,
+    backgroundColor: colors.chalk,
   },
   penaltyBox: {
     position: "absolute",
-    left: "22%",
-    right: "22%",
-    height: "13%",
-    borderWidth: hairline,
-    borderColor: "rgba(255,255,255,0.14)",
+    left: "21%",
+    right: "21%",
+    height: "15%",
+    borderWidth: 1,
+    borderColor: colors.chalk,
   },
   penaltyBottom: {
-    bottom: 0,
+    bottom: 10,
     borderBottomWidth: 0,
   },
   penaltyTop: {
-    top: 0,
+    top: 10,
+    borderTopWidth: 0,
+  },
+  /** Kale alanı — ceza sahasının içindeki küçük dikdörtgen. */
+  goalBox: {
+    position: "absolute",
+    left: "36%",
+    right: "36%",
+    height: "6.5%",
+    borderWidth: 1,
+    borderColor: colors.chalk,
+  },
+  goalBottom: {
+    bottom: 10,
+    borderBottomWidth: 0,
+  },
+  goalTop: {
+    top: 10,
     borderTopWidth: 0,
   },
 
@@ -268,10 +324,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 1,
-    // Boş yuva: yarı saydam, kesikli görünümlü çerçeve.
-    backgroundColor: "rgba(0,0,0,0.28)",
+    // Boş yuva: sahayı karartan yarı saydam disk + tebeşir çerçeve.
+    backgroundColor: colors.overlay,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.22)",
+    borderColor: colors.chalk,
   },
   slotFilled: {
     backgroundColor: colors.brand,
@@ -297,15 +353,17 @@ const styles = StyleSheet.create({
   slotName: {
     ...type.micro,
     color: colors.textOnBrand,
-    maxWidth: SLOT_SIZE - 6,
+    maxWidth: SLOT_SIZE - 8,
     textAlign: "center",
     letterSpacing: 0,
   },
+  /* Boş yuvanın etiketi derin sahanın üstünde durur: ikincil GRİ değil,
+     kısılmış BEYAZ olmalı — gri, koyu yeşilin üstünde okunmuyordu. */
   slotNameEmpty: {
-    color: colors.textSecondary,
+    color: colors.onDarkMuted,
   },
   slotNameActive: {
-    color: colors.brandAccent,
+    color: colors.brand,
   },
 });
 
