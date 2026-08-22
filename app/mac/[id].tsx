@@ -43,6 +43,7 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   type RefreshControlProps,
@@ -55,15 +56,21 @@ import { YoutubeBanner } from "@/components/YoutubeBanner";
 import {
   Avatar,
   Badge,
+  BottomSheet,
+  Button,
   Card,
+  ChalkArc,
   EmptyState,
   ErrorState,
+  EventIcon,
   FormChips,
+  PitchView,
   KeyValueRow,
-  LiveBadge,
+  MinuteRing,
   RatingPill,
   ScreenHeader,
   SectionHeader,
+  SegmentedControl,
   SkeletonCard,
   SkeletonListRow,
   SkeletonStandings,
@@ -78,6 +85,9 @@ import {
   useToast,
   type ScreenHeaderAction,
   type TabItem,
+  type EventIconKind,
+  type PitchPlayerView,
+  type SegmentedItem,
 } from "@/components/ui";
 import { useLiveClock, useLiveMatch } from "@/hooks/useLiveMatch";
 import { useTeamLogos } from "@/hooks/useTeamLogos";
@@ -86,8 +96,19 @@ import { getStandings } from "@/lib/api/standings";
 import { addMatchToCalendar } from "@/lib/calendar";
 import { formatClock, formatDateLong, formatDateShort, formatTime, mediaUrl } from "@/lib/format";
 import { openLink } from "@/lib/links";
-import { eventKind, goalDetail, isSubstitution, isTimelineEvent, matchState } from "@/lib/match";
+import {
+  EVENT_LABEL,
+  eventKind,
+  goalDetail,
+  isGoal,
+  isOwnGoal,
+  isSubstitution,
+  isTimelineEvent,
+  matchState,
+  scoreDelta,
+} from "@/lib/match";
 import { buildContributions, buildStatRows, buildTopPlayers } from "@/lib/matchStats";
+import { positionLabel, positionLine } from "@/lib/api/team";
 import { queryKeys } from "@/lib/queryKeys";
 import { youtubeChannelUrl } from "@/lib/youtube";
 import { useFavorite } from "@/providers/FavoriteProvider";
@@ -103,6 +124,7 @@ import {
   space,
   textScale,
   type,
+  upperTR,
 } from "@/theme";
 import type { ContribRow, StatRow, TopPlayer } from "@/lib/matchStats";
 import type {
@@ -405,6 +427,7 @@ export default function MatchDetailScreen() {
 
   const nameOf = usePlayerNames(kadroQuery.data);
   const substitutions = useSubstitutions(events);
+  const scorers = useGoalScorers(events, homeTeamId, awayTeamId, nameOf);
 
   const homeLogo = teams.logoFor(match?.home_team_id, match?.first_team_name);
   const awayLogo = teams.logoFor(match?.away_team_id, match?.second_team_name);
@@ -565,6 +588,7 @@ export default function MatchDetailScreen() {
               awayLogo={awayLogo}
               homeTeamId={homeTeamId}
               awayTeamId={awayTeamId}
+              scorers={scorers}
             />
             <Tabs items={tabItems} value={activeTab} onChange={changeTab} sticky />
           </View>
@@ -579,6 +603,7 @@ export default function MatchDetailScreen() {
           timeline={timeline}
           meetings={meetings}
           homeTeamId={homeTeamId}
+          awayTeamId={awayTeamId}
           nameOf={nameOf}
           bestPlayers={bestPlayers}
           statRows={statRows}
@@ -664,6 +689,15 @@ interface ScrollChrome {
    4) HERO — sabit tabela
    ══════════════════════════════════════════════════════════════════════════ */
 
+/** Skor bloğunun altındaki tek golcü satırı. */
+interface ScorerLine {
+  key: string;
+  name: string;
+  minute: number | null;
+  /** Kendi kalesine — adın yanında (k.k.) notu çıkar. */
+  ownGoal: boolean;
+}
+
 const MatchHero = memo(function MatchHero({
   match,
   state,
@@ -676,6 +710,7 @@ const MatchHero = memo(function MatchHero({
   awayLogo,
   homeTeamId,
   awayTeamId,
+  scorers,
 }: {
   match: ApiMatch;
   state: MatchState;
@@ -688,8 +723,10 @@ const MatchHero = memo(function MatchHero({
   awayLogo: string | null;
   homeTeamId: number | null;
   awayTeamId: number | null;
+  scorers: { home: ScorerLine[]; away: ScorerLine[] };
 }) {
   const router = useRouter();
+  const { width } = useWindowDimensions();
   const played = state !== "scheduled";
 
   const openHome = useCallback(() => {
@@ -708,8 +745,13 @@ const MatchHero = memo(function MatchHero({
     .filter(Boolean)
     .join(" · ");
 
+  const hasScorers = scorers.home.length > 0 || scorers.away.length > 0;
+
   return (
     <View style={styles.hero}>
+      {/* İmza öğesi: skor bloğunun arkasında %4 opaklıkta orta yuvarlak yayı. */}
+      <ChalkArc width={width} height={HERO_ARC_HEIGHT} />
+
       <View style={styles.heroTeams}>
         <Touchable
           style={styles.heroTeam}
@@ -720,7 +762,7 @@ const MatchHero = memo(function MatchHero({
           accessibilityRole="button"
           accessibilityLabel={`${match.first_team_name} takım sayfası`}
         >
-          <TeamLogo name={match.first_team_name} logo={homeLogo} size={44} />
+          <TeamLogo name={match.first_team_name} logo={homeLogo} size={48} />
           <Text style={styles.heroTeamName} numberOfLines={2} {...textScale.dense}>
             {match.first_team_name}
           </Text>
@@ -728,9 +770,9 @@ const MatchHero = memo(function MatchHero({
 
         <View style={styles.heroCenter}>
           {played ? (
-            <Text style={[styles.heroScore, live && styles.heroScoreLive]} {...textScale.dense}>
+            <Text style={styles.heroScore} {...textScale.dense}>
               {homeScore ?? 0}
-              <Text style={styles.heroScoreDash}> - </Text>
+              <Text style={styles.heroScoreDash}>{" – "}</Text>
               {awayScore ?? 0}
             </Text>
           ) : (
@@ -757,12 +799,34 @@ const MatchHero = memo(function MatchHero({
           accessibilityRole="button"
           accessibilityLabel={`${match.second_team_name} takım sayfası`}
         >
-          <TeamLogo name={match.second_team_name} logo={awayLogo} size={44} />
+          <TeamLogo name={match.second_team_name} logo={awayLogo} size={48} />
           <Text style={styles.heroTeamName} numberOfLines={2} {...textScale.dense}>
             {match.second_team_name}
           </Text>
         </Touchable>
       </View>
+
+      {/*
+        GOL ATANLAR — iki sütun, ortada hairline. Ev sahibi SAĞA, deplasman
+        SOLA hizalıdır; yani her iki liste de ortadaki eksene yaslanır ve
+        gözün tek bir dikey çizgiyi takip etmesi yeter. Tek satıra sıkıştırmak
+        ("Demir 12', Ateş 78', Yılmaz 45'") üç golden sonra okunmaz oluyordu.
+      */}
+      {hasScorers ? (
+        <View style={styles.scorers}>
+          <View style={styles.scorerColumn}>
+            {scorers.home.map((line) => (
+              <ScorerRow key={line.key} line={line} side="home" />
+            ))}
+          </View>
+          <View style={styles.scorerAxis} />
+          <View style={styles.scorerColumn}>
+            {scorers.away.map((line) => (
+              <ScorerRow key={line.key} line={line} side="away" />
+            ))}
+          </View>
+        </View>
+      ) : null}
 
       {meta ? (
         <Text style={styles.heroMeta} numberOfLines={1} {...textScale.dense}>
@@ -775,18 +839,58 @@ const MatchHero = memo(function MatchHero({
   );
 });
 
+/** Skor bloğunun arkasındaki yayın yüksekliği — armalar + skor + golcüler. */
+const HERO_ARC_HEIGHT = 132;
+
+/** Tek golcü satırı: ev sahibinde top ikonu SAĞDA, deplasmanda SOLDA durur. */
+const ScorerRow = memo(function ScorerRow({
+  line,
+  side,
+}: {
+  line: ScorerLine;
+  side: "home" | "away";
+}) {
+  const label = line.ownGoal ? `${line.name} (k.k.)` : line.name;
+  const minute = line.minute != null ? `${line.minute}'` : "";
+
+  return (
+    <View style={[styles.scorerRow, side === "home" && styles.scorerRowHome]}>
+      <EventIcon kind={line.ownGoal ? "ownGoal" : "goal"} size={11} />
+      <Text
+        style={[styles.scorerText, side === "home" && styles.scorerTextHome]}
+        numberOfLines={1}
+        {...textScale.dense}
+      >
+        {label} {minute}
+      </Text>
+    </View>
+  );
+});
+
 /**
  * Canlı sayaç. `useLiveClock` SANİYEDE BİR tikler; bu yüzden ekran gövdesinde
- * değil burada çağrılır — yeniden çizilen tek şey bu küçük rozettir.
+ * değil burada çağrılır — yeniden çizilen tek şey bu küçük halkadır.
+ *
+ * NEDEN ROZET DEĞİL HALKA: eski sürüm nabız atan kırmızı noktalı bir "CANLI"
+ * rozeti çiziyordu. Rozet yalnız "canlı" der; halka aynı yeri kaplayarak hem
+ * canlılığı hem maçın nerede olduğunu söyler (90 dakikanın tamamlanan payı).
+ * Ekrandan sürekli hareket eden bir öğe de böylece kalkmış olur.
  */
 const MatchClock = memo(function MatchClock({ snapshot }: { snapshot: LiveSnapshot | undefined }) {
   const clockMs = useLiveClock(snapshot);
   const halftime = isHalftime(snapshot);
   const minute = clockMs != null ? Math.floor(clockMs / 60_000) : null;
+  // 90+ uzatma: halka dolu kalır, dakika "90+3" yazılır.
+  const added = minute != null && minute > 90 ? minute - 90 : null;
 
   return (
     <View style={styles.heroClock}>
-      <LiveBadge minute={halftime ? null : minute} halftime={halftime} size="md" />
+      <MinuteRing
+        minute={halftime ? null : added != null ? 90 : minute}
+        addedTime={added}
+        halftime={halftime}
+        size={40}
+      />
     </View>
   );
 });
@@ -850,6 +954,7 @@ function SummaryTab({
   timeline,
   meetings,
   homeTeamId,
+  awayTeamId,
   nameOf,
   bestPlayers,
   statRows,
@@ -867,6 +972,7 @@ function SummaryTab({
   timeline: ApiMatchEvent[];
   meetings: ApiMatch[];
   homeTeamId: number | null;
+  awayTeamId: number | null;
   nameOf: (playerId?: number | null) => string | null;
   bestPlayers: TopPlayer[];
   statRows: StatRow[];
@@ -943,23 +1049,35 @@ function SummaryTab({
     return rows;
   }, [match, state]);
 
+  /*
+    SIRA VARSAYILANI "EN YENİ ÖNCE": maç detayı en çok canlı maçta ve maç biter
+    bitmez açılıyor; o anda merak edilen son olaydır, ilk düdük değil. Maçın
+    hikâyesini baştan okumak isteyen tek dokunuşla "Maç akışı"na geçer.
+  */
+  const [order, setOrder] = useState<TimelineOrder>("yeni");
+  const items = useTimelineItems(timeline, homeTeamId, awayTeamId, state === "finished", order);
+
   const renderEvent = useCallback(
-    ({ item }: { item: ApiMatchEvent }) => (
-      <TimelineRow
-        event={item}
-        home={Number(item.takim_id) === Number(homeTeamId)}
-        nameOf={nameOf}
-        onOpenPlayer={openPlayer}
-      />
-    ),
-    [homeTeamId, nameOf, openPlayer],
+    ({ item }: { item: TimelineItem }) =>
+      item.kind === "break" ? (
+        <TimelineBreak label={item.label} />
+      ) : (
+        <TimelineRow
+          event={item.event}
+          home={item.home}
+          score={item.score}
+          nameOf={nameOf}
+          onOpenPlayer={openPlayer}
+        />
+      ),
+    [nameOf, openPlayer],
   );
 
   return (
     <FlatList
       {...scrollProps}
-      data={timeline}
-      keyExtractor={eventKey}
+      data={items}
+      keyExtractor={timelineKey}
       renderItem={renderEvent}
       refreshControl={refreshControl}
       contentContainerStyle={styles.listContent}
@@ -1081,7 +1199,18 @@ function SummaryTab({
             </>
           ) : null}
 
-          <SectionHeader title="Maç akışı" meta={timeline.length ? `${timeline.length} olay` : undefined} />
+          <SectionHeader
+            title="Maç akışı"
+            meta={timeline.length ? `${timeline.length} olay` : undefined}
+            action={
+              timeline.length > 1
+                ? {
+                    label: order === "yeni" ? "Maç akışı" : "En yeni önce",
+                    onPress: () => setOrder((current) => (current === "yeni" ? "akis" : "yeni")),
+                  }
+                : undefined
+            }
+          />
         </View>
       }
       ListEmptyComponent={
@@ -1123,29 +1252,107 @@ function SummaryTab({
 }
 
 /**
+ * Zaman çizelgesinin bir öğesi: ya bir olay ya da bir devre ayracı.
+ *
+ * Ayraçlar veriden türetilir (olayların `devre` alanı değişince) — sunucudan
+ * "devre arası" diye bir olay gelmiyor. Bu yüzden liste düz bir olay dizisi
+ * değil, ayraçlarla dokunmuş bir dizidir.
+ */
+/** Zaman çizelgesi sırası: en yeni önce (varsayılan) ya da maçın akışı. */
+type TimelineOrder = "yeni" | "akis";
+
+type TimelineItem =
+  | { kind: "event"; key: string; event: ApiMatchEvent; home: boolean; score: string | null }
+  | { kind: "break"; key: string; label: string };
+
+/**
+ * Olayları zaman tüneli öğelerine çevirir: devre ayraçlarını ekler ve her
+ * golün YANINA O ANKİ SKORU yazar.
+ *
+ * NEDEN KOŞAN SKOR: "78' Ateş" satırı golün atıldığını söyler ama maçın o an
+ * kaç kaç olduğunu söylemez; okuyucu yukarı çıkıp saymak zorunda kalıyordu.
+ * `1–2` etiketi bunu satırın içinde bitiriyor.
+ *
+ * SIRA: `order` "yeni" ise ters kronolojik (varsayılan — canlı maçta en yeni
+ * olay en üstte olmalı), "akis" ise maçın gerçek akışı.
+ */
+function useTimelineItems(
+  timeline: ApiMatchEvent[],
+  homeTeamId: number | null,
+  awayTeamId: number | null,
+  finished: boolean,
+  order: TimelineOrder,
+): TimelineItem[] {
+  return useMemo(() => {
+    const items: TimelineItem[] = [];
+    let home = 0;
+    let away = 0;
+    let period: number | null = null;
+
+    timeline.forEach((event, index) => {
+      // Devre değişimi: ilk devrenin sonuna ayraç.
+      const current = event.devre ?? null;
+      if (period != null && current != null && current !== period) {
+        items.push({ kind: "break", key: `break-${current}`, label: "Devre arası" });
+      }
+      period = current ?? period;
+
+      const delta = scoreDelta(event, homeTeamId, awayTeamId);
+      const scored = delta.home > 0 || delta.away > 0;
+      home += delta.home;
+      away += delta.away;
+
+      items.push({
+        kind: "event",
+        key: eventKey(event, index),
+        event,
+        home: Number(event.takim_id) === Number(homeTeamId),
+        score: scored ? `${home}–${away}` : null,
+      });
+    });
+
+    if (finished && items.length) {
+      items.push({ kind: "break", key: "break-full", label: "Maç sonu" });
+    }
+
+    return order === "yeni" ? items.slice().reverse() : items;
+  }, [timeline, homeTeamId, awayTeamId, finished, order]);
+}
+
+/**
  * Zaman çizelgesi satırı — ortada dakika, olay hangi takımınsa o yanda.
  * İki sütunlu düzen "kim yaptı" sorusunu okumadan yanıtlar.
+ *
+ * GOL AYRI BİR AĞIRLIKTA: gol satırı zeminli bir kart olur ve o anki skoru
+ * taşır; kart, değişiklik ve diğerleri tek satır kalır. Bütün olayları aynı
+ * ağırlıkta çizmek, maçın hikâyesini düz bir döküme çeviriyordu — 90 dakikada
+ * olan tek önemli şey gollerdir, çizelge de bunu söylemeli.
+ *
+ * İKONLAR INLINE SVG (`EventIcon`): Ionicons'ta dikey sarı kart yok, en yakını
+ * yuvarlak köşeli genel bir kare — futbolda kart keskin köşelidir.
  */
 const TimelineRow = memo(function TimelineRow({
   event,
   home,
+  score,
   nameOf,
   onOpenPlayer,
 }: {
   event: ApiMatchEvent;
   home: boolean;
+  score: string | null;
   nameOf: (playerId?: number | null) => string | null;
   onOpenPlayer: (playerId: number) => void;
 }) {
   const kind = eventKind(event);
-  const visual = EVENT_VISUAL[kind] ?? EVENT_VISUAL.other;
+  const goal = isGoalKind(kind);
   const detail = kind === "goal" ? goalDetail(event) : kind === "ownGoal" ? "kendi kalesine" : null;
 
   const label =
     kind === "substitution"
       ? [nameOf(event.oyuncu_giren_id), nameOf(event.oyuncu_cikan_id)].filter(Boolean).join(" → ") ||
         "Oyuncu değişikliği"
-      : nameOf(event.oyuncu_id) || event.aciklama || visual.label;
+      : nameOf(event.oyuncu_id) || event.aciklama || EVENT_LABEL[kind] || "Olay";
 
   const playerId = Number(event.oyuncu_id) || null;
   const open = useCallback(() => {
@@ -1158,30 +1365,40 @@ const TimelineRow = memo(function TimelineRow({
       haptic="selection"
       disabled={!playerId}
       onPress={open}
-      style={[styles.tlBubble, home ? styles.tlBubbleHome : styles.tlBubbleAway]}
+      style={[
+        styles.tlBubble,
+        home ? styles.tlBubbleHome : styles.tlBubbleAway,
+        goal && styles.tlBubbleGoal,
+      ]}
       accessibilityRole={playerId ? "button" : "text"}
-      accessibilityLabel={`${event.dakika ?? "?"}. dakika ${visual.label}: ${label}`}
+      accessibilityLabel={`${event.dakika ?? "?"}. dakika ${EVENT_LABEL[kind] || "olay"}: ${label}${
+        score ? `, skor ${score}` : ""
+      }`}
     >
-      {home ? <Ionicons name={visual.icon} size={14} color={visual.color} /> : null}
+      {home ? <EventIcon kind={kind} size={13} /> : null}
       <View style={styles.tlTexts}>
         <Text
-          style={[styles.tlName, home ? styles.tlAlignLeft : styles.tlAlignRight]}
+          style={[
+            styles.tlName,
+            goal && styles.tlNameGoal,
+            home ? styles.tlAlignLeft : styles.tlAlignRight,
+          ]}
           numberOfLines={1}
           {...textScale.dense}
         >
           {label}
         </Text>
-        {detail ? (
+        {detail || score ? (
           <Text
             style={[styles.tlDetail, home ? styles.tlAlignLeft : styles.tlAlignRight]}
             numberOfLines={1}
             {...textScale.dense}
           >
-            {detail}
+            {[score, detail].filter(Boolean).join(" · ")}
           </Text>
         ) : null}
       </View>
-      {home ? null : <Ionicons name={visual.icon} size={14} color={visual.color} />}
+      {home ? null : <EventIcon kind={kind} size={13} />}
     </Touchable>
   );
 
@@ -1191,8 +1408,8 @@ const TimelineRow = memo(function TimelineRow({
 
       <View style={styles.tlCenter}>
         <View style={styles.tlLine} />
-        <View style={[styles.tlMinute, { borderColor: visual.color }]}>
-          <Text style={[styles.tlMinuteText, { color: visual.color }]} {...textScale.badge}>
+        <View style={[styles.tlMinute, goal && styles.tlMinuteGoal]}>
+          <Text style={[styles.tlMinuteText, goal && styles.tlMinuteTextGoal]} {...textScale.badge}>
             {event.dakika != null ? `${event.dakika}'` : "—"}
           </Text>
         </View>
@@ -1200,6 +1417,19 @@ const TimelineRow = memo(function TimelineRow({
       </View>
 
       <View style={styles.tlSide}>{home ? null : bubble}</View>
+    </View>
+  );
+});
+
+/** Devre arası / maç sonu — tam genişlik, etiketli ayraç. */
+const TimelineBreak = memo(function TimelineBreak({ label }: { label: string }) {
+  return (
+    <View style={styles.tlBreak} accessibilityRole="header">
+      <View style={styles.tlBreakLine} />
+      <Text style={styles.tlBreakLabel} {...textScale.badge}>
+        {upperTR(label)}
+      </Text>
+      <View style={styles.tlBreakLine} />
     </View>
   );
 });
@@ -1408,6 +1638,31 @@ interface LineupSection {
   data: KadroPlayer[];
 }
 
+/** Kadro sekmesinin iki görünümü. */
+type LineupMode = "saha" | "liste";
+type LineupSide = "home" | "away";
+
+/**
+ * Dizilişi kadro satırlarından türetir: "3-3-1".
+ *
+ * Sunucu maç kadrosunda diziliş SAKLAMAZ (yalnız takımın ideal kadrosunda
+ * vardır), bu yüzden ilk kadronun pozisyon kodları hatlara sayılıp yazılır.
+ * Kaleci dizilişte gösterilmez — futbolun yazım kuralı budur (3-3-1, 1+3-3-1
+ * değil).
+ */
+function formationOf(rows: KadroPlayer[]): string | null {
+  const count: Record<"DEF" | "MID" | "FWD", number> = { DEF: 0, MID: 0, FWD: 0 };
+  let keeper = 0;
+  for (const row of rows) {
+    const line = positionLine(row.position);
+    if (line === "GK") keeper += 1;
+    else count[line] += 1;
+  }
+  const outfield = count.DEF + count.MID + count.FWD;
+  if (outfield === 0 && keeper === 0) return null;
+  return `${count.DEF}-${count.MID}-${count.FWD}`;
+}
+
 function LineupTab({
   match,
   kadro,
@@ -1430,6 +1685,16 @@ function LineupTab({
   refreshControl: React.ReactElement<RefreshControlProps>;
 }) {
   const router = useRouter();
+  const { width } = useWindowDimensions();
+
+  /**
+   * MOBİLDE TEK TAKIM: iki kadroyu aynı sahaya koymak 36px avatarları 22px'e
+   * indirmeyi ve soyadlarını kısaltmayı gerektiriyordu. Takım segmenti
+   * okunurluğu koruyor ve tek dokunuşla diğer tarafa geçiriyor.
+   */
+  const [side, setSide] = useState<LineupSide>("home");
+  const [mode, setMode] = useState<LineupMode>("saha");
+  const [sheetPlayer, setSheetPlayer] = useState<KadroPlayer | null>(null);
 
   /** Oyuncu katkıları id ile aranır: satırın sağındaki G/A/K rozetleri buradan. */
   const contribById = useMemo(() => {
@@ -1440,31 +1705,64 @@ function LineupTab({
     return map;
   }, [contributions]);
 
-  const sections = useMemo<LineupSection[]>(() => {
-    const build = (teamName: string, rows: KadroPlayer[] | undefined): LineupSection[] => {
-      const list = rows ?? [];
-      if (!list.length) return [];
-      const starters = list.filter((row) => row.role === "starter");
-      const subs = list.filter((row) => row.role !== "starter");
-      const result: LineupSection[] = [];
-      if (starters.length) {
-        result.push({ title: teamName, meta: `İlk 11 · ${starters.length}`, data: starters });
-      }
-      if (subs.length) {
-        result.push({ title: `${teamName} · Yedekler`, meta: String(subs.length), data: subs });
-      }
-      return result;
-    };
-    return [
-      ...build(match.first_team_name, kadro?.home),
-      ...build(match.second_team_name, kadro?.away),
-    ];
-  }, [kadro, match.first_team_name, match.second_team_name]);
+  const teamName = side === "home" ? match.first_team_name : match.second_team_name;
+  const rows = useMemo(
+    () => (side === "home" ? kadro?.home : kadro?.away) ?? [],
+    [kadro, side],
+  );
+  const starters = useMemo(() => rows.filter((row) => row.role === "starter"), [rows]);
+  const bench = useMemo(() => rows.filter((row) => row.role !== "starter"), [rows]);
+
+  const sideItems = useMemo<SegmentedItem<LineupSide>[]>(
+    () => [
+      { key: "home", label: match.first_team_name },
+      { key: "away", label: match.second_team_name },
+    ],
+    [match.first_team_name, match.second_team_name],
+  );
 
   const openPlayer = useCallback(
     (playerId: number) => router.push(`/oyuncu/${playerId}`),
     [router],
   );
+
+  /* Sahadaki oyuncular: avatarın sağ üstündeki rozetler gerçek olaylardan. */
+  const pitchPlayers = useMemo<PitchPlayerView[]>(
+    () =>
+      starters.map((row, index) => {
+        const playerId = Number(row.playerId ?? row.oyuncu_id) || null;
+        const contrib = playerId ? contribById.get(playerId) : null;
+        const sub = playerId ? substitutions.get(playerId) : null;
+        const events: EventIconKind[] = [];
+        if (contrib?.goals) events.push("goal");
+        if (contrib?.cards) events.push("yellow");
+        if (sub?.out != null) events.push("substitution");
+        return {
+          key: playerKey(row, index),
+          name: row.playerName || row.guestName || "İsimsiz oyuncu",
+          photo: row.playerImg,
+          number: row.number,
+          position: row.position,
+          events,
+          onPress: () => setSheetPlayer(row),
+        };
+      }),
+    [starters, contribById, substitutions],
+  );
+
+  const formation = useMemo(() => formationOf(starters), [starters]);
+
+  /* Liste görünümünde bölümler; saha görünümünde yalnız yedekler. */
+  const sections = useMemo<LineupSection[]>(() => {
+    const out: LineupSection[] = [];
+    if (mode === "liste" && starters.length) {
+      out.push({ title: `${teamName} · İlk kadro`, meta: String(starters.length), data: starters });
+    }
+    if (bench.length) {
+      out.push({ title: "Yedekler", meta: String(bench.length), data: bench });
+    }
+    return out;
+  }, [mode, starters, bench, teamName]);
 
   const renderItem = useCallback(
     ({ item }: { item: KadroPlayer }) => {
@@ -1488,6 +1786,49 @@ function LineupTab({
     [],
   );
 
+  const header = useMemo(
+    () => (
+      <View style={styles.lineupHead}>
+        <SegmentedControl items={sideItems} value={side} onChange={setSide} size="sm" />
+
+        {mode === "saha" ? (
+          starters.length ? (
+            <PitchView
+              players={pitchPlayers}
+              width={width - layout.screenPadding * 2}
+              formation={formation}
+              style={styles.pitchWrap}
+            />
+          ) : (
+            <EmptyState
+              icon="people-outline"
+              title="İlk kadro girilmedi"
+              body={`${teamName} bu maçın ilk kadrosunu açıklamadı. Yedekler aşağıda görünüyor.`}
+            />
+          )
+        ) : null}
+
+        <Touchable
+          feedback="button"
+          haptic="selection"
+          onPress={() => setMode((current) => (current === "saha" ? "liste" : "saha"))}
+          accessibilityRole="button"
+          style={styles.lineupToggle}
+        >
+          <Ionicons
+            name={mode === "saha" ? "list-outline" : "football-outline"}
+            size={14}
+            color={colors.brandAccent}
+          />
+          <Text style={styles.lineupToggleText} {...textScale.dense}>
+            {mode === "saha" ? "Kadroyu liste olarak gör" : "Sahaya dön"}
+          </Text>
+        </Touchable>
+      </View>
+    ),
+    [sideItems, side, mode, starters.length, pitchPlayers, width, formation, teamName],
+  );
+
   if (loading) {
     return (
       <View style={styles.loading}>
@@ -1500,31 +1841,131 @@ function LineupTab({
     return <ErrorState error={error} onRetry={onRetry} />;
   }
 
-  if (!sections.length) {
+  if (!(kadro?.home?.length || kadro?.away?.length)) {
     return (
       <EmptyState
         icon="people-outline"
         title="Kadrolar açıklanmadı"
-        body="Takımlar kadrolarını girdiğinde ilk 11 ve yedekler burada görünür."
+        body="Takımlar kadrolarını girdiğinde saha görünümü ve yedekler burada çıkar."
       />
     );
   }
 
   return (
-    <SectionList
-      {...scrollProps}
-      sections={sections}
-      keyExtractor={playerKey}
-      renderItem={renderItem}
-      renderSectionHeader={renderSectionHeader}
-      refreshControl={refreshControl}
-      contentContainerStyle={styles.listContent}
-      stickySectionHeadersEnabled
-      initialNumToRender={14}
-      windowSize={9}
-    />
+    <>
+      <SectionList
+        {...scrollProps}
+        sections={sections}
+        keyExtractor={playerKey}
+        renderItem={renderItem}
+        renderSectionHeader={renderSectionHeader}
+        ListHeaderComponent={header}
+        refreshControl={refreshControl}
+        contentContainerStyle={styles.listContent}
+        stickySectionHeadersEnabled
+        initialNumToRender={14}
+        windowSize={9}
+      />
+
+      <PlayerSheet
+        player={sheetPlayer}
+        contrib={
+          sheetPlayer
+            ? contribById.get(Number(sheetPlayer.playerId ?? sheetPlayer.oyuncu_id)) ?? null
+            : null
+        }
+        onClose={() => setSheetPlayer(null)}
+        onOpen={openPlayer}
+      />
+    </>
   );
 }
+
+/**
+ * Oyuncuya dokununca açılan kart.
+ *
+ * NEDEN SAYFAYA GİTMİYOR: sahada bir oyuncuya dokunmanın en sık sebebi "bu kim
+ * ve nasıl oynadı" sorusudur; tam sayfaya gitmek kadroyu kaybettiriyor ve geri
+ * dönüşte sekme sıfırlanıyordu. Sheet soruyu yerinde yanıtlıyor, sayfaya
+ * gitmek isteyen için de tek düğme bırakıyor.
+ *
+ * ISI HARİTASI YOK: sunucu oyuncu konum verisi tutmuyor. Uydurma bir ısı
+ * haritası, gerçek verinin yanında duran sahte bir grafik olurdu.
+ */
+const PlayerSheet = memo(function PlayerSheet({
+  player,
+  contrib,
+  onClose,
+  onOpen,
+}: {
+  player: KadroPlayer | null;
+  contrib: ContribRow | null;
+  onClose: () => void;
+  onOpen: (playerId: number) => void;
+}) {
+  const playerId = player ? Number(player.playerId ?? player.oyuncu_id) || null : null;
+  const linkable = Boolean(playerId) && !player?.isGuest;
+  const name = player?.playerName || player?.guestName || "İsimsiz oyuncu";
+  const rating = player?.puan != null ? Number(player.puan) : null;
+
+  return (
+    <BottomSheet visible={player != null} onClose={onClose} title={name}>
+      {player ? (
+        <View style={styles.sheetBody}>
+          <View style={styles.sheetHead}>
+            <Avatar name={name} image={player.playerImg} size={56} />
+            <View style={styles.sheetTexts}>
+              <Text style={styles.sheetMeta} numberOfLines={1} {...textScale.dense}>
+                {[
+                  positionLabel(player.position) || null,
+                  player.number !== "" && player.number != null ? `Forma ${player.number}` : null,
+                  player.captain ? "Kaptan" : null,
+                  player.isGuest ? "Misafir" : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </Text>
+              {rating != null ? <RatingPill value={rating} /> : null}
+            </View>
+          </View>
+
+          <View style={styles.sheetStats}>
+            <SheetStat label="Gol" value={contrib?.goals ?? 0} />
+            <View style={styles.sheetStatAxis} />
+            <SheetStat label="Asist" value={contrib?.assists ?? 0} />
+            <View style={styles.sheetStatAxis} />
+            <SheetStat label="Kart" value={contrib?.cards ?? 0} />
+          </View>
+
+          {linkable && playerId ? (
+            <Button
+              label="Oyuncu sayfasına git"
+              icon="arrow-forward"
+              fullWidth
+              onPress={() => {
+                onClose();
+                onOpen(playerId);
+              }}
+            />
+          ) : null}
+        </View>
+      ) : null}
+    </BottomSheet>
+  );
+});
+
+const SheetStat = memo(function SheetStat({ label, value }: { label: string; value: number }) {
+  return (
+    <View style={styles.sheetStat}>
+      <Text style={styles.sheetStatValue} {...textScale.dense}>
+        {value}
+      </Text>
+      <Text style={styles.sheetStatLabel} {...textScale.badge}>
+        {upperTR(label)}
+      </Text>
+    </View>
+  );
+});
 
 /** Oyuncu değişikliği bilgisi: kaçıncı dakikada girdi / çıktı. */
 interface SubInfo {
@@ -1642,6 +2083,32 @@ const ContribBadge = memo(function ContribBadge({
    8) İSTATİSTİK
    ══════════════════════════════════════════════════════════════════════════ */
 
+/**
+ * İstatistik grupları.
+ *
+ * NEDEN GRUPLU: on iki satırı düz sıralamak, hepsini eşit önemde gösteren bir
+ * döküm üretiyordu; okuyucu "bu takım nerede iyi" sorusunu ancak tek tek
+ * karşılaştırarak yanıtlayabiliyordu. Üç blok soruyu blok başlığında yanıtlar.
+ *
+ * NEDEN BU ÜÇ BLOK: sunucunun gerçekten tuttuğu olay kodları bu üç aileye
+ * ayrılıyor. TOPLA OYNAMA YÜZDESİ VE xG BİLEREK YOK — şemada karşılıkları
+ * bulunmuyor ve uydurulmuş bir yüzde, gerçek verinin yanında duran sahte bir
+ * sayı olurdu.
+ *
+ * Tanınmayan kodlar "Mücadele"ye düşer: sunucuya yeni bir olay kodu eklendiğinde
+ * ekran onu sessizce yutmaz, bir yerde gösterir.
+ */
+const STAT_GROUPS: { title: string; labels: string[] }[] = [
+  { title: "Hücum", labels: ["Goller", "Asistler", "Fırsat Yarat."] },
+  { title: "Mücadele", labels: ["Kurtarışlar", "Kritik Blok", "Hava Topu", "İkili Müc."] },
+  { title: "Disiplin", labels: ["Fauller", "Sarı Kart", "Kırmızı Kart", "Sakatlık", "Değişiklik"] },
+];
+
+interface StatSection {
+  title: string;
+  data: StatRow[];
+}
+
 function StatsTab({
   match,
   statRows,
@@ -1660,24 +2127,47 @@ function StatsTab({
   refreshControl: React.ReactElement<RefreshControlProps>;
 }) {
   const router = useRouter();
-  const meaningful = useMemo(
-    () => statRows.some((row) => row.home > 0 || row.away > 0),
-    [statRows],
-  );
+
+  /*
+    Sıfır satırlar elenir — "Kırmızı Kart 0–0" barı hiçbir şey söylemez ve
+    ekranda gerçek veriyle aynı yeri kaplar. Goller tek istisnadır: 0–0 da bir
+    sonuçtur ve gösterilmesi gerekir.
+  */
+  const sections = useMemo<StatSection[]>(() => {
+    const byLabel = new Map(statRows.map((row) => [row.label, row]));
+    const known = new Set(STAT_GROUPS.flatMap((group) => group.labels));
+    const unknown = statRows.filter((row) => !known.has(row.label));
+
+    const keep = (row: StatRow) => row.label === "Goller" || row.home > 0 || row.away > 0;
+
+    return STAT_GROUPS.map((group) => {
+      const rows = group.labels
+        .map((label) => byLabel.get(label))
+        .filter((row): row is StatRow => row != null);
+      // Tanınmayan kodlar Mücadele bloğunun sonuna eklenir.
+      const data = (group.title === "Mücadele" ? [...rows, ...unknown] : rows).filter(keep);
+      return { title: group.title, data };
+    }).filter((section) => section.data.length > 0);
+  }, [statRows]);
 
   const renderItem = useCallback(
-    ({ item, index }: { item: StatRow; index: number }) => (
+    ({ item, index, section }: { item: StatRow; index: number; section: StatSection }) => (
       <View
         style={[
           styles.statCard,
           index === 0 && styles.statCardFirst,
-          index === statRows.length - 1 && styles.statCardLast,
+          index === section.data.length - 1 && styles.statCardLast,
         ]}
       >
         <StatBar label={item.label} home={item.home} away={item.away} />
       </View>
     ),
-    [statRows.length],
+    [],
+  );
+
+  const renderSectionHeader = useCallback(
+    ({ section }: { section: StatSection }) => <SectionHeader title={section.title} />,
+    [],
   );
 
   const openPlayer = useCallback(
@@ -1686,11 +2176,12 @@ function StatsTab({
   );
 
   return (
-    <FlatList
+    <SectionList
       {...scrollProps}
-      data={meaningful ? statRows : []}
+      sections={sections}
       keyExtractor={statKey}
       renderItem={renderItem}
+      renderSectionHeader={renderSectionHeader}
       refreshControl={refreshControl}
       contentContainerStyle={styles.listContent}
       ListHeaderComponent={
@@ -1712,15 +2203,14 @@ function StatsTab({
               <TeamLogo name={match.second_team_name} logo={awayLogo} size={layout.crestMd} />
             </View>
           </View>
-          <SectionHeader title="Karşılaştırma" />
         </View>
       }
       ListEmptyComponent={
         <EmptyState
           icon="stats-chart-outline"
           variant="inline"
-          title="İstatistik yok"
-          body="Maç olayları girildikçe şut, faul, kart ve korner karşılaştırmaları burada oluşur."
+          title="İstatistik girilmedi"
+          body="Bu maçın olayları girildikçe gol, kurtarış, ikili mücadele ve kart karşılaştırmaları burada oluşur."
         />
       }
       ListFooterComponent={
@@ -2165,6 +2655,8 @@ const standingLayout = (_data: ArrayLike<StandingRow> | null | undefined, index:
    ══════════════════════════════════════════════════════════════════════════ */
 
 const eventKey = (event: ApiMatchEvent, index: number) => `${event.id ?? "olay"}-${index}`;
+/** Zaman çizelgesi öğesi (olay ya da ayraç) — anahtar zaten öğenin içinde. */
+const timelineKey = (item: TimelineItem) => item.key;
 const matchKey = (item: ApiMatch) => String(item.id);
 const statKey = (row: StatRow) => row.label;
 /** Aynı index iki bölümde de geçtiği için anahtar TAKIMI da taşır. */
@@ -2180,6 +2672,53 @@ function rowPosition(index: number, total: number): "single" | "first" | "middle
 }
 
 /** Olay satırlarındaki oyuncu adları kadro ucundan çözülür. */
+/**
+ * Gol atanlar — skor bloğunun altındaki iki sütun.
+ *
+ * NEDEN AYRI KANCA: skor bloğu, "kim attı" sorusunu zaman tüneline inmeden
+ * yanıtlamalı; bu maç detayının en çok sorulan sorusudur. Olay listesini
+ * hero'nun içinde filtrelemek her canlı olayda hero'yu yeniden çizerdi.
+ *
+ * KENDİ KALESİNE GOL, SKORU HANGİ TAKIMA YAZIYORSA O SÜTUNDA görünür (skor
+ * tablosuyla tutarlı olması için) ama adın yanında (k.k.) notu taşır — aksi
+ * hâlde oyuncu, rakip takımın golcüsü gibi okunurdu.
+ */
+function useGoalScorers(
+  events: ApiMatchEvent[],
+  homeTeamId: number | null,
+  awayTeamId: number | null,
+  nameOf: (playerId?: number | null) => string | null,
+): { home: ScorerLine[]; away: ScorerLine[] } {
+  return useMemo(() => {
+    const home: ScorerLine[] = [];
+    const away: ScorerLine[] = [];
+
+    for (const event of events) {
+      const goal = isGoal(event);
+      const own = isOwnGoal(event);
+      if (!goal && !own) continue;
+
+      const scoredBy = Number(event.takim_id);
+      // Kendi kalesine golde sayı RAKİBE yazılır; sütun da ona göre seçilir.
+      const creditedHome = own ? scoredBy !== Number(homeTeamId) : scoredBy === Number(homeTeamId);
+      const creditedAway = own ? scoredBy !== Number(awayTeamId) : scoredBy === Number(awayTeamId);
+
+      const line: ScorerLine = {
+        key: String(event.id),
+        name: nameOf(event.oyuncu_id) ?? "Bilinmeyen oyuncu",
+        minute: event.dakika ?? null,
+        ownGoal: own,
+      };
+
+      if (creditedHome) home.push(line);
+      else if (creditedAway) away.push(line);
+    }
+
+    const byMinute = (a: ScorerLine, b: ScorerLine) => (a.minute ?? 0) - (b.minute ?? 0);
+    return { home: home.sort(byMinute), away: away.sort(byMinute) };
+  }, [events, homeTeamId, awayTeamId, nameOf]);
+}
+
 function usePlayerNames(kadro: KadroResponse | undefined) {
   return useMemo(() => {
     const byId = new Map<number, string>();
@@ -2397,9 +2936,10 @@ const styles = StyleSheet.create({
   hero: {
     backgroundColor: colors.surface1,
     paddingHorizontal: layout.screenPadding,
-    paddingTop: space.m,
-    paddingBottom: space.sm,
-    gap: space.s,
+    paddingTop: space.md,
+    paddingBottom: space.m,
+    gap: space.m,
+    overflow: "hidden",
   },
   heroTeams: {
     flexDirection: "row",
@@ -2419,21 +2959,53 @@ const styles = StyleSheet.create({
     minHeight: 28,
   },
   heroCenter: {
-    minWidth: 104,
+    minWidth: 116,
     alignItems: "center",
     justifyContent: "flex-start",
-    gap: space.xs,
-    paddingTop: space.s,
+    gap: space.s,
+    paddingTop: space.xs,
   },
   heroScore: {
     ...type.scoreHero,
     color: colors.textPrimary,
   },
-  heroScoreLive: {
-    color: colors.brandAccent,
-  },
+  /* Tire skordan sönük: göz iki rakamı görsün, aradaki işareti değil. */
   heroScoreDash: {
     color: colors.textTertiary,
+  },
+
+  /* ---- Gol atanlar: iki sütun, ortada eksen ---- */
+  scorers: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: space.md,
+  },
+  scorerColumn: {
+    flex: 1,
+    gap: space.xs,
+  },
+  /* Ortadaki hairline — iki sütunun hangi eksene yaslandığını söyler. */
+  scorerAxis: {
+    width: hairline,
+    alignSelf: "stretch",
+    backgroundColor: colors.separator,
+  },
+  scorerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+  },
+  /* Ev sahibi sütunu SAĞA yaslanır: ikon da metnin sağına geçer. */
+  scorerRowHome: {
+    flexDirection: "row-reverse",
+  },
+  scorerText: {
+    ...type.caption,
+    color: colors.textSecondary,
+    flexShrink: 1,
+  },
+  scorerTextHome: {
+    textAlign: "right",
   },
   heroKickoff: {
     ...type.scoreLg,
@@ -2450,6 +3022,70 @@ const styles = StyleSheet.create({
     ...type.caption,
     color: colors.textSecondary,
     textAlign: "center",
+  },
+
+  /* ---- Kadro sekmesi: saha başlığı, görünüm düğmesi, oyuncu kartı ---- */
+  lineupHead: {
+    paddingHorizontal: layout.screenPadding,
+    paddingTop: space.md,
+    gap: space.md,
+  },
+  pitchWrap: {
+    alignSelf: "center",
+  },
+  lineupToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: space.s,
+    paddingVertical: space.m,
+    borderRadius: radius.md,
+    borderWidth: hairline,
+    borderColor: colors.border,
+  },
+  lineupToggleText: {
+    ...type.label,
+    color: colors.brandAccent,
+  },
+  sheetBody: {
+    gap: space.lg,
+    paddingBottom: space.sm,
+  },
+  sheetHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+  },
+  sheetTexts: {
+    flex: 1,
+    gap: space.s,
+    alignItems: "flex-start",
+  },
+  sheetMeta: {
+    ...type.caption,
+    color: colors.textSecondary,
+  },
+  /* Sayı bloğu KUTU DEĞİL: hairline ile bölünmüş üç sütun. */
+  sheetStats: {
+    flexDirection: "row",
+    alignItems: "stretch",
+  },
+  sheetStat: {
+    flex: 1,
+    alignItems: "center",
+    gap: 2,
+  },
+  sheetStatAxis: {
+    width: hairline,
+    backgroundColor: colors.separator,
+  },
+  sheetStatValue: {
+    ...type.metric,
+    color: colors.textPrimary,
+  },
+  sheetStatLabel: {
+    ...type.overline,
+    color: colors.textTertiary,
   },
 
   /* ---- Yeniden bağlanma şeridi ---- */
@@ -2579,6 +3215,12 @@ const styles = StyleSheet.create({
   tlBubbleHome: {
     justifyContent: "flex-start",
   },
+  /* Gol satırı zeminli kart olur: 90 dakikada olan tek önemli şey odur. */
+  tlBubbleGoal: {
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+  },
   tlBubbleAway: {
     justifyContent: "flex-end",
   },
@@ -2587,6 +3229,10 @@ const styles = StyleSheet.create({
   },
   tlName: {
     ...type.bodySm,
+    color: colors.textPrimary,
+  },
+  tlNameGoal: {
+    ...type.h3,
     color: colors.textPrimary,
   },
   tlDetail: {
@@ -2613,12 +3259,40 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.xs,
     paddingVertical: 2,
     borderRadius: radius.pill,
-    borderWidth: 1,
+    borderWidth: hairline,
+    borderColor: colors.border,
     alignItems: "center",
     backgroundColor: colors.surface1,
   },
   tlMinuteText: {
-    ...type.micro,
+    ...type.clock,
+    color: colors.textTertiary,
+  },
+  /* Golün dakikası da vurgulanır: çizginin üstünde dolu bir işaret olur. */
+  tlMinuteGoal: {
+    backgroundColor: colors.textPrimary,
+    borderColor: colors.textPrimary,
+  },
+  tlMinuteTextGoal: {
+    color: colors.surface1,
+  },
+
+  /* ---- Devre ayracı: tam genişlik, etiketli ---- */
+  tlBreak: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    paddingHorizontal: layout.screenPadding,
+    paddingVertical: space.md,
+  },
+  tlBreakLine: {
+    flex: 1,
+    height: hairline,
+    backgroundColor: colors.border,
+  },
+  tlBreakLabel: {
+    ...type.overline,
+    color: colors.textTertiary,
   },
 
   /* ---- Canlı akış ---- */

@@ -754,7 +754,7 @@ function SummaryTab({
           <View style={styles.group}>
             <ListRow
               leading={{ icon: "play-circle", tone: "info" }}
-              title="İlk 11 başlangıcı"
+              title="İlk kadro başlangıcı"
               value={String(num(stats.starts))}
               chevron={false}
               position="first"
@@ -1159,7 +1159,7 @@ function StatisticsTab({ scrollProps }: { scrollProps: ScrollChrome }) {
   const detailRows = useMemo(() => {
     if (!totals) return [];
     return [
-      { label: "İlk 11 başlangıcı", value: num(totals.starts) },
+      { label: "İlk kadro başlangıcı", value: num(totals.starts) },
       { label: "Sonradan oyuna giriş", value: num(totals.sub_ins) },
       { label: "Kaptanlık", value: num(totals.captain) },
       { label: "Kurtarış", value: num(totals.saves) },
@@ -1301,7 +1301,7 @@ function StatisticsTab({ scrollProps }: { scrollProps: ScrollChrome }) {
             <PerMatchCell label="Gol" value={perMatch.goals.toFixed(2)} />
             <PerMatchCell label="Asist" value={perMatch.assists.toFixed(2)} />
             <PerMatchCell label="Katkı" value={perMatch.contributions.toFixed(2)} />
-            <PerMatchCell label="İlk 11" value={`%${Math.round(num(perMatch.start_ratio))}`} />
+            <PerMatchCell label="İlk kadro" value={`%${Math.round(num(perMatch.start_ratio))}`} />
           </View>
           <View style={styles.recordRow}>
             <Text style={styles.recordText} {...textScale.dense}>

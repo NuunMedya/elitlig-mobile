@@ -1028,7 +1028,7 @@ function StatsTab({
     if (!stats) return [];
     const candidates: { label: string; value: number }[] = [
       { label: "Asist", value: stats.asist },
-      { label: "İlk 11 başlangıcı", value: stats.ilk11_basladigi_mac_sayisi },
+      { label: "İlk kadro başlangıcı", value: stats.ilk11_basladigi_mac_sayisi },
       { label: "Sonradan oyuna girdiği", value: stats.sonradan_oyuna_girdigi_mac_sayisi },
       { label: "Kaptanlık", value: stats.kaptan_oldugu_mac_sayisi },
       { label: "Kurtarış", value: stats.kurtaris },
