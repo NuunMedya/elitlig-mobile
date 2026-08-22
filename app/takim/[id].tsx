@@ -35,6 +35,7 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   type RefreshControlProps,
@@ -47,6 +48,7 @@ import {
   BottomSheet,
   Button,
   Card,
+  ChalkArc,
   EmptyState,
   ErrorState,
   FormChips,
@@ -901,9 +903,31 @@ const TeamHero = React.memo(function TeamHero({
   onShare: () => void;
 }) {
   const place = [city, league].filter(Boolean).join(" · ");
+  const { width } = useWindowDimensions();
 
   return (
     <View style={styles.hero}>
+      {/*
+        KAPAK — iki katman, ikisi de geometri:
+
+        1. Dev arma filigranı, sol üstte, %6 opaklıkta. Takımın kimliğini
+           kapağa taşıyan tek öğe budur ve kullanıcının YÜKLEDİĞİ görselden
+           gelir; uydurulmuş bir kapak fotoğrafı ya da renk gradyanı değildir.
+        2. ChalkArc — uygulamanın imza öğesi. Kapak, maç detayının skor
+           bloğuyla aynı dili konuşur.
+
+        TAKIM RENGİNDEN ZEMİN TÜRETİLMEDİ: `ApiTeam.colors` alanı şemada var
+        ama biçimi tanımsız (hiçbir yerde okunmuyor) ve serbest metin
+        olabiliyor. Ayrıştırılamayan bir alandan renk üretmek, bazı takımlarda
+        okunmaz bir kapak demekti.
+      */}
+      {logo ? (
+        <View style={styles.coverMark} pointerEvents="none">
+          <TeamLogo name={teamName} logo={logo} size={168} />
+        </View>
+      ) : null}
+      <ChalkArc width={width} height={COVER_HEIGHT} />
+
       <View style={styles.heroTop}>
         <TeamLogo name={teamName} logo={logo} size={layout.crestXl} />
         <View style={styles.heroIdentity}>
@@ -963,6 +987,9 @@ const TeamHero = React.memo(function TeamHero({
 /* ══════════════════════════════════════════════════════════════════════════
    GERİ SAYIM — yalnız kendi satırını yeniler
    ══════════════════════════════════════════════════════════════════════════ */
+
+/** Kapak katmanının yüksekliği — ChalkArc yayı buna göre çizilir. */
+const COVER_HEIGHT = 176;
 
 const pad = (value: number) => String(value).padStart(2, "0");
 
@@ -2432,6 +2459,14 @@ const styles = StyleSheet.create({
     paddingTop: space.md,
     paddingBottom: space.lg,
     gap: space.md,
+    overflow: "hidden",
+  },
+  /* Dev arma filigranı — kadrajdan taşar, %6 opaklıkta. */
+  coverMark: {
+    position: "absolute",
+    top: -44,
+    left: -40,
+    opacity: 0.06,
   },
   heroTop: {
     flexDirection: "row",

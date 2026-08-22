@@ -9,6 +9,11 @@
  * görseli kırpıyor; bu yüzden halka dış kapsayıcıdadır ve 2px boşlukla
  * fotoğrafı çevreler — kapsayıcının ölçüsü `size + 8` olur, çağıran taraf
  * yerleşimi buna göre kurgular.
+ *
+ * KARE BİÇİM (`shape="square"`): oyuncu profilinin üst bloğunda kullanılır.
+ * Orada fotoğraf 88px'e çıkıyor ve dairesel hâli, aynı ekrandaki dairesel
+ * TAKIM AMBLEMLERİYLE aynı silueti paylaşıp "bu hangisi" tereddüdü
+ * yaratıyordu. Yumuşak köşeli kare, oyuncuyu kulüpten ayırır.
  */
 
 import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
@@ -29,6 +34,8 @@ export interface AvatarProps {
   badge?: ReactNode;
   /** 2px halka */
   ring?: "none" | "brand" | "live";
+  /** Biçim. Varsayılan dairesel; kare biçim büyük profil fotoğrafı içindir. */
+  shape?: "circle" | "square";
 }
 
 export const Avatar = memo(function Avatar({
@@ -39,19 +46,27 @@ export const Avatar = memo(function Avatar({
   jersey,
   badge,
   ring = "none",
+  shape = "circle",
 }: AvatarProps) {
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [image]);
 
   const uri = failed ? null : mediaUrl(image);
 
+  // Kare biçimde yarıçap ölçüye göre ölçeklenir ama radius.lg'yi (kart
+  // yarıçapı) geçmez: iç eleman daima dış elemandan küçük yarıçaplı kalır.
+  const corner = shape === "square" ? Math.min(radius.lg, Math.round(size * 0.18)) : radius.pill;
+
   const box = useMemo(
-    () => ({ width: size, height: size, borderRadius: radius.pill }),
-    [size],
+    () => ({ width: size, height: size, borderRadius: corner }),
+    [size, corner],
   );
   const wrap = useMemo(
-    () => (ring === "none" ? { width: size, height: size } : { width: size + 8, height: size + 8, padding: 2 }),
-    [size, ring],
+    () =>
+      ring === "none"
+        ? { width: size, height: size, borderRadius: corner }
+        : { width: size + 8, height: size + 8, padding: 2, borderRadius: corner + 2 },
+    [size, ring, corner],
   );
   const initialsSize = useMemo(() => ({ fontSize: Math.max(9, Math.round(size * 0.36)) }), [size]);
 
@@ -97,7 +112,7 @@ const styles = StyleSheet.create({
   ring: {
     borderWidth: 2,
     borderColor: colors.brandBorder,
-    borderRadius: radius.pill,
+    // borderRadius BURADA DEĞİL: kare biçimde `wrap` içindeki değeri ezerdi.
   },
   ringLive: {
     borderColor: colors.live,

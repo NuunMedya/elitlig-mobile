@@ -39,7 +39,14 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FlatList, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  FlatList,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import ViewShot from "react-native-view-shot";
 import {
@@ -60,6 +67,7 @@ import {
   SkeletonCard,
   SkeletonListRow,
   SkeletonTable,
+  Sparkline,
   Tabs,
   TeamLogo,
   Touchable,
@@ -625,7 +633,10 @@ function GeneralTab({
 }: GeneralTabProps) {
   const router = useRouter();
   const scope = useScope();
+  const { width } = useWindowDimensions();
   const refresh = useRefresh(refetchPlayer, { refreshing: isRefetching });
+  /* Sparkline ölçüyü kendi hesaplamaz; ekran kenarları düşülür. */
+  const trendWidth = width - layout.screenPadding * 2;
 
   /* Asist oyuncu ucunda yok; kapsam içi sıralama listesinden zenginleştirilir
      (bulunamazsa rakam hiç gösterilmez — eski ekranın kuralı korundu). */
@@ -713,6 +724,23 @@ function GeneralTab({
     [profileQuery.data],
   );
 
+  /*
+    FORM GRAFİĞİ — son 10 maçın puan seyri, eskiden yeniye.
+
+    Puanlanmamış maçlar (points = 0) DİZİYE HİÇ GİRMEZ; sıfır olarak
+    çizilseydi grafik her puanlanmamış maçta tabana çakılır ve oyuncu kötü
+    oynamış gibi görünürdü. Beş gerçek puan yoksa grafik hiç çizilmez —
+    üç noktalı bir "seyir" seyir değildir.
+  */
+  const ratingTrend = useMemo(() => {
+    const values = playedAppearances(profileQuery.data?.mergedStatistics)
+      .slice(0, 10)
+      .map((row) => ratingOf(num(row.points)))
+      .filter((value): value is number => value != null)
+      .reverse();
+    return values.length >= 5 ? values : [];
+  }, [profileQuery.data]);
+
   /* Form şeridi soldan sağa eskiden yeniye okunur. */
   const form = useMemo<FormResult[]>(
     () =>
@@ -765,35 +793,55 @@ function GeneralTab({
       contentContainerStyle={styles.content}
       refreshControl={refresh.control}
     >
-      {/* ————— Kimlik ————— */}
+      {/*
+        ————— Kimlik —————
+
+        DÜZEN: fotoğraf SOLDA, künye SAĞDA. Eski hâl her şeyi ortalıyordu ve
+        ad, rozetler, künye alt alta dizilince blok ekranın üçte birini
+        kaplıyordu; asıl veri (sezon rakamları) kaydırmadan görünmüyordu.
+
+        FOTOĞRAF KARE: 88px dairesel bir fotoğraf, hemen altındaki dairesel
+        TAKIM AMBLEMİYLE aynı silueti paylaşıyor ve ikisi bir an karışıyordu.
+        16px yarıçaplı kare oyuncuyu kulüpten ayırır.
+      */}
       <View style={styles.hero}>
-        <Avatar
-          name={playerName}
-          image={mediaUrl(playerImage)}
-          size={76}
-          ring="brand"
-          jersey={jersey}
-        />
-
-        <Text style={styles.heroName} numberOfLines={2} {...textScale.dense}>
-          {playerName}
-        </Text>
-
-        <View style={styles.heroBadges}>
-          {position ? (
-            <Badge label={`${positionIcon(position)} ${position}`} tone="brand" size="sm" />
-          ) : null}
-          {/* Sunucuda ayrı bir "doğrulanmış" alanı yok; aktif oyuncu kaydı
-              lisanslı/doğrulanmış kaydın kendisidir (models/players.js). */}
-          <Badge
-            label={active ? "AKTİF" : "PASİF"}
-            tone={active ? "win" : "neutral"}
-            icon={active ? "checkmark-circle" : undefined}
-            size="sm"
+        <View style={styles.heroTop}>
+          <Avatar
+            name={playerName}
+            image={mediaUrl(playerImage)}
+            size={88}
+            shape="square"
+            jersey={jersey}
           />
-          {trRank ? (
-            <Badge label={`TR ${trRank.rank}.`} tone="info" size="sm" />
-          ) : null}
+
+          <View style={styles.heroIdentity}>
+            <Text style={styles.heroName} numberOfLines={2} {...textScale.dense}>
+              {playerName}
+            </Text>
+
+            {/* Künye tek satır, 11px: pozisyon · forma · yaş · uyruk. */}
+            <Text style={styles.heroMeta} numberOfLines={2} {...textScale.dense}>
+              {[
+                position || null,
+                jersey != null ? `#${jersey}` : null,
+                age !== "—" ? `${age} yaş` : null,
+                nationality || null,
+              ]
+                .filter(Boolean)
+                .join(" · ") || "Künye girilmedi"}
+            </Text>
+
+            <View style={styles.heroBadges}>
+              {/* Sunucuda ayrı bir "doğrulanmış" alanı yok; aktif oyuncu kaydı
+                  lisanslı/doğrulanmış kaydın kendisidir (models/players.js). */}
+              <Badge
+                label={active ? "AKTİF" : "PASİF"}
+                tone={active ? "win" : "neutral"}
+                size="xs"
+              />
+              {trRank ? <Badge label={`TR ${trRank.rank}.`} tone="info" size="xs" /> : null}
+            </View>
+          </View>
         </View>
 
         {/* Takım satırı — dokununca takım profiline iner. */}
@@ -821,20 +869,17 @@ function GeneralTab({
           <Badge label="TAKIMSIZ" tone="neutral" size="sm" />
         )}
 
-        {/* Kimlik künyesi — boş alan satırı hiç çizilmez. */}
-        <View style={styles.metaRow}>
-          {age !== "—" ? <MetaChip label="Yaş" value={age} /> : null}
-          {nationality ? <MetaChip label="Uyruk" value={nationality} /> : null}
-          {jersey != null ? <MetaChip label="Forma" value={`#${jersey}`} /> : null}
-          {form.length ? (
+        {/* Son maçların sonucu — künye yukarı taşındığı için burada yalnız bu kalır. */}
+        {form.length ? (
+          <View style={styles.metaRow}>
             <View style={styles.formBox}>
               <Text style={styles.metaLabel} {...textScale.badge}>
                 SON {form.length}
               </Text>
               <FormChips form={form} limit={5} size="xs" />
             </View>
-          ) : null}
-        </View>
+          </View>
+        ) : null}
       </View>
 
       {/* ————— Sezon özeti: büyük rakamlar ————— */}
@@ -855,6 +900,21 @@ function GeneralTab({
           tone="brand"
         />
       </View>
+
+      {/* ————— Form grafiği: son maçların puan seyri ————— */}
+      {ratingTrend.length ? (
+        <View style={styles.trend}>
+          <View style={styles.trendHead}>
+            <Text style={styles.metaLabel} {...textScale.badge}>
+              SON {ratingTrend.length} MAÇ PUANI
+            </Text>
+            <Text style={styles.trendRange} {...textScale.dense}>
+              {Math.min(...ratingTrend).toFixed(1)} – {Math.max(...ratingTrend).toFixed(1)}
+            </Text>
+          </View>
+          <Sparkline values={ratingTrend} width={trendWidth} height={36} />
+        </View>
+      ) : null}
 
       {/* ————— Galibiyet dengesi ————— */}
       {decided > 0 ? (
@@ -2115,21 +2175,49 @@ const styles = StyleSheet.create({
 
   /* — Kimlik — */
   hero: {
-    alignItems: "center",
-    gap: space.sm,
+    gap: space.md,
     paddingTop: space.md,
     paddingBottom: space.sm,
   },
+  /* Fotoğraf solda, künye sağda — blok ekranın üçte birini kaplamasın. */
+  heroTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.lg,
+  },
+  heroIdentity: {
+    flex: 1,
+    gap: space.s,
+  },
   heroName: {
-    ...type.display,
+    ...type.h1,
     color: colors.textPrimary,
-    textAlign: "center",
+  },
+  heroMeta: {
+    ...type.caption,
+    color: colors.textSecondary,
   },
   heroBadges: {
     flexDirection: "row",
     flexWrap: "wrap",
-    justifyContent: "center",
     gap: space.s,
+  },
+  /* Form grafiği: kutu değil, hairline ile ayrılmış bir şerit. */
+  trend: {
+    gap: space.s,
+    paddingTop: space.md,
+    paddingBottom: space.sm,
+    borderTopWidth: hairline,
+    borderTopColor: colors.border,
+  },
+  trendHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  trendRange: {
+    ...type.tableNum,
+    color: colors.textTertiary,
   },
   heroTeam: {
     flexDirection: "row",
