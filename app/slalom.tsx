@@ -998,11 +998,11 @@ const styles = StyleSheet.create({
   arena: {
     flex: 1,
     margin: layout.screenPadding,
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     backgroundColor: colors.pitchGreen,
-    borderWidth: hairline,
-    borderColor: colors.border,
     overflow: "hidden",
+    ...elevate(2),
+    borderWidth: 0,
   },
   /* Pist, koniler ve oyuncu artık SVG olarak çizilir (bkz. dosya başı);
      eski View tabanlı stiller kaldırıldı. */

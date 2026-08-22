@@ -55,6 +55,7 @@ import { TUNING } from "@/lib/game/tuning";
 import { useAuth } from "@/providers/AuthProvider";
 import {
   colors,
+  elevate,
   hairline,
   haptics,
   layout,
@@ -472,7 +473,13 @@ export default function PenaltiScreen() {
             style={[styles.outcome, outcome === "gol" ? styles.outcomeGoal : styles.outcomeMiss]}
             pointerEvents="none"
           >
-            <Text style={styles.outcomeText} {...textScale.dense}>
+            <Text
+              style={[
+                styles.outcomeText,
+                outcome === "gol" ? styles.outcomeTextGoal : styles.outcomeTextMiss,
+              ]}
+              {...textScale.dense}
+            >
               {OUTCOME_LABEL[outcome]}
             </Text>
           </View>
@@ -610,11 +617,11 @@ const Goal = memo(function Goal({
       />
       <Path
         d={`M ${g.x} ${g.y + g.h} L ${g.x} ${g.y} L ${g.x + g.w} ${g.y} L ${g.x + g.w} ${g.y + g.h}`}
-        stroke={paint.ink}
+        stroke={paint.onTurfMuted}
         strokeWidth={1}
         strokeLinejoin="round"
         fill="none"
-        opacity={0.25}
+        opacity={0.35}
       />
     </G>
   );
@@ -666,9 +673,9 @@ const KeeperFigure = memo(function KeeperFigure({
     <G transform={`rotate(${lean.toFixed(1)} ${cx.toFixed(1)} ${base.toFixed(1)})`}>
       {/* Gölge */}
       <Ellipse cx={cx} cy={base} rx={14} ry={4} fill={paint.shadow} opacity={0.5} />
-      {/* Bacaklar */}
-      <Line x1={cx} y1={cy + 12} x2={cx - 7} y2={base} stroke={paint.ink} strokeWidth={4} strokeLinecap="round" />
-      <Line x1={cx} y1={cy + 12} x2={cx + 7} y2={base} stroke={paint.ink} strokeWidth={4} strokeLinecap="round" />
+      {/* Bacaklar — çim üstünde mürekkep okunmuyordu, beyaz şort/tozluk. */}
+      <Line x1={cx} y1={cy + 12} x2={cx - 7} y2={base} stroke={paint.onTurf} strokeWidth={4} strokeLinecap="round" />
+      <Line x1={cx} y1={cy + 12} x2={cx + 7} y2={base} stroke={paint.onTurf} strokeWidth={4} strokeLinecap="round" />
       {/* Gövde */}
       <Line x1={cx} y1={cy - 6} x2={cx} y2={cy + 12} stroke={paint.action} strokeWidth={9} strokeLinecap="round" />
       {/* Kollar — dalış yüksekliğiyle açılır */}
@@ -691,7 +698,7 @@ const KeeperFigure = memo(function KeeperFigure({
         strokeLinecap="round"
       />
       {/* Baş */}
-      <Circle cx={cx} cy={cy - 11} r={5} fill={paint.ink} />
+      <Circle cx={cx} cy={cy - 11} r={5} fill={paint.onTurf} />
     </G>
   );
 });
@@ -978,10 +985,10 @@ const styles = StyleSheet.create({
     flex: 1,
     margin: layout.screenPadding,
     marginTop: 0,
-    borderRadius: radius.lg,
-    borderWidth: hairline,
-    borderColor: colors.border,
+    borderRadius: radius.xl,
     overflow: "hidden",
+    ...elevate(2),
+    borderWidth: 0,
   },
 
   /* — Sonuç etiketi — */
@@ -999,9 +1006,20 @@ const styles = StyleSheet.create({
   outcomeMiss: {
     backgroundColor: colors.inverse,
   },
+  /*
+   * HATA DÜZELTMESİ: etiket iki zeminde de `textOnBrand` (mürekkep) yazıyordu.
+   * "Gol" mercan dolgu üstünde okunuyordu ama "kaçtı"/"kurtardı" MÜREKKEP
+   * dolgu üstünde mürekkeple yazılıyor, yani görünmüyordu — kullanıcı sonucu
+   * hiç okuyamıyordu.
+   */
   outcomeText: {
     ...type.h1,
+  },
+  outcomeTextGoal: {
     color: colors.textOnBrand,
+  },
+  outcomeTextMiss: {
+    color: colors.onDark,
   },
 
   /* — Kartlar — */
