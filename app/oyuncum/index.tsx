@@ -615,34 +615,12 @@ function SummaryTab({
         subtitle: "Yürürlükteki sözleşmen",
         onPress: () => onOpenTab("sozlesme"),
       },
-      {
-        key: "teklifler",
-        icon: "swap-horizontal" as const,
-        title: "Transfer Tekliflerim",
-        subtitle: "Gelen teklifler ve yanıtların",
-        onPress: () => router.push("/tekliflerim"),
-      },
-      {
-        key: "davetler",
-        icon: "mail-open" as const,
-        title: "Takım Davetlerim",
-        subtitle: "Gelen davetler ve başvuruların",
-        onPress: () => router.push("/davetler"),
-      },
-      {
-        key: "cezalar",
-        icon: "alert-circle" as const,
-        title: "Disiplin Dosyalarım",
-        subtitle: "Savunma ve itiraz hakların",
-        onPress: () => router.push("/cezalarim"),
-      },
-      {
-        key: "mesajlar",
-        icon: "chatbubbles" as const,
-        title: "Panel Mesajlarım",
-        subtitle: "Yönetimle yazışmaların",
-        onPress: () => router.push("/mesajlarim"),
-      },
+      /*
+       * TEKLİFLER · DAVETLER · DİSİPLİN · MESAJLAR BURADAN KALDIRILDI.
+       * Dördü de Profil sekmesinde ("Kariyerim" ve "Kulübüm" bölümleri) birebir
+       * aynı başlıklarla duruyordu; bu ekran onların ikinci kopyasıydı. Burada
+       * yalnız BU EKRANIN kendi sekmeleri ve profil düzenleme kalır.
+       */
       {
         key: "duzenle",
         icon: "create" as const,

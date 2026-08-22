@@ -366,14 +366,6 @@ export default function AccountScreen() {
         subtitle: "elitlig.com üzerinden yapılır",
         action: { kind: "link", url: SITE_URL },
       },
-      {
-        kind: "action",
-        key: "bildirim",
-        icon: "notifications-circle",
-        title: "Bildirim tercihleri",
-        subtitle: "Hangi bildirimleri alacağını seç",
-        action: { kind: "route", route: "/bildirim-tercihleri" },
-      },
     ];
     if (player) {
       actions.push({
