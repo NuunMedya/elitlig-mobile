@@ -24,6 +24,7 @@
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQueries, useQuery } from "@tanstack/react-query";
+import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -907,7 +908,13 @@ const TeamHero = React.memo(function TeamHero({
   return (
     <View style={styles.hero}>
       {/*
-        KAPAK — iki katman, ikisi de geometri:
+        KAPAK — MÜREKKEP BLOK + iki geometri katmanı.
+
+        Takım kimliği ekranın en üstünde durur ve kendi yüzeyini hak eder;
+        beyaz kâğıt üstünde duran bir takım adı, altındaki liste satırlarıyla
+        aynı ağırlıkta görünüyordu. Blok, maç detayının skor şeridiyle ve ana
+        ekranın vitrin kartıyla AYNI mürekkep yüzeydir — üç ekran arasında
+        gezinen kullanıcı aynı dili görür.
 
         1. Dev arma filigranı, sol üstte, %6 opaklıkta. Takımın kimliğini
            kapağa taşıyan tek öğe budur ve kullanıcının YÜKLEDİĞİ görselden
@@ -920,12 +927,19 @@ const TeamHero = React.memo(function TeamHero({
         olabiliyor. Ayrıştırılamayan bir alandan renk üretmek, bazı takımlarda
         okunmaz bir kapak demekti.
       */}
+      <LinearGradient
+        colors={colors.gradientInk}
+        start={HERO_GRADIENT_START}
+        end={HERO_GRADIENT_END}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
       {logo ? (
         <View style={styles.coverMark} pointerEvents="none">
-          <TeamLogo name={teamName} logo={logo} size={168} />
+          <TeamLogo name={teamName} logo={logo} size={200} />
         </View>
       ) : null}
-      <ChalkArc width={width} height={COVER_HEIGHT} />
+      <ChalkArc width={width} height={COVER_HEIGHT} color={colors.chalk} />
 
       <View style={styles.heroTop}>
         <TeamLogo name={teamName} logo={logo} size={layout.crestXl} />
@@ -940,7 +954,14 @@ const TeamHero = React.memo(function TeamHero({
           ) : null}
           <View style={styles.heroBadges}>
             {rank != null ? <Badge label={`${rank}. sıra`} tone="brand" size="sm" /> : null}
-            {points != null ? <Badge label={`${points} puan`} tone="neutral" size="sm" /> : null}
+            {points != null ? (
+              // Mürekkep blok üstünde nötr rozet sönük kalırdı: tebeşir pul.
+              <View style={styles.heroPill}>
+                <Text style={styles.heroPillText} {...textScale.badge}>
+                  {`${points} puan`}
+                </Text>
+              </View>
+            ) : null}
             {followers != null ? (
               <Text style={styles.heroFollowers} {...textScale.dense}>
                 {followers} takipçi
@@ -964,6 +985,7 @@ const TeamHero = React.memo(function TeamHero({
           label={favorite ? "Favorilerde" : "Favoriye ekle"}
           icon={favorite ? "star" : "star-outline"}
           variant={favorite ? "secondary" : "primary"}
+          onDark
           onPress={onToggleFavorite}
           style={styles.heroPrimary}
           accessibilityLabel={favorite ? "Takımı favorilerden çıkar" : "Takımı favoriye al"}
@@ -975,6 +997,7 @@ const TeamHero = React.memo(function TeamHero({
           label="Paylaş"
           icon="share-social-outline"
           variant="ghost"
+          onDark
           onPress={onShare}
           accessibilityLabel="Takım kartını paylaş"
         />
@@ -988,7 +1011,11 @@ const TeamHero = React.memo(function TeamHero({
    ══════════════════════════════════════════════════════════════════════════ */
 
 /** Kapak katmanının yüksekliği — ChalkArc yayı buna göre çizilir. */
-const COVER_HEIGHT = 176;
+const COVER_HEIGHT = 200;
+
+/** Mürekkep bloğun gradyan yönü — köşegen ışık. */
+const HERO_GRADIENT_START = { x: 0, y: 0 } as const;
+const HERO_GRADIENT_END = { x: 1, y: 1 } as const;
 
 const pad = (value: number) => String(value).padStart(2, "0");
 
@@ -2455,20 +2482,24 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
 
-  /* — Hero — */
+  /* — Hero: mürekkep blok — */
   hero: {
+    // Gradyan yüklenemezse düz mürekkep zemin altta durur.
+    backgroundColor: colors.inverse,
     paddingHorizontal: layout.screenPadding,
-    paddingTop: space.md,
-    paddingBottom: space.lg,
-    gap: space.md,
+    paddingTop: space.lg,
+    paddingBottom: space.xl,
+    gap: space.lg,
+    borderBottomLeftRadius: radius.xxl,
+    borderBottomRightRadius: radius.xxl,
     overflow: "hidden",
   },
-  /* Dev arma filigranı — kadrajdan taşar, %6 opaklıkta. */
+  /* Dev arma filigranı — kadrajdan taşar. Mürekkep üstünde %10 görünür. */
   coverMark: {
     position: "absolute",
-    top: -44,
-    left: -40,
-    opacity: 0.06,
+    top: -52,
+    left: -48,
+    opacity: 0.1,
   },
   heroTop: {
     flexDirection: "row",
@@ -2481,12 +2512,12 @@ const styles = StyleSheet.create({
     gap: space.xs,
   },
   heroName: {
-    ...type.h1,
-    color: colors.textPrimary,
+    ...type.display,
+    color: colors.onDark,
   },
   heroPlace: {
-    ...type.bodySm,
-    color: colors.textSecondary,
+    ...type.body,
+    color: colors.onDarkMuted,
   },
   heroBadges: {
     flexDirection: "row",
@@ -2495,8 +2526,20 @@ const styles = StyleSheet.create({
     gap: space.s,
   },
   heroFollowers: {
-    ...type.caption,
-    color: colors.textTertiary,
+    ...type.bodySm,
+    color: colors.onDarkMuted,
+  },
+  /** Tebeşir pul — mürekkep blok üstündeki nötr rozet. */
+  heroPill: {
+    paddingHorizontal: space.m,
+    paddingVertical: 3,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.chalk,
+  },
+  heroPillText: {
+    ...type.micro,
+    color: colors.onDark,
   },
   heroForm: {
     flexDirection: "row",
@@ -2504,8 +2547,8 @@ const styles = StyleSheet.create({
     gap: space.sm,
   },
   heroFormLabel: {
-    ...type.micro,
-    color: colors.textTertiary,
+    ...type.overline,
+    color: colors.onDarkMuted,
   },
   heroActions: {
     flexDirection: "row",

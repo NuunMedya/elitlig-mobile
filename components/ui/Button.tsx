@@ -58,6 +58,11 @@ export interface ButtonProps {
   loading?: boolean;
   disabled?: boolean;
   fullWidth?: boolean;
+  /**
+   * Mürekkep blok üstünde mi. `secondary` cam bir pula, `ghost` beyaz metne
+   * döner; `primary` ve `danger` iki zeminde de aynıdır.
+   */
+  onDark?: boolean;
   /** Varsayılan: primary → "medium", diğerleri → "light". */
   haptic?: "none" | "light" | "medium" | "success";
   style?: StyleProp<ViewStyle>;
@@ -78,6 +83,7 @@ export const Button = React.memo(function Button({
   loading,
   disabled,
   fullWidth,
+  onDark = false,
   haptic,
   style,
   accessibilityLabel,
@@ -92,7 +98,10 @@ export const Button = React.memo(function Button({
       ? // Gradyan yüklenemezse (web/eski cihaz) düz mercan zemin altta durur.
         { backgroundColor: colors.brand, ...elevate(1), borderWidth: 0 }
       : variant === "secondary"
-        ? { backgroundColor: colors.surface2, borderWidth: hairline, borderColor: colors.border }
+        ? onDark
+          // Cam pul: mürekkep bloğun üstünde beyazın %22'si + tebeşir çerçeve.
+          ? { backgroundColor: colors.chalk, borderWidth: 1, borderColor: colors.chalk }
+          : { backgroundColor: colors.surface2, borderWidth: hairline, borderColor: colors.border }
         : variant === "danger"
           ? { backgroundColor: colors.dangerDim }
           : { backgroundColor: "transparent" };
@@ -102,9 +111,11 @@ export const Button = React.memo(function Button({
       ? colors.textOnBrand
       : variant === "danger"
         ? colors.danger
-        : variant === "ghost"
-          ? colors.brandAccent
-          : colors.textPrimary;
+        : onDark
+          ? colors.onDark
+          : variant === "ghost"
+            ? colors.brandAccent
+            : colors.textPrimary;
 
   const labelStyle: StyleProp<TextStyle> = [
     size === "lg" ? styles.labelLg : size === "sm" ? styles.labelSm : styles.labelMd,

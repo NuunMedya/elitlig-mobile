@@ -87,6 +87,7 @@ import { queryKeys } from "@/lib/queryKeys";
 import { useScope } from "@/providers/ScopeProvider";
 import {
   colors,
+  elevate,
   fonts,
   hairline,
   layout,
@@ -96,6 +97,10 @@ import {
   textScale,
   type,
 } from "@/theme";
+
+/** Kimlik kartının gradyan yönü — köşegen ışık. */
+const HERO_GRADIENT_START = { x: 0, y: 0 } as const;
+const HERO_GRADIENT_END = { x: 1, y: 1 } as const;
 
 /* ══════════════════════════════════════════════════════════════════════════
    1) EKRANA ÖZGÜ UÇ TANIMLARI
@@ -793,9 +798,21 @@ function GeneralTab({
 
         FOTOĞRAF KARE: 88px dairesel bir fotoğraf, hemen altındaki dairesel
         TAKIM AMBLEMİYLE aynı silueti paylaşıyor ve ikisi bir an karışıyordu.
-        16px yarıçaplı kare oyuncuyu kulüpten ayırır.
+        Yuvarlatılmış kare oyuncuyu kulüpten ayırır.
+
+        MÜREKKEP KART: kimlik bloğu koyu bir karttır — maç detayının skor
+        şeridi ve takım profilinin kapağıyla aynı yüzey. Oyuncu adı burada
+        `display` ölçeğindedir; bir profil sayfasının ilk söylediği şey kimin
+        profili olduğudur.
       */}
       <View style={styles.hero}>
+        <LinearGradient
+          colors={colors.gradientInk}
+          start={HERO_GRADIENT_START}
+          end={HERO_GRADIENT_END}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
         <View style={styles.heroTop}>
           <Avatar
             name={playerName}
@@ -854,7 +871,7 @@ function GeneralTab({
                 {teamName}
               </Text>
             </View>
-            <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
+            <Ionicons name="chevron-forward" size={18} color={colors.onDarkMuted} />
           </Touchable>
         ) : (
           <Badge label="TAKIMSIZ" tone="neutral" size="sm" />
@@ -864,7 +881,7 @@ function GeneralTab({
         {form.length ? (
           <View style={styles.metaRow}>
             <View style={styles.formBox}>
-              <Text style={styles.metaLabel} {...textScale.badge}>
+              <Text style={styles.heroMetaLabel} {...textScale.badge}>
                 SON {form.length}
               </Text>
               <FormChips form={form} limit={5} size="xs" />
@@ -2167,11 +2184,17 @@ const styles = StyleSheet.create({
     marginTop: space.sm,
   },
 
-  /* — Kimlik — */
+  /* — Kimlik: mürekkep kart — */
   hero: {
-    gap: space.md,
-    paddingTop: space.md,
-    paddingBottom: space.sm,
+    gap: space.lg,
+    padding: space.lg,
+    marginTop: space.sm,
+    borderRadius: radius.xxl,
+    overflow: "hidden",
+    // Gradyan yüklenemezse düz mürekkep zemin altta durur.
+    backgroundColor: colors.inverse,
+    ...elevate(2),
+    borderWidth: 0,
   },
   /* Fotoğraf solda, künye sağda — blok ekranın üçte birini kaplamasın. */
   heroTop: {
@@ -2184,12 +2207,12 @@ const styles = StyleSheet.create({
     gap: space.s,
   },
   heroName: {
-    ...type.h1,
-    color: colors.textPrimary,
+    ...type.display,
+    color: colors.onDark,
   },
   heroMeta: {
-    ...type.caption,
-    color: colors.textSecondary,
+    ...type.bodySm,
+    color: colors.onDarkMuted,
   },
   heroBadges: {
     flexDirection: "row",
@@ -2213,15 +2236,16 @@ const styles = StyleSheet.create({
     ...type.tableNum,
     color: colors.textTertiary,
   },
+  /* Kulüp satırı mürekkep kartın İÇİNDE: cam pul (beyazın %22'si + tebeşir). */
   heroTeam: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.md,
     alignSelf: "stretch",
-    backgroundColor: colors.surface1,
-    borderWidth: hairline,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
+    backgroundColor: colors.chalk,
+    borderWidth: 1,
+    borderColor: colors.chalk,
+    borderRadius: radius.md,
     paddingHorizontal: space.md,
     paddingVertical: space.m,
   },
@@ -2230,12 +2254,12 @@ const styles = StyleSheet.create({
     gap: 1,
   },
   heroTeamLabel: {
-    ...type.micro,
-    color: colors.brandAccent,
+    ...type.overline,
+    color: colors.brand,
   },
   heroTeamName: {
     ...type.h3,
-    color: colors.textPrimary,
+    color: colors.onDark,
   },
   metaRow: {
     flexDirection: "row",
@@ -2252,8 +2276,13 @@ const styles = StyleSheet.create({
     minWidth: 56,
   },
   metaLabel: {
-    ...type.micro,
+    ...type.overline,
     color: colors.textTertiary,
+  },
+  /** Aynı etiketin mürekkep kimlik kartı içindeki sürümü. */
+  heroMetaLabel: {
+    ...type.overline,
+    color: colors.onDarkMuted,
   },
   metaValue: {
     ...type.tableNumStrong,
