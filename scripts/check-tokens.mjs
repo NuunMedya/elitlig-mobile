@@ -85,6 +85,12 @@ const PAIRS = (p) => [
   [p.brandAccent, p.surface1, 4.5, "mercan metin / kart"],
   [p.accentText, p.bg, 4.5, "mavi metin / zemin"],
   [p.live, p.bg, 3.0, "canlı halkası / zemin"],
+  // Mürekkep blok iki temada da koyudur; üstündeki metin onun karanlık
+  // durağına göre ölçülür.
+  [p.liveOnDark, p.gradientInk[0], 4.5, "canlı metni / mürekkep blok"],
+  [p.onDark, p.gradientInk[0], 4.5, "blok metni / mürekkep blok"],
+  [p.brand, p.gradientInk[0], 4.5, "mercan etiket / mürekkep blok"],
+  [p.onPitch, p.gradientPitch[0], 4.5, "oyuncu adı / saha"],
   [p.accent, p.surface3, 3.0, "veri barı (ev) / ray"],
   [p.slate, p.surface3, 3.0, "veri barı (deplasman) / ray"],
   [p.win, p.bg, 3.0, "kazandı çipi / zemin"],

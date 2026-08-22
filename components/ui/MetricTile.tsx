@@ -23,7 +23,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import React from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
-import { colors, hairline, radius, space, textScale, type, upperTR } from "@/theme";
+import { colors, elevate, radius, space, textScale, type, upperTR } from "@/theme";
 import { Touchable } from "./Pressable";
 
 /** Sayının rengi. Zemin hiçbir tonda değişmez (bkz. dosya başlığı). */
@@ -71,7 +71,7 @@ export const MetricTile = React.memo(function MetricTile({
   const body = (
     <>
       <View style={styles.labelRow}>
-        {icon ? <Ionicons name={icon} size={11} color={colors.textTertiary} /> : null}
+        {icon ? <Ionicons name={icon} size={14} color={colors.textTertiary} /> : null}
         <Text style={styles.label} numberOfLines={1} {...textScale.badge}>
           {upperTR(label)}
         </Text>
@@ -118,7 +118,7 @@ export const MetricTile = React.memo(function MetricTile({
       {body}
       <Ionicons
         name="chevron-forward"
-        size={11}
+        size={15}
         color={colors.textDisabled}
         style={styles.chevron}
       />
@@ -178,13 +178,11 @@ const styles = StyleSheet.create({
   box: {
     minHeight: 66,
     justifyContent: "center",
-    gap: 3,
-    paddingHorizontal: space.m,
-    paddingVertical: space.m,
-    backgroundColor: colors.surface1,
+    gap: 4,
+    paddingHorizontal: space.md,
+    paddingVertical: space.lg,
     borderRadius: radius.lg,
-    borderWidth: hairline,
-    borderColor: colors.border,
+    ...elevate(1),
   },
   flex: {
     flex: 1,
@@ -203,7 +201,7 @@ const styles = StyleSheet.create({
     ...type.metric,
   },
   hint: {
-    ...type.caption,
+    ...type.bodySm,
     color: colors.textTertiary,
   },
   chevron: {

@@ -918,7 +918,8 @@ const MatchClock = memo(function MatchClock({ snapshot }: { snapshot: LiveSnapsh
         minute={halftime ? null : added != null ? 90 : minute}
         addedTime={added}
         halftime={halftime}
-        size={40}
+        size={48}
+        onDark
       />
     </View>
   );

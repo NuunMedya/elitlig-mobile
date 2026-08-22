@@ -108,6 +108,12 @@ export interface Palette {
   live: string;
   liveDim: string;
   liveGlow: string;      // dakika halkası izi (rgba)
+  /**
+   * Canlı kırmızısının MÜREKKEP BLOK üstündeki sürümü. `live` açık kâğıt için
+   * koyulaştırılmıştır ve koyu blokta 2,9:1'e düşüyordu; bu token iki temada
+   * da koyu zemin varsayar ve AA geçer.
+   */
+  liveOnDark: string;
   win: string;
   winDim: string;
   draw: string;
@@ -237,9 +243,10 @@ export const light: Palette = {
   slate:     "#7C8598",       // brief #99A1B3 → koyulaştırıldı (grafik 3:1)
   slateSoft: "#99A1B3",
 
-  live:     "#E0374A",
-  liveDim:  "#FDECEE",
-  liveGlow: "rgba(224, 55, 74, 0.20)",
+  live:       "#E0374A",
+  liveDim:    "#FDECEE",
+  liveGlow:   "rgba(224, 55, 74, 0.20)",
+  liveOnDark: "#FF6B7A",
 
   win:    "#14966B",  winDim:    "#E4F5EE",
   draw:   "#9AA2B1",  drawDim:   "#EFF1F5",
@@ -335,9 +342,10 @@ export const dark: Palette = {
   slate:     "#8A93A6",
   slateSoft: "#5C6474",
 
-  live:     "#FF4759",
-  liveDim:  "#2E1218",
-  liveGlow: "rgba(255, 71, 89, 0.28)",
+  live:       "#FF4759",
+  liveDim:    "#2E1218",
+  liveGlow:   "rgba(255, 71, 89, 0.28)",
+  liveOnDark: "#FF6B7A",
 
   win:    "#25B37F",  winDim:    "#0D2C21",
   draw:   "#8A93A6",  drawDim:   "#1F242E",

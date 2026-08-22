@@ -30,6 +30,12 @@ export interface LiveBadgeProps {
   size?: "sm" | "md";
   /** Yalnız nokta (satır içi dar alan) */
   compact?: boolean;
+  /**
+   * Mürekkep blok üstünde mi. `live` kırmızısı açık kâğıt için
+   * koyulaştırılmıştır ve koyu blokta okunmuyordu; burada `liveOnDark`
+   * kullanılır (bkz. theme/palette.ts).
+   */
+  onDark?: boolean;
 }
 
 /**
@@ -71,6 +77,7 @@ export const LiveBadge = memo(function LiveBadge({
   halftime = false,
   size = "sm",
   compact = false,
+  onDark = false,
 }: LiveBadgeProps) {
   const label = halftime
     ? "İY"
@@ -86,11 +93,21 @@ export const LiveBadge = memo(function LiveBadge({
       accessibilityLabel={speech(minute, addedTime, halftime)}
     >
       <View style={styles.dotBox}>
-        <View style={[styles.dot, halftime && styles.dotHalftime]} />
+        <View
+          style={[
+            styles.dot,
+            onDark && styles.dotOnDark,
+            halftime && (onDark ? styles.dotHalftimeOnDark : styles.dotHalftime),
+          ]}
+        />
       </View>
       {compact ? null : (
         <Text
-          style={[size === "md" ? styles.textMd : styles.text, halftime && styles.textHalftime]}
+          style={[
+            size === "md" ? styles.textMd : styles.text,
+            onDark && styles.textOnDark,
+            halftime && (onDark ? styles.textHalftimeOnDark : styles.textHalftime),
+          ]}
           {...textScale.badge}
         >
           {label}
@@ -125,8 +142,14 @@ const styles = StyleSheet.create({
     borderRadius: DOT / 2,
     backgroundColor: colors.live,
   },
+  dotOnDark: {
+    backgroundColor: colors.liveOnDark,
+  },
   dotHalftime: {
     backgroundColor: colors.textTertiary,
+  },
+  dotHalftimeOnDark: {
+    backgroundColor: colors.onDarkMuted,
   },
 
   text: {
@@ -137,7 +160,13 @@ const styles = StyleSheet.create({
     ...type.caption,
     color: colors.live,
   },
+  textOnDark: {
+    color: colors.liveOnDark,
+  },
   textHalftime: {
     color: colors.textTertiary,
+  },
+  textHalftimeOnDark: {
+    color: colors.onDarkMuted,
   },
 });
