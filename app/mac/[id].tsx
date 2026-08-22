@@ -890,7 +890,7 @@ const MatchHero = memo(function MatchHero({
 });
 
 /** Skor bloğunun arkasındaki yayın yüksekliği — armalar + skor + golcüler. */
-const HERO_ARC_HEIGHT = 160;
+const HERO_ARC_HEIGHT = 132;
 
 /** Mürekkep bloğun gradyan yönü — YATAY, bkz. MatchHero içindeki gerekçe. */
 const HERO_GRADIENT_START = { x: 0, y: 0 } as const;
@@ -952,7 +952,7 @@ const ScorerRow = memo(function ScorerRow({
    */
   return (
     <View style={[styles.scorerRow, side === "home" && styles.scorerRowHome]}>
-      <EventIcon kind={line.ownGoal ? "ownGoal" : "goal"} size={13} onDark />
+      <EventIcon kind={line.ownGoal ? "ownGoal" : "goal"} size={11} onDark />
       <Text
         style={[styles.scorerText, side === "home" && styles.scorerTextHome]}
         numberOfLines={1}
@@ -991,7 +991,7 @@ const MatchClock = memo(function MatchClock({ snapshot }: { snapshot: LiveSnapsh
         minute={halftime ? null : added != null ? 90 : minute}
         addedTime={added}
         halftime={halftime}
-        size={48}
+        size={38}
         onDark
       />
     </View>
@@ -1038,7 +1038,7 @@ const Countdown = memo(function Countdown({ target }: { target: number }) {
 const ReconnectStrip = memo(function ReconnectStrip() {
   return (
     <View style={styles.reconnect}>
-      <Ionicons name="cloud-offline-outline" size={16} color={colors.onDarkMuted} />
+      <Ionicons name="cloud-offline-outline" size={14} color={colors.onDarkMuted} />
       <Text style={styles.reconnectText} numberOfLines={2} {...textScale.dense}>
         Anlık bağlantı kurulamadı — yeniden bağlanılıyor. Skor kısa aralıklarla yenileniyor.
       </Text>
@@ -1492,7 +1492,7 @@ const TimelineRow = memo(function TimelineRow({
         score ? `, skor ${score}` : ""
       }`}
     >
-      {home ? <EventIcon kind={kind} size={16} /> : null}
+      {home ? <EventIcon kind={kind} size={14} /> : null}
       <View style={styles.tlTexts}>
         <Text
           style={[
@@ -1515,7 +1515,7 @@ const TimelineRow = memo(function TimelineRow({
           </Text>
         ) : null}
       </View>
-      {home ? null : <EventIcon kind={kind} size={16} />}
+      {home ? null : <EventIcon kind={kind} size={14} />}
     </Touchable>
   );
 
@@ -2126,7 +2126,7 @@ const LineupPlayerRow = memo(function LineupPlayerRow({
         {shirt}
       </Text>
 
-      <Avatar name={name} image={player.playerImg} size={36} />
+      <Avatar name={name} image={player.playerImg} size={30} />
 
       <View style={styles.playerTexts}>
         <Text style={styles.playerName} numberOfLines={1} {...textScale.dense}>
@@ -2155,7 +2155,7 @@ const LineupPlayerRow = memo(function LineupPlayerRow({
       {/* Değişiklik okları */}
       {sub?.in != null ? (
         <View style={styles.subMark}>
-          <Ionicons name="arrow-up" size={13} color={colors.win} />
+          <Ionicons name="arrow-up" size={11} color={colors.win} />
           <Text style={[styles.subMinute, { color: colors.win }]} {...textScale.badge}>
             {sub.in}&apos;
           </Text>
@@ -2163,7 +2163,7 @@ const LineupPlayerRow = memo(function LineupPlayerRow({
       ) : null}
       {sub?.out != null ? (
         <View style={styles.subMark}>
-          <Ionicons name="arrow-down" size={13} color={colors.loss} />
+          <Ionicons name="arrow-down" size={11} color={colors.loss} />
           <Text style={[styles.subMinute, { color: colors.loss }]} {...textScale.badge}>
             {sub.out}&apos;
           </Text>
@@ -2186,7 +2186,7 @@ const ContribBadge = memo(function ContribBadge({
 }) {
   return (
     <View style={styles.contribBadge}>
-      <Ionicons name={icon} size={14} color={color} />
+      <Ionicons name={icon} size={12} color={color} />
       {count > 1 ? (
         <Text style={styles.contribCount} {...textScale.badge}>
           {count}
@@ -3054,9 +3054,9 @@ const styles = StyleSheet.create({
     // Gradyan yüklenemezse düz mürekkep zemin altta durur.
     backgroundColor: colors.inkBlock,
     paddingHorizontal: layout.screenPadding,
-    paddingTop: space.lg,
-    paddingBottom: space.lg,
-    gap: space.md,
+    paddingTop: space.md,
+    paddingBottom: space.md,
+    gap: space.sm,
     // Alt köşeler yuvarlak: blok "sayfaya oturmuş bir panel" olur, ekranı
     // ikiye bölen düz bir bant değil.
     borderBottomLeftRadius: radius.xxl,
@@ -3070,24 +3070,25 @@ const styles = StyleSheet.create({
   heroTeam: {
     flex: 1,
     alignItems: "center",
-    gap: space.sm,
+    gap: space.s,
     paddingVertical: space.xxs,
     borderRadius: radius.md,
   },
   /* 14px (label) — 15px'te "ŞANLI BERKCAN GÜCÜ" ikinci satırda da kırpılıyordu.
      İki satır + 14px, üç kelimelik takım adlarını tam gösteriyor. */
   heroTeamName: {
-    ...type.label,
+    ...type.caption,
+    fontFamily: type.label.fontFamily,
     color: colors.onDark,
     textAlign: "center",
-    minHeight: 40,
+    minHeight: 32,
   },
   heroCenter: {
-    minWidth: 118,
+    minWidth: 108,
     alignItems: "center",
     justifyContent: "flex-start",
-    gap: space.m,
-    paddingTop: space.sm,
+    gap: space.s,
+    paddingTop: space.xs,
   },
   heroScore: {
     ...type.scoreHero,
@@ -3099,8 +3100,8 @@ const styles = StyleSheet.create({
   },
   /** "MS" pulu — mürekkep blok üstünde tebeşir çerçeveli. */
   heroChip: {
-    paddingHorizontal: space.m,
-    paddingVertical: space.xxs,
+    paddingHorizontal: space.sm,
+    paddingVertical: 1,
     borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: colors.chalk,
@@ -3136,7 +3137,7 @@ const styles = StyleSheet.create({
     flexDirection: "row-reverse",
   },
   scorerText: {
-    ...type.bodySm,
+    ...type.caption,
     color: colors.onDarkMuted,
     flexShrink: 1,
   },
@@ -3161,7 +3162,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   heroCountdown: {
-    ...type.bodySm,
+    ...type.caption,
     color: colors.onDarkMuted,
   },
   heroMeta: {
@@ -3241,15 +3242,15 @@ const styles = StyleSheet.create({
   reconnect: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.sm,
+    gap: space.s,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.chalk,
-    paddingHorizontal: space.md,
-    paddingVertical: space.m,
+    paddingHorizontal: space.m,
+    paddingVertical: space.s,
   },
   reconnectText: {
-    ...type.bodySm,
+    ...type.caption,
     color: colors.onDarkMuted,
     flex: 1,
   },
@@ -3358,10 +3359,10 @@ const styles = StyleSheet.create({
   tlBubble: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.m,
+    gap: space.s,
     borderRadius: radius.md,
-    paddingHorizontal: space.m,
-    paddingVertical: space.sm,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.s,
   },
   tlBubbleHome: {
     justifyContent: "flex-start",
@@ -3380,15 +3381,15 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   tlName: {
-    ...type.body,
+    ...type.bodySm,
     color: colors.textSecondary,
   },
   tlNameGoal: {
-    ...type.h3,
+    ...type.h4,
     color: colors.textPrimary,
   },
   tlDetail: {
-    ...type.bodySm,
+    ...type.caption,
     color: colors.textTertiary,
   },
   tlAlignLeft: {
@@ -3398,19 +3399,19 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
   tlCenter: {
-    width: 56,
+    width: 48,
     alignItems: "center",
   },
   /* Dikey ray: satırların ortasından geçen sürekli çizgi hissini kurar. */
   tlLine: {
     width: 1.5,
-    height: 14,
+    height: 10,
     backgroundColor: colors.border,
   },
   tlMinute: {
-    minWidth: 42,
-    paddingHorizontal: space.s,
-    paddingVertical: 3,
+    minWidth: 36,
+    paddingHorizontal: space.xs,
+    paddingVertical: 2,
     borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: colors.border,
@@ -3434,9 +3435,9 @@ const styles = StyleSheet.create({
   tlBreak: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.lg,
+    gap: space.md,
     paddingHorizontal: layout.screenPadding,
-    paddingVertical: space.lg,
+    paddingVertical: space.md,
   },
   tlBreakLine: {
     flex: 1,
@@ -3553,12 +3554,12 @@ const styles = StyleSheet.create({
   playerRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.md,
+    gap: space.sm,
     marginHorizontal: layout.screenPadding,
-    paddingHorizontal: space.md,
-    paddingVertical: space.m,
+    paddingHorizontal: space.m,
+    paddingVertical: space.s,
     borderRadius: radius.md,
-    marginTop: space.s,
+    marginTop: space.xs,
     minHeight: layout.listRowHeight,
     ...elevate(1),
   },
@@ -3566,7 +3567,7 @@ const styles = StyleSheet.create({
   shirt: {
     ...type.tableNumStrong,
     color: colors.textTertiary,
-    width: 26,
+    width: 22,
     textAlign: "center",
   },
   playerTexts: {
@@ -3574,11 +3575,11 @@ const styles = StyleSheet.create({
     gap: space.xxs,
   },
   playerName: {
-    ...type.h4,
+    ...type.label,
     color: colors.textPrimary,
   },
   playerMeta: {
-    ...type.bodySm,
+    ...type.caption,
     color: colors.textTertiary,
   },
   contribRow: {

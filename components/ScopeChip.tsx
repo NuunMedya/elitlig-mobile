@@ -88,7 +88,7 @@ export const ScopeChip = React.memo(function ScopeChip({
         >
           {label}
         </Text>
-        <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />
+        <Ionicons name="chevron-down" size={14} color={colors.textSecondary} />
       </View>
     </Touchable>
   );
@@ -96,7 +96,7 @@ export const ScopeChip = React.memo(function ScopeChip({
 
 const styles = StyleSheet.create({
   chip: {
-    height: 40,
+    height: 34,
     justifyContent: "center",
     borderRadius: radius.md,
     // Çerçevesiz: başlıkla aynı zemine oturur, kutu çizmez.
@@ -105,7 +105,7 @@ const styles = StyleSheet.create({
   inner: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.s,
+    gap: space.xs,
   },
   label: {
     ...type.label,

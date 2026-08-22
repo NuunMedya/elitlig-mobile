@@ -230,7 +230,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: space.xs,
     height: layout.tabStripHeight,
-    paddingHorizontal: space.lg,
+    paddingHorizontal: space.md,
   },
   /*
    * Aktif sekme AİLE DEĞİŞTİRMEZ, yalnız renk değiştirir. Önceki sürümde aktif
@@ -249,8 +249,8 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 0,
     bottom: 0,
-    height: 3,
-    borderRadius: 1.5,
+    height: 2,
+    borderRadius: 1,
     backgroundColor: colors.brand,
   },
 });

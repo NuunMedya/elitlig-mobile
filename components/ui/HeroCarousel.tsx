@@ -314,8 +314,8 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   cardBody: {
-    padding: space.xl,
-    gap: space.s,
+    padding: space.md,
+    gap: space.xs,
   },
   eyebrowRow: {
     flexDirection: "row",
@@ -342,17 +342,17 @@ const styles = StyleSheet.create({
     color: colors.onDark,
   },
   meta: {
-    ...type.bodySm,
+    ...type.caption,
     color: colors.onDarkMuted,
   },
   segments: {
     flexDirection: "row",
-    gap: space.s,
-    paddingTop: space.md,
+    gap: space.xs,
+    paddingTop: space.sm,
   },
   segmentTrack: {
-    height: 3,
-    borderRadius: 1.5,
+    height: 2,
+    borderRadius: 1,
     backgroundColor: colors.border,
     overflow: "hidden",
   },
@@ -361,8 +361,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.borderStrong,
   },
   segmentFill: {
-    height: 3,
-    borderRadius: 1.5,
+    height: 2,
+    borderRadius: 1,
     backgroundColor: colors.brand,
   },
 });

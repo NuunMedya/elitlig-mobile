@@ -119,8 +119,8 @@ const styles = StyleSheet.create({
   container: {
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: space.xxl,
-    gap: space.sm,
+    paddingHorizontal: space.xl,
+    gap: space.s,
   },
   /** Tam ekran: dikeyde ortalanır. */
   screen: {
@@ -135,8 +135,8 @@ const styles = StyleSheet.create({
     paddingVertical: space.xl,
   },
   iconCircle: {
-    width: 56,
-    height: 56,
+    width: 48,
+    height: 48,
     borderRadius: radius.pill,
     backgroundColor: colors.surface2,
     alignItems: "center",
@@ -144,16 +144,16 @@ const styles = StyleSheet.create({
     marginBottom: space.xs,
   },
   title: {
-    ...type.h2,
+    ...type.h3,
     color: colors.textPrimary,
     textAlign: "center",
   },
   /** 300px tavanı: uzun açıklama ekranın iki kenarına yapışmasın. */
   body: {
-    ...type.body,
+    ...type.bodySm,
     color: colors.textSecondary,
     textAlign: "center",
-    maxWidth: 300,
+    maxWidth: 280,
   },
   /*
    * `alignSelf: "center"` ŞART: `Button` kendi tabanında `alignSelf:
@@ -162,7 +162,7 @@ const styles = StyleSheet.create({
    * sola kaçmış bir düğme, ekranın tek bozuk hizasıydı.
    */
   action: {
-    marginTop: space.lg,
+    marginTop: space.md,
     alignSelf: "center",
     borderRadius: radius.pill,
   },

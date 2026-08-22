@@ -154,7 +154,7 @@ export const ListRow = React.memo(function ListRow({
         />
       ) : null}
       {showChevron ? (
-        <Ionicons name="chevron-forward" size={18} color={colors.textDisabled} />
+        <Ionicons name="chevron-forward" size={16} color={colors.textDisabled} />
       ) : null}
 
       {showDivider ? (
@@ -206,7 +206,7 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.m,
+    gap: space.sm,
     minHeight: layout.listRowHeight,
     paddingHorizontal: layout.rowPaddingH,
     backgroundColor: colors.surface1,
@@ -232,8 +232,8 @@ const styles = StyleSheet.create({
     borderLeftColor: colors.brand,
   },
   leading: {
-    width: 28,
-    height: 28,
+    width: 24,
+    height: 24,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -246,14 +246,14 @@ const styles = StyleSheet.create({
    * hizası aynı kalır, daha genişleri kendi yerini alır.
    */
   leadingNode: {
-    minWidth: 28,
-    minHeight: 28,
+    minWidth: 24,
+    minHeight: 24,
     alignItems: "center",
     justifyContent: "center",
   },
   texts: {
     flex: 1,
-    gap: 3,
+    gap: 1,
   },
   title: {
     ...type.h4,
@@ -270,9 +270,9 @@ const styles = StyleSheet.create({
     color: colors.textTertiary,
   },
   value: {
-    ...type.body,
+    ...type.bodySm,
     color: colors.textSecondary,
-    maxWidth: 140,
+    maxWidth: 130,
     textAlign: "right",
   },
   divider: {
@@ -283,8 +283,8 @@ const styles = StyleSheet.create({
     height: hairline,
     backgroundColor: colors.separator,
   },
-  /** Amblem/ikon sütununu atlayan ayraç: 14 + 28 + 10 = 52. */
+  /** Amblem/ikon sütununu atlayan ayraç: 12 + 24 + 8 = 44. */
   dividerInsetAvatar: {
-    left: layout.rowPaddingH + 28 + space.m,
+    left: layout.rowPaddingH + 24 + space.sm,
   },
 });

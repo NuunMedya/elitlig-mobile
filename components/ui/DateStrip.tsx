@@ -41,7 +41,7 @@ export interface DateStripProps {
 /** getDay() sırasıyla Türkçe gün kısaltmaları (0 = Pazar). */
 const WEEKDAYS = ["Paz", "Pzt", "Sal", "Çar", "Per", "Cum", "Cmt"] as const;
 
-const CELL_WIDTH = 50;
+const CELL_WIDTH = 46;
 
 const pad = (value: number) => String(value).padStart(2, "0");
 
@@ -328,7 +328,7 @@ const styles = StyleSheet.create({
   },
   cell: {
     width: CELL_WIDTH,
-    height: 54,
+    height: 46,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: radius.md,
@@ -368,14 +368,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.brandAccent,
   },
   dotRow: {
-    height: 5,
-    marginTop: 3,
+    height: 4,
+    marginTop: 2,
     justifyContent: "center",
   },
   dot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
     backgroundColor: colors.brandAccent,
   },
   dotLive: {
@@ -385,8 +385,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.textOnBrand,
   },
   todayButton: {
-    height: 36,
-    paddingHorizontal: space.m,
+    height: 30,
+    paddingHorizontal: space.sm,
     marginLeft: space.xs,
     borderRadius: radius.pill,
     backgroundColor: colors.brandDim,

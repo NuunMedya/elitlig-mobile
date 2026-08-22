@@ -942,7 +942,7 @@ const TeamHero = React.memo(function TeamHero({
       />
       {logo ? (
         <View style={styles.coverMark} pointerEvents="none">
-          <TeamLogo name={teamName} logo={logo} size={200} plain />
+          <TeamLogo name={teamName} logo={logo} size={168} plain />
         </View>
       ) : null}
       <ChalkArc width={width} height={COVER_HEIGHT} color={colors.chalk} />
@@ -1021,7 +1021,7 @@ const TeamHero = React.memo(function TeamHero({
    ══════════════════════════════════════════════════════════════════════════ */
 
 /** Kapak katmanının yüksekliği — ChalkArc yayı buna göre çizilir. */
-const COVER_HEIGHT = 200;
+const COVER_HEIGHT = 164;
 
 /** Mürekkep bloğun gradyan yönü — köşegen ışık. */
 const HERO_GRADIENT_START = { x: 0, y: 0 } as const;
@@ -2501,9 +2501,9 @@ const styles = StyleSheet.create({
     // Gradyan yüklenemezse düz mürekkep zemin altta durur.
     backgroundColor: colors.inkBlock,
     paddingHorizontal: layout.screenPadding,
-    paddingTop: space.lg,
-    paddingBottom: space.xl,
-    gap: space.lg,
+    paddingTop: space.md,
+    paddingBottom: space.md,
+    gap: space.md,
     borderBottomLeftRadius: radius.xxl,
     borderBottomRightRadius: radius.xxl,
     overflow: "hidden",
@@ -2511,8 +2511,8 @@ const styles = StyleSheet.create({
   /* Dev arma filigranı — kadrajdan taşar. Mürekkep üstünde %10 görünür. */
   coverMark: {
     position: "absolute",
-    top: -52,
-    left: -48,
+    top: -44,
+    left: -40,
     opacity: 0.1,
   },
   heroTop: {
@@ -2530,7 +2530,7 @@ const styles = StyleSheet.create({
     color: colors.onDark,
   },
   heroPlace: {
-    ...type.body,
+    ...type.bodySm,
     color: colors.onDarkMuted,
   },
   heroBadges: {
@@ -2540,13 +2540,13 @@ const styles = StyleSheet.create({
     gap: space.s,
   },
   heroFollowers: {
-    ...type.bodySm,
+    ...type.caption,
     color: colors.onDarkMuted,
   },
   /** Tebeşir pul — mürekkep blok üstündeki nötr rozet. */
   heroPill: {
-    paddingHorizontal: space.m,
-    paddingVertical: 3,
+    paddingHorizontal: space.sm,
+    paddingVertical: 1,
     borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: colors.chalk,

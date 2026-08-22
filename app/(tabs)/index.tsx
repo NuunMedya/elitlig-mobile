@@ -784,8 +784,8 @@ const styles = StyleSheet.create({
   },
   /* Karusel tam genişlik kaydırır; kenar boşluğu içeride `inset` ile verilir. */
   heroBox: {
-    paddingTop: space.md,
-    paddingBottom: space.m,
+    paddingTop: space.m,
+    paddingBottom: space.s,
   },
   /* İskelet kaydırmıyor; kenar boşluğunu kendisi taşır. */
   heroSkeleton: {
@@ -793,19 +793,19 @@ const styles = StyleSheet.create({
   },
   spotlightBox: {
     paddingHorizontal: layout.screenPadding,
-    paddingTop: space.md,
+    paddingTop: space.m,
   },
   shortcuts: {
     paddingHorizontal: layout.screenPadding,
-    paddingTop: space.xl,
+    paddingTop: space.md,
   },
-  /* Bölümler arası nefes: başlık 18px'e büyüdü, ritim de onunla büyür. */
+  /* Bölümler arası nefes — kompakt ritim. */
   block: {
-    paddingTop: space.xxl,
+    paddingTop: space.lg,
   },
   blockBody: {
     paddingHorizontal: layout.screenPadding,
-    paddingTop: space.sm,
+    paddingTop: space.xs,
   },
 
   /* — Mini puan tablosu — */
@@ -816,11 +816,11 @@ const styles = StyleSheet.create({
     ...elevate(1),
   },
   miniRow: {
-    height: 48,
+    height: 40,
     flexDirection: "row",
     alignItems: "center",
-    gap: space.md,
-    paddingHorizontal: space.md,
+    gap: space.sm,
+    paddingHorizontal: space.m,
     borderBottomWidth: hairline,
     borderBottomColor: colors.separator,
   },
@@ -834,7 +834,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   miniName: {
-    ...type.h4,
+    ...type.bodySm,
     color: colors.textPrimary,
     flex: 1,
   },
@@ -849,24 +849,24 @@ const styles = StyleSheet.create({
   guestCard: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.md,
+    gap: space.sm,
     marginHorizontal: layout.screenPadding,
-    marginTop: space.xxl,
-    padding: space.lg,
+    marginTop: space.lg,
+    padding: space.md,
     borderRadius: radius.lg,
     ...elevate(1),
     borderColor: colors.brandBorder,
   },
   guestTexts: {
     flex: 1,
-    gap: 3,
+    gap: 2,
   },
   guestTitle: {
     ...type.h3,
     color: colors.textPrimary,
   },
   guestBody: {
-    ...type.bodySm,
+    ...type.caption,
     color: colors.textTertiary,
   },
 });

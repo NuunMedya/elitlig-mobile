@@ -161,7 +161,7 @@ const Slot = React.memo(function Slot({
         <>
           <Ionicons
             name="add"
-            size={20}
+            size={17}
             color={active ? colors.brand : colors.onPitch}
           />
           <Text
@@ -227,7 +227,7 @@ export const PitchLineup = React.memo(function PitchLineup({
   );
 });
 
-const SLOT_SIZE = 58;
+const SLOT_SIZE = 50;
 
 const styles = StyleSheet.create({
   pitch: {
@@ -263,10 +263,10 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: "50%",
     top: "50%",
-    width: 84,
-    height: 84,
-    marginLeft: -42,
-    marginTop: -42,
+    width: 72,
+    height: 72,
+    marginLeft: -36,
+    marginTop: -36,
     borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: colors.chalk,
@@ -479,25 +479,25 @@ const benchStyles = StyleSheet.create({
     gap: space.xs,
   },
   title: {
-    ...type.h2,
+    ...type.h3,
     color: colors.textPrimary,
   },
   hint: {
-    ...type.bodySm,
+    ...type.caption,
     color: colors.textTertiary,
   },
   list: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: space.sm,
-    paddingTop: space.m,
+    gap: space.s,
+    paddingTop: space.sm,
   },
   item: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.m,
-    paddingVertical: space.m,
-    paddingHorizontal: space.md,
+    gap: space.s,
+    paddingVertical: space.s,
+    paddingHorizontal: space.m,
     backgroundColor: colors.surface1,
     borderRadius: radius.md,
     borderWidth: hairline,
@@ -508,8 +508,8 @@ const benchStyles = StyleSheet.create({
     opacity: 0.45,
   },
   itemNumber: {
-    width: 28,
-    height: 28,
+    width: 22,
+    height: 22,
     borderRadius: radius.sm,
     backgroundColor: colors.surface3,
     alignItems: "center",
@@ -523,17 +523,17 @@ const benchStyles = StyleSheet.create({
     gap: 2,
   },
   itemName: {
-    ...type.h4,
+    ...type.label,
     color: colors.textPrimary,
-    maxWidth: 170,
+    maxWidth: 150,
   },
   itemSub: {
-    ...type.bodySm,
+    ...type.caption,
     color: colors.textTertiary,
-    maxWidth: 170,
+    maxWidth: 150,
   },
   empty: {
-    ...type.body,
+    ...type.bodySm,
     color: colors.textTertiary,
     paddingTop: space.m,
   },

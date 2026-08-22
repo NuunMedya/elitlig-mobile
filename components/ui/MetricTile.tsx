@@ -71,7 +71,7 @@ export const MetricTile = React.memo(function MetricTile({
   const body = (
     <>
       <View style={styles.labelRow}>
-        {icon ? <Ionicons name={icon} size={14} color={colors.textTertiary} /> : null}
+        {icon ? <Ionicons name={icon} size={12} color={colors.textTertiary} /> : null}
         <Text style={styles.label} numberOfLines={1} {...textScale.badge}>
           {upperTR(label)}
         </Text>
@@ -118,7 +118,7 @@ export const MetricTile = React.memo(function MetricTile({
       {body}
       <Ionicons
         name="chevron-forward"
-        size={15}
+        size={13}
         color={colors.textDisabled}
         style={styles.chevron}
       />
@@ -178,9 +178,9 @@ const styles = StyleSheet.create({
   box: {
     minHeight: 66,
     justifyContent: "center",
-    gap: 4,
-    paddingHorizontal: space.md,
-    paddingVertical: space.lg,
+    gap: 2,
+    paddingHorizontal: space.m,
+    paddingVertical: space.md,
     borderRadius: radius.lg,
     ...elevate(1),
   },
@@ -201,7 +201,7 @@ const styles = StyleSheet.create({
     ...type.metric,
   },
   hint: {
-    ...type.bodySm,
+    ...type.caption,
     color: colors.textTertiary,
   },
   chevron: {

@@ -803,8 +803,8 @@ const styles = StyleSheet.create({
     paddingVertical: space.md,
   },
   dailyIcon: {
-    width: 38,
-    height: 38,
+    width: 32,
+    height: 32,
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
@@ -820,7 +820,7 @@ const styles = StyleSheet.create({
     color: colors.textOnBrand,
   },
   dailySub: {
-    ...type.bodySm,
+    ...type.caption,
     fontFamily: fonts.semibold,
     letterSpacing: 0,
     color: withAlpha(colors.textOnBrand, 0.78),
@@ -832,7 +832,7 @@ const styles = StyleSheet.create({
     backgroundColor: withAlpha(colors.textOnBrand, 0.22),
   },
   dailyPillText: {
-    ...type.label,
+    ...type.caption,
     fontFamily: fonts.bold,
     letterSpacing: 0.2,
     color: colors.textOnBrand,

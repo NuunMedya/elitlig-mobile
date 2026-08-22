@@ -66,7 +66,7 @@ export const ActionTile = React.memo(function ActionTile({
       style={[styles.tile, disabled ? styles.disabled : null, style]}
       testID={testID}
     >
-      <Ionicons name={icon} size={24} color={disabled ? colors.textDisabled : TONE_ICON[tone]} />
+      <Ionicons name={icon} size={20} color={disabled ? colors.textDisabled : TONE_ICON[tone]} />
       <Text style={styles.label} numberOfLines={1} {...textScale.badge}>
         {label}
       </Text>
@@ -122,11 +122,11 @@ export const ActionRow = React.memo(function ActionRow({
 
 const styles = StyleSheet.create({
   tile: {
-    height: 82,
+    height: 66,
     alignItems: "center",
     justifyContent: "center",
-    gap: space.sm,
-    paddingHorizontal: space.s,
+    gap: space.s,
+    paddingHorizontal: space.xs,
     borderRadius: radius.lg,
     ...elevate(1),
   },
@@ -134,16 +134,16 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   label: {
-    ...type.bodySm,
+    ...type.caption,
     color: colors.textSecondary,
     textAlign: "center",
   },
   badge: {
     position: "absolute",
-    top: 7,
-    right: 7,
-    minWidth: 18,
-    height: 18,
+    top: 5,
+    right: 5,
+    minWidth: 16,
+    height: 16,
     paddingHorizontal: 4,
     borderRadius: radius.pill,
     backgroundColor: colors.live,
