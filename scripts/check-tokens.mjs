@@ -53,18 +53,51 @@ const channel = (v) => {
   return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
 };
 
-function luminance(hex) {
-  const h = hex.replace("#", "");
-  const n = parseInt(h.length === 3 ? h.split("").map((c) => c + c).join("") : h, 16);
-  return (
-    0.2126 * channel((n >> 16) & 255) +
-    0.7152 * channel((n >> 8) & 255) +
-    0.0722 * channel(n & 255)
-  );
+/**
+ * Rengi [r, g, b, a] dizisine çevirir. Hem `#RGB`/`#RRGGBB` hem
+ * `rgba(r, g, b, a)` kabul eder.
+ *
+ * NEDEN rgba DESTEĞİ GEREKTİ: palet, koyu blok üstündeki sönük metinleri
+ * (`onDarkMuted`, `chalk`, `glassBorder`) bilerek YARI SAYDAM tutuyor — koyu
+ * yüzeyin tonu değiştiğinde bunlar kendiliğinden uyum sağlasın diye. Ama
+ * `luminance` yalnız hex okuyordu ve `parseInt("rgba(...)", 16)` NaN veriyor:
+ * yarı saydam bir rengi denetime sokan her çift SESSİZCE anlamsız bir sayı
+ * üretiyordu. Yani denetim, tam da en kırılgan renkleri ölçemiyordu.
+ */
+function toRgba(color) {
+  const value = String(color).trim();
+  const fn = value.match(/^rgba?\(([^)]+)\)$/i);
+  if (fn) {
+    const parts = fn[1].split(",").map((piece) => Number(piece.trim()));
+    return [parts[0] || 0, parts[1] || 0, parts[2] || 0, parts.length > 3 ? parts[3] : 1];
+  }
+  const h = value.replace("#", "");
+  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+  const n = parseInt(full, 16);
+  if (!Number.isFinite(n)) throw new Error(`okunamayan renk: ${value}`);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255, 1];
+}
+
+/** Yarı saydam ön planı zemine yedirir — gerçekte gözün gördüğü renk budur. */
+function composite(fg, bg) {
+  const [fr, fg2, fb, fa] = toRgba(fg);
+  const [br, bg2, bb] = toRgba(bg);
+  if (fa >= 1) return [fr, fg2, fb];
+  return [
+    fr * fa + br * (1 - fa),
+    fg2 * fa + bg2 * (1 - fa),
+    fb * fa + bb * (1 - fa),
+  ];
+}
+
+function luminance(color, over) {
+  const [r, g, b] = over ? composite(color, over) : toRgba(color);
+  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
 }
 
 const ratio = (a, b) => {
-  const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p);
+  // Zeminin kendisi saydamsa ölçülemez; palette zeminler daima opaktır.
+  const [x, y] = [luminance(a, b), luminance(b)].sort((p, q) => q - p);
   return (x + 0.05) / (y + 0.05);
 };
 
@@ -98,6 +131,18 @@ const PAIRS = (p) => [
   [p.textPrimary, p.gradientCard[1], 4.5, "birincil metin / kart gradyanının koyu ucu"],
   [p.textTertiary, p.gradientCard[1], 4.5, "etiket metni / kart gradyanının koyu ucu"],
   [p.onPitch, p.gradientPitch[0], 4.5, "oyuncu adı / saha"],
+
+  /* MAÇ ATMOSFERİ. Başlık şeridi ve skor tablosunun künyesi, sahnenin en üst
+     (en koyu) bölgesinin üstünde duruyor ve METNİ BEYAZ. Taban rengi bir tık
+     açılırsa maç detayının başlığı okunmaz olur — üstelik bu, yalnız kapak
+     fotoğrafı olan maçlarda fark edilirdi. Taban burada ölçülür. */
+  [p.onDark, p.matchTint, 4.5, "başlık metni / maç atmosferi"],
+  [p.onDarkMuted, p.matchTint, 3.0, "başlık alt metni / maç atmosferi"],
+  [p.brandOnDark, p.matchTint, 3.0, "marka etiketi / maç atmosferi"],
+  /* Sahne kâğıdı, kartların (beyaz/mürekkep) üstünde durduğu zemin. */
+  [p.textPrimary, p.matchCanvas, 4.5, "birincil metin / maç kâğıdı"],
+  [p.textSecondary, p.matchCanvas, 4.5, "ikincil metin / maç kâğıdı"],
+  [p.textTertiary, p.matchCanvas, 4.5, "üçüncül metin / maç kâğıdı"],
   [p.accent, p.surface3, 3.0, "veri barı (ev) / ray"],
   [p.slate, p.surface3, 3.0, "veri barı (deplasman) / ray"],
   [p.win, p.bg, 3.0, "kazandı çipi / zemin"],

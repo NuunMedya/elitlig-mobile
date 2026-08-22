@@ -54,6 +54,12 @@ export interface TabsProps<T extends string> {
   onChange: (key: T) => void;
   /** Yapışkan kullanımda: opak zemin + alt kenarlık. */
   sticky?: boolean;
+  /**
+   * Yapışkan şeridin zemini. Verilmezse sayfa kâğıdı (`bg`) kullanılır; maç
+   * detayı gibi kendi kâğıdı olan ekranlar kendi rengini verir, aksi hâlde
+   * şerit sayfadan farklı bir tonda kalır ve altında yatay bir dikiş görünür.
+   */
+  surface?: string;
   /** Sığıyorsa eşit dağıt, sığmıyorsa kaydır — varsayılan "auto". */
   distribute?: "auto" | "equal" | "scroll";
   style?: StyleProp<ViewStyle>;
@@ -76,6 +82,7 @@ function TabsBase<T extends string>({
   value,
   onChange,
   sticky,
+  surface,
   distribute = "auto",
   style,
   testID,
@@ -184,7 +191,12 @@ function TabsBase<T extends string>({
 
   return (
     <View
-      style={[styles.wrapper, sticky ? styles.sticky : null, style]}
+      style={[
+        styles.wrapper,
+        sticky ? styles.sticky : null,
+        sticky && surface ? { backgroundColor: surface } : null,
+        style,
+      ]}
       onLayout={(event) => setContainerWidth(event.nativeEvent.layout.width)}
       testID={testID}
     >
