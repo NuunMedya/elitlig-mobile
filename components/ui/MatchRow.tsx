@@ -80,8 +80,8 @@ export interface MatchRowProps {
 /** Sabit satır yükseklikleri — `getItemLayout` bunlardan hesaplanır. */
 export const MATCH_ROW_HEIGHT = layout.matchRowHeight;
 export const MATCH_ROW_HEIGHT_COMPACT = layout.matchRowHeightCompact;
-/** Meta satırı (saha/lig) 16px ekler. */
-export const MATCH_ROW_META_HEIGHT = 16;
+/** Meta satırı (saha/lig) 14px ekler. */
+export const MATCH_ROW_META_HEIGHT = 14;
 
 /**
  * Satır yüksekliği. Bir listede varyant ve metaMode tüm satırlarda aynı olduğu
@@ -352,7 +352,7 @@ export const MatchRow = memo(function MatchRow({
           >
             <Ionicons
               name={isFavorite ? "star" : "star-outline"}
-              size={19}
+              size={17}
               color={isFavorite ? colors.star : colors.starEmpty}
             />
           </Pressable>
@@ -402,7 +402,7 @@ const TeamLine = memo(function TeamLine({
 });
 
 const ANDROID_RIPPLE = { color: colors.ripple } as const;
-const STAR_SLOP = touchSlop(19);
+const STAR_SLOP = touchSlop(17);
 
 const styles = StyleSheet.create({
   row: {
@@ -479,15 +479,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   teamLine: {
-    height: 28,
+    height: 24,
     flexDirection: "row",
     alignItems: "center",
-    gap: space.m,
+    gap: space.sm,
   },
   /** Kullanıcının takımı — adın solunda 3px marka rayı. */
   rail: {
     width: 3,
-    height: 16,
+    height: 13,
     borderRadius: 1.5,
     backgroundColor: colors.brand,
     marginRight: -space.xxs,
@@ -519,18 +519,18 @@ const styles = StyleSheet.create({
    * Satır yüksekliği sabit olduğu için skorun SATIR YÜKSEKLİĞİ de sabittir
    * (28 = takım satırı yüksekliği). Tokenın kendi lineHeight'ı burada
    * kullanılmaz; kullanılsaydı canlı skor iki takım satırını iterdi.
-   * ÖNEMLİ: punto da 28'i aşmamalı, yoksa rakam kırpılır — bu yüzden canlı
-   * skor `scoreLg` (34) değil `scoreMd` (24) puntosunda, yalnız RENKLE
+   * ÖNEMLİ: punto da 24'ü aşmamalı, yoksa rakam kırpılır — bu yüzden canlı
+   * skor `scoreLg` (28) değil `scoreMd` (20) puntosunda, yalnız RENKLE
    * ayrışır.
    */
   score: {
     ...type.scoreMd,
-    lineHeight: 28,
+    lineHeight: 24,
     color: colors.textPrimary,
   },
   scoreLive: {
     ...type.scoreMd,
-    lineHeight: 28,
+    lineHeight: 24,
     color: colors.live,
   },
   scoreDim: {
@@ -545,7 +545,7 @@ const styles = StyleSheet.create({
   compactScore: {
     ...type.scoreSm,
     color: colors.textPrimary,
-    minWidth: 48,
+    minWidth: 44,
     textAlign: "center",
   },
   compactScoreLive: {

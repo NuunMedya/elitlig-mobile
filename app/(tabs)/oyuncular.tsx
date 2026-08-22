@@ -112,7 +112,7 @@ const PlayerRow = React.memo(function PlayerRow({
       <Text style={styles.rank} {...textScale.dense}>
         {rank}
       </Text>
-      <Avatar name={name} image={image} size={32} />
+      <Avatar name={name} image={image} size={28} />
 
       <View style={styles.rowBody}>
         <Text style={styles.name} numberOfLines={1} {...textScale.dense}>

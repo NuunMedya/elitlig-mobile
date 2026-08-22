@@ -1561,7 +1561,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: layout.screenPadding,
     paddingTop: space.md,
     paddingBottom: space.huge,
-    gap: space.lg,
+    gap: space.md,
   },
   lineupMeta: {
     flexDirection: "row",
@@ -1574,18 +1574,18 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   lineupDirty: {
-    ...type.bodySm,
+    ...type.caption,
     color: colors.warn,
   },
   lineupHint: {
-    ...type.bodySm,
+    ...type.caption,
     color: colors.textTertiary,
   },
 
   /* Piyasa değeri sütunu */
   marketBox: {
     alignItems: "flex-end",
-    minWidth: 54,
+    minWidth: 48,
   },
   marketValue: {
     ...type.tableNumStrong,
@@ -1622,8 +1622,8 @@ const styles = StyleSheet.create({
   },
   seasonTexts: {
     flex: 1,
-    gap: 2,
-    paddingVertical: space.sm,
+    gap: 1,
+    paddingVertical: space.s,
   },
   seasonName: {
     ...type.bodySm,

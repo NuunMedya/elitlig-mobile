@@ -68,6 +68,9 @@ interface TabLayout {
 /** Göstergenin sekme kenarlarından içeri çekilme payı. */
 const INDICATOR_INSET = space.m;
 
+/** `styles.tab` yatay dolgusu — kırpılma hesabı bunu bilmek zorunda. */
+const TAB_PADDING = space.s;
+
 function TabsBase<T extends string>({
   items,
   value,
@@ -84,13 +87,34 @@ function TabsBase<T extends string>({
   const [containerWidth, setContainerWidth] = useState(0);
   const [contentWidth, setContentWidth] = useState(0);
   const [layouts, setLayouts] = useState<TabLayout[]>([]);
+  /**
+   * Etiket metninin DOĞAL genişliği. Sekme kutusunun genişliği eşit kipte
+   * zorlandığı için kendi ölçümü doğal genişliği vermez; kırpılma kararını
+   * verebilmek için metin ayrıca ölçülür.
+   */
+  const [labelWidths, setLabelWidths] = useState<number[]>([]);
 
   const index = Math.max(
     0,
     items.findIndex((item) => item.key === value),
   );
 
-  const fits = containerWidth > 0 && contentWidth > 0 && contentWidth <= containerWidth + 1;
+  /*
+   * EŞİT DAĞITIM KOŞULU: toplam genişliğin şeride sığması YETMEZ.
+   *
+   * Eşit kipte kap genişliği sekme sayısına bölünür; yani her sekme aynı
+   * yuvayı alır. Toplam sığsa bile EN GENİŞ etiket o yuvadan büyükse yalnız o
+   * etiket üç noktaya düşer ("Kadrolar" → "Kadro…", "Sonuçlar" → "Sonuç…")
+   * ve şerit, bir sekmesi kırpılmış hâlde durur. Bu yüzden koşul en geniş
+   * sekmeye bakar: sığmıyorsa şerit kaydırmaya geçer, hiçbir etiket kırpılmaz.
+   */
+  const widestLabel = labelWidths.reduce((max, width) => Math.max(max, width), 0);
+  const equalSlot = containerWidth / Math.max(1, items.length);
+  const fits =
+    containerWidth > 0 &&
+    contentWidth > 0 &&
+    contentWidth <= containerWidth + 1 &&
+    (widestLabel === 0 || widestLabel + TAB_PADDING * 2 <= equalSlot + 1);
   const mode: "equal" | "scroll" =
     distribute === "equal" ? "equal" : distribute === "scroll" ? "scroll" : fits ? "equal" : "scroll";
 
@@ -129,6 +153,12 @@ function TabsBase<T extends string>({
     scrollRef.current?.scrollTo({ x: Math.min(Math.max(0, target), max), animated: true });
   }, [active, containerWidth, contentWidth, mode]);
 
+  const labelKey = items.map((item) => item.label).join("|");
+  useEffect(() => {
+    // Etiketler değiştiyse doğal genişlikler geçersizdir.
+    setLabelWidths([]);
+  }, [labelKey]);
+
   const handleTabLayout = useCallback((i: number, event: LayoutChangeEvent) => {
     const { x, width } = event.nativeEvent.layout;
     setLayouts((prev) => {
@@ -136,6 +166,18 @@ function TabsBase<T extends string>({
       if (current && current.x === x && current.width === width) return prev;
       const next = prev.slice();
       next[i] = { x, width };
+      return next;
+    });
+  }, []);
+
+  const handleLabelLayout = useCallback((i: number, event: LayoutChangeEvent) => {
+    const { width } = event.nativeEvent.layout;
+    setLabelWidths((prev) => {
+      // Metin yalnız BÜYÜDÜĞÜNDE güncellenir: eşit kipte kutu daralınca metin
+      // de daralır ve doğal genişlik kaybolurdu (karar kendi kendini besler).
+      if ((prev[i] ?? 0) >= width) return prev;
+      const next = prev.slice();
+      next[i] = width;
       return next;
     });
   }, []);
@@ -177,6 +219,7 @@ function TabsBase<T extends string>({
               <Text
                 style={[styles.label, isActive ? styles.labelActive : null]}
                 numberOfLines={1}
+                onLayout={(event) => handleLabelLayout(i, event)}
                 {...textScale.dense}
               >
                 {item.label}
@@ -230,7 +273,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: space.xs,
     height: layout.tabStripHeight,
-    paddingHorizontal: space.lg,
+    /* Dar yatay dolgu: eşit genişlik kipinde şerit, kap genişliğini sekme
+       sayısına böler; 12px'lik dolgu 78px'lik bir yuvada metne yalnız 54px
+       bırakıyor ve "Haberler" gibi etiketler üç noktaya düşüyordu. */
+    paddingHorizontal: space.s,
   },
   /*
    * Aktif sekme AİLE DEĞİŞTİRMEZ, yalnız renk değiştirir. Önceki sürümde aktif
@@ -249,8 +295,8 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 0,
     bottom: 0,
-    height: 3,
-    borderRadius: 1.5,
+    height: 2,
+    borderRadius: 1,
     backgroundColor: colors.brand,
   },
 });

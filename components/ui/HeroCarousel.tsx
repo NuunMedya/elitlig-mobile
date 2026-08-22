@@ -50,7 +50,12 @@ import { Touchable } from "./Pressable";
 /** Otomatik geçiş süresi. */
 const AUTOPLAY_MS = 6000;
 /** 16:10 — manşet görseli için yeterince geniş, listeyi ekrandan itmeyecek kadar alçak. */
-const ASPECT = 10 / 16;
+/*
+ * 1:2 — kompakt manşet. 10:16 oranı 390px'lik ekranda 224px'lik bir kart
+ * üretiyordu ve ana ekranın üçte birini tek başına yiyordu; manşet bir
+ * "kapak" değil, listenin başındaki bir şerittir.
+ */
+const ASPECT = 1 / 2;
 
 export interface HeroSlide {
   key: string;
@@ -314,8 +319,8 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   cardBody: {
-    padding: space.xl,
-    gap: space.s,
+    padding: space.md,
+    gap: space.xs,
   },
   eyebrowRow: {
     flexDirection: "row",
@@ -342,17 +347,17 @@ const styles = StyleSheet.create({
     color: colors.onDark,
   },
   meta: {
-    ...type.bodySm,
+    ...type.caption,
     color: colors.onDarkMuted,
   },
   segments: {
     flexDirection: "row",
-    gap: space.s,
-    paddingTop: space.md,
+    gap: space.xs,
+    paddingTop: space.sm,
   },
   segmentTrack: {
-    height: 3,
-    borderRadius: 1.5,
+    height: 2,
+    borderRadius: 1,
     backgroundColor: colors.border,
     overflow: "hidden",
   },
@@ -361,8 +366,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.borderStrong,
   },
   segmentFill: {
-    height: 3,
-    borderRadius: 1.5,
+    height: 2,
+    borderRadius: 1,
     backgroundColor: colors.brand,
   },
 });

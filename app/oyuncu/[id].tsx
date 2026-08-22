@@ -825,7 +825,7 @@ function GeneralTab({
           <Avatar
             name={playerName}
             image={mediaUrl(playerImage)}
-            size={88}
+            size={72}
             shape="square"
             jersey={jersey}
           />
@@ -879,7 +879,7 @@ function GeneralTab({
                 {teamName}
               </Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color={colors.onDarkMuted} />
+            <Ionicons name="chevron-forward" size={16} color={colors.onDarkMuted} />
           </Touchable>
         ) : (
           <Badge label="TAKIMSIZ" tone="neutral" size="sm" />
@@ -2205,9 +2205,9 @@ const styles = StyleSheet.create({
 
   /* — Kimlik: mürekkep kart — */
   hero: {
-    gap: space.lg,
-    padding: space.lg,
-    marginTop: space.sm,
+    gap: space.md,
+    padding: space.md,
+    marginTop: space.s,
     ...elevate(2),
     borderWidth: 0,
     borderRadius: radius.xxl,
@@ -2220,7 +2220,7 @@ const styles = StyleSheet.create({
   heroTop: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.lg,
+    gap: space.md,
   },
   heroIdentity: {
     flex: 1,
@@ -2260,14 +2260,14 @@ const styles = StyleSheet.create({
   heroTeam: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.md,
+    gap: space.sm,
     alignSelf: "stretch",
     backgroundColor: colors.chalk,
     borderWidth: 1,
     borderColor: colors.chalk,
     borderRadius: radius.md,
-    paddingHorizontal: space.md,
-    paddingVertical: space.m,
+    paddingHorizontal: space.m,
+    paddingVertical: space.s,
   },
   heroTeamBody: {
     flex: 1,
@@ -2278,7 +2278,7 @@ const styles = StyleSheet.create({
     color: colors.brand,
   },
   heroTeamName: {
-    ...type.h3,
+    ...type.h4,
     color: colors.onDark,
   },
   metaRow: {

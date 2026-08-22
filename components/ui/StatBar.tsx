@@ -151,7 +151,7 @@ const styles = StyleSheet.create({
   value: {
     ...type.tableNum,
     color: colors.textSecondary,
-    minWidth: 40,
+    minWidth: 34,
   },
   valueRight: {
     textAlign: "right",
@@ -161,37 +161,38 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
   label: {
-    ...type.bodySm,
+    ...type.caption,
     color: colors.textTertiary,
     flex: 1,
     textAlign: "center",
   },
   /*
-   * Bar 4px değil 8px. 4px'lik bir çubuk telefonda "çizgi" olarak okunuyor,
-   * iki taraf arasındaki farkı göstermiyordu; 8px hem veri hem grafik olur.
+   * Bar 4px değil 6px. 4px'lik bir çubuk telefonda "çizgi" olarak okunuyor,
+   * iki taraf arasındaki farkı göstermiyordu; 6px hem veri hem grafik olur ve
+   * kompakt satır yüksekliğine sığar.
    * Köşeler yuvarlak: keskin uçlu ince bar "ilerleme çubuğu" gibi duruyordu.
    */
   track: {
     flexDirection: "row",
     alignItems: "center",
-    height: 8,
+    height: 6,
   },
   half: {
     flex: 1,
-    height: 8,
-    borderRadius: 4,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: colors.surface3,
     overflow: "hidden",
   },
   /** Merkez ekseni — iki yarının hangi noktadan ölçüldüğünü söyler. */
   axis: {
     width: 1,
-    height: 14,
+    height: 11,
     backgroundColor: colors.borderStrong,
   },
   fill: {
-    height: 8,
-    borderRadius: 4,
+    height: 6,
+    borderRadius: 3,
   },
   // Sol yarım merkezden sola dolar: dolgu yarımın sağ kenarına yapışır.
   fillLeft: {

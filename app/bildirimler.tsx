@@ -342,7 +342,6 @@ export default function NotificationsScreen() {
     [isManagement, markRead, router, toast],
   );
 
-  const openPreferences = useCallback(() => router.push("/bildirim-tercihleri"), [router]);
   const handleMarkAll = useCallback(() => markAllRead(), [markAllRead]);
   const selectTab = useCallback((next: NotifTab) => router.setParams({ tab: next }), [router]);
   const loadMore = useCallback(() => {
@@ -402,20 +401,20 @@ export default function NotificationsScreen() {
         <ErrorState error={query.error} onRetry={refetchAll} variant="banner" />
       ) : null}
 
-      <ListRow
-        leading={{ icon: "notifications-circle", tone: "brand" }}
-        title="Bildirim tercihlerini yönet"
-        subtitle="Gol, maç, panel ve haber bildirimleri"
-        position={unread > 0 ? "first" : "single"}
-        onPress={openPreferences}
-      />
+      {/*
+        BİLDİRİM TERCİHLERİ SATIRI KALDIRILDI. Tercihlere önceden dört ayrı
+        yerden gidiliyordu: Profil, Hesabım, bu listenin başı ve boş durumu.
+        Tek kanonik kapı Profil → Tercihler → Bildirim Tercihleri'dir; burası
+        bildirimlerin OKUNDUĞU yerdir, ayarlandığı yer değil. Üstelik satır her
+        açılışta gerçek bildirimleri bir satır aşağı itiyordu.
+      */}
       {unread > 0 ? (
         <ListRow
           leading={{ icon: "checkmark-done", tone: "win" }}
           title="Tümünü okundu işaretle"
           value={String(unread)}
           chevron={false}
-          position="last"
+          position="single"
           onPress={handleMarkAll}
         />
       ) : null}
@@ -484,8 +483,7 @@ export default function NotificationsScreen() {
             <EmptyState
               icon="notifications-off-outline"
               title="Bildirim yok"
-              body="Transfer teklifleri, sözleşmeler, disiplin dosyaları ve yönetim mesajları için bildirimler burada toplanır."
-              action={{ label: "Bildirim tercihleri", onPress: openPreferences }}
+              body="Transfer teklifleri, sözleşmeler, disiplin dosyaları ve yönetim mesajları için bildirimler burada toplanır. Hangilerini alacağını Profil → Bildirim Tercihleri'nden seçebilirsin."
             />
           }
           contentContainerStyle={styles.list}

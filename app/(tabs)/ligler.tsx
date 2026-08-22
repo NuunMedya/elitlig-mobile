@@ -1,17 +1,24 @@
 /**
  * LİGLER — kapsama (şehir → lig → sezon) bağlı tüm verinin tek evi.
  *
- * NE: eski `(tabs)/standings.tsx` + `(tabs)/players.tsx` + `(tabs)/news.tsx` +
- * `app/arsiv.tsx` ekranlarının altı segmentte birleşmiş hâli:
- *   Puan · Fikstür · Oyuncular · İstatistik · Haberler · Arşiv
+ * NE: eski `(tabs)/standings.tsx` + `(tabs)/news.tsx` + `app/arsiv.tsx`
+ * ekranlarının beş segmentte birleşmiş hâli:
+ *   Puan · Fikstür · İstatistik · Haberler · Arşiv
+ *
+ * OYUNCULAR SEGMENTİ NEDEN YOK: alt çubuktaki Oyuncular sekmesiyle birebir
+ * aynı ekrandı (aynı uç, aynı kapsam, aynı altı ölçüt). Aynı listeye iki ayrı
+ * menü basamağından gitmek, kullanıcıya iki farklı yer olduğunu düşündürüyordu.
+ * Kanonik kapı alt çubuktaki sekmedir; kapsam ortak olduğu için oraya geçen
+ * kullanıcı aynı lig ve sezonu görür.
  *
  * NEDEN BİRLEŞTİ: dördü de aynı kapsama bağlıydı ve dördü de ayrı ayrı 48px'lik
  * bir kapsam çubuğu çiziyordu. Kullanıcı "Ankara 1.Lig 25/26" seçimini sekme
  * değiştirdikçe yeniden okumak/doğrulamak zorunda kalıyordu. Artık kapsam bir
  * kez üstte gösterilir (ScopeChip) ve segment değiştikçe sabit kalır.
  *
- * DERİN BAĞLANTI: `/(tabs)/ligler?tab=<puan|fikstur|oyuncular|istatistik|
- * haberler|arsiv>&leagueId=<id>`. Geçersiz değer sessizce "puan" olur;
+ * DERİN BAĞLANTI: `/(tabs)/ligler?tab=<puan|fikstur|istatistik|haberler|
+ * arsiv>&leagueId=<id>`. Geçersiz değer (eski `oyuncular` dâhil) sessizce
+ * "puan" olur;
  * `leagueId` verilirse kapsam o lige çevrilir (maç listesindeki lig başlığı
  * buraya bu parametreyle gelir).
  *
@@ -38,14 +45,12 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ScopeChip } from "@/components/ScopeChip";
 import {
-  Avatar,
   Badge,
   Chip,
   ChipGroup,
   EmptyState,
   ErrorState,
   FormChips,
-  Input,
   ListRow,
   MatchRow,
   ScreenHeader,
@@ -67,7 +72,7 @@ import { getPlayerRankings } from "@/lib/api/players";
 import { getStandings } from "@/lib/api/standings";
 import { formatDayHeading, mediaUrl, stripHtml, timeAgo } from "@/lib/format";
 import { queryKeys } from "@/lib/queryKeys";
-import type { ApiMatch, NewsItem, PlayerRankRow, PlayerSort, StandingRow } from "@/lib/types";
+import type { ApiMatch, NewsItem, StandingRow } from "@/lib/types";
 import { useFavorite } from "@/providers/FavoriteProvider";
 import { useScope } from "@/providers/ScopeProvider";
 import {
@@ -89,14 +94,13 @@ import {
    Segmentler ve rota parametresi
    ══════════════════════════════════════════════════════════════════════════ */
 
-type LeagueTab = "puan" | "fikstur" | "oyuncular" | "istatistik" | "haberler" | "arsiv";
+type LeagueTab = "puan" | "fikstur" | "istatistik" | "haberler" | "arsiv";
 
 const TAB_ITEMS: TabItem<LeagueTab>[] = [
   { key: "puan", label: "Puan" },
   { key: "fikstur", label: "Fikstür" },
-  { key: "oyuncular", label: "Oyuncular" },
   { key: "istatistik", label: "İstatistik" },
-  { key: "haberler", label: "Haberler" },
+  { key: "haberler", label: "Haber" },
   { key: "arsiv", label: "Arşiv" },
 ];
 
@@ -121,8 +125,6 @@ const TAB_ALIASES: Record<string, LeagueTab> = {
   fikstur: "fikstur",
   fixtures: "fikstur",
   maclar: "fikstur",
-  players: "oyuncular",
-  oyuncu: "oyuncular",
   stats: "istatistik",
   istatistikler: "istatistik",
   news: "haberler",
@@ -247,8 +249,6 @@ export default function LeaguesScreen() {
         <StandingsTab scrollProps={scrollProps} onPickScope={openScope} />
       ) : tab === "fikstur" ? (
         <FixturesTab scrollProps={scrollProps} onPickScope={openScope} />
-      ) : tab === "oyuncular" ? (
-        <PlayersTab scrollProps={scrollProps} onPickScope={openScope} />
       ) : tab === "istatistik" ? (
         <StatsTab scrollProps={scrollProps} onPickScope={openScope} />
       ) : tab === "haberler" ? (
@@ -630,221 +630,21 @@ const matchKey = (item: ApiMatch) => String(item.id);
 const SKELETON_ROWS = ["s1", "s2", "s3", "s4", "s5", "s6"] as const;
 
 /* ══════════════════════════════════════════════════════════════════════════
-   3) OYUNCULAR — sunucunun hesapladığı sıralamalar
+   3) OYUNCULAR — KALDIRILDI
+
+   Bu sekme, OYUNCULAR ANA SEKMESİYLE birebir aynı ekrandı: aynı uç
+   (`/api/oyuncu-listesi`), aynı kapsam, aynı altı sıralama ölçütü
+   (En Değerliler · Gol Krallığı · En Çok Maç · Puan/Maç · Gol/Maç · Kartlar),
+   aynı podyum ve aynı satır düzeni. Yani bir kullanıcı gol krallığına iki
+   ayrı menü basamağından ulaşıyordu.
+
+   Kanonik kapı: alt çubuktaki OYUNCULAR sekmesi. Kapsam seçimi ikisinde de
+   ortak (`ScopeProvider`) olduğu için buradan oraya geçen kullanıcı aynı
+   lig ve sezonu görmeye devam eder — bilgi kaybı yoktur.
    ══════════════════════════════════════════════════════════════════════════ */
 
+/** Sayıya çevir; sunucu bazı toplamları DİZE olarak döndürüyor. */
 const num = (value: number | string | null | undefined) => Number(value ?? 0) || 0;
-
-const SORTS: {
-  key: PlayerSort;
-  label: string;
-  metric: (row: PlayerRankRow) => string;
-  unit: string;
-}[] = [
-  { key: "mostValuable", label: "En Değerliler", metric: (r) => String(num(r.points)), unit: "puan" },
-  { key: "topScorers", label: "Gol Krallığı", metric: (r) => String(num(r.goals)), unit: "gol" },
-  { key: "mostMatches", label: "En Çok Maç", metric: (r) => String(num(r.matches)), unit: "maç" },
-  { key: "pointsPerMatch", label: "Puan / Maç", metric: (r) => num(r.pointsPerMatch).toFixed(2), unit: "puan" },
-  { key: "goalsPerMatch", label: "Gol / Maç", metric: (r) => num(r.goalsPerMatch).toFixed(2), unit: "gol" },
-  { key: "mostCards", label: "Kartlar", metric: (r) => String(num(r.cards)), unit: "kart" },
-];
-
-const PlayerItem = React.memo(function PlayerItem({
-  playerId,
-  rank,
-  name,
-  image,
-  teamName,
-  metric,
-  unit,
-  position,
-  onPress,
-}: {
-  playerId: number;
-  rank: number;
-  name: string;
-  image: string | null;
-  teamName: string;
-  metric: string;
-  unit: string;
-  position: "single" | "first" | "middle" | "last";
-  onPress: (playerId: number) => void;
-}) {
-  const handlePress = useCallback(() => onPress(playerId), [onPress, playerId]);
-  return (
-    <ListRow
-      position={position}
-      title={name}
-      subtitle={teamName || "Takımsız"}
-      onPress={handlePress}
-      leading={
-        <View style={styles.plLeading}>
-          <Text style={styles.plRank} {...textScale.dense}>
-            {rank}
-          </Text>
-          <Avatar name={name} image={image} size={layout.crestLg} />
-        </View>
-      }
-      trailing={
-        <View style={styles.plMetric}>
-          <Text style={styles.plMetricValue} {...textScale.dense}>
-            {metric}
-          </Text>
-          <Text style={styles.plMetricUnit} {...textScale.badge}>
-            {unit}
-          </Text>
-        </View>
-      }
-    />
-  );
-});
-
-function PlayersTab({ scrollProps, onPickScope }: TabProps) {
-  const scope = useScope();
-  const router = useRouter();
-  const [sort, setSort] = useState<PlayerSort>("mostValuable");
-  const [search, setSearch] = useState("");
-
-  const active = SORTS.find((item) => item.key === sort) ?? SORTS[0];
-
-  const scopeKey = {
-    cityId: scope.cityId ?? undefined,
-    leagueId: scope.leagueId ?? undefined,
-    seasonId: scope.seasonId ?? undefined,
-  };
-
-  const query = useQuery({
-    queryKey: queryKeys.playerRankings(scopeKey, sort),
-    queryFn: () => getPlayerRankings(scopeKey, sort),
-    enabled: scope.ready,
-    staleTime: 60_000,
-  });
-
-  const refresh = useRefresh(query.refetch, { refreshing: query.isRefetching });
-
-  const rows = useMemo(() => {
-    const players = query.data?.players ?? [];
-    const term = search.trim().toLocaleLowerCase("tr-TR");
-    const filtered = term
-      ? players.filter(
-          (player) =>
-            player.name.toLocaleLowerCase("tr-TR").includes(term) ||
-            (player.teamName ?? "").toLocaleLowerCase("tr-TR").includes(term),
-        )
-      : players;
-    // "En Değerliler"de sunucu piyasa değerine göre sıralar ama yanıt bu alanı
-    // taşımaz; ekranda puan gösterildiği için liste puana göre yeniden dizilir.
-    if (sort !== "mostValuable") return filtered;
-    return [...filtered].sort((a, b) => num(b.points) - num(a.points));
-  }, [query.data, search, sort]);
-
-  const openPlayer = useCallback((playerId: number) => router.push(`/oyuncu/${playerId}`), [router]);
-
-  const renderItem = useCallback(
-    ({ item, index }: { item: PlayerRankRow; index: number }) => (
-      <PlayerItem
-        playerId={item.id}
-        rank={index + 1}
-        name={item.name}
-        image={item.image ?? null}
-        teamName={item.teamName ?? ""}
-        metric={active.metric(item)}
-        unit={active.unit}
-        position={
-          rows.length === 1
-            ? "single"
-            : index === 0
-              ? "first"
-              : index === rows.length - 1
-                ? "last"
-                : "middle"
-        }
-        onPress={openPlayer}
-      />
-    ),
-    [active, openPlayer, rows.length],
-  );
-
-  if (!scope.ready && !scope.loading) return <ScopeMissing onPress={onPickScope} />;
-
-  // Kapsam meta sorguları uçarken `query` devre dışıdır (`isLoading === false`);
-  // bu durumu iskelete katmazsak liste boş sanılıp "Oyuncu listesi boş" çizilir.
-  const busy = query.isLoading || scope.loading;
-
-  return (
-    <FlatList
-      {...scrollProps}
-      data={busy ? [] : rows}
-      keyExtractor={playerKey}
-      renderItem={renderItem}
-      getItemLayout={playerLayout}
-      initialNumToRender={12}
-      windowSize={8}
-      contentContainerStyle={styles.listContent}
-      keyboardShouldPersistTaps="handled"
-      refreshControl={
-        <RefreshControl {...refreshControlProps(refresh.refreshing, refresh.onRefresh)} />
-      }
-      ListHeaderComponent={
-        <View style={styles.plHeader}>
-          <ChipGroup>
-            {SORTS.map((item) => (
-              <Chip
-                key={item.key}
-                label={item.label}
-                selected={item.key === sort}
-                onPress={() => setSort(item.key)}
-              />
-            ))}
-          </ChipGroup>
-          <View>
-            <Input
-              variant="search"
-              size="sm"
-              value={search}
-              onChangeText={setSearch}
-              placeholder="Oyuncu veya takım ara"
-              autoCorrect={false}
-            />
-          </View>
-          {query.isError ? <ErrorState error={query.error} variant="banner" /> : null}
-        </View>
-      }
-      ListEmptyComponent={
-        busy ? (
-          <View>
-            {SKELETON_ROWS.map((key) => (
-              <SkeletonListRow key={key} />
-            ))}
-          </View>
-        ) : query.isError ? (
-          <ErrorState error={query.error} onRetry={query.refetch} variant="inline" />
-        ) : search.trim() ? (
-          <EmptyState
-            icon="search-outline"
-            title="Eşleşme yok"
-            body="Aramaya uyan oyuncu bulunamadı."
-            variant="inline"
-          />
-        ) : (
-          <EmptyState
-            icon="people-outline"
-            title="Oyuncu listesi boş"
-            body="Bu sezonda yayınlanmış maç kadrosu bulunmuyor."
-            variant="inline"
-          />
-        )
-      }
-    />
-  );
-}
-
-const playerKey = (item: PlayerRankRow) => String(item.id);
-const playerLayout = (_data: ArrayLike<PlayerRankRow> | null | undefined, index: number) => ({
-  length: layout.listRowHeightTwoLine,
-  offset: layout.listRowHeightTwoLine * index,
-  index,
-});
 
 /* ══════════════════════════════════════════════════════════════════════════
    4) İSTATİSTİK — tablodan türeyen liderler + disiplin girişi
@@ -1094,18 +894,8 @@ function StatsTab({ scrollProps, onPickScope }: TabProps) {
       refreshControl={
         <RefreshControl {...refreshControlProps(refresh.refreshing, refresh.onRefresh)} />
       }
-      ListFooterComponent={
-        <View style={styles.statFooter}>
-          <SectionHeader title="Disiplin" />
-          <ListRow
-            position="single"
-            leading={{ icon: "hammer-outline", tone: "danger" }}
-            title="Lig Disiplin Kararları"
-            subtitle="Ceza kurulunun yayımladığı kararlar"
-            onPress={() => router.push("/cezalar")}
-          />
-        </View>
-      }
+      /* Disiplin kartı kaldırıldı: `/cezalar` ekranının kanonik kapısı
+         Menü → Bilgi → Cezalar'dır. İstatistik sekmesi istatistik gösterir. */
       ListEmptyComponent={
         <EmptyState
           icon="stats-chart-outline"

@@ -74,8 +74,8 @@ const VIEWS: SegmentedItem<ViewKey>[] = [
 /** Arama kutusu bu eşiğin altındaki listelerde gösterilmez. */
 const SEARCH_THRESHOLD = 20;
 
-const CARD_HEIGHT = 76;
-const TABLE_ROW_HEIGHT = 46;
+const CARD_HEIGHT = 62;
+const TABLE_ROW_HEIGHT = 38;
 
 /** Türkçe duyarlı, aksan/büyük-küçük farkını yok sayan arama karşılaştırması. */
 const normalize = (value: string) => value.trim().toLocaleLowerCase("tr-TR");
@@ -445,8 +445,8 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.separator,
   },
   rankBox: {
-    width: 28,
-    height: 28,
+    width: 24,
+    height: 24,
     borderRadius: radius.sm,
     borderWidth: 1.5,
     borderColor: colors.border,
@@ -477,13 +477,13 @@ const styles = StyleSheet.create({
     gap: space.s,
   },
   cardMeta: {
-    ...type.bodySm,
+    ...type.caption,
     color: colors.textTertiary,
     flexShrink: 1,
   },
   pointsBox: {
     alignItems: "flex-end",
-    minWidth: 38,
+    minWidth: 34,
   },
   pointsValue: {
     ...type.metricSm,
@@ -498,7 +498,7 @@ const styles = StyleSheet.create({
      Sütun genişlikleri TableHead ile birebir aynı olmalı; aksi hâlde başlık
      rakamların üstüne oturmaz ve tablo okunmaz hâle gelir. */
   tableHead: {
-    height: 34,
+    height: 28,
     flexDirection: "row",
     alignItems: "center",
     gap: space.s,
@@ -532,7 +532,7 @@ const styles = StyleSheet.create({
   tRank: {
     ...type.tableNum,
     color: colors.textTertiary,
-    width: 22,
+    width: 20,
     textAlign: "center",
   },
   tName: {
@@ -546,11 +546,11 @@ const styles = StyleSheet.create({
   tNum: {
     ...type.tableNum,
     color: colors.textSecondary,
-    width: 24,
+    width: 22,
     textAlign: "center",
   },
   tNumWide: {
-    width: 32,
+    width: 28,
   },
   tPos: {
     color: colors.win,

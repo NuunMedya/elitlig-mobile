@@ -95,7 +95,7 @@ export const ErrorState = React.memo(function ErrorState({
         accessibilityLabel={message}
         style={[styles.banner, style]}
       >
-        <Ionicons name="alert-circle-outline" size={17} color={colors.danger} />
+        <Ionicons name="alert-circle-outline" size={15} color={colors.danger} />
         <Text style={styles.bannerText} numberOfLines={1} {...textScale.dense}>
           {message}
         </Text>
@@ -124,7 +124,7 @@ export const ErrorState = React.memo(function ErrorState({
       body={errorBody(error, offline)}
       illustration={
         <View style={styles.iconCircle}>
-          <Ionicons name="cloud-offline-outline" size={36} color={colors.danger} />
+          <Ionicons name="cloud-offline-outline" size={30} color={colors.danger} />
         </View>
       }
       action={onRetry ? { label: "Tekrar dene", onPress: onRetry, haptic: "light" } : undefined}
@@ -136,8 +136,8 @@ export const ErrorState = React.memo(function ErrorState({
 const styles = StyleSheet.create({
   /** İkon dairesi boş durumla aynı ölçüde ama tonu `danger` — hata olduğu belli. */
   iconCircle: {
-    width: 56,
-    height: 56,
+    width: 48,
+    height: 48,
     borderRadius: radius.pill,
     backgroundColor: colors.dangerDim,
     alignItems: "center",
@@ -148,7 +148,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: space.sm,
-    minHeight: 46,
+    minHeight: 38,
     paddingVertical: space.s,
     paddingHorizontal: space.md,
     backgroundColor: colors.dangerDim,
@@ -166,7 +166,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
   },
   bannerActionText: {
-    ...type.label,
+    ...type.caption,
     fontFamily: fonts.bold,
     color: colors.danger,
   },

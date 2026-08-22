@@ -10,8 +10,9 @@
  *  - `danger` DOLU KIRMIZI DEĞİLDİR: sönük zemin + kırmızı metin. Yıkıcı eylem
  *    sessiz görünür; asıl uyarıyı onay sheet'i verir.
  *
- * ÖLÇÜ: 38 / 48 / 56. Önceki 32/40/48 üçlüsü 44px dokunma hedefinin altında
- * kalıyordu ve büyümüş tipografiyle birlikte düğmeler "sıkışmış" görünüyordu.
+ * ÖLÇÜ: 34 / 40 / 46. `sm` ve `md` 44px'in altındadır; ikisi de `touchSlop`
+ * ile 44px'lik dokunma alanına tamamlanır (bkz. `hitSlop`). Kompakt düzende
+ * 48–56px'lik düğmeler ekranın dörtte birini yiyordu.
  *
  * BASMA: hepsi opaklıkla söner (gradyan dolgu zemin değişimini gizlerdi).
  * `loading` sırasında GENİŞLİK KORUNUR — etiket görünmez olur ve göstergesi
@@ -50,7 +51,7 @@ export interface ButtonProps {
   label: string;
   onPress: () => void;
   variant?: "primary" | "secondary" | "ghost" | "danger";
-  /** 38 / 48 / 56 — varsayılan "md". */
+  /** 34 / 40 / 46 — varsayılan "md". */
   size?: "sm" | "md" | "lg";
   icon?: keyof typeof Ionicons.glyphMap;
   iconPosition?: "left" | "right";
@@ -71,7 +72,7 @@ export interface ButtonProps {
   testID?: string;
 }
 
-const HEIGHTS = { sm: 38, md: 48, lg: 56 } as const;
+const HEIGHTS = { sm: 34, md: 40, lg: 46 } as const;
 
 export const Button = React.memo(function Button({
   label,
@@ -127,7 +128,7 @@ export const Button = React.memo(function Button({
   const iconNode = icon ? (
     <Ionicons
       name={icon}
-      size={size === "lg" ? 20 : size === "sm" ? 16 : 18}
+      size={size === "lg" ? 18 : 16}
       color={fg}
       style={loading ? styles.labelHidden : null}
     />
@@ -141,7 +142,7 @@ export const Button = React.memo(function Button({
       haptic={isDisabled ? "none" : effectiveHaptic}
       onPress={onPress}
       disabled={isDisabled}
-      hitSlop={size === "sm" ? touchSlop(height) : undefined}
+      hitSlop={height < 44 ? touchSlop(height) : undefined}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
       accessibilityHint={accessibilityHint}
@@ -151,7 +152,7 @@ export const Button = React.memo(function Button({
         styles.base,
         {
           height,
-          paddingHorizontal: size === "sm" ? space.m : size === "lg" ? space.xl : space.lg,
+          paddingHorizontal: size === "sm" ? space.md : size === "lg" ? space.lg : space.md,
         },
         boxStyle,
         fullWidth ? styles.fullWidth : null,
@@ -208,7 +209,7 @@ const styles = StyleSheet.create({
   /* Düğme etiketleri tek ailede (Inter SemiBold) kalır: Archivo rakam ailesidir,
      düğme metninde kullanılınca arayüz iki sesle konuşmuş oluyordu. */
   labelSm: {
-    ...type.h4,
+    ...type.label,
   },
   labelMd: {
     ...type.h4,

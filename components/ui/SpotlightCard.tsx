@@ -71,7 +71,7 @@ export const SpotlightCard = React.memo(function SpotlightCard({
 
   const side = (team: SpotlightTeam, winner: boolean) => (
     <View style={styles.side}>
-      <TeamLogo logo={team.logo} name={team.name} size={32} />
+      <TeamLogo logo={team.logo} name={team.name} size={26} />
       <Text
         style={[styles.teamName, winner ? styles.teamNameWinner : null]}
         numberOfLines={1}
@@ -143,7 +143,7 @@ export const SpotlightCard = React.memo(function SpotlightCard({
             {footnote}
           </Text>
           {onPress ? (
-            <Ionicons name="chevron-forward" size={15} color={colors.onDarkMuted} />
+            <Ionicons name="chevron-forward" size={13} color={colors.onDarkMuted} />
           ) : null}
         </View>
       ) : null}
@@ -184,8 +184,8 @@ const styles = StyleSheet.create({
   gradient: {
     // Gradyan yüklenemezse düz mürekkep zemin altta durur.
     backgroundColor: colors.inkBlock,
-    padding: space.lg,
-    gap: space.md,
+    padding: space.md,
+    gap: space.sm,
   },
   head: {
     flexDirection: "row",
@@ -203,7 +203,7 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   teams: {
-    gap: space.sm,
+    gap: space.s,
   },
   side: {
     flexDirection: "row",
@@ -221,7 +221,7 @@ const styles = StyleSheet.create({
   score: {
     ...type.scoreLg,
     color: colors.onDarkMuted,
-    minWidth: 32,
+    minWidth: 26,
     textAlign: "right",
   },
   scoreWinner: {
@@ -243,12 +243,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: space.s,
-    paddingTop: space.md,
+    paddingTop: space.sm,
     borderTopWidth: 1,
     borderTopColor: colors.chalk,
   },
   footnote: {
-    ...type.bodySm,
+    ...type.caption,
     color: colors.onDarkMuted,
     flex: 1,
   },

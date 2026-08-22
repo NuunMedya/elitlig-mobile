@@ -116,7 +116,7 @@ export const SectionHeader = React.memo(function SectionHeader({
     <>
       {collapsible ? (
         <Animated.View style={chevronStyle}>
-          <Ionicons name="chevron-forward" size={group ? 13 : 16} color={colors.textTertiary} />
+          <Ionicons name="chevron-forward" size={group ? 12 : 14} color={colors.textTertiary} />
         </Animated.View>
       ) : null}
       {leading ? (
@@ -187,7 +187,7 @@ export const SectionHeader = React.memo(function SectionHeader({
           <Text style={styles.actionLabel} numberOfLines={1} {...textScale.dense}>
             {action.label}
           </Text>
-          <Ionicons name="chevron-forward" size={15} color={colors.brandAccent} />
+          <Ionicons name="chevron-forward" size={13} color={colors.brandAccent} />
         </Touchable>
       ) : null}
     </View>
@@ -205,18 +205,18 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.m,
+    gap: space.sm,
     paddingHorizontal: layout.screenPadding,
   },
   headerSection: {
-    minHeight: 44,
+    minHeight: 34,
   },
   headerGroup: {
-    minHeight: 34,
+    minHeight: 28,
     gap: space.s,
   },
   headerWithLeading: {
-    minHeight: 48,
+    minHeight: 40,
   },
   sticky: {
     backgroundColor: colors.bg,
@@ -224,16 +224,16 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.separator,
   },
   leading: {
-    width: 24,
-    height: 24,
+    width: 20,
+    height: 20,
     alignItems: "center",
     justifyContent: "center",
   },
   /** Kale direği: mercan dikey işaret (imza öğesi). Başlıkla birlikte büyüdü. */
   mark: {
     width: 3,
-    height: 18,
-    borderRadius: 2,
+    height: 14,
+    borderRadius: 1.5,
     backgroundColor: colors.brand,
   },
   title: {
@@ -251,7 +251,7 @@ const styles = StyleSheet.create({
     marginLeft: "auto",
   },
   metaSection: {
-    ...type.bodySm,
+    ...type.caption,
     color: colors.textTertiary,
   },
   metaGroup: {
@@ -265,7 +265,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: layout.screenPadding,
   },
   actionLabel: {
-    ...type.label,
+    ...type.caption,
+    fontFamily: type.label.fontFamily,
     color: colors.brandAccent,
   },
 });

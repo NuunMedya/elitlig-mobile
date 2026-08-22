@@ -1,11 +1,16 @@
 /**
- * Tipografi ölçeği — okunur, hiyerarşik, premium.
+ * Tipografi ölçeği — KOMPAKT ama hiyerarşik.
  *
- * NEDEN DEĞİŞTİ (önceki sürümün hatası): eski ölçek "yoğunluk" adına 16px
- * tavan koyuyordu; arayüzün varsayılanı 12px, kart başlığı 14px, sayfa başlığı
- * 16px idi. Sonuç, telefonda gri bir metin duvarıydı: hiyerarşi yok, nefes yok,
- * hiçbir şey öne çıkmıyor. Bir skor uygulaması yoğun OLMALI ama yoğunluk küçük
- * puntoyla değil, DOĞRU RİTİMLE kurulur — büyük başlık, rahat gövde, sıkı meta.
+ * İKİ AŞIRI UÇ VE ARADAKİ DOĞRU YER:
+ *   · İlk sürüm 16px TAVAN koyuyordu (gövde 12, kart başlığı 14). Sonuç,
+ *     telefonda hiyerarşisiz gri bir metin duvarıydı.
+ *   · İkinci sürüm tavanı kaldırıp gövdeyi 15'e, sayfa başlığını 22'ye,
+ *     kimlik başlığını 28'e çıkardı. Okunurluk geldi ama ekrana giren içerik
+ *     belirgin biçimde azaldı; bir skor uygulaması için bu pahalı bir takas.
+ *   · Bu sürüm ortayı tutar: gövde 14, satır başlığı 15, kart başlığı 16,
+ *     sayfa başlığı 19, kimlik 22. Hiyerarşi korunur (her basamak arasında en
+ *     az 1px ve net bir ağırlık farkı vardır) ama ölçeğin tamamı bir tık
+ *     aşağı çekildiği için ekrana yaklaşık %15 daha fazla satır girer.
  *
  * KURALLAR (neden böyle):
  *  - İKİ AİLE, ÜÇ ROL: Archivo (skor/rakam), Inter (arayüz metni), Inter
@@ -13,18 +18,19 @@
  *  - `fontWeight` KULLANILMAZ. Özel fontlarda RN ağırlık uygulamaz; ağırlık
  *    ailenin adıyla seçilir (`fontFamily: fonts.semibold`). Bu dosyadaki her
  *    token doğru aileyi zaten taşır.
- *  - GÖVDE TABANI 15px, META TABANI 13px. 13px'in altına yalnız rozet ve
- *    yapısal etiket iner (11–12). 10px arayüzden tamamen kalktı — telefonda
- *    10px metin okunmaz, "kalabalık" hissi verir.
+ *  - GÖVDE TABANI 14px, META TABANI 12px. 12px'in altına yalnız rozet ve
+ *    yapısal büyük-harf etiket iner (10–11). 10px yalnız `micro`/`overline`
+ *    içindir ve o tokenlar DAİMA büyük harf + geniş harf aralığı taşır;
+ *    büyük harf, küçük puntoda okunurluğu ayakta tutar.
  *  - HİYERARŞİ HEM PUNTO HEM TRACKING İLE kurulur: başlıklar negatif
  *    (-0.6…-0.1), büyük harf etiketler pozitif (+0.4…+1.0) tracking alır.
  *  - TÜM rakamlar tabular (`fontVariant: ["tabular-nums"]`). Aksi hâlde canlı
  *    skor 1 → 10 olduğunda satır kayar.
  *  - Türkçe büyük harf dönüşümü daima toLocaleUpperCase("tr-TR") ile yapılır.
  *
- * ÖLÇEK: 11 · 12 · 13 · 15 · 16 · 18 · 22 · 28  (metin)
- *        18 · 24 · 34 · 46                      (skor)
- * Aradaki 14 ve 17 bilerek YOK: iki komşu basamak birbirinden ayırt
+ * ÖLÇEK: 10 · 11 · 12 · 13 · 14 · 15 · 16 · 19 · 22  (metin)
+ *        16 · 20 · 28 · 38                            (skor)
+ * 17, 18, 20 ve 21 bilerek YOK: iki komşu basamak birbirinden ayırt
  * edilemiyorsa hiyerarşi değil bulanıklık üretir.
  *
  * ESKİ ADLAR: `score/title/subtitle/body/small/caption` 58 dosyada kullanılıyor;
@@ -37,58 +43,58 @@ import { fonts } from "./fonts";
 /** Tabular rakam karışımı — skor/dakika/puan içeren her token bunu alır. */
 const numeric: Pick<TextStyle, "fontVariant"> = { fontVariant: ["tabular-nums"] };
 
-/** Ölçek — 11–28px metin, ayrı skor ölçeği (18–46), ayrı panel metriği. */
+/** Ölçek — 10–22px metin, ayrı skor ölçeği (16–38), ayrı panel metriği. */
 export const scale = {
   /* — Metin ölçeği — */
 
   /** Ekranın kimlik başlığı: takım adı, oyuncu adı, genişletilmiş sayfa başlığı. */
-  display: { fontSize: 28, lineHeight: 33, fontFamily: fonts.bold, letterSpacing: -0.6 },
+  display: { fontSize: 22, lineHeight: 27, fontFamily: fonts.bold, letterSpacing: -0.5 },
   /** Sayfa/ekran başlığı. */
-  h1:      { fontSize: 22, lineHeight: 27, fontFamily: fonts.semibold, letterSpacing: -0.4 },
+  h1:      { fontSize: 19, lineHeight: 24, fontFamily: fonts.semibold, letterSpacing: -0.35 },
   /** Kart ve bölüm başlığı. */
-  h2:      { fontSize: 18, lineHeight: 23, fontFamily: fonts.semibold, letterSpacing: -0.25 },
+  h2:      { fontSize: 16, lineHeight: 21, fontFamily: fonts.semibold, letterSpacing: -0.2 },
   /** Satır başlığı — liste satırındaki isim, en sık kullanılan başlık. */
-  h3:      { fontSize: 16, lineHeight: 21, fontFamily: fonts.semibold, letterSpacing: -0.15 },
+  h3:      { fontSize: 15, lineHeight: 19, fontFamily: fonts.semibold, letterSpacing: -0.12 },
   /** Alt başlık / güçlü satır metni. */
-  h4:      { fontSize: 15, lineHeight: 20, fontFamily: fonts.semibold, letterSpacing: -0.1 },
+  h4:      { fontSize: 14, lineHeight: 18, fontFamily: fonts.semibold, letterSpacing: -0.08 },
   /** Uzun metin (haber gövdesi, kurallar, mesaj). */
-  bodyLg:  { fontSize: 16, lineHeight: 24, fontFamily: fonts.regular,  letterSpacing: 0 },
+  bodyLg:  { fontSize: 15, lineHeight: 22, fontFamily: fonts.regular,  letterSpacing: 0 },
   /** ARAYÜZÜN VARSAYILANI. */
-  body:    { fontSize: 15, lineHeight: 21, fontFamily: fonts.regular,  letterSpacing: 0 },
+  body:    { fontSize: 14, lineHeight: 19, fontFamily: fonts.regular,  letterSpacing: 0 },
   /** İkincil satır, meta metni. */
-  bodySm:  { fontSize: 13, lineHeight: 18, fontFamily: fonts.regular,  letterSpacing: 0 },
+  bodySm:  { fontSize: 12, lineHeight: 16, fontFamily: fonts.regular,  letterSpacing: 0 },
   /** Buton, sekme, form etiketi. */
-  label:   { fontSize: 14, lineHeight: 18, fontFamily: fonts.semibold, letterSpacing: -0.05 },
+  label:   { fontSize: 13, lineHeight: 17, fontFamily: fonts.semibold, letterSpacing: -0.05 },
   /** Küçük meta — tarih, saha adı, satır altı açıklama. */
-  caption: { fontSize: 12, lineHeight: 16, fontFamily: fonts.medium,   letterSpacing: 0.05 },
-  /** Rozet içi metin. */
-  micro:   { fontSize: 11, lineHeight: 14, fontFamily: fonts.semibold, letterSpacing: 0.4 },
+  caption: { fontSize: 11, lineHeight: 15, fontFamily: fonts.medium,   letterSpacing: 0.05 },
+  /** Rozet içi metin — daima büyük harf. */
+  micro:   { fontSize: 10, lineHeight: 13, fontFamily: fonts.semibold, letterSpacing: 0.4 },
   /** Yapısal işaretçi — bölüm ve kart başlıklarının üstündeki büyük-harf satır. */
-  overline:{ fontSize: 11, lineHeight: 14, fontFamily: fonts.semibold, letterSpacing: 1.0 },
+  overline:{ fontSize: 10, lineHeight: 13, fontFamily: fonts.semibold, letterSpacing: 0.9 },
 
   /* — Skor ölçeği: tamamı Archivo + tabular — */
-  scoreHero: { fontSize: 46, lineHeight: 50, fontFamily: fonts.bold, letterSpacing: -1.6, ...numeric },
-  scoreLg:   { fontSize: 34, lineHeight: 38, fontFamily: fonts.bold, letterSpacing: -1.0, ...numeric },
-  scoreMd:   { fontSize: 24, lineHeight: 28, fontFamily: fonts.bold, letterSpacing: -0.6, ...numeric },
-  scoreSm:   { fontSize: 18, lineHeight: 22, fontFamily: fonts.bold, letterSpacing: -0.3, ...numeric },
+  scoreHero: { fontSize: 38, lineHeight: 42, fontFamily: fonts.bold, letterSpacing: -1.3, ...numeric },
+  scoreLg:   { fontSize: 28, lineHeight: 31, fontFamily: fonts.bold, letterSpacing: -0.8, ...numeric },
+  scoreMd:   { fontSize: 20, lineHeight: 24, fontFamily: fonts.bold, letterSpacing: -0.5, ...numeric },
+  scoreSm:   { fontSize: 16, lineHeight: 20, fontFamily: fonts.bold, letterSpacing: -0.25, ...numeric },
 
   /* — Sayısal yardımcılar — */
-  clock:          { fontSize: 12, lineHeight: 15, fontFamily: fonts.display, letterSpacing: 0, ...numeric },
-  tableNum:       { fontSize: 14, lineHeight: 18, fontFamily: fonts.display, letterSpacing: 0, ...numeric },
-  tableNumStrong: { fontSize: 14, lineHeight: 18, fontFamily: fonts.bold,    letterSpacing: 0, ...numeric },
+  clock:          { fontSize: 11, lineHeight: 14, fontFamily: fonts.display, letterSpacing: 0, ...numeric },
+  tableNum:       { fontSize: 12, lineHeight: 16, fontFamily: fonts.display, letterSpacing: 0, ...numeric },
+  tableNumStrong: { fontSize: 12, lineHeight: 16, fontFamily: fonts.bold,    letterSpacing: 0, ...numeric },
   /** Panel kartlarındaki tek rakam (kadro sayısı, kasa, puan). */
-  metric:         { fontSize: 26, lineHeight: 30, fontFamily: fonts.bold, letterSpacing: -0.7, ...numeric },
-  metricSm:       { fontSize: 18, lineHeight: 22, fontFamily: fonts.bold, letterSpacing: -0.3, ...numeric },
+  metric:         { fontSize: 22, lineHeight: 26, fontFamily: fonts.bold, letterSpacing: -0.6, ...numeric },
+  metricSm:       { fontSize: 16, lineHeight: 20, fontFamily: fonts.bold, letterSpacing: -0.25, ...numeric },
 } as const satisfies Record<string, TextStyle>;
 
 /**
  * Uygulamanın kullandığı sözlük: yeni ölçek + eski adlar.
  *
  * TAKMA AD EŞLEMESİ (eski kod kırılmasın ama görünürlük kazansın):
- *   title    → h2 (18)  · kart/satır başlığı; eskiden 16 idi
- *   subtitle → h4 (15)  · alt başlık; eskiden 14 idi
- *   small    → bodySm (13) · eskiden 12 idi
- *   score    → scoreLg (34) · eskiden 28 idi
+ *   title    → h2 (16)  · kart/satır başlığı
+ *   subtitle → h4 (14)  · alt başlık
+ *   small    → bodySm (12) · ikincil metin
+ *   score    → scoreLg (28) · büyük skor
  */
 export const type = {
   ...scale,

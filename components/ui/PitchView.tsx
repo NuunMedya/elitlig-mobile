@@ -24,7 +24,7 @@
  * FORMATIONS). 11 kişilik varsayımıyla yazılmış hiçbir yerleşim burada
  * çalışmaz; hatlar oyuncu sayısına göre kendiliğinden dağılır.
  *
- * DİKEY SAHA, TEK TAKIM: mobilde iki takımı aynı sahaya koymak 42px avatarları
+ * DİKEY SAHA, TEK TAKIM: mobilde iki takımı aynı sahaya koymak 36px avatarları
  * 22px'e indirmeyi gerektiriyordu ve isimler okunmaz oluyordu. Bunun yerine
  * takım başına bir segment kullanılır — okunurluk kazanır, bilgi kaybolmaz.
  */
@@ -47,7 +47,7 @@ const LINE_ORDER = ["GK", "DEF", "MID", "FWD"] as const;
  *  yapıştırıyor; 3:4 hem "saha" okunuyor hem sekiz oyuncuyu rahat taşıyor. */
 const ASPECT = 4 / 3;
 
-const AVATAR = 42;
+const AVATAR = 36;
 
 /** Saha gradyanının yönü: üstten alta, kalenin derinliğini ima eder. */
 const GRADIENT_START = { x: 0.5, y: 0 } as const;
@@ -284,7 +284,7 @@ const PitchSlot = memo(function PitchSlot({
       style={[styles.slot, { left: `${x}%`, top: `${y}%` }]}
     >
       <View>
-        <Avatar name={player.name} image={player.photo} size={AVATAR} />
+        <Avatar name={player.name} image={player.photo} size={AVATAR} onPitch />
 
         {player.number != null && player.number !== "" ? (
           <View style={styles.numberBadge}>
@@ -299,7 +299,7 @@ const PitchSlot = memo(function PitchSlot({
             {/* Koyu pul: beyaz olay ikonu beyaz avatarın kenarında kayboluyordu. */}
             <View style={styles.eventsBacking} pointerEvents="none" />
             {player.events.slice(0, 3).map((kind, i) => (
-              <EventIcon key={`${kind}-${i}`} kind={kind} size={13} onDark />
+              <EventIcon key={`${kind}-${i}`} kind={kind} size={11} onDark />
             ))}
           </View>
         ) : null}
@@ -312,7 +312,7 @@ const PitchSlot = memo(function PitchSlot({
   );
 });
 
-const SLOT_W = 72;
+const SLOT_W = 62;
 
 const styles = StyleSheet.create({
   formationRow: {
@@ -349,18 +349,18 @@ const styles = StyleSheet.create({
     position: "absolute",
     width: SLOT_W,
     marginLeft: -SLOT_W / 2,
-    marginTop: -(AVATAR + 18) / 2,
+    marginTop: -(AVATAR + 16) / 2,
     alignItems: "center",
-    gap: 4,
+    gap: 3,
   },
   numberBadge: {
     position: "absolute",
-    right: -4,
-    bottom: -4,
-    minWidth: 20,
-    height: 20,
-    paddingHorizontal: 4,
-    borderRadius: 10,
+    right: -3,
+    bottom: -3,
+    minWidth: 17,
+    height: 17,
+    paddingHorizontal: 3,
+    borderRadius: 8.5,
     backgroundColor: colors.surface1,
     borderWidth: 1.5,
     borderColor: colors.surface1,
@@ -368,8 +368,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   number: {
-    fontSize: 11,
-    lineHeight: 14,
+    fontSize: 10,
+    lineHeight: 13,
     fontFamily: type.tableNumStrong.fontFamily,
     fontVariant: ["tabular-nums"],
     color: colors.textPrimary,

@@ -46,59 +46,64 @@ export const spacing = {
 /**
  * Yerleşim sabitleri — ekran ve satır ölçüleri tek yerde toplanır.
  *
- * ÖLÇÜLER TİPOGRAFİYLE BİRLİKTE BÜYÜDÜ. Önceki sürüm satırları 44–48px'e
- * sıkıştırıp gövde metnini 12px'e indirmişti; ekrana iki satır daha giriyordu
- * ama ürün "sıkışık ve ucuz" görünüyordu. Yeni ölçüler 15px gövdeyle nefes
- * alan bir ritim kurar: tek satır 56, iki satır 68, maç satırı 66.
+ * KOMPAKT RİTİM. Ölçüler tipografiyle birlikte bir tık aşağı çekildi: 14px
+ * gövdeyle tek satır 46, iki satır 58, maç satırı 56 piksele oturur. Önceki
+ * sürümdeki 56/68/66 üçlüsü rahat okunuyordu ama 844px'lik bir ekrana iki
+ * satır daha az sığdırıyordu; bir skor uygulamasında listenin uzunluğu
+ * okunurluk kadar önemlidir.
+ *
+ * ALT SINIR 44px DOKUNMA HEDEFİDİR ve altına inilmez; 46px'lik satır bu
+ * sınırın hemen üstünde durur.
  */
 export const layout = {
-  /* YATAY KENAR 20px. Kenar boşluğu ürünün "nefes"idir.
-     İSTİSNA: 8 sütunlu puan tablosu 360px'lik ekrana 20px kenarla sığmıyor —
-     o düzenler `screenPaddingDense` kullanır. */
-  screenPadding: 20,
+  /* YATAY KENAR 16px. Kenar boşluğu ürünün "nefes"idir ama 20px, dar
+     ekranlarda içerik genişliğinden çalıyordu.
+     İSTİSNA: 8 sütunlu puan tablosu daha da dar bir kenar ister — o düzenler
+     `screenPaddingDense` kullanır. */
+  screenPadding: 16,
   /** Yoğun tablo düzenleri (puan durumu, istatistik ızgarası) için dar kenar. */
-  screenPaddingDense: 14,
-  rowPaddingH: 14,
-  rowGap: 8,
-  sectionGap: 20,
-  listRowHeight: 56,        // tek satırlı ListRow
-  listRowHeightTwoLine: 68, // iki satırlı ListRow
-  matchRowHeight: 66,       // iki takım satırı + padding
-  matchRowHeightCompact: 52,
-  headerHeightExpanded: 104,
-  headerHeightCollapsed: 50,
-  tabBarHeight: 64,        // + insets.bottom — 23px ikon + 11px etiket + iç boşluk
-  tabStripHeight: 44,
-  dateStripHeight: 60,
+  screenPaddingDense: 12,
+  rowPaddingH: 12,
+  rowGap: 6,
+  sectionGap: 14,
+  listRowHeight: 46,        // tek satırlı ListRow
+  listRowHeightTwoLine: 58, // iki satırlı ListRow
+  matchRowHeight: 56,       // iki takım satırı + padding
+  matchRowHeightCompact: 44,
+  headerHeightExpanded: 88,
+  headerHeightCollapsed: 46,
+  tabBarHeight: 60,        // + insets.bottom — 21px ikon + 13px etiket + iç boşluk
+  tabStripHeight: 38,
+  dateStripHeight: 52,
   minTouch: 44,            // erişilebilirlik alt sınırı (hitSlop ile tamamlanır)
-  crestSm: 22,
-  crestMd: 28,
-  crestLg: 36,
-  crestXl: 64,
-  starColumnWidth: 32,
-  timeColumnWidth: 46,
-  scoreColumnWidth: 34,
+  crestSm: 20,
+  crestMd: 24,
+  crestLg: 30,
+  crestXl: 52,
+  starColumnWidth: 28,
+  timeColumnWidth: 42,
+  scoreColumnWidth: 30,
 } as const;
 
 /**
  * Köşe yarıçapları.
  *
  * KURAL: iç eleman DAİMA dış elemandan küçük yarıçaplıdır. Karışık yarıçap
- * (18px kartın içinde 18px kutu) kenarları paralel göstermez ve amatör durur.
- * Kart 18, kart içindeki her şey 12, chip/rozet pill, avatar dairesel.
+ * (14px kartın içinde 14px kutu) kenarları paralel göstermez ve amatör durur.
+ * Kart 14, kart içindeki her şey 10, chip/rozet pill, avatar dairesel.
  *
- * Yarıçaplar tipografiyle birlikte büyüdü: 18px'lik bir kart 10px'lik köşeyle
- * "keskin ve ucuz", 24px'lik köşeyle "oyuncak" görünür; 18/12 ikilisi yüzeyi
- * yumuşatırken editoryal kalır.
+ * Yarıçaplar kart ölçüleriyle birlikte küçüldü: 46px'lik bir satırın üstünde
+ * 18px köşe "şişkin" duruyordu. 14/10 ikilisi yüzeyi yumuşatırken kompakt
+ * düzende de dik durur.
  */
 export const radius = {
   none: 0,
-  xs:   6,   // form çipi, mikro rozet
-  sm:   8,   // amblem kutusu
-  md:  12,   // KART İÇİ ELEMAN: input, chip zemini, satır grubu, bar
-  lg:  18,   // KART
-  xl:  22,   // bottom sheet, hero kartı
-  xxl: 28,   // tam genişlik vitrin kartı
+  xs:   4,   // form çipi, mikro rozet
+  sm:   6,   // amblem kutusu
+  md:  10,   // KART İÇİ ELEMAN: input, chip zemini, satır grubu, bar
+  lg:  14,   // KART
+  xl:  18,   // bottom sheet, hero kartı
+  xxl: 22,   // tam genişlik vitrin kartı
   pill: 999,
 } as const;
 

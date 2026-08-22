@@ -59,7 +59,7 @@ export const Chip = React.memo(function Chip({
   style,
   testID,
 }: ChipProps) {
-  const height = size === "sm" ? 32 : 38;
+  const height = size === "sm" ? 26 : 32;
 
   const { boxStyle, fg } = useMemo(() => {
     if (disabled) {
@@ -109,7 +109,7 @@ export const Chip = React.memo(function Chip({
       testID={testID}
       style={[
         styles.chip,
-        { height, paddingHorizontal: size === "sm" ? space.md : space.lg },
+        { height, paddingHorizontal: size === "sm" ? space.m : space.md },
         boxStyle,
         style,
       ]}
@@ -206,7 +206,7 @@ const styles = StyleSheet.create({
     ...type.label,
   },
   labelSm: {
-    ...type.bodySm,
+    ...type.caption,
   },
   count: {
     ...type.micro,

@@ -52,7 +52,7 @@ function tabIcon(name: React.ComponentProps<typeof TabBarIcon>["name"], badge?: 
       name={name}
       color={color}
       focused={focused}
-      size={23}
+      size={21}
       indicator
       badge={badge && badge > 0 ? badge : undefined}
     />
@@ -85,7 +85,7 @@ export default function TabsLayout() {
         tabBarInactiveTintColor: colors.textTertiary,
         tabBarActiveBackgroundColor: colors.tabBar,
         /* Altı yuvada bir sekmeye ~65px düşüyor. En uzun etiket "Oyuncular";
-           11px punto + NEGATİF harf aralığı + sıfır yatay dolgu ile tek satıra
+           10px punto + NEGATİF harf aralığı + sıfır yatay dolgu ile tek satıra
            sığar. Varsayılan `micro` aralığı (+0.4) ile son harf kırpılıyordu. */
         tabBarLabelStyle: {
           ...type.micro,
@@ -99,13 +99,14 @@ export default function TabsLayout() {
           backgroundColor: colors.tabBar,
           borderTopWidth: 1,
           borderTopColor: colors.tabBarBorder,
-          /* ÖLÇÜ: ikon kutusu 23px glif, etiket 14px satır yüksekliği,
-             aralarında 2px = 39px içerik. Çubuk 64px ve dikey iç boşluk
-             6+6 → 52px kullanılabilir alan. Öğe başına gelen 5px varsayılan
+          /* ÖLÇÜ: ikon kutusu 21px glif, etiket 13px satır yüksekliği,
+             aralarında 2px = 43px içerik (ikon kutusu glifin kendisinden
+             büyüktür: yazı tipi satır kutusu ~28px). Çubuk 60px ve dikey iç
+             boşluk 4+4 → 52px kullanılabilir alan. Öğe başına gelen 5px varsayılan
              dolgu etiketin alt kesimini kırptığı için sıfırlanır. */
           height: layout.tabBarHeight + insets.bottom,
-          paddingTop: 6,
-          paddingBottom: insets.bottom > 0 ? insets.bottom : 6,
+          paddingTop: 4,
+          paddingBottom: insets.bottom > 0 ? insets.bottom : 4,
         },
         tabBarItemStyle: { paddingTop: 0, paddingBottom: 0, paddingHorizontal: 0 },
       }}

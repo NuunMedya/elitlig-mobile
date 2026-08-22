@@ -108,8 +108,10 @@ const PAIRS = (p) => [
  * Eski kural "hiçbir token 16px'i geçmesin" idi ve ürünü hiyerarşisiz bir gri
  * duvara çevirdi (bkz. theme/typography.ts başlığı). Yerine ölçülebilir üç
  * gerçek kural konur:
- *   1. OKUNABİLİRLİK TABANI — hiçbir token 11px'in altına inmez; gövde ve
- *      ikincil metin sırasıyla 15 ve 13'ün altına inmez.
+ *   1. OKUNABİLİRLİK TABANI — hiçbir token 10px'in altına inmez; gövde ve
+ *      ikincil metin sırasıyla 14 ve 12'nin altına inmez. 10px'e YALNIZ
+ *      büyük-harf rozet/etiket tokenları (`micro`, `overline`) inebilir:
+ *      büyük harf, o puntoda okunurluğu ayakta tutan şeydir.
  *   2. TAVAN — metin 28px'i, skor 48px'i geçmez (telefonda taşar).
  *   3. HİYERARŞİ MONOTON — h1 > h2 > h3 > body olmalı; iki komşu basamak
  *      eşitse hiyerarşi değil bulanıklık üretilmiş demektir.
@@ -119,6 +121,9 @@ const PAIRS = (p) => [
 const TEXT_MAX = 28;
 const SCORE_MAX = 48;
 const ABSOLUTE_MIN = 11;
+/** 10px'e inmesine izin verilen tokenlar — daima büyük harf kullanılırlar. */
+const UPPERCASE_TOKENS = new Set(["micro", "overline"]);
+const UPPERCASE_MIN = 10;
 /** Skor/metrik ailesi: metin tavanı bunlara uygulanmaz. */
 const NUMERIC_TOKENS = new Set([
   "scoreHero", "scoreLg", "scoreMd", "scoreSm", "metric", "metricSm",
@@ -129,7 +134,7 @@ const NUMERIC_TOKENS = new Set([
  */
 const HIERARCHY = ["display", "h1", "h2", "h3", "body", "bodySm", "caption", "micro"];
 /** Belirli tokenların taban değerleri — arayüzün okunurluğu bunlara bağlı. */
-const MIN_SIZE = { body: 15, bodySm: 13, bodyLg: 15, label: 13, caption: 12 };
+const MIN_SIZE = { body: 14, bodySm: 12, bodyLg: 14, label: 12, caption: 11 };
 
 /** Çıplak hex'e izin verilen dosyalar ve gerekçeleri. */
 const HEX_ALLOWED = {
@@ -157,8 +162,9 @@ for (const [token, style] of Object.entries(scale)) {
   if (style.fontSize > max) {
     note(`tipografi · ${token} = ${style.fontSize}px > ${max}px tavanı`);
   }
-  if (style.fontSize < ABSOLUTE_MIN) {
-    note(`tipografi · ${token} = ${style.fontSize}px < ${ABSOLUTE_MIN}px okunabilirlik tabanı`);
+  const min = UPPERCASE_TOKENS.has(token) ? UPPERCASE_MIN : ABSOLUTE_MIN;
+  if (style.fontSize < min) {
+    note(`tipografi · ${token} = ${style.fontSize}px < ${min}px okunabilirlik tabanı`);
   }
   if (token in MIN_SIZE && style.fontSize < MIN_SIZE[token]) {
     note(`tipografi · ${token} = ${style.fontSize}px < ${MIN_SIZE[token]}px (bu tokenın tabanı)`);
@@ -171,7 +177,7 @@ for (const [token, style] of Object.entries(scale)) {
   }
   if (!style.lineHeight) {
     note(`tipografi · ${token} lineHeight taşımıyor`);
-  } else if (style.lineHeight < style.fontSize * 1.08) {
+  } else if (style.lineHeight < Math.ceil(style.fontSize * 1.08)) {
     note(
       `tipografi · ${token} lineHeight ${style.lineHeight} < punto × 1.08 (${(style.fontSize * 1.08).toFixed(1)})`,
     );
