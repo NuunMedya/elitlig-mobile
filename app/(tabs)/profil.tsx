@@ -260,7 +260,7 @@ export default function ProfileTabScreen() {
     (item: MenuItem) => {
       switch (item.action.kind) {
         case "route":
-          router.push(item.action.route);
+          router.push(item.action.route as never);
           return;
         case "link":
           void openLink(item.action.url);
