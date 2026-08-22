@@ -192,9 +192,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: space.s,
   },
+  /* Mürekkep blok üstünde `brand` mor üstüne mor olurdu (~1,8:1). */
   eyebrow: {
     ...type.overline,
-    color: colors.brand,
+    color: colors.brandOnDark,
   },
   context: {
     ...type.caption,

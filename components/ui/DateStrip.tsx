@@ -22,6 +22,7 @@ import { FlatList, Platform, Pressable, StyleSheet, Text, View } from "react-nat
 import type { LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { colors, layout, radius, space, textScale, touchSlop, type } from "@/theme";
+import { GradientFill } from "./GradientFill";
 import { haptics } from "@/lib/haptics";
 
 export interface DateStripProps {
@@ -270,6 +271,9 @@ const DayCell = memo(function DayCell({
       accessibilityState={{ selected }}
       accessibilityLabel={item.isToday ? `Bugün, ${item.speech}` : item.speech}
     >
+      {/* Seçili gün MARKA GRADYANIDIR: düz mor blok, ışıklı sistemde tek başına
+          yassı duruyordu. */}
+      {selected ? <GradientFill tone="brand" radius="md" /> : null}
       <Text
         style={[styles.weekday, item.isToday && styles.weekdayToday, selected && styles.onBrand]}
         numberOfLines={1}

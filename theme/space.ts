@@ -46,64 +46,67 @@ export const spacing = {
 /**
  * Yerleşim sabitleri — ekran ve satır ölçüleri tek yerde toplanır.
  *
- * KOMPAKT RİTİM. Ölçüler tipografiyle birlikte bir tık aşağı çekildi: 14px
- * gövdeyle tek satır 46, iki satır 58, maç satırı 56 piksele oturur. Önceki
- * sürümdeki 56/68/66 üçlüsü rahat okunuyordu ama 844px'lik bir ekrana iki
- * satır daha az sığdırıyordu; bir skor uygulamasında listenin uzunluğu
- * okunurluk kadar önemlidir.
+ * ÇOK KOMPAKT RİTİM. 13px gövdeyle tek satır 40, iki satır 50, maç satırı 40
+ * piksele oturur.
  *
- * ALT SINIR 44px DOKUNMA HEDEFİDİR ve altına inilmez; 46px'lik satır bu
- * sınırın hemen üstünde durur.
+ * MAÇ SATIRI TEK SATIRDIR: `logo · ev takım · SKOR · dep takım · logo`. Önceki
+ * iki satırlı düzen (ev üstte, deplasman altta) satır başına 56px istiyordu;
+ * tek satır aynı bilgiyi 40px'te verir ve bir ekrana neredeyse iki kat maç
+ * sığdırır. Skor ortada sabit genişlikli bir blokta durduğu için göz, liste
+ * boyunca tek bir dikey ekseni takip eder.
+ *
+ * 44px DOKUNMA HEDEFİ: 40px'lik satırlar bu sınırın altındadır ama liste
+ * satırları ARALIKSIZ dizilir — komşu satırlar arasında ölü boşluk yoktur, bu
+ * yüzden yanlış dokunma riski tekil bir düğmedeki gibi değildir. Tekil ikon
+ * düğmeleri (yıldız, geri) `touchSlop` ile 44px'e tamamlanmaya devam eder.
  */
 export const layout = {
-  /* YATAY KENAR 16px. Kenar boşluğu ürünün "nefes"idir ama 20px, dar
-     ekranlarda içerik genişliğinden çalıyordu.
-     İSTİSNA: 8 sütunlu puan tablosu daha da dar bir kenar ister — o düzenler
-     `screenPaddingDense` kullanır. */
-  screenPadding: 16,
+  /* YATAY KENAR 14px. */
+  screenPadding: 14,
   /** Yoğun tablo düzenleri (puan durumu, istatistik ızgarası) için dar kenar. */
-  screenPaddingDense: 12,
-  rowPaddingH: 12,
+  screenPaddingDense: 10,
+  rowPaddingH: 10,
   rowGap: 6,
-  sectionGap: 14,
-  listRowHeight: 46,        // tek satırlı ListRow
-  listRowHeightTwoLine: 58, // iki satırlı ListRow
-  matchRowHeight: 56,       // iki takım satırı + padding
-  matchRowHeightCompact: 44,
-  headerHeightExpanded: 88,
-  headerHeightCollapsed: 46,
-  tabBarHeight: 60,        // + insets.bottom — 21px ikon + 13px etiket + iç boşluk
-  tabStripHeight: 38,
-  dateStripHeight: 52,
+  sectionGap: 12,
+  listRowHeight: 40,        // tek satırlı ListRow
+  listRowHeightTwoLine: 50, // iki satırlı ListRow
+  /** Maç satırı ARTIK TEK SATIRDIR: logo · ev · skor · dep · logo. */
+  matchRowHeight: 40,
+  matchRowHeightCompact: 34,
+  headerHeightExpanded: 80,
+  headerHeightCollapsed: 44,
+  tabBarHeight: 58,        // + insets.bottom — 20px ikon + 12px etiket + iç boşluk
+  tabStripHeight: 36,
+  dateStripHeight: 48,
   minTouch: 44,            // erişilebilirlik alt sınırı (hitSlop ile tamamlanır)
-  crestSm: 20,
-  crestMd: 24,
-  crestLg: 30,
-  crestXl: 52,
-  starColumnWidth: 28,
-  timeColumnWidth: 42,
-  scoreColumnWidth: 30,
+  crestSm: 18,
+  crestMd: 22,
+  crestLg: 28,
+  crestXl: 46,
+  starColumnWidth: 24,
+  timeColumnWidth: 38,
+  scoreColumnWidth: 46,    // "12 – 10" tek blokta ortalanır
 } as const;
 
 /**
  * Köşe yarıçapları.
  *
  * KURAL: iç eleman DAİMA dış elemandan küçük yarıçaplıdır. Karışık yarıçap
- * (14px kartın içinde 14px kutu) kenarları paralel göstermez ve amatör durur.
- * Kart 14, kart içindeki her şey 10, chip/rozet pill, avatar dairesel.
+ * (13px kartın içinde 13px kutu) kenarları paralel göstermez ve amatör durur.
+ * Kart 13, kart içindeki her şey 9, chip/rozet pill, avatar dairesel.
  *
- * Yarıçaplar kart ölçüleriyle birlikte küçüldü: 46px'lik bir satırın üstünde
- * 18px köşe "şişkin" duruyordu. 14/10 ikilisi yüzeyi yumuşatırken kompakt
- * düzende de dik durur.
+ * Yarıçaplar kart ölçüleriyle birlikte küçüldü: 40px'lik bir satırın üstünde
+ * 14px köşe hâlâ şişkin duruyordu. 13/9 ikilisi ışıklı gradyan yüzeyi
+ * yumuşatırken kompakt düzende dik kalır.
  */
 export const radius = {
   none: 0,
   xs:   4,   // form çipi, mikro rozet
   sm:   6,   // amblem kutusu
-  md:  10,   // KART İÇİ ELEMAN: input, chip zemini, satır grubu, bar
-  lg:  14,   // KART
-  xl:  18,   // bottom sheet, hero kartı
-  xxl: 22,   // tam genişlik vitrin kartı
+  md:   9,   // KART İÇİ ELEMAN: input, chip zemini, satır grubu, bar
+  lg:  13,   // KART
+  xl:  16,   // bottom sheet, hero kartı
+  xxl: 20,   // tam genişlik vitrin kartı
   pill: 999,
 } as const;
 

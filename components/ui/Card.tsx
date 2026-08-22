@@ -1,5 +1,9 @@
 /**
- * Card — başlıklı içerik bloğu (§4.2).
+ * Card — başlıklı içerik bloğu.
+ *
+ * YÜZEY IŞIKLIDIR: kart düz dolgu değil `gradientCard` geçişidir (bkz.
+ * `GradientFill`) + 1px kenarlık + mor tonlu gölge. Gradyan katmanı mutlak
+ * konumludur, kartın yüksekliğini değiştirmez.
  *
  * KURAL: LİSTE ASLA KART İÇİNE SARILMAZ. Kart, "Genel Bakış", "Kasa özeti"
  * gibi tek parça bir bloğu çerçevelemek içindir; liste ise `ListRow` grubudur.
@@ -15,6 +19,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import React from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { colors, elevate, hairline, radius as radiusScale, space, textScale, type } from "@/theme";
+import { GradientFill } from "./GradientFill";
 import { Touchable } from "./Pressable";
 import { Surface, type SurfaceProps } from "./Surface";
 
@@ -51,6 +56,8 @@ export const Card = React.memo(function Card({
 
   const inner = (
     <>
+      {/* Işıklı yüzey: üstte açık, altta lavanta. Yerleşimi etkilemez. */}
+      <GradientFill radius={radius} />
       {title || action ? (
         <View style={[styles.header, { paddingHorizontal: pad, paddingTop: pad }]}>
           <View style={styles.headerTexts}>

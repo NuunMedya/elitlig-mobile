@@ -162,7 +162,7 @@ const Slot = React.memo(function Slot({
           <Ionicons
             name="add"
             size={17}
-            color={active ? colors.brand : colors.onPitch}
+            color={active ? colors.brandOnDark : colors.onPitch}
           />
           <Text
             style={[styles.slotName, active ? styles.slotNameActive : styles.slotNameEmpty]}
@@ -363,7 +363,7 @@ const styles = StyleSheet.create({
     color: colors.onDarkMuted,
   },
   slotNameActive: {
-    color: colors.brand,
+    color: colors.brandOnDark,
   },
 });
 

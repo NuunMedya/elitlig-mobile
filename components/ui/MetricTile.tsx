@@ -24,6 +24,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import React from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { colors, elevate, radius, space, textScale, type, upperTR } from "@/theme";
+import { GradientFill } from "./GradientFill";
 import { Touchable } from "./Pressable";
 
 /** Sayının rengi. Zemin hiçbir tonda değişmez (bkz. dosya başlığı). */
@@ -70,6 +71,7 @@ export const MetricTile = React.memo(function MetricTile({
 }: MetricTileProps) {
   const body = (
     <>
+      <GradientFill radius="lg" />
       <View style={styles.labelRow}>
         {icon ? <Ionicons name={icon} size={12} color={colors.textTertiary} /> : null}
         <Text style={styles.label} numberOfLines={1} {...textScale.badge}>

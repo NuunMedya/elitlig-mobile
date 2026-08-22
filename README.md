@@ -181,55 +181,51 @@ görünür.
 
 Renk, tipografi ve uzay `theme/` altındadır ve dört kural taşır:
 
-- **Mercan `brand` yalnız AKSİYON ve SEÇİLİ DURUM**, **mavi `accent` yalnız
-  VERİ** içindir. Bir ekranda mercan alanı o ekranın %5'ini geçmemelidir.
-- **Çizgi ve yumuşak gölge birlikte.** Kart = `surface1` + 1px `border` + çok
-  geniş/çok sönük bir gölge (opaklık 0,045). Gölge görünmez ama hissedilir;
-  gölgesiz beyaz kart, beyaza yakın kâğıdın üstünde hiç yüzmüyordu.
-- **Gradyan serbest değil, TOKENDIR.** Paletteki altı gradyanın her birinin bir
-  işi vardır: `gradientInk` (kimlik bloğu), `gradientBrand` (birincil aksiyon),
-  `gradientAccent` (veri), `gradientLive`, `gradientPitch` (saha),
-  `gradientSurface`. Elle yazılmış iki renk = denetim hatası.
+- **MOR MARKANIN KENDİSİDİR.** Kimlik, açık mor ile koyu mor arasındaki
+  geçiştir: kâğıt hafif lavanta (`bg` #F5F3FB), kartlar beyazdan lavantaya
+  ışıyan bir geçiş (`gradientCard`), kimlik blokları derin mor gradyan
+  (`gradientInk`). Mürekkep de nötr siyah değil MOR mürekkeptir (#1A1033).
+- **İKİ VURGU, İKİ İŞ.** Mor `brand` yalnız AKSİYON ve SEÇİLİ DURUM, mavi
+  `accent` yalnız VERİ içindir. Koyu mor blokların üstünde mor bir vurgu
+  okunmaz (mor üstüne mor ≈ 1,8:1); oradaki marka rengi ayrı bir tokendır:
+  `brandOnDark` (açık lavanta).
+- **KARTLAR IŞIKLIDIR.** Varsayılan kart üç katmandır: `gradientCard` geçişi
+  (bkz. `components/ui/GradientFill.tsx`) + 1px kenarlık + MOR tonlu yumuşak
+  gölge. Gölge rengi siyah değil `shadowColor` (#3B1E6E): siyah gölge lavanta
+  kâğıdın üstünde grileşip kirli görünür.
+- **GRADYAN SAYILIDIR VE TOKENDIR.** Yedi gradyanın her birinin bir işi vardır
+  (`gradientCard` · `gradientInk` · `gradientBrand` · `gradientAccent` ·
+  `gradientLive` · `gradientPitch` · `gradientSurface`). Elle yazılmış iki
+  renk = denetim hatası.
 - **`fontWeight` KULLANILMAZ** — özel fontlarda RN ağırlık uygulamaz, ağırlık
   ailenin adıyla seçilir (`fontFamily: fonts.semibold`).
 
 ### Tipografi ölçeği
 
-Metin 10–22, skor 16–38. Arayüzün varsayılanı **14px** (`body`), ikincil metin
-12 (`bodySm`), satır başlığı 15 (`h3`), kart/bölüm başlığı 16 (`h2`), sayfa
-başlığı 19 (`h1`), kimlik başlığı 22 (`display`). Satır ölçüleri: tek satır 46,
-iki satır 58, maç satırı 56.
+Metin 9–19, skor 14–30. Arayüzün varsayılanı **13px** (`body`), ikincil metin
+11 (`bodySm`), satır başlığı 14 (`h3`), kart başlığı 15 (`h2`), sayfa başlığı
+17 (`h1`), kimlik başlığı 19 (`display`). Satır ölçüleri: tek satır 40, iki
+satır 50, maç satırı 40.
 
-> Ölçek iki uç arasında dengelendi. İlk sürüm 16px'lik bir TAVAN koyuyordu
-> (gövde 12, kart başlığı 14) ve ürün hiyerarşisiz gri bir metin duvarıydı.
-> İkincisi tavanı kaldırıp gövdeyi 15'e, kimliği 28'e çıkardı; okunurluk geldi
-> ama ekrana giren içerik belirgin biçimde azaldı. Bu sürüm hiyerarşiyi korur
-> (her basamak arasında net bir punto ve ağırlık farkı vardır) ama ölçeğin
-> tamamını bir tık aşağı çeker — ekrana yaklaşık %15 daha fazla satır girer.
+9px'e yalnız `micro` ve `overline` iner; ikisi de DAİMA büyük harf + geniş harf
+aralığı taşır — büyük harf, o puntoda okunurluğu ayakta tutan şeydir.
 
-### Mürekkep blok (`inkBlock`)
+### Maç satırı — tek satır
 
-Ürünün imzası, **daima koyu** bir yüzeydir: maç detayının skor şeridi, takım
-profilinin kapağı, oyuncu kimlik kartı, ana ekranın vitrin kartı ve manşet
-karuseli aynı bloğu paylaşır. Üstünde `onDark` metin, `chalk` çizgi ve
-`liveOnDark` canlı rengi kullanılır.
+```
+┌ 38 ┬────── flex ──────┬ 46 ┬────── flex ──────┬ 24 ┐
+│19:30│ ◆ Kartalspor     │2–1 │ Yıldızspor ◆     │ ☆ │
+└─────┴──────────────────┴────┴──────────────────┴────┘
+  saat   logo + ev (sağa)  skor  dep (sola) + logo  yıldız
+```
 
-`inkBlock` ile `inverse` AYNI ŞEY DEĞİLDİR: `inverse` "zeminin tersi"dir ve
-koyu temada AÇIK bir yüzeydir. Beyaz metin taşıyan bir blok `inverse`
-kullanırsa koyu temada beyaz üstüne beyaz yazar.
+Ev sahibinin adı SAĞA, deplasmanınki SOLA yaslanır; ikisi de ortadaki sabit
+genişlikli skor bloğuna dayandığı için "ev – skor – deplasman" tek bir okuma
+birimi olur ve göz, liste boyunca tek bir dikey ekseni takip eder. Amblemler
+dışta durup iki kenarda sabit bir ritim kurar.
 
-### Saha
-
-`PitchView`, `PitchLineup` ve oyun tuvalleri aynı sahayı çizer: `gradientPitch`
-derin yeşil zemin, `chalk` beyaz tebeşir, `onPitch` beyaz oyuncu adı. Tuvalin
-üstündeki her şey (kale direği, top, kaleci) TEMADAN BAĞIMSIZ sabit renktedir —
-`surface1` ile çizilen bir direk koyu temada görünmez oluyordu. HUD tuvalin
-dışındadır ve normal tema tokenlarını kullanır.
-
-Bu kuralların ölçülebilir olanları `npm run check:tokens` ile sınanır: her iki
-temada WCAG AA kontrastı, ölçek sağlığı (taban, tavan, monoton hiyerarşi, satır
-yüksekliği), çıplak hex, `fontWeight`, emoji, gradyan durağı ve belirsiz hata
-metni. Ayrıntılı gerekçeler `docs/tasarim-plani.md` dosyasındadır.
+Önceki iki satırlı düzen (ev üstte, deplasman altta, skor sağda) satır başına
+56px istiyordu ve skorun yeri takım adının uzunluğuna göre kayıyordu.
 
 ## Bilgi mimarisi — tek kapı kuralı
 

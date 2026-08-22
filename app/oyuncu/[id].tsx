@@ -2273,9 +2273,10 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 1,
   },
+  /* Mürekkep kart üstünde marka rengi açık lavantadır. */
   heroTeamLabel: {
     ...type.overline,
-    color: colors.brand,
+    color: colors.brandOnDark,
   },
   heroTeamName: {
     ...type.h4,
