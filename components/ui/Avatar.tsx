@@ -129,6 +129,9 @@ const styles = StyleSheet.create({
   },
   initials: {
     ...type.micro,
+    // Baş harfler dar bir kutuya sığar: `micro` tokenının +0.4 harf aralığı
+    // 22px'lik amblemde iki harfi kenara dayayıp üç nokta üretiyordu.
+    letterSpacing: 0,
     color: colors.textTertiary,
   },
   jersey: {

@@ -61,6 +61,7 @@ import { get } from "@/lib/http";
 import { useAuth } from "@/providers/AuthProvider";
 import {
   colors,
+  elevate,
   fonts,
   hairline,
   layout,
@@ -70,6 +71,10 @@ import {
   type,
   upperTR,
 } from "@/theme";
+
+/** Günün Testi kartının gradyan yönü — köşegen ışık. */
+const DAILY_GRADIENT_START = { x: 0, y: 0 } as const;
+const DAILY_GRADIENT_END = { x: 1, y: 1 } as const;
 
 /* ===================== SABİTLER (saf veri) ===================== */
 
@@ -360,9 +365,19 @@ const DailyTestCard = React.memo(function DailyTestCard({
       accessibilityRole="button"
       accessibilityLabel={`Günün Testi. ${title}. ${subtitle}`}
     >
-      {/* Düz mercan dolgu: gradyan kartın mercan alanını büyütüyor ama
-          hiçbir şey söylemiyordu. */}
+      {/*
+        Mercan gradyan dolgu. Düz tek renk, ekranın en büyük mercan yüzeyinde
+        matlaşıp "boyanmış kutu" gibi duruyordu; iki durak yüzeye hafif bir
+        ışık verip kartı kabartıyor. Renk aynı aileden, alan büyümüyor.
+      */}
       <View style={styles.dailyFill}>
+        <LinearGradient
+          colors={colors.gradientBrand}
+          start={DAILY_GRADIENT_START}
+          end={DAILY_GRADIENT_END}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
         <View style={styles.dailyIcon}>
           <Ionicons
             name={ready && done ? "checkmark" : "bulb"}
@@ -776,6 +791,8 @@ const styles = StyleSheet.create({
     marginHorizontal: layout.screenPadding,
     borderRadius: radius.xl,
     overflow: "hidden",
+    ...elevate(1),
+    borderWidth: 0,
   },
   dailyFill: {
     backgroundColor: colors.brand,
@@ -803,7 +820,7 @@ const styles = StyleSheet.create({
     color: colors.textOnBrand,
   },
   dailySub: {
-    ...type.caption,
+    ...type.bodySm,
     fontFamily: fonts.semibold,
     letterSpacing: 0,
     color: withAlpha(colors.textOnBrand, 0.78),
@@ -815,7 +832,7 @@ const styles = StyleSheet.create({
     backgroundColor: withAlpha(colors.textOnBrand, 0.22),
   },
   dailyPillText: {
-    ...type.caption,
+    ...type.label,
     fontFamily: fonts.bold,
     letterSpacing: 0.2,
     color: colors.textOnBrand,

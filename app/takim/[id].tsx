@@ -953,7 +953,11 @@ const TeamHero = React.memo(function TeamHero({
             </Text>
           ) : null}
           <View style={styles.heroBadges}>
-            {rank != null ? <Badge label={`${rank}. sıra`} tone="brand" size="sm" /> : null}
+            {/* Mürekkep blok üstünde tint rozet soluk bir pembe leke oluyordu:
+                dolu mercan, mürekkep metin. */}
+            {rank != null ? (
+              <Badge label={`${rank}. sıra`} tone="brand" variant="solid" size="sm" />
+            ) : null}
             {points != null ? (
               // Mürekkep blok üstünde nötr rozet sönük kalırdı: tebeşir pul.
               <View style={styles.heroPill}>
@@ -2379,7 +2383,11 @@ function TeamShareSheet({
                   </Text>
                   {row ? (
                     <View style={styles.shareRankRow}>
-                      {rank != null ? <Badge label={`${rank}. sıra`} tone="brand" size="sm" /> : null}
+                      {/* Mürekkep blok üstünde tint rozet soluk bir pembe leke oluyordu:
+                dolu mercan, mürekkep metin. */}
+            {rank != null ? (
+              <Badge label={`${rank}. sıra`} tone="brand" variant="solid" size="sm" />
+            ) : null}
                       <Badge label={`${row.display_points} puan`} tone="neutral" size="sm" />
                     </View>
                   ) : null}
