@@ -307,7 +307,10 @@ const styles = StyleSheet.create({
     borderWidth: 0,
     borderRadius: radius.xxl,
     overflow: "hidden",
-    backgroundColor: colors.inverse,
+    // DAİMA KOYU: kart, görselin üstüne beyaz metin koyar. Burada `inverse`
+    // kullanılıyordu ve `inverse` koyu temada AÇIK bir yüzey olduğu için
+    // manşet kartının görselsiz üst yarısı bembeyaz çiziliyordu.
+    backgroundColor: colors.inkBlock,
     justifyContent: "flex-end",
   },
   cardBody: {

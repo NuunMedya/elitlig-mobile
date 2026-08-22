@@ -89,6 +89,8 @@ const PAIRS = (p) => [
   // durağına göre ölçülür.
   [p.liveOnDark, p.gradientInk[0], 4.5, "canlı metni / mürekkep blok"],
   [p.onDark, p.gradientInk[0], 4.5, "blok metni / mürekkep blok"],
+  [p.onDark, p.inkBlock, 4.5, "blok metni / düz mürekkep yüzey"],
+  [p.liveOnDark, p.inkBlock, 4.5, "canlı metni / düz mürekkep yüzey"],
   [p.brand, p.gradientInk[0], 4.5, "mercan etiket / mürekkep blok"],
   [p.onPitch, p.gradientPitch[0], 4.5, "oyuncu adı / saha"],
   [p.accent, p.surface3, 3.0, "veri barı (ev) / ray"],

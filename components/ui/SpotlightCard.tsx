@@ -179,11 +179,11 @@ const styles = StyleSheet.create({
     borderWidth: 0,
     borderRadius: radius.xxl,
     overflow: "hidden",
-    backgroundColor: colors.inverse,
+    backgroundColor: colors.inkBlock,
   },
   gradient: {
     // Gradyan yüklenemezse düz mürekkep zemin altta durur.
-    backgroundColor: colors.inverse,
+    backgroundColor: colors.inkBlock,
     padding: space.lg,
     gap: space.md,
   },

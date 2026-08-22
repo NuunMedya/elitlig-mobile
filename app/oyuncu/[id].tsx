@@ -2214,7 +2214,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     // Gradyan yüklenemezse düz mürekkep zemin altta durur. `elevate` kendi
     // zeminini taşıdığı için bu satır ondan SONRA gelmek zorunda.
-    backgroundColor: colors.inverse,
+    backgroundColor: colors.inkBlock,
   },
   /* Fotoğraf solda, künye sağda — blok ekranın üçte birini kaplamasın. */
   heroTop: {

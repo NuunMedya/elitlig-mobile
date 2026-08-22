@@ -1003,8 +1003,10 @@ const styles = StyleSheet.create({
   outcomeGoal: {
     backgroundColor: colors.brand,
   },
+  /* DAİMA KOYU: üstündeki metin `onDark` (beyaz). `inverse` koyu temada
+     açık bir yüzey olduğu için "kurtardı" etiketi orada okunmuyordu. */
   outcomeMiss: {
-    backgroundColor: colors.inverse,
+    backgroundColor: colors.inkBlock,
   },
   /*
    * HATA DÜZELTMESİ: etiket iki zeminde de `textOnBrand` (mürekkep) yazıyordu.

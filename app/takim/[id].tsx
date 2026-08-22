@@ -2499,7 +2499,7 @@ const styles = StyleSheet.create({
   /* — Hero: mürekkep blok — */
   hero: {
     // Gradyan yüklenemezse düz mürekkep zemin altta durur.
-    backgroundColor: colors.inverse,
+    backgroundColor: colors.inkBlock,
     paddingHorizontal: layout.screenPadding,
     paddingTop: space.lg,
     paddingBottom: space.xl,

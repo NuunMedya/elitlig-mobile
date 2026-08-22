@@ -79,6 +79,16 @@ export interface Palette {
    * Seçili filtre chip'i gibi ters blok öğeleri bunu kullanır.
    */
   onInverse: string;
+  /**
+   * DAİMA KOYU blok yüzeyi — maç skoru şeridi, takım kapağı, oyuncu kimlik
+   * kartı, manşet karuseli, paylaşım kartı.
+   *
+   * `inverse` İLE KARIŞTIRMA: `inverse` "zeminin tersi" demektir ve KOYU
+   * temada AÇIK bir yüzeydir. Üstüne `onDark` (beyaz) metin koyan her blok
+   * `inverse` kullandığında koyu temada beyaz üstüne beyaz yazıyordu.
+   * `inkBlock` iki temada da koyudur; `onDark` metni her zaman okunur.
+   */
+  inkBlock: string;
 
   /* — Kenarlık / ayraç — */
   border: string;        // hairline ayraçlar, normal kenarlık
@@ -222,6 +232,7 @@ export const light: Palette = {
   onDark:        "#FFFFFF",
   onDarkMuted:   "rgba(255, 255, 255, 0.64)",
   onInverse:     "#FFFFFF",   // inverse = #12141C (koyu blok)
+  inkBlock:      "#161B27",
 
   border:       "#E4E9F0",
   borderStrong: "#CDD4DF",
@@ -321,6 +332,7 @@ export const dark: Palette = {
   onDark:        "#FFFFFF",
   onDarkMuted:   "rgba(255, 255, 255, 0.64)",
   onInverse:     "#12141C",   // inverse = #F2F4F7 (açık blok) → metin mürekkep
+  inkBlock:      "#12161F",
 
   border:       "#242A35",
   borderStrong: "#333A48",
