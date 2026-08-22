@@ -216,6 +216,33 @@ function kickoffAt(match: Pick<ApiMatch, "date" | "time">): number {
   return Number.isFinite(stamp) ? stamp : 0;
 }
 
+/**
+ * Oyuncu adını dar bir sütuna sığdır: "Muhammed Enes YAZICIOĞLU" ne skor
+ * bloğunun iki sütununa ne de zaman tünelinin baloncuğuna sığıyor; ikisinde de
+ * "Muhammed…" diye kırpılıyor ve satır, kimin ne yaptığını söylemiyordu.
+ * İlk adın baş harfi + kalanı ("M. Enes YAZICIOĞLU") hem ayırt edici hem kısa;
+ * tek kelimelik adlar olduğu gibi kalır.
+ */
+function shortName(full: string): string {
+  const parts = full.trim().split(/\s+/).filter(Boolean);
+  if (parts.length < 2) return full;
+  return `${parts[0].slice(0, 1)}. ${parts.slice(1).join(" ")}`;
+}
+
+/**
+ * Zaman tünelinin baloncuğu için DAHA DA kısa ad: baş harf + SOYADI.
+ *
+ * Baloncuk, iki sütunlu düzende ~140px'tir ve 16px'lik "M. Ali GÜRER" oraya da
+ * sığmayıp "M. Ali GÜR…" oluyordu. Göbek adı düşer: "M. GÜRER". Televizyon
+ * grafiklerinin kullandığı biçim budur ve bir gol satırında ayırt edici olan
+ * da soyadıdır.
+ */
+function compactName(full: string): string {
+  const parts = full.trim().split(/\s+/).filter(Boolean);
+  if (parts.length < 2) return full;
+  return `${parts[0].slice(0, 1)}. ${parts[parts.length - 1]}`;
+}
+
 /** Türkçe küçük harf (İ/I tuzağı) — takım adı karşılaştırmaları bununla yapılır. */
 const normalizeName = (value?: string | null) =>
   String(value ?? "").trim().toLocaleLowerCase("tr-TR");
@@ -906,17 +933,6 @@ const ScorerColumn = memo(function ScorerColumn({
   );
 });
 
-/**
- * Golcü adını satıra sığdır: "Muhammed Enes YAZICIOĞLU" iki sütunlu bir bloğa
- * sığmıyor. İlk adın baş harfi + soyadı ("M. YAZICIOĞLU") hem ayırt edici hem
- * kısadır; tek kelimelik adlar olduğu gibi kalır.
- */
-function scorerName(full: string): string {
-  const parts = full.trim().split(/\s+/).filter(Boolean);
-  if (parts.length < 2) return full;
-  return `${parts[0].slice(0, 1)}. ${parts.slice(1).join(" ")}`;
-}
-
 /** Tek golcü satırı: ev sahibinde top ikonu SAĞDA, deplasmanda SOLDA durur. */
 const ScorerRow = memo(function ScorerRow({
   line,
@@ -925,7 +941,7 @@ const ScorerRow = memo(function ScorerRow({
   line: ScorerLine;
   side: "home" | "away";
 }) {
-  const label = line.ownGoal ? `${scorerName(line.name)} (k.k.)` : scorerName(line.name);
+  const label = line.ownGoal ? `${shortName(line.name)} (k.k.)` : shortName(line.name);
   const minute = line.minute != null ? `${line.minute}'` : "";
 
   /*
@@ -1438,11 +1454,22 @@ const TimelineRow = memo(function TimelineRow({
   const goal = isGoalKind(kind);
   const detail = kind === "goal" ? goalDetail(event) : kind === "ownGoal" ? "kendi kalesine" : null;
 
+  /*
+   * Adlar `compactName` ile kısaltılır (baş harf + soyadı): baloncuk, iki
+   * sütunlu düzende ~140px genişliktedir ve 16px'lik tam ad oraya sığmayıp
+   * "ABDULLAH…" diye kırpılıyordu — yani satırın söylediği tek şey
+   * kayboluyordu.
+   */
   const label =
     kind === "substitution"
-      ? [nameOf(event.oyuncu_giren_id), nameOf(event.oyuncu_cikan_id)].filter(Boolean).join(" → ") ||
-        "Oyuncu değişikliği"
-      : nameOf(event.oyuncu_id) || event.aciklama || EVENT_LABEL[kind] || "Olay";
+      ? [nameOf(event.oyuncu_giren_id), nameOf(event.oyuncu_cikan_id)]
+          .filter((value): value is string => Boolean(value))
+          .map(compactName)
+          .join(" → ") || "Oyuncu değişikliği"
+      : (() => {
+          const player = nameOf(event.oyuncu_id);
+          return player ? compactName(player) : event.aciklama || EVENT_LABEL[kind] || "Olay";
+        })();
 
   const playerId = Number(event.oyuncu_id) || null;
   const open = useCallback(() => {
