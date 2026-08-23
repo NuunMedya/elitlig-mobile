@@ -29,7 +29,7 @@
 
 import { memo, useEffect, useMemo, useRef } from "react";
 import { Animated, InteractionManager, StyleSheet, Text, View } from "react-native";
-import { colors, easing, hairline, space, textScale, type, upperTR } from "@/theme";
+import { colors, easing, hairline, radius, space, textScale, type, upperTR } from "@/theme";
 import { useReduceMotion } from "./LiveBadge";
 
 export interface StatBarProps {
@@ -167,32 +167,33 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   /*
-   * Bar 4px değil 6px. 4px'lik bir çubuk telefonda "çizgi" olarak okunuyor,
-   * iki taraf arasındaki farkı göstermiyordu; 6px hem veri hem grafik olur ve
-   * kompakt satır yüksekliğine sığar.
-   * Köşeler yuvarlak: keskin uçlu ince bar "ilerleme çubuğu" gibi duruyordu.
+   * Bar 8px. 4px'lik bir çubuk telefonda "çizgi" olarak okunuyor, iki taraf
+   * arasındaki farkı göstermiyordu; 6px veriyi veriyordu ama yeni yarıçap
+   * ölçeğinde (kart 18, saha 30) hâlâ ince kalıyor ve grafik, çevresindeki
+   * yuvarlak yüzeylere ait görünmüyordu. 8px + hap köşe, barı yüzey ailesine
+   * katar.
    */
   track: {
     flexDirection: "row",
     alignItems: "center",
-    height: 6,
+    height: 8,
   },
   half: {
     flex: 1,
-    height: 6,
-    borderRadius: 3,
+    height: 8,
+    borderRadius: radius.pill,
     backgroundColor: colors.surface3,
     overflow: "hidden",
   },
   /** Merkez ekseni — iki yarının hangi noktadan ölçüldüğünü söyler. */
   axis: {
     width: 1,
-    height: 11,
+    height: 14,
     backgroundColor: colors.borderStrong,
   },
   fill: {
-    height: 6,
-    borderRadius: 3,
+    height: 8,
+    borderRadius: radius.pill,
   },
   // Sol yarım merkezden sola dolar: dolgu yarımın sağ kenarına yapışır.
   fillLeft: {

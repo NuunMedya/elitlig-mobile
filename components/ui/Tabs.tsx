@@ -4,10 +4,12 @@
  * Maç detayı (Özet / Kadro / İstatistik / H2H / Tablo), takım ve oyuncu
  * profilleri gibi ÇOK SAYFALI detay ekranlarının gezinme şerididir.
  *
- * NEDEN ALT ÇİZGİ, HAP DEĞİL: sekme sayısı 5'e çıkabilir ve etiketler Türkçe
- * uzundur ("İstatistik"). Hap biçimli seçim bu genişlikte şeridi doldurur ve
- * yatay kaydırmayı okunmaz kılar; 2px'lik alt gösterge ise sekme ne kadar
- * uzarsa uzasın sessiz kalır.
+ * SEÇİM HAP, ALT ÇİZGİ DEĞİL: 2px'lik alt çizgi, yuvarlak yüzeylerden ve hap
+ * düğmelerden kurulu bir dilde tek keskin öğeydi — şerit, sayfanın geri
+ * kalanına ait görünmüyordu. Hap seçili sekmenin ARKASINDA durur (bu yüzden
+ * ağaçta sekmelerden ÖNCE çizilir) ve zemini `brandDim`dir: dolgu sönük
+ * olduğu için etiket `textPrimary` kalabiliyor, yani beş sekmelik bir şeritte
+ * seçim güçlü ama gürültüsüz okunuyor.
  *
  * ÖLÇÜM STRATEJİSİ: `distribute="auto"` içerik ekrana SIĞIYORSA sekmeleri eşit
  * dağıtır, sığmıyorsa kaydırmaya geçer. Bu karar `onContentSizeChange` ile
@@ -35,6 +37,7 @@ import {
   hairline,
   haptics,
   layout,
+  radius,
   space,
   textScale,
   type,
@@ -194,7 +197,8 @@ function TabsBase<T extends string>({
       style={[
         styles.wrapper,
         sticky ? styles.sticky : null,
-        sticky && surface ? { backgroundColor: surface } : null,
+        sticky && surface === "transparent" ? styles.stickyBare : null,
+        sticky && surface && surface !== "transparent" ? { backgroundColor: surface } : null,
         style,
       ]}
       onLayout={(event) => setContainerWidth(event.nativeEvent.layout.width)}
@@ -210,6 +214,18 @@ function TabsBase<T extends string>({
         contentContainerStyle={styles.content}
         accessibilityRole="tablist"
       >
+        {/* Gösterge sekmelerden ÖNCE çizilir: hap, etiketin ARKASINDA kalmalı.
+            Sonra çizilseydi etiketlerin üstünü örterdi. */}
+        {indicatorWidth > 0 ? (
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.indicator,
+              { width: indicatorWidth, transform: [{ translateX: translate }] },
+            ]}
+          />
+        ) : null}
+
         {items.map((item, i) => {
           const isActive = item.key === value;
           return (
@@ -245,15 +261,6 @@ function TabsBase<T extends string>({
           );
         })}
 
-        {indicatorWidth > 0 ? (
-          <Animated.View
-            pointerEvents="none"
-            style={[
-              styles.indicator,
-              { width: indicatorWidth, transform: [{ translateX: translate }] },
-            ]}
-          />
-        ) : null}
       </ScrollView>
     </View>
   );
@@ -269,6 +276,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
     borderBottomWidth: hairline,
     borderBottomColor: colors.separator,
+  },
+  /* Şerit, yuvarlak köşeli bir yüzeyin İÇİNDEYSE kendi zeminini ve alt
+     ayracını basmamalı: köşesiz bir dikdörtgen olarak yüzeyin köşelerinin
+     üstünde görünürdü. `surface="transparent"` bunu söyler. */
+  stickyBare: {
+    backgroundColor: "transparent",
+    borderBottomWidth: 0,
   },
   /**
    * `flexGrow: 1` içerik kapsayıcısını en az şerit genişliğinde tutar; böylece
@@ -303,12 +317,20 @@ const styles = StyleSheet.create({
   labelActive: {
     color: colors.textPrimary,
   },
+  /*
+   * GÖSTERGE ÇUBUK DEĞİL, HAP.
+   *
+   * 2px'lik alt çizgi, yuvarlak yüzeylerden ve hap düğmelerden kurulu bir
+   * dilde tek keskin öğeydi — sekme şeridi, sayfanın geri kalanına ait
+   * görünmüyordu. Hap, seçili sekmenin ALTINDA değil ARKASINDA durur ve aynı
+   * eğri ailesine katılır; etiket de marka rengine döner.
+   */
   indicator: {
     position: "absolute",
     left: 0,
-    bottom: 0,
-    height: 2,
-    borderRadius: 1,
-    backgroundColor: colors.brand,
+    top: 3,
+    bottom: 3,
+    borderRadius: radius.pill,
+    backgroundColor: colors.brandDim,
   },
 });

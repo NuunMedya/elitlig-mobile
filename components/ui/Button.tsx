@@ -167,13 +167,22 @@ export const Button = React.memo(function Button({
       ]}
     >
       {variant === "primary" ? (
-        <LinearGradient
-          colors={colors.gradientBrand}
-          start={GRADIENT_START}
-          end={GRADIENT_END}
-          style={styles.primaryFill}
-          pointerEvents="none"
-        />
+        <>
+          <LinearGradient
+            colors={colors.gradientBrand}
+            start={GRADIENT_START}
+            end={GRADIENT_END}
+            style={styles.primaryFill}
+            pointerEvents="none"
+          />
+          {/*
+            ÜST IŞIK. Düz bir gradyan dolgu, mat bir boya lekesi gibi duruyordu.
+            Gerçek bir düğme ışığı ÜSTTEN alır: üst yarıya yerleştirilen çok
+            sönük beyaz bir katman, yüzeye hafif bir kubbe hissi verir. Tek
+            katman ve %10 — daha fazlası "parlak plastik" olur.
+          */}
+          <View style={styles.primaryGloss} pointerEvents="none" />
+        </>
       ) : null}
 
       {iconPosition === "left" ? iconNode : null}
@@ -197,7 +206,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: space.s,
-    borderRadius: radius.md,
+    // Hap biçim: yeni yarıçap ölçeğinde düğme, kartla aynı köşeyi taşımamalı —
+    // kart bir YÜZEY, düğme bir NESNEdir ve nesne tamamen yuvarlaktır.
+    borderRadius: radius.pill,
     alignSelf: "flex-start",
   },
   fullWidth: {
@@ -207,7 +218,18 @@ const styles = StyleSheet.create({
   /** Gradyan dolgu — içeriğin ALTINDA, köşeleri kutuyla aynı. */
   primaryFill: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: radius.md,
+    borderRadius: radius.pill,
+  },
+  /** Üst ışık: yüzeyin üst yarısına serilen çok sönük beyaz kubbe. */
+  primaryGloss: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: "50%",
+    borderTopLeftRadius: radius.pill,
+    borderTopRightRadius: radius.pill,
+    backgroundColor: "rgba(255, 255, 255, 0.10)",
   },
   disabled: {
     opacity: 0.45,

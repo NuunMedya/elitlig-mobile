@@ -250,12 +250,16 @@ const PitchLines = memo(function PitchLines({ width, height }: { width: number; 
       ))}
 
       <Svg width={width} height={height}>
-        {/* Kenar çizgisi */}
+        {/* Kenar çizgisi. KÖŞELERİ YUVARLAK: sahanın kendi kutusu artık 30px
+            yarıçapla çiziliyor; keskin köşeli bir tebeşir dikdörtgeni, yuvarlak
+            zeminin köşelerinden dışarı taşıyor ve kırpılıyordu. */}
         <Rect
           x={left}
           y={top}
           width={right - left}
           height={bottom - top}
+          rx={radius.xxl - inset}
+          ry={radius.xxl - inset}
           stroke={c}
           strokeWidth={sw}
           fill="none"
@@ -383,7 +387,10 @@ const styles = StyleSheet.create({
   pitch: {
     // Gradyan yüklenemezse düz derin yeşil altta durur.
     backgroundColor: colors.pitchGreen,
-    borderRadius: radius.lg,
+    /* Saha, sayfanın en büyük tek yüzeyi: yarıçapı da ona göre (`xxl`).
+       Kart yarıçapıyla çizilince, ekranın yarısını kaplayan bir dikdörtgen
+       "büyütülmüş kart" gibi duruyordu. */
+    borderRadius: radius.xxl,
     borderWidth: hairline,
     borderColor: colors.border,
     overflow: "hidden",
@@ -421,7 +428,7 @@ const styles = StyleSheet.create({
     minWidth: 15,
     height: 15,
     paddingHorizontal: 3,
-    borderRadius: 8.5,
+    borderRadius: radius.pill,
     backgroundColor: colors.surface1,
     borderWidth: 1.5,
     borderColor: colors.surface1,

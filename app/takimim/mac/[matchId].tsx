@@ -767,7 +767,7 @@ const styles = StyleSheet.create({
   kitDot: {
     width: 34,
     height: 34,
-    borderRadius: 17,
+    borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 2,

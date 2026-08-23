@@ -370,6 +370,44 @@ for (const file of new Set(grep("<LinearGradient", "app components").map((h) => 
   }
 }
 
+/*
+ * YARIÇAP TOKENDIR — çıplak sayı yasak.
+ *
+ * Ürünün en belirgin imzası köşe yarıçapı; ölçeği bir kez büyüttük ve bir
+ * daha tek tek dosyalardan kaçmasın diye burada bağlıyoruz. `borderRadius: 8`
+ * gibi elle yazılmış bir değer, ölçek değiştiğinde geride kalır ve o tek
+ * bileşen bütün sistemden farklı bir eğri taşır — "kavisli tasarım" hissini
+ * bozan tam olarak budur.
+ *
+ * MEŞRU İSTİSNA: hesaplanmış yarıçaplar (`radius.xxl - inset`, `size / 2`,
+ * `(AVATAR + 4) / 2`) ve daireyi kuran yarım-ölçü değerler. Kural yalnız
+ * ÇIPLAK SAYI sabitlerine bakar.
+ */
+const RADIUS_LITERAL = /border(?:Top|Bottom)?(?:Left|Right)?Radius:\s*(\d+(?:\.\d+)?)\s*[,\n]/g;
+/*
+ * MİKRO ŞEKİLLER MUAF (≤ 4px). 4px'in altındaki yarıçap bir "köşe kararı"
+ * değildir: 4px'lik bir noktayı ya da 3px'lik bir rayı yuvarlayan değer,
+ * şeklin KENDİ ölçüsünden gelir ve ölçek büyüdüğünde büyümesi de gerekmez.
+ *
+ * `ShareScoreCard` tümüyle muaf: dışa aktarılan PNG'nin geometrisi bilerek
+ * DONDURULDU (bkz. dosya başlığı). Şablon her paylaşımda birebir aynı
+ * görünmeli; uygulama ölçeği değiştiğinde kartın oranları kaymamalı.
+ */
+const RADIUS_MAX_FREE = 4;
+const RADIUS_EXEMPT = new Set(["components/ShareScoreCard.tsx"]);
+
+for (const hit of grep("Radius: [0-9]", "app components")) {
+  const [file, line, ...rest] = hit.split(":");
+  const text = rest.join(":");
+  const match = /border(?:Top|Bottom)?(?:Left|Right)?Radius:\s*(\d+(?:\.\d+)?)\s*[,;]?\s*$/.exec(
+    text.trim(),
+  );
+  if (!match) continue;
+  if (RADIUS_EXEMPT.has(file)) continue;
+  if (Number(match[1]) <= RADIUS_MAX_FREE) continue;
+  note(`yarıçap · ${file}:${line} — borderRadius: ${match[1]} çıplak sayı, \`radius.*\` kullan`);
+}
+
 /* Sonsuz animasyon döngüsü — yalnız iskelet parıltısı meşru. */
 for (const hit of grep("Animated.loop", "app components")) {
   const [file] = hit.split(":");

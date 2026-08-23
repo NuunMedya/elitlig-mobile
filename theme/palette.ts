@@ -248,6 +248,20 @@ export interface Palette {
    */
   glassBorder: string;
 
+  /* — Çerçeveler — */
+  /**
+   * IŞIKLI ÇERÇEVE — `Frame` bileşeninin 1px gradyan kenarı.
+   *
+   * Düz `hairline` bir kenarlık her arayüzde aynıdır ve hiçbir şey söylemez.
+   * Işık üstten geliyorsa kenarın ÜST yayı alt yayından parlak olmalıdır;
+   * gerçek bir nesnenin kenarı böyle davranır. İki durak tam da bunu kurar:
+   * ilki (parlak) üstte, ikincisi (sönük) altta. Bu, kartı kâğıttan
+   * "kesilmiş" değil, kâğıdın üstüne "konmuş" gösteren tek detaydır.
+   */
+  rimLight: readonly [string, string];
+  /** Koyu blokların (skor tablosu, mürekkep panel) ışıklı kenarı. */
+  rimDark: readonly [string, string];
+
   /* — Yardımcı — */
   /** Gölge rengi — açık temada mürekkep, koyuda saf siyah. */
   shadowColor: string;
@@ -379,6 +393,8 @@ export const light: Palette = {
   /* Skor tablosunun ışıklı kenarı. Kart, atmosferin en koyu bölgesinde
      duruyor; ince açık bir çerçeve onu sahneden AYIRIR ama koparmaz. */
   glassBorder:  "rgba(255, 255, 255, 0.26)",
+  rimLight: ["#FFFFFF", "#E4DAF7"],
+  rimDark:  ["rgba(255, 255, 255, 0.34)", "rgba(255, 255, 255, 0.06)"],
 
   shadowColor:       "#3B1E6E",   // MOR gölge; siyah gölge lavantada kirlenir
   skeletonBase:      "#EDE7F9",
@@ -489,6 +505,8 @@ export const dark: Palette = {
   matchTint: "#2C1458",
   matchWash: ["rgba(44, 20, 88, 0)", "rgba(40, 20, 80, 0.55)", "#100826"],
   glassBorder:  "rgba(196, 181, 253, 0.20)",
+  rimLight: ["#3A2A5C", "#1E1436"],
+  rimDark:  ["rgba(196, 181, 253, 0.30)", "rgba(196, 181, 253, 0.05)"],
 
   shadowColor:       "#000000",
   skeletonBase:      "#1B1030",

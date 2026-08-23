@@ -38,6 +38,13 @@ export interface TeamLogoProps {
    * bir DİKDÖRTGEN olarak görünüyordu.
    */
   plain?: boolean;
+  /**
+   * Koyu bir bloğun üstünde mi. Logosu olmayan takımlarda yedek baş harfler
+   * `textSecondary` ile çizilir; mürekkep bir tabağın üstünde bu neredeyse
+   * görünmez olur (bu ligdeki takımların çoğunun logosu yok, yani istisna
+   * değil VARSAYILAN durum). Bayrak baş harfleri `onDark`a çevirir.
+   */
+  onDark?: boolean;
 }
 
 export const TeamLogo = memo(function TeamLogo({
@@ -48,6 +55,7 @@ export const TeamLogo = memo(function TeamLogo({
   dimmed = false,
   loading = false,
   plain = false,
+  onDark = false,
 }: TeamLogoProps) {
   const [failed, setFailed] = useState(false);
 
@@ -59,7 +67,9 @@ export const TeamLogo = memo(function TeamLogo({
     () => ({
       width: size,
       height: size,
-      borderRadius: shape === "circle" ? radius.pill : Math.round(size / 5),
+      // Yeni yarıçap ölçeğinde 1/5 fazla köşeli kalıyordu: amblem, yanındaki
+      // 18px yarıçaplı kartın içinde "keskin" duruyordu. 1/3.2 aynı ailede.
+      borderRadius: shape === "circle" ? radius.pill : Math.round(size / 3.2),
     }),
     [size, shape],
   );
@@ -81,7 +91,11 @@ export const TeamLogo = memo(function TeamLogo({
         accessibilityRole="image"
         accessibilityLabel={name ? `${name} amblemi` : "Takım amblemi"}
       >
-        <Text style={[styles.initials, initialsSize]} numberOfLines={1} {...textScale.badge}>
+        <Text
+          style={[styles.initials, initialsSize, onDark ? styles.initialsOnDark : null]}
+          numberOfLines={1}
+          {...textScale.badge}
+        >
           {initials(name)}
         </Text>
       </View>
@@ -124,6 +138,9 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     color: colors.textTertiary,
     paddingHorizontal: space.xxs,
+  },
+  initialsOnDark: {
+    color: colors.onDark,
   },
   skeleton: {
     backgroundColor: colors.skeletonBase,

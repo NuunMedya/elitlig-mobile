@@ -57,6 +57,7 @@ import { YoutubeBanner } from "@/components/YoutubeBanner";
 import {
   Avatar,
   Badge,
+  Bloom,
   BottomSheet,
   Button,
   Card,
@@ -65,6 +66,7 @@ import {
   ErrorState,
   EventIcon,
   FormChips,
+  Frame,
   PitchView,
   KeyValueRow,
   MinuteRing,
@@ -676,17 +678,42 @@ export default function MatchDetailScreen() {
               homeTeamId={homeTeamId}
               awayTeamId={awayTeamId}
             />
-            <Tabs
-              items={tabItems}
-              value={activeTab}
-              onChange={changeTab}
-              sticky
-              surface={colors.matchCanvas}
-            />
+
+            {/*
+              YÜKSELEN SAYFA. İçerik alanı, mor sahnenin üstüne ÇIKAN geniş
+              yarıçaplı bir yüzey olarak başlar: üst iki köşesi 30px yuvarlak,
+              tepesinde ince bir ışık çizgisi. Sayfa böylece "sahnenin üstünde
+              duran bir kâğıt" olur — düz bir kenarla başlasaydı sekme şeridi,
+              atmosferi ortasından kesen yatay bir bant gibi dururdu.
+
+              Sekme şeridi bu yüzeyin İÇİNDE ve saydam: kendi zeminini bassaydı
+              yüzeyin yuvarlak köşelerinin üstünde köşesiz bir dikdörtgen
+              olarak görünürdü.
+            */}
+            <View style={styles.sheet}>
+              <View style={styles.sheetRim} pointerEvents="none" />
+              <Tabs
+                items={tabItems}
+                value={activeTab}
+                onChange={changeTab}
+                sticky
+                surface="transparent"
+              />
+            </View>
           </View>
         }
       />
 
+      {/*
+        GÖVDE OPAK OLMAK ZORUNDA.
+        Atmosfer, sayfanın en arkasında duran mutlak konumlu 300px'lik bir
+        katman. Sekme listelerinin kendi zemini olmadığı için, yükselen yüzeyin
+        bittiği yerden atmosferin bittiği yere kadar mor, liste satırlarının
+        YANINDAN sızıyordu — yüzeyin altında iki yanda birer mor kertik olarak
+        görünüyordu. Gövde kendi kâğıdını basar; atmosfer yalnız yüzeyin
+        ÜSTÜNDE kalır.
+      */}
+      <View style={styles.body}>
       {activeTab === "ozet" ? (
         <SummaryTab
           match={match}
@@ -768,6 +795,7 @@ export default function MatchDetailScreen() {
           refreshControl={refreshControl}
         />
       )}
+      </View>
     </SafeAreaView>
   );
 }
@@ -905,27 +933,18 @@ const MatchHero = memo(function MatchHero({
   const awayWon = decided && (awayScore as number) > (homeScore as number);
 
   return (
-    <View style={styles.hero}>
-      {/*
-        MÜREKKEP ZEMİN + IŞIKLI ÇERÇEVE.
-        Yarı saydam bir "cam" kart denendi ve OKUNMADI: kart, atmosfer
-        yıkamasının orta bölgesinde duruyor (açık lavanta) ve üstündeki metin
-        beyaz — skor kayboluyordu. Sayfanın en önemli tek bilgisi, arkasındaki
-        dokunun insafına bırakılamaz. Kart kendi mürekkep zeminini basar;
-        sahneyle bağı ince açık çerçeveden ve altındaki mor gölgeden gelir.
-      */}
-      <LinearGradient
-        colors={colors.gradientInk}
-        start={HERO_GRADIENT_START}
-        end={HERO_GRADIENT_END}
-        style={StyleSheet.absoluteFill}
-        pointerEvents="none"
-      />
-      <View style={styles.heroRim} pointerEvents="none" />
-
+    <Frame
+      tone="dark"
+      radius="xxl"
+      elevation={3}
+      surface={colors.inkBlock}
+      gradient={colors.gradientInk}
+      style={styles.hero}
+      contentStyle={styles.heroBody}
+    >
       {/* İmza öğesi: skor bloğunun arkasında tebeşir orta yuvarlak yayı. */}
       <ChalkArc
-        width={width - layout.screenPadding * 2}
+        width={width - layout.screenPadding * 2 - 2}
         height={HERO_ARC_HEIGHT}
         color={colors.chalk}
       />
@@ -940,7 +959,19 @@ const MatchHero = memo(function MatchHero({
           accessibilityRole="button"
           accessibilityLabel={`${match.first_team_name} takım sayfası`}
         >
-          <TeamLogo name={match.first_team_name} logo={homeLogo} size={layout.crestXl} />
+          {/*
+            AMBLEM TABAĞI. Amblem doğrudan mürekkebin üstünde duruyordu ve her
+            takımda başka türlü görünüyordu: logosu olmayanlarda beyaz bir
+            kare, saydam PNG'li olanlarda hiçbir şey.
+
+            Tabak mürekkebin üstünde ışıklı bir çerçeve, amblem ise onun
+            içinde KENDİ AÇIK ZEMİNİNDE durur — kulüp logoları açık zemine
+            göre tasarlanır, `plain` (zeminsiz) çizim onları koyu blokta
+            kaybediyordu. Böylece logosu olan da olmayan da aynı formda.
+          */}
+          <View style={styles.crestPlate}>
+            <TeamLogo name={match.first_team_name} logo={homeLogo} size={layout.crestXl} />
+          </View>
           <Text
             style={[styles.heroTeamName, awayWon ? styles.heroTeamNameDim : null]}
             numberOfLines={2}
@@ -951,6 +982,15 @@ const MatchHero = memo(function MatchHero({
         </Touchable>
 
         <View style={styles.heroCenter}>
+          {/* Skorun arkasındaki hâle: ekranın en önemli bilgisi olduğunu
+              söyleyen tek işaret (bkz. components/ui/Bloom.tsx). */}
+          <Bloom
+            width={140}
+            height={72}
+            color={live ? colors.live : colors.brandOnDark}
+            intensity={live ? 0.4 : 0.3}
+            style={styles.heroBloom}
+          />
           {played ? (
             <View style={styles.heroScoreRow}>
               <Text
@@ -978,7 +1018,6 @@ const MatchHero = memo(function MatchHero({
           {live ? (
             <MatchClock snapshot={snapshot} />
           ) : state === "finished" ? (
-            // Mürekkep blok üstünde `Badge` sönük kalırdı: tebeşir çerçeveli pul.
             <View style={styles.heroChip}>
               <Text style={styles.heroChipText} {...textScale.badge}>
                 MS
@@ -998,7 +1037,9 @@ const MatchHero = memo(function MatchHero({
           accessibilityRole="button"
           accessibilityLabel={`${match.second_team_name} takım sayfası`}
         >
-          <TeamLogo name={match.second_team_name} logo={awayLogo} size={layout.crestXl} />
+          <View style={styles.crestPlate}>
+            <TeamLogo name={match.second_team_name} logo={awayLogo} size={layout.crestXl} />
+          </View>
           <Text
             style={[styles.heroTeamName, homeWon ? styles.heroTeamNameDim : null]}
             numberOfLines={2}
@@ -1010,16 +1051,11 @@ const MatchHero = memo(function MatchHero({
       </View>
 
       {/*
-        GOLCÜLER ARTIK BURADA DEĞİL.
-        Skor bloğunun içinde iki sütun hâlinde diziliyorlardı ve 9-5 biten bir
-        maçta blok, ortasından dokuz satırlık ragged bir metin dökümüyle
-        yarılıyordu: dakika, ad ve takım eki iç içe geçiyor, skorun kendisi o
-        dökümün içinde kayboluyordu. Golcüler Özet'in en üstünde kendi
-        kartında, iki HİZALI sütun olarak duruyor (`GoalsCard`) — skor bloğu
-        yalnız skoru söylüyor.
+        GOLCÜLER BURADA DEĞİL — Özet'in ilk kartında (`GoalsCard`). Skor
+        bloğunun içinde iki sütun hâlindeydiler ve 9-5 biten bir maçta blok,
+        ortasından dokuz satırlık düzensiz bir dökümle yarılıyordu.
       */}
 
-      {/* Tek satır künye: nokta ayraçlı, kırpılmayan üç bilgi. */}
       <View style={styles.heroFacts}>
         <HeroFact icon="calendar-outline" text={formatDateLong(match.date)} />
         {match.match_field ? <HeroFact icon="location-outline" text={match.match_field} /> : null}
@@ -1027,7 +1063,7 @@ const MatchHero = memo(function MatchHero({
       </View>
 
       {live && !realtime ? <ReconnectStrip /> : null}
-    </View>
+    </Frame>
   );
 });
 
@@ -1059,6 +1095,9 @@ const HeroFact = memo(function HeroFact({
 
 /** Skor bloğunun arkasındaki yayın yüksekliği — armalar + skor + golcüler. */
 const HERO_ARC_HEIGHT = 112;
+
+/** Zaman çizelgesi bağlantı kolunun ölçüsü — yay yarıçapı da budur. */
+const ARM_SIZE = 14;
 
 /**
  * Mürekkep bloğun gradyan yönü — YATAY ve SAĞDAN SOLA.
@@ -1100,7 +1139,7 @@ const GoalsCard = memo(function GoalsCard({
   const away = useMemo(() => groupScorers(scorers.away), [scorers.away]);
 
   return (
-    <Card padding="md" style={styles.inset}>
+    <Frame radius="lg" elevation={1} style={styles.inset} contentStyle={styles.goalsBox}>
       <View style={styles.goalsHead}>
         <Text style={[styles.goalsTeam, styles.goalsTeamHome]} numberOfLines={1} {...textScale.badge}>
           {upperTR(homeName)}
@@ -1126,7 +1165,7 @@ const GoalsCard = memo(function GoalsCard({
           ))}
         </View>
       </View>
-    </Card>
+    </Frame>
   );
 });
 
@@ -1449,11 +1488,14 @@ function SummaryTab({
           ) : null}
 
           {headline ? (
-            <Card title="Maç manşeti" padding="md" style={styles.inset}>
+            <Frame radius="lg" elevation={1} style={styles.inset} contentStyle={styles.panel}>
+              <Text style={styles.panelTitle} {...textScale.badge}>
+                {upperTR("Maç manşeti")}
+              </Text>
               <Text style={styles.headline} {...textScale.long}>
                 {headline}
               </Text>
-            </Card>
+            </Frame>
           ) : null}
 
           {hasPhotos ? (
@@ -1468,10 +1510,11 @@ function SummaryTab({
               feedback="card"
               haptic="selection"
               onPress={() => openPlayer(mvpId)}
-              style={styles.mvpRow}
               accessibilityRole="button"
               accessibilityLabel={`Maçın yıldızı ${mvpName}`}
+              style={styles.mvpRow}
             >
+              <Frame radius="lg" elevation={1} contentStyle={styles.mvpRowBody}>
               <View style={styles.mvpIcon}>
                 <Ionicons name="star" size={16} color={colors.star} />
               </View>
@@ -1483,7 +1526,8 @@ function SummaryTab({
                   {mvpName}
                 </Text>
               </View>
-              <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
+                <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
+              </Frame>
             </Touchable>
           ) : null}
 
@@ -1555,11 +1599,14 @@ function SummaryTab({
               ) : null}
 
               {match.post_rapor ? (
-                <Card title="Maç özeti" padding="md" style={styles.inset}>
+                <Frame radius="lg" elevation={1} style={styles.inset} contentStyle={styles.panel}>
+                  <Text style={styles.panelTitle} {...textScale.badge}>
+                    {upperTR("Maç özeti")}
+                  </Text>
                   <Text style={styles.reportText} {...textScale.long}>
                     {match.post_rapor}
                   </Text>
-                </Card>
+                </Frame>
               ) : null}
             </>
           ) : null}
@@ -1822,19 +1869,49 @@ const TimelineRow = memo(function TimelineRow({
     </Touchable>
   );
 
+  /*
+   * BAĞLANTI KOLU — çeyrek daire.
+   *
+   * Kart rayın yanında serbestçe duruyordu; ikisi arasında görsel bir bağ
+   * yoktu ve çizelge "bir çizgi + yanına dizilmiş kutular" gibi okunuyordu.
+   * Kol, olayı rayına BAĞLAR: raydan çıkar, yumuşak bir yayla döner ve kartın
+   * kenarına yatay olarak varır — metro haritalarının dili.
+   *
+   * SVG YOK: iki kenarı olan bir kutuya köşe yarıçapı vermek çeyrek daire
+   * üretir. Ev sahibi tarafında yay sağ-üstten (`borderTopRightRadius`),
+   * deplasmanda sol-üstten döner.
+   */
+  const arm = (
+    <View
+      style={[styles.tlArm, home ? styles.tlArmHome : styles.tlArmAway, goal ? styles.tlArmGoal : null]}
+      pointerEvents="none"
+    />
+  );
+
   return (
     <View style={styles.tlRow}>
-      <View style={styles.tlSide}>{home ? bubble : null}</View>
+      <View style={styles.tlSide}>
+        {home ? (
+          <View style={styles.tlSideInner}>
+            {bubble}
+            {arm}
+          </View>
+        ) : null}
+      </View>
 
       {/*
-        RAY SÜREKLİDİR. Çizgi eskiden her satırda 10px'lik iki parçaydı ve
-        aralarında boşluk kalıyordu: on altı satır boyunca kesik kesik bir
-        nokta dizisi görünüyor, "zaman akıyor" hissi hiç kurulmuyordu. Artık
-        çizgi satırın TAMAMINI kaplayan mutlak konumlu bir katman; arka arkaya
-        gelen satırlar kesintisiz tek bir ray üretir. Dakika onun üstünde durur.
+        RAY SÜREKLİDİR: çizgi satırın TAMAMINI kaplayan mutlak konumlu bir
+        katman; arka arkaya gelen satırlar kesintisiz tek bir ray üretir.
+        Daha önce her satırda 10px'lik iki parçaydı ve aralarında boşluk
+        kalıyordu — on altı satır boyunca kesik bir nokta dizisi görünüyordu.
       */}
       <View style={styles.tlCenter}>
         <View style={styles.tlLine} pointerEvents="none" />
+
+        {/* Gol düğümü, rayın üstünde IŞIYAN bir halka: 90 dakikada olan tek
+            önemli şey odur ve çizelgede de öyle görünmeli. */}
+        {goal ? <View style={styles.tlHalo} pointerEvents="none" /> : null}
+
         <View style={[styles.tlMinute, goal ? styles.tlMinuteGoal : null]}>
           <Text
             style={[styles.tlMinuteText, goal ? styles.tlMinuteTextGoal : null]}
@@ -1843,12 +1920,12 @@ const TimelineRow = memo(function TimelineRow({
             {event.dakika != null ? `${event.dakika}'` : "—"}
           </Text>
         </View>
+
         {/*
           SKOR RAYIN ÜSTÜNDE. Koşan skor daha önce gol kartının içinde, adın
           altında küçük gri bir satırdı; maçın nasıl geliştiğini okumak için
           göz sağa sola zıplamak zorundaydı. Rayın üstüne alınınca skorlar tek
-          bir dikey sütunda dizilir ve çizelge, aşağı inildikçe skorun nasıl
-          değiştiğini KENDİ BAŞINA anlatır.
+          bir dikey sütunda dizilir ve çizelge kendi başına anlatır.
         */}
         {score ? (
           <Text style={styles.tlScore} {...textScale.badge}>
@@ -1857,7 +1934,14 @@ const TimelineRow = memo(function TimelineRow({
         ) : null}
       </View>
 
-      <View style={styles.tlSide}>{home ? null : bubble}</View>
+      <View style={styles.tlSide}>
+        {home ? null : (
+          <View style={[styles.tlSideInner, styles.tlSideInnerAway]}>
+            {arm}
+            {bubble}
+          </View>
+        )}
+      </View>
     </View>
   );
 });
@@ -2276,9 +2360,11 @@ function LineupTab({
                     {match.second_team_name}
                   </Text>
                   {awayFormation ? (
-                    <Text style={styles.pitchFormation} {...textScale.badge}>
-                      {awayFormation}
-                    </Text>
+                    <View style={styles.pitchFormationChip}>
+                      <Text style={styles.pitchFormation} {...textScale.badge}>
+                        {awayFormation}
+                      </Text>
+                    </View>
                   ) : null}
                 </View>
               </View>
@@ -2296,9 +2382,11 @@ function LineupTab({
                     {match.first_team_name}
                   </Text>
                   {homeFormation ? (
-                    <Text style={styles.pitchFormation} {...textScale.badge}>
-                      {homeFormation}
-                    </Text>
+                    <View style={styles.pitchFormationChip}>
+                      <Text style={styles.pitchFormation} {...textScale.badge}>
+                        {homeFormation}
+                      </Text>
+                    </View>
                   ) : null}
                 </View>
               </View>
@@ -2700,7 +2788,7 @@ function StatsTab({
           olduğu hiçbir yerde yazmıyordu; okuyucu "soldaki ev sahibidir"
           varsayımını kendisi kurmak zorundaydı. Cetvel bunu bir kez söyler.
         */}
-        <View style={[styles.legend, styles.inset]}>
+        <Frame radius="lg" elevation={1} style={styles.inset} contentStyle={styles.legend}>
           <View style={styles.legendSide}>
             <TeamLogo name={match.first_team_name} logo={homeLogo} size={layout.crestMd} />
             <View style={[styles.legendDot, styles.legendDotHome]} />
@@ -2719,10 +2807,10 @@ function StatsTab({
             <View style={[styles.legendDot, styles.legendDotAway]} />
             <TeamLogo name={match.second_team_name} logo={awayLogo} size={layout.crestMd} />
           </View>
-        </View>
+        </Frame>
 
         {sections.length ? (
-          <View style={styles.statCard}>
+          <Frame radius="lg" elevation={1} style={styles.inset} contentStyle={styles.statCard}>
             {sections.map((section, sectionIndex) => (
               <View key={section.title}>
                 <Text
@@ -2741,7 +2829,7 @@ function StatsTab({
                 ))}
               </View>
             ))}
-          </View>
+          </Frame>
         ) : (
           <EmptyState
             icon="stats-chart-outline"
@@ -3469,7 +3557,11 @@ const styles = StyleSheet.create({
   inset: {
     marginHorizontal: layout.screenPadding,
   },
+  /* Gruplu satır kabı da kart ailesinde: yeni yarıçap + ışıklı kenar +
+     gölge. Düz `surface1` bir kutu, çerçeveli komşularının yanında
+     "yamalı" duruyordu. */
   group: {
+    ...elevate(1),
     backgroundColor: colors.surface1,
     borderRadius: radius.lg,
     marginHorizontal: layout.screenPadding,
@@ -3499,26 +3591,55 @@ const styles = StyleSheet.create({
     opacity: 0.28,
   },
 
+  /* Sekme içeriği kendi kâğıdını basar — atmosfer yüzeyin altından sızmasın. */
+  body: {
+    flex: 1,
+    backgroundColor: colors.matchCanvas,
+  },
+
+  /* ---- Yükselen sayfa ---- */
+  /* İçerik alanı sahnenin üstüne çıkan geniş yarıçaplı bir yüzeydir. */
+  sheet: {
+    backgroundColor: colors.matchCanvas,
+    borderTopLeftRadius: radius.xxl,
+    borderTopRightRadius: radius.xxl,
+    paddingTop: space.xxs,
+    overflow: "hidden",
+  },
+  /* Tepedeki ışık çizgisi: yüzeyin kâğıt kalınlığı. Yalnız üst kenarda ve
+     yalnız 1px — kalınlaştığı anda "çerçeve" olur ve yüzey kutuya döner. */
+  sheetRim: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    height: hairline,
+    backgroundColor: colors.rimLight[0],
+  },
+
   /* ---- Hero: atmosferin üstünde cam skor tablosu ----
    *
    * KENAR BOŞLUĞU SAYFANIN GERİ KALANIYLA AYNI: altındaki her kart 16px
    * içeriden başlıyor, skor tablosu da öyle. */
+  /* Kenar boşluğu sayfanın geri kalanıyla aynı; kenarlık ve gölge `Frame`ten
+     gelir (bkz. components/ui/Frame.tsx). */
   hero: {
-    // Gradyan yüklenemezse düz mürekkep zemin altta durur.
-    backgroundColor: colors.inkBlock,
     marginHorizontal: layout.screenPadding,
+  },
+  heroBody: {
     paddingHorizontal: space.md,
     paddingTop: space.md,
     paddingBottom: space.sm,
     gap: space.sm,
-    borderRadius: radius.xxl,
-    overflow: "hidden",
   },
-  /* Çerçeve AYRI katman: `hero` üstünde `borderWidth` verilseydi gradyan
-     katmanı çerçevenin altından taşardı (mutlak dolgu kenarlığı saymaz). */
-  heroRim: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: radius.xxl,
+  /* Amblem tabağı: logosu olsun olmasın her takıma aynı form. */
+  crestPlate: {
+    width: layout.crestXl + 12,
+    height: layout.crestXl + 12,
+    borderRadius: radius.lg,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.chalk,
     borderWidth: hairline,
     borderColor: colors.glassBorder,
   },
@@ -3545,6 +3666,9 @@ const styles = StyleSheet.create({
      karşılaştırmak zorunda kalıyordu. */
   heroTeamNameDim: {
     color: colors.onDarkMuted,
+  },
+  heroBloom: {
+    top: -8,
   },
   heroCenter: {
     minWidth: 104,
@@ -3621,6 +3745,23 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
 
+  /* ---- Ortak panel: başlıklı içerik kartı ---- */
+  /* `Card`ın başlık düzeni yerine tek bir üst-satır: `Card` başlığı
+     `h3`ti ve gövde metniyle neredeyse aynı ağırlıkta kalıyordu. Büyük
+     harf + `overline`, başlığı bir ETİKET yapar; gövde tek başına kalır. */
+  panel: {
+    padding: space.md,
+    gap: space.s,
+  },
+  panelTitle: {
+    ...type.overline,
+    color: colors.textTertiary,
+  },
+
+  /* ---- Gol kartı: iki hizalı sütun ---- */
+  goalsBox: {
+    padding: space.md,
+  },
   /* ---- Gol kartı: iki hizalı sütun ---- */
   goalsHead: {
     flexDirection: "row",
@@ -3721,10 +3862,18 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     flexShrink: 1,
   },
+  /* Diziliş bir SAYI DİZİSİdir, cümle değil: kendi pulunda durunca takım
+     adından ayrışır ve şerit iki bilgiyi de tek bakışta veriyor. */
+  pitchFormationChip: {
+    marginLeft: "auto",
+    paddingHorizontal: space.sm,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface3,
+  },
   pitchFormation: {
     ...type.clock,
-    color: colors.textTertiary,
-    marginLeft: "auto",
+    color: colors.textSecondary,
   },
   lineupToggle: {
     flexDirection: "row",
@@ -3810,13 +3959,16 @@ const styles = StyleSheet.create({
   photoBlock: {
     gap: space.sm,
   },
+  /* Maçın yıldızı satırı da diğer kartlarla aynı çerçeve ailesinde: düz
+     `surface1` + yarıçap, ışıklı kenarlı komşularının yanında "yamalı"
+     duruyordu. Kenarlık ve gölge `Frame`ten gelir. */
   mvpRow: {
     marginHorizontal: layout.screenPadding,
+  },
+  mvpRowBody: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.m,
-    backgroundColor: colors.surface1,
-    borderRadius: radius.lg,
     paddingHorizontal: space.md,
     paddingVertical: space.m,
   },
@@ -3876,15 +4028,14 @@ const styles = StyleSheet.create({
   },
   /* Yalnız kanal bağlantısı varsa TEK SATIR: bir bağlantı afiş değildir. */
   linkRow: {
+    ...elevate(1),
     flexDirection: "row",
     alignItems: "center",
     gap: space.md,
-    minHeight: layout.listRowHeightTwoLine,
+    minHeight: layout.listRowHeightTwoLine + 8,
     paddingHorizontal: space.md,
     borderRadius: radius.lg,
     backgroundColor: colors.surface1,
-    borderWidth: hairline,
-    borderColor: colors.border,
   },
   linkTexts: {
     flex: 1,
@@ -3907,7 +4058,10 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: space.sm,
   },
+  /* SIRA: `elevate` kendi zeminini ve kenarlığını taşır, bu yüzden ÖNCE
+     serilir; sonraki değerler onu bilinçli olarak ezer. */
   factCell: {
+    ...elevate(1),
     flexGrow: 1,
     flexBasis: "44%",
     gap: 2,
@@ -3915,8 +4069,6 @@ const styles = StyleSheet.create({
     paddingVertical: space.sm,
     borderRadius: radius.lg,
     backgroundColor: colors.surface1,
-    borderWidth: hairline,
-    borderColor: colors.border,
   },
   factLabelRow: {
     flexDirection: "row",
@@ -3953,31 +4105,41 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "stretch",
     paddingHorizontal: layout.screenPadding,
-    minHeight: 34,
+    minHeight: 38,
   },
   tlSide: {
     flex: 1,
     justifyContent: "center",
+  },
+  /* Kart + bağlantı kolu tek satırda: kol daima rayın tarafında durur. */
+  tlSideInner: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  tlSideInnerAway: {
+    justifyContent: "flex-end",
   },
   tlBubble: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.s,
     borderRadius: radius.md,
-    paddingHorizontal: space.sm,
-    paddingVertical: space.xs,
-    marginVertical: 2,
+    paddingHorizontal: space.md,
+    paddingVertical: space.s,
+    marginVertical: 3,
   },
-  /* Kart İÇERİĞİ KADAR geniş, sütun kadar değil. `flex: 1` taşıyan sütunda
-     kart tüm yarıyı kaplıyordu ve tek bir ad, 170px'lik boş bir kutunun
-     ucunda asılı duruyordu. `alignSelf` ile kart rayın yanına yanaşır. */
+  /* Kart İÇERİĞİ KADAR geniş, sütun kadar değil: `flex: 1` taşıyan sütunda
+     kart tüm yarıyı kaplıyor, tek bir ad boş bir kutunun ucunda asılı
+     duruyordu. */
   tlBubbleHome: {
-    alignSelf: "flex-start",
-    maxWidth: "100%",
+    flexShrink: 1,
   },
-  /* Gol satırı zeminli kart olur: 90 dakikada olan tek önemli şey odur.
-     Zemin AÇIKÇA verilir — `elevate` kendi zeminini (surface2) taşır ama
-     kartın kâğıttan ayrılması için beyaz gerekiyor. */
+  tlBubbleAway: {
+    flexShrink: 1,
+  },
+  /* Gol satırı zeminli kart olur. Zemin AÇIKÇA verilir — `elevate` kendi
+     zeminini (surface2) taşır ama kartın kâğıttan ayrılması için beyaz
+     gerekiyor. */
   tlBubbleGoal: {
     ...elevate(1),
     backgroundColor: colors.surface1,
@@ -3985,9 +4147,32 @@ const styles = StyleSheet.create({
     borderWidth: hairline,
     borderColor: colors.border,
   },
-  tlBubbleAway: {
-    alignSelf: "flex-end",
-    maxWidth: "100%",
+  /* ---- Bağlantı kolu: çeyrek daire ----
+     İki kenarı olan bir kutuya köşe yarıçapı vermek yay üretir; SVG gerekmez.
+     Ev sahibinde yay sağ-üstten, deplasmanda sol-üstten döner. */
+  /* Kolun yay yarıçapı KENDİ GENİŞLİĞİdir: yay tam çeyrek daire olmalı,
+     yani yarıçap = kol genişliği. Token değil, geometri. */
+  tlArm: {
+    width: ARM_SIZE,
+    height: ARM_SIZE - 2,
+    borderColor: colors.border,
+  },
+  tlArmHome: {
+    borderTopWidth: 1.5,
+    borderRightWidth: 1.5,
+    borderTopRightRadius: ARM_SIZE,
+    marginBottom: 11,
+  },
+  tlArmAway: {
+    borderTopWidth: 1.5,
+    borderLeftWidth: 1.5,
+    borderTopLeftRadius: ARM_SIZE,
+    marginBottom: 11,
+  },
+  /* Gol kolu marka renginde: göz rayı takip ederken golleri kendiliğinden
+     ayırt eder. */
+  tlArmGoal: {
+    borderColor: colors.brandBorder,
   },
   tlTexts: {
     flexShrink: 1,
@@ -4013,14 +4198,12 @@ const styles = StyleSheet.create({
   /* Orta sütun: ray + dakika + koşan skor. Genişlik SABİT — skor sütununun
      liste boyunca aynı yerde durması, çizelgenin okuma eksenidir. */
   tlCenter: {
-    width: 52,
+    width: 54,
     alignItems: "center",
     justifyContent: "center",
     gap: 2,
     paddingVertical: space.xxs,
   },
-  /* Ray satırın TAMAMINI kaplar: arka arkaya gelen satırlar kesintisiz tek
-     bir çizgi üretir (bkz. TimelineRow içindeki gerekçe). */
   tlLine: {
     position: "absolute",
     top: 0,
@@ -4029,9 +4212,19 @@ const styles = StyleSheet.create({
     borderRadius: 1,
     backgroundColor: colors.border,
   },
+  /* Gol düğümünün ışıması: dakika pulunun ARKASINDA duran sönük marka halkası.
+     Gölge değil, halka — gölge koyu temada kayboluyor. */
+  tlHalo: {
+    position: "absolute",
+    top: 1,
+    width: 40,
+    height: 24,
+    borderRadius: radius.pill,
+    backgroundColor: colors.brandDim,
+  },
   tlMinute: {
-    minWidth: 30,
-    paddingHorizontal: space.xs,
+    minWidth: 32,
+    paddingHorizontal: space.s,
     paddingVertical: 1,
     borderRadius: radius.pill,
     borderWidth: 1,
@@ -4043,7 +4236,6 @@ const styles = StyleSheet.create({
     ...type.clock,
     color: colors.textTertiary,
   },
-  /* Golün dakikası da vurgulanır: rayın üstünde dolu bir işaret olur. */
   tlMinuteGoal: {
     backgroundColor: colors.brand,
     borderColor: colors.brand,
@@ -4051,8 +4243,6 @@ const styles = StyleSheet.create({
   tlMinuteTextGoal: {
     color: colors.textOnBrand,
   },
-  /* Koşan skor: rayın üstünde, tabular. Aşağı inildikçe tek bir dikey sütunda
-     skorun nasıl değiştiği okunur. */
   tlScore: {
     ...type.clock,
     color: colors.textSecondary,
@@ -4241,10 +4431,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: space.sm,
-    backgroundColor: colors.surface1,
-    borderRadius: radius.lg,
-    borderWidth: hairline,
-    borderColor: colors.border,
     paddingHorizontal: space.md,
     paddingVertical: space.sm,
   },
@@ -4295,13 +4481,7 @@ const styles = StyleSheet.create({
   /* Bütün gruplar TEK kartta. Kendi kenarlığı var: `matchCanvas` neredeyse
      beyaz olduğu için beyaz kart, gölge tek başına yeterince ayrışmıyor. */
   statCard: {
-    marginHorizontal: layout.screenPadding,
     paddingBottom: space.sm,
-    backgroundColor: colors.surface1,
-    borderRadius: radius.lg,
-    borderWidth: hairline,
-    borderColor: colors.border,
-    overflow: "hidden",
   },
   barsCard: {
     backgroundColor: colors.surface1,
