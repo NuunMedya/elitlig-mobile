@@ -112,14 +112,28 @@ export const layout = {
  * yüksekliğin üçte birini yuvarlıyor ve satırı hap gibi gösteriyordu. 12/8
  * ikilisi yüzeyi yumuşatırken dikdörtgen kimliğini korur.
  */
+/**
+ * YARIÇAP — ürünün en belirgin imzası.
+ *
+ * Eski ölçek (kart 12, hero 18) her arayüzde görülen "genel geçer" bir
+ * yumuşaklıktı: köşeler yuvarlaktı ama hiçbir şey söylemiyordu. Yeni ölçek
+ * bilerek CESUR: kart 18, panel 24, sahne yüzeyi 30. Bu ölçekte köşe artık
+ * bir detay değil, formun kendisi — kartlar "kesilmiş dikdörtgen" değil,
+ * "yastık" olarak okunuyor.
+ *
+ * ÖLÇEK İÇ İÇE GEÇMEYİ BİLİR: bir kabın içindeki öğe, kabın yarıçapından
+ * en az iç boşluk kadar küçük olmalı (28 kabın içinde 12px dolguyla duran
+ * öğe → 16). Aksi hâlde iç köşe dış köşeye "yapışık" görünür. Ardışık iki
+ * kademe arasındaki fark (6px) tam da tipik iç boşluk kadar seçildi.
+ */
 export const radius = {
   none: 0,
-  xs:   4,   // form çipi, mikro rozet
-  sm:   6,   // amblem kutusu
-  md:   8,   // KART İÇİ ELEMAN: input, chip zemini, satır grubu, bar
-  lg:  12,   // KART
-  xl:  14,   // bottom sheet, hero kartı
-  xxl: 18,   // tam genişlik vitrin kartı
+  xs:   6,   // form çipi, mikro rozet
+  sm:  10,   // amblem kutusu, küçük pul
+  md:  14,   // KART İÇİ ELEMAN: input, chip zemini, satır grubu, bar
+  lg:  18,   // KART
+  xl:  24,   // bottom sheet, panel
+  xxl: 30,   // sahne yüzeyi: skor tablosu, saha, yükselen sayfa
   pill: 999,
 } as const;
 

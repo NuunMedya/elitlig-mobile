@@ -179,7 +179,7 @@ görünür.
 
 ## Tasarım sistemi
 
-Renk, tipografi ve uzay `theme/` altındadır ve altı kural taşır:
+Renk, tipografi ve uzay `theme/` altındadır ve yedi kural taşır:
 
 - **MOR MARKANIN KENDİSİDİR.** Kimlik, açık mor ile koyu mor arasındaki
   geçiştir: kâğıt lavanta (`bg` #ECE7F7), kartlar beyazdan lavantaya
@@ -213,6 +213,32 @@ Renk, tipografi ve uzay `theme/` altındadır ve altı kural taşır:
   karışır ve kart taşıyormuş gibi durur.
 - **`fontWeight` KULLANILMAZ** — özel fontlarda RN ağırlık uygulamaz, ağırlık
   ailenin adıyla seçilir (`fontFamily: fonts.semibold`).
+
+- **KÖŞE ÜRÜNÜN İMZASIDIR.** Yarıçap ölçeği bilerek cesur: kart **18**, panel
+  **24**, sahne yüzeyi (skor tablosu, saha, yükselen sayfa) **30**, düğme ve
+  seçim göstergesi **hap**. Bu ölçekte köşe bir detay değil formun kendisidir —
+  kartlar "kesilmiş dikdörtgen" değil "yastık" okunur. Ölçek iç içe geçmeyi
+  bilir: bir kabın içindeki öğe, kabın yarıçapından en az iç boşluk kadar
+  küçüktür (ardışık iki kademe farkı 6px, yani tipik iç boşluk).
+  `check-tokens` çıplak `borderRadius: <sayı>` yazımını yasaklar (≤ 4px mikro
+  şekiller ve dondurulmuş paylaşım kartı hariç) — ölçek bir daha tek tek
+  dosyalardan kaçmasın diye.
+
+### Çerçeve ve ışık
+
+İki küçük ilkel, ürünün "el yapımı" hissini taşıyan şeyler:
+
+- **`Frame`** — 1px'lik GRADYAN kenar. React Native'de gradyan kenarlık yok;
+  teknik, gradyanla dolu bir dış katman + `padding: 1` + kartın kendi zeminini
+  taşıyan iç katman. Gerçek bir nesnenin kenarı ışığa göre davranır: üst yay
+  parlak, alt yay sönük (`rimLight` / `rimDark`). Düz bir `hairline` kenarlık
+  her arayüzde aynıdır ve kartı kâğıttan KESİLMİŞ gösterir; gradyan kenar onu
+  kâğıdın üstüne KONMUŞ gösterir. İç yarıçap dıştan 1 eksiktir, yoksa kenarlık
+  köşelerde kalınlaşır.
+- **`Bloom`** — bir öğenin arkasındaki yumuşak ışık, `RadialGradient` ile.
+  Düz renkli bir daire hâle DEĞİLDİR: kenarı keskindir ve ekranda disk olarak
+  görünür. Skorun arkasındaki hâle, mürekkep bloğu "aydınlatılmış bir tabela"
+  yapan tek detaydır; canlı maçta rengi `live`a döner.
 
 ### Tipografi ölçeği
 
@@ -250,6 +276,41 @@ dışta durup iki kenarda sabit bir ritim kurar.
 
 Önceki iki satırlı düzen (ev üstte, deplasman altta, skor sağda) satır başına
 56px istiyordu ve skorun yeri takım adının uzunluğuna göre kayıyordu.
+
+### Maç detayı — sahne
+
+Maç detayı, uygulamanın geri kalanı gibi bir LİSTE değil, tek bir maçın
+sahnesidir; kendi kâğıdı ve kendi ışığı vardır.
+
+**Atmosfer.** Sayfanın arkasında, üst 300px'i kaplayan üç katman durur
+(`MatchAtmosphere`):
+
+1. **Taban** (`matchTint`) — sahnenin mor rengi, her zaman.
+2. **Doku** — maçın kapak fotoğrafı, %28 opaklıkta. Tam opaklıkta serilseydi
+   sahnenin rengi fotoğrafın rengi olurdu ve başlık şeridindeki beyaz metnin
+   okunurluğu, o maça hangi fotoğrafın yüklendiğine bağlı kalırdı. Bu ligdeki
+   maçların çoğunda kapak yok; "fotoğrafsız" hâl istisna değil VARSAYILAN.
+3. **Yıkama** (`matchWash`) — tepede saydam (doku görünsün), dipte kâğıdın
+   kendisi. Son durak `matchCanvas` ile birebir aynı; bir tık farklı olsa
+   atmosferin bittiği yerde yatay bir dikiş çizgisi görünür.
+
+**Kâğıt.** `matchCanvas` uygulama kâğıdından ayrıdır: açık temada neredeyse
+BEYAZ (#FBFAFE), koyu temada DERİN MOR (#100826). Üstteki mor atmosfer ancak
+sakin bir zeminde "ışık" gibi okunur — lavanta kâğıt üstünde sayfa baştan aşağı
+mor bir sise dönüyordu.
+
+**Denetim.** `check-tokens` başlık metninin (`onDark`, `onDarkMuted`,
+`brandOnDark`) atmosfer tabanıyla, sayfa metinlerinin de `matchCanvas` ile
+kontrastını ölçer. Taban bir tık açılırsa maç başlığı okunmaz olur ve bu,
+yalnız kapak fotoğrafı olan maçlarda fark edilirdi.
+
+**Oyuncu adı hijyeni.** Kadro kayıtlarının bir bölümünde oyuncu adı takım
+adıyla birlikte girilmiş ("Yusuf YILDIRIM İNFERNO FK"). Bu ad ekranda beş ayrı
+yerde okunuyor: skor bloğu golcüleri, zaman çizelgesi, saha dizilişi etiketi,
+en iyi oyuncular ve kadro satırı. `stripTeamSuffix` ekini atar ve temizlik
+KADRO YÜKÜNÜN KENDİSİNDE, bir kez yapılır — böylece `lib/matchStats`
+türetmeleri de temiz adı görür. Ek yalnız sonda ve kelime sınırında eşleşirse
+atılır: "Ali FENERBAHÇELİ", takım adı "FENERBAHÇE" olsa bile korunur.
 
 ## Bilgi mimarisi — tek kapı kuralı
 

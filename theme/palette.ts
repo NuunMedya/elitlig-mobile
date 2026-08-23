@@ -192,7 +192,14 @@ export interface Palette {
   gradientAccent: readonly [string, string];
   /** Canlı rozeti ve canlı skor şeridi. */
   gradientLive: readonly [string, string];
-  /** Sahanın zemini — derin yeşil, üstünde beyaz tebeşir okunur. */
+  /**
+   * Sahanın zemini — derin YEŞİL-TEAL, üstünde beyaz tebeşir okunur.
+   *
+   * Doygun zümrüt yeşili denendi ve mor sistemin yanında YABANCI duruyordu:
+   * saha, sayfanın geri kalanından kopmuş parlak bir dikdörtgen gibi
+   * görünüyordu. Ton teal'a çekilince yeşil hâlâ "çim" okunuyor ama mor
+   * atmosferle aynı soğuk aileye giriyor — gece maçı ışığı altındaki bir saha.
+   */
   gradientPitch: readonly [string, string];
   /** Kartın çok hafif üst ışığı; ikinci seviye yüzeyler. */
   gradientSurface: readonly [string, string];
@@ -201,6 +208,59 @@ export interface Palette {
    * görünmesini sağlayan şey budur; düz dolgu yüzeyi kâğıda yapıştırıyordu.
    */
   gradientCard: readonly [string, string];
+
+  /* — Maç detayı atmosferi — */
+  /**
+   * MAÇ EKRANININ KÂĞIDI. Uygulamanın geri kalanı lavanta bir kâğıt üstünde
+   * durur; maç detayı ise TEK BİR MAÇIN sahnesidir ve üstündeki atmosfer
+   * (kapak fotoğrafı + mor yıkama) ancak sakin bir zeminde okunur.
+   * Açık temada bu zemin BEYAZ AĞIRLIKLI, koyu temada DERİN MOR ağırlıklıdır.
+   */
+  matchCanvas: string;
+/**
+   * Atmosferin TABAN rengi — sahnenin en koyu, en üst bölgesi.
+   *
+   * Kapak fotoğrafı bunun ÜSTÜNE düşük opaklıkta serilir; yani fotoğraf bir
+   * resim değil, mor tabanı boyayan bir DOKU olur. Fotoğraf yoksa taban tek
+   * başına sahneyi kurar. İki durumda da üst bölge, başlık şeridindeki beyaz
+   * metni taşıyacak kadar koyudur — sahne fotoğrafın parlaklığına göre
+   * değişmez.
+   */
+  matchTint: string;
+  /**
+   * Atmosfer yıkaması — tabanın ve fotoğrafın üstüne serilen üç duraklı dikey
+   * geçiş: tepede SAYDAM (doku görünsün), ortada yarı saydam mor, dipte
+   * kâğıdın kendisi. Son durak `matchCanvas` ile birebir aynı olmak zorunda,
+   * yoksa atmosferin bittiği yerde yatay bir dikiş çizgisi görünür.
+   *
+   * Dikey olması bilinçli: burası bir yüzey değil, ışık kaynağıdır (gradyan
+   * ekseni kuralı yüzey gradyanlarına bakar, bkz. scripts/check-tokens.mjs).
+   */
+  matchWash: readonly [string, string, string];
+  /**
+   * Atmosferin üstünde duran skor tablosunun ışıklı kenarı.
+   *
+   * Kartın ZEMİNİ yarı saydam DEĞİL, `gradientInk`tir — bilerek. Yarı saydam
+   * denendi ve okunamadı: kart, yıkamanın orta bölgesinde (açık lavanta)
+   * duruyor ve üstündeki metin beyaz; saydam zeminde skor kayboluyordu.
+   * Sayfanın en önemli tek bilgisi, arkasındaki dokunun insafına bırakılamaz.
+   * Sahneyle bağı ZEMİNDEN değil, bu ince açık çerçeveden gelir.
+   */
+  glassBorder: string;
+
+  /* — Çerçeveler — */
+  /**
+   * IŞIKLI ÇERÇEVE — `Frame` bileşeninin 1px gradyan kenarı.
+   *
+   * Düz `hairline` bir kenarlık her arayüzde aynıdır ve hiçbir şey söylemez.
+   * Işık üstten geliyorsa kenarın ÜST yayı alt yayından parlak olmalıdır;
+   * gerçek bir nesnenin kenarı böyle davranır. İki durak tam da bunu kurar:
+   * ilki (parlak) üstte, ikincisi (sönük) altta. Bu, kartı kâğıttan
+   * "kesilmiş" değil, kâğıdın üstüne "konmuş" gösteren tek detaydır.
+   */
+  rimLight: readonly [string, string];
+  /** Koyu blokların (skor tablosu, mürekkep panel) ışıklı kenarı. */
+  rimDark: readonly [string, string];
 
   /* — Yardımcı — */
   /** Gölge rengi — açık temada mürekkep, koyuda saf siyah. */
@@ -316,9 +376,25 @@ export const light: Palette = {
   gradientBrand:   ["#8B46E8", "#7231D6"],
   gradientAccent:  ["#3D74F0", "#2A5CDC"],
   gradientLive:    ["#EE3355", "#D42546"],
-  gradientPitch:   ["#155249", "#0E3D36"],
+  gradientPitch:   ["#1A4B54", "#12333C"],
   gradientSurface: ["#FBF9FE", "#F6F2FD"],
   gradientCard:    ["#FFFFFF", "#F8F4FE"],
+
+  /* AÇIK TEMA: BEYAZ AĞIRLIKLI SAHNE. Uygulama kâğıdı (#ECE7F7) lavantadır,
+     ama maç ekranının üst yarısını mor bir atmosfer kaplıyor; altındaki kâğıt
+     da lavanta olsaydı sayfa baştan aşağı mor bir sis olurdu. Neredeyse beyaz
+     bir zemin, atmosferi bir "ışık" gibi okutur ve kartları öne çıkarır. */
+  matchCanvas:  "#FBFAFE",
+  /* Üç durak: tepede doygun mor, ortada seyrelmiş, dipte kâğıdın kendisi.
+     Son durak `matchCanvas` ile BİREBİR aynı olmak zorunda — bir tık farklı
+     olsa atmosferin bittiği yerde yatay bir dikiş çizgisi görünür. */
+  matchTint: "#4E2589",
+  matchWash: ["rgba(78, 37, 137, 0)", "rgba(102, 55, 170, 0.55)", "#FBFAFE"],
+  /* Skor tablosunun ışıklı kenarı. Kart, atmosferin en koyu bölgesinde
+     duruyor; ince açık bir çerçeve onu sahneden AYIRIR ama koparmaz. */
+  glassBorder:  "rgba(255, 255, 255, 0.26)",
+  rimLight: ["#FFFFFF", "#E4DAF7"],
+  rimDark:  ["rgba(255, 255, 255, 0.34)", "rgba(255, 255, 255, 0.06)"],
 
   shadowColor:       "#3B1E6E",   // MOR gölge; siyah gölge lavantada kirlenir
   skeletonBase:      "#EDE7F9",
@@ -418,9 +494,19 @@ export const dark: Palette = {
   gradientBrand:   ["#8B46E8", "#7231D6"],
   gradientAccent:  ["#5E9CFB", "#3B82F6"],
   gradientLive:    ["#F7476A", "#D42B4E"],
-  gradientPitch:   ["#124037", "#0B2E28"],
+  gradientPitch:   ["#153C45", "#0D2930"],
   gradientSurface: ["#1D1234", "#180E2B"],
   gradientCard:    ["#1C1233", "#170E29"],
+
+  /* KOYU TEMA: DERİN MOR AĞIRLIKLI SAHNE. Burada zemin uygulama gecesinden
+     (#0C0718) bir tık MOR tarafa çekilir — atmosfer sönümlendiğinde sayfa
+     nötr siyaha düşmesin, mor kalsın. */
+  matchCanvas:  "#100826",
+  matchTint: "#2C1458",
+  matchWash: ["rgba(44, 20, 88, 0)", "rgba(40, 20, 80, 0.55)", "#100826"],
+  glassBorder:  "rgba(196, 181, 253, 0.20)",
+  rimLight: ["#3A2A5C", "#1E1436"],
+  rimDark:  ["rgba(196, 181, 253, 0.30)", "rgba(196, 181, 253, 0.05)"],
 
   shadowColor:       "#000000",
   skeletonBase:      "#1B1030",

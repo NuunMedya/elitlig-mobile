@@ -40,6 +40,8 @@ export type { TouchableProps, PressFeedback, HapticKind } from "./Pressable";
 export { Surface } from "./Surface";
 
 /** Kartların ışıklı mor gradyan katmanı. */
+export { Bloom, type BloomProps } from "./Bloom";
+export { Frame, type FrameProps, type FrameTone } from "./Frame";
 export { GradientFill, type GradientTone } from "./GradientFill";
 export type { SurfaceProps } from "./Surface";
 

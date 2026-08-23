@@ -105,6 +105,44 @@ export function initials(name?: string | null): string {
   return (words[0][0] + words[1][0]).toLocaleUpperCase(TR);
 }
 
+/**
+ * Oyuncu adından takım adı EKİNİ atar.
+ *
+ * NEDEN VAR: kadro kayıtlarının bir bölümünde oyuncu adı takım adıyla birlikte
+ * girilmiş — "Yusuf YILDIRIM İNFERNO FK", "Can YILDIZ JUNİORS FC". Bu ad maç
+ * detayında beş ayrı yerde geçiyor (skor bloğu golcüleri, zaman çizelgesi,
+ * saha dizilişi etiketleri, en iyi oyuncular, kadro satırı) ve her birinde
+ * satırı taşırıp kırpılmaya yol açıyordu: sahada etiket "FK" görünüyordu
+ * (son kelime alınıyor, o da takım ekinin son kelimesi), zaman çizelgesinde
+ * "Y. YILDIRIM İNFERNO FK" iki satıra sarıyordu.
+ *
+ * Ek yalnız SONDA ve TAM eşleşiyorsa atılır; "Ali FENERBAHÇELİ" gibi gerçek
+ * bir soyadı, takım adı "FENERBAHÇE" olsa bile korunur (kelime sınırı aranır).
+ * Ad tamamen takım adından ibaretse dokunulmaz — geriye boş dize kalmasın.
+ */
+export function stripTeamSuffix(name?: string | null, ...teams: (string | null | undefined)[]): string {
+  let out = String(name ?? "").replace(/\s+/g, " ").trim();
+  if (!out) return "";
+
+  for (const team of teams) {
+    const suffix = String(team ?? "").replace(/\s+/g, " ").trim();
+    if (!suffix) continue;
+
+    const lower = out.toLocaleLowerCase(TR);
+    const target = suffix.toLocaleLowerCase(TR);
+    if (!lower.endsWith(target)) continue;
+
+    const cut = out.length - suffix.length;
+    if (cut <= 0) continue;                       // ad = takım adı: dokunma
+    if (!/\s/.test(out[cut - 1])) continue;       // kelime sınırı yoksa dokunma
+
+    const trimmed = out.slice(0, cut).trim();
+    if (trimmed) out = trimmed;
+  }
+
+  return out;
+}
+
 /** Haber içeriği HTML olarak saklanıyor; listelerde düz metin özeti gerekir. */
 export function stripHtml(value?: string | null, limit = 200): string {
   const text = String(value ?? "")

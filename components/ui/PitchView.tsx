@@ -40,12 +40,33 @@ import { EventIcon, type EventIconKind } from "./EventIcon";
 import { Touchable } from "./Pressable";
 
 /** Hatların sahadaki dikey konumu (%). Kendi kalemiz ALTTA. */
+/** Tek takım tüm sahaya yayıldığında hat yükseklikleri. */
 const LINE_Y: Record<string, number> = { GK: 88, DEF: 66, MID: 42, FWD: 18 };
+/**
+ * İKİ TAKIM KARŞI KARŞIYA. Ev sahibi sahanın ALT yarısında, kalesi dipte;
+ * deplasman ÜST yarıda, aynalanmış. Bu, kadronun gerçekten "diziliş" gibi
+ * okunduğu tek düzendir: daha önce iki takım bir segment düğmesiyle sırayla
+ * gösteriliyordu ve kimin kime karşı nasıl dizildiği hiç görünmüyordu.
+ *
+ * Yarım sahada dört hat 6..46 aralığına sıkışır; kaleci kendi kalesinin
+ * önünde, forvet orta çizginin dibinde durur.
+ */
+/*
+ * ORTA ÇİZGİDE ÇARPIŞMA OLMAMALI. İlk ölçüde forvet hatları 46 ve 54'teydi:
+ * 3:2 oranında 358px genişlikte saha 537px yüksekliğinde, yani aradaki %8
+ * yalnız 43px — bir yuvanın kendi yüksekliği (30px avatar + 3 boşluk + 12
+ * etiket ≈ 45px) kadar. İki forvetin ETİKETLERİ birbirinin avatarına
+ * giriyordu. %16 aralık (≈86px) iki hattı da rahat bırakır.
+ */
+const HALF_Y_HOME: Record<string, number> = { GK: 92, DEF: 80, MID: 69, FWD: 58 };
+const HALF_Y_AWAY: Record<string, number> = { GK: 8, DEF: 20, MID: 31, FWD: 42 };
 const LINE_ORDER = ["GK", "DEF", "MID", "FWD"] as const;
 
 /** Saha en/boy oranı. Gerçek oran (68:105) telefonda yuvaları birbirine
  *  yapıştırıyor; 3:4 hem "saha" okunuyor hem sekiz oyuncuyu rahat taşıyor. */
 const ASPECT = 4 / 3;
+/** İki takım aynı sahaya dizilince dikey alan iki katına çıkmalı. */
+const ASPECT_FACING = 3 / 2;
 
 const AVATAR = 30;
 
@@ -64,12 +85,24 @@ export interface PitchPlayerView {
   position?: string | null;
   /** Avatarın sağ üstündeki olay rozetleri (gol, kart, değişiklik). */
   events?: EventIconKind[];
+  /**
+   * Takım rengi. İki kadro AYNI sahaya dizildiğinde forma numarası rozetinin
+   * zemini bu renk olur; iki takım aynı beyaz rozeti taşırsa sahadaki on altı
+   * avatar tek bir takım gibi okunur.
+   */
+  tint?: string | null;
   onPress?: () => void;
 }
 
 export interface PitchViewProps {
+  /** Ev sahibi kadro. `opponents` verilirse sahanın ALT yarısına dizilir. */
   players: PitchPlayerView[];
-  /** Ölçüyü çağıran belirler; saha genişliğe göre 3:4 yükselir. */
+  /**
+   * Deplasman kadrosu. Verilirse iki takım TEK sahaya karşı karşıya dizilir
+   * (deplasman üst yarıda, aynalanmış) ve saha 3:2 oranına yükselir.
+   */
+  opponents?: PitchPlayerView[];
+  /** Ölçüyü çağıran belirler; saha genişliğe göre 3:4 (karşılıklıysa 3:2) yükselir. */
   width: number;
   /** "3-3-1" — sahanın üstünde takım renginin noktasıyla yazılır. */
   formation?: string | null;
@@ -86,12 +119,14 @@ function surname(name: string): string {
 
 export const PitchView = memo(function PitchView({
   players,
+  opponents,
   width,
   formation,
   teamColor,
   style,
 }: PitchViewProps) {
-  const height = Math.round(width * ASPECT);
+  const facing = Boolean(opponents?.length);
+  const height = Math.round(width * (facing ? ASPECT_FACING : ASPECT));
 
   /**
    * Oyuncuları hatlara dağıt. Aynı hattaki n oyuncudan i.'sinin merkezi
@@ -99,28 +134,39 @@ export const PitchView = memo(function PitchView({
    * aralık kendiliğinden daralır.
    */
   const placed = useMemo(() => {
-    const byLine = new Map<string, PitchPlayerView[]>();
-    for (const p of players) {
-      const line = positionLine(p.position);
-      const group = byLine.get(line);
-      if (group) group.push(p);
-      else byLine.set(line, [p]);
-    }
+    const layout = (
+      squad: PitchPlayerView[],
+      lineY: Record<string, number>,
+    ): { player: PitchPlayerView; x: number; y: number }[] => {
+      const byLine = new Map<string, PitchPlayerView[]>();
+      for (const p of squad) {
+        const line = positionLine(p.position);
+        const group = byLine.get(line);
+        if (group) group.push(p);
+        else byLine.set(line, [p]);
+      }
 
-    const out: { player: PitchPlayerView; x: number; y: number }[] = [];
-    for (const line of LINE_ORDER) {
-      const group = byLine.get(line);
-      if (!group) continue;
-      group.forEach((player, i) => {
-        out.push({
-          player,
-          x: ((i + 1) / (group.length + 1)) * 100,
-          y: LINE_Y[line],
+      const out: { player: PitchPlayerView; x: number; y: number }[] = [];
+      for (const line of LINE_ORDER) {
+        const group = byLine.get(line);
+        if (!group) continue;
+        group.forEach((player, i) => {
+          out.push({
+            player,
+            x: ((i + 1) / (group.length + 1)) * 100,
+            y: lineY[line],
+          });
         });
-      });
-    }
-    return out;
-  }, [players]);
+      }
+      return out;
+    };
+
+    if (!facing) return layout(players, LINE_Y);
+    return [
+      ...layout(players, HALF_Y_HOME),
+      ...layout(opponents ?? [], HALF_Y_AWAY),
+    ];
+  }, [players, opponents, facing]);
 
   return (
     <View style={style}>
@@ -204,12 +250,16 @@ const PitchLines = memo(function PitchLines({ width, height }: { width: number; 
       ))}
 
       <Svg width={width} height={height}>
-        {/* Kenar çizgisi */}
+        {/* Kenar çizgisi. KÖŞELERİ YUVARLAK: sahanın kendi kutusu artık 30px
+            yarıçapla çiziliyor; keskin köşeli bir tebeşir dikdörtgeni, yuvarlak
+            zeminin köşelerinden dışarı taşıyor ve kırpılıyordu. */}
         <Rect
           x={left}
           y={top}
           width={right - left}
           height={bottom - top}
+          rx={radius.xxl - inset}
+          ry={radius.xxl - inset}
           stroke={c}
           strokeWidth={sw}
           fill="none"
@@ -283,12 +333,15 @@ const PitchSlot = memo(function PitchSlot({
       accessibilityLabel={speech}
       style={[styles.slot, { left: `${x}%`, top: `${y}%` }]}
     >
-      <View>
+      <View style={player.tint ? [styles.ring, { borderColor: player.tint }] : null}>
         <Avatar name={player.name} image={player.photo} size={AVATAR} onPitch />
 
         {player.number != null && player.number !== "" ? (
-          <View style={styles.numberBadge}>
-            <Text style={styles.number} {...textScale.badge}>
+          <View style={[styles.numberBadge, player.tint ? { backgroundColor: player.tint } : null]}>
+            <Text
+              style={[styles.number, player.tint ? styles.numberOnTint : null]}
+              {...textScale.badge}
+            >
               {player.number}
             </Text>
           </View>
@@ -334,7 +387,10 @@ const styles = StyleSheet.create({
   pitch: {
     // Gradyan yüklenemezse düz derin yeşil altta durur.
     backgroundColor: colors.pitchGreen,
-    borderRadius: radius.lg,
+    /* Saha, sayfanın en büyük tek yüzeyi: yarıçapı da ona göre (`xxl`).
+       Kart yarıçapıyla çizilince, ekranın yarısını kaplayan bir dikdörtgen
+       "büyütülmüş kart" gibi duruyordu. */
+    borderRadius: radius.xxl,
     borderWidth: hairline,
     borderColor: colors.border,
     overflow: "hidden",
@@ -348,10 +404,22 @@ const styles = StyleSheet.create({
   slot: {
     position: "absolute",
     width: SLOT_W,
+    // Etiket yuvadan taşabilsin (bkz. `name`).
+    overflow: "visible",
     marginLeft: -SLOT_W / 2,
     marginTop: -(AVATAR + 16) / 2,
     alignItems: "center",
     gap: 3,
+  },
+  /* Takım halkası: iki kadro aynı sahadayken avatarın kime ait olduğunu
+     söyleyen tek işaret. Yalnız `tint` verildiğinde çizilir. */
+  ring: {
+    borderRadius: (AVATAR + 4) / 2,
+    borderWidth: 2,
+    padding: 1,
+  },
+  numberOnTint: {
+    color: colors.onDark,
   },
   numberBadge: {
     position: "absolute",
@@ -360,7 +428,7 @@ const styles = StyleSheet.create({
     minWidth: 15,
     height: 15,
     paddingHorizontal: 3,
-    borderRadius: 8.5,
+    borderRadius: radius.pill,
     backgroundColor: colors.surface1,
     borderWidth: 1.5,
     borderColor: colors.surface1,
@@ -394,6 +462,15 @@ const styles = StyleSheet.create({
    * Ad derin sahanın üstünde durur: beyaz metin + koyu kapsül. Kapsül olmadan
    * ad, biçme şeridinin açık bandına denk geldiğinde okunurluğunu kaybediyordu.
    */
+  /*
+   * ETİKET YUVADAN GENİŞ OLABİLİR. `maxWidth` yuva genişliğine (56px)
+   * eşitti ve "SÜTLÜPINAR" gibi on harfli soyadları "SÜTLÜPI…" diye
+   * kırpılıyordu — sahadaki bir oyuncunun tek ayırt edici bilgisi.
+   *
+   * Etiket ORTALANMIŞ olduğu için yuvadan taşması yerleşimi kaydırmaz; bir
+   * hatta en fazla dört oyuncu var ve 358px'lik sahada her birine 89px
+   * düşüyor, yani 78px'lik bir etiket komşusuna değmiyor.
+   */
   name: {
     ...type.micro,
     letterSpacing: 0.2,
@@ -404,6 +481,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5,
     paddingVertical: 1,
     backgroundColor: colors.overlay,
-    maxWidth: SLOT_W,
+    maxWidth: 78,
   },
 });

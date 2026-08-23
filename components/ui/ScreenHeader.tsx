@@ -83,6 +83,22 @@ export interface ScreenHeaderProps {
   bottom?: React.ReactNode;
   /** Şeffaf hero üstünde mi (maç/takım detayı). */
   transparent?: boolean;
+  /**
+   * KOYU BİR ATMOSFERİN ÜSTÜNDE Mİ.
+   *
+   * Maç detayında başlık şeridi, sayfanın arkasındaki mor atmosferin en koyu
+   * bölgesinde duruyor: `textPrimary` (mor mürekkep) orada okunmaz. Bu bayrak
+   * başlığı, alt başlığı, geri okunu ve eylem ikonlarını `onDark` ailesine
+   * çevirir. Daralmış hâlde zemin opaklaştığı için renkler de geri döner —
+   * bu yüzden değer sabit değil, `progress` ile geçişlidir.
+   */
+  onDark?: boolean;
+  /**
+   * Daralınca altına serilecek zemin. Verilmezse `bg` kullanılır; maç
+   * detayı gibi kendi kâğıdı olan ekranlar kendi rengini verir, aksi hâlde
+   * şerit sayfadan farklı bir tonda kalıp yatay bir dikiş çizgisi yapar.
+   */
+  surface?: string;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -119,6 +135,8 @@ export function ScreenHeader({
   actions,
   bottom,
   transparent = false,
+  onDark = false,
+  surface,
   style,
 }: ScreenHeaderProps) {
   const router = useRouter();
@@ -175,6 +193,16 @@ export function ScreenHeader({
   const scaleShift = (titleBox.width * (1 - TITLE_SCALE)) / 2;
   const titleSlide = (back ? BACK_OFFSET : 0) - scaleShift;
 
+  /*
+   * MÜREKKEP SETİ. `onDark` verildiğinde şerit, koyu bir atmosferin üstünde
+   * duruyor demektir ve daralınca da koyu bir zemine (`surface`) oturuyordur —
+   * yani renkler her iki uçta da AYNI kalabilir, geçiş gerekmez. Renkleri
+   * kaydırmayla döndürmek gerekseydi ikon renkleri için `Animated` sarmalayıcı
+   * gerekirdi; sabit koyu zemin bu karmaşıklığı tümden ortadan kaldırıyor.
+   */
+  const ink = onDark ? colors.onDark : colors.textPrimary;
+  const inkMuted = onDark ? colors.onDarkMuted : colors.textSecondary;
+
   const expandedHeight = Math.max(
     layout.headerHeightExpanded,
     BAR_HEIGHT + blockHeight + space.m,
@@ -200,7 +228,12 @@ export function ScreenHeader({
         {transparent ? (
           <Animated.View
             pointerEvents="none"
-            style={[StyleSheet.absoluteFill, styles.background, { opacity: appear }]}
+            style={[
+              StyleSheet.absoluteFill,
+              styles.background,
+              surface ? { backgroundColor: surface } : null,
+              { opacity: appear },
+            ]}
           />
         ) : null}
 
@@ -215,7 +248,7 @@ export function ScreenHeader({
               accessibilityLabel="Geri"
               style={styles.backButton}
             >
-              <Ionicons name="chevron-back" size={21} color={colors.textPrimary} />
+              <Ionicons name="chevron-back" size={21} color={ink} />
             </Touchable>
           ) : null}
 
@@ -235,7 +268,7 @@ export function ScreenHeader({
               <Ionicons
                 name={action.icon}
                 size={18}
-                color={action.tone ? toneColors(action.tone).fg : colors.textSecondary}
+                color={action.tone ? toneColors(action.tone).fg : inkMuted}
               />
               {action.badge != null ? (
                 <Badge
@@ -267,7 +300,7 @@ export function ScreenHeader({
           {overline ? (
             <Animated.Text
               numberOfLines={1}
-              style={[styles.overline, { opacity: fadeOut }]}
+              style={[styles.overline, onDark ? styles.overlineOnDark : null, { opacity: fadeOut }]}
               {...textScale.badge}
             >
               {overline}
@@ -290,7 +323,7 @@ export function ScreenHeader({
             <Text
               accessibilityRole="header"
               numberOfLines={1}
-              style={styles.title}
+              style={[styles.title, { color: ink }]}
               {...textScale.dense}
             >
               {title}
@@ -300,7 +333,7 @@ export function ScreenHeader({
           {subtitle ? (
             <Animated.Text
               numberOfLines={1}
-              style={[styles.subtitle, { opacity: fadeOut }]}
+              style={[styles.subtitle, { color: inkMuted }, { opacity: fadeOut }]}
               {...textScale.dense}
             >
               {subtitle}
@@ -309,7 +342,10 @@ export function ScreenHeader({
         </View>
 
         {/* Alt kenarlık: yalnız kaydırma başlayınca belirir. */}
-        <Animated.View pointerEvents="none" style={[styles.border, { opacity: appear }]} />
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.border, onDark ? styles.borderOnDark : null, { opacity: appear }]}
+        />
       </Animated.View>
 
       {bottom}
@@ -372,6 +408,11 @@ const styles = StyleSheet.create({
     ...type.overline,
     color: colors.brandAccent,
   },
+  /* Koyu atmosfer üstünde `brandAccent` mor üstüne mor kalır (~1,8:1); orada
+     marka etiketinin rengi açık lavantadır. */
+  overlineOnDark: {
+    color: colors.brandOnDark,
+  },
   title: {
     ...type.h1,
     color: colors.textPrimary,
@@ -387,5 +428,8 @@ const styles = StyleSheet.create({
     bottom: 0,
     height: hairline,
     backgroundColor: colors.border,
+  },
+  borderOnDark: {
+    backgroundColor: colors.chalk,
   },
 });
