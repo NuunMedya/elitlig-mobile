@@ -399,7 +399,11 @@ export default function AccountScreen() {
     }
     result.push({ key: "guvenlik", title: "Hesap ve güvenlik", data: actions });
 
-    /* 5 — Oturum */
+    /* 5 — Oturum ve hesap
+       Hesap silme bilinçli olarak "Hesap ve güvenlik" grubunda değil en altta,
+       çıkışın yanında durur: mağazaların istediği kapı burada aranır ve
+       gündelik ayarların arasında kaybolmaz. Sonuçları ayrı ekran anlatır
+       (app/hesap-sil.tsx); buradaki satır yalnız kapıdır. */
     result.push({
       key: "oturum",
       data: [
@@ -411,6 +415,16 @@ export default function AccountScreen() {
           tone: "danger",
           destructive: true,
           action: { kind: "signOut" },
+        },
+        {
+          kind: "action",
+          key: "hesap-sil",
+          icon: "trash",
+          title: "Hesabı sil",
+          subtitle: "Kalıcı olarak silinir, geri alınamaz",
+          tone: "danger",
+          destructive: true,
+          action: { kind: "route", route: "/hesap-sil" },
         },
       ],
     });

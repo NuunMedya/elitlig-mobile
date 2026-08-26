@@ -99,6 +99,7 @@ export default function RootLayout() {
                   {/* Ayar ve hesap ekranları — klasik detay geçişi. */}
                   <Stack.Screen name="bildirim-tercihleri" />
                   <Stack.Screen name="hesabim" />
+                  <Stack.Screen name="hesap-sil" />
 
                   {/* Takım paneli alt ekranları — detay geçişi. */}
                   <Stack.Screen name="takimim/mac-al" />
