@@ -73,7 +73,7 @@ export const MetricTile = React.memo(function MetricTile({
     <>
       <GradientFill radius="lg" />
       <View style={styles.labelRow}>
-        {icon ? <Ionicons name={icon} size={12} color={colors.textTertiary} /> : null}
+        {icon ? <Ionicons name={icon} size={15} color={colors.textTertiary} /> : null}
         <Text style={styles.label} numberOfLines={1} {...textScale.badge}>
           {upperTR(label)}
         </Text>
@@ -120,7 +120,7 @@ export const MetricTile = React.memo(function MetricTile({
       {body}
       <Ionicons
         name="chevron-forward"
-        size={13}
+        size={16}
         color={colors.textDisabled}
         style={styles.chevron}
       />
@@ -178,7 +178,9 @@ export const MetricGrid = React.memo(function MetricGrid({
 
 const styles = StyleSheet.create({
   box: {
-    minHeight: 66,
+    /* `type.metric` 16 → 26px oldu (satır yüksekliği 31); 66px'lik kutuda
+       rakam + etiket artık sığmıyordu. */
+    minHeight: 84,
     justifyContent: "center",
     gap: 2,
     paddingHorizontal: space.m,

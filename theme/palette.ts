@@ -96,6 +96,13 @@ export interface Palette {
   border: string;        // hairline ayraçlar, normal kenarlık
   borderStrong: string;  // odaklı input, seçili çerçeve
   separator: string;     // liste içi ayraç (border'dan bir tık sönük)
+  /**
+   * KOYU BLOK üstündeki ayraç/kenarlık. `border` kâğıt için ayarlanmış mat bir
+   * lavantadır ve mürekkep bloğun üstünde kayboluyordu; koyu blokta ayraç,
+   * zemini boyayan bir çizgi değil ışığı GEÇİREN bir çatlaktır — bu yüzden
+   * yarı saydam beyazdır ve iki temada da aynıdır (blok iki temada da koyu).
+   */
+  borderOnDark: string;
 
   /* — MOR: aksiyon ve seçili durum — */
   brand: string;         // dolgu (buton, aktif sekme, seçili chip)
@@ -320,6 +327,7 @@ export const light: Palette = {
   border:       "#DCD3F0",
   borderStrong: "#C6B8E6",
   separator:    "#EFEAFA",
+  borderOnDark: "rgba(255, 255, 255, 0.14)",
 
   brand:       "#7C3AED",
   brandStrong: "#6D28D9",
@@ -438,6 +446,7 @@ export const dark: Palette = {
   border:       "#2A1D45",
   borderStrong: "#3B2A5E",
   separator:    "#221739",
+  borderOnDark: "rgba(255, 255, 255, 0.14)",
 
   brand:       "#7C3AED",
   brandStrong: "#6D28D9",

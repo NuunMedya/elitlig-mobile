@@ -39,14 +39,16 @@ import type { AndroidImportance } from "expo-notifications";
  * bildirim gölgesinde birikir ama titreşimle bölmez.
  */
 export const CHANNELS = {
-  GOAL:    { id: "goal",    name: "Goller",              importance: 7, vibration: [0, 120, 80, 120, 80, 240] },
-  MATCH:   { id: "match",   name: "Maç Bildirimleri",    importance: 6, vibration: [0, 250, 250, 250] },
-  PANEL:   { id: "panel",   name: "Panel Bildirimleri",  importance: 5, vibration: [0, 200, 150, 200] },
-  GAME:    { id: "game",    name: "Oyun Hatırlatmaları", importance: 4, vibration: [0, 180] },
-  NEWS:    { id: "news",    name: "Haberler",            importance: 4, vibration: [0, 180] },
+  GOAL:    { id: "goal",    name: "Goller",              importance: 7, vibration: [0, 120, 80, 120, 80, 240], silent: false },
+  MATCH:   { id: "match",   name: "Maç Bildirimleri",    importance: 6, vibration: [0, 250, 250, 250],         silent: false },
+  PANEL:   { id: "panel",   name: "Panel Bildirimleri",  importance: 5, vibration: [0, 200, 150, 200],         silent: false },
+  /* Oyun ve haber SESSİZDİR: bildirim gölgesinde birikir, kullanıcıyı bölmez.
+     Aynı kural ön planda `shouldPlaySoundFor` ile uygulanır. */
+  GAME:    { id: "game",    name: "Oyun Hatırlatmaları", importance: 4, vibration: [0, 180],                   silent: true  },
+  NEWS:    { id: "news",    name: "Haberler",            importance: 4, vibration: [0, 180],                   silent: true  },
   /* Sunucu tanımadığı bir tür için bu kanala düşer; yaratılmazsa o bildirim
      expo'nun İngilizce yedek kanalına gider. */
-  DEFAULT: { id: "default", name: "Diğer Bildirimler",   importance: 5, vibration: [0, 250, 250, 250] },
+  DEFAULT: { id: "default", name: "Diğer Bildirimler",   importance: 5, vibration: [0, 250, 250, 250],         silent: false },
 } as const;
 
 
@@ -300,7 +302,34 @@ export function categoryForNotif(data: Record<string, unknown> | null | undefine
   if (MATCH_KINDS.has(kind)) return "MATCH";
   if (kind === "news") return "NEWS";
   if (kind) return "GAME";
+  /* `kind` YOKSA bu bir PANEL bildirimidir (mesaj, teklif, sözleşme, ceza,
+     davet). Panel yükü `kind` değil `type`/`entity_type` taşır; bu dalın
+     "PANEL" dönmesi kaza değil, sözleşmenin kendisidir. */
   return "PANEL";
+}
+
+/**
+ * BU BİLDİRİM SES ÇIKARMALI MI — tek karar yeri.
+ *
+ * NEDEN AYRI FONKSİYON: bu kararı iki yer veriyordu ve İKİSİ AYNI FİKİRDE
+ * DEĞİLDİ. Ön plan handler'ı `categoryForNotif`e bakıp GAME/NEWS dışındaki
+ * her şeyi sesli çalıyordu; yerel köprü ise (hooks/useNotificationBridge.ts)
+ * `categoryForNotif({ type: item.type }) === "GOAL"` yazıyordu.
+ *
+ * O İFADE HİÇBİR ZAMAN DOĞRU OLAMAZDI: `categoryForNotif` yalnız `kind`
+ * okur, köprü ise `type` veriyordu. `kind` daima undefined kaldığı için
+ * fonksiyon her seferinde "PANEL" dönüyor, karşılaştırma her seferinde false
+ * oluyordu — yani KÖPRÜDEN GEÇEN HER BİLDİRİM SESSİZDİ. Panel bildirimleri
+ * (mesajlar dahil) bu köprüden geçtiği için kullanıcı mesaj geldiğinde hiçbir
+ * ses duymuyordu.
+ *
+ * KURAL: sessiz olan yalnız OYUN ve HABER'dir. Gol, maç olayı ve panel
+ * bildirimi (mesaj, teklif, sözleşme, ceza) kullanıcının o an bilmesi
+ * gereken şeylerdir ve ses çıkarır.
+ */
+export function shouldPlaySoundFor(data: Record<string, unknown> | null | undefined): boolean {
+  const category = categoryForNotif(data);
+  return category !== "GAME" && category !== "NEWS";
 }
 
 /** Bildirim izni iste + token al (EAS Build sonrası çalışır) */
@@ -383,6 +412,25 @@ export async function registerForPush(): Promise<PushRegistration> {
             name: channel.name,
             importance: channel.importance as AndroidImportance,
             vibrationPattern: [...channel.vibration],
+            /* SES VE TİTREŞİM AÇIKÇA YAZILIR. Kanal oluşturulurken `sound`
+               verilmezse expo-notifications `setSound` çağrısını hiç yapmaz
+               ve kanal Android'in o sürümdeki varsayılanına bırakılır;
+               `enableVibrate` verilmezse titreşim deseni yazılmış olsa bile
+               kanal titremeyebilir. İkisini de yazmak, "bildirim geldi ama
+               ses yok" durumunu cihaz sürümüne bırakmaz.
+
+               SESSİZ OLANLAR: oyun ve haber. Kural `shouldPlaySoundFor` ile
+               birebir aynıdır — kanal (arka plan) ile handler (ön plan) aynı
+               şeyi söylemeli.
+
+               ANDROID KANALLARI DEĞİŞMEZ: bir kanal bir kez oluşturulduktan
+               sonra uygulama onun sesini/önemini DEĞİŞTİREMEZ; yalnız
+               kullanıcı sistem ayarlarından değiştirebilir. Bu yüzden bu
+               ayarlar yalnız TEMİZ KURULUMLARDA yürürlüğe girer. Mevcut
+               kurulumlarda kanal ayarı bozuksa kullanıcının uygulama
+               bildirim ayarlarından düzeltmesi gerekir. */
+            sound: channel.silent ? null : "default",
+            enableVibrate: true,
           }).catch(() => undefined)
         )
       );
@@ -444,14 +492,12 @@ export async function setupNotificationHandlers(): Promise<void> {
     Notifications.setNotificationHandler({
       handleNotification: async (notif) => {
         const data = notif.request.content.data as Record<string, unknown> | undefined;
-        const category = categoryForNotif(data);
-        // Oyun ve haber bildirimleri ön planda sessiz; gol her zaman sesli.
-        const silent = category === "GAME" || category === "NEWS";
+        // Ses kararı TEK YERDEN gelir; köprü de aynı fonksiyonu kullanır.
         return {
           shouldShowAlert: true,
           shouldShowBanner: true,
           shouldShowList: true,
-          shouldPlaySound: !silent,
+          shouldPlaySound: shouldPlaySoundFor(data),
           shouldSetBadge: true,
         };
       },

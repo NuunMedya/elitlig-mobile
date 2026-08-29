@@ -136,8 +136,8 @@ export const ErrorState = React.memo(function ErrorState({
 const styles = StyleSheet.create({
   /** İkon dairesi boş durumla aynı ölçüde ama tonu `danger` — hata olduğu belli. */
   iconCircle: {
-    width: 42,
-    height: 42,
+    width: 54,
+    height: 54,
     borderRadius: radius.pill,
     backgroundColor: colors.dangerDim,
     alignItems: "center",

@@ -68,7 +68,7 @@ export const ActionTile = React.memo(function ActionTile({
       testID={testID}
     >
       <GradientFill radius="lg" />
-      <Ionicons name={icon} size={18} color={disabled ? colors.textDisabled : TONE_ICON[tone]} />
+      <Ionicons name={icon} size={22} color={disabled ? colors.textDisabled : TONE_ICON[tone]} />
       <Text style={styles.label} numberOfLines={1} {...textScale.badge}>
         {label}
       </Text>
@@ -124,7 +124,9 @@ export const ActionRow = React.memo(function ActionRow({
 
 const styles = StyleSheet.create({
   tile: {
-    height: 58,
+    /* İkon(22) + aralık + iki satır etiket(2×17) + dolgu. Eski 58px, 11px
+       etiket içindi; 13px etikette ikinci satır kırpılıyordu. */
+    height: 76,
     alignItems: "center",
     justifyContent: "center",
     gap: space.s,
@@ -145,7 +147,7 @@ const styles = StyleSheet.create({
     top: 5,
     right: 5,
     minWidth: 14,
-    height: 14,
+    height: 18,
     paddingHorizontal: 4,
     borderRadius: radius.pill,
     backgroundColor: colors.live,

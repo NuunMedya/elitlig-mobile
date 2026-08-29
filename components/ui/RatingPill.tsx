@@ -52,7 +52,7 @@ export const RatingPill = memo(function RatingPill({
       <Text style={[styles.text, TEXT_SIZE_STYLE[size], { color: tone.fg }]} {...textScale.badge}>
         {ratingLabel(value)}
       </Text>
-      {best ? <Ionicons name="star" size={8} color={colors.zoneChampion} style={styles.star} /> : null}
+      {best ? <Ionicons name="star" size={10} color={colors.zoneChampion} style={styles.star} /> : null}
     </View>
   );
 });
@@ -77,9 +77,11 @@ const styles = StyleSheet.create({
   text: {
     ...type.tableNumStrong,
   },
-  sm: { height: 18, paddingHorizontal: 4 },
-  md: { height: 22, paddingHorizontal: 6 },
-  lg: { height: 28, paddingHorizontal: 8 },
+  /* Reyting hapı bir RAKAM taşır ve rakam ölçeği bu sürümde büyüdü;
+     hap da onunla büyür, yoksa sayı kenarlara yapışır. */
+  sm: { height: 22, paddingHorizontal: 6 },
+  md: { height: 27, paddingHorizontal: 8 },
+  lg: { height: 34, paddingHorizontal: 10 },
   textSm: { fontSize: 11, lineHeight: 14 },
   textMd: { fontSize: 13, lineHeight: 16 },
   textLg: { fontSize: 15, lineHeight: 18 },

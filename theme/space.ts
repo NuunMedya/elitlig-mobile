@@ -65,30 +65,43 @@ export const spacing = {
  * düğmeleri (yıldız, geri) `touchSlop` ile 44px'e tamamlanmaya devam eder.
  */
 export const layout = {
-  /* YATAY KENAR 16px. Punto küçülürken kenar boşluğu BÜYÜDÜ: ferahlığı veren
-     şey puntonun kendisi değil, punto ile boşluk arasındaki orandır. */
+  /* ÖLÇÜLER TİPOGRAFİYLE BİRLİKTE BÜYÜDÜ.
+     `theme/typography.ts` bu sürümde gövdeyi 11 → 14px'e çıkardı (gerekçe
+     orada). Satır yükseklikleri ve sütun genişlikleri o eski, kısık ölçeğe
+     göre hesaplanmıştı; ikisi birlikte büyümeseydi iri metin 38px'lik
+     satırların içinde kırpılırdı. Buradaki her değer yeni ölçeğin satır
+     yüksekliğinden (`lineHeight`) + dikey dolgudan türetildi. */
+
+  /* YATAY KENAR 16px. Punto büyürken kenar boşluğu SABİT kaldı: ferahlığı
+     veren şey oranıdır ve iri metinle 16px zaten doğru orana oturuyor. */
   screenPadding: 16,
   /** Yoğun tablo düzenleri (puan durumu, istatistik ızgarası) için dar kenar. */
   screenPaddingDense: 12,
-  rowPaddingH: 12,
-  rowGap: 6,
-  /** Bölümler arası nefes — ölçek inerken bu değer AÇILDI (12 → 18). */
-  sectionGap: 18,
-  listRowHeight: 38,        // tek satırlı ListRow
-  listRowHeightTwoLine: 46, // iki satırlı ListRow
+  rowPaddingH: 14,
+  rowGap: 8,
+  /** Bölümler arası nefes. */
+  sectionGap: 22,
+  listRowHeight: 52,        // tek satırlı ListRow — h3(20) + 2×16 dolgu
+  listRowHeightTwoLine: 66, // iki satırlı ListRow — h3(20) + bodySm(17) + dolgu
   /** Maç satırı TEK SATIRDIR: logo · ev · skor · dep · logo. */
-  matchRowHeight: 38,
-  matchRowHeightCompact: 32,
-  headerHeightExpanded: 72,
-  headerHeightCollapsed: 42,
-  tabBarHeight: 56,        // + insets.bottom — 6+19 ikon +2+13 etiket +4 = 44px içerik, 12px pay
-  tabStripHeight: 34,
-  dateStripHeight: 44,
+  matchRowHeight: 54,       // scoreSm(21) ve crestMd(26) bu yüksekliği ister
+  matchRowHeightCompact: 44,
+  headerHeightExpanded: 96, // overline(13) + display(27) + dolgu
+  headerHeightCollapsed: 52,
+  /* + insets.bottom — 6 üst dolgu + 22 ikon + 2 aralık + 17 etiket + 4 alt
+     dolgu = 51px içerik; 64'te 13px pay kalır ve yazı tipi ölçeği
+     büyütüldüğünde bile etiket kırpılmaz. */
+  tabBarHeight: 64,
+  tabStripHeight: 42,
+  dateStripHeight: 56,
   minTouch: 44,            // erişilebilirlik alt sınırı (hitSlop ile tamamlanır)
-  crestSm: 16,
-  crestMd: 20,
-  crestLg: 24,
-  crestXl: 40,
+  /* AMBLEM ÖLÇÜSÜ METİNLE ORANTILIDIR: 16px'lik bir arma, 15px'lik bir takım
+     adının yanında "ikon" değil kir gibi duruyordu. Arma en az satır
+     başlığının satır yüksekliği kadar olmalı ki isimle aynı ağırlıkta okunsun. */
+  crestSm: 22,
+  crestMd: 26,
+  crestLg: 32,
+  crestXl: 52,
   /* YILDIZ ve SAAT SÜTUNU AYNI GENİŞLİKTE OLMAK ZORUNDA.
      Maç satırı [saat][ev yanı][skor][deplasman yanı][yıldız] dizilir ve iki
      yan eşit `flex` alır. Kenar sütunları eşit değilse skor bloğu satırın
@@ -96,9 +109,9 @@ export const layout = {
      Bir listede yirmi satır boyunca aynı 7px kayma, "okuma ekseni" diye bir
      şeyin kalmaması demektir. Yıldız sütun içinde sağa yaslı durduğu için
      genişlemesi yıldızın yerini değiştirmez, yalnız ekseni düzeltir. */
-  starColumnWidth: 36,
-  timeColumnWidth: 36,
-  scoreColumnWidth: 42,    // "12–10" tek blokta ortalanır
+  starColumnWidth: 42,
+  timeColumnWidth: 42,
+  scoreColumnWidth: 56,    // "12–10" scoreSm(17px) ile tek blokta ortalanır
 } as const;
 
 /**

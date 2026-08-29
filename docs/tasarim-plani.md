@@ -1150,3 +1150,132 @@ npm run typecheck
 Bu betikler briefin "bitti sayılma kriterleri" listesinin ölçülebilir kısmını
 kalıcı hâle getirir: bir sonraki değişiklik kuralı bozarsa gözle fark
 edilmesini beklemek gerekmez.
+
+---
+
+## 8. Sekizinci geçiş — ölçek geri alındı, marka görünür oldu
+
+Bu geçişin tetiği bir kullanıcı cümlesiydi: *"tasarımdan hiç memnun değilim,
+özellikle giriş anındaki logo çok kötü."*
+
+### 8.1 Logo kötü değildi, GÖRÜNMÜYORDU
+
+`assets/images/splash-icon.png` salt beyaz bir çizimdir — dosyadaki her opak
+piksel `#FFFFFF`. `app.json` açılış zeminini `#ECE7F7` (açık lavanta) yapıyor,
+`app/hosgeldin.tsx` ise aynı beyaz PNG'yi `colors.bg` üstüne koyuyordu. İki
+yerde de beyaz üstüne beyaz: kullanıcı açılışta boş bir kare görüyordu.
+
+Karar: **zemin bileşenin içine alındı.** `components/ui/BrandMark.tsx` logoyu
+asla çıplak bırakmaz; uygulama simgesinin kendisi olan mor gradyan karonun
+(ince açık kenarlık + yumuşak mor gölge) içine oturtur. Çağıran "logoyu koy"
+der, hangi zeminde durduğunu düşünmek zorunda kalmaz — ve hiçbir ekran bir
+daha görünmez logo çizemez. Üç boy: `sm` başlık, `md` kart, `lg` açılış
+sahnesi (arkasında `Bloom`).
+
+İşletim sistemi açılış karesi de mor bir alan oldu (`#4C1D95`, koyuda
+`#2A1055`); karşılama ekranı aynı mor alana taşındı. Böylece simge → açılış →
+karşılama tek bir hareket olarak sürüyor, zemin bir kare için lavantaya
+atlamıyor.
+
+### 8.2 Ölçek: yedinci geçişin yönü tersine çevrildi
+
+Beşinci, altıncı ve yedinci geçişler ölçeği adım adım küçültmüştü. Son hâlde
+gövde 11, ikincil 10, meta 9, rozet 8, sayfa başlığı 14 ve skor 24px'ti.
+
+Gerekçe `theme/typography.ts`'in kendi cümlesiydi: *"küçük punto + geniş boşluk
++ ışıklı yüzey, büyük punto + sıkışık boşluktan daha pahalı bir izlenim
+verir."* **Cümle doğru ama sınırı var, ve sınır aşılmıştı.** 11px gövde,
+iOS'un önerdiği 17pt gövdenin ve Material'ın 14sp tabanının belirgin
+altındadır; 9px meta ile 8px rozet, her iki platformun erişilebilirlik
+tabanının da altına iner. Telefonda sonuç "yoğun ve şık" değil KISIK ve YARIM
+görünüyordu — kullanıcı ekrana yaklaşmak zorunda kalıyorsa, o arayüz pahalı
+değil ucuz okunur.
+
+Yeni ölçek: gövde 14, ikincil 12, meta 11, rozet 10, satır başlığı 15, kart
+başlığı 16, sayfa başlığı 19, kimlik 22, skor 40. Hiyerarşi eskisinden DAHA
+nettir — basamaklar 1px değil 2–3px aralıklı, yani punto farkı tek başına da
+okunuyor.
+
+**Ölçek tek başına büyütülmedi.** İri metin eski kutuların içinde kırpılırdı;
+aynı geçişte birlikte büyüyenler: satır yükseklikleri (38 → 52), maç satırı
+(38 → 54), başlık (72 → 96), sekme çubuğu (56 → 64), amblem ölçüleri
+(16/20/24/40 → 22/26/32/52), skor/saat/yıldız sütunları, `Button` boyları
+(30/36/42 → 38/44/52) ve metin taşıyan sabit kutular (`Badge`, `RatingPill`,
+`ActionTile`, `MetricTile`, `TabBarIcon`, `Card`, `EmptyState`, `ErrorState`,
+`ScreenHeader`).
+
+`Badge`'de 14px'lik kutu 13px satır yüksekliğini zaten kırpıyordu; ölçü artık
+satır yüksekliğinden türüyor, elle yazılmıyor.
+
+### 8.3 Bu geçişte düzeltilen gerçek hatalar
+
+- **Tema seçimi yayın derlemesinde ölüydü.** Akış `try { DevSettings.reload() }
+  catch { uyar }` diye yazılmıştı, ama `DevSettings.reload()` yayında HATA
+  ATMAZ: React Native `__DEV__` false iken gövdesi boş bir nesne koyuyor
+  (`Libraries/Utilities/DevSettings.js`). Catch dalı hiç çalışmıyordu —
+  kullanıcı "Koyu"yu seçiyor, tema değişmiyor, hiçbir şey söylenmiyordu.
+  Karar artık `__DEV__` ile veriliyor. (Anında geçiş için ya `expo-updates`
+  bağımlılığı ya da paletin donmasını kaldıran stil düzeni gerekiyor; ikisi de
+  ayrı bir karar.)
+- **`lib/themeToggle.ts` aynı hatayı taşıyordu** ve içindeki
+  `require("expo-updates")` dalı tamamen ölüydü — paket `package.json`'da yok.
+  Olmayan bir yedeğe güvenmek yedeği olmamaktan kötüdür; dal kaldırıldı.
+- **Paylaş düğmesi iki ekranda sessizdi.** `Sharing.isAvailableAsync()` false
+  döndüğünde `app/turkiye.tsx` ve `app/slalom.tsx` içinde `else` dalı yoktu:
+  düğmeye basılıyor, görsel üretiliyor, sonra hiçbir şey olmuyordu. Aynı
+  akışın diğer iki kopyası zaten haber veriyordu.
+- **Koyu blok üstünde mor-üstüne-mor.** Karşılama slaytlarının ikonu ve aktif
+  sayfa noktası `brand` (dolgu moru) kullanıyordu; mürekkep bloğun üstünde
+  okunmuyordu → `brandOnDark`.
+- Palete eksik olan **`borderOnDark`** tokenı eklendi: koyu blokta ayraç,
+  zemini boyayan bir çizgi değil ışığı geçiren bir çatlaktır. Daha önce
+  `hosgeldin.tsx` bunu elle `rgba(255,255,255,0.06)` yazarak çözüyordu.
+
+### 8.4 Ölçülen ama sorun çıkmayan şey
+
+Mobilin çağırdığı 101 uç, sunucudaki (`elitlig-server`) 487 rota tanımına
+karşı tek tek denetlendi: **eşleşmeyen uç yok.** "Çalışmayan fonksiyonlar"
+bir uç uyuşmazlığı değil, yukarıdaki sessiz başarısızlıklardı.
+
+### 8.5 Kullanıcının bildirdiği iki hata
+
+Sekizinci geçişin ilk turundan sonra kullanıcı iki somut şikâyet iletti;
+ikisi de gerçek hata çıktı.
+
+**1. "Oyuncu profilinde maçlar gözükmüyor."**
+
+`routes/PlayerStatistics.js` diziyi yanıta `playerStatistics` adıyla yazıyor;
+servis katmanı onu kendi içinde `mergedStatistics` diye taşıdığı için ekran da
+o adı okuyordu. O anahtar HTTP yanıtında hiç yok — dizi daima `undefined`
+geliyor, `playedAppearances` boş dizi üretiyor ve ekranın maçla ilgili BEŞ
+parçası birden sessizce boşalıyordu: form şeridi, reyting grafiği, sezon
+tablosu, "Oynadığı maçlar" sekmesi, olay listesi. Ekran hata da vermiyordu,
+çünkü eksik alan bir hata değil `undefined`dır.
+
+`getProfileStats` artık ham yanıtı tek ve kesin bir ada (`appearances`)
+indirger ve üç olası kaynağı da tanır. Anahtar yine değişirse düzeltme beş
+çağrı yerine tek satırdır.
+
+**2. "Mesaj geldiğinde ses gelmiyor."**
+
+Ses kararını iki yer veriyordu ve ikisi aynı fikirde değildi. Yerel köprü
+şunu yazıyordu:
+
+    sound: categoryForNotif({ type: item.type }) === "GOAL"
+
+`categoryForNotif` yalnız `kind` okur, köprü ise `type` veriyordu; `kind`
+daima undefined kaldığı için fonksiyon her seferinde "PANEL" dönüyor ve
+karşılaştırma her seferinde false oluyordu. Köprüden geçen her bildirim
+sessizdi — ve panel bildirimleri (mesajlar dahil) tam olarak oradan geçiyor.
+
+Karar tek yere alındı: `shouldPlaySoundFor()`. Sessiz olan yalnız oyun ve
+haberdir. Ayrıca köprü bildirimi artık `panel` kanalına yazılıyor (kanal
+içerikte değil TETİKLEYİCİDE verilir) ve Android kanalları sesi/titreşimi
+açıkça yazıyor.
+
+**Bu ikisinin ortak dersi:** üç hatanın da (tema, paylaş, bildirim sesi,
+maç listesi) tek bir şekli var — *sessiz başarısızlık*. Hiçbiri hata
+fırlatmıyordu; hepsi geçerli görünen bir değer üretip yanlış davranıyordu.
+`undefined` bir alan, hiç çalışmayan bir `catch`, hiç doğru olamayan bir
+karşılaştırma. Bu yüzden bu geçişte eklenen her düzeltme, kararı TEK bir
+yere toplayıp adlandırdı; ikinci bir kopya, ikinci bir fikir demektir.

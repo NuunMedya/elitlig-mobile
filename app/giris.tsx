@@ -32,7 +32,7 @@ import {
   type TextInput,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Button, Input, ScreenHeader, Touchable, toneColors } from "@/components/ui";
+import { BrandMark, Button, Input, ScreenHeader, Touchable, toneColors } from "@/components/ui";
 import { ApiError } from "@/lib/http";
 import { useAuth } from "@/providers/AuthProvider";
 import {
@@ -122,6 +122,14 @@ export default function LoginScreen() {
           keyboardDismissMode="on-drag"
           showsVerticalScrollIndicator={false}
         >
+          {/* Marka karosu formun ÜSTÜNDE: giriş ekranı uygulamanın kimlik
+              sorduğu yerdir, kullanıcının da kime kimlik verdiğini görmesi
+              gerekir. Karo kendi mor zeminini getirdiği için lavanta kâğıdın
+              üstünde de okunur (bkz. components/ui/BrandMark.tsx). */}
+          <View style={styles.brand}>
+            <BrandMark size="md" />
+          </View>
+
           <Text style={styles.lede} {...textScale.long}>
             Üye, oyuncu, takım başkanı ve yönetim hesapları buradan giriş
             yapabilir. Hesabınız yoksa elitlig.com üzerinden üye olabilirsiniz.
@@ -212,6 +220,11 @@ const styles = StyleSheet.create({
     paddingTop: space.sm,
     paddingBottom: space.giant,
     gap: space.lg,
+  },
+
+  brand: {
+    alignItems: "center",
+    paddingTop: space.s,
   },
 
   lede: {

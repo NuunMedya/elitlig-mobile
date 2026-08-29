@@ -879,8 +879,15 @@ function ShareSheet({
     setBusy(true);
     try {
       const uri = await captureRef(shotRef, { format: "png", quality: 1 });
+      /* `isAvailableAsync()` false dönebilir (paylaşım hedefi olmayan cihaz,
+         web hedefi). ELSE DALI ŞART: dalsız hâlde düğme basılıyor, görsel
+         üretiliyor, sonra sessizce hiçbir şey olmuyordu — kullanıcı için bu
+         "buton bozuk" demektir. Aynı ekranların diğer ikisi (gunun.tsx,
+         ShareScoreCard.tsx) zaten haber veriyordu. */
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(uri, { mimeType: "image/png" });
+      } else {
+        toast.show({ message: "Bu cihazda paylaşım menüsü açılamıyor.", tone: "warn" });
       }
     } catch {
       toast.show({ message: "Görsel oluşturulamadı, tekrar dener misin?", tone: "danger" });

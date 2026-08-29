@@ -242,32 +242,48 @@ Renk, tipografi ve uzay `theme/` altındadır ve yedi kural taşır:
 
 ### Tipografi ölçeği
 
-Metin 8–15, skor 12–24. Arayüzün varsayılanı **11px** (`body`), ikincil metin
-10 (`bodySm`), satır başlığı 12 (`h3`), kart başlığı 13 (`h2`), sayfa başlığı
-14 (`h1`), kimlik başlığı 15 (`display`). Satır ölçüleri: tek satır 38, iki
-satır 46, maç satırı 38.
+Metin 10–22, skor 17–40. Arayüzün varsayılanı **14px** (`body`), ikincil metin
+12 (`bodySm`), satır başlığı 15 (`h3`), kart başlığı 16 (`h2`), sayfa başlığı
+19 (`h1`), kimlik başlığı 22 (`display`). Satır ölçüleri: tek satır 52, iki
+satır 66, maç satırı 54.
 
-8px'e yalnız `micro` ve `overline` iner; ikisi de DAİMA büyük harf + geniş harf
+10px'e yalnız `micro` ve `overline` iner; ikisi de DAİMA büyük harf + geniş harf
 aralığı taşır — büyük harf, o puntoda okunurluğu ayakta tutan şeydir.
 
-Boşluk ölçüsü puntoyla birlikte küçülür: 15px başlığın etrafındaki 48px'lik
-boşluk, punto 11'e inince "yok" mesajını ekranın üçte birine yayar. Bu yüzden
-`EmptyState` dikey boşluğu ve ikon kutusu da bu geçişte daraltıldı.
+**ÖLÇEK NEDEN BÜYÜTÜLDÜ.** Önceki sürümler ölçeği adım adım küçültmüştü; son
+hâlde gövde 11, meta 9, rozet 8 ve skor 24px'ti. Gerekçe "küçük punto + geniş
+boşluk daha pahalı bir izlenim verir" idi — doğru ama sınırı var, ve sınır
+aşılmıştı: 11px gövde iOS'un 17pt gövdesinin ve Material'ın 14sp tabanının
+belirgin altındadır, 9px meta ile 8px rozet iki platformun erişilebilirlik
+tabanının da altına iner. Kullanıcı ekrana yaklaşmak zorunda kalıyorsa o
+arayüz pahalı değil UCUZ okunur. Skor ayrıca büyüdü (24 → 40): bir skor
+uygulamasında skorun büyüklüğü, ürünün neyle ilgili olduğunu söyleyen ilk
+şeydir.
+
+Hiyerarşi eskisinden daha nettir: basamaklar 1px değil 2–3px aralıklıdır, yani
+punto farkı tek başına da okunur (eskiden fark yalnız aile + renk ile ayakta
+duruyordu).
+
+**Ölçek tek başına büyütülmez.** İri metin, eski kısık ölçeğe göre hesaplanmış
+kutuların içinde kırpılır; bu yüzden `theme/space.ts` satır yükseklikleri,
+amblem ölçüleri ve sütun genişlikleri, `Button` boyları ve metin taşıyan sabit
+kutular (`Badge`, `RatingPill`, `ActionTile`, `MetricTile`, `ScreenHeader`…)
+aynı geçişte birlikte büyüdü — her biri yeni satır yüksekliğinden türetilerek.
 
 ### Maç satırı — tek satır
 
 ```
-┌ 36 ┬────── flex ──────┬ 42 ┬────── flex ──────┬ 36 ┐
+┌ 42 ┬────── flex ──────┬ 56 ┬────── flex ──────┬ 42 ┐
 │19:30│ ◆ Kartalspor     │2–1 │ Yıldızspor ◆     │ ☆ │
 └─────┴──────────────────┴────┴──────────────────┴────┘
   saat   logo + ev (sağa)  skor  dep (sola) + logo  yıldız
 ```
 
-**Kenar sütunları eşit genişliktedir (36/36) ve yıldız gizlense bile yerini
+**Kenar sütunları eşit genişliktedir (42/42) ve yıldız gizlense bile yerini
 korur.** İki yan eşit `flex` aldığı için skor bloğu ancak kenarlar eşitken
-satırın geometrik merkezine oturur; 36/22'de blok 7px, yıldız hiç
-çizilmediğinde 18px sağa kayıyordu — yani aynı uygulamada maçlar üç farklı
-okuma ekseninde diziliyordu.
+satırın geometrik merkezine oturur; eşit olmadığında blok birkaç piksel, yıldız
+hiç çizilmediğinde çok daha fazla sağa kayıyordu — yani aynı uygulamada maçlar
+üç farklı okuma ekseninde diziliyordu.
 
 Ev sahibinin adı SAĞA, deplasmanınki SOLA yaslanır; ikisi de ortadaki sabit
 genişlikli skor bloğuna dayandığı için "ev – skor – deplasman" tek bir okuma
