@@ -289,6 +289,20 @@ export default function ProfileTabScreen() {
    * NEDEN YENİDEN YÜKLEME: palet modül yüklenirken donuyor; seçim etkin temayı
    * DEĞİŞTİRİYORSA JS'in bir kez tazelenmesi gerekir. Değiştirmiyorsa (ör.
    * sistem zaten koyu) hiç tazelenmez — bedava bir yeniden başlatma olmaz.
+   *
+   * NEDEN `__DEV__` SORULUYOR (try/catch YETMİYOR): `DevSettings.reload()`
+   * YAYIN DERLEMESİNDE HATA ATMAZ — React Native, `__DEV__` false iken
+   * DevSettings yerine gövdesi boş bir nesne koyar
+   * (react-native/Libraries/Utilities/DevSettings.js: `reload() {}`).
+   * Dolayısıyla eski `try { reload() } catch { uyar }` kurgusunda catch HİÇ
+   * çalışmıyordu: kullanıcı yayındaki uygulamada "Koyu"yu seçiyor, sayfa
+   * kapanıyor, tema değişmiyor ve HİÇBİR ŞEY SÖYLENMİYORDU. Sessiz başarısızlık
+   * en kötü hata türüdür — düğme bozuk değil, YALANCI görünür.
+   *
+   * Tazeleme yalnız geliştirmede var; yayında kullanıcıya ne yapması
+   * gerektiğini söylüyoruz. (Anında geçiş için ya `expo-updates` bağımlılığı
+   * ya da paletin donmasını kaldıran stil düzeni gerekir; ikisi de bu
+   * düzeltmenin kapsamı dışında.)
    */
   const chooseTheme = useCallback(
     (choice: ThemeChoice) => {
@@ -306,16 +320,17 @@ export default function ProfileTabScreen() {
             toast.show({ message: `Görünüm: ${THEME_LABELS[choice]}`, tone: "success" });
             return;
           }
-          try {
+          if (__DEV__) {
             DevSettings.reload();
-          } catch {
-            // Yayın derlemesinde tazeleme yoksa kullanıcıya dürüst ol.
-            toast.show({
-              message: "Görünüm kaydedildi. Uygulamayı yeniden açınca uygulanacak.",
-              tone: "warn",
-              duration: 4000,
-            });
+            return;
           }
+
+          // Yayın derlemesinde tazeleme YOK; kullanıcıya dürüst ol.
+          toast.show({
+            message: `Görünüm: ${THEME_LABELS[choice]}. Uygulamayı tamamen kapatıp yeniden açınca uygulanacak.`,
+            tone: "warn",
+            duration: 5000,
+          });
         })
         .catch(() => {
           setThemeChoice(storedThemeChoice());
