@@ -39,12 +39,12 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef } from "react";
-import { AppState, type AppStateStatus } from "react-native";
+import { AppState, Platform, type AppStateStatus } from "react-native";
 
 import { getPanelNotifications, type PanelNotification } from "@/lib/api/panel";
 import { ApiError } from "@/lib/http";
 import { deliveredIds, markManyDelivered } from "@/lib/notificationLedger";
-import { categoryForNotif } from "@/lib/notifications";
+import { CHANNELS, shouldPlaySoundFor } from "@/lib/notifications";
 import { queryKeys } from "@/lib/queryKeys";
 import { useAuth } from "@/providers/AuthProvider";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -81,10 +81,27 @@ async function present(item: PanelNotification): Promise<boolean> {
           // Köprüden geldiğini işaretler; teşhis ekranı ve günlükler için.
           source: "bridge",
         },
-        sound: categoryForNotif({ type: item.type }) === "GOAL",
+        /* SES: karar `shouldPlaySoundFor` ile ön plan handler'ıyla AYNI
+           yerden gelir. Eski hâli
+           `categoryForNotif({ type: item.type }) === "GOAL"` idi ve HİÇBİR
+           ZAMAN doğru olamıyordu: `categoryForNotif` yalnız `kind` okur,
+           buradan `type` geçiliyordu; fonksiyon her seferinde "PANEL"
+           dönüyor, karşılaştırma her seferinde false oluyordu. Sonuç:
+           köprüden geçen HER bildirim sessizdi — mesajlar dahil. */
+        sound: shouldPlaySoundFor({
+          type: item.type,
+          entity_type: item.entity_type,
+        }),
       },
-      // Şimdi göster — zamanlanmış değil, anlık.
-      trigger: null,
+      /* Android'de bildirimin sesi KANALDAN gelir; kanal verilmezse expo'nun
+         kendi yedek kanalına düşer ve oradaki ses uygulamanın kuralını değil
+         o kanalın ayarını izler. Panel bildirimleri panel kanalına yazılır.
+
+         KANAL TETİKLEYİCİDE VERİLİR, İÇERİKTE DEĞİL: expo-notifications'ta
+         `{ channelId }` bir `ChannelAwareTriggerInput`tur ve `null` gibi
+         "hemen göster" anlamına gelir (bkz. Notifications.types.d.ts). Üst
+         seviyeye yazılan bir `channelId` alanı sessizce yok sayılırdı. */
+      trigger: Platform.OS === "android" ? { channelId: CHANNELS.PANEL.id } : null,
     });
     return true;
   } catch {
