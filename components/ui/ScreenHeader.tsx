@@ -248,7 +248,7 @@ export function ScreenHeader({
               accessibilityLabel="Geri"
               style={styles.backButton}
             >
-              <Ionicons name="chevron-back" size={21} color={ink} />
+              <Ionicons name="chevron-back" size={24} color={ink} />
             </Touchable>
           ) : null}
 
@@ -267,7 +267,7 @@ export function ScreenHeader({
             >
               <Ionicons
                 name={action.icon}
-                size={18}
+                size={21}
                 color={action.tone ? toneColors(action.tone).fg : inkMuted}
               />
               {action.badge != null ? (
@@ -374,9 +374,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.sm,
     gap: space.xs,
   },
+  /* Dokunma alanı 40px: 52px'lik çubuğun içinde kalan en büyük kare ve
+     44px tabanına hitSlop'la tamamlanır. Ölçek büyüyünce ikon 21 → 24
+     oldu, kutu da onunla büyüdü. */
   backButton: {
-    width: 36,
-    height: 36,
+    width: 40,
+    height: 40,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -384,8 +387,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   action: {
-    width: 34,
-    height: 34,
+    width: 38,
+    height: 38,
     alignItems: "center",
     justifyContent: "center",
   },

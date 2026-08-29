@@ -3659,7 +3659,11 @@ const styles = StyleSheet.create({
     fontFamily: type.label.fontFamily,
     color: colors.onDark,
     textAlign: "center",
-    minHeight: 26,
+    /* İKİ SATIRLIK YER AYRILIR: uzun takım adı alta sarınca skor bloğu
+       kaymasın diye iki tarafa da aynı yükseklik verilir. Değer, iki satır
+       `caption` demektir — punto büyüyünce (13 → 15 satır yüksekliği) bu da
+       büyümek zorundaydı, yoksa ikinci satır kırpılıyordu. */
+    minHeight: 30,
   },
   /* KAYBEDEN SÖNÜKLEŞİR. Skor tablosunun ilk işi "kim kazandı"yı bir bakışta
      söylemektir; iki taraf aynı ağırlıktayken göz rakamları okuyup zihnen
@@ -4217,8 +4221,8 @@ const styles = StyleSheet.create({
   tlHalo: {
     position: "absolute",
     top: 1,
-    width: 40,
-    height: 24,
+    width: 46,
+    height: 28,
     borderRadius: radius.pill,
     backgroundColor: colors.brandDim,
   },

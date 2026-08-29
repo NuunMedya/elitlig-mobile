@@ -611,8 +611,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   meBadge: {
-    minWidth: 44,
-    height: 32,
+    minWidth: 52,
+    /* `type.tableNumStrong` 10 → 13px oldu (satır yüksekliği 18); 32px'lik
+       kutu sırayı kenarlara yaslıyordu. */
+    height: 38,
     borderRadius: radius.md,
     alignItems: "center",
     justifyContent: "center",
