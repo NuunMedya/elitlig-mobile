@@ -1236,3 +1236,46 @@ satır yüksekliğinden türüyor, elle yazılmıyor.
 Mobilin çağırdığı 101 uç, sunucudaki (`elitlig-server`) 487 rota tanımına
 karşı tek tek denetlendi: **eşleşmeyen uç yok.** "Çalışmayan fonksiyonlar"
 bir uç uyuşmazlığı değil, yukarıdaki sessiz başarısızlıklardı.
+
+### 8.5 Kullanıcının bildirdiği iki hata
+
+Sekizinci geçişin ilk turundan sonra kullanıcı iki somut şikâyet iletti;
+ikisi de gerçek hata çıktı.
+
+**1. "Oyuncu profilinde maçlar gözükmüyor."**
+
+`routes/PlayerStatistics.js` diziyi yanıta `playerStatistics` adıyla yazıyor;
+servis katmanı onu kendi içinde `mergedStatistics` diye taşıdığı için ekran da
+o adı okuyordu. O anahtar HTTP yanıtında hiç yok — dizi daima `undefined`
+geliyor, `playedAppearances` boş dizi üretiyor ve ekranın maçla ilgili BEŞ
+parçası birden sessizce boşalıyordu: form şeridi, reyting grafiği, sezon
+tablosu, "Oynadığı maçlar" sekmesi, olay listesi. Ekran hata da vermiyordu,
+çünkü eksik alan bir hata değil `undefined`dır.
+
+`getProfileStats` artık ham yanıtı tek ve kesin bir ada (`appearances`)
+indirger ve üç olası kaynağı da tanır. Anahtar yine değişirse düzeltme beş
+çağrı yerine tek satırdır.
+
+**2. "Mesaj geldiğinde ses gelmiyor."**
+
+Ses kararını iki yer veriyordu ve ikisi aynı fikirde değildi. Yerel köprü
+şunu yazıyordu:
+
+    sound: categoryForNotif({ type: item.type }) === "GOAL"
+
+`categoryForNotif` yalnız `kind` okur, köprü ise `type` veriyordu; `kind`
+daima undefined kaldığı için fonksiyon her seferinde "PANEL" dönüyor ve
+karşılaştırma her seferinde false oluyordu. Köprüden geçen her bildirim
+sessizdi — ve panel bildirimleri (mesajlar dahil) tam olarak oradan geçiyor.
+
+Karar tek yere alındı: `shouldPlaySoundFor()`. Sessiz olan yalnız oyun ve
+haberdir. Ayrıca köprü bildirimi artık `panel` kanalına yazılıyor (kanal
+içerikte değil TETİKLEYİCİDE verilir) ve Android kanalları sesi/titreşimi
+açıkça yazıyor.
+
+**Bu ikisinin ortak dersi:** üç hatanın da (tema, paylaş, bildirim sesi,
+maç listesi) tek bir şekli var — *sessiz başarısızlık*. Hiçbiri hata
+fırlatmıyordu; hepsi geçerli görünen bir değer üretip yanlış davranıyordu.
+`undefined` bir alan, hiç çalışmayan bir `catch`, hiç doğru olamayan bir
+karşılaştırma. Bu yüzden bu geçişte eklenen her düzeltme, kararı TEK bir
+yere toplayıp adlandırdı; ikinci bir kopya, ikinci bir fikir demektir.
