@@ -159,6 +159,9 @@ export type { MinuteRingProps } from "./MinuteRing";
 export { ChalkArc } from "./ChalkArc";
 export type { ChalkArcProps } from "./ChalkArc";
 
+/** Markanın tek çizim yeri — logo daima kendi mor karosuyla gelir. */
+export { BrandMark, brandMarkSize, type BrandMarkProps } from "./BrandMark";
+
 /* — Yükleme, boşluk, hata — */
 export {
   Skeleton,

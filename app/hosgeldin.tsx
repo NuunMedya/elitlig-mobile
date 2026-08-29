@@ -21,6 +21,17 @@
  * olmadığımız bir fotoğrafı temsili koymak, ürünün geri kalanında ısrarla
  * kaçınılan "hazır şablon" hissinin ta kendisi olurdu.
  *
+ * NEDEN İKİ EKRAN DA KOYU MOR: bu ekran, işletim sisteminin açılış
+ * (splash) karesinin DEVAMIDIR. Splash mor bir alanın ortasında beyaz
+ * markadır; buraya gelince zemin açık lavantaya atlayınca marka bir kare
+ * için yanıp sönüyor, üstelik beyaz logo açık zeminde GÖRÜNMÜYORDU. Aynı
+ * mor alanda aynı yerde duran aynı marka, açılışı iki ayrı ekran değil tek
+ * bir hareket yapar; lavanta kâğıt ancak sekmelere geçince açılır.
+ *
+ * LOGO ARTIK `BrandMark`TIR: ham `Image` + beyaz PNG bırakılmadı, çünkü o
+ * kombinasyon zeminin koyu olmasına BEL BAĞLIYORDU. `BrandMark` kendi mor
+ * karosunu getirir; ekran hangi zeminde olursa olsun marka görünür.
+ *
  * NEDEN ODAĞA BAĞLI ZAMANLAYICI (hızlı yol): "Hesabım var, giriş yap" giriş
  * modalını yığına PUSH eder; hosgeldin unmount OLMAZ, dolayısıyla sıradan bir
  * `useEffect` temizliği koşmaz ve zamanlayıcı ateşlenmeye devam ederdi.
@@ -37,7 +48,6 @@ import {
   Animated,
   Easing,
   FlatList,
-  Image,
   StyleSheet,
   Text,
   View,
@@ -47,15 +57,19 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { Button, ChalkArc, Touchable, useReduceMotion } from "@/components/ui";
+import { BrandMark, Button, ChalkArc, Touchable, useReduceMotion } from "@/components/ui";
 import { INTRO_SEEN_KEY } from "@/lib/storage";
 import { colors, radius, space, textScale, type, upperTR } from "@/theme";
 
 /** Hızlı yolun süresi. İlerleme çubuğu bu süreyi birebir çizer. */
 const AUTO_ADVANCE_MS = 2200;
 
-/** Marka işaretinin kenar uzunluğu. */
-const LOGO_SIZE = 104;
+/**
+ * Açılış sahnesindeki tebeşir yayının yüksekliğini türeten ölçü — marka
+ * karosunun (`BrandMark size="lg"`) kenarına denk gelir. Yay karodan belirgin
+ * biçimde büyük olmalı, yoksa logonun etrafında bir çerçeve gibi görünür.
+ */
+const LOGO_SIZE = 108;
 
 /**
  * Üç slayt — üç cümle.
@@ -162,7 +176,10 @@ function IntroSlides({
 
   return (
     <SafeAreaView style={[styles.screen, styles.dark]} edges={["top", "bottom"]}>
+      {/* Marka tanıtım boyunca ekranda kalır: üç slayt boyunca kullanıcının
+          NEREDE olduğunu söyleyen tek sabit öğe odur. */}
       <View style={styles.skipRow}>
+        <BrandMark size="sm" />
         <Touchable
           feedback="button"
           haptic="none"
@@ -223,7 +240,9 @@ function Slide({ slide, width }: { slide: (typeof SLIDES)[number]; width: number
           thickness={1}
         />
         <View style={styles.artIcon}>
-          <Ionicons name={slide.icon} size={30} color={colors.brand} />
+          {/* Koyu blok üstünde `brand` (dolgu moru) mor üstüne mor kalıyor;
+              kimlik bloklarının marka rengi `brandOnDark` açık lavantadır. */}
+          <Ionicons name={slide.icon} size={30} color={colors.brandOnDark} />
         </View>
       </View>
 
@@ -322,15 +341,20 @@ function FastSplash({
   };
 
   return (
-    <SafeAreaView style={styles.screen} edges={["top", "bottom"]}>
+    <SafeAreaView style={[styles.screen, styles.dark]} edges={["top", "bottom"]}>
       <View style={styles.fast}>
+        {/* İmza geometrisi markanın ARKASINDA: tebeşir yayı sahneyi
+            "bir futbol sahasının orta yuvarlağı" yapar, logo o sahnenin
+            ortasında durur. */}
+        <ChalkArc
+          width={barWidth}
+          height={LOGO_SIZE * 2.4}
+          color={colors.onDarkMuted}
+          thickness={1}
+        />
+
         <Animated.View style={logoStyle}>
-          <Image
-            source={require("../assets/images/splash-icon.png")}
-            style={styles.logo}
-            resizeMode="contain"
-            accessible={false}
-          />
+          <BrandMark size="lg" glow />
         </Animated.View>
 
         <Animated.View style={[styles.fastTexts, textStyle]}>
@@ -380,7 +404,9 @@ const styles = StyleSheet.create({
 
   /* — Üç slayt — */
   skipRow: {
-    alignItems: "flex-end",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: space.xl,
     paddingTop: space.md,
   },
@@ -406,7 +432,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: colors.borderOnDark,
   },
   slideTitle: {
     ...type.h1,
@@ -434,20 +460,19 @@ const styles = StyleSheet.create({
     opacity: 0.4,
   },
   dotActive: {
-    backgroundColor: colors.brand,
+    backgroundColor: colors.brandOnDark,
     opacity: 1,
   },
 
-  /* — Hızlı yol — */
+  /* — Hızlı yol —
+     Zemin koyu mordur (bkz. dosya başı): işletim sisteminin splash karesiyle
+     aynı alan. Bu yüzden buradaki her metin `onDark` ailesindendir; kâğıt
+     üstü tokenları (textPrimary/textTertiary) koyu blokta okunmaz. */
   fast: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
     gap: space.xl,
-  },
-  logo: {
-    width: LOGO_SIZE,
-    height: LOGO_SIZE,
   },
   fastTexts: {
     alignItems: "center",
@@ -455,30 +480,32 @@ const styles = StyleSheet.create({
   },
   fastOverline: {
     ...type.overline,
-    color: colors.textTertiary,
+    color: colors.brandOnDark,
   },
   fastTitle: {
     ...type.h1,
-    color: colors.textPrimary,
+    color: colors.onDark,
   },
   fastFooter: {
     alignItems: "center",
     gap: space.lg,
     paddingBottom: space.xl,
   },
+  /* Ray koyu blokta `border` ile çizilemez (kâğıt için ayarlı, morun üstünde
+     kaybolur); yarı saydam beyaz hem açık hem koyu temada aynı görünür. */
   barTrack: {
     height: 2,
     borderRadius: 1,
-    backgroundColor: colors.border,
+    backgroundColor: colors.borderOnDark,
     overflow: "hidden",
   },
   barFill: {
     height: 2,
     borderRadius: 1,
-    backgroundColor: colors.brand,
+    backgroundColor: colors.brandOnDark,
   },
   fastLink: {
     ...type.label,
-    color: colors.brandAccent,
+    color: colors.brandOnDark,
   },
 });
