@@ -78,7 +78,17 @@ export interface ButtonProps {
   testID?: string;
 }
 
-const HEIGHTS = { sm: 30, md: 36, lg: 42 } as const;
+/*
+ * ÖLÇÜ TİPOGRAFİYLE BİRLİKTE BÜYÜDÜ (30/36/42 → 38/44/52).
+ *
+ * Eski ölçüler 11px etiket için hesaplanmıştı; etiket 13px'e çıkınca 30px'lik
+ * bir düğmede metnin üstünde ve altında 8px'ten az yer kalıyor ve düğme
+ * "metne yapışmış bir şerit" gibi duruyordu. Yeni ölçülerde `lg` (52px) ve
+ * `md` (44px) erişilebilirlik tabanı olan 44px'i KENDİ BAŞINA karşılıyor —
+ * eskiden yalnız `hitSlop` ile tamamlanıyordu; birincil eylemin dokunma
+ * alanının görünür alanıyla aynı olması, düğmenin sağlam hissettiren şeydir.
+ */
+const HEIGHTS = { sm: 38, md: 44, lg: 52 } as const;
 
 export const Button = React.memo(function Button({
   label,

@@ -147,7 +147,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: space.sm,
-    minHeight: 30,
+    minHeight: 40,
   },
   headerTexts: {
     flex: 1,

@@ -165,6 +165,9 @@ export const Badge = React.memo(function Badge({
   );
 });
 
+/** Nokta rozetinin çapı — yarıçapı bundan TÜRER, elle yazılmaz. */
+const DOT = 9;
+
 const styles = StyleSheet.create({
   box: {
     flexDirection: "row",
@@ -174,14 +177,17 @@ const styles = StyleSheet.create({
     borderRadius: radius.xs,
     paddingHorizontal: space.s,
   },
+  /* YÜKSEKLİK METNİN SATIR YÜKSEKLİĞİNDEN TÜRER. `type.micro` bu sürümde
+     8 → 10px oldu (satır yüksekliği 13); 14px'lik kutu o metni kırpıyordu.
+     Kutu = satır yüksekliği + 2×dikey nefes. */
   boxXs: {
-    height: 14,
-    minWidth: 14,
+    height: 18,
+    minWidth: 18,
     paddingHorizontal: space.xs,
   },
   boxSm: {
-    height: 17,
-    minWidth: 17,
+    height: 22,
+    minWidth: 22,
   },
   /** Sayısal rozetler hap biçimindedir — "99+" da aynı yüksekliği korur. */
   pill: {
@@ -191,9 +197,9 @@ const styles = StyleSheet.create({
     ...type.micro,
   },
   dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: DOT,
+    height: DOT,
+    borderRadius: DOT / 2,
   },
   floating: {
     position: "absolute",

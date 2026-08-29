@@ -91,7 +91,7 @@ const styles = StyleSheet.create({
   indicator: {
     position: "absolute",
     top: -4,
-    width: 18,
+    width: 22,
     height: 2,
     borderRadius: radius.pill,
     backgroundColor: "transparent",
@@ -130,7 +130,7 @@ const styles = StyleSheet.create({
     top: -7,
     right: -12,
     minWidth: 14,
-    height: 14,
+    height: 18,
     paddingHorizontal: 3,
     borderRadius: radius.pill,
     backgroundColor: colors.live,

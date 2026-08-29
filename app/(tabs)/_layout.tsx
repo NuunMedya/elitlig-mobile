@@ -52,7 +52,7 @@ function tabIcon(name: React.ComponentProps<typeof TabBarIcon>["name"], badge?: 
       name={name}
       color={color}
       focused={focused}
-      size={19}
+      size={22}
       indicator
       badge={badge && badge > 0 ? badge : undefined}
     />
@@ -85,11 +85,12 @@ export default function TabsLayout() {
         tabBarInactiveTintColor: colors.textTertiary,
         tabBarActiveBackgroundColor: colors.tabBar,
         /* Altı yuvada bir sekmeye ~65px düşüyor. En uzun etiket "Oyuncular";
-           9px punto + NEGATİF harf aralığı + sıfır yatay dolgu ile tek satıra
-           sığar. Pozitif harf aralığıyla son harf kırpılıyordu. */
-        /* `micro` (8px) sekme etiketi için fazla küçük: alt çubuk ekranın en
-           uzak okunan yeridir. `caption` (9px) + negatif aralık, "Oyuncular"ı
-           tek satırda tutar. */
+           `caption` (artık 11px) + NEGATİF harf aralığı + sıfır yatay dolgu
+           ile tek satıra sığar. Pozitif harf aralığıyla son harf
+           kırpılıyordu. */
+        /* `micro` sekme etiketi için fazla küçük: alt çubuk ekranın en uzak
+           okunan yeridir. Ölçek büyüyünce `caption` 9 → 11px oldu ve etiket
+           artık ilk bakışta okunuyor. */
         /* `height` + `flexShrink: 0` ZORUNLU: ölçümde etiket kutusu 9px punto
            ile 5px'e sıkışıp alt kesimi tamamen kırpılıyordu — sekme öğesi bir
            flex sütunu ve dikey alan daralınca React Navigation önce metni
@@ -112,9 +113,9 @@ export default function TabsLayout() {
           borderTopWidth: 1,
           borderTopColor: colors.tabBarBorder,
           /* ÖLÇÜ: üst dolgu 6px (aktif gösterge çizgisi ikonun 4px üstünde
-             durur, kırpılmasın), 19px ikon, 2px aralık, 13px etiket, 4px alt
-             dolgu = 44px. Çubuk 56px olduğu için 12px pay kalır; yazı tipi
-             ölçeği büyütülse bile etiket kırpılmaz. Öğe başına gelen 5px
+             durur, kırpılmasın), 22px ikon, 2px aralık, 15px etiket kutusu,
+             4px alt dolgu = 49px. Çubuk 64px olduğu için 15px pay kalır; yazı
+             tipi ölçeği büyütülse bile etiket kırpılmaz. Öğe başına gelen 5px
              varsayılan dolgu sıfırlanır. */
           height: layout.tabBarHeight + insets.bottom,
           paddingTop: 6,

@@ -144,8 +144,8 @@ const styles = StyleSheet.create({
     paddingVertical: space.md,
   },
   iconCircle: {
-    width: 34,
-    height: 34,
+    width: 44,
+    height: 44,
     borderRadius: radius.pill,
     backgroundColor: colors.surface2,
     alignItems: "center",
