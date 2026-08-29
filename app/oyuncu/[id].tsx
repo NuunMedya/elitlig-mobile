@@ -211,8 +211,31 @@ const getMarketValueHistory = (playerId: number) =>
 
 /**
  * GET /oyuncu-istatistikleri/oyuncu/:id — services/playerProfileStats.js.
- * Maç maç kayıt (`mergedStatistics`) + takım/lig/sezon geçmişi (`profile.history`).
+ * Maç maç kayıt + takım/lig/sezon geçmişi (`profile.history`).
+ *
+ * ALAN ADI SUNUCUDA BAŞKA: servis katmanı diziyi kendi içinde
+ * `mergedStatistics` diye taşır, AMA rota onu yanıta yazarken
+ * `playerStatistics` adıyla yazıyor (routes/PlayerStatistics.js). Bu ekran
+ * uzun süre `mergedStatistics` okudu ve o anahtar yanıtta HİÇ YOKTU: dizi
+ * daima `undefined` geliyor, `playedAppearances` boş dizi üretiyor ve
+ * ekranın maçla ilgili BEŞ parçası birden sessizce boş çıkıyordu — form
+ * şeridi, reyting grafiği, sezon tablosu, "Oynadığı maçlar" sekmesi ve
+ * olay listesi. Kullanıcının gördüğü "maçlar gözükmüyor" buydu.
+ *
+ * NORMALİZASYON TEK YERDE: ham yanıt üç olası adı da tanır ve ekranın geri
+ * kalanı yalnız `appearances` görür. Anahtarın adı yine değişirse düzeltme
+ * altı çağrı yerine tek satırdır.
  */
+
+/** Sunucudan gelen HAM yanıt — alan adı toleransı burada tiplenir. */
+interface RawProfileStatsResponse {
+  player_id: number;
+  profile: { history: { teams: HistoryTeam[] }; appearances?: Appearance[] };
+  /** Rotanın GERÇEKTEN yazdığı ad. */
+  playerStatistics?: Appearance[] | null;
+  /** Servisin iç adı — bazı sürümlerde yanıta bu adla düşüyor. */
+  mergedStatistics?: Appearance[] | null;
+}
 interface HistoryTeam {
   id: number | null;
   name: string | null;
@@ -263,14 +286,29 @@ interface Appearance {
   match: AppearanceMatch | null;
 }
 
+/** Ekranın gördüğü NORMALİZE yanıt — dizi tek ve kesin bir adla durur. */
 interface ProfileStatsResponse {
   player_id: number;
   profile: { history: { teams: HistoryTeam[] } };
-  mergedStatistics: Appearance[];
+  /** Maç maç kayıt. Sunucu hangi adı kullanırsa kullansın burada budur. */
+  appearances: Appearance[];
 }
 
-const getProfileStats = (playerId: number) =>
-  get<ProfileStatsResponse>(`/oyuncu-istatistikleri/oyuncu/${playerId}`);
+const getProfileStats = async (playerId: number): Promise<ProfileStatsResponse> => {
+  const raw = await get<RawProfileStatsResponse>(
+    `/oyuncu-istatistikleri/oyuncu/${playerId}`
+  );
+
+  return {
+    player_id: raw.player_id,
+    profile: raw.profile,
+    /* Sıra ÖNEMLİ: rotanın yazdığı ad önce denenir; `profile.appearances`
+       aynı diziyi taşıyan ikinci kaynaktır; `mergedStatistics` ise sunucu
+       o adı yanıta geri koyarsa diye durur. */
+    appearances:
+      raw.playerStatistics ?? raw.profile?.appearances ?? raw.mergedStatistics ?? [],
+  };
+};
 
 /* Ekrana özgü önbellek anahtarları — paylaşılan olanlar `queryKeys` içinde. */
 const key = {
@@ -734,7 +772,7 @@ function GeneralTab({
   }, [rankingsQuery.data, playerId]);
 
   const recent = useMemo(
-    () => playedAppearances(profileQuery.data?.mergedStatistics).slice(0, 5),
+    () => playedAppearances(profileQuery.data?.appearances).slice(0, 5),
     [profileQuery.data],
   );
 
@@ -747,7 +785,7 @@ function GeneralTab({
     üç noktalı bir "seyir" seyir değildir.
   */
   const ratingTrend = useMemo(() => {
-    const values = playedAppearances(profileQuery.data?.mergedStatistics)
+    const values = playedAppearances(profileQuery.data?.appearances)
       .slice(0, 10)
       .map((row) => ratingOf(num(row.points)))
       .filter((value): value is number => value != null)
@@ -1098,7 +1136,7 @@ function StatsTab({
 
   const redBySeason = useMemo(() => {
     const map = new Map<string, number>();
-    playedAppearances(profileQuery.data?.mergedStatistics).forEach((row) => {
+    playedAppearances(profileQuery.data?.appearances).forEach((row) => {
       const id = row.season?.id;
       if (id == null) return;
       map.set(String(id), (map.get(String(id)) ?? 0) + num(row.red_card));
@@ -1311,7 +1349,7 @@ function MatchesTab({ playerId, scrollProps }: { playerId: number; scrollProps: 
   const refresh = useRefresh(profileQuery.refetch, { refreshing: profileQuery.isRefetching });
 
   const rows = useMemo(
-    () => playedAppearances(profileQuery.data?.mergedStatistics),
+    () => playedAppearances(profileQuery.data?.appearances),
     [profileQuery.data],
   );
 
@@ -1412,7 +1450,7 @@ function CareerTab({
   const refresh = useRefresh(profileQuery.refetch, { refreshing: profileQuery.isRefetching });
 
   const appearances = useMemo(
-    () => playedAppearances(profileQuery.data?.mergedStatistics),
+    () => playedAppearances(profileQuery.data?.appearances),
     [profileQuery.data],
   );
 
