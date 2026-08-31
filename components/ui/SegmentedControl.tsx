@@ -220,7 +220,10 @@ const styles = StyleSheet.create({
     left: PAD,
     top: PAD,
     borderRadius: radius.sm,
-    backgroundColor: isDark ? colors.surface3 : colors.surface1,
+    /* Seçili pul RAYDAN AÇIK olmalı: açık temada `elevated` (saf beyaz), koyu
+       temada bir kademe yukarı. `surface1` yetmiyordu — yeni palette yüzeyler
+       beyazdan bir kademe aşağı indi ve pul, rayla neredeyse aynı tona düştü. */
+    backgroundColor: isDark ? colors.surface3 : colors.elevated,
   },
   segment: {
     flexDirection: "row",

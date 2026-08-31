@@ -6,22 +6,23 @@
  * geniş, mor tonlu bir gölge alır. `elevate()` bu üçlünün zemin+kenarlık+gölge
  * kısmını verir; gradyan katmanını çağıran serer.
  *
- * NEDEN DEĞİŞTİ: önceki sürüm "gölge değil çizgi" diyerek kart gölgesini
- * tamamen kaldırmıştı. Gerekçe doğruydu (her yuvarlak köşenin altına koyu bir
- * bulut koymak ürünü şablona çevirir) ama çözüm aşırıydı: beyaz kart, beyaza
- * yakın kâğıdın üstünde yalnız 1px çizgiyle durunca hiçbir şey YÜZMEDİ ve
- * arayüz "ekrana basılmış" göründü. Doğru orta yol, gölgenin GÖRÜNMEMESİ ama
- * HİSSEDİLMESİDİR: y ofseti küçük, yarıçap büyük, opaklık 0.04–0.06.
+ * GÖLGE ARTIK DAHA ÇOK İŞ YAPIYOR. Açık tema kâğıdı BEYAZ olduğu için kart da
+ * beyazdır (bkz. theme/palette.ts): iki yüzeyi ayıran tek şey 1px kenarlık ve
+ * gölgedir. Önceki ölçekte kâğıt lavantaydı ve kartı zaten dolgu farkı
+ * ayırıyordu; gölge yalnızca "hissedilsin" diye vardı ve 0.08 opaklık
+ * yetiyordu. Beyaz kâğıtta aynı değer kartı hiç kaldırmıyor, arayüz düz bir
+ * sayfaya dönüyordu. Yine de gölge GÖRÜNMEZ kalır: y ofseti küçük, yarıçap
+ * geniş, opaklık düşük — gördüğünüz şey gölge değil, kartın yüzdüğüdür.
  *
  * Reçeteler (açık tema):
- *   seviye 1 (kart)     opaklık .08 · yarıçap 16 · y 4  · android 2
- *   seviye 2 (yükseltilmiş) .11 · 22 · 8  · android 4
- *   seviye 3 (yüzen)    .16 · 28 · 12 · android 8
- *   seviye 4 (sheet)    .22 · 36 · 18 · android 16
+ *   seviye 1 (kart)         opaklık .09 · yarıçap 18 · y 4  · android 2
+ *   seviye 2 (yükseltilmiş)         .12 · 24 · 8  · android 4
+ *   seviye 3 (yüzen)                .17 · 30 · 13 · android 8
+ *   seviye 4 (sheet)                .24 · 40 · 20 · android 16
  *
- * GÖLGE MORDUR. `shadowColor` derin mordur (#3B1E6E), siyah değil: lavanta
- * kâğıdın üstünde siyah gölge grileşip kirli görünüyordu. Mor gölge kartın
- * ışıklı gradyanıyla aynı aileden olduğu için yüzey "ışık alıyor" gibi durur.
+ * GÖLGE MORDUR. `shadowColor` derin mordur (#2E1065), siyah değil: beyaz
+ * kâğıdın üstünde siyah gölge grileşip kirli görünür. Mor gölge kartın ışıklı
+ * gradyanıyla aynı aileden olduğu için yüzey "ışık alıyor" gibi durur.
  *
  * Koyu temada gölge görünmez (siyah üstüne siyah); orada katmanlar yüzey farkı
  * + kenarlıkla ayrılır ve 3. seviyeden itibaren üst kenara 1px iç ışık eklenir.
@@ -40,10 +41,10 @@ export type ElevationLevel = 0 | 1 | 2 | 3 | 4;
 /** Verilen seviyenin zemin + kenarlık (+ yüzen katmanlarda gölge) stilini üretir. */
 /** Seviye başına gölge reçetesi: opaklık · yarıçap · y ofseti · android kotu. */
 const SHADOW: Record<Exclude<ElevationLevel, 0>, { o: number; r: number; y: number; e: number }> = {
-  1: { o: 0.08, r: 16, y: 4, e: 2 },
-  2: { o: 0.11, r: 22, y: 8, e: 4 },
-  3: { o: 0.16, r: 28, y: 12, e: 8 },
-  4: { o: 0.22, r: 36, y: 18, e: 16 },
+  1: { o: 0.09, r: 18, y: 4, e: 2 },
+  2: { o: 0.12, r: 24, y: 8, e: 4 },
+  3: { o: 0.17, r: 30, y: 13, e: 8 },
+  4: { o: 0.24, r: 40, y: 20, e: 16 },
 };
 
 /** Koyu temada yalnız gerçekten yüzen katmanlar gölge alır; kart almaz. */
@@ -79,8 +80,8 @@ export function elevation(level: ElevationLevel, p: Palette, isDarkTheme: boolea
   return {
     ...base,
     ...Platform.select({
-      // Gölge rengi açık temada saf siyah değil mürekkeptir: siyah gölge açık
-      // zeminde grileşip kirli görünür, mürekkep tonu soğuk kalır.
+      // Gölge rengi açık temada saf siyah değil MOR mürekkeptir: siyah gölge
+      // beyaz zeminde grileşip kirli görünür, mor ton soğuk ve temiz kalır.
       ios: {
         shadowColor: p.shadowColor,
         shadowOpacity: shadow.o,

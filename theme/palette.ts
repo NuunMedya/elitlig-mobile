@@ -5,52 +5,62 @@
  * yalnızca iki sabit nesne tanımlar. Aktif temanın seçilmesi `theme/index.ts`
  * işidir.
  *
- * RENK FELSEFESİ — MOR SİSTEM:
+ * RENK FELSEFESİ — MOR MÜREKKEP, BEYAZ KÂĞIT:
  *
- *  1. MOR MARKANIN KENDİSİDİR. Uygulamanın kimliği açık mor ile koyu mor
- *     arasındaki geçiştir: kâğıt hafif lavanta, kartlar beyazdan lavantaya
- *     ışıyan bir geçiş, kimlik blokları derin mor gradyan. Mor burada bir
- *     "aksan" değil, sistemin TONUDUR.
+ *  1. MOR MARKANIN KENDİSİDİR AMA ARKA PLAN DEĞİLDİR. Açık temada kâğıt
+ *     BEYAZDIR; mor, mürekkepte (metin), aksiyonda (düğme, seçili sekme) ve
+ *     sayılı kimlik bloklarındadır (alt menü barı, skor tablosu, hero). Bir
+ *     önceki sürüm zemini de mor yapmıştı ve mor, her yeri kaplayınca vurgu
+ *     olmaktan çıkmıştı. Koyu temada ise zemin GERÇEKTEN mordur (#180D33) —
+ *     eski #0C0718 adı mor olan bir siyahtı.
  *
- *  2. İKİ VURGU, İKİ İŞ (kural korundu, renkler değişti):
- *       MOR   (`brand`)  = AKSİYON ve SEÇİLİ DURUM. Buton, aktif sekme,
- *                          seçili chip, favori yıldızı, bölüm işareti.
- *       MAVİ  (`accent`) = VERİ. İstatistik barı, ilerleme, ev sahibi tarafı,
- *                          öne çıkan rakam, sparkline.
- *     Mor zeminin üstünde mor bir vurgu okunmaz; bu yüzden koyu mor blokların
- *     üstündeki marka rengi ayrı bir tokendır: `brandOnDark` (açık lavanta).
+ *  2. İKİ VURGU, İKİ İŞ:
+ *       MOR       (`brand`)  = AKSİYON ve SEÇİLİ DURUM. Düğme, aktif sekme,
+ *                              seçili chip, favori yıldızı, bölüm işareti.
+ *       CAMGÖBEĞİ (`accent`) = VERİ. İstatistik barı, ilerleme, ev sahibi
+ *                              tarafı, öne çıkan rakam, sparkline.
+ *     Veri rengi eskiden MAVİYDİ ve mavi morun komşusudur: bir istatistik
+ *     barında "bu seçili mi, veri mi" ayırt edilemiyordu. Camgöbeği morun tam
+ *     karşısında durur ve iki renk hiçbir ışıkta karışmaz.
+ *     Mor zeminin üstünde mor bir vurgu okunmaz; koyu blokların üstündeki
+ *     marka rengi ayrı bir tokendır: `brandOnDark` (açık lavanta).
  *
- *  3. KARTLAR IŞIKLIDIR AMA GEÇİŞ GÖRÜNMEZ. Varsayılan kart `gradientCard`
- *     geçişidir + 1px kenarlık + mor tonlu yumuşak gölge. Geçişin iki durağı
- *     BİRBİRİNE ÇOK YAKINDIR (açık temada #FFFFFF → #F8F4FE): amaç yüzeyin
- *     "boyanmış" görünmesi değil, ışık aldığını hissettirmektir. Keskin
- *     geçişler yüzeyi iki parçaya bölüyordu.
+ *  3. KART, DOLGUYLA DEĞİL KENARLIK VE GÖLGEYLE AYRILIR. Beyaz kâğıdın
+ *     üstünde beyaz kart durur; onu ayıran şey 1px lavanta kenarlık ve geniş,
+ *     çok sönük mor gölgedir. `gradientCard` geçişi neredeyse görünmezdir
+ *     (#FFFFFF → #FBF9FE): amaç yüzeyi boyamak değil, ışık aldığını
+ *     hissettirmektir.
  *
  *     YÖN DAİMA SAĞDAN SOLADIR. Dikey geçiş, geniş ve alçak bir kartın
  *     üstünde silindir ("boru") etkisi yapıyordu; yatay geçiş yüzeyi düz
  *     bırakır. Bkz. components/ui/GradientFill.tsx.
  *
- *     Gölge rengi siyah değil `shadowColor` (derin mor): siyah gölge lavanta
+ *     Gölge rengi siyah değil `shadowColor` (derin mor): siyah gölge beyaz
  *     kâğıdın üstünde grileşip kirli görünür.
  *
- *  4. GRADYAN SAYILIDIR VE TOKENDIR. Serbest gradyan yoktur; yedi gradyanın
- *     her birinin bir İŞİ vardır: `gradientCard` kart yüzeyi, `gradientInk`
- *     kimlik bloğu, `gradientBrand` birincil aksiyon, `gradientAccent` veri,
- *     `gradientLive` canlı, `gradientPitch` saha, `gradientSurface` ikincil
- *     yüzey. Görsel üstündeki okunabilirlik scrim'i ayrıca
- *     `scrimGradientTop` → `scrimGradientBottom` ile kurulur.
+ *  4. GRADYAN SAYILIDIR VE TOKENDIR. Serbest gradyan yoktur; her gradyanın bir
+ *     İŞİ vardır: `gradientCard` kart yüzeyi, `gradientInk` kimlik bloğu,
+ *     `gradientBrand` birincil aksiyon, `gradientAccent` veri, `gradientLive`
+ *     canlı, `gradientPitch` saha, `gradientSurface` ikincil yüzey,
+ *     `gradientTabBar` alt menü barı. Görsel üstündeki okunabilirlik scrim'i
+ *     ayrıca `scrimGradientTop` → `scrimGradientBottom` ile kurulur.
  *
- *  5. KONTRAST HESAPLANDI, VARSAYILMADI. Her metin/zemin çifti
+ *  5. ALT MENÜ BARI İKİ TEMADA DA KOYU MORDUR. Uygulamanın her ekranında
+ *     görünen tek yüzey odur; tema değiştikçe kimlik değiştirmemesi için
+ *     rengi temadan bağımsızdır. Açık temada beyaz kâğıdın üstündeki tek koyu
+ *     ada, koyu temada kâğıttan bir kademe açık duran yüzen bir hap.
+ *
+ *  6. KONTRAST HESAPLANDI, VARSAYILMADI. Her metin/zemin çifti
  *     `npm run check:tokens` ile iki temada da sınanır.
  *
- *  6. Durum rengi tek başına anlam taşımaz; kazanan takım kalın + textPrimary,
+ *  7. Durum rengi tek başına anlam taşımaz; kazanan takım kalın + textPrimary,
  *     kaybeden textTertiary olur.
  *
- *  7. Her token her iki temada da tanımlıdır; ekran hangi temada olduğunu bilmez.
+ *  8. Her token her iki temada da tanımlıdır; ekran hangi temada olduğunu bilmez.
  *
- * MÜREKKEP ARTIK MOR MÜREKKEPTİR: `textPrimary` nötr siyah değil çok koyu bir
- * mordur (#1A1033). Nötr siyah, lavanta kâğıdın üstünde "başka bir tema"dan
- * gelmiş gibi durur.
+ * MÜREKKEP MOR MÜREKKEPTİR: `textPrimary` nötr siyah değil çok koyu bir mordur
+ * (#160C2E). Nötr siyah, mor aksanların yanında "başka bir tema"dan gelmiş
+ * gibi durur.
  */
 
 export interface Palette {
@@ -274,257 +284,317 @@ export interface Palette {
   shadowColor: string;
   skeletonBase: string;
   skeletonHighlight: string;
+
+  /* — Alt menü barı — İKİ TEMADA DA KOYU MOR —
+   *
+   * Bar, ekranın altında YÜZEN bir hap. Zemini iki temada da derin mordur:
+   * açık temada beyaz kâğıdın üstünde duran tek koyu blok odur ve uygulamanın
+   * kimliğini her ekranda taşır; koyu temada kâğıttan bir kademe AÇIK durur ki
+   * gece de "yüzen" okunsun. Bar iki temada da koyu olduğu için üstündeki
+   * bütün renkler (ikon, etiket, ışık) tema değiştirse de aynı kalır — sekme
+   * çubuğu, uygulamanın tema değişiminden etkilenmeyen tek yüzeyidir.
+   */
+  /** Barın düz zemini — gradyan yüklenemezse yedek, rozet halkası bunu kullanır. */
   tabBar: string;
+  /** Barın ışıklı üst kenarı (yarı saydam beyaz). */
   tabBarBorder: string;
+  /** Barın yüzey gradyanı — sağdan sola. */
+  gradientTabBar: readonly [string, string];
+  /** Seçili sekmenin ikon/etiket rengi. */
+  tabActive: string;
+  /** Seçili olmayan sekmenin ikon/etiket rengi. */
+  tabInactive: string;
+  /** Işığın kaynağı: seçili sekmenin üstündeki 3px'lik parlak çizgi. */
+  tabBeam: string;
+  /**
+   * IŞIK KONİSİ — çizginin altına düşen üç duraklı DİKEY geçiş.
+   * Yüzey değil ışık kaynağı olduğu için dikeydir (bkz. `matchWash`).
+   */
+  tabGlow: readonly [string, string, string];
+
   chartGrid: string;
   scrimGradientTop: string;    // hero üstü okunabilirlik gradyanı
   scrimGradientBottom: string;
 }
 
 /**
- * Açık tema — BİRİNCİL tema, cilalanan tema budur.
+ * AÇIK TEMA — BEYAZ KÂĞIT, MOR MÜREKKEP.
  *
- * Kontrast düzeltmeleri (ham brief değeri → buradaki değer, kağıt #F4F6FA üstü):
- *   · ink-muted   #767D8E = 3,74:1 ✗  →  #656C7D = 4,77:1 ✓ (AA metin)
- *   · slate bar   #99A1B3 = 2,35:1 ✗  →  #7C8598 = 3,36:1 ✓ (AA grafik)
- *   · mercan metin #EE7F55 = 2,44:1 ✗ →  #B0512A = 4,70:1 ✓ (AA metin)
- * Ayrıca mercan DOLGU üstünde beyaz metin 2,69:1 ile geçmiyor; bu yüzden
- * `textOnBrand` beyaz değil mürekkeptir (6,83:1). Koyu metinli mercan buton
- * hem geçer hem editoryal durur.
- */
-/**
- * AÇIK MOR — birincil tema.
+ * NEDEN KÂĞIT ARTIK BEYAZ (bu sürümün asıl kararı): önceki sürüm ekran zeminini
+ * lavanta bir kâğıt (#ECE7F7) yapmıştı; gerekçe "mor sistemin tonu" idi. Ama
+ * lavanta kâğıt, üstündeki beyaz kartla arasında yalnız üç puanlık bir fark
+ * bırakıyor ve ekran, mor bir sisin içinde duran soluk bir listeye dönüşüyordu:
+ * hiçbir yüzey öne çıkmıyor, mor da vurgu olmaktan çıkıp ARKA PLAN oluyordu.
  *
- * Kâğıt (`bg` #ECE7F7) beyaz değil açık bir lavantadır; kart beyazdan
- * lavantaya ışıyan bir geçiştir. Kâğıt daha önce #F5F3FB idi ve kartın geçiş
- * SONU (#F8F4FE) ile arasında üç puanlık fark kalıyordu: kartın sağ ucu
- * kâğıda karışıyor, kart "sağa doğru taşıyormuş" gibi duruyordu. Kâğıt bir
- * kademe koyulaşınca kartın iki ucu da kâğıdın üstünde kalır ve ışıklı geçiş
- * kartın TAMAMINDA okunur.
+ * Yeni kural: KÂĞIT BEYAZDIR, MOR YALNIZ MÜREKKEPTE VE AKSİYONDADIR. Mor artık
+ * her yeri kaplamadığı için gerçekten görülür — bir düğme, bir seçili sekme,
+ * bir başlık moru olduğunda göz oraya gider. Uygulamanın kimliğini taşıyan
+ * geniş mor yüzeyler (alt menü barı, skor bloğu, hero) yerinde durur; onlar
+ * beyazın üstünde ADA gibidir ve kimliği tam da bu karşıtlık kurar.
+ *
+ * KART BEYAZ KÂĞIDIN ÜSTÜNDE NASIL AYRILIR: kâğıt SAF beyazdır (#FFFFFF),
+ * yüzeyler ise beyazdan bir kademe aşağıda, çok açık bir lavantadır (#F8F5FE)
+ * — üstüne 1px kenarlık ve geniş, sönük mor gölge biner.
+ *
+ * NEDEN KART BEYAZ DEĞİL: kartı da beyaz yapıp yalnız kenarlığa güvenmek
+ * denendi ve tek tek kartlarda güzel çalışıyordu; ama bu uygulamanın asıl
+ * yüzeyi kart değil LİSTE SATIRIDIR ve satırların kenarlığı yoktur (bkz.
+ * components/ui/ListRow.tsx, MatchRow.tsx) — bir maç listesi, satırları
+ * kâğıttan ayıran hiçbir şey kalmayınca tek parça beyaz bir alana dönüşüyordu.
+ * Bir kademe lavanta, satırı kâğıttan ayırmaya yeter ve sayfanın beyaz
+ * okunmasını bozmaz: gördüğünüz sayfa beyazdır, üstündeki bloklar değil.
+ *
+ * İKİ VURGU, İKİ İŞ:
+ *   MOR  (`brand`)  = AKSİYON ve SEÇİLİ DURUM.
+ *   CAMGÖBEĞİ (`accent`) = VERİ. Eskiden maviydi; mavi morun komşusu olduğu
+ *   için bir istatistik barında "seçili mi yoksa veri mi" ayırt edilemiyordu.
+ *   Camgöbeği morun karşısında durur: iki renk hiçbir ışıkta karışmaz.
  */
 export const light: Palette = {
-  bg:       "#ECE7F7",
-  surface1: "#FFFFFF",
-  surface2: "#FAF8FE",
-  surface3: "#E3DCF4",
+  bg:       "#FFFFFF",
+  surface1: "#F8F5FE",
+  surface2: "#F1ECFA",
+  surface3: "#EAE3F6",
   elevated: "#FFFFFF",
-  inverse:  "#1A0F2E",
-  inkBlock: "#1E1235",
-  overlay:  "rgba(26, 15, 46, 0.58)",
-  pressed:  "#EFEAFA",
-  ripple:   "rgba(109, 40, 217, 0.08)",
+  inverse:  "#1B1033",
+  inkBlock: "#221340",
+  overlay:  "rgba(18, 10, 38, 0.55)",
+  pressed:  "#EFE9F9",
+  ripple:   "rgba(109, 40, 217, 0.09)",
 
-  textPrimary:   "#1A1033",   // nötr siyah değil MOR mürekkep
-  textSecondary: "#4B3D6B",
-  textTertiary:  "#6B5C8A",
+  textPrimary:   "#160C2E",   // nötr siyah değil MOR mürekkep
+  textSecondary: "#4A3A6B",
+  textTertiary:  "#6E5F8C",
   textDisabled:  "#A99CC2",
-  textOnBrand:   "#FFFFFF",   // mor dolgu üstünde beyaz (5,70:1)
+  textOnBrand:   "#FFFFFF",   // mor dolgu üstünde beyaz (7,10:1)
   textOnStatus:  "#FFFFFF",
   onDark:        "#FFFFFF",
-  onDarkMuted:   "rgba(255, 255, 255, 0.66)",
+  onDarkMuted:   "rgba(255, 255, 255, 0.68)",
   onInverse:     "#FFFFFF",
 
-  border:       "#DCD3F0",
-  borderStrong: "#C6B8E6",
-  separator:    "#EFEAFA",
+  border:       "#E4DCF3",
+  borderStrong: "#CBBDE8",
+  separator:    "#E9E2F5",
   borderOnDark: "rgba(255, 255, 255, 0.14)",
 
-  brand:       "#7C3AED",
-  brandStrong: "#6D28D9",
-  brandAccent: "#6D28D9",     // yalnız METİN/ikon
-  brandDim:    "#F1EAFE",
-  brandBorder: "#DCCCFB",
+  brand:       "#6D28D9",
+  brandStrong: "#5B21B6",
+  brandAccent: "#5B21B6",     // yalnız METİN/ikon
+  brandDim:    "#F3EDFE",
+  brandBorder: "#DFD1FB",
   brandOnDark: "#C4B5FD",
 
-  accent:       "#2563EB",
-  accentStrong: "#1D4ED8",
-  accentText:   "#1D4ED8",
-  accentDim:    "#E6EDFD",
-  accentBorder: "#C3D4FA",
+  accent:       "#0E7490",
+  accentStrong: "#0C5F77",
+  accentText:   "#0E7490",
+  accentDim:    "#E2F4F9",
+  accentBorder: "#B6E0EC",
   textOnAccent: "#FFFFFF",
 
   slate:     "#7A6C99",
-  slateSoft: "#A79CC0",
+  slateSoft: "#CFC7E2",
 
   live:       "#E11D48",
   liveDim:    "#FDE8ED",
   liveGlow:   "rgba(225, 29, 72, 0.22)",
   liveOnDark: "#FF6B8A",
 
-  win:    "#059669",  winDim:    "#E0F5EE",
-  draw:   "#8B7FA8",  drawDim:   "#EFEAFA",
-  loss:   "#DC2626",  lossDim:   "#FDE8E8",
-  warn:   "#B45309",  warnDim:   "#FDF0E1",
-  danger: "#DC2626",  dangerDim: "#FDE8E8",
-  info:   "#2563EB",  infoDim:   "#E6EDFD",
+  win:    "#059669",  winDim:    "#E2F6F0",
+  draw:   "#7A6C99",  drawDim:   "#F1ECFA",
+  loss:   "#DC2626",  lossDim:   "#FDE9E9",
+  warn:   "#B45309",  warnDim:   "#FDF1E3",
+  danger: "#DC2626",  dangerDim: "#FDE9E9",
+  info:   "#0E7490",  infoDim:   "#E2F4F9",
 
   yellowCard: "#CA8A04",
   redCard:    "#DC2626",
-  star:       "#7C3AED",
-  starEmpty:  "#D2C7EC",
+  star:       "#6D28D9",
+  starEmpty:  "#D6CCEE",
   pitch:      "#123B34",
   chalk:      "rgba(255, 255, 255, 0.22)",
-  chalkInk:   "rgba(26, 16, 51, 0.08)",
+  chalkInk:   "rgba(22, 12, 46, 0.07)",
   onPitch:    "#FFFFFF",
 
-  ratingPoor:  "#DC2626", ratingPoorBg:  "#FDE8E8",
-  ratingFair:  "#B45309", ratingFairBg:  "#FDF0E1",
-  ratingGood:  "#059669", ratingGoodBg:  "#E0F5EE",
-  ratingGreat: "#047857", ratingGreatBg: "#D8F0E7",
-  ratingElite: "#7C3AED", ratingEliteBg: "#F1EAFE",
-  ratingNone:  "#6B5C8A", ratingNoneBg:  "#EFEAFA",
+  ratingPoor:  "#DC2626", ratingPoorBg:  "#FDE9E9",
+  ratingFair:  "#B45309", ratingFairBg:  "#FDF1E3",
+  ratingGood:  "#059669", ratingGoodBg:  "#E2F6F0",
+  ratingGreat: "#047857", ratingGreatBg: "#D9F1E8",
+  ratingElite: "#6D28D9", ratingEliteBg: "#F3EDFE",
+  ratingNone:  "#6E5F8C", ratingNoneBg:  "#F1ECFA",
 
   zoneChampion:          "#CA8A04",
   zonePromotion:         "#059669",
-  zonePlayoff:           "#2563EB",
+  zonePlayoff:           "#0E7490",
   zoneRelegationPlayoff: "#B45309",
   zoneRelegation:        "#DC2626",
 
-  gradientInk:     ["#33215A", "#241641"],
-  gradientBrand:   ["#8B46E8", "#7231D6"],
-  gradientAccent:  ["#3D74F0", "#2A5CDC"],
+  gradientInk:     ["#382159", "#241540"],
+  gradientBrand:   ["#7C3AED", "#6023C8"],
+  gradientAccent:  ["#1193B4", "#0E7490"],
   gradientLive:    ["#EE3355", "#D42546"],
   gradientPitch:   ["#1A4B54", "#12333C"],
-  gradientSurface: ["#FBF9FE", "#F6F2FD"],
-  gradientCard:    ["#FFFFFF", "#F8F4FE"],
+  gradientSurface: ["#FAF7FE", "#F4F0FC"],
+  /* Kart geçişi neredeyse görünmezdir: kartı kâğıttan ayıran asıl şey lavanta
+     dolgusu + kenarlık + gölgedir. Geçiş yalnız yüzeye "ışık alıyor" hissi
+     verir; iki durak arasındaki fark tek kademedir. */
+  gradientCard:    ["#FAF8FE", "#F5F1FC"],
 
-  /* AÇIK TEMA: BEYAZ AĞIRLIKLI SAHNE. Uygulama kâğıdı (#ECE7F7) lavantadır,
-     ama maç ekranının üst yarısını mor bir atmosfer kaplıyor; altındaki kâğıt
-     da lavanta olsaydı sayfa baştan aşağı mor bir sis olurdu. Neredeyse beyaz
-     bir zemin, atmosferi bir "ışık" gibi okutur ve kartları öne çıkarır. */
-  matchCanvas:  "#FBFAFE",
-  /* Üç durak: tepede doygun mor, ortada seyrelmiş, dipte kâğıdın kendisi.
-     Son durak `matchCanvas` ile BİREBİR aynı olmak zorunda — bir tık farklı
-     olsa atmosferin bittiği yerde yatay bir dikiş çizgisi görünür. */
-  matchTint: "#4E2589",
-  matchWash: ["rgba(78, 37, 137, 0)", "rgba(102, 55, 170, 0.55)", "#FBFAFE"],
-  /* Skor tablosunun ışıklı kenarı. Kart, atmosferin en koyu bölgesinde
-     duruyor; ince açık bir çerçeve onu sahneden AYIRIR ama koparmaz. */
-  glassBorder:  "rgba(255, 255, 255, 0.26)",
-  rimLight: ["#FFFFFF", "#E4DAF7"],
+  /* MAÇ SAHNESİ. Uygulamanın kâğıdı zaten beyaz olduğu için maç ekranının
+     kâğıdı da beyazdır; sahneyi kuran şey üstteki mor atmosferdir, altındaki
+     zeminin tonu değil. */
+  matchCanvas:  "#FFFFFF",
+  matchTint: "#40207A",
+  /* Üç durak: tepede saydam (kapak dokusu görünsün), ortada mor yıkama, dipte
+     kâğıdın kendisi. Son durak `matchCanvas` ile BİREBİR aynı olmak zorunda,
+     yoksa atmosferin bittiği yerde yatay bir dikiş çizgisi görünür. */
+  matchWash: ["rgba(64, 32, 122, 0)", "rgba(78, 40, 150, 0.50)", "#FFFFFF"],
+  glassBorder:  "rgba(255, 255, 255, 0.28)",
+  rimLight: ["#FFFFFF", "#EFE9FA"],
   rimDark:  ["rgba(255, 255, 255, 0.34)", "rgba(255, 255, 255, 0.06)"],
 
-  shadowColor:       "#3B1E6E",   // MOR gölge; siyah gölge lavantada kirlenir
-  skeletonBase:      "#EDE7F9",
-  skeletonHighlight: "#F8F5FE",
-  tabBar:            "#FFFFFF",
-  tabBarBorder:      "#E6E0F5",
-  chartGrid:         "#EDE7F9",
-  scrimGradientTop:    "rgba(26, 15, 46, 0.00)",
-  scrimGradientBottom: "rgba(26, 15, 46, 0.90)",
+  shadowColor:       "#2E1065",   // MOR gölge; siyah gölge beyaz kâğıtta grileşir
+  skeletonBase:      "#EFE9F9",
+  skeletonHighlight: "#FAF8FE",
+
+  tabBar:         "#281850",
+  tabBarBorder:   "rgba(255, 255, 255, 0.10)",
+  gradientTabBar: ["#33205C", "#1E1138"],
+  tabActive:      "#FFFFFF",
+  tabInactive:    "rgba(255, 255, 255, 0.58)",
+  tabBeam:        "#DDD1FF",
+  tabGlow:        ["rgba(196, 181, 253, 0.60)", "rgba(167, 139, 250, 0.16)", "rgba(167, 139, 250, 0)"],
+
+  chartGrid:         "#EDE7F7",
+  scrimGradientTop:    "rgba(18, 10, 38, 0.00)",
+  scrimGradientBottom: "rgba(18, 10, 38, 0.90)",
 };
 
 /**
- * KOYU MOR — açık temanın negatifi değil, AYNI SİSTEMİN koyu hâli.
+ * KOYU TEMA — GERÇEKTEN MOR.
  *
- * Zemin nötr siyah değil mora çalan bir gece rengidir (#0C0718); kartlar da
- * koyu mordan daha koyu mora ışır. Marka moru iki temada da aynı hex'tedir —
- * hem beyaz metinle 5,70:1 verir hem iki temayı tek marka altında tutar.
+ * NEDEN DEĞİŞTİ: önceki koyu tema zemini #0C0718 idi — adı mordu ama gözle
+ * SİYAHTI. Telefon ekranında %2 doygunluktaki bir mor, siyahtan ayırt
+ * edilmez; kullanıcı koyu temaya geçtiğinde markanın rengini kaybediyordu.
+ *
+ * Yeni zemin #180D33: hâlâ karanlık (beyaz metinle 16,4:1) ama MOR olduğu ilk
+ * bakışta görülüyor. Katmanlar da mor kalır — surface1 → surface3 giderek
+ * açılan mor tonlardır, gri değil. Koyu tema artık açık temanın "ışığı
+ * kapatılmış" hâli değil, aynı sistemin gece sürümüdür.
+ *
+ * Marka moru koyu temada bir kademe AÇILIR (#7C3AED): #6D28D9 mor bir zeminin
+ * üstünde kendi zeminine karışıyordu.
  */
 export const dark: Palette = {
-  bg:       "#0C0718",
-  surface1: "#150C26",
-  surface2: "#1B1030",
-  surface3: "#23163D",
-  elevated: "#2A1B48",
-  inverse:  "#F5F3FB",
-  inkBlock: "#1B1030",
-  overlay:  "rgba(6, 3, 14, 0.78)",
-  pressed:  "#1B1030",
-  ripple:   "rgba(196, 181, 253, 0.09)",
+  bg:       "#180D33",
+  surface1: "#221443",
+  surface2: "#2A1A50",
+  surface3: "#33215F",
+  elevated: "#2E1C57",
+  inverse:  "#F4F0FF",
+  inkBlock: "#241547",
+  overlay:  "rgba(10, 5, 24, 0.76)",
+  pressed:  "#2A1A50",
+  ripple:   "rgba(196, 181, 253, 0.10)",
 
-  textPrimary:   "#F3EFFB",
-  textSecondary: "#B4A8CE",
-  textTertiary:  "#8D80AD",
-  textDisabled:  "#5A4E78",
+  textPrimary:   "#F4F0FF",
+  textSecondary: "#C0B2DC",
+  textTertiary:  "#9C8CBE",
+  textDisabled:  "#6A5B8C",
   textOnBrand:   "#FFFFFF",
   textOnStatus:  "#FFFFFF",
   onDark:        "#FFFFFF",
-  onDarkMuted:   "rgba(255, 255, 255, 0.66)",
-  onInverse:     "#1A1033",   // inverse = #F5F3FB (açık blok)
+  onDarkMuted:   "rgba(255, 255, 255, 0.68)",
+  onInverse:     "#160C2E",   // inverse = #F4F0FF (açık blok)
 
-  border:       "#2A1D45",
-  borderStrong: "#3B2A5E",
-  separator:    "#221739",
+  border:       "#392561",
+  borderStrong: "#4C3480",
+  separator:    "#2C1B52",
   borderOnDark: "rgba(255, 255, 255, 0.14)",
 
   brand:       "#7C3AED",
   brandStrong: "#6D28D9",
   brandAccent: "#C4B5FD",     // koyuda metin sürümü AÇILIR
-  brandDim:    "#2A1B48",
-  brandBorder: "#45318C",
+  brandDim:    "#31215C",
+  brandBorder: "#4E3690",
   brandOnDark: "#C4B5FD",
 
-  accent:       "#60A5FA",
-  accentStrong: "#3B82F6",
-  accentText:   "#93BBFC",
-  accentDim:    "#16224A",
-  accentBorder: "#2C3F7A",
-  textOnAccent: "#0C0718",
+  accent:       "#22D3EE",
+  accentStrong: "#06B6D4",
+  accentText:   "#67E8F9",
+  accentDim:    "#123A47",
+  accentBorder: "#1E5A6B",
+  textOnAccent: "#0B2027",
 
-  slate:     "#8D80AD",
-  slateSoft: "#4A3E68",
+  slate:     "#9C8CBE",
+  slateSoft: "#4A3A70",
 
   live:       "#FB4E6D",
-  liveDim:    "#3A0F1E",
+  liveDim:    "#43132A",
   liveGlow:   "rgba(251, 78, 109, 0.30)",
   liveOnDark: "#FF6B8A",
 
-  win:    "#34D399",  winDim:    "#0D3328",
-  draw:   "#8D80AD",  drawDim:   "#221739",
-  loss:   "#FB7185",  lossDim:   "#3A0F1E",
-  warn:   "#FBBF24",  warnDim:   "#3A2A08",
-  danger: "#FB7185",  dangerDim: "#3A0F1E",
-  info:   "#60A5FA",  infoDim:   "#16224A",
+  win:    "#34D399",  winDim:    "#12352C",
+  draw:   "#9C8CBE",  drawDim:   "#2C1B52",
+  loss:   "#FB7185",  lossDim:   "#43132A",
+  warn:   "#FBBF24",  warnDim:   "#3E2D10",
+  danger: "#FB7185",  dangerDim: "#43132A",
+  info:   "#67E8F9",  infoDim:   "#123A47",
 
   yellowCard: "#FBBF24",
   redCard:    "#FB7185",
-  star:       "#A78BFA",
-  starEmpty:  "#4A3E68",
+  star:       "#C4B5FD",
+  starEmpty:  "#4A3A70",
   pitch:      "#0F312B",
   chalk:      "rgba(255, 255, 255, 0.18)",
   chalkInk:   "rgba(255, 255, 255, 0.06)",
   onPitch:    "#FFFFFF",
 
-  ratingPoor:  "#FB7185", ratingPoorBg:  "#3A0F1E",
-  ratingFair:  "#FBBF24", ratingFairBg:  "#3A2A08",
-  ratingGood:  "#34D399", ratingGoodBg:  "#0D3328",
-  ratingGreat: "#10B981", ratingGreatBg: "#0A2A20",
-  ratingElite: "#C4B5FD", ratingEliteBg: "#2A1B48",
-  ratingNone:  "#8D80AD", ratingNoneBg:  "#23163D",
+  ratingPoor:  "#FB7185", ratingPoorBg:  "#43132A",
+  ratingFair:  "#FBBF24", ratingFairBg:  "#3E2D10",
+  ratingGood:  "#34D399", ratingGoodBg:  "#12352C",
+  ratingGreat: "#10B981", ratingGreatBg: "#0E2C24",
+  ratingElite: "#C4B5FD", ratingEliteBg: "#31215C",
+  ratingNone:  "#9C8CBE", ratingNoneBg:  "#2C1B52",
 
   zoneChampion:          "#FBBF24",
   zonePromotion:         "#34D399",
-  zonePlayoff:           "#60A5FA",
+  zonePlayoff:           "#22D3EE",
   zoneRelegationPlayoff: "#FBBF24",
   zoneRelegation:        "#FB7185",
 
-  gradientInk:     ["#281A47", "#1B1032"],
-  gradientBrand:   ["#8B46E8", "#7231D6"],
-  gradientAccent:  ["#5E9CFB", "#3B82F6"],
+  gradientInk:     ["#301D55", "#20133D"],
+  gradientBrand:   ["#7C3AED", "#6023C8"],
+  gradientAccent:  ["#2DD9F2", "#06B6D4"],
   gradientLive:    ["#F7476A", "#D42B4E"],
   gradientPitch:   ["#153C45", "#0D2930"],
-  gradientSurface: ["#1D1234", "#180E2B"],
-  gradientCard:    ["#1C1233", "#170E29"],
+  gradientSurface: ["#26174A", "#1F123E"],
+  gradientCard:    ["#241547", "#1D1039"],
 
-  /* KOYU TEMA: DERİN MOR AĞIRLIKLI SAHNE. Burada zemin uygulama gecesinden
-     (#0C0718) bir tık MOR tarafa çekilir — atmosfer sönümlendiğinde sayfa
-     nötr siyaha düşmesin, mor kalsın. */
-  matchCanvas:  "#100826",
-  matchTint: "#2C1458",
-  matchWash: ["rgba(44, 20, 88, 0)", "rgba(40, 20, 80, 0.55)", "#100826"],
-  glassBorder:  "rgba(196, 181, 253, 0.20)",
-  rimLight: ["#3A2A5C", "#1E1436"],
+  /* KOYU TEMA: sahne, uygulama gecesinden bir tık daha DOYGUN mora çekilir —
+     atmosfer sönümlendiğinde sayfa nötre düşmesin, mor kalsın. */
+  matchCanvas:  "#170C32",
+  matchTint: "#39206B",
+  matchWash: ["rgba(57, 32, 107, 0)", "rgba(52, 28, 100, 0.55)", "#170C32"],
+  glassBorder:  "rgba(196, 181, 253, 0.22)",
+  rimLight: ["#412C6E", "#241547"],
   rimDark:  ["rgba(196, 181, 253, 0.30)", "rgba(196, 181, 253, 0.05)"],
 
   shadowColor:       "#000000",
-  skeletonBase:      "#1B1030",
-  skeletonHighlight: "#261841",
-  tabBar:            "#100822",
-  tabBarBorder:      "#221739",
-  chartGrid:         "#23163D",
-  scrimGradientTop:    "rgba(12, 7, 24, 0.00)",
-  scrimGradientBottom: "rgba(12, 7, 24, 0.94)",
+  skeletonBase:      "#251749",
+  skeletonHighlight: "#31215C",
+
+  /* Bar, koyu temada kâğıttan AÇIK durur — gece de "yüzen" okunsun diye. */
+  tabBar:         "#351F63",
+  tabBarBorder:   "rgba(255, 255, 255, 0.10)",
+  gradientTabBar: ["#402876", "#2A1852"],
+  tabActive:      "#FFFFFF",
+  tabInactive:    "rgba(255, 255, 255, 0.58)",
+  tabBeam:        "#DDD1FF",
+  tabGlow:        ["rgba(196, 181, 253, 0.58)", "rgba(167, 139, 250, 0.15)", "rgba(167, 139, 250, 0)"],
+
+  chartGrid:         "#2C1B52",
+  scrimGradientTop:    "rgba(15, 8, 32, 0.00)",
+  scrimGradientBottom: "rgba(15, 8, 32, 0.94)",
 };
 
 /** Tema adı — depolanan tercih ve sistem ayarı bu iki değere indirgenir. */

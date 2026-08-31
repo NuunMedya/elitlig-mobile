@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "scheme": "elitlig",
     "userInterfaceStyle": "automatic",
-    "backgroundColor": "#ECE7F7",
+    "backgroundColor": "#FFFFFF",
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.elitlig.app",
@@ -41,9 +41,9 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 260,
           "resizeMode": "contain",
-          "backgroundColor": "#4C1D95",
+          "backgroundColor": "#2E1065",
           "dark": {
-            "backgroundColor": "#2A1055"
+            "backgroundColor": "#180D33"
           }
         }
       ],

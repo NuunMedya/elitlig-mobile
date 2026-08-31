@@ -181,22 +181,28 @@ görünür.
 
 Renk, tipografi ve uzay `theme/` altındadır ve yedi kural taşır:
 
-- **MOR MARKANIN KENDİSİDİR.** Kimlik, açık mor ile koyu mor arasındaki
-  geçiştir: kâğıt lavanta (`bg` #ECE7F7), kartlar beyazdan lavantaya
-  ışıyan bir geçiş (`gradientCard`), kimlik blokları derin mor gradyan
-  (`gradientInk`). Mürekkep de nötr siyah değil MOR mürekkeptir (#1A1033).
-- **İKİ VURGU, İKİ İŞ.** Mor `brand` yalnız AKSİYON ve SEÇİLİ DURUM, mavi
-  `accent` yalnız VERİ içindir. Koyu mor blokların üstünde mor bir vurgu
-  okunmaz (mor üstüne mor ≈ 1,8:1); oradaki marka rengi ayrı bir tokendır:
-  `brandOnDark` (açık lavanta).
+- **MOR MÜREKKEPTİR, ARKA PLAN DEĞİL.** Açık temada kâğıt SAF BEYAZDIR
+  (`bg` #FFFFFF); yüzeyler beyazdan bir kademe aşağıda çok açık bir lavantadır
+  (`surface1` #F8F5FE) ve kimlik blokları derin mor gradyandır (`gradientInk`).
+  Koyu temada zemin GERÇEKTEN mordur (#180D33) — önceki #0C0718 adı mor olan
+  bir siyahtı. Mürekkep de nötr siyah değil MOR mürekkeptir (#160C2E).
+- **İKİ VURGU, İKİ İŞ.** Mor `brand` yalnız AKSİYON ve SEÇİLİ DURUM,
+  camgöbeği `accent` yalnız VERİ içindir. Veri rengi eskiden maviydi ve mavi
+  morun komşusu olduğu için bir istatistik barında "seçili mi, veri mi" ayırt
+  edilemiyordu. Koyu mor blokların üstünde mor bir vurgu okunmaz (mor üstüne
+  mor ≈ 1,8:1); oradaki marka rengi ayrı bir tokendır: `brandOnDark`.
 - **KARTLAR IŞIKLIDIR.** Varsayılan kart üç katmandır: `gradientCard` geçişi
   (bkz. `components/ui/GradientFill.tsx`) + 1px kenarlık + MOR tonlu yumuşak
-  gölge. Gölge rengi siyah değil `shadowColor` (#3B1E6E): siyah gölge lavanta
+  gölge. Gölge rengi siyah değil `shadowColor` (#2E1065): siyah gölge beyaz
   kâğıdın üstünde grileşip kirli görünür.
-- **GRADYAN SAYILIDIR VE TOKENDIR.** Yedi gradyanın her birinin bir işi vardır
+- **ALT MENÜ BARI İKİ TEMADA DA KOYU MOR.** Uygulamanın her ekranında görünen
+  tek yüzey odur; tema değiştikçe kimlik değiştirmesin diye rengi temadan
+  bağımsızdır. Ekranın altında YÜZEN bir haptır ve seçili sekmeye yaylanarak
+  uzanan bir ışık taşır (bkz. `components/ui/GlowTabBar.tsx`).
+- **GRADYAN SAYILIDIR VE TOKENDIR.** Sekiz gradyanın her birinin bir işi vardır
   (`gradientCard` · `gradientInk` · `gradientBrand` · `gradientAccent` ·
-  `gradientLive` · `gradientPitch` · `gradientSurface`). Elle yazılmış iki
-  renk = denetim hatası.
+  `gradientLive` · `gradientPitch` · `gradientSurface` · `gradientTabBar`).
+  Elle yazılmış iki renk = denetim hatası.
 - **GRADYAN EKSENİ TEKTİR: YATAY, SAĞDAN SOLA.** Köşegen ya da dikey geçiş
   dikdörtgen bir yüzeyi silindire çevirir — kart "boru" gibi görünür. Aynı
   ekranda iki farklı eksen varsa göz iki ayrı ışık kaynağı okur ve yüzeyler
@@ -310,10 +316,10 @@ sahnesidir; kendi kâğıdı ve kendi ışığı vardır.
    kendisi. Son durak `matchCanvas` ile birebir aynı; bir tık farklı olsa
    atmosferin bittiği yerde yatay bir dikiş çizgisi görünür.
 
-**Kâğıt.** `matchCanvas` uygulama kâğıdından ayrıdır: açık temada neredeyse
-BEYAZ (#FBFAFE), koyu temada DERİN MOR (#100826). Üstteki mor atmosfer ancak
-sakin bir zeminde "ışık" gibi okunur — lavanta kâğıt üstünde sayfa baştan aşağı
-mor bir sise dönüyordu.
+**Kâğıt.** `matchCanvas` açık temada uygulama kâğıdıyla aynıdır (#FFFFFF),
+koyu temada bir tık daha doygun mordur (#170C32). Üstteki mor atmosfer ancak
+sakin bir zeminde "ışık" gibi okunur; sahnenin altındaki zemin de mor olsaydı
+sayfa baştan aşağı mor bir sise dönerdi.
 
 **Denetim.** `check-tokens` başlık metninin (`onDark`, `onDarkMuted`,
 `brandOnDark`) atmosfer tabanıyla, sayfa metinlerinin de `matchCanvas` ile

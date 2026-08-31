@@ -150,6 +150,23 @@ const PAIRS = (p) => [
   // Hairline için WCAG eşiği yoktur (dekoratif değil ama metin de değil).
   // 1.1 "gözle seçilebilir" alt sınırıdır; brief'in --line değeri 1.14 verir.
   [p.border, p.bg, 1.1, "hairline / zemin (görünür olmalı)"],
+
+  /* ALT MENÜ BARI. Bar iki temada da koyu mordur ve uygulamanın her ekranında
+     görünür; üstündeki etiket ekranın en uzak okunan metnidir. Seçili sekme
+     AA metin eşiğini, seçili olmayan sekme AA grafik eşiğini geçmek zorunda —
+     "sönük" olması okunmaz olması demek değildir. */
+  [p.tabActive, p.tabBar, 4.5, "seçili sekme / menü barı"],
+  [p.tabInactive, p.tabBar, 4.5, "sönük sekme / menü barı"],
+  [p.tabActive, p.gradientTabBar[0], 4.5, "seçili sekme / bar gradyanının açık ucu"],
+  [p.tabInactive, p.gradientTabBar[0], 4.5, "sönük sekme / bar gradyanının açık ucu"],
+  [p.tabBeam, p.gradientTabBar[0], 3.0, "ışık çizgisi / bar gradyanının açık ucu"],
+  /* Bar KÂĞITTAN AYRILMALI: açık temada beyazın üstünde koyu bir ada (oran
+     onlarca kat), koyu temada kâğıttan bir kademe AÇIK bir hap. Eşik 1.3 —
+     grafik eşiği (3.0) buraya yanlış olurdu: koyu temada barı kâğıttan üç kat
+     açık yapmak, gece ekranında göz alan parlak bir şerit üretir. Koyu temada
+     ayrımı zaten ışıklı kenar + gölge tamamlar; dolgu farkının işi yalnız
+     "burası ayrı bir yüzey" demektir. */
+  [p.tabBar, p.bg, 1.3, "menü barı / kâğıt (yüzdüğü görülmeli)"],
 ];
 
 /**

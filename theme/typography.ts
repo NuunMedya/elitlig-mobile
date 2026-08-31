@@ -70,8 +70,17 @@ export const scale = {
 
   /** Ekranın kimlik başlığı: takım adı, oyuncu adı, genişletilmiş sayfa başlığı. */
   display: { fontSize: 22, lineHeight: 27, fontFamily: fonts.bold, letterSpacing: -0.5 },
-  /** Sayfa/ekran başlığı. */
-  h1:      { fontSize: 19, lineHeight: 24, fontFamily: fonts.semibold, letterSpacing: -0.4 },
+  /**
+   * Sayfa/ekran başlığı — ARCHIVO.
+   *
+   * Eskiden Inter SemiBold'du ve ekran başlığı, altındaki satır başlıklarından
+   * (yine Inter SemiBold) yalnız dört punto büyüktü: sayfanın adı, listesinin
+   * bir satırıyla aynı sesle konuşuyordu. Archivo dar ve yüksek x-height'lı bir
+   * grotesk; aynı puntoda daha çok mürekkep taşır ve başlık, gövdeden PUNTOYLA
+   * değil SESLE ayrılır. Kural netleşti: Archivo yüksek sesle söylenen şeydir
+   * (skor, büyük rakam, sayfa adı), Inter okunan şeydir.
+   */
+  h1:      { fontSize: 19, lineHeight: 24, fontFamily: fonts.bold, letterSpacing: -0.4 },
   /** Kart ve bölüm başlığı. */
   h2:      { fontSize: 16, lineHeight: 21, fontFamily: fonts.semibold, letterSpacing: -0.3 },
   /** Satır başlığı — liste satırındaki isim, en sık kullanılan başlık. */
@@ -85,13 +94,17 @@ export const scale = {
   /** İkincil satır, meta metni. */
   bodySm:  { fontSize: 12, lineHeight: 17, fontFamily: fonts.regular,  letterSpacing: 0 },
   /** Buton, sekme, form etiketi. */
-  label:   { fontSize: 13, lineHeight: 17, fontFamily: fonts.semibold, letterSpacing: -0.05 },
+  label:   { fontSize: 13, lineHeight: 17, fontFamily: fonts.semibold, letterSpacing: 0 },
   /** Küçük meta — tarih, saha adı, satır altı açıklama. */
   caption: { fontSize: 11, lineHeight: 15, fontFamily: fonts.medium,   letterSpacing: 0.05 },
   /** Rozet içi metin — daima büyük harf. */
-  micro:   { fontSize: 10, lineHeight: 13, fontFamily: fonts.semibold, letterSpacing: 0.4 },
-  /** Yapısal işaretçi — bölüm ve kart başlıklarının üstündeki büyük-harf satır. */
-  overline:{ fontSize: 10, lineHeight: 13, fontFamily: fonts.semibold, letterSpacing: 0.9 },
+  micro:   { fontSize: 10, lineHeight: 13, fontFamily: fonts.semibold, letterSpacing: 0.5 },
+  /**
+   * Yapısal işaretçi — bölüm ve kart başlıklarının üstündeki büyük-harf satır.
+   * Harf aralığı 0.9 → 1.2: 10px'lik bir büyük-harf satırında aralık, satırı
+   * "küçültülmüş başlık" değil BİR ETİKET olarak okutan tek şeydir.
+   */
+  overline:{ fontSize: 10, lineHeight: 13, fontFamily: fonts.semibold, letterSpacing: 1.2 },
 
   /* — Skor ölçeği: tamamı Archivo + tabular —
      Skor ekranın KAHRAMANIDIR. 24px'lik bir "2–1", satır başlığından yalnız
