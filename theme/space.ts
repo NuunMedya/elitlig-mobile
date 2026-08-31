@@ -88,10 +88,19 @@ export const layout = {
   matchRowHeightCompact: 44,
   headerHeightExpanded: 96, // overline(13) + display(27) + dolgu
   headerHeightCollapsed: 52,
-  /* + insets.bottom — 6 üst dolgu + 22 ikon + 2 aralık + 17 etiket + 4 alt
-     dolgu = 51px içerik; 64'te 13px pay kalır ve yazı tipi ölçeği
-     büyütüldüğünde bile etiket kırpılmaz. */
-  tabBarHeight: 64,
+  /**
+   * ALT MENÜ BARI YUVASI — hapın kendisi değil, kapladığı alan.
+   *
+   * 6 üst boşluk + 58 hap + 8 alt boşluk = 72; güvenli alan (insets.bottom)
+   * bunun ALTINA eklenir. Bar artık ekranın alt kenarına yapışık bir şerit
+   * değil, kenarlardan 16px içeride YÜZEN bir haptır (bkz.
+   * components/ui/GlowTabBar.tsx) — bu yüzden yuva, hapın etrafındaki
+   * boşluğu da sayar.
+   *
+   * Ekranlar bu değeri kaydırma listelerinin alt dolgusu için kullanır: son
+   * satır hapın altında kalmasın diye.
+   */
+  tabBarHeight: 72,
   tabStripHeight: 42,
   dateStripHeight: 56,
   minTouch: 44,            // erişilebilirlik alt sınırı (hitSlop ile tamamlanır)

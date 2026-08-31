@@ -1279,3 +1279,129 @@ fırlatmıyordu; hepsi geçerli görünen bir değer üretip yanlış davranıyo
 `undefined` bir alan, hiç çalışmayan bir `catch`, hiç doğru olamayan bir
 karşılaştırma. Bu yüzden bu geçişte eklenen her düzeltme, kararı TEK bir
 yere toplayıp adlandırdı; ikinci bir kopya, ikinci bir fikir demektir.
+
+---
+
+## 9. Dokuzuncu geçiş — beyaz kâğıt, mor gece, yüzen menü barı
+
+Bu geçişin tetiği yine bir kullanıcı cümlesiydi: *"alt menü barını şuradaki
+gibi bir tasarıma çevir; tasarımın geri kalanını da aynı estetik çizgilerde,
+koyu modu mor, açık modu beyaz arkaplanda düzenle. Mevcut tema yapısından hiç
+memnun değilim."*
+
+Referans, bir mikro-etkileşim gösterisiydi: ekranın altında yüzen bir menü
+çubuğu ve **dokunulan sekmeye uzanan bir ışık**.
+
+### 9.1 Alt menü barı — `components/ui/GlowTabBar.tsx`
+
+Eski çubuk, ekranın alt kenarına yapışık, üstünde 1px çizgi olan düz bir
+şeritti: yani platformun varsayılan sekme çubuğunun renkli hâli. Uygulamanın
+HER ekranında görünen tek yüzey oydu ve hiçbir şey söylemiyordu.
+
+Yeni fikir tek cümle: **bar yüzen bir haptır ve seçili sekmenin üstünde bir
+ışık yanar; başka bir sekmeye dokunduğunuzda o ışık söndürülüp yeniden
+yakılmaz, yaylanarak oraya UZANIR.** Seçimi anlatan şey artık bir renk değil,
+bir hareket.
+
+Işık üç katmandır:
+
+1. **Çizgi** (`tabBeam`) — barın üst kenarındaki 3px'lik parlak kaynak.
+2. **Koni** (`tabGlow`) — çizginin altına düşen, aşağı doğru sönen dikey
+   geçiş. Işığın ikonun üstüne düşen huzmesi budur.
+3. **Taban** — koninin altındaki çok sönük pul; huzmenin "yere vurduğu" yer.
+   Bu olmadan koni havada asılı kalıyor, seçili ikonla ilişkisi kurulmuyordu.
+
+**Bar iki temada da koyu mordur.** Tema değiştiğinde uygulamanın kimliği
+değişmemeli. Açık temada bar, beyaz kâğıdın üstündeki tek koyu adadır ve
+markayı her ekranda taşır; koyu temada kâğıttan bir kademe AÇIK durur ki gece
+de yüzdüğü okunsun. Bar iki temada da koyu olduğu için üstündeki bütün renkler
+(ikon, etiket, ışık) temadan bağımsızdır — tek yüzey, tek kural.
+
+**Yüzen ama akışta.** Bar `position: absolute` DEĞİLDİR; sekme çubuğu
+yuvasının tamamını kaplayan saydam bir kapsayıcının içinde durur. Böylece
+React Navigation yüksekliği doğru ölçer ve ekranların içeriği barın altına
+girmez — altmış ekranın hiçbirine alt dolgu eklemek gerekmedi. Hapın
+etrafındaki boşluktan sayfanın kendi zemini görünür; "yüzen" görüntüsünü kuran
+şey budur.
+
+**Sekme listesi artık `_layout.tsx` içinde açıkça yazılı.** `href: null` ile
+gizlenen rotalar (ligler, favoriler, oyunlar) gezinme durumunda durmaya devam
+eder; expo-router onları yalnız `tabBarItemStyle: { display: "none" }` ile
+saklar. Özel bir çubuğun bu iç ayrıntıyı okuması kırılgan olurdu.
+
+Gizli bir rota açıkken hiçbir sekme seçili değildir; ışık o sırada SON seçili
+sekmenin üstünde kalır. Kaybolan bir ışık, "çubuk bozuldu" dedirtiyordu.
+
+`TabBarIcon` içindeki 2px aktif gösterge çizgisi kaldırıldı: aynı şeyi iki kez
+söylemek ve ışığın altında ikinci bir çizgi çakışması demekti. İkona kalan tek
+iş dolu/boş varyant ve rozet.
+
+### 9.2 Açık tema — kâğıt beyaza döndü
+
+| | sekizinci geçiş | dokuzuncu geçiş |
+| --- | --- | --- |
+| kâğıt (`bg`) | #ECE7F7 lavanta | **#FFFFFF beyaz** |
+| yüzey (`surface1`) | #FFFFFF | **#F8F5FE** |
+| mürekkep | #1A1033 | **#160C2E** |
+| marka dolgusu | #7C3AED | **#6D28D9** (beyazla 7,10:1) |
+| veri rengi | mavi #2563EB | **camgöbeği #0E7490** |
+| gölge | #3B1E6E | **#2E1065** |
+| kart gölgesi (sv. 1) | .08 · 16 · y4 | **.09 · 18 · y4** |
+
+Lavanta kâğıt, üstündeki beyaz kartla arasında yalnız üç puanlık fark
+bırakıyordu: ekran, mor bir sisin içinde duran soluk bir listeye dönüşüyor ve
+mor, vurgu olmaktan çıkıp ARKA PLAN oluyordu. Yeni kural: **kâğıt beyazdır,
+mor yalnız mürekkepte ve aksiyondadır.**
+
+**Kart neden saf beyaz değil.** Kâğıdı beyaz, kartı da beyaz yapıp yalnız
+kenarlığa güvenmek denendi ve tek tek kartlarda güzel çalışıyordu. Ama bu
+uygulamanın asıl yüzeyi kart değil **liste satırıdır** ve satırların kenarlığı
+yoktur (`ListRow`, `MatchRow` yalnız `surface1` dolgusuyla kâğıttan ayrılır):
+bir maç listesi tek parça beyaz bir alana dönüşüyordu. Yüzeyler beyazdan bir
+kademe aşağı indi (#F8F5FE); fark, koyu temadaki `surface1`/`bg` farkıyla aynı
+büyüklükte (1,08 : 1,09). Gördüğünüz sayfa beyazdır, üstündeki bloklar değil.
+
+Kart beyaz kâğıttan dolguyla ayrılamadığı için **gölge daha çok iş yapıyor**:
+1. seviye 0.08 → 0.09 opaklık, 16 → 18 yarıçap. Yine de görünmez kalır;
+gördüğünüz şey gölge değil, kartın yüzdüğüdür.
+
+**Veri rengi maviden camgöbeğine geçti.** Mavi morun komşusudur: bir istatistik
+barında "bu seçili mi, yoksa veri mi" ayırt edilemiyordu. Camgöbeği morun tam
+karşısında durur ve iki renk hiçbir ışıkta karışmaz.
+
+### 9.3 Koyu tema — adı mor olan siyah gitti
+
+Önceki koyu zemin #0C0718 idi; adı mordu ama gözle SİYAHTI. Telefon ekranında
+%2 doygunluktaki bir mor siyahtan ayırt edilmez — kullanıcı koyu temaya
+geçtiğinde markanın rengini kaybediyordu.
+
+Yeni zemin **#180D33**: hâlâ karanlık (beyaz metinle 16,4:1) ama mor olduğu
+ilk bakışta görülüyor. Katmanlar da mor kalır — `surface1` → `surface3`
+giderek açılan mor tonlardır, gri değil. Marka moru koyu temada bir kademe
+açılır (#7C3AED), çünkü #6D28D9 mor bir zeminin üstünde kendi zeminine
+karışıyordu.
+
+### 9.4 Tipografi — Archivo'ya bir iş daha verildi
+
+`h1` (sayfa/ekran başlığı) Inter SemiBold'du ve altındaki satır başlıklarından
+(yine Inter SemiBold) yalnız dört punto büyüktü: sayfanın adı, listesinin bir
+satırıyla aynı sesle konuşuyordu. `h1` **Archivo Bold**'a geçti. Kural
+netleşti: **Archivo yüksek sesle söylenen şeydir** (skor, büyük rakam, sayfa
+adı), **Inter okunan şeydir**.
+
+`overline` harf aralığı 0.9 → 1.2: 10px'lik bir büyük-harf satırında aralık,
+o satırı "küçültülmüş başlık" değil BİR ETİKET olarak okutan tek şeydir.
+
+### 9.5 Denetime eklenenler
+
+`scripts/check-tokens.mjs` altı yeni çift ölçüyor: seçili ve sönük sekme
+etiketinin bar zeminiyle (ve bar gradyanının açık ucuyla) kontrastı, ışık
+çizgisinin görünürlüğü ve **barın kâğıttan ayrıldığı**. Son eşik bilerek 1.3 —
+grafik eşiği (3.0) buraya yanlış olurdu: koyu temada barı kâğıttan üç kat açık
+yapmak, gece ekranında göz alan parlak bir şerit üretir. Koyu temada ayrımı
+ışıklı kenar + gölge tamamlar; dolgu farkının işi yalnız "burası ayrı bir
+yüzey" demektir.
+
+Sönük sekme etiketi için grafik değil **metin** eşiği (4.5) kullanıldı: alt
+çubuk ekranın en uzak okunan yeridir ve "sönük" olması okunmaz olması demek
+değildir.

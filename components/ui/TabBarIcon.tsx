@@ -10,9 +10,14 @@
  * Rozetin çevresinde 2px zemin rengi halka vardır; ikonun çizgileriyle
  * karışmasın diye — koyu temada bu halka olmadan rozet ikona yapışık görünür.
  *
- * NEDEN MOR HAP DOLGUSU KALDIRILDI: eski tab bar aktif sekmeyi mor bir hapla
- * dolduruyordu; mor bu tasarımda geniş yüzey doldurmaz (§1.0). Aktif sekme
- * artık `brandAccent` ikon + üstte 2px `brand` gösterge çizgisidir.
+ * NEDEN AKTİF GÖSTERGE ÇİZGİSİ KALDIRILDI: seçili sekmeyi anlatan iş artık
+ * `GlowTabBar` içindeki IŞIĞA aittir (üst kenardaki parlak çizgi + aşağı düşen
+ * koni). İkonun kendi içinde ikinci bir gösterge çizgisi taşıması, aynı şeyi
+ * iki kez söylemek ve ışığın altında ikinci bir çizgi çakışması demekti.
+ * İkona kalan tek iş: dolu/boş varyant ve rozet.
+ *
+ * ROZET HALKASI BARIN ZEMİNİNDEDİR (`tabBar`): bar iki temada da koyu mordur,
+ * bu yüzden halka rengi temaya göre değişmez.
  *
  * "Hareketi azalt" açıkken nabız durur, nokta sabit kalır (§5.8).
  */
@@ -30,8 +35,6 @@ export interface TabBarIconProps {
   size?: number;
   /** Sayısal rozet, canlı noktası veya sade nokta. */
   badge?: number | "live" | "dot";
-  /** Üstte 2px aktif gösterge çizgisi (yeni tab bar düzeni). */
-  indicator?: boolean;
 }
 
 /** 99'dan büyük sayaçlar rozete sığmaz. */
@@ -45,7 +48,6 @@ export const TabBarIcon = React.memo(function TabBarIcon({
   color,
   size = 22,
   badge,
-  indicator = false,
 }: TabBarIconProps) {
   /* NABIZ KALDIRILDI: canlı rozeti sekme çubuğunda sürekli nabız atıyordu.
      Sekme çubuğu her ekranda görünür — yani bu, uygulamanın tamamında hiç
@@ -59,10 +61,6 @@ export const TabBarIcon = React.memo(function TabBarIcon({
 
   return (
     <View style={styles.container}>
-      {indicator ? (
-        <View style={[styles.indicator, focused ? styles.indicatorOn : null]} />
-      ) : null}
-
       <View style={styles.iconBox}>
         <Ionicons name={iconName} size={size} color={color} />
 
@@ -86,18 +84,6 @@ const styles = StyleSheet.create({
   container: {
     alignItems: "center",
     justifyContent: "center",
-  },
-  /** Aktif göstergesi: ikonun 2px üstünde, sekme genişliğinin ortasında. */
-  indicator: {
-    position: "absolute",
-    top: -4,
-    width: 22,
-    height: 2,
-    borderRadius: radius.pill,
-    backgroundColor: "transparent",
-  },
-  indicatorOn: {
-    backgroundColor: colors.brand,
   },
   iconBox: {
     alignItems: "center",

@@ -199,3 +199,7 @@ export type { FABProps } from "./FAB";
 
 export { TabBarIcon } from "./TabBarIcon";
 export type { TabBarIconProps } from "./TabBarIcon";
+
+/** Yüzen alt menü barı — seçili sekmeye uzanan ışık. */
+export { GlowTabBar } from "./GlowTabBar";
+export type { GlowTabBarProps, GlowTab } from "./GlowTabBar";
