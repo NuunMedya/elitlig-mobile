@@ -279,145 +279,143 @@ export function ScreenHeader({
             pointerEvents="none"
           />
         ) : null}
-      <Animated.View
-        style={[
-          styles.container,
-          transparent ? styles.transparent : isInk ? styles.transparent : styles.opaque,
-          { height: containerHeight },
-        ]}
-      >
-        {/* Şeffaf başlıkta zemin, daralma ilerledikçe opaklaşır. */}
-        {transparent ? (
+        {/* Şerit KENDİ zeminini basmaz: mor blokta zemin bloğun gradyanı,
+            şeffaf başlıkta ise arkadaki atmosferdir. */}
+        <Animated.View
+          style={[styles.container, styles.transparent, { height: containerHeight }]}
+        >
+          {/* Şeffaf başlıkta zemin, daralma ilerledikçe opaklaşır. */}
+          {transparent ? (
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                StyleSheet.absoluteFill,
+                styles.background,
+                surface ? { backgroundColor: surface } : null,
+                { opacity: appear },
+              ]}
+            />
+          ) : null}
+
+          {/* Üst şerit: geri düğmesi ve eylemler — daralmadan etkilenmez. */}
+          <View style={styles.bar}>
+            {back ? (
+              <Touchable
+                feedback="icon"
+                onPress={handleBack}
+                hitSlop={touchSlop(36)}
+                accessibilityRole="button"
+                accessibilityLabel="Geri"
+                style={styles.backButton}
+              >
+                <Ionicons name="chevron-back" size={24} color={ink} />
+              </Touchable>
+            ) : null}
+
+            <View style={styles.barSpacer} />
+
+            {actions?.slice(0, 3).map((action) => (
+              <Touchable
+                key={action.icon + action.accessibilityLabel}
+                feedback="icon"
+                haptic="light"
+                onPress={action.onPress}
+                hitSlop={touchSlop(34)}
+                accessibilityRole="button"
+                accessibilityLabel={action.accessibilityLabel}
+                style={styles.action}
+              >
+                <Ionicons
+                  name={action.icon}
+                  size={21}
+                  color={action.tone ? toneColors(action.tone).fg : inkMuted}
+                />
+                {action.badge != null ? (
+                  <Badge
+                    tone="live"
+                    variant="solid"
+                    size="xs"
+                    dot={action.badge === "dot"}
+                    label={action.badge === "dot" ? undefined : action.badge}
+                    floating
+                    style={styles.actionBadge}
+                    accessibilityLabel={
+                      action.badge === "dot" ? "Yeni" : `${action.badge} yeni`
+                    }
+                  />
+                ) : null}
+              </Touchable>
+            ))}
+          </View>
+
+          {/* Başlık bloğu: daralınca yukarı-sağa kayar ve küçülür. */}
+          <View
+            pointerEvents="box-none"
+            onLayout={(e) => {
+              const next = Math.round(e.nativeEvent.layout.height);
+              setBlockHeight((current) => (current === next ? current : next));
+            }}
+            style={[styles.titleBlock, { paddingRight: space.sm + (actions?.length ?? 0) * 36 }]}
+          >
+            {overline ? (
+              <Animated.Text
+                numberOfLines={1}
+                style={[
+                  styles.overline,
+                  onDark || isInk ? styles.overlineOnDark : null,
+                  { opacity: fadeOut },
+                ]}
+                {...textScale.badge}
+              >
+                {overline}
+              </Animated.Text>
+            ) : null}
+
+            <Animated.View
+              onLayout={handleTitleLayout}
+              style={[
+                styles.titleWrapper,
+                {
+                  transform: [
+                    { translateX: progress.interpolate({ inputRange: [0, 1], outputRange: [0, titleSlide] }) },
+                    { translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [0, titleRise] }) },
+                    { scale: progress.interpolate({ inputRange: [0, 1], outputRange: [1, TITLE_SCALE] }) },
+                  ],
+                },
+              ]}
+            >
+              <Text
+                accessibilityRole="header"
+                numberOfLines={1}
+                style={[styles.title, { color: ink }]}
+                {...textScale.dense}
+              >
+                {title}
+              </Text>
+            </Animated.View>
+
+            {subtitle ? (
+              <Animated.Text
+                numberOfLines={1}
+                style={[styles.subtitle, { color: inkMuted }, { opacity: fadeOut }]}
+                {...textScale.dense}
+              >
+                {subtitle}
+              </Animated.Text>
+            ) : null}
+          </View>
+
+          {/* Alt kenarlık: yalnız kaydırma başlayınca belirir. Mor blokta
+              şeridi kâğıttan değil, bloğun kendi ışığından ayırır. */}
           <Animated.View
             pointerEvents="none"
             style={[
-              StyleSheet.absoluteFill,
-              styles.background,
-              surface ? { backgroundColor: surface } : null,
+              styles.border,
+              onDark || isInk ? styles.borderOnDark : null,
               { opacity: appear },
             ]}
           />
-        ) : null}
-
-        {/* Üst şerit: geri düğmesi ve eylemler — daralmadan etkilenmez. */}
-        <View style={styles.bar}>
-          {back ? (
-            <Touchable
-              feedback="icon"
-              onPress={handleBack}
-              hitSlop={touchSlop(36)}
-              accessibilityRole="button"
-              accessibilityLabel="Geri"
-              style={styles.backButton}
-            >
-              <Ionicons name="chevron-back" size={24} color={ink} />
-            </Touchable>
-          ) : null}
-
-          <View style={styles.barSpacer} />
-
-          {actions?.slice(0, 3).map((action) => (
-            <Touchable
-              key={action.icon + action.accessibilityLabel}
-              feedback="icon"
-              haptic="light"
-              onPress={action.onPress}
-              hitSlop={touchSlop(34)}
-              accessibilityRole="button"
-              accessibilityLabel={action.accessibilityLabel}
-              style={styles.action}
-            >
-              <Ionicons
-                name={action.icon}
-                size={21}
-                color={action.tone ? toneColors(action.tone).fg : inkMuted}
-              />
-              {action.badge != null ? (
-                <Badge
-                  tone="live"
-                  variant="solid"
-                  size="xs"
-                  dot={action.badge === "dot"}
-                  label={action.badge === "dot" ? undefined : action.badge}
-                  floating
-                  style={styles.actionBadge}
-                  accessibilityLabel={
-                    action.badge === "dot" ? "Yeni" : `${action.badge} yeni`
-                  }
-                />
-              ) : null}
-            </Touchable>
-          ))}
-        </View>
-
-        {/* Başlık bloğu: daralınca yukarı-sağa kayar ve küçülür. */}
-        <View
-          pointerEvents="box-none"
-          onLayout={(e) => {
-            const next = Math.round(e.nativeEvent.layout.height);
-            setBlockHeight((current) => (current === next ? current : next));
-          }}
-          style={[styles.titleBlock, { paddingRight: space.sm + (actions?.length ?? 0) * 36 }]}
-        >
-          {overline ? (
-            <Animated.Text
-              numberOfLines={1}
-              style={[
-                styles.overline,
-                onDark || isInk ? styles.overlineOnDark : null,
-                { opacity: fadeOut },
-              ]}
-              {...textScale.badge}
-            >
-              {overline}
-            </Animated.Text>
-          ) : null}
-
-          <Animated.View
-            onLayout={handleTitleLayout}
-            style={[
-              styles.titleWrapper,
-              {
-                transform: [
-                  { translateX: progress.interpolate({ inputRange: [0, 1], outputRange: [0, titleSlide] }) },
-                  { translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [0, titleRise] }) },
-                  { scale: progress.interpolate({ inputRange: [0, 1], outputRange: [1, TITLE_SCALE] }) },
-                ],
-              },
-            ]}
-          >
-            <Text
-              accessibilityRole="header"
-              numberOfLines={1}
-              style={[styles.title, { color: ink }]}
-              {...textScale.dense}
-            >
-              {title}
-            </Text>
-          </Animated.View>
-
-          {subtitle ? (
-            <Animated.Text
-              numberOfLines={1}
-              style={[styles.subtitle, { color: inkMuted }, { opacity: fadeOut }]}
-              {...textScale.dense}
-            >
-              {subtitle}
-            </Animated.Text>
-          ) : null}
-        </View>
-
-        {/* Alt kenarlık: yalnız kaydırma başlayınca belirir. Mor blokta
-            şeridi kâğıttan değil, bloğun kendi ışığından ayırır. */}
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            styles.border,
-            onDark || isInk ? styles.borderOnDark : null,
-            { opacity: appear },
-          ]}
-        />
-      </Animated.View>
+        </Animated.View>
 
         {/* Sayfa sekmeleri bloğun İÇİNDE: başlıkla aynı yüzeye aittir. */}
         {tabs}
@@ -442,9 +440,6 @@ const styles = StyleSheet.create({
   container: {
     overflow: "hidden",
     justifyContent: "flex-start",
-  },
-  opaque: {
-    backgroundColor: colors.bg,
   },
   transparent: {
     backgroundColor: "transparent",
