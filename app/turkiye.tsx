@@ -334,7 +334,7 @@ export default function TurkeyRankingsScreen() {
   const tabs = useMemo(
     () => (
       <View style={styles.tabBand}>
-        <Tabs items={TAB_ITEMS} value={sort} onChange={setSort} distribute="scroll" />
+        <Tabs items={TAB_ITEMS} value={sort} onChange={setSort} distribute="scroll" tone="paper" />
       </View>
     ),
     [sort]

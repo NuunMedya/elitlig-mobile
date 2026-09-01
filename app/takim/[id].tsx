@@ -747,7 +747,7 @@ export default function TeamDetailScreen() {
         back
         scrollY={scrollY}
         actions={headerActions}
-        bottom={<Tabs items={TAB_ITEMS} value={tab} onChange={changeTab} sticky />}
+        tabs={<Tabs items={TAB_ITEMS} value={tab} onChange={changeTab} sticky />}
       />
 
       {tab === "genel" ? (

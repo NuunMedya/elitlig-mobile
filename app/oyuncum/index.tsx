@@ -471,7 +471,7 @@ export default function MyPlayerScreen() {
         back
         actions={actions}
         scrollY={scrollY}
-        bottom={<Tabs items={TAB_ITEMS} value={tab} onChange={changeTab} sticky />}
+        tabs={<Tabs items={TAB_ITEMS} value={tab} onChange={changeTab} sticky />}
       />
 
       {tab === "ozet" ? (

@@ -17,11 +17,15 @@
  * ARAMA: liste 20 satırı geçtiğinde ad araması görünür. Küçük liglerde arama
  * kutusu göstermek 44px'i boşa harcar.
  *
- * PERFORMANS: iki görünümün de satır yüksekliği sabittir (kart 64, tablo 40)
- * ve `getItemLayout` kurulur; FlatList hiçbir hücreyi ölçmez.
+ * PERFORMANS: iki görünümün de satır yüksekliği sabittir (`TEAM_ROW_HEIGHT`
+ * 66, `TEAM_ROW_HEIGHT_TABLE` 40) ve `getItemLayout` kurulur; FlatList hiçbir
+ * hücreyi ölçmez.
+ *
+ * SATIRIN KENDİSİ BU DOSYADA DEĞİL: iki görünüm de `components/ui/TeamRow`
+ * bileşenini kullanır — takım satırı uygulamanın her yerinde aynı sırayı
+ * taşır (sıra · amblem · ad + bağlam · sayı), yalnız yoğunluğu değişir.
  */
 
-import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
@@ -32,13 +36,14 @@ import { ScopeChip } from "@/components/ScopeChip";
 import {
   EmptyState,
   ErrorState,
-  FormChips,
   Input,
   ScreenHeader,
   SegmentedControl,
   SkeletonStandings,
-  TeamLogo,
-  Touchable,
+  TeamRow,
+  TeamRowHead,
+  TEAM_ROW_HEIGHT,
+  TEAM_ROW_HEIGHT_TABLE,
   refreshControlProps,
   useHeaderScroll,
   useRefresh,
@@ -52,14 +57,9 @@ import { useScope } from "@/providers/ScopeProvider";
 import {
   colors,
   defaultZoneRules,
-  hairline,
   layout,
   palette,
-  radius,
   space,
-  textScale,
-  type,
-  upperTR,
   zoneColor,
   zoneForRank,
 } from "@/theme";
@@ -74,184 +74,8 @@ const VIEWS: SegmentedItem<ViewKey>[] = [
 /** Arama kutusu bu eşiğin altındaki listelerde gösterilmez. */
 const SEARCH_THRESHOLD = 20;
 
-const CARD_HEIGHT = 54;
-const TABLE_ROW_HEIGHT = 38;
-
 /** Türkçe duyarlı, aksan/büyük-küçük farkını yok sayan arama karşılaştırması. */
 const normalize = (value: string) => value.trim().toLocaleLowerCase("tr-TR");
-
-/* ══════════════════════════════════════════════════════════════════════════
-   Satır bileşenleri — ikisi de memo'lu ve yalnız ilkel prop alır
-   ══════════════════════════════════════════════════════════════════════════ */
-
-interface RowProps {
-  rank: number;
-  teamId: number;
-  teamName: string;
-  logo: string | null;
-  played: number;
-  wins: number;
-  draws: number;
-  losses: number;
-  goalDiff: number;
-  points: number;
-  last5: string;
-  favorite: boolean;
-  zone: string | null;
-  onPress: (teamId: number) => void;
-}
-
-const TeamCard = React.memo(function TeamCard({
-  rank,
-  teamId,
-  teamName,
-  logo,
-  played,
-  goalDiff,
-  points,
-  last5,
-  favorite,
-  zone,
-  onPress,
-}: RowProps) {
-  const handlePress = useCallback(() => onPress(teamId), [onPress, teamId]);
-
-  return (
-    <Touchable
-      style={styles.card}
-      onPress={handlePress}
-      feedback="row"
-      haptic="selection"
-      accessibilityLabel={`${rank}. ${teamName}, ${points} puan`}
-    >
-      {/* Sıra rozeti: bölge rengi çerçevede, rakam nötr. Rakamı da renklendirmek
-          zeminle birlikte iki sinyal üretir ve tabloyu alacalı gösterir. */}
-      <View style={[styles.rankBox, zone ? { borderColor: zone } : null]}>
-        <Text style={styles.rankText} {...textScale.dense}>
-          {rank}
-        </Text>
-      </View>
-
-      <TeamLogo name={teamName} logo={logo} size={layout.crestLg} />
-
-      <View style={styles.cardBody}>
-        <View style={styles.cardTitleRow}>
-          <Text style={styles.cardTitle} numberOfLines={1} {...textScale.dense}>
-            {teamName}
-          </Text>
-          {favorite ? <Ionicons name="star" size={11} color={colors.star} /> : null}
-        </View>
-        <View style={styles.cardMetaRow}>
-          {last5 ? <FormChips form={last5} size="xs" /> : null}
-          <Text style={styles.cardMeta} numberOfLines={1} {...textScale.dense}>
-            {played} maç · AV {goalDiff > 0 ? `+${goalDiff}` : goalDiff}
-          </Text>
-        </View>
-      </View>
-
-      {/* SÜTUN BAŞLIĞI SATIRDA DEĞİL, LİSTENİN ÜSTÜNDE: "PUAN" her satırda
-          tekrarlanınca yirmi takımlık listede yirmi kez okunuyor ve sağ sütunu
-          gri bir gürültü şeridine çeviriyordu. Birim bir kez CardHead'de
-          söylenir; ekran okuyucu için satırın kendi etiketi taşır. */}
-      <View style={styles.pointsBox}>
-        <Text style={styles.pointsValue} {...textScale.dense}>
-          {points}
-        </Text>
-      </View>
-    </Touchable>
-  );
-});
-
-const TableRow = React.memo(function TableRow({
-  rank,
-  teamId,
-  teamName,
-  logo,
-  played,
-  wins,
-  draws,
-  losses,
-  goalDiff,
-  points,
-  favorite,
-  zone,
-  onPress,
-}: RowProps) {
-  const handlePress = useCallback(() => onPress(teamId), [onPress, teamId]);
-
-  return (
-    <Touchable style={styles.tableRow} onPress={handlePress} feedback="row" haptic="selection">
-      <View style={[styles.zoneRail, zone ? { backgroundColor: zone } : null]} />
-      <Text style={styles.tRank} {...textScale.dense}>
-        {rank}
-      </Text>
-      <TeamLogo name={teamName} logo={logo} size={layout.crestSm} />
-      <Text
-        style={[styles.tName, favorite ? styles.tNameFav : null]}
-        numberOfLines={1}
-        {...textScale.dense}
-      >
-        {teamName}
-      </Text>
-      <Text style={styles.tNum} {...textScale.dense}>{played}</Text>
-      <Text style={styles.tNum} {...textScale.dense}>{wins}</Text>
-      <Text style={styles.tNum} {...textScale.dense}>{draws}</Text>
-      <Text style={styles.tNum} {...textScale.dense}>{losses}</Text>
-      <Text
-        style={[
-          styles.tNum,
-          styles.tNumWide,
-          goalDiff > 0 ? styles.tPos : goalDiff < 0 ? styles.tNeg : null,
-        ]}
-        {...textScale.dense}
-      >
-        {goalDiff > 0 ? `+${goalDiff}` : goalDiff}
-      </Text>
-      <Text style={[styles.tNum, styles.tPoints]} {...textScale.dense}>
-        {points}
-      </Text>
-    </Touchable>
-  );
-});
-
-/**
- * Kart görünümünün sütun başlığı — tek satır, iki kelime.
- *
- * Sağdaki genişlik `pointsBox.minWidth` ile BİREBİR aynı olmak zorunda;
- * aksi hâlde "PUAN" başlığı altındaki rakamların üstüne oturmaz.
- */
-const CardHead = React.memo(function CardHead() {
-  return (
-    <View style={styles.cardHead}>
-      <Text style={styles.headLabel} {...textScale.badge}>
-        {upperTR("Takım")}
-      </Text>
-      <Text style={[styles.headLabel, styles.cardHeadPoints]} {...textScale.badge}>
-        {upperTR("Puan")}
-      </Text>
-    </View>
-  );
-});
-
-/** Tablo başlığı — sütun genişlikleri satırla BİREBİR aynı olmak zorunda. */
-const TableHead = React.memo(function TableHead() {
-  return (
-    <View style={styles.tableHead}>
-      <View style={styles.zoneRail} />
-      <Text style={styles.tRank} {...textScale.badge}>#</Text>
-      <View style={{ width: layout.crestSm }} />
-      <Text style={[styles.tName, styles.headLabel]} {...textScale.badge}>
-        {upperTR("Takım")}
-      </Text>
-      <Text style={[styles.tNum, styles.headLabel]} {...textScale.badge}>O</Text>
-      <Text style={[styles.tNum, styles.headLabel]} {...textScale.badge}>G</Text>
-      <Text style={[styles.tNum, styles.headLabel]} {...textScale.badge}>B</Text>
-      <Text style={[styles.tNum, styles.headLabel]} {...textScale.badge}>M</Text>
-      <Text style={[styles.tNum, styles.tNumWide, styles.headLabel]} {...textScale.badge}>AV</Text>
-      <Text style={[styles.tNum, styles.headLabel]} {...textScale.badge}>P</Text>
-    </View>
-  );
-});
 
 /* ══════════════════════════════════════════════════════════════════════════
    Ekran
@@ -314,12 +138,12 @@ export default function TeamsScreen() {
   const renderItem = useCallback(
     ({ item }: { item: StandingRow }) => {
       const rank = rankOf.get(item.team_id) ?? 0;
-      const Row = view === "kart" ? TeamCard : TableRow;
       return (
-        <Row
+        <TeamRow
+          density={view === "kart" ? "list" : "table"}
           rank={rank}
           teamId={item.team_id}
-          teamName={item.team_name}
+          name={item.team_name}
           logo={item.logo}
           played={item.played}
           wins={item.wins}
@@ -327,7 +151,7 @@ export default function TeamsScreen() {
           losses={item.losses}
           goalDiff={Number(item.goal_diff ?? 0)}
           points={item.display_points}
-          last5={item.last5 ?? ""}
+          form={item.last5 ?? ""}
           favorite={isFavorite(item.team_id)}
           zone={zoneColor(palette, zoneForRank(rank, zoneRules))}
           onPress={openTeam}
@@ -337,7 +161,7 @@ export default function TeamsScreen() {
     [isFavorite, openTeam, rankOf, view, zoneRules],
   );
 
-  const rowHeight = view === "kart" ? CARD_HEIGHT : TABLE_ROW_HEIGHT;
+  const rowHeight = view === "kart" ? TEAM_ROW_HEIGHT : TEAM_ROW_HEIGHT_TABLE;
   const getItemLayout = useCallback(
     (_: unknown, index: number) => ({
       length: rowHeight,
@@ -412,7 +236,7 @@ export default function TeamsScreen() {
                   />
                 </View>
               ) : null}
-              {view === "tablo" ? <TableHead /> : <CardHead />}
+              <TeamRowHead density={view === "tablo" ? "table" : "list"} />
             </>
           }
           ListEmptyComponent={
@@ -458,152 +282,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: layout.screenPadding,
     paddingTop: space.sm,
     paddingBottom: space.m,
-  },
-
-  /* — Kart görünümü — */
-  /* Sıralama listesi TAM GENİŞLİKTE tek bir yüzeydir, satır satır kart değil.
-     Yirmi satırın her birine ayrı kart vermek listeyi merdivene çevirir; tek
-     yüzey + saç teli ayraç, tabloyu tarayarak okumayı kolaylaştırır. Zemin
-     açıkça verilmek zorunda: kâğıt (`bg`) lavantadır, zeminsiz satırlar
-     "bitmemiş" görünüyordu. */
-  card: {
-    height: CARD_HEIGHT,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.m,
-    paddingHorizontal: layout.screenPadding,
-    backgroundColor: colors.surface1,
-    borderBottomWidth: hairline,
-    borderBottomColor: colors.separator,
-  },
-  rankBox: {
-    width: 24,
-    height: 24,
-    borderRadius: radius.sm,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  rankText: {
-    ...type.tableNumStrong,
-    color: colors.textSecondary,
-  },
-  cardBody: {
-    flex: 1,
-    gap: 3,
-  },
-  cardTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.xs,
-  },
-  cardTitle: {
-    ...type.h3,
-    color: colors.textPrimary,
-    flexShrink: 1,
-  },
-  cardMetaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.s,
-  },
-  cardMeta: {
-    ...type.caption,
-    color: colors.textTertiary,
-    flexShrink: 1,
-  },
-  pointsBox: {
-    alignItems: "flex-end",
-    minWidth: 34,
-  },
-  pointsValue: {
-    ...type.metricSm,
-    color: colors.textPrimary,
-  },
-  cardHead: {
-    height: 24,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: layout.screenPadding,
-    backgroundColor: colors.surface3,
-    borderBottomWidth: hairline,
-    borderBottomColor: colors.border,
-  },
-  cardHeadPoints: {
-    minWidth: 34,
-    textAlign: "right",
-  },
-
-  /* — Tablo görünümü —
-     Sütun genişlikleri TableHead ile birebir aynı olmalı; aksi hâlde başlık
-     rakamların üstüne oturmaz ve tablo okunmaz hâle gelir. */
-  tableHead: {
-    height: 28,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.s,
-    paddingRight: layout.screenPadding,
-    backgroundColor: colors.surface3,
-    borderBottomWidth: hairline,
-    borderBottomColor: colors.border,
-  },
-  headLabel: {
-    ...type.overline,
-    color: colors.textTertiary,
-  },
-  tableRow: {
-    height: TABLE_ROW_HEIGHT,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.s,
-    paddingRight: layout.screenPadding,
-    backgroundColor: colors.surface1,
-    borderBottomWidth: hairline,
-    borderBottomColor: colors.separator,
-  },
-  /** Bölge rayı: satırın en solunda 3px dikey renk şeridi. */
-  zoneRail: {
-    width: 3,
-    alignSelf: "stretch",
-    marginRight: space.s,
-    backgroundColor: "transparent",
-  },
-  /* Sütun genişlikleri 14px tabular rakama göre ölçüldü: bir basamak ~8px.
-     İki basamak + eksi işareti (AV: "-12") yalnız `tNumWide` içinde sığar. */
-  tRank: {
-    ...type.tableNum,
-    color: colors.textTertiary,
-    width: 20,
-    textAlign: "center",
-  },
-  tName: {
-    ...type.bodySm,
-    color: colors.textPrimary,
-    flex: 1,
-  },
-  tNameFav: {
-    color: colors.brandAccent,
-  },
-  tNum: {
-    ...type.tableNum,
-    color: colors.textSecondary,
-    width: 22,
-    textAlign: "center",
-  },
-  tNumWide: {
-    width: 28,
-  },
-  tPos: {
-    color: colors.win,
-  },
-  tNeg: {
-    color: colors.loss,
-  },
-  tPoints: {
-    ...type.tableNumStrong,
-    color: colors.textPrimary,
-    width: 24,
   },
 });

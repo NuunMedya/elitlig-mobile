@@ -1,4 +1,27 @@
 /**
+ * ScreenHeader — MOR BLOK. Her ekranın açılışı.
+ *
+ * TEMANIN BİRİNCİ KURALI BURADA KURULUR: her ekran koyu mor bir başlık
+ * bloğuyla açılır, kâğıt üstünde okunur, mor menü rayıyla kapanır. Blok
+ * uygulamanın kimliğini taşıyan yüzeydir; ekranlar arası fark İÇERİKTE olur,
+ * çerçevede değil. Önceki sürümde başlık sayfanın kendi kâğıdındaydı ve
+ * altmış ekranın hiçbirinde ortak bir kimlik yoktu — her ekran kendi
+ * başlığını kendi tonunda çiziyordu.
+ *
+ * BLOK GÜVENLİ ALANI DA BOYAR: durum çubuğunun arkası da mordur. Bunu
+ * `marginTop: -insets.top` + `paddingTop: insets.top` çifti kurar — blok
+ * yukarı kayar, içeriği aynı kadar aşağı itilir. Böylece ekranlar
+ * `SafeAreaView edges={["top"]}` kullanmaya devam edebilir; tek satır bile
+ * değişmez ve blok yine de durum çubuğunun altına uzanır. (Negatif konumlu
+ * bir çocuk denenmedi: Android'de kapsayıcı sınırının dışına taşan çocuk
+ * güvenilir biçimde çizilmez.)
+ *
+ * SAYFA SEKMELERİ BLOĞUN İÇİNDE (`tabs` yuvası): şerit kâğıtta ayrı bir kutu
+ * olarak durduğunda ekranın tepesinde iki gezinme katmanı oluşuyordu. `tabs`
+ * bloğun içine, `bottom` ise bloğun ALTINA (kâğıda) çizilir; süzgeç
+ * segmentleri, tarih şeridi ve kapsam çipleri kâğıda aittir.
+ *
+ * ═══ eski başlık notu ═══
  * ScreenHeader — kaydırınca daralan premium başlık (§4.27).
  *
  * ESKİ DOSYA YERİNDE DURUYOR: `components/ScreenHeader.tsx` hâlâ 20'den fazla
@@ -32,6 +55,7 @@
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useMemo, useRef, useState } from "react";
 import {
@@ -45,6 +69,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, hairline, layout, space, textScale, touchSlop, type } from "@/theme";
 import { Badge, toneColors, type Tone } from "./Badge";
 import { Touchable } from "./Pressable";
@@ -57,6 +82,10 @@ const TITLE_SCALE = 13 / 14;
 const BACK_OFFSET = 36;
 /** Üst satırın (geri/eylem) yüksekliği; daralmış başlık da bu şeride oturur. */
 const BAR_HEIGHT = layout.headerHeightCollapsed;
+
+/** Mor bloğun yüzey gradyanı — yüzeylerin ışığı daima sağdan gelir. */
+const INK_START = { x: 1, y: 0.5 } as const;
+const INK_END = { x: 0, y: 0.5 } as const;
 
 export interface ScreenHeaderAction {
   icon: keyof typeof Ionicons.glyphMap;
@@ -79,7 +108,16 @@ export interface ScreenHeaderProps {
   onBack?: () => void;
   /** Sağ eylemler — en fazla 3 ikon. */
   actions?: ScreenHeaderAction[];
-  /** Başlığın altında sabit kalan bant (Tabs, DateStrip, ScopeBar). */
+  /**
+   * SAYFA SEKMELERİ — mor bloğun İÇİNDE çizilir (bkz. components/ui/Tabs.tsx).
+   * Yalnız gezinme şeridi buraya girer: sekme sayfayı değiştirir.
+   */
+  tabs?: React.ReactNode;
+  /**
+   * Bloğun ALTINDA, kâğıdın üstünde duran bant: süzgeç segmenti, tarih
+   * şeridi, kapsam çipleri. Bunlar veriyi süzer, sayfayı değiştirmez — bu
+   * yüzden kâğıda aittir.
+   */
   bottom?: React.ReactNode;
   /** Şeffaf hero üstünde mi (maç/takım detayı). */
   transparent?: boolean;
@@ -133,6 +171,7 @@ export function ScreenHeader({
   back = false,
   onBack,
   actions,
+  tabs,
   bottom,
   transparent = false,
   onDark = false,
@@ -140,6 +179,13 @@ export function ScreenHeader({
   style,
 }: ScreenHeaderProps) {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  /**
+   * MÜREKKEP BLOK MU: şeffaf başlık (maç detayı, kendi atmosferi var) dışında
+   * her başlık mor bloktur. `onDark` bayrağı zaten "koyu zemin" demek
+   * olduğundan renk seti ikisinde de aynı yerden gelir.
+   */
+  const isInk = !transparent;
   const staticProgress = useRef(new Animated.Value(0)).current;
   /** Başlık metninin ölçülen kutusu — ölçek telafisi ve dikey ortalama için. */
   const [titleBox, setTitleBox] = useState({ width: 0, y: 0, height: 0 });
@@ -200,8 +246,8 @@ export function ScreenHeader({
    * kaydırmayla döndürmek gerekseydi ikon renkleri için `Animated` sarmalayıcı
    * gerekirdi; sabit koyu zemin bu karmaşıklığı tümden ortadan kaldırıyor.
    */
-  const ink = onDark ? colors.onDark : colors.textPrimary;
-  const inkMuted = onDark ? colors.onDarkMuted : colors.textSecondary;
+  const ink = onDark || isInk ? colors.onDark : colors.textPrimary;
+  const inkMuted = onDark || isInk ? colors.onDarkMuted : colors.textSecondary;
 
   const expandedHeight = Math.max(
     layout.headerHeightExpanded,
@@ -217,10 +263,27 @@ export function ScreenHeader({
 
   return (
     <View style={style}>
+      {/* MOR BLOK. Güvenli alanı da kaplar: yukarı kayar, içeriği aynı kadar
+          aşağı itilir — bkz. dosya başlığı. */}
+      <View
+        style={[
+          isInk ? styles.inkWrap : null,
+          isInk ? { marginTop: -insets.top, paddingTop: insets.top } : null,
+        ]}
+      >
+        {isInk ? (
+          <LinearGradient
+            colors={colors.gradientInk}
+            start={INK_START}
+            end={INK_END}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          />
+        ) : null}
       <Animated.View
         style={[
           styles.container,
-          transparent ? styles.transparent : styles.opaque,
+          transparent ? styles.transparent : isInk ? styles.transparent : styles.opaque,
           { height: containerHeight },
         ]}
       >
@@ -300,7 +363,11 @@ export function ScreenHeader({
           {overline ? (
             <Animated.Text
               numberOfLines={1}
-              style={[styles.overline, onDark ? styles.overlineOnDark : null, { opacity: fadeOut }]}
+              style={[
+                styles.overline,
+                onDark || isInk ? styles.overlineOnDark : null,
+                { opacity: fadeOut },
+              ]}
               {...textScale.badge}
             >
               {overline}
@@ -341,12 +408,21 @@ export function ScreenHeader({
           ) : null}
         </View>
 
-        {/* Alt kenarlık: yalnız kaydırma başlayınca belirir. */}
+        {/* Alt kenarlık: yalnız kaydırma başlayınca belirir. Mor blokta
+            şeridi kâğıttan değil, bloğun kendi ışığından ayırır. */}
         <Animated.View
           pointerEvents="none"
-          style={[styles.border, onDark ? styles.borderOnDark : null, { opacity: appear }]}
+          style={[
+            styles.border,
+            onDark || isInk ? styles.borderOnDark : null,
+            { opacity: appear },
+          ]}
         />
       </Animated.View>
+
+        {/* Sayfa sekmeleri bloğun İÇİNDE: başlıkla aynı yüzeye aittir. */}
+        {tabs}
+      </View>
 
       {bottom}
     </View>
@@ -354,6 +430,16 @@ export function ScreenHeader({
 }
 
 const styles = StyleSheet.create({
+  /**
+   * Mor bloğun kabı. Zemin rengi gradyanın YEDEĞİdir: `expo-linear-gradient`
+   * yüklenemezse (web, eski cihaz) blok yine de koyu kalır ve üstündeki beyaz
+   * metin okunur — yedeksiz bir gradyan, o cihazlarda beyaz üstüne beyaz
+   * yazardı.
+   */
+  inkWrap: {
+    backgroundColor: colors.inkBlock,
+    overflow: "hidden",
+  },
   container: {
     overflow: "hidden",
     justifyContent: "flex-start",
@@ -392,12 +478,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  /** Rozet, ikonla karışmasın diye zemin renginde 2px halkayla ayrılır. */
+  /**
+   * Rozet, ikonla karışmasın diye 2px halkayla ayrılır. Halkanın rengi mor
+   * BLOĞUN rengidir, kâğıdın değil: kâğıt renginde bir halka, koyu bloğun
+   * üstünde ikonun yanında parlayan beyaz bir çentik bırakıyordu.
+   */
   actionBadge: {
     top: 2,
     right: 2,
     borderWidth: 2,
-    borderColor: colors.bg,
+    borderColor: colors.inkBlock,
   },
   titleBlock: {
     paddingHorizontal: layout.screenPadding,

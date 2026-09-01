@@ -235,12 +235,12 @@ export default function LeaguesScreen() {
         onBack={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)/menu"))}
         scrollY={scrollY}
         actions={actions}
+        tabs={<Tabs items={TAB_ITEMS} value={tab} onChange={changeTab} sticky />}
         bottom={
           <View style={styles.headerBottom}>
             <View style={styles.scopeRow}>
               <ScopeChip variant="full" />
             </View>
-            <Tabs items={TAB_ITEMS} value={tab} onChange={changeTab} sticky />
           </View>
         }
       />

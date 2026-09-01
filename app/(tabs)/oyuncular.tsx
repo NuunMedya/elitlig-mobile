@@ -35,6 +35,9 @@ import {
   EmptyState,
   ErrorState,
   Input,
+  PlayerRow,
+  PlayerRowHead,
+  PLAYER_ROW_HEIGHT,
   ScreenHeader,
   SkeletonListRow,
   Touchable,
@@ -46,7 +49,7 @@ import { getPlayerRankings } from "@/lib/api/players";
 import { queryKeys } from "@/lib/queryKeys";
 import type { PlayerRankRow, PlayerSort } from "@/lib/types";
 import { useScope } from "@/providers/ScopeProvider";
-import { colors, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
+import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
 
 /** Sunucu sayıları kimi uçlarda string döndürüyor; tek dönüştürücüden geçer. */
 const num = (value: number | string | null | undefined) => Number(value ?? 0) || 0;
@@ -68,110 +71,12 @@ const SORTS: SortDef[] = [
   { key: "mostCards", label: "Kartlar", metric: (r) => String(num(r.cards)), unit: "kart" },
 ];
 
-const ROW_HEIGHT = 56;
 const SKELETON_ROWS = ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8"] as const;
 
 /** Podyum sırasına göre madalya rengi. */
 const MEDAL = [colors.star, colors.textSecondary, colors.warn];
 
 const normalize = (value: string) => value.trim().toLocaleLowerCase("tr-TR");
-
-/* ══════════════════════════════════════════════════════════════════════════
-   Satır
-   ══════════════════════════════════════════════════════════════════════════ */
-
-const PlayerRow = React.memo(function PlayerRow({
-  playerId,
-  rank,
-  name,
-  image,
-  teamName,
-  matches,
-  goals,
-  assists,
-  metric,
-  unit,
-  onPress,
-}: {
-  playerId: number;
-  rank: number;
-  name: string;
-  image: string | null;
-  teamName: string;
-  matches: number;
-  goals: number;
-  assists: number;
-  metric: string;
-  unit: string;
-  onPress: (playerId: number) => void;
-}) {
-  const handlePress = useCallback(() => onPress(playerId), [onPress, playerId]);
-
-  return (
-    <Touchable
-      style={styles.row}
-      onPress={handlePress}
-      feedback="row"
-      haptic="selection"
-      accessibilityLabel={`${rank}. ${name}, ${metric} ${unit}`}
-    >
-      <Text style={styles.rank} {...textScale.dense}>
-        {rank}
-      </Text>
-      <Avatar name={name} image={image} size={28} />
-
-      <View style={styles.rowBody}>
-        <Text style={styles.name} numberOfLines={1} {...textScale.dense}>
-          {name}
-        </Text>
-        {/*
-          Meta satırı, SAĞDAKİ metriğin tekrarını taşımaz. Önceki hâlde
-          "24 gol" hem sağdaki büyük rakamdaydı hem meta satırındaydı; satır
-          da bu yüzden taşıp "… 2 asis" diye kırpılıyordu. Şimdi aktif ölçüt
-          meta'dan düşülür ve satır tek satıra sığar.
-        */}
-        <Text style={styles.meta} numberOfLines={1} {...textScale.dense}>
-          {[
-            teamName || "Takımsız",
-            unit === "maç" ? null : `${matches} maç`,
-            unit === "gol" ? null : `${goals} gol`,
-            `${assists} asist`,
-          ]
-            .filter(Boolean)
-            .join(" · ")}
-        </Text>
-      </View>
-
-      {/* BİRİM SATIRDA DEĞİL, SÜTUN BAŞLIĞINDA: "gol" yirmi satırda yirmi kez
-          yazılınca sağ sütun gri bir gürültü şeridine dönüyordu. Birim bir kez
-          RankHead'de söylenir, satırın erişilebilirlik etiketi taşır. */}
-      <View style={styles.metricBox}>
-        <Text style={styles.metricValue} {...textScale.dense}>
-          {metric}
-        </Text>
-      </View>
-    </Touchable>
-  );
-});
-
-/**
- * Sıralama sütun başlığı — "OYUNCU … <BİRİM>".
- *
- * Sağdaki genişlik `metricBox.minWidth` ile BİREBİR aynı olmak zorunda;
- * aksi hâlde başlık altındaki rakamların üstüne oturmaz.
- */
-const RankHead = React.memo(function RankHead({ unit }: { unit: string }) {
-  return (
-    <View style={styles.rankHead}>
-      <Text style={styles.headLabel} {...textScale.badge}>
-        {upperTR("Oyuncu")}
-      </Text>
-      <Text style={[styles.headLabel, styles.rankHeadMetric]} {...textScale.badge}>
-        {upperTR(unit)}
-      </Text>
-    </View>
-  );
-});
 
 /* ══════════════════════════════════════════════════════════════════════════
    Podyum — ilk üç
@@ -230,8 +135,8 @@ const Podium = React.memo(function Podium({
 
 const keyExtractor = (item: PlayerRankRow) => String(item.id);
 const getItemLayout = (_data: ArrayLike<PlayerRankRow> | null | undefined, index: number) => ({
-  length: ROW_HEIGHT,
-  offset: ROW_HEIGHT * index,
+  length: PLAYER_ROW_HEIGHT,
+  offset: PLAYER_ROW_HEIGHT * index,
   index,
 });
 
@@ -292,12 +197,16 @@ export default function PlayersScreen() {
         rank={index + 1}
         name={item.name}
         image={item.image ?? null}
-        teamName={item.teamName ?? ""}
-        matches={num(item.matches)}
-        goals={num(item.goals)}
-        assists={num(item.assists)}
+        /* META AKTİF ÖLÇÜTÜ TEKRAR ETMEZ: gol sıralamasındayken meta'da gol
+           yazmaz — sağdaki sütun zaten onu söylüyor ve tekrar, satırı taşırıp
+           oyuncu adını kırpan şeydi. */
+        meta={[
+          item.teamName || "Takımsız",
+          active.unit === "maç" ? null : `${num(item.matches)} maç`,
+          active.unit === "gol" ? null : `${num(item.goals)} gol`,
+          `${num(item.assists)} asist`,
+        ]}
         metric={active.metric(item)}
-        unit={active.unit}
         onPress={openPlayer}
       />
     ),
@@ -394,7 +303,7 @@ export default function PlayersScreen() {
                 />
               ) : null}
 
-              {rows.length > 0 ? <RankHead unit={active.unit} /> : null}
+              {rows.length > 0 ? <PlayerRowHead unit={active.unit} /> : null}
             </View>
           }
           ListEmptyComponent={
@@ -449,63 +358,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: layout.screenPadding,
   },
 
-  /* — Satır — */
-  /* Sıralama listesi TAM GENİŞLİKTE tek bir yüzeydir (bkz. takimlar.tsx).
-     Zemin açıkça verilir: kâğıt lavantadır, zeminsiz satırlar boşlukta durur. */
-  row: {
-    height: ROW_HEIGHT,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.m,
-    paddingHorizontal: layout.screenPadding,
-    backgroundColor: colors.surface1,
-    borderBottomWidth: hairline,
-    borderBottomColor: colors.separator,
-  },
-  rank: {
-    ...type.tableNum,
-    color: colors.textTertiary,
-    width: 20,
-    textAlign: "center",
-  },
-  rowBody: {
-    flex: 1,
-    gap: 2,
-  },
-  name: {
-    ...type.h3,
-    color: colors.textPrimary,
-  },
-  meta: {
-    ...type.caption,
-    color: colors.textTertiary,
-  },
-  metricBox: {
-    alignItems: "flex-end",
-    minWidth: 42,
-  },
-  metricValue: {
-    ...type.metricSm,
-    color: colors.accentText,
-  },
-  rankHead: {
-    height: 24,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: layout.screenPadding,
-    backgroundColor: colors.surface3,
-    borderBottomWidth: hairline,
-    borderBottomColor: colors.border,
-  },
-  headLabel: {
-    ...type.overline,
-    color: colors.textTertiary,
-  },
-  rankHeadMetric: {
-    minWidth: 42,
-    textAlign: "right",
-  },
 
   /* — Podyum — */
   podium: {

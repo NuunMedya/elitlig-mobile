@@ -1,36 +1,45 @@
 /**
- * SEKME ÇUBUĞU — uygulamanın altı ana bölümü.
+ * SEKME ÇUBUĞU — uygulamanın beş ana bölümü.
  *
- * NE: Genel Bakış · Maçlar · Takımlar · Oyuncular · Profil · Menü.
+ * NE: Genel Bakış · Maçlar · Takımlar · Oyuncular · Profil.
  *
- * NEDEN GENEL BAKIŞ VAR: beş sekmeli düzende açılış ekranı doğrudan maç
+ * NEDEN GENEL BAKIŞ VAR: eski düzende açılış ekranı doğrudan maç
  * listesiydi ve uygulamanın geri kalanı (takım paneli, kadro, maç talepleri,
  * mesajlar, bildirimler) yalnızca Profil sekmesinin altındaki liste
  * satırlarından ulaşılabiliyordu. Takım başkanı için asıl iş orada; her açılışta
  * iki dokunuş öteye düşüyordu. Genel Bakış bu iki dokunuşu sıfırlar: kullanıcının
  * ŞU AN önemsediği maç en üstte, işini yaptığı dört kısayol hemen altında.
  *
- * NEDEN ALTI SEKME: "Takımlar" ile "Oyuncular" eskiden tek "Ligler" sekmesinin
+ * NEDEN TAKIMLAR VE OYUNCULAR AYRI: bu ikisi eskiden tek "Ligler" sekmesinin
  * segmentleriydi. Segment, sekme çubuğundan bir kademe aşağıdadır: kullanıcı
  * önce doğru sekmeyi, sonra doğru segmenti bulmak zorundaydı ve segment seçimi
  * ekran değişince unutuluyordu. İkisi de uygulamanın birinci sınıf varlıkları
  * olduğu için kendi sekmelerine çıktı.
  *
- * NEDEN OYUNLAR MENÜYE İNDİ: oyunlar günde bir kez, keyif için açılır; maç
- * takibi gün boyu açılır. Kalıcı sekme çubuğundaki bir yuva "günde bir"lik bir
- * işe ayrılamaz. Oyunlar rota olarak DURUYOR (`/(tabs)/oyunlar`), yalnız
- * çubuktan kaldırıldı; Menü'nün en üstünde ilk sırada.
+ * NEDEN MENÜ SEKMESİ KALKTI (bu turun kararı): altı yuva 360px'lik bir
+ * telefonda her sekmeye 60px bırakıyordu; dokunma alanı daralıyor ve
+ * "Oyuncular" etiketi kırpılıyordu. Menü zaten bir BÖLÜM değil, başka
+ * bölümlere açılan bir kapı listesiydi — kalıcı çubuktaki bir yuva, kendi
+ * içeriği olmayan bir işe ayrılamaz. İçeriği Profil'in en üstündeki dört
+ * kısayola ve mevcut liste bölümlerine taşındı; rota olarak DURUYOR
+ * (`/(tabs)/menu`), yalnız çubuktan kaldırıldı. Beş yuva = 72px dokunma
+ * alanı, kırpılmayan etiket.
  *
- * GİZLİ SEKMELER (`href: null`): ligler · favoriler · oyunlar. Bu üçü hâlâ bu
- * gruba aittir — böylece açıldıklarında sekme çubuğu ekranda kalır ve kullanıcı
- * tek dokunuşla ana bölüme dönebilir — ama çubukta yuvaları yoktur. Rotaları
- * değişmediği için mevcut derin bağlantılar (bildirimler, haber kartları)
- * olduğu gibi çalışmaya devam eder.
+ * NEDEN OYUNLAR ÇUBUKTA DEĞİL: oyunlar günde bir kez, keyif için açılır; maç
+ * takibi gün boyu açılır. Oyunlar rota olarak DURUYOR (`/(tabs)/oyunlar`);
+ * Profil'deki kısayol ızgarasından tek dokunuşla açılır.
  *
- * ÇUBUĞUN KENDİSİ ARTIK ÖZEL: platformun düz şeridi yerine ekranın altında
- * YÜZEN koyu mor bir hap ve seçili sekmeye YAYLANARAK uzanan bir ışık
- * kullanılır. Çizimin tamamı `components/ui/GlowTabBar.tsx` içindedir; burası
- * yalnız hangi sekmelerin görüneceğini ve rozetlerin nereden geldiğini söyler.
+ * GİZLİ SEKMELER (`href: null`): ligler · favoriler · oyunlar · menu. Bu dördü
+ * hâlâ bu gruba aittir — böylece açıldıklarında sekme çubuğu ekranda kalır ve
+ * kullanıcı tek dokunuşla ana bölüme dönebilir — ama çubukta yuvaları yoktur.
+ * Rotaları değişmediği için mevcut derin bağlantılar (bildirimler, haber
+ * kartları, menüye giden eski bağlantılar) olduğu gibi çalışmaya devam eder.
+ *
+ * ÇUBUĞUN KENDİSİ ARTIK ÖZEL: platformun düz şeridi yerine ekranın alt
+ * kenarına oturan koyu mor bir ray, seçili ikonu saran bir kapsül ve barın üst
+ * kenarında seçili sekmeye YAYLANARAK kayan bir ışık çizgisi kullanılır.
+ * Çizimin tamamı `components/ui/GlowTabBar.tsx` içindedir; burası yalnız hangi
+ * sekmelerin görüneceğini ve rozetlerin nereden geldiğini söyler.
  *
  * NEDEN SEKME LİSTESİ BURADA AÇIKÇA YAZILI: `href: null` ile gizlenen rotalar
  * gezinme durumunda durmaya devam eder ve expo-router onları yalnız bir stil
@@ -73,7 +82,6 @@ export default function TabsLayout() {
     { name: "takimlar", label: "Takımlar", icon: "shield" },
     { name: "oyuncular", label: "Oyuncular", icon: "people" },
     { name: "profil", label: "Profil", icon: "person-circle", badge: unread.total },
-    { name: "menu", label: "Menü", icon: "grid" },
   ];
 
   return (
@@ -86,10 +94,11 @@ export default function TabsLayout() {
       <Tabs.Screen name="takimlar" options={{ title: "Takımlar" }} />
       <Tabs.Screen name="oyuncular" options={{ title: "Oyuncular" }} />
       <Tabs.Screen name="profil" options={{ title: "Profil" }} />
-      <Tabs.Screen name="menu" options={{ title: "Menü" }} />
 
       {/* — Çubukta yuvası olmayan, ama bu gruba ait ekranlar —
-          Menü'den açılırlar; sekme çubuğu ekranda kalır. */}
+          Profil'deki kısayollardan ve derin bağlantılardan açılırlar; sekme
+          çubuğu ekranda kalır. */}
+      <Tabs.Screen name="menu" options={{ href: null }} />
       <Tabs.Screen name="ligler" options={{ href: null }} />
       <Tabs.Screen name="favoriler" options={{ href: null }} />
       <Tabs.Screen name="oyunlar" options={{ href: null }} />

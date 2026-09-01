@@ -108,6 +108,13 @@ export type { RatingPillProps } from "./RatingPill";
 export { TeamLogo } from "./TeamLogo";
 export type { TeamLogoProps } from "./TeamLogo";
 
+/* Tek anatomili varlık satırları — takım ve oyuncu her listede aynı sırayla
+   okunur; yoğunluk değişir, sıra değişmez. */
+export { TeamRow, TeamRowHead, TEAM_ROW_HEIGHT, TEAM_ROW_HEIGHT_TABLE } from "./TeamRow";
+export type { TeamRowProps, TeamRowDensity } from "./TeamRow";
+export { PlayerRow, PlayerRowHead, PLAYER_ROW_HEIGHT } from "./PlayerRow";
+export type { PlayerRowProps } from "./PlayerRow";
+
 export { Avatar } from "./Avatar";
 export type { AvatarProps } from "./Avatar";
 
