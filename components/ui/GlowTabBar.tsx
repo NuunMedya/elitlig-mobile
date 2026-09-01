@@ -151,7 +151,14 @@ export function GlowTabBar({ state, navigation, insets, tabs }: GlowTabBarProps)
 
   return (
     <View
-      style={[styles.bar, { paddingBottom: insets.bottom }]}
+      /* YÜKSEKLİK GÜVENLİ ALANI DA SAYAR: React Native'de `height` dolguyu
+         İÇERİR (border-box). Sabit 60px'e `paddingBottom: insets.bottom`
+         eklenseydi, çeneli telefonlarda içeriğe 26px kalır ve etiketler
+         kırpılırdı — bar kısalmaz, İÇİ ezilirdi. */
+      style={[
+        styles.bar,
+        { height: layout.tabBarHeight + insets.bottom, paddingBottom: insets.bottom },
+      ]}
       onLayout={onBarLayout}
     >
       <LinearGradient
@@ -257,7 +264,7 @@ const styles = StyleSheet.create({
   bar: {
     flexDirection: "row",
     alignItems: "stretch",
-    height: layout.tabBarHeight,
+    /* Yükseklik satır içinde verilir: güvenli alan cihazdan cihaza değişir. */
     /* Gradyan yüklenemezse (web/eski cihaz) düz zemin altta durur. */
     backgroundColor: colors.tabBar,
   },

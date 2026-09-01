@@ -23,8 +23,6 @@
  *     Barrel YENİ olanları (`components/ui/*`) dışa aktarır. Eski dosya
  *     dokunulmadan duruyor; onu içe aktaran ekranlar geçene kadar çalışsın
  *     diye. Bir ekran İKİSİNİ BİRDEN içe aktarmamalı.
- *   - ScreenHeader: ESKİ `components/ScreenHeader.tsx` içinde de var (ayrıca
- *     `DetailHeader`). Barrel YENİ, daralan başlığı (`components/ui`) verir.
  *   - `Loading` (States.tsx) burada YOK: karşılığı belirsiz dönen çember değil,
  *     içeriğin şeklini taklit eden iskelettir → `SkeletonMatchRow` vb.
  *   - Şartnamedeki `Switch`, RN'in yerleşik `Switch`'iyle karışmasın diye

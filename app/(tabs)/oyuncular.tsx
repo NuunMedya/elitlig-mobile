@@ -30,8 +30,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ScopeChip } from "@/components/ScopeChip";
 import {
   Avatar,
-  Chip,
-  ChipGroup,
   EmptyState,
   ErrorState,
   Input,
@@ -40,10 +38,12 @@ import {
   PLAYER_ROW_HEIGHT,
   ScreenHeader,
   SkeletonListRow,
+  Tabs,
   Touchable,
   refreshControlProps,
   useHeaderScroll,
   useRefresh,
+  type TabItem,
 } from "@/components/ui";
 import { getPlayerRankings } from "@/lib/api/players";
 import { queryKeys } from "@/lib/queryKeys";
@@ -62,6 +62,13 @@ interface SortDef {
   unit: string;
 }
 
+/**
+ * Ölçüt seçimi ÇİP DEĞİL SEKME (tema kuralı, bkz. components/ui/Tabs.tsx):
+ * "Gol Krallığı" ile "En Çok Maç" aynı listenin süzülmüş hâlleri değil, ayrı
+ * SAYFALARDIR — sıralama, sağdaki sütun ve podyum, hepsi değişir. Çip yığını
+ * bunu süzgeç gibi gösteriyordu ve kâğıdın üstünde ekranın ikinci gezinme
+ * katmanı olarak duruyordu.
+ */
 const SORTS: SortDef[] = [
   { key: "mostValuable", label: "En Değerliler", metric: (r) => String(num(r.points)), unit: "puan" },
   { key: "topScorers", label: "Gol Krallığı", metric: (r) => String(num(r.goals)), unit: "gol" },
@@ -70,6 +77,12 @@ const SORTS: SortDef[] = [
   { key: "goalsPerMatch", label: "Gol / Maç", metric: (r) => num(r.goalsPerMatch).toFixed(2), unit: "gol" },
   { key: "mostCards", label: "Kartlar", metric: (r) => String(num(r.cards)), unit: "kart" },
 ];
+
+/** Sekme şeridi için — `SORTS` ile aynı sıra, aynı anahtarlar. */
+const SORT_TABS: TabItem<PlayerSort>[] = SORTS.map((item) => ({
+  key: item.key,
+  label: item.label,
+}));
 
 const SKELETON_ROWS = ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8"] as const;
 
@@ -239,6 +252,15 @@ export default function PlayersScreen() {
             onPress: () => router.push("/ara"),
           },
         ]}
+        tabs={
+          <Tabs
+            items={SORT_TABS}
+            value={sort}
+            onChange={setSort}
+            distribute="scroll"
+            sticky
+          />
+        }
         bottom={
           <View style={styles.headerBottom}>
             <ScopeChip />
@@ -270,17 +292,6 @@ export default function PlayersScreen() {
           }
           ListHeaderComponent={
             <View style={styles.listHeader}>
-              <ChipGroup>
-                {SORTS.map((item) => (
-                  <Chip
-                    key={item.key}
-                    label={item.label}
-                    selected={item.key === sort}
-                    onPress={() => setSort(item.key)}
-                  />
-                ))}
-              </ChipGroup>
-
               <View style={styles.searchBox}>
                 <Input
                   variant="search"

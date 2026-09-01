@@ -24,9 +24,8 @@
  * ═══ eski başlık notu ═══
  * ScreenHeader — kaydırınca daralan premium başlık (§4.27).
  *
- * ESKİ DOSYA YERİNDE DURUYOR: `components/ScreenHeader.tsx` hâlâ 20'den fazla
- * ekran tarafından kullanılıyor. Bu dosya onun yerini alacak YENİ bileşendir;
- * ekranlar tek tek geçirilir, geçiş bitince eskisi silinir.
+ * TEK BAŞLIK: eski `components/ScreenHeader.tsx` geçiş bitince silindi;
+ * uygulamadaki her başlık artık bu dosyadan geliyor.
  *
  * DARALMA NASIL ÇALIŞIR:
  *   0 → 56 px kaydırma arasında `progress` 0'dan 1'e gider.
