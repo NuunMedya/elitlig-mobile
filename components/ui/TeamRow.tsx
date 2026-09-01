@@ -68,6 +68,13 @@ export interface TeamRowProps {
   favorite?: boolean;
   /** Bölge rayının rengi (`zoneColor`); yoksa ray çizilmez. */
   zone?: string | null;
+  /**
+   * "Bu satır BU sayfanın konusu" — takım detayındaki mini tabloda kendi
+   * takımını işaretler. Zemin sönük mor olur; kalın yazı ya da renkli metin
+   * KULLANILMAZ, çünkü satırın kendi hiyerarşisi (sıra, ad, puan) zaten
+   * kurulu ve ikinci bir vurgu onu bozar.
+   */
+  highlighted?: boolean;
   density?: TeamRowDensity;
   onPress: (teamId: number) => void;
   style?: StyleProp<ViewStyle>;
@@ -94,6 +101,7 @@ function TeamRowBase({
   form,
   favorite,
   zone,
+  highlighted,
   density = "list",
   onPress,
   style,
@@ -111,7 +119,7 @@ function TeamRowBase({
   if (density === "table") {
     return (
       <Touchable
-        style={[styles.tableRow, style]}
+        style={[styles.tableRow, highlighted ? styles.highlighted : null, style]}
         onPress={handlePress}
         feedback="row"
         haptic="selection"
@@ -163,7 +171,7 @@ function TeamRowBase({
 
   return (
     <Touchable
-      style={[styles.listRow, style]}
+      style={[styles.listRow, highlighted ? styles.highlighted : null, style]}
       onPress={handlePress}
       feedback="row"
       haptic="selection"
@@ -282,6 +290,9 @@ const styles = StyleSheet.create({
   headLabel: {
     ...type.overline,
     color: colors.textTertiary,
+  },
+  highlighted: {
+    backgroundColor: colors.brandDim,
   },
 
   /* — Liste yoğunluğu — */

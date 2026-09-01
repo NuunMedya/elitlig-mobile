@@ -66,7 +66,9 @@ import {
   SkeletonMatchRow,
   StatBar,
   Tabs,
+  PlayerRow,
   TeamLogo,
+  TeamRow,
   Touchable,
   useHeaderScroll,
   useRefresh,
@@ -1246,16 +1248,15 @@ function GeneralTab({
       ) : (
         <View style={styles.group}>
           {neighbours.map(({ row, rank }, index) => (
-            <MiniStandingRow
+            <TeamRow
               key={row.team_id}
               rank={rank}
               teamId={Number(row.team_id)}
-              teamName={row.team_name}
+              name={row.team_name}
               logo={row.logo}
               played={row.played}
               points={row.display_points}
               highlighted={Number(row.team_id) === teamId}
-              position={groupPosition(index, neighbours.length)}
               onPress={onOpenTeam}
             />
           ))}
@@ -1277,16 +1278,15 @@ function GeneralTab({
       {topScorers.length ? (
         <View style={styles.group}>
           {topScorers.map((player, index) => (
-            <ScorerRow
+            <PlayerRow
               key={player.id}
               rank={index + 1}
               playerId={Number(player.id)}
               name={player.name}
               image={player.image ?? null}
-              goals={num(player.goals)}
-              assists={num(player.assists)}
-              matches={num(player.matches)}
-              position={groupPosition(index, topScorers.length)}
+              /* Meta gol TEKRAR ETMEZ: sağdaki sayı zaten gol. */
+              meta={[`${num(player.matches)} maç`, `${num(player.assists)} asist`]}
+              metric={num(player.goals)}
               onPress={onOpenPlayer}
             />
           ))}
@@ -1372,91 +1372,7 @@ const NextMatchCard = React.memo(function NextMatchCard({
   );
 });
 
-const MiniStandingRow = React.memo(function MiniStandingRow({
-  rank,
-  teamId,
-  teamName,
-  logo,
-  played,
-  points,
-  highlighted,
-  position,
-  onPress,
-}: {
-  rank: number;
-  teamId: number;
-  teamName: string;
-  logo: string | null;
-  played: number;
-  points: number;
-  highlighted: boolean;
-  position: "single" | "first" | "middle" | "last";
-  onPress: (teamId: number) => void;
-}) {
-  const handlePress = useCallback(() => onPress(teamId), [onPress, teamId]);
 
-  return (
-    <ListRow
-      leading={
-        <View style={styles.miniLead}>
-          <Text style={styles.miniRank} {...textScale.dense}>
-            {rank}
-          </Text>
-          <TeamLogo name={teamName} logo={logo} size={layout.crestMd} />
-        </View>
-      }
-      title={teamName}
-      value={`${played} maç`}
-      badge={<Badge label={String(points)} tone={highlighted ? "brand" : "neutral"} size="sm" />}
-      highlighted={highlighted}
-      chevron={false}
-      position={position}
-      onPress={handlePress}
-    />
-  );
-});
-
-const ScorerRow = React.memo(function ScorerRow({
-  rank,
-  playerId,
-  name,
-  image,
-  goals,
-  assists,
-  matches,
-  position,
-  onPress,
-}: {
-  rank: number;
-  playerId: number;
-  name: string;
-  image: string | null;
-  goals: number;
-  assists: number;
-  matches: number;
-  position: "single" | "first" | "middle" | "last";
-  onPress: (playerId: number) => void;
-}) {
-  const handlePress = useCallback(() => onPress(playerId), [onPress, playerId]);
-
-  return (
-    <ListRow
-      leading={
-        <View style={styles.miniLead}>
-          <Text style={styles.miniRank} {...textScale.dense}>
-            {rank}
-          </Text>
-          <Avatar name={name} image={image} size={32} />
-        </View>
-      }
-      title={name}
-      subtitle={`${matches} maç · ${assists} asist`}
-      badge={<Badge label={`${goals} gol`} tone="win" size="sm" />}
-      position={position}
-      onPress={handlePress}
-    />
-  );
-});
 
 /* ══════════════════════════════════════════════════════════════════════════
    2) FİKSTÜR / 3) SONUÇLAR
@@ -2665,18 +2581,6 @@ const styles = StyleSheet.create({
     color: colors.textTertiary,
   },
 
-  /* — Mini tablo / gol krallığı — */
-  miniLead: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.sm,
-  },
-  miniRank: {
-    ...type.tableNum,
-    color: colors.textTertiary,
-    width: 18,
-    textAlign: "center",
-  },
 
   /* — Maç listeleri — */
   fixtureRow: {
