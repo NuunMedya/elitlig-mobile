@@ -205,7 +205,7 @@ export default function TeamsScreen() {
           action={{ label: "Kapsam seç", onPress: () => scope.openScopeSheet("city") }}
         />
       ) : query.isLoading || scope.loading ? (
-        <SkeletonStandings />
+        <SkeletonStandings density={view === "tablo" ? "table" : "list"} />
       ) : query.isError && rows.length === 0 ? (
         <ErrorState error={query.error} onRetry={query.refetch} />
       ) : (

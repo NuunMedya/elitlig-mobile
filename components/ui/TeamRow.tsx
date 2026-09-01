@@ -222,8 +222,14 @@ export const TeamRow = React.memo(TeamRowBase);
  */
 export const TeamRowHead = React.memo(function TeamRowHead({
   density = "list",
+  pointsLabel = "Puan",
 }: {
   density?: TeamRowDensity;
+  /**
+   * Puan sütununun başlığı. Güç Dengesi puanlaması kullanan liglerde sütun
+   * "GP"dir; başlık sabit yazılsaydı o liglerde yanlış birim gösterilirdi.
+   */
+  pointsLabel?: string;
 }) {
   if (density === "table") {
     return (
@@ -242,7 +248,7 @@ export const TeamRowHead = React.memo(function TeamRowHead({
           AV
         </Text>
         <Text style={[styles.tableNum, styles.tablePointsHead, styles.headLabel]} {...textScale.badge}>
-          P
+          {upperTR(pointsLabel).slice(0, 2)}
         </Text>
       </View>
     );
@@ -254,7 +260,7 @@ export const TeamRowHead = React.memo(function TeamRowHead({
         {upperTR("Takım")}
       </Text>
       <Text style={[styles.headLabel, styles.listHeadPoints]} {...textScale.badge}>
-        {upperTR("Puan")}
+        {upperTR(pointsLabel)}
       </Text>
     </View>
   );
