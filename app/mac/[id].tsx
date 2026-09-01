@@ -692,12 +692,17 @@ export default function MatchDetailScreen() {
             */}
             <View style={styles.sheet}>
               <View style={styles.sheetRim} pointerEvents="none" />
+              {/* TONE="PAPER": bu şerit mor bloğun içinde değil, sahnenin
+                  üstüne çıkan KÂĞIT yüzeyin içinde duruyor (bkz. yukarıdaki
+                  not). Varsayılan "ink" tonu etiketleri beyaza çevirir ve
+                  beyaz kâğıdın üstünde okunmaz hâle getirirdi. */}
               <Tabs
                 items={tabItems}
                 value={activeTab}
                 onChange={changeTab}
                 sticky
                 surface="transparent"
+                tone="paper"
               />
             </View>
           </View>

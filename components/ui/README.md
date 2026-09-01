@@ -13,17 +13,21 @@ Tokenlar AYRI kapıdan: `import { colors, space, type, radius, layout, elevate, 
 | `ListRow` | Ayarlar, menü, profil, sıradan liste satırı. `leading` + `value`/`badge`/`chevron`/`toggle`, `position` ile köşe+ayraç |
 | `KeyValueRow` | Detay sayfalarında etiket–değer çifti (kopyalanabilir/bilgi ikonlu) |
 | `SectionHeader` / `Divider` | Bölüm başlığı / elle ayraç (`ListRow` ayracı kendi çizer) |
-| `Chip` · `ChipGroup` | Filtre etiketleri, çoklu seçim |
-| `SegmentedControl` | 2–4 seçenekli görünüm değiştirici (jenerik: `<SegmentedControl<"live"\|"fixtures"> …/>`) |
-| `Tabs` | 3+ sekmeli içerik gezinmesi; `sticky` ile yapışkan |
+| `Chip` · `ChipGroup` | Çoklu/kaydırmalı süzgeç etiketleri |
+| `SegmentedControl` | 2–4 seçenekli VERİ süzgeci — daima kâğıdın üstünde |
+| `Tabs` | SAYFA sekmesi — daima mor bloğun içinde (`ScreenHeader tabs={…}`); kâğıt üstündeki tek tük istisna `tone="paper"` verir |
 | `Badge` | Durum rozeti. **Ton sözlüğünün evi burası**: `toneColors(tone)`, `withAlpha(hex, .4)` — kendi renk eşlemeni yazma |
 | `Button` · `Input` · `Toggle` · `Stepper` | Form öğeleri. `Stepper` skor girişi için (tabular, sabit genişlik) |
 | `MatchRow` | Maç listesi satırı. Yükseklik `matchRowHeight(variant, metaMode)` — `getItemLayout` DAİMA bundan kurulur |
 | `LeagueGroupHeader` | Maç listesinde lig grubu başlığı (katlanır, favori yıldızlı) |
 | `DateStrip` | Fikstür tarih seçici (varsayılan −14…+28 gün, bugün ortalanır) |
 | `TeamLogo` · `Avatar` | Takım amblemi / oyuncu-kullanıcı avatarı (eski `TeamCrest` yerine) |
+| `TeamRow` · `TeamRowHead` | Takım satırının TEK anatomisi: sıra · amblem · ad + bağlam · sayı. `density="list"` (66px) tanımak, `density="table"` (40px) karşılaştırmak için. Yükseklikler `TEAM_ROW_HEIGHT(_TABLE)` — `getItemLayout` DAİMA bunlardan kurulur |
+| `PlayerRow` · `PlayerRowHead` | Oyuncu satırının TEK anatomisi: sıra · mevki halkalı avatar · ad + MEVKİ · tek sayı. Meta, aktif ölçütü tekrar ETMEZ |
+| `ScreenHeader` | MOR BLOK — her ekranın açılışı. Güvenli alanı da boyar; `tabs` bloğun içine, `bottom` bloğun altına (kâğıda) çizilir |
 | `LiveBadge` · `RatingPill` · `FormChips` · `ProgressRing` | Canlı nabız · puan hapı · son 5 maç · yüzde halkası |
 | `StatBar` | Ev/deplasman karşılaştırması. Tek 4px şerit, ORTADAN bölünür; ev daima mavi, deplasman daima slate — renk kazanana göre DEĞİŞMEZ |
+| `GlowTabBar` | ALT MENÜ RAYI — ekranın alt kenarına oturur. Seçim: ikonu saran kapsül + üst kenarda kayan huzme. Sekme listesi `app/(tabs)/_layout.tsx` içinde |
 | `MinuteRing` | **İmza öğesi.** Canlı dakika + 90'lık ilerleme halkası. Nabız atan kırmızı noktanın yerini alır |
 | `ChalkArc` | **İmza öğesi.** Skor bloğunun arkasındaki %4 opaklıkta orta yuvarlak yayı. Mutlak konumlu katman |
 | `SectionHeader` | **İmza öğesi.** Başlığın solunda 2×12px mercan kale direği; `leading` verilirse çizilmez |
@@ -36,7 +40,7 @@ Tokenlar AYRI kapıdan: `import { colors, space, type, radius, layout, elevate, 
 | `Refresh` / `useRefresh` | Aşağı çekip yenileme |
 | `ToastProvider` / `useToast` | Kısa geri bildirim. Sağlayıcı `app/_layout.tsx`'te, SafeAreaProvider içinde |
 | `BottomSheet` | Seçim/eylem menüsü, filtre paneli. İçine FlatList koyacaksan `scrollable={false}` |
-| `ScreenHeader` / `useHeaderScroll` | Ekran başlığı (96→48 daralır). Tema düğmesi YOK — Ayarlar'da |
+| `useHeaderScroll` | `ScreenHeader`ın daralma bağlantısı — kendi `Animated.event`ini yazma |
 | `FAB` / `useFabAutoHide` | Ekran başına TEK birincil eylem |
 | `TabBarIcon` | Sekme çubuğu ikonu; `badge="live"\|"dot"\|sayı`, `indicator` |
 
@@ -67,7 +71,7 @@ Yükleme stratejisi: `isLoading` → iskelet · `isRefetching` → `useRefresh` 
 | Ad | Eski | Yeni (barrel) | Not |
 |---|---|---|---|
 | `EmptyState`, `ErrorState` | `components/States.tsx` | `components/ui/*` | API uyumlu; ikisini birden içe aktarma |
-| `ScreenHeader` | `components/ScreenHeader.tsx` (+`DetailHeader`) | `components/ui/ScreenHeader.tsx` | `scrollY` verilirse daralır; `back`/`actions`/`bottom` destekler |
+| `ScreenHeader` | — (eski dosya SİLİNDİ) | `components/ui/ScreenHeader.tsx` | Tek başlık kaldı; mor blok + `tabs`/`bottom` yuvaları |
 | `Loading` | `components/States.tsx` | — | Karşılığı iskelettir: `SkeletonMatchRow` vb. |
 | `MatchCard`, `TeamCrest` | `components/*.tsx` | `MatchRow`, `TeamLogo` | Eskiler geçiş bitince silinecek |
 

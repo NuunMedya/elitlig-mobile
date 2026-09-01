@@ -72,9 +72,15 @@ export const layout = {
      satırların içinde kırpılırdı. Buradaki her değer yeni ölçeğin satır
      yüksekliğinden (`lineHeight`) + dikey dolgudan türetildi. */
 
-  /* YATAY KENAR 16px. Punto büyürken kenar boşluğu SABİT kaldı: ferahlığı
-     veren şey oranıdır ve iri metinle 16px zaten doğru orana oturuyor. */
-  screenPadding: 16,
+  /* YATAY KENAR 14px (eski: 16).
+     Kenar boşluğunun işi ferahlık üretmek değil, İÇERİĞİ kenardan kurtarmak.
+     16px, 360px'lik bir telefonda satır başına 32px yiyordu ve bunun bedelini
+     hep aynı şey ödüyordu: takım adı. "Karadeniz Gençlikspor" gibi gerçek
+     adlar, yanlarındaki arma ve puan sütunu yüzünden kırpılıyordu. 14px iki
+     yandan 4px geri verir; kart iç dolgusu (12) ve satır dolgusu (14) zaten
+     buna oturuyor, yani ferahlık kaybı gözle görülmez ama kırpılan ad
+     kalmaz. */
+  screenPadding: 14,
   /** Yoğun tablo düzenleri (puan durumu, istatistik ızgarası) için dar kenar. */
   screenPaddingDense: 12,
   rowPaddingH: 14,
@@ -89,18 +95,18 @@ export const layout = {
   headerHeightExpanded: 96, // overline(13) + display(27) + dolgu
   headerHeightCollapsed: 52,
   /**
-   * ALT MENÜ BARI YUVASI — hapın kendisi değil, kapladığı alan.
+   * ALT MENÜ BARI YÜKSEKLİĞİ — güvenli alan HARİÇ.
    *
-   * 6 üst boşluk + 58 hap + 8 alt boşluk = 72; güvenli alan (insets.bottom)
-   * bunun ALTINA eklenir. Bar artık ekranın alt kenarına yapışık bir şerit
-   * değil, kenarlardan 16px içeride YÜZEN bir haptır (bkz.
-   * components/ui/GlowTabBar.tsx) — bu yüzden yuva, hapın etrafındaki
-   * boşluğu da sayar.
+   * 8 üst dolgu + 26 kapsül + 3 boşluk + 13 etiket + 10 alt dolgu = 60;
+   * `insets.bottom` bunun ALTINA eklenir.
    *
-   * Ekranlar bu değeri kaydırma listelerinin alt dolgusu için kullanır: son
-   * satır hapın altında kalmasın diye.
+   * NEDEN 72'DEN 60'A İNDİ: bar artık YÜZMÜYOR, ekranın alt kenarına
+   * OTURUYOR (bkz. components/ui/GlowTabBar.tsx). Yüzen hap, kendi
+   * etrafındaki 16px boşluğu da yuvaya saydırıyordu; o boşluk şimdi içeriğe
+   * dönüyor. Yan etkisi ölçülebilir: liste ekranlarında bir satır daha
+   * görünüyor ve son satır artık barın altında kalmıyor.
    */
-  tabBarHeight: 72,
+  tabBarHeight: 60,
   tabStripHeight: 42,
   dateStripHeight: 56,
   minTouch: 44,            // erişilebilirlik alt sınırı (hitSlop ile tamamlanır)

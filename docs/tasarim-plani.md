@@ -1405,3 +1405,67 @@ yüzey" demektir.
 Sönük sekme etiketi için grafik değil **metin** eşiği (4.5) kullanıldı: alt
 çubuk ekranın en uzak okunan yeridir ve "sönük" olması okunmaz olması demek
 değildir.
+
+---
+
+# 10. İkinci tur — "Mor Saha" (onaylandı, uygulandı)
+
+Birinci tur renk ve tipografiyi düzeltti ama kullanıcı dört başlıkta hâlâ
+memnun değildi: **sekmeler, oyuncu kartları, takım kartları ve alt menü.**
+Ortak şikâyet "bir düzene sahip değil" idi ve haklıydı — sorun renk değil,
+aynı işin her ekranda farklı çizilmesiydi. Bu turun tamamı önce bir tema UI'si
+olarak sunuldu, onaylandıktan sonra koda geçildi.
+
+## 10.1 Beş kural (tema bütünlüğü)
+
+1. **Mor blok üstte, mor ray altta.** Her ekran koyu mor bir başlık bloğuyla
+   açılır, altta mor menü rayıyla kapanır; arada kalan her şey kâğıttır.
+2. **Sekme sayfayı, segment veriyi değiştirir.** Sekme daima mor bloğun
+   içinde, segment daima kâğıdın üstünde. Üçüncü bir şerit biçimi yok.
+3. **Tek anatomi, üç yoğunluk.** Takım ve oyuncu satırı her ekranda aynı
+   sırayı taşır: sıra · kimlik · ad + bağlam · sayı.
+4. **Mor aksiyon, camgöbeği veri.** Mor dokunulabilir olanı, camgöbeği
+   ölçülen şeyi işaretler; bu iki iş renk değiştirmez.
+5. **Sayılar Archivo, cümleler Inter.**
+
+## 10.2 Dört şikâyet, dört karar
+
+| Şikâyet | Bulgu | Karar |
+| --- | --- | --- |
+| Sekmeler değişken | Aynı iş için dört biçim: alt çizgili şerit, sönük hap, kâğıt segmenti, çip yığını | `Tabs` tek biçim ve mor bloğun içinde (`ScreenHeader tabs={…}`); süzgeç `SegmentedControl` olarak kâğıtta kalır; çip yalnız çoklu/kaydırmalı süzgeç |
+| Takım kartları | Üç ekranda üç ayrı düzen (sıra bazen yok, amblem bazen sağda, puan bazen birimli) | `components/ui/TeamRow` — iki yoğunluk (liste 66 / tablo 40), sütun başlığı aynı dosyada |
+| Oyuncu kartları | Mevki kimi yerde yazıyla kimi yerde hiç; meta sağdaki metriği tekrarlayıp adı kırpıyordu | `components/ui/PlayerRow` — mevki renkli halka + üç harf, meta aktif ölçütü tekrar etmez |
+| Alt menü | Altı yuva 360px'e sıkışıyor, yüzen hap 16px yiyor, ışık konisi ikonla ilişki kurmuyor | Kenara oturan ray (yuva 72 → 60), seçim = kapsül + üst kenarda kayan huzme, altı sekme beşe indi |
+
+## 10.3 Menü sekmesinin kaldırılması
+
+Menü bir BÖLÜM değil, başka bölümlere açılan bir kapı listesiydi; kalıcı
+çubuktaki bir yuva kendi içeriği olmayan bir işe ayrılamaz. Ekran duruyor
+(`/(tabs)/menu`, artık geri düğmeli), ona açılan kapı Profil'in en üstündeki
+dört kutuluk kısayol ızgarası: **Ligler · Canlı · Oyunlar · Menü.** Böylece
+menünün eskiden tek dokunuşla verdiği her şey hâlâ tek dokunuş uzakta —
+kaldırılan yuva kimseye dokunuş maliyeti çıkarmadı.
+
+## 10.4 Mor blok güvenli alanı nasıl boyuyor
+
+`ScreenHeader` içindeki blok `marginTop: -insets.top` + `paddingTop:
+insets.top` çifti kullanır: blok yukarı kayar, içeriği aynı kadar aşağı
+itilir, akıştaki net katkısı değişmez. Böylece elli ekranın `SafeAreaView
+edges={["top"]}` satırına dokunmadan durum çubuğunun arkası da mor olur.
+Negatif konumlu bir çocuk denenmedi: Android'de kapsayıcı sınırının dışına
+taşan çocuk güvenilir biçimde çizilmez.
+
+## 10.5 Bu turda dönüştürülen ekranlar
+
+Takımlar (kart + tablo), Ligler puan durumu, Oyuncular sıralaması, Takım
+detayının mini puan tablosu ve gol kralları listesi. **Dönüştürülmeyenler:**
+kadro listeleri (`takim/[id]` kadro sekmesi, `takimim/kadro`) hâlâ `ListRow`
+kullanıyor — orada satır, reyting hapı ve gruplanmış köşeler taşıyor; ayrı
+bir tur işi.
+
+## 10.6 Bilinen sınır: mevki halkası veriye bağlı
+
+Mevki renkleri yalnız sunucunun mevki döndürdüğü yerlerde renklenir. Oyuncu
+sıralaması ucu (`getPlayerRankings`) mevki alanı taşımıyor; orada halka nötr
+lavantadır. Renklenmesi için uca `player_position` eklenmesi gerekir —
+sunucu değişikliği olduğu için ayrıca kararlaştırılmalı.

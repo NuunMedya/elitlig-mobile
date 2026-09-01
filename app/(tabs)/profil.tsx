@@ -13,11 +13,17 @@
  * kullanılan grup en üste alınır.
  *
  * MENÜ SEKMESİYLE İŞ BÖLÜMÜ: Keşfet (haberler, arşiv, şehirler, rekorlar),
- * Bilgi (kurallar, cezalar, iletişim) ve sosyal bağlantılar bu ekrandan çıkıp
- * MENÜ sekmesine taşındı. Profil'de KİMLİK ve TERCİH kalır — "ben kimim, neyi
- * nasıl görmek istiyorum"; Menü'de KEŞİF ve ARAÇ durur — "uygulamada başka ne
- * var". Aynı satırın iki sekmede birden bulunması kullanıcıya "hangisi doğru
- * yer" sorusunu sordurur ve iki listeyi de şişirir.
+ * Bilgi (kurallar, cezalar, iletişim) ve sosyal bağlantılar MENÜ ekranında
+ * durur. Profil'de KİMLİK ve TERCİH kalır — "ben kimim, neyi nasıl görmek
+ * istiyorum". Aynı satırın iki yerde birden bulunması kullanıcıya "hangisi
+ * doğru yer" sorusunu sordurur ve iki listeyi de şişirir.
+ *
+ * KISAYOL IZGARASI (menü sekmesi kalkınca eklendi): alt menüde artık Menü
+ * yuvası yok (bkz. app/(tabs)/_layout.tsx). Menü ekranı DURUYOR ama ona
+ * açılan kapı buradaki dört kutudur: Ligler · Canlı · Oyunlar · Menü. Izgara
+ * kimlik kartının hemen altındadır, yani menünün eskiden tek dokunuşla
+ * verdiği her şey hâlâ tek dokunuş uzakta — kaldırılan yuva kimseye bir
+ * dokunuş maliyeti çıkarmadı.
  *
  * NEDEN SectionList: satırlar sabit bir menü gibi görünse de sayıları role ve
  * rozetlere göre değişir; SectionList + memo'lu satır, ScrollView + map'e göre
@@ -53,6 +59,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
+  ActionRow,
+  ActionTile,
   Avatar,
   Badge,
   BottomSheet,
@@ -564,23 +572,73 @@ export default function ProfileTabScreen() {
 
   const renderSectionFooter = useCallback(() => <View style={styles.sectionGap} />, []);
 
+  /**
+   * KISAYOLLAR — kaldırılan Menü sekmesinin kapısı.
+   *
+   * Dört kutu, menünün en çok açılan dört hedefi. Dördüncüsü menünün
+   * KENDİSİNE gider: keşfet/bilgi/sosyal ne varsa hepsi orada durmaya devam
+   * ediyor ve buradan tek dokunuşla açılıyor. Izgara girişsiz kullanıcıda da
+   * çizilir — dördü de giriş istemez.
+   */
+  const shortcuts = useMemo(
+    () => (
+      <ActionRow style={styles.shortcuts}>
+        <ActionTile
+          icon="trophy"
+          label="Ligler"
+          tone="brand"
+          onPress={() => router.push("/(tabs)/ligler")}
+        />
+        <ActionTile
+          icon="radio"
+          label="Canlı"
+          tone="live"
+          onPress={() => router.push("/canli")}
+        />
+        <ActionTile
+          icon="game-controller"
+          label="Oyunlar"
+          tone="accent"
+          onPress={() => router.push("/(tabs)/oyunlar")}
+        />
+        <ActionTile
+          icon="grid"
+          label="Menü"
+          tone="neutral"
+          onPress={() => router.push("/(tabs)/menu")}
+        />
+      </ActionRow>
+    ),
+    [router],
+  );
+
   const listHeader = useMemo(() => {
     if (auth.initializing) return <SkeletonCard lines={2} />;
     if (!user) {
-      return <GuestHero onSignIn={openSignIn} onRegister={openSite} />;
+      /* Misafirde de ızgara çizilir: dört hedefin dördü de giriş istemez ve
+         menü sekmesi kalktığı için kapı burasıdır. */
+      return (
+        <>
+          <GuestHero onSignIn={openSignIn} onRegister={openSite} />
+          {shortcuts}
+        </>
+      );
     }
     return (
-      <IdentityCard
-        name={user.fullName ?? user.username}
-        username={user.username}
-        avatar={mediaUrl(me?.player?.player_img)}
-        teamName={teamName}
-        teamLogo={mediaUrl(teamCard?.logo)}
-        isManagement={auth.isManagement}
-        isPresident={isPresident}
-        isPlayer={isPlayer}
-        onPress={openAccount}
-      />
+      <>
+        <IdentityCard
+          name={user.fullName ?? user.username}
+          username={user.username}
+          avatar={mediaUrl(me?.player?.player_img)}
+          teamName={teamName}
+          teamLogo={mediaUrl(teamCard?.logo)}
+          isManagement={auth.isManagement}
+          isPresident={isPresident}
+          isPlayer={isPlayer}
+          onPress={openAccount}
+        />
+        {shortcuts}
+      </>
     );
   }, [
     auth.initializing,
@@ -591,6 +649,7 @@ export default function ProfileTabScreen() {
     openAccount,
     openSignIn,
     openSite,
+    shortcuts,
     teamCard?.logo,
     teamName,
     user,
@@ -815,6 +874,10 @@ const ThemeOptionRow = React.memo(function ThemeOptionRow({
 /* ================================ STİLLER ================================= */
 
 const styles = StyleSheet.create({
+  /** Izgara kimlik kartına yapışmasın; bölüm başlığı kadar nefes alsın. */
+  shortcuts: {
+    marginTop: space.md,
+  },
   screen: {
     flex: 1,
     backgroundColor: colors.bg,

@@ -25,6 +25,7 @@ export * from "./palette";
 export * from "./legacy";
 export * from "./rating";
 export * from "./zones";
+export * from "./positions";
 export * from "./typography";
 export * from "./fonts";
 export * from "./space";

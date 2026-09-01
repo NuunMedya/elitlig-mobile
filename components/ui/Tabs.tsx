@@ -1,8 +1,18 @@
 /**
- * Tabs — kaydırmalı üst sekme şeridi (§4.7).
+ * Tabs — SAYFA SEKMESİ. Mor başlık bloğunun içinde yaşar.
  *
- * Maç detayı (Özet / Kadro / İstatistik / H2H / Tablo), takım ve oyuncu
- * profilleri gibi ÇOK SAYFALI detay ekranlarının gezinme şerididir.
+ * SİSTEMİN TEK KURALI (bu turun kararı): **sekme SAYFAYI değiştirir ve daima
+ * mor blokta durur; segment (`SegmentedControl`) VERİYİ süzer ve daima
+ * kâğıtta durur; çip (`Chip`) çoklu/kaydırmalı süzgeçtir.** Uygulamada aynı
+ * işi yapan dört ayrı şerit biçimi vardı (alt çizgili şerit, sönük hap, kâğıt
+ * segmenti, çip yığını) ve kullanıcı her ekranda "bu neyi değiştirir"
+ * sorusunu yeniden çözmek zorunda kalıyordu. Artık biçim, işi söyler.
+ *
+ * NEDEN MOR BLOĞUN İÇİNDE: şerit kâğıdın üstünde ayrı bir kutu olarak
+ * durduğunda ekranın tepesinde iki gezinme katmanı oluşuyordu — başlık bir
+ * yüzey, sekmeler başka bir yüzey. Şerit `ScreenHeader`ın `bottom` yuvasına
+ * girip aynı mor bloğu paylaşınca tek bir başlık nesnesi olur; ekran ~12px
+ * kısalır ve yapışkan kaydırmada blok bütün hâlde daralır.
  *
  * SEÇİM HAP, ALT ÇİZGİ DEĞİL: 2px'lik alt çizgi, yuvarlak yüzeylerden ve hap
  * düğmelerden kurulu bir dilde tek keskin öğeydi — şerit, sayfanın geri
@@ -63,6 +73,12 @@ export interface TabsProps<T extends string> {
    * şerit sayfadan farklı bir tonda kalır ve altında yatay bir dikiş görünür.
    */
   surface?: string;
+  /**
+   * Şeridin üstünde durduğu yüzey. Varsayılan `"ink"`: şerit mor başlık
+   * bloğunun içindedir ve renklerini `onDark` ailesinden alır. `"paper"`
+   * yalnız blok DIŞINDA, beyaz kâğıdın üstünde duran birkaç istisna içindir.
+   */
+  tone?: "ink" | "paper";
   /** Sığıyorsa eşit dağıt, sığmıyorsa kaydır — varsayılan "auto". */
   distribute?: "auto" | "equal" | "scroll";
   style?: StyleProp<ViewStyle>;
@@ -86,6 +102,7 @@ function TabsBase<T extends string>({
   onChange,
   sticky,
   surface,
+  tone = "ink",
   distribute = "auto",
   style,
   testID,
@@ -196,9 +213,14 @@ function TabsBase<T extends string>({
     <View
       style={[
         styles.wrapper,
-        sticky ? styles.sticky : null,
-        sticky && surface === "transparent" ? styles.stickyBare : null,
-        sticky && surface && surface !== "transparent" ? { backgroundColor: surface } : null,
+        /* Mor blokta şerit KENDİ zeminini basmaz: zemin bloğun gradyanıdır ve
+           şerit onun bir parçasıdır. Kendi zeminini bassaydı bloğun içinde
+           farklı tonda bir dikdörtgen olarak görünürdü. */
+        sticky && tone === "paper" ? styles.sticky : null,
+        sticky && tone === "paper" && surface === "transparent" ? styles.stickyBare : null,
+        sticky && tone === "paper" && surface && surface !== "transparent"
+          ? { backgroundColor: surface }
+          : null,
         style,
       ]}
       onLayout={(event) => setContainerWidth(event.nativeEvent.layout.width)}
@@ -221,6 +243,7 @@ function TabsBase<T extends string>({
             pointerEvents="none"
             style={[
               styles.indicator,
+              tone === "ink" ? styles.indicatorInk : null,
               { width: indicatorWidth, transform: [{ translateX: translate }] },
             ]}
           />
@@ -245,17 +268,24 @@ function TabsBase<T extends string>({
               style={[styles.tab, mode === "equal" && equalWidth > 0 ? { width: equalWidth } : null]}
             >
               <Text
-                style={[styles.label, isActive ? styles.labelActive : null]}
+                style={[
+                  styles.label,
+                  tone === "ink" ? styles.labelInk : null,
+                  isActive ? (tone === "ink" ? styles.labelInkActive : styles.labelActive) : null,
+                ]}
                 numberOfLines={1}
                 onLayout={(event) => handleLabelLayout(i, event)}
                 {...textScale.dense}
               >
                 {item.label}
               </Text>
+              {/* Mor blok üstünde marka moru rozet okunmaz (mor üstüne mor);
+                  orada rozet CANLI tonundadır — zaten "yeni/şu an" demek
+                  istiyor. Kâğıt üstünde marka tonu kalır. */}
               {item.badge === "dot" ? (
-                <Badge dot tone="brand" />
+                <Badge dot tone={tone === "ink" ? "live" : "brand"} />
               ) : typeof item.badge === "number" && item.badge > 0 ? (
-                <Badge label={item.badge} tone="brand" size="xs" />
+                <Badge label={item.badge} tone={tone === "ink" ? "live" : "brand"} size="xs" />
               ) : null}
             </Touchable>
           );
@@ -317,6 +347,14 @@ const styles = StyleSheet.create({
   labelActive: {
     color: colors.textPrimary,
   },
+  /* Mor blok üstünde: sönük etiket yarı saydam beyaz (AA'yı geçer, bkz.
+     scripts/check-tokens.mjs), seçili etiket tam beyaz. */
+  labelInk: {
+    color: colors.onDarkMuted,
+  },
+  labelInkActive: {
+    color: colors.onDark,
+  },
   /*
    * GÖSTERGE ÇUBUK DEĞİL, HAP.
    *
@@ -332,5 +370,18 @@ const styles = StyleSheet.create({
     bottom: 3,
     borderRadius: radius.pill,
     backgroundColor: colors.brandDim,
+  },
+  /**
+   * Mor blok üstündeki hap: dolgu, bloğun kendi ışığından bir tık daha
+   * aydınlık yarı saydam bir mor + ince ışıklı çerçeve. Düz bir dolgu rengi
+   * denendi ve bloğun gradyanı boyunca kâğıt gibi bir leke bırakıyordu; yarı
+   * saydam hap, altındaki geçişi taşıdığı için bloğun parçası olarak okunur.
+   * Değerler alt menü rayının kapsülüyle AYNI tokenlardan gelir — ikisi de
+   * "koyu blok üstünde seçili" demek.
+   */
+  indicatorInk: {
+    backgroundColor: colors.tabCapsule,
+    borderWidth: hairline,
+    borderColor: colors.tabCapsuleBorder,
   },
 });

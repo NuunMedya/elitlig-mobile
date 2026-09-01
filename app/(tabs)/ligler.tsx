@@ -50,7 +50,6 @@ import {
   ChipGroup,
   EmptyState,
   ErrorState,
-  FormChips,
   ListRow,
   MatchRow,
   ScreenHeader,
@@ -60,6 +59,9 @@ import {
   SkeletonStandings,
   Tabs,
   TeamLogo,
+  TeamRow,
+  TeamRowHead,
+  TEAM_ROW_HEIGHT,
   Touchable,
   refreshControlProps,
   useHeaderScroll,
@@ -235,12 +237,12 @@ export default function LeaguesScreen() {
         onBack={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)/menu"))}
         scrollY={scrollY}
         actions={actions}
+        tabs={<Tabs items={TAB_ITEMS} value={tab} onChange={changeTab} sticky />}
         bottom={
           <View style={styles.headerBottom}>
             <View style={styles.scopeRow}>
               <ScopeChip variant="full" />
             </View>
-            <Tabs items={TAB_ITEMS} value={tab} onChange={changeTab} sticky />
           </View>
         }
       />
@@ -288,73 +290,8 @@ const ScopeMissing = React.memo(function ScopeMissing({ onPress }: { onPress: ()
    ══════════════════════════════════════════════════════════════════════════ */
 
 /** Satır: sıra + amblem + ad/form iki satır. Sabit yükseklik `getItemLayout` içindir. */
-const STANDING_ROW_HEIGHT = 60;
 
-const StandingItem = React.memo(function StandingItem({
-  rank,
-  teamId,
-  teamName,
-  logo,
-  played,
-  goalDiff,
-  points,
-  last5,
-  favorite,
-  zone,
-  onPress,
-}: {
-  rank: number;
-  teamId: number;
-  teamName: string;
-  logo: string | null;
-  played: number;
-  goalDiff: number;
-  points: number;
-  last5: string;
-  favorite: boolean;
-  zone: string | null;
-  onPress: (teamId: number) => void;
-}) {
-  const handlePress = useCallback(() => onPress(teamId), [onPress, teamId]);
 
-  return (
-    <Touchable style={styles.stRow} onPress={handlePress} feedback="row" haptic="selection">
-      <View style={[styles.stZone, zone ? { backgroundColor: zone } : null]} />
-      <Text style={styles.stRank} {...textScale.dense}>
-        {rank}
-      </Text>
-      <TeamLogo name={teamName} logo={logo} size={layout.crestMd} />
-      <View style={styles.stNameBox}>
-        <View style={styles.stNameRow}>
-          <Text
-            style={[styles.stName, favorite ? styles.stNameFav : null]}
-            numberOfLines={1}
-            {...textScale.dense}
-          >
-            {teamName}
-          </Text>
-          {favorite ? <Ionicons name="star" size={11} color={colors.star} /> : null}
-        </View>
-        {last5 ? <FormChips form={last5} size="xs" /> : null}
-      </View>
-      <Text style={[styles.stNum, styles.stMuted]} {...textScale.dense}>
-        {played}
-      </Text>
-      <Text
-        style={[
-          styles.stNum,
-          goalDiff > 0 ? styles.stPos : goalDiff < 0 ? styles.stNeg : styles.stMuted,
-        ]}
-        {...textScale.dense}
-      >
-        {goalDiff > 0 ? `+${goalDiff}` : goalDiff}
-      </Text>
-      <Text style={[styles.stNum, styles.stPoints]} {...textScale.dense}>
-        {points}
-      </Text>
-    </Touchable>
-  );
-});
 
 function StandingsTab({ scrollProps, onPickScope }: TabProps) {
   const scope = useScope();
@@ -390,15 +327,15 @@ function StandingsTab({ scrollProps, onPickScope }: TabProps) {
     ({ item, index }: { item: StandingRow; index: number }) => {
       const rank = index + 1;
       return (
-        <StandingItem
+        <TeamRow
           rank={rank}
           teamId={item.team_id}
-          teamName={item.team_name}
+          name={item.team_name}
           logo={item.logo}
           played={item.played}
           goalDiff={Number(item.goal_diff ?? 0)}
           points={item.display_points}
-          last5={item.last5 ?? ""}
+          form={item.last5 ?? ""}
           favorite={isFavorite(item.team_id)}
           zone={zoneColor(palette, zoneForRank(rank, zoneRules))}
           onPress={openTeam}
@@ -430,14 +367,7 @@ function StandingsTab({ scrollProps, onPickScope }: TabProps) {
       ListHeaderComponent={
         <>
           {query.isError ? <ErrorState error={query.error} variant="banner" /> : null}
-          <View style={styles.stHead}>
-            <View style={styles.stZone} />
-            <Text style={styles.stHeadRank}>#</Text>
-            <Text style={styles.stHeadTeam}>TAKIM</Text>
-            <Text style={styles.stHeadNum}>O</Text>
-            <Text style={styles.stHeadNum}>AV</Text>
-            <Text style={styles.stHeadNum}>{powerBalance ? "GP" : "P"}</Text>
-          </View>
+          <TeamRowHead pointsLabel={powerBalance ? "GP" : "Puan"} />
         </>
       }
       ListEmptyComponent={
@@ -461,8 +391,8 @@ function StandingsTab({ scrollProps, onPickScope }: TabProps) {
 
 const standingKey = (item: StandingRow) => String(item.team_id);
 const standingLayout = (_data: ArrayLike<StandingRow> | null | undefined, index: number) => ({
-  length: STANDING_ROW_HEIGHT,
-  offset: STANDING_ROW_HEIGHT * index,
+  length: TEAM_ROW_HEIGHT,
+  offset: TEAM_ROW_HEIGHT * index,
   index,
 });
 
@@ -1279,34 +1209,6 @@ const styles = StyleSheet.create({
     paddingBottom: layout.tabBarHeight + space.xxl,
     flexGrow: 1,
   },
-  stHead: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.sm,
-    paddingVertical: space.sm,
-  },
-  stHeadRank: { ...type.micro, color: colors.textTertiary, width: 20, textAlign: "center" },
-  stHeadTeam: { ...type.micro, color: colors.textTertiary, flex: 1, marginLeft: layout.crestMd + space.sm },
-  stHeadNum: { ...type.micro, color: colors.textTertiary, width: 30, textAlign: "center" },
-  stRow: {
-    height: STANDING_ROW_HEIGHT,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.separator,
-  },
-  stZone: { width: 3, height: 28, borderRadius: radius.xs, backgroundColor: "transparent" },
-  stRank: { ...type.tableNum, color: colors.textSecondary, width: 20, textAlign: "center" },
-  stNameBox: { flex: 1, gap: 3 },
-  stNameRow: { flexDirection: "row", alignItems: "center", gap: 4 },
-  stName: { ...type.body, color: colors.textPrimary, fontFamily: fonts.bold, flexShrink: 1 },
-  stNameFav: { color: colors.brandAccent },
-  stNum: { ...type.tableNum, width: 30, textAlign: "center" },
-  stMuted: { color: colors.textSecondary },
-  stPos: { color: colors.win, fontFamily: fonts.bold },
-  stNeg: { color: colors.loss, fontFamily: fonts.bold },
-  stPoints: { ...type.tableNumStrong, color: colors.textPrimary, width: 30, textAlign: "center" },
 
   /* — Oyuncular — */
   plHeader: { gap: space.sm, paddingBottom: space.sm },

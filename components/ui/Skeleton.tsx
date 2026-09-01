@@ -34,6 +34,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { colors, duration, hairline, layout, radius as radiusScale, space } from "@/theme";
 import { useReduceMotion } from "./LiveBadge";
+import { TEAM_ROW_HEIGHT, TEAM_ROW_HEIGHT_TABLE } from "./TeamRow";
 
 /* ——————————————————— Paylaşılan parlama döngüsü ——————————————————— */
 
@@ -255,10 +256,17 @@ export const SkeletonTable = React.memo(function SkeletonTable({
   count = 10,
   columns = 5,
   header = true,
+  rowHeight,
 }: {
   count?: number;
   columns?: number;
   header?: boolean;
+  /**
+   * Satır yüksekliği. İSKELET, YERİNİ TUTACAĞI SATIRLA AYNI YÜKSEKLİKTE
+   * olmalı: 40px'lik iskeletin yerine 66px'lik liste satırı gelince yükleme
+   * biter bitmez sayfa boyu bir anda uzuyor ve göz konumunu kaybediyor.
+   */
+  rowHeight?: number;
 }) {
   return (
     <SkeletonGroup label="Tablo yükleniyor" style={styles.block}>
@@ -277,7 +285,7 @@ export const SkeletonTable = React.memo(function SkeletonTable({
       ) : null}
 
       {repeat(count, (index) => (
-        <View key={index} style={styles.tableRow}>
+        <View key={index} style={[styles.tableRow, rowHeight ? { height: rowHeight } : null]}>
           <Skeleton width={14} height={12} />
           <View style={styles.tableName}>
             <Skeleton width={20} height={20} radius="sm" />
@@ -297,10 +305,19 @@ export const SkeletonTable = React.memo(function SkeletonTable({
 /** Puan durumu iskeleti — tablonun O/G/B/M/P sütun sayısıyla sabitlenmiş hâli. */
 export const SkeletonStandings = React.memo(function SkeletonStandings({
   count = 12,
+  density = "list",
 }: {
   count?: number;
+  /** `TeamRow` yoğunluğu — iskelet gerçek satırla aynı yükseklikte durur. */
+  density?: "list" | "table";
 }) {
-  return <SkeletonTable count={count} columns={5} />;
+  return (
+    <SkeletonTable
+      count={count}
+      columns={density === "table" ? 5 : 2}
+      rowHeight={density === "table" ? TEAM_ROW_HEIGHT_TABLE : TEAM_ROW_HEIGHT}
+    />
+  );
 });
 
 /** Kart iskeleti — başlık + `lines` kadar metin satırı. */

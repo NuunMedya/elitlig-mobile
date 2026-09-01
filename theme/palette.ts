@@ -193,6 +193,24 @@ export interface Palette {
   ratingEliteBg: string;
   ratingNoneBg: string;
 
+  /* — MEVKİ RENKLERİ — oyuncu kimliğinin tek renk kuralı —
+   *
+   * Oyuncu satırında mevki eskiden ya yazıyla ("Forvet") ya da hiç
+   * söylenmiyordu; kadro listesine bakınca dizilişin okunması için her satırı
+   * tek tek okumak gerekiyordu. Artık mevki, avatarın etrafındaki HALKANIN ve
+   * adın yanındaki üç harfin rengidir: kaleci altın, defans camgöbeği, orta
+   * saha mor, forvet mercan. Renk tek başına anlam taşımaz — yanında daima üç
+   * harfli etiket durur (KAL · DEF · ORT · FOR).
+   *
+   * Bu değerler DOLGU DEĞİL, ÖN PLANDIR: hem halka çizgisi hem etiket metni
+   * olarak kâğıdın üstünde durur, bu yüzden ikisi de AA metin eşiğini geçer.
+   */
+  posKeeper: string;
+  posDefense: string;
+  posMidfield: string;
+  posForward: string;
+  posUnknown: string;    // sunucudan mevki gelmeyen oyuncu
+
   /* — Sıralama bölgeleri — satır boyanmaz, sol kenarda 3px işaret olur — */
   zoneChampion: string;
   zonePromotion: string;
@@ -307,10 +325,17 @@ export interface Palette {
   /** Işığın kaynağı: seçili sekmenin üstündeki 3px'lik parlak çizgi. */
   tabBeam: string;
   /**
-   * IŞIK KONİSİ — çizginin altına düşen üç duraklı DİKEY geçiş.
-   * Yüzey değil ışık kaynağı olduğu için dikeydir (bkz. `matchWash`).
+   * SEÇİLİ SEKMENİN KAPSÜLÜ — ikonun arkasındaki yumuşak mor pul.
+   *
+   * ESKİ IŞIK KONİSİ KALKTI: çizginin altına düşen dikey geçiş, ikonun
+   * üstünde asılı duran bir sis lekesi gibi görünüyordu ve hangi sekmenin
+   * seçili olduğunu ancak yanındakiyle karşılaştırarak söylüyordu. Kapsül
+   * ikonu SARAR: seçim, ikonun kendi kutusunda okunur; huzme ise barın üst
+   * kenarında kalan ince bir kaynak çizgisi olarak seçimi uzaktan işaretler.
    */
-  tabGlow: readonly [string, string, string];
+  tabCapsule: string;
+  /** Kapsülün ince ışıklı çerçevesi. */
+  tabCapsuleBorder: string;
 
   chartGrid: string;
   scrimGradientTop: string;    // hero üstü okunabilirlik gradyanı
@@ -422,6 +447,12 @@ export const light: Palette = {
   ratingElite: "#6D28D9", ratingEliteBg: "#F3EDFE",
   ratingNone:  "#6E5F8C", ratingNoneBg:  "#F1ECFA",
 
+  posKeeper:    "#8A5A00",
+  posDefense:   "#0E7490",
+  posMidfield:  "#5B21B6",
+  posForward:   "#BE123C",
+  posUnknown:   "#6E5F8C",
+
   zoneChampion:          "#CA8A04",
   zonePromotion:         "#059669",
   zonePlayoff:           "#0E7490",
@@ -462,7 +493,8 @@ export const light: Palette = {
   tabActive:      "#FFFFFF",
   tabInactive:    "rgba(255, 255, 255, 0.58)",
   tabBeam:        "#DDD1FF",
-  tabGlow:        ["rgba(196, 181, 253, 0.60)", "rgba(167, 139, 250, 0.16)", "rgba(167, 139, 250, 0)"],
+  tabCapsule:       "rgba(167, 139, 250, 0.26)",
+  tabCapsuleBorder: "rgba(221, 209, 255, 0.34)",
 
   chartGrid:         "#EDE7F7",
   scrimGradientTop:    "rgba(18, 10, 38, 0.00)",
@@ -556,6 +588,12 @@ export const dark: Palette = {
   ratingElite: "#C4B5FD", ratingEliteBg: "#31215C",
   ratingNone:  "#9C8CBE", ratingNoneBg:  "#2C1B52",
 
+  posKeeper:    "#E0AE4A",
+  posDefense:   "#67E8F9",
+  posMidfield:  "#C4B5FD",
+  posForward:   "#FF8FA3",
+  posUnknown:   "#9C8CBE",
+
   zoneChampion:          "#FBBF24",
   zonePromotion:         "#34D399",
   zonePlayoff:           "#22D3EE",
@@ -590,7 +628,8 @@ export const dark: Palette = {
   tabActive:      "#FFFFFF",
   tabInactive:    "rgba(255, 255, 255, 0.58)",
   tabBeam:        "#DDD1FF",
-  tabGlow:        ["rgba(196, 181, 253, 0.58)", "rgba(167, 139, 250, 0.15)", "rgba(167, 139, 250, 0)"],
+  tabCapsule:       "rgba(167, 139, 250, 0.30)",
+  tabCapsuleBorder: "rgba(221, 209, 255, 0.36)",
 
   chartGrid:         "#2C1B52",
   scrimGradientTop:    "rgba(15, 8, 32, 0.00)",

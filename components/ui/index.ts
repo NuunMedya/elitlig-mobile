@@ -23,8 +23,6 @@
  *     Barrel YENİ olanları (`components/ui/*`) dışa aktarır. Eski dosya
  *     dokunulmadan duruyor; onu içe aktaran ekranlar geçene kadar çalışsın
  *     diye. Bir ekran İKİSİNİ BİRDEN içe aktarmamalı.
- *   - ScreenHeader: ESKİ `components/ScreenHeader.tsx` içinde de var (ayrıca
- *     `DetailHeader`). Barrel YENİ, daralan başlığı (`components/ui`) verir.
  *   - `Loading` (States.tsx) burada YOK: karşılığı belirsiz dönen çember değil,
  *     içeriğin şeklini taklit eden iskelettir → `SkeletonMatchRow` vb.
  *   - Şartnamedeki `Switch`, RN'in yerleşik `Switch`'iyle karışmasın diye
@@ -107,6 +105,13 @@ export type { RatingPillProps } from "./RatingPill";
 
 export { TeamLogo } from "./TeamLogo";
 export type { TeamLogoProps } from "./TeamLogo";
+
+/* Tek anatomili varlık satırları — takım ve oyuncu her listede aynı sırayla
+   okunur; yoğunluk değişir, sıra değişmez. */
+export { TeamRow, TeamRowHead, TEAM_ROW_HEIGHT, TEAM_ROW_HEIGHT_TABLE } from "./TeamRow";
+export type { TeamRowProps, TeamRowDensity } from "./TeamRow";
+export { PlayerRow, PlayerRowHead, PLAYER_ROW_HEIGHT } from "./PlayerRow";
+export type { PlayerRowProps } from "./PlayerRow";
 
 export { Avatar } from "./Avatar";
 export type { AvatarProps } from "./Avatar";

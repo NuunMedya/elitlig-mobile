@@ -264,7 +264,16 @@ export default function MenuScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      <ScreenHeader title="Menü" overline="ELİTLİG" scrollY={scrollY} />
+      {/* GERİ DÜĞMESİ VAR: menü artık sekme çubuğunda yuvası olan bir kök
+          ekran değil (bkz. app/(tabs)/_layout.tsx), Profil'deki kısayoldan
+          açılıyor. Geri yığını boşsa geldiği yere — Profil'e — dönülür. */}
+      <ScreenHeader
+        title="Menü"
+        overline="ELİTLİG"
+        back
+        onBack={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)/profil"))}
+        scrollY={scrollY}
+      />
 
       <SectionList
         {...scrollProps}

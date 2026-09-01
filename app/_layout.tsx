@@ -11,7 +11,7 @@ import { ApiError } from "@/lib/http";
 import { AuthProvider } from "@/providers/AuthProvider";
 import { FavoriteProvider } from "@/providers/FavoriteProvider";
 import { ScopeProvider } from "@/providers/ScopeProvider";
-import { colors, isDark } from "@/theme";
+import { colors } from "@/theme";
 
 /**
  * Uygulamanın kökü: sağlayıcı sırası ve gezinme yığını.
@@ -76,7 +76,10 @@ export default function RootLayout() {
           <ScopeProvider>
             <FavoriteProvider>
               <ToastProvider>
-                <StatusBar style={isDark ? "light" : "dark"} />
+                {/* DAİMA AÇIK: her ekranın tepesinde koyu mor blok var (bkz.
+                    components/ui/ScreenHeader.tsx), tema ne olursa olsun
+                    durum çubuğu simgeleri o bloğun üstünde duruyor. */}
+                <StatusBar style="light" />
                 <Stack
                   initialRouteName="hosgeldin"
                   screenOptions={{
