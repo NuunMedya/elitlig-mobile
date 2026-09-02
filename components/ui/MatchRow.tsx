@@ -534,7 +534,9 @@ const styles = StyleSheet.create({
     width: RAIL_WIDTH,
     height: RAIL_HEIGHT,
     borderRadius: 2,
-    backgroundColor: colors.brand,
+    /* Mor DEĞİL: mor dokunulabilir olanı işaretler (kural 04); kullanıcının
+       takımı bir veri vurgusudur, camgöbeği rayla söylenir. */
+    backgroundColor: colors.accent,
   },
   railCompact: {
     top: (LINE_COMPACT - RAIL_HEIGHT) / 2,
@@ -566,7 +568,8 @@ const styles = StyleSheet.create({
     color: colors.textTertiary,
   },
   teamNameMine: {
-    color: colors.brandAccent,
+    color: colors.textPrimary,
+    fontFamily: fonts.semibold,
   },
   /**
    * Skor sütunu: SABİT genişlik, rakamlar SAĞA yaslı. Liste boyunca aynı

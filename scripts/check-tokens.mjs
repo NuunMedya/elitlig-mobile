@@ -166,7 +166,11 @@ const PAIRS = (p) => [
      açık yapmak, gece ekranında göz alan parlak bir şerit üretir. Koyu temada
      ayrımı zaten ışıklı kenar + gölge tamamlar; dolgu farkının işi yalnız
      "burası ayrı bir yüzey" demektir. */
-  [p.tabBar, p.bg, 1.3, "menü barı / kâğıt (yüzdüğü görülmeli)"],
+  /* Bar artık YÜZMÜYOR, kenara oturuyor ve başlık bloğuyla aynı mürekkep.
+     Kâğıttan ayrımı üst kenardaki hairline + huzme kurar; dolgu farkı yalnız
+     "gözle seçilebilir" olmalı (koyuda 1.1 civarı), üç kat açık bir bar gece
+     ekranında göz alan bir şerit üretiyordu. */
+  [p.tabBar, p.bg, 1.05, "menü barı / kâğıt (gözle seçilebilir)"],
 ];
 
 /**

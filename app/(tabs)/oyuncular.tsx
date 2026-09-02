@@ -15,10 +15,20 @@
  * PODYUM: ilk üç, listenin üstünde tek satırlık bir podyum olarak çizilir.
  * Sıralama ekranının işi "kim önde" sorusunu BİR BAKIŞTA yanıtlamaktır; ilk
  * üçü liste satırı olarak vermek bunu üç ayrı okumaya böler. Podyum yalnız
- * arama boşken ve en az üç oyuncu varken görünür.
+ * arama boşken ve en az üç oyuncu varken görünür. Dizilim gerçek podyum gibi
+ * 2 · 1 · 3'tür: birinci ORTADA ve büyük, ikinci solda, üçüncü sağda
+ * (tema.html §7/4). Basamaklar kartsızdır — üç ayrı kart, üç ayrı "şey"
+ * gibi okunuyordu; oysa podyum tek bir sahnedir.
  *
- * PERFORMANS: satır yüksekliği sabit (56px) → `getItemLayout`. Satır bileşeni
- * memo'lu ve yalnız ilkel prop alır.
+ * KAPSAM BLOĞUN ÜST BAŞLIĞINDA (`ScopeChip tone="ink"`): kâğıttaki ayrı
+ * kapsam satırı kalktı; aynı bilgi iki kez yazılıyordu.
+ *
+ * LİSTE KART İÇİNDE (tema.html §5.4 ".group"): sütun başlığı kartın tepesi,
+ * son satır tabanı, arada ince ayraç. FlatList satırları tek tek ürettiği
+ * için kart satır satır çizilir; podyum ve arama kutusu kartın DIŞINDA kalır.
+ *
+ * PERFORMANS: satır yüksekliği sabit (60px + hairline ayraç) → `getItemLayout`.
+ * Satır bileşeni memo'lu ve yalnız ilkel prop alır.
  */
 
 import { useQuery } from "@tanstack/react-query";
@@ -86,8 +96,21 @@ const SORT_TABS: TabItem<PlayerSort>[] = SORTS.map((item) => ({
 
 const SKELETON_ROWS = ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8"] as const;
 
-/** Podyum sırasına göre madalya rengi. */
-const MEDAL = [colors.star, colors.textSecondary, colors.warn];
+/**
+ * Madalya rengi, basamağa göre (dizin = sıra − 1): altın · gümüş · bronz.
+ * Altın, puan tablosundaki şampiyonluk rayıyla AYNI token — "birinci" iki
+ * ekranda aynı renkle okunur. Gümüş nötr kayrak, bronz uyarı turuncusu.
+ */
+/* 3. madalya BRONZ: `warn` koyu temada (#FBBF24) altınla ayırt edilemiyordu;
+   düşme play-off rayı iki temada da bronz-turuncu. */
+const MEDAL = [colors.zoneChampion, colors.slate, colors.zoneRelegationPlayoff] as const;
+
+/** Podyumdaki çizim sırası — sol, orta, sağ (0 tabanlı sıra dizini). */
+const PODIUM_ORDER = [1, 0, 2] as const;
+
+/** Avatar ölçüsü: birinci büyük (56), diğerleri 44 (tema.html §7/4). */
+const PODIUM_AVATAR_FIRST = 56;
+const PODIUM_AVATAR = 44;
 
 const normalize = (value: string) => value.trim().toLocaleLowerCase("tr-TR");
 
@@ -108,48 +131,70 @@ const Podium = React.memo(function Podium({
 }) {
   return (
     <View style={styles.podium}>
-      {players.map((player, index) => (
-        <Touchable
-          key={player.id}
-          style={styles.podiumCell}
-          onPress={() => onPress(player.id)}
-          feedback="card"
-          haptic="selection"
-          accessibilityRole="button"
-          accessibilityLabel={`${index + 1}. ${player.name}, ${metricOf(player)} ${unit}`}
-        >
-          {/* Sıra rakamı halkanın altına oturur: madalya rengi zaten sırayı
-              söylüyor, ayrı bir satır olarak durunca kart bir satır uzuyordu. */}
-          <View style={styles.podiumAvatar}>
-            <View style={[styles.podiumRing, { borderColor: MEDAL[index] }]}>
-              <Avatar name={player.name} image={player.image ?? null} size={40} />
+      {PODIUM_ORDER.map((index) => {
+        const player = players[index];
+        const first = index === 0;
+        return (
+          <Touchable
+            key={player.id}
+            style={styles.podiumCell}
+            onPress={() => onPress(player.id)}
+            feedback="card"
+            haptic="selection"
+            accessibilityRole="button"
+            accessibilityLabel={`${index + 1}. ${player.name}, ${metricOf(player)} ${unit}`}
+          >
+            {/* Madalya rozeti halkanın ALTINDA, ortada: sıra rakamı avatarla
+                aynı düşey eksende durur, ayrı bir satır olarak yer yemez. */}
+            <View style={styles.podiumAvatar}>
+              <View style={[styles.podiumRing, { borderColor: MEDAL[index] }]}>
+                <Avatar
+                  name={player.name}
+                  image={player.image ?? null}
+                  size={first ? PODIUM_AVATAR_FIRST : PODIUM_AVATAR}
+                />
+              </View>
+              <View style={[styles.podiumRankBadge, { backgroundColor: MEDAL[index] }]}>
+                <Text style={styles.podiumRankText} {...textScale.badge}>
+                  {index + 1}
+                </Text>
+              </View>
             </View>
-            <View style={[styles.podiumRankBadge, { backgroundColor: MEDAL[index] }]}>
-              <Text style={styles.podiumRankText} {...textScale.badge}>
-                {index + 1}
-              </Text>
-            </View>
-          </View>
-          <Text style={styles.podiumName} numberOfLines={1} {...textScale.dense}>
-            {player.name}
-          </Text>
-          <Text style={styles.podiumMetric} numberOfLines={1} {...textScale.dense}>
-            {metricOf(player)} {unit}
-          </Text>
-        </Touchable>
-      ))}
+            <Text
+              style={first ? styles.podiumNameFirst : styles.podiumName}
+              numberOfLines={1}
+              {...textScale.dense}
+            >
+              {player.name}
+            </Text>
+            {/* Yalnız sayı: birim sütun başlığında bir kez yazılır. */}
+            <Text
+              style={first ? styles.podiumMetricFirst : styles.podiumMetric}
+              numberOfLines={1}
+              {...textScale.dense}
+            >
+              {metricOf(player)}
+            </Text>
+          </Touchable>
+        );
+      })}
     </View>
   );
 });
+
+/** Satırlar arası ince ayraç; kartın yan kenarlığını da taşır ki çizgi kesilmesin. */
+const GroupSeparator = () => <View style={styles.separator} />;
 
 /* ══════════════════════════════════════════════════════════════════════════
    Ekran
    ══════════════════════════════════════════════════════════════════════════ */
 
 const keyExtractor = (item: PlayerRankRow) => String(item.id);
+/* Hücre = satır + ayraç: VirtualizedList ayracı satırla aynı hücreye koyar. */
+const CELL_HEIGHT = PLAYER_ROW_HEIGHT + hairline;
 const getItemLayout = (_data: ArrayLike<PlayerRankRow> | null | undefined, index: number) => ({
-  length: PLAYER_ROW_HEIGHT,
-  offset: PLAYER_ROW_HEIGHT * index,
+  length: CELL_HEIGHT,
+  offset: CELL_HEIGHT * index,
   index,
 });
 
@@ -203,47 +248,46 @@ export default function PlayersScreen() {
   const searching = Boolean(search.trim());
   const showPodium = !searching && !busy && rows.length >= 3;
 
-  const renderItem = useCallback(
-    ({ item, index }: { item: PlayerRankRow; index: number }) => (
-      <PlayerRow
-        playerId={item.id}
-        rank={index + 1}
-        name={item.name}
-        image={item.image ?? null}
-        /* META AKTİF ÖLÇÜTÜ TEKRAR ETMEZ: gol sıralamasındayken meta'da gol
-           yazmaz — sağdaki sütun zaten onu söylüyor ve tekrar, satırı taşırıp
-           oyuncu adını kırpan şeydi. */
-        meta={[
-          item.teamName || "Takımsız",
-          active.unit === "maç" ? null : `${num(item.matches)} maç`,
-          active.unit === "gol" ? null : `${num(item.goals)} gol`,
-          `${num(item.assists)} asist`,
-        ]}
-        metric={active.metric(item)}
-        onPress={openPlayer}
-      />
-    ),
-    [active, openPlayer],
-  );
-
   /* Podyum çizildiyse ilk üç listeden düşülür; aksi hâlde aynı üç oyuncu
      ekranda iki kez görünür ve sıralama "1,2,3,1,2,3" gibi okunur. */
   const listData = useMemo(
     () => (showPodium ? rows.slice(3) : rows),
     [rows, showPodium],
   );
+  const lastIndex = listData.length - 1;
 
-  const renderOffsetItem = useCallback(
-    ({ item, index }: { item: PlayerRankRow; index: number }) =>
-      renderItem({ item, index: showPodium ? index + 3 : index }),
-    [renderItem, showPodium],
+  const renderItem = useCallback(
+    ({ item, index }: { item: PlayerRankRow; index: number }) => (
+      <PlayerRow
+        playerId={item.id}
+        rank={showPodium ? index + 4 : index + 1}
+        name={item.name}
+        image={item.image ?? null}
+        /* META AKTİF ÖLÇÜTÜ TEKRAR ETMEZ: gol sıralamasındayken meta'da gol
+           yazmaz — sağdaki sütun zaten onu söylüyor ve tekrar, satırı taşırıp
+           oyuncu adını kırpan şeydi. */
+        meta={[
+          active.unit === "maç" ? null : `${num(item.matches)} maç`,
+          active.unit === "gol" ? null : `${num(item.goals)} gol`,
+          `${num(item.assists)} asist`,
+          /* Takım adı SONDA: satır taşarsa kırpılan şey en uzun ve en az
+             bilgi taşıyan parça olsun, "2 as…" değil. */
+          item.teamName || "Takımsız",
+        ]}
+        metric={active.metric(item)}
+        onPress={openPlayer}
+        /* Son satır kartın tabanıdır: alt kenarlık ve alt köşeler onda. */
+        style={index === lastIndex ? styles.groupRowLast : styles.groupRow}
+      />
+    ),
+    [active, lastIndex, openPlayer, showPodium],
   );
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader
         title="Oyuncular"
-        overline={scope.leagueLabel || "ELİTLİG"}
+        scope={<ScopeChip tone="ink" />}
         scrollY={scrollY}
         actions={[
           {
@@ -261,11 +305,6 @@ export default function PlayersScreen() {
             sticky
           />
         }
-        bottom={
-          <View style={styles.headerBottom}>
-            <ScopeChip />
-          </View>
-        }
       />
 
       {!scope.ready && !scope.loading ? (
@@ -280,8 +319,9 @@ export default function PlayersScreen() {
           {...scrollProps}
           data={busy ? [] : listData}
           keyExtractor={keyExtractor}
-          renderItem={renderOffsetItem}
+          renderItem={renderItem}
           getItemLayout={getItemLayout}
+          ItemSeparatorComponent={GroupSeparator}
           initialNumToRender={12}
           windowSize={8}
           removeClippedSubviews
@@ -292,16 +332,14 @@ export default function PlayersScreen() {
           }
           ListHeaderComponent={
             <View style={styles.listHeader}>
-              <View style={styles.searchBox}>
-                <Input
-                  variant="search"
-                  size="sm"
-                  value={search}
-                  onChangeText={setSearch}
-                  placeholder="Oyuncu veya takım ara"
-                  autoCorrect={false}
-                />
-              </View>
+              <Input
+                variant="search"
+                size="sm"
+                value={search}
+                onChangeText={setSearch}
+                placeholder="Oyuncu veya takım ara"
+                autoCorrect={false}
+              />
 
               {query.isError ? <ErrorState error={query.error} variant="banner" /> : null}
 
@@ -314,12 +352,18 @@ export default function PlayersScreen() {
                 />
               ) : null}
 
-              {rows.length > 0 ? <PlayerRowHead unit={active.unit} /> : null}
+              {/* Sütun başlığı kartın TEPESİDİR: üst kenarlık ve üst köşeler onda. */}
+              {!busy && listData.length > 0 ? (
+                <View style={styles.groupHead}>
+                  <PlayerRowHead unit={active.unit} />
+                </View>
+              ) : null}
             </View>
           }
           ListEmptyComponent={
             busy ? (
-              <View>
+              /* İskelet de kartta durur; yükleme bitince çerçeve zıplamaz. */
+              <View style={styles.skeletonCard}>
                 {SKELETON_ROWS.map((key) => (
                   <SkeletonListRow key={key} />
                 ))}
@@ -348,65 +392,105 @@ export default function PlayersScreen() {
   );
 }
 
+/* Kartın kabuğu: satır satır çizilir (bkz. dosya başlığı). */
+const GROUP_SHELL = {
+  backgroundColor: colors.surface1,
+  borderColor: colors.border,
+} as const;
+
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.bg,
   },
-  headerBottom: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: layout.screenPadding,
-    paddingBottom: space.sm,
-  },
   listContent: {
+    paddingHorizontal: layout.screenPadding,
     paddingBottom: space.xxxl,
   },
   listHeader: {
     gap: space.sm,
-  },
-  searchBox: {
-    paddingHorizontal: layout.screenPadding,
+    paddingTop: space.md,
   },
 
+  /* — Satır grubu (tema.html ".group") — */
+  groupHead: {
+    ...GROUP_SHELL,
+    borderWidth: hairline,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    /* Başlığın kendi üst dolgusu ve alt çizgisi yok; kart tepesinde ikisi de gerekir. */
+    paddingTop: space.s,
+    borderBottomColor: colors.separator,
+    overflow: "hidden",
+  },
+  groupRow: {
+    ...GROUP_SHELL,
+    borderLeftWidth: hairline,
+    borderRightWidth: hairline,
+  },
+  groupRowLast: {
+    ...GROUP_SHELL,
+    borderLeftWidth: hairline,
+    borderRightWidth: hairline,
+    borderBottomWidth: hairline,
+    borderBottomLeftRadius: radius.lg,
+    borderBottomRightRadius: radius.lg,
+    overflow: "hidden",
+  },
+  separator: {
+    height: hairline,
+    backgroundColor: colors.separator,
+    borderLeftWidth: hairline,
+    borderRightWidth: hairline,
+    borderColor: colors.border,
+  },
+  skeletonCard: {
+    borderWidth: hairline,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    overflow: "hidden",
+  },
 
   /* — Podyum — */
   podium: {
     flexDirection: "row",
+    /* Basamaklar tabandan hizalanır: birinci daha uzun, ikisi onun yanında
+       alçakta durur — podyum silueti buradan çıkar. */
+    alignItems: "flex-end",
     gap: space.sm,
-    paddingHorizontal: layout.screenPadding,
-    paddingTop: space.xs,
+    paddingTop: space.s,
+    paddingBottom: space.xs,
   },
   podiumCell: {
     flex: 1,
     alignItems: "center",
-    gap: space.xs,
-    paddingVertical: space.m,
-    backgroundColor: colors.surface1,
-    borderRadius: radius.lg,
-    borderWidth: hairline,
-    borderColor: colors.border,
+    gap: space.xxs,
+    paddingVertical: space.xs,
+    borderRadius: radius.md,
   },
+  /* Rozet halkanın altına taşar; ad onun altında nefes alsın. */
   podiumAvatar: {
-    paddingBottom: 5,
+    alignItems: "center",
+    marginBottom: space.sm,
   },
   podiumRing: {
     padding: 2,
     borderRadius: radius.pill,
-    borderWidth: 1.5,
+    borderWidth: 2,
   },
   podiumRankBadge: {
     position: "absolute",
-    bottom: 0,
+    bottom: -3,
     alignSelf: "center",
-    minWidth: 14,
-    height: 14,
+    minWidth: 16,
+    height: 16,
     paddingHorizontal: 3,
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
+    /* Halka kâğıt renginde: podyum kartsız, rozet doğrudan zemine oturur. */
     borderWidth: 1.5,
-    borderColor: colors.surface1,
+    borderColor: colors.bg,
   },
   podiumRankText: {
     ...type.micro,
@@ -418,8 +502,19 @@ const styles = StyleSheet.create({
     textAlign: "center",
     paddingHorizontal: space.xs,
   },
+  podiumNameFirst: {
+    ...type.label,
+    color: colors.textPrimary,
+    textAlign: "center",
+    paddingHorizontal: space.xs,
+  },
   podiumMetric: {
-    ...type.caption,
-    color: colors.textTertiary,
+    ...type.tableNumStrong,
+    color: colors.textSecondary,
+  },
+  /* Birincinin sayısı büyük ve altın: "kim önde" sorusunun tek bakışlık yanıtı. */
+  podiumMetricFirst: {
+    ...type.metricSm,
+    color: colors.zoneChampion,
   },
 });

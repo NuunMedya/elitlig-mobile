@@ -11,8 +11,12 @@
  *  - Yükseklik 52 (tek satır) / 64 (subtitle var).
  *  - Basılı hâlde zemin `pressed` rengine ANINDA geçer, 120 ms'de döner;
  *    opaklık/ölçek YOK (§5.2) — satırda ucuz durur.
- *  - `position` grup içi konumdur: köşe yuvarlaması ve ayraç ondan gelir.
- *    Grubun SON satırından sonra ayraç çizilmez (§3.4).
+ *  - `position` grup içi konumdur: köşe yuvarlaması, kenarlık ve ayraç ondan
+ *    gelir. Grup bir KART gibi durur (yüzey + hairline kenarlık; tema.html
+ *    ".group") ama satırlar sarılmaz, kabuğu her satır kendi konumuna göre
+ *    taşır. Grubun SON satırından sonra ayraç çizilmez (§3.4).
+ *  - `leading={{ icon, tone }}` ikonu 32px'lik renkli bir kutuda çizer
+ *    (tema.html ".lrow .lic"): zemin rolün sönük rengi, ikon rolün rengi.
  *  - `toggle` verildiğinde satırın tamamı basılabilir olur ve anahtarı çevirir.
  */
 
@@ -104,11 +108,24 @@ export const ListRow = React.memo(function ListRow({
   const leadingNode = useMemo(() => {
     if (leading == null) return null;
     if (isLeadingIcon(leading)) {
-      const tint = leading.tone && leading.tone !== "neutral"
-        ? toneColors(leading.tone).fg
-        : colors.textSecondary;
+      /*
+       * İKON KUTUDA DURUR (tema.html §6 ".lrow .lic"): 32px'lik yuvarlak
+       * köşeli bir kutu, zemini rolün SÖNÜK rengi, ikonu rolün kendisi.
+       * Çıplak ikon, 15px'lik başlığın yanında satırdan satıra farklı
+       * ağırlıkta okunuyordu (dolu kupa iri, ince bir çizgi ikonu cılız);
+       * kutu her satıra aynı görsel kütleyi verir ve rolün rengini (mor:
+       * kulüp işi, camgöbeği: veri, kırmızı: canlı) ikondan çok daha
+       * geniş bir alanda söyler.
+       *
+       * Nötr ton, rozetteki gibi `surface3` değil `surface2` alır: kartın
+       * üstünde üç kademe koyu bir kutu, ikonun etrafında gri bir leke gibi
+       * kalıyordu; bir kademe fark yeter.
+       */
+      const tone = leading.tone && leading.tone !== "neutral" ? toneColors(leading.tone) : null;
+      const box = tone ? tone.dim : colors.surface2;
+      const tint = tone ? tone.fg : colors.textSecondary;
       return (
-        <View style={styles.leading}>
+        <View style={[styles.leading, { backgroundColor: disabled ? colors.surface2 : box }]}>
           <Ionicons name={leading.icon} size={18} color={disabled ? colors.textDisabled : tint} />
         </View>
       );
@@ -187,6 +204,7 @@ export const ListRow = React.memo(function ListRow({
     subtitle ? styles.rowTwoLine : null,
     position === "single" ? styles.single : null,
     position === "first" ? styles.first : null,
+    position === "middle" ? styles.middle : null,
     position === "last" ? styles.last : null,
     highlighted ? styles.highlighted : null,
     style,
@@ -218,11 +236,39 @@ export const ListRow = React.memo(function ListRow({
   );
 });
 
+/** Sol ikon kutusunun kenarı — mockup ".lrow .lic" 32px. */
+const LEADING_BOX = 32;
+
+/**
+ * Grup kartının kabuğu — tema.html ".group": yüzey + hairline kenarlık.
+ * `elevate(1)`in yüzey ve kenarlık kısmıdır; GÖLGESİ BİLEREK YOK.
+ *
+ * NEDEN HER SATIR KENDİ KABUĞUNU TAŞIR: satırlar bir kaba SARILMAZ (60 ekran
+ * `position` ile grup kurar), dolayısıyla kenarlık satır satır çizilir ve
+ * grup içi konuma göre KESİLİR — ilk satırın altında, son satırın üstünde,
+ * ortadakilerin iki yanı dışında kenarlık yoktur; yoksa satırlar arasında
+ * ayraçtan başka bir çizgi daha belirir.
+ *
+ * NEDEN GÖLGE YOK: gölge de satır satır verildiğinde sonraki satırın gölgesi
+ * (18px bulanıklık, 4px ofset → üst kenardan 14px yukarı taşar) bir önceki
+ * satırın ALT şeridinin üstüne çiziliyordu — her ayracın üstünde 12px'lik
+ * koyulaşan bir bant, ayraç da olması gerekenden koyu. Çizim sırası
+ * değiştirilemez (liste hücreleri sırayla boyanır), yani bir grubun tek
+ * parça gölgesi ancak satırları saran bir kaptan gelebilir; o kap yokken
+ * gölgesiz düz bir kabuk, dikişli bir gölgeden iyidir. Tek başına duran
+ * satır (`single`) gölgesini korur: onun komşusu yok.
+ */
+const GROUP_SHELL = {
+  backgroundColor: colors.surface1,
+  borderWidth: hairline,
+  borderColor: colors.border,
+} as const;
+
 const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.sm,
+    gap: space.m,
     minHeight: layout.listRowHeight,
     paddingHorizontal: layout.rowPaddingH,
     backgroundColor: colors.surface1,
@@ -246,10 +292,19 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: radius.lg,
   },
   first: {
+    ...GROUP_SHELL,
+    borderBottomWidth: 0,
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,
   },
+  middle: {
+    ...GROUP_SHELL,
+    borderTopWidth: 0,
+    borderBottomWidth: 0,
+  },
   last: {
+    ...GROUP_SHELL,
+    borderTopWidth: 0,
     borderBottomLeftRadius: radius.lg,
     borderBottomRightRadius: radius.lg,
   },
@@ -259,22 +314,24 @@ const styles = StyleSheet.create({
     borderLeftColor: colors.brand,
   },
   leading: {
-    width: 20,
-    height: 20,
+    width: LEADING_BOX,
+    height: LEADING_BOX,
+    borderRadius: radius.sm,
     alignItems: "center",
     justifyContent: "center",
   },
   /**
-   * Çağıranın verdiği HAZIR düğüm için yuva: ikon yuvasının aksine SABİT
-   * değil, en az 24px. Sabit 24px'te 24'ten geniş bir düğüm (sıra numarası +
-   * `crestLg` amblem gibi bileşik sol içerikler) yuvadan iki yana taşıyor,
+   * Çağıranın verdiği HAZIR düğüm için yuva: ikon kutusuyla AYNI genişlikte
+   * başlar ki amblemli ve ikonlu satırlarda başlık sütunu aynı hizadan
+   * başlasın; SABİT değildir. Sabit bir yuvada yuvadan geniş bir düğüm (sıra
+   * numarası + `crestLg` amblem gibi bileşik sol içerikler) iki yana taşıyor,
    * solda satırın iç boşluğunu aşıp kenardan dışarı çıkıyor, sağda başlığın
-   * üstüne biniyordu. `minWidth`/`minHeight` ile 24'e kadar olan düğümlerin
+   * üstüne biniyordu. `minWidth`/`minHeight` ile kutuya kadar olan düğümlerin
    * hizası aynı kalır, daha genişleri kendi yerini alır.
    */
   leadingNode: {
-    minWidth: 20,
-    minHeight: 20,
+    minWidth: LEADING_BOX,
+    minHeight: LEADING_BOX,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -310,8 +367,8 @@ const styles = StyleSheet.create({
     height: hairline,
     backgroundColor: colors.separator,
   },
-  /** Amblem/ikon sütununu atlayan ayraç: 12 + 20 + 8 = 40. */
+  /** Amblem/ikon sütununu atlayan ayraç: 14 + 32 + 10 = 56. */
   dividerInsetAvatar: {
-    left: layout.rowPaddingH + 20 + space.sm,
+    left: layout.rowPaddingH + LEADING_BOX + space.m,
   },
 });

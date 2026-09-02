@@ -299,6 +299,13 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: BEAM_HEIGHT,
     borderBottomRightRadius: BEAM_HEIGHT,
     backgroundColor: colors.tabBeam,
+    /* Işıma: çizgi bir IŞIK KAYNAĞIDIR, boyanmış bir şerit değil. iOS'ta
+       gölge çizginin kendi rengiyle dağılır; Android `elevation` ışımaz,
+       orada yalnız çizgi kalır — kabul edilebilir bir düşüş. */
+    shadowColor: colors.tabBeam,
+    shadowOpacity: 0.85,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 0 },
   },
   tab: {
     flex: 1,

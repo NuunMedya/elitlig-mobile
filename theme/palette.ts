@@ -619,7 +619,7 @@ export const dark: Palette = {
   zoneChampion:          "#E0AE4A",
   zonePromotion:         "#34D399",
   zonePlayoff:           "#22D3EE",
-  zoneRelegationPlayoff: "#FBBF24",
+  zoneRelegationPlayoff: "#D98F5A",
   zoneRelegation:        "#FB7185",
 
   gradientInk:     ["#301D55", "#20133D"],
@@ -644,12 +644,14 @@ export const dark: Palette = {
   skeletonHighlight: "#31215C",
 
   /* Bar, koyu temada kâğıttan AÇIK durur — gece de "yüzen" okunsun diye. */
-  /* Bar iki temada da koyu mordur; koyu temada kâğıttan yalnız denetimin
-     istediği kadar (1.3:1) açık — daha açığı, gece ekranındaki en parlak
-     yüzey oluyor ve mor bloktan kopuyordu. */
-  tabBar:         "#33205C",
+  /* RAY = MOR BLOK. Bar iki temada da başlık bloğuyla AYNI mürekkeptir
+     (gradientInk / inkBlock): üst blok ve alt ray tek kimlik yüzeyi. Koyuda
+     kâğıttan ayrımı dolgu farkı değil, üst kenardaki ışık çizgisi ve huzme
+     verir — daha açık bir bar, gece ekranındaki en parlak yüzey oluyor ve
+     bloktan kopuyordu. */
+  tabBar:         "#241547",
   tabBarBorder:   "rgba(255, 255, 255, 0.10)",
-  gradientTabBar: ["#38225F", "#2C1B56"],
+  gradientTabBar: ["#3A2263", "#251549"],
   tabActive:      "#FFFFFF",
   tabInactive:    "rgba(255, 255, 255, 0.58)",
   tabBeam:        "#DDD1FF",

@@ -1,13 +1,18 @@
 /**
  * MAÇ DETAYI — uygulamanın en çok açılan ekranı ve gol bildiriminin varış noktası.
  *
- * NE: tek bir maçın her yüzü. Üstte sabit bir tabela (armalar + skor + durum),
- * altında altı segment: Özet · Canlı · Kadrolar · İstatistik · H2H · Puan.
+ * NE: tek bir maçın her yüzü. Üstte TEK mor blok (başlık satırı + skor
+ * sahnesi + sekmeler), altında altı segment: Özet · Canlı · Kadrolar ·
+ * İstatistik · H2H · Puan.
  *
- * NEDEN SABİT TABELA: ekran canlı maçta açık kalıyor; kullanıcı istatistiğe
- * ya da kadroya inerken skoru kaybetmemeli. Bu yüzden hero, daralan başlığın
- * (ScreenHeader 96→48) hemen altında SABİT durur ve yalnız segment içeriği
- * kaydırılır. Segment şeridi hero'ya yapışıktır.
+ * NEDEN TEK BLOK: eski sürüm kendi atmosferini kuruyordu — şeffaf başlık,
+ * fotoğraf yıkaması, ayrı kenarlıklı skor kartı, üstüne çıkan yuvarlak
+ * köşeli "kâğıt" ve kâğıtta sekmeler. Uygulamanın her ekranı düz mor blokla
+ * açılırken maç detayı başka bir morla, iki katman hâlinde açılıyordu.
+ * Şimdi skor sahnesi `ScreenHeader`ın `hero` yuvasında, sekmeler `tabs`
+ * yuvasındadır; blok takım ve oyuncu sayfalarındakiyle aynı yüzeydir.
+ * Kaydırınca sahne kapanır, lig adı başlık satırına gelir, sekmeler bloğun
+ * altında yapışık kalır — yalnız segment içeriği kaydırılır.
  *
  * NEDEN URL PARAMETRESİ: `/mac/<id>?tab=canli` gol ve "maç başladı"
  * bildirimlerinin varış noktasıdır. Segment ekran durumunda değil ROTADA
@@ -31,7 +36,6 @@
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
-import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -57,11 +61,9 @@ import { YoutubeBanner } from "@/components/YoutubeBanner";
 import {
   Avatar,
   Badge,
-  Bloom,
   BottomSheet,
   Button,
   Card,
-  ChalkArc,
   EmptyState,
   ErrorState,
   EventIcon,
@@ -69,7 +71,7 @@ import {
   Frame,
   PitchView,
   KeyValueRow,
-  MinuteRing,
+  LiveBadge,
   RatingPill,
   ScreenHeader,
   SectionHeader,
@@ -132,7 +134,6 @@ import {
   fonts,
   hairline,
   haptics,
-  isDark,
   layout,
   radius,
   space,
@@ -637,88 +638,44 @@ export default function MatchDetailScreen() {
     <RefreshControl {...refreshControlProps(refresh.refreshing, refresh.onRefresh)} />
   );
 
-  /* Atmosferin dokusu: maçın kapak görseli. Yoksa mor yıkama tek başına
-     sahneyi kurar — bu ligdeki maçların çoğunda kapak yok, dolayısıyla
-     "fotoğrafsız" hâl istisna değil VARSAYILAN. */
-  const coverPhoto = mediaUrl(match.match_picture);
-
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      {/* Sahne ışığı — her şeyin arkasında, kaydırmadan bağımsız. */}
-      <MatchAtmosphere cover={coverPhoto} />
-
       {/*
         BAŞLIK LİG ADINI TAŞIR, TAKIM ADLARINI DEĞİL. İki takım adı tek satıra
         sığmıyor ve "ÇAYKARA FC – ŞANLI B…" gibi kırpılıyordu; üstelik hemen
-        altındaki mürekkep blok ikisini de armalarıyla birlikte zaten
-        gösteriyor. Başlık artık tekrar etmeyen bağlamı verir.
+        altındaki sahne ikisini de armalarıyla birlikte zaten gösteriyor.
+        Açık hâlde satırda yalnız üst başlık okunur (lig · sezon); lig adı,
+        kaydırıp daraltınca sahne kapanırken başlık olarak belirir.
+
+        ALT BAŞLIK YOK: tarih ve saha sahnenin künye satırındadır; burada bir
+        kez daha yazılsaydı blok üç satırla açılırdı.
       */}
       <ScreenHeader
         title={match.league_name ?? "Maç detayı"}
-        overline="MAÇ"
-        subtitle={[match.match_season, match.match_field].filter(Boolean).join(" · ") || undefined}
+        overline={
+          upperTR([match.league_name, match.match_season].filter(Boolean).join(" · ")) || undefined
+        }
         back
         scrollY={scrollY}
         actions={actions}
-        transparent
-        onDark
-        surface={colors.matchWash[0]}
-        bottom={
-          <View>
-            <MatchHero
-              match={match}
-              state={state}
-              live={live}
-              realtime={realtime}
-              snapshot={snapshot}
-              homeScore={homeScore}
-              awayScore={awayScore}
-              homeLogo={homeLogo}
-              awayLogo={awayLogo}
-              homeTeamId={homeTeamId}
-              awayTeamId={awayTeamId}
-            />
-
-            {/*
-              YÜKSELEN SAYFA. İçerik alanı, mor sahnenin üstüne ÇIKAN geniş
-              yarıçaplı bir yüzey olarak başlar: üst iki köşesi 30px yuvarlak,
-              tepesinde ince bir ışık çizgisi. Sayfa böylece "sahnenin üstünde
-              duran bir kâğıt" olur — düz bir kenarla başlasaydı sekme şeridi,
-              atmosferi ortasından kesen yatay bir bant gibi dururdu.
-
-              Sekme şeridi bu yüzeyin İÇİNDE ve saydam: kendi zeminini bassaydı
-              yüzeyin yuvarlak köşelerinin üstünde köşesiz bir dikdörtgen
-              olarak görünürdü.
-            */}
-            <View style={styles.sheet}>
-              <View style={styles.sheetRim} pointerEvents="none" />
-              {/* TONE="PAPER": bu şerit mor bloğun içinde değil, sahnenin
-                  üstüne çıkan KÂĞIT yüzeyin içinde duruyor (bkz. yukarıdaki
-                  not). Varsayılan "ink" tonu etiketleri beyaza çevirir ve
-                  beyaz kâğıdın üstünde okunmaz hâle getirirdi. */}
-              <Tabs
-                items={tabItems}
-                value={activeTab}
-                onChange={changeTab}
-                sticky
-                surface="transparent"
-                tone="paper"
-              />
-            </View>
-          </View>
+        hero={
+          <MatchHero
+            match={match}
+            state={state}
+            live={live}
+            realtime={realtime}
+            snapshot={snapshot}
+            homeScore={homeScore}
+            awayScore={awayScore}
+            homeLogo={homeLogo}
+            awayLogo={awayLogo}
+            homeTeamId={homeTeamId}
+            awayTeamId={awayTeamId}
+          />
         }
+        tabs={<Tabs items={tabItems} value={activeTab} onChange={changeTab} sticky />}
       />
 
-      {/*
-        GÖVDE OPAK OLMAK ZORUNDA.
-        Atmosfer, sayfanın en arkasında duran mutlak konumlu 300px'lik bir
-        katman. Sekme listelerinin kendi zemini olmadığı için, yükselen yüzeyin
-        bittiği yerden atmosferin bittiği yere kadar mor, liste satırlarının
-        YANINDAN sızıyordu — yüzeyin altında iki yanda birer mor kertik olarak
-        görünüyordu. Gövde kendi kâğıdını basar; atmosfer yalnız yüzeyin
-        ÜSTÜNDE kalır.
-      */}
-      <View style={styles.body}>
       {activeTab === "ozet" ? (
         <SummaryTab
           match={match}
@@ -800,7 +757,6 @@ export default function MatchDetailScreen() {
           refreshControl={refreshControl}
         />
       )}
-      </View>
     </SafeAreaView>
   );
 }
@@ -824,74 +780,23 @@ interface ScorerLine {
   ownGoal: boolean;
 }
 
-/* ══════════════════════════════════════════════════════════════════════════
-   ATMOSFER — sayfanın arkasındaki ışık
-   ══════════════════════════════════════════════════════════════════════════ */
-
 /**
- * `MatchAtmosphere` — maç ekranının arkasına serilen tek katman.
+ * `MatchHero` — SKOR SAHNESİ. Bloğun içinde, kutusuz.
  *
- * NEDEN VAR: maç detayı, uygulamanın geri kalanı gibi bir LİSTE değil, tek bir
- * maçın SAHNESİdir. Düz lavanta bir kâğıt üstünde altı sekme ve on kart, ne
- * kadar düzgün dizilirse dizilsin, "form" gibi okunuyordu. Sahnenin bir ışığı
- * olması gerekiyordu.
+ * Eskiden kendi gradyanı, tebeşir yayı, hâlesi ve amblem tabakları olan
+ * kenarlıklı bir mor karttı; şeffaf başlığın altında, fotoğraf yıkamasının
+ * üstünde duruyordu — mor üstüne mor, iki katman. Sahne artık `ScreenHeader`ın
+ * `hero` yuvasında, bloğun kendi gradyanı üstünde çizilir: takım ve oyuncu
+ * kimlikleriyle aynı yüzey, aynı kural. Yalnız ekran kenarı dolgusu ve alt
+ * boşluk taşır; kaydırınca kapanması ScreenHeader'ın işidir.
  *
- * ÜÇ KATMAN, ÜSTTEN ALTA:
- *   1. Kapak fotoğrafı (varsa) — düşük opaklıkta, üst 380px'te.
- *   2. Mor yıkama (`matchWash`) — üç duraklı DİKEY geçiş. Fotoğrafın üstüne
- *      serildiği için fotoğrafın kendi renkleri ne olursa olsun sahne tema
- *      moruna boyanır; fotoğraf yoksa sahneyi tek başına kurar.
- *   3. Kâğıt (`matchCanvas`) — açık temada neredeyse beyaz, koyuda derin mor.
+ * DİZİLİŞ (maket §7/5 ".stage"): iki yanda arma + ad, ortada sabit genişlikte
+ * bir sütun — durum hapı (CANLI / MS) · skor · dakika ya da geri sayım —
+ * altında tek satır künye (tarih · saha).
  *
- * Yıkamanın DİKEY olması gradyan ekseni kuralına aykırı değil: kural yüzey
- * gradyanlarına (`colors.gradient*`) bakar. Burası bir yüzey değil, ışık
- * kaynağıdır ve ışık yukarıdan gelir.
- *
- * FOTOĞRAF NEDEN BULANIK DEĞİL: React Native'de görsel bulanıklığı platforma
- * göre ayrı bir bağımlılık ister ve web önizlemesinde hiç çalışmaz. Aynı etki
- * düşük opaklık + üstteki mor yıkamayla elde ediliyor; fotoğraf bir DOKU
- * olarak kalıyor, bir resim olarak değil.
+ * Canlı skor ve sayaç mantığı olduğu gibi: skor canlı görüntüden okunur,
+ * sayaç kendi bileşeninde tikler.
  */
-const ATMOSPHERE_HEIGHT = 300;
-const WASH_START = { x: 0.5, y: 0 } as const;
-const WASH_END = { x: 0.5, y: 1 } as const;
-/** Duraklar: tepede tam mor, %45'te seyrelmiş, dipte kâğıt. */
-const WASH_LOCATIONS = [0, 0.5, 1] as const;
-
-const MatchAtmosphere = memo(function MatchAtmosphere({ cover }: { cover: string | null }) {
-  return (
-    <View style={styles.atmosphere} pointerEvents="none">
-      {/* 1 — Taban: sahnenin mor rengi. Fotoğraf olsun olmasın hep burada. */}
-      <View style={styles.atmosphereTint} />
-
-      {/*
-        2 — Doku: kapak fotoğrafı, DÜŞÜK opaklıkta.
-        Tam opaklıkta serilseydi sahnenin rengi fotoğrafın rengi olurdu ve
-        başlık şeridindeki beyaz metnin okunurluğu, o maça hangi fotoğrafın
-        yüklendiğine bağlı kalırdı. %28'de fotoğraf mor tabanı boyayan bir
-        doku olur; taban koyu kaldığı için kontrast garanti altındadır.
-      */}
-      {cover ? (
-        <Image
-          source={{ uri: cover }}
-          style={[StyleSheet.absoluteFill, styles.atmosphereCover]}
-          resizeMode="cover"
-          accessible={false}
-        />
-      ) : null}
-
-      {/* 3 — Yıkama: tepede saydam (doku görünsün), dipte kâğıt. */}
-      <LinearGradient
-        colors={colors.matchWash}
-        locations={WASH_LOCATIONS}
-        start={WASH_START}
-        end={WASH_END}
-        style={StyleSheet.absoluteFill}
-      />
-    </View>
-  );
-});
-
 const MatchHero = memo(function MatchHero({
   match,
   state,
@@ -918,7 +823,6 @@ const MatchHero = memo(function MatchHero({
   awayTeamId: number | null;
 }) {
   const router = useRouter();
-  const { width } = useWindowDimensions();
   const played = state !== "scheduled";
 
   const openHome = useCallback(() => {
@@ -937,26 +841,15 @@ const MatchHero = memo(function MatchHero({
   const homeWon = decided && (homeScore as number) > (awayScore as number);
   const awayWon = decided && (awayScore as number) > (homeScore as number);
 
-  return (
-    <Frame
-      tone="dark"
-      radius="xxl"
-      elevation={3}
-      surface={colors.inkBlock}
-      gradient={colors.gradientInk}
-      style={styles.hero}
-      contentStyle={styles.heroBody}
-    >
-      {/* İmza öğesi: skor bloğunun arkasında tebeşir orta yuvarlak yayı. */}
-      <ChalkArc
-        width={width - layout.screenPadding * 2 - 2}
-        height={HERO_ARC_HEIGHT}
-        color={colors.chalk}
-      />
+  /* Künye TEK SATIR: tarih · saha. Hakem Özet'teki "Maç bilgileri"ndedir;
+     sahne bir tabeladır, künye değil — üç ikonlu parça skoru aşağı itiyordu. */
+  const meta = [formatDateLong(match.date), match.match_field].filter(Boolean).join(" · ");
 
-      <View style={styles.heroTeams}>
+  return (
+    <View style={styles.stage}>
+      <View style={styles.stageTeams}>
         <Touchable
-          style={styles.heroTeam}
+          style={styles.stageTeam}
           feedback="row"
           haptic="selection"
           disabled={!homeTeamId}
@@ -964,21 +857,10 @@ const MatchHero = memo(function MatchHero({
           accessibilityRole="button"
           accessibilityLabel={`${match.first_team_name} takım sayfası`}
         >
-          {/*
-            AMBLEM TABAĞI. Amblem doğrudan mürekkebin üstünde duruyordu ve her
-            takımda başka türlü görünüyordu: logosu olmayanlarda beyaz bir
-            kare, saydam PNG'li olanlarda hiçbir şey.
-
-            Tabak mürekkebin üstünde ışıklı bir çerçeve, amblem ise onun
-            içinde KENDİ AÇIK ZEMİNİNDE durur — kulüp logoları açık zemine
-            göre tasarlanır, `plain` (zeminsiz) çizim onları koyu blokta
-            kaybediyordu. Böylece logosu olan da olmayan da aynı formda.
-          */}
-          <View style={styles.crestPlate}>
-            <TeamLogo name={match.first_team_name} logo={homeLogo} size={layout.crestXl} />
-          </View>
+          {/* Amblem doğrudan blokta — takım sayfasındaki kimlikle aynı form. */}
+          <TeamLogo name={match.first_team_name} logo={homeLogo} size={layout.crestXl} />
           <Text
-            style={[styles.heroTeamName, awayWon ? styles.heroTeamNameDim : null]}
+            style={[styles.stageTeamName, awayWon ? styles.stageTeamNameDim : null]}
             numberOfLines={2}
             {...textScale.dense}
           >
@@ -986,55 +868,53 @@ const MatchHero = memo(function MatchHero({
           </Text>
         </Touchable>
 
-        <View style={styles.heroCenter}>
-          {/* Skorun arkasındaki hâle: ekranın en önemli bilgisi olduğunu
-              söyleyen tek işaret (bkz. components/ui/Bloom.tsx). */}
-          <Bloom
-            width={140}
-            height={72}
-            color={live ? colors.live : colors.brandOnDark}
-            intensity={live ? 0.4 : 0.3}
-            style={styles.heroBloom}
-          />
+        <View style={styles.stageMid}>
+          {/* Durum hapı skorun ÜSTÜNDE: canlıda kırmızı noktalı CANLI, bitince
+              cam "MS". Oynanmamış maçta hap yok — başlama saati zaten durumu
+              söyler. */}
+          {live ? (
+            <LiveBadge onDark />
+          ) : state === "finished" ? (
+            <View style={styles.stagePill}>
+              <Text style={styles.stagePillText} {...textScale.badge}>
+                MS
+              </Text>
+            </View>
+          ) : null}
+
           {played ? (
-            <View style={styles.heroScoreRow}>
+            <View style={styles.stageScoreRow}>
               <Text
-                style={[styles.heroScore, awayWon ? styles.heroScoreDim : null]}
+                style={[styles.stageScore, awayWon ? styles.stageScoreDim : null]}
                 {...textScale.dense}
               >
                 {homeScore ?? 0}
               </Text>
-              <Text style={styles.heroScoreDash} {...textScale.dense}>
+              <Text style={styles.stageScoreDash} {...textScale.dense}>
                 –
               </Text>
               <Text
-                style={[styles.heroScore, homeWon ? styles.heroScoreDim : null]}
+                style={[styles.stageScore, homeWon ? styles.stageScoreDim : null]}
                 {...textScale.dense}
               >
                 {awayScore ?? 0}
               </Text>
             </View>
           ) : (
-            <Text style={styles.heroKickoff} {...textScale.dense}>
+            <Text style={styles.stageKickoff} {...textScale.dense}>
               {formatTime(match.time) || "—"}
             </Text>
           )}
 
           {live ? (
             <MatchClock snapshot={snapshot} />
-          ) : state === "finished" ? (
-            <View style={styles.heroChip}>
-              <Text style={styles.heroChipText} {...textScale.badge}>
-                MS
-              </Text>
-            </View>
-          ) : (
+          ) : state === "scheduled" ? (
             <Countdown target={kickoffAt(match)} />
-          )}
+          ) : null}
         </View>
 
         <Touchable
-          style={styles.heroTeam}
+          style={styles.stageTeam}
           feedback="row"
           haptic="selection"
           disabled={!awayTeamId}
@@ -1042,11 +922,9 @@ const MatchHero = memo(function MatchHero({
           accessibilityRole="button"
           accessibilityLabel={`${match.second_team_name} takım sayfası`}
         >
-          <View style={styles.crestPlate}>
-            <TeamLogo name={match.second_team_name} logo={awayLogo} size={layout.crestXl} />
-          </View>
+          <TeamLogo name={match.second_team_name} logo={awayLogo} size={layout.crestXl} />
           <Text
-            style={[styles.heroTeamName, homeWon ? styles.heroTeamNameDim : null]}
+            style={[styles.stageTeamName, homeWon ? styles.stageTeamNameDim : null]}
             numberOfLines={2}
             {...textScale.dense}
           >
@@ -1057,62 +935,23 @@ const MatchHero = memo(function MatchHero({
 
       {/*
         GOLCÜLER BURADA DEĞİL — Özet'in ilk kartında (`GoalsCard`). Skor
-        bloğunun içinde iki sütun hâlindeydiler ve 9-5 biten bir maçta blok,
+        sahnesinin içinde iki sütun hâlindeydiler ve 9-5 biten bir maçta sahne,
         ortasından dokuz satırlık düzensiz bir dökümle yarılıyordu.
       */}
 
-      <View style={styles.heroFacts}>
-        <HeroFact icon="calendar-outline" text={formatDateLong(match.date)} />
-        {match.match_field ? <HeroFact icon="location-outline" text={match.match_field} /> : null}
-        {refereeOf(match) ? <HeroFact icon="person-outline" text={refereeOf(match) as string} /> : null}
-      </View>
+      {meta ? (
+        <Text style={styles.stageMeta} numberOfLines={1} {...textScale.dense}>
+          {meta}
+        </Text>
+      ) : null}
 
       {live && !realtime ? <ReconnectStrip /> : null}
-    </Frame>
-  );
-});
-
-/**
- * Künye parçası — ikon + metin.
- *
- * NEDEN AYRI PARÇALAR, TEK BİR METİN DEĞİL: künye eskiden nokta ayraçlı tek
- * bir dizeydi ("7 Ağustos Perşembe · 22:00 · Ostim Saha · Hakem: …") ve
- * `numberOfLines={1}` ile kırpılıyordu — yani en sondaki bilgi (çoğu zaman
- * hakem ya da saha) hiç görünmüyordu. Parçalara ayrılınca satır sarabilir ve
- * her parça kendi ikonuyla ne olduğunu söyler.
- */
-const HeroFact = memo(function HeroFact({
-  icon,
-  text,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  text: string;
-}) {
-  return (
-    <View style={styles.heroFact}>
-      <Ionicons name={icon} size={11} color={colors.onDarkMuted} />
-      <Text style={styles.heroFactText} numberOfLines={1} {...textScale.dense}>
-        {text}
-      </Text>
     </View>
   );
 });
 
-/** Skor bloğunun arkasındaki yayın yüksekliği — armalar + skor + golcüler. */
-const HERO_ARC_HEIGHT = 112;
-
 /** Zaman çizelgesi bağlantı kolunun ölçüsü — yay yarıçapı da budur. */
 const ARM_SIZE = 14;
-
-/**
- * Mürekkep bloğun gradyan yönü — YATAY ve SAĞDAN SOLA.
- *
- * Yön, `GradientFill` ile birebir aynı olmak zorunda: aynı ekranda kimi yüzey
- * sağdan sola, kimi soldan sağa ışırsa göz ikisini iki ayrı ışık kaynağı gibi
- * okur ve yüzeyler birbirine ait görünmez.
- */
-const HERO_GRADIENT_START = { x: 1, y: 0.5 } as const;
-const HERO_GRADIENT_END = { x: 0, y: 0.5 } as const;
 
 /**
  * `GoalsCard` — "kim attı" kartı. Özet'in ilk kartı.
@@ -1145,15 +984,18 @@ const GoalsCard = memo(function GoalsCard({
 
   return (
     <Frame radius="lg" elevation={1} style={styles.inset} contentStyle={styles.goalsBox}>
+      {/* Sütun başlığı, bölüm başlığı DEĞİL: iki sütunun hangi takıma ait
+          olduğunu söyler ve o kadar. Versal + ayraçlı eski biçim kartın
+          içinde ikinci bir bölüm başlığı gibi duruyordu. */}
       <View style={styles.goalsHead}>
-        <Text style={[styles.goalsTeam, styles.goalsTeamHome]} numberOfLines={1} {...textScale.badge}>
-          {upperTR(homeName)}
+        <Text style={[styles.goalsTeam, styles.goalsTeamHome]} numberOfLines={1} {...textScale.dense}>
+          {homeName}
         </Text>
         <View style={styles.goalsBall}>
           <EventIcon kind="goal" size={12} />
         </View>
-        <Text style={styles.goalsTeam} numberOfLines={1} {...textScale.badge}>
-          {upperTR(awayName)}
+        <Text style={styles.goalsTeam} numberOfLines={1} {...textScale.dense}>
+          {awayName}
         </Text>
       </View>
 
@@ -1239,30 +1081,36 @@ const GoalLine = memo(function GoalLine({
 
 /**
  * Canlı sayaç. `useLiveClock` SANİYEDE BİR tikler; bu yüzden ekran gövdesinde
- * değil burada çağrılır — yeniden çizilen tek şey bu küçük halkadır.
+ * değil burada çağrılır — yeniden çizilen tek şey bu küçük satırdır.
  *
- * NEDEN ROZET DEĞİL HALKA: eski sürüm nabız atan kırmızı noktalı bir "CANLI"
- * rozeti çiziyordu. Rozet yalnız "canlı" der; halka aynı yeri kaplayarak hem
- * canlılığı hem maçın nerede olduğunu söyler (90 dakikanın tamamlanan payı).
- * Ekrandan sürekli hareket eden bir öğe de böylece kalkmış olur.
+ * NEDEN HALKA DEĞİL SATIR: eski `MinuteRing` kendi kartı olan skor tablosunda
+ * yer buluyordu; bloğun içindeki düz sahnede 32px'lik bir halka skorun altında
+ * ikinci bir odak oluyordu. Canlılığı skorun üstündeki CANLI hapı söyler;
+ * dakika ve yarı burada lavanta versal tek satır olarak akar ("67' · 2. YARI").
  */
 const MatchClock = memo(function MatchClock({ snapshot }: { snapshot: LiveSnapshot | undefined }) {
   const clockMs = useLiveClock(snapshot);
   const halftime = isHalftime(snapshot);
   const minute = clockMs != null ? Math.floor(clockMs / 60_000) : null;
-  // 90+ uzatma: halka dolu kalır, dakika "90+3" yazılır.
+  // 90+ uzatma: "90+3'".
   const added = minute != null && minute > 90 ? minute - 90 : null;
+  // Yarı yalnız 1 ya da 2 ise yazılır; başka bir değer "3. YARI" gibi yanlış okunur.
+  const period = snapshot?.period === 1 || snapshot?.period === 2 ? snapshot.period : null;
 
+  const label = halftime
+    ? "DEVRE ARASI"
+    : [
+        minute == null ? null : added != null ? `90+${added}'` : `${minute}'`,
+        period ? `${period}. YARI` : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+
+  if (!label) return null;
   return (
-    <View style={styles.heroClock}>
-      <MinuteRing
-        minute={halftime ? null : added != null ? 90 : minute}
-        addedTime={added}
-        halftime={halftime}
-        size={32}
-        onDark
-      />
-    </View>
+    <Text style={styles.stageClock} {...textScale.badge}>
+      {label}
+    </Text>
   );
 });
 
@@ -1281,7 +1129,7 @@ const Countdown = memo(function Countdown({ target }: { target: number }) {
 
   if (!target) return null;
   const diff = target - now;
-  if (diff <= 0) return <Text style={styles.heroCountdown}>Başlamak üzere</Text>;
+  if (diff <= 0) return <Text style={styles.stageCountdown}>Başlamak üzere</Text>;
 
   const days = Math.floor(diff / 86_400_000);
   const hours = Math.floor((diff % 86_400_000) / 3_600_000);
@@ -1296,7 +1144,7 @@ const Countdown = memo(function Countdown({ target }: { target: number }) {
         : `${pad2(minutes)}:${pad2(seconds)}`;
 
   return (
-    <Text style={styles.heroCountdown} {...textScale.dense}>
+    <Text style={styles.stageCountdown} {...textScale.dense}>
       {label}
     </Text>
   );
@@ -1485,22 +1333,30 @@ function SummaryTab({
           {/* GOLLER ÖZET'İN İLK KARTI: "kim attı", maç detayının en çok sorulan
               sorusudur ve zaman tüneline inmeden yanıtlanmalı. */}
           {scorers.home.length || scorers.away.length ? (
-            <GoalsCard
-              scorers={scorers}
-              homeName={match.first_team_name}
-              awayName={match.second_team_name}
-            />
+            <>
+              {/* Bölüm başlığıyla girer: sayfanın öbür bölümleriyle aynı dil,
+                  kart başlıksız bloğun altına yapışmaz. */}
+              <SectionHeader title="Golcüler" />
+              <GoalsCard
+                scorers={scorers}
+                homeName={match.first_team_name}
+                awayName={match.second_team_name}
+              />
+            </>
           ) : null}
 
+          {/* Manşet, sayfanın öbür bölümleri gibi bölüm başlığı + kart:
+              kartın içindeki versal etiket, gol kartının başlığıyla birlikte
+              iki ayrı "başlık dili" kuruyordu. */}
           {headline ? (
-            <Frame radius="lg" elevation={1} style={styles.inset} contentStyle={styles.panel}>
-              <Text style={styles.panelTitle} {...textScale.badge}>
-                {upperTR("Maç manşeti")}
-              </Text>
-              <Text style={styles.headline} {...textScale.long}>
-                {headline}
-              </Text>
-            </Frame>
+            <>
+              <SectionHeader title="Maç manşeti" />
+              <Frame radius="lg" elevation={1} style={styles.inset} contentStyle={styles.panel}>
+                <Text style={styles.headline} {...textScale.long}>
+                  {headline}
+                </Text>
+              </Frame>
+            </>
           ) : null}
 
           {hasPhotos ? (
@@ -3535,13 +3391,12 @@ function extractYouTubeId(url: string): string | null {
    ══════════════════════════════════════════════════════════════════════════ */
 
 const styles = StyleSheet.create({
-  /* Maç ekranının kâğıdı uygulamanın geri kalanından AYRI: açık temada
-     neredeyse beyaz, koyuda derin mor (bkz. `matchCanvas`). Üstündeki mor
-     atmosfer ancak sakin bir zeminde "ışık" gibi okunur; lavanta kâğıt
-     üstünde sayfa baştan aşağı mor bir sise dönüyordu. */
+  /* Kâğıt uygulamanın geri kalanıyla AYNI: mor blok kimliği taşır, altı
+     düz kâğıttır. Ekrana özel bir kanvas, maç detayını "başka bir uygulama"
+     gibi gösteriyordu. */
   screen: {
     flex: 1,
-    backgroundColor: colors.matchCanvas,
+    backgroundColor: colors.bg,
   },
   loading: {
     padding: layout.screenPadding,
@@ -3577,181 +3432,103 @@ const styles = StyleSheet.create({
     color: colors.textTertiary,
   },
 
-  /* ---- Atmosfer ---- */
-  /* Sayfanın ARKASINDA duran tek katman. `position: absolute` + `top: 0`:
-     yerleşimi hiç etkilemez, kaydırma ile birlikte kaymaz — sahne sabit
-     kalır, içerik onun üstünden akar. */
-  atmosphere: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    height: ATMOSPHERE_HEIGHT,
-  },
-  atmosphereTint: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: colors.matchTint,
-  },
-  atmosphereCover: {
-    opacity: 0.28,
-  },
-
-  /* Sekme içeriği kendi kâğıdını basar — atmosfer yüzeyin altından sızmasın. */
-  body: {
-    flex: 1,
-    backgroundColor: colors.matchCanvas,
-  },
-
-  /* ---- Yükselen sayfa ---- */
-  /* İçerik alanı sahnenin üstüne çıkan geniş yarıçaplı bir yüzeydir. */
-  sheet: {
-    backgroundColor: colors.matchCanvas,
-    borderTopLeftRadius: radius.xxl,
-    borderTopRightRadius: radius.xxl,
-    paddingTop: space.xxs,
-    overflow: "hidden",
-  },
-  /* Tepedeki ışık çizgisi: yüzeyin kâğıt kalınlığı. Yalnız üst kenarda ve
-     yalnız 1px — kalınlaştığı anda "çerçeve" olur ve yüzey kutuya döner. */
-  sheetRim: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    top: 0,
-    height: hairline,
-    backgroundColor: colors.rimLight[0],
-  },
-
-  /* ---- Hero: atmosferin üstünde cam skor tablosu ----
+  /* ---- Skor sahnesi: bloğun içinde, kutusuz ----
    *
-   * KENAR BOŞLUĞU SAYFANIN GERİ KALANIYLA AYNI: altındaki her kart 16px
-   * içeriden başlıyor, skor tablosu da öyle. */
-  /* Kenar boşluğu sayfanın geri kalanıyla aynı; kenarlık ve gölge `Frame`ten
-     gelir (bkz. components/ui/Frame.tsx). */
-  hero: {
-    marginHorizontal: layout.screenPadding,
-  },
-  heroBody: {
-    paddingHorizontal: space.md,
-    paddingTop: space.md,
-    paddingBottom: space.sm,
+   * Kenar dolgusu ekranın geri kalanıyla aynı (`screenPadding`); zemin,
+   * kenarlık ve gölge YOK — yüzey bloğun kendisidir (bkz. MatchHero). Alt
+   * boşluk sekme şeridine mesafedir. */
+  stage: {
+    paddingHorizontal: layout.screenPadding,
+    paddingTop: space.xs,
+    paddingBottom: space.md,
     gap: space.sm,
   },
-  /* Amblem tabağı: logosu olsun olmasın her takıma aynı form. */
-  crestPlate: {
-    width: layout.crestXl + 12,
-    height: layout.crestXl + 12,
-    borderRadius: radius.lg,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.chalk,
-    borderWidth: hairline,
-    borderColor: colors.glassBorder,
-  },
-  heroTeams: {
+  stageTeams: {
     flexDirection: "row",
     alignItems: "flex-start",
+    gap: space.sm,
   },
-  heroTeam: {
+  stageTeam: {
     flex: 1,
     alignItems: "center",
     gap: space.s,
     paddingVertical: space.xxs,
     borderRadius: radius.md,
   },
-  heroTeamName: {
+  stageTeamName: {
     ...type.caption,
-    fontFamily: type.label.fontFamily,
+    fontFamily: fonts.semibold,
     color: colors.onDark,
     textAlign: "center",
-    /* İKİ SATIRLIK YER AYRILIR: uzun takım adı alta sarınca skor bloğu
-       kaymasın diye iki tarafa da aynı yükseklik verilir. Değer, iki satır
-       `caption` demektir — punto büyüyünce (13 → 15 satır yüksekliği) bu da
-       büyümek zorundaydı, yoksa ikinci satır kırpılıyordu. */
+    /* İKİ SATIRLIK YER AYRILIR: uzun takım adı alta sarınca skor kaymasın
+       diye iki tarafa da aynı yükseklik verilir (iki satır `caption`). */
     minHeight: 30,
   },
   /* KAYBEDEN SÖNÜKLEŞİR. Skor tablosunun ilk işi "kim kazandı"yı bir bakışta
      söylemektir; iki taraf aynı ağırlıktayken göz rakamları okuyup zihnen
      karşılaştırmak zorunda kalıyordu. */
-  heroTeamNameDim: {
+  stageTeamNameDim: {
     color: colors.onDarkMuted,
   },
-  heroBloom: {
-    top: -8,
-  },
-  heroCenter: {
-    minWidth: 104,
+  /* Orta sütun SABİT genişlikte: takım adları uzayıp kısaldıkça skor
+     kaymasın. Sıra: durum hapı · skor · dakika/geri sayım. */
+  stageMid: {
+    width: 112,
     alignItems: "center",
-    justifyContent: "flex-start",
     gap: space.s,
     paddingTop: space.xs,
   },
   /* Rakamlar AYRI `Text`: tek metin içindeki `<Text>` çocuğuna verilen renk
      iOS'ta ana metnin rengini eziyordu, yani kazananı vurgulamak mümkün
      olmuyordu. Üç ayrı düğüm, üç ayrı renk. */
-  heroScoreRow: {
+  stageScoreRow: {
     flexDirection: "row",
     alignItems: "baseline",
     gap: space.xs,
   },
-  heroScore: {
+  stageScore: {
     ...type.scoreHero,
     color: colors.onDark,
   },
-  heroScoreDim: {
+  stageScoreDim: {
     color: colors.onDarkMuted,
   },
   /* Tire skordan sönük: göz iki rakamı görsün, aradaki işareti değil. */
-  heroScoreDash: {
+  stageScoreDash: {
     ...type.scoreLg,
     color: colors.onDarkMuted,
   },
-  /** "MS" pulu — tebeşir çerçeveli. */
-  heroChip: {
+  /** "MS" hapı — bloktaki cam hap dili (sekme göstergesi, başlık eylemleri). */
+  stagePill: {
     paddingHorizontal: space.sm,
     paddingVertical: 1,
     borderRadius: radius.pill,
+    backgroundColor: colors.inkPill,
     borderWidth: 1,
-    borderColor: colors.chalk,
+    borderColor: colors.inkPillBorder,
   },
-  heroChipText: {
+  stagePillText: {
     ...type.micro,
-    color: colors.onDarkMuted,
+    color: colors.onDark,
   },
-  heroKickoff: {
+  stageKickoff: {
     ...type.scoreLg,
     color: colors.onDark,
   },
-  heroClock: {
-    alignItems: "center",
+  /* Dakika satırı lavanta versal: bloğun üst başlığıyla aynı ses. */
+  stageClock: {
+    ...type.overline,
+    color: colors.brandOnDark,
   },
-  heroCountdown: {
+  stageCountdown: {
     ...type.caption,
     color: colors.onDarkMuted,
   },
-
-  /* ---- Künye: ikonlu parçalar, sarabilir ---- */
-  heroFacts: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "center",
-    columnGap: space.md,
-    rowGap: 2,
-    paddingTop: space.xxs,
-    borderTopWidth: hairline,
-    borderTopColor: colors.chalk,
-    marginTop: space.xxs,
-  },
-  heroFact: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    maxWidth: "100%",
-  },
-  heroFactText: {
-    ...type.micro,
+  /* Künye: tarih · saha, tek satır, ortalı. */
+  stageMeta: {
+    ...type.caption,
     color: colors.onDarkMuted,
-    flexShrink: 1,
+    textAlign: "center",
   },
 
   /* ---- Ortak panel: başlıklı içerik kartı ---- */
@@ -3772,16 +3549,16 @@ const styles = StyleSheet.create({
     padding: space.md,
   },
   /* ---- Gol kartı: iki hizalı sütun ---- */
+  /* Sütun başlığı: ayraçsız, versalsız — kartın içinde ikinci bir bölüm
+     başlığı gibi durmasın. */
   goalsHead: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.sm,
-    paddingBottom: space.sm,
-    borderBottomWidth: hairline,
-    borderBottomColor: colors.separator,
+    paddingBottom: space.xs,
   },
   goalsTeam: {
-    ...type.overline,
+    ...type.caption,
     color: colors.textTertiary,
     flex: 1,
   },
@@ -3823,10 +3600,12 @@ const styles = StyleSheet.create({
     maxWidth: "100%",
   },
   /* DAKİKALAR TABULAR: ad ne kadar uzun olursa olsun bütün dakikalar aynı
-     dikey çizgiye oturur. Ad kırpılabilir, dakika kırpılamaz. */
+     dikey çizgiye oturur. Ad kırpılabilir, dakika kırpılamaz.
+     RENK ÜÇÜNCÜL, MOR DEĞİL: mor yalnız dokunulabilir olanı işaretler
+     (kural 04); dakika bir veridir, düğme değil. */
   goalMinutes: {
-    ...type.clock,
-    color: colors.brandAccent,
+    ...type.tableNum,
+    color: colors.textTertiary,
   },
   goalTextRight: {
     textAlign: "right",
@@ -3941,15 +3720,16 @@ const styles = StyleSheet.create({
 
   /* ---- Yeniden bağlanma şeridi ---- */
   /* Şerit mürekkep bloğun İÇİNDE durur: açık bej bir kutu orada alarm gibi
-     parlıyordu. Tebeşir çerçeve + kısılmış beyaz, bilgiyi verir ama skoru
-     bastırmaz. */
+     parlıyordu. Bloktaki cam kutu dili (`inkTile`) + kısılmış beyaz, bilgiyi
+     verir ama skoru bastırmaz. */
   reconnect: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.s,
     borderRadius: radius.md,
+    backgroundColor: colors.inkTile,
     borderWidth: 1,
-    borderColor: colors.chalk,
+    borderColor: colors.inkTileBorder,
     paddingHorizontal: space.m,
     paddingVertical: space.s,
   },
@@ -4487,8 +4267,7 @@ const styles = StyleSheet.create({
   statRow: {
     paddingHorizontal: space.md,
   },
-  /* Bütün gruplar TEK kartta. Kendi kenarlığı var: `matchCanvas` neredeyse
-     beyaz olduğu için beyaz kart, gölge tek başına yeterince ayrışmıyor. */
+  /* Bütün gruplar TEK kartta; kenarlık ve gölge `Frame`ten gelir. */
   statCard: {
     paddingBottom: space.sm,
   },

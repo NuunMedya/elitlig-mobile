@@ -454,7 +454,9 @@ export default function OverviewScreen() {
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader
         title="Genel Bakış"
-        overline="ELİTLİG"
+        /* Kapsam bloğun üst başlığında, dokunulur: kâğıttaki ayrı kapsam satırı
+           aynı bilgiyi ikinci kez yazıyordu. */
+        scope={<ScopeChip tone="ink" />}
         scrollY={scrollY}
         actions={[
           {
@@ -469,11 +471,6 @@ export default function OverviewScreen() {
             onPress: () => go(signedIn ? "/bildirimler" : "/giris"),
           },
         ]}
-        bottom={
-          <View style={styles.headerBottom}>
-            <ScopeChip />
-          </View>
-        }
       />
 
       <ScrollView
@@ -777,13 +774,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.bg,
   },
-  headerBottom: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: layout.screenPadding,
-    paddingBottom: space.sm,
-  },
   content: {
+    paddingTop: space.xs,
     paddingBottom: space.huge,
   },
   /* Karusel tam genişlik kaydırır; kenar boşluğu içeride `inset` ile verilir. */

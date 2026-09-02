@@ -566,7 +566,9 @@ export default function ProfileTabScreen() {
 
   const renderSectionHeader = useCallback(
     ({ section }: { section: MenuSection }) =>
-      section.title ? <SectionHeader title={section.title} /> : null,
+      /* İçerik kabı zaten 14px dolgu basıyor; başlık kendi dolgusunu basmasın
+         ki ray kart kenarıyla hizalansın. */
+      section.title ? <SectionHeader title={section.title} style={styles.flushHeader} /> : null,
     []
   );
 
@@ -877,10 +879,15 @@ const styles = StyleSheet.create({
   /** Izgara kimlik kartına yapışmasın; bölüm başlığı kadar nefes alsın. */
   shortcuts: {
     marginTop: space.md,
+    marginBottom: space.sm,
   },
   screen: {
     flex: 1,
     backgroundColor: colors.bg,
+  },
+  /* Bölüm başlığı, dolgulu kabın içinde kendi dolgusunu basmaz. */
+  flushHeader: {
+    paddingHorizontal: 0,
   },
   content: {
     paddingHorizontal: layout.screenPadding,

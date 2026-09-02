@@ -90,7 +90,7 @@ export const EmptyState = React.memo(function EmptyState({
         <Button
           label={action.label}
           onPress={action.onPress}
-          variant="primary"
+          variant="secondary"
           size="md"
           haptic={action.haptic}
           style={styles.action}

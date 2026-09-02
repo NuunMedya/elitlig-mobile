@@ -74,6 +74,7 @@ import {
   type FormResult,
   type TabItem,
   type Tone,
+  withAlpha,
 } from "@/components/ui";
 import { getMatchKadro } from "@/lib/api/matches";
 import { getPlayer, getPlayerRankings } from "@/lib/api/players";
@@ -529,7 +530,7 @@ export default function PlayerDetailScreen() {
     staleTime: 10 * 60_000,
   });
 
-  /* Maç maç kayıt — yalnız en son maçın kimliği için (forma numarası). */
+  /* Maç maç kayıt — yalnız en son maçın kimliği için (forma numarası, mevki). */
   const profileQuery = useQuery({
     queryKey: key.profileStats(playerId),
     queryFn: () => getProfileStats(playerId),
@@ -543,8 +544,9 @@ export default function PlayerDetailScreen() {
     [profileQuery.data],
   );
 
-  /* Forma numarası oyuncu kaydında yok; en son maçın kadrosundan okunur.
-     Kadro sorgusu maç detayıyla aynı önbelleği paylaşır, ek maliyeti yok. */
+  /* Forma numarası oyuncu kaydında yok, mevki de çoğu kayıtta boş; ikisi de
+     en son maçın kadrosundan okunur. Kadro sorgusu maç detayıyla aynı
+     önbelleği paylaşır, ek maliyeti yok. */
   const kadroQuery = useQuery({
     queryKey: [...queryKeys.match(Number(lastMatchId)), "kadro"] as const,
     queryFn: () => getMatchKadro(Number(lastMatchId)),
@@ -564,14 +566,27 @@ export default function PlayerDetailScreen() {
     return index >= 0 ? index + 1 : null;
   }, [trRankQuery.data, playerId]);
 
-  const jersey = useMemo(() => {
+  /* Son kadrodaki satırım: forma no ve mevki buradan. Numara girilmemişse
+     boş dize gelir (bkz. KadroPlayer.number) → null, rozet çizilmez. */
+  const lineup = useMemo(() => {
     const kadro = kadroQuery.data;
-    if (!kadro) return null;
-    const all = [...(kadro.home ?? []), ...(kadro.away ?? [])];
+    const all = [...(kadro?.home ?? []), ...(kadro?.away ?? [])];
     const me = all.find((row) => Number(row.playerId ?? row.oyuncu_id ?? row.id) === playerId);
     const parsed = Number(me?.number);
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+    return {
+      jersey: Number.isFinite(parsed) && parsed > 0 ? parsed : null,
+      position: String(me?.position ?? "").trim() || null,
+    };
   }, [kadroQuery.data, playerId]);
+
+  /*
+   * MEVKİ İKİ KAYNAKTAN: oyuncu kaydındaki `player_position` çoğu kayıtta
+   * boş (kadro girişinde doldurulmuyor), ama son maçın kadro satırı mevkiyi
+   * taşıyor ("Forvet", "STP"). Kayıt söylüyorsa kayıt kazanır; yoksa
+   * oynadığı son mevki — uydurma değil, kadroya yazılmış veri. İkisi de
+   * boşsa halka nötr kalır ve çip çizilmez.
+   */
+  const position = String(player?.player_position ?? "").trim() || lineup.position;
 
   const openTeam = useCallback(() => {
     if (teamId) router.push(`/takim/${teamId}`);
@@ -595,8 +610,8 @@ export default function PlayerDetailScreen() {
         <PlayerIdentity
           name={playerName}
           image={player.player_img ?? null}
-          position={player.player_position ?? null}
-          jersey={jersey}
+          position={position}
+          jersey={lineup.jersey}
           teamName={team?.team_name ?? null}
           age={formatAge(player.birth_date ?? null)}
           active={isActive(player.active)}
@@ -608,7 +623,7 @@ export default function PlayerDetailScreen() {
           onOpenTeam={openTeam}
         />
       ) : null,
-    [player, playerName, jersey, team, trRank, totalMatches, totalPoints, assists, openTeam],
+    [player, playerName, position, lineup.jersey, team, trRank, totalMatches, totalPoints, assists, openTeam],
   );
 
   const actions = useMemo(
@@ -710,7 +725,7 @@ export default function PlayerDetailScreen() {
         onClose={closeShare}
         playerName={playerName}
         playerImage={player.player_img ?? null}
-        position={player.player_position ?? null}
+        position={position}
         teamName={team?.team_name ?? null}
         matches={num(player.total_matches)}
         goals={num(player.total_goals)}
@@ -739,6 +754,13 @@ const IDENTITY_AVATAR = 56;
 const IDENTITY_RING = 2;
 /** Halka ile fotoğraf arasındaki nefes: blok zemini bu aralıktan görünür. */
 const IDENTITY_RING_GAP = 2;
+
+/**
+ * Cam kutunun dikey dolgusu — maket §7/6: 7px. Boşluk ölçeğinde karşılığı
+ * yok (s=6 rakamı kenara yapıştırıyor, sm=8 kutuyu bloğun içinde bir kat
+ * yükseltiyor); kutu yüksekliği "içerik + 7px" olsun diye tek yerde adlanır.
+ */
+const TILE_PAD_Y = 7;
 
 /** Cam kutudaki tek sayı. Değeri olmayan kutu HİÇ çizilmez — uydurma yok. */
 interface Fact {
@@ -843,9 +865,15 @@ const PlayerIdentity = React.memo(function PlayerIdentity({
           {/* Bağlam satırı: MEVKİ · kulüp · yaş, sonda küçük rozetler. Boş
               değer satıra girmez; hepsi boşsa satır hiç çizilmez. */}
           <View style={styles.identityMetaRow}>
+            {/* ÇİP: mevki rengi hem halkada hem etikette; zemin aynı rengin
+                %18 tonu — koyu temada mevki renkleri pastel olduğu için dolu
+                zemin + beyaz metin okunmazdı, tonlu zemin iki temada da okunur. */}
             {line ? (
               <Text
-                style={[styles.identityPosition, { color: lineColor }]}
+                style={[
+                  styles.identityPosition,
+                  { color: lineColor, backgroundColor: withAlpha(lineColor, 0.18) },
+                ]}
                 accessibilityLabel={positionLineLabel(line)}
                 {...textScale.badge}
               >
@@ -1084,7 +1112,7 @@ function GeneralTab({
       {/* ————— Lig içi sıralamalar ————— */}
       {ranks ? (
         <>
-          <SectionHeader title="Lig içi sıralama" meta={`${ranks.total} oyuncu`} />
+          <SectionHeader style={styles.flushHeader} title="Lig içi sıralama" meta={`${ranks.total} oyuncu`} />
           <View style={styles.rankRow}>
             {ranks.points != null ? (
               <RankTile label="PUAN" value={`${ranks.points}.`} />
@@ -1109,7 +1137,7 @@ function GeneralTab({
       />
 
       {/* ————— Son 5 maç ————— */}
-      <SectionHeader title="Son maçlar" meta={recent.length ? `${recent.length} maç` : undefined} />
+      <SectionHeader style={styles.flushHeader} title="Son maçlar" meta={recent.length ? `${recent.length} maç` : undefined} />
       {profileQuery.isLoading ? (
         <SkeletonListRow count={4} />
       ) : recent.length === 0 ? (
@@ -1136,7 +1164,7 @@ function GeneralTab({
       {/* ————— İletişim: yalnız yetkili görüntüleyende alanlar yanıta girer ————— */}
       {phone || email ? (
         <>
-          <SectionHeader title="İletişim" meta="Yalnız yetkili görür" />
+          <SectionHeader style={styles.flushHeader} title="İletişim" meta="Yalnız yetkili görür" />
           <View style={styles.group}>
             {phone ? (
               <ListRow
@@ -1276,7 +1304,7 @@ function StatsTab({
       contentContainerStyle={styles.content}
       refreshControl={refresh.control}
     >
-      <SectionHeader title="Sezon sezon" meta={`${seasons.length} sezon`} />
+      <SectionHeader style={styles.flushHeader} title="Sezon sezon" meta={`${seasons.length} sezon`} />
 
       {seasons.length === 0 ? (
         <EmptyState
@@ -1349,7 +1377,7 @@ function StatsTab({
       {/* ————— Gol kırılımı ————— */}
       {goalTypes.length ? (
         <>
-          <SectionHeader title="Golleri nasıl attı" meta={`${totalGoals} gol`} />
+          <SectionHeader style={styles.flushHeader} title="Golleri nasıl attı" meta={`${totalGoals} gol`} />
           <View style={styles.card}>
             {goalTypes.map((item) => (
               <View key={item.label} style={styles.goalTypeRow}>
@@ -1377,7 +1405,7 @@ function StatsTab({
       {/* ————— Ayrıntılı toplamlar ————— */}
       {detailRows.length ? (
         <>
-          <SectionHeader title="Ayrıntılı istatistik" />
+          <SectionHeader style={styles.flushHeader} title="Ayrıntılı istatistik" />
           <View style={styles.group}>
             {detailRows.map((item, index) => (
               <ListRow
@@ -1482,7 +1510,7 @@ function MatchesTab({ playerId, scrollProps }: { playerId: number; scrollProps: 
   return (
     <View style={styles.tabBody}>
       <View style={styles.tabHeading}>
-        <SectionHeader title="Oynadığı maçlar" meta={`${rows.length} maç`} />
+        <SectionHeader style={styles.flushHeader} title="Oynadığı maçlar" meta={`${rows.length} maç`} />
       </View>
 
       <FlatList
@@ -1596,7 +1624,7 @@ function CareerTab({
       refreshControl={refresh.control}
     >
       {/* ————— Takım geçmişi ————— */}
-      <SectionHeader title="Takım geçmişi" meta={`${teams.length} kulüp`} />
+      <SectionHeader style={styles.flushHeader} title="Takım geçmişi" meta={`${teams.length} kulüp`} />
       <View style={styles.timeline}>
         {teams.map((team, index) => (
           <TimelineTeam
@@ -1613,7 +1641,7 @@ function CareerTab({
       {/* ————— Transferler ————— */}
       {transfers.length > 1 ? (
         <>
-          <SectionHeader title="Transferler" meta={`${transfers.length - 1} geçiş`} />
+          <SectionHeader style={styles.flushHeader} title="Transferler" meta={`${transfers.length - 1} geçiş`} />
           <View style={styles.group}>
             {transfers
               .filter((item) => item.from != null)
@@ -1636,7 +1664,7 @@ function CareerTab({
       ) : null}
 
       {/* ————— Disiplin ————— */}
-      <SectionHeader
+      <SectionHeader style={styles.flushHeader}
         title="Disiplin kayıtları"
         meta={discipline.length ? `${discipline.length} maç` : undefined}
       />
@@ -1880,7 +1908,7 @@ const Achievements = React.memo(function Achievements({
      kullanıldığında kendini devre dışı sayıp soluk boyanıyor. */
   return (
     <>
-      <SectionHeader title="Başarılar" />
+      <SectionHeader style={styles.flushHeader} title="Başarılar" />
       <View style={styles.badgeWrap}>
         {badges.map((badge) => (
           <Badge key={badge.label} label={badge.label} tone={badge.tone} size="sm" />
@@ -2277,6 +2305,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.bg,
   },
+  /* İçerik kabı 14px dolgu basıyor; başlık kendi dolgusunu basmaz. */
+  flushHeader: {
+    paddingHorizontal: 0,
+  },
   content: {
     paddingHorizontal: layout.screenPadding,
     /* Üst nefes: kâğıt mor bloğun kenarından hemen başlamasın. */
@@ -2330,8 +2362,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  /* Forma numarası: halkanın sağ altında, blok renginde küçük bir pul —
-     halkanın üstüne biner, cam çerçevesi onu fotoğraftan ayırır. */
+  /* Forma numarası: halkanın sağ altında, blok zemininde küçük bir rozet
+     (maket §7/7) — halkanın üstüne biner; beyaz-saydam kenar onu hem
+     fotoğraftan hem halkadan ayırır. Lavanta hap çerçevesi DEĞİL: rozet
+     dokunulmaz, hap dili dokunulana ayrılır. */
   jersey: {
     position: "absolute",
     right: -space.xs,
@@ -2342,12 +2376,15 @@ const styles = StyleSheet.create({
     borderRadius: radius.xs,
     backgroundColor: colors.inkBlock,
     borderWidth: 1,
-    borderColor: colors.inkPillBorder,
+    borderColor: colors.borderOnDark,
     alignItems: "center",
     justifyContent: "center",
   },
+  /* Rakam Archivo Bold (maket: Archivo 10 700): forma numarası bir SAYIDIR,
+     rozet metni değil; Inter'deki `micro` etiket içindir. */
   jerseyText: {
     ...type.micro,
+    fontFamily: fonts.bold,
     color: colors.onDark,
     letterSpacing: 0,
   },
@@ -2368,6 +2405,10 @@ const styles = StyleSheet.create({
   /* Mevki etiketi: üç harf, rengi `positionColor` ile satır içinde verilir. */
   identityPosition: {
     ...type.micro,
+    paddingHorizontal: space.s,
+    paddingVertical: 1,
+    borderRadius: radius.xs,
+    overflow: "hidden",
   },
   identityMeta: {
     ...type.caption,
@@ -2379,8 +2420,10 @@ const styles = StyleSheet.create({
     color: colors.onDark,
   },
   /*
-   * CAM KUTULAR — sayılar bloğun içinde, yarı saydam beyaz zeminde, lavanta
-   * çerçeveyle (Tabs ve başlık eylemleriyle aynı pul dili). Kutu sayısı
+   * CAM KUTULAR — sayılar bloğun içinde, SESSİZ camda (maket §7/6): %9 beyaz
+   * zemin, %12 beyaz kenar, 14px köşe. Hap dili (inkPill + lavanta çerçeve)
+   * DEĞİL: hap dokunulan şeydir (sekme, kapsam çipi), kutu yalnız okunur;
+   * ikisi aynı zemini taşısaydı sayılar düğme gibi dururdu. Kutu sayısı
    * veriye bağlıdır: asist kapsam listesinden gelmezse, ortalama maç yoksa
    * kutu yoktur; kalanlar genişliği eşit paylaşır.
    */
@@ -2391,11 +2434,11 @@ const styles = StyleSheet.create({
   fact: {
     flex: 1,
     alignItems: "center",
-    paddingVertical: space.sm,
+    paddingVertical: TILE_PAD_Y,
     borderRadius: radius.md,
-    backgroundColor: colors.inkPill,
+    backgroundColor: colors.inkTile,
     borderWidth: 1,
-    borderColor: colors.inkPillBorder,
+    borderColor: colors.inkTileBorder,
   },
   factValue: {
     ...type.metricSm,
@@ -2550,9 +2593,11 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     paddingVertical: space.m,
   },
+  /* Rakam mürekkep rengidir: kâğıt üstünde mor, dokunulan ve vurgulanan
+     şeye ayrılmıştır; sıra bir bilgidir, çağrı değil. */
   rankValue: {
     ...type.scoreMd,
-    color: colors.brandAccent,
+    color: colors.textPrimary,
   },
   rankLabel: {
     ...type.micro,

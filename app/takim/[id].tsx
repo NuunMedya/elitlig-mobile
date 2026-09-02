@@ -654,6 +654,11 @@ export default function TeamDetailScreen() {
   const openH2h = useCallback(() => setH2hOpen(true), []);
   const closeH2h = useCallback(() => setH2hOpen(false), []);
 
+  /* "Sıradaki maç" boş durumunun TEK çıkışı. Sekme değişimi `changeTab`tan
+     geçer ki rota parametresi ve kaydırma sıfırlaması derin bağlantıyla
+     birebir aynı yolu izlesin. */
+  const openFixtures = useCallback(() => changeTab("fikstur"), [changeTab]);
+
   /** Rakip seçilince eski ekrandaki karşılaştırma sayfasına aynı parametrelerle gidilir. */
   const pickRival = useCallback(
     (rivalId: number, rivalName: string) => {
@@ -796,6 +801,7 @@ export default function TeamDetailScreen() {
           onAddCalendar={addToCalendar}
           onPickScope={scope.openScopeSheet}
           onCompare={openH2h}
+          onOpenFixtures={openFixtures}
         />
       ) : tab === "fikstur" ? (
         <MatchesTab
@@ -899,6 +905,13 @@ type LogoFor = (teamId?: number | null, teamName?: string | null) => string | nu
 /* ══════════════════════════════════════════════════════════════════════════
    KİMLİK — mor bloğun içinde: arma, ad, bağlam, cam kutular, form
    ══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Cam kutunun dikey dolgusu — maket §7/6: 7px. Boşluk ölçeğinde karşılığı
+ * yok (s=6 rakamı kenara yapıştırıyor, sm=8 kutuyu bloğun içinde bir kat
+ * yükseltiyor); kutu yüksekliği "içerik + 7px" olsun diye tek yerde adlanır.
+ */
+const TILE_PAD_Y = 7;
 
 /** Cam kutudaki tek sayı. Değeri olmayan kutu HİÇ çizilmez — uydurma yok. */
 interface Fact {
@@ -1079,6 +1092,8 @@ interface GeneralTabProps extends TabShell {
   onAddCalendar: (match: ApiMatch) => void;
   onPickScope: () => void;
   onCompare: () => void;
+  /** "Sıradaki maç" boşken tek çıkış: Fikstür sekmesine geçer. */
+  onOpenFixtures: () => void;
 }
 
 function GeneralTab({
@@ -1104,6 +1119,7 @@ function GeneralTab({
   onAddCalendar,
   onPickScope,
   onCompare,
+  onOpenFixtures,
 }: GeneralTabProps) {
   const lastFive = useMemo(() => recent.slice(0, 5), [recent]);
 
@@ -1142,6 +1158,7 @@ function GeneralTab({
           icon="calendar-outline"
           title="Yaklaşan maç yok"
           body="Fikstüre maç eklendiğinde burada geri sayımıyla görünecek."
+          action={{ label: "Fikstüre git", onPress: onOpenFixtures }}
           variant="inline"
           compact
         />
@@ -2365,6 +2382,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   content: {
+    paddingTop: space.md,
     paddingBottom: space.huge,
   },
   /*
@@ -2415,8 +2433,10 @@ const styles = StyleSheet.create({
     color: colors.brandOnDark,
   },
   /*
-   * CAM KUTULAR — sayılar bloğun içinde, yarı saydam beyaz zeminde, lavanta
-   * çerçeveyle (Tabs ve başlık eylemleriyle aynı pul dili). Kutu sayısı
+   * CAM KUTULAR — sayılar bloğun içinde, SESSİZ camda (maket §7/6): %9 beyaz
+   * zemin, %12 beyaz kenar, 14px köşe. Hap dili (inkPill + lavanta çerçeve)
+   * DEĞİL: hap dokunulan şeydir (sekme, kapsam çipi), kutu yalnız okunur;
+   * ikisi aynı zemini taşısaydı sayılar düğme gibi dururdu. Kutu sayısı
    * veriye bağlıdır: kapsam tutmuyorsa sıra/puan/averaj, liste gelmeden
    * kadro yoktur; kalan kutular genişliği eşit paylaşır.
    */
@@ -2427,11 +2447,11 @@ const styles = StyleSheet.create({
   fact: {
     flex: 1,
     alignItems: "center",
-    paddingVertical: space.sm,
+    paddingVertical: TILE_PAD_Y,
     borderRadius: radius.md,
-    backgroundColor: colors.inkPill,
+    backgroundColor: colors.inkTile,
     borderWidth: 1,
-    borderColor: colors.inkPillBorder,
+    borderColor: colors.inkTileBorder,
   },
   factValue: {
     ...type.metricSm,

@@ -5,10 +5,13 @@
  * ekran tarafından verilir (canlı maç > bugünkü maç > sıradaki maç); bu
  * bileşen yalnız çizer.
  *
- * NEDEN MÜREKKEP BLOK: uygulamanın geri kalanı beyaz kartlardan kuruludur.
- * Tek bir koyu kart, hiçbir yeni renk ya da tipografi katmadan "burası
- * ekranın merkezi" der. Aynı blok maç detayının skor şeridinde de kullanılır;
- * vitrine dokunan kullanıcı tanıdık bir yüzeye iner.
+ * NEDEN BEYAZ KART (mürekkep blok değil): Kural 01 — mor yalnız BAŞLIK
+ * bloğunda ve ALT RAYDA yaşar; kâğıdın üstünde ikinci bir mor blok, başlığın
+ * "burası kimlik" sözünü tekrarlayıp zayıflatıyordu ve kart, kartlar
+ * arasında değil ayrı bir uygulamadan gelmiş gibi duruyordu. Vitrin artık
+ * maketin "Kulübüm" kartıyla (tema.html §7/1 ".card") aynı dili konuşur:
+ * beyaz yüzey + hairline kenarlık + 1. seviye gölge. Onu manşet yapan şey
+ * zemin değil KONUM (kâğıdın ilk kartı) ve ÖLÇÜ (26px skor).
  *
  * NEDEN SKOR ORTADA DEĞİL: iki takım adı iki satırda, skor sağda hizalı
  * durur. Bu, alttaki maç listesinin satır düzeniyle AYNI okuma eksenidir;
@@ -17,23 +20,13 @@
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { LinearGradient } from "expo-linear-gradient";
 import React from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
-import { colors, elevate, radius, space, textScale, type, upperTR } from "@/theme";
+import { colors, elevate, hairline, radius, space, textScale, type, upperTR } from "@/theme";
+import { GradientFill } from "./GradientFill";
 import { LiveBadge } from "./LiveBadge";
 import { Touchable } from "./Pressable";
 import { TeamLogo } from "./TeamLogo";
-
-/**
- * Mürekkep kartın ışık yönü — YATAY, SAĞDAN SOLA.
- *
- * Köşegen ışık kartı silindir gibi yuvarlıyordu; ayrıca aynı ekrandaki
- * `Card`/`ListRow` yüzeyleri sağdan sola ışıdığı için iki ayrı ışık kaynağı
- * okunuyordu. Tek eksen, tek kaynak.
- */
-const GRADIENT_START = { x: 1, y: 0.5 } as const;
-const GRADIENT_END = { x: 0, y: 0.5 } as const;
 
 export interface SpotlightTeam {
   name: string;
@@ -75,51 +68,46 @@ export const SpotlightCard = React.memo(function SpotlightCard({
 }: SpotlightCardProps) {
   const hasScore = typeof home.score === "number" && typeof away.score === "number";
 
-  const side = (team: SpotlightTeam, winner: boolean) => (
-    <View style={styles.side}>
-      <TeamLogo logo={team.logo} name={team.name} size={22} />
-      <Text
-        style={[styles.teamName, winner ? styles.teamNameWinner : null]}
-        numberOfLines={1}
-        {...textScale.dense}
-      >
-        {team.name}
-      </Text>
-      {hasScore ? (
-        <Text
-          style={[styles.score, winner ? styles.scoreWinner : null]}
-          {...textScale.dense}
-        >
-          {team.score}
-        </Text>
-      ) : null}
-    </View>
-  );
-
   // Kazanan kalın + textPrimary, kaybeden sönük (§1.0/4). Berabere ikisi de normal.
   const homeWins = hasScore && (home.score as number) > (away.score as number);
   const awayWins = hasScore && (away.score as number) > (home.score as number);
+  const decided = homeWins || awayWins;
 
   /*
-   * MÜREKKEP KART. Vitrin maçı ana ekranın tek "manşet"idir ve altındaki
-   * beyaz kartlarla aynı yüzeyde durursa manşet olmaktan çıkar. Koyu blok onu
-   * listeden ayırır; maç detayındaki skor bloğuyla da aynı dili konuşur, yani
-   * kullanıcı vitrine dokunduğunda gittiği yer tanıdık gelir.
-   *
-   * Gradyan iki duraklıdır ve KÖŞEGENDİR: tek renk koyu bir dikdörtgen düz
-   * kalıyordu, köşegen ışık kartı hafifçe kabartıyor.
+   * Taraf satırı. Skor CANLIYKEN iki tarafta da canlı kırmızısıdır — maç
+   * bitmeden "kazanan" yoktur, o anki üstünlük renkle işaretlenmez; bittiğinde
+   * kaybeden taraf adıyla birlikte üçüncül griye çekilir (maket ".mrow .lose").
    */
+  const side = (team: SpotlightTeam, winner: boolean) => {
+    const loser = decided && !winner;
+    return (
+      <View style={styles.side}>
+        <TeamLogo logo={team.logo} name={team.name} size={22} />
+        <Text
+          style={[styles.teamName, loser ? styles.muted : null]}
+          numberOfLines={1}
+          {...textScale.dense}
+        >
+          {team.name}
+        </Text>
+        {hasScore ? (
+          <Text
+            style={[styles.score, live ? styles.scoreLive : loser ? styles.muted : null]}
+            {...textScale.dense}
+          >
+            {team.score}
+          </Text>
+        ) : null}
+      </View>
+    );
+  };
+
   const content = (
-    <View style={styles.gradient}>
-      <LinearGradient
-        colors={colors.gradientInk}
-        start={GRADIENT_START}
-        end={GRADIENT_END}
-        style={StyleSheet.absoluteFill}
-        pointerEvents="none"
-      />
+    <>
+      {/* Işıklı yüzey — `Card` ile aynı katman; yerleşimi etkilemez. */}
+      <GradientFill radius="lg" />
       <View style={styles.head}>
-        {live ? <LiveBadge minute={minute} size="sm" onDark /> : null}
+        {live ? <LiveBadge minute={minute} size="sm" /> : null}
         <Text style={styles.eyebrow} numberOfLines={1} {...textScale.badge}>
           {upperTR(eyebrow)}
         </Text>
@@ -149,11 +137,11 @@ export const SpotlightCard = React.memo(function SpotlightCard({
             {footnote}
           </Text>
           {onPress ? (
-            <Ionicons name="chevron-forward" size={12} color={colors.onDarkMuted} />
+            <Ionicons name="chevron-forward" size={12} color={colors.textTertiary} />
           ) : null}
         </View>
       ) : null}
-    </View>
+    </>
   );
 
   if (!onPress) {
@@ -180,16 +168,14 @@ export const SpotlightCard = React.memo(function SpotlightCard({
 });
 
 const styles = StyleSheet.create({
+  /**
+   * Kart kabuğu: `elevate(1)` yüzey + hairline kenarlık + gölgeyi verir,
+   * yarıçap KART ölçüsü (18). `overflow: "hidden"` YOK — iOS'ta gölgeyi
+   * kırpardı; köşeleri gradyan katmanı kendi taşır (bkz. GradientFill).
+   */
   card: {
-    ...elevate(2),
-    borderWidth: 0,
-    borderRadius: radius.xxl,
-    overflow: "hidden",
-    backgroundColor: colors.inkBlock,
-  },
-  gradient: {
-    // Gradyan yüklenemezse düz mürekkep zemin altta durur.
-    backgroundColor: colors.inkBlock,
+    ...elevate(1),
+    borderRadius: radius.lg,
     padding: space.md,
     gap: space.sm,
   },
@@ -198,14 +184,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: space.s,
   },
-  /* Mürekkep blok üstünde `brand` mor üstüne mor olurdu (~1,8:1). */
   eyebrow: {
     ...type.overline,
-    color: colors.brandOnDark,
+    color: colors.brandAccent,
   },
   context: {
     ...type.caption,
-    color: colors.onDarkMuted,
+    color: colors.textTertiary,
     marginLeft: "auto",
     flexShrink: 1,
   },
@@ -219,20 +204,23 @@ const styles = StyleSheet.create({
   },
   teamName: {
     ...type.h2,
-    color: colors.onDarkMuted,
+    color: colors.textPrimary,
     flex: 1,
   },
-  teamNameWinner: {
-    color: colors.onDark,
-  },
+  /* Panel metriği (26): satır başlığından iki kademe büyük, ekranın en iri
+     rakamı — kartı manşet yapan ölçü budur, zemin değil. */
   score: {
-    ...type.scoreLg,
-    color: colors.onDarkMuted,
+    ...type.metric,
+    color: colors.textPrimary,
     minWidth: 24,
     textAlign: "right",
   },
-  scoreWinner: {
-    color: colors.onDark,
+  scoreLive: {
+    color: colors.live,
+  },
+  /** Kaybeden taraf: ad ve skor birlikte üçüncül griye çekilir. */
+  muted: {
+    color: colors.textTertiary,
   },
   /** Skor yoksa saat/durum sağ üstte, iki takım satırının ortasında durur. */
   statusBox: {
@@ -244,19 +232,19 @@ const styles = StyleSheet.create({
   },
   statusText: {
     ...type.h2,
-    color: colors.onDark,
+    color: colors.textPrimary,
   },
   footer: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.s,
     paddingTop: space.sm,
-    borderTopWidth: 1,
-    borderTopColor: colors.chalk,
+    borderTopWidth: hairline,
+    borderTopColor: colors.separator,
   },
   footnote: {
     ...type.caption,
-    color: colors.onDarkMuted,
+    color: colors.textTertiary,
     flex: 1,
   },
 });

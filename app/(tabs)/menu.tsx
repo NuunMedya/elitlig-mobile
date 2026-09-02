@@ -295,6 +295,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   listContent: {
+    paddingTop: space.md,
     paddingBottom: space.xxxl,
   },
   /*

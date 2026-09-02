@@ -11,12 +11,14 @@
  * ekrandaki hiçbir listeyi kopyalamaz, yalnız kesitini gösterir.
  *
  * NEDEN BU DÜZEN: ekran, diğer bütün sekmeler gibi MOR BLOK başlıkla açılır
- * (`ScreenHeader`: üst başlıkta lig adı, solda "Maçlar", sağda arama ve takvim
- * ikonları — tek satır, 52px). Eski beyaz başlık tek istisnaydı ve sekmeler
- * arasında geçişte çerçeve değişiyordu. Kapsam çipi, gün şeridi, segment ve
- * favori süzgeci VERİYİ SÜZEN denetimlerdir; başlığın parçası değil, kâğıda
- * aittirler — bloğun altında `bottom` yuvasında dururlar (takımlar/oyuncular
- * sekmeleriyle aynı hiza). Kaydırınca blok daralır, üst başlık söner; geri
+ * (`ScreenHeader`: üst başlıkta dokunulur kapsam çipi "Ankara · FREELİG ·
+ * 15. Sezon", solda "Maçlar", sağda arama ve takvim ikonları — tek satır,
+ * 52px). Eski beyaz başlık tek istisnaydı ve sekmeler arasında geçişte
+ * çerçeve değişiyordu. Gün şeridi, segment ve favori süzgeci VERİYİ SÜZEN
+ * denetimlerdir; başlığın parçası değil, kâğıda aittirler — bloğun altında
+ * `bottom` yuvasında dururlar (takımlar/oyuncular sekmeleriyle aynı hiza).
+ * Kapsam ise süzgeç değil AYARDIR; bloğun üst başlığında bir kez yazılır,
+ * kâğıtta tekrarlanmaz. Kaydırınca blok daralır, üst başlık söner; geri
  * kalan her piksel liste.
  *
  * NEDEN LİGE GÖRE GRUPLAMA: bir günde birden çok ligin maçı olabilir; tarih
@@ -653,11 +655,12 @@ export default function MatchesScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      {/* MOR BLOK — diğer sekmelerle aynı çerçeve: üst başlıkta lig, solda ad,
-          sağda arama ve takvim. Süzgeçler bloğun altında kâğıtta (`bottom`). */}
+      {/* MOR BLOK — diğer sekmelerle aynı çerçeve: üst başlıkta kapsam çipi,
+          solda ad, sağda arama ve takvim. Süzgeçler bloğun altında kâğıtta
+          (`bottom`). */}
       <ScreenHeader
         title="Maçlar"
-        overline={scope.leagueLabel || "ELİTLİG"}
+        scope={<ScopeChip tone="ink" />}
         scrollY={scrollY}
         actions={[
           { icon: "search-outline", accessibilityLabel: "Ara", onPress: openSearch },
@@ -669,12 +672,6 @@ export default function MatchesScreen() {
         ]}
         bottom={
           <>
-            {/* Kapsam çipi kendi satırında: gün şeridi tam genişlik ister,
-                çip onun yanına sığmaz — diğer sekmelerdeki `scopeRow` kalıbı. */}
-            <View style={styles.scopeRow}>
-              <ScopeChip />
-            </View>
-
             {/* Canlı segmentinde gün kavramı yok: şerit yerini yenileme satırına bırakır. */}
             {tab === "canli" ? (
               <View style={styles.autoRow}>
@@ -1048,14 +1045,6 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.bg,
-  },
-
-  /* Kapsam çipi — mor bloğun hemen altında, kâğıtta; takımlar/oyuncular ile
-     aynı sol hiza. Alt boşluk yok: gün şeridi (56px) kendi dikey alanını taşır. */
-  scopeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: layout.screenPadding,
   },
 
   /* Canlı segmentinin şerit yerine geçen satırı */

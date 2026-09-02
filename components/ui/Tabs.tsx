@@ -142,11 +142,21 @@ function TabsBase<T extends string>({
    */
   const widestLabel = labelWidths.reduce((max, width) => Math.max(max, width), 0);
   const equalSlot = containerWidth / Math.max(1, items.length);
+  /*
+   * KARAR, BÜTÜN ETİKETLER ÖLÇÜLMEDEN VERİLMEZ. Eski koşul etiket ölçümü yokken
+   * de "sığıyor" diyebiliyordu; şerit bir kare eşit kipe geçip ölçümler
+   * gelince kaydırmaya dönüyor ve bu gidiş-geliş sırasında sekme kutuları ile
+   * hap birbirinden kopuyordu (web'de konum değişimi `onLayout` üretmez).
+   * Ölçüm tamamlanana dek şerit doğal genişlikte (kaydırma) kalır; karar bir
+   * kez verilir.
+   */
+  const labelsMeasured = items.length > 0 && items.every((_, i) => (labelWidths[i] ?? 0) > 0);
   const fits =
     containerWidth > 0 &&
     contentWidth > 0 &&
+    labelsMeasured &&
     contentWidth <= containerWidth + 1 &&
-    (widestLabel === 0 || widestLabel + TAB_PADDING * 2 <= equalSlot + 1);
+    widestLabel + TAB_PADDING * 2 <= equalSlot + 1;
   const mode: "equal" | "scroll" =
     distribute === "equal" ? "equal" : distribute === "scroll" ? "scroll" : fits ? "equal" : "scroll";
 
@@ -155,16 +165,18 @@ function TabsBase<T extends string>({
     : 0;
 
   /*
-   * HAP DAİMA ÖLÇÜLEN YERLEŞİMDEN HESAPLANIR. Eşit kipte hap konumu eskiden
-   * `equalWidth × index` diye TÜRETİLİYORDU, sekmeler ise ölçülen kutularına
-   * çiziliyordu; kip bir kare geç değiştiğinde ("sığıyor" kararı ölçümlerden
-   * sonra gelir) hap eşit-yuva ölçüsüyle, etiketler doğal genişlikle
-   * kalıyor ve hap komşu etiketin üstüne biniyordu (koyu temada oyuncu
-   * sayfasında yakalandı). Tek doğruluk kaynağı: her sekmenin kendi
-   * `onLayout`u — kip ne olursa olsun hap, etiketin gerçekten bulunduğu yeri
-   * sarar.
+   * HAP GEOMETRİSİ KİPE GÖRE: eşit kipte sekmelerin genişliği ZATEN dayatılıyor
+   * (`width: equalWidth`), hap da aynı aritmetikten gelir — ölçüm beklenmez,
+   * ölçümün gecikmesi ya da web'de konum değişiminin `onLayout` üretmemesi
+   * hapı yanlış yere koyamaz. Kaydırma kipinde genişlikler doğaldır ve yalnız
+   * ölçümle bilinebilir; orada her sekmenin kendi `onLayout`u kullanılır.
+   * Kip kararı bütün etiketler ölçülmeden verilmediği için (bkz. `fits`)
+   * eşit ↔ kaydırma gidiş-gelişi de yoktur.
    */
-  const active: TabLayout | undefined = layouts[index];
+  const active: TabLayout | undefined =
+    mode === "equal" && equalWidth > 0
+      ? { x: equalWidth * index, width: equalWidth }
+      : layouts[index];
 
   const indicatorWidth = active ? Math.max(16, active.width - INDICATOR_INSET * 2) : 0;
   const indicatorX = active ? active.x + (active.width - indicatorWidth) / 2 : 0;
@@ -198,11 +210,6 @@ function TabsBase<T extends string>({
     setLabelWidths([]);
   }, [labelKey]);
 
-  /* Kip değişince (eşit ↔ kaydırma) sekme kutuları yeniden ölçülür; eski
-     ölçümlerle bir kare bile çizmemek için yerleşim sıfırlanır. */
-  useEffect(() => {
-    setLayouts([]);
-  }, [mode]);
 
   const handleTabLayout = useCallback((i: number, event: LayoutChangeEvent) => {
     const { x, width } = event.nativeEvent.layout;
@@ -271,7 +278,11 @@ function TabsBase<T extends string>({
           const isActive = item.key === value;
           return (
             <Touchable
-              key={item.key}
+              /* Anahtar kipi de taşır: eşit ↔ kaydırma geçişinde sekmeler
+                 yeniden kurulur ve her kutu için taze `onLayout` gelir — yalnız
+                 genişliği değil KONUMU değişen bir kutu web'de yeniden
+                 ölçülmüyordu ve hap eski yerinde kalıyordu. */
+              key={`${mode}-${item.key}`}
               feedback="row"
               haptic="none"
               onPress={() => {

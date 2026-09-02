@@ -12,7 +12,7 @@
 
 import { memo, useCallback, useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { colors, radius, textScale, touchSlop, type } from "@/theme";
+import { colors, fonts, textScale, touchSlop, type } from "@/theme";
 import { haptics } from "@/lib/haptics";
 
 export type FormResult = "W" | "D" | "L";
@@ -22,7 +22,7 @@ export interface FormChipsProps {
   form: string | FormResult[];
   /** En fazla kaç maç (varsayılan 5), sondan alınır */
   limit?: number;
-  /** 14 / 18 */
+  /** 13 / 18 */
   size?: "xs" | "sm";
   /** Basınca ilgili maça git — index, en eskiden en yeniye sıralı dizideki sıradır */
   onPressItem?: (index: number) => void;
@@ -127,7 +127,10 @@ const Chip = memo(function Chip({
         slot.result ? TONE_STYLE[slot.result] : styles.chipEmpty,
       ]}
     >
-      <Text style={[styles.letter, !slot.result && styles.letterEmpty]} {...textScale.badge}>
+      <Text
+        style={[styles.letter, size === "xs" ? styles.letterXs : null, !slot.result && styles.letterEmpty]}
+        {...textScale.badge}
+      >
         {slot.result ? LETTER[slot.result] : "—"}
       </Text>
     </View>
@@ -153,21 +156,33 @@ const styles = StyleSheet.create({
     gap: 3,
     alignItems: "center",
   },
+  /*
+   * KARE ÇİP, 4px KÖŞE (maket ".form i"). Yarıçap ölçeğinin en küçük tokenı
+   * (radius.xs = 6) 13px'lik bir karenin yarısına yaklaşıyor ve çipi DAİREYE
+   * çeviriyordu; puan tablosundaki form dizisi nokta nokta okunuyordu. 4px,
+   * kareyi kare bırakır — çıplak sayı yalnız bu sınırda (≤4) serbesttir.
+   */
   chip: {
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: radius.xs,
+    borderRadius: 4,
   },
-  chipXs: { width: 14, height: 14 },
+  chipXs: { width: 13, height: 13 },
   chipSm: { width: 18, height: 18 },
   chipWin: { backgroundColor: colors.win },
   chipDraw: { backgroundColor: colors.draw },
   chipLoss: { backgroundColor: colors.loss },
   chipEmpty: { backgroundColor: colors.surface3 },
+  /** Harf Archivo kalın: kare içinde dar ve dik durur, Inter'in yuvarlak G'si taşıyordu. */
   letter: {
     ...type.micro,
+    fontFamily: fonts.bold,
     color: colors.textOnStatus,
     letterSpacing: 0,
+  },
+  letterXs: {
+    fontSize: 8,
+    lineHeight: 10,
   },
   letterEmpty: {
     color: colors.textTertiary,
