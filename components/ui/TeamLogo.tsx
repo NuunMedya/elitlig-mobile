@@ -10,6 +10,14 @@
  * amblem "buton" gibi görünüyordu), yedek metin `textTertiary`, zemin `surface2`,
  * `loading` durumunda iskelet kutusu, kaybeden takım satırında `dimmed`.
  *
+ * KARO İKİ TEMADA DA AÇIKTIR. Kulüp logoları açık zemine göre çizilir; koyu
+ * temada karo `surface2` (koyu mor) olunca siyah ağırlıklı amblemler (FC
+ * ANGARA) zeminde kayboluyordu — logo görseline dokunulamayacağına göre
+ * arkasındaki karo açılır. Koyu temada karo `inverse` (açık blok), üstündeki
+ * yedek baş harfler `onInverse`; açık temada `surface2` + `textTertiary`.
+ * Karonun kenarı her iki temada hairline `border` (maketteki ".crest" gibi
+ * köşeli, çerçeveli).
+ *
  * PERFORMANS: liste satırında iki kez render edilir; `memo` ile sarılı ve
  * ölçüye bağlı stil nesneleri `useMemo` ile tutulur (her satır render'ında yeni
  * nesne üretmek FlatList'te kayda değer çöp üretiyordu).
@@ -17,7 +25,7 @@
 
 import { memo, useEffect, useMemo, useState } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
-import { colors, layout, radius, space, textScale, type } from "@/theme";
+import { colors, hairline, isDark, layout, radius, space, textScale, type } from "@/theme";
 import { initials, mediaUrl } from "@/lib/format";
 
 export interface TeamLogoProps {
@@ -39,10 +47,11 @@ export interface TeamLogoProps {
    */
   plain?: boolean;
   /**
-   * Koyu bir bloğun üstünde mi. Logosu olmayan takımlarda yedek baş harfler
-   * `textSecondary` ile çizilir; mürekkep bir tabağın üstünde bu neredeyse
-   * görünmez olur (bu ligdeki takımların çoğunun logosu yok, yani istisna
-   * değil VARSAYILAN durum). Bayrak baş harfleri `onDark`a çevirir.
+   * Koyu bir bloğun üstünde ZEMİNSİZ (`plain`) çizim mi. Yedek baş harfler
+   * normalde karonun mürekkebiyle çizilir; karo yokken mürekkep bir tabağın
+   * üstünde görünmez olur (bu ligdeki takımların çoğunun logosu yok, yani
+   * istisna değil VARSAYILAN durum). Bayrak baş harfleri `onDark`a çevirir.
+   * Karolu çizimde yok sayılır — karo zaten açıktır.
    */
   onDark?: boolean;
 }
@@ -92,7 +101,7 @@ export const TeamLogo = memo(function TeamLogo({
         accessibilityLabel={name ? `${name} amblemi` : "Takım amblemi"}
       >
         <Text
-          style={[styles.initials, initialsSize, onDark ? styles.initialsOnDark : null]}
+          style={[styles.initials, initialsSize, plain && onDark ? styles.initialsOnDark : null]}
           numberOfLines={1}
           {...textScale.badge}
         >
@@ -114,9 +123,16 @@ export const TeamLogo = memo(function TeamLogo({
   );
 });
 
+/** Amblemin arkasındaki açık karo — iki temada da logodan açık kalır. */
+const tile = {
+  backgroundColor: isDark ? colors.inverse : colors.surface2,
+  borderWidth: hairline,
+  borderColor: colors.border,
+} as const;
+
 const styles = StyleSheet.create({
   image: {
-    backgroundColor: colors.surface2,
+    ...tile,
   },
   /** Filigran: zemin ve çerçeve yok, yalnız görselin kendisi. */
   plain: {
@@ -125,18 +141,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   fallback: {
-    backgroundColor: colors.surface2,
+    ...tile,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
   },
   initials: {
     ...type.micro,
     // Baş harfler dar bir kutuya sığar: `micro` tokenının +0.4 harf aralığı
     // 22px'lik amblemde iki harfi kenara dayayıp üç nokta üretiyordu.
     letterSpacing: 0,
-    color: colors.textTertiary,
+    // Karonun mürekkebi: koyu temada karo açık blok olduğu için `onInverse`.
+    color: isDark ? colors.onInverse : colors.textTertiary,
     paddingHorizontal: space.xxs,
   },
   initialsOnDark: {

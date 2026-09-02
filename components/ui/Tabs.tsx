@@ -28,7 +28,7 @@
  * ortalanır — kullanıcı hangi sekmede olduğunu daima görür.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
   ScrollView,
@@ -90,11 +90,16 @@ interface TabLayout {
   width: number;
 }
 
-/** Göstergenin sekme kenarlarından içeri çekilme payı. */
-const INDICATOR_INSET = space.m;
+/**
+ * Göstergenin sekme kenarlarından içeri çekilme payı — DOLGUDAN KÜÇÜK olmak
+ * zorunda. Önceki değer (10px) sekme dolgusundan (6px) büyüktü: hap, etiketin
+ * her iki yanından 4px İÇERİDE kalıyor ve "Gol Krallığı" gibi etiketler hapın
+ * dışına taşıyordu. Şimdi hap, etiketi iki yandan 10px sarar.
+ */
+const INDICATOR_INSET = space.xxs;
 
 /** `styles.tab` yatay dolgusu — kırpılma hesabı bunu bilmek zorunda. */
-const TAB_PADDING = space.s;
+const TAB_PADDING = space.md;
 
 function TabsBase<T extends string>({
   items,
@@ -137,11 +142,21 @@ function TabsBase<T extends string>({
    */
   const widestLabel = labelWidths.reduce((max, width) => Math.max(max, width), 0);
   const equalSlot = containerWidth / Math.max(1, items.length);
+  /*
+   * KARAR, BÜTÜN ETİKETLER ÖLÇÜLMEDEN VERİLMEZ. Eski koşul etiket ölçümü yokken
+   * de "sığıyor" diyebiliyordu; şerit bir kare eşit kipe geçip ölçümler
+   * gelince kaydırmaya dönüyor ve bu gidiş-geliş sırasında sekme kutuları ile
+   * hap birbirinden kopuyordu (web'de konum değişimi `onLayout` üretmez).
+   * Ölçüm tamamlanana dek şerit doğal genişlikte (kaydırma) kalır; karar bir
+   * kez verilir.
+   */
+  const labelsMeasured = items.length > 0 && items.every((_, i) => (labelWidths[i] ?? 0) > 0);
   const fits =
     containerWidth > 0 &&
     contentWidth > 0 &&
+    labelsMeasured &&
     contentWidth <= containerWidth + 1 &&
-    (widestLabel === 0 || widestLabel + TAB_PADDING * 2 <= equalSlot + 1);
+    widestLabel + TAB_PADDING * 2 <= equalSlot + 1;
   const mode: "equal" | "scroll" =
     distribute === "equal" ? "equal" : distribute === "scroll" ? "scroll" : fits ? "equal" : "scroll";
 
@@ -149,10 +164,19 @@ function TabsBase<T extends string>({
     ? containerWidth / Math.max(1, items.length)
     : 0;
 
-  const active: TabLayout | undefined = useMemo(() => {
-    if (mode === "equal" && equalWidth > 0) return { x: equalWidth * index, width: equalWidth };
-    return layouts[index];
-  }, [equalWidth, index, layouts, mode]);
+  /*
+   * HAP GEOMETRİSİ KİPE GÖRE: eşit kipte sekmelerin genişliği ZATEN dayatılıyor
+   * (`width: equalWidth`), hap da aynı aritmetikten gelir — ölçüm beklenmez,
+   * ölçümün gecikmesi ya da web'de konum değişiminin `onLayout` üretmemesi
+   * hapı yanlış yere koyamaz. Kaydırma kipinde genişlikler doğaldır ve yalnız
+   * ölçümle bilinebilir; orada her sekmenin kendi `onLayout`u kullanılır.
+   * Kip kararı bütün etiketler ölçülmeden verilmediği için (bkz. `fits`)
+   * eşit ↔ kaydırma gidiş-gelişi de yoktur.
+   */
+  const active: TabLayout | undefined =
+    mode === "equal" && equalWidth > 0
+      ? { x: equalWidth * index, width: equalWidth }
+      : layouts[index];
 
   const indicatorWidth = active ? Math.max(16, active.width - INDICATOR_INSET * 2) : 0;
   const indicatorX = active ? active.x + (active.width - indicatorWidth) / 2 : 0;
@@ -185,6 +209,7 @@ function TabsBase<T extends string>({
     // Etiketler değiştiyse doğal genişlikler geçersizdir.
     setLabelWidths([]);
   }, [labelKey]);
+
 
   const handleTabLayout = useCallback((i: number, event: LayoutChangeEvent) => {
     const { x, width } = event.nativeEvent.layout;
@@ -253,7 +278,11 @@ function TabsBase<T extends string>({
           const isActive = item.key === value;
           return (
             <Touchable
-              key={item.key}
+              /* Anahtar kipi de taşır: eşit ↔ kaydırma geçişinde sekmeler
+                 yeniden kurulur ve her kutu için taze `onLayout` gelir — yalnız
+                 genişliği değil KONUMU değişen bir kutu web'de yeniden
+                 ölçülmüyordu ve hap eski yerinde kalıyordu. */
+              key={`${mode}-${item.key}`}
               feedback="row"
               haptic="none"
               onPress={() => {
@@ -322,6 +351,9 @@ const styles = StyleSheet.create({
   content: {
     flexGrow: 1,
     alignItems: "stretch",
+    /* Hap ekran kenarından 8px içeride başlar (maket: 12px); etiket
+       kenardan 20px. Kenara yapışık bir hap, şeridi kırpılmış gösteriyordu. */
+    paddingHorizontal: space.sm,
   },
   tab: {
     flexDirection: "row",
@@ -329,10 +361,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: space.xs,
     height: layout.tabStripHeight,
-    /* Dar yatay dolgu: eşit genişlik kipinde şerit, kap genişliğini sekme
-       sayısına böler; 12px'lik dolgu 78px'lik bir yuvada metne yalnız 54px
-       bırakıyor ve "Haberler" gibi etiketler üç noktaya düşüyordu. */
-    paddingHorizontal: space.s,
+    /* Eşit kipte kap sekme sayısına bölünür; en geniş etiket yuvaya
+       sığmıyorsa şerit zaten kaydırmaya geçer (bkz. `fits`), yani dolgu
+       kırpılmaya yol açmaz. 12px, hapın etiketi rahatça sarması için. */
+    paddingHorizontal: TAB_PADDING,
   },
   /*
    * Aktif sekme AİLE DEĞİŞTİRMEZ, yalnız renk değiştirir. Önceki sürümde aktif
@@ -366,8 +398,8 @@ const styles = StyleSheet.create({
   indicator: {
     position: "absolute",
     left: 0,
-    top: 3,
-    bottom: 3,
+    top: 5,
+    bottom: 5,
     borderRadius: radius.pill,
     backgroundColor: colors.brandDim,
   },
@@ -376,12 +408,12 @@ const styles = StyleSheet.create({
    * aydınlık yarı saydam bir mor + ince ışıklı çerçeve. Düz bir dolgu rengi
    * denendi ve bloğun gradyanı boyunca kâğıt gibi bir leke bırakıyordu; yarı
    * saydam hap, altındaki geçişi taşıdığı için bloğun parçası olarak okunur.
-   * Değerler alt menü rayının kapsülüyle AYNI tokenlardan gelir — ikisi de
-   * "koyu blok üstünde seçili" demek.
+   * Alt menü kapsülünden AÇIK durur: kapsül ikonun arkasında sessiz bir
+   * puldur, bu hap ise seçili sayfayı söyleyen tek işaret.
    */
   indicatorInk: {
-    backgroundColor: colors.tabCapsule,
-    borderWidth: hairline,
-    borderColor: colors.tabCapsuleBorder,
+    backgroundColor: colors.inkPill,
+    borderWidth: 1,
+    borderColor: colors.inkPillBorder,
   },
 });

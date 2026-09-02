@@ -177,22 +177,20 @@ export const Button = React.memo(function Button({
       ]}
     >
       {variant === "primary" ? (
-        <>
-          <LinearGradient
-            colors={colors.gradientBrand}
-            start={GRADIENT_START}
-            end={GRADIENT_END}
-            style={styles.primaryFill}
-            pointerEvents="none"
-          />
-          {/*
-            ÜST IŞIK. Düz bir gradyan dolgu, mat bir boya lekesi gibi duruyordu.
-            Gerçek bir düğme ışığı ÜSTTEN alır: üst yarıya yerleştirilen çok
-            sönük beyaz bir katman, yüzeye hafif bir kubbe hissi verir. Tek
-            katman ve %10 — daha fazlası "parlak plastik" olur.
-          */}
-          <View style={styles.primaryGloss} pointerEvents="none" />
-        </>
+        /*
+         * TEK KATMAN. Gradyanın üstüne bir de "üst ışık" (üst yarıya serilen
+         * %10 beyaz) konmuştu; kubbe hissi vermesi bekleniyordu ama keskin
+         * kenarlı bir katman düğmeyi tam ortasından ikiye bölen yatay bir
+         * DİKİŞ olarak görünüyordu — üst yarı açık, alt yarı koyu iki ayrı
+         * mor. Işık yalnız gradyandan gelir; başka dolgu yok.
+         */
+        <LinearGradient
+          colors={colors.gradientBrand}
+          start={GRADIENT_START}
+          end={GRADIENT_END}
+          style={styles.primaryFill}
+          pointerEvents="none"
+        />
       ) : null}
 
       {iconPosition === "left" ? iconNode : null}
@@ -229,17 +227,6 @@ const styles = StyleSheet.create({
   primaryFill: {
     ...StyleSheet.absoluteFillObject,
     borderRadius: radius.pill,
-  },
-  /** Üst ışık: yüzeyin üst yarısına serilen çok sönük beyaz kubbe. */
-  primaryGloss: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: "50%",
-    borderTopLeftRadius: radius.pill,
-    borderTopRightRadius: radius.pill,
-    backgroundColor: "rgba(255, 255, 255, 0.10)",
   },
   disabled: {
     opacity: 0.45,

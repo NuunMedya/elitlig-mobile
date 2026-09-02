@@ -14,12 +14,23 @@
  * Görünüm seçimi cihazda saklanmaz: iki görünüm de aynı listeyi gösterdiği
  * için "hangi moddaydım" diye hatırlanacak bir bağlam yok; varsayılan karttır.
  *
+ * KAPSAM BLOĞUN ÜST BAŞLIĞINDA: "Ankara · FREELİG · 15. Sezon" mor bloğun
+ * içinde, başlığın üstünde, dokunulur bir çip (`ScopeChip tone="ink"`).
+ * Eskiden aynı bilgi hem bloğun üst başlığında hem kâğıtta ayrı bir satırda
+ * yazılıyordu; ikinci satır 28px yiyip hiçbir şey eklemiyordu.
+ *
+ * SATIRLAR KART İÇİNDE (tema.html §5.3 ".group"): liste kâğıtta çıplak
+ * yüzmez; sütun başlığı kartın tepesi, son satır kartın tabanıdır ve satırlar
+ * arasında ince ayraç vardır. FlatList satırları tek tek ürettiği için kart
+ * tek bir kap olarak değil satır satır çizilir (bkz. `styles.groupRow`).
+ * Bölge rayı böylece kartın sol iç kenarında durur — Ligler > Puan ile aynı x.
+ *
  * ARAMA: liste 20 satırı geçtiğinde ad araması görünür. Küçük liglerde arama
  * kutusu göstermek 44px'i boşa harcar.
  *
  * PERFORMANS: iki görünümün de satır yüksekliği sabittir (`TEAM_ROW_HEIGHT`
- * 66, `TEAM_ROW_HEIGHT_TABLE` 40) ve `getItemLayout` kurulur; FlatList hiçbir
- * hücreyi ölçmez.
+ * 66, `TEAM_ROW_HEIGHT_TABLE` 40; ayraç `hairline` hücreye dâhil) ve
+ * `getItemLayout` kurulur; FlatList hiçbir hücreyi ölçmez.
  *
  * SATIRIN KENDİSİ BU DOSYADA DEĞİL: iki görünüm de `components/ui/TeamRow`
  * bileşenini kullanır — takım satırı uygulamanın her yerinde aynı sırayı
@@ -57,11 +68,18 @@ import { useScope } from "@/providers/ScopeProvider";
 import {
   colors,
   defaultZoneRules,
+  hairline,
   layout,
   palette,
+  radius,
   space,
+  textScale,
+  type,
   zoneColor,
   zoneForRank,
+  zoneLabel,
+  type StandingZone,
+  type ZoneRule,
 } from "@/theme";
 
 type ViewKey = "kart" | "tablo";
@@ -76,6 +94,47 @@ const SEARCH_THRESHOLD = 20;
 
 /** Türkçe duyarlı, aksan/büyük-küçük farkını yok sayan arama karşılaştırması. */
 const normalize = (value: string) => value.trim().toLocaleLowerCase("tr-TR");
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Bölge açıklaması — rayın renk anahtarı
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Ray renginin anahtarı, listenin ALTINDA tek satır (tema.html §7/3). Renk
+ * tek başına anlam taşımaz; "altın = şampiyon" bir yerde yazılmalı ve o yer
+ * tablonun sonudur — başta dursaydı daha tek satır okunmadan açıklama
+ * okutulmuş olurdu. Yalnız kuralda geçen bölgeler yazılır.
+ */
+const ZoneLegend = React.memo(function ZoneLegend({ rules }: { rules: ZoneRule[] }) {
+  const zones = useMemo(() => {
+    const seen = new Set<StandingZone>();
+    return rules
+      .map((rule) => rule.zone)
+      .filter((zone) => {
+        if (zone === "none" || seen.has(zone)) return false;
+        seen.add(zone);
+        return true;
+      });
+  }, [rules]);
+
+  if (zones.length === 0) return null;
+
+  return (
+    <View style={styles.legend}>
+      {zones.map((zone) => (
+        <View key={zone} style={styles.legendItem}>
+          <View style={[styles.legendSwatch, { backgroundColor: zoneColor(palette, zone) ?? colors.border }]} />
+          <Text style={styles.legendLabel} {...textScale.dense}>
+            {zoneLabel(zone)}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+});
+
+/** Satırlar arası ince ayraç; kartın yan kenarlığını da taşır ki çizgi kesilmesin. */
+const GroupSeparator = () => <View style={styles.separator} />;
 
 /* ══════════════════════════════════════════════════════════════════════════
    Ekran
@@ -135,8 +194,11 @@ export default function TeamsScreen() {
     return map;
   }, [ranked]);
 
+  const data = useMemo(() => visible.map((entry) => entry.row), [visible]);
+  const lastIndex = data.length - 1;
+
   const renderItem = useCallback(
-    ({ item }: { item: StandingRow }) => {
+    ({ item, index }: { item: StandingRow; index: number }) => {
       const rank = rankOf.get(item.team_id) ?? 0;
       return (
         <TeamRow
@@ -155,43 +217,41 @@ export default function TeamsScreen() {
           favorite={isFavorite(item.team_id)}
           zone={zoneColor(palette, zoneForRank(rank, zoneRules))}
           onPress={openTeam}
+          /* Son satır kartın tabanıdır: alt kenarlık ve alt köşeler onda. */
+          style={index === lastIndex ? styles.groupRowLast : styles.groupRow}
         />
       );
     },
-    [isFavorite, openTeam, rankOf, view, zoneRules],
+    [isFavorite, lastIndex, openTeam, rankOf, view, zoneRules],
   );
 
-  const rowHeight = view === "kart" ? TEAM_ROW_HEIGHT : TEAM_ROW_HEIGHT_TABLE;
+  /* Hücre = satır + ayraç: VirtualizedList ayracı satırla aynı hücreye koyar. */
+  const cellHeight = (view === "kart" ? TEAM_ROW_HEIGHT : TEAM_ROW_HEIGHT_TABLE) + hairline;
   const getItemLayout = useCallback(
     (_: unknown, index: number) => ({
-      length: rowHeight,
-      offset: rowHeight * index,
+      length: cellHeight,
+      offset: cellHeight * index,
       index,
     }),
-    [rowHeight],
+    [cellHeight],
   );
 
-  const data = useMemo(() => visible.map((entry) => entry.row), [visible]);
   const showSearch = ranked.length >= SEARCH_THRESHOLD;
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader
         title="Takımlar"
-        overline={scope.leagueLabel || "ELİTLİG"}
+        scope={<ScopeChip tone="ink" />}
         scrollY={scrollY}
         actions={[
           { icon: "search-outline", accessibilityLabel: "Ara", onPress: () => router.push("/ara") },
         ]}
         bottom={
-          /* Kapsam çipi ile segment AYNI SATIRDA DEĞİL: çip gerçek veriyle
-             "Ankara · 1.Lig · 25/26" kadar uzayabiliyor ve yanındaki segmentin
-             etiketlerini kırpıyordu ("Puan Ta…"). Alt alta iki satır 30px daha
-             yer kaplar ama iki denetim de tam okunur kalır. */
+          /* Görünüm segmenti KÂĞITTA (tema kuralı: sekme blokta, süzgeç
+             kâğıtta). Kapsam artık bloğun üst başlığında; burada bir kez daha
+             yazılmaz. */
           <View style={styles.headerBottom}>
-            <View style={styles.scopeRow}>
-              <ScopeChip />
-            </View>
             <SegmentedControl items={VIEWS} value={view} onChange={setView} size="sm" />
           </View>
         }
@@ -205,7 +265,10 @@ export default function TeamsScreen() {
           action={{ label: "Kapsam seç", onPress: () => scope.openScopeSheet("city") }}
         />
       ) : query.isLoading || scope.loading ? (
-        <SkeletonStandings density={view === "tablo" ? "table" : "list"} />
+        /* İskelet de kartta durur; yükleme bitince çerçeve zıplamaz. */
+        <View style={styles.skeletonCard}>
+          <SkeletonStandings density={view === "tablo" ? "table" : "list"} />
+        </View>
       ) : query.isError && rows.length === 0 ? (
         <ErrorState error={query.error} onRetry={query.refetch} />
       ) : (
@@ -215,6 +278,7 @@ export default function TeamsScreen() {
           keyExtractor={keyExtractor}
           renderItem={renderItem}
           getItemLayout={getItemLayout}
+          ItemSeparatorComponent={GroupSeparator}
           initialNumToRender={14}
           windowSize={8}
           removeClippedSubviews
@@ -236,9 +300,15 @@ export default function TeamsScreen() {
                   />
                 </View>
               ) : null}
-              <TeamRowHead density={view === "tablo" ? "table" : "list"} />
+              {/* Sütun başlığı kartın TEPESİDİR: üst kenarlık ve üst köşeler onda. */}
+              {data.length > 0 ? (
+                <View style={[styles.groupHead, view === "kart" ? styles.groupHeadList : null]}>
+                  <TeamRowHead density={view === "tablo" ? "table" : "list"} />
+                </View>
+              ) : null}
             </>
           }
+          ListFooterComponent={data.length > 0 ? <ZoneLegend rules={zoneRules} /> : null}
           ListEmptyComponent={
             search ? (
               <EmptyState
@@ -261,26 +331,96 @@ export default function TeamsScreen() {
   );
 }
 
+/* Kartın kabuğu: satır satır çizilir (bkz. dosya başlığı). */
+const GROUP_SHELL = {
+  backgroundColor: colors.surface1,
+  borderColor: colors.border,
+} as const;
+
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.bg,
   },
+  /* Segmentin mor bloğa ve karta uzaklığı maketle aynı (12px, §7/3 ".seg"). */
   headerBottom: {
-    gap: space.s,
     paddingHorizontal: layout.screenPadding,
-    paddingBottom: space.sm,
-  },
-  scopeRow: {
-    flexDirection: "row",
-    alignItems: "center",
+    paddingTop: space.md,
+    paddingBottom: space.md,
   },
   listContent: {
+    paddingHorizontal: layout.screenPadding,
     paddingBottom: space.xxxl,
   },
   searchBox: {
-    paddingHorizontal: layout.screenPadding,
-    paddingTop: space.sm,
     paddingBottom: space.m,
+  },
+
+  /* — Satır grubu (tema.html ".group") — */
+  groupHead: {
+    ...GROUP_SHELL,
+    borderWidth: hairline,
+    borderBottomWidth: 0,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    overflow: "hidden",
+  },
+  /* Liste başlığının kendi üst dolgusu ve alt çizgisi yok; kart tepesinde
+     ikisi de gerekir (tablo başlığı bunları zaten taşır). */
+  groupHeadList: {
+    paddingTop: space.s,
+    borderBottomWidth: hairline,
+    borderBottomColor: colors.separator,
+  },
+  groupRow: {
+    ...GROUP_SHELL,
+    borderLeftWidth: hairline,
+    borderRightWidth: hairline,
+  },
+  groupRowLast: {
+    ...GROUP_SHELL,
+    borderLeftWidth: hairline,
+    borderRightWidth: hairline,
+    borderBottomWidth: hairline,
+    borderBottomLeftRadius: radius.lg,
+    borderBottomRightRadius: radius.lg,
+    overflow: "hidden",
+  },
+  separator: {
+    height: hairline,
+    backgroundColor: colors.separator,
+    borderLeftWidth: hairline,
+    borderRightWidth: hairline,
+    borderColor: colors.border,
+  },
+  skeletonCard: {
+    marginHorizontal: layout.screenPadding,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    overflow: "hidden",
+  },
+
+  /* — Bölge açıklaması — */
+  legend: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: space.md,
+    paddingVertical: space.m,
+    paddingHorizontal: space.xxs,
+  },
+  legendItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+  },
+  legendSwatch: {
+    width: 3,
+    height: 11,
+    borderRadius: 2,
+  },
+  legendLabel: {
+    ...type.caption,
+    color: colors.textTertiary,
   },
 });

@@ -20,6 +20,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
+  Platform,
   StyleSheet,
   Text,
   View,
@@ -33,7 +34,6 @@ import {
   easing,
   fonts,
   haptics,
-  isDark,
   radius,
   space,
   textScale,
@@ -178,7 +178,7 @@ function SegmentedControlBase<T extends string>({
               <Ionicons
                 name={item.icon}
                 size={size === "sm" ? 12 : 14}
-                color={active ? colors.textPrimary : colors.textSecondary}
+                color={active ? colors.brandAccent : colors.textSecondary}
               />
             ) : null}
             <Text
@@ -204,33 +204,43 @@ export const SegmentedControl = React.memo(
 ) as typeof SegmentedControlBase;
 
 const styles = StyleSheet.create({
+  /** Yuva: bir kademe koyu yüzey, tam hap (maket §6 ".seg"). */
   container: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.surface2,
-    borderRadius: radius.md,
+    backgroundColor: colors.surface3,
+    borderRadius: radius.pill,
     padding: PAD,
   },
   /**
-   * Aktif hap: koyu temada bir üst yüzey (surface3) seçilir, çünkü surface1
-   * kutunun zemininden (surface2) daha KOYU olurdu ve seçim geri giderdi.
+   * AKTİF HAP KÂĞIT RENGİDİR (`bg`), İKİ TEMADA DA. Açık temada yuvadan açık
+   * bir beyaz pul + sönük mor gölge; koyu temada yuvadan KOYU bir pul. Önceki
+   * sürüm koyuda `surface3` ile yuvadan açık bir pul üretiyordu — o zaman pul
+   * yuvanın rengine yaklaşıyor ve seçim "hangisi basılı" sorusuna cevap
+   * veremiyordu. Kâğıt rengi her iki temada da yuvadan en uzak tondur.
    */
   indicator: {
     position: "absolute",
     left: PAD,
     top: PAD,
-    borderRadius: radius.sm,
-    /* Seçili pul RAYDAN AÇIK olmalı: açık temada `elevated` (saf beyaz), koyu
-       temada bir kademe yukarı. `surface1` yetmiyordu — yeni palette yüzeyler
-       beyazdan bir kademe aşağı indi ve pul, rayla neredeyse aynı tona düştü. */
-    backgroundColor: isDark ? colors.surface3 : colors.elevated,
+    borderRadius: radius.pill,
+    backgroundColor: colors.bg,
+    ...Platform.select({
+      android: { elevation: 1 },
+      default: {
+        shadowColor: colors.shadowColor,
+        shadowOpacity: 0.16,
+        shadowRadius: 4,
+        shadowOffset: { width: 0, height: 1 },
+      },
+    }),
   },
   segment: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: space.xs,
-    borderRadius: radius.sm,
+    borderRadius: radius.pill,
   },
   segmentStretch: {
     flex: 1,
@@ -240,15 +250,17 @@ const styles = StyleSheet.create({
   },
   label: {
     ...type.label,
+    fontFamily: fonts.medium,
     color: colors.textSecondary,
   },
   labelSm: {
     ...type.caption,
     color: colors.textSecondary,
   },
+  /** Seçili etiket morun METİN sürümüyle konuşur; ağırlık bir kademe artar. */
   labelActive: {
-    color: colors.textPrimary,
-    fontFamily: fonts.bold,
+    color: colors.brandAccent,
+    fontFamily: fonts.semibold,
   },
   dot: {
     width: 5,

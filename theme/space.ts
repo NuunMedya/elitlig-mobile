@@ -53,11 +53,13 @@ export const spacing = {
  * sıkışık alanda ucuz. "Minimal" olan şey punto değil, boşluk/mürekkep
  * oranıdır.
  *
- * MAÇ SATIRI TEK SATIRDIR: `logo · ev takım · SKOR · dep takım · logo`. Önceki
- * iki satırlı düzen (ev üstte, deplasman altta) satır başına 56px istiyordu;
- * tek satır aynı bilgiyi 40px'te verir ve bir ekrana neredeyse iki kat maç
- * sığdırır. Skor ortada sabit genişlikli bir blokta durduğu için göz, liste
- * boyunca tek bir dikey ekseni takip eder.
+ * MAÇ SATIRI İKİ TAKIMI ÜST ÜSTE YAZAR (tema.html §6 ".mrow"): `arma · ev`
+ * üstte, `arma · dep` altta, skor sağda alt alta, en sağda "ne zaman" sütunu.
+ * Aradaki tek satırlı deneme ("ev · skor · dep") 390px'te iki ada toplam
+ * ~150px bırakıyordu ve bu ligin uzun, büyük harfli adları ("ASYA
+ * KARTALLARI") her satırda üç noktaya düşüyordu. İki satır 58px ister; tek
+ * satırdan (54) yalnız 4px fazla, çünkü zaten amblem ve skor o yüksekliği
+ * istiyordu — ekrana giren maç sayısı değişmez, kırpılan ad kalmaz.
  *
  * 44px DOKUNMA HEDEFİ: 40px'lik satırlar bu sınırın altındadır ama liste
  * satırları ARALIKSIZ dizilir — komşu satırlar arasında ölü boşluk yoktur, bu
@@ -89,9 +91,14 @@ export const layout = {
   sectionGap: 22,
   listRowHeight: 52,        // tek satırlı ListRow — h3(20) + 2×16 dolgu
   listRowHeightTwoLine: 66, // iki satırlı ListRow — h3(20) + bodySm(17) + dolgu
-  /** Maç satırı TEK SATIRDIR: logo · ev · skor · dep · logo. */
-  matchRowHeight: 54,       // scoreSm(21) ve crestMd(26) bu yüksekliği ister
-  matchRowHeightCompact: 44,
+  /* MAÇ SATIRI İKİ ÇİZGİDİR: `arma · ev` üstte, `arma · dep` altta; skor sağda
+     alt alta. Çizgi yüksekliği amblemden gelir (crestSm 22), çizgi arası 6:
+     2×22 + 6 = 50 içerik + 2×4 dikey nefes = 58. Meta satırı (lig/saha, 14px)
+     `MatchRow.MATCH_ROW_META_HEIGHT` ile bunun ÜSTÜNE eklenir.
+     Kompakt: 18px çizgi (bodySm 17 + tableNumStrong 18 sığar), 4 boşluk:
+     2×18 + 4 = 40 + 2×3 = 46. */
+  matchRowHeight: 58,
+  matchRowHeightCompact: 46,
   headerHeightExpanded: 96, // overline(13) + display(27) + dolgu
   headerHeightCollapsed: 52,
   /**

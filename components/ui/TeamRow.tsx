@@ -45,9 +45,12 @@ export const TEAM_ROW_HEIGHT_TABLE = 40;
 
 /* Sütun genişlikleri — satır ve başlık AYNI sabitleri kullanır. */
 const COL_RANK = 22;
-const COL_NUM = 20;
-const COL_DIFF = 26;
-const COL_POINTS = 26;
+/* Sayı sütunları DAR: 20px + 6px aralık altı sütunda ad sütununa 390px'te
+   ~140px bırakıyor ve "ESAT MUTLU S…" diye kırpıyordu. 18 + 4 (maket 17 + 7)
+   ada ~30px geri verir; iki haneli sayılar 18px'e tabular rakamla sığar. */
+const COL_NUM = 18;
+const COL_DIFF = 24;
+const COL_POINTS = 24;
 /** Liste yoğunluğunda sağdaki puan bloğu. */
 const POINTS_BOX = 34;
 
@@ -367,14 +370,14 @@ const styles = StyleSheet.create({
     height: TEAM_ROW_HEIGHT_TABLE,
     flexDirection: "row",
     alignItems: "center",
-    gap: space.s,
+    gap: space.xs,
     paddingLeft: space.sm,
     paddingRight: space.md,
   },
   tableHead: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.s,
+    gap: space.xs,
     paddingLeft: space.sm,
     paddingRight: space.md,
     paddingVertical: space.s,

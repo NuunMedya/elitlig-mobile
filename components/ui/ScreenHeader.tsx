@@ -4,53 +4,46 @@
  * TEMANIN BİRİNCİ KURALI BURADA KURULUR: her ekran koyu mor bir başlık
  * bloğuyla açılır, kâğıt üstünde okunur, mor menü rayıyla kapanır. Blok
  * uygulamanın kimliğini taşıyan yüzeydir; ekranlar arası fark İÇERİKTE olur,
- * çerçevede değil. Önceki sürümde başlık sayfanın kendi kâğıdındaydı ve
- * altmış ekranın hiçbirinde ortak bir kimlik yoktu — her ekran kendi
- * başlığını kendi tonunda çiziyordu.
+ * çerçevede değil.
+ *
+ * TEK SATIR (bu turun düzeltmesi): ilk sürüm eski beyaz başlığın düzenini
+ * miras almıştı — üstte geri/eylem satırı, altta büyük başlık. Beyaz kâğıtta
+ * bu "ferah" görünüyordu; koyu mor bir blokta ise 40px'lik boş mor bir
+ * şeride dönüştü ve her ekran dev bir mor levhayla açılıyordu. Şimdi başlık,
+ * üst başlık, geri oku ve eylemler TEK satırda durur (52px); blok yalnız
+ * gerektiği kadar yüksektir.
+ *
+ *   [geri] [üst başlık / BAŞLIK / alt başlık ............] [eylem] [eylem]
+ *   [kimlik — hero: amblem, ad, sayılar .......................... ]
+ *   [sekme] [sekme] [sekme]
+ *
+ * KİMLİK BLOĞUN İÇİNDE (`hero`): takım ve oyuncu sayfalarında kimlik kartı
+ * eskiden başlığın ALTINDA ikinci bir mor kart olarak duruyordu — mor üstüne
+ * mor, ad iki kez. Artık kimlik bloğun içindedir; başlık satırı o sırada
+ * yalnız geri oku ve eylemleri taşır, ad kaydırınca daralan satırda belirir.
+ *
+ * DARALMA: `scrollY` verilirse 0 → 56px kaydırma arasında
+ *   · kimlik ölçülen yüksekliğinden 0'a iner ve söner,
+ *   · üst/alt başlık söner, satır 52px'e iner,
+ *   · kimlik varsa başlık adı belirir.
+ * Yükseklik animasyonu düzen özelliği olduğu için `useHeaderScroll()`
+ * ZORUNLUDUR (yerel sürücüsüz `Animated.event`).
  *
  * BLOK GÜVENLİ ALANI DA BOYAR: durum çubuğunun arkası da mordur. Bunu
  * `marginTop: -insets.top` + `paddingTop: insets.top` çifti kurar — blok
- * yukarı kayar, içeriği aynı kadar aşağı itilir. Böylece ekranlar
- * `SafeAreaView edges={["top"]}` kullanmaya devam edebilir; tek satır bile
- * değişmez ve blok yine de durum çubuğunun altına uzanır. (Negatif konumlu
- * bir çocuk denenmedi: Android'de kapsayıcı sınırının dışına taşan çocuk
- * güvenilir biçimde çizilmez.)
+ * yukarı kayar, içeriği aynı kadar aşağı itilir; akıştaki net katkısı
+ * değişmez. Böylece ekranlar `SafeAreaView edges={["top"]}` kullanmaya devam
+ * eder. (Negatif konumlu bir çocuk denenmedi: Android'de kapsayıcı sınırının
+ * dışına taşan çocuk güvenilir biçimde çizilmez.)
  *
- * SAYFA SEKMELERİ BLOĞUN İÇİNDE (`tabs` yuvası): şerit kâğıtta ayrı bir kutu
- * olarak durduğunda ekranın tepesinde iki gezinme katmanı oluşuyordu. `tabs`
- * bloğun içine, `bottom` ise bloğun ALTINA (kâğıda) çizilir; süzgeç
- * segmentleri, tarih şeridi ve kapsam çipleri kâğıda aittir.
+ * SAYFA SEKMELERİ BLOĞUN İÇİNDE (`tabs`), SÜZGEÇLER DIŞINDA (`bottom`):
+ * sekme sayfayı değiştirir ve başlıkla aynı yüzeye aittir; segment, tarih
+ * şeridi ve kapsam çipleri veriyi süzer ve kâğıda aittir.
  *
- * ═══ eski başlık notu ═══
- * ScreenHeader — kaydırınca daralan premium başlık (§4.27).
- *
- * TEK BAŞLIK: eski `components/ScreenHeader.tsx` geçiş bitince silindi;
- * uygulamadaki her başlık artık bu dosyadan geliyor.
- *
- * DARALMA NASIL ÇALIŞIR:
- *   0 → 56 px kaydırma arasında `progress` 0'dan 1'e gider.
- *   · yükseklik 72 → 42
- *   · üst satır (geri + eylemler) YERİNDE KALIR, hiç kıpırdamaz
- *   · başlık bloğu yukarı ve sağa kayar, 14px'ten 13px'e "küçülür"
- *   · overline ve alt başlık söner
- *   · alt kenarda hairline çizgi belirir, şeffaf başlıkta zemin opaklaşır
- *
- * NEDEN fontSize DEĞİL scale: yazı boyutunu animasyonla değiştirmek her karede
- * metin ölçümü (layout) tetikler. Bunun yerine 13/14 = 0.929 ölçek uygulanır ve
- * ölçek merkeze doğru küçülttüğü için sola hizalama `translateX` ile geri
- * alınır — metnin sol kenarı sabit kalır, yalnızca boyu değişir.
- *
- * NEDEN `useHeaderScroll()` ZORUNLU: yükseklik animasyonu (layout özelliği)
- * yerel sürücüyle çalışamaz. `scrollY` yerel sürücülü bir `Animated.event` ile
- * beslenirse RN çalışma anında hata verir. Bu tuzağı ortadan kaldırmak için
- * doğru yapılandırılmış hazır kancayı veriyoruz:
- *
- *   const { scrollY, scrollProps } = useHeaderScroll();
- *   <ScreenHeader title="Maçlar" scrollY={scrollY} />
- *   <Animated.FlatList {...scrollProps} … />
- *
- * TEMA DÜĞMESİ YOK: her ekranın köşesinde duran güneş/ay düğmesi görsel
- * gürültüdür ve günde bir kez kullanılır; Ayarlar/Profil ekranına taşındı.
+ * ŞEFFAF KİP (`transparent`): maç detayı gibi kendi atmosferi olan ekranlar
+ * bloğu boyamaz; başlık atmosferin üstünde durur ve daralınca `surface`
+ * rengiyle opaklaşır. Bu kipte güvenli alan hilesi de uygulanmaz — atmosfer
+ * zaten ekranın tepesinden başlar.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -60,7 +53,6 @@ import React, { useMemo, useRef, useState } from "react";
 import {
   Animated,
   StyleSheet,
-  Text,
   View,
   type LayoutChangeEvent,
   type NativeScrollEvent,
@@ -69,17 +61,13 @@ import {
   type ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { colors, hairline, layout, space, textScale, touchSlop, type } from "@/theme";
+import { colors, hairline, layout, radius, space, textScale, touchSlop, type } from "@/theme";
 import { Badge, toneColors, type Tone } from "./Badge";
 import { Touchable } from "./Pressable";
 
 /** Başlığın tamamen daralması için gereken kaydırma mesafesi. */
 const COLLAPSE_RANGE = 56;
-/** 13 / 14 — daralmış başlığın ölçeği. Açık başlık `type.h1` (14px). */
-const TITLE_SCALE = 13 / 14;
-/** Geri düğmesi + boşluk: daralınca başlık bu kadar sağa kayar. */
-const BACK_OFFSET = 36;
-/** Üst satırın (geri/eylem) yüksekliği; daralmış başlık da bu şeride oturur. */
+/** Daralmış satır: yalnız başlık + ikonlar. */
 const BAR_HEIGHT = layout.headerHeightCollapsed;
 
 /** Mor bloğun yüzey gradyanı — yüzeylerin ışığı daima sağdan gelir. */
@@ -96,10 +84,16 @@ export interface ScreenHeaderAction {
 
 export interface ScreenHeaderProps {
   title: string;
-  /** Üstte küçük marka/bağlam satırı ("ELİTLİG", lig adı). */
+  /** Başlığın üstünde küçük bağlam satırı ("FREELİG", "14. Hafta"). */
   overline?: string;
+  /**
+   * KAPSAM ÇİPİ — üst başlığın YERİNE geçer (`<ScopeChip tone="ink" />`).
+   * Kök sekmelerde kapsam (şehir · lig · sezon) hem bloğun üst başlığında
+   * hem kâğıtta ayrı bir satırda yazılıyordu; artık yalnız burada, dokunulur.
+   */
+  scope?: React.ReactNode;
   subtitle?: string;
-  /** Kaydırma konumu — verilirse başlık daralır. `useHeaderScroll()` ile üretin. */
+  /** Kaydırma konumu — verilirse blok daralır. `useHeaderScroll()` ile üretin. */
   scrollY?: Animated.Value;
   /** Geri düğmesi (detay ekranları). */
   back?: boolean;
@@ -108,40 +102,27 @@ export interface ScreenHeaderProps {
   /** Sağ eylemler — en fazla 3 ikon. */
   actions?: ScreenHeaderAction[];
   /**
-   * SAYFA SEKMELERİ — mor bloğun İÇİNDE çizilir (bkz. components/ui/Tabs.tsx).
-   * Yalnız gezinme şeridi buraya girer: sekme sayfayı değiştirir.
+   * KİMLİK — bloğun içinde, başlık satırının altında: amblem/avatar, ad,
+   * bağlam ve sayılar. Verildiğinde açık hâlde başlık metni ÇİZİLMEZ (ad
+   * zaten kimlikte); kaydırınca kimlik kapanır ve ad satıra gelir.
    */
+  hero?: React.ReactNode;
+  /** SAYFA SEKMELERİ — bloğun içinde (bkz. components/ui/Tabs.tsx). */
   tabs?: React.ReactNode;
-  /**
-   * Bloğun ALTINDA, kâğıdın üstünde duran bant: süzgeç segmenti, tarih
-   * şeridi, kapsam çipleri. Bunlar veriyi süzer, sayfayı değiştirmez — bu
-   * yüzden kâğıda aittir.
-   */
+  /** Bloğun ALTINDA, kâğıtta duran bant: süzgeç segmenti, tarih şeridi, çip. */
   bottom?: React.ReactNode;
-  /** Şeffaf hero üstünde mi (maç/takım detayı). */
+  /** Kendi atmosferi olan ekran (maç detayı): blok boyanmaz. */
   transparent?: boolean;
-  /**
-   * KOYU BİR ATMOSFERİN ÜSTÜNDE Mİ.
-   *
-   * Maç detayında başlık şeridi, sayfanın arkasındaki mor atmosferin en koyu
-   * bölgesinde duruyor: `textPrimary` (mor mürekkep) orada okunmaz. Bu bayrak
-   * başlığı, alt başlığı, geri okunu ve eylem ikonlarını `onDark` ailesine
-   * çevirir. Daralmış hâlde zemin opaklaştığı için renkler de geri döner —
-   * bu yüzden değer sabit değil, `progress` ile geçişlidir.
-   */
+  /** Şeffaf kipte, arkadaki atmosfer koyuysa metinler `onDark` ailesinden. */
   onDark?: boolean;
-  /**
-   * Daralınca altına serilecek zemin. Verilmezse `bg` kullanılır; maç
-   * detayı gibi kendi kâğıdı olan ekranlar kendi rengini verir, aksi hâlde
-   * şerit sayfadan farklı bir tonda kalıp yatay bir dikiş çizgisi yapar.
-   */
+  /** Şeffaf kipte daralınca altına serilecek zemin. */
   surface?: string;
   style?: StyleProp<ViewStyle>;
 }
 
 /**
  * Daralan başlık için doğru yapılandırılmış kaydırma bağlantısı.
- * `useNativeDriver: false` ZORUNLUDUR — başlığın yüksekliği animasyonlanıyor.
+ * `useNativeDriver: false` ZORUNLUDUR — bloğun yüksekliği animasyonlanıyor.
  */
 export function useHeaderScroll(): {
   scrollY: Animated.Value;
@@ -165,11 +146,13 @@ export function useHeaderScroll(): {
 export function ScreenHeader({
   title,
   overline,
+  scope,
   subtitle,
   scrollY,
   back = false,
   onBack,
   actions,
+  hero,
   tabs,
   bottom,
   transparent = false,
@@ -179,26 +162,21 @@ export function ScreenHeader({
 }: ScreenHeaderProps) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  /**
-   * MÜREKKEP BLOK MU: şeffaf başlık (maç detayı, kendi atmosferi var) dışında
-   * her başlık mor bloktur. `onDark` bayrağı zaten "koyu zemin" demek
-   * olduğundan renk seti ikisinde de aynı yerden gelir.
-   */
-  const isInk = !transparent;
   const staticProgress = useRef(new Animated.Value(0)).current;
-  /** Başlık metninin ölçülen kutusu — ölçek telafisi ve dikey ortalama için. */
-  const [titleBox, setTitleBox] = useState({ width: 0, y: 0, height: 0 });
   /**
-   * Başlık bloğunun (overline + başlık + alt başlık) ölçülen yüksekliği.
-   *
-   * NEDEN ÖLÇÜLÜYOR: açık başlığın yüksekliği eskiden 88px'e SABİTLENMİŞTİ ve
-   * bu, yalnız iki satırlık içeriğe yetiyordu. Üçü birden verilen ekranlarda
-   * (maç detayı, oyunlar) alt başlık kadrajın dışında kalıp KIRPILIYORDU —
-   * ekranda yarısı kesilmiş bir satır olarak görünüyordu. Artık yükseklik
-   * içerikten türetiliyor; 88px alt sınır olarak korunuyor ki iki satırlık
-   * başlıklarda düzen değişmesin.
+   * Başlık bloğunun (üst başlık + başlık + alt başlık) doğal yüksekliği.
+   * ANİMASYONLANAN SATIR DEĞİL, İÇİNDEKİ METİN BLOĞU ÖLÇÜLÜR: satırın kendi
+   * yüksekliği daralmayla değişir, metin bloğununki değişmez; ayrıca üst
+   * başlık çoğu ekranda veriyle sonradan gelir (lig adı), bu yüzden ölçüm
+   * bir kez değil her değişimde yenilenir — yoksa sonradan gelen satır
+   * kırpılırdı.
    */
-  const [blockHeight, setBlockHeight] = useState(0);
+  const [titleHeight, setTitleHeight] = useState(0);
+  /** Kimlik bloğunun doğal yüksekliği — aynı gerekçeyle her değişimde. */
+  const [heroHeight, setHeroHeight] = useState(0);
+
+  const isInk = !transparent;
+  const dark = isInk || onDark;
 
   const progress = useMemo(
     () =>
@@ -221,52 +199,47 @@ export function ScreenHeader({
     else router.replace("/");
   };
 
-  const handleTitleLayout = (event: LayoutChangeEvent) => {
-    const { width, y, height } = event.nativeEvent.layout;
-    setTitleBox((prev) =>
-      prev.width === width && prev.y === y && prev.height === height ? prev : { width, y, height },
-    );
-  };
+  const measure = (setter: React.Dispatch<React.SetStateAction<number>>) =>
+    (event: LayoutChangeEvent) => {
+      const next = Math.round(event.nativeEvent.layout.height);
+      if (next > 0) setter((current) => (current === next ? current : next));
+    };
 
-  /**
-   * Başlığın dikeyde ne kadar yükseleceği: daralmış şeridin ortası ile
-   * başlığın şu anki ortası arasındaki fark. Ölçüm `onLayout`'tan geldiği için
-   * overline/alt başlık olsun olmasın doğru hesaplanır.
-   */
-  const titleCenter = BAR_HEIGHT + titleBox.y + titleBox.height / 2;
-  const titleRise = titleBox.height > 0 ? BAR_HEIGHT / 2 - titleCenter : 0;
-  const scaleShift = (titleBox.width * (1 - TITLE_SCALE)) / 2;
-  const titleSlide = (back ? BACK_OFFSET : 0) - scaleShift;
+  const ink = dark ? colors.onDark : colors.textPrimary;
+  const inkMuted = dark ? colors.onDarkMuted : colors.textSecondary;
+  const inkOverline = dark ? colors.brandOnDark : colors.brandAccent;
 
-  /*
-   * MÜREKKEP SETİ. `onDark` verildiğinde şerit, koyu bir atmosferin üstünde
-   * duruyor demektir ve daralınca da koyu bir zemine (`surface`) oturuyordur —
-   * yani renkler her iki uçta da AYNI kalabilir, geçiş gerekmez. Renkleri
-   * kaydırmayla döndürmek gerekseydi ikon renkleri için `Animated` sarmalayıcı
-   * gerekirdi; sabit koyu zemin bu karmaşıklığı tümden ortadan kaldırıyor.
-   */
-  const ink = onDark || isInk ? colors.onDark : colors.textPrimary;
-  const inkMuted = onDark || isInk ? colors.onDarkMuted : colors.textSecondary;
-
-  const expandedHeight = Math.max(
-    layout.headerHeightExpanded,
-    BAR_HEIGHT + blockHeight + space.m,
-  );
-
-  const containerHeight = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [expandedHeight, layout.headerHeightCollapsed],
-  });
-  const fadeOut = progress.interpolate({ inputRange: [0, 0.7], outputRange: [1, 0], extrapolate: "clamp" });
+  /* Üst/alt başlık daralmanın ilk yarısında söner; satır 52px'e inerken
+     ortalanmış başlık yerinde kalır, sönen satırlar kırpılır. */
+  const fadeOut = progress.interpolate({ inputRange: [0, 0.6], outputRange: [1, 0], extrapolate: "clamp" });
   const appear = progress.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
+  /* Kimlik varken başlık adı yalnız daralınca görünür. */
+  const titleOpacity = hero ? progress.interpolate({ inputRange: [0.5, 1], outputRange: [0, 1], extrapolate: "clamp" }) : 1;
+
+  /* Satırın doğal yüksekliği metin bloğundan türetilir; ölçüm gelmeden
+     yükseklik dayatılmaz ki doğal yükseklik ölçülebilsin. */
+  const hasExtras = Boolean(overline || scope || subtitle);
+  const rowNatural = Math.max(BAR_HEIGHT, titleHeight + space.xs * 2);
+  const rowStyle =
+    scrollY && hasExtras && titleHeight > 0
+      ? { height: progress.interpolate({ inputRange: [0, 1], outputRange: [rowNatural, BAR_HEIGHT] }) }
+      : hasExtras
+        ? null
+        : { height: BAR_HEIGHT };
+  const heroStyle =
+    scrollY && heroHeight > 0
+      ? {
+          height: progress.interpolate({ inputRange: [0, 1], outputRange: [heroHeight, 0] }),
+          opacity: fadeOut,
+        }
+      : null;
 
   return (
     <View style={style}>
-      {/* MOR BLOK. Güvenli alanı da kaplar: yukarı kayar, içeriği aynı kadar
-          aşağı itilir — bkz. dosya başlığı. */}
+      {/* MOR BLOK — güvenli alanı da kaplar (bkz. dosya başlığı). */}
       <View
         style={[
-          isInk ? styles.inkWrap : null,
+          isInk ? styles.inkWrap : styles.bareWrap,
           isInk ? { marginTop: -insets.top, paddingTop: insets.top } : null,
         ]}
       >
@@ -278,126 +251,62 @@ export function ScreenHeader({
             style={StyleSheet.absoluteFill}
             pointerEvents="none"
           />
-        ) : null}
-        {/* Şerit KENDİ zeminini basmaz: mor blokta zemin bloğun gradyanı,
-            şeffaf başlıkta ise arkadaki atmosferdir. */}
-        <Animated.View
-          style={[styles.container, styles.transparent, { height: containerHeight }]}
-        >
-          {/* Şeffaf başlıkta zemin, daralma ilerledikçe opaklaşır. */}
-          {transparent ? (
-            <Animated.View
-              pointerEvents="none"
-              style={[
-                StyleSheet.absoluteFill,
-                styles.background,
-                surface ? { backgroundColor: surface } : null,
-                { opacity: appear },
-              ]}
-            />
+        ) : (
+          /* Şeffaf kipte zemin, daralma ilerledikçe opaklaşır. */
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              StyleSheet.absoluteFill,
+              styles.background,
+              surface ? { backgroundColor: surface } : null,
+              { opacity: appear },
+            ]}
+          />
+        )}
+
+        {/* TEK SATIR: geri · başlık bloğu · eylemler. */}
+        <Animated.View style={[styles.row, rowStyle]}>
+          {back ? (
+            <Touchable
+              feedback="icon"
+              onPress={handleBack}
+              hitSlop={touchSlop(36)}
+              accessibilityRole="button"
+              accessibilityLabel="Geri"
+              style={styles.backButton}
+            >
+              <Ionicons name="chevron-back" size={24} color={ink} />
+            </Touchable>
           ) : null}
 
-          {/* Üst şerit: geri düğmesi ve eylemler — daralmadan etkilenmez. */}
-          <View style={styles.bar}>
-            {back ? (
-              <Touchable
-                feedback="icon"
-                onPress={handleBack}
-                hitSlop={touchSlop(36)}
-                accessibilityRole="button"
-                accessibilityLabel="Geri"
-                style={styles.backButton}
-              >
-                <Ionicons name="chevron-back" size={24} color={ink} />
-              </Touchable>
-            ) : null}
-
-            <View style={styles.barSpacer} />
-
-            {actions?.slice(0, 3).map((action) => (
-              <Touchable
-                key={action.icon + action.accessibilityLabel}
-                feedback="icon"
-                haptic="light"
-                onPress={action.onPress}
-                hitSlop={touchSlop(34)}
-                accessibilityRole="button"
-                accessibilityLabel={action.accessibilityLabel}
-                style={styles.action}
-              >
-                <Ionicons
-                  name={action.icon}
-                  size={21}
-                  color={action.tone ? toneColors(action.tone).fg : inkMuted}
-                />
-                {action.badge != null ? (
-                  <Badge
-                    tone="live"
-                    variant="solid"
-                    size="xs"
-                    dot={action.badge === "dot"}
-                    label={action.badge === "dot" ? undefined : action.badge}
-                    floating
-                    style={styles.actionBadge}
-                    accessibilityLabel={
-                      action.badge === "dot" ? "Yeni" : `${action.badge} yeni`
-                    }
-                  />
-                ) : null}
-              </Touchable>
-            ))}
-          </View>
-
-          {/* Başlık bloğu: daralınca yukarı-sağa kayar ve küçülür. */}
           <View
+            style={[styles.titleBlock, back ? null : styles.titleBlockFlush]}
             pointerEvents="box-none"
-            onLayout={(e) => {
-              const next = Math.round(e.nativeEvent.layout.height);
-              setBlockHeight((current) => (current === next ? current : next));
-            }}
-            style={[styles.titleBlock, { paddingRight: space.sm + (actions?.length ?? 0) * 36 }]}
+            onLayout={measure(setTitleHeight)}
           >
-            {overline ? (
+            {scope ? (
+              <Animated.View style={[styles.scope, { opacity: fadeOut }]}>{scope}</Animated.View>
+            ) : overline ? (
               <Animated.Text
                 numberOfLines={1}
-                style={[
-                  styles.overline,
-                  onDark || isInk ? styles.overlineOnDark : null,
-                  { opacity: fadeOut },
-                ]}
+                style={[styles.overline, { color: inkOverline, opacity: fadeOut }]}
                 {...textScale.badge}
               >
                 {overline}
               </Animated.Text>
             ) : null}
-
-            <Animated.View
-              onLayout={handleTitleLayout}
-              style={[
-                styles.titleWrapper,
-                {
-                  transform: [
-                    { translateX: progress.interpolate({ inputRange: [0, 1], outputRange: [0, titleSlide] }) },
-                    { translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [0, titleRise] }) },
-                    { scale: progress.interpolate({ inputRange: [0, 1], outputRange: [1, TITLE_SCALE] }) },
-                  ],
-                },
-              ]}
+            <Animated.Text
+              accessibilityRole="header"
+              numberOfLines={1}
+              style={[styles.title, { color: ink, opacity: titleOpacity }]}
+              {...textScale.dense}
             >
-              <Text
-                accessibilityRole="header"
-                numberOfLines={1}
-                style={[styles.title, { color: ink }]}
-                {...textScale.dense}
-              >
-                {title}
-              </Text>
-            </Animated.View>
-
+              {title}
+            </Animated.Text>
             {subtitle ? (
               <Animated.Text
                 numberOfLines={1}
-                style={[styles.subtitle, { color: inkMuted }, { opacity: fadeOut }]}
+                style={[styles.subtitle, { color: inkMuted, opacity: fadeOut }]}
                 {...textScale.dense}
               >
                 {subtitle}
@@ -405,20 +314,53 @@ export function ScreenHeader({
             ) : null}
           </View>
 
-          {/* Alt kenarlık: yalnız kaydırma başlayınca belirir. Mor blokta
-              şeridi kâğıttan değil, bloğun kendi ışığından ayırır. */}
-          <Animated.View
-            pointerEvents="none"
-            style={[
-              styles.border,
-              onDark || isInk ? styles.borderOnDark : null,
-              { opacity: appear },
-            ]}
-          />
+          {actions?.slice(0, 3).map((action) => (
+            <Touchable
+              key={action.icon + action.accessibilityLabel}
+              feedback="icon"
+              haptic="light"
+              onPress={action.onPress}
+              hitSlop={touchSlop(34)}
+              accessibilityRole="button"
+              accessibilityLabel={action.accessibilityLabel}
+              style={[styles.action, dark ? styles.actionOnInk : null]}
+            >
+              <Ionicons
+                name={action.icon}
+                size={20}
+                color={action.tone ? toneColors(action.tone).fg : ink}
+              />
+              {action.badge != null ? (
+                <Badge
+                  tone="live"
+                  variant="solid"
+                  size="xs"
+                  dot={action.badge === "dot"}
+                  label={action.badge === "dot" ? undefined : action.badge}
+                  floating
+                  style={styles.actionBadge}
+                  accessibilityLabel={action.badge === "dot" ? "Yeni" : `${action.badge} yeni`}
+                />
+              ) : null}
+            </Touchable>
+          ))}
         </Animated.View>
 
-        {/* Sayfa sekmeleri bloğun İÇİNDE: başlıkla aynı yüzeye aittir. */}
+        {/* KİMLİK — bloğun içinde; kaydırınca kapanır. */}
+        {hero ? (
+          <Animated.View style={[styles.hero, heroStyle]}>
+            <View onLayout={measure(setHeroHeight)}>{hero}</View>
+          </Animated.View>
+        ) : null}
+
+        {/* SAYFA SEKMELERİ — başlıkla aynı yüzeyde. */}
         {tabs}
+
+        {/* Alt kenar: yalnız kaydırma başlayınca belirir. */}
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.border, dark ? styles.borderOnDark : null, { opacity: appear }]}
+        />
       </View>
 
       {bottom}
@@ -430,83 +372,86 @@ const styles = StyleSheet.create({
   /**
    * Mor bloğun kabı. Zemin rengi gradyanın YEDEĞİdir: `expo-linear-gradient`
    * yüklenemezse (web, eski cihaz) blok yine de koyu kalır ve üstündeki beyaz
-   * metin okunur — yedeksiz bir gradyan, o cihazlarda beyaz üstüne beyaz
-   * yazardı.
+   * metin okunur.
    */
   inkWrap: {
     backgroundColor: colors.inkBlock,
     overflow: "hidden",
   },
-  container: {
-    overflow: "hidden",
-    justifyContent: "flex-start",
-  },
-  transparent: {
+  bareWrap: {
     backgroundColor: "transparent",
   },
   background: {
     backgroundColor: colors.bg,
   },
-  bar: {
-    height: BAR_HEIGHT,
+  /* Satır: içerik dikeyde ortalanır; daralınca üst/alt başlık kırpılır,
+     başlık yerinde kalır. */
+  row: {
+    minHeight: BAR_HEIGHT,
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: space.sm,
-    gap: space.xs,
+    paddingVertical: space.xs,
+    gap: space.xxs,
+    overflow: "hidden",
   },
-  /* Dokunma alanı 40px: 52px'lik çubuğun içinde kalan en büyük kare ve
-     44px tabanına hitSlop'la tamamlanır. Ölçek büyüyünce ikon 21 → 24
-     oldu, kutu da onunla büyüdü. */
   backButton: {
     width: 40,
     height: 40,
     alignItems: "center",
     justifyContent: "center",
   },
-  barSpacer: {
+  titleBlock: {
     flex: 1,
-  },
-  action: {
-    width: 38,
-    height: 38,
-    alignItems: "center",
+    minWidth: 0,
     justifyContent: "center",
   },
-  /**
-   * Rozet, ikonla karışmasın diye 2px halkayla ayrılır. Halkanın rengi mor
-   * BLOĞUN rengidir, kâğıdın değil: kâğıt renginde bir halka, koyu bloğun
-   * üstünde ikonun yanında parlayan beyaz bir çentik bırakıyordu.
-   */
-  actionBadge: {
-    top: 2,
-    right: 2,
-    borderWidth: 2,
-    borderColor: colors.inkBlock,
-  },
-  titleBlock: {
-    paddingHorizontal: layout.screenPadding,
-  },
-  /** Genişlik metin kadar olsun: ölçek telafisi ölçülen genişliğe dayanır. */
-  titleWrapper: {
-    alignSelf: "flex-start",
-    maxWidth: "100%",
+  /* Geri oku yokken başlık ekranın sol kenar boşluğuna oturur. */
+  titleBlockFlush: {
+    paddingLeft: layout.screenPadding - space.sm,
   },
   overline: {
     ...type.overline,
-    color: colors.brandAccent,
+    marginBottom: 1,
   },
-  /* Koyu atmosfer üstünde `brandAccent` mor üstüne mor kalır (~1,8:1); orada
-     marka etiketinin rengi açık lavantadır. */
-  overlineOnDark: {
-    color: colors.brandOnDark,
+  /* Çip 28px'lik kendi dokunma kutusunu taşır; başlıkla çakışmasın diye
+     yalnız görünen metin kadar yer kaplar. */
+  scope: {
+    alignSelf: "flex-start",
+    height: 16,
+    justifyContent: "center",
+    marginBottom: 1,
   },
   title: {
     ...type.h1,
-    color: colors.textPrimary,
   },
   subtitle: {
     ...type.bodySm,
-    color: colors.textSecondary,
+    marginTop: 1,
+  },
+  /** Eylem ikonu: 36px kutu; blokta hafif cam pul, kâğıtta çıplak. */
+  action: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.sm,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: space.xs,
+  },
+  actionOnInk: {
+    backgroundColor: colors.inkPill,
+    borderWidth: hairline,
+    borderColor: colors.borderOnDark,
+  },
+  /** Rozet halkası bloğun rengindedir; kâğıt renginde halka çentik bırakır. */
+  actionBadge: {
+    top: -2,
+    right: -2,
+    borderWidth: 2,
+    borderColor: colors.inkBlock,
+  },
+  hero: {
+    overflow: "hidden",
   },
   border: {
     position: "absolute",

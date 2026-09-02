@@ -24,7 +24,6 @@
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -35,7 +34,6 @@ import {
   StyleSheet,
   Text,
   View,
-  useWindowDimensions,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   type RefreshControlProps,
@@ -48,7 +46,6 @@ import {
   BottomSheet,
   Button,
   Card,
-  ChalkArc,
   EmptyState,
   ErrorState,
   FormChips,
@@ -657,6 +654,11 @@ export default function TeamDetailScreen() {
   const openH2h = useCallback(() => setH2hOpen(true), []);
   const closeH2h = useCallback(() => setH2hOpen(false), []);
 
+  /* "Sıradaki maç" boş durumunun TEK çıkışı. Sekme değişimi `changeTab`tan
+     geçer ki rota parametresi ve kaydırma sıfırlaması derin bağlantıyla
+     birebir aynı yolu izlesin. */
+  const openFixtures = useCallback(() => changeTab("fikstur"), [changeTab]);
+
   /** Rakip seçilince eski ekrandaki karşılaştırma sayfasına aynı parametrelerle gidilir. */
   const pickRival = useCallback(
     (rivalId: number, rivalName: string) => {
@@ -674,37 +676,59 @@ export default function TeamDetailScreen() {
     [router, teamId, teamName],
   );
 
+  /*
+   * BAŞLIK EYLEMLERİ: yıldız + paylaş. Favori, kimlik bloğundaki "Favoriye
+   * ekle" düğmesinden buraya taşındı — maket başlık satırında yıldız gösterir
+   * ve kimlik yalnız kimlik taşır (arma, ad, bağlam, sayılar). Durum ikonla
+   * anlatılır: dolu yıldız favoride, çizgili yıldız değil; erişilebilirlik
+   * etiketi de duruma göre değişir ki ekran okuyucu ne yapacağını söylesin.
+   */
   const headerActions = useMemo(
     () => [
+      {
+        icon: (favorite ? "star" : "star-outline") as keyof typeof Ionicons.glyphMap,
+        onPress: handleToggleFavorite,
+        accessibilityLabel: favorite ? "Takımı favorilerden çıkar" : "Takımı favoriye al",
+      },
       {
         icon: "share-social-outline" as keyof typeof Ionicons.glyphMap,
         onPress: openShare,
         accessibilityLabel: "Takım kartını paylaş",
       },
     ],
-    [openShare],
+    [favorite, handleToggleFavorite, openShare],
   );
 
   /* ------------------------------ Kabuk ------------------------------ */
 
+  /*
+   * KİMLİK BLOĞUN İÇİNDE: `ScreenHeader`ın `hero` yuvasına gider; başlık
+   * satırının altında, sekmelerin üstünde, aynı mor yüzeyde durur. Eskiden
+   * her sekmenin listesine `header` olarak giren ikinci bir mor kart vardı —
+   * mor üstüne mor, ad iki kez. Ad artık açık hâlde yalnız burada, kaydırıp
+   * daraltınca yalnız başlık satırında okunur.
+   *
+   * KADRO sayısı Kadro sekmesinin gösterdiği listeden gelir (şehir oyuncu
+   * kaydı + sezon sıralaması); liste henüz yoksa kutu çizilmez, sayı
+   * UYDURULMAZ.
+   */
   const hero = useMemo(
     () =>
       team ? (
-        <TeamHero
+        <TeamIdentity
           teamName={teamLabel}
           logo={team.logo ?? null}
           city={team.city ?? null}
           league={team.current_league ?? null}
+          followers={followerCount ?? null}
           rank={standing?.position ?? null}
           points={standing ? standing.row.display_points : null}
+          goalDiff={standing ? num(standing.row.goal_diff) : null}
+          squadCount={squad.length > 0 ? squad.length : null}
           form={standing?.row.last5 ?? ""}
-          followers={followerCount ?? null}
-          favorite={favorite}
-          onToggleFavorite={handleToggleFavorite}
-          onShare={openShare}
         />
       ) : null,
-    [team, standing, followerCount, favorite, handleToggleFavorite, openShare],
+    [team, teamLabel, followerCount, standing, squad.length],
   );
 
   if (!validId) {
@@ -741,14 +765,15 @@ export default function TeamDetailScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      {/* Alt başlık YOK: lig ve şehir, hemen altındaki kimlik bloğunda
-          "Ankara · FREELİG" olarak zaten yazıyor. İkisi arka arkaya durunca
-          takım adı ve ligi ekranda üst üste iki kez okunuyordu. */}
+      {/* Alt başlık YOK: lig ve şehir kimlik satırında "Ankara · FREELİG"
+          olarak zaten yazıyor. Başlık adı da açık hâlde çizilmez (kimlik
+          taşıyor); kaydırıp daraltınca satıra gelir — bkz. ScreenHeader. */}
       <ScreenHeader
         title={teamLabel}
         back
         scrollY={scrollY}
         actions={headerActions}
+        hero={hero}
         tabs={<Tabs items={TAB_ITEMS} value={tab} onChange={changeTab} sticky />}
       />
 
@@ -756,7 +781,6 @@ export default function TeamDetailScreen() {
         <GeneralTab
           scrollProps={scrollProps}
           refreshControl={refresh.control}
-          header={hero}
           teamId={teamId}
           teamName={teamLabel}
           nextMatch={nextMatch}
@@ -777,13 +801,13 @@ export default function TeamDetailScreen() {
           onAddCalendar={addToCalendar}
           onPickScope={scope.openScopeSheet}
           onCompare={openH2h}
+          onOpenFixtures={openFixtures}
         />
       ) : tab === "fikstur" ? (
         <MatchesTab
           mode="fixtures"
           scrollProps={scrollProps}
           refreshControl={refresh.control}
-          header={hero}
           matches={upcoming}
           loading={matchesQuery.isLoading}
           logoFor={logos.logoFor}
@@ -795,7 +819,6 @@ export default function TeamDetailScreen() {
           mode="results"
           scrollProps={scrollProps}
           refreshControl={refresh.control}
-          header={hero}
           matches={recent}
           loading={matchesQuery.isLoading}
           logoFor={logos.logoFor}
@@ -806,7 +829,6 @@ export default function TeamDetailScreen() {
         <SquadTab
           scrollProps={scrollProps}
           refreshControl={refresh.control}
-          header={hero}
           sections={squadSections}
           loading={(rosterQuery.isLoading || rankingsQuery.isLoading) && squad.length === 0}
           seasonLabel={scope.seasonLabel}
@@ -816,7 +838,6 @@ export default function TeamDetailScreen() {
         <StatsTab
           scrollProps={scrollProps}
           refreshControl={refresh.control}
-          header={hero}
           records={records}
           career={career}
           discipline={discipline}
@@ -826,7 +847,6 @@ export default function TeamDetailScreen() {
         <TransfersTab
           scrollProps={scrollProps}
           refreshControl={refresh.control}
-          header={hero}
           items={transfers}
           loading={newsQuery.isLoading}
           error={newsQuery.isError ? newsQuery.error : null}
@@ -878,144 +898,124 @@ interface TabShell {
   /** `useRefresh().control` — RefreshControl düğümü; tipi açık yazılmalı,
       aksi hâlde `ReactElement<unknown>` FlatList'in beklediğine oturmaz. */
   refreshControl: React.ReactElement<RefreshControlProps>;
-  header: React.ReactNode;
 }
 
 type LogoFor = (teamId?: number | null, teamName?: string | null) => string | null;
 
 /* ══════════════════════════════════════════════════════════════════════════
-   HERO — kimlik, sezon özeti, takipçi, favori
+   KİMLİK — mor bloğun içinde: arma, ad, bağlam, cam kutular, form
    ══════════════════════════════════════════════════════════════════════════ */
 
-const TeamHero = React.memo(function TeamHero({
+/**
+ * Cam kutunun dikey dolgusu — maket §7/6: 7px. Boşluk ölçeğinde karşılığı
+ * yok (s=6 rakamı kenara yapıştırıyor, sm=8 kutuyu bloğun içinde bir kat
+ * yükseltiyor); kutu yüksekliği "içerik + 7px" olsun diye tek yerde adlanır.
+ */
+const TILE_PAD_Y = 7;
+
+/** Cam kutudaki tek sayı. Değeri olmayan kutu HİÇ çizilmez — uydurma yok. */
+interface Fact {
+  key: string;
+  value: string;
+  label: string;
+}
+
+/** Averaj işaretli yazılır: +49 / 0 / -3. Sıfır işaretsiz kalır. */
+function signed(value: number): string {
+  return value > 0 ? `+${value}` : String(value);
+}
+
+const TeamIdentity = React.memo(function TeamIdentity({
   teamName,
   logo,
   city,
   league,
+  followers,
   rank,
   points,
+  goalDiff,
+  squadCount,
   form,
-  followers,
-  favorite,
-  onToggleFavorite,
-  onShare,
 }: {
   teamName: string;
   logo: string | null;
   city: string | null;
   league: string | null;
+  followers: number | null;
   rank: number | null;
   points: number | null;
+  goalDiff: number | null;
+  squadCount: number | null;
   form: string;
-  followers: number | null;
-  favorite: boolean;
-  onToggleFavorite: () => void;
-  onShare: () => void;
 }) {
-  const place = [city, league].filter(Boolean).join(" · ");
-  const { width } = useWindowDimensions();
+  /*
+   * KİMLİK BLOĞUN PARÇASIDIR — KENDİ YÜZEYİ YOK.
+   *
+   * Eski TeamHero kendi gradyanını, tebeşir yayını ve dev arma filigranını
+   * taşıyan ayrı bir mor karttı ve başlık bloğunun hemen altına oturuyordu:
+   * mor üstüne mor, takım adı iki kez, ekranın üst yarısı ağır. Bu bileşen
+   * `ScreenHeader`ın `hero` yuvasında, bloğun kendi gradyanı üstünde
+   * çizilir; yalnız ekran kenarı dolgusu ve alt boşluk taşır. Kaydırınca
+   * bloğun daralması, kimliğin kapanıp adın başlık satırına gelmesi
+   * ScreenHeader'ın işidir — burada kaydırmaya dair hiçbir şey yok.
+   *
+   * Takipçi sayısı bağlam satırındadır ("Ankara · FREELİG · 12 takipçi");
+   * kutular sezona ait dört sayıyı taşır: sıra, puan, averaj, kadro.
+   */
+  const meta = [city, league, followers != null ? `${followers} takipçi` : null]
+    .filter(Boolean)
+    .join(" · ");
+
+  const facts: Fact[] = [];
+  if (rank != null) facts.push({ key: "rank", value: `${rank}.`, label: "SIRA" });
+  if (points != null) facts.push({ key: "points", value: String(points), label: "PUAN" });
+  if (goalDiff != null) facts.push({ key: "diff", value: signed(goalDiff), label: "AVERAJ" });
+  if (squadCount != null) facts.push({ key: "squad", value: String(squadCount), label: "KADRO" });
 
   return (
-    <View style={styles.hero}>
-      {/*
-        KAPAK — MÜREKKEP BLOK + iki geometri katmanı.
-
-        Takım kimliği ekranın en üstünde durur ve kendi yüzeyini hak eder;
-        beyaz kâğıt üstünde duran bir takım adı, altındaki liste satırlarıyla
-        aynı ağırlıkta görünüyordu. Blok, maç detayının skor şeridiyle ve ana
-        ekranın vitrin kartıyla AYNI mürekkep yüzeydir — üç ekran arasında
-        gezinen kullanıcı aynı dili görür.
-
-        1. Dev arma filigranı, sol üstte, %6 opaklıkta. Takımın kimliğini
-           kapağa taşıyan tek öğe budur ve kullanıcının YÜKLEDİĞİ görselden
-           gelir; uydurulmuş bir kapak fotoğrafı ya da renk gradyanı değildir.
-        2. ChalkArc — uygulamanın imza öğesi. Kapak, maç detayının skor
-           bloğuyla aynı dili konuşur.
-
-        TAKIM RENGİNDEN ZEMİN TÜRETİLMEDİ: `ApiTeam.colors` alanı şemada var
-        ama biçimi tanımsız (hiçbir yerde okunmuyor) ve serbest metin
-        olabiliyor. Ayrıştırılamayan bir alandan renk üretmek, bazı takımlarda
-        okunmaz bir kapak demekti.
-      */}
-      <LinearGradient
-        colors={colors.gradientInk}
-        start={HERO_GRADIENT_START}
-        end={HERO_GRADIENT_END}
-        style={StyleSheet.absoluteFill}
-        pointerEvents="none"
-      />
-      {logo ? (
-        <View style={styles.coverMark} pointerEvents="none">
-          <TeamLogo name={teamName} logo={logo} size={140} plain />
-        </View>
-      ) : null}
-      <ChalkArc width={width} height={COVER_HEIGHT} color={colors.chalk} />
-
-      <View style={styles.heroTop}>
+    <View style={styles.identity}>
+      <View style={styles.identityTop}>
         <TeamLogo name={teamName} logo={logo} size={layout.crestXl} />
-        <View style={styles.heroIdentity}>
-          <Text style={styles.heroName} numberOfLines={2} {...textScale.dense}>
+        <View style={styles.identityBody}>
+          <Text style={styles.identityName} numberOfLines={2} {...textScale.dense}>
             {teamName}
           </Text>
-          {place ? (
-            <Text style={styles.heroPlace} numberOfLines={1} {...textScale.dense}>
-              {place}
+          {meta ? (
+            <Text style={styles.identityMeta} numberOfLines={1} {...textScale.dense}>
+              {meta}
             </Text>
           ) : null}
-          <View style={styles.heroBadges}>
-            {/* Mürekkep blok üstünde tint rozet soluk bir pembe leke oluyordu:
-                dolu mercan, mürekkep metin. */}
-            {rank != null ? (
-              <Badge label={`${rank}. sıra`} tone="brand" variant="solid" size="sm" />
-            ) : null}
-            {points != null ? (
-              // Mürekkep blok üstünde nötr rozet sönük kalırdı: tebeşir pul.
-              <View style={styles.heroPill}>
-                <Text style={styles.heroPillText} {...textScale.badge}>
-                  {`${points} puan`}
-                </Text>
-              </View>
-            ) : null}
-            {followers != null ? (
-              <Text style={styles.heroFollowers} {...textScale.dense}>
-                {followers} takipçi
-              </Text>
-            ) : null}
-          </View>
         </View>
       </View>
 
+      {facts.length ? (
+        <View style={styles.factRow}>
+          {facts.map((fact) => (
+            <View
+              key={fact.key}
+              style={styles.fact}
+              accessible
+              accessibilityLabel={`${fact.label.toLocaleLowerCase("tr-TR")} ${fact.value}`}
+            >
+              <Text style={styles.factValue} numberOfLines={1} {...textScale.dense}>
+                {fact.value}
+              </Text>
+              <Text style={styles.factLabel} numberOfLines={1} {...textScale.badge}>
+                {fact.label}
+              </Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+
       {form ? (
-        <View style={styles.heroForm}>
-          <Text style={styles.heroFormLabel} {...textScale.badge}>
+        <View style={styles.formRow}>
+          <Text style={styles.formLabel} {...textScale.badge}>
             SON 5
           </Text>
           <FormChips form={form} size="sm" />
         </View>
       ) : null}
-
-      <View style={styles.heroActions}>
-        <Button
-          label={favorite ? "Favorilerde" : "Favoriye ekle"}
-          icon={favorite ? "star" : "star-outline"}
-          variant={favorite ? "secondary" : "primary"}
-          onDark
-          onPress={onToggleFavorite}
-          style={styles.heroPrimary}
-          accessibilityLabel={favorite ? "Takımı favorilerden çıkar" : "Takımı favoriye al"}
-          accessibilityHint={
-            favorite ? undefined : "Bu takımın maç bildirimleri telefonuna gelir"
-          }
-        />
-        <Button
-          label="Paylaş"
-          icon="share-social-outline"
-          variant="ghost"
-          onDark
-          onPress={onShare}
-          accessibilityLabel="Takım kartını paylaş"
-        />
-      </View>
     </View>
   );
 });
@@ -1023,20 +1023,6 @@ const TeamHero = React.memo(function TeamHero({
 /* ══════════════════════════════════════════════════════════════════════════
    GERİ SAYIM — yalnız kendi satırını yeniler
    ══════════════════════════════════════════════════════════════════════════ */
-
-/** Kapak katmanının yüksekliği — ChalkArc yayı buna göre çizilir. */
-const COVER_HEIGHT = 136;
-
-/**
- * Mürekkep bloğun gradyan yönü — YATAY ve SAĞDAN SOLA.
- *
- * Köşegen ışık (0,0 → 1,1) buradaydı ve bloğa "boru" görünümü veriyordu:
- * köşeden köşeye giden bir geçiş, dikdörtgen bir yüzeyi silindir gibi
- * yuvarlıyor. Yön `GradientFill` ile birebir aynı olmak zorunda; aksi hâlde
- * aynı ekrandaki yüzeyler iki ayrı ışık kaynağından aydınlanmış gibi durur.
- */
-const HERO_GRADIENT_START = { x: 1, y: 0.5 } as const;
-const HERO_GRADIENT_END = { x: 0, y: 0.5 } as const;
 
 const pad = (value: number) => String(value).padStart(2, "0");
 
@@ -1106,12 +1092,13 @@ interface GeneralTabProps extends TabShell {
   onAddCalendar: (match: ApiMatch) => void;
   onPickScope: () => void;
   onCompare: () => void;
+  /** "Sıradaki maç" boşken tek çıkış: Fikstür sekmesine geçer. */
+  onOpenFixtures: () => void;
 }
 
 function GeneralTab({
   scrollProps,
   refreshControl,
-  header,
   teamId,
   teamName,
   nextMatch,
@@ -1132,6 +1119,7 @@ function GeneralTab({
   onAddCalendar,
   onPickScope,
   onCompare,
+  onOpenFixtures,
 }: GeneralTabProps) {
   const lastFive = useMemo(() => recent.slice(0, 5), [recent]);
 
@@ -1142,8 +1130,6 @@ function GeneralTab({
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
-      {header}
-
       {/* Sezon yorumu — puan tablosundaki satırdan otomatik üretilir */}
       {analysis ? (
         <>
@@ -1172,6 +1158,7 @@ function GeneralTab({
           icon="calendar-outline"
           title="Yaklaşan maç yok"
           body="Fikstüre maç eklendiğinde burada geri sayımıyla görünecek."
+          action={{ label: "Fikstüre git", onPress: onOpenFixtures }}
           variant="inline"
           compact
         />
@@ -1391,7 +1378,6 @@ function MatchesTab({
   mode,
   scrollProps,
   refreshControl,
-  header,
   matches,
   loading,
   logoFor,
@@ -1418,7 +1404,6 @@ function MatchesTab({
   if (loading) {
     return (
       <ScrollView {...scrollProps} contentContainerStyle={styles.content}>
-        {header}
         <SkeletonMatchRow count={6} />
       </ScrollView>
     );
@@ -1433,16 +1418,10 @@ function MatchesTab({
       refreshControl={refreshControl}
       contentContainerStyle={styles.content}
       ListHeaderComponent={
-        /* Hero yüksekliği içerikle değiştiği için `getItemLayout` KURULMAZ:
-           sabit satır yüksekliğiyle hesaplanan ofset başlığı yok sayar ve
-           kaydırma konumu kayar. */
-        <>
-          {header}
-          <SectionHeader
-            title={fixtures ? "Fikstür" : "Sonuçlar"}
-            meta={matches.length ? `${matches.length} maç` : undefined}
-          />
-        </>
+        <SectionHeader
+          title={fixtures ? "Fikstür" : "Sonuçlar"}
+          meta={matches.length ? `${matches.length} maç` : undefined}
+        />
       }
       ListEmptyComponent={
         fixtures ? (
@@ -1598,7 +1577,6 @@ interface SquadTabProps extends TabShell {
 function SquadTab({
   scrollProps,
   refreshControl,
-  header,
   sections,
   loading,
   seasonLabel,
@@ -1637,7 +1615,6 @@ function SquadTab({
   if (loading) {
     return (
       <ScrollView {...scrollProps} contentContainerStyle={styles.content}>
-        {header}
         <SkeletonListRow count={8} />
       </ScrollView>
     );
@@ -1654,14 +1631,11 @@ function SquadTab({
       refreshControl={refreshControl}
       contentContainerStyle={styles.content}
       ListHeaderComponent={
-        <>
-          {header}
-          {seasonLabel ? (
-            <Text style={styles.squadHint} {...textScale.dense}>
-              Sezon katkıları · {seasonLabel}
-            </Text>
-          ) : null}
-        </>
+        seasonLabel ? (
+          <Text style={styles.squadHint} {...textScale.dense}>
+            Sezon katkıları · {seasonLabel}
+          </Text>
+        ) : null
       }
       ListEmptyComponent={
         <EmptyState
@@ -1879,7 +1853,6 @@ interface StatsTabProps extends TabShell {
 function StatsTab({
   scrollProps,
   refreshControl,
-  header,
   records,
   career,
   discipline,
@@ -1895,8 +1868,6 @@ function StatsTab({
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
-      {header}
-
       {/* Tüm zamanlar — puan tablosuna değil takım kaydına dayanır, bu yüzden
           kapsam tutmasa da her zaman gösterilir. */}
       {career.matches > 0 ? (
@@ -2084,7 +2055,6 @@ interface TransfersTabProps extends TabShell {
 function TransfersTab({
   scrollProps,
   refreshControl,
-  header,
   items,
   loading,
   error,
@@ -2098,7 +2068,6 @@ function TransfersTab({
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
-      {header}
       <SectionHeader title="Transfer hareketleri" meta={items.length ? `${items.length} kayıt` : undefined} />
 
       {loading ? (
@@ -2413,6 +2382,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   content: {
+    paddingTop: space.md,
     paddingBottom: space.huge,
   },
   /*
@@ -2432,92 +2402,74 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
 
-  /* — Hero: mürekkep blok — */
-  /* Kimlik bloğu da diğer kartlarla aynı hizada, dört köşesi yuvarlak —
-     bkz. `inset`. Ekranın iki ucuna dayanan ama alt köşeleri yuvarlak bir
-     blok, altındaki her kart 16px içeriden başlarken taşmış görünüyordu. */
-  hero: {
-    // Gradyan yüklenemezse düz mürekkep zemin altta durur.
-    backgroundColor: colors.inkBlock,
-    marginHorizontal: layout.screenPadding,
-    paddingHorizontal: space.md,
-    paddingTop: space.md,
+  /* — Kimlik: mor bloğun içinde — */
+  /*
+   * YÜZEY YOK, GRADYAN YOK, KÖŞE YOK: blok zaten mor ve gradyanlı; ikinci
+   * bir yüzey çizmek "mor üstüne mor" hatasını geri getirirdi. Yatay dolgu
+   * ekran kenarıyla aynı (üstteki geri oku ve alttaki sekmelerle hizalı),
+   * alt boşluk sekme şeridine nefes bırakır.
+   */
+  identity: {
+    paddingHorizontal: layout.screenPadding,
     paddingBottom: space.md,
     gap: space.md,
-    borderRadius: radius.xxl,
-    overflow: "hidden",
   },
-  /* Dev arma filigranı — kadrajdan taşar. Mürekkep üstünde %10 görünür. */
-  coverMark: {
-    position: "absolute",
-    top: -36,
-    left: -32,
-    opacity: 0.1,
-  },
-  heroTop: {
+  identityTop: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.md,
   },
-  heroIdentity: {
+  identityBody: {
     flex: 1,
     minWidth: 0,
-    gap: space.xs,
+    gap: 2,
   },
-  heroName: {
-    ...type.display,
+  identityName: {
+    ...type.h1,
     color: colors.onDark,
   },
-  heroPlace: {
-    ...type.bodySm,
-    color: colors.onDarkMuted,
-  },
-  heroBadges: {
-    flexDirection: "row",
-    alignItems: "center",
-    flexWrap: "wrap",
-    gap: space.s,
-  },
-  heroFollowers: {
+  identityMeta: {
     ...type.caption,
-    color: colors.onDarkMuted,
-  },
-  /** Tebeşir pul — mürekkep blok üstündeki nötr rozet. */
-  heroPill: {
-    paddingHorizontal: space.sm,
-    paddingVertical: 1,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.chalk,
-  },
-  heroPillText: {
-    ...type.micro,
-    color: colors.onDark,
-  },
-  heroForm: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.sm,
-  },
-  heroFormLabel: {
-    ...type.overline,
-    color: colors.onDarkMuted,
+    color: colors.brandOnDark,
   },
   /*
-   * KİMLİK BLOĞUNUN EYLEMLERİ — SLAB DEĞİL, KENDİ BOYUNDA.
-   *
-   * "Favoriye ekle" `flex: 1` ile bloğun neredeyse tamamını kaplayan mor bir
-   * slab oluyordu: takım sayfası, takımın kendisiyle değil bir eylem
-   * çağrısıyla açılıyordu. İki düğme de kendi metni kadar yer tutar ve sola
-   * yaslanır; blokta asıl ağırlık arma ve takım adında kalır.
+   * CAM KUTULAR — sayılar bloğun içinde, SESSİZ camda (maket §7/6): %9 beyaz
+   * zemin, %12 beyaz kenar, 14px köşe. Hap dili (inkPill + lavanta çerçeve)
+   * DEĞİL: hap dokunulan şeydir (sekme, kapsam çipi), kutu yalnız okunur;
+   * ikisi aynı zemini taşısaydı sayılar düğme gibi dururdu. Kutu sayısı
+   * veriye bağlıdır: kapsam tutmuyorsa sıra/puan/averaj, liste gelmeden
+   * kadro yoktur; kalan kutular genişliği eşit paylaşır.
    */
-  heroActions: {
+  factRow: {
+    flexDirection: "row",
+    gap: space.s,
+  },
+  fact: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: TILE_PAD_Y,
+    borderRadius: radius.md,
+    backgroundColor: colors.inkTile,
+    borderWidth: 1,
+    borderColor: colors.inkTileBorder,
+  },
+  factValue: {
+    ...type.metricSm,
+    color: colors.onDark,
+  },
+  factLabel: {
+    ...type.overline,
+    color: colors.brandOnDark,
+    marginTop: 1,
+  },
+  formRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.sm,
   },
-  heroPrimary: {
-    flexShrink: 1,
+  formLabel: {
+    ...type.overline,
+    color: colors.brandOnDark,
   },
 
   /* — Sıradaki maç — */
@@ -2613,10 +2565,13 @@ const styles = StyleSheet.create({
   },
 
   /* — Kadro — */
+  /* Bloğun hemen altında durur (eskiden kimlik kartının altındaydı):
+     üstten de nefes alır, yoksa mor kenara yapışıyor. */
   squadHint: {
     ...type.caption,
     color: colors.textTertiary,
     paddingHorizontal: layout.screenPadding,
+    paddingTop: space.md,
     paddingBottom: space.sm,
   },
   squadTrailing: {

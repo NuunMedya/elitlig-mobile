@@ -1,31 +1,38 @@
 /**
  * SectionHeader — bölüm/grup başlığı, yapışkan kullanılabilir.
  *
- * İKİ BOY, İKİ İŞ (`size`):
- *   · "section" (VARSAYILAN) — ekrandaki asıl bölüm başlığı. 18px, cümle
- *     düzeni, birincil mürekkep. Bir bölümün nerede başladığını UZAKTAN
- *     söyler.
- *   · "group" — yoğun bir listenin içindeki grup etiketi (lig adı, gün).
- *     11px büyük harf, ikincil mürekkep; altındaki veriyle yarışmaz.
+ * TEK BİÇİM (tema.html §6 ".sh"): 3px mor ray + Archivo VERSAL 11px başlık +
+ * sağda "Tümü ›" kapısı. Ekranın hangi bölümü olursa olsun başlık aynı sesle
+ * konuşur; "bölüm başlığı dışında hiçbir yerde ikinci bir başlık biçimi yok"
+ * maketin kendi cümlesidir.
  *
- * NEDEN DEĞİŞTİ: önceki sürümde TEK boy vardı ve o da "group" boyuydu — 10px
- * büyük harf. Ekranın her başlığı aynı sönük etiket olunca sayfa "gri bir
- * duvar" hâline geliyordu; kullanıcı nereye baktığını başlıktan değil ancak
- * içeriği okuyarak anlayabiliyordu. Asıl bölüm başlığı manşet olmalıdır.
+ * NEDEN VERSAL VE KÜÇÜK: bir önceki sürüm 16px karışık harfli `h2` idi ve
+ * başlık, altındaki kartın satır başlığıyla (15px semibold) aynı boyda
+ * duruyordu — "Bugün" ile "FC ANGARA" yarışıyordu. Versal 11px Archivo bir
+ * ETİKETTİR: içerikle yarışmaz ama geniş harf aralığı ve ray sayesinde
+ * uzaktan seçilir. Türkçe büyük harf daima `upperTR()` ile yapılır (I/İ
+ * sorunu); erişilebilirlik etiketi özgün metni taşır, ekran okuyucu "BUGÜN"
+ * diye bağırmaz.
  *
- * Türkçe büyük harf daima `upperTR()` ile yapılır (I/İ sorunu).
+ * İKİ BOY, AYNI GÖRÜNÜM (`size`):
+ *   · "section" (VARSAYILAN) — ekrandaki asıl bölüm başlığı.
+ *   · "group" — yoğun bir listenin içindeki grup etiketi (lig adı, gün);
+ *     yalnız dikey payı daha sıkıdır, çünkü yapışkan bir bant olarak kayar.
+ *
+ * DİKEY PAY: maket başlığa 20px üst / 9px alt boşluk verir. Üst boşluğu bu
+ * bileşen DEĞİL ekran taşır — her ekran bölümler arasına zaten kendi nefesini
+ * (space.lg / layout.sectionGap) koyuyor; ikisi üst üste binseydi bölümler
+ * arası 36px'e çıkardı. Bileşen üstte yalnız küçük bir pay, altta maketin
+ * 9px'ini basar.
  *
  * YAPIŞKAN KULLANIM: `sticky` verildiğinde zemin OPAK `bg` olur ve alta
  * hairline eklenir; şeffaf bırakılırsa altından kayan satırlar başlığın
  * içinden geçer.
  *
- * İMZA ÖĞESİ — KALE DİREĞİ. Başlığın solunda 2×12px mercan dikey işaret durur.
- * Bu, ürünün "tebeşir çizgisi" dilinin en çok tekrar eden parçasıdır: saha
- * çizgileri dekor değil YAPISAL AYRAÇ olarak kullanılır ve bir bölümün nerede
- * başladığını renk değil GEOMETRİ söyler. Mercan burada aksiyon rengi olarak
- * değil işaret olarak durur; toplam alanı birkaç pikseldir, %5 kuralını
- * zorlamaz. `leading` (lig amblemi) verildiğinde işaret çizilmez — iki sol
- * gösterge yan yana gelirse ikisi de anlamını kaybeder.
+ * İMZA ÖĞESİ — RAY. Başlığın solunda 3×13px mor dikey işaret durur; bir
+ * bölümün nerede başladığını renk değil GEOMETRİ söyler. `leading` (lig
+ * amblemi) verildiğinde ray çizilmez — iki sol gösterge yan yana gelirse
+ * ikisi de anlamını kaybeder.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -35,6 +42,7 @@ import {
   colors,
   duration,
   easing,
+  fonts,
   hairline,
   layout,
   space,
@@ -63,9 +71,12 @@ export interface SectionHeaderProps {
    * grup etiketi. Varsayılan "section".
    */
   size?: "section" | "group";
-  /** Büyük harfe çevir. Varsayılan: "group" boyunda true, "section"da false. */
+  /**
+   * Büyük harfe çevir. Varsayılan true — maket başlığı daima versaldır.
+   * Resmî bir başlığın (kural maddesi) yazımı korunacaksa false verilir.
+   */
   uppercase?: boolean;
-  /** Kale direği işareti. Varsayılan true; `leading` varsa yok sayılır. */
+  /** Ray işareti. Varsayılan true; `leading` varsa yok sayılır. */
   mark?: boolean;
   style?: StyleProp<ViewStyle>;
   testID?: string;
@@ -81,7 +92,7 @@ export const SectionHeader = React.memo(function SectionHeader({
   action,
   sticky,
   size = "section",
-  uppercase,
+  uppercase = true,
   mark = true,
   style,
   testID,
@@ -109,14 +120,13 @@ export const SectionHeader = React.memo(function SectionHeader({
   );
 
   const group = size === "group";
-  const upper = uppercase ?? group;
-  const label = upper ? upperTR(title) : title;
+  const label = uppercase ? upperTR(title) : title;
 
   const body = (
     <>
       {collapsible ? (
         <Animated.View style={chevronStyle}>
-          <Ionicons name="chevron-forward" size={group ? 11 : 13} color={colors.textTertiary} />
+          <Ionicons name="chevron-forward" size={12} color={colors.textTertiary} />
         </Animated.View>
       ) : null}
       {leading ? (
@@ -124,20 +134,12 @@ export const SectionHeader = React.memo(function SectionHeader({
       ) : mark ? (
         <View style={styles.mark} />
       ) : null}
-      <Text
-        style={[styles.title, group ? styles.titleGroup : styles.titleSection]}
-        numberOfLines={1}
-        {...textScale.dense}
-      >
+      <Text style={styles.title} numberOfLines={1} {...textScale.dense}>
         {label}
       </Text>
       {meta ? (
-        <Text
-          style={[styles.meta, group ? styles.metaGroup : styles.metaSection]}
-          numberOfLines={1}
-          {...textScale.dense}
-        >
-          {meta}
+        <Text style={styles.meta} numberOfLines={1} {...textScale.dense}>
+          {upperTR(meta)}
         </Text>
       ) : null}
     </>
@@ -146,7 +148,6 @@ export const SectionHeader = React.memo(function SectionHeader({
   const containerStyle: StyleProp<ViewStyle> = [
     styles.header,
     group ? styles.headerGroup : styles.headerSection,
-    leading ? styles.headerWithLeading : null,
     sticky ? styles.sticky : null,
     style,
   ];
@@ -182,7 +183,7 @@ export const SectionHeader = React.memo(function SectionHeader({
           onPress={action.onPress}
           accessibilityRole="button"
           accessibilityLabel={action.label}
-          style={[styles.action, sticky ? styles.sticky : null]}
+          style={[styles.action, group ? styles.headerGroup : styles.headerSection, sticky ? styles.sticky : null]}
         >
           <Text style={styles.actionLabel} numberOfLines={1} {...textScale.dense}>
             {action.label}
@@ -208,15 +209,14 @@ const styles = StyleSheet.create({
     gap: space.sm,
     paddingHorizontal: layout.screenPadding,
   },
+  /** Maketin 9px alt payı: space.sm + 1. Üst pay ekranın bölüm boşluğuna eklenir. */
   headerSection: {
-    minHeight: 30,
+    paddingTop: space.xs,
+    paddingBottom: space.sm + space.px,
   },
+  /** Yapışkan bant: liste içinde kaydığı için üst/alt eşit ve sıkı. */
   headerGroup: {
-    minHeight: 24,
-    gap: space.s,
-  },
-  headerWithLeading: {
-    minHeight: 34,
+    paddingVertical: space.s,
   },
   sticky: {
     backgroundColor: colors.bg,
@@ -229,44 +229,41 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  /** Kale direği: mercan dikey işaret (imza öğesi). Başlıkla birlikte büyüdü. */
+  /** Ray: 3×13px mor dikey işaret (maket ".sh i.bar"), başlıkla dikey ortalı. */
   mark: {
-    width: 2,
-    height: 11,
-    borderRadius: 1,
+    width: 3,
+    height: 13,
+    borderRadius: 2,
     backgroundColor: colors.brand,
   },
+  /** Archivo versal 11px, geniş aralık — etiket sesi, manşet değil. */
   title: {
+    ...type.overline,
+    fontFamily: fonts.display,
+    fontSize: 11,
+    lineHeight: 15,
+    letterSpacing: 1.4,
+    color: colors.textPrimary,
     flexShrink: 1,
   },
-  titleSection: {
-    ...type.h2,
-    color: colors.textPrimary,
-  },
-  titleGroup: {
-    ...type.overline,
-    color: colors.textSecondary,
-  },
+  /** "4 MAÇ": başlıkla aynı aile, bir punto küçük, üçüncül mürekkep. */
   meta: {
-    marginLeft: "auto",
-  },
-  metaSection: {
-    ...type.caption,
-    color: colors.textTertiary,
-  },
-  metaGroup: {
     ...type.micro,
+    fontFamily: fonts.display,
+    letterSpacing: 0.6,
     color: colors.textTertiary,
+    marginLeft: "auto",
   },
   action: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 2,
+    gap: space.xxs,
     paddingHorizontal: layout.screenPadding,
   },
   actionLabel: {
     ...type.caption,
-    fontFamily: type.label.fontFamily,
+    fontFamily: fonts.semibold,
+    fontSize: 11.5,
     color: colors.brandAccent,
   },
 });

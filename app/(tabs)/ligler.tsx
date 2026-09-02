@@ -14,7 +14,14 @@
  * NEDEN BİRLEŞTİ: dördü de aynı kapsama bağlıydı ve dördü de ayrı ayrı 48px'lik
  * bir kapsam çubuğu çiziyordu. Kullanıcı "Ankara 1.Lig 25/26" seçimini sekme
  * değiştirdikçe yeniden okumak/doğrulamak zorunda kalıyordu. Artık kapsam bir
- * kez üstte gösterilir (ScopeChip) ve segment değiştikçe sabit kalır.
+ * kez, mor bloğun üst başlığında gösterilir (`ScopeChip tone="ink"`) ve
+ * segment değiştikçe sabit kalır; kâğıtta ikinci bir kapsam satırı yoktur.
+ *
+ * PUAN SEKMESİ TABLO YOĞUNLUĞUNDA (tema.html §7/3): O·G·B·M·AV·P sütunlarıyla
+ * on satır tek ekrana sığar. Satırlar ".group" kartında durur — sütun
+ * başlığı kartın tepesi, son satır tabanı, arada ince ayraç. FlatList
+ * satırları tek tek ürettiği için kart satır satır çizilir; bölge açıklaması
+ * ve dipnot kartın DIŞINDA, altında kalır.
  *
  * DERİN BAĞLANTI: `/(tabs)/ligler?tab=<puan|fikstur|istatistik|haberler|
  * arsiv>&leagueId=<id>`. Geçersiz değer (eski `oyuncular` dâhil) sessizce
@@ -61,7 +68,7 @@ import {
   TeamLogo,
   TeamRow,
   TeamRowHead,
-  TEAM_ROW_HEIGHT,
+  TEAM_ROW_HEIGHT_TABLE,
   Touchable,
   refreshControlProps,
   useHeaderScroll,
@@ -80,7 +87,7 @@ import { useScope } from "@/providers/ScopeProvider";
 import {
   colors,
   defaultZoneRules,
-  fonts,
+  hairline,
   layout,
   palette,
   radius,
@@ -90,6 +97,9 @@ import {
   type,
   zoneColor,
   zoneForRank,
+  zoneLabel,
+  type StandingZone,
+  type ZoneRule,
 } from "@/theme";
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -230,6 +240,7 @@ export default function LeaguesScreen() {
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader
         title="Ligler"
+        scope={<ScopeChip tone="ink" />}
         back
         /* Bu ekran sekme çubuğunda yuvası olmayan bir sekmedir (href: null) ve
            Menü'den açılır. Sekme gezgininde geri yığını olmayabilir; o durumda
@@ -238,13 +249,6 @@ export default function LeaguesScreen() {
         scrollY={scrollY}
         actions={actions}
         tabs={<Tabs items={TAB_ITEMS} value={tab} onChange={changeTab} sticky />}
-        bottom={
-          <View style={styles.headerBottom}>
-            <View style={styles.scopeRow}>
-              <ScopeChip variant="full" />
-            </View>
-          </View>
-        }
       />
 
       {tab === "puan" ? (
@@ -289,9 +293,42 @@ const ScopeMissing = React.memo(function ScopeMissing({ onPress }: { onPress: ()
    1) PUAN — sıralama tablosu
    ══════════════════════════════════════════════════════════════════════════ */
 
-/** Satır: sıra + amblem + ad/form iki satır. Sabit yükseklik `getItemLayout` içindir. */
+/**
+ * Ray renginin anahtarı, tablonun ALTINDA tek satır (tema.html §7/3). Renk
+ * tek başına anlam taşımaz; "altın = şampiyon" bir yerde yazılmalı ve o yer
+ * tablonun sonudur — başta dursaydı daha tek satır okunmadan açıklama
+ * okutulmuş olurdu. Yalnız kuralda geçen bölgeler yazılır.
+ */
+const ZoneLegend = React.memo(function ZoneLegend({ rules }: { rules: ZoneRule[] }) {
+  const zones = useMemo(() => {
+    const seen = new Set<StandingZone>();
+    return rules
+      .map((rule) => rule.zone)
+      .filter((zone) => {
+        if (zone === "none" || seen.has(zone)) return false;
+        seen.add(zone);
+        return true;
+      });
+  }, [rules]);
 
+  if (zones.length === 0) return null;
 
+  return (
+    <View style={styles.legend}>
+      {zones.map((zone) => (
+        <View key={zone} style={styles.legendItem}>
+          <View style={[styles.legendSwatch, { backgroundColor: zoneColor(palette, zone) ?? colors.border }]} />
+          <Text style={styles.legendLabel} {...textScale.dense}>
+            {zoneLabel(zone)}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+});
+
+/** Satırlar arası ince ayraç; kartın yan kenarlığını da taşır ki çizgi kesilmesin. */
+const GroupSeparator = () => <View style={styles.separator} />;
 
 function StandingsTab({ scrollProps, onPickScope }: TabProps) {
   const scope = useScope();
@@ -323,30 +360,44 @@ function StandingsTab({ scrollProps, onPickScope }: TabProps) {
 
   const openTeam = useCallback((teamId: number) => router.push(`/takim/${teamId}`), [router]);
 
+  const lastIndex = rows.length - 1;
+
   const renderItem = useCallback(
     ({ item, index }: { item: StandingRow; index: number }) => {
       const rank = index + 1;
       return (
         <TeamRow
+          density="table"
           rank={rank}
           teamId={item.team_id}
           name={item.team_name}
           logo={item.logo}
           played={item.played}
+          wins={item.wins}
+          draws={item.draws}
+          losses={item.losses}
           goalDiff={Number(item.goal_diff ?? 0)}
           points={item.display_points}
-          form={item.last5 ?? ""}
           favorite={isFavorite(item.team_id)}
           zone={zoneColor(palette, zoneForRank(rank, zoneRules))}
           onPress={openTeam}
+          /* Son satır kartın tabanıdır: alt kenarlık ve alt köşeler onda. */
+          style={index === lastIndex ? styles.groupRowLast : styles.groupRow}
         />
       );
     },
-    [isFavorite, openTeam, zoneRules],
+    [isFavorite, lastIndex, openTeam, zoneRules],
   );
 
   if (!scope.ready && !scope.loading) return <ScopeMissing onPress={onPickScope} />;
-  if (query.isLoading || scope.loading) return <SkeletonStandings />;
+  if (query.isLoading || scope.loading) {
+    /* İskelet de kartta durur; yükleme bitince çerçeve zıplamaz. */
+    return (
+      <View style={styles.skeletonCard}>
+        <SkeletonStandings density="table" />
+      </View>
+    );
+  }
   if (query.isError && rows.length === 0) {
     return <ErrorState error={query.error} onRetry={query.refetch} />;
   }
@@ -358,6 +409,7 @@ function StandingsTab({ scrollProps, onPickScope }: TabProps) {
       keyExtractor={standingKey}
       renderItem={renderItem}
       getItemLayout={standingLayout}
+      ItemSeparatorComponent={GroupSeparator}
       initialNumToRender={14}
       windowSize={8}
       contentContainerStyle={styles.standingsContent}
@@ -367,7 +419,12 @@ function StandingsTab({ scrollProps, onPickScope }: TabProps) {
       ListHeaderComponent={
         <>
           {query.isError ? <ErrorState error={query.error} variant="banner" /> : null}
-          <TeamRowHead pointsLabel={powerBalance ? "GP" : "Puan"} />
+          {/* Sütun başlığı kartın TEPESİDİR: üst kenarlık ve üst köşeler onda. */}
+          {rows.length > 0 ? (
+            <View style={styles.groupHead}>
+              <TeamRowHead density="table" pointsLabel={powerBalance ? "GP" : "Puan"} />
+            </View>
+          ) : null}
         </>
       }
       ListEmptyComponent={
@@ -378,21 +435,26 @@ function StandingsTab({ scrollProps, onPickScope }: TabProps) {
         />
       }
       ListFooterComponent={
-        powerBalance ? (
-          <Text style={styles.footnote} {...textScale.long}>
-            Bu sezon Güç Dengesi puanlaması kullanılıyor: bir maçtan alınan puan
-            rakibin güç endeksine göre değişir, toplam puan 0&apos;ın altına düşmez.
-          </Text>
-        ) : null
+        <>
+          {rows.length > 0 ? <ZoneLegend rules={zoneRules} /> : null}
+          {powerBalance ? (
+            <Text style={styles.footnote} {...textScale.long}>
+              Bu sezon Güç Dengesi puanlaması kullanılıyor: bir maçtan alınan puan
+              rakibin güç endeksine göre değişir, toplam puan 0&apos;ın altına düşmez.
+            </Text>
+          ) : null}
+        </>
       }
     />
   );
 }
 
 const standingKey = (item: StandingRow) => String(item.team_id);
+/* Hücre = satır + ayraç: VirtualizedList ayracı satırla aynı hücreye koyar. */
+const STANDING_CELL = TEAM_ROW_HEIGHT_TABLE + hairline;
 const standingLayout = (_data: ArrayLike<StandingRow> | null | undefined, index: number) => ({
-  length: TEAM_ROW_HEIGHT,
-  offset: TEAM_ROW_HEIGHT * index,
+  length: STANDING_CELL,
+  offset: STANDING_CELL * index,
   index,
 });
 
@@ -1182,10 +1244,14 @@ const seasonLayout = (
 
 /* ══════════════════════════════════════════════════════════════════════════ */
 
+/* Kartın kabuğu: satır satır çizilir (bkz. dosya başlığı). */
+const GROUP_SHELL = {
+  backgroundColor: colors.surface1,
+  borderColor: colors.border,
+} as const;
+
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  headerBottom: { gap: space.sm },
-  scopeRow: { paddingHorizontal: layout.screenPadding, flexDirection: "row" },
   listContent: {
     paddingHorizontal: layout.screenPadding,
     paddingBottom: layout.tabBarHeight + space.xxl,
@@ -1196,30 +1262,68 @@ const styles = StyleSheet.create({
     color: colors.textTertiary,
     letterSpacing: 0,
     lineHeight: 18,
-    paddingTop: space.md,
+    paddingTop: space.xs,
   },
 
   /* — Puan tablosu —
-     DAR KENAR: bu tablo sekiz sütun taşıyor (bölge, sıra, arma, ad, O/AV/P,
-     son 5) ve 360px'lik bir ekranda 20px kenarla takım adına 97px kalıyor.
-     `screenPaddingDense` ile 113px'e çıkıyor — yoğun tablo düzenleri için
-     ayrılan istisna tam olarak budur. Diğer beş sekme normal kenarı kullanır. */
+     KENAR DİĞER SEKMELERLE AYNI (screenPadding): satırlar kartta ve kartın
+     sol kenarındaki bölge rayı, Takımlar sekmesindeki kartla aynı x'te
+     durmalı — aynı tablo iki ekranda iki farklı hizada durunca "iki ayrı
+     şey" gibi okunuyordu. Dar kenarın (screenPaddingDense) kazandırdığı 4px
+     için sütunlar zaten `TeamRow` içinde sabit; ad sütunu 390px'te kırpılmaz. */
   standingsContent: {
-    paddingHorizontal: layout.screenPaddingDense,
+    paddingHorizontal: layout.screenPadding,
+    paddingTop: space.md,
     paddingBottom: layout.tabBarHeight + space.xxl,
     flexGrow: 1,
   },
-
-  /* — Oyuncular — */
-  plHeader: { gap: space.sm, paddingBottom: space.sm },
-  plLeading: { flexDirection: "row", alignItems: "center", gap: space.sm },
-  plRank: { ...type.tableNum, color: colors.textTertiary, width: 18, textAlign: "center" },
-  plMetric: { alignItems: "flex-end", minWidth: 44 },
-  plMetricValue: { ...type.tableNumStrong, color: colors.brandAccent },
-  plMetricUnit: { ...type.micro, color: colors.textTertiary },
-
-  /* — İstatistik — */
-  statFooter: { paddingTop: space.lg },
+  groupHead: {
+    ...GROUP_SHELL,
+    borderWidth: hairline,
+    borderBottomWidth: 0,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    overflow: "hidden",
+  },
+  groupRow: {
+    ...GROUP_SHELL,
+    borderLeftWidth: hairline,
+    borderRightWidth: hairline,
+  },
+  groupRowLast: {
+    ...GROUP_SHELL,
+    borderLeftWidth: hairline,
+    borderRightWidth: hairline,
+    borderBottomWidth: hairline,
+    borderBottomLeftRadius: radius.lg,
+    borderBottomRightRadius: radius.lg,
+    overflow: "hidden",
+  },
+  separator: {
+    height: hairline,
+    backgroundColor: colors.separator,
+    borderLeftWidth: hairline,
+    borderRightWidth: hairline,
+    borderColor: colors.border,
+  },
+  skeletonCard: {
+    marginHorizontal: layout.screenPadding,
+    marginTop: space.md,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    overflow: "hidden",
+  },
+  legend: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: space.md,
+    paddingVertical: space.m,
+    paddingHorizontal: space.xxs,
+  },
+  legendItem: { flexDirection: "row", alignItems: "center", gap: space.xs },
+  legendSwatch: { width: 3, height: 11, borderRadius: 2 },
+  legendLabel: { ...type.caption, color: colors.textTertiary },
 
   /* — Haberler — */
   newsHeader: { gap: space.sm, paddingBottom: space.sm },

@@ -21,8 +21,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { FlatList, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import type { LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { colors, layout, radius, space, textScale, touchSlop, type } from "@/theme";
-import { GradientFill } from "./GradientFill";
+import { colors, fonts, layout, radius, space, textScale, touchSlop, type } from "@/theme";
 import { haptics } from "@/lib/haptics";
 
 export interface DateStripProps {
@@ -39,8 +38,10 @@ export interface DateStripProps {
   showTodayButton?: boolean;
 }
 
-/** getDay() sırasıyla Türkçe gün kısaltmaları (0 = Pazar). */
-const WEEKDAYS = ["Paz", "Pzt", "Sal", "Çar", "Per", "Cum", "Cmt"] as const;
+/** getDay() sırasıyla Türkçe gün kısaltmaları (0 = Pazar) — VERSAL, maket
+    §7/2 gün etiketi gibi ("PER", "CUM"). Sabit yazıldığı için `upperTR`
+    gerekmez; İ/ı dönüşümü elle doğrudur (ÇAR, PZT). */
+const WEEKDAYS = ["PAZ", "PZT", "SAL", "ÇAR", "PER", "CUM", "CMT"] as const;
 
 const CELL_WIDTH = 42;
 
@@ -62,8 +63,8 @@ interface DayItem {
   iso: string;
   /** Ayın günü — "19" */
   day: string;
-  /** Her zaman kısa gün adı ("Per"). Bugün, rengiyle ve altındaki çizgiyle
-      ayrışır — bkz. `DayCell`. */
+  /** Her zaman versal kısa gün adı ("PER"). Bugün, rengiyle ve altındaki
+      çizgiyle ayrışır — bkz. `DayCell`. */
   weekday: string;
   isToday: boolean;
   /** Ekran okuyucu metni — "19 Ağustos Çarşamba" */
@@ -279,9 +280,10 @@ const DayCell = memo(function DayCell({
       accessibilityState={{ selected }}
       accessibilityLabel={item.isToday ? `Bugün, ${item.speech}` : item.speech}
     >
-      {/* Seçili gün MARKA GRADYANIDIR: düz mor blok, ışıklı sistemde tek başına
-          yassı duruyordu. */}
-      {selected ? <GradientFill tone="brand" radius="md" style={styles.cellFill} /> : null}
+      {/* Seçili gün DOLU MARKA MORUDUR: şerit kâğıtta durur ve kâğıtta seçili
+          durum daima düz `brand` dolgudur (chip, sekme gibi); gradyan burada
+          skor sahnesinin dilini kâğıda taşıyordu. */}
+      {selected ? <View style={styles.cellFill} /> : null}
       <Text
         style={[styles.weekday, item.isToday && styles.weekdayToday, selected && styles.onBrand]}
         numberOfLines={1}
@@ -340,36 +342,53 @@ const styles = StyleSheet.create({
     bottom: 0,
     width: 12,
   },
+  /*
+   * HÜCRE İÇERİK KADAR YÜKSEK. Eskiden `height: 40` sabitti; içerik (gün
+   * etiketi 13 + rakam 18 + çizgi 4 + nokta 6 = 41 + üst pay) 40'ı aşıyor ve
+   * gün adlarının tepesi (Ç, P) kırpılıyordu. Şimdi hücre `minHeight` +
+   * dikey dolgu taşır; 53px içerik 56px'lik şeridin (layout.dateStripHeight)
+   * içinde durur, "bugün" çizgisi ve maç noktası dolgunun İÇİNDE kalır.
+   */
   cell: {
     width: CELL_WIDTH,
-    height: 40,
+    minHeight: 40,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: radius.md,
-    paddingTop: 2,
+    borderRadius: radius.sm,
+    paddingVertical: space.s,
   },
   /* SEÇİLİ GÜN: dolgu hücrenin TAMAMINI kaplamaz. 42px'lik hücreler yan yana
      dizildiği için tam dolgu, komşu günlere yapışık bir blok gibi duruyor ve
-     şeridi ağırlaştırıyordu. 4px yatay / 2px dikey içeri çekilince blok kendi
-     etrafında nefes alır; seçim yine tartışmasız okunur. */
+     şeridi ağırlaştırıyordu. 4px içeri çekilince blok kendi etrafında nefes
+     alır; seçim yine tartışmasız okunur. Köşe: maketin 11px hapına en yakın
+     token (radius.sm). */
   cellFill: {
-    left: 4,
-    right: 4,
-    top: 2,
-    bottom: 2,
+    position: "absolute",
+    left: space.xs,
+    right: space.xs,
+    top: space.xs,
+    bottom: space.xs,
+    borderRadius: radius.sm,
+    backgroundColor: colors.brand,
   },
+  /** Gün adı: Archivo versal 9px, geniş aralık (maket 8.5px / .1em). */
   weekday: {
     ...type.micro,
+    fontFamily: fonts.display,
+    fontSize: 9,
+    lineHeight: 13,
+    letterSpacing: 0.9,
     color: colors.textTertiary,
   },
   weekdayToday: {
     color: colors.brandAccent,
-    letterSpacing: 0.2,
   },
+  /** Ayın günü: Archivo kalın 14px (maket), tabular. */
   day: {
     ...type.tableNumStrong,
+    fontSize: 14,
     color: colors.textPrimary,
-    marginTop: 1,
+    marginTop: space.px,
   },
   dayToday: {
     color: colors.brandAccent,
@@ -379,7 +398,7 @@ const styles = StyleSheet.create({
   },
   underlineRow: {
     height: 2,
-    marginTop: 2,
+    marginTop: space.xxs,
     justifyContent: "center",
   },
   todayUnderline: {
@@ -393,7 +412,7 @@ const styles = StyleSheet.create({
   },
   dotRow: {
     height: 4,
-    marginTop: 2,
+    marginTop: space.xxs,
     justifyContent: "center",
   },
   dot: {

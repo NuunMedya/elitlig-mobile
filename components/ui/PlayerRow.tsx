@@ -29,7 +29,7 @@ import React, { useCallback, useMemo } from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import {
   colors,
-  layout,
+  hairline,
   palette,
   positionBadge,
   positionColor,
@@ -43,6 +43,7 @@ import {
 } from "@/theme";
 import { positionLine } from "@/lib/api/team";
 import { Avatar } from "./Avatar";
+import { withAlpha } from "./Badge";
 import { Touchable } from "./Pressable";
 
 /** Satır yüksekliği — ekranlar `getItemLayout` için bunu kullanır. */
@@ -135,7 +136,13 @@ function PlayerRowBase({
             {name}
           </Text>
           {line ? (
-            <Text style={[styles.position, { color: lineColor }]} {...textScale.badge}>
+            <Text
+              style={[
+                styles.position,
+                { color: lineColor, backgroundColor: withAlpha(lineColor, 0.18) },
+              ]}
+              {...textScale.badge}
+            >
               {positionBadge(line)}
             </Text>
           ) : null}
@@ -196,13 +203,24 @@ const styles = StyleSheet.create({
     gap: space.m,
     paddingHorizontal: space.md,
   },
+  /* Sıra KUTUDA durur (tema.html ".rank"), TeamRow ile aynı anatomi: çıplak
+     bir rakam avatarın yanında havada asılı kalıyor ve "4" ile "14" farklı
+     genişlikte olduğu için avatar sütunu satırdan satıra kayıyordu. Sabit
+     bir kutu hem hizayı sabitler hem de sıralamayı takım listesiyle aynı
+     dilde okutur. */
   rankBox: {
     width: RANK_BOX,
+    height: RANK_BOX,
+    borderRadius: radius.xs,
     alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface2,
+    borderWidth: hairline,
+    borderColor: colors.border,
   },
   rankText: {
     ...type.tableNum,
-    color: colors.textTertiary,
+    color: colors.textSecondary,
   },
   ring: {
     width: AVATAR + RING * 2,
@@ -227,8 +245,14 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     flexShrink: 1,
   },
+  /* Mevki ÇİPİ: rengin %18 tonu zemin, rengin kendisi metin — iki temada
+     da okunur (dolu zemin + beyaz metin koyuda pastel üstünde kayboluyordu). */
   position: {
     ...type.micro,
+    paddingHorizontal: space.s,
+    paddingVertical: 1,
+    borderRadius: radius.xs,
+    overflow: "hidden",
   },
   shirt: {
     ...type.micro,
