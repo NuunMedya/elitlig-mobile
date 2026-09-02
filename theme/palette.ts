@@ -337,6 +337,24 @@ export interface Palette {
   /** Kapsülün ince ışıklı çerçevesi. */
   tabCapsuleBorder: string;
 
+  /* — Mor blok üstündeki SAYFA SEKMESİ hapı —
+   *
+   * Alt menü kapsülünden AYRI token: kapsül morun içinde mor bir puldur
+   * (ikonun arkasında durur, gözü çekmesi istenmez); sekme hapı ise başlık
+   * bloğunda seçili sayfayı söyleyen tek işarettir ve daha açık, daha
+   * belirgin olmak zorunda — yarı saydam beyaz + lavanta çerçeve. İki temada
+   * da aynıdır çünkü blok iki temada da koyudur.
+   */
+  inkPill: string;
+  inkPillBorder: string;
+  /**
+   * Mor bloktaki CAM KUTU (kimlik sayıları: SIRA · PUAN · AVERAJ). Haptan
+   * daha sessiz: sayı zaten konuşuyor, kutu yalnız gruplar. Maket: beyaz %9
+   * dolgu + %12 kenar.
+   */
+  inkTile: string;
+  inkTileBorder: string;
+
   chartGrid: string;
   scrimGradientTop: string;    // hero üstü okunabilirlik gradyanı
   scrimGradientBottom: string;
@@ -453,7 +471,7 @@ export const light: Palette = {
   posForward:   "#BE123C",
   posUnknown:   "#6E5F8C",
 
-  zoneChampion:          "#CA8A04",
+  zoneChampion:          "#B4801F",
   zonePromotion:         "#059669",
   zonePlayoff:           "#0E7490",
   zoneRelegationPlayoff: "#B45309",
@@ -495,6 +513,10 @@ export const light: Palette = {
   tabBeam:        "#DDD1FF",
   tabCapsule:       "rgba(167, 139, 250, 0.26)",
   tabCapsuleBorder: "rgba(221, 209, 255, 0.34)",
+  inkPill:          "rgba(255, 255, 255, 0.16)",
+  inkPillBorder:    "rgba(201, 184, 242, 0.45)",
+  inkTile:          "rgba(255, 255, 255, 0.09)",
+  inkTileBorder:    "rgba(255, 255, 255, 0.12)",
 
   chartGrid:         "#EDE7F7",
   scrimGradientTop:    "rgba(18, 10, 38, 0.00)",
@@ -594,7 +616,7 @@ export const dark: Palette = {
   posForward:   "#FF8FA3",
   posUnknown:   "#9C8CBE",
 
-  zoneChampion:          "#FBBF24",
+  zoneChampion:          "#E0AE4A",
   zonePromotion:         "#34D399",
   zonePlayoff:           "#22D3EE",
   zoneRelegationPlayoff: "#FBBF24",
@@ -622,14 +644,21 @@ export const dark: Palette = {
   skeletonHighlight: "#31215C",
 
   /* Bar, koyu temada kâğıttan AÇIK durur — gece de "yüzen" okunsun diye. */
-  tabBar:         "#351F63",
+  /* Bar iki temada da koyu mordur; koyu temada kâğıttan yalnız denetimin
+     istediği kadar (1.3:1) açık — daha açığı, gece ekranındaki en parlak
+     yüzey oluyor ve mor bloktan kopuyordu. */
+  tabBar:         "#33205C",
   tabBarBorder:   "rgba(255, 255, 255, 0.10)",
-  gradientTabBar: ["#402876", "#2A1852"],
+  gradientTabBar: ["#38225F", "#2C1B56"],
   tabActive:      "#FFFFFF",
   tabInactive:    "rgba(255, 255, 255, 0.58)",
   tabBeam:        "#DDD1FF",
   tabCapsule:       "rgba(167, 139, 250, 0.30)",
   tabCapsuleBorder: "rgba(221, 209, 255, 0.36)",
+  inkPill:          "rgba(255, 255, 255, 0.16)",
+  inkPillBorder:    "rgba(201, 184, 242, 0.45)",
+  inkTile:          "rgba(255, 255, 255, 0.09)",
+  inkTileBorder:    "rgba(255, 255, 255, 0.12)",
 
   chartGrid:         "#2C1B52",
   scrimGradientTop:    "rgba(15, 8, 32, 0.00)",

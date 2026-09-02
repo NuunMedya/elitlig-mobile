@@ -28,7 +28,7 @@
  * ortalanır — kullanıcı hangi sekmede olduğunu daima görür.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
   ScrollView,
@@ -90,11 +90,16 @@ interface TabLayout {
   width: number;
 }
 
-/** Göstergenin sekme kenarlarından içeri çekilme payı. */
-const INDICATOR_INSET = space.m;
+/**
+ * Göstergenin sekme kenarlarından içeri çekilme payı — DOLGUDAN KÜÇÜK olmak
+ * zorunda. Önceki değer (10px) sekme dolgusundan (6px) büyüktü: hap, etiketin
+ * her iki yanından 4px İÇERİDE kalıyor ve "Gol Krallığı" gibi etiketler hapın
+ * dışına taşıyordu. Şimdi hap, etiketi iki yandan 10px sarar.
+ */
+const INDICATOR_INSET = space.xxs;
 
 /** `styles.tab` yatay dolgusu — kırpılma hesabı bunu bilmek zorunda. */
-const TAB_PADDING = space.s;
+const TAB_PADDING = space.md;
 
 function TabsBase<T extends string>({
   items,
@@ -149,10 +154,17 @@ function TabsBase<T extends string>({
     ? containerWidth / Math.max(1, items.length)
     : 0;
 
-  const active: TabLayout | undefined = useMemo(() => {
-    if (mode === "equal" && equalWidth > 0) return { x: equalWidth * index, width: equalWidth };
-    return layouts[index];
-  }, [equalWidth, index, layouts, mode]);
+  /*
+   * HAP DAİMA ÖLÇÜLEN YERLEŞİMDEN HESAPLANIR. Eşit kipte hap konumu eskiden
+   * `equalWidth × index` diye TÜRETİLİYORDU, sekmeler ise ölçülen kutularına
+   * çiziliyordu; kip bir kare geç değiştiğinde ("sığıyor" kararı ölçümlerden
+   * sonra gelir) hap eşit-yuva ölçüsüyle, etiketler doğal genişlikle
+   * kalıyor ve hap komşu etiketin üstüne biniyordu (koyu temada oyuncu
+   * sayfasında yakalandı). Tek doğruluk kaynağı: her sekmenin kendi
+   * `onLayout`u — kip ne olursa olsun hap, etiketin gerçekten bulunduğu yeri
+   * sarar.
+   */
+  const active: TabLayout | undefined = layouts[index];
 
   const indicatorWidth = active ? Math.max(16, active.width - INDICATOR_INSET * 2) : 0;
   const indicatorX = active ? active.x + (active.width - indicatorWidth) / 2 : 0;
@@ -185,6 +197,12 @@ function TabsBase<T extends string>({
     // Etiketler değiştiyse doğal genişlikler geçersizdir.
     setLabelWidths([]);
   }, [labelKey]);
+
+  /* Kip değişince (eşit ↔ kaydırma) sekme kutuları yeniden ölçülür; eski
+     ölçümlerle bir kare bile çizmemek için yerleşim sıfırlanır. */
+  useEffect(() => {
+    setLayouts([]);
+  }, [mode]);
 
   const handleTabLayout = useCallback((i: number, event: LayoutChangeEvent) => {
     const { x, width } = event.nativeEvent.layout;
@@ -322,6 +340,9 @@ const styles = StyleSheet.create({
   content: {
     flexGrow: 1,
     alignItems: "stretch",
+    /* Hap ekran kenarından 8px içeride başlar (maket: 12px); etiket
+       kenardan 20px. Kenara yapışık bir hap, şeridi kırpılmış gösteriyordu. */
+    paddingHorizontal: space.sm,
   },
   tab: {
     flexDirection: "row",
@@ -329,10 +350,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: space.xs,
     height: layout.tabStripHeight,
-    /* Dar yatay dolgu: eşit genişlik kipinde şerit, kap genişliğini sekme
-       sayısına böler; 12px'lik dolgu 78px'lik bir yuvada metne yalnız 54px
-       bırakıyor ve "Haberler" gibi etiketler üç noktaya düşüyordu. */
-    paddingHorizontal: space.s,
+    /* Eşit kipte kap sekme sayısına bölünür; en geniş etiket yuvaya
+       sığmıyorsa şerit zaten kaydırmaya geçer (bkz. `fits`), yani dolgu
+       kırpılmaya yol açmaz. 12px, hapın etiketi rahatça sarması için. */
+    paddingHorizontal: TAB_PADDING,
   },
   /*
    * Aktif sekme AİLE DEĞİŞTİRMEZ, yalnız renk değiştirir. Önceki sürümde aktif
@@ -366,8 +387,8 @@ const styles = StyleSheet.create({
   indicator: {
     position: "absolute",
     left: 0,
-    top: 3,
-    bottom: 3,
+    top: 5,
+    bottom: 5,
     borderRadius: radius.pill,
     backgroundColor: colors.brandDim,
   },
@@ -376,12 +397,12 @@ const styles = StyleSheet.create({
    * aydınlık yarı saydam bir mor + ince ışıklı çerçeve. Düz bir dolgu rengi
    * denendi ve bloğun gradyanı boyunca kâğıt gibi bir leke bırakıyordu; yarı
    * saydam hap, altındaki geçişi taşıdığı için bloğun parçası olarak okunur.
-   * Değerler alt menü rayının kapsülüyle AYNI tokenlardan gelir — ikisi de
-   * "koyu blok üstünde seçili" demek.
+   * Alt menü kapsülünden AÇIK durur: kapsül ikonun arkasında sessiz bir
+   * puldur, bu hap ise seçili sayfayı söyleyen tek işaret.
    */
   indicatorInk: {
-    backgroundColor: colors.tabCapsule,
-    borderWidth: hairline,
-    borderColor: colors.tabCapsuleBorder,
+    backgroundColor: colors.inkPill,
+    borderWidth: 1,
+    borderColor: colors.inkPillBorder,
   },
 });

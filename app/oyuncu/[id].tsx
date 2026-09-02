@@ -35,7 +35,6 @@
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
-import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -58,7 +57,6 @@ import {
   Chip,
   EmptyState,
   ErrorState,
-  FormChips,
   ListRow,
   ProgressRing,
   RatingPill,
@@ -79,6 +77,7 @@ import {
 } from "@/components/ui";
 import { getMatchKadro } from "@/lib/api/matches";
 import { getPlayer, getPlayerRankings } from "@/lib/api/players";
+import { positionLine } from "@/lib/api/team";
 import { getTeam } from "@/lib/api/teams";
 import { formatAge, formatDateShort, formatMoney, mediaUrl } from "@/lib/format";
 import { get } from "@/lib/http";
@@ -87,27 +86,20 @@ import { queryKeys } from "@/lib/queryKeys";
 import { useScope } from "@/providers/ScopeProvider";
 import {
   colors,
-  elevate,
+  dark,
   fonts,
   hairline,
   layout,
   light,
+  positionBadge,
+  positionColor,
+  positionLineLabel,
   radius,
   space,
   textScale,
   type,
+  type PositionLine,
 } from "@/theme";
-
-/**
- * Mürekkep bloğun gradyan yönü — YATAY ve SAĞDAN SOLA.
- *
- * Köşegen ışık (0,0 → 1,1) buradaydı ve bloğa "boru" görünümü veriyordu:
- * köşeden köşeye giden bir geçiş, dikdörtgen bir yüzeyi silindir gibi
- * yuvarlıyor. Yön `GradientFill` ile birebir aynı olmak zorunda; aksi hâlde
- * aynı ekrandaki yüzeyler iki ayrı ışık kaynağından aydınlanmış gibi durur.
- */
-const HERO_GRADIENT_START = { x: 1, y: 0.5 } as const;
-const HERO_GRADIENT_END = { x: 0, y: 0.5 } as const;
 
 /* ══════════════════════════════════════════════════════════════════════════
    1) EKRANA ÖZGÜ UÇ TANIMLARI
@@ -435,8 +427,6 @@ function playedAppearances(rows: Appearance[] | undefined): Appearance[] {
     .sort((a, b) => timeOf(b) - timeOf(a));
 }
 
-/** Mevki → emoji (eski ekrandan korundu; mevki metni sunucudan serbest gelir). */
-
 /** Grup içi konum — ListRow köşe yuvarlaması ve ayracı buradan gelir. */
 function rowPosition(index: number, total: number): "single" | "first" | "middle" | "last" {
   if (total === 1) return "single";
@@ -452,6 +442,7 @@ function rowPosition(index: number, total: number): "single" | "first" | "middle
 export default function PlayerDetailScreen() {
   const params = useLocalSearchParams<{ id: string; tab?: string }>();
   const router = useRouter();
+  const scope = useScope();
   const { scrollY, scrollProps } = useHeaderScroll();
 
   const playerId = Number(params.id);
@@ -491,8 +482,134 @@ export default function PlayerDetailScreen() {
     staleTime: 10 * 60_000,
   });
 
+  const team = teamQuery.data ?? null;
+  const teamId = player?.team_id ?? null;
+
+  /*
+   * SAVUNMA: `player_name` şemada zorunlu ama sunucu eksik/kısmi bir kayıt
+   * döndürdüğünde (ör. 200 ile hata gövdesi) ekran `undefined.toLocaleUpperCase`
+   * ile ÇÖKÜYORDU. Ad tek bir yerde güvenli hâle getirilir ve aşağıdaki tüm
+   * kullanımlar bunu alır.
+   */
+  const playerName = player?.player_name || "İsimsiz oyuncu";
+
+  /*
+   * KİMLİK BLOĞUNUN VERİSİ — ekran kabuğunda toplanır.
+   *
+   * Kimlik artık `ScreenHeader`ın `hero` yuvasında, yani sekmelerin DIŞINDA
+   * çizilir; asist, TR sırası ve forma numarası gibi kimliğe giren parçalar
+   * bu yüzden Genel sekmesinden buraya çıktı. Genel sekmesi aynı sorguların
+   * bir kısmını (kapsam içi sıralama, maç maç kayıt) kendi işi için yine
+   * açar; anahtar aynı olduğu için React Query tek istek atar, iki kopya
+   * aynı önbelleği paylaşır.
+   */
+  const scopeKey = useMemo(
+    () => ({
+      cityId: scope.cityId ?? undefined,
+      leagueId: scope.leagueId ?? undefined,
+      seasonId: scope.seasonId ?? undefined,
+    }),
+    [scope.cityId, scope.leagueId, scope.seasonId],
+  );
+
+  /* Asist oyuncu ucunda yok; kapsam içi sıralama listesinden zenginleştirilir
+     (bulunamazsa kutu hiç çizilmez — eski ekranın kuralı korundu). */
+  const rankingsQuery = useQuery({
+    queryKey: queryKeys.playerRankings(scopeKey, "topScorers"),
+    queryFn: () => getPlayerRankings(scopeKey, "topScorers"),
+    enabled: validId && scope.ready,
+    staleTime: 5 * 60_000,
+  });
+
+  /* Türkiye geneli sıralama (kapsamsız) — kimlikteki "TR n." rozetinin kaynağı. */
+  const trRankQuery = useQuery({
+    queryKey: queryKeys.playerRankings({}, "topScorers"),
+    queryFn: () => getPlayerRankings({}, "topScorers"),
+    enabled: validId,
+    staleTime: 10 * 60_000,
+  });
+
+  /* Maç maç kayıt — yalnız en son maçın kimliği için (forma numarası). */
+  const profileQuery = useQuery({
+    queryKey: key.profileStats(playerId),
+    queryFn: () => getProfileStats(playerId),
+    enabled: validId,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+
+  const lastMatchId = useMemo(
+    () => playedAppearances(profileQuery.data?.appearances)[0]?.match?.id ?? null,
+    [profileQuery.data],
+  );
+
+  /* Forma numarası oyuncu kaydında yok; en son maçın kadrosundan okunur.
+     Kadro sorgusu maç detayıyla aynı önbelleği paylaşır, ek maliyeti yok. */
+  const kadroQuery = useQuery({
+    queryKey: [...queryKeys.match(Number(lastMatchId)), "kadro"] as const,
+    queryFn: () => getMatchKadro(Number(lastMatchId)),
+    enabled: lastMatchId != null,
+    staleTime: 60 * 60_000,
+    retry: false,
+  });
+
+  const assists = useMemo(() => {
+    const row = rankingsQuery.data?.players?.find((item) => Number(item.id) === playerId);
+    return row ? num(row.assists) : null;
+  }, [rankingsQuery.data, playerId]);
+
+  const trRank = useMemo(() => {
+    const list = trRankQuery.data?.players ?? [];
+    const index = list.findIndex((item) => Number(item.id) === playerId);
+    return index >= 0 ? index + 1 : null;
+  }, [trRankQuery.data, playerId]);
+
+  const jersey = useMemo(() => {
+    const kadro = kadroQuery.data;
+    if (!kadro) return null;
+    const all = [...(kadro.home ?? []), ...(kadro.away ?? [])];
+    const me = all.find((row) => Number(row.playerId ?? row.oyuncu_id ?? row.id) === playerId);
+    const parsed = Number(me?.number);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }, [kadroQuery.data, playerId]);
+
+  const openTeam = useCallback(() => {
+    if (teamId) router.push(`/takim/${teamId}`);
+  }, [router, teamId]);
+
   const openShare = useCallback(() => setShareOpen(true), []);
   const closeShare = useCallback(() => setShareOpen(false), []);
+
+  /*
+   * KİMLİK BLOĞUN İÇİNDE: `ScreenHeader`ın `hero` yuvasına gider; başlık
+   * satırının altında, sekmelerin üstünde, aynı mor yüzeyde durur. Eskiden
+   * Genel sekmesinin kaydırıcısına giren ikinci bir mor kart vardı — mor
+   * üstüne mor, ad iki kez. Ad artık açık hâlde yalnız burada, kaydırıp
+   * daraltınca yalnız başlık satırında okunur.
+   */
+  const totalMatches = num(player?.total_matches);
+  const totalPoints = num(player?.total_points);
+  const hero = useMemo(
+    () =>
+      player ? (
+        <PlayerIdentity
+          name={playerName}
+          image={player.player_img ?? null}
+          position={player.player_position ?? null}
+          jersey={jersey}
+          teamName={team?.team_name ?? null}
+          age={formatAge(player.birth_date ?? null)}
+          active={isActive(player.active)}
+          trRank={trRank}
+          matches={totalMatches}
+          goals={num(player.total_goals)}
+          assists={assists}
+          averageRating={totalMatches > 0 ? totalPoints / totalMatches : null}
+          onOpenTeam={openTeam}
+        />
+      ) : null,
+    [player, playerName, jersey, team, trRank, totalMatches, totalPoints, assists, openTeam],
+  );
 
   const actions = useMemo(
     () => [
@@ -540,50 +657,30 @@ export default function PlayerDetailScreen() {
     );
   }
 
-  const team = teamQuery.data ?? null;
-
-  /*
-   * SAVUNMA: `player_name` şemada zorunlu ama sunucu eksik/kısmi bir kayıt
-   * döndürdüğünde (ör. 200 ile hata gövdesi) ekran `undefined.toLocaleUpperCase`
-   * ile ÇÖKÜYORDU. Ad tek bir yerde güvenli hâle getirilir ve aşağıdaki tüm
-   * kullanımlar bunu alır.
-   */
-  const playerName = player.player_name || "İsimsiz oyuncu";
-
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      {/* Alt başlık YOK: mevki, hemen altındaki kimlik kartında zaten yazıyor.
-          İkisi arka arkaya durunca aynı iki satır ("Berkcan SIRT / Forvet")
-          ekranda üst üste iki kez okunuyordu. Ad şeritte kalır — kaydırınca
-          daralan başlıkta gereken tek bilgi odur. */}
+      {/* Alt başlık YOK: mevki ve kulüp, bloğun içindeki kimlik satırında
+          zaten yazıyor. Başlık adı da açık hâlde çizilmez (kimlik taşıyor);
+          kaydırıp daraltınca satıra gelir — bkz. ScreenHeader. */}
       <ScreenHeader
         title={playerName}
         back
         actions={actions}
         scrollY={scrollY}
+        hero={hero}
         tabs={<Tabs items={TAB_ITEMS} value={tab} onChange={changeTab} sticky />}
       />
 
       {tab === "genel" ? (
         <GeneralTab
           playerId={playerId}
-          playerName={playerName}
-          playerImage={player.player_img ?? null}
-          position={player.player_position ?? null}
-          birthDate={player.birth_date ?? null}
-          nationality={player.nationality ?? null}
-          active={isActive(player.active)}
-          totalMatches={num(player.total_matches)}
+          totalMatches={totalMatches}
           totalGoals={num(player.total_goals)}
-          totalPoints={num(player.total_points)}
           wins={num(player.wins)}
           draws={num(player.draws)}
           losses={num(player.losses)}
           phone={player.phone ?? null}
           email={player.email ?? null}
-          teamId={player.team_id ?? null}
-          teamName={team?.team_name ?? null}
-          teamLogo={team?.logo ?? null}
           refetchPlayer={playerQuery.refetch}
           isRefetching={playerQuery.isRefetching}
           scrollProps={scrollProps}
@@ -633,28 +730,188 @@ interface ScrollChrome {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   5) GENEL — kimlik, sezon özeti, piyasa değeri, son 5 maç
+   KİMLİK — mor bloğun içinde: mevki halkalı fotoğraf, ad, bağlam, cam kutular
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/** Kimlik fotoğrafı — maket §7: 56px daire, mevki renkli halka, sağ altta forma no. */
+const IDENTITY_AVATAR = 56;
+/** Halka kalınlığı — PlayerRow'daki kalıpla aynı. */
+const IDENTITY_RING = 2;
+/** Halka ile fotoğraf arasındaki nefes: blok zemini bu aralıktan görünür. */
+const IDENTITY_RING_GAP = 2;
+
+/** Cam kutudaki tek sayı. Değeri olmayan kutu HİÇ çizilmez — uydurma yok. */
+interface Fact {
+  key: string;
+  value: string;
+  label: string;
+}
+
+const PlayerIdentity = React.memo(function PlayerIdentity({
+  name,
+  image,
+  position,
+  jersey,
+  teamName,
+  age,
+  active,
+  trRank,
+  matches,
+  goals,
+  assists,
+  averageRating,
+  onOpenTeam,
+}: {
+  name: string;
+  image: string | null;
+  /** Ham mevki: kod ("STP") ya da serbest metin ("Sol Bek"); yoksa null. */
+  position: string | null;
+  jersey: number | null;
+  teamName: string | null;
+  /** `formatAge` çıktısı — bilinmiyorsa "—" gelir ve satıra girmez. */
+  age: string;
+  active: boolean;
+  trRank: number | null;
+  matches: number;
+  goals: number;
+  assists: number | null;
+  averageRating: number | null;
+  onOpenTeam: () => void;
+}) {
+  /*
+   * KİMLİK BLOĞUN PARÇASIDIR — KENDİ YÜZEYİ YOK.
+   *
+   * Eski kimlik kartı kendi gradyanını ve gölgesini taşıyan ayrı bir mor
+   * karttı ve başlık bloğunun hemen altına oturuyordu: mor üstüne mor, ad
+   * iki kez, ekranın üst yarısı ağır. Bu bileşen `ScreenHeader`ın `hero`
+   * yuvasında, bloğun kendi gradyanı üstünde çizilir; yalnız ekran kenarı
+   * dolgusu ve alt boşluk taşır. Kaydırınca bloğun daralması, kimliğin
+   * kapanıp adın başlık satırına gelmesi ScreenHeader'ın işidir.
+   *
+   * MEVKİ RENKTİR (theme/positions.ts): halka ve üç harfli etiket aynı rengi
+   * taşır. Mevki YOKSA hat da yok — `positionLine` boş girdide "MID" döndürür
+   * (saha dizilişi için doğru varsayım), ama bilinmeyen bir oyuncuyu "ORT"
+   * diye etiketlemek yanlış bilgi olurdu; halka o zaman nötr lavantadır.
+   */
+  const line: PositionLine | null = useMemo(
+    () => (position && String(position).trim() ? positionLine(position) : null),
+    [position],
+  );
+  /*
+   * NEDEN `dark` PALETİ: mevki renkleri kâğıt üstünde okunacak ÖN PLAN
+   * renkleridir; açık temada koyu tonlardır (mor #5B21B6 gibi) ve koyu mor
+   * bloğun üstünde kaybolurlar. Blok iki temada da koyu olduğu için üstündeki
+   * mevki rengi de daima koyu temanın (açık tonlu) sürümüdür — `onDark`ın iki
+   * temada da beyaz olmasıyla aynı mantık.
+   */
+  const lineColor = positionColor(dark, line);
+
+  const facts: Fact[] = [
+    { key: "matches", value: String(matches), label: "MAÇ" },
+    { key: "goals", value: String(goals), label: "GOL" },
+  ];
+  if (assists != null) facts.push({ key: "assists", value: String(assists), label: "ASİST" });
+  if (averageRating != null) {
+    facts.push({ key: "rating", value: averageRating.toFixed(1), label: "ORT. PUAN" });
+  }
+
+  const showAge = age !== "—";
+
+  return (
+    <View style={styles.identity}>
+      <View style={styles.identityTop}>
+        <View>
+          {/* Halka avatarın DIŞINDA: `borderWidth` verilseydi fotoğrafın görsel
+              çapı küçülürdü. Ayrı bir kap ölçüyü sabit tutar (PlayerRow kalıbı). */}
+          <View style={[styles.ring, { borderColor: lineColor }]}>
+            <Avatar name={name} image={image} size={IDENTITY_AVATAR} />
+          </View>
+          {jersey != null ? (
+            <View style={styles.jersey} accessible accessibilityLabel={`Forma numarası ${jersey}`}>
+              <Text style={styles.jerseyText} {...textScale.badge}>
+                {jersey}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+
+        <View style={styles.identityBody}>
+          <Text style={styles.identityName} numberOfLines={2} {...textScale.dense}>
+            {name}
+          </Text>
+
+          {/* Bağlam satırı: MEVKİ · kulüp · yaş, sonda küçük rozetler. Boş
+              değer satıra girmez; hepsi boşsa satır hiç çizilmez. */}
+          <View style={styles.identityMetaRow}>
+            {line ? (
+              <Text
+                style={[styles.identityPosition, { color: lineColor }]}
+                accessibilityLabel={positionLineLabel(line)}
+                {...textScale.badge}
+              >
+                {positionBadge(line)}
+              </Text>
+            ) : null}
+            {teamName || showAge ? (
+              <Text style={styles.identityMeta} numberOfLines={1} {...textScale.dense}>
+                {line ? "· " : null}
+                {teamName ? (
+                  /* Kulüp adı dokununca takım sayfasına iner — eski KULÜBÜ kartının işi. */
+                  <Text
+                    onPress={onOpenTeam}
+                    accessibilityRole="link"
+                    accessibilityLabel={`${teamName} takım sayfası`}
+                    style={styles.identityMetaLink}
+                  >
+                    {teamName}
+                  </Text>
+                ) : null}
+                {teamName && showAge ? " · " : null}
+                {showAge ? `${age} yaş` : null}
+              </Text>
+            ) : null}
+            {/* Aktif kayıt varsayılan durumdur, rozeti gürültü olur; yalnız
+                pasif kayıt söylenir. TR sırası tek satıra sığan tek ek rozettir. */}
+            {!active ? <Badge label="PASİF" tone="neutral" size="xs" /> : null}
+            {trRank != null ? <Badge label={`TR ${trRank}.`} tone="info" size="xs" /> : null}
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.factRow}>
+        {facts.map((fact) => (
+          <View
+            key={fact.key}
+            style={styles.fact}
+            accessible
+            accessibilityLabel={`${fact.label.toLocaleLowerCase("tr-TR")} ${fact.value}`}
+          >
+            <Text style={styles.factValue} numberOfLines={1} {...textScale.dense}>
+              {fact.value}
+            </Text>
+            <Text style={styles.factLabel} numberOfLines={1} {...textScale.badge}>
+              {fact.label}
+            </Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   5) GENEL — form grafiği, galibiyet dengesi, piyasa değeri, sıralama, son 5 maç
    ══════════════════════════════════════════════════════════════════════════ */
 
 interface GeneralTabProps {
   playerId: number;
-  playerName: string;
-  playerImage: string | null;
-  position: string | null;
-  birthDate: string | null;
-  nationality: string | null;
-  active: boolean;
   totalMatches: number;
   totalGoals: number;
-  totalPoints: number;
   wins: number;
   draws: number;
   losses: number;
   phone: string | null;
   email: string | null;
-  teamId: number | null;
-  teamName: string | null;
-  teamLogo: string | null;
   refetchPlayer: () => unknown;
   isRefetching: boolean;
   scrollProps: ScrollChrome;
@@ -662,23 +919,13 @@ interface GeneralTabProps {
 
 function GeneralTab({
   playerId,
-  playerName,
-  playerImage,
-  position,
-  birthDate,
-  nationality,
-  active,
   totalMatches,
   totalGoals,
-  totalPoints,
   wins,
   draws,
   losses,
   phone,
   email,
-  teamId,
-  teamName,
-  teamLogo,
   refetchPlayer,
   isRefetching,
   scrollProps,
@@ -690,8 +937,8 @@ function GeneralTab({
   /* Sparkline ölçüyü kendi hesaplamaz; ekran kenarları düşülür. */
   const trendWidth = width - layout.screenPadding * 2;
 
-  /* Asist oyuncu ucunda yok; kapsam içi sıralama listesinden zenginleştirilir
-     (bulunamazsa rakam hiç gösterilmez — eski ekranın kuralı korundu). */
+  /* Kapsam içi sıralama listesi — lig içi sıralar ve başarı rozetleri buradan
+     türetilir (kimlikteki asist kutusu da aynı sorguyu kabukta paylaşır). */
   const scopeKey = useMemo(
     () => ({
       cityId: scope.cityId ?? undefined,
@@ -706,13 +953,6 @@ function GeneralTab({
     queryFn: () => getPlayerRankings(scopeKey, "topScorers"),
     enabled: scope.ready,
     staleTime: 5 * 60_000,
-  });
-
-  /* Türkiye geneli sıralama (kapsamsız) — hero'daki "TR n." rozetinin kaynağı. */
-  const trRankQuery = useQuery({
-    queryKey: queryKeys.playerRankings({}, "topScorers"),
-    queryFn: () => getPlayerRankings({}, "topScorers"),
-    staleTime: 10 * 60_000,
   });
 
   const profileQuery = useQuery({
@@ -736,17 +976,6 @@ function GeneralTab({
     staleTime: 30 * 60_000,
     retry: false,
   });
-
-  const assists = useMemo(() => {
-    const row = rankingsQuery.data?.players?.find((item) => Number(item.id) === playerId);
-    return row ? num(row.assists) : null;
-  }, [rankingsQuery.data, playerId]);
-
-  const trRank = useMemo(() => {
-    const list = trRankQuery.data?.players ?? [];
-    const index = list.findIndex((item) => Number(item.id) === playerId);
-    return index >= 0 ? { rank: index + 1, total: list.length } : null;
-  }, [trRankQuery.data, playerId]);
 
   /* Lig içi sıralamalar — zaten çekilen listeden türetilir, ek istek yok. */
   const ranks = useMemo(() => {
@@ -793,44 +1022,8 @@ function GeneralTab({
     return values.length >= 5 ? values : [];
   }, [profileQuery.data]);
 
-  /* Form şeridi soldan sağa eskiden yeniye okunur. */
-  const form = useMemo<FormResult[]>(
-    () =>
-      recent
-        .map(appearanceResult)
-        .filter((value): value is FormResult => value != null)
-        .reverse(),
-    [recent],
-  );
-
-  /* Forma numarası oyuncu kaydında yok; en son maçın kadrosundan okunur.
-     Kadro sorgusu maç detayıyla aynı önbelleği paylaşır, ek maliyeti yok. */
-  const lastMatchId = recent[0]?.match?.id ?? null;
-  const kadroQuery = useQuery({
-    queryKey: [...queryKeys.match(Number(lastMatchId)), "kadro"] as const,
-    queryFn: () => getMatchKadro(Number(lastMatchId)),
-    enabled: lastMatchId != null,
-    staleTime: 60 * 60_000,
-    retry: false,
-  });
-
-  const jersey = useMemo(() => {
-    const kadro = kadroQuery.data;
-    if (!kadro) return null;
-    const all = [...(kadro.home ?? []), ...(kadro.away ?? [])];
-    const me = all.find((row) => Number(row.playerId ?? row.oyuncu_id ?? row.id) === playerId);
-    const parsed = Number(me?.number);
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-  }, [kadroQuery.data, playerId]);
-
   const decided = wins + draws + losses;
   const winRate = decided > 0 ? wins / decided : null;
-  const averageRating = totalMatches > 0 ? totalPoints / totalMatches : null;
-  const age = formatAge(birthDate);
-
-  const openTeam = useCallback(() => {
-    if (teamId) router.push(`/takim/${teamId}`);
-  }, [router, teamId]);
 
   const openMatch = useCallback(
     (matchId: number) => router.push(`/mac/${matchId}`),
@@ -845,127 +1038,9 @@ function GeneralTab({
       contentContainerStyle={styles.content}
       refreshControl={refresh.control}
     >
-      {/*
-        ————— Kimlik —————
-
-        DÜZEN: fotoğraf SOLDA, künye SAĞDA. Eski hâl her şeyi ortalıyordu ve
-        ad, rozetler, künye alt alta dizilince blok ekranın üçte birini
-        kaplıyordu; asıl veri (sezon rakamları) kaydırmadan görünmüyordu.
-
-        FOTOĞRAF KARE: 88px dairesel bir fotoğraf, hemen altındaki dairesel
-        TAKIM AMBLEMİYLE aynı silueti paylaşıyor ve ikisi bir an karışıyordu.
-        Yuvarlatılmış kare oyuncuyu kulüpten ayırır.
-
-        MÜREKKEP KART: kimlik bloğu koyu bir karttır — maç detayının skor
-        şeridi ve takım profilinin kapağıyla aynı yüzey. Oyuncu adı burada
-        `display` ölçeğindedir; bir profil sayfasının ilk söylediği şey kimin
-        profili olduğudur.
-      */}
-      <View style={styles.hero}>
-        <LinearGradient
-          colors={colors.gradientInk}
-          start={HERO_GRADIENT_START}
-          end={HERO_GRADIENT_END}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
-        />
-        <View style={styles.heroTop}>
-          <Avatar
-            name={playerName}
-            image={mediaUrl(playerImage)}
-            size={60}
-            shape="square"
-            jersey={jersey}
-          />
-
-          <View style={styles.heroIdentity}>
-            <Text style={styles.heroName} numberOfLines={2} {...textScale.dense}>
-              {playerName}
-            </Text>
-
-            {/* Künye tek satır, 11px: pozisyon · forma · yaş · uyruk. */}
-            <Text style={styles.heroMeta} numberOfLines={2} {...textScale.dense}>
-              {[
-                position || null,
-                jersey != null ? `#${jersey}` : null,
-                age !== "—" ? `${age} yaş` : null,
-                nationality || null,
-              ]
-                .filter(Boolean)
-                .join(" · ") || "Künye girilmedi"}
-            </Text>
-
-            <View style={styles.heroBadges}>
-              {/* Sunucuda ayrı bir "doğrulanmış" alanı yok; aktif oyuncu kaydı
-                  lisanslı/doğrulanmış kaydın kendisidir (models/players.js). */}
-              <Badge
-                label={active ? "AKTİF" : "PASİF"}
-                tone={active ? "win" : "neutral"}
-                size="xs"
-              />
-              {trRank ? <Badge label={`TR ${trRank.rank}.`} tone="info" size="xs" /> : null}
-            </View>
-          </View>
-        </View>
-
-        {/* Takım satırı — dokununca takım profiline iner. */}
-        {teamName ? (
-          <Touchable
-            feedback="card"
-            haptic="selection"
-            onPress={openTeam}
-            accessibilityRole="button"
-            accessibilityLabel={`${teamName} takım sayfası`}
-            style={styles.heroTeam}
-          >
-            <TeamLogo name={teamName} logo={mediaUrl(teamLogo)} size={layout.crestLg} />
-            <View style={styles.heroTeamBody}>
-              <Text style={styles.heroTeamLabel} {...textScale.badge}>
-                KULÜBÜ
-              </Text>
-              <Text style={styles.heroTeamName} numberOfLines={1} {...textScale.dense}>
-                {teamName}
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={14} color={colors.onDarkMuted} />
-          </Touchable>
-        ) : (
-          <Badge label="TAKIMSIZ" tone="neutral" size="sm" />
-        )}
-
-        {/* Son maçların sonucu — künye yukarı taşındığı için burada yalnız bu kalır. */}
-        {form.length ? (
-          <View style={styles.metaRow}>
-            <View style={styles.formBox}>
-              <Text style={styles.heroMetaLabel} {...textScale.badge}>
-                SON {form.length}
-              </Text>
-              <FormChips form={form} limit={5} size="xs" />
-            </View>
-          </View>
-        ) : null}
-      </View>
-
-      {/* ————— Sezon özeti: büyük rakamlar ————— */}
-      <View style={styles.bigRow}>
-        <BigStat label="MAÇ" value={String(totalMatches)} />
-        <View style={styles.bigDivider} />
-        <BigStat label="GOL" value={String(totalGoals)} />
-        {assists != null ? (
-          <>
-            <View style={styles.bigDivider} />
-            <BigStat label="ASİST" value={String(assists)} />
-          </>
-        ) : null}
-        <View style={styles.bigDivider} />
-        <BigStat
-          label="ORT. PUAN"
-          value={averageRating != null ? averageRating.toFixed(1) : "—"}
-          tone="brand"
-        />
-      </View>
-
-      {/* ————— Form grafiği: son maçların puan seyri ————— */}
+      {/* ————— Form grafiği: son maçların puan seyri —————
+          Kâğıdın ilk öğesi: kimlik ve sayılar artık mor blokta, burada
+          doğrudan seyir başlar. */}
       {ratingTrend.length ? (
         <View style={styles.trend}>
           <View style={styles.trendHead}>
@@ -1608,31 +1683,6 @@ function CareerTab({
    9) ALT BİLEŞENLER
    ══════════════════════════════════════════════════════════════════════════ */
 
-/** Büyük özet rakamı — `type.display` ile okunur, tabular hizalı. */
-const BigStat = React.memo(function BigStat({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string;
-  tone?: "brand";
-}) {
-  return (
-    <View style={styles.bigStat}>
-      <Text
-        style={[styles.bigValue, tone === "brand" && styles.bigValueBrand]}
-        {...textScale.dense}
-      >
-        {value}
-      </Text>
-      <Text style={styles.bigLabel} numberOfLines={1} {...textScale.badge}>
-        {label}
-      </Text>
-    </View>
-  );
-});
-
 /** Kimlik künyesindeki küçük etiket–değer kutusu. */
 const MetaChip = React.memo(function MetaChip({
   label,
@@ -2229,6 +2279,8 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: layout.screenPadding,
+    /* Üst nefes: kâğıt mor bloğun kenarından hemen başlamasın. */
+    paddingTop: space.sm,
     paddingBottom: space.giant,
     gap: space.sm,
   },
@@ -2251,49 +2303,116 @@ const styles = StyleSheet.create({
     marginTop: space.sm,
   },
 
-  /* — Kimlik: mürekkep kart — */
-  hero: {
+  /* — Kimlik: mor bloğun içinde — */
+  /*
+   * YÜZEY YOK, GRADYAN YOK, KÖŞE YOK: blok zaten mor ve gradyanlı; ikinci
+   * bir yüzey çizmek "mor üstüne mor" hatasını geri getirirdi. Yatay dolgu
+   * ekran kenarıyla aynı (üstteki geri oku ve alttaki sekmelerle hizalı),
+   * alt boşluk sekme şeridine nefes bırakır.
+   */
+  identity: {
+    paddingHorizontal: layout.screenPadding,
+    paddingBottom: space.md,
     gap: space.md,
-    padding: space.md,
-    marginTop: space.s,
-    ...elevate(2),
-    borderWidth: 0,
-    borderRadius: radius.xxl,
-    overflow: "hidden",
-    // Gradyan yüklenemezse düz mürekkep zemin altta durur. `elevate` kendi
-    // zeminini taşıdığı için bu satır ondan SONRA gelmek zorunda.
-    backgroundColor: colors.inkBlock,
   },
-  /* Fotoğraf solda, künye sağda — blok ekranın üçte birini kaplamasın. */
-  heroTop: {
+  identityTop: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.md,
   },
-  heroIdentity: {
-    flex: 1,
-    gap: space.s,
+  /* Halka + nefes fotoğrafın dışına eklenir; fotoğrafın çapı değişmez. */
+  ring: {
+    width: IDENTITY_AVATAR + (IDENTITY_RING + IDENTITY_RING_GAP) * 2,
+    height: IDENTITY_AVATAR + (IDENTITY_RING + IDENTITY_RING_GAP) * 2,
+    borderRadius: radius.pill,
+    borderWidth: IDENTITY_RING,
+    padding: IDENTITY_RING_GAP,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  heroName: {
-    ...type.display,
+  /* Forma numarası: halkanın sağ altında, blok renginde küçük bir pul —
+     halkanın üstüne biner, cam çerçevesi onu fotoğraftan ayırır. */
+  jersey: {
+    position: "absolute",
+    right: -space.xs,
+    bottom: -space.xxs,
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: space.xs,
+    borderRadius: radius.xs,
+    backgroundColor: colors.inkBlock,
+    borderWidth: 1,
+    borderColor: colors.inkPillBorder,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  jerseyText: {
+    ...type.micro,
+    color: colors.onDark,
+    letterSpacing: 0,
+  },
+  identityBody: {
+    flex: 1,
+    minWidth: 0,
+    gap: space.xs,
+  },
+  identityName: {
+    ...type.h1,
     color: colors.onDark,
   },
-  heroMeta: {
-    ...type.bodySm,
-    color: colors.onDarkMuted,
-  },
-  heroBadges: {
+  identityMetaRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
+    alignItems: "center",
     gap: space.s,
   },
-  /* Form grafiği: kutu değil, hairline ile ayrılmış bir şerit. */
+  /* Mevki etiketi: üç harf, rengi `positionColor` ile satır içinde verilir. */
+  identityPosition: {
+    ...type.micro,
+  },
+  identityMeta: {
+    ...type.caption,
+    color: colors.brandOnDark,
+    flexShrink: 1,
+  },
+  /* Dokunulabilir kulüp adı, lavanta bağlamdan bir ton daha beyaz. */
+  identityMetaLink: {
+    color: colors.onDark,
+  },
+  /*
+   * CAM KUTULAR — sayılar bloğun içinde, yarı saydam beyaz zeminde, lavanta
+   * çerçeveyle (Tabs ve başlık eylemleriyle aynı pul dili). Kutu sayısı
+   * veriye bağlıdır: asist kapsam listesinden gelmezse, ortalama maç yoksa
+   * kutu yoktur; kalanlar genişliği eşit paylaşır.
+   */
+  factRow: {
+    flexDirection: "row",
+    gap: space.s,
+  },
+  fact: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: space.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.inkPill,
+    borderWidth: 1,
+    borderColor: colors.inkPillBorder,
+  },
+  factValue: {
+    ...type.metricSm,
+    color: colors.onDark,
+  },
+  factLabel: {
+    ...type.overline,
+    color: colors.brandOnDark,
+    marginTop: 1,
+  },
+
+  /* Form grafiği: kutu değil, kâğıt üstünde çıplak bir şerit. Üst çizgisi
+     yok — hemen üstünde mor blok biter, ayrım zaten renkle kurulu. */
   trend: {
     gap: space.s,
-    paddingTop: space.md,
+    paddingTop: space.xs,
     paddingBottom: space.sm,
-    borderTopWidth: hairline,
-    borderTopColor: colors.border,
   },
   trendHead: {
     flexDirection: "row",
@@ -2303,38 +2422,6 @@ const styles = StyleSheet.create({
   trendRange: {
     ...type.tableNum,
     color: colors.textTertiary,
-  },
-  /* Kulüp satırı mürekkep kartın İÇİNDE: cam pul (beyazın %22'si + tebeşir). */
-  heroTeam: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.sm,
-    alignSelf: "stretch",
-    backgroundColor: colors.chalk,
-    borderWidth: 1,
-    borderColor: colors.chalk,
-    borderRadius: radius.md,
-    paddingHorizontal: space.m,
-    paddingVertical: space.s,
-  },
-  heroTeamBody: {
-    flex: 1,
-    gap: 1,
-  },
-  /* Mürekkep kart üstünde marka rengi açık lavantadır. */
-  heroTeamLabel: {
-    ...type.overline,
-    color: colors.brandOnDark,
-  },
-  heroTeamName: {
-    ...type.h4,
-    color: colors.onDark,
-  },
-  metaRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "center",
-    gap: space.s,
   },
   metaChip: {
     alignItems: "center",
@@ -2348,55 +2435,9 @@ const styles = StyleSheet.create({
     ...type.overline,
     color: colors.textTertiary,
   },
-  /** Aynı etiketin mürekkep kimlik kartı içindeki sürümü. */
-  heroMetaLabel: {
-    ...type.overline,
-    color: colors.onDarkMuted,
-  },
   metaValue: {
     ...type.tableNumStrong,
     color: colors.textPrimary,
-  },
-  formBox: {
-    alignItems: "center",
-    gap: 2,
-    backgroundColor: colors.surface2,
-    borderRadius: radius.md,
-    paddingHorizontal: space.m,
-    paddingVertical: space.xs,
-  },
-
-  /* — Büyük rakamlar — */
-  bigRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.surface1,
-    borderWidth: hairline,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    paddingVertical: space.md,
-  },
-  bigDivider: {
-    width: hairline,
-    alignSelf: "stretch",
-    backgroundColor: colors.separator,
-  },
-  bigStat: {
-    flex: 1,
-    alignItems: "center",
-    gap: 2,
-  },
-  bigValue: {
-    ...type.display,
-    fontVariant: ["tabular-nums"],
-    color: colors.textPrimary,
-  },
-  bigValueBrand: {
-    color: colors.brandAccent,
-  },
-  bigLabel: {
-    ...type.micro,
-    color: colors.textTertiary,
   },
 
   /* — Kart, grup — */

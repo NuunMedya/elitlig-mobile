@@ -1,23 +1,38 @@
 /**
  * MatchRow — maç listesinin tek satırı. Sistemin görsel kalbi.
  *
- * DÜZEN — TEK SATIR, SİMETRİK:
+ * DÜZEN — İKİ TAKIM ÜST ÜSTE, SKOR SAĞDA (tema.html §6 ".mrow"):
  *
- *   ┌ 36 ┬────── flex ──────┬ 42 ┬────── flex ──────┬ 22 ┐
- *   │19:30│ ◆ Kartalspor     │2–1 │ Yıldızspor ◆     │ ☆ │
- *   └─────┴──────────────────┴────┴──────────────────┴────┘
- *     saat   logo + ev (sağa)  skor  dep (sola) + logo  yıldız
+ *   ┌──────────── flex ────────────┬ 30 ┬ 42 ┬ 42 ┐
+ *   │ ◆ FC ANGARA                  │ 10 │ MS │ ☆ │
+ *   │ ◆ LAST DANCE                 │ 10 │    │   │
+ *   └──────────────────────────────┴────┴────┴────┘
+ *      arma + ad (sola yaslı)       skor  zaman yıldız
  *
- * NEDEN İKİ SATIRDAN TEK SATIRA: eski düzen ev sahibini üste, deplasmanı alta
- * yazıyor ve satır başına 56px istiyordu. Aynı bilgi 40px'e sığıyor; bir
- * ekrana neredeyse iki kat maç giriyor. Skor ORTADA sabit genişlikli bir
- * blokta durduğu için göz, liste boyunca tek bir dikey ekseni takip eder —
- * iki satırlı düzende skor sağdaydı ve takım adlarının uzunluğu okuma eksenini
- * her satırda kaydırıyordu.
+ * NEDEN TEK SATIRDAN İKİ SATIRA DÖNDÜ: tek satırlı simetrik düzen
+ * ("ev · arma · 2–1 · arma · dep") 390px'te iki takım adına toplam ~150px
+ * bırakıyordu. Bu ligde adlar uzun ve BÜYÜK HARF ("ASYA KARTALLARI",
+ * "BOZKURTLAR FC"); neredeyse her satır "FC ANG…" / "LAST DA…" diye kırpılıyor
+ * ve maç satırı, söylemesi gereken tek şeyi — kim kime karşı — söyleyemez
+ * hâle geliyordu. Üst üste düzende her ada satırın ~200px'i kalır; iki satırın
+ * bedeli (54 → 58px) ekrana giren maç sayısını neredeyse hiç değiştirmez.
  *
- * NEDEN İÇE HİZALI: ev sahibinin adı SAĞA, deplasmanınki SOLA yaslanır; ikisi
- * de ortadaki skora yaslandığı için "ev – skor – deplasman" tek bir okuma
- * birimi olur. Amblemler dışta durur ve iki kenarda sabit bir ritim kurar.
+ * OKUMA EKSENİ: skor sağda, sabit genişlikli bir sütunda ve SAĞA yaslı durur;
+ * onun sağında saç teli ayraçla ayrılmış sabit genişlikli "ne zaman" sütunu
+ * (MS / 67' / 20:30). Adlar ne kadar uzun olursa olsun bu iki sütun liste
+ * boyunca aynı yerde kalır: göz soldan adı, sağdan sonucu okur.
+ *
+ * ÜÇ SÜTUN AYNI ÇİZGİYE OTURUR: takım satırı, skor satırı ve (canlıda)
+ * dakika, hepsi aynı sabit çizgi yüksekliğini (`LINE`) ve aynı çizgi
+ * boşluğunu paylaşır. Amblem 22px, ad 17px, skor 21px olduğu hâlde ev
+ * sahibinin rakamı ev sahibinin adıyla, deplasmanınki deplasmanınkiyle aynı
+ * hizada durur — aksi hâlde iki sütun birbirinden bir iki piksel kayar ve
+ * satır "yamuk" okunur.
+ *
+ * KAZANAN/KAYBEDEN RENKLE VE AĞIRLIKLA AYRILIR: kazanan `fonts.semibold` +
+ * `textPrimary`; kaybedenin adı da skoru da `textTertiary`, amblemi soluk.
+ * Berabere ve oynanmamış maçta iki taraf da "normal"dir (`fonts.medium`);
+ * canlı maçta ağırlık yok, skor `live` rengindedir — henüz kazanan yok.
  *
  * SABİT YÜKSEKLİK ŞART: yüzlerce satırlık listede `getItemLayout` olmadan
  * kaydırma tökezliyor. Bu yüzden yükseklik varyanta göre SABİTTİR ve
@@ -69,7 +84,7 @@ export interface MatchRowProps {
   showFavorite?: boolean;
   isFavorite?: boolean;
   onToggleFavorite?: () => void;
-  /** Kompakt: tek satır, 48px (profil "son maçlar" listesi) */
+  /** Kompakt: iki satır daha sıkı (bodySm, 18px çizgi), 46px */
   variant?: MatchRowVariant;
   /** Saha adı ya da lig adı — satırın üstünde mikro etiket */
   metaMode?: MatchRowMetaMode;
@@ -90,8 +105,27 @@ export interface MatchRowProps {
 /** Sabit satır yükseklikleri — `getItemLayout` bunlardan hesaplanır. */
 export const MATCH_ROW_HEIGHT = layout.matchRowHeight;
 export const MATCH_ROW_HEIGHT_COMPACT = layout.matchRowHeightCompact;
-/** Meta satırı (saha/lig) 12px ekler. */
-export const MATCH_ROW_META_HEIGHT = 12;
+/** Meta satırı (saha/lig) 14px ekler. */
+export const MATCH_ROW_META_HEIGHT = 14;
+
+/**
+ * Bir takım/skor çizgisinin yüksekliği. Amblem (crestSm 22) satırdaki en
+ * uzun öğe olduğu için çizgi ona göre kurulur; skor (scoreSm, 21) ve ad
+ * (label, 17) bu çizginin içinde ortalanır. Kompaktta amblem de çizgi de 18'e
+ * iner ve skor `tableNumStrong` (18) ile çizgiyi tam doldurur.
+ */
+const LINE = layout.crestSm;
+const LINE_COMPACT = 18;
+/**
+ * Skor sütunu: SABİT 30px, sağa yaslı. Archivo Bold 17px'te "10" ~20px;
+ * 30px iki basamağı rahat taşır ve üç basamak zaten yok. `layout.scoreColumnWidth`
+ * (56) tek satırlı "12–10" bloğu içindi; burada iki rakam alt alta durduğu
+ * için o genişlik ad alanından 26px çalardı.
+ */
+const SCORE_COLUMN_WIDTH = 30;
+/** Kullanıcının takımı rayı — 3×12, satır dolgusunun (14px) içinde durur. */
+const RAIL_WIDTH = 3;
+const RAIL_HEIGHT = 12;
 
 /**
  * Satır yüksekliği. Bir listede varyant ve metaMode tüm satırlarda aynı olduğu
@@ -154,6 +188,50 @@ const sameTeam = (
   return myTeamName.trim().toLocaleLowerCase("tr-TR") === teamName.trim().toLocaleLowerCase("tr-TR");
 };
 
+/**
+ * Bir takım çizgisi: [ray] arma · ad. Ev ve deplasman aynı anatomiyi paylaşır;
+ * fark yalnız kazandı/kaybetti/benim durumundan gelir.
+ *
+ * Ray `position: absolute` ile satır dolgusunun içine (sola) taşar: çizginin
+ * akışına girseydi o çizginin arması diğerinin armasından 11px sağa kayar ve
+ * iki amblem alt alta hizalanmazdı. Amblem hizası, kullanıcının takımını
+ * işaretlemekten daha önemli — ikisi birden oluyor.
+ */
+function TeamLine({
+  name,
+  logo,
+  compact,
+  won,
+  lost,
+  mine,
+}: {
+  name: string | null | undefined;
+  logo: string | null | undefined;
+  compact: boolean;
+  won: boolean;
+  lost: boolean;
+  mine: boolean;
+}) {
+  return (
+    <View style={compact ? styles.sideCompact : styles.side}>
+      {mine ? <View style={[styles.rail, compact && styles.railCompact]} /> : null}
+      <TeamLogo name={name} logo={logo} size={compact ? LINE_COMPACT : LINE} dimmed={lost} />
+      <Text
+        style={[
+          compact ? styles.teamNameCompact : styles.teamName,
+          won && styles.teamNameWinner,
+          lost && styles.teamNameDim,
+          mine && styles.teamNameMine,
+        ]}
+        numberOfLines={1}
+        {...textScale.dense}
+      >
+        {name}
+      </Text>
+    </View>
+  );
+}
+
 export const MatchRow = memo(function MatchRow({
   match,
   homeLogo,
@@ -179,8 +257,10 @@ export const MatchRow = memo(function MatchRow({
 
   const homeScore = Number(match.first_team_score ?? 0);
   const awayScore = Number(match.second_team_score ?? 0);
-  const homeWon = played && homeScore > awayScore;
-  const awayWon = played && awayScore > homeScore;
+  // Kazanan/kaybeden yalnız BİTMİŞ maçta vardır; canlıda öne geçen takım
+  // henüz kazanmadı, satır onu kalınlaştırmaz.
+  const homeWon = finished && homeScore > awayScore;
+  const awayWon = finished && awayScore > homeScore;
 
   const { overlayOpacity, numberScale } = useScoreFlash(
     `${match.first_team_score ?? ""}-${match.second_team_score ?? ""}`,
@@ -188,8 +268,6 @@ export const MatchRow = memo(function MatchRow({
   );
 
   const compact = variant === "compact";
-  /** Kompakt varyant yalnız amblemi küçültür; düzen ikisinde de aynıdır. */
-  const crestSize = compact ? 13 : layout.crestSm;
   const metaText =
     metaMode === "field" ? match.match_field : metaMode === "league" ? match.league_name : null;
   const hasMeta = metaMode !== "none" && Boolean(metaText);
@@ -216,15 +294,21 @@ export const MatchRow = memo(function MatchRow({
     onToggleFavorite?.();
   }, [onToggleFavorite]);
 
+  /** Ekran okuyucu için TEK cümle: "FC Angara 3, Last Dance 1, maç sonu". */
   const speech = useMemo(() => {
-    const teams = `${match.first_team_name} - ${match.second_team_name}`;
+    const home = match.first_team_name ?? "Ev sahibi";
+    const away = match.second_team_name ?? "Deplasman";
     if (live) {
-      const clock = halftime ? "devre arası" : minute != null ? `${minute}. dakika` : "";
-      return `Canlı${clock ? `, ${clock}` : ""}. ${teams}. Skor ${homeScore} ${awayScore}`;
+      const clock = halftime ? "devre arası" : minute != null ? `${minute}. dakika` : "canlı";
+      return `${home} ${homeScore}, ${away} ${awayScore}, ${clock}`;
     }
-    if (played) return `Maç sonucu. ${teams}. Skor ${homeScore} ${awayScore}`;
-    return `${formatTime(match.time)}. ${teams}`;
+    if (played) return `${home} ${homeScore}, ${away} ${awayScore}, maç sonu`;
+    const time = formatTime(match.time);
+    return `${home} – ${away}${time ? `, saat ${time}` : ""}`;
   }, [live, played, halftime, minute, homeScore, awayScore, match.first_team_name, match.second_team_name, match.time]);
+
+  const scoreStyle = compact ? styles.scoreCompact : styles.score;
+  const numberTransform = { transform: [{ scale: numberScale }] };
 
   return (
     <Pressable
@@ -250,10 +334,74 @@ export const MatchRow = memo(function MatchRow({
       ) : null}
 
       <View style={styles.main}>
-        <View style={styles.timeColumn}>
+        {/* Takımlar: iki çizgi üst üste, kalan tüm genişliği alır. */}
+        <View style={compact ? styles.teamsCompact : styles.teams}>
+          <TeamLine
+            name={match.first_team_name}
+            logo={homeLogo}
+            compact={compact}
+            won={homeWon}
+            lost={awayWon}
+            mine={homeMine}
+          />
+          <TeamLine
+            name={match.second_team_name}
+            logo={awayLogo}
+            compact={compact}
+            won={awayWon}
+            lost={homeWon}
+            mine={awayMine}
+          />
+        </View>
+
+        {/* Skor: iki rakam alt alta, takım çizgileriyle aynı hizada. */}
+        <View style={compact ? styles.scoreColumnCompact : styles.scoreColumn}>
+          {played ? (
+            <>
+              <View style={compact ? styles.lineCompact : styles.line}>
+                <Animated.Text
+                  style={[scoreStyle, live && styles.scoreLive, awayWon && styles.scoreDim, numberTransform]}
+                  numberOfLines={1}
+                  {...textScale.dense}
+                >
+                  {formatScore(match.first_team_score)}
+                </Animated.Text>
+              </View>
+              <View style={compact ? styles.lineCompact : styles.line}>
+                <Animated.Text
+                  style={[scoreStyle, live && styles.scoreLive, homeWon && styles.scoreDim, numberTransform]}
+                  numberOfLines={1}
+                  {...textScale.dense}
+                >
+                  {formatScore(match.second_team_score)}
+                </Animated.Text>
+              </View>
+            </>
+          ) : (
+            /* Oynanmamış maçta rakamların yerini iki çizgi tutar: sütun boş
+               kalmaz, sağdaki "ne zaman" sütunu kaymaz. */
+            <>
+              <View style={compact ? styles.lineCompact : styles.line}>
+                <Text style={styles.scorePending} {...textScale.badge}>
+                  –
+                </Text>
+              </View>
+              <View style={compact ? styles.lineCompact : styles.line}>
+                <Text style={styles.scorePending} {...textScale.badge}>
+                  –
+                </Text>
+              </View>
+            </>
+          )}
+        </View>
+
+        {/* Ne zaman: MS / dakika / saat. Solunda saç teli ayraç; `alignSelf:
+            "stretch"` ile ayraç yalnız iki takım çizgisi boyunca uzar, meta
+            satırına ve satır dolgusuna girmez. */}
+        <View style={styles.whenColumn}>
           {live ? (
-            /* Dakika 44px sütuna yatay sığmıyor: rozet DİKEY kurulur —
-               üstte dakika/İY/CANLI, altında nabız noktası. */
+            /* Dakika 42px sütuna yatay sığmıyor: rozet DİKEY kurulur —
+               üstte dakika/İY/CANLI, altında nokta. */
             <>
               <Text
                 style={halftime ? styles.halftimeWord : minute != null ? styles.minute : styles.liveWord}
@@ -281,76 +429,11 @@ export const MatchRow = memo(function MatchRow({
         </View>
 
         {/*
-          TEK SATIR GÖVDE. `compact` varyantı yalnız amblemleri küçültür ve
-          yıldız sütununu düşürür; düzen ikisinde de aynıdır, çünkü iki farklı
-          maç satırı düzeni listeler arasında geçerken okuma eksenini
-          değiştiriyordu.
+          Yıldız sütunu yalnız favori eylemi VARSA çizilir. Eski tek satırlı
+          düzen, ortadaki skorun ekseni kaymasın diye boş bir sütun tutuyordu;
+          burada skor ve "ne zaman" sütunu SAĞA yaslıdır, yani eksen satırın
+          sağ kenarından okunur ve yıldız olmayan listelerde o 42px ada döner.
         */}
-        <View style={styles.side}>
-          {homeMine ? <View style={styles.rail} /> : null}
-          <Text
-            style={[
-              styles.teamName,
-              styles.teamNameRight,
-              homeWon && styles.teamNameWinner,
-              finished && awayWon && styles.teamNameDim,
-              homeMine && styles.teamNameMine,
-            ]}
-            numberOfLines={1}
-            {...textScale.dense}
-          >
-            {match.first_team_name}
-          </Text>
-          <TeamLogo
-            name={match.first_team_name}
-            logo={homeLogo}
-            size={crestSize}
-            dimmed={finished && awayWon}
-          />
-        </View>
-
-        <View style={styles.scoreColumn}>
-          {played ? (
-            <Animated.Text
-              style={[
-                styles.score,
-                live && styles.scoreLive,
-                { transform: [{ scale: numberScale }] },
-              ]}
-              numberOfLines={1}
-              {...textScale.dense}
-            >
-              {`${formatScore(match.first_team_score)}–${formatScore(match.second_team_score)}`}
-            </Animated.Text>
-          ) : (
-            <Text style={styles.scorePending} numberOfLines={1} {...textScale.badge}>
-              vs
-            </Text>
-          )}
-        </View>
-
-        <View style={styles.side}>
-          <TeamLogo
-            name={match.second_team_name}
-            logo={awayLogo}
-            size={crestSize}
-            dimmed={finished && homeWon}
-          />
-          <Text
-            style={[
-              styles.teamName,
-              awayWon && styles.teamNameWinner,
-              finished && homeWon && styles.teamNameDim,
-              awayMine && styles.teamNameMine,
-            ]}
-            numberOfLines={1}
-            {...textScale.dense}
-          >
-            {match.second_team_name}
-          </Text>
-          {awayMine ? <View style={styles.rail} /> : null}
-        </View>
-
         {showFavorite && onToggleFavorite ? (
           <Pressable
             style={styles.starColumn}
@@ -366,18 +449,7 @@ export const MatchRow = memo(function MatchRow({
               color={isFavorite ? colors.star : colors.starEmpty}
             />
           </Pressable>
-        ) : (
-          /*
-           * SÜTUN HER HÂLÜKÂRDA DURUR.
-           *
-           * Yıldız gizlendiğinde (`showFavorite={false}` — takım sayfasındaki
-           * fikstür ve son maç listeleri) sütun tamamen kaldırılıyordu; sağdaki
-           * 36px yok olunca skor bloğu 18px sağa kayıyor ve aynı uygulamada
-           * maçlar iki farklı okuma ekseninde diziliyordu. Boş sütun, ekseni
-           * favori gösterilse de gösterilmese de aynı yerde tutar.
-           */
-          <View style={styles.starColumn} />
-        )}
+        ) : null}
       </View>
 
       {position !== "last" && position !== "single" ? <View style={styles.divider} /> : null}
@@ -419,21 +491,144 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: colors.live,
   },
+  /** Lig/saha etiketi — takım çizgileriyle aynı sol hizada, onların üstünde. */
   meta: {
     ...type.micro,
     color: colors.textTertiary,
     lineHeight: MATCH_ROW_META_HEIGHT,
     height: MATCH_ROW_META_HEIGHT,
-    marginLeft: layout.timeColumnWidth,
   },
   main: {
     flexDirection: "row",
     alignItems: "center",
   },
-  timeColumn: {
+  /** Takım sütunu: iki çizgi alt alta, aradaki boşluk skor sütunuyla AYNI. */
+  teams: {
+    flex: 1,
+    minWidth: 0,
+    gap: space.s,
+  },
+  teamsCompact: {
+    flex: 1,
+    minWidth: 0,
+    gap: space.xs,
+  },
+  /** Bir takım çizgisi: arma + ad. Yüksekliği sabit ki skorla hizalansın. */
+  side: {
+    height: LINE,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+  },
+  sideCompact: {
+    height: LINE_COMPACT,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.s,
+  },
+  /** Kullanıcının takımı — satır dolgusunun içinde, armanın solunda ince ray. */
+  rail: {
+    position: "absolute",
+    left: -space.sm,
+    top: (LINE - RAIL_HEIGHT) / 2,
+    width: RAIL_WIDTH,
+    height: RAIL_HEIGHT,
+    borderRadius: 2,
+    backgroundColor: colors.brand,
+  },
+  railCompact: {
+    top: (LINE_COMPACT - RAIL_HEIGHT) / 2,
+  },
+  /**
+   * Takım adı 13px, Inter Medium: maketin "normal" ağırlığı. Kazanan
+   * `fonts.semibold` ile ayrışır (arayüzün en kalını), kaybeden renkle
+   * söner. Ad çizgideki kalan tüm genişliği alır ve gerekirse sonundan
+   * kırpılır — artık ~200px alanı var, gerçek adların hepsi sığıyor.
+   */
+  teamName: {
+    ...type.label,
+    fontFamily: fonts.medium,
+    color: colors.textPrimary,
+    flex: 1,
+    minWidth: 0,
+  },
+  teamNameCompact: {
+    ...type.bodySm,
+    fontFamily: fonts.medium,
+    color: colors.textPrimary,
+    flex: 1,
+    minWidth: 0,
+  },
+  teamNameWinner: {
+    fontFamily: fonts.semibold,
+  },
+  teamNameDim: {
+    color: colors.textTertiary,
+  },
+  teamNameMine: {
+    color: colors.brandAccent,
+  },
+  /**
+   * Skor sütunu: SABİT genişlik, rakamlar SAĞA yaslı. Liste boyunca aynı
+   * yerde durması, iki satırlı düzenin okuma eksenini kuran şeydir; genişlik
+   * içerikten gelseydi "9" ile "10" farklı hizada dururdu.
+   */
+  scoreColumn: {
+    width: SCORE_COLUMN_WIDTH,
+    marginLeft: space.m,
+    alignItems: "flex-end",
+    gap: space.s,
+  },
+  scoreColumnCompact: {
+    width: SCORE_COLUMN_WIDTH,
+    marginLeft: space.m,
+    alignItems: "flex-end",
+    gap: space.xs,
+  },
+  /** Bir skor çizgisi — takım çizgisiyle aynı yükseklik, rakam ortada. */
+  line: {
+    height: LINE,
+    justifyContent: "center",
+  },
+  lineCompact: {
+    height: LINE_COMPACT,
+    justifyContent: "center",
+  },
+  score: {
+    ...type.scoreSm,
+    color: colors.textPrimary,
+    textAlign: "right",
+  },
+  scoreCompact: {
+    ...type.tableNumStrong,
+    color: colors.textPrimary,
+    textAlign: "right",
+  },
+  scoreLive: {
+    color: colors.live,
+  },
+  /** Kaybedenin rakamı adı gibi söner. */
+  scoreDim: {
+    color: colors.textTertiary,
+  },
+  /** Oynanmamış maçta rakamın yerini tutar: sütun boş kalmaz, hiza bozulmaz. */
+  scorePending: {
+    ...type.tableNum,
+    color: colors.textTertiary,
+    textAlign: "right",
+  },
+  /**
+   * "Ne zaman" sütunu: sabit genişlik, solunda saç teli ayraç. Kâğıt
+   * üstündeyiz, ayraç `separator`dır (`borderOnDark` değil).
+   */
+  whenColumn: {
     width: layout.timeColumnWidth,
+    marginLeft: space.m,
+    alignSelf: "stretch",
     alignItems: "center",
     justifyContent: "center",
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderLeftColor: colors.separator,
   },
   time: {
     ...type.tableNum,
@@ -458,76 +653,16 @@ const styles = StyleSheet.create({
     ...type.micro,
     color: colors.textTertiary,
   },
-  /**
-   * Bir takım yanı: amblem + ad. İki yan da ortadaki skora YASLANIR — ev
-   * sahibinde ad sağa, deplasmanda sola hizalıdır; amblemler dışta kalır.
-   */
-  side: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.s,
-    minWidth: 0,
-  },
-  /** Kullanıcının takımı — adın dışında ince marka rayı. */
-  rail: {
-    width: 2,
-    height: 10,
-    borderRadius: 1,
-    backgroundColor: colors.brand,
-  },
-  /* Takım adı 12px: tek satırda beş sütun (logo·ad·skor·ad·logo) yan yana
-     durduğu için ad, skorun önüne geçmemeli. Kazanan `fonts.bold` ile ayrışır,
-     puntoyla değil. */
-  teamName: {
-    ...type.label,
-    color: colors.textPrimary,
-    flexShrink: 1,
-    flexGrow: 1,
-  },
-  teamNameRight: {
-    textAlign: "right",
-  },
-  teamNameWinner: {
-    fontFamily: fonts.bold,
-  },
-  teamNameDim: {
-    color: colors.textTertiary,
-  },
-  teamNameMine: {
-    color: colors.brandAccent,
-  },
-  /**
-   * Skor bloğu: SABİT genişlik. Liste boyunca aynı yerde durması, tek satırlı
-   * düzenin okuma eksenini kuran şeydir; genişlik içerikten gelseydi her
-   * satırda kayardı.
-   */
-  scoreColumn: {
-    width: layout.scoreColumnWidth,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  score: {
-    ...type.scoreSm,
-    color: colors.textPrimary,
-  },
-  scoreLive: {
-    color: colors.live,
-  },
-  /** Oynanmamış maçta skorun yerini tutar: sütun boş kalmaz, hiza bozulmaz. */
-  scorePending: {
-    ...type.micro,
-    color: colors.textDisabled,
-  },
   starColumn: {
     width: layout.starColumnWidth,
+    alignSelf: "stretch",
     alignItems: "flex-end",
     justifyContent: "center",
   },
-  /** Ayraç saat sütununu atlar ve yüksekliği etkilemez. */
+  /** Ayraç satır dolgusundan başlar ve yüksekliği etkilemez. */
   divider: {
     position: "absolute",
-    left: layout.rowPaddingH + layout.timeColumnWidth,
+    left: layout.rowPaddingH,
     right: 0,
     bottom: 0,
     height: StyleSheet.hairlineWidth,

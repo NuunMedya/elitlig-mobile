@@ -10,8 +10,14 @@
  * gün şeridi, lig grupları, segmentler ve takvim burada yaşar. Genel Bakış bu
  * ekrandaki hiçbir listeyi kopyalamaz, yalnız kesitini gösterir.
  *
- * NEDEN BU DÜZEN: başlık 44px, gün şeridi 52px, segment 32px — geri kalan her
- * piksel liste.
+ * NEDEN BU DÜZEN: ekran, diğer bütün sekmeler gibi MOR BLOK başlıkla açılır
+ * (`ScreenHeader`: üst başlıkta lig adı, solda "Maçlar", sağda arama ve takvim
+ * ikonları — tek satır, 52px). Eski beyaz başlık tek istisnaydı ve sekmeler
+ * arasında geçişte çerçeve değişiyordu. Kapsam çipi, gün şeridi, segment ve
+ * favori süzgeci VERİYİ SÜZEN denetimlerdir; başlığın parçası değil, kâğıda
+ * aittirler — bloğun altında `bottom` yuvasında dururlar (takımlar/oyuncular
+ * sekmeleriyle aynı hiza). Kaydırınca blok daralır, üst başlık söner; geri
+ * kalan her piksel liste.
  *
  * NEDEN LİGE GÖRE GRUPLAMA: bir günde birden çok ligin maçı olabilir; tarih
  * başlığı (eski düzen) o gün zaten seçili olduğu için bilgi taşımıyordu. Lig
@@ -46,12 +52,14 @@ import {
   LeagueGroupHeader,
   LiveBadge,
   MatchRow,
+  ScreenHeader,
   SegmentedControl,
   SkeletonMatchRow,
   Toggle,
   Touchable,
   matchRowHeight,
   toIsoDate,
+  useHeaderScroll,
   useRefresh,
 } from "@/components/ui";
 import type { SegmentedItem } from "@/components/ui";
@@ -187,6 +195,8 @@ export default function MatchesScreen() {
   const favorite = useFavorite();
   const appActive = useAppActive();
   const params = useLocalSearchParams();
+  /** Mor bloğun daralması listenin kaydırmasına bağlıdır (bkz. ScreenHeader). */
+  const { scrollY, scrollProps } = useHeaderScroll();
 
   /** Bugün ekran ömrü boyunca bir kez hesaplanır (gece yarısı geçişi nadir). */
   const todayIso = useMemo(() => toIsoDate(new Date()), []);
@@ -643,70 +653,68 @@ export default function MatchesScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      {/* Başlık: kapsam çipi solda, ad ortada, arama ve takvim sağda.
-          Çip başlık satırının İÇİNDE olduğu için ek dikey alan maliyeti yok. */}
-      <View style={styles.header}>
-        <View style={styles.headerSide}>
-          <ScopeChip variant="city" />
-        </View>
-        <Text style={styles.headerTitle} accessibilityRole="header" numberOfLines={1} {...textScale.dense}>
-          Maçlar
-        </Text>
-        <View style={[styles.headerSide, styles.headerActions]}>
-          <Touchable
-            feedback="icon"
-            haptic="light"
-            onPress={openSearch}
-            hitSlop={touchSlop(36)}
-            accessibilityLabel="Ara"
-            style={styles.headerButton}
-          >
-            <Ionicons name="search" size={20} color={colors.textSecondary} />
-          </Touchable>
-          <Touchable
-            feedback="icon"
-            haptic="light"
-            onPress={openCalendar}
-            hitSlop={touchSlop(36)}
-            accessibilityLabel="Takvimden tarih seç"
-            style={styles.headerButton}
-          >
-            <Ionicons name="calendar-outline" size={20} color={colors.textSecondary} />
-          </Touchable>
-        </View>
-      </View>
+      {/* MOR BLOK — diğer sekmelerle aynı çerçeve: üst başlıkta lig, solda ad,
+          sağda arama ve takvim. Süzgeçler bloğun altında kâğıtta (`bottom`). */}
+      <ScreenHeader
+        title="Maçlar"
+        overline={scope.leagueLabel || "ELİTLİG"}
+        scrollY={scrollY}
+        actions={[
+          { icon: "search-outline", accessibilityLabel: "Ara", onPress: openSearch },
+          {
+            icon: "calendar-outline",
+            accessibilityLabel: "Takvimden tarih seç",
+            onPress: openCalendar,
+          },
+        ]}
+        bottom={
+          <>
+            {/* Kapsam çipi kendi satırında: gün şeridi tam genişlik ister,
+                çip onun yanına sığmaz — diğer sekmelerdeki `scopeRow` kalıbı. */}
+            <View style={styles.scopeRow}>
+              <ScopeChip />
+            </View>
 
-      {/* Canlı segmentinde gün kavramı yok: şerit yerini yenileme satırına bırakır. */}
-      {tab === "canli" ? (
-        <View style={styles.autoRow}>
-          <LiveBadge compact />
-          <Text style={styles.autoText} {...textScale.dense}>
-            {liveCount > 0
-              ? `${liveCount} maç oynanıyor · Otomatik yenileniyor`
-              : "Otomatik yenileniyor"}
-          </Text>
-        </View>
-      ) : (
-        <DateStrip value={date} onChange={setDate} markers={markers} range={stripRange} showTodayButton />
-      )}
+            {/* Canlı segmentinde gün kavramı yok: şerit yerini yenileme satırına bırakır. */}
+            {tab === "canli" ? (
+              <View style={styles.autoRow}>
+                <LiveBadge compact />
+                <Text style={styles.autoText} {...textScale.dense}>
+                  {liveCount > 0
+                    ? `${liveCount} maç oynanıyor · Otomatik yenileniyor`
+                    : "Otomatik yenileniyor"}
+                </Text>
+              </View>
+            ) : (
+              <DateStrip
+                value={date}
+                onChange={setDate}
+                markers={markers}
+                range={stripRange}
+                showTodayButton
+              />
+            )}
 
-      <View style={styles.controls}>
-        <SegmentedControl<TabKey> items={segments} value={tab} onChange={setTab} />
-      </View>
+            <View style={styles.controls}>
+              <SegmentedControl<TabKey> items={segments} value={tab} onChange={setTab} />
+            </View>
 
-      {hasAnyFavorite ? (
-        <View style={styles.filterRow}>
-          <Ionicons name="star" size={14} color={colors.star} />
-          <Text style={styles.filterLabel} {...textScale.dense}>
-            Sadece favorilerim
-          </Text>
-          <Toggle
-            value={favoritesOnly}
-            onValueChange={setFavoritesOnly}
-            accessibilityLabel="Sadece favorilerim"
-          />
-        </View>
-      ) : null}
+            {hasAnyFavorite ? (
+              <View style={styles.filterRow}>
+                <Ionicons name="star" size={14} color={colors.star} />
+                <Text style={styles.filterLabel} {...textScale.dense}>
+                  Sadece favorilerim
+                </Text>
+                <Toggle
+                  value={favoritesOnly}
+                  onValueChange={setFavoritesOnly}
+                  accessibilityLabel="Sadece favorilerim"
+                />
+              </View>
+            ) : null}
+          </>
+        }
+      />
 
       {/* Ekranda bayat veri varken hata satır olarak düşer; liste silinmez. */}
       {matchesQuery.isError && hasData ? (
@@ -733,6 +741,7 @@ export default function MatchesScreen() {
         <ErrorState error={matchesQuery.error} onRetry={handleRefresh} />
       ) : (
         <SectionList<ApiMatch, LeagueSectionMeta>
+          {...scrollProps}
           sections={sections}
           keyExtractor={keyExtractor}
           renderItem={renderItem}
@@ -1041,35 +1050,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
 
-  /* Başlık */
-  header: {
-    height: layout.headerHeightCollapsed,
+  /* Kapsam çipi — mor bloğun hemen altında, kâğıtta; takımlar/oyuncular ile
+     aynı sol hiza. Alt boşluk yok: gün şeridi (56px) kendi dikey alanını taşır. */
+  scopeRow: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: layout.screenPadding,
-  },
-  headerSide: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    minWidth: 0,
-  },
-  headerActions: {
-    justifyContent: "flex-end",
-    gap: space.xs,
-  },
-  // Ad ortada durur; iki yan blok eşit `flex` aldığı için ölçüm gerekmez.
-  headerTitle: {
-    ...type.h1,
-    color: colors.textPrimary,
-    textAlign: "center",
-    paddingHorizontal: space.sm,
-  },
-  headerButton: {
-    width: 32,
-    height: 32,
-    alignItems: "center",
-    justifyContent: "center",
   },
 
   /* Canlı segmentinin şerit yerine geçen satırı */
