@@ -1469,3 +1469,34 @@ Mevki renkleri yalnız sunucunun mevki döndürdüğü yerlerde renklenir. Oyunc
 sıralaması ucu (`getPlayerRankings`) mevki alanı taşımıyor; orada halka nötr
 lavantadır. Renklenmesi için uca `player_position` eklenmesi gerekir —
 sunucu değişikliği olduğu için ayrıca kararlaştırılmalı.
+
+## 10.7 Gözle doğrulama — ve ilk sürümün neden maketten saptığı
+
+İlk uygulama yalnız tip denetimi ve jeton denetimiyle "bitti" sayıldı;
+kullanıcı cihazda açınca maketle ilgisi olmadığını söyledi ve haklıydı.
+Bunun üzerine uygulama **Expo web + Playwright** ile (390×844, gerçek API,
+Ankara · FREELİG · 15. Sezon) render edilip her ekran açık/koyu temada
+çekildi ve maketle yan yana kondu. Bulunan ve düzeltilenler:
+
+| Ne görüldü | Kök neden | Düzeltme |
+| --- | --- | --- |
+| Mor blok çok uzun, içi boş | Eski beyaz başlığın iki katlı düzeni (üstte ikon satırı, altta başlık) koyu blokta 40px boş şerit bırakıyordu | Tek satır: geri · üst başlık/başlık · eylemler (52px) |
+| Sekme hapı etiketten dar / komşunun üstüne biniyor / hiç yok | Hap iç payı dolgudan büyüktü; kip kararı ölçümden önce veriliyor ve eşit ↔ kaydırma gidiş-gelişinde hap ile kutular kopuyordu | İç pay < dolgu; karar bütün etiketler ölçülünce; eşit kipte aritmetik, kaydırmada ölçüm; kip değişince yeniden kurulum |
+| Maçlar'da beyaz başlık | Ekran kendi başlığını çiziyordu | ScreenHeader (mor blok) |
+| Takım/oyuncu sayfasında ad iki kez, mor üstüne mor | Kimlik kartı bloğun altında ikinci bir mor yüzeydi | Kimlik bloğun `hero` yuvasında, kaydırınca kapanır |
+| Maç satırında adlar kırpılıyor ("FC ANG…") | Tek satırlı simetrik düzen 390px'te ada 60px bırakıyordu | Maketin üst üste iki satırlı düzeni |
+| Kâğıtta ikinci kapsam satırı | Blok üst başlığı ile kapsam çipi aynı bilgiyi iki kez yazıyordu | Kapsam çipi bloğun üst başlığı (`scope`) |
+| Bölüm başlıkları büyük karışık harf | SectionHeader eski ölçekte kalmıştı | Maketin dili: 3px ray + Archivo versal 11px |
+| Tarih şeridinde gün adları kırpık | Hücre sabit 40px, içerik daha yüksek | İçerik kadar hücre |
+| Koyu temada ray bloktan açık | Yüzen hap için konmuş "kâğıttan 1.3× açık" eşiği | Ray = blok; eşik 1.05 (ayrımı hairline + huzme verir) |
+
+**Tezgâh nasıl kuruldu:** `expo start --web` (react-native-web geçici olarak
+kuruldu, package.json'a girmedi) + Playwright; tarayıcı API'ye ajan
+proxy'sinden ulaşamadığı için istekler Playwright'ın Node istemcisinden
+köprülendi. Cihazda yalnız durum çubuğu arkasındaki güvenli alan (web'de
+sıfır) ve Android'de huzmenin ışıması (elevation ışımaz) farklı görünür.
+
+**Kalan, bilerek bırakılanlar:** menü ayrı sayfa; tarih şeridi/segmentler
+kâğıtta; oyuncu sıralamasında mevki verisi yok; lig grubu başlığı kart içinde
+katlanır bant (bilinçli karar); düğmeler tam hap (Button.tsx'te belgeli);
+kadro listeleri (`takim/[id]` kadro sekmesi, `takimim/kadro`) eski `ListRow`.
