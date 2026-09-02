@@ -24,7 +24,7 @@ Tokenlar AYRI kapıdan: `import { colors, space, type, radius, layout, elevate, 
 | `TeamLogo` · `Avatar` | Takım amblemi / oyuncu-kullanıcı avatarı (eski `TeamCrest` yerine) |
 | `TeamRow` · `TeamRowHead` | Takım satırının TEK anatomisi: sıra · amblem · ad + bağlam · sayı. `density="list"` (66px) tanımak, `density="table"` (40px) karşılaştırmak için. Yükseklikler `TEAM_ROW_HEIGHT(_TABLE)` — `getItemLayout` DAİMA bunlardan kurulur |
 | `PlayerRow` · `PlayerRowHead` | Oyuncu satırının TEK anatomisi: sıra · mevki halkalı avatar · ad + MEVKİ · tek sayı. Meta, aktif ölçütü tekrar ETMEZ |
-| `ScreenHeader` | MOR BLOK — her ekranın açılışı. Güvenli alanı da boyar; `tabs` bloğun içine, `bottom` bloğun altına (kâğıda) çizilir |
+| `ScreenHeader` | MOR BLOK — her ekranın açılışı, TEK satır (geri · üst başlık/başlık · eylemler). Güvenli alanı da boyar. Yuvalar: `scope` (kapsam çipi, üst başlık yerine), `hero` (kimlik: amblem/avatar + ad + cam kutular; kaydırınca kapanır), `tabs` (bloğun içinde), `bottom` (bloğun altında, kâğıtta) |
 | `LiveBadge` · `RatingPill` · `FormChips` · `ProgressRing` | Canlı nabız · puan hapı · son 5 maç · yüzde halkası |
 | `StatBar` | Ev/deplasman karşılaştırması. Tek 4px şerit, ORTADAN bölünür; ev daima mavi, deplasman daima slate — renk kazanana göre DEĞİŞMEZ |
 | `GlowTabBar` | ALT MENÜ RAYI — ekranın alt kenarına oturur. Seçim: ikonu saran kapsül + üst kenarda kayan huzme. Sekme listesi `app/(tabs)/_layout.tsx` içinde |
@@ -40,7 +40,7 @@ Tokenlar AYRI kapıdan: `import { colors, space, type, radius, layout, elevate, 
 | `Refresh` / `useRefresh` | Aşağı çekip yenileme |
 | `ToastProvider` / `useToast` | Kısa geri bildirim. Sağlayıcı `app/_layout.tsx`'te, SafeAreaProvider içinde |
 | `BottomSheet` | Seçim/eylem menüsü, filtre paneli. İçine FlatList koyacaksan `scrollable={false}` |
-| `useHeaderScroll` | `ScreenHeader`ın daralma bağlantısı — kendi `Animated.event`ini yazma |
+| `useHeaderScroll` | `ScreenHeader`ın daralma bağlantısı — kendi `Animated.event`ini yazma. `hero` veren ekranda ZORUNLU: kimlik ancak bununla kapanır |
 | `FAB` / `useFabAutoHide` | Ekran başına TEK birincil eylem |
 | `TabBarIcon` | Sekme çubuğu ikonu; `badge="live"\|"dot"\|sayı`, `indicator` |
 
