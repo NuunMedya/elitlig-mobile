@@ -214,9 +214,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: space.s,
-    // Hap biçim: yeni yarıçap ölçeğinde düğme, kartla aynı köşeyi taşımamalı —
-    // kart bir YÜZEY, düğme bir NESNEdir ve nesne tamamen yuvarlaktır.
-    borderRadius: radius.pill,
+    // KÖŞE 12px, HAP DEĞİL: tam yuvarlak düğme, keskinleşen köşe ölçeğinde
+    // (kart 14) ekrandaki en oval nesne olarak kalıyor ve kullanıcının "fazla
+    // oval" dediği şeyin ta kendisiydi. Kart içi köşe (radius.md) düğmeyi
+    // kartın diliyle aynı aileye sokar.
+    borderRadius: radius.md,
     alignSelf: "flex-start",
   },
   fullWidth: {

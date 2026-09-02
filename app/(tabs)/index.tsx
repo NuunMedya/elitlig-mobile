@@ -32,14 +32,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import React, { useCallback, useMemo } from "react";
-import {
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-  useWindowDimensions,
-} from "react-native";
+import { Image, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ScopeChip } from "@/components/ScopeChip";
@@ -49,40 +42,51 @@ import {
   Button,
   EmptyState,
   ErrorState,
-  FormChips,
-  HeroCarousel,
   MatchRow,
   MetricGrid,
   MetricTile,
+  PlayerRow,
   ScreenHeader,
   SectionHeader,
   SkeletonCard,
-  SkeletonHero,
   SkeletonMatchRow,
   SpotlightCard,
-  TeamLogo,
+  TeamRow,
+  TeamRowHead,
   Touchable,
   refreshControlProps,
   useHeaderScroll,
   useRefresh,
-  type HeroSlide,
 } from "@/components/ui";
 import { useTeamLogos } from "@/hooks/useTeamLogos";
 import { useUnreadCount } from "@/hooks/useUnreadCount";
 import { getLiveMatches, getMatches } from "@/lib/api/matches";
+import { getPlayerRankings } from "@/lib/api/players";
 import { getMyMatchRequests, getTeamDashboard, getTeamMatches } from "@/lib/api/team";
 import { getStandings } from "@/lib/api/standings";
 import { formatDayHeading, mediaUrl, timeAgo } from "@/lib/format";
 import { matchState } from "@/lib/match";
 import { getNewsFeed } from "@/lib/api/news";
 import { queryKeys } from "@/lib/queryKeys";
-import type { ApiMatch, StandingRow } from "@/lib/types";
+import type { ApiMatch, NewsItem, StandingRow } from "@/lib/types";
 import { useAuth } from "@/providers/AuthProvider";
 import { useFavorite } from "@/providers/FavoriteProvider";
 import { useScope } from "@/providers/ScopeProvider";
-import { colors, elevate, hairline, layout, radius, space, textScale, type } from "@/theme";
+import {
+  colors,
+  defaultZoneRules,
+  elevate,
+  hairline,
+  layout,
+  palette,
+  radius,
+  space,
+  textScale,
+  type,
+  zoneColor,
+  zoneForRank,
+} from "@/theme";
 
-/** Takım başkanı sayılan profil tipleri (sunucudaki `profile_type` değerleri). */
 const PRESIDENT_PROFILES = new Set(["takim_baskani", "double"]);
 
 /** Bölümlerde gösterilen en fazla satır sayısı — gerisi "Tümü" kapısından. */
@@ -139,51 +143,67 @@ const Block = React.memo(function Block({
 });
 
 /** Mini puan tablosu satırı — sıra, amblem, ad, form, puan. */
-const MiniStandingRow = React.memo(function MiniStandingRow({
-  rank,
-  teamId,
-  teamName,
-  logo,
-  last5,
-  points,
-  highlighted,
-  onPress,
+/**
+ * HABER ŞERİDİ — kapağı olan son beş haber, yatay kaydırmalı kompakt kartlar.
+ *
+ * NEDEN KARUSEL DEĞİL: eski 16:10 manşet karuseli sayfanın en üstünde
+ * 240px'lik bir fotoğrafla açılıyordu; kullanıcının ilk gördüğü şey ligin
+ * verisi değil bir haber görseliydi ve sayfa "dergi" gibi okunuyordu. Genel
+ * Bakış bir ARAÇ sayfasıdır: önce maç, puan ve gol; haber en altta, küçük
+ * kartlarda. Kart 200px genişlikte, görsel 16:10, iki satır başlık.
+ */
+const NEWS_CARD_WIDTH = 200;
+
+const NewsStrip = React.memo(function NewsStrip({
+  items,
+  onOpen,
 }: {
-  rank: number;
-  teamId: number;
-  teamName: string;
-  logo: string | null;
-  last5: string;
-  points: number;
-  highlighted: boolean;
-  onPress: (teamId: number) => void;
+  items: NewsItem[];
+  onOpen: (id: NewsItem["id"]) => void;
 }) {
-  const handlePress = useCallback(() => onPress(teamId), [onPress, teamId]);
   return (
-    <Touchable
-      style={[styles.miniRow, highlighted ? styles.miniRowActive : null]}
-      onPress={handlePress}
-      feedback="row"
-      haptic="selection"
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.newsStrip}
+      decelerationRate="fast"
+      snapToInterval={NEWS_CARD_WIDTH + space.sm}
+      snapToAlignment="start"
     >
-      <Text style={styles.miniRank} {...textScale.dense}>
-        {rank}
-      </Text>
-      <TeamLogo name={teamName} logo={logo} size={20} />
-      <Text style={styles.miniName} numberOfLines={1} {...textScale.dense}>
-        {teamName}
-      </Text>
-      {last5 ? <FormChips form={last5} size="xs" limit={3} /> : null}
-      <Text style={styles.miniPoints} {...textScale.dense}>
-        {points}
-      </Text>
-    </Touchable>
+      {items.map((item) => (
+        <Touchable
+          key={item.id}
+          feedback="card"
+          haptic="selection"
+          onPress={() => onOpen(item.id)}
+          style={styles.newsCard}
+          accessibilityRole="button"
+          accessibilityLabel={item.title}
+        >
+          <Image
+            source={{ uri: mediaUrl(item.cover_image_url) ?? undefined }}
+            style={styles.newsImage}
+            resizeMode="cover"
+            accessibilityIgnoresInvertColors
+          />
+          <View style={styles.newsBody}>
+            {item.category_label || item.category ? (
+              <Text style={styles.newsEyebrow} numberOfLines={1} {...textScale.badge}>
+                {String(item.category_label ?? item.category).toLocaleUpperCase("tr-TR")}
+              </Text>
+            ) : null}
+            <Text style={styles.newsTitle} numberOfLines={2} {...textScale.dense}>
+              {item.title}
+            </Text>
+            <Text style={styles.newsMeta} numberOfLines={1} {...textScale.dense}>
+              {timeAgo(item.published_at)}
+            </Text>
+          </View>
+        </Touchable>
+      ))}
+    </ScrollView>
   );
 });
-
-/* ══════════════════════════════════════════════════════════════════════════
-   Ekran
-   ══════════════════════════════════════════════════════════════════════════ */
 
 export default function OverviewScreen() {
   const router = useRouter();
@@ -200,7 +220,6 @@ export default function OverviewScreen() {
 
   const today = useMemo(() => todayIso(), []);
   const go = useCallback((route: string) => router.push(route as never), [router]);
-  const { width } = useWindowDimensions();
 
   const scopeKey = {
     cityId: scope.cityId ?? undefined,
@@ -255,6 +274,15 @@ export default function OverviewScreen() {
       }),
     enabled: scope.ready,
     staleTime: 60_000,
+  });
+
+  /* Gol krallığı — sayfanın "kim atıyor" sorusu; ilk üç yeter, gerisi
+     Oyuncular sekmesinde. */
+  const scorersQuery = useQuery({
+    queryKey: queryKeys.playerRankings(scopeKey, "topScorers"),
+    queryFn: () => getPlayerRankings(scopeKey, "topScorers"),
+    enabled: scope.ready,
+    staleTime: 5 * 60_000,
   });
 
   /* Panel sorguları YALNIZ başkanda açılır: misafir ve sıradan oyuncu için
@@ -404,42 +432,26 @@ export default function OverviewScreen() {
       )[0];
     if (nextOwn) return { match: nextOwn, eyebrow: "Sıradaki maç", live: false as const };
 
-    if (todayMatches.length) {
-      return { match: todayMatches[0], eyebrow: "Bugün", live: false as const };
-    }
+    /* Sırf "bugün bir maç var" diye vitrin kurulmaz: aynı maç hemen altındaki
+       "Bugün" listesinde zaten duruyor ve ekranda iki kez görünüyordu. Vitrin
+       yalnız CANLI ya da KULLANICININ maçı için vardır. */
     return null;
-  }, [allMatches, favorite.favorites, liveMatches, team, teamMatchesQuery.data, today, todayMatches]);
+  }, [allMatches, favorite.favorites, liveMatches, team, teamMatchesQuery.data, today]);
 
-  /**
-   * Karusel slaytları.
-   *
-   * MANŞET TAM CÜMLEDİR: haberin kendi başlığı kullanılır, "Bunu görmelisiniz"
-   * gibi bir tıklama tuzağı üretilmez. Başlık iki satırda bitmiyorsa zaten
-   * manşet değildir; kart onu kırpar, biz kısaltmayız.
-   *
-   * EN FAZLA BEŞ: karusel bir akış değil bir VİTRİNDİR. Beşten fazlası
-   * gösterge segmentlerini okunmaz inceliğe indiriyor ve kimse sonuna kadar
-   * kaydırmıyor. Kalan haberler kendi sekmesinde duruyor.
-   */
-  const heroSlides = useMemo<HeroSlide[]>(() => {
-    const items = newsQuery.data?.items ?? [];
-    return items
-      .filter((item) => Boolean(item.cover_image_url))
-      .slice(0, 5)
-      .map((item) => ({
-        key: item.id,
-        image: mediaUrl(item.cover_image_url),
-        eyebrow: item.category_label ?? item.category ?? null,
-        headline: item.title,
-        meta: [scope.leagueLabel, timeAgo(item.published_at)].filter(Boolean).join(" · "),
-        onPress: () => go(`/haber/${item.id}`),
-      }));
-  }, [newsQuery.data, scope.leagueLabel, go]);
+  /** Kapağı olan son beş haber — şerit görselsiz haber çizmez. */
+  const news = useMemo<NewsItem[]>(
+    () => (newsQuery.data?.items ?? []).filter((item) => Boolean(item.cover_image_url)).slice(0, 5),
+    [newsQuery.data],
+  );
+
+  const scorers = useMemo(() => (scorersQuery.data?.players ?? []).slice(0, 3), [scorersQuery.data]);
+  const zoneRules = useMemo(() => defaultZoneRules(standings.length), [standings.length]);
 
   /* ------------------------------- ÇİZİM ---------------------------------- */
 
   const openMatch = useCallback((id: number) => router.push(`/mac/${id}`), [router]);
   const openTeam = useCallback((teamId: number) => router.push(`/takim/${teamId}`), [router]);
+  const openPlayer = useCallback((playerId: number) => router.push(`/oyuncu/${playerId}`), [router]);
 
   const scopeBusy = scope.loading || (scope.ready && matchesQuery.isLoading);
 
@@ -480,25 +492,13 @@ export default function OverviewScreen() {
           <RefreshControl {...refreshControlProps(refresh.refreshing, refresh.onRefresh)} />
         }
       >
-        {/* ── 0) MANŞET KARUSELİ ────────────────────────────────────────── */}
-        {newsQuery.isLoading && !heroSlides.length ? (
-          <View style={[styles.heroBox, styles.heroSkeleton]}>
-            <SkeletonHero />
-          </View>
-        ) : heroSlides.length ? (
-          <HeroCarousel
-            slides={heroSlides}
-            width={width}
-            inset={layout.screenPadding}
-            style={styles.heroBox}
-          />
-        ) : null}
-
-        {/* ── 1) VİTRİN ─────────────────────────────────────────────────── */}
-        <View style={styles.spotlightBox}>
-          {scopeBusy && !spotlight ? (
+        {/* ── 1) VİTRİN — yalnız canlı maç ya da kullanıcının maçı ─────── */}
+        {scopeBusy && !spotlight ? (
+          <View style={styles.pad}>
             <SkeletonCard />
-          ) : spotlight?.match ? (
+          </View>
+        ) : spotlight?.match ? (
+          <View style={styles.pad}>
             <SpotlightCard
               eyebrow={spotlight.eyebrow}
               context={spotlight.match.league_name ?? scope.leagueLabel}
@@ -514,15 +514,14 @@ export default function OverviewScreen() {
                 score: matchState(spotlight.match) === "scheduled" ? null : spotlight.match.second_team_score,
               }}
               statusText={spotlight.match.time ?? undefined}
-              footnote={[
-                formatDayHeading(matchDay(spotlight.match)),
-                spotlight.match.match_field,
-              ]
+              footnote={[formatDayHeading(matchDay(spotlight.match)), spotlight.match.match_field]
                 .filter(Boolean)
                 .join(" · ")}
               onPress={() => openMatch(spotlight.match!.id)}
             />
-          ) : spotlight?.teamMatch ? (
+          </View>
+        ) : spotlight?.teamMatch ? (
+          <View style={styles.pad}>
             <SpotlightCard
               eyebrow={spotlight.eyebrow}
               context={scope.leagueLabel}
@@ -537,19 +536,15 @@ export default function OverviewScreen() {
                 .join(" · ")}
               onPress={() => go(`/takimim/mac/${spotlight.teamMatch!.id}`)}
             />
-          ) : null}
-        </View>
+          </View>
+        ) : null}
 
         {/* ── 2) KISAYOLLAR — role göre ─────────────────────────────────── */}
-        <View style={styles.shortcuts}>
+        <View style={[styles.pad, styles.shortcuts]}>
           {isPresident ? (
             <ActionRow columns={4}>
               <ActionTile icon="people" label="Kadro" onPress={() => go("/takimim/kadro")} />
-              <ActionTile
-                icon="clipboard"
-                label="Maç Merkezi"
-                onPress={() => go("/takimim/mac-merkezi")}
-              />
+              <ActionTile icon="clipboard" label="Maç Merkezi" onPress={() => go("/takimim/mac-merkezi")} />
               <ActionTile
                 icon="add-circle"
                 label="Maç Al"
@@ -567,12 +562,7 @@ export default function OverviewScreen() {
           ) : signedIn ? (
             <ActionRow columns={4}>
               <ActionTile icon="football" label="Maçlarım" onPress={() => go("/oyuncum?tab=maclarim")} />
-              <ActionTile
-                icon="swap-horizontal"
-                label="Teklifler"
-                tone="accent"
-                onPress={() => go("/tekliflerim")}
-              />
+              <ActionTile icon="swap-horizontal" label="Teklifler" tone="accent" onPress={() => go("/tekliflerim")} />
               <ActionTile
                 icon="chatbubbles"
                 label="Mesajlar"
@@ -586,25 +576,15 @@ export default function OverviewScreen() {
               <ActionTile icon="radio" label="Canlı" tone="live" onPress={() => go("/canli")} />
               <ActionTile icon="trophy" label="Ligler" onPress={() => go("/(tabs)/ligler")} />
               <ActionTile icon="star" label="Favoriler" onPress={() => go("/(tabs)/favoriler")} />
-              <ActionTile
-                icon="game-controller"
-                label="Oyunlar"
-                tone="accent"
-                onPress={() => go("/(tabs)/oyunlar")}
-              />
+              <ActionTile icon="game-controller" label="Oyunlar" tone="accent" onPress={() => go("/(tabs)/oyunlar")} />
             </ActionRow>
           )}
         </View>
 
         {/* ── 3) KULÜP METRİKLERİ — yalnız başkan ───────────────────────── */}
         {isPresident ? (
-          <Block
-            title="Kulübüm"
-            meta={team?.team_name ?? undefined}
-            actionLabel="Panel"
-            onAction={() => go("/takimim")}
-          >
-            <View style={styles.blockBody}>
+          <Block title="Kulübüm" meta={team?.team_name ?? undefined} actionLabel="Panel" onAction={() => go("/takimim")}>
+            <View style={styles.pad}>
               <MetricGrid columns={2}>
                 <MetricTile
                   label="Lig sırası"
@@ -642,34 +622,21 @@ export default function OverviewScreen() {
 
         {/* ── 4) CANLI ──────────────────────────────────────────────────── */}
         {liveMatches.length ? (
-          <Block
-            title="Canlı"
-            meta={`${liveMatches.length} maç`}
-            actionLabel="Tümü"
-            onAction={() => go("/canli")}
-          >
-            <View style={styles.rowGroup}>
-            {liveMatches.slice(0, PREVIEW_LIMIT).map((match, index, list) => (
-              <MatchRow
-                key={match.id}
-                match={match}
-                homeLogo={teams.logoFor(match.home_team_id, match.first_team_name)}
-                awayLogo={teams.logoFor(match.away_team_id, match.second_team_name)}
-                myTeamId={team?.id ?? null}
-                myTeamName={team?.team_name ?? null}
-                metaMode="none"
-                position={
-                  list.length === 1
-                    ? "single"
-                    : index === 0
-                      ? "first"
-                      : index === list.length - 1
-                        ? "last"
-                        : "middle"
-                }
-                onPress={() => openMatch(match.id)}
-              />
-            ))}
+          <Block title="Canlı" meta={`${liveMatches.length} maç`} actionLabel="Tümü" onAction={() => go("/canli")}>
+            <View style={styles.group}>
+              {liveMatches.slice(0, PREVIEW_LIMIT).map((match, index, list) => (
+                <MatchRow
+                  key={match.id}
+                  match={match}
+                  homeLogo={teams.logoFor(match.home_team_id, match.first_team_name)}
+                  awayLogo={teams.logoFor(match.away_team_id, match.second_team_name)}
+                  myTeamId={team?.id ?? null}
+                  myTeamName={team?.team_name ?? null}
+                  metaMode="none"
+                  position={groupPosition(index, list.length)}
+                  onPress={() => openMatch(match.id)}
+                />
+              ))}
             </View>
           </Block>
         ) : null}
@@ -682,7 +649,7 @@ export default function OverviewScreen() {
           onAction={() => go("/(tabs)/maclar")}
         >
           {scopeBusy ? (
-            <View style={styles.rowGroup}>
+            <View style={styles.group}>
               <SkeletonMatchRow />
               <SkeletonMatchRow />
               <SkeletonMatchRow />
@@ -690,40 +657,27 @@ export default function OverviewScreen() {
           ) : matchesQuery.isError ? (
             <ErrorState error={matchesQuery.error} variant="banner" />
           ) : previewMatches.length ? (
-            <View style={styles.rowGroup}>
-            {previewMatches.slice(0, PREVIEW_LIMIT).map((match, index, list) => (
-              <MatchRow
-                key={match.id}
-                match={match}
-                homeLogo={teams.logoFor(match.home_team_id, match.first_team_name)}
-                awayLogo={teams.logoFor(match.away_team_id, match.second_team_name)}
-                myTeamId={team?.id ?? null}
-                myTeamName={team?.team_name ?? null}
-                metaMode="none"
-                position={
-                  list.length === 1
-                    ? "single"
-                    : index === 0
-                      ? "first"
-                      : index === list.length - 1
-                        ? "last"
-                        : "middle"
-                }
-                onPress={() => openMatch(match.id)}
-              />
-            ))}
+            <View style={styles.group}>
+              {previewMatches.slice(0, PREVIEW_LIMIT).map((match, index, list) => (
+                <MatchRow
+                  key={match.id}
+                  match={match}
+                  homeLogo={teams.logoFor(match.home_team_id, match.first_team_name)}
+                  awayLogo={teams.logoFor(match.away_team_id, match.second_team_name)}
+                  myTeamId={team?.id ?? null}
+                  myTeamName={team?.team_name ?? null}
+                  metaMode="none"
+                  position={groupPosition(index, list.length)}
+                  onPress={() => openMatch(match.id)}
+                />
+              ))}
             </View>
           ) : (
-            <EmptyState
-              icon="calendar-outline"
-              title="Maç yok"
-              body="Bu ligde yaklaşan maç görünmüyor."
-              variant="inline"
-            />
+            <EmptyState icon="calendar-outline" title="Maç yok" body="Bu ligde yaklaşan maç görünmüyor." variant="inline" />
           )}
         </Block>
 
-        {/* ── 6) MİNİ PUAN TABLOSU ──────────────────────────────────────── */}
+        {/* ── 6) PUAN DURUMU — ilk beş, tablo yoğunluğu ──────────────────── */}
         {standings.length ? (
           <Block
             title="Puan durumu"
@@ -731,25 +685,64 @@ export default function OverviewScreen() {
             actionLabel="Tümü"
             onAction={() => go("/(tabs)/takimlar")}
           >
-            <View style={styles.miniTable}>
-              {standings.slice(0, MINI_TABLE_LIMIT).map((row: StandingRow, index) => (
-                <MiniStandingRow
-                  key={row.team_id}
+            <View style={styles.group}>
+              <TeamRowHead density="table" />
+              {standings.slice(0, MINI_TABLE_LIMIT).map((row: StandingRow, index) => {
+                const rank = index + 1;
+                return (
+                  <TeamRow
+                    key={row.team_id}
+                    density="table"
+                    rank={rank}
+                    teamId={row.team_id}
+                    name={row.team_name}
+                    logo={row.logo}
+                    played={row.played}
+                    wins={row.wins}
+                    draws={row.draws}
+                    losses={row.losses}
+                    goalDiff={Number(row.goal_diff ?? 0)}
+                    points={row.display_points}
+                    zone={zoneColor(palette, zoneForRank(rank, zoneRules))}
+                    highlighted={row.team_id === team?.id || favorite.isFavorite(row.team_id)}
+                    onPress={openTeam}
+                    style={index < MINI_TABLE_LIMIT - 1 ? styles.groupRow : null}
+                  />
+                );
+              })}
+            </View>
+          </Block>
+        ) : null}
+
+        {/* ── 7) GOL KRALLIĞI — ilk üç ───────────────────────────────────── */}
+        {scorers.length ? (
+          <Block title="Gol krallığı" meta="gol" actionLabel="Tümü" onAction={() => go("/(tabs)/oyuncular")}>
+            <View style={styles.group}>
+              {scorers.map((player, index) => (
+                <PlayerRow
+                  key={player.id}
                   rank={index + 1}
-                  teamId={row.team_id}
-                  teamName={row.team_name}
-                  logo={row.logo}
-                  last5={row.last5 ?? ""}
-                  points={row.display_points}
-                  highlighted={row.team_id === team?.id || favorite.isFavorite(row.team_id)}
-                  onPress={openTeam}
+                  playerId={player.id}
+                  name={player.name}
+                  image={player.image ?? null}
+                  meta={[`${Number(player.matches) || 0} maç`, player.teamName || null]}
+                  metric={Number(player.goals) || 0}
+                  onPress={openPlayer}
+                  style={index < scorers.length - 1 ? styles.groupRow : null}
                 />
               ))}
             </View>
           </Block>
         ) : null}
 
-        {/* ── 7) MİSAFİR ÇAĞRISI ────────────────────────────────────────── */}
+        {/* ── 8) HABERLER — en altta, kompakt şerit ──────────────────────── */}
+        {news.length ? (
+          <Block title="Haberler" actionLabel="Tümü" onAction={() => go("/(tabs)/ligler?tab=haberler")}>
+            <NewsStrip items={news} onOpen={(id) => go(`/haber/${id}`)} />
+          </Block>
+        ) : null}
+
+        {/* ── 9) MİSAFİR ÇAĞRISI ────────────────────────────────────────── */}
         {!signedIn ? (
           <View style={styles.guestCard}>
             <Ionicons name="log-in-outline" size={22} color={colors.brandAccent} />
@@ -769,90 +762,88 @@ export default function OverviewScreen() {
   );
 }
 
+/** Grup içi konum — köşe yuvarlaması ve ayraç bundan gelir. */
+function groupPosition(index: number, total: number): "single" | "first" | "middle" | "last" {
+  if (total <= 1) return "single";
+  if (index === 0) return "first";
+  if (index === total - 1) return "last";
+  return "middle";
+}
+
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.bg,
   },
   content: {
-    paddingTop: space.xs,
+    paddingTop: space.sm,
     paddingBottom: space.huge,
   },
-  /* Karusel tam genişlik kaydırır; kenar boşluğu içeride `inset` ile verilir. */
-  heroBox: {
-    paddingTop: space.m,
-    paddingBottom: space.s,
-  },
-  /* İskelet kaydırmıyor; kenar boşluğunu kendisi taşır. */
-  heroSkeleton: {
+  /** Ekran kenarı — her blok aynı hizada başlar. */
+  pad: {
     paddingHorizontal: layout.screenPadding,
-  },
-  spotlightBox: {
-    paddingHorizontal: layout.screenPadding,
-    paddingTop: space.m,
   },
   shortcuts: {
-    paddingHorizontal: layout.screenPadding,
-    paddingTop: space.md,
+    paddingTop: space.xs,
   },
-  /* Bölümler arası nefes — kompakt ritim. */
+  /* Bölümler arası tek ritim: 16px. */
   block: {
     paddingTop: space.lg,
   },
-  blockBody: {
-    paddingHorizontal: layout.screenPadding,
-    paddingTop: space.xs,
-  },
-
-  /* — Mini puan tablosu — */
-  /*
-   * GRUP KABI — ekrandaki HER liste aynı kenar boşluğunda başlar.
-   *
-   * Maç satırları daha önce kapsız duruyordu: bölüm başlığı 16px içeriden
-   * başlıyor, altındaki satırlar ekranın iki ucuna kadar uzanıyordu. Mini puan
-   * tablosu ise kaplıydı. Aynı ekranda iki farklı hizanın olması listenin
-   * "dağınık" okunmasının asıl sebebiydi. Tek kap, tek hiza.
+  /**
+   * GRUP KABI — ekrandaki HER liste aynı kenar boşluğunda, aynı kabukta:
+   * 14px köşe, saç teli kenarlık, kâğıttan bir kademe koyu zemin. Kapsız
+   * satırlar ekranın iki ucuna uzanıp bölüm başlığıyla farklı hizada
+   * duruyordu; tek kap, tek hiza.
    */
-  rowGroup: {
+  group: {
     marginHorizontal: layout.screenPadding,
     borderRadius: radius.lg,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    backgroundColor: colors.surface1,
     overflow: "hidden",
-    ...elevate(1),
   },
-  miniTable: {
-    marginHorizontal: layout.screenPadding,
-    borderRadius: radius.lg,
-    overflow: "hidden",
-    ...elevate(1),
-  },
-  miniRow: {
-    height: 40,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.sm,
-    paddingHorizontal: space.m,
+  /** Grup içi ayraç — satırın kendi ayracı yoksa. */
+  groupRow: {
     borderBottomWidth: hairline,
     borderBottomColor: colors.separator,
   },
-  miniRowActive: {
-    backgroundColor: colors.surface2,
+
+  /* — Haber şeridi — */
+  newsStrip: {
+    paddingHorizontal: layout.screenPadding,
+    gap: space.sm,
   },
-  miniRank: {
-    ...type.tableNum,
+  newsCard: {
+    width: NEWS_CARD_WIDTH,
+    borderRadius: radius.lg,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    backgroundColor: colors.surface1,
+    overflow: "hidden",
+  },
+  newsImage: {
+    width: "100%",
+    aspectRatio: 16 / 10,
+    backgroundColor: colors.surface3,
+  },
+  newsBody: {
+    padding: space.m,
+    gap: space.xxs,
+  },
+  newsEyebrow: {
+    ...type.overline,
+    color: colors.brandAccent,
+  },
+  newsTitle: {
+    ...type.h4,
+    color: colors.textPrimary,
+    minHeight: type.h4.lineHeight * 2,
+  },
+  newsMeta: {
+    ...type.caption,
     color: colors.textTertiary,
-    width: 20,
-    textAlign: "center",
-  },
-  miniName: {
-    ...type.bodySm,
-    color: colors.textPrimary,
-    flex: 1,
-  },
-  miniPoints: {
-    ...type.tableNumStrong,
-    color: colors.textPrimary,
-    minWidth: 24,
-    textAlign: "right",
   },
 
   /* — Misafir çağrısı — */

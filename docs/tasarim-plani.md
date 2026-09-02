@@ -1500,3 +1500,27 @@ sıfır) ve Android'de huzmenin ışıması (elevation ışımaz) farklı görü
 kâğıtta; oyuncu sıralamasında mevki verisi yok; lig grubu başlığı kart içinde
 katlanır bant (bilinçli karar); düğmeler tam hap (Button.tsx'te belgeli);
 kadro listeleri (`takim/[id]` kadro sekmesi, `takimim/kadro`) eski `ListRow`.
+
+## 10.8 Üçüncü tur — sekme salınımı, köşe ölçeği, Genel Bakış
+
+**Sekmeler cihazda "sürekli hareket edip dokunmaya yanıt vermiyordu."** Kök
+neden `Tabs` içinde: şeride 8px kenar dolgusu eklenmişti ama "sığıyor mu"
+kararı içerik genişliğini kapla karşılaştırıyordu. Eşit kipte içerik = kap +
+16 → "sığmıyor" → kaydırma kipi → içerik doğal genişlik → "sığıyor" → eşit
+kipi → … sonsuz salınım; üstüne her kip değişiminde sekmeler yeniden
+kurulduğu için (`key`) dokunma hiç tamamlanmıyordu. Düzeltme: sığma hesabı
+dolguyu düşer (`available`), yeniden kurulum kalktı, hap ölçümden (yoksa
+dolgu eklenmiş aritmetikten) gelir, ölçüme 6px emniyet payı ("İstatis…"
+kırpılması). Web'de yakalanamamıştı çünkü ekran görüntüsü salınımın bir
+karesini gösteriyor.
+
+**Köşe ölçeği bir kademe keskinleşti:** kart 18 → 14, kart içi 14 → 12,
+pul 10 → 8, panel 24 → 18, sahne 30 → 22; birincil düğme hap → 12px. "Fazla
+oval" geri bildirimi tek yerden, `theme/space.ts` içinden kapatıldı.
+
+**Genel Bakış baştan kuruldu — veri önce, dergi sonra:** manşet karuseli
+sayfanın tepesinden en alta, kompakt yatay haber şeridine indi; vitrin
+yalnız canlı maç ya da kullanıcının maçı için çiziliyor (aynı maç "Bugün"
+listesinde tekrar etmiyor); puan durumu ilk beş takımla TABLO yoğunluğunda
+(`TeamRow`, bölge rayları); yeni "Gol krallığı" bölümü ilk üç golcüyü
+`PlayerRow` ile gösteriyor; her liste aynı 14px köşeli grup kabında.

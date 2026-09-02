@@ -100,6 +100,16 @@ const INDICATOR_INSET = space.xxs;
 
 /** `styles.tab` yatay dolgusu — kırpılma hesabı bunu bilmek zorunda. */
 const TAB_PADDING = space.md;
+/**
+ * Şeridin kendi kenar dolgusu (hap kenardan bu kadar içeride başlar).
+ * SIĞMA HESABI BUNU DÜŞMEK ZORUNDA: eşit kipte içerik genişliği = kap +
+ * 2×dolgu olur; dolgu hesaba katılmazsa "sığmıyor" kararı çıkar, şerit
+ * kaydırmaya döner, orada "sığıyor" der ve sonsuza dek gidip gelir — cihazda
+ * sekmelerin sürekli hareket edip dokunmaya yanıt vermemesi tam olarak buydu.
+ */
+const CONTENT_PAD = space.sm;
+/** Eşit kip kararında ölçüm payı (px). */
+const FIT_MARGIN = 6;
 
 function TabsBase<T extends string>({
   items,
@@ -141,7 +151,9 @@ function TabsBase<T extends string>({
    * sekmeye bakar: sığmıyorsa şerit kaydırmaya geçer, hiçbir etiket kırpılmaz.
    */
   const widestLabel = labelWidths.reduce((max, width) => Math.max(max, width), 0);
-  const equalSlot = containerWidth / Math.max(1, items.length);
+  /** Sekmelere kalan genişlik: kap eksi şeridin iki kenar dolgusu. */
+  const available = Math.max(0, containerWidth - CONTENT_PAD * 2);
+  const equalSlot = available / Math.max(1, items.length);
   /*
    * KARAR, BÜTÜN ETİKETLER ÖLÇÜLMEDEN VERİLMEZ. Eski koşul etiket ölçümü yokken
    * de "sığıyor" diyebiliyordu; şerit bir kare eşit kipe geçip ölçümler
@@ -151,32 +163,40 @@ function TabsBase<T extends string>({
    * kez verilir.
    */
   const labelsMeasured = items.length > 0 && items.every((_, i) => (labelWidths[i] ?? 0) > 0);
+  /*
+   * `contentWidth` şeridin kenar dolgusunu İÇERİR (ScrollView içerik kutusu).
+   * Eşit kipte içerik = n × yuva + 2 × dolgu = kap; yani karar bir kez
+   * "sığıyor" dedikten sonra eşit kipte de "sığıyor" kalır — salınım yok.
+   */
   const fits =
     containerWidth > 0 &&
     contentWidth > 0 &&
     labelsMeasured &&
     contentWidth <= containerWidth + 1 &&
-    widestLabel + TAB_PADDING * 2 <= equalSlot + 1;
+    /* +6px emniyet payı: ölçülen metin genişliği ile çizilen genişlik
+       platforma göre birkaç piksel oynuyor (yazı tipi tarama/hinting); pay
+       olmadan en geniş etiket yuvaya "tam sığıp" üç noktaya düşüyordu
+       ("İstatis…"). Sığmayan şerit kaydırmaya geçer, hiçbir etiket kırpılmaz. */
+    widestLabel + TAB_PADDING * 2 + FIT_MARGIN <= equalSlot;
   const mode: "equal" | "scroll" =
     distribute === "equal" ? "equal" : distribute === "scroll" ? "scroll" : fits ? "equal" : "scroll";
 
-  const equalWidth = mode === "equal" && containerWidth > 0
-    ? containerWidth / Math.max(1, items.length)
-    : 0;
+  const equalWidth = mode === "equal" && available > 0 ? available / Math.max(1, items.length) : 0;
 
   /*
-   * HAP GEOMETRİSİ KİPE GÖRE: eşit kipte sekmelerin genişliği ZATEN dayatılıyor
-   * (`width: equalWidth`), hap da aynı aritmetikten gelir — ölçüm beklenmez,
-   * ölçümün gecikmesi ya da web'de konum değişiminin `onLayout` üretmemesi
-   * hapı yanlış yere koyamaz. Kaydırma kipinde genişlikler doğaldır ve yalnız
-   * ölçümle bilinebilir; orada her sekmenin kendi `onLayout`u kullanılır.
-   * Kip kararı bütün etiketler ölçülmeden verilmediği için (bkz. `fits`)
-   * eşit ↔ kaydırma gidiş-gelişi de yoktur.
+   * HAP GEOMETRİSİ: sekmenin kendi `onLayout` ölçümü varsa o (kip ne olursa
+   * olsun; hap ile kutu aynı koordinat sisteminde, aynı kaynaktan). Ölçüm
+   * henüz gelmediyse eşit kipte aritmetikten türetilir — kenar dolgusu
+   * eklenerek, çünkü sekmeler dolgunun içinden başlar. Kip kararı bütün
+   * etiketler ölçülmeden verilmediği ve dolgu hesaba katıldığı için eşit ↔
+   * kaydırma gidiş-gelişi yoktur.
    */
+  const measured = layouts[index];
   const active: TabLayout | undefined =
-    mode === "equal" && equalWidth > 0
-      ? { x: equalWidth * index, width: equalWidth }
-      : layouts[index];
+    measured ??
+    (mode === "equal" && equalWidth > 0
+      ? { x: CONTENT_PAD + equalWidth * index, width: equalWidth }
+      : undefined);
 
   const indicatorWidth = active ? Math.max(16, active.width - INDICATOR_INSET * 2) : 0;
   const indicatorX = active ? active.x + (active.width - indicatorWidth) / 2 : 0;
@@ -282,7 +302,7 @@ function TabsBase<T extends string>({
                  yeniden kurulur ve her kutu için taze `onLayout` gelir — yalnız
                  genişliği değil KONUMU değişen bir kutu web'de yeniden
                  ölçülmüyordu ve hap eski yerinde kalıyordu. */
-              key={`${mode}-${item.key}`}
+              key={item.key}
               feedback="row"
               haptic="none"
               onPress={() => {
@@ -353,7 +373,7 @@ const styles = StyleSheet.create({
     alignItems: "stretch",
     /* Hap ekran kenarından 8px içeride başlar (maket: 12px); etiket
        kenardan 20px. Kenara yapışık bir hap, şeridi kırpılmış gösteriyordu. */
-    paddingHorizontal: space.sm,
+    paddingHorizontal: CONTENT_PAD,
   },
   tab: {
     flexDirection: "row",

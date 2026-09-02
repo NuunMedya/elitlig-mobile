@@ -161,14 +161,22 @@ export const layout = {
  * öğe → 16). Aksi hâlde iç köşe dış köşeye "yapışık" görünür. Ardışık iki
  * kademe arasındaki fark (6px) tam da tipik iç boşluk kadar seçildi.
  */
+/*
+ * KÖŞE ÖLÇEĞİ BİR KADEME KESKİNLEŞTİ (18 → 14 kart, 24 → 18 panel).
+ * Kullanıcı geri bildirimi "fazla oval": 18px'lik kart köşesi, 14px'lik kenar
+ * boşluğu ve 12px'lik iç dolguyla birlikte her kutuyu hap gibi gösteriyor,
+ * ekranın "ölçüleri" bozuk okunuyordu. Kavis hâlâ bir imza, ama artık
+ * nesnenin kenarıyla orantılı: kart 14, kart içi 12, küçük pul 8. Bütün
+ * bileşenler tokenı kullandığı için değişiklik tek yerden uygulanır.
+ */
 export const radius = {
   none: 0,
   xs:   6,   // form çipi, mikro rozet
-  sm:  10,   // amblem kutusu, küçük pul
-  md:  14,   // KART İÇİ ELEMAN: input, chip zemini, satır grubu, bar
-  lg:  18,   // KART
-  xl:  24,   // bottom sheet, panel
-  xxl: 30,   // sahne yüzeyi: skor tablosu, saha, yükselen sayfa
+  sm:   8,   // amblem kutusu, küçük pul
+  md:  12,   // KART İÇİ ELEMAN: input, chip zemini, satır grubu, bar, DÜĞME
+  lg:  14,   // KART
+  xl:  18,   // bottom sheet, panel
+  xxl: 22,   // sahne yüzeyi: skor tablosu, saha, yükselen sayfa
   pill: 999,
 } as const;
 
