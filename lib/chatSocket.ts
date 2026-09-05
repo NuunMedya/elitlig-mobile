@@ -26,6 +26,8 @@ export const CHAT_EVENTS = {
   READ: "chat:read",
   TYPING: "chat:typing",
   DELETED: "chat:deleted",
+  UPDATED: "chat:updated",
+  ADMIN_INBOX: "chat:admin-inbox",
   CALL_INCOMING: "call:incoming",
   CALL_ACCEPTED: "call:accepted",
   CALL_ENDED: "call:ended",

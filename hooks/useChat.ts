@@ -13,6 +13,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { useAppActive } from "@/hooks/useLiveFavoriteCount";
 import {
+  adminChat,
   getChatUnread,
   getConversations,
   getMessages,
@@ -62,6 +63,7 @@ export function useChatRealtime(): void {
 
     const offMessage = onChatEvent<MessageEvent>(CHAT_EVENTS.MESSAGE, ({ conversation_id, message }) => {
       const isActive = activeConversationId === conversation_id;
+      void queryClient.invalidateQueries({ queryKey: ["chat", "admin", "conversations"] });
       queryClient.setQueryData<ConversationsResponse>(queryKeys.chatConversations(), (previous) => {
         if (!previous) return previous;
         const exists = previous.conversations.some((item) => item.id === conversation_id);
@@ -112,15 +114,71 @@ export function useChatRealtime(): void {
 
     const offConversation = onChatEvent(CHAT_EVENTS.CONVERSATION, () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.chatConversations() });
+      void queryClient.invalidateQueries({ queryKey: ["chat", "admin"] });
+    });
+
+    // Mesaj meta'sı değişti (maç teklifi yanıtı, eylem kartı kapandı).
+    const offUpdated = onChatEvent<MessageEvent>(CHAT_EVENTS.UPDATED, ({ conversation_id, message }) => {
+      queryClient.setQueryData<MessagesResponse>(queryKeys.chatMessages(conversation_id), (previous) =>
+        previous
+          ? { ...previous, messages: previous.messages.map((item) => (item.id === message.id ? { ...item, ...message, sender: item.sender } : item)) }
+          : previous,
+      );
+    });
+
+    // Yönetim kutusuna üye mesajı düştü: yönetici listesi tazelenir.
+    const offAdminInbox = onChatEvent(CHAT_EVENTS.ADMIN_INBOX, () => {
+      void queryClient.invalidateQueries({ queryKey: ["chat", "admin"] });
     });
 
     return () => {
       offMessage();
       offDeleted();
       offConversation();
+      offUpdated();
+      offAdminInbox();
       releaseChatSocket();
     };
   }, [enabled, queryClient]);
+}
+
+/* ---------- yönetim modu ---------- */
+
+export type AdminListType = "management" | "team" | "all";
+
+export function useAdminConversations(type: AdminListType = "management") {
+  const auth = useAuth();
+  const appActive = useAppActive();
+  return useQuery({
+    queryKey: ["chat", "admin", "conversations", type] as const,
+    queryFn: async () => {
+      // Yöneticinin kendi bildirim akışı + grupları ve üyelerin yönetim sohbetleri tek listede.
+      const [own, managed] = await Promise.all([
+        getConversations().catch(() => ({ conversations: [], unread: 0 }) as ConversationsResponse),
+        adminChat.getConversations({ type, limit: 100 }),
+      ]);
+      const seen = new Set(own.conversations.map((item) => item.id));
+      const merged = [...own.conversations, ...managed.conversations.filter((item) => !seen.has(item.id))];
+      return { conversations: merged, unread: own.unread + managed.unread, total: managed.total } as ConversationsResponse;
+    },
+    enabled: Boolean(auth.user) && auth.isManagement,
+    staleTime: 5_000,
+    refetchInterval: appActive ? LIST_POLL_MS : false,
+    retry: false,
+  });
+}
+
+export function useAdminConversationMessages(conversationId: number) {
+  const auth = useAuth();
+  const appActive = useAppActive();
+  return useQuery({
+    queryKey: queryKeys.chatMessages(conversationId),
+    queryFn: () => adminChat.getMessages(conversationId, { limit: 50 }),
+    enabled: Boolean(auth.user) && auth.isManagement && Number.isInteger(conversationId) && conversationId > 0,
+    staleTime: 4_000,
+    refetchInterval: appActive ? ROOM_POLL_MS : false,
+    retry: false,
+  });
 }
 
 export function useConversations() {
