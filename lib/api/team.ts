@@ -606,6 +606,147 @@ export function capLabel(value?: RosterCap | null): string {
   return "—";
 }
 
+/* ═════════════════════ KADRO KURUCU (SQUAD BUILDER) ═════════════════════
+ *
+ * routes/teamManagement.js  /api/team-management/squad-builder/*
+ * services/squadBuilderService.js
+ *
+ * Başkanın oyuncu transfer etme ve sezon kadrosuna oyuncu girme işlerini TEK
+ * ekrandan, en az dokunuşla yaptığı üst katman. İstemci hangi alt sistemi
+ * (davet, transfer teklifi, sezon kadrosu) kullanacağını SEÇMEZ:
+ *   · arama sonucundaki her aday tek bir `action` ile gelir,
+ *   · `recruit` doğru akışı sunucuda seçer (serbest+hesaplı → davet; diğer
+ *     her durum → varsayılanlarla hızlı transfer teklifi; hesabı olmayan
+ *     oyuncunun teklifi lig yönetimi onayına düşer),
+ *   · sezon kadrosu tek/çoklu ekleme, çıkarma ve lisans tek uçtan yönetilir.
+ * Önceden mobilde başkanın oyuncu transfer edebileceği hiçbir ekran yoktu.
+ */
+
+export type SquadCandidateAction = "own" | "pending" | "invite" | "offer";
+
+export interface SquadCandidate {
+  id: number;
+  name: string;
+  image: string | null;
+  position: string | null;
+  age: number | null;
+  city: string | null;
+  teamId: number | null;
+  teamName: string | null;
+  teamLogo: string | null;
+  isFreeAgent: boolean;
+  hasLinkedAccount: boolean;
+  marketValue: number | string | null;
+  action: SquadCandidateAction;
+  label: string;
+  /** action === "pending" iken: bekleyen teklifin/davetin kimliği. */
+  offerPublicId?: string;
+  inviteId?: number;
+  /** action === "offer" iken: hesabı olmayan oyuncu → yönetim onayı. */
+  requiresAdminApproval?: boolean;
+}
+
+export interface SquadSeason {
+  id: number;
+  leagueId: number | null;
+  name: string;
+  leagueName: string | null;
+  year: number | string | null;
+  hasRules: boolean;
+}
+
+export interface SquadRosterEntry {
+  id: number;
+  name: string;
+  image: string | null;
+  position: string | null;
+  jerseyNumber: number | null;
+  inSeasonRoster: boolean;
+  pendingSeasonApproval?: boolean;
+  isLicensed: boolean;
+  joinedAt?: string | null;
+  /** Sezon kadrosunda olup takımdan ayrılmış oyuncu. */
+  leftTeam?: boolean;
+}
+
+export interface SquadPendingItem {
+  kind: "offer" | "invite";
+  id: number;
+  publicId?: string;
+  status: string;
+  awaitingAdminApproval?: boolean;
+  createdAt: string | null;
+  expiresAt?: string | null;
+  player: { id: number; name: string; image: string | null; position: string | null } | null;
+}
+
+export interface SquadBuilderOverview {
+  team: { id: number; team_name: string; logo: string | null };
+  seasons: SquadSeason[];
+  selectedSeasonId: number | null;
+  seasonStatus: SeasonRosterStatus | null;
+  roster: SquadRosterEntry[];
+  formerMembers: SquadRosterEntry[];
+  pending: SquadPendingItem[];
+  summary: { teamPlayers: number; inSeasonRoster: number; notInSeasonRoster: number };
+}
+
+export interface RecruitResult {
+  kind: "invite" | "offer";
+  message: string;
+  awaitingAdminApproval?: boolean;
+  request?: JoinRequest;
+  offer?: { public_id: string; status: string };
+}
+
+export interface SeasonAddResult {
+  message: string;
+  added: { playerId: number; name: string; memberId: number }[];
+  failed: { playerId: number; code: string; message: string; skipped?: boolean }[];
+}
+
+const SQUAD_BUILDER = "/api/team-management/squad-builder";
+
+export const getSquadBuilder = (seasonId?: number | null) =>
+  get<SquadBuilderOverview>(SQUAD_BUILDER, seasonId ? { seasonId } : undefined);
+
+/** En az 2 karakter; sunucu 12 aday döner. */
+export const searchSquadCandidates = (q: string, signal?: AbortSignal) =>
+  get<{ items: SquadCandidate[]; query: string }>(`${SQUAD_BUILDER}/search`, { q }, { signal });
+
+/** Tek dokunuşla "takımıma kat" — davet mi teklif mi olduğuna sunucu karar verir. */
+export const recruitPlayer = (body: {
+  playerId: number;
+  message?: string | null;
+  transferFee?: string | null;
+  contractEndDate?: string | null;
+}) => post<RecruitResult>(`${SQUAD_BUILDER}/recruit`, body);
+
+export const addSquadSeasonPlayers = (
+  seasonId: number,
+  body: { playerIds: number[]; isLicensed?: boolean }
+) => post<SeasonAddResult>(`${SQUAD_BUILDER}/seasons/${seasonId}/players`, body);
+
+export const removeSquadSeasonPlayer = (seasonId: number, playerId: number) =>
+  del<{ message: string; removed?: boolean }>(`${SQUAD_BUILDER}/seasons/${seasonId}/players/${playerId}`);
+
+export const setSquadSeasonLicense = (seasonId: number, playerId: number, isLicensed: boolean) =>
+  patch<{ message: string }>(`${SQUAD_BUILDER}/seasons/${seasonId}/players/${playerId}`, { isLicensed });
+
+/** Kadro kurucu hata kodları → Türkçe cümle (kural hataları da dâhil). */
+export const SQUAD_BUILDER_ERRORS: Record<string, string> = {
+  ...ROSTER_RULE_ERRORS,
+  PLAYER_ALREADY_IN_TEAM: "Bu oyuncu zaten kadronda.",
+  TRANSFER_OFFER_ALREADY_EXISTS: "Bu oyuncu için zaten bekleyen bir teklifin var.",
+  REQUEST_ALREADY_PENDING: "Bu oyuncuya bekleyen bir davetin zaten var.",
+  PLAYER_HAS_NO_ACCOUNT: "Oyuncunun panel hesabı yok; transfer teklifi lig yönetimi onayıyla ilerler.",
+  PLAYER_NOT_FOUND: "Oyuncu bulunamadı.",
+  TEAM_PLAYER_NOT_FOUND: "Oyuncu takımının kadrosunda değil; önce kadroya katılmalı.",
+  SEASON_NOT_FOUND: "Takımın bu sezona kayıtlı değil.",
+  MEMBER_NOT_FOUND: "Oyuncu bu sezon kadrosunda bulunamadı.",
+  TEAM_MANAGEMENT_REQUIRED: "Bu işlem için takım yönetimi yetkisi gerekiyor.",
+};
+
 /* ═════════════════════ RAKİP ANALİZİ VE SİMÜLASYON ═════════════════════
  *
  * routes/matchCenter.js:

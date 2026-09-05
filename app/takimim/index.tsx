@@ -82,7 +82,15 @@ const NAV_ITEMS: NavItem[] = [
     href: "/takimim/kadro",
     icon: "people",
     title: "Kadro Yönetimi",
-    subtitle: "Forma numarası, mevki ve kadro rolleri",
+    subtitle: "Oyuncu ekle, sezon kadrosu, forma ve mevki",
+    tone: "brand",
+  },
+  {
+    key: "kadro-kur",
+    href: "/takimim/kadro?gorunum=sezon",
+    icon: "person-add",
+    title: "Transfer & Sezon Kadrosu",
+    subtitle: "Oyuncu ara, tek dokunuşla davet/teklif; sezon kadrosunu doldur",
     tone: "brand",
   },
   {
@@ -337,6 +345,7 @@ export default function TeamPanelScreen() {
         subtitle: "Gönderdiğin, hâlâ sonuçlanmamış teklifler",
         count: activeOffers.length,
         tone: "brand",
+        href: "/takimim/kadro?gorunum=sezon",
       });
     }
     if (pendingChanges.length > 0) {
