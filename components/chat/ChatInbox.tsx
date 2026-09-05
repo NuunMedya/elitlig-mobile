@@ -5,6 +5,10 @@
  * birebir sohbetler ve kurulan gruplar; son mesaja göre sıralı. Sağ üstteki
  * kalem "Mesaj oluştur" ekranına götürür (yönetim / takım / oyuncu / grup).
  *
+ * Üye, sağ üstteki ayar simgesinden kimden mesaj kabul edeceğini seçer
+ * (yönetim her zaman açık). Yönetim modunda yalnızca üyelerin yönetimle
+ * yazışmaları, yöneticinin kendi grupları ve bildirim akışı listelenir.
+ *
  * Gerçek zamanlı güncelleme hooks/useChat.ts (soket + yoklama).
  */
 
@@ -29,8 +33,8 @@ import {
   useHeaderScroll,
   useRefresh,
 } from "@/components/ui";
-import { useAdminConversations, useConversations, type AdminListType } from "@/hooks/useChat";
-import { Chip, ChipGroup } from "@/components/ui";
+import { ChatPrefsSheet } from "@/components/chat/ChatPrefsSheet";
+import { useAdminConversations, useConversations } from "@/hooks/useChat";
 import { conversationPreview, type ChatConversation } from "@/lib/api/chat";
 import { queryKeys } from "@/lib/queryKeys";
 import { useAuth } from "@/providers/AuthProvider";
@@ -73,11 +77,11 @@ export function ChatInbox({ admin = false }: ChatInboxProps) {
   const { scrollY, scrollProps } = useHeaderScroll();
   const fab = useFabAutoHide();
   const [search, setSearch] = useState("");
-  const [listType, setListType] = useState<AdminListType>("management");
+  const [prefsOpen, setPrefsOpen] = useState(false);
   const basePath = admin ? "/yonetim/sohbet" : "/sohbet";
 
   const memberQuery = useConversations();
-  const adminQuery = useAdminConversations(listType);
+  const adminQuery = useAdminConversations();
   const query = admin ? adminQuery : memberQuery;
   const refetch = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.chatConversations() });
@@ -119,21 +123,19 @@ export function ChatInbox({ admin = false }: ChatInboxProps) {
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader
         title={admin ? "Yönetim Sohbeti" : "Mesajlar"}
-        subtitle={unread > 0 ? `${unread} okunmamış mesaj` : admin ? "Üyeler, takım grupları, bildirimler" : "Yönetim, takımın ve oyuncular"}
+        subtitle={unread > 0 ? `${unread} okunmamış mesaj` : admin ? "Yönetimle yazışmalar, gruplar, bildirimler" : "Yönetim, takımın ve oyuncular"}
         back
         scrollY={scrollY}
-        actions={[{ icon: "create-outline", onPress: compose, accessibilityLabel: "Mesaj oluştur" }]}
+        actions={
+          admin
+            ? [{ icon: "create-outline", onPress: compose, accessibilityLabel: "Mesaj oluştur" }]
+            : [
+                { icon: "options-outline", onPress: () => setPrefsOpen(true), accessibilityLabel: "Kimden mesaj kabul edeyim?" },
+                { icon: "create-outline", onPress: compose, accessibilityLabel: "Mesaj oluştur" },
+              ]
+        }
         bottom={
           <View style={styles.searchWrap}>
-            {admin ? (
-              <View style={styles.typeRow}>
-                <ChipGroup contentPadding={0}>
-                  <Chip label="Üyeler" selected={listType === "management"} onPress={() => setListType("management")} size="sm" />
-                  <Chip label="Takım grupları" selected={listType === "team"} onPress={() => setListType("team")} size="sm" />
-                  <Chip label="Tümü" selected={listType === "all"} onPress={() => setListType("all")} size="sm" />
-                </ChipGroup>
-              </View>
-            ) : null}
             <Input
               value={search}
               onChangeText={setSearch}
@@ -171,7 +173,7 @@ export function ChatInbox({ admin = false }: ChatInboxProps) {
             <EmptyState
               icon="chatbubbles-outline"
               title={search ? "Eşleşen sohbet yok" : "Henüz sohbet yok"}
-              body={search ? "Başka bir ad dene." : admin ? "Üyeler yazdıkça burada listelenir; kalem ile bir üyeye ya da takıma yazabilirsiniz." : "Yönetime, takım grubuna ya da bir oyuncuya ilk mesajı gönder."}
+              body={search ? "Başka bir ad dene." : admin ? "Üyeler yönetime yazdıkça burada listelenir; kalem ile bir üyeye ya da takıma yazabilirsiniz." : "Yönetime, takım grubuna ya da bir oyuncuya ilk mesajı gönder."}
               action={search ? undefined : { label: "Mesaj oluştur", onPress: compose }}
             />
           }
@@ -187,6 +189,7 @@ export function ChatInbox({ admin = false }: ChatInboxProps) {
         onPress={compose}
         accessibilityLabel="Mesaj oluştur"
       />
+      {admin ? null : <ChatPrefsSheet visible={prefsOpen} onClose={() => setPrefsOpen(false)} />}
     </SafeAreaView>
   );
 }
@@ -252,7 +255,6 @@ const PIP = 18;
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   searchWrap: { paddingHorizontal: layout.screenPadding, paddingBottom: space.sm, gap: space.sm },
-  typeRow: { paddingTop: space.xs },
   skeleton: { paddingHorizontal: layout.screenPadding, paddingTop: space.sm },
   list: { flexGrow: 1, paddingBottom: space.huge + space.giant },
   separator: { height: hairline, backgroundColor: colors.separator, marginLeft: layout.screenPadding + 50 + space.md },

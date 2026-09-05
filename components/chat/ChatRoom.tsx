@@ -24,6 +24,7 @@ import { setActiveChatConversation, useAdminConversationMessages, useConversatio
 import {
   adminChat,
   callAction,
+  deleteConversation,
   deleteMessage,
   formatDurationMs,
   getMessages,
@@ -304,6 +305,38 @@ export function ChatRoom({ conversationId, admin = false }: ChatRoomProps) {
     }
   }, [api, conversationId, hasMore, loadingOlder, query.data?.messages, queryClient, toast]);
 
+  /* ---------- sohbeti sil ---------- */
+  // Kendi tarafımdan silme: karşı taraf görmeye devam eder, kayıt çöp kutusuna
+  // düşer ve geri alınabilir; yeni mesaj gelirse sohbet yeniden listelenir.
+  const removeConversation = useCallback(() => {
+    if (!conversation) return;
+    Alert.alert(
+      "Sohbeti sil",
+      `"${conversation.title}" sohbeti listenden kaldırılacak. Eski mesajlar senin tarafında görünmez olur; kayıt çöp kutusuna taşınır ve geri alınabilir.`,
+      [
+        { text: "Vazgeç", style: "cancel" },
+        {
+          text: "Sil",
+          style: "destructive",
+          onPress: () => {
+            const ownFeed = conversation.is_admin_feed || conversation.participants.some((item) => item.is_me);
+            const request = admin && !ownFeed ? adminChat.deleteConversation(conversationId) : deleteConversation(conversationId);
+            void request
+              .then((data) => {
+                queryClient.removeQueries({ queryKey: queryKeys.chatMessages(conversationId) });
+                void queryClient.invalidateQueries({ queryKey: queryKeys.chatConversations() });
+                void queryClient.invalidateQueries({ queryKey: queryKeys.chatUnread() });
+                if (admin) void queryClient.invalidateQueries({ queryKey: ["chat", "admin"] });
+                toast.show({ message: data.message ?? "Sohbet silindi.", tone: "success" });
+                router.replace(basePath as never);
+              })
+              .catch((error: unknown) => toast.show({ message: errorMessage(error), tone: "danger" }));
+          },
+        },
+      ],
+    );
+  }, [admin, basePath, conversation, conversationId, queryClient, router, toast]);
+
   /* ---------- silme / yanıt ---------- */
   const remove = useCallback(
     (message: ChatMessage) => {
@@ -419,7 +452,11 @@ export function ChatRoom({ conversationId, admin = false }: ChatRoomProps) {
   if (!auth.user) return <Redirect href="/giris" />;
 
   const headerSubtitle = typingName ? (conversation?.type === "direct" ? "yazıyor…" : `${typingName} yazıyor…`) : conversation?.subtitle ?? "";
-  const headerActions = conversation?.can_call ? [{ icon: "call" as const, onPress: () => void call.startCall(conversation), accessibilityLabel: "Sesli ara" }] : [];
+  // Yönetici tarafında arama ve silme rol yetkisine bağlıdır; asıl denetim sunucudadır.
+  const headerActions = [
+    ...(conversation?.can_call ? [{ icon: "call" as const, onPress: () => void call.startCall(conversation), accessibilityLabel: "Sesli ara" }] : []),
+    ...(conversation && !conversation.is_admin_feed ? [{ icon: "trash-outline" as const, onPress: removeConversation, accessibilityLabel: "Sohbeti sil" }] : []),
+  ];
   const header = <ScreenHeader title={conversation?.title ?? "Sohbet"} subtitle={headerSubtitle} back actions={headerActions} />;
 
   if (!conversation) {

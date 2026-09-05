@@ -85,6 +85,9 @@ export function ChatCompose({ admin = false }: ChatComposeProps) {
     onSuccess: ({ conversation }) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.chatConversations() });
       if (admin) void queryClient.invalidateQueries({ queryKey: ["chat", "admin"] });
+      if (conversation.skipped_members?.length) {
+        toast.show({ message: `Mesaj tercihi nedeniyle gruba eklenemeyenler: ${conversation.skipped_members.map((item) => item.name).join(", ")}`, tone: "warn" });
+      }
       router.replace(`${basePath}/${conversation.id}` as never);
     },
     onError: (error) => toast.show({ message: errorMessage(error), tone: "danger" }),
