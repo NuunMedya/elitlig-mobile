@@ -680,12 +680,60 @@ export interface SquadPendingItem {
   player: { id: number; name: string; image: string | null; position: string | null } | null;
 }
 
+/* ── Sezon kadrosu taslağı ──
+ * Takım kadroyu önce taslakta düzenler, sonra yönetime gönderir. Transfer
+ * hakkı yalnızca yönetim onayında, net eklemeler kadar düşer; gönderime kadar
+ * geri alınan hamleler iz bırakmaz. routes/rosterDrafts.js */
+export interface RosterDraftMember {
+  player_id: number;
+  is_licensed: boolean;
+  kind: "own" | "loan";
+  name?: string;
+  image?: string | null;
+  position?: string | null;
+}
+
+export interface RosterDraft {
+  id: number;
+  team_id: number;
+  season_id: number;
+  status: "draft" | "submitted";
+  note: string;
+  submitted_at: string | null;
+  last_decision: "approved" | "rejected" | null;
+  last_decision_note: string | null;
+  last_decision_at: string | null;
+  members: RosterDraftMember[];
+  active: RosterDraftMember[];
+  diff: { additions: RosterDraftMember[]; removals: RosterDraftMember[]; license_changes: RosterDraftMember[]; changed: boolean };
+  errors: { code: string; player_id?: number; message: string }[];
+  can_submit: boolean;
+  rules: {
+    applies: boolean;
+    general: RosterCap | null;
+    licensed: RosterCap | null;
+    transfer_rights: SeasonRosterStatus["transferRights"] | null;
+    rights_needed: number;
+    rights_after: number | null;
+  };
+}
+
+export interface SquadLoanMember extends SquadRosterEntry {
+  isLoan?: boolean;
+  ownTeamId?: number | null;
+  ownTeamName?: string | null;
+}
+
 export interface SquadBuilderOverview {
   team: { id: number; team_name: string; logo: string | null };
   seasons: SquadSeason[];
   selectedSeasonId: number | null;
   seasonStatus: SeasonRosterStatus | null;
+  /** Seçili sezonun kadro taslağı (sezon yoksa null). */
+  draft?: RosterDraft | null;
   roster: SquadRosterEntry[];
+  /** Başka takımdan kiralık olarak sezon kadrosunda olan oyuncular. */
+  loanMembers?: SquadLoanMember[];
   formerMembers: SquadRosterEntry[];
   pending: SquadPendingItem[];
   summary: { teamPlayers: number; inSeasonRoster: number; notInSeasonRoster: number };
@@ -717,10 +765,22 @@ export const searchSquadCandidates = (q: string, signal?: AbortSignal) =>
 /** Tek dokunuşla "takımıma kat" — davet mi teklif mi olduğuna sunucu karar verir. */
 export const recruitPlayer = (body: {
   playerId: number;
+  /** "sale" (kalıcı, varsayılan) ya da "loan" (kiralık; bitiş tarihi zorunlu). */
+  transferType?: "sale" | "loan";
   message?: string | null;
   transferFee?: string | null;
   contractEndDate?: string | null;
 }) => post<RecruitResult>(`${SQUAD_BUILDER}/recruit`, body);
+
+const ROSTER_DRAFTS = "/api/roster-drafts/mine";
+
+export const getRosterDraft = (seasonId: number) => get<{ draft: RosterDraft }>(`${ROSTER_DRAFTS}/${seasonId}`);
+export const saveRosterDraft = (seasonId: number, body: { members: RosterDraftMember[]; note?: string }) =>
+  put<{ message: string; draft: RosterDraft }>(`${ROSTER_DRAFTS}/${seasonId}`, body);
+export const resetRosterDraft = (seasonId: number) => post<{ message: string; draft: RosterDraft }>(`${ROSTER_DRAFTS}/${seasonId}/reset`);
+export const submitRosterDraft = (seasonId: number, note = "") =>
+  post<{ message: string; draft: RosterDraft }>(`${ROSTER_DRAFTS}/${seasonId}/submit`, { note });
+export const withdrawRosterDraft = (seasonId: number) => post<{ message: string; draft: RosterDraft }>(`${ROSTER_DRAFTS}/${seasonId}/withdraw`);
 
 export const addSquadSeasonPlayers = (
   seasonId: number,
@@ -745,6 +805,14 @@ export const SQUAD_BUILDER_ERRORS: Record<string, string> = {
   SEASON_NOT_FOUND: "Takımın bu sezona kayıtlı değil.",
   MEMBER_NOT_FOUND: "Oyuncu bu sezon kadrosunda bulunamadı.",
   TEAM_MANAGEMENT_REQUIRED: "Bu işlem için takım yönetimi yetkisi gerekiyor.",
+  DRAFT_SUBMITTED: "Taslak yönetim onayında; düzenlemek için önce gönderimi geri çek.",
+  DRAFT_UNCHANGED: "Aktif kadroya göre değişiklik yok; gönderilecek bir şey bulunmuyor.",
+  DRAFT_NOT_SUBMITTED: "Geri çekilecek bir gönderim yok.",
+  ROSTER_LIMIT_EXCEEDED: "Genel kadro limiti aşılıyor.",
+  LICENSED_ROSTER_LIMIT_EXCEEDED: "Lisanslı oyuncu limiti aşılıyor.",
+  LOAN_LIMIT_EXCEEDED: "Oyuncu zaten iki takımda kiralık; üçüncü kiralık mümkün değil.",
+  LOAN_ALREADY_ACTIVE: "Oyuncu takımında zaten kiralık.",
+  LOAN_REQUIRES_TEAM: "Serbest oyuncu kiralanamaz; kalıcı transfer teklifi gönder.",
 };
 
 /* ═════════════════════ RAKİP ANALİZİ VE SİMÜLASYON ═════════════════════
