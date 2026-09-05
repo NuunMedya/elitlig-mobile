@@ -41,6 +41,11 @@ export class ApiError extends Error {
 type TokenReader = () => string | null;
 
 let readToken: TokenReader = () => null;
+
+/** Oturum jetonu (socket el sıkışması gibi HTTP dışı kanallar için). */
+export function currentAuthToken(): string | null {
+  return readToken();
+}
 let onUnauthorized: (() => void) | null = null;
 
 /** AuthProvider açılışta jeton kaynağını buraya bağlar. */

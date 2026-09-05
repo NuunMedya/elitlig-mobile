@@ -393,12 +393,12 @@ export default function ProfileTabScreen() {
       }
       club.push(
         {
-          key: "mesajlarim",
+          key: "sohbet",
           icon: "chatbubbles",
-          title: "Mesajlarım",
-          subtitle: "Yönetimle yazışmaların",
+          title: "Mesajlar",
+          subtitle: "Yönetim, takımın ve oyuncularla yazış, sesli ara",
           badge: unreadBadgeLabel(unread.messages),
-          action: { kind: "route", route: "/mesajlarim" },
+          action: { kind: "route", route: "/sohbet" },
         },
         {
           key: "bildirimler",

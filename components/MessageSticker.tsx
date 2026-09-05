@@ -68,6 +68,7 @@ const POSITION_KEY = "elitlig.messageSticker.v1";
  * rotalar da kapsansın diye.
  */
 const HIDDEN_PREFIXES = [
+  "/sohbet",
   "/mesajlarim",
   "/mesaj",
   "/giris",
@@ -219,7 +220,7 @@ export const MessageSticker = React.memo(function MessageSticker() {
       dragged.current = false;
       return;
     }
-    router.push("/mesajlarim");
+    router.push("/sohbet" as never);
   }, [router]);
 
   /* ------------------------------ Görünürlük ------------------------------ */

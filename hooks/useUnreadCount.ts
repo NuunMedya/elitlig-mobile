@@ -14,7 +14,8 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
-import { getMyMessages, getUnreadNotifCount } from "@/lib/api/panel";
+import { getChatUnread } from "@/lib/api/chat";
+import { getUnreadNotifCount } from "@/lib/api/panel";
 import { queryKeys } from "@/lib/queryKeys";
 import { useAuth } from "@/providers/AuthProvider";
 
@@ -41,9 +42,11 @@ export function useUnreadCount(): UnreadCount {
     retry: false,
   });
 
+  // Mesaj rozeti artık sohbet sisteminden gelir: yönetim yazışması da,
+  // takım/oyuncu sohbetleri de aynı kutuda (app/sohbet).
   const messagesQuery = useQuery({
-    queryKey: queryKeys.panelMessages(),
-    queryFn: getMyMessages,
+    queryKey: queryKeys.chatUnread(),
+    queryFn: getChatUnread,
     enabled,
     staleTime: 30_000,
     refetchInterval: enabled ? 60_000 : false,
@@ -51,7 +54,7 @@ export function useUnreadCount(): UnreadCount {
   });
 
   const notifications = enabled ? notifQuery.data?.count ?? 0 : 0;
-  const messages = enabled ? messagesQuery.data?.unread ?? 0 : 0;
+  const messages = enabled ? messagesQuery.data?.count ?? 0 : 0;
 
   return {
     total: notifications + messages,

@@ -12,8 +12,11 @@
       "bundleIdentifier": "com.elitlig.app",
       "infoPlist": {
         "UIBackgroundModes": [
-          "remote-notification"
-        ]
+          "remote-notification",
+          "audio",
+          "voip"
+        ],
+        "NSMicrophoneUsageDescription": "Sesli arama sırasında sesinizi karşı tarafa iletmek için mikrofon kullanılır."
       }
     },
     "android": {
@@ -22,7 +25,13 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#6D28D9"
-      }
+      },
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_CONNECT"
+      ]
     },
     "plugins": [
       "expo-router",
@@ -47,7 +56,14 @@
           }
         }
       ],
-      "expo-font"
+      "expo-font",
+      [
+        "@config-plugins/react-native-webrtc",
+        {
+          "cameraPermission": "Kamera bu uygulamada kullanılmaz.",
+          "microphonePermission": "Sesli arama sırasında sesinizi karşı tarafa iletmek için mikrofon kullanılır."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
