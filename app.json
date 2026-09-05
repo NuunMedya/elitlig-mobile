@@ -16,7 +16,8 @@
           "audio",
           "voip"
         ],
-        "NSMicrophoneUsageDescription": "Sesli arama sırasında sesinizi karşı tarafa iletmek için mikrofon kullanılır."
+        "NSMicrophoneUsageDescription": "Sesli arama sırasında sesinizi karşı tarafa iletmek için mikrofon kullanılır.",
+        "NSLocationWhenInUseUsageDescription": "Sohbette bulunduğunuz konumu paylaşmak için konum kullanılır."
       }
     },
     "android": {
@@ -30,7 +31,9 @@
         "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS",
         "android.permission.BLUETOOTH",
-        "android.permission.BLUETOOTH_CONNECT"
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
       ]
     },
     "plugins": [
@@ -62,6 +65,18 @@
         {
           "cameraPermission": "Kamera bu uygulamada kullanılmaz.",
           "microphonePermission": "Sesli arama sırasında sesinizi karşı tarafa iletmek için mikrofon kullanılır."
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Sesli mesaj kaydetmek ve sesli arama yapmak için mikrofon kullanılır."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Sohbette bulunduğunuz konumu paylaşmak için konum kullanılır."
         }
       ]
     ],

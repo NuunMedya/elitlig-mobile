@@ -77,8 +77,11 @@ const END_LABELS: Record<string, string> = {
   missed: "Cevapsız arama",
   cancelled: "Arama iptal edildi",
   hangup: "Görüşme bitti",
+  taken: "Aramayı başka bir yönetici yanıtladı",
   "connection-failed": "Bağlantı koptu",
 };
+
+const MANAGEMENT_REMOTE: ChatUser = { user_id: 0, name: "ElitLig Yönetimi", avatar: null, subtitle: "Yönetim" };
 
 const CallContext = createContext<CallApi | null>(null);
 
@@ -244,12 +247,14 @@ export function CallProvider({ children }: { children: ReactNode }) {
         return;
       }
       if (!isWebRtcAvailable()) {
-        setState({ ...IDLE, status: "ended", remote: conversation.other_user, endedLabel: WEBRTC_UNAVAILABLE_MESSAGE, error: WEBRTC_UNAVAILABLE_MESSAGE });
+        setState({ ...IDLE, status: "ended", remote: conversation.other_user ?? MANAGEMENT_REMOTE, endedLabel: WEBRTC_UNAVAILABLE_MESSAGE, error: WEBRTC_UNAVAILABLE_MESSAGE });
         setTimeout(() => setState((current) => (current.status === "ended" ? IDLE : current)), 4_000);
         return;
       }
       const rtc = loadWebRtc()!;
-      setState({ ...IDLE, status: "outgoing", remote: conversation.other_user });
+      // Yönetim sohbetinde üye "ElitLig Yönetimi"ni arar; yönetici üyeyi arar.
+      const remote = conversation.other_user ?? (conversation.is_management ? MANAGEMENT_REMOTE : null);
+      setState({ ...IDLE, status: "outgoing", remote });
       statusRef.current = "outgoing";
       try {
         await loadIce();
@@ -263,7 +268,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
           () => startCallRest({ conversation_id: conversation.id, sdp }),
         );
         callRef.current = result.call;
-        patch({ call: result.call, remote: (result.call.other_user as ChatUser) ?? conversation.other_user });
+        patch({ call: result.call, remote: (result.call.other_user as ChatUser) ?? remote });
         flushLocalIce();
         ringTimer.current = setTimeout(() => {
           const call = callRef.current;
@@ -276,7 +281,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
         cleanup();
         callRef.current = null;
         const message = describeError(error);
-        setState({ ...IDLE, status: "ended", remote: conversation.other_user, endedLabel: message, error: message });
+        setState({ ...IDLE, status: "ended", remote, endedLabel: message, error: message });
         statusRef.current = "ended";
         setTimeout(() => setState((current) => (current.status === "ended" ? IDLE : current)), 3_500);
       }

@@ -69,6 +69,8 @@ const POSITION_KEY = "elitlig.messageSticker.v1";
  */
 const HIDDEN_PREFIXES = [
   "/sohbet",
+  "/yonetim/sohbet",
+  "/yonetim/kayitlar",
   "/mesajlarim",
   "/mesaj",
   "/giris",

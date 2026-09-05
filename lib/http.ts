@@ -42,6 +42,9 @@ type TokenReader = () => string | null;
 
 let readToken: TokenReader = () => null;
 
+const isFormData = (value: unknown): value is FormData =>
+  typeof FormData !== "undefined" && value instanceof FormData;
+
 /** Oturum jetonu (socket el sıkışması gibi HTTP dışı kanallar için). */
 export function currentAuthToken(): string | null {
   return readToken();
@@ -124,10 +127,12 @@ async function once<T>(path: string, options: RequestOptions): Promise<T> {
       signal: controller.signal,
       headers: {
         Accept: "application/json",
-        ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+        // FormData (dosya yükleme) gövdesinde Content-Type verilmez: fetch sınır
+        // (boundary) değerini kendisi ekler; JSON türü multer'ı bozardı.
+        ...(body !== undefined && !isFormData(body) ? { "Content-Type": "application/json" } : {}),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      ...(body !== undefined ? { body: isFormData(body) ? body : JSON.stringify(body) } : {}),
     });
 
     const payload = await parseBody(response);

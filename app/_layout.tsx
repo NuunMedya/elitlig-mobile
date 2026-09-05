@@ -136,6 +136,10 @@ export default function RootLayout() {
                   <Stack.Screen name="sohbet/index" />
                   <Stack.Screen name="sohbet/[id]" />
                   <Stack.Screen name="sohbet/yeni" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
+                  <Stack.Screen name="yonetim/sohbet/index" />
+                  <Stack.Screen name="yonetim/sohbet/[id]" />
+                  <Stack.Screen name="yonetim/sohbet/yeni" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
+                  <Stack.Screen name="yonetim/kayitlar" />
 
                   {/* Modal olanlar: bir görevi bitirip kapanan, yığına ait olmayan ekranlar. */}
                   <Stack.Screen name="ara" options={{ presentation: "modal", animation: "slide_from_bottom" }} />

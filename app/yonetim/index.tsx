@@ -51,7 +51,7 @@ import { colors, hairline, layout, radius, space, textScale, type } from "@/them
 /** Sayaçların tazelenme aralığı — uygulama arkadayken hiç yoklanmaz. */
 const POLL_MS = 30_000;
 
-type SectionKey = "maclar" | "mesajlar" | "sahalar";
+type SectionKey = "maclar" | "sohbet" | "kayitlar" | "mesajlar" | "sahalar";
 
 interface PanelSection {
   key: SectionKey;
@@ -158,6 +158,28 @@ export default function AdminHomeScreen() {
           unread && unread > 0 ? `${unread} okunmamış başvuru` : "Okunmamış başvuru yok",
         tone: "warn",
         loading: messagesQuery.isLoading,
+      },
+      {
+        key: "sohbet",
+        route: "/yonetim/sohbet",
+        icon: "chatbubbles",
+        title: "Sohbet",
+        body: "Üyelerle yazış, sesli ara, konum ve maç teklifi gönder; onay bekleyen işlemleri kartlardan sonuçlandır",
+        pending: null,
+        pendingLabel: "WhatsApp mantığında yönetim sohbeti",
+        tone: "brand",
+        loading: false,
+      },
+      {
+        key: "kayitlar",
+        route: "/yonetim/kayitlar",
+        icon: "recording-outline",
+        title: "Kayıtlar",
+        body: "Sesli aramaların kayıtları ve sesli mesajlar",
+        pending: null,
+        pendingLabel: "Arama ve sesli mesaj arşivi",
+        tone: "neutral",
+        loading: false,
       },
       {
         key: "sahalar",
