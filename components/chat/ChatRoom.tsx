@@ -11,7 +11,7 @@
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Redirect, useRouter } from "expo-router";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, View } from "react-native";
@@ -19,7 +19,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AttachSheet, type AttachMode } from "@/components/chat/AttachSheet";
 import { AttendanceCard, AudioBubble, CallChip, LocationBubble, MatchOfferBubble, NotificationCard, SystemChip, clockLabel } from "@/components/chat/ChatBubbles";
-import { Button, EmptyState, ErrorState, Input, ScreenHeader, SkeletonListRow, Touchable, errorMessage, useToast, withAlpha } from "@/components/ui";
+import { BottomSheet, Button, EmptyState, ErrorState, Input, ScreenHeader, SkeletonListRow, Touchable, errorMessage, useToast, withAlpha } from "@/components/ui";
 import { setActiveChatConversation, useAdminConversationMessages, useConversationMessages } from "@/hooks/useChat";
 import {
   adminChat,
@@ -43,7 +43,7 @@ import {
   type SendMessageInput,
 } from "@/lib/api/chat";
 import { useVoiceRecorder } from "@/lib/chatMedia";
-import { respondMatchAttendance } from "@/lib/api/team";
+import { addMatchAttendancePlayers, getTeamRoster, removeMatchAttendancePlayer, respondMatchAttendance, type AttendancePlayer } from "@/lib/api/team";
 import { CHAT_EVENTS, emitTyping, onChatEvent } from "@/lib/chatSocket";
 import { formatDayHeading } from "@/lib/format";
 import { queryKeys } from "@/lib/queryKeys";
@@ -431,6 +431,51 @@ export function ChatRoom({ conversationId, admin = false }: ChatRoomProps) {
     [toast],
   );
 
+  /* Yoklama kartını düzenleme (yalnız yoklamayı kuran yönetici): çıkarma
+     onayla, ekleme takım kadrosundan seçilir; sunucu maç planını da eşitler. */
+  const [attendancePick, setAttendancePick] = useState<ChatMessage | null>(null);
+  const rosterQuery = useQuery({ queryKey: ["takim", "roster"], queryFn: getTeamRoster, enabled: Boolean(attendancePick), staleTime: 60_000 });
+  const removeAttendancePlayer = useCallback(
+    (message: ChatMessage, player: AttendancePlayer) => {
+      const attendanceMatchId = message.meta?.attendance?.match_id;
+      if (!attendanceMatchId) return;
+      Alert.alert("Kadrodan çıkar", `${player.name} yoklamadan ve maç kadrosundan çıkarılacak; gruptan alınır.`, [
+        { text: "Vazgeç", style: "cancel" },
+        {
+          text: "Çıkar",
+          style: "destructive",
+          onPress: () => {
+            setBusyKey(`att-${message.id}`);
+            void removeMatchAttendancePlayer(attendanceMatchId, player.player_id)
+              .then((result) => { toast.show({ message: result.message, tone: "success" }); void queryClient.invalidateQueries({ queryKey: ["takim", "attendance", attendanceMatchId] }); })
+              .catch((error: unknown) => toast.show({ message: errorMessage(error), tone: "danger" }))
+              .finally(() => setBusyKey(null));
+          },
+        },
+      ]);
+    },
+    [queryClient, toast],
+  );
+  const openAttendancePicker = useCallback((message: ChatMessage) => setAttendancePick(message), []);
+  const addAttendancePlayer = useCallback(
+    (playerId: number) => {
+      const message = attendancePick;
+      const attendanceMatchId = message?.meta?.attendance?.match_id;
+      if (!message || !attendanceMatchId) return;
+      setAttendancePick(null);
+      setBusyKey(`att-${message.id}`);
+      void addMatchAttendancePlayers(attendanceMatchId, [playerId])
+        .then((result) => { toast.show({ message: result.message, tone: "success" }); void queryClient.invalidateQueries({ queryKey: ["takim", "attendance", attendanceMatchId] }); })
+        .catch((error: unknown) => toast.show({ message: errorMessage(error), tone: "danger" }))
+        .finally(() => setBusyKey(null));
+    },
+    [attendancePick, queryClient, toast],
+  );
+  const attendanceCandidates = useMemo(() => {
+    const inPoll = new Set((attendancePick?.meta?.attendance?.players ?? []).map((p) => p.player_id));
+    return (rosterQuery.data?.roster ?? []).filter((p) => !inPoll.has(p.id));
+  }, [attendancePick, rosterQuery.data]);
+
   /* ---------- kaydırma ---------- */
   const entryCount = entries.length;
   useEffect(() => {
@@ -456,14 +501,14 @@ export function ChatRoom({ conversationId, admin = false }: ChatRoomProps) {
         case "match_offer":
           return <MatchOfferBubble message={message} canRespond={canRespondOffer} busy={busyKey === `offer-${message.id}`} onRespond={respondOffer} />;
         case "attendance":
-          return <AttendanceCard message={message} viewerPlayerId={auth.user?.player_id} busy={busyKey === `att-${message.id}`} onRespond={respondAttendance} />;
+          return <AttendanceCard message={message} viewerPlayerId={auth.user?.player_id} viewerUserId={auth.user?.id} busy={busyKey === `att-${message.id}`} onRespond={respondAttendance} onRemove={removeAttendancePlayer} onAdd={openAttendancePicker} />;
         case "system":
           return <SystemChip text={message.body ?? ""} />;
         default:
           return <Bubble message={message} showSender={item.showSender} onLongPress={onLongPress} onRetry={retry} />;
       }
     },
-    [admin, auth.user?.player_id, busyKey, onLongPress, respondAttendance, respondOffer, retry, runAction],
+    [admin, auth.user?.id, auth.user?.player_id, busyKey, onLongPress, openAttendancePicker, removeAttendancePlayer, respondAttendance, respondOffer, retry, runAction],
   );
 
   if (!auth.user) return <Redirect href="/giris" />;
@@ -574,6 +619,22 @@ export function ChatRoom({ conversationId, admin = false }: ChatRoomProps) {
       </KeyboardAvoidingView>
 
       <AttachSheet mode={attach} onChangeMode={setAttach} conversation={conversation} admin={admin} onSendLocation={onSendLocation} onSendOffer={onSendOffer} />
+      <BottomSheet visible={Boolean(attendancePick)} onClose={() => setAttendancePick(null)} title="Yoklamaya oyuncu ekle" snap="half" scrollable={false}>
+        <Text style={styles.attendanceHint} {...textScale.long}>Seçtiğin oyuncu gruba alınır ve maç kadrosuna yedek olarak eklenir.</Text>
+        <FlatList
+          data={attendanceCandidates}
+          keyExtractor={(item) => String(item.id)}
+          keyboardShouldPersistTaps="handled"
+          renderItem={({ item }) => (
+            <Touchable feedback="row" haptic="selection" onPress={() => addAttendancePlayer(item.id)} style={styles.attendanceRow} accessibilityLabel={`${item.player_name} ekle`}>
+              <Text style={styles.attendanceName} numberOfLines={1}>{item.player_name}</Text>
+              <Text style={styles.attendanceMeta}>{item.team_position ?? item.profile_position ?? ""}</Text>
+              <Ionicons name="add-circle-outline" size={20} color={colors.brandAccent} />
+            </Touchable>
+          )}
+          ListEmptyComponent={<Text style={styles.attendanceHint}>{rosterQuery.isLoading ? "Kadro yükleniyor…" : "Eklenecek oyuncu kalmadı."}</Text>}
+        />
+      </BottomSheet>
     </SafeAreaView>
   );
 }
@@ -627,6 +688,11 @@ const Bubble = memo(function Bubble({ message, showSender, onLongPress, onRetry 
 });
 
 const styles = StyleSheet.create({
+  attendanceHint: { ...type.bodySm, color: colors.textSecondary, paddingVertical: space.xs },
+  attendanceRow: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: space.sm, borderBottomWidth: hairline, borderBottomColor: colors.separator },
+  attendanceName: { ...type.body, color: colors.textPrimary, flex: 1 },
+  attendanceMeta: { ...type.caption, color: colors.textTertiary },
+
   screen: { flex: 1, backgroundColor: colors.bg },
   flex: { flex: 1 },
   skeleton: { paddingHorizontal: layout.screenPadding, paddingTop: space.sm },

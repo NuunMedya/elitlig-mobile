@@ -11,6 +11,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { Button, Touchable, withAlpha } from "@/components/ui";
 import { formatDurationMs, type ChatAction, type ChatMessage } from "@/lib/api/chat";
 import { openMap } from "@/lib/chatMedia";
+import type { AttendancePlayer } from "@/lib/api/team";
 import { colors, radius, space, textScale, type } from "@/theme";
 
 export function clockLabel(iso: string): string {
@@ -159,24 +160,58 @@ export const MatchOfferBubble = memo(function MatchOfferBubble({
 
 const ATT_ICON: Record<string, keyof typeof Ionicons.glyphMap> = { coming: "checkmark-circle", not_coming: "close-circle", maybe: "help-circle" };
 
+const ATT_LINES: ReadonlyArray<readonly [string, string]> = [["FWD", "Forvet"], ["MID", "Orta saha"], ["DEF", "Defans"], ["GK", "Kaleci"]];
+
+function AttendanceChip({ p, mine, isMe, canEdit, busy, onRemove }: { p: AttendancePlayer; mine: boolean; isMe: boolean; canEdit: boolean; busy: boolean; onRemove?: (p: AttendancePlayer) => void }) {
+  const color = p.status === "coming" ? colors.win : p.status === "not_coming" ? colors.danger : p.status === "maybe" ? colors.warn : colors.textTertiary;
+  return (
+    <View style={[styles.attChip, { backgroundColor: mine ? withAlpha(colors.textOnBrand, 0.16) : colors.surface2, borderColor: isMe ? colors.brandAccent : withAlpha(color, 0.5) }]}>
+      <Ionicons name={ATT_ICON[p.status ?? ""] ?? "time-outline"} size={13} color={color} />
+      <View style={styles.attChipBody}>
+        <Text style={[styles.attName, mine ? styles.textMine : null]} numberOfLines={1} {...textScale.dense}>{p.jersey ? `${p.jersey} · ` : ""}{p.name}{p.captain ? " (C)" : ""}</Text>
+        <Text style={[styles.attStatus, mine ? styles.subMine : null]} {...textScale.badge}>{p.status_label}</Text>
+      </View>
+      {canEdit && onRemove ? (
+        <Touchable feedback="icon" haptic="selection" onPress={() => onRemove(p)} disabled={busy} accessibilityLabel={`${p.name} kadrodan çıkar`} style={styles.attRemove}>
+          <Ionicons name="close" size={14} color={colors.danger} />
+        </Touchable>
+      ) : null}
+    </View>
+  );
+}
+
+/* Maç yoklaması kartı: saha dizilişi (AS oyuncular hatlarıyla), yedekler ve
+   kadro dışı. Yoklamayı kuran yönetici karttan oyuncu çıkarır / ekler; sunucu
+   maç kadrosu planını da eşitler. */
 export const AttendanceCard = memo(function AttendanceCard({
   message,
   viewerPlayerId,
+  viewerUserId,
   busy,
   onRespond,
+  onRemove,
+  onAdd,
 }: {
   message: ChatMessage;
   viewerPlayerId: number | null | undefined;
+  viewerUserId?: number | null;
   busy: boolean;
   onRespond: (message: ChatMessage, status: "coming" | "not_coming" | "maybe") => void;
+  onRemove?: (message: ChatMessage, player: AttendancePlayer) => void;
+  onAdd?: (message: ChatMessage) => void;
 }) {
   const mine = message.sender.is_me;
   const att = message.meta?.attendance;
   const players = att?.players ?? [];
   const me = players.find((p) => p.player_id === Number(viewerPlayerId));
   const canAnswer = Boolean(me) && !att?.reported_at;
+  const canEdit = Boolean(onRemove) && att?.manager_user_id != null && Number(att.manager_user_id) === Number(viewerUserId) && !att?.reported_at;
   const counts = att?.counts ?? { coming: 0, not_coming: 0, maybe: 0, unanswered: 0 };
-  const statusColorOf = (status: string | null) => (status === "coming" ? colors.win : status === "not_coming" ? colors.danger : status === "maybe" ? colors.warn : colors.textTertiary);
+  const starters = players.filter((p) => p.role === "starter");
+  const bench = players.filter((p) => p.role === "bench");
+  const others = players.filter((p) => !p.role);
+  const lines = ATT_LINES.map(([key, label]) => ({ key, label, list: starters.filter((p) => (p.line ?? "MID") === key) })).filter((line) => line.list.length);
+  const chip = (p: AttendancePlayer) => <AttendanceChip key={p.player_id} p={p} mine={mine} isMe={p.player_id === Number(viewerPlayerId)} canEdit={canEdit} busy={busy} onRemove={onRemove ? (target) => onRemove(message, target) : undefined} />;
   return (
     <View style={[styles.bubble, styles.card, mine ? styles.bubbleMine : styles.bubbleTheirs, { borderLeftColor: colors.warn }]}>
       <View style={styles.cardHead}>
@@ -186,21 +221,39 @@ export const AttendanceCard = memo(function AttendanceCard({
           <Text style={[styles.statusText, { color: mine ? colors.textOnBrand : colors.win }]} {...textScale.badge}>{counts.coming} geliyor · {counts.unanswered} bekliyor</Text>
         </View>
       </View>
-      <Fact icon="football-outline" text={`${att?.is_home === false ? "Deplasman" : "Ev sahibi"} · ${att?.opponent ?? "Rakip"} · ${att?.when ?? ""}`} mine={mine} />
+      <Fact icon="football-outline" text={`${att?.is_home === false ? "Deplasman" : "Ev sahibi"} · ${att?.opponent ?? "Rakip"} · ${att?.when ?? ""}${att?.formation ? ` · ${att.formation}` : ""}`} mine={mine} />
       {att?.venue ? <Fact icon="location-outline" text={att.venue} mine={mine} /> : null}
-      <View style={styles.attList}>
-        {players.map((p) => (
-          <View key={p.player_id} style={[styles.attRow, { backgroundColor: mine ? withAlpha(colors.textOnBrand, 0.14) : colors.surface3 }]}>
-            <Ionicons name={ATT_ICON[p.status ?? ""] ?? "time-outline"} size={14} color={statusColorOf(p.status)} />
-            <Text style={[styles.attName, mine ? styles.textMine : null]} numberOfLines={1} {...textScale.dense}>{p.name}</Text>
-            <Text style={[styles.attStatus, mine ? styles.subMine : null]} {...textScale.badge}>{p.status_label}</Text>
-          </View>
-        ))}
-      </View>
+      {lines.length ? (
+        <View style={styles.attPitch}>
+          {lines.map((line) => (
+            <View key={line.key} style={styles.attLine}>
+              <Text style={styles.attLineLabel} {...textScale.badge}>{line.label}</Text>
+              <View style={styles.attRow}>{line.list.map(chip)}</View>
+            </View>
+          ))}
+        </View>
+      ) : null}
+      {bench.length ? (
+        <View style={styles.attGroup}>
+          <Text style={[styles.attGroupLabel, mine ? styles.subMine : null]} {...textScale.badge}>Yedekler</Text>
+          <View style={styles.attRow}>{bench.map(chip)}</View>
+        </View>
+      ) : null}
+      {others.length ? (
+        <View style={styles.attGroup}>
+          <Text style={[styles.attGroupLabel, mine ? styles.subMine : null]} {...textScale.badge}>{lines.length || bench.length ? "Kadro dışı" : "Yoklama listesi"}</Text>
+          <View style={styles.attRow}>{others.map(chip)}</View>
+        </View>
+      ) : null}
       {canAnswer ? (
         <View style={styles.actions}>
           <Button label="Geliyorum" size="sm" icon="checkmark" variant={me?.status === "coming" ? "primary" : "secondary"} onPress={() => onRespond(message, "coming")} disabled={busy} loading={busy} />
           <Button label="Gelemiyorum" size="sm" icon="close" variant={me?.status === "not_coming" ? "danger" : "secondary"} onPress={() => onRespond(message, "not_coming")} disabled={busy} />
+        </View>
+      ) : null}
+      {canEdit && onAdd ? (
+        <View style={styles.actions}>
+          <Button label="Oyuncu ekle" size="sm" icon="person-add-outline" variant="secondary" onPress={() => onAdd(message)} disabled={busy} />
         </View>
       ) : null}
       {att?.reported_at ? <Fact icon="checkmark-done-outline" text="Kadro son şekliyle yönetime bildirildi." mine={mine} /> : null}
@@ -304,10 +357,17 @@ export const SystemChip = memo(function SystemChip({ text, icon }: { text: strin
 const PLAY = 34;
 
 const styles = StyleSheet.create({
-  attList: { gap: space.xxs, marginTop: space.xs },
-  attRow: { flexDirection: "row", alignItems: "center", gap: space.xs, paddingHorizontal: space.sm, paddingVertical: space.xs, borderRadius: radius.sm },
-  attName: { ...type.bodySm, color: colors.textPrimary, flex: 1 },
+  attPitch: { gap: space.xs, marginTop: space.xs, padding: space.sm, borderRadius: radius.md, backgroundColor: colors.win },
+  attLine: { gap: space.xxs },
+  attLineLabel: { ...type.caption, color: colors.textOnBrand },
+  attGroup: { gap: space.xxs, marginTop: space.xs },
+  attGroupLabel: { ...type.caption, color: colors.textSecondary },
+  attRow: { flexDirection: "row", flexWrap: "wrap", gap: space.xs },
+  attChip: { flexDirection: "row", alignItems: "center", gap: space.xs, paddingHorizontal: space.sm, paddingVertical: space.xs, borderRadius: radius.sm, borderWidth: 1, minWidth: 120, maxWidth: "100%" },
+  attChipBody: { flexShrink: 1 },
+  attName: { ...type.bodySm, color: colors.textPrimary },
   attStatus: { ...type.caption, color: colors.textSecondary },
+  attRemove: { width: 22, height: 22, alignItems: "center", justifyContent: "center" },
 
   bubble: { maxWidth: "86%", borderRadius: radius.lg, padding: space.md, gap: space.xs },
   bubbleMine: { alignSelf: "flex-end", backgroundColor: colors.brand, borderBottomRightRadius: radius.xs },

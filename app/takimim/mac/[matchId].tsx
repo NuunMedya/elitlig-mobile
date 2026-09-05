@@ -460,12 +460,20 @@ export default function MacKadrosuScreen() {
     onError: (error) => toast.show({ message: error instanceof ApiError ? error.userMessage : "Kadro bildirilemedi.", tone: "danger" }),
   });
   const selectedRegisteredIds = useMemo(() => entries.map((entry) => entry.playerId).filter((id): id is number => id != null), [entries]);
+  const syncMutation = useMutation({
+    // Planı kaydeder; sunucu yoklama listesini planla eşitler.
+    mutationFn: () => saveTeamMatchPlan(matchId, { formation, kitColor: kit, tactics: tactics.trim() || undefined, lineup: entries.map(({ displayName: _n, photo: _p, ...row }) => row) }),
+    onSuccess: () => {
+      toast.show({ message: "Yoklama listesi maç kadrosuyla eşitlendi.", tone: "success" });
+      void queryClient.invalidateQueries({ queryKey: ["takim", "attendance", matchId] });
+      void queryClient.invalidateQueries({ queryKey: ["takim", "match-plan", matchId] });
+    },
+    onError: (error) => toast.show({ message: error instanceof ApiError ? error.userMessage : "Eşitleme başarısız.", tone: "danger" }),
+  });
   const startAttendance = () => {
     if (!selectedRegisteredIds.length) { toast.show({ message: "Önce kadroya oyuncu ekle.", tone: "warn" }); return; }
-    const known = new Set((attendanceQuery.data?.attendance?.players ?? []).map((p) => p.player_id));
-    const fresh = selectedRegisteredIds.filter((id) => !known.has(id));
-    if (attendanceQuery.data?.active && !fresh.length) { toast.show({ message: "Yoklamada olmayan yeni oyuncu yok; gelemeyenin yerine kadroya oyuncu ekleyip tekrar dene.", tone: "warn" }); return; }
-    attendanceMutation.mutate(attendanceQuery.data?.active ? fresh : selectedRegisteredIds);
+    if (attendanceQuery.data?.active) { syncMutation.mutate(); return; }
+    attendanceMutation.mutate(selectedRegisteredIds);
   };
 
   const save = useMutation({
@@ -480,6 +488,8 @@ export default function MacKadrosuScreen() {
       toast.show({ message: data.message, tone: "success" });
       void queryClient.invalidateQueries({ queryKey: ["takim", "match-plan", matchId] });
       void queryClient.invalidateQueries({ queryKey: ["takim", "matches"] });
+      // Sunucu yoklama listesini planla eşitledi (çıkan gruptan alındı, giren eklendi).
+      void queryClient.invalidateQueries({ queryKey: ["takim", "attendance", matchId] });
       router.back();
     },
     onError: (error) => {
@@ -704,12 +714,12 @@ export default function MacKadrosuScreen() {
             </Text>
             <View style={styles.attendanceActions}>
               <Button
-                label={attendanceQuery.data?.active ? "Yeni seçilenleri yoklamaya ekle" : "Takımda yoklama yap"}
+                label={attendanceQuery.data?.active ? "Kadroyla eşitle" : "Takımda yoklama yap"}
                 variant="secondary"
                 size="sm"
-                icon="people-outline"
+                icon={attendanceQuery.data?.active ? "sync-outline" : "people-outline"}
                 onPress={startAttendance}
-                loading={attendanceMutation.isPending}
+                loading={attendanceMutation.isPending || syncMutation.isPending}
                 fullWidth
               />
               <Button
@@ -732,7 +742,7 @@ export default function MacKadrosuScreen() {
               ? attendanceQuery.data.attendance.players.map((p) => (
                   <View key={p.player_id} style={styles.attendanceRow}>
                     <Ionicons name={p.status === "coming" ? "checkmark-circle" : p.status === "not_coming" ? "close-circle" : p.status === "maybe" ? "help-circle" : "time-outline"} size={16} color={p.status === "coming" ? colors.win : p.status === "not_coming" ? colors.danger : p.status === "maybe" ? colors.warn : colors.textTertiary} />
-                    <Text style={styles.attendanceName} numberOfLines={1}>{p.name}</Text>
+                    <Text style={styles.attendanceName} numberOfLines={1}>{p.name}{p.role ? ` · ${p.role === "starter" ? "AS" : "YEDEK"}` : ""}</Text>
                     <Text style={styles.attendanceStatus}>{p.status_label}{p.has_account ? "" : " · hesabı yok"}</Text>
                   </View>
                 ))
