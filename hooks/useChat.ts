@@ -144,18 +144,17 @@ export function useChatRealtime(): void {
 
 /* ---------- yönetim modu ---------- */
 
-export type AdminListType = "management" | "team" | "all";
-
-export function useAdminConversations(type: AdminListType = "management") {
+export function useAdminConversations() {
   const auth = useAuth();
   const appActive = useAppActive();
   return useQuery({
-    queryKey: ["chat", "admin", "conversations", type] as const,
+    queryKey: ["chat", "admin", "conversations"] as const,
     queryFn: async () => {
-      // Yöneticinin kendi bildirim akışı + grupları ve üyelerin yönetim sohbetleri tek listede.
+      // Yöneticinin kendi bildirim akışı + grupları ve üyelerin yönetimle yazışmaları
+      // tek listede. Üyelerin kendi aralarındaki sohbetler yönetime görünmez.
       const [own, managed] = await Promise.all([
         getConversations().catch(() => ({ conversations: [], unread: 0 }) as ConversationsResponse),
-        adminChat.getConversations({ type, limit: 100 }),
+        adminChat.getConversations({ limit: 100 }),
       ]);
       const seen = new Set(own.conversations.map((item) => item.id));
       const merged = [...own.conversations, ...managed.conversations.filter((item) => !seen.has(item.id))];

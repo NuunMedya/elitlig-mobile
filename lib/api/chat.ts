@@ -173,6 +173,8 @@ export interface ChatConversation {
   unread: number;
   last_message_at: string | null;
   created_at: string;
+  /** Grup kurarken mesaj tercihi nedeniyle dışarıda kalanlar (yalnızca açılış yanıtında). */
+  skipped_members?: { user_id: number; name: string }[];
 }
 
 export interface ConversationsResponse {
@@ -297,22 +299,19 @@ export interface AdminConversationsResponse extends ConversationsResponse {
 export interface AdminCallRecord extends ChatCall {
   caller: ChatUser | { user_id: number; name: string };
   callee: ChatUser | { user_id: number; name: string };
-}
-
-export interface AdminAudioMessage extends ChatMessage {
-  conversation: { id: number; type: ConversationType; title: string } | null;
+  /** Kayıt var ama dinleme yetkisi yoksa recording_url boş gelir. */
+  has_recording?: boolean;
 }
 
 export interface AdminChatStats {
   conversations: number;
-  messages: number;
   calls: number;
   recorded_calls: number;
-  audio_messages: number;
 }
 
 export const adminChat = {
-  getConversations: (params: { type?: "management" | "all" | "direct" | "group" | "team"; q?: string; page?: number; limit?: number } = {}) =>
+  /** Yalnızca üyelerin yönetimle yaptığı yazışmalar; üyeler arası sohbetler yönetime kapalıdır. */
+  getConversations: (params: { q?: string; page?: number; limit?: number } = {}) =>
     get<AdminConversationsResponse>("/api/admin/chat/conversations", params),
   openConversation: (input: OpenConversationInput) =>
     post<{ conversation: ChatConversation }>("/api/admin/chat/conversations", input),
@@ -327,16 +326,41 @@ export const adminChat = {
   resolveAction: (id: number, messageId: number, body: { key: string; label?: string }) =>
     post<{ message: ChatMessage }>(`/api/admin/chat/conversations/${id}/messages/${messageId}/resolve`, body),
   getDirectory: (q = "") => get<DirectoryResponse>("/api/admin/chat/directory", q ? { q } : undefined),
+  /** Yalnızca yönetimle yapılan aramalar; can_listen "messages.listen" yetkisini yansıtır. */
   getCalls: (params: { recorded?: "1"; page?: number; limit?: number } = {}) =>
-    get<{ calls: AdminCallRecord[]; page: number; limit: number; total: number }>("/api/admin/chat/calls", params),
-  getAudioMessages: (params: { page?: number; limit?: number } = {}) =>
-    get<{ messages: AdminAudioMessage[]; page: number; limit: number; total: number }>("/api/admin/chat/audio-messages", params),
+    get<{ calls: AdminCallRecord[]; can_listen: boolean; page: number; limit: number; total: number }>("/api/admin/chat/calls", params),
   getStats: () => get<AdminChatStats>("/api/admin/chat/stats"),
+  /** Sohbeti yönetim tarafından gizler; kayıt çöp kutusuna düşer. */
+  deleteConversation: (id: number) => del<{ message: string; conversation_id: number }>(`/api/admin/chat/conversations/${id}`),
 };
 export const markConversationRead = (id: number) => post<{ conversation_id: number }>(`/api/chat/conversations/${id}/read`);
 export const deleteMessage = (id: number, messageId: number) =>
   del<{ message: ChatMessage }>(`/api/chat/conversations/${id}/messages/${messageId}`);
 export const leaveConversation = (id: number) => post<{ left: boolean }>(`/api/chat/conversations/${id}/leave`);
+/** Sohbeti kendi tarafımdan sil: karşı taraf görmeye devam eder, kayıt çöp kutusuna düşer. */
+export const deleteConversation = (id: number) => del<{ message: string; conversation_id: number }>(`/api/chat/conversations/${id}`);
+
+/* ---------- Kimden mesaj kabul ederim ---------- */
+
+export type AcceptFrom = "everyone" | "teams" | "players" | "teammates";
+
+export const ACCEPT_FROM_OPTIONS: { key: AcceptFrom; label: string; hint: string }[] = [
+  { key: "everyone", label: "Herkesten", hint: "Tüm takım yöneticileri ve oyuncular sana yazabilir." },
+  { key: "teams", label: "Takım yöneticilerinden", hint: "Yalnızca takım yöneticileri." },
+  { key: "players", label: "Oyunculardan", hint: "Yalnızca oyuncular." },
+  { key: "teammates", label: "Takım arkadaşlarımdan", hint: "Kendi takımının yöneticisi ve oyuncuları." },
+];
+
+export interface ChatPreferences {
+  accept_from: AcceptFrom[];
+  options: { key: AcceptFrom; label: string }[];
+  /** Yönetimden gelen mesaj her koşulda kabul edilir. */
+  management_always: boolean;
+}
+
+export const getChatPreferences = () => get<ChatPreferences>("/api/chat/preferences");
+export const setChatPreferences = (acceptFrom: AcceptFrom[]) =>
+  patch<ChatPreferences & { message?: string }>("/api/chat/preferences", { accept_from: acceptFrom });
 export const muteConversation = (id: number, muted: boolean) =>
   patch<{ muted: boolean }>(`/api/chat/conversations/${id}/mute`, { muted });
 export const getDirectory = (q = "") => get<DirectoryResponse>("/api/chat/directory", q ? { q } : undefined);
