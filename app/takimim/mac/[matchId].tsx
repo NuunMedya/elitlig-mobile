@@ -34,7 +34,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MatchAnalysisView } from "@/components/MatchAnalysisView";
 import { PitchBench, PitchLineup, type PitchPlayer } from "@/components/PitchLineup";
@@ -70,8 +70,14 @@ import {
   saveTeamMatchPlan,
   type MatchPlanPlayer,
   type RosterPlayer,
+  getMatchAttendance,
+  getMatchCenterRoster,
+  reportMatchLineup,
+  startMatchAttendance,
+  type MatchCenterRosterPlayer,
 } from "@/lib/api/team";
 import { ApiError } from "@/lib/http";
+import { queryKeys } from "@/lib/queryKeys";
 import { mediaUrl } from "@/lib/format";
 import { useAuth } from "@/providers/AuthProvider";
 import { colors, haptics, radius, space, textScale, type } from "@/theme";
@@ -123,16 +129,31 @@ export default function MacKadrosuScreen() {
   const matchId = Number(params.matchId);
 
   const planQuery = useQuery({
-    queryKey: ["team", "match-plan", matchId],
+    queryKey: ["takim", "match-plan", matchId],
     queryFn: () => getTeamMatchPlan(matchId),
     enabled: Boolean(auth.user) && Number.isInteger(matchId) && matchId > 0,
   });
 
+  // Diğer takım ekranlarıyla aynı önbellek anahtarı: kadro yönetiminde yapılan
+  // ekleme/çıkarma bu ekranı da tazeler.
   const rosterQuery = useQuery({
-    queryKey: ["team", "roster"],
+    queryKey: ["takim", "roster"],
     queryFn: getTeamRoster,
     enabled: Boolean(auth.user),
     staleTime: 60_000,
+  });
+  // Misafir oyuncu seçimi: ildeki oyuncu havuzu (takım oyuncuları hariç).
+  const poolQuery = useQuery({
+    queryKey: ["takim", "match-center-roster"],
+    queryFn: getMatchCenterRoster,
+    enabled: Boolean(auth.user),
+    staleTime: 60_000,
+  });
+  const attendanceQuery = useQuery({
+    queryKey: ["takim", "attendance", matchId],
+    queryFn: () => getMatchAttendance(matchId),
+    enabled: Boolean(auth.user) && Number.isInteger(matchId) && matchId > 0,
+    refetchInterval: (query) => (query.state.data?.active ? 20_000 : false),
   });
 
   const [formation, setFormation] = useState<string>(DEFAULT_FORMATION);
@@ -142,6 +163,7 @@ export default function MacKadrosuScreen() {
   const [editing, setEditing] = useState<Entry | null>(null);
   const [guestOpen, setGuestOpen] = useState(false);
   const [guestName, setGuestName] = useState("");
+  const [attendanceOpen, setAttendanceOpen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [tab, setTab] = useState<MatchTab>("kadro");
 
@@ -149,6 +171,9 @@ export default function MacKadrosuScreen() {
      yaptığı düzenlemeyi EZMEMELİ — bu yüzden hydrated bayrağı var. */
   useEffect(() => {
     if (hydrated || !planQuery.data) return;
+    // Kadro listesi gelmeden hidrasyon yapılırsa kayıtlı oyuncular kalıcı olarak
+    // "Oyuncu" adıyla kalıyordu; kadro isteği bitene (başarı ya da hata) kadar bekle.
+    if (rosterQuery.isPending) return;
     const plan = planQuery.data.plan;
     const roster = rosterQuery.data?.roster ?? [];
     const nameOf = (id: number | null) =>
@@ -185,7 +210,7 @@ export default function MacKadrosuScreen() {
       );
     }
     setHydrated(true);
-  }, [planQuery.data, rosterQuery.data, hydrated]);
+  }, [planQuery.data, rosterQuery.data, rosterQuery.isPending, hydrated]);
 
   /* ─────────────────────────── türetilmiş durum ─────────────────────────── */
 
@@ -374,6 +399,75 @@ export default function MacKadrosuScreen() {
     },
   });
 
+  /* Havuzdan seçilen misafir: kayıtlı oyuncu id'siyle, misafir bayrağıyla eklenir. */
+  const addGuestFromPool = useCallback((player: MatchCenterRosterPlayer) => {
+    haptics.select();
+    setEntries((prev) => {
+      if (prev.some((entry) => entry.playerId === player.id)) return prev;
+      return [
+        ...prev,
+        {
+          playerId: player.id,
+          isGuest: true,
+          guestName: player.player_name,
+          jerseyNumber: null,
+          position: player.player_position ?? null,
+          starter: prev.filter((entry) => entry.starter).length < MAX_STARTERS,
+          captain: false,
+          slot: null,
+          displayName: player.player_name,
+          photo: player.player_img ?? null,
+        },
+      ];
+    });
+    setGuestName("");
+    setGuestOpen(false);
+    toast.show({ message: `${player.player_name} misafir olarak eklendi.`, tone: "success" });
+  }, [toast]);
+
+  const guestPool = useMemo(() => {
+    const term = guestName.trim().toLocaleLowerCase("tr-TR");
+    const teamId = poolQuery.data?.team_id;
+    const taken = new Set(entries.map((entry) => entry.playerId).filter((id): id is number => id != null));
+    const pool = (poolQuery.data?.allPlayers ?? []).filter((player) => player.team_id !== teamId && !taken.has(player.id));
+    if (!term) return pool.slice(0, 20);
+    return pool.filter((player) => player.player_name.toLocaleLowerCase("tr-TR").includes(term)).slice(0, 30);
+  }, [guestName, poolQuery.data, entries]);
+
+  /* ── Yoklama ve reji bildirimi ── */
+  const attendanceMutation = useMutation({
+    mutationFn: (playerIds: number[]) => startMatchAttendance(matchId, playerIds),
+    onSuccess: (data) => {
+      toast.show({ message: data.without_account?.length ? `${data.message} Hesabı olmayanlar: ${data.without_account.join(", ")}` : data.message, tone: "success" });
+      void queryClient.invalidateQueries({ queryKey: ["takim", "attendance", matchId] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.chatConversations() });
+    },
+    onError: (error) => toast.show({ message: error instanceof ApiError ? error.userMessage : "Yoklama başlatılamadı.", tone: "danger" }),
+  });
+  const reportMutation = useMutation({
+    mutationFn: async () => {
+      // Kadro henüz kaydedilmediyse önce kaydet, sonra rejiye bildir.
+      if (!planQuery.data?.plan?.lineup?.length) {
+        await saveTeamMatchPlan(matchId, { formation, kitColor: kit, tactics: tactics.trim() || undefined, lineup: entries.map(({ displayName: _n, photo: _p, ...row }) => row) });
+      }
+      return reportMatchLineup(matchId);
+    },
+    onSuccess: (data) => {
+      toast.show({ message: data.message, tone: "success" });
+      void queryClient.invalidateQueries({ queryKey: ["takim", "attendance", matchId] });
+      void queryClient.invalidateQueries({ queryKey: ["takim", "match-plan", matchId] });
+    },
+    onError: (error) => toast.show({ message: error instanceof ApiError ? error.userMessage : "Kadro bildirilemedi.", tone: "danger" }),
+  });
+  const selectedRegisteredIds = useMemo(() => entries.map((entry) => entry.playerId).filter((id): id is number => id != null), [entries]);
+  const startAttendance = () => {
+    if (!selectedRegisteredIds.length) { toast.show({ message: "Önce kadroya oyuncu ekle.", tone: "warn" }); return; }
+    const known = new Set((attendanceQuery.data?.attendance?.players ?? []).map((p) => p.player_id));
+    const fresh = selectedRegisteredIds.filter((id) => !known.has(id));
+    if (attendanceQuery.data?.active && !fresh.length) { toast.show({ message: "Yoklamada olmayan yeni oyuncu yok; gelemeyenin yerine kadroya oyuncu ekleyip tekrar dene.", tone: "warn" }); return; }
+    attendanceMutation.mutate(attendanceQuery.data?.active ? fresh : selectedRegisteredIds);
+  };
+
   const save = useMutation({
     mutationFn: () =>
       saveTeamMatchPlan(matchId, {
@@ -384,8 +478,8 @@ export default function MacKadrosuScreen() {
       }),
     onSuccess: (data) => {
       toast.show({ message: data.message, tone: "success" });
-      void queryClient.invalidateQueries({ queryKey: ["team", "match-plan", matchId] });
-      void queryClient.invalidateQueries({ queryKey: ["team", "matches"] });
+      void queryClient.invalidateQueries({ queryKey: ["takim", "match-plan", matchId] });
+      void queryClient.invalidateQueries({ queryKey: ["takim", "matches"] });
       router.back();
     },
     onError: (error) => {
@@ -565,6 +659,8 @@ export default function MacKadrosuScreen() {
           <SectionHeader title="KADROYA EKLE" meta={String(available.length)} />
           {rosterQuery.isLoading ? (
             <SkeletonListRow />
+          ) : rosterQuery.isError ? (
+            <ErrorState error={rosterQuery.error} onRetry={rosterQuery.refetch} variant="banner" />
           ) : available.length ? (
             available.map((player: RosterPlayer) => (
               <Touchable
@@ -597,6 +693,54 @@ export default function MacKadrosuScreen() {
             onPress={() => setGuestOpen(true)}
             fullWidth
           />
+
+          {/* Yoklama ve reji bildirimi */}
+          <SectionHeader title="YOKLAMA VE BİLDİRİM" meta={attendanceQuery.data?.attendance ? `${attendanceQuery.data.attendance.counts.coming} geliyor` : undefined} />
+          <Card>
+            <Text style={styles.hint} {...textScale.long}>
+              {attendanceQuery.data?.active
+                ? `${attendanceQuery.data.attendance?.counts.coming ?? 0} geliyor · ${attendanceQuery.data.attendance?.counts.not_coming ?? 0} gelemiyor · ${attendanceQuery.data.attendance?.counts.unanswered ?? 0} yanıt bekliyor. Gelemeyenin yerine kadroya oyuncu ekleyip yoklamaya dahil et.`
+                : "Kadroyu seçtikten sonra takımda yoklama yap: seçilen oyuncularla sohbet grubu kurulur, herkes geliyorum / gelemiyorum der. Ya da kadroyu doğrudan rejiye bildir."}
+            </Text>
+            <View style={styles.attendanceActions}>
+              <Button
+                label={attendanceQuery.data?.active ? "Yeni seçilenleri yoklamaya ekle" : "Takımda yoklama yap"}
+                variant="secondary"
+                size="sm"
+                icon="people-outline"
+                onPress={startAttendance}
+                loading={attendanceMutation.isPending}
+                fullWidth
+              />
+              <Button
+                label={attendanceQuery.data?.active ? "Kadroyu son şekliyle bildir" : "Direkt bildir"}
+                size="sm"
+                icon="paper-plane-outline"
+                onPress={() => reportMutation.mutate()}
+                loading={reportMutation.isPending}
+                disabled={Boolean(problem)}
+                fullWidth
+              />
+            </View>
+            {attendanceQuery.data?.active ? (
+              <Touchable feedback="row" onPress={() => setAttendanceOpen((value) => !value)} style={styles.attendanceToggle} accessibilityLabel="Yoklama yanıtlarını göster">
+                <Text style={styles.attendanceToggleText}>{attendanceOpen ? "Yanıtları gizle" : "Yanıtları göster"}</Text>
+                <Ionicons name={attendanceOpen ? "chevron-up" : "chevron-down"} size={16} color={colors.textSecondary} />
+              </Touchable>
+            ) : null}
+            {attendanceOpen && attendanceQuery.data?.attendance
+              ? attendanceQuery.data.attendance.players.map((p) => (
+                  <View key={p.player_id} style={styles.attendanceRow}>
+                    <Ionicons name={p.status === "coming" ? "checkmark-circle" : p.status === "not_coming" ? "close-circle" : p.status === "maybe" ? "help-circle" : "time-outline"} size={16} color={p.status === "coming" ? colors.win : p.status === "not_coming" ? colors.danger : p.status === "maybe" ? colors.warn : colors.textTertiary} />
+                    <Text style={styles.attendanceName} numberOfLines={1}>{p.name}</Text>
+                    <Text style={styles.attendanceStatus}>{p.status_label}{p.has_account ? "" : " · hesabı yok"}</Text>
+                  </View>
+                ))
+              : null}
+            {attendanceQuery.data?.conversation_id ? (
+              <Button label="Yoklama grubunu aç" variant="ghost" size="sm" icon="chatbubbles-outline" onPress={() => router.push(`/sohbet/${attendanceQuery.data?.conversation_id}` as never)} fullWidth />
+            ) : null}
+          </Card>
 
           {/* Taktik notu */}
           <SectionHeader title="TAKTİK NOTU" />
@@ -676,20 +820,38 @@ export default function MacKadrosuScreen() {
       </BottomSheet>
 
       {/* Misafir oyuncu */}
-      <BottomSheet visible={guestOpen} onClose={() => setGuestOpen(false)} title="Misafir oyuncu">
-        <View style={styles.sheet}>
+      <BottomSheet visible={guestOpen} onClose={() => setGuestOpen(false)} title="Misafir oyuncu" snap="half" scrollable={false}>
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.sheet}>
           <Text style={styles.hint} {...textScale.long}>
-            Kadroda olmayan bir oyuncuyu bu maça özel ekler. Takımsız oyuncu olarak kaydedilir.
+            Kadroda olmayan bir oyuncuyu bu maça özel ekler. Listeden ilinizdeki kayıtlı bir oyuncuyu seçin ya da adı yazıp yeni oyuncu olarak ekleyin.
           </Text>
-          <Input value={guestName} onChangeText={setGuestName} placeholder="Ad soyad" />
+          <Input value={guestName} onChangeText={setGuestName} placeholder="Oyuncu ara ya da ad soyad yaz" variant="search" leadingIcon="search" accessibilityLabel="Misafir oyuncu ara" />
+          <ScrollView style={styles.guestList} keyboardShouldPersistTaps="handled">
+            {poolQuery.isLoading ? (
+              <SkeletonListRow count={3} avatar />
+            ) : poolQuery.isError ? (
+              <ErrorState error={poolQuery.error} onRetry={poolQuery.refetch} variant="banner" />
+            ) : guestPool.length ? (
+              guestPool.map((player) => (
+                <Touchable key={player.id} feedback="row" onPress={() => addGuestFromPool(player)} style={styles.addRow} accessibilityLabel={`${player.player_name} misafir olarak ekle`}>
+                  <Avatar name={player.player_name} image={player.player_img ? mediaUrl(player.player_img) : undefined} size={28} />
+                  <Text style={styles.addName} numberOfLines={1}>{player.player_name}</Text>
+                  <Text style={styles.addPos}>{positionLabel(player.player_position)}</Text>
+                  <Ionicons name="add-circle-outline" size={20} color={colors.brandAccent} />
+                </Touchable>
+              ))
+            ) : (
+              <Text style={styles.hint}>{guestName.trim().length >= 2 ? "Eşleşen kayıtlı oyuncu yok; aşağıdan yeni oyuncu olarak ekleyebilirsin." : "İlinizdeki oyuncu havuzu boş."}</Text>
+            )}
+          </ScrollView>
           <Button
-            label="Ekle"
+            label={guestName.trim().length >= 2 ? `"${guestName.trim()}" adıyla yeni oyuncu ekle` : "Yeni oyuncu eklemek için ad yaz"}
             onPress={() => guestMutation.mutate(guestName.trim())}
             loading={guestMutation.isPending}
-            disabled={guestName.trim().length < 3}
+            disabled={guestName.trim().length < 2}
             fullWidth
           />
-        </View>
+        </KeyboardAvoidingView>
       </BottomSheet>
     </SafeAreaView>
   );
@@ -776,6 +938,13 @@ const styles = StyleSheet.create({
   kitDotActive: { borderColor: colors.textPrimary },
 
   hint: { ...type.bodySm, color: colors.textSecondary, paddingVertical: space.xs },
+  guestList: { maxHeight: 280 },
+  attendanceActions: { gap: space.xs, marginTop: space.xs },
+  attendanceToggle: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: space.sm },
+  attendanceToggleText: { ...type.bodySm, color: colors.textSecondary },
+  attendanceRow: { flexDirection: "row", alignItems: "center", gap: space.xs, paddingVertical: space.xxs },
+  attendanceName: { ...type.body, color: colors.textPrimary, flex: 1 },
+  attendanceStatus: { ...type.caption, color: colors.textSecondary },
 
   squadRow: { flexDirection: "row", alignItems: "center", gap: space.sm },
   squadMain: { flexDirection: "row", alignItems: "center", gap: space.sm, flex: 1 },

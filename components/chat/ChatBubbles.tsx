@@ -155,6 +155,60 @@ export const MatchOfferBubble = memo(function MatchOfferBubble({
   );
 });
 
+/* ---------- maç yoklaması kartı ---------- */
+
+const ATT_ICON: Record<string, keyof typeof Ionicons.glyphMap> = { coming: "checkmark-circle", not_coming: "close-circle", maybe: "help-circle" };
+
+export const AttendanceCard = memo(function AttendanceCard({
+  message,
+  viewerPlayerId,
+  busy,
+  onRespond,
+}: {
+  message: ChatMessage;
+  viewerPlayerId: number | null | undefined;
+  busy: boolean;
+  onRespond: (message: ChatMessage, status: "coming" | "not_coming" | "maybe") => void;
+}) {
+  const mine = message.sender.is_me;
+  const att = message.meta?.attendance;
+  const players = att?.players ?? [];
+  const me = players.find((p) => p.player_id === Number(viewerPlayerId));
+  const canAnswer = Boolean(me) && !att?.reported_at;
+  const counts = att?.counts ?? { coming: 0, not_coming: 0, maybe: 0, unanswered: 0 };
+  const statusColorOf = (status: string | null) => (status === "coming" ? colors.win : status === "not_coming" ? colors.danger : status === "maybe" ? colors.warn : colors.textTertiary);
+  return (
+    <View style={[styles.bubble, styles.card, mine ? styles.bubbleMine : styles.bubbleTheirs, { borderLeftColor: colors.warn }]}>
+      <View style={styles.cardHead}>
+        <Ionicons name="clipboard-outline" size={16} color={mine ? colors.textOnBrand : colors.brandAccent} />
+        <Text style={[styles.cardTitle, mine ? styles.textMine : null]} {...textScale.dense}>Maç Yoklaması</Text>
+        <View style={[styles.statusPill, { backgroundColor: withAlpha(colors.win, mine ? 0.35 : 0.16) }]}>
+          <Text style={[styles.statusText, { color: mine ? colors.textOnBrand : colors.win }]} {...textScale.badge}>{counts.coming} geliyor · {counts.unanswered} bekliyor</Text>
+        </View>
+      </View>
+      <Fact icon="football-outline" text={`${att?.is_home === false ? "Deplasman" : "Ev sahibi"} · ${att?.opponent ?? "Rakip"} · ${att?.when ?? ""}`} mine={mine} />
+      {att?.venue ? <Fact icon="location-outline" text={att.venue} mine={mine} /> : null}
+      <View style={styles.attList}>
+        {players.map((p) => (
+          <View key={p.player_id} style={[styles.attRow, { backgroundColor: mine ? withAlpha(colors.textOnBrand, 0.14) : colors.surface3 }]}>
+            <Ionicons name={ATT_ICON[p.status ?? ""] ?? "time-outline"} size={14} color={statusColorOf(p.status)} />
+            <Text style={[styles.attName, mine ? styles.textMine : null]} numberOfLines={1} {...textScale.dense}>{p.name}</Text>
+            <Text style={[styles.attStatus, mine ? styles.subMine : null]} {...textScale.badge}>{p.status_label}</Text>
+          </View>
+        ))}
+      </View>
+      {canAnswer ? (
+        <View style={styles.actions}>
+          <Button label="Geliyorum" size="sm" icon="checkmark" variant={me?.status === "coming" ? "primary" : "secondary"} onPress={() => onRespond(message, "coming")} disabled={busy} loading={busy} />
+          <Button label="Gelemiyorum" size="sm" icon="close" variant={me?.status === "not_coming" ? "danger" : "secondary"} onPress={() => onRespond(message, "not_coming")} disabled={busy} />
+        </View>
+      ) : null}
+      {att?.reported_at ? <Fact icon="checkmark-done-outline" text="Kadro son şekliyle yönetime bildirildi." mine={mine} /> : null}
+      <Text style={[styles.stamp, mine ? styles.stampMine : null]} {...textScale.badge}>{clockLabel(message.created_at)}</Text>
+    </View>
+  );
+});
+
 function Fact({ icon, text, mine }: { icon: keyof typeof Ionicons.glyphMap; text: string; mine: boolean }) {
   return (
     <View style={styles.fact}>
@@ -250,6 +304,11 @@ export const SystemChip = memo(function SystemChip({ text, icon }: { text: strin
 const PLAY = 34;
 
 const styles = StyleSheet.create({
+  attList: { gap: space.xxs, marginTop: space.xs },
+  attRow: { flexDirection: "row", alignItems: "center", gap: space.xs, paddingHorizontal: space.sm, paddingVertical: space.xs, borderRadius: radius.sm },
+  attName: { ...type.bodySm, color: colors.textPrimary, flex: 1 },
+  attStatus: { ...type.caption, color: colors.textSecondary },
+
   bubble: { maxWidth: "86%", borderRadius: radius.lg, padding: space.md, gap: space.xs },
   bubbleMine: { alignSelf: "flex-end", backgroundColor: colors.brand, borderBottomRightRadius: radius.xs },
   bubbleTheirs: { alignSelf: "flex-start", backgroundColor: colors.surface2, borderBottomLeftRadius: radius.xs },

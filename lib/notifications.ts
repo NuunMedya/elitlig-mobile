@@ -154,6 +154,18 @@ function targetFromEntity(
     case "TEAM_JOIN_REQUEST":
       return { pathname: "/davetler" };
 
+    // "Maçınız oluşturuldu / kadro gir" ve "kadro bildirildi": takım yöneticisi
+    // maç kadrosu ekranına, yönetim maç listesine düşer.
+    case "MATCH":
+      return ctx.isManagement
+        ? { pathname: "/yonetim/maclar" }
+        : entityId
+          ? { pathname: "/takimim/mac/[matchId]", params: { matchId: entityId } }
+          : { pathname: "/takimim/mac-merkezi", params: { tab: "yaklasan" } };
+
+    case "SEASON":
+      return { pathname: "/takimim/kadro", params: { gorunum: "sezon" } };
+
     default:
       return null;
   }
@@ -178,6 +190,9 @@ const TYPE_PREFIX_TARGETS: ReadonlyArray<
   ["TEAM_INVITE", () => ({ pathname: "/davetler" })],
   ["TEAM_APPLICATION", () => ({ pathname: "/davetler" })],
   ["MATCH_REQUEST", (id, ctx) => targetFromEntity("MATCH_REQUEST", id, ctx) ?? { pathname: "/bildirimler" }],
+  ["MATCH_", (id, ctx) => targetFromEntity("MATCH", id, ctx) ?? { pathname: "/bildirimler" }],
+  ["ROSTER_RULES_", () => ({ pathname: "/takimim/kadro", params: { gorunum: "sezon" } })],
+  ["TEAM_AVAILABILITY_", () => ({ pathname: "/yonetim/sahalar" })],
   // BÜTÜNLEŞTİRME DÜZELTMESİ: `/haftanin-enleri` diye bir rota YOK; bildirime
   // dokunan üye boş ekrana düşüyordu. Haftanın enlerinin mobildeki en yakın
   // karşılığı Ligler > İstatistik segmentidir (lig enleri: gol kralı, en golcü,
