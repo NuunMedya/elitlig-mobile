@@ -1082,6 +1082,12 @@ export interface AttendancePlayer {
   status: AttendanceStatus | null;
   status_label: string;
   has_account: boolean;
+  /** Maç kadrosu planından: AS / YEDEK, saha yuvası ve hattı. */
+  role?: "starter" | "bench" | null;
+  slot?: string | null;
+  line?: "GK" | "DEF" | "MID" | "FWD" | null;
+  jersey?: number | null;
+  captain?: boolean;
 }
 export interface AttendanceMeta {
   match_id: number;
@@ -1093,6 +1099,9 @@ export interface AttendanceMeta {
   players: AttendancePlayer[];
   counts: { coming: number; not_coming: number; maybe: number; unanswered: number };
   reported_at: string | null;
+  formation?: string | null;
+  /** Yoklamayı kuran yönetici; kartı yalnız o düzenler. */
+  manager_user_id?: number | null;
 }
 export const getMatchAttendance = (matchId: number) =>
   get<{ active: boolean; conversation_id: number | null; attendance: AttendanceMeta | null }>(`/api/match-center/team/matches/${matchId}/attendance`);
@@ -1102,6 +1111,11 @@ export const startMatchAttendance = (matchId: number, playerIds: number[]) =>
 /** Kadroyu son şekliyle reji paneline bildirir. */
 export const reportMatchLineup = (matchId: number, note?: string) =>
   post<{ message: string; reported_at: string; lineup_count: number }>(`/api/match-center/team/matches/${matchId}/report`, { note });
+/** Yoklama kartından oyuncu ekle / çıkar (plan da eşitlenir). */
+export const addMatchAttendancePlayers = (matchId: number, playerIds: number[]) =>
+  post<{ message: string; attendance: AttendanceMeta }>(`/api/match-center/team/matches/${matchId}/attendance/players`, { player_ids: playerIds });
+export const removeMatchAttendancePlayer = (matchId: number, playerId: number) =>
+  del<{ message: string; attendance: AttendanceMeta }>(`/api/match-center/team/matches/${matchId}/attendance/players/${playerId}`);
 /** Oyuncu: yoklama kartından yanıt. */
 export const respondMatchAttendance = (matchId: number, status: AttendanceStatus) =>
   post<{ message: string; status: AttendanceStatus }>(`/api/match-availability/${matchId}/respond/${status}`);
