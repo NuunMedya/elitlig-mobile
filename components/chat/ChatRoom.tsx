@@ -18,7 +18,7 @@ import { Alert, FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, View
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AttachSheet, type AttachMode } from "@/components/chat/AttachSheet";
-import { AudioBubble, CallChip, LocationBubble, MatchOfferBubble, NotificationCard, SystemChip, clockLabel } from "@/components/chat/ChatBubbles";
+import { AttendanceCard, AudioBubble, CallChip, LocationBubble, MatchOfferBubble, NotificationCard, SystemChip, clockLabel } from "@/components/chat/ChatBubbles";
 import { Button, EmptyState, ErrorState, Input, ScreenHeader, SkeletonListRow, Touchable, errorMessage, useToast, withAlpha } from "@/components/ui";
 import { setActiveChatConversation, useAdminConversationMessages, useConversationMessages } from "@/hooks/useChat";
 import {
@@ -43,6 +43,7 @@ import {
   type SendMessageInput,
 } from "@/lib/api/chat";
 import { useVoiceRecorder } from "@/lib/chatMedia";
+import { respondMatchAttendance } from "@/lib/api/team";
 import { CHAT_EVENTS, emitTyping, onChatEvent } from "@/lib/chatSocket";
 import { formatDayHeading } from "@/lib/format";
 import { queryKeys } from "@/lib/queryKeys";
@@ -416,6 +417,20 @@ export function ChatRoom({ conversationId, admin = false }: ChatRoomProps) {
   const onSendLocation = useCallback((location: Partial<ChatLocationMeta>) => sendRich({ kind: "location", meta: { location } }), [sendRich]);
   const onSendOffer = useCallback((offer: MatchOfferInput) => sendRich({ kind: "match_offer", meta: { match_offer: offer } }), [sendRich]);
 
+  /* Yoklama kartı: yanıt sunucuya yazılır, sunucu kartı günceller (chat:updated). */
+  const respondAttendance = useCallback(
+    (message: ChatMessage, status: "coming" | "not_coming" | "maybe") => {
+      const attendanceMatchId = message.meta?.attendance?.match_id;
+      if (!attendanceMatchId) return;
+      setBusyKey(`att-${message.id}`);
+      void respondMatchAttendance(attendanceMatchId, status)
+        .then((result) => toast.show({ message: result.message, tone: "success" }))
+        .catch((error: unknown) => toast.show({ message: errorMessage(error), tone: "danger" }))
+        .finally(() => setBusyKey(null));
+    },
+    [toast],
+  );
+
   /* ---------- kaydırma ---------- */
   const entryCount = entries.length;
   useEffect(() => {
@@ -440,13 +455,15 @@ export function ChatRoom({ conversationId, admin = false }: ChatRoomProps) {
           return <LocationBubble message={message} showSender={item.showSender} />;
         case "match_offer":
           return <MatchOfferBubble message={message} canRespond={canRespondOffer} busy={busyKey === `offer-${message.id}`} onRespond={respondOffer} />;
+        case "attendance":
+          return <AttendanceCard message={message} viewerPlayerId={auth.user?.player_id} busy={busyKey === `att-${message.id}`} onRespond={respondAttendance} />;
         case "system":
           return <SystemChip text={message.body ?? ""} />;
         default:
           return <Bubble message={message} showSender={item.showSender} onLongPress={onLongPress} onRetry={retry} />;
       }
     },
-    [admin, busyKey, onLongPress, respondOffer, retry, runAction],
+    [admin, auth.user?.player_id, busyKey, onLongPress, respondAttendance, respondOffer, retry, runAction],
   );
 
   if (!auth.user) return <Redirect href="/giris" />;

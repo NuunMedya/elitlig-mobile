@@ -1054,7 +1054,59 @@ export const saveTeamMatchPlan = (
   }
 ) => put<{ message: string; plan: MatchPlan }>(`/api/match-center/team/matches/${matchId}/plan`, body);
 
-/** POST .../guest-players — kadroya takımsız misafir oyuncu ekler. */
+/** GET /api/match-center/team/roster — takım oyuncuları + ildeki oyuncu havuzu (misafir seçimi). */
+export interface MatchCenterRosterPlayer {
+  id: number;
+  player_name: string;
+  player_position: string | null;
+  player_img: string | null;
+  team_id: number | null;
+  city: string | null;
+}
+export interface MatchCenterRosterResponse {
+  team_id: number;
+  team_name: string | null;
+  players: MatchCenterRosterPlayer[];
+  allPlayers: MatchCenterRosterPlayer[];
+}
+export const getMatchCenterRoster = () => get<MatchCenterRosterResponse>("/api/match-center/team/roster");
+
+/* ---------- Maç yoklaması ---------- */
+export type AttendanceStatus = "coming" | "not_coming" | "maybe";
+export interface AttendancePlayer {
+  player_id: number;
+  user_id: number | null;
+  name: string;
+  image: string | null;
+  position: string | null;
+  status: AttendanceStatus | null;
+  status_label: string;
+  has_account: boolean;
+}
+export interface AttendanceMeta {
+  match_id: number;
+  team_id: number;
+  opponent: string;
+  when: string;
+  is_home: boolean;
+  venue: string | null;
+  players: AttendancePlayer[];
+  counts: { coming: number; not_coming: number; maybe: number; unanswered: number };
+  reported_at: string | null;
+}
+export const getMatchAttendance = (matchId: number) =>
+  get<{ active: boolean; conversation_id: number | null; attendance: AttendanceMeta | null }>(`/api/match-center/team/matches/${matchId}/attendance`);
+/** Yoklamayı başlatır ya da mevcut gruba oyuncu ekler. */
+export const startMatchAttendance = (matchId: number, playerIds: number[]) =>
+  post<{ message: string; conversation_id: number; attendance: AttendanceMeta; without_account: string[] }>(`/api/match-center/team/matches/${matchId}/attendance`, { player_ids: playerIds });
+/** Kadroyu son şekliyle reji paneline bildirir. */
+export const reportMatchLineup = (matchId: number, note?: string) =>
+  post<{ message: string; reported_at: string; lineup_count: number }>(`/api/match-center/team/matches/${matchId}/report`, { note });
+/** Oyuncu: yoklama kartından yanıt. */
+export const respondMatchAttendance = (matchId: number, status: AttendanceStatus) =>
+  post<{ message: string; status: AttendanceStatus }>(`/api/match-availability/${matchId}/respond/${status}`);
+
+/** POST .../guest-players — kadroya misafir oyuncu ekler (takıma bağlanır). */
 export const createGuestPlayer = (matchId: number, body: { name: string; position?: string }) =>
   post<{ message: string; player: { id: number; player_name: string } }>(
     `/api/match-center/team/matches/${matchId}/guest-players`,

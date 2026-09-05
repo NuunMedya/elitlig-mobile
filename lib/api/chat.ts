@@ -10,7 +10,7 @@ import { del, get, patch, post } from "../http";
  */
 
 export type ConversationType = "direct" | "group" | "team" | "management" | "admin";
-export type MessageKind = "text" | "system" | "notification" | "call" | "audio" | "location" | "match_offer";
+export type MessageKind = "text" | "system" | "notification" | "call" | "audio" | "location" | "match_offer" | "attendance";
 
 export interface ChatSender {
   user_id: number | null;
@@ -111,6 +111,8 @@ export interface ChatMessageMeta {
   audio?: ChatAudioMeta;
   location?: ChatLocationMeta;
   match_offer?: ChatMatchOfferMeta;
+  /** Maç yoklaması kartı (services/matchAttendanceService.js). */
+  attendance?: import("./team").AttendanceMeta;
   /** Eylem kartı tamamlandı (Onayla/Reddet sonrası). */
   resolved?: { key: string; user_id: number; at: string; label?: string | null };
   admin_user_id?: number;
