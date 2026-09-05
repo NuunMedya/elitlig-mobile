@@ -235,7 +235,16 @@ export function routeFromNotif(
       : { pathname: "/(tabs)/ligler", params: { tab: "haberler" } };
   }
 
-  /* ---------- 4) Panel bildirimleri ---------- */
+  /* ---------- 4) Sohbet push'ları (services/chat) ---------- */
+  const pushType = String(data.type ?? "").trim().toUpperCase();
+  if (pushType === "CHAT_MESSAGE" || pushType === "CALL_INCOMING") {
+    const conversationId = asId(data.conversation_id);
+    return conversationId
+      ? { pathname: "/sohbet/[id]", params: { id: conversationId } }
+      : { pathname: "/sohbet" };
+  }
+
+  /* ---------- 5) Panel bildirimleri ---------- */
   const entityType = String(data.entity_type ?? "").trim().toUpperCase();
   const entityId = asId(data.entity_public_id);
 
@@ -257,6 +266,7 @@ export function routeFromNotif(
 
 /** Giriş zorunlu rotalar. Misafir bir bildirime dokunursa önce /giris'e uğrar. */
 const AUTH_REQUIRED_PREFIXES = [
+  "/sohbet",
   "/tekliflerim",
   "/teklif",
   "/sozlesmelerim",

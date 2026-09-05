@@ -125,10 +125,10 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     key: "mesajlar",
-    href: "/mesajlarim",
+    href: "/sohbet",
     icon: "chatbubbles",
     title: "Mesajlar",
-    subtitle: "Lig yönetimiyle yazışmaların",
+    subtitle: "Takım grubu, oyuncular ve yönetimle yazışma",
   },
 ];
 

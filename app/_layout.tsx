@@ -2,11 +2,14 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { CallScreen } from "@/components/CallScreen";
 import { MessageSticker } from "@/components/MessageSticker";
 import { ScopeSheet } from "@/components/ScopeSheet";
 import { ToastProvider } from "@/components/ui";
 import { useNotificationBridge } from "@/hooks/useNotificationBridge";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
+import { useChatRealtime } from "@/hooks/useChat";
+import { CallProvider } from "@/providers/CallProvider";
 import { ApiError } from "@/lib/http";
 import { AuthProvider } from "@/providers/AuthProvider";
 import { FavoriteProvider } from "@/providers/FavoriteProvider";
@@ -67,15 +70,23 @@ function NotificationSetup() {
   return null;
 }
 
+/** Sohbet soketi → React Query önbelleği köprüsü (tek örnek). */
+function ChatRealtimeSetup() {
+  useChatRealtime();
+  return null;
+}
+
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <NotificationSetup />
+          <ChatRealtimeSetup />
           <ScopeProvider>
             <FavoriteProvider>
               <ToastProvider>
+               <CallProvider>
                 {/* DAİMA AÇIK: her ekranın tepesinde koyu mor blok var (bkz.
                     components/ui/ScreenHeader.tsx), tema ne olursa olsun
                     durum çubuğu simgeleri o bloğun üstünde duruyor. */}
@@ -119,6 +130,13 @@ export default function RootLayout() {
                   <Stack.Screen name="sozlesme/[id]" />
                   <Stack.Screen name="ceza/[id]" />
 
+                  {/* Sohbet: WhatsApp mantığında mesajlaşma + sesli arama.
+                      Bildirim ve push derin bağlantıları (CHAT_MESSAGE,
+                      CALL_INCOMING) doğrudan sohbete iner. */}
+                  <Stack.Screen name="sohbet/index" />
+                  <Stack.Screen name="sohbet/[id]" />
+                  <Stack.Screen name="sohbet/yeni" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
+
                   {/* Modal olanlar: bir görevi bitirip kapanan, yığına ait olmayan ekranlar. */}
                   <Stack.Screen name="ara" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
                   <Stack.Screen name="giris" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
@@ -131,6 +149,11 @@ export default function RootLayout() {
                     Stack'in DIŞINDA ve SONRASINDA mount edilir: ekran değişse
                     de yeniden yaratılmaz, konumu ve sürükleme durumu korunur. */}
                 <MessageSticker />
+
+                {/* Sesli arama katmanı: gelen arama hangi ekranda olunursa
+                    olunsun üstte açılır (CallProvider kökte). */}
+                <CallScreen />
+               </CallProvider>
               </ToastProvider>
             </FavoriteProvider>
           </ScopeProvider>

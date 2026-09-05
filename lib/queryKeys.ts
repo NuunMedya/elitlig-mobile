@@ -57,6 +57,11 @@ export const queryKeys = {
   panelMessages: () => ["panel", "messages"] as const,
   unreadNotifCount: () => ["panel", "notif-count"] as const,
   notificationPreferences: () => ["notifications", "preferences"] as const,
+  /* ---- Sohbet (app/sohbet) ---- */
+  chatConversations: () => ["chat", "conversations"] as const,
+  chatMessages: (conversationId: number) => ["chat", "messages", conversationId] as const,
+  chatUnread: () => ["chat", "unread"] as const,
+  chatDirectory: (q: string) => ["chat", "directory", q] as const,
   /** Hesap silme onay ekranının özeti (app/hesap-sil.tsx). */
   accountDeletionSummary: () => ["account", "deletion-summary"] as const,
 } as const;
