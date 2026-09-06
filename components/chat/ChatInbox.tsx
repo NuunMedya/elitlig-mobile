@@ -22,8 +22,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import {
   Avatar,
   Badge,
-  Chip,
-  ChipGroup,
   EmptyState,
   ErrorState,
   FAB,
@@ -36,7 +34,7 @@ import {
   useRefresh,
 } from "@/components/ui";
 import { ChatPrefsSheet } from "@/components/chat/ChatPrefsSheet";
-import { useAdminConversations, useAdminInboxSummary, useConversations } from "@/hooks/useChat";
+import { useAdminConversations, useConversations } from "@/hooks/useChat";
 import { conversationPreview, type ChatConversation } from "@/lib/api/chat";
 import { queryKeys } from "@/lib/queryKeys";
 import { useAuth } from "@/providers/AuthProvider";
@@ -80,15 +78,10 @@ export function ChatInbox({ admin = false }: ChatInboxProps) {
   const fab = useFabAutoHide();
   const [search, setSearch] = useState("");
   const [prefsOpen, setPrefsOpen] = useState(false);
-  // Yönetim gelen kutusu filtreleri: varlık türü ve talep kategorisi.
-  const [kind, setKind] = useState("");
-  const [category, setCategory] = useState("");
   const basePath = admin ? "/yonetim/sohbet" : "/sohbet";
 
   const memberQuery = useConversations();
-  const adminQuery = useAdminConversations({ kind, category });
-  const summaryQuery = useAdminInboxSummary();
-  const summary = admin ? summaryQuery.data : undefined;
+  const adminQuery = useAdminConversations();
   const query = admin ? adminQuery : memberQuery;
   const refetch = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.chatConversations() });
@@ -146,27 +139,12 @@ export function ChatInbox({ admin = false }: ChatInboxProps) {
             <Input
               value={search}
               onChangeText={setSearch}
-              placeholder={admin ? "Takım, oyuncu ya da üye ara" : "Sohbet ara"}
+              placeholder="Sohbet ara"
               variant="search"
               size="sm"
               leadingIcon="search"
               accessibilityLabel="Sohbet ara"
             />
-            {admin ? (
-              <>
-                <ChipGroup>
-                  {KIND_CHIPS.map(([key, label]) => (
-                    <Chip key={key || "all"} label={key && summary?.kinds?.[key] ? `${label} ${summary.kinds[key]}` : label} selected={kind === key} onPress={() => setKind(key)} size="sm" />
-                  ))}
-                </ChipGroup>
-                <ChipGroup>
-                  <Chip label={summary?.pending ? `Tüm talepler ${summary.pending}` : "Tüm talepler"} selected={!category} onPress={() => setCategory("")} size="sm" />
-                  {(summary?.categories ?? []).filter((item) => item.pending > 0 || item.key === category).map((item) => (
-                    <Chip key={item.key} label={item.pending ? `${item.label} ${item.pending}` : item.label} selected={category === item.key} onPress={() => setCategory(category === item.key ? "" : item.key)} size="sm" />
-                  ))}
-                </ChipGroup>
-              </>
-            ) : null}
           </View>
         }
       />
@@ -220,9 +198,6 @@ const Separator = memo(function Separator() {
   return <View style={styles.separator} />;
 });
 
-const KIND_CHIPS: [string, string][] = [["", "Tümü"], ["team", "Takımlar"], ["player", "Oyuncular"], ["member", "Üyeler"]];
-const KIND_LABEL: Record<string, string> = { team: "Takım", player: "Oyuncu", member: "Üye", general: "Genel" };
-
 const ConversationRow = memo(function ConversationRow({
   conversation,
   onPress,
@@ -264,20 +239,12 @@ const ConversationRow = memo(function ConversationRow({
               {preview}
             </Text>
           </View>
-          {conversation.pending?.total ? (
-            <Badge label={`${conversation.pending.total} bekleyen`} tone="warn" size="sm" />
-          ) : null}
           {unread ? (
             <Badge label={conversation.unread > 99 ? "99+" : conversation.unread} tone="win" variant="solid" size="sm" />
           ) : conversation.muted ? (
             <Ionicons name="notifications-off-outline" size={14} color={colors.textTertiary} />
           ) : null}
         </View>
-        {conversation.entity ? (
-          <Text style={styles.kind} numberOfLines={1} {...textScale.dense}>
-            {KIND_LABEL[conversation.entity.kind] ?? "Üye"}{conversation.subtitle ? ` · ${conversation.subtitle}` : ""}
-          </Text>
-        ) : null}
       </View>
     </Touchable>
   );
@@ -287,7 +254,6 @@ const PIP = 18;
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  kind: { ...type.caption, color: colors.textTertiary },
   searchWrap: { paddingHorizontal: layout.screenPadding, paddingBottom: space.sm, gap: space.sm },
   skeleton: { paddingHorizontal: layout.screenPadding, paddingTop: space.sm },
   list: { flexGrow: 1, paddingBottom: space.huge + space.giant },
