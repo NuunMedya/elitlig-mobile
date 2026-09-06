@@ -144,22 +144,46 @@ export function useChatRealtime(): void {
 
 /* ---------- yönetim modu ---------- */
 
-export function useAdminConversations() {
+export interface AdminInboxFilters {
+  category?: string;
+  kind?: string;
+}
+
+export function useAdminConversations(filters: AdminInboxFilters = {}) {
+  const auth = useAuth();
+  const appActive = useAppActive();
+  const category = filters.category || "";
+  const kind = filters.kind || "";
+  return useQuery({
+    queryKey: ["chat", "admin", "conversations", category, kind] as const,
+    queryFn: async () => {
+      // Varlık bazlı yönetim sohbetleri (talep kartları burada) + yöneticinin
+      // katıldığı gruplar tek listede. Eski kişisel bildirim akışı listelenmez;
+      // üyelerin kendi aralarındaki sohbetler yönetime görünmez.
+      const filtered = Boolean(category || kind);
+      const [own, managed] = await Promise.all([
+        filtered ? Promise.resolve({ conversations: [], unread: 0 } as ConversationsResponse) : getConversations().catch(() => ({ conversations: [], unread: 0 }) as ConversationsResponse),
+        adminChat.getConversations({ limit: 100, ...(category ? { category } : {}), ...(kind ? { kind } : {}) }),
+      ]);
+      const ownList = own.conversations.filter((item) => item.type !== "admin");
+      const seen = new Set(ownList.map((item) => item.id));
+      const merged = [...ownList, ...managed.conversations.filter((item) => !seen.has(item.id))];
+      return { conversations: merged, unread: ownList.reduce((sum, item) => sum + item.unread, 0) + managed.unread, total: managed.total } as ConversationsResponse;
+    },
+    enabled: Boolean(auth.user) && auth.isManagement,
+    staleTime: 5_000,
+    refetchInterval: appActive ? LIST_POLL_MS : false,
+    retry: false,
+  });
+}
+
+/** Gelen kutusu özeti (rozetler ve kategori filtreleri). */
+export function useAdminInboxSummary() {
   const auth = useAuth();
   const appActive = useAppActive();
   return useQuery({
-    queryKey: ["chat", "admin", "conversations"] as const,
-    queryFn: async () => {
-      // Yöneticinin kendi bildirim akışı + grupları ve üyelerin yönetimle yazışmaları
-      // tek listede. Üyelerin kendi aralarındaki sohbetler yönetime görünmez.
-      const [own, managed] = await Promise.all([
-        getConversations().catch(() => ({ conversations: [], unread: 0 }) as ConversationsResponse),
-        adminChat.getConversations({ limit: 100 }),
-      ]);
-      const seen = new Set(own.conversations.map((item) => item.id));
-      const merged = [...own.conversations, ...managed.conversations.filter((item) => !seen.has(item.id))];
-      return { conversations: merged, unread: own.unread + managed.unread, total: managed.total } as ConversationsResponse;
-    },
+    queryKey: ["chat", "admin", "summary"] as const,
+    queryFn: () => adminChat.getSummary(),
     enabled: Boolean(auth.user) && auth.isManagement,
     staleTime: 5_000,
     refetchInterval: appActive ? LIST_POLL_MS : false,

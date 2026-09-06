@@ -177,6 +177,25 @@ export interface ChatConversation {
   created_at: string;
   /** Grup kurarken mesaj tercihi nedeniyle dışarıda kalanlar (yalnızca açılış yanıtında). */
   skipped_members?: { user_id: number; name: string }[];
+  /** Yönetim gelen kutusu: sohbetin ait olduğu varlık (takım / oyuncu / üye / genel). */
+  entity?: { kind: "team" | "player" | "member" | "general"; id: number | null; name: string; avatar: string | null; user_id?: number | null } | null;
+  /** Yönetim gelen kutusu: bekleyen talep kartları (kategori → adet). */
+  pending?: { total: number; categories: Record<string, number>; latest_category?: string | null };
+}
+
+export interface InboxCategory {
+  key: string;
+  label: string;
+  icon?: string;
+  pending: number;
+}
+
+export interface InboxSummary {
+  unread: number;
+  unread_conversations: number;
+  pending: number;
+  categories: InboxCategory[];
+  kinds: Record<string, number>;
 }
 
 export interface ConversationsResponse {
@@ -313,8 +332,10 @@ export interface AdminChatStats {
 
 export const adminChat = {
   /** Yalnızca üyelerin yönetimle yaptığı yazışmalar; üyeler arası sohbetler yönetime kapalıdır. */
-  getConversations: (params: { q?: string; page?: number; limit?: number } = {}) =>
+  getConversations: (params: { q?: string; page?: number; limit?: number; category?: string; kind?: string; pending?: "1" } = {}) =>
     get<AdminConversationsResponse>("/api/admin/chat/conversations", params),
+  /** Gelen kutusu özeti: okunmamış / bekleyen talep sayıları, kategori dökümü. */
+  getSummary: () => get<InboxSummary>("/api/admin/chat/summary"),
   openConversation: (input: OpenConversationInput) =>
     post<{ conversation: ChatConversation }>("/api/admin/chat/conversations", input),
   getConversation: (id: number) => get<{ conversation: ChatConversation }>(`/api/admin/chat/conversations/${id}`),
