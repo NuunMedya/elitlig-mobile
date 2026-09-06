@@ -38,7 +38,6 @@ import {
   type ChatLocationMeta,
   type ChatMessage,
   type ConversationsResponse,
-  type MatchOfferInput,
   type MessagesResponse,
   type SendMessageInput,
 } from "@/lib/api/chat";
@@ -415,7 +414,6 @@ export function ChatRoom({ conversationId, admin = false }: ChatRoomProps) {
   );
 
   const onSendLocation = useCallback((location: Partial<ChatLocationMeta>) => sendRich({ kind: "location", meta: { location } }), [sendRich]);
-  const onSendOffer = useCallback((offer: MatchOfferInput) => sendRich({ kind: "match_offer", meta: { match_offer: offer } }), [sendRich]);
 
   /* Yoklama kartı: yanıt sunucuya yazılır, sunucu kartı günceller (chat:updated). */
   const respondAttendance = useCallback(
@@ -618,7 +616,7 @@ export function ChatRoom({ conversationId, admin = false }: ChatRoomProps) {
         ) : null}
       </KeyboardAvoidingView>
 
-      <AttachSheet mode={attach} onChangeMode={setAttach} conversation={conversation} admin={admin} onSendLocation={onSendLocation} onSendOffer={onSendOffer} />
+      <AttachSheet mode={attach} onChangeMode={setAttach} conversation={conversation} admin={admin} onSendLocation={onSendLocation} />
       <BottomSheet visible={Boolean(attendancePick)} onClose={() => setAttendancePick(null)} title="Yoklamaya oyuncu ekle" snap="half" scrollable={false}>
         <Text style={styles.attendanceHint} {...textScale.long}>Seçtiğin oyuncu gruba alınır ve maç kadrosuna yedek olarak eklenir.</Text>
         <FlatList
