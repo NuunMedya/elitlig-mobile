@@ -7,6 +7,7 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
@@ -23,6 +24,7 @@ export interface ChatPrefsSheetProps {
 
 export function ChatPrefsSheet({ visible, onClose }: ChatPrefsSheetProps) {
   const toast = useToast();
+  const router = useRouter();
   const queryClient = useQueryClient();
   const query = useQuery({ queryKey: QUERY_KEY, queryFn: getChatPreferences, enabled: visible, staleTime: 30_000, retry: false });
   const [selected, setSelected] = useState<AcceptFrom[]>(["everyone"]);
@@ -78,6 +80,17 @@ export function ChatPrefsSheet({ visible, onClose }: ChatPrefsSheetProps) {
           position="last"
           leading={{ icon: "lock-closed", tone: "neutral" }}
           toggle={{ value: true, onValueChange: () => undefined, disabled: true }}
+        />
+      </View>
+      {/* Engel listesi ayrı ekrandır; buradan yalnız kapı verilir. */}
+      <View style={styles.group}>
+        <ListRow
+          title="Engellediğim üyeler"
+          subtitle="Engelleri gör ve kaldır"
+          position="single"
+          leading={{ icon: "ban", tone: "danger" }}
+          chevron
+          onPress={() => { onClose(); router.push("/engellenenler"); }}
         />
       </View>
     </BottomSheet>

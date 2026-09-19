@@ -168,6 +168,10 @@ export interface ChatConversation {
   is_admin_feed?: boolean;
   can_call: boolean;
   can_write?: boolean;
+  /** Birebir: karşı tarafı engelledim (composer yerine "engelledin" şeridi). */
+  blocked_by_me?: boolean;
+  /** Birebir: karşı taraf beni engelledi (gönderim 403 USER_BLOCKED döner). */
+  blocked_me?: boolean;
   my_role: "member" | "admin";
   muted: boolean;
   participants: ChatParticipant[];
@@ -388,6 +392,53 @@ export const muteConversation = (id: number, muted: boolean) =>
   patch<{ muted: boolean }>(`/api/chat/conversations/${id}/mute`, { muted });
 export const getDirectory = (q = "") => get<DirectoryResponse>("/api/chat/directory", q ? { q } : undefined);
 export const getChatUnread = () => get<{ count: number }>("/api/chat/unread-count");
+
+/* ---------- engelleme & şikayet (App Store 1.2 / Google Play UGC) ----------
+   Mağazalar, üyelerin birbirine yazıp arayabildiği her uygulamadan kötüye
+   kullanan üyeyi engelleme ve içeriği şikayet etme ister. Sunucu:
+   services/chat/safetyService.js (docs/chat-api.md, 4. aşama). */
+
+export interface BlockedUser {
+  user_id: number;
+  name: string;
+  avatar: string | null;
+  subtitle: string;
+  blocked_at: string | null;
+}
+
+export type ReportReason = "harassment" | "spam" | "inappropriate" | "threat" | "impersonation" | "other";
+
+/** Sunucudaki REPORT_REASONS ile aynı sıra ve anahtarlar. */
+export const REPORT_REASONS: { key: ReportReason; label: string; hint: string }[] = [
+  { key: "harassment", label: "Taciz veya hakaret", hint: "Küfür, aşağılama, ısrarlı rahatsız etme" },
+  { key: "spam", label: "Spam veya reklam", hint: "İstenmeyen tanıtım, tekrarlayan mesajlar" },
+  { key: "inappropriate", label: "Uygunsuz içerik", hint: "Müstehcen, nefret söylemi, yasa dışı içerik" },
+  { key: "threat", label: "Tehdit veya şiddet", hint: "Fiziksel tehdit, şiddete çağrı" },
+  { key: "impersonation", label: "Sahte hesap", hint: "Başka biri ya da kurum gibi davranma" },
+  { key: "other", label: "Diğer", hint: "Aşağıda kısaca açıkla" },
+];
+
+export interface ReportInput {
+  reason: ReportReason;
+  details?: string;
+  user_id?: number;
+  conversation_id?: number;
+  message_id?: number;
+  call_id?: number;
+  /** Şikayetle birlikte üyeyi de engelle. */
+  block?: boolean;
+}
+
+export interface ReportResult {
+  message: string;
+  report: { id: number; public_id: string | null; status: string; reason: string };
+  blocked: boolean;
+}
+
+export const getBlockedUsers = () => get<{ blocks: BlockedUser[] }>("/api/chat/blocks");
+export const blockUser = (userId: number) => post<{ blocked: true; user_id: number; created: boolean }>("/api/chat/blocks", { user_id: userId });
+export const unblockUser = (userId: number) => del<{ blocked: false; user_id: number }>(`/api/chat/blocks/${userId}`);
+export const reportAbuse = (body: ReportInput) => post<ReportResult>("/api/chat/reports", body);
 
 export const getIceServers = () => get<{ ice_servers: IceServer[] }>("/api/chat/ice-servers");
 export const getActiveCall = () => get<{ call: ChatCall | null; ice_servers: IceServer[] }>("/api/chat/calls/active");

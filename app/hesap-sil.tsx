@@ -16,9 +16,20 @@
  * kılar. İkisini de sunucu ayrıca doğrular; buradaki kontrol yalnız kullanıcıyı
  * boş isteğe göndermemek içindir.
  *
- * NEDEN MAĞAZA İÇİN ÖNEMLİ: App Store ve Google Play, hesap açtıran her
- * uygulamadan hesabın uygulama içinden silinebilmesini ister. Bu ekran o
- * şarttır; kaldırılırsa sürüm reddedilir.
+ * NEDEN MAĞAZA İÇİN ÖNEMLİ: App Store (Guideline 5.1.1-v) ve Google Play,
+ * hesap açtıran her uygulamadan hesabın uygulama içinden silinebilmesini
+ * ister. Bu ekran o şarttır; kaldırılırsa sürüm reddedilir.
+ *
+ * NEDEN ÖZET YÜKLENEMESE DE FORM AÇILIR: özet ucu yalnız "neyi
+ * kaybedeceksin" metnini getirir; silmenin kendisi ona bağlı değildir. Ağ
+ * hatası ya da eski bir sunucu yüzünden özet gelmezse ekran "hata" deyip
+ * kapanmaz — genel bir uyarı metniyle form yine çizilir, hata bir şerit
+ * olarak duyurulur. İnceleyicinin karşısına hiçbir koşulda "silinemiyor"
+ * izlenimi veren bir ekran çıkmamalı.
+ *
+ * NEDEN YÖNETİM HESABI DA SİLEBİLİR: mağaza şartı herkes içindir, incelemede
+ * kullanılan test hesabı da dâhil. Sunucu yalnız sistemdeki son admini
+ * engeller (LAST_ADMIN); o durumda ne yapılacağını `blockedReason` söyler.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -46,7 +57,7 @@ import {
   toneColors,
   useToast,
 } from "@/components/ui";
-import { deleteAccount, getDeletionSummary } from "@/lib/api/account";
+import { deleteAccount, getDeletionSummary, type DeletionSummary } from "@/lib/api/account";
 import { ApiError } from "@/lib/http";
 import { queryKeys } from "@/lib/queryKeys";
 import { useAuth } from "@/providers/AuthProvider";
@@ -58,8 +69,30 @@ const DANGER = toneColors("danger");
 const ERROR_TEXTS: Record<string, string> = {
   PASSWORD_INVALID: "Şifren hatalı.",
   CONFIRMATION_REQUIRED: "Onay cümlesini birebir yazman gerekiyor.",
-  MANAGEMENT_ACCOUNT: "Yönetim hesapları uygulamadan silinemez. Lig yönetimiyle iletişime geç.",
+  LAST_ADMIN:
+    "Sistemdeki son yönetici hesabı silinemez. Önce başka bir üyeyi yönetici yap, sonra hesabını silebilirsin.",
+  /* Eski sunucu sürümü için: yeni sürüm yönetim hesaplarını da siler. */
+  MANAGEMENT_ACCOUNT: "Bu hesap şu an silinemiyor. Lig yönetimiyle iletişime geç.",
   TOO_MANY_REQUESTS: "Çok fazla deneme yapıldı. Bir süre sonra tekrar dene.",
+};
+
+/** Sunucudan ne olacağı gelmezse gösterilecek genel özet; silme yine mümkündür. */
+const FALLBACK_SUMMARY: DeletionSummary = {
+  canDelete: true,
+  blockedReason: null,
+  requiresPassword: true,
+  confirmationPhrase: "HESABIMI SİL",
+  player: null,
+  team: null,
+  consequences: [
+    {
+      key: "account",
+      title: "Hesabın ve kişisel kayıtların kalıcı olarak silinir",
+      description:
+        "Mesajların, bildirimlerin, takip ettiklerin, taleplerin ve oyun skorların geri alınamaz biçimde silinir. " +
+        "Lig kayıtları (maçlar, goller, puan durumu) ligin ortak verisidir; onlar yerinde kalır, hesabınla bağı kopar.",
+    },
+  ],
 };
 
 function messageFor(error: unknown): string {
@@ -90,9 +123,11 @@ export default function DeleteAccountScreen() {
     retry: false,
   });
 
-  const summary = query.data;
-  const phrase = summary?.confirmationPhrase ?? "HESABIMI SİL";
-  const ready = password.length > 0 && confirmation.trim().length > 0 && !busy;
+  /* Özet gelmediyse (ağ hatası, eski sunucu) genel metinle devam edilir;
+     kullanıcı silme hakkından mahrum kalmaz. */
+  const summaryFailed = Boolean(query.error) && !query.data;
+  const summary: DeletionSummary | undefined = query.data ?? (summaryFailed ? FALLBACK_SUMMARY : undefined);
+  const phrase = summary?.confirmationPhrase ?? FALLBACK_SUMMARY.confirmationPhrase;
 
   const goToSignIn = useCallback(() => router.push("/giris"), [router]);
 
@@ -101,8 +136,19 @@ export default function DeleteAccountScreen() {
     else router.replace("/(tabs)");
   }, [router]);
 
+  /* Düğme hiçbir zaman pasif değil: boş alanla basılınca ne eksik olduğu
+     yazıyla söylenir. Soluk/pasif düğme "çalışmıyor" izlenimi veriyor; hem
+     kullanıcı hem mağaza inceleyicisi buna takılıyordu. */
   const submit = useCallback(async () => {
-    if (!ready) return;
+    if (busy) return;
+    if (!password) {
+      setError("Önce şifreni gir.");
+      return;
+    }
+    if (!confirmation.trim()) {
+      setError(`Onaylamak için Onay kutusuna ${phrase} yaz.`);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -124,7 +170,7 @@ export default function DeleteAccountScreen() {
       setError(messageFor(caught));
       setBusy(false);
     }
-  }, [auth, confirmation, password, ready, reason, router, toast]);
+  }, [auth, busy, confirmation, password, phrase, reason, router, toast]);
 
   const header = <ScreenHeader title="Hesabı sil" back />;
 
@@ -154,7 +200,7 @@ export default function DeleteAccountScreen() {
     );
   }
 
-  if (query.error || !summary) {
+  if (!summary) {
     return (
       <SafeAreaView style={styles.screen} edges={["top"]}>
         {header}
@@ -191,6 +237,10 @@ export default function DeleteAccountScreen() {
             Hesabını kalıcı olarak silersin. Bu işlem geri alınamaz; aynı kullanıcı adıyla
             yeniden kaydolsan bile eski hesabın geri gelmez.
           </Text>
+
+          {summaryFailed ? (
+            <ErrorState error={query.error} onRetry={query.refetch} variant="banner" />
+          ) : null}
 
           {summary.consequences.map((item) => (
             <Surface key={item.key} style={styles.consequence}>
@@ -267,7 +317,6 @@ export default function DeleteAccountScreen() {
             size="lg"
             fullWidth
             loading={busy}
-            disabled={!ready}
           />
 
           <Button label="Vazgeç" onPress={leave} variant="ghost" size="md" fullWidth disabled={busy} />

@@ -62,6 +62,8 @@ export const queryKeys = {
   chatMessages: (conversationId: number) => ["chat", "messages", conversationId] as const,
   chatUnread: () => ["chat", "unread"] as const,
   chatDirectory: (q: string) => ["chat", "directory", q] as const,
+  /** Engellediğim üyeler (app/engellenenler.tsx). */
+  chatBlocks: () => ["chat", "blocks"] as const,
   /** Hesap silme onay ekranının özeti (app/hesap-sil.tsx). */
   accountDeletionSummary: () => ["account", "deletion-summary"] as const,
 } as const;

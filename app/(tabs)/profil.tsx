@@ -524,7 +524,12 @@ export default function ProfileTabScreen() {
        her şey Menü'nün evidir. Aynı satırı iki sekmede birden göstermek
        kullanıcıya "hangisi doğru yer" sorusunu sordurur. */
 
-    /* 8 — Çıkış: kendi başına, kırmızı, başlıksız grup. */
+    /* 8 — Çıkış ve hesap silme: kendi başına, kırmızı, başlıksız grup.
+       Hesap silme burada da durur; Hesap ve Güvenlik'in içinde zaten var ama
+       App Store (5.1.1-v) ve Google Play silme kapısının "kolayca bulunur"
+       olmasını ister. İnceleyici Profil sekmesini açtığında üç seviye
+       inmeden kapıyı görmeli; aksi hâlde "hesap silme yok" diye reddedilir.
+       Sonuçları ve onayı ayrı ekran taşır (app/hesap-sil.tsx). */
     if (user) {
       result.push({
         key: "oturum",
@@ -536,6 +541,15 @@ export default function ProfileTabScreen() {
             tone: "danger",
             destructive: true,
             action: { kind: "signOut" },
+          },
+          {
+            key: "hesap-sil",
+            icon: "trash",
+            title: "Hesabı sil",
+            subtitle: "Kalıcı olarak silinir, geri alınamaz",
+            tone: "danger",
+            destructive: true,
+            action: { kind: "route", route: "/hesap-sil" },
           },
         ],
       });

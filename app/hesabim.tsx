@@ -397,6 +397,16 @@ export default function AccountScreen() {
         action: { kind: "route", route: `/takim/${me.team.id}` },
       });
     }
+    /* Engel listesi: mağazalar (App Store 1.2) engellemenin bulunabilir ve
+       geri alınabilir olmasını ister; sohbet ayarlarının yanında burada da kapı var. */
+    actions.push({
+      kind: "action",
+      key: "engellenenler",
+      icon: "ban",
+      title: "Engellediğim üyeler",
+      subtitle: "Sohbette engellediklerin; engeli buradan kaldır",
+      action: { kind: "route", route: "/engellenenler" },
+    });
     result.push({ key: "guvenlik", title: "Hesap ve güvenlik", data: actions });
 
     /* 5 — Oturum ve hesap

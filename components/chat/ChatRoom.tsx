@@ -18,11 +18,13 @@ import { Alert, FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, View
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AttachSheet, type AttachMode } from "@/components/chat/AttachSheet";
+import { ReportSheet, type ReportTarget } from "@/components/chat/ReportSheet";
 import { AttendanceCard, AudioBubble, CallChip, LocationBubble, MatchOfferBubble, NotificationCard, SystemChip, clockLabel } from "@/components/chat/ChatBubbles";
 import { BottomSheet, Button, EmptyState, ErrorState, Input, ScreenHeader, SkeletonListRow, Touchable, errorMessage, useToast, withAlpha } from "@/components/ui";
 import { setActiveChatConversation, useAdminConversationMessages, useConversationMessages } from "@/hooks/useChat";
 import {
   adminChat,
+  blockUser,
   callAction,
   deleteConversation,
   deleteMessage,
@@ -33,6 +35,7 @@ import {
   resolveAction,
   respondMatchOffer,
   sendMessage,
+  unblockUser,
   uploadAudio,
   type ChatAction,
   type ChatLocationMeta,
@@ -100,6 +103,8 @@ export function ChatRoom({ conversationId, admin = false }: ChatRoomProps) {
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [tick, setTick] = useState(0);
+  const [report, setReport] = useState<ReportTarget | null>(null);
+  const [blockBusy, setBlockBusy] = useState(false);
   const lastTypingSent = useRef(0);
   const basePath = admin ? "/yonetim/sohbet" : "/sohbet";
 
@@ -337,6 +342,68 @@ export function ChatRoom({ conversationId, admin = false }: ChatRoomProps) {
     );
   }, [admin, basePath, conversation, conversationId, queryClient, router, toast]);
 
+  /* ---------- engelle / şikayet et (App Store 1.2 / Google Play UGC) ---------- */
+  // Yalnız üye tarafı ve birebir sohbet: karşı taraf bellidir. Engel iki
+  // yönlüdür (o yazamaz, ben de yazamam); sunucu aramayı da keser.
+  const otherUser = !admin && conversation?.type === "direct" ? conversation.other_user : null;
+  const refreshAfterBlock = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.chatMessages(conversationId) });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.chatConversations() });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.chatBlocks() });
+  }, [conversationId, queryClient]);
+
+  const toggleBlock = useCallback(() => {
+    if (!otherUser || blockBusy) return;
+    const blocked = Boolean(conversation?.blocked_by_me);
+    const run = () => {
+      setBlockBusy(true);
+      void (blocked ? unblockUser(otherUser.user_id) : blockUser(otherUser.user_id))
+        .then(() => {
+          toast.show({ message: blocked ? "Engel kaldırıldı." : `${otherUser.name} engellendi.`, tone: blocked ? "success" : "neutral" });
+          refreshAfterBlock();
+        })
+        .catch((error: unknown) => toast.show({ message: errorMessage(error), tone: "danger" }))
+        .finally(() => setBlockBusy(false));
+    };
+    if (blocked) { run(); return; }
+    Alert.alert(
+      `${otherUser.name} engellensin mi?`,
+      "Sana mesaj yazamaz ve seni arayamaz; sen de ona yazamazsın. Takım ve grup sohbetleri etkilenmez. İstediğin zaman kaldırabilirsin.",
+      [{ text: "Vazgeç", style: "cancel" }, { text: "Engelle", style: "destructive", onPress: run }],
+    );
+  }, [blockBusy, conversation?.blocked_by_me, otherUser, refreshAfterBlock, toast]);
+
+  const reportConversation = useCallback(() => {
+    if (!conversation) return;
+    setReport({ userId: otherUser?.user_id ?? null, userName: otherUser?.name ?? null, conversationId });
+  }, [conversation, conversationId, otherUser]);
+
+  const reportMessage = useCallback(
+    (message: ChatMessage) => {
+      const excerpt = message.kind === "text" ? message.body : message.kind === "call" ? "Sesli arama" : message.kind === "audio" ? "Sesli mesaj" : message.kind === "location" ? "Konum" : null;
+      setReport({
+        userId: message.sender.user_id,
+        userName: message.sender.name,
+        conversationId,
+        messageId: message.kind === "call" ? null : message.id,
+        callId: message.kind === "call" ? message.meta?.call?.id ?? null : null,
+        excerpt,
+      });
+    },
+    [conversationId],
+  );
+
+  // Üst menü: şikayet, engelle, sil. Üç ikon sınırı yüzünden tek "⋯" altında.
+  const openMenu = useCallback(() => {
+    if (!conversation) return;
+    const options: { text: string; style?: "cancel" | "destructive"; onPress?: () => void }[] = [];
+    if (!admin && !conversation.is_admin_feed && !conversation.is_management) options.push({ text: "Şikayet et", onPress: reportConversation });
+    if (otherUser) options.push({ text: conversation.blocked_by_me ? "Engeli kaldır" : "Engelle", style: conversation.blocked_by_me ? undefined : "destructive", onPress: toggleBlock });
+    if (!conversation.is_admin_feed) options.push({ text: "Sohbeti sil", style: "destructive", onPress: removeConversation });
+    options.push({ text: "Vazgeç", style: "cancel" });
+    Alert.alert(conversation.title, undefined, options);
+  }, [admin, conversation, otherUser, removeConversation, reportConversation, toggleBlock]);
+
   /* ---------- silme / yanıt ---------- */
   const remove = useCallback(
     (message: ChatMessage) => {
@@ -362,13 +429,17 @@ export function ChatRoom({ conversationId, admin = false }: ChatRoomProps) {
 
   const onLongPress = useCallback(
     (message: ChatMessage) => {
-      if (message.deleted || message.pending || message.kind !== "text") return;
-      const options: { text: string; style?: "cancel" | "destructive"; onPress?: () => void }[] = [{ text: "Yanıtla", onPress: () => setReplyTo(message) }];
-      if (message.sender.is_me && !admin) options.push({ text: "Sil", style: "destructive", onPress: () => remove(message) });
+      if (message.deleted || message.pending) return;
+      const reportable = !admin && !message.sender.is_me && !message.sender.is_management && Boolean(message.sender.user_id) && ["text", "audio", "location", "call"].includes(message.kind);
+      if (message.kind !== "text" && !reportable) return;
+      const options: { text: string; style?: "cancel" | "destructive"; onPress?: () => void }[] = [];
+      if (message.kind === "text") options.push({ text: "Yanıtla", onPress: () => setReplyTo(message) });
+      if (message.sender.is_me && !admin && message.kind === "text") options.push({ text: "Sil", style: "destructive", onPress: () => remove(message) });
+      if (reportable) options.push({ text: "Şikayet et", style: "destructive", onPress: () => reportMessage(message) });
       options.push({ text: "Vazgeç", style: "cancel" });
-      Alert.alert("Mesaj", message.body ?? "", options);
+      Alert.alert("Mesaj", message.kind === "text" ? message.body ?? "" : undefined, options);
     },
-    [admin, remove],
+    [admin, remove, reportMessage],
   );
 
   /* ---------- kart eylemleri ---------- */
@@ -515,7 +586,7 @@ export function ChatRoom({ conversationId, admin = false }: ChatRoomProps) {
   // Yönetici tarafında arama ve silme rol yetkisine bağlıdır; asıl denetim sunucudadır.
   const headerActions = [
     ...(conversation?.can_call ? [{ icon: "call" as const, onPress: () => void call.startCall(conversation), accessibilityLabel: "Sesli ara" }] : []),
-    ...(conversation && !conversation.is_admin_feed ? [{ icon: "trash-outline" as const, onPress: removeConversation, accessibilityLabel: "Sohbeti sil" }] : []),
+    ...(conversation ? [{ icon: "ellipsis-horizontal" as const, onPress: openMenu, accessibilityLabel: "Sohbet seçenekleri: şikayet et, engelle, sil" }] : []),
   ];
   const header = <ScreenHeader title={conversation?.title ?? "Sohbet"} subtitle={headerSubtitle} back actions={headerActions} />;
 
@@ -574,7 +645,13 @@ export function ChatRoom({ conversationId, admin = false }: ChatRoomProps) {
           </View>
         ) : null}
 
-        {canWrite ? (
+        {conversation.blocked_by_me ? (
+          <View style={styles.blockedBar}>
+            <Ionicons name="ban" size={18} color={colors.textSecondary} />
+            <Text style={styles.blockedText} {...textScale.long}>Bu üyeyi engelledin. Mesaj yazamaz ve arayamazsın.</Text>
+            <Button label="Engeli kaldır" variant="secondary" size="sm" onPress={toggleBlock} loading={blockBusy} />
+          </View>
+        ) : canWrite ? (
           recorder.isRecording ? (
             <View style={styles.composer}>
               <Touchable feedback="icon" haptic="light" onPress={cancelRecording} accessibilityLabel="Kaydı iptal et" style={styles.roundGhost}>
@@ -617,6 +694,7 @@ export function ChatRoom({ conversationId, admin = false }: ChatRoomProps) {
       </KeyboardAvoidingView>
 
       <AttachSheet mode={attach} onChangeMode={setAttach} conversation={conversation} admin={admin} onSendLocation={onSendLocation} />
+      <ReportSheet target={report} onClose={() => setReport(null)} onBlocked={refreshAfterBlock} />
       <BottomSheet visible={Boolean(attendancePick)} onClose={() => setAttendancePick(null)} title="Yoklamaya oyuncu ekle" snap="half" scrollable={false}>
         <Text style={styles.attendanceHint} {...textScale.long}>Seçtiğin oyuncu gruba alınır ve maç kadrosuna yedek olarak eklenir.</Text>
         <FlatList
@@ -727,6 +805,17 @@ const styles = StyleSheet.create({
   replyText: { ...type.caption, color: colors.textSecondary },
   replyClose: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
 
+  blockedBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    paddingHorizontal: layout.screenPadding,
+    paddingVertical: space.md,
+    borderTopWidth: hairline,
+    borderTopColor: colors.border,
+    backgroundColor: colors.surfaceRaised,
+  },
+  blockedText: { ...type.caption, color: colors.textSecondary, flex: 1, lineHeight: 17 },
   composer: { flexDirection: "row", alignItems: "flex-end", gap: space.sm, paddingHorizontal: layout.screenPadding, paddingTop: space.sm, paddingBottom: space.sm, borderTopWidth: hairline, borderTopColor: colors.separator, backgroundColor: colors.surface1 },
   composerInput: { flex: 1 },
   send: { width: 44, height: 44, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.brand },

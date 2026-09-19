@@ -135,6 +135,17 @@ export default function LoginScreen() {
             yapabilir. Hesabınız yoksa elitlig.com üzerinden üye olabilirsiniz.
           </Text>
 
+          {/* Mağaza şartı (App Store 1.2): kullanıcı içeriği olan uygulama,
+              hakaret ve taciz için hoşgörü olmadığını kullanıcıya kabul
+              ettirir. Kurallar uygulama içinde (app/kurallar.tsx). */}
+          <Text style={styles.consent} {...textScale.long}>
+            Giriş yaparak{" "}
+            <Text style={styles.consentLink} onPress={() => router.push("/kurallar")} accessibilityRole="link">
+              Lig Kuralları
+            </Text>
+            {"'nı kabul etmiş olursun. Sohbet ve aramalarda hakaret, taciz ve uygunsuz içeriğe hoşgörü yoktur; ihlal eden üye engellenebilir ve şikayet edilebilir."}
+          </Text>
+
           <View style={styles.form}>
             <Input
               label="Kullanıcı adı"
@@ -232,6 +243,9 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     lineHeight: 19,
   },
+
+  consent: { ...type.caption, color: colors.textSecondary, lineHeight: 17, marginTop: -space.sm },
+  consentLink: { color: colors.brandAccent, textDecorationLine: "underline" },
 
   form: {
     gap: space.md,
