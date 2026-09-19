@@ -128,7 +128,6 @@ export default function DeleteAccountScreen() {
   const summaryFailed = Boolean(query.error) && !query.data;
   const summary: DeletionSummary | undefined = query.data ?? (summaryFailed ? FALLBACK_SUMMARY : undefined);
   const phrase = summary?.confirmationPhrase ?? FALLBACK_SUMMARY.confirmationPhrase;
-  const ready = password.length > 0 && confirmation.trim().length > 0 && !busy;
 
   const goToSignIn = useCallback(() => router.push("/giris"), [router]);
 
@@ -137,8 +136,19 @@ export default function DeleteAccountScreen() {
     else router.replace("/(tabs)");
   }, [router]);
 
+  /* Düğme hiçbir zaman pasif değil: boş alanla basılınca ne eksik olduğu
+     yazıyla söylenir. Soluk/pasif düğme "çalışmıyor" izlenimi veriyor; hem
+     kullanıcı hem mağaza inceleyicisi buna takılıyordu. */
   const submit = useCallback(async () => {
-    if (!ready) return;
+    if (busy) return;
+    if (!password) {
+      setError("Önce şifreni gir.");
+      return;
+    }
+    if (!confirmation.trim()) {
+      setError(`Onaylamak için Onay kutusuna ${phrase} yaz.`);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -160,7 +170,7 @@ export default function DeleteAccountScreen() {
       setError(messageFor(caught));
       setBusy(false);
     }
-  }, [auth, confirmation, password, ready, reason, router, toast]);
+  }, [auth, busy, confirmation, password, phrase, reason, router, toast]);
 
   const header = <ScreenHeader title="Hesabı sil" back />;
 
@@ -307,7 +317,6 @@ export default function DeleteAccountScreen() {
             size="lg"
             fullWidth
             loading={busy}
-            disabled={!ready}
           />
 
           <Button label="Vazgeç" onPress={leave} variant="ghost" size="md" fullWidth disabled={busy} />
