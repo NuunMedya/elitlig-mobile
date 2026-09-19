@@ -114,6 +114,7 @@ export default function RootLayout() {
                   <Stack.Screen name="bildirim-tercihleri" />
                   <Stack.Screen name="hesabim" />
                   <Stack.Screen name="hesap-sil" />
+                  <Stack.Screen name="engellenenler" />
 
                   {/* Takım paneli alt ekranları — detay geçişi. */}
                   <Stack.Screen name="takimim/mac-al" />

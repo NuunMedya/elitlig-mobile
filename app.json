@@ -13,9 +13,9 @@
       "infoPlist": {
         "UIBackgroundModes": [
           "remote-notification",
-          "audio",
-          "voip"
+          "audio"
         ],
+        "ITSAppUsesNonExemptEncryption": false,
         "NSMicrophoneUsageDescription": "Sesli arama sırasında sesinizi karşı tarafa iletmek için mikrofon kullanılır.",
         "NSLocationWhenInUseUsageDescription": "Sohbette bulunduğunuz konumu paylaşmak için konum kullanılır."
       }
