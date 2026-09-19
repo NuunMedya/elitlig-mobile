@@ -16,7 +16,7 @@ export interface DeletionConsequence {
 
 export interface DeletionSummary {
   canDelete: boolean;
-  /** canDelete false ise gösterilecek metin (yönetim hesapları). */
+  /** canDelete false ise gösterilecek metin (yalnız sistemdeki son admin). */
   blockedReason: string | null;
   requiresPassword: boolean;
   confirmationPhrase: string;
