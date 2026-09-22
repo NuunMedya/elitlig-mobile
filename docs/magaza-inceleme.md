@@ -129,6 +129,23 @@ User-generated content safeguards (Guideline 1.2):
 
 ---
 
+# 3b) iOS'ta native çökme yaması (React Native 0.81)
+
+TestFlight 1.0.0 (2), iOS 27.0: Bildirimler / Mesajlar'a girince
+`EXC_BAD_ACCESS (SIGBUS)` ile çökme. Rapor: JS iş parçacığı Hermes içinde
+ölürken (`BoundFunction::create` → `DictPropertyMap::lookupEntryFor`) başka
+bir iş parçacığı `convertNSExceptionToJSError` çalıştırıyor. Bilinen RN hatası
+(facebook/react-native#53960, #54859, reactwg/react-native-new-architecture#276):
+bir native modülün **void** metodu NSException fırlatınca RN bunu modülün
+kendi kuyruğunda JS hatasına çevirmeye kalkıyor, JS motoruna yanlış iş
+parçacığından dokunuyor ve bellek bozuluyor. 0.81.x ve 0.82.x'te düzeltilmedi.
+
+Çözüm: `patches/react-native+0.81.5.patch` (patch-package, `postinstall`
+ile her kurulumda uygulanır). Void metotta yakalanan NSException artık JS'e
+çevrilmez; modül ve metot adıyla loglanır (`[TurboModule] X.y raised an
+exception…`), uygulama yaşamaya devam eder. Hangi modülün fırlattığını
+görmek için cihazı Mac'e bağlayıp Console.app'te "TurboModule" araması yeter.
+
 # 4) İnceleme videosu — çekim listesi
 
 Apple, sesli arama ve sohbet gibi ikinci bir hesap/cihaz gerektiren
