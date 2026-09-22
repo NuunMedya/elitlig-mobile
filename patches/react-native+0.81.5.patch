@@ -1,0 +1,27 @@
+diff --git a/node_modules/react-native/ReactCommon/react/nativemodule/core/platform/ios/ReactCommon/RCTTurboModule.mm b/node_modules/react-native/ReactCommon/react/nativemodule/core/platform/ios/ReactCommon/RCTTurboModule.mm
+index 2a67797..530515c 100644
+--- a/node_modules/react-native/ReactCommon/react/nativemodule/core/platform/ios/ReactCommon/RCTTurboModule.mm
++++ b/node_modules/react-native/ReactCommon/react/nativemodule/core/platform/ios/ReactCommon/RCTTurboModule.mm
+@@ -435,7 +435,21 @@ void ObjCTurboModule::performVoidMethodInvocation(
+     @try {
+       [inv invokeWithTarget:strongModule];
+     } @catch (NSException *exception) {
+-      throw convertNSExceptionToJSError(runtime, exception, std::string{moduleName}, methodNameStr);
++      // ElitLig patch (facebook/react-native#53960, #54859, reactwg discussion #276):
++      // Void methods run on the module's own queue. Converting the NSException to a
++      // JSError here touches the JS runtime off the JS thread and corrupts the Hermes
++      // heap (EXC_BAD_ACCESS in DictPropertyMap/HiddenClass). Log with module+method
++      // identity and keep the app alive instead. Sync void calls run on the JS thread
++      // and may still surface the error as a JSError.
++      if (shouldVoidMethodsExecuteSync_) {
++        throw convertNSExceptionToJSError(runtime, exception, std::string{moduleName}, methodNameStr);
++      }
++      RCTLogError(
++          @"[TurboModule] %s.%s raised an exception in a void method: %@ — %@",
++          moduleName,
++          methodName,
++          exception.name,
++          exception.reason);
+     } @finally {
+       [retainedObjectsForInvocation removeAllObjects];
+     }
