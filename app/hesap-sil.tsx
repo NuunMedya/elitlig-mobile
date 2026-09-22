@@ -37,6 +37,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -149,6 +150,22 @@ export default function DeleteAccountScreen() {
       setError(`Onaylamak için Onay kutusuna ${phrase} yaz.`);
       return;
     }
+    /* Son kapı: alanlar doluyken bile bir kez daha sorulur. Şifre + yazılı
+       cümle "bilinçli mi" sorusunu yanıtlar; bu pencere "şu an mı" sorusunu.
+       Yanlış anda basılan tek dokunuş geri alınamaz bir silme olmasın. */
+    const confirmed = await new Promise<boolean>((resolve) => {
+      Alert.alert(
+        "Hesabın kalıcı olarak silinecek",
+        "Bu işlem geri alınamaz. Hesabın, mesajların ve kişisel kayıtların silinir. Devam etmek istiyor musun?",
+        [
+          { text: "Vazgeç", style: "cancel", onPress: () => resolve(false) },
+          { text: "Evet, sil", style: "destructive", onPress: () => resolve(true) },
+        ],
+        { cancelable: true, onDismiss: () => resolve(false) },
+      );
+    });
+    if (!confirmed) return;
+
     setBusy(true);
     setError(null);
     try {
