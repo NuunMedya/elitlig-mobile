@@ -37,6 +37,15 @@
       ]
     },
     "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "buildReactNativeFromSource": true,
+          "ios": {
+            "usePrecompiledModules": false
+          }
+        }
+      ],
       "expo-router",
       "expo-secure-store",
       [
