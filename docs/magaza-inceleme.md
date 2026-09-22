@@ -146,6 +146,14 @@ ile her kurulumda uygulanır). Void metotta yakalanan NSException artık JS'e
 exception…`), uygulama yaşamaya devam eder. Hangi modülün fırlattığını
 görmek için cihazı Mac'e bağlayıp Console.app'te "TurboModule" araması yeter.
 
+**Önemli:** Expo 54 iOS'ta React Native'i önceden derlenmiş XCFramework
+olarak kullanır; bu durumda `patches/` altındaki RN kaynak yaması derlemeye
+girmez (build 6'da yaşandı, çökme aynen sürdü). Bu yüzden `app.json`'da
+`expo-build-properties` ile `buildReactNativeFromSource: true` ve
+`ios.usePrecompiledModules: false` açıldı: RN kaynaktan derlenir, yama
+uygulanır. Build süresi birkaç dakika uzar; kalıcı çözüm RN'in bu hatayı
+kapattığı sürüme (0.83+) geçmektir.
+
 # 4) İnceleme videosu — çekim listesi
 
 Apple, sesli arama ve sohbet gibi ikinci bir hesap/cihaz gerektiren
