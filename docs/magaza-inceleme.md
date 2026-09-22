@@ -149,9 +149,12 @@ görmek için cihazı Mac'e bağlayıp Console.app'te "TurboModule" araması yet
 **Önemli:** Expo 54 iOS'ta React Native'i önceden derlenmiş XCFramework
 olarak kullanır; bu durumda `patches/` altındaki RN kaynak yaması derlemeye
 girmez (build 6'da yaşandı, çökme aynen sürdü). Bu yüzden `app.json`'da
-`expo-build-properties` ile `buildReactNativeFromSource: true` ve
-`ios.usePrecompiledModules: false` açıldı: RN kaynaktan derlenir, yama
-uygulanır. Build süresi birkaç dakika uzar; kalıcı çözüm RN'in bu hatayı
+`expo-build-properties` ile `ios.buildReactNativeFromSource: true` açıldı
+(anahtar `ios` altında olmalı; üst seviyede yok sayılır, build 7'de yaşandı).
+`npx expo prebuild` sonrası `ios/Podfile.properties.json` içinde
+`"ios.buildReactNativeFromSource": "true"` görünmeli; o zaman RN kaynaktan
+derlenir ve yama uygulanır. Kaynaktan derleme 15-25 dakika sürer; 4-5
+dakikada biten build hazır paketi kullanmış demektir. Build süresi birkaç dakika uzar; kalıcı çözüm RN'in bu hatayı
 kapattığı sürüme (0.83+) geçmektir.
 
 # 4) İnceleme videosu — çekim listesi
