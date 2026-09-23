@@ -3,6 +3,7 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { CallScreen } from "@/components/CallScreen";
+import { CrashCatcher } from "@/components/CrashCatcher";
 import { MessageSticker } from "@/components/MessageSticker";
 import { ScopeSheet } from "@/components/ScopeSheet";
 import { ToastProvider } from "@/components/ui";
@@ -78,6 +79,7 @@ function ChatRealtimeSetup() {
 
 export default function RootLayout() {
   return (
+    <CrashCatcher>
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
@@ -165,5 +167,6 @@ export default function RootLayout() {
         </AuthProvider>
       </QueryClientProvider>
     </SafeAreaProvider>
+    </CrashCatcher>
   );
 }
