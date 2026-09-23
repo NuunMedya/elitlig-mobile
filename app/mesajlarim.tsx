@@ -128,9 +128,13 @@ function firstParam(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
 
-/** Türkçe karşılaştırma için sadeleştirme (İ/I ve şapkalı harf tuzağı). */
-function normalize(value: string): string {
-  return value
+/** Türkçe karşılaştırma için sadeleştirme (İ/I ve şapkalı harf tuzağı).
+ *  Sunucu kategori etiketini null gönderebilir (ör. "Talebiniz onaylandı"
+ *  otomatik mesajı); null'da boş metin döner. Bu satır App Store'daki
+ *  çökmenin kökeniydi: null.toLocaleLowerCase → ölümcül JS hatası → RN'in
+ *  native fatal yolu → EXC_BAD_ACCESS. */
+function normalize(value: string | null | undefined): string {
+  return String(value ?? "")
     .toLocaleLowerCase("tr-TR")
     .replace(/ı/g, "i")
     .replace(/ş/g, "s")
@@ -140,7 +144,7 @@ function normalize(value: string): string {
     .replace(/ç/g, "c");
 }
 
-function categoryIcon(label: string): keyof typeof Ionicons.glyphMap {
+function categoryIcon(label: string | null | undefined): keyof typeof Ionicons.glyphMap {
   const text = normalize(label);
   const hit = CATEGORY_ICONS.find(([needle]) => text.includes(needle));
   return hit ? hit[1] : "chatbubbles";

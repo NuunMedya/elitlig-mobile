@@ -266,7 +266,8 @@ export interface PanelThreadMessage {
 export interface PanelThread {
   id: number;
   subject: string;
-  category_label: string;
+  /** Sunucu otomatik mesajlarda null gönderir; ekranlar null'a dayanmalı. */
+  category_label: string | null;
   status: string;
   status_label: string;
   last_message_at: string;
