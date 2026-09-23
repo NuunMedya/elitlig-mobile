@@ -157,6 +157,16 @@ derlenir ve yama uygulanır. Kaynaktan derleme 15-25 dakika sürer; 4-5
 dakikada biten build hazır paketi kullanmış demektir. Build süresi birkaç dakika uzar; kalıcı çözüm RN'in bu hatayı
 kapattığı sürüme (0.83+) geçmektir.
 
+**Kök neden (build 11'de hata ekranıyla görüldü):** `app/mesajlarim.tsx`
+içindeki `categoryIcon(thread.category_label)` sunucudan `null` gelen
+kategori etiketinde `null.toLocaleLowerCase` ile patlıyordu ("Talebiniz
+onaylandı" gibi otomatik mesajlar kategori taşımıyor). Üretimde ölümcül JS
+hatası → RN'in native fatal yolu (void TurboModule metodu NSException
+fırlatır) → yukarıdaki bellek bozulması. Mesajlar karosu ve bildirimden
+mesaja gidiş aynı ekrana çıktığı için ikisi de çöküyordu. Düzeltme:
+`normalize` ve `categoryIcon` null'a dayanıklı, `PanelThread.category_label`
+tipi `string | null`. RN yaması ve CrashCatcher koruma olarak kalıyor.
+
 # 4) İnceleme videosu — çekim listesi
 
 Apple, sesli arama ve sohbet gibi ikinci bir hesap/cihaz gerektiren
