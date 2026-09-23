@@ -18,6 +18,8 @@ import * as Clipboard from "expo-clipboard";
 import React from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
+import { colors, radius, space, type } from "@/theme";
+
 interface State {
   error: Error | null;
   fatal: boolean;
@@ -98,22 +100,22 @@ export class CrashCatcher extends React.Component<{ children: React.ReactNode },
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#FFFFFF" },
-  content: { paddingHorizontal: 20, paddingTop: 80, paddingBottom: 40, gap: 12 },
-  title: { fontSize: 20, fontWeight: "700", color: "#7F1D1D" },
-  hint: { fontSize: 14, color: "#4B5563", lineHeight: 20 },
+  screen: { flex: 1, backgroundColor: colors.bg },
+  content: { paddingHorizontal: space.lg, paddingTop: space.giant, paddingBottom: space.xl, gap: space.md },
+  title: { ...type.h2, color: colors.danger },
+  hint: { ...type.bodySm, color: colors.textSecondary, lineHeight: 19 },
   code: {
+    ...type.caption,
     fontFamily: "Menlo",
-    fontSize: 12,
     lineHeight: 17,
-    color: "#111827",
-    backgroundColor: "#F3F4F6",
-    borderRadius: 8,
-    padding: 12,
+    color: colors.textPrimary,
+    backgroundColor: colors.surfaceRaised,
+    borderRadius: radius.md,
+    padding: space.md,
   },
-  row: { flexDirection: "row", gap: 12, marginTop: 8 },
-  button: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: "#6D28D9", alignItems: "center" },
-  secondary: { backgroundColor: "#E5E7EB" },
-  buttonText: { fontSize: 15, fontWeight: "600", color: "#111827" },
-  primaryText: { color: "#FFFFFF" },
+  row: { flexDirection: "row", gap: space.md, marginTop: space.sm },
+  button: { flex: 1, paddingVertical: space.md, borderRadius: radius.lg, backgroundColor: colors.brand, alignItems: "center" },
+  secondary: { backgroundColor: colors.surfaceRaised },
+  buttonText: { ...type.body, color: colors.textPrimary },
+  primaryText: { color: colors.textOnBrand },
 });
