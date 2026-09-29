@@ -120,8 +120,10 @@ User-generated content safeguards (Guideline 1.2):
 
 - `UIBackgroundModes` içinden **`voip` kaldırıldı**. Uygulama CallKit/PushKit
   kullanmıyor; `voip` bildirildiği hâlde kullanılmazsa Apple 2.5.4 ile
-  reddeder. `audio` kalıyor (sesli arama arka planda sürer), `remote-notification`
-  kalıyor (push).
+  reddeder. İkinci turda Apple aynı gerekçeyle **`audio`** modunu da istedi
+  (2.5.4: "persistent audio" özelliği bulunamadı); o da kaldırıldı. Sonuç:
+  sesli arama yalnızca uygulama öndeyken sürer, ana ekrana çıkınca ses kesilir.
+  Geriye yalnız `remote-notification` (push) kaldı.
 - `ITSAppUsesNonExemptEncryption: false` eklendi: yalnız HTTPS kullanıldığı
   için her build'de sorulan "export compliance" sorusu otomatik geçer.
 - Kamera izni metni "Kamera bu uygulamada kullanılmaz." WebRTC eklentisinden
