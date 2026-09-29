@@ -12,8 +12,7 @@
       "bundleIdentifier": "com.elitlig.app",
       "infoPlist": {
         "UIBackgroundModes": [
-          "remote-notification",
-          "audio"
+          "remote-notification"
         ],
         "ITSAppUsesNonExemptEncryption": false,
         "NSMicrophoneUsageDescription": "Sesli arama sırasında sesinizi karşı tarafa iletmek için mikrofon kullanılır.",
