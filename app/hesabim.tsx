@@ -66,6 +66,8 @@ import { colors, hairline, layout, radius, space, textScale, type, upperTR } fro
 
 /** Üyelik, şifre sıfırlama ve talep akışlarının yaşadığı web panel. */
 const SITE_URL = "https://elitlig.com";
+/** App Store 5.1.1(i): gizlilik politikası uygulama içinden erişilebilir olmalı. */
+const PRIVACY_URL = "https://elitlig.com/gizlilik-politikasi";
 
 /** Takım başkanı sayılan profil tipleri (sunucudaki `profile_type` değerleri). */
 const PRESIDENT_PROFILES = new Set(["takim_baskani", "double"]);
@@ -363,8 +365,8 @@ export default function AccountScreen() {
         key: "sifre",
         icon: "key",
         title: "Şifre değiştir",
-        subtitle: "elitlig.com üzerinden yapılır",
-        action: { kind: "link", url: SITE_URL },
+        subtitle: "Mevcut şifrenle doğrulanır",
+        action: { kind: "route", route: "/sifre-degistir" },
       },
     ];
     if (player) {
@@ -373,7 +375,7 @@ export default function AccountScreen() {
         key: "foto",
         icon: "camera",
         title: "Profil fotoğrafı talebi",
-        subtitle: "Yeni fotoğraf yönetim onayından geçer",
+        subtitle: "elitlig.com paneli uygulama içinde açılır; yönetim onayından geçer",
         action: { kind: "link", url: SITE_URL },
       });
     } else {
@@ -382,7 +384,7 @@ export default function AccountScreen() {
         key: "oyuncu-bagla",
         icon: "person-add",
         title: "Oyuncu profili bağla",
-        subtitle: "Sahiplenme talebi web panelinden açılır",
+        subtitle: "Sahiplenme talebi elitlig.com panelinde (uygulama içinde açılır)",
         action: { kind: "link", url: SITE_URL },
       });
     }
@@ -406,6 +408,22 @@ export default function AccountScreen() {
       title: "Engellediğim üyeler",
       subtitle: "Sohbette engellediklerin; engeli buradan kaldır",
       action: { kind: "route", route: "/engellenenler" },
+    });
+    actions.push({
+      kind: "action",
+      key: "gizlilik",
+      icon: "shield-checkmark",
+      title: "Gizlilik Politikası",
+      subtitle: "Hangi verinin neden tutulduğu",
+      action: { kind: "link", url: PRIVACY_URL },
+    });
+    actions.push({
+      kind: "action",
+      key: "kurallar",
+      icon: "book",
+      title: "Lig Kuralları",
+      subtitle: "Sohbet ve saha kuralları",
+      action: { kind: "route", route: "/kurallar" },
     });
     result.push({ key: "guvenlik", title: "Hesap ve güvenlik", data: actions });
 

@@ -34,6 +34,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BrandMark, Button, Input, ScreenHeader, Touchable, toneColors } from "@/components/ui";
 import { ApiError } from "@/lib/http";
+import { openLink } from "@/lib/links";
 import { useAuth } from "@/providers/AuthProvider";
 import {
   colors,
@@ -49,6 +50,7 @@ import {
 
 /** Hata kutusunun tonu tek yerden okunur — kendi kırmızısını yazan yok. */
 const DANGER = toneColors("danger");
+const PRIVACY_URL = "https://elitlig.com/gizlilik-politikasi";
 
 export default function LoginScreen() {
   const { signIn, signingIn } = useAuth();
@@ -83,6 +85,7 @@ export default function LoginScreen() {
   }, [router]);
 
   const openRegister = useCallback(() => router.replace("/kayit"), [router]);
+  const openForgot = useCallback(() => router.replace("/sifremi-unuttum"), [router]);
 
   const submit = useCallback(async () => {
     if (!canSubmit) return;
@@ -144,6 +147,10 @@ export default function LoginScreen() {
             Giriş yaparak{" "}
             <Text style={styles.consentLink} onPress={() => router.push("/kurallar")} accessibilityRole="link">
               Lig Kuralları
+            </Text>
+            {"'nı ve "}
+            <Text style={styles.consentLink} onPress={() => void openLink(PRIVACY_URL)} accessibilityRole="link">
+              Gizlilik Politikası
             </Text>
             {"'nı kabul etmiş olursun. Sohbet ve aramalarda hakaret, taciz ve uygunsuz içeriğe hoşgörü yoktur; ihlal eden üye engellenebilir ve şikayet edilebilir."}
           </Text>
@@ -227,13 +234,11 @@ export default function LoginScreen() {
             disabled={signingIn}
           />
 
-          <Text style={styles.footnote} {...textScale.long}>
-            Şifreni unuttuysan{" "}
-            <Text style={styles.consentLink} onPress={() => router.push("/iletisim")} accessibilityRole="link">
-              destek ekibine yaz
+          <Touchable onPress={openForgot} accessibilityRole="button" disabled={signingIn}>
+            <Text style={styles.footnote} {...textScale.long}>
+              Şifreni mi unuttun? <Text style={styles.consentLink}>Sıfırla</Text>
             </Text>
-            , yeni şifre tanımlansın.
-          </Text>
+          </Touchable>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

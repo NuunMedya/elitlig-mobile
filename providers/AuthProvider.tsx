@@ -33,6 +33,8 @@ interface AuthContextValue {
   signIn: (username: string, password: string) => Promise<void>;
   /** Uygulama içi kayıt; başarılıysa oturum da kurulur. */
   signUp: (input: RegisterInput) => Promise<void>;
+  /** Şifre değiştirir ve sunucunun verdiği taze jetonu saklar. Mesajı döndürür. */
+  changePassword: (currentPassword: string, newPassword: string) => Promise<string>;
   signOut: () => Promise<void>;
   isManagement: boolean;
 }
@@ -144,6 +146,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [queryClient]
   );
 
+  const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
+    const response = await authApi.changePassword(currentPassword, newPassword);
+    // Eski jeton sunucuda geçersiz kılındı; yenisi yazılmazsa bir sonraki
+    // istek 401 alır ve kullanıcı dışarı atılır.
+    tokenRef.current = response.token;
+    await saveToken(response.token);
+    return response.message;
+  }, []);
+
   const signOut = useCallback(async () => {
     try {
       await authApi.logout();
@@ -161,10 +172,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signingIn,
       signIn,
       signUp,
+      changePassword,
       signOut,
       isManagement: Boolean(user && MANAGEMENT_ROLES.includes(user.role)),
     }),
-    [user, initializing, signingIn, signIn, signUp, signOut]
+    [user, initializing, signingIn, signIn, signUp, changePassword, signOut]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

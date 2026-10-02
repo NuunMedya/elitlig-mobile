@@ -35,6 +35,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { BrandMark, Button, Chip, Input, ScreenHeader, Touchable, toneColors } from "@/components/ui";
 import { getCities } from "@/lib/api/meta";
 import { ApiError } from "@/lib/http";
+import { openLink } from "@/lib/links";
 import { queryKeys } from "@/lib/queryKeys";
 import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
@@ -51,6 +52,7 @@ import {
 } from "@/theme";
 
 const DANGER = toneColors("danger");
+const PRIVACY_URL = "https://elitlig.com/gizlilik-politikasi";
 
 /* Kurallar web kayıt formuyla (elitlig-client Register.js) ve sunucuyla
    (services/passwordService.js) aynı tutulur. */
@@ -418,6 +420,10 @@ export default function RegisterScreen() {
             Üye olarak{" "}
             <Text style={styles.consentLink} onPress={() => router.push("/kurallar")} accessibilityRole="link">
               Lig Kuralları
+            </Text>
+            {"'nı ve "}
+            <Text style={styles.consentLink} onPress={() => void openLink(PRIVACY_URL)} accessibilityRole="link">
+              Gizlilik Politikası
             </Text>
             {"'nı kabul etmiş olursun. Sohbet ve aramalarda hakaret, taciz ve uygunsuz içeriğe hoşgörü yoktur. Hesabını dilediğin zaman Profil → Hesabı sil ile kalıcı olarak silebilirsin."}
           </Text>

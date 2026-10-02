@@ -224,3 +224,28 @@ Notes'a adım adım yaz (yukarıdaki İngilizce metinler).
   `/kayit` ekranını açar.
 - Hesap silme zaten uygulama içinde (`/hesap-sil`); Apple'ın "kayıt varsa
   silme de olmalı" notu karşılanıyor.
+
+# 8) Üçüncü tur sonrası genel tarama (2 Ekim)
+
+Apple'ın bir sonraki turda takılabileceği yerler önceden kapatıldı:
+
+- **Şifre yönetimi uygulama içinde**: `app/sifre-degistir.tsx`
+  (`PATCH /api/users/me/password`, taze jeton saklanır) ve
+  `app/sifremi-unuttum.tsx` (`/password/forgot` → kod → `/password/reset`).
+  Giriş ekranındaki "Şifreni mi unuttun? Sıfırla" ve Hesabım'daki "Şifre
+  değiştir" artık siteye değil bu ekranlara gider.
+- **Gizlilik politikası uygulama içinden erişilebilir** (5.1.1(i)): Hesabım →
+  "Gizlilik Politikası" satırı, giriş ve kayıt onay metinlerindeki bağlantı.
+  Hepsi `openLink` ile uygulama içi tarayıcıda (SFSafariViewController) açılır.
+  App Store Connect → App Information → Privacy Policy URL alanında da
+  `https://elitlig.com/gizlilik-politikasi` yazmalı.
+- **Kamera izni metni**: WebRTC eklentisi NSCameraUsageDescription'ı zorunlu
+  ekliyor; "kullanılmaz" yazan metin yerine olası kullanımı anlatan metin.
+- **Siteye kalan bağlantılar** (profil fotoğrafı talebi, oyuncu profili
+  sahiplenme, takım yönetimi başvurusu): yönetim onayı gerektiren akışlar;
+  `openLink` uygulama içi tarayıcı kullandığı için Apple'ın 4. maddede açıkça
+  izin verdiği yöntemle açılır. İnceleme notunda belirtilir.
+- Kontrol edildi, sorun yok: ödeme/abonelik yok (3.1.1 kapsamı dışı), üçüncü
+  taraf giriş yok (4.8 Apple ile giriş gerekmiyor), izleme SDK'sı yok (ATT
+  gerekmiyor), push izni açılışta değil kullanıcı istediğinde soruluyor
+  (4.5.4), iPad desteği kapalı (iPhone uyumluluk modunda çalışır).

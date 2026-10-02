@@ -115,6 +115,7 @@ export default function RootLayout() {
                   {/* Ayar ve hesap ekranları — klasik detay geçişi. */}
                   <Stack.Screen name="bildirim-tercihleri" />
                   <Stack.Screen name="hesabim" />
+                  <Stack.Screen name="sifre-degistir" />
                   <Stack.Screen name="hesap-sil" />
                   <Stack.Screen name="engellenenler" />
 
@@ -148,6 +149,7 @@ export default function RootLayout() {
                   <Stack.Screen name="ara" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
                   <Stack.Screen name="giris" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
                   <Stack.Screen name="kayit" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
+                  <Stack.Screen name="sifremi-unuttum" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
                 </Stack>
 
                 {/* Kapsam seçici — uygulamada TEK örnek. */}
