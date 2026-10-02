@@ -70,7 +70,7 @@
       [
         "@config-plugins/react-native-webrtc",
         {
-          "cameraPermission": "Kamera bu uygulamada kullanılmaz.",
+          "cameraPermission": "Kamera yalnızca ileride görüntülü arama özelliği açılırsa, aramada görüntünüzü karşı tarafa iletmek için kullanılır.",
           "microphonePermission": "Sesli arama sırasında sesinizi karşı tarafa iletmek için mikrofon kullanılır."
         }
       ],

@@ -1,4 +1,4 @@
-import { get, post } from "../http";
+import { get, patch, post } from "../http";
 import type { AuthUser, LoginResponse } from "../types";
 
 /**
@@ -35,3 +35,20 @@ export const verifySession = () =>
   get<{ user: AuthUser }>("/api/users/verify", undefined, { retry: false }).then((data) => data.user);
 
 export const logout = () => post<{ message: string }>("/api/users/logout");
+
+/** Oturum açıkken şifre değiştirme — PATCH /api/users/me/password. Sunucu
+ *  token_version'ı artırıp taze jeton döndürür; eski jeton geçersizdir. */
+export const changePassword = (currentPassword: string, newPassword: string) =>
+  patch<{ message: string; token: string; expiresIn: number }>("/api/users/me/password", {
+    currentPassword,
+    newPassword,
+  });
+
+/** Şifremi unuttum, 1. adım: hesap kayıtlıysa yönetim tek kullanımlık kod iletir.
+ *  Sunucu hesap sayımını önlemek için her koşulda 202 döner. */
+export const forgotPassword = (identifier: string) =>
+  post<{ message: string }>("/api/users/password/forgot", { identifier });
+
+/** Şifremi unuttum, 2. adım: kodla yeni şifre. */
+export const resetPassword = (identifier: string, code: string, newPassword: string) =>
+  post<{ message: string }>("/api/users/password/reset", { identifier, code, newPassword });
