@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import * as authApi from "@/lib/api/auth";
+import type { RegisterInput } from "@/lib/api/auth";
 import { ApiError, configureAuth } from "@/lib/http";
 import { resetPushSync } from "@/hooks/usePushStatus";
 import { clearLedger } from "@/lib/notificationLedger";
@@ -30,6 +31,8 @@ interface AuthContextValue {
   initializing: boolean;
   signingIn: boolean;
   signIn: (username: string, password: string) => Promise<void>;
+  /** Uygulama içi kayıt; başarılıysa oturum da kurulur. */
+  signUp: (input: RegisterInput) => Promise<void>;
   signOut: () => Promise<void>;
   isManagement: boolean;
 }
@@ -125,6 +128,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [queryClient]
   );
 
+  const signUp = useCallback(
+    async (input: RegisterInput) => {
+      setSigningIn(true);
+      try {
+        const response = await authApi.register(input);
+        tokenRef.current = response.token;
+        await saveToken(response.token);
+        setUser(response.user);
+        await queryClient.invalidateQueries();
+      } finally {
+        setSigningIn(false);
+      }
+    },
+    [queryClient]
+  );
+
   const signOut = useCallback(async () => {
     try {
       await authApi.logout();
@@ -141,10 +160,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       initializing,
       signingIn,
       signIn,
+      signUp,
       signOut,
       isManagement: Boolean(user && MANAGEMENT_ROLES.includes(user.role)),
     }),
-    [user, initializing, signingIn, signIn, signOut]
+    [user, initializing, signingIn, signIn, signUp, signOut]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

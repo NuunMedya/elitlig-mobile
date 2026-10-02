@@ -207,3 +207,20 @@ Notes'a adım adım yaz (yukarıdaki İngilizce metinler).
 - [ ] App Privacy: ad, e-posta, telefon, konum, kullanıcı içeriği (mesaj, ses),
       kullanıcı kimliği beyan edildi.
 - [ ] Gizlilik politikası ve destek URL'si (elitlig.com) dolu.
+
+# 7) Uygulama içi üyelik (App Store 4 — Design)
+
+Üçüncü turda (2 Ekim) Apple, "Üye ol" düğmesinin kullanıcıyı tarayıcıya
+(elitlig.com) götürmesini reddetti. Çözüm:
+
+- `app/kayit.tsx`: uygulama içi kayıt ekranı. `POST /api/users/register`
+  ucunu kullanır; sunucu jeton döndürdüğü için kayıt biter bitmez oturum
+  kurulur (`AuthProvider.signUp`). Zorunlu alanlar yalnız ad soyad, kullanıcı
+  adı, e-posta, şehir ve şifre; telefon isteğe bağlı (5.1.1(v)).
+- `app/giris.tsx`: "elitlig.com üzerinden üye olabilirsiniz" cümlesi kalktı,
+  altında "Üye ol" düğmesi var. Şifre sıfırlama notu uygulama içi İletişim
+  ekranına bağlanır.
+- `app/(tabs)/profil.tsx`: misafir kartındaki "Üye ol" artık siteyi değil
+  `/kayit` ekranını açar.
+- Hesap silme zaten uygulama içinde (`/hesap-sil`); Apple'ın "kayıt varsa
+  silme de olmalı" notu karşılanıyor.

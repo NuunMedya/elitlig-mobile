@@ -92,7 +92,6 @@ import { colors, hairline, isDark, layout, radius, space, textScale, type } from
 /* ============================ SABİTLER / TİPLER ============================ */
 
 /** Web sitesi — üyelik, şifre sıfırlama ve kurumsal sayfalar orada yaşıyor. */
-const SITE_URL = "https://elitlig.com";
 
 /** Takım başkanı sayılan profil tipleri (sunucudaki `profile_type` değerleri). */
 const PRESIDENT_PROFILES = new Set(["takim_baskani", "double"]);
@@ -350,7 +349,9 @@ export default function ProfileTabScreen() {
 
   const openAccount = useCallback(() => router.push("/hesabim"), [router]);
   const openSignIn = useCallback(() => router.push("/giris"), [router]);
-  const openSite = useCallback(() => void openLink(SITE_URL), []);
+  // App Store 4 (Design): üyelik tarayıcıda değil, uygulama içindeki
+  // /kayit ekranında açılır.
+  const openRegister = useCallback(() => router.push("/kayit"), [router]);
 
   /* ------------------------------ SATIRLAR ------------------------------- */
 
@@ -635,7 +636,7 @@ export default function ProfileTabScreen() {
          menü sekmesi kalktığı için kapı burasıdır. */
       return (
         <>
-          <GuestHero onSignIn={openSignIn} onRegister={openSite} />
+          <GuestHero onSignIn={openSignIn} onRegister={openRegister} />
           {shortcuts}
         </>
       );
@@ -664,7 +665,7 @@ export default function ProfileTabScreen() {
     me?.player?.player_img,
     openAccount,
     openSignIn,
-    openSite,
+    openRegister,
     shortcuts,
     teamCard?.logo,
     teamName,

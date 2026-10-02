@@ -82,6 +82,8 @@ export default function LoginScreen() {
     else router.replace("/(tabs)");
   }, [router]);
 
+  const openRegister = useCallback(() => router.replace("/kayit"), [router]);
+
   const submit = useCallback(async () => {
     if (!canSubmit) return;
     setError(null);
@@ -132,7 +134,7 @@ export default function LoginScreen() {
 
           <Text style={styles.lede} {...textScale.long}>
             Üye, oyuncu, takım başkanı ve yönetim hesapları buradan giriş
-            yapabilir. Hesabınız yoksa elitlig.com üzerinden üye olabilirsiniz.
+            yapabilir. Hesabın yoksa aşağıdan ücretsiz üye olabilirsin.
           </Text>
 
           {/* Mağaza şartı (App Store 1.2): kullanıcı içeriği olan uygulama,
@@ -213,8 +215,24 @@ export default function LoginScreen() {
             fullWidth
           />
 
+          {/* App Store 4 (Design): kayıt tarayıcıya yönlendirilmez, uygulama
+              içindeki /kayit ekranında yapılır. replace: iki modal üst üste
+              binmesin, kapatınca geldiği yere dönsün. */}
+          <Button
+            label="Üye ol"
+            onPress={openRegister}
+            variant="secondary"
+            size="lg"
+            fullWidth
+            disabled={signingIn}
+          />
+
           <Text style={styles.footnote} {...textScale.long}>
-            Şifrenizi unuttuysanız elitlig.com üzerinden sıfırlama isteği gönderin.
+            Şifreni unuttuysan{" "}
+            <Text style={styles.consentLink} onPress={() => router.push("/iletisim")} accessibilityRole="link">
+              destek ekibine yaz
+            </Text>
+            , yeni şifre tanımlansın.
           </Text>
         </ScrollView>
       </KeyboardAvoidingView>
