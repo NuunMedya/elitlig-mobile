@@ -147,6 +147,7 @@ export default function RootLayout() {
                   {/* Modal olanlar: bir görevi bitirip kapanan, yığına ait olmayan ekranlar. */}
                   <Stack.Screen name="ara" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
                   <Stack.Screen name="giris" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
+                  <Stack.Screen name="kayit" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
                 </Stack>
 
                 {/* Kapsam seçici — uygulamada TEK örnek. */}
