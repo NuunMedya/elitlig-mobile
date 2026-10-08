@@ -249,3 +249,18 @@ Apple'ın bir sonraki turda takılabileceği yerler önceden kapatıldı:
   taraf giriş yok (4.8 Apple ile giriş gerekmiyor), izleme SDK'sı yok (ATT
   gerekmiyor), push izni açılışta değil kullanıcı istediğinde soruluyor
   (4.5.4), iPad desteği kapalı (iPhone uyumluluk modunda çalışır).
+
+# 9) Dördüncü tur (7 Ekim, build 15)
+
+- **2.3.6 yaş sınırı**: sohbette konum paylaşımı olduğu için Apple 18+ istedi.
+  Kod değişikliği yok; App Store Connect → App Information → Age Ratings →
+  "Override to a Higher Age Rating" → 18+.
+- **2.1(a) "Üye Ol penceresi kapanıyor"**: inceleyici giriş modalındaki
+  "Üye ol" düğmesini kullanmış. Modal içinden `router.replace` başka bir modala
+  geçerken iOS'ta ilk pencereyi kapatıp yenisini açmıyordu. Düzeltme: giriş →
+  kayıt ve giriş → şifremi unuttum artık `router.push`; geri dönüşler
+  `router.dismissTo("/giris")`. Ayrıca kayıt ve sıfırlama modallarında aşağı
+  çekerek kapatma (`gestureEnabled: false`) kapatıldı; uzun formda listeyi
+  yukarı çekerken pencere kapanmasın.
+- Test ederken her iki giriş yolunu da dene: Profil → Üye ol **ve** Giriş yap
+  → Üye ol.

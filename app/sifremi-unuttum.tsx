@@ -78,7 +78,9 @@ export default function ForgotPasswordScreen() {
     else router.replace("/(tabs)");
   }, [router]);
 
-  const toLogin = useCallback(() => router.replace("/giris"), [router]);
+  /* replace değil dismissTo: modal içinden replace iOS'ta pencereyi kapatıp
+     yenisini açmayabiliyor (bkz. app/giris.tsx openRegister). */
+  const toLogin = useCallback(() => router.dismissTo("/giris"), [router]);
 
   const request = useCallback(async () => {
     setTouched((t) => ({ ...t, identifier: true }));
@@ -104,7 +106,7 @@ export default function ForgotPasswordScreen() {
     try {
       const response = await resetPassword(identifier.trim(), code.trim(), password);
       toast.show({ message: response.message || "Şifren güncellendi.", tone: "success" });
-      router.replace("/giris");
+      router.dismissTo("/giris");
     } catch (caught) {
       setError(
         caught instanceof ApiError

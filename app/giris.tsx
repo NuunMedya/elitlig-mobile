@@ -84,8 +84,12 @@ export default function LoginScreen() {
     else router.replace("/(tabs)");
   }, [router]);
 
-  const openRegister = useCallback(() => router.replace("/kayit"), [router]);
-  const openForgot = useCallback(() => router.replace("/sifremi-unuttum"), [router]);
+  /* PUSH, REPLACE DEĞİL: bir modalı başka bir modalla "replace" etmek iOS'ta
+     ilk modalı kapatıp yenisini açmayabiliyor (App Store incelemesinde "Üye Ol
+     penceresi kapanıyor" diye reddedildi). Push ile kayıt ekranı girişin
+     üstüne açılır; "Giriş yap" bağlantısı dismissTo ile buraya döner. */
+  const openRegister = useCallback(() => router.push("/kayit"), [router]);
+  const openForgot = useCallback(() => router.push("/sifremi-unuttum"), [router]);
 
   const submit = useCallback(async () => {
     if (!canSubmit) return;
@@ -223,8 +227,7 @@ export default function LoginScreen() {
           />
 
           {/* App Store 4 (Design): kayıt tarayıcıya yönlendirilmez, uygulama
-              içindeki /kayit ekranında yapılır. replace: iki modal üst üste
-              binmesin, kapatınca geldiği yere dönsün. */}
+              içindeki /kayit ekranında yapılır. */}
           <Button
             label="Üye ol"
             onPress={openRegister}
