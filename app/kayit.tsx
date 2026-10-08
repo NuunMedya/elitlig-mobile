@@ -185,7 +185,9 @@ export default function RegisterScreen() {
     else router.replace("/(tabs)");
   }, [router]);
 
-  const openLogin = useCallback(() => router.replace("/giris"), [router]);
+  /* Giriş ekranından gelindiyse ona döner; Profil'den gelindiyse girişi açar.
+     replace kullanılmaz (bkz. app/giris.tsx openRegister). */
+  const openLogin = useCallback(() => router.dismissTo("/giris"), [router]);
 
   const submit = useCallback(async () => {
     setTouched({
@@ -209,6 +211,10 @@ export default function RegisterScreen() {
         phone: form.phone.trim() || undefined,
         city: effectiveCity,
       });
+      // Önce açık modalların hepsi kapanır (giriş → kayıt yolu iki modal
+      // açar), sonra Profil sekmesi gösterilir. Modal içinden doğrudan
+      // replace etmek iOS'ta güvenilir değil.
+      if (router.canDismiss()) router.dismissAll();
       router.replace("/(tabs)/profil");
     } catch (caught) {
       if (caught instanceof ApiError) {
