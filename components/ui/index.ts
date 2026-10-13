@@ -130,6 +130,12 @@ export type {
   MatchRowPosition,
 } from "./MatchRow";
 
+/** Fikstür/sonuç kartı — iki takım yan yana, skor ya da saat ortada. */
+export { MatchCard, matchCardHeight, matchDayLabel, MATCH_CARD_GAP } from "./MatchCard";
+export type { MatchCardProps } from "./MatchCard";
+export { MatchCardRail } from "./MatchCardRail";
+export type { MatchCardRailProps } from "./MatchCardRail";
+
 export { LeagueGroupHeader } from "./LeagueGroupHeader";
 export type { LeagueGroupHeaderProps } from "./LeagueGroupHeader";
 

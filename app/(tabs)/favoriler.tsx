@@ -45,7 +45,7 @@ import {
   EmptyState,
   ErrorState,
   ListRow,
-  MatchRow,
+  MatchCard,
   ScreenHeader,
   SectionHeader,
   SegmentedControl,
@@ -246,17 +246,16 @@ const FavoriteMatchRow = React.memo(function FavoriteMatchRow({
   const toggle = useCallback(() => onToggleStar(match.id), [onToggleStar, match.id]);
 
   return (
-    <MatchRow
+    <MatchCard
       match={match}
-      position={position}
       homeLogo={homeLogo}
       awayLogo={awayLogo}
-      metaMode="league"
-      showFavorite
+      meta="league"
+      showDate
       isFavorite={starred}
       onToggleFavorite={toggle}
       onPress={open}
-      flashOnScoreChange
+      style={position === "last" || position === "single" ? undefined : { marginBottom: space.m }}
     />
   );
 });

@@ -38,11 +38,12 @@ import {
   EmptyState,
   ErrorState,
   LiveBadge,
-  MatchRow,
+  MatchCard,
   ScreenHeader,
   SkeletonMatchRow,
   Touchable,
-  matchRowHeight,
+  matchCardHeight,
+  MATCH_CARD_GAP,
   refreshControlProps,
   useHeaderScroll,
   useRefresh,
@@ -73,7 +74,7 @@ const LIVE_POLL_MS = 15_000;
 /** Gol bandı kalıcı değildir; bu süre sonunda kendini toplar. */
 const GOAL_BAND_MS = 90_000;
 /** Her satırda lig adı (meta) çizildiği için yükseklik tek değerdir. */
-const ROW_HEIGHT = matchRowHeight("default", "league");
+const ROW_HEIGHT = matchCardHeight({ meta: "league", showDate: true }) + MATCH_CARD_GAP;
 /** Lig adı boş gelen kayıtlarda meta satırının kaybolmaması için yedek etiket. */
 const LEAGUE_FALLBACK = "Lig belirtilmemiş";
 
@@ -519,17 +520,17 @@ const LiveMatchItem = memo(function LiveMatchItem({
   const handleStar = useCallback(() => onToggleStar(matchId), [onToggleStar, matchId]);
 
   return (
-    <MatchRow
-      match={match}
-      position={position}
-      metaMode="league"
-      homeLogo={homeLogo}
-      awayLogo={awayLogo}
-      isFavorite={isFavorite}
-      onToggleFavorite={handleStar}
-      onPress={handlePress}
-      flashOnScoreChange
-    />
+    <View style={{ height: ROW_HEIGHT, paddingBottom: MATCH_CARD_GAP }}>
+      <MatchCard
+        match={match}
+        meta="league"
+        homeLogo={homeLogo}
+        awayLogo={awayLogo}
+        isFavorite={isFavorite}
+        onToggleFavorite={handleStar}
+        onPress={handlePress}
+      />
+    </View>
   );
 });
 

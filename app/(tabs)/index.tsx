@@ -42,7 +42,7 @@ import {
   Button,
   EmptyState,
   ErrorState,
-  MatchRow,
+  MatchCardRail,
   MetricGrid,
   MetricTile,
   PlayerRow,
@@ -623,21 +623,13 @@ export default function OverviewScreen() {
         {/* ── 4) CANLI ──────────────────────────────────────────────────── */}
         {liveMatches.length ? (
           <Block title="Canlı" meta={`${liveMatches.length} maç`} actionLabel="Tümü" onAction={() => go("/canli")}>
-            <View style={styles.group}>
-              {liveMatches.slice(0, PREVIEW_LIMIT).map((match, index, list) => (
-                <MatchRow
-                  key={match.id}
-                  match={match}
-                  homeLogo={teams.logoFor(match.home_team_id, match.first_team_name)}
-                  awayLogo={teams.logoFor(match.away_team_id, match.second_team_name)}
-                  myTeamId={team?.id ?? null}
-                  myTeamName={team?.team_name ?? null}
-                  metaMode="none"
-                  position={groupPosition(index, list.length)}
-                  onPress={() => openMatch(match.id)}
-                />
-              ))}
-            </View>
+            <MatchCardRail
+              matches={liveMatches.slice(0, PREVIEW_LIMIT)}
+              logoFor={teams.logoFor}
+              onOpen={openMatch}
+              highlightTeamId={team?.id ?? null}
+              highlightTeamName={team?.team_name ?? null}
+            />
           </Block>
         ) : null}
 
@@ -657,21 +649,13 @@ export default function OverviewScreen() {
           ) : matchesQuery.isError ? (
             <ErrorState error={matchesQuery.error} variant="banner" />
           ) : previewMatches.length ? (
-            <View style={styles.group}>
-              {previewMatches.slice(0, PREVIEW_LIMIT).map((match, index, list) => (
-                <MatchRow
-                  key={match.id}
-                  match={match}
-                  homeLogo={teams.logoFor(match.home_team_id, match.first_team_name)}
-                  awayLogo={teams.logoFor(match.away_team_id, match.second_team_name)}
-                  myTeamId={team?.id ?? null}
-                  myTeamName={team?.team_name ?? null}
-                  metaMode="none"
-                  position={groupPosition(index, list.length)}
-                  onPress={() => openMatch(match.id)}
-                />
-              ))}
-            </View>
+            <MatchCardRail
+              matches={previewMatches.slice(0, PREVIEW_LIMIT)}
+              logoFor={teams.logoFor}
+              onOpen={openMatch}
+              highlightTeamId={team?.id ?? null}
+              highlightTeamName={team?.team_name ?? null}
+            />
           ) : (
             <EmptyState icon="calendar-outline" title="Maç yok" body="Bu ligde yaklaşan maç görünmüyor." variant="inline" />
           )}

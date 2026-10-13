@@ -43,6 +43,8 @@ export interface LeagueGroupHeaderProps {
   /** Lig sayfasına git */
   onPress?: () => void;
   sticky?: boolean;
+  /** Kart listelerinde: başlık satırlara bitişmez, dört köşesi yuvarlak bir şerittir. */
+  detached?: boolean;
 }
 
 export const LeagueGroupHeader = memo(function LeagueGroupHeader({
@@ -56,6 +58,7 @@ export const LeagueGroupHeader = memo(function LeagueGroupHeader({
   onToggleFavorite,
   onPress,
   sticky = false,
+  detached = false,
 }: LeagueGroupHeaderProps) {
   const spin = useRef(new Animated.Value(collapsed ? 1 : 0)).current;
 
@@ -98,7 +101,7 @@ export const LeagueGroupHeader = memo(function LeagueGroupHeader({
   const hasLogo = Boolean(mediaUrl(logo));
 
   return (
-    <View style={[styles.wrap, sticky && styles.sticky]}>
+    <View style={[styles.wrap, sticky && !detached && styles.sticky, detached && styles.detached]}>
       <Pressable
         style={styles.body}
         onPress={handleBody}
@@ -175,6 +178,11 @@ const styles = StyleSheet.create({
   sticky: {
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
+  },
+  detached: {
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
   },
   body: {
     flex: 1,
