@@ -1,6 +1,14 @@
 /**
- * LİGLER — kapsama (şehir → lig → sezon) bağlı tüm verinin tek evi.
+ * LİG — kapsama (il → lig → sezon) bağlı tüm verinin tek evi. ALT ÇUBUKTA
+ * KENDİ SEKMESİDİR (eskiden Profil → Menü'nün altında gizliydi).
  *
+ * YENİ DÜZEN: üstte ScopeBar (il · lig · sezon üç ayrı kutu + lig kısayol
+ * çipleri), altında yedi sekme: Puan · Fikstür · Takımlar · Oyuncular ·
+ * İstatistik · Haber · Arşiv. Takımlar ve Oyuncular eskiden alt çubukta ayrı
+ * sekmelerdi; aynı kapsama bağlı oldukları için buraya katıldılar ve eski
+ * rotaları buraya yönlendirir.
+ *
+ * ESKİ NOT —
  * NE: eski `(tabs)/standings.tsx` + `(tabs)/news.tsx` + `app/arsiv.tsx`
  * ekranlarının beş segmentte birleşmiş hâli:
  *   Puan · Fikstür · İstatistik · Haberler · Arşiv
@@ -50,7 +58,9 @@ import {
   type NativeSyntheticEvent,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { ScopeChip } from "@/components/ScopeChip";
+import { ScopeBar } from "@/components/ScopeBar";
+import { PlayersPane } from "@/components/league/PlayersPane";
+import { TeamsPane } from "@/components/league/TeamsPane";
 import {
   Badge,
   Chip,
@@ -108,11 +118,13 @@ import {
    Segmentler ve rota parametresi
    ══════════════════════════════════════════════════════════════════════════ */
 
-type LeagueTab = "puan" | "fikstur" | "istatistik" | "haberler" | "arsiv";
+type LeagueTab = "puan" | "fikstur" | "takimlar" | "oyuncular" | "istatistik" | "haberler" | "arsiv";
 
 const TAB_ITEMS: TabItem<LeagueTab>[] = [
   { key: "puan", label: "Puan" },
   { key: "fikstur", label: "Fikstür" },
+  { key: "takimlar", label: "Takımlar" },
+  { key: "oyuncular", label: "Oyuncular" },
   { key: "istatistik", label: "İstatistik" },
   { key: "haberler", label: "Haber" },
   { key: "arsiv", label: "Arşiv" },
@@ -144,6 +156,11 @@ const TAB_ALIASES: Record<string, LeagueTab> = {
   news: "haberler",
   haber: "haberler",
   archive: "arsiv",
+  teams: "takimlar",
+  takim: "takimlar",
+  players: "oyuncular",
+  oyuncu: "oyuncular",
+  krallik: "oyuncular",
 };
 
 function resolveTab(raw: unknown): LeagueTab {
@@ -229,34 +246,38 @@ export default function LeaguesScreen() {
         ? undefined
         : [
             {
+              icon: "search-outline" as keyof typeof Ionicons.glyphMap,
+              onPress: () => router.push("/ara"),
+              accessibilityLabel: "Takım, oyuncu ara",
+            },
+            {
               icon: (leagueFavorite ? "star" : "star-outline") as keyof typeof Ionicons.glyphMap,
               onPress: toggleLeague,
               tone: leagueFavorite ? ("warn" as const) : undefined,
               accessibilityLabel: leagueFavorite ? "Ligi favorilerden çıkar" : "Ligi favoriye al",
             },
           ],
-    [leagueFavorite, leagueId, toggleLeague],
+    [leagueFavorite, leagueId, toggleLeague, router],
   );
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader
-        title="Ligler"
-        scope={<ScopeChip tone="ink" />}
-        back
-        /* Bu ekran sekme çubuğunda yuvası olmayan bir sekmedir (href: null) ve
-           Menü'den açılır. Sekme gezgininde geri yığını olmayabilir; o durumda
-           geldiği yere, yani Menü'ye dönülür. */
-        onBack={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)/menu"))}
+        title="Lig"
         scrollY={scrollY}
         actions={actions}
-        tabs={<Tabs items={TAB_ITEMS} value={tab} onChange={changeTab} sticky />}
+        tabs={<Tabs items={TAB_ITEMS} value={tab} onChange={changeTab} distribute="scroll" sticky />}
+        bottom={<ScopeBar />}
       />
 
       {tab === "puan" ? (
         <StandingsTab scrollProps={scrollProps} onPickScope={openScope} />
       ) : tab === "fikstur" ? (
         <FixturesTab scrollProps={scrollProps} onPickScope={openScope} />
+      ) : tab === "takimlar" ? (
+        <TeamsPane scrollProps={scrollProps} />
+      ) : tab === "oyuncular" ? (
+        <PlayersPane scrollProps={scrollProps} />
       ) : tab === "istatistik" ? (
         <StatsTab scrollProps={scrollProps} onPickScope={openScope} />
       ) : tab === "haberler" ? (

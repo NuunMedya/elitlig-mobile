@@ -83,6 +83,8 @@ import { unreadBadgeLabel, useUnreadCount } from "@/hooks/useUnreadCount";
 import { getPanelMe } from "@/lib/api/panel";
 import { mediaUrl } from "@/lib/format";
 import { openLink } from "@/lib/links";
+import { instagramUrl } from "@/lib/socials";
+import { youtubeChannelUrl } from "@/lib/youtube";
 import { queryKeys } from "@/lib/queryKeys";
 import { useAuth } from "@/providers/AuthProvider";
 import { useFavorite } from "@/providers/FavoriteProvider";
@@ -92,6 +94,7 @@ import { colors, hairline, isDark, layout, radius, space, textScale, type } from
 /* ============================ SABİTLER / TİPLER ============================ */
 
 /** Web sitesi — üyelik, şifre sıfırlama ve kurumsal sayfalar orada yaşıyor. */
+const SITE_URL = "https://elitlig.com";
 
 /** Takım başkanı sayılan profil tipleri (sunucudaki `profile_type` değerleri). */
 const PRESIDENT_PROFILES = new Set(["takim_baskani", "double"]);
@@ -357,149 +360,199 @@ export default function ProfileTabScreen() {
 
   const favoriteScopeCount = favorite.favoriteLeagues.length + favorite.favoriteSeasons.length;
 
+  const igUrl = instagramUrl(scope.cityLabel);
+  const channelUrl = youtubeChannelUrl(scope.cityLabel);
+
+  /**
+   * PROFİL BÖLÜMLERİ — "hesabım ve tercihlerim".
+   *
+   * Yönetim araçları (Takım Panelim, Oyuncu Profilim, Kariyerim, Yönetim
+   * Paneli) KULÜBÜM sekmesine taşındı; Menü sekmesinin içeriği (oyunlar, bilgi,
+   * sosyal) buraya katıldı. Sıra kullanım sıklığına göredir: takip → bildirim
+   * → oyun → keşif → bilgi → ayar.
+   */
   const sections = useMemo<MenuSection[]>(() => {
     const result: MenuSection[] = [];
 
-    /* 1 — KULÜBÜM: rolüne göre değişen, en sık kullanılan grup. */
-    if (user) {
-      const club: MenuItem[] = [];
-      if (auth.isManagement) {
-        club.push({
-          key: "yonetim",
-          icon: "shield-checkmark",
-          title: "Yönetim Paneli",
-          subtitle: "Maç, saha ve mesaj yönetimi",
-          tone: "brand",
-          action: { kind: "route", route: "/yonetim" },
-        });
-      }
-      if (isPresident) {
-        club.push({
-          key: "takimim",
-          icon: "people",
-          title: "Takım Panelim",
-          subtitle: "Kadro, kasa, davetler, maç merkezi",
-          tone: "brand",
-          action: { kind: "route", route: "/takimim" },
-        });
-      }
-      if (isPlayer) {
-        club.push({
-          key: "oyuncum",
-          icon: "shirt",
-          title: "Oyuncu Profilim",
-          subtitle: "İstatistiklerin, maçların ve sözleşmen",
-          action: { kind: "route", route: "/oyuncum" },
-        });
-      }
-      club.push(
-        {
-          key: "sohbet",
-          icon: "chatbubbles",
-          title: "Mesajlar",
-          subtitle: "Yönetim, takımın ve oyuncularla yazış, sesli ara",
-          badge: unreadBadgeLabel(unread.messages),
-          action: { kind: "route", route: "/sohbet" },
-        },
-        {
-          key: "bildirimler",
-          icon: "notifications",
-          title: "Bildirimler",
-          subtitle: "Teklifler, cezalar, duyurular",
-          badge: unreadBadgeLabel(unread.notifications),
-          action: { kind: "route", route: "/bildirimler" },
-        },
-        {
-          key: "davetler",
-          icon: "git-pull-request",
-          title: "Davet ve Başvurular",
-          subtitle: "Takım davetlerin ve başvuruların",
-          action: { kind: "route", route: "/davetler" },
-        }
-      );
-      result.push({ key: "kulubum", title: "Kulübüm", data: club });
-    }
-
-    /* 2 — KARİYERİM: yalnız oyuncu profili bağlı hesaplarda. */
-    if (user && isPlayer) {
-      result.push({
-        key: "kariyerim",
-        title: "Kariyerim",
-        data: [
-          {
-            // BÜTÜNLEŞTİRME NOTU: eski `/maclarim` ekranı Oyuncu Paneli'nin
-            // Maçlarım segmentine taşındı (yoklama ve kadro rozeti dâhil),
-            // rota dosyası silindi. Kapı artık doğrudan oraya açılıyor.
-            key: "maclarim",
-            icon: "football",
-            title: "Maçlarım",
-            subtitle: "Kadroda yer aldığın maçlar ve performansın",
-            action: { kind: "route", route: "/oyuncum?tab=maclarim" },
-          },
-          {
-            key: "tekliflerim",
-            icon: "swap-horizontal",
-            title: "Transfer Tekliflerim",
-            subtitle: "Gelen teklifleri kabul et ya da reddet",
-            action: { kind: "route", route: "/tekliflerim" },
-          },
-          {
-            key: "sozlesmelerim",
-            icon: "document-text",
-            title: "Sözleşmelerim",
-            subtitle: "Aktif ve geçmiş sözleşmelerin",
-            action: { kind: "route", route: "/sozlesmelerim" },
-          },
-          {
-            key: "cezalarim",
-            icon: "alert-circle",
-            title: "Disiplin Dosyalarım",
-            subtitle: "Savunma ve itiraz hakların",
-            tone: "warn",
-            action: { kind: "route", route: "/cezalarim" },
-          },
-        ],
-      });
-    }
-
-    /* 3 — FAVORİLER: cihazda saklanır, misafirde de çalışır. */
+    /* 1 — TAKİP ETTİKLERİM: cihazda saklanır, misafirde de çalışır. */
     result.push({
-      key: "favoriler",
-      title: "Favoriler",
+      key: "takip",
+      title: "Takip ettiklerim",
       data: [
         {
           key: "fav-takimlar",
-          icon: "star",
-          title: "Favori Takımlarım",
+          icon: "shield",
+          title: "Takımlar",
+          subtitle: "Maçları öne çıkar, gol ve sonuç bildirimi al",
+          tone: "brand",
           value: favorite.favorites.length ? String(favorite.favorites.length) : undefined,
           action: { kind: "route", route: "/(tabs)/favoriler?tab=takimlar" },
         },
         {
           key: "fav-ligler",
           icon: "trophy",
-          title: "Favori Liglerim",
-          subtitle: "Lig ve sezonlar",
+          title: "Ligler ve sezonlar",
           value: favoriteScopeCount ? String(favoriteScopeCount) : undefined,
           action: { kind: "route", route: "/(tabs)/favoriler?tab=ligler" },
+        },
+        {
+          key: "fav-maclar",
+          icon: "star",
+          title: "Maçlar",
+          subtitle: "Yıldızladığın maçlar ve canlı skorları",
+          value: favorite.favoriteMatches.length ? String(favorite.favoriteMatches.length) : undefined,
+          action: { kind: "route", route: "/(tabs)/favoriler?tab=maclar" },
+        },
+        {
+          key: "takim-bul",
+          icon: "add-circle",
+          title: "Takım bul ve takip et",
+          tone: "info",
+          action: { kind: "route", route: "/(tabs)/ligler?tab=takimlar" },
         },
       ],
     });
 
-    /* 4 — TERCİHLER */
-    const prefs: MenuItem[] = [
+    /* 2 — BİLDİRİMLER: gelen kutusu + iki ayar ekranı tek grupta. */
+    const notif: MenuItem[] = [];
+    if (user) {
+      notif.push(
+        {
+          key: "bildirimler",
+          icon: "notifications",
+          title: "Bildirim kutusu",
+          subtitle: "Teklifler, cezalar, duyurular",
+          badge: unreadBadgeLabel(unread.notifications),
+          tone: "brand",
+          action: { kind: "route", route: "/bildirimler" },
+        },
+        {
+          key: "sohbet",
+          icon: "chatbubbles",
+          title: "Mesajlar",
+          subtitle: "Yönetim, takımın ve oyuncularla yazış",
+          badge: unreadBadgeLabel(unread.messages),
+          action: { kind: "route", route: "/sohbet" },
+        },
+      );
+    }
+    notif.push(
       {
         key: "bildirim-tercihleri",
-        icon: "notifications-circle",
-        title: "Bildirim Tercihleri",
-        subtitle: "Gol, maç, panel ve haber bildirimleri",
+        icon: "options",
+        title: "Bildirim türleri",
+        subtitle: "Gol, maç başlangıcı, sonuç, haber, panel",
         action: { kind: "route", route: "/bildirim-tercihleri" },
       },
       {
         key: "takip-bildirimleri",
-        icon: "options",
-        title: "Takip Bildirimleri",
+        icon: "git-network",
+        title: "Takip bildirimleri",
         subtitle: "Takım, lig, sezon, il ve maç bazında ayrıntılı seçim",
         action: { kind: "route", route: "/takip-bildirimleri" },
+      },
+    );
+    result.push({ key: "bildirim", title: "Bildirimler", data: notif });
+
+    /* 3 — OYUNLAR */
+    result.push({
+      key: "oyunlar",
+      title: "Oyunlar",
+      data: [
+        {
+          key: "oyun-merkezi",
+          icon: "game-controller",
+          title: "Oyun Merkezi",
+          subtitle: "Penaltı, slalom, top sektirme, Kim Bu?, Günün Testi, Arena",
+          tone: "win",
+          action: { kind: "route", route: "/(tabs)/oyunlar" },
+        },
+        {
+          key: "siralama",
+          icon: "podium",
+          title: "Rekor tablosu",
+          subtitle: "Oyun rekorları lider tablosu",
+          action: { kind: "route", route: "/siralama" },
+        },
+      ],
+    });
+
+    /* 4 — KEŞFET */
+    result.push({
+      key: "kesfet",
+      title: "Keşfet",
+      data: [
+        {
+          key: "canli",
+          icon: "radio",
+          title: "Canlı maçlar",
+          tone: "live",
+          action: { kind: "route", route: "/canli" },
+        },
+        {
+          key: "h2h",
+          icon: "git-compare",
+          title: "Takım karşılaştır",
+          subtitle: "İki takımı yan yana koy",
+          action: { kind: "route", route: "/h2h" },
+        },
+        {
+          key: "ara",
+          icon: "search",
+          title: "Takım, oyuncu ara",
+          action: { kind: "route", route: "/ara" },
+        },
+      ],
+    });
+
+    /* 5 — BİLGİ VE DESTEK (eski Menü sekmesi) */
+    const info: MenuItem[] = [
+      { key: "kurallar", icon: "book", title: "Lig kuralları", action: { kind: "route", route: "/kurallar" } },
+      {
+        key: "cezalar",
+        icon: "hammer",
+        title: "Cezalar",
+        subtitle: "Disiplin talimatı ve kurul kararları",
+        action: { kind: "route", route: "/cezalar" },
+      },
+      {
+        key: "iletisim",
+        icon: "call",
+        title: "İletişim",
+        subtitle: "Telefon, WhatsApp, e-posta",
+        action: { kind: "route", route: "/iletisim" },
+      },
+    ];
+    if (igUrl) {
+      info.push({
+        key: "instagram",
+        icon: "logo-instagram",
+        title: "Instagram",
+        subtitle: `${scope.cityLabel} hesabı`,
+        action: { kind: "link", url: igUrl },
+      });
+    }
+    if (channelUrl) {
+      info.push({
+        key: "youtube",
+        icon: "logo-youtube",
+        title: "YouTube",
+        subtitle: "Canlı yayınlar ve maç özetleri",
+        tone: "danger",
+        action: { kind: "link", url: channelUrl },
+      });
+    }
+    info.push({ key: "site", icon: "globe", title: "elitlig.com", action: { kind: "link", url: SITE_URL } });
+    result.push({ key: "bilgi", title: "Bilgi ve destek", data: info });
+
+    /* 6 — AYARLAR */
+    const prefs: MenuItem[] = [
+      {
+        key: "kapsam",
+        icon: "location",
+        title: "İl, lig ve sezon",
+        value: [scope.cityLabel, scope.leagueLabel].filter(Boolean).join(" · ") || "Seç",
+        action: { kind: "city" },
       },
       {
         key: "gorunum",
@@ -508,36 +561,21 @@ export default function ProfileTabScreen() {
         value: THEME_LABELS[themeChoice],
         action: { kind: "theme" },
       },
-      {
-        key: "sehir",
-        icon: "location",
-        title: "Şehir",
-        value: scope.cityLabel || "Seç",
-        action: { kind: "city" },
-      },
     ];
     if (user) {
       prefs.push({
         key: "hesabim",
         icon: "key",
-        title: "Hesap ve Güvenlik",
+        title: "Hesap ve güvenlik",
         subtitle: "Bilgilerin, şifren ve oturumun",
         action: { kind: "route", route: "/hesabim" },
       });
     }
-    result.push({ key: "tercihler", title: "Tercihler", data: prefs });
+    result.push({ key: "tercihler", title: "Ayarlar", data: prefs });
 
-    /* NOT: Keşfet · Bilgi · Bizi takip et grupları MENÜ sekmesine taşındı.
-       Profil artık yalnız KİMLİK ve TERCİH taşır; keşif ve araç niteliğindeki
-       her şey Menü'nün evidir. Aynı satırı iki sekmede birden göstermek
-       kullanıcıya "hangisi doğru yer" sorusunu sordurur. */
-
-    /* 8 — Çıkış ve hesap silme: kendi başına, kırmızı, başlıksız grup.
-       Hesap silme burada da durur; Hesap ve Güvenlik'in içinde zaten var ama
-       App Store (5.1.1-v) ve Google Play silme kapısının "kolayca bulunur"
-       olmasını ister. İnceleyici Profil sekmesini açtığında üç seviye
-       inmeden kapıyı görmeli; aksi hâlde "hesap silme yok" diye reddedilir.
-       Sonuçları ve onayı ayrı ekran taşır (app/hesap-sil.tsx). */
+    /* 7 — Çıkış ve hesap silme: kendi başına, kırmızı, başlıksız grup.
+       Hesap silme burada da durur; App Store (5.1.1-v) ve Google Play silme
+       kapısının "kolayca bulunur" olmasını ister (bkz. app/hesap-sil.tsx). */
     if (user) {
       result.push({
         key: "oturum",
@@ -565,12 +603,13 @@ export default function ProfileTabScreen() {
 
     return result;
   }, [
-    auth.isManagement,
+    channelUrl,
+    favorite.favoriteMatches.length,
     favorite.favorites.length,
     favoriteScopeCount,
-    isPlayer,
-    isPresident,
+    igUrl,
     scope.cityLabel,
+    scope.leagueLabel,
     themeChoice,
     unread.messages,
     unread.notifications,
@@ -608,16 +647,17 @@ export default function ProfileTabScreen() {
     () => (
       <ActionRow style={styles.shortcuts}>
         <ActionTile
-          icon="trophy"
-          label="Ligler"
+          icon="star"
+          label="Takip"
           tone="brand"
-          onPress={() => router.push("/(tabs)/ligler")}
+          onPress={() => router.push("/(tabs)/favoriler?tab=takimlar")}
         />
         <ActionTile
-          icon="radio"
-          label="Canlı"
+          icon="notifications"
+          label="Bildirim"
           tone="live"
-          onPress={() => router.push("/canli")}
+          badge={unread.notifications || undefined}
+          onPress={() => router.push(user ? "/bildirimler" : "/bildirim-tercihleri")}
         />
         <ActionTile
           icon="game-controller"
@@ -626,14 +666,14 @@ export default function ProfileTabScreen() {
           onPress={() => router.push("/(tabs)/oyunlar")}
         />
         <ActionTile
-          icon="grid"
-          label="Menü"
+          icon="shield"
+          label="Kulübüm"
           tone="neutral"
-          onPress={() => router.push("/(tabs)/menu")}
+          onPress={() => router.push("/(tabs)/kulubum")}
         />
       </ActionRow>
     ),
-    [router],
+    [router, unread.notifications, user],
   );
 
   const listHeader = useMemo(() => {

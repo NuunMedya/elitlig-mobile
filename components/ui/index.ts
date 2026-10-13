@@ -51,6 +51,8 @@ export { MetricTile, MetricGrid } from "./MetricTile";
 export type { MetricTileProps, MetricGridProps, MetricTone } from "./MetricTile";
 
 export { ActionTile, ActionRow } from "./ActionTile";
+export { HubTile, HubGrid } from "./HubTile";
+export type { HubTileProps, HubTone } from "./HubTile";
 export type { ActionTileProps, ActionRowProps } from "./ActionTile";
 
 export { SpotlightCard } from "./SpotlightCard";

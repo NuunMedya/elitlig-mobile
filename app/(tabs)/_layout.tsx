@@ -1,50 +1,27 @@
 /**
  * SEKME ÇUBUĞU — uygulamanın beş ana bölümü.
  *
- * NE: Genel Bakış · Maçlar · Takımlar · Oyuncular · Profil.
+ * NE: Ana Sayfa · Maçlar · Lig · Kulübüm · Profil.
  *
- * NEDEN GENEL BAKIŞ VAR: eski düzende açılış ekranı doğrudan maç
- * listesiydi ve uygulamanın geri kalanı (takım paneli, kadro, maç talepleri,
- * mesajlar, bildirimler) yalnızca Profil sekmesinin altındaki liste
- * satırlarından ulaşılabiliyordu. Takım başkanı için asıl iş orada; her açılışta
- * iki dokunuş öteye düşüyordu. Genel Bakış bu iki dokunuşu sıfırlar: kullanıcının
- * ŞU AN önemsediği maç en üstte, işini yaptığı dört kısayol hemen altında.
+ * BİLGİ MİMARİSİ (bu turun kararı) — her bölüm tek bir soruyu yanıtlar:
+ *   · Ana Sayfa → "Şu an ne oluyor?" Kapsam şeridi, canlı ve yaklaşan maç
+ *     kartları, takip ettiğin takımlar, puan özeti, haberler.
+ *   · Maçlar    → "Hangi gün kim kiminle?" Gün şeridi + lig gruplu maç kartları.
+ *   · Lig       → "Ligde durum ne?" İl · lig · sezon şeridi ve yedi sekme:
+ *     Puan · Fikstür · Takımlar · Oyuncular · İstatistik · Haber · Arşiv.
+ *     Eskiden Takımlar ve Oyuncular ayrı sekmelerdi, Ligler ise Profil →
+ *     Menü'nün altında gizliydi; üçü de aynı kapsama bağlı olduğu için tek
+ *     bölümde birleşti.
+ *   · Kulübüm   → "Benim işim ne?" Takım başkanı, oyuncu ve lig yönetimi
+ *     araçları rol bazlı ızgaralarda; takip ettiğin takımlar.
+ *   · Profil    → "Hesabım ve tercihlerim." Takip, bildirim yönetimi,
+ *     oyunlar, bilgi ve ayarlar.
  *
- * NEDEN TAKIMLAR VE OYUNCULAR AYRI: bu ikisi eskiden tek "Ligler" sekmesinin
- * segmentleriydi. Segment, sekme çubuğundan bir kademe aşağıdadır: kullanıcı
- * önce doğru sekmeyi, sonra doğru segmenti bulmak zorundaydı ve segment seçimi
- * ekran değişince unutuluyordu. İkisi de uygulamanın birinci sınıf varlıkları
- * olduğu için kendi sekmelerine çıktı.
+ * GİZLİ SEKMELER (`href: null`): takimlar · oyuncular (Lig'e yönlendirir),
+ * favoriler · oyunlar · menu. Bu gruba ait kalırlar ki açıldıklarında sekme
+ * çubuğu ekranda dursun; eski derin bağlantılar çalışmaya devam eder.
  *
- * NEDEN MENÜ SEKMESİ KALKTI (bu turun kararı): altı yuva 360px'lik bir
- * telefonda her sekmeye 60px bırakıyordu; dokunma alanı daralıyor ve
- * "Oyuncular" etiketi kırpılıyordu. Menü zaten bir BÖLÜM değil, başka
- * bölümlere açılan bir kapı listesiydi — kalıcı çubuktaki bir yuva, kendi
- * içeriği olmayan bir işe ayrılamaz. İçeriği Profil'in en üstündeki dört
- * kısayola ve mevcut liste bölümlerine taşındı; rota olarak DURUYOR
- * (`/(tabs)/menu`), yalnız çubuktan kaldırıldı. Beş yuva = 72px dokunma
- * alanı, kırpılmayan etiket.
- *
- * NEDEN OYUNLAR ÇUBUKTA DEĞİL: oyunlar günde bir kez, keyif için açılır; maç
- * takibi gün boyu açılır. Oyunlar rota olarak DURUYOR (`/(tabs)/oyunlar`);
- * Profil'deki kısayol ızgarasından tek dokunuşla açılır.
- *
- * GİZLİ SEKMELER (`href: null`): ligler · favoriler · oyunlar · menu. Bu dördü
- * hâlâ bu gruba aittir — böylece açıldıklarında sekme çubuğu ekranda kalır ve
- * kullanıcı tek dokunuşla ana bölüme dönebilir — ama çubukta yuvaları yoktur.
- * Rotaları değişmediği için mevcut derin bağlantılar (bildirimler, haber
- * kartları, menüye giden eski bağlantılar) olduğu gibi çalışmaya devam eder.
- *
- * ÇUBUĞUN KENDİSİ ARTIK ÖZEL: platformun düz şeridi yerine ekranın alt
- * kenarına oturan koyu mor bir ray, seçili ikonu saran bir kapsül ve barın üst
- * kenarında seçili sekmeye YAYLANARAK kayan bir ışık çizgisi kullanılır.
- * Çizimin tamamı `components/ui/GlowTabBar.tsx` içindedir; burası yalnız hangi
- * sekmelerin görüneceğini ve rozetlerin nereden geldiğini söyler.
- *
- * NEDEN SEKME LİSTESİ BURADA AÇIKÇA YAZILI: `href: null` ile gizlenen rotalar
- * gezinme durumunda durmaya devam eder ve expo-router onları yalnız bir stil
- * hilesiyle saklar. Özel çubuğun bu iç ayrıntıyı okuması kırılgan olurdu;
- * görünen sekmeler tek bir dizide, sırasıyla tanımlanır.
+ * Çubuğun çizimi `components/ui/GlowTabBar.tsx` içindedir.
  *
  * İlk açılışta (şehir seçim ekranı henüz görülmemişse) sekmeler yerine /sehir
  * harita ekranına yönlendirilir.
@@ -77,11 +54,11 @@ export default function TabsLayout() {
 
   /** Çubukta görünen sekmeler — SIRA BURADAKİ SIRADIR. */
   const tabs: readonly GlowTab[] = [
-    { name: "index", label: "Genel", icon: "home", accessibilityLabel: "Genel Bakış" },
+    { name: "index", label: "Ana Sayfa", icon: "home" },
     { name: "maclar", label: "Maçlar", icon: "football", badge: live.count },
-    { name: "takimlar", label: "Takımlar", icon: "shield" },
-    { name: "oyuncular", label: "Oyuncular", icon: "people" },
-    { name: "profil", label: "Profil", icon: "person-circle", badge: unread.total },
+    { name: "ligler", label: "Lig", icon: "trophy", accessibilityLabel: "Lig: puan, fikstür, takımlar, oyuncular" },
+    { name: "kulubum", label: "Kulübüm", icon: "shield", badge: unread.total },
+    { name: "profil", label: "Profil", icon: "person-circle" },
   ];
 
   return (
@@ -89,17 +66,18 @@ export default function TabsLayout() {
       screenOptions={{ headerShown: false }}
       tabBar={(props) => <GlowTabBar {...props} tabs={tabs} />}
     >
-      <Tabs.Screen name="index" options={{ title: "Genel" }} />
+      <Tabs.Screen name="index" options={{ title: "Ana Sayfa" }} />
       <Tabs.Screen name="maclar" options={{ title: "Maçlar" }} />
-      <Tabs.Screen name="takimlar" options={{ title: "Takımlar" }} />
-      <Tabs.Screen name="oyuncular" options={{ title: "Oyuncular" }} />
+      <Tabs.Screen name="ligler" options={{ title: "Lig" }} />
+      <Tabs.Screen name="kulubum" options={{ title: "Kulübüm" }} />
       <Tabs.Screen name="profil" options={{ title: "Profil" }} />
 
       {/* — Çubukta yuvası olmayan, ama bu gruba ait ekranlar —
-          Profil'deki kısayollardan ve derin bağlantılardan açılırlar; sekme
+          Kısayollardan ve derin bağlantılardan açılırlar; sekme
           çubuğu ekranda kalır. */}
       <Tabs.Screen name="menu" options={{ href: null }} />
-      <Tabs.Screen name="ligler" options={{ href: null }} />
+      <Tabs.Screen name="takimlar" options={{ href: null }} />
+      <Tabs.Screen name="oyuncular" options={{ href: null }} />
       <Tabs.Screen name="favoriler" options={{ href: null }} />
       <Tabs.Screen name="oyunlar" options={{ href: null }} />
     </Tabs>

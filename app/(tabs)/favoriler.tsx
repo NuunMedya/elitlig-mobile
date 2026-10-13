@@ -604,7 +604,7 @@ export default function FavorilerScreen() {
       /* Bu ekran sekme çubuğunda yuvası olmayan bir sekmedir (href: null) ve
          Menü'den açılır. Sekme gezgininde geri yığını olmayabilir; o durumda
          geldiği yere, yani Menü'ye dönülür. */
-      onBack={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)/menu"))}
+      onBack={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)/profil"))}
       scrollY={scrollY}
       /* Takip başına bildirim ayarı (gol, sonuç, kart, haber…) ve il takibi. */
       actions={[
