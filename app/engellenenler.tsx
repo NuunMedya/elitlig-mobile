@@ -11,6 +11,7 @@
  * services/chat/safetyService.js).
  */
 
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useCallback, useState } from "react";
@@ -22,7 +23,7 @@ import { getBlockedUsers, unblockUser, type BlockedUser } from "@/lib/api/chat";
 import { formatDateShort, mediaUrl } from "@/lib/format";
 import { queryKeys } from "@/lib/queryKeys";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, layout, space, textScale, type } from "@/theme";
+import { colors, layout, radius, space, textScale, type } from "@/theme";
 
 export default function BlockedUsersScreen() {
   const auth = useAuth();
@@ -58,7 +59,14 @@ export default function BlockedUsersScreen() {
     [unblock],
   );
 
-  const header = <ScreenHeader title="Engellediğim üyeler" back />;
+  const count = query.data?.blocks.length ?? 0;
+  const header = (
+    <ScreenHeader
+      title="Engellediğim üyeler"
+      subtitle={signedIn && query.data ? (count ? `${count} üye engelli` : "Engel listen boş") : undefined}
+      back
+    />
+  );
 
   if (!signedIn) {
     return (
@@ -86,9 +94,12 @@ export default function BlockedUsersScreen() {
           keyExtractor={(item) => String(item.user_id)}
           contentContainerStyle={styles.content}
           ListHeaderComponent={
-            <Text style={styles.lede} {...textScale.long}>
-              Engellenen üye sana mesaj yazamaz ve seni arayamaz; sen de ona yazamazsın. Takım ve grup sohbetleri etkilenmez.
-            </Text>
+            <View style={styles.info}>
+              <Ionicons name="ban" size={18} color={colors.textSecondary} />
+              <Text style={styles.lede} {...textScale.long}>
+                Engellenen üye sana mesaj yazamaz ve seni arayamaz; sen de ona yazamazsın. Takım ve grup sohbetleri etkilenmez.
+              </Text>
+            </View>
           }
           renderItem={({ item, index }) => (
             <ListRow
@@ -96,7 +107,7 @@ export default function BlockedUsersScreen() {
               subtitle={[item.subtitle, item.blocked_at ? `Engellendi: ${formatDateShort(item.blocked_at)}` : null].filter(Boolean).join(" · ")}
               leading={<Avatar name={item.name} image={mediaUrl(item.avatar)} size={40} />}
               position={blocks.length === 1 ? "single" : index === 0 ? "first" : index === blocks.length - 1 ? "last" : "middle"}
-              trailing={<Button label="Kaldır" variant="secondary" size="sm" onPress={() => confirmUnblock(item)} loading={busyId === item.user_id} />}
+              trailing={<Button label="Engeli kaldır" variant="secondary" size="sm" onPress={() => confirmUnblock(item)} loading={busyId === item.user_id} />}
             />
           )}
         />
@@ -108,5 +119,14 @@ export default function BlockedUsersScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { paddingHorizontal: layout.screenPadding, paddingTop: space.md, paddingBottom: space.giant },
-  lede: { ...type.bodySm, color: colors.textSecondary, lineHeight: 19, marginBottom: space.md },
+  info: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: space.sm,
+    padding: space.md,
+    marginBottom: space.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface2,
+  },
+  lede: { ...type.bodySm, color: colors.textSecondary, lineHeight: 19, flex: 1 },
 });

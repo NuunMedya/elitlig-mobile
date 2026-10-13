@@ -42,6 +42,9 @@ export interface FormStripProps {
   /** Kariyer ortalaması — kıyas satırı için; yoksa satır çizilmez. */
   careerAverage: number | null;
   onSeeAll?: () => void;
+  /** Sütun yuvası sayısı; maç azsa yuvalar SAĞA yaslı dolar (en son maç
+      daima sağ kenarda — FormChips ile aynı okuma). Varsayılan 6. */
+  slots?: number;
 }
 
 const RESULT_COLOR: Record<FormResult, string> = {
@@ -55,7 +58,9 @@ export const FormStrip = React.memo(function FormStrip({
   onOpenMatch,
   careerAverage,
   onSeeAll,
+  slots = 6,
 }: FormStripProps) {
+  const slotWidth = { width: `${100 / Math.max(slots, items.length)}%` as const };
   const rated = items.map((item) => item.rating).filter((value): value is number => value != null);
   const recentAverage = rated.length ? rated.reduce((acc, value) => acc + value, 0) / rated.length : null;
   const delta =
@@ -100,7 +105,7 @@ export const FormStrip = React.memo(function FormStrip({
             accessibilityLabel={`${item.opponent} maçı, ${item.dateLabel}${
               item.rating != null ? `, puan ${item.rating.toFixed(1)}` : ""
             }`}
-            style={styles.column}
+            style={[styles.column, slotWidth]}
           >
             <RatingPill value={item.rating} size="sm" />
             <TeamLogo name={item.opponent} logo={mediaUrl(item.opponentLogo)} size={30} />
@@ -201,12 +206,12 @@ const styles = StyleSheet.create({
   },
   columns: {
     flexDirection: "row",
+    justifyContent: "flex-end",
     paddingHorizontal: space.sm,
     paddingTop: space.md,
     paddingBottom: space.md,
   },
   column: {
-    flex: 1,
     alignItems: "center",
     gap: space.s,
     paddingVertical: space.xs,

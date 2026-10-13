@@ -8,6 +8,7 @@
  */
 
 import { StyleSheet } from "react-native";
+import { formatDateShort } from "@/lib/format";
 import { colors, dark, elevate, radius, ratingColors, space } from "@/theme";
 
 /** Grup içi konum — köşe yuvarlaması ve ayraç buradan gelir. */
@@ -38,6 +39,18 @@ export function stageRatingColor(value: number | null | undefined): string {
 /** Ondalığı Türkçe yazar: 1.55 → "1,55". Rakam kahramandır, nokta değil virgül. */
 export function decimalTR(value: number, digits = 1): string {
   return value.toFixed(digits).replace(".", ",");
+}
+
+/**
+ * Yıllı kısa tarih: "1 Mar 2026". Kariyer geçişleri ve sözleşmeler yıllara
+ * yayılır; yılsız "1 Mar → 1 Mar" hangi yıl olduğunu söylemiyordu. Yıl dizeden
+ * okunur (saat dilimi kaydırmasın).
+ */
+export function dateWithYear(value: string | null | undefined): string {
+  if (!value) return "";
+  const short = formatDateShort(value);
+  const year = String(value).match(/^(\d{4})-/)?.[1];
+  return year && short ? `${short} ${year}` : short;
 }
 
 /**

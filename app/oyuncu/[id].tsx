@@ -91,6 +91,7 @@ import {
   StatTiles,
   WinBalance,
   buildAchievements,
+  dateWithYear,
   decimalTR,
   rowPosition,
   surfaces,
@@ -105,7 +106,7 @@ import { getPlayer, getPlayerRankings } from "@/lib/api/players";
 import { positionLabel } from "@/lib/api/team";
 import { getTeam } from "@/lib/api/teams";
 import { formatAge, formatDateShort, mediaUrl } from "@/lib/format";
-import { get } from "@/lib/http";
+import { ApiError, get } from "@/lib/http";
 import { openLink } from "@/lib/links";
 import { queryKeys } from "@/lib/queryKeys";
 import { useFavorite } from "@/providers/FavoriteProvider";
@@ -753,7 +754,8 @@ export default function PlayerDetailScreen() {
     return (
       <SafeAreaView style={styles.screen} edges={["top"]}>
         <ScreenHeader title="Oyuncu" back />
-        {playerQuery.isError ? (
+        {/* 404 bir HATA değil, bir durumdur: "tekrar dene" yerine "geri dön". */}
+        {playerQuery.isError && !(playerQuery.error instanceof ApiError && playerQuery.error.status === 404) ? (
           <ErrorState error={playerQuery.error} onRetry={playerQuery.refetch} />
         ) : (
           <EmptyState
@@ -1038,6 +1040,7 @@ function GeneralTab({
           onOpenMatch={openMatch}
           careerAverage={careerAverage}
           onSeeAll={seeAllMatches}
+          slots={FORM_COUNT}
         />
       ) : null}
 
@@ -1541,6 +1544,9 @@ function MatchesTab({ playerId, scrollProps }: { playerId: number; scrollProps: 
    8) KARİYER — özet, kulüp zaman çizelgesi, transferler, disiplin
    ══════════════════════════════════════════════════════════════════════════ */
 
+/** Kariyer geçişlerinde ilk bakışta görünen satır sayısı. */
+const TRANSFER_PREVIEW = 6;
+
 function CareerTab({
   playerId,
   currentTeamId,
@@ -1635,6 +1641,11 @@ function CareerTab({
   const openTeam = useCallback((teamId: number) => router.push(`/takim/${teamId}`), [router]);
   const openMatch = useCallback((matchId: number) => router.push(`/mac/${matchId}`), [router]);
 
+  /* Uzun kariyerde (20+ kulüp) geçiş listesi ekranı boğuyordu: ilk 6 geçiş
+     görünür, gerisi tek dokunuşla açılır. */
+  const [allTransfers, setAllTransfers] = useState(false);
+  const shownTransfers = allTransfers ? transfers : transfers.slice(0, TRANSFER_PREVIEW);
+
   if (profileQuery.isLoading) {
     return (
       <View style={styles.loadingBody}>
@@ -1690,9 +1701,23 @@ function CareerTab({
         <>
           <SectionHeader style={styles.flushHeader} title="Kulüp geçişleri" meta={`${transfers.length} kulüp`} />
           <View style={surfaces.card}>
-            {transfers.map((item, index) => (
+            {shownTransfers.map((item, index) => (
               <TransferRow key={item.key} from={item.from} to={item.to} date={item.date} divider={index > 0} onOpenTeam={openTeam} />
             ))}
+            {transfers.length > TRANSFER_PREVIEW ? (
+              <Touchable
+                feedback="row"
+                haptic="selection"
+                onPress={() => setAllTransfers((value) => !value)}
+                accessibilityRole="button"
+                style={styles.moreRow}
+              >
+                <Text style={styles.moreText} {...textScale.dense}>
+                  {allTransfers ? "Daha az göster" : `Tümünü göster (${transfers.length})`}
+                </Text>
+                <Ionicons name={allTransfers ? "chevron-up" : "chevron-down"} size={14} color={colors.brandAccent} />
+              </Touchable>
+            ) : null}
           </View>
           <Text style={styles.note} {...textScale.long}>
             Geçişler oyuncunun forma giydiği maçlardan çıkarılır: her kulüp için o
@@ -1848,7 +1873,7 @@ const TransferRow = React.memo(function TransferRow({
       haptic="selection"
       onPress={to.id != null ? open : undefined}
       accessibilityRole="button"
-      accessibilityLabel={`${from ? `${from.name ?? "Takım"} kulübünden ` : ""}${to.name ?? "takım"} kulübüne${date ? `, ${formatDateShort(date)}` : ""}`}
+      accessibilityLabel={`${from ? `${from.name ?? "Takım"} kulübünden ` : ""}${to.name ?? "takım"} kulübüne${date ? `, ${dateWithYear(date)}` : ""}`}
       style={[styles.transferRow, divider && styles.transferDivider]}
     >
       <View style={styles.transferCrests}>
@@ -1872,7 +1897,7 @@ const TransferRow = React.memo(function TransferRow({
       </View>
       {date ? (
         <Text style={styles.transferDate} {...textScale.dense}>
-          {formatDateShort(date)}
+          {dateWithYear(date)}
         </Text>
       ) : null}
     </Touchable>
@@ -2280,6 +2305,20 @@ const styles = StyleSheet.create({
   transferDate: {
     ...type.tableNum,
     color: colors.textSecondary,
+  },
+
+  moreRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: space.xs,
+    minHeight: layout.minTouch,
+    borderTopWidth: hairline,
+    borderTopColor: colors.separator,
+  },
+  moreText: {
+    ...type.label,
+    color: colors.brandAccent,
   },
 
   /* — Temiz sicil — */

@@ -79,6 +79,7 @@ import {
   StatTable,
   StatTiles,
   WinBalance,
+  dateWithYear,
   decimalTR,
   surfaces,
   type HeroFact,
@@ -966,7 +967,13 @@ const MyMatchCard = React.memo(function MyMatchCard({
   const opponent =
     match.opponent_name ?? (match.is_home ? match.second_team_name : match.first_team_name);
 
-  const meta = [match.is_home ? "Ev sahibi" : "Deplasman", match.match_field].filter(Boolean).join(" · ");
+  const meta = [
+    match.is_home ? "Ev sahibi" : "Deplasman",
+    match.match_field,
+    past && !match.in_squad ? "Kadroda değildin" : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <View style={[surfaces.card, styles.matchCard]}>
@@ -985,7 +992,10 @@ const MyMatchCard = React.memo(function MyMatchCard({
             <Text style={styles.matchOpponent} numberOfLines={1} {...textScale.dense}>
               {upperTR(opponent ?? "Rakip")}
             </Text>
-            {match.in_squad ? <Badge label="KADRODA" tone="win" size="xs" /> : null}
+            {/* Yaklaşan maçta "kadrodasın" bir haberdir; oynanan maçta her
+                kartta tekrarlanan rozet gürültüdür — orada yalnız kadroda
+                OLMADIĞI maç künyede söylenir. */}
+            {!past && match.in_squad ? <Badge label="KADRODA" tone="win" size="xs" /> : null}
           </View>
           <Text style={styles.matchMeta} numberOfLines={1} {...textScale.dense}>
             {meta}
@@ -1489,10 +1499,8 @@ function ContractTab({ scrollProps }: { scrollProps: ScrollChrome }) {
 }
 
 function contractPeriod(contract: Contract): string {
-  const start = contract.contract_start_date
-    ? formatDateShort(contract.contract_start_date)
-    : "?";
-  const end = contract.contract_end_date ? formatDateShort(contract.contract_end_date) : "?";
+  const start = dateWithYear(contract.contract_start_date) || "?";
+  const end = dateWithYear(contract.contract_end_date) || "?";
   return `${start} → ${end}`;
 }
 
@@ -1593,7 +1601,7 @@ const ContractDate = React.memo(function ContractDate({
         {label}
       </Text>
       <Text style={styles.contractDateValue} {...textScale.dense}>
-        {value ? formatDateShort(value) : "—"}
+        {value ? dateWithYear(value) : "—"}
       </Text>
     </View>
   );

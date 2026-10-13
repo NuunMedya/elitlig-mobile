@@ -69,7 +69,9 @@ export const MarketValueCard = React.memo(function MarketValueCard({ market, ser
           <Text style={styles.overline} {...textScale.badge}>
             PİYASA DEĞERİ
           </Text>
-          {market.changeAmount !== 0 ? (
+          {/* Oran yalnız ANLAMLIYSA: ilk değerlemeden (≈0) sonraki değişim
+              "+%69393" gibi bir sayı üretiyor — bilgi değil gürültü. */}
+          {market.changeAmount !== 0 && Math.abs(market.changePercentage) < 1000 ? (
             <Badge
               label={`${rising ? "+" : ""}%${decimalTR(market.changePercentage)}`}
               tone={rising ? "win" : falling ? "danger" : "neutral"}

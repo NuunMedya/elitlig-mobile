@@ -16,4 +16,4 @@ export {
 export { StatTable, type StatColumn, type StatRow } from "./StatTable";
 export { Achievements, buildAchievements, type Achievement } from "./Achievements";
 export { MarketValueCard, type MarketValueData } from "./MarketValueCard";
-export { decimalTR, num, rowPosition, stageRatingColor, surfaces, type RowPosition } from "./shared";
+export { dateWithYear, decimalTR, num, rowPosition, stageRatingColor, surfaces, type RowPosition } from "./shared";

@@ -148,7 +148,9 @@ export const Scoreboard = memo(function Scoreboard({
     : formatDateLong(match.date) || null;
 
   const scoreSpeech = played
-    ? `${match.first_team_name} ${homeScore ?? 0}, ${match.second_team_name} ${awayScore ?? 0}`
+    ? `${match.first_team_name} ${homeScore ?? 0}, ${match.second_team_name} ${awayScore ?? 0}${
+        live ? ", maç canlı" : ", maç sonu"
+      }${halftimeScore ? `, ilk yarı ${halftimeScore}` : ""}`
     : `${match.first_team_name} ile ${match.second_team_name}, başlama ${kickoff || "belirsiz"}`;
 
   return (
@@ -172,7 +174,7 @@ export const Scoreboard = memo(function Scoreboard({
         ) : null}
 
         {/* — Takımlar ve skor — */}
-        <View style={styles.teams} accessible accessibilityLabel={scoreSpeech}>
+        <View style={styles.teams}>
           <TeamColumn
             name={match.first_team_name}
             logo={homeLogo}
@@ -180,7 +182,7 @@ export const Scoreboard = memo(function Scoreboard({
             onPress={homeTeamId ? openHome : undefined}
           />
 
-          <View style={styles.middle}>
+          <View style={styles.middle} accessible accessibilityLabel={scoreSpeech}>
             {played ? (
               <View style={styles.scoreRow}>
                 <Text style={[styles.score, awayWon ? styles.scoreDim : null]} {...textScale.dense}>

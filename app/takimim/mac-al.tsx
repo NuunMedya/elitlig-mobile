@@ -48,7 +48,6 @@ import {
   ErrorState,
   Input,
   ScreenHeader,
-  SectionHeader,
   SkeletonCard,
   Tabs,
   Touchable,
@@ -397,7 +396,6 @@ export default function MacAlScreen() {
               />
             ) : (
               <>
-                <SectionHeader title="Saha" meta={`${venuesQuery.data.items.length} saha`} style={styles.flushHeader} />
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.venueRow}>
                   {venuesQuery.data.items.map((venue) => (
                     <Chip
@@ -456,7 +454,7 @@ export default function MacAlScreen() {
                   />
                 ) : (
                   days.map((day) => (
-                    <Card key={day.date} padding="sm" style={styles.dayCard}>
+                    <Card key={day.date} padding="md" style={styles.dayCard}>
                       <Text style={styles.dayTitle}>{dayLabel(day.date)}</Text>
                       <View style={styles.slotWrap}>
                         {day.cells.map((cell) => (
@@ -694,7 +692,6 @@ const styles = StyleSheet.create({
     paddingBottom: space.giant,
   },
   contentWithBar: { paddingBottom: 120 },
-  flushHeader: { paddingHorizontal: 0, paddingTop: 0 },
   bar: {
     ...elevate(2),
     position: "absolute",
@@ -737,17 +734,18 @@ const styles = StyleSheet.create({
   legendText: { ...type.caption, color: colors.textSecondary },
 
   dayCard: { gap: space.sm },
-  dayTitle: { ...type.label, color: colors.textPrimary },
+  dayTitle: { ...type.h3, color: colors.textPrimary },
   slotWrap: { flexDirection: "row", flexWrap: "wrap", gap: space.s },
-  /* Hücre artık iki satırlı (saat + açıklama); genişlik açıklamayı taşıyacak
-     kadar büyüdü ama satıra hâlâ iki hücre sığıyor. */
+  /* Hücre iki satırlı (saat + açıklama) ve İKİ EŞİT SÜTUNDA durur: içerik
+     genişliğine göre boyutlanan hücreler (96–168px) her günü farklı bir
+     yap-boza çeviriyor, aynı saat günden güne başka yerde duruyordu. */
   slot: {
     borderWidth: 1,
     borderRadius: radius.md,
     paddingHorizontal: space.m,
     paddingVertical: space.s,
-    minWidth: 96,
-    maxWidth: 168,
+    flexBasis: "46%",
+    flexGrow: 1,
     gap: 1,
     backgroundColor: colors.surface2,
   },
