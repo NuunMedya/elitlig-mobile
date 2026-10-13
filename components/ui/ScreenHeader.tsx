@@ -344,8 +344,9 @@ export function ScreenHeader({
                 color={action.tone ? toneColors(action.tone).fg : ink}
               />
               {action.badge != null ? (
+                // Okunmamış rozeti menekşe: uygulamada tek okunmamış rengi.
                 <Badge
-                  tone="live"
+                  tone="brand"
                   variant="solid"
                   size="xs"
                   dot={action.badge === "dot"}

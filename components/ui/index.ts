@@ -53,6 +53,8 @@ export type { MetricTileProps, MetricGridProps, MetricTone } from "./MetricTile"
 
 export { ActionTile, ActionRow } from "./ActionTile";
 export { HubTile, HubGrid } from "./HubTile";
+export { ActionBar, ACTION_BAR_SPACE } from "./ActionBar";
+export type { ActionBarProps } from "./ActionBar";
 export type { HubTileProps, HubTone } from "./HubTile";
 export type { ActionTileProps, ActionRowProps } from "./ActionTile";
 

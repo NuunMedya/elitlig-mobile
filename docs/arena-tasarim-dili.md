@@ -59,7 +59,7 @@ gradyan ekseni yatay sağdan sola, kontrast ≥ 4.5.
 - **Sahne** (`hero` verildiğinde ya da `variant="stage"`): takım, oyuncu,
   maç gibi kimlik sayfaları. Kimlik bloğu (`hero`) kaydırınca kapanır.
 
-Başlığın içine verilen `Tabs` ve `ScopeChip` yüzeyi kendiliğinden öğrenir
+Başlığın içine verilen `Tabs` ve `LeaguePicker` yüzeyi kendiliğinden öğrenir
 (`HeaderToneContext`), `tone` geçmeye gerek yoktur.
 
 ## 4. Bileşen sözlüğü
@@ -69,14 +69,15 @@ Başlığın içine verilen `Tabs` ve `ScopeChip` yüzeyi kendiliğinden öğren
 | Maç (liste) | `MatchCard`, yatay şerit `MatchCardRail` |
 | Takım/oyuncu satırı | `TeamRow`, `PlayerRow` |
 | Ayar/menü satırı | `ListRow` (grup içinde `position`) |
-| Kapı ızgarası | `HubGrid` + `HubTile` |
+| Kapı ızgarası | `HubGrid` + `HubTile` (`inset="flush"` aynı sözleşme) |
 | Kısayol | `ActionRow` + `ActionTile` |
 | Sayı kutusu | `MetricGrid` + `MetricTile` |
-| Bölüm başlığı | `SectionHeader` |
+| Bölüm başlığı | `SectionHeader` (`inset="flush"`: kenar boşluklu kapsayıcı içinde) |
 | Süzgeç | `SegmentedControl` (2–4 seçenek), `Chip`/`ChipGroup` (çok seçenek) |
 | Sayfa sekmeleri | `Tabs` (başlığın `tabs` yuvasında) |
-| Kapsam | `ScopeBar` (il · lig · sezon), başlıkta `ScopeChip` |
-| Takip | `FollowActions` (sahne üstünde) |
+| Lig seçici | `LeaguePicker` — TEK bileşen: hap "Ankara · FREELİG · 15. Sezon ▾" + sabitlenmiş lig çipleri; başlığın `bottom` yuvasında. Alt sayfa (`ScopeSheet`) il → lig → sezon; Arşiv sezon adımında |
+| Takip | `FollowActions` (sahne üstünde), satırda `FollowStar`, takip edilen öğede `FollowBell`; hepsi `useFollowFlow()` |
+| Alt eylem çubuğu | `ActionBar` (form/karar ekranlarında sabit birincil düğme) |
 | Kaplama | `BottomSheet`, `useToast` |
 
 ## 5. Ekran kalıpları
@@ -89,7 +90,25 @@ Başlığın içine verilen `Tabs` ve `ScopeChip` yüzeyi kendiliğinden öğren
   sabit birincil düğme.
 - **Merkez (hub):** kimlik/özet kartı → bekleyen işler → `HubGrid`.
 
-## 6. Ses ve metin
+## 6. Bilgi mimarisi kuralları
+
+- **Alt çubuk:** Skorlar · Takip · Lig · Kulübüm · Profil. Uygulama Skorlar
+  ile açılır.
+- **Takip = bildirim.** Takım, maç ya da lig takip edildiği anda o takibin
+  bildirim türleri alt sayfada sorulur (`useFollowFlow().toggle`). Doğrudan
+  `toggleFavorite*` çağıran yeni "Takip et" düğmesi yazılmaz.
+- **Sabitleme ≠ takip.** Sabitleme yalnız görünüm tercihidir (cihazda):
+  Skorlar'da lig grubu üstte, lig seçicide çip olur; bildirim üretmez.
+- **Tek gelen kutusu.** Bildirim zili ve mesaj kapıları her ekranda
+  `/gelen-kutusu` (Bildirimler | Mesajlar) ekranına açılır.
+- **Detay sayfaları:** sekme seti veriye göre değişmez (boş sekme boş durum
+  gösterir); paylaş her zaman başlığın sağ üst eylemidir.
+- **Rozet ve sayı:** okunmamış rozeti her yerde menekşe (`brand`); kırmızı
+  yalnız canlı maç sayısıdır. Ondalık ve binlik sayılar `formatNumber` /
+  `formatDecimal` / `formatPercent` ile Türkçe yazılır ("7,4", "12.500");
+  reyting dahil (`ratingLabel`).
+
+## 7. Ses ve metin
 
 Türkçe, kısa, eylem odaklı. Düğme metni fiildir ("Takip et", "Kaydet").
 Boş durum cümlesi ne olduğunu ve ne yapılabileceğini söyler. Büyük harf

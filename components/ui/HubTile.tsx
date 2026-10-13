@@ -89,12 +89,25 @@ export const HubTile = React.memo(function HubTile({
 });
 
 /** İki sütunlu ızgara; tek kalan karo yarım genişlikte kalır (hizası bozulmaz). */
-export function HubGrid({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
+/**
+ * `inset` (varsayılan "inset"): ızgara ekran kenar payıyla çizilir; zaten
+ * kenar boşluklu bir kapsayıcının içinde "flush" verilir (SectionHeader ile
+ * aynı sözleşme).
+ */
+export function HubGrid({
+  children,
+  style,
+  inset = "inset",
+}: {
+  children: React.ReactNode;
+  style?: StyleProp<ViewStyle>;
+  inset?: "inset" | "flush";
+}) {
   const items = React.Children.toArray(children).filter(Boolean);
   const rows: React.ReactNode[][] = [];
   for (let i = 0; i < items.length; i += 2) rows.push(items.slice(i, i + 2));
   return (
-    <View style={[styles.grid, style]}>
+    <View style={[styles.grid, inset === "flush" ? styles.gridFlush : null, style]}>
       {rows.map((row, index) => (
         <View key={index} style={styles.row}>
           {row.map((child, j) => (
@@ -113,6 +126,9 @@ const styles = StyleSheet.create({
   grid: {
     paddingHorizontal: layout.screenPadding,
     gap: space.m,
+  },
+  gridFlush: {
+    paddingHorizontal: 0,
   },
   row: {
     flexDirection: "row",

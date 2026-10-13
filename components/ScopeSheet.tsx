@@ -22,6 +22,12 @@
  * dokunduğunda ligini kaybediyordu. Seçili değere dokunmak artık yalnız
  * adımı ilerletir.
  *
+ * TEK LİG SEÇİCİ (bilgi mimarisi turu): bu sayfa `LeaguePicker` hapının
+ * açtığı sayfadır. Lig adımında SABİTLENEN ligler (başka ilde olsalar da)
+ * en üstte durur; her lig satırının sağındaki raptiye sabitler/çözer. Sezon
+ * adımı güncel sezonları ve altında ARŞİV'i (eski Lig ▸ Arşiv sekmesi)
+ * gösterir — geçmiş sezona geçmek ayrı bir sekme değil, sezon seçimidir.
+ *
  * Tek örnek app/_layout.tsx'te mount edilir; açma/kapama ScopeProvider
  * üstünden yapılır (`openScopeSheet(step?)`).
  */
@@ -40,7 +46,7 @@ import {
 } from "@/components/ui";
 import { useFavorite } from "@/providers/FavoriteProvider";
 import { useScope, type ScopeStep } from "@/providers/ScopeProvider";
-import { colors, fonts, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
+import { colors, fonts, hairline, layout, radius, space, textScale, touchSlop, type, upperTR } from "@/theme";
 
 /** Arama kutusunun görüneceği eşik — altında kutu gereksiz yer kaplar. */
 const SEARCH_THRESHOLD = 12;
@@ -52,9 +58,16 @@ const STEPS: { key: ScopeStep; label: string; icon: keyof typeof Ionicons.glyphM
 ];
 
 interface ScopeOption {
+  /** Satır anahtarı — sabitlenen başka ildeki lig aynı id ile iki kez görünmesin. */
+  key: string;
+  kind: "option" | "header";
   id: number;
   label: string;
+  /** Satırın ikinci satırı (sabitlenen başka ilde lig: il adı; sezon: yıl). */
+  caption?: string;
   archived: boolean;
+  /** Sabitlenen lig başka bir ildeyse il id'si — seçim `jumpTo` ile yapılır. */
+  cityId?: number;
 }
 
 /** Türkçe arama: "İzmir" araması "izmir" yazınca da bulunmalı. */
@@ -65,16 +78,32 @@ const OptionRow = React.memo(function OptionRow({
   option,
   selected,
   favorite,
+  pinned,
   onSelect,
+  onTogglePin,
 }: {
   option: ScopeOption;
   selected: boolean;
   favorite: boolean;
-  onSelect: (id: number) => void;
+  /** undefined → raptiye çizilmez (il ve sezon adımı). */
+  pinned?: boolean;
+  onSelect: (option: ScopeOption) => void;
+  onTogglePin?: (option: ScopeOption) => void;
 }) {
-  const handlePress = useCallback(() => onSelect(option.id), [onSelect, option.id]);
+  const handlePress = useCallback(() => onSelect(option), [onSelect, option]);
+  const handlePin = useCallback(() => onTogglePin?.(option), [onTogglePin, option]);
 
-  return (
+  if (option.kind === "header") {
+    return (
+      <View style={styles.groupHead}>
+        <Text style={styles.groupLabel} {...textScale.badge}>
+          {upperTR(option.label)}
+        </Text>
+      </View>
+    );
+  }
+
+  const row = (
     <Touchable
       feedback="row"
       haptic="selection"
@@ -85,13 +114,20 @@ const OptionRow = React.memo(function OptionRow({
       accessibilityLabel={option.label}
     >
       {favorite ? <Ionicons name="star" size={13} color={colors.star} /> : null}
-      <Text
-        style={[styles.rowLabel, selected && styles.rowLabelSelected]}
-        numberOfLines={1}
-        {...textScale.dense}
-      >
-        {option.label}
-      </Text>
+      <View style={styles.rowText}>
+        <Text
+          style={[styles.rowLabel, selected && styles.rowLabelSelected]}
+          numberOfLines={1}
+          {...textScale.dense}
+        >
+          {option.label}
+        </Text>
+        {option.caption ? (
+          <Text style={styles.rowCaption} numberOfLines={1} {...textScale.dense}>
+            {option.caption}
+          </Text>
+        ) : null}
+      </View>
       {option.archived ? <Badge label="Arşiv" tone="neutral" size="xs" /> : null}
       <View style={styles.rowSpacer} />
       {selected ? (
@@ -100,6 +136,27 @@ const OptionRow = React.memo(function OptionRow({
         <Ionicons name="chevron-forward" size={16} color={colors.textDisabled} />
       )}
     </Touchable>
+  );
+
+  if (pinned === undefined) return row;
+
+  return (
+    <View style={styles.rowWithPin}>
+      <View style={styles.rowFlex}>{row}</View>
+      <Touchable
+        feedback="icon"
+        haptic="selection"
+        onPress={handlePin}
+        hitSlop={touchSlop(40)}
+        style={[styles.pin, pinned && styles.pinOn]}
+        accessibilityRole="button"
+        accessibilityState={{ selected: pinned }}
+        accessibilityLabel={pinned ? `${option.label} sabitlemesini kaldır` : `${option.label} ligini sabitle`}
+        testID={`pin-league-${option.id}`}
+      >
+        <Ionicons name={pinned ? "pin" : "pin-outline"} size={16} color={pinned ? colors.brandAccent : colors.textTertiary} />
+      </Touchable>
+    </View>
   );
 });
 
@@ -161,9 +218,13 @@ export function ScopeSheet() {
     selectCity,
     selectLeague,
     selectSeason,
+    jumpTo,
     cityId,
     leagueId,
     seasonId,
+    pinnedLeagues,
+    isPinnedLeague,
+    togglePinLeague,
   } = scope;
 
   const [step, setStep] = useState<ScopeStep>(sheetStep);
@@ -183,24 +244,63 @@ export function ScopeSheet() {
   }, []);
 
   const options: ScopeOption[] = useMemo(() => {
-    const source =
-      step === "city" ? scope.cities : step === "league" ? scope.leagues : scope.seasons;
-    const list = source.map((item) => ({
+    const toOption = (item: { id: number; label: string; is_archived?: boolean | null }, caption?: string): ScopeOption => ({
+      key: `o:${item.id}`,
+      kind: "option",
       id: item.id,
       label: item.label,
+      caption,
       archived: Boolean(item.is_archived),
-    }));
-    // Ligler: favoriler başa (ScopeBar'daki çiplerle aynı sıra).
+    });
+    const header = (key: string, label: string): ScopeOption => ({
+      key: `h:${key}`,
+      kind: "header",
+      id: -1,
+      label,
+      archived: false,
+    });
+
+    if (step === "city") return scope.cities.map((item) => toOption(item));
+
     if (step === "league") {
-      return [...list].sort((a, b) => Number(isFavoriteLeague(b.id)) - Number(isFavoriteLeague(a.id)));
+      // Sabitlenenler (her ilden) en üstte; ardından bu ilin kalan ligleri,
+      // takip edilenler başta.
+      const pinnedRows: ScopeOption[] = pinnedLeagues.map((item) => ({
+        key: `p:${item.leagueId}`,
+        kind: "option",
+        id: item.leagueId,
+        label: item.label,
+        caption: item.cityId === cityId ? undefined : item.cityLabel,
+        archived: false,
+        cityId: item.cityId,
+      }));
+      const rest = scope.leagues
+        .filter((league) => !isPinnedLeague(league.id))
+        .map((league) => toOption(league))
+        .sort((a, b) => Number(isFavoriteLeague(b.id)) - Number(isFavoriteLeague(a.id)));
+      if (!pinnedRows.length) return rest;
+      return [
+        header("pinned", "Sabitlenenler"),
+        ...pinnedRows,
+        ...(rest.length ? [header("city", scope.cityLabel ? `${scope.cityLabel} ligleri` : "Ligler"), ...rest] : []),
+      ];
     }
-    return list;
-  }, [step, scope.cities, scope.leagues, scope.seasons, isFavoriteLeague]);
+
+    // Sezon: güncel sezonlar, altında arşiv.
+    const yearOf = (item: { season_year?: string | number | null }) =>
+      item.season_year ? String(item.season_year) : undefined;
+    const current = scope.seasons.filter((item) => !item.is_archived).map((item) => toOption(item, yearOf(item)));
+    const archived = scope.seasons
+      .filter((item) => item.is_archived)
+      .map((item) => ({ ...toOption(item, yearOf(item)), archived: false }));
+    if (!archived.length) return current;
+    return [...current, header("archive", "Arşiv · geçmiş sezonlar"), ...archived];
+  }, [step, scope.cities, scope.leagues, scope.seasons, scope.cityLabel, cityId, pinnedLeagues, isPinnedLeague, isFavoriteLeague]);
 
   const filtered = useMemo(() => {
     const term = fold(search);
     if (!term) return options;
-    return options.filter((option) => fold(option.label).includes(term));
+    return options.filter((option) => option.kind === "option" && fold(option.label).includes(term));
   }, [options, search]);
 
   const selectedId = step === "city" ? cityId : step === "league" ? leagueId : seasonId;
@@ -210,7 +310,8 @@ export function ScopeSheet() {
    * ilerler. Seçili değere yeniden dokunmak yalnız ilerletir (bkz. başlık).
    */
   const handleSelect = useCallback(
-    (id: number) => {
+    (option: ScopeOption) => {
+      const id = option.id;
       setSearch("");
       if (step === "city") {
         if (id !== cityId) selectCity(id);
@@ -218,7 +319,9 @@ export function ScopeSheet() {
         return;
       }
       if (step === "league") {
-        if (id !== leagueId) selectLeague(id);
+        // Başka ilde sabitlenmiş lig: il ve lig birlikte değişir.
+        if (option.cityId && option.cityId !== cityId) jumpTo(option.cityId, id);
+        else if (id !== leagueId) selectLeague(id);
         setStep("season");
         return;
       }
@@ -226,31 +329,39 @@ export function ScopeSheet() {
       // Son adım: seçim tamam, sayfa kendiliğinden kapanır.
       closeScopeSheet();
     },
-    [step, cityId, leagueId, seasonId, selectCity, selectLeague, selectSeason, closeScopeSheet],
+    [step, cityId, leagueId, seasonId, selectCity, selectLeague, selectSeason, jumpTo, closeScopeSheet],
+  );
+
+  const handleTogglePin = useCallback(
+    (option: ScopeOption) => {
+      const pinnedEntry = pinnedLeagues.find((item) => item.leagueId === option.id);
+      togglePinLeague(
+        pinnedEntry ?? {
+          cityId: cityId as number,
+          cityLabel: scope.cityLabel,
+          leagueId: option.id,
+          label: option.label,
+        },
+      );
+    },
+    [pinnedLeagues, togglePinLeague, cityId, scope.cityLabel],
   );
 
   const renderItem = useCallback(
     ({ item }: ListRenderItemInfo<ScopeOption>) => (
       <OptionRow
         option={item}
-        selected={item.id === selectedId}
+        selected={item.kind === "option" && item.id === selectedId}
         favorite={step === "league" && isFavoriteLeague(item.id)}
+        pinned={step === "league" && cityId ? isPinnedLeague(item.id) : undefined}
         onSelect={handleSelect}
+        onTogglePin={handleTogglePin}
       />
     ),
-    [selectedId, handleSelect, step, isFavoriteLeague],
+    [selectedId, handleSelect, handleTogglePin, step, cityId, isFavoriteLeague, isPinnedLeague],
   );
 
-  const keyExtractor = useCallback((item: ScopeOption) => String(item.id), []);
-
-  const getItemLayout = useCallback(
-    (_data: ArrayLike<ScopeOption> | null | undefined, index: number) => ({
-      length: ROW_CELL,
-      offset: ROW_CELL * index,
-      index,
-    }),
-    [],
-  );
+  const keyExtractor = useCallback((item: ScopeOption) => item.key, []);
 
   const showSearch = options.length > SEARCH_THRESHOLD;
   const loading = options.length === 0 && scope.loading;
@@ -277,7 +388,7 @@ export function ScopeSheet() {
     <BottomSheet
       visible={sheetOpen}
       onClose={closeScopeSheet}
-      title="Kapsamı değiştir"
+      title="Lig seç"
       // NEDEN "full": 81 şehirlik liste + adım kartları + arama + alt çubuk
       // yarım ekranda listeye üç satır bırakıyordu.
       snap="full"
@@ -323,7 +434,6 @@ export function ScopeSheet() {
             data={filtered}
             renderItem={renderItem}
             keyExtractor={keyExtractor}
-            getItemLayout={getItemLayout}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.listContent}
@@ -337,9 +447,8 @@ export function ScopeSheet() {
   );
 }
 
-/** Satır + aradaki boşluk — `getItemLayout` için. */
+/** Satırlar arası boşluk. */
 const ROW_GAP = space.xxs;
-const ROW_CELL = layout.listRowHeight + ROW_GAP;
 
 const styles = StyleSheet.create({
   body: {
@@ -424,6 +533,42 @@ const styles = StyleSheet.create({
   },
   rowSpacer: {
     flex: 1,
+  },
+  rowText: {
+    flexShrink: 1,
+    gap: 1,
+  },
+  rowCaption: {
+    ...type.caption,
+    color: colors.textTertiary,
+  },
+  rowWithPin: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+  },
+  rowFlex: {
+    flex: 1,
+  },
+  pin: {
+    width: 36,
+    height: 36,
+    marginBottom: ROW_GAP,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pinOn: {
+    backgroundColor: colors.brandDim,
+  },
+  groupHead: {
+    paddingTop: space.md,
+    paddingBottom: space.xs,
+    paddingHorizontal: space.xs,
+  },
+  groupLabel: {
+    ...type.overline,
+    color: colors.textTertiary,
   },
   rowLabel: {
     ...type.body,

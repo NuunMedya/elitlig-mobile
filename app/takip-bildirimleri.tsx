@@ -29,16 +29,14 @@
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { memo, useCallback, useMemo, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { FollowEventEditor } from "@/components/FollowEventEditor";
 import {
-  Badge,
-  Button,
-  Chip,
   EmptyState,
   ErrorState,
   ListRow,
@@ -53,22 +51,19 @@ import {
   useToast,
 } from "@/components/ui";
 import {
-  getFollowNotifications,
-  updateFollowNotifications,
   type FollowEventInfo,
   type FollowItem,
   type FollowNotifications,
   type FollowSettingsPatch,
   type FollowType,
 } from "@/lib/api/favorites";
+import { followKey, followSummary as summaryOf, useFollowSettings } from "@/hooks/useFollowSettings";
 import { updateNotificationPreferences } from "@/lib/api/notifications";
 import { queryKeys } from "@/lib/queryKeys";
 import { useAuth } from "@/providers/AuthProvider";
 import { useFavorite } from "@/providers/FavoriteProvider";
 import { useScope } from "@/providers/ScopeProvider";
-import { colors, elevate, hairline, layout, radius, space, textScale, touchSlop, type, upperTR } from "@/theme";
-
-const FOLLOW_MUTATION_KEY = ["favorites", "follow-settings"] as const;
+import { colors, elevate, hairline, layout, radius, space, textScale, touchSlop, type } from "@/theme";
 
 /** Bölüm sırası ve başlıkları. */
 const SECTIONS: { type: FollowType; title: string; icon: keyof typeof Ionicons.glyphMap }[] = [
@@ -79,16 +74,6 @@ const SECTIONS: { type: FollowType; title: string; icon: keyof typeof Ionicons.g
   { type: "match", title: "Maçlar", icon: "football-outline" },
 ];
 
-const followKey = (item: Pick<FollowItem, "type" | "id">) => `${item.type}:${item.id}`;
-
-/** Kaç olayın açık olduğunu anlatan kısa özet: "5 / 9 bildirim açık". */
-function summaryOf(item: FollowItem): string {
-  if (item.muted) return "Sessizde — bildirim gelmez";
-  const on = item.events.filter((event) => item.prefs[event]).length;
-  if (on === 0) return "Tüm bildirimler kapalı";
-  if (on === item.events.length) return "Tüm bildirimler açık";
-  return `${on} / ${item.events.length} bildirim açık`;
-}
 
 /* ═════════════════════════════ EKRAN ═════════════════════════════ */
 
@@ -108,60 +93,9 @@ export default function FollowNotificationsScreen() {
   const [showCities, setShowCities] = useState(false);
   const [pendingCity, setPendingCity] = useState<number | null>(null);
 
-  const query = useQuery({
-    queryKey: queryKeys.followNotifications(),
-    queryFn: getFollowNotifications,
-    enabled: signedIn,
-    staleTime: 30_000,
-  });
+  // Sorgu ve iyimser yazım "Takip et" alt sayfasıyla ortak (hooks/useFollowSettings).
+  const { query, change: changeFollow, eventInfo } = useFollowSettings();
   const refresh = useRefresh(query.refetch, { refreshing: query.isRefetching });
-
-  /* ───────────── takip başına ayar (iyimser) ───────────── */
-
-  const mutation = useMutation({
-    mutationKey: FOLLOW_MUTATION_KEY,
-    mutationFn: ({ item, patch }: { item: FollowItem; patch: FollowSettingsPatch }) =>
-      updateFollowNotifications(item.kind, item.id, patch),
-
-    onMutate: async ({ item, patch }) => {
-      await queryClient.cancelQueries({ queryKey: queryKeys.followNotifications() });
-      const previous = queryClient.getQueryData<FollowNotifications>(queryKeys.followNotifications());
-      if (previous) {
-        queryClient.setQueryData<FollowNotifications>(queryKeys.followNotifications(), {
-          ...previous,
-          follows: previous.follows.map((follow) =>
-            followKey(follow) === followKey(item)
-              ? {
-                  ...follow,
-                  muted: patch.muted ?? follow.muted,
-                  prefs: patch.prefs ? { ...follow.prefs, ...patch.prefs } : follow.prefs,
-                  customized: patch.reset ? false : patch.prefs ? true : follow.customized,
-                }
-              : follow
-          ),
-        });
-      }
-      return { previous };
-    },
-
-    onError: (_error, _variables, context) => {
-      if (context?.previous) queryClient.setQueryData(queryKeys.followNotifications(), context.previous);
-      toast.show({ message: "Ayar kaydedilemedi. Bağlantını kontrol edip tekrar dene.", tone: "danger" });
-    },
-
-    // Yalnız son istek bitince tazele (bkz. bildirim-tercihleri.tsx).
-    onSettled: () => {
-      if (queryClient.isMutating({ mutationKey: FOLLOW_MUTATION_KEY }) === 1) {
-        void queryClient.invalidateQueries({ queryKey: queryKeys.followNotifications() });
-      }
-    },
-  });
-  const { mutate } = mutation;
-
-  const changeFollow = useCallback(
-    (item: FollowItem, patch: FollowSettingsPatch) => mutate({ item, patch }),
-    [mutate]
-  );
 
   /* ───────────── genel ana anahtar ───────────── */
 
@@ -204,12 +138,6 @@ export default function FollowNotificationsScreen() {
   );
 
   /* ───────────── görünüm verisi ───────────── */
-
-  const eventInfo = useMemo(() => {
-    const map = new Map<string, FollowEventInfo>();
-    query.data?.catalog.events.forEach((event) => map.set(event.key, event));
-    return map;
-  }, [query.data]);
 
   const grouped = useMemo(() => {
     const map = new Map<FollowType, FollowItem[]>();
@@ -380,16 +308,6 @@ const FollowCard = memo(function FollowCard({
   onChange: (item: FollowItem, patch: FollowSettingsPatch) => void;
 }) {
   const toggleMute = useCallback(() => onChange(item, { muted: !item.muted }), [item, onChange]);
-  const setAll = useCallback(
-    (value: boolean) => {
-      const prefs: Record<string, boolean> = {};
-      item.events.forEach((event) => {
-        prefs[event] = value;
-      });
-      onChange(item, { prefs });
-    },
-    [item, onChange],
-  );
 
   return (
     <View style={[styles.card, expanded ? styles.cardOpen : null]}>
@@ -444,59 +362,7 @@ const FollowCard = memo(function FollowCard({
 
       {expanded ? (
         <View style={styles.cardBody}>
-          {item.muted ? (
-            <View style={styles.mutedNote}>
-              <Ionicons name="notifications-off-outline" size={16} color={colors.textSecondary} />
-              <Text style={styles.mutedNoteText} {...textScale.long}>
-                Sessizde: takip sürer, bildirim gelmez.
-              </Text>
-              <Button label="Aç" size="sm" variant="secondary" onPress={toggleMute} />
-            </View>
-          ) : (
-            <>
-              <View style={styles.bodyHead}>
-                <Text style={styles.bodyTitle} {...textScale.badge}>
-                  {upperTR("Hangi anlarda?")}
-                </Text>
-                <View style={styles.bodyActions}>
-                  <Touchable feedback="chip" onPress={() => setAll(true)} accessibilityRole="button" style={styles.textButton}>
-                    <Text style={styles.textButtonLabel} {...textScale.dense}>Hepsi</Text>
-                  </Touchable>
-                  <Touchable feedback="chip" onPress={() => setAll(false)} accessibilityRole="button" style={styles.textButton}>
-                    <Text style={styles.textButtonLabel} {...textScale.dense}>Hiçbiri</Text>
-                  </Touchable>
-                </View>
-              </View>
-              <View style={styles.events}>
-                {item.events.map((event) => {
-                  const info = eventInfo.get(event);
-                  const on = Boolean(item.prefs[event]);
-                  return (
-                    <Chip
-                      key={event}
-                      label={info?.label ?? event}
-                      icon={on ? "checkmark" : undefined}
-                      selected={on}
-                      onPress={() => onChange(item, { prefs: { [event]: !on } })}
-                      testID={`follow-${item.type}-${item.id}-${event}`}
-                    />
-                  );
-                })}
-              </View>
-            </>
-          )}
-          {item.customized ? (
-            <View style={styles.resetRow}>
-              <Badge label="Özelleştirildi" tone="brand" size="xs" />
-              <Button
-                label="Varsayılana dön"
-                variant="ghost"
-                size="sm"
-                icon="refresh-outline"
-                onPress={() => onChange(item, { reset: true })}
-              />
-            </View>
-          ) : null}
+          <FollowEventEditor item={item} eventInfo={eventInfo} onChange={onChange} />
         </View>
       ) : null}
     </View>
@@ -575,27 +441,6 @@ const styles = StyleSheet.create({
     paddingBottom: space.md,
     borderTopWidth: hairline,
     borderTopColor: colors.separator,
-  },
-  bodyHead: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  bodyTitle: { ...type.overline, color: colors.textTertiary },
-  bodyActions: { flexDirection: "row", gap: space.xs },
-  textButton: { paddingHorizontal: space.sm, minHeight: 28, justifyContent: "center" },
-  textButtonLabel: { ...type.label, color: colors.brandAccent },
-  events: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
-  mutedNote: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.sm,
-  },
-  mutedNoteText: { ...type.bodySm, color: colors.textSecondary, flex: 1 },
-  resetRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
   },
   hint: { ...type.caption, color: colors.textTertiary, lineHeight: 16, paddingHorizontal: space.xxs },
 });

@@ -24,6 +24,21 @@ import type { MetaLeague, MetaOption, MetaSeason } from "@/lib/types";
  */
 
 const STORAGE_KEY = "elitlig.scope.v1";
+/** Sabitlenen ligler — cihazda saklanır, sunucuya yazılmaz (bkz. PinnedLeague). */
+const PINNED_STORAGE_KEY = "elitlig.pinnedLeagues.v1";
+
+/**
+ * Sabitlenen lig. Takipten FARKLIDIR: takip bildirim üretir (sunucu), sabitleme
+ * yalnız GÖRÜNÜM tercihidir — Skorlar'da lig grubu üstte durur, lig seçicide
+ * hapın yanında çip olur. Lig başka bir ilde olabilir; il bilgisi bu yüzden
+ * kayıtta taşınır ve çipe dokununca kapsam o il + lige birlikte geçer.
+ */
+export interface PinnedLeague {
+  cityId: number;
+  cityLabel: string;
+  leagueId: number;
+  label: string;
+}
 
 /** Kapsam sayfasının üç adımı — ScopeSheet bu sırayı izler. */
 export type ScopeStep = "city" | "league" | "season";
@@ -51,6 +66,16 @@ interface ScopeContextValue {
   selectLeague: (leagueId: number) => void;
   selectSeason: (seasonId: number) => void;
   /**
+   * Kapsamı tek seferde başka bir il + lige (isteğe bağlı sezona) geçirir.
+   * `selectCity` ligi sıfırladığı için sabitlenmiş başka ildeki bir lige
+   * geçmek iki adımla yapılamıyordu.
+   */
+  jumpTo: (cityId: number, leagueId: number, seasonId?: number | null) => void;
+  /** Sabitlenen ligler (eklenme sırası). */
+  pinnedLeagues: PinnedLeague[];
+  isPinnedLeague: (leagueId?: number | null) => boolean;
+  togglePinLeague: (league: PinnedLeague) => void;
+  /**
    * Kapsam seçici alt sayfası. Tek örnek app/_layout.tsx'te mount edilir;
    * ekranlar (ScopeChip, boş durum kartları) yalnız açma/kapama çağırır —
    * böylece her ekran kendi modalını yaratmaz.
@@ -71,6 +96,34 @@ export function ScopeProvider({ children }: { children: ReactNode }) {
   const [restored, setRestored] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetStep, setSheetStep] = useState<ScopeStep>("city");
+  const [pinned, setPinned] = useState<PinnedLeague[]>([]);
+  const [pinnedRestored, setPinnedRestored] = useState(false);
+
+  useEffect(() => {
+    AsyncStorage.getItem(PINNED_STORAGE_KEY)
+      .then((raw) => {
+        if (!raw) return;
+        try {
+          const stored: unknown = JSON.parse(raw);
+          if (!Array.isArray(stored)) return;
+          setPinned(
+            stored.filter(
+              (item): item is PinnedLeague =>
+                Boolean(item) && Number.isInteger(item.leagueId) && Number.isInteger(item.cityId)
+            )
+          );
+        } catch {
+          // Bozuk kayıt: sabitleme yok sayılır.
+        }
+      })
+      .catch(() => {})
+      .finally(() => setPinnedRestored(true));
+  }, []);
+
+  useEffect(() => {
+    if (!pinnedRestored) return;
+    AsyncStorage.setItem(PINNED_STORAGE_KEY, JSON.stringify(pinned)).catch(() => {});
+  }, [pinned, pinnedRestored]);
 
   // 1) Cihazda saklı seçimi geri yükle.
   useEffect(() => {
@@ -180,6 +233,25 @@ export function ScopeProvider({ children }: { children: ReactNode }) {
 
   const selectSeason = useCallback((next: number) => setSeasonId(next), []);
 
+  const jumpTo = useCallback((nextCity: number, nextLeague: number, nextSeason?: number | null) => {
+    setCityId(nextCity);
+    setLeagueId(nextLeague);
+    setSeasonId(nextSeason ?? null);
+  }, []);
+
+  const isPinnedLeague = useCallback(
+    (id?: number | null) => pinned.some((item) => item.leagueId === Number(id)),
+    [pinned]
+  );
+
+  const togglePinLeague = useCallback((league: PinnedLeague) => {
+    setPinned((prev) =>
+      prev.some((item) => item.leagueId === league.leagueId)
+        ? prev.filter((item) => item.leagueId !== league.leagueId)
+        : [...prev, league]
+    );
+  }, []);
+
   const openScopeSheet = useCallback((step: ScopeStep = "city") => {
     setSheetStep(step);
     setSheetOpen(true);
@@ -210,6 +282,10 @@ export function ScopeProvider({ children }: { children: ReactNode }) {
       selectCity,
       selectLeague,
       selectSeason,
+      jumpTo,
+      pinnedLeagues: pinned,
+      isPinnedLeague,
+      togglePinLeague,
       sheetOpen,
       sheetStep,
       openScopeSheet,
@@ -229,6 +305,10 @@ export function ScopeProvider({ children }: { children: ReactNode }) {
       selectCity,
       selectLeague,
       selectSeason,
+      jumpTo,
+      pinned,
+      isPinnedLeague,
+      togglePinLeague,
       sheetOpen,
       sheetStep,
       openScopeSheet,

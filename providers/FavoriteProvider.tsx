@@ -46,6 +46,25 @@ export interface FavoriteScope {
   name: string;
 }
 
+/** Takip edilebilen varlık türleri — sunucudaki `FollowType` ile aynı adlar. */
+export type FollowTargetType = "team" | "league" | "season" | "city" | "match";
+
+/** Takip edilecek varlık. `logo` yalnız takımda anlamlıdır. */
+export interface FollowTarget {
+  type: FollowTargetType;
+  id: number;
+  name: string;
+  logo?: string | null;
+}
+
+const KIND_OF: Record<FollowTargetType, FavoriteKind> = {
+  team: "teams",
+  league: "leagues",
+  season: "seasons",
+  city: "cities",
+  match: "matches",
+};
+
 interface FavoriteContextValue {
   favorites: FavoriteTeam[];
   isFavorite: (teamId?: number | null) => boolean;
@@ -71,6 +90,14 @@ interface FavoriteContextValue {
   addFavoriteMatch: (matchId: number) => void;
   removeFavoriteMatch: (matchId: number) => void;
   toggleFavoriteMatch: (matchId: number) => void;
+  /**
+   * Tür bağımsız takip/bırak. Söz, sunucu yazımı bittiğinde (misafirde hemen)
+   * çözülür — takip sonrası bildirim alt sayfası takibin sunucuda var
+   * olduğundan emin olmak için bunu bekler (bkz. providers/FollowFlowProvider).
+   */
+  isFollowing: (type: FollowTargetType, id?: number | null) => boolean;
+  follow: (target: FollowTarget) => Promise<void>;
+  unfollow: (type: FollowTargetType, id: number) => Promise<void>;
   // Geriye dönük uyumluluk
   favorite: FavoriteTeam | null;
 }
@@ -297,6 +324,65 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
     });
   }, [signedIn]);
 
+  const isFollowing = useCallback(
+    (type: FollowTargetType, id?: number | null) => {
+      const target = Number(id);
+      if (!Number.isInteger(target)) return false;
+      switch (type) {
+        case "team":
+          return favorites.some((t) => t.id === target);
+        case "league":
+          return leagues.some((l) => l.id === target);
+        case "season":
+          return seasons.some((s) => s.id === target);
+        case "city":
+          return cities.some((c) => c.id === target);
+        case "match":
+          return matches.includes(target);
+      }
+    },
+    [favorites, leagues, seasons, cities, matches]
+  );
+
+  const follow = useCallback(
+    (target: FollowTarget): Promise<void> => {
+      const { type, id, name } = target;
+      if (type === "team") {
+        setFavorites((prev) => (prev.some((t) => t.id === id) ? prev : [...prev, { id, name, logo: target.logo ?? null }]));
+      } else if (type === "league") {
+        setLeagues((prev) => (prev.some((l) => l.id === id) ? prev : [...prev, { id, name }]));
+      } else if (type === "season") {
+        setSeasons((prev) => (prev.some((s) => s.id === id) ? prev : [...prev, { id, name }]));
+      } else if (type === "city") {
+        setCities((prev) => (prev.some((c) => c.id === id) ? prev : [...prev, { id, name }]));
+      } else {
+        setMatches((prev) => (prev.includes(id) ? prev : [...prev, id]));
+      }
+      if (!signedIn) return Promise.resolve();
+      return followFavorite(KIND_OF[type], id).then(
+        () => undefined,
+        () => undefined
+      );
+    },
+    [signedIn]
+  );
+
+  const unfollow = useCallback(
+    (type: FollowTargetType, id: number): Promise<void> => {
+      if (type === "team") setFavorites((prev) => prev.filter((t) => t.id !== id));
+      else if (type === "league") setLeagues((prev) => prev.filter((l) => l.id !== id));
+      else if (type === "season") setSeasons((prev) => prev.filter((s) => s.id !== id));
+      else if (type === "city") setCities((prev) => prev.filter((c) => c.id !== id));
+      else setMatches((prev) => prev.filter((m) => m !== id));
+      if (!signedIn) return Promise.resolve();
+      return unfollowFavorite(KIND_OF[type], id).then(
+        () => undefined,
+        () => undefined
+      );
+    },
+    [signedIn]
+  );
+
   const value = useMemo(
     () => ({
       favorites,
@@ -319,6 +405,9 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
       addFavoriteMatch,
       removeFavoriteMatch,
       toggleFavoriteMatch,
+      isFollowing,
+      follow,
+      unfollow,
       favorite: favorites[0] ?? null, // geriye dönük uyumluluk
     }),
     [
@@ -342,6 +431,9 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
       addFavoriteMatch,
       removeFavoriteMatch,
       toggleFavoriteMatch,
+      isFollowing,
+      follow,
+      unfollow,
     ]
   );
 
