@@ -232,7 +232,7 @@ export function routeFromNotif(
     const matchId = asId(data.match_id ?? data.id);
     // Maç kimliği yoksa Maçlar sekmesi. `/(tabs)` artık Genel Bakış'a
     // düşüyor; maç bildirimi maç listesine gitmeli, özete değil.
-    if (!matchId) return { pathname: "/(tabs)/maclar" };
+    if (!matchId) return { pathname: "/(tabs)/skorlar" };
     return {
       pathname: "/mac/[id]",
       params: { id: matchId, tab: LIVE_MATCH_KINDS.has(kind) ? "canli" : "ozet" },

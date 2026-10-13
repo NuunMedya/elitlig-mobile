@@ -49,7 +49,7 @@ import {
   type MatchSimulation,
   type SimulationScenario,
 } from "@/lib/api/team";
-import { mediaUrl } from "@/lib/format";
+import { formatDecimal, mediaUrl } from "@/lib/format";
 import { colors, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -170,7 +170,7 @@ const KeyPlayerRow = React.memo(function KeyPlayerRow({ player }: { player: Anal
       </View>
       {player.rating != null ? (
         <Text style={styles.keyRating} {...textScale.dense}>
-          {player.rating.toFixed(2)}
+          {formatDecimal(player.rating, 2)}
         </Text>
       ) : null}
     </View>

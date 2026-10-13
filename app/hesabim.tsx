@@ -64,7 +64,7 @@ import { getPanelMe, type PanelPendingChange } from "@/lib/api/panel";
 import { formatDateShort, mediaUrl } from "@/lib/format";
 import { openLink } from "@/lib/links";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
+import { colors, hairline, layout, radius, ratingLabel, space, textScale, type, upperTR } from "@/theme";
 
 /* ============================ SABİTLER / TİPLER ============================ */
 
@@ -715,7 +715,7 @@ const IdentityHero = React.memo(function IdentityHero({
           <View style={styles.statDivider} />
           <StatCell label="Asist" value={String(stats.assists)} />
           <View style={styles.statDivider} />
-          <StatCell label="Reyting" value={stats.rating != null ? stats.rating.toFixed(1) : "—"} highlight />
+          <StatCell label="Reyting" value={ratingLabel(stats.rating)} highlight />
         </View>
       ) : null}
     </View>

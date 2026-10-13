@@ -322,7 +322,7 @@ export const MatchCard = memo(function MatchCard({
       <Ionicons
         name={isFavorite ? "star" : "star-outline"}
         size={16}
-        color={isFavorite ? colors.star : colors.starEmpty}
+        color={isFavorite ? colors.brand : colors.starEmpty}
       />
     </Pressable>
   ) : null;

@@ -18,6 +18,7 @@ import type {
 } from "react-native";
 import type React from "react";
 import { POSITIONS } from "@/lib/api/team";
+import { formatNumber } from "@/lib/format";
 import { matchState } from "@/lib/match";
 import type { ApiMatch, StandingRow } from "@/lib/types";
 
@@ -67,9 +68,9 @@ export function meaningful(value?: string | number | null): string | null {
   return raw && raw !== "0" && raw.toLowerCase() !== "null" ? raw : null;
 }
 
-/** Ondalıklı oran — "2,4". Türkçe ondalık ayırıcı virgüldür. */
+/** Ondalıklı oran — "2,4". Tek biçim `lib/format.ts → formatNumber` (virgül + binlik nokta). */
 export function decimal(value: number, digits = 1): string {
-  return value.toFixed(digits).replace(".", ",");
+  return formatNumber(value, digits);
 }
 
 /* ══════════════════════════════════════════════════════════════════════════

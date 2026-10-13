@@ -52,7 +52,7 @@ export interface StatBarProps {
 /** Sayıyı okunur biçime çevirir: tam sayı ise ondalıksız, değilse tek ondalık. */
 function formatValue(value: number, unit: string | undefined, asPercent: boolean): string {
   if (!Number.isFinite(value)) return "—";
-  const text = Number.isInteger(value) ? String(value) : value.toFixed(1);
+  const text = Number.isInteger(value) ? String(value) : value.toFixed(1).replace(".", ","); // Türkçe ondalık virgül (bkz. lib/format.ts)
   if (asPercent) return `${text}%`;
   return unit ? `${text}${unit}` : text;
 }

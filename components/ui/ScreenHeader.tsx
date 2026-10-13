@@ -88,7 +88,7 @@ export interface ScreenHeaderProps {
   /** Başlığın üstünde küçük bağlam satırı ("FREELİG", "14. Hafta"). */
   overline?: string;
   /**
-   * KAPSAM ÇİPİ — üst başlığın YERİNE geçer (`<ScopeChip tone="ink" />`).
+   * KAPSAM ÇİPİ — üst başlığın YERİNE geçer (eskiden kapsam çipi; artık lig seçici `bottom` yuvasında, `LeaguePicker`).
    * Kök sekmelerde kapsam (şehir · lig · sezon) hem bloğun üst başlığında
    * hem kâğıtta ayrı bir satırda yazılıyordu; artık yalnız burada, dokunulur.
    */

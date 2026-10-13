@@ -25,6 +25,9 @@
  * dokunuşla başlar. Altında sosyal hesaplar satır grubu, bölge sorumluları
  * (iç içe kart yok: telefon/e-posta kartın kendi satırlarıdır) ve form.
  *
+ * DERİN BAĞLANTI: `/iletisim?konu=<metin>` formun "Konu" alanını doldurur ve
+ * formu açık başlatır (Kulübüm → "Takım kurmak için başvur").
+ *
  * SUNUCU YOKSA EKRAN ÇALIŞIR: uç hata verirse ya da şehir seçili değilse
  * varsayılan merkez numaraları (`FALLBACK`) gösterilir — iletişim ekranı
  * "bağlantı yok" diye boş kalamaz. Hata yalnız bant olarak duyurulur.
@@ -32,6 +35,7 @@
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { useLocalSearchParams } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
 import { Animated, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -154,11 +158,16 @@ export default function ContactScreen() {
   const toast = useToast();
   const { scrollY, scrollProps } = useHeaderScroll();
 
-  const [formOpen, setFormOpen] = useState(false);
+  /* `?konu=` — başka ekrandan gelen konu ön dolgusu (ör. Kulübüm'deki
+     "Takım kurmak için başvur" adımı). Verilmişse form açık başlar. */
+  const params = useLocalSearchParams<{ konu?: string }>();
+  const initialSubject = trimmed(Array.isArray(params.konu) ? params.konu[0] : params.konu).slice(0, 120);
+
+  const [formOpen, setFormOpen] = useState(Boolean(initialSubject));
   const [name, setName] = useState(auth.user?.fullName || auth.user?.username || "");
   const [email, setEmail] = useState(auth.user?.email ?? "");
   const [phone, setPhone] = useState(auth.user?.phone ?? "");
-  const [subject, setSubject] = useState("");
+  const [subject, setSubject] = useState(initialSubject);
   const [message, setMessage] = useState("");
 
   const cityId = scope.cityId ?? null;

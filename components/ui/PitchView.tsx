@@ -37,7 +37,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { memo, useMemo } from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import Svg, { Circle, Line, Path, Rect } from "react-native-svg";
-import { colors, palette, radius, ratingColors, space, textScale, type } from "@/theme";
+import { colors, palette, radius, ratingColors, ratingLabel, space, textScale, type } from "@/theme";
 import { positionLine } from "@/lib/api/team";
 import { Avatar } from "./Avatar";
 import { EventIcon, type EventIconKind } from "./EventIcon";
@@ -408,9 +408,9 @@ const PitchSlot = memo(function PitchSlot({
 const RatingDot = memo(function RatingDot({ value }: { value: number }) {
   const { fg } = ratingColors(palette, value);
   return (
-    <View style={[styles.rating, { backgroundColor: fg }]} accessibilityLabel={`Reyting ${value.toFixed(1)}`}>
+    <View style={[styles.rating, { backgroundColor: fg }]} accessibilityLabel={`Reyting ${ratingLabel(value)}`}>
       <Text style={styles.ratingText} {...textScale.badge}>
-        {value.toFixed(1)}
+        {ratingLabel(value)}
       </Text>
     </View>
   );

@@ -30,7 +30,7 @@ import type { ApiMatch, ApiMatchEvent, KadroPlayer, KadroResponse, LiveSnapshot 
    Tipler
    ══════════════════════════════════════════════════════════════════════════ */
 
-/** Sayfa sekmeleri. "canli" yalnız maç canlıyken vardır ve Özet'in yerini alır. */
+/** Sayfa sekmeleri. "canli" yalnız maç canlıyken kullanılan Özet anahtarıdır (etiket yine "Özet", yanında nokta). */
 export type MatchTab = "ozet" | "canli" | "kadro" | "istatistik" | "h2h" | "puan";
 
 /** Her sekmenin listesine geçen ortak kaydırma bağlantısı (başlık daralması). */

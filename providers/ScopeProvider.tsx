@@ -77,7 +77,7 @@ interface ScopeContextValue {
   togglePinLeague: (league: PinnedLeague) => void;
   /**
    * Kapsam seçici alt sayfası. Tek örnek app/_layout.tsx'te mount edilir;
-   * ekranlar (ScopeChip, boş durum kartları) yalnız açma/kapama çağırır —
+   * ekranlar (LeaguePicker, boş durum kartları) yalnız açma/kapama çağırır —
    * böylece her ekran kendi modalını yaratmaz.
    */
   sheetOpen: boolean;

@@ -8,7 +8,7 @@
  *   OYNANMAMIŞ — maç öncesi karar verdiren bilgiler: künye (ne zaman, nerede),
  *                iki takımın son beş maçı, aralarındaki geçmiş, ligdeki yerleri.
  *                Hepsi gerçek veridir: maç kaydı, takım maçları, puan tablosu.
- *   CANLI      — sekmenin adı "Canlı" olur; dakika halkası + bağlantı durumu,
+ *   CANLI      — sekmenin adı "Özet" kalır, yanında kırmızı nokta; dakika halkası + bağlantı durumu,
  *                ardından en yeni olay üstte akan zaman tüneli.
  *   BİTTİ      — maçın yıldızı, video/rapor, fotoğraflar, zaman tüneli,
  *                öne çıkan istatistikler ve künye.

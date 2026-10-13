@@ -1,43 +1,42 @@
 /**
- * Profil sekmesi — kimlik kartı + rol bazlı kişisel menü.
+ * Profil sekmesi — "Hesabım": kimlik, gelen kutusu, oyunlar, keşif, ayarlar.
  *
- * YENİ İŞ BÖLÜMÜ (beş sekmeli düzen, bkz. app/(tabs)/_layout.tsx):
- *   · Yönetim araçları (Takım Panelim, Oyuncu Profilim, Kariyerim, Yönetim
- *     Paneli) KULÜBÜM sekmesine taşındı.
- *   · Eski Menü'nün içeriği (oyunlar, keşif, bilgi, sosyal) buraya katıldı;
- *     lig bağlantıları alt çubuktaki LİG sekmesindedir.
- *   · Profil (merkez kalıbı): kimlik SAHNESİ (takip sayıları) → bekleyen işler
- *     (bildirim · mesaj) → takip edilen takımlar şeridi → bildirim ayarları ·
- *     oyunlar · keşfet · ayarlar · bilgi ve destek · oturum. ESKİ: kimlik kartı +
- *     dört kısayol (Takip · Bildirim · Oyunlar ·
- *     Kulübüm) + Takip ettiklerim · Bildirimler · Oyunlar · Keşfet · Bilgi ve
- *     destek · Ayarlar · oturum. Sıra kullanım sıklığına göredir.
+ * DÜZEN (Arena merkez kalıbı, yukarıdan aşağı):
+ *   1. Kimlik SAHNESİ (ProfileHero) — ad, roller, takip sayıları (her sayı
+ *      Takip sekmesinin ilgili bölümünü açar; ayrı "takip ettiğin takımlar"
+ *      şeridi Takip sekmesi varken çift kapıydı, kaldırıldı).
+ *   2. Oyun karoları — Günün Testi (bugün oynandı mı, cihazdaki sonuçtan) ve
+ *      Oyun merkezi (/oyunlar). Günün Testi her gün dönülen tek oyun olduğu
+ *      için kimliğin hemen altındadır.
+ *   3. Gelen kutusu (girişli) — TEK satır: okunmamış bildirim + mesaj
+ *      toplamı, alt çubuktaki Profil rozetiyle AYNI sayı (hooks/
+ *      useUnreadCount), menekşe. Bildirimler | Mesajlar sekmeli
+ *      app/gelen-kutusu.tsx'i açar.
+ *   4. Keşfet · Bilgi ve destek · Ayarlar (tek satır → app/ayarlar.tsx; aynı
+ *      ekran başlıktaki ayar ikonundan da açılır). Bildirim türleri, takip
+ *      bildirimleri, görünüm (tema), lig seçimi, hesap ve güvenlik, çıkış ve
+ *      HESABI SİL (App Store kapısı) Ayarlar'dadır; Hesabım ▸ Hesabı sil
+ *      yolu da yerindedir.
+ *   5. Dipte sosyal hesaplar ve sürüm.
  *
- * NEDEN SectionList: satırlar sabit bir menü gibi görünse de sayıları role ve
- * rozetlere göre değişir; SectionList + memo'lu satır, ScrollView + map'e göre
- * hem rozet güncellemelerinde daha az yeniden çizim yapar hem de proje kuralına
- * (uzun listede sanal liste) uyar.
+ * Yönetim araçları (Takım Panelim, Oyuncu Profilim, Kariyerim, Yönetim
+ * Paneli) KULÜBÜM sekmesindedir.
  *
- * NEDEN GÖRÜNÜM SEÇİMİ BURADA: renk paleti açılışta donuyor (bkz. @/theme), bu
- * yüzden tema değişimi ekran başlıklarındaki bir düğmeyle değil, sonucu
- * anlatılabilen bir ayar satırıyla yapılmalı. Üç durumlu seçim (Açık/Koyu/
- * Sistem) satır içi alt sayfada toplanır.
+ * NEDEN SectionList: satırların sayısı role göre değişir; SectionList +
+ * memo'lu satır rozet güncellemelerinde daha az yeniden çizer.
  *
- * GİRİŞSİZ: kimlik kartı yerine giriş çağrısı kartı çizilir; KULÜBÜM ve
- * KARİYERİM grupları hiç üretilmez. Favoriler cihazda saklandığı için misafirde
- * de görünür.
+ * GİRİŞSİZ: kimlik kartı yerine giriş çağrısı çizilir; gelen kutusu satırı
+ * hiç üretilmez (misafire "0 bildirim" bile yanlış vaattir). Takip sayıları
+ * ve Günün Testi cihazda saklandığı için misafirde de gerçektir.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Constants from "expo-constants";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
 import {
-  Alert,
-  Appearance,
-  DevSettings,
   RefreshControl,
   SectionList,
   StyleSheet,
@@ -48,7 +47,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   Badge,
-  BottomSheet,
+  HubGrid,
+  HubTile,
   ListRow,
   ScreenHeader,
   SectionHeader,
@@ -57,16 +57,12 @@ import {
   refreshControlProps,
   useHeaderScroll,
   useRefresh,
-  useToast,
   type Tone,
 } from "@/components/ui";
-import { FollowedTeamsRail } from "@/components/account/FollowedTeamsRail";
-import { InboxStrip, type InboxItem } from "@/components/account/InboxStrip";
 import { ProfileHero, type ProfileHeroStat } from "@/components/account/ProfileHero";
-import { THEME_STORAGE_KEY, getStoredTheme, setStoredTheme } from "@/constants/themePreference";
 import { unreadBadgeLabel, useUnreadCount } from "@/hooks/useUnreadCount";
 import { getPanelMe } from "@/lib/api/panel";
-import { mediaUrl } from "@/lib/format";
+import { formatNumber, mediaUrl } from "@/lib/format";
 import { openLink } from "@/lib/links";
 import { instagramUrl } from "@/lib/socials";
 import { youtubeChannelUrl } from "@/lib/youtube";
@@ -74,7 +70,7 @@ import { queryKeys } from "@/lib/queryKeys";
 import { useAuth } from "@/providers/AuthProvider";
 import { useFavorite } from "@/providers/FavoriteProvider";
 import { useScope } from "@/providers/ScopeProvider";
-import { colors, hairline, isDark, layout, radius, space, textScale, type } from "@/theme";
+import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
 
 /* ============================ SABİTLER / TİPLER ============================ */
 
@@ -87,10 +83,7 @@ const PRESIDENT_PROFILES = new Set(["takim_baskani", "double"]);
 /** Satırın dokunulduğunda ne yapacağı — hepsi tek `onSelect` içinde çözülür. */
 type MenuAction =
   | { kind: "route"; route: string }
-  | { kind: "link"; url: string }
-  | { kind: "theme" }
-  | { kind: "city" }
-  | { kind: "signOut" };
+  | { kind: "link"; url: string };
 
 interface MenuItem {
   key: string;
@@ -99,7 +92,7 @@ interface MenuItem {
   subtitle?: string;
   /** Sağda gri metin (şehir adı, görünüm tercihi, favori sayısı). */
   value?: string;
-  /** Sağda kırmızı sayaç rozeti (okunmamış mesaj/bildirim). */
+  /** Sağda menekşe sayaç rozeti (okunmamış bildirim + mesaj). */
   badge?: string;
   /** Sol ikonun tonu — varsayılan nötr gri. */
   tone?: Tone;
@@ -114,25 +107,8 @@ interface MenuSection {
   data: MenuItem[];
 }
 
-type ThemeChoice = "light" | "dark" | "system";
-
-interface ThemeOption {
-  value: ThemeChoice;
-  label: string;
-  icon: keyof typeof Ionicons.glyphMap;
-}
-
-const THEME_OPTIONS: ThemeOption[] = [
-  { value: "light", label: "Açık", icon: "sunny-outline" },
-  { value: "dark", label: "Koyu", icon: "moon-outline" },
-  { value: "system", label: "Sistem", icon: "phone-portrait-outline" },
-];
-
-const THEME_LABELS: Record<ThemeChoice, string> = {
-  light: "Açık",
-  dark: "Koyu",
-  system: "Sistem",
-};
+/** Günün Testi'nin o güne ait sonucu — app/gunun.tsx ile AYNI anahtar (UTC gün). */
+const dailyResultKey = (day: string) => `elitlig.gunun.${day}.v1`;
 
 /* ============================== SAF YARDIMCILAR ============================= */
 
@@ -144,18 +120,16 @@ function rowPosition(index: number, total: number): "single" | "first" | "middle
   return "middle";
 }
 
-/**
- * Cihazda saklı tema tercihi → üç durumlu seçim.
- * `getStoredTheme()` açılışta okunan değeri verir; null = kullanıcı seçmemiş.
- */
-function storedThemeChoice(): ThemeChoice {
-  return getStoredTheme() ?? "system";
-}
-
-/** Seçim uygulandığında ekranın koyu olup olmayacağı. */
-function willBeDark(choice: ThemeChoice): boolean {
-  if (choice === "system") return Appearance.getColorScheme() === "dark";
-  return choice === "dark";
+/** Günün Testi sonucu → "7/10 doğru"; bozuk ya da yoksa null. */
+function parseDaily(raw: string | null): string | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as { correct?: unknown };
+    const correct = Number(parsed.correct);
+    return Number.isFinite(correct) ? `${formatNumber(correct)}/10 doğru` : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -177,21 +151,16 @@ export default function ProfileTabScreen() {
   const scope = useScope();
   const favorite = useFavorite();
   const router = useRouter();
-  const toast = useToast();
   const queryClient = useQueryClient();
   const unread = useUnreadCount();
   const { scrollY, scrollProps } = useHeaderScroll();
-
-  const [themeChoice, setThemeChoice] = useState<ThemeChoice>(storedThemeChoice);
-  const [themeSheetOpen, setThemeSheetOpen] = useState(false);
 
   const user = auth.user;
 
   /**
    * Kimlik kartının avatarı ve takım amblemi için panel özeti.
-   * Anahtar `["panel","me"]` — /hesabim ve eski ekranlarla AYNI önbellek, iki
-   * ekran arasında geçişte ikinci istek atılmaz. Panel rolü olmayan hesapta
-   * sunucu 403 döndürür; kart o zaman sadece harf yedeğiyle çizilir.
+   * Anahtar `["panel","me"]` — /hesabim ile AYNI önbellek. Panel rolü olmayan
+   * hesapta sunucu 403 döndürür; kart o zaman sadece harf yedeğiyle çizilir.
    */
   const meQuery = useQuery({
     queryKey: ["panel", "me"],
@@ -202,13 +171,32 @@ export default function ProfileTabScreen() {
   });
 
   /**
-   * Aşağı çekince rozetler ve kimlik kartı tazelenir. Sorgular zaten 60 sn'de
-   * bir yoklanıyor; elle çekme "şimdi bak" isteğidir, misafirde tazelenecek
+   * Günün Testi'nin bugünkü sonucu — cihazdan (app/gunun.tsx yazar). Odakta
+   * yeniden okunur: oyundan dönünce karo "oynadın" demeli.
+   */
+  const [dailyDone, setDailyDone] = useState<string | null>(null);
+  useFocusEffect(
+    useCallback(() => {
+      const today = new Date().toISOString().slice(0, 10);
+      let alive = true;
+      AsyncStorage.getItem(dailyResultKey(today))
+        .then((raw) => {
+          if (alive) setDailyDone(parseDaily(raw));
+        })
+        .catch(() => undefined);
+      return () => {
+        alive = false;
+      };
+    }, [])
+  );
+
+  /**
+   * Aşağı çekince rozetler ve kimlik kartı tazelenir. Misafirde tazelenecek
    * sunucu verisi olmadığı için gösterge hiç bağlanmaz.
    */
   const refreshAll = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.unreadNotifCount() });
-    void queryClient.invalidateQueries({ queryKey: queryKeys.panelMessages() });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.chatUnread() });
     void meQuery.refetch();
   }, [meQuery, queryClient]);
 
@@ -233,24 +221,6 @@ export default function ProfileTabScreen() {
 
   /* ------------------------------ EYLEMLER ------------------------------- */
 
-  const openThemeSheet = useCallback(() => setThemeSheetOpen(true), []);
-  const closeThemeSheet = useCallback(() => setThemeSheetOpen(false), []);
-
-  const confirmSignOut = useCallback(() => {
-    Alert.alert("Çıkış yap", "Oturumu kapatmak istediğine emin misin?", [
-      { text: "Vazgeç", style: "cancel" },
-      {
-        text: "Çıkış yap",
-        style: "destructive",
-        onPress: () => {
-          void auth.signOut().then(() => {
-            toast.show({ message: "Çıkış yapıldı.", tone: "neutral" });
-          });
-        },
-      },
-    ]);
-  }, [auth, toast]);
-
   const onSelect = useCallback(
     (item: MenuItem) => {
       switch (item.action.kind) {
@@ -259,80 +229,9 @@ export default function ProfileTabScreen() {
           return;
         case "link":
           void openLink(item.action.url);
-          return;
-        case "theme":
-          openThemeSheet();
-          return;
-        case "city":
-          // Kapsam sayfası uygulamada TEK örnektir (app/_layout.tsx); ekran
-          // kendi modalını açmaz, yalnız hangi adımla açılacağını söyler.
-          scope.openScopeSheet("city");
-          return;
-        case "signOut":
-          confirmSignOut();
       }
     },
-    [confirmSignOut, openThemeSheet, router, scope]
-  );
-
-  /**
-   * Tema tercihi: yaz, gerekiyorsa uygulamayı tazele.
-   *
-   * NEDEN lib/themeToggle.ts KULLANILMIYOR: o yardımcı ikili çalışır (mevcut
-   * temanın tersine geçer) ve "Sistem" durumunu ifade edemez. Buradaki akış
-   * aynı depolama anahtarını kullanır, yalnız üç durumu da yazabilir.
-   * NEDEN YENİDEN YÜKLEME: palet modül yüklenirken donuyor; seçim etkin temayı
-   * DEĞİŞTİRİYORSA JS'in bir kez tazelenmesi gerekir. Değiştirmiyorsa (ör.
-   * sistem zaten koyu) hiç tazelenmez — bedava bir yeniden başlatma olmaz.
-   *
-   * NEDEN `__DEV__` SORULUYOR (try/catch YETMİYOR): `DevSettings.reload()`
-   * YAYIN DERLEMESİNDE HATA ATMAZ — React Native, `__DEV__` false iken
-   * DevSettings yerine gövdesi boş bir nesne koyar
-   * (react-native/Libraries/Utilities/DevSettings.js: `reload() {}`).
-   * Dolayısıyla eski `try { reload() } catch { uyar }` kurgusunda catch HİÇ
-   * çalışmıyordu: kullanıcı yayındaki uygulamada "Koyu"yu seçiyor, sayfa
-   * kapanıyor, tema değişmiyor ve HİÇBİR ŞEY SÖYLENMİYORDU. Sessiz başarısızlık
-   * en kötü hata türüdür — düğme bozuk değil, YALANCI görünür.
-   *
-   * Tazeleme yalnız geliştirmede var; yayında kullanıcıya ne yapması
-   * gerektiğini söylüyoruz. (Anında geçiş için ya `expo-updates` bağımlılığı
-   * ya da paletin donmasını kaldıran stil düzeni gerekir; ikisi de bu
-   * düzeltmenin kapsamı dışında.)
-   */
-  const chooseTheme = useCallback(
-    (choice: ThemeChoice) => {
-      setThemeChoice(choice);
-      setThemeSheetOpen(false);
-
-      const persist = choice === "system"
-        ? AsyncStorage.removeItem(THEME_STORAGE_KEY)
-        : AsyncStorage.setItem(THEME_STORAGE_KEY, choice);
-
-      void persist
-        .then(() => {
-          setStoredTheme(choice === "system" ? null : choice);
-          if (willBeDark(choice) === isDark) {
-            toast.show({ message: `Görünüm: ${THEME_LABELS[choice]}`, tone: "success" });
-            return;
-          }
-          if (__DEV__) {
-            DevSettings.reload();
-            return;
-          }
-
-          // Yayın derlemesinde tazeleme YOK; kullanıcıya dürüst ol.
-          toast.show({
-            message: `Görünüm: ${THEME_LABELS[choice]}. Uygulamayı tamamen kapatıp yeniden açınca uygulanacak.`,
-            tone: "warn",
-            duration: 5000,
-          });
-        })
-        .catch(() => {
-          setThemeChoice(storedThemeChoice());
-          toast.show({ message: "Tema tercihi kaydedilemedi.", tone: "danger" });
-        });
-    },
-    [toast]
+    [router]
   );
 
   const openAccount = useCallback(() => router.push("/hesabim"), [router]);
@@ -340,6 +239,14 @@ export default function ProfileTabScreen() {
   // App Store 4 (Design): üyelik tarayıcıda değil, uygulama içindeki
   // /kayit ekranında açılır.
   const openRegister = useCallback(() => router.push("/kayit"), [router]);
+  const openSettings = useCallback(() => router.push("/ayarlar"), [router]);
+  const openDaily = useCallback(() => router.push("/gunun"), [router]);
+  const openGames = useCallback(() => router.push("/(tabs)/oyunlar"), [router]);
+  /** Okunmamış bildirim varsa o sekme, yoksa mesaj varsa Mesajlar açılır. */
+  const openInbox = useCallback(() => {
+    const tab = unread.notifications === 0 && unread.messages > 0 ? "mesajlar" : "bildirimler";
+    router.push(`/gelen-kutusu?tab=${tab}`);
+  }, [router, unread.messages, unread.notifications]);
 
   /* ------------------------------ SATIRLAR ------------------------------- */
 
@@ -349,66 +256,13 @@ export default function ProfileTabScreen() {
   const channelUrl = youtubeChannelUrl(scope.cityLabel);
 
   /**
-   * PROFİL BÖLÜMLERİ — "hesabım ve tercihlerim".
-   *
-   * Yönetim araçları (Takım Panelim, Oyuncu Profilim, Kariyerim, Yönetim
-   * Paneli) KULÜBÜM sekmesine taşındı; Menü sekmesinin içeriği (oyunlar, bilgi,
-   * sosyal) buraya katıldı. Sıra kullanım sıklığına göredir: takip → bildirim
-   * → oyun → keşif → bilgi → ayar.
+   * PROFİL BÖLÜMLERİ — keşif, bilgi, ayarlar. Gelen kutusu ve oyunlar
+   * listenin başlığında (kimliğin hemen altında) durur.
    */
   const sections = useMemo<MenuSection[]>(() => {
     const result: MenuSection[] = [];
 
-    /* 1 — BİLDİRİM AYARLARI. Gelen kutusu ve mesajlar yukarıdaki "bekleyen
-       işler" şeridine taşındı; burada yalnız NE ZAMAN ve KİMİN İÇİN
-       bildirim alınacağı ayarlanır. İki ekranın farkı alt satırda tek
-       cümleyle söylenir ki kullanıcı hangisini açacağını tahmin etmesin. */
-    result.push({
-      key: "bildirim",
-      title: "Bildirim ayarları",
-      data: [
-        {
-          key: "bildirim-tercihleri",
-          icon: "notifications",
-          title: "Bildirim türleri",
-          subtitle: "Gol, maç başlangıcı, sonuç, haber ve panel",
-          tone: "brand",
-          action: { kind: "route", route: "/bildirim-tercihleri" },
-        },
-        {
-          key: "takip-bildirimleri",
-          icon: "options",
-          title: "Takip ettiklerim için",
-          subtitle: "Her takım, lig ve maç için ayrı aç/kapat",
-          action: { kind: "route", route: "/takip-bildirimleri" },
-        },
-      ],
-    });
-
-    /* 2 — OYUNLAR */
-    result.push({
-      key: "oyunlar",
-      title: "Oyunlar",
-      data: [
-        {
-          key: "oyun-merkezi",
-          icon: "game-controller",
-          title: "Oyun Merkezi",
-          subtitle: "Günün Testi, Penaltı, Arena, Kim Bu? ve daha fazlası",
-          tone: "win",
-          action: { kind: "route", route: "/(tabs)/oyunlar" },
-        },
-        {
-          key: "siralama",
-          icon: "podium",
-          title: "Rekor tablosu",
-          subtitle: "Oyun rekorları lider tablosu",
-          action: { kind: "route", route: "/siralama" },
-        },
-      ],
-    });
-
-    /* 3 — KEŞFET */
+    /* 1 — KEŞFET */
     result.push({
       key: "kesfet",
       title: "Keşfet",
@@ -418,7 +272,14 @@ export default function ProfileTabScreen() {
           icon: "radio",
           title: "Canlı maçlar",
           tone: "live",
-          action: { kind: "route", route: "/canli" },
+          action: { kind: "route", route: "/(tabs)/skorlar?tab=canli&tum=1" },
+        },
+        {
+          key: "siralama",
+          icon: "podium",
+          title: "Rekor tablosu",
+          subtitle: "Oyun rekorları lider tablosu",
+          action: { kind: "route", route: "/siralama" },
         },
         {
           key: "h2h",
@@ -436,87 +297,65 @@ export default function ProfileTabScreen() {
       ],
     });
 
-    /* 4 — AYARLAR */
-    const prefs: MenuItem[] = [
-      {
-        key: "kapsam",
-        icon: "location",
-        title: "İl, lig ve sezon",
-        value: [scope.cityLabel, scope.leagueLabel].filter(Boolean).join(" · ") || "Seç",
-        action: { kind: "city" },
-      },
-      {
-        key: "gorunum",
-        icon: "contrast",
-        title: "Görünüm",
-        value: THEME_LABELS[themeChoice],
-        action: { kind: "theme" },
-      },
-    ];
-    if (user) {
-      prefs.push({
-        key: "hesabim",
-        icon: "key",
-        title: "Hesap ve güvenlik",
-        subtitle: "Bilgilerin, şifren, engellediklerin",
-        action: { kind: "route", route: "/hesabim" },
-      });
-    }
-    result.push({ key: "tercihler", title: "Ayarlar", data: prefs });
+    /* 2 — BİLGİ VE DESTEK. Sosyal hesaplar ve site liste satırı değil,
+       listenin dibinde üç yuvarlak düğmedir (bkz. `listFooter`). */
+    result.push({
+      key: "bilgi",
+      title: "Bilgi ve destek",
+      data: [
+        { key: "kurallar", icon: "book", title: "Lig kuralları", action: { kind: "route", route: "/kurallar" } },
+        {
+          key: "cezalar",
+          icon: "hammer",
+          title: "Cezalar",
+          subtitle: "Disiplin talimatı ve kurul kararları",
+          action: { kind: "route", route: "/cezalar" },
+        },
+        {
+          key: "iletisim",
+          icon: "call",
+          title: "İletişim",
+          subtitle: "Telefon, WhatsApp, e-posta",
+          action: { kind: "route", route: "/iletisim" },
+        },
+      ],
+    });
 
-    /* 5 — BİLGİ VE DESTEK (eski Menü sekmesi) */
-    const info: MenuItem[] = [
-      { key: "kurallar", icon: "book", title: "Lig kuralları", action: { kind: "route", route: "/kurallar" } },
-      {
-        key: "cezalar",
-        icon: "hammer",
-        title: "Cezalar",
-        subtitle: "Disiplin talimatı ve kurul kararları",
-        action: { kind: "route", route: "/cezalar" },
-      },
-      {
-        key: "iletisim",
-        icon: "call",
-        title: "İletişim",
-        subtitle: "Telefon, WhatsApp, e-posta",
-        action: { kind: "route", route: "/iletisim" },
-      },
-    ];
-    /* Sosyal hesaplar ve site liste satırı değil, listenin dibinde üç
-       yuvarlak düğmedir (bkz. `listFooter`): sık açılmazlar ve altı satırlık
-       bir grubu yarı yarıya şişiriyorlardı. */
-    result.push({ key: "bilgi", title: "Bilgi ve destek", data: info });
-
-    /* 6 — Çıkış ve hesap silme: kendi başına, kırmızı, başlıksız grup.
-       Hesap silme burada da durur; App Store (5.1.1-v) ve Google Play silme
-       kapısının "kolayca bulunur" olmasını ister (bkz. app/hesap-sil.tsx). */
-    if (user) {
-      result.push({
-        key: "oturum",
-        data: [
-          {
-            key: "cikis",
-            icon: "log-out",
-            title: "Çıkış yap",
-            tone: "danger",
-            destructive: true,
-            action: { kind: "signOut" },
-          },
-          {
-            key: "hesap-sil",
-            icon: "trash",
-            title: "Hesabı sil",
-            subtitle: "Kalıcı olarak silinir, geri alınamaz",
-            tone: "danger",
-            destructive: true,
-            action: { kind: "route", route: "/hesap-sil" },
-          },
-        ],
-      });
-    }
+    /* 3 — AYARLAR: tek satır, tek ekran (app/ayarlar.tsx). Hesabı sil
+       oradaki "Oturum" grubunda da durur; App Store 5.1.1-v için girişli
+       üyede Profil'in en altında da doğrudan kapı olarak kalır
+       (docs/magaza-inceleme.md §1). */
+    result.push({
+      key: "ayarlar",
+      data: [
+        {
+          key: "ayarlar",
+          icon: "settings",
+          title: "Ayarlar",
+          subtitle: user
+            ? "Bildirimler, görünüm, lig, hesap ve güvenlik"
+            : "Görünüm, lig ve bildirim seçimi",
+          tone: "brand",
+          action: { kind: "route", route: "/ayarlar" },
+        },
+        ...(user
+          ? [
+              {
+                key: "hesap-sil",
+                icon: "trash",
+                title: "Hesabı sil",
+                subtitle: "Hesabını ve kişisel verilerini kalıcı olarak sil",
+                tone: "danger",
+                destructive: true,
+                action: { kind: "route", route: "/hesap-sil" },
+              } satisfies MenuItem,
+            ]
+          : []),
+      ],
+    });
 
     return result;
-  }, [scope.cityLabel, scope.leagueLabel, themeChoice, user]);
+  }, [user]);
 
   /* ------------------------------ ÇİZİM ---------------------------------- */
 
@@ -529,9 +368,8 @@ export default function ProfileTabScreen() {
 
   const renderSectionHeader = useCallback(
     ({ section }: { section: MenuSection }) =>
-      /* İçerik kabı zaten 14px dolgu basıyor; başlık kendi dolgusunu basmasın
-         ki ray kart kenarıyla hizalansın. */
-      section.title ? <SectionHeader title={section.title} style={styles.flushHeader} /> : null,
+      /* İçerik kabı zaten 14px dolgu basıyor; başlık kendi dolgusunu basmaz. */
+      section.title ? <SectionHeader title={section.title} inset="flush" /> : null,
     []
   );
 
@@ -540,7 +378,7 @@ export default function ProfileTabScreen() {
   /**
    * KİMLİK SAHNESİNİN ÜÇ SAYISI — takip edilen takım · lig/sezon · maç.
    * Üçü de cihazda saklanır (FavoriteProvider), misafirde de gerçektir; her
-   * sayı takip ekranının ilgili sekmesini açar.
+   * sayı Takip sekmesini açar (Takip'e kısa yol).
    */
   const heroStats = useMemo<ProfileHeroStat[]>(
     () => [
@@ -548,19 +386,19 @@ export default function ProfileTabScreen() {
         key: "takim",
         label: "Takım",
         value: favorite.favorites.length,
-        onPress: () => router.push("/(tabs)/favoriler?tab=takimlar"),
+        onPress: () => router.push("/(tabs)/takip?tab=takimlar"),
       },
       {
         key: "lig",
         label: "Lig · sezon",
         value: favoriteScopeCount,
-        onPress: () => router.push("/(tabs)/favoriler?tab=ligler"),
+        onPress: () => router.push("/(tabs)/takip?tab=ligler"),
       },
       {
         key: "mac",
         label: "Maç",
         value: favorite.favoriteMatches.length,
-        onPress: () => router.push("/(tabs)/favoriler?tab=maclar"),
+        onPress: () => router.push("/(tabs)/takip?tab=maclar"),
       },
     ],
     [favorite.favoriteMatches.length, favorite.favorites.length, favoriteScopeCount, router]
@@ -582,32 +420,15 @@ export default function ProfileTabScreen() {
     };
   }, [auth.isManagement, isPlayer, isPresident, me?.player?.player_img, teamCard?.logo, teamName, user]);
 
-  /** BEKLEYEN İŞLER — yalnız girişli kullanıcıda; ikisi de sunucudan sayılır. */
-  const inboxItems = useMemo<InboxItem[]>(
-    () => [
-      {
-        key: "bildirim",
-        icon: "notifications",
-        title: "Bildirimler",
-        count: unread.notifications,
-        idleLabel: "Hepsi okundu",
-        onPress: () => router.push("/bildirimler"),
-      },
-      {
-        key: "mesaj",
-        icon: "chatbubbles",
-        title: "Mesajlar",
-        count: unread.messages,
-        idleLabel: "Yeni mesaj yok",
-        onPress: () => router.push("/sohbet"),
-      },
-    ],
-    [router, unread.messages, unread.notifications]
-  );
+  /** Gelen kutusu satırının alt metni: "3 bildirim · 1 mesaj" / "Hepsi okundu". */
+  const inboxSubtitle = useMemo(() => {
+    const parts: string[] = [];
+    if (unread.notifications > 0) parts.push(`${formatNumber(unread.notifications)} bildirim`);
+    if (unread.messages > 0) parts.push(`${formatNumber(unread.messages)} mesaj`);
+    return parts.length ? `${parts.join(" · ")} okunmadı` : "Bildirimler ve mesajlar · hepsi okundu";
+  }, [unread.messages, unread.notifications]);
 
-  const openTeam = useCallback((teamId: number) => router.push(`/takim/${teamId}`), [router]);
-  const findTeam = useCallback(() => router.push("/(tabs)/ligler?tab=takimlar"), [router]);
-  const manageFollows = useCallback(() => router.push("/(tabs)/favoriler?tab=takimlar"), [router]);
+  const inboxBadge = unreadBadgeLabel(unread.total);
 
   const listHeader = useMemo(
     () => (
@@ -623,29 +444,55 @@ export default function ProfileTabScreen() {
             onRegister={openRegister}
           />
         )}
-        {user ? <InboxStrip items={inboxItems} /> : null}
 
-        <SectionHeader
-          title="Takip ettiğin takımlar"
-          action={favorite.favorites.length ? { label: "Yönet", onPress: manageFollows } : undefined}
-          style={styles.flushHeader}
-        />
-        <FollowedTeamsRail teams={favorite.favorites} onOpenTeam={openTeam} onAdd={findTeam} />
+        {/* Oyunlar: Günün Testi kimliğin hemen altında; oyun merkezi yanında. */}
+        <HubGrid inset="flush" style={styles.games}>
+          <HubTile
+            icon="bulb"
+            title="Günün Testi"
+            subtitle={dailyDone ? `Bugün oynadın · ${dailyDone}` : "Bugünün 10 sorusu seni bekliyor"}
+            tone="brand"
+            onPress={openDaily}
+          />
+          <HubTile
+            icon="game-controller"
+            title="Oyunlar"
+            subtitle="Penaltı, Arena, Kim Bu? ve daha fazlası"
+            tone="win"
+            onPress={openGames}
+          />
+        </HubGrid>
+
+        {user ? (
+          <ListRow
+            leading={{ icon: "mail-unread", tone: "brand" }}
+            title="Gelen kutusu"
+            subtitle={inboxSubtitle}
+            badge={inboxBadge ? <Badge label={inboxBadge} tone="brand" variant="solid" size="xs" /> : undefined}
+            position="single"
+            onPress={openInbox}
+            accessibilityLabel={
+              inboxBadge ? `Gelen kutusu, ${inboxBadge} okunmamış` : "Gelen kutusu, hepsi okundu"
+            }
+            style={styles.inbox}
+          />
+        ) : null}
         <View style={styles.sectionGap} />
       </>
     ),
     [
       auth.initializing,
-      favorite.favorites,
-      findTeam,
+      dailyDone,
       heroStats,
       heroUser,
-      inboxItems,
-      manageFollows,
+      inboxBadge,
+      inboxSubtitle,
       openAccount,
+      openDaily,
+      openGames,
+      openInbox,
       openRegister,
       openSignIn,
-      openTeam,
       user,
     ]
   );
@@ -681,7 +528,11 @@ export default function ProfileTabScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      <ScreenHeader title="Profil" scrollY={scrollY} />
+      <ScreenHeader
+        title="Profil"
+        scrollY={scrollY}
+        actions={[{ icon: "settings-outline", onPress: openSettings, accessibilityLabel: "Ayarlar" }]}
+      />
 
       <SectionList
         {...scrollProps}
@@ -697,30 +548,6 @@ export default function ProfileTabScreen() {
         refreshControl={user ? refreshControl : undefined}
         initialNumToRender={14}
       />
-
-      <BottomSheet
-        visible={themeSheetOpen}
-        onClose={closeThemeSheet}
-        title="Görünüm"
-        snap="content"
-      >
-        {/* Üç sabit seçenek — veri listesi değil, bu yüzden map yeterli. */}
-        <View style={styles.sheetBody}>
-          {THEME_OPTIONS.map((option, index) => (
-            <ThemeOptionRow
-              key={option.value}
-              option={option}
-              selected={option.value === themeChoice}
-              position={rowPosition(index, THEME_OPTIONS.length)}
-              onSelect={chooseTheme}
-            />
-          ))}
-          <Text style={styles.sheetNote} {...textScale.dense}>
-            Renkler uygulama açılırken sabitlendiği için tema değişiminde uygulama bir kez
-            tazelenir.
-          </Text>
-        </View>
-      </BottomSheet>
     </SafeAreaView>
   );
 }
@@ -749,41 +576,9 @@ const MenuRow = React.memo(function MenuRow({
       title={item.title}
       subtitle={item.subtitle}
       value={item.value}
-      badge={item.badge ? <Badge label={item.badge} tone="live" variant="solid" size="xs" /> : undefined}
+      badge={item.badge ? <Badge label={item.badge} tone="brand" variant="solid" size="xs" /> : undefined}
       destructive={item.destructive}
       position={position}
-      onPress={handlePress}
-    />
-  );
-});
-
-/** Görünüm alt sayfasının tek seçeneği. */
-const ThemeOptionRow = React.memo(function ThemeOptionRow({
-  option,
-  selected,
-  position,
-  onSelect,
-}: {
-  option: ThemeOption;
-  selected: boolean;
-  position: "single" | "first" | "middle" | "last";
-  onSelect: (choice: ThemeChoice) => void;
-}) {
-  const handlePress = useCallback(() => onSelect(option.value), [onSelect, option.value]);
-  const leading = useMemo(
-    () => ({ icon: option.icon, tone: selected ? ("brand" as Tone) : undefined }),
-    [option.icon, selected]
-  );
-
-  return (
-    <ListRow
-      leading={leading}
-      title={option.label}
-      position={position}
-      chevron={false}
-      trailing={
-        selected ? <Ionicons name="checkmark" size={18} color={colors.brandAccent} /> : undefined
-      }
       onPress={handlePress}
     />
   );
@@ -796,10 +591,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.bg,
   },
-  /* Bölüm başlığı, dolgulu kabın içinde kendi dolgusunu basmaz. */
-  flushHeader: {
-    paddingHorizontal: 0,
-  },
   content: {
     paddingHorizontal: layout.screenPadding,
     paddingBottom: layout.tabBarHeight + space.xxl,
@@ -811,17 +602,11 @@ const styles = StyleSheet.create({
   heroSkeleton: {
     marginTop: space.sm,
   },
-
-  /* Görünüm alt sayfası */
-  sheetBody: {
-    gap: space.xs,
-    paddingBottom: space.sm,
+  games: {
+    marginTop: space.md,
   },
-  sheetNote: {
-    ...type.caption,
-    color: colors.textTertiary,
-    paddingHorizontal: layout.rowPaddingH,
-    paddingTop: space.sm,
+  inbox: {
+    marginTop: space.md,
   },
 
   footer: {

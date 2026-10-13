@@ -210,7 +210,7 @@ export default function FollowNotificationsScreen() {
             title="Henüz bir şey takip etmiyorsun"
             body="Takım, lig, sezon ya da maç sayfasındaki yıldıza dokunarak takip et; ya da aşağıdan bir il seç."
             variant="inline"
-            action={{ label: "Takım bul", onPress: () => router.push("/(tabs)/ligler?tab=takimlar") }}
+            action={{ label: "Takım bul", onPress: () => router.push("/(tabs)/takip") }}
           />
         ) : (
           SECTIONS.map((section) => {

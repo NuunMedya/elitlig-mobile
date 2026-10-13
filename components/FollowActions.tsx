@@ -9,8 +9,14 @@
  *   [ ★ Takip et ]  [ ⇄ Karşılaştır ]
  *   [ ✓ Takip ediliyor ]  [ 🔔 ]  [ ⇄ Karşılaştır ]
  *
- * Zil yalnız takip edilen varlıkta görünür (takip edilmeyen şeyin bildirimi
- * olmaz) ve takip bildirimleri ekranını o takibin ayarları AÇIK olarak açar.
+ * TAKİP = BİLDİRİM: çağıranlar `onToggleFollow`'u `useFollowFlow().toggle`a,
+ * zili `useFollowFlow().openSettings`e bağlar — takip edildiği anda o takibin
+ * bildirim türleri alt sayfası açılır (takip bildirimleri ekranıyla aynı
+ * ayarlar). Zil yalnız takip edilen varlıkta görünür (takip edilmeyen şeyin
+ * bildirimi olmaz) ve aynı alt sayfayı yeniden açar.
+ *
+ * PAYLAŞ BURADA DEĞİL: detay sayfalarında paylaş başlığın sağ üst ikonudur;
+ * `extra` yalnız sayfaya özgü ikincil eylemler içindir (ör. Karşılaştır).
  *
  * ŞERİT SATIRI DOLDURUR: düğmeler içerik genişliğinden başlar ve kalan yeri
  * paylaşır (`flexGrow`). Eskiden sola yaslı iki hap sahnenin sağında boş bir

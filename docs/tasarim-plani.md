@@ -1,5 +1,10 @@
 # Premium Yeniden Tasarım — Envanter ve Plan
 
+> **Tarihçe notu:** Bu belge ilk yeniden tasarımın planıdır. Sonraki bilgi
+> mimarisi turunda Ana Sayfa kaldırıldı (bölümleri Skorlar, Takip ve Lig'e
+> dağıtıldı); alt çubuk Skorlar · Takip · Lig · Kulübüm · Profil oldu. Güncel
+> kurallar: `docs/arena-tasarim-dili.md` §4 ve §6, ekran haritası: `README.md`.
+
 Bu belge, yeniden tasarım briefinin **§1 (envanter)** ve **§7.1 (önce plan,
 sonra kod)** maddelerinin karşılığıdır. Onay verilene kadar bu dosya dışında
 hiçbir üretim dosyası değişmez.

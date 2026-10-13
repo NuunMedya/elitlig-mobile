@@ -2,7 +2,7 @@
  * Chip / ChipGroup — filtre çipleri (§4.5).
  *
  * Maç listesinde gün ve "takımım" filtresi, oyuncularda mevki, puan
- * durumunda favoriler, ScopeBar'da şehir/lig/sezon hep bu çiptir.
+ * durumunda favoriler, lig seçicinin sabitlenmiş lig çipleri hep bu çiptir.
  *
  * SEÇİM DİLİ (Arena): seçili çip DÜZ marka dolgusu + beyaz metindir;
  * seçili değilse beyaz kâğıt hap + hairline kenarlık. Gri kâğıt zeminde beyaz

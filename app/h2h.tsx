@@ -334,7 +334,7 @@ export default function H2HScreen() {
         hasTargets
           ? [
               {
-                icon: "share-social-outline",
+                icon: "share-outline",
                 onPress: openShare,
                 accessibilityLabel: "Karşılaştırmayı paylaş",
               },

@@ -6,10 +6,13 @@
  * Menü → "Şehir değiştir" ile sonradan da açılır; o yüzden yığında geri
  * dönülecek bir ekran varsa başlıkta geri oku çıkar.
  *
- * AKIŞ KORUNUR: seçim `scope.selectCity` ile kaydedilir (şehir değişince lig ve
- * sezon sıfırlanır, sunucu yenisini önerir), `INTRO_SEEN_KEY` yazılır ve ekran
- * `/(tabs)` ile değiştirilir. Bayrak yazılamazsa ekran bir sonraki açılışta
- * yine gelir — engel değil, o yüzden hata yutulur.
+ * İKİ KİP:
+ *   · İLK AÇILIŞ (`INTRO_SEEN_KEY` yok) → sihirbazın 1. adımı (ADIM 1 / 4).
+ *     Seçim `scope.selectCity` ile kaydedilir (lig ve sezon sıfırlanır, sunucu
+ *     yenisini önerir) ve `/baslangic` açılır: lig → takım → bildirim. Bayrak
+ *     orada, son adımda yazılır. "Atla" şehri değiştirmeden ilerler.
+ *   · SONRADAN (bayrak var, ör. "Şehir değiştir") → tek adımlık seçici: şehri
+ *     seçer ve geri döner; yığında geri yoksa sekmelere gider.
  *
  * ROZET NE ANLATIR: `/api/meta/cities` yalnız lig verisi olan şehirleri
  * döndürür; arşivlenmiş olanlar `is_archived` ile işaretlenir. ARENA: renk
@@ -26,7 +29,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { TurkeyMap } from "@/components/TurkeyMap";
@@ -116,6 +119,14 @@ export default function CityIntroScreen() {
   /** Geri oku yalnız menüden gelindiğinde anlamlı; ilk açılışta yığın boştur. */
   const canGoBack = useMemo(() => router.canGoBack(), [router]);
 
+  /** İlk açılış mı? null = bayrak henüz okunmadı. */
+  const [firstRun, setFirstRun] = useState<boolean | null>(null);
+  useEffect(() => {
+    AsyncStorage.getItem(INTRO_SEEN_KEY)
+      .then((value) => setFirstRun(!value))
+      .catch(() => setFirstRun(false));
+  }, []);
+
   const cities = scope.cities;
   const loading = cities.length === 0 && scope.loading;
 
@@ -135,14 +146,16 @@ export default function CityIntroScreen() {
     haptics.select();
   }, []);
 
-  const finish = useCallback(async () => {
+  const finish = useCallback(() => {
     if (!selectedId) return;
     if (selectedId !== scope.cityId) scope.selectCity(selectedId);
-    await AsyncStorage.setItem(INTRO_SEEN_KEY, "1").catch(() => {
-      // Bayrak yazılamazsa ekran bir dahaki açılışta yine gelir; engel değil.
-    });
-    router.replace("/(tabs)");
-  }, [router, scope, selectedId]);
+    if (firstRun) router.replace("/baslangic");
+    else if (canGoBack) router.back();
+    else router.replace("/(tabs)");
+  }, [canGoBack, firstRun, router, scope, selectedId]);
+
+  /** İlk açılışta şehir adımı da atlanabilir: önerilen kapsamla sürer. */
+  const skip = useCallback(() => router.replace("/baslangic"), [router]);
 
   const renderItem = useCallback(
     ({ item, index }: { item: MetaOption; index: number }) => (
@@ -208,7 +221,7 @@ export default function CityIntroScreen() {
     <SafeAreaView style={styles.screen} edges={["top", "bottom"]}>
       <ScreenHeader
         title="Şehrini seç"
-        overline="ELİTLİG"
+        overline={firstRun ? `ADIM 1 / 4` : "ELİTLİG"}
         subtitle="Lig, fikstür ve yıldızlar şehrine göre gelir"
         back={canGoBack}
         scrollY={scrollY}
@@ -253,6 +266,9 @@ export default function CityIntroScreen() {
       )}
 
       <View style={styles.footer}>
+        {firstRun ? (
+          <Button label="Atla" variant="ghost" size="lg" onPress={skip} testID="intro-city-skip" />
+        ) : null}
         <Button
           label={
             selectedId
@@ -264,7 +280,9 @@ export default function CityIntroScreen() {
           icon="arrow-forward"
           iconPosition="right"
           size="lg"
-          fullWidth
+          fullWidth={!firstRun}
+          style={firstRun ? styles.footerPrimary : undefined}
+          testID="intro-city-next"
         />
       </View>
     </SafeAreaView>
@@ -309,11 +327,17 @@ const styles = StyleSheet.create({
   },
 
   footer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
     paddingHorizontal: layout.screenPadding,
     paddingTop: space.sm,
     paddingBottom: space.sm,
     borderTopWidth: hairline,
     borderTopColor: colors.border,
     backgroundColor: colors.bg,
+  },
+  footerPrimary: {
+    flex: 1,
   },
 });

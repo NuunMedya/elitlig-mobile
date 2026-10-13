@@ -1,223 +1,114 @@
 /**
- * Favoriler sekmesi — kullanıcının yıldızladığı her şeyin tek adresi.
+ * TAKİP sekmesi — takip ettiğin takımlar, maçlar, ligler ve onlarla ilgili akış.
  *
- * NE: üç görünüm tek segment denetimiyle değişir —
- *   MAÇLAR   favori takım ∪ favori maç ∪ favori lig/sezon kaynaklarından
- *            birleştirilmiş program: CANLI → BUGÜN → YAKLAŞAN → SON 7 GÜN
- *   TAKIMLAR yıldızlı takımlar; her satırda lig ve sıradaki maç özeti
- *   LİGLER   yıldızlı lig ve sezonlar; dokununca Ligler sekmesi o kapsamla açılır
+ * NE (yukarıdan aşağı):
+ *   1. TAKIMLARIM   yatay şerit: amblem + zil, son 5 maç formu, sıradaki maça
+ *                   kalan süre; sonda "Takip et" (takım arama).
+ *   2. MAÇLAR       her takımın en güncel maçı: canlı/sıradaki, yoksa son
+ *                   biten (eski Ana Sayfa'nın "Takımların" şeridi).
+ *   3. TAKİP ETTİĞİN MAÇLAR  tek tek takip edilen maçlar; kartın altında
+ *                   yıldız (bırak) ve zil.
+ *   4. AKIŞ         takip edilenlerle ilgili haber / transfer / disiplin
+ *                   (components/follow/useFollowNews — süzgeç neden istemcide
+ *                   orada anlatılır); tür etiketi kaydın `kind` alanından.
+ *                   Transfer → oyuncu sayfası, disiplin → takım sayfası
+ *                   (tekil haber ucu yalnız editör haberinde var).
+ *   5. LİGLER       takip edilen lig / sezon / iller; dokununca Lig sekmesi o
+ *                   kapsamla açılır, satırda yıldız + zil.
  *
- * NEDEN PROGRAM ÖNCE: eski `app/favorilerim.tsx` yalnızca "ne favoriledim"
- * dökümüydü. Kullanıcının gerçekten merak ettiği şey favorilerinin BUGÜN NE
- * YAPTIĞIDIR; bu yüzden varsayılan görünüm düz liste değil, zamana göre
- * bölümlenmiş maç programıdır. Ham favori listesi ikinci ve üçüncü sekmeye
- * çekilmiştir.
+ * BOŞ DURUM: takım takip edilmiyorsa şerit yerine TAKIM SEÇME IZGARASI çıkar
+ * (components/follow/TeamPickerGrid — ilk açılışta da aynı ızgara). Izgara
+ * seçili kapsamın puan tablosundan beslenir; bu yüzden üstünde küçük bir
+ * `LeaguePicker` durur. Takip sekmesinin geri kalanı kapsamdan bağımsızdır.
  *
- * NEDEN BİRLEŞTİRME İSTEMCİDE: sunucuda "favorilerimin maçları" diye tek bir uç
- * yok; takım (`/maclar?team_id=`), lig ve sezon (`/maclar?league_id=`) uçları
- * ayrı. Favori sayısı küçük olduğundan (tipik 1-5) her kaynak kendi sorgusuyla
- * çekilir ve maç id'sine göre tekilleştirilir. CANLI bölüm ayrıca
- * `useLiveFavoriteCount` yoklamasından (20 sn, yalnız ön planda) beslenir —
- * o kanca zaten sekme rozetini besliyor, ikinci bir zamanlayıcı açılmaz.
+ * TAKİP = BİLDİRİM: bu ekrandaki her takip düğmesi `useFollowFlow()` kullanır
+ * (takip et → bildirim türleri alt sayfası); her takip öğesinde `FollowBell`
+ * o takibin bildirim türlerini açar. Başlıktaki zil bütün takip bildirimleri.
  *
- * GÖRÜNÜM: program bölümleri Maçlar sekmesiyle aynı satır dilini konuşur —
- * her bölüm TEK karttır, içinde `MatchCard variant="compact"` satırları;
- * gün skorun altında yazar (bölümler birden çok günü karıştırır). Canlı
- * bölümün başlığında nabız noktası vardır.
+ * NEDEN MAÇLAR İSTEMCİDE BİRLEŞİR: sunucuda "takiplerimin maçları" ucu yok;
+ * takım başına `/maclar?team_id=` çekilir (tipik 1-5 takım), tek tek takip
+ * edilen maçlar `/maclar/:id` ile tamamlanır. Canlı skor `useLiveFavoriteCount`
+ * yoklamasından ezilir — o kanca zaten sekme rozetini besliyor.
  *
- * NEDEN GİRİŞSİZ DE ÇALIŞIR: favoriler cihazda saklanır. Giriş yalnızca push
- * bildirimlerini (gol, maç başladı) açar; üst bant bunu anlatır.
+ * GİRİŞSİZ DE ÇALIŞIR: takipler cihazda saklanır; giriş yalnız bildirimleri
+ * açar, üstteki bant bunu söyler.
  *
- * DERİN BAĞLANTI: /(tabs)/favoriler?tab=maclar | takimlar | ligler
+ * ESKİ ROTA: `/favoriler?tab=…` buraya yönlendirir (app/(tabs)/favoriler.tsx).
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  FlatList,
-  RefreshControl,
-  SectionList,
-  StyleSheet,
-  Text,
-  View,
-  type SectionListRenderItemInfo,
-} from "react-native";
+import { useRouter } from "expo-router";
+import React, { useCallback, useMemo } from "react";
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { FollowBell, FollowStar } from "@/components/FollowControls";
+import { LeaguePicker } from "@/components/LeaguePicker";
+import { FollowedTeamsStrip, type TeamStripSummary } from "@/components/follow/FollowedTeamsStrip";
+import { TeamPickerGrid } from "@/components/follow/TeamPickerGrid";
+import {
+  belongsToTeam,
+  byKickoffAsc,
+  countdownLabel,
+  dayKeyOf,
+  nextAndLast,
+  teamForm,
+} from "@/components/follow/followMatches";
+import { useFollowNews } from "@/components/follow/useFollowNews";
 import {
   Button,
-  EmptyState,
   ErrorState,
   ListRow,
-  LiveBadge,
   MatchCard,
+  MatchCardRail,
   ScreenHeader,
   SectionHeader,
-  SegmentedControl,
+  SkeletonListRow,
   SkeletonMatchRow,
   Surface,
-  TeamLogo,
-  Touchable,
   refreshControlProps,
   useHeaderScroll,
   useRefresh,
-  useToast,
 } from "@/components/ui";
-import type { MatchRowPosition, SegmentedItem } from "@/components/ui";
+import type { LeadingIcon } from "@/components/ui";
 import { useLiveFavoriteCount } from "@/hooks/useLiveFavoriteCount";
 import { useTeamLogos } from "@/hooks/useTeamLogos";
-import { getMatch, getMatches, getTeamMatches } from "@/lib/api/matches";
-import { formatDayHeading, formatTime } from "@/lib/format";
+import { getMatch, getTeamMatches } from "@/lib/api/matches";
+import { timeAgo } from "@/lib/format";
 import { matchState } from "@/lib/match";
 import { queryKeys } from "@/lib/queryKeys";
-import type { ApiMatch } from "@/lib/types";
+import type { ApiMatch, NewsItem } from "@/lib/types";
 import { useAuth } from "@/providers/AuthProvider";
-import { useFavorite, type FavoriteScope, type FavoriteTeam } from "@/providers/FavoriteProvider";
+import { useFavorite, type FavoriteScope, type FavoriteTeam, type FollowTarget } from "@/providers/FavoriteProvider";
+import { useFollowFlow } from "@/providers/FollowFlowProvider";
 import { useScope } from "@/providers/ScopeProvider";
-import { colors, layout, radius, space, textScale, touchSlop, type } from "@/theme";
+import { colors, layout, radius, space, textScale, type } from "@/theme";
 
-/* ===================== YARDIMCILAR (saf, bileşen dışı) ===================== */
+type Position = "single" | "first" | "middle" | "last";
 
-type FavTab = "maclar" | "takimlar" | "ligler";
-
-/**
- * ?tab= değeri — bilinmeyen/eksik değerde varsayılan görünüme düşer.
- *
- * DİKKAT — I/İ TUZAĞI: rota anahtarları ASCII'dir ama parametre büyük harfle ya
- * da Türkçe harfle gelebilir. `"TAKIMLAR".toLocaleLowerCase("tr")` noktasız
- * "takımlar", düz `"LİG".toLowerCase()` ise birleşik noktalı "li̇g" üretir;
- * ikisi de eşleşmeyi kaçırır. Bu yüzden önce I ailesi ASCII "i"ye katlanır,
- * sonra küçültme yapılır.
- */
-function normalizeTab(value?: string | string[]): FavTab {
-  const raw = Array.isArray(value) ? value[0] : value;
-  const key = String(raw ?? "")
-    .trim()
-    .replace(/[İIı]/g, "i")
-    .toLowerCase();
-  if (key === "takimlar" || key === "takim" || key === "teams") return "takimlar";
-  if (key === "ligler" || key === "lig" || key === "leagues") return "ligler";
-  return "maclar";
-}
-
-/** Yerel takvime göre "YYYY-MM-DD". */
-function dayKeyOf(date: Date): string {
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${date.getFullYear()}-${month}-${day}`;
-}
-
-/**
- * Maç kaydının gün anahtarı. Sunucu `date` alanını hem "2026-08-19" hem
- * "2026-08-19T00:00:00.000Z" biçiminde döndürebiliyor; ilk on karakter varsa
- * doğrudan okunur — UTC gece yarısını yerel saate çevirmek negatif zaman
- * diliminde günü bir geri kaydırırdı.
- */
-function matchDayKey(match: ApiMatch): string {
-  const raw = String(match.date ?? "").trim();
-  const direct = raw.match(/^(\d{4}-\d{2}-\d{2})/);
-  if (direct) return direct[1];
-  const parsed = new Date(raw);
-  return Number.isNaN(parsed.getTime()) ? "" : dayKeyOf(parsed);
-}
-
-/** Kronolojik sıralama anahtarı: "YYYY-MM-DD HH:MM" dizi karşılaştırmasıyla doğru sıralanır. */
-function matchSortKey(match: ApiMatch): string {
-  return `${matchDayKey(match)} ${formatTime(match.time) || "00:00"}`;
-}
-
-/** Gün anahtarını takvim aritmetiğiyle kaydırır (ay/yıl sınırı doğru geçilir). */
-function shiftDayKey(key: string, days: number): string {
-  const [year, month, day] = key.split("-").map(Number);
-  if (!year || !month || !day) return key;
-  const date = new Date(year, month - 1, day);
-  date.setDate(date.getDate() + days);
-  return dayKeyOf(date);
-}
-
-/** Takım adı karşılaştırması Türkçe küçük harfle yapılır (İ/I tuzağı). */
-const normalizeName = (value?: string | null) => String(value ?? "").trim().toLocaleLowerCase("tr");
-
-/** Eski maç kayıtlarında takım id'si boş olabilir; ada göre eşleşme yedeği şart. */
-function belongsToTeam(match: ApiMatch, team: FavoriteTeam): boolean {
-  if (match.home_team_id != null && Number(match.home_team_id) === team.id) return true;
-  if (match.away_team_id != null && Number(match.away_team_id) === team.id) return true;
-  const name = normalizeName(team.name);
-  return normalizeName(match.first_team_name) === name || normalizeName(match.second_team_name) === name;
-}
-
-/** Favori takımın o maçtaki rakibi. */
-function opponentName(match: ApiMatch, team: FavoriteTeam): string {
-  const isHome =
-    (match.home_team_id != null && Number(match.home_team_id) === team.id) ||
-    normalizeName(match.first_team_name) === normalizeName(team.name);
-  return (isHome ? match.second_team_name : match.first_team_name) ?? "";
-}
-
-/** Grup içi konum — ayraç ve köşe yuvarlaması için. */
-function rowPosition(index: number, total: number): MatchRowPosition {
+function rowPosition(index: number, total: number): Position {
   if (total <= 1) return "single";
   if (index === 0) return "first";
   if (index === total - 1) return "last";
   return "middle";
 }
 
-const byKeyAsc = (a: ApiMatch, b: ApiMatch) => (matchSortKey(a) < matchSortKey(b) ? -1 : 1);
-const byKeyDesc = (a: ApiMatch, b: ApiMatch) => (matchSortKey(a) > matchSortKey(b) ? -1 : 1);
+/** Akış satırının ikonu — kaydın türü (`kind`) ne olduğunu söyler. */
+const NEWS_ICON: Record<NewsItem["kind"], LeadingIcon> = {
+  news: { icon: "newspaper-outline", tone: "neutral" },
+  transfer: { icon: "swap-horizontal-outline", tone: "brand" },
+  penalty: { icon: "alert-circle-outline", tone: "warn" },
+};
 
-interface MatchSection {
-  key: string;
-  title: string;
-  data: ApiMatch[];
-}
+const NEWS_KIND_LABEL: Record<NewsItem["kind"], string> = {
+  news: "Haber",
+  transfer: "Transfer",
+  penalty: "Disiplin",
+};
 
-interface ScopeSection {
-  key: string;
-  title: string;
-  kind: "league" | "season";
-  data: FavoriteScope[];
-}
+/* ═════════════════════════ KÜÇÜK BİLEŞENLER ═════════════════════════ */
 
-interface TeamSummary {
-  /** Takımın oynadığı lig — son/sıradaki maç kaydından okunur. */
-  league: string | null;
-  next: ApiMatch | null;
-}
-
-/** YAKLAŞAN bölümü sonsuza kadar uzamasın: bir sezonun tamamı listelenmez. */
-const UPCOMING_LIMIT = 50;
-/** Geçmiş penceresi — şartname §2.2. */
-const RECENT_DAYS = 7;
-
-/* ===================== KÜÇÜK BİLEŞENLER ===================== */
-
-/** Favoriden çıkarma yıldızı — satır içinde ayrı dokunma alanı. */
-const StarButton = React.memo(function StarButton({
-  label,
-  onPress,
-}: {
-  label: string;
-  onPress: () => void;
-}) {
-  return (
-    <Touchable
-      feedback="icon"
-      haptic="selection"
-      onPress={onPress}
-      hitSlop={touchSlop(22)}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-    >
-      <Ionicons name="star" size={20} color={colors.star} />
-    </Touchable>
-  );
-});
-
-/**
- * Girişsiz üst bandı. Favoriler cihazda çalışır ama push hedeflemesi sunucudaki
- * kayda göre yapılır — kullanıcıya kaybettiği şey (gol bildirimi) söylenir.
- */
+/** Girişsiz üst bant — takip cihazda çalışır, bildirim hesaba bağlıdır. */
 const GuestBanner = React.memo(function GuestBanner({ onSignIn }: { onSignIn: () => void }) {
   return (
     <Surface level={1} radius="xl" style={styles.banner}>
@@ -225,157 +116,107 @@ const GuestBanner = React.memo(function GuestBanner({ onSignIn }: { onSignIn: ()
         <Ionicons name="notifications" size={17} color={colors.brandAccent} />
       </View>
       <Text style={styles.bannerText} {...textScale.dense}>
-        Favorilerin bu cihazda. Giriş yap, gol bildirimlerini al.
+        Takiplerin bu cihazda. Giriş yap, gol ve sonuç bildirimi al.
       </Text>
       <Button label="Giriş yap" size="sm" variant="primary" onPress={onSignIn} />
     </Surface>
   );
 });
 
-/** Maç satırı — `onPress`/`onToggleFavorite` içeride sabitlenir ki memo işe yarasın.
- *  Satırlar `position` ile bölüm başına tek kart kurar. */
-const FavoriteMatchRow = React.memo(function FavoriteMatchRow({
+/** Takip edilen tek maç — kart + alt şeritte yıldız (bırak) ve zil. */
+const FollowedMatchCard = React.memo(function FollowedMatchCard({
   match,
-  position,
-  showDate,
   homeLogo,
   awayLogo,
-  starred,
   onOpen,
-  onToggleStar,
 }: {
   match: ApiMatch;
-  position: MatchRowPosition;
-  /** Gün etiketi — yalnız birden çok günü karıştıran bölümlerde (Yaklaşan, Son 7 gün). */
-  showDate: boolean;
-  homeLogo?: string | null;
-  awayLogo?: string | null;
-  starred: boolean;
+  homeLogo: string | null;
+  awayLogo: string | null;
   onOpen: (matchId: number) => void;
-  onToggleStar: (matchId: number) => void;
 }) {
-  const open = useCallback(() => onOpen(match.id), [onOpen, match.id]);
-  const toggle = useCallback(() => onToggleStar(match.id), [onToggleStar, match.id]);
-
+  const target = useMemo<FollowTarget>(
+    () => ({
+      type: "match",
+      id: Number(match.id),
+      name: `${match.first_team_name ?? "Ev sahibi"} – ${match.second_team_name ?? "Deplasman"}`,
+    }),
+    [match.id, match.first_team_name, match.second_team_name]
+  );
+  const open = useCallback(() => onOpen(Number(match.id)), [onOpen, match.id]);
   return (
     <MatchCard
-      variant="compact"
-      position={position}
       match={match}
       homeLogo={homeLogo}
       awayLogo={awayLogo}
-      showDate={showDate}
-      showVenue
-      isFavorite={starred}
-      onToggleFavorite={toggle}
+      showDate
       onPress={open}
+      footer={
+        <View style={styles.matchFooter}>
+          <Text style={styles.matchFooterText} numberOfLines={1} {...textScale.dense}>
+            Maç takipte
+          </Text>
+          <FollowStar target={target} />
+          <FollowBell target={target} size={16} />
+        </View>
+      }
     />
   );
 });
 
-/** Favori takım satırı. */
-const FavoriteTeamRow = React.memo(function FavoriteTeamRow({
-  team,
-  logo,
-  subtitle,
-  position,
-  onOpen,
-  onRemove,
-}: {
-  team: FavoriteTeam;
-  /** Favori kaydında logo yoksa maç verisinden çözülen amblem. */
-  logo?: string | null;
-  subtitle: string;
-  position: MatchRowPosition;
-  onOpen: (teamId: number) => void;
-  onRemove: (team: FavoriteTeam) => void;
-}) {
-  const open = useCallback(() => onOpen(team.id), [onOpen, team.id]);
-  const remove = useCallback(() => onRemove(team), [onRemove, team]);
-
-  return (
-    <ListRow
-      leading={<TeamLogo name={team.name} logo={logo} size={layout.crestLg} />}
-      title={team.name}
-      subtitle={subtitle}
-      position={position}
-      onPress={open}
-      trailing={<StarButton label={`${team.name} favorilerden çıkar`} onPress={remove} />}
-    />
-  );
-});
-
-/** Favori lig / sezon satırı. */
-const FavoriteScopeRow = React.memo(function FavoriteScopeRow({
+/** Takip edilen lig / sezon / il satırı. */
+const ScopeFollowRow = React.memo(function ScopeFollowRow({
   item,
   kind,
   position,
   onOpen,
-  onRemove,
 }: {
   item: FavoriteScope;
-  kind: "league" | "season";
-  position: MatchRowPosition;
-  onOpen: (item: FavoriteScope, kind: "league" | "season") => void;
-  onRemove: (item: FavoriteScope, kind: "league" | "season") => void;
+  kind: "league" | "season" | "city";
+  position: Position;
+  onOpen: (item: FavoriteScope, kind: "league" | "season" | "city") => void;
 }) {
-  const open = useCallback(() => onOpen(item, kind), [onOpen, item, kind]);
-  const remove = useCallback(() => onRemove(item, kind), [onRemove, item, kind]);
-
+  const target = useMemo<FollowTarget>(() => ({ type: kind, id: item.id, name: item.name }), [item.id, item.name, kind]);
+  const open = useCallback(() => onOpen(item, kind), [item, kind, onOpen]);
+  const icon: LeadingIcon =
+    kind === "league"
+      ? { icon: "trophy-outline", tone: "brand" }
+      : kind === "season"
+        ? { icon: "calendar-outline", tone: "brand" }
+        : { icon: "location-outline", tone: "brand" };
   return (
     <ListRow
-      leading={{ icon: kind === "league" ? "trophy-outline" : "calendar-outline", tone: "brand" }}
+      leading={icon}
       title={item.name}
-      subtitle={kind === "league" ? "Ligler sekmesinde aç" : "Sezonu Ligler sekmesinde aç"}
+      subtitle={kind === "league" ? "Lig" : kind === "season" ? "Sezon" : "İl"}
       position={position}
       onPress={open}
-      trailing={<StarButton label={`${item.name} favorilerden çıkar`} onPress={remove} />}
+      chevron={false}
+      trailing={
+        <View style={styles.rowControls}>
+          <FollowStar target={target} />
+          <FollowBell target={target} size={16} />
+        </View>
+      }
     />
   );
 });
 
-/* ===================== EKRAN ===================== */
+/* ═════════════════════════ EKRAN ═════════════════════════ */
 
-export default function FavorilerScreen() {
+export default function TakipScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ tab?: string }>();
   const auth = useAuth();
-  const toast = useToast();
   const queryClient = useQueryClient();
-  const { selectLeague, selectSeason } = useScope();
+  const scope = useScope();
+  const flow = useFollowFlow();
   const { logoFor } = useTeamLogos();
   const live = useLiveFavoriteCount();
   const { scrollY, scrollProps } = useHeaderScroll();
+  const { favorites, favoriteLeagues, favoriteSeasons, favoriteCities, favoriteMatches, isFollowing } =
+    useFavorite();
 
-  const {
-    favorites,
-    favoriteLeagues,
-    favoriteSeasons,
-    favoriteMatches,
-    addFavorite,
-    removeFavorite,
-    isFavoriteMatch,
-    toggleFavoriteMatch,
-    toggleFavoriteLeague,
-    toggleFavoriteSeason,
-  } = useFavorite();
-
-  const [tab, setTab] = useState<FavTab>(() => normalizeTab(params.tab));
-
-  // Derin bağlantı sonradan da gelebilir (bildirime dokunma): parametre
-  // değişince görünüm ona uyar, kullanıcının elle seçimi ezilmez.
-  const paramTab = params.tab;
-  useEffect(() => {
-    if (paramTab) setTab(normalizeTab(paramTab));
-  }, [paramTab]);
-
-  // Sekme değişince yeni liste tepeden başlar; başlığın daralma ilerlemesi de
-  // sıfırlanmazsa başlık boşuna küçük kalır.
-  useEffect(() => {
-    scrollY.setValue(0);
-  }, [tab, scrollY]);
-
-  /* ---- Kaynak sorgular: takım / lig / sezon ---- */
+  /* ---- Takım maçları ---- */
 
   const teamQueries = useQueries({
     queries: favorites.map((team) => ({
@@ -385,464 +226,280 @@ export default function FavorilerScreen() {
     })),
   });
 
-  const leagueQueries = useQueries({
-    queries: favoriteLeagues.map((league) => ({
-      queryKey: queryKeys.matches({ leagueId: league.id }),
-      queryFn: () => getMatches({ leagueId: league.id, limit: 120 }),
-      staleTime: 60_000,
-    })),
-  });
-
-  const seasonQueries = useQueries({
-    queries: favoriteSeasons.map((season) => ({
-      queryKey: queryKeys.matches({ seasonId: season.id }),
-      queryFn: () => getMatches({ seasonId: season.id, limit: 120 }),
-      staleTime: 60_000,
-    })),
-  });
-
-  /**
-   * Toplu kaynaklardan gelen maçlar. Tek tek yıldızlanmış maçların hangilerinin
-   * AYRICA çekilmesi gerektiği BURADAN hesaplanır; tekil maç sonuçları bu
-   * haritaya KATILMAZ — katılsaydı sorgu listesi kendi sonucuyla küçülüp
-   * büyüyerek salınırdı.
-   */
-  const bulkMatches = useMemo(() => {
+  const teamPool = useMemo(() => {
     const map = new Map<number, ApiMatch>();
-    const collect = (rows?: ApiMatch[]) => {
-      rows?.forEach((row) => {
-        if (row?.id != null) map.set(Number(row.id), row);
-      });
-    };
-    teamQueries.forEach((query) => collect(query.data));
-    leagueQueries.forEach((query) => collect(query.data));
-    seasonQueries.forEach((query) => collect(query.data));
-    return map;
-  }, [teamQueries, leagueQueries, seasonQueries]);
+    teamQueries.forEach((query) => query.data?.forEach((row) => row?.id != null && map.set(Number(row.id), row)));
+    // Canlı yoklaması en taze skoru taşır.
+    live.matches.forEach((match) => map.has(Number(match.id)) && map.set(Number(match.id), match));
+    return Array.from(map.values());
+  }, [teamQueries, live.matches]);
 
-  const missingMatchIds = useMemo(
-    () => favoriteMatches.filter((id) => !bulkMatches.has(id)),
-    [favoriteMatches, bulkMatches]
-  );
+  /** Takım başına: form, sayaç ve en güncel maç. Sorgusu bitmeyen takım özetsiz kalır (iskelet). */
+  const { summaries, teamMatches } = useMemo(() => {
+    const today = dayKeyOf(new Date());
+    const now = new Date();
+    const map = new Map<number, TeamStripSummary>();
+    const picked = new Map<number, ApiMatch>();
+    favorites.forEach((team, index) => {
+      if (!teamQueries[index]?.data) return;
+      const own = teamPool.filter((match) => belongsToTeam(match, team));
+      const { next, last } = nextAndLast(own, team, today);
+      map.set(team.id, {
+        form: teamForm(own, team),
+        countdown: next ? countdownLabel(next, now) : "",
+        live: next ? matchState(next) === "live" : false,
+      });
+      const chosen = next ?? last;
+      if (chosen) picked.set(Number(chosen.id), chosen);
+    });
+    return { summaries: map, teamMatches: Array.from(picked.values()).sort(byKickoffAsc) };
+  }, [favorites, teamPool, teamQueries]);
+
+  /* ---- Tek tek takip edilen maçlar ---- */
 
   const matchQueries = useQueries({
-    queries: missingMatchIds.map((id) => ({
+    queries: favoriteMatches.map((id) => ({
       queryKey: queryKeys.match(id),
       queryFn: () => getMatch(id),
       staleTime: 60_000,
     })),
   });
 
-  /* ---- Birleştirme ---- */
+  const followedMatches = useMemo(() => {
+    const liveById = new Map(live.matches.map((match) => [Number(match.id), match]));
+    return matchQueries
+      .map((query) => query.data)
+      .filter((match): match is ApiMatch => Boolean(match?.id))
+      .map((match) => liveById.get(Number(match.id)) ?? match)
+      .sort(byKickoffAsc);
+  }, [matchQueries, live.matches]);
 
-  const hasAnyFavorite =
-    favorites.length > 0 ||
-    favoriteLeagues.length > 0 ||
-    favoriteSeasons.length > 0 ||
-    favoriteMatches.length > 0;
+  /* ---- Akış ---- */
 
-  const pool = useMemo(() => {
-    const map = new Map<number, ApiMatch>(bulkMatches);
-    matchQueries.forEach((query) => {
-      const match = query.data;
-      if (match?.id != null) map.set(Number(match.id), match);
-    });
-    // Canlı yoklaması en taze skoru taşır; aynı id varsa onu ezer.
-    live.matches.forEach((match) => map.set(Number(match.id), match));
-    return Array.from(map.values());
-  }, [bulkMatches, matchQueries, live.matches]);
+  const news = useFollowNews({
+    teams: favorites,
+    leagues: favoriteLeagues,
+    seasons: favoriteSeasons,
+    cities: favoriteCities,
+    scopeCityId: scope.cityId,
+  });
 
-  const sections = useMemo<MatchSection[]>(() => {
-    const today = dayKeyOf(new Date());
-    const floor = shiftDayKey(today, -RECENT_DAYS);
-    const liveIds = new Set(live.matches.map((match) => Number(match.id)));
+  /* ---- Durum ---- */
 
-    const liveRows: ApiMatch[] = [];
-    const todayRows: ApiMatch[] = [];
-    const upcomingRows: ApiMatch[] = [];
-    const recentRows: ApiMatch[] = [];
+  const scopeRows = useMemo(
+    () => [
+      ...favoriteLeagues.map((item) => ({ item, kind: "league" as const })),
+      ...favoriteSeasons.map((item) => ({ item, kind: "season" as const })),
+      ...favoriteCities.map((item) => ({ item, kind: "city" as const })),
+    ],
+    [favoriteCities, favoriteLeagues, favoriteSeasons]
+  );
 
-    pool.forEach((match) => {
-      const day = matchDayKey(match);
-      if (!day) return;
-      if (liveIds.has(Number(match.id)) || matchState(match) === "live") {
-        liveRows.push(match);
-        return;
-      }
-      if (day === today) {
-        todayRows.push(match);
-        return;
-      }
-      if (day > today) {
-        upcomingRows.push(match);
-        return;
-      }
-      if (day >= floor) recentRows.push(match);
-    });
-
-    const result: MatchSection[] = [];
-    if (liveRows.length) result.push({ key: "live", title: "Canlı", data: liveRows.sort(byKeyAsc) });
-    if (todayRows.length) result.push({ key: "today", title: "Bugün", data: todayRows.sort(byKeyAsc) });
-    if (upcomingRows.length) {
-      result.push({
-        key: "upcoming",
-        title: "Yaklaşan",
-        data: upcomingRows.sort(byKeyAsc).slice(0, UPCOMING_LIMIT),
-      });
-    }
-    if (recentRows.length) {
-      result.push({ key: "recent", title: `Son ${RECENT_DAYS} gün`, data: recentRows.sort(byKeyDesc) });
-    }
-    return result;
-  }, [pool, live.matches]);
-
-  /** Takım sekmesinin alt satırı: lig + sıradaki maç. */
-  const teamSummaries = useMemo(() => {
-    const today = dayKeyOf(new Date());
-    const map = new Map<number, TeamSummary>();
-
-    favorites.forEach((team) => {
-      const rows = pool.filter((match) => matchDayKey(match) !== "" && belongsToTeam(match, team));
-      const ahead = rows.filter((match) => matchDayKey(match) >= today).sort(byKeyAsc);
-      const behind = rows.filter((match) => matchDayKey(match) < today).sort(byKeyDesc);
-      const next = ahead[0] ?? null;
-      const reference = next ?? behind[0] ?? null;
-      map.set(team.id, { league: reference?.league_name ?? null, next });
-    });
-
-    return map;
-  }, [favorites, pool]);
-
-  const scopeSections = useMemo<ScopeSection[]>(() => {
-    const result: ScopeSection[] = [];
-    if (favoriteLeagues.length) {
-      result.push({ key: "leagues", title: "Ligler", kind: "league", data: favoriteLeagues });
-    }
-    if (favoriteSeasons.length) {
-      result.push({ key: "seasons", title: "Sezonlar", kind: "season", data: favoriteSeasons });
-    }
-    return result;
-  }, [favoriteLeagues, favoriteSeasons]);
-
-  /* ---- Durum: yükleniyor / hata / yenileniyor ---- */
-
-  const allQueries = [...teamQueries, ...leagueQueries, ...seasonQueries, ...matchQueries];
-  const loading = hasAnyFavorite && pool.length === 0 && allQueries.some((query) => query.isLoading);
-  const firstError = allQueries.find((query) => query.isError)?.error ?? null;
-  const refreshing = allQueries.some((query) => query.isRefetching);
+  const hasTeams = favorites.length > 0;
+  const teamsLoading = hasTeams && teamQueries.some((query) => query.isLoading);
+  const teamsError = teamQueries.find((query) => query.isError)?.error ?? null;
+  const matchesLoading = matchQueries.some((query) => query.isLoading);
+  const refreshing = [...teamQueries, ...matchQueries].some((query) => query.isRefetching);
 
   const refetchAll = useCallback(() => {
-    // Tek tek `refetch()` çağırmak yerine önek geçersizleştirme: sorgu dizisi
-    // her render'da yeniden kurulduğu için kararlı bir geri çağrı gerekiyor.
     void queryClient.invalidateQueries({ queryKey: ["matches"] });
-    void queryClient.invalidateQueries({ queryKey: ["favorites"] });
+    void queryClient.invalidateQueries({ queryKey: ["news"] });
+    void queryClient.invalidateQueries({ queryKey: ["standings"] });
   }, [queryClient]);
 
   const refresh = useRefresh(refetchAll, { refreshing });
-  /**
-   * `refresh.control` hazır bir düğüm döndürür ama tipi `ReactElement<unknown>`;
-   * RN'in `refreshControl` prop'u `ReactElement<RefreshControlProps>` bekler.
-   * Bu yüzden aynı davranış (en az 450ms görünürlük + seçim titreşimi) kancanın
-   * `refreshing`/`onRefresh` alanlarıyla ve ortak renk sözlüğüyle kurulur.
-   */
-  const refreshControl = (
-    <RefreshControl {...refreshControlProps(refresh.refreshing, refresh.onRefresh)} />
-  );
 
   /* ---- Gezinme ---- */
 
   const openMatch = useCallback((matchId: number) => router.push(`/mac/${matchId}`), [router]);
   const openTeam = useCallback((teamId: number) => router.push(`/takim/${teamId}`), [router]);
   const openTeamSearch = useCallback(() => router.push("/ara?tip=takim"), [router]);
-  const openLeagues = useCallback(() => router.push("/(tabs)/ligler"), [router]);
+  /** Akış satırının rotası useFollowNews'te çözülür (haber / oyuncu / takım). */
+  const openHref = useCallback((href: string) => router.push(href as never), [router]);
   const openSignIn = useCallback(() => router.push("/giris"), [router]);
 
-  const openScopeTab = useCallback(
-    (item: FavoriteScope, kind: "league" | "season") => {
-      // Sezon kaydında bağlı olduğu lig tutulmuyor; ScopeProvider seçili lig
-      // listesinde bulamazsa ilk geçerli sezona kayar — kapsam tutarsız kalmaz.
-      if (kind === "league") selectLeague(item.id);
-      else selectSeason(item.id);
+  const openScope = useCallback(
+    (item: FavoriteScope, kind: "league" | "season" | "city") => {
+      if (kind === "league") {
+        // Takip kaydı ligin ilini tutmaz; sabitlenmiş lig kaydı tutar. Varsa
+        // il + lig birlikte atlanır, yoksa seçili ilde lig seçilir.
+        const pinned = scope.pinnedLeagues.find((entry) => entry.leagueId === item.id);
+        if (pinned) scope.jumpTo(pinned.cityId, item.id);
+        else scope.selectLeague(item.id);
+      } else if (kind === "season") {
+        scope.selectSeason(item.id);
+      } else {
+        scope.selectCity(item.id);
+      }
       router.push("/(tabs)/ligler");
     },
-    [router, selectLeague, selectSeason]
+    [router, scope]
   );
 
-  /* ---- Favoriden çıkarma (geri alınabilir) ---- */
-
-  const removeTeam = useCallback(
-    (team: FavoriteTeam) => {
-      removeFavorite(team.id);
-      toast.show({
-        message: `${team.name} favorilerden çıkarıldı`,
-        action: { label: "Geri al", onPress: () => addFavorite(team) },
-      });
-    },
-    [addFavorite, removeFavorite, toast]
+  const followTeam = useCallback(
+    (team: FavoriteTeam) => flow.follow({ type: "team", id: team.id, name: team.name, logo: team.logo ?? null }),
+    [flow]
   );
+  const isTeamFollowed = useCallback((teamId: number) => isFollowing("team", teamId), [isFollowing]);
+  const teamLogo = useCallback((team: FavoriteTeam) => logoFor(team.id, team.name), [logoFor]);
 
-  const removeScope = useCallback(
-    (item: FavoriteScope, kind: "league" | "season") => {
-      if (kind === "league") toggleFavoriteLeague(item);
-      else toggleFavoriteSeason(item);
-      toast.show({
-        message: `${item.name} favorilerden çıkarıldı`,
-        action: {
-          label: "Geri al",
-          onPress: () => (kind === "league" ? toggleFavoriteLeague(item) : toggleFavoriteSeason(item)),
-        },
-      });
-    },
-    [toast, toggleFavoriteLeague, toggleFavoriteSeason]
-  );
-
-  /* ---- Başlık ---- */
-
-  const segments = useMemo<SegmentedItem<FavTab>[]>(
-    () => [
-      { key: "maclar", label: "Maçlar", dot: live.count > 0 },
-      { key: "takimlar", label: favorites.length ? `Takımlar ${favorites.length}` : "Takımlar" },
-      {
-        key: "ligler",
-        label:
-          favoriteLeagues.length + favoriteSeasons.length
-            ? `Ligler ${favoriteLeagues.length + favoriteSeasons.length}`
-            : "Ligler",
-      },
-    ],
-    [live.count, favorites.length, favoriteLeagues.length, favoriteSeasons.length]
-  );
-
-  const header = (
-    <ScreenHeader
-      title="Favoriler"
-      back
-      /* Bu ekran sekme çubuğunda yuvası olmayan bir sekmedir (href: null) ve
-         Menü'den açılır. Sekme gezgininde geri yığını olmayabilir; o durumda
-         geldiği yere, yani Menü'ye dönülür. */
-      onBack={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)/profil"))}
-      scrollY={scrollY}
-      /* Takip başına bildirim ayarı (gol, sonuç, kart, haber…) ve il takibi. */
-      actions={[
-        {
-          icon: "notifications-outline",
-          onPress: () => router.push("/takip-bildirimleri"),
-          accessibilityLabel: "Takip bildirimleri",
-        },
-      ]}
-      /* BAŞLIKTA MESAJ DÜĞMESİ YOK: yazışmaya artık her ekranda duran yüzen
-         mesaj balonundan ulaşılıyor (components/MessageSticker.tsx). İkisini
-         birden çizmek aynı hedefe iki kapı açar ve rozet iki yerde sayılırdı. */
-      bottom={
-        <View style={styles.segmentWrap}>
-          <SegmentedControl<FavTab> items={segments} value={tab} onChange={setTab} />
-        </View>
-      }
-    />
-  );
-
-  const guestBanner = auth.user ? null : <GuestBanner onSignIn={openSignIn} />;
-
-  /* ---- Liste çizimleri ---- */
-
-  const renderMatch = useCallback(
-    ({ item, index, section }: SectionListRenderItemInfo<ApiMatch, MatchSection>) => (
-      <FavoriteMatchRow
-        match={item}
-        position={rowPosition(index, section.data.length)}
-        showDate={section.key === "upcoming" || section.key === "recent"}
-        homeLogo={logoFor(item.home_team_id, item.first_team_name)}
-        awayLogo={logoFor(item.away_team_id, item.second_team_name)}
-        starred={isFavoriteMatch(item.id)}
-        onOpen={openMatch}
-        onToggleStar={toggleFavoriteMatch}
-      />
-    ),
-    [logoFor, isFavoriteMatch, openMatch, toggleFavoriteMatch]
-  );
-
-  const renderMatchSectionHeader = useCallback(
-    ({ section }: { section: MatchSection }) => (
-      <SectionHeader
-        title={section.title}
-        meta={`${section.data.length} maç`}
-        leading={section.key === "live" ? <LiveBadge compact /> : undefined}
-        style={styles.sectionHeader}
-      />
-    ),
-    []
-  );
-
-  const renderTeam = useCallback(
-    ({ item, index }: { item: FavoriteTeam; index: number }) => {
-      const summary = teamSummaries.get(item.id);
-      const parts: string[] = [];
-      if (summary?.league) parts.push(summary.league);
-      if (summary?.next && matchState(summary.next) === "live") {
-        // Maç şu an oynanıyorsa "Bugün 20:24" bayat kalır; skoru söylemek gerekir.
-        parts.push(
-          `Canlı ${Number(summary.next.first_team_score ?? 0)}–${Number(
-            summary.next.second_team_score ?? 0
-          )} · ${opponentName(summary.next, item)}`
-        );
-      } else if (summary?.next) {
-        parts.push(
-          `${formatDayHeading(summary.next.date)} ${formatTime(summary.next.time)} · ${opponentName(
-            summary.next,
-            item
-          )}`.trim()
-        );
-      } else {
-        parts.push("Yaklaşan maç yok");
-      }
-
-      return (
-        <FavoriteTeamRow
-          team={item}
-          logo={item.logo ?? logoFor(item.id, item.name)}
-          subtitle={parts.join(" · ")}
-          position={rowPosition(index, favorites.length)}
-          onOpen={openTeam}
-          onRemove={removeTeam}
-        />
-      );
-    },
-    [teamSummaries, favorites.length, openTeam, removeTeam, logoFor]
-  );
-
-  const renderScope = useCallback(
-    ({ item, index, section }: SectionListRenderItemInfo<FavoriteScope, ScopeSection>) => (
-      <FavoriteScopeRow
-        item={item}
-        kind={section.kind}
-        position={rowPosition(index, section.data.length)}
-        onOpen={openScopeTab}
-        onRemove={removeScope}
-      />
-    ),
-    [openScopeTab, removeScope]
-  );
-
-  const renderScopeSectionHeader = useCallback(
-    ({ section }: { section: ScopeSection }) => (
-      <SectionHeader title={section.title} style={styles.sectionHeader} />
-    ),
-    []
-  );
-
-  const sectionFooter = useCallback(() => <View style={styles.sectionGap} />, []);
-
-  /** Boş/yükleniyor/hata gövdesi — liste yerine değil, listenin İÇİNDE çizilir
-   *  ki aşağı çekip yenileme her durumda çalışsın. */
-  const matchesPlaceholder = loading ? (
-    <SkeletonMatchRow count={6} />
-  ) : firstError ? (
-    <ErrorState error={firstError} onRetry={refetchAll} />
-  ) : hasAnyFavorite ? (
-    // Favori VAR ama pencerede maç yok: kullanıcıya "favorile" demek yanlış olur.
-    <EmptyState
-      icon="calendar-outline"
-      title="Yaklaşan maç yok"
-      body="Favorilerinin son 7 gün ve sonrası için maçı yok. Fikstür açılınca burada görünür."
-      action={{ label: "Ligleri gez", onPress: openLeagues }}
-    />
-  ) : (
-    <EmptyState
-      icon="star-outline"
-      title="Favori maçın yok"
-      body="Takım veya lig favorile, maçları burada topla."
-      action={{ label: "Ligleri gez", onPress: openLeagues }}
-      secondaryAction={{ label: "Takım ara", onPress: openTeamSearch }}
-    />
-  );
-
-  // Takım listesi cihazdan gelir (ağ yok): iskelet göstermek yanıltıcı olur.
-  const teamsPlaceholder = (
-    <EmptyState
-      icon="shield-outline"
-      title="Favori takımın yok"
-      body="Takımını yıldızla; maçlarını, sonuçlarını ve gollerini kaçırma."
-      action={{ label: "Takım ara", onPress: openTeamSearch }}
-    />
-  );
-
-  const scopesPlaceholder = (
-    <EmptyState
-      icon="trophy-outline"
-      title="Favori lig veya sezon yok"
-      body="Ligi yıldızla; o ligin bütün maçları favorilerinde toplansın."
-      action={{ label: "Ligleri gez", onPress: openLeagues }}
-    />
-  );
+  /* ---- Çizim ---- */
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      {header}
+      <ScreenHeader
+        title="Takip"
+        scrollY={scrollY}
+        actions={[
+          { icon: "search-outline", onPress: openTeamSearch, accessibilityLabel: "Takım ara" },
+          {
+            icon: "notifications-outline",
+            onPress: () => router.push("/takip-bildirimleri"),
+            accessibilityLabel: "Takip bildirimleri",
+          },
+        ]}
+      />
 
-      {tab === "maclar" ? (
-        <SectionList
-          {...scrollProps}
-          sections={sections}
-          keyExtractor={(item) => String(item.id)}
-          renderItem={renderMatch}
-          renderSectionHeader={renderMatchSectionHeader}
-          renderSectionFooter={sectionFooter}
-          stickySectionHeadersEnabled={false}
-          ListHeaderComponent={guestBanner}
-          ListEmptyComponent={matchesPlaceholder}
-          contentContainerStyle={styles.content}
-          refreshControl={refreshControl}
-          initialNumToRender={12}
-          windowSize={9}
-        />
-      ) : null}
+      <ScrollView
+        {...scrollProps}
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl {...refreshControlProps(refresh.refreshing, refresh.onRefresh)} />}
+      >
+        {auth.user ? null : (
+          <View style={styles.pad}>
+            <GuestBanner onSignIn={openSignIn} />
+          </View>
+        )}
 
-      {tab === "takimlar" ? (
-        <FlatList
-          {...scrollProps}
-          data={favorites}
-          keyExtractor={(item) => String(item.id)}
-          renderItem={renderTeam}
-          getItemLayout={(_, index) => ({
-            length: layout.listRowHeightTwoLine,
-            offset: layout.listRowHeightTwoLine * index,
-            index,
-          })}
-          ListHeaderComponent={guestBanner}
-          ListEmptyComponent={teamsPlaceholder}
-          ListFooterComponent={
-            // Liste boşken EmptyState'in kendi "Takım ara" eylemi var; iki ayrı
-            // giriş noktası göstermek gürültü olur.
-            favorites.length ? (
-              <ListRow
-                leading={{ icon: "add-circle-outline", tone: "brand" }}
-                title="Takım ekle"
-                position="single"
-                onPress={openTeamSearch}
-                style={styles.addRow}
-              />
-            ) : null
-          }
-          contentContainerStyle={styles.content}
-          refreshControl={refreshControl}
-        />
-      ) : null}
+        {/* ── 1) TAKIMLARIM ── */}
+        {hasTeams ? (
+          <>
+            <SectionHeader
+              title="Takımlarım"
+              meta={`${favorites.length} takım`}
+              action={{ label: "Takip et", onPress: openTeamSearch }}
+            />
+            <FollowedTeamsStrip
+              teams={favorites}
+              summaries={summaries}
+              logoFor={teamLogo}
+              onOpenTeam={openTeam}
+              onAdd={openTeamSearch}
+            />
 
-      {tab === "ligler" ? (
-        <SectionList
-          {...scrollProps}
-          sections={scopeSections}
-          keyExtractor={(item) => String(item.id)}
-          renderItem={renderScope}
-          renderSectionHeader={renderScopeSectionHeader}
-          renderSectionFooter={sectionFooter}
-          stickySectionHeadersEnabled={false}
-          ListHeaderComponent={guestBanner}
-          ListEmptyComponent={scopesPlaceholder}
-          contentContainerStyle={styles.content}
-          refreshControl={refreshControl}
-        />
-      ) : null}
+            {/* ── 2) MAÇLAR ── */}
+            <SectionHeader title="Maçlar" meta={teamMatches.length ? `${teamMatches.length} maç` : undefined} />
+            {teamsLoading && !teamMatches.length ? (
+              <View style={styles.pad}>
+                <SkeletonMatchRow count={2} />
+              </View>
+            ) : teamsError && !teamMatches.length ? (
+              <View style={styles.pad}>
+                <ErrorState error={teamsError} variant="banner" onRetry={refetchAll} />
+              </View>
+            ) : teamMatches.length ? (
+              <MatchCardRail matches={teamMatches} logoFor={logoFor} onOpen={openMatch} />
+            ) : (
+              <Text style={[styles.pad, styles.note]} {...textScale.long}>
+                Takımlarının kayıtlı maçı yok. Fikstür açılınca burada görünür.
+              </Text>
+            )}
+          </>
+        ) : (
+          <>
+            <SectionHeader title="Takımını seç" />
+            <Text style={[styles.pad, styles.lead]} {...textScale.long}>
+              Takip ettiğin takımların maçları, formu ve haberleri burada toplanır; gol ve sonuç bildirimi gelir.
+            </Text>
+            <View style={styles.picker}>
+              <LeaguePicker pinned={false} step="league" />
+            </View>
+            <View style={styles.pad}>
+              <TeamPickerGrid isSelected={isTeamFollowed} onPress={followTeam} testID="takip-team-grid" />
+            </View>
+            <Button
+              label="Takım ara"
+              icon="search-outline"
+              variant="ghost"
+              size="sm"
+              onPress={openTeamSearch}
+              style={styles.searchLink}
+            />
+          </>
+        )}
+
+        {/* ── 3) TAKİP ETTİĞİN MAÇLAR ── */}
+        {favoriteMatches.length ? (
+          <>
+            <SectionHeader title="Takip ettiğin maçlar" meta={`${favoriteMatches.length} maç`} />
+            <View style={[styles.pad, styles.stack]}>
+              {matchesLoading && !followedMatches.length ? (
+                <SkeletonMatchRow count={Math.min(favoriteMatches.length, 2)} />
+              ) : (
+                followedMatches.map((match) => (
+                  <FollowedMatchCard
+                    key={match.id}
+                    match={match}
+                    homeLogo={logoFor(match.home_team_id, match.first_team_name)}
+                    awayLogo={logoFor(match.away_team_id, match.second_team_name)}
+                    onOpen={openMatch}
+                  />
+                ))
+              )}
+            </View>
+          </>
+        ) : null}
+
+        {/* ── 4) AKIŞ: haber / transfer / disiplin ── */}
+        {hasTeams || scopeRows.length ? (
+          <>
+            <SectionHeader title="Akış" meta={news.items.length ? `${news.items.length} kayıt` : undefined} />
+            <View style={styles.pad}>
+              {news.loading && !news.items.length ? (
+                <SkeletonListRow count={3} />
+              ) : news.error && !news.items.length ? (
+                <ErrorState error={news.error} variant="banner" onRetry={news.refetch} />
+              ) : news.items.length ? (
+                news.items.map(({ item, reason, href }, index) => (
+                  <ListRow
+                    key={`${item.kind}:${item.id}`}
+                    leading={NEWS_ICON[item.kind] ?? NEWS_ICON.news}
+                    title={item.title}
+                    subtitle={[item.category_label ?? NEWS_KIND_LABEL[item.kind], reason, timeAgo(item.published_at)]
+                      .filter(Boolean)
+                      .join(" · ")}
+                    position={rowPosition(index, news.items.length)}
+                    onPress={href ? () => openHref(href) : undefined}
+                    chevron={Boolean(href)}
+                  />
+                ))
+              ) : (
+                <Text style={styles.note} {...textScale.long}>
+                  Takip ettiklerinle ilgili yeni haber, transfer ya da disiplin kararı yok.
+                </Text>
+              )}
+            </View>
+          </>
+        ) : null}
+
+        {/* ── 5) LİGLER ── */}
+        {scopeRows.length ? (
+          <>
+            <SectionHeader title="Ligler" meta={`${scopeRows.length} takip`} />
+            <View style={styles.pad}>
+              {scopeRows.map(({ item, kind }, index) => (
+                <ScopeFollowRow
+                  key={`${kind}:${item.id}`}
+                  item={item}
+                  kind={kind}
+                  position={rowPosition(index, scopeRows.length)}
+                  onOpen={openScope}
+                />
+              ))}
+            </View>
+          </>
+        ) : null}
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -852,23 +509,32 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.bg,
   },
-  segmentWrap: {
-    paddingHorizontal: layout.screenPadding,
-    paddingBottom: space.sm,
-    backgroundColor: colors.bg,
-  },
+  /* flexGrow YOK: web'de yatay ScrollView'lar (şerit, maç rayı) varsayılan
+     flexGrow taşır; içerik kabı büyürse boş alanı onlar doldurup uzar. */
   content: {
-    paddingHorizontal: layout.screenPadding,
     paddingBottom: layout.tabBarHeight + space.xxl,
-    flexGrow: 1,
   },
-  sectionGap: {
-    height: layout.sectionGap - space.lg,
+  pad: {
+    paddingHorizontal: layout.screenPadding,
   },
-  /* Liste zaten ekran kenarı dolgusunu taşır; bölüm başlığı ikinci kez
-     içeri çekilmesin, satırlarla aynı hizadan başlasın. */
-  sectionHeader: {
-    paddingHorizontal: space.xxs,
+  stack: {
+    gap: space.m,
+  },
+  picker: {
+    marginTop: space.md,
+    marginBottom: space.md,
+  },
+  lead: {
+    ...type.bodySm,
+    color: colors.textSecondary,
+  },
+  note: {
+    ...type.bodySm,
+    color: colors.textTertiary,
+  },
+  searchLink: {
+    alignSelf: "center",
+    marginTop: space.sm,
   },
   banner: {
     flexDirection: "row",
@@ -878,7 +544,6 @@ const styles = StyleSheet.create({
     paddingLeft: space.lg,
     paddingRight: space.md,
     marginTop: space.sm,
-    marginBottom: space.md,
     borderRadius: radius.xl,
   },
   bannerIcon: {
@@ -894,7 +559,19 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     flex: 1,
   },
-  addRow: {
-    marginTop: space.md,
+  matchFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+  },
+  matchFooterText: {
+    ...type.caption,
+    color: colors.textTertiary,
+    flex: 1,
+  },
+  rowControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
   },
 });

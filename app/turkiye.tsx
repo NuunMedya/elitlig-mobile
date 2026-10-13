@@ -56,6 +56,7 @@ import { getPlayerRankings } from "@/lib/api/players";
 import type { PlayerRankRow, PlayerSort } from "@/lib/types";
 import { Podium } from "@/components/league/Podium";
 import { GroupSeparator, groupRowStyle, groupStyles } from "@/components/league/shared";
+import { formatDecimal } from "@/lib/format";
 import {
   colors,
   fonts,
@@ -84,9 +85,9 @@ interface Category {
 const CATEGORIES: Category[] = [
   { sort: "mostValuable",   label: "En Değerli",  unit: "PUAN", value: (p) => Number(p.points) || 0,         display: (p) => String(Number(p.points) || 0) },
   { sort: "topScorers",     label: "Gol Kralı",   unit: "GOL",  value: (p) => Number(p.goals) || 0,          display: (p) => String(Number(p.goals) || 0) },
-  { sort: "goalsPerMatch",  label: "Gol / Maç",   unit: "ORT",  value: (p) => Number(p.goalsPerMatch) || 0,  display: (p) => Number(p.goalsPerMatch ?? 0).toFixed(2) },
+  { sort: "goalsPerMatch",  label: "Gol / Maç",   unit: "ORT",  value: (p) => Number(p.goalsPerMatch) || 0,  display: (p) => formatDecimal(Number(p.goalsPerMatch ?? 0), 2) },
   { sort: "mostMatches",    label: "En Çok Maç",  unit: "MAÇ",  value: (p) => Number(p.matches) || 0,        display: (p) => String(Number(p.matches) || 0) },
-  { sort: "pointsPerMatch", label: "Puan / Maç",  unit: "ORT",  value: (p) => Number(p.pointsPerMatch) || 0, display: (p) => Number(p.pointsPerMatch ?? 0).toFixed(2) },
+  { sort: "pointsPerMatch", label: "Puan / Maç",  unit: "ORT",  value: (p) => Number(p.pointsPerMatch) || 0, display: (p) => formatDecimal(Number(p.pointsPerMatch ?? 0), 2) },
   { sort: "mostCards",      label: "En Çok Kart", unit: "KART", value: (p) => Number(p.cards) || 0,          display: (p) => String(Number(p.cards) || 0) },
 ];
 

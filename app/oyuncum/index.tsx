@@ -110,6 +110,7 @@ import {
   hairline,
   layout,
   radius,
+  ratingLabel,
   space,
   textScale,
   type,
@@ -441,7 +442,7 @@ export default function MyPlayerScreen() {
           { key: "goals", value: String(num(stats.goals)), label: "GOL" },
           { key: "assists", value: String(num(stats.assists)), label: "ASİST" },
           ...(stats.rating != null
-            ? [{ key: "rating", value: stats.rating.toFixed(1), label: "ORT. PUAN", rating: stats.rating }]
+            ? [{ key: "rating", value: ratingLabel(stats.rating), label: "ORT. PUAN", rating: stats.rating }]
             : []),
         ]
       : [];
@@ -1176,9 +1177,9 @@ function StatisticsTab({ scrollProps }: { scrollProps: ScrollChrome }) {
     if (totals.rating != null) {
       list.push({
         key: "r",
-        value: totals.rating.toFixed(1),
+        value: ratingLabel(totals.rating),
         label: "ORT. PUAN",
-        hint: totals.best_rating != null ? `en iyi ${totals.best_rating.toFixed(1)}` : undefined,
+        hint: totals.best_rating != null ? `en iyi ${ratingLabel(totals.best_rating)}` : undefined,
       });
     }
     return list;

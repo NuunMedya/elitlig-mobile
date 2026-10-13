@@ -36,6 +36,7 @@ import {
   useRefresh,
 } from "@/components/ui";
 import { getPlayerRankings } from "@/lib/api/players";
+import { formatDecimal } from "@/lib/format";
 import { queryKeys } from "@/lib/queryKeys";
 import type { PlayerRankRow, PlayerSort } from "@/lib/types";
 import { useScope } from "@/providers/ScopeProvider";
@@ -64,8 +65,8 @@ const SORTS: SortDef[] = [
   { key: "mostValuable", label: "En Değerliler", metric: (r) => String(num(r.points)), unit: "puan" },
   { key: "topScorers", label: "Gol Krallığı", metric: (r) => String(num(r.goals)), unit: "gol" },
   { key: "mostMatches", label: "En Çok Maç", metric: (r) => String(num(r.matches)), unit: "maç" },
-  { key: "pointsPerMatch", label: "Puan / Maç", metric: (r) => num(r.pointsPerMatch).toFixed(2), unit: "puan" },
-  { key: "goalsPerMatch", label: "Gol / Maç", metric: (r) => num(r.goalsPerMatch).toFixed(2), unit: "gol" },
+  { key: "pointsPerMatch", label: "Puan / Maç", metric: (r) => formatDecimal(num(r.pointsPerMatch), 2), unit: "puan" },
+  { key: "goalsPerMatch", label: "Gol / Maç", metric: (r) => formatDecimal(num(r.goalsPerMatch), 2), unit: "gol" },
   { key: "mostCards", label: "Kartlar", metric: (r) => String(num(r.cards)), unit: "kart" },
 ];
 

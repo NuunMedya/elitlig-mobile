@@ -17,13 +17,27 @@
  * dikkat isteyen seçili durum); eski yeşil sayaç "sonuç" rengiyle karışıyordu.
  * "Mesaj oluştur" tek kapıdan, alttaki geniş düğmeden açılır; başlıkta yalnız
  * mesaj tercihleri (kimden mesaj alırım) durur.
+ *
+ * İKİ YERDE KULLANILIR: kendi ekranı olarak (/sohbet, /yonetim/sohbet) ve
+ * GÖMÜLÜ olarak Gelen kutusu ▸ Mesajlar ▸ Sohbetler (`embedded`). Gömülüyken
+ * başlık çizilmez (ekranın başlığı gelen kutusunundur); arama + süzgeç
+ * şeridi listenin üstünde, mesaj tercihleri düğmesi aramanın yanında durur ve
+ * kaydırma ekranın daralan başlığına `onScroll` ile bağlanır. Veri kaynağı
+ * (hooks/useChat.ts) iki kullanımda da aynıdır.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQueryClient } from "@tanstack/react-query";
 import { Redirect, useRouter } from "expo-router";
 import { memo, useCallback, useMemo, useState } from "react";
-import { FlatList, StyleSheet, Text, View } from "react-native";
+import {
+  FlatList,
+  StyleSheet,
+  Text,
+  View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
@@ -76,9 +90,13 @@ const TYPE_ICON: Record<ChatConversation["type"], keyof typeof Ionicons.glyphMap
 
 export interface ChatInboxProps {
   admin?: boolean;
+  /** Başka bir ekranın (gelen kutusu) içinde, başlıksız çizilir. */
+  embedded?: boolean;
+  /** Gömülüyken: ekranın daralan başlığına kaydırma bağlantısı. */
+  onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
 }
 
-export function ChatInbox({ admin = false }: ChatInboxProps) {
+export function ChatInbox({ admin = false, embedded = false, onScroll }: ChatInboxProps) {
   const auth = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -132,10 +150,11 @@ export function ChatInbox({ admin = false }: ChatInboxProps) {
 
   const handleScroll = useCallback(
     (event: Parameters<typeof scrollProps.onScroll>[0]) => {
-      scrollProps.onScroll(event);
+      if (embedded) onScroll?.(event);
+      else scrollProps.onScroll(event);
       fab.onScroll(event);
     },
-    [fab, scrollProps],
+    [embedded, fab, onScroll, scrollProps],
   );
 
   const renderItem = useCallback(
@@ -143,31 +162,40 @@ export function ChatInbox({ admin = false }: ChatInboxProps) {
     [open],
   );
 
-  if (!auth.user) return <Redirect href="/giris" />;
+  if (!auth.user && !embedded) return <Redirect href="/giris" />;
 
-  return (
-    <SafeAreaView style={styles.screen} edges={["top"]}>
-      <ScreenHeader
-        title={admin ? "Yönetim Sohbeti" : "Mesajlar"}
-        subtitle={unread > 0 ? `${unread} okunmamış mesaj` : admin ? "Yönetimle yazışmalar, gruplar, bildirimler" : "Yönetim, takımın ve oyuncular"}
-        back
-        scrollY={scrollY}
-        actions={
-          admin
-            ? [{ icon: "create-outline", onPress: compose, accessibilityLabel: "Mesaj oluştur" }]
-            : [{ icon: "options-outline", onPress: () => setPrefsOpen(true), accessibilityLabel: "Kimden mesaj kabul edeyim?" }]
-        }
-        bottom={
-          <View style={styles.searchWrap}>
-            <Input
-              value={search}
-              onChangeText={setSearch}
-              placeholder={admin ? "Takım, oyuncu ya da üye ara" : "Sohbet ara"}
-              variant="search"
-              size="sm"
-              leadingIcon="search"
-              accessibilityLabel="Sohbet ara"
-            />
+  const searchInput = (
+    <Input
+      value={search}
+      onChangeText={setSearch}
+      placeholder={admin ? "Takım, oyuncu ya da üye ara" : "Sohbet ara"}
+      variant="search"
+      size="sm"
+      leadingIcon="search"
+      accessibilityLabel="Sohbet ara"
+      containerStyle={embedded ? styles.searchFlex : undefined}
+    />
+  );
+
+  const controls = (
+          <View style={[styles.searchWrap, embedded ? styles.searchWrapEmbedded : null]}>
+            {embedded && !admin ? (
+              <View style={styles.searchRow}>
+                {searchInput}
+                <Touchable
+                  feedback="icon"
+                  haptic="selection"
+                  onPress={() => setPrefsOpen(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Kimden mesaj kabul edeyim?"
+                  style={styles.prefsButton}
+                >
+                  <Ionicons name="options-outline" size={20} color={colors.textSecondary} />
+                </Touchable>
+              </View>
+            ) : (
+              searchInput
+            )}
             {admin ? (
               <>
                 <ChipGroup>
@@ -206,9 +234,10 @@ export function ChatInbox({ admin = false }: ChatInboxProps) {
               </ChipGroup>
             ) : null}
           </View>
-        }
-      />
+  );
 
+  const body = (
+    <>
       {query.isLoading ? (
         <View style={styles.skeleton}>
           <SkeletonListRow count={7} avatar />
@@ -256,6 +285,33 @@ export function ChatInbox({ admin = false }: ChatInboxProps) {
         accessibilityLabel="Mesaj oluştur"
       />
       {admin ? null : <ChatPrefsSheet visible={prefsOpen} onClose={() => setPrefsOpen(false)} />}
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <View style={styles.pane}>
+        {controls}
+        {body}
+      </View>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.screen} edges={["top"]}>
+      <ScreenHeader
+        title={admin ? "Yönetim Sohbeti" : "Mesajlar"}
+        subtitle={unread > 0 ? `${unread} okunmamış mesaj` : admin ? "Yönetimle yazışmalar, gruplar, bildirimler" : "Yönetim, takımın ve oyuncular"}
+        back
+        scrollY={scrollY}
+        actions={
+          admin
+            ? [{ icon: "create-outline", onPress: compose, accessibilityLabel: "Mesaj oluştur" }]
+            : [{ icon: "options-outline", onPress: () => setPrefsOpen(true), accessibilityLabel: "Kimden mesaj kabul edeyim?" }]
+        }
+        bottom={controls}
+      />
+      {body}
     </SafeAreaView>
   );
 }
@@ -351,6 +407,20 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   kind: { ...type.caption, color: colors.textTertiary },
   searchWrap: { paddingHorizontal: layout.screenPadding, paddingBottom: space.sm, gap: space.sm },
+  pane: { flex: 1 },
+  searchWrapEmbedded: { paddingTop: space.sm },
+  searchRow: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  searchFlex: { flex: 1 },
+  prefsButton: {
+    width: layout.minTouch,
+    height: layout.minTouch,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+  },
   skeleton: { paddingHorizontal: layout.screenPadding, paddingTop: space.sm },
   list: { flexGrow: 1, paddingBottom: space.huge + space.giant },
   separator: { height: hairline, backgroundColor: colors.separator, marginLeft: layout.screenPadding + 50 + space.md },
