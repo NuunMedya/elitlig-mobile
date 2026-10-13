@@ -30,6 +30,12 @@ export const API_BASE_URL = asString(
   "https://elitlig-api-88a866b7a4da.herokuapp.com"
 ).replace(/\/+$/, "");
 
+/**
+ * Web sitesi kökü — yönetim panelinin web sürümü uygulama içinde buradan
+ * açılır (app/yonetim/web.tsx). Sonda eğik çizgi yok.
+ */
+export const WEB_BASE_URL = asString(extra.webBaseUrl, "https://elitlig.com").replace(/\/+$/, "");
+
 /** Socket.io sunucusu; ayrı verilmediyse API ile aynı köktür. */
 export const SOCKET_URL = asString(extra.socketUrl, API_BASE_URL).replace(/\/+$/, "");
 

@@ -20,7 +20,7 @@
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
@@ -55,6 +55,16 @@ const PRIVACY_URL = "https://elitlig.com/gizlilik-politikasi";
 export default function LoginScreen() {
   const { signIn, signingIn } = useAuth();
   const router = useRouter();
+  const params = useLocalSearchParams<{ yonetim?: string }>();
+
+  /* YÖNETİM GİRİŞİ: `/giris?yonetim=1` ya da alttaki bağlantı. Sunucuya
+     scope=management gider; yönetim rolü olmayan hesap reddedilir ve giriş
+     sonrası doğrudan Yönetim Paneli açılır. Web'deki /yonetim/giris ile aynı. */
+  const [managementMode, setManagementMode] = useState(params.yonetim === "1");
+  const toggleMode = useCallback(() => {
+    setManagementMode((value) => !value);
+    setError(null);
+  }, []);
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -95,7 +105,13 @@ export default function LoginScreen() {
     if (!canSubmit) return;
     setError(null);
     try {
-      await signIn(username, password);
+      const signedUser = await signIn(username, password, managementMode ? "management" : undefined);
+      // Yönetim girişinde (ya da yönetim hesabı yığında dönülecek ekran
+      // yokken) doğrudan Yönetim Paneli açılır.
+      if (managementMode || (signedUser?.isManagement && !router.canGoBack())) {
+        router.replace("/yonetim");
+        return;
+      }
       if (router.canGoBack()) router.back();
       // Eski `(tabs)/profile` ekranı kaldırıldı; girişten sonra yığında geri
       // dönülecek bir şey yoksa Profil SEKMESİ açılır (hesap detayı oradaki
@@ -111,13 +127,13 @@ export default function LoginScreen() {
           : "Giriş yapılamadı."
       );
     }
-  }, [canSubmit, password, router, signIn, username]);
+  }, [canSubmit, managementMode, password, router, signIn, username]);
 
   return (
     <SafeAreaView style={styles.screen} edges={["top", "bottom"]}>
       <ScreenHeader
-        title="Giriş yap"
-        overline="ELİTLİG"
+        title={managementMode ? "Yönetim girişi" : "Giriş yap"}
+        overline={managementMode ? "ELİTLİG YÖNETİM" : "ELİTLİG"}
         actions={[{ icon: "close", onPress: close, accessibilityLabel: "Kapat" }]}
       />
 
@@ -140,8 +156,9 @@ export default function LoginScreen() {
           </View>
 
           <Text style={styles.lede} {...textScale.long}>
-            Üye, oyuncu, takım başkanı ve yönetim hesapları buradan giriş
-            yapabilir. Hesabın yoksa aşağıdan ücretsiz üye olabilirsin.
+            {managementMode
+              ? "Admin, editör, il / lig / maç yöneticisi, disiplin kurulu ve sosyal medya hesapları buradan giriş yapar. Giriş sonrası Yönetim Paneli açılır; web panelindeki tüm araçlar uygulamada kullanılabilir."
+              : "Üye, oyuncu, takım başkanı ve yönetim hesapları buradan giriş yapabilir. Hesabın yoksa aşağıdan ücretsiz üye olabilirsin."}
           </Text>
 
           {/* Mağaza şartı (App Store 1.2): kullanıcı içeriği olan uygulama,
@@ -218,7 +235,8 @@ export default function LoginScreen() {
           ) : null}
 
           <Button
-            label="Giriş yap"
+            label={managementMode ? "Yönetim paneline gir" : "Giriş yap"}
+            icon={managementMode ? "shield-checkmark-outline" : undefined}
             onPress={submit}
             loading={signingIn}
             disabled={!canSubmit}
@@ -228,14 +246,23 @@ export default function LoginScreen() {
 
           {/* App Store 4 (Design): kayıt tarayıcıya yönlendirilmez, uygulama
               içindeki /kayit ekranında yapılır. */}
-          <Button
-            label="Üye ol"
-            onPress={openRegister}
-            variant="secondary"
-            size="lg"
-            fullWidth
-            disabled={signingIn}
-          />
+          {managementMode ? null : (
+            <Button
+              label="Üye ol"
+              onPress={openRegister}
+              variant="secondary"
+              size="lg"
+              fullWidth
+              disabled={signingIn}
+            />
+          )}
+
+          <Touchable onPress={toggleMode} accessibilityRole="button" disabled={signingIn} testID="toggle-management-login">
+            <Text style={styles.footnote} {...textScale.long}>
+              {managementMode ? "Üye misin? " : "Yönetim hesabın mı var? "}
+              <Text style={styles.consentLink}>{managementMode ? "Üye girişi" : "Yönetim girişi"}</Text>
+            </Text>
+          </Touchable>
 
           <Touchable onPress={openForgot} accessibilityRole="button" disabled={signingIn}>
             <Text style={styles.footnote} {...textScale.long}>

@@ -145,6 +145,10 @@ export default function RootLayout() {
                   <Stack.Screen name="yonetim/sohbet/[id]" />
                   <Stack.Screen name="yonetim/sohbet/yeni" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
                   <Stack.Screen name="yonetim/kayitlar" />
+                  {/* Yönetim: görevler, yeni görev ve web panelindeki tüm araçlar. */}
+                  <Stack.Screen name="yonetim/gorevler" />
+                  <Stack.Screen name="yonetim/gorev-yeni" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
+                  <Stack.Screen name="yonetim/web" />
 
                   {/* Modal olanlar: bir görevi bitirip kapanan, yığına ait olmayan ekranlar. */}
                   <Stack.Screen name="ara" options={{ presentation: "modal", animation: "slide_from_bottom" }} />

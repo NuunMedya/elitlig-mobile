@@ -375,6 +375,12 @@ export interface AuthUser {
   managed_team_id?: number | null;
   profile_type?: string | null;
   profileScopes?: string[];
+  /** Sunucu rol kaydına göre yönetim hesabı mı (panelden eklenen roller dahil). */
+  isManagement?: boolean;
+  /** Etkin yetki anahtarları (routes/User.js sessionUserPayload). */
+  permissions?: string[];
+  /** Yönetim kullanıcısının ünvanı. */
+  title?: string | null;
 }
 
 export interface LoginResponse {

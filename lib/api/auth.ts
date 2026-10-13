@@ -10,8 +10,8 @@ import type { AuthUser, LoginResponse } from "../types";
  */
 
 /** `client: "mobile"` → sunucu uzun ömürlü oturum jetonu verir. */
-export const login = (username: string, password: string) =>
-  post<LoginResponse>("/api/users/login", { username, password, client: "mobile" });
+export const login = (username: string, password: string, scope?: "management" | "member") =>
+  post<LoginResponse>("/api/users/login", { username, password, client: "mobile", ...(scope ? { scope } : {}) });
 
 /** Kayıt gövdesi — routes/User.js POST /register. Telefon isteğe bağlıdır. */
 export interface RegisterInput {
@@ -44,6 +44,14 @@ export const verifySession = () =>
  */
 export const refreshSession = () =>
   post<Omit<LoginResponse, "message">>("/api/users/session/refresh", undefined, { retry: false });
+
+/**
+ * Web yönetim paneli için kısa ömürlü (24 saat) oturum jetonu —
+ * POST /api/users/session/web. Uzun ömürlü mobil jeton web sayfasına hiç
+ * verilmez; uygulama içi tarayıcı (app/yonetim/web.tsx) yalnız bunu kullanır.
+ */
+export const webSession = () =>
+  post<{ token: string; expiresIn: number; user: AuthUser }>("/api/users/session/web", undefined, { retry: false });
 
 export const logout = () => post<{ message: string }>("/api/users/logout");
 

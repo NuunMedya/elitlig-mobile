@@ -64,7 +64,11 @@ interface AuthContextValue {
   /** Açılışta saklı jeton doğrulanırken true. */
   initializing: boolean;
   signingIn: boolean;
-  signIn: (username: string, password: string) => Promise<void>;
+  /**
+   * Giriş. `scope: "management"` yönetim girişidir: sunucu yönetim rolü
+   * olmayan hesabı reddeder (routes/User.js assertLoginScope).
+   */
+  signIn: (username: string, password: string, scope?: "management" | "member") => Promise<AuthUser>;
   /** Uygulama içi kayıt; başarılıysa oturum da kurulur. */
   signUp: (input: RegisterInput) => Promise<void>;
   /** Şifre değiştirir ve sunucunun verdiği taze jetonu saklar. Mesajı döndürür. */
@@ -223,15 +227,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [revalidate]);
 
   const signIn = useCallback(
-    async (username: string, password: string) => {
+    async (username: string, password: string, scope?: "management" | "member") => {
       setSigningIn(true);
       try {
-        const response = await authApi.login(username.trim(), password);
+        const response = await authApi.login(username.trim(), password, scope);
         await adoptToken(response.token);
         rememberUser(response.user);
         lastValidatedRef.current = Date.now();
         // Yetkiye göre değişen uçlar (oyuncu iletişim bilgisi vb.) yeniden çekilsin.
         await queryClient.invalidateQueries();
+        return response.user;
       } finally {
         setSigningIn(false);
       }
@@ -282,7 +287,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signUp,
       changePassword,
       signOut,
-      isManagement: Boolean(user && MANAGEMENT_ROLES.includes(user.role)),
+      // Sunucunun rol kaydı esas alınır (panelden eklenen yönetim rolleri de
+      // yönetim sayılır); eski sunucu yanıtında alan yoksa sabit listeye düşülür.
+      isManagement: Boolean(
+        user && (typeof user.isManagement === "boolean" ? user.isManagement : MANAGEMENT_ROLES.includes(user.role))
+      ),
     }),
     [user, initializing, signingIn, signIn, signUp, changePassword, signOut]
   );

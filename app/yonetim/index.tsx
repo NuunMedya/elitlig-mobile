@@ -32,6 +32,7 @@ import {
   Badge,
   EmptyState,
   ErrorState,
+  ListRow,
   ScreenHeader,
   SectionHeader,
   Skeleton,
@@ -41,7 +42,9 @@ import {
   type Tone,
 } from "@/components/ui";
 import { useAppActive } from "@/hooks/useLiveFavoriteCount";
+import { visibleModuleGroups, type AdminModule } from "@/lib/adminModules";
 import { getAdminMatches, getAdminMessages, getAdminRequests, ROLE_LABELS } from "@/lib/api/admin";
+import { getTodoSummary, todoKeys } from "@/lib/api/todos";
 import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
 import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
@@ -51,7 +54,7 @@ import { colors, hairline, layout, radius, space, textScale, type } from "@/them
 /** Sayaçların tazelenme aralığı — uygulama arkadayken hiç yoklanmaz. */
 const POLL_MS = 30_000;
 
-type SectionKey = "maclar" | "sohbet" | "kayitlar" | "mesajlar" | "sahalar";
+type SectionKey = "gorevler" | "maclar" | "sohbet" | "kayitlar" | "mesajlar" | "sahalar";
 
 interface PanelSection {
   key: SectionKey;
@@ -101,6 +104,15 @@ export default function AdminHomeScreen() {
     retry: false,
   });
 
+  const todoQuery = useQuery({
+    queryKey: todoKeys.summary(),
+    queryFn: getTodoSummary,
+    enabled: canQuery,
+    staleTime: 15_000,
+    refetchInterval: poll,
+    retry: false,
+  });
+
   const liveQuery = useQuery({
     queryKey: ["admin", "matches", "live-badge", scope.leagueId, scope.seasonId],
     queryFn: () =>
@@ -130,9 +142,25 @@ export default function AdminHomeScreen() {
   const unread = messagesQuery.data?.counts.unread ?? null;
   const pendingRequests = requestsQuery.data?.items.length ?? null;
   const liveMatches = liveQuery.data?.length ?? null;
+  const openTodos = todoQuery.data?.open ?? null;
+  const overdueTodos = todoQuery.data?.overdue ?? 0;
 
   const sections = useMemo<PanelSection[]>(
     () => [
+      {
+        key: "gorevler",
+        route: "/yonetim/gorevler",
+        icon: "checkbox-outline",
+        title: "Görevlerim",
+        body: "Yapılacaklar: sana atananlar, atadıkların, maç görevlerin",
+        pending: openTodos,
+        pendingLabel:
+          openTodos && openTodos > 0
+            ? `${openTodos} açık görev${overdueTodos ? ` · ${overdueTodos} gecikmiş` : ""}`
+            : "Açık görevin yok",
+        tone: overdueTodos ? "danger" : "brand",
+        loading: todoQuery.isLoading,
+      },
       {
         key: "maclar",
         route: "/yonetim/maclar",
@@ -197,6 +225,9 @@ export default function AdminHomeScreen() {
       },
     ],
     [
+      openTodos,
+      overdueTodos,
+      todoQuery.isLoading,
       liveMatches,
       liveQuery.isLoading,
       messagesQuery.isLoading,
@@ -207,6 +238,14 @@ export default function AdminHomeScreen() {
   );
 
   const openSection = useCallback((route: string) => router.push(route as never), [router]);
+
+  /* Web panelindeki her yönetim sayfası (yetkiye göre) — uygulama içinde açılır. */
+  const moduleGroups = useMemo(() => visibleModuleGroups(auth.user), [auth.user]);
+  const openModule = useCallback(
+    (module: AdminModule) =>
+      router.push({ pathname: "/yonetim/web", params: { path: module.path, title: module.title } }),
+    [router]
+  );
 
   /* — Kapı: misafir giriş ekranına, yetkisiz üye nazik uyarıya — */
 
@@ -230,7 +269,7 @@ export default function AdminHomeScreen() {
 
   const roleLabel = ROLE_LABELS[auth.user.role] ?? auth.user.role;
   /** Üç sorgunun da düşmesi ağ/oturum sorununu gösterir; biri düşerse sessiz kal. */
-  const allFailed = messagesQuery.isError && requestsQuery.isError && liveQuery.isError;
+  const allFailed = messagesQuery.isError && requestsQuery.isError && liveQuery.isError && todoQuery.isError;
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
@@ -277,6 +316,51 @@ export default function AdminHomeScreen() {
             <SectionCard key={section.key} section={section} onPress={openSection} />
           ))}
         </View>
+
+        <SectionHeader title="Tüm yönetim araçları" meta="Web paneli" />
+        <Text style={styles.toolsIntro} {...textScale.long}>
+          Web sürümündeki bütün yönetim sayfaları burada; yetkine göre listelenir ve uygulamadan
+          çıkmadan, yeniden giriş yapmadan açılır.
+        </Text>
+        {moduleGroups.map((group) => (
+          <View key={group.key} style={styles.toolGroup}>
+            <Text style={styles.toolGroupTitle} {...textScale.dense}>
+              {group.title.toLocaleUpperCase("tr-TR")}
+            </Text>
+            <View style={styles.toolList}>
+              {group.modules.map((module, index) => (
+                <ListRow
+                  key={module.key}
+                  leading={{ icon: module.icon, tone: "brand" }}
+                  title={module.title}
+                  subtitle={module.description}
+                  chevron
+                  position={
+                    group.modules.length === 1
+                      ? "single"
+                      : index === 0
+                        ? "first"
+                        : index === group.modules.length - 1
+                          ? "last"
+                          : "middle"
+                  }
+                  onPress={() => openModule(module)}
+                  testID={`admin-module-${module.key}`}
+                />
+              ))}
+            </View>
+          </View>
+        ))}
+
+        <ListRow
+          leading={{ icon: "notifications-outline", tone: "brand" }}
+          title="Yönetim bildirimleri"
+          subtitle="Görev ve gelen kutusu bildirimlerini aç / kapat"
+          chevron
+          position="single"
+          onPress={() => router.push("/bildirim-tercihleri")}
+          style={styles.notifRow}
+        />
 
         <Text style={styles.footnote} {...textScale.long}>
           Sayaçlar ekran açıkken kendiliğinden tazelenir. Yaptığınız her işlem üye tarafında anında
@@ -438,6 +522,25 @@ const styles = StyleSheet.create({
     marginTop: space.xs,
   },
 
+  toolsIntro: {
+    ...type.caption,
+    color: colors.textSecondary,
+    marginBottom: space.sm,
+  },
+  toolGroup: {
+    marginBottom: space.md,
+    gap: space.xs,
+  },
+  toolGroupTitle: {
+    ...type.caption,
+    color: colors.textTertiary,
+    letterSpacing: 0.6,
+    paddingHorizontal: space.xxs,
+  },
+  toolList: {},
+  notifRow: {
+    marginTop: space.sm,
+  },
   footnote: {
     ...type.caption,
     color: colors.textTertiary,
