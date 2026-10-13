@@ -114,6 +114,7 @@ export default function RootLayout() {
 
                   {/* Ayar ve hesap ekranları — klasik detay geçişi. */}
                   <Stack.Screen name="bildirim-tercihleri" />
+                  <Stack.Screen name="takip-bildirimleri" />
                   <Stack.Screen name="hesabim" />
                   <Stack.Screen name="sifre-degistir" />
                   <Stack.Screen name="hesap-sil" />

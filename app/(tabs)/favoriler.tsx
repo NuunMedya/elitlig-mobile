@@ -607,6 +607,14 @@ export default function FavorilerScreen() {
          geldiği yere, yani Menü'ye dönülür. */
       onBack={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)/menu"))}
       scrollY={scrollY}
+      /* Takip başına bildirim ayarı (gol, sonuç, kart, haber…) ve il takibi. */
+      actions={[
+        {
+          icon: "notifications-outline",
+          onPress: () => router.push("/takip-bildirimleri"),
+          accessibilityLabel: "Takip bildirimleri",
+        },
+      ]}
       /* BAŞLIKTA MESAJ DÜĞMESİ YOK: yazışmaya artık her ekranda duran yüzen
          mesaj balonundan ulaşılıyor (components/MessageSticker.tsx). İkisini
          birden çizmek aynı hedefe iki kapı açar ve rozet iki yerde sayılırdı. */

@@ -18,7 +18,7 @@ import {
 import { useAuth } from "@/providers/AuthProvider";
 
 /**
- * Favoriler — takım, lig, sezon ve MAÇ takibi.
+ * Favoriler — takım, lig, sezon, İL ve MAÇ takibi.
  *
  * Kullanıcı istediği kadar takımı, ligi, sezonu ve tek tek maçı favoriye
  * ekleyebilir. Seçimler her zaman cihazda saklanır (misafir de kullanabilir);
@@ -61,6 +61,10 @@ interface FavoriteContextValue {
   favoriteSeasons: FavoriteScope[];
   isFavoriteSeason: (seasonId?: number | null) => boolean;
   toggleFavoriteSeason: (season: FavoriteScope) => void;
+  /** İl takibi — o ildeki maçlar ve haberler için bildirim. */
+  favoriteCities: FavoriteScope[];
+  isFavoriteCity: (cityId?: number | null) => boolean;
+  toggleFavoriteCity: (city: FavoriteScope) => Promise<void>;
   /** Maç favorileri — yalnız id tutulur, maç kaydı sorgudan gelir. */
   favoriteMatches: number[];
   isFavoriteMatch: (matchId?: number | null) => boolean;
@@ -100,6 +104,7 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
   const [favorites, setFavorites] = useState<FavoriteTeam[]>([]);
   const [leagues, setLeagues] = useState<FavoriteScope[]>([]);
   const [seasons, setSeasons] = useState<FavoriteScope[]>([]);
+  const [cities, setCities] = useState<FavoriteScope[]>([]);
   const [matches, setMatches] = useState<number[]>([]);
   const [restored, setRestored] = useState(false);
   const syncedUserRef = useRef<string | null>(null);
@@ -124,6 +129,7 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
             const stored = JSON.parse(scopesRaw);
             if (Array.isArray(stored?.leagues)) setLeagues(stored.leagues.filter((l: FavoriteScope) => l?.id));
             if (Array.isArray(stored?.seasons)) setSeasons(stored.seasons.filter((s: FavoriteScope) => s?.id));
+            if (Array.isArray(stored?.cities)) setCities(stored.cities.filter((c: FavoriteScope) => c?.id));
           } catch {}
         }
         const storedMatches = parseIdList(matchesRaw);
@@ -139,8 +145,8 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!restored) return;
-    AsyncStorage.setItem(SCOPE_STORAGE_KEY, JSON.stringify({ leagues, seasons })).catch(() => {});
-  }, [leagues, seasons, restored]);
+    AsyncStorage.setItem(SCOPE_STORAGE_KEY, JSON.stringify({ leagues, seasons, cities })).catch(() => {});
+  }, [leagues, seasons, cities, restored]);
 
   useEffect(() => {
     if (!restored) return;
@@ -165,6 +171,7 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
         const serverLeagues = new Set(server.leagueIds);
         const serverSeasons = new Set(server.seasonIds);
         const serverMatches = new Set(server.matchIds);
+        const serverCities = new Set(server.cityIds);
         favorites.forEach((t) => {
           if (!serverTeams.has(t.id)) followFavorite("teams", t.id).catch(() => {});
         });
@@ -176,6 +183,9 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
         });
         matches.forEach((id) => {
           if (!serverMatches.has(id)) followFavorite("matches", id).catch(() => {});
+        });
+        cities.forEach((c) => {
+          if (!serverCities.has(c.id)) followFavorite("cities", c.id).catch(() => {});
         });
         // Maçta takım/ligden farklı olarak yalnız id tutulur; ad/amblem
         // aramaya gerek olmadığı için sunucudaki yıldızlar cihaza da indirilir
@@ -244,6 +254,26 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
     });
   }, [signedIn]);
 
+  const isFavoriteCity = useCallback(
+    (cityId?: number | null) => cities.some((c) => c.id === Number(cityId)),
+    [cities]
+  );
+
+  /* Diğer türlerden farklı olarak sunucu çağrısının sözü döner: takip
+     bildirimleri ekranı yeni ili listeye eklemek için yazımın bitmesini bekler. */
+  const toggleFavoriteCity = useCallback((city: FavoriteScope): Promise<void> => {
+    const exists = cities.some((c) => c.id === city.id);
+    setCities((prev) =>
+      exists ? prev.filter((c) => c.id !== city.id) : prev.some((c) => c.id === city.id) ? prev : [...prev, city]
+    );
+    if (!signedIn) return Promise.resolve();
+    const call = exists ? unfollowFavorite : followFavorite;
+    return call("cities", city.id).then(
+      () => undefined,
+      () => undefined
+    );
+  }, [cities, signedIn]);
+
   const isFavoriteMatch = useCallback(
     (matchId?: number | null) => matches.includes(Number(matchId)),
     [matches]
@@ -281,6 +311,9 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
       favoriteSeasons: seasons,
       isFavoriteSeason,
       toggleFavoriteSeason,
+      favoriteCities: cities,
+      isFavoriteCity,
+      toggleFavoriteCity,
       favoriteMatches: matches,
       isFavoriteMatch,
       addFavoriteMatch,
@@ -301,6 +334,9 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
       seasons,
       isFavoriteSeason,
       toggleFavoriteSeason,
+      cities,
+      isFavoriteCity,
+      toggleFavoriteCity,
       matches,
       isFavoriteMatch,
       addFavoriteMatch,

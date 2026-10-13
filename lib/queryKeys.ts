@@ -47,6 +47,8 @@ export const queryKeys = {
 
   /* ---- Favoriler (sunucu tarafı) ---- */
   favoritesMe: () => ["favorites", "me"] as const,
+  /** Takip başına bildirim ayarları (app/takip-bildirimleri.tsx). */
+  followNotifications: () => ["favorites", "notifications"] as const,
   /** Bir maçı kaç kişinin takip ettiği — oturum gerektirmez. */
   matchFollowerCount: (matchId: number) => ["favorites", "match-count", matchId] as const,
   /** Favori kapsamdaki canlı maçlar (sekme rozeti) — kapsamdan bağımsızdır. */
