@@ -54,7 +54,10 @@ app/                       Ekranlar (Expo Router — dosya = rota)
   giris.tsx                Giriş (modal)
 
 components/                ScopeBar, ScopeChip, FollowActions, MessageSticker …
-components/league/         Lig merkezinin panelleri (TeamsPane, PlayersPane)
+components/league/         Lig sekmeleri (Puan, Fikstür, Takımlar, Oyuncular,
+                           İstatistik, Haber, Arşiv panelleri)
+components/home/ · teampage/ · playerpage/ · matchpage/ · club/ · account/
+                           Ekrana özgü parçalar (bkz. Tasarım sistemi)
 components/ui/             Tasarım sistemi bileşenleri (MatchCard,
                            MatchCardRail, HubTile, ListRow, MetricTile, …)
 theme/                     Palet, tipografi, uzay, yükselti, hareket, font
@@ -181,162 +184,50 @@ ve her isteğe `Authorization: Bearer` olarak eklenir. 401 gelirse oturum sessiz
 kapatılır, uygulama misafir moduna düşer — maçlar ve puan durumu girişsiz de
 görünür.
 
-## Tasarım sistemi
+## Tasarım sistemi — Arena
 
-Renk, tipografi ve uzay `theme/` altındadır ve yedi kural taşır:
+Uygulamanın tasarım dili **Arena**'dır; tam kılavuz
+[`docs/arena-tasarim-dili.md`](docs/arena-tasarim-dili.md). Özet:
 
-- **MOR MÜREKKEPTİR, ARKA PLAN DEĞİL.** Açık temada kâğıt SAF BEYAZDIR
-  (`bg` #FFFFFF); yüzeyler beyazdan bir kademe aşağıda çok açık bir lavantadır
-  (`surface1` #F8F5FE) ve kimlik blokları derin mor gradyandır (`gradientInk`).
-  Koyu temada zemin GERÇEKTEN mordur (#180D33) — önceki #0C0718 adı mor olan
-  bir siyahtı. Mürekkep de nötr siyah değil MOR mürekkeptir (#160C2E).
-- **İKİ VURGU, İKİ İŞ.** Mor `brand` yalnız AKSİYON ve SEÇİLİ DURUM,
-  camgöbeği `accent` yalnız VERİ içindir. Veri rengi eskiden maviydi ve mavi
-  morun komşusu olduğu için bir istatistik barında "seçili mi, veri mi" ayırt
-  edilemiyordu. Koyu mor blokların üstünde mor bir vurgu okunmaz (mor üstüne
-  mor ≈ 1,8:1); oradaki marka rengi ayrı bir tokendır: `brandOnDark`.
-- **KARTLAR IŞIKLIDIR.** Varsayılan kart üç katmandır: `gradientCard` geçişi
-  (bkz. `components/ui/GradientFill.tsx`) + 1px kenarlık + MOR tonlu yumuşak
-  gölge. Gölge rengi siyah değil `shadowColor` (#2E1065): siyah gölge beyaz
-  kâğıdın üstünde grileşip kirli görünür.
-- **ALT MENÜ BARI İKİ TEMADA DA KOYU MOR.** Uygulamanın her ekranında görünen
-  tek yüzey odur; tema değiştikçe kimlik değiştirmesin diye rengi temadan
-  bağımsızdır. Ekranın altında YÜZEN bir haptır ve seçili sekmeye yaylanarak
-  uzanan bir ışık taşır (bkz. `components/ui/GlowTabBar.tsx`).
-- **GRADYAN SAYILIDIR VE TOKENDIR.** Sekiz gradyanın her birinin bir işi vardır
-  (`gradientCard` · `gradientInk` · `gradientBrand` · `gradientAccent` ·
-  `gradientLive` · `gradientPitch` · `gradientSurface` · `gradientTabBar`).
-  Elle yazılmış iki renk = denetim hatası.
-- **GRADYAN EKSENİ TEKTİR: YATAY, SAĞDAN SOLA.** Köşegen ya da dikey geçiş
-  dikdörtgen bir yüzeyi silindire çevirir — kart "boru" gibi görünür. Aynı
-  ekranda iki farklı eksen varsa göz iki ayrı ışık kaynağı okur ve yüzeyler
-  birbirine ait görünmez. `check-tokens` her `colors.gradient*` yüzeyinin
-  `start`/`end` noktasını ölçer: `y` iki uçta da 0.5, `start.x > end.x`.
-  Kural yalnız YÜZEY gradyanlarına bakar; ekseni işinden gelen üç gradyan
-  dışarıdadır — okunabilirlik scrim'i (dikey), kaydırma kenarı maskesi
-  (kaydırma yönünde) ve saha (`gradientPitch`, dikey; oradaki geçiş ışık
-  değil derinliktir).
-- **GEÇİŞ DURAKLARI BİRBİRİNE YAKIN TONDUR.** İki durak arasındaki fark
-  yaklaşık bir kademedir (`gradientCard` #FFFFFF → #F8F4FE). Keskin geçiş
-  yüzeyi ikiye böler; yakın ton "ışık" izlenimi verir. Kâğıt (`bg`) bu yüzden
-  geçişin KOYU ucundan da bir kademe koyudur — yoksa kartın sağ ucu kâğıda
-  karışır ve kart taşıyormuş gibi durur.
-- **`fontWeight` KULLANILMAZ** — özel fontlarda RN ağırlık uygulamaz, ağırlık
-  ailenin adıyla seçilir (`fontFamily: fonts.semibold`).
+- **Nötr kâğıt, renk sinyaldir.** Açık temada serin gri kâğıt (`bg` #F3F4F6)
+  ve beyaz kartlar; koyu temada grafit gece (#0B0D11). Renk yalnız bir şey
+  söylediğinde kullanılır: `brand` (elektrik menekşe) aksiyon ve seçili durum,
+  `accent` (zümrüt) veri, `live` canlı, `win/draw/loss` sonuç.
+- **Grafit sahne.** Kimlik ve skor anları (maç skorbordu, takım/oyuncu
+  kimliği, vitrin maçı) ve alt menü grafit sahnededir (`gradientInk`,
+  `inkBlock`, `tabBar`); iki temada da aynıdır. Sahne bir ekranda bir kez,
+  tepede kullanılır.
+- **İki başlık.** `ScreenHeader` sekme köklerinde KÂĞIT (22px büyük başlık,
+  beyaz yuvarlak eylem düğmeleri), kimlik sayfalarında SAHNE (`hero` ile)
+  çizilir. İçindeki `Tabs` ve `ScopeChip` yüzeyi `HeaderToneContext`'ten
+  öğrenir.
+- **Düz yüzeyler.** Kart: beyaz dolgu + saç teli kenarlık + çok hafif nötr
+  gölge, köşe `radius.xl` (18); düğme ve çip hap. Kart gradyanı düzdür.
+- **Hiyerarşi tipografiyle.** Bölüm başlıkları cümle düzeninde kalın
+  (`SectionHeader`); rakamlar Archivo ile büyük ve tabular; etiketler küçük
+  büyük harf (`overline`, `micro`).
+- **Denetim.** `npm run check:tokens`: kontrast ≥ 4.5 (iki tema), çıplak hex
+  yok, `fontWeight` yok, çıplak `borderRadius` yok, gradyan ekseni yatay.
 
-- **KÖŞE ÜRÜNÜN İMZASIDIR.** Yarıçap ölçeği bilerek cesur: kart **18**, panel
-  **24**, sahne yüzeyi (skor tablosu, saha, yükselen sayfa) **30**, düğme ve
-  seçim göstergesi **hap**. Bu ölçekte köşe bir detay değil formun kendisidir —
-  kartlar "kesilmiş dikdörtgen" değil "yastık" okunur. Ölçek iç içe geçmeyi
-  bilir: bir kabın içindeki öğe, kabın yarıçapından en az iç boşluk kadar
-  küçüktür (ardışık iki kademe farkı 6px, yani tipik iç boşluk).
-  `check-tokens` çıplak `borderRadius: <sayı>` yazımını yasaklar (≤ 4px mikro
-  şekiller ve dondurulmuş paylaşım kartı hariç) — ölçek bir daha tek tek
-  dosyalardan kaçmasın diye.
-
-### Çerçeve ve ışık
-
-İki küçük ilkel, ürünün "el yapımı" hissini taşıyan şeyler:
-
-- **`Frame`** — 1px'lik GRADYAN kenar. React Native'de gradyan kenarlık yok;
-  teknik, gradyanla dolu bir dış katman + `padding: 1` + kartın kendi zeminini
-  taşıyan iç katman. Gerçek bir nesnenin kenarı ışığa göre davranır: üst yay
-  parlak, alt yay sönük (`rimLight` / `rimDark`). Düz bir `hairline` kenarlık
-  her arayüzde aynıdır ve kartı kâğıttan KESİLMİŞ gösterir; gradyan kenar onu
-  kâğıdın üstüne KONMUŞ gösterir. İç yarıçap dıştan 1 eksiktir, yoksa kenarlık
-  köşelerde kalınlaşır.
-- **`Bloom`** — bir öğenin arkasındaki yumuşak ışık, `RadialGradient` ile.
-  Düz renkli bir daire hâle DEĞİLDİR: kenarı keskindir ve ekranda disk olarak
-  görünür. Skorun arkasındaki hâle, mürekkep bloğu "aydınlatılmış bir tabela"
-  yapan tek detaydır; canlı maçta rengi `live`a döner.
-
-### Tipografi ölçeği
-
-Metin 10–22, skor 17–40. Arayüzün varsayılanı **14px** (`body`), ikincil metin
-12 (`bodySm`), satır başlığı 15 (`h3`), kart başlığı 16 (`h2`), sayfa başlığı
-19 (`h1`), kimlik başlığı 22 (`display`). Satır ölçüleri: tek satır 52, iki
-satır 66, maç satırı 54.
-
-10px'e yalnız `micro` ve `overline` iner; ikisi de DAİMA büyük harf + geniş harf
-aralığı taşır — büyük harf, o puntoda okunurluğu ayakta tutan şeydir.
-
-**ÖLÇEK NEDEN BÜYÜTÜLDÜ.** Önceki sürümler ölçeği adım adım küçültmüştü; son
-hâlde gövde 11, meta 9, rozet 8 ve skor 24px'ti. Gerekçe "küçük punto + geniş
-boşluk daha pahalı bir izlenim verir" idi — doğru ama sınırı var, ve sınır
-aşılmıştı: 11px gövde iOS'un 17pt gövdesinin ve Material'ın 14sp tabanının
-belirgin altındadır, 9px meta ile 8px rozet iki platformun erişilebilirlik
-tabanının da altına iner. Kullanıcı ekrana yaklaşmak zorunda kalıyorsa o
-arayüz pahalı değil UCUZ okunur. Skor ayrıca büyüdü (24 → 40): bir skor
-uygulamasında skorun büyüklüğü, ürünün neyle ilgili olduğunu söyleyen ilk
-şeydir.
-
-Hiyerarşi eskisinden daha nettir: basamaklar 1px değil 2–3px aralıklıdır, yani
-punto farkı tek başına da okunur (eskiden fark yalnız aile + renk ile ayakta
-duruyordu).
-
-**Ölçek tek başına büyütülmez.** İri metin, eski kısık ölçeğe göre hesaplanmış
-kutuların içinde kırpılır; bu yüzden `theme/space.ts` satır yükseklikleri,
-amblem ölçüleri ve sütun genişlikleri, `Button` boyları ve metin taşıyan sabit
-kutular (`Badge`, `RatingPill`, `ActionTile`, `MetricTile`, `ScreenHeader`…)
-aynı geçişte birlikte büyüdü — her biri yeni satır yüksekliğinden türetilerek.
-
-### Maç satırı — tek satır (yalnız yönetim listeleri; halka açık listeler `MatchCard` kullanır)
-
-```
-┌ 42 ┬────── flex ──────┬ 56 ┬────── flex ──────┬ 42 ┐
-│19:30│ ◆ Kartalspor     │2–1 │ Yıldızspor ◆     │ ☆ │
-└─────┴──────────────────┴────┴──────────────────┴────┘
-  saat   logo + ev (sağa)  skor  dep (sola) + logo  yıldız
-```
-
-**Kenar sütunları eşit genişliktedir (42/42) ve yıldız gizlense bile yerini
-korur.** İki yan eşit `flex` aldığı için skor bloğu ancak kenarlar eşitken
-satırın geometrik merkezine oturur; eşit olmadığında blok birkaç piksel, yıldız
-hiç çizilmediğinde çok daha fazla sağa kayıyordu — yani aynı uygulamada maçlar
-üç farklı okuma ekseninde diziliyordu.
-
-Ev sahibinin adı SAĞA, deplasmanınki SOLA yaslanır; ikisi de ortadaki sabit
-genişlikli skor bloğuna dayandığı için "ev – skor – deplasman" tek bir okuma
-birimi olur ve göz, liste boyunca tek bir dikey ekseni takip eder. Amblemler
-dışta durup iki kenarda sabit bir ritim kurar.
-
-Önceki iki satırlı düzen (ev üstte, deplasman altta, skor sağda) satır başına
-56px istiyordu ve skorun yeri takım adının uzunluğuna göre kayıyordu.
+Ekran bileşenleri alana göre ayrılmıştır: `components/home` (Ana Sayfa),
+`components/league` (Lig sekmeleri), `components/teampage`,
+`components/playerpage`, `components/matchpage` (detay sayfaları),
+`components/club` (Kulübüm ve kulüp paneli), `components/account`
+(profil, giriş/kayıt), `components/chat` (mesajlaşma).
 
 ### Maç detayı — sahne
 
-Maç detayı, uygulamanın geri kalanı gibi bir LİSTE değil, tek bir maçın
-sahnesidir; kendi kâğıdı ve kendi ışığı vardır.
-
-**Atmosfer.** Sayfanın arkasında, üst 300px'i kaplayan üç katman durur
-(`MatchAtmosphere`):
-
-1. **Taban** (`matchTint`) — sahnenin mor rengi, her zaman.
-2. **Doku** — maçın kapak fotoğrafı, %28 opaklıkta. Tam opaklıkta serilseydi
-   sahnenin rengi fotoğrafın rengi olurdu ve başlık şeridindeki beyaz metnin
-   okunurluğu, o maça hangi fotoğrafın yüklendiğine bağlı kalırdı. Bu ligdeki
-   maçların çoğunda kapak yok; "fotoğrafsız" hâl istisna değil VARSAYILAN.
-3. **Yıkama** (`matchWash`) — tepede saydam (doku görünsün), dipte kâğıdın
-   kendisi. Son durak `matchCanvas` ile birebir aynı; bir tık farklı olsa
-   atmosferin bittiği yerde yatay bir dikiş çizgisi görünür.
-
-**Kâğıt.** `matchCanvas` açık temada uygulama kâğıdıyla aynıdır (#FFFFFF),
-koyu temada bir tık daha doygun mordur (#170C32). Üstteki mor atmosfer ancak
-sakin bir zeminde "ışık" gibi okunur; sahnenin altındaki zemin de mor olsaydı
-sayfa baştan aşağı mor bir sise dönerdi.
-
-**Denetim.** `check-tokens` başlık metninin (`onDark`, `onDarkMuted`,
-`brandOnDark`) atmosfer tabanıyla, sayfa metinlerinin de `matchCanvas` ile
-kontrastını ölçer. Taban bir tık açılırsa maç başlığı okunmaz olur ve bu,
-yalnız kapak fotoğrafı olan maçlarda fark edilirdi.
+Maç sayfası kendi atmosferini taşır (`components/matchpage/MatchAtmosphere`):
+grafit taban (`matchTint`), %28 opaklıkta kapak fotoğrafı ve kâğıda
+(`matchCanvas`) inen dikey yıkama (`matchWash`; son durak `matchCanvas` ile
+birebir aynı). Skorbord grafit sahne kartıdır; altında Özet (canlıda Canlı) ·
+Kadro (iki takım tek sahada) · İstatistik · H2H · Puan sekmeleri durur.
+`check-tokens` başlık metninin atmosfer tabanıyla kontrastını ölçer.
 
 **Oyuncu adı hijyeni.** Kadro kayıtlarının bir bölümünde oyuncu adı takım
-adıyla birlikte girilmiş ("Yusuf YILDIRIM İNFERNO FK"). Bu ad ekranda beş ayrı
-yerde okunuyor: skor bloğu golcüleri, zaman çizelgesi, saha dizilişi etiketi,
-en iyi oyuncular ve kadro satırı. `stripTeamSuffix` ekini atar ve temizlik
-KADRO YÜKÜNÜN KENDİSİNDE, bir kez yapılır — böylece `lib/matchStats`
-türetmeleri de temiz adı görür. Ek yalnız sonda ve kelime sınırında eşleşirse
-atılır: "Ali FENERBAHÇELİ", takım adı "FENERBAHÇE" olsa bile korunur.
+adıyla birlikte girilmiş ("Yusuf YILDIRIM İNFERNO FK"). `stripTeamSuffix` eki
+kadro yükünün kendisinde bir kez atar; ek yalnız sonda ve kelime sınırında
+eşleşirse atılır.
 
 ## Bilgi mimarisi — beş bölüm, tek kapı
 
@@ -376,6 +267,11 @@ yönlendirir.
 │      SPOR                                     │
 └───────────────────────────────────────────────┘
 ```
+
+`MatchCard` iki biçimde gelir: büyük KART (yatay şeritler, vitrin) ve yoğun
+listeler için KOMPAKT SATIR (`variant="compact"`: ev · skor/saat · deplasman
+tek eksende, durum skorun altında, saha ve takip yıldızı ikinci satırda;
+satırlar `position` ile tek kart hâlinde gruplanır).
 
 `MatchCard` fikstür ve sonuç listelerinin ortak birimidir (Maçlar, Lig ▸
 Fikstür, Favoriler, Canlı, takım sayfası). Oynanmamış maçta ortada saat,
