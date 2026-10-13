@@ -40,6 +40,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import ViewShot, { captureRef } from "react-native-view-shot";
+import { FollowActions } from "@/components/FollowActions";
 import {
   Avatar,
   Badge,
@@ -86,6 +87,7 @@ import { formatDateShort, formatTime, timeAgo } from "@/lib/format";
 import { get } from "@/lib/http";
 import { matchState } from "@/lib/match";
 import { queryKeys } from "@/lib/queryKeys";
+import { useAuth } from "@/providers/AuthProvider";
 import { useFavorite } from "@/providers/FavoriteProvider";
 import { useScope } from "@/providers/ScopeProvider";
 import type { ApiMatch, ApiPlayer, KadroPlayer, NewsItem, PlayerRankRow, StandingRow } from "@/lib/types";
@@ -281,6 +283,7 @@ const num = (value: number | string | null | undefined): number => Number(value 
    ══════════════════════════════════════════════════════════════════════════ */
 
 export default function TeamDetailScreen() {
+  const auth = useAuth();
   const { id, tab: tabParam } = useLocalSearchParams<{ id: string; tab?: string }>();
   const teamId = Number(id);
   const validId = Number.isFinite(teamId) && teamId > 0;
@@ -689,7 +692,7 @@ export default function TeamDetailScreen() {
       {
         icon: (favorite ? "star" : "star-outline") as keyof typeof Ionicons.glyphMap,
         onPress: handleToggleFavorite,
-        accessibilityLabel: favorite ? "Takımı favorilerden çıkar" : "Takımı favoriye al",
+        accessibilityLabel: favorite ? "Takımı takipten çıkar" : "Takımı takip et",
       },
       {
         icon: "share-social-outline" as keyof typeof Ionicons.glyphMap,
@@ -727,9 +730,19 @@ export default function TeamDetailScreen() {
           goalDiff={standing ? num(standing.row.goal_diff) : null}
           squadCount={squad.length > 0 ? squad.length : null}
           form={standing?.row.last5 ?? ""}
+          actions={
+            <FollowActions
+              following={favorite}
+              onToggleFollow={handleToggleFavorite}
+              onOpenNotifications={() =>
+                auth.user ? router.push(`/takip-bildirimleri?odak=team:${teamId}`) : router.push("/giris")
+              }
+              extra={rivals.length > 0 ? [{ icon: "git-compare", label: "Karşılaştır", onPress: openH2h }] : []}
+            />
+          }
         />
       ) : null,
-    [team, teamLabel, followerCount, standing, squad.length],
+    [team, teamLabel, followerCount, standing, squad.length, favorite, handleToggleFavorite, auth.user, router, teamId, rivals.length, openH2h],
   );
 
   if (!validId) {
@@ -941,7 +954,9 @@ const TeamIdentity = React.memo(function TeamIdentity({
   goalDiff,
   squadCount,
   form,
+  actions,
 }: {
+  actions?: React.ReactNode;
   teamName: string;
   logo: string | null;
   city: string | null;
@@ -1021,6 +1036,8 @@ const TeamIdentity = React.memo(function TeamIdentity({
           <FormChips form={form} size="sm" />
         </View>
       ) : null}
+
+      {actions}
     </View>
   );
 });

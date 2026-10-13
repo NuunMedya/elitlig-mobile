@@ -15,13 +15,16 @@
  * NEDEN İYİMSER GÜNCELLEME: bildirim tercihleri ekranıyla aynı gerekçe —
  * anahtar dokunulduğu anda dönmeli; hata olursa eski değere dönülür.
  *
+ * ODAK: `?odak=team:610` ile açılırsa o takibin ayarları açık gelir (takım,
+ * maç ve lig sayfalarındaki zil düğmesi buraya bu parametreyle gelir).
+ *
  * İL TAKİBİ: takım/lig/sezon/maç kendi sayfalarındaki yıldızla takip edilir.
  * İlin ayrı bir sayfası olmadığı için il takibi bu ekranın altından yapılır.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { memo, useCallback, useMemo, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -92,7 +95,9 @@ export default function FollowNotificationsScreen() {
   const { isFavoriteCity, toggleFavoriteCity } = useFavorite();
 
   const signedIn = Boolean(auth.user);
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const params = useLocalSearchParams<{ odak?: string }>();
+  const focusKey = typeof params.odak === "string" && /^[a-z]+:\d+$/.test(params.odak) ? params.odak : null;
+  const [expanded, setExpanded] = useState<string | null>(focusKey);
   const [showCities, setShowCities] = useState(false);
   const [pendingCity, setPendingCity] = useState<number | null>(null);
 
@@ -203,11 +208,13 @@ export default function FollowNotificationsScreen() {
     const map = new Map<FollowType, FollowItem[]>();
     query.data?.follows.forEach((item) => {
       const list = map.get(item.type) ?? [];
-      list.push(item);
+      // Odaktaki takip kendi bölümünün başına alınır ki kaydırmadan görünsün.
+      if (focusKey && followKey(item) === focusKey) list.unshift(item);
+      else list.push(item);
       map.set(item.type, list);
     });
     return map;
-  }, [query.data]);
+  }, [query.data, focusKey]);
 
   const header = <ScreenHeader title="Takip Bildirimleri" back scrollY={scrollY} />;
 
