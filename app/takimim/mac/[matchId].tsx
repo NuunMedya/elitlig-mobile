@@ -171,7 +171,7 @@ export default function MacKadrosuScreen() {
   const [editing, setEditing] = useState<Entry | null>(null);
   const [guestOpen, setGuestOpen] = useState(false);
   const [guestName, setGuestName] = useState("");
-  const [attendanceOpen, setAttendanceOpen] = useState(false);
+  const [attendanceOpen, setAttendanceOpen] = useState(true);
   const [hydrated, setHydrated] = useState(false);
   const [tab, setTab] = useState<MatchTab>(() => resolveMatchTab(params.sekme));
 
@@ -586,7 +586,7 @@ export default function MacKadrosuScreen() {
         <ScrollView contentContainerStyle={[styles.content, styles.contentWithBar]} keyboardShouldPersistTaps="handled">
           {/* Diziliş */}
           <SectionHeader title="Diziliş" style={styles.flushHeader} />
-          <ChipGroup>
+          <ChipGroup contentPadding={0}>
             {FORMATION_NAMES.map((name) => (
               <Chip
                 key={name}
@@ -803,7 +803,7 @@ export default function MacKadrosuScreen() {
             />
 
             <Text style={styles.sheetLabel}>Mevki</Text>
-            <ChipGroup>
+            <ChipGroup scrollable={false} contentPadding={0}>
               {POSITIONS.map((position) => (
                 <Chip
                   key={position.code}

@@ -801,7 +801,7 @@ const LineupEditor = React.memo(function LineupEditor({
       <Text style={styles.fieldLabel} {...textScale.badge}>
         {upperTR("Diziliş")}
       </Text>
-      <ChipGroup>
+      <ChipGroup contentPadding={0}>
         {formationNames.map((name) => (
           <FormationChip
             key={name}

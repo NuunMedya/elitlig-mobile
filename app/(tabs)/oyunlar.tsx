@@ -458,7 +458,7 @@ const GameCard = React.memo(function GameCard({
           <Text style={styles.gameTitle} numberOfLines={1} {...textScale.dense}>
             {meta.title}
           </Text>
-          <Text style={styles.gameBlurb} numberOfLines={2} {...textScale.dense}>
+          <Text style={styles.gameBlurb} numberOfLines={3} {...textScale.dense}>
             {meta.blurb}
           </Text>
         </>
