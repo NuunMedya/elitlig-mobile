@@ -116,6 +116,10 @@ function targetFromEntity(
   ctx: NotifContext
 ): NotifTarget | null {
   switch (entityType) {
+    // Yönetim görevleri (services/todoNotifications.js): kart açık başlar.
+    case "TODO":
+      return entityId ? { pathname: "/yonetim/gorevler", params: { id: entityId } } : { pathname: "/yonetim/gorevler" };
+
     case "TRANSFER_OFFER":
       return entityId
         ? { pathname: "/teklif/[id]", params: { id: entityId } }
@@ -183,6 +187,7 @@ function targetFromEntity(
 const TYPE_PREFIX_TARGETS: ReadonlyArray<
   readonly [string, (entityId: string | null, ctx: NotifContext) => NotifTarget]
 > = [
+  ["TODO_", (id) => (id ? { pathname: "/yonetim/gorevler", params: { id } } : { pathname: "/yonetim/gorevler" })],
   ["TRANSFER_", (id) => (id ? { pathname: "/teklif/[id]", params: { id } } : { pathname: "/tekliflerim" })],
   ["OFFER_", (id) => (id ? { pathname: "/teklif/[id]", params: { id } } : { pathname: "/tekliflerim" })],
   ["CONTRACT_", (id) => (id ? { pathname: "/sozlesme/[id]", params: { id } } : { pathname: "/sozlesmelerim" })],
@@ -271,6 +276,13 @@ export function routeFromNotif(
   /* ---------- 5) Panel bildirimleri ---------- */
   const entityType = String(data.entity_type ?? "").trim().toUpperCase();
   const entityId = asId(data.entity_public_id);
+
+  /* Yönetim gelen kutusu (services/chat/managementInbox.js): talep kartları
+     yönetim sohbetlerinde yaşar. Üye ekranına (ör. /teklif) değil yönetim
+     gelen kutusuna gidilir. */
+  if (String(data.audience ?? "").toLowerCase() === "management") {
+    return { pathname: "/yonetim/sohbet" };
+  }
 
   const byEntity = targetFromEntity(entityType, entityId, ctx);
   if (byEntity) return byEntity;
