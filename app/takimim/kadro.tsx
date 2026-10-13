@@ -66,7 +66,7 @@ import {
   View,
   type SectionListRenderItemInfo,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { PitchBench, PitchLineup, type PitchPlayer } from "@/components/PitchLineup";
 import { SquadSnapshot, countLines } from "@/components/club/SquadSnapshot";
 import { SquadBuilderView } from "@/components/team/SquadBuilderView";
@@ -116,6 +116,7 @@ import { ApiError } from "@/lib/http";
 import { useAuth } from "@/providers/AuthProvider";
 import {
   colors,
+  elevate,
   fonts,
   hairline,
   layout,
@@ -644,6 +645,7 @@ const LineupEditor = React.memo(function LineupEditor({
 }) {
   const toast = useToast();
   const queryClient = useQueryClient();
+  const insets = useSafeAreaInsets();
 
   const roster = data.roster;
 
@@ -792,68 +794,71 @@ const LineupEditor = React.memo(function LineupEditor({
   });
 
   return (
-    <ScrollView
-      contentContainerStyle={styles.lineupContent}
-      refreshControl={refreshControl}
-      keyboardShouldPersistTaps="handled"
-    >
-      {/* Diziliş seçimi */}
-      <Text style={styles.fieldLabel} {...textScale.badge}>
-        {upperTR("Diziliş")}
-      </Text>
-      <ChipGroup contentPadding={0}>
-        {formationNames.map((name) => (
-          <FormationChip
-            key={name}
-            name={name}
-            selected={name === formation}
-            onPress={changeFormation}
-          />
-        ))}
-      </ChipGroup>
-
-      <View style={styles.lineupMeta}>
-        <Text style={styles.lineupCount} {...textScale.dense}>
-          Sahada {filled}/{Math.min(slots.length, MAX_STARTERS)}
+    <View style={styles.flex}>
+      <ScrollView
+        contentContainerStyle={styles.lineupContent}
+        refreshControl={refreshControl}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Diziliş seçimi */}
+        <Text style={styles.fieldLabel} {...textScale.badge}>
+          {upperTR("Diziliş")}
         </Text>
-        {dirty ? (
-          <Text style={styles.lineupDirty} {...textScale.dense}>
-            Kaydedilmemiş değişiklik var
+        <ChipGroup contentPadding={0}>
+          {formationNames.map((name) => (
+            <FormationChip
+              key={name}
+              name={name}
+              selected={name === formation}
+              onPress={changeFormation}
+            />
+          ))}
+        </ChipGroup>
+
+        <PitchLineup
+          slots={slots}
+          assignments={pitchAssignments}
+          activeSlot={activeSlot}
+          onSelectSlot={selectSlot}
+          onClearSlot={clearSlot}
+        />
+
+        <PitchBench
+          players={bench}
+          activeSlot={activeSlot}
+          onPick={placePlayer}
+          subtitleOf={benchSubtitle}
+          emptyLabel="Kadrodaki herkes sahada."
+        />
+
+        <Text style={styles.lineupHint} {...textScale.long}>
+          Sahaya yerleştirdiğin oyuncular kadro tablosunda “İlk Kadro” rolüne
+          geçer; bu rol yalnız buradan değişir. Maça özel kadro (kaptan, misafir
+          oyuncu, forma rengi) Maç Merkezi’ndeki maç kartından girilir.
+        </Text>
+      </ScrollView>
+
+      {/* SABİT KAYIT ÇUBUĞU — sahadaki doluluk ve kaydedilmemiş değişiklik
+          her an görünür; kaydetmek için yedek havuzunun sonuna inilmez. */}
+      <View style={[styles.bar, { paddingBottom: space.md + insets.bottom }]}>
+        <View style={styles.barTexts}>
+          <Text style={styles.barTitle} {...textScale.dense}>
+            Sahada {filled}/{Math.min(slots.length, MAX_STARTERS)}
           </Text>
-        ) : null}
+          <Text style={[styles.barMeta, dirty ? styles.barDirty : null]} numberOfLines={1} {...textScale.dense}>
+            {dirty ? "Kaydedilmemiş değişiklik var" : "İdeal kadro kayıtlı"}
+          </Text>
+        </View>
+        <Button
+          label="Kaydet"
+          icon="checkmark"
+          onPress={() => save.mutate()}
+          loading={save.isPending}
+          disabled={!dirty || save.isPending}
+          haptic="success"
+        />
       </View>
-
-      <PitchLineup
-        slots={slots}
-        assignments={pitchAssignments}
-        activeSlot={activeSlot}
-        onSelectSlot={selectSlot}
-        onClearSlot={clearSlot}
-      />
-
-      <PitchBench
-        players={bench}
-        activeSlot={activeSlot}
-        onPick={placePlayer}
-        subtitleOf={benchSubtitle}
-        emptyLabel="Kadrodaki herkes sahada."
-      />
-
-      <Button
-        label="İdeal kadroyu kaydet"
-        icon="save-outline"
-        onPress={() => save.mutate()}
-        loading={save.isPending}
-        disabled={!dirty || save.isPending}
-        fullWidth
-      />
-
-      <Text style={styles.lineupHint} {...textScale.long}>
-        Sahaya yerleştirdiğin oyuncular kadro tablosunda “İlk Kadro” rolüne
-        geçer; bu rol yalnız buradan değişir. Maça özel kadro (kaptan, misafir
-        oyuncu, forma rengi) Maç Merkezi’ndeki maç kartından girilir.
-      </Text>
-    </ScrollView>
+    </View>
   );
 });
 
@@ -1279,21 +1284,41 @@ const styles = StyleSheet.create({
   lineupContent: {
     paddingHorizontal: layout.screenPadding,
     paddingTop: space.md,
-    paddingBottom: space.huge,
+    paddingBottom: 120,
     gap: space.md,
   },
-  lineupMeta: {
+  flex: {
+    flex: 1,
+  },
+  bar: {
+    ...elevate(2),
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: space.sm,
+    gap: space.md,
+    paddingHorizontal: layout.screenPadding,
+    paddingTop: space.md,
+    backgroundColor: colors.surface1,
+    borderTopWidth: hairline,
+    borderTopColor: colors.border,
   },
-  lineupCount: {
-    ...type.label,
-    color: colors.textSecondary,
+  barTexts: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
   },
-  lineupDirty: {
+  barTitle: {
+    ...type.h3,
+    color: colors.textPrimary,
+  },
+  barMeta: {
     ...type.caption,
+    color: colors.textTertiary,
+  },
+  barDirty: {
     color: colors.warn,
   },
   lineupHint: {

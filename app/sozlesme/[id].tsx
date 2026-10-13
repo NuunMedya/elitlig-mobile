@@ -50,6 +50,7 @@ import {
 } from "@/components/ui";
 import { type Contract } from "@/lib/api/panel";
 import { formatDateShort, formatMoney, mediaUrl } from "@/lib/format";
+import { formatDateWithYear } from "@/components/club/dates";
 import { get } from "@/lib/http";
 import { useAuth } from "@/providers/AuthProvider";
 import {
@@ -263,14 +264,14 @@ export default function ContractDetailScreen() {
         key: "baslangic",
         label: "Başlangıç",
         value: contract.contract_start_date
-          ? formatDateShort(contract.contract_start_date)
+          ? formatDateWithYear(contract.contract_start_date)
           : "—",
       },
       {
         key: "bitis",
         label: "Bitiş",
         value: contract.contract_end_date
-          ? formatDateShort(contract.contract_end_date)
+          ? formatDateWithYear(contract.contract_end_date)
           : "Süresiz (bitiş yok)",
       },
     ];
@@ -278,28 +279,28 @@ export default function ContractDetailScreen() {
       rows.push({
         key: "gonderim",
         label: "Takım gönderdi",
-        value: formatDateShort(contract.team_sent_at),
+        value: formatDateWithYear(contract.team_sent_at),
       });
     }
     if (contract.player_accepted_at) {
       rows.push({
         key: "kabul",
         label: "Oyuncu kabul etti",
-        value: formatDateShort(contract.player_accepted_at),
+        value: formatDateWithYear(contract.player_accepted_at),
       });
     }
     if (contract.activated_at) {
       rows.push({
         key: "aktivasyon",
         label: "Yürürlüğe girdi",
-        value: formatDateShort(contract.activated_at),
+        value: formatDateWithYear(contract.activated_at),
       });
     }
     if (contract.terminated_at) {
       rows.push({
         key: "fesih",
         label: "Fesih",
-        value: formatDateShort(contract.terminated_at),
+        value: formatDateWithYear(contract.terminated_at),
       });
     }
     return rows;
@@ -375,11 +376,11 @@ export default function ContractDetailScreen() {
               </Text>
               <Text style={styles.heroMeta} {...textScale.dense}>
                 {contract.contract_start_date
-                  ? formatDateShort(contract.contract_start_date)
+                  ? formatDateWithYear(contract.contract_start_date)
                   : "?"}
                 {"  →  "}
                 {contract.contract_end_date
-                  ? formatDateShort(contract.contract_end_date)
+                  ? formatDateWithYear(contract.contract_end_date)
                   : "Süresiz"}
               </Text>
               <View style={styles.heroBadges}>
@@ -399,7 +400,7 @@ export default function ContractDetailScreen() {
           ) : null}
 
           {/* Taraflar */}
-          <SectionHeader title="Taraflar" />
+          <SectionHeader style={styles.flushHeader} title="Taraflar" />
           <ListRow
             leading={
               <TeamLogo
@@ -428,7 +429,7 @@ export default function ContractDetailScreen() {
           />
 
           {/* Süre */}
-          <SectionHeader title="Süre ve tarihler" />
+          <SectionHeader style={styles.flushHeader} title="Süre ve tarihler" />
           {dates.map((row, index) => (
             <KeyValueRow
               key={row.key}
@@ -440,7 +441,7 @@ export default function ContractDetailScreen() {
           ))}
 
           {/* Maddeler */}
-          <SectionHeader title="Sözleşme maddeleri" />
+          <SectionHeader style={styles.flushHeader} title="Sözleşme maddeleri" />
           {clauses.map((row, index) => (
             <KeyValueRow
               key={row.key}
@@ -454,7 +455,7 @@ export default function ContractDetailScreen() {
 
           {additional.length > 0 ? (
             <>
-              <SectionHeader title="Ek maddeler" meta={String(additional.length)} />
+              <SectionHeader style={styles.flushHeader} title="Ek maddeler" meta={String(additional.length)} />
               {/* Uzun madde metinleri kırpılmasın diye paragraf yüzeyi. */}
               {additional.map((item, index) => (
                 <Surface
@@ -475,7 +476,7 @@ export default function ContractDetailScreen() {
           ) : null}
 
           {/* Kaynak teklif ve künye */}
-          <SectionHeader title="Belge künyesi" />
+          <SectionHeader style={styles.flushHeader} title="Belge künyesi" />
           <KeyValueRow label="Sözleşme no" value={contract.public_id} numeric position="first" />
           <KeyValueRow
             label="Durum"
@@ -496,7 +497,7 @@ export default function ContractDetailScreen() {
           {/* Kısa süreç akışı */}
           {events.length > 0 ? (
             <>
-              <SectionHeader title="Nasıl buraya geldi" meta={String(events.length)} />
+              <SectionHeader style={styles.flushHeader} title="Nasıl buraya geldi" meta={String(events.length)} />
               {events.map((event, index) => (
                 <View key={event.id} style={styles.timelineRow}>
                   <View style={styles.timelineRail}>
@@ -537,6 +538,12 @@ export default function ContractDetailScreen() {
 /* ================================ STİLLER ================================= */
 
 const styles = StyleSheet.create({
+  /* Bölüm başlığı kendi ekran kenarı dolgusunu taşır; içerik zaten dolgulu
+     olduğu için burada sıfırlanır — aksi hâlde başlık kartlardan 14px içeride
+     dururdu. */
+  flushHeader: {
+    paddingHorizontal: 0,
+  },
   termNote: {
     padding: space.md,
     marginBottom: space.xs,
