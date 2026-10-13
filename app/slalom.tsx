@@ -1,46 +1,46 @@
 /**
  * SLALOM — basılan noktanın yatay konumunun yön hızını belirlediği koşu.
  *
- * ESKİ KONTROL NEDEN REDDEDİLDİ: ekranın sol/sağ YARISINA basılı tutmak topu
- * sabit hızda o yöne kaydırıyordu. Yani üç durum vardı — tam sola, tam sağa,
- * dur. Hassasiyet kademesi yoktu; dar bir kapıdan geçmekle geniş bir kapıdan
- * geçmek aynı girdiyi istiyordu ve oyuncunun öğreneceği bir şey kalmıyordu.
- *
- * YENİ KONTROL EĞRİSİ (brief §5.3 birebir):
+ * KONTROL EĞRİSİ (brief §5.3 birebir):
  *
  *     n        = clamp((touchX - centerX) / (width / 2), -1, 1)
  *     steer    = sign(n) * |n|^1.7        ← merkez hassas, kenar agresif
  *     targetVx = steer * MAX_LATERAL
  *     vx       = approach(vx, targetVx, accel, decel, dt)
  *
- * `1.7` üssü işin kalbi: merkezin yakınında girdi neredeyse doğrusal olarak
- * KÜÇÜLÜR, kenara doğru hızla büyür. Ortaya yakın basmak milimetrik düzeltme,
- * kenara basmak sert kaçış verir — ve bu fark ölçülebilir biçimde hissedilir.
- * `approach` momentum ekler: hedefe ışınlanma yok, yön değiştirmenin ağırlığı
- * var. Yavaşlama katsayısı hızlanmadan büyüktür; durmak, hızlanmaktan kolay
- * olmalı ki kaçınma kontrol edilebilsin.
+ * Ortaya yakın basmak milimetrik düzeltme, kenara basmak sert kaçış verir.
+ * `approach` momentum ekler: yön değiştirmenin ağırlığı var, ışınlanma yok.
+ * PARMAK EKRANDA KALDIĞI SÜRECE OKUNUR — sadece basma anı değil.
  *
- * PARMAK EKRANDA KALDIĞI SÜRECE OKUNUR — sadece basma anı değil. Parmağını
- * kaydıran oyuncuyu görmezden gelen bir kontrol ölü hissettirir.
+ * DESENLER RASTGELE DEĞİL: koni dizilimi tasarlanmış altı desenden dönüşümlü
+ * gelir ve mesafeyle sıkışır. Oyuncu deseni öğrenir, öğrendiği için hızlanır.
  *
- * DESENLER RASTGELE DEĞİL: koni dizilimi, tasarlanmış altı desenden seçilir.
- * Rastgelelik adaletsiz hissettirir — oyuncu bir deseni öğrenip aşamaz, yalnız
- * şansa küser. Altı desen dönüşümlü gelir ve mesafeyle sıkışır.
+ * ÇARPIŞMA OYUNU BİTİRMEZ: hız düşer, combo sıfırlanır, kısa bir
+ * dokunulmazlık verilir (yanıp sönme değil opaklık düşüşü). Üç çarpışmada
+ * tur biter.
  *
- * ÇARPIŞMA OYUNU BİTİRMEZ: hız %35 düşer, combo sıfırlanır, 600ms
- * dokunulmazlık verilir (yanıp sönme değil opaklık düşüşü — yanıp sönen bir
- * öğe bu üründe yasak). Üç çarpışmada tur biter.
+ * GÖRSEL — YENİDEN YAPILDI. Eski pist düz yeşil bir zemin, iki çizgi, kırmızı
+ * üçgenler ve ortasında nokta olan bir daireydi; zemin şeritleri konilerden
+ * farklı hızda aktığı için hareket "kayıyor" gibi görünüyordu. Şimdi:
+ *   · Gece antrenmanı: projektör kuleleri, ufukta stadyum silüeti, sis.
+ *   · Perspektifli çim: biçme şeritleri, kesikli orta çizgi ve her 100
+ *     metrede bir boyanmış mesafe çizgisi — HEPSİ konilerle aynı hızda akar
+ *     (tek bir dünya ölçeği: 1 derinlik birimi = 90 metre).
+ *   · Arkadan görünen oyuncu: koşu döngüsü, kol salınımı, dönüşte gövde yatar;
+ *     önündeki gerçek 3B desenli top ileri yuvarlanır.
+ *   · Turuncu antrenman konileri: yansıtıcı bant, taban, gölge. Çarpılan koni
+ *     devrilip savrulur; sıyrılan koninin etrafında yeşil hale ve "+N" yazısı.
+ *   · Koniler oyuncunun yanından geçip ekranın altından çıkar — kaybolmaz.
+ *   · Hız arttıkça kenarlarda hız çizgileri; çarpışmada kırmızı parlama ve
+ *     sarsıntı (yerel sürücüde).
  *
- * FİZİK: `lib/game/loop.ts` sabit adımlı döngü. Eski `setInterval(16ms)`
- * kurulumu kare hızına bağlıydı ve yavaş cihazda oyun başka bir oyundu.
- *
- * ÇİZİM: `react-native-svg`. Perspektif dokuyla değil GEOMETRİYLE kurulur —
- * ufka doğru yakınsayan tebeşir çizgileri ve kayan biçme şeritleri. Doku
- * denemesi hem ağır hem uygulamanın diline yabancı olurdu.
+ * AKICILIK — KATMANLAR. Gökyüzü/stadyum ve sis/vinyet statik `<Svg>`
+ * katmanlarıdır, bir kez çizilir. Döngü yalnız DÜNYA katmanını bir kare
+ * sinyaliyle uyandırır; başlık, HUD ve kartlar her karede render almaz. HUD
+ * mesafesi yalnız metre değiştiğinde güncellenir.
  *
  * NEDEN HAM `PanResponder`: kontrol sürekli konum okumasıdır; `Touchable`'ın
- * ölçek animasyonu ve haptik gecikmesi araya girseydi oyun hantallaşırdı. Bu,
- * kılavuzdaki "oyun içi dokunma alanı" istisnasıdır.
+ * ölçek animasyonu ve haptik gecikmesi araya girseydi oyun hantallaşırdı.
  *
  * PAYLAŞIM KARTI SABİT KOYU PALETTEN: kart görüntü olarak dışarı çıkar.
  */
@@ -49,23 +49,40 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { memo, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
+import { Animated, Modal, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import Svg, { Circle, Ellipse, G, Path, Rect } from "react-native-svg";
+import Svg, {
+  Circle,
+  Defs,
+  Ellipse,
+  G,
+  LinearGradient,
+  Path,
+  RadialGradient,
+  Rect,
+  Stop,
+  Text as SvgText,
+} from "react-native-svg";
 import ViewShot, { captureRef } from "react-native-view-shot";
+
+import { Cone, FigureDefs, RunnerBack } from "@/components/game/Figures";
+import { BallDefs, SoccerBall } from "@/components/game/SoccerBall";
 import {
   Badge,
   Button,
   ScreenHeader,
   Touchable,
+  useReduceMotion,
   useToast,
   withAlpha,
 } from "@/components/ui";
 import { submitArenaScore } from "@/lib/api/arena";
+import { art } from "@/lib/game/art";
 import { useHoldGesture } from "@/lib/game/input";
 import { approach, clamp, useGameLoop } from "@/lib/game/loop";
-import { paint } from "@/lib/game/paint";
+import { useFrameSignal, useOnFrame, useSignalValue, type FrameSignal } from "@/lib/game/signal";
+import { initialOrientation, rotate, type Orientation } from "@/lib/game/sphere";
 import { TUNING } from "@/lib/game/tuning";
 import { instagramUrl } from "@/lib/socials";
 import { useAuth } from "@/providers/AuthProvider";
@@ -91,13 +108,19 @@ const BEST_KEY = "elitlig.slalom.best.v2";
 const T = TUNING.slalom;
 
 /** Oyuncunun sabit dikey konumu (kadraj payı). */
-const PLAYER_Y = 0.78;
+const PLAYER_Y = 0.8;
 /** Ufuk çizgisinin yüksekliği — perspektif buradan yakınsar. */
 const HORIZON = 0.3;
-/** Oyuncu yarıçapı. */
+/** Çarpışma yarıçapı (piksel) — oynanış eski sürümle birebir aynı kalır. */
 const PLAYER_R = 15;
 /** Koridor kenarının koridor koordinatındaki yeri (oyuncu tavanı 1.0). */
 const EDGE = 1.2;
+/** Bir derinlik birimi kaç metre: zemin, çizgiler ve koniler AYNI ölçekte akar. */
+const METRES_PER_Z = 90;
+/** Oyuncu figürünün boyu, tuval yüksekliğinin payı. */
+const RUNNER_H = 0.15;
+/** Koninin oyuncu düzlemindeki boyu (piksel). */
+const CONE_PX = 46;
 
 /**
  * TASARLANMIŞ DESENLER — her biri bir "kapı dizisi".
@@ -117,16 +140,28 @@ const PATTERNS: number[][] = [
 
 type Phase = "ready" | "playing" | "over";
 
-/** Akıştaki tek koni. `z` 1 (ufuk) → 0 (oyuncu) arasında ilerler. */
-interface Cone {
+/** Akıştaki tek koni. `z` 1 (ufuk) → 0 (oyuncu) → negatif (ekranın altı). */
+interface ConeState {
   id: number;
   /** Koridor içindeki yatay konum, -1..1. */
   lane: number;
   z: number;
-  /** Sıyırma bonusu bir kez verilir. */
+  /** Sıyırma bonusu bir kez verilir; anı hale efekti için saklanır. */
   grazed: boolean;
-  /** Çarpışma bir kez sayılır. */
+  grazedAt: number;
+  /** Çarpışma bir kez sayılır; anı devrilme animasyonu içindir. */
   hit: boolean;
+  hitAt: number;
+  /** Devrilme yönü: oyuncunun karşı tarafına. */
+  hitDir: number;
+}
+
+/** "+N" yazısı — sıyırılan koninin üstünden yükselir. */
+interface Floater {
+  x: number;
+  y: number;
+  age: number;
+  text: string;
 }
 
 type SubmitState = "idle" | "guest" | "sending" | "sent" | "failed";
@@ -137,15 +172,19 @@ export default function SlalomScreen() {
   const router = useRouter();
   const scope = useScope();
   const auth = useAuth();
+  const reduceMotion = useReduceMotion();
 
   const [phase, setPhase] = useState<Phase>("ready");
+  /** Tur sonunda dondurulan skor — kartlar ve paylaşım bunu gösterir. */
   const [distance, setDistance] = useState(0);
   const [combo, setCombo] = useState(0);
   const [lives, setLives] = useState<number>(T.lives);
   const [best, setBest] = useState(0);
-  const [, setFrame] = useState(0);
+  const [size, setSize] = useState({ w: 0, h: 0 });
 
+  const signal = useFrameSignal();
   const area = useRef({ w: 0, h: 0 });
+  area.current = size;
   const phaseRef = useRef<Phase>("ready");
 
   /* — Kontrol — */
@@ -158,7 +197,8 @@ export default function SlalomScreen() {
   const lane = useRef(0);
 
   /* — Dünya — */
-  const cones = useRef<Cone[]>([]);
+  const cones = useRef<ConeState[]>([]);
+  const floaters = useRef<Floater[]>([]);
   const coneId = useRef(0);
   const patternIndex = useRef(0);
   const patternStep = useRef(0);
@@ -168,11 +208,17 @@ export default function SlalomScreen() {
   const comboRef = useRef(0);
   const livesRef = useRef<number>(T.lives);
   const invulnerable = useRef(0);
-  /** "Close" etiketinin kalan süresi. */
-  const grazeFlash = useRef(0);
+  const clock = useRef(0);
+  /** Koşu döngüsünün fazı (radyan) — adım sıklığı hızla artar. */
+  const stride = useRef(0);
+  const ball = useRef<Orientation>(initialOrientation());
 
   const [submit, setSubmit] = useState<SubmitState>("idle");
   const [shareOpen, setShareOpen] = useState(false);
+
+  /* Çarpışma: kırmızı parlama ve sarsıntı — yerel sürücüde. */
+  const flash = useRef(new Animated.Value(0)).current;
+  const shakeX = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     AsyncStorage.getItem(BEST_KEY).then((value) => setBest(Number(value) || 0));
@@ -204,6 +250,7 @@ export default function SlalomScreen() {
     if (phaseRef.current === "over") return;
     setPhaseBoth("over");
     const finished = Math.round(travelled.current);
+    setDistance(finished);
     submitScore(finished);
     if (finished > 0) {
       setBest((current) => {
@@ -221,6 +268,7 @@ export default function SlalomScreen() {
     vx.current = 0;
     lane.current = 0;
     cones.current = [];
+    floaters.current = [];
     patternIndex.current = 0;
     patternStep.current = 0;
     spawnTimer.current = 0;
@@ -229,18 +277,31 @@ export default function SlalomScreen() {
     comboRef.current = 0;
     livesRef.current = T.lives;
     invulnerable.current = 0;
-    grazeFlash.current = 0;
+    stride.current = 0;
     setDistance(0);
     setCombo(0);
     setLives(T.lives);
+    signal.emit();
+  };
+
+  const crashFeedback = () => {
+    if (reduceMotion) return;
+    flash.setValue(1);
+    Animated.timing(flash, { toValue: 0, duration: 420, useNativeDriver: true }).start();
+    Animated.sequence(
+      [7, -6, 4, -2, 0].map((toValue) =>
+        Animated.timing(shakeX, { toValue, duration: 45, useNativeDriver: true }),
+      ),
+    ).start();
   };
 
   /* ─────────────────────────── fizik adımı ─────────────────────────── */
 
   const step = (dt: number) => {
     if (phaseRef.current !== "playing") return;
-    const { w } = area.current;
+    const { w, h } = area.current;
     if (w <= 0) return;
+    clock.current += dt;
 
     /* KONTROL EĞRİSİ — briefin verdiği model birebir. */
     const centerX = w / 2;
@@ -257,13 +318,20 @@ export default function SlalomScreen() {
     if (Math.abs(lane.current) >= 1) vx.current = 0;
 
     /* İLERLEME — mesafeyle hızlanır ama tavanı vardır. */
-    speed.current = Math.min(
-      T.maxSpeed,
-      T.baseSpeed + travelled.current * T.speedGrowth,
-    );
+    speed.current = Math.min(T.maxSpeed, T.baseSpeed + travelled.current * T.speedGrowth);
     travelled.current += (speed.current * dt) / 10;
     invulnerable.current = Math.max(0, invulnerable.current - dt);
-    grazeFlash.current = Math.max(0, grazeFlash.current - dt);
+
+    /* Görsel ritim: adım sıklığı ve topun yuvarlanması hızdan gelir. */
+    stride.current += dt * (7 + speed.current / 55);
+    rotate(ball.current, [1, 0, 0], -(speed.current / 32) * dt);
+    rotate(ball.current, [0, 1, 0], (vx.current / 60) * dt);
+
+    for (let i = floaters.current.length - 1; i >= 0; i -= 1) {
+      const f = floaters.current[i];
+      f.age += dt;
+      if (f.age > 0.9) floaters.current.splice(i, 1);
+    }
 
     /* ÜRETİM — desenden sıradaki kapı. Aralık hızla kısalır ki kapılar
        mesafede sıkışsın; ama alt sınır var, oyun boğulmaz. */
@@ -272,14 +340,18 @@ export default function SlalomScreen() {
     if (spawnTimer.current <= 0) {
       spawnTimer.current = interval;
       const pattern = PATTERNS[patternIndex.current % PATTERNS.length];
-      const spread = T.gateWide - (T.gateWide - T.gateNarrow) * clamp(travelled.current / 900, 0, 1);
+      const spread =
+        T.gateWide - (T.gateWide - T.gateNarrow) * clamp(travelled.current / 900, 0, 1);
       coneId.current += 1;
       cones.current.push({
         id: coneId.current,
         lane: clamp(pattern[patternStep.current] * (1 / T.gateWide) * spread, -0.92, 0.92),
         z: 1,
         grazed: false,
+        grazedAt: 0,
         hit: false,
+        hitAt: 0,
+        hitDir: 1,
       });
       patternStep.current += 1;
       if (patternStep.current >= pattern.length) {
@@ -288,7 +360,7 @@ export default function SlalomScreen() {
       }
     }
 
-    /* KONİLER — ufuktan oyuncuya akar. */
+    /* KONİLER — ufuktan oyuncuya akar, yanından geçip ekranın altından çıkar. */
     const flow = (speed.current / 900) * dt;
     for (const cone of cones.current) {
       cone.z -= flow;
@@ -296,9 +368,11 @@ export default function SlalomScreen() {
       // Oyuncu düzlemine geldiğinde çarpışma/sıyırma sınanır.
       if (cone.hit || cone.z > 0.14 || cone.z < -0.05) continue;
 
-      const gap = Math.abs(cone.lane - lane.current) * (area.current.w / 2);
+      const gap = Math.abs(cone.lane - lane.current) * (w / 2);
       if (gap < PLAYER_R + 12) {
         cone.hit = true;
+        cone.hitAt = clock.current;
+        cone.hitDir = cone.lane >= lane.current ? 1 : -1;
         if (invulnerable.current <= 0) {
           /* ÇARPIŞMA: oyun BİTMEZ. Hız düşer, combo sıfırlanır, kısa bir
              dokunulmazlık verilir. Tek çarpmada bitirmek, öğrenmeyi
@@ -311,6 +385,7 @@ export default function SlalomScreen() {
           livesRef.current -= 1;
           setLives(livesRef.current);
           haptics.error();
+          crashFeedback();
           if (livesRef.current <= 0) {
             gameOver();
             return;
@@ -320,26 +395,25 @@ export default function SlalomScreen() {
         /* SIYIRMA: riski ödüllendirir. Koniden uzak durmak güvenlidir ama
            puan getirmez; oyunun gerilimi bu tercihten gelir. */
         cone.grazed = true;
+        cone.grazedAt = clock.current;
         comboRef.current += 1;
         setCombo(comboRef.current);
         travelled.current += comboRef.current;
-        grazeFlash.current = 0.6;
+        const p = project(cone.z, h);
+        floaters.current.push({
+          x: laneX(cone.lane, w, p.scale, -steer.current * T.cameraShift),
+          y: p.y - CONE_PX * p.scale,
+          age: 0,
+          text: `+${comboRef.current}`,
+        });
         haptics.light();
       }
     }
 
-    cones.current = cones.current.filter((cone) => cone.z > -0.06);
+    cones.current = cones.current.filter((cone) => cone.z > -0.32);
   };
 
-  /*
-    Mesafe HUD'u render'da güncellenir, fizik adımında DEĞİL: fizik saniyede
-    120 adım atıyor ve her adımda setState çağırmak React'ı boğuyordu. Render
-    saniyede ~60 kez çalışır ve zaten ekranı çizecektir.
-  */
-  const render = () => {
-    setDistance(Math.round(travelled.current));
-    setFrame((n) => (n + 1) % 1_000_000);
-  };
+  const render = () => signal.emit();
   useGameLoop({ step, render, running: phase === "playing" });
 
   /* ─────────────────────────── girdi ─────────────────────────── */
@@ -379,7 +453,20 @@ export default function SlalomScreen() {
     [],
   );
 
-  const { w, h } = area.current;
+  const world = {
+    steer,
+    lane,
+    cones,
+    floaters,
+    speed,
+    travelled,
+    invulnerable,
+    clock,
+    stride,
+    ball,
+  };
+
+  const { w, h } = size;
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
@@ -397,9 +484,7 @@ export default function SlalomScreen() {
           <Text style={styles.hudLabel} {...textScale.badge}>
             {upperTR("Metre")}
           </Text>
-          <Text style={styles.hudScore} {...textScale.dense}>
-            {distance}
-          </Text>
+          <LiveMetres signal={signal} travelled={travelled} />
         </View>
 
         <View style={styles.hudRight}>
@@ -427,39 +512,30 @@ export default function SlalomScreen() {
       <View
         style={styles.arena}
         {...gesture.panHandlers}
-        onLayout={(e) =>
-          (area.current = { w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })
-        }
+        onLayout={(e) => {
+          const { width, height } = e.nativeEvent.layout;
+          setSize((s) => (s.w === width && s.h === height ? s : { w: width, h: height }));
+        }}
         accessible
         accessibilityRole="adjustable"
         accessibilityLabel="Slalom pisti"
         accessibilityHint="Ekrana basılı tut. Ortaya yakın basmak hassas, kenara basmak sert döndürür."
       >
         {w > 0 && h > 0 ? (
-          <Svg width={w} height={h} pointerEvents="none">
-            <Track w={w} h={h} steer={steer.current} scroll={travelled.current} />
-            {cones.current.map((cone) => (
-              <ConeSprite key={cone.id} cone={cone} w={w} h={h} steer={steer.current} />
-            ))}
-            <Player
-              w={w}
-              h={h}
-              lane={lane.current}
-              steer={steer.current}
-              faded={invulnerable.current > 0}
-            />
-            {/* Hız çizgileri: hız arttıkça kenarlarda belirir. */}
-            <SpeedLines w={w} h={h} speed={speed.current} />
-          </Svg>
+          <Animated.View
+            style={[StyleSheet.absoluteFill, { transform: [{ translateX: shakeX }] }]}
+            pointerEvents="none"
+          >
+            <Scenery w={w} h={h} />
+            <WorldLayer w={w} h={h} signal={signal} world={world} />
+            <Atmosphere w={w} h={h} />
+          </Animated.View>
         ) : null}
 
-        {grazeFlash.current > 0 ? (
-          <View style={styles.grazeTag} pointerEvents="none">
-            <Text style={styles.grazeText} {...textScale.badge}>
-              {upperTR("Sıyırdın")}
-            </Text>
-          </View>
-        ) : null}
+        <Animated.View
+          pointerEvents="none"
+          style={[StyleSheet.absoluteFill, styles.crashFlash, { opacity: flash }]}
+        />
 
         {phase === "ready" ? <StartOverlay best={best} onStart={start} /> : null}
 
@@ -489,191 +565,372 @@ export default function SlalomScreen() {
   );
 }
 
-/* ============================== PİST ÇİZİMİ ============================== */
+/** HUD mesafesi — yalnız metre değiştiğinde yeniden çizilir. */
+function LiveMetres({
+  signal,
+  travelled,
+}: {
+  signal: FrameSignal;
+  travelled: MutableRefObject<number>;
+}) {
+  const metres = useSignalValue(signal, () => Math.round(travelled.current));
+  return (
+    <Text style={styles.hudScore} {...textScale.dense}>
+      {metres}
+    </Text>
+  );
+}
 
-/** Bir `z` derinliğinin ekrandaki y'si ve ölçeği. */
+/* ============================== PERSPEKTİF ============================== */
+
+/**
+ * Bir `z` derinliğinin ekrandaki y'si ve ölçeği. z=1 ufuk, z=0 oyuncu
+ * düzlemi; negatif z oyuncunun önü (ekranın altı) — koniler oradan çıkar.
+ * Kare eğri derinliği hızlandırır: uzaktakiler yavaş, yakındakiler hızlı büyür.
+ */
 function project(z: number, h: number): { y: number; scale: number } {
-  // z=1 ufuk, z=0 oyuncu düzlemi. Kare kök olmayan bir eğri derinliği
-  // hızlandırır: uzaktakiler yavaş, yakındakiler hızlı büyür.
-  const t = clamp(1 - z, 0, 1);
+  const t = clamp(1 - z, 0, 1.4);
   const y = h * HORIZON + (h * PLAYER_Y - h * HORIZON) * t * t;
-  const scale = 0.12 + t * t * 0.88;
+  const scale = 0.06 + t * t * 0.94;
   return { y, scale };
 }
 
 /** Bir koridor konumunun (-1..1) ekrandaki x'i. */
 function laneX(lane: number, w: number, scale: number, shift: number): number {
-  return w / 2 + lane * (w / 2) * scale * 0.92 + shift;
+  // 0.84: oyuncu en uçta (lane = ±1) bile gövdesiyle birlikte kadrajda kalır.
+  return w / 2 + lane * (w / 2) * scale * 0.84 + shift * scale;
+}
+
+/* ========================== 1 · GÖKYÜZÜ VE STADYUM ========================== */
+
+/**
+ * Ufuk ve çimin taban rengi — bir kez çizilir. Projektör kuleleri, uzaktaki
+ * stadyumun ışıklı silüeti ve ufuk parıltısı; pist bunun önünde akar.
+ */
+const Scenery = memo(function Scenery({ w, h }: { w: number; h: number }) {
+  const horizon = h * HORIZON;
+  const towers = [0.08, 0.3, 0.7, 0.92];
+  const standTop = horizon - h * 0.07;
+
+  return (
+    <Svg width={w} height={h} style={StyleSheet.absoluteFill}>
+      <Defs>
+        <LinearGradient id="slSky" x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor={art.skyTop} />
+          <Stop offset="0.75" stopColor={art.skyBottom} />
+          <Stop offset="1" stopColor={art.skyGlow} />
+        </LinearGradient>
+        <LinearGradient id="slGrass" x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor={art.grassFar} />
+          <Stop offset="1" stopColor={art.grassNear} />
+        </LinearGradient>
+        <RadialGradient id="slFlood" cx="50%" cy="50%" r="50%">
+          <Stop offset="0" stopColor={art.floodlight} stopOpacity={0.6} />
+          <Stop offset="1" stopColor={art.floodlight} stopOpacity={0} />
+        </RadialGradient>
+      </Defs>
+
+      <Rect x={0} y={0} width={w} height={horizon + 1} fill="url(#slSky)" />
+      {/* Yıldızlar: seyrek, sabit. */}
+      {Array.from({ length: 26 }, (_, i) => {
+        const x = ((i * 137.5) % 100) / 100;
+        const y = ((i * 61.8) % 100) / 100;
+        return (
+          <Circle key={i} cx={x * w} cy={y * standTop * 0.7} r={i % 5 === 0 ? 1.2 : 0.7} fill={art.white} opacity={0.25 + (i % 3) * 0.15} />
+        );
+      })}
+
+      {/* Uzak stadyum silüeti ve ışıklı kenarı */}
+      <Path
+        d={`M 0 ${horizon} L 0 ${standTop + 10} Q ${w * 0.25} ${standTop - 4} ${w * 0.5} ${standTop - 6}
+            Q ${w * 0.75} ${standTop - 4} ${w} ${standTop + 10} L ${w} ${horizon} Z`}
+        fill={art.standBack}
+      />
+      <Path
+        d={`M 0 ${standTop + 10} Q ${w * 0.25} ${standTop - 4} ${w * 0.5} ${standTop - 6} Q ${w * 0.75} ${standTop - 4} ${w} ${standTop + 10}`}
+        stroke={art.boardAccent}
+        strokeWidth={1.2}
+        opacity={0.5}
+        fill="none"
+      />
+      {Array.from({ length: Math.round(w / 9) }, (_, i) => (
+        <Circle
+          key={i}
+          cx={i * 9 + 4}
+          cy={standTop + 6 + ((i * 7) % 5) * 2.2}
+          r={0.9}
+          fill={art.crowd[i % art.crowd.length]}
+          opacity={0.55}
+        />
+      ))}
+
+      {/* Projektör kuleleri */}
+      {towers.map((fx, i) => {
+        const x = fx * w;
+        const top = standTop - h * (i === 0 || i === 3 ? 0.13 : 0.1);
+        return (
+          <G key={i}>
+            <Path d={`M ${x - 1.6} ${horizon} L ${x - 0.8} ${top} L ${x + 0.8} ${top} L ${x + 1.6} ${horizon} Z`} fill={art.tower} />
+            <Ellipse cx={x} cy={top} rx={w * 0.12} ry={h * 0.05} fill="url(#slFlood)" />
+            <Rect x={x - 8} y={top - 5} width={16} height={7} rx={1.5} fill={art.floodlightCore} />
+          </G>
+        );
+      })}
+
+      {/* Ufuk parıltısı */}
+      <Rect x={0} y={horizon - 3} width={w} height={3} fill={art.floodlight} opacity={0.18} />
+
+      {/* Çim tabanı */}
+      <Rect x={0} y={horizon} width={w} height={h - horizon} fill="url(#slGrass)" />
+    </Svg>
+  );
+});
+
+/** Ufuk sisi ve köşe karartması — uzak koniler sisten çıkar. Statik. */
+const Atmosphere = memo(function Atmosphere({ w, h }: { w: number; h: number }) {
+  const horizon = h * HORIZON;
+  return (
+    <Svg width={w} height={h} style={StyleSheet.absoluteFill}>
+      <Defs>
+        <LinearGradient id="slFog" x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor={art.skyGlow} stopOpacity={0.42} />
+          <Stop offset="1" stopColor={art.skyGlow} stopOpacity={0} />
+        </LinearGradient>
+        <RadialGradient id="slVig" cx="50%" cy="58%" r="78%">
+          <Stop offset="0.55" stopColor={art.outline} stopOpacity={0} />
+          <Stop offset="1" stopColor={art.outline} stopOpacity={0.6} />
+        </RadialGradient>
+      </Defs>
+      <Rect x={0} y={horizon} width={w} height={h * 0.09} fill="url(#slFog)" />
+      <Rect x={0} y={0} width={w} height={h} fill="url(#slVig)" />
+    </Svg>
+  );
+});
+
+/* ============================== 2 · DÜNYA ============================== */
+
+interface WorldRefs {
+  steer: MutableRefObject<number>;
+  lane: MutableRefObject<number>;
+  cones: MutableRefObject<ConeState[]>;
+  floaters: MutableRefObject<Floater[]>;
+  speed: MutableRefObject<number>;
+  travelled: MutableRefObject<number>;
+  invulnerable: MutableRefObject<number>;
+  clock: MutableRefObject<number>;
+  stride: MutableRefObject<number>;
+  ball: MutableRefObject<Orientation>;
 }
 
 /**
- * Koridor — ufka doğru yakınsayan tebeşir çizgileri ve kayan biçme şeritleri.
- * Doku yok: yalnız geometri, çok daha temiz ve çok daha ucuz.
+ * Her karede çizilen tek katman: zemin deseni, çizgiler, koniler, oyuncu,
+ * efektler. Bütün hareket TEK dünya ölçeğinden türer — metre → z.
  */
-const Track = memo(function Track({
+function WorldLayer({
   w,
   h,
-  steer,
-  scroll,
+  signal,
+  world,
 }: {
   w: number;
   h: number;
-  steer: number;
-  scroll: number;
+  signal: FrameSignal;
+  world: WorldRefs;
 }) {
+  useOnFrame(signal);
+
+  const steer = world.steer.current;
+  const metres = world.travelled.current;
+  const speed = world.speed.current;
+  const now = world.clock.current;
   // Kamera karşı kayar (parallax): sağa dönerken dünya sola akar.
-  const shift = -steer * T.cameraShift;
-  const near = project(0, h);
+  const shift = -steer * T.cameraShift * 1.8;
+  // Hız arttıkça yatay ölçek %4 açılır — FOV genişleme hissi.
+  const fov = 1 + clamp((speed - T.baseSpeed) / (T.maxSpeed - T.baseSpeed), 0, 1) * 0.04;
+  const zOf = (m: number) => (m - metres) / METRES_PER_Z;
+  const X = (l: number, s: number) => laneX(l, w, s * fov, shift);
+
+  /* Biçme şeritleri: her 10 metrede bir, 5 metre açık. */
+  const stripes: string[] = [];
+  for (let m = Math.floor((metres - 30) / 10) * 10; m < metres + METRES_PER_Z; m += 10) {
+    const z1 = zOf(m);
+    const z2 = zOf(m + 5);
+    if (z2 < -0.4 || z1 > 1) continue;
+    const a = project(Math.min(1, z1), h);
+    const b = project(Math.min(1, z2), h);
+    stripes.push(`M0 ${a.y.toFixed(1)}H${w}V${b.y.toFixed(1)}H0Z`);
+  }
+
+  /* Koridor ve kenar çizgileri: ince uzakta, kalın yakında (dörtgen). */
   const far = project(1, h);
+  const near = project(-0.4, h);
+  const edge = (side: number) => {
+    const wf = 0.6;
+    const wn = 4.5;
+    return `M${X(side * EDGE, far.scale) - wf} ${far.y}L${X(side * EDGE, far.scale) + wf} ${far.y}L${X(side * EDGE, near.scale) + wn} ${near.y}L${X(side * EDGE, near.scale) - wn} ${near.y}Z`;
+  };
+  const corridor = `M${X(-EDGE, far.scale)} ${far.y}L${X(EDGE, far.scale)} ${far.y}L${X(EDGE, near.scale)} ${near.y}L${X(-EDGE, near.scale)} ${near.y}Z`;
 
-  // Hız arttıkça yatay ölçek %3 açılır — FOV genişleme hissi.
-  const fov = 1 + clamp(scroll / 2000, 0, 1) * 0.03;
+  /* Kesikli orta çizgi: 6 metrede bir 3 metrelik boya. */
+  const dashes: string[] = [];
+  for (let m = Math.floor((metres - 30) / 6) * 6; m < metres + METRES_PER_Z; m += 6) {
+    const z1 = zOf(m);
+    const z2 = zOf(m + 3);
+    if (z2 < -0.4 || z1 > 1) continue;
+    const a = project(Math.min(1, z1), h);
+    const b = project(Math.min(1, z2), h);
+    const wa = 2.4 * a.scale;
+    const wb = 2.4 * b.scale;
+    dashes.push(
+      `M${X(0, a.scale) - wa} ${a.y}L${X(0, a.scale) + wa} ${a.y}L${X(0, b.scale) + wb} ${b.y}L${X(0, b.scale) - wb} ${b.y}Z`,
+    );
+  }
 
-  return (
-    <G>
-      <Rect x={0} y={0} width={w} height={h} fill={paint.turf} />
+  /* 100 metre çizgileri ve boyalı sayılar. */
+  const markers = [];
+  for (let m = Math.ceil((metres - 20) / 100) * 100; m < metres + METRES_PER_Z; m += 100) {
+    if (m <= 0) continue;
+    const z = zOf(m);
+    if (z < -0.35 || z > 0.97) continue;
+    const p = project(z, h);
+    const lw = Math.max(0.6, 5 * p.scale * p.scale);
+    markers.push(
+      <G key={m}>
+        <Rect x={X(-EDGE, p.scale)} y={p.y - lw / 2} width={X(EDGE, p.scale) - X(-EDGE, p.scale)} height={lw} fill={art.chalk} opacity={0.75} />
+        <SvgText
+          x={X(-0.62, p.scale)}
+          y={p.y - 6 * p.scale}
+          fontSize={Math.max(4, 30 * p.scale)}
+          fontFamily={fonts.bold}
+          fill={art.chalk}
+          opacity={0.55}
+          textAnchor="middle"
+        >
+          {m}
+        </SvgText>
+      </G>,
+    );
+  }
 
-      {/* Biçme şeritleri: kaydıkça ufka doğru daralır. */}
-      {Array.from({ length: 9 }, (_, i) => {
-        const offset = ((scroll / 26 + i) % 9) / 9;
-        const a = project(1 - offset, h);
-        const b = project(1 - Math.min(1, offset + 0.055), h);
-        return i % 2 === 0 ? (
-          <Path
-            key={i}
-            d={`M ${laneX(-EDGE, w, a.scale * fov, shift)} ${a.y}
-                L ${laneX(EDGE, w, a.scale * fov, shift)} ${a.y}
-                L ${laneX(EDGE, w, b.scale * fov, shift)} ${b.y}
-                L ${laneX(-EDGE, w, b.scale * fov, shift)} ${b.y} Z`}
-            fill={paint.turfAlt}
-          />
-        ) : null;
-      })}
+  /* Koniler: uzaktan yakına (ressam sırası). */
+  const ordered = [...world.cones.current].sort((a, b) => b.z - a.z);
+  const playerY = h * PLAYER_Y;
+  const coneNodes = (list: ConeState[]) =>
+    list.map((cone) => {
+      const p = project(cone.z, h);
+      if (p.scale < 0.07) return null;
+      let x = X(cone.lane, p.scale);
+      let y = p.y;
+      let rotation = 0;
+      let opacity = Math.min(1, (1 - cone.z) * 6);
+      if (cone.hit) {
+        // Devrilip savrulur ve solar.
+        const age = now - cone.hitAt;
+        rotation = cone.hitDir * Math.min(95, age * 520);
+        x += cone.hitDir * age * 190 * p.scale;
+        y -= Math.sin(Math.min(Math.PI, age * 7)) * 22 * p.scale;
+        opacity *= Math.max(0, 1 - age / 0.8);
+        if (opacity <= 0) return null;
+      }
+      const glow = cone.grazed ? Math.max(0, 1 - (now - cone.grazedAt) / 0.5) : 0;
+      return (
+        <Cone
+          key={cone.id}
+          x={x}
+          y={y}
+          scale={(CONE_PX * p.scale) / 100}
+          rotation={rotation}
+          opacity={opacity}
+          glow={glow}
+        />
+      );
+    });
+  // Oyuncunun ARKASINDAKİLER önce, önüne geçenler (ekranın altı) sonra çizilir.
+  const behind = ordered.filter((c) => project(c.z, h).y <= playerY);
+  const front = ordered.filter((c) => project(c.z, h).y > playerY);
 
-      {/* Koridor kenarları — tebeşir.
+  /* Oyuncu ve top */
+  const px = X(world.lane.current, 1);
+  const scale = (h * RUNNER_H) / 100;
+  const phase = world.stride.current;
+  const touch = Math.abs(Math.sin(phase));
+  const ballR = 8 * scale;
+  const ballX = px + 10 * scale + steer * 6 * scale;
+  const ballY = playerY - 8 * scale - touch * 5 * scale;
+  const faded = world.invulnerable.current > 0;
 
-          GENİŞLİK 1.2: oyuncu en uçta (lane = ±1) YARIÇAPIYLA BİRLİKTE
-          çizginin içinde kalmalı. 1.05'te top kenardan ~8px taşıyor ve
-          "pistin dışına çıkmış" gibi duruyordu (tarayıcıda ölçüldü). */}
-      <Path
-        d={`M ${laneX(-EDGE, w, far.scale * fov, shift)} ${far.y} L ${laneX(-EDGE, w, near.scale * fov, shift)} ${near.y}`}
-        stroke={paint.chalk}
-        strokeWidth={2}
-      />
-      <Path
-        d={`M ${laneX(EDGE, w, far.scale * fov, shift)} ${far.y} L ${laneX(EDGE, w, near.scale * fov, shift)} ${near.y}`}
-        stroke={paint.chalk}
-        strokeWidth={2}
-      />
-      {/* Orta çizgi — kesikli, kaydıkça akar. */}
-      <Path
-        d={`M ${laneX(0, w, far.scale * fov, shift)} ${far.y} L ${laneX(0, w, near.scale * fov, shift)} ${near.y}`}
-        stroke={paint.chalk}
-        strokeWidth={1.5}
-        strokeDasharray="10 18"
-        strokeDashoffset={-scroll * 2}
-        opacity={0.5}
-      />
-    </G>
-  );
-});
-
-/**
- * Koni — gerçek 3B değil, ölçekli sprite. Zemin gölgesi mesafeyle küçülür;
- * derinlik hissini veren şey gölgenin kendisidir, koninin değil.
- */
-const ConeSprite = memo(function ConeSprite({
-  cone,
-  w,
-  h,
-  steer,
-}: {
-  cone: Cone;
-  w: number;
-  h: number;
-  steer: number;
-}) {
-  const { y, scale } = project(cone.z, h);
-  const x = laneX(cone.lane, w, scale, -steer * T.cameraShift);
-  const size = 30 * scale;
-  if (size < 1.5) return null;
-
-  const fill = cone.grazed ? paint.action : paint.miss;
-
-  return (
-    <G opacity={cone.hit ? 0.3 : 1}>
-      <Ellipse cx={x} cy={y} rx={size * 0.55} ry={size * 0.18} fill={paint.shadow} opacity={0.35} />
-      <Path
-        d={`M ${x} ${y - size} L ${x + size * 0.42} ${y} L ${x - size * 0.42} ${y} Z`}
-        fill={fill}
-      />
-      {/* Konideki beyaz bant — ölçekte de okunur kalan tek ayrıntı. */}
-      <Path
-        d={`M ${x - size * 0.26} ${y - size * 0.38} L ${x + size * 0.26} ${y - size * 0.38}`}
-        stroke={paint.onTurf}
-        strokeWidth={Math.max(1, size * 0.12)}
-      />
-    </G>
-  );
-});
-
-/**
- * Oyuncu — top + gövde. Gövde `steer * 14°` yatar; bu, kontrolün ne kadar
- * agresif olduğunu GÖSTEREN tek geri bildirimdir ve eğrinin öğrenilmesini
- * sağlar. Dokunulmazlıkta yanıp sönmez, OPAKLIĞI DÜŞER.
- */
-const Player = memo(function Player({
-  w,
-  h,
-  lane,
-  steer,
-  faded,
-}: {
-  w: number;
-  h: number;
-  lane: number;
-  steer: number;
-  faded: boolean;
-}) {
-  const y = h * PLAYER_Y;
-  const x = laneX(lane, w, 1, -steer * T.cameraShift);
-  const tilt = steer * T.tilt;
-
-  return (
-    <G opacity={faded ? 0.4 : 1} transform={`rotate(${tilt.toFixed(1)} ${x.toFixed(1)} ${y.toFixed(1)})`}>
-      <Ellipse cx={x} cy={y + PLAYER_R * 0.9} rx={PLAYER_R} ry={PLAYER_R * 0.32} fill={paint.shadow} opacity={0.4} />
-      <Circle cx={x} cy={y} r={PLAYER_R} fill={paint.ball} stroke={paint.ballLine} strokeWidth={1.5} />
-      <Circle cx={x} cy={y} r={PLAYER_R * 0.38} fill={paint.ballLine} opacity={0.85} />
-    </G>
-  );
-});
-
-/** Hız çizgileri — kenarlarda, hızla belirginleşen ince çizgiler. */
-const SpeedLines = memo(function SpeedLines({
-  w,
-  h,
-  speed,
-}: {
-  w: number;
-  h: number;
-  speed: number;
-}) {
+  /* Hız çizgileri: kenarlarda, hızla belirginleşir. */
   const intensity = clamp((speed - T.baseSpeed) / (T.maxSpeed - T.baseSpeed), 0, 1);
-  if (intensity < 0.08) return null;
-
-  return (
-    <G opacity={intensity * 0.5}>
-      {[0.04, 0.1, 0.9, 0.96].map((ratio, i) => (
+  const streaks = [];
+  if (intensity > 0.08) {
+    for (let i = 0; i < 8; i += 1) {
+      const side = i % 2 ? 1 : -1;
+      const lane = side * (1.45 + (i % 4) * 0.22);
+      const z = 1 - (((metres * 0.9 + i * 37) % 120) / 120) * 1.3;
+      const a = project(z, h);
+      const b = project(z - 0.12, h);
+      streaks.push(
         <Path
           key={i}
-          d={`M ${w * ratio} ${h * 0.42} L ${w * ratio} ${h * 0.92}`}
-          stroke={paint.chalk}
-          strokeWidth={1.5}
-        />
+          d={`M${X(lane, a.scale)} ${a.y}L${X(lane, b.scale)} ${b.y}`}
+          stroke={art.white}
+          strokeWidth={1 + b.scale * 1.5}
+          strokeLinecap="round"
+          opacity={intensity * 0.45}
+        />,
+      );
+    }
+  }
+
+  return (
+    <Svg width={w} height={h} style={StyleSheet.absoluteFill}>
+      <Defs>
+        <FigureDefs />
+        <BallDefs />
+      </Defs>
+
+      {stripes.length ? <Path d={stripes.join("")} fill={art.grassLight} opacity={0.05} /> : null}
+      <Path d={corridor} fill={art.grassLight} opacity={0.035} />
+      <Path d={`${edge(-1)}${edge(1)}`} fill={art.chalk} opacity={0.85} />
+      {dashes.length ? <Path d={dashes.join("")} fill={art.chalk} opacity={0.45} /> : null}
+      {markers}
+      {streaks}
+
+      {coneNodes(behind)}
+
+      {/* Top oyuncunun önünde, biraz sağında — bacakların arkasından görünür. */}
+      <Ellipse cx={ballX + ballR * 0.3} cy={ballY + ballR * 0.85} rx={ballR} ry={ballR * 0.3} fill={art.shadow} opacity={faded ? 0.15 : 0.35} />
+      <SoccerBall cx={ballX} cy={ballY} r={ballR} orientation={world.ball.current} opacity={faded ? 0.45 : 1} />
+      <RunnerBack
+        x={px}
+        y={playerY}
+        scale={scale}
+        phase={phase}
+        tilt={steer * T.tilt}
+        opacity={faded ? 0.45 : 1}
+      />
+
+      {coneNodes(front)}
+
+      {world.floaters.current.map((f, i) => (
+        <SvgText
+          key={i}
+          x={f.x}
+          y={f.y - f.age * 46}
+          fontSize={20}
+          fontFamily={fonts.bold}
+          fill={art.gold}
+          stroke={art.outline}
+          strokeWidth={1}
+          textAnchor="middle"
+          opacity={Math.max(0, 1 - f.age / 0.9)}
+        >
+          {f.text}
+        </SvgText>
       ))}
-    </G>
+    </Svg>
   );
-});
+}
 
 /* ============================== GİRİŞ KARTI ============================== */
 
@@ -753,11 +1010,11 @@ function ResultOverlay({
           {score}
         </Text>
         <Text style={styles.resultUnit} {...textScale.badge}>
-          {upperTR("koni")}
+          {upperTR("metre")}
         </Text>
 
         <Text style={styles.resultBest} {...textScale.dense}>
-          {`Rekorun ${best} koni`}
+          {`Rekorun ${best} metre`}
         </Text>
 
         <SubmitLine state={submit} onRetry={onRetrySubmit} onSignIn={onSignIn} />
@@ -915,7 +1172,7 @@ function ShareSheet({
               {score}
             </Text>
             <Text style={styles.shareUnit} {...textScale.badge}>
-              {upperTR(isRecord ? "koni · yeni rekor" : "koni")}
+              {upperTR(isRecord ? "metre · yeni rekor" : "metre")}
             </Text>
 
             <View style={styles.shareDivider} />
@@ -1012,8 +1269,6 @@ const styles = StyleSheet.create({
     // `elevate` kendi zeminini taşır; saha yeşili ondan SONRA yazılmalı.
     backgroundColor: colors.pitchGreen,
   },
-  /* Pist, koniler ve oyuncu artık SVG olarak çizilir (bkz. dosya başı);
-     eski View tabanlı stiller kaldırıldı. */
 
   /* Kalan hak göstergesi. */
   life: {
@@ -1028,21 +1283,10 @@ const styles = StyleSheet.create({
     borderColor: colors.live,
   },
 
-  /* Sıyırma etiketi — riski ödüllendiren tek geri bildirim. */
-  grazeTag: {
-    position: "absolute",
-    top: "14%",
-    alignSelf: "center",
-    paddingHorizontal: space.md,
-    paddingVertical: space.xs,
-    borderRadius: radius.pill,
-    backgroundColor: colors.brand,
+  /* Çarpışma parlaması — opaklığı yerel sürücüde söner. */
+  crashFlash: {
+    backgroundColor: withAlpha(art.miss, 0.32),
   },
-  grazeText: {
-    ...type.overline,
-    color: colors.textOnBrand,
-  },
-
 
   /* — Giriş kartı — */
   overlay: {

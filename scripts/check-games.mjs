@@ -11,10 +11,16 @@
  *   4. Slalomda kenara basmak ile ortaya basmak ÖLÇÜLEBİLİR biçimde farklı.
  *   5. `approach` momentumlu: hedefe ışınlanmıyor, yavaşlama hızlanmadan çabuk.
  *   6. Falso ölçümü parmağın kavisini doğru işaretle okuyor.
+ *   7. Penaltıda top tam hedefe varıyor, falsolu top ilk yönünden sapıyor ve
+ *      falso kaleciyi ölçülebilir biçimde aldatıyor.
+ *   8. 3B top deseni: her yönelimde gerçek bir futbol topu gibi 6–7 yama
+ *      görünür; dönme matrisi uzun dönüşte bozulmuyor.
  */
 
 import { applyHit, stepBall } from "../lib/game/ballistics.ts";
 import { approach, curvatureOf } from "../lib/game/math.ts";
+import { ballAt, GOAL_W, keeperGuess, planShot } from "../lib/game/penalty.ts";
+import { initialOrientation, rotate, visiblePatchCount } from "../lib/game/sphere.ts";
 import { TUNING } from "../lib/game/tuning.ts";
 
 const fails = [];
@@ -163,6 +169,68 @@ check("sağa kavis pozitif", curvatureOf(rightCurve) > 0.05,
   `ölçüm ${curvatureOf(rightCurve).toFixed(3)}`);
 check("sola kavis negatif", curvatureOf(leftCurve) < -0.05,
   `ölçüm ${curvatureOf(leftCurve).toFixed(3)}`);
+
+/* ── 7) Penaltı: varış, falso ve kalecinin aldanması ─────────────────────── */
+
+const W = 360;
+const H = 640;
+const straightShot = planShot({ dx: 120, dy: -200, length: 233, curve: 0 }, W, H);
+const curledShot = planShot({ dx: 120, dy: -200, length: 233, curve: -0.004 }, W, H);
+
+const landed = ballAt(curledShot, 1);
+const landedX = landed.X / GOAL_W + 0.5;
+check(
+  "top hedefe varıyor",
+  Math.abs(landedX - curledShot.aimX) < 1e-9,
+  `varış ${landedX.toFixed(3)}, hedef ${curledShot.aimX.toFixed(3)}`,
+);
+
+// İlk %15'lik uçuşta falsolu top, falsosuzdan ayrışmış olmalı (ters yöne çıkar).
+const early = ballAt(curledShot, 0.15).X - ballAt(straightShot, 0.15).X;
+check(
+  "falso ilk yönü saptırıyor",
+  Math.abs(early) > 0.15,
+  `uçuşun %15'inde ${early.toFixed(2)}m yanal fark`,
+);
+
+const mean = (plan, n = 4000) => {
+  let sum = 0;
+  for (let i = 0; i < n; i += 1) sum += keeperGuess(plan, 1);
+  return sum / n;
+};
+const missStraight = Math.abs(mean(straightShot) - straightShot.aimX);
+const missCurled = Math.abs(mean(curledShot) - curledShot.aimX);
+check(
+  "falso kaleciyi aldatıyor",
+  missCurled > missStraight + 0.05,
+  `kalecinin ortalama sapması falsosuz ${(missStraight * GOAL_W).toFixed(2)}m, falsolu ${(missCurled * GOAL_W).toFixed(2)}m`,
+);
+
+/* ── 8) 3B top ────────────────────────────────────────────────────────────── */
+
+const orient = initialOrientation();
+let minPatches = 12;
+let maxPatches = 0;
+for (let i = 0; i < 2000; i += 1) {
+  rotate(orient, [1, 0.3, 0.2], 0.07);
+  const count = visiblePatchCount(orient);
+  minPatches = Math.min(minPatches, count);
+  maxPatches = Math.max(maxPatches, count);
+}
+const det =
+  orient[0] * (orient[4] * orient[8] - orient[5] * orient[7]) -
+  orient[1] * (orient[3] * orient[8] - orient[5] * orient[6]) +
+  orient[2] * (orient[3] * orient[7] - orient[4] * orient[6]);
+check(
+  "top deseni",
+  minPatches >= 5 && maxPatches <= 9,
+  `görünen yama ${minPatches}–${maxPatches} (gerçek topta 6–7 civarı)`,
+);
+check(
+  "dönme matrisi kararlı",
+  Math.abs(det - 1) < 1e-6,
+  `2000 dönüş sonra determinant ${det.toFixed(9)}`,
+);
 
 /* ── rapor ────────────────────────────────────────────────────────────────── */
 
