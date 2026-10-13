@@ -58,7 +58,7 @@ export default function TabsLayout() {
 
   /** Çubukta görünen sekmeler — SIRA BURADAKİ SIRADIR. */
   const tabs: readonly GlowTab[] = [
-    { name: "skorlar", label: "Skorlar", icon: "football", badge: live.count },
+    { name: "skorlar", label: "Skorlar", icon: "football", badge: live.count, badgeTone: "live" },
     { name: "takip", label: "Takip", icon: "star", accessibilityLabel: "Takip: takımların, ligler ve maçlar" },
     { name: "ligler", label: "Lig", icon: "trophy", accessibilityLabel: "Lig: puan, fikstür, oyuncular, istatistik, haber" },
     { name: "kulubum", label: "Kulübüm", icon: "shield" },

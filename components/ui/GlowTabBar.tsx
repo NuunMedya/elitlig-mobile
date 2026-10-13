@@ -90,6 +90,8 @@ export interface GlowTab {
   icon: keyof typeof Ionicons.glyphMap;
   /** Sayısal rozet — 0/undefined ise çizilmez. */
   badge?: number;
+  /** Rozetin anlamı: "unread" menekşe (varsayılan), "live" kırmızı (canlı maç sayısı). */
+  badgeTone?: "unread" | "live";
   /** Ekran okuyucu etiketi; verilmezse `label` kullanılır. */
   accessibilityLabel?: string;
 }
@@ -236,6 +238,7 @@ export function GlowTabBar({ state, navigation, insets, tabs }: GlowTabBarProps)
                 color={focused ? colors.tabActive : colors.tabInactive}
                 size={22}
                 badge={tab.badge && tab.badge > 0 ? tab.badge : undefined}
+                badgeTone={tab.badgeTone}
               />
             </View>
             <Text

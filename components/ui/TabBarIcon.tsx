@@ -35,6 +35,12 @@ export interface TabBarIconProps {
   size?: number;
   /** Sayısal rozet, canlı noktası veya sade nokta. */
   badge?: number | "live" | "dot";
+  /**
+   * Sayısal rozetin anlamı. "unread" (varsayılan) → menekşe: okunmamış /
+   * bekleyen iş bir EYLEM çağrısıdır, uygulamadaki tüm okunmamış rozetleri
+   * aynı menekşedir. "live" → kırmızı: yalnız "şu an oynanan N maç".
+   */
+  badgeTone?: "unread" | "live";
 }
 
 /** 99'dan büyük sayaçlar rozete sığmaz. */
@@ -48,6 +54,7 @@ export const TabBarIcon = React.memo(function TabBarIcon({
   color,
   size = 22,
   badge,
+  badgeTone = "unread",
 }: TabBarIconProps) {
   /* NABIZ KALDIRILDI: canlı rozeti sekme çubuğunda sürekli nabız atıyordu.
      Sekme çubuğu her ekranda görünür — yani bu, uygulamanın tamamında hiç
@@ -69,7 +76,7 @@ export const TabBarIcon = React.memo(function TabBarIcon({
         {badge === "dot" ? <View style={styles.dot} /> : null}
 
         {hasCount ? (
-          <View style={styles.countBadge}>
+          <View style={[styles.countBadge, badgeTone === "live" ? styles.countBadgeLive : null]}>
             <Text style={styles.countText} {...textScale.badge}>
               {formatCount(badge)}
             </Text>
@@ -107,7 +114,7 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: radius.pill,
-    backgroundColor: colors.live,
+    backgroundColor: colors.brand,
     borderWidth: 2,
     borderColor: colors.tabBar,
   },
@@ -119,14 +126,17 @@ const styles = StyleSheet.create({
     height: 18,
     paddingHorizontal: 3,
     borderRadius: radius.pill,
-    backgroundColor: colors.live,
+    backgroundColor: colors.brand,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 2,
     borderColor: colors.tabBar,
   },
+  countBadgeLive: {
+    backgroundColor: colors.live,
+  },
   countText: {
     ...type.micro,
-    color: colors.textOnStatus,
+    color: colors.textOnBrand,
   },
 });
