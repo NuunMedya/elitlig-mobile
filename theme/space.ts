@@ -179,7 +179,6 @@ export const radius = {
   md:  12,   // KART İÇİ ELEMAN: input, chip zemini, bar
   lg:  14,   // küçük kart/karo (eski kart değeri)
   xl:  18,   // KART ve satır grubu (Arena), panel
-
   xxl: 22,   // sahne yüzeyi: skor tablosu, saha, yükselen sayfa
   pill: 999,
 } as const;
