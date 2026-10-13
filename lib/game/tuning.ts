@@ -67,8 +67,16 @@ export const TUNING = {
     keeperSigmaHard: 0.13,
     /** Kalecinin erişim yarıçapı (kale genişliğinin payı). */
     keeperReach: 0.17,
-    /** Koşu açısının kalecinin tahminine katkısı — %10'u GEÇMEZ. */
-    keeperReadBias: 0.1,
+    /**
+     * Falsonun topun İLK yönünü saptırma payı (kale genişliği cinsinden).
+     * Top bu kadar yana çıkar ve uçuş boyunca hedefe kıvrılır.
+     */
+    curveBend: 0.22,
+    /**
+     * Kalecinin falsoya aldanma payı: tahmini, varış noktasından görünen yöne
+     * bu oranda kayar. 0 = falsoyu tam okur, 1 = yalnız ilk yönü görür.
+     */
+    curveFool: 0.5,
     /** Kalecinin dalış süresi (sn) — bu süre boyunca yön DEĞİŞTİREMEZ. */
     keeperDive: 0.28,
     /** Bir seride kaç atış. */

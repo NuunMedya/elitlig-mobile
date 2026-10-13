@@ -1,66 +1,117 @@
 /**
- * PENALTI — tek sürükleme jestiyle yön, güç ve FALSO.
+ * PENALTI — tek sürükleme jestiyle yön, güç ve FALSO; yayın kamerası açısından.
  *
- * ESKİ HÂL NEDEN REDDEDİLDİ: üç dokunuşlu bir zamanlama oyunuydu (gidip gelen
- * nişangâhı kilitle → dolup boşalan güç barını kilitle → izle). Oyuncunun
- * verdiği tek karar "ne zaman dokunayım"dı; penaltı atmakla ilgisi yoktu.
- * Kaleci de atışın yönünü ARTAN BİR OLASILIKLA "okuyordu" — yani hile
- * yapıyordu ve zorluk, adaletsizlikle yükseliyordu.
- *
- * YENİ MODEL — TEK JEST, DÖRT BİLGİ. Toptan başlayan bir sürükle-fırlat:
- *   YÖN       ← vektörün yatay bileşeni (kalenin hangi köşesi)
- *   GÜÇ       ← vektörün uzunluğu, POWER_MIN..POWER_MAX aralığına eşlenir
+ * OYUN MODELİ — TEK JEST, DÖRT BİLGİ. Toptan başlayan bir sürükle-fırlat:
+ *   YÖN       ← vektörün yatay bileşeni (topun VARACAĞI köşe)
+ *   GÜÇ       ← vektörün uzunluğu; uçuş süresini kısaltır, kalecinin erişimini daraltır
  *   YÜKSEKLİK ← vektörün dikey bileşeni
- *   FALSO     ← parmağın izlediği YOLUN EĞRİLİĞİ (başlangıç–bitiş doğrusuna
- *               göre orta noktanın sapması; çapraz çarpımla ölçülür)
- * Oyunun derinliği falsodadır: köşeyi güçle değil kavisle bulmak gerekir ve
- * bu, öğrenilebilir bir beceridir.
+ *   FALSO     ← parmağın çizdiği kavis: topun İLK yönünü saptırır, top
+ *               uçuşta hedefe kıvrılır. Kaleci ilk yönü okur — falso onu aldatır.
+ * Ayrıntı ve sayılar: `lib/game/penalty.ts`.
  *
- * KALECİ DÜRÜSTTÜR — oyunu adil yapan tek şey budur:
+ * KALECİ DÜRÜSTTÜR:
  *   · Kararını top AYRILDIKTAN SONRA verir (140–320ms tepki gecikmesi).
- *   · Yönü hatayla okur: tahmin = gerçek + gauss(0, sigma). Sigma zorlukla
- *     düşer ama SIFIRLANMAZ.
- *   · BİR KEZ DALAR VE DÜZELTEMEZ. Mükemmel takip yok; dalış başladıktan
- *     sonra hedef değişse bile kaleci gittiği yöne gider.
- *   · Koşu açısının tahmine katkısı %10'u geçmez — "okudu" hissi verir,
- *     okumaz.
+ *   · Yönü hatayla okur (gauss); sigma zorlukla düşer ama SIFIRLANMAZ.
+ *   · BİR KEZ DALAR VE DÜZELTEMEZ.
  *
- * FİZİK: `lib/game/loop.ts` içindeki sabit adımlı döngü. Uçuş boyunca `z`
- * derinliği ölçeği belirler (top uzaklaştıkça küçülür), `y`'ye yerçekimi,
- * `x`'e `curve * t²` uygulanır.
+ * GÖRSEL — YENİDEN YAPILDI. Eski sahne düz yeşil bir zemin, beyaz bir
+ * çerçeve, çubuk bir kaleci ve ortasında nokta olan bir daireydi. Şimdi:
+ *   · Gece maçı: projektörler, iki katlı dolu tribün, LED reklam panoları.
+ *   · Perspektifli çim: ufka doğru açılan biçme deseni, tebeşir çizgileri.
+ *   · Derinliği olan kale: arka çerçeve, yan ve tavan ağları, gölgeli direkler;
+ *     gol olunca ağ topun girdiği yerden dalgalanır.
+ *   · Eklemli kaleci: hazır duruşta sallanır, kararını verince yana uçar.
+ *   · Gerçek 3B desenli top: falsoyla kendi ekseninde döner, iz bırakır.
+ *   · Nişan önizlemesi: sürüklerken noktalı yörünge + kaledeki hedef halkası.
+ *   · Sonrası: gol ağda durur, kurtarış sekip döner, direk geri çarpar.
+ *     Gol anında konfeti, kamera hafifçe sarsılır.
  *
- * ÇİZİM: `react-native-svg`. Kale üç nokta perspektifiyle çizilir; ağ bir grid
- * mesh'tir ve çarpmada temas noktasından komşu düğümlere sönümlü dalga yayılır
- * — iki satır fizik, sonuç çok değerli. Kaleci ve atıcı basit vektör
- * silüetlerdir: yamuk bir 3B denemesi yerine stilize ve tutarlı.
+ * AKICILIK — KATMANLAR. Eski ekran her karede KÖK bileşende `setState`
+ * çağırıp başlığı, HUD'u ve bütün sahneyi yeniden çiziyordu; üstelik `memo`
+ * bileşenlerine yerinde değişen nesneler verildiği için top ve kaleci bazı
+ * karelerde hiç güncellenmiyordu. Şimdi sahne üç ayrı `<Svg>` katmanıdır:
+ *   1. ARKA PLAN — stadyum, çim, çizgiler. Boyut değişmedikçe bir kez çizilir.
+ *   2. KALE — ağ ve direkler. Yalnız ağ dalgalanırken yeniden çizilir.
+ *   3. AKTÖRLER — kaleci, top, iz, nişan, konfeti. Her kare; ama küçük.
+ * Döngü yalnız 3. katmanı (ve dalga sürerken 2.'yi) bir kare sinyaliyle
+ * uyandırır; ekranın geri kalanı yalnız skor/faz değişince render alır.
+ * Kamera yakınlaşması ve sarsıntı yerel sürücülü `Animated` dönüşümüdür —
+ * JS iş parçacığına hiç yük bindirmez.
  *
- * EMOJİ YOK: eski sürümde top ⚽ ve kaleci 🧤 emojiydi; emoji cihazın yazı
- * tipine göre değişir, renk tokenlarına uymaz ve ölçeklenmez.
+ * EMOJİ YOK: top ve kaleci vektör çizimdir; renkleri `lib/game/art.ts`.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
-import { memo, useCallback, useEffect, useRef, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentProps,
+  type MutableRefObject,
+} from "react";
+import { Animated, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import Svg, { Circle, Ellipse, G, Line, Path, Polyline, Rect } from "react-native-svg";
+import Svg, {
+  Circle,
+  Defs,
+  Ellipse,
+  G,
+  Line,
+  LinearGradient,
+  Path,
+  RadialGradient,
+  Rect,
+  Stop,
+  Text as SvgText,
+} from "react-native-svg";
 
-import { Button, ScreenHeader, Touchable } from "@/components/ui";
+import { FigureDefs, Keeper } from "@/components/game/Figures";
+import { BallDefs, BallShadow, SoccerBall } from "@/components/game/SoccerBall";
+import { Button, ScreenHeader, Touchable, useReduceMotion } from "@/components/ui";
 import { submitArenaScore } from "@/lib/api/arena";
+import { art, seeded } from "@/lib/game/art";
 import { useDragGesture, type DragResult } from "@/lib/game/input";
-import { clamp, gauss, useGameLoop } from "@/lib/game/loop";
-import { paint } from "@/lib/game/paint";
+import { clamp, useGameLoop } from "@/lib/game/loop";
+import {
+  BALL_R,
+  ballAt,
+  D_BOARDS,
+  D_GOAL,
+  D_KEEPER,
+  D_NET,
+  D_SPOT,
+  GOAL_H,
+  GOAL_W,
+  keeperGuess,
+  makeView,
+  NET_BACK_H,
+  planShot,
+  project,
+  resolveShot,
+  type Outcome,
+  type ShotPlan,
+  type View as Cam,
+} from "@/lib/game/penalty";
+import { useFrameSignal, useOnFrame, useSignalValue, type FrameSignal } from "@/lib/game/signal";
+import { initialOrientation, rotate, type Orientation } from "@/lib/game/sphere";
 import { TUNING } from "@/lib/game/tuning";
 import { useAuth } from "@/providers/AuthProvider";
 import {
   colors,
+  easing,
   elevate,
+  fonts,
   hairline,
   haptics,
   layout,
   radius,
   space,
+  spring,
   textScale,
   type,
   upperTR,
@@ -71,57 +122,116 @@ import {
 const BEST_KEY = "elitlig.penalti.best.v2";
 const T = TUNING.penalti;
 
-/**
- * Nişan duyarlılığı: sürüklemenin yatay bileşeni bu kadar ekran genişliğine
- * bölünür. Büyük değer = daha az duyarlı. Tarayıcıda ölçülerek seçildi.
- */
-const AIM_SPAN = 1.05;
-/** Aynısının dikey karşılığı: üst direğe çıkmak için gereken yukarı sürükleme. */
-const AIM_RISE = 0.55;
-
-/** Ağ örgüsünün düğüm sayısı. Az olursa dalga görünmez, çok olursa kare düşer. */
-const NET_COLS = 9;
-const NET_ROWS = 6;
+/** Arka ağ örgüsü: sütun × satır düğüm. Dalga bu ızgarada yayılır. */
+const NET_COLS = 15;
+const NET_ROWS = 8;
+/** Sonuç ekranda bu kadar kalır, sonra sıradaki atış. */
+const RESULT_HOLD_MS = 1600;
+/** Gol anında kameranın yakınlaşma oranı. */
+const ZOOM = 1.07;
+const GRAVITY = 9.8;
 
 type Phase = "ready" | "aim" | "flight" | "result" | "over";
-type Outcome = "gol" | "kurtaris" | "aut" | "direk";
 type SubmitState = "idle" | "guest" | "sending" | "sent" | "failed";
-
-/** Bir atışın sonucu — seri tablosunda dolu/boş nokta olarak görünür. */
 type ShotMark = Outcome | null;
 
-/** Uçuştaki topun durumu. */
-interface Shot {
-  /** 0 → 1 uçuş ilerlemesi. */
-  t: number;
-  /** Kale düzlemindeki hedef: 0 sol direk, 1 sağ direk. */
-  aimX: number;
-  /** Kale düzlemindeki hedef yükseklik: 0 yer, 1 üst direk. */
-  aimY: number;
-  /** Falso — uçuş boyunca x'e `curve * t²` olarak uygulanır. */
-  curve: number;
-  power: number;
-}
-
 /** Kalecinin durumu — kararını verdikten SONRA değiştiremez. */
-interface Keeper {
-  /** Şu anki konum (0–1). */
+interface KeeperState {
+  /** Konum, kale genişliği cinsinden (0 sol direk, 1 sağ direk). */
   x: number;
+  /** Dalışın başladığı konum. */
+  fromX: number;
   /** Dalış hedefi; karar verilene kadar null. */
   target: number | null;
-  /** Kararın verileceği zaman (uçuş `t` cinsinden). */
+  /** Kararın verileceği an (atıştan sonra saniye). */
   decideAt: number;
-  /** Dalışın başladığı `t` — dalış süresince ilerleme buradan hesaplanır. */
+  /** Dalışın başladığı an; null = henüz dalmadı. */
   divedAt: number | null;
-  /** Dalış yüksekliği (0 ayakta, 1 tam uzanma). */
+  /** -1..1 uçuş pozu (Figures/Keeper). */
+  dive: number;
+  /** Yerden yükselme, 0–1. */
   lift: number;
+  crouch: number;
 }
+
+interface Particle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  rot: number;
+  vr: number;
+  life: number;
+  color: string;
+  size: number;
+}
+
+/** Sahnenin bütün hareketli durumu — refte yaşar, render'da okunur. */
+interface World {
+  time: number;
+  plan: ShotPlan | null;
+  /** Uçuş ilerlemesi 0→1. */
+  t: number;
+  /** Atıştan beri geçen (ağır çekimle ölçeklenmiş) süre. */
+  since: number;
+  /** Top — uçuşta yörüngeden, sonrasında serbest fizikle. */
+  ball: { X: number; Y: number; D: number; vX: number; vY: number; vD: number; free: boolean };
+  orient: Orientation;
+  /** Dönüş hızları (rad/sn): falso (z) ve yuvarlanma (x). */
+  spin: number;
+  roll: number;
+  trail: { X: number; Y: number; D: number }[];
+  keeper: KeeperState;
+  net: number[];
+  netActive: boolean;
+  netTick: number;
+  confetti: Particle[];
+  slowmo: number;
+  outcome: Outcome | null;
+}
+
+const restingKeeper = (): KeeperState => ({
+  x: 0.5,
+  fromX: 0.5,
+  target: null,
+  decideAt: 0,
+  divedAt: null,
+  dive: 0,
+  lift: 0,
+  crouch: 0,
+});
+
+const spotBall = () => ({ X: 0, Y: BALL_R, D: D_SPOT, vX: 0, vY: 0, vD: 0, free: false });
+
+function newWorld(): World {
+  return {
+    time: 0,
+    plan: null,
+    t: 0,
+    since: 0,
+    ball: spotBall(),
+    orient: initialOrientation(),
+    spin: 0,
+    roll: 0,
+    trail: [],
+    keeper: restingKeeper(),
+    net: Array(NET_COLS * NET_ROWS).fill(0),
+    netActive: false,
+    netTick: 0,
+    confetti: [],
+    slowmo: 1,
+    outcome: null,
+  };
+}
+
+const smooth = (p: number) => p * p * (3 - 2 * p);
 
 /* ================================= EKRAN ================================= */
 
 export default function PenaltiScreen() {
   const router = useRouter();
   const auth = useAuth();
+  const reduceMotion = useReduceMotion();
 
   const [phase, setPhase] = useState<Phase>("ready");
   const [score, setScore] = useState(0);
@@ -129,25 +239,24 @@ export default function PenaltiScreen() {
   const [marks, setMarks] = useState<ShotMark[]>(Array(T.shots).fill(null));
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [submit, setSubmit] = useState<SubmitState>("idle");
-  const [, setFrame] = useState(0);
+  const [size, setSize] = useState({ w: 0, h: 0 });
 
-  /** Sürükleme sırasında canlı geri bildirim (mercan yay). */
-  const [drag, setDrag] = useState<DragResult | null>(null);
-
-  const area = useRef({ w: 0, h: 0 });
+  const signal = useFrameSignal();
+  const world = useRef<World>(newWorld());
+  /** Sürükleme sürerken canlı önizleme — state değil ref: kare sinyaliyle çizilir. */
+  const drag = useRef<DragResult | null>(null);
   const phaseRef = useRef<Phase>("ready");
-  const shotRef = useRef<Shot | null>(null);
-  const keeperRef = useRef<Keeper>({ x: 0.5, target: null, decideAt: 0, divedAt: null, lift: 0 });
   const shotIndex = useRef(0);
   const scoreRef = useRef(0);
-  /** Ağ düğümlerinin sapması — gol anında dalga buradan yayılır. */
-  const net = useRef<number[]>(Array(NET_COLS * NET_ROWS).fill(0));
-  /** Ağır çekim çarpanı: kritik anda 0.25'e iner. */
-  const slowmo = useRef(1);
-  /** Gol/direk sonrası kamera sarsıntısı (piksel). */
-  const shake = useRef(0);
-  /** Sonuç kartının bekleme zamanlayıcısı — ekrandan çıkılırsa iptal edilir. */
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const cam = useMemo(() => (size.w > 0 && size.h > 0 ? makeView(size.w, size.h) : null), [size]);
+  const camRef = useRef<Cam | null>(null);
+  camRef.current = cam;
+
+  /* Kamera: yakınlaşma ve sarsıntı yerel sürücüde. */
+  const zoom = useRef(new Animated.Value(1)).current;
+  const shakeX = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     AsyncStorage.getItem(BEST_KEY).then((value) => setBest(Number(value) || 0));
@@ -194,126 +303,237 @@ export default function PenaltiScreen() {
     }
   }, [setPhaseBoth, submitScore]);
 
-  /* ─────────────────────────── atışın çözümü ─────────────────────────── */
+  /* ─────────────────────────── kamera hareketi ─────────────────────────── */
 
-  /**
-   * Sonucu belirler. Kalecinin eli topun geçtiği noktaya `reach` kadar
-   * yakınsa kurtarış; hedef direklerin dışındaysa aut; direğe çok yakınsa
-   * direk. Kalecinin YÜKSEKLİĞİ de hesaba katılır: üst köşeye giden bir topa
-   * yerde duran kaleci yetişemez.
-   */
-  const resolve = useCallback(
-    (shot: Shot, keeper: Keeper): Outcome => {
-      if (shot.aimX < 0.04 || shot.aimX > 0.96 || shot.aimY > 0.96) return "aut";
-      if (shot.aimX < 0.09 || shot.aimX > 0.91 || shot.aimY > 0.9) return "direk";
-
-      const dx = Math.abs(shot.aimX - keeper.x);
-      // Uzanma yüksekliği: kaleci ne kadar daldıysa o kadar yükseğe erişir.
-      const reachY = 0.35 + keeper.lift * 0.5;
-      const withinHeight = shot.aimY <= reachY;
-      // Sert vuruşa yetişmek zordur: erişim yarıçapı güçle daralır.
-      const reach = T.keeperReach * (1.25 - shot.power * 0.4);
-
-      return dx < reach && withinHeight ? "kurtaris" : "gol";
+  const pushIn = useCallback(
+    (ms: number) => {
+      if (reduceMotion) return;
+      Animated.timing(zoom, {
+        toValue: ZOOM,
+        duration: ms,
+        easing: easing.decelerate,
+        useNativeDriver: true,
+      }).start();
     },
-    [],
+    [reduceMotion, zoom],
   );
+
+  const pullBack = useCallback(() => {
+    Animated.timing(zoom, {
+      toValue: 1,
+      duration: 380,
+      easing: easing.standard,
+      useNativeDriver: true,
+    }).start();
+  }, [zoom]);
+
+  const shake = useCallback(
+    (amount: number) => {
+      if (reduceMotion) return;
+      const steps = [amount, -amount, amount * 0.6, -amount * 0.6, amount * 0.25, 0];
+      Animated.sequence(
+        steps.map((toValue) =>
+          Animated.timing(shakeX, { toValue, duration: 42, useNativeDriver: true }),
+        ),
+      ).start();
+    },
+    [reduceMotion, shakeX],
+  );
+
+  /* ─────────────────────────── atışın sonu ─────────────────────────── */
 
   const land = useCallback(
     (result: Outcome) => {
+      const w = world.current;
+      const plan = w.plan;
+      w.outcome = result;
       setOutcome(result);
       setPhaseBoth("result");
-
       setMarks((current) => {
         const next = [...current];
         next[shotIndex.current] = result;
         return next;
       });
 
+      /* Top serbest fiziğe devrolur: sonucun HİKÂYESİNİ top anlatır. */
+      const b = w.ball;
+      b.free = true;
+      const speed = plan ? 11 / plan.duration : 25;
+      const lateral = plan ? ((plan.aimX - plan.apparentX) * GOAL_W * 2) / plan.duration : 0;
+
       if (result === "gol") {
+        b.vD = speed * 0.55;
+        b.vX = lateral * 0.3;
+        b.vY = 0;
         scoreRef.current += 1;
         setScore(scoreRef.current);
-        // Ağ dalgası: topun girdiği noktadan yayılır.
-        const shot = shotRef.current;
-        if (shot) {
-          const col = clamp(Math.round(shot.aimX * (NET_COLS - 1)), 0, NET_COLS - 1);
-          const row = clamp(Math.round((1 - shot.aimY) * (NET_ROWS - 1)), 0, NET_ROWS - 1);
-          net.current[row * NET_COLS + col] = 1;
+        // Ağ dalgası topun girdiği noktadan yayılır.
+        if (plan) {
+          const col = clamp(Math.round(plan.aimX * (NET_COLS - 1)), 0, NET_COLS - 1);
+          const row = clamp(
+            Math.round((1 - Math.min(1, plan.aimY)) * (NET_ROWS - 1)),
+            0,
+            NET_ROWS - 1,
+          );
+          w.net[row * NET_COLS + col] = 1.4;
+          w.netActive = true;
         }
-        shake.current = 3;
+        burstConfetti(w, camRef.current);
+        shake(4);
         haptics.success();
+      } else if (result === "kurtaris") {
+        const away = Math.sign((plan?.aimX ?? 0.5) - w.keeper.x) || 1;
+        b.vD = -5.5;
+        b.vX = away * 4.5;
+        b.vY = 3.2;
+        w.spin = -w.spin * 0.5;
+        haptics.warning();
       } else if (result === "direk") {
-        shake.current = 2;
+        b.vD = -7;
+        b.vX = -Math.sign(b.X || 1) * 2.4;
+        b.vY = 1.8;
+        shake(3);
         haptics.warning();
       } else {
+        b.vD = speed * 0.8;
+        b.vX = lateral * 0.5 + Math.sign(b.X || 1) * 2;
+        b.vY = b.Y > GOAL_H ? 1.5 : 0;
         haptics.warning();
       }
 
-      // Sonuç kartı kısa süre durur, sonra sıradaki atış ya da seri sonu.
       holdTimer.current = setTimeout(() => {
         shotIndex.current += 1;
-        shotRef.current = null;
-        slowmo.current = 1;
+        const fresh = world.current;
+        fresh.plan = null;
+        fresh.t = 0;
+        fresh.since = 0;
+        fresh.ball = spotBall();
+        fresh.trail = [];
+        fresh.keeper = restingKeeper();
+        fresh.slowmo = 1;
+        fresh.outcome = null;
+        fresh.spin = 0;
+        fresh.roll = 0;
         setOutcome(null);
-        setDrag(null);
+        drag.current = null;
+        pullBack();
         if (shotIndex.current >= T.shots) finish();
         else setPhaseBoth("aim");
-      }, 1200);
+      }, RESULT_HOLD_MS);
     },
-    [finish, setPhaseBoth],
+    [finish, pullBack, setPhaseBoth, shake],
   );
 
   /* ─────────────────────────── fizik adımı ─────────────────────────── */
 
   const step = useCallback(
     (dt: number) => {
-      // Ağ dalgası her adımda söner ve komşulara yayılır — durum ne olursa olsun.
-      relaxNet(net.current);
-      if (shake.current > 0) shake.current = Math.max(0, shake.current - dt * 12);
+      const w = world.current;
+      w.time += dt;
 
-      const shot = shotRef.current;
-      if (phaseRef.current !== "flight" || !shot) return;
+      if (w.netActive) w.netActive = relaxNet(w.net);
+      stepConfetti(w.confetti, dt);
 
-      const keeper = keeperRef.current;
+      const k = w.keeper;
+      const current = phaseRef.current;
 
-      /* KALECİNİN KARARI — top ayrıldıktan SONRA, gecikmeyle, hatayla.
-         Bir kez verilir; `target` dolduktan sonra bir daha okunmaz. */
-      if (keeper.target == null && shot.t >= keeper.decideAt) {
+      /* BEKLEME: kaleci çizgide yana sallanır ve dizlerini kırar — sahne
+         ölü durmasın. Atış anındaki konumu dalışın başlangıcıdır. */
+      if (current === "aim") {
+        k.x = 0.5 + Math.sin(w.time * 1.7) * 0.035;
+        k.crouch = 0.5 + 0.5 * Math.sin(w.time * 3.4);
+        return;
+      }
+
+      const plan = w.plan;
+      if (!plan || (current !== "flight" && current !== "result")) return;
+
+      const sdt = dt * w.slowmo;
+      w.since += sdt;
+
+      /* KALECİNİN KARARI — gecikmeyle, hatayla, bir kez. */
+      if (k.target == null && w.since >= k.decideAt) {
         const difficulty = clamp(shotIndex.current / Math.max(1, T.shots - 1), 0, 1);
-        const sigma = T.keeperSigmaEasy + (T.keeperSigmaHard - T.keeperSigmaEasy) * difficulty;
-        // Koşu açısının katkısı: hissettirir, belirlemez (%10 tavan).
-        const bias = clamp(shot.curve, -1, 1) * T.keeperReadBias;
-        keeper.target = clamp(gauss(shot.aimX + bias, sigma), 0.02, 0.98);
-        keeper.divedAt = shot.t;
+        k.target = keeperGuess(plan, difficulty);
+        k.divedAt = w.since;
       }
 
-      /* DALIŞ — başladıktan sonra hedef DEĞİŞMEZ. Kaleci gittiği yere gider;
-         topu takip etmez. Oyunu adil yapan tek kural budur. */
-      if (keeper.target != null && keeper.divedAt != null) {
-        const progress = clamp((shot.t - keeper.divedAt) / T.keeperDive, 0, 1);
-        // Yumuşak giriş-çıkış: dalış bir sıçrayış gibi görünsün.
-        const eased = progress * progress * (3 - 2 * progress);
-        keeper.x = 0.5 + (keeper.target - 0.5) * eased;
-        keeper.lift = Math.sin(eased * Math.PI) * Math.min(1, Math.abs(keeper.target - 0.5) * 2.4);
+      /* DALIŞ — başladıktan sonra hedef DEĞİŞMEZ. */
+      if (k.target != null && k.divedAt != null) {
+        const p = clamp((w.since - k.divedAt) / T.keeperDive, 0, 1);
+        const eased = smooth(p);
+        const span = Math.min(1, Math.abs(k.target - k.fromX) * 2.6);
+        k.x = k.fromX + (k.target - k.fromX) * eased;
+        k.dive = Math.sign(k.target - k.fromX) * span * Math.min(1, eased * 1.6);
+        k.lift = Math.sin(eased * Math.PI) * span;
+        k.crouch = 0;
       }
 
-      /* AĞIR ÇEKİM: son %20'lik uçuşta kaleciyle mesafe kritikse zaman yavaşlar.
-         Kritik olmayan atışta yavaşlatmak, her atışı uzatıp oyunu ağırlaştırırdı. */
-      const close = Math.abs(shot.aimX - keeper.x) < T.keeperReach * 1.6;
-      slowmo.current = shot.t > 0.8 && close ? 0.25 : 1;
+      /* Top kendi ekseninde döner (falso) ve ileri yuvarlanır. */
+      rotate(w.orient, [0, 0, 1], w.spin * sdt);
+      rotate(w.orient, [1, 0, 0], -w.roll * sdt);
 
-      shot.t += (dt / T.flight) * slowmo.current;
+      if (current === "flight") {
+        /* AĞIR ÇEKİM: son %20'de kaleciyle mesafe kritikse zaman yavaşlar. */
+        const close = Math.abs(plan.aimX - k.x) < T.keeperReach * 1.6;
+        w.slowmo = w.t > 0.8 && close ? 0.3 : 1;
 
-      if (shot.t >= 1) {
-        shot.t = 1;
-        land(resolve(shot, keeper));
+        w.t = Math.min(1, w.t + sdt / plan.duration);
+        const pos = ballAt(plan, w.t);
+        w.ball.X = pos.X;
+        w.ball.Y = pos.Y;
+        w.ball.D = pos.D;
+
+        w.trail.push({ X: pos.X, Y: pos.Y, D: pos.D });
+        if (w.trail.length > 14) w.trail.shift();
+
+        if (w.t >= 1) {
+          w.slowmo = 1;
+          land(resolveShot(plan, k.x, k.lift));
+        }
+        return;
       }
+
+      /* SONRASI — serbest top: yerçekimi, zemin sekmesi, ağın frenlemesi. */
+      const b = w.ball;
+      if (w.trail.length) w.trail.shift();
+      b.vY -= GRAVITY * sdt;
+      b.X += b.vX * sdt;
+      b.Y += b.vY * sdt;
+      b.D += b.vD * sdt;
+      if (b.Y < BALL_R) {
+        b.Y = BALL_R;
+        b.vY = Math.abs(b.vY) > 1 ? -b.vY * 0.45 : 0;
+        b.vX *= 0.86;
+        b.vD *= 0.86;
+      }
+      if (w.outcome === "gol" && b.D > D_GOAL + 0.25) {
+        // Ağ topu yakalar: derinlik ve yan hız hızla söner.
+        b.vD *= Math.exp(-9 * sdt);
+        b.vX *= Math.exp(-6 * sdt);
+        b.D = Math.min(b.D, D_NET - 0.25);
+      }
+      if (b.D > D_BOARDS - 0.4) {
+        b.D = D_BOARDS - 0.4;
+        b.vD = -Math.abs(b.vD) * 0.25;
+      }
+      w.spin *= Math.exp(-1.5 * sdt);
+      w.roll = Math.hypot(b.vD, b.vX) * 2.2;
     },
-    [land, resolve],
+    [land],
   );
 
-  const render = useCallback(() => setFrame((n) => (n + 1) % 1_000_000), []);
-  useGameLoop({ step, render, running: phase === "flight" || phase === "result" });
+  const render = useCallback(() => {
+    const w = world.current;
+    if (w.netActive) w.netTick += 1;
+    signal.emit();
+  }, [signal]);
+
+  useGameLoop({
+    step,
+    render,
+    running: phase === "aim" || phase === "flight" || phase === "result",
+  });
 
   /* ─────────────────────────── jest ─────────────────────────── */
 
@@ -322,75 +542,54 @@ export default function PenaltiScreen() {
       if (phaseRef.current !== "aim") return;
       if (result.length < T.dragMin) {
         // Çok kısa sürükleme atış değil, kararsızlıktır; jest yutulur.
-        setDrag(null);
+        drag.current = null;
         return;
       }
+      const v = camRef.current;
+      if (!v) return;
 
-      const power = clamp(
-        T.powerMin +
-          ((result.length - T.dragMin) / (T.dragMax - T.dragMin)) * (T.powerMax - T.powerMin),
-        T.powerMin,
-        T.powerMax,
-      );
-
-      /* Yön: yatay bileşen kale genişliğine eşlenir. Sürüklemenin YUKARI
-         bileşeni yüksekliği verir — aşağı sürüklemek topu yerden gönderir.
-
-         BÖLENLER GENİŞ TUTULUR (tarayıcıda ölçüldü): kale genişliğini
-         `w * 0.62`ye eşlemek, 96px'lik bir sürüklemede topu direğe
-         götürüyordu. Telefonda doğal bir fiske bundan çok daha uzun; o
-         ayarla atışların çoğu dışarı giderdi. `AIM_SPAN` ile kalenin bir
-         ucundan diğerine gitmek ekran genişliği kadar sürükleme ister —
-         yani nişan, gücün yanında ikinci bir beceri olarak kalır ama
-         cezalandırıcı olmaz. */
-      const { w, h } = area.current;
-      const aimX = clamp(0.5 + result.dx / Math.max(1, w * AIM_SPAN), 0, 1);
-      const aimY = clamp(-result.dy / Math.max(1, h * AIM_RISE), 0, 1);
-
-      shotRef.current = {
-        t: 0,
-        aimX,
-        aimY,
-        curve: clamp(result.curve * T.curveK, -1, 1),
-        power,
-      };
+      const plan = planShot(result, v.w, v.h);
+      const w = world.current;
+      w.plan = plan;
+      w.t = 0;
+      w.since = 0;
+      w.trail = [];
+      w.spin = -plan.curve * 16;
+      w.roll = 18 + plan.power * 22;
 
       const difficulty = clamp(shotIndex.current / Math.max(1, T.shots - 1), 0, 1);
       const delay = T.keeperDelayEasy + (T.keeperDelayHard - T.keeperDelayEasy) * difficulty;
-      keeperRef.current = {
-        x: 0.5,
-        target: null,
-        // Gecikme saniyeden uçuş oranına çevrilir.
-        decideAt: clamp(delay / T.flight, 0, 0.9),
-        divedAt: null,
-        lift: 0,
-      };
+      w.keeper = { ...restingKeeper(), x: w.keeper.x, fromX: w.keeper.x, decideAt: delay };
 
-      setDrag(null);
+      drag.current = null;
       setPhaseBoth("flight");
+      pushIn(plan.duration * 1000 + 300);
       haptics.medium();
     },
-    [setPhaseBoth],
+    [pushIn, setPhaseBoth],
   );
 
   const gesture = useDragGesture({
     enabled: phase === "aim",
-    onMove: setDrag,
+    onMove: (result) => {
+      drag.current = result;
+    },
     onEnd: shoot,
   });
 
   const start = useCallback(() => {
     scoreRef.current = 0;
     shotIndex.current = 0;
-    shotRef.current = null;
-    net.current = Array(NET_COLS * NET_ROWS).fill(0);
+    world.current = newWorld();
+    drag.current = null;
     setScore(0);
     setMarks(Array(T.shots).fill(null));
     setOutcome(null);
-    setDrag(null);
     setSubmit("idle");
+    zoom.setValue(1);
     setPhaseBoth("aim");
-  }, [setPhaseBoth]);
+    signal.emit();
+  }, [setPhaseBoth, signal, zoom]);
 
   const openBoard = useCallback(
     () => router.push({ pathname: "/siralama", params: { game: "penalti" } }),
@@ -398,7 +597,19 @@ export default function PenaltiScreen() {
   );
 
   const isRecord = score > 0 && score >= best;
-  const { w, h } = area.current;
+
+  /* Kamera dönüşümü: kale noktasını sabit tutarak yakınlaş. */
+  const goalY = cam ? project(cam, 0, GOAL_H * 0.5, D_GOAL).y : 0;
+  const lift = (size.h / 2 - goalY) * (ZOOM - 1);
+  const cameraStyle = {
+    transform: [
+      { translateX: shakeX },
+      {
+        translateY: zoom.interpolate({ inputRange: [1, ZOOM], outputRange: [0, lift] }),
+      },
+      { scale: zoom },
+    ],
+  };
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
@@ -449,41 +660,31 @@ export default function PenaltiScreen() {
       <View
         style={styles.pitch}
         {...gesture.panHandlers}
-        onLayout={(e) =>
-          (area.current = { w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })
-        }
+        onLayout={(e) => {
+          const { width, height } = e.nativeEvent.layout;
+          setSize((s) => (s.w === width && s.h === height ? s : { w: width, h: height }));
+        }}
         accessible
         accessibilityRole="adjustable"
         accessibilityLabel="Penaltı sahası"
         accessibilityHint="Toptan parmağını sürükleyip bırak. Uzunluk gücü, yön köşeyi, çizdiğin kavis falsoyu belirler."
       >
-        {w > 0 && h > 0 ? (
-          <Svg width={w} height={h} pointerEvents="none">
-            <Field w={w} h={h} shake={shake.current} />
-            <Goal w={w} h={h} net={net.current} shake={shake.current} />
-            <KeeperFigure w={w} h={h} keeper={keeperRef.current} />
-            {shotRef.current ? <FlyingBall w={w} h={h} shot={shotRef.current} /> : null}
-            {phase === "aim" ? <SpotBall w={w} h={h} drag={drag} /> : null}
-          </Svg>
+        {cam ? (
+          <Animated.View style={[StyleSheet.absoluteFill, cameraStyle]} pointerEvents="none">
+            <Backdrop cam={cam} />
+            <GoalLayer cam={cam} world={world} signal={signal} />
+            <ActorsLayer
+              cam={cam}
+              world={world}
+              drag={drag}
+              phaseRef={phaseRef}
+              signal={signal}
+            />
+            <Vignette w={cam.w} h={cam.h} />
+          </Animated.View>
         ) : null}
 
-        {/* Sonuç etiketi */}
-        {outcome ? (
-          <View
-            style={[styles.outcome, outcome === "gol" ? styles.outcomeGoal : styles.outcomeMiss]}
-            pointerEvents="none"
-          >
-            <Text
-              style={[
-                styles.outcomeText,
-                outcome === "gol" ? styles.outcomeTextGoal : styles.outcomeTextMiss,
-              ]}
-              {...textScale.dense}
-            >
-              {OUTCOME_LABEL[outcome]}
-            </Text>
-          </View>
-        ) : null}
+        {outcome ? <OutcomeBanner outcome={outcome} /> : null}
 
         {phase === "ready" ? (
           <StartCard best={best} onStart={start} />
@@ -504,135 +705,15 @@ export default function PenaltiScreen() {
   );
 }
 
-const OUTCOME_LABEL: Record<Outcome, string> = {
-  gol: "GOL",
-  kurtaris: "KURTARIŞ",
-  aut: "AUT",
-  direk: "DİREK",
-};
-
-/* ============================== SAHA ÇİZİMİ ============================== */
-
-/** Kalenin kadraj içindeki yeri — bütün çizimler bu ölçülerden türer. */
-function goalBox(w: number, h: number) {
-  const width = w * 0.62;
-  const height = h * 0.3;
-  return { x: (w - width) / 2, y: h * 0.16, w: width, h: height };
-}
-
-/**
- * Çim ve ceza sahası — doku yok, yalnız geometri. Yakınsayan tebeşir
- * çizgileri derinliği tek başına kurar; sahte bir çim dokusu hem ağır hem
- * uygulamanın geri kalanına yabancı dururdu.
- */
-const Field = memo(function Field({ w, h, shake }: { w: number; h: number; shake: number }) {
-  const goal = goalBox(w, h);
-  const dx = shake ? (Math.random() - 0.5) * shake : 0;
-
-  return (
-    <G transform={`translate(${dx.toFixed(2)} 0)`}>
-      <Rect x={0} y={0} width={w} height={h} fill={paint.turf} />
-      {/* Biçme şeritleri: ufka doğru daralan yatay bantlar. */}
-      {Array.from({ length: 7 }, (_, i) => {
-        const top = h * (0.36 + (i / 7) ** 1.6 * 0.64);
-        const next = h * (0.36 + ((i + 1) / 7) ** 1.6 * 0.64);
-        return i % 2 === 0 ? (
-          <Rect key={i} x={0} y={top} width={w} height={next - top} fill={paint.turfAlt} />
-        ) : null;
-      })}
-
-      {/* Ceza sahası — yakınsayan iki kenar + ön çizgi. */}
-      <Path
-        d={`M ${w * 0.06} ${h} L ${goal.x - w * 0.06} ${goal.y + goal.h}
-            L ${goal.x + goal.w + w * 0.06} ${goal.y + goal.h} L ${w * 0.94} ${h}`}
-        stroke={paint.chalk}
-        strokeWidth={2}
-        fill="none"
-      />
-      {/* Penaltı noktası */}
-      <Circle cx={w / 2} cy={h * 0.82} r={3} fill={paint.chalk} />
-    </G>
-  );
-});
-
-/**
- * Kale — üç nokta projeksiyonuyla çizilmiş çerçeve + ağ örgüsü.
- *
- * Ağ, `net` dizisindeki sapmalarla çizilir: her düğüm kendi sapması kadar
- * içeri çöker. Top girdiğinde temas düğümü 1'e set edilir, `relaxNet` her
- * adımda sapmayı komşulara yayıp söndürür — dalga budur.
- */
-const Goal = memo(function Goal({
-  w,
-  h,
-  net,
-  shake,
-}: {
-  w: number;
-  h: number;
-  net: number[];
-  shake: number;
-}) {
-  const g = goalBox(w, h);
-  const dx = shake ? (Math.random() - 0.5) * shake : 0;
-
-  return (
-    <G transform={`translate(${dx.toFixed(2)} 0)`}>
-      {/* Ağ: dikey ve yatay ipler, düğüm sapmalarıyla eğrilmiş. */}
-      {Array.from({ length: NET_COLS }, (_, c) => (
-        <Polyline
-          key={`c${c}`}
-          points={Array.from({ length: NET_ROWS }, (_, r) => {
-            const x = g.x + (g.w * c) / (NET_COLS - 1) + net[r * NET_COLS + c] * 6;
-            const y = g.y + (g.h * r) / (NET_ROWS - 1) + net[r * NET_COLS + c] * 4;
-            return `${x.toFixed(1)},${y.toFixed(1)}`;
-          }).join(" ")}
-          stroke={paint.net}
-          strokeWidth={0.75}
-          fill="none"
-        />
-      ))}
-      {Array.from({ length: NET_ROWS }, (_, r) => (
-        <Polyline
-          key={`r${r}`}
-          points={Array.from({ length: NET_COLS }, (_, c) => {
-            const x = g.x + (g.w * c) / (NET_COLS - 1) + net[r * NET_COLS + c] * 6;
-            const y = g.y + (g.h * r) / (NET_ROWS - 1) + net[r * NET_COLS + c] * 4;
-            return `${x.toFixed(1)},${y.toFixed(1)}`;
-          }).join(" ")}
-          stroke={paint.net}
-          strokeWidth={0.75}
-          fill="none"
-        />
-      ))}
-
-      {/* Direkler ve üst direk — kalın, beyaz, perspektifli. */}
-      <Path
-        d={`M ${g.x} ${g.y + g.h} L ${g.x} ${g.y} L ${g.x + g.w} ${g.y} L ${g.x + g.w} ${g.y + g.h}`}
-        stroke={paint.post}
-        strokeWidth={5}
-        strokeLinejoin="round"
-        strokeLinecap="round"
-        fill="none"
-      />
-      <Path
-        d={`M ${g.x} ${g.y + g.h} L ${g.x} ${g.y} L ${g.x + g.w} ${g.y} L ${g.x + g.w} ${g.y + g.h}`}
-        stroke={paint.onTurfMuted}
-        strokeWidth={1}
-        strokeLinejoin="round"
-        fill="none"
-        opacity={0.35}
-      />
-    </G>
-  );
-});
+/* ============================== EFEKT FİZİĞİ ============================== */
 
 /**
  * Ağ dalgası: her düğüm komşularının ortalamasına doğru çekilir ve söner.
- * İki satır fizik — ama ağın "canlı" görünmesi tamamen buradan geliyor.
+ * Ağ durulunca false döner — katman yeniden çizilmeyi bırakır.
  */
-function relaxNet(net: number[]): void {
+function relaxNet(net: number[]): boolean {
   const next = net.slice();
+  let alive = false;
   for (let r = 0; r < NET_ROWS; r += 1) {
     for (let c = 0; c < NET_COLS; c += 1) {
       const i = r * NET_COLS + c;
@@ -643,138 +724,592 @@ function relaxNet(net: number[]): void {
       if (r > 0) (sum += net[i - NET_COLS]), (count += 1);
       if (r < NET_ROWS - 1) (sum += net[i + NET_COLS]), (count += 1);
       const neighbour = count ? sum / count : 0;
-      next[i] = (net[i] + (neighbour - net[i]) * TUNING.penalti.netSpread) * TUNING.penalti.netDamp;
+      next[i] = (net[i] + (neighbour - net[i]) * T.netSpread) * T.netDamp;
     }
   }
-  for (let i = 0; i < net.length; i += 1) net[i] = Math.abs(next[i]) < 0.002 ? 0 : next[i];
+  for (let i = 0; i < net.length; i += 1) {
+    net[i] = Math.abs(next[i]) < 0.003 ? 0 : next[i];
+    if (net[i] !== 0) alive = true;
+  }
+  return alive;
+}
+
+function burstConfetti(w: World, cam: Cam | null): void {
+  if (!cam) return;
+  const origin = project(cam, w.ball.X, w.ball.Y, w.ball.D);
+  const rand = seeded(Math.floor(w.time * 1000));
+  for (let i = 0; i < 70; i += 1) {
+    const angle = -Math.PI / 2 + (rand() - 0.5) * Math.PI * 1.3;
+    const speed = 160 + rand() * 340;
+    w.confetti.push({
+      x: origin.x + (rand() - 0.5) * 30,
+      y: origin.y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      rot: rand() * 360,
+      vr: (rand() - 0.5) * 900,
+      life: 1.2 + rand() * 0.5,
+      color: art.confetti[i % art.confetti.length],
+      size: 4 + rand() * 5,
+    });
+  }
+}
+
+function stepConfetti(list: Particle[], dt: number): void {
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    const p = list[i];
+    p.vy += 520 * dt;
+    p.vx *= Math.exp(-1.6 * dt);
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.rot += p.vr * dt;
+    p.life -= dt;
+    if (p.life <= 0) list.splice(i, 1);
+  }
+}
+
+/* ============================== 1 · ARKA PLAN ============================== */
+
+/**
+ * Stadyum ve çim — boyut değişmedikçe BİR KEZ çizilir.
+ *
+ * Kalabalık binlerce ayrı daire değil, renk başına TEK bir yoldur: her
+ * seyirci kafası aynı `Path`'e eklenmiş küçük bir dairedir. On renk = on
+ * düğüm; tribün dolu görünür, çizim maliyeti neredeyse sıfırdır.
+ */
+const Backdrop = memo(function Backdrop({ cam }: { cam: Cam }) {
+  const { w, h } = cam;
+  const boardsBottom = project(cam, 0, 0, D_BOARDS).y;
+  const boardH = (cam.fx * 0.95) / D_BOARDS;
+  const boardsTop = boardsBottom - boardH;
+  const roofH = boardsTop * 0.16;
+  const tierSplit = roofH + (boardsTop - roofH) * 0.46;
+
+  const crowd = useMemo(() => {
+    const rand = seeded(1907);
+    const paths: string[] = art.crowd.map(() => "");
+    const rows = (top: number, bottom: number, gap: number, rMin: number, rMax: number) => {
+      for (let y = top + gap * 0.6; y < bottom - 1; y += gap) {
+        const depth = (y - top) / Math.max(1, bottom - top);
+        const r = rMin + (rMax - rMin) * depth;
+        for (let x = (rand() * gap) / 2; x < w; x += gap * (0.92 + rand() * 0.2)) {
+          if (rand() < 0.07) continue; // boş koltuk
+          const c = Math.floor(rand() * art.crowd.length);
+          const cx = x + (rand() - 0.5) * 1.5;
+          const cy = y + (rand() - 0.5) * 1.5;
+          paths[c] += `M${(cx - r).toFixed(1)} ${cy.toFixed(1)}a${r.toFixed(1)} ${r.toFixed(1)} 0 1 0 ${(2 * r).toFixed(1)} 0a${r.toFixed(1)} ${r.toFixed(1)} 0 1 0 ${(-2 * r).toFixed(1)} 0`;
+        }
+      }
+    };
+    rows(roofH + 3, tierSplit - 4, 5.2, 1.3, 1.9);
+    rows(tierSplit + 4, boardsTop, 6.4, 1.8, 2.5);
+    return paths;
+  }, [w, roofH, tierSplit, boardsTop]);
+
+  // Çim bantları: kale çizgisine paralel biçme şeritleri (derinlik aralıkları).
+  const bands: { y1: number; y2: number }[] = [];
+  for (let d = D_BOARDS, i = 0; d > 2.5; d -= 1.6, i += 1) {
+    if (i % 2 === 0) bands.push({ y1: project(cam, 0, 0, d).y, y2: project(cam, 0, 0, d - 1.6).y });
+  }
+  // Boyuna şeritler: ufka yakınsayan dörtgenler — dama deseni bunların kesişimi.
+  const lanes: string[] = [];
+  for (let X = -30; X < 30; X += 8) {
+    const a = project(cam, X, 0, D_BOARDS);
+    const b = project(cam, X + 4, 0, D_BOARDS);
+    const c = project(cam, X + 4, 0, 1.2);
+    const d = project(cam, X, 0, 1.2);
+    lanes.push(`M${a.x} ${a.y}L${b.x} ${b.y}L${c.x} ${c.y}L${d.x} ${d.y}Z`);
+  }
+
+  const line = (X1: number, D1: number, X2: number, D2: number) => {
+    const a = project(cam, X1, 0, D1);
+    const b = project(cam, X2, 0, D2);
+    return `M${a.x.toFixed(1)} ${a.y.toFixed(1)}L${b.x.toFixed(1)} ${b.y.toFixed(1)}`;
+  };
+  const sixYard = D_GOAL - 5.5;
+  const lights = Math.max(4, Math.round(w / 44));
+  const chalkW = (cam.fx / D_GOAL) * 0.12;
+  const spot = project(cam, 0, 0, D_SPOT);
+
+  return (
+    <Svg width={w} height={h} style={StyleSheet.absoluteFill}>
+      <Defs>
+        <LinearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor={art.skyTop} />
+          <Stop offset="1" stopColor={art.skyBottom} />
+        </LinearGradient>
+        <LinearGradient id="stand" x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor={art.standBack} />
+          <Stop offset="1" stopColor={art.standFront} />
+        </LinearGradient>
+        <LinearGradient id="standShade" x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor={art.skyTop} stopOpacity={0.7} />
+          <Stop offset="0.6" stopColor={art.skyTop} stopOpacity={0.15} />
+          <Stop offset="1" stopColor={art.skyTop} stopOpacity={0} />
+        </LinearGradient>
+        <LinearGradient id="board" x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor={art.boardTop} />
+          <Stop offset="1" stopColor={art.boardBottom} />
+        </LinearGradient>
+        <LinearGradient id="grass" x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor={art.grassFar} />
+          <Stop offset="1" stopColor={art.grassNear} />
+        </LinearGradient>
+        <RadialGradient id="flood" cx="50%" cy="50%" r="50%">
+          <Stop offset="0" stopColor={art.floodlight} stopOpacity={0.55} />
+          <Stop offset="1" stopColor={art.floodlight} stopOpacity={0} />
+        </RadialGradient>
+        <RadialGradient id="pool" cx="50%" cy="50%" r="50%">
+          <Stop offset="0" stopColor={art.grassLight} stopOpacity={0.14} />
+          <Stop offset="1" stopColor={art.grassLight} stopOpacity={0} />
+        </RadialGradient>
+      </Defs>
+
+      {/* Gökyüzü ve tribün */}
+      <Rect x={0} y={0} width={w} height={boardsTop + 1} fill="url(#sky)" />
+      <Rect x={0} y={roofH} width={w} height={boardsTop - roofH} fill="url(#stand)" />
+      {crowd.map((d, i) => (d ? <Path key={i} d={d} fill={art.crowd[i]} opacity={0.62} /> : null))}
+      {/* Uzak tribün karanlıkta kalır: üstten inen bir koyuluk derinlik verir. */}
+      <Rect x={0} y={roofH} width={w} height={boardsTop - roofH} fill="url(#standShade)" />
+      {/* Katlar arası korkuluk ve çatı */}
+      <Rect x={0} y={tierSplit - 2.5} width={w} height={4} fill={art.standRail} />
+      <Rect x={0} y={0} width={w} height={roofH} fill={art.roof} />
+      {/* Projektör sırası: çatının altında parlayan paneller */}
+      {Array.from({ length: lights }, (_, i) => {
+        const x = ((i + 0.5) / lights) * w;
+        return (
+          <G key={i}>
+            <Ellipse cx={x} cy={roofH} rx={34} ry={22} fill="url(#flood)" />
+            <Rect x={x - 9} y={roofH - 4} width={18} height={4} rx={1} fill={art.floodlightCore} opacity={0.9} />
+          </G>
+        );
+      })}
+      {/* Tribünün alt kenarında havada asılı ışık sisi */}
+      <Ellipse cx={w / 2} cy={boardsTop} rx={w * 0.7} ry={boardH * 1.6} fill="url(#flood)" opacity={0.35} />
+
+      {/* LED panolar */}
+      <Rect x={0} y={boardsTop} width={w} height={boardH} fill="url(#board)" />
+      <Rect x={0} y={boardsTop} width={w} height={Math.max(1, boardH * 0.08)} fill={art.boardAccent} opacity={0.7} />
+      {Array.from({ length: Math.ceil(w / 120) + 1 }, (_, i) => (
+        <SvgText
+          key={i}
+          x={i * 120 + 40}
+          y={boardsTop + boardH * 0.7}
+          fontSize={boardH * 0.58}
+          fontFamily={fonts.bold}
+          fill={i % 2 ? art.boardAccent : art.boardText}
+          textAnchor="middle"
+          letterSpacing={1.2}
+        >
+          {i % 2 ? "ARENA" : "ELİTLİG"}
+        </SvgText>
+      ))}
+
+      {/* Çim */}
+      <Rect x={0} y={boardsBottom} width={w} height={h - boardsBottom} fill="url(#grass)" />
+      {bands.map((b, i) => (
+        <Rect key={i} x={0} y={b.y1} width={w} height={b.y2 - b.y1} fill={art.grassLight} opacity={0.045} />
+      ))}
+      {lanes.map((d, i) => (
+        <Path key={i} d={d} fill={art.grassDark} opacity={0.05} />
+      ))}
+      {/* Kale ağzına düşen ışık havuzu */}
+      <Ellipse
+        cx={cam.cx}
+        cy={project(cam, 0, 0, D_GOAL - 2).y}
+        rx={w * 0.55}
+        ry={(project(cam, 0, 0, D_GOAL - 6).y - project(cam, 0, 0, D_GOAL + 1).y) * 0.7}
+        fill="url(#pool)"
+      />
+
+      {/* Tebeşir çizgileri */}
+      <G stroke={art.chalk} strokeLinecap="round" fill="none" opacity={0.9}>
+        <Path d={line(-40, D_GOAL, 40, D_GOAL)} strokeWidth={chalkW} />
+        <Path
+          d={`${line(-9.16, D_GOAL, -9.16, sixYard)}${line(-9.16, sixYard, 9.16, sixYard).replace("M", "L")}${line(9.16, sixYard, 9.16, D_GOAL).replace("M", "L")}`}
+          strokeWidth={chalkW * 1.15}
+        />
+      </G>
+      <Ellipse cx={spot.x} cy={spot.y} rx={(cam.fx / D_SPOT) * 0.14} ry={(cam.fx / D_SPOT) * 0.05} fill={art.chalk} />
+    </Svg>
+  );
+});
+
+/** Köşe karartması — gözü merkeze, kaleye çeker. Statik. */
+const Vignette = memo(function Vignette({ w, h }: { w: number; h: number }) {
+  return (
+    <Svg width={w} height={h} style={StyleSheet.absoluteFill}>
+      <Defs>
+        <RadialGradient id="vig" cx="50%" cy="46%" r="75%">
+          <Stop offset="0.55" stopColor={art.outline} stopOpacity={0} />
+          <Stop offset="1" stopColor={art.outline} stopOpacity={0.55} />
+        </RadialGradient>
+      </Defs>
+      <Rect x={0} y={0} width={w} height={h} fill="url(#vig)" />
+    </Svg>
+  );
+});
+
+/* ================================ 2 · KALE ================================ */
+
+/**
+ * Ağ + direkler. Yalnız ağ dalgalanırken (gol sonrası ~1 sn) yeniden çizilir;
+ * geri kalan her karede React bu bileşeni atlar.
+ */
+function GoalLayer({
+  cam,
+  world,
+  signal,
+}: {
+  cam: Cam;
+  world: MutableRefObject<World>;
+  signal: FrameSignal;
+}) {
+  const tick = useSignalValue(signal, () => world.current.netTick);
+  return <GoalDrawing cam={cam} net={world.current.net} tick={tick} />;
+}
+
+const GoalDrawing = memo(function GoalDrawing({
+  cam,
+  net,
+}: {
+  cam: Cam;
+  net: number[];
+  tick: number;
+}) {
+  const half = GOAL_W / 2;
+  const P = (X: number, Y: number, D: number) => project(cam, X, Y, D);
+  const pt = (p: { x: number; y: number }) => `${p.x.toFixed(1)} ${p.y.toFixed(1)}`;
+
+  /* Arka ağ düğümleri: dalga düğümü derinliğe iter. */
+  const node = (c: number, r: number) => {
+    const X = -half + (GOAL_W * c) / (NET_COLS - 1);
+    const Y = NET_BACK_H * (1 - r / (NET_ROWS - 1));
+    const push = net[r * NET_COLS + c];
+    return P(X * (1 - push * 0.05), Y, D_NET + push * 1.1);
+  };
+
+  let back = "";
+  for (let c = 0; c < NET_COLS; c += 1) {
+    for (let r = 0; r < NET_ROWS; r += 1) back += `${r === 0 ? "M" : "L"}${pt(node(c, r))}`;
+  }
+  for (let r = 0; r < NET_ROWS; r += 1) {
+    for (let c = 0; c < NET_COLS; c += 1) back += `${c === 0 ? "M" : "L"}${pt(node(c, r))}`;
+  }
+
+  /* Tavan ve yan ağlar: ön çerçeveden arka çerçeveye. */
+  let sides = "";
+  const depthSteps = 5;
+  for (let i = 0; i <= depthSteps; i += 1) {
+    const d = D_GOAL + ((D_NET - D_GOAL) * i) / depthSteps;
+    const top = GOAL_H + ((NET_BACK_H - GOAL_H) * i) / depthSteps;
+    sides += `M${pt(P(-half, 0, d))}L${pt(P(-half, top, d))}L${pt(P(half, top, d))}L${pt(P(half, 0, d))}`;
+  }
+  for (let c = 0; c < NET_COLS; c += 1) {
+    const X = -half + (GOAL_W * c) / (NET_COLS - 1);
+    sides += `M${pt(P(X, GOAL_H, D_GOAL))}L${pt(P(X, NET_BACK_H, D_NET))}`;
+  }
+  for (let r = 1; r < 6; r += 1) {
+    const f = r / 6;
+    for (const X of [-half, half]) {
+      sides += `M${pt(P(X, GOAL_H * f, D_GOAL))}L${pt(P(X, NET_BACK_H * f, D_NET))}`;
+    }
+  }
+
+  const fl = P(-half, 0, D_GOAL);
+  const flt = P(-half, GOAL_H, D_GOAL);
+  const frt = P(half, GOAL_H, D_GOAL);
+  const fr = P(half, 0, D_GOAL);
+  const bl = P(-half, 0, D_NET);
+  const blt = P(-half, NET_BACK_H, D_NET);
+  const brt = P(half, NET_BACK_H, D_NET);
+  const br = P(half, 0, D_NET);
+  const post = fl.s * 0.12;
+
+  return (
+    <Svg width={cam.w} height={cam.h} style={StyleSheet.absoluteFill}>
+      <Defs>
+        <LinearGradient id="postV" x1="0" y1="0" x2="1" y2="0">
+          <Stop offset="0" stopColor={art.postShade} />
+          <Stop offset="0.35" stopColor={art.postLight} />
+          <Stop offset="1" stopColor={art.postShade} />
+        </LinearGradient>
+      </Defs>
+
+      {/* Kale içi gölge: ağzın derinliğini okutur. */}
+      <Path
+        d={`M${pt(fl)}L${pt(flt)}L${pt(frt)}L${pt(fr)}Z`}
+        fill={art.outline}
+        opacity={0.22}
+      />
+      {/* Direk gölgeleri — projektör önden-soldan vurur. */}
+      <Path
+        d={`M${pt(fl)}L${pt(P(-half + 1.4, 0, D_GOAL + 2.6))}M${pt(fr)}L${pt(P(half + 1.4, 0, D_GOAL + 2.6))}`}
+        stroke={art.shadow}
+        strokeWidth={post * 0.9}
+        strokeLinecap="round"
+        opacity={0.3}
+      />
+
+      {/* Ağ */}
+      <Path d={sides} stroke={art.net} strokeWidth={0.6} opacity={0.32} fill="none" />
+      <Path d={back} stroke={art.net} strokeWidth={0.7} opacity={0.5} fill="none" />
+
+      {/* Arka çerçeve — ince, gri. */}
+      <Path
+        d={`M${pt(fl)}L${pt(bl)}L${pt(blt)}L${pt(brt)}L${pt(br)}L${pt(fr)}M${pt(flt)}L${pt(blt)}M${pt(frt)}L${pt(brt)}`}
+        stroke={art.postShade}
+        strokeWidth={post * 0.35}
+        strokeLinejoin="round"
+        fill="none"
+        opacity={0.9}
+      />
+
+      {/* Ön çerçeve — silindir gölgeli direkler. */}
+      <Rect x={fl.x - post / 2} y={flt.y - post / 2} width={post} height={fl.y - flt.y + post / 2} fill="url(#postV)" />
+      <Rect x={fr.x - post / 2} y={frt.y - post / 2} width={post} height={fr.y - frt.y + post / 2} fill="url(#postV)" />
+      <Rect x={flt.x - post / 2} y={flt.y - post / 2} width={frt.x - flt.x + post} height={post} fill={art.postLight} />
+      <Line
+        x1={flt.x}
+        y1={flt.y + post * 0.42}
+        x2={frt.x}
+        y2={frt.y + post * 0.42}
+        stroke={art.postShade}
+        strokeWidth={post * 0.22}
+      />
+    </Svg>
+  );
+});
+
+/* ============================== 3 · AKTÖRLER ============================== */
+
+function ActorsLayer({
+  cam,
+  world,
+  drag,
+  phaseRef,
+  signal,
+}: {
+  cam: Cam;
+  world: MutableRefObject<World>;
+  drag: MutableRefObject<DragResult | null>;
+  phaseRef: MutableRefObject<Phase>;
+  signal: FrameSignal;
+}) {
+  useOnFrame(signal);
+  const w = world.current;
+  const phase = phaseRef.current;
+  const b = w.ball;
+  const k = w.keeper;
+
+  /* Kaleci: eli `x` noktasında olsun diye gövde uçuş yönünün tersine kayar. */
+  const keeperX = (k.x - 0.5) * GOAL_W - k.dive * 1.15;
+  const kp = project(cam, keeperX, 0, D_KEEPER);
+  const keeper = (
+    <Keeper
+      key="keeper"
+      x={kp.x}
+      y={kp.y}
+      scale={(kp.s * 1.9) / 100}
+      dive={k.dive}
+      lift={k.lift}
+      crouch={k.crouch}
+    />
+  );
+
+  const bp = project(cam, b.X, b.Y, b.D);
+  const ground = project(cam, b.X, 0, b.D);
+  const r = bp.s * BALL_R;
+  const ball = (
+    <G key="ball">
+      <BallShadow cx={ground.x} cy={ground.y} r={r} height={(b.Y - BALL_R) / BALL_R} />
+      {w.trail.map((p, i) => {
+        const tp = project(cam, p.X, p.Y, p.D);
+        const f = (i + 1) / w.trail.length;
+        return (
+          <Circle
+            key={i}
+            cx={tp.x}
+            cy={tp.y}
+            r={tp.s * BALL_R * (0.35 + f * 0.55)}
+            fill={art.white}
+            opacity={f * 0.22}
+          />
+        );
+      })}
+      <SoccerBall cx={bp.x} cy={bp.y} r={r} orientation={w.orient} />
+    </G>
+  );
+
+  // Top kalecinin arkasındaysa (ağda) önce top çizilir.
+  const ordered = b.D > D_KEEPER ? [ball, keeper] : [keeper, ball];
+
+  return (
+    <Svg width={cam.w} height={cam.h} style={StyleSheet.absoluteFill}>
+      <Defs>
+        <BallDefs />
+        <FigureDefs />
+      </Defs>
+      {ordered}
+      {phase === "aim" ? <AimGuide cam={cam} drag={drag.current} time={w.time} /> : null}
+      {w.confetti.map((p, i) => (
+        <Rect
+          key={i}
+          x={p.x - p.size / 2}
+          y={p.y - p.size / 4}
+          width={p.size}
+          height={p.size / 2}
+          fill={p.color}
+          opacity={Math.min(1, p.life * 1.6)}
+          transform={`rotate(${p.rot.toFixed(0)} ${p.x.toFixed(1)} ${p.y.toFixed(1)})`}
+        />
+      ))}
+    </Svg>
+  );
 }
 
 /**
- * Kaleci — stilize vektör silüet. Dalış yönüne göre kollar açılır ve gövde
- * yatar. Üç 3B denemesi yerine tek bir tutarlı çizim dili.
- */
-const KeeperFigure = memo(function KeeperFigure({
-  w,
-  h,
-  keeper,
-}: {
-  w: number;
-  h: number;
-  keeper: Keeper;
-}) {
-  const g = goalBox(w, h);
-  const cx = g.x + g.w * keeper.x;
-  const base = g.y + g.h;
-  const lean = (keeper.x - 0.5) * 44 * keeper.lift;
-  const rise = keeper.lift * g.h * 0.35;
-  const cy = base - g.h * 0.34 - rise;
-
-  return (
-    <G transform={`rotate(${lean.toFixed(1)} ${cx.toFixed(1)} ${base.toFixed(1)})`}>
-      {/* Gölge */}
-      <Ellipse cx={cx} cy={base} rx={14} ry={4} fill={paint.shadow} opacity={0.5} />
-      {/* Bacaklar — çim üstünde mürekkep okunmuyordu, beyaz şort/tozluk. */}
-      <Line x1={cx} y1={cy + 12} x2={cx - 7} y2={base} stroke={paint.onTurf} strokeWidth={4} strokeLinecap="round" />
-      <Line x1={cx} y1={cy + 12} x2={cx + 7} y2={base} stroke={paint.onTurf} strokeWidth={4} strokeLinecap="round" />
-      {/* Gövde */}
-      <Line x1={cx} y1={cy - 6} x2={cx} y2={cy + 12} stroke={paint.action} strokeWidth={9} strokeLinecap="round" />
-      {/* Kollar — dalış yüksekliğiyle açılır */}
-      <Line
-        x1={cx}
-        y1={cy - 2}
-        x2={cx - 12 - keeper.lift * 12}
-        y2={cy - 4 - keeper.lift * 10}
-        stroke={paint.action}
-        strokeWidth={4}
-        strokeLinecap="round"
-      />
-      <Line
-        x1={cx}
-        y1={cy - 2}
-        x2={cx + 12 + keeper.lift * 12}
-        y2={cy - 4 - keeper.lift * 10}
-        stroke={paint.action}
-        strokeWidth={4}
-        strokeLinecap="round"
-      />
-      {/* Baş */}
-      <Circle cx={cx} cy={cy - 11} r={5} fill={paint.onTurf} />
-    </G>
-  );
-});
-
-/**
- * Uçuştaki top. `z` derinliği ölçeği belirler: top uzaklaştıkça küçülür.
- * `y`'ye yerçekimi düşüşü, `x`'e `curve * t²` uygulanır — falso uçuşun
- * SONUNA doğru belirginleşir, gerçek bir kavis gibi.
- */
-const FlyingBall = memo(function FlyingBall({ w, h, shot }: { w: number; h: number; shot: Shot }) {
-  const g = goalBox(w, h);
-  const t = shot.t;
-
-  const startX = w / 2;
-  const startY = h * 0.82;
-  const endX = g.x + g.w * shot.aimX;
-  const endY = g.y + g.h * (1 - shot.aimY);
-
-  const x = startX + (endX - startX) * t + shot.curve * 60 * t * t;
-  // Yerçekimi: uçuşun ortasında hafif bir kubbe.
-  const y = startY + (endY - startY) * t + Math.sin(t * Math.PI) * -18 * shot.power;
-  const scale = 1 - t * 0.62;
-
-  return (
-    <G>
-      <Ellipse cx={x} cy={h * 0.82 + 4} rx={9 * scale} ry={3 * scale} fill={paint.shadow} opacity={0.3 * (1 - t)} />
-      <Circle cx={x} cy={y} r={11 * scale} fill={paint.ball} stroke={paint.ballLine} strokeWidth={1.5 * scale} />
-      <Circle cx={x} cy={y} r={4 * scale} fill={paint.ballLine} opacity={0.85} />
-    </G>
-  );
-});
-
-/**
- * Noktadaki top + nişan yayı.
+ * Nişan önizlemesi — sürüklerken noktalı yörünge, kalede hedef halkası, topun
+ * çevresinde güç halkası. Parmak kalkmadan jestin NE ürettiği görünür; falso
+ * öğrenilebilir bir beceri olur, tesadüf değil.
  *
- * Sürükleme sürerken toptan çıkan ince mercan yay canlı geri bildirim verir:
- * uzunluk gücü, eğrilik falsoyu GÖSTERİR. Oyuncu, jestin ne ürettiğini
- * bırakmadan önce görür — bu olmadan falso öğrenilebilir bir beceri değil,
- * tesadüf olurdu.
+ * Parmak ekranda değilken: topun üstünde, yavaşça nefes alan üç ok işareti
+ * "buradan yukarı sürükle" der.
  */
-const SpotBall = memo(function SpotBall({
-  w,
-  h,
-  drag,
-}: {
-  w: number;
-  h: number;
-  drag: DragResult | null;
-}) {
-  const x = w / 2;
-  const y = h * 0.82;
+function AimGuide({ cam, drag, time }: { cam: Cam; drag: DragResult | null; time: number }) {
+  const spot = project(cam, 0, BALL_R, D_SPOT);
+  const r = spot.s * BALL_R;
 
-  const power = drag
-    ? clamp((drag.length - T.dragMin) / (T.dragMax - T.dragMin), 0, 1)
-    : 0;
+  if (!drag || drag.length < T.dragMin) {
+    return (
+      <G>
+        {[0, 1, 2].map((i) => {
+          const y = spot.y - r * 2.6 - i * r * 1.3;
+          const a = 0.25 + 0.55 * Math.max(0, Math.sin(time * 3.2 - i * 0.9));
+          return (
+            <Path
+              key={i}
+              d={`M${spot.x - r * 0.8} ${y + r * 0.45}L${spot.x} ${y - r * 0.2}L${spot.x + r * 0.8} ${y + r * 0.45}`}
+              stroke={art.white}
+              strokeWidth={Math.max(2, r * 0.22)}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              fill="none"
+              opacity={a}
+            />
+          );
+        })}
+      </G>
+    );
+  }
+
+  const plan = planShot(drag, cam.w, cam.h);
+  const onTarget = plan.aimX >= 0.03 && plan.aimX <= 0.97 && plan.aimY <= 1.04;
+  const tint = onTarget ? art.white : art.miss;
+
+  const dots = [];
+  for (let i = 1; i <= 16; i += 1) {
+    const t = i / 16;
+    const p = ballAt(plan, t);
+    const sp = project(cam, p.X, p.Y, p.D);
+    dots.push(
+      <Circle
+        key={i}
+        cx={sp.x}
+        cy={sp.y}
+        r={Math.max(1.2, sp.s * 0.05)}
+        fill={tint}
+        opacity={0.35 + 0.55 * (1 - t)}
+      />,
+    );
+  }
+
+  const end = ballAt(plan, 1);
+  const target = project(cam, end.X, end.Y, D_GOAL);
+  const tr = target.s * 0.32;
+  const powerFrac = (plan.power - T.powerMin) / (T.powerMax - T.powerMin);
+  const ring = r * 1.9;
+  const circumference = 2 * Math.PI * ring;
 
   return (
     <G>
-      {drag && drag.length >= T.dragMin ? (
-        <Path
-          // Kuadratik Bézier: kontrol noktası eğriliğe göre yana kaçar —
-          // yayın kavisi topun çizeceği kavistir.
-          d={`M ${x} ${y} Q ${x + drag.dx / 2 + drag.curve * 900} ${y + drag.dy / 2} ${x + drag.dx} ${y + drag.dy}`}
-          stroke={paint.action}
-          strokeWidth={1.5 + power * 2.5}
-          strokeLinecap="round"
-          fill="none"
-          opacity={0.85}
-        />
-      ) : null}
-      <Ellipse cx={x} cy={y + 5} rx={10} ry={3} fill={paint.shadow} opacity={0.35} />
-      <Circle cx={x} cy={y} r={12} fill={paint.ball} stroke={paint.ballLine} strokeWidth={1.5} />
-      <Circle cx={x} cy={y} r={4.5} fill={paint.ballLine} opacity={0.85} />
+      {dots}
+      {/* Hedef halkası */}
+      <Circle cx={target.x} cy={target.y} r={tr} stroke={tint} strokeWidth={2} fill={tint} fillOpacity={0.12} />
+      <Path
+        d={`M${target.x - tr * 1.5} ${target.y}L${target.x - tr * 0.5} ${target.y}M${target.x + tr * 0.5} ${target.y}L${target.x + tr * 1.5} ${target.y}M${target.x} ${target.y - tr * 1.5}L${target.x} ${target.y - tr * 0.5}M${target.x} ${target.y + tr * 0.5}L${target.x} ${target.y + tr * 1.5}`}
+        stroke={tint}
+        strokeWidth={1.6}
+        strokeLinecap="round"
+      />
+      {/* Güç halkası: boş iz + dolan yay. */}
+      <Circle cx={spot.x} cy={spot.y} r={ring} stroke={art.white} strokeOpacity={0.22} strokeWidth={4} fill="none" />
+      <Circle
+        cx={spot.x}
+        cy={spot.y}
+        r={ring}
+        stroke={powerFrac > 0.85 ? art.gold : art.goal}
+        strokeWidth={4}
+        strokeLinecap="round"
+        fill="none"
+        strokeDasharray={`${(circumference * (0.15 + powerFrac * 0.85)).toFixed(1)} ${circumference.toFixed(1)}`}
+        transform={`rotate(-90 ${spot.x.toFixed(1)} ${spot.y.toFixed(1)})`}
+      />
     </G>
   );
-});
+}
+
+/* ============================== SONUÇ ETİKETİ ============================== */
+
+const OUTCOME_LABEL: Record<Outcome, string> = {
+  gol: "GOL!",
+  kurtaris: "KURTARIŞ",
+  aut: "AUT",
+  direk: "DİREK",
+};
+
+const OUTCOME_ICON: Record<Outcome, ComponentProps<typeof Ionicons>["name"]> = {
+  gol: "football",
+  kurtaris: "hand-left",
+  aut: "close-circle",
+  direk: "remove-circle",
+};
+
+/** Sonuç bandı yaylı bir ölçekle girer — yerel sürücüde, kare kaybı yok. */
+function OutcomeBanner({ outcome }: { outcome: Outcome }) {
+  const pop = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    pop.setValue(0);
+    Animated.spring(pop, { toValue: 1, ...spring.bounce }).start();
+  }, [outcome, pop]);
+
+  const goal = outcome === "gol";
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        styles.outcome,
+        goal ? styles.outcomeGoal : styles.outcomeMiss,
+        {
+          opacity: pop.interpolate({ inputRange: [0, 0.4, 1], outputRange: [0, 1, 1] }),
+          transform: [{ scale: pop.interpolate({ inputRange: [0, 1], outputRange: [0.55, 1] }) }],
+        },
+      ]}
+    >
+      <Ionicons
+        name={OUTCOME_ICON[outcome]}
+        size={22}
+        color={goal ? colors.textOnBrand : colors.onDark}
+      />
+      <Text
+        style={[styles.outcomeText, goal ? styles.outcomeTextGoal : styles.outcomeTextMiss]}
+        {...textScale.dense}
+      >
+        {OUTCOME_LABEL[outcome]}
+      </Text>
+    </Animated.View>
+  );
+}
 
 /* ============================== KARTLAR ============================== */
 
@@ -989,16 +1524,23 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     ...elevate(2),
     borderWidth: 0,
+    // Sahne çizilene kadar gece göğü — beyaz bir kare parlamasın.
+    backgroundColor: colors.inkBlock,
   },
 
   /* — Sonuç etiketi — */
   outcome: {
     position: "absolute",
     alignSelf: "center",
-    top: "44%",
-    paddingHorizontal: space.lg,
+    top: "47%",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    paddingHorizontal: space.xl,
     paddingVertical: space.sm,
     borderRadius: radius.pill,
+    ...elevate(3),
+    borderWidth: 0,
   },
   outcomeGoal: {
     backgroundColor: colors.brand,
@@ -1016,6 +1558,8 @@ const styles = StyleSheet.create({
    */
   outcomeText: {
     ...type.h1,
+    fontFamily: fonts.bold,
+    letterSpacing: 1,
   },
   outcomeTextGoal: {
     color: colors.textOnBrand,

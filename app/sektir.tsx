@@ -47,8 +47,10 @@ import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import type { GestureResponderEvent } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import Svg, { Circle, Ellipse, G, Line, Path, Rect } from "react-native-svg";
+import Svg, { Circle, Defs, Ellipse, Line, Rect } from "react-native-svg";
 import ViewShot, { captureRef } from "react-native-view-shot";
+
+import { BallDefs, SoccerBall } from "@/components/game/SoccerBall";
 import {
   Badge,
   Button,
@@ -61,6 +63,7 @@ import { submitArenaScore } from "@/lib/api/arena";
 import { applyHit, isSweetSpot, stepBall } from "@/lib/game/ballistics";
 import { clamp, useGameLoop } from "@/lib/game/loop";
 import { paint } from "@/lib/game/paint";
+import { initialOrientation, rotate } from "@/lib/game/sphere";
 import { TUNING } from "@/lib/game/tuning";
 import { instagramUrl } from "@/lib/socials";
 import { useAuth } from "@/providers/AuthProvider";
@@ -490,6 +493,9 @@ export default function SektirScreen() {
       >
         {w > 0 && h > 0 ? (
           <Svg width={w} height={h} pointerEvents="none">
+            <Defs>
+              <BallDefs />
+            </Defs>
             {/* Çim şeridi — iki tonlu biçme bandı, üstünde tebeşir çizgisi. */}
             <Rect x={0} y={h - GROUND} width={w} height={GROUND} fill={paint.turf} />
             {[0, 1, 2, 3].map((i) => (
@@ -590,50 +596,17 @@ export default function SektirScreen() {
 /* ============================== TOP VE GÖLGE ============================== */
 
 /**
- * Top — daire + beşgen panel. Panel çizgileri `angle` kadar DÖNER; yalnız
- * kayan bir daire "dönüyor" okunmuyordu ve Magnus etkisinin ne yaptığı
- * görünmüyordu. Dönüş yönü kavisi doğruluyor: oyuncu neden kıvrıldığını görür.
+ * Top — penaltı ve slalomla AYNI 3B desenli top (`components/game/SoccerBall`).
+ * Yamalar `angle` kadar döner; dönüş yönü Magnus kavisini doğrular: oyuncu
+ * topun neden kıvrıldığını görür.
  */
-const Ball = memo(function Ball({ x, y, angle }: { x: number; y: number; angle: number }) {
-  const deg = (angle * 180) / Math.PI;
-  return (
-    <G transform={`rotate(${deg.toFixed(1)} ${x.toFixed(1)} ${y.toFixed(1)})`}>
-      <Circle cx={x} cy={y} r={BALL_R} fill={paint.ball} stroke={paint.ballLine} strokeWidth={1.5} />
-      {/* Merkez beşgen + üç dikiş: dönüşü okutan en az sayıda çizgi. */}
-      <Path
-        d={pentagon(x, y, BALL_R * 0.42)}
-        fill={paint.ballLine}
-        opacity={0.9}
-      />
-      {[0, 1, 2, 3, 4].map((i) => {
-        const a = (Math.PI * 2 * i) / 5 - Math.PI / 2;
-        const inner = BALL_R * 0.42;
-        return (
-          <Line
-            key={i}
-            x1={x + Math.cos(a) * inner}
-            y1={y + Math.sin(a) * inner}
-            x2={x + Math.cos(a) * BALL_R}
-            y2={y + Math.sin(a) * BALL_R}
-            stroke={paint.ballLine}
-            strokeWidth={1.5}
-            opacity={0.55}
-          />
-        );
-      })}
-    </G>
-  );
-});
+const BALL_BASE = initialOrientation();
 
-/** Beşgen yolu — topun merkez paneli. */
-function pentagon(cx: number, cy: number, r: number): string {
-  return (
-    Array.from({ length: 5 }, (_, i) => {
-      const a = (Math.PI * 2 * i) / 5 - Math.PI / 2;
-      return `${i === 0 ? "M" : "L"} ${(cx + Math.cos(a) * r).toFixed(1)} ${(cy + Math.sin(a) * r).toFixed(1)}`;
-    }).join(" ") + " Z"
-  );
-}
+const Ball = memo(function Ball({ x, y, angle }: { x: number; y: number; angle: number }) {
+  const orientation = BALL_BASE.slice();
+  rotate(orientation, [0, 0, 1], angle);
+  return <SoccerBall cx={x} cy={y} r={BALL_R} orientation={orientation} />;
+});
 
 /**
  * Topun gölgesi — çim üstünde bir elips. Top yükseldikçe gölge KÜÇÜLÜR ve
