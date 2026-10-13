@@ -2,27 +2,38 @@
  * KULÜBÜM — takım, oyuncu ve lig yönetiminin TEK kapısı (alt çubuğun 4. sekmesi).
  * `/kulubum?rol=<takim|oyuncu|lig>`
  *
- * BİLGİ MİMARİSİ (Arena "Merkez" kalıbı: kimlik → bekleyen işler → kapılar):
+ * BİLGİ MİMARİSİ (Arena "Merkez" kalıbı: sıradaki iş → kimlik → bekleyen işler → kapılar):
  *
- *   1. ROL SEKMELERİ — bir hesap başkan + oyuncu + yönetici olabilir. Eskiden
- *      üç rolün blokları alt alta diziliyordu: iki grafit kimlik kartı üst
- *      üste biniyor (Arena: sahne ekranda bir kez), oyuncu araçları başkanın
- *      on iki karosunun altında kayboluyordu. Artık her rol kendi sekmesidir;
- *      sekme şeridi YALNIZ birden çok rol varsa çizilir. Seçim `?rol=` ile
- *      URL'de taşınır (derin bağlantı, geri tuşu).
- *   2. KİMLİK — tek sahne kartı: takım (sıra, puan, averaj, kadro, son 5) ya
+ *   1. ROL SEKMELERİ — bir hesap başkan + oyuncu + yönetici olabilir; her rol
+ *      kendi sekmesidir, şerit YALNIZ birden çok rol varsa çizilir. Seçim
+ *      `?rol=` ile URL'de taşınır (derin bağlantı, geri tuşu).
+ *   2. SIRADAKİ ETKİNLİK — her rolde EN ÜSTTE (`NextEventSection`): maç, gün/
+ *      saat, saha, yoklama ölçeri (yalnız başkanın yoklama ucu
+ *      `/api/match-availability/:id/team` okunabildiğinde) ve kullanıcının
+ *      kendi "Geliyorum / Belki / Gelemem" yanıtı (`AvailabilityPicker`,
+ *      yalnız oyuncu profili o maçın kadrosundaysa). Kaynak: başkanda
+ *      `["takim","matches"]`, oyuncuda `["panel","my-matches"]`; lig
+ *      sekmesinde hangisi varsa. Veri yoksa "Planlanmış etkinlik yok" —
+ *      uydurma maç yok. Bu kâğıt kart, kimliğin grafit sahnesinin ÜSTÜNDE
+ *      durur: kullanıcının en çok sorduğu "ne zaman, nerede, geliyor muyum?".
+ *   3. KİMLİK — tek sahne kartı: takım (sıra, puan, averaj, kadro, son 5) ya
  *      da oyuncu (maç, gol, asist, reyting). Karta dokunmak herkese açık
  *      sayfayı, alttaki düğme yönetim panelini açar.
- *   3. ŞİMDİ İLGİLEN — gerçek bekleyen işler, aciliyete göre sıralı (bkz.
+ *   4. ŞİMDİ İLGİLEN — gerçek bekleyen işler, aciliyete göre sıralı (bkz.
  *      components/club/useClubSignals.ts). İlk üçü burada, tamamı Kulüp
  *      Panelinde. Boşsa yeşil "her şey güncel" satırı — sessizlik değil.
- *   4. SIRADAKİ MAÇ — başkana yoklama ölçeri + "kadroyu gir", oyuncuya tek
- *      dokunuşla "geliyor musun?" yanıtı.
- *   5. ARAÇLAR — `HubGrid`: her iş bir karo, rozet gerçek sayıdır.
- *   6. TAKİP ETTİĞİM TAKIMLAR — her rolde (ve misafirde) en altta.
+ *   5. ARAÇLAR — `HubGrid`: her iş bir karo, rozet gerçek sayıdır (menekşe).
+ *      Takım sohbeti kapısı (`/sohbet`) burada kalır.
+ *   6. TAKİP KISA YOLU — takip edilen takımlar artık Takip sekmesinde; burada
+ *      yalnız tek satırlık "Takip ettiklerin → /takip".
  *
- * MİSAFİR: grafit tanıtım kartı + "Giriş yap / Üye ol"; takip şeridi
- * misafirde de çalışır (favoriler cihazda tutulur).
+ * GELEN KUTUSU: başlıktaki mesaj ve zil ikonları ayrı ekranlara değil tek
+ * `/gelen-kutusu` ekranına açılır (`?tab=mesajlar` / `?tab=bildirimler`);
+ * rozetler menekşe (okunmamış). Takım sohbeti ayrı kalır.
+ *
+ * MİSAFİR ve KULÜPSÜZ ÜYE: tanıtım kartı yerine EYLEM AKIŞI (`JoinFlow`):
+ * 1) Takımını bul → `/ara?tip=takim`, 2) Davet koduyla katıl → `/davetler`
+ * (misafirde önce `/giris`), 3) Takım kurmak için başvur → `/iletisim?konu=…`.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -35,20 +46,19 @@ import { AttendanceMeter } from "@/components/club/AttendanceMeter";
 import { AttentionList } from "@/components/club/AttentionList";
 import { AvailabilityPicker } from "@/components/club/AvailabilityPicker";
 import { ClubIdentity, type IdentityFact } from "@/components/club/ClubIdentity";
+import { JoinFlow } from "@/components/club/JoinFlow";
 import { NextMatchCard } from "@/components/club/NextMatchCard";
 import { useClubSignals, type AttentionItem } from "@/components/club/useClubSignals";
 import {
   Button,
-  GradientFill,
   HubGrid,
   HubTile,
+  ListRow,
   ScreenHeader,
   SectionHeader,
   Skeleton,
   SkeletonCard,
   Tabs,
-  TeamLogo,
-  Touchable,
   refreshControlProps,
   useHeaderScroll,
   useRefresh,
@@ -56,11 +66,10 @@ import {
 } from "@/components/ui";
 import { useUnreadCount } from "@/hooks/useUnreadCount";
 import { MAX_STARTERS } from "@/lib/api/team";
-import { mediaUrl } from "@/lib/format";
+import { formatDecimal, mediaUrl } from "@/lib/format";
 import { useAuth } from "@/providers/AuthProvider";
-import { useFavorite } from "@/providers/FavoriteProvider";
 import { useScope } from "@/providers/ScopeProvider";
-import { colors, fonts, layout, radius, space, textScale, type } from "@/theme";
+import { colors, layout, radius, space, textScale, type } from "@/theme";
 
 type RoleTab = "takim" | "oyuncu" | "lig";
 
@@ -82,7 +91,6 @@ export default function ClubHubScreen() {
   const scope = useScope();
   const router = useRouter();
   const unread = useUnreadCount();
-  const { favorites } = useFavorite();
   const { scrollY, scrollProps } = useHeaderScroll();
   const params = useLocalSearchParams<{ rol?: string }>();
   const signals = useClubSignals();
@@ -151,14 +159,14 @@ export default function ClubHubScreen() {
             ? [
                 {
                   icon: "chatbubbles-outline",
-                  accessibilityLabel: "Mesajlar",
-                  onPress: () => go("/sohbet"),
+                  accessibilityLabel: "Gelen kutusu: mesajlar",
+                  onPress: () => go("/gelen-kutusu?tab=mesajlar"),
                   badge: unread.messages || undefined,
                 },
                 {
                   icon: "notifications-outline",
-                  accessibilityLabel: "Bildirimler",
-                  onPress: () => go("/bildirimler"),
+                  accessibilityLabel: "Gelen kutusu: bildirimler",
+                  onPress: () => go("/gelen-kutusu?tab=bildirimler"),
                   badge: unread.notifications || undefined,
                 },
               ]
@@ -184,73 +192,31 @@ export default function ClubHubScreen() {
             <SkeletonCard lines={3} />
           </View>
         ) : !user ? (
-          <GuestCard onSignIn={() => go("/giris")} onRegister={() => go("/kayit")} />
+          <JoinFlow signedIn={false} go={go} />
         ) : role === "takim" ? (
-          <PresidentSection signals={signals} scopeLabel={[scope.leagueLabel, scope.seasonLabel].filter(Boolean).join(" · ")} go={go} onAttention={openAttention} unreadMessages={unread.messages} />
+          <PresidentSection
+            signals={signals}
+            scopeLabel={[scope.leagueLabel, scope.seasonLabel].filter(Boolean).join(" · ")}
+            go={go}
+            onAttention={openAttention}
+          />
         ) : role === "oyuncu" ? (
           <PlayerSection signals={signals} go={go} onAttention={openAttention} />
         ) : role === "lig" ? (
-          <ManagementSection go={go} />
+          <ManagementSection signals={signals} go={go} />
         ) : (
-          <InfoCard
-            icon="people-circle-outline"
-            title="Henüz bir kulübe bağlı değilsin"
-            body="Bir takımdan gelen daveti kabul et ya da takım kurmak için lig yönetimiyle iletişime geç."
-            actionLabel="Davetlerim"
-            onAction={() => go("/davetler")}
-            secondaryLabel="İletişim"
-            onSecondary={() => go("/iletisim")}
-          />
+          <JoinFlow signedIn go={go} />
         )}
 
-        {/* ── TAKİP ETTİĞİM TAKIMLAR ────────────────────────────────── */}
-        <SectionHeader
-          title="Takip ettiğim takımlar"
-          meta={favorites.length ? `${favorites.length} takım` : undefined}
-          action={favorites.length ? { label: "Yönet", onPress: () => go("/(tabs)/favoriler?tab=takimlar") } : undefined}
-        />
-        {favorites.length ? (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.follows}>
-            {favorites.map((fav) => (
-              <Touchable
-                key={fav.id}
-                feedback="card"
-                haptic="selection"
-                onPress={() => go(`/takim/${fav.id}`)}
-                accessibilityRole="button"
-                accessibilityLabel={fav.name}
-                style={styles.followTile}
-              >
-                <TeamLogo name={fav.name} logo={fav.logo} size={40} />
-                <Text style={styles.followName} numberOfLines={2} {...textScale.badge}>
-                  {fav.name}
-                </Text>
-              </Touchable>
-            ))}
-            <Touchable
-              feedback="card"
-              haptic="selection"
-              onPress={() => go("/(tabs)/ligler?tab=takimlar")}
-              accessibilityRole="button"
-              accessibilityLabel="Takım ekle"
-              style={[styles.followTile, styles.followAdd]}
-            >
-              <Ionicons name="add" size={24} color={colors.brandAccent} />
-              <Text style={[styles.followName, styles.followAddText]} {...textScale.badge}>
-                Takım ekle
-              </Text>
-            </Touchable>
-          </ScrollView>
-        ) : (
-          <InfoCard
-            icon="star-outline"
-            title="Takım takip etmiyorsun"
-            body="Maçları öne çıkar, gol ve sonuç bildirimi gelir."
-            actionLabel="Takım seç"
-            onAction={() => go("/(tabs)/ligler?tab=takimlar")}
-            compact
+        {/* ── TAKİP KISA YOLU — takip listesi Takip sekmesinde ─────────── */}
+        <View style={styles.followLink}>
+          <ListRow
+            leading={{ icon: "star", tone: "brand" }}
+            title="Takip ettiklerin"
+            subtitle="Takımlar, ligler ve maçlar Takip sekmesinde"
+            onPress={() => go("/takip")}
           />
-        )}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -263,15 +229,13 @@ function PresidentSection({
   scopeLabel,
   go,
   onAttention,
-  unreadMessages,
 }: {
   signals: ReturnType<typeof useClubSignals>;
   scopeLabel: string;
   go: (href: string) => void;
   onAttention: (item: AttentionItem) => void;
-  unreadMessages: number;
 }) {
-  const { team, standing, dashboard, nextTeamMatch, teamAvailability, counts } = signals;
+  const { team, standing, dashboard, counts } = signals;
 
   if (dashboard.isLoading) {
     return (
@@ -309,6 +273,8 @@ function PresidentSection({
 
   return (
     <>
+      <NextEventSection signals={signals} source="team" go={go} />
+
       <ClubIdentity
         kind="team"
         framed
@@ -343,49 +309,6 @@ function PresidentSection({
         limit={ATTENTION_LIMIT}
         onSeeAll={() => go("/takimim")}
       />
-
-      <SectionHeader
-        title="Sıradaki maç"
-        action={{ label: "Maç merkezi", onPress: () => go("/takimim/mac-merkezi") }}
-      />
-      {signals.teamMatches.isLoading ? (
-        <View style={styles.pad}>
-          <SkeletonCard lines={2} />
-        </View>
-      ) : nextTeamMatch ? (
-        <NextMatchCard
-          opponent={nextTeamMatch.opponent_name}
-          date={nextTeamMatch.date}
-          time={nextTeamMatch.time}
-          isHome={nextTeamMatch.is_home}
-          venue={nextTeamMatch.match_field}
-          onPress={() => go(`/mac/${nextTeamMatch.id}`)}
-          footer={
-            <Button
-              label="Maç kadrosunu gir"
-              icon="people-outline"
-              size="sm"
-              onPress={() => go(`/takimim/mac/${nextTeamMatch.id}`)}
-              fullWidth
-            />
-          }
-        >
-          {teamAvailability.isLoading ? (
-            <Skeleton width="100%" height={8} radius="pill" />
-          ) : teamAvailability.data ? (
-            <AttendanceMeter counts={teamAvailability.data.counts} need={MAX_STARTERS} />
-          ) : null}
-        </NextMatchCard>
-      ) : (
-        <InfoCard
-          icon="calendar-outline"
-          title="Programda maç yok"
-          body="Saha panosundan boş saat seç; yönetici onaylayınca maç takımına yazılır."
-          actionLabel="Maç al"
-          onAction={() => go("/takimim/mac-al")}
-          compact
-        />
-      )}
 
       <SectionHeader title="Yönetim araçları" />
       <HubGrid>
@@ -447,9 +370,8 @@ function PresidentSection({
         />
         <HubTile
           icon="chatbubbles"
-          title="Mesajlar"
+          title="Takım sohbeti"
           subtitle="Takım grubu, oyuncular"
-          badge={unreadMessages}
           tone="neutral"
           onPress={() => go("/sohbet")}
         />
@@ -469,7 +391,7 @@ function PlayerSection({
   go: (href: string) => void;
   onAttention: (item: AttentionItem) => void;
 }) {
-  const { me, nextPlayerMatch, counts, user } = signals;
+  const { me, counts, user } = signals;
   const data = me.data;
   const player = data?.player ?? null;
   const playerTeam = data?.playerTeam ?? null;
@@ -480,12 +402,14 @@ function PlayerSection({
         { label: "Maç", value: String(stats.matches ?? 0) },
         { label: "Gol", value: String(stats.goals ?? 0) },
         { label: "Asist", value: String(stats.assists ?? 0) },
-        { label: "Reyting", value: stats.rating != null ? Number(stats.rating).toFixed(1) : "—" },
+        { label: "Reyting", value: stats.rating != null ? formatDecimal(stats.rating, 1) : "—" },
       ]
     : [];
 
   return (
     <>
+      <NextEventSection signals={signals} source="player" go={go} />
+
       {me.isLoading ? (
         <View style={styles.pad}>
           <SkeletonCard lines={3} />
@@ -524,25 +448,6 @@ function PlayerSection({
         onPress={onAttention}
         emptyText="Yanıt bekleyen teklif, davet ya da disiplin dosyan yok."
       />
-
-      {nextPlayerMatch ? (
-        <>
-          <SectionHeader
-            title="Sıradaki maçın"
-            action={{ label: "Maçlarım", onPress: () => go("/oyuncum?tab=maclarim") }}
-          />
-          <NextMatchCard
-            opponent={nextPlayerMatch.opponent_name}
-            date={nextPlayerMatch.date}
-            time={nextPlayerMatch.time}
-            isHome={nextPlayerMatch.is_home}
-            venue={nextPlayerMatch.match_field}
-            onPress={() => go(`/mac/${nextPlayerMatch.id}`)}
-          >
-            <AvailabilityPicker matchId={nextPlayerMatch.id} />
-          </NextMatchCard>
-        </>
-      ) : null}
 
       <SectionHeader title="Kariyerim" />
       <HubGrid>
@@ -584,9 +489,17 @@ function PlayerSection({
 
 /* ═══════════════════════════ LİG YÖNETİMİ ═══════════════════════════ */
 
-function ManagementSection({ go }: { go: (href: string) => void }) {
+function ManagementSection({
+  signals,
+  go,
+}: {
+  signals: ReturnType<typeof useClubSignals>;
+  go: (href: string) => void;
+}) {
   return (
     <>
+      <NextEventSection signals={signals} source="auto" go={go} />
+
       <SectionHeader title="Lig yönetimi" action={{ label: "Panel", onPress: () => go("/yonetim") }} />
       <HubGrid>
         <HubTile icon="checkbox" title="Görevlerim" subtitle="Atanan ve açık görevler" tone="brand" onPress={() => go("/yonetim/gorevler")} />
@@ -596,6 +509,140 @@ function ManagementSection({ go }: { go: (href: string) => void }) {
         <HubTile icon="chatbubbles" title="Yönetim sohbeti" subtitle="Üyelerle yazışma" tone="accent" onPress={() => go("/yonetim/sohbet")} />
         <HubTile icon="grid" title="Tüm araçlar" subtitle="Web panelinin modülleri" tone="neutral" onPress={() => go("/yonetim")} />
       </HubGrid>
+    </>
+  );
+}
+
+/* ══════════════════════════ SIRADAKİ ETKİNLİK ══════════════════════════ */
+
+/**
+ * Her rolün en üst bloğu. `source` hangi maç listesinin okunacağını söyler:
+ *   - "team":   başkanın takım fikstürü (`signals.nextTeamMatch`)
+ *   - "player": oyuncunun maçları (`signals.nextPlayerMatch`)
+ *   - "auto":   lig sekmesi — hesabın hangisi varsa (önce takım)
+ *
+ * Yoklama ölçeri yalnız başkanın takım yoklaması okunabildiğinde (aynı maç),
+ * "Geliyor musun?" yanıtı yalnız oyuncunun maç listesinde AYNI maç varsa
+ * çizilir — başkanın oyuncu profili başka takımdaysa yanıt verdirilmez.
+ */
+function NextEventSection({
+  signals,
+  source,
+  go,
+}: {
+  signals: ReturnType<typeof useClubSignals>;
+  source: "team" | "player" | "auto";
+  go: (href: string) => void;
+}) {
+  const { managed, isPlayer, nextTeamMatch, nextPlayerMatch, teamMatches, myMatches, teamAvailability } = signals;
+  const kind: "team" | "player" | null =
+    source === "team"
+      ? managed
+        ? "team"
+        : null
+      : source === "player"
+        ? isPlayer
+          ? "player"
+          : null
+        : managed
+          ? "team"
+          : isPlayer
+            ? "player"
+            : null;
+
+  const loading = kind === "team" ? teamMatches.isLoading : kind === "player" ? myMatches.isLoading : false;
+  const failed = kind === "team" ? teamMatches.isError : kind === "player" ? myMatches.isError : false;
+  const match = kind === "team" ? nextTeamMatch : kind === "player" ? nextPlayerMatch : null;
+
+  const header = (
+    <SectionHeader
+      title="Sıradaki etkinlik"
+      action={
+        kind === "team"
+          ? { label: "Maç merkezi", onPress: () => go("/takimim/mac-merkezi") }
+          : kind === "player"
+            ? { label: "Maçlarım", onPress: () => go("/oyuncum?tab=maclarim") }
+            : undefined
+      }
+    />
+  );
+
+  if (loading) {
+    return (
+      <>
+        {header}
+        <View style={styles.pad}>
+          <SkeletonCard lines={2} />
+        </View>
+      </>
+    );
+  }
+
+  if (!match) {
+    return (
+      <>
+        {header}
+        <InfoCard
+          icon="calendar-outline"
+          title={failed ? "Etkinlik bilgisi alınamadı" : "Planlanmış etkinlik yok"}
+          body={
+            failed
+              ? "Aşağı çekerek yeniden deneyebilirsin."
+              : kind === "team"
+                ? "Saha panosundan saat seç; onaylanınca maç burada görünür."
+                : "Takımına maç yazılınca burada görünür."
+          }
+          actionLabel={failed ? undefined : kind === "team" ? "Maç al" : undefined}
+          onAction={failed ? undefined : kind === "team" ? () => go("/takimim/mac-al") : undefined}
+          compact
+        />
+      </>
+    );
+  }
+
+  // Yoklama dağılımı: başkanın ucu, yalnız takımın sıradaki maçı için.
+  const showMeter = managed && nextTeamMatch?.id === match.id;
+  // Kişisel yanıt: oyuncu profili bu maçta (oyuncunun maç listesinde) ise.
+  const showPicker = isPlayer && nextPlayerMatch?.id === match.id;
+
+  const meter = showMeter ? (
+    teamAvailability.isLoading ? (
+      <Skeleton width="100%" height={8} radius="pill" />
+    ) : teamAvailability.data ? (
+      <AttendanceMeter counts={teamAvailability.data.counts} need={MAX_STARTERS} />
+    ) : null
+  ) : null;
+
+  return (
+    <>
+      {header}
+      <NextMatchCard
+        opponent={match.opponent_name}
+        date={match.date}
+        time={match.time}
+        isHome={match.is_home}
+        venue={match.match_field}
+        onPress={() => go(`/mac/${match.id}`)}
+        footer={
+          kind === "team" ? (
+            <Button
+              label="Maç kadrosunu gir"
+              icon="people-outline"
+              size="sm"
+              onPress={() => go(`/takimim/mac/${match.id}`)}
+              fullWidth
+            />
+          ) : undefined
+        }
+        style={styles.event}
+      >
+        {meter || showPicker ? (
+          <View style={styles.eventBody}>
+            {meter}
+            {showPicker ? <AvailabilityPicker matchId={match.id} /> : null}
+          </View>
+        ) : null}
+      </NextMatchCard>
     </>
   );
 }
@@ -615,8 +662,8 @@ const InfoCard = React.memo(function InfoCard({
   icon: keyof typeof Ionicons.glyphMap;
   title: string;
   body: string;
-  actionLabel: string;
-  onAction: () => void;
+  actionLabel?: string;
+  onAction?: () => void;
   secondaryLabel?: string;
   onSecondary?: () => void;
   /** Satır içi sürüm: ikon solda, düğme sağda — bölüm içi boş hâller için. */
@@ -636,7 +683,9 @@ const InfoCard = React.memo(function InfoCard({
             {body}
           </Text>
         </View>
-        <Button label={actionLabel} onPress={onAction} size="sm" variant="secondary" />
+        {actionLabel && onAction ? (
+          <Button label={actionLabel} onPress={onAction} size="sm" variant="secondary" />
+        ) : null}
       </View>
     );
   }
@@ -652,61 +701,10 @@ const InfoCard = React.memo(function InfoCard({
         {body}
       </Text>
       <View style={styles.infoActions}>
-        <Button label={actionLabel} onPress={onAction} size="sm" />
+        {actionLabel && onAction ? <Button label={actionLabel} onPress={onAction} size="sm" /> : null}
         {secondaryLabel && onSecondary ? (
           <Button label={secondaryLabel} onPress={onSecondary} size="sm" variant="secondary" />
         ) : null}
-      </View>
-    </View>
-  );
-});
-
-const GUEST_POINTS: [keyof typeof Ionicons.glyphMap, string, string][] = [
-  ["pulse", "Şimdi ilgilen", "Başvuru, sözleşme, yoklama — bekleyen her iş tek listede"],
-  ["people", "Kadro ve transfer", "Forma, mevki, diziliş; oyuncu ara, davet et, teklif ver"],
-  ["calendar", "Maç günü", "Saha al, yoklama yap, maç kadrosunu gir"],
-  ["wallet", "Kulüp kasası", "Gelir, gider, kadro değeri ve FFP"],
-];
-
-const GuestCard = React.memo(function GuestCard({
-  onSignIn,
-  onRegister,
-}: {
-  onSignIn: () => void;
-  onRegister: () => void;
-}) {
-  return (
-    <View style={styles.guest}>
-      <GradientFill tone="ink" radius="xxl" />
-      <Text style={styles.guestOverline} {...textScale.badge}>
-        BAŞKAN · OYUNCU · YÖNETİCİ
-      </Text>
-      <Text style={styles.guestTitle} {...textScale.dense}>
-        Kulübünü cebinden yönet
-      </Text>
-      <Text style={styles.guestBody} {...textScale.long}>
-        Giriş yaptığında rolüne göre araçların burada açılır.
-      </Text>
-      <View style={styles.guestPoints}>
-        {GUEST_POINTS.map(([icon, title, body]) => (
-          <View key={title} style={styles.guestPoint}>
-            <View style={styles.guestPip}>
-              <Ionicons name={icon} size={16} color={colors.brandOnDark} />
-            </View>
-            <View style={styles.guestPointTexts}>
-              <Text style={styles.guestPointTitle} {...textScale.dense}>
-                {title}
-              </Text>
-              <Text style={styles.guestPointBody} {...textScale.dense}>
-                {body}
-              </Text>
-            </View>
-          </View>
-        ))}
-      </View>
-      <View style={styles.guestActions}>
-        <Button label="Giriş yap" onPress={onSignIn} style={styles.flex} />
-        <Button label="Üye ol" onPress={onRegister} variant="secondary" onDark style={styles.flex} />
       </View>
     </View>
   );
@@ -720,7 +718,6 @@ const styles = StyleSheet.create({
   },
   pad: { paddingHorizontal: layout.screenPadding },
   skeletonGap: { marginTop: space.md },
-  flex: { flex: 1 },
   identity: { marginBottom: space.xs },
 
   info: {
@@ -752,61 +749,7 @@ const styles = StyleSheet.create({
   infoBody: { ...type.bodySm, color: colors.textSecondary },
   infoActions: { flexDirection: "row", gap: space.sm, marginTop: space.xs },
 
-  guest: {
-    marginHorizontal: layout.screenPadding,
-    padding: space.xl,
-    gap: space.sm,
-    borderRadius: radius.xxl,
-    overflow: "hidden",
-    backgroundColor: colors.inkBlock,
-  },
-  guestOverline: { ...type.overline, color: colors.brandOnDark },
-  guestTitle: { ...type.display, color: colors.onDark },
-  guestBody: { ...type.body, color: colors.onDarkMuted },
-  guestPoints: { gap: space.md, marginVertical: space.sm },
-  guestPoint: { flexDirection: "row", alignItems: "center", gap: space.md },
-  guestPip: {
-    width: 32,
-    height: 32,
-    borderRadius: radius.sm,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.inkTile,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.inkTileBorder,
-  },
-  guestPointTexts: { flex: 1, minWidth: 0, gap: 1 },
-  guestPointTitle: { ...type.label, color: colors.onDark },
-  guestPointBody: { ...type.caption, color: colors.onDarkMuted },
-  guestActions: { flexDirection: "row", gap: space.sm, marginTop: space.xs },
-
-  follows: {
-    paddingHorizontal: layout.screenPadding,
-    gap: space.sm,
-  },
-  followTile: {
-    width: 88,
-    alignItems: "center",
-    gap: space.s,
-    paddingVertical: space.md,
-    paddingHorizontal: space.s,
-    borderRadius: radius.lg,
-    backgroundColor: colors.surface1,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-  },
-  followName: {
-    ...type.caption,
-    fontFamily: fonts.semibold,
-    color: colors.textPrimary,
-    textAlign: "center",
-  },
-  followAdd: {
-    justifyContent: "center",
-    borderStyle: "dashed",
-    borderColor: colors.brandBorder,
-    borderWidth: 1,
-    backgroundColor: colors.bg,
-  },
-  followAddText: { color: colors.brandAccent },
+  event: { marginBottom: space.xs },
+  eventBody: { gap: space.md },
+  followLink: { paddingHorizontal: layout.screenPadding, marginTop: layout.sectionGap },
 });
