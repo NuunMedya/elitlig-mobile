@@ -15,6 +15,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { useCallback, useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Touchable } from "@/components/ui";
+import { useHeaderTone } from "@/components/ui/HeaderTone";
 import { useScope } from "@/providers/ScopeProvider";
 import { colors, radius, space, textScale, touchSlop, type, upperTR } from "@/theme";
 
@@ -52,9 +53,10 @@ function shortLeague(label: string): string {
 export const ScopeChip = React.memo(function ScopeChip({
   variant = "full",
   onPress,
-  tone = "paper",
+  tone: toneProp,
   testID,
 }: ScopeChipProps) {
+  const tone = useHeaderTone(toneProp ?? "paper");
   const scope = useScope();
   const { openScopeSheet } = scope;
 

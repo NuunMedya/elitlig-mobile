@@ -648,7 +648,7 @@ export default function MatchesScreen() {
           (`bottom`). */}
       <ScreenHeader
         title="Maçlar"
-        scope={<ScopeChip tone="ink" />}
+        scope={<ScopeChip />}
         scrollY={scrollY}
         actions={[
           { icon: "search-outline", accessibilityLabel: "Ara", onPress: openSearch },

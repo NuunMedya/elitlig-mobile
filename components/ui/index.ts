@@ -33,6 +33,7 @@
 
 /* — Temeller: basma, yüzey, düzen — */
 export { Touchable, fireHaptic } from "./Pressable";
+export { HeaderToneContext, useHeaderTone, type HeaderTone } from "./HeaderTone";
 export type { TouchableProps, PressFeedback, HapticKind } from "./Pressable";
 
 export { Surface } from "./Surface";

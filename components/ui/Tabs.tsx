@@ -28,6 +28,7 @@
  * ortalanır — kullanıcı hangi sekmede olduğunu daima görür.
  */
 
+import { useHeaderTone } from "./HeaderTone";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -117,11 +118,12 @@ function TabsBase<T extends string>({
   onChange,
   sticky,
   surface,
-  tone = "ink",
+  tone: toneProp,
   distribute = "auto",
   style,
   testID,
 }: TabsProps<T>) {
+  const tone = useHeaderTone(toneProp ?? "paper");
   const scrollRef = useRef<ScrollView>(null);
   const translate = useRef(new Animated.Value(0)).current;
   const firstRun = useRef(true);
