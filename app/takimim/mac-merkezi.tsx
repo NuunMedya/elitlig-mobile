@@ -6,6 +6,13 @@
  * ayırır (saate değil `mac_durumu`'na bakar: canlıya/yayına geçmemiş maç, saati
  * geçse bile "yaklaşan" sayılır). Segment seçimi `?tab=` ile URL'de taşınır.
  *
+ * İLK YAKLAŞAN MAÇ AÇIK GELİR: ekrana gelen başkanın asıl derdi sıradaki
+ * maçtır; kartı açmak için ayrıca dokunmak gerekmiyor. Diğer kartlar kapalı
+ * kalır (yoklama isteği yalnız açılan karta atılır).
+ *
+ * YOKLAMA ÖLÇERİ: dört sayaç rozeti yerine `AttendanceMeter` — oran tek
+ * çubukta, altında "ilk 8 için N oyuncu eksik" eşiği (bkz. components/club).
+ *
  * YAKLAŞAN MAÇ: kart açıldığında takımın yoklama dağılımı TEMBEL yüklenir
  * (`GET /api/match-availability/:matchId/team` — başkana özel). Dört sayaç
  * rozeti (Geliyor / Belirsiz / Gelmiyor / Yanıtsız) ve gelemeyecek oyuncuların
@@ -51,7 +58,9 @@ import {
   type SegmentedItem,
   type Tone,
 } from "@/components/ui";
+import { AttendanceMeter } from "@/components/club/AttendanceMeter";
 import {
+  MAX_STARTERS,
   REVIEW_SCORE_FIELDS,
   getMyMatchReview,
   getTeamAvailability,
@@ -140,7 +149,8 @@ export default function MatchCenterScreen() {
   const params = useLocalSearchParams<{ tab?: string }>();
   const { scrollY, scrollProps } = useHeaderScroll();
 
-  const [expandedId, setExpandedId] = useState<number | null>(null);
+  /* `undefined` = kullanıcı henüz seçmedi → ilk yaklaşan maç açık gelir. */
+  const [expandedId, setExpandedId] = useState<number | null | undefined>(undefined);
   const [reviewing, setReviewing] = useState<TeamMatch | null>(null);
 
   const tab = resolveTab(params.tab);
@@ -163,18 +173,24 @@ export default function MatchCenterScreen() {
     [query.data, tab]
   );
 
+  const openId =
+    expandedId === undefined ? (tab === "yaklasan" ? (query.data?.upcoming?.[0]?.id ?? null) : null) : expandedId;
+
   const changeTab = useCallback(
     (next: CenterTab) => {
-      setExpandedId(null);
+      setExpandedId(undefined);
       scrollY.setValue(0);
       router.setParams({ tab: next });
     },
     [router, scrollY]
   );
 
-  const toggleExpanded = useCallback((matchId: number) => {
-    setExpandedId((prev) => (prev === matchId ? null : matchId));
-  }, []);
+  const toggleExpanded = useCallback(
+    (matchId: number) => {
+      setExpandedId(openId === matchId ? null : matchId);
+    },
+    [openId],
+  );
 
   const openMatch = useCallback((matchId: number) => router.push(`/mac/${matchId}`), [router]);
   const editSquad = useCallback(
@@ -189,7 +205,7 @@ export default function MatchCenterScreen() {
       tab === "yaklasan" ? (
         <UpcomingCard
           match={item}
-          expanded={expandedId === item.id}
+          expanded={openId === item.id}
           onToggle={toggleExpanded}
           onOpenMatch={openMatch}
           onEditSquad={editSquad}
@@ -197,7 +213,7 @@ export default function MatchCenterScreen() {
       ) : (
         <PastCard match={item} onReview={openReview} onOpenMatch={openMatch} />
       ),
-    [editSquad, expandedId, openMatch, openReview, tab, toggleExpanded]
+    [editSquad, openId, openMatch, openReview, tab, toggleExpanded]
   );
 
   if (!auth.user) {
@@ -395,12 +411,7 @@ const UpcomingCard = React.memo(function UpcomingCard({
             />
           ) : counts ? (
             <>
-              <View style={styles.countRow}>
-                <Badge label={`Geliyor ${counts.coming}`} tone="win" size="sm" />
-                <Badge label={`Belirsiz ${counts.maybe}`} tone="warn" size="sm" />
-                <Badge label={`Gelmiyor ${counts.not_coming}`} tone="danger" size="sm" />
-                <Badge label={`Yanıtsız ${counts.unanswered}`} tone="neutral" size="sm" />
-              </View>
+              <AttendanceMeter counts={counts} need={MAX_STARTERS} />
 
               {notComing.length > 0 ? (
                 <Text style={styles.notComing} numberOfLines={4} {...textScale.long}>
@@ -415,22 +426,25 @@ const UpcomingCard = React.memo(function UpcomingCard({
             </>
           ) : null}
 
-          {/* Kadro girişi yaklaşan maçın ASIL işi; maç detayı ikincil kalır. */}
-          <Button
-            label="Maç kadrosunu gir"
-            size="sm"
-            icon="people-outline"
-            onPress={handleSquad}
-            fullWidth
-          />
-          <Button
-            label="Maç detayı"
-            variant="secondary"
-            size="sm"
-            icon="football-outline"
-            onPress={handleOpen}
-            fullWidth
-          />
+          {/* Kadro girişi yaklaşan maçın ASIL işi; maç detayı ikincil kalır.
+              Yan yana: iki tam genişlikli düğme kartı 100px uzatıyordu. */}
+          <View style={styles.actionRow}>
+            <Button
+              label="Kadroyu gir"
+              size="sm"
+              icon="people-outline"
+              onPress={handleSquad}
+              style={styles.flex}
+            />
+            <Button
+              label="Maç detayı"
+              variant="secondary"
+              size="sm"
+              icon="football-outline"
+              onPress={handleOpen}
+              style={styles.flex}
+            />
+          </View>
         </View>
       ) : null}
     </View>
@@ -681,6 +695,13 @@ const ScoreRow = React.memo(function ScoreRow({
    ══════════════════════════════════════════════════════════════════════════ */
 
 const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+  },
+  actionRow: {
+    flexDirection: "row",
+    gap: space.sm,
+  },
   screen: {
     flex: 1,
     backgroundColor: colors.bg,
@@ -775,11 +796,6 @@ const styles = StyleSheet.create({
   },
   availLoading: {
     gap: space.sm,
-  },
-  countRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: space.s,
   },
   notComing: {
     ...type.caption,

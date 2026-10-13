@@ -36,10 +36,16 @@ const WASH_END = { x: 0.5, y: 1 } as const;
 export interface MatchAtmosphereProps {
   /** Kapak fotoğrafının tam adresi; yoksa taban tek başına sahneyi kurar. */
   photo?: string | null;
+  /**
+   * Kâğıda yıkama. Kapalıyken atmosfer düz grafit bir şerittir — sahnenin
+   * altında skor tablosu olmayan hâller (hata, geçersiz bağlantı) için:
+   * 50px'lik bir şeride sıkışan yıkama ışık değil leke gibi görünüyordu.
+   */
+  wash?: boolean;
   style?: StyleProp<ViewStyle>;
 }
 
-export const MatchAtmosphere = memo(function MatchAtmosphere({ photo, style }: MatchAtmosphereProps) {
+export const MatchAtmosphere = memo(function MatchAtmosphere({ photo, wash = true, style }: MatchAtmosphereProps) {
   return (
     <View style={[styles.base, style]} pointerEvents="none">
       {photo ? (
@@ -51,6 +57,7 @@ export const MatchAtmosphere = memo(function MatchAtmosphere({ photo, style }: M
           accessibilityIgnoresInvertColors
         />
       ) : null}
+      {wash ? (
       <LinearGradient
         colors={colors.matchWash}
         locations={WASH_LOCATIONS}
@@ -58,6 +65,7 @@ export const MatchAtmosphere = memo(function MatchAtmosphere({ photo, style }: M
         end={WASH_END}
         style={StyleSheet.absoluteFill}
       />
+      ) : null}
     </View>
   );
 });

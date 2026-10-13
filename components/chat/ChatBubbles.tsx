@@ -12,7 +12,7 @@ import { Button, Touchable, withAlpha } from "@/components/ui";
 import { formatDurationMs, type ChatAction, type ChatMessage } from "@/lib/api/chat";
 import { openMap } from "@/lib/chatMedia";
 import type { AttendancePlayer } from "@/lib/api/team";
-import { colors, radius, space, textScale, type } from "@/theme";
+import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
 export function clockLabel(iso: string): string {
   const date = new Date(iso);
@@ -371,7 +371,7 @@ const styles = StyleSheet.create({
 
   bubble: { maxWidth: "86%", borderRadius: radius.lg, padding: space.md, gap: space.xs },
   bubbleMine: { alignSelf: "flex-end", backgroundColor: colors.brand, borderBottomRightRadius: radius.xs },
-  bubbleTheirs: { alignSelf: "flex-start", backgroundColor: colors.surface2, borderBottomLeftRadius: radius.xs },
+  bubbleTheirs: { alignSelf: "flex-start", backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border, borderBottomLeftRadius: radius.xs },
   sender: { ...type.micro, color: colors.brandAccent },
   stamp: { ...type.micro, color: colors.textTertiary, alignSelf: "flex-end", marginTop: space.xxs },
   stampMine: { color: withAlpha(colors.textOnBrand, 0.72) },

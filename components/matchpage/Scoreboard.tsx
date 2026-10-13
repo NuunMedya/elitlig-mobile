@@ -9,9 +9,10 @@
  *
  * DİZİLİŞ (yukarıdan aşağı, tek bakışta okunma sırası):
  *
- *     ( ● CANLI · 2. YARI )                 ← durum hapı: ne zaman / ne oldu
+ *            FREELİG · 15. SEZON            ← yarışma (lavanta versal)
  *    [arma]      2 – 1       [arma]         ← skor kahramandır (Archivo 40)
- *    EV ADI       67'        DEP ADI        ← kazanan parlak, kaybeden sönük
+ *    EV ADI   ( ● 67' )      DEP ADI        ← durum hapı skorun altında
+ *               2. YARI                     ← yarı / İY skoru / geri sayım
  *   ────────────── ⚽ ──────────────
  *       A. YILMAZ 12'  ·  K. DEMİR 55'      ← "kim attı": en çok sorulan soru
  *   ─────────────────────────────────
@@ -26,8 +27,9 @@
  * Tam döküm Özet'in zaman tünelindedir.
  *
  * DÖRT DURUM:
- *   · Oynanmamış — ortada başlama saati, altında geri sayım; hap günü söyler.
- *   · Canlı      — kırmızı hap, skor, kendi kendine ilerleyen dakika.
+ *   · Oynanmamış — ortada başlama saati; hap günü, altındaki satır geri sayımı.
+ *   · Canlı      — kırmızı çerçeveli hapta kendi kendine ilerleyen dakika;
+ *                  devre arasında hap söner.
  *   · Bitti      — "MAÇ SONU" hapı, kazanan vurgulu, (tutarlıysa) ilk yarı skoru.
  *   · Yükleniyor — `ScoreboardSkeleton` (aynı kart, aynı ölçüler, içi boş).
  *
@@ -328,18 +330,31 @@ const StatusPill = memo(function StatusPill({
   date: string | null | undefined;
 }) {
   if (state === "live") {
-    const halftime = isHalftime(snapshot);
+    /* Devre arasında hap SÖNER: sayaç durmuştur, kırmızı "şu an oluyor"
+       demek olurdu. Nokta kalır — maç hâlâ canlı yayındadır. */
+    if (isHalftime(snapshot)) {
+      return (
+        <View style={styles.pill} accessibilityLabel="Devre arası">
+          <View style={[styles.pillDot, styles.pillDotPaused]} />
+          <Text style={styles.pillText} {...textScale.badge}>
+            DEVRE ARASI
+          </Text>
+        </View>
+      );
+    }
     return (
       <View style={[styles.pill, styles.pillLive]}>
-        <View style={[styles.pillDot, halftime ? styles.pillDotPaused : null]} />
+        <View style={styles.pillDot} />
         <MatchClock snapshot={snapshot} />
       </View>
     );
   }
 
+  /* Oynanmamış maçta tarih zaten künye çipinde yazılı; hap GÜNÜ söyler:
+     "BUGÜN", "YARIN" ya da haftanın günü. */
   const heading = formatDayHeading(date);
   const relative = heading === "Bugün" || heading === "Yarın" || heading === "Dün";
-  const label = state === "finished" ? "MAÇ SONU" : upperTR(relative ? heading : formatDateShort(date));
+  const label = state === "finished" ? "MAÇ SONU" : upperTR(relative ? heading : weekdayOf(date));
   return (
     <View style={styles.pill}>
       <Text style={styles.pillText} numberOfLines={1} {...textScale.badge}>
@@ -348,6 +363,13 @@ const StatusPill = memo(function StatusPill({
     </View>
   );
 });
+
+/** "Perşembe" — tarih okunamazsa boş. */
+function weekdayOf(date: string | null | undefined): string {
+  const parsed = date ? new Date(date) : null;
+  if (!parsed || Number.isNaN(parsed.getTime())) return "";
+  return parsed.toLocaleDateString("tr-TR", { weekday: "long" });
+}
 
 /** Canlı maçın yarısı — hapın altında ("2. YARI"); devre arasında boş. */
 const LivePeriod = memo(function LivePeriod({ snapshot }: { snapshot: LiveSnapshot | undefined }) {

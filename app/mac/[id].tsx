@@ -523,11 +523,19 @@ export default function MatchDetailScreen() {
  * arkası da sahnedir); başlık şeffaf kipte güvenli alan hilesi uygulamadığı
  * için üst boşluğu burada verilir.
  */
-function MatchStage({ photo, children }: { photo: string | null; children: React.ReactNode }) {
+function MatchStage({
+  photo,
+  wash = true,
+  children,
+}: {
+  photo: string | null;
+  wash?: boolean;
+  children: React.ReactNode;
+}) {
   const insets = useSafeAreaInsets();
   return (
     <View style={[styles.stage, { paddingTop: insets.top }]}>
-      <MatchAtmosphere photo={photo} />
+      <MatchAtmosphere photo={photo} wash={wash} />
       {children}
     </View>
   );
@@ -553,7 +561,7 @@ function MatchFallback({
 }) {
   return (
     <View style={styles.screen}>
-      <MatchStage photo={null}>
+      <MatchStage photo={null} wash={kind === "loading"}>
         <ScreenHeader
           title="Maç"
           back
@@ -565,9 +573,7 @@ function MatchFallback({
               <View style={styles.hero}>
                 <ScoreboardSkeleton />
               </View>
-            ) : (
-              <View style={styles.heroSpacer} />
-            )
+            ) : undefined
           }
         />
       </MatchStage>
@@ -603,9 +609,6 @@ const styles = StyleSheet.create({
   hero: {
     paddingTop: space.xs,
     paddingBottom: space.lg,
-  },
-  heroSpacer: {
-    height: space.xxxl,
   },
   loading: {
     paddingTop: layout.sectionGap,

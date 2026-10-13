@@ -452,7 +452,7 @@ export default function MyPlayerScreen() {
         teamName={playerTeam?.team_name ?? null}
         teamLogo={mediaUrl(playerTeam?.logo ?? null)}
         onOpenTeam={player.team_id ? openTeam : undefined}
-        details={[player.city, stats?.season ? `${stats.season} rakamları` : null]}
+        details={[player.city, stats?.season ? `Sezon: ${stats.season}` : null]}
         badges={!player.active ? <Badge label="PASİF" tone="neutral" size="xs" /> : null}
         facts={facts}
       />
