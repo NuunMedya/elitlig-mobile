@@ -55,6 +55,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { FollowActions } from "@/components/FollowActions";
 import { MatchPhotoSlider } from "@/components/MatchPhotoSlider";
 import { ShareScoreCard } from "@/components/ShareScoreCard";
 import { YoutubeBanner } from "@/components/YoutubeBanner";
@@ -124,6 +125,7 @@ import { buildContributions, buildStatRows, buildTopPlayers } from "@/lib/matchS
 import { positionLabel, positionLine } from "@/lib/api/team";
 import { queryKeys } from "@/lib/queryKeys";
 import { youtubeChannelUrl } from "@/lib/youtube";
+import { useAuth } from "@/providers/AuthProvider";
 import { useFavorite } from "@/providers/FavoriteProvider";
 import { useScope } from "@/providers/ScopeProvider";
 import {
@@ -313,6 +315,7 @@ export default function MatchDetailScreen() {
   const toast = useToast();
   const teams = useTeamLogos();
   const { isFavoriteMatch, toggleFavoriteMatch } = useFavorite();
+  const auth = useAuth();
   const { scrollY, scrollProps } = useHeaderScroll();
 
   const matchId = Number(firstParam(params.id));
@@ -659,19 +662,36 @@ export default function MatchDetailScreen() {
         scrollY={scrollY}
         actions={actions}
         hero={
-          <MatchHero
-            match={match}
-            state={state}
-            live={live}
-            realtime={realtime}
-            snapshot={snapshot}
-            homeScore={homeScore}
-            awayScore={awayScore}
-            homeLogo={homeLogo}
-            awayLogo={awayLogo}
-            homeTeamId={homeTeamId}
-            awayTeamId={awayTeamId}
-          />
+          <>
+            <MatchHero
+              match={match}
+              state={state}
+              live={live}
+              realtime={realtime}
+              snapshot={snapshot}
+              homeScore={homeScore}
+              awayScore={awayScore}
+              homeLogo={homeLogo}
+              awayLogo={awayLogo}
+              homeTeamId={homeTeamId}
+              awayTeamId={awayTeamId}
+            />
+            {/* Maçı takip et + o maçın bildirim ayarları, sahnenin hemen altında. */}
+            <View style={styles.followRow}>
+              <FollowActions
+                following={favorite}
+                onToggleFollow={toggleStar}
+                onOpenNotifications={() =>
+                  router.push(auth.user ? `/takip-bildirimleri?odak=match:${matchId}` : "/giris")
+                }
+                extra={
+                  state === "scheduled"
+                    ? [{ icon: "calendar-outline", label: "Takvime ekle", onPress: addToCalendar }]
+                    : []
+                }
+              />
+            </View>
+          </>
         }
         tabs={<Tabs items={tabItems} value={activeTab} onChange={changeTab} sticky />}
       />
@@ -3391,6 +3411,11 @@ function extractYouTubeId(url: string): string | null {
    ══════════════════════════════════════════════════════════════════════════ */
 
 const styles = StyleSheet.create({
+  followRow: {
+    alignItems: "center",
+    paddingHorizontal: layout.screenPadding,
+    paddingBottom: space.md,
+  },
   /* Kâğıt uygulamanın geri kalanıyla AYNI: mor blok kimliği taşır, altı
      düz kâğıttır. Ekrana özel bir kanvas, maç detayını "başka bir uygulama"
      gibi gösteriyordu. */

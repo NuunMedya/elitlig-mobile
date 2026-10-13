@@ -35,14 +35,14 @@ import React, { useCallback, useMemo } from "react";
 import { Image, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { ScopeChip } from "@/components/ScopeChip";
+import { ScopeBar } from "@/components/ScopeBar";
 import {
   ActionRow,
   ActionTile,
   Button,
   EmptyState,
   ErrorState,
-  MatchRow,
+  MatchCardRail,
   MetricGrid,
   MetricTile,
   PlayerRow,
@@ -438,6 +438,33 @@ export default function OverviewScreen() {
     return null;
   }, [allMatches, favorite.favorites, liveMatches, team, teamMatchesQuery.data, today]);
 
+  /**
+   * TAKİP ETTİĞİN TAKIMLAR — seçili kapsamdaki maçlarından her takım için
+   * en güncel olanı: önce canlı/yaklaşan ilk maç, yoksa son oynanan maç.
+   */
+  const followedMatches = useMemo(() => {
+    if (!favorite.favorites.length) return [];
+    const picked = new Map<number, ApiMatch>();
+    const sorted = [...allMatches].sort((a, b) =>
+      matchDay(a) === matchDay(b) ? kickoffKey(a) - kickoffKey(b) : matchDay(a) < matchDay(b) ? -1 : 1,
+    );
+    for (const fav of favorite.favorites) {
+      const name = fav.name.trim().toLocaleLowerCase("tr-TR");
+      const own = sorted.filter(
+        (match) =>
+          Number(match.home_team_id) === fav.id ||
+          Number(match.away_team_id) === fav.id ||
+          String(match.first_team_name ?? "").trim().toLocaleLowerCase("tr-TR") === name ||
+          String(match.second_team_name ?? "").trim().toLocaleLowerCase("tr-TR") === name,
+      );
+      const next = own.find((match) => matchDay(match) >= today && matchState(match) !== "finished");
+      const last = [...own].reverse().find((match) => matchState(match) === "finished");
+      const chosen = next ?? last;
+      if (chosen) picked.set(chosen.id, chosen);
+    }
+    return [...picked.values()];
+  }, [allMatches, favorite.favorites, today]);
+
   /** Kapağı olan son beş haber — şerit görselsiz haber çizmez. */
   const news = useMemo<NewsItem[]>(
     () => (newsQuery.data?.items ?? []).filter((item) => Boolean(item.cover_image_url)).slice(0, 5),
@@ -465,10 +492,12 @@ export default function OverviewScreen() {
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader
-        title="Genel Bakış"
-        /* Kapsam bloğun üst başlığında, dokunulur: kâğıttaki ayrı kapsam satırı
-           aynı bilgiyi ikinci kez yazıyordu. */
-        scope={<ScopeChip tone="ink" />}
+        title="Ana Sayfa"
+        overline="ElitLig"
+        /* İl · lig · sezon üç ayrı kutu olarak bloğun altında: hangi kutuya
+           dokunulursa alt sayfa o adımda açılır; lig çipleri tek dokunuşla
+           ligler arası geçiş yapar. */
+        bottom={<ScopeBar />}
         scrollY={scrollY}
         actions={[
           {
@@ -574,8 +603,8 @@ export default function OverviewScreen() {
           ) : (
             <ActionRow columns={4}>
               <ActionTile icon="radio" label="Canlı" tone="live" onPress={() => go("/canli")} />
-              <ActionTile icon="trophy" label="Ligler" onPress={() => go("/(tabs)/ligler")} />
-              <ActionTile icon="star" label="Favoriler" onPress={() => go("/(tabs)/favoriler")} />
+              <ActionTile icon="trophy" label="Puan" onPress={() => go("/(tabs)/ligler?tab=puan")} />
+              <ActionTile icon="star" label="Takip" onPress={() => go("/(tabs)/favoriler?tab=takimlar")} />
               <ActionTile icon="game-controller" label="Oyunlar" tone="accent" onPress={() => go("/(tabs)/oyunlar")} />
             </ActionRow>
           )}
@@ -592,7 +621,7 @@ export default function OverviewScreen() {
                   hint={scope.leagueLabel || undefined}
                   tone="accent"
                   icon="podium-outline"
-                  onPress={() => go("/(tabs)/takimlar")}
+                  onPress={() => go("/(tabs)/ligler?tab=puan")}
                 />
                 <MetricTile
                   label="Puan"
@@ -620,24 +649,61 @@ export default function OverviewScreen() {
           </Block>
         ) : null}
 
+        {/* ── 3b) TAKİP ETTİĞİN TAKIMLAR ─────────────────────────────────── */}
+        {favorite.favorites.length ? (
+          <Block
+            title="Takip ettiğin takımlar"
+            meta={followedMatches.length ? `${followedMatches.length} maç` : undefined}
+            actionLabel="Yönet"
+            onAction={() => go("/(tabs)/favoriler?tab=takimlar")}
+          >
+            {followedMatches.length ? (
+              <MatchCardRail matches={followedMatches} logoFor={teams.logoFor} onOpen={openMatch} />
+            ) : (
+              <EmptyState
+                icon="star-outline"
+                title="Bu ligde maçları yok"
+                body="Takip ettiğin takımlar seçili lig ve sezonda oynamıyor."
+                variant="inline"
+                compact
+              />
+            )}
+          </Block>
+        ) : (
+          <View style={styles.pad}>
+            <Touchable
+              feedback="card"
+              haptic="selection"
+              onPress={() => go("/(tabs)/ligler?tab=takimlar")}
+              accessibilityRole="button"
+              accessibilityLabel="Takım takip et"
+              style={styles.followPrompt}
+            >
+              <Ionicons name="star" size={20} color={colors.star} />
+              <View style={styles.followPromptTexts}>
+                <Text style={styles.followPromptTitle} {...textScale.dense}>
+                  Takımını takip et
+                </Text>
+                <Text style={styles.followPromptBody} {...textScale.dense}>
+                  Maçları burada öne çıksın, gol ve sonuç bildirimleri gelsin.
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+            </Touchable>
+          </View>
+        )}
+
         {/* ── 4) CANLI ──────────────────────────────────────────────────── */}
-        {liveMatches.length ? (
+        {/* Tek canlı maç zaten vitrindeyse aynı kart ikinci kez çizilmez. */}
+        {liveMatches.length && !(liveMatches.length === 1 && spotlight?.live) ? (
           <Block title="Canlı" meta={`${liveMatches.length} maç`} actionLabel="Tümü" onAction={() => go("/canli")}>
-            <View style={styles.group}>
-              {liveMatches.slice(0, PREVIEW_LIMIT).map((match, index, list) => (
-                <MatchRow
-                  key={match.id}
-                  match={match}
-                  homeLogo={teams.logoFor(match.home_team_id, match.first_team_name)}
-                  awayLogo={teams.logoFor(match.away_team_id, match.second_team_name)}
-                  myTeamId={team?.id ?? null}
-                  myTeamName={team?.team_name ?? null}
-                  metaMode="none"
-                  position={groupPosition(index, list.length)}
-                  onPress={() => openMatch(match.id)}
-                />
-              ))}
-            </View>
+            <MatchCardRail
+              matches={liveMatches.slice(0, PREVIEW_LIMIT)}
+              logoFor={teams.logoFor}
+              onOpen={openMatch}
+              highlightTeamId={team?.id ?? null}
+              highlightTeamName={team?.team_name ?? null}
+            />
           </Block>
         ) : null}
 
@@ -657,21 +723,13 @@ export default function OverviewScreen() {
           ) : matchesQuery.isError ? (
             <ErrorState error={matchesQuery.error} variant="banner" />
           ) : previewMatches.length ? (
-            <View style={styles.group}>
-              {previewMatches.slice(0, PREVIEW_LIMIT).map((match, index, list) => (
-                <MatchRow
-                  key={match.id}
-                  match={match}
-                  homeLogo={teams.logoFor(match.home_team_id, match.first_team_name)}
-                  awayLogo={teams.logoFor(match.away_team_id, match.second_team_name)}
-                  myTeamId={team?.id ?? null}
-                  myTeamName={team?.team_name ?? null}
-                  metaMode="none"
-                  position={groupPosition(index, list.length)}
-                  onPress={() => openMatch(match.id)}
-                />
-              ))}
-            </View>
+            <MatchCardRail
+              matches={previewMatches.slice(0, PREVIEW_LIMIT)}
+              logoFor={teams.logoFor}
+              onOpen={openMatch}
+              highlightTeamId={team?.id ?? null}
+              highlightTeamName={team?.team_name ?? null}
+            />
           ) : (
             <EmptyState icon="calendar-outline" title="Maç yok" body="Bu ligde yaklaşan maç görünmüyor." variant="inline" />
           )}
@@ -683,7 +741,7 @@ export default function OverviewScreen() {
             title="Puan durumu"
             meta={scope.leagueLabel || undefined}
             actionLabel="Tümü"
-            onAction={() => go("/(tabs)/takimlar")}
+            onAction={() => go("/(tabs)/ligler?tab=puan")}
           >
             <View style={styles.group}>
               <TeamRowHead density="table" />
@@ -716,7 +774,7 @@ export default function OverviewScreen() {
 
         {/* ── 7) GOL KRALLIĞI — ilk üç ───────────────────────────────────── */}
         {scorers.length ? (
-          <Block title="Gol krallığı" meta="gol" actionLabel="Tümü" onAction={() => go("/(tabs)/oyuncular")}>
+          <Block title="Gol krallığı" meta="gol" actionLabel="Tümü" onAction={() => go("/(tabs)/ligler?tab=oyuncular")}>
             <View style={styles.group}>
               {scorers.map((player, index) => (
                 <PlayerRow
@@ -771,6 +829,20 @@ function groupPosition(index: number, total: number): "single" | "first" | "midd
 }
 
 const styles = StyleSheet.create({
+  followPrompt: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    padding: space.lg,
+    marginTop: space.lg,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.brandBorder,
+  },
+  followPromptTexts: { flex: 1, gap: 2 },
+  followPromptTitle: { ...type.h3, color: colors.textPrimary },
+  followPromptBody: { ...type.bodySm, color: colors.textSecondary },
   screen: {
     flex: 1,
     backgroundColor: colors.bg,

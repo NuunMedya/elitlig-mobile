@@ -51,6 +51,8 @@ export { MetricTile, MetricGrid } from "./MetricTile";
 export type { MetricTileProps, MetricGridProps, MetricTone } from "./MetricTile";
 
 export { ActionTile, ActionRow } from "./ActionTile";
+export { HubTile, HubGrid } from "./HubTile";
+export type { HubTileProps, HubTone } from "./HubTile";
 export type { ActionTileProps, ActionRowProps } from "./ActionTile";
 
 export { SpotlightCard } from "./SpotlightCard";
@@ -129,6 +131,12 @@ export type {
   MatchRowMetaMode,
   MatchRowPosition,
 } from "./MatchRow";
+
+/** Fikstür/sonuç kartı — iki takım yan yana, skor ya da saat ortada. */
+export { MatchCard, matchCardHeight, matchDayLabel, MATCH_CARD_GAP } from "./MatchCard";
+export type { MatchCardProps } from "./MatchCard";
+export { MatchCardRail } from "./MatchCardRail";
+export type { MatchCardRailProps } from "./MatchCardRail";
 
 export { LeagueGroupHeader } from "./LeagueGroupHeader";
 export type { LeagueGroupHeaderProps } from "./LeagueGroupHeader";

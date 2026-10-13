@@ -32,16 +32,19 @@ Seçim cihazda saklanır, kullanıcı uygulamayı kendi ligiyle açar.
 app/                       Ekranlar (Expo Router — dosya = rota)
   _layout.tsx              Sağlayıcılar + tek örnek kaplamalar (ScopeSheet,
                            MessageSticker) + bildirim kancaları
-  (tabs)/                  Altı sekme + çubukta yuvası olmayan üç ekran
-    index.tsx              GENEL BAKIŞ — vitrin maçı, kısayollar, özetler
-    maclar.tsx             MAÇLAR — gün şeridi, lig grupları, segmentler
-    takimlar.tsx           TAKIMLAR — kart görünümü + puan tablosu
-    oyuncular.tsx          OYUNCULAR — podyum + sıralamalar
-    profil.tsx             PROFİL — kimlik ve tercihler
-    menu.tsx               MENÜ — oyunlar, lig, kulüp, bilgi
-    ligler.tsx             (href: null) Puan/fikstür/istatistik/haber/arşiv
-    favoriler.tsx          (href: null) Favori takım, lig, maç
+  (tabs)/                  Beş sekme + çubukta yuvası olmayan ekranlar
+    index.tsx              ANA SAYFA — kapsam şeridi, vitrin, takip edilen
+                           takımların maç kartları, canlı/yaklaşan, özetler
+    maclar.tsx             MAÇLAR — gün şeridi, lig grupları, maç kartları
+    ligler.tsx             LİG — il/lig/sezon şeridi + Puan · Fikstür ·
+                           Takımlar · Oyuncular · İstatistik · Haber · Arşiv
+    kulubum.tsx            KULÜBÜM — başkan, oyuncu, lig yönetimi araçları
+    profil.tsx             PROFİL — takip, bildirimler, oyunlar, bilgi, ayarlar
+    favoriler.tsx          (href: null) Takip edilen takım, lig, maç
     oyunlar.tsx            (href: null) Oyun merkezi
+    takimlar.tsx           (href: null) → Lig ▸ Takımlar yönlendirmesi
+    oyuncular.tsx          (href: null) → Lig ▸ Oyuncular yönlendirmesi
+    menu.tsx               (href: null) → Profil yönlendirmesi
   takimim/                 Takım paneli: kadro, maç merkezi, maç al, kasa
   yonetim/                 Yönetim paneli: maçlar, sahalar, mesajlar
   mac/[id].tsx             Maç detayı — skor, akış, kadrolar (canlı)
@@ -50,9 +53,10 @@ app/                       Ekranlar (Expo Router — dosya = rota)
   haber/[id].tsx           Haber detayı
   giris.tsx                Giriş (modal)
 
-components/                ScopeChip, MessageSticker, TeamCrest, TurkeyMap …
-components/ui/             Tasarım sistemi bileşenleri (MatchRow, ListRow,
-                           MetricTile, ActionTile, SpotlightCard, …)
+components/                ScopeBar, ScopeChip, FollowActions, MessageSticker …
+components/league/         Lig merkezinin panelleri (TeamsPane, PlayersPane)
+components/ui/             Tasarım sistemi bileşenleri (MatchCard,
+                           MatchCardRail, HubTile, ListRow, MetricTile, …)
 theme/                     Palet, tipografi, uzay, yükselti, hareket, font
 lib/game/                  Oyun motoru: sabit adımlı döngü, girdi, fizik,
                            ayarlar (TUNING), oyun paleti
@@ -276,7 +280,7 @@ amblem ölçüleri ve sütun genişlikleri, `Button` boyları ve metin taşıyan
 kutular (`Badge`, `RatingPill`, `ActionTile`, `MetricTile`, `ScreenHeader`…)
 aynı geçişte birlikte büyüdü — her biri yeni satır yüksekliğinden türetilerek.
 
-### Maç satırı — tek satır
+### Maç satırı — tek satır (yalnız yönetim listeleri; halka açık listeler `MatchCard` kullanır)
 
 ```
 ┌ 42 ┬────── flex ──────┬ 56 ┬────── flex ──────┬ 42 ┐
@@ -334,38 +338,53 @@ KADRO YÜKÜNÜN KENDİSİNDE, bir kez yapılır — böylece `lib/matchStats`
 türetmeleri de temiz adı görür. Ek yalnız sonda ve kelime sınırında eşleşirse
 atılır: "Ali FENERBAHÇELİ", takım adı "FENERBAHÇE" olsa bile korunur.
 
-## Bilgi mimarisi — tek kapı kuralı
+## Bilgi mimarisi — beş bölüm, tek kapı
 
-Bir hedefe uygulamada **tek bir mantıklı yerden** ulaşılır. İki hub ekranı
-arasındaki iş bölümü şudur:
+Alt çubuk beş bölümdür; her biri tek bir soruyu yanıtlar ve bir hedefe
+uygulamada **tek bir mantıklı yerden** ulaşılır.
 
-| | Menü | Profil |
+| Sekme | Soru | İçerik |
 | --- | --- | --- |
-| Kapsam | Herkese aynı görünen şeyler | Yalnız sana ait olanlar |
-| İçerik | Lig · Oyunlar · Bilgi · Sosyal | Kulübüm · Kariyerim · Favoriler · Tercihler |
+| **Ana Sayfa** | Şu an ne oluyor? | İl · lig · sezon şeridi, vitrin maçı, takip ettiğin takımların maç kartları, canlı/yaklaşan maçlar, puan özeti, gol krallığı, haberler |
+| **Maçlar** | Hangi gün kim kiminle? | Gün şeridi, takvim, Tümü/Canlı/Bitti/Yaklaşan, lig gruplu maç kartları |
+| **Lig** | Ligde durum ne? | İl · lig · sezon şeridi + Puan · Fikstür (Yaklaşan/Sonuçlar) · Takımlar (takip ızgarası) · Oyuncular (sıralamalar) · İstatistik · Haber · Arşiv |
+| **Kulübüm** | Benim işim ne? | Rol bazlı ızgaralar: Takım Yönetimi (kadro, transfer, davet/başvuru, maç merkezi, maç al, kasa, mesajlar, onay bekleyenler) · Kariyerim (maçlarım, teklifler, sözleşmeler, disiplin, davetler) · Lig Yönetimi · takip ettiğim takımlar |
+| **Profil** | Hesabım ve tercihlerim | Takip ettiklerim · Bildirimler (kutu, mesajlar, bildirim türleri, takip bildirimleri) · Oyunlar · Keşfet · Bilgi ve destek · Ayarlar · çıkış/hesap silme |
 
-Bu ayrım uygulandığında kaldırılan tekrarlar:
+**Kapsam şeridi (`components/ScopeBar.tsx`).** İl, lig ve sezon üç ayrı
+kutudur; dokunulan kutu kapsam sayfasını o adımda açar. Altındaki lig çipleri
+ligler arası geçişi alt sayfa açmadan yapar, favori ligler başa alınır. Ana
+Sayfa ve Lig sekmelerinde durur; Maçlar başlığındaki çip aynı sayfayı açar.
 
-- **Menü ↔ Profil**: Yönetim Paneli, Takım Panelim (+4 alt sayfa), Mesajlarım,
-  Bildirimler, Favorilerim ikisinde birden vardı → yalnız Profil'de.
-- **Menü içindeki tekrar**: listedeki hedeflerin aynısını gösteren 8 kutuluk
-  kısayol ızgarası kaldırıldı; altı oyun tek "Oyun Merkezi" satırına,
-  Haberler/Arşiv `ligler` sekmelerine indi. Menü 34 satırdan 11'e düştü.
-- **Bildirim tercihleri** dört kapıdan (Profil · Hesabım · bildirim listesi
-  başı · boş durum) tek kapıya indi: **Profil → Tercihler**.
-- **Oyuncu sıralamaları** iki yerden çıkıyordu (`ligler` içindeki "Oyuncular"
-  segmenti + Oyuncular sekmesi); ikisi birebir aynı ekrandı → segment kaldırıldı,
-  kanonik kapı alt çubuktaki **Oyuncular** sekmesi.
-- **Oyuncu Profilim** ekranındaki Teklifler/Davetler/Disiplin/Mesajlar
-  kısayolları Profil'in "Kariyerim" ve "Kulübüm" bölümlerinin kopyasıydı →
-  kaldırıldı.
-- **Lig disiplin kararları** hem `ligler` → İstatistik altında hem Menü → Bilgi
-  altındaydı → yalnız **Menü → Bilgi → Cezalar**.
+**Takip ve bildirim tek akış.** Takım, maç ve oyuncu sayfalarının kimlik
+bloğunda `FollowActions` şeridi vardır: *Takip et* → *Bildirimler* (takip
+bildirimleri ekranını o takibin ayarları açık olarak, `?odak=team:610`
+parametresiyle açar). Lig ▸ Takımlar ızgarasında her karo tek dokunuşla takip
+edilir.
 
-İstisna: Genel Bakış'taki kısayol satırı ve bekleyen-iş kartları bir menü
-basamağı değil, özet ekranın detaya açılan kapılarıdır; ayrıca bir ekranın
-kendi içindeki bağlamsal bağlantılar (detay → liste, boş durum → ilgili ekran)
-tekrar sayılmaz.
+**Eski rotalar** (`/(tabs)/takimlar`, `/(tabs)/oyuncular`, `/(tabs)/menu`)
+derin bağlantılar ve bildirimler kırılmasın diye durur ve yeni yerlerine
+yönlendirir.
+
+### Maç kartı
+
+```
+┌───────────────────────────────────────────────┐
+│ ⌖ OSTİM HALISAHA 1 NOLU            Dün    ☆  │  saha/lig · gün · takip
+│      ◆◆◆            13 – 9            ◆◆◆      │  44px amblemler, skor/saat
+│  ÖZMEN PETROL         MS          VURKAÇ FC   │  iki satıra kırılan adlar
+│      SPOR                                     │
+└───────────────────────────────────────────────┘
+```
+
+`MatchCard` fikstür ve sonuç listelerinin ortak birimidir (Maçlar, Lig ▸
+Fikstür, Favoriler, Canlı, takım sayfası). Oynanmamış maçta ortada saat,
+canlıda kırmızı skor + dakika rozeti, bitende skor + "MS" durur; kazanan kalın,
+kaybeden soluk yazılır. Yüksekliği seçeneklerden hesaplanır
+(`matchCardHeight`), uzun listeler `getItemLayout` kurmaya devam eder. Özet
+ekranlarda kartlar `MatchCardRail` ile yatay şerit olarak dizilir. Eski
+`MatchRow` yoğun yönetim listelerinde (yönetim ▸ maçlar) kullanılmaya devam
+eder.
 
 ## Yol haritası
 

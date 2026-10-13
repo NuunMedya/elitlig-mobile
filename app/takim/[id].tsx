@@ -40,6 +40,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import ViewShot, { captureRef } from "react-native-view-shot";
+import { FollowActions } from "@/components/FollowActions";
 import {
   Avatar,
   Badge,
@@ -51,7 +52,8 @@ import {
   FormChips,
   KeyValueRow,
   ListRow,
-  MatchRow,
+  MatchCard,
+  MatchCardRail,
   ProgressRing,
   RatingPill,
   ScreenHeader,
@@ -85,6 +87,7 @@ import { formatDateShort, formatTime, timeAgo } from "@/lib/format";
 import { get } from "@/lib/http";
 import { matchState } from "@/lib/match";
 import { queryKeys } from "@/lib/queryKeys";
+import { useAuth } from "@/providers/AuthProvider";
 import { useFavorite } from "@/providers/FavoriteProvider";
 import { useScope } from "@/providers/ScopeProvider";
 import type { ApiMatch, ApiPlayer, KadroPlayer, NewsItem, PlayerRankRow, StandingRow } from "@/lib/types";
@@ -280,6 +283,7 @@ const num = (value: number | string | null | undefined): number => Number(value 
    ══════════════════════════════════════════════════════════════════════════ */
 
 export default function TeamDetailScreen() {
+  const auth = useAuth();
   const { id, tab: tabParam } = useLocalSearchParams<{ id: string; tab?: string }>();
   const teamId = Number(id);
   const validId = Number.isFinite(teamId) && teamId > 0;
@@ -688,7 +692,7 @@ export default function TeamDetailScreen() {
       {
         icon: (favorite ? "star" : "star-outline") as keyof typeof Ionicons.glyphMap,
         onPress: handleToggleFavorite,
-        accessibilityLabel: favorite ? "Takımı favorilerden çıkar" : "Takımı favoriye al",
+        accessibilityLabel: favorite ? "Takımı takipten çıkar" : "Takımı takip et",
       },
       {
         icon: "share-social-outline" as keyof typeof Ionicons.glyphMap,
@@ -726,9 +730,19 @@ export default function TeamDetailScreen() {
           goalDiff={standing ? num(standing.row.goal_diff) : null}
           squadCount={squad.length > 0 ? squad.length : null}
           form={standing?.row.last5 ?? ""}
+          actions={
+            <FollowActions
+              following={favorite}
+              onToggleFollow={handleToggleFavorite}
+              onOpenNotifications={() =>
+                auth.user ? router.push(`/takip-bildirimleri?odak=team:${teamId}`) : router.push("/giris")
+              }
+              extra={rivals.length > 0 ? [{ icon: "git-compare", label: "Karşılaştır", onPress: openH2h }] : []}
+            />
+          }
         />
       ) : null,
-    [team, teamLabel, followerCount, standing, squad.length],
+    [team, teamLabel, followerCount, standing, squad.length, favorite, handleToggleFavorite, auth.user, router, teamId, rivals.length, openH2h],
   );
 
   if (!validId) {
@@ -813,6 +827,8 @@ export default function TeamDetailScreen() {
           logoFor={logos.logoFor}
           onOpenMatch={openMatch}
           onAddCalendar={addToCalendar}
+          teamId={teamId}
+          teamName={teamLabel}
         />
       ) : tab === "sonuclar" ? (
         <MatchesTab
@@ -824,6 +840,8 @@ export default function TeamDetailScreen() {
           logoFor={logos.logoFor}
           onOpenMatch={openMatch}
           onAddCalendar={addToCalendar}
+          teamId={teamId}
+          teamName={teamLabel}
         />
       ) : tab === "kadro" ? (
         <SquadTab
@@ -936,7 +954,9 @@ const TeamIdentity = React.memo(function TeamIdentity({
   goalDiff,
   squadCount,
   form,
+  actions,
 }: {
+  actions?: React.ReactNode;
   teamName: string;
   logo: string | null;
   city: string | null;
@@ -1016,6 +1036,8 @@ const TeamIdentity = React.memo(function TeamIdentity({
           <FormChips form={form} size="sm" />
         </View>
       ) : null}
+
+      {actions}
     </View>
   );
 });
@@ -1167,20 +1189,13 @@ function GeneralTab({
       {/* Son 5 maç */}
       <SectionHeader title="Son 5 maç" meta={recent.length ? `${recent.length} maç` : undefined} />
       {lastFive.length ? (
-        <View style={styles.group}>
-          {lastFive.map((match, index) => (
-            <TeamMatchRow
-              key={match.id}
-              match={match}
-              homeLogo={logoFor(match.home_team_id, match.first_team_name)}
-              awayLogo={logoFor(match.away_team_id, match.second_team_name)}
-              position={groupPosition(index, lastFive.length)}
-              myTeamId={teamId}
-              myTeamName={teamName}
-              onOpen={onOpenMatch}
-            />
-          ))}
-        </View>
+        <MatchCardRail
+          matches={lastFive}
+          logoFor={logoFor}
+          onOpen={onOpenMatch}
+          highlightTeamId={teamId}
+          highlightTeamName={teamName}
+        />
       ) : (
         <EmptyState
           icon="football-outline"
@@ -1372,10 +1387,14 @@ interface MatchesTabProps extends TabShell {
   logoFor: LogoFor;
   onOpenMatch: (matchId: number) => void;
   onAddCalendar: (match: ApiMatch) => void;
+  teamId: number;
+  teamName: string;
 }
 
 function MatchesTab({
   mode,
+  teamId,
+  teamName,
   scrollProps,
   refreshControl,
   matches,
@@ -1392,13 +1411,14 @@ function MatchesTab({
         match={item}
         homeLogo={logoFor(item.home_team_id, item.first_team_name)}
         awayLogo={logoFor(item.away_team_id, item.second_team_name)}
-        position={groupPosition(index, matches.length)}
         showCalendar={fixtures}
+        teamId={teamId}
+        teamName={teamName}
         onOpen={onOpenMatch}
         onAddCalendar={onAddCalendar}
       />
     ),
-    [logoFor, matches.length, fixtures, onOpenMatch, onAddCalendar],
+    [logoFor, fixtures, onOpenMatch, onAddCalendar, teamId, teamName],
   );
 
   if (loading) {
@@ -1456,103 +1476,51 @@ const FixtureListItem = React.memo(function FixtureListItem({
   match,
   homeLogo,
   awayLogo,
-  position,
   showCalendar,
+  teamId,
+  teamName,
   onOpen,
   onAddCalendar,
 }: {
   match: ApiMatch;
   homeLogo: string | null;
   awayLogo: string | null;
-  position: "single" | "first" | "middle" | "last";
   showCalendar: boolean;
+  teamId: number;
+  teamName: string;
   onOpen: (matchId: number) => void;
   onAddCalendar: (match: ApiMatch) => void;
 }) {
   const handleOpen = useCallback(() => onOpen(Number(match.id)), [onOpen, match.id]);
   const handleCalendar = useCallback(() => onAddCalendar(match), [onAddCalendar, match]);
 
-  if (!showCalendar) {
-    return (
-      <MatchRow
-        match={match}
-        homeLogo={homeLogo}
-        awayLogo={awayLogo}
-        position={position}
-        metaMode="league"
-        showFavorite={false}
-        onPress={handleOpen}
-      />
-    );
-  }
-
-  const corner =
-    position === "first"
-      ? styles.cornerTop
-      : position === "last"
-        ? styles.cornerBottom
-        : position === "single"
-          ? styles.cornerAll
-          : null;
-
   return (
-    <View style={[styles.fixtureRow, corner]}>
-      <View style={styles.fixtureMain}>
-        <MatchRow
-          match={match}
-          homeLogo={homeLogo}
-          awayLogo={awayLogo}
-          position={position}
-          metaMode="league"
-          showFavorite={false}
-          onPress={handleOpen}
-        />
-      </View>
-      <Touchable
-        style={styles.calendarButton}
-        onPress={handleCalendar}
-        feedback="icon"
-        haptic="light"
-        accessibilityRole="button"
-        accessibilityLabel="Maçı takvime ekle"
-      >
-        <Ionicons name="calendar-outline" size={18} color={colors.brandAccent} />
-      </Touchable>
-    </View>
-  );
-});
-
-/** Genel segmentindeki "son 5 maç" satırı — takvim düğmesi olmadan. */
-const TeamMatchRow = React.memo(function TeamMatchRow({
-  match,
-  homeLogo,
-  awayLogo,
-  position,
-  myTeamId,
-  myTeamName,
-  onOpen,
-}: {
-  match: ApiMatch;
-  homeLogo: string | null;
-  awayLogo: string | null;
-  position: "single" | "first" | "middle" | "last";
-  myTeamId: number;
-  myTeamName: string;
-  onOpen: (matchId: number) => void;
-}) {
-  const handleOpen = useCallback(() => onOpen(Number(match.id)), [onOpen, match.id]);
-
-  return (
-    <MatchRow
+    <MatchCard
       match={match}
       homeLogo={homeLogo}
       awayLogo={awayLogo}
-      position={position}
-      metaMode="league"
-      showFavorite={false}
-      myTeamId={myTeamId}
-      myTeamName={myTeamName}
+      meta="league"
+      showDate
+      showVenue
+      highlightTeamId={teamId}
+      highlightTeamName={teamName}
       onPress={handleOpen}
+      style={styles.matchCard}
+      footer={
+        showCalendar ? (
+          <Touchable
+            style={styles.calendarAction}
+            onPress={handleCalendar}
+            feedback="icon"
+            haptic="light"
+            accessibilityRole="button"
+            accessibilityLabel="Maçı takvime ekle"
+          >
+            <Ionicons name="calendar-outline" size={16} color={colors.brandAccent} />
+            <Text style={styles.calendarActionText}>Takvime ekle</Text>
+          </Touchable>
+        ) : undefined
+      }
     />
   );
 });
@@ -2395,6 +2363,21 @@ const styles = StyleSheet.create({
    */
   inset: {
     marginHorizontal: layout.screenPadding,
+  },
+  matchCard: {
+    marginHorizontal: layout.screenPadding,
+    marginBottom: space.m,
+  },
+  calendarAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: space.s,
+    height: 28,
+  },
+  calendarActionText: {
+    ...type.label,
+    color: colors.brandAccent,
   },
   group: {
     marginHorizontal: layout.screenPadding,

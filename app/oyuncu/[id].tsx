@@ -84,7 +84,9 @@ import { formatAge, formatDateShort, formatMoney, mediaUrl } from "@/lib/format"
 import { get } from "@/lib/http";
 import { openLink } from "@/lib/links";
 import { queryKeys } from "@/lib/queryKeys";
+import { useFavorite } from "@/providers/FavoriteProvider";
 import { useScope } from "@/providers/ScopeProvider";
+import { FollowActions } from "@/components/FollowActions";
 import {
   colors,
   dark,
@@ -591,6 +593,7 @@ export default function PlayerDetailScreen() {
   const openTeam = useCallback(() => {
     if (teamId) router.push(`/takim/${teamId}`);
   }, [router, teamId]);
+  const { isFavorite, toggleFavorite } = useFavorite();
 
   const openShare = useCallback(() => setShareOpen(true), []);
   const closeShare = useCallback(() => setShareOpen(false), []);
@@ -621,9 +624,19 @@ export default function PlayerDetailScreen() {
           assists={assists}
           averageRating={totalMatches > 0 ? totalPoints / totalMatches : null}
           onOpenTeam={openTeam}
+          actions={
+            team && teamId ? (
+              <FollowActions
+                following={isFavorite(teamId)}
+                onToggleFollow={() => toggleFavorite({ id: teamId, name: team.team_name, logo: team.logo })}
+                labels={{ follow: "Takımını takip et", following: "Takımı takip ediliyor" }}
+                extra={[{ icon: "shield-outline", label: "Takım sayfası", onPress: openTeam }]}
+              />
+            ) : null
+          }
         />
       ) : null,
-    [player, playerName, position, lineup.jersey, team, trRank, totalMatches, totalPoints, assists, openTeam],
+    [player, playerName, position, lineup.jersey, team, trRank, totalMatches, totalPoints, assists, openTeam, teamId, isFavorite, toggleFavorite],
   );
 
   const actions = useMemo(
@@ -783,7 +796,9 @@ const PlayerIdentity = React.memo(function PlayerIdentity({
   assists,
   averageRating,
   onOpenTeam,
+  actions,
 }: {
+  actions?: React.ReactNode;
   name: string;
   image: string | null;
   /** Ham mevki: kod ("STP") ya da serbest metin ("Sol Bek"); yoksa null. */
@@ -923,6 +938,8 @@ const PlayerIdentity = React.memo(function PlayerIdentity({
           </View>
         ))}
       </View>
+
+      {actions}
     </View>
   );
 });

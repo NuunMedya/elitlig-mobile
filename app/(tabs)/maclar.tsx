@@ -53,13 +53,14 @@ import {
   ErrorState,
   LeagueGroupHeader,
   LiveBadge,
-  MatchRow,
+  MATCH_CARD_GAP,
+  MatchCard,
   ScreenHeader,
   SegmentedControl,
   SkeletonMatchRow,
   Toggle,
   Touchable,
-  matchRowHeight,
+  matchCardHeight,
   toIsoDate,
   useHeaderScroll,
   useRefresh,
@@ -91,11 +92,11 @@ type TabKey = "tumu" | "canli" | "bitti" | "yaklasan";
 const TAB_KEYS: readonly string[] = ["tumu", "canli", "bitti", "yaklasan"];
 
 /** Satır ve başlık yükseklikleri — `getItemLayout` bunlardan kurulur. */
-const ROW_HEIGHT = matchRowHeight("default", "none");
+const ROW_HEIGHT = matchCardHeight({ meta: "field", showDate: true }) + MATCH_CARD_GAP;
 /** 8px üst boşluk + 40px LeagueGroupHeader. Boşluk başlığın İÇİNDE, çünkü
  *  yapışkan başlık ekranın tepesine yapıştığında altındaki satır başlığın
  *  arkasından sızmasın diye opak zemin gerekiyor. */
-const SECTION_HEADER_HEIGHT = 48;
+const SECTION_HEADER_HEIGHT = 58;
 
 /** Gün şeridinin varsayılan penceresi (§2.1): dün-bir-hafta … iki-hafta sonrası. */
 const STRIP_BACK_DAYS = 7;
@@ -510,29 +511,16 @@ export default function MatchesScreen() {
   /* ───────────────────────── LİSTE ÇİZİMİ ───────────────────────── */
 
   const renderItem = useCallback(
-    ({ item, index, section }: SectionListRenderItemInfo<ApiMatch, LeagueSectionMeta>) => {
-      /*
-       * İLK SATIR "first" DEĞİL: bölümün üstünde zaten `LeagueGroupHeader`
-       * duruyor ve ÜST köşeleri o yuvarlıyor. İlk satır da üst köşelerini
-       * yuvarlarsa başlıkla satırın birleştiği yerde iki yandan içeri kaçan
-       * bir kertik oluşuyor — grup tek kart değil, üst üste iki kart gibi
-       * okunuyordu. Yuvarlak köşe grubun DIŞ sınırına aittir: üstte başlık,
-       * altta son satır.
-       */
-      const last = index === section.data.length - 1;
-      const position = last ? "last" : "middle";
-      return (
-        <MatchListItem
-          match={item}
-          homeLogo={teams.logoFor(item.home_team_id, item.first_team_name)}
-          awayLogo={teams.logoFor(item.away_team_id, item.second_team_name)}
-          position={position}
-          isFavorite={favoriteMatchIds.has(Number(item.id))}
-          onOpen={openMatch}
-          onToggleStar={toggleMatchStar}
-        />
-      );
-    },
+    ({ item }: SectionListRenderItemInfo<ApiMatch, LeagueSectionMeta>) => (
+      <MatchListItem
+        match={item}
+        homeLogo={teams.logoFor(item.home_team_id, item.first_team_name)}
+        awayLogo={teams.logoFor(item.away_team_id, item.second_team_name)}
+        isFavorite={favoriteMatchIds.has(Number(item.id))}
+        onOpen={openMatch}
+        onToggleStar={toggleMatchStar}
+      />
+    ),
     [teams, favoriteMatchIds, openMatch, toggleMatchStar],
   );
 
@@ -782,7 +770,6 @@ const MatchListItem = memo(function MatchListItem({
   match,
   homeLogo,
   awayLogo,
-  position,
   isFavorite,
   onOpen,
   onToggleStar,
@@ -790,7 +777,6 @@ const MatchListItem = memo(function MatchListItem({
   match: ApiMatch;
   homeLogo: string | null;
   awayLogo: string | null;
-  position: "single" | "first" | "middle" | "last";
   isFavorite: boolean;
   onOpen: (matchId: number) => void;
   onToggleStar: (matchId: number) => void;
@@ -800,16 +786,18 @@ const MatchListItem = memo(function MatchListItem({
   const handleStar = useCallback(() => onToggleStar(matchId), [onToggleStar, matchId]);
 
   return (
-    <MatchRow
-      match={match}
-      homeLogo={homeLogo}
-      awayLogo={awayLogo}
-      position={position}
-      isFavorite={isFavorite}
-      onToggleFavorite={handleStar}
-      onPress={handlePress}
-      flashOnScoreChange
-    />
+    <View style={styles.cardSlot}>
+      <MatchCard
+        match={match}
+        homeLogo={homeLogo}
+        awayLogo={awayLogo}
+        meta="field"
+        showDate
+        isFavorite={isFavorite}
+        onToggleFavorite={handleStar}
+        onPress={handlePress}
+      />
+    </View>
   );
 });
 
@@ -856,6 +844,7 @@ const LeagueSectionHeader = memo(function LeagueSectionHeader({
         onToggleFavorite={leagueId != null ? handleFavorite : undefined}
         onPress={handleOpen}
         sticky
+        detached
       />
     </View>
   );
@@ -1102,7 +1091,12 @@ const styles = StyleSheet.create({
   sectionHeader: {
     height: SECTION_HEADER_HEIGHT,
     paddingTop: space.sm,
+    paddingBottom: space.m,
     backgroundColor: colors.bg,
+  },
+  cardSlot: {
+    height: ROW_HEIGHT,
+    paddingBottom: MATCH_CARD_GAP,
   },
 
   /* Takvim sayfası */

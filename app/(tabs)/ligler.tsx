@@ -1,6 +1,14 @@
 /**
- * LİGLER — kapsama (şehir → lig → sezon) bağlı tüm verinin tek evi.
+ * LİG — kapsama (il → lig → sezon) bağlı tüm verinin tek evi. ALT ÇUBUKTA
+ * KENDİ SEKMESİDİR (eskiden Profil → Menü'nün altında gizliydi).
  *
+ * YENİ DÜZEN: üstte ScopeBar (il · lig · sezon üç ayrı kutu + lig kısayol
+ * çipleri), altında yedi sekme: Puan · Fikstür · Takımlar · Oyuncular ·
+ * İstatistik · Haber · Arşiv. Takımlar ve Oyuncular eskiden alt çubukta ayrı
+ * sekmelerdi; aynı kapsama bağlı oldukları için buraya katıldılar ve eski
+ * rotaları buraya yönlendirir.
+ *
+ * ESKİ NOT —
  * NE: eski `(tabs)/standings.tsx` + `(tabs)/news.tsx` + `app/arsiv.tsx`
  * ekranlarının beş segmentte birleşmiş hâli:
  *   Puan · Fikstür · İstatistik · Haberler · Arşiv
@@ -50,7 +58,9 @@ import {
   type NativeSyntheticEvent,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { ScopeChip } from "@/components/ScopeChip";
+import { ScopeBar } from "@/components/ScopeBar";
+import { PlayersPane } from "@/components/league/PlayersPane";
+import { TeamsPane } from "@/components/league/TeamsPane";
 import {
   Badge,
   Chip,
@@ -58,7 +68,7 @@ import {
   EmptyState,
   ErrorState,
   ListRow,
-  MatchRow,
+  MatchCard,
   ScreenHeader,
   SectionHeader,
   SkeletonListRow,
@@ -74,6 +84,7 @@ import {
   useHeaderScroll,
   useRefresh,
   type TabItem,
+  SegmentedControl,
 } from "@/components/ui";
 import { getMatches } from "@/lib/api/matches";
 import { getNewsFeed } from "@/lib/api/news";
@@ -83,6 +94,7 @@ import { formatDayHeading, mediaUrl, stripHtml, timeAgo } from "@/lib/format";
 import { queryKeys } from "@/lib/queryKeys";
 import type { ApiMatch, NewsItem, StandingRow } from "@/lib/types";
 import { useFavorite } from "@/providers/FavoriteProvider";
+import { useTeamLogos } from "@/hooks/useTeamLogos";
 import { useScope } from "@/providers/ScopeProvider";
 import {
   colors,
@@ -106,11 +118,13 @@ import {
    Segmentler ve rota parametresi
    ══════════════════════════════════════════════════════════════════════════ */
 
-type LeagueTab = "puan" | "fikstur" | "istatistik" | "haberler" | "arsiv";
+type LeagueTab = "puan" | "fikstur" | "takimlar" | "oyuncular" | "istatistik" | "haberler" | "arsiv";
 
 const TAB_ITEMS: TabItem<LeagueTab>[] = [
   { key: "puan", label: "Puan" },
   { key: "fikstur", label: "Fikstür" },
+  { key: "takimlar", label: "Takımlar" },
+  { key: "oyuncular", label: "Oyuncular" },
   { key: "istatistik", label: "İstatistik" },
   { key: "haberler", label: "Haber" },
   { key: "arsiv", label: "Arşiv" },
@@ -142,6 +156,11 @@ const TAB_ALIASES: Record<string, LeagueTab> = {
   news: "haberler",
   haber: "haberler",
   archive: "arsiv",
+  teams: "takimlar",
+  takim: "takimlar",
+  players: "oyuncular",
+  oyuncu: "oyuncular",
+  krallik: "oyuncular",
 };
 
 function resolveTab(raw: unknown): LeagueTab {
@@ -227,34 +246,38 @@ export default function LeaguesScreen() {
         ? undefined
         : [
             {
+              icon: "search-outline" as keyof typeof Ionicons.glyphMap,
+              onPress: () => router.push("/ara"),
+              accessibilityLabel: "Takım, oyuncu ara",
+            },
+            {
               icon: (leagueFavorite ? "star" : "star-outline") as keyof typeof Ionicons.glyphMap,
               onPress: toggleLeague,
               tone: leagueFavorite ? ("warn" as const) : undefined,
               accessibilityLabel: leagueFavorite ? "Ligi favorilerden çıkar" : "Ligi favoriye al",
             },
           ],
-    [leagueFavorite, leagueId, toggleLeague],
+    [leagueFavorite, leagueId, toggleLeague, router],
   );
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader
-        title="Ligler"
-        scope={<ScopeChip tone="ink" />}
-        back
-        /* Bu ekran sekme çubuğunda yuvası olmayan bir sekmedir (href: null) ve
-           Menü'den açılır. Sekme gezgininde geri yığını olmayabilir; o durumda
-           geldiği yere, yani Menü'ye dönülür. */
-        onBack={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)/menu"))}
+        title="Lig"
         scrollY={scrollY}
         actions={actions}
-        tabs={<Tabs items={TAB_ITEMS} value={tab} onChange={changeTab} sticky />}
+        tabs={<Tabs items={TAB_ITEMS} value={tab} onChange={changeTab} distribute="scroll" sticky />}
+        bottom={<ScopeBar />}
       />
 
       {tab === "puan" ? (
         <StandingsTab scrollProps={scrollProps} onPickScope={openScope} />
       ) : tab === "fikstur" ? (
         <FixturesTab scrollProps={scrollProps} onPickScope={openScope} />
+      ) : tab === "takimlar" ? (
+        <TeamsPane scrollProps={scrollProps} />
+      ) : tab === "oyuncular" ? (
+        <PlayersPane scrollProps={scrollProps} />
       ) : tab === "istatistik" ? (
         <StatsTab scrollProps={scrollProps} onPickScope={openScope} />
       ) : tab === "haberler" ? (
@@ -472,13 +495,15 @@ const dayKeyOf = (match: ApiMatch) => String(match.date ?? "").slice(0, 10);
 
 const MatchItem = React.memo(function MatchItem({
   match,
-  position,
+  homeLogo,
+  awayLogo,
   favorite,
   onOpen,
   onToggleFavorite,
 }: {
   match: ApiMatch;
-  position: "single" | "first" | "middle" | "last";
+  homeLogo: string | null;
+  awayLogo: string | null;
   favorite: boolean;
   onOpen: (id: number) => void;
   onToggleFavorite: (id: number) => void;
@@ -486,14 +511,15 @@ const MatchItem = React.memo(function MatchItem({
   const open = useCallback(() => onOpen(match.id), [match.id, onOpen]);
   const star = useCallback(() => onToggleFavorite(match.id), [match.id, onToggleFavorite]);
   return (
-    <MatchRow
+    <MatchCard
       match={match}
-      position={position}
-      metaMode="none"
-      showFavorite
+      homeLogo={homeLogo}
+      awayLogo={awayLogo}
+      meta="field"
       isFavorite={favorite}
       onToggleFavorite={star}
       onPress={open}
+      style={styles.fixtureCard}
     />
   );
 });
@@ -502,6 +528,7 @@ function FixturesTab({ scrollProps, onPickScope }: TabProps) {
   const scope = useScope();
   const router = useRouter();
   const { isFavoriteMatch, toggleFavoriteMatch } = useFavorite();
+  const teams = useTeamLogos();
 
   const scopeKey = {
     cityId: scope.cityId ?? undefined,
@@ -523,46 +550,69 @@ function FixturesTab({ scrollProps, onPickScope }: TabProps) {
 
   const refresh = useRefresh(query.refetch, { refreshing: query.isRefetching });
 
-  // Sunucu yeniden eskiye sıralı döner; fikstür eskiden yeniye okunur.
-  const sections = useMemo<DaySection[]>(() => {
+  /**
+   * İki pencere: YAKLAŞAN (bugünden ileri, eskiden yeniye) ve SONUÇLAR
+   * (bugünden geri, yeniden eskiye). Tek uzun liste sezonun ilk gününden
+   * açılıyordu ve kullanıcı bugüne ulaşmak için aylarca kaydırmak zorundaydı.
+   */
+  const [fixtureWindow, setFixtureWindow] = useState<"yaklasan" | "sonuclar" | null>(null);
+  const todayKey = useMemo(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  }, []);
+
+  const buckets = useMemo(() => {
     const list = query.data ?? [];
-    const buckets = new Map<string, ApiMatch[]>();
+    const map = new Map<string, ApiMatch[]>();
     for (const match of list) {
       const key = dayKeyOf(match);
       if (!key) continue;
-      const bucket = buckets.get(key);
+      const bucket = map.get(key);
       if (bucket) bucket.push(match);
-      else buckets.set(key, [match]);
+      else map.set(key, [match]);
     }
-    return [...buckets.entries()]
-      .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
-      .map(([key, data]) => ({
-        title: formatDayHeading(key),
-        data: [...data].sort((a, b) => String(a.time).localeCompare(String(b.time))),
-      }));
+    return [...map.entries()].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
   }, [query.data]);
+
+  const upcomingCount = useMemo(
+    () => buckets.filter(([key]) => key >= todayKey).reduce((sum, [, data]) => sum + data.length, 0),
+    [buckets, todayKey],
+  );
+  const activeWindow = fixtureWindow ?? (upcomingCount > 0 ? "yaklasan" : "sonuclar");
+
+  const sections = useMemo<DaySection[]>(() => {
+    const picked =
+      activeWindow === "yaklasan"
+        ? buckets.filter(([key]) => key >= todayKey)
+        : buckets.filter(([key]) => key < todayKey).reverse();
+    return picked.map(([key, data]) => ({
+      title: formatDayHeading(key),
+      data: [...data].sort((a, b) => String(a.time).localeCompare(String(b.time))),
+    }));
+  }, [buckets, activeWindow, todayKey]);
+
+  const windowItems = useMemo(
+    () => [
+      { key: "yaklasan" as const, label: upcomingCount ? `Yaklaşan ${upcomingCount}` : "Yaklaşan" },
+      { key: "sonuclar" as const, label: "Sonuçlar" },
+    ],
+    [upcomingCount],
+  );
 
   const openMatch = useCallback((id: number) => router.push(`/mac/${id}`), [router]);
 
   const renderItem = useCallback(
-    ({ item, index, section }: { item: ApiMatch; index: number; section: DaySection }) => (
+    ({ item }: { item: ApiMatch }) => (
       <MatchItem
         match={item}
-        position={
-          section.data.length === 1
-            ? "single"
-            : index === 0
-              ? "first"
-              : index === section.data.length - 1
-                ? "last"
-                : "middle"
-        }
+        homeLogo={teams.logoFor(item.home_team_id, item.first_team_name)}
+        awayLogo={teams.logoFor(item.away_team_id, item.second_team_name)}
         favorite={isFavoriteMatch(item.id)}
         onOpen={openMatch}
         onToggleFavorite={toggleFavoriteMatch}
       />
     ),
-    [isFavoriteMatch, openMatch, toggleFavoriteMatch],
+    [isFavoriteMatch, openMatch, toggleFavoriteMatch, teams],
   );
 
   const renderSectionHeader = useCallback(
@@ -606,12 +656,21 @@ function FixturesTab({ scrollProps, onPickScope }: TabProps) {
       refreshControl={
         <RefreshControl {...refreshControlProps(refresh.refreshing, refresh.onRefresh)} />
       }
-      ListHeaderComponent={query.isError ? <ErrorState error={query.error} variant="banner" /> : null}
+      ListHeaderComponent={
+        <View style={styles.fixtureHeader}>
+          <SegmentedControl items={windowItems} value={activeWindow} onChange={setFixtureWindow} />
+          {query.isError ? <ErrorState error={query.error} variant="banner" /> : null}
+        </View>
+      }
       ListEmptyComponent={
         <EmptyState
           icon="calendar-outline"
-          title="Fikstür boş"
-          body="Bu sezon için henüz maç tanımlanmamış."
+          title={activeWindow === "yaklasan" ? "Yaklaşan maç yok" : "Henüz sonuç yok"}
+          body={
+            activeWindow === "yaklasan"
+              ? "Bu sezonun fikstüründe oynanacak maç kalmadı."
+              : "Bu sezonda oynanmış maç bulunmuyor."
+          }
         />
       }
     />
@@ -1251,6 +1310,14 @@ const GROUP_SHELL = {
 } as const;
 
 const styles = StyleSheet.create({
+  fixtureCard: {
+    marginBottom: space.m,
+  },
+  fixtureHeader: {
+    gap: space.sm,
+    paddingTop: space.sm,
+    paddingBottom: space.xs,
+  },
   screen: { flex: 1, backgroundColor: colors.bg },
   listContent: {
     paddingHorizontal: layout.screenPadding,
