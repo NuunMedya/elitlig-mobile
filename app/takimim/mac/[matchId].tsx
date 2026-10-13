@@ -869,6 +869,151 @@ export default function MacKadrosuScreen() {
   );
 }
 
+/* ═══════════════════════════ YOKLAMA PANELİ ═══════════════════════════ */
+
+const ATTENDANCE_ICON: Record<string, { icon: keyof typeof Ionicons.glyphMap; color: string }> = {
+  coming: { icon: "checkmark-circle", color: colors.win },
+  not_coming: { icon: "close-circle", color: colors.danger },
+  maybe: { icon: "help-circle", color: colors.warn },
+};
+
+/**
+ * Yoklama sekmesi: durum → ölçer → iki eylem → yanıt listesi.
+ *
+ * İKİ YOL: (1) "Takımda yoklama yap" seçilen oyuncularla sohbet grubu kurar,
+ * herkes geliyorum / gelemiyorum der; yoklama açıkken aynı düğme "kadroyla
+ * eşitle"ye döner. (2) "Rejiye bildir" kadroyu doğrudan reji paneline yollar.
+ */
+function AttendancePanel({
+  attendance,
+  loading,
+  error,
+  onRetry,
+  open,
+  onToggleOpen,
+  squadCount,
+  problem,
+  starting,
+  reporting,
+  onStart,
+  onReport,
+  onOpenChat,
+  onEditSquad,
+}: {
+  attendance: Awaited<ReturnType<typeof getMatchAttendance>> | undefined;
+  loading: boolean;
+  error: unknown;
+  onRetry: () => void;
+  open: boolean;
+  onToggleOpen: () => void;
+  squadCount: number;
+  problem: string | null;
+  starting: boolean;
+  reporting: boolean;
+  onStart: () => void;
+  onReport: () => void;
+  onOpenChat?: () => void;
+  onEditSquad: () => void;
+}) {
+  if (loading) return <SkeletonListRow count={4} />;
+  if (error) return <ErrorState error={error} onRetry={onRetry} variant="inline" />;
+
+  const active = Boolean(attendance?.active);
+  const meta = attendance?.attendance ?? null;
+
+  return (
+    <>
+      <Card>
+        <View style={styles.panelHead}>
+          <View style={[styles.panelPip, active ? styles.panelPipOn : null]}>
+            <Ionicons name={active ? "radio" : "people-outline"} size={18} color={active ? colors.win : colors.brandAccent} />
+          </View>
+          <View style={styles.panelTexts}>
+            <Text style={styles.panelTitle} {...textScale.dense}>
+              {active ? "Yoklama açık" : "Yoklama başlamadı"}
+            </Text>
+            <Text style={styles.hint} {...textScale.long}>
+              {active
+                ? "Gelemeyenin yerine kadroya oyuncu ekle, sonra kadroyla eşitle."
+                : squadCount
+                  ? `Kadrodaki ${squadCount} oyuncuyla sohbet grubu kurulur; herkes geliyorum / gelemiyorum der.`
+                  : "Önce Kadro sekmesinden maç kadrosunu seç."}
+            </Text>
+          </View>
+        </View>
+
+        {meta ? <AttendanceMeter counts={meta.counts} need={MAX_STARTERS} style={styles.meter} /> : null}
+
+        <View style={styles.attendanceActions}>
+          {squadCount ? (
+            <Button
+              label={active ? "Kadroyla eşitle" : "Takımda yoklama yap"}
+              variant={active ? "secondary" : "primary"}
+              size="sm"
+              icon={active ? "sync-outline" : "people-outline"}
+              onPress={onStart}
+              loading={starting}
+              style={styles.flex}
+            />
+          ) : (
+            <Button label="Kadroyu seç" size="sm" icon="people-outline" onPress={onEditSquad} style={styles.flex} />
+          )}
+          <Button
+            label={active ? "Son hâli bildir" : "Rejiye bildir"}
+            variant={active ? "primary" : "secondary"}
+            size="sm"
+            icon="paper-plane-outline"
+            onPress={onReport}
+            loading={reporting}
+            disabled={Boolean(problem)}
+            style={styles.flex}
+          />
+        </View>
+        {problem ? (
+          <Text style={styles.barWarn} {...textScale.long}>
+            Bildirmeden önce: {problem}
+          </Text>
+        ) : null}
+      </Card>
+
+      {meta && meta.players.length ? (
+        <>
+          <SectionHeader
+            title="Yanıtlar"
+            meta={`${meta.players.length} oyuncu`}
+            action={{ label: open ? "Gizle" : "Göster", onPress: onToggleOpen }}
+            style={styles.flushHeader}
+          />
+          {open ? (
+            <View style={styles.group}>
+              {meta.players.map((p, index) => {
+                const look = (p.status && ATTENDANCE_ICON[p.status]) || { icon: "time-outline" as const, color: colors.textTertiary };
+                return (
+                  <View key={p.player_id} style={[styles.attendanceRow, index ? styles.rowDivided : null]}>
+                    <Ionicons name={look.icon} size={18} color={look.color} />
+                    <Text style={styles.attendanceName} numberOfLines={1} {...textScale.dense}>
+                      {p.name}
+                      {p.role ? ` · ${p.role === "starter" ? "AS" : "YEDEK"}` : ""}
+                    </Text>
+                    <Text style={styles.attendanceStatus} {...textScale.dense}>
+                      {p.status_label}
+                      {p.has_account ? "" : " · hesabı yok"}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          ) : null}
+        </>
+      ) : null}
+
+      {onOpenChat ? (
+        <Button label="Yoklama grubunu aç" variant="secondary" size="sm" icon="chatbubbles-outline" onPress={onOpenChat} fullWidth />
+      ) : null}
+    </>
+  );
+}
+
 /* ═══════════════════════════ KADRO SATIRI ═══════════════════════════ */
 
 function SquadRow({
@@ -885,7 +1030,7 @@ function SquadRow({
   onRemove: () => void;
 }) {
   return (
-    <Card padding="sm" style={styles.squadRow}>
+    <View style={styles.squadRow}>
       <Touchable feedback="row" onPress={onEdit} style={styles.squadMain} accessibilityLabel={`${entry.displayName} düzenle`}>
         <Avatar
           name={entry.displayName}
@@ -906,36 +1051,81 @@ function SquadRow({
       </Touchable>
 
       <View style={styles.squadActions}>
-        <Touchable feedback="icon" onPress={onCaptain} accessibilityLabel="Kaptan yap">
+        <Touchable feedback="icon" onPress={onCaptain} accessibilityLabel="Kaptan yap" style={styles.iconButton}>
           <Ionicons
             name={entry.captain ? "ribbon" : "ribbon-outline"}
-            size={18}
+            size={20}
             color={entry.captain ? colors.warn : colors.textTertiary}
           />
         </Touchable>
-        <Touchable feedback="icon" onPress={onToggleStarter} accessibilityLabel={entry.starter ? "Yedeğe al" : "İlk kadroya al"}>
+        <Touchable feedback="icon" onPress={onToggleStarter} accessibilityLabel={entry.starter ? "Yedeğe al" : "İlk kadroya al"} style={styles.iconButton}>
           <Ionicons
             name={entry.starter ? "arrow-down-circle-outline" : "arrow-up-circle-outline"}
-            size={18}
+            size={20}
             color={colors.textSecondary}
           />
         </Touchable>
-        <Touchable feedback="icon" onPress={onRemove} accessibilityLabel="Kadrodan çıkar">
-          <Ionicons name="close-circle-outline" size={18} color={colors.danger} />
+        <Touchable feedback="icon" onPress={onRemove} accessibilityLabel="Kadrodan çıkar" style={styles.iconButton}>
+          <Ionicons name="close-circle-outline" size={20} color={colors.danger} />
         </Touchable>
       </View>
-    </Card>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  headerBottom: {
-    paddingHorizontal: space.md,
-    paddingBottom: space.sm,
+  loading: { padding: layout.screenPadding },
+  content: {
+    paddingHorizontal: layout.screenPadding,
+    paddingTop: space.md,
+    gap: space.sm,
+    paddingBottom: space.giant,
   },
-  loading: { padding: space.md },
-  content: { padding: space.md, gap: space.sm, paddingBottom: space.giant },
+  contentWithBar: { paddingBottom: 120 },
+  flushHeader: { paddingHorizontal: 0 },
+  flex: { flex: 1 },
+  group: {
+    borderRadius: radius.lg,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    backgroundColor: colors.surface1,
+    overflow: "hidden",
+  },
+  rowDivided: { borderTopWidth: hairline, borderTopColor: colors.separator },
+  panelHead: { flexDirection: "row", alignItems: "flex-start", gap: space.md },
+  panelPip: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.sm,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.brandDim,
+  },
+  panelPipOn: { backgroundColor: colors.winDim },
+  panelTexts: { flex: 1, gap: 2 },
+  panelTitle: { ...type.h3, color: colors.textPrimary },
+  meter: { marginTop: space.md },
+  iconButton: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
+  bar: {
+    ...elevate(2),
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    paddingHorizontal: layout.screenPadding,
+    paddingTop: space.md,
+    backgroundColor: colors.surface1,
+    borderTopWidth: hairline,
+    borderTopColor: colors.border,
+  },
+  barTexts: { flex: 1, minWidth: 0, gap: 2 },
+  barTitle: { ...type.h3, color: colors.textPrimary },
+  barMeta: { ...type.caption, color: colors.textTertiary },
+  barWarn: { ...type.bodySm, color: colors.warn },
 
   kitRow: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
   kitDot: {
@@ -951,19 +1141,34 @@ const styles = StyleSheet.create({
 
   hint: { ...type.bodySm, color: colors.textSecondary, paddingVertical: space.xs },
   guestList: { maxHeight: 280 },
-  attendanceActions: { gap: space.xs, marginTop: space.xs },
-  attendanceToggle: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: space.sm },
-  attendanceToggleText: { ...type.bodySm, color: colors.textSecondary },
-  attendanceRow: { flexDirection: "row", alignItems: "center", gap: space.xs, paddingVertical: space.xxs },
+  attendanceActions: { flexDirection: "row", gap: space.sm, marginTop: space.md },
+  attendanceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    minHeight: layout.listRowHeight,
+    paddingHorizontal: space.md,
+  },
   attendanceName: { ...type.body, color: colors.textPrimary, flex: 1 },
   attendanceStatus: { ...type.caption, color: colors.textSecondary },
 
-  squadRow: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  squadRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+    minHeight: layout.listRowHeightTwoLine - space.sm,
+    paddingLeft: space.md,
+    paddingRight: space.xs,
+    borderRadius: radius.md,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    backgroundColor: colors.surface1,
+  },
   squadMain: { flexDirection: "row", alignItems: "center", gap: space.sm, flex: 1 },
   squadText: { flex: 1 },
   squadName: { ...type.body, color: colors.textPrimary },
   squadMeta: { ...type.caption, color: colors.textTertiary, marginTop: 1 },
-  squadActions: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  squadActions: { flexDirection: "row", alignItems: "center" },
 
   addRow: {
     flexDirection: "row",
@@ -971,22 +1176,14 @@ const styles = StyleSheet.create({
     gap: space.sm,
     backgroundColor: colors.surface1,
     borderRadius: radius.md,
-    borderWidth: 1,
+    borderWidth: hairline,
     borderColor: colors.border,
     paddingHorizontal: space.md,
-    paddingVertical: space.sm,
+    minHeight: layout.listRowHeight,
   },
   addName: { ...type.body, color: colors.textPrimary, flex: 1 },
   addPos: { ...type.caption, color: colors.textTertiary },
 
-  problem: {
-    flexDirection: "row",
-    gap: space.sm,
-    backgroundColor: colors.warnDim,
-    borderRadius: radius.md,
-    padding: space.md,
-  },
-  problemText: { ...type.bodySm, color: colors.textPrimary, flex: 1, lineHeight: 19 },
 
   sheet: { gap: space.md, paddingBottom: space.md },
   sheetLabel: { ...type.label, color: colors.textSecondary },

@@ -358,7 +358,8 @@ const styles = StyleSheet.create({
   },
   number: {
     ...type.tableNumStrong,
-    color: colors.brandAccent,
+    // Madde numarası bir bağlantı değil, yapıdır: mor (aksiyon) yerine mürekkep.
+    color: colors.textTertiary,
   },
   bulletDot: {
     width: 5,

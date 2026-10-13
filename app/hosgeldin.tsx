@@ -455,9 +455,10 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.inkTile,
+    /* Opak: tebeşir yayı halkanın ARKASINDAN geçer, ikonu kesmez. */
+    backgroundColor: colors.inkBlock,
     borderWidth: 1,
-    borderColor: colors.inkTileBorder,
+    borderColor: colors.inkPillBorder,
   },
   artIcon: {
     width: 88,
