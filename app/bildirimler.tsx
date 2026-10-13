@@ -6,10 +6,22 @@
  * enleri…). Push bildirimi kaçırılmış olsa bile bu ekran her şeyi gösterir;
  * "telefonuma düşmedi" ile "hiç olmadı" burada ayrılır.
  *
- * NEDEN İKİ SIRALAMA (segment): bildirim merkezi iki farklı soruya cevap verir
- * — "bekleyen işim var mı" ve "dün ne oldu". İlkinde okunmamışlar üstte
- * toplanmalı, ikincisinde zaman sırası bozulmamalı. Seçim `?tab=` ile ROTADA
- * taşınır: derin bağlantı, geri dönüş ve ekran tazelemesi seçimi korur.
+ * TARANABİLİRLİK (yeniden tasarım): liste DAİMA zaman sırasındadır ve gün
+ * başlıklarıyla ("Bugün", "Dün", "12 Ağustos Salı") bölünür; her gün tek bir
+ * satır grubudur (Arena ListRow grubu). Okunmamış satır sol kenarda mor ray,
+ * kalın başlık ve nokta taşır — "yeni" bilgisini renk + ağırlık + işaret
+ * birlikte söyler. Eski "Okunmamış üstte / Zaman sırası" segmenti, aynı
+ * listeyi iki biçimde sıralıyordu; kullanıcı asıl şunu soruyor: "bekleyen
+ * işim var mı" ve "maçla ilgili ne geldi". Bu yüzden başlığın altında TEK
+ * süzgeç şeridi var: Tümü · Okunmamış (sayı) · ve listede gerçekten bulunan
+ * kategoriler (Maç, Takım ve transfer, Disiplin, Mesaj, Diğer). Seçim
+ * `?tab=` ile ROTADA taşınır: derin bağlantı, geri dönüş ve tazeleme korur.
+ * Eski değer `kronolojik` "Tümü"ye düşer.
+ *
+ * AYARLAR BAŞLIKTA: sağ üstteki ayar ikonu Bildirim türleri ekranını açar.
+ * Listenin başındaki ayar SATIRI bilerek yok (gerçek bildirimleri aşağı
+ * itiyordu); ikon yer kaplamaz ve "bunu nasıl kapatırım" sorusunun
+ * herkesin baktığı yerdeki cevabıdır.
  *
  * NEDEN İKONLAR lib/notifications.ts İLE EŞLEŞİR: bildirime dokunulunca
  * gidilecek ekranı `routeFromNotif` çözer; ikon ve ton da AYNI sırayla
@@ -48,10 +60,10 @@ import {
   Button,
   EmptyState,
   ErrorState,
-  ListRow,
+  Chip,
+  ChipGroup,
   ScreenHeader,
   SectionHeader,
-  SegmentedControl,
   SkeletonListRow,
   Touchable,
   errorMessage,
@@ -59,7 +71,6 @@ import {
   useHeaderScroll,
   useRefresh,
   useToast,
-  type SegmentedItem,
   type Tone,
 } from "@/components/ui";
 import { useAppActive } from "@/hooks/useLiveFavoriteCount";
@@ -84,32 +95,39 @@ const POLL_MS = 30_000;
 /** Sorgu anahtarı: başka ekran bu listeyi okumuyor, tek sahibi burası. */
 const NOTIF_KEY = ["panel", "notifications"] as const;
 
-type NotifTab = "okunmamis" | "kronolojik";
+/** Bildirim kategorisi — süzgeç şeridinin çipleri. */
+type NotifCategory = "mac" | "takim" | "disiplin" | "mesaj" | "diger";
 
-const TAB_ITEMS: SegmentedItem<NotifTab>[] = [
-  { key: "okunmamis", label: "Okunmamış üstte" },
-  { key: "kronolojik", label: "Zaman sırası" },
+type NotifTab = "tumu" | "okunmamis" | NotifCategory;
+
+const CATEGORY_ORDER: { key: NotifCategory; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { key: "mac", label: "Maç", icon: "football-outline" },
+  { key: "takim", label: "Takım ve transfer", icon: "people-outline" },
+  { key: "disiplin", label: "Disiplin", icon: "shield-outline" },
+  { key: "mesaj", label: "Mesaj", icon: "chatbubble-ellipses-outline" },
+  { key: "diger", label: "Diğer", icon: "ellipsis-horizontal" },
 ];
 
 interface NotifLook {
   icon: keyof typeof Ionicons.glyphMap;
   tone: Tone;
+  category: NotifCategory;
 }
 
 /** Bilinmeyen tür: nötr zil. Ekran asla boş bir kutu çizmez. */
-const DEFAULT_LOOK: NotifLook = { icon: "notifications", tone: "neutral" };
+const DEFAULT_LOOK: NotifLook = { icon: "notifications", tone: "neutral", category: "diger" };
 
 /**
  * entity_type → görünüm. lib/notifications.ts'teki `targetFromEntity` ile aynı
  * anahtarlar; entity daha dar bir sözleşme olduğu için önce o bakılır.
  */
 const ENTITY_LOOK: Record<string, NotifLook> = {
-  TRANSFER_OFFER: { icon: "swap-horizontal", tone: "brand" },
-  CONTRACT: { icon: "document-text", tone: "info" },
-  PENALTY: { icon: "shield", tone: "danger" },
-  PANEL_MESSAGE: { icon: "chatbubble-ellipses", tone: "info" },
-  MATCH_REQUEST: { icon: "calendar", tone: "warn" },
-  TEAM_JOIN_REQUEST: { icon: "people", tone: "brand" },
+  TRANSFER_OFFER: { icon: "swap-horizontal", tone: "brand", category: "takim" },
+  CONTRACT: { icon: "document-text", tone: "info", category: "takim" },
+  PENALTY: { icon: "shield", tone: "danger", category: "disiplin" },
+  PANEL_MESSAGE: { icon: "chatbubble-ellipses", tone: "info", category: "mesaj" },
+  MATCH_REQUEST: { icon: "calendar", tone: "warn", category: "mac" },
+  TEAM_JOIN_REQUEST: { icon: "people", tone: "brand", category: "takim" },
 };
 
 /**
@@ -119,27 +137,27 @@ const ENTITY_LOOK: Record<string, NotifLook> = {
  * durur ki MATCH_REQUEST onun altında kalmasın.
  */
 const TYPE_PREFIX_LOOK: ReadonlyArray<readonly [string, NotifLook]> = [
-  ["MATCH_GOAL", { icon: "football", tone: "live" }],
-  ["MATCH_START", { icon: "play-circle", tone: "live" }],
-  ["MATCH_HALFTIME", { icon: "pause-circle", tone: "live" }],
-  ["MATCH_RESULT", { icon: "flag", tone: "live" }],
-  ["MATCH_FIXTURE", { icon: "calendar-number", tone: "live" }],
-  ["MATCH_REMINDER", { icon: "alarm", tone: "live" }],
-  ["TRANSFER_", { icon: "swap-horizontal", tone: "brand" }],
-  ["OFFER_", { icon: "swap-horizontal", tone: "brand" }],
-  ["CONTRACT_", { icon: "document-text", tone: "info" }],
-  ["PENALTY_", { icon: "shield", tone: "danger" }],
-  ["PANEL_MESSAGE", { icon: "chatbubble-ellipses", tone: "info" }],
-  ["TEAM_INVITE", { icon: "people", tone: "brand" }],
-  ["TEAM_APPLICATION", { icon: "people", tone: "brand" }],
-  ["MATCH_REQUEST", { icon: "calendar", tone: "warn" }],
-  ["WEEKLY_AWARD", { icon: "trophy", tone: "warn" }],
-  ["MEMBERSHIP_", { icon: "card", tone: "neutral" }],
-  ["ACCOUNT_REQUEST_", { icon: "person-circle", tone: "neutral" }],
-  ["TEAM_TRANSFER", { icon: "swap-horizontal", tone: "brand" }],
-  ["PASSWORD_RESET", { icon: "key", tone: "neutral" }],
-  ["MATCH_", { icon: "football", tone: "live" }],
-  ["NEWS", { icon: "newspaper", tone: "neutral" }],
+  ["MATCH_GOAL", { icon: "football", tone: "live", category: "mac" }],
+  ["MATCH_START", { icon: "play-circle", tone: "live", category: "mac" }],
+  ["MATCH_HALFTIME", { icon: "pause-circle", tone: "live", category: "mac" }],
+  ["MATCH_RESULT", { icon: "flag", tone: "live", category: "mac" }],
+  ["MATCH_FIXTURE", { icon: "calendar-number", tone: "live", category: "mac" }],
+  ["MATCH_REMINDER", { icon: "alarm", tone: "live", category: "mac" }],
+  ["TRANSFER_", { icon: "swap-horizontal", tone: "brand", category: "takim" }],
+  ["OFFER_", { icon: "swap-horizontal", tone: "brand", category: "takim" }],
+  ["CONTRACT_", { icon: "document-text", tone: "info", category: "takim" }],
+  ["PENALTY_", { icon: "shield", tone: "danger", category: "disiplin" }],
+  ["PANEL_MESSAGE", { icon: "chatbubble-ellipses", tone: "info", category: "mesaj" }],
+  ["TEAM_INVITE", { icon: "people", tone: "brand", category: "takim" }],
+  ["TEAM_APPLICATION", { icon: "people", tone: "brand", category: "takim" }],
+  ["MATCH_REQUEST", { icon: "calendar", tone: "warn", category: "mac" }],
+  ["WEEKLY_AWARD", { icon: "trophy", tone: "warn", category: "diger" }],
+  ["MEMBERSHIP_", { icon: "card", tone: "neutral", category: "diger" }],
+  ["ACCOUNT_REQUEST_", { icon: "person-circle", tone: "neutral", category: "diger" }],
+  ["TEAM_TRANSFER", { icon: "swap-horizontal", tone: "brand", category: "takim" }],
+  ["PASSWORD_RESET", { icon: "key", tone: "neutral", category: "diger" }],
+  ["MATCH_", { icon: "football", tone: "live", category: "mac" }],
+  ["NEWS", { icon: "newspaper", tone: "neutral", category: "diger" }],
 ] as const;
 
 /** Bildirimin ikonu ve tonu — çözümleme sırası routeFromNotif ile aynıdır. */
@@ -158,7 +176,10 @@ function firstParam(value: string | string[] | undefined): string | undefined {
 }
 
 function normalizeTab(value: string | undefined): NotifTab {
-  return value === "kronolojik" ? "kronolojik" : "okunmamis";
+  if (value === "okunmamis") return "okunmamis";
+  if (CATEGORY_ORDER.some((item) => item.key === value)) return value as NotifCategory;
+  // "kronolojik" (eski değer) ve bilinmeyen her şey: Tümü.
+  return "tumu";
 }
 
 /** "Az önce · 12 dk · 5 sa · Dün · Sal · 14 Ağu" */
@@ -343,6 +364,7 @@ export default function NotificationsScreen() {
   );
 
   const handleMarkAll = useCallback(() => markAllRead(), [markAllRead]);
+  const openPrefs = useCallback(() => router.push("/bildirim-tercihleri"), [router]);
   const selectTab = useCallback((next: NotifTab) => router.setParams({ tab: next }), [router]);
   const loadMore = useCallback(() => {
     if (query.hasNextPage && !query.isFetchingNextPage) void query.fetchNextPage();
@@ -350,21 +372,26 @@ export default function NotificationsScreen() {
 
   /* ──────────────────────────── BÖLÜMLER ──────────────────────────── */
 
-  const sections = useMemo<NotifSection[]>(() => {
-    if (items.length === 0) return [];
-
-    if (tab === "okunmamis") {
-      const fresh = items.filter((item) => !item.is_read);
-      const old = items.filter((item) => item.is_read);
-      const result: NotifSection[] = [];
-      if (fresh.length) result.push({ key: "okunmamis", title: "Okunmamış", data: fresh });
-      if (old.length) result.push({ key: "okunmus", title: "Daha önce", data: old });
-      return result;
-    }
-
-    // Kronolojik: gün başlıklarıyla ("Bugün", "Dün", "12 Ağustos Salı").
-    const groups: NotifSection[] = [];
+  /** Listede gerçekten bulunan kategoriler — boş çip çizilmez. */
+  const categoryCounts = useMemo(() => {
+    const counts: Partial<Record<NotifCategory, number>> = {};
     for (const item of items) {
+      const key = notifLook(item).category;
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+    return counts;
+  }, [items]);
+
+  const visible = useMemo(() => {
+    if (tab === "tumu") return items;
+    if (tab === "okunmamis") return items.filter((item) => !item.is_read);
+    return items.filter((item) => notifLook(item).category === tab);
+  }, [items, tab]);
+
+  /* Her süzgeçte zaman sırası + gün başlığı ("Bugün", "Dün", "12 Ağustos Salı"). */
+  const sections = useMemo<NotifSection[]>(() => {
+    const groups: NotifSection[] = [];
+    for (const item of visible) {
       const key = dayKey(item.createdAt);
       const last = groups[groups.length - 1];
       if (last && last.key === key) {
@@ -374,17 +401,24 @@ export default function NotificationsScreen() {
       }
     }
     return groups;
-  }, [items, tab]);
+  }, [visible]);
 
   const renderItem = useCallback(
-    ({ item }: SectionListRenderItemInfo<PanelNotification, NotifSection>) => (
-      <NotificationRow notif={item} onPress={openNotif} />
+    ({ item, index, section }: SectionListRenderItemInfo<PanelNotification, NotifSection>) => (
+      <NotificationRow
+        notif={item}
+        onPress={openNotif}
+        first={index === 0}
+        last={index === section.data.length - 1}
+      />
     ),
     [openNotif],
   );
 
   const renderSectionHeader = useCallback(
-    ({ section }: { section: NotifSection }) => <SectionHeader title={section.title} />,
+    ({ section }: { section: NotifSection }) => (
+      <SectionHeader title={section.title} meta={`${section.data.length}`} style={styles.flushHeader} />
+    ),
     [],
   );
 
@@ -394,32 +428,63 @@ export default function NotificationsScreen() {
     return <Redirect href="/giris" />;
   }
 
-  const listHeader = (
-    <View style={styles.header}>
-      {/* Veri EKRANDAYKEN hata bant olur; liste silinmez (§5.6). */}
-      {query.isError && items.length > 0 ? (
+  const listHeader =
+    query.isError && items.length > 0 ? (
+      <View style={styles.header}>
+        {/* Veri EKRANDAYKEN hata bant olur; liste silinmez (§5.6). */}
         <ErrorState error={query.error} onRetry={refetchAll} variant="banner" />
-      ) : null}
+      </View>
+    ) : null;
 
-      {/*
-        BİLDİRİM TERCİHLERİ SATIRI KALDIRILDI. Tercihlere önceden dört ayrı
-        yerden gidiliyordu: Profil, Hesabım, bu listenin başı ve boş durumu.
-        Tek kanonik kapı Profil → Tercihler → Bildirim Tercihleri'dir; burası
-        bildirimlerin OKUNDUĞU yerdir, ayarlandığı yer değil. Üstelik satır her
-        açılışta gerçek bildirimleri bir satır aşağı itiyordu.
-      */}
-      {unread > 0 ? (
-        <ListRow
-          leading={{ icon: "checkmark-done", tone: "win" }}
-          title="Tümünü okundu işaretle"
-          value={String(unread)}
-          chevron={false}
-          position="single"
-          onPress={handleMarkAll}
+  /* SÜZGEÇ ŞERİDİ — Tümü · Okunmamış · listede bulunan kategoriler. */
+  const presentCategories = CATEGORY_ORDER.filter((item) => categoryCounts[item.key]);
+  const filterBar =
+    items.length > 0 ? (
+      <ChipGroup style={styles.filters}>
+        <Chip label="Tümü" selected={tab === "tumu"} onPress={() => selectTab("tumu")} />
+        <Chip
+          label="Okunmamış"
+          count={unread || undefined}
+          selected={tab === "okunmamis"}
+          onPress={() => selectTab("okunmamis")}
         />
-      ) : null}
-    </View>
-  );
+        {presentCategories.length > 1
+          ? presentCategories.map((item) => (
+              <Chip
+                key={item.key}
+                label={item.label}
+                icon={item.icon}
+                selected={tab === item.key}
+                onPress={() => selectTab(item.key)}
+              />
+            ))
+          : null}
+      </ChipGroup>
+    ) : null;
+
+  /* Süzgece göre boş durum: "hiç bildirim yok" ile "bu süzgeçte yok" ayrı. */
+  const emptyState =
+    items.length === 0 ? (
+      <EmptyState
+        icon="notifications-off-outline"
+        title="Henüz bildirim yok"
+        body="Teklifler, sözleşmeler, disiplin kararları ve yönetim mesajları geldikçe burada toplanır."
+        action={{ label: "Bildirim türlerini seç", onPress: openPrefs }}
+      />
+    ) : tab === "okunmamis" ? (
+      <EmptyState
+        icon="checkmark-done-outline"
+        title="Hepsi okundu"
+        body="Bekleyen bildirimin yok. Yeni bir şey gelince burada görürsün."
+        action={{ label: "Tümünü göster", onPress: () => selectTab("tumu") }}
+      />
+    ) : (
+      <EmptyState
+        icon="filter-outline"
+        title="Bu süzgeçte bildirim yok"
+        action={{ label: "Tümünü göster", onPress: () => selectTab("tumu") }}
+      />
+    );
 
   const listFooter = query.hasNextPage ? (
     <Button
@@ -437,30 +502,28 @@ export default function NotificationsScreen() {
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader
         title="Bildirimler"
-        subtitle={unread > 0 ? `${unread} okunmamış bildirim` : "Tümü okundu"}
+        subtitle={
+          query.isLoading ? undefined : unread > 0 ? `${unread} okunmamış bildirim` : "Hepsi okundu"
+        }
         back
         scrollY={scrollY}
-        actions={
-          unread > 0
+        actions={[
+          ...(unread > 0
             ? [
                 {
-                  icon: "checkmark-done",
+                  icon: "checkmark-done" as const,
                   onPress: handleMarkAll,
                   accessibilityLabel: "Tümünü okundu işaretle",
                 },
               ]
-            : undefined
-        }
-        bottom={
-          <View style={styles.segment}>
-            <SegmentedControl<NotifTab>
-              items={TAB_ITEMS}
-              value={tab}
-              onChange={selectTab}
-              size="sm"
-            />
-          </View>
-        }
+            : []),
+          {
+            icon: "options-outline" as const,
+            onPress: openPrefs,
+            accessibilityLabel: "Bildirim ayarları",
+          },
+        ]}
+        bottom={filterBar}
       />
 
       {query.isLoading ? (
@@ -479,13 +542,7 @@ export default function NotificationsScreen() {
           stickySectionHeadersEnabled={false}
           ListHeaderComponent={listHeader}
           ListFooterComponent={listFooter}
-          ListEmptyComponent={
-            <EmptyState
-              icon="notifications-off-outline"
-              title="Bildirim yok"
-              body="Transfer teklifleri, sözleşmeler, disiplin dosyaları ve yönetim mesajları için bildirimler burada toplanır. Hangilerini alacağını Profil → Bildirim Tercihleri'nden seçebilirsin."
-            />
-          }
+          ListEmptyComponent={emptyState}
           contentContainerStyle={styles.list}
           refreshControl={refresh.control}
           initialNumToRender={12}
@@ -501,16 +558,23 @@ export default function NotificationsScreen() {
 /* ═══════════════════════════════ LİSTE SATIRI ═════════════════════════════ */
 
 /**
- * Bildirim satırı. Okunmamışta ikon kutusu türünün tonunda YANAR, satır marka
- * çerçevesi alır ve sağda nokta durur; okunmuşta hepsi sessizleşir — renk
- * "yeni" bilgisini taşır, süs değildir.
+ * Bildirim satırı — günün satır grubunun bir parçası (`first`/`last` grubun
+ * köşelerini ve ayracını verir; Arena ListRow grubu ile aynı ölçü).
+ *
+ * OKUNMAMIŞ: sol kenarda 3px mor ray, ikon pulu türünün tonunda yanar, başlık
+ * kalın, sağda nokta. OKUNMUŞ: pul sönük, başlık normal ağırlık. "Yeni"
+ * bilgisini renk tek başına taşımaz; ağırlık ve işaret de söyler.
  */
 const NotificationRow = memo(function NotificationRow({
   notif,
   onPress,
+  first,
+  last,
 }: {
   notif: PanelNotification;
   onPress: (notif: PanelNotification) => void;
+  first: boolean;
+  last: boolean;
 }) {
   const handlePress = useCallback(() => onPress(notif), [notif, onPress]);
   const look = notifLook(notif);
@@ -519,47 +583,44 @@ const NotificationRow = memo(function NotificationRow({
 
   return (
     <Touchable
-      feedback="card"
+      feedback="row"
       haptic="selection"
       onPress={handlePress}
       accessibilityRole="button"
-      accessibilityLabel={`${notif.title}${notif.description ? `. ${notif.description}` : ""}${
-        unread ? ". Okunmadı" : ""
-      }`}
-      style={[styles.row, unread ? styles.rowUnread : null]}
+      accessibilityLabel={`${unread ? "Okunmadı. " : ""}${notif.title}${notif.description ? `. ${notif.description}` : ""}. ${relativeTime(notif.createdAt)}`}
+      style={[
+        styles.row,
+        first ? styles.rowFirst : null,
+        last ? styles.rowLast : styles.rowDivided,
+      ]}
     >
-      <View
-        style={[
-          styles.icon,
-          { backgroundColor: unread ? palette.dim : colors.surface3 },
-        ]}
-      >
-        <Ionicons
-          name={look.icon}
-          size={18}
-          color={unread ? palette.fg : colors.textTertiary}
-        />
+      {unread ? <View style={[styles.rail, first ? styles.railFirst : null, last ? styles.railLast : null]} /> : null}
+
+      <View style={[styles.icon, { backgroundColor: unread ? palette.dim : colors.surface2 }]}>
+        <Ionicons name={look.icon} size={18} color={unread ? palette.fg : colors.textTertiary} />
       </View>
 
       <View style={styles.rowBody}>
-        <Text
-          style={[styles.title, unread ? styles.titleUnread : null]}
-          numberOfLines={2}
-          {...textScale.dense}
-        >
-          {notif.title}
-        </Text>
+        <View style={styles.titleRow}>
+          <Text
+            style={[styles.title, unread ? styles.titleUnread : null]}
+            numberOfLines={2}
+            {...textScale.dense}
+          >
+            {notif.title}
+          </Text>
+          <Text style={[styles.time, unread ? styles.timeUnread : null]} numberOfLines={1} {...textScale.dense}>
+            {relativeTime(notif.createdAt)}
+          </Text>
+        </View>
         {notif.description ? (
-          <Text style={styles.description} numberOfLines={3} {...textScale.dense}>
+          <Text style={styles.description} numberOfLines={2} {...textScale.dense}>
             {notif.description}
           </Text>
         ) : null}
-        <Text style={styles.time} {...textScale.badge}>
-          {relativeTime(notif.createdAt)}
-        </Text>
       </View>
 
-      {unread ? <View style={styles.dot} /> : null}
+      {unread ? <View style={styles.dot} accessibilityElementsHidden /> : null}
     </Touchable>
   );
 });
@@ -571,9 +632,11 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.bg,
   },
-  segment: {
-    paddingHorizontal: layout.screenPadding,
+  filters: {
     paddingBottom: space.sm,
+  },
+  flushHeader: {
+    paddingHorizontal: 0,
   },
   skeleton: {
     paddingHorizontal: layout.screenPadding,
@@ -592,21 +655,46 @@ const styles = StyleSheet.create({
     marginTop: space.md,
   },
 
-  /* Bildirim satırı */
+  /* Bildirim satırı — grup içi konumla köşe ve ayraç. */
   row: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: space.md,
-    padding: space.md,
-    marginBottom: space.sm,
-    borderRadius: radius.lg,
-    borderWidth: hairline,
-    borderColor: colors.border,
+    paddingVertical: space.md,
+    paddingHorizontal: space.md,
     backgroundColor: colors.surface1,
+    borderLeftWidth: hairline,
+    borderRightWidth: hairline,
+    borderColor: colors.border,
+    overflow: "hidden",
   },
-  rowUnread: {
-    borderColor: colors.brandBorder,
-    backgroundColor: colors.surface2,
+  rowFirst: {
+    borderTopWidth: hairline,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+  },
+  rowLast: {
+    borderBottomWidth: hairline,
+    borderBottomLeftRadius: radius.lg,
+    borderBottomRightRadius: radius.lg,
+  },
+  rowDivided: {
+    borderBottomWidth: hairline,
+    borderBottomColor: colors.separator,
+  },
+  rail: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 3,
+    backgroundColor: colors.brand,
+  },
+  railFirst: {
+    borderTopLeftRadius: radius.lg,
+  },
+  railLast: {
+    borderBottomLeftRadius: radius.lg,
   },
   icon: {
     width: 36,
@@ -619,28 +707,36 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
   },
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: space.sm,
+  },
   title: {
-    ...type.bodySm,
+    ...type.body,
     color: colors.textPrimary,
+    flex: 1,
   },
   titleUnread: {
     ...type.h3,
-    color: colors.textPrimary,
   },
   description: {
-    ...type.caption,
+    ...type.bodySm,
     color: colors.textSecondary,
   },
   time: {
-    ...type.micro,
+    ...type.caption,
     color: colors.textTertiary,
-    marginTop: space.xxs,
+    paddingTop: 2,
+  },
+  timeUnread: {
+    color: colors.brandAccent,
   },
   dot: {
     width: 8,
     height: 8,
     borderRadius: radius.pill,
-    backgroundColor: colors.brandAccent,
-    marginTop: space.xs,
+    backgroundColor: colors.brand,
+    marginTop: space.sm,
   },
 });

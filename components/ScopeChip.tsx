@@ -16,14 +16,24 @@ import React, { useCallback, useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Touchable } from "@/components/ui";
 import { useHeaderTone } from "@/components/ui/HeaderTone";
-import { useScope } from "@/providers/ScopeProvider";
+import { useScope, type ScopeStep } from "@/providers/ScopeProvider";
 import { colors, radius, space, textScale, touchSlop, type, upperTR } from "@/theme";
 
 export interface ScopeChipProps {
-  /** "full" = şehir · lig · sezon, "city" = yalnız şehir. Varsayılan "full". */
-  variant?: "full" | "city";
+  /**
+   * "full" = şehir · lig · sezon, "city" = yalnız şehir, "context" = şehir ·
+   * sezon. Varsayılan "full".
+   *
+   * "context" LİG ADININ BAŞLIK OLDUĞU ekranlar içindir (Lig merkezi): lig
+   * adı başlıkta zaten büyük yazılıyor; üst satır yalnız onu konumlandıran
+   * bağlamı (il, sezon) söyler. Kâğıtta da üst başlık dilinde (versal,
+   * geniş aralık, marka rengi = dokunulur) çizilir.
+   */
+  variant?: "full" | "city" | "context";
   /** Verilmezse kapsam sayfası açılır. */
   onPress?: () => void;
+  /** Alt sayfanın açılacağı adım (varsayılan "city"). */
+  step?: ScopeStep;
   /**
    * "ink": çip mor başlık bloğunun İÇİNDE, başlığın üst satırı olarak durur —
    * lavanta versal, tıpkı maketteki "İstanbul · Süper Amatör" üst başlığı gibi.
@@ -54,6 +64,7 @@ export const ScopeChip = React.memo(function ScopeChip({
   variant = "full",
   onPress,
   tone: toneProp,
+  step = "city",
   testID,
 }: ScopeChipProps) {
   const tone = useHeaderTone(toneProp ?? "paper");
@@ -65,43 +76,66 @@ export const ScopeChip = React.memo(function ScopeChip({
       onPress();
       return;
     }
-    openScopeSheet("city");
-  }, [onPress, openScopeSheet]);
+    openScopeSheet(step);
+  }, [onPress, openScopeSheet, step]);
 
   const label = useMemo(() => {
     const city = scope.cityLabel || "Şehir";
     if (variant === "city") return city;
+    if (variant === "context") {
+      return scope.seasonLabel ? `${city} · ${shortSeason(scope.seasonLabel)}` : city;
+    }
     const parts = [city];
     if (scope.leagueLabel) parts.push(shortLeague(scope.leagueLabel));
     if (scope.seasonLabel) parts.push(shortSeason(scope.seasonLabel));
     return parts.join(" · ");
   }, [variant, scope.cityLabel, scope.leagueLabel, scope.seasonLabel]);
 
+  /* Üst başlık dili: mürekkep blokta her zaman, kâğıtta "context" kipinde. */
+  const overline = tone === "ink" || variant === "context";
+
   return (
     <Touchable
       feedback="chip"
       haptic="selection"
       onPress={handlePress}
-      style={styles.chip}
-      hitSlop={touchSlop(32)}
+      style={[styles.chip, variant === "context" ? styles.chipContext : null]}
+      hitSlop={touchSlop(variant === "context" ? 20 : 32)}
       accessibilityRole="button"
       accessibilityLabel={`Kapsam: ${label}`}
       accessibilityHint="Şehir, lig ve sezon seçmek için dokunun"
       testID={testID}
     >
       <View style={styles.inner}>
+        {variant === "context" ? (
+          <Ionicons
+            name="location"
+            size={11}
+            color={tone === "ink" ? colors.brandOnDark : colors.brandAccent}
+          />
+        ) : null}
         <Text
-          style={[styles.label, tone === "ink" ? styles.labelInk : null]}
+          style={[
+            styles.label,
+            overline ? styles.labelOverline : null,
+            tone === "ink" ? styles.labelInk : null,
+          ]}
           numberOfLines={1}
           ellipsizeMode="tail"
-          {...(tone === "ink" ? textScale.badge : textScale.dense)}
+          {...(overline ? textScale.badge : textScale.dense)}
         >
-          {tone === "ink" ? upperTR(label) : label}
+          {overline ? upperTR(label) : label}
         </Text>
         <Ionicons
           name="chevron-down"
           size={12}
-          color={tone === "ink" ? colors.brandOnDark : colors.textSecondary}
+          color={
+            tone === "ink"
+              ? colors.brandOnDark
+              : variant === "context"
+                ? colors.brandAccent
+                : colors.textSecondary
+          }
         />
       </View>
     </Touchable>
@@ -116,6 +150,11 @@ const styles = StyleSheet.create({
     // Çerçevesiz: başlıkla aynı zemine oturur, kutu çizmez.
     paddingHorizontal: 0,
   },
+  /* Üst satır yüksekliğinde: başlık bloğunu büyütmez, dokunma alanı hitSlop'ta. */
+  chipContext: {
+    height: 20,
+    alignSelf: "flex-start",
+  },
   inner: {
     flexDirection: "row",
     alignItems: "center",
@@ -128,10 +167,14 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     maxWidth: 220,
   },
-  /* Mor blokta: üst başlık dili (Archivo versal, geniş aralık), lavanta. */
-  labelInk: {
+  /* Üst başlık dili (versal, geniş aralık): kâğıtta marka metni. */
+  labelOverline: {
     ...type.overline,
-    color: colors.brandOnDark,
+    color: colors.brandAccent,
     maxWidth: 280,
+  },
+  /* Sahnede: lavanta. */
+  labelInk: {
+    color: colors.brandOnDark,
   },
 });

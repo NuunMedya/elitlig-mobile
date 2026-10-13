@@ -12,6 +12,14 @@
  * görebileceği şeyler var — bekleyen değişiklik talepleri, müsaitlik yoklaması,
  * sözleşme durumu. İkisi ayrı yetki dünyaları; ayrı ekranlar.
  *
+ * ARENA DÜZENİ: herkese açık profille AYNI kimlik sahnesi (PlayerHero —
+ * fotoğraf, mevki, kulüp hapı, bu sezonun sayıları); başlıkta "OYUNCU
+ * PROFİLİM" etiketi ve iki eylem (herkese açık profilim, düzenle). Kâğıtta
+ * merkez kalıbı (Arena §5): bekleyen işler → kulüp → sezon ayrıntısı → son
+ * maçlar → kapı ızgarası. Maç ve istatistik satırları herkese açık profille
+ * aynı bileşenlerdir (components/playerpage) — üye kendi sayfasını
+ * başkalarının gördüğü dille görür.
+ *
  * VERİ KAYNAKLARI (hepsi oturum gerektirir):
  *   GET  /api/panel/me                       profil + sezon özeti + talepler
  *   GET  /api/panel/me/statistics?scope=player   lig/sezon filtreli ayrıntı
@@ -36,16 +44,14 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
-  Avatar,
   Badge,
-  Card,
   Chip,
   ChipGroup,
   EmptyState,
   ErrorState,
-  FormChips,
+  HubGrid,
+  HubTile,
   ListRow,
-  RatingPill,
   ScreenHeader,
   SectionHeader,
   SegmentedControl,
@@ -58,11 +64,27 @@ import {
   useHeaderScroll,
   useRefresh,
   useToast,
+  withAlpha,
   type FormResult,
   type SegmentedItem,
   type TabItem,
   type Tone,
 } from "@/components/ui";
+import {
+  BarList,
+  DateBlock,
+  MatchLogRow,
+  PlayerHero,
+  StatList,
+  StatTable,
+  StatTiles,
+  WinBalance,
+  decimalTR,
+  surfaces,
+  type HeroFact,
+  type StatRow,
+  type StatTile,
+} from "@/components/playerpage";
 import {
   getMyContracts,
   getMyMatches,
@@ -70,6 +92,7 @@ import {
   type Contract,
   type MyMatch,
   type PanelPendingChange,
+  type PanelRecentMatch,
 } from "@/lib/api/panel";
 import {
   AVAILABILITY_LABELS,
@@ -83,7 +106,6 @@ import { openLink } from "@/lib/links";
 import { useAuth } from "@/providers/AuthProvider";
 import {
   colors,
-  fonts,
   hairline,
   layout,
   radius,
@@ -238,11 +260,6 @@ const TAB_KEYS = TAB_ITEMS.map((item) => item.key);
 /** Maçlarım içindeki alt görünüm — o da rotada taşınır (`?durum=`). */
 type MatchFilter = "yaklasan" | "oynanan";
 
-const MATCH_FILTERS: SegmentedItem<MatchFilter>[] = [
-  { key: "yaklasan", label: "Yaklaşan" },
-  { key: "oynanan", label: "Oynanan" },
-];
-
 /** Türkçe I/İ katlanması olmadan rota anahtarı eşleşmez (bkz. ligler.tsx). */
 function normalizeKey(raw: unknown): string {
   if (typeof raw !== "string") return "";
@@ -376,10 +393,15 @@ export default function MyPlayerScreen() {
   const me = meQuery.data;
   const player = me?.player ?? null;
   const playerTeam = me?.playerTeam ?? me?.team ?? null;
+  const stats = me?.stats ?? null;
 
   const openPublicProfile = useCallback(() => {
     if (player?.id) router.push(`/oyuncu/${player.id}`);
   }, [player?.id, router]);
+
+  const openTeam = useCallback(() => {
+    if (player?.team_id) router.push(`/takim/${player.team_id}`);
+  }, [player?.team_id, router]);
 
   /* NOT: profil düzenleme + fotoğraf talebi bugün `/hesabim` içinde yaşıyor.
      `app/oyuncum/duzenle.tsx` eklendiğinde hedef oraya çevrilir; şu an olmayan
@@ -404,6 +426,38 @@ export default function MyPlayerScreen() {
         : undefined,
     [openEdit, openPublicProfile, player],
   );
+
+  /*
+   * KİMLİK SAHNESİ — herkese açık profille aynı bileşen. Sayı şeridi BU
+   * SEZONUN rakamlarıdır (panel özeti `stats`); sezon adı künyede yazar ki
+   * "79 maç" ile "bu sezon 12 maç" karışmasın.
+   */
+  const hero = useMemo(() => {
+    if (!player) return null;
+    const facts: HeroFact[] = stats
+      ? [
+          { key: "matches", value: String(num(stats.matches)), label: "MAÇ" },
+          { key: "goals", value: String(num(stats.goals)), label: "GOL" },
+          { key: "assists", value: String(num(stats.assists)), label: "ASİST" },
+          ...(stats.rating != null
+            ? [{ key: "rating", value: decimalTR(stats.rating), label: "ORT. PUAN", rating: stats.rating }]
+            : []),
+        ]
+      : [];
+    return (
+      <PlayerHero
+        name={player.player_name || "Oyuncu"}
+        image={player.player_img}
+        position={player.player_position}
+        teamName={playerTeam?.team_name ?? null}
+        teamLogo={mediaUrl(playerTeam?.logo ?? null)}
+        onOpenTeam={player.team_id ? openTeam : undefined}
+        details={[player.city, stats?.season ? `${stats.season} rakamları` : null]}
+        badges={!player.active ? <Badge label="PASİF" tone="neutral" size="xs" /> : null}
+        facts={facts}
+      />
+    );
+  }, [player, playerTeam, stats, openTeam]);
 
   /* — Kapılar — */
 
@@ -471,27 +525,22 @@ export default function MyPlayerScreen() {
         back
         actions={actions}
         scrollY={scrollY}
+        hero={hero}
         tabs={<Tabs items={TAB_ITEMS} value={tab} onChange={changeTab} sticky />}
       />
 
       {tab === "ozet" ? (
         <SummaryTab
-          playerId={player.id}
-          playerName={player.player_name}
-          playerImage={player.player_img}
-          position={player.player_position}
-          city={player.city}
-          active={player.active}
           teamName={playerTeam?.team_name ?? null}
           teamLogo={playerTeam?.logo ?? null}
           teamId={player.team_id}
           league={playerTeam?.current_league ?? null}
           season={playerTeam?.current_season ?? null}
-          stats={me.stats}
+          stats={stats}
           recentMatches={me.recentMatches}
           pendingChanges={me.pendingChanges}
-          unreadMessages={me.messages.filter((item) => !item.read).length}
           onOpenTab={changeTab}
+          onOpenPublic={openPublicProfile}
           refetch={meQuery.refetch}
           isRefetching={meQuery.isRefetching}
           scrollProps={scrollProps}
@@ -519,16 +568,10 @@ interface ScrollChrome {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   5) ÖZET — profil kartı, sezon rakamları, bekleyen talepler, kısayollar
+   5) ÖZET — bekleyen işler, kulüp, sezon ayrıntısı, son maçlar, kapılar
    ══════════════════════════════════════════════════════════════════════════ */
 
 interface SummaryTabProps {
-  playerId: number;
-  playerName: string;
-  playerImage: string | null;
-  position: string | null;
-  city: string | null;
-  active: boolean;
   teamName: string | null;
   teamLogo: string | null;
   teamId: number | null;
@@ -544,29 +587,16 @@ interface SummaryTabProps {
     starts: number;
     season?: string | null;
   } | null;
-  recentMatches: {
-    id: number;
-    date: string;
-    home_team: string;
-    away_team: string;
-    home_score: number | null;
-    away_score: number | null;
-  }[];
+  recentMatches: PanelRecentMatch[];
   pendingChanges: PanelPendingChange[];
-  unreadMessages: number;
   onOpenTab: (tab: MyTab) => void;
+  onOpenPublic: () => void;
   refetch: () => unknown;
   isRefetching: boolean;
   scrollProps: ScrollChrome;
 }
 
 function SummaryTab({
-  playerId,
-  playerName,
-  playerImage,
-  position,
-  city,
-  active,
   teamName,
   teamLogo,
   teamId,
@@ -575,8 +605,8 @@ function SummaryTab({
   stats,
   recentMatches,
   pendingChanges,
-  unreadMessages,
   onOpenTab,
+  onOpenPublic,
   refetch,
   isRefetching,
   scrollProps,
@@ -588,90 +618,75 @@ function SummaryTab({
     if (teamId) router.push(`/takim/${teamId}`);
   }, [router, teamId]);
 
-  const openPublic = useCallback(() => router.push(`/oyuncu/${playerId}`), [playerId, router]);
-
   const pending = pendingChanges.filter((change) => change.status === "pending");
-
-  const shortcuts = useMemo(
-    () => [
-      {
-        key: "maclarim",
-        icon: "calendar" as const,
-        title: "Maçlarım",
-        subtitle: "Fikstür, sonuçlar ve yoklama",
-        onPress: () => onOpenTab("maclarim"),
-      },
-      {
-        key: "istatistik",
-        icon: "stats-chart" as const,
-        title: "İstatistiklerim",
-        subtitle: "Lig ve sezon kırılımı",
-        onPress: () => onOpenTab("istatistik"),
-      },
-      {
-        key: "sozlesme",
-        icon: "document-text" as const,
-        title: "Sözleşmem",
-        subtitle: "Yürürlükteki sözleşmen",
-        onPress: () => onOpenTab("sozlesme"),
-      },
-      /*
-       * TEKLİFLER · DAVETLER · DİSİPLİN · MESAJLAR BURADAN KALDIRILDI.
-       * Dördü de Profil sekmesinde ("Kariyerim" ve "Kulübüm" bölümleri) birebir
-       * aynı başlıklarla duruyordu; bu ekran onların ikinci kopyasıydı. Burada
-       * yalnız BU EKRANIN kendi sekmeleri ve profil düzenleme kalır.
-       */
-      {
-        key: "duzenle",
-        icon: "create" as const,
-        title: "Profilimi Düzenle",
-        subtitle: "Bilgi ve fotoğraf talebi",
-        onPress: () => router.push("/hesabim"),
-      },
-    ],
-    [onOpenTab, router],
+  /* Önce bekleyenler: merkez kalıbında bekleyen iş kimliğin hemen altındadır. */
+  const sortedChanges = useMemo(
+    () =>
+      [...pendingChanges]
+        .sort((a, b) => Number(b.status === "pending") - Number(a.status === "pending"))
+        .slice(0, 6),
+    [pendingChanges],
   );
 
+  /* Sezon ayrıntısı — kimlikte olmayan sayılar (ilk 11, kartlar). */
+  const seasonTiles: StatTile[] = useMemo(() => {
+    if (!stats) return [];
+    const matches = num(stats.matches);
+    return [
+      {
+        key: "starts",
+        value: String(num(stats.starts)),
+        label: "İLK 11",
+        hint: matches > 0 ? `%${Math.round((num(stats.starts) / matches) * 100)}` : undefined,
+      },
+      {
+        key: "ga",
+        value: String(num(stats.goals) + num(stats.assists)),
+        label: "GOL + ASİST",
+        hint: matches > 0 ? `${decimalTR((num(stats.goals) + num(stats.assists)) / matches, 2)} / maç` : undefined,
+      },
+      {
+        key: "cards",
+        value: `${num(stats.yellow_cards)}·${num(stats.red_cards)}`,
+        label: "SARI · KIRMIZI",
+      },
+    ];
+  }, [stats]);
+
   return (
-    <ScrollView
-      {...scrollProps}
-      contentContainerStyle={styles.content}
-      refreshControl={refresh.control}
-    >
-      {/* ————— Profil kartı ————— */}
-      <Touchable
-        feedback="card"
-        haptic="selection"
-        onPress={openPublic}
-        accessibilityRole="button"
-        accessibilityLabel={`${playerName}, herkese açık profilim`}
-        style={styles.profileCard}
-      >
-        <Avatar name={playerName} image={mediaUrl(playerImage)} size={56} ring="brand" />
-
-        <View style={styles.profileBody}>
-          <Text style={styles.profileName} numberOfLines={1} {...textScale.dense}>
-            {playerName}
-          </Text>
-          <View style={styles.profileMeta}>
-            {position ? <Badge label={position} tone="brand" size="xs" /> : null}
-            <Badge
-              label={active ? "AKTİF" : "PASİF"}
-              tone={active ? "win" : "neutral"}
-              size="xs"
-            />
-            {city ? (
-              <Text style={styles.profileCity} numberOfLines={1} {...textScale.dense}>
-                {city}
-              </Text>
-            ) : null}
+    <ScrollView {...scrollProps} contentContainerStyle={styles.content} refreshControl={refresh.control}>
+      {/* ————— Bekleyen talepler ————— */}
+      {sortedChanges.length ? (
+        <>
+          <SectionHeader
+            style={styles.flushHeader}
+            title="Değişiklik taleplerim"
+            meta={pending.length ? `${pending.length} bekliyor` : undefined}
+            action={{ label: "Hesabım", onPress: () => router.push("/hesabim") }}
+          />
+          <View>
+            {sortedChanges.map((change, index, list) => (
+              <ListRow
+                key={change.id}
+                leading={{ icon: "document-attach", tone: changeStatusTone(change.status) }}
+                title={change.type === "player_update" ? "Oyuncu bilgisi" : change.type}
+                subtitle={change.created_at ? formatDateShort(change.created_at) : undefined}
+                badge={
+                  <Badge
+                    label={changeStatusLabel(change.status)}
+                    tone={changeStatusTone(change.status)}
+                    size="xs"
+                  />
+                }
+                chevron={false}
+                position={rowPosition(index, list.length)}
+              />
+            ))}
           </View>
-        </View>
+        </>
+      ) : null}
 
-        <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
-      </Touchable>
-
-      {/* ————— Kulüp satırı ————— */}
+      {/* ————— Kulübüm ————— */}
       {teamName ? (
         <Touchable
           feedback="card"
@@ -679,11 +694,11 @@ function SummaryTab({
           onPress={openTeam}
           accessibilityRole="button"
           accessibilityLabel={`${teamName} takım sayfası`}
-          style={styles.teamCard}
+          style={[surfaces.cardPadded, styles.teamCard]}
         >
-          <TeamLogo name={teamName} logo={mediaUrl(teamLogo)} size={layout.crestLg} />
+          <TeamLogo name={teamName} logo={mediaUrl(teamLogo)} size={layout.crestXl} />
           <View style={styles.teamBody}>
-            <Text style={styles.teamLabel} {...textScale.badge}>
+            <Text style={styles.overline} {...textScale.badge}>
               KULÜBÜM
             </Text>
             <Text style={styles.teamName} numberOfLines={1} {...textScale.dense}>
@@ -708,132 +723,116 @@ function SummaryTab({
         />
       )}
 
-      {/* ————— Sezon rakamları ————— */}
-      {stats ? (
+      {/* ————— Sezon ayrıntısı ————— */}
+      {seasonTiles.length ? (
         <>
           <SectionHeader
-            title="Sezon özetim"
-            meta={stats.season ? String(stats.season) : undefined}
+            style={styles.flushHeader}
+            title="Sezonum"
+            meta={stats?.season ? String(stats.season) : undefined}
+            action={{ label: "Ayrıntı", onPress: () => onOpenTab("istatistik") }}
           />
-          <View style={styles.bigRow}>
-            <BigStat label="MAÇ" value={String(num(stats.matches))} />
-            <View style={styles.bigDivider} />
-            <BigStat label="GOL" value={String(num(stats.goals))} />
-            <View style={styles.bigDivider} />
-            <BigStat label="ASİST" value={String(num(stats.assists))} />
-            <View style={styles.bigDivider} />
-            <BigStat
-              label="ORT. PUAN"
-              value={stats.rating != null ? stats.rating.toFixed(1) : "—"}
-              tone="brand"
-            />
-          </View>
-
-          <View style={styles.group}>
-            <ListRow
-              leading={{ icon: "play-circle", tone: "info" }}
-              title="İlk kadro başlangıcı"
-              value={String(num(stats.starts))}
-              chevron={false}
-              position="first"
-            />
-            <ListRow
-              leading={{ icon: "square", tone: "warn" }}
-              title="Sarı kart"
-              value={String(num(stats.yellow_cards))}
-              chevron={false}
-              position="middle"
-            />
-            <ListRow
-              leading={{ icon: "square", tone: "danger" }}
-              title="Kırmızı kart"
-              value={String(num(stats.red_cards))}
-              chevron={false}
-              position="last"
-            />
-          </View>
-        </>
-      ) : null}
-
-      {/* ————— Bekleyen talepler ————— */}
-      {pendingChanges.length ? (
-        <>
-          <SectionHeader
-            title="Değişiklik taleplerim"
-            meta={pending.length ? `${pending.length} bekliyor` : undefined}
-            action={{ label: "Hesabım", onPress: () => router.push("/hesabim") }}
-          />
-          <View style={styles.group}>
-            {pendingChanges.slice(0, 6).map((change, index, list) => (
-              <ListRow
-                key={change.id}
-                leading={{ icon: "document-attach", tone: changeStatusTone(change.status) }}
-                title={change.type === "player_update" ? "Oyuncu bilgisi" : change.type}
-                subtitle={change.created_at ? formatDateShort(change.created_at) : undefined}
-                badge={
-                  <Badge
-                    label={changeStatusLabel(change.status)}
-                    tone={changeStatusTone(change.status)}
-                    size="xs"
-                  />
-                }
-                chevron={false}
-                position={rowPosition(index, Math.min(list.length, 6))}
-              />
-            ))}
-          </View>
+          <StatTiles tiles={seasonTiles} />
         </>
       ) : null}
 
       {/* ————— Son maçlar ————— */}
+      <SectionHeader
+        style={styles.flushHeader}
+        title="Son maçlarım"
+        action={recentMatches.length ? { label: "Tümü", onPress: () => onOpenTab("maclarim") } : undefined}
+      />
       {recentMatches.length ? (
-        <>
-          <SectionHeader
-            title="Son maçlarım"
-            action={{ label: "Tümü", onPress: () => onOpenTab("maclarim") }}
-          />
-          <View style={styles.group}>
-            {recentMatches.slice(0, 5).map((match, index, list) => (
-              <ListRow
-                key={match.id}
-                leading={{ icon: "football", tone: "brand" }}
-                title={`${match.home_team} - ${match.away_team}`}
-                subtitle={formatDateShort(match.date)}
-                value={
-                  match.home_score != null && match.away_score != null
-                    ? `${match.home_score}-${match.away_score}`
-                    : undefined
-                }
-                position={rowPosition(index, Math.min(list.length, 5))}
-                onPress={() => router.push(`/mac/${match.id}`)}
-              />
-            ))}
-          </View>
-        </>
-      ) : null}
+        <View style={surfaces.card}>
+          {recentMatches.slice(0, 5).map((match, index) => (
+            <RecentMatchRow
+              key={match.id}
+              match={match}
+              divider={index > 0}
+              onPress={() => router.push(`/mac/${match.id}`)}
+            />
+          ))}
+        </View>
+      ) : (
+        <EmptyState
+          icon="football-outline"
+          title="Henüz maçın yok"
+          body="Takımın yayınlanmış bir maç oynadığında burada görünür."
+          variant="inline"
+          compact
+        />
+      )}
 
-      {/* ————— Kısayollar ————— */}
-      <SectionHeader title="Kariyerim" />
-      <View style={styles.group}>
-        {shortcuts.map((item, index) => (
-          <ListRow
-            key={item.key}
-            leading={{ icon: item.icon }}
-            title={item.title}
-            subtitle={item.subtitle}
-            badge={
-              item.key === "mesajlar" && unreadMessages > 0 ? (
-                <Badge label={unreadMessages} tone="live" variant="solid" size="xs" />
-              ) : undefined
-            }
-            position={rowPosition(index, shortcuts.length)}
-            onPress={item.onPress}
-          />
-        ))}
-      </View>
+      {/* ————— Kapılar ————— */}
+      <SectionHeader style={styles.flushHeader} title="Kariyerim" />
+      {/*
+       * TEKLİFLER · DAVETLER · DİSİPLİN · MESAJLAR BURADA YOK: dördü de Profil
+       * sekmesinde ("Kariyerim" ve "Kulübüm" bölümleri) aynı başlıklarla
+       * duruyor; bu ekran onların ikinci kopyası olmaz. Burada yalnız BU
+       * EKRANIN kendi sekmeleri, herkese açık profil ve düzenleme kalır.
+       */}
+      <HubGrid>
+        <HubTile icon="calendar" title="Maçlarım" subtitle="Fikstür ve yoklama" tone="brand" onPress={() => onOpenTab("maclarim")} />
+        <HubTile icon="stats-chart" title="İstatistiklerim" subtitle="Lig ve sezon kırılımı" tone="accent" onPress={() => onOpenTab("istatistik")} />
+        <HubTile icon="document-text" title="Sözleşmem" subtitle="Yürürlükteki sözleşmen" tone="info" onPress={() => onOpenTab("sozlesme")} />
+        <HubTile icon="eye" title="Herkese açık profil" subtitle="Başkalarının gördüğü" tone="neutral" onPress={onOpenPublic} />
+        <HubTile icon="create" title="Profilimi düzenle" subtitle="Bilgi ve fotoğraf talebi" tone="neutral" onPress={() => router.push("/hesabim")} />
+      </HubGrid>
     </ScrollView>
   );
 }
+
+/**
+ * Son maç satırı — panel özeti takımların adını ve skoru verir, oyuncunun
+ * hangi tarafta olduğunu vermez; bu yüzden sonuç rengi UYDURULMAZ. Satır iki
+ * takımı alt alta, skorları sağda hizalı yazar (skor listesi kalıbı); kazanan
+ * taraf kalın, kaybeden sönük.
+ */
+const RecentMatchRow = React.memo(function RecentMatchRow({
+  match,
+  divider,
+  onPress,
+}: {
+  match: PanelRecentMatch;
+  divider: boolean;
+  onPress: () => void;
+}) {
+  const hasScore = match.home_score != null && match.away_score != null;
+  const homeWon = hasScore && Number(match.home_score) > Number(match.away_score);
+  const awayWon = hasScore && Number(match.away_score) > Number(match.home_score);
+
+  return (
+    <Touchable
+      feedback="row"
+      haptic="selection"
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${match.home_team} ${match.home_score ?? ""}, ${match.away_team} ${match.away_score ?? ""}`}
+      style={[styles.recentRow, divider && styles.rowDivider]}
+    >
+      <DateBlock date={match.date} />
+      <View style={styles.recentTeams}>
+        <View style={styles.recentLine}>
+          <Text style={[styles.recentTeam, awayWon && styles.recentLoser]} numberOfLines={1} {...textScale.dense}>
+            {match.home_team}
+          </Text>
+          <Text style={[styles.recentScore, awayWon && styles.recentLoser]} {...textScale.dense}>
+            {match.home_score ?? "–"}
+          </Text>
+        </View>
+        <View style={styles.recentLine}>
+          <Text style={[styles.recentTeam, homeWon && styles.recentLoser]} numberOfLines={1} {...textScale.dense}>
+            {match.away_team}
+          </Text>
+          <Text style={[styles.recentScore, homeWon && styles.recentLoser]} {...textScale.dense}>
+            {match.away_score ?? "–"}
+          </Text>
+        </View>
+      </View>
+      <Ionicons name="chevron-forward" size={14} color={colors.textTertiary} />
+    </Touchable>
+  );
+});
 
 /* ══════════════════════════════════════════════════════════════════════════
    6) MAÇLARIM — maç merkezi + müsaitlik yoklaması
@@ -842,8 +841,7 @@ function SummaryTab({
    upcoming/past ayrımını sunucu yapar (saate değil maç durumuna bakar),
    `in_squad` kadroda olup olmadığını söyler, yoklama seçimi iyimser
    güncellenir ve sunucu reddederse eski seçim geri gelir. Değişen yalnız
-   sunum katmanı: Alert yerine toast, elle çizilen sekme yerine
-   SegmentedControl, satırlar tasarım sistemi yüzeylerinde.
+   sunum katmanı.
    ══════════════════════════════════════════════════════════════════════════ */
 
 /** Satır yüksekliği sabit değil (yoklama satırı ekleniyor); getItemLayout yok. */
@@ -882,13 +880,23 @@ function MyMatchesTab({
 
   const keyExtractor = useCallback((item: MyMatch) => String(item.id), []);
 
+  /* Segment etiketinde sayılar: hangi tarafta kaç maç olduğu seçmeden görünür. */
+  const filters: SegmentedItem<MatchFilter>[] = useMemo(() => {
+    const upcoming = query.data?.upcoming?.length;
+    const played = query.data?.past?.length;
+    return [
+      { key: "yaklasan", label: upcoming ? `Yaklaşan · ${upcoming}` : "Yaklaşan" },
+      { key: "oynanan", label: played ? `Oynanan · ${played}` : "Oynanan" },
+    ];
+  }, [query.data]);
+
   const header = useMemo(
     () => (
       <View style={styles.filterBar}>
-        <SegmentedControl items={MATCH_FILTERS} value={filter} onChange={changeFilter} />
+        <SegmentedControl items={filters} value={filter} onChange={changeFilter} />
       </View>
     ),
-    [changeFilter, filter],
+    [changeFilter, filter, filters],
   );
 
   if (query.isLoading) {
@@ -938,7 +946,13 @@ function MyMatchesTab({
   );
 }
 
-/** Tek maç kartı: üstte maç satırı, yaklaşan maçta altında yoklama şeridi. */
+const RESULT_COLOR: Record<FormResult, string> = { W: colors.win, D: colors.draw, L: colors.loss };
+const RESULT_DIM: Record<FormResult, string> = { W: colors.winDim, D: colors.drawDim, L: colors.lossDim };
+
+/**
+ * Tek maç kartı: tarih bloğu · rakip + künye · sağda saat (yaklaşan) ya da
+ * SONUÇ RENKLİ skor kutusu (oynanan). Yaklaşan maçta altında yoklama şeridi.
+ */
 const MyMatchCard = React.memo(function MyMatchCard({
   match,
   past,
@@ -955,61 +969,54 @@ const MyMatchCard = React.memo(function MyMatchCard({
   const opponent =
     match.opponent_name ?? (match.is_home ? match.second_team_name : match.first_team_name);
 
-  const resultColor =
-    result === "W" ? colors.win : result === "L" ? colors.loss : colors.draw;
+  const meta = [match.is_home ? "Ev sahibi" : "Deplasman", match.match_field].filter(Boolean).join(" · ");
 
   return (
-    <View style={styles.matchCard}>
+    <View style={[surfaces.card, styles.matchCard]}>
       <Touchable
         feedback="row"
         haptic="selection"
         onPress={onPress}
         accessibilityRole="button"
-        accessibilityLabel={`${opponent ?? "Rakip"} maçı`}
+        accessibilityLabel={`${opponent ?? "Rakip"} maçı, ${formatDateShort(match.date)}`}
         style={styles.matchRow}
       >
-        <View style={styles.matchWhen}>
-          <Text style={styles.matchDate} {...textScale.dense}>
-            {formatDateShort(match.date)}
-          </Text>
-          {match.time ? (
-            <Text style={styles.matchTime} {...textScale.dense}>
-              {formatTime(match.time)}
-            </Text>
-          ) : null}
-        </View>
+        <DateBlock date={match.date} />
 
         <View style={styles.matchBody}>
-          <Text style={styles.matchOpponent} numberOfLines={1} {...textScale.dense}>
-            {String(opponent ?? "").toLocaleUpperCase("tr-TR")}
-          </Text>
-          <View style={styles.matchMeta}>
-            <Text style={styles.matchMetaText} {...textScale.dense}>
-              {match.is_home ? "Ev sahibi" : "Deplasman"}
+          <View style={styles.matchTitleRow}>
+            <Text style={styles.matchOpponent} numberOfLines={1} {...textScale.dense}>
+              {upperTR(opponent ?? "Rakip")}
             </Text>
-            {match.match_field ? (
-              <Text style={styles.matchMetaText} numberOfLines={1} {...textScale.dense}>
-                · {match.match_field}
-              </Text>
-            ) : null}
             {match.in_squad ? <Badge label="KADRODA" tone="win" size="xs" /> : null}
           </View>
+          <Text style={styles.matchMeta} numberOfLines={1} {...textScale.dense}>
+            {meta}
+          </Text>
         </View>
 
         {past ? (
-          <View style={styles.matchResult}>
-            {result ? <FormChips form={[result]} limit={1} size="sm" /> : null}
-            <Text style={styles.matchScore} {...textScale.dense}>
-              {ours ?? "-"}-{theirs ?? "-"}
+          <View
+            style={[
+              styles.scoreBox,
+              result
+                ? { backgroundColor: RESULT_DIM[result], borderColor: withAlpha(RESULT_COLOR[result], 0.4) }
+                : null,
+            ]}
+          >
+            <Text style={styles.scoreText} {...textScale.badge}>
+              {ours ?? "–"}-{theirs ?? "–"}
+            </Text>
+          </View>
+        ) : match.time ? (
+          <View style={styles.timeBox}>
+            <Text style={styles.timeText} {...textScale.badge}>
+              {formatTime(match.time)}
             </Text>
           </View>
         ) : (
           <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
         )}
-
-        {past && result ? (
-          <View style={[styles.matchRail, { backgroundColor: resultColor }]} />
-        ) : null}
       </Touchable>
 
       {/* Yaklaşan maçta müsaitlik yoklaması */}
@@ -1070,9 +1077,17 @@ function AvailabilityStrip({ matchId }: { matchId: number }) {
 
   return (
     <View style={styles.availability}>
-      <Text style={styles.availabilityLabel} {...textScale.badge}>
-        YOKLAMA
-      </Text>
+      <View style={styles.availabilityHead}>
+        <Text style={styles.overline} {...textScale.badge}>
+          KATILIM DURUMUN
+        </Text>
+        {/* Yanıt verilmediyse küçük bir hatırlatma; verildiyse seçim çipte görünür. */}
+        {current == null && !query.isLoading ? (
+          <Text style={styles.availabilityHint} {...textScale.dense}>
+            Henüz yanıt vermedin
+          </Text>
+        ) : null}
+      </View>
       <View style={styles.availabilityOptions}>
         {AVAILABILITY_OPTIONS.map((option) => (
           <Chip
@@ -1133,22 +1148,81 @@ function StatisticsTab({ scrollProps }: { scrollProps: ScrollChrome }) {
     ].filter((item) => item.value > 0);
   }, [data?.goal_types]);
 
-  /** Sıfır olan ayrıntı satırı hiç çizilmez. */
-  const detailRows = useMemo(() => {
-    if (!totals) return [];
+  /* Vurgu şeridi: maç başına oranlar — sunucunun kendi hesapladığı değerler. */
+  const rateTiles: StatTile[] = useMemo(() => {
+    if (!perMatch) return [];
     return [
-      { label: "İlk kadro başlangıcı", value: num(totals.starts) },
-      { label: "Sonradan oyuna giriş", value: num(totals.sub_ins) },
-      { label: "Kaptanlık", value: num(totals.captain) },
-      { label: "Kurtarış", value: num(totals.saves) },
-      { label: "Yaratılan pozisyon", value: num(totals.chances_created) },
-      { label: "Kritik blok", value: num(totals.critical_blocks) },
-      { label: "Kazanılan hava topu", value: num(totals.aerials_won) },
-      { label: "Kazanılan ikili mücadele", value: num(totals.duels_won) },
-      { label: "Faul", value: num(totals.fouls) },
-      { label: "Sarı kart", value: num(totals.yellow_cards) },
-      { label: "Kırmızı kart", value: num(totals.red_cards) },
-    ].filter((item) => item.value > 0);
+      { key: "g", value: decimalTR(num(perMatch.goals), 2), label: "GOL / MAÇ" },
+      { key: "a", value: decimalTR(num(perMatch.assists), 2), label: "ASİST / MAÇ" },
+      { key: "c", value: decimalTR(num(perMatch.contributions), 2), label: "KATKI / MAÇ" },
+      { key: "s", value: `%${Math.round(num(perMatch.start_ratio))}`, label: "İLK 11" },
+    ];
+  }, [perMatch]);
+
+  const totalTiles: StatTile[] = useMemo(() => {
+    if (!totals) return [];
+    const list: StatTile[] = [
+      { key: "m", value: String(num(totals.matches)), label: "MAÇ" },
+      { key: "g", value: String(num(totals.goals)), label: "GOL" },
+      { key: "a", value: String(num(totals.assists)), label: "ASİST" },
+    ];
+    if (totals.rating != null) {
+      list.push({
+        key: "r",
+        value: decimalTR(totals.rating),
+        label: "ORT. PUAN",
+        hint: totals.best_rating != null ? `en iyi ${decimalTR(totals.best_rating)}` : undefined,
+      });
+    }
+    return list;
+  }, [totals]);
+
+  const breakdownRows: StatRow[] = useMemo(() => {
+    const maxGoals = breakdown.reduce((acc, row) => Math.max(acc, num(row.goals)), 0);
+    return breakdown.map((row) => ({
+      key: `${row.league_id ?? "x"}-${row.season_id ?? "x"}`,
+      title: row.league_name ?? "Bilinmeyen lig",
+      subtitle: row.season_name ?? "Bilinmeyen sezon",
+      values: [num(row.matches), num(row.goals), num(row.assists)],
+      rating: row.rating,
+      share: maxGoals > 0 ? num(row.goals) / maxGoals : undefined,
+    }));
+  }, [breakdown]);
+
+  /** Sıfır olan ayrıntı satırı hiç çizilmez. */
+  const detailGroups = useMemo(() => {
+    if (!totals) return [];
+    const matches = num(totals.matches);
+    const pick = (lines: { label: string; value: number; share?: number }[]) =>
+      lines.filter((line) => line.value > 0).map((line) => ({ ...line, value: String(line.value) }));
+    return [
+      {
+        title: "Oyun süresi",
+        lines: pick([
+          { label: "İlk kadro başlangıcı", value: num(totals.starts), share: matches > 0 ? num(totals.starts) / matches : undefined },
+          { label: "Sonradan oyuna giriş", value: num(totals.sub_ins) },
+          { label: "Kaptanlık", value: num(totals.captain) },
+        ]),
+      },
+      {
+        title: "Hücum ve savunma",
+        lines: pick([
+          { label: "Yaratılan pozisyon", value: num(totals.chances_created) },
+          { label: "Kurtarış", value: num(totals.saves) },
+          { label: "Kritik blok", value: num(totals.critical_blocks) },
+          { label: "Kazanılan hava topu", value: num(totals.aerials_won) },
+          { label: "Kazanılan ikili mücadele", value: num(totals.duels_won) },
+        ]),
+      },
+      {
+        title: "Disiplin",
+        lines: pick([
+          { label: "Sarı kart", value: num(totals.yellow_cards) },
+          { label: "Kırmızı kart", value: num(totals.red_cards) },
+          { label: "Faul", value: num(totals.fouls) },
+        ]),
+      },
+    ].filter((group) => group.lines.length > 0);
   }, [totals]);
 
   const selectAll = useCallback(() => setSelected({ leagueId: null, seasonId: null }), []);
@@ -1164,15 +1238,28 @@ function StatisticsTab({ scrollProps }: { scrollProps: ScrollChrome }) {
      geri çağrısı burada, erken dönüşlerin ÜSTÜNDE sabitlenir. */
   const openMatch = useCallback((matchId: number) => router.push(`/mac/${matchId}`), [router]);
 
+  const logLength = query.data?.match_log?.length ?? 0;
   const renderLogRow = useCallback(
     ({ item, index }: { item: StatMatchLogRow; index: number }) => (
       <MatchLogRow
-        row={item}
-        position={rowPosition(index, query.data?.match_log?.length ?? 0)}
-        onOpen={openMatch}
+        matchId={item.match_id}
+        date={item.date}
+        opponent={item.opponent ?? "Rakip"}
+        score={item.score || null}
+        result={item.result}
+        rating={item.rating}
+        goals={num(item.goals)}
+        assists={num(item.assists)}
+        yellow={num(item.yellow_cards)}
+        red={num(item.red_cards)}
+        started={item.started}
+        captain={item.captain}
+        venue={[item.is_home ? "Ev" : "Dep", item.season_name].filter(Boolean).join(" · ")}
+        position={rowPosition(index, logLength)}
+        onPress={openMatch}
       />
     ),
-    [openMatch, query.data?.match_log?.length],
+    [openMatch, logLength],
   );
 
   const logKey = useCallback((item: StatMatchLogRow) => String(item.match_id), []);
@@ -1220,7 +1307,6 @@ function StatisticsTab({ scrollProps }: { scrollProps: ScrollChrome }) {
     );
   }
 
-  const maxGoalType = goalTypes.reduce((acc, item) => Math.max(acc, item.value), 0);
   const anyFilter = selected.leagueId != null || selected.seasonId != null;
 
   return (
@@ -1236,272 +1322,71 @@ function StatisticsTab({ scrollProps }: { scrollProps: ScrollChrome }) {
       removeClippedSubviews
       ListHeaderComponent={
         <View style={styles.statHeader}>
-      {/* ————— Lig / sezon filtresi ————— */}
-      {combos.length > 1 ? (
-        <View style={styles.filterBar}>
-          <ChipGroup contentPadding={0}>
-            <Chip label="Tüm dönemler" selected={!anyFilter} size="sm" onPress={selectAll} />
-            {combos.map((combo) => (
-              <Chip
-                key={comboKey(combo)}
-                label={comboLabel(combo)}
-                count={combo.matches}
-                size="sm"
-                selected={
-                  selected.leagueId === combo.league_id && selected.seasonId === combo.season_id
-                }
-                onPress={() => selectCombo(combo)}
+          {/* ————— Lig / sezon filtresi ————— */}
+          {combos.length > 1 ? (
+            <ChipGroup contentPadding={0}>
+              <Chip label="Tüm dönemler" selected={!anyFilter} size="sm" onPress={selectAll} />
+              {combos.map((combo) => (
+                <Chip
+                  key={comboKey(combo)}
+                  label={comboLabel(combo)}
+                  count={combo.matches}
+                  size="sm"
+                  selected={
+                    selected.leagueId === combo.league_id && selected.seasonId === combo.season_id
+                  }
+                  onPress={() => selectCombo(combo)}
+                />
+              ))}
+            </ChipGroup>
+          ) : null}
+
+          {/* ————— Ana rakamlar + maç başına ————— */}
+          <StatTiles tiles={totalTiles} />
+          <StatTiles tiles={rateTiles} />
+
+          {/* ————— Galibiyet dengesi ————— */}
+          <WinBalance wins={num(totals.wins)} draws={num(totals.draws)} losses={num(totals.losses)} />
+
+          {/* ————— Gol kırılımı ————— */}
+          {goalTypes.length ? (
+            <BarList title="Gollerimi nasıl attım" meta={`${num(totals.goals)} gol`} items={goalTypes} />
+          ) : null}
+
+          {/* ————— Lig / sezon kırılımı ————— */}
+          {breakdownRows.length ? (
+            <>
+              <SectionHeader style={styles.flushHeader} title="Dönem dönem" meta={`${breakdownRows.length} dönem`} />
+              <StatTable
+                columns={[
+                  { key: "m", label: "M" },
+                  { key: "g", label: "G" },
+                  { key: "a", label: "A" },
+                ]}
+                rows={breakdownRows}
               />
-            ))}
-          </ChipGroup>
-        </View>
-      ) : null}
+            </>
+          ) : null}
 
-      {/* ————— Ana rakamlar ————— */}
-      <View style={styles.bigRow}>
-        <BigStat label="MAÇ" value={String(num(totals.matches))} />
-        <View style={styles.bigDivider} />
-        <BigStat label="GOL" value={String(num(totals.goals))} />
-        <View style={styles.bigDivider} />
-        <BigStat label="ASİST" value={String(num(totals.assists))} />
-        <View style={styles.bigDivider} />
-        <BigStat
-          label="ORT. PUAN"
-          value={totals.rating != null ? totals.rating.toFixed(1) : "—"}
-          tone="brand"
-        />
-      </View>
+          {/* ————— Ayrıntılı toplamlar ————— */}
+          {detailGroups.length ? (
+            <>
+              <SectionHeader style={styles.flushHeader} title="Ayrıntılı istatistik" />
+              {detailGroups.map((group) => (
+                <StatList key={group.title} title={group.title} lines={group.lines} />
+              ))}
+            </>
+          ) : null}
 
-      {/* ————— Maç başına ————— */}
-      {perMatch ? (
-        <Card title="Maç başına" style={styles.card}>
-          <View style={styles.perMatchRow}>
-            <PerMatchCell label="Gol" value={perMatch.goals.toFixed(2)} />
-            <PerMatchCell label="Asist" value={perMatch.assists.toFixed(2)} />
-            <PerMatchCell label="Katkı" value={perMatch.contributions.toFixed(2)} />
-            <PerMatchCell label="İlk kadro" value={`%${Math.round(num(perMatch.start_ratio))}`} />
-          </View>
-          <View style={styles.recordRow}>
-            <Text style={styles.recordText} {...textScale.dense}>
-              {num(totals.wins)}G · {num(totals.draws)}B · {num(totals.losses)}M
-            </Text>
-            {totals.best_rating != null ? (
-              <View style={styles.bestRating}>
-                <Text style={styles.recordText} {...textScale.dense}>
-                  En iyi puan
-                </Text>
-                <RatingPill value={totals.best_rating} size="sm" />
-              </View>
-            ) : null}
-          </View>
-        </Card>
-      ) : null}
-
-      {/* ————— Gol kırılımı ————— */}
-      {goalTypes.length ? (
-        <>
-          <SectionHeader title="Gollerimi nasıl attım" meta={`${num(totals.goals)} gol`} />
-          <View style={styles.card}>
-            {goalTypes.map((item) => (
-              <View key={item.label} style={styles.goalTypeRow}>
-                <Text style={styles.goalTypeLabel} numberOfLines={1} {...textScale.dense}>
-                  {item.label}
-                </Text>
-                <View style={styles.goalTypeTrack}>
-                  <View
-                    style={[
-                      styles.goalTypeFill,
-                      { flex: maxGoalType > 0 ? item.value / maxGoalType : 0 },
-                    ]}
-                  />
-                  <View style={{ flex: maxGoalType > 0 ? 1 - item.value / maxGoalType : 1 }} />
-                </View>
-                <Text style={styles.goalTypeValue} {...textScale.dense}>
-                  {item.value}
-                </Text>
-              </View>
-            ))}
-          </View>
-        </>
-      ) : null}
-
-      {/* ————— Lig / sezon kırılımı ————— */}
-      {breakdown.length ? (
-        <>
-          <SectionHeader title="Dönem dönem" meta={`${breakdown.length} dönem`} />
-          <View style={styles.table}>
-            <View style={styles.tableHead}>
-              <Text style={[styles.thText, styles.colPeriod]} {...textScale.badge}>
-                DÖNEM
-              </Text>
-              <Text style={[styles.thText, styles.colNum]} {...textScale.badge}>
-                M
-              </Text>
-              <Text style={[styles.thText, styles.colNum]} {...textScale.badge}>
-                G
-              </Text>
-              <Text style={[styles.thText, styles.colNum]} {...textScale.badge}>
-                A
-              </Text>
-              <Text style={[styles.thText, styles.colRating]} {...textScale.badge}>
-                Ø
-              </Text>
-            </View>
-            {breakdown.map((row) => (
-              <View
-                key={`${row.league_id ?? "x"}-${row.season_id ?? "x"}`}
-                style={styles.tableRow}
-              >
-                <View style={styles.colPeriod}>
-                  <Text style={styles.tdStrong} numberOfLines={1} {...textScale.dense}>
-                    {row.league_name ?? "Bilinmeyen lig"}
-                  </Text>
-                  <Text style={styles.tdSub} numberOfLines={1} {...textScale.badge}>
-                    {row.season_name ?? "Bilinmeyen sezon"}
-                  </Text>
-                </View>
-                <Text style={[styles.tdNum, styles.colNum]} {...textScale.dense}>
-                  {num(row.matches)}
-                </Text>
-                <Text style={[styles.tdNum, styles.colNum]} {...textScale.dense}>
-                  {num(row.goals)}
-                </Text>
-                <Text style={[styles.tdNum, styles.colNum]} {...textScale.dense}>
-                  {num(row.assists)}
-                </Text>
-                <View style={styles.colRating}>
-                  <RatingPill value={row.rating} size="sm" />
-                </View>
-              </View>
-            ))}
-          </View>
-        </>
-      ) : null}
-
-      {/* ————— Ayrıntılı toplamlar ————— */}
-      {detailRows.length ? (
-        <>
-          <SectionHeader title="Ayrıntılı istatistik" />
-          <View style={styles.group}>
-            {detailRows.map((item, index) => (
-              <ListRow
-                key={item.label}
-                title={item.label}
-                value={String(item.value)}
-                chevron={false}
-                position={rowPosition(index, detailRows.length)}
-              />
-            ))}
-          </View>
-        </>
-      ) : null}
-
-      {/* ————— Maç günlüğü başlığı — satırlar listenin kendisidir ————— */}
-      {matchLog.length ? (
-        <SectionHeader title="Maç günlüğü" meta={`son ${matchLog.length} maç`} />
-      ) : null}
+          {/* ————— Maç günlüğü başlığı — satırlar listenin kendisidir ————— */}
+          {matchLog.length ? (
+            <SectionHeader style={styles.flushHeader} title="Maç günlüğü" meta={`son ${matchLog.length} maç`} />
+          ) : null}
         </View>
       }
     />
   );
 }
-
-/** Maç günlüğünün tek satırı: tarih · rakip · skor · gol/asist · reyting. */
-const MatchLogRow = React.memo(function MatchLogRow({
-  row,
-  position,
-  onOpen,
-}: {
-  row: StatMatchLogRow;
-  position: "single" | "first" | "middle" | "last";
-  onOpen: (matchId: number) => void;
-}) {
-  const onPress = useCallback(() => onOpen(row.match_id), [onOpen, row.match_id]);
-
-  const resultColor =
-    row.result === "W" ? colors.win : row.result === "L" ? colors.loss : colors.draw;
-
-  return (
-    <Touchable
-      feedback="row"
-      haptic="selection"
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={`${row.opponent ?? "Rakip"} maçı, skor ${row.score}`}
-      style={[
-        styles.logRow,
-        position === "first" && styles.groupFirst,
-        position === "last" && styles.groupLast,
-        position === "single" && styles.groupSingle,
-        position !== "last" && position !== "single" && styles.groupDivider,
-      ]}
-    >
-      <View style={[styles.matchRail, { backgroundColor: resultColor }]} />
-
-      <View style={styles.logWhen}>
-        <Text style={styles.matchDate} {...textScale.dense}>
-          {row.date ? formatDateShort(row.date) : "—"}
-        </Text>
-        {row.started ? (
-          <Text style={styles.logRole} {...textScale.badge}>
-            İLK 11
-          </Text>
-        ) : null}
-      </View>
-
-      <View style={styles.logBody}>
-        <Text style={styles.matchOpponent} numberOfLines={1} {...textScale.dense}>
-          {String(row.opponent ?? "").toLocaleUpperCase("tr-TR")}
-        </Text>
-        <View style={styles.logMarks}>
-          <Text style={styles.matchMetaText} {...textScale.dense}>
-            {row.is_home ? "Ev" : "Dep"}
-          </Text>
-          {num(row.goals) > 0 ? (
-            <LogMark icon="football" tone={colors.win} count={num(row.goals)} />
-          ) : null}
-          {num(row.assists) > 0 ? (
-            <LogMark icon="navigate" tone={colors.info} count={num(row.assists)} />
-          ) : null}
-          {num(row.yellow_cards) > 0 ? (
-            <LogMark icon="square" tone={colors.yellowCard} count={num(row.yellow_cards)} />
-          ) : null}
-          {num(row.red_cards) > 0 ? (
-            <LogMark icon="square" tone={colors.redCard} count={num(row.red_cards)} />
-          ) : null}
-          {row.captain ? <LogMark icon="ribbon" tone={colors.brandAccent} count={0} /> : null}
-        </View>
-      </View>
-
-      <Text style={styles.matchScore} {...textScale.dense}>
-        {row.score}
-      </Text>
-
-      <RatingPill value={row.rating} size="sm" hideEmpty />
-    </Touchable>
-  );
-});
-
-const LogMark = React.memo(function LogMark({
-  icon,
-  tone,
-  count,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  tone: string;
-  count: number;
-}) {
-  return (
-    <View style={styles.logMark}>
-      <Ionicons name={icon} size={10} color={tone} />
-      {count > 1 ? (
-        <Text style={[styles.logMarkCount, { color: tone }]} {...textScale.badge}>
-          {count}
-        </Text>
-      ) : null}
-    </View>
-  );
-});
 
 /* ══════════════════════════════════════════════════════════════════════════
    8) SÖZLEŞMEM — yürürlükteki sözleşme + kısayollar
@@ -1538,14 +1423,10 @@ function ContractTab({ scrollProps }: { scrollProps: ScrollChrome }) {
   }
 
   return (
-    <ScrollView
-      {...scrollProps}
-      contentContainerStyle={styles.content}
-      refreshControl={refresh.control}
-    >
+    <ScrollView {...scrollProps} contentContainerStyle={styles.content} refreshControl={refresh.control}>
       {active ? (
         <>
-          <SectionHeader title="Yürürlükteki sözleşmem" />
+          <SectionHeader style={styles.flushHeader} title="Yürürlükteki sözleşmem" />
           <ActiveContractCard contract={active} />
         </>
       ) : (
@@ -1560,8 +1441,8 @@ function ContractTab({ scrollProps }: { scrollProps: ScrollChrome }) {
 
       {others.length ? (
         <>
-          <SectionHeader title="Geçmiş sözleşmelerim" meta={`${others.length} kayıt`} />
-          <View style={styles.group}>
+          <SectionHeader style={styles.flushHeader} title="Geçmiş sözleşmelerim" meta={`${others.length} kayıt`} />
+          <View>
             {others.map((contract, index) => (
               <ListRow
                 key={contract.public_id}
@@ -1589,8 +1470,8 @@ function ContractTab({ scrollProps }: { scrollProps: ScrollChrome }) {
         </>
       ) : null}
 
-      <SectionHeader title="Sözleşme işlemleri" />
-      <View style={styles.group}>
+      <SectionHeader style={styles.flushHeader} title="Sözleşme işlemleri" />
+      <View>
         <ListRow
           leading={{ icon: "documents", tone: "brand" }}
           title="Sözleşmelerim"
@@ -1618,7 +1499,27 @@ function contractPeriod(contract: Contract): string {
   return `${start} → ${end}`;
 }
 
-/** Yürürlükteki sözleşmenin vurgulu kartı. */
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Sözleşmenin zaman çizgisi — başlangıç ve bitiş tarihinden hesaplanır.
+ * Tarihlerden biri yoksa ya da okunamıyorsa null (çizgi çizilmez).
+ */
+function contractProgress(contract: Contract): { elapsed: number; daysLeft: number } | null {
+  const start = Date.parse(String(contract.contract_start_date ?? "").slice(0, 10));
+  const end = Date.parse(String(contract.contract_end_date ?? "").slice(0, 10));
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
+  const now = Date.now();
+  const elapsed = Math.max(0, Math.min(1, (now - start) / (end - start)));
+  const daysLeft = Math.max(0, Math.ceil((end - now) / DAY_MS));
+  return { elapsed, daysLeft };
+}
+
+/**
+ * Yürürlükteki sözleşmenin kartı: amblem + kulüp + durum, altında süre
+ * çizgisi (geçen pay + "kalan N gün") ve iki tarih. Süre çizgisi tarihlerden
+ * hesaplanır; uydurma bir değer değildir.
+ */
 const ActiveContractCard = React.memo(function ActiveContractCard({
   contract,
 }: {
@@ -1629,6 +1530,7 @@ const ActiveContractCard = React.memo(function ActiveContractCard({
   /* NOT: tek sözleşme detayı ekranı (`app/sozlesme/[id].tsx`) henüz yok;
      kart şimdilik sözleşme listesine iner. */
   const open = useCallback(() => router.push("/sozlesmelerim"), [router]);
+  const progress = contractProgress(contract);
 
   return (
     <Touchable
@@ -1636,8 +1538,8 @@ const ActiveContractCard = React.memo(function ActiveContractCard({
       haptic="selection"
       onPress={open}
       accessibilityRole="button"
-      accessibilityLabel={`${contract.team?.team_name ?? "Takım"} sözleşmesi`}
-      style={styles.contractCard}
+      accessibilityLabel={`${contract.team?.team_name ?? "Takım"} sözleşmesi${progress ? `, kalan ${progress.daysLeft} gün` : ""}`}
+      style={[surfaces.cardPadded, styles.contractCard]}
     >
       <View style={styles.contractHead}>
         <TeamLogo
@@ -1657,6 +1559,18 @@ const ActiveContractCard = React.memo(function ActiveContractCard({
         </View>
         <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
       </View>
+
+      {progress ? (
+        <View style={styles.contractProgress}>
+          <View style={styles.contractTrack}>
+            <View style={[styles.contractFill, { flex: progress.elapsed }]} />
+            <View style={{ flex: 1 - progress.elapsed }} />
+          </View>
+          <Text style={styles.contractLeft} {...textScale.dense}>
+            {progress.daysLeft > 0 ? `Kalan ${progress.daysLeft} gün` : "Süre doldu"}
+          </Text>
+        </View>
+      ) : null}
 
       <View style={styles.contractDates}>
         <ContractDate label="BAŞLANGIÇ" value={contract.contract_start_date} />
@@ -1678,7 +1592,7 @@ const ContractDate = React.memo(function ContractDate({
 }) {
   return (
     <View style={styles.contractDate}>
-      <Text style={styles.contractDateLabel} {...textScale.badge}>
+      <Text style={styles.overline} {...textScale.badge}>
         {label}
       </Text>
       <Text style={styles.contractDateValue} {...textScale.dense}>
@@ -1689,55 +1603,7 @@ const ContractDate = React.memo(function ContractDate({
 });
 
 /* ══════════════════════════════════════════════════════════════════════════
-   9) ORTAK KÜÇÜK BİLEŞENLER
-   ══════════════════════════════════════════════════════════════════════════ */
-
-/** Büyük özet rakamı — `type.display`, tabular hizalı. */
-const BigStat = React.memo(function BigStat({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string;
-  tone?: "brand";
-}) {
-  return (
-    <View style={styles.bigStat}>
-      <Text
-        style={[styles.bigValue, tone === "brand" && styles.bigValueBrand]}
-        {...textScale.dense}
-      >
-        {value}
-      </Text>
-      <Text style={styles.bigLabel} numberOfLines={1} {...textScale.badge}>
-        {label}
-      </Text>
-    </View>
-  );
-});
-
-const PerMatchCell = React.memo(function PerMatchCell({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <View style={styles.perMatchCell}>
-      <Text style={styles.perMatchValue} {...textScale.dense}>
-        {value}
-      </Text>
-      <Text style={styles.perMatchLabel} numberOfLines={1} {...textScale.badge}>
-        {label.toLocaleUpperCase("tr-TR")}
-      </Text>
-    </View>
-  );
-});
-
-/* ══════════════════════════════════════════════════════════════════════════
-   10) STİLLER
+   9) STİLLER
    ══════════════════════════════════════════════════════════════════════════ */
 
 const styles = StyleSheet.create({
@@ -1747,8 +1613,9 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: layout.screenPadding,
+    paddingTop: space.md,
     paddingBottom: space.giant,
-    gap: space.sm,
+    gap: space.md,
   },
   listContent: {
     paddingHorizontal: layout.screenPadding,
@@ -1757,7 +1624,13 @@ const styles = StyleSheet.create({
   /* Sanal listenin başlığı: `content` ile aynı dikey ritim, ama boşluk
      satırların ARASINA değil yalnız başlık bölümlerine uygulanır. */
   statHeader: {
-    gap: space.sm,
+    gap: space.md,
+    paddingTop: space.md,
+  },
+  /* İçerik kabı ekran dolgusunu basıyor; başlık kendi dolgusunu basmaz. */
+  flushHeader: {
+    paddingHorizontal: 0,
+    paddingBottom: space.xs,
   },
   loadingBody: {
     paddingHorizontal: layout.screenPadding,
@@ -1765,62 +1638,15 @@ const styles = StyleSheet.create({
     gap: space.md,
   },
   filterBar: {
-    paddingVertical: space.sm,
+    paddingVertical: space.md,
   },
-  card: {
-    marginTop: space.xs,
-  },
-
-  /* — Gruplar — */
-  group: {
-    borderRadius: radius.lg,
-    overflow: "hidden",
-  },
-  groupFirst: {
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
-  },
-  groupLast: {
-    borderBottomLeftRadius: radius.lg,
-    borderBottomRightRadius: radius.lg,
-  },
-  groupSingle: {
-    borderRadius: radius.lg,
-  },
-  groupDivider: {
-    borderBottomWidth: hairline,
-    borderBottomColor: colors.separator,
-  },
-
-  /* — Profil kartı — */
-  profileCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.md,
-    backgroundColor: colors.surface1,
-    borderWidth: hairline,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    padding: space.md,
-    marginTop: space.md,
-  },
-  profileBody: {
-    flex: 1,
-    gap: space.xs,
-  },
-  profileName: {
-    ...type.h1,
-    color: colors.textPrimary,
-  },
-  profileMeta: {
-    flexDirection: "row",
-    alignItems: "center",
-    flexWrap: "wrap",
-    gap: space.s,
-  },
-  profileCity: {
-    ...type.caption,
+  overline: {
+    ...type.overline,
     color: colors.textTertiary,
+  },
+  rowDivider: {
+    borderTopWidth: hairline,
+    borderTopColor: colors.separator,
   },
 
   /* — Kulüp kartı — */
@@ -1828,22 +1654,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: space.md,
-    backgroundColor: colors.surface1,
-    borderWidth: hairline,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    padding: space.md,
   },
   teamBody: {
     flex: 1,
-    gap: 1,
-  },
-  teamLabel: {
-    ...type.micro,
-    color: colors.brandAccent,
+    minWidth: 0,
+    gap: 2,
   },
   teamName: {
-    ...type.h3,
+    ...type.h2,
     color: colors.textPrimary,
   },
   teamMeta: {
@@ -1851,101 +1669,97 @@ const styles = StyleSheet.create({
     color: colors.textTertiary,
   },
 
-  /* — Büyük rakamlar — */
-  bigRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.surface1,
-    borderWidth: hairline,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    paddingVertical: space.md,
-  },
-  bigDivider: {
-    width: hairline,
-    alignSelf: "stretch",
-    backgroundColor: colors.separator,
-  },
-  bigStat: {
-    flex: 1,
-    alignItems: "center",
-    gap: 2,
-  },
-  bigValue: {
-    ...type.display,
-    fontVariant: ["tabular-nums"],
-    color: colors.textPrimary,
-  },
-  bigValueBrand: {
-    color: colors.brandAccent,
-  },
-  bigLabel: {
-    ...type.micro,
-    color: colors.textTertiary,
-  },
-
-  /* — Maç kartı — */
-  matchCard: {
-    backgroundColor: colors.surface1,
-    borderWidth: hairline,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    marginBottom: space.sm,
-    overflow: "hidden",
-  },
-  matchRow: {
+  /* — Son maç satırı (iki takım alt alta) — */
+  recentRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.md,
     paddingHorizontal: space.md,
     paddingVertical: space.m,
   },
-  matchRail: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 3,
+  recentTeams: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
   },
-  matchWhen: {
-    width: 52,
+  recentLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
   },
-  matchDate: {
-    ...type.tableNumStrong,
+  recentTeam: {
+    ...type.h4,
     color: colors.textPrimary,
+    flex: 1,
   },
-  matchTime: {
-    ...type.caption,
+  recentScore: {
+    ...type.tableNumStrong,
+    fontSize: 15,
+    color: colors.textPrimary,
+    minWidth: 20,
+    textAlign: "right",
+  },
+  recentLoser: {
     color: colors.textTertiary,
+  },
+
+  /* — Maç kartı — */
+  matchCard: {
+    marginBottom: space.sm,
+  },
+  matchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    paddingHorizontal: space.md,
+    paddingVertical: space.md,
   },
   matchBody: {
     flex: 1,
-    gap: 2,
+    minWidth: 0,
+    gap: 3,
   },
-  matchOpponent: {
-    ...type.bodySm,
-    fontFamily: fonts.bold,
-    color: colors.textPrimary,
-  },
-  matchMeta: {
+  matchTitleRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.s,
   },
-  matchMetaText: {
-    ...type.caption,
-    color: colors.textTertiary,
+  matchOpponent: {
+    ...type.h4,
+    color: colors.textPrimary,
     flexShrink: 1,
   },
-  matchResult: {
-    alignItems: "flex-end",
-    gap: 3,
+  matchMeta: {
+    ...type.caption,
+    color: colors.textTertiary,
   },
-  matchScore: {
-    ...type.scoreSm,
+  scoreBox: {
+    minWidth: 48,
+    height: 28,
+    paddingHorizontal: space.s,
+    borderRadius: radius.xs,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    backgroundColor: colors.surface2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  scoreText: {
+    ...type.tableNumStrong,
     color: colors.textPrimary,
-    minWidth: 34,
-    textAlign: "right",
+  },
+  timeBox: {
+    minWidth: 52,
+    height: 28,
+    paddingHorizontal: space.s,
+    borderRadius: radius.xs,
+    backgroundColor: colors.surface3,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  timeText: {
+    ...type.clock,
+    color: colors.textPrimary,
   },
 
   /* — Yoklama — */
@@ -1954,11 +1768,17 @@ const styles = StyleSheet.create({
     borderTopColor: colors.separator,
     paddingHorizontal: space.md,
     paddingVertical: space.m,
-    gap: space.s,
+    gap: space.sm,
   },
-  availabilityLabel: {
-    ...type.micro,
-    color: colors.textTertiary,
+  availabilityHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: space.sm,
+  },
+  availabilityHint: {
+    ...type.caption,
+    color: colors.warn,
   },
   availabilityOptions: {
     flexDirection: "row",
@@ -1969,173 +1789,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  /* — Maç başına — */
-  perMatchRow: {
-    flexDirection: "row",
-  },
-  perMatchCell: {
-    flex: 1,
-    alignItems: "center",
-    gap: 2,
-  },
-  perMatchValue: {
-    ...type.scoreMd,
-    color: colors.textPrimary,
-  },
-  perMatchLabel: {
-    ...type.micro,
-    color: colors.textTertiary,
-  },
-  recordRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: space.sm,
-    marginTop: space.md,
-    paddingTop: space.sm,
-    borderTopWidth: hairline,
-    borderTopColor: colors.separator,
-  },
-  recordText: {
-    ...type.caption,
-    color: colors.textSecondary,
-  },
-  bestRating: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.s,
-  },
-
-  /* — Gol kırılımı — */
-  goalTypeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.sm,
-    paddingVertical: space.xs,
-  },
-  goalTypeLabel: {
-    ...type.caption,
-    color: colors.textSecondary,
-    width: 84,
-  },
-  goalTypeTrack: {
-    flex: 1,
-    flexDirection: "row",
-    height: 6,
-    borderRadius: 3,
-    overflow: "hidden",
-    backgroundColor: colors.surface3,
-  },
-  goalTypeFill: {
-    height: 6,
-    backgroundColor: colors.brand,
-  },
-  goalTypeValue: {
-    ...type.tableNumStrong,
-    color: colors.textPrimary,
-    minWidth: 20,
-    textAlign: "right",
-  },
-
-  /* — Dönem tablosu — */
-  table: {
-    backgroundColor: colors.surface1,
-    borderWidth: hairline,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    overflow: "hidden",
-  },
-  tableHead: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.surface3,
-    paddingHorizontal: space.md,
-    paddingVertical: space.s,
-    gap: space.xs,
-  },
-  thText: {
-    ...type.micro,
-    color: colors.textTertiary,
-    textAlign: "center",
-  },
-  tableRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: space.md,
-    paddingVertical: space.m,
-    gap: space.xs,
-    borderTopWidth: hairline,
-    borderTopColor: colors.separator,
-  },
-  colPeriod: {
-    flex: 1,
-    textAlign: "left",
-  },
-  colNum: {
-    width: 30,
-    textAlign: "center",
-  },
-  colRating: {
-    width: 40,
-    alignItems: "flex-end",
-  },
-  tdStrong: {
-    ...type.bodySm,
-    fontFamily: fonts.bold,
-    color: colors.textPrimary,
-  },
-  tdSub: {
-    ...type.micro,
-    color: colors.textTertiary,
-    letterSpacing: 0.2,
-  },
-  tdNum: {
-    ...type.tableNum,
-    color: colors.textSecondary,
-  },
-
-  /* — Maç günlüğü — */
-  logRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.sm,
-    minHeight: 56,
-    paddingRight: space.md,
-    paddingLeft: space.sm,
-    backgroundColor: colors.surface1,
-  },
-  logWhen: {
-    width: 52,
-  },
-  logRole: {
-    ...type.micro,
-    color: colors.brandAccent,
-  },
-  logBody: {
-    flex: 1,
-    gap: 2,
-  },
-  logMarks: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.s,
-  },
-  logMark: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 2,
-  },
-  logMarkCount: {
-    ...type.micro,
-  },
-
   /* — Sözleşme — */
   contractCard: {
-    backgroundColor: colors.surface1,
-    borderWidth: hairline,
-    borderColor: colors.brandBorder,
-    borderRadius: radius.lg,
-    padding: space.md,
     gap: space.md,
   },
   contractHead: {
@@ -2145,12 +1800,32 @@ const styles = StyleSheet.create({
   },
   contractHeadBody: {
     flex: 1,
+    minWidth: 0,
     alignItems: "flex-start",
     gap: space.s,
   },
   contractTeam: {
     ...type.h2,
     color: colors.textPrimary,
+  },
+  contractProgress: {
+    gap: space.s,
+  },
+  contractTrack: {
+    flexDirection: "row",
+    height: 6,
+    borderRadius: radius.pill,
+    overflow: "hidden",
+    backgroundColor: colors.surface3,
+  },
+  contractFill: {
+    height: 6,
+    borderRadius: radius.pill,
+    backgroundColor: colors.accent,
+  },
+  contractLeft: {
+    ...type.caption,
+    color: colors.textSecondary,
   },
   contractDates: {
     flexDirection: "row",
@@ -2163,10 +1838,6 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     gap: 2,
-  },
-  contractDateLabel: {
-    ...type.micro,
-    color: colors.textTertiary,
   },
   contractDateValue: {
     ...type.tableNumStrong,

@@ -1,13 +1,13 @@
 /**
  * Oyunlar sekmesi — beş mini oyunun tek giriş kapısı.
  *
- * NE:
- *   1. Kişisel durum şeridi — girişliyse bu haftaki en iyi sıra, toplam puan
- *      ve kaç oyunda skoru olduğu; girişsizse "giriş yap" çağrısı.
- *   2. "Günün Testi" öne çıkan kartı — bugün oynandı mı, bu hafta kaç kişi
- *      yarıştı, tek dokunuşla oyna.
- *   3. İki sütunlu oyun kartları — Arena, Top Sektir, Kim Bu?, Slalom.
- *   4. REKORLAR — Rekor Tablosu (/siralama) ve Türkiye Sıralaması (/turkiye).
+ * NE (Arena "merkez" kalıbı):
+ *   1. SAHNE — Günün Testi (bugün oynandı mı, bu hafta kaç kişi yarıştı, tek
+ *      mor düğme) ve dibinde kişisel haftalık özet: en iyi sıra · puan · oyun.
+ *      Misafirde özetin yerine giriş çağrısı durur.
+ *   2. OYNA — ilk oyun tam genişlikte öne çıkar, kalan dördü 2×2; her kartın
+ *      dibinde rekor RAKAMLA yazılır (Archivo), yoksa "İlk rekorunu kur".
+ *   3. SIRALAMALAR — Rekor tablosu (/siralama) ve Türkiye sıralaması (/turkiye).
  *
  * NEDEN SEGMENT YOK: sayfada dört blok ve dokuz basılabilir öğe var; bunları
  * sekmelere bölmek keşfi zorlaştırır, kaydırma ise bedavadır. Öğe sayısı sabit
@@ -37,23 +37,22 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
-import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
-import { Animated, RefreshControl, StyleSheet, Text, View, type ColorValue } from "react-native";
+import { Animated, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   Badge,
+  Button,
+  GradientFill,
   ListRow,
   ScreenHeader,
   SectionHeader,
-  Skeleton,
   Touchable,
   refreshControlProps,
   toneColors,
   useHeaderScroll,
   useRefresh,
-  withAlpha,
 } from "@/components/ui";
 import type { Tone } from "@/components/ui";
 import type { ArenaGame } from "@/lib/api/arena";
@@ -62,7 +61,6 @@ import { useAuth } from "@/providers/AuthProvider";
 import {
   colors,
   elevate,
-  fonts,
   hairline,
   layout,
   radius,
@@ -71,15 +69,6 @@ import {
   type,
   upperTR,
 } from "@/theme";
-
-/**
- * Günün Testi kartının gradyan yönü — YATAY, SAĞDAN SOLA.
- *
- * Köşegen ışıktı; kartı silindire çevirip "boru" görünümü veriyordu ve aynı
- * ekrandaki diğer yüzeylerle farklı bir ışık kaynağı okunuyordu.
- */
-const DAILY_GRADIENT_START = { x: 1, y: 0.5 } as const;
-const DAILY_GRADIENT_END = { x: 0, y: 0.5 } as const;
 
 /* ===================== SABİTLER (saf veri) ===================== */
 
@@ -130,7 +119,7 @@ const GRID_GAMES: GameMeta[] = [
     key: "seri",
     route: "/arena",
     title: "Arena",
-    blurb: "Seri modu: iki oyuncudan hangisi önde? Yanlışa kadar uzat.",
+    blurb: "İki oyuncudan hangisi önde? Seriyi yanlışa kadar uzat.",
     icon: "flame",
     tone: "warn",
     unit: "seri",
@@ -251,165 +240,141 @@ function dayLabelOf(isoDay: string): string {
   return month && Number.isFinite(day) ? `${day} ${month}` : "";
 }
 
-/* ===================== KİŞİSEL DURUM ŞERİDİ ===================== */
+/* ===================== SAHNE: GÜNÜN TESTİ + BU HAFTA ===================== */
 
 /**
- * NEDEN İLKEL PROP: özet bir nesne olarak geçilseydi her render'da yeni
- * referans alır ve `React.memo` hiçbir şey kazandırmazdı. Üç sayı ayrı ayrı
- * geçilince şerit yalnız değerler gerçekten değişince yeniden çizilir.
+ * EKRANIN TEK SAHNESİ (Arena §1.2) — Günün Testi'nin kendisi.
+ *
+ * ESKİ DÜZEN: üstte beyaz "bu hafta" şeridi, altında mor dolgulu Günün Testi
+ * kartı. İki ayrı vurgu yarışıyordu ve mor dolgu Arena'da yalnız aksiyona
+ * ayrılmış rengi bir yüzeye yayıyordu. YENİ: grafit sahne, içinde günün
+ * sorusu ve tek mor düğme ("Oyna"); kişisel haftalık özet sahnenin dibinde
+ * üç sayı olarak durur (rakam kahramandır). Misafirde sayıların yerine giriş
+ * çağrısı çıkar — skorların neden sıralamaya girmediğini söyler.
  */
-const WeekStrip = React.memo(function WeekStrip({
-  bestRank,
-  totalScore,
-  playedGames,
-  onPress,
-}: {
-  /** En iyi (en küçük) sıra — hiç kaydı yoksa null. */
-  bestRank: number | null;
-  totalScore: number;
-  playedGames: number;
-  onPress: () => void;
-}) {
-  return (
-    <Touchable
-      feedback="card"
-      haptic="light"
-      onPress={onPress}
-      style={styles.weekCard}
-      accessibilityRole="button"
-      accessibilityLabel={`Bu hafta en iyi sıran ${bestRank ?? "yok"}, toplam ${totalScore} puan. Rekor tablosunu aç.`}
-    >
-      <View style={styles.weekHead}>
-        <Ionicons name="sparkles" size={12} color={colors.brandAccent} />
-        <Text style={styles.weekOverline} {...textScale.badge}>
-          {upperTR("Bu hafta")}
-        </Text>
-        <View style={styles.flex} />
-        <Ionicons name="chevron-forward" size={14} color={colors.textTertiary} />
-      </View>
-
-      <View style={styles.weekStats}>
-        <View style={styles.weekStat}>
-          <Text style={styles.weekValueAccent} {...textScale.dense}>
-            {bestRank != null ? `#${bestRank}` : "—"}
-          </Text>
-          <Text style={styles.weekLabel} numberOfLines={1} {...textScale.badge}>
-            en iyi sıran
-          </Text>
-        </View>
-
-        <View style={styles.weekDivider} />
-
-        <View style={styles.weekStat}>
-          <Text style={styles.weekValue} {...textScale.dense}>
-            {formatCount(totalScore)}
-          </Text>
-          <Text style={styles.weekLabel} numberOfLines={1} {...textScale.badge}>
-            toplam puan
-          </Text>
-        </View>
-
-        <View style={styles.weekDivider} />
-
-        <View style={styles.weekStat}>
-          <Text style={styles.weekValue} {...textScale.dense}>
-            {`${playedGames}/${GAME_ORDER.length}`}
-          </Text>
-          <Text style={styles.weekLabel} numberOfLines={1} {...textScale.badge}>
-            oyun
-          </Text>
-        </View>
-      </View>
-    </Touchable>
-  );
-});
-
-/* ===================== GÜNÜN TESTİ KARTI ===================== */
-
-const DailyTestCard = React.memo(function DailyTestCard({
+const DailyStage = React.memo(function DailyStage({
   dayLabel,
   ready,
   result,
-  rank,
   players,
-  onPress,
+  signedIn,
+  statsLoading,
+  bestRank,
+  totalScore,
+  playedGames,
+  onPlay,
+  onBoard,
+  onSignIn,
 }: {
   dayLabel: string;
   /** Cihazdaki sonuç okundu mu — okunmadan "çözülmedi" iddiası yazılmaz. */
   ready: boolean;
   /** Bugünkü resmî hak kullanıldıysa sonucu, yoksa null. */
   result: DailyResult | null;
-  /** Bu haftaki sıra — girişsizken ya da hiç oynamamışken null. */
-  rank: number | null;
-  /** Bu hafta yarışan oyuncu sayısı — girişsizken null. */
+  /** Bu hafta Günün Testi'nde yarışan oyuncu sayısı — girişsizken null. */
   players: number | null;
-  onPress: () => void;
+  signedIn: boolean;
+  statsLoading: boolean;
+  /** En iyi (en küçük) haftalık sıra — kaydı yoksa null. */
+  bestRank: number | null;
+  totalScore: number;
+  playedGames: number;
+  onPlay: () => void;
+  onBoard: () => void;
+  onSignIn: () => void;
 }) {
-  const done = result != null;
+  const done = ready && result != null;
 
-  const title = !ready
-    ? "Bugünün testi hazır"
-    : done
-      ? `${result.correct}/10 doğru · ${formatCount(result.score)} puan`
-      : "Bugünün testini çöz";
-
-  const subtitle = (() => {
-    if (rank != null && players != null) {
-      return `Bu hafta #${rank} · ${formatCount(players)} kişi yarıştı`;
-    }
-    if (players != null) return `Bu hafta ${formatCount(players)} kişi yarıştı`;
-    return "Herkese aynı 10 soru — günde tek resmî hak";
-  })();
+  const title = done ? "Bugünkü testi çözdün" : "Bugünün testi hazır";
+  const body = done
+    ? `${result.correct}/10 doğru · ${formatCount(result.score)} puan`
+    : players != null && players > 0
+      ? `Herkese aynı 10 soru. Bu hafta ${formatCount(players)} kişi yarıştı.`
+      : "Herkese aynı 10 soru — günde tek resmî hak.";
 
   return (
-    <Touchable
-      feedback="card"
-      haptic="light"
-      onPress={onPress}
-      style={styles.daily}
-      accessibilityRole="button"
-      accessibilityLabel={`Günün Testi. ${title}. ${subtitle}`}
-    >
-      {/*
-        Mercan gradyan dolgu. Düz tek renk, ekranın en büyük mercan yüzeyinde
-        matlaşıp "boyanmış kutu" gibi duruyordu; iki durak yüzeye hafif bir
-        ışık verip kartı kabartıyor. Renk aynı aileden, alan büyümüyor.
-      */}
-      <View style={styles.dailyFill}>
-        <LinearGradient
-          colors={colors.gradientBrand}
-          start={DAILY_GRADIENT_START}
-          end={DAILY_GRADIENT_END}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
-        />
-        <View style={styles.dailyIcon}>
-          <Ionicons
-            name={ready && done ? "checkmark" : "bulb"}
-            size={20}
-            color={colors.textOnBrand}
+    <View style={styles.stage}>
+      <GradientFill tone="ink" radius="xxl" />
+
+      <View style={styles.stageTop}>
+        <View style={styles.stageHead}>
+          <View style={styles.stageIcon}>
+            <Ionicons name={done ? "checkmark" : "bulb"} size={18} color={colors.brandOnDark} />
+          </View>
+          <Text style={styles.stageOverline} numberOfLines={1} {...textScale.badge}>
+            {upperTR(dayLabel ? `Günün Testi · ${dayLabel}` : "Günün Testi")}
+          </Text>
+        </View>
+        <Text style={styles.stageTitle} numberOfLines={1} {...textScale.dense}>
+          {title}
+        </Text>
+        <Text style={[styles.stageBody, done ? styles.stageBodyResult : null]} numberOfLines={2} {...textScale.dense}>
+          {body}
+        </Text>
+        <View style={styles.stageActions}>
+          <Button
+            label={done ? "Tekrar oyna" : "Testi çöz"}
+            icon={done ? "refresh" : "play"}
+            variant={done ? "secondary" : "primary"}
+            onDark
+            onPress={onPlay}
+            accessibilityLabel={`Günün Testi. ${title}. ${body}`}
           />
         </View>
-
-        <View style={styles.dailyBody}>
-          <Text style={styles.dailyOverline} numberOfLines={1} {...textScale.badge}>
-            {upperTR(dayLabel ? `${dayLabel} · Günün Testi` : "Günün Testi")}
-          </Text>
-          <Text style={styles.dailyTitle} numberOfLines={1} {...textScale.dense}>
-            {title}
-          </Text>
-          <Text style={styles.dailySub} numberOfLines={1} {...textScale.dense}>
-            {subtitle}
-          </Text>
-        </View>
-
-        <View style={styles.dailyPill}>
-          <Text style={styles.dailyPillText} {...textScale.badge}>
-            {ready && done ? "Tekrar" : "Oyna"}
-          </Text>
-        </View>
       </View>
-    </Touchable>
+
+      {/* Bu hafta — sahnenin dibinde üç sayı ya da misafir çağrısı. */}
+      {!signedIn ? (
+        <Touchable
+          feedback="chip"
+          haptic="selection"
+          onPress={onSignIn}
+          accessibilityRole="button"
+          accessibilityLabel="Giriş yap; skorların sıralamaya yazılsın"
+          style={styles.stageFoot}
+        >
+          <Ionicons name="log-in-outline" size={16} color={colors.brandOnDark} />
+          <Text style={styles.stageFootText} numberOfLines={1} {...textScale.dense}>
+            Giriş yap, skorların sıralamaya yazılsın
+          </Text>
+          <Ionicons name="chevron-forward" size={14} color={colors.onDarkMuted} />
+        </Touchable>
+      ) : statsLoading ? (
+        <View style={[styles.stageFoot, styles.stageStats]}>
+          <Text style={styles.stageFootText} {...textScale.dense}>
+            Haftalık sıran yükleniyor…
+          </Text>
+        </View>
+      ) : (
+        <Touchable
+          feedback="chip"
+          haptic="selection"
+          onPress={onBoard}
+          accessibilityRole="button"
+          accessibilityLabel={`Bu hafta en iyi sıran ${bestRank ?? "yok"}, toplam ${totalScore} puan, ${playedGames} oyun. Rekor tablosunu aç.`}
+          style={[styles.stageFoot, styles.stageStats]}
+        >
+          <StageStat value={bestRank != null ? `#${bestRank}` : "—"} label="En iyi sıra" />
+          <View style={styles.stageDivider} />
+          <StageStat value={formatCount(totalScore)} label="Puan" />
+          <View style={styles.stageDivider} />
+          <StageStat value={`${playedGames}/${GAME_ORDER.length}`} label="Oyun" />
+        </Touchable>
+      )}
+    </View>
+  );
+});
+
+const StageStat = React.memo(function StageStat({ value, label }: { value: string; label: string }) {
+  return (
+    <View style={styles.stageStat}>
+      <Text style={styles.stageStatValue} {...textScale.dense}>
+        {value}
+      </Text>
+      <Text style={styles.stageStatLabel} numberOfLines={1} {...textScale.badge}>
+        {upperTR(label)}
+      </Text>
+    </View>
   );
 });
 
@@ -420,6 +385,7 @@ const GameCard = React.memo(function GameCard({
   ready,
   best,
   rank,
+  wide,
   onPress,
 }: {
   meta: GameMeta;
@@ -429,61 +395,77 @@ const GameCard = React.memo(function GameCard({
   best: number | null;
   /** Bu haftaki sıra — girişsizken ya da kaydı yokken null. */
   rank: number | null;
+  /** Izgaranın ilk (öne çıkan) kartı tam genişlikte, yatay düzende çizilir. */
+  wide?: boolean;
   onPress: (route: string) => void;
 }) {
   const tone = toneColors(meta.tone);
-
   const handlePress = useCallback(() => onPress(meta.route), [meta.route, onPress]);
 
-  /**
-   * Tonlu zemin: kartın kimliğini rengin kendisi değil, yüzeye doğru sönen
-   * ince bir tint verir. Dolu renk dört kartta yan yana durunca ekranı
-   * yorar (§renk felsefesi: renk anlam taşır, dekor değildir).
-   */
-  const fill: readonly [ColorValue, ColorValue] = [withAlpha(tone.fg, 0.18), colors.surface1];
+  /* REKOR RAKAMLA SÖYLENİR (Arena §1.5): "1.240 gol" Archivo ile büyük,
+     birimi küçük. Rekor yoksa aynı yükseklikte bir davet satırı durur ki
+     depolama okunurken kart zıplamasın. */
+  const record = !ready ? (
+    <View style={styles.gameRecord} />
+  ) : best != null ? (
+    <View style={styles.gameRecord}>
+      <Text style={styles.gameBest} numberOfLines={1} {...textScale.dense}>
+        {formatCount(best)}
+      </Text>
+      <Text style={styles.gameUnit} numberOfLines={1} {...textScale.dense}>
+        {meta.unit} · rekorun
+      </Text>
+    </View>
+  ) : (
+    <View style={styles.gameRecord}>
+      <Text style={styles.gameCta} numberOfLines={1} {...textScale.dense}>
+        İlk rekorunu kur
+      </Text>
+      <Ionicons name="arrow-forward" size={13} color={colors.brandAccent} />
+    </View>
+  );
 
   return (
     <Touchable
       feedback="card"
       haptic="light"
       onPress={handlePress}
-      style={styles.gameCard}
+      style={[styles.gameCard, wide ? styles.gameCardWide : null]}
       accessibilityRole="button"
-      accessibilityLabel={`${meta.title}. ${meta.blurb}${best != null ? ` Rekorun ${best} ${meta.unit}.` : ""}`}
+      accessibilityLabel={`${meta.title}. ${meta.blurb}${best != null ? ` Rekorun ${best} ${meta.unit}.` : ""}${rank != null ? ` Bu hafta ${rank}. sıradasın.` : ""}`}
     >
-      {/* Düz yüzey — oyun kartlarının rengi ton rozetinden okunur. */}
-      <View style={[styles.gameFill, { backgroundColor: fill[fill.length - 1] }]}>
-        <View style={styles.gameTop}>
-          <View style={[styles.gameIcon, { backgroundColor: tone.dim }]}>
-            <Ionicons name={meta.icon} size={18} color={tone.fg} />
-          </View>
-          {rank != null ? <Badge label={`#${rank}`} tone={meta.tone} size="xs" /> : null}
+      <View style={styles.gameTop}>
+        <View style={[styles.gameIcon, wide ? styles.gameIconWide : null, { backgroundColor: tone.dim }]}>
+          <Ionicons name={meta.icon} size={wide ? 22 : 18} color={tone.fg} />
         </View>
-
-        <Text style={styles.gameTitle} numberOfLines={1} {...textScale.dense}>
-          {meta.title}
-        </Text>
-        <Text style={styles.gameBlurb} numberOfLines={2} {...textScale.dense}>
-          {meta.blurb}
-        </Text>
-
-        {/* Yükseklik her durumda sabit: depolama okunurken satır kaybolup
-            kart zıplamasın diye boş hâl de aynı yeri kaplar. */}
-        <View style={styles.gameFoot}>
-          {!ready ? null : best != null ? (
-            <>
-              <Ionicons name="trophy" size={11} color={colors.star} />
-              <Text style={styles.gameBest} numberOfLines={1} {...textScale.badge}>
-                {`${formatCount(best)} ${meta.unit}`}
-              </Text>
-            </>
-          ) : (
-            <Text style={styles.gameCta} numberOfLines={1} {...textScale.badge}>
-              İlk rekorunu kur
+        {wide ? (
+          <View style={styles.flex}>
+            <Text style={styles.gameTitle} numberOfLines={1} {...textScale.dense}>
+              {meta.title}
             </Text>
-          )}
-        </View>
+            <Text style={styles.gameBlurb} numberOfLines={2} {...textScale.dense}>
+              {meta.blurb}
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.flex} />
+        )}
+        {rank != null ? <Badge label={`#${rank}`} tone="brand" size="xs" /> : null}
       </View>
+
+      {wide ? null : (
+        <>
+          <Text style={styles.gameTitle} numberOfLines={1} {...textScale.dense}>
+            {meta.title}
+          </Text>
+          <Text style={styles.gameBlurb} numberOfLines={2} {...textScale.dense}>
+            {meta.blurb}
+          </Text>
+        </>
+      )}
+
+      <View style={styles.gameFootRule} />
+      {record}
     </Touchable>
   );
 });
@@ -627,35 +609,6 @@ export default function OyunlarScreen() {
 
   const dailyStanding = standingByGame.gunun;
 
-  /**
-   * Üst slot üç hâlden birini alır:
-   *   • girişsiz            → giriş çağrısı (skorun neden kaybolduğunu anlatır)
-   *   • girişli + yükleniyor→ iskelet (spinner değil, §yükleme stratejisi)
-   *   • girişli + kaydı var → haftalık özet şeridi
-   * Girişli ama bu hafta hiç skoru yoksa slot BOŞ kalır: "#— / 0 puan" satırı
-   * bilgi taşımaz, yalnız ekranın tepesini üzgün bir tabloya çevirirdi.
-   */
-  const topSlot = !signedIn ? (
-    <View style={styles.rows}>
-      <ListRow
-        leading={{ icon: "log-in", tone: "brand" }}
-        title="Giriş yap"
-        subtitle="Skorların rekor tablosuna yazılsın"
-        position="single"
-        onPress={openSignIn}
-      />
-    </View>
-  ) : standingsLoading ? (
-    <Skeleton width="100%" height={78} radius="lg" style={styles.stripSkeleton} />
-  ) : playedGames > 0 ? (
-    <WeekStrip
-      bestRank={bestRank}
-      totalScore={totalScore}
-      playedGames={playedGames}
-      onPress={openBoard}
-    />
-  ) : null;
-
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader
@@ -665,7 +618,6 @@ export default function OyunlarScreen() {
            Menü'den açılır. Sekme gezgininde geri yığını olmayabilir; o durumda
            geldiği yere, yani Menü'ye dönülür. */
         onBack={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)/profil"))}
-        subtitle="Rekor kır, sıralamaya gir"
         scrollY={scrollY}
         actions={headerActions}
       />
@@ -676,25 +628,29 @@ export default function OyunlarScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={refreshControl}
       >
-        {/* 1) Kişisel durum şeridi */}
-        {topSlot}
-
-        {/* 2) Günün Testi */}
-        <DailyTestCard
+        {/* 1) Sahne: Günün Testi + bu haftaki özet */}
+        <DailyStage
           dayLabel={dayLabel}
           ready={local.loaded}
           result={local.today}
-          rank={dailyStanding?.entry?.rank ?? null}
           players={dailyStanding ? dailyStanding.totalPlayers : null}
-          onPress={openDaily}
+          signedIn={signedIn}
+          statsLoading={standingsLoading}
+          bestRank={bestRank}
+          totalScore={totalScore}
+          playedGames={playedGames}
+          onPlay={openDaily}
+          onBoard={openBoard}
+          onSignIn={openSignIn}
         />
 
-        {/* 3) Oyun kartları */}
-        <SectionHeader title="Oyunlar" meta={`${GRID_GAMES.length} oyun`} />
+        {/* 2) Oyun kartları — ilki öne çıkan, tam genişlik; kalan dördü 2×2. */}
+        <SectionHeader title="Oyna" meta={`${GRID_GAMES.length} oyun`} />
         <View style={styles.grid}>
-          {GRID_GAMES.map((meta) => (
+          {GRID_GAMES.map((meta, index) => (
             <GameCard
               key={meta.key}
+              wide={index === 0}
               meta={meta}
               ready={local.loaded}
               best={local.best[meta.key] ?? null}
@@ -704,19 +660,19 @@ export default function OyunlarScreen() {
           ))}
         </View>
 
-        {/* 4) Rekorlar */}
-        <SectionHeader title="Rekorlar" />
+        {/* 3) Rekorlar */}
+        <SectionHeader title="Sıralamalar" />
         <View style={styles.rows}>
           <ListRow
             leading={{ icon: "trophy", tone: "warn" }}
-            title="Rekor Tablosu"
-            subtitle="Beş oyunun haftalık ve tüm zamanlar sıralaması"
+            title="Rekor tablosu"
+            subtitle="Her oyunun haftalık ve tüm zamanlar sıralaması"
             position="first"
             onPress={openBoard}
           />
           <ListRow
             leading={{ icon: "earth", tone: "info" }}
-            title="Türkiye Sıralaması"
+            title="Türkiye sıralaması"
             subtitle="Tüm şehirler · oyuncu ve takım rekorları"
             position="last"
             onPress={openTurkey}
@@ -739,108 +695,97 @@ const styles = StyleSheet.create({
     gap: space.md,
   },
 
-  /* — Kişisel durum şeridi — */
-  stripSkeleton: {
+  /* — Sahne: Günün Testi — */
+  stage: {
     marginHorizontal: layout.screenPadding,
+    borderRadius: radius.xxl,
+    backgroundColor: colors.inkBlock,
+    overflow: "hidden",
+    ...elevate(2),
   },
-  weekCard: {
-    marginHorizontal: layout.screenPadding,
-    backgroundColor: colors.surface1,
-    borderRadius: radius.lg,
-    borderWidth: hairline,
-    borderColor: colors.brandBorder,
-    paddingHorizontal: space.md,
-    paddingVertical: space.m,
-    gap: space.sm,
-  },
-  weekHead: {
-    flexDirection: "row",
-    alignItems: "center",
+  stageTop: {
+    paddingHorizontal: space.lg,
+    paddingTop: space.lg,
+    paddingBottom: space.md,
     gap: space.xs,
   },
-  weekOverline: {
-    ...type.micro,
-    color: colors.brandAccent,
-  },
-  weekStats: {
+  stageHead: {
     flexDirection: "row",
     alignItems: "center",
+    gap: space.sm,
+    marginBottom: space.xs,
   },
-  weekStat: {
-    flex: 1,
-    alignItems: "center",
-    gap: space.xxs,
-  },
-  weekDivider: {
-    width: hairline,
-    alignSelf: "stretch",
-    backgroundColor: colors.separator,
-  },
-  weekValue: {
-    ...type.scoreSm,
-    color: colors.textPrimary,
-  },
-  weekValueAccent: {
-    ...type.scoreSm,
-    color: colors.brandAccent,
-  },
-  weekLabel: {
-    ...type.caption,
-    fontFamily: fonts.semibold,
-    letterSpacing: 0,
-    color: colors.textTertiary,
-  },
-
-  /* — Günün Testi — */
-  daily: {
-    marginHorizontal: layout.screenPadding,
-    borderRadius: radius.xl,
-    overflow: "hidden",
-    ...elevate(1),
-    borderWidth: 0,
-  },
-  dailyFill: {
-    backgroundColor: colors.brand,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.md,
-    paddingHorizontal: space.md,
-    paddingVertical: space.md,
-  },
-  dailyIcon: {
-    width: 32,
-    height: 32,
+  stageIcon: {
+    width: 30,
+    height: 30,
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: withAlpha(colors.textOnBrand, 0.18),
+    backgroundColor: colors.inkPill,
+    borderWidth: hairline,
+    borderColor: colors.inkPillBorder,
   },
-  dailyBody: { flex: 1, gap: space.xxs },
-  dailyOverline: {
-    ...type.micro,
-    color: withAlpha(colors.textOnBrand, 0.72),
+  stageOverline: {
+    ...type.overline,
+    color: colors.brandOnDark,
+    flex: 1,
   },
-  dailyTitle: {
-    ...type.h2,
-    color: colors.textOnBrand,
+  stageTitle: {
+    ...type.display,
+    color: colors.onDark,
   },
-  dailySub: {
-    ...type.caption,
-    fontFamily: fonts.semibold,
-    letterSpacing: 0,
-    color: withAlpha(colors.textOnBrand, 0.78),
+  stageBody: {
+    ...type.bodySm,
+    color: colors.onDarkMuted,
   },
-  dailyPill: {
-    borderRadius: radius.pill,
+  stageBodyResult: {
+    ...type.h4,
+    color: colors.onDark,
+  },
+  stageActions: {
+    flexDirection: "row",
+    marginTop: space.md,
+  },
+  stageFoot: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    marginHorizontal: space.md,
+    marginBottom: space.md,
     paddingHorizontal: space.md,
-    paddingVertical: space.s,
-    backgroundColor: withAlpha(colors.textOnBrand, 0.22),
+    minHeight: layout.minTouch,
+    borderRadius: radius.md,
+    backgroundColor: colors.inkTile,
+    borderWidth: hairline,
+    borderColor: colors.inkTileBorder,
   },
-  dailyPillText: {
-    ...type.caption,
-    fontFamily: fonts.bold,
-    letterSpacing: 0.2,
-    color: colors.textOnBrand,
+  stageFootText: {
+    ...type.label,
+    color: colors.onDark,
+    flex: 1,
+  },
+  stageStats: {
+    paddingHorizontal: 0,
+    paddingVertical: space.m,
+    gap: 0,
+  },
+  stageStat: {
+    flex: 1,
+    alignItems: "center",
+    gap: 2,
+  },
+  stageStatValue: {
+    ...type.metricSm,
+    color: colors.onDark,
+  },
+  stageStatLabel: {
+    ...type.overline,
+    color: colors.onDarkMuted,
+  },
+  stageDivider: {
+    width: hairline,
+    alignSelf: "stretch",
+    backgroundColor: colors.borderOnDark,
   },
 
   /* — Oyun ızgarası — */
@@ -853,59 +798,71 @@ const styles = StyleSheet.create({
   },
   gameCard: {
     width: "48.5%",
-    borderRadius: radius.lg,
-    overflow: "hidden",
-    borderWidth: hairline,
-    borderColor: colors.border,
-  },
-  gameFill: {
-    minHeight: 132,
+    minHeight: 150,
     padding: space.md,
     gap: space.xs,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    ...elevate(1),
+  },
+  gameCardWide: {
+    width: "100%",
+    minHeight: 0,
   },
   gameTop: {
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: space.xxs,
+    alignItems: "flex-start",
+    gap: space.md,
+    marginBottom: space.xs,
   },
   gameIcon: {
-    width: 32,
-    height: 32,
+    width: 36,
+    height: 36,
     borderRadius: radius.md,
     alignItems: "center",
     justifyContent: "center",
+  },
+  gameIconWide: {
+    width: 44,
+    height: 44,
   },
   gameTitle: {
     ...type.h3,
     color: colors.textPrimary,
   },
   gameBlurb: {
-    ...type.caption,
-    fontFamily: fonts.medium,
-    letterSpacing: 0,
+    ...type.bodySm,
     color: colors.textSecondary,
-    flex: 1,
+    marginTop: 2,
   },
-  gameFoot: {
+  /* Rekor satırını açıklamadan ayıran ince çizgi; satır kartın dibine iner. */
+  gameFootRule: {
+    flex: 1,
+    minHeight: space.s,
+    borderBottomWidth: hairline,
+    borderBottomColor: colors.separator,
+    marginBottom: space.s,
+  },
+  gameRecord: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "baseline",
     gap: space.xs,
-    // Rekor satırı boşken de yer kaplar: depolama okunurken kart zıplamaz.
-    minHeight: 14,
+    minHeight: 22,
   },
   gameBest: {
-    ...type.caption,
-    fontFamily: fonts.bold,
-    letterSpacing: 0,
+    ...type.metricSm,
     color: colors.textPrimary,
+  },
+  gameUnit: {
+    ...type.caption,
+    color: colors.textTertiary,
     flexShrink: 1,
   },
   gameCta: {
-    ...type.caption,
-    fontFamily: fonts.bold,
-    letterSpacing: 0,
-    color: colors.textTertiary,
+    ...type.label,
+    color: colors.brandAccent,
   },
 
   /* — Satır grupları — */

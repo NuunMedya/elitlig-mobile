@@ -283,8 +283,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.overlay,
   },
   panel: {
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
+    borderTopLeftRadius: radius.xxl,
+    borderTopRightRadius: radius.xxl,
     // Üst köşeler yuvarlak; alt köşeler ekran kenarına yapışır.
     borderBottomLeftRadius: 0,
     borderBottomRightRadius: 0,
@@ -305,14 +305,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: space.sm,
-    paddingHorizontal: space.lg,
-    paddingTop: space.s,
-    paddingBottom: space.md,
-    borderBottomWidth: hairline,
-    borderBottomColor: colors.separator,
+    paddingHorizontal: space.lg + space.xxs,
+    paddingTop: space.xs,
+    paddingBottom: space.sm,
   },
+  /* Başlık ayraçsızdır: tipografi (h1) bölgeyi zaten ayırır; çizgi, sheet'i
+     "başlık + gövde" diye iki kutuya bölüyordu. */
   title: {
-    ...type.h2,
+    ...type.h1,
     color: colors.textPrimary,
     flex: 1,
   },
@@ -322,7 +322,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.surface2,
+    backgroundColor: colors.surface3,
   },
   /** "content" snap'inde sheet içeriği kadar uzar; ekranı zorla doldurmaz. */
   scroll: {
@@ -333,7 +333,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: space.lg,
+    paddingHorizontal: space.lg + space.xxs,
     paddingTop: space.md,
     paddingBottom: space.md,
   },
@@ -341,7 +341,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   footer: {
-    paddingHorizontal: space.lg,
+    paddingHorizontal: space.lg + space.xxs,
     paddingTop: space.md,
     borderTopWidth: hairline,
     borderTopColor: colors.separator,

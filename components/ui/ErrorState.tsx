@@ -124,7 +124,7 @@ export const ErrorState = React.memo(function ErrorState({
       body={errorBody(error, offline)}
       illustration={
         <View style={styles.iconCircle}>
-          <Ionicons name="cloud-offline-outline" size={26} color={colors.danger} />
+          <Ionicons name={offline ? "cloud-offline-outline" : "alert-circle-outline"} size={22} color={colors.danger} />
         </View>
       }
       action={onRetry ? { label: "Tekrar dene", onPress: onRetry, haptic: "light" } : undefined}
@@ -134,15 +134,15 @@ export const ErrorState = React.memo(function ErrorState({
 });
 
 const styles = StyleSheet.create({
-  /** İkon dairesi boş durumla aynı ölçüde ama tonu `danger` — hata olduğu belli. */
+  /** İkon karosu boş durumla AYNI ölçü ve biçimde, tonu `danger` — hata olduğu belli. */
   iconCircle: {
-    width: 54,
-    height: 54,
-    borderRadius: radius.pill,
+    width: 52,
+    height: 52,
+    borderRadius: radius.lg,
     backgroundColor: colors.dangerDim,
+    marginBottom: space.sm,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: space.xs,
   },
   banner: {
     flexDirection: "row",
@@ -161,9 +161,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   bannerAction: {
-    paddingHorizontal: space.sm,
+    paddingHorizontal: space.md,
     paddingVertical: space.xs,
-    borderRadius: radius.sm,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface1,
   },
   bannerActionText: {
     ...type.caption,

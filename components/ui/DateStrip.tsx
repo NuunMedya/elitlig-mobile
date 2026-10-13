@@ -23,6 +23,11 @@ import type { LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent } from 
 import { LinearGradient } from "expo-linear-gradient";
 import { colors, fonts, layout, radius, space, textScale, touchSlop, type } from "@/theme";
 import { haptics } from "@/lib/haptics";
+import { withAlpha } from "./Badge";
+
+/** Maske gradyanının saydam ucu — zeminin KENDİ renginin sıfır opaklığı.
+    Düz "transparent" siyahın saydamıdır ve iOS'ta geçişte gri bir bant bırakır. */
+const BG_CLEAR = withAlpha(colors.bg, 0);
 
 export interface DateStripProps {
   /** "YYYY-MM-DD" */
@@ -43,7 +48,7 @@ export interface DateStripProps {
     gerekmez; İ/ı dönüşümü elle doğrudur (ÇAR, PZT). */
 const WEEKDAYS = ["PAZ", "PZT", "SAL", "ÇAR", "PER", "CUM", "CMT"] as const;
 
-const CELL_WIDTH = 42;
+const CELL_WIDTH = 44;
 
 const pad = (value: number) => String(value).padStart(2, "0");
 
@@ -218,12 +223,20 @@ export const DateStrip = memo(function DateStrip({
           onScroll={handleScroll}
           scrollEventThrottle={32}
         />
-        {/* Sol kenardaki maske: şeridin devam ettiğini gösterir. */}
+        {/* Kenar maskeleri: şeridin iki yöne de devam ettiğini gösterir; sağdaki
+            maske "BUGÜN" hapının altında yarım kalan hücreyi de yumuşatır. */}
         <LinearGradient
-          colors={[colors.bg, "transparent"]}
+          colors={[colors.bg, BG_CLEAR]}
           start={GRADIENT_START}
           end={GRADIENT_END}
           style={styles.mask}
+          pointerEvents="none"
+        />
+        <LinearGradient
+          colors={[BG_CLEAR, colors.bg]}
+          start={GRADIENT_START}
+          end={GRADIENT_END}
+          style={styles.maskRight}
           pointerEvents="none"
         />
       </View>
@@ -342,6 +355,13 @@ const styles = StyleSheet.create({
     bottom: 0,
     width: 12,
   },
+  maskRight: {
+    position: "absolute",
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 20,
+  },
   /*
    * HÜCRE İÇERİK KADAR YÜKSEK. Eskiden `height: 40` sabitti; içerik (gün
    * etiketi 13 + rakam 18 + çizgi 4 + nokta 6 = 41 + üst pay) 40'ı aşıyor ve
@@ -364,31 +384,30 @@ const styles = StyleSheet.create({
      token (radius.sm). */
   cellFill: {
     position: "absolute",
-    left: space.xs,
-    right: space.xs,
-    top: space.xs,
-    bottom: space.xs,
-    borderRadius: radius.sm,
+    left: 3,
+    right: 3,
+    top: space.xxs,
+    bottom: space.xxs,
+    borderRadius: radius.md,
     backgroundColor: colors.brand,
   },
-  /** Gün adı: Archivo versal 9px, geniş aralık (maket 8.5px / .1em). */
+  /** Gün adı: Archivo versal 10px (Arena'nın etiket tabanı), geniş aralık. */
   weekday: {
     ...type.micro,
     fontFamily: fonts.display,
-    fontSize: 9,
-    lineHeight: 13,
-    letterSpacing: 0.9,
+    letterSpacing: 0.8,
     color: colors.textTertiary,
   },
   weekdayToday: {
     color: colors.brandAccent,
   },
   /** Ayın günü: Archivo kalın 14px (maket), tabular. */
+  /** Ayın günü: Archivo kalın 16px, tabular — şeridin kahramanı rakamdır. */
   day: {
     ...type.tableNumStrong,
-    fontSize: 14,
+    fontSize: 16,
+    lineHeight: 20,
     color: colors.textPrimary,
-    marginTop: space.px,
   },
   dayToday: {
     color: colors.brandAccent,
@@ -428,9 +447,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.textOnBrand,
   },
   todayButton: {
-    height: 26,
-    paddingHorizontal: space.sm,
-    marginLeft: space.xs,
+    height: 28,
+    paddingHorizontal: space.m,
+    marginLeft: space.xxs,
     borderRadius: radius.pill,
     backgroundColor: colors.brandDim,
     alignItems: "center",

@@ -5,7 +5,8 @@
  * diye. İçeride yine yerel `Switch` kullanılır — platformun kendi anahtarı
  * erişilebilirlik (VoiceOver/TalkBack "açık/kapalı") ve dokunma alanı
  * açısından elle yazılan bir anahtardan daima üstündür; bize düşen yalnızca
- * renkleri temaya bağlamak.
+ * renkleri temaya bağlamak. Kapalı ray `borderStrong`: `surface3` beyaz
+ * satırda neredeyse görünmüyor, anahtar "yok" gibi okunuyordu.
  *
  * HAPTİK: değer değişimi bir SEÇİM'dir (§5.3) → `haptics.select()`. Satır
  * içinde kullanıldığında ListRow da haptik tetikler; theme/motion.ts'teki
@@ -51,9 +52,9 @@ export const Toggle = React.memo(function Toggle({
       accessibilityRole="switch"
       accessibilityLabel={accessibilityLabel}
       accessibilityState={{ checked: value, disabled }}
-      trackColor={{ true: colors.brand, false: colors.surface3 }}
+      trackColor={{ true: colors.brand, false: colors.borderStrong }}
       thumbColor={Platform.OS === "android" ? colors.surface1 : undefined}
-      ios_backgroundColor={colors.surface3}
+      ios_backgroundColor={colors.borderStrong}
       style={[styles.base, disabled ? styles.disabled : null]}
     />
   );

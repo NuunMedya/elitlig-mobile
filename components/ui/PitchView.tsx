@@ -24,16 +24,20 @@
  * FORMATIONS). 11 kişilik varsayımıyla yazılmış hiçbir yerleşim burada
  * çalışmaz; hatlar oyuncu sayısına göre kendiliğinden dağılır.
  *
- * DİKEY SAHA, TEK TAKIM: mobilde iki takımı aynı sahaya koymak 36px avatarları
- * 22px'e indirmeyi gerektiriyordu ve isimler okunmaz oluyordu. Bunun yerine
- * takım başına bir segment kullanılır — okunurluk kazanır, bilgi kaybolmaz.
+ * İKİ KİP: `players` tek başına verilirse tek takım bütün sahaya yayılır
+ * (kadro yönetimi); `opponents` da verilirse iki takım KARŞI KARŞIYA dizilir
+ * (maç detayı) ve saha 3:2'ye uzar. Avatar 30px'te kalır, ad soyadına iner.
+ *
+ * YUVANIN DÖRT KÖŞESİ: sağ altta forma numarası (takım renginde), sağ üstte
+ * olay rozetleri (gol, kart, değişiklik), sol üstte maç reytingi, sol altta
+ * kaptan işareti. Hepsi isteğe bağlıdır; veri yoksa köşe boş kalır.
  */
 
 import { LinearGradient } from "expo-linear-gradient";
 import { memo, useMemo } from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import Svg, { Circle, Line, Path, Rect } from "react-native-svg";
-import { colors, hairline, radius, space, textScale, type } from "@/theme";
+import { colors, palette, radius, ratingColors, space, textScale, type } from "@/theme";
 import { positionLine } from "@/lib/api/team";
 import { Avatar } from "./Avatar";
 import { EventIcon, type EventIconKind } from "./EventIcon";
@@ -58,15 +62,20 @@ const LINE_Y: Record<string, number> = { GK: 88, DEF: 66, MID: 42, FWD: 18 };
  * etiket ≈ 45px) kadar. İki forvetin ETİKETLERİ birbirinin avatarına
  * giriyordu. %16 aralık (≈86px) iki hattı da rahat bırakır.
  */
-const HALF_Y_HOME: Record<string, number> = { GK: 92, DEF: 80, MID: 69, FWD: 58 };
-const HALF_Y_AWAY: Record<string, number> = { GK: 8, DEF: 20, MID: 31, FWD: 42 };
+const HALF_Y_HOME: Record<string, number> = { GK: 93, DEF: 81, MID: 69, FWD: 57 };
+const HALF_Y_AWAY: Record<string, number> = { GK: 7, DEF: 19, MID: 31, FWD: 43 };
 const LINE_ORDER = ["GK", "DEF", "MID", "FWD"] as const;
 
 /** Saha en/boy oranı. Gerçek oran (68:105) telefonda yuvaları birbirine
  *  yapıştırıyor; 3:4 hem "saha" okunuyor hem sekiz oyuncuyu rahat taşıyor. */
 const ASPECT = 4 / 3;
-/** İki takım aynı sahaya dizilince dikey alan iki katına çıkmalı. */
-const ASPECT_FACING = 3 / 2;
+/**
+ * İki takım aynı sahaya dizilince dikey alan iki katına çıkmalı. 3:2'de
+ * komşu hatlar arası (%11) 59px'e iniyordu — yuvanın kendisi (avatar +
+ * etiket + reyting rozeti) ~52px; ad etiketi alttaki hattın rozetine
+ * değiyordu. 1,6 oranında aynı aralık 63px, forvet–forvet aralığı 80px.
+ */
+const ASPECT_FACING = 1.6;
 
 const AVATAR = 30;
 
@@ -91,6 +100,16 @@ export interface PitchPlayerView {
    * avatar tek bir takım gibi okunur.
    */
   tint?: string | null;
+  /**
+   * `tint` zemininin üstündeki forma numarası rengi. Verilmezse `onDark`
+   * (beyaz) — açık bir takım rengi (ör. beyaz) verildiğinde koyu mürekkep
+   * geçilir, yoksa numara rozetin içinde kaybolur.
+   */
+  tintInk?: string | null;
+  /** Maç reytingi — avatarın sol üstünde renkli küçük rozet; yoksa çizilmez. */
+  rating?: number | null;
+  /** Kaptan — avatarın sol altında "K" işareti. */
+  captain?: boolean;
   onPress?: () => void;
 }
 
@@ -337,12 +356,28 @@ const PitchSlot = memo(function PitchSlot({
         <Avatar name={player.name} image={player.photo} size={AVATAR} onPitch />
 
         {player.number != null && player.number !== "" ? (
-          <View style={[styles.numberBadge, player.tint ? { backgroundColor: player.tint } : null]}>
+          <View style={[styles.numberBadge, player.tint ? { backgroundColor: player.tint, borderColor: player.tint } : null]}>
             <Text
-              style={[styles.number, player.tint ? styles.numberOnTint : null]}
+              style={[
+                styles.number,
+                player.tint ? styles.numberOnTint : null,
+                player.tint && player.tintInk ? { color: player.tintInk } : null,
+              ]}
               {...textScale.badge}
             >
               {player.number}
+            </Text>
+          </View>
+        ) : null}
+
+        {player.rating != null && Number.isFinite(player.rating) && player.rating > 0 ? (
+          <RatingDot value={player.rating} />
+        ) : null}
+
+        {player.captain ? (
+          <View style={styles.captain} accessibilityLabel="Kaptan">
+            <Text style={styles.captainText} {...textScale.badge}>
+              K
             </Text>
           </View>
         ) : null}
@@ -362,6 +397,22 @@ const PitchSlot = memo(function PitchSlot({
         {label}
       </Text>
     </Touchable>
+  );
+});
+
+/**
+ * Reyting rozeti — SofaScore'un saha dili: avatarın köşesinde renkli küçük
+ * kutu, içinde tek ondalık. Renk skalası `theme/rating.ts`ten; sayı her zaman
+ * yazılır, renk tek başına anlam taşımaz.
+ */
+const RatingDot = memo(function RatingDot({ value }: { value: number }) {
+  const { fg } = ratingColors(palette, value);
+  return (
+    <View style={[styles.rating, { backgroundColor: fg }]} accessibilityLabel={`Reyting ${value.toFixed(1)}`}>
+      <Text style={styles.ratingText} {...textScale.badge}>
+        {value.toFixed(1)}
+      </Text>
+    </View>
   );
 });
 
@@ -389,11 +440,47 @@ const styles = StyleSheet.create({
     backgroundColor: colors.pitchGreen,
     /* Saha, sayfanın en büyük tek yüzeyi: yarıçapı da ona göre (`xxl`).
        Kart yarıçapıyla çizilince, ekranın yarısını kaplayan bir dikdörtgen
-       "büyütülmüş kart" gibi duruyordu. */
+       "büyütülmüş kart" gibi duruyordu. Kenarlık YOK: derin yeşil kâğıttan
+       zaten ayrılıyor, gri saç teli yeşilin kenarında kirli bir hare yapıyordu. */
     borderRadius: radius.xxl,
-    borderWidth: hairline,
-    borderColor: colors.border,
     overflow: "hidden",
+  },
+  /* Reyting: avatarın sol üst köşesi; olay rozetleri sağ üstte durur. */
+  rating: {
+    position: "absolute",
+    top: -6,
+    left: -12,
+    height: 15,
+    paddingHorizontal: 3,
+    borderRadius: radius.xs - 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  ratingText: {
+    fontSize: 9,
+    lineHeight: 12,
+    fontFamily: type.tableNumStrong.fontFamily,
+    fontVariant: ["tabular-nums"],
+    /* Rozet zemini reytingin ÖN PLAN rengidir (açıkta koyu, koyuda açık);
+       üstündeki rakam kartın kendi rengiyle yazılır — iki temada da zıt. */
+    color: colors.surface1,
+  },
+  captain: {
+    position: "absolute",
+    left: -4,
+    bottom: -3,
+    width: 15,
+    height: 15,
+    borderRadius: radius.pill,
+    backgroundColor: colors.onPitch,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  captainText: {
+    fontSize: 9,
+    lineHeight: 12,
+    fontFamily: type.tableNumStrong.fontFamily,
+    color: colors.pitchGreen,
   },
   mowStripe: {
     position: "absolute",

@@ -398,8 +398,10 @@ const styles = StyleSheet.create({
     color: colors.textTertiary,
     fontFamily: fonts.semibold,
   },
+  /* Arena: seçili sekme MARKA rengindedir — sönük menekşe hap + menekşe
+     metin tek bir sinyal olarak okunur. */
   labelActive: {
-    color: colors.textPrimary,
+    color: colors.brandAccent,
   },
   /* Mor blok üstünde: sönük etiket yarı saydam beyaz (AA'yı geçer, bkz.
      scripts/check-tokens.mjs), seçili etiket tam beyaz. */

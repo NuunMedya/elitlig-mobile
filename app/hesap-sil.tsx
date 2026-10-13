@@ -53,8 +53,8 @@ import {
   ErrorState,
   Input,
   ScreenHeader,
+  SectionHeader,
   SkeletonCard,
-  Surface,
   toneColors,
   useToast,
 } from "@/components/ui";
@@ -62,7 +62,8 @@ import { deleteAccount, getDeletionSummary, type DeletionSummary } from "@/lib/a
 import { ApiError } from "@/lib/http";
 import { queryKeys } from "@/lib/queryKeys";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
+import { AuthNotice } from "@/components/account/AuthShell";
+import { colors, elevate, hairline, layout, radius, space, textScale, type } from "@/theme";
 
 const DANGER = toneColors("danger");
 
@@ -250,37 +251,60 @@ export default function DeleteAccountScreen() {
           keyboardDismissMode="on-drag"
           showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.lede} {...textScale.long}>
-            Hesabını kalıcı olarak silersin. Bu işlem geri alınamaz; aynı kullanıcı adıyla
-            yeniden kaydolsan bile eski hesabın geri gelmez.
-          </Text>
+          {/* UYARI BAŞLIĞI — ekranın ilk cümlesi geri dönüşün olmadığını söyler. */}
+          <View style={styles.warning}>
+            <View style={styles.warningIcon}>
+              <Ionicons name="trash-outline" size={22} color={DANGER.fg} />
+            </View>
+            <View style={styles.warningCopy}>
+              <Text style={styles.warningTitle} accessibilityRole="header" {...textScale.dense}>
+                Bu işlem geri alınamaz
+              </Text>
+              <Text style={styles.warningBody} {...textScale.long}>
+                Hesabın kalıcı olarak silinir. Aynı kullanıcı adıyla yeniden kaydolsan bile eski
+                hesabın geri gelmez.
+              </Text>
+            </View>
+          </View>
 
           {summaryFailed ? (
             <ErrorState error={query.error} onRetry={query.refetch} variant="banner" />
           ) : null}
 
-          {summary.consequences.map((item) => (
-            <Surface key={item.key} style={styles.consequence}>
-              <Ionicons name="warning-outline" size={18} color={DANGER.fg} />
-              <View style={styles.consequenceCopy}>
-                <Text style={styles.consequenceTitle} {...textScale.long}>
-                  {item.title}
-                </Text>
-                <Text style={styles.consequenceBody} {...textScale.long}>
-                  {item.description}
+          {/* NE OLACAK — sunucudan gelen sonuçlar tek kartta, satır satır. */}
+          <SectionHeader title="Ne olacak?" style={styles.flushHeader} />
+          <View style={styles.card}>
+            {summary.consequences.map((item, index) => (
+              <View key={item.key} style={[styles.consequence, index > 0 ? styles.consequenceBorder : null]}>
+                <View style={styles.bullet}>
+                  <Ionicons name="remove-circle-outline" size={16} color={DANGER.fg} />
+                </View>
+                <View style={styles.consequenceCopy}>
+                  <Text style={styles.consequenceTitle} {...textScale.long}>
+                    {item.title}
+                  </Text>
+                  <Text style={styles.consequenceBody} {...textScale.long}>
+                    {item.description}
+                  </Text>
+                </View>
+              </View>
+            ))}
+            {summary.team ? (
+              <View style={[styles.consequence, styles.consequenceBorder]}>
+                <View style={styles.bullet}>
+                  <Ionicons name="information-circle-outline" size={16} color={colors.textTertiary} />
+                </View>
+                <Text style={[styles.consequenceBody, styles.consequenceCopy]} {...textScale.long}>
+                  Takımını bırakmak istemiyorsan hesabını silmeden önce elitlig.com üzerinden
+                  başka bir üyeye devredebilirsin.
                 </Text>
               </View>
-            </Surface>
-          ))}
+            ) : null}
+          </View>
 
-          {summary.team ? (
-            <Text style={styles.note} {...textScale.long}>
-              Takımını bırakmak istemiyorsan hesabını silmeden önce elitlig.com üzerinden
-              başka bir üyeye devredebilirsin.
-            </Text>
-          ) : null}
-
-          <View style={styles.form}>
+          {/* ONAY — şifre + elle yazılan cümle (+ isteğe bağlı neden). */}
+          <SectionHeader title="Onayla" style={styles.flushHeader} />
+          <View style={[styles.card, styles.form]}>
             <Input
               label="Şifren"
               value={password}
@@ -296,14 +320,14 @@ export default function DeleteAccountScreen() {
             />
 
             <Input
-              label="Onay"
+              label={`Onay: ${phrase} yaz`}
               value={confirmation}
               onChangeText={(value) => { setConfirmation(value); setError(null); }}
               leadingIcon="create-outline"
               autoCapitalize="characters"
               autoCorrect={false}
               placeholder={phrase}
-              hint={`Onaylamak için ${phrase} yaz.`}
+              hint="Büyük harflerle, birebir."
               editable={!busy}
             />
 
@@ -318,14 +342,7 @@ export default function DeleteAccountScreen() {
             />
           </View>
 
-          {error ? (
-            <View style={styles.errorBox} accessibilityRole="alert">
-              <Ionicons name="alert-circle" size={16} color={DANGER.fg} />
-              <Text style={styles.errorText} {...textScale.long}>
-                {error}
-              </Text>
-            </View>
-          ) : null}
+          {error ? <AuthNotice message={error} /> : null}
 
           <Button
             label="Hesabımı kalıcı olarak sil"
@@ -354,32 +371,51 @@ const styles = StyleSheet.create({
     gap: space.md,
   },
 
-  lede: { ...type.bodySm, color: colors.textSecondary, lineHeight: 19 },
+  flushHeader: { paddingHorizontal: 0, paddingBottom: 0 },
 
+  warning: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: space.md,
+    padding: space.lg,
+    borderRadius: radius.lg,
+    backgroundColor: DANGER.dim,
+    borderWidth: hairline,
+    borderColor: DANGER.fg,
+  },
+  warningIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface1,
+  },
+  warningCopy: { flex: 1, gap: space.xxs },
+  warningTitle: { ...type.h2, color: DANGER.fg },
+  warningBody: { ...type.bodySm, color: colors.textPrimary, lineHeight: 19 },
+
+  card: {
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    ...elevate(1),
+  },
   consequence: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: space.sm,
+    gap: space.m,
     padding: space.md,
   },
-  consequenceCopy: { flex: 1, gap: space.xs },
-  consequenceTitle: { ...type.bodySm, color: colors.textPrimary },
-  consequenceBody: { ...type.caption, color: colors.textSecondary, lineHeight: 17 },
-
-  note: { ...type.caption, color: colors.textTertiary, lineHeight: 17 },
-
-  form: { gap: space.md, paddingTop: space.xs },
-
-  errorBox: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: space.sm,
-    backgroundColor: DANGER.dim,
-    borderRadius: radius.md,
-    borderWidth: hairline,
-    borderColor: DANGER.fg,
-    paddingHorizontal: space.md,
-    paddingVertical: space.m,
+  consequenceBorder: {
+    borderTopWidth: hairline,
+    borderTopColor: colors.separator,
   },
-  errorText: { ...type.bodySm, color: DANGER.fg, flex: 1, lineHeight: 19 },
+  bullet: { paddingTop: 2 },
+  consequenceCopy: { flex: 1, gap: space.xxs },
+  consequenceTitle: { ...type.h4, color: colors.textPrimary },
+  consequenceBody: { ...type.bodySm, color: colors.textSecondary, lineHeight: 18 },
+
+  form: { gap: space.md, padding: space.lg },
 });

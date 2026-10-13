@@ -18,6 +18,12 @@
  * ODAK: `?odak=team:610` ile açılırsa o takibin ayarları açık gelir (takım,
  * maç ve lig sayfalarındaki zil düğmesi buraya bu parametreyle gelir).
  *
+ * YÖNETİM KOLAYLIĞI (yeniden tasarım): her takip tek kart. Kartın sağındaki
+ * zil SESSİZE ALIR / AÇAR — en sık yapılan iş tek dokunuştur, kartı açmak
+ * gerekmez. Karta dokununca olaylar ÇİP olarak açılır ("Gol", "Sonuç"…):
+ * on satırlık anahtar listesi yerine tek bakışta hangi anların açık olduğu
+ * görünür; "Hepsi" / "Hiçbiri" iki dokunuşla toplu seçim yapar.
+ *
  * İL TAKİBİ: takım/lig/sezon/maç kendi sayfalarındaki yıldızla takip edilir.
  * İlin ayrı bir sayfası olmadığı için il takibi bu ekranın altından yapılır.
  */
@@ -32,7 +38,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import {
   Badge,
   Button,
-  Card,
+  Chip,
   EmptyState,
   ErrorState,
   ListRow,
@@ -40,6 +46,7 @@ import {
   SectionHeader,
   SkeletonListRow,
   TeamLogo,
+  Touchable,
   refreshControlProps,
   useHeaderScroll,
   useRefresh,
@@ -59,7 +66,7 @@ import { queryKeys } from "@/lib/queryKeys";
 import { useAuth } from "@/providers/AuthProvider";
 import { useFavorite } from "@/providers/FavoriteProvider";
 import { useScope } from "@/providers/ScopeProvider";
-import { colors, layout, radius, space, textScale, type } from "@/theme";
+import { colors, elevate, hairline, layout, radius, space, textScale, touchSlop, type, upperTR } from "@/theme";
 
 const FOLLOW_MUTATION_KEY = ["favorites", "follow-settings"] as const;
 
@@ -216,7 +223,7 @@ export default function FollowNotificationsScreen() {
     return map;
   }, [query.data, focusKey]);
 
-  const header = <ScreenHeader title="Takip Bildirimleri" back scrollY={scrollY} />;
+  const header = <ScreenHeader title="Takip bildirimleri" subtitle="Kimden, hangi anlarda" back scrollY={scrollY} />;
 
   if (!signedIn) {
     return (
@@ -248,28 +255,21 @@ export default function FollowNotificationsScreen() {
         <View style={styles.intro}>
           {query.error && data ? <ErrorState error={query.error} onRetry={query.refetch} variant="banner" /> : null}
 
-          <Card padding="md">
-            <View style={styles.introRow}>
-              <Ionicons name="options-outline" size={16} color={colors.brandAccent} />
-              <Text style={styles.introText} {...textScale.long}>
-                Takip ettiğin her takım, lig, sezon, il ve maç için hangi bildirimleri alacağını ayrı ayrı
-                seç. Bir takibe dokun, ayrıntıları aç. Takım, lig, sezon ve maçları kendi sayfalarındaki
-                yıldızla takip edebilirsin; illeri bu sayfanın altından ekle.
-              </Text>
-            </View>
-          </Card>
-
           <ListRow
+            leading={{ icon: enabled ? "notifications" : "notifications-off", tone: enabled ? "brand" : "neutral" }}
             title="Takip bildirimleri"
             subtitle={
               enabled
-                ? "Açık — aşağıdaki ayarlara göre bildirim gelir."
-                : "Kapalı — hiçbir takipten bildirim gelmez."
+                ? "Açık · aşağıdaki ayarlara göre gelir"
+                : "Kapalı · hiçbir takipten bildirim gelmez"
             }
             position="single"
             toggle={{ value: enabled, onValueChange: (value) => master.mutate(value), disabled: !data }}
             testID="follow-master"
           />
+          <Text style={styles.hint} {...textScale.long}>
+            Zile dokun: o takibi sessize al. Karta dokun: hangi anlarda bildirim geleceğini seç.
+          </Text>
         </View>
 
         {query.isLoading ? (
@@ -282,6 +282,7 @@ export default function FollowNotificationsScreen() {
             title="Henüz bir şey takip etmiyorsun"
             body="Takım, lig, sezon ya da maç sayfasındaki yıldıza dokunarak takip et; ya da aşağıdan bir il seç."
             variant="inline"
+            action={{ label: "Takım bul", onPress: () => router.push("/(tabs)/ligler?tab=takimlar") }}
           />
         ) : (
           SECTIONS.map((section) => {
@@ -378,53 +379,112 @@ const FollowCard = memo(function FollowCard({
   eventInfo: Map<string, FollowEventInfo>;
   onChange: (item: FollowItem, patch: FollowSettingsPatch) => void;
 }) {
-  const leading =
-    item.type === "team" ? (
-      <TeamLogo name={item.name} logo={item.logo} size={36} />
-    ) : (
-      { icon, tone: "brand" as const }
-    );
+  const toggleMute = useCallback(() => onChange(item, { muted: !item.muted }), [item, onChange]);
+  const setAll = useCallback(
+    (value: boolean) => {
+      const prefs: Record<string, boolean> = {};
+      item.events.forEach((event) => {
+        prefs[event] = value;
+      });
+      onChange(item, { prefs });
+    },
+    [item, onChange],
+  );
 
   return (
-    <View style={styles.card}>
-      <ListRow
-        leading={leading}
-        title={item.name}
-        subtitle={[item.subtitle, summaryOf(item)].filter(Boolean).join(" · ")}
-        position={expanded ? "first" : "single"}
-        onPress={onToggleExpand}
-        trailing={
-          <Ionicons name={expanded ? "chevron-up" : "chevron-down"} size={18} color={colors.textSecondary} />
-        }
-        testID={`follow-${item.type}-${item.id}`}
-      />
+    <View style={[styles.card, expanded ? styles.cardOpen : null]}>
+      <View style={styles.cardHead}>
+        {/* Karta dokunmak olayları açar; zil ayrı bir hedeftir (iç içe
+            düğme yok — ekran okuyucu iki ayrı eylem duyar). */}
+        <Touchable
+          feedback="row"
+          haptic="selection"
+          onPress={onToggleExpand}
+          accessibilityRole="button"
+          accessibilityState={{ expanded }}
+          accessibilityLabel={`${item.name}. ${summaryOf(item)}. Ayrıntılar`}
+          style={styles.cardMain}
+          testID={`follow-${item.type}-${item.id}`}
+        >
+          {item.type === "team" ? (
+            <TeamLogo name={item.name} logo={item.logo} size={36} dimmed={item.muted} />
+          ) : (
+            <View style={styles.typeIcon}>
+              <Ionicons name={icon} size={18} color={item.muted ? colors.textTertiary : colors.brandAccent} />
+            </View>
+          )}
+          <View style={styles.cardText}>
+            <Text style={[styles.cardTitle, item.muted ? styles.mutedText : null]} numberOfLines={1} {...textScale.dense}>
+              {item.name}
+            </Text>
+            <Text style={styles.cardSub} numberOfLines={1} {...textScale.dense}>
+              {[item.subtitle, summaryOf(item)].filter(Boolean).join(" · ")}
+            </Text>
+          </View>
+          <Ionicons name={expanded ? "chevron-up" : "chevron-down"} size={16} color={colors.textTertiary} />
+        </Touchable>
+
+        <Touchable
+          feedback="icon"
+          haptic="light"
+          onPress={toggleMute}
+          accessibilityRole="switch"
+          accessibilityState={{ checked: !item.muted }}
+          accessibilityLabel={item.muted ? `${item.name} bildirimlerini aç` : `${item.name} için sessize al`}
+          hitSlop={touchSlop(36)}
+          style={[styles.bell, item.muted ? styles.bellMuted : null]}
+        >
+          <Ionicons
+            name={item.muted ? "notifications-off" : "notifications"}
+            size={18}
+            color={item.muted ? colors.textTertiary : colors.brandAccent}
+          />
+        </Touchable>
+      </View>
 
       {expanded ? (
-        <>
-          <ListRow
-            title="Bu takipten bildirim al"
-            subtitle={item.muted ? "Sessizde: takip sürer, bildirim gelmez." : "Açık"}
-            position="middle"
-            toggle={{ value: !item.muted, onValueChange: (value) => onChange(item, { muted: !value }) }}
-          />
-          {item.events.map((event, index) => {
-            const info = eventInfo.get(event);
-            return (
-              <ListRow
-                key={event}
-                title={info?.label ?? event}
-                subtitle={info?.description}
-                position={index === item.events.length - 1 && !item.customized ? "last" : "middle"}
-                disabled={item.muted}
-                toggle={{
-                  value: Boolean(item.prefs[event]),
-                  onValueChange: (value) => onChange(item, { prefs: { [event]: value } }),
-                  disabled: item.muted,
-                }}
-                testID={`follow-${item.type}-${item.id}-${event}`}
-              />
-            );
-          })}
+        <View style={styles.cardBody}>
+          {item.muted ? (
+            <View style={styles.mutedNote}>
+              <Ionicons name="notifications-off-outline" size={16} color={colors.textSecondary} />
+              <Text style={styles.mutedNoteText} {...textScale.long}>
+                Sessizde: takip sürer, bildirim gelmez.
+              </Text>
+              <Button label="Aç" size="sm" variant="secondary" onPress={toggleMute} />
+            </View>
+          ) : (
+            <>
+              <View style={styles.bodyHead}>
+                <Text style={styles.bodyTitle} {...textScale.badge}>
+                  {upperTR("Hangi anlarda?")}
+                </Text>
+                <View style={styles.bodyActions}>
+                  <Touchable feedback="chip" onPress={() => setAll(true)} accessibilityRole="button" style={styles.textButton}>
+                    <Text style={styles.textButtonLabel} {...textScale.dense}>Hepsi</Text>
+                  </Touchable>
+                  <Touchable feedback="chip" onPress={() => setAll(false)} accessibilityRole="button" style={styles.textButton}>
+                    <Text style={styles.textButtonLabel} {...textScale.dense}>Hiçbiri</Text>
+                  </Touchable>
+                </View>
+              </View>
+              <View style={styles.events}>
+                {item.events.map((event) => {
+                  const info = eventInfo.get(event);
+                  const on = Boolean(item.prefs[event]);
+                  return (
+                    <Chip
+                      key={event}
+                      label={info?.label ?? event}
+                      icon={on ? "checkmark" : undefined}
+                      selected={on}
+                      onPress={() => onChange(item, { prefs: { [event]: !on } })}
+                      testID={`follow-${item.type}-${item.id}-${event}`}
+                    />
+                  );
+                })}
+              </View>
+            </>
+          )}
           {item.customized ? (
             <View style={styles.resetRow}>
               <Badge label="Özelleştirildi" tone="brand" size="xs" />
@@ -437,7 +497,7 @@ const FollowCard = memo(function FollowCard({
               />
             </View>
           ) : null}
-        </>
+        </View>
       ) : null}
     </View>
   );
@@ -453,20 +513,89 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   intro: { paddingTop: space.md, gap: space.sm },
-  introRow: { flexDirection: "row", alignItems: "flex-start", gap: space.sm },
-  introText: { ...type.bodySm, color: colors.textSecondary, flex: 1 },
   section: { paddingTop: space.sm },
-  sectionHeader: { paddingTop: space.lg },
+  sectionHeader: { paddingTop: space.lg, paddingHorizontal: 0 },
   dimmed: { opacity: 0.55 },
   cards: { gap: space.sm },
-  card: { borderRadius: radius.md, overflow: "hidden" },
+
+  /* Takip kartı */
+  card: {
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    overflow: "hidden",
+  },
+  cardOpen: {
+    borderColor: colors.borderStrong,
+    ...elevate(1),
+  },
+  cardHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingRight: space.md,
+  },
+  cardMain: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    paddingVertical: space.md,
+    paddingLeft: space.md,
+    paddingRight: space.sm,
+    minHeight: layout.listRowHeightTwoLine,
+  },
+  typeIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.sm,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.brandDim,
+  },
+  cardText: { flex: 1, gap: 2 },
+  cardTitle: { ...type.h3, color: colors.textPrimary },
+  mutedText: { color: colors.textTertiary },
+  cardSub: { ...type.bodySm, color: colors.textSecondary },
+  bell: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.brandDim,
+  },
+  bellMuted: {
+    backgroundColor: colors.surface2,
+  },
+  cardBody: {
+    gap: space.md,
+    paddingHorizontal: space.md,
+    paddingTop: space.md,
+    paddingBottom: space.md,
+    borderTopWidth: hairline,
+    borderTopColor: colors.separator,
+  },
+  bodyHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  bodyTitle: { ...type.overline, color: colors.textTertiary },
+  bodyActions: { flexDirection: "row", gap: space.xs },
+  textButton: { paddingHorizontal: space.sm, minHeight: 28, justifyContent: "center" },
+  textButtonLabel: { ...type.label, color: colors.brandAccent },
+  events: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
+  mutedNote: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+  },
+  mutedNoteText: { ...type.bodySm, color: colors.textSecondary, flex: 1 },
   resetRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: space.md,
-    paddingVertical: space.xs,
-    backgroundColor: colors.surface,
   },
-  hint: { ...type.caption, color: colors.textSecondary, lineHeight: 16 },
+  hint: { ...type.caption, color: colors.textTertiary, lineHeight: 16, paddingHorizontal: space.xxs },
 });

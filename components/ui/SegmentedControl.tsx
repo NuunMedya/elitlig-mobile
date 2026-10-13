@@ -33,7 +33,9 @@ import {
   duration,
   easing,
   fonts,
+  hairline,
   haptics,
+  isDark,
   radius,
   space,
   textScale,
@@ -72,7 +74,7 @@ function SegmentedControlBase<T extends string>({
   style,
   testID,
 }: SegmentedControlProps<T>) {
-  const innerHeight = size === "sm" ? 24 : 28;
+  const innerHeight = size === "sm" ? 26 : 32;
   const index = Math.max(
     0,
     items.findIndex((item) => item.key === value),
@@ -86,7 +88,7 @@ function SegmentedControlBase<T extends string>({
   const segmentWidth = useCallback(
     (i: number): number => {
       if (stretch) {
-        return containerWidth > 0 ? (containerWidth - PAD * 2) / Math.max(1, items.length) : 0;
+        return containerWidth > 0 ? (containerWidth - PAD * 2 - hairline * 2) / Math.max(1, items.length) : 0;
       }
       return widths[i] ?? 0;
     },
@@ -138,7 +140,7 @@ function SegmentedControlBase<T extends string>({
     <View
       accessibilityRole="tablist"
       onLayout={handleContainerLayout}
-      style={[styles.container, { height: innerHeight + PAD * 2 }, style]}
+      style={[styles.container, { height: innerHeight + PAD * 2 + hairline * 2 }, style]}
       testID={testID}
     >
       {indicatorWidth > 0 ? (
@@ -178,7 +180,7 @@ function SegmentedControlBase<T extends string>({
               <Ionicons
                 name={item.icon}
                 size={size === "sm" ? 12 : 14}
-                color={active ? colors.brandAccent : colors.textSecondary}
+                color={active ? colors.textPrimary : colors.textSecondary}
               />
             ) : null}
             <Text
@@ -204,33 +206,37 @@ export const SegmentedControl = React.memo(
 ) as typeof SegmentedControlBase;
 
 const styles = StyleSheet.create({
-  /** Yuva: bir kademe koyu yüzey, tam hap (maket §6 ".seg"). */
+  /** Yuva: kâğıttan bir kademe koyu hap (koyu temada kâğıdın kendisi). */
   container: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.surface3,
+    backgroundColor: isDark ? colors.bg : colors.surface3,
     borderRadius: radius.pill,
+    borderWidth: hairline,
+    borderColor: isDark ? colors.border : colors.surface3,
     padding: PAD,
   },
   /**
-   * AKTİF HAP KÂĞIT RENGİDİR (`bg`), İKİ TEMADA DA. Açık temada yuvadan açık
-   * bir beyaz pul + sönük mor gölge; koyu temada yuvadan KOYU bir pul. Önceki
-   * sürüm koyuda `surface3` ile yuvadan açık bir pul üretiyordu — o zaman pul
-   * yuvanın rengine yaklaşıyor ve seçim "hangisi basılı" sorusuna cevap
-   * veremiyordu. Kâğıt rengi her iki temada da yuvadan en uzak tondur.
+   * AKTİF HAP YUVADAN EN UZAK TONDUR: açık temada beyaz kâğıt (`surface1`) +
+   * ince gölge, koyu temada bir kademe açık yüzey (`surface3`) + hairline
+   * çerçeve. Önceki sürüm pulu `bg` ile boyuyordu; Arena'da `bg` gri kâğıt
+   * olduğu için pul yuvayla (surface3) neredeyse aynı tondaydı ve seçim
+   * okunmuyordu.
    */
   indicator: {
     position: "absolute",
     left: PAD,
     top: PAD,
     borderRadius: radius.pill,
-    backgroundColor: colors.bg,
+    backgroundColor: isDark ? colors.surface3 : colors.surface1,
+    borderWidth: hairline,
+    borderColor: isDark ? colors.borderStrong : colors.border,
     ...Platform.select({
       android: { elevation: 1 },
       default: {
         shadowColor: colors.shadowColor,
-        shadowOpacity: 0.16,
-        shadowRadius: 4,
+        shadowOpacity: isDark ? 0 : 0.1,
+        shadowRadius: 3,
         shadowOffset: { width: 0, height: 1 },
       },
     }),
@@ -257,15 +263,17 @@ const styles = StyleSheet.create({
     ...type.caption,
     color: colors.textSecondary,
   },
-  /** Seçili etiket morun METİN sürümüyle konuşur; ağırlık bir kademe artar. */
+  /** Seçili etiket mürekkebe döner, ağırlık bir kademe artar. Segment bir
+      FİLTREDİR; seçimi beyaz pul zaten söyler — mor metin, sayfanın tek
+      birincil eylemiyle yarışıyordu. */
   labelActive: {
-    color: colors.brandAccent,
+    color: colors.textPrimary,
     fontFamily: fonts.semibold,
   },
   dot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
+    width: 6,
+    height: 6,
+    borderRadius: radius.pill,
     backgroundColor: colors.live,
   },
 });

@@ -84,13 +84,18 @@ const SWIPE_VELOCITY = 0.5;
 
 const ToastContext = createContext<ToastApi | null>(null);
 
-/** Ton → ikon + renk. Tonun kendisi zemin doldurmaz; yalnız şerit ve ikon renklenir. */
+/**
+ * Ton → ikon + renk. ARENA TOAST'U GRAFİTTİR (`inkBlock`): kâğıt ekranın
+ * üstünde beyaz bir kart, içerikle karışıp "sayfanın bir parçası" gibi
+ * okunuyordu; koyu hap, geçici bir katman olduğunu ilk bakışta söyler. Ton
+ * zemini boyamaz, yalnız ikon renklenir — koyu zeminde okunan sürümleriyle.
+ */
 const TONES: Record<ToastTone, { color: string; icon: keyof typeof Ionicons.glyphMap }> = {
-  neutral: { color: colors.textSecondary, icon: "information-circle-outline" },
-  success: { color: colors.win, icon: "checkmark-circle-outline" },
-  warn: { color: colors.warn, icon: "alert-circle-outline" },
-  danger: { color: colors.danger, icon: "close-circle-outline" },
-  live: { color: colors.live, icon: "football-outline" },
+  neutral: { color: colors.onDarkMuted, icon: "information-circle" },
+  success: { color: colors.win, icon: "checkmark-circle" },
+  warn: { color: colors.yellowCard, icon: "alert-circle" },
+  danger: { color: colors.liveOnDark, icon: "close-circle" },
+  live: { color: colors.liveOnDark, icon: "football" },
 };
 
 /** ToastOptions.haptic → Pressable'daki ortak haptik sözlüğü. */
@@ -266,10 +271,9 @@ export function ToastProvider({
             accessibilityRole="alert"
             accessibilityLabel={current.message}
             accessibilityLiveRegion="polite"
-            style={[styles.toast, elevate(3)]}
+            style={[styles.toast, elevate(3), styles.toastInk]}
           >
-            <View style={[styles.accent, { backgroundColor: tone.color }]} />
-            <Ionicons name={current.icon ?? tone.icon} size={18} color={tone.color} />
+            <Ionicons name={current.icon ?? tone.icon} size={20} color={tone.color} />
             <Text style={styles.message} numberOfLines={2} {...textScale.dense}>
               {current.message}
             </Text>
@@ -300,7 +304,7 @@ export function ToastProvider({
                 accessibilityLabel="Bildirimi kapat"
                 style={styles.closeButton}
               >
-                <Ionicons name="close" size={16} color={colors.textTertiary} />
+                <Ionicons name="close" size={16} color={colors.onDarkMuted} />
               </Touchable>
             ) : null}
           </View>
@@ -336,36 +340,34 @@ const styles = StyleSheet.create({
   toast: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.md,
-    minHeight: 48,
+    gap: space.m,
+    minHeight: 50,
     paddingVertical: space.m,
     paddingLeft: space.lg,
     paddingRight: space.md,
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     overflow: "hidden",
   },
-  /** Sol kenardaki 3px ton şeridi — zemini boyamadan durumu söyler. */
-  accent: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 3,
+  /* `elevate` kendi zeminini ve kenarlığını taşır; grafit zemin ondan sonra. */
+  toastInk: {
+    backgroundColor: colors.inkBlock,
+    borderColor: colors.borderOnDark,
   },
   message: {
-    ...type.bodySm,
-    color: colors.textPrimary,
+    ...type.body,
+    fontFamily: fonts.medium,
+    color: colors.onDark,
     flex: 1,
   },
   actionButton: {
-    paddingHorizontal: space.sm,
+    paddingHorizontal: space.md,
     paddingVertical: space.s,
-    borderRadius: radius.sm,
+    borderRadius: radius.pill,
+    backgroundColor: colors.inkPill,
   },
   actionLabel: {
-    ...type.caption,
-    fontFamily: fonts.bold,
-    color: colors.brandAccent,
+    ...type.label,
+    color: colors.brandOnDark,
   },
   closeButton: {
     width: 24,

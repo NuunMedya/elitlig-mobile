@@ -99,6 +99,9 @@ export function ShareScoreCard({
   contributions,
   homeLogo,
   awayLogo,
+  visible,
+  onClose,
+  hideTrigger = false,
 }: {
   mode: Mode;
   match: ApiMatch;
@@ -109,9 +112,26 @@ export function ShareScoreCard({
   contributions?: { home: ContribRow[]; away: ContribRow[] };
   homeLogo: string | null;
   awayLogo: string | null;
+  /**
+   * DENETİMLİ KİP — pencereyi ekran açar/kapatır (ör. başlıktaki paylaş
+   * ikonu). Verilmezse bileşen kendi düğmesiyle kendi durumunu taşır.
+   */
+  visible?: boolean;
+  onClose?: () => void;
+  /** Tetikleyici düğmeyi çizme — pencere yalnız `visible` ile açılır. */
+  hideTrigger?: boolean;
 }) {
   const scope = useScope();
-  const [open, setOpen] = useState(false);
+  const [ownOpen, setOwnOpen] = useState(false);
+  const controlled = visible !== undefined;
+  const open = controlled ? Boolean(visible) : ownOpen;
+  const setOpen = (next: boolean) => {
+    if (controlled) {
+      if (!next) onClose?.();
+    } else {
+      setOwnOpen(next);
+    }
+  };
   const [busy, setBusy] = useState(false);
   const [fmt, setFmt] = useState<Fmt>("story");
   const shotRef = useRef<View>(null);
@@ -122,7 +142,13 @@ export function ShareScoreCard({
     return handle ? `@${handle}` : null;
   })();
 
-  const kicker = [scope.cityLabel, scope.leagueLabel, scope.seasonLabel]
+  /* Künye MAÇIN kendi şehri/ligi/sezonudur; ekranın o anki kapsamı başka bir
+     lig olabilir (favorilerden açılan maç). Maç kaydında yoksa kapsama düşülür. */
+  const kicker = [
+    match.city ?? scope.cityLabel,
+    match.league_name ?? scope.leagueLabel,
+    match.match_season ?? scope.seasonLabel,
+  ]
     .filter(Boolean)
     .map((part) => String(part).toLocaleUpperCase("tr-TR"))
     .join("  •  ");
@@ -159,6 +185,7 @@ export function ShareScoreCard({
 
   return (
     <>
+      {hideTrigger ? null : (
       <Touchable
         feedback="button"
         haptic="light"
@@ -172,6 +199,7 @@ export function ShareScoreCard({
           {mode === "matchday" ? "Maç Gününü Paylaş" : "Sonucu Paylaş"}
         </Text>
       </Touchable>
+      )}
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
         <View style={styles.backdrop}>

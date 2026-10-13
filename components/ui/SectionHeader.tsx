@@ -134,7 +134,7 @@ export const SectionHeader = React.memo(function SectionHeader({
       ) : mark ? (
         <View style={styles.mark} />
       ) : null}
-      <Text style={styles.title} numberOfLines={1} {...textScale.dense}>
+      <Text style={[styles.title, group ? styles.titleGroup : null]} numberOfLines={1} {...textScale.dense}>
         {label}
       </Text>
       {meta ? (
@@ -243,6 +243,10 @@ const styles = StyleSheet.create({
     fontFamily: fonts.semibold,
     color: colors.textPrimary,
     flexShrink: 1,
+  },
+  /** Liste içi grup etiketi bir kademe küçüktür: bölüm başlığıyla yarışmaz. */
+  titleGroup: {
+    ...type.h3,
   },
   /** "4 MAÇ": başlıkla aynı aile, bir punto küçük, üçüncül mürekkep. */
   meta: {

@@ -19,8 +19,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import React from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
-import { colors, elevate, radius, space, textScale, type } from "@/theme";
-import { GradientFill } from "./GradientFill";
+import { colors, elevate, fonts, radius, space, textScale, type } from "@/theme";
 import { Touchable } from "./Pressable";
 
 export interface ActionTileProps {
@@ -67,7 +66,6 @@ export const ActionTile = React.memo(function ActionTile({
       style={[styles.tile, disabled ? styles.disabled : null, style]}
       testID={testID}
     >
-      <GradientFill radius="lg" />
       <Ionicons name={icon} size={22} color={disabled ? colors.textDisabled : TONE_ICON[tone]} />
       <Text style={styles.label} numberOfLines={1} {...textScale.badge}>
         {label}
@@ -137,15 +135,18 @@ const styles = StyleSheet.create({
   disabled: {
     opacity: 0.5,
   },
+  /* Etiket mürekkeptir: ikon rengi kategoriyi, metin eylemi söyler.
+     Gri etiket karoyu "pasif" gösteriyordu. */
   label: {
     ...type.caption,
-    color: colors.textSecondary,
+    fontFamily: fonts.semibold,
+    color: colors.textPrimary,
     textAlign: "center",
   },
   badge: {
     position: "absolute",
-    top: 5,
-    right: 5,
+    top: space.s,
+    right: space.s,
     minWidth: 14,
     height: 18,
     paddingHorizontal: 4,

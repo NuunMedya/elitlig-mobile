@@ -1,9 +1,10 @@
 /**
  * Card — başlıklı içerik bloğu.
  *
- * YÜZEY IŞIKLIDIR: kart düz dolgu değil `gradientCard` geçişidir (bkz.
- * `GradientFill`) + 1px kenarlık + mor tonlu gölge. Gradyan katmanı mutlak
- * konumludur, kartın yüksekliğini değiştirmez.
+ * ARENA KARTI: beyaz kâğıt (`surface1`) + hairline kenarlık + `elevate(1)`
+ * sönük gölge, köşe `radius.xl` (18), iç boşluk 16. Yüzey DÜZDÜR — eski
+ * ışıklı gradyan katmanı kaldırıldı (zaten iki durağı aynı beyazdı; her
+ * kartta boşuna bir yerel görünüm çiziyordu).
  *
  * KURAL: LİSTE ASLA KART İÇİNE SARILMAZ. Kart, "Genel Bakış", "Kasa özeti"
  * gibi tek parça bir bloğu çerçevelemek içindir; liste ise `ListRow` grubudur.
@@ -19,7 +20,6 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import React from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { colors, elevate, hairline, radius as radiusScale, space, textScale, type } from "@/theme";
-import { GradientFill } from "./GradientFill";
 import { Touchable } from "./Pressable";
 import { Surface, type SurfaceProps } from "./Surface";
 
@@ -28,7 +28,7 @@ export interface CardProps extends SurfaceProps {
   subtitle?: string;
   /** Sağ üstte metin + chevron; basılınca onPress. */
   action?: { label: string; onPress: () => void };
-  /** İçerik iç boşluğu — varsayılan "md" (12). */
+  /** İçerik iç boşluğu — varsayılan "lg" (16). */
   padding?: keyof typeof space;
   footer?: React.ReactNode;
   /** Kartın tamamı basılabilirse: ölçek 0.985 + surface2 zemin (§5.2). */
@@ -40,12 +40,12 @@ export const Card = React.memo(function Card({
   title,
   subtitle,
   action,
-  padding = "md",
+  padding = "lg",
   footer,
   onPress,
   children,
   level = 1,
-  radius = "lg",
+  radius = "xl",
   bordered,
   style,
   contentStyle,
@@ -56,8 +56,6 @@ export const Card = React.memo(function Card({
 
   const inner = (
     <>
-      {/* Işıklı yüzey: üstte açık, altta lavanta. Yerleşimi etkilemez. */}
-      <GradientFill radius={radius} />
       {title || action ? (
         <View style={[styles.header, { paddingHorizontal: pad, paddingTop: pad }]}>
           <View style={styles.headerTexts}>
@@ -147,7 +145,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: space.sm,
-    minHeight: 40,
+    minHeight: 36,
   },
   headerTexts: {
     flex: 1,
@@ -155,6 +153,7 @@ const styles = StyleSheet.create({
   },
   title: {
     ...type.h2,
+    flexShrink: 1,
     color: colors.textPrimary,
   },
   subtitle: {

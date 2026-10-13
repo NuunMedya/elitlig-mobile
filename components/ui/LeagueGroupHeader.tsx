@@ -6,6 +6,10 @@
  * favoriye al, lige git). Üç eylem tek satıra sığdığı için dokunma alanları
  * ayrılır: gövde ligi açar, chevron katlar, yıldız favoriler.
  *
+ * İKİ BİÇİM: varsayılan BİTİŞİK başlık, grubun kartının üst kapağıdır (altına
+ * `MatchCard variant="compact"` satırları `position` ile dizilir); `detached`
+ * ise kartlardan ayrı duran, dört köşesi yuvarlak bağımsız şerittir.
+ *
  * KATLAMA: `LayoutAnimation` ile (reanimated yok). Chevron 150ms'de -90°
  * dönerek "aşağı bak" → "sağa bak" olur; ikon değiştirmek yerine döndürmek,
  * yarım kalan geçişlerde zıplamayı önler.
@@ -19,7 +23,7 @@ import {
   colors,
   duration,
   easing,
-  layout,
+  hairline,
   radius,
   space,
   textScale,
@@ -101,7 +105,13 @@ export const LeagueGroupHeader = memo(function LeagueGroupHeader({
   const hasLogo = Boolean(mediaUrl(logo));
 
   return (
-    <View style={[styles.wrap, sticky && !detached && styles.sticky, detached && styles.detached]}>
+    <View
+      style={[
+        styles.wrap,
+        detached ? styles.detached : collapsed ? styles.attachedCollapsed : styles.attached,
+        sticky && !detached && !collapsed ? styles.sticky : null,
+      ]}
+    >
       <Pressable
         style={styles.body}
         onPress={handleBody}
@@ -111,35 +121,46 @@ export const LeagueGroupHeader = memo(function LeagueGroupHeader({
         }
         accessibilityState={{ expanded: !collapsed }}
       >
-        {hasLogo ? (
-          <TeamLogo name={leagueName} logo={logo} size={18} />
-        ) : (
-          <Ionicons name="trophy-outline" size={14} color={colors.textTertiary} />
-        )}
+        <View style={styles.mark}>
+          {hasLogo ? (
+            <TeamLogo name={leagueName} logo={logo} size={22} />
+          ) : (
+            <Ionicons name="trophy" size={13} color={colors.textSecondary} />
+          )}
+        </View>
 
-        <Text style={styles.name} numberOfLines={1} {...textScale.dense}>
-          {leagueName}
-          {cityName ? <Text style={styles.city}>{`  ·  ${cityName}`}</Text> : null}
-        </Text>
+        <View style={styles.texts}>
+          <Text style={styles.name} numberOfLines={1} {...textScale.dense}>
+            {leagueName}
+          </Text>
+          {cityName ? (
+            <Text style={styles.city} numberOfLines={1} {...textScale.badge}>
+              {cityName}
+            </Text>
+          ) : null}
+        </View>
       </Pressable>
 
       {matchCount != null ? (
-        <Text style={styles.count} {...textScale.badge}>
-          {matchCount}
-        </Text>
+        <View style={styles.countPill}>
+          <Text style={styles.count} {...textScale.badge}>
+            {matchCount}
+          </Text>
+        </View>
       ) : null}
 
       {onToggleFavorite ? (
         <Pressable
           onPress={handleFavorite}
-          hitSlop={touchSlop(24)}
+          hitSlop={touchSlop(28)}
+          style={styles.iconButton}
           accessibilityRole="button"
           accessibilityState={{ selected: isFavorite }}
           accessibilityLabel={isFavorite ? `${leagueName} favorilerden çıkar` : `${leagueName} favorilere ekle`}
         >
           <Ionicons
             name={isFavorite ? "star" : "star-outline"}
-            size={16}
+            size={17}
             color={isFavorite ? colors.star : colors.starEmpty}
           />
         </Pressable>
@@ -148,13 +169,14 @@ export const LeagueGroupHeader = memo(function LeagueGroupHeader({
       {onToggle ? (
         <Pressable
           onPress={handleToggle}
-          hitSlop={touchSlop(24)}
+          hitSlop={touchSlop(28)}
+          style={styles.iconButton}
           accessibilityRole="button"
           accessibilityState={{ expanded: !collapsed }}
           accessibilityLabel={collapsed ? `${leagueName} maçlarını göster` : `${leagueName} maçlarını gizle`}
         >
           <Animated.View style={{ transform: [{ rotate }] }}>
-            <Ionicons name="chevron-down" size={16} color={colors.textTertiary} />
+            <Ionicons name="chevron-down" size={17} color={colors.textTertiary} />
           </Animated.View>
         </Pressable>
       ) : null}
@@ -162,46 +184,99 @@ export const LeagueGroupHeader = memo(function LeagueGroupHeader({
   );
 });
 
+/** Başlık satırının yüksekliği — listeler `getItemLayout` için bunu kullanır. */
+export const LEAGUE_GROUP_HEADER_HEIGHT = 48;
+
 const styles = StyleSheet.create({
   wrap: {
-    height: 40,
+    height: LEAGUE_GROUP_HEADER_HEIGHT,
     flexDirection: "row",
     alignItems: "center",
-    gap: space.sm,
-    paddingHorizontal: layout.rowPaddingH,
-    backgroundColor: colors.surface2,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
+    gap: space.xs,
+    paddingLeft: space.md,
+    paddingRight: space.xs,
+    backgroundColor: colors.surface1,
+    borderColor: colors.border,
   },
-  // Yapışkan başlık listenin üstünde durur; alt kenar çizgisi içeriğin
-  // başlığın altından "sızıyor" hissini keser.
+  /**
+   * BİTİŞİK (varsayılan): grubun kartının ÜST KAPAĞI. Alttaki satırlar
+   * (`MatchCard variant="compact"`) kartın gövdesini ve alt köşelerini çizer;
+   * başlık ile ilk satır arasında yalnız saç teli ayraç vardır. Lig kimliği
+   * böylece maçlarından kopmaz — eski ayrı gri şerit, grubu "başlık + kartlar"
+   * diye ikiye bölüyordu.
+   */
+  attached: {
+    borderTopWidth: hairline,
+    borderLeftWidth: hairline,
+    borderRightWidth: hairline,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    borderBottomWidth: hairline,
+    borderBottomColor: colors.separator,
+  },
+  /** Katlıyken satır yok: başlık tek başına, dört köşesi yuvarlak bir karttır. */
+  attachedCollapsed: {
+    borderWidth: hairline,
+    borderRadius: radius.xl,
+  },
+  // Yapışkan başlık listenin üstünde durur; alt kenar biraz koyulaşır ki
+  // altından kayan satırlarla karışmasın.
   sticky: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
   detached: {
-    borderRadius: radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    borderRadius: radius.xl,
+    borderWidth: hairline,
   },
   body: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: space.sm,
+    gap: space.m,
     height: "100%",
+    minWidth: 0,
+  },
+  /** Lig işareti: amblem ya da kupa, küçük gri pulun içinde. */
+  mark: {
+    width: 26,
+    height: 26,
+    borderRadius: radius.sm,
+    backgroundColor: colors.surface3,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  texts: {
+    flex: 1,
+    minWidth: 0,
   },
   name: {
-    ...type.label,
+    ...type.h4,
     color: colors.textPrimary,
-    flexShrink: 1,
   },
   city: {
-    ...type.micro,
+    ...type.caption,
     color: colors.textTertiary,
   },
+  countPill: {
+    minWidth: 24,
+    height: 20,
+    paddingHorizontal: space.s,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface3,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   count: {
-    ...type.micro,
-    color: colors.textTertiary,
+    ...type.tableNumStrong,
+    fontSize: 11,
+    lineHeight: 14,
+    color: colors.textSecondary,
+  },
+  iconButton: {
+    width: 32,
+    height: 32,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

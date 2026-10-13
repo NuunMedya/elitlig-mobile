@@ -376,8 +376,15 @@ export function ScreenHeader({
         />
       </View>
 
-      {bottom}
       </HeaderToneContext.Provider>
+
+      {/* SÜZGEÇ BANDI bloğun DIŞINDA, kâğıdın üstündedir: sahne başlıklı bir
+          ekranda bile içindeki çip ve segmentler kâğıt tonunda çizilmeli. */}
+      {bottom ? (
+        <HeaderToneContext.Provider value="paper">
+          <View style={styles.bottomSlot}>{bottom}</View>
+        </HeaderToneContext.Provider>
+      ) : null}
     </View>
   );
 }
@@ -485,6 +492,10 @@ const styles = StyleSheet.create({
   },
   hero: {
     overflow: "hidden",
+  },
+  /** Süzgeç bandı başlığın alt satırına yapışmasın: 4px nefes. */
+  bottomSlot: {
+    paddingTop: space.xs,
   },
   border: {
     position: "absolute",

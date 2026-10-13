@@ -133,6 +133,7 @@ export const KeyValueRow = React.memo(function KeyValueRow({
     styles.row,
     position === "single" ? styles.single : null,
     position === "first" ? styles.first : null,
+    position === "middle" ? styles.middle : null,
     position === "last" ? styles.last : null,
     style,
   ];
@@ -167,28 +168,43 @@ export const KeyValueRow = React.memo(function KeyValueRow({
   );
 });
 
+/** Grup kabuğu — ListRow ile aynı: yüzey + hairline kenarlık, konuma göre kesilir. */
+const GROUP_SHELL = {
+  borderWidth: hairline,
+  borderColor: colors.border,
+} as const;
+
 const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: space.md,
-    height: 40,
+    minHeight: 44,
+    paddingVertical: space.s,
     paddingHorizontal: layout.rowPaddingH,
     backgroundColor: colors.surface1,
   },
   single: {
-    borderRadius: radius.lg,
-    borderWidth: hairline,
-    borderColor: colors.border,
+    ...GROUP_SHELL,
+    borderRadius: radius.xl,
   },
   first: {
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
+    ...GROUP_SHELL,
+    borderBottomWidth: 0,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+  },
+  middle: {
+    ...GROUP_SHELL,
+    borderTopWidth: 0,
+    borderBottomWidth: 0,
   },
   last: {
-    borderBottomLeftRadius: radius.lg,
-    borderBottomRightRadius: radius.lg,
+    ...GROUP_SHELL,
+    borderTopWidth: 0,
+    borderBottomLeftRadius: radius.xl,
+    borderBottomRightRadius: radius.xl,
   },
   labelBox: {
     flexDirection: "row",
@@ -197,12 +213,12 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   label: {
-    ...type.bodySm,
+    ...type.body,
     color: colors.textSecondary,
     flexShrink: 1,
   },
   value: {
-    ...type.bodySm,
+    ...type.body,
     fontFamily: fonts.semibold,
     textAlign: "right",
     flexShrink: 1,

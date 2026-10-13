@@ -206,7 +206,9 @@ export const Touchable = React.memo(function Touchable({
         style,
         isPressed && feedback === "card" ? styles.cardPressed : null,
         isPressed ? pressedStyle : null,
-        animatedStyle,
+        /* Pasif öğe basılamaz; animasyonlu opaklık (daima 1) çağıranın
+           verdiği `opacity`yi (pasif sönüklüğü) ezmesin. */
+        disabled ? null : animatedStyle,
       ]}
     >
       {tinted ? (

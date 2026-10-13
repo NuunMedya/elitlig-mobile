@@ -16,9 +16,13 @@
  * olmamasıdır; kimlik bilgileri oturumdan (AuthProvider) geldiği için ekran
  * yine dolu görünür, yalnız panel blokları çizilmez.
  *
- * NEDEN ŞİFRE DEĞİŞTİRME BURADA YOK: sunucuda mobil için şifre değiştirme ucu
- * yok (bkz. lib/api/auth.ts — yalnız login/verify/logout). Uydurma bir form
- * yerine kullanıcı elitlig.com'a yönlendirilir.
+ * ŞİFRE UYGULAMA İÇİNDE: "Güvenlik ve gizlilik" grubunun ilk satırı
+ * /sifre-degistir ekranını açar (PATCH /api/users/me/password).
+ *
+ * DÜZEN (Arena "detay" kalıbı): sahne başlık + kimlik (avatar, ad, roller) ve
+ * oyuncuysa sezonun dört sayısı sahnenin dibinde → kâğıtta önce BEKLEYEN
+ * talepler (yapılacak iş), sonra bilgiler, güvenlik, oyuncu profili, sezon
+ * ayrıntısı ve en altta oturum (çıkış + hesabı sil — mağaza kapısı).
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -113,6 +117,8 @@ interface AccountSection {
   key: string;
   title?: string;
   meta?: string;
+  /** Grubun altında küçük açıklama. */
+  footnote?: string;
   data: AccountRow[];
 }
 
@@ -297,7 +303,21 @@ export default function AccountScreen() {
     if (!user) return [];
     const result: AccountSection[] = [];
 
-    /* 1 — Hesap bilgileri: oturumdan gelir, panel 403 olsa da doludur. */
+    /* 1 — Bekleyen talepler (yapılacak iş — en üstte): onay bekleyen her kayıt tek satır. */
+    if (me?.pendingChanges.length) {
+      result.push({
+        key: "talepler",
+        title: "Bekleyen taleplerim",
+        meta: String(me.pendingChanges.length),
+        data: me.pendingChanges.map((change) => ({
+          kind: "pending" as const,
+          key: `talep-${change.id}`,
+          change,
+        })),
+      });
+    }
+
+    /* 2 — Hesap bilgileri: oturumdan gelir, panel 403 olsa da doludur. */
     result.push({
       key: "bilgiler",
       title: "Hesap bilgilerim",
@@ -310,9 +330,87 @@ export default function AccountScreen() {
         { kind: "kv", key: "takim", label: "Takım", value: orDash(teamName) },
         { kind: "kv", key: "rol", label: "Hesap türü", value: roleLabel(user.role) },
       ],
+      footnote: "Bilgilerini değiştirmek için lig yönetimiyle iletişime geç.",
     });
 
-    /* 2 — Sezon detayı: başlıca dört sayı hero'da, gerisi burada. */
+    /* 3 — Güvenlik ve gizlilik: şifre ve engeller en üstte. */
+    result.push({
+      key: "guvenlik",
+      title: "Güvenlik ve gizlilik",
+      data: [
+        {
+          kind: "action",
+          key: "sifre",
+          icon: "key",
+          title: "Şifre değiştir",
+          subtitle: "Mevcut şifrenle doğrulanır",
+          tone: "brand",
+          action: { kind: "route", route: "/sifre-degistir" },
+        },
+        /* Engel listesi: mağazalar (App Store 1.2) engellemenin bulunabilir ve
+           geri alınabilir olmasını ister; sohbet ayarlarının yanında burada da kapı var. */
+        {
+          kind: "action",
+          key: "engellenenler",
+          icon: "ban",
+          title: "Engellediğim üyeler",
+          subtitle: "Sohbette engellediklerin; engeli buradan kaldır",
+          action: { kind: "route", route: "/engellenenler" },
+        },
+        {
+          kind: "action",
+          key: "gizlilik",
+          icon: "shield-checkmark",
+          title: "Gizlilik Politikası",
+          subtitle: "Hangi verinin neden tutulduğu",
+          action: { kind: "link", url: PRIVACY_URL },
+        },
+        {
+          kind: "action",
+          key: "kurallar",
+          icon: "book",
+          title: "Lig Kuralları",
+          subtitle: "Sohbet ve saha kuralları",
+          action: { kind: "route", route: "/kurallar" },
+        },
+      ],
+    });
+
+    /* 4 — Oyuncu profili ve takım: web panelinde süren talepler. */
+    const profile: AccountRow[] = [];
+    if (player) {
+      profile.push({
+        kind: "action",
+        key: "foto",
+        icon: "camera",
+        title: "Profil fotoğrafı talebi",
+        subtitle: "elitlig.com panelinde; yönetim onayından geçer",
+        action: { kind: "link", url: SITE_URL },
+      });
+    } else {
+      profile.push({
+        kind: "action",
+        key: "oyuncu-bagla",
+        icon: "person-add",
+        title: "Oyuncu profili bağla",
+        subtitle: "Sahiplenme talebi elitlig.com panelinde",
+        action: { kind: "link", url: SITE_URL },
+      });
+    }
+    if (me?.team) {
+      profile.push({
+        kind: "action",
+        key: "yonetilen-takim",
+        icon: "shield",
+        title: me.team.team_name,
+        subtitle: "Yönettiğin takım",
+        tone: "brand",
+        action: { kind: "route", route: `/takim/${me.team.id}` },
+      });
+    }
+    result.push({ key: "profil", title: "Oyuncu profili", data: profile });
+
+    /* 5 — Sezon detayı: başlıca dört sayı sahnede, gerisi burada. */
     if (me?.stats) {
       result.push({
         key: "sezon",
@@ -344,90 +442,7 @@ export default function AccountScreen() {
       });
     }
 
-    /* 3 — Bekleyen talepler: onay bekleyen her kayıt tek satır. */
-    if (me?.pendingChanges.length) {
-      result.push({
-        key: "talepler",
-        title: "Bekleyen taleplerim",
-        meta: String(me.pendingChanges.length),
-        data: me.pendingChanges.map((change) => ({
-          kind: "pending" as const,
-          key: `talep-${change.id}`,
-          change,
-        })),
-      });
-    }
-
-    /* 4 — Hesap ve güvenlik */
-    const actions: AccountRow[] = [
-      {
-        kind: "action",
-        key: "sifre",
-        icon: "key",
-        title: "Şifre değiştir",
-        subtitle: "Mevcut şifrenle doğrulanır",
-        action: { kind: "route", route: "/sifre-degistir" },
-      },
-    ];
-    if (player) {
-      actions.push({
-        kind: "action",
-        key: "foto",
-        icon: "camera",
-        title: "Profil fotoğrafı talebi",
-        subtitle: "elitlig.com paneli uygulama içinde açılır; yönetim onayından geçer",
-        action: { kind: "link", url: SITE_URL },
-      });
-    } else {
-      actions.push({
-        kind: "action",
-        key: "oyuncu-bagla",
-        icon: "person-add",
-        title: "Oyuncu profili bağla",
-        subtitle: "Sahiplenme talebi elitlig.com panelinde (uygulama içinde açılır)",
-        action: { kind: "link", url: SITE_URL },
-      });
-    }
-    if (me?.team) {
-      actions.push({
-        kind: "action",
-        key: "yonetilen-takim",
-        icon: "shield",
-        title: me.team.team_name,
-        subtitle: "Yönettiğin takım",
-        tone: "brand",
-        action: { kind: "route", route: `/takim/${me.team.id}` },
-      });
-    }
-    /* Engel listesi: mağazalar (App Store 1.2) engellemenin bulunabilir ve
-       geri alınabilir olmasını ister; sohbet ayarlarının yanında burada da kapı var. */
-    actions.push({
-      kind: "action",
-      key: "engellenenler",
-      icon: "ban",
-      title: "Engellediğim üyeler",
-      subtitle: "Sohbette engellediklerin; engeli buradan kaldır",
-      action: { kind: "route", route: "/engellenenler" },
-    });
-    actions.push({
-      kind: "action",
-      key: "gizlilik",
-      icon: "shield-checkmark",
-      title: "Gizlilik Politikası",
-      subtitle: "Hangi verinin neden tutulduğu",
-      action: { kind: "link", url: PRIVACY_URL },
-    });
-    actions.push({
-      kind: "action",
-      key: "kurallar",
-      icon: "book",
-      title: "Lig Kuralları",
-      subtitle: "Sohbet ve saha kuralları",
-      action: { kind: "route", route: "/kurallar" },
-    });
-    result.push({ key: "guvenlik", title: "Hesap ve güvenlik", data: actions });
-
-    /* 5 — Oturum ve hesap
+    /* 6 — Oturum ve hesap
        Hesap silme bilinçli olarak "Hesap ve güvenlik" grubunda değil en altta,
        çıkışın yanında durur: mağazaların istediği kapı burada aranır ve
        gündelik ayarların arasında kaybolmaz. Sonuçları ayrı ekran anlatır
@@ -485,38 +500,55 @@ export default function AccountScreen() {
 
   const renderSectionHeader = useCallback(
     ({ section }: { section: AccountSection }) =>
-      section.title ? <SectionHeader title={section.title} meta={section.meta} /> : null,
+      section.title ? (
+        <SectionHeader title={section.title} meta={section.meta} style={styles.flushHeader} />
+      ) : null,
     []
   );
 
-  const renderSectionFooter = useCallback(() => <View style={styles.sectionGap} />, []);
+  const renderSectionFooter = useCallback(
+    ({ section }: { section: AccountSection }) => (
+      <View style={styles.sectionGap}>
+        {section.footnote ? (
+          <Text style={styles.footnote} {...textScale.long}>
+            {section.footnote}
+          </Text>
+        ) : null}
+      </View>
+    ),
+    []
+  );
+
+  /** Sahne kimliği — başlığın `hero` yuvasında; kaydırınca kapanır. */
+  const hero = user ? (
+    <IdentityHero
+      name={user.fullName ?? user.username}
+      username={user.username}
+      avatar={mediaUrl(player?.player_img)}
+      meta={[player?.player_position, teamName].filter(Boolean).join(" · ")}
+      teamName={teamName}
+      teamLogo={mediaUrl(playerTeam?.logo)}
+      isManagement={auth.isManagement}
+      isPresident={isPresident}
+      isPlayer={isPlayer}
+      onPress={player ? openPlayer : undefined}
+      stats={
+        me?.stats
+          ? {
+              matches: me.stats.matches ?? 0,
+              goals: me.stats.goals ?? 0,
+              assists: me.stats.assists ?? 0,
+              rating: me.stats.rating,
+            }
+          : null
+      }
+    />
+  ) : undefined;
 
   const listHeader = useMemo(() => {
     if (!user) return null;
     return (
       <View style={styles.header}>
-        <IdentityHero
-          name={user.fullName ?? user.username}
-          username={user.username}
-          avatar={mediaUrl(player?.player_img)}
-          meta={[player?.player_position, teamName].filter(Boolean).join(" · ")}
-          teamName={teamName}
-          teamLogo={mediaUrl(playerTeam?.logo)}
-          isManagement={auth.isManagement}
-          isPresident={isPresident}
-          isPlayer={isPlayer}
-          onPress={player ? openPlayer : undefined}
-        />
-
-        {me?.stats ? (
-          <StatStrip
-            matches={me.stats.matches ?? 0}
-            goals={me.stats.goals ?? 0}
-            assists={me.stats.assists ?? 0}
-            rating={me.stats.rating}
-          />
-        ) : null}
-
         {!player && me?.onboarding?.player ? (
           <Surface level={1} radius="lg" style={styles.onboard}>
             <Text style={styles.onboardTitle} {...textScale.dense}>
@@ -542,20 +574,7 @@ export default function AccountScreen() {
         ) : null}
       </View>
     );
-  }, [
-    auth.isManagement,
-    blockingError,
-    forbidden,
-    isPlayer,
-    isPresident,
-    me,
-    meQuery.refetch,
-    openPlayer,
-    player,
-    playerTeam?.logo,
-    teamName,
-    user,
-  ]);
+  }, [blockingError, forbidden, me, meQuery.refetch, player, user]);
 
   /* Misafir: yönlendirme yerine açık bir çağrı — geri tuşu döngüsü olmaz. */
   if (!auth.initializing && !user) {
@@ -574,12 +593,7 @@ export default function AccountScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      <ScreenHeader
-        title="Hesabım"
-        subtitle={user?.fullName ?? user?.username}
-        back
-        scrollY={scrollY}
-      />
+      <ScreenHeader title="Hesabım" back scrollY={scrollY} variant="stage" hero={hero} />
 
       {auth.initializing || (meQuery.isLoading && !me) ? (
         <View style={styles.loading}>
@@ -608,10 +622,10 @@ export default function AccountScreen() {
 /* ============================== ALT BİLEŞENLER ============================= */
 
 /**
- * Kimlik hero'su — avatar, ad, kullanıcı adı, rol rozetleri ve takım amblemi.
- * Oyuncu profili bağlıysa kart basılabilir olur ve herkese açık oyuncu
- * sayfasına gider; değilse düz bir yüzeydir (basınca hiçbir şey olmaması,
- * basılabilir görünüp tepkisiz kalmasından iyidir).
+ * Kimlik — sahnede (grafit) avatar, ad, kullanıcı adı, bağlam ve rol
+ * pulları; oyuncuysa sezonun dört sayısı dipte. Oyuncu profili bağlıysa
+ * kimlik satırı basılabilir ve herkese açık oyuncu sayfasına gider; değilse
+ * düz kalır (basılabilir görünüp tepkisiz kalmasından iyidir).
  */
 const IdentityHero = React.memo(function IdentityHero({
   name,
@@ -624,6 +638,7 @@ const IdentityHero = React.memo(function IdentityHero({
   isPresident,
   isPlayer,
   onPress,
+  stats,
 }: {
   name: string;
   username: string;
@@ -635,12 +650,13 @@ const IdentityHero = React.memo(function IdentityHero({
   isPresident: boolean;
   isPlayer: boolean;
   onPress?: () => void;
+  stats: { matches: number; goals: number; assists: number; rating: number | null } | null;
 }) {
   const roles = useMemo(() => {
-    const list: { key: string; label: string; tone: Tone }[] = [];
-    if (isManagement) list.push({ key: "yonetim", label: "YÖNETİM", tone: "brand" });
-    if (isPresident) list.push({ key: "baskan", label: "BAŞKAN", tone: "info" });
-    if (isPlayer) list.push({ key: "oyuncu", label: "OYUNCU", tone: "win" });
+    const list: { key: string; label: string }[] = [];
+    if (isManagement) list.push({ key: "yonetim", label: "Yönetim" });
+    if (isPresident) list.push({ key: "baskan", label: "Başkan" });
+    if (isPlayer) list.push({ key: "oyuncu", label: "Oyuncu" });
     return list;
   }, [isManagement, isPlayer, isPresident]);
 
@@ -654,64 +670,55 @@ const IdentityHero = React.memo(function IdentityHero({
         </Text>
         <Text style={styles.heroHandle} numberOfLines={1} {...textScale.dense}>
           @{username}
+          {meta ? ` · ${meta}` : ""}
         </Text>
-        {meta ? (
-          <Text style={styles.heroMeta} numberOfLines={1} {...textScale.dense}>
-            {meta}
-          </Text>
-        ) : null}
         {roles.length ? (
           <View style={styles.roleRow}>
             {roles.map((role) => (
-              <Badge key={role.key} label={role.label} tone={role.tone} size="xs" />
+              <View key={role.key} style={styles.rolePill}>
+                <Text style={styles.roleText} {...textScale.badge}>
+                  {upperTR(role.label)}
+                </Text>
+              </View>
             ))}
           </View>
         ) : null}
       </View>
 
-      {teamName ? <TeamLogo name={teamName} logo={teamLogo} size={layout.crestLg} /> : null}
-      {onPress ? <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} /> : null}
+      {teamName ? <TeamLogo name={teamName} logo={teamLogo} size={layout.crestLg} onDark /> : null}
+      {onPress ? <Ionicons name="chevron-forward" size={16} color={colors.onDarkMuted} /> : null}
     </>
   );
 
-  if (!onPress) return <View style={styles.hero}>{body}</View>;
-
   return (
-    <Touchable
-      feedback="card"
-      haptic="selection"
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={`${name}, oyuncu profilini aç`}
-      style={styles.hero}
-    >
-      {body}
-    </Touchable>
-  );
-});
+    <View style={styles.heroWrap}>
+      {onPress ? (
+        <Touchable
+          feedback="card"
+          haptic="selection"
+          onPress={onPress}
+          accessibilityRole="button"
+          accessibilityLabel={`${name}, oyuncu profilini aç`}
+          style={styles.hero}
+        >
+          {body}
+        </Touchable>
+      ) : (
+        <View style={styles.hero}>{body}</View>
+      )}
 
-/** Sezonun dört başlık sayısı — tabular rakamlarla tek şerit. */
-const StatStrip = React.memo(function StatStrip({
-  matches,
-  goals,
-  assists,
-  rating,
-}: {
-  matches: number;
-  goals: number;
-  assists: number;
-  rating: number | null;
-}) {
-  return (
-    <Surface level={1} radius="lg" style={styles.stats}>
-      <StatCell label="MAÇ" value={String(matches)} />
-      <View style={styles.statDivider} />
-      <StatCell label="GOL" value={String(goals)} />
-      <View style={styles.statDivider} />
-      <StatCell label="ASİST" value={String(assists)} />
-      <View style={styles.statDivider} />
-      <StatCell label="REYTİNG" value={rating != null ? rating.toFixed(1) : "—"} highlight />
-    </Surface>
+      {stats ? (
+        <View style={styles.stats}>
+          <StatCell label="Maç" value={String(stats.matches)} />
+          <View style={styles.statDivider} />
+          <StatCell label="Gol" value={String(stats.goals)} />
+          <View style={styles.statDivider} />
+          <StatCell label="Asist" value={String(stats.assists)} />
+          <View style={styles.statDivider} />
+          <StatCell label="Reyting" value={stats.rating != null ? stats.rating.toFixed(1) : "—"} highlight />
+        </View>
+      ) : null}
+    </View>
   );
 });
 
@@ -726,14 +733,11 @@ const StatCell = React.memo(function StatCell({
 }) {
   return (
     <View style={styles.statCell}>
-      <Text
-        style={[styles.statValue, highlight ? styles.statValueHighlight : null]}
-        {...textScale.badge}
-      >
+      <Text style={[styles.statValue, highlight ? styles.statValueHighlight : null]} {...textScale.badge}>
         {value}
       </Text>
       <Text style={styles.statLabel} {...textScale.badge}>
-        {label}
+        {upperTR(label)}
       </Text>
     </View>
   );
@@ -817,52 +821,73 @@ const styles = StyleSheet.create({
   },
   header: {
     gap: space.sm,
-    paddingTop: space.sm,
-    paddingBottom: space.sm,
+    paddingTop: space.xs,
   },
   sectionGap: {
     height: layout.sectionGap,
   },
 
-  /* Kimlik hero'su */
+  flushHeader: {
+    paddingHorizontal: 0,
+  },
+  footnote: {
+    ...type.caption,
+    color: colors.textTertiary,
+    paddingHorizontal: space.xs,
+    paddingTop: space.sm,
+  },
+
+  /* Sahne kimliği */
+  heroWrap: {
+    paddingHorizontal: layout.screenPadding,
+    paddingBottom: space.lg,
+    gap: space.md,
+  },
   hero: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.md,
-    padding: space.md,
-    borderRadius: radius.lg,
-    borderWidth: hairline,
-    borderColor: colors.border,
-    backgroundColor: colors.surface1,
   },
   heroBody: {
     flex: 1,
     gap: 2,
   },
   heroName: {
-    ...type.h1,
-    color: colors.textPrimary,
+    ...type.display,
+    color: colors.onDark,
   },
   heroHandle: {
-    ...type.caption,
-    color: colors.textSecondary,
-  },
-  heroMeta: {
     ...type.bodySm,
-    color: colors.textSecondary,
+    color: colors.onDarkMuted,
   },
   roleRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: space.xs,
-    marginTop: space.xs,
+    marginTop: space.s,
+  },
+  rolePill: {
+    paddingHorizontal: space.sm,
+    paddingVertical: 3,
+    borderRadius: radius.pill,
+    backgroundColor: colors.inkPill,
+    borderWidth: hairline,
+    borderColor: colors.inkPillBorder,
+  },
+  roleText: {
+    ...type.micro,
+    color: colors.brandOnDark,
   },
 
-  /* Sezon şeridi */
+  /* Sezon şeridi — sahnenin dibinde */
   stats: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: space.md,
+    paddingVertical: space.m,
+    borderRadius: radius.md,
+    backgroundColor: colors.inkTile,
+    borderWidth: hairline,
+    borderColor: colors.inkTileBorder,
   },
   statCell: {
     flex: 1,
@@ -872,18 +897,18 @@ const styles = StyleSheet.create({
   statDivider: {
     width: hairline,
     alignSelf: "stretch",
-    backgroundColor: colors.separator,
+    backgroundColor: colors.borderOnDark,
   },
   statValue: {
-    ...type.scoreMd,
-    color: colors.textPrimary,
+    ...type.metricSm,
+    color: colors.onDark,
   },
   statValueHighlight: {
-    color: colors.brandAccent,
+    color: colors.brandOnDark,
   },
   statLabel: {
-    ...type.micro,
-    color: colors.textTertiary,
+    ...type.overline,
+    color: colors.onDarkMuted,
   },
 
   /* Oyuncu profili bağlı değil kutusu */

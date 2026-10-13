@@ -23,8 +23,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { useCallback, useMemo } from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
-import { colors, elevate, hairline, layout, radius, space, textScale, type } from "@/theme";
-import { GradientFill } from "./GradientFill";
+import { colors, elevate, fonts, hairline, layout, radius, space, textScale, type } from "@/theme";
 import { Toggle } from "./Toggle";
 import { toneColors, type Tone } from "./Badge";
 import { Touchable } from "./Pressable";
@@ -63,6 +62,8 @@ export interface ListRowProps {
   /** Sağda özel içerik (chevron/rozet yerine). */
   trailing?: React.ReactNode;
   style?: StyleProp<ViewStyle>;
+  /** Ekran okuyucu metni — verilmezse başlık · alt satır · değer okunur. */
+  accessibilityLabel?: string;
   testID?: string;
 }
 
@@ -93,6 +94,7 @@ export const ListRow = React.memo(function ListRow({
   disabled,
   trailing,
   style,
+  accessibilityLabel,
   testID,
 }: ListRowProps) {
   const showChevron = chevron ?? (Boolean(onPress) && !toggle && !trailing);
@@ -117,12 +119,11 @@ export const ListRow = React.memo(function ListRow({
        * kulüp işi, camgöbeği: veri, kırmızı: canlı) ikondan çok daha
        * geniş bir alanda söyler.
        *
-       * Nötr ton, rozetteki gibi `surface3` değil `surface2` alır: kartın
-       * üstünde üç kademe koyu bir kutu, ikonun etrafında gri bir leke gibi
-       * kalıyordu; bir kademe fark yeter.
+       * Nötr ton `surface3` alır: Arena kartı saf beyazdır ve `surface2`
+       * (#F7F8FA) beyazın üstünde kutuyu görünmez kılıyordu.
        */
       const tone = leading.tone && leading.tone !== "neutral" ? toneColors(leading.tone) : null;
-      const box = tone ? tone.dim : colors.surface2;
+      const box = tone ? tone.dim : colors.surface3;
       const tint = tone ? tone.fg : colors.textSecondary;
       return (
         <View style={[styles.leading, { backgroundColor: disabled ? colors.surface2 : box }]}>
@@ -133,23 +134,8 @@ export const ListRow = React.memo(function ListRow({
     return <View style={styles.leadingNode}>{leading}</View>;
   }, [disabled, leading]);
 
-  const gradientCorners =
-    position === "single"
-      ? styles.cornersAll
-      : position === "first"
-        ? styles.cornersTop
-        : position === "last"
-          ? styles.cornersBottom
-          : null;
-
   const content = (
     <>
-      {/*
-        Işıklı yüzey. Köşe yarıçapı SATIRIN GRUP İÇİNDEKİ KONUMUNDAN gelir:
-        kapsayıcıya `overflow: "hidden"` vermek yüzen rozetleri kırpardı, bu
-        yüzden gradyan kendi köşelerini taşır.
-      */}
-      <GradientFill style={gradientCorners ?? undefined} />
       {leadingNode}
 
       <View style={styles.texts}>
@@ -227,7 +213,7 @@ export const ListRow = React.memo(function ListRow({
       disabled={disabled}
       testID={testID}
       accessibilityRole={toggle ? "switch" : "button"}
-      accessibilityLabel={[title, subtitle, value].filter(Boolean).join(". ")}
+      accessibilityLabel={accessibilityLabel ?? [title, subtitle, value].filter(Boolean).join(". ")}
       accessibilityState={{ disabled: Boolean(disabled), checked: toggle?.value }}
       style={containerStyle}
     >
@@ -277,25 +263,14 @@ const styles = StyleSheet.create({
     minHeight: layout.listRowHeightTwoLine,
   },
   single: {
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     ...elevate(1),
-  },
-  cornersAll: {
-    borderRadius: radius.lg,
-  },
-  cornersTop: {
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
-  },
-  cornersBottom: {
-    borderBottomLeftRadius: radius.lg,
-    borderBottomRightRadius: radius.lg,
   },
   first: {
     ...GROUP_SHELL,
     borderBottomWidth: 0,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
   },
   middle: {
     ...GROUP_SHELL,
@@ -305,8 +280,8 @@ const styles = StyleSheet.create({
   last: {
     ...GROUP_SHELL,
     borderTopWidth: 0,
-    borderBottomLeftRadius: radius.lg,
-    borderBottomRightRadius: radius.lg,
+    borderBottomLeftRadius: radius.xl,
+    borderBottomRightRadius: radius.xl,
   },
   highlighted: {
     backgroundColor: colors.brandDim,
@@ -339,8 +314,11 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 1,
   },
+  /** Satır başlığı Arena'da `h3` ölçüsündedir (15); ağırlık Medium — her
+      satırı SemiBold yazmak listeyi bağıran bir başlık yığınına çeviriyordu. */
   title: {
-    ...type.h4,
+    ...type.h3,
+    fontFamily: fonts.medium,
     color: colors.textPrimary,
   },
   titleDestructive: {

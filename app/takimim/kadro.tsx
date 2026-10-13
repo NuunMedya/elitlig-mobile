@@ -30,18 +30,25 @@
  *  - PUT /api/team-management/lineup — { formation, assignments[] }. İlk 8
  *    rolü SUNUCUDA bu uçtan türer; kadro tablosundan `starter` seçilemez.
  *
- * ÜÇ GÖRÜNÜM (`?gorunum=`):
+ * DÖRT GÖRÜNÜM (`?gorunum=`) — başlıktaki SAYFA SEKMELERİ (Arena: sekme
+ * sayfayı değiştirir, segment veriyi süzer). Eskiden üç görünüm kâğıttaki bir
+ * segmentteydi ve "Transfer & Sezon" tek sekmede iki ayrı işi taşıyordu:
+ * oyuncu aramak (günlük iş) ile sezon kadrosunu onaya göndermek (sezonda
+ * birkaç kez) aynı uzun kaydırmanın içindeydi. Artık ayrı sekmelerdir.
  *   kadro   Oyuncu listesi ve takıma özgü alanlar (bu dosyanın çekirdeği).
+ *           Arama + hızlı süzgeç çipleri (`?filtre=sozlesmesiz|hesapsiz|
+ *           numarasiz|mevkisiz`): başkan "kimin sözleşmesi yok?" sorusunu
+ *           listede gözle aramaz, tek dokunuşla süzer. Kulübüm'deki
+ *           "Sözleşmesiz oyuncu" işi doğrudan bu süzgeçle açılır.
  *   dizilis Takımın İDEAL kadrosu — `components/PitchLineup.tsx` ile sahada
  *           iki dokunuşla kurulur (boş yuva → havuzdan oyuncu). Aynı bileşen
  *           maç kadrosu ekranında da kullanılır; iki yer tek etkileşim modeli
  *           paylaşır. Öncesinde mobilde ideal kadro hiç düzenlenemiyordu.
- *   sezon   TRANSFER & SEZON KADROSU — `components/team/SquadBuilderView`.
- *           Oyuncu ara → tek dokunuşla davet/teklif; takım oyuncularını tek
- *           dokunuşla sezon kadrosuna al. Sunucunun karar veren
- *           squad-builder katmanını kullanır (bkz. bileşen başlığı). Takım
- *           kadrosuyla karıştırılmamalı: sezon kadrosu o sezona kayıttır ve
- *           bir oyuncu eklemek transfer hakkı tüketir.
+ *   transfer OYUNCU EKLE — `SquadBuilderView section="transfer"`: oyuncu ara
+ *           → tek dokunuşla davet/teklif; bekleyen davet ve teklifler.
+ *   sezon   SEZON KADROSU — `SquadBuilderView section="season"`: taslak →
+ *           yönetime gönder → onay. Takım kadrosuyla karıştırılmamalı: sezon
+ *           kadrosu o sezona kayıttır ve net ekleme transfer hakkı tüketir.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -61,6 +68,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { PitchBench, PitchLineup, type PitchPlayer } from "@/components/PitchLineup";
+import { SquadSnapshot, countLines } from "@/components/club/SquadSnapshot";
 import { SquadBuilderView } from "@/components/team/SquadBuilderView";
 import {
   Avatar,
@@ -71,18 +79,21 @@ import {
   ChipGroup,
   EmptyState,
   ErrorState,
+  Input,
   ScreenHeader,
   SectionHeader,
   SegmentedControl,
+  SkeletonCard,
   SkeletonListRow,
   Stepper,
+  Tabs,
   Touchable,
   refreshControlProps,
   useHeaderScroll,
   useRefresh,
   useToast,
   type SegmentedItem,
-  type Tone,
+  type TabItem,
 } from "@/components/ui";
 import {
   DEFAULT_FORMATION,
@@ -105,7 +116,6 @@ import { ApiError } from "@/lib/http";
 import { useAuth } from "@/providers/AuthProvider";
 import {
   colors,
-  elevate,
   fonts,
   hairline,
   layout,
@@ -122,19 +132,24 @@ import {
 
 type GroupMode = "mevki" | "rol";
 
+/** Hızlı süzgeçler — başkanın "kimde eksik var?" soruları. */
+type QuickFilter = "tumu" | "sozlesmesiz" | "hesapsiz" | "numarasiz" | "mevkisiz";
+
+const QUICK_FILTERS: { key: QuickFilter; label: string; match: (player: RosterPlayer) => boolean }[] = [
+  { key: "tumu", label: "Tümü", match: () => true },
+  { key: "sozlesmesiz", label: "Sözleşmesiz", match: (player) => !player.has_active_contract },
+  { key: "hesapsiz", label: "Hesabı yok", match: (player) => !player.has_linked_account },
+  { key: "numarasiz", label: "Numarasız", match: (player) => player.jersey_number == null },
+  { key: "mevkisiz", label: "Mevkisiz", match: (player) => !player.team_position },
+];
+
 const GROUP_ITEMS: SegmentedItem<GroupMode>[] = [
   { key: "mevki", label: "Mevkiye göre" },
   { key: "rol", label: "Role göre" },
 ];
 
-/** Ekranın iki ana görünümü. Seçim `?gorunum=` ile rotada taşınır. */
-type ViewMode = "kadro" | "dizilis" | "sezon";
-
-const VIEW_ITEMS: SegmentedItem<ViewMode>[] = [
-  { key: "kadro", label: "Kadro", icon: "people-outline" },
-  { key: "dizilis", label: "Diziliş", icon: "grid-outline" },
-  { key: "sezon", label: "Transfer & Sezon", icon: "person-add-outline" },
-];
+/** Ekranın dört görünümü. Seçim `?gorunum=` ile rotada taşınır. */
+type ViewMode = "kadro" | "dizilis" | "transfer" | "sezon";
 
 const ROLE_LABELS: Record<SquadRole, string> = {
   starter: "İlk Kadro",
@@ -193,10 +208,17 @@ function resolveGroup(raw: string | string[] | undefined): GroupMode {
 /** Rota parametresinden görünüm — tanınmayan değer sessizce "kadro" olur. */
 function resolveView(value: string | string[] | undefined): ViewMode {
   const raw = Array.isArray(value) ? value[0] : value;
-  if (raw === "dizilis") return "dizilis";
-  if (raw === "sezon") return "sezon";
+  if (raw === "dizilis" || raw === "transfer" || raw === "sezon") return raw;
   return "kadro";
 }
+
+function resolveFilter(value: string | string[] | undefined): QuickFilter {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return QUICK_FILTERS.some((item) => item.key === raw) ? (raw as QuickFilter) : "tumu";
+}
+
+/** Türkçe büyük/küçük harf duyarsız arama anahtarı. */
+const searchKey = (value: string) => value.toLocaleLowerCase("tr-TR").trim();
 
 /* ══════════════════════════════════════════════════════════════════════════
    Ekran
@@ -205,13 +227,15 @@ function resolveView(value: string | string[] | undefined): ViewMode {
 export default function SquadManagementScreen() {
   const auth = useAuth();
   const router = useRouter();
-  const params = useLocalSearchParams<{ grup?: string; gorunum?: string }>();
+  const params = useLocalSearchParams<{ grup?: string; gorunum?: string; filtre?: string }>();
   const { scrollY, scrollProps } = useHeaderScroll();
 
   const [editing, setEditing] = useState<RosterPlayer | null>(null);
+  const [term, setTerm] = useState("");
 
   const group = resolveGroup(params.grup);
   const view = resolveView(params.gorunum);
+  const quick = resolveFilter(params.filtre);
 
   const query = useQuery({
     queryKey: ["takim", "roster"],
@@ -253,15 +277,37 @@ export default function SquadManagementScreen() {
     return map;
   }, [marketQuery.data]);
 
+  /** Her hızlı süzgecin sayacı — çipte gösterilir, 0 olan çip sönük kalır. */
+  const quickCounts = useMemo(() => {
+    const result = {} as Record<QuickFilter, number>;
+    QUICK_FILTERS.forEach((item) => {
+      result[item.key] = roster.filter(item.match).length;
+    });
+    return result;
+  }, [roster]);
+
+  /** Süzgeç + arama sonrası görünen oyuncular. */
+  const filtered = useMemo(() => {
+    const def = QUICK_FILTERS.find((item) => item.key === quick) ?? QUICK_FILTERS[0];
+    const needle = searchKey(term);
+    return roster.filter(
+      (player) =>
+        def.match(player) &&
+        (!needle ||
+          searchKey(player.player_name).includes(needle) ||
+          String(player.jersey_number ?? "") === needle),
+    );
+  }, [quick, roster, term]);
+
   const sections = useMemo<RosterSection[]>(() => {
-    if (roster.length === 0) return [];
+    if (filtered.length === 0) return [];
 
     if (group === "rol") {
       return (["starter", "substitute", "reserve"] as const)
         .map((role) => ({
           key: role,
           title: ROLE_LABELS[role],
-          data: roster.filter((player) => player.squad_role === role).sort(comparePlayers),
+          data: filtered.filter((player) => player.squad_role === role).sort(comparePlayers),
         }))
         .filter((section) => section.data.length > 0);
     }
@@ -269,31 +315,44 @@ export default function SquadManagementScreen() {
     const byLine = LINE_ORDER.map((line) => ({
       key: line,
       title: LINE_LABELS[line],
-      data: roster
+      data: filtered
         .filter((player) => LINE_BY_CODE[player.team_position ?? ""] === line)
         .sort(comparePlayers),
     })).filter((section) => section.data.length > 0);
 
-    const unknown = roster
+    const unknown = filtered
       .filter((player) => !LINE_BY_CODE[player.team_position ?? ""])
       .sort(comparePlayers);
 
     return unknown.length > 0
       ? [...byLine, { key: "bilinmiyor", title: "Mevkisi belirlenmemiş", data: unknown }]
       : byLine;
-  }, [group, roster]);
+  }, [filtered, group]);
 
-  const withoutContract = useMemo(
-    () => roster.filter((player) => !player.has_active_contract).length,
-    [roster]
-  );
+  const lines = useMemo(() => countLines(roster.map((player) => player.team_position)), [roster]);
+  const contracted = useMemo(() => roster.filter((player) => player.has_active_contract).length, [roster]);
+
+  /** Forma numarası → oyuncu adı; düzenleyicide çakışma uyarısı için. */
+  const jerseyOwners = useMemo(() => {
+    const map = new Map<number, { id: number; name: string }>();
+    roster.forEach((player) => {
+      if (player.jersey_number != null) map.set(player.jersey_number, { id: player.id, name: player.player_name });
+    });
+    return map;
+  }, [roster]);
 
   const changeGroup = useCallback(
     (next: GroupMode) => {
-      scrollY.setValue(0);
       router.setParams({ grup: next });
     },
-    [router, scrollY]
+    [router]
+  );
+
+  const changeQuick = useCallback(
+    (next: QuickFilter) => {
+      router.setParams({ filtre: next });
+    },
+    [router]
   );
 
   const changeView = useCallback(
@@ -322,12 +381,22 @@ export default function SquadManagementScreen() {
 
   const renderSectionHeader = useCallback(
     ({ section }: { section: RosterSection }) => (
-      <SectionHeader title={section.title} meta={`${section.data.length} oyuncu`} />
+      <SectionHeader title={section.title} meta={`${section.data.length} oyuncu`} size="group" style={styles.flushHeader} />
     ),
     []
   );
 
   const renderSectionFooter = useCallback(() => <View style={styles.sectionGap} />, []);
+
+  const tabItems = useMemo<TabItem<ViewMode>[]>(
+    () => [
+      { key: "kadro", label: "Kadro" },
+      { key: "dizilis", label: "Diziliş" },
+      { key: "transfer", label: "Transfer" },
+      { key: "sezon", label: "Sezon kadrosu" },
+    ],
+    []
+  );
 
   if (!auth.user) {
     return <Redirect href="/giris" />;
@@ -342,22 +411,9 @@ export default function SquadManagementScreen() {
       subtitle={query.data?.team?.team_name}
       back
       scrollY={scrollY}
-      bottom={
+      tabs={
         roster.length > 0 ? (
-          <View style={styles.headerBottom}>
-            <SegmentedControl items={VIEW_ITEMS} value={view} onChange={changeView} />
-            {/* Gruplama YALNIZ kadro listesinde anlamlı; diziliş ve sezon
-                görünümlerinde iki segmentli çubuk üst üste binip 76px yer
-                yerdi. */}
-            {view === "kadro" ? (
-              <SegmentedControl
-                items={GROUP_ITEMS}
-                value={group}
-                onChange={changeGroup}
-                size="sm"
-              />
-            ) : null}
-          </View>
+          <Tabs items={tabItems} value={view} onChange={changeView} sticky />
         ) : undefined
       }
     />
@@ -368,6 +424,7 @@ export default function SquadManagementScreen() {
       <SafeAreaView style={styles.screen} edges={["top"]}>
         {header}
         <View style={styles.loading}>
+          <SkeletonCard lines={2} />
           <SkeletonListRow count={8} avatar />
         </View>
       </SafeAreaView>
@@ -382,6 +439,7 @@ export default function SquadManagementScreen() {
           icon="shield-outline"
           title="Takım başkanlığı gerekli"
           body="Kadro yönetimi yalnızca takımının yönetimini üstlenen başkanlara açıktır."
+          action={{ label: "Kulübüm'e dön", onPress: () => router.replace("/kulubum") }}
         />
       </SafeAreaView>
     );
@@ -396,13 +454,13 @@ export default function SquadManagementScreen() {
     );
   }
 
-  /* Kadro boşken segment çubuğu gizlidir; başkanı boş ekranla bırakmak yerine
+  /* Kadro boşken sekme şeridi gizlidir; başkanı boş ekranla bırakmak yerine
      doğrudan oyuncu arayıp kadroya katabileceği kurucu görünüm açılır. */
   if (roster.length === 0) {
     return (
       <SafeAreaView style={styles.screen} edges={["top"]}>
         {header}
-        <SquadBuilderView refreshControl={refreshControl} />
+        <SquadBuilderView section="transfer" refreshControl={refreshControl} />
       </SafeAreaView>
     );
   }
@@ -423,14 +481,54 @@ export default function SquadManagementScreen() {
     );
   }
 
-  if (view === "sezon") {
+  if (view === "transfer" || view === "sezon") {
     return (
       <SafeAreaView style={styles.screen} edges={["top"]}>
         {header}
-        <SquadBuilderView refreshControl={refreshControl} />
+        <SquadBuilderView key={view} section={view === "transfer" ? "transfer" : "season"} refreshControl={refreshControl} />
       </SafeAreaView>
     );
   }
+
+  const listHeader = (
+    <View style={styles.summary}>
+      {query.isError ? (
+        <ErrorState error={query.error} onRetry={query.refetch} variant="banner" />
+      ) : null}
+
+      <SquadSnapshot lines={lines} total={roster.length} contracted={contracted} style={styles.flush} />
+
+      <Input
+        variant="search"
+        value={term}
+        onChangeText={setTerm}
+        placeholder="Oyuncu adı ya da forma no"
+        autoCorrect={false}
+        returnKeyType="search"
+        accessibilityLabel="Kadroda ara"
+      />
+
+      <ChipGroup contentPadding={0}>
+        {QUICK_FILTERS.map((item) => (
+          <QuickChip
+            key={item.key}
+            value={item.key}
+            label={item.label}
+            count={item.key === "tumu" ? undefined : quickCounts[item.key]}
+            selected={quick === item.key}
+            onPress={changeQuick}
+          />
+        ))}
+      </ChipGroup>
+
+      <View style={styles.listBar}>
+        <Text style={styles.listCount} {...textScale.dense}>
+          {filtered.length === roster.length ? `${roster.length} oyuncu` : `${filtered.length} / ${roster.length} oyuncu`}
+        </Text>
+        <SegmentedControl items={GROUP_ITEMS} value={group} onChange={changeGroup} size="sm" stretch={false} />
+      </View>
+    </View>
+  );
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
@@ -446,25 +544,71 @@ export default function SquadManagementScreen() {
         stickySectionHeadersEnabled={false}
         contentContainerStyle={styles.content}
         refreshControl={refreshControl}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         initialNumToRender={12}
-        ListHeaderComponent={
-          <SquadSummary
-            total={roster.length}
-            contracted={roster.length - withoutContract}
-            withoutContract={withoutContract}
-            stale={query.isError}
-            error={query.error}
-            onRetry={query.refetch}
+        ListHeaderComponent={listHeader}
+        ListEmptyComponent={
+          <EmptyState
+            icon={term ? "search-outline" : "checkmark-circle-outline"}
+            title={term ? "Eşleşen oyuncu yok" : "Bu süzgeçte oyuncu yok"}
+            body={
+              term
+                ? `“${term.trim()}” kadronda bulunamadı. Yeni oyuncu için Transfer sekmesini kullan.`
+                : "Bu konuda eksik yok — kadronun bu bilgisi tam."
+            }
+            action={
+              term
+                ? { label: "Transfer'de ara", onPress: () => changeView("transfer") }
+                : { label: "Tüm kadroyu göster", onPress: () => changeQuick("tumu") }
+            }
+            variant="inline"
+            compact
           />
         }
       />
 
       {editing ? (
-        <PlayerEditorSheet player={editing} onClose={closeEditor} />
+        <PlayerEditorSheet
+          player={editing}
+          jerseyOwners={jerseyOwners}
+          onClose={closeEditor}
+          onOpenProfile={(id) => {
+            closeEditor();
+            router.push(`/oyuncu/${id}`);
+          }}
+        />
       ) : null}
     </SafeAreaView>
   );
 }
+
+/** Hızlı süzgeç çipi — memo'lu olsun diye anahtarı geri verir. */
+const QuickChip = React.memo(function QuickChip({
+  value,
+  label,
+  count,
+  selected,
+  onPress,
+}: {
+  value: QuickFilter;
+  label: string;
+  count?: number;
+  selected: boolean;
+  onPress: (value: QuickFilter) => void;
+}) {
+  const handlePress = useCallback(() => onPress(value), [onPress, value]);
+  return (
+    <Chip
+      label={label}
+      count={count}
+      selected={selected}
+      onPress={handlePress}
+      size="sm"
+      disabled={count === 0 && !selected}
+    />
+  );
+});
 
 /* ══════════════════════════════════════════════════════════════════════════
    DİZİLİŞ — takımın ideal kadrosu
@@ -731,61 +875,6 @@ const FormationChip = React.memo(function FormationChip({
    Alt bileşenler
    ══════════════════════════════════════════════════════════════════════════ */
 
-/** Liste başlığı: kadro büyüklüğü ve sözleşme dökümü + bayat veri bandı. */
-const SquadSummary = React.memo(function SquadSummary({
-  total,
-  contracted,
-  withoutContract,
-  stale,
-  error,
-  onRetry,
-}: {
-  total: number;
-  contracted: number;
-  withoutContract: number;
-  stale: boolean;
-  error: unknown;
-  onRetry: () => void;
-}) {
-  return (
-    <View style={styles.summary}>
-      {stale ? <ErrorState error={error} onRetry={onRetry} variant="banner" /> : null}
-      <View style={styles.kpiRow}>
-        <StatTile label="KADRO" value={String(total)} />
-        <StatTile label="SÖZLEŞMELİ" value={String(contracted)} tone="win" />
-        <StatTile
-          label="SÖZLEŞMESİZ"
-          value={String(withoutContract)}
-          tone={withoutContract > 0 ? "warn" : "neutral"}
-        />
-      </View>
-    </View>
-  );
-});
-
-const StatTile = React.memo(function StatTile({
-  label,
-  value,
-  tone = "neutral",
-}: {
-  label: string;
-  value: string;
-  tone?: Tone;
-}) {
-  const color =
-    tone === "win" ? colors.win : tone === "warn" ? colors.warn : colors.textPrimary;
-  return (
-    <View style={styles.tile}>
-      <Text style={[styles.tileValue, { color }]} numberOfLines={1} {...textScale.dense}>
-        {value}
-      </Text>
-      <Text style={styles.tileLabel} numberOfLines={1} {...textScale.badge}>
-        {label}
-      </Text>
-    </View>
-  );
-});
-
 /**
  * Kadro satırı — forma numarası sütunu + avatar + ad/mevki + sözleşme rozeti.
  *
@@ -872,13 +961,12 @@ const PlayerRow = React.memo(function PlayerRow({
         </View>
       ) : null}
 
-      {player.has_active_contract ? (
-        <Badge label="SÖZLEŞMELİ" tone="win" size="xs" />
-      ) : (
-        <Badge label="SERBEST" tone="warn" size="xs" />
-      )}
+      {/* Renk sinyaldir (Arena §1): sözleşmeli olmak NORMAL hâldir ve rozet
+          taşımaz; yalnız eksik olan işaretlenir. On altı yeşil rozetin
+          arasında iki turuncu kayboluyordu. */}
+      {player.has_active_contract ? null : <Badge label="SÖZLEŞMESİZ" tone="warn" size="xs" />}
 
-      <Ionicons name="create-outline" size={16} color={colors.textTertiary} />
+      <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
 
       {position === "first" || position === "middle" ? (
         <View pointerEvents="none" style={styles.rowDivider} />
@@ -896,10 +984,15 @@ const NO_JERSEY = 0;
 
 function PlayerEditorSheet({
   player,
+  jerseyOwners,
   onClose,
+  onOpenProfile,
 }: {
   player: RosterPlayer;
+  /** Forma numarası → sahibi; aynı numarayı iki oyuncuya vermeyi önceden uyarır. */
+  jerseyOwners: Map<number, { id: number; name: string }>;
   onClose: () => void;
+  onOpenProfile: (playerId: number) => void;
 }) {
   const queryClient = useQueryClient();
   const toast = useToast();
@@ -998,6 +1091,11 @@ function PlayerEditorSheet({
 
   const busy = saveMutation.isPending || releaseMutation.isPending;
 
+  /** Seçilen numara kadroda başka birinde mi? Sunucu engellemiyor; maç
+      kadrosunda "forma numaraları benzersiz" kuralına takılmadan uyarılır. */
+  const owner = jersey !== NO_JERSEY ? jerseyOwners.get(jersey) : undefined;
+  const clash = owner && owner.id !== player.id ? owner : null;
+
   return (
     <BottomSheet
       visible
@@ -1042,7 +1140,21 @@ function PlayerEditorSheet({
           {player.has_active_contract ? (
             <Badge label="SÖZLEŞMELİ" tone="win" size="xs" />
           ) : (
-            <Badge label="SERBEST" tone="warn" size="xs" />
+            <Badge label="SÖZLEŞMESİZ" tone="warn" size="xs" />
+          )}
+        </View>
+        <View style={styles.sheetLinks}>
+          <Button
+            label="Oyuncu profili"
+            icon="person-outline"
+            size="sm"
+            variant="secondary"
+            onPress={() => onOpenProfile(player.id)}
+          />
+          {player.has_linked_account ? null : (
+            <Text style={styles.fieldHint} {...textScale.dense}>
+              Panel hesabı yok — yoklama ve bildirim alamaz.
+            </Text>
           )}
         </View>
 
@@ -1059,8 +1171,12 @@ function PlayerEditorSheet({
             repeatOnHold
             accessibilityLabel="Forma numarası"
           />
-          <Text style={styles.fieldHint} {...textScale.dense}>
-            {jersey === NO_JERSEY ? "Numarasız" : `${jersey} numaralı forma`}
+          <Text style={[styles.fieldHint, clash ? styles.fieldWarn : null]} {...textScale.dense}>
+            {jersey === NO_JERSEY
+              ? "Numarasız"
+              : clash
+                ? `${jersey} numara ${clash.name} oyuncusunda`
+                : `${jersey} numaralı forma`}
           </Text>
         </View>
 
@@ -1202,30 +1318,9 @@ const styles = StyleSheet.create({
 
   /* Özet */
   summary: {
-    paddingTop: space.sm,
-    gap: space.sm,
-  },
-  kpiRow: {
-    flexDirection: "row",
-    gap: space.sm,
-  },
-  tile: {
-    flex: 1,
-    alignItems: "center",
-    gap: 2,
-    borderRadius: radius.lg,
-    borderWidth: hairline,
-    borderColor: colors.border,
-    backgroundColor: colors.surface1,
-    paddingVertical: space.m,
-    paddingHorizontal: space.xs,
-  },
-  tileValue: {
-    ...type.scoreSm,
-  },
-  tileLabel: {
-    ...type.micro,
-    color: colors.textTertiary,
+    paddingTop: space.md,
+    paddingBottom: space.xs,
+    gap: space.md,
   },
 
   /* Kadro satırı — ListRow ölçüleriyle birebir. */
@@ -1309,6 +1404,30 @@ const styles = StyleSheet.create({
     color: colors.textTertiary,
     marginTop: space.xs,
     flexShrink: 1,
+  },
+  sheetLinks: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+  },
+  fieldWarn: {
+    color: colors.warn,
+  },
+  flush: {
+    marginHorizontal: 0,
+  },
+  flushHeader: {
+    paddingHorizontal: 0,
+  },
+  listBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: space.sm,
+  },
+  listCount: {
+    ...type.label,
+    color: colors.textSecondary,
   },
   sheetFooter: {
     flexDirection: "row",

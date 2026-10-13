@@ -15,7 +15,7 @@
  * İki yoğunluk vardır ve ikisi de bu sırayı taşır:
  *   · `list`  (66px) — ad ALTINDA form çipleri ve meta satırı. Takımı
  *                      TANIMAK için: Takımlar sekmesi, favoriler, mini liste.
- *   · `table` (40px) — O·G·B·M·AV·P sütunları. KARŞILAŞTIRMAK için: tam puan
+ *   · `table` (44px) — O·G·B·M·AV·P sütunları (`columns` ile Kısa/Form). KARŞILAŞTIRMAK için: tam puan
  *                      durumu. Sütun genişlikleri `TeamRowHead` ile birebir
  *                      aynıdır; ikisi tek dosyada olduğu için kayamaz.
  *
@@ -38,10 +38,19 @@ import { TeamLogo } from "./TeamLogo";
 import { Touchable } from "./Pressable";
 
 export type TeamRowDensity = "list" | "table";
+/**
+ * Tablo yoğunluğunun sütun kümesi (FotMob'un Kısa · Tam · Form kalıbı):
+ *   · `full`  — O · G · B · M · AV · P (varsayılan, eski davranış)
+ *   · `short` — O · AV · P; ad sütunu genişler, uzun adlar kırpılmaz
+ *   · `form`  — son beş maç çipleri · P
+ */
+export type TeamRowColumns = "full" | "short" | "form";
 
 /** Satır yükseklikleri — ekranlar `getItemLayout` için bunları kullanır. */
 export const TEAM_ROW_HEIGHT = 66;
-export const TEAM_ROW_HEIGHT_TABLE = 40;
+/* 40 → 44: Arena satırı 44px dokunma hedefinin altına inmez; on altı takımlık
+   bir tablo yine de tek ekranda ilk on iki satırı gösterir. */
+export const TEAM_ROW_HEIGHT_TABLE = 44;
 
 /* Sütun genişlikleri — satır ve başlık AYNI sabitleri kullanır. */
 const COL_RANK = 22;
@@ -49,8 +58,12 @@ const COL_RANK = 22;
    ~140px bırakıyor ve "ESAT MUTLU S…" diye kırpıyordu. 18 + 4 (maket 17 + 7)
    ada ~30px geri verir; iki haneli sayılar 18px'e tabular rakamla sığar. */
 const COL_NUM = 18;
-const COL_DIFF = 24;
-const COL_POINTS = 24;
+/* AV 24 → 36: amatör liglerde üç haneli averaj (+121, −340) olağan; 24px'te iki
+   satıra kırılıp satırı bozuyordu. */
+const COL_DIFF = 36;
+const COL_POINTS = 26;
+/** "Form" sütunu: beş xs form çipi (5 × 13 + 4 × 2 aralık) ve nefes. */
+const COL_FORM = 78;
 /** Liste yoğunluğunda sağdaki puan bloğu. */
 const POINTS_BOX = 34;
 
@@ -72,14 +85,21 @@ export interface TeamRowProps {
   /** Bölge rayının rengi (`zoneColor`); yoksa ray çizilmez. */
   zone?: string | null;
   /**
-   * "Bu satır BU sayfanın konusu" — takım detayındaki mini tabloda kendi
-   * takımını işaretler. Zemin sönük mor olur; kalın yazı ya da renkli metin
-   * KULLANILMAZ, çünkü satırın kendi hiyerarşisi (sıra, ad, puan) zaten
-   * kurulu ve ikinci bir vurgu onu bozar.
+   * "Bu satır öne çıkar" — takım detayındaki mini tabloda sayfanın takımı,
+   * puan tablosunda takip edilen takımlar. ARENA: vurgulanan takım VERİDİR,
+   * aksiyon değil; bu yüzden zemin mor değil sönük zümrüttür (`accentDim`) ve
+   * ad bir kademe kalınlaşır. Sol kenar bölge rayına ayrılmıştır.
    */
   highlighted?: boolean;
   density?: TeamRowDensity;
+  /** Yalnız `table` yoğunluğunda: hangi sütunlar çizilir (varsayılan "full"). */
+  columns?: TeamRowColumns;
   onPress: (teamId: number) => void;
+  /**
+   * Yalnız `list` yoğunluğunda: puanın SAĞINDA ek yuva (ör. takip yıldızı).
+   * Satırın okuma sırası değişmez; yuva en sonda durur.
+   */
+  trailing?: React.ReactNode;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -106,7 +126,9 @@ function TeamRowBase({
   zone,
   highlighted,
   density = "list",
+  columns = "full",
   onPress,
+  trailing,
   style,
 }: TeamRowProps) {
   const handlePress = useCallback(() => onPress(teamId), [onPress, teamId]);
@@ -120,6 +142,12 @@ function TeamRowBase({
     .join(" ");
 
   if (density === "table") {
+    const diffStyle = [
+      styles.tableNum,
+      styles.tableDiff,
+      goalDiff != null && goalDiff > 0 ? styles.diffPositive : null,
+      goalDiff != null && goalDiff < 0 ? styles.diffNegative : null,
+    ];
     return (
       <Touchable
         style={[styles.tableRow, highlighted ? styles.highlighted : null, style]}
@@ -129,32 +157,39 @@ function TeamRowBase({
         accessibilityLabel={accessibilityLabel}
       >
         <View style={[styles.rail, zone ? { backgroundColor: zone } : null]} />
-        <Text style={styles.tableRank} {...textScale.dense}>
+        <Text style={[styles.tableRank, zone ? styles.tableRankZone : null]} {...textScale.dense}>
           {rank ?? "—"}
         </Text>
         <TeamLogo name={name} logo={logo ?? null} size={layout.crestSm} />
-        <Text
-          style={[styles.tableName, favorite ? styles.nameFavorite : null]}
-          numberOfLines={1}
-          {...textScale.dense}
-        >
-          {name}
-        </Text>
-        <Text style={styles.tableNum} {...textScale.dense}>{played ?? "—"}</Text>
-        <Text style={styles.tableNum} {...textScale.dense}>{wins ?? "—"}</Text>
-        <Text style={styles.tableNum} {...textScale.dense}>{draws ?? "—"}</Text>
-        <Text style={styles.tableNum} {...textScale.dense}>{losses ?? "—"}</Text>
-        <Text
-          style={[
-            styles.tableNum,
-            styles.tableDiff,
-            goalDiff != null && goalDiff > 0 ? styles.diffPositive : null,
-            goalDiff != null && goalDiff < 0 ? styles.diffNegative : null,
-          ]}
-          {...textScale.dense}
-        >
-          {goalDiff != null ? formatDiff(goalDiff) : "—"}
-        </Text>
+        <View style={styles.tableNameCell}>
+          <Text
+            style={[styles.tableName, favorite || highlighted ? styles.nameFavorite : null]}
+            numberOfLines={1}
+            {...textScale.dense}
+          >
+            {name}
+          </Text>
+          {favorite ? <Ionicons name="star" size={10} color={colors.star} /> : null}
+        </View>
+        {columns === "form" ? (
+          <View style={styles.tableForm}>
+            {form ? <FormChips form={form} size="xs" /> : null}
+          </View>
+        ) : (
+          <>
+            <Text style={styles.tableNum} {...textScale.dense}>{played ?? "—"}</Text>
+            {columns === "full" ? (
+              <>
+                <Text style={styles.tableNum} {...textScale.dense}>{wins ?? "—"}</Text>
+                <Text style={styles.tableNum} {...textScale.dense}>{draws ?? "—"}</Text>
+                <Text style={styles.tableNum} {...textScale.dense}>{losses ?? "—"}</Text>
+              </>
+            ) : null}
+            <Text style={diffStyle} numberOfLines={1} {...textScale.dense}>
+              {goalDiff != null ? formatDiff(goalDiff) : "—"}
+            </Text>
+          </>
+        )}
         <Text style={[styles.tableNum, styles.tablePoints]} {...textScale.dense}>
           {points ?? "—"}
         </Text>
@@ -221,6 +256,7 @@ function TeamRowBase({
           </Text>
         </View>
       ) : null}
+      {trailing}
     </Touchable>
   );
 }
@@ -234,6 +270,7 @@ export const TeamRow = React.memo(TeamRowBase);
 export const TeamRowHead = React.memo(function TeamRowHead({
   density = "list",
   pointsLabel = "Puan",
+  columns = "full",
 }: {
   density?: TeamRowDensity;
   /**
@@ -241,6 +278,8 @@ export const TeamRowHead = React.memo(function TeamRowHead({
    * "GP"dir; başlık sabit yazılsaydı o liglerde yanlış birim gösterilirdi.
    */
   pointsLabel?: string;
+  /** Satırla aynı sütun kümesi — ikisi aynı değeri almalı. */
+  columns?: TeamRowColumns;
 }) {
   if (density === "table") {
     return (
@@ -248,16 +287,28 @@ export const TeamRowHead = React.memo(function TeamRowHead({
         <View style={styles.rail} />
         <Text style={[styles.tableRank, styles.headLabel]} {...textScale.badge}>#</Text>
         <View style={{ width: layout.crestSm }} />
-        <Text style={[styles.tableName, styles.headLabel]} {...textScale.badge}>
+        <Text style={[styles.tableNameCell, styles.headLabel]} {...textScale.badge}>
           {upperTR("Takım")}
         </Text>
-        <Text style={[styles.tableNum, styles.headLabel]} {...textScale.badge}>O</Text>
-        <Text style={[styles.tableNum, styles.headLabel]} {...textScale.badge}>G</Text>
-        <Text style={[styles.tableNum, styles.headLabel]} {...textScale.badge}>B</Text>
-        <Text style={[styles.tableNum, styles.headLabel]} {...textScale.badge}>M</Text>
-        <Text style={[styles.tableNum, styles.tableDiff, styles.headLabel]} {...textScale.badge}>
-          AV
-        </Text>
+        {columns === "form" ? (
+          <Text style={[styles.tableForm, styles.headLabel, styles.tableFormHead]} {...textScale.badge}>
+            {upperTR("Son 5")}
+          </Text>
+        ) : (
+          <>
+            <Text style={[styles.tableNum, styles.headLabel]} {...textScale.badge}>O</Text>
+            {columns === "full" ? (
+              <>
+                <Text style={[styles.tableNum, styles.headLabel]} {...textScale.badge}>G</Text>
+                <Text style={[styles.tableNum, styles.headLabel]} {...textScale.badge}>B</Text>
+                <Text style={[styles.tableNum, styles.headLabel]} {...textScale.badge}>M</Text>
+              </>
+            ) : null}
+            <Text style={[styles.tableNum, styles.tableDiff, styles.headLabel]} {...textScale.badge}>
+              AV
+            </Text>
+          </>
+        )}
         <Text style={[styles.tableNum, styles.tablePointsHead, styles.headLabel]} {...textScale.badge}>
           {upperTR(pointsLabel).slice(0, 2)}
         </Text>
@@ -295,7 +346,7 @@ const styles = StyleSheet.create({
     color: colors.textTertiary,
   },
   highlighted: {
-    backgroundColor: colors.brandDim,
+    backgroundColor: colors.accentDim,
   },
 
   /* — Liste yoğunluğu — */
@@ -380,7 +431,7 @@ const styles = StyleSheet.create({
     gap: space.xs,
     paddingLeft: space.sm,
     paddingRight: space.md,
-    paddingVertical: space.s,
+    paddingVertical: space.sm,
     backgroundColor: colors.surface1,
     borderBottomWidth: hairline,
     borderBottomColor: colors.separator,
@@ -391,10 +442,30 @@ const styles = StyleSheet.create({
     ...type.tableNum,
     color: colors.textTertiary,
   },
-  tableName: {
+  /* Bölgedeki takımın sırası bir kademe koyu: ray rengi söyler, rakam onaylar. */
+  tableRankZone: {
+    ...type.tableNumStrong,
+    color: colors.textPrimary,
+  },
+  tableNameCell: {
     flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+    marginLeft: space.xs,
+  },
+  tableName: {
     ...type.body,
     color: colors.textPrimary,
+    flexShrink: 1,
+  },
+  tableForm: {
+    width: COL_FORM,
+    alignItems: "flex-end",
+  },
+  tableFormHead: {
+    textAlign: "right",
   },
   nameFavorite: {
     ...type.label,

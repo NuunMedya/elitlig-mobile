@@ -1,10 +1,12 @@
 /**
  * Input — metin alanı ve arama kutusu (§4.30).
  *
- * NEDEN ODAK KENARLIĞI: koyu temada alan zemini (`surface3`) kartla neredeyse
- * aynı aydınlıktadır; odaklanan alanın nereye gittiğini yalnız kenarlık
- * gösterir (`borderStrong`). Hata varsa kenarlık kırmızıya döner ve ALTINDA
- * metin belirir — yalnız renk kullanmak erişilebilir değildir (§1.0).
+ * ARENA ALANI: beyaz kâğıt + 1px kenarlık (`border`). Gri dolgulu alan, gri
+ * kâğıdın üstünde "pasif" okunuyordu; beyaz alan "buraya yazılır" der ve
+ * kart içinde de aynı dili konuşur. ODAKTA kenarlık marka rengine döner —
+ * alanın nereye gittiğini yalnız kenarlık gösterir. Hata varsa kenarlık
+ * kırmızıya döner ve ALTINDA metin belirir — yalnız renk kullanmak
+ * erişilebilir değildir.
  *
  * `variant="search"` hap biçimli, arama ikonlu ve temizle düğmeli varyanttır;
  * temizleme yalnız `value` doluyken görünür ve dokunma alanı 44px'e
@@ -22,7 +24,7 @@ import {
   type TextInputProps,
   type ViewStyle,
 } from "react-native";
-import { colors, hairline, radius, space, textScale, touchSlop, type } from "@/theme";
+import { colors, radius, space, textScale, touchSlop, type } from "@/theme";
 import { Touchable } from "./Pressable";
 
 export interface InputProps extends Omit<TextInputProps, "style"> {
@@ -111,7 +113,7 @@ export const Input = React.memo(
             <Ionicons
               name={icon}
               size={16}
-              color={focused ? colors.textSecondary : colors.textTertiary}
+              color={error ? colors.danger : focused ? colors.brandAccent : colors.textTertiary}
             />
           ) : null}
 
@@ -166,18 +168,18 @@ const styles = StyleSheet.create({
     gap: space.s,
   },
   label: {
-    ...type.caption,
+    ...type.h4,
     color: colors.textSecondary,
   },
   field: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.sm,
-    paddingHorizontal: space.md,
+    paddingHorizontal: space.md + space.xxs,
     borderRadius: radius.md,
-    borderWidth: hairline,
+    borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.surface3,
+    backgroundColor: colors.surface1,
   },
   fieldSearch: {
     borderRadius: radius.pill,
@@ -185,22 +187,26 @@ const styles = StyleSheet.create({
   fieldMultiline: {
     minHeight: 88,
     alignItems: "flex-start",
-    paddingVertical: space.m,
+    paddingVertical: space.md,
   },
   fieldFocused: {
-    borderColor: colors.borderStrong,
+    borderColor: colors.brand,
   },
   fieldError: {
     borderColor: colors.danger,
   },
   fieldDisabled: {
-    opacity: 0.55,
+    backgroundColor: colors.surface2,
+    opacity: 0.7,
   },
   input: {
     flex: 1,
     ...type.body,
+    fontSize: 15,
     color: colors.textPrimary,
     padding: 0,
+    // Web'de tarayıcının odak halkası alanın kendi kenarlığıyla çakışıyordu.
+    ...({ outlineStyle: "none" } as object),
   },
   inputMultiline: {
     textAlignVertical: "top",

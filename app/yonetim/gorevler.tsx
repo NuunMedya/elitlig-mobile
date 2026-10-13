@@ -54,7 +54,7 @@ import {
   type TodoTask,
 } from "@/lib/api/todos";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
+import { colors, elevate, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
 
 type TodoTab = TodoListTab;
 
@@ -216,16 +216,15 @@ export default function AdminTodosScreen() {
         contentContainerStyle={styles.list}
         refreshControl={<RefreshControl {...refreshControlProps(refresh.refreshing, refresh.onRefresh)} />}
         ListHeaderComponent={
-          summaryText ? (
-            <View style={[styles.summary, summary?.overdue ? styles.summaryWarn : null]}>
-              <Ionicons
-                name={summary?.overdue ? "alert-circle-outline" : "checkbox-outline"}
-                size={16}
-                color={summary?.overdue ? colors.danger : colors.brandAccent}
-              />
-              <Text style={styles.summaryText} {...textScale.dense}>
-                {summaryText}
-              </Text>
+          summary ? (
+            /* Özet şeridi: dört sayaç, rakam kahramandır. Gecikmiş sayısı
+               sıfırdan büyükse YALNIZ o rakam kırmızıdır — bütün şeridi
+               boyamak, tek bir uyarıyı ekranın tamamına yayıyordu. */
+            <View style={styles.summary} accessibilityLabel={summaryText ?? undefined} accessible>
+              <SummaryStat label="Açık" value={summary.open} />
+              <SummaryStat label="Gecikmiş" value={summary.overdue} tone={summary.overdue ? "danger" : undefined} divided />
+              <SummaryStat label="Bugün" value={summary.today} divided />
+              <SummaryStat label="Maç görevi" value={summary.matchDuties} divided />
             </View>
           ) : null
         }
@@ -258,6 +257,31 @@ export default function AdminTodosScreen() {
 
       <FAB icon="add" onPress={openCreate} accessibilityLabel="Yeni görev" label="Görev" extended />
     </SafeAreaView>
+  );
+}
+
+/* ═══════════════════════════ ÖZET HÜCRESİ ═══════════════════════════ */
+
+function SummaryStat({
+  label,
+  value,
+  tone,
+  divided,
+}: {
+  label: string;
+  value: number;
+  tone?: "danger";
+  divided?: boolean;
+}) {
+  return (
+    <View style={[styles.stat, divided ? styles.statDivided : null]}>
+      <Text style={[styles.statValue, tone === "danger" ? styles.statDanger : null]} {...textScale.badge}>
+        {value}
+      </Text>
+      <Text style={styles.statLabel} numberOfLines={1} {...textScale.badge}>
+        {upperTR(label)}
+      </Text>
+    </View>
   );
 }
 
@@ -303,7 +327,7 @@ const TaskCard = memo(function TaskCard({
     });
 
   return (
-    <View style={[styles.card, task.overdue ? styles.cardOverdue : null]}>
+    <View style={styles.card}>
       <Touchable
         feedback="card"
         onPress={() => onToggle(task.id)}
@@ -314,7 +338,15 @@ const TaskCard = memo(function TaskCard({
         <Ionicons
           name={task.status === "done" ? "checkmark-circle" : task.status === "in_progress" ? "time-outline" : "ellipse-outline"}
           size={22}
-          color={task.status === "done" ? colors.win : task.overdue ? colors.danger : colors.brandAccent}
+          color={
+            task.status === "done"
+              ? colors.win
+              : task.overdue
+                ? colors.danger
+                : task.status === "in_progress"
+                  ? colors.brandAccent
+                  : colors.textTertiary
+          }
         />
         <View style={styles.cardBody}>
           <Text style={[styles.cardTitle, task.status === "done" ? styles.doneTitle : null]} numberOfLines={expanded ? 4 : 2} {...textScale.dense}>
@@ -383,7 +415,7 @@ const TaskCard = memo(function TaskCard({
                   <Ionicons
                     name={entry.done ? "checkbox" : "square-outline"}
                     size={18}
-                    color={entry.done ? colors.win : colors.textSecondary}
+                    color={entry.done ? colors.brandAccent : colors.textTertiary}
                   />
                   <Text style={[styles.checkText, entry.done ? styles.doneTitle : null]} {...textScale.dense}>
                     {entry.text}
@@ -452,38 +484,36 @@ const styles = StyleSheet.create({
   separator: { height: space.sm },
   summary: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: space.sm,
-    padding: space.md,
+    paddingVertical: space.md,
     marginBottom: space.md,
-    borderRadius: radius.md,
-    backgroundColor: colors.brandDim,
+    borderRadius: radius.xl,
+    ...elevate(1),
   },
-  summaryWarn: { backgroundColor: colors.dangerDim },
-  summaryText: { ...type.bodySm, color: colors.textPrimary, flex: 1 },
+  stat: { flex: 1, alignItems: "center", gap: space.xxs },
+  statDivided: { borderLeftWidth: hairline, borderLeftColor: colors.separator },
+  statValue: { ...type.metricSm, color: colors.textPrimary },
+  statDanger: { color: colors.danger },
+  statLabel: { ...type.micro, color: colors.textTertiary },
   card: {
-    borderRadius: radius.lg,
-    borderWidth: hairline,
-    borderColor: colors.border,
-    backgroundColor: colors.surface1,
+    borderRadius: radius.xl,
+    ...elevate(1),
     overflow: "hidden",
   },
-  cardOverdue: { borderColor: colors.danger },
-  cardHead: { flexDirection: "row", alignItems: "flex-start", gap: space.md, padding: space.md },
+  cardHead: { flexDirection: "row", alignItems: "flex-start", gap: space.md, padding: space.md + space.xxs },
   cardBody: { flex: 1, gap: 2 },
   cardTitle: { ...type.h3, color: colors.textPrimary },
   doneTitle: { textDecorationLine: "line-through", color: colors.textSecondary },
-  cardSub: { ...type.caption, color: colors.textSecondary },
-  badges: { flexDirection: "row", flexWrap: "wrap", gap: space.xs, marginTop: space.xs },
+  cardSub: { ...type.bodySm, color: colors.textSecondary },
+  badges: { flexDirection: "row", flexWrap: "wrap", gap: space.xs, marginTop: space.s },
   detail: {
     gap: space.sm,
-    paddingHorizontal: space.md,
-    paddingBottom: space.md,
+    paddingHorizontal: space.md + space.xxs,
+    paddingBottom: space.md + space.xxs,
     borderTopWidth: hairline,
-    borderTopColor: colors.border,
-    paddingTop: space.sm,
+    borderTopColor: colors.separator,
+    paddingTop: space.md,
   },
-  bodyText: { ...type.bodySm, color: colors.textPrimary },
+  bodyText: { ...type.body, color: colors.textPrimary },
   meta: { ...type.caption, color: colors.textSecondary },
   linkRow: { flexDirection: "row", alignItems: "center", gap: space.xs },
   linkText: { ...type.bodySm, color: colors.brandAccent, flex: 1 },

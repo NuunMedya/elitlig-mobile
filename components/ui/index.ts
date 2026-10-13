@@ -135,11 +135,11 @@ export type {
 
 /** Fikstür/sonuç kartı — iki takım yan yana, skor ya da saat ortada. */
 export { MatchCard, matchCardHeight, matchDayLabel, MATCH_CARD_GAP } from "./MatchCard";
-export type { MatchCardProps } from "./MatchCard";
+export type { MatchCardProps, MatchCardVariant, MatchCardPosition } from "./MatchCard";
 export { MatchCardRail } from "./MatchCardRail";
 export type { MatchCardRailProps } from "./MatchCardRail";
 
-export { LeagueGroupHeader } from "./LeagueGroupHeader";
+export { LeagueGroupHeader, LEAGUE_GROUP_HEADER_HEIGHT } from "./LeagueGroupHeader";
 export type { LeagueGroupHeaderProps } from "./LeagueGroupHeader";
 
 export { DateStrip, toIsoDate } from "./DateStrip";

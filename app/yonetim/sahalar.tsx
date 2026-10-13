@@ -75,7 +75,7 @@ import {
 } from "@/lib/api/admin";
 import { formatDateShort, mediaUrl } from "@/lib/format";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
+import { colors, elevate, fonts, hairline, layout, radius, space, textScale, type } from "@/theme";
 
 /* ═══════════════════════════ SABİTLER VE YARDIMCILAR ═══════════════════════ */
 
@@ -596,7 +596,7 @@ export default function AdminVenuesScreen() {
           data={venues}
           keyExtractor={venueKey}
           renderItem={renderVenue}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, styles.listGrouped]}
           refreshControl={venueRefresh.control}
           initialNumToRender={10}
           ListEmptyComponent={
@@ -822,7 +822,7 @@ const RequestCard = memo(function RequestCard({
 
       {request.note ? (
         <Text style={styles.cardNote} numberOfLines={3} {...textScale.long}>
-          “{request.note}”
+          {request.note}
         </Text>
       ) : null}
 
@@ -837,11 +837,14 @@ const RequestCard = memo(function RequestCard({
               key={cellKey(slot)}
               style={[
                 styles.slotStatic,
-                { backgroundColor: tone.dim, borderColor: withAlpha(tone.fg, 0.4) },
+                { backgroundColor: tone.dim },
               ]}
             >
-              <Text style={[styles.slotStaticText, { color: tone.fg }]} {...textScale.badge}>
-                {formatDateShort(slot.date)} {slot.label}
+              <Text
+                style={[styles.slotStaticText, slot.status === "pending" ? null : { color: tone.fg }]}
+                {...textScale.badge}
+              >
+                {formatDateShort(slot.date)} · {slot.label}
               </Text>
             </View>
           );
@@ -1031,14 +1034,18 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
 
+  /* Saha listesi tek bir satır grubudur: kartlar arası boşluk grubu
+     ortasından bölüyordu. */
+  listGrouped: {
+    gap: 0,
+  },
+
   /* Talep kartı */
   card: {
-    gap: space.sm,
-    padding: space.md,
-    borderRadius: radius.lg,
-    borderWidth: hairline,
-    borderColor: colors.border,
-    backgroundColor: colors.surface1,
+    gap: space.md,
+    padding: space.md + space.xxs,
+    borderRadius: radius.xl,
+    ...elevate(1),
   },
   cardTop: {
     flexDirection: "row",
@@ -1054,13 +1061,17 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
   cardMeta: {
-    ...type.caption,
+    ...type.bodySm,
     color: colors.textSecondary,
   },
+  /* Takımın notu alıntıdır: sol ince ray + ikincil mürekkep (italik yerine
+     ray — Inter'in italiği yüklü değil, tarayıcı eğik taklit çiziyordu). */
   cardNote: {
     ...type.bodySm,
     color: colors.textSecondary,
-    fontStyle: "italic",
+    paddingLeft: space.sm,
+    borderLeftWidth: 2,
+    borderLeftColor: colors.border,
   },
   cardAdminNote: {
     ...type.caption,
@@ -1081,16 +1092,19 @@ const styles = StyleSheet.create({
     gap: space.s,
   },
   slotStatic: {
-    borderRadius: radius.md,
-    borderWidth: hairline,
-    borderColor: colors.border,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+    borderRadius: radius.pill,
     backgroundColor: colors.surface3,
-    paddingHorizontal: space.sm,
-    paddingVertical: space.xs,
+    paddingHorizontal: space.m,
+    paddingVertical: space.xs + 1,
   },
   slotStaticText: {
-    ...type.micro,
-    color: colors.textSecondary,
+    ...type.caption,
+    fontFamily: fonts.semibold,
+    color: colors.textPrimary,
+    fontVariant: ["tabular-nums"],
   },
   slotCell: {
     flexDirection: "row",
@@ -1138,15 +1152,17 @@ const styles = StyleSheet.create({
     gap: space.sm,
     marginHorizontal: layout.screenPadding,
     padding: space.xs,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface2,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
   },
   weekButton: {
     width: 32,
     height: 32,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: radius.sm,
+    borderRadius: radius.pill,
     backgroundColor: colors.surface3,
   },
   weekButtonDisabled: {
@@ -1178,18 +1194,16 @@ const styles = StyleSheet.create({
     borderWidth: hairline,
   },
   legendText: {
-    ...type.micro,
-    color: colors.textTertiary,
+    ...type.caption,
+    color: colors.textSecondary,
   },
 
   /* Gün kartı */
   dayCard: {
-    gap: space.sm,
-    padding: space.md,
-    borderRadius: radius.lg,
-    borderWidth: hairline,
-    borderColor: colors.border,
-    backgroundColor: colors.surface1,
+    gap: space.md,
+    padding: space.md + space.xxs,
+    borderRadius: radius.xl,
+    ...elevate(1),
   },
   dayHead: {
     flexDirection: "row",
@@ -1263,7 +1277,7 @@ const styles = StyleSheet.create({
     gap: space.sm,
     padding: space.md,
     borderRadius: radius.md,
-    backgroundColor: colors.surface2,
+    backgroundColor: colors.surface3,
   },
   pendingRow: {
     flexDirection: "row",

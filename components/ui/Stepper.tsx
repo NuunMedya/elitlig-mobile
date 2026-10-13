@@ -190,14 +190,15 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     marginRight: space.xs,
   },
+  /* Hap düğme: Arena'da basılabilir şey yuvarlak, veri köşelidir. */
   button: {
-    borderRadius: radius.md,
-    backgroundColor: colors.surface2,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface3,
     alignItems: "center",
     justifyContent: "center",
   },
   buttonBlocked: {
-    backgroundColor: colors.surface3,
+    backgroundColor: colors.surface2,
   },
   /** Sabit genişlik + tabular rakam: 9 → 10 geçişinde düğmeler kaymaz. */
   value: {
