@@ -3,7 +3,7 @@
  *
  * Arena dilinde sekme kökleri KÂĞIT başlıkla (açık zemin, koyu metin), kimlik
  * taşıyan detay sayfaları SAHNE başlıkla (grafit zemin, beyaz metin) açılır.
- * Başlığın içine verilen `Tabs` ve `ScopeChip` hangi yüzeyde durduklarını
+ * Başlığın içine verilen `Tabs` ve `LeaguePicker` hangi yüzeyde durduklarını
  * buradan okur; ekranların tek tek `tone` geçmesi gerekmez.
  */
 

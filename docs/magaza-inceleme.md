@@ -14,10 +14,11 @@ ister (App Review Guideline 5.1.1-v). Google Play'in "Hesap silme" politikası a
 
 ## Kullanıcı nereden bulur
 
-1. **Profil sekmesi → en alttaki kırmızı grup → "Hesabı sil"** (tek dokunuş).
-2. **Profil → Ayarlar → Hesap ve güvenlik → en altta "Hesabı sil"** (aynı ekrana gider).
+1. **Profil sekmesi → en altta, Ayarlar satırının altında "Hesabı sil"** (tek dokunuş; yalnız girişli üyede).
+2. **Profil → Ayarlar → Oturum → "Hesabı sil"** (aynı ekrana gider).
+3. **Profil → Ayarlar → Hesap ve güvenlik → Hesabım → "Hesabı sil"**.
 
-İki kapı da `app/hesap-sil.tsx` ekranını açar:
+Üç kapı da `app/hesap-sil.tsx` ekranını açar:
 
 - Neyin silineceği ve neyin ligde kalacağı sunucudan gelir
   (`GET /api/users/me/deletion-summary`). Özet yüklenemezse ekran yine açılır;

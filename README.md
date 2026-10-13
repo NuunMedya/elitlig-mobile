@@ -28,23 +28,38 @@ Uygulamanın omurgası web sitesindekiyle aynı: **şehir → lig → sezon** ka
 Fikstür, puan durumu, oyuncu sıralaması ve haberler hep seçili kapsamı gösterir.
 Seçim cihazda saklanır, kullanıcı uygulamayı kendi ligiyle açar.
 
+Kapsam her ekranda **tek bileşenle** seçilir: `LeaguePicker` hapı
+("Ankara · FREELİG · 15. Sezon ▾") ve yanındaki sabitlenmiş lig çipleri.
+Hap, il → lig → sezon adımlı alt sayfayı açar; geçmiş sezonlar (eski Arşiv)
+sezon adımındadır. Sabitleme yalnız görünüm tercihidir (cihazda); **takip**
+ise bildirim üretir: takım, maç ya da lig takip edildiği anda o takibin
+bildirim türleri alt sayfada sorulur. Ayrıntı: `docs/arena-tasarim-dili.md` §6.
+
 ```
 app/                       Ekranlar (Expo Router — dosya = rota)
   _layout.tsx              Sağlayıcılar + tek örnek kaplamalar (ScopeSheet,
-                           MessageSticker) + bildirim kancaları
+                           takip alt sayfası) + bildirim kancaları
   (tabs)/                  Beş sekme + çubukta yuvası olmayan ekranlar
-    index.tsx              ANA SAYFA — kapsam şeridi, vitrin, takip edilen
-                           takımların maç kartları, canlı/yaklaşan, özetler
-    maclar.tsx             MAÇLAR — gün şeridi, lig grupları, maç kartları
-    ligler.tsx             LİG — il/lig/sezon şeridi + Puan · Fikstür ·
-                           Takımlar · Oyuncular · İstatistik · Haber · Arşiv
-    kulubum.tsx            KULÜBÜM — başkan, oyuncu, lig yönetimi araçları
-    profil.tsx             PROFİL — takip, bildirimler, oyunlar, bilgi, ayarlar
-    favoriler.tsx          (href: null) Takip edilen takım, lig, maç
+    skorlar.tsx            SKORLAR (açılış) — lig seçici, gün şeridi, Tümü/
+                           Canlı/Bitti/Yaklaşan, Canlı ▸ Tüm şehirler; en üstte
+                           vitrin + "Takip ettiklerin", sonra sabitlenen ligler
+    takip.tsx              TAKİP — Takımlarım şeridi, maç kartları, takip
+                           edilenlere süzülmüş haber/transfer/ceza akışı,
+                           ligler, maçlar; her öğede zil
+    ligler.tsx             LİG — Puan · Fikstür · Oyuncular · İstatistik ·
+                           Haber; puan tablosunda takip yıldızı, gol krallığı
+    kulubum.tsx            KULÜBÜM — sıradaki etkinlik, rol araçları, takım
+                           sohbeti; misafire/kulüpsüze katılma akışı
+    profil.tsx             PROFİL — kimlik, Günün Testi, gelen kutusu, ayarlar
     oyunlar.tsx            (href: null) Oyun merkezi
-    takimlar.tsx           (href: null) → Lig ▸ Takımlar yönlendirmesi
-    oyuncular.tsx          (href: null) → Lig ▸ Oyuncular yönlendirmesi
-    menu.tsx               (href: null) → Profil yönlendirmesi
+    index · maclar · favoriler · takimlar · oyuncular · menu
+                           (href: null) Eski rotalar → yeni yerlerine yönlendirir
+  canli.tsx                Eski rota → Skorlar ▸ Canlı ▸ Tüm şehirler
+  gelen-kutusu.tsx         Bildirimler | Mesajlar (/bildirimler ve /mesajlarim
+                           buraya yönlendirir)
+  ayarlar.tsx              Tek Ayarlar: bildirim türleri, takip bildirimleri,
+                           görünüm, lig seçimi, hesap ve güvenlik, hesap silme
+  sehir.tsx · baslangic.tsx İlk açılış: şehir → lig → takım → bildirim izni
   takimim/                 Takım paneli: kadro, maç merkezi, maç al, kasa
   yonetim/                 Yönetim paneli: maçlar, sahalar, mesajlar
   mac/[id].tsx             Maç detayı — skor, akış, kadrolar (canlı)
@@ -53,9 +68,13 @@ app/                       Ekranlar (Expo Router — dosya = rota)
   haber/[id].tsx           Haber detayı
   giris.tsx                Giriş (modal)
 
-components/                ScopeBar, ScopeChip, FollowActions, MessageSticker …
-components/league/         Lig sekmeleri (Puan, Fikstür, Takımlar, Oyuncular,
-                           İstatistik, Haber, Arşiv panelleri)
+components/                LeaguePicker (tek lig seçici), ScopeSheet,
+                           FollowActions, FollowControls (FollowStar,
+                           FollowBell), FollowEventEditor …
+components/league/         Lig sekmeleri (Puan, Fikstür, Oyuncular,
+                           İstatistik, Haber panelleri)
+components/scores/ · follow/ · inbox/
+                           Skorlar, Takip ve Gelen kutusu parçaları
 components/home/ · teampage/ · playerpage/ · matchpage/ · club/ · account/
                            Ekrana özgü parçalar (bkz. Tasarım sistemi)
 components/ui/             Tasarım sistemi bileşenleri (MatchCard,
@@ -66,7 +85,10 @@ lib/game/                  Oyun motoru: sabit adımlı döngü, girdi, fizik,
 scripts/check-tokens.mjs   Tasarım sistemi denetimi (kontrast, punto, hex…)
 scripts/check-games.mjs    Oyun fiziği denetimi (yön, Magnus, kare hızı…)
 providers/
-  ScopeProvider.tsx        Şehir/lig/sezon seçimi + kalıcılık
+  ScopeProvider.tsx        Şehir/lig/sezon seçimi, sabitlenen ligler + kalıcılık
+  FavoriteProvider.tsx     Takip (takım, lig, sezon, il, maç) — cihaz + sunucu
+  FollowFlowProvider.tsx   Takip = bildirim: takip edince bildirim türleri
+                           alt sayfası
   AuthProvider.tsx         Oturum, jeton, 401 davranışı
 hooks/
   useLiveMatch.ts          Socket.io + anlık görüntü + canlı sayaç
@@ -89,7 +111,9 @@ lib/
 | Ekran | Uç |
 | --- | --- |
 | Kapsam seçici | `GET /api/meta/cities`, `/leagues`, `/seasons`, `/default-scope` |
-| Maçlar | `GET /maclar?league_id&season_id` |
+| Skorlar | `GET /maclar?league_id&season_id`, `GET /maclar/live` (Tüm şehirler), `GET /maclar?team_id=` (takip edilen takımlar) |
+| Takip | `GET /maclar?team_id=`, `GET /maclar/:id`, `GET /api/news/feed` (istemcide takiplere süzülür) |
+| Takip bildirimleri | `GET /api/favorites/notifications`, `PATCH /api/favorites/:kind/:id/notifications` |
 | Maç detayı | `GET /maclar/:id?include=timeline`, `GET /maclar/:id/kadro` |
 | Canlı maç | `GET /api/live-matches/:id/snapshot` + Socket.io |
 | Puan durumu | `GET /api/standings?cityId&leagueId&seasonId` |

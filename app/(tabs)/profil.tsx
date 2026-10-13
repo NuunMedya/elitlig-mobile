@@ -272,7 +272,7 @@ export default function ProfileTabScreen() {
           icon: "radio",
           title: "Canlı maçlar",
           tone: "live",
-          action: { kind: "route", route: "/canli" },
+          action: { kind: "route", route: "/(tabs)/skorlar?tab=canli&tum=1" },
         },
         {
           key: "siralama",
@@ -322,7 +322,9 @@ export default function ProfileTabScreen() {
     });
 
     /* 3 — AYARLAR: tek satır, tek ekran (app/ayarlar.tsx). Hesabı sil
-       oradaki "Oturum" grubunda ayrı ve görünür bir satırdır. */
+       oradaki "Oturum" grubunda da durur; App Store 5.1.1-v için girişli
+       üyede Profil'in en altında da doğrudan kapı olarak kalır
+       (docs/magaza-inceleme.md §1). */
     result.push({
       key: "ayarlar",
       data: [
@@ -336,6 +338,19 @@ export default function ProfileTabScreen() {
           tone: "brand",
           action: { kind: "route", route: "/ayarlar" },
         },
+        ...(user
+          ? [
+              {
+                key: "hesap-sil",
+                icon: "trash",
+                title: "Hesabı sil",
+                subtitle: "Hesabını ve kişisel verilerini kalıcı olarak sil",
+                tone: "danger",
+                destructive: true,
+                action: { kind: "route", route: "/hesap-sil" },
+              } satisfies MenuItem,
+            ]
+          : []),
       ],
     });
 

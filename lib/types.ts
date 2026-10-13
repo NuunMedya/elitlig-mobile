@@ -342,6 +342,20 @@ export interface NewsItem {
   season_id?: number | null;
   pinned?: boolean;
   published_at?: string;
+  /**
+   * Yalnız akıştaki transfer / disiplin kayıtlarında: ilgili oyuncu ve takım.
+   * Bu kayıtların tekil haber ucu yoktur (`/api/news/:id` 404) — dokununca
+   * oyuncu/takım sayfası açılır. Disiplin kaydında `team_id` gelmez, `team_name` gelir.
+   */
+  meta?: {
+    player_id?: number | null;
+    player_name?: string | null;
+    team_id?: number | null;
+    team_name?: string | null;
+    team_logo?: string | null;
+    public_id?: string | null;
+    match_label?: string | null;
+  } | null;
 }
 
 export interface NewsFeedResponse {
