@@ -36,6 +36,7 @@ import {
 } from "@/components/ui";
 import { getPlayerRankings } from "@/lib/api/players";
 import { getStandings } from "@/lib/api/standings";
+import { formatDecimal, formatNumber } from "@/lib/format";
 import { queryKeys } from "@/lib/queryKeys";
 import type { PlayerRankRow, PlayerSort, StandingRow } from "@/lib/types";
 import { useScope } from "@/providers/ScopeProvider";
@@ -57,9 +58,6 @@ function formPoints(last5: string | null | undefined): number {
       return sum;
     }, 0);
 }
-
-/** Türkçe ondalık: 3.42 → "3,42". */
-const decimal = (value: number, digits = 2) => value.toFixed(digits).replace(".", ",");
 
 const teamEntry = (row: StandingRow, value: number, meta: string): LeaderEntry => ({
   id: row.team_id,
@@ -220,10 +218,10 @@ export function StatsPane({ scrollProps, onOpenPlayers, onOpenStandings }: Stats
           {summary.matches > 0 ? (
             <MetricGrid columns={3}>
               <MetricTile label="Maç" value={String(summary.matches)} icon="football-outline" />
-              <MetricTile label="Gol" value={String(summary.goals)} icon="flame-outline" />
+              <MetricTile label="Gol" value={formatNumber(summary.goals)} icon="flame-outline" />
               <MetricTile
                 label="Gol / Maç"
-                value={decimal(summary.perMatch)}
+                value={formatDecimal(summary.perMatch, 2)}
                 tone="accent"
                 icon="trending-up-outline"
               />

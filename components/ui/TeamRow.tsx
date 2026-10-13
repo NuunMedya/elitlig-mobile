@@ -96,8 +96,10 @@ export interface TeamRowProps {
   columns?: TeamRowColumns;
   onPress: (teamId: number) => void;
   /**
-   * Yalnız `list` yoğunluğunda: puanın SAĞINDA ek yuva (ör. takip yıldızı).
-   * Satırın okuma sırası değişmez; yuva en sonda durur.
+   * Puanın SAĞINDA ek yuva (ör. takip yıldızı) — iki yoğunlukta da.
+   * Satırın okuma sırası değişmez; yuva en sonda durur. Tabloda verilirse
+   * adın yanındaki küçük yıldız çizilmez (yuva zaten takip durumunu söyler)
+   * ve başlık aynı genişlikte boşluk almalıdır (`TeamRowHead trailingWidth`).
    */
   trailing?: React.ReactNode;
   style?: StyleProp<ViewStyle>;
@@ -150,7 +152,12 @@ function TeamRowBase({
     ];
     return (
       <Touchable
-        style={[styles.tableRow, highlighted ? styles.highlighted : null, style]}
+        style={[
+          styles.tableRow,
+          trailing ? styles.tableRowTrailing : null,
+          highlighted ? styles.highlighted : null,
+          style,
+        ]}
         onPress={handlePress}
         feedback="row"
         haptic="selection"
@@ -169,7 +176,7 @@ function TeamRowBase({
           >
             {name}
           </Text>
-          {favorite ? <Ionicons name="star" size={10} color={colors.star} /> : null}
+          {favorite && !trailing ? <Ionicons name="star" size={10} color={colors.star} /> : null}
         </View>
         {columns === "form" ? (
           <View style={styles.tableForm}>
@@ -193,6 +200,7 @@ function TeamRowBase({
         <Text style={[styles.tableNum, styles.tablePoints]} {...textScale.dense}>
           {points ?? "—"}
         </Text>
+        {trailing}
       </Touchable>
     );
   }
@@ -271,6 +279,7 @@ export const TeamRowHead = React.memo(function TeamRowHead({
   density = "list",
   pointsLabel = "Puan",
   columns = "full",
+  trailingWidth,
 }: {
   density?: TeamRowDensity;
   /**
@@ -280,10 +289,12 @@ export const TeamRowHead = React.memo(function TeamRowHead({
   pointsLabel?: string;
   /** Satırla aynı sütun kümesi — ikisi aynı değeri almalı. */
   columns?: TeamRowColumns;
+  /** Yalnız `table`: satırların `trailing` yuvası kadar sağ boşluk (sütunlar hizalı kalsın). */
+  trailingWidth?: number;
 }) {
   if (density === "table") {
     return (
-      <View style={styles.tableHead}>
+      <View style={[styles.tableHead, trailingWidth ? styles.tableHeadTrailing : null]}>
         <View style={styles.rail} />
         <Text style={[styles.tableRank, styles.headLabel]} {...textScale.badge}>#</Text>
         <View style={{ width: layout.crestSm }} />
@@ -312,6 +323,7 @@ export const TeamRowHead = React.memo(function TeamRowHead({
         <Text style={[styles.tableNum, styles.tablePointsHead, styles.headLabel]} {...textScale.badge}>
           {upperTR(pointsLabel).slice(0, 2)}
         </Text>
+        {trailingWidth ? <View style={{ width: trailingWidth }} /> : null}
       </View>
     );
   }
@@ -424,6 +436,13 @@ const styles = StyleSheet.create({
     gap: space.xs,
     paddingLeft: space.sm,
     paddingRight: space.md,
+  },
+  /* Sondaki yuva (takip yıldızı) kendi dokunma alanını taşır; sağ pay daralır. */
+  tableRowTrailing: {
+    paddingRight: space.xxs,
+  },
+  tableHeadTrailing: {
+    paddingRight: space.xxs,
   },
   tableHead: {
     flexDirection: "row",

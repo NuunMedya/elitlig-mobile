@@ -1,8 +1,8 @@
 /**
  * Lig merkezi bölmelerinin ortak parçaları.
  *
- * Yedi bölme (Puan · Fikstür · Takımlar · Oyuncular · İstatistik · Haber ·
- * Arşiv) aynı kapsama bağlıdır ve aynı kabuğun altında durur; kaydırma
+ * Beş bölme (Puan · Fikstür · Oyuncular · İstatistik · Haber) aynı kapsama
+ * bağlıdır ve aynı kabuğun altında durur; kaydırma
  * bağlantısı, "lig seçilmedi" kartı, kapsam anahtarı ve satır grubu kabuğu
  * her birinde aynı olmak zorunda. Tek yerde tanımlanır ki bir bölme
  * diğerlerinden ayrı bir dil konuşmasın.

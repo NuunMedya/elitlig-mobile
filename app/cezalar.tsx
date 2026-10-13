@@ -14,7 +14,8 @@
  *      ve ceza türü/süresi alt satır, karar tarihi sağdaki değer olur.
  *   2. Durum çipleri: aşama (Kurul / CAS) ve ceza türü (Süresiz / Maç cezası)
  *      üstünden süzme. Çip sayaçları görünür kayıtlardan hesaplanır.
- *   3. Satır → dosya. Kayıt KULLANICININ KENDİ dosyasıysa `/ceza/[id]` açılır
+ *   3. Kapsam başlığın altındaki tek lig seçicide (`LeaguePicker`).
+ *   4. Satır → dosya. Kayıt KULLANICININ KENDİ dosyasıysa `/ceza/[id]` açılır
  *      (savunma/itiraz orada yapılır); değilse karar özeti alt sayfada gösterilir.
  *
  * NEDEN "KENDİ DOSYASI" AYRIMI: `/ceza/[id]` ekranı dosyayı
@@ -27,7 +28,6 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
-import { ScopeChip } from "@/components/ScopeChip";
 import { useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";
@@ -49,6 +49,7 @@ import {
   useRefresh,
   type Tone,
 } from "@/components/ui";
+import { LeaguePicker } from "@/components/LeaguePicker";
 import { getMyPenalties } from "@/lib/api/panel";
 import { getNewsFeed } from "@/lib/api/news";
 import { formatDateLong, formatDateShort, mediaUrl, stripHtml } from "@/lib/format";
@@ -286,9 +287,6 @@ export default function PenaltiesScreen() {
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader
         title="Cezalar"
-        /* Kapsam dokunulur çipte: boş il listesinden kullanıcı tek dokunuşla
-           başka ile geçebilsin (eskiden yalnız okunan bir alt başlıktı). */
-        scope={<ScopeChip variant="city" />}
         subtitle="Disiplin kararları"
         back
         scrollY={scrollY}
@@ -303,6 +301,9 @@ export default function PenaltiesScreen() {
               ]
             : undefined
         }
+        /* Kapsam uygulamanın tek lig seçicisinde: boş listeden kullanıcı tek
+           dokunuşla başka il/lige geçebilsin. */
+        bottom={<LeaguePicker />}
       />
 
       {query.isLoading ? (
