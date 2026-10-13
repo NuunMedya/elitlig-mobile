@@ -103,6 +103,7 @@ const MATCH_KINDS = new Set([
   "match_card",
   "match_halftime",
   "match_result",
+  "match_schedule",
 ]);
 
 /** Canlı akış bildirimleri maç detayını doğrudan "Canlı" sekmesinde açar. */
@@ -242,9 +243,17 @@ export function routeFromNotif(
   if (kind === "game" || kind === "game_reminder") return { pathname: "/(tabs)/oyunlar" };
   if (kind === "leaderboard") return { pathname: "/siralama" };
 
-  /* ---------- 3) Haber push'u ---------- */
+  /* ---------- 3) Takip: takım transferi (services/followNotifications.js) ---------- */
+  if (kind === "team_transfer") {
+    const playerId = asId(data.player_id);
+    if (playerId) return { pathname: "/oyuncu/[id]", params: { id: playerId } };
+    const teamId = asId(data.team_id);
+    return teamId ? { pathname: "/takim/[id]", params: { id: teamId } } : { pathname: "/bildirimler" };
+  }
+
+  /* ---------- 3b) Haber push'u ---------- */
   if (kind === "news") {
-    const newsId = asId(data.news_public_id ?? data.entity_public_id ?? data.id);
+    const newsId = asId(data.news_id ?? data.news_public_id ?? data.entity_public_id ?? data.id);
     return newsId
       ? { pathname: "/haber/[id]", params: { id: newsId } }
       : { pathname: "/(tabs)/ligler", params: { tab: "haberler" } };

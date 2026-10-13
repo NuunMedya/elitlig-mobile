@@ -495,6 +495,13 @@ export default function ProfileTabScreen() {
         action: { kind: "route", route: "/bildirim-tercihleri" },
       },
       {
+        key: "takip-bildirimleri",
+        icon: "options",
+        title: "Takip Bildirimleri",
+        subtitle: "Takım, lig, sezon, il ve maç bazında ayrıntılı seçim",
+        action: { kind: "route", route: "/takip-bildirimleri" },
+      },
+      {
         key: "gorunum",
         icon: "contrast",
         title: "Görünüm",

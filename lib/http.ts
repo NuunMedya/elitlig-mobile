@@ -49,10 +49,23 @@ const isFormData = (value: unknown): value is FormData =>
 export function currentAuthToken(): string | null {
   return readToken();
 }
-let onUnauthorized: (() => void) | null = null;
+/**
+ * Oturumu GERÇEKTEN bitiren 401 kodları (routes/User.js, middleware/authenticate).
+ *
+ * NEDEN KOD LİSTESİ: kullanıcı kendisi çıkış yapana kadar oturum açık kalmalı.
+ * Her 401'de oturumu silmek, ilgisiz bir uçtaki (ör. yanlış mevcut şifre)
+ * hatada kullanıcıyı dışarı atıyordu. Yalnız jetonun geçersiz olduğunu
+ * söyleyen kodlar oturumu kapatır.
+ */
+const SESSION_ENDING_CODES = new Set(["INVALID_TOKEN", "TOKEN_STALE", "INVALID_USER", "AUTH_REQUIRED"]);
+
+/** Oturum kapatma geri çağrısı — hangi jetonla reddedildiği bildirilir. */
+type UnauthorizedHandler = (rejectedToken: string) => void;
+
+let onUnauthorized: UnauthorizedHandler | null = null;
 
 /** AuthProvider açılışta jeton kaynağını buraya bağlar. */
-export function configureAuth(reader: TokenReader, unauthorizedHandler?: () => void) {
+export function configureAuth(reader: TokenReader, unauthorizedHandler?: UnauthorizedHandler) {
   readToken = reader;
   onUnauthorized = unauthorizedHandler ?? null;
 }
@@ -131,6 +144,8 @@ async function once<T>(path: string, options: RequestOptions): Promise<T> {
         // (boundary) değerini kendisi ekler; JSON türü multer'ı bozardı.
         ...(body !== undefined && !isFormData(body) ? { "Content-Type": "application/json" } : {}),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        // Sunucu mobil oturuma uzun ömürlü jeton verir (routes/User.js).
+        "X-Client-Platform": "mobile",
       },
       ...(body !== undefined ? { body: isFormData(body) ? body : JSON.stringify(body) } : {}),
     });
@@ -148,7 +163,10 @@ async function once<T>(path: string, options: RequestOptions): Promise<T> {
         code,
         payload
       );
-      if (response.status === 401) onUnauthorized?.();
+      // Jetonsuz istek (ör. yanlış şifreyle giriş) oturumu etkilemez.
+      if (response.status === 401 && token && (!code || SESSION_ENDING_CODES.has(code))) {
+        onUnauthorized?.(token);
+      }
       throw error;
     }
 

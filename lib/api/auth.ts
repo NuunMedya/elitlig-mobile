@@ -9,8 +9,9 @@ import type { AuthUser, LoginResponse } from "../types";
  * başlığıyla gönderilir.
  */
 
+/** `client: "mobile"` → sunucu uzun ömürlü oturum jetonu verir. */
 export const login = (username: string, password: string) =>
-  post<LoginResponse>("/api/users/login", { username, password });
+  post<LoginResponse>("/api/users/login", { username, password, client: "mobile" });
 
 /** Kayıt gövdesi — routes/User.js POST /register. Telefon isteğe bağlıdır. */
 export interface RegisterInput {
@@ -28,11 +29,21 @@ export interface RegisterInput {
  * kurulur (App Store 4: kayıt uygulama içinde, tarayıcıya yönlendirme yok).
  */
 export const register = (input: RegisterInput) =>
-  post<LoginResponse & { message?: string }>("/api/users/register", input);
+  post<LoginResponse & { message?: string }>("/api/users/register", { ...input, client: "mobile" });
 
 /** Açılışta saklı jetonun hâlâ geçerli olduğunu doğrular. */
 export const verifySession = () =>
   get<{ user: AuthUser }>("/api/users/verify", undefined, { retry: false }).then((data) => data.user);
+
+/**
+ * Oturumu yeniler — POST /api/users/session/refresh.
+ *
+ * Kullanıcı çıkış yapana kadar oturum açık kalsın diye uygulama açıldıkça
+ * (en fazla günde bir) çağrılır; sunucu süresi baştan başlayan taze jeton
+ * döndürür. Mevcut jeton geçerli olmalıdır.
+ */
+export const refreshSession = () =>
+  post<Omit<LoginResponse, "message">>("/api/users/session/refresh", undefined, { retry: false });
 
 export const logout = () => post<{ message: string }>("/api/users/logout");
 

@@ -295,6 +295,7 @@ export default function NotificationPreferencesScreen() {
   }, [toast]);
 
   const goToSignIn = useCallback(() => router.push("/giris"), [router]);
+  const openFollowSettings = useCallback(() => router.push("/takip-bildirimleri"), [router]);
 
   /* ────────────────────────── BÖLÜMLER ────────────────────────── */
 
@@ -363,12 +364,24 @@ export default function NotificationPreferencesScreen() {
         <View style={styles.introRow}>
           <Ionicons name="phone-portrait-outline" size={16} color={colors.brandAccent} />
           <Text style={styles.introText} {...textScale.long}>
-            Bildirimler favorilerine göre gelir: yıldızladığın maçın golleri, takımının fikstürü ve
-            sana gelen panel mesajları. Aşağıdaki anahtarlar hangi türlerin telefonuna düşeceğini
-            belirler.
+            Bildirimler favorilerine göre gelir: takip ettiğin takım, lig, sezon, il ve maçlar,
+            oyuncusu olduğun takımın maçları ve sana gelen panel mesajları. Aşağıdaki anahtarlar
+            hangi türlerin telefonuna düşeceğini belirler.
           </Text>
         </View>
       </Card>
+
+      {/* Takip başına ayrıntılı ayar ayrı ekranda: her takım/lig/sezon/il/maç
+          için olay olay (gol, kart, sonuç, haber…) seçim yapılır. */}
+      <ListRow
+        leading={{ icon: "options-outline", tone: "brand" }}
+        title="Takip ettiklerimin bildirimleri"
+        subtitle="Her takım, lig, sezon, il ve maç için ayrı ayrı seç; il takip et."
+        position="single"
+        chevron
+        onPress={openFollowSettings}
+        testID="open-follow-settings"
+      />
 
       {/* TEŞHİS: "bildirim gelmiyor" şikâyetinin nedenini görünür kılar.
           Üç kapı da açık olmadan bildirim düşmez: cihaz izni, cihaz kimliği

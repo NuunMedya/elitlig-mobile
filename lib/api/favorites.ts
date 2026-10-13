@@ -1,4 +1,4 @@
-import { del, get, post } from "../http";
+import { del, get, patch, post } from "../http";
 
 /**
  * Favoriler — routes/favorites.js (sunucu).
@@ -19,9 +19,11 @@ export interface ServerFavorites {
   seasonIds: number[];
   /** Yıldızlanan maçlar — sunucu bu alanı her zaman döndürür (boş dizi olabilir). */
   matchIds: number[];
+  /** Takip edilen iller (Cities.id). */
+  cityIds: number[];
 }
 
-export type FavoriteKind = "teams" | "leagues" | "seasons" | "matches";
+export type FavoriteKind = "teams" | "leagues" | "seasons" | "cities" | "matches";
 
 export const getMyFavorites = () =>
   get<Partial<ServerFavorites>>("/api/favorites/me").then<ServerFavorites>((data) => ({
@@ -31,6 +33,7 @@ export const getMyFavorites = () =>
     leagueIds: data.leagueIds ?? [],
     seasonIds: data.seasonIds ?? [],
     matchIds: data.matchIds ?? [],
+    cityIds: data.cityIds ?? [],
   }));
 
 export const followFavorite = (kind: FavoriteKind, id: number) =>
@@ -45,3 +48,71 @@ export const unfollowFavorite = (kind: FavoriteKind, id: number) =>
  */
 export const getMatchFollowerCount = (matchId: number) =>
   get<{ matchId: number; count: number }>(`/api/favorites/matches/${matchId}/count`);
+
+/* ═════════════════════ TAKİP BAŞINA BİLDİRİM AYARI ═════════════════════
+ * routes/favorites.js → GET /api/favorites/notifications,
+ * PATCH /api/favorites/:kind/:id/notifications
+ *
+ * Her takip (takım, lig, sezon, il, maç) kendi bildirim ayarını taşır: hangi
+ * olayların (gol, sonuç, kırmızı kart, haber…) telefona düşeceği ve takibin
+ * susturulup susturulmadığı. Olay listesi, etiketleri ve hangi türde hangi
+ * olayın geçerli olduğu sunucudan gelir (constants/followNotifications.js);
+ * yeni bir olay mobil sürüm çıkmadan ekranda görünür.
+ */
+
+export type FollowType = "team" | "league" | "season" | "city" | "match";
+
+export interface FollowEventInfo {
+  key: string;
+  label: string;
+  description?: string;
+}
+
+export interface FollowTypeInfo {
+  key: FollowType;
+  label: string;
+  events: string[];
+  defaults: Record<string, boolean>;
+}
+
+export interface FollowItem {
+  kind: FavoriteKind;
+  type: FollowType;
+  type_label: string;
+  id: number;
+  name: string;
+  subtitle?: string | null;
+  logo?: string | null;
+  date?: string | null;
+  muted: boolean;
+  /** Üye bu takibin ayarını kendisi değiştirdi mi? (false = varsayılan) */
+  customized: boolean;
+  /** Bu takip türünde geçerli olaylar (sıralı). */
+  events: string[];
+  /** Etkin değerler — olay anahtarı → açık/kapalı. */
+  prefs: Record<string, boolean>;
+}
+
+export interface FollowNotifications {
+  /** Genel "Takip bildirimleri" ana anahtarı (follow_alerts). */
+  enabled: boolean;
+  catalog: { types: FollowTypeInfo[]; events: FollowEventInfo[] };
+  follows: FollowItem[];
+}
+
+export const getFollowNotifications = () =>
+  get<FollowNotifications>("/api/favorites/notifications").then((data) => ({
+    enabled: data?.enabled !== false,
+    catalog: { types: data?.catalog?.types ?? [], events: data?.catalog?.events ?? [] },
+    follows: Array.isArray(data?.follows) ? data.follows : [],
+  }));
+
+export interface FollowSettingsPatch {
+  prefs?: Record<string, boolean>;
+  muted?: boolean;
+  /** Ayarı silip varsayılana döndürür. */
+  reset?: boolean;
+}
+
+export const updateFollowNotifications = (kind: FavoriteKind, id: number, body: FollowSettingsPatch) =>
+  patch<{ message: string; follow: FollowItem }>(`/api/favorites/${kind}/${id}/notifications`, body);
