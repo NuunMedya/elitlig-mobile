@@ -56,6 +56,7 @@ import {
 } from "@/components/ui";
 import type { Tone } from "@/components/ui";
 import type { ArenaGame } from "@/lib/api/arena";
+import { formatNumber } from "@/lib/format";
 import { get } from "@/lib/http";
 import { useAuth } from "@/providers/AuthProvider";
 import {
@@ -227,11 +228,6 @@ function parseDailyResult(raw: string | null): DailyResult | null {
   }
 }
 
-/** 1240 → "1.240" (binlik ayracı Türkçe nokta). */
-function formatCount(value: number): string {
-  return String(Math.round(value)).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-}
-
 /** "2026-08-19" → "19 Ağustos". */
 function dayLabelOf(isoDay: string): string {
   const parts = isoDay.split("-");
@@ -287,9 +283,9 @@ const DailyStage = React.memo(function DailyStage({
 
   const title = done ? "Bugünkü testi çözdün" : "Bugünün testi hazır";
   const body = done
-    ? `${result.correct}/10 doğru · ${formatCount(result.score)} puan`
+    ? `${result.correct}/10 doğru · ${formatNumber(result.score)} puan`
     : players != null && players > 0
-      ? `Herkese aynı 10 soru. Bu hafta ${formatCount(players)} kişi yarıştı.`
+      ? `Herkese aynı 10 soru. Bu hafta ${formatNumber(players)} kişi yarıştı.`
       : "Herkese aynı 10 soru — günde tek resmî hak.";
 
   return (
@@ -356,7 +352,7 @@ const DailyStage = React.memo(function DailyStage({
         >
           <StageStat value={bestRank != null ? `#${bestRank}` : "—"} label="En iyi sıra" />
           <View style={styles.stageDivider} />
-          <StageStat value={formatCount(totalScore)} label="Puan" />
+          <StageStat value={formatNumber(totalScore)} label="Puan" />
           <View style={styles.stageDivider} />
           <StageStat value={`${playedGames}/${GAME_ORDER.length}`} label="Oyun" />
         </Touchable>
@@ -410,7 +406,7 @@ const GameCard = React.memo(function GameCard({
   ) : best != null ? (
     <View style={styles.gameRecord}>
       <Text style={styles.gameBest} numberOfLines={1} {...textScale.dense}>
-        {formatCount(best)}
+        {formatNumber(best)}
       </Text>
       <Text style={styles.gameUnit} numberOfLines={1} {...textScale.dense}>
         {meta.unit} · rekorun
