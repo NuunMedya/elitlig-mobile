@@ -20,7 +20,9 @@ import React from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import {
   colors,
+  elevate,
   fonts,
+  hairline,
   radius,
   space,
   textScale,
@@ -71,8 +73,8 @@ export const EmptyState = React.memo(function EmptyState({
       ]}
     >
       {illustration ?? (
-        <View style={styles.iconCircle}>
-          <Ionicons name={icon} size={19} color={colors.textDisabled} />
+        <View style={styles.iconTile}>
+          <Ionicons name={icon} size={22} color={colors.textSecondary} />
         </View>
       )}
 
@@ -143,37 +145,39 @@ const styles = StyleSheet.create({
   compact: {
     paddingVertical: space.md,
   },
-  iconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.pill,
-    backgroundColor: colors.surface2,
+  /**
+   * ARENA İKON KAROSU: beyaz kâğıt + hairline kenarlık, köşeli (`radius.lg`).
+   * Eski gri daire (surface2 üstünde textDisabled ikon) gri kâğıtta neredeyse
+   * görünmüyordu; boş durumun TEK görseli olduğu için okunur olmalı ama renk
+   * taşımamalı — renk yalnız bir şey söylediğinde kullanılır.
+   */
+  iconTile: {
+    width: 52,
+    height: 52,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: space.xs,
+    marginBottom: space.sm,
+    ...elevate(1),
   },
   title: {
-    ...type.h3,
+    ...type.h2,
     color: colors.textPrimary,
     textAlign: "center",
   },
   /** 300px tavanı: uzun açıklama ekranın iki kenarına yapışmasın. */
   body: {
-    ...type.bodySm,
+    ...type.body,
     color: colors.textSecondary,
     textAlign: "center",
-    maxWidth: 280,
+    maxWidth: 300,
   },
-  /*
-   * `alignSelf: "center"` ŞART: `Button` kendi tabanında `alignSelf:
-   * "flex-start"` taşır ve bu, kapsayıcının `alignItems: "center"` kuralını
-   * ezip düğmeyi sola yapıştırıyordu — ortalanmış bir metin bloğunun altında
-   * sola kaçmış bir düğme, ekranın tek bozuk hizasıydı.
-   */
   action: {
     marginTop: space.md,
     alignSelf: "center",
-    borderRadius: radius.pill,
   },
   secondary: {
     marginTop: space.s,
@@ -182,8 +186,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.md,
   },
   secondaryLabel: {
-    ...type.bodySm,
-    fontFamily: fonts.bold,
+    ...type.label,
+    fontFamily: fonts.semibold,
     color: colors.brandAccent,
   },
 });

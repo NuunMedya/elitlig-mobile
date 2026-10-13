@@ -23,6 +23,11 @@
  * herkesin görmesi gerekir, bu yüzden bant iki yoklama arasındaki SKOR
  * FARKINDAN üretilir — ek istek yok, izin gerekmez, Expo Go'da da çalışır.
  *
+ * GÖRÜNÜM: Maçlar sekmesiyle aynı dil — lig başına TEK kart; üst kapakta lig
+ * kimliği, gövdede `MatchCard variant="compact"` satırları. Canlı satırın sol
+ * kenarındaki kırmızı çizgi ve kırmızı skor sinyali taşır; eski düzende her
+ * kartın kırmızı çerçevesi altı maçı altı alarm kutusuna çeviriyordu.
+ *
  * VARIŞ NOKTASI: sekme çubuğundaki canlı rozeti ve `match_start` push'u buraya
  * düşer (bkz. lib/notifications.ts → routeFromNotif).
  */
@@ -31,25 +36,26 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FlatList, RefreshControl, StyleSheet, Text, View } from "react-native";
+import { RefreshControl, SectionList, StyleSheet, Text, View } from "react-native";
+import type { SectionListData, SectionListRenderItemInfo } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
   EmptyState,
   ErrorState,
+  LeagueGroupHeader,
   LiveBadge,
   MatchCard,
   ScreenHeader,
   SkeletonMatchRow,
   Touchable,
   matchCardHeight,
-  MATCH_CARD_GAP,
   refreshControlProps,
   useHeaderScroll,
   useRefresh,
   useToast,
 } from "@/components/ui";
-import type { MatchRowPosition } from "@/components/ui";
+import { LEAGUE_GROUP_HEADER_HEIGHT } from "@/components/ui/LeagueGroupHeader";
 import { useAppActive } from "@/hooks/useLiveFavoriteCount";
 import { useTeamLogos } from "@/hooks/useTeamLogos";
 import { getLiveMatches } from "@/lib/api/matches";
@@ -61,6 +67,7 @@ import {
   animateNextLayout,
   colors,
   haptics,
+  hairline,
   layout,
   radius,
   space,
@@ -73,8 +80,10 @@ import {
 const LIVE_POLL_MS = 15_000;
 /** Gol bandı kalıcı değildir; bu süre sonunda kendini toplar. */
 const GOAL_BAND_MS = 90_000;
-/** Her satırda lig adı (meta) çizildiği için yükseklik tek değerdir. */
-const ROW_HEIGHT = matchCardHeight({ meta: "league", showDate: true }) + MATCH_CARD_GAP;
+/** Satır (compact + saha) ve lig başlığı yükseklikleri — `getItemLayout` bunlardan kurulur. */
+const ROW_HEIGHT = matchCardHeight({ variant: "compact", showVenue: true, favoritable: true });
+const GROUP_GAP = space.lg;
+const SECTION_HEADER_HEIGHT = GROUP_GAP + LEAGUE_GROUP_HEADER_HEIGHT;
 /** Lig adı boş gelen kayıtlarda meta satırının kaybolmaması için yedek etiket. */
 const LEAGUE_FALLBACK = "Lig belirtilmemiş";
 
@@ -143,13 +152,17 @@ function detectGoal(previous: Map<number, string>, list: ApiMatch[]): GoalNews |
   return found;
 }
 
-/** Listeye giren tek satır: maç + grup içi konumu (köşe ve ayraç için). */
-interface LiveRow {
-  match: ApiMatch;
-  position: MatchRowPosition;
+/** Lig öbeği — SectionList bölümü. */
+interface LiveSectionMeta {
+  key: string;
+  leagueId: number | null;
+  label: string;
+  city: string | null;
 }
 
-const keyExtractor = (item: LiveRow) => String(item.match.id);
+type LiveSection = LiveSectionMeta & { data: ApiMatch[] };
+
+const keyExtractor = (item: ApiMatch) => String(item.id);
 
 /* ═════════════════════════════ EKRAN ═════════════════════════════ */
 
@@ -207,18 +220,25 @@ export default function LiveCenterScreen() {
 
   /* ─────────────────────── LİSTE (lig öbekleri) ─────────────────────── */
 
-  const rows = useMemo<LiveRow[]>(() => {
+  const sections = useMemo<LiveSection[]>(() => {
     const list = query.data ?? [];
     if (!list.length) return [];
 
-    const groups = new Map<string, { label: string; followed: boolean; matches: ApiMatch[] }>();
+    const groups = new Map<string, LiveSection & { followed: boolean }>();
 
     list.forEach((match) => {
       const label = String(match.league_name ?? "").trim() || LEAGUE_FALLBACK;
       // Eski kayıtlarda lig id'si boş olabilir; o zaman ad anahtar olur.
       const key = match.league_id != null ? `id:${match.league_id}` : `ad:${normalizeName(label)}`;
-      const group = groups.get(key) ?? { label, followed: false, matches: [] };
-      group.matches.push(match);
+      const group = groups.get(key) ?? {
+        key,
+        leagueId: match.league_id != null ? Number(match.league_id) : null,
+        label,
+        city: String(match.city ?? "").trim() || null,
+        followed: false,
+        data: [],
+      };
+      group.data.push(match);
       if (isFollowed(match)) group.followed = true;
       groups.set(key, group);
     });
@@ -229,38 +249,15 @@ export default function LiveCenterScreen() {
       return compareTr(a.label, b.label);
     });
 
-    const result: LiveRow[] = [];
-    ordered.forEach((group) => {
-      const sorted = [...group.matches].sort(
-        (a, b) =>
-          formatTime(a.time).localeCompare(formatTime(b.time)) || Number(a.id) - Number(b.id),
-      );
-
-      sorted.forEach((match, index) => {
-        const position: MatchRowPosition =
-          sorted.length === 1
-            ? "single"
-            : index === 0
-              ? "first"
-              : index === sorted.length - 1
-                ? "last"
-                : "middle";
-
-        /**
-         * Lig adı boşsa MatchRow meta satırını çizmez ve satır 12px kısalır;
-         * `getItemLayout` sabit yüksekliğe göre kurulduğu için liste kayar.
-         * Yedek etiketle bütün satırlar aynı yükseklikte kalır.
-         */
-        const safeMatch = String(match.league_name ?? "").trim()
-          ? match
-          : { ...match, league_name: LEAGUE_FALLBACK };
-
-        result.push({ match: safeMatch, position });
-      });
-    });
-
-    return result;
+    return ordered.map(({ followed: _followed, ...group }) => ({
+      ...group,
+      data: [...group.data].sort(
+        (a, b) => formatTime(a.time).localeCompare(formatTime(b.time)) || Number(a.id) - Number(b.id),
+      ),
+    }));
   }, [query.data, isFollowed]);
+
+  const count = useMemo(() => sections.reduce((sum, section) => sum + section.data.length, 0), [sections]);
 
   /* ───────────────────────── SON GOL BANDI ───────────────────────── */
 
@@ -343,16 +340,25 @@ export default function LiveCenterScreen() {
     router.replace("/(tabs)");
   }, [router]);
 
+  const openLeague = useCallback(
+    (leagueId: number | null) => {
+      router.push(
+        leagueId != null ? `/(tabs)/ligler?leagueId=${leagueId}&tab=fikstur` : "/(tabs)/ligler",
+      );
+    },
+    [router],
+  );
+
   const { logoFor } = logos;
 
   const renderItem = useCallback(
-    ({ item }: { item: LiveRow }) => (
+    ({ item, index, section }: SectionListRenderItemInfo<ApiMatch, LiveSectionMeta>) => (
       <LiveMatchItem
-        match={item.match}
-        position={item.position}
-        homeLogo={logoFor(item.match.home_team_id, item.match.first_team_name)}
-        awayLogo={logoFor(item.match.away_team_id, item.match.second_team_name)}
-        isFavorite={favoriteMatchIds.has(Number(item.match.id))}
+        match={item}
+        last={index === section.data.length - 1}
+        homeLogo={logoFor(item.home_team_id, item.first_team_name)}
+        awayLogo={logoFor(item.away_team_id, item.second_team_name)}
+        isFavorite={favoriteMatchIds.has(Number(item.id))}
         onOpen={openMatch}
         onToggleStar={toggleStar}
       />
@@ -360,18 +366,47 @@ export default function LiveCenterScreen() {
     [logoFor, favoriteMatchIds, openMatch, toggleStar],
   );
 
+  const renderSectionHeader = useCallback(
+    ({ section }: { section: SectionListData<ApiMatch, LiveSectionMeta> }) => (
+      <LiveSectionHeader
+        leagueId={section.leagueId}
+        label={section.label}
+        city={section.city}
+        count={section.data.length}
+        onOpenLeague={openLeague}
+      />
+    ),
+    [openLeague],
+  );
+
+  /**
+   * SectionList düz indeks uzayı: her bölüm için [başlık, ...satırlar, altlık].
+   * Altlık çizilmese bile bir indeks tüketir (VirtualizedSectionList kuralı).
+   */
   const getItemLayout = useCallback(
-    (_data: ArrayLike<LiveRow> | null | undefined, index: number) => ({
-      length: ROW_HEIGHT,
-      offset: ROW_HEIGHT * index,
-      index,
-    }),
+    (data: SectionListData<ApiMatch, LiveSectionMeta>[] | null, index: number) => {
+      let offset = 0;
+      let cursor = 0;
+      for (const section of data ?? []) {
+        if (index === cursor) return { length: SECTION_HEADER_HEIGHT, offset, index };
+        offset += SECTION_HEADER_HEIGHT;
+        cursor += 1;
+        const rowsInSection = section.data.length;
+        if (index < cursor + rowsInSection) {
+          return { length: ROW_HEIGHT, offset: offset + (index - cursor) * ROW_HEIGHT, index };
+        }
+        offset += rowsInSection * ROW_HEIGHT;
+        cursor += rowsInSection;
+        if (index === cursor) return { length: 0, offset, index };
+        cursor += 1;
+      }
+      return { length: 0, offset, index };
+    },
     [],
   );
 
   /* ─────────────────────────── GÖRÜNÜM ─────────────────────────── */
 
-  const count = rows.length;
   const updatedLabel = useMemo(() => {
     if (!query.dataUpdatedAt) return "";
     return new Date(query.dataUpdatedAt).toLocaleTimeString("tr-TR", {
@@ -384,12 +419,12 @@ export default function LiveCenterScreen() {
     <View style={styles.headerBottom}>
       <View style={styles.summary}>
         {/* Nabız yalnız gerçekten maç varken atar; boş listede yanıp sönmesi yalan olur. */}
-        {count > 0 ? <LiveBadge size="sm" /> : null}
+        {count > 0 ? <LiveBadge compact /> : null}
         <Text style={styles.summaryText} numberOfLines={1} {...textScale.dense}>
           {query.isLoading
             ? "Canlı maçlar yükleniyor"
             : count > 0
-              ? `${count} maç canlı`
+              ? `${count} maç oynanıyor · ${sections.length} lig`
               : "Şu an canlı maç yok"}
         </Text>
         {updatedLabel ? (
@@ -398,7 +433,7 @@ export default function LiveCenterScreen() {
             accessibilityLabel={`Son güncelleme ${updatedLabel}`}
             {...textScale.badge}
           >
-            {updatedLabel}
+            {`Güncellendi ${updatedLabel}`}
           </Text>
         ) : null}
       </View>
@@ -412,7 +447,7 @@ export default function LiveCenterScreen() {
        * `getItemLayout` ofsetleri başlığın yüksekliği kadar kayar (RN ofsete
        * başlığı katmaz) ve `removeClippedSubviews` ile satırlar yanlış kırpılır.
        */}
-      {query.error && rows.length > 0 ? (
+      {query.error && count > 0 ? (
         <ErrorState error={query.error} onRetry={query.refetch} variant="banner" />
       ) : null}
 
@@ -456,7 +491,9 @@ export default function LiveCenterScreen() {
   );
 
   const listEmpty = query.isLoading ? (
-    <SkeletonMatchRow count={5} />
+    <View style={styles.skeletonGroup}>
+      <SkeletonMatchRow count={5} />
+    </View>
   ) : query.error ? (
     <ErrorState error={query.error} onRetry={query.refetch} />
   ) : (
@@ -472,11 +509,13 @@ export default function LiveCenterScreen() {
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader title="Canlı" back scrollY={scrollY} bottom={headerBottom} />
 
-      <FlatList
+      <SectionList<ApiMatch, LiveSectionMeta>
         {...scrollProps}
-        data={rows}
+        sections={sections}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
+        renderSectionHeader={renderSectionHeader}
+        stickySectionHeadersEnabled
         getItemLayout={getItemLayout}
         contentContainerStyle={styles.list}
         ListEmptyComponent={listEmpty}
@@ -500,7 +539,7 @@ export default function LiveCenterScreen() {
  */
 const LiveMatchItem = memo(function LiveMatchItem({
   match,
-  position,
+  last,
   homeLogo,
   awayLogo,
   isFavorite,
@@ -508,7 +547,8 @@ const LiveMatchItem = memo(function LiveMatchItem({
   onToggleStar,
 }: {
   match: ApiMatch;
-  position: MatchRowPosition;
+  /** Öbeğin son satırı — kartın alt köşelerini çizer. */
+  last: boolean;
   homeLogo: string | null;
   awayLogo: string | null;
   isFavorite: boolean;
@@ -520,16 +560,38 @@ const LiveMatchItem = memo(function LiveMatchItem({
   const handleStar = useCallback(() => onToggleStar(matchId), [onToggleStar, matchId]);
 
   return (
-    <View style={{ height: ROW_HEIGHT, paddingBottom: MATCH_CARD_GAP }}>
-      <MatchCard
-        match={match}
-        meta="league"
-        homeLogo={homeLogo}
-        awayLogo={awayLogo}
-        isFavorite={isFavorite}
-        onToggleFavorite={handleStar}
-        onPress={handlePress}
-      />
+    <MatchCard
+      variant="compact"
+      position={last ? "last" : "middle"}
+      match={match}
+      homeLogo={homeLogo}
+      awayLogo={awayLogo}
+      showVenue
+      isFavorite={isFavorite}
+      onToggleFavorite={handleStar}
+      onPress={handlePress}
+    />
+  );
+});
+
+/** Lig öbeğinin başlığı — aynı memo gerekçesi (bkz. LiveMatchItem). */
+const LiveSectionHeader = memo(function LiveSectionHeader({
+  leagueId,
+  label,
+  city,
+  count,
+  onOpenLeague,
+}: {
+  leagueId: number | null;
+  label: string;
+  city: string | null;
+  count: number;
+  onOpenLeague: (leagueId: number | null) => void;
+}) {
+  const handleOpen = useCallback(() => onOpenLeague(leagueId), [onOpenLeague, leagueId]);
+  return (
+    <View style={styles.sectionHeader}>
+      <LeagueGroupHeader leagueName={label} cityName={city} matchCount={count} onPress={handleOpen} sticky />
     </View>
   );
 });
@@ -551,8 +613,8 @@ const styles = StyleSheet.create({
     gap: space.sm,
   },
   summaryText: {
-    ...type.bodySm,
-    color: colors.textSecondary,
+    ...type.label,
+    color: colors.textPrimary,
     flex: 1,
   },
   updated: {
@@ -583,5 +645,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: layout.screenPadding,
     paddingBottom: space.giant,
     flexGrow: 1,
+  },
+  sectionHeader: {
+    height: SECTION_HEADER_HEIGHT,
+    paddingTop: GROUP_GAP,
+    backgroundColor: colors.bg,
+  },
+  skeletonGroup: {
+    marginTop: GROUP_GAP,
+    borderRadius: radius.xl,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    backgroundColor: colors.surface1,
+    overflow: "hidden",
   },
 });

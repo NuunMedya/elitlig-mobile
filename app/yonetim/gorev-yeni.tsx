@@ -16,7 +16,7 @@ import { useCallback, useMemo, useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { Button, Chip, Input, ListRow, ScreenHeader, SectionHeader, SkeletonListRow, useToast } from "@/components/ui";
+import { Button, Chip, Input, ListRow, ScreenHeader, SkeletonListRow, useToast } from "@/components/ui";
 import {
   createTodo,
   getTodoAssignees,
@@ -27,7 +27,7 @@ import {
 } from "@/lib/api/todos";
 import { ROLE_LABELS } from "@/lib/api/admin";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, layout, space, textScale, type } from "@/theme";
+import { colors, hairline, layout, space, textScale, type } from "@/theme";
 
 type Kind = TodoCreateInput["kind"];
 type DueChoice = "none" | "today" | "tomorrow" | "3d" | "1w";
@@ -143,54 +143,67 @@ export default function NewTodoScreen() {
     <SafeAreaView style={styles.screen} edges={["top", "bottom"]}>
       <ScreenHeader title="Yeni görev" back />
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        {/* ARENA FORM KALIBI: alanlar etiketli gruplar hâlinde akar, birincil
+            eylem altta SABİT durur — uzun ekip listesinde "Kaydet" kaydırma
+            sonunda kaybolmasın. */}
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <SectionHeader title="Tür" />
-          <View style={styles.chips}>
-            {KINDS.map((item) => (
-              <Chip key={item.key} label={item.label} selected={kind === item.key} onPress={() => setKind(item.key)} />
-            ))}
+          <View style={styles.field}>
+            <Text style={styles.fieldLabel} {...textScale.dense}>Tür</Text>
+            <View style={styles.chips}>
+              {KINDS.map((item) => (
+                <Chip key={item.key} label={item.label} selected={kind === item.key} onPress={() => setKind(item.key)} />
+              ))}
+            </View>
           </View>
 
-          <Input label="Başlık" value={title} onChangeText={setTitle} placeholder="Ne yapılacak?" maxLength={200} autoFocus />
-          <Input
-            label="Açıklama"
-            value={body}
-            onChangeText={setBody}
-            placeholder="Ayrıntılar (isteğe bağlı)"
-            multiline
-          />
-
-          <SectionHeader title="Öncelik" />
-          <View style={styles.chips}>
-            {PRIORITIES.map((item) => (
-              <Chip
-                key={item.key}
-                label={item.label}
-                selected={priority === item.key}
-                tone={item.key === "high" ? "warn" : undefined}
-                onPress={() => setPriority(item.key)}
-              />
-            ))}
+          <View style={styles.field}>
+            <Input label="Başlık" value={title} onChangeText={setTitle} placeholder="Ne yapılacak?" maxLength={200} autoFocus />
+            <Input
+              label="Açıklama"
+              value={body}
+              onChangeText={setBody}
+              placeholder="Ayrıntılar (isteğe bağlı)"
+              multiline
+            />
           </View>
 
-          <SectionHeader title="Bitiş" />
-          <View style={styles.chips}>
-            {DUE_CHOICES.map((item) => (
-              <Chip key={item.key} label={item.label} selected={due === item.key} onPress={() => setDue(item.key)} />
-            ))}
+          <View style={styles.field}>
+            <Text style={styles.fieldLabel} {...textScale.dense}>Öncelik</Text>
+            <View style={styles.chips}>
+              {PRIORITIES.map((item) => (
+                <Chip
+                  key={item.key}
+                  label={item.label}
+                  selected={priority === item.key}
+                  tone={item.key === "high" ? "warn" : undefined}
+                  onPress={() => setPriority(item.key)}
+                />
+              ))}
+            </View>
           </View>
-          {due !== "none" ? (
-            <Text style={styles.hint} {...textScale.dense}>
-              Bitişe 1 saat kala ve süre geçince bildirim gelir.
-            </Text>
-          ) : null}
+
+          <View style={styles.field}>
+            <Text style={styles.fieldLabel} {...textScale.dense}>Bitiş</Text>
+            <View style={styles.chips}>
+              {DUE_CHOICES.map((item) => (
+                <Chip key={item.key} label={item.label} selected={due === item.key} onPress={() => setDue(item.key)} />
+              ))}
+            </View>
+            {due !== "none" ? (
+              <Text style={styles.hint} {...textScale.dense}>
+                Bitişe 1 saat kala ve süre geçince bildirim gelir.
+              </Text>
+            ) : null}
+          </View>
 
           {canAssign ? (
-            <>
-              <SectionHeader
-                title="Kime atansın?"
-                meta={assignees.length ? `${assignees.length} kişi` : "Seçilmezse sana"}
-              />
+            <View style={styles.field}>
+              <View style={styles.fieldHead}>
+                <Text style={styles.fieldLabel} {...textScale.dense}>Kime atansın?</Text>
+                <Text style={styles.fieldMeta} {...textScale.dense}>
+                  {assignees.length ? `${assignees.length} kişi` : "Seçilmezse sana"}
+                </Text>
+              </View>
               {selectedNames.length ? (
                 <Text style={styles.hint} numberOfLines={2} {...textScale.dense}>
                   {selectedNames.join(", ")}
@@ -212,23 +225,25 @@ export default function NewTodoScreen() {
                   ))}
                 </View>
               )}
-            </>
+            </View>
           ) : kind === "note" ? (
             <Text style={styles.hint} {...textScale.dense}>
               Kişisel not yalnız senin listende durur.
             </Text>
           ) : null}
+        </ScrollView>
 
+        <View style={styles.footer}>
           <Button
             label={assignees.length > 1 ? `${assignees.length} kişiye ata` : "Kaydet"}
             onPress={() => create.mutate()}
             disabled={!canSubmit}
             loading={create.isPending}
             fullWidth
+            size="lg"
             icon="checkmark"
-            style={styles.submit}
           />
-        </ScrollView>
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -237,8 +252,19 @@ export default function NewTodoScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   flex: { flex: 1 },
-  content: { padding: layout.screenPadding, gap: space.sm, paddingBottom: space.giant },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: space.xs },
+  content: { padding: layout.screenPadding, gap: layout.sectionGap, paddingBottom: space.xxl },
+  field: { gap: space.sm },
+  fieldHead: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: space.sm },
+  fieldLabel: { ...type.h4, color: colors.textSecondary },
+  fieldMeta: { ...type.caption, color: colors.textTertiary },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: space.s },
   hint: { ...type.caption, color: colors.textSecondary },
-  submit: { marginTop: space.lg },
+  footer: {
+    paddingHorizontal: layout.screenPadding,
+    paddingTop: space.md,
+    paddingBottom: space.md,
+    borderTopWidth: hairline,
+    borderTopColor: colors.separator,
+    backgroundColor: colors.bg,
+  },
 });

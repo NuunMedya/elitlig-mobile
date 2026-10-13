@@ -37,7 +37,8 @@ import {
   type Tone,
 } from "@/components/ui";
 import { getMyContracts, type Contract } from "@/lib/api/panel";
-import { formatDateShort, mediaUrl } from "@/lib/format";
+import { mediaUrl } from "@/lib/format";
+import { formatDateWithYear } from "@/components/club/dates";
 import { useAuth } from "@/providers/AuthProvider";
 import { colors, layout, space, textScale, type } from "@/theme";
 
@@ -174,7 +175,8 @@ export default function ContractsScreen() {
     () => (
       <View style={styles.headerBlock}>
         <ChipGroup style={styles.chips}>
-          {FILTERS.map((def) => (
+          {/* Boş durum çipi gösterilmez (Tekliflerim / Cezalarım ile aynı kural). */}
+          {FILTERS.filter((def) => def.key === "tumu" || def.key === filter || counts[def.key] > 0).map((def) => (
             <FilterChip
               key={def.key}
               def={def}
@@ -189,7 +191,7 @@ export default function ContractsScreen() {
           <Text style={styles.summary} {...textScale.long}>
             Yürürlükteki sözleşmen: {live.team?.team_name ?? "takımın"}
             {live.contract_end_date
-              ? ` · bitiş ${formatDateShort(live.contract_end_date)}`
+              ? ` · bitiş ${formatDateWithYear(live.contract_end_date)}`
               : " · süresiz"}
             .
           </Text>
@@ -308,8 +310,8 @@ const ContractRow = React.memo(function ContractRow({
   );
 
   const subtitle = `${
-    contract.contract_start_date ? formatDateShort(contract.contract_start_date) : "?"
-  } → ${contract.contract_end_date ? formatDateShort(contract.contract_end_date) : "Süresiz"}`;
+    contract.contract_start_date ? formatDateWithYear(contract.contract_start_date) : "?"
+  } → ${contract.contract_end_date ? formatDateWithYear(contract.contract_end_date) : "Süresiz"}`;
 
   return (
     <ListRow

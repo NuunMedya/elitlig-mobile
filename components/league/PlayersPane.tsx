@@ -2,18 +2,26 @@
  * PlayersPane — oyuncu sıralamaları (Lig merkezinin "Oyuncular" sekmesi).
  *
  * Eskiden alt çubukta kendi sekmesi olan ekranın gövdesidir. Kapsam (il · lig ·
- * sezon) Lig merkezinin üstündeki şeritte seçilir; sıralama ölçütü burada,
+ * sezon) Lig merkezinin başlığında seçilir; sıralama ölçütü burada,
  * listenin tepesindeki çiplerle değişir. Podyum ilk üçü, liste kalanını taşır.
+ *
+ * ARENA PODYUMU: üç oyuncu tek bir kartta, gerçek bir podyum gibi BASAMAK
+ * üstünde durur — birinci ortada ve en yüksek basamakta. Basamaklar nötr
+ * ikinci katman yüzeyidir (`surface2`); madalya rengi yalnız avatar
+ * halkasında ve sıra rozetindedir. Birincinin rakamı büyük Archivo'dur.
+ *
+ * HÜKMEN KAYITLARI AYIKLANIR: sunucu hükmen maçlar için sistem oyuncuları
+ * ("HÜKMEN 1") döndürüyor; ayıklanmazsa gol krallığını onlar kazanıyordu.
  */
 
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
-import { FlatList, RefreshControl, StyleSheet, Text, View } from "react-native";
+import { FlatList, RefreshControl, StyleSheet, View } from "react-native";
 import type { NativeScrollEvent, NativeSyntheticEvent } from "react-native";
 
 import {
-  Avatar,
+
   EmptyState,
   ErrorState,
   Input,
@@ -23,7 +31,7 @@ import {
   SkeletonListRow,
   Chip,
   ChipGroup,
-  Touchable,
+
   refreshControlProps,
   useRefresh,
 } from "@/components/ui";
@@ -31,7 +39,9 @@ import { getPlayerRankings } from "@/lib/api/players";
 import { queryKeys } from "@/lib/queryKeys";
 import type { PlayerRankRow, PlayerSort } from "@/lib/types";
 import { useScope } from "@/providers/ScopeProvider";
-import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
+import { colors, hairline, layout, radius, space } from "@/theme";
+import { Podium } from "./Podium";
+import { JUNK_PLAYER } from "./shared";
 
 /** Sunucu sayıları kimi uçlarda string döndürüyor; tek dönüştürücüden geçer. */
 const num = (value: number | string | null | undefined) => Number(value ?? 0) || 0;
@@ -45,11 +55,10 @@ interface SortDef {
 }
 
 /**
- * Ölçüt seçimi ÇİP DEĞİL SEKME (tema kuralı, bkz. components/ui/Tabs.tsx):
- * "Gol Krallığı" ile "En Çok Maç" aynı listenin süzülmüş hâlleri değil, ayrı
- * SAYFALARDIR — sıralama, sağdaki sütun ve podyum, hepsi değişir. Çip yığını
- * bunu süzgeç gibi gösteriyordu ve kâğıdın üstünde ekranın ikinci gezinme
- * katmanı olarak duruyordu.
+ * Sıralama ölçütleri — listenin tepesinde küçük (sm) çip şeridi. Lig
+ * merkezinin başlığında sekmeler ve lig çipleri zaten iki gezinme katmanı
+ * kuruyor; üçüncü bir sekme şeridi yerine küçük çipler, "bu listenin
+ * sıralaması" olduğunu söyleyen daha sessiz bir dil.
  */
 const SORTS: SortDef[] = [
   { key: "mostValuable", label: "En Değerliler", metric: (r) => String(num(r.points)), unit: "puan" },
@@ -60,93 +69,9 @@ const SORTS: SortDef[] = [
   { key: "mostCards", label: "Kartlar", metric: (r) => String(num(r.cards)), unit: "kart" },
 ];
 
-const SKELETON_ROWS = ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8"] as const;
-
-/**
- * Madalya rengi, basamağa göre (dizin = sıra − 1): altın · gümüş · bronz.
- * Altın, puan tablosundaki şampiyonluk rayıyla AYNI token — "birinci" iki
- * ekranda aynı renkle okunur. Gümüş nötr kayrak, bronz uyarı turuncusu.
- */
-/* 3. madalya BRONZ: `warn` koyu temada (#FBBF24) altınla ayırt edilemiyordu;
-   düşme play-off rayı iki temada da bronz-turuncu. */
-const MEDAL = [colors.zoneChampion, colors.slate, colors.zoneRelegationPlayoff] as const;
-
-/** Podyumdaki çizim sırası — sol, orta, sağ (0 tabanlı sıra dizini). */
-const PODIUM_ORDER = [1, 0, 2] as const;
-
-/** Avatar ölçüsü: birinci büyük (56), diğerleri 44 (tema.html §7/4). */
-const PODIUM_AVATAR_FIRST = 56;
-const PODIUM_AVATAR = 44;
-
 const normalize = (value: string) => value.trim().toLocaleLowerCase("tr-TR");
 
-/* ══════════════════════════════════════════════════════════════════════════
-   Podyum — ilk üç
-   ══════════════════════════════════════════════════════════════════════════ */
-
-const Podium = React.memo(function Podium({
-  players,
-  metricOf,
-  unit,
-  onPress,
-}: {
-  players: PlayerRankRow[];
-  metricOf: (row: PlayerRankRow) => string;
-  unit: string;
-  onPress: (playerId: number) => void;
-}) {
-  return (
-    <View style={styles.podium}>
-      {PODIUM_ORDER.map((index) => {
-        const player = players[index];
-        const first = index === 0;
-        return (
-          <Touchable
-            key={player.id}
-            style={styles.podiumCell}
-            onPress={() => onPress(player.id)}
-            feedback="card"
-            haptic="selection"
-            accessibilityRole="button"
-            accessibilityLabel={`${index + 1}. ${player.name}, ${metricOf(player)} ${unit}`}
-          >
-            {/* Madalya rozeti halkanın ALTINDA, ortada: sıra rakamı avatarla
-                aynı düşey eksende durur, ayrı bir satır olarak yer yemez. */}
-            <View style={styles.podiumAvatar}>
-              <View style={[styles.podiumRing, { borderColor: MEDAL[index] }]}>
-                <Avatar
-                  name={player.name}
-                  image={player.image ?? null}
-                  size={first ? PODIUM_AVATAR_FIRST : PODIUM_AVATAR}
-                />
-              </View>
-              <View style={[styles.podiumRankBadge, { backgroundColor: MEDAL[index] }]}>
-                <Text style={styles.podiumRankText} {...textScale.badge}>
-                  {index + 1}
-                </Text>
-              </View>
-            </View>
-            <Text
-              style={first ? styles.podiumNameFirst : styles.podiumName}
-              numberOfLines={1}
-              {...textScale.dense}
-            >
-              {player.name}
-            </Text>
-            {/* Yalnız sayı: birim sütun başlığında bir kez yazılır. */}
-            <Text
-              style={first ? styles.podiumMetricFirst : styles.podiumMetric}
-              numberOfLines={1}
-              {...textScale.dense}
-            >
-              {metricOf(player)}
-            </Text>
-          </Touchable>
-        );
-      })}
-    </View>
-  );
-});
+const SKELETON_ROWS = ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8"] as const;
 
 /** Satırlar arası ince ayraç; kartın yan kenarlığını da taşır ki çizgi kesilmesin. */
 const GroupSeparator = () => <View style={styles.separator} />;
@@ -170,13 +95,15 @@ export interface PlayersPaneProps {
     onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
     scrollEventThrottle: number;
   };
+  /** Açılıştaki sıralama ölçütü (İstatistik → "Tüm sıralama"). */
+  initialSort?: PlayerSort;
 }
 
-export function PlayersPane({ scrollProps }: PlayersPaneProps) {
+export function PlayersPane({ scrollProps, initialSort = "topScorers" }: PlayersPaneProps) {
   const scope = useScope();
   const router = useRouter();
 
-  const [sort, setSort] = useState<PlayerSort>("topScorers");
+  const [sort, setSort] = useState<PlayerSort>(initialSort);
   const [search, setSearch] = useState("");
 
   const active = SORTS.find((item) => item.key === sort) ?? SORTS[0];
@@ -197,7 +124,9 @@ export function PlayersPane({ scrollProps }: PlayersPaneProps) {
   const refresh = useRefresh(query.refetch, { refreshing: query.isRefetching });
 
   const rows = useMemo(() => {
-    const players = query.data?.players ?? [];
+    const players = (query.data?.players ?? []).filter(
+      (player) => player.name && !JUNK_PLAYER.test(player.name),
+    );
     const term = normalize(search);
     const filtered = term
       ? players.filter(
@@ -289,6 +218,7 @@ export function PlayersPane({ scrollProps }: PlayersPaneProps) {
                     key={item.key}
                     label={item.label}
                     selected={item.key === sort}
+                    size="sm"
                     onPress={() => setSort(item.key)}
                   />
                 ))}
@@ -366,13 +296,13 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: layout.screenPadding,
-    paddingBottom: space.xxxl,
+    paddingBottom: layout.tabBarHeight + space.xxl,
   },
   sortChips: {
     marginHorizontal: -layout.screenPadding,
   },
   listHeader: {
-    gap: space.sm,
+    gap: space.md,
     paddingTop: space.md,
   },
 
@@ -380,8 +310,8 @@ const styles = StyleSheet.create({
   groupHead: {
     ...GROUP_SHELL,
     borderWidth: hairline,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
     /* Başlığın kendi üst dolgusu ve alt çizgisi yok; kart tepesinde ikisi de gerekir. */
     paddingTop: space.s,
     borderBottomColor: colors.separator,
@@ -397,8 +327,8 @@ const styles = StyleSheet.create({
     borderLeftWidth: hairline,
     borderRightWidth: hairline,
     borderBottomWidth: hairline,
-    borderBottomLeftRadius: radius.lg,
-    borderBottomRightRadius: radius.lg,
+    borderBottomLeftRadius: radius.xl,
+    borderBottomRightRadius: radius.xl,
     overflow: "hidden",
   },
   separator: {
@@ -411,74 +341,8 @@ const styles = StyleSheet.create({
   skeletonCard: {
     borderWidth: hairline,
     borderColor: colors.border,
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     overflow: "hidden",
   },
 
-  /* — Podyum — */
-  podium: {
-    flexDirection: "row",
-    /* Basamaklar tabandan hizalanır: birinci daha uzun, ikisi onun yanında
-       alçakta durur — podyum silueti buradan çıkar. */
-    alignItems: "flex-end",
-    gap: space.sm,
-    paddingTop: space.s,
-    paddingBottom: space.xs,
-  },
-  podiumCell: {
-    flex: 1,
-    alignItems: "center",
-    gap: space.xxs,
-    paddingVertical: space.xs,
-    borderRadius: radius.md,
-  },
-  /* Rozet halkanın altına taşar; ad onun altında nefes alsın. */
-  podiumAvatar: {
-    alignItems: "center",
-    marginBottom: space.sm,
-  },
-  podiumRing: {
-    padding: 2,
-    borderRadius: radius.pill,
-    borderWidth: 2,
-  },
-  podiumRankBadge: {
-    position: "absolute",
-    bottom: -3,
-    alignSelf: "center",
-    minWidth: 16,
-    height: 16,
-    paddingHorizontal: 3,
-    borderRadius: radius.pill,
-    alignItems: "center",
-    justifyContent: "center",
-    /* Halka kâğıt renginde: podyum kartsız, rozet doğrudan zemine oturur. */
-    borderWidth: 1.5,
-    borderColor: colors.bg,
-  },
-  podiumRankText: {
-    ...type.micro,
-    color: colors.textOnStatus,
-  },
-  podiumName: {
-    ...type.caption,
-    color: colors.textPrimary,
-    textAlign: "center",
-    paddingHorizontal: space.xs,
-  },
-  podiumNameFirst: {
-    ...type.label,
-    color: colors.textPrimary,
-    textAlign: "center",
-    paddingHorizontal: space.xs,
-  },
-  podiumMetric: {
-    ...type.tableNumStrong,
-    color: colors.textSecondary,
-  },
-  /* Birincinin sayısı büyük ve altın: "kim önde" sorusunun tek bakışlık yanıtı. */
-  podiumMetricFirst: {
-    ...type.metricSm,
-    color: colors.zoneChampion,
-  },
 });

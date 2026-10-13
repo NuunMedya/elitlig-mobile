@@ -7,14 +7,12 @@ import { FlatList, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import ViewShot, { captureRef } from "react-native-view-shot";
 import {
-  Badge,
   BottomSheet,
   Button,
   EmptyState,
   ErrorState,
   FormChips,
   ScreenHeader,
-  SectionHeader,
   SegmentedControl,
   SkeletonCard,
   SkeletonListRow,
@@ -32,7 +30,7 @@ import { formatDateShort } from "@/lib/format";
 import { matchState } from "@/lib/match";
 import { queryKeys } from "@/lib/queryKeys";
 import { useScope } from "@/providers/ScopeProvider";
-import { colors, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
+import { colors, fonts, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
 import type { ApiMatch, StandingRow } from "@/lib/types";
 
 /**
@@ -56,6 +54,18 @@ import type { ApiMatch, StandingRow } from "@/lib/types";
  * DEĞİŞEN SUNUM: eski ekran her şeyi tek `ScrollView` içinde çiziyor ve
  * karşılaşmaları 8'le kırpıyordu. Artık liste sanaldır (`FlatList`), bu yüzden
  * kırpma kalktı: iki takımın TÜM geçmişi görülebiliyor.
+ *
+ * ARENA DÜZENİ:
+ *   · SAHNE: iki takımın kimliği (arma, ad, sıra · puan) ve aradaki skor
+ *     cümlesi — "3 G · 1 B · 2 G" — grafit sahnede, ekranın tepesinde bir kez.
+ *     Kaydırınca kapanır, başlıkta "A – B" kalır.
+ *   · DAĞILIM ÇUBUĞU: galibiyet/beraberlik/galibiyet oranı tek yatay çubukta;
+ *     ev sahibi zümrüt (veri), rakip kayrak, beraberlik nötr ray rengi
+ *     (StatBar'ın taraf dili ile aynı).
+ *   · KARŞILAŞTIRMA: galibiyet, atılan gol, maç başı gol çubukları tek kartta.
+ *   · FORM: iki satır — arma + ad + son beş maç.
+ *   · GEÇMİŞ: tarih · ev – deplasman skoru tek kartta; sonuç çipi ev sahibi
+ *     gözünden.
  */
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -256,23 +266,70 @@ export default function H2HScreen() {
   );
 
   const renderItem = useCallback(
-    ({ item }: { item: ApiMatch }) => (
-      <MeetingRow meeting={item} result={resultFor(item, homeId, homeLower)} onOpen={openMatch} />
+    ({ item, index }: { item: ApiMatch; index: number }) => (
+      <MeetingRow
+        meeting={item}
+        result={resultFor(item, homeId, homeLower)}
+        first={index === 0}
+        last={index === meetings.length - 1}
+        onOpen={openMatch}
+      />
     ),
-    [homeId, homeLower, openMatch],
+    [homeId, homeLower, meetings.length, openMatch],
   );
 
   const loading =
     (homeMatchesQuery.isLoading || awayMatchesQuery.isLoading) && meetings.length === 0;
   const failed = homeMatchesQuery.isError && !homeMatchesQuery.data;
 
+  const homeRank = rankOf(rows, homeStanding);
+  const awayRank = rankOf(rows, awayStanding);
+
+  const hero = hasTargets ? (
+    <View style={styles.hero}>
+      <HeroTeam
+        name={homeName}
+        logo={homeStanding?.logo ?? null}
+        rank={homeRank}
+        points={homeStanding?.display_points ?? null}
+        onPress={homeId ? openHome : undefined}
+      />
+      <View style={styles.heroMiddle}>
+        {meetings.length > 0 ? (
+          <Text style={styles.heroScore} {...textScale.dense}>
+            {tally.homeWins}
+            <Text style={styles.heroScoreDim}>{"  –  "}</Text>
+            {tally.awayWins}
+          </Text>
+        ) : (
+          <Text style={[styles.heroScore, styles.heroVs]} {...textScale.dense}>
+            VS
+          </Text>
+        )}
+        <Text style={styles.heroCaption} {...textScale.badge}>
+          {meetings.length > 0
+            ? upperTR(`${meetings.length} maç · ${tally.draws} beraberlik`)
+            : upperTR("Karşılaşma yok")}
+        </Text>
+      </View>
+      <HeroTeam
+        name={awayName}
+        logo={awayStanding?.logo ?? null}
+        rank={awayRank}
+        points={awayStanding?.display_points ?? null}
+        onPress={awayId ? openAway : undefined}
+      />
+    </View>
+  ) : undefined;
+
   const header = (
     <ScreenHeader
-      title="H2H"
-      overline="KARŞILAŞTIRMA"
-      subtitle={hasTargets ? `${homeName} – ${awayName}` : undefined}
+      title={hasTargets ? `${homeName} – ${awayName}` : "Karşılaştırma"}
+      overline={hasTargets ? undefined : "KARŞILAŞTIRMA"}
       scrollY={scrollY}
       back
+      variant={hasTargets ? "stage" : undefined}
+      hero={hero}
       actions={
         hasTargets
           ? [
@@ -307,8 +364,9 @@ export default function H2HScreen() {
 
       {loading ? (
         <View style={styles.loading}>
-          <SkeletonCard lines={3} />
-          <SkeletonListRow count={6} avatar={false} />
+          <SkeletonCard lines={4} />
+          <SkeletonCard lines={2} />
+          <SkeletonListRow count={5} avatar={false} />
         </View>
       ) : failed ? (
         <ErrorState error={homeMatchesQuery.error} onRetry={homeMatchesQuery.refetch} />
@@ -318,67 +376,57 @@ export default function H2HScreen() {
           data={meetings}
           renderItem={renderItem}
           keyExtractor={matchKey}
+          ItemSeparatorComponent={MeetingSeparator}
           refreshControl={refresh.control}
           contentContainerStyle={styles.listContent}
           initialNumToRender={10}
           windowSize={9}
           ListHeaderComponent={
             <View style={styles.headerBlock}>
-              {/* ————— İki takım ————— */}
-              <View style={styles.versus}>
-                <TeamColumn
-                  name={homeName}
-                  logo={homeStanding?.logo ?? null}
-                  rank={rankOf(rows, homeStanding)}
-                  points={homeStanding?.display_points ?? null}
-                  form={homeForm}
-                  onPress={homeId ? openHome : undefined}
-                />
-
-                <View style={styles.versusMiddle}>
-                  <Text style={styles.versusCount} {...textScale.dense}>
-                    {meetings.length}
+              {meetings.length > 0 ? (
+                <View style={[styles.card, styles.cardPad]}>
+                  <Text style={styles.cardTitle} {...textScale.dense}>
+                    Galibiyet dağılımı
                   </Text>
-                  <Text style={styles.overline} {...textScale.badge}>
-                    KARŞILAŞMA
-                  </Text>
+                  <SplitBar home={tally.homeWins} draws={tally.draws} away={tally.awayWins} />
+                  <View style={styles.splitLegend}>
+                    <SplitLabel value={tally.homeWins} label={homeName} tone="home" />
+                    <SplitLabel value={tally.draws} label="Beraberlik" tone="draw" />
+                    <SplitLabel value={tally.awayWins} label={awayName} tone="away" align="right" />
+                  </View>
+                  <View style={styles.cardDivider} />
+                  <View style={styles.bars}>
+                    <StatBar label="Atılan gol" home={tally.homeGoals} away={tally.awayGoals} />
+                    <StatBar
+                      label="Maç başı gol"
+                      home={Math.round((tally.homeGoals / meetings.length) * 10) / 10}
+                      away={Math.round((tally.awayGoals / meetings.length) * 10) / 10}
+                    />
+                  </View>
                 </View>
+              ) : null}
 
-                <TeamColumn
-                  name={awayName}
-                  logo={awayStanding?.logo ?? null}
-                  rank={rankOf(rows, awayStanding)}
-                  points={awayStanding?.display_points ?? null}
-                  form={awayForm}
-                  onPress={awayId ? openAway : undefined}
-                  align="right"
-                />
-              </View>
+              {/* ————— Form ————— */}
+              {homeForm || awayForm ? (
+                <View style={styles.card}>
+                  <Text style={[styles.cardTitle, styles.cardTitlePad]} {...textScale.dense}>
+                    Son 5 maç
+                  </Text>
+                  <FormLine name={homeName} logo={homeStanding?.logo ?? null} form={homeForm} />
+                  <View style={styles.formDivider} />
+                  <FormLine name={awayName} logo={awayStanding?.logo ?? null} form={awayForm} />
+                </View>
+              ) : null}
 
               {meetings.length > 0 ? (
-                <>
-                  {/* ————— Galibiyet dağılımı ————— */}
-                  <View style={styles.tally}>
-                    <TallyCell value={tally.homeWins} label="GALİBİYET" color={colors.win} />
-                    <TallyCell
-                      value={tally.draws}
-                      label="BERABERLİK"
-                      color={colors.textSecondary}
-                    />
-                    <TallyCell value={tally.awayWins} label="GALİBİYET" color={colors.live} />
-                  </View>
-
-                  {/* ————— Karşılaştırma çubukları ————— */}
-                  <View style={styles.barsCard}>
-                    <StatBar label="Galibiyet" home={tally.homeWins} away={tally.awayWins} />
-                    <StatBar label="Atılan gol" home={tally.homeGoals} away={tally.awayGoals} />
-                  </View>
-
-                  <SectionHeader
-                    title="Geçmiş karşılaşmalar"
-                    meta={`rozetler ${homeName} gözünden`}
-                  />
-                </>
+                <View style={styles.listLabel}>
+                  <Text style={styles.overline} {...textScale.badge}>
+                    {upperTR("Geçmiş karşılaşmalar")}
+                  </Text>
+                  <Text style={styles.listLabelMeta} numberOfLines={1} {...textScale.dense}>
+                    sonuç {homeName} gözünden
+                  </Text>
+                </View>
               ) : null}
             </View>
           }
@@ -386,8 +434,8 @@ export default function H2HScreen() {
             <EmptyState
               icon="git-compare-outline"
               variant="inline"
-              title="Karşılaşma yok"
-              body="Bu iki takım daha önce tamamlanmış bir maçta karşılaşmamış. Form karşılaştırması yukarıda."
+              title="Henüz karşılaşmadılar"
+              body="Bu iki takım tamamlanmış bir maçta karşılaşmamış. Form ve sıralama yukarıda."
             />
           }
         />
@@ -400,8 +448,8 @@ export default function H2HScreen() {
         awayName={awayName}
         homeLogo={homeStanding?.logo ?? null}
         awayLogo={awayStanding?.logo ?? null}
-        homeRank={rankOf(rows, homeStanding)}
-        awayRank={rankOf(rows, awayStanding)}
+        homeRank={homeRank}
+        awayRank={awayRank}
         homeForm={homeForm}
         awayForm={awayForm}
         tally={tally}
@@ -433,43 +481,34 @@ function rankOf(rows: StandingRow[], row: StandingRow | null): number | null {
    Parçalar
    ══════════════════════════════════════════════════════════════════════════ */
 
-const TeamColumn = memo(function TeamColumn({
+/** Sahnedeki takım sütunu: arma, ad, sıra · puan. */
+const HeroTeam = memo(function HeroTeam({
   name,
   logo,
   rank,
   points,
-  form,
   onPress,
-  align = "left",
 }: {
   name: string;
   logo: string | null;
   rank: number | null;
   points: number | null;
-  form: string;
   onPress?: () => void;
-  align?: "left" | "right";
 }) {
   const body = (
     <>
-      <TeamLogo name={name} logo={logo} size={layout.crestXl} />
-      <Text style={styles.teamName} numberOfLines={2} {...textScale.dense}>
-        {upperTR(name)}
+      <TeamLogo name={name} logo={logo} size={layout.crestXl} onDark />
+      <Text style={styles.heroName} numberOfLines={2} {...textScale.dense}>
+        {name}
       </Text>
       {rank != null ? (
-        <View style={styles.teamMeta}>
-          <Badge label={`${rank}. sıra`} tone="brand" size="xs" />
-          {points != null ? <Badge label={`${points} puan`} tone="neutral" size="xs" /> : null}
-        </View>
+        <Text style={styles.heroMeta} numberOfLines={1} {...textScale.dense}>
+          {rank}. sıra{points != null ? ` · ${points} P` : ""}
+        </Text>
       ) : null}
-      <FormChips form={form} size="xs" />
     </>
   );
-
-  if (!onPress) {
-    return <View style={[styles.teamColumn, align === "right" && styles.teamColumnRight]}>{body}</View>;
-  }
-
+  if (!onPress) return <View style={styles.heroTeam}>{body}</View>;
   return (
     <Touchable
       feedback="card"
@@ -477,83 +516,141 @@ const TeamColumn = memo(function TeamColumn({
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={`${name} takım sayfası`}
-      style={[styles.teamColumn, align === "right" && styles.teamColumnRight]}
+      style={styles.heroTeam}
     >
       {body}
     </Touchable>
   );
 });
 
-const TallyCell = memo(function TallyCell({
+/** Galibiyet · beraberlik · galibiyet oranı — tek yatay çubuk. */
+const SplitBar = memo(function SplitBar({ home, draws, away }: { home: number; draws: number; away: number }) {
+  const total = home + draws + away || 1;
+  return (
+    <View style={styles.split} accessibilityLabel={`${home} galibiyet, ${draws} beraberlik, ${away} mağlubiyet`}>
+      {home > 0 ? <View style={[styles.splitPart, styles.splitHome, { flex: home / total }]} /> : null}
+      {draws > 0 ? <View style={[styles.splitPart, styles.splitDraw, { flex: draws / total }]} /> : null}
+      {away > 0 ? <View style={[styles.splitPart, styles.splitAway, { flex: away / total }]} /> : null}
+    </View>
+  );
+});
+
+const SplitLabel = memo(function SplitLabel({
   value,
   label,
-  color,
+  tone,
+  align = "left",
 }: {
   value: number;
   label: string;
-  color: string;
+  tone: "home" | "draw" | "away";
+  align?: "left" | "right";
 }) {
   return (
-    <View style={styles.tallyCell}>
-      <Text style={[styles.tallyValue, { color }]} {...textScale.dense}>
+    <View style={[styles.splitLabel, align === "right" && styles.splitLabelRight]}>
+      <Text
+        style={[
+          styles.splitValue,
+          tone === "home" ? styles.splitValueHome : tone === "draw" ? styles.splitValueDraw : null,
+        ]}
+        {...textScale.dense}
+      >
         {value}
       </Text>
-      <Text style={styles.overline} {...textScale.badge}>
+      <Text style={[styles.splitName, align === "right" && styles.textRight]} numberOfLines={1} {...textScale.dense}>
         {label}
       </Text>
     </View>
   );
 });
 
+const FormLine = memo(function FormLine({
+  name,
+  logo,
+  form,
+}: {
+  name: string;
+  logo: string | null;
+  form: string;
+}) {
+  return (
+    <View style={styles.formLine}>
+      <TeamLogo name={name} logo={logo} size={layout.crestSm} />
+      <Text style={styles.formName} numberOfLines={1} {...textScale.dense}>
+        {name}
+      </Text>
+      {form ? (
+        <FormChips form={form} size="sm" />
+      ) : (
+        <Text style={styles.formEmpty} {...textScale.dense}>
+          maç yok
+        </Text>
+      )}
+    </View>
+  );
+});
+
+const MeetingSeparator = () => <View style={styles.meetSeparator} />;
+
 const MeetingRow = memo(function MeetingRow({
   meeting,
   result,
+  first,
+  last,
   onOpen,
 }: {
   meeting: ApiMatch;
   result: "G" | "B" | "M";
+  first: boolean;
+  last: boolean;
   onOpen: (matchId: number) => void;
 }) {
   const open = useCallback(() => onOpen(Number(meeting.id)), [meeting.id, onOpen]);
 
-  const first = meeting.first_team_score ?? null;
-  const second = meeting.second_team_score ?? null;
+  const homeScore = meeting.first_team_score ?? null;
+  const awayScore = meeting.second_team_score ?? null;
+  const homeWon = homeScore != null && awayScore != null && homeScore > awayScore;
+  const awayWon = homeScore != null && awayScore != null && awayScore > homeScore;
 
   return (
     <Touchable
       feedback="row"
       haptic="selection"
       onPress={open}
-      style={styles.meetRow}
+      style={[styles.meetRow, first && styles.meetRowFirst, last && styles.meetRowLast]}
       accessibilityRole="button"
-      accessibilityLabel={`${meeting.first_team_name} ${first ?? "-"} ${second ?? "-"} ${meeting.second_team_name}`}
+      accessibilityLabel={`${meeting.first_team_name} ${homeScore ?? "-"} ${awayScore ?? "-"} ${meeting.second_team_name}`}
     >
       <Text style={styles.meetDate} {...textScale.dense}>
         {formatDateShort(meeting.date)}
       </Text>
 
+      <Text
+        style={[styles.meetTeam, styles.textRight, homeWon && styles.meetTeamWon]}
+        numberOfLines={1}
+        {...textScale.dense}
+      >
+        {meeting.first_team_name}
+      </Text>
+      <View style={styles.meetScoreBox}>
+        <Text style={styles.meetScore} {...textScale.dense}>
+          {homeScore ?? "-"}–{awayScore ?? "-"}
+        </Text>
+      </View>
+      <Text style={[styles.meetTeam, awayWon && styles.meetTeamWon]} numberOfLines={1} {...textScale.dense}>
+        {meeting.second_team_name}
+      </Text>
+
       <View
         style={[
           styles.meetChip,
-          result === "G"
-            ? styles.meetChipWin
-            : result === "M"
-              ? styles.meetChipLoss
-              : styles.meetChipDraw,
+          result === "G" ? styles.meetChipWin : result === "M" ? styles.meetChipLoss : styles.meetChipDraw,
         ]}
       >
         <Text style={styles.meetChipText} {...textScale.badge}>
           {result}
         </Text>
       </View>
-
-      <Text style={styles.meetTeams} numberOfLines={1} {...textScale.dense}>
-        {meeting.first_team_name} – {meeting.second_team_name}
-      </Text>
-
-      <Text style={styles.meetScore} {...textScale.dense}>
-        {first ?? "-"}–{second ?? "-"}
-      </Text>
     </Touchable>
   );
 });
@@ -565,6 +662,9 @@ const MeetingRow = memo(function MeetingRow({
 type ShareFormat = "story" | "post";
 
 const SHARE_WIDTH = 264;
+/** Sahne gradyanının ekseni — yatay, sağdan sola (Arena kuralı). */
+const INK_START = { x: 1, y: 0.5 };
+const INK_END = { x: 0, y: 0.5 };
 const SHARE_FORMATS: Record<ShareFormat, { label: string; height: number }> = {
   story: { label: "Hikâye 9:16", height: Math.round((SHARE_WIDTH * 16) / 9) },
   post: { label: "Gönderi 3:4", height: Math.round((SHARE_WIDTH * 4) / 3) },
@@ -632,8 +732,14 @@ function ShareSheet({
       <View style={styles.shareCardWrap}>
         <ViewShot ref={shotRef} options={{ format: "png", quality: 1 }}>
           <View style={[styles.shareCard, { height: SHARE_FORMATS[format].height }]}>
-            {/* Düz dolgu — gradient yalnız okunabilirlik scrim'i için. */}
-            <View style={styles.shareStrip} />
+            {/* SAHNE: paylaşım kartı kimlik anıdır — grafit, sağdan sola ışık. */}
+            <LinearGradient
+              colors={colors.gradientInk}
+              start={INK_START}
+              end={INK_END}
+              style={StyleSheet.absoluteFill}
+              pointerEvents="none"
+            />
 
             <View style={styles.shareBody}>
               <View style={styles.shareTop}>
@@ -647,7 +753,7 @@ function ShareSheet({
 
               <View style={styles.shareTeams}>
                 <View style={styles.shareTeam}>
-                  <TeamLogo name={homeName} logo={homeLogo} size={40} />
+                  <TeamLogo name={homeName} logo={homeLogo} size={40} onDark />
                   <Text style={styles.shareTeamName} numberOfLines={2} {...textScale.badge}>
                     {upperTR(homeName)}
                   </Text>
@@ -668,7 +774,7 @@ function ShareSheet({
                 </View>
 
                 <View style={[styles.shareTeam, styles.shareTeamRight]}>
-                  <TeamLogo name={awayName} logo={awayLogo} size={40} />
+                  <TeamLogo name={awayName} logo={awayLogo} size={40} onDark />
                   <Text
                     style={[styles.shareTeamName, styles.shareTextRight]}
                     numberOfLines={2}
@@ -688,9 +794,9 @@ function ShareSheet({
               </View>
 
               <View style={styles.shareTally}>
-                <ShareStat label="GALİBİYET" value={tally.homeWins} tone={colors.win} />
-                <ShareStat label="BERABERLİK" value={tally.draws} tone={colors.textSecondary} />
-                <ShareStat label="GALİBİYET" value={tally.awayWins} tone={colors.live} />
+                <ShareStat label="GALİBİYET" value={tally.homeWins} tone={colors.brandOnDark} />
+                <ShareStat label="BERABERLİK" value={tally.draws} />
+                <ShareStat label="GALİBİYET" value={tally.awayWins} tone={colors.brandOnDark} />
               </View>
 
               <View style={styles.shareGoals}>
@@ -775,101 +881,219 @@ const styles = StyleSheet.create({
     paddingBottom: space.sm,
   },
   overline: {
-    ...type.micro,
+    ...type.overline,
     color: colors.textTertiary,
   },
+  textRight: {
+    textAlign: "right",
+  },
 
-  /* — İki takım — */
-  versus: {
+  /* — Sahne kimliği — */
+  hero: {
     flexDirection: "row",
     alignItems: "flex-start",
-    backgroundColor: colors.surface1,
-    borderWidth: hairline,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    padding: space.md,
+    paddingHorizontal: layout.screenPadding,
+    paddingTop: space.sm,
+    paddingBottom: space.xl,
   },
-  teamColumn: {
+  heroTeam: {
     flex: 1,
     alignItems: "center",
-    gap: space.xs,
-    paddingVertical: space.xs,
+    gap: space.s,
   },
-  teamColumnRight: {
-    alignItems: "center",
-  },
-  teamName: {
-    ...type.label,
-    color: colors.textPrimary,
+  heroName: {
+    ...type.h4,
+    color: colors.onDark,
     textAlign: "center",
   },
-  teamMeta: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "center",
-    gap: space.xs,
+  heroMeta: {
+    ...type.caption,
+    color: colors.onDarkMuted,
   },
-  versusMiddle: {
+  heroMiddle: {
     alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: space.sm,
-    paddingTop: space.lg,
-    gap: space.xxs,
+    paddingTop: space.md,
+    gap: space.xs,
+    minWidth: 104,
   },
-  versusCount: {
-    ...type.scoreLg,
+  heroScore: {
+    ...type.scoreHero,
+    color: colors.onDark,
+  },
+  heroVs: {
+    color: colors.onDarkMuted,
+  },
+  heroScoreDim: {
+    ...type.scoreMd,
+    color: colors.onDarkMuted,
+  },
+  heroCaption: {
+    ...type.overline,
+    color: colors.brandOnDark,
+    textAlign: "center",
+  },
+
+  /* — Kartlar — */
+  card: {
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    borderRadius: radius.xl,
+  },
+  cardPad: {
+    padding: space.lg,
+    gap: space.md,
+  },
+  cardTitle: {
+    ...type.h2,
     color: colors.textPrimary,
   },
-
-  /* — Galibiyet dağılımı — */
-  tally: {
-    flexDirection: "row",
-    backgroundColor: colors.surface1,
-    borderWidth: hairline,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    overflow: "hidden",
+  cardTitlePad: {
+    paddingHorizontal: space.lg,
+    paddingTop: space.lg,
+    paddingBottom: space.xs,
   },
-  tallyCell: {
-    flex: 1,
-    alignItems: "center",
-    gap: space.xxs,
-    paddingVertical: space.md,
+  cardDivider: {
+    height: hairline,
+    backgroundColor: colors.separator,
   },
-  tallyValue: {
-    ...type.scoreLg,
-  },
-
-  /* — Karşılaştırma çubukları — */
-  barsCard: {
-    backgroundColor: colors.surface1,
-    borderWidth: hairline,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    padding: space.md,
+  bars: {
     gap: space.md,
   },
 
-  /* — Karşılaşma satırı — */
+  /* — Dağılım çubuğu — */
+  split: {
+    flexDirection: "row",
+    height: 10,
+    gap: 3,
+  },
+  splitPart: {
+    borderRadius: 3,
+  },
+  splitHome: { backgroundColor: colors.accent },
+  splitDraw: { backgroundColor: colors.slateSoft },
+  splitAway: { backgroundColor: colors.slate },
+  splitLegend: {
+    flexDirection: "row",
+    gap: space.sm,
+  },
+  splitLabel: {
+    flex: 1,
+    minWidth: 0,
+  },
+  splitLabelRight: {
+    alignItems: "flex-end",
+  },
+  splitValue: {
+    ...type.scoreMd,
+    color: colors.textPrimary,
+  },
+  splitValueHome: {
+    color: colors.accentText,
+  },
+  splitValueDraw: {
+    color: colors.textSecondary,
+  },
+  splitName: {
+    ...type.caption,
+    color: colors.textTertiary,
+  },
+
+  /* — Form — */
+  formLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.m,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.md,
+  },
+  formName: {
+    ...type.label,
+    color: colors.textPrimary,
+    flex: 1,
+  },
+  formEmpty: {
+    ...type.caption,
+    color: colors.textTertiary,
+  },
+  formDivider: {
+    height: hairline,
+    marginLeft: space.lg,
+    backgroundColor: colors.separator,
+  },
+
+  /* — Geçmiş — */
+  listLabel: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    gap: space.sm,
+    paddingHorizontal: space.xxs,
+    paddingTop: space.sm,
+  },
+  listLabelMeta: {
+    ...type.caption,
+    color: colors.textTertiary,
+    flexShrink: 1,
+  },
   meetRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.sm,
-    minHeight: 48,
+    minHeight: 52,
     paddingHorizontal: space.md,
     backgroundColor: colors.surface1,
+    borderLeftWidth: hairline,
+    borderRightWidth: hairline,
+    borderColor: colors.border,
+  },
+  meetRowFirst: {
+    borderTopWidth: hairline,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+  },
+  meetRowLast: {
     borderBottomWidth: hairline,
-    borderBottomColor: colors.separator,
+    borderBottomLeftRadius: radius.xl,
+    borderBottomRightRadius: radius.xl,
+  },
+  meetSeparator: {
+    height: hairline,
+    backgroundColor: colors.separator,
+    borderLeftWidth: hairline,
+    borderRightWidth: hairline,
+    borderColor: colors.border,
   },
   meetDate: {
     ...type.caption,
     color: colors.textTertiary,
-    width: 52,
+    width: 50,
+  },
+  meetTeam: {
+    ...type.bodySm,
+    color: colors.textSecondary,
+    flex: 1,
+  },
+  meetTeamWon: {
+    fontFamily: fonts.semibold,
+    color: colors.textPrimary,
+  },
+  meetScoreBox: {
+    minWidth: 44,
+    paddingHorizontal: space.s,
+    paddingVertical: space.xxs,
+    borderRadius: radius.xs,
+    backgroundColor: colors.surface3,
+    alignItems: "center",
+  },
+  meetScore: {
+    ...type.tableNumStrong,
+    color: colors.textPrimary,
   },
   meetChip: {
-    width: 18,
-    height: 18,
-    borderRadius: radius.sm,
+    width: 20,
+    height: 20,
+    borderRadius: radius.xs,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -884,16 +1108,7 @@ const styles = StyleSheet.create({
   },
   meetChipText: {
     ...type.micro,
-    color: colors.textOnBrand,
-  },
-  meetTeams: {
-    ...type.bodySm,
-    color: colors.textPrimary,
-    flex: 1,
-  },
-  meetScore: {
-    ...type.tableNumStrong,
-    color: colors.textPrimary,
+    color: colors.textOnStatus,
   },
 
   /* — Paylaşım kartı — */
@@ -903,18 +1118,14 @@ const styles = StyleSheet.create({
   },
   shareCard: {
     width: SHARE_WIDTH,
-    backgroundColor: colors.surface1,
-    borderRadius: radius.lg,
+    backgroundColor: colors.inkBlock,
+    borderRadius: radius.xl,
     overflow: "hidden",
-  },
-  shareStrip: {
-    backgroundColor: colors.brand,
-    height: 6,
   },
   shareBody: {
     flex: 1,
-    padding: space.md,
-    gap: space.sm,
+    padding: space.lg,
+    gap: space.md,
   },
   shareTop: {
     flexDirection: "row",
@@ -922,32 +1133,33 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   shareBrand: {
-    ...type.label,
-    color: colors.brand,
+    ...type.h4,
+    color: colors.onDark,
   },
   shareKicker: {
-    ...type.micro,
-    color: colors.textTertiary,
+    ...type.overline,
+    color: colors.brandOnDark,
   },
   shareTeams: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: space.sm,
+    marginTop: space.sm,
   },
   shareTeam: {
     flex: 1,
-    gap: space.xxs,
+    gap: space.xs,
   },
   shareTeamRight: {
     alignItems: "flex-end",
   },
   shareTeamName: {
-    ...type.caption,
-    color: colors.textPrimary,
+    ...type.label,
+    color: colors.onDark,
   },
   shareTeamRank: {
-    ...type.micro,
-    color: colors.brand,
+    ...type.caption,
+    color: colors.onDarkMuted,
   },
   shareTextRight: {
     textAlign: "right",
@@ -958,24 +1170,28 @@ const styles = StyleSheet.create({
     paddingTop: space.sm,
   },
   shareVersusText: {
-    ...type.h2,
-    color: colors.textSecondary,
+    ...type.scoreSm,
+    color: colors.onDarkMuted,
   },
   shareVersusMeta: {
-    ...type.micro,
-    color: colors.textTertiary,
+    ...type.overline,
+    color: colors.onDarkMuted,
   },
   shareTally: {
     flexDirection: "row",
-    backgroundColor: colors.surface2,
+    backgroundColor: colors.inkTile,
+    borderWidth: hairline,
+    borderColor: colors.inkTileBorder,
     borderRadius: radius.md,
-    paddingVertical: space.sm,
+    paddingVertical: space.md,
   },
   shareGoals: {
     flexDirection: "row",
-    backgroundColor: colors.surface2,
+    backgroundColor: colors.inkTile,
+    borderWidth: hairline,
+    borderColor: colors.inkTileBorder,
     borderRadius: radius.md,
-    paddingVertical: space.sm,
+    paddingVertical: space.md,
   },
   shareStat: {
     flex: 1,
@@ -984,11 +1200,11 @@ const styles = StyleSheet.create({
   },
   shareStatValue: {
     ...type.scoreMd,
-    color: colors.textPrimary,
+    color: colors.onDark,
   },
   shareStatLabel: {
-    ...type.micro,
-    color: colors.textTertiary,
+    ...type.overline,
+    color: colors.onDarkMuted,
   },
   shareForm: {
     flexDirection: "row",
@@ -997,15 +1213,15 @@ const styles = StyleSheet.create({
     gap: space.sm,
   },
   shareFormLabel: {
-    ...type.micro,
-    color: colors.textTertiary,
+    ...type.overline,
+    color: colors.onDarkMuted,
   },
   shareSpacer: {
     flex: 1,
   },
   shareFooter: {
-    ...type.micro,
-    color: colors.textTertiary,
+    ...type.overline,
+    color: colors.onDarkMuted,
     textAlign: "center",
   },
   shareHint: {

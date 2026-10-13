@@ -36,7 +36,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   Badge,
   BottomSheet,
@@ -51,7 +51,7 @@ import {
   ListRow,
   ScreenHeader,
   SectionHeader,
-  SegmentedControl,
+  Tabs,
   SkeletonCard,
   SkeletonListRow,
   Surface,
@@ -60,11 +60,13 @@ import {
   useHeaderScroll,
   useRefresh,
   useToast,
-  type SegmentedItem,
+  type TabItem,
   type Tone,
 } from "@/components/ui";
 import { acceptOffer, getOffer, rejectOffer, type TransferOffer } from "@/lib/api/panel";
 import { formatDateShort, formatMoney, mediaUrl } from "@/lib/format";
+import { DeadlineBanner } from "@/components/club/DeadlineBanner";
+import { formatDateWithYear } from "@/components/club/dates";
 import { ApiError, post } from "@/lib/http";
 import { queryKeys } from "@/lib/queryKeys";
 import { useAuth } from "@/providers/AuthProvider";
@@ -183,7 +185,9 @@ const SIDE_LABELS: Record<string, string> = {
 
 type OfferTab = "belge" | "surumler" | "surec";
 
-const TAB_ITEMS: SegmentedItem<OfferTab>[] = [
+/* Belge / Sürümler / Süreç SAYFAYI değiştirir → başlıktaki sekme şeridi
+   (Arena: sekme sayfayı değiştirir, segment veriyi süzer). */
+const TAB_ITEMS: TabItem<OfferTab>[] = [
   { key: "belge", label: "Belge" },
   { key: "surumler", label: "Sürümler" },
   { key: "surec", label: "Süreç" },
@@ -335,6 +339,7 @@ export default function OfferDetailScreen() {
   const router = useRouter();
   const toast = useToast();
   const queryClient = useQueryClient();
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ id?: string; tab?: string }>();
   const { scrollY, scrollProps } = useHeaderScroll();
 
@@ -577,13 +582,7 @@ export default function OfferDetailScreen() {
         subtitle={offer?.team?.team_name ?? undefined}
         back
         scrollY={scrollY}
-        bottom={
-          offer ? (
-            <View style={styles.tabsWrap}>
-              <SegmentedControl items={TAB_ITEMS} value={tab} onChange={changeTab} size="sm" />
-            </View>
-          ) : undefined
-        }
+        tabs={offer ? <Tabs items={TAB_ITEMS} value={tab} onChange={changeTab} sticky /> : undefined}
       />
 
       {!publicId ? (
@@ -623,7 +622,7 @@ export default function OfferDetailScreen() {
           </ScrollView>
 
           {hasActions ? (
-            <View style={styles.actionBar}>
+            <View style={[styles.actionBar, { paddingBottom: space.md + insets.bottom }]}>
               {canReject ? (
                 <Button
                   label="Reddet"
@@ -804,13 +803,13 @@ const DocumentTab = React.memo(function DocumentTab({
       {
         key: "baslangic",
         label: "Sözleşme başlangıcı",
-        value: terms.contract_start_date ? formatDateShort(terms.contract_start_date) : "—",
+        value: terms.contract_start_date ? formatDateWithYear(terms.contract_start_date) : "—",
       },
       {
         key: "bitis",
         label: "Sözleşme bitişi",
         value: terms.contract_end_date
-          ? formatDateShort(terms.contract_end_date)
+          ? formatDateWithYear(terms.contract_end_date)
           : "Süresiz (bitiş yok)",
       },
       {
@@ -871,11 +870,17 @@ const DocumentTab = React.memo(function DocumentTab({
       </Surface>
 
       {offer.status === "SENT" ? (
-        <Text style={[styles.note, remaining ? styles.noteWarn : styles.noteDanger]} {...textScale.long}>
-          {remaining
-            ? `Son geçerlilik: ${formatDateShort(offer.expires_at)} — ${remaining}.`
-            : "Teklifin geçerlilik süresi dolmak üzere; sunucu süresi geçen teklifi otomatik kapatır."}
-        </Text>
+        remaining ? (
+          <DeadlineBanner
+            title="Teklifin süresi işliyor"
+            detail={`Son geçerlilik ${formatDateWithYear(offer.expires_at)} · süre dolunca kapanır`}
+            deadline={offer.expires_at}
+          />
+        ) : (
+          <Text style={[styles.note, styles.noteDanger]} {...textScale.long}>
+            Teklifin geçerlilik süresi dolmak üzere; sunucu süresi geçen teklifi otomatik kapatır.
+          </Text>
+        )
       ) : null}
 
       {offer.awaiting_admin_approval ? (
@@ -886,7 +891,7 @@ const DocumentTab = React.memo(function DocumentTab({
       ) : null}
 
       {/* Şartlar */}
-      <SectionHeader title="Sözleşme şartları" meta={terms ? `${terms.version_number}. sürüm` : undefined} />
+      <SectionHeader style={styles.flushHeader} title="Sözleşme şartları" meta={terms ? `${terms.version_number}. sürüm` : undefined} />
       {clauses.length === 0 ? (
         <EmptyState
           icon="document-text-outline"
@@ -911,7 +916,7 @@ const DocumentTab = React.memo(function DocumentTab({
       {/* Ek maddeler */}
       {additional.length > 0 ? (
         <>
-          <SectionHeader title="Ek maddeler" meta={String(additional.length)} />
+          <SectionHeader style={styles.flushHeader} title="Ek maddeler" meta={String(additional.length)} />
           {/* Ek madde metinleri uzun olabilir; tek satırlık KeyValueRow yerine
               paragraf yüzeyinde tam gösterilir (kırpılan madde okunmaz madde). */}
           {additional.map((item, index) => (
@@ -930,7 +935,7 @@ const DocumentTab = React.memo(function DocumentTab({
       {/* Takımın mesajı */}
       {terms?.message ? (
         <>
-          <SectionHeader title="Takımın notu" />
+          <SectionHeader style={styles.flushHeader} title="Takımın notu" />
           <Surface level={1} radius="lg" style={styles.quote}>
             <Ionicons name="chatbubble-ellipses-outline" size={16} color={colors.brandAccent} />
             <Text style={styles.quoteText} {...textScale.long}>
@@ -941,7 +946,7 @@ const DocumentTab = React.memo(function DocumentTab({
       ) : null}
 
       {/* Künye satırları */}
-      <SectionHeader title="Teklif künyesi" />
+      <SectionHeader style={styles.flushHeader} title="Teklif künyesi" />
       <KeyValueRow
         label="Teklif no"
         value={offer.public_id}
@@ -1013,7 +1018,7 @@ const VersionsTab = React.memo(function VersionsTab({ offer }: { offer: OfferDoc
 
   return (
     <>
-      <SectionHeader title="Teklif sürümleri" meta={String(versions.length)} />
+      <SectionHeader style={styles.flushHeader} title="Teklif sürümleri" meta={String(versions.length)} />
       {versions.map((version) => (
         <VersionCard
           key={version.id}
@@ -1024,7 +1029,7 @@ const VersionsTab = React.memo(function VersionsTab({ offer }: { offer: OfferDoc
 
       {revisions.length > 0 ? (
         <>
-          <SectionHeader title="Düzenleme isteklerim" meta={String(revisions.length)} />
+          <SectionHeader style={styles.flushHeader} title="Düzenleme isteklerim" meta={String(revisions.length)} />
           {revisions.map((request) => (
             <RevisionCard key={request.id} request={request} />
           ))}
@@ -1058,8 +1063,8 @@ const VersionCard = React.memo(function VersionCard({
         <CardLine label="Transfer bedeli" value={moneyText(version.transfer_fee, currency)} />
         <CardLine
           label="Süre"
-          value={`${version.contract_start_date ? formatDateShort(version.contract_start_date) : "?"} → ${
-            version.contract_end_date ? formatDateShort(version.contract_end_date) : "Süresiz"
+          value={`${version.contract_start_date ? formatDateWithYear(version.contract_start_date) : "?"} → ${
+            version.contract_end_date ? formatDateWithYear(version.contract_end_date) : "Süresiz"
           }`}
         />
         <CardLine
@@ -1165,7 +1170,7 @@ const TimelineTab = React.memo(function TimelineTab({ offer }: { offer: OfferDoc
 
   return (
     <>
-      <SectionHeader title="Süreç akışı" meta={String(events.length)} />
+      <SectionHeader style={styles.flushHeader} title="Süreç akışı" meta={String(events.length)} />
       {events.map((event, index) => (
         <View key={event.id} style={styles.timelineRow}>
           <View style={styles.timelineRail}>
@@ -1269,6 +1274,12 @@ const RevisionFieldEditor = React.memo(function RevisionFieldEditor({
 /* ================================ STİLLER ================================= */
 
 const styles = StyleSheet.create({
+  /* Bölüm başlığı kendi ekran kenarı dolgusunu taşır; içerik zaten dolgulu
+     olduğu için burada sıfırlanır — aksi hâlde başlık kartlardan 14px içeride
+     dururdu. */
+  flushHeader: {
+    paddingHorizontal: 0,
+  },
   termNote: {
     padding: space.md,
     marginBottom: space.xs,
@@ -1287,12 +1298,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.bg,
   },
-  tabsWrap: {
-    paddingHorizontal: layout.screenPadding,
-    paddingBottom: space.sm,
-  },
   content: {
     paddingHorizontal: layout.screenPadding,
+    paddingTop: space.md,
     paddingBottom: space.giant,
   },
   contentWithBar: {

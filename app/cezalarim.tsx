@@ -22,7 +22,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useMemo } from "react";
-import { FlatList, StyleSheet, Text, View } from "react-native";
+import { FlatList, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   Badge,
@@ -37,17 +37,11 @@ import {
   useRefresh,
   type Tone,
 } from "@/components/ui";
+import { DeadlineBanner, isUrgentDeadline, remainingShort } from "@/components/club/DeadlineBanner";
 import { getMyPenalties, type Penalty } from "@/lib/api/panel";
 import { formatDateShort } from "@/lib/format";
 import { useAuth } from "@/providers/AuthProvider";
-import {
-  colors,
-  fonts,
-  layout,
-  space,
-  textScale,
-  type,
-} from "@/theme";
+import { colors, layout, space } from "@/theme";
 
 /* ============================ SABİTLER / TİPLER ============================ */
 
@@ -111,19 +105,6 @@ function rowPosition(index: number, total: number): "single" | "first" | "middle
   if (index === 0) return "first";
   if (index === total - 1) return "last";
   return "middle";
-}
-
-/** Kalan süre — "6 saat 12 dakika"; süre dolduysa null. */
-function remainingText(iso?: string | null): string | null {
-  if (!iso) return null;
-  const left = new Date(iso).getTime() - Date.now();
-  if (!Number.isFinite(left) || left <= 0) return null;
-  const days = Math.floor(left / 86_400_000);
-  const hours = Math.floor((left % 86_400_000) / 3_600_000);
-  const minutes = Math.floor((left % 3_600_000) / 60_000);
-  if (days > 0) return `${days} gün ${hours} saat`;
-  if (hours > 0) return `${hours} saat ${minutes} dakika`;
-  return `${Math.max(1, minutes)} dakika`;
 }
 
 /* ================================= EKRAN ================================== */
@@ -216,7 +197,8 @@ export default function PenaltiesScreen() {
     () => (
       <View style={styles.headerBlock}>
         <ChipGroup style={styles.chips}>
-          {FILTERS.map((def) => (
+          {/* Boş aşama çipi gösterilmez: "CAS 0" bir seçenek değil, gürültü. */}
+          {FILTERS.filter((def) => def.key === "tumu" || def.key === filter || counts[def.key] > 0).map((def) => (
             <FilterChip
               key={def.key}
               def={def}
@@ -227,12 +209,15 @@ export default function PenaltiesScreen() {
           ))}
         </ChipGroup>
 
+        {/* En yakın son tarih: kendi bandında, kalan süre rakamla. */}
         {urgent ? (
-          <Text style={styles.urgent} {...textScale.long}>
-            ⏰ {urgent.penalty.player_name ?? "Dosya"} için {urgent.kind} süresi
-            işliyor: {remainingText(urgent.deadline) ?? "az bir süre"} kaldı.
-            Dosyaya dokunup metnini gönderebilirsin.
-          </Text>
+          <DeadlineBanner
+            title={urgent.kind === "savunma" ? "Savunma süresi işliyor" : "İtiraz süresi işliyor"}
+            detail={[urgent.penalty.match_label, urgent.penalty.player_name].filter(Boolean).join(" · ")}
+            deadline={urgent.deadline}
+            actionLabel="Dosyayı aç"
+            onPress={() => openPenalty(urgent.penalty.public_id)}
+          />
         ) : null}
 
         {query.isError && items.length > 0 ? (
@@ -240,7 +225,7 @@ export default function PenaltiesScreen() {
         ) : null}
       </View>
     ),
-    [counts, filter, items.length, query.error, query.isError, query.refetch, selectFilter, urgent],
+    [counts, filter, items.length, openPenalty, query.error, query.isError, query.refetch, selectFilter, urgent],
   );
 
   if (!auth.user) {
@@ -334,14 +319,17 @@ const PenaltyRow = React.memo(function PenaltyRow({
   const defenseOpen = canDefend(penalty);
   const objectionOpen = canObject(penalty);
   const deadline = defenseOpen ? penalty.defense_deadline_at : penalty.objection_deadline_at;
-  const left = defenseOpen || objectionOpen ? remainingText(deadline) : null;
+  const left = defenseOpen || objectionOpen ? remainingShort(deadline) : null;
 
   const leading = useMemo(
     () => ({ icon: stage.icon, tone: stage.tone }),
     [stage.icon, stage.tone],
   );
 
+  /* Başlık maç, alt satır kişi + tarih + süre. Uzun maç etiketi ("A – B")
+     satırı taşırmasın diye takım adı ayrıca yazılmaz. */
   const subtitle = [
+    left ? (defenseOpen ? "Savunma süresi" : "İtiraz süresi") : null,
     penalty.player_name,
     penalty.match_date ? formatDateShort(penalty.match_date) : null,
     penalty.match_count ? `${penalty.match_count} maç` : null,
@@ -356,7 +344,7 @@ const PenaltyRow = React.memo(function PenaltyRow({
       subtitle={subtitle || undefined}
       badge={
         left ? (
-          <Badge label={`${defenseOpen ? "SAVUNMA" : "İTİRAZ"} · ${left}`} tone="live" size="xs" />
+          <Badge icon="time" label={left} tone={isUrgentDeadline(deadline) ? "danger" : "warn"} size="xs" />
         ) : (
           <Badge label={stage.short} tone={stage.tone} size="xs" />
         )
@@ -393,12 +381,5 @@ const styles = StyleSheet.create({
    */
   chips: {
     marginHorizontal: -layout.screenPadding,
-  },
-  urgent: {
-    ...type.caption,
-    color: colors.warn,
-    fontFamily: fonts.bold,
-    letterSpacing: 0,
-    lineHeight: 16,
   },
 });

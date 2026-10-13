@@ -10,6 +10,13 @@
  * yazışmaları, yöneticinin kendi grupları ve bildirim akışı listelenir.
  *
  * Gerçek zamanlı güncelleme hooks/useChat.ts (soket + yoklama).
+ *
+ * TARAMA (yeniden tasarım): üyede aramanın altında tek süzgeç şeridi —
+ * Tümü · Okunmamış (sayı) · ve listede bulunan sohbet türleri (Yönetim,
+ * Takım, Kişiler, Gruplar). Okunmamış satırda saat ve sayaç MOR (Arena: mor =
+ * dikkat isteyen seçili durum); eski yeşil sayaç "sonuç" rengiyle karışıyordu.
+ * "Mesaj oluştur" tek kapıdan, alttaki geniş düğmeden açılır; başlıkta yalnız
+ * mesaj tercihleri (kimden mesaj alırım) durur.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -83,6 +90,8 @@ export function ChatInbox({ admin = false }: ChatInboxProps) {
   // Yönetim gelen kutusu filtreleri: varlık türü ve talep kategorisi.
   const [kind, setKind] = useState("");
   const [category, setCategory] = useState("");
+  // Üye süzgeci: "" tümü, "unread" okunmamış, yoksa sohbet türü grubu.
+  const [memberFilter, setMemberFilter] = useState<MemberFilter>("");
   const basePath = admin ? "/yonetim/sohbet" : "/sohbet";
 
   const memberQuery = useConversations();
@@ -96,12 +105,22 @@ export function ChatInbox({ admin = false }: ChatInboxProps) {
   }, [admin, queryClient]);
   const refresh = useRefresh(refetch, { refreshing: query.isRefetching });
 
+  const allConversations = useMemo(() => query.data?.conversations ?? [], [query.data]);
+
+  /** Listede gerçekten bulunan tür grupları — boş çip çizilmez. */
+  const presentGroups = useMemo(() => {
+    const present = new Set(allConversations.map((item) => TYPE_GROUP[item.type]));
+    return MEMBER_GROUPS.filter((group) => present.has(group.key));
+  }, [allConversations]);
+
   const conversations = useMemo(() => {
-    const list = query.data?.conversations ?? [];
+    let list = allConversations;
+    if (!admin && memberFilter === "unread") list = list.filter((item) => item.unread > 0);
+    else if (!admin && memberFilter) list = list.filter((item) => TYPE_GROUP[item.type] === memberFilter);
     const q = normalize(search.trim());
     if (!q) return list;
     return list.filter((item) => normalize(`${item.title} ${item.subtitle}`).includes(q));
-  }, [query.data, search]);
+  }, [admin, allConversations, memberFilter, search]);
 
   const unread = query.data?.unread ?? 0;
 
@@ -136,10 +155,7 @@ export function ChatInbox({ admin = false }: ChatInboxProps) {
         actions={
           admin
             ? [{ icon: "create-outline", onPress: compose, accessibilityLabel: "Mesaj oluştur" }]
-            : [
-                { icon: "options-outline", onPress: () => setPrefsOpen(true), accessibilityLabel: "Kimden mesaj kabul edeyim?" },
-                { icon: "create-outline", onPress: compose, accessibilityLabel: "Mesaj oluştur" },
-              ]
+            : [{ icon: "options-outline", onPress: () => setPrefsOpen(true), accessibilityLabel: "Kimden mesaj kabul edeyim?" }]
         }
         bottom={
           <View style={styles.searchWrap}>
@@ -166,6 +182,28 @@ export function ChatInbox({ admin = false }: ChatInboxProps) {
                   ))}
                 </ChipGroup>
               </>
+            ) : allConversations.length > 1 ? (
+              <ChipGroup contentPadding={0}>
+                <Chip label="Tümü" selected={memberFilter === ""} onPress={() => setMemberFilter("")} size="sm" />
+                <Chip
+                  label="Okunmamış"
+                  count={unread || undefined}
+                  selected={memberFilter === "unread"}
+                  onPress={() => setMemberFilter("unread")}
+                  size="sm"
+                />
+                {presentGroups.length > 1
+                  ? presentGroups.map((group) => (
+                      <Chip
+                        key={group.key}
+                        label={group.label}
+                        selected={memberFilter === group.key}
+                        onPress={() => setMemberFilter(group.key)}
+                        size="sm"
+                      />
+                    ))
+                  : null}
+              </ChipGroup>
             ) : null}
           </View>
         }
@@ -194,9 +232,15 @@ export function ChatInbox({ admin = false }: ChatInboxProps) {
           ListEmptyComponent={
             <EmptyState
               icon="chatbubbles-outline"
-              title={search ? "Eşleşen sohbet yok" : "Henüz sohbet yok"}
-              body={search ? "Başka bir ad dene." : admin ? "Üyeler yönetime yazdıkça burada listelenir; kalem ile bir üyeye ya da takıma yazabilirsiniz." : "Yönetime, takım grubuna ya da bir oyuncuya ilk mesajı gönder."}
-              action={search ? undefined : { label: "Mesaj oluştur", onPress: compose }}
+              title={search ? "Eşleşen sohbet yok" : memberFilter === "unread" && allConversations.length ? "Hepsi okundu" : memberFilter && allConversations.length ? "Bu süzgeçte sohbet yok" : "Henüz sohbet yok"}
+              body={search ? "Başka bir ad dene." : memberFilter && allConversations.length ? "Bütün sohbetlerine dönmek için Tümü'ne dokun." : admin ? "Üyeler yönetime yazdıkça burada listelenir; kalem ile bir üyeye ya da takıma yazabilirsiniz." : "Yönetime, takım grubuna ya da bir oyuncuya ilk mesajı gönder."}
+              action={
+                search
+                  ? undefined
+                  : memberFilter && allConversations.length
+                    ? { label: "Tümünü göster", onPress: () => setMemberFilter("") }
+                    : { label: "Mesaj oluştur", onPress: compose }
+              }
             />
           }
         />
@@ -219,6 +263,24 @@ export function ChatInbox({ admin = false }: ChatInboxProps) {
 const Separator = memo(function Separator() {
   return <View style={styles.separator} />;
 });
+
+type MemberFilter = "" | "unread" | "yonetim" | "takim" | "kisi" | "grup";
+
+/** Sohbet türü → üye süzgecindeki grup. */
+const TYPE_GROUP: Record<ChatConversation["type"], Exclude<MemberFilter, "" | "unread">> = {
+  management: "yonetim",
+  admin: "yonetim",
+  team: "takim",
+  direct: "kisi",
+  group: "grup",
+};
+
+const MEMBER_GROUPS: { key: Exclude<MemberFilter, "" | "unread">; label: string }[] = [
+  { key: "yonetim", label: "Yönetim" },
+  { key: "takim", label: "Takım" },
+  { key: "kisi", label: "Kişiler" },
+  { key: "grup", label: "Gruplar" },
+];
 
 const KIND_CHIPS: [string, string][] = [["", "Tümü"], ["team", "Takımlar"], ["player", "Oyuncular"], ["member", "Üyeler"]];
 const KIND_LABEL: Record<string, string> = { team: "Takım", player: "Oyuncu", member: "Üye", general: "Genel" };
@@ -243,7 +305,7 @@ const ConversationRow = memo(function ConversationRow({
       style={styles.row}
     >
       <View style={styles.avatarWrap}>
-        <Avatar name={conversation.title} image={conversation.avatar} size={50} ring={unread ? "brand" : "none"} />
+        <Avatar name={conversation.title} image={conversation.avatar} size={50} />
         <View style={[styles.typePip, conversation.type === "management" || conversation.type === "admin" ? styles.typePipBrand : null]}>
           <Ionicons name={TYPE_ICON[conversation.type]} size={10} color={colors.textOnBrand} />
         </View>
@@ -268,7 +330,7 @@ const ConversationRow = memo(function ConversationRow({
             <Badge label={`${conversation.pending.total} bekleyen`} tone="warn" size="sm" />
           ) : null}
           {unread ? (
-            <Badge label={conversation.unread > 99 ? "99+" : conversation.unread} tone="win" variant="solid" size="sm" />
+            <Badge label={conversation.unread > 99 ? "99+" : conversation.unread} tone="brand" variant="solid" size="sm" />
           ) : conversation.muted ? (
             <Ionicons name="notifications-off-outline" size={14} color={colors.textTertiary} />
           ) : null}
@@ -320,7 +382,7 @@ const styles = StyleSheet.create({
   title: { ...type.h3, color: colors.textPrimary, flex: 1 },
   titleUnread: { color: colors.textPrimary },
   time: { ...type.caption, color: colors.textTertiary },
-  timeUnread: { color: colors.win },
+  timeUnread: { color: colors.brandAccent, fontFamily: type.label.fontFamily },
   previewRow: { flex: 1, flexDirection: "row", alignItems: "center", gap: space.xs, minWidth: 0 },
   preview: { ...type.bodySm, color: colors.textSecondary, flex: 1 },
   previewUnread: { color: colors.textPrimary, fontFamily: type.label.fontFamily },

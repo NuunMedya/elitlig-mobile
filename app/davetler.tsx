@@ -416,7 +416,7 @@ export default function InvitesScreen() {
         {/* Oyuncu: ilan vitrini. */}
         {isPlayer && recruitments.length > 0 ? (
           <View>
-            <SectionHeader title="Oyuncu arayan takımlar" meta={String(recruitments.length)} />
+            <SectionHeader style={styles.flushHeader} title="Oyuncu arayan takımlar" meta={String(recruitments.length)} />
             <FlatList
               horizontal
               data={recruitments}
@@ -1087,6 +1087,12 @@ const PositionChip = React.memo(function PositionChip({
 /* ================================ STİLLER ================================= */
 
 const styles = StyleSheet.create({
+  /* Bölüm başlığı kendi ekran kenarı dolgusunu taşır; içerik zaten dolgulu
+     olduğu için burada sıfırlanır — aksi hâlde başlık kartlardan 14px içeride
+     dururdu. */
+  flushHeader: {
+    paddingHorizontal: 0,
+  },
   screen: {
     flex: 1,
     backgroundColor: colors.bg,

@@ -587,8 +587,10 @@ const ThreadRow = memo(function ThreadRow({
       accessibilityLabel={`${thread.subject}. ${
         unread ? `${thread.unread} okunmamış mesaj` : thread.status_label
       }`}
-      style={[styles.row, unread ? styles.rowUnread : null]}
+      style={styles.row}
     >
+      {/* Okunmamış: sol kenarda mor ray (bildirim merkeziyle aynı dil). */}
+      {unread ? <View style={styles.rail} /> : null}
       <View style={[styles.icon, unread ? styles.iconUnread : null]}>
         <Ionicons
           name={categoryIcon(thread.category_label)}
@@ -629,7 +631,7 @@ const ThreadRow = memo(function ThreadRow({
       </View>
 
       {unread ? (
-        <Badge label={thread.unread} tone="live" variant="solid" size="sm" />
+        <Badge label={thread.unread} tone="brand" variant="solid" size="sm" />
       ) : (
         <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
       )}
@@ -672,10 +674,15 @@ const styles = StyleSheet.create({
     borderWidth: hairline,
     borderColor: colors.border,
     backgroundColor: colors.surface1,
+    overflow: "hidden",
   },
-  rowUnread: {
-    borderColor: colors.brandBorder,
-    backgroundColor: colors.surface2,
+  rail: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 3,
+    backgroundColor: colors.brand,
   },
   icon: {
     width: 36,
@@ -683,7 +690,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.surface3,
+    backgroundColor: colors.surface2,
   },
   iconUnread: {
     backgroundColor: colors.brandDim,
@@ -698,7 +705,7 @@ const styles = StyleSheet.create({
     gap: space.sm,
   },
   subject: {
-    ...type.bodySm,
+    ...type.body,
     color: colors.textPrimary,
     flex: 1,
   },
@@ -711,7 +718,7 @@ const styles = StyleSheet.create({
     color: colors.textTertiary,
   },
   preview: {
-    ...type.caption,
+    ...type.bodySm,
     color: colors.textSecondary,
   },
   tagRow: {

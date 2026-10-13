@@ -5,12 +5,13 @@
  * gösteriyor, başlığı görselin altına yığıyordu; paylaş düğmesi ise tarihin
  * yanında kaybolmuş bir dairenin içindeydi. Artık ekran bir OKUMA ekranıdır:
  *
- *   1. Kapak GÖRSELİ tam genişlikte durur ve üstüne okunabilirlik gradyanı
- *      (`colors.scrimGradientTop → scrimGradientBottom`) serilir. Gradyanın
- *      son durağı ekran zemininin %92 opak hâli olduğu için başlık, görsel ne
- *      kadar parlak/karanlık olursa olsun okunur ve iki temada da doğrudur.
- *   2. Kategori rozeti + başlık gradyanın üstünde durur; görsel yoksa aynı
- *      blok düz zeminde aynı hiyerarşiyle çizilir (yerleşim kaymaz).
+ *   1. Kapak GÖRSELİ tam genişlikte, metinsiz durur. (Önceki sürüm başlığı
+ *      görselin üstüne koyuyordu; koyu scrim'in üstünde `textPrimary` —
+ *      açık temada siyah — başlık okunmuyordu. Afiş türü kapaklarda da
+ *      başlık afişin kendi yazısıyla çakışıyordu.) Başlık görselin ALTINDA,
+ *      kâğıtta, editoryal düzende: üst satır (kategori · tarih · okuma
+ *      süresi) → büyük başlık → kaynak.
+ *   2. Görsel yoksa aynı blok görselsiz çizilir; hiyerarşi değişmez.
  *   3. Gövde `type.bodyLg` + 26px satır aralığıyla ve `textScale.long` ile
  *      yazılır: uzun metin kullanıcının yazı tipi tercihine kadar büyüyebilir
  *      (tavan ×2), çünkü burada tabloya sığma kaygısı yoktur.
@@ -20,7 +21,10 @@
  *
  * İÇERİK HTML: sunucu içeriği temizlenmiş HTML olarak saklar. React Native
  * HTML render etmediği için blok etiketleri paragraf sınırı sayılıp düz metne
- * indirgenir; bu, ek bir render bağımlılığı getirmeden okunur sonuç verir.
+ * indirgenir. GÖVDEDEKİ GÖRSELLER (`<img>`) artık atılmaz: kendi blokları
+ * olur ve gerçek oranlarıyla tam genişlikte çizilir — editörün afişi
+ * haberin parçasıdır. Kapakla aynı görsel ve başlığı tekrar eden ilk
+ * paragraf ikinci kez gösterilmez.
  *
  * İLGİLİ BAĞLANTI: editör haberinin gövdesinde maç/takım kimliği YOKTUR;
  * sunucu `serializeNews` yalnız kapsam alanlarını (city/league/season) döndürür.
@@ -30,7 +34,6 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
-import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useMemo } from "react";
 import {
@@ -41,11 +44,10 @@ import {
   Text,
   View,
   useWindowDimensions,
-  type ColorValue,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
-  Badge,
+  BrandMark,
   Button,
   Divider,
   EmptyState,
@@ -70,6 +72,7 @@ import {
   space,
   textScale,
   type,
+  upperTR,
 } from "@/theme";
 
 /* ============================ SABİTLER / TİPLER ============================ */
@@ -111,16 +114,67 @@ interface RelatedLink {
 
 /* ============================== SAF YARDIMCILAR =========================== */
 
-/** Blok etiketlerini paragraf sınırı sayarak HTML'i okunur metne çevirir. */
-function toParagraphs(html?: string | null): string[] {
+/** Gövde bloğu: düz paragraf ya da görsel. */
+type BodyBlock = { kind: "text"; text: string } | { kind: "image"; uri: string };
+
+const IMAGE_MARK = "\u0000IMG:";
+
+/**
+ * Blok etiketlerini paragraf sınırı sayarak HTML'i okunur bloklara çevirir.
+ * `<img src>` kendi bloğu olur; kapakla aynı görsel ve başlığın tekrarı atılır.
+ */
+function toBlocks(html: string | null | undefined, skip: { cover: string | null; title: string }): BodyBlock[] {
   if (!html) return [];
-  return String(html)
+  const blocks = String(html)
+    .replace(/<img[^>]*?src=["']([^"']+)["'][^>]*>/gi, (_m, src: string) => `\n\n${IMAGE_MARK}${src}\n\n`)
     .replace(/<\/(p|div|h[1-6]|li|blockquote)>/gi, "\n\n")
     .replace(/<br\s*\/?>/gi, "\n")
     .split("\n\n")
-    .map((block) => stripHtml(block, 5000))
-    .filter(Boolean);
+    .map((block): BodyBlock | null => {
+      const trimmed = block.trim();
+      if (trimmed.startsWith(IMAGE_MARK)) {
+        const uri = mediaUrl(trimmed.slice(IMAGE_MARK.length));
+        return uri ? { kind: "image", uri } : null;
+      }
+      const text = stripHtml(block, 5000);
+      return text ? { kind: "text", text } : null;
+    })
+    .filter((block): block is BodyBlock => block != null);
+
+  const title = skip.title.trim();
+  return blocks.filter((block, index) => {
+    if (block.kind === "image") return block.uri !== skip.cover;
+    // Başlığın gövdede birebir tekrarı (ilk birkaç blokta) atılır.
+    return !(index < 3 && block.text.trim() === title);
+  });
 }
+
+/**
+ * Gövde görseli: gerçek oranıyla tam genişlikte. Oran yüklenene kadar 4:3
+ * yer tutulur ki metin zıplamasın; aşırı uç oranlar (çok uzun afiş) 3:4'te
+ * sınırlanır, yoksa tek görsel üç ekran boyu kaplar.
+ */
+const BodyImage = React.memo(function BodyImage({ uri }: { uri: string }) {
+  const [ratio, setRatio] = React.useState(4 / 3);
+  React.useEffect(() => {
+    let alive = true;
+    Image.getSize(
+      uri,
+      (width, height) => {
+        if (alive && width > 0 && height > 0) setRatio(Math.min(2.2, Math.max(0.75, width / height)));
+      },
+      () => undefined,
+    );
+    return () => {
+      alive = false;
+    };
+  }, [uri]);
+  return (
+    <View style={[styles.bodyImage, { aspectRatio: ratio }]}>
+      <Image source={{ uri }} style={StyleSheet.absoluteFill} resizeMode="cover" accessibilityIgnoresInvertColors />
+    </View>
+  );
+});
 
 /** "4 dk okuma" — kelime sayısından tahmin, en az 1 dakika. */
 function readingMinutes(content?: string | null): number {
@@ -195,7 +249,10 @@ export default function NewsDetailScreen() {
 
   const item = query.data as NewsDetail | undefined;
   const cover = mediaUrl(item?.cover_image_url);
-  const paragraphs = useMemo(() => toParagraphs(item?.content), [item?.content]);
+  const blocks = useMemo(
+    () => toBlocks(item?.content, { cover, title: item?.title ?? "" }),
+    [item?.content, item?.title, cover],
+  );
   const links = useMemo(() => (item ? relatedLinks(item) : []), [item]);
 
   /**
@@ -280,8 +337,7 @@ export default function NewsDetailScreen() {
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader
-        title={category}
-        overline="ELİTLİG HABER"
+        title="Haber"
         back
         scrollY={scrollY}
         actions={headerActions}
@@ -292,37 +348,52 @@ export default function NewsDetailScreen() {
         contentContainerStyle={styles.content}
         refreshControl={refresh.control}
       >
-        <Hero cover={cover} category={category} title={item.title} width={width} />
+        <Hero cover={cover} width={width} />
 
         <View style={styles.body}>
-          <View style={styles.metaRow}>
-            <Text style={styles.meta} numberOfLines={2} {...textScale.dense}>
-              {formatDateLong(item.published_at)}
+          <View style={styles.titleBlock}>
+            <View style={styles.kickerRow}>
+              <Text style={styles.kicker} {...textScale.badge}>
+                {upperTR(category)}
+              </Text>
+              <View style={styles.metaDot} />
+              <Text style={styles.meta} numberOfLines={1} {...textScale.dense}>
+                {formatDateLong(item.published_at)}
+              </Text>
+              <View style={styles.metaDot} />
+              <Text style={styles.meta} {...textScale.dense}>
+                {minutes} dk okuma
+              </Text>
+            </View>
+            <Text style={styles.title} accessibilityRole="header" {...textScale.long}>
+              {item.title}
             </Text>
-            <View style={styles.metaDot} />
-            <Text style={styles.meta} {...textScale.dense}>
-              {minutes} dk okuma
-            </Text>
+            <View style={styles.sourceRow}>
+              <BrandMark size="sm" />
+              <Text style={styles.source} {...textScale.dense}>
+                {SOURCE_LABEL}
+              </Text>
+            </View>
           </View>
-          <Text style={styles.source} {...textScale.dense}>
-            Kaynak: {SOURCE_LABEL}
-          </Text>
 
           {item.summary ? (
-            <>
-              <Text style={styles.lead} {...textScale.long}>
-                {item.summary.trim()}
-              </Text>
-              <Divider variant="section" />
-            </>
+            <Text style={styles.lead} {...textScale.long}>
+              {item.summary.trim()}
+            </Text>
           ) : null}
 
-          {paragraphs.length ? (
-            paragraphs.map((paragraph, index) => (
-              <Text key={index} style={styles.paragraph} {...textScale.long}>
-                {paragraph}
-              </Text>
-            ))
+          <Divider variant="section" />
+
+          {blocks.length ? (
+            blocks.map((block, index) =>
+              block.kind === "image" ? (
+                <BodyImage key={`img-${index}`} uri={block.uri} />
+              ) : (
+                <Text key={`p-${index}`} style={styles.paragraph} {...textScale.long}>
+                  {block.text}
+                </Text>
+              ),
+            )
           ) : (
             <EmptyState
               icon="document-text-outline"
@@ -368,58 +439,19 @@ export default function NewsDetailScreen() {
 /* ============================== ALT BİLEŞENLER ============================ */
 
 /**
- * Kapak bloğu. Görsel varsa: tam genişlikte resim + üstünde gradyan + gradyanın
- * içinde rozet ve başlık. Görsel yoksa: aynı blok düz zeminde çizilir; böylece
- * görselsiz haberde başlık yukarı zıplamaz, hiyerarşi aynı kalır.
+ * Kapak: tam genişlikte, metinsiz görsel (bkz. dosya başlığı). Görsel yoksa
+ * hiçbir şey çizilmez — başlık bloğu doğrudan kâğıtta başlar.
  */
-const Hero = React.memo(function Hero({
-  cover,
-  category,
-  title,
-  width,
-}: {
-  cover: string | null;
-  category: string;
-  title: string;
-  width: number;
-}) {
-  /** Gradyanın son durağı ekran zemininin %92'si — metin daima okunur. */
-  const scrim: readonly [ColorValue, ColorValue] = [
-    colors.scrimGradientTop,
-    colors.scrimGradientBottom,
-  ];
-
-  if (!cover) {
-    return (
-      <View style={styles.heroPlain}>
-        <Badge label={category} tone="brand" />
-        <Text style={styles.title} {...textScale.long}>
-          {title}
-        </Text>
-      </View>
-    );
-  }
-
+const Hero = React.memo(function Hero({ cover, width }: { cover: string | null; width: number }) {
+  if (!cover) return null;
   return (
-    <View style={[styles.hero, { minHeight: Math.round(width * 0.62) }]}>
+    <View style={[styles.hero, { height: Math.round(width * 0.62) }]}>
       <Image
         source={{ uri: cover }}
         style={StyleSheet.absoluteFill}
         resizeMode="cover"
         accessibilityIgnoresInvertColors
       />
-      <LinearGradient
-        colors={scrim}
-        locations={[0.15, 1]}
-        style={StyleSheet.absoluteFill}
-        pointerEvents="none"
-      />
-      <View style={styles.heroText}>
-        <Badge label={category} tone="brand" variant="solid" />
-        <Text style={styles.title} {...textScale.long}>
-          {title}
-        </Text>
-      </View>
     </View>
   );
 });
@@ -446,66 +478,74 @@ const styles = StyleSheet.create({
 
   /* — Kapak — */
   hero: {
-    justifyContent: "flex-end",
-    backgroundColor: colors.surface2,
-  },
-  heroText: {
-    paddingHorizontal: layout.screenPadding,
-    paddingTop: space.xxl,
-    paddingBottom: space.lg,
-    gap: space.sm,
-    alignItems: "flex-start",
-  },
-  heroPlain: {
-    paddingHorizontal: layout.screenPadding,
-    paddingTop: space.sm,
-    paddingBottom: space.md,
-    gap: space.sm,
-    alignItems: "flex-start",
-  },
-  title: {
-    ...type.display,
-    color: colors.textPrimary,
-    lineHeight: 28,
+    backgroundColor: colors.surface3,
   },
 
   /* — Gövde — */
   body: {
-    paddingHorizontal: layout.screenPadding,
-    paddingTop: space.md,
-    gap: space.md,
+    paddingHorizontal: layout.screenPadding + space.xxs,
+    paddingTop: space.lg,
+    gap: space.lg,
   },
-  metaRow: {
-    flexDirection: "row",
-    alignItems: "center",
+  titleBlock: {
     gap: space.sm,
   },
-  meta: {
-    ...type.label,
-    color: colors.textSecondary,
+  kickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: space.sm,
   },
-  /** İki meta arasındaki 3px ayraç noktası. */
+  kicker: {
+    ...type.overline,
+    color: colors.brandAccent,
+  },
+  meta: {
+    ...type.caption,
+    color: colors.textTertiary,
+  },
+  /** Meta parçaları arasındaki 3px ayraç noktası. */
   metaDot: {
     width: 3,
     height: 3,
     borderRadius: radius.pill,
     backgroundColor: colors.textTertiary,
   },
+  title: {
+    ...type.display,
+    fontSize: 26,
+    lineHeight: 32,
+    letterSpacing: -0.6,
+    color: colors.textPrimary,
+  },
+  sourceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    marginTop: space.xxs,
+  },
   source: {
-    ...type.caption,
-    color: colors.textTertiary,
-    marginTop: -space.sm,
+    ...type.label,
+    color: colors.textSecondary,
   },
   lead: {
     ...type.bodyLg,
-    color: colors.textSecondary,
-    lineHeight: 23,
+    fontSize: 16,
+    lineHeight: 25,
+    color: colors.textPrimary,
     fontFamily: fonts.semibold,
   },
   paragraph: {
     ...type.bodyLg,
+    fontSize: 16,
+    lineHeight: 27,
     color: colors.textPrimary,
-    lineHeight: 26,
+  },
+  bodyImage: {
+    width: "100%",
+    borderRadius: radius.md,
+    overflow: "hidden",
+    backgroundColor: colors.surface3,
   },
   related: {
     marginTop: space.sm,

@@ -20,6 +20,15 @@
  *                 uygulanır ve yalnızca net eklemeler kadar hak düşer.
  *                 Gönderilmeden geri alınan hamlelerin izi kalmaz.
  *
+ * İKİ BÖLÜM (`section`): Kadro Yönetimi'nde iki AYRI sekmedir.
+ *   "transfer" → oyuncu ara + bekleyen davet/teklifler (günlük iş),
+ *   "season"   → sezon kadrosu taslağı (sezonda birkaç kez).
+ * Eskiden ikisi tek kaydırmada alt alta duruyordu; taslağı göndermek için
+ * arama kutusunu ve bekleyen işlemleri geçmek gerekiyordu. Sezon bölümünde
+ * "Yönetime gönder" artık listenin sonunda değil, ALTTA SABİT bir çubukta:
+ * değişiklik özeti (+ekleme / −çıkarma / lisans) ve gönder düğmesi her an
+ * görünür (Arena "Form" kalıbı: altta sabit birincil düğme).
+ *
  * Sunucu sözleşmesi: elitlig-server/docs/team-roster-management-api.md
  */
 
@@ -29,6 +38,7 @@ import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RefreshControlProps } from "react-native";
 import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   Avatar,
   Badge,
@@ -67,7 +77,7 @@ import {
 } from "@/lib/api/team";
 import { mediaUrl } from "@/lib/format";
 import { ApiError } from "@/lib/http";
-import { colors, elevate, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
+import { colors, elevate, fonts, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
 
 /** Takım paneli önbelleğiyle paylaşılan anahtar — kadro değişince diğer ekranlar da tazelenir. */
 export const SQUAD_BUILDER_KEY = ["takim", "squad-builder"] as const;
@@ -161,13 +171,16 @@ const shortDate = (value: string | null | undefined) =>
    ══════════════════════════════════════════════════════════════════════════ */
 
 export function SquadBuilderView({
+  section = "transfer",
   refreshControl,
 }: {
+  section?: "transfer" | "season";
   refreshControl?: React.ReactElement<RefreshControlProps>;
 }) {
   const toast = useToast();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const insets = useSafeAreaInsets();
 
   const [seasonId, setSeasonId] = useState<number | null>(null);
   const [filter, setFilter] = useState<"all" | "in" | "out" | "changed">("all");
@@ -416,84 +429,123 @@ export function SquadBuilderView({
 
   const pendingList = data.pending;
 
+  /* ── OYUNCU EKLE (transfer) ─────────────────────────────────────────── */
+  if (section === "transfer") {
+    return (
+      <>
+        <ScrollView
+          contentContainerStyle={styles.content}
+          refreshControl={refreshControl}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
+          <MetricGrid columns={2}>
+            <MetricTile label="Takım oyuncusu" value={String(data.summary.teamPlayers)} icon="people-outline" />
+            <MetricTile
+              label="Transfer hakkı"
+              value={transferRightsLabel(status)}
+              hint={season?.name}
+              tone={rulesApply && status?.transferRights?.available === 0 ? "warn" : "accent"}
+              icon="swap-horizontal-outline"
+            />
+          </MetricGrid>
+
+          <SectionHeader title="Oyuncu ara" meta="davet ya da teklif" style={styles.flushHeader} />
+          <Input
+            variant="search"
+            value={term}
+            onChangeText={setTerm}
+            placeholder="Oyuncu adı yaz…"
+            autoCorrect={false}
+            autoCapitalize="words"
+            returnKeyType="search"
+            accessibilityLabel="Oyuncu ara"
+          />
+          {results === null ? (
+            <View style={styles.howTo}>
+              <HowToRow icon="mail-outline" title="Serbest oyuncu" body="Davet gönderilir; kabul edince kadrona katılır." />
+              <HowToRow icon="swap-horizontal-outline" title="Takımlı oyuncu" body="Transfer teklifi gönderilir: bonservis, bitiş, mesaj." />
+              <HowToRow icon="shield-checkmark-outline" title="Hesabı olmayan" body="Teklif lig yönetiminin onayıyla sonuçlanır." />
+            </View>
+          ) : searching && results.length === 0 ? (
+            <SkeletonListRow count={3} avatar />
+          ) : results.length === 0 ? (
+            <EmptyState
+              icon="search-outline"
+              title="Oyuncu bulunamadı"
+              body={`“${term.trim()}” ile eşleşen oyuncu yok. Adın yazımını kontrol et.`}
+              variant="inline"
+              compact
+            />
+          ) : (
+            <View style={styles.group}>
+              {results.map((item, index) => (
+                <CandidateRow key={item.id} item={item} disabled={busy} onInvite={invite} onOffer={openOffer} first={index === 0} />
+              ))}
+            </View>
+          )}
+
+          <SectionHeader title="Bekleyen işlemler" meta={pendingList.length ? String(pendingList.length) : undefined} style={styles.flushHeader} />
+          {pendingList.length > 0 ? (
+            <View style={styles.group}>
+              {pendingList.map((item, index) => (
+                <PendingRow key={`${item.kind}-${item.id}`} item={item} onPress={openPending} first={index === 0} />
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.hint} {...textScale.long}>
+              Yanıt bekleyen davet ya da teklifin yok.
+            </Text>
+          )}
+        </ScrollView>
+
+        {offerTarget ? (
+          <QuickOfferSheet
+            candidate={offerTarget}
+            busy={recruitMutation.isPending}
+            onClose={closeOffer}
+            onSubmit={(terms) => recruitMutation.mutate({ playerId: offerTarget.id, ...terms })}
+            allowLoan={!offerTarget.isFreeAgent}
+          />
+        ) : null}
+      </>
+    );
+  }
+
+  /* ── SEZON KADROSU (season) ─────────────────────────────────────────── */
+  const showBar = Boolean(season && draft && !locked);
+
   return (
-    <>
+    <View style={styles.flex}>
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, showBar ? styles.contentWithBar : null]}
         refreshControl={refreshControl}
         keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
       >
-        {/* Özet */}
-        <MetricGrid columns={2}>
-          <MetricTile label="Takım oyuncusu" value={String(data.summary.teamPlayers)} icon="people-outline" />
-          <MetricTile
-            label="Taslak kadro"
-            value={rulesApply ? `${counts.inDraft} / ${capLabel(status?.general)}` : String(counts.inDraft)}
-            hint={season?.name}
-            icon="calendar-outline"
-          />
-          <MetricTile
-            label="Lisanslı"
-            value={rulesApply ? `${counts.licensed} / ${capLabel(status?.licensed)}` : String(counts.licensed)}
-            icon="id-card-outline"
-          />
-          <MetricTile
-            label="Transfer hakkı"
-            value={transferRightsLabel(status)}
-            hint={rulesApply && counts.add > 0 && draft?.rules.rights_after != null ? `Onayda → ${draft.rules.rights_after}` : undefined}
-            tone={rulesApply && status?.transferRights?.available === 0 ? "warn" : "accent"}
-            icon="swap-horizontal-outline"
-          />
-        </MetricGrid>
-
-        {/* ── Oyuncu ekle ── */}
-        <SectionHeader title="Oyuncu ekle" meta="davet ya da teklif" />
-        <Input
-          variant="search"
-          value={term}
-          onChangeText={setTerm}
-          placeholder="Oyuncu adı yaz…"
-          autoCorrect={false}
-          autoCapitalize="words"
-          returnKeyType="search"
-          accessibilityLabel="Oyuncu ara"
-        />
-        {results === null ? (
-          <Text style={styles.hint} {...textScale.long}>
-            En az {MIN_QUERY} harf yaz. Her oyuncu için yapılacak tek işlem hazır gelir: serbest oyuncuya davet,
-            takımlı oyuncuya transfer teklifi.
-          </Text>
-        ) : searching && results.length === 0 ? (
-          <SkeletonListRow count={3} avatar />
-        ) : results.length === 0 ? (
-          <Text style={styles.hint} {...textScale.long}>
-            “{term.trim()}” ile eşleşen oyuncu bulunamadı.
-          </Text>
-        ) : (
-          results.map((item) => (
-            <CandidateRow key={item.id} item={item} disabled={busy} onInvite={invite} onOffer={openOffer} />
-          ))
-        )}
-
-        {pendingList.length > 0 ? (
-          <>
-            <SectionHeader title="Bekleyen işlemler" meta={`${pendingList.length}`} />
-            {pendingList.map((item) => (
-              <PendingRow key={`${item.kind}-${item.id}`} item={item} onPress={openPending} />
-            ))}
-          </>
-        ) : null}
-
-        {/* ── Sezon kadrosu taslağı ── */}
-        <SectionHeader title="Sezon kadrosu" meta={season ? season.name : undefined} />
         {data.seasons.length > 1 ? (
-          <ChipGroup>
+          <ChipGroup contentPadding={0}>
             {data.seasons.map((item) => (
               <SeasonChip key={item.id} id={item.id} label={item.name} selected={item.id === activeSeasonId} onPress={setSeasonId} />
             ))}
           </ChipGroup>
         ) : null}
+
+        <MetricGrid columns={3}>
+          <MetricTile
+            label="Kadro"
+            value={rulesApply ? `${counts.inDraft}/${capLabel(status?.general)}` : String(counts.inDraft)}
+          />
+          <MetricTile
+            label="Lisanslı"
+            value={rulesApply ? `${counts.licensed}/${capLabel(status?.licensed)}` : String(counts.licensed)}
+          />
+          <MetricTile
+            label="Hak"
+            value={transferRightsLabel(status)}
+            hint={rulesApply && counts.add > 0 && draft?.rules.rights_after != null ? `Onayda → ${draft.rules.rights_after}` : undefined}
+            tone={rulesApply && status?.transferRights?.available === 0 ? "warn" : "accent"}
+          />
+        </MetricGrid>
 
         {!season ? (
           <EmptyState
@@ -503,14 +555,35 @@ export function SquadBuilderView({
             variant="inline"
           />
         ) : !draft ? (
-          <Text style={styles.hint} {...textScale.long}>
-            Taslak bilgisi alınamadı. Aşağı çekerek yeniden dene.
-          </Text>
+          <EmptyState
+            icon="cloud-offline-outline"
+            title="Taslak alınamadı"
+            body="Sezon kadrosu taslağı yüklenemedi."
+            action={{ label: "Tekrar dene", onPress: () => void overviewQuery.refetch(), haptic: "light" }}
+            variant="inline"
+            compact
+          />
         ) : (
           <>
-            <Text style={styles.hint} {...textScale.long}>
-              Önce taslakta düzenle, sonra yönetime gönder. Gönderene kadar hiçbir hamle transfer hakkı düşürmez.
-            </Text>
+            {/* Akış: üç adım; bulunduğun adım menekşe. */}
+            <View style={styles.steps}>
+              {[
+                { key: "edit", label: "Taslakta düzenle", active: !locked },
+                { key: "send", label: "Yönetime gönder", active: locked },
+                { key: "done", label: "Onay", active: false },
+              ].map((step, index) => (
+                <View key={step.key} style={styles.step}>
+                  <View style={[styles.stepDot, step.active ? styles.stepDotActive : null]}>
+                    <Text style={[styles.stepNum, step.active ? styles.stepNumActive : null]} {...textScale.badge}>
+                      {index + 1}
+                    </Text>
+                  </View>
+                  <Text style={[styles.stepLabel, step.active ? styles.stepLabelActive : null]} numberOfLines={1} {...textScale.dense}>
+                    {step.label}
+                  </Text>
+                </View>
+              ))}
+            </View>
 
             {locked ? (
               <View style={[styles.banner, styles.bannerSubmitted]}>
@@ -558,7 +631,7 @@ export function SquadBuilderView({
               items={[
                 { key: "all", label: `Tümü ${rows.length}` },
                 { key: "in", label: `Kadroda ${counts.inDraft}` },
-                { key: "out", label: `Dışarı ${rows.length - counts.inDraft}` },
+                { key: "out", label: `Dışarıda ${rows.length - counts.inDraft}` },
                 { key: "changed", label: `Değişen ${counts.changed}`, dot: counts.changed > 0 },
               ]}
             />
@@ -568,59 +641,81 @@ export function SquadBuilderView({
             ) : null}
 
             {rows.length === 0 ? (
-              <Text style={styles.hint} {...textScale.long}>
-                Takımda henüz oyuncu yok. Yukarıdan oyuncu ara ve kadrona kat.
-              </Text>
+              <EmptyState
+                icon="people-outline"
+                title="Takımda oyuncu yok"
+                body="Önce Transfer sekmesinden oyuncu ekle; sonra sezon kadrosuna al."
+                variant="inline"
+                compact
+              />
             ) : visibleRows.length === 0 ? (
               <Text style={styles.hint} {...textScale.long}>
-                Bu filtrede oyuncu yok.
+                Bu süzgeçte oyuncu yok.
               </Text>
             ) : (
-              visibleRows.map((row) => (
-                <RosterRow key={row.id} row={row} disabled={busy} locked={locked} onToggle={toggleRow} onLicense={toggleLicense} />
-              ))
-            )}
-
-            {!locked ? (
-              <View style={styles.draftFoot}>
-                <View style={styles.draftSummary}>
-                  {counts.changed > 0 ? (
-                    <>
-                      <Badge label={`+${counts.add}`} tone="win" />
-                      <Badge label={`−${counts.remove}`} tone="danger" />
-                      <Badge label={`Lisans ${counts.license}`} tone="info" />
-                      <Text style={styles.hint} {...textScale.dense}>
-                        {rulesApply && draft.rules.transfer_rights && !draft.rules.transfer_rights.unlimited ? `Onayda ${counts.add} hak düşer.` : "Gönderilmedi."}
-                      </Text>
-                    </>
-                  ) : (
-                    <Text style={styles.hint} {...textScale.long}>
-                      Taslak aktif kadroyla aynı; değişiklik yapınca burada özetlenir.
-                    </Text>
-                  )}
-                </View>
-                <View style={styles.draftActions}>
-                  <Button label="Sıfırla" size="sm" variant="ghost" icon="arrow-undo" onPress={resetDraft} disabled={busy || counts.changed === 0} />
-                  <Button label="Yönetime gönder" size="sm" icon="paper-plane" onPress={submitDraft} disabled={busy || !draft.can_submit} />
-                </View>
+              <View style={styles.group}>
+                {visibleRows.map((row, index) => (
+                  <RosterRow key={row.id} row={row} disabled={busy} locked={locked} onToggle={toggleRow} onLicense={toggleLicense} first={index === 0} />
+                ))}
               </View>
-            ) : null}
+            )}
           </>
         )}
       </ScrollView>
 
-      {offerTarget ? (
-        <QuickOfferSheet
-          candidate={offerTarget}
-          busy={recruitMutation.isPending}
-          onClose={closeOffer}
-          onSubmit={(terms) => recruitMutation.mutate({ playerId: offerTarget.id, ...terms })}
-          allowLoan={!offerTarget.isFreeAgent}
-        />
+      {/* SABİT GÖNDERİM ÇUBUĞU — taslak düzenlenebilirken her an görünür. */}
+      {showBar && draft ? (
+        <View style={[styles.bar, { paddingBottom: space.md + insets.bottom }]}>
+          <View style={styles.barSummary}>
+            {counts.changed > 0 ? (
+              <>
+                <Text style={styles.barTitle} {...textScale.dense}>
+                  {counts.changed} değişiklik
+                </Text>
+                <Text style={styles.barMeta} numberOfLines={1} {...textScale.dense}>
+                  +{counts.add} · −{counts.remove} · lisans {counts.license}
+                  {rulesApply && draft.rules.transfer_rights && !draft.rules.transfer_rights.unlimited ? ` · onayda ${counts.add} hak` : ""}
+                </Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.barTitle} {...textScale.dense}>
+                  Değişiklik yok
+                </Text>
+                <Text style={styles.barMeta} numberOfLines={1} {...textScale.dense}>
+                  Taslak aktif kadroyla aynı
+                </Text>
+              </>
+            )}
+          </View>
+          <Button label="Sıfırla" size="sm" variant="ghost" onPress={resetDraft} disabled={busy || counts.changed === 0} />
+          <Button label="Gönder" size="sm" icon="paper-plane" onPress={submitDraft} disabled={busy || !draft.can_submit} />
+        </View>
       ) : null}
-    </>
+    </View>
   );
 }
+
+/** Arama boşken: üç oyuncu türü için tek satırlık "ne olur" anlatımı. */
+const HowToRow = React.memo(function HowToRow({
+  icon,
+  title,
+  body,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  body: string;
+}) {
+  return (
+    <View style={styles.howToRow}>
+      <Ionicons name={icon} size={16} color={colors.brandAccent} />
+      <Text style={styles.howToText} {...textScale.long}>
+        <Text style={styles.howToTitle}>{title}: </Text>
+        {body}
+      </Text>
+    </View>
+  );
+});
 
 /* ══════════════════════════════════════════════════════════════════════════
    Satırlar
@@ -647,9 +742,11 @@ const CandidateRow = React.memo(function CandidateRow({
   disabled,
   onInvite,
   onOffer,
+  first,
 }: {
   item: SquadCandidate;
   disabled: boolean;
+  first?: boolean;
   onInvite: (item: SquadCandidate) => void;
   onOffer: (item: SquadCandidate) => void;
 }) {
@@ -670,7 +767,7 @@ const CandidateRow = React.memo(function CandidateRow({
   else trailing = <Button label="Teklif gönder" size="sm" icon="swap-horizontal" onPress={handleOffer} disabled={disabled} />;
 
   return (
-    <View style={styles.row}>
+    <View style={[styles.row, first ? null : styles.rowDivided]}>
       <Avatar name={item.name} image={mediaUrl(item.image)} size={36} />
       <View style={styles.rowTexts}>
         <Text style={styles.rowTitle} numberOfLines={1} {...textScale.dense}>
@@ -693,8 +790,10 @@ const CandidateRow = React.memo(function CandidateRow({
 const PendingRow = React.memo(function PendingRow({
   item,
   onPress,
+  first,
 }: {
   item: SquadPendingItem;
+  first?: boolean;
   onPress: (item: SquadPendingItem) => void;
 }) {
   const handlePress = useCallback(() => onPress(item), [item, onPress]);
@@ -705,7 +804,7 @@ const PendingRow = React.memo(function PendingRow({
         ? "Teklif · lig yönetimi onayı bekleniyor"
         : "Transfer teklifi gönderildi";
   return (
-    <Touchable feedback="row" haptic="selection" onPress={handlePress} accessibilityRole="button" style={styles.row}>
+    <Touchable feedback="row" haptic="selection" onPress={handlePress} accessibilityRole="button" style={[styles.row, first ? null : styles.rowDivided]}>
       <Avatar name={item.player?.name} image={mediaUrl(item.player?.image)} size={36} />
       <View style={styles.rowTexts}>
         <Text style={styles.rowTitle} numberOfLines={1} {...textScale.dense}>
@@ -733,8 +832,10 @@ const RosterRow = React.memo(function RosterRow({
   locked,
   onToggle,
   onLicense,
+  first,
 }: {
   row: DraftRowModel;
+  first?: boolean;
   disabled: boolean;
   locked: boolean;
   onToggle: (row: DraftRowModel, add: boolean) => void;
@@ -755,7 +856,7 @@ const RosterRow = React.memo(function RosterRow({
   const change = row.change ? CHANGE_LABEL[row.change] : null;
 
   return (
-    <View style={[styles.row, row.inDraft ? styles.rowIn : null]}>
+    <View style={[styles.row, first ? null : styles.rowDivided, row.inDraft ? null : styles.rowOut]}>
       <Avatar name={row.name} image={mediaUrl(row.image)} size={36} jersey={row.jerseyNumber} />
       <View style={styles.rowTexts}>
         <Text style={styles.rowTitle} numberOfLines={1} {...textScale.dense}>
@@ -764,7 +865,7 @@ const RosterRow = React.memo(function RosterRow({
         <Text style={styles.rowMeta} numberOfLines={1} {...textScale.dense}>
           {meta || "Mevki yok"}
         </Text>
-        {change ? <Badge label={change.label} tone={change.tone} /> : null}
+        {change ? <Badge label={change.label} tone={change.tone} size="xs" style={styles.changeBadge} /> : null}
       </View>
       {row.inDraft ? (
         <>
@@ -917,21 +1018,39 @@ const styles = StyleSheet.create({
     ...type.caption,
     color: colors.textTertiary,
   },
+  /* Satırlar tek bir grup kartının içinde, ince ayraçlarla — her satırı ayrı
+     karta koymak (eski hâl) listeyi kart yığınına çeviriyordu (Arena §1.3). */
+  group: {
+    ...elevate(1),
+    borderRadius: radius.lg,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    backgroundColor: colors.surface1,
+    overflow: "hidden",
+  },
+  flushHeader: {
+    paddingHorizontal: 0,
+  },
   row: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.sm,
-    minHeight: layout.listRowHeight,
+    minHeight: layout.listRowHeightTwoLine,
     paddingHorizontal: space.md,
     paddingVertical: space.s,
-    borderRadius: radius.md,
     backgroundColor: colors.surface1,
-    borderWidth: hairline,
-    borderColor: colors.border,
-    ...elevate(1),
   },
-  rowIn: {
+  rowDivided: {
+    borderTopWidth: hairline,
+    borderTopColor: colors.separator,
+  },
+  /** Taslak dışındaki oyuncu: zemin sönük, "Kadroya al" öne çıkar. */
+  rowOut: {
     backgroundColor: colors.surface2,
+  },
+  changeBadge: {
+    alignSelf: "flex-start",
+    marginTop: 2,
   },
   rowTexts: {
     flex: 1,
@@ -992,22 +1111,96 @@ const styles = StyleSheet.create({
     ...type.caption,
     color: colors.textSecondary,
   },
-  draftFoot: {
+  flex: {
+    flex: 1,
+  },
+  contentWithBar: {
+    paddingBottom: 96,
+  },
+  howTo: {
     gap: space.sm,
-    paddingTop: space.sm,
+    padding: space.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface3,
+  },
+  howToRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: space.sm,
+  },
+  howToText: {
+    ...type.bodySm,
+    color: colors.textSecondary,
+    flex: 1,
+  },
+  howToTitle: {
+    ...type.label,
+    color: colors.textPrimary,
+  },
+  steps: {
+    flexDirection: "row",
+    gap: space.xs,
+  },
+  step: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+  },
+  stepDot: {
+    width: 20,
+    height: 20,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface3,
+  },
+  stepDotActive: {
+    backgroundColor: colors.brand,
+  },
+  stepNum: {
+    ...type.micro,
+    color: colors.textTertiary,
+  },
+  stepNumActive: {
+    color: colors.textOnBrand,
+  },
+  stepLabel: {
+    ...type.caption,
+    color: colors.textTertiary,
+    flexShrink: 1,
+  },
+  stepLabelActive: {
+    color: colors.textPrimary,
+    fontFamily: fonts.semibold,
+  },
+  bar: {
+    ...elevate(2),
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    paddingHorizontal: layout.screenPadding,
+    paddingTop: space.md,
+    backgroundColor: colors.surface1,
     borderTopWidth: hairline,
     borderTopColor: colors.border,
   },
-  draftSummary: {
-    flexDirection: "row",
-    alignItems: "center",
-    flexWrap: "wrap",
-    gap: space.xs,
+  barSummary: {
+    flex: 1,
+    minWidth: 0,
+    gap: 1,
   },
-  draftActions: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    gap: space.sm,
+  barTitle: {
+    ...type.label,
+    color: colors.textPrimary,
+  },
+  barMeta: {
+    ...type.caption,
+    color: colors.textTertiary,
   },
   sheetBody: {
     gap: space.md,

@@ -39,6 +39,7 @@ import {
   useRefresh,
   type Tone,
 } from "@/components/ui";
+import { DeadlineBanner, remainingShort } from "@/components/club/DeadlineBanner";
 import { getOfferInbox, type TransferOffer } from "@/lib/api/panel";
 import { formatDateShort, mediaUrl } from "@/lib/format";
 import { useAuth } from "@/providers/AuthProvider";
@@ -158,6 +159,15 @@ export default function OffersScreen() {
   /** Cevap bekleyen teklif sayısı — başlık altındaki özet cümlesi. */
   const waiting = counts.bekleyen + counts.revizyon;
 
+  /** Süresi en yakın, hâlâ yanıt bekleyen teklif — liste başı bandı. */
+  const nextExpiring = useMemo(
+    () =>
+      items
+        .filter((offer) => offer.status === "SENT" && remainingShort(offer.expires_at))
+        .sort((a, b) => String(a.expires_at).localeCompare(String(b.expires_at)))[0] ?? null,
+    [items],
+  );
+
   const selectFilter = useCallback(
     (next: OfferFilter) => {
       scrollY.setValue(0);
@@ -186,7 +196,8 @@ export default function OffersScreen() {
     () => (
       <View style={styles.headerBlock}>
         <ChipGroup style={styles.chips}>
-          {FILTERS.map((def) => (
+          {/* Boş durum çipi gösterilmez: "Ret 0" bir seçenek değil, gürültü. */}
+          {FILTERS.filter((def) => def.key === "tumu" || def.key === filter || counts[def.key] > 0).map((def) => (
             <FilterChip
               key={def.key}
               def={def}
@@ -197,7 +208,16 @@ export default function OffersScreen() {
           ))}
         </ChipGroup>
 
-        {waiting > 0 ? (
+        {/* Süresi en yakın bekleyen teklif bant olarak; yoksa tek cümle. */}
+        {nextExpiring ? (
+          <DeadlineBanner
+            title={waiting > 1 ? `${waiting} teklif yanıt bekliyor` : "Teklif yanıt bekliyor"}
+            detail={`${nextExpiring.team?.team_name ?? "Takım"} · kabul, ret ya da revizyon`}
+            deadline={nextExpiring.expires_at}
+            actionLabel="Teklifi aç"
+            onPress={() => openOffer(nextExpiring.public_id)}
+          />
+        ) : waiting > 0 ? (
           <Text style={styles.summary} {...textScale.long}>
             {waiting} teklif senden cevap bekliyor. Teklife dokunup belgeyi
             aç: kabul, ret ve revizyon istekleri orada.
@@ -210,7 +230,7 @@ export default function OffersScreen() {
         ) : null}
       </View>
     ),
-    [counts, filter, items.length, query.error, query.isError, query.refetch, selectFilter, waiting],
+    [counts, filter, items.length, nextExpiring, openOffer, query.error, query.isError, query.refetch, selectFilter, waiting],
   );
 
   if (!auth.user) {
@@ -313,7 +333,11 @@ const OfferRow = React.memo(function OfferRow({
 
   const subtitle = [
     offer.sent_at ? `Gönderildi ${formatDateShort(offer.sent_at)}` : null,
-    offer.expires_at ? `Son gün ${formatDateShort(offer.expires_at)}` : null,
+    offer.expires_at
+      ? offer.status === "SENT" && remainingShort(offer.expires_at)
+        ? `${remainingShort(offer.expires_at)} kaldı`
+        : `Son gün ${formatDateShort(offer.expires_at)}`
+      : null,
     offer.awaiting_admin_approval ? "Yönetici onayı bekliyor" : null,
   ]
     .filter(Boolean)
@@ -333,7 +357,7 @@ const OfferRow = React.memo(function OfferRow({
   const badge = (
     <Badge
       label={urgent ? "SON GÜN" : meta.label}
-      tone={urgent ? "live" : meta.tone}
+      tone={urgent ? "danger" : meta.tone}
       size="xs"
     />
   );

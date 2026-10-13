@@ -1,8 +1,10 @@
 /**
  * GİRİŞ — POST /api/users/login
  *
- * NE: marka başlığı, iki alan (kullanıcı adı + şifre), tek birincil düğme ve
- * gerektiğinde tek bir hata kutusu. Modal olarak açılır (bkz. app/_layout.tsx),
+ * NE (ortak kabuk: components/account/AuthShell.tsx): sahnede marka + "Tekrar
+ * hoş geldin", beyaz kartta iki alan ve şifrenin hemen altında "Şifremi
+ * unuttum", tek birincil düğme, "Hesabın yok mu?" ayracıyla üyelik yolu,
+ * yönetim girişi bağlantısı ve en altta rıza metni. Modal olarak açılır (bkz. app/_layout.tsx),
  * bu yüzden sağ üstte geri oku değil KAPAT düğmesi vardır.
  *
  * HATA METNİ SUNUCUDAN GELİR: onaylanmamış hesaplara sunucu 403 döner ve
@@ -19,37 +21,24 @@
  * düğmeye ilk dokunuş kaybolmaz (`keyboardShouldPersistTaps="handled"`).
  */
 
-import Ionicons from "@expo/vector-icons/Ionicons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useRef, useState } from "react";
+import { StyleSheet, Text, type TextInput } from "react-native";
 import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-  type TextInput,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { BrandMark, Button, Input, ScreenHeader, Touchable, toneColors } from "@/components/ui";
+  AuthCard,
+  AuthDivider,
+  AuthLink,
+  AuthNotice,
+  AuthShell,
+  PasswordEye,
+  authStyles,
+} from "@/components/account/AuthShell";
+import { Button, Input, Touchable } from "@/components/ui";
 import { ApiError } from "@/lib/http";
 import { openLink } from "@/lib/links";
 import { useAuth } from "@/providers/AuthProvider";
-import {
-  colors,
-  fonts,
-  hairline,
-  layout,
-  radius,
-  space,
-  textScale,
-  touchSlop,
-  type,
-} from "@/theme";
+import { colors, space, textScale, touchSlop, type } from "@/theme";
 
-/** Hata kutusunun tonu tek yerden okunur — kendi kırmızısını yazan yok. */
-const DANGER = toneColors("danger");
 const PRIVACY_URL = "https://elitlig.com/gizlilik-politikasi";
 
 export default function LoginScreen() {
@@ -130,204 +119,128 @@ export default function LoginScreen() {
   }, [canSubmit, managementMode, password, router, signIn, username]);
 
   return (
-    <SafeAreaView style={styles.screen} edges={["top", "bottom"]}>
-      <ScreenHeader
-        title={managementMode ? "Yönetim girişi" : "Giriş yap"}
-        overline={managementMode ? "ELİTLİG YÖNETİM" : "ELİTLİG"}
-        actions={[{ icon: "close", onPress: close, accessibilityLabel: "Kapat" }]}
+    <AuthShell
+      title={managementMode ? "Yönetim girişi" : "Giriş yap"}
+      overline={managementMode ? "ElitLig yönetim" : "ElitLig"}
+      heading={managementMode ? "Yönetim girişi" : "Tekrar hoş geldin"}
+      lede={
+        managementMode
+          ? "Admin, editör, il / lig / maç yöneticisi, disiplin kurulu ve sosyal medya hesapları. Giriş sonrası Yönetim Paneli açılır."
+          : "Üye, oyuncu, takım başkanı ve yönetim hesapları buradan girer."
+      }
+      icon={managementMode ? "shield-checkmark-outline" : undefined}
+      onClose={close}
+    >
+      <AuthCard>
+        <Input
+          label="Kullanıcı adı"
+          value={username}
+          onChangeText={changeUsername}
+          leadingIcon="person-outline"
+          autoCapitalize="none"
+          autoCorrect={false}
+          autoComplete="username"
+          placeholder="kullanici.adi"
+          returnKeyType="next"
+          submitBehavior="submit"
+          onSubmitEditing={focusPassword}
+          editable={!signingIn}
+        />
+
+        <Input
+          ref={passwordRef}
+          label="Şifre"
+          value={password}
+          onChangeText={changePassword}
+          leadingIcon="lock-closed-outline"
+          secureTextEntry={secure}
+          autoCapitalize="none"
+          autoCorrect={false}
+          autoComplete="current-password"
+          placeholder="••••••••"
+          returnKeyType="go"
+          onSubmitEditing={submit}
+          editable={!signingIn}
+          trailing={<PasswordEye secure={secure} onToggle={toggleSecure} />}
+        />
+
+        {/* Şifre sıfırlama, şifre alanının hemen altında — kullanıcının
+            "şifremi hatırlamıyorum" dediği an baktığı yer orası. */}
+        <Touchable
+          feedback="chip"
+          onPress={openForgot}
+          disabled={signingIn}
+          accessibilityRole="button"
+          hitSlop={touchSlop(20)}
+          style={styles.forgot}
+        >
+          <Text style={styles.forgotText} {...textScale.dense}>
+            Şifremi unuttum
+          </Text>
+        </Touchable>
+      </AuthCard>
+
+      {error ? <AuthNotice message={error} /> : null}
+
+      <Button
+        label={managementMode ? "Yönetim paneline gir" : "Giriş yap"}
+        icon={managementMode ? "shield-checkmark-outline" : undefined}
+        onPress={submit}
+        loading={signingIn}
+        disabled={!canSubmit}
+        size="lg"
+        fullWidth
       />
 
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-      >
-        <ScrollView
-          contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Marka karosu formun ÜSTÜNDE: giriş ekranı uygulamanın kimlik
-              sorduğu yerdir, kullanıcının da kime kimlik verdiğini görmesi
-              gerekir. Karo kendi mor zeminini getirdiği için lavanta kâğıdın
-              üstünde de okunur (bkz. components/ui/BrandMark.tsx). */}
-          <View style={styles.brand}>
-            <BrandMark size="md" />
-          </View>
-
-          <Text style={styles.lede} {...textScale.long}>
-            {managementMode
-              ? "Admin, editör, il / lig / maç yöneticisi, disiplin kurulu ve sosyal medya hesapları buradan giriş yapar. Giriş sonrası Yönetim Paneli açılır; web panelindeki tüm araçlar uygulamada kullanılabilir."
-              : "Üye, oyuncu, takım başkanı ve yönetim hesapları buradan giriş yapabilir. Hesabın yoksa aşağıdan ücretsiz üye olabilirsin."}
-          </Text>
-
-          {/* Mağaza şartı (App Store 1.2): kullanıcı içeriği olan uygulama,
-              hakaret ve taciz için hoşgörü olmadığını kullanıcıya kabul
-              ettirir. Kurallar uygulama içinde (app/kurallar.tsx). */}
-          <Text style={styles.consent} {...textScale.long}>
-            Giriş yaparak{" "}
-            <Text style={styles.consentLink} onPress={() => router.push("/kurallar")} accessibilityRole="link">
-              Lig Kuralları
-            </Text>
-            {"'nı ve "}
-            <Text style={styles.consentLink} onPress={() => void openLink(PRIVACY_URL)} accessibilityRole="link">
-              Gizlilik Politikası
-            </Text>
-            {"'nı kabul etmiş olursun. Sohbet ve aramalarda hakaret, taciz ve uygunsuz içeriğe hoşgörü yoktur; ihlal eden üye engellenebilir ve şikayet edilebilir."}
-          </Text>
-
-          <View style={styles.form}>
-            <Input
-              label="Kullanıcı adı"
-              value={username}
-              onChangeText={changeUsername}
-              leadingIcon="person-outline"
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoComplete="username"
-              placeholder="kullanici.adi"
-              returnKeyType="next"
-              submitBehavior="submit"
-              onSubmitEditing={focusPassword}
-              editable={!signingIn}
-            />
-
-            <Input
-              ref={passwordRef}
-              label="Şifre"
-              value={password}
-              onChangeText={changePassword}
-              leadingIcon="lock-closed-outline"
-              secureTextEntry={secure}
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoComplete="current-password"
-              placeholder="••••••••"
-              returnKeyType="go"
-              onSubmitEditing={submit}
-              editable={!signingIn}
-              trailing={
-                <Touchable
-                  feedback="icon"
-                  haptic="none"
-                  onPress={toggleSecure}
-                  hitSlop={touchSlop(20)}
-                  accessibilityRole="button"
-                  accessibilityLabel={secure ? "Şifreyi göster" : "Şifreyi gizle"}
-                >
-                  <Ionicons
-                    name={secure ? "eye-outline" : "eye-off-outline"}
-                    size={18}
-                    color={colors.textTertiary}
-                  />
-                </Touchable>
-              }
-            />
-          </View>
-
-          {error ? (
-            <View style={styles.errorBox} accessibilityRole="alert">
-              <Ionicons name="alert-circle" size={16} color={DANGER.fg} />
-              <Text style={styles.errorText} {...textScale.long}>
-                {error}
-              </Text>
-            </View>
-          ) : null}
-
+      {/* App Store 4 (Design): kayıt tarayıcıya yönlendirilmez, uygulama
+          içindeki /kayit ekranında yapılır. */}
+      {managementMode ? null : (
+        <>
+          <AuthDivider label="Hesabın yok mu?" />
           <Button
-            label={managementMode ? "Yönetim paneline gir" : "Giriş yap"}
-            icon={managementMode ? "shield-checkmark-outline" : undefined}
-            onPress={submit}
-            loading={signingIn}
-            disabled={!canSubmit}
+            label="Ücretsiz üye ol"
+            onPress={openRegister}
+            variant="secondary"
             size="lg"
             fullWidth
+            disabled={signingIn}
           />
+        </>
+      )}
 
-          {/* App Store 4 (Design): kayıt tarayıcıya yönlendirilmez, uygulama
-              içindeki /kayit ekranında yapılır. */}
-          {managementMode ? null : (
-            <Button
-              label="Üye ol"
-              onPress={openRegister}
-              variant="secondary"
-              size="lg"
-              fullWidth
-              disabled={signingIn}
-            />
-          )}
+      <AuthLink
+        prompt={managementMode ? "Üye misin?" : "Yönetim hesabın mı var?"}
+        action={managementMode ? "Üye girişi" : "Yönetim girişi"}
+        onPress={toggleMode}
+        disabled={signingIn}
+        testID="toggle-management-login"
+      />
 
-          <Touchable onPress={toggleMode} accessibilityRole="button" disabled={signingIn} testID="toggle-management-login">
-            <Text style={styles.footnote} {...textScale.long}>
-              {managementMode ? "Üye misin? " : "Yönetim hesabın mı var? "}
-              <Text style={styles.consentLink}>{managementMode ? "Üye girişi" : "Yönetim girişi"}</Text>
-            </Text>
-          </Touchable>
-
-          <Touchable onPress={openForgot} accessibilityRole="button" disabled={signingIn}>
-            <Text style={styles.footnote} {...textScale.long}>
-              Şifreni mi unuttun? <Text style={styles.consentLink}>Sıfırla</Text>
-            </Text>
-          </Touchable>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+      {/* Mağaza şartı (App Store 1.2): kullanıcı içeriği olan uygulama,
+          hakaret ve taciz için hoşgörü olmadığını kullanıcıya kabul
+          ettirir. Kurallar uygulama içinde (app/kurallar.tsx). */}
+      <Text style={authStyles.fine} {...textScale.long}>
+        Giriş yaparak{" "}
+        <Text style={authStyles.inlineLink} onPress={() => router.push("/kurallar")} accessibilityRole="link">
+          Lig Kuralları
+        </Text>
+        {"'nı ve "}
+        <Text style={authStyles.inlineLink} onPress={() => void openLink(PRIVACY_URL)} accessibilityRole="link">
+          Gizlilik Politikası
+        </Text>
+        {"'nı kabul etmiş olursun. Sohbet ve aramalarda hakaret, taciz ve uygunsuz içeriğe hoşgörü yoktur; ihlal eden üye engellenebilir ve şikayet edilebilir."}
+      </Text>
+    </AuthShell>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  flex: { flex: 1 },
-
-  content: {
-    paddingHorizontal: layout.screenPadding,
-    paddingTop: space.sm,
-    paddingBottom: space.giant,
-    gap: space.lg,
+  forgot: {
+    alignSelf: "flex-end",
+    marginTop: -space.xs,
   },
-
-  brand: {
-    alignItems: "center",
-    paddingTop: space.s,
-  },
-
-  lede: {
-    ...type.bodySm,
-    color: colors.textSecondary,
-    lineHeight: 19,
-  },
-
-  consent: { ...type.caption, color: colors.textSecondary, lineHeight: 17, marginTop: -space.sm },
-  consentLink: { color: colors.brandAccent, textDecorationLine: "underline" },
-
-  form: {
-    gap: space.md,
-  },
-
-  errorBox: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: space.sm,
-    backgroundColor: DANGER.dim,
-    borderRadius: radius.md,
-    borderWidth: hairline,
-    borderColor: DANGER.fg,
-    paddingHorizontal: space.md,
-    paddingVertical: space.m,
-  },
-  errorText: {
-    ...type.bodySm,
-    color: DANGER.fg,
-    flex: 1,
-    lineHeight: 19,
-  },
-
-  footnote: {
-    ...type.caption,
-    fontFamily: fonts.semibold,
-    letterSpacing: 0,
-    color: colors.textTertiary,
-    textAlign: "center",
-    lineHeight: 17,
+  forgotText: {
+    ...type.label,
+    color: colors.brandAccent,
   },
 });

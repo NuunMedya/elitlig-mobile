@@ -11,25 +11,22 @@
  * Kodu olan kullanıcı 1. adımı atlayıp doğrudan "Kodum var" diyebilir.
  */
 
-import Ionicons from "@expo/vector-icons/Ionicons";
 import { useRouter } from "expo-router";
 import { useCallback, useMemo, useRef, useState } from "react";
+import type { TextInput } from "react-native";
 import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-  type TextInput,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { BrandMark, Button, Input, ScreenHeader, Touchable, toneColors, useToast } from "@/components/ui";
+  AuthCard,
+  AuthLink,
+  AuthNotice,
+  AuthShell,
+  AuthSteps,
+  PasswordEye,
+  PasswordRules,
+} from "@/components/account/AuthShell";
+import { Button, Input, useToast } from "@/components/ui";
 import { forgotPassword, resetPassword } from "@/lib/api/auth";
 import { ApiError } from "@/lib/http";
-import { colors, fonts, hairline, layout, radius, space, textScale, touchSlop, type } from "@/theme";
 
-const DANGER = toneColors("danger");
 const PASSWORD_MIN = 8;
 
 type Step = "identify" | "reset";
@@ -120,259 +117,156 @@ export default function ForgotPasswordScreen() {
     }
   }, [canReset, code, identifier, password, router, toast]);
 
-  const eye = (
-    <Touchable
-      feedback="icon"
-      haptic="none"
-      onPress={() => setSecure((v) => !v)}
-      hitSlop={touchSlop(20)}
-      accessibilityRole="button"
-      accessibilityLabel={secure ? "Şifreyi göster" : "Şifreyi gizle"}
-    >
-      <Ionicons name={secure ? "eye-outline" : "eye-off-outline"} size={18} color={colors.textTertiary} />
-    </Touchable>
-  );
+  const eye = <PasswordEye secure={secure} onToggle={() => setSecure((v) => !v)} />;
 
   return (
-    <SafeAreaView style={styles.screen} edges={["top", "bottom"]}>
-      <ScreenHeader
-        title="Şifremi unuttum"
-        overline="ELİTLİG"
-        actions={[{ icon: "close", onPress: close, accessibilityLabel: "Kapat" }]}
-      />
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        <ScrollView
-          contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.brand}>
-            <BrandMark size="md" />
-          </View>
+    <AuthShell
+      title="Şifremi unuttum"
+      heading="Şifreni sıfırla"
+      lede={
+        step === "identify"
+          ? "İki adım: önce kod iste, sonra kodla yeni şifreni belirle."
+          : "Lig yönetiminden aldığın kodu ve yeni şifreni gir."
+      }
+      icon="key-outline"
+      onClose={close}
+    >
+      <AuthSteps steps={["Kod iste", "Yeni şifre"]} current={step === "identify" ? 0 : 1} />
 
-          {step === "identify" ? (
-            <>
-              <Text style={styles.lede} {...textScale.long}>
-                Kullanıcı adını veya e-postanı gir. Hesabın kayıtlıysa lig yönetimi sana tek
-                kullanımlık bir sıfırlama kodu iletir; kodu bir sonraki adımda gireceksin.
-              </Text>
+      {step === "identify" ? (
+        <>
+          <AuthCard>
+            <Input
+              label="Kullanıcı adı veya e-posta"
+              value={identifier}
+              onChangeText={(v) => {
+                setIdentifier(v);
+                setError(null);
+              }}
+              onBlur={blur("identifier")}
+              error={show("identifier", identifierError)}
+              hint="Hesabın kayıtlıysa lig yönetimi sana tek kullanımlık bir sıfırlama kodu iletir."
+              leadingIcon="person-outline"
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="username"
+              placeholder="kullanici.adi veya ad@ornek.com"
+              returnKeyType="go"
+              onSubmitEditing={request}
+              editable={!busy}
+            />
+          </AuthCard>
 
-              <View style={styles.form}>
-                <Input
-                  label="Kullanıcı adı veya e-posta"
-                  value={identifier}
-                  onChangeText={(v) => {
-                    setIdentifier(v);
-                    setError(null);
-                  }}
-                  onBlur={blur("identifier")}
-                  error={show("identifier", identifierError)}
-                  leadingIcon="person-outline"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  autoComplete="username"
-                  placeholder="kullanici.adi veya ad@ornek.com"
-                  returnKeyType="go"
-                  onSubmitEditing={request}
-                  editable={!busy}
-                />
-              </View>
+          {error ? <AuthNotice message={error} /> : null}
 
-              {error ? (
-                <View style={styles.errorBox} accessibilityRole="alert">
-                  <Ionicons name="alert-circle" size={16} color={DANGER.fg} />
-                  <Text style={styles.errorText} {...textScale.long}>
-                    {error}
-                  </Text>
-                </View>
-              ) : null}
+          <Button label="Kod iste" icon="paper-plane-outline" onPress={request} loading={busy} size="lg" fullWidth />
 
-              <Button label="Kod iste" onPress={request} loading={busy} size="lg" fullWidth />
+          <AuthLink prompt="Kodun zaten var mı?" action="Kodla devam et" onPress={() => setStep("reset")} disabled={busy} />
+        </>
+      ) : (
+        <>
+          {notice ? <AuthNotice message={notice} tone="success" /> : null}
 
-              <Touchable onPress={() => setStep("reset")} accessibilityRole="button" disabled={busy}>
-                <Text style={styles.footnote} {...textScale.long}>
-                  Kodun zaten var mı? <Text style={styles.link}>Kodla devam et</Text>
-                </Text>
-              </Touchable>
-            </>
-          ) : (
-            <>
-              {notice ? (
-                <View style={styles.noticeBox}>
-                  <Ionicons name="mail-outline" size={16} color={colors.brandAccent} />
-                  <Text style={styles.noticeText} {...textScale.long}>
-                    {notice}
-                  </Text>
-                </View>
-              ) : (
-                <Text style={styles.lede} {...textScale.long}>
-                  Lig yönetiminden aldığın sıfırlama kodunu ve yeni şifreni gir.
-                </Text>
-              )}
+          <AuthCard>
+            <Input
+              label="Kullanıcı adı veya e-posta"
+              value={identifier}
+              onChangeText={(v) => {
+                setIdentifier(v);
+                setError(null);
+              }}
+              onBlur={blur("identifier")}
+              error={show("identifier", identifierError)}
+              leadingIcon="person-outline"
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="username"
+              placeholder="kullanici.adi veya ad@ornek.com"
+              returnKeyType="next"
+              submitBehavior="submit"
+              onSubmitEditing={() => codeRef.current?.focus()}
+              editable={!busy}
+            />
+            <Input
+              ref={codeRef}
+              label="Sıfırlama kodu"
+              value={code}
+              onChangeText={(v) => {
+                setCode(v);
+                setError(null);
+              }}
+              onBlur={blur("code")}
+              error={show("code", codeError)}
+              leadingIcon="keypad-outline"
+              autoCapitalize="characters"
+              autoCorrect={false}
+              autoComplete="one-time-code"
+              textContentType="oneTimeCode"
+              placeholder="Örn. A7K2M9"
+              returnKeyType="next"
+              submitBehavior="submit"
+              onSubmitEditing={() => passwordRef.current?.focus()}
+              editable={!busy}
+            />
+          </AuthCard>
 
-              <View style={styles.form}>
-                <Input
-                  label="Kullanıcı adı veya e-posta"
-                  value={identifier}
-                  onChangeText={(v) => {
-                    setIdentifier(v);
-                    setError(null);
-                  }}
-                  onBlur={blur("identifier")}
-                  error={show("identifier", identifierError)}
-                  leadingIcon="person-outline"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  autoComplete="username"
-                  placeholder="kullanici.adi veya ad@ornek.com"
-                  returnKeyType="next"
-                  submitBehavior="submit"
-                  onSubmitEditing={() => codeRef.current?.focus()}
-                  editable={!busy}
-                />
-                <Input
-                  ref={codeRef}
-                  label="Sıfırlama kodu"
-                  value={code}
-                  onChangeText={(v) => {
-                    setCode(v);
-                    setError(null);
-                  }}
-                  onBlur={blur("code")}
-                  error={show("code", codeError)}
-                  leadingIcon="keypad-outline"
-                  autoCapitalize="characters"
-                  autoCorrect={false}
-                  autoComplete="one-time-code"
-                  textContentType="oneTimeCode"
-                  placeholder="Örn. A7K2M9"
-                  returnKeyType="next"
-                  submitBehavior="submit"
-                  onSubmitEditing={() => passwordRef.current?.focus()}
-                  editable={!busy}
-                />
-                <Input
-                  ref={passwordRef}
-                  label="Yeni şifre"
-                  value={password}
-                  onChangeText={(v) => {
-                    setPassword(v);
-                    setError(null);
-                  }}
-                  onBlur={blur("password")}
-                  error={show("password", pwError)}
-                  hint="En az 8 karakter; bir harf ve bir rakam içermeli."
-                  leadingIcon="key-outline"
-                  secureTextEntry={secure}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  autoComplete="new-password"
-                  textContentType="newPassword"
-                  placeholder="••••••••"
-                  returnKeyType="next"
-                  submitBehavior="submit"
-                  onSubmitEditing={() => repeatRef.current?.focus()}
-                  editable={!busy}
-                  trailing={eye}
-                />
-                <Input
-                  ref={repeatRef}
-                  label="Yeni şifre (tekrar)"
-                  value={repeat}
-                  onChangeText={(v) => {
-                    setRepeat(v);
-                    setError(null);
-                  }}
-                  onBlur={blur("repeat")}
-                  error={show("repeat", repeatError)}
-                  leadingIcon="key-outline"
-                  secureTextEntry={secure}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  autoComplete="new-password"
-                  textContentType="newPassword"
-                  placeholder="••••••••"
-                  returnKeyType="go"
-                  onSubmitEditing={reset}
-                  editable={!busy}
-                />
-              </View>
+          <AuthCard title="Yeni şifre">
+            <Input
+              ref={passwordRef}
+              label="Yeni şifre"
+              value={password}
+              onChangeText={(v) => {
+                setPassword(v);
+                setError(null);
+              }}
+              onBlur={blur("password")}
+              error={show("password", pwError)}
+              leadingIcon="lock-closed-outline"
+              secureTextEntry={secure}
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="new-password"
+              textContentType="newPassword"
+              placeholder="••••••••"
+              returnKeyType="next"
+              submitBehavior="submit"
+              onSubmitEditing={() => repeatRef.current?.focus()}
+              editable={!busy}
+              trailing={eye}
+            />
+            <PasswordRules value={password} minLength={PASSWORD_MIN} />
+            <Input
+              ref={repeatRef}
+              label="Yeni şifre (tekrar)"
+              value={repeat}
+              onChangeText={(v) => {
+                setRepeat(v);
+                setError(null);
+              }}
+              onBlur={blur("repeat")}
+              error={show("repeat", repeatError)}
+              leadingIcon="lock-closed-outline"
+              secureTextEntry={secure}
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="new-password"
+              textContentType="newPassword"
+              placeholder="••••••••"
+              returnKeyType="go"
+              onSubmitEditing={reset}
+              editable={!busy}
+            />
+          </AuthCard>
 
-              {error ? (
-                <View style={styles.errorBox} accessibilityRole="alert">
-                  <Ionicons name="alert-circle" size={16} color={DANGER.fg} />
-                  <Text style={styles.errorText} {...textScale.long}>
-                    {error}
-                  </Text>
-                </View>
-              ) : null}
+          {error ? <AuthNotice message={error} /> : null}
 
-              <Button label="Şifreyi sıfırla" onPress={reset} loading={busy} size="lg" fullWidth />
+          <Button label="Şifreyi sıfırla" onPress={reset} loading={busy} size="lg" fullWidth />
 
-              <Touchable onPress={() => setStep("identify")} accessibilityRole="button" disabled={busy}>
-                <Text style={styles.footnote} {...textScale.long}>
-                  Kod gelmedi mi? <Text style={styles.link}>Yeniden iste</Text>
-                </Text>
-              </Touchable>
-            </>
-          )}
+          <AuthLink prompt="Kod gelmedi mi?" action="Yeniden iste" onPress={() => setStep("identify")} disabled={busy} />
+        </>
+      )}
 
-          <Touchable onPress={toLogin} accessibilityRole="button" disabled={busy}>
-            <Text style={styles.footnote} {...textScale.long}>
-              Şifreni hatırladın mı? <Text style={styles.link}>Giriş yap</Text>
-            </Text>
-          </Touchable>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+      <AuthLink prompt="Şifreni hatırladın mı?" action="Giriş yap" onPress={toLogin} disabled={busy} />
+    </AuthShell>
   );
 }
-
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  flex: { flex: 1 },
-  content: {
-    paddingHorizontal: layout.screenPadding,
-    paddingTop: space.sm,
-    paddingBottom: space.giant,
-    gap: space.lg,
-  },
-  brand: { alignItems: "center", paddingTop: space.s },
-  lede: { ...type.bodySm, color: colors.textSecondary, lineHeight: 19 },
-  form: { gap: space.md },
-  noticeBox: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: space.sm,
-    backgroundColor: colors.surfaceRaised,
-    borderRadius: radius.md,
-    borderWidth: hairline,
-    borderColor: colors.border,
-    paddingHorizontal: space.md,
-    paddingVertical: space.m,
-  },
-  noticeText: { ...type.bodySm, color: colors.textSecondary, flex: 1, lineHeight: 19 },
-  errorBox: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: space.sm,
-    backgroundColor: DANGER.dim,
-    borderRadius: radius.md,
-    borderWidth: hairline,
-    borderColor: DANGER.fg,
-    paddingHorizontal: space.md,
-    paddingVertical: space.m,
-  },
-  errorText: { ...type.bodySm, color: DANGER.fg, flex: 1, lineHeight: 19 },
-  footnote: {
-    ...type.caption,
-    fontFamily: fonts.semibold,
-    letterSpacing: 0,
-    color: colors.textTertiary,
-    textAlign: "center",
-    lineHeight: 17,
-    paddingVertical: space.sm,
-  },
-  link: { color: colors.brandAccent, textDecorationLine: "underline" },
-});

@@ -1,15 +1,18 @@
 /**
  * YÖNETİM PANELİ — yönetim rollerine açılan giriş ekranı.
  *
- * NE: rol etiketli bir kimlik bandı ve üç bölüm kartı (Maç / Mesaj / Saha).
- * Her kart, o bölümde BEKLEYEN İŞİ sayar: okunmamış üye başvurusu, onay
- * bekleyen saha talebi ve şu an oynanan maç.
+ * NE (Arena "merkez" kalıbı): tepede tek SAHNE bloğu — kim olarak işlem
+ * yapıldığı (monogram, ad, rol) ve dört sayaçlık ÖZET ŞERİDİ (açık görev,
+ * canlı maç, okunmamış başvuru, saha talebi). Altında bölümler gruplanmış
+ * liste satırlarıdır; bekleyen iş varsa satırın alt metni sayacın CÜMLESİNE
+ * döner ve sağda tonlu rozet durur.
  *
- * NEDEN ROZET: eski ekran yalnız mesaj rozetini gösteriyordu; yönetici hangi
- * bölümde iş olduğunu anlamak için üç ekranı da tek tek açmak zorundaydı.
- * Panelin tek işi "nereye bakmalıyım" sorusunu bir bakışta yanıtlamaktır, bu
- * yüzden üç sayaç da burada toplanır ve kartın altında CÜMLEYLE de yazılır
- * (rozet rengi tek başına anlam taşımaz, §erişilebilirlik).
+ * NEDEN ÖZET ŞERİDİ: eski ekran sayaçları altı ayrı kartın içine dağıtıyordu;
+ * yönetici hangi bölümde iş olduğunu anlamak için listeyi baştan sona
+ * taramak zorundaydı. Panelin tek işi "nereye bakmalıyım" sorusunu bir
+ * bakışta yanıtlamaktır, bu yüzden dört rakam sahnede büyük yazılır ve her
+ * biri kendi bölümünü açar. Rakam tek başına anlam taşımaz; satırda da
+ * CÜMLEYLE yazılır (erişilebilirlik).
  *
  * NEDEN AYRI ÜÇ SORGU: üç uç birbirinden bağımsız ve biri 403 dönse bile
  * (rolün o yetkisi yoksa) diğer iki sayaç çizilmeli. `retry: false` ile yetki
@@ -21,6 +24,7 @@
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Redirect, useRouter } from "expo-router";
 import { memo, useCallback, useMemo } from "react";
@@ -28,7 +32,6 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
-  Avatar,
   Badge,
   EmptyState,
   ErrorState,
@@ -47,7 +50,7 @@ import { getAdminMatches, getAdminMessages, getAdminRequests, ROLE_LABELS } from
 import { getTodoSummary, todoKeys } from "@/lib/api/todos";
 import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
-import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
+import { colors, fonts, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
 
 /* ═══════════════════════════ SABİTLER VE TİPLER ═══════════════════════════ */
 
@@ -271,6 +274,41 @@ export default function AdminHomeScreen() {
   /** Üç sorgunun da düşmesi ağ/oturum sorununu gösterir; biri düşerse sessiz kal. */
   const allFailed = messagesQuery.isError && requestsQuery.isError && liveQuery.isError && todoQuery.isError;
 
+  /* Özet şeridi: dört sayaç, sahnede rakam kahramandır. Sayaç okunamadıysa
+     (yetki yok) "—" yazar; yükleniyorsa sönük nokta. */
+  const metrics: SummaryMetric[] = [
+    {
+      key: "gorevler",
+      label: "Açık görev",
+      value: openTodos,
+      loading: todoQuery.isLoading,
+      alert: overdueTodos > 0,
+      route: "/yonetim/gorevler",
+    },
+    {
+      key: "maclar",
+      label: "Canlı maç",
+      value: liveMatches,
+      loading: liveQuery.isLoading,
+      live: (liveMatches ?? 0) > 0,
+      route: "/yonetim/maclar",
+    },
+    {
+      key: "mesajlar",
+      label: "Okunmamış",
+      value: unread,
+      loading: messagesQuery.isLoading,
+      route: "/yonetim/mesajlar",
+    },
+    {
+      key: "sahalar",
+      label: "Saha talebi",
+      value: pendingRequests,
+      loading: requestsQuery.isLoading,
+      route: "/yonetim/sahalar",
+    },
+  ];
+
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader title="Yönetim Paneli" back scrollY={scrollY} />
@@ -280,24 +318,49 @@ export default function AdminHomeScreen() {
         contentContainerStyle={styles.content}
         refreshControl={refresh.control}
       >
-        {/* Kimlik bandı — kim olarak işlem yapıldığı her zaman görünür. */}
-        <View style={styles.identity}>
-          <Avatar name={auth.user.fullName ?? auth.user.username} size={48} ring="brand" />
-          <View style={styles.identityBody}>
-            <Text style={styles.identityName} numberOfLines={1} {...textScale.dense}>
-              {auth.user.fullName || auth.user.username}
-            </Text>
-            <Text style={styles.identityHandle} numberOfLines={1} {...textScale.dense}>
-              @{auth.user.username}
-            </Text>
-            <View style={styles.roleRow}>
-              <Badge label={roleLabel.toLocaleUpperCase("tr-TR")} tone="brand" size="xs" />
-              {scope.cityLabel ? (
-                <Badge label={scope.cityLabel.toLocaleUpperCase("tr-TR")} tone="neutral" size="xs" />
-              ) : null}
+        {/* SAHNE — kimlik + özet. Ekranın tek grafit bloğu: kim olarak işlem
+            yapıldığı ve "nereye bakmalıyım" sorusunun cevabı aynı yerde. */}
+        <View style={styles.stage}>
+          <LinearGradient
+            colors={colors.gradientInk}
+            start={STAGE_START}
+            end={STAGE_END}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          />
+          <View style={styles.identity}>
+            <View style={styles.monogram}>
+              <Text style={styles.monogramText} {...textScale.badge}>
+                {initials(auth.user.fullName || auth.user.username)}
+              </Text>
+            </View>
+            <View style={styles.identityBody}>
+              <Text style={styles.identityName} numberOfLines={1} {...textScale.dense}>
+                {auth.user.fullName || auth.user.username}
+              </Text>
+              <Text style={styles.identityHandle} numberOfLines={1} {...textScale.dense}>
+                @{auth.user.username}
+                {scope.cityLabel ? ` · ${scope.cityLabel}` : ""}
+              </Text>
+            </View>
+            <View style={styles.rolePill}>
+              <Ionicons name="shield-checkmark" size={12} color={colors.brandOnDark} />
+              <Text style={styles.rolePillText} numberOfLines={1} {...textScale.badge}>
+                {upperTR(roleLabel)}
+              </Text>
             </View>
           </View>
-          <Ionicons name="shield-checkmark" size={20} color={colors.brandAccent} />
+
+          <View style={styles.metrics}>
+            {metrics.map((metric, index) => (
+              <SummaryCell
+                key={metric.key}
+                metric={metric}
+                first={index === 0}
+                onPress={openSection}
+              />
+            ))}
+          </View>
         </View>
 
         {allFailed ? (
@@ -309,15 +372,20 @@ export default function AdminHomeScreen() {
           />
         ) : null}
 
-        <SectionHeader title="Bölümler" />
+        <SectionHeader title="Bölümler" style={styles.sectionHeader} />
 
-        <View style={styles.cards}>
-          {sections.map((section) => (
-            <SectionCard key={section.key} section={section} onPress={openSection} />
+        <View>
+          {sections.map((section, index) => (
+            <SectionRow
+              key={section.key}
+              section={section}
+              position={groupPosition(index, sections.length)}
+              onPress={openSection}
+            />
           ))}
         </View>
 
-        <SectionHeader title="Tüm yönetim araçları" meta="Web paneli" />
+        <SectionHeader title="Tüm yönetim araçları" meta="Web paneli" style={styles.sectionHeader} />
         <Text style={styles.toolsIntro} {...textScale.long}>
           Web sürümündeki bütün yönetim sayfaları burada; yetkine göre listelenir ve uygulamadan
           çıkmadan, yeniden giriş yapmadan açılır.
@@ -325,25 +393,17 @@ export default function AdminHomeScreen() {
         {moduleGroups.map((group) => (
           <View key={group.key} style={styles.toolGroup}>
             <Text style={styles.toolGroupTitle} {...textScale.dense}>
-              {group.title.toLocaleUpperCase("tr-TR")}
+              {upperTR(group.title)}
             </Text>
-            <View style={styles.toolList}>
+            <View>
               {group.modules.map((module, index) => (
                 <ListRow
                   key={module.key}
-                  leading={{ icon: module.icon, tone: "brand" }}
+                  leading={{ icon: module.icon }}
                   title={module.title}
                   subtitle={module.description}
                   chevron
-                  position={
-                    group.modules.length === 1
-                      ? "single"
-                      : index === 0
-                        ? "first"
-                        : index === group.modules.length - 1
-                          ? "last"
-                          : "middle"
-                  }
+                  position={groupPosition(index, group.modules.length)}
                   onPress={() => openModule(module)}
                   testID={`admin-module-${module.key}`}
                 />
@@ -353,7 +413,7 @@ export default function AdminHomeScreen() {
         ))}
 
         <ListRow
-          leading={{ icon: "notifications-outline", tone: "brand" }}
+          leading={{ icon: "notifications-outline" }}
           title="Yönetim bildirimleri"
           subtitle="Görev ve gelen kutusu bildirimlerini aç / kapat"
           chevron
@@ -373,59 +433,122 @@ export default function AdminHomeScreen() {
 
 /* ═══════════════════════════════ ALT PARÇALAR ══════════════════════════════ */
 
+/** Sahne gradyanı — uygulamadaki her yüzey gibi sağdan sola. */
+const STAGE_START = { x: 1, y: 0.5 } as const;
+const STAGE_END = { x: 0, y: 0.5 } as const;
+
+type GroupPosition = "single" | "first" | "middle" | "last";
+
+function groupPosition(index: number, count: number): GroupPosition {
+  if (count === 1) return "single";
+  if (index === 0) return "first";
+  if (index === count - 1) return "last";
+  return "middle";
+}
+
+/** Ad soyaddan iki harflik monogram ("Elif Kaya" → "EK"). */
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const letters = parts.length > 1 ? parts[0][0] + parts[parts.length - 1][0] : (parts[0] ?? "?").slice(0, 2);
+  return upperTR(letters);
+}
+
+interface SummaryMetric {
+  key: SectionKey;
+  label: string;
+  value: number | null;
+  loading: boolean;
+  /** Gecikmiş iş var: rakamın yanında kırmızı nokta. */
+  alert?: boolean;
+  /** Şu an oynanan maç var: rakam canlı rengine döner. */
+  live?: boolean;
+  route: string;
+}
+
 /**
- * Bölüm kartı. `section` nesnesi `useMemo`'lu olduğu için referansı sabittir;
- * memo bu sayede yalnız sayaç değiştiğinde yeniden çizer.
+ * Özet hücresi — sahnede büyük rakam + küçük versal etiket. Hücreler arası
+ * ayraç sol kenardaki hairline'dır; ilk hücrede yoktur.
  */
-const SectionCard = memo(function SectionCard({
+const SummaryCell = memo(function SummaryCell({
+  metric,
+  first,
+  onPress,
+}: {
+  metric: SummaryMetric;
+  first: boolean;
+  onPress: (route: string) => void;
+}) {
+  const handlePress = useCallback(() => onPress(metric.route), [metric.route, onPress]);
+  const shown = metric.loading ? "·" : metric.value == null ? "—" : String(metric.value);
+
+  return (
+    <Touchable
+      feedback="icon"
+      haptic="selection"
+      onPress={handlePress}
+      accessibilityRole="button"
+      accessibilityLabel={`${metric.label}: ${metric.value ?? "bilinmiyor"}`}
+      style={[styles.metric, first ? null : styles.metricDivided]}
+    >
+      <View style={styles.metricValueRow}>
+        <Text
+          style={[styles.metricValue, metric.live ? styles.metricValueLive : null]}
+          numberOfLines={1}
+          {...textScale.badge}
+        >
+          {shown}
+        </Text>
+        {metric.alert ? <View style={styles.metricAlert} /> : null}
+      </View>
+      <Text style={styles.metricLabel} numberOfLines={1} {...textScale.badge}>
+        {upperTR(metric.label)}
+      </Text>
+    </Touchable>
+  );
+});
+
+/**
+ * Bölüm satırı — gruplanmış liste satırı. Bekleyen iş varsa alt satır sayacın
+ * CÜMLESİDİR ve sağda tonlu rozet durur; yoksa bölümün ne işe yaradığını
+ * söyler. `section` nesnesi `useMemo`'lu olduğu için memo yalnız sayaç
+ * değiştiğinde yeniden çizer.
+ */
+const SectionRow = memo(function SectionRow({
   section,
+  position,
   onPress,
 }: {
   section: PanelSection;
+  position: GroupPosition;
   onPress: (route: string) => void;
 }) {
   const handlePress = useCallback(() => onPress(section.route), [onPress, section.route]);
   const active = section.pending != null && section.pending > 0;
 
   return (
-    <Touchable
-      feedback="card"
-      haptic="selection"
+    <ListRow
+      leading={
+        <View style={[styles.rowIcon, active ? styles.rowIconActive : null]}>
+          <Ionicons
+            name={section.icon}
+            size={18}
+            color={active ? colors.brandAccent : colors.textSecondary}
+          />
+        </View>
+      }
+      title={section.title}
+      subtitle={section.loading ? section.body : active ? section.pendingLabel : section.body}
+      badge={
+        section.loading ? (
+          <Skeleton width={22} height={22} radius="pill" />
+        ) : active ? (
+          <Badge label={section.pending ?? 0} tone={section.tone} variant="solid" size="sm" />
+        ) : undefined
+      }
+      position={position}
       onPress={handlePress}
-      accessibilityRole="button"
       accessibilityLabel={`${section.title}. ${section.pendingLabel}`}
-      style={styles.card}
-    >
-      <View style={styles.cardIcon}>
-        <Ionicons name={section.icon} size={20} color={colors.brandAccent} />
-      </View>
-
-      <View style={styles.cardBody}>
-        <Text style={styles.cardTitle} numberOfLines={1} {...textScale.dense}>
-          {section.title}
-        </Text>
-        <Text style={styles.cardText} numberOfLines={2} {...textScale.dense}>
-          {section.body}
-        </Text>
-
-        {section.loading ? (
-          <Skeleton width="55%" height={12} radius="xs" style={styles.cardPendingSkeleton} />
-        ) : section.pending == null ? null : (
-          <Text
-            style={[styles.cardPending, active ? styles.cardPendingActive : null]}
-            numberOfLines={1}
-            {...textScale.dense}
-          >
-            {section.pendingLabel}
-          </Text>
-        )}
-      </View>
-
-      {active ? (
-        <Badge label={section.pending ?? 0} tone={section.tone} variant="solid" size="sm" />
-      ) : null}
-      <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
-    </Touchable>
+    />
   );
 });
 
@@ -440,106 +563,144 @@ const styles = StyleSheet.create({
     paddingHorizontal: layout.screenPadding,
     paddingBottom: space.giant,
   },
+  sectionHeader: {
+    paddingHorizontal: 0,
+  },
 
-  /* Kimlik bandı */
+  /* — Sahne: kimlik + özet — */
+  stage: {
+    marginTop: space.sm,
+    borderRadius: radius.xxl,
+    overflow: "hidden",
+    backgroundColor: colors.inkBlock,
+    padding: space.lg,
+    gap: space.lg,
+  },
   identity: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.md,
-    marginTop: space.sm,
-    padding: space.md,
-    borderRadius: radius.lg,
+  },
+  monogram: {
+    width: 48,
+    height: 48,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.inkTile,
     borderWidth: hairline,
-    borderColor: colors.brandBorder,
-    backgroundColor: colors.brandDim,
+    borderColor: colors.inkTileBorder,
+  },
+  monogramText: {
+    ...type.h2,
+    fontFamily: fonts.bold,
+    color: colors.onDark,
   },
   identityBody: {
     flex: 1,
     gap: 2,
   },
   identityName: {
-    ...type.h2,
-    color: colors.textPrimary,
+    ...type.h1,
+    color: colors.onDark,
   },
   identityHandle: {
-    ...type.caption,
-    color: colors.textSecondary,
+    ...type.bodySm,
+    color: colors.onDarkMuted,
   },
-  roleRow: {
+  rolePill: {
     flexDirection: "row",
-    flexWrap: "wrap",
+    alignItems: "center",
     gap: space.xs,
+    height: 24,
+    paddingHorizontal: space.sm,
+    borderRadius: radius.pill,
+    backgroundColor: colors.inkPill,
+    borderWidth: hairline,
+    borderColor: colors.inkPillBorder,
+  },
+  rolePillText: {
+    ...type.micro,
+    color: colors.brandOnDark,
+  },
+  metrics: {
+    flexDirection: "row",
+    borderRadius: radius.lg,
+    backgroundColor: colors.inkTile,
+    borderWidth: hairline,
+    borderColor: colors.inkTileBorder,
+    paddingVertical: space.md,
+  },
+  metric: {
+    flex: 1,
+    alignItems: "center",
+    gap: space.xxs,
+  },
+  metricDivided: {
+    borderLeftWidth: hairline,
+    borderLeftColor: colors.borderOnDark,
+  },
+  metricValueRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: space.xxs,
+  },
+  metricValue: {
+    ...type.metricSm,
+    fontSize: 22,
+    lineHeight: 26,
+    color: colors.onDark,
+  },
+  metricValueLive: {
+    color: colors.liveOnDark,
+  },
+  metricAlert: {
+    width: 6,
+    height: 6,
     marginTop: space.xs,
+    borderRadius: radius.pill,
+    backgroundColor: colors.liveOnDark,
+  },
+  metricLabel: {
+    ...type.micro,
+    color: colors.onDarkMuted,
   },
 
   banner: {
     marginTop: space.sm,
+    borderRadius: radius.md,
   },
 
-  /* Bölüm kartları */
-  cards: {
-    gap: space.sm,
-  },
-  card: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.md,
-    padding: space.md,
-    borderRadius: radius.lg,
-    borderWidth: hairline,
-    borderColor: colors.border,
-    backgroundColor: colors.surface1,
-  },
-  cardIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.pill,
+  /* — Bölüm satırları — */
+  rowIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.sm,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: colors.surface3,
+  },
+  rowIconActive: {
     backgroundColor: colors.brandDim,
   },
-  cardBody: {
-    flex: 1,
-    gap: 2,
-  },
-  cardTitle: {
-    ...type.h3,
-    color: colors.textPrimary,
-  },
-  cardText: {
-    ...type.caption,
-    color: colors.textSecondary,
-  },
-  cardPending: {
-    ...type.caption,
-    color: colors.textTertiary,
-    marginTop: space.xxs,
-  },
-  cardPendingActive: {
-    color: colors.textPrimary,
-  },
-  cardPendingSkeleton: {
-    marginTop: space.xs,
-  },
 
+  /* — Araçlar — */
   toolsIntro: {
-    ...type.caption,
+    ...type.bodySm,
     color: colors.textSecondary,
-    marginBottom: space.sm,
+    marginBottom: space.md,
   },
   toolGroup: {
-    marginBottom: space.md,
-    gap: space.xs,
+    marginBottom: space.lg,
+    gap: space.sm,
   },
   toolGroupTitle: {
-    ...type.caption,
+    ...type.overline,
     color: colors.textTertiary,
-    letterSpacing: 0.6,
     paddingHorizontal: space.xxs,
   },
-  toolList: {},
   notifRow: {
-    marginTop: space.sm,
+    marginTop: space.xs,
   },
   footnote: {
     ...type.caption,

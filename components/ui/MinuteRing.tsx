@@ -106,7 +106,11 @@ export const MinuteRing = memo(function MinuteRing({
           fill="none"
         />
       </Svg>
-      <Text style={[styles.minute, { color: ink }]} numberOfLines={1} {...textScale.badge}>
+      <Text
+        style={[styles.minute, size >= 48 ? styles.minuteLg : null, { color: ink }]}
+        numberOfLines={1}
+        {...textScale.badge}
+      >
         {text}
       </Text>
     </View>
@@ -125,5 +129,10 @@ const styles = StyleSheet.create({
   },
   minute: {
     ...type.clock,
+  },
+  /* Büyük halka (canlı panel, ≥48px): 12px'lik dakika halkanın içinde
+     kayboluyordu; rakam halkayla birlikte büyür. */
+  minuteLg: {
+    ...type.metricSm,
   },
 });

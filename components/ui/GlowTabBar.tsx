@@ -12,14 +12,12 @@
  *      `layout.tabBarHeight` 72 → 60) ve liste ekranlarında bir satır daha
  *      görünüyor.
  *
- *   2. KONİ NEREDEN GELDİĞİ BELLİ OLMAYAN BİR SİSTİ. İkonun üstünde asılı
- *      duran bir leke, seçimi ancak komşusuyla karşılaştırınca söylüyordu.
- *      Yerine İKİ NET SİNYAL kondu ve ikisi de aynı şeyi anlatır:
- *        · KAPSÜL — seçili ikonu saran mor pul (`tabCapsule`). Seçim ikonun
- *          KENDİ kutusunda okunur; komşuya bakmak gerekmez.
- *        · HUZME — barın üst kenarındaki 22px'lik parlak çizgi (`tabBeam`).
- *          Işığın kaynağı görünür bir çizgidir ve sekme değişince YAYLANARAK
- *          oraya kayar. Hareket, seçimin yönünü de söyler.
+ *   2. KONİ NEREDEN GELDİĞİ BELLİ OLMAYAN BİR SİSTİ. Arena'da seçimin TEK
+ *      ve NET bir sinyali var: KAYAN KAPSÜL. Seçili ikonu saran menekşe pul
+ *      (`tabCapsule`) barın üstünde TEK bir nesnedir ve sekme değişince
+ *      yaylanarak yeni sekmeye KAYAR; hareket seçimin yönünü de söyler.
+ *      Üst kenardaki parlayan huzme kaldırıldı: aynı şeyi ikinci kez söyleyen
+ *      ve sakin grafit barın üstünde tek "neon" kalan öğeydi.
  *
  * BEŞ SEKME: "Menü" sekmesi kaldırıldı, içeriği Profil'in en üstündeki
  * kısayol ızgarasına taşındı (bkz. app/(tabs)/_layout.tsx başlığı). Beş yuva,
@@ -57,6 +55,7 @@ import {
 } from "react-native";
 import {
   colors,
+  fonts,
   hairline,
   haptics,
   layout,
@@ -74,14 +73,13 @@ const BAR_START = { x: 1, y: 0.5 } as const;
 const BAR_END = { x: 0, y: 0.5 } as const;
 
 /* ÖLÇÜLER — barın iç geometrisi tek yerde.
-   8 üst dolgu + 26 kapsül + 3 aralık + 13 etiket + 10 alt dolgu = 60
+   7 üst dolgu + 28 kapsül + 3 aralık + 13 etiket + 9 alt dolgu = 60
    (`layout.tabBarHeight`); güvenli alan bunun ALTINA eklenir. */
-/** Seçili ikonu saran kapsül. */
-const CAPSULE_WIDTH = 44;
-const CAPSULE_HEIGHT = 26;
-/** Üst kenardaki ışık kaynağı — kapsülden dar, ikondan geniş. */
-const BEAM_WIDTH = 22;
-const BEAM_HEIGHT = 3;
+/** Seçili ikonu saran kapsül — tam hap (Arena: seçim yuvarlaktır). */
+const CAPSULE_WIDTH = 52;
+const CAPSULE_HEIGHT = 28;
+/** Kapsülün üst kenardan uzaklığı — `styles.tab` üst dolgusuyla aynı. */
+const CAPSULE_TOP = 7;
 
 /** Görünen bir sekme — sıra, etiket ve ikon `_layout.tsx` içinde tanımlanır. */
 export interface GlowTab {
@@ -171,15 +169,20 @@ export function GlowTabBar({ state, navigation, insets, tabs }: GlowTabBarProps)
       {/* Üst kenar: barı sayfadan ayıran ince ışık çizgisi. */}
       <View style={styles.edge} pointerEvents="none" />
 
-      {/* Işık kaynağı — barın ÜST kenarında, seçili sekmeye yaylanarak kayar.
-          Yuva genişliğinde saydam bir kutu içinde ortalanır; böylece huzmenin
-          konumu sekme sayısından bağımsız olarak doğru hesaplanır. */}
+      {/* Kayan kapsül — sekmelerden ÖNCE çizilir ki ikonun ARKASINDA kalsın.
+          Yuva genişliğinde saydam bir kutu içinde ortalanır; konumu sekme
+          sayısından bağımsız olarak doğru hesaplanır. Gizli bir rota açıkken
+          (hiçbir sekme seçili değil) kapsül söner. */}
       {slot > 0 ? (
         <Animated.View
-          style={[styles.beamSlot, { width: slot, transform: [{ translateX }] }]}
+          style={[
+            styles.capsuleSlot,
+            { width: slot, transform: [{ translateX }] },
+            matchedIndex >= 0 ? null : styles.capsuleIdle,
+          ]}
           pointerEvents="none"
         >
-          <View style={styles.beam} />
+          <View style={styles.capsuleOn} />
         </Animated.View>
       ) : null}
 
@@ -226,7 +229,7 @@ export function GlowTabBar({ state, navigation, insets, tabs }: GlowTabBarProps)
             {/* Kapsül seçili sekmede DOLU, diğerlerinde saydamdır; ikon her
                 iki hâlde de aynı kutunun ortasında durur, yani seçim
                 değişince ikon KIPIRDAMAZ. */}
-            <View style={[styles.capsule, focused ? styles.capsuleOn : null]}>
+            <View style={styles.capsule}>
               <TabBarIcon
                 name={tab.icon}
                 focused={focused}
@@ -283,50 +286,37 @@ const styles = StyleSheet.create({
     height: hairline,
     backgroundColor: colors.tabBarBorder,
   },
-  /** Huzmenin taşıyıcısı: bir sekme yuvası genişliğinde, sola yaslı. */
-  beamSlot: {
+  /** Kapsülün taşıyıcısı: bir sekme yuvası genişliğinde, sola yaslı. */
+  capsuleSlot: {
     position: "absolute",
-    top: 0,
+    top: CAPSULE_TOP,
     left: 0,
     alignItems: "center",
   },
-  beam: {
-    width: BEAM_WIDTH,
-    height: BEAM_HEIGHT,
-    /* Alt köşeler yuvarlak, üst köşeler değil: çizgi barın üst kenarından
-       ÇIKIYOR gibi dursun; iki ucu da yuvarlak bir hap, kenardan kopmuş
-       serbest bir çubuk gibi görünüyordu. */
-    borderBottomLeftRadius: BEAM_HEIGHT,
-    borderBottomRightRadius: BEAM_HEIGHT,
-    backgroundColor: colors.tabBeam,
-    /* Işıma: çizgi bir IŞIK KAYNAĞIDIR, boyanmış bir şerit değil. iOS'ta
-       gölge çizginin kendi rengiyle dağılır; Android `elevation` ışımaz,
-       orada yalnız çizgi kalır — kabul edilebilir bir düşüş. */
-    shadowColor: colors.tabBeam,
-    shadowOpacity: 0.85,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 0 },
+  capsuleIdle: {
+    opacity: 0,
   },
   tab: {
     flex: 1,
     alignItems: "center",
     justifyContent: "flex-start",
     gap: 3,
-    paddingTop: space.sm,
+    paddingTop: CAPSULE_TOP,
     paddingBottom: space.m,
   },
-  /** İkonun kutusu — seçilmemiş hâlde saydam, ölçüsü aynı. */
+  /** İkonun kutusu — kapsülle aynı ölçü; kapsül bunun ARKASINA kayar. */
   capsule: {
     width: CAPSULE_WIDTH,
     height: CAPSULE_HEIGHT,
-    borderRadius: radius.sm,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: hairline,
-    borderColor: "transparent",
   },
   capsuleOn: {
+    width: CAPSULE_WIDTH,
+    height: CAPSULE_HEIGHT,
+    borderRadius: radius.pill,
     backgroundColor: colors.tabCapsule,
+    borderWidth: hairline,
     borderColor: colors.tabCapsuleBorder,
   },
   /**
@@ -337,11 +327,13 @@ const styles = StyleSheet.create({
    */
   label: {
     ...type.micro,
-    letterSpacing: -0.1,
+    fontFamily: fonts.medium,
+    letterSpacing: 0,
     textTransform: "none",
     color: colors.tabInactive,
   },
   labelOn: {
     color: colors.tabActive,
+    fontFamily: fonts.semibold,
   },
 });

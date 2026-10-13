@@ -46,6 +46,7 @@
  * zaten ekranın tepesinden başlar.
  */
 
+import { HeaderToneContext } from "./HeaderTone";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
@@ -111,6 +112,12 @@ export interface ScreenHeaderProps {
   tabs?: React.ReactNode;
   /** Bloğun ALTINDA, kâğıtta duran bant: süzgeç segmenti, tarih şeridi, çip. */
   bottom?: React.ReactNode;
+  /**
+   * Yüzey: "paper" (açık kâğıt, koyu metin — sekme kökleri ve listeler) ya da
+   * "stage" (grafit sahne, beyaz metin — kimlik taşıyan detay sayfaları).
+   * Verilmezse `hero` varsa sahne, yoksa kâğıt.
+   */
+  variant?: "paper" | "stage";
   /** Kendi atmosferi olan ekran (maç detayı): blok boyanmaz. */
   transparent?: boolean;
   /** Şeffaf kipte, arkadaki atmosfer koyuysa metinler `onDark` ailesinden. */
@@ -155,6 +162,7 @@ export function ScreenHeader({
   hero,
   tabs,
   bottom,
+  variant,
   transparent = false,
   onDark = false,
   surface,
@@ -175,8 +183,12 @@ export function ScreenHeader({
   /** Kimlik bloğunun doğal yüksekliği — aynı gerekçeyle her değişimde. */
   const [heroHeight, setHeroHeight] = useState(0);
 
-  const isInk = !transparent;
-  const dark = isInk || onDark;
+  const mode: "paper" | "stage" = variant ?? (hero ? "stage" : "paper");
+  const isInk = !transparent && mode === "stage";
+  const isPaper = !transparent && mode === "paper";
+  const dark = isInk || (transparent && onDark);
+  /* Sekme kökü (geri oku yok, kâğıt): Arena'nın büyük başlığı. */
+  const large = isPaper && !back;
 
   const progress = useMemo(
     () =>
@@ -237,13 +249,14 @@ export function ScreenHeader({
   return (
     <View style={style}>
       {/* MOR BLOK — güvenli alanı da kaplar (bkz. dosya başlığı). */}
+      <HeaderToneContext.Provider value={dark ? "ink" : "paper"}>
       <View
         style={[
-          isInk ? styles.inkWrap : styles.bareWrap,
-          isInk ? { marginTop: -insets.top, paddingTop: insets.top } : null,
+          isInk ? styles.inkWrap : isPaper ? styles.paperWrap : styles.bareWrap,
+          isInk || isPaper ? { marginTop: -insets.top, paddingTop: insets.top } : null,
         ]}
       >
-        {isInk ? (
+        {isPaper ? null : isInk ? (
           <LinearGradient
             colors={colors.gradientInk}
             start={INK_START}
@@ -298,7 +311,7 @@ export function ScreenHeader({
             <Animated.Text
               accessibilityRole="header"
               numberOfLines={1}
-              style={[styles.title, { color: ink, opacity: titleOpacity }]}
+              style={[large ? styles.titleLarge : styles.title, { color: ink, opacity: titleOpacity }]}
               {...textScale.dense}
             >
               {title}
@@ -323,7 +336,7 @@ export function ScreenHeader({
               hitSlop={touchSlop(34)}
               accessibilityRole="button"
               accessibilityLabel={action.accessibilityLabel}
-              style={[styles.action, dark ? styles.actionOnInk : null]}
+              style={[styles.action, dark ? styles.actionOnInk : styles.actionOnPaper]}
             >
               <Ionicons
                 name={action.icon}
@@ -338,7 +351,7 @@ export function ScreenHeader({
                   dot={action.badge === "dot"}
                   label={action.badge === "dot" ? undefined : action.badge}
                   floating
-                  style={styles.actionBadge}
+                  style={[styles.actionBadge, isPaper ? styles.actionBadgePaper : null]}
                   accessibilityLabel={action.badge === "dot" ? "Yeni" : `${action.badge} yeni`}
                 />
               ) : null}
@@ -363,7 +376,15 @@ export function ScreenHeader({
         />
       </View>
 
-      {bottom}
+      </HeaderToneContext.Provider>
+
+      {/* SÜZGEÇ BANDI bloğun DIŞINDA, kâğıdın üstündedir: sahne başlıklı bir
+          ekranda bile içindeki çip ve segmentler kâğıt tonunda çizilmeli. */}
+      {bottom ? (
+        <HeaderToneContext.Provider value="paper">
+          <View style={styles.bottomSlot}>{bottom}</View>
+        </HeaderToneContext.Provider>
+      ) : null}
     </View>
   );
 }
@@ -377,6 +398,10 @@ const styles = StyleSheet.create({
   inkWrap: {
     backgroundColor: colors.inkBlock,
     overflow: "hidden",
+  },
+  /** Kâğıt başlık: zemin sayfayla aynı, ayrım kaydırınca beliren saç teli. */
+  paperWrap: {
+    backgroundColor: colors.bg,
   },
   bareWrap: {
     backgroundColor: "transparent",
@@ -425,6 +450,11 @@ const styles = StyleSheet.create({
   title: {
     ...type.h1,
   },
+  /** Sekme kökü başlığı — 22px, sıkı harf aralığı. */
+  titleLarge: {
+    ...type.display,
+    fontSize: 22,
+  },
   subtitle: {
     ...type.bodySm,
     marginTop: 1,
@@ -438,7 +468,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginLeft: space.xs,
   },
+  actionOnPaper: {
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+  },
+  actionBadgePaper: {
+    borderColor: colors.bg,
+  },
   actionOnInk: {
+    borderRadius: radius.pill,
     backgroundColor: colors.inkPill,
     borderWidth: hairline,
     borderColor: colors.borderOnDark,
@@ -452,6 +492,10 @@ const styles = StyleSheet.create({
   },
   hero: {
     overflow: "hidden",
+  },
+  /** Süzgeç bandı başlığın alt satırına yapışmasın: 4px nefes. */
+  bottomSlot: {
+    paddingTop: space.xs,
   },
   border: {
     position: "absolute",

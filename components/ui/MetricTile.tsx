@@ -24,7 +24,6 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import React from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { colors, elevate, radius, space, textScale, type, upperTR } from "@/theme";
-import { GradientFill } from "./GradientFill";
 import { Touchable } from "./Pressable";
 
 /** Sayının rengi. Zemin hiçbir tonda değişmez (bkz. dosya başlığı). */
@@ -71,9 +70,8 @@ export const MetricTile = React.memo(function MetricTile({
 }: MetricTileProps) {
   const body = (
     <>
-      <GradientFill radius="lg" />
       <View style={styles.labelRow}>
-        {icon ? <Ionicons name={icon} size={15} color={colors.textTertiary} /> : null}
+        {icon ? <Ionicons name={icon} size={13} color={colors.textTertiary} /> : null}
         <Text style={styles.label} numberOfLines={1} {...textScale.badge}>
           {upperTR(label)}
         </Text>
@@ -120,7 +118,7 @@ export const MetricTile = React.memo(function MetricTile({
       {body}
       <Ionicons
         name="chevron-forward"
-        size={16}
+        size={14}
         color={colors.textDisabled}
         style={styles.chevron}
       />
@@ -183,7 +181,7 @@ const styles = StyleSheet.create({
     minHeight: 84,
     justifyContent: "center",
     gap: 2,
-    paddingHorizontal: space.m,
+    paddingHorizontal: space.md + space.xxs,
     paddingVertical: space.md,
     borderRadius: radius.lg,
     ...elevate(1),
@@ -210,8 +208,8 @@ const styles = StyleSheet.create({
   },
   chevron: {
     position: "absolute",
-    top: space.sm,
-    right: space.sm,
+    top: space.md,
+    right: space.m,
   },
   grid: {
     gap: space.sm,

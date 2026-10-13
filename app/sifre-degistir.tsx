@@ -10,25 +10,21 @@
  * newPassword) ve ilgili alanın altına yazılır.
  */
 
-import Ionicons from "@expo/vector-icons/Ionicons";
 import { useRouter } from "expo-router";
 import { useCallback, useMemo, useRef, useState } from "react";
+import type { TextInput } from "react-native";
 import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-  type TextInput,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { Button, Input, ScreenHeader, Touchable, toneColors, useToast } from "@/components/ui";
+  AuthCard,
+  AuthLink,
+  AuthNotice,
+  AuthShell,
+  PasswordEye,
+  PasswordRules,
+} from "@/components/account/AuthShell";
+import { Button, Input, useToast } from "@/components/ui";
 import { ApiError } from "@/lib/http";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, hairline, layout, radius, space, textScale, touchSlop, type } from "@/theme";
 
-const DANGER = toneColors("danger");
 const PASSWORD_MIN = 8;
 
 type FieldName = "currentPassword" | "newPassword" | "newPasswordRepeat";
@@ -115,140 +111,101 @@ export default function ChangePasswordScreen() {
     }
   }, [canSubmit, changePassword, current, next, router, toast]);
 
-  const eye = (
-    <Touchable
-      feedback="icon"
-      haptic="none"
-      onPress={toggleSecure}
-      hitSlop={touchSlop(20)}
-      accessibilityRole="button"
-      accessibilityLabel={secure ? "Şifreyi göster" : "Şifreyi gizle"}
-    >
-      <Ionicons name={secure ? "eye-outline" : "eye-off-outline"} size={18} color={colors.textTertiary} />
-    </Touchable>
-  );
+  const eye = <PasswordEye secure={secure} onToggle={toggleSecure} />;
 
   return (
-    <SafeAreaView style={styles.screen} edges={["top", "bottom"]}>
-      <ScreenHeader title="Şifre değiştir" back />
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        <ScrollView
-          contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-          showsVerticalScrollIndicator={false}
-        >
-          <Text style={styles.lede} {...textScale.long}>
-            Güvenlik için önce mevcut şifren sorulur. Değişiklikten sonra diğer cihazlarda
-            yeniden giriş yapman gerekebilir.
-          </Text>
+    <AuthShell
+      title="Şifre değiştir"
+      overline="Hesap ve güvenlik"
+      heading="Şifreni değiştir"
+      lede="Önce mevcut şifren sorulur. Bu cihazda oturumun açık kalır; diğer cihazlarda yeniden giriş gerekebilir."
+      icon="lock-closed-outline"
+      back
+    >
+      <AuthCard title="Mevcut şifre">
+        <Input
+          label="Mevcut şifre"
+          value={current}
+          onChangeText={(v) => {
+            setCurrent(v);
+            clearServer("currentPassword");
+          }}
+          onBlur={blur("currentPassword")}
+          error={errorFor("currentPassword")}
+          leadingIcon="lock-closed-outline"
+          secureTextEntry={secure}
+          autoCapitalize="none"
+          autoCorrect={false}
+          autoComplete="current-password"
+          textContentType="password"
+          placeholder="••••••••"
+          returnKeyType="next"
+          submitBehavior="submit"
+          onSubmitEditing={() => nextRef.current?.focus()}
+          editable={!busy}
+          trailing={eye}
+        />
+      </AuthCard>
 
-          <View style={styles.form}>
-            <Input
-              label="Mevcut şifre"
-              value={current}
-              onChangeText={(v) => {
-                setCurrent(v);
-                clearServer("currentPassword");
-              }}
-              onBlur={blur("currentPassword")}
-              error={errorFor("currentPassword")}
-              leadingIcon="lock-closed-outline"
-              secureTextEntry={secure}
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoComplete="current-password"
-              textContentType="password"
-              placeholder="••••••••"
-              returnKeyType="next"
-              submitBehavior="submit"
-              onSubmitEditing={() => nextRef.current?.focus()}
-              editable={!busy}
-              trailing={eye}
-            />
-            <Input
-              ref={nextRef}
-              label="Yeni şifre"
-              value={next}
-              onChangeText={(v) => {
-                setNext(v);
-                clearServer("newPassword");
-              }}
-              onBlur={blur("newPassword")}
-              error={errorFor("newPassword")}
-              hint="En az 8 karakter; bir harf ve bir rakam içermeli."
-              leadingIcon="key-outline"
-              secureTextEntry={secure}
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoComplete="new-password"
-              textContentType="newPassword"
-              placeholder="••••••••"
-              returnKeyType="next"
-              submitBehavior="submit"
-              onSubmitEditing={() => repeatRef.current?.focus()}
-              editable={!busy}
-            />
-            <Input
-              ref={repeatRef}
-              label="Yeni şifre (tekrar)"
-              value={repeat}
-              onChangeText={(v) => {
-                setRepeat(v);
-                setError(null);
-              }}
-              onBlur={blur("newPasswordRepeat")}
-              error={errorFor("newPasswordRepeat")}
-              leadingIcon="key-outline"
-              secureTextEntry={secure}
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoComplete="new-password"
-              textContentType="newPassword"
-              placeholder="••••••••"
-              returnKeyType="go"
-              onSubmitEditing={submit}
-              editable={!busy}
-            />
-          </View>
+      <AuthCard title="Yeni şifre">
+        <Input
+          ref={nextRef}
+          label="Yeni şifre"
+          value={next}
+          onChangeText={(v) => {
+            setNext(v);
+            clearServer("newPassword");
+          }}
+          onBlur={blur("newPassword")}
+          error={errorFor("newPassword")}
+          leadingIcon="key-outline"
+          secureTextEntry={secure}
+          autoCapitalize="none"
+          autoCorrect={false}
+          autoComplete="new-password"
+          textContentType="newPassword"
+          placeholder="••••••••"
+          returnKeyType="next"
+          submitBehavior="submit"
+          onSubmitEditing={() => repeatRef.current?.focus()}
+          editable={!busy}
+        />
+        <PasswordRules value={next} minLength={PASSWORD_MIN} />
+        <Input
+          ref={repeatRef}
+          label="Yeni şifre (tekrar)"
+          value={repeat}
+          onChangeText={(v) => {
+            setRepeat(v);
+            setError(null);
+          }}
+          onBlur={blur("newPasswordRepeat")}
+          error={errorFor("newPasswordRepeat")}
+          leadingIcon="key-outline"
+          secureTextEntry={secure}
+          autoCapitalize="none"
+          autoCorrect={false}
+          autoComplete="new-password"
+          textContentType="newPassword"
+          placeholder="••••••••"
+          returnKeyType="go"
+          onSubmitEditing={submit}
+          editable={!busy}
+        />
+      </AuthCard>
 
-          {error ? (
-            <View style={styles.errorBox} accessibilityRole="alert">
-              <Ionicons name="alert-circle" size={16} color={DANGER.fg} />
-              <Text style={styles.errorText} {...textScale.long}>
-                {error}
-              </Text>
-            </View>
-          ) : null}
+      {error ? <AuthNotice message={error} /> : null}
 
-          <Button label="Şifreyi güncelle" onPress={submit} loading={busy} size="lg" fullWidth />
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+      <Button label="Şifreyi güncelle" onPress={submit} loading={busy} size="lg" fullWidth />
+
+      {/* Mevcut şifreyi hatırlamayan girişli kullanıcı da çıkış yapmadan
+          kodla sıfırlama akışına geçebilir. */}
+      <AuthLink
+        prompt="Mevcut şifreni hatırlamıyor musun?"
+        action="Kodla sıfırla"
+        onPress={() => router.push("/sifremi-unuttum")}
+        disabled={busy}
+      />
+    </AuthShell>
   );
 }
-
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  flex: { flex: 1 },
-  content: {
-    paddingHorizontal: layout.screenPadding,
-    paddingTop: space.md,
-    paddingBottom: space.giant,
-    gap: space.lg,
-  },
-  lede: { ...type.bodySm, color: colors.textSecondary, lineHeight: 19 },
-  form: { gap: space.md },
-  errorBox: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: space.sm,
-    backgroundColor: DANGER.dim,
-    borderRadius: radius.md,
-    borderWidth: hairline,
-    borderColor: DANGER.fg,
-    paddingHorizontal: space.md,
-    paddingVertical: space.m,
-  },
-  errorText: { ...type.bodySm, color: DANGER.fg, flex: 1, lineHeight: 19 },
-});

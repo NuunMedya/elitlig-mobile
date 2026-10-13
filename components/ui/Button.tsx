@@ -1,26 +1,32 @@
 /**
- * Button — birincil ve ikincil eylem düğmesi.
+ * Button — birincil ve ikincil eylem düğmesi (Arena).
  *
  * VARYANT FELSEFESİ:
- *  - `primary` mercan dolgudur ve bir ekranda TEK TANE bulunur. Dolgu düz renk
- *    değil `gradientBrand` iki durağıdır: düz mercan geniş bir dikdörtgende
- *    matlaşıp "boyanmış kutu" gibi görünüyordu; iki durak yüzeye hafif bir
- *    ışık verip düğmeyi kabartıyor. Metni `textOnBrand` (mürekkep) — mercan
- *    üstünde beyaz metin AA'yı geçmez.
+ *  - `primary` DÜZ marka dolgusudur ve bir ekranda TEK TANE bulunur. Gradyan
+ *    ve renkli gölge kaldırıldı: Arena'da renk sinyaldir, süs değil. Düz
+ *    menekşe zemin kâğıdın üstünde zaten en yüksek kontrastlı öğedir; ışık
+ *    efekti onu yalnız "reklam düğmesi"ne çeviriyordu. Basılıyken bir kademe
+ *    koyulaşır (`brandStrong`).
+ *  - `secondary` beyaz kâğıt + hairline kenarlıktır: gri kâğıtta beyaz bir
+ *    hap, beyaz kartta çerçeveli bir hap — iki zeminde de ayrışır.
+ *  - `ghost` yalnız marka renginde metindir (satır içi eylem).
  *  - `danger` DOLU KIRMIZI DEĞİLDİR: sönük zemin + kırmızı metin. Yıkıcı eylem
  *    sessiz görünür; asıl uyarıyı onay sheet'i verir.
+ *  - `onDark`: sahne (grafit) üstünde ikincil düğme cam pul (`inkPill`),
+ *    hayalet düğme beyaz metin olur.
  *
- * ÖLÇÜ: 30 / 36 / 42. Üçü de 44px'in altındadır ve `touchSlop` ile 44px'lik
- * dokunma alanına tamamlanır (bkz. `hitSlop`). 11–12px etiketin etrafında
- * 46px'lik bir kutu, düğmeyi metninden bağımsız bir blok gibi gösteriyordu.
+ * BİÇİM: tam hap (`radius.pill`) — Arena'da düğme ve çip aynı eğri ailesidir,
+ * kartlar (18) ve iç elemanlar (12) köşelidir; böylece "basılabilir" olan şey
+ * biçiminden de okunur.
  *
- * BASMA: hepsi opaklıkla söner (gradyan dolgu zemin değişimini gizlerdi).
+ * ÖLÇÜ: 38 / 44 / 52. `md` ve `lg` 44px'lik dokunma tabanını kendi başına
+ * karşılar; `sm` `touchSlop` ile tamamlanır.
+ *
  * `loading` sırasında GENİŞLİK KORUNUR — etiket görünmez olur ve göstergesi
  * üstüne biner; düğmenin zıplaması yerleşimi bozar.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { LinearGradient } from "expo-linear-gradient";
 import React from "react";
 import {
   ActivityIndicator,
@@ -33,7 +39,6 @@ import {
 } from "react-native";
 import {
   colors,
-  elevate,
   hairline,
   radius,
   space,
@@ -43,21 +48,11 @@ import {
 } from "@/theme";
 import { Touchable, type HapticKind } from "./Pressable";
 
-/**
- * Dolgunun ışık yönü — YATAY, SAĞDAN SOLA.
- *
- * Köşegendi (0,0 → 1,1); hap biçimli bir butonda köşegen geçiş yüzeyi
- * silindire çeviriyor, yani "boru" görünümü veriyordu. Uygulamadaki her
- * gradyan aynı eksende ışır (bkz. `GradientFill`).
- */
-const GRADIENT_START = { x: 1, y: 0.5 } as const;
-const GRADIENT_END = { x: 0, y: 0.5 } as const;
-
 export interface ButtonProps {
   label: string;
   onPress: () => void;
   variant?: "primary" | "secondary" | "ghost" | "danger";
-  /** 30 / 36 / 42 — varsayılan "md". */
+  /** 38 / 44 / 52 — varsayılan "md". */
   size?: "sm" | "md" | "lg";
   icon?: keyof typeof Ionicons.glyphMap;
   iconPosition?: "left" | "right";
@@ -78,16 +73,6 @@ export interface ButtonProps {
   testID?: string;
 }
 
-/*
- * ÖLÇÜ TİPOGRAFİYLE BİRLİKTE BÜYÜDÜ (30/36/42 → 38/44/52).
- *
- * Eski ölçüler 11px etiket için hesaplanmıştı; etiket 13px'e çıkınca 30px'lik
- * bir düğmede metnin üstünde ve altında 8px'ten az yer kalıyor ve düğme
- * "metne yapışmış bir şerit" gibi duruyordu. Yeni ölçülerde `lg` (52px) ve
- * `md` (44px) erişilebilirlik tabanı olan 44px'i KENDİ BAŞINA karşılıyor —
- * eskiden yalnız `hitSlop` ile tamamlanıyordu; birincil eylemin dokunma
- * alanının görünür alanıyla aynı olması, düğmenin sağlam hissettiren şeydir.
- */
 const HEIGHTS = { sm: 38, md: 44, lg: 52 } as const;
 
 export const Button = React.memo(function Button({
@@ -112,17 +97,23 @@ export const Button = React.memo(function Button({
 
   const boxStyle: ViewStyle =
     variant === "primary"
-      ? // Gradyan yüklenemezse (web/eski cihaz) düz mercan zemin altta durur.
-        // SIRA ÖNEMLİ: `elevate` kendi zeminini taşır, mercan ondan SONRA gelmeli.
-        { ...elevate(1), borderWidth: 0, backgroundColor: colors.brand }
+      ? { backgroundColor: colors.brand }
       : variant === "secondary"
         ? onDark
-          // Cam pul: mürekkep bloğun üstünde beyazın %22'si + tebeşir çerçeve.
-          ? { backgroundColor: colors.chalk, borderWidth: 1, borderColor: colors.chalk }
-          : { backgroundColor: colors.surface2, borderWidth: hairline, borderColor: colors.border }
+          ? { backgroundColor: colors.inkPill, borderWidth: hairline, borderColor: colors.inkPillBorder }
+          : { backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.borderStrong }
         : variant === "danger"
           ? { backgroundColor: colors.dangerDim }
           : { backgroundColor: "transparent" };
+
+  /* Basılı zemin: dolu varyantlar bir kademe koyulaşır; opaklık sönmesi
+     (Touchable "button") bunun üstüne biner. */
+  const pressedBox: ViewStyle | undefined =
+    variant === "primary"
+      ? { backgroundColor: colors.brandStrong }
+      : variant === "secondary" && !onDark
+        ? { backgroundColor: colors.pressed }
+        : undefined;
 
   const fg =
     variant === "primary"
@@ -144,7 +135,7 @@ export const Button = React.memo(function Button({
   const iconNode = icon ? (
     <Ionicons
       name={icon}
-      size={size === "lg" ? 16 : 14}
+      size={size === "lg" ? 18 : size === "sm" ? 14 : 16}
       color={fg}
       style={loading ? styles.labelHidden : null}
     />
@@ -164,11 +155,12 @@ export const Button = React.memo(function Button({
       accessibilityHint={accessibilityHint}
       accessibilityState={{ disabled: isDisabled, busy: Boolean(loading) }}
       testID={testID}
+      pressedStyle={pressedBox}
       style={[
         styles.base,
         {
           height,
-          paddingHorizontal: size === "sm" ? space.md : size === "lg" ? space.lg : space.md,
+          paddingHorizontal: size === "sm" ? space.md + space.xxs : size === "lg" ? space.xl : space.lg,
         },
         boxStyle,
         fullWidth ? styles.fullWidth : null,
@@ -176,23 +168,6 @@ export const Button = React.memo(function Button({
         style,
       ]}
     >
-      {variant === "primary" ? (
-        /*
-         * TEK KATMAN. Gradyanın üstüne bir de "üst ışık" (üst yarıya serilen
-         * %10 beyaz) konmuştu; kubbe hissi vermesi bekleniyordu ama keskin
-         * kenarlı bir katman düğmeyi tam ortasından ikiye bölen yatay bir
-         * DİKİŞ olarak görünüyordu — üst yarı açık, alt yarı koyu iki ayrı
-         * mor. Işık yalnız gradyandan gelir; başka dolgu yok.
-         */
-        <LinearGradient
-          colors={colors.gradientBrand}
-          start={GRADIENT_START}
-          end={GRADIENT_END}
-          style={styles.primaryFill}
-          pointerEvents="none"
-        />
-      ) : null}
-
       {iconPosition === "left" ? iconNode : null}
       <Text style={labelStyle} numberOfLines={1} {...textScale.dense}>
         {label}
@@ -214,24 +189,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: space.s,
-    // KÖŞE 12px, HAP DEĞİL: tam yuvarlak düğme, keskinleşen köşe ölçeğinde
-    // (kart 14) ekrandaki en oval nesne olarak kalıyor ve kullanıcının "fazla
-    // oval" dediği şeyin ta kendisiydi. Kart içi köşe (radius.md) düğmeyi
-    // kartın diliyle aynı aileye sokar.
-    borderRadius: radius.md,
+    borderRadius: radius.pill,
     alignSelf: "flex-start",
   },
   fullWidth: {
     alignSelf: "stretch",
     width: "100%",
   },
-  /** Gradyan dolgu — içeriğin ALTINDA, köşeleri kutuyla aynı. */
-  primaryFill: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: radius.pill,
-  },
+  /* Pasif düğme rengini korur ama söner: "burada bir eylem var, şu an
+     kapalı" der — gri bir kutu eylemin kendisini de gizlerdi. */
   disabled: {
-    opacity: 0.45,
+    opacity: 0.4,
   },
   /* Düğme etiketleri tek ailede (Inter SemiBold) kalır: Archivo rakam ailesidir,
      düğme metninde kullanılınca arayüz iki sesle konuşmuş oluyordu. */
@@ -239,10 +207,10 @@ const styles = StyleSheet.create({
     ...type.label,
   },
   labelMd: {
-    ...type.h4,
+    ...type.h3,
   },
   labelLg: {
-    ...type.h3,
+    ...type.h2,
   },
   /** Yükleniyorken etiket görünmez olur ama YERİNİ KORUR. */
   labelHidden: {

@@ -156,6 +156,10 @@ function IntroSlides({
 }) {
   const listRef = useRef<FlatList<(typeof SLIDES)[number]>>(null);
   const last = index === SLIDES.length - 1;
+  /* Slayt yüksekliği listenin ölçülen yüksekliğidir: yatay listede öğe
+     yüksekliği içerikten gelir ve slayt ekranın üst yarısına yapışıyordu;
+     ölçülen yükseklikle içerik dikeyde ortalanır. */
+  const [listHeight, setListHeight] = useState(0);
 
   const onScroll = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -197,7 +201,10 @@ function IntroSlides({
         ref={listRef}
         data={SLIDES}
         keyExtractor={(item) => item.key}
-        renderItem={({ item }) => <Slide slide={item} width={width} />}
+        renderItem={({ item, index: i }) => (
+          <Slide slide={item} width={width} height={listHeight} step={i + 1} />
+        )}
+        onLayout={(event) => setListHeight(Math.round(event.nativeEvent.layout.height))}
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
@@ -229,23 +236,38 @@ function IntroSlides({
  * Tek slayt. Görsel yerine imza geometrisi: koyu blok + tebeşir yayı + ikon.
  * Sahip olmadığımız bir stok fotoğrafı koymaktansa ürünün kendi dili.
  */
-function Slide({ slide, width }: { slide: (typeof SLIDES)[number]; width: number }) {
+function Slide({
+  slide,
+  width,
+  height,
+  step,
+}: {
+  slide: (typeof SLIDES)[number];
+  width: number;
+  height: number;
+  step: number;
+}) {
   return (
-    <View style={[styles.slide, { width }]}>
+    <View style={[styles.slide, { width }, height > 0 ? { height } : null]}>
       <View style={styles.art}>
         <ChalkArc
           width={width - space.xl * 2}
-          height={220}
+          height={260}
           color={colors.onDarkMuted}
           thickness={1}
         />
-        <View style={styles.artIcon}>
-          {/* Koyu blok üstünde `brand` (dolgu moru) mor üstüne mor kalıyor;
-              kimlik bloklarının marka rengi `brandOnDark` açık lavantadır. */}
-          <Ionicons name={slide.icon} size={30} color={colors.brandOnDark} />
+        <View style={styles.artHalo}>
+          <View style={styles.artIcon}>
+            {/* Koyu blok üstünde `brand` (dolgu moru) mor üstüne mor kalıyor;
+                kimlik bloklarının marka rengi `brandOnDark` açık lavantadır. */}
+            <Ionicons name={slide.icon} size={40} color={colors.brandOnDark} />
+          </View>
         </View>
       </View>
 
+      <Text style={styles.slideStep} {...textScale.badge}>
+        {upperTR(`${step} / ${SLIDES.length}`)}
+      </Text>
       <Text style={styles.slideTitle} {...textScale.dense}>
         {slide.title}
       </Text>
@@ -415,27 +437,45 @@ const styles = StyleSheet.create({
     color: colors.onDarkMuted,
   },
   slide: {
-    flex: 1,
     justifyContent: "center",
     paddingHorizontal: space.xl,
-    gap: space.md,
+    gap: space.sm,
   },
   art: {
-    height: 220,
+    height: 260,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: space.xxl,
   },
-  artIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: radius.lg,
+  /* İkonun etrafında ikinci, daha geniş bir halka: tebeşir yayının merkezini
+     işaret eder ve ikonu "sahnenin ortasına" oturtur. */
+  artHalo: {
+    width: 132,
+    height: 132,
+    borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.borderOnDark,
+    /* Opak: tebeşir yayı halkanın ARKASINDAN geçer, ikonu kesmez. */
+    backgroundColor: colors.inkBlock,
+    borderWidth: 1,
+    borderColor: colors.inkPillBorder,
+  },
+  artIcon: {
+    width: 88,
+    height: 88,
+    borderRadius: radius.xl,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.inkPill,
+    borderWidth: 1,
+    borderColor: colors.inkPillBorder,
+  },
+  slideStep: {
+    ...type.overline,
+    color: colors.brandOnDark,
   },
   slideTitle: {
-    ...type.h1,
+    ...type.display,
     color: colors.onDark,
   },
   slideBody: {
@@ -459,7 +499,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.onDarkMuted,
     opacity: 0.4,
   },
+  /* Etkin nokta uzar: "neredeyim" bilgisi renkle değil biçimle de okunur. */
   dotActive: {
+    width: 20,
     backgroundColor: colors.brandOnDark,
     opacity: 1,
   },

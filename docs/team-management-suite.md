@@ -6,3 +6,16 @@
 - Karttan düzenleme (yalnız yoklamayı kuran yönetici, `attendance.manager_user_id`):
   - `POST /api/match-center/team/matches/:id/attendance/players { player_ids }` — plana yedek olarak eklenir, gruba alınır.
   - `DELETE /api/match-center/team/matches/:id/attendance/players/:playerId` — plandan düşer, gruptan alınır.
+
+## Mobil kulüp yönetimi — gezinme ve derin bağlantılar
+
+- **Kulübüm** sekmesi giriş kapısıdır; hesap birden fazla role sahipse üstte
+  rol sekmeleri durur (`/kulubum?rol=takim|kariyer|yonetim`). Her rol aynı
+  sırayı izler: kimlik kartı → "Şimdi ilgilen" (bekleyen işler, aciliyete
+  göre) → sıradaki maç → araç ızgarası → takip edilen takımlar.
+- **Kulüp Paneli** (`/takimim`) aynı sinyallerin tam dökümüdür; ikisi tek veri
+  kancasını paylaşır (`components/club/useClubSignals.ts`).
+- **Kadro** (`/takimim/kadro`): sekmeler Kadro · Diziliş · Transfer · Sezon
+  kadrosu (`?gorunum=`); hızlı süzgeç `?filtre=sozlesmesiz|hesapsiz|numarasiz|mevkisiz`.
+- **Maç kadrosu** (`/takimim/mac/:id`): sekmeler Kadro · Yoklama · Rakip analizi
+  (`?sekme=kadro|yoklama|analiz`).

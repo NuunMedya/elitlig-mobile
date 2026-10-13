@@ -12,8 +12,12 @@
  * yine gelir — engel değil, o yüzden hata yutulur.
  *
  * ROZET NE ANLATIR: `/api/meta/cities` yalnız lig verisi olan şehirleri
- * döndürür; arşivlenmiş olanlar `is_archived` ile işaretlenir. "Aktif lig"
- * rozeti bu ayrımı gösterir ve haritadaki parlak illerle aynı şeyi söyler.
+ * döndürür; arşivlenmiş olanlar `is_archived` ile işaretlenir. ARENA: renk
+ * sinyaldir — eskiden HER satırda yeşil "Aktif lig" rozeti vardı ve on bir
+ * satırın on birinde aynı şeyi söyleyen rozet hiçbir şey söylemiyordu. Artık
+ * kural tersine çevrildi: yalnız İSTİSNA (arşivlenmiş şehir) nötr "Arşiv"
+ * rozeti taşır. Seçili şehir vurgulu zemin + onay işaretiyle okunur, alt
+ * düğme şehrin adını söyler ("Ankara ile devam et").
  *
  * ARAMA TÜRKÇEYE GÖRE: "istanbul" yazınca "İstanbul" bulunsun diye
  * karşılaştırma `toLocaleLowerCase("tr-TR")` ile yapılır (I/İ tuzağı).
@@ -85,7 +89,7 @@ const CityRow = React.memo(function CityRow({
     <ListRow
       leading={{ icon: selected ? "location" : "location-outline", tone: selected ? "brand" : "neutral" }}
       title={label}
-      badge={active ? <Badge label="Aktif lig" tone="win" size="xs" /> : undefined}
+      badge={active ? undefined : <Badge label="Arşiv" tone="neutral" size="xs" />}
       trailing={
         selected ? (
           <Ionicons name="checkmark-circle" size={20} color={colors.brandAccent} />
@@ -183,7 +187,7 @@ export default function CityIntroScreen() {
       <View style={styles.mapCard}>
         <TurkeyMap cities={cities} selectedId={selectedId} onSelect={select} />
         <Text style={styles.mapHint} {...textScale.dense}>
-          Parlak iller aktif lig verisi olduğunu gösterir
+          Renkli illerde lig var — haritadan ya da listeden seç
         </Text>
       </View>
 
@@ -193,7 +197,7 @@ export default function CityIntroScreen() {
           query
             ? `${filtered.length} sonuç`
             : activeCount > 0
-              ? `${activeCount} aktif lig`
+              ? `${activeCount} şehirde lig`
               : undefined
         }
       />
@@ -250,7 +254,11 @@ export default function CityIntroScreen() {
 
       <View style={styles.footer}>
         <Button
-          label={selectedId ? "Misafir olarak devam et" : "Bir şehir seç"}
+          label={
+            selectedId
+              ? `${cities.find((city) => city.id === selectedId)?.label ?? "Şehir"} ile devam et`
+              : "Bir şehir seç"
+          }
           onPress={finish}
           disabled={!selectedId}
           icon="arrow-forward"

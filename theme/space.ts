@@ -162,6 +162,9 @@ export const layout = {
  * kademe arasındaki fark (6px) tam da tipik iç boşluk kadar seçildi.
  */
 /*
+ * ARENA NOTU: kartlar ve satır grupları yeniden `xl` (18) kullanır; düğme ve
+ * çipler hap (`pill`). Aşağıdaki eski gerekçe tarihçe olarak durur.
+ *
  * KÖŞE ÖLÇEĞİ BİR KADEME KESKİNLEŞTİ (18 → 14 kart, 24 → 18 panel).
  * Kullanıcı geri bildirimi "fazla oval": 18px'lik kart köşesi, 14px'lik kenar
  * boşluğu ve 12px'lik iç dolguyla birlikte her kutuyu hap gibi gösteriyor,
@@ -173,9 +176,9 @@ export const radius = {
   none: 0,
   xs:   6,   // form çipi, mikro rozet
   sm:   8,   // amblem kutusu, küçük pul
-  md:  12,   // KART İÇİ ELEMAN: input, chip zemini, satır grubu, bar, DÜĞME
-  lg:  14,   // KART
-  xl:  18,   // bottom sheet, panel
+  md:  12,   // KART İÇİ ELEMAN: input, chip zemini, bar
+  lg:  14,   // küçük kart/karo (eski kart değeri)
+  xl:  18,   // KART ve satır grubu (Arena), panel
   xxl: 22,   // sahne yüzeyi: skor tablosu, saha, yükselen sayfa
   pill: 999,
 } as const;

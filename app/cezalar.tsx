@@ -27,6 +27,7 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
+import { ScopeChip } from "@/components/ScopeChip";
 import { useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";
@@ -121,6 +122,17 @@ function durationText(meta?: PenaltyMeta | null): string | null {
   if (meta.duration_type === "mac") {
     const count = Number(meta.match_count);
     return Number.isFinite(count) && count > 0 ? `${count} maç men` : "Maç cezası";
+  }
+  return null;
+}
+
+/** Satır rozeti için kısa ceza: "3 maç" / "Süresiz" / null. */
+function durationShort(meta?: PenaltyMeta | null): string | null {
+  if (!meta) return null;
+  if (meta.duration_type === "suresiz") return "Süresiz";
+  if (meta.duration_type === "mac") {
+    const count = Number(meta.match_count);
+    return Number.isFinite(count) && count > 0 ? `${count} maç` : "Maç cezası";
   }
   return null;
 }
@@ -246,7 +258,7 @@ export default function PenaltiesScreen() {
     () => (
       <View style={styles.headerBlock}>
         <ChipGroup style={styles.chips}>
-          {FILTERS.map((def) => (
+          {FILTERS.filter((def) => def.key === "tumu" || def.key === filter || counts[def.key] > 0).map((def) => (
             <Chip
               key={def.key}
               label={def.label}
@@ -274,7 +286,10 @@ export default function PenaltiesScreen() {
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader
         title="Cezalar"
-        subtitle={`${scope.cityLabel || "Türkiye"} · disiplin kararları`}
+        /* Kapsam dokunulur çipte: boş il listesinden kullanıcı tek dokunuşla
+           başka ile geçebilsin (eskiden yalnız okunan bir alt başlıktı). */
+        scope={<ScopeChip variant="city" />}
+        subtitle="Disiplin kararları"
         back
         scrollY={scrollY}
         actions={
@@ -300,7 +315,8 @@ export default function PenaltiesScreen() {
         <EmptyState
           icon="shield-checkmark-outline"
           title="Ceza kaydı yok"
-          body="Bu kapsamda sonuçlanmış disiplin kararı bulunmuyor — centilmenlik kazanıyor."
+          body={`${scope.cityLabel || "Bu kapsam"} için sonuçlanmış disiplin kararı bulunmuyor — centilmenlik kazanıyor.`}
+          action={{ label: "Şehri değiştir", onPress: () => scope.openScopeSheet("city"), haptic: "light" }}
         />
       ) : (
         <FlatList
@@ -352,10 +368,18 @@ const PenaltyRow = React.memo(function PenaltyRow({
 }) {
   const handlePress = useCallback(() => onPress(item), [item, onPress]);
 
+  /* SATIR DİLİ: kişi → takım · tarih → CEZA. Listedeki kayıtların çoğu
+     "Kurul kararı" aşamasındadır; her satırda aynı kırmızı aşama rozeti
+     hiçbir şey söylemiyor, asıl bilgiyi (kaç maç?) kırpıyordu. Rozet artık
+     cezanın kendisidir; aşama yalnız farklıysa (CAS) alt satıra yazılır. */
   const meta = item.meta;
   const stage = stageOf(meta?.status);
-  const duration = durationText(meta);
-  const subtitle = [meta?.team_name?.trim(), duration, meta?.match_label?.trim()]
+  const short = durationShort(meta);
+  const subtitle = [
+    meta?.team_name?.trim(),
+    formatDateShort(item.published_at),
+    meta?.status === "cas_karari" ? stage.label : null,
+  ]
     .filter(Boolean)
     .join(" · ");
 
@@ -364,8 +388,15 @@ const PenaltyRow = React.memo(function PenaltyRow({
       leading={<Avatar name={meta?.player_name ?? item.title} image={mediaUrl(item.cover_image_url)} size={32} />}
       title={meta?.player_name?.trim() || item.title}
       subtitle={subtitle || "Merkez Disiplin Kurulu kararı"}
-      value={formatDateShort(item.published_at)}
-      badge={<Badge label={own ? "Dosyam" : stage.label} tone={own ? "brand" : stage.tone} />}
+      badge={
+        own ? (
+          <Badge label="Dosyam" tone="brand" />
+        ) : short ? (
+          <Badge label={short} tone={meta?.duration_type === "suresiz" ? "danger" : "warn"} />
+        ) : (
+          <Badge label={stage.label} tone={stage.tone} />
+        )
+      }
       position={position}
       onPress={handlePress}
     />

@@ -20,6 +20,11 @@
  * `useLiveFavoriteCount` yoklamasından (20 sn, yalnız ön planda) beslenir —
  * o kanca zaten sekme rozetini besliyor, ikinci bir zamanlayıcı açılmaz.
  *
+ * GÖRÜNÜM: program bölümleri Maçlar sekmesiyle aynı satır dilini konuşur —
+ * her bölüm TEK karttır, içinde `MatchCard variant="compact"` satırları;
+ * gün skorun altında yazar (bölümler birden çok günü karıştırır). Canlı
+ * bölümün başlığında nabız noktası vardır.
+ *
  * NEDEN GİRİŞSİZ DE ÇALIŞIR: favoriler cihazda saklanır. Giriş yalnızca push
  * bildirimlerini (gol, maç başladı) açar; üst bant bunu anlatır.
  *
@@ -45,6 +50,7 @@ import {
   EmptyState,
   ErrorState,
   ListRow,
+  LiveBadge,
   MatchCard,
   ScreenHeader,
   SectionHeader,
@@ -214,8 +220,10 @@ const StarButton = React.memo(function StarButton({
  */
 const GuestBanner = React.memo(function GuestBanner({ onSignIn }: { onSignIn: () => void }) {
   return (
-    <Surface level={1} radius="lg" style={styles.banner}>
-      <Ionicons name="notifications-outline" size={18} color={colors.brandAccent} />
+    <Surface level={1} radius="xl" style={styles.banner}>
+      <View style={styles.bannerIcon}>
+        <Ionicons name="notifications" size={17} color={colors.brandAccent} />
+      </View>
       <Text style={styles.bannerText} {...textScale.dense}>
         Favorilerin bu cihazda. Giriş yap, gol bildirimlerini al.
       </Text>
@@ -224,10 +232,12 @@ const GuestBanner = React.memo(function GuestBanner({ onSignIn }: { onSignIn: ()
   );
 });
 
-/** Maç satırı — `onPress`/`onToggleFavorite` içeride sabitlenir ki memo işe yarasın. */
+/** Maç satırı — `onPress`/`onToggleFavorite` içeride sabitlenir ki memo işe yarasın.
+ *  Satırlar `position` ile bölüm başına tek kart kurar. */
 const FavoriteMatchRow = React.memo(function FavoriteMatchRow({
   match,
   position,
+  showDate,
   homeLogo,
   awayLogo,
   starred,
@@ -236,6 +246,8 @@ const FavoriteMatchRow = React.memo(function FavoriteMatchRow({
 }: {
   match: ApiMatch;
   position: MatchRowPosition;
+  /** Gün etiketi — yalnız birden çok günü karıştıran bölümlerde (Yaklaşan, Son 7 gün). */
+  showDate: boolean;
   homeLogo?: string | null;
   awayLogo?: string | null;
   starred: boolean;
@@ -247,15 +259,16 @@ const FavoriteMatchRow = React.memo(function FavoriteMatchRow({
 
   return (
     <MatchCard
+      variant="compact"
+      position={position}
       match={match}
       homeLogo={homeLogo}
       awayLogo={awayLogo}
-      meta="league"
-      showDate
+      showDate={showDate}
+      showVenue
       isFavorite={starred}
       onToggleFavorite={toggle}
       onPress={open}
-      style={position === "last" || position === "single" ? undefined : { marginBottom: space.m }}
     />
   );
 });
@@ -263,12 +276,15 @@ const FavoriteMatchRow = React.memo(function FavoriteMatchRow({
 /** Favori takım satırı. */
 const FavoriteTeamRow = React.memo(function FavoriteTeamRow({
   team,
+  logo,
   subtitle,
   position,
   onOpen,
   onRemove,
 }: {
   team: FavoriteTeam;
+  /** Favori kaydında logo yoksa maç verisinden çözülen amblem. */
+  logo?: string | null;
   subtitle: string;
   position: MatchRowPosition;
   onOpen: (teamId: number) => void;
@@ -279,7 +295,7 @@ const FavoriteTeamRow = React.memo(function FavoriteTeamRow({
 
   return (
     <ListRow
-      leading={<TeamLogo name={team.name} logo={team.logo} size={layout.crestLg} />}
+      leading={<TeamLogo name={team.name} logo={logo} size={layout.crestLg} />}
       title={team.name}
       subtitle={subtitle}
       position={position}
@@ -634,6 +650,7 @@ export default function FavorilerScreen() {
       <FavoriteMatchRow
         match={item}
         position={rowPosition(index, section.data.length)}
+        showDate={section.key === "upcoming" || section.key === "recent"}
         homeLogo={logoFor(item.home_team_id, item.first_team_name)}
         awayLogo={logoFor(item.away_team_id, item.second_team_name)}
         starred={isFavoriteMatch(item.id)}
@@ -646,7 +663,12 @@ export default function FavorilerScreen() {
 
   const renderMatchSectionHeader = useCallback(
     ({ section }: { section: MatchSection }) => (
-      <SectionHeader title={section.title} meta={`${section.data.length} maç`} />
+      <SectionHeader
+        title={section.title}
+        meta={`${section.data.length} maç`}
+        leading={section.key === "live" ? <LiveBadge compact /> : undefined}
+        style={styles.sectionHeader}
+      />
     ),
     []
   );
@@ -656,7 +678,14 @@ export default function FavorilerScreen() {
       const summary = teamSummaries.get(item.id);
       const parts: string[] = [];
       if (summary?.league) parts.push(summary.league);
-      if (summary?.next) {
+      if (summary?.next && matchState(summary.next) === "live") {
+        // Maç şu an oynanıyorsa "Bugün 20:24" bayat kalır; skoru söylemek gerekir.
+        parts.push(
+          `Canlı ${Number(summary.next.first_team_score ?? 0)}–${Number(
+            summary.next.second_team_score ?? 0
+          )} · ${opponentName(summary.next, item)}`
+        );
+      } else if (summary?.next) {
         parts.push(
           `${formatDayHeading(summary.next.date)} ${formatTime(summary.next.time)} · ${opponentName(
             summary.next,
@@ -670,6 +699,7 @@ export default function FavorilerScreen() {
       return (
         <FavoriteTeamRow
           team={item}
+          logo={item.logo ?? logoFor(item.id, item.name)}
           subtitle={parts.join(" · ")}
           position={rowPosition(index, favorites.length)}
           onOpen={openTeam}
@@ -677,7 +707,7 @@ export default function FavorilerScreen() {
         />
       );
     },
-    [teamSummaries, favorites.length, openTeam, removeTeam]
+    [teamSummaries, favorites.length, openTeam, removeTeam, logoFor]
   );
 
   const renderScope = useCallback(
@@ -694,7 +724,9 @@ export default function FavorilerScreen() {
   );
 
   const renderScopeSectionHeader = useCallback(
-    ({ section }: { section: ScopeSection }) => <SectionHeader title={section.title} />,
+    ({ section }: { section: ScopeSection }) => (
+      <SectionHeader title={section.title} style={styles.sectionHeader} />
+    ),
     []
   );
 
@@ -831,15 +863,31 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   sectionGap: {
-    height: layout.sectionGap,
+    height: layout.sectionGap - space.lg,
+  },
+  /* Liste zaten ekran kenarı dolgusunu taşır; bölüm başlığı ikinci kez
+     içeri çekilmesin, satırlarla aynı hizadan başlasın. */
+  sectionHeader: {
+    paddingHorizontal: space.xxs,
   },
   banner: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.sm,
-    padding: space.md,
+    gap: space.md,
+    paddingVertical: space.md,
+    paddingLeft: space.lg,
+    paddingRight: space.md,
+    marginTop: space.sm,
     marginBottom: space.md,
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
+  },
+  bannerIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.md,
+    backgroundColor: colors.brandDim,
+    alignItems: "center",
+    justifyContent: "center",
   },
   bannerText: {
     ...type.bodySm,

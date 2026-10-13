@@ -98,7 +98,10 @@ const CONFIRM_STATUS: Partial<Record<MacDurumu, { title: string; body: string; a
 
 /** Satır ve başlık ölçüleri — `getItemLayout` yalnız bunlardan kurulur. */
 const ROW_HEIGHT = matchRowHeight("default", "none");
-const SECTION_HEADER_HEIGHT = 32;
+/* Gün başlığı: 12 üst nefes + h3 satırı (20) + 8 alt nefes. Bölüm başlığı
+   listenin kendi kenar boşluğunun İÇİNDE durur; SectionHeader'ın ekran
+   kenarı dolgusu burada sıfırlanır (iki kez içeri kaçıyordu). */
+const SECTION_HEADER_HEIGHT = 40;
 const SECTION_GAP = space.md;
 
 /** Canlı bölüm varken hızlı, yokken sakin yoklama. */
@@ -390,7 +393,7 @@ export default function AdminMatchesScreen() {
 
   const renderSectionHeader = useCallback(
     ({ section }: { section: SectionListData<ApiMatch, MatchSectionMeta> }) => (
-      <SectionHeader title={section.title} meta={section.meta} />
+      <SectionHeader title={section.title} meta={section.meta} size="group" style={styles.dayHeader} />
     ),
     [],
   );
@@ -497,7 +500,7 @@ export default function AdminMatchesScreen() {
         />
       ) : loading ? (
         <View style={styles.skeleton}>
-          <SkeletonMatchRow count={7} />
+          <SkeletonMatchRow count={7} variant="row" />
         </View>
       ) : failed ? (
         <ErrorState error={matchesQuery.error} onRetry={refetch} />
@@ -727,6 +730,12 @@ const styles = StyleSheet.create({
   },
   sectionGap: {
     height: SECTION_GAP,
+  },
+  dayHeader: {
+    height: SECTION_HEADER_HEIGHT,
+    paddingHorizontal: space.xxs,
+    paddingTop: space.md,
+    paddingBottom: space.sm,
   },
 
   /* Eylem alt sayfası */

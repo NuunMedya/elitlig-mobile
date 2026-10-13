@@ -35,6 +35,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { colors, duration, hairline, layout, radius as radiusScale, space } from "@/theme";
 import { useReduceMotion } from "./LiveBadge";
 import { TEAM_ROW_HEIGHT, TEAM_ROW_HEIGHT_TABLE } from "./TeamRow";
+import { matchCardHeight } from "./MatchCard";
 
 /* ——————————————————— Paylaşılan parlama döngüsü ——————————————————— */
 
@@ -186,14 +187,61 @@ function repeat(count: number, render: (index: number) => React.ReactNode): Reac
 /* ——————————————————————— Hazır şablonlar ——————————————————————— */
 
 /**
- * Maç listesi iskeleti — gerçek `MatchRow` iskeletini taklit eder:
- * saat sütunu (44) · iki takım satırı · skor sütunu (30) · yıldız (32).
+ * Maç listesi iskeleti.
+ *
+ * VARSAYILAN BİÇİM ARENA'NIN KOMPAKT MAÇ KARTIDIR (`MatchCard
+ * variant="compact"`): tek eksende `ad · arma · skor · arma · ad`, altında
+ * ortalı saha satırı; satırlar `radius.xl` köşeli tek bir grup kartında
+ * durur. Ölçüler `matchCardHeight` ile aynı kaynaktan gelir, yükleme bitince
+ * düzen zıplamaz.
+ *
+ * `variant="row"`: eski iki çizgili `MatchRow` iskeleti (saat sütunu · iki
+ * takım satırı · skor sütunu) — hâlâ `MatchRow` kullanan listeler için.
  */
 export const SkeletonMatchRow = React.memo(function SkeletonMatchRow({
   count = 6,
+  variant = "compact",
+  showVenue = true,
 }: {
   count?: number;
+  /** "compact" (varsayılan): MatchCard kompakt satırı; "row": eski MatchRow. */
+  variant?: "compact" | "row";
+  /** Yalnız compact: alt saha satırı çizilsin mi — varsayılan true. */
+  showVenue?: boolean;
 }) {
+  if (variant === "compact") {
+    const height = matchCardHeight({ variant: "compact", showVenue });
+    return (
+      <SkeletonGroup label="Maçlar yükleniyor" style={styles.compactGroup}>
+        {repeat(count, (index) => (
+          <View
+            key={index}
+            style={[styles.compactRow, { height }, index < count - 1 ? styles.compactDivider : null]}
+          >
+            <View style={styles.compactMain}>
+              <View style={[styles.compactSide, styles.compactSideHome]}>
+                <Skeleton width={24} height={24} radius="sm" />
+                <Skeleton width="58%" height={12} radius="pill" />
+              </View>
+              <View style={styles.compactCenter}>
+                <Skeleton width={40} height={16} radius="sm" />
+              </View>
+              <View style={styles.compactSide}>
+                <Skeleton width={24} height={24} radius="sm" />
+                <Skeleton width="52%" height={12} radius="pill" />
+              </View>
+            </View>
+            {showVenue ? (
+              <View style={styles.compactMeta}>
+                <Skeleton width={96} height={9} radius="pill" />
+              </View>
+            ) : null}
+          </View>
+        ))}
+      </SkeletonGroup>
+    );
+  }
+
   return (
     <SkeletonGroup label="Maçlar yükleniyor" style={styles.block}>
       {repeat(count, (index) => (
@@ -390,6 +438,43 @@ const styles = StyleSheet.create({
     borderBottomWidth: hairline,
     borderColor: colors.border,
   },
+  /* Kompakt maç kartı grubu — MatchCard'ın `position` kabuğuyla aynı. */
+  compactGroup: {
+    backgroundColor: colors.surface1,
+    borderRadius: radiusScale.xl,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    overflow: "hidden",
+  },
+  compactRow: {
+    justifyContent: "center",
+  },
+  compactDivider: {
+    borderBottomWidth: hairline,
+    borderBottomColor: colors.separator,
+  },
+  compactMain: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: space.md,
+  },
+  compactSide: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.s,
+  },
+  compactSideHome: {
+    flexDirection: "row-reverse",
+  },
+  compactCenter: {
+    width: 70,
+    alignItems: "center",
+  },
+  compactMeta: {
+    alignItems: "center",
+    paddingTop: space.s,
+  },
   matchRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -453,10 +538,10 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: colors.surface1,
-    borderRadius: radiusScale.lg,
+    borderRadius: radiusScale.xl,
     borderWidth: hairline,
     borderColor: colors.border,
-    padding: space.md,
+    padding: space.lg,
     gap: space.md,
   },
   cardLines: {

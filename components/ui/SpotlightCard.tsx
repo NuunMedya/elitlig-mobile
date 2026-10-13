@@ -1,28 +1,35 @@
 /**
- * SpotlightCard — Genel Bakış'ın tepesindeki tek büyük kart.
+ * SpotlightCard — Ana Sayfa'nın vitrin maçı, SAHNE yüzeyinde.
  *
  * NE GÖSTERİR: kullanıcının ŞU AN önemsediği tek maç. Öncelik sırası
- * ekran tarafından verilir (canlı maç > bugünkü maç > sıradaki maç); bu
- * bileşen yalnız çizer.
+ * ekran tarafından verilir (canlı maç > kullanıcının maçı > sıradaki maç);
+ * bu bileşen yalnız çizer.
  *
- * NEDEN BEYAZ KART (mürekkep blok değil): Kural 01 — mor yalnız BAŞLIK
- * bloğunda ve ALT RAYDA yaşar; kâğıdın üstünde ikinci bir mor blok, başlığın
- * "burası kimlik" sözünü tekrarlayıp zayıflatıyordu ve kart, kartlar
- * arasında değil ayrı bir uygulamadan gelmiş gibi duruyordu. Vitrin artık
- * maketin "Kulübüm" kartıyla (tema.html §7/1 ".card") aynı dili konuşur:
- * beyaz yüzey + hairline kenarlık + 1. seviye gölge. Onu manşet yapan şey
- * zemin değil KONUM (kâğıdın ilk kartı) ve ÖLÇÜ (26px skor).
+ * NEDEN SAHNE (grafit): Arena dilinde sahne "kimlik ve skor anı"dır ve
+ * ekranda en fazla BİR kez, tepede kullanılır. Ana Sayfa'nın tepesindeki tek
+ * maç tam olarak budur: altındaki her şey kâğıttır (liste, tablo, haber),
+ * vitrin ise skorbordun kendisi. Beyaz kartlar arasında beyaz bir vitrin,
+ * yalnız boyutuyla ayrışabiliyordu; grafit, "burası skor" der.
  *
- * NEDEN SKOR ORTADA DEĞİL: iki takım adı iki satırda, skor sağda hizalı
- * durur. Bu, alttaki maç listesinin satır düzeniyle AYNI okuma eksenidir;
- * ortada dev skor gösteren bir hero kart, kullanıcıyı iki farklı okuma
- * biçimi arasında gidip gelmeye zorlardı.
+ *   ┌────────────────────────────────────────────┐
+ *   │ ● CANLI · ŞU AN OYNANIYOR         FREELİG  │  bağlam satırı
+ *   │                                            │
+ *   │    ◆◆◆            0 – 0            ◆◆◆      │  amblem · SKOR · amblem
+ *   │   EMA FC                        DOSTLAR FC │
+ *   │ ────────────────────────────────────────── │
+ *   │ ⌖ Bugün · ERYAMAN ATA HALISAHA  Maça git › │  alt şerit
+ *   └────────────────────────────────────────────┘
+ *
+ * SKOR ORTADA, 40px: vitrin listeden farklı okunur ve okunmalıdır — liste
+ * tarar, vitrin söyler. Rakam `scoreHero`, sahnede beyaz; canlıyken skor
+ * beyaz kalır, canlılığı rozet ve kırmızı nokta söyler (kırmızı rakam koyu
+ * zeminde titreşir).
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import React from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
-import { colors, elevate, hairline, radius, space, textScale, type, upperTR } from "@/theme";
+import { colors, fonts, hairline, radius, space, textScale, type, upperTR } from "@/theme";
 import { GradientFill } from "./GradientFill";
 import { LiveBadge } from "./LiveBadge";
 import { Touchable } from "./Pressable";
@@ -35,23 +42,27 @@ export interface SpotlightTeam {
 }
 
 export interface SpotlightCardProps {
-  /** Üst satırdaki küçük büyük-harf etiket: "SIRADAKİ MAÇ", "CANLI". */
+  /** Üst satırdaki küçük büyük-harf etiket: "SIRADAKİ MAÇ", "ŞU AN OYNANIYOR". */
   eyebrow: string;
-  /** Etiketin sağındaki bağlam: lig adı, saha. */
+  /** Etiketin sağındaki bağlam: lig adı. */
   context?: string;
   home: SpotlightTeam;
   away: SpotlightTeam;
-  /** Skor yerine gösterilecek metin (saat, "MS", "—"). */
+  /** Skor yerine gösterilecek metin (başlama saati, "—"). */
   statusText?: string;
+  /** Saatin altındaki küçük gün etiketi ("Yarın", "14 Eki Çar"). */
+  statusCaption?: string;
   /** Canlı ise nabız atan rozet ve dakika. */
   live?: boolean;
   minute?: number | null;
-  /** Alt şeritteki bilgi satırı: tarih · saha · hakem. */
+  /** Alt şeritteki bilgi satırı: tarih · saha. */
   footnote?: string;
   onPress?: () => void;
   style?: StyleProp<ViewStyle>;
   testID?: string;
 }
+
+const CREST = 56;
 
 export const SpotlightCard = React.memo(function SpotlightCard({
   eyebrow,
@@ -59,6 +70,7 @@ export const SpotlightCard = React.memo(function SpotlightCard({
   home,
   away,
   statusText,
+  statusCaption,
   live,
   minute,
   footnote,
@@ -68,76 +80,86 @@ export const SpotlightCard = React.memo(function SpotlightCard({
 }: SpotlightCardProps) {
   const hasScore = typeof home.score === "number" && typeof away.score === "number";
 
-  // Kazanan kalın + textPrimary, kaybeden sönük (§1.0/4). Berabere ikisi de normal.
-  const homeWins = hasScore && (home.score as number) > (away.score as number);
-  const awayWins = hasScore && (away.score as number) > (home.score as number);
-  const decided = homeWins || awayWins;
+  // Bitmiş maçta kaybeden soluklaşır; canlıyken "kazanan" yoktur.
+  const homeWins = !live && hasScore && (home.score as number) > (away.score as number);
+  const awayWins = !live && hasScore && (away.score as number) > (home.score as number);
 
-  /*
-   * Taraf satırı. Skor CANLIYKEN iki tarafta da canlı kırmızısıdır — maç
-   * bitmeden "kazanan" yoktur, o anki üstünlük renkle işaretlenmez; bittiğinde
-   * kaybeden taraf adıyla birlikte üçüncül griye çekilir (maket ".mrow .lose").
-   */
-  const side = (team: SpotlightTeam, winner: boolean) => {
-    const loser = decided && !winner;
-    return (
-      <View style={styles.side}>
-        <TeamLogo logo={team.logo} name={team.name} size={22} />
-        <Text
-          style={[styles.teamName, loser ? styles.muted : null]}
-          numberOfLines={1}
-          {...textScale.dense}
-        >
-          {team.name}
-        </Text>
-        {hasScore ? (
-          <Text
-            style={[styles.score, live ? styles.scoreLive : loser ? styles.muted : null]}
-            {...textScale.dense}
-          >
-            {team.score}
-          </Text>
-        ) : null}
-      </View>
-    );
-  };
+  const side = (team: SpotlightTeam, lost: boolean) => (
+    <View style={styles.side}>
+      <TeamLogo logo={team.logo} name={team.name} size={CREST} />
+      <Text
+        style={[styles.teamName, lost ? styles.dim : null]}
+        numberOfLines={2}
+        {...textScale.dense}
+      >
+        {team.name}
+      </Text>
+    </View>
+  );
 
   const content = (
     <>
-      {/* Işıklı yüzey — `Card` ile aynı katman; yerleşimi etkilemez. */}
-      <GradientFill radius="lg" />
+      <GradientFill tone="ink" radius="xxl" />
+
       <View style={styles.head}>
-        {live ? <LiveBadge minute={minute} size="sm" /> : null}
+        {live ? <LiveBadge minute={minute} onDark /> : null}
+        {live ? <View style={styles.headDot} /> : null}
         <Text style={styles.eyebrow} numberOfLines={1} {...textScale.badge}>
           {upperTR(eyebrow)}
         </Text>
         {context ? (
-          <Text style={styles.context} numberOfLines={1} {...textScale.dense}>
-            {context}
-          </Text>
-        ) : null}
-      </View>
-
-      <View style={styles.teams}>
-        {side(home, homeWins)}
-        {side(away, awayWins)}
-
-        {!hasScore && statusText ? (
-          <View style={styles.statusBox}>
-            <Text style={styles.statusText} {...textScale.dense}>
-              {statusText}
+          <View style={styles.contextPill}>
+            <Text style={styles.context} numberOfLines={1} {...textScale.badge}>
+              {upperTR(context)}
             </Text>
           </View>
         ) : null}
       </View>
 
+      <View style={styles.board}>
+        {side(home, awayWins)}
+
+        <View style={styles.center}>
+          {hasScore ? (
+            <Text style={styles.score} numberOfLines={1} {...textScale.badge}>
+              <Text style={awayWins ? styles.dim : null}>{home.score}</Text>
+              <Text style={styles.dash}> – </Text>
+              <Text style={homeWins ? styles.dim : null}>{away.score}</Text>
+            </Text>
+          ) : (
+            <Text style={styles.time} numberOfLines={1} {...textScale.badge}>
+              {statusText || "—"}
+            </Text>
+          )}
+          {!live && hasScore ? (
+            <View style={styles.statePill}>
+              <Text style={styles.stateText} {...textScale.badge}>
+                MS
+              </Text>
+            </View>
+          ) : !hasScore && statusCaption ? (
+            <Text style={styles.caption} numberOfLines={1} {...textScale.badge}>
+              {statusCaption}
+            </Text>
+          ) : null}
+        </View>
+
+        {side(away, homeWins)}
+      </View>
+
       {footnote ? (
         <View style={styles.footer}>
+          <Ionicons name="location-outline" size={13} color={colors.onDarkMuted} />
           <Text style={styles.footnote} numberOfLines={1} {...textScale.dense}>
             {footnote}
           </Text>
           {onPress ? (
-            <Ionicons name="chevron-forward" size={12} color={colors.textTertiary} />
+            <View style={styles.cta}>
+              <Text style={styles.ctaText} {...textScale.badge}>
+                Maça git
+              </Text>
+              <Ionicons name="chevron-forward" size={13} color={colors.brandOnDark} />
+            </View>
           ) : null}
         </View>
       ) : null}
@@ -158,7 +180,11 @@ export const SpotlightCard = React.memo(function SpotlightCard({
       haptic="selection"
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${eyebrow}: ${home.name} - ${away.name}`}
+      accessibilityLabel={
+        hasScore
+          ? `${eyebrow}: ${home.name} ${home.score}, ${away.name} ${away.score}`
+          : `${eyebrow}: ${home.name} - ${away.name}${statusText ? `, ${statusText}` : ""}`
+      }
       style={[styles.card, style]}
       testID={testID}
     >
@@ -169,82 +195,125 @@ export const SpotlightCard = React.memo(function SpotlightCard({
 
 const styles = StyleSheet.create({
   /**
-   * Kart kabuğu: `elevate(1)` yüzey + hairline kenarlık + gölgeyi verir,
-   * yarıçap KART ölçüsü (18). `overflow: "hidden"` YOK — iOS'ta gölgeyi
-   * kırpardı; köşeleri gradyan katmanı kendi taşır (bkz. GradientFill).
+   * Sahne kabuğu: grafit zemin (gradyan katmanı köşeyi kendi taşır), sahne
+   * yarıçapı (22) ve sahnenin saç teli kenarlığı. Gölge yok — koyu blok
+   * kâğıdın üstünde zaten en ağır öğedir.
    */
   card: {
-    ...elevate(1),
-    borderRadius: radius.lg,
-    padding: space.md,
-    gap: space.sm,
+    backgroundColor: colors.inkBlock,
+    borderRadius: radius.xxl,
+    borderWidth: hairline,
+    borderColor: colors.borderOnDark,
+    paddingHorizontal: space.lg,
+    paddingTop: space.lg,
+    paddingBottom: space.md,
   },
   head: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.s,
+    minHeight: 22,
+  },
+  headDot: {
+    width: 3,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: colors.onDarkMuted,
   },
   eyebrow: {
     ...type.overline,
-    color: colors.brandAccent,
-  },
-  context: {
-    ...type.caption,
-    color: colors.textTertiary,
-    marginLeft: "auto",
+    color: colors.brandOnDark,
     flexShrink: 1,
   },
-  teams: {
-    gap: space.s,
+  contextPill: {
+    marginLeft: "auto",
+    flexShrink: 1,
+    paddingHorizontal: space.sm,
+    paddingVertical: 3,
+    borderRadius: radius.pill,
+    backgroundColor: colors.inkPill,
+    borderWidth: hairline,
+    borderColor: colors.inkPillBorder,
+  },
+  context: {
+    ...type.micro,
+    color: colors.onDark,
+  },
+  board: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginTop: space.lg,
   },
   side: {
-    flexDirection: "row",
+    flex: 1,
+    minWidth: 0,
     alignItems: "center",
     gap: space.sm,
   },
   teamName: {
-    ...type.h2,
-    color: colors.textPrimary,
-    flex: 1,
+    ...type.h4,
+    color: colors.onDark,
+    textAlign: "center",
+    minHeight: type.h4.lineHeight * 2,
   },
-  /* Panel metriği (26): satır başlığından iki kademe büyük, ekranın en iri
-     rakamı — kartı manşet yapan ölçü budur, zemin değil. */
-  score: {
-    ...type.metric,
-    color: colors.textPrimary,
-    minWidth: 24,
-    textAlign: "right",
+  /** Bitmiş maçın kaybeden tarafı — sahnenin ikincil metni. */
+  dim: {
+    color: colors.onDarkMuted,
   },
-  scoreLive: {
-    color: colors.live,
-  },
-  /** Kaybeden taraf: ad ve skor birlikte üçüncül griye çekilir. */
-  muted: {
-    color: colors.textTertiary,
-  },
-  /** Skor yoksa saat/durum sağ üstte, iki takım satırının ortasında durur. */
-  statusBox: {
-    position: "absolute",
-    right: 0,
-    top: 0,
-    bottom: 0,
+  center: {
+    width: 116,
+    height: CREST,
+    alignItems: "center",
     justifyContent: "center",
+    gap: space.xs,
   },
-  statusText: {
-    ...type.h2,
-    color: colors.textPrimary,
+  score: {
+    ...type.scoreHero,
+    color: colors.onDark,
+  },
+  dash: {
+    color: colors.onDarkMuted,
+  },
+  time: {
+    ...type.scoreLg,
+    color: colors.onDark,
+  },
+  caption: {
+    ...type.caption,
+    fontFamily: fonts.semibold,
+    color: colors.onDarkMuted,
+  },
+  statePill: {
+    paddingHorizontal: space.sm,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+    backgroundColor: colors.inkPill,
+  },
+  stateText: {
+    ...type.micro,
+    color: colors.onDark,
   },
   footer: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.s,
-    paddingTop: space.sm,
+    marginTop: space.md,
+    paddingTop: space.md,
     borderTopWidth: hairline,
-    borderTopColor: colors.separator,
+    borderTopColor: colors.borderOnDark,
   },
   footnote: {
     ...type.caption,
-    color: colors.textTertiary,
+    color: colors.onDarkMuted,
     flex: 1,
+  },
+  cta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+  },
+  ctaText: {
+    ...type.label,
+    color: colors.brandOnDark,
   },
 });

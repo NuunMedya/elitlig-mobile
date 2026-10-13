@@ -2,7 +2,9 @@
  * TÜRKİYE SIRALAMASI — tüm şehirlerin birleşik istatistik liderleri.
  *
  * NE: altı kategori sekmesi (Tabs) + dönem segmenti + ilk üçün podyumu +
- * yoğun liste. Satıra dokunmak oyuncu profilini açar; sağ üstteki paylaş
+ * yoğun liste. ARENA: podyum ve satırlar Lig merkezinin Oyuncular bölmesiyle
+ * AYNI parçalardır (`Podium`, `PlayerRow`) — sıralama ülke geneline de
+ * çıksa aynı dille okunur. Satıra dokunmak oyuncu profilini açar; sağ üstteki paylaş
  * düğmesi ilk beşi bir kartta paylaşılabilir hâle getirir.
  *
  * VERİ: sıralama ucu kapsam parametresi verilmeyince ülke genelini döndürür;
@@ -37,13 +39,12 @@ import {
   Button,
   EmptyState,
   ErrorState,
-  ListRow,
+  PlayerRow,
+  PlayerRowHead,
   ScreenHeader,
-  SectionHeader,
   SegmentedControl,
   SkeletonListRow,
   Tabs,
-  Touchable,
   refreshControlProps,
   useHeaderScroll,
   useRefresh,
@@ -53,6 +54,8 @@ import {
 } from "@/components/ui";
 import { getPlayerRankings } from "@/lib/api/players";
 import type { PlayerRankRow, PlayerSort } from "@/lib/types";
+import { Podium } from "@/components/league/Podium";
+import { GroupSeparator, groupRowStyle, groupStyles } from "@/components/league/shared";
 import {
   colors,
   fonts,
@@ -105,8 +108,6 @@ const PERIOD_ITEMS: SegmentedItem<Period>[] = [
   { key: "alltime", label: "Tüm Zamanlar" },
 ];
 
-/** Podyum basamağı renkleri — altın, gümüş, bronz karşılığı tokenlar. */
-const PODIUM_TONES = [colors.star, colors.textTertiary, colors.warn] as const;
 
 /* — Paylaşım kartı — */
 type ShareFormat = "story" | "post";
@@ -129,139 +130,6 @@ function metaOf(player: PlayerRankRow): string {
   const parts = [player.teamName, player.city].filter(Boolean);
   return parts.length > 0 ? parts.join(" · ") : "—";
 }
-
-/* ═════════════════════════ PODYUM ═════════════════════════ */
-
-/**
- * NEDEN İLKEL PROP: basamak memo'lu; `PlayerRankRow` her sorgu dönüşünde yeni
- * referans alır, ilkel değerlerde ise yalnız gerçekten değişen basamak
- * yeniden çizilir.
- */
-const PodiumStep = React.memo(function PodiumStep({
-  place,
-  id,
-  name,
-  image,
-  meta,
-  display,
-  unit,
-  onOpen,
-}: {
-  /** 1, 2 veya 3. */
-  place: number;
-  id: number;
-  name: string;
-  image: string | null;
-  meta: string;
-  display: string;
-  unit: string;
-  onOpen: (playerId: number) => void;
-}) {
-  const tone = PODIUM_TONES[place - 1] ?? colors.textTertiary;
-  const first = place === 1;
-  const press = useCallback(() => onOpen(id), [id, onOpen]);
-
-  return (
-    <Touchable
-      feedback="card"
-      haptic="light"
-      onPress={press}
-      style={[styles.step, first ? styles.stepFirst : null]}
-      accessibilityRole="button"
-      accessibilityLabel={`${place}. sıra: ${name}, ${display} ${unit}`}
-    >
-      <Avatar
-        name={name}
-        image={image}
-        size={first ? 48 : 40}
-        ring={first ? "brand" : "none"}
-      />
-
-      {/* NEDEN DOLU DEĞİL ÇERÇEVE: altın/bronz dolgunun üstünde beyaz rakam
-          açık temada okunmuyor. Basamak rengi çerçevede yaşar, rakam her iki
-          temada da birincil metin rengiyle net kalır. */}
-      <View style={[styles.stepMedal, { borderColor: tone }]}>
-        <Text style={styles.stepMedalText} {...textScale.badge}>
-          {place}
-        </Text>
-      </View>
-
-      <Text style={styles.stepName} numberOfLines={1} {...textScale.dense}>
-        {name}
-      </Text>
-      <Text style={styles.stepMeta} numberOfLines={1} {...textScale.badge}>
-        {meta}
-      </Text>
-
-      <View style={[styles.stepValue, first ? styles.stepValueFirst : null]}>
-        <Text style={styles.stepValueText} {...textScale.dense}>
-          {display}
-        </Text>
-        <Text style={styles.stepValueUnit} {...textScale.badge}>
-          {unit}
-        </Text>
-      </View>
-    </Touchable>
-  );
-});
-
-/* ═════════════════════════ LİSTE SATIRI ═════════════════════════ */
-
-const RankRow = React.memo(function RankRow({
-  id,
-  rank,
-  name,
-  image,
-  meta,
-  display,
-  unit,
-  position,
-  onOpen,
-}: {
-  id: number;
-  rank: number;
-  name: string;
-  image: string | null;
-  meta: string;
-  display: string;
-  unit: string;
-  position: "single" | "first" | "middle" | "last";
-  onOpen: (playerId: number) => void;
-}) {
-  const press = useCallback(() => onOpen(id), [id, onOpen]);
-
-  return (
-    <ListRow
-      leading={
-        /* `ListRow` sol yuvası 24px'tir ve içeriği ORTALAR. Sıra + amblem
-           ikilisi bu yuvadan taşar; toplam genişlik 46px'te tutuluyor ki
-           taşma satır iç boşluğunu (12px) ve başlıkla arasındaki boşluğu
-           (10px) aşmasın — yani hiçbir şeyin üstüne binmesin. */
-        <View style={styles.rowLeading}>
-          <Text style={styles.rowRank} {...textScale.dense}>
-            {rank}
-          </Text>
-          <Avatar name={name} image={image} size={layout.crestMd} />
-        </View>
-      }
-      title={name}
-      subtitle={meta}
-      position={position}
-      onPress={press}
-      chevron={false}
-      trailing={
-        <View style={styles.rowValue}>
-          <Text style={styles.rowValueText} {...textScale.dense}>
-            {display}
-          </Text>
-          <Text style={styles.rowValueUnit} {...textScale.badge}>
-            {unit}
-          </Text>
-        </View>
-      }
-    />
-  );
-});
 
 /* ═════════════════════════ EKRAN ═════════════════════════ */
 
@@ -300,8 +168,9 @@ export default function TurkeyRankingsScreen() {
     [query.data, category]
   );
 
-  const podium = useMemo(() => players.slice(0, 3), [players]);
-  const rest = useMemo(() => players.slice(3), [players]);
+  /* Podyum yalnız üç oyuncu varsa; yoksa herkes listede. */
+  const podium = useMemo(() => (players.length >= 3 ? players.slice(0, 3) : []), [players]);
+  const rest = useMemo(() => (players.length >= 3 ? players.slice(3) : players), [players]);
 
   const refresh = useRefresh(query.refetch, { refreshing: query.isRefetching });
   const refreshControl = useMemo(
@@ -342,24 +211,15 @@ export default function TurkeyRankingsScreen() {
 
   const renderItem = useCallback(
     ({ item, index }: { item: PlayerRankRow; index: number }) => (
-      <RankRow
-        id={item.id}
+      <PlayerRow
+        playerId={item.id}
         rank={index + 4}
         name={item.name}
         image={item.image ?? null}
-        meta={metaOf(item)}
-        display={category.display(item)}
-        unit={category.unit}
-        position={
-          rest.length === 1
-            ? "single"
-            : index === 0
-              ? "first"
-              : index === rest.length - 1
-                ? "last"
-                : "middle"
-        }
-        onOpen={openPlayer}
+        meta={[item.teamName || "Takımsız", item.city]}
+        metric={category.display(item)}
+        onPress={openPlayer}
+        style={groupRowStyle(index, rest.length, true)}
       />
     ),
     [category, openPlayer, rest.length]
@@ -374,56 +234,22 @@ export default function TurkeyRankingsScreen() {
 
       <SegmentedControl items={PERIOD_ITEMS} value={period} onChange={setPeriod} size="sm" />
 
-      {podium.length > 0 ? (
-        <>
-          <View style={styles.podium}>
-            {/* 2 · 1 · 3 sırası: birinci ortada ve bir tık yukarıda durur. */}
-            {podium[1] ? (
-              <PodiumStep
-                place={2}
-                id={podium[1].id}
-                name={podium[1].name}
-                image={podium[1].image ?? null}
-                meta={metaOf(podium[1])}
-                display={category.display(podium[1])}
-                unit={category.unit}
-                onOpen={openPlayer}
-              />
-            ) : (
-              <View style={styles.step} />
-            )}
+      {podium.length >= 3 ? (
+        <Podium
+          players={podium}
+          metricOf={category.display}
+          unit={category.unit}
+          metaOf={metaOf}
+          onPress={openPlayer}
+        />
+      ) : null}
 
-            <PodiumStep
-              place={1}
-              id={podium[0].id}
-              name={podium[0].name}
-              image={podium[0].image ?? null}
-              meta={metaOf(podium[0])}
-              display={category.display(podium[0])}
-              unit={category.unit}
-              onOpen={openPlayer}
-            />
-
-            {podium[2] ? (
-              <PodiumStep
-                place={3}
-                id={podium[2].id}
-                name={podium[2].name}
-                image={podium[2].image ?? null}
-                meta={metaOf(podium[2])}
-                display={category.display(podium[2])}
-                unit={category.unit}
-                onOpen={openPlayer}
-              />
-            ) : (
-              <View style={styles.step} />
-            )}
-          </View>
-
-          {rest.length > 0 ? (
-            <SectionHeader title={category.label} meta={`${players.length} oyuncu`} />
-          ) : null}
-        </>
+      {/* Sütun başlığı kartın TEPESİDİR. Podyum yoksa (üçten az oyuncu) liste
+          birinciden başlar. */}
+      {rest.length > 0 ? (
+        <View style={[groupStyles.head, styles.groupHead]}>
+          <PlayerRowHead unit={category.unit} />
+        </View>
       ) : null}
     </View>
   );
@@ -452,6 +278,7 @@ export default function TurkeyRankingsScreen() {
           data={rest}
           keyExtractor={(item) => String(item.id)}
           renderItem={renderItem}
+          ItemSeparatorComponent={GroupSeparator}
           ListHeaderComponent={listHeader}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
@@ -631,105 +458,11 @@ const styles = StyleSheet.create({
   listHeader: {
     gap: space.md,
     paddingTop: space.md,
-    paddingBottom: space.sm,
   },
 
-  /* — Podyum — */
-  podium: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    justifyContent: "space-between",
-    gap: space.sm,
-    backgroundColor: colors.surface1,
-    borderRadius: radius.lg,
-    borderWidth: hairline,
-    borderColor: colors.border,
-    paddingHorizontal: space.md,
-    paddingTop: space.lg,
-    paddingBottom: space.md,
-  },
-  step: {
-    flex: 1,
-    alignItems: "center",
-    gap: space.xxs,
-  },
-  /* Birinci bir tık yukarıda durur — podyum basamağı hissi. */
-  stepFirst: {
-    marginBottom: space.m,
-  },
-  stepMedal: {
-    minWidth: 20,
-    height: 20,
-    borderRadius: radius.pill,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: space.xs,
-    marginTop: -space.m,
-    backgroundColor: colors.surface1,
-    borderWidth: 1.5,
-  },
-  stepMedalText: {
-    ...type.micro,
-    color: colors.textPrimary,
-  },
-  stepName: {
-    ...type.caption,
-    fontFamily: fonts.bold,
-    letterSpacing: 0,
-    color: colors.textPrimary,
-    textAlign: "center",
-    marginTop: space.xxs,
-  },
-  stepMeta: {
-    ...type.micro,
-    fontFamily: fonts.semibold,
-    letterSpacing: 0,
-    color: colors.textTertiary,
-    textAlign: "center",
-  },
-  stepValue: {
-    alignItems: "center",
-    borderRadius: radius.sm,
-    backgroundColor: colors.surface3,
-    paddingHorizontal: space.sm,
-    paddingVertical: space.xs,
+  groupHead: {
+    paddingTop: space.sm,
     marginTop: space.xs,
-  },
-  stepValueFirst: {
-    backgroundColor: colors.brandDim,
-  },
-  stepValueText: {
-    ...type.tableNumStrong,
-    color: colors.textPrimary,
-  },
-  stepValueUnit: {
-    ...type.micro,
-    color: colors.textTertiary,
-  },
-
-  /* — Liste satırı — */
-  rowLeading: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.xs,
-  },
-  rowRank: {
-    ...type.tableNum,
-    color: colors.textTertiary,
-    width: 18,
-    textAlign: "center",
-  },
-  rowValue: {
-    alignItems: "flex-end",
-    minWidth: 44,
-  },
-  rowValueText: {
-    ...type.scoreSm,
-    color: colors.textPrimary,
-  },
-  rowValueUnit: {
-    ...type.micro,
-    color: colors.textTertiary,
   },
 
   /* — Paylaşım kartı — */

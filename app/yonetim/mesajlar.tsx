@@ -72,7 +72,7 @@ import {
 } from "@/lib/api/admin";
 import { formatDateShort } from "@/lib/format";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
+import { colors, elevate, fonts, hairline, layout, radius, space, textScale, type } from "@/theme";
 
 /* ═══════════════════════════ SABİTLER VE YARDIMCILAR ═══════════════════════ */
 
@@ -451,27 +451,34 @@ const ThreadRow = memo(function ThreadRow({
       accessibilityLabel={`${thread.sender}, ${thread.subject}. ${
         unread ? `${thread.unread} okunmamış mesaj` : thread.status_label
       }`}
-      style={[styles.row, unread ? styles.rowUnread : null]}
+      style={styles.row}
     >
-      <Avatar name={thread.sender} size={36} />
+      {/* Okunmamışlık KUTUYU BOYAMAZ: avatarın solundaki menekşe nokta,
+          menekşe saat ve sağdaki sayaç söyler. Boyalı kart, gelen kutusunu
+          iki ayrı renkte kartlar yığınına çeviriyordu. */}
+      <View style={[styles.unreadDot, unread ? styles.unreadDotOn : null]} />
+      <Avatar name={thread.sender} size={40} />
 
       <View style={styles.rowBody}>
         <View style={styles.rowTop}>
-          <Text
-            style={[styles.sender, unread ? styles.senderUnread : null]}
-            numberOfLines={1}
-            {...textScale.dense}
-          >
+          <Text style={styles.sender} numberOfLines={1} {...textScale.dense}>
             {thread.sender}
           </Text>
-          <Text style={styles.time} {...textScale.dense}>
+          <Text style={[styles.time, unread ? styles.timeUnread : null]} {...textScale.dense}>
             {smartDate(thread.last_message_at)}
           </Text>
         </View>
 
-        <Text style={styles.subject} numberOfLines={1} {...textScale.dense}>
-          {thread.subject}
-        </Text>
+        <View style={styles.rowTop}>
+          <Text
+            style={[styles.subject, unread ? styles.subjectUnread : null]}
+            numberOfLines={1}
+            {...textScale.dense}
+          >
+            {thread.subject}
+          </Text>
+          {unread ? <Badge label={thread.unread} tone="brand" variant="solid" size="xs" /> : null}
+        </View>
 
         <Text style={styles.preview} numberOfLines={2} {...textScale.dense}>
           {thread.last_message_preview}
@@ -497,7 +504,6 @@ const ThreadRow = memo(function ThreadRow({
         </View>
       </View>
 
-      {unread ? <Badge label={thread.unread} tone="live" variant="solid" size="sm" /> : null}
     </Touchable>
   );
 });
@@ -723,15 +729,22 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     gap: space.md,
-    padding: space.md,
-    borderRadius: radius.lg,
-    borderWidth: hairline,
-    borderColor: colors.border,
-    backgroundColor: colors.surface1,
+    paddingVertical: space.md + space.xxs,
+    paddingRight: space.md + space.xxs,
+    paddingLeft: space.s,
+    borderRadius: radius.xl,
+    ...elevate(1),
   },
-  rowUnread: {
-    borderColor: colors.brandBorder,
-    backgroundColor: colors.surface2,
+  unreadDot: {
+    width: 6,
+    height: 6,
+    marginTop: 17,
+    marginRight: -space.s,
+    borderRadius: radius.pill,
+    backgroundColor: "transparent",
+  },
+  unreadDotOn: {
+    backgroundColor: colors.brand,
   },
   rowBody: {
     flex: 1,
@@ -743,24 +756,28 @@ const styles = StyleSheet.create({
     gap: space.sm,
   },
   sender: {
-    ...type.label,
-    color: colors.textPrimary,
-    flex: 1,
-  },
-  senderUnread: {
     ...type.h3,
     color: colors.textPrimary,
+    flex: 1,
   },
   time: {
     ...type.caption,
     color: colors.textTertiary,
   },
+  timeUnread: {
+    color: colors.brandAccent,
+    fontFamily: fonts.semibold,
+  },
   subject: {
-    ...type.bodySm,
+    ...type.body,
     color: colors.textPrimary,
+    flex: 1,
+  },
+  subjectUnread: {
+    fontFamily: fonts.semibold,
   },
   preview: {
-    ...type.caption,
+    ...type.bodySm,
     color: colors.textSecondary,
   },
   tagRow: {
@@ -781,14 +798,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: space.sm,
     paddingHorizontal: layout.screenPadding,
+    paddingTop: space.xs,
     paddingBottom: space.sm,
   },
   threadMetaLabel: {
-    ...type.micro,
+    ...type.caption,
     color: colors.textTertiary,
   },
+  /* Uzun biçim (flexGrow/flexShrink): ChipGroup kendi `flexGrow: 0`ını
+     taşır ve web'de kısa `flex: 1` uzun biçimi ezemiyordu — öncelik çipleri
+     sıfır genişliğe çöküp görünmüyordu. */
   priorityGroup: {
-    flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
   },
 
   /* Balonlar */
@@ -801,17 +824,22 @@ const styles = StyleSheet.create({
   },
   bubble: {
     maxWidth: "86%",
-    borderRadius: radius.lg,
-    padding: space.md,
+    borderRadius: radius.xl,
+    paddingVertical: space.m,
+    paddingHorizontal: space.md + space.xxs,
   },
   bubbleMine: {
     alignSelf: "flex-end",
     backgroundColor: colors.brand,
     borderBottomRightRadius: radius.xs,
   },
+  /* Üye balonu beyaz kâğıttır + hairline: gri kâğıt zeminde `surface2`
+     balon zeminle aynı tondaydı ve metin havada asılı duruyordu. */
   bubbleTheirs: {
     alignSelf: "flex-start",
-    backgroundColor: colors.surface2,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
     borderBottomLeftRadius: radius.xs,
   },
   bubbleSender: {
@@ -820,7 +848,7 @@ const styles = StyleSheet.create({
     marginBottom: space.xxs,
   },
   bubbleText: {
-    ...type.bodySm,
+    ...type.body,
     color: colors.textPrimary,
   },
   bubbleTextMine: {
@@ -853,8 +881,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: layout.screenPadding,
   },
   replyStatusLabel: {
-    ...type.micro,
+    ...type.caption,
     color: colors.textTertiary,
+    marginRight: space.xxs,
   },
   replyRow: {
     flexDirection: "row",

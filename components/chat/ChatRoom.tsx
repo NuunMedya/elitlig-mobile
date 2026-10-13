@@ -19,8 +19,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AttachSheet, type AttachMode } from "@/components/chat/AttachSheet";
 import { ReportSheet, type ReportTarget } from "@/components/chat/ReportSheet";
+import { ComposerField } from "@/components/chat/ComposerField";
 import { AttendanceCard, AudioBubble, CallChip, LocationBubble, MatchOfferBubble, NotificationCard, SystemChip, clockLabel } from "@/components/chat/ChatBubbles";
-import { BottomSheet, Button, EmptyState, ErrorState, Input, ScreenHeader, SkeletonListRow, Touchable, errorMessage, useToast, withAlpha } from "@/components/ui";
+import { BottomSheet, Button, EmptyState, ErrorState, ScreenHeader, SkeletonListRow, Touchable, errorMessage, useToast, withAlpha } from "@/components/ui";
 import { setActiveChatConversation, useAdminConversationMessages, useConversationMessages } from "@/hooks/useChat";
 import {
   adminChat,
@@ -670,13 +671,11 @@ export function ChatRoom({ conversationId, admin = false }: ChatRoomProps) {
               <Touchable feedback="icon" haptic="light" onPress={() => setAttach("menu")} accessibilityLabel="Ek gönder" style={styles.roundGhost}>
                 <Ionicons name="add" size={22} color={colors.textSecondary} />
               </Touchable>
-              <Input
+              <ComposerField
                 value={draft}
                 onChangeText={onDraft}
                 placeholder={conversation.type === "management" ? (admin ? "Yönetim adına yaz…" : "Yönetime mesaj yaz…") : "Mesaj yaz…"}
-                multiline
                 maxLength={8000}
-                containerStyle={styles.composerInput}
                 accessibilityLabel="Mesaj metni"
               />
               {draft.trim() ? (
@@ -773,15 +772,19 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   skeleton: { paddingHorizontal: layout.screenPadding, paddingTop: space.sm },
   banner: { marginHorizontal: layout.screenPadding, marginBottom: space.sm },
-  thread: { flexGrow: 1, justifyContent: "flex-end", paddingHorizontal: layout.screenPadding, paddingVertical: space.md, gap: space.sm },
+  /* Balonlar arası 6px: ardışık mesajlar bir "konuşma bloğu" gibi okunur;
+     gün ayracı ve kartlar kendi dikey dolgularıyla ayrışır. */
+  thread: { flexGrow: 1, justifyContent: "flex-end", paddingHorizontal: layout.screenPadding, paddingVertical: space.md, gap: space.s },
   olderWrap: { alignItems: "center", paddingBottom: space.sm },
   dayRow: { alignItems: "center", paddingVertical: space.xs },
-  dayPill: { paddingHorizontal: space.md, paddingVertical: space.xs, borderRadius: radius.sm, backgroundColor: colors.surface2 },
+  dayPill: { paddingHorizontal: space.md, paddingVertical: space.xs, borderRadius: radius.pill, backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border, marginVertical: space.xs },
   dayLabel: { ...type.micro, color: colors.textSecondary },
 
-  bubble: { maxWidth: "86%", borderRadius: radius.lg, padding: space.md },
+  /* Gelen balon BEYAZ kâğıt + saç teli: gri kâğıdın üstünde gri balon (eski
+     surface2) zeminle neredeyse aynı tondaydı ve mesaj sınırı okunmuyordu. */
+  bubble: { maxWidth: "82%", borderRadius: radius.lg, paddingHorizontal: space.md, paddingTop: space.sm, paddingBottom: space.s },
   bubbleMine: { alignSelf: "flex-end", backgroundColor: colors.brand, borderBottomRightRadius: radius.xs },
-  bubbleTheirs: { alignSelf: "flex-start", backgroundColor: colors.surface2, borderBottomLeftRadius: radius.xs },
+  bubbleTheirs: { alignSelf: "flex-start", backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border, borderBottomLeftRadius: radius.xs },
   bubbleSending: { opacity: 0.72 },
   bubbleFailed: { borderWidth: 1, borderColor: colors.danger },
   senderRow: { flexDirection: "row", alignItems: "center", gap: space.xs, marginBottom: space.xxs },
@@ -792,10 +795,10 @@ const styles = StyleSheet.create({
   quoteNameMine: { color: colors.textOnBrand },
   quoteText: { ...type.caption, color: colors.textSecondary },
   quoteTextMine: { color: withAlpha(colors.textOnBrand, 0.85) },
-  bubbleText: { ...type.bodySm, color: colors.textPrimary },
+  bubbleText: { ...type.body, color: colors.textPrimary },
   bubbleTextMine: { color: colors.textOnBrand },
   deletedText: { fontStyle: "italic", color: colors.textTertiary },
-  stampRow: { flexDirection: "row", alignItems: "center", gap: space.xxs, alignSelf: "flex-end", marginTop: space.xs },
+  stampRow: { flexDirection: "row", alignItems: "center", gap: space.xxs, alignSelf: "flex-end", marginTop: space.xxs },
   stamp: { ...type.micro, color: colors.textTertiary },
   stampMine: { color: withAlpha(colors.textOnBrand, 0.72) },
 
@@ -817,10 +820,11 @@ const styles = StyleSheet.create({
   },
   blockedText: { ...type.caption, color: colors.textSecondary, flex: 1, lineHeight: 17 },
   composer: { flexDirection: "row", alignItems: "flex-end", gap: space.sm, paddingHorizontal: layout.screenPadding, paddingTop: space.sm, paddingBottom: space.sm, borderTopWidth: hairline, borderTopColor: colors.separator, backgroundColor: colors.surface1 },
-  composerInput: { flex: 1 },
   send: { width: 44, height: 44, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.brand },
-  mic: { backgroundColor: colors.win },
-  roundGhost: { width: 44, height: 44, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface2 },
+  /* Mikrofon da birincil eylemdir (Arena: mor = aksiyon); yeşil "sonuç"
+     rengiydi ve gönder düğmesiyle aynı yerde iki ayrı dil konuşuyordu. */
+  mic: { backgroundColor: colors.brand },
+  roundGhost: { width: 44, height: 44, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface2, borderWidth: hairline, borderColor: colors.border },
   recordingInfo: { flex: 1, minHeight: 44, flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.md, borderRadius: radius.pill, backgroundColor: colors.dangerDim },
   recDot: { width: 10, height: 10, borderRadius: radius.pill, backgroundColor: colors.danger },
   recordingText: { ...type.label, color: colors.danger, fontVariant: ["tabular-nums"] },

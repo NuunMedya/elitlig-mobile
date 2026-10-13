@@ -1,35 +1,29 @@
 /**
- * Frame — IŞIKLI ÇERÇEVE. Ürünün en çok tekrar eden görsel imzası.
+ * Frame — kartın çerçevesi.
  *
- * NEDEN VAR: kartlar `borderWidth: hairline` + düz bir kenar rengiyle
- * çiziliyordu. Bu, her arayüzde bulunan "genel geçer" bir kenarlıktır ve
- * hiçbir şey söylemez — kart, kâğıttan kesilmiş bir dikdörtgen gibi durur.
- *
- * Gerçek bir nesnenin kenarı ışığa göre davranır: ışık üstten geliyorsa üst
- * yay parlak, alt yay sönüktür. `Frame` bunu 1px'lik bir GRADYAN kenarla
- * kurar ve kart, kâğıdın üstüne KONMUŞ bir nesneye dönüşür.
- *
- * NASIL ÇALIŞIR: React Native'de gradyan kenarlık diye bir şey yok. Teknik
- * şu: dış katman gradyanla dolu ve `padding: 1`; iç katman kartın kendi
- * zeminiyle dolu. Aradaki 1px, gradyanın görünen tek parçası — yani kenar.
- *
- * İÇ YARIÇAP DIŞTAN 1 EKSİK olmak zorunda. Aynı yarıçap verilirse iç köşe
- * dış köşeden daha "geniş" kalır ve kenarlık köşelerde kalınlaşır: göz bunu
- * "köşeleri bulanık kart" olarak okur. Bir eksiltmek çerçeveyi dört köşede
- * de eşit kalınlıkta tutar.
+ * ARENA'DA İKİ BİÇİM:
+ *  · `tone="light"` (kâğıt): DÜZ hairline kenarlık (`border`) + `elevate`
+ *    gölgesi. Eski "ışıklı" gradyan kenar beyazdan beyaza geçiyordu ve gri
+ *    kâğıtta kenar hiç görünmüyordu; kart bulanık bir leke gibi kalıyordu.
+ *    Net bir 1px çizgi, kartı kâğıttan kesin biçimde ayırır.
+ *  · `tone="dark"` (sahne): 1px GRADYAN kenar (`rimDark`). Grafit blokta düz
+ *    çizgi sert durur; üstten gelen sönük ışık bloğu kâğıttan kaldırır.
+ *    Teknik: dış katman gradyanla dolu ve `padding: 1`; iç katman kartın kendi
+ *    zemini. Aradaki 1px, gradyanın görünen tek parçası — yani kenar. İç
+ *    yarıçap dıştan 1 eksiktir ki çerçeve dört köşede eşit kalınlıkta kalsın.
  *
  * ZEMİN İKİ BİÇİMDE VERİLEBİLİR:
  *   · `surface` — düz renk (varsayılan `surface1`)
- *   · `gradient` — iki duraklı yüzey gradyanı (skor tablosu, mürekkep panel)
+ *   · `gradient` — iki duraklı yüzey gradyanı (skor tablosu, sahne panel)
  * İkisi birden verilirse gradyan kazanır; `surface` yükleme öncesi yedektir.
  */
 
 import React, { memo } from "react";
 import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { colors, elevate, radius as radiusScale, type ElevationLevel } from "@/theme";
+import { colors, elevate, hairline, radius as radiusScale, type ElevationLevel } from "@/theme";
 
-/** Kenarın yönü — `GradientFill` ile aynı eksende değil, BİLEREK. */
+/** Sahne kenarının yönü — `GradientFill` ile aynı eksende değil, BİLEREK: ışık üstten gelir. */
 const RIM_START = { x: 0.5, y: 0 } as const;
 const RIM_END = { x: 0.5, y: 1 } as const;
 
@@ -39,7 +33,7 @@ export interface FrameProps {
   children: React.ReactNode;
   /** Kenar tonu: açık yüzeyler için `light`, mürekkep bloklar için `dark`. */
   tone?: FrameTone;
-  /** Köşe yarıçapı — token adı ya da doğrudan piksel. Varsayılan `lg`. */
+  /** Köşe yarıçapı — token adı ya da doğrudan piksel. Varsayılan `xl` (Arena kartı). */
   radius?: keyof typeof radiusScale | number;
   /** İç zemin düz renk. `gradient` verilirse yalnız yedek olarak kalır. */
   surface?: string;
@@ -66,7 +60,7 @@ const RIM_WIDTH = 1;
 export const Frame = memo(function Frame({
   children,
   tone = "light",
-  radius = "lg",
+  radius = "xl",
   surface,
   gradient,
   gradientStart,
@@ -77,34 +71,56 @@ export const Frame = memo(function Frame({
   testID,
 }: FrameProps) {
   const outer = typeof radius === "number" ? radius : radiusScale[radius];
+
+  const gradientLayer = gradient ? (
+    <LinearGradient
+      colors={gradient}
+      start={gradientStart ?? SURFACE_START}
+      end={gradientEnd ?? SURFACE_END}
+      style={StyleSheet.absoluteFill}
+      pointerEvents="none"
+    />
+  ) : null;
+
+  if (tone === "light") {
+    /* Kâğıt kart: tek kutu. Gölge kutunun kendisinde (iç kapta `overflow:
+       hidden` gölgeyi kesmesin diye içerik ayrı bir kapta kırpılır). */
+    return (
+      <View
+        style={[
+          elevation ? elevate(elevation) : styles.flatBorder,
+          { borderRadius: outer, backgroundColor: surface ?? colors.surface1 },
+          style,
+        ]}
+        testID={testID}
+      >
+        <View style={[styles.inner, { borderRadius: Math.max(0, outer - hairline) }, contentStyle]}>
+          {gradientLayer}
+          {children}
+        </View>
+      </View>
+    );
+  }
+
   const inner = Math.max(0, outer - RIM_WIDTH);
-  const rim = tone === "dark" ? colors.rimDark : colors.rimLight;
 
   return (
     <LinearGradient
-      colors={rim}
+      colors={colors.rimDark}
       start={RIM_START}
       end={RIM_END}
       style={[
         styles.rim,
         { borderRadius: outer },
         elevation ? elevate(elevation) : null,
-        // `elevate` kendi zeminini taşır; kenar gradyanı onun ÜSTÜNDE olmalı.
+        // `elevate` kendi zeminini ve kenarlığını taşır; kenar gradyanı görünsün.
         elevation ? styles.rimOverElevation : null,
         style,
       ]}
       testID={testID}
     >
       <View style={[styles.inner, { borderRadius: inner }, contentStyle]}>
-        {gradient ? (
-          <LinearGradient
-            colors={gradient}
-            start={gradientStart ?? SURFACE_START}
-            end={gradientEnd ?? SURFACE_END}
-            style={StyleSheet.absoluteFill}
-            pointerEvents="none"
-          />
-        ) : null}
+        {gradientLayer}
         <View style={[styles.fill, { backgroundColor: surface ?? colors.surface1 }]} />
         {children}
       </View>
@@ -120,6 +136,12 @@ const styles = StyleSheet.create({
      zeminini ezer; sıfırlanmazsa kenar gradyanı hiç görünmez. */
   rimOverElevation: {
     backgroundColor: "transparent",
+    borderWidth: 0,
+  },
+  /** Gölgesiz kâğıt kart: yalnız hairline kenarlık. */
+  flatBorder: {
+    borderWidth: hairline,
+    borderColor: colors.border,
   },
   inner: {
     overflow: "hidden",

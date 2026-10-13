@@ -15,7 +15,7 @@ ister (App Review Guideline 5.1.1-v). Google Play'in "Hesap silme" politikası a
 ## Kullanıcı nereden bulur
 
 1. **Profil sekmesi → en alttaki kırmızı grup → "Hesabı sil"** (tek dokunuş).
-2. **Profil → Tercihler → Hesap ve Güvenlik → en altta "Hesabı sil"** (aynı ekrana gider).
+2. **Profil → Ayarlar → Hesap ve güvenlik → en altta "Hesabı sil"** (aynı ekrana gider).
 
 İki kapı da `app/hesap-sil.tsx` ekranını açar:
 

@@ -33,6 +33,7 @@
 
 /* — Temeller: basma, yüzey, düzen — */
 export { Touchable, fireHaptic } from "./Pressable";
+export { HeaderToneContext, useHeaderTone, type HeaderTone } from "./HeaderTone";
 export type { TouchableProps, PressFeedback, HapticKind } from "./Pressable";
 
 export { Surface } from "./Surface";
@@ -111,7 +112,7 @@ export type { TeamLogoProps } from "./TeamLogo";
 /* Tek anatomili varlık satırları — takım ve oyuncu her listede aynı sırayla
    okunur; yoğunluk değişir, sıra değişmez. */
 export { TeamRow, TeamRowHead, TEAM_ROW_HEIGHT, TEAM_ROW_HEIGHT_TABLE } from "./TeamRow";
-export type { TeamRowProps, TeamRowDensity } from "./TeamRow";
+export type { TeamRowProps, TeamRowDensity, TeamRowColumns } from "./TeamRow";
 export { PlayerRow, PlayerRowHead, PLAYER_ROW_HEIGHT } from "./PlayerRow";
 export type { PlayerRowProps } from "./PlayerRow";
 
@@ -134,11 +135,11 @@ export type {
 
 /** Fikstür/sonuç kartı — iki takım yan yana, skor ya da saat ortada. */
 export { MatchCard, matchCardHeight, matchDayLabel, MATCH_CARD_GAP } from "./MatchCard";
-export type { MatchCardProps } from "./MatchCard";
+export type { MatchCardProps, MatchCardVariant, MatchCardPosition } from "./MatchCard";
 export { MatchCardRail } from "./MatchCardRail";
 export type { MatchCardRailProps } from "./MatchCardRail";
 
-export { LeagueGroupHeader } from "./LeagueGroupHeader";
+export { LeagueGroupHeader, LEAGUE_GROUP_HEADER_HEIGHT } from "./LeagueGroupHeader";
 export type { LeagueGroupHeaderProps } from "./LeagueGroupHeader";
 
 export { DateStrip, toIsoDate } from "./DateStrip";

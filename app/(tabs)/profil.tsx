@@ -6,7 +6,10 @@
  *     Paneli) KULÜBÜM sekmesine taşındı.
  *   · Eski Menü'nün içeriği (oyunlar, keşif, bilgi, sosyal) buraya katıldı;
  *     lig bağlantıları alt çubuktaki LİG sekmesindedir.
- *   · Profil: kimlik kartı + dört kısayol (Takip · Bildirim · Oyunlar ·
+ *   · Profil (merkez kalıbı): kimlik SAHNESİ (takip sayıları) → bekleyen işler
+ *     (bildirim · mesaj) → takip edilen takımlar şeridi → bildirim ayarları ·
+ *     oyunlar · keşfet · ayarlar · bilgi ve destek · oturum. ESKİ: kimlik kartı +
+ *     dört kısayol (Takip · Bildirim · Oyunlar ·
  *     Kulübüm) + Takip ettiklerim · Bildirimler · Oyunlar · Keşfet · Bilgi ve
  *     destek · Ayarlar · oturum. Sıra kullanım sıklığına göredir.
  *
@@ -44,18 +47,12 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
-  ActionRow,
-  ActionTile,
-  Avatar,
   Badge,
   BottomSheet,
-  Button,
-  Card,
   ListRow,
   ScreenHeader,
   SectionHeader,
-  SkeletonCard,
-  TeamLogo,
+  Skeleton,
   Touchable,
   refreshControlProps,
   useHeaderScroll,
@@ -63,6 +60,9 @@ import {
   useToast,
   type Tone,
 } from "@/components/ui";
+import { FollowedTeamsRail } from "@/components/account/FollowedTeamsRail";
+import { InboxStrip, type InboxItem } from "@/components/account/InboxStrip";
+import { ProfileHero, type ProfileHeroStat } from "@/components/account/ProfileHero";
 import { THEME_STORAGE_KEY, getStoredTheme, setStoredTheme } from "@/constants/themePreference";
 import { unreadBadgeLabel, useUnreadCount } from "@/hooks/useUnreadCount";
 import { getPanelMe } from "@/lib/api/panel";
@@ -359,87 +359,33 @@ export default function ProfileTabScreen() {
   const sections = useMemo<MenuSection[]>(() => {
     const result: MenuSection[] = [];
 
-    /* 1 — TAKİP ETTİKLERİM: cihazda saklanır, misafirde de çalışır. */
+    /* 1 — BİLDİRİM AYARLARI. Gelen kutusu ve mesajlar yukarıdaki "bekleyen
+       işler" şeridine taşındı; burada yalnız NE ZAMAN ve KİMİN İÇİN
+       bildirim alınacağı ayarlanır. İki ekranın farkı alt satırda tek
+       cümleyle söylenir ki kullanıcı hangisini açacağını tahmin etmesin. */
     result.push({
-      key: "takip",
-      title: "Takip ettiklerim",
+      key: "bildirim",
+      title: "Bildirim ayarları",
       data: [
         {
-          key: "fav-takimlar",
-          icon: "shield",
-          title: "Takımlar",
-          subtitle: "Maçları öne çıkar, gol ve sonuç bildirimi al",
+          key: "bildirim-tercihleri",
+          icon: "notifications",
+          title: "Bildirim türleri",
+          subtitle: "Gol, maç başlangıcı, sonuç, haber ve panel",
           tone: "brand",
-          value: favorite.favorites.length ? String(favorite.favorites.length) : undefined,
-          action: { kind: "route", route: "/(tabs)/favoriler?tab=takimlar" },
+          action: { kind: "route", route: "/bildirim-tercihleri" },
         },
         {
-          key: "fav-ligler",
-          icon: "trophy",
-          title: "Ligler ve sezonlar",
-          value: favoriteScopeCount ? String(favoriteScopeCount) : undefined,
-          action: { kind: "route", route: "/(tabs)/favoriler?tab=ligler" },
-        },
-        {
-          key: "fav-maclar",
-          icon: "star",
-          title: "Maçlar",
-          subtitle: "Yıldızladığın maçlar ve canlı skorları",
-          value: favorite.favoriteMatches.length ? String(favorite.favoriteMatches.length) : undefined,
-          action: { kind: "route", route: "/(tabs)/favoriler?tab=maclar" },
-        },
-        {
-          key: "takim-bul",
-          icon: "add-circle",
-          title: "Takım bul ve takip et",
-          tone: "info",
-          action: { kind: "route", route: "/(tabs)/ligler?tab=takimlar" },
+          key: "takip-bildirimleri",
+          icon: "options",
+          title: "Takip ettiklerim için",
+          subtitle: "Her takım, lig ve maç için ayrı aç/kapat",
+          action: { kind: "route", route: "/takip-bildirimleri" },
         },
       ],
     });
 
-    /* 2 — BİLDİRİMLER: gelen kutusu + iki ayar ekranı tek grupta. */
-    const notif: MenuItem[] = [];
-    if (user) {
-      notif.push(
-        {
-          key: "bildirimler",
-          icon: "notifications",
-          title: "Bildirim kutusu",
-          subtitle: "Teklifler, cezalar, duyurular",
-          badge: unreadBadgeLabel(unread.notifications),
-          tone: "brand",
-          action: { kind: "route", route: "/bildirimler" },
-        },
-        {
-          key: "sohbet",
-          icon: "chatbubbles",
-          title: "Mesajlar",
-          subtitle: "Yönetim, takımın ve oyuncularla yazış",
-          badge: unreadBadgeLabel(unread.messages),
-          action: { kind: "route", route: "/sohbet" },
-        },
-      );
-    }
-    notif.push(
-      {
-        key: "bildirim-tercihleri",
-        icon: "options",
-        title: "Bildirim türleri",
-        subtitle: "Gol, maç başlangıcı, sonuç, haber, panel",
-        action: { kind: "route", route: "/bildirim-tercihleri" },
-      },
-      {
-        key: "takip-bildirimleri",
-        icon: "git-network",
-        title: "Takip bildirimleri",
-        subtitle: "Takım, lig, sezon, il ve maç bazında ayrıntılı seçim",
-        action: { kind: "route", route: "/takip-bildirimleri" },
-      },
-    );
-    result.push({ key: "bildirim", title: "Bildirimler", data: notif });
-
-    /* 3 — OYUNLAR */
+    /* 2 — OYUNLAR */
     result.push({
       key: "oyunlar",
       title: "Oyunlar",
@@ -448,7 +394,7 @@ export default function ProfileTabScreen() {
           key: "oyun-merkezi",
           icon: "game-controller",
           title: "Oyun Merkezi",
-          subtitle: "Penaltı, slalom, top sektirme, Kim Bu?, Günün Testi, Arena",
+          subtitle: "Günün Testi, Penaltı, Arena, Kim Bu? ve daha fazlası",
           tone: "win",
           action: { kind: "route", route: "/(tabs)/oyunlar" },
         },
@@ -462,7 +408,7 @@ export default function ProfileTabScreen() {
       ],
     });
 
-    /* 4 — KEŞFET */
+    /* 3 — KEŞFET */
     result.push({
       key: "kesfet",
       title: "Keşfet",
@@ -490,47 +436,7 @@ export default function ProfileTabScreen() {
       ],
     });
 
-    /* 5 — BİLGİ VE DESTEK (eski Menü sekmesi) */
-    const info: MenuItem[] = [
-      { key: "kurallar", icon: "book", title: "Lig kuralları", action: { kind: "route", route: "/kurallar" } },
-      {
-        key: "cezalar",
-        icon: "hammer",
-        title: "Cezalar",
-        subtitle: "Disiplin talimatı ve kurul kararları",
-        action: { kind: "route", route: "/cezalar" },
-      },
-      {
-        key: "iletisim",
-        icon: "call",
-        title: "İletişim",
-        subtitle: "Telefon, WhatsApp, e-posta",
-        action: { kind: "route", route: "/iletisim" },
-      },
-    ];
-    if (igUrl) {
-      info.push({
-        key: "instagram",
-        icon: "logo-instagram",
-        title: "Instagram",
-        subtitle: `${scope.cityLabel} hesabı`,
-        action: { kind: "link", url: igUrl },
-      });
-    }
-    if (channelUrl) {
-      info.push({
-        key: "youtube",
-        icon: "logo-youtube",
-        title: "YouTube",
-        subtitle: "Canlı yayınlar ve maç özetleri",
-        tone: "danger",
-        action: { kind: "link", url: channelUrl },
-      });
-    }
-    info.push({ key: "site", icon: "globe", title: "elitlig.com", action: { kind: "link", url: SITE_URL } });
-    result.push({ key: "bilgi", title: "Bilgi ve destek", data: info });
-
-    /* 6 — AYARLAR */
+    /* 4 — AYARLAR */
     const prefs: MenuItem[] = [
       {
         key: "kapsam",
@@ -552,13 +458,36 @@ export default function ProfileTabScreen() {
         key: "hesabim",
         icon: "key",
         title: "Hesap ve güvenlik",
-        subtitle: "Bilgilerin, şifren ve oturumun",
+        subtitle: "Bilgilerin, şifren, engellediklerin",
         action: { kind: "route", route: "/hesabim" },
       });
     }
     result.push({ key: "tercihler", title: "Ayarlar", data: prefs });
 
-    /* 7 — Çıkış ve hesap silme: kendi başına, kırmızı, başlıksız grup.
+    /* 5 — BİLGİ VE DESTEK (eski Menü sekmesi) */
+    const info: MenuItem[] = [
+      { key: "kurallar", icon: "book", title: "Lig kuralları", action: { kind: "route", route: "/kurallar" } },
+      {
+        key: "cezalar",
+        icon: "hammer",
+        title: "Cezalar",
+        subtitle: "Disiplin talimatı ve kurul kararları",
+        action: { kind: "route", route: "/cezalar" },
+      },
+      {
+        key: "iletisim",
+        icon: "call",
+        title: "İletişim",
+        subtitle: "Telefon, WhatsApp, e-posta",
+        action: { kind: "route", route: "/iletisim" },
+      },
+    ];
+    /* Sosyal hesaplar ve site liste satırı değil, listenin dibinde üç
+       yuvarlak düğmedir (bkz. `listFooter`): sık açılmazlar ve altı satırlık
+       bir grubu yarı yarıya şişiriyorlardı. */
+    result.push({ key: "bilgi", title: "Bilgi ve destek", data: info });
+
+    /* 6 — Çıkış ve hesap silme: kendi başına, kırmızı, başlıksız grup.
        Hesap silme burada da durur; App Store (5.1.1-v) ve Google Play silme
        kapısının "kolayca bulunur" olmasını ister (bkz. app/hesap-sil.tsx). */
     if (user) {
@@ -587,19 +516,7 @@ export default function ProfileTabScreen() {
     }
 
     return result;
-  }, [
-    channelUrl,
-    favorite.favoriteMatches.length,
-    favorite.favorites.length,
-    favoriteScopeCount,
-    igUrl,
-    scope.cityLabel,
-    scope.leagueLabel,
-    themeChoice,
-    unread.messages,
-    unread.notifications,
-    user,
-  ]);
+  }, [scope.cityLabel, scope.leagueLabel, themeChoice, user]);
 
   /* ------------------------------ ÇİZİM ---------------------------------- */
 
@@ -621,97 +538,146 @@ export default function ProfileTabScreen() {
   const renderSectionFooter = useCallback(() => <View style={styles.sectionGap} />, []);
 
   /**
-   * KISAYOLLAR — kaldırılan Menü sekmesinin kapısı.
-   *
-   * Dört kutu, menünün en çok açılan dört hedefi. Dördüncüsü menünün
-   * KENDİSİNE gider: keşfet/bilgi/sosyal ne varsa hepsi orada durmaya devam
-   * ediyor ve buradan tek dokunuşla açılıyor. Izgara girişsiz kullanıcıda da
-   * çizilir — dördü de giriş istemez.
+   * KİMLİK SAHNESİNİN ÜÇ SAYISI — takip edilen takım · lig/sezon · maç.
+   * Üçü de cihazda saklanır (FavoriteProvider), misafirde de gerçektir; her
+   * sayı takip ekranının ilgili sekmesini açar.
    */
-  const shortcuts = useMemo(
-    () => (
-      <ActionRow style={styles.shortcuts}>
-        <ActionTile
-          icon="star"
-          label="Takip"
-          tone="brand"
-          onPress={() => router.push("/(tabs)/favoriler?tab=takimlar")}
-        />
-        <ActionTile
-          icon="notifications"
-          label="Bildirim"
-          tone="live"
-          badge={unread.notifications || undefined}
-          onPress={() => router.push(user ? "/bildirimler" : "/bildirim-tercihleri")}
-        />
-        <ActionTile
-          icon="game-controller"
-          label="Oyunlar"
-          tone="accent"
-          onPress={() => router.push("/(tabs)/oyunlar")}
-        />
-        <ActionTile
-          icon="shield"
-          label="Kulübüm"
-          tone="neutral"
-          onPress={() => router.push("/(tabs)/kulubum")}
-        />
-      </ActionRow>
-    ),
-    [router, unread.notifications, user],
+  const heroStats = useMemo<ProfileHeroStat[]>(
+    () => [
+      {
+        key: "takim",
+        label: "Takım",
+        value: favorite.favorites.length,
+        onPress: () => router.push("/(tabs)/favoriler?tab=takimlar"),
+      },
+      {
+        key: "lig",
+        label: "Lig · sezon",
+        value: favoriteScopeCount,
+        onPress: () => router.push("/(tabs)/favoriler?tab=ligler"),
+      },
+      {
+        key: "mac",
+        label: "Maç",
+        value: favorite.favoriteMatches.length,
+        onPress: () => router.push("/(tabs)/favoriler?tab=maclar"),
+      },
+    ],
+    [favorite.favoriteMatches.length, favorite.favorites.length, favoriteScopeCount, router]
   );
 
-  const listHeader = useMemo(() => {
-    if (auth.initializing) return <SkeletonCard lines={2} />;
-    if (!user) {
-      /* Misafirde de ızgara çizilir: dört hedefin dördü de giriş istemez ve
-         menü sekmesi kalktığı için kapı burasıdır. */
-      return (
-        <>
-          <GuestHero onSignIn={openSignIn} onRegister={openRegister} />
-          {shortcuts}
-        </>
-      );
-    }
-    return (
+  const heroUser = useMemo(() => {
+    if (!user) return null;
+    const roles: { key: string; label: string }[] = [];
+    if (auth.isManagement) roles.push({ key: "yonetim", label: "Yönetim" });
+    if (isPresident) roles.push({ key: "baskan", label: "Başkan" });
+    if (isPlayer) roles.push({ key: "oyuncu", label: "Oyuncu" });
+    return {
+      name: user.fullName ?? user.username,
+      username: user.username,
+      avatar: mediaUrl(me?.player?.player_img),
+      teamName,
+      teamLogo: mediaUrl(teamCard?.logo),
+      roles,
+    };
+  }, [auth.isManagement, isPlayer, isPresident, me?.player?.player_img, teamCard?.logo, teamName, user]);
+
+  /** BEKLEYEN İŞLER — yalnız girişli kullanıcıda; ikisi de sunucudan sayılır. */
+  const inboxItems = useMemo<InboxItem[]>(
+    () => [
+      {
+        key: "bildirim",
+        icon: "notifications",
+        title: "Bildirimler",
+        count: unread.notifications,
+        idleLabel: "Hepsi okundu",
+        onPress: () => router.push("/bildirimler"),
+      },
+      {
+        key: "mesaj",
+        icon: "chatbubbles",
+        title: "Mesajlar",
+        count: unread.messages,
+        idleLabel: "Yeni mesaj yok",
+        onPress: () => router.push("/sohbet"),
+      },
+    ],
+    [router, unread.messages, unread.notifications]
+  );
+
+  const openTeam = useCallback((teamId: number) => router.push(`/takim/${teamId}`), [router]);
+  const findTeam = useCallback(() => router.push("/(tabs)/ligler?tab=takimlar"), [router]);
+  const manageFollows = useCallback(() => router.push("/(tabs)/favoriler?tab=takimlar"), [router]);
+
+  const listHeader = useMemo(
+    () => (
       <>
-        <IdentityCard
-          name={user.fullName ?? user.username}
-          username={user.username}
-          avatar={mediaUrl(me?.player?.player_img)}
-          teamName={teamName}
-          teamLogo={mediaUrl(teamCard?.logo)}
-          isManagement={auth.isManagement}
-          isPresident={isPresident}
-          isPlayer={isPlayer}
-          onPress={openAccount}
-        />
-        {shortcuts}
-      </>
-    );
-  }, [
-    auth.initializing,
-    auth.isManagement,
-    isPlayer,
-    isPresident,
-    me?.player?.player_img,
-    openAccount,
-    openSignIn,
-    openRegister,
-    shortcuts,
-    teamCard?.logo,
-    teamName,
-    user,
-  ]);
+        {auth.initializing ? (
+          <Skeleton height={196} radius="xxl" style={styles.heroSkeleton} />
+        ) : (
+          <ProfileHero
+            user={heroUser}
+            stats={heroStats}
+            onAccount={openAccount}
+            onSignIn={openSignIn}
+            onRegister={openRegister}
+          />
+        )}
+        {user ? <InboxStrip items={inboxItems} /> : null}
 
-  const listFooter = useMemo(
-    () => (
-      <Text style={styles.version} {...textScale.dense}>
-        {versionLabel()}
-      </Text>
+        <SectionHeader
+          title="Takip ettiğin takımlar"
+          action={favorite.favorites.length ? { label: "Yönet", onPress: manageFollows } : undefined}
+          style={styles.flushHeader}
+        />
+        <FollowedTeamsRail teams={favorite.favorites} onOpenTeam={openTeam} onAdd={findTeam} />
+        <View style={styles.sectionGap} />
+      </>
     ),
-    []
+    [
+      auth.initializing,
+      favorite.favorites,
+      findTeam,
+      heroStats,
+      heroUser,
+      inboxItems,
+      manageFollows,
+      openAccount,
+      openRegister,
+      openSignIn,
+      openTeam,
+      user,
+    ]
   );
+
+  const listFooter = useMemo(() => {
+    const socials: { key: string; icon: keyof typeof Ionicons.glyphMap; label: string; url: string }[] = [];
+    if (igUrl) socials.push({ key: "ig", icon: "logo-instagram", label: `Instagram, ${scope.cityLabel} hesabı`, url: igUrl });
+    if (channelUrl) socials.push({ key: "yt", icon: "logo-youtube", label: "YouTube kanalı", url: channelUrl });
+    socials.push({ key: "site", icon: "globe-outline", label: "elitlig.com", url: SITE_URL });
+    return (
+      <View style={styles.footer}>
+        <View style={styles.socialRow}>
+          {socials.map((item) => (
+            <Touchable
+              key={item.key}
+              feedback="icon"
+              haptic="selection"
+              onPress={() => void openLink(item.url)}
+              accessibilityRole="link"
+              accessibilityLabel={item.label}
+              style={styles.socialButton}
+            >
+              <Ionicons name={item.icon} size={20} color={colors.textSecondary} />
+            </Touchable>
+          ))}
+        </View>
+        <Text style={styles.version} {...textScale.dense}>
+          {versionLabel()}
+        </Text>
+      </View>
+    );
+  }, [channelUrl, igUrl, scope.cityLabel]);
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
@@ -791,103 +757,6 @@ const MenuRow = React.memo(function MenuRow({
   );
 });
 
-/** Kimlik kartı — dokununca hesap ekranına iner. */
-const IdentityCard = React.memo(function IdentityCard({
-  name,
-  username,
-  avatar,
-  teamName,
-  teamLogo,
-  isManagement,
-  isPresident,
-  isPlayer,
-  onPress,
-}: {
-  name: string;
-  username: string;
-  avatar: string | null;
-  teamName: string | null;
-  teamLogo: string | null;
-  isManagement: boolean;
-  isPresident: boolean;
-  isPlayer: boolean;
-  onPress: () => void;
-}) {
-  const roles = useMemo(() => {
-    const list: { key: string; label: string; tone: Tone }[] = [];
-    if (isManagement) list.push({ key: "yonetim", label: "YÖNETİM", tone: "brand" });
-    if (isPresident) list.push({ key: "baskan", label: "BAŞKAN", tone: "info" });
-    if (isPlayer) list.push({ key: "oyuncu", label: "OYUNCU", tone: "win" });
-    return list;
-  }, [isManagement, isPlayer, isPresident]);
-
-  // NEDEN Card DEĞİL: Card'ın basılabilir hâli ekran okuyucu etiketini `title`
-  // prop'undan alıyor; burada başlık bir metin satırı değil, avatar + ad + rol
-  // rozetlerinden oluşan bir blok. Yüzey Card'ın basılabilir hâliyle birebir
-  // aynı (surface1 + hairline), yalnız etiketi elle veriyoruz.
-  return (
-    <Touchable
-      feedback="card"
-      haptic="selection"
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={`${name}, @${username}. Hesap ve güvenlik`}
-      style={styles.identityCard}
-    >
-      <Avatar name={name} image={avatar} size={56} ring="brand" />
-
-      <View style={styles.identityBody}>
-        <Text style={styles.identityName} numberOfLines={1} {...textScale.dense}>
-          {name}
-        </Text>
-        <Text style={styles.identityHandle} numberOfLines={1} {...textScale.dense}>
-          @{username}
-        </Text>
-        {roles.length ? (
-          <View style={styles.roleRow}>
-            {roles.map((role) => (
-              <Badge key={role.key} label={role.label} tone={role.tone} size="xs" />
-            ))}
-          </View>
-        ) : null}
-      </View>
-
-      {teamName ? <TeamLogo name={teamName} logo={teamLogo} size={layout.crestLg} /> : null}
-      <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
-    </Touchable>
-  );
-});
-
-/**
- * Misafir kartı — kimlik kartının yerine geçer.
- * Üyelik akışı mobilde yok; kayıt web sitesinde tamamlanır.
- */
-const GuestHero = React.memo(function GuestHero({
-  onSignIn,
-  onRegister,
-}: {
-  onSignIn: () => void;
-  onRegister: () => void;
-}) {
-  return (
-    <Card padding="lg" style={styles.guestCard}>
-      <View style={styles.guestIcon}>
-        <Ionicons name="person-outline" size={22} color={colors.brandAccent} />
-      </View>
-      <Text style={styles.guestTitle} {...textScale.dense}>
-        ElitLig&apos;e giriş yap
-      </Text>
-      <Text style={styles.guestBody} {...textScale.long}>
-        Takımını takip et, gol bildirimlerini al, panelini ve sözleşmelerini yönet.
-      </Text>
-      <View style={styles.guestActions}>
-        <Button label="Giriş yap" onPress={onSignIn} style={styles.guestButton} />
-        <Button label="Üye ol" variant="secondary" onPress={onRegister} style={styles.guestButton} />
-      </View>
-    </Card>
-  );
-});
-
 /** Görünüm alt sayfasının tek seçeneği. */
 const ThemeOptionRow = React.memo(function ThemeOptionRow({
   option,
@@ -923,11 +792,6 @@ const ThemeOptionRow = React.memo(function ThemeOptionRow({
 /* ================================ STİLLER ================================= */
 
 const styles = StyleSheet.create({
-  /** Izgara kimlik kartına yapışmasın; bölüm başlığı kadar nefes alsın. */
-  shortcuts: {
-    marginTop: space.md,
-    marginBottom: space.sm,
-  },
   screen: {
     flex: 1,
     backgroundColor: colors.bg,
@@ -944,67 +808,8 @@ const styles = StyleSheet.create({
     height: layout.sectionGap,
   },
 
-  /* Kimlik kartı — Card'ın basılabilir yüzeyiyle aynı ölçüler. */
-  identityCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.md,
+  heroSkeleton: {
     marginTop: space.sm,
-    padding: space.md,
-    borderRadius: radius.lg,
-    borderWidth: hairline,
-    borderColor: colors.border,
-    backgroundColor: colors.surface1,
-  },
-  identityBody: {
-    flex: 1,
-    gap: 2,
-  },
-  identityName: {
-    ...type.h2,
-    color: colors.textPrimary,
-  },
-  identityHandle: {
-    ...type.caption,
-    color: colors.textSecondary,
-  },
-  roleRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: space.xs,
-    marginTop: space.xs,
-  },
-
-  /* Misafir kartı */
-  guestCard: {
-    marginTop: space.sm,
-    alignItems: "flex-start",
-    gap: space.sm,
-  },
-  guestIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.pill,
-    backgroundColor: colors.brandDim,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  guestTitle: {
-    ...type.h1,
-    color: colors.textPrimary,
-  },
-  guestBody: {
-    ...type.bodySm,
-    color: colors.textSecondary,
-  },
-  guestActions: {
-    flexDirection: "row",
-    gap: space.sm,
-    marginTop: space.xs,
-    alignSelf: "stretch",
-  },
-  guestButton: {
-    flex: 1,
   },
 
   /* Görünüm alt sayfası */
@@ -1019,10 +824,28 @@ const styles = StyleSheet.create({
     paddingTop: space.sm,
   },
 
+  footer: {
+    alignItems: "center",
+    gap: space.md,
+    marginTop: space.xs,
+  },
+  socialRow: {
+    flexDirection: "row",
+    gap: space.md,
+  },
+  socialButton: {
+    width: layout.minTouch,
+    height: layout.minTouch,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+  },
   version: {
     ...type.caption,
     color: colors.textTertiary,
     textAlign: "center",
-    marginTop: space.lg,
   },
 });

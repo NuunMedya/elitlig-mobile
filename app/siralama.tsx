@@ -24,7 +24,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { FlatList, RefreshControl, StyleSheet, Text, View } from "react-native";
@@ -39,6 +39,7 @@ import {
   ChipGroup,
   EmptyState,
   ErrorState,
+  GradientFill,
   ListRow,
   ScreenHeader,
   SectionHeader,
@@ -75,15 +76,17 @@ interface GameMeta {
   icon: keyof typeof Ionicons.glyphMap;
   /** Skor birimi: "24 seri", "180 puan". */
   unit: string;
+  /** Oyunun ekranı — boş tablodan tek dokunuşla oynamaya geçilir. */
+  route: string;
 }
 
 const GAMES: GameMeta[] = [
-  { key: "seri", label: "Arena", icon: "flame", unit: "seri" },
-  { key: "sektir", label: "Top Sektir", icon: "football", unit: "sekme" },
-  { key: "penalti", label: "Penaltı", icon: "golf", unit: "gol" },
-  { key: "kimbu", label: "Kim Bu?", icon: "search", unit: "puan" },
-  { key: "slalom", label: "Slalom", icon: "flag", unit: "koni" },
-  { key: "gunun", label: "Günün Testi", icon: "bulb", unit: "puan" },
+  { key: "seri", label: "Arena", icon: "flame", unit: "seri", route: "/arena" },
+  { key: "sektir", label: "Top Sektir", icon: "football", unit: "sekme", route: "/sektir" },
+  { key: "penalti", label: "Penaltı", icon: "golf", unit: "gol", route: "/penalti" },
+  { key: "kimbu", label: "Kim Bu?", icon: "search", unit: "puan", route: "/kimbu" },
+  { key: "slalom", label: "Slalom", icon: "flag", unit: "koni", route: "/slalom" },
+  { key: "gunun", label: "Günün Testi", icon: "bulb", unit: "puan", route: "/gunun" },
 ];
 
 type Period = "weekly" | "alltime";
@@ -91,11 +94,16 @@ type ScopeMode = "city" | "turkey";
 
 const PERIOD_ITEMS: SegmentedItem<Period>[] = [
   { key: "weekly", label: "Haftalık" },
-  { key: "alltime", label: "Tüm Zamanlar" },
+  { key: "alltime", label: "Tümü" },
 ];
 
-/** Podyum basamağı renkleri — altın, gümüş, bronz karşılığı tokenlar. */
-const PODIUM_TONES = [colors.star, colors.textTertiary, colors.warn] as const;
+/**
+ * Podyum basamağı renkleri — altın, gümüş, bronz. Podyum sahnede (grafit)
+ * durduğu için tokenlar koyu zeminde okunanlardan seçildi.
+ */
+const PODIUM_TONES = [colors.yellowCard, colors.onDarkMuted, colors.zoneRelegationPlayoff] as const;
+/** Basamak yükseklikleri: 1 · 2 · 3. */
+const PLINTH_HEIGHT = [58, 40, 28] as const;
 
 /* — Paylaşım kartı — */
 type ShareFormat = "story" | "post";
@@ -162,35 +170,59 @@ const PodiumStep = React.memo(function PodiumStep({
   unit: string;
   mine: boolean;
 }) {
-  const tone = PODIUM_TONES[place - 1] ?? colors.textTertiary;
+  const tone = PODIUM_TONES[place - 1] ?? colors.onDarkMuted;
   const first = place === 1;
 
   return (
-    <View style={[styles.step, first ? styles.stepFirst : null]}>
-      <Avatar name={name} size={first ? 48 : 40} ring={mine ? "brand" : "none"} />
+    <View style={styles.step}>
+      <Avatar name={name} size={first ? 56 : 44} ring={mine ? "brand" : "none"} />
 
-      {/* NEDEN DOLU DEĞİL ÇERÇEVE: altın/bronz dolgunun üstünde beyaz rakam
-          açık temada okunmuyor. Basamak rengi çerçevede yaşar, rakam her iki
-          temada da birincil metin rengiyle net kalır. */}
-      <View style={[styles.stepMedal, { borderColor: tone }]}>
-        <Text style={styles.stepMedalText} {...textScale.badge}>
-          {place}
+      <Text style={styles.stepName} numberOfLines={1} {...textScale.dense}>
+        {mine ? "Sen" : name}
+      </Text>
+      <Text style={styles.stepTeam} numberOfLines={1} {...textScale.dense}>
+        {teamName ?? " "}
+      </Text>
+
+      {/* Rakam kahramandır: skor Archivo ile basamağın üstünde. */}
+      <View style={styles.stepScoreRow}>
+        <Text style={[styles.stepScore, first ? styles.stepScoreFirst : null]} {...textScale.dense}>
+          {formatCount(score)}
+        </Text>
+        <Text style={styles.stepUnit} {...textScale.badge}>
+          {unit}
         </Text>
       </View>
 
-      <Text style={styles.stepName} numberOfLines={1} {...textScale.dense}>
-        {mine ? `${name} (sen)` : name}
-      </Text>
-      <Text style={styles.stepTeam} numberOfLines={1} {...textScale.badge}>
-        {teamName ?? "—"}
-      </Text>
-
-      <View style={[styles.stepScore, first ? styles.stepScoreFirst : null]}>
-        <Text style={styles.stepScoreText} {...textScale.dense}>
-          {formatCount(score)}
+      {/* BASAMAK — yükseklik sırayı söyler; üst kenardaki renkli çizgi
+          madalya rengidir (altın · gümüş · bronz). Rakam beyaz, sahnede
+          her temada okunur. */}
+      <View style={[styles.plinth, PLINTH_HEIGHT[place - 1] != null ? { height: PLINTH_HEIGHT[place - 1] } : null]}>
+        <View style={[styles.plinthTop, { backgroundColor: tone }]} />
+        <Text style={styles.plinthPlace} {...textScale.badge}>
+          {place}
         </Text>
-        <Text style={styles.stepScoreUnit} {...textScale.badge}>
-          {unit}
+      </View>
+    </View>
+  );
+});
+
+/**
+ * Boş basamak — ilk üçün hepsi dolmadığında podyum yine podyum gibi okunsun
+ * diye basamak çizilir, üstü boş kalır ("kimse yok" değil "yer boş" der).
+ */
+const EmptyStep = React.memo(function EmptyStep({ place }: { place: 2 | 3 }) {
+  return (
+    <View style={styles.step}>
+      <View style={styles.emptySeat}>
+        <Ionicons name="person-outline" size={18} color={colors.onDarkMuted} />
+      </View>
+      <Text style={styles.stepTeam} numberOfLines={1} {...textScale.dense}>
+        Yer boş
+      </Text>
+      <View style={[styles.plinth, styles.plinthEmpty, { height: PLINTH_HEIGHT[place - 1] }]}>
+        <Text style={[styles.plinthPlace, styles.plinthPlaceEmpty]} {...textScale.badge}>
+          {place}
         </Text>
       </View>
     </View>
@@ -210,6 +242,7 @@ export default function ArenaLeaderboardScreen() {
 
   const scope = useScope();
   const auth = useAuth();
+  const router = useRouter();
   const { scrollY, scrollProps } = useHeaderScroll();
 
   const cityId = scopeMode === "city" && scope.cityId ? Number(scope.cityId) : undefined;
@@ -326,9 +359,15 @@ export default function ArenaLeaderboardScreen() {
     <View style={styles.listHeader}>
       {boardQuery.isError ? <ErrorState error={boardQuery.error} variant="banner" /> : null}
 
+      {/* İki süzgeç tek satırda: ikisi de iki seçenekli, alt alta iki bant
+          ekranın ilk üçte birini podyumdan önce yiyordu. */}
       <View style={styles.filters}>
-        <SegmentedControl items={PERIOD_ITEMS} value={period} onChange={setPeriod} size="sm" />
-        <SegmentedControl items={scopeItems} value={scopeMode} onChange={setScopeMode} size="sm" />
+        <View style={styles.flex}>
+          <SegmentedControl items={PERIOD_ITEMS} value={period} onChange={setPeriod} size="sm" />
+        </View>
+        <View style={styles.flex}>
+          <SegmentedControl items={scopeItems} value={scopeMode} onChange={setScopeMode} size="sm" />
+        </View>
       </View>
 
       {/* Kendi sıran listede yoksa üstte sabit kart olarak gösterilir. */}
@@ -356,7 +395,12 @@ export default function ArenaLeaderboardScreen() {
       {podium.length > 0 ? (
         <>
           <View style={styles.podium}>
-            {/* 2 · 1 · 3 sırası: birinci ortada ve bir tık yukarıda durur. */}
+            <GradientFill tone="ink" radius="xxl" />
+            <Text style={styles.podiumOverline} {...textScale.badge}>
+              {upperTR(`${meta.label} · ${period === "weekly" ? "bu hafta" : "tüm zamanlar"}`)}
+            </Text>
+            <View style={styles.podiumRow}>
+            {/* 2 · 1 · 3 sırası: birinci ortada ve en yüksek basamakta. */}
             {podium[1] ? (
               <PodiumStep
                 place={2}
@@ -367,7 +411,7 @@ export default function ArenaLeaderboardScreen() {
                 mine={myId != null && Number(podium[1].userId) === myId}
               />
             ) : (
-              <View style={styles.step} />
+              <EmptyStep place={2} />
             )}
 
             <PodiumStep
@@ -389,8 +433,9 @@ export default function ArenaLeaderboardScreen() {
                 mine={myId != null && Number(podium[2].userId) === myId}
               />
             ) : (
-              <View style={styles.step} />
+              <EmptyStep place={3} />
             )}
+            </View>
           </View>
 
           {rest.length > 0 ? (
@@ -439,6 +484,7 @@ export default function ArenaLeaderboardScreen() {
                     : "Oyna ve giriş yap; skorun otomatik sıralamaya yazılsın."
                 }
                 variant="inline"
+                action={{ label: `${meta.label} oyna`, onPress: () => router.push(meta.route as never) }}
               />
             ) : null
           }
@@ -595,6 +641,7 @@ const styles = StyleSheet.create({
     paddingBottom: space.sm,
   },
   filters: {
+    flexDirection: "row",
     gap: space.sm,
   },
 
@@ -607,6 +654,7 @@ const styles = StyleSheet.create({
     borderColor: colors.brandBorder,
     paddingHorizontal: space.m,
     paddingVertical: space.m,
+    backgroundColor: colors.surface1,
     ...elevate(1),
     borderWidth: 1,
   },
@@ -636,75 +684,98 @@ const styles = StyleSheet.create({
     color: colors.textTertiary,
   },
 
-  /* — Podyum — */
+  /* — Podyum: ekranın tek sahnesi — */
   podium: {
+    borderRadius: radius.xxl,
+    backgroundColor: colors.inkBlock,
+    overflow: "hidden",
+    paddingTop: space.lg,
+    paddingHorizontal: space.md,
+    ...elevate(2),
+  },
+  podiumOverline: {
+    ...type.overline,
+    color: colors.brandOnDark,
+    textAlign: "center",
+    marginBottom: space.md,
+  },
+  podiumRow: {
     flexDirection: "row",
     alignItems: "flex-end",
-    justifyContent: "space-between",
     gap: space.sm,
-    borderRadius: radius.lg,
-    paddingHorizontal: space.m,
-    paddingTop: space.md,
-    paddingBottom: space.m,
-    ...elevate(1),
   },
   step: {
     flex: 1,
     alignItems: "center",
-    gap: space.xxs,
+    gap: 2,
   },
-  /* Birinci bir tık yukarıda durur — podyum basamağı hissi. */
-  stepFirst: {
-    marginBottom: space.m,
+  stepName: {
+    ...type.h4,
+    color: colors.onDark,
+    textAlign: "center",
+    marginTop: space.s,
   },
-  stepMedal: {
-    minWidth: 20,
-    height: 20,
+  stepTeam: {
+    ...type.caption,
+    color: colors.onDarkMuted,
+    textAlign: "center",
+  },
+  stepScoreRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 3,
+    marginTop: space.xs,
+    marginBottom: space.s,
+  },
+  stepScore: {
+    ...type.metricSm,
+    color: colors.onDark,
+  },
+  stepScoreFirst: {
+    ...type.scoreMd,
+  },
+  stepUnit: {
+    ...type.caption,
+    color: colors.onDarkMuted,
+  },
+  plinth: {
+    alignSelf: "stretch",
+    alignItems: "center",
+    justifyContent: "center",
+    borderTopLeftRadius: radius.sm,
+    borderTopRightRadius: radius.sm,
+    backgroundColor: colors.inkTile,
+    borderWidth: hairline,
+    borderBottomWidth: 0,
+    borderColor: colors.inkTileBorder,
+    overflow: "hidden",
+  },
+  plinthTop: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 3,
+  },
+  plinthEmpty: {
+    marginTop: space.s,
+  },
+  plinthPlaceEmpty: {
+    color: colors.onDarkMuted,
+  },
+  emptySeat: {
+    width: 44,
+    height: 44,
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: space.xs,
-    marginTop: -space.m,
-    backgroundColor: colors.surface1,
-    borderWidth: 1.5,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: colors.inkPillBorder,
   },
-  stepMedalText: {
-    ...type.micro,
-    color: colors.textPrimary,
-  },
-  stepName: {
-    ...type.caption,
-    fontFamily: fonts.bold,
-    letterSpacing: 0,
-    color: colors.textPrimary,
-    textAlign: "center",
-    marginTop: space.xxs,
-  },
-  stepTeam: {
-    ...type.micro,
-    fontFamily: fonts.semibold,
-    letterSpacing: 0,
-    color: colors.textTertiary,
-    textAlign: "center",
-  },
-  stepScore: {
-    alignItems: "center",
-    borderRadius: radius.sm,
-    backgroundColor: colors.surface3,
-    paddingHorizontal: space.sm,
-    paddingVertical: space.xs,
-    marginTop: space.xs,
-  },
-  stepScoreFirst: {
-    backgroundColor: colors.brandDim,
-  },
-  stepScoreText: {
-    ...type.tableNumStrong,
-    color: colors.textPrimary,
-  },
-  stepScoreUnit: {
-    ...type.micro,
-    color: colors.textTertiary,
+  plinthPlace: {
+    ...type.metricSm,
+    color: colors.onDark,
   },
 
   /* — Liste satırı — */

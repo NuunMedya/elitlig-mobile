@@ -23,6 +23,16 @@
  * izni, sonra tür seçimi. Expo Go'da push modülü token veremez — kart sessizce
  * gizlenir, ekranın geri kalanı çalışır.
  *
+ * BİR BAKIŞTA OKUNSUN (yeniden tasarım):
+ *   1. CİHAZ DURUMU — tek başlık ("Bu telefon bildirim alıyor" / "Bildirim
+ *      izni kapalı") + tek eylem. Teşhis ayrıntısı ve test bildirimi
+ *      "Sorun mu var?" altında katlanır; herkesin değil, sorunu olanın işi.
+ *   2. ÖZET — "14 türden 10'u açık".
+ *   3. GRUPLAR — her grubun başlığında "3/4 açık" sayacı ve TEK dokunuşla
+ *      "Tümünü aç / Tümünü kapat". Grup anahtarları tek PATCH ile gider.
+ *   4. Takip bazında ayar (takım, lig, maç) ayrı ekrandadır; satırı gruplar
+ *      ile cihaz durumu arasında durur, "kimin için" sorusunun kapısıdır.
+ *
  * NEDEN GİRİŞ GEREKİR: tercihler hesaba bağlıdır (kullanıcı satırında tutulur),
  * cihaza değil. Misafire çağrı gösterilir.
  */
@@ -44,14 +54,15 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
   Button,
-  Card,
   EmptyState,
   ErrorState,
   ListRow,
   ScreenHeader,
   SectionHeader,
   SkeletonListRow,
+  Touchable,
   refreshControlProps,
+  toneColors,
   useHeaderScroll,
   useRefresh,
   useToast,
@@ -73,7 +84,7 @@ import {
 } from "@/hooks/usePushStatus";
 import { queryKeys } from "@/lib/queryKeys";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, layout, radius, space, textScale, type } from "@/theme";
+import { colors, elevate, hairline, layout, radius, space, textScale, type } from "@/theme";
 
 /** Aynı anda giden tercih isteklerini tanımak için (bkz. onSettled). */
 const PREFERENCE_MUTATION_KEY = ["notifications", "preference-toggle"] as const;
@@ -117,10 +128,11 @@ export default function NotificationPreferencesScreen() {
 
   const mutation = useMutation({
     mutationKey: PREFERENCE_MUTATION_KEY,
-    mutationFn: ({ key, value }: { key: string; value: boolean }) =>
-      updateNotificationPreferences({ [key]: value }),
+    /* Tek anahtar ya da bir grubun tüm anahtarları — sunucu kısmi PATCH alır. */
+    mutationFn: ({ changes }: { changes: Record<string, boolean> }) =>
+      updateNotificationPreferences(changes),
 
-    onMutate: async ({ key, value }) => {
+    onMutate: async ({ changes }) => {
       // Uçuştaki GET yanıtı iyimser değeri ezmesin.
       await queryClient.cancelQueries({ queryKey: queryKeys.notificationPreferences() });
 
@@ -131,7 +143,7 @@ export default function NotificationPreferencesScreen() {
       if (previous) {
         queryClient.setQueryData<NotificationPreferences>(queryKeys.notificationPreferences(), {
           ...previous,
-          preferences: { ...previous.preferences, [key]: value },
+          preferences: { ...previous.preferences, ...changes },
         });
       }
 
@@ -164,7 +176,20 @@ export default function NotificationPreferencesScreen() {
   const { mutate } = mutation;
 
   const togglePreference = useCallback(
-    (key: string, value: boolean) => mutate({ key, value }),
+    (key: string, value: boolean) => mutate({ changes: { [key]: value } }),
+    [mutate],
+  );
+
+  /** Grubun hepsi açıksa hepsini kapatır, değilse hepsini açar. */
+  const toggleGroup = useCallback(
+    (items: NotificationPreferenceItem[]) => {
+      const turnOn = items.some((item) => !item.value);
+      const changes: Record<string, boolean> = {};
+      items.forEach((item) => {
+        changes[item.key] = turnOn;
+      });
+      mutate({ changes });
+    },
     [mutate],
   );
 
@@ -327,15 +352,47 @@ export default function NotificationPreferencesScreen() {
   );
 
   const renderSectionHeader = useCallback(
-    ({ section }: { section: PreferenceSectionData }) => (
-      <SectionHeader title={section.group.label} style={styles.sectionHeader} />
-    ),
-    [],
+    ({ section }: { section: PreferenceSectionData }) => {
+      const on = section.data.filter((item) => item.value).length;
+      const all = on === section.data.length;
+      return (
+        <View>
+          <SectionHeader
+            title={section.group.label}
+            meta={`${on}/${section.data.length} açık`}
+            action={
+              section.data.length > 1
+                ? { label: all ? "Tümünü kapat" : "Tümünü aç", onPress: () => toggleGroup(section.data) }
+                : undefined
+            }
+            style={styles.sectionHeader}
+          />
+          {section.group.description ? (
+            <Text style={styles.groupDescription} {...textScale.long}>
+              {section.group.description}
+            </Text>
+          ) : null}
+        </View>
+      );
+    },
+    [toggleGroup],
   );
+
+  const totals = useMemo(() => {
+    let on = 0;
+    let all = 0;
+    sections.forEach((section) => {
+      all += section.data.length;
+      on += section.data.filter((item) => item.value).length;
+    });
+    return { on, all };
+  }, [sections]);
+
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
 
   /* ────────────────────────── GÖRÜNÜM ────────────────────────── */
 
-  const header = <ScreenHeader title="Bildirim Tercihleri" back scrollY={scrollY} />;
+  const header = <ScreenHeader title="Bildirim türleri" back scrollY={scrollY} />;
 
   if (!signedIn) {
     return (
@@ -343,8 +400,8 @@ export default function NotificationPreferencesScreen() {
         {header}
         <EmptyState
           icon="notifications-outline"
-          title="Tercihler hesabına bağlı"
-          body="Hangi bildirimleri alacağını seçebilmek için giriş yapmalısın. Favorilerin cihazda kalır, tercihler hesabında."
+          title="Bildirim ayarların hesabında durur"
+          body="Gol, maç başlangıcı, sonuç ve haber bildirimlerini seçmek için giriş yap. Takip ettiklerin cihazında kalır."
           action={{ label: "Giriş yap", onPress: goToSignIn }}
         />
       </SafeAreaView>
@@ -353,6 +410,18 @@ export default function NotificationPreferencesScreen() {
 
   const permissionBlocked = permission === "blocked";
 
+  const deviceOk = push.state === "hazir" && push.server === "yazildi";
+  const statusTone = push.busy ? "neutral" : pushStatusTone(push);
+  const statusTitle = push.busy
+    ? "Bildirim durumu kontrol ediliyor"
+    : deviceOk
+      ? "Bu telefon bildirim alıyor"
+      : push.state === "izin-yok"
+        ? "Bildirim izni kapalı"
+        : push.state === "hazir"
+          ? "Cihaz kaydı tamamlanmadı"
+          : "Bildirimler hazır değil";
+
   const listHeader = (
     <View style={styles.intro}>
       {/* Liste doluyken hata bant olur: tercihleri ekrandan silmek yanlış (§5.6). */}
@@ -360,79 +429,42 @@ export default function NotificationPreferencesScreen() {
         <ErrorState error={query.error} onRetry={query.refetch} variant="banner" />
       ) : null}
 
-      <Card padding="md">
-        <View style={styles.introRow}>
-          <Ionicons name="phone-portrait-outline" size={16} color={colors.brandAccent} />
-          <Text style={styles.introText} {...textScale.long}>
-            Bildirimler favorilerine göre gelir: takip ettiğin takım, lig, sezon, il ve maçlar,
-            oyuncusu olduğun takımın maçları ve sana gelen panel mesajları. Aşağıdaki anahtarlar
-            hangi türlerin telefonuna düşeceğini belirler.
-          </Text>
+      {/* 1) CİHAZ DURUMU — üç kapı (izin, cihaz kimliği, sunucu kaydı) tek
+          başlıkta özetlenir; ayrıntı ve test bildirimi katlanır. */}
+      <View style={styles.status}>
+        <View style={styles.statusRow}>
+          <View style={[styles.statusIcon, { backgroundColor: toneColors(statusTone).dim }]}>
+            <Ionicons
+              name={
+                push.busy
+                  ? "sync-outline"
+                  : deviceOk
+                    ? "checkmark-circle"
+                    : push.state === "izin-yok"
+                      ? "notifications-off"
+                      : "alert-circle"
+              }
+              size={20}
+              color={toneColors(statusTone).fg}
+            />
+          </View>
+          <View style={styles.statusCopy}>
+            <Text style={styles.statusTitle} {...textScale.dense}>
+              {statusTitle}
+            </Text>
+            <Text style={styles.statusBody} {...textScale.long}>
+              {push.busy ? "Birkaç saniye sürebilir." : push.message}
+            </Text>
+          </View>
         </View>
-      </Card>
-
-      {/* Takip başına ayrıntılı ayar ayrı ekranda: her takım/lig/sezon/il/maç
-          için olay olay (gol, kart, sonuç, haber…) seçim yapılır. */}
-      <ListRow
-        leading={{ icon: "options-outline", tone: "brand" }}
-        title="Takip ettiklerimin bildirimleri"
-        subtitle="Her takım, lig, sezon, il ve maç için ayrı ayrı seç; il takip et."
-        position="single"
-        chevron
-        onPress={openFollowSettings}
-        testID="open-follow-settings"
-      />
-
-      {/* TEŞHİS: "bildirim gelmiyor" şikâyetinin nedenini görünür kılar.
-          Üç kapı da açık olmadan bildirim düşmez: cihaz izni, cihaz kimliği
-          (Expo push token) ve o kimliğin sunucuya yazılması. */}
-      <View style={[styles.permission, push.state === "hazir" && push.server === "yazildi" && styles.permissionOk]}>
-        <View style={styles.introRow}>
-          <Ionicons
-            name={
-              push.busy
-                ? "sync-outline"
-                : push.state === "hazir" && push.server === "yazildi"
-                  ? "checkmark-circle-outline"
-                  : push.state === "izin-yok"
-                    ? "notifications-off-outline"
-                    : "alert-circle-outline"
-            }
-            size={16}
-            color={
-              pushStatusTone(push) === "win"
-                ? colors.win
-                : pushStatusTone(push) === "danger"
-                  ? colors.danger
-                  : colors.warn
-            }
-          />
-          <Text style={styles.permissionText} {...textScale.long}>
-            {push.busy ? "Bildirim durumu kontrol ediliyor…" : push.message}
-          </Text>
-        </View>
-
-        {!push.busy && push.state === "hazir" ? (
-          <Text style={styles.permissionSub} {...textScale.long}>
-            {serverSyncMessage(push)}
-          </Text>
-        ) : null}
 
         {!push.busy && push.state !== "hazir" ? (
           <Button
-            label={
-              permissionBlocked || push.state === "izin-yok"
-                ? "Ayarları aç"
-                : "Tekrar dene"
-            }
-            onPress={
-              permissionBlocked || push.state === "izin-yok"
-                ? openSystemSettings
-                : askPermission
-            }
+            label={permissionBlocked || push.state === "izin-yok" ? "Ayarları aç" : "Tekrar dene"}
+            onPress={permissionBlocked || push.state === "izin-yok" ? openSystemSettings : askPermission}
             loading={asking}
             size="sm"
-            variant="secondary"
+            variant="primary"
             fullWidth
           />
         ) : push.server === "hata" ? (
@@ -446,25 +478,67 @@ export default function NotificationPreferencesScreen() {
           />
         ) : null}
 
-        {/* Yerel köprü: push zinciri kurulu olmasa bile bildirimlerin
-            görünmesini sağlayan yedek yol (hooks/useNotificationBridge.ts).
-            Kullanıcının "neden bazen geç geliyor" sorusunun yanıtı burada. */}
-        <Text style={styles.permissionSub} {...textScale.long}>
-          Uygulama açıkken bildirimler yedek yoldan da gelir: bildirim merkezine
-          düşen her yeni kayıt telefonda gösterilir. Uygulama tamamen kapalıyken
-          yalnız push bildirimi çalışır.
-        </Text>
+        <Touchable
+          feedback="chip"
+          onPress={() => setDiagnosticsOpen((open) => !open)}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: diagnosticsOpen }}
+          style={styles.disclosure}
+        >
+          <Text style={styles.disclosureText} {...textScale.dense}>
+            Sorun mu var?
+          </Text>
+          <Ionicons
+            name={diagnosticsOpen ? "chevron-up" : "chevron-down"}
+            size={14}
+            color={colors.brandAccent}
+          />
+        </Touchable>
 
-        <Button
-          label="Test bildirimi gönder"
-          onPress={sendTestNotification}
-          loading={testing}
-          size="sm"
-          variant="ghost"
-          icon="notifications-outline"
-          fullWidth
-        />
+        {diagnosticsOpen ? (
+          <View style={styles.diagnostics}>
+            {!push.busy && push.state === "hazir" ? (
+              <Text style={styles.statusSub} {...textScale.long}>
+                {serverSyncMessage(push)}
+              </Text>
+            ) : null}
+            {/* Yerel köprü: push zinciri kurulu olmasa bile bildirimlerin
+                görünmesini sağlayan yedek yol (hooks/useNotificationBridge.ts). */}
+            <Text style={styles.statusSub} {...textScale.long}>
+              Uygulama açıkken bildirimler yedek yoldan da gelir: bildirim merkezine düşen her yeni
+              kayıt telefonda gösterilir. Uygulama tamamen kapalıyken yalnız push bildirimi çalışır.
+            </Text>
+            <Button
+              label="Test bildirimi gönder"
+              onPress={sendTestNotification}
+              loading={testing}
+              size="sm"
+              variant="secondary"
+              icon="notifications-outline"
+              fullWidth
+            />
+          </View>
+        ) : null}
       </View>
+
+      {/* 2) KİMİN İÇİN — takip başına ayrıntılı ayar ayrı ekranda. */}
+      <ListRow
+        leading={{ icon: "star", tone: "brand" }}
+        title="Takip ettiklerim için"
+        subtitle="Her takım, lig ve maç için ayrı aç/kapat"
+        position="single"
+        chevron
+        onPress={openFollowSettings}
+        testID="open-follow-settings"
+      />
+
+      {/* 3) ÖZET — kaç tür açık, tek cümle. */}
+      {totals.all > 0 ? (
+        <Text style={styles.summary} {...textScale.long}>
+          <Text style={styles.summaryStrong}>{`${totals.on} / ${totals.all} tür açık.`}</Text>
+          {" Anahtarlar bu hesaba hangi bildirimlerin gönderileceğini belirler; bildirimler takip ettiklerine göre gelir."}
+        </Text>
+      ) : null}
     </View>
   );
 
@@ -562,34 +636,68 @@ const styles = StyleSheet.create({
 
   intro: {
     paddingTop: space.md,
-    gap: space.sm,
-  },
-  introRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: space.sm,
-  },
-  introText: {
-    ...type.bodySm,
-    color: colors.textSecondary,
-    flex: 1,
+    gap: space.md,
   },
 
-  permission: {
-    gap: space.sm,
-    backgroundColor: colors.warnDim,
-    borderRadius: radius.md,
-    padding: space.md,
+  status: {
+    gap: space.md,
+    padding: space.lg,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    ...elevate(1),
   },
-  permissionOk: { borderColor: colors.win, backgroundColor: colors.winDim },
-  permissionSub: { ...type.caption, color: colors.textSecondary, lineHeight: 16 },
-  permissionText: {
+  statusRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: space.md,
+  },
+  statusIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  statusCopy: { flex: 1, gap: 2 },
+  statusTitle: { ...type.h3, color: colors.textPrimary },
+  statusBody: { ...type.bodySm, color: colors.textSecondary },
+  statusSub: { ...type.caption, color: colors.textSecondary, lineHeight: 16 },
+  disclosure: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: space.xs,
+    minHeight: 28,
+    marginBottom: -space.xs,
+  },
+  disclosureText: { ...type.label, color: colors.brandAccent },
+  diagnostics: {
+    gap: space.sm,
+    paddingTop: space.sm,
+    borderTopWidth: hairline,
+    borderTopColor: colors.separator,
+  },
+
+  summary: {
     ...type.bodySm,
+    color: colors.textSecondary,
+    paddingHorizontal: space.xxs,
+  },
+  summaryStrong: {
+    fontFamily: type.h4.fontFamily,
     color: colors.textPrimary,
-    flex: 1,
+  },
+  groupDescription: {
+    ...type.caption,
+    color: colors.textTertiary,
+    marginTop: -space.xs,
+    marginBottom: space.sm,
   },
 
   sectionHeader: {
-    paddingTop: space.lg,
+    paddingTop: space.xl,
+    paddingHorizontal: 0,
   },
 });

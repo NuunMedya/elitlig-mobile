@@ -4,11 +4,14 @@
  * Maç listesinde gün ve "takımım" filtresi, oyuncularda mevki, puan
  * durumunda favoriler, ScopeBar'da şehir/lig/sezon hep bu çiptir.
  *
- * SEÇİM DİLİ: seçili çip MOR DOLGU + beyaz metindir; seçili değilse yalnız
- * `surface2` zemin ve hairline kenarlık taşır. Mor burada geniş yüzey
- * doldurmaz (§1.0), 26–32px'lik bir hapta aksan olarak kalır. `tone="live"`
- * gibi anlamlı bir ton verildiğinde seçili hâl morun yerine o tonun sönük
- * dolgusunu alır — "canlı" filtresi kırmızı okunmalıdır, mor değil.
+ * SEÇİM DİLİ (Arena): seçili çip DÜZ marka dolgusu + beyaz metindir;
+ * seçili değilse beyaz kâğıt hap + hairline kenarlık. Gri kâğıt zeminde beyaz
+ * hap net ayrışır, seçilen tek hap ise ekranda "şu an bu" diyen tek renktir.
+ * `tone="live"` gibi anlamlı bir ton verildiğinde seçili hâl morun yerine o
+ * tonun sönük dolgusunu alır — "canlı" filtresi kırmızı okunmalıdır, mor değil.
+ *
+ * SAHNE ÜSTÜNDE (HeaderToneContext "ink"): seçili olmayan çip cam pula
+ * (`inkPill`) döner; beyaz kâğıt hap grafit blokta delik gibi duruyordu.
  *
  * ChipGroup yatay kaydırmalıdır; KAYDIRMA HAPTİK ÜRETMEZ (§5.3), yalnız çip
  * SEÇİMİ titrer.
@@ -24,9 +27,9 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import { colors, hairline, layout, radius, space, textScale, touchSlop, type } from "@/theme";
+import { colors, fonts, hairline, layout, radius, space, textScale, touchSlop, type } from "@/theme";
 import { toneColors, withAlpha, type Tone } from "./Badge";
-import { GradientFill } from "./GradientFill";
+import { useHeaderTone } from "./HeaderTone";
 import { Touchable } from "./Pressable";
 
 export interface ChipProps {
@@ -60,48 +63,41 @@ export const Chip = React.memo(function Chip({
   style,
   testID,
 }: ChipProps) {
-  const height = size === "sm" ? 24 : 28;
+  const height = size === "sm" ? 28 : 32;
+  const surface = useHeaderTone("paper");
+  const onInk = surface === "ink";
 
-  const { boxStyle, fg, fill } = useMemo<{
-    boxStyle: ViewStyle;
-    fg: string;
-    fill?: boolean;
-  }>(() => {
-    if (disabled) {
-      return {
-        boxStyle: { backgroundColor: colors.surface2, borderColor: colors.border } as ViewStyle,
-        fg: colors.textDisabled,
-      };
-    }
+  const { boxStyle, fg } = useMemo<{ boxStyle: ViewStyle; fg: string }>(() => {
+    /* Seçili + pasif çip "şu anki değer" demektir (ör. mevcut öncelik): seçili
+       görünür, sönmez. Pasiflik yalnız seçili olmayan çipi gri yapar. */
     if (!selected) {
       return {
-        boxStyle: { backgroundColor: colors.surface2, borderColor: colors.border } as ViewStyle,
-        fg: colors.textSecondary,
+        boxStyle: onInk
+          ? { backgroundColor: colors.inkPill, borderColor: colors.inkPillBorder }
+          : { backgroundColor: colors.surface1, borderColor: colors.border },
+        fg: disabled
+          ? onInk
+            ? colors.onDarkMuted
+            : colors.textDisabled
+          : onInk
+            ? colors.onDark
+            : colors.textSecondary,
       };
     }
-    /* SEÇİLİ FİLTRE MOR GEÇİŞLİ DOLGUDUR.
-       Burada `inverse` (neredeyse siyah blok) kullanılıyordu; marka rengi
-       mercanken bu doğruydu, çünkü mercan AKSİYON rengiydi ve bir filtre bir
-       DURUM bildirir. Tema mora döndükten sonra siyah blok, mor bir şeridin
-       ortasında temaya ait olmayan bir leke gibi duruyor. Mor artık zaten
-       yüzey rengi; seçili chip'i markanın kendi geçişiyle doldurmak seçimi
-       en yüksek kontrastla söyler ve şeridi tek bir renk ailesinde tutar.
-
-       Anlamlı tonlar (canlı, kazanç, uyarı…) sönük dolgu + kendi renginde
-       metin alır — orada anlam RENKTEN okunur. */
+    /* Seçili: marka (ve nötr) DÜZ dolgu; anlamlı tonlar sönük dolgu + kendi
+       renginde metin — orada anlam RENKTEN okunur. */
     if (tone === "brand" || tone === "neutral") {
       return {
-        boxStyle: { borderColor: "transparent", overflow: "hidden" } as ViewStyle,
+        boxStyle: { backgroundColor: colors.brand, borderColor: colors.brand },
         fg: colors.textOnBrand,
-        fill: true,
       };
     }
     const t = toneColors(tone);
     return {
-      boxStyle: { backgroundColor: t.dim, borderColor: withAlpha(t.fg, 0.4) } as ViewStyle,
+      boxStyle: { backgroundColor: t.dim, borderColor: withAlpha(t.fg, 0.35) },
       fg: t.fg,
     };
-  }, [disabled, selected, tone]);
+  }, [disabled, onInk, selected, tone]);
 
   return (
     <Touchable
@@ -116,13 +112,12 @@ export const Chip = React.memo(function Chip({
       testID={testID}
       style={[
         styles.chip,
-        { height, paddingHorizontal: size === "sm" ? space.m : space.md },
+        { height, paddingHorizontal: size === "sm" ? space.m : space.md + space.xxs },
         boxStyle,
+        disabled && !selected ? styles.disabled : null,
         style,
       ]}
     >
-      {fill ? <GradientFill tone="brand" radius="pill" /> : null}
-
       {icon ? <Ionicons name={icon} size={size === "sm" ? 12 : 14} color={fg} /> : null}
 
       <Text
@@ -216,6 +211,10 @@ const styles = StyleSheet.create({
   },
   labelSm: {
     ...type.caption,
+    fontFamily: fonts.semibold,
+  },
+  disabled: {
+    opacity: 0.5,
   },
   count: {
     ...type.micro,

@@ -7,7 +7,13 @@
  * döndürür (services/teamFinance getTeamFinanceDetail). Kayıt eklemek/silmek
  * yönetici yetkisidir; başkan yalnızca izler.
  *
- * NEDEN İKİ SEGMENT: yanıtın `squad[]` alanı (oyuncu bazlı piyasa değeri ve
+ * ÖZET: dört eşit kutu (gelir, gider, bakiye, değer) yerine TEK bakiye kartı.
+ * Başkanın ilk sorusu "kasada ne var?" — bakiye büyük rakamla, altında gelir
+ * ve gider yan yana ve ikisinin oranını gösteren çift renkli çubuk. Kadro
+ * değeri ayrı bir satırdır; bakiyeyle aynı ağırlıkta durunca "kasada 712
+ * bin var" diye yanlış okunuyordu (değer nakit değildir).
+ *
+ * NEDEN İKİ SEKME (başlıkta, Arena: sekme sayfayı değiştirir): yanıtın `squad[]` alanı (oyuncu bazlı piyasa değeri ve
  * ülke geneli sıra) eski sürümde HİÇ çizilmiyordu — yalnız toplamı
  * görünüyordu. Kadro değeri kulübün en büyük varlığı olduğu için kendi
  * segmentini hak ediyor. Seçim `?tab=` ile URL'de taşınır.
@@ -31,15 +37,15 @@ import {
   ErrorState,
   ScreenHeader,
   SectionHeader,
-  SegmentedControl,
   SkeletonCard,
   SkeletonListRow,
+  Tabs,
   refreshControlProps,
   toneColors,
   useHeaderScroll,
   useRefresh,
   withAlpha,
-  type SegmentedItem,
+  type TabItem,
   type Tone,
 } from "@/components/ui";
 import {
@@ -57,6 +63,7 @@ import { ApiError } from "@/lib/http";
 import { useAuth } from "@/providers/AuthProvider";
 import {
   colors,
+  elevate,
   fonts,
   hairline,
   layout,
@@ -72,9 +79,9 @@ import {
 
 type FinanceTab = "defter" | "kadro";
 
-const TAB_ITEMS: SegmentedItem<FinanceTab>[] = [
-  { key: "defter", label: "Kasa Defteri" },
-  { key: "kadro", label: "Kadro Değeri" },
+const TAB_ITEMS: TabItem<FinanceTab>[] = [
+  { key: "defter", label: "Kasa defteri" },
+  { key: "kadro", label: "Kadro değeri" },
 ];
 
 /** FFP durumu → rozet tonu + başlık + ikon. Renk `toneColors` sözlüğünden. */
@@ -171,30 +178,26 @@ export default function ClubFinanceScreen() {
 
   const listHeader = useMemo(() => {
     if (!data) return null;
-    const balance = data.totals.income - data.totals.expense;
     return (
       <View style={styles.header}>
         {query.isError ? (
           <ErrorState error={query.error} onRetry={query.refetch} variant="banner" />
         ) : null}
 
-        {/* Özet kartları */}
-        <View style={styles.summaryRow}>
-          <SummaryCard label="GELİR" value={signedMoney(data.totals.income)} tone="win" />
-          <SummaryCard label="GİDER" value={signedMoney(data.totals.expense)} tone="danger" />
-        </View>
-        <View style={styles.summaryRow}>
-          <SummaryCard
-            label="BAKİYE"
-            value={signedMoney(balance)}
-            tone={balance >= 0 ? "win" : "danger"}
-          />
-          <SummaryCard
-            label="KADRO DEĞERİ"
-            value={formatMoney(data.squadValue)}
-            tone="brand"
-            meta={`${data.playerCount} oyuncu`}
-          />
+        <BalanceCard income={data.totals.income} expense={data.totals.expense} />
+
+        <View style={styles.valueRow}>
+          <View style={styles.valueTexts}>
+            <Text style={styles.summaryLabel} {...textScale.badge}>
+              KADRO DEĞERİ
+            </Text>
+            <Text style={styles.valueMeta} numberOfLines={1} {...textScale.dense}>
+              {data.playerCount} oyuncunun piyasa değeri · nakit değildir
+            </Text>
+          </View>
+          <Text style={styles.valueAmount} numberOfLines={1} {...textScale.dense}>
+            {formatMoney(data.squadValue)}
+          </Text>
         </View>
 
         {/* FFP bandı */}
@@ -206,7 +209,8 @@ export default function ClubFinanceScreen() {
         />
 
         <SectionHeader
-          title={tab === "defter" ? "Kasa defteri" : "Oyuncu bazlı değer"}
+          title={tab === "defter" ? "Hareketler" : "Oyuncu bazlı değer"}
+          style={styles.flushHeader}
           meta={
             tab === "defter"
               ? `${data.entries.length} kayıt`
@@ -229,7 +233,7 @@ export default function ClubFinanceScreen() {
 
   const renderSquad = useCallback(
     ({ item, index }: { item: FinanceSquadPlayer; index: number }) => (
-      <SquadValueRow player={item} position={rowPosition(index, squad.length)} />
+      <SquadValueRow player={item} rank={index + 1} position={rowPosition(index, squad.length)} />
     ),
     [squad.length]
   );
@@ -247,13 +251,7 @@ export default function ClubFinanceScreen() {
       subtitle={data?.team.teamName}
       back
       scrollY={scrollY}
-      bottom={
-        data ? (
-          <View style={styles.headerBottom}>
-            <SegmentedControl items={TAB_ITEMS} value={tab} onChange={changeTab} />
-          </View>
-        ) : undefined
-      }
+      tabs={data ? <Tabs items={TAB_ITEMS} value={tab} onChange={changeTab} sticky /> : undefined}
     />
   );
 
@@ -342,36 +340,59 @@ export default function ClubFinanceScreen() {
    Alt bileşenler
    ══════════════════════════════════════════════════════════════════════════ */
 
-/** Özet kartı — dört tanesi 2×2 ızgara kurar. */
-const SummaryCard = React.memo(function SummaryCard({
-  label,
-  value,
-  tone,
-  meta,
+/**
+ * Bakiye kartı — büyük bakiye, altında gelir/gider ve oran çubuğu.
+ * Çubuk iki renklidir (gelir yeşil, gider kırmızı); toplam sıfırsa ray boş.
+ */
+const BalanceCard = React.memo(function BalanceCard({
+  income,
+  expense,
 }: {
-  label: string;
-  value: string;
-  tone: Tone;
-  meta?: string;
+  income: number;
+  expense: number;
 }) {
-  const palette = toneColors(tone);
+  const balance = income - expense;
+  const total = income + expense;
   return (
-    <View style={styles.summaryCard}>
-      <Text style={styles.summaryLabel} numberOfLines={1} {...textScale.badge}>
-        {label}
+    <View style={styles.balance}>
+      <Text style={styles.summaryLabel} {...textScale.badge}>
+        BAKİYE
       </Text>
       <Text
-        style={[styles.summaryValue, { color: palette.fg }]}
+        style={[styles.balanceValue, { color: balance < 0 ? colors.danger : colors.textPrimary }]}
         numberOfLines={1}
         {...textScale.dense}
       >
-        {value}
+        {signedMoney(balance)}
       </Text>
-      {meta ? (
-        <Text style={styles.summaryMeta} numberOfLines={1} {...textScale.dense}>
-          {meta}
-        </Text>
-      ) : null}
+      <View style={styles.flowTrack}>
+        {total > 0 ? (
+          <>
+            <View style={[styles.flowFill, { flex: income, backgroundColor: colors.win }]} />
+            <View style={[styles.flowFill, { flex: expense, backgroundColor: colors.danger }]} />
+          </>
+        ) : null}
+      </View>
+      <View style={styles.flowRow}>
+        <View style={styles.flowItem}>
+          <View style={[styles.flowDot, { backgroundColor: colors.win }]} />
+          <Text style={styles.flowLabel} {...textScale.dense}>
+            Gelir
+          </Text>
+          <Text style={styles.flowValue} numberOfLines={1} {...textScale.dense}>
+            {signedMoney(income)}
+          </Text>
+        </View>
+        <View style={styles.flowItem}>
+          <View style={[styles.flowDot, { backgroundColor: colors.danger }]} />
+          <Text style={styles.flowLabel} {...textScale.dense}>
+            Gider
+          </Text>
+          <Text style={styles.flowValue} numberOfLines={1} {...textScale.dense}>
+            {signedMoney(expense)}
+          </Text>
+        </View>
+      </View>
     </View>
   );
 });
@@ -499,9 +520,12 @@ const LedgerRow = React.memo(function LedgerRow({
 /** Kadro değeri satırı: avatar, ad/mevki, piyasa değeri ve genel sıra rozeti. */
 const SquadValueRow = React.memo(function SquadValueRow({
   player,
+  rank,
   position,
 }: {
   player: FinanceSquadPlayer;
+  /** Kulüp içi değer sırası — liste değere göre sıralıdır. */
+  rank: number;
   position: "single" | "first" | "middle" | "last";
 }) {
   return (
@@ -513,6 +537,9 @@ const SquadValueRow = React.memo(function SquadValueRow({
         position === "last" ? styles.rowLast : null,
       ]}
     >
+      <Text style={styles.rank} {...textScale.badge}>
+        {rank}
+      </Text>
       <Avatar name={player.playerName} image={mediaUrl(player.image)} size={32} />
 
       <View style={styles.rowTexts}>
@@ -525,7 +552,7 @@ const SquadValueRow = React.memo(function SquadValueRow({
       </View>
 
       {player.globalRank != null ? (
-        <Badge label={`#${player.globalRank}`} tone="brand" size="xs" />
+        <Badge label={`Türkiye #${player.globalRank}`} tone="neutral" size="xs" />
       ) : null}
 
       <Text style={styles.amount} numberOfLines={1} {...textScale.dense}>
@@ -548,10 +575,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.bg,
   },
-  headerBottom: {
-    paddingHorizontal: layout.screenPadding,
-    paddingBottom: space.sm,
-  },
   content: {
     paddingHorizontal: layout.screenPadding,
     paddingBottom: space.xxxl,
@@ -561,34 +584,97 @@ const styles = StyleSheet.create({
     gap: space.sm,
   },
   header: {
-    paddingTop: space.sm,
+    paddingTop: space.md,
     gap: space.sm,
   },
 
-  /* Özet kartları */
-  summaryRow: {
-    flexDirection: "row",
-    gap: space.sm,
+  flushHeader: {
+    paddingHorizontal: 0,
   },
-  summaryCard: {
-    flex: 1,
-    gap: 3,
+
+  /* Bakiye kartı */
+  balance: {
+    ...elevate(1),
+    gap: space.s,
     borderRadius: radius.lg,
     borderWidth: hairline,
     borderColor: colors.border,
     backgroundColor: colors.surface1,
-    padding: space.md,
+    padding: space.lg,
   },
   summaryLabel: {
-    ...type.micro,
+    ...type.overline,
     color: colors.textTertiary,
   },
-  summaryValue: {
-    ...type.scoreSm,
+  balanceValue: {
+    ...type.scoreLg,
   },
-  summaryMeta: {
+  flowTrack: {
+    flexDirection: "row",
+    gap: 2,
+    height: 6,
+    marginTop: space.xs,
+    borderRadius: radius.pill,
+    overflow: "hidden",
+    backgroundColor: colors.slateSoft,
+  },
+  flowFill: {
+    height: "100%",
+  },
+  flowRow: {
+    flexDirection: "row",
+    gap: space.lg,
+  },
+  flowItem: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.s,
+  },
+  flowDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  flowLabel: {
+    ...type.bodySm,
+    color: colors.textTertiary,
+  },
+  flowValue: {
+    ...type.tableNumStrong,
+    color: colors.textPrimary,
+    flex: 1,
+    textAlign: "right",
+  },
+  valueRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    borderRadius: radius.lg,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    backgroundColor: colors.surface1,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.md,
+  },
+  valueTexts: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  valueMeta: {
     ...type.caption,
     color: colors.textTertiary,
+  },
+  valueAmount: {
+    ...type.metricSm,
+    color: colors.accentText,
+  },
+  rank: {
+    ...type.tableNumStrong,
+    color: colors.textTertiary,
+    width: 20,
+    textAlign: "center",
   },
 
   /* FFP */

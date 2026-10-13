@@ -1,70 +1,81 @@
 /**
- * GENEL BAKIŞ — uygulamanın açılış ekranı ve tek bakışta durum özeti.
+ * ANA SAYFA — uygulamanın açılış ekranı ve tek bakışta durum özeti.
  *
- * NEDEN GERİ GELDİ: bir önceki düzende açılış doğrudan maç listesiydi ve
- * uygulamanın geri kalanı (takım paneli, kadro, maç talepleri, bildirimler)
- * Profil sekmesinin altındaki satırlardan ulaşılıyordu. Amatör ligde
- * kullanıcıların çoğu bir takıma bağlıdır ve açılışta üç soruyu sorar:
- *   1. Takımımın sıradaki / şu anki maçı ne durumda?
+ * Amatör ligde kullanıcıların çoğu bir takıma bağlıdır ve açılışta üç soruyu
+ * sorar:
+ *   1. Şu an bir şey oynanıyor mu, takımımın maçı ne durumda?
  *   2. Beni bekleyen bir iş var mı (talep, teklif, mesaj, kadro)?
- *   3. Bugün ligde ne oynanıyor?
- * Bu ekran üçünü de kaydırmadan yanıtlar; her biri kendi bölümünde ve hepsi
- * "dokun → asıl ekran" kapısıdır. Ekran hiçbir veriyi KOPYALAMAZ, yalnız
- * yönlendirir; asıl liste hep kendi sekmesindedir.
+ *   3. Ligde bugün ne var, tablo ne durumda, kim atıyor?
+ * Ekran üçünü de bu SIRAYLA yanıtlar; her bölüm "dokun → asıl ekran"
+ * kapısıdır. Ekran hiçbir listeyi KOPYALAMAZ, yalnız kesitini gösterir.
  *
- * NEDEN ROLE GÖRE DEĞİŞİR:
- *   · Takım başkanı  → Kulüp metrikleri + kadro/maç merkezi/talep kısayolları.
- *   · Oyuncu         → Sıradaki maçı, kadroda olup olmadığı, kariyer kapıları.
- *   · Misafir/taraftar→ Favori takım maçı, canlı maçlar, lig özeti.
- * Herkese aynı ekranı göstermek, kullanıcıların çoğu için ekranın yarısını
- * ölü alana çevirirdi.
+ * BİLGİ SIRASI (Arena: "ilk ekranda kullanıcının en çok baktığı şey en üstte"):
+ *   1. VİTRİN    — sahne yüzeyinde tek maç: canlı > kullanıcının > sıradaki.
+ *   2. KISAYOL   — role göre dört kapı (başkan / oyuncu / misafir).
+ *   3. KULÜBÜM   — yalnız başkan: sıra, puan, kadro, bekleyen talep.
+ *   4. CANLI     — vitrindekinin dışındaki canlı maçlar.
+ *   5. TAKIMLARIN— takip edilen takımların en güncel maçı (şerit).
+ *   6. BUGÜN     — günün programı (yoksa sıradaki maç günü), satır listesi.
+ *   7. PUAN      — ilk beş.
+ *   8. GOLCÜLER  — ilk üç.
+ *   9. HABERLER  — en altta, kompakt şerit.
+ *
+ * NEDEN SAHNE TEK VE TEPEDE: Arena'da grafit sahne "skor anı"dır ve ekranda
+ * bir kez kullanılır. Vitrin kâğıdın ilk öğesidir; altındaki her şey kâğıttır.
+ *
+ * NEDEN KAPSAM ÇİPİ (eski üç kutulu kapsam bandı yerine): bant ekranın
+ * tepesinde ~130px yiyor ve vitrini ilk ekranın ortasına itiyordu. Kapsam bir
+ * AYARDIR, içerik değil; Maçlar sekmesindeki gibi başlığın üst satırında bir
+ * kez yazılır ve dokununca kapsam sayfası açılır.
  *
  * SORGU DİSİPLİNİ: girişsiz kullanıcıda panel sorguları HİÇ açılmaz
- * (`enabled`), kapsam hazır değilken lig sorguları açılmaz. Ekran açılışta en
- * fazla üç istek yapar; kalanları rol koşullarına bağlıdır.
+ * (`enabled`), kapsam hazır değilken lig sorguları açılmaz.
  *
- * PERFORMANS: tek ScrollView değil, bölümlerden oluşan bir `ScrollView` +
- * memo'lu kart bileşenleri. Liste burada YOK — en fazla 5 satırlık kesitler
- * var; sanal listeye gerek duyacak uzunlukta hiçbir bölüm çizilmez.
+ * PERFORMANS: bölümler en fazla beş satırlık kesitlerdir; sanal listeye gerek
+ * duyacak uzunlukta hiçbir bölüm çizilmez.
  */
 
-import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import React, { useCallback, useMemo } from "react";
-import { Image, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { ScopeBar } from "@/components/ScopeBar";
+import { HomeSection } from "@/components/home/HomeSection";
+import { MatchGroup } from "@/components/home/MatchGroup";
+import { NewsStrip } from "@/components/home/NewsStrip";
+import { PromptCard } from "@/components/home/PromptCard";
+import { ScopeChip } from "@/components/ScopeChip";
 import {
   ActionRow,
   ActionTile,
-  Button,
   EmptyState,
   ErrorState,
+  LiveBadge,
   MatchCardRail,
   MetricGrid,
   MetricTile,
   PlayerRow,
   ScreenHeader,
-  SectionHeader,
-  SkeletonCard,
+  SkeletonHero,
   SkeletonMatchRow,
   SpotlightCard,
   TeamRow,
   TeamRowHead,
-  Touchable,
+  matchDayLabel,
   refreshControlProps,
   useHeaderScroll,
   useRefresh,
 } from "@/components/ui";
+import type { SpotlightCardProps } from "@/components/ui";
 import { useTeamLogos } from "@/hooks/useTeamLogos";
 import { useUnreadCount } from "@/hooks/useUnreadCount";
 import { getLiveMatches, getMatches } from "@/lib/api/matches";
 import { getPlayerRankings } from "@/lib/api/players";
 import { getMyMatchRequests, getTeamDashboard, getTeamMatches } from "@/lib/api/team";
+import type { TeamMatch } from "@/lib/api/team";
 import { getStandings } from "@/lib/api/standings";
-import { formatDayHeading, mediaUrl, timeAgo } from "@/lib/format";
+import { formatDayHeading, formatTime } from "@/lib/format";
 import { matchState } from "@/lib/match";
 import { getNewsFeed } from "@/lib/api/news";
 import { queryKeys } from "@/lib/queryKeys";
@@ -75,14 +86,11 @@ import { useScope } from "@/providers/ScopeProvider";
 import {
   colors,
   defaultZoneRules,
-  elevate,
   hairline,
   layout,
   palette,
   radius,
   space,
-  textScale,
-  type,
   zoneColor,
   zoneForRank,
 } from "@/theme";
@@ -90,8 +98,9 @@ import {
 const PRESIDENT_PROFILES = new Set(["takim_baskani", "double"]);
 
 /** Bölümlerde gösterilen en fazla satır sayısı — gerisi "Tümü" kapısından. */
-const PREVIEW_LIMIT = 4;
-
+const PREVIEW_LIMIT = 5;
+/** Canlı kesitinde en fazla satır. */
+const LIVE_LIMIT = 4;
 /** Mini puan tablosunda gösterilen sıra sayısı. */
 const MINI_TABLE_LIMIT = 5;
 
@@ -103,7 +112,7 @@ function todayIso(): string {
   return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
 }
 
-const matchDay = (match: ApiMatch) => String(match.date ?? "").slice(0, 10);
+const matchDay = (match: { date?: string | null }) => String(match.date ?? "").slice(0, 10);
 
 /** "18:30" → dakikaya çevrilmiş sıralama anahtarı. Boş saat sona düşer. */
 function kickoffKey(match: ApiMatch): number {
@@ -112,98 +121,40 @@ function kickoffKey(match: ApiMatch): number {
   return Number.isFinite(value) ? value : 24 * 60;
 }
 
-/* ══════════════════════════════════════════════════════════════════════════
-   Küçük yapı taşları
-   ══════════════════════════════════════════════════════════════════════════ */
+const byKickoff = (a: ApiMatch, b: ApiMatch) =>
+  matchDay(a) === matchDay(b) ? kickoffKey(a) - kickoffKey(b) : matchDay(a) < matchDay(b) ? -1 : 1;
 
-/** Bölüm başlığı + "Tümü" kapısı. SectionHeader'ın ekran içi sarmalayıcısı. */
-const Block = React.memo(function Block({
-  title,
-  meta,
-  actionLabel,
-  onAction,
-  children,
-}: {
-  title: string;
-  meta?: string;
-  actionLabel?: string;
-  onAction?: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <View style={styles.block}>
-      <SectionHeader
-        title={title}
-        meta={meta}
-        action={actionLabel && onAction ? { label: actionLabel, onPress: onAction } : undefined}
-      />
-      {children}
-    </View>
-  );
-});
-
-/** Mini puan tablosu satırı — sıra, amblem, ad, form, puan. */
 /**
- * HABER ŞERİDİ — kapağı olan son beş haber, yatay kaydırmalı kompakt kartlar.
- *
- * NEDEN KARUSEL DEĞİL: eski 16:10 manşet karuseli sayfanın en üstünde
- * 240px'lik bir fotoğrafla açılıyordu; kullanıcının ilk gördüğü şey ligin
- * verisi değil bir haber görseliydi ve sayfa "dergi" gibi okunuyordu. Genel
- * Bakış bir ARAÇ sayfasıdır: önce maç, puan ve gol; haber en altta, küçük
- * kartlarda. Kart 200px genişlikte, görsel 16:10, iki satır başlık.
+ * Vitrin kartının alanları — maç kaydından (ApiMatch ya da kulübün TeamMatch
+ * kaydı) üretilir. Oynanmamış maçta skor yerine saat, altında gün yazar.
  */
-const NEWS_CARD_WIDTH = 200;
-
-const NewsStrip = React.memo(function NewsStrip({
-  items,
-  onOpen,
-}: {
-  items: NewsItem[];
-  onOpen: (id: NewsItem["id"]) => void;
-}) {
-  return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.newsStrip}
-      decelerationRate="fast"
-      snapToInterval={NEWS_CARD_WIDTH + space.sm}
-      snapToAlignment="start"
-    >
-      {items.map((item) => (
-        <Touchable
-          key={item.id}
-          feedback="card"
-          haptic="selection"
-          onPress={() => onOpen(item.id)}
-          style={styles.newsCard}
-          accessibilityRole="button"
-          accessibilityLabel={item.title}
-        >
-          <Image
-            source={{ uri: mediaUrl(item.cover_image_url) ?? undefined }}
-            style={styles.newsImage}
-            resizeMode="cover"
-            accessibilityIgnoresInvertColors
-          />
-          <View style={styles.newsBody}>
-            {item.category_label || item.category ? (
-              <Text style={styles.newsEyebrow} numberOfLines={1} {...textScale.badge}>
-                {String(item.category_label ?? item.category).toLocaleUpperCase("tr-TR")}
-              </Text>
-            ) : null}
-            <Text style={styles.newsTitle} numberOfLines={2} {...textScale.dense}>
-              {item.title}
-            </Text>
-            <Text style={styles.newsMeta} numberOfLines={1} {...textScale.dense}>
-              {timeAgo(item.published_at)}
-            </Text>
-          </View>
-        </Touchable>
-      ))}
-    </ScrollView>
-  );
-});
+function spotlightFields(
+  match: ApiMatch | TeamMatch,
+  logoFor: (id: number | null | undefined, name: string | null | undefined) => string | null,
+): Pick<SpotlightCardProps, "home" | "away" | "statusText" | "statusCaption" | "footnote"> {
+  const scheduled =
+    matchState({
+      mac_durumu: match.mac_durumu as ApiMatch["mac_durumu"],
+      is_it_fixture: "is_it_fixture" in match ? match.is_it_fixture : 1,
+      first_team_score: match.first_team_score,
+      second_team_score: match.second_team_score,
+    }) === "scheduled";
+  return {
+    home: {
+      name: match.first_team_name ?? "Ev sahibi",
+      logo: logoFor(match.home_team_id, match.first_team_name),
+      score: scheduled ? null : match.first_team_score,
+    },
+    away: {
+      name: match.second_team_name ?? "Deplasman",
+      logo: logoFor(match.away_team_id, match.second_team_name),
+      score: scheduled ? null : match.second_team_score,
+    },
+    statusText: formatTime(match.time) || undefined,
+    statusCaption: matchDayLabel(match.date) || undefined,
+    footnote: [formatDayHeading(matchDay(match)), match.match_field].filter(Boolean).join(" · "),
+  };
+}
 
 export default function OverviewScreen() {
   const router = useRouter();
@@ -229,8 +180,8 @@ export default function OverviewScreen() {
 
   /* ---------------------------- SORGULAR ---------------------------------- */
 
-  /* Canlı maçlar kapsam bağımsızdır: kullanıcı kendi liginde maç yokken bile
-     "şu an bir şey oynanıyor mu" sorusunun yanıtını almalı. */
+  /* Canlı maçlar lig kapsamına bağlıdır ama sezondan bağımsızdır: kullanıcı
+     bir sezona bakarken ligde başka bir konferansın maçı oynanıyor olabilir. */
   const liveQuery = useQuery({
     queryKey: queryKeys.liveMatches(scopeKey),
     queryFn: () => getLiveMatches({ leagueId: scope.leagueId ?? undefined }),
@@ -251,12 +202,8 @@ export default function OverviewScreen() {
     staleTime: 60_000,
   });
 
-  /*
-    MANŞET KAYNAĞI — haber akışı. Editör haberleri, tamamlanan transferler ve
-    disiplin kararları tek uçtan geliyor; karusel bunların KAPAK GÖRSELİ OLAN
-    ilk beşini gösterir. Görselsiz bir manşet 16:10'luk bir kutuda boş koyu
-    blok demektir, o yüzden elenirler.
-  */
+  /* Haber akışı — editör haberleri, transferler ve disiplin kararları tek
+     uçtan gelir; şerit KAPAK GÖRSELİ OLAN ilk beşini gösterir. */
   const newsQuery = useQuery({
     queryKey: queryKeys.newsFeed(scopeKey),
     queryFn: () => getNewsFeed(scopeKey),
@@ -276,8 +223,7 @@ export default function OverviewScreen() {
     staleTime: 60_000,
   });
 
-  /* Gol krallığı — sayfanın "kim atıyor" sorusu; ilk üç yeter, gerisi
-     Oyuncular sekmesinde. */
+  /* Gol krallığı — "kim atıyor" sorusu; ilk üç yeter, gerisi Lig sekmesinde. */
   const scorersQuery = useQuery({
     queryKey: queryKeys.playerRankings(scopeKey, "topScorers"),
     queryFn: () => getPlayerRankings(scopeKey, "topScorers"),
@@ -317,6 +263,8 @@ export default function OverviewScreen() {
         liveQuery.refetch(),
         matchesQuery.refetch(),
         standingsQuery.refetch(),
+        scorersQuery.refetch(),
+        newsQuery.refetch(),
         isPresident ? dashboardQuery.refetch() : Promise.resolve(),
         isPresident ? teamMatchesQuery.refetch() : Promise.resolve(),
         isPresident ? requestsQuery.refetch() : Promise.resolve(),
@@ -328,38 +276,26 @@ export default function OverviewScreen() {
   /* ---------------------------- TÜRETİLEN VERİ ---------------------------- */
 
   const liveMatches = useMemo(() => liveQuery.data ?? [], [liveQuery.data]);
-
   const allMatches = useMemo(() => matchesQuery.data ?? [], [matchesQuery.data]);
 
   const todayMatches = useMemo(
-    () =>
-      allMatches
-        .filter((match) => matchDay(match) === today)
-        .sort((a, b) => kickoffKey(a) - kickoffKey(b)),
+    () => allMatches.filter((match) => matchDay(match) === today).sort(byKickoff),
     [allMatches, today],
   );
 
-  /** Bugün maç yoksa vitrin bir sonraki maç gününü gösterir — boş bölüm çizmez. */
+  /** Bugün maç yoksa kesit bir sonraki maç gününü gösterir — boş bölüm çizmez. */
   const nextDay = useMemo(() => {
     if (todayMatches.length) return null;
-    const upcoming = allMatches
-      .filter((match) => matchDay(match) > today)
-      .sort((a, b) => (matchDay(a) < matchDay(b) ? -1 : 1));
+    const upcoming = allMatches.filter((match) => matchDay(match) > today).sort(byKickoff);
     return upcoming.length ? matchDay(upcoming[0]) : null;
   }, [allMatches, today, todayMatches.length]);
 
   const nextDayMatches = useMemo(
-    () =>
-      nextDay
-        ? allMatches
-            .filter((match) => matchDay(match) === nextDay)
-            .sort((a, b) => kickoffKey(a) - kickoffKey(b))
-        : [],
+    () => (nextDay ? allMatches.filter((match) => matchDay(match) === nextDay).sort(byKickoff) : []),
     [allMatches, nextDay],
   );
 
   const standings = useMemo(() => standingsQuery.data ?? [], [standingsQuery.data]);
-
   const team = dashboardQuery.data?.team ?? null;
 
   /** Kulübün lig sırası — puan tablosundan bulunur, ayrı istek yoktur. */
@@ -380,63 +316,63 @@ export default function OverviewScreen() {
     return roster.contracted.length + roster.withoutContract.length;
   }, [dashboardQuery.data]);
 
+  /** Kullanıcının takımları (favoriler + kulübü) — id ve ad ile iki yollu eşleşme. */
+  const involves = useMemo(() => {
+    const ids = new Set<number>(favorite.favorites.map((entry) => entry.id));
+    if (team) ids.add(team.id);
+    const names = new Set<string>(
+      favorite.favorites.map((entry) => entry.name.trim().toLocaleLowerCase("tr-TR")),
+    );
+    if (team?.team_name) names.add(team.team_name.trim().toLocaleLowerCase("tr-TR"));
+    return (match: ApiMatch) =>
+      ids.has(Number(match.home_team_id)) ||
+      ids.has(Number(match.away_team_id)) ||
+      names.has(String(match.first_team_name ?? "").trim().toLocaleLowerCase("tr-TR")) ||
+      names.has(String(match.second_team_name ?? "").trim().toLocaleLowerCase("tr-TR"));
+  }, [favorite.favorites, team]);
+
   /**
    * VİTRİN MAÇI — öncelik sırası:
    *   1. Kulübün / favori takımın CANLI maçı
    *   2. Herhangi bir canlı maç
-   *   3. Kulübün sıradaki maçı
-   *   4. Bugünün ilk maçı
-   * Hiçbiri yoksa vitrin çizilmez; boş bir hero kart ekranın en değerli
-   * alanını harcar.
+   *   3. Kulübün sıradaki maçı (maç merkezi kaydı)
+   *   4. Favori takımın sıradaki maçı
+   *   5. Ligin sıradaki maçı (bugün ya da bir sonraki maç günü)
+   * Vitrindeki maç aşağıdaki kesitlerden ÇIKARILIR; aynı maç ekranda iki kez
+   * görünmez.
    */
-  const spotlight = useMemo(() => {
-    const teamIds = new Set<number>(favorite.favorites.map((entry) => entry.id));
-    if (team) teamIds.add(team.id);
-
-    /* Eski maç kayıtlarında takım id'si boştur; ada göre de eşleşmek gerekir
-       (useTeamLogos ile aynı iki yollu eşleştirme mantığı). */
-    const teamNames = new Set<string>(
-      favorite.favorites.map((entry) => entry.name.trim().toLocaleLowerCase("tr-TR")),
-    );
-    if (team?.team_name) teamNames.add(team.team_name.trim().toLocaleLowerCase("tr-TR"));
-
-    const involves = (match: ApiMatch) =>
-      teamIds.has(Number(match.home_team_id)) ||
-      teamIds.has(Number(match.away_team_id)) ||
-      teamNames.has(String(match.first_team_name ?? "").trim().toLocaleLowerCase("tr-TR")) ||
-      teamNames.has(String(match.second_team_name ?? "").trim().toLocaleLowerCase("tr-TR"));
-
+  const spotlight = useMemo(():
+    | { match: ApiMatch; eyebrow: string; live: boolean }
+    | { teamMatch: TeamMatch; eyebrow: string; live: false }
+    | null => {
     const mine = liveMatches.find(involves);
-    if (mine) return { match: mine, eyebrow: "Takımın sahada", live: true as const };
+    if (mine) return { match: mine, eyebrow: "Takımın sahada", live: true };
 
-    if (liveMatches.length) {
-      // Etiket "Canlı" OLAMAZ: kartın solundaki canlı rozeti zaten "CANLI"
-      // yazıyor ve ikisi yan yana "CANLI CANLI" olarak okunuyordu.
-      return { match: liveMatches[0], eyebrow: "Şu an oynanıyor", live: true as const };
-    }
+    // Etiket "Canlı" OLAMAZ: rozet zaten "CANLI" yazıyor.
+    if (liveMatches.length) return { match: liveMatches[0], eyebrow: "Şu an oynanıyor", live: true };
 
     const upcoming = teamMatchesQuery.data?.upcoming ?? [];
-    if (upcoming.length) {
-      const next = upcoming[0];
-      return {
-        teamMatch: next,
-        eyebrow: "Sıradaki maçın",
-        live: false as const,
-      };
-    }
+    if (upcoming.length) return { teamMatch: upcoming[0], eyebrow: "Sıradaki maçın", live: false };
 
     const nextOwn = allMatches
-      .filter((match) => involves(match) && matchDay(match) >= today)
-      .sort((a, b) =>
-        matchDay(a) === matchDay(b) ? kickoffKey(a) - kickoffKey(b) : matchDay(a) < matchDay(b) ? -1 : 1,
-      )[0];
-    if (nextOwn) return { match: nextOwn, eyebrow: "Sıradaki maç", live: false as const };
+      .filter((match) => involves(match) && matchDay(match) >= today && matchState(match) !== "finished")
+      .sort(byKickoff)[0];
+    if (nextOwn) return { match: nextOwn, eyebrow: "Takımının sıradaki maçı", live: false };
 
-    /* Sırf "bugün bir maç var" diye vitrin kurulmaz: aynı maç hemen altındaki
-       "Bugün" listesinde zaten duruyor ve ekranda iki kez görünüyordu. Vitrin
-       yalnız CANLI ya da KULLANICININ maçı için vardır. */
+    const nextLeague =
+      todayMatches.find((match) => matchState(match) === "scheduled") ?? nextDayMatches[0];
+    if (nextLeague) return { match: nextLeague, eyebrow: "Sıradaki maç", live: false };
+
     return null;
-  }, [allMatches, favorite.favorites, liveMatches, team, teamMatchesQuery.data, today]);
+  }, [allMatches, involves, liveMatches, nextDayMatches, teamMatchesQuery.data, today, todayMatches]);
+
+  const spotlightId = spotlight && "match" in spotlight ? Number(spotlight.match.id) : null;
+
+  /** Canlı kesiti — vitrindeki maç hariç. */
+  const otherLive = useMemo(
+    () => liveMatches.filter((match) => Number(match.id) !== spotlightId),
+    [liveMatches, spotlightId],
+  );
 
   /**
    * TAKİP ETTİĞİN TAKIMLAR — seçili kapsamdaki maçlarından her takım için
@@ -445,9 +381,7 @@ export default function OverviewScreen() {
   const followedMatches = useMemo(() => {
     if (!favorite.favorites.length) return [];
     const picked = new Map<number, ApiMatch>();
-    const sorted = [...allMatches].sort((a, b) =>
-      matchDay(a) === matchDay(b) ? kickoffKey(a) - kickoffKey(b) : matchDay(a) < matchDay(b) ? -1 : 1,
-    );
+    const sorted = [...allMatches].sort(byKickoff);
     for (const fav of favorite.favorites) {
       const name = fav.name.trim().toLocaleLowerCase("tr-TR");
       const own = sorted.filter(
@@ -460,10 +394,20 @@ export default function OverviewScreen() {
       const next = own.find((match) => matchDay(match) >= today && matchState(match) !== "finished");
       const last = [...own].reverse().find((match) => matchState(match) === "finished");
       const chosen = next ?? last;
-      if (chosen) picked.set(chosen.id, chosen);
+      if (chosen && Number(chosen.id) !== spotlightId) picked.set(chosen.id, chosen);
     }
     return [...picked.values()];
-  }, [allMatches, favorite.favorites, today]);
+  }, [allMatches, favorite.favorites, today, spotlightId]);
+
+  /** Günün kesiti — vitrindeki ve canlı kesitindeki maçlar hariç. */
+  const previewDay = todayMatches.length ? today : nextDay;
+  const previewMatches = useMemo(() => {
+    const liveIds = new Set(liveMatches.map((match) => Number(match.id)));
+    const source = todayMatches.length ? todayMatches : nextDayMatches;
+    return source.filter((match) => Number(match.id) !== spotlightId && !liveIds.has(Number(match.id)));
+  }, [liveMatches, nextDayMatches, spotlightId, todayMatches]);
+  const previewTotal = todayMatches.length || nextDayMatches.length;
+  const previewTitle = todayMatches.length ? "Bugün" : nextDay ? formatDayHeading(nextDay) : "Yaklaşan";
 
   /** Kapağı olan son beş haber — şerit görselsiz haber çizmez. */
   const news = useMemo<NewsItem[]>(
@@ -479,32 +423,50 @@ export default function OverviewScreen() {
   const openMatch = useCallback((id: number) => router.push(`/mac/${id}`), [router]);
   const openTeam = useCallback((teamId: number) => router.push(`/takim/${teamId}`), [router]);
   const openPlayer = useCallback((playerId: number) => router.push(`/oyuncu/${playerId}`), [router]);
+  const openDay = useCallback(
+    () => go(previewDay ? `/(tabs)/maclar?date=${previewDay}` : "/(tabs)/maclar"),
+    [go, previewDay],
+  );
 
   const scopeBusy = scope.loading || (scope.ready && matchesQuery.isLoading);
+  const highlightId = team?.id ?? null;
+  const highlightName = team?.team_name ?? null;
 
-  const previewMatches = todayMatches.length ? todayMatches : nextDayMatches;
-  const previewTitle = todayMatches.length
-    ? "Bugün"
-    : nextDay
-      ? formatDayHeading(nextDay)
-      : "Yaklaşan";
+  /* ── 1) VİTRİN ── */
+  let hero: React.ReactNode = null;
+  if (spotlight && "match" in spotlight) {
+    const match = spotlight.match;
+    hero = (
+      <SpotlightCard
+        eyebrow={spotlight.eyebrow}
+        context={match.league_name || scope.leagueLabel || undefined}
+        live={spotlight.live}
+        {...spotlightFields(match, teams.logoFor)}
+        onPress={() => openMatch(Number(match.id))}
+      />
+    );
+  } else if (spotlight && "teamMatch" in spotlight) {
+    const match = spotlight.teamMatch;
+    hero = (
+      <SpotlightCard
+        eyebrow={spotlight.eyebrow}
+        context={scope.leagueLabel || undefined}
+        {...spotlightFields(match, teams.logoFor)}
+        onPress={() => go(`/takimim/mac/${match.id}`)}
+      />
+    );
+  } else if (scopeBusy || (scope.ready && liveQuery.isLoading)) {
+    hero = <SkeletonHero />;
+  }
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader
         title="Ana Sayfa"
-        overline="ElitLig"
-        /* İl · lig · sezon üç ayrı kutu olarak bloğun altında: hangi kutuya
-           dokunulursa alt sayfa o adımda açılır; lig çipleri tek dokunuşla
-           ligler arası geçiş yapar. */
-        bottom={<ScopeBar />}
+        scope={<ScopeChip />}
         scrollY={scrollY}
         actions={[
-          {
-            icon: "search-outline",
-            accessibilityLabel: "Ara",
-            onPress: () => go("/ara"),
-          },
+          { icon: "search-outline", accessibilityLabel: "Ara", onPress: () => go("/ara") },
           {
             icon: "notifications-outline",
             accessibilityLabel: "Bildirimler",
@@ -521,54 +483,18 @@ export default function OverviewScreen() {
           <RefreshControl {...refreshControlProps(refresh.refreshing, refresh.onRefresh)} />
         }
       >
-        {/* ── 1) VİTRİN — yalnız canlı maç ya da kullanıcının maçı ─────── */}
-        {scopeBusy && !spotlight ? (
-          <View style={styles.pad}>
-            <SkeletonCard />
-          </View>
-        ) : spotlight?.match ? (
-          <View style={styles.pad}>
-            <SpotlightCard
-              eyebrow={spotlight.eyebrow}
-              context={spotlight.match.league_name ?? scope.leagueLabel}
-              live={spotlight.live}
-              home={{
-                name: spotlight.match.first_team_name ?? "Ev sahibi",
-                logo: teams.logoFor(spotlight.match.home_team_id, spotlight.match.first_team_name),
-                score: matchState(spotlight.match) === "scheduled" ? null : spotlight.match.first_team_score,
-              }}
-              away={{
-                name: spotlight.match.second_team_name ?? "Deplasman",
-                logo: teams.logoFor(spotlight.match.away_team_id, spotlight.match.second_team_name),
-                score: matchState(spotlight.match) === "scheduled" ? null : spotlight.match.second_team_score,
-              }}
-              statusText={spotlight.match.time ?? undefined}
-              footnote={[formatDayHeading(matchDay(spotlight.match)), spotlight.match.match_field]
-                .filter(Boolean)
-                .join(" · ")}
-              onPress={() => openMatch(spotlight.match!.id)}
-            />
-          </View>
-        ) : spotlight?.teamMatch ? (
-          <View style={styles.pad}>
-            <SpotlightCard
-              eyebrow={spotlight.eyebrow}
-              context={scope.leagueLabel}
-              home={{ name: spotlight.teamMatch.first_team_name }}
-              away={{ name: spotlight.teamMatch.second_team_name }}
-              statusText={spotlight.teamMatch.time ?? undefined}
-              footnote={[
-                formatDayHeading(String(spotlight.teamMatch.date ?? "").slice(0, 10)),
-                spotlight.teamMatch.match_field,
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-              onPress={() => go(`/takimim/mac/${spotlight.teamMatch!.id}`)}
-            />
-          </View>
+        {!scope.ready && !scope.loading ? (
+          <EmptyState
+            icon="options-outline"
+            title="Lig seçilmedi"
+            body="Maçları, puan durumunu ve golcüleri görmek için şehir, lig ve sezon seç."
+            action={{ label: "Kapsam seç", onPress: () => scope.openScopeSheet("city") }}
+          />
         ) : null}
 
-        {/* ── 2) KISAYOLLAR — role göre ─────────────────────────────────── */}
+        {hero ? <View style={styles.pad}>{hero}</View> : null}
+
+        {/* ── 2) KISAYOLLAR — role göre ── */}
         <View style={[styles.pad, styles.shortcuts]}>
           {isPresident ? (
             <ActionRow columns={4}>
@@ -581,23 +507,13 @@ export default function OverviewScreen() {
                 badge={pendingRequests}
                 onPress={() => go("/takimim/mac-al")}
               />
-              <ActionTile
-                icon="chatbubbles"
-                label="Mesajlar"
-                badge={unread.messages}
-                onPress={() => go("/mesajlarim")}
-              />
+              <ActionTile icon="chatbubbles" label="Mesajlar" badge={unread.messages} onPress={() => go("/mesajlarim")} />
             </ActionRow>
           ) : signedIn ? (
             <ActionRow columns={4}>
               <ActionTile icon="football" label="Maçlarım" onPress={() => go("/oyuncum?tab=maclarim")} />
               <ActionTile icon="swap-horizontal" label="Teklifler" tone="accent" onPress={() => go("/tekliflerim")} />
-              <ActionTile
-                icon="chatbubbles"
-                label="Mesajlar"
-                badge={unread.messages}
-                onPress={() => go("/mesajlarim")}
-              />
+              <ActionTile icon="chatbubbles" label="Mesajlar" badge={unread.messages} onPress={() => go("/mesajlarim")} />
               <ActionTile icon="star" label="Favoriler" onPress={() => go("/(tabs)/favoriler")} />
             </ActionRow>
           ) : (
@@ -610,134 +526,130 @@ export default function OverviewScreen() {
           )}
         </View>
 
-        {/* ── 3) KULÜP METRİKLERİ — yalnız başkan ───────────────────────── */}
+        {/* ── 3) KULÜBÜM — yalnız başkan ── */}
         {isPresident ? (
-          <Block title="Kulübüm" meta={team?.team_name ?? undefined} actionLabel="Panel" onAction={() => go("/takimim")}>
-            <View style={styles.pad}>
-              <MetricGrid columns={2}>
-                <MetricTile
-                  label="Lig sırası"
-                  value={teamRank ? `${teamRank}.` : "—"}
-                  hint={scope.leagueLabel || undefined}
-                  tone="accent"
-                  icon="podium-outline"
-                  onPress={() => go("/(tabs)/ligler?tab=puan")}
-                />
-                <MetricTile
-                  label="Puan"
-                  value={String(team?.team_points ?? 0)}
-                  hint={`${team?.total_matches ?? 0} maç`}
-                  icon="star-outline"
-                />
-                <MetricTile
-                  label="Kadro"
-                  value={rosterCount === null ? "—" : String(rosterCount)}
-                  hint="oyuncu"
-                  icon="people-outline"
-                  onPress={() => go("/takimim/kadro")}
-                />
-                <MetricTile
-                  label="Bekleyen talep"
-                  value={String(pendingRequests)}
-                  hint="maç talebi"
-                  tone={pendingRequests > 0 ? "warn" : "neutral"}
-                  icon="time-outline"
-                  onPress={() => go("/takimim/mac-al")}
-                />
-              </MetricGrid>
-            </View>
-          </Block>
+          <HomeSection title="Kulübüm" meta={team?.team_name ?? undefined} actionLabel="Panel" onAction={() => go("/takimim")}>
+            <MetricGrid columns={2}>
+              <MetricTile
+                label="Lig sırası"
+                value={teamRank ? `${teamRank}.` : "—"}
+                hint={scope.leagueLabel || undefined}
+                tone="accent"
+                icon="podium-outline"
+                onPress={() => go("/(tabs)/ligler?tab=puan")}
+              />
+              <MetricTile
+                label="Puan"
+                value={String(team?.team_points ?? 0)}
+                hint={`${team?.total_matches ?? 0} maç`}
+                icon="star-outline"
+              />
+              <MetricTile
+                label="Kadro"
+                value={rosterCount === null ? "—" : String(rosterCount)}
+                hint="oyuncu"
+                icon="people-outline"
+                onPress={() => go("/takimim/kadro")}
+              />
+              <MetricTile
+                label="Bekleyen talep"
+                value={String(pendingRequests)}
+                hint="maç talebi"
+                tone={pendingRequests > 0 ? "warn" : "neutral"}
+                icon="time-outline"
+                onPress={() => go("/takimim/mac-al")}
+              />
+            </MetricGrid>
+          </HomeSection>
         ) : null}
 
-        {/* ── 3b) TAKİP ETTİĞİN TAKIMLAR ─────────────────────────────────── */}
-        {favorite.favorites.length ? (
-          <Block
-            title="Takip ettiğin takımlar"
-            meta={followedMatches.length ? `${followedMatches.length} maç` : undefined}
-            actionLabel="Yönet"
-            onAction={() => go("/(tabs)/favoriler?tab=takimlar")}
+        {/* ── 4) CANLI — vitrindeki hariç ── */}
+        {otherLive.length ? (
+          <HomeSection
+            title="Canlı"
+            leading={<LiveBadge compact />}
+            meta={`${liveMatches.length} maç`}
+            actionLabel="Tümü"
+            onAction={() => go("/canli")}
           >
-            {followedMatches.length ? (
-              <MatchCardRail matches={followedMatches} logoFor={teams.logoFor} onOpen={openMatch} />
-            ) : (
-              <EmptyState
-                icon="star-outline"
-                title="Bu ligde maçları yok"
-                body="Takip ettiğin takımlar seçili lig ve sezonda oynamıyor."
-                variant="inline"
-                compact
-              />
-            )}
-          </Block>
-        ) : (
-          <View style={styles.pad}>
-            <Touchable
-              feedback="card"
-              haptic="selection"
-              onPress={() => go("/(tabs)/ligler?tab=takimlar")}
-              accessibilityRole="button"
-              accessibilityLabel="Takım takip et"
-              style={styles.followPrompt}
-            >
-              <Ionicons name="star" size={20} color={colors.star} />
-              <View style={styles.followPromptTexts}>
-                <Text style={styles.followPromptTitle} {...textScale.dense}>
-                  Takımını takip et
-                </Text>
-                <Text style={styles.followPromptBody} {...textScale.dense}>
-                  Maçları burada öne çıksın, gol ve sonuç bildirimleri gelsin.
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
-            </Touchable>
-          </View>
-        )}
-
-        {/* ── 4) CANLI ──────────────────────────────────────────────────── */}
-        {/* Tek canlı maç zaten vitrindeyse aynı kart ikinci kez çizilmez. */}
-        {liveMatches.length && !(liveMatches.length === 1 && spotlight?.live) ? (
-          <Block title="Canlı" meta={`${liveMatches.length} maç`} actionLabel="Tümü" onAction={() => go("/canli")}>
-            <MatchCardRail
-              matches={liveMatches.slice(0, PREVIEW_LIMIT)}
+            <MatchGroup
+              matches={otherLive.slice(0, LIVE_LIMIT)}
               logoFor={teams.logoFor}
               onOpen={openMatch}
-              highlightTeamId={team?.id ?? null}
-              highlightTeamName={team?.team_name ?? null}
+              highlightTeamId={highlightId}
+              highlightTeamName={highlightName}
             />
-          </Block>
+          </HomeSection>
         ) : null}
 
-        {/* ── 5) BUGÜN / YAKLAŞAN ───────────────────────────────────────── */}
-        <Block
-          title={previewTitle}
-          meta={previewMatches.length ? `${previewMatches.length} maç` : undefined}
-          actionLabel="Maçlar"
-          onAction={() => go("/(tabs)/maclar")}
-        >
-          {scopeBusy ? (
+        {/* ── 5) TAKİP ETTİĞİN TAKIMLAR ── */}
+        {favorite.favorites.length ? (
+          followedMatches.length ? (
+            <HomeSection
+              title="Takımların"
+              meta={`${favorite.favorites.length} takım`}
+              actionLabel="Yönet"
+              onAction={() => go("/(tabs)/favoriler?tab=takimlar")}
+              bleed
+            >
+              <MatchCardRail matches={followedMatches} logoFor={teams.logoFor} onOpen={openMatch} />
+            </HomeSection>
+          ) : null
+        ) : signedIn || !scopeBusy ? (
+          <View style={[styles.pad, styles.prompt]}>
+            <PromptCard
+              icon="star"
+              title="Takımını takip et"
+              body="Maçları burada öne çıksın, gol ve sonuç bildirimleri gelsin."
+              onPress={() => go("/(tabs)/ligler?tab=takimlar")}
+            />
+          </View>
+        ) : null}
+
+        {/* ── 6) BUGÜN / SIRADAKİ MAÇ GÜNÜ ── */}
+        {scopeBusy ? (
+          <HomeSection title="Bugün">
             <View style={styles.group}>
-              <SkeletonMatchRow />
-              <SkeletonMatchRow />
-              <SkeletonMatchRow />
+              <SkeletonMatchRow count={3} />
             </View>
-          ) : matchesQuery.isError ? (
-            <ErrorState error={matchesQuery.error} variant="banner" />
-          ) : previewMatches.length ? (
-            <MatchCardRail
+          </HomeSection>
+        ) : matchesQuery.isError ? (
+          <HomeSection title="Bugün">
+            <ErrorState error={matchesQuery.error} variant="banner" onRetry={() => void matchesQuery.refetch()} />
+          </HomeSection>
+        ) : previewMatches.length ? (
+          <HomeSection
+            title={previewTitle}
+            meta={`${previewTotal} maç`}
+            actionLabel="Tümü"
+            onAction={openDay}
+          >
+            <MatchGroup
               matches={previewMatches.slice(0, PREVIEW_LIMIT)}
               logoFor={teams.logoFor}
               onOpen={openMatch}
-              highlightTeamId={team?.id ?? null}
-              highlightTeamName={team?.team_name ?? null}
+              showVenue
+              highlightTeamId={highlightId}
+              highlightTeamName={highlightName}
             />
-          ) : (
-            <EmptyState icon="calendar-outline" title="Maç yok" body="Bu ligde yaklaşan maç görünmüyor." variant="inline" />
-          )}
-        </Block>
+          </HomeSection>
+        ) : scope.ready && !spotlight && !liveMatches.length ? (
+          <HomeSection title="Maçlar" actionLabel="Fikstür" onAction={() => go("/(tabs)/maclar")}>
+            <View style={styles.emptyCard}>
+              <EmptyState
+                icon="calendar-outline"
+                title="Yaklaşan maç yok"
+                body="Bu lig ve sezonda planlanmış maç görünmüyor."
+                variant="inline"
+                compact
+              />
+            </View>
+          </HomeSection>
+        ) : null}
 
-        {/* ── 6) PUAN DURUMU — ilk beş, tablo yoğunluğu ──────────────────── */}
+        {/* ── 7) PUAN DURUMU — ilk beş ── */}
         {standings.length ? (
-          <Block
+          <HomeSection
             title="Puan durumu"
             meta={scope.leagueLabel || undefined}
             actionLabel="Tümü"
@@ -745,7 +657,7 @@ export default function OverviewScreen() {
           >
             <View style={styles.group}>
               <TeamRowHead density="table" />
-              {standings.slice(0, MINI_TABLE_LIMIT).map((row: StandingRow, index) => {
+              {standings.slice(0, MINI_TABLE_LIMIT).map((row: StandingRow, index, list) => {
                 const rank = index + 1;
                 return (
                   <TeamRow
@@ -764,17 +676,17 @@ export default function OverviewScreen() {
                     zone={zoneColor(palette, zoneForRank(rank, zoneRules))}
                     highlighted={row.team_id === team?.id || favorite.isFavorite(row.team_id)}
                     onPress={openTeam}
-                    style={index < MINI_TABLE_LIMIT - 1 ? styles.groupRow : null}
+                    style={index < list.length - 1 ? styles.groupRow : null}
                   />
                 );
               })}
             </View>
-          </Block>
+          </HomeSection>
         ) : null}
 
-        {/* ── 7) GOL KRALLIĞI — ilk üç ───────────────────────────────────── */}
+        {/* ── 8) GOL KRALLIĞI — ilk üç ── */}
         {scorers.length ? (
-          <Block title="Gol krallığı" meta="gol" actionLabel="Tümü" onAction={() => go("/(tabs)/ligler?tab=oyuncular")}>
+          <HomeSection title="Gol krallığı" actionLabel="Tümü" onAction={() => go("/(tabs)/ligler?tab=oyuncular")}>
             <View style={styles.group}>
               {scorers.map((player, index) => (
                 <PlayerRow
@@ -790,29 +702,26 @@ export default function OverviewScreen() {
                 />
               ))}
             </View>
-          </Block>
+          </HomeSection>
         ) : null}
 
-        {/* ── 8) HABERLER — en altta, kompakt şerit ──────────────────────── */}
+        {/* ── 9) HABERLER — en altta, kompakt şerit ── */}
         {news.length ? (
-          <Block title="Haberler" actionLabel="Tümü" onAction={() => go("/(tabs)/ligler?tab=haberler")}>
+          <HomeSection title="Haberler" actionLabel="Tümü" onAction={() => go("/(tabs)/ligler?tab=haberler")} bleed>
             <NewsStrip items={news} onOpen={(id) => go(`/haber/${id}`)} />
-          </Block>
+          </HomeSection>
         ) : null}
 
-        {/* ── 9) MİSAFİR ÇAĞRISI ────────────────────────────────────────── */}
+        {/* ── 10) MİSAFİR ÇAĞRISI ── */}
         {!signedIn ? (
-          <View style={styles.guestCard}>
-            <Ionicons name="log-in-outline" size={22} color={colors.brandAccent} />
-            <View style={styles.guestTexts}>
-              <Text style={styles.guestTitle} {...textScale.dense}>
-                Kulübünü yönet
-              </Text>
-              <Text style={styles.guestBody} {...textScale.dense}>
-                Giriş yapınca kadro, maç talepleri, teklifler ve mesajlar burada görünür.
-              </Text>
-            </View>
-            <Button label="Giriş yap" size="sm" onPress={() => go("/giris")} />
+          <View style={[styles.pad, styles.guest]}>
+            <PromptCard
+              icon="shield-half"
+              title="Kulübünü yönet"
+              body="Kadro, maç talepleri, teklifler ve mesajlar giriş yapınca burada."
+              actionLabel="Giriş yap"
+              onPress={() => go("/giris")}
+            />
           </View>
         ) : null}
       </ScrollView>
@@ -820,57 +729,34 @@ export default function OverviewScreen() {
   );
 }
 
-/** Grup içi konum — köşe yuvarlaması ve ayraç bundan gelir. */
-function groupPosition(index: number, total: number): "single" | "first" | "middle" | "last" {
-  if (total <= 1) return "single";
-  if (index === 0) return "first";
-  if (index === total - 1) return "last";
-  return "middle";
-}
-
 const styles = StyleSheet.create({
-  followPrompt: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.md,
-    padding: space.lg,
-    marginTop: space.lg,
-    borderRadius: radius.xl,
-    backgroundColor: colors.surface1,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.brandBorder,
-  },
-  followPromptTexts: { flex: 1, gap: 2 },
-  followPromptTitle: { ...type.h3, color: colors.textPrimary },
-  followPromptBody: { ...type.bodySm, color: colors.textSecondary },
   screen: {
     flex: 1,
     backgroundColor: colors.bg,
   },
   content: {
-    paddingTop: space.sm,
-    paddingBottom: space.huge,
+    paddingTop: space.xs,
+    paddingBottom: layout.tabBarHeight + space.xxl,
   },
   /** Ekran kenarı — her blok aynı hizada başlar. */
   pad: {
     paddingHorizontal: layout.screenPadding,
   },
   shortcuts: {
-    paddingTop: space.xs,
+    paddingTop: space.md,
   },
-  /* Bölümler arası tek ritim: 16px. */
-  block: {
-    paddingTop: space.lg,
+  prompt: {
+    paddingTop: layout.sectionGap,
+  },
+  guest: {
+    paddingTop: layout.sectionGap,
   },
   /**
-   * GRUP KABI — ekrandaki HER liste aynı kenar boşluğunda, aynı kabukta:
-   * 14px köşe, saç teli kenarlık, kâğıttan bir kademe koyu zemin. Kapsız
-   * satırlar ekranın iki ucuna uzanıp bölüm başlığıyla farklı hizada
-   * duruyordu; tek kap, tek hiza.
+   * GRUP KABI — tablo ve oyuncu kesitleri aynı kabukta: kart yarıçapı, saç
+   * teli kenarlık, beyaz yüzey. Satırlar ayracı kendisi çizer.
    */
   group: {
-    marginHorizontal: layout.screenPadding,
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     borderWidth: hairline,
     borderColor: colors.border,
     backgroundColor: colors.surface1,
@@ -881,65 +767,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: hairline,
     borderBottomColor: colors.separator,
   },
-
-  /* — Haber şeridi — */
-  newsStrip: {
-    paddingHorizontal: layout.screenPadding,
-    gap: space.sm,
-  },
-  newsCard: {
-    width: NEWS_CARD_WIDTH,
-    borderRadius: radius.lg,
+  emptyCard: {
+    borderRadius: radius.xl,
     borderWidth: hairline,
     borderColor: colors.border,
     backgroundColor: colors.surface1,
-    overflow: "hidden",
-  },
-  newsImage: {
-    width: "100%",
-    aspectRatio: 16 / 10,
-    backgroundColor: colors.surface3,
-  },
-  newsBody: {
-    padding: space.m,
-    gap: space.xxs,
-  },
-  newsEyebrow: {
-    ...type.overline,
-    color: colors.brandAccent,
-  },
-  newsTitle: {
-    ...type.h4,
-    color: colors.textPrimary,
-    minHeight: type.h4.lineHeight * 2,
-  },
-  newsMeta: {
-    ...type.caption,
-    color: colors.textTertiary,
-  },
-
-  /* — Misafir çağrısı — */
-  guestCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.sm,
-    marginHorizontal: layout.screenPadding,
-    marginTop: space.lg,
-    padding: space.md,
-    borderRadius: radius.lg,
-    ...elevate(1),
-    borderColor: colors.brandBorder,
-  },
-  guestTexts: {
-    flex: 1,
-    gap: 2,
-  },
-  guestTitle: {
-    ...type.h3,
-    color: colors.textPrimary,
-  },
-  guestBody: {
-    ...type.caption,
-    color: colors.textTertiary,
   },
 });

@@ -6,6 +6,10 @@
  * listesinde hepsi aynı ağırlıkta okunuyor ve en sık kullanılan iş listenin
  * altında kalabiliyordu. Izgarada her iş kendi karosunda, ikonu renkli bir
  * pulda ve bekleyen sayısı köşede durur: göz önce rozeti olan karoya gider.
+ *
+ * ROZET MENEKŞEDİR, KIRMIZI DEĞİL: Arena'da kırmızı (`live`) yalnız "canlı"
+ * demektir. Bekleyen iş bir EYLEM çağrısıdır ve eylemin rengi `brand`dir;
+ * sekiz karonun dördünde kırmızı rozet, ekranı bir alarm panosuna çeviriyordu.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -60,7 +64,7 @@ export const HubTile = React.memo(function HubTile({
     >
       <View style={styles.top}>
         <View style={[styles.icon, { backgroundColor: palette.bg }]}>
-          <Ionicons name={icon} size={20} color={palette.fg} />
+          <Ionicons name={icon} size={19} color={palette.fg} />
         </View>
         {badge ? (
           <View style={styles.badge}>
@@ -120,7 +124,7 @@ const styles = StyleSheet.create({
   tile: {
     ...elevate(1),
     flex: 1,
-    minHeight: 104,
+    minHeight: 96,
     padding: space.md,
     gap: space.xs,
     borderRadius: radius.xl,
@@ -135,9 +139,9 @@ const styles = StyleSheet.create({
     marginBottom: space.xs,
   },
   icon: {
-    width: 38,
-    height: 38,
-    borderRadius: radius.md,
+    width: 36,
+    height: 36,
+    borderRadius: radius.sm,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -146,13 +150,13 @@ const styles = StyleSheet.create({
     height: 22,
     paddingHorizontal: space.s,
     borderRadius: radius.pill,
-    backgroundColor: colors.live,
+    backgroundColor: colors.brand,
     alignItems: "center",
     justifyContent: "center",
   },
   badgeText: {
     ...type.micro,
-    color: colors.textOnStatus,
+    color: colors.textOnBrand,
   },
   title: {
     ...type.h3,

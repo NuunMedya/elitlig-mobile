@@ -22,34 +22,24 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useCallback, useMemo, useRef, useState } from "react";
+import { StyleSheet, Text, View, type TextInput } from "react-native";
 import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-  type TextInput,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { BrandMark, Button, Chip, Input, ScreenHeader, Touchable, toneColors } from "@/components/ui";
+  AuthCard,
+  AuthLink,
+  AuthNotice,
+  AuthShell,
+  PasswordEye,
+  PasswordRules,
+  authStyles,
+} from "@/components/account/AuthShell";
+import { Button, Chip, Input, Skeleton, Touchable, toneColors } from "@/components/ui";
 import { getCities } from "@/lib/api/meta";
 import { ApiError } from "@/lib/http";
 import { openLink } from "@/lib/links";
 import { queryKeys } from "@/lib/queryKeys";
 import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
-import {
-  colors,
-  fonts,
-  hairline,
-  layout,
-  radius,
-  space,
-  textScale,
-  touchSlop,
-  type,
-} from "@/theme";
+import { colors, space, textScale, type } from "@/theme";
 
 const DANGER = toneColors("danger");
 const PRIVACY_URL = "https://elitlig.com/gizlilik-politikasi";
@@ -229,301 +219,196 @@ export default function RegisterScreen() {
   }, [canSubmit, effectiveCity, form, router, signUp]);
 
   return (
-    <SafeAreaView style={styles.screen} edges={["top", "bottom"]}>
-      <ScreenHeader
-        title="Üye ol"
-        overline="ELİTLİG"
-        actions={[{ icon: "close", onPress: close, accessibilityLabel: "Kapat" }]}
-      />
+    <AuthShell
+      title="Üye ol"
+      heading="Ligine katıl"
+      lede="Üyelik ücretsiz ve hemen açılır. Oyuncu profilini sahiplen, takımını takip et, mesajlaş."
+      onClose={close}
+    >
+      {/* 1) HESAP — kim olduğun ve sana nasıl ulaşılacağı. */}
+      <AuthCard title="Hesap">
+        <Input
+          label="Ad soyad"
+          value={form.fullName}
+          onChangeText={change("fullName")}
+          onBlur={blur("fullName")}
+          error={errorFor("fullName")}
+          leadingIcon="person-outline"
+          autoComplete="name"
+          textContentType="name"
+          placeholder="Adın Soyadın"
+          returnKeyType="next"
+          submitBehavior="submit"
+          onSubmitEditing={() => usernameRef.current?.focus()}
+          editable={!signingIn}
+        />
 
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-      >
-        <ScrollView
-          contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.brand}>
-            <BrandMark size="md" />
+        <Input
+          ref={usernameRef}
+          label="Kullanıcı adı"
+          value={form.username}
+          onChangeText={change("username")}
+          onBlur={blur("username")}
+          error={errorFor("username")}
+          hint="Giriş yaparken bu adı kullanacaksın."
+          leadingIcon="at-outline"
+          autoCapitalize="none"
+          autoCorrect={false}
+          autoComplete="username-new"
+          textContentType="username"
+          placeholder="kullanici.adi"
+          returnKeyType="next"
+          submitBehavior="submit"
+          onSubmitEditing={() => emailRef.current?.focus()}
+          editable={!signingIn}
+        />
+
+        <Input
+          ref={emailRef}
+          label="E-posta"
+          value={form.email}
+          onChangeText={change("email")}
+          onBlur={blur("email")}
+          error={errorFor("email")}
+          leadingIcon="mail-outline"
+          autoCapitalize="none"
+          autoCorrect={false}
+          autoComplete="email"
+          textContentType="emailAddress"
+          keyboardType="email-address"
+          placeholder="ad@ornek.com"
+          returnKeyType="next"
+          submitBehavior="submit"
+          onSubmitEditing={() => phoneRef.current?.focus()}
+          editable={!signingIn}
+        />
+
+        <Input
+          ref={phoneRef}
+          label="Telefon (isteğe bağlı)"
+          value={form.phone}
+          onChangeText={change("phone")}
+          onBlur={blur("phone")}
+          error={errorFor("phone")}
+          hint="Yönetimin sana ulaşabilmesi için; boş bırakabilirsin."
+          leadingIcon="call-outline"
+          autoComplete="tel"
+          textContentType="telephoneNumber"
+          keyboardType="phone-pad"
+          placeholder="05xx xxx xx xx"
+          returnKeyType="next"
+          submitBehavior="submit"
+          onSubmitEditing={() => passwordRef.current?.focus()}
+          editable={!signingIn}
+        />
+      </AuthCard>
+
+      {/* 2) ŞEHİR — oyuncu ve takım kayıtları bu ille sınırlı. */}
+      <AuthCard title="Şehir">
+        {citiesQuery.isPending ? (
+          <View style={styles.cityChips}>
+            {[72, 88, 64, 96].map((width) => (
+              <Skeleton key={width} width={width} height={34} radius="pill" />
+            ))}
           </View>
-
-          <Text style={styles.lede} {...textScale.long}>
-            Üyelik ücretsizdir ve hemen açılır. Üye olduktan sonra oyuncu profilini
-            sahiplenebilir, takımını ve maçlarını takip edebilir, mesajlaşabilirsin.
-          </Text>
-
-          <View style={styles.form}>
-            <Input
-              label="Ad soyad"
-              value={form.fullName}
-              onChangeText={change("fullName")}
-              onBlur={blur("fullName")}
-              error={errorFor("fullName")}
-              leadingIcon="person-outline"
-              autoComplete="name"
-              textContentType="name"
-              placeholder="Adın Soyadın"
-              returnKeyType="next"
-              submitBehavior="submit"
-              onSubmitEditing={() => usernameRef.current?.focus()}
-              editable={!signingIn}
-            />
-
-            <Input
-              ref={usernameRef}
-              label="Kullanıcı adı"
-              value={form.username}
-              onChangeText={change("username")}
-              onBlur={blur("username")}
-              error={errorFor("username")}
-              hint="Giriş yaparken bu adı kullanacaksın."
-              leadingIcon="at-outline"
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoComplete="username-new"
-              textContentType="username"
-              placeholder="kullanici.adi"
-              returnKeyType="next"
-              submitBehavior="submit"
-              onSubmitEditing={() => emailRef.current?.focus()}
-              editable={!signingIn}
-            />
-
-            <Input
-              ref={emailRef}
-              label="E-posta"
-              value={form.email}
-              onChangeText={change("email")}
-              onBlur={blur("email")}
-              error={errorFor("email")}
-              leadingIcon="mail-outline"
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoComplete="email"
-              textContentType="emailAddress"
-              keyboardType="email-address"
-              placeholder="ad@ornek.com"
-              returnKeyType="next"
-              submitBehavior="submit"
-              onSubmitEditing={() => phoneRef.current?.focus()}
-              editable={!signingIn}
-            />
-
-            <Input
-              ref={phoneRef}
-              label="Telefon (isteğe bağlı)"
-              value={form.phone}
-              onChangeText={change("phone")}
-              onBlur={blur("phone")}
-              error={errorFor("phone")}
-              hint="Yönetimin sana ulaşabilmesi için; boş bırakabilirsin."
-              leadingIcon="call-outline"
-              autoComplete="tel"
-              textContentType="telephoneNumber"
-              keyboardType="phone-pad"
-              placeholder="05xx xxx xx xx"
-              returnKeyType="next"
-              submitBehavior="submit"
-              onSubmitEditing={() => passwordRef.current?.focus()}
-              editable={!signingIn}
-            />
-
-            <View style={styles.cityBlock}>
-              <Text style={styles.cityLabel}>Şehir</Text>
-              {citiesQuery.isPending ? (
-                <Text style={styles.cityHint}>Şehirler yükleniyor…</Text>
-              ) : citiesQuery.isError || cities.length === 0 ? (
-                <Touchable onPress={() => citiesQuery.refetch()} accessibilityRole="button">
-                  <Text style={[styles.cityHint, styles.cityRetry]}>
-                    Şehirler alınamadı. Yeniden denemek için dokun.
-                  </Text>
-                </Touchable>
-              ) : (
-                <View style={styles.cityChips}>
-                  {cities.map((city) => (
-                    <Chip
-                      key={city.id}
-                      label={city.label}
-                      selected={effectiveCity === city.label}
-                      onPress={() => selectCity(city.label)}
-                      disabled={signingIn}
-                    />
-                  ))}
-                </View>
-              )}
-              {errorFor("city") ? (
-                <Text style={styles.cityError} accessibilityRole="alert">
-                  {errorFor("city")}
-                </Text>
-              ) : (
-                <Text style={styles.cityHint}>Oyuncu ve takım kayıtların bu ille sınırlıdır.</Text>
-              )}
-            </View>
-
-            <Input
-              ref={passwordRef}
-              label="Şifre"
-              value={form.password}
-              onChangeText={change("password")}
-              onBlur={blur("password")}
-              error={errorFor("password")}
-              hint="En az 8 karakter; bir harf ve bir rakam içermeli."
-              leadingIcon="lock-closed-outline"
-              secureTextEntry={secure}
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoComplete="new-password"
-              textContentType="newPassword"
-              placeholder="••••••••"
-              returnKeyType="next"
-              submitBehavior="submit"
-              onSubmitEditing={() => passwordRepeatRef.current?.focus()}
-              editable={!signingIn}
-              trailing={
-                <Touchable
-                  feedback="icon"
-                  haptic="none"
-                  onPress={toggleSecure}
-                  hitSlop={touchSlop(20)}
-                  accessibilityRole="button"
-                  accessibilityLabel={secure ? "Şifreyi göster" : "Şifreyi gizle"}
-                >
-                  <Ionicons
-                    name={secure ? "eye-outline" : "eye-off-outline"}
-                    size={18}
-                    color={colors.textTertiary}
-                  />
-                </Touchable>
-              }
-            />
-
-            <Input
-              ref={passwordRepeatRef}
-              label="Şifre (tekrar)"
-              value={form.passwordRepeat}
-              onChangeText={change("passwordRepeat")}
-              onBlur={blur("passwordRepeat")}
-              error={errorFor("passwordRepeat")}
-              leadingIcon="lock-closed-outline"
-              secureTextEntry={secure}
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoComplete="new-password"
-              textContentType="newPassword"
-              placeholder="••••••••"
-              returnKeyType="go"
-              onSubmitEditing={submit}
-              editable={!signingIn}
-            />
-          </View>
-
-          {/* Mağaza şartı (App Store 1.2): kullanıcı içeriği olan uygulama,
-              hakaret ve taciz için hoşgörü olmadığını kayıtta kabul ettirir. */}
-          <Text style={styles.consent} {...textScale.long}>
-            Üye olarak{" "}
-            <Text style={styles.consentLink} onPress={() => router.push("/kurallar")} accessibilityRole="link">
-              Lig Kuralları
-            </Text>
-            {"'nı ve "}
-            <Text style={styles.consentLink} onPress={() => void openLink(PRIVACY_URL)} accessibilityRole="link">
-              Gizlilik Politikası
-            </Text>
-            {"'nı kabul etmiş olursun. Sohbet ve aramalarda hakaret, taciz ve uygunsuz içeriğe hoşgörü yoktur. Hesabını dilediğin zaman Profil → Hesabı sil ile kalıcı olarak silebilirsin."}
-          </Text>
-
-          {error ? (
-            <View style={styles.errorBox} accessibilityRole="alert">
-              <Ionicons name="alert-circle" size={16} color={DANGER.fg} />
-              <Text style={styles.errorText} {...textScale.long}>
-                {error}
-              </Text>
-            </View>
-          ) : null}
-
-          <Button
-            label="Üye ol"
-            onPress={submit}
-            loading={signingIn}
-            size="lg"
-            fullWidth
-          />
-
-          <Touchable onPress={openLogin} accessibilityRole="button" disabled={signingIn}>
-            <Text style={styles.footnote} {...textScale.long}>
-              Zaten üye misin? <Text style={styles.footnoteLink}>Giriş yap</Text>
-            </Text>
+        ) : citiesQuery.isError || cities.length === 0 ? (
+          <Touchable onPress={() => citiesQuery.refetch()} accessibilityRole="button" style={styles.cityRetryRow}>
+            <Ionicons name="refresh" size={16} color={colors.brandAccent} />
+            <Text style={styles.cityRetry}>Şehirler alınamadı. Yeniden dene</Text>
           </Touchable>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+        ) : (
+          <View style={styles.cityChips}>
+            {cities.map((city) => (
+              <Chip
+                key={city.id}
+                label={city.label}
+                selected={effectiveCity === city.label}
+                onPress={() => selectCity(city.label)}
+                disabled={signingIn}
+              />
+            ))}
+          </View>
+        )}
+        {errorFor("city") ? (
+          <Text style={styles.cityError} accessibilityRole="alert">
+            {errorFor("city")}
+          </Text>
+        ) : (
+          <Text style={styles.cityHint}>Oyuncu ve takım kayıtların bu ille sınırlıdır.</Text>
+        )}
+      </AuthCard>
+
+      {/* 3) ŞİFRE — kurallar alanın altında canlı işaretlenir. */}
+      <AuthCard title="Şifre">
+        <Input
+          ref={passwordRef}
+          label="Şifre"
+          value={form.password}
+          onChangeText={change("password")}
+          onBlur={blur("password")}
+          error={errorFor("password")}
+          leadingIcon="lock-closed-outline"
+          secureTextEntry={secure}
+          autoCapitalize="none"
+          autoCorrect={false}
+          autoComplete="new-password"
+          textContentType="newPassword"
+          placeholder="••••••••"
+          returnKeyType="next"
+          submitBehavior="submit"
+          onSubmitEditing={() => passwordRepeatRef.current?.focus()}
+          editable={!signingIn}
+          trailing={<PasswordEye secure={secure} onToggle={toggleSecure} />}
+        />
+        <PasswordRules value={form.password} minLength={PASSWORD_MIN} />
+
+        <Input
+          ref={passwordRepeatRef}
+          label="Şifre (tekrar)"
+          value={form.passwordRepeat}
+          onChangeText={change("passwordRepeat")}
+          onBlur={blur("passwordRepeat")}
+          error={errorFor("passwordRepeat")}
+          leadingIcon="lock-closed-outline"
+          secureTextEntry={secure}
+          autoCapitalize="none"
+          autoCorrect={false}
+          autoComplete="new-password"
+          textContentType="newPassword"
+          placeholder="••••••••"
+          returnKeyType="go"
+          onSubmitEditing={submit}
+          editable={!signingIn}
+        />
+      </AuthCard>
+
+      {error ? <AuthNotice message={error} /> : null}
+
+      <Button label="Üye ol" onPress={submit} loading={signingIn} size="lg" fullWidth />
+
+      <AuthLink prompt="Zaten üye misin?" action="Giriş yap" onPress={openLogin} disabled={signingIn} />
+
+      {/* Mağaza şartı (App Store 1.2): kullanıcı içeriği olan uygulama,
+          hakaret ve taciz için hoşgörü olmadığını kayıtta kabul ettirir. */}
+      <Text style={authStyles.fine} {...textScale.long}>
+        Üye olarak{" "}
+        <Text style={authStyles.inlineLink} onPress={() => router.push("/kurallar")} accessibilityRole="link">
+          Lig Kuralları
+        </Text>
+        {"'nı ve "}
+        <Text style={authStyles.inlineLink} onPress={() => void openLink(PRIVACY_URL)} accessibilityRole="link">
+          Gizlilik Politikası
+        </Text>
+        {"'nı kabul etmiş olursun. Sohbet ve aramalarda hakaret, taciz ve uygunsuz içeriğe hoşgörü yoktur. Hesabını dilediğin zaman Profil → Hesabı sil ile kalıcı olarak silebilirsin."}
+      </Text>
+    </AuthShell>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  flex: { flex: 1 },
-
-  content: {
-    paddingHorizontal: layout.screenPadding,
-    paddingTop: space.sm,
-    paddingBottom: space.giant,
-    gap: space.lg,
-  },
-
-  brand: {
-    alignItems: "center",
-    paddingTop: space.s,
-  },
-
-  lede: {
-    ...type.bodySm,
-    color: colors.textSecondary,
-    lineHeight: 19,
-  },
-
-  form: {
-    gap: space.md,
-  },
-
-  cityBlock: { gap: space.sm },
-  cityLabel: { ...type.label, color: colors.textSecondary },
   cityChips: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
   cityHint: { ...type.caption, color: colors.textTertiary, lineHeight: 17 },
-  cityRetry: { color: colors.brandAccent, textDecorationLine: "underline" },
+  cityRetryRow: { flexDirection: "row", alignItems: "center", gap: space.s, minHeight: 36 },
+  cityRetry: { ...type.label, color: colors.brandAccent },
   cityError: { ...type.caption, color: DANGER.fg, lineHeight: 17 },
-
-  consent: { ...type.caption, color: colors.textSecondary, lineHeight: 17 },
-  consentLink: { color: colors.brandAccent, textDecorationLine: "underline" },
-
-  errorBox: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: space.sm,
-    backgroundColor: DANGER.dim,
-    borderRadius: radius.md,
-    borderWidth: hairline,
-    borderColor: DANGER.fg,
-    paddingHorizontal: space.md,
-    paddingVertical: space.m,
-  },
-  errorText: {
-    ...type.bodySm,
-    color: DANGER.fg,
-    flex: 1,
-    lineHeight: 19,
-  },
-
-  footnote: {
-    ...type.caption,
-    fontFamily: fonts.semibold,
-    letterSpacing: 0,
-    color: colors.textTertiary,
-    textAlign: "center",
-    lineHeight: 17,
-    paddingVertical: space.sm,
-  },
-  footnoteLink: { color: colors.brandAccent, textDecorationLine: "underline" },
 });

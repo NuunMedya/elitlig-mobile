@@ -10,7 +10,7 @@
  * gün şeridi, lig grupları, segmentler ve takvim burada yaşar. Genel Bakış bu
  * ekrandaki hiçbir listeyi kopyalamaz, yalnız kesitini gösterir.
  *
- * NEDEN BU DÜZEN: ekran, diğer bütün sekmeler gibi MOR BLOK başlıkla açılır
+ * NEDEN BU DÜZEN: ekran, diğer sekme kökleri gibi KÂĞIT başlıkla açılır
  * (`ScreenHeader`: üst başlıkta dokunulur kapsam çipi "Ankara · FREELİG ·
  * 15. Sezon", solda "Maçlar", sağda arama ve takvim ikonları — tek satır,
  * 52px). Eski beyaz başlık tek istisnaydı ve sekmeler arasında geçişte
@@ -30,9 +30,15 @@
  * paylaşılan bir bağlantı doğrudan doğru segmente ve güne düşsün diye segment
  * ve tarih ekran durumunda değil ROTADA taşınır.
  *
- * PERFORMANS SÖZLEŞMESİ: satır yüksekliği sabittir (metaMode="none" → 60px),
- * bölüm başlığı sabittir (48px) → `getItemLayout` kurulabiliyor ve SectionList
- * hiçbir hücreyi ölçmüyor. Satır ve başlık bileşenleri `memo`'lu; render
+ * NEDEN SATIR, KART DEĞİL: bir günde on iki maçlık bir listede kart başına
+ * 146px, ekranda dört maç demekti. Lig grubu artık TEK KARTTIR: üst kapakta
+ * lig kimliği (`LeagueGroupHeader`), gövdede `MatchCard variant="compact"`
+ * satırları — ev · skor/saat · deplasman tek eksende, altında saha. Ekrana
+ * iki katı maç sığar ve "kim kiminle, kaç kaç" taramayla okunur.
+ *
+ * PERFORMANS SÖZLEŞMESİ: satır yüksekliği sabittir (`matchCardHeight` →
+ * compact + saha), bölüm başlığı sabittir → `getItemLayout` kurulabiliyor ve
+ * SectionList hiçbir hücreyi ölçmüyor. Satır ve başlık bileşenleri `memo`'lu; render
  * sırasında hiçbir kapanış (closure) üretilmez — dokunma işleyicileri maç
  * id'sini kendi içinde bağlayan küçük sarmalayıcılarda yaşar.
  */
@@ -46,6 +52,7 @@ import type { SectionListData, SectionListRenderItemInfo } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ScopeChip } from "@/components/ScopeChip";
+import { LEAGUE_GROUP_HEADER_HEIGHT } from "@/components/ui/LeagueGroupHeader";
 import {
   BottomSheet,
   DateStrip,
@@ -53,8 +60,8 @@ import {
   ErrorState,
   LeagueGroupHeader,
   LiveBadge,
-  MATCH_CARD_GAP,
   MatchCard,
+  matchDayLabel,
   ScreenHeader,
   SegmentedControl,
   SkeletonMatchRow,
@@ -76,6 +83,7 @@ import { useScope } from "@/providers/ScopeProvider";
 import {
   colors,
   fonts,
+  hairline,
   layout,
   radius,
   space,
@@ -91,12 +99,14 @@ type TabKey = "tumu" | "canli" | "bitti" | "yaklasan";
 
 const TAB_KEYS: readonly string[] = ["tumu", "canli", "bitti", "yaklasan"];
 
-/** Satır ve başlık yükseklikleri — `getItemLayout` bunlardan kurulur. */
-const ROW_HEIGHT = matchCardHeight({ meta: "field", showDate: true }) + MATCH_CARD_GAP;
-/** 8px üst boşluk + 40px LeagueGroupHeader. Boşluk başlığın İÇİNDE, çünkü
- *  yapışkan başlık ekranın tepesine yapıştığında altındaki satır başlığın
- *  arkasından sızmasın diye opak zemin gerekiyor. */
-const SECTION_HEADER_HEIGHT = 58;
+/** Satır ve başlık yükseklikleri — `getItemLayout` bunlardan kurulur. Satırlar
+ *  bir grubun içinde bitişiktir; aralarında boşluk yoktur. */
+const ROW_HEIGHT = matchCardHeight({ variant: "compact", showVenue: true, favoritable: true });
+/** Gruplar arası boşluk + lig başlığı. Boşluk başlığın İÇİNDE, çünkü yapışkan
+ *  başlık ekranın tepesine yapıştığında altındaki satır başlığın arkasından
+ *  sızmasın diye opak zemin gerekiyor. */
+const GROUP_GAP = space.lg;
+const SECTION_HEADER_HEIGHT = GROUP_GAP + LEAGUE_GROUP_HEADER_HEIGHT;
 
 /** Gün şeridinin varsayılan penceresi (§2.1): dün-bir-hafta … iki-hafta sonrası. */
 const STRIP_BACK_DAYS = 7;
@@ -198,7 +208,7 @@ export default function MatchesScreen() {
   const favorite = useFavorite();
   const appActive = useAppActive();
   const params = useLocalSearchParams();
-  /** Mor bloğun daralması listenin kaydırmasına bağlıdır (bkz. ScreenHeader). */
+  /** Başlığın daralması listenin kaydırmasına bağlıdır (bkz. ScreenHeader). */
   const { scrollY, scrollProps } = useHeaderScroll();
 
   /** Bugün ekran ömrü boyunca bir kez hesaplanır (gece yarısı geçişi nadir). */
@@ -473,10 +483,12 @@ export default function MatchesScreen() {
     [toggleFavoriteLeague],
   );
 
+  /** Seçili günden sonraki ilk maç günü — boş durum düğmesi onu adıyla söyler. */
+  const nextMatchDay = useMemo(() => daysWithMatches.find((day) => day > date) ?? null, [daysWithMatches, date]);
+
   const goToNextMatchDay = useCallback(() => {
-    const next = daysWithMatches.find((day) => day > date);
-    setDate(next ?? shiftDays(date, 1));
-  }, [daysWithMatches, date, setDate]);
+    setDate(nextMatchDay ?? shiftDays(date, 1));
+  }, [nextMatchDay, date, setDate]);
 
   const goToToday = useCallback(() => {
     setTab("tumu");
@@ -511,9 +523,10 @@ export default function MatchesScreen() {
   /* ───────────────────────── LİSTE ÇİZİMİ ───────────────────────── */
 
   const renderItem = useCallback(
-    ({ item }: SectionListRenderItemInfo<ApiMatch, LeagueSectionMeta>) => (
+    ({ item, index, section }: SectionListRenderItemInfo<ApiMatch, LeagueSectionMeta>) => (
       <MatchListItem
         match={item}
+        last={index === section.data.length - 1}
         homeLogo={teams.logoFor(item.home_team_id, item.first_team_name)}
         awayLogo={teams.logoFor(item.away_team_id, item.second_team_name)}
         isFavorite={favoriteMatchIds.has(Number(item.id))}
@@ -633,22 +646,27 @@ export default function MatchesScreen() {
             ? "Bu günde tamamlanmış maç bulunmuyor."
             : tab === "yaklasan"
               ? "Bu günde oynanacak maç bulunmuyor."
-              : "Başka bir gün seçebilir ya da takvimden ileri gidebilirsin."
+              : nextMatchDay
+                ? `En yakın maç günü: ${matchDayLabel(nextMatchDay)}.`
+                : "Başka bir gün seçebilir ya da takvimden ileri gidebilirsin."
         }
-        action={{ label: "İleri git", onPress: goToNextMatchDay }}
+        action={{
+          label: nextMatchDay ? "Sıradaki maç gününe git" : "İleri git",
+          onPress: goToNextMatchDay,
+        }}
         secondaryAction={date === todayIso ? undefined : { label: "Bugüne dön", onPress: goToToday }}
       />
     );
-  }, [favoritesOnly, tab, date, todayIso, clearFavoritesFilter, goToToday, goToNextMatchDay]);
+  }, [favoritesOnly, tab, date, todayIso, clearFavoritesFilter, goToToday, goToNextMatchDay, nextMatchDay]);
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      {/* MOR BLOK — diğer sekmelerle aynı çerçeve: üst başlıkta kapsam çipi,
+      {/* KÂĞIT BAŞLIK — diğer sekmelerle aynı çerçeve: üst başlıkta kapsam çipi,
           solda ad, sağda arama ve takvim. Süzgeçler bloğun altında kâğıtta
           (`bottom`). */}
       <ScreenHeader
         title="Maçlar"
-        scope={<ScopeChip tone="ink" />}
+        scope={<ScopeChip />}
         scrollY={scrollY}
         actions={[
           { icon: "search-outline", accessibilityLabel: "Ara", onPress: openSearch },
@@ -720,7 +738,9 @@ export default function MatchesScreen() {
         />
       ) : loading ? (
         <View style={styles.skeletonWrap}>
-          <SkeletonMatchRow count={6} />
+          <View style={styles.skeletonGroup}>
+            <SkeletonMatchRow count={6} />
+          </View>
         </View>
       ) : failed ? (
         <ErrorState error={matchesQuery.error} onRetry={handleRefresh} />
@@ -768,6 +788,7 @@ const keyExtractor = (item: ApiMatch) => String(item.id);
  */
 const MatchListItem = memo(function MatchListItem({
   match,
+  last,
   homeLogo,
   awayLogo,
   isFavorite,
@@ -775,6 +796,8 @@ const MatchListItem = memo(function MatchListItem({
   onToggleStar,
 }: {
   match: ApiMatch;
+  /** Grubun son satırı — kartın alt köşelerini çizer. */
+  last: boolean;
   homeLogo: string | null;
   awayLogo: string | null;
   isFavorite: boolean;
@@ -786,18 +809,17 @@ const MatchListItem = memo(function MatchListItem({
   const handleStar = useCallback(() => onToggleStar(matchId), [onToggleStar, matchId]);
 
   return (
-    <View style={styles.cardSlot}>
-      <MatchCard
-        match={match}
-        homeLogo={homeLogo}
-        awayLogo={awayLogo}
-        meta="field"
-        showDate
-        isFavorite={isFavorite}
-        onToggleFavorite={handleStar}
-        onPress={handlePress}
-      />
-    </View>
+    <MatchCard
+      variant="compact"
+      position={last ? "last" : "middle"}
+      match={match}
+      homeLogo={homeLogo}
+      awayLogo={awayLogo}
+      showVenue
+      isFavorite={isFavorite}
+      onToggleFavorite={handleStar}
+      onPress={handlePress}
+    />
   );
 });
 
@@ -844,7 +866,6 @@ const LeagueSectionHeader = memo(function LeagueSectionHeader({
         onToggleFavorite={leagueId != null ? handleFavorite : undefined}
         onPress={handleOpen}
         sticky
-        detached
       />
     </View>
   );
@@ -1079,6 +1100,14 @@ const styles = StyleSheet.create({
 
   skeletonWrap: {
     paddingHorizontal: layout.screenPadding,
+    paddingTop: GROUP_GAP,
+  },
+  skeletonGroup: {
+    borderRadius: radius.xl,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    backgroundColor: colors.surface1,
+    overflow: "hidden",
   },
 
   /* Liste — contentContainer'a ÜST boşluk verilmez: `getItemLayout`
@@ -1090,13 +1119,8 @@ const styles = StyleSheet.create({
   },
   sectionHeader: {
     height: SECTION_HEADER_HEIGHT,
-    paddingTop: space.sm,
-    paddingBottom: space.m,
+    paddingTop: GROUP_GAP,
     backgroundColor: colors.bg,
-  },
-  cardSlot: {
-    height: ROW_HEIGHT,
-    paddingBottom: MATCH_CARD_GAP,
   },
 
   /* Takvim sayfası */

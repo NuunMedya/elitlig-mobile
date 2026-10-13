@@ -20,6 +20,11 @@
  * içinde de var); bütünleştirme ajanı isterse `lib/api/cityContacts.ts` açıp
  * buradaki tipleri oraya taşıyabilir.
  *
+ * DÜZEN (yeniden tasarım): en üstte üç HIZLI EYLEM kutusu (Ara · WhatsApp ·
+ * E-posta) — iletişim ekranını açanın %90'ı bunlardan birini arıyor; tek
+ * dokunuşla başlar. Altında sosyal hesaplar satır grubu, bölge sorumluları
+ * (iç içe kart yok: telefon/e-posta kartın kendi satırlarıdır) ve form.
+ *
  * SUNUCU YOKSA EKRAN ÇALIŞIR: uç hata verirse ya da şehir seçili değilse
  * varsayılan merkez numaraları (`FALLBACK`) gösterilir — iletişim ekranı
  * "bağlantı yok" diye boş kalamaz. Hata yalnız bant olarak duyurulur.
@@ -36,11 +41,12 @@ import {
   Card,
   ErrorState,
   Input,
-  KeyValueRow,
   ListRow,
   ScreenHeader,
   SectionHeader,
   SkeletonCard,
+  Touchable,
+  toneColors,
   useHeaderScroll,
   useRefresh,
   useToast,
@@ -52,7 +58,7 @@ import { instagramUrl } from "@/lib/socials";
 import { youtubeChannelUrl } from "@/lib/youtube";
 import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
-import { colors, layout, space, textScale, type } from "@/theme";
+import { colors, elevate, hairline, layout, radius, space, textScale, type } from "@/theme";
 
 /* ========================= SUNUCU SÖZLEŞMESİ / TİPLER ===================== */
 
@@ -124,10 +130,16 @@ function whatsappNumber(raw?: string | null): string {
   return digits;
 }
 
-/** "https://instagram.com/elitlig.ankara/" → "@elitlig.ankara" */
+/**
+ * "https://instagram.com/elitlig.ankara/" → "@elitlig.ankara".
+ * Sorgu dizesi atılır, baştaki "@" ikilenmez ("tiktok.com/@elitlig" →
+ * "@elitlig"); "profile.php?id=…" gibi okunamayan adreslerde yedek etiket.
+ */
 function handleOf(url: string, fallback: string): string {
-  const match = url.replace(/\/+$/, "").split("/").pop();
-  return match ? `@${match}` : fallback;
+  const path = url.split(/[?#]/)[0].replace(/\/+$/, "");
+  const last = path.split("/").pop() ?? "";
+  if (!last || last.includes(".php") || /^\d+$/.test(last)) return fallback;
+  return `@${last.replace(/^@+/, "")}`;
 }
 
 const trimmed = (value?: string | null): string => String(value ?? "").trim();
@@ -173,7 +185,7 @@ export default function ContactScreen() {
       list.push({
         key: "phone",
         value: formatPhone(phoneRaw),
-        label: "Telefonla ara",
+        label: "Ara",
         leading: { icon: "call", tone: "info" },
         url: `tel:${digitsOf(phoneRaw)}`,
       });
@@ -184,7 +196,7 @@ export default function ContactScreen() {
       list.push({
         key: "whatsapp",
         value: formatPhone(waRaw),
-        label: "WhatsApp'tan yaz",
+        label: "WhatsApp",
         leading: { icon: "logo-whatsapp", tone: "win" },
         url: `https://wa.me/${whatsappNumber(waRaw)}`,
       });
@@ -195,7 +207,7 @@ export default function ContactScreen() {
       list.push({
         key: "email",
         value: mail,
-        label: "E-posta gönder",
+        label: "E-posta",
         leading: { icon: "mail", tone: "brand" },
         url: `mailto:${mail}`,
       });
@@ -229,7 +241,7 @@ export default function ContactScreen() {
     if (facebook) {
       list.push({
         key: "facebook",
-        value: handleOf(facebook, "Facebook"),
+        value: handleOf(facebook, "ElitLig Facebook sayfası"),
         label: "Facebook",
         leading: { icon: "logo-facebook", tone: "info" },
         url: facebook,
@@ -249,6 +261,10 @@ export default function ContactScreen() {
 
     return list;
   }, [primary, scope.cityLabel]);
+
+  const DIRECT_KEYS = ["phone", "whatsapp", "email"];
+  const direct = channels.filter((channel) => DIRECT_KEYS.includes(channel.key));
+  const social = channels.filter((channel) => !DIRECT_KEYS.includes(channel.key));
 
   /* ------------------------------- Form ---------------------------------- */
 
@@ -329,17 +345,25 @@ export default function ContactScreen() {
           />
         ) : null}
 
-        <SectionHeader title="Kanallar" style={styles.sectionHeader} />
-        {channels.map((channel, index) => (
+        {/* 1) HIZLI EYLEMLER — arama, WhatsApp, e-posta tek dokunuşta. */}
+        <View style={styles.quick}>
+          {direct.map((channel) => (
+            <QuickTile key={channel.key} channel={channel} />
+          ))}
+        </View>
+
+        {/* 2) SOSYAL HESAPLAR */}
+        {social.length ? <SectionHeader title="Sosyal medya" style={styles.sectionHeader} /> : null}
+        {social.map((channel, index) => (
           <ChannelRow
             key={channel.key}
             channel={channel}
             position={
-              channels.length === 1
+              social.length === 1
                 ? "single"
                 : index === 0
                   ? "first"
-                  : index === channels.length - 1
+                  : index === social.length - 1
                     ? "last"
                     : "middle"
             }
@@ -459,6 +483,37 @@ export default function ContactScreen() {
 
 /* ============================== ALT BİLEŞENLER ============================ */
 
+/**
+ * Hızlı eylem kutusu — ikon, eylem adı ve değer (numara/adres). Üç kutu yan
+ * yana eşit genişliktedir; değer kutuya sığmazsa kırpılır, eylem adı kalır.
+ */
+const QuickTile = React.memo(function QuickTile({ channel }: { channel: Channel }) {
+  const tone = toneColors(channel.leading.tone ?? "brand");
+  const handlePress = useCallback(() => {
+    void openLink(channel.url);
+  }, [channel.url]);
+  return (
+    <Touchable
+      feedback="card"
+      haptic="light"
+      onPress={handlePress}
+      accessibilityRole="button"
+      accessibilityLabel={`${channel.label}: ${channel.value}`}
+      style={styles.quickTile}
+    >
+      <View style={[styles.quickIcon, { backgroundColor: tone.dim }]}>
+        <Ionicons name={channel.leading.icon} size={20} color={tone.fg} />
+      </View>
+      <Text style={styles.quickLabel} numberOfLines={1} {...textScale.dense}>
+        {channel.label}
+      </Text>
+      <Text style={styles.quickValue} numberOfLines={1} {...textScale.dense}>
+        {channel.value}
+      </Text>
+    </Touchable>
+  );
+});
+
 /** Tek kanal satırı: basınca ilgili uygulamayı açar (arama/WhatsApp/tarayıcı). */
 const ChannelRow = React.memo(function ChannelRow({
   channel,
@@ -546,25 +601,17 @@ const ManagerCard = React.memo(function ManagerCard({
         ) : undefined
       }
     >
-      {rows.length ? (
-        rows.map((row, index) => (
-          <KeyValueRow
-            key={row.label}
-            label={row.label}
-            value={row.value}
-            numeric={row.numeric}
-            position={
-              rows.length === 1
-                ? "single"
-                : index === 0
-                  ? "first"
-                  : index === rows.length - 1
-                    ? "last"
-                    : "middle"
-            }
-          />
-        ))
-      ) : null}
+      {/* Kartın kendi satırları — iç içe kart (grup kabuğu) yok (Arena §1.3). */}
+      {rows.map((row, index) => (
+        <View key={row.label} style={[styles.kv, index > 0 ? styles.kvDivided : null]}>
+          <Text style={styles.kvLabel} {...textScale.dense}>
+            {row.label}
+          </Text>
+          <Text style={[styles.kvValue, row.numeric ? styles.kvNumeric : null]} numberOfLines={1} {...textScale.dense}>
+            {row.value}
+          </Text>
+        </View>
+      ))}
 
       {address ? (
         <View style={styles.addressRow}>
@@ -612,6 +659,63 @@ const styles = StyleSheet.create({
   },
   managerCard: {
     marginTop: space.sm,
+  },
+  quick: {
+    flexDirection: "row",
+    gap: space.sm,
+    marginTop: space.md,
+  },
+  quickTile: {
+    flex: 1,
+    alignItems: "center",
+    gap: space.xs,
+    paddingVertical: space.md,
+    paddingHorizontal: space.s,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    ...elevate(1),
+  },
+  quickIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: space.xxs,
+  },
+  quickLabel: {
+    ...type.h4,
+    color: colors.textPrimary,
+  },
+  quickValue: {
+    ...type.caption,
+    color: colors.textTertiary,
+  },
+  kv: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: space.md,
+    minHeight: 40,
+  },
+  kvDivided: {
+    borderTopWidth: hairline,
+    borderTopColor: colors.separator,
+  },
+  kvLabel: {
+    ...type.bodySm,
+    color: colors.textSecondary,
+  },
+  kvValue: {
+    ...type.h4,
+    color: colors.textPrimary,
+    flexShrink: 1,
+    textAlign: "right",
+  },
+  kvNumeric: {
+    fontVariant: ["tabular-nums"],
   },
   managerActions: {
     flexDirection: "row",

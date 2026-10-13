@@ -92,8 +92,8 @@ export const SectionHeader = React.memo(function SectionHeader({
   action,
   sticky,
   size = "section",
-  uppercase = true,
-  mark = true,
+  uppercase = false,
+  mark = false,
   style,
   testID,
 }: SectionHeaderProps) {
@@ -134,12 +134,12 @@ export const SectionHeader = React.memo(function SectionHeader({
       ) : mark ? (
         <View style={styles.mark} />
       ) : null}
-      <Text style={styles.title} numberOfLines={1} {...textScale.dense}>
+      <Text style={[styles.title, group ? styles.titleGroup : null]} numberOfLines={1} {...textScale.dense}>
         {label}
       </Text>
       {meta ? (
         <Text style={styles.meta} numberOfLines={1} {...textScale.dense}>
-          {upperTR(meta)}
+          {meta}
         </Text>
       ) : null}
     </>
@@ -211,8 +211,8 @@ const styles = StyleSheet.create({
   },
   /** Maketin 9px alt payı: space.sm + 1. Üst pay ekranın bölüm boşluğuna eklenir. */
   headerSection: {
-    paddingTop: space.xs,
-    paddingBottom: space.sm + space.px,
+    paddingTop: space.lg,
+    paddingBottom: space.m,
   },
   /** Yapışkan bant: liste içinde kaydığı için üst/alt eşit ve sıkı. */
   headerGroup: {
@@ -237,20 +237,20 @@ const styles = StyleSheet.create({
     backgroundColor: colors.brand,
   },
   /** Archivo versal 11px, geniş aralık — etiket sesi, manşet değil. */
+  /** Arena: cümle düzeninde kalın başlık — etiket değil, bölüm adı. */
   title: {
-    ...type.overline,
-    fontFamily: fonts.display,
-    fontSize: 11,
-    lineHeight: 15,
-    letterSpacing: 1.4,
+    ...type.h2,
+    fontFamily: fonts.semibold,
     color: colors.textPrimary,
     flexShrink: 1,
   },
+  /** Liste içi grup etiketi bir kademe küçüktür: bölüm başlığıyla yarışmaz. */
+  titleGroup: {
+    ...type.h3,
+  },
   /** "4 MAÇ": başlıkla aynı aile, bir punto küçük, üçüncül mürekkep. */
   meta: {
-    ...type.micro,
-    fontFamily: fonts.display,
-    letterSpacing: 0.6,
+    ...type.caption,
     color: colors.textTertiary,
     marginLeft: "auto",
   },
@@ -261,9 +261,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: layout.screenPadding,
   },
   actionLabel: {
-    ...type.caption,
-    fontFamily: fonts.semibold,
-    fontSize: 11.5,
+    ...type.label,
     color: colors.brandAccent,
   },
 });

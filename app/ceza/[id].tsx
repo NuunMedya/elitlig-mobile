@@ -380,7 +380,7 @@ export default function PenaltyDetailScreen() {
           </Surface>
 
           {/* Aşama çizelgesi */}
-          <SectionHeader title="Süreç" meta={`${Math.max(stageIndex + 1, 1)}/${STAGES.length}`} />
+          <SectionHeader style={styles.flushHeader} title="Süreç" meta={`${Math.max(stageIndex + 1, 1)}/${STAGES.length}`} />
           <Surface level={1} radius="lg" style={styles.stages}>
             {STAGES.map((stage, index) => (
               <StageStep
@@ -396,7 +396,7 @@ export default function PenaltyDetailScreen() {
           {/* Kurul kararı metni */}
           {penalty.disiplin_karari ? (
             <>
-              <SectionHeader title="Kurul kararı" />
+              <SectionHeader style={styles.flushHeader} title="Kurul kararı" />
               <Surface level={1} radius="lg" style={styles.decision}>
                 <Ionicons name="shield" size={16} color={colors.danger} />
                 <Text style={styles.decisionText} {...textScale.long}>
@@ -409,7 +409,7 @@ export default function PenaltyDetailScreen() {
           {/* Dosya künyesi */}
           {facts.length > 0 ? (
             <>
-              <SectionHeader title="Dosya bilgileri" />
+              <SectionHeader style={styles.flushHeader} title="Dosya bilgileri" />
               {facts.map((row, index) => (
                 <KeyValueRow
                   key={row.key}
@@ -423,7 +423,7 @@ export default function PenaltyDetailScreen() {
           ) : null}
 
           {/* Savunma / itiraz kapıları */}
-          <SectionHeader title="Savunma ve itiraz" />
+          <SectionHeader style={styles.flushHeader} title="Savunma ve itiraz" />
 
           {penalty.available_sides.length > 1 ? (
             <View style={styles.sideBlock}>
@@ -481,7 +481,7 @@ export default function PenaltyDetailScreen() {
           {/* Gönderdiğim metinler */}
           {submissions.length > 0 ? (
             <>
-              <SectionHeader title="Gönderdiklerim" meta={String(submissions.length)} />
+              <SectionHeader style={styles.flushHeader} title="Gönderdiklerim" meta={String(submissions.length)} />
               {submissions.map((event) => (
                 <Surface key={event.id} level={1} radius="lg" style={styles.submission}>
                   <View style={styles.submissionHead}>
@@ -506,7 +506,7 @@ export default function PenaltyDetailScreen() {
           ) : null}
 
           {/* Olay zinciri */}
-          <SectionHeader title="Olay zinciri" meta={String(timeline.length)} />
+          <SectionHeader style={styles.flushHeader} title="Olay zinciri" meta={String(timeline.length)} />
           {timeline.length === 0 ? (
             <EmptyState
               icon="time-outline"
@@ -696,9 +696,12 @@ const WindowCard = React.memo(function WindowCard({
       {open ? (
         <>
           {left ? (
-            <Text style={styles.windowDeadline} {...textScale.dense}>
-              ⏰ Son tarih {formatDateShort(deadline)} — {left} kaldı.
-            </Text>
+            <View style={styles.deadlineRow}>
+              <Ionicons name="time" size={14} color={colors.warn} />
+              <Text style={styles.windowDeadline} {...textScale.dense}>
+                Son tarih {formatDateShort(deadline)} · {left} kaldı
+              </Text>
+            </View>
           ) : null}
           <Button label={`${title} gönder`} variant="primary" size="sm" onPress={onPress} />
         </>
@@ -710,6 +713,17 @@ const WindowCard = React.memo(function WindowCard({
 /* ================================ STİLLER ================================= */
 
 const styles = StyleSheet.create({
+  /* Bölüm başlığı kendi ekran kenarı dolgusunu taşır; içerik zaten dolgulu
+     olduğu için burada sıfırlanır — aksi hâlde başlık kartlardan 14px içeride
+     dururdu. */
+  flushHeader: {
+    paddingHorizontal: 0,
+  },
+  deadlineRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+  },
   screen: {
     flex: 1,
     backgroundColor: colors.bg,

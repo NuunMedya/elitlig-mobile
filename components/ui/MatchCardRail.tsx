@@ -13,6 +13,11 @@ import { layout, space } from "@/theme";
 import type { ApiMatch } from "@/lib/types";
 import { MatchCard } from "./MatchCard";
 
+/** elevate(1) gölgesinin taşma payı — gölge aşağı düştüğü için alt pay büyük;
+    üst pay küçük tutulur ki şerit, başlıktaki "Tümü" düğmesinin üstüne binmesin. */
+const SHADOW_TOP = space.sm;
+const SHADOW_BOTTOM = space.xl;
+
 export interface MatchCardRailProps {
   matches: ApiMatch[];
   logoFor: (teamId: number | null | undefined, teamName: string | null | undefined) => string | null;
@@ -40,7 +45,7 @@ export const MatchCardRail = memo(function MatchCardRail({
 }: MatchCardRailProps) {
   const { width } = useWindowDimensions();
   const single = matches.length === 1;
-  const cardWidth = single ? width - inset * 2 : Math.min(320, Math.round((width - inset * 2) * 0.86));
+  const cardWidth = single ? width - inset * 2 : Math.min(320, Math.round((width - inset * 2) * 0.84));
 
   const cards = matches.map((match) => (
     <MatchCard
@@ -66,6 +71,7 @@ export const MatchCardRail = memo(function MatchCardRail({
       decelerationRate="fast"
       snapToInterval={cardWidth + space.m}
       snapToAlignment="start"
+      style={styles.scroller}
       contentContainerStyle={[styles.content, { paddingHorizontal: inset }]}
     >
       {cards}
@@ -74,8 +80,16 @@ export const MatchCardRail = memo(function MatchCardRail({
 });
 
 const styles = StyleSheet.create({
+  /* Kartların gölgesi ScrollView kenarında kırpılmasın: şerit dikeyde gölge
+     payı kadar genişler, kap aynı payı negatif boşlukla geri alır — çevredeki
+     düzen değişmez. */
+  scroller: {
+    marginTop: -SHADOW_TOP,
+    marginBottom: -SHADOW_BOTTOM,
+  },
   content: {
     gap: space.m,
-    paddingBottom: space.xs,
+    paddingTop: SHADOW_TOP,
+    paddingBottom: SHADOW_BOTTOM,
   },
 });
