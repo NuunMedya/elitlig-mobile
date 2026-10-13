@@ -2,9 +2,14 @@
  * Lig grubu başlığı — maç listesinde blokları ayıran yapışkan (sticky) satır.
  *
  * NEDEN AYRI BİLEŞEN: SofaScore hissi "lige göre bloklar"dan gelir; başlık hem
- * grubun kimliği (logo + ad + şehir) hem de kontrol yüzeyidir (katla/aç,
- * favoriye al, lige git). Üç eylem tek satıra sığdığı için dokunma alanları
- * ayrılır: gövde ligi açar, chevron katlar, yıldız favoriler.
+ * grubun kimliği (logo + ad + şehir) hem de kontrol yüzeyidir. Dokunma
+ * alanları ayrıdır: gövde ligi açar, raptiye ligi SABİTLER (cihazda; lig
+ * listesinde ve lig seçicide üste çıkar), yıldız ligi TAKİP eder (bildirim),
+ * chevron katlar. Sabitlemek ile takip etmek ayrı kavramlardır: biri düzen
+ * tercihi, öteki bildirim aboneliği.
+ *
+ * `icon` verilirse kupa yerine o ikon menekşe pulda çizilir — Skorlar'daki
+ * "Takip ettiklerin" grubu bir lig değildir ve lig gibi görünmemelidir.
  *
  * İKİ BİÇİM: varsayılan BİTİŞİK başlık, grubun kartının üst kapağıdır (altına
  * `MatchCard variant="compact"` satırları `position` ile dizilir); `detached`
@@ -41,9 +46,14 @@ export interface LeagueGroupHeaderProps {
   matchCount?: number;
   collapsed?: boolean;
   onToggle?: () => void;
-  /** Ligi favoriye alma yıldızı */
+  /** Ligi takip yıldızı (`useFollowFlow().toggle({ type: "league", … })`). */
   isFavorite?: boolean;
   onToggleFavorite?: () => void;
+  /** Ligi sabitleme raptiyesi (`useScope().togglePinLeague`). */
+  isPinned?: boolean;
+  onTogglePin?: () => void;
+  /** Lig olmayan gruplar için kupa yerine ikon (ör. "star" → Takip ettiklerin). */
+  icon?: keyof typeof Ionicons.glyphMap;
   /** Lig sayfasına git */
   onPress?: () => void;
   sticky?: boolean;
@@ -60,6 +70,9 @@ export const LeagueGroupHeader = memo(function LeagueGroupHeader({
   onToggle,
   isFavorite = false,
   onToggleFavorite,
+  isPinned = false,
+  onTogglePin,
+  icon,
   onPress,
   sticky = false,
   detached = false,
@@ -102,6 +115,11 @@ export const LeagueGroupHeader = memo(function LeagueGroupHeader({
     onToggleFavorite?.();
   }, [onToggleFavorite]);
 
+  const handlePin = useCallback(() => {
+    haptics.select();
+    onTogglePin?.();
+  }, [onTogglePin]);
+
   const hasLogo = Boolean(mediaUrl(logo));
 
   return (
@@ -121,8 +139,10 @@ export const LeagueGroupHeader = memo(function LeagueGroupHeader({
         }
         accessibilityState={{ expanded: !collapsed }}
       >
-        <View style={styles.mark}>
-          {hasLogo ? (
+        <View style={[styles.mark, icon ? styles.markBrand : null]}>
+          {icon ? (
+            <Ionicons name={icon} size={13} color={colors.brandAccent} />
+          ) : hasLogo ? (
             <TeamLogo name={leagueName} logo={logo} size={22} />
           ) : (
             <Ionicons name="trophy" size={13} color={colors.textSecondary} />
@@ -149,6 +169,23 @@ export const LeagueGroupHeader = memo(function LeagueGroupHeader({
         </View>
       ) : null}
 
+      {onTogglePin ? (
+        <Pressable
+          onPress={handlePin}
+          hitSlop={touchSlop(28)}
+          style={styles.iconButton}
+          accessibilityRole="button"
+          accessibilityState={{ selected: isPinned }}
+          accessibilityLabel={isPinned ? `${leagueName} sabitlemesini kaldır` : `${leagueName} sabitle`}
+        >
+          <Ionicons
+            name={isPinned ? "pin" : "pin-outline"}
+            size={16}
+            color={isPinned ? colors.brandAccent : colors.textTertiary}
+          />
+        </Pressable>
+      ) : null}
+
       {onToggleFavorite ? (
         <Pressable
           onPress={handleFavorite}
@@ -156,12 +193,12 @@ export const LeagueGroupHeader = memo(function LeagueGroupHeader({
           style={styles.iconButton}
           accessibilityRole="button"
           accessibilityState={{ selected: isFavorite }}
-          accessibilityLabel={isFavorite ? `${leagueName} favorilerden çıkar` : `${leagueName} favorilere ekle`}
+          accessibilityLabel={isFavorite ? `${leagueName} takibini bırak` : `${leagueName} takip et`}
         >
           <Ionicons
             name={isFavorite ? "star" : "star-outline"}
             size={17}
-            color={isFavorite ? colors.star : colors.starEmpty}
+            color={isFavorite ? colors.brand : colors.textTertiary}
           />
         </Pressable>
       ) : null}
@@ -245,6 +282,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
+  },
+  markBrand: {
+    backgroundColor: colors.brandDim,
   },
   texts: {
     flex: 1,
