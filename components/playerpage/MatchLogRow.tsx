@@ -22,7 +22,7 @@ import React, { useCallback } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { RatingPill, TeamLogo, Touchable, withAlpha, type FormResult } from "@/components/ui";
 import { mediaUrl } from "@/lib/format";
-import { colors, hairline, radius, space, textScale, type, upperTR } from "@/theme";
+import { colors, hairline, radius, ratingLabel, space, textScale, type, upperTR } from "@/theme";
 import type { RowPosition } from "./shared";
 
 /** Satır yüksekliği sabittir; sanal liste `getItemLayout`'u bundan kurar. */
@@ -105,7 +105,7 @@ export const MatchLogRow = React.memo(function MatchLogRow({
     result ? RESULT_SPEECH[result] : null,
     goals > 0 ? `${goals} gol` : null,
     assists > 0 ? `${assists} asist` : null,
-    rating != null ? `puan ${rating.toFixed(1)}` : null,
+    rating != null ? `puan ${ratingLabel(rating)}` : null,
   ]
     .filter(Boolean)
     .join(", ");

@@ -15,9 +15,10 @@
  *   3. Gövde `type.bodyLg` + 26px satır aralığıyla ve `textScale.long` ile
  *      yazılır: uzun metin kullanıcının yazı tipi tercihine kadar büyüyebilir
  *      (tavan ×2), çünkü burada tabloya sığma kaygısı yoktur.
- *   4. Paylaş eylemi başlığın sağ üst köşesindedir (§4.27 eylem yuvası) —
- *      metnin akışını bölmez; gövdenin sonunda da tam genişlikte tekrar edilir,
- *      okuma bitince el zaten oradadır.
+ *   4. PAYLAŞ yalnız başlığın SAĞ ÜST köşesindedir ("share-outline", RN
+ *      `Share`) — detay sayfalarının ortak sözleşmesi; metnin akışını bölmez.
+ *      Gövdenin sonundaki ikinci "Haberi paylaş" düğmesi kaldırıldı (tek
+ *      eylem, tek yer).
  *
  * İÇERİK HTML: sunucu içeriği temizlenmiş HTML olarak saklar. React Native
  * HTML render etmediği için blok etiketleri paragraf sınırı sayılıp düz metne
@@ -48,7 +49,6 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   BrandMark,
-  Button,
   Divider,
   EmptyState,
   ErrorState,
@@ -420,16 +420,6 @@ export default function NewsDetailScreen() {
               ))}
             </View>
           ) : null}
-
-          <Button
-            label="Haberi paylaş"
-            icon="share-outline"
-            variant="secondary"
-            fullWidth
-            haptic="light"
-            onPress={share}
-            style={styles.shareButton}
-          />
         </View>
       </Animated.ScrollView>
     </SafeAreaView>
@@ -553,8 +543,5 @@ const styles = StyleSheet.create({
   /** SectionHeader kendi yatay boşluğunu taşır; gövdenin boşluğu geri alınır. */
   relatedHeader: {
     marginHorizontal: -layout.screenPadding,
-  },
-  shareButton: {
-    marginTop: space.md,
   },
 });

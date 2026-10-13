@@ -1,9 +1,18 @@
 /**
  * TAKIM PROFİLİ — `/takim/[id]`
  *
- * NE: bir takımın kamuya açık bütün yüzü. Altı segment:
+ * NE: bir takımın kamuya açık bütün yüzü. SABİT altı sekme — veri durumuna
+ * göre gizlenmez, sırası değişmez; verisi olmayan sekme kendi içinde boş
+ * durum gösterir:
  *
  *   Genel · Fikstür · Sonuçlar · Kadro · İstatistik · Transferler
+ *
+ * EYLEMLER (detay sayfalarında ortak sözleşme):
+ *   - PAYLAŞ başlığın SAĞ ÜSTÜNDE tek ikondur ("share-outline" →
+ *     `TeamShareSheet`); başka yerde tekrarı yok.
+ *   - TAKİP = BİLDİRİM: kimlik şeridindeki "Takip et" `useFollowFlow().toggle`
+ *     çağırır — takip edilir ve o takibin bildirim türleri alt sayfası açılır;
+ *     zil (`openSettings`) aynı alt sayfayı yeniden açar.
  *
  * DÜZEN (Arena "detay/kimlik" kalıbı): grafit sahne başlığı → kimlik (arma,
  * ad, lig · sezon, skor şeridi, form, takip eylemleri) → sekmeler → kâğıt
@@ -76,8 +85,8 @@ import { getTeam } from "@/lib/api/teams";
 import { addMatchToCalendar } from "@/lib/calendar";
 import { get } from "@/lib/http";
 import { queryKeys } from "@/lib/queryKeys";
-import { useAuth } from "@/providers/AuthProvider";
 import { useFavorite } from "@/providers/FavoriteProvider";
+import { useFollowFlow } from "@/providers/FollowFlowProvider";
 import { useScope } from "@/providers/ScopeProvider";
 import type { ApiMatch, ApiPlayer, KadroPlayer, StandingRow } from "@/lib/types";
 import { colors, layout, radius, space } from "@/theme";
@@ -159,7 +168,6 @@ function getTeamFollowerCount(teamId: number) {
    ══════════════════════════════════════════════════════════════════════════ */
 
 export default function TeamDetailScreen() {
-  const auth = useAuth();
   const { id, tab: tabParam } = useLocalSearchParams<{ id: string; tab?: string }>();
   const teamId = Number(id);
   const validId = Number.isFinite(teamId) && teamId > 0;
@@ -168,7 +176,8 @@ export default function TeamDetailScreen() {
   const scope = useScope();
   const logos = useTeamLogos();
   const toast = useToast();
-  const { isFavorite, toggleFavorite } = useFavorite();
+  const { isFavorite } = useFavorite();
+  const flow = useFollowFlow();
   const { scrollY, scrollProps } = useHeaderScroll();
 
   const [tab, setTab] = useState<TeamTab>(() => resolveTab(firstParam(tabParam)));
@@ -482,37 +491,48 @@ export default function TeamDetailScreen() {
    */
   const teamLabel = team?.team_name || "İsimsiz takım";
 
+  /** Takip hedefi — TAKİP = BİLDİRİM akışına (useFollowFlow) giden tek kimlik. */
+  const followTarget = useMemo(
+    () => ({ type: "team" as const, id: teamId, name: teamLabel, logo: team?.logo ?? null }),
+    [teamId, teamLabel, team?.logo],
+  );
+
+  /* Takip et → takip edilir ve o takibin bildirim türleri alt sayfası açılır;
+     takip ediliyorsa bırakılır (bildirim akışın kendisinde). */
   const handleToggleFavorite = useCallback(() => {
     if (!team) return;
-    const next = !favorite;
-    toggleFavorite({ id: teamId, name: teamLabel, logo: team.logo });
-    toast.show(
-      next
-        ? {
-            message: `${teamLabel} favorilerinde · Maç bildirimleri gelecek`,
-            tone: "success",
-            icon: "star",
-            haptic: "success",
-          }
-        : { message: `${teamLabel} favorilerden çıkarıldı`, tone: "neutral", icon: "star-outline" },
-    );
-  }, [team, teamLabel, favorite, teamId, toggleFavorite, toast]);
+    flow.toggle(followTarget);
+  }, [team, flow, followTarget]);
 
   const openMatch = useCallback((matchId: number) => router.push(`/mac/${matchId}`), [router]);
   const openPlayer = useCallback((playerId: number) => router.push(`/oyuncu/${playerId}`), [router]);
   const openTeam = useCallback((otherId: number) => router.push(`/takim/${otherId}`), [router]);
+  /*
+   * Transfer kayıtları haber AKIŞINDA yayımlanır ama tekil haber ucunda
+   * karşılıkları yoktur (`/api/news/transfer-…` → 404). Kayıt `meta` içinde
+   * oyuncu kimliği taşıyorsa (savunmacı okunur) oyuncu sayfası açılır;
+   * yoksa haber detayı denenir.
+   */
   const openNews = useCallback(
-    (newsId: string) => router.push({ pathname: "/haber/[id]", params: { id: newsId } }),
-    [router],
+    (newsId: string) => {
+      const item = transfers.find((entry) => entry.id === newsId) as
+        | { meta?: { player_id?: number | string | null } }
+        | undefined;
+      const playerId = Number(item?.meta?.player_id);
+      if (Number.isFinite(playerId) && playerId > 0) {
+        router.push(`/oyuncu/${playerId}`);
+        return;
+      }
+      router.push({ pathname: "/haber/[id]", params: { id: newsId } });
+    },
+    [router, transfers],
   );
   const openStandings = useCallback(
     () => router.push({ pathname: "/(tabs)/ligler", params: { tab: "puan" } }),
     [router],
   );
-  const openNotifications = useCallback(
-    () => (auth.user ? router.push(`/takip-bildirimleri?odak=team:${teamId}`) : router.push("/giris")),
-    [auth.user, router, teamId],
-  );
+  /** Zil: bu takibin bildirim türleri (misafirde alt sayfa giriş çağrısı gösterir). */
+  const openNotifications = useCallback(() => flow.openSettings(followTarget), [flow, followTarget]);
 
   const addToCalendar = useCallback(
     async (match: ApiMatch) => {

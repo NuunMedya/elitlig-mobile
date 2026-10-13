@@ -8,7 +8,7 @@
  */
 
 import { StyleSheet } from "react-native";
-import { formatDateShort } from "@/lib/format";
+import { formatDateShort, formatNumber } from "@/lib/format";
 import { colors, dark, elevate, radius, ratingColors, space } from "@/theme";
 
 /** Grup içi konum — köşe yuvarlaması ve ayraç buradan gelir. */
@@ -36,9 +36,9 @@ export function stageRatingColor(value: number | null | undefined): string {
   return ratingColors(dark, value).fg;
 }
 
-/** Ondalığı Türkçe yazar: 1.55 → "1,55". Rakam kahramandır, nokta değil virgül. */
+/** Ondalığı Türkçe yazar: 1.55 → "1,55" (tek biçim: `lib/format.ts → formatNumber`). */
 export function decimalTR(value: number, digits = 1): string {
-  return value.toFixed(digits).replace(".", ",");
+  return formatNumber(value, digits);
 }
 
 /**

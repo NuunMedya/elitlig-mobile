@@ -6,10 +6,21 @@
  * aldı" (Maçlar), "nereden geldi" (Kariyer). Yalnız açık segmentin sorgusu
  * çalışır.
  *
+ * SABİT SEKMELER: Genel · İstatistik · Maçlar · Kariyer — veri durumuna göre
+ * gizlenmez, sırası değişmez; verisi olmayan sekme kendi içinde boş durum
+ * gösterir.
+ *
+ * EYLEMLER (detay sayfalarının ortak sözleşmesi):
+ *   - PAYLAŞ başlığın SAĞ ÜSTÜNDE tek ikon ("share-outline" → oyuncu kartı
+ *     alt sayfası, ViewShot + expo-sharing). Kimlik şeridinde tekrarı yok.
+ *   - TAKİP: oyuncu takibi sunucuda yok; şerit oyuncunun TAKIMINI takip eder
+ *     ("Takımını takip et") ve `useFollowFlow` ile bildirim türleri alt
+ *     sayfasını açar; zil aynı alt sayfayı yeniden açar.
+ *
  * ARENA DÜZENİ (docs/arena-tasarim-dili.md):
  *   - SAHNE (grafit başlık + `hero`): kimlik — mevki halkalı büyük fotoğraf,
  *     mevki etiketi, ad, kulüp hapı (dokununca takım), künye, tek panelde
- *     sayı şeridi (MAÇ · GOL · ASİST · ORT. PUAN), takip şeridi, sekmeler.
+ *     sayı şeridi (MAÇ · GOL · ASİST · ORT. PUAN), takım takip şeridi, sekmeler.
  *     Bkz. components/playerpage/PlayerHero.tsx.
  *   - KÂĞIT: her segment kendi kartları. Genel'in ilk kartı FORM'dur (son
  *     maçlar sütun sütun) çünkü bir oyuncu sayfasına bakanın ilk sorusu "şu
@@ -110,6 +121,7 @@ import { ApiError, get } from "@/lib/http";
 import { openLink } from "@/lib/links";
 import { queryKeys } from "@/lib/queryKeys";
 import { useFavorite } from "@/providers/FavoriteProvider";
+import { useFollowFlow } from "@/providers/FollowFlowProvider";
 import { useScope } from "@/providers/ScopeProvider";
 import { FollowActions } from "@/components/FollowActions";
 import {
@@ -120,6 +132,7 @@ import {
   layout,
   light,
   radius,
+  ratingLabel,
   space,
   textScale,
   type,
@@ -652,7 +665,27 @@ export default function PlayerDetailScreen() {
   const openTeam = useCallback(() => {
     if (teamId) router.push(`/takim/${teamId}`);
   }, [router, teamId]);
-  const { isFavorite, toggleFavorite } = useFavorite();
+  const { isFavorite } = useFavorite();
+  const flow = useFollowFlow();
+
+  /*
+   * TAKİP: oyuncu takibi sunucuda YOK; şerit oyuncunun TAKIMINI takip eder
+   * (etiket bunu söyler). TAKİP = BİLDİRİM akışı: takip edilir ve o takımın
+   * bildirim türleri alt sayfası açılır; zil aynı alt sayfayı yeniden açar.
+   */
+  const teamTarget = useMemo(
+    () =>
+      team && teamId
+        ? { type: "team" as const, id: Number(teamId), name: team.team_name || "Takım", logo: team.logo ?? null }
+        : null,
+    [team, teamId],
+  );
+  const toggleTeamFollow = useCallback(() => {
+    if (teamTarget) flow.toggle(teamTarget);
+  }, [flow, teamTarget]);
+  const openTeamNotifications = useCallback(() => {
+    if (teamTarget) flow.openSettings(teamTarget);
+  }, [flow, teamTarget]);
 
   const openShare = useCallback(() => setShareOpen(true), []);
   const closeShare = useCallback(() => setShareOpen(false), []);
@@ -670,7 +703,7 @@ export default function PlayerDetailScreen() {
     ];
     if (assists != null) facts.push({ key: "assists", value: String(assists), label: "ASİST" });
     if (careerAverage != null) {
-      facts.push({ key: "rating", value: careerAverage.toFixed(1), label: "ORT. PUAN", rating: careerAverage });
+      facts.push({ key: "rating", value: ratingLabel(careerAverage), label: "ORT. PUAN", rating: careerAverage });
     }
     return (
       <PlayerHero
@@ -692,34 +725,30 @@ export default function PlayerDetailScreen() {
         }
         facts={facts}
         actions={
-          team && teamId ? (
+          teamTarget ? (
             <FollowActions
-              following={isFavorite(teamId)}
-              onToggleFollow={() => toggleFavorite({ id: teamId, name: team.team_name, logo: team.logo })}
+              following={isFavorite(teamTarget.id)}
+              onToggleFollow={toggleTeamFollow}
+              onOpenNotifications={openTeamNotifications}
               labels={{ follow: "Takımını takip et", following: "Takımı takip ediliyor" }}
-              extra={[{ icon: "share-social-outline", label: "Kartı paylaş", onPress: openShare }]}
             />
           ) : null
         }
       />
     );
-  }, [player, playerName, position, lineup.jersey, team, trRank, totalMatches, careerAverage, assists, openTeam, openShare, teamId, isFavorite, toggleFavorite]);
+  }, [player, playerName, position, lineup.jersey, team, trRank, totalMatches, careerAverage, assists, openTeam, teamId, teamTarget, isFavorite, toggleTeamFollow, openTeamNotifications]);
 
-  /* Paylaş: kulübü olan oyuncuda eylem şeridinde metinli düğmedir; başlıkta
-     ikinci bir ikon kopyası olmaz. Kulübü yoksa şerit çizilmez ve paylaş
-     başlığa döner — eylem hiçbir oyuncuda kaybolmaz. */
+  /* PAYLAŞ: her oyuncuda başlığın SAĞ ÜSTÜNDEKİ tek ikon (detay sayfalarının
+     ortak sözleşmesi). Kimlik şeridinde tekrarı yok. */
   const actions = useMemo(
-    () =>
-      team && teamId
-        ? undefined
-        : [
-            {
-              icon: "share-social-outline" as const,
-              onPress: openShare,
-              accessibilityLabel: "Oyuncu kartını paylaş",
-            },
-          ],
-    [openShare, team, teamId],
+    () => [
+      {
+        icon: "share-outline" as const,
+        onPress: openShare,
+        accessibilityLabel: "Oyuncu kartını paylaş",
+      },
+    ],
+    [openShare],
   );
 
   if (!validId) {
@@ -1433,7 +1462,7 @@ function MatchesTab({ playerId, scrollProps }: { playerId: number; scrollProps: 
     if (rated.length) {
       list.push({
         key: "r",
-        value: (rated.reduce((acc, v) => acc + v, 0) / rated.length).toFixed(1),
+        value: ratingLabel(rated.reduce((acc, v) => acc + v, 0) / rated.length),
         label: "ORT. PUAN",
       });
     }
@@ -2051,7 +2080,7 @@ function ShareSheet({
 
             {average != null ? (
               <View style={styles.shareRating}>
-                <Text style={[styles.shareRatingValue, { color: dark.ratingGood }]}>{average.toFixed(1)}</Text>
+                <Text style={[styles.shareRatingValue, { color: dark.ratingGood }]}>{ratingLabel(average)}</Text>
                 <Text style={styles.shareRatingLabel}>ORTALAMA MAÇ PUANI</Text>
               </View>
             ) : null}

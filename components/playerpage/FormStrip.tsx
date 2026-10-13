@@ -20,8 +20,8 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { RatingPill, TeamLogo, Touchable, type FormResult } from "@/components/ui";
-import { mediaUrl } from "@/lib/format";
-import { colors, hairline, radius, space, textScale, type } from "@/theme";
+import { formatDecimal, mediaUrl } from "@/lib/format";
+import { colors, hairline, radius, ratingLabel, space, textScale, type } from "@/theme";
 import { surfaces } from "./shared";
 
 export interface FormItem {
@@ -103,7 +103,7 @@ export const FormStrip = React.memo(function FormStrip({
             onPress={() => onOpenMatch(item.matchId)}
             accessibilityRole="button"
             accessibilityLabel={`${item.opponent} maçı, ${item.dateLabel}${
-              item.rating != null ? `, puan ${item.rating.toFixed(1)}` : ""
+              item.rating != null ? `, puan ${ratingLabel(item.rating)}` : ""
             }`}
             style={[styles.column, slotWidth]}
           >
@@ -132,7 +132,7 @@ export const FormStrip = React.memo(function FormStrip({
               </Text>
               <View style={styles.footValueRow}>
                 <Text style={styles.footValue} {...textScale.dense}>
-                  {recentAverage.toFixed(1)}
+                  {ratingLabel(recentAverage)}
                 </Text>
                 {delta != null && Math.abs(delta) >= 0.05 ? (
                   <View style={styles.delta}>
@@ -144,7 +144,7 @@ export const FormStrip = React.memo(function FormStrip({
                     {/* Ok rengi sonucu söyler (grafik, 3:1); rakam mürekkeptir —
                         yeşil metin beyaz kartta AA'yı geçmez. */}
                     <Text style={styles.deltaText} {...textScale.badge}>
-                      {Math.abs(delta).toFixed(1)}
+                      {formatDecimal(Math.abs(delta))}
                     </Text>
                   </View>
                 ) : null}
@@ -157,7 +157,7 @@ export const FormStrip = React.memo(function FormStrip({
                 KARİYER ORT.
               </Text>
               <Text style={styles.footValue} {...textScale.dense}>
-                {careerAverage.toFixed(1)}
+                {ratingLabel(careerAverage)}
               </Text>
             </View>
           ) : null}

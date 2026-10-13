@@ -19,9 +19,19 @@
  * opaklaşır ve "ÖZM 13–9 VUR" kısaltmasını taşır; sekmeler kâğıtta yapışık
  * kalır.
  *
- * SEKMELER: Özet · Kadro · İstatistik · H2H · Puan. Maç CANLIYKEN ilk sekmenin
- * adı "Canlı" olur (kırmızı noktalı) — eskiden canlı maçta altı sekme vardı ve
- * Özet ile Canlı aynı olayları iki ayrı biçimde gösteriyordu.
+ * SABİT SEKMELER: Özet · Kadro · İstatistik · H2H · Puan — maçın durumuna ve
+ * veriye göre gizlenmez, adı/sırası değişmez; verisi olmayan sekme kendi
+ * içinde boş durum gösterir. Maç CANLIYKEN Özet'e yalnız kırmızı nokta
+ * eklenir (eskiden canlı maçta ilk sekmenin adı "Canlı" oluyordu; ondan da
+ * önce altı sekme vardı ve Özet ile Canlı aynı olayları iki kez gösteriyordu).
+ *
+ * EYLEMLER (detay sayfalarının ortak sözleşmesi):
+ *   - PAYLAŞ başlığın SAĞ ÜSTÜNDEKİ tek ikon ("share-outline"): oynanmamış ve
+ *     biten maçta `ShareScoreCard` görsel kartı, canlı maçta RN `Share` ile
+ *     skor metni. Başka yerde paylaş düğmesi yok.
+ *   - TAKİP = BİLDİRİM: skor tablosundaki "Takip et" `useFollowFlow().toggle`
+ *     ile maçı takip eder ve bildirim türleri alt sayfasını açar; zil aynı
+ *     alt sayfayı yeniden açar.
  *
  * NEDEN URL PARAMETRESİ: `/mac/<id>?tab=canli` gol ve "maç başladı"
  * bildirimlerinin varış noktasıdır; segment ekran durumunda değil ROTADA
@@ -75,7 +85,6 @@ import {
   refreshControlProps,
   useHeaderScroll,
   useRefresh,
-  useToast,
   type ScreenHeaderAction,
   type TabItem,
 } from "@/components/ui";
@@ -88,8 +97,8 @@ import { formatDateShort, formatTime, mediaUrl, stripTeamSuffix } from "@/lib/fo
 import { isTimelineEvent, matchState } from "@/lib/match";
 import { buildContributions, buildStatRows, buildTopPlayers } from "@/lib/matchStats";
 import { queryKeys } from "@/lib/queryKeys";
-import { useAuth } from "@/providers/AuthProvider";
 import { useFavorite } from "@/providers/FavoriteProvider";
+import { useFollowFlow } from "@/providers/FollowFlowProvider";
 import { useScope } from "@/providers/ScopeProvider";
 import { colors, hairline, layout, space } from "@/theme";
 import type { ApiMatchEvent, KadroPlayer, MatchState } from "@/lib/types";
@@ -98,10 +107,9 @@ export default function MatchDetailScreen() {
   const params = useLocalSearchParams<{ id: string; tab?: string }>();
   const router = useRouter();
   const scope = useScope();
-  const toast = useToast();
   const teams = useTeamLogos();
-  const { isFavoriteMatch, toggleFavoriteMatch } = useFavorite();
-  const auth = useAuth();
+  const { isFavoriteMatch } = useFavorite();
+  const flow = useFollowFlow();
   const { scrollY, scrollProps } = useHeaderScroll();
 
   const matchId = Number(firstParam(params.id));
@@ -191,7 +199,9 @@ export default function MatchDetailScreen() {
 
   const tabItems = useMemo<TabItem<MatchTab>[]>(
     () => [
-      live ? { key: "canli", label: "Canlı", badge: "dot" } : { key: "ozet", label: "Özet" },
+      /* Etiket SABİT ("Özet"); canlıyken yalnız kırmızı nokta eklenir —
+         sekme seti ve adları maçın durumuna göre değişmez. */
+      live ? { key: "canli", label: "Özet", badge: "dot" } : { key: "ozet", label: "Özet" },
       { key: "kadro", label: "Kadro" },
       { key: "istatistik", label: "İstatistik" },
       { key: "h2h", label: "H2H" },
@@ -293,22 +303,26 @@ export default function MatchDetailScreen() {
   /* ---- Takip, takvim, paylaşım ---- */
   const favorite = isFavoriteMatch(matchId);
 
+  /**
+   * TAKİP = BİLDİRİM: "Takip et" maçı takip eder ve o maçın bildirim türleri
+   * alt sayfasını açar (useFollowFlow); takip ediliyorsa bırakır. Zil aynı
+   * alt sayfayı yeniden açar — misafirde alt sayfa giriş çağrısı gösterir.
+   */
+  const followTarget = useMemo(
+    () => ({
+      type: "match" as const,
+      id: matchId,
+      name: match ? `${match.first_team_name} – ${match.second_team_name}` : "Maç",
+    }),
+    [match, matchId],
+  );
+
   const toggleFollow = useCallback(() => {
     if (!validId) return;
-    toggleFavoriteMatch(matchId);
-    toast.show({
-      message: favorite
-        ? "Maçı takip etmeyi bıraktın."
-        : "Maç takipte — gol ve sonuç bildirimlerini alacaksın.",
-      tone: favorite ? "neutral" : "success",
-      icon: favorite ? "star-outline" : "star",
-    });
-  }, [favorite, matchId, toast, toggleFavoriteMatch, validId]);
+    flow.toggle(followTarget);
+  }, [flow, followTarget, validId]);
 
-  const openNotifications = useCallback(
-    () => router.push(auth.user ? `/takip-bildirimleri?odak=match:${matchId}` : "/giris"),
-    [auth.user, matchId, router],
-  );
+  const openNotifications = useCallback(() => flow.openSettings(followTarget), [flow, followTarget]);
 
   const addToCalendar = useCallback(() => {
     if (match) void addMatchToCalendar(match);

@@ -25,7 +25,7 @@ import {
   StatBar,
   Touchable,
 } from "@/components/ui";
-import { formatDateShort } from "@/lib/format";
+import { formatDateShort, formatPercent } from "@/lib/format";
 import { colors, elevate, layout, radius, space, textScale, type, upperTR } from "@/theme";
 import {
   decimal,
@@ -94,7 +94,7 @@ export function StatsTab({
                 size={88}
                 thickness={7}
                 tone="win"
-                label={`%${Math.round(winRate * 100)}`}
+                label={formatPercent(winRate, { ratio: true })}
                 sublabel="galibiyet"
                 animate
               />

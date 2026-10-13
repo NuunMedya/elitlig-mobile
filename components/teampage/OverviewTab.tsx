@@ -30,6 +30,7 @@ import {
   TeamRow,
   TeamRowHead,
 } from "@/components/ui";
+import { formatPercent } from "@/lib/format";
 import type { ApiMatch, PlayerRankRow, StandingRow } from "@/lib/types";
 import {
   colors,
@@ -353,7 +354,7 @@ const SeasonSummary = React.memo(function SeasonSummary({
           size={76}
           thickness={6}
           tone="win"
-          label={`%${Math.round(winRate * 100)}`}
+          label={formatPercent(winRate, { ratio: true })}
           sublabel="galibiyet"
           animate
         />
