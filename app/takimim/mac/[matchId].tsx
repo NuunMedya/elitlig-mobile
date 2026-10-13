@@ -1,11 +1,16 @@
 /**
  * MAÇ MERKEZİ (tek maç) — kadro/diziliş girme ve rakip analizi.
  *
- * İKİ SEKME: "Kadro" (bu maçın kadrosu, dizilişi, forma rengi, taktiği) ve
- * "Rakip Analizi" (sunucudan gelen karar-destek raporu + skor simülasyonu,
- * bkz. components/MatchAnalysisView.tsx). Web panelindeki Maç Merkezi'nin
- * "Kadro & Ayarlar / Rakip Analizi" ayrımıyla birebir aynıdır; analiz mobilde
- * hiç yoktu.
+ * ÜÇ SEKME (başlıkta, `?sekme=kadro|yoklama|analiz`):
+ *   Kadro    bu maçın kadrosu, dizilişi, forma rengi, taktiği.
+ *   Yoklama  takım içi yoklama, rejiye bildirim. Eskiden kadro sekmesinin en
+ *            altında, taktik notunun üstünde kayboluyordu; maç günü başkanın
+ *            en çok baktığı yer olduğu için kendi sekmesi oldu.
+ *   Analiz   sunucudan gelen karar-destek raporu + skor simülasyonu
+ *            (components/MatchAnalysisView.tsx).
+ * "Kadroyu kaydet" listenin sonunda değil, kadro sekmesinde ALTTA SABİT bir
+ * çubuktadır: sunucu kuralına takılan sorun (ör. "yalnızca bir kaptan") da
+ * düğmenin hemen üstünde yazar — kullanıcı neden kaydedemediğini aramaz.
  *
  * "İdeal kadro" (Kadro Yönetimi) takımın genel tercihidir; BURASI maça özeldir:
  * bu maçta kim ilk 8'de, kim yedek, kaptan kim, kadroda misafir oyuncu var mı.
@@ -35,7 +40,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { AttendanceMeter } from "@/components/club/AttendanceMeter";
 import { MatchAnalysisView } from "@/components/MatchAnalysisView";
 import { PitchBench, PitchLineup, type PitchPlayer } from "@/components/PitchLineup";
 import {
@@ -50,12 +56,12 @@ import {
   Input,
   ScreenHeader,
   SectionHeader,
-  SegmentedControl,
   SkeletonListRow,
   Stepper,
+  Tabs,
   Touchable,
   useToast,
-  type SegmentedItem,
+  type TabItem,
 } from "@/components/ui";
 import {
   createGuestPlayer,
@@ -79,8 +85,9 @@ import {
 import { ApiError } from "@/lib/http";
 import { queryKeys } from "@/lib/queryKeys";
 import { mediaUrl } from "@/lib/format";
+import { matchWhen } from "@/components/club/NextMatchCard";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, haptics, radius, space, textScale, type } from "@/theme";
+import { colors, elevate, hairline, haptics, layout, radius, space, textScale, type } from "@/theme";
 
 /** Ekranda tutulan satır — sunucu biçimine kaydederken MatchPlanPlayer'a çevrilir. */
 interface Entry extends MatchPlanPlayer {
@@ -95,12 +102,12 @@ interface Entry extends MatchPlanPlayer {
  * kurarken analize bakıp geri dönüyor; iki ayrı ekran her geçişte kadro
  * taslağını yeniden yüklerdi.
  */
-type MatchTab = "kadro" | "analiz";
+type MatchTab = "kadro" | "yoklama" | "analiz";
 
-const MATCH_TABS: SegmentedItem<MatchTab>[] = [
-  { key: "kadro", label: "Kadro", icon: "people-outline" },
-  { key: "analiz", label: "Rakip Analizi", icon: "analytics-outline" },
-];
+function resolveMatchTab(raw: string | string[] | undefined): MatchTab {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  return value === "yoklama" || value === "analiz" ? value : "kadro";
+}
 
 /**
  * FORMA RENKLERİ — bunlar tasarım tokenı DEĞİL, ALAN VERİSİDİR: kullanıcının
@@ -125,7 +132,8 @@ export default function MacKadrosuScreen() {
   const toast = useToast();
   const queryClient = useQueryClient();
 
-  const params = useLocalSearchParams<{ matchId?: string }>();
+  const params = useLocalSearchParams<{ matchId?: string; sekme?: string }>();
+  const insets = useSafeAreaInsets();
   const matchId = Number(params.matchId);
 
   const planQuery = useQuery({
@@ -165,7 +173,7 @@ export default function MacKadrosuScreen() {
   const [guestName, setGuestName] = useState("");
   const [attendanceOpen, setAttendanceOpen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
-  const [tab, setTab] = useState<MatchTab>("kadro");
+  const [tab, setTab] = useState<MatchTab>(() => resolveMatchTab(params.sekme));
 
   /* Sunucudaki planı bir kez forma yükle. Sonraki tazelemeler kullanıcının
      yaptığı düzenlemeyi EZMEMELİ — bu yüzden hydrated bayrağı var. */
@@ -520,18 +528,20 @@ export default function MacKadrosuScreen() {
   }
 
   const match = planQuery.data?.match;
+  const attendance = attendanceQuery.data;
+  const tabItems: TabItem<MatchTab>[] = [
+    { key: "kadro", label: "Kadro" },
+    { key: "yoklama", label: "Yoklama", badge: attendance?.attendance?.counts.unanswered || undefined },
+    { key: "analiz", label: "Rakip analizi" },
+  ];
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader
-        title="Maç Merkezi"
-        subtitle={match ? `${match.opponent_name ?? "Rakip"} · ${match.date ?? ""}` : undefined}
+        title={match?.opponent_name ? `vs ${match.opponent_name}` : "Maç Kadrosu"}
+        subtitle={match ? matchWhen(match.date, match.time) : undefined}
         back
-        bottom={
-          <View style={styles.headerBottom}>
-            <SegmentedControl items={MATCH_TABS} value={tab} onChange={setTab} />
-          </View>
-        }
+        tabs={<Tabs items={tabItems} value={tab} onChange={setTab} sticky />}
       />
 
       {tab === "analiz" ? (
@@ -543,6 +553,29 @@ export default function MacKadrosuScreen() {
           canSimulate={Boolean(planQuery.data?.plan?.lineup?.length || entries.length)}
           onNeedPlan={() => setTab("kadro")}
         />
+      ) : tab === "yoklama" ? (
+        <ScrollView contentContainerStyle={styles.content}>
+          <AttendancePanel
+            attendance={attendance}
+            loading={attendanceQuery.isLoading}
+            error={attendanceQuery.isError ? attendanceQuery.error : null}
+            onRetry={attendanceQuery.refetch}
+            open={attendanceOpen}
+            onToggleOpen={() => setAttendanceOpen((value) => !value)}
+            squadCount={selectedRegisteredIds.length}
+            problem={problem}
+            starting={attendanceMutation.isPending || syncMutation.isPending}
+            reporting={reportMutation.isPending}
+            onStart={startAttendance}
+            onReport={() => reportMutation.mutate()}
+            onOpenChat={
+              attendance?.conversation_id
+                ? () => router.push(`/sohbet/${attendance.conversation_id}` as never)
+                : undefined
+            }
+            onEditSquad={() => setTab("kadro")}
+          />
+        </ScrollView>
       ) : planQuery.isLoading ? (
         <View style={styles.loading}>
           <SkeletonListRow />
@@ -550,9 +583,9 @@ export default function MacKadrosuScreen() {
       ) : planQuery.error ? (
         <ErrorState error={planQuery.error} onRetry={planQuery.refetch} />
       ) : (
-        <ScrollView contentContainerStyle={styles.content}>
+        <ScrollView contentContainerStyle={[styles.content, styles.contentWithBar]} keyboardShouldPersistTaps="handled">
           {/* Diziliş */}
-          <SectionHeader title="DİZİLİŞ" />
+          <SectionHeader title="Diziliş" style={styles.flushHeader} />
           <ChipGroup>
             {FORMATION_NAMES.map((name) => (
               <Chip
@@ -581,7 +614,7 @@ export default function MacKadrosuScreen() {
           </ChipGroup>
 
           {/* Forma rengi */}
-          <SectionHeader title="FORMA RENGİ" />
+          <SectionHeader title="Forma rengi" style={styles.flushHeader} />
           <View style={styles.kitRow}>
             {KIT_COLORS.map((color) => (
               <Touchable
@@ -607,8 +640,9 @@ export default function MacKadrosuScreen() {
 
           {/* İlk kadro — sahada kurulur */}
           <SectionHeader
-            title="İLK KADRO"
+            title="İlk kadro"
             meta={`${starters.length}/${Math.min(slots.length, MAX_STARTERS)}`}
+            style={styles.flushHeader}
           />
 
           <PitchLineup
@@ -642,7 +676,7 @@ export default function MacKadrosuScreen() {
             : null}
 
           {/* Yedekler */}
-          <SectionHeader title="YEDEKLER" meta={String(subs.length)} />
+          <SectionHeader title="Yedekler" meta={String(subs.length)} style={styles.flushHeader} />
           {subs.length ? (
             subs.map((entry) => (
               <SquadRow
@@ -666,7 +700,7 @@ export default function MacKadrosuScreen() {
           )}
 
           {/* Kadro dışı oyuncular */}
-          <SectionHeader title="KADROYA EKLE" meta={String(available.length)} />
+          <SectionHeader title="Kadroya ekle" meta={String(available.length)} style={styles.flushHeader} />
           {rosterQuery.isLoading ? (
             <SkeletonListRow />
           ) : rosterQuery.isError ? (
@@ -704,56 +738,8 @@ export default function MacKadrosuScreen() {
             fullWidth
           />
 
-          {/* Yoklama ve reji bildirimi */}
-          <SectionHeader title="YOKLAMA VE BİLDİRİM" meta={attendanceQuery.data?.attendance ? `${attendanceQuery.data.attendance.counts.coming} geliyor` : undefined} />
-          <Card>
-            <Text style={styles.hint} {...textScale.long}>
-              {attendanceQuery.data?.active
-                ? `${attendanceQuery.data.attendance?.counts.coming ?? 0} geliyor · ${attendanceQuery.data.attendance?.counts.not_coming ?? 0} gelemiyor · ${attendanceQuery.data.attendance?.counts.unanswered ?? 0} yanıt bekliyor. Gelemeyenin yerine kadroya oyuncu ekleyip yoklamaya dahil et.`
-                : "Kadroyu seçtikten sonra takımda yoklama yap: seçilen oyuncularla sohbet grubu kurulur, herkes geliyorum / gelemiyorum der. Ya da kadroyu doğrudan rejiye bildir."}
-            </Text>
-            <View style={styles.attendanceActions}>
-              <Button
-                label={attendanceQuery.data?.active ? "Kadroyla eşitle" : "Takımda yoklama yap"}
-                variant="secondary"
-                size="sm"
-                icon={attendanceQuery.data?.active ? "sync-outline" : "people-outline"}
-                onPress={startAttendance}
-                loading={attendanceMutation.isPending || syncMutation.isPending}
-                fullWidth
-              />
-              <Button
-                label={attendanceQuery.data?.active ? "Kadroyu son şekliyle bildir" : "Direkt bildir"}
-                size="sm"
-                icon="paper-plane-outline"
-                onPress={() => reportMutation.mutate()}
-                loading={reportMutation.isPending}
-                disabled={Boolean(problem)}
-                fullWidth
-              />
-            </View>
-            {attendanceQuery.data?.active ? (
-              <Touchable feedback="row" onPress={() => setAttendanceOpen((value) => !value)} style={styles.attendanceToggle} accessibilityLabel="Yoklama yanıtlarını göster">
-                <Text style={styles.attendanceToggleText}>{attendanceOpen ? "Yanıtları gizle" : "Yanıtları göster"}</Text>
-                <Ionicons name={attendanceOpen ? "chevron-up" : "chevron-down"} size={16} color={colors.textSecondary} />
-              </Touchable>
-            ) : null}
-            {attendanceOpen && attendanceQuery.data?.attendance
-              ? attendanceQuery.data.attendance.players.map((p) => (
-                  <View key={p.player_id} style={styles.attendanceRow}>
-                    <Ionicons name={p.status === "coming" ? "checkmark-circle" : p.status === "not_coming" ? "close-circle" : p.status === "maybe" ? "help-circle" : "time-outline"} size={16} color={p.status === "coming" ? colors.win : p.status === "not_coming" ? colors.danger : p.status === "maybe" ? colors.warn : colors.textTertiary} />
-                    <Text style={styles.attendanceName} numberOfLines={1}>{p.name}{p.role ? ` · ${p.role === "starter" ? "AS" : "YEDEK"}` : ""}</Text>
-                    <Text style={styles.attendanceStatus}>{p.status_label}{p.has_account ? "" : " · hesabı yok"}</Text>
-                  </View>
-                ))
-              : null}
-            {attendanceQuery.data?.conversation_id ? (
-              <Button label="Yoklama grubunu aç" variant="ghost" size="sm" icon="chatbubbles-outline" onPress={() => router.push(`/sohbet/${attendanceQuery.data?.conversation_id}` as never)} fullWidth />
-            ) : null}
-          </Card>
-
           {/* Taktik notu */}
-          <SectionHeader title="TAKTİK NOTU" />
+          <SectionHeader title="Taktik notu" style={styles.flushHeader} />
           <Input
             value={tactics}
             onChangeText={setTactics}
@@ -761,24 +747,40 @@ export default function MacKadrosuScreen() {
             multiline
           />
 
-          {problem ? (
-            <View style={styles.problem}>
-              <Ionicons name="alert-circle-outline" size={16} color={colors.warn} />
-              <Text style={styles.problemText} {...textScale.long}>
-                {problem}
-              </Text>
-            </View>
-          ) : null}
+        </ScrollView>
+      )}
 
+      {/* SABİT KAYIT ÇUBUĞU — yalnız kadro sekmesinde. */}
+      {tab === "kadro" && !planQuery.isLoading && !planQuery.error ? (
+        <View style={[styles.bar, { paddingBottom: space.md + insets.bottom }]}>
+          <View style={styles.barTexts}>
+            {problem ? (
+              <>
+                <Text style={styles.barWarn} numberOfLines={2} {...textScale.dense}>
+                  {problem}
+                </Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.barTitle} {...textScale.dense}>
+                  {entries.length} oyuncu
+                </Text>
+                <Text style={styles.barMeta} numberOfLines={1} {...textScale.dense}>
+                  İlk {starters.length}/{MAX_STARTERS} · {subs.length} yedek{entries.some((entry) => entry.captain) ? " · kaptan seçildi" : ""}
+                </Text>
+              </>
+            )}
+          </View>
           <Button
-            label="Kadroyu kaydet"
+            label="Kaydet"
+            icon="checkmark"
             onPress={() => save.mutate()}
             loading={save.isPending}
             disabled={Boolean(problem)}
-            fullWidth
+            haptic="success"
           />
-        </ScrollView>
-      )}
+        </View>
+      ) : null}
 
       {/* Oyuncu düzenleme */}
       <BottomSheet
