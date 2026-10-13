@@ -1,29 +1,14 @@
 /**
  * Profil sekmesi — kimlik kartı + rol bazlı kişisel menü.
  *
- * NE: eski `(tabs)/menu.tsx` (27 satırlık genel menü) ile `(tabs)/profile.tsx`
- * (hesap özeti) tek kavramın iki yarısıydı; menünün ilk satırı zaten profile
- * gidiyordu. Burada ikisi birleşir: en üstte kimlik kartı, altında YALNIZCA
- * kişisel/ayar niteliğindeki satırlar. Hesap detayı `/hesabim` ekranına iner.
- *
- * NEDEN ROL BAZLI GRUP: 27 satırlık düz liste herkese aynı şeyi gösteriyordu;
- * oyuncu olmayan biri "Sözleşmelerim"i, yönetici olmayan biri "Yönetim
- * Paneli"ni görüyordu. Artık satırlar kullanıcının gerçekten sahip olduğu
- * rollere göre üretilir (KULÜBÜM ve KARİYERİM grupları koşulludur) ve en sık
- * kullanılan grup en üste alınır.
- *
- * MENÜ SEKMESİYLE İŞ BÖLÜMÜ: Keşfet (haberler, arşiv, şehirler, rekorlar),
- * Bilgi (kurallar, cezalar, iletişim) ve sosyal bağlantılar MENÜ ekranında
- * durur. Profil'de KİMLİK ve TERCİH kalır — "ben kimim, neyi nasıl görmek
- * istiyorum". Aynı satırın iki yerde birden bulunması kullanıcıya "hangisi
- * doğru yer" sorusunu sordurur ve iki listeyi de şişirir.
- *
- * KISAYOL IZGARASI (menü sekmesi kalkınca eklendi): alt menüde artık Menü
- * yuvası yok (bkz. app/(tabs)/_layout.tsx). Menü ekranı DURUYOR ama ona
- * açılan kapı buradaki dört kutudur: Ligler · Canlı · Oyunlar · Menü. Izgara
- * kimlik kartının hemen altındadır, yani menünün eskiden tek dokunuşla
- * verdiği her şey hâlâ tek dokunuş uzakta — kaldırılan yuva kimseye bir
- * dokunuş maliyeti çıkarmadı.
+ * YENİ İŞ BÖLÜMÜ (beş sekmeli düzen, bkz. app/(tabs)/_layout.tsx):
+ *   · Yönetim araçları (Takım Panelim, Oyuncu Profilim, Kariyerim, Yönetim
+ *     Paneli) KULÜBÜM sekmesine taşındı.
+ *   · Eski Menü'nün içeriği (oyunlar, keşif, bilgi, sosyal) buraya katıldı;
+ *     lig bağlantıları alt çubuktaki LİG sekmesindedir.
+ *   · Profil: kimlik kartı + dört kısayol (Takip · Bildirim · Oyunlar ·
+ *     Kulübüm) + Takip ettiklerim · Bildirimler · Oyunlar · Keşfet · Bilgi ve
+ *     destek · Ayarlar · oturum. Sıra kullanım sıklığına göredir.
  *
  * NEDEN SectionList: satırlar sabit bir menü gibi görünse de sayıları role ve
  * rozetlere göre değişir; SectionList + memo'lu satır, ScrollView + map'e göre
