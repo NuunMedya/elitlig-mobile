@@ -42,5 +42,6 @@ export function ratingColors(
 /** Rozette gösterilecek metin — reyting yoksa tire. */
 export function ratingLabel(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return "—";
-  return value.toFixed(1);
+  // Türkçe ondalık virgül — uygulamanın tek sayı biçimi (bkz. lib/format.ts).
+  return value.toFixed(1).replace(".", ",");
 }

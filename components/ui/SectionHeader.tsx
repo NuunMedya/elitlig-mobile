@@ -29,6 +29,12 @@
  * hairline eklenir; şeffaf bırakılırsa altından kayan satırlar başlığın
  * içinden geçer.
  *
+ * YATAY PAY (`inset`): varsayılan "inset" — başlık ekran kenarından
+ * `layout.screenPadding` içeride durur (ekranın doğrudan çocuğu olduğunda).
+ * Zaten kenar boşluklu bir kapsayıcının (kart sütunu, `paddingHorizontal`'lı
+ * ScrollView) içinde "flush" verilir; eskiden her çağıran `style={{
+ * paddingHorizontal: 0 }}` yazıyordu.
+ *
  * İMZA ÖĞESİ — RAY. Başlığın solunda 3×13px mor dikey işaret durur; bir
  * bölümün nerede başladığını renk değil GEOMETRİ söyler. `leading` (lig
  * amblemi) verildiğinde ray çizilmez — iki sol gösterge yan yana gelirse
@@ -78,6 +84,8 @@ export interface SectionHeaderProps {
   uppercase?: boolean;
   /** Ray işareti. Varsayılan true; `leading` varsa yok sayılır. */
   mark?: boolean;
+  /** "inset" (varsayılan): ekran kenar payı; "flush": yatay pay yok. */
+  inset?: "inset" | "flush";
   style?: StyleProp<ViewStyle>;
   testID?: string;
 }
@@ -94,9 +102,11 @@ export const SectionHeader = React.memo(function SectionHeader({
   size = "section",
   uppercase = false,
   mark = false,
+  inset = "inset",
   style,
   testID,
 }: SectionHeaderProps) {
+  const flush = inset === "flush";
   const spin = useRef(new Animated.Value(collapsed ? 0 : 1)).current;
 
   useEffect(() => {
@@ -149,6 +159,7 @@ export const SectionHeader = React.memo(function SectionHeader({
     styles.header,
     group ? styles.headerGroup : styles.headerSection,
     sticky ? styles.sticky : null,
+    flush ? styles.flush : null,
     style,
   ];
 
@@ -183,7 +194,12 @@ export const SectionHeader = React.memo(function SectionHeader({
           onPress={action.onPress}
           accessibilityRole="button"
           accessibilityLabel={action.label}
-          style={[styles.action, group ? styles.headerGroup : styles.headerSection, sticky ? styles.sticky : null]}
+          style={[
+            styles.action,
+            group ? styles.headerGroup : styles.headerSection,
+            sticky ? styles.sticky : null,
+            flush ? styles.flushAction : null,
+          ]}
         >
           <Text style={styles.actionLabel} numberOfLines={1} {...textScale.dense}>
             {action.label}
@@ -217,6 +233,13 @@ const styles = StyleSheet.create({
   /** Yapışkan bant: liste içinde kaydığı için üst/alt eşit ve sıkı. */
   headerGroup: {
     paddingVertical: space.s,
+  },
+  flush: {
+    paddingHorizontal: 0,
+  },
+  flushAction: {
+    paddingLeft: space.sm,
+    paddingRight: 0,
   },
   sticky: {
     backgroundColor: colors.bg,

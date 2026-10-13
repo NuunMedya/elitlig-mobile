@@ -54,6 +54,44 @@ export function formatClock(clockMs?: number | null): string {
   return `${minutes}'`;
 }
 
+/* ─────────────────────── SAYILAR — TEK BİÇİM ───────────────────────
+ * Uygulamadaki her ondalık ve binlik sayı buradan geçer: Türkçe ondalık
+ * ayırıcı VİRGÜL ("7,4"), binlik ayırıcı NOKTA ("12.500"). Reyting de dahil
+ * (`theme/rating.ts → ratingLabel` aynı kuralı uygular). `toFixed` çıktısı
+ * ekrana doğrudan yazılmaz. Hermes'te `Intl` her cihazda tam olmadığı için
+ * biçim elle kurulur.
+ */
+
+/** Binlik ayırıcı: 12500 → "12.500". */
+function groupThousands(integer: string): string {
+  return integer.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
+
+/**
+ * Sayı → Türkçe metin. `digits` ondalık basamak (varsayılan 0).
+ * `formatNumber(7.43, 1)` → "7,4"; `formatNumber(12500)` → "12.500";
+ * geçersiz değer → "—".
+ */
+export function formatNumber(value: number | string | null | undefined, digits = 0): string {
+  const num = typeof value === "string" ? Number(value.replace(",", ".")) : value;
+  if (num == null || !Number.isFinite(num)) return "—";
+  const fixed = Math.abs(num).toFixed(digits);
+  const [int, frac] = fixed.split(".");
+  const sign = num < 0 && Number(fixed) !== 0 ? "-" : "";
+  return `${sign}${groupThousands(int)}${frac ? `,${frac}` : ""}`;
+}
+
+/** Tek ondalıklı oran/ortalama: 2.456 → "2,5". */
+export const formatDecimal = (value: number | string | null | undefined, digits = 1) =>
+  formatNumber(value, digits);
+
+/** Yüzde: 0.634 (oran) ya da 63.4 → "%63". `ratio` true ise 0–1 aralığı beklenir. */
+export function formatPercent(value: number | null | undefined, options: { ratio?: boolean; digits?: number } = {}): string {
+  if (value == null || !Number.isFinite(value)) return "—";
+  const pct = options.ratio ? value * 100 : value;
+  return `%${formatNumber(pct, options.digits ?? 0)}`;
+}
+
 /** Skor gösterimi: henüz oynanmadıysa tire. */
 export const formatScore = (value: number | null | undefined) =>
   value == null ? "-" : String(value);

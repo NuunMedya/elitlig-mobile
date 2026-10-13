@@ -4,7 +4,6 @@ import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { CallScreen } from "@/components/CallScreen";
 import { CrashCatcher } from "@/components/CrashCatcher";
-import { MessageSticker } from "@/components/MessageSticker";
 import { ScopeSheet } from "@/components/ScopeSheet";
 import { ToastProvider } from "@/components/ui";
 import { useNotificationBridge } from "@/hooks/useNotificationBridge";
@@ -14,6 +13,7 @@ import { CallProvider } from "@/providers/CallProvider";
 import { ApiError } from "@/lib/http";
 import { AuthProvider } from "@/providers/AuthProvider";
 import { FavoriteProvider } from "@/providers/FavoriteProvider";
+import { FollowFlowProvider } from "@/providers/FollowFlowProvider";
 import { ScopeProvider } from "@/providers/ScopeProvider";
 import { colors } from "@/theme";
 
@@ -27,16 +27,16 @@ import { colors } from "@/theme";
  *   Scope            → ScopeSheet ve ekranlar kapsamı okur.
  *   Favorite         → rozetler (canlı favori sayısı) favorileri okur.
  *   Toast            → en altta: her ekranın üstünde tek katman.
+ *   FollowFlow       → "Takip et" sonrası bildirim türleri alt sayfası; toast
+ *                      ve favorileri okuduğu için ikisinin altında.
  *
- * TEK ÖRNEK KURALI — iki kaplama burada BİR KEZ mount edilir:
- *   `<ScopeSheet />`     Beş ekranın her birinin kendi modalını yaratması hem
- *                        belleği hem de "hangi sayfa açık" durumunu
- *                        çoğaltıyordu; açma/kapama ScopeProvider üstünden.
- *   `<MessageSticker />` Yüzen mesaj balonu her ekranda görünmeli ama ekran
- *                        değiştikçe yeniden yaratılmamalı — kullanıcının
- *                        sürüklediği konum ekranlar arasında korunuyor.
- * İkisi de Stack'in DIŞINDA ve SONRASINDA durur: yığındaki hiçbir ekran
- * bunların üstünü örtemez.
+ * TEK ÖRNEK KURALI — kaplamalar burada BİR KEZ mount edilir:
+ *   `<ScopeSheet />`     Lig seçicinin (LeaguePicker) alt sayfası; açma/kapama
+ *                        ScopeProvider üstünden.
+ *   Takip alt sayfası    FollowFlowProvider'ın kendi içinde.
+ * Stack'in DIŞINDA ve SONRASINDA dururlar: yığındaki hiçbir ekran bunların
+ * üstünü örtemez. (Yüzen sohbet düğmesi `MessageSticker` kaldırıldı; mesajlar
+ * Profil ▸ Gelen kutusu'ndadır.)
  */
 
 const queryClient = new QueryClient({
@@ -88,6 +88,7 @@ export default function RootLayout() {
           <ScopeProvider>
             <FavoriteProvider>
               <ToastProvider>
+               <FollowFlowProvider>
                <CallProvider>
                 {/* DAİMA AÇIK: her ekranın tepesinde koyu mor blok var (bkz.
                     components/ui/ScreenHeader.tsx), tema ne olursa olsun
@@ -109,8 +110,12 @@ export default function RootLayout() {
                   {/* Karşılama — animasyonsuz açılır, arkasında bir şey yok. */}
                   <Stack.Screen name="hosgeldin" options={{ animation: "none" }} />
 
-                  {/* Canlı maç merkezi: sürekli değişen akış, geri dönüşü sık. */}
-                  <Stack.Screen name="canli" />
+                  {/* Eski /canli: Skorlar ▸ Canlı ▸ Tüm şehirler'e yönlendirir. */}
+                  <Stack.Screen name="canli" options={{ animation: "none" }} />
+
+                  {/* Gelen kutusu (Bildirimler | Mesajlar) ve tek Ayarlar ekranı. */}
+                  <Stack.Screen name="gelen-kutusu" />
+                  <Stack.Screen name="ayarlar" />
 
                   {/* Ayar ve hesap ekranları — klasik detay geçişi. */}
                   <Stack.Screen name="bildirim-tercihleri" />
@@ -160,15 +165,11 @@ export default function RootLayout() {
                 {/* Kapsam seçici — uygulamada TEK örnek. */}
                 <ScopeSheet />
 
-                {/* Mesaj balonu — her ekranın üstünde duran tek örnek.
-                    Stack'in DIŞINDA ve SONRASINDA mount edilir: ekran değişse
-                    de yeniden yaratılmaz, konumu ve sürükleme durumu korunur. */}
-                <MessageSticker />
-
                 {/* Sesli arama katmanı: gelen arama hangi ekranda olunursa
                     olunsun üstte açılır (CallProvider kökte). */}
                 <CallScreen />
                </CallProvider>
+               </FollowFlowProvider>
               </ToastProvider>
             </FavoriteProvider>
           </ScopeProvider>
