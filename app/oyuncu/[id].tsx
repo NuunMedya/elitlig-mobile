@@ -669,7 +669,7 @@ export default function PlayerDetailScreen() {
     ];
     if (assists != null) facts.push({ key: "assists", value: String(assists), label: "ASİST" });
     if (careerAverage != null) {
-      facts.push({ key: "rating", value: decimalTR(careerAverage), label: "ORT. PUAN", rating: careerAverage });
+      facts.push({ key: "rating", value: careerAverage.toFixed(1), label: "ORT. PUAN", rating: careerAverage });
     }
     return (
       <PlayerHero
@@ -1430,7 +1430,7 @@ function MatchesTab({ playerId, scrollProps }: { playerId: number; scrollProps: 
     if (rated.length) {
       list.push({
         key: "r",
-        value: decimalTR(rated.reduce((acc, v) => acc + v, 0) / rated.length),
+        value: (rated.reduce((acc, v) => acc + v, 0) / rated.length).toFixed(1),
         label: "ORT. PUAN",
       });
     }
@@ -2026,7 +2026,7 @@ function ShareSheet({
 
             {average != null ? (
               <View style={styles.shareRating}>
-                <Text style={[styles.shareRatingValue, { color: dark.ratingGood }]}>{decimalTR(average)}</Text>
+                <Text style={[styles.shareRatingValue, { color: dark.ratingGood }]}>{average.toFixed(1)}</Text>
                 <Text style={styles.shareRatingLabel}>ORTALAMA MAÇ PUANI</Text>
               </View>
             ) : null}

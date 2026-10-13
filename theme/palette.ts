@@ -5,62 +5,20 @@
  * yalnızca iki sabit nesne tanımlar. Aktif temanın seçilmesi `theme/index.ts`
  * işidir.
  *
- * RENK FELSEFESİ — MOR MÜREKKEP, BEYAZ KÂĞIT:
+ * RENK FELSEFESİ — ARENA: NÖTR SAHNE, RENK SİNYALDİR.
  *
- *  1. MOR MARKANIN KENDİSİDİR AMA ARKA PLAN DEĞİLDİR. Açık temada kâğıt
- *     BEYAZDIR; mor, mürekkepte (metin), aksiyonda (düğme, seçili sekme) ve
- *     sayılı kimlik bloklarındadır (alt menü barı, skor tablosu, hero). Bir
- *     önceki sürüm zemini de mor yapmıştı ve mor, her yeri kaplayınca vurgu
- *     olmaktan çıkmıştı. Koyu temada ise zemin GERÇEKTEN mordur (#180D33) —
- *     eski #0C0718 adı mor olan bir siyahtı.
+ * Ayrıntılı gerekçe aşağıdaki `light` nesnesinin başlığında ve
+ * docs/arena-tasarim-dili.md içindedir. Özet:
  *
- *  2. İKİ VURGU, İKİ İŞ:
- *       MOR       (`brand`)  = AKSİYON ve SEÇİLİ DURUM. Düğme, aktif sekme,
- *                              seçili chip, favori yıldızı, bölüm işareti.
- *       CAMGÖBEĞİ (`accent`) = VERİ. İstatistik barı, ilerleme, ev sahibi
- *                              tarafı, öne çıkan rakam, sparkline.
- *     Veri rengi eskiden MAVİYDİ ve mavi morun komşusudur: bir istatistik
- *     barında "bu seçili mi, veri mi" ayırt edilemiyordu. Camgöbeği morun tam
- *     karşısında durur ve iki renk hiçbir ışıkta karışmaz.
- *     Mor zeminin üstünde mor bir vurgu okunmaz; koyu blokların üstündeki
- *     marka rengi ayrı bir tokendır: `brandOnDark` (açık lavanta).
- *
- *  3. KART, DOLGUYLA DEĞİL KENARLIK VE GÖLGEYLE AYRILIR. Beyaz kâğıdın
- *     üstünde beyaz kart durur; onu ayıran şey 1px lavanta kenarlık ve geniş,
- *     çok sönük mor gölgedir. `gradientCard` geçişi neredeyse görünmezdir
- *     (#FFFFFF → #FBF9FE): amaç yüzeyi boyamak değil, ışık aldığını
- *     hissettirmektir.
- *
- *     YÖN DAİMA SAĞDAN SOLADIR. Dikey geçiş, geniş ve alçak bir kartın
- *     üstünde silindir ("boru") etkisi yapıyordu; yatay geçiş yüzeyi düz
- *     bırakır. Bkz. components/ui/GradientFill.tsx.
- *
- *     Gölge rengi siyah değil `shadowColor` (derin mor): siyah gölge beyaz
- *     kâğıdın üstünde grileşip kirli görünür.
- *
- *  4. GRADYAN SAYILIDIR VE TOKENDIR. Serbest gradyan yoktur; her gradyanın bir
- *     İŞİ vardır: `gradientCard` kart yüzeyi, `gradientInk` kimlik bloğu,
- *     `gradientBrand` birincil aksiyon, `gradientAccent` veri, `gradientLive`
- *     canlı, `gradientPitch` saha, `gradientSurface` ikincil yüzey,
- *     `gradientTabBar` alt menü barı. Görsel üstündeki okunabilirlik scrim'i
- *     ayrıca `scrimGradientTop` → `scrimGradientBottom` ile kurulur.
- *
- *  5. ALT MENÜ BARI İKİ TEMADA DA KOYU MORDUR. Uygulamanın her ekranında
- *     görünen tek yüzey odur; tema değiştikçe kimlik değiştirmemesi için
- *     rengi temadan bağımsızdır. Açık temada beyaz kâğıdın üstündeki tek koyu
- *     ada, koyu temada kâğıttan bir kademe açık duran yüzen bir hap.
- *
- *  6. KONTRAST HESAPLANDI, VARSAYILMADI. Her metin/zemin çifti
- *     `npm run check:tokens` ile iki temada da sınanır.
- *
- *  7. Durum rengi tek başına anlam taşımaz; kazanan takım kalın + textPrimary,
- *     kaybeden textTertiary olur.
- *
- *  8. Her token her iki temada da tanımlıdır; ekran hangi temada olduğunu bilmez.
- *
- * MÜREKKEP MOR MÜREKKEPTİR: `textPrimary` nötr siyah değil çok koyu bir mordur
- * (#160C2E). Nötr siyah, mor aksanların yanında "başka bir tema"dan gelmiş
- * gibi durur.
+ *  1. Kâğıt nötrdür (serin gri), kartlar beyazdır; koyu temada grafit gece.
+ *  2. Kimlik ve skor anları ile alt menü GRAFİT SAHNEDE durur (`gradientInk`,
+ *     `inkBlock`, `tabBar`); iki temada da aynı.
+ *  3. Renk yalnız sinyaldir: `brand` aksiyon/seçili, `accent` veri, `live`
+ *     canlı, `win/draw/loss` sonuç.
+ *  4. Kart gradyanı düzdür; gölge nötr ve çok hafiftir. Gradyanlar tokendır,
+ *     yönleri yatay sağdan soladır (bkz. components/ui/GradientFill.tsx).
+ *  5. Kontrast hesaplanır: her çift `npm run check:tokens` ile iki temada da
+ *     sınanır. Her token iki temada da tanımlıdır.
  */
 
 export interface Palette {

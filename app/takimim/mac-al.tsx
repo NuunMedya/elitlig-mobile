@@ -21,6 +21,12 @@
  * yapar. Bu ekranın önceki sürümü yalnız `open` hücreleri seçilebilir
  * kılıyordu ve akışın en çok kullanılan yolu mobilde kapalıydı.
  *
+ * GÖNDERİM ÇUBUĞU: seçim yapıldığı anda altta sabit bir çubuk belirir
+ * ("3 saat seçildi · Talebi gönder"). Eskiden gönderim kartı panonun EN
+ * ALTINDAydı; yedi günlük panoda saat seçen başkan kartı görmek için tüm
+ * haftayı kaydırmak zorundaydı ve seçimin sayıldığını hiç görmüyordu. Not ve
+ * seçilen saatlerin özeti alt sayfada onaylanır.
+ *
  * HÜCRE İÇİNDE AÇIKLAMA: renk tek başına anlam taşımaz. Her hücre durumunu
  * tek satırla söyler ("Yıldızspor · rakip bekleniyor", "Talebiniz bekliyor",
  * "3 takım istedi"); kullanıcı lejanta bakmak zorunda kalmaz.
@@ -31,8 +37,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Redirect, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import {
+  Badge,
+  BottomSheet,
   Button,
   Card,
   Chip,
@@ -41,11 +49,13 @@ import {
   Input,
   ScreenHeader,
   SectionHeader,
-  SegmentedControl,
   SkeletonCard,
+  Tabs,
   Touchable,
   useRefresh,
   useToast,
+  type TabItem,
+  type Tone,
 } from "@/components/ui";
 import type { SlotStatus } from "@/lib/api/admin";
 import {
@@ -60,14 +70,22 @@ import {
 } from "@/lib/api/team";
 import { ApiError } from "@/lib/http";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, haptics, radius, space, textScale, type } from "@/theme";
+import { colors, elevate, hairline, haptics, layout, radius, space, textScale, type } from "@/theme";
 
 type Tab = "pano" | "taleplerim";
 
-const TABS = [
-  { key: "pano" as const, label: "Saha Panosu" },
-  { key: "taleplerim" as const, label: "Taleplerim" },
+const TABS: TabItem<Tab>[] = [
+  { key: "pano", label: "Saha panosu" },
+  { key: "taleplerim", label: "Taleplerim" },
 ];
+
+/** Talep durumu → rozet tonu. */
+const REQUEST_TONE: Record<string, Tone> = {
+  pending: "warn",
+  approved: "win",
+  rejected: "danger",
+  cancelled: "neutral",
+};
 
 /** Hücre anahtarı — seçim kümesinde ve sunucuya gönderirken aynı biçim. */
 const cellKey = (cell: { date: string; hour: number; minute: number }) =>
@@ -209,6 +227,8 @@ export default function MacAlScreen() {
   const [weekStart, setWeekStart] = useState<string | undefined>(undefined);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [note, setNote] = useState("");
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const insets = useSafeAreaInsets();
 
   const venuesQuery = useQuery({
     queryKey: ["team", "venues"],
@@ -250,6 +270,7 @@ export default function MacAlScreen() {
     onSuccess: (data) => {
       setSelected(new Set());
       setNote("");
+      setConfirmOpen(false);
       toast.show({ message: data.message, tone: "success" });
       void queryClient.invalidateQueries({ queryKey: ["team", "match-requests"] });
       void boardQuery.refetch();
@@ -348,14 +369,15 @@ export default function MacAlScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      <ScreenHeader title="Maç Al" subtitle="Saha talebi gönder" back />
-
-      <View style={styles.tabs}>
-        <SegmentedControl items={TABS} value={tab} onChange={setTab} />
-      </View>
+      <ScreenHeader
+        title="Maç Al"
+        subtitle="Saha talebi gönder"
+        back
+        tabs={<Tabs items={TABS} value={tab} onChange={setTab} sticky />}
+      />
 
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, tab === "pano" && selected.size > 0 ? styles.contentWithBar : null]}
         refreshControl={
           <RefreshControl refreshing={refresh.refreshing} onRefresh={refresh.onRefresh} tintColor={colors.brandAccent} />
         }
@@ -375,7 +397,7 @@ export default function MacAlScreen() {
               />
             ) : (
               <>
-                <SectionHeader title="SAHA" />
+                <SectionHeader title="Saha" meta={`${venuesQuery.data.items.length} saha`} style={styles.flushHeader} />
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.venueRow}>
                   {venuesQuery.data.items.map((venue) => (
                     <Chip
@@ -451,38 +473,6 @@ export default function MacAlScreen() {
                   ))
                 )}
 
-                {selected.size > 0 ? (
-                  <Card padding="md" style={styles.submitCard}>
-                    <Text style={styles.submitTitle}>
-                      {selected.size} saat seçildi
-                    </Text>
-                    <Text style={styles.submitHint} {...textScale.long}>
-                      Birden fazla saat seçebilirsin; yönetici uygun olanı onaylar. Onaylanan
-                      saat takımına maç olarak yazılır ve bildirim gelir. Rakip bekleyen bir
-                      saati seçtiysen o maçın rakibi olursun.
-                    </Text>
-                    <Input
-                      value={note}
-                      onChangeText={setNote}
-                      placeholder="Not (isteğe bağlı) — örn. rakip bulundu, hakem talebi"
-                      multiline
-                    />
-                    <View style={styles.submitActions}>
-                      <Button
-                        label="Seçimi temizle"
-                        variant="ghost"
-                        size="sm"
-                        onPress={() => setSelected(new Set())}
-                      />
-                      <Button
-                        label="Talebi gönder"
-                        size="sm"
-                        onPress={() => submit.mutate()}
-                        loading={submit.isPending}
-                      />
-                    </View>
-                  </Card>
-                ) : null}
               </>
             )}
           </>
@@ -514,6 +504,69 @@ export default function MacAlScreen() {
           </>
         )}
       </ScrollView>
+
+      {/* SABİT GÖNDERİM ÇUBUĞU — seçim varken her an görünür. */}
+      {tab === "pano" && selected.size > 0 ? (
+        <View style={[styles.bar, { paddingBottom: space.md + insets.bottom }]}>
+          <View style={styles.barTexts}>
+            <Text style={styles.barTitle} {...textScale.dense}>
+              {selected.size} saat seçildi
+            </Text>
+            <Touchable feedback="none" onPress={() => setSelected(new Set())} accessibilityRole="button" accessibilityLabel="Seçimi temizle">
+              <Text style={styles.barClear} {...textScale.dense}>
+                Seçimi temizle
+              </Text>
+            </Touchable>
+          </View>
+          <Button label="Devam et" icon="arrow-forward" iconPosition="right" onPress={() => setConfirmOpen(true)} />
+        </View>
+      ) : null}
+
+      <BottomSheet
+        visible={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        title="Talebi gönder"
+        snap="content"
+        footer={
+          <Button
+            label={`${selected.size} saat için talep gönder`}
+            icon="paper-plane"
+            onPress={() => submit.mutate()}
+            loading={submit.isPending}
+            disabled={selected.size === 0}
+            fullWidth
+          />
+        }
+      >
+        <View style={styles.sheetBody}>
+          <Text style={styles.sheetLabel} {...textScale.badge}>
+            {venuesQuery.data?.items.find((venue) => venue.public_id === activeVenue)?.name ?? "Saha"}
+          </Text>
+          <View style={styles.slotWrap}>
+            {[...selected].sort().map((key) => {
+              const slot = parseCellKey(key);
+              return (
+                <View key={key} style={styles.requestSlot}>
+                  <Text style={styles.requestSlotText} allowFontScaling={false}>
+                    {dayLabel(slot.date)} · {String(slot.hour).padStart(2, "0")}:{String(slot.minute).padStart(2, "0")}
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
+          <Text style={styles.submitHint} {...textScale.long}>
+            Yönetici seçtiğin saatlerden uygun olanı onaylar; onaylanan saat takımına maç olarak
+            yazılır ve bildirim gelir. Rakip bekleyen bir saat seçtiysen o maçın rakibi olursun.
+          </Text>
+          <Input
+            label="Not (isteğe bağlı)"
+            value={note}
+            onChangeText={setNote}
+            placeholder="Örn. rakip bulundu, hakem talebi"
+            multiline
+          />
+        </View>
+      </BottomSheet>
     </SafeAreaView>
   );
 }
@@ -591,24 +644,17 @@ function RequestCard({
   onWithdraw: () => void;
   withdrawing: boolean;
 }) {
-  const tone =
-    request.status === "approved"
-      ? colors.win
-      : request.status === "rejected"
-        ? colors.danger
-        : request.status === "cancelled"
-          ? colors.textTertiary
-          : colors.warn;
-
   return (
     <Card padding="md" style={[styles.requestCard, highlighted ? styles.requestCardActive : null]}>
       <View style={styles.requestHead}>
         <Text style={styles.requestVenue} numberOfLines={1}>
           {request.venue_name}
         </Text>
-        <Text style={[styles.requestStatus, { color: tone }]} allowFontScaling={false}>
-          {MATCH_REQUEST_STATUS_LABELS[request.status] ?? request.status}
-        </Text>
+        <Badge
+          label={MATCH_REQUEST_STATUS_LABELS[request.status] ?? request.status}
+          tone={REQUEST_TONE[request.status] ?? "neutral"}
+          size="xs"
+        />
       </View>
 
       {request.venue_location ? (
@@ -641,8 +687,34 @@ function RequestCard({
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  tabs: { paddingHorizontal: space.md, paddingBottom: space.sm },
-  content: { padding: space.md, gap: space.md, paddingBottom: space.giant },
+  content: {
+    paddingHorizontal: layout.screenPadding,
+    paddingTop: space.md,
+    gap: space.md,
+    paddingBottom: space.giant,
+  },
+  contentWithBar: { paddingBottom: 120 },
+  flushHeader: { paddingHorizontal: 0, paddingTop: 0 },
+  bar: {
+    ...elevate(2),
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    paddingHorizontal: layout.screenPadding,
+    paddingTop: space.md,
+    backgroundColor: colors.surface1,
+    borderTopWidth: hairline,
+    borderTopColor: colors.border,
+  },
+  barTexts: { flex: 1, gap: 2 },
+  barTitle: { ...type.h3, color: colors.textPrimary },
+  barClear: { ...type.caption, color: colors.brandAccent },
+  sheetBody: { gap: space.md, paddingBottom: space.md },
+  sheetLabel: { ...type.overline, color: colors.textTertiary },
 
   venueRow: { gap: space.sm, paddingVertical: space.xs },
 
@@ -652,7 +724,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     backgroundColor: colors.surface1,
     borderRadius: radius.md,
-    borderWidth: 1,
+    borderWidth: hairline,
     borderColor: colors.border,
     paddingHorizontal: space.md,
     paddingVertical: space.sm,
@@ -688,17 +760,13 @@ const styles = StyleSheet.create({
   slotHint: { ...type.micro, color: colors.textTertiary, letterSpacing: 0 },
   slotHintSelected: { color: colors.textOnBrand },
 
-  submitCard: { gap: space.sm },
-  submitTitle: { ...type.h3, color: colors.textPrimary },
   submitHint: { ...type.bodySm, color: colors.textSecondary, lineHeight: 19 },
-  submitActions: { flexDirection: "row", justifyContent: "flex-end", gap: space.sm },
 
   requestCard: { gap: space.sm },
   /** Bildirimden gelinen kart: "aradığın bu" demek için mor çerçeve. */
   requestCardActive: { borderColor: colors.brandBorder, borderWidth: 1 },
   requestHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.sm },
   requestVenue: { ...type.h3, color: colors.textPrimary, flex: 1 },
-  requestStatus: { ...type.caption },
   requestMeta: { ...type.caption, color: colors.textTertiary },
   requestSlot: {
     backgroundColor: colors.surface3,

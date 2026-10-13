@@ -14,11 +14,12 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Redirect, useRouter } from "expo-router";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AttachSheet, type AttachMode } from "@/components/chat/AttachSheet";
 import { ReportSheet, type ReportTarget } from "@/components/chat/ReportSheet";
+import { ComposerField } from "@/components/chat/ComposerField";
 import { AttendanceCard, AudioBubble, CallChip, LocationBubble, MatchOfferBubble, NotificationCard, SystemChip, clockLabel } from "@/components/chat/ChatBubbles";
 import { BottomSheet, Button, EmptyState, ErrorState, ScreenHeader, SkeletonListRow, Touchable, errorMessage, useToast, withAlpha } from "@/components/ui";
 import { setActiveChatConversation, useAdminConversationMessages, useConversationMessages } from "@/hooks/useChat";
@@ -670,22 +671,13 @@ export function ChatRoom({ conversationId, admin = false }: ChatRoomProps) {
               <Touchable feedback="icon" haptic="light" onPress={() => setAttach("menu")} accessibilityLabel="Ek gönder" style={styles.roundGhost}>
                 <Ionicons name="add" size={22} color={colors.textSecondary} />
               </Touchable>
-              {/* Ortak `Input`ın çok satırlı hâli form alanıdır (en az 88px);
-                  sohbet kutusu tek satırdan başlar, yazdıkça 5 satıra kadar büyür. */}
-              <View style={styles.composerField}>
-                <TextInput
-                  value={draft}
-                  onChangeText={onDraft}
-                  placeholder={conversation.type === "management" ? (admin ? "Yönetim adına yaz…" : "Yönetime mesaj yaz…") : "Mesaj yaz…"}
-                  placeholderTextColor={colors.textTertiary}
-                  multiline
-                  numberOfLines={1}
-                  maxLength={8000}
-                  style={styles.composerText}
-                  accessibilityLabel="Mesaj metni"
-                  {...textScale.dense}
-                />
-              </View>
+              <ComposerField
+                value={draft}
+                onChangeText={onDraft}
+                placeholder={conversation.type === "management" ? (admin ? "Yönetim adına yaz…" : "Yönetime mesaj yaz…") : "Mesaj yaz…"}
+                maxLength={8000}
+                accessibilityLabel="Mesaj metni"
+              />
               {draft.trim() ? (
                 <Touchable feedback="button" haptic="medium" onPress={handleSend} accessibilityRole="button" accessibilityLabel="Gönder" style={styles.send}>
                   <Ionicons name="send" size={17} color={colors.textOnBrand} />
@@ -828,26 +820,6 @@ const styles = StyleSheet.create({
   },
   blockedText: { ...type.caption, color: colors.textSecondary, flex: 1, lineHeight: 17 },
   composer: { flexDirection: "row", alignItems: "flex-end", gap: space.sm, paddingHorizontal: layout.screenPadding, paddingTop: space.sm, paddingBottom: space.sm, borderTopWidth: hairline, borderTopColor: colors.separator, backgroundColor: colors.surface1 },
-  composerField: {
-    flex: 1,
-    minHeight: 44,
-    maxHeight: 132,
-    justifyContent: "center",
-    paddingHorizontal: space.lg,
-    paddingVertical: space.s,
-    borderRadius: radius.xl,
-    backgroundColor: colors.bg,
-    borderWidth: hairline,
-    borderColor: colors.border,
-  },
-  composerText: {
-    ...type.body,
-    color: colors.textPrimary,
-    maxHeight: 112,
-    padding: 0,
-    // Web: tarayıcı odak halkası kutunun kendi kenarlığıyla çakışmasın (bkz. ui/Input).
-    ...({ outlineStyle: "none" } as object),
-  },
   send: { width: 44, height: 44, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.brand },
   /* Mikrofon da birincil eylemdir (Arena: mor = aksiyon); yeşil "sonuç"
      rengiydi ve gönder düğmesiyle aynı yerde iki ayrı dil konuşuyordu. */

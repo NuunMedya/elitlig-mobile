@@ -42,7 +42,6 @@ import {
   Button,
   EmptyState,
   ErrorState,
-  Input,
   ScreenHeader,
   SkeletonListRow,
   Touchable,
@@ -51,6 +50,7 @@ import {
   withAlpha,
   type Tone,
 } from "@/components/ui";
+import { ComposerField } from "@/components/chat/ComposerField";
 import { useAppActive } from "@/hooks/useLiveFavoriteCount";
 import {
   getMyMessages,
@@ -414,13 +414,11 @@ export default function ThreadDetailScreen() {
           </View>
         ) : (
           <View style={styles.composer}>
-            <Input
+            <ComposerField
               value={reply}
               onChangeText={setReply}
               placeholder="Yanıtını yaz…"
-              multiline
               maxLength={2000}
-              containerStyle={styles.composerInput}
               accessibilityLabel="Yanıt metni"
             />
             <Touchable
@@ -556,9 +554,11 @@ const styles = StyleSheet.create({
   },
 
   bubble: {
-    maxWidth: "86%",
+    maxWidth: "82%",
     borderRadius: radius.lg,
-    padding: space.md,
+    paddingHorizontal: space.md,
+    paddingTop: space.sm,
+    paddingBottom: space.s,
   },
   bubbleMine: {
     alignSelf: "flex-end",
@@ -567,7 +567,9 @@ const styles = StyleSheet.create({
   },
   bubbleTheirs: {
     alignSelf: "flex-start",
-    backgroundColor: colors.surface2,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
     borderBottomLeftRadius: radius.xs,
   },
   bubbleSending: {
@@ -585,7 +587,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   bubbleText: {
-    ...type.bodySm,
+    ...type.body,
     color: colors.textPrimary,
   },
   bubbleTextMine: {
@@ -617,9 +619,6 @@ const styles = StyleSheet.create({
     borderTopWidth: hairline,
     borderTopColor: colors.separator,
     backgroundColor: colors.surface1,
-  },
-  composerInput: {
-    flex: 1,
   },
   send: {
     width: 44,

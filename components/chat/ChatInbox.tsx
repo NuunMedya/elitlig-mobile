@@ -351,7 +351,6 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   kind: { ...type.caption, color: colors.textTertiary },
   searchWrap: { paddingHorizontal: layout.screenPadding, paddingBottom: space.sm, gap: space.sm },
-  /* Satırlar kâğıt üstünde beyaz bir şerit: liste, başlığın gri zemininden ayrışır. */
   skeleton: { paddingHorizontal: layout.screenPadding, paddingTop: space.sm },
   list: { flexGrow: 1, paddingBottom: space.huge + space.giant },
   separator: { height: hairline, backgroundColor: colors.separator, marginLeft: layout.screenPadding + 50 + space.md },

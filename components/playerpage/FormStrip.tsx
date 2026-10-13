@@ -8,6 +8,10 @@
  * seyri kendisi çıkarır; eski tek başına çizgi grafiği (sparkline) hangi
  * noktanın hangi maç olduğunu söylemiyordu.
  *
+ * REYTİNG NOKTAYLA YAZILIR ("7.3"): reyting hapı (RatingPill) ile aynı
+ * biçim — aynı sayının iki yerde iki ayrı yazımı olmasın. Oranlar ("1,55
+ * gol/maç") Türkçe virgülle yazılır; reyting bir skor tokenıdır.
+ *
  * Sütunlar ESKİDEN YENİYE sıralıdır (sağdaki en son maç) — skor uygulamalarının
  * ortak okuma yönü. Her sütun maça gider.
  */
@@ -18,7 +22,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { RatingPill, TeamLogo, Touchable, type FormResult } from "@/components/ui";
 import { mediaUrl } from "@/lib/format";
 import { colors, hairline, radius, space, textScale, type } from "@/theme";
-import { decimalTR, surfaces } from "./shared";
+import { surfaces } from "./shared";
 
 export interface FormItem {
   matchId: number;
@@ -123,7 +127,7 @@ export const FormStrip = React.memo(function FormStrip({
               </Text>
               <View style={styles.footValueRow}>
                 <Text style={styles.footValue} {...textScale.dense}>
-                  {decimalTR(recentAverage)}
+                  {recentAverage.toFixed(1)}
                 </Text>
                 {delta != null && Math.abs(delta) >= 0.05 ? (
                   <View style={styles.delta}>
@@ -135,7 +139,7 @@ export const FormStrip = React.memo(function FormStrip({
                     {/* Ok rengi sonucu söyler (grafik, 3:1); rakam mürekkeptir —
                         yeşil metin beyaz kartta AA'yı geçmez. */}
                     <Text style={styles.deltaText} {...textScale.badge}>
-                      {decimalTR(Math.abs(delta))}
+                      {Math.abs(delta).toFixed(1)}
                     </Text>
                   </View>
                 ) : null}
@@ -148,7 +152,7 @@ export const FormStrip = React.memo(function FormStrip({
                 KARİYER ORT.
               </Text>
               <Text style={styles.footValue} {...textScale.dense}>
-                {decimalTR(careerAverage)}
+                {careerAverage.toFixed(1)}
               </Text>
             </View>
           ) : null}

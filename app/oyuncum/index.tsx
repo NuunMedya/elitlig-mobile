@@ -440,7 +440,7 @@ export default function MyPlayerScreen() {
           { key: "goals", value: String(num(stats.goals)), label: "GOL" },
           { key: "assists", value: String(num(stats.assists)), label: "ASİST" },
           ...(stats.rating != null
-            ? [{ key: "rating", value: decimalTR(stats.rating), label: "ORT. PUAN", rating: stats.rating }]
+            ? [{ key: "rating", value: stats.rating.toFixed(1), label: "ORT. PUAN", rating: stats.rating }]
             : []),
         ]
       : [];
@@ -540,7 +540,6 @@ export default function MyPlayerScreen() {
           recentMatches={me.recentMatches}
           pendingChanges={me.pendingChanges}
           onOpenTab={changeTab}
-          onOpenPublic={openPublicProfile}
           refetch={meQuery.refetch}
           isRefetching={meQuery.isRefetching}
           scrollProps={scrollProps}
@@ -590,7 +589,6 @@ interface SummaryTabProps {
   recentMatches: PanelRecentMatch[];
   pendingChanges: PanelPendingChange[];
   onOpenTab: (tab: MyTab) => void;
-  onOpenPublic: () => void;
   refetch: () => unknown;
   isRefetching: boolean;
   scrollProps: ScrollChrome;
@@ -606,7 +604,6 @@ function SummaryTab({
   recentMatches,
   pendingChanges,
   onOpenTab,
-  onOpenPublic,
   refetch,
   isRefetching,
   scrollProps,
@@ -769,13 +766,13 @@ function SummaryTab({
        * TEKLİFLER · DAVETLER · DİSİPLİN · MESAJLAR BURADA YOK: dördü de Profil
        * sekmesinde ("Kariyerim" ve "Kulübüm" bölümleri) aynı başlıklarla
        * duruyor; bu ekran onların ikinci kopyası olmaz. Burada yalnız BU
-       * EKRANIN kendi sekmeleri, herkese açık profil ve düzenleme kalır.
+       * EKRANIN kendi sekmeleri ve düzenleme kalır (herkese açık profil
+       * başlıktaki göz ikonundadır).
        */}
-      <HubGrid>
+      <HubGrid style={styles.flushGrid}>
         <HubTile icon="calendar" title="Maçlarım" subtitle="Fikstür ve yoklama" tone="brand" onPress={() => onOpenTab("maclarim")} />
         <HubTile icon="stats-chart" title="İstatistiklerim" subtitle="Lig ve sezon kırılımı" tone="accent" onPress={() => onOpenTab("istatistik")} />
         <HubTile icon="document-text" title="Sözleşmem" subtitle="Yürürlükteki sözleşmen" tone="info" onPress={() => onOpenTab("sozlesme")} />
-        <HubTile icon="eye" title="Herkese açık profil" subtitle="Başkalarının gördüğü" tone="neutral" onPress={onOpenPublic} />
         <HubTile icon="create" title="Profilimi düzenle" subtitle="Bilgi ve fotoğraf talebi" tone="neutral" onPress={() => router.push("/hesabim")} />
       </HubGrid>
     </ScrollView>
@@ -1169,9 +1166,9 @@ function StatisticsTab({ scrollProps }: { scrollProps: ScrollChrome }) {
     if (totals.rating != null) {
       list.push({
         key: "r",
-        value: decimalTR(totals.rating),
+        value: totals.rating.toFixed(1),
         label: "ORT. PUAN",
-        hint: totals.best_rating != null ? `en iyi ${decimalTR(totals.best_rating)}` : undefined,
+        hint: totals.best_rating != null ? `en iyi ${totals.best_rating.toFixed(1)}` : undefined,
       });
     }
     return list;
@@ -1631,6 +1628,10 @@ const styles = StyleSheet.create({
   flushHeader: {
     paddingHorizontal: 0,
     paddingBottom: space.xs,
+  },
+  /* Izgara kendi ekran dolgusunu basar; içerik kabı zaten basıyor. */
+  flushGrid: {
+    paddingHorizontal: 0,
   },
   loadingBody: {
     paddingHorizontal: layout.screenPadding,

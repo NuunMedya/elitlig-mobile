@@ -50,6 +50,7 @@ import { ShareScoreCard } from "@/components/ShareScoreCard";
 import { HeadToHeadTab } from "@/components/matchpage/HeadToHeadTab";
 import { LineupTab } from "@/components/matchpage/LineupTab";
 import { MatchAtmosphere } from "@/components/matchpage/MatchAtmosphere";
+import { PaperCard } from "@/components/matchpage/parts";
 import { Scoreboard, ScoreboardSkeleton } from "@/components/matchpage/Scoreboard";
 import { StandingsTab } from "@/components/matchpage/StandingsTab";
 import { StatsTab } from "@/components/matchpage/StatsTab";
@@ -69,8 +70,7 @@ import {
   ErrorState,
   HeaderToneContext,
   ScreenHeader,
-  SkeletonCard,
-  SkeletonListRow,
+  Skeleton,
   Tabs,
   refreshControlProps,
   useHeaderScroll,
@@ -91,7 +91,7 @@ import { queryKeys } from "@/lib/queryKeys";
 import { useAuth } from "@/providers/AuthProvider";
 import { useFavorite } from "@/providers/FavoriteProvider";
 import { useScope } from "@/providers/ScopeProvider";
-import { colors, layout, space } from "@/theme";
+import { colors, hairline, layout, space } from "@/theme";
 import type { ApiMatchEvent, KadroPlayer, MatchState } from "@/lib/types";
 
 export default function MatchDetailScreen() {
@@ -579,10 +579,7 @@ function MatchFallback({
       </MatchStage>
 
       {kind === "loading" ? (
-        <View style={styles.loading}>
-          <SkeletonCard lines={3} />
-          <SkeletonListRow count={5} />
-        </View>
+        <BodySkeleton />
       ) : kind === "invalid" ? (
         <EmptyState
           icon="alert-circle-outline"
@@ -593,6 +590,34 @@ function MatchFallback({
       ) : (
         <ErrorState error={error} onRetry={onRetry} />
       )}
+    </View>
+  );
+}
+
+/**
+ * Kâğıt iskeleti — sekmelerin gerçek düzeninin taklidi: bölüm başlığı + kart
+ * içinde ikonlu satırlar. Genel `SkeletonCard` kenardan kenara uzanıyor ve
+ * sayfanın kart diline (14px kenar, 18px köşe) benzemiyordu.
+ */
+function BodySkeleton() {
+  return (
+    <View style={styles.loading} accessibilityLabel="Maç yükleniyor">
+      <View style={styles.skeletonTabs}>
+        {[44, 52, 72, 36, 40].map((width, index) => (
+          <Skeleton key={index} width={width} height={14} />
+        ))}
+      </View>
+      <Skeleton width={128} height={16} style={styles.skeletonTitle} />
+      <PaperCard>
+        {[0, 1, 2, 3, 4].map((row) => (
+          <View key={row} style={[styles.skeletonRow, row > 0 ? styles.skeletonRuled : null]}>
+            <Skeleton width={28} height={28} radius="sm" />
+            <Skeleton width={row % 2 ? 140 : 96} height={12} />
+            <View style={styles.flex} />
+            <Skeleton width={row % 2 ? 48 : 72} height={12} />
+          </View>
+        ))}
+      </PaperCard>
     </View>
   );
 }
@@ -611,7 +636,32 @@ const styles = StyleSheet.create({
     paddingBottom: space.lg,
   },
   loading: {
-    paddingTop: layout.sectionGap,
+    paddingTop: space.lg,
+  },
+  skeletonTabs: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xxl,
+    paddingHorizontal: layout.screenPadding + space.sm,
+    paddingBottom: space.lg,
+  },
+  skeletonTitle: {
+    marginHorizontal: layout.screenPadding,
+    marginTop: space.sm,
+    marginBottom: space.md,
+  },
+  skeletonRow: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: space.md,
+    height: layout.listRowHeight,
+    paddingHorizontal: space.lg,
+  },
+  skeletonRuled: {
+    borderTopWidth: hairline,
+    borderTopColor: colors.separator,
+  },
+  flex: {
+    flex: 1,
   },
 });
