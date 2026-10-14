@@ -495,6 +495,17 @@ export default function MacKadrosuScreen() {
       }),
     onSuccess: (data) => {
       toast.show({ message: data.message, tone: "success" });
+      /* Takım kadrosunda olmayan oyuncuları sunucu misafir olarak kaydeder;
+         ekrandaki taslak da aynı işareti alsın (liste "Misafir" yazar). */
+      const saved = data.plan?.lineup ?? [];
+      if (data.converted_guests?.length && saved.length) {
+        setEntries((prev) =>
+          prev.map((entry) => {
+            const row = saved.find((item) => item.playerId != null && item.playerId === entry.playerId);
+            return row?.isGuest && !entry.isGuest ? { ...entry, isGuest: true, guestName: row.guestName } : entry;
+          })
+        );
+      }
       void queryClient.invalidateQueries({ queryKey: ["takim", "match-plan", matchId] });
       void queryClient.invalidateQueries({ queryKey: ["takim", "matches"] });
       // Sunucu yoklama listesini planla eşitledi (çıkan gruptan alındı, giren eklendi).
@@ -741,7 +752,7 @@ export default function MacKadrosuScreen() {
           )}
 
           <Button
-            label="Misafir oyuncu ekle"
+            label="Takım dışından oyuncu ekle (misafir)"
             variant="ghost"
             size="sm"
             onPress={() => setGuestOpen(true)}
