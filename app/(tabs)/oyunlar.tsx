@@ -80,21 +80,22 @@ import {
  * diğerleri ilgili ekrandaki `BEST_KEY` sabitiyle BİREBİR aynıdır.
  */
 const BEST_KEYS: Record<ArenaGame, string> = {
-  seri: "elitlig.arena.best.v1",
+  seri: ARENA_BEST_KEYS.seri,
   sektir: ARENA_BEST_KEYS.sektir,
-  kimbu: "elitlig.kimbu.best.v1",
+  kimbu: ARENA_BEST_KEYS.kimbu,
   slalom: ARENA_BEST_KEYS.slalom,
   gunun: "elitlig.gunun.best.v1",
   penalti: ARENA_BEST_KEYS.penalti,
+  tahmin: ARENA_BEST_KEYS.tahmin,
 };
 
 /** Sorgu ve depolama okumalarının sabit sırası. */
-const GAME_ORDER: ArenaGame[] = ["gunun", "penalti", "seri", "sektir", "kimbu", "slalom"];
+const GAME_ORDER: ArenaGame[] = ["gunun", "tahmin", "penalti", "seri", "sektir", "kimbu", "slalom"];
 
 /** Günün Testi'nin o güne ait sonucu — `app/gunun.tsx` ile aynı anahtar. */
 const dailyResultKey = (day: string) => `elitlig.gunun.${day}.v1`;
 
-/** Kart ızgarasındaki dört oyun (Günün Testi ayrı, öne çıkan kartta). */
+/** Kart ızgarasındaki oyunlar (Günün Testi ayrı, öne çıkan kartta). */
 interface GameMeta {
   key: ArenaGame;
   route: string;
@@ -109,6 +110,15 @@ interface GameMeta {
 
 const GRID_GAMES: GameMeta[] = [
   {
+    key: "tahmin",
+    route: "/tahmin",
+    title: "Skor Tahmini",
+    blurb: "Oynanmış maçları kim kazandı? İlini seç, 1 · X · 2 tahmin et, seriyi uzat.",
+    icon: "stats-chart",
+    tone: "win",
+    unit: "puan",
+  },
+  {
     key: "penalti",
     route: "/penalti",
     title: "Penaltı",
@@ -121,10 +131,10 @@ const GRID_GAMES: GameMeta[] = [
     key: "seri",
     route: "/arena",
     title: "Arena",
-    blurb: "İki oyuncudan hangisi önde? Seriyi yanlışa kadar uzat.",
+    blurb: "Oyuncu düelloları: kim daha çok gol attı? İlini seç, hızlı cevapla.",
     icon: "flame",
     tone: "warn",
-    unit: "seri",
+    unit: "puan",
   },
   {
     key: "sektir",
@@ -139,7 +149,7 @@ const GRID_GAMES: GameMeta[] = [
     key: "kimbu",
     route: "/kimbu",
     title: "Kim Bu?",
-    blurb: "Gizemli oyuncuyu en az ipucuyla bil, puanı koru.",
+    blurb: "İpuçlarından gizemli oyuncuyu bul; erken bilen çok kazanır.",
     icon: "search",
     tone: "brand",
     unit: "puan",
@@ -647,7 +657,8 @@ export default function OyunlarScreen() {
           {GRID_GAMES.map((meta, index) => (
             <GameCard
               key={meta.key}
-              wide={index === 0}
+              // İlk kart geniş; tek sayıda kalan son kart da satırı doldursun.
+              wide={index === 0 || (index === GRID_GAMES.length - 1 && index % 2 === 1)}
               meta={meta}
               ready={local.loaded}
               best={local.best[meta.key] ?? null}

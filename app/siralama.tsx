@@ -1,5 +1,5 @@
 /**
- * REKOR TABLOSU — beş oyunun haftalık ve tüm zamanlar sıralaması.
+ * REKOR TABLOSU — Arena oyunlarının haftalık ve tüm zamanlar sıralaması.
  *
  * NE: oyun seçicisi (çip şeridi) + iki filtre segmenti (dönem, kapsam) +
  * podyum (ilk üç) + yoğun liste (`ListRow`). Kullanıcının kendi satırı hem
@@ -81,7 +81,8 @@ interface GameMeta {
 }
 
 const GAMES: GameMeta[] = [
-  { key: "seri", label: "Arena", icon: "flame", unit: "seri", route: "/arena" },
+  { key: "seri", label: "Arena", icon: "flame", unit: "puan", route: "/arena" },
+  { key: "tahmin", label: "Skor Tahmini", icon: "stats-chart", unit: "puan", route: "/tahmin" },
   { key: "sektir", label: "Top Sektir", icon: "football", unit: "puan", route: "/sektir" },
   { key: "penalti", label: "Penaltı", icon: "golf", unit: "puan", route: "/penalti" },
   { key: "kimbu", label: "Kim Bu?", icon: "search", unit: "puan", route: "/kimbu" },

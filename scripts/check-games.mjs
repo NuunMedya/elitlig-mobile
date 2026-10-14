@@ -17,6 +17,10 @@
  *      kapılar daralır.
  *   4. PENALTI: süre dolarsa kaçırma sayılır ve üç kaçırmada tur biter; gol
  *      puan kazandırır ve oyun sonu skoru köprüden iletilir.
+ *   5. BİLGİ YARIŞMALARI (Arena, Kim Bu?, Skor Tahmini): her soru geçerli
+ *      (cevap şıklarda, şıklar tekil), zorluk seviyeyle artar, son sorulan
+ *      oyuncu/maç hemen tekrar gelmez, maç sonucu doğru okunur, hızlı ve seri
+ *      cevap daha çok puan getirir.
  */
 
 import { readFileSync } from "node:fs";
@@ -25,6 +29,16 @@ import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
 import { buildModule, GENERATED_PATH } from "./build-games.mjs";
+import {
+  arenaQuestion,
+  kimbuQuestion,
+  levelOf,
+  matchQuestion,
+  multiplierOf,
+  scoreFor,
+  toMatches,
+  toPlayers,
+} from "../lib/game/quiz/questions.ts";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const fails = [];
@@ -295,6 +309,127 @@ for (const game of ["penalti", "slalom", "sektir"]) {
     "penaltı: gol puan kazandırır ve seri biter",
     goals >= 1 && Boolean(end) && end.score >= goals * 100,
     `${shots} atış, ${goals} gol, skor ${end ? end.score : "—"} (${outcomes.join(" ")})`,
+  );
+}
+
+
+/* ── 5) BİLGİ YARIŞMALARI ────────────────────────────────────────────────── */
+
+{
+  // Sahte ama gerçekçi havuz: 12 takım × 6 oyuncu, gol/maç dağılımı geniş.
+  let seed = 7;
+  const rand = () => {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
+  };
+  const rawPlayers = [];
+  for (let t = 0; t < 12; t += 1) {
+    for (let k = 0; k < 6; k += 1) {
+      const id = t * 10 + k + 1;
+      rawPlayers.push({
+        id,
+        name: `Oyuncu ${String.fromCharCode(65 + t)}${k} Soyad${id}`,
+        teamName: `Takım ${t + 1} SK`,
+        matches: 3 + Math.floor(rand() * 20),
+        goals: Math.floor(rand() * 30),
+        assists: Math.floor(rand() * 12),
+        points: Math.floor(rand() * 900),
+      });
+    }
+  }
+  rawPlayers.push({ id: 999, name: "HÜKMEN", teamName: "x", matches: 5, goals: 0 });
+  const players = toPlayers(rawPlayers);
+  check("yarışma: sistem oyuncuları havuza girmez", !players.some((p) => /hükmen/i.test(p.name)), `${players.length} oyuncu`);
+
+  const valid = (q) =>
+    q &&
+    q.options.some((o) => o.key === q.answer) &&
+    new Set(q.options.map((o) => o.key)).size === q.options.length &&
+    q.options.length >= 2 &&
+    q.seconds >= 4;
+
+  for (const [name, make] of [
+    ["arena", (lvl, recent) => arenaQuestion(players, lvl, recent, "İzmir", rand)],
+    ["kim bu", (lvl, recent) => kimbuQuestion(players, lvl, recent, rand)],
+  ]) {
+    let bad = 0;
+    let made = 0;
+    const tags = new Set();
+    for (let lvl = 1; lvl <= 8; lvl += 1) {
+      for (let i = 0; i < 120; i += 1) {
+        const q = make(lvl, new Set());
+        made += 1;
+        if (!valid(q)) bad += 1;
+        else tags.add(q.tag);
+      }
+    }
+    check(`yarışma: ${name} soruları geçerli`, bad === 0 && tags.size >= 3, `${made} soru, ${bad} geçersiz, ${tags.size} soru türü (${[...tags].join(", ")})`);
+  }
+
+  // Zorluk: düellolarda iki değerin oranı seviye yükseldikçe 1'e yaklaşır.
+  const duelRatio = (lvl) => {
+    const ratios = [];
+    for (let i = 0; i < 300; i += 1) {
+      const q = arenaQuestion(players, lvl, new Set(), "Türkiye", rand);
+      if (q?.visual.type !== "duel") continue;
+      const [a, b] = q.visual.players;
+      const m = q.visual.metric;
+      const v = (p) => (m === "goals" ? p.goals : m === "matches" ? p.matches : m === "assists" ? p.assists : m === "points" ? p.points : p.goals / p.matches);
+      ratios.push(Math.max(v(a), v(b)) / Math.max(0.0001, Math.min(v(a), v(b))));
+    }
+    ratios.sort((x, y) => x - y);
+    return ratios[Math.floor(ratios.length / 2)];
+  };
+  const easy = duelRatio(1);
+  const hard = duelRatio(6);
+  const t1 = arenaQuestion(players, 1, new Set(), "x", rand).seconds;
+  const t6 = arenaQuestion(players, 6, new Set(), "x", rand).seconds;
+  check("yarışma: zorluk artar", easy > hard && easy >= 1.8 && t6 <= t1, `düello oran medyanı ${easy.toFixed(2)} → ${hard.toFixed(2)}, süre ${t1} → ${t6} sn`);
+
+  // Tekrar etmeme: son sorulanlar havuzda yeterli seçenek varken gelmez.
+  const recent = [];
+  let repeats = 0;
+  for (let i = 0; i < 60; i += 1) {
+    const q = kimbuQuestion(players, 2, new Set(recent), rand);
+    if (q.subjects.some((s) => recent.slice(-10).includes(s))) repeats += 1;
+    recent.push(...q.subjects);
+  }
+  check("yarışma: aynı oyuncu hemen tekrar gelmez", repeats === 0, `60 soruda ${repeats} tekrar`);
+
+  // Skor tahmini
+  const matches = toMatches([
+    { id: 1, first_team_name: "Ada FK", second_team_name: "Kale SK", first_team_score: 3, second_team_score: 1 },
+    { id: 2, first_team_name: "Ada FK", second_team_name: "Deniz SK", first_team_score: 2, second_team_score: 2 },
+    { id: 3, first_team_name: "Kale SK", second_team_name: "Deniz SK", first_team_score: "0", second_team_score: "4" },
+    { id: 4, first_team_name: "Kale SK", second_team_name: "Ada FK", first_team_score: null, second_team_score: null },
+    { id: 5, first_team_name: "HÜKMEN", second_team_name: "Ada FK", first_team_score: 0, second_team_score: 3 },
+    { id: 6, first_team_name: "Ada FK", second_team_name: "Kale SK", first_team_score: 1, second_team_score: 0, mac_durumu: "canli" },
+  ]);
+  const expected = { 1: "home", 2: "draw", 3: "away" };
+  let wrongAnswers = 0;
+  let wrongLabels = 0;
+  const seen = new Set();
+  const recentM = [];
+  for (let i = 0; i < 30; i += 1) {
+    const q = matchQuestion(matches, 1 + (i % 6), new Set(recentM.slice(-2)), rand);
+    const id = q.visual.match.id;
+    seen.add(id);
+    recentM.push(...q.subjects);
+    if (q.answer !== expected[id]) wrongAnswers += 1;
+    const m = q.visual.match;
+    const labels = q.options.map((o) => o.label).join(" | ");
+    if (labels !== `${m.home} kazandı | Berabere | ${m.away} kazandı`) wrongLabels += 1;
+  }
+  check(
+    "skor tahmini: yalnız oynanmış maçlar, doğru cevap",
+    matches.length === 3 && wrongAnswers === 0 && wrongLabels === 0 && seen.size === 3,
+    `${matches.length} geçerli maç (oynanmamış/canlı/hükmen elendi), 30 soruda ${wrongAnswers} yanlış cevap anahtarı`,
+  );
+
+  check(
+    "yarışma: hız ve seri puanı",
+    scoreFor(1, 1) === 200 && scoreFor(0, 1) === 100 && scoreFor(0.5, 6) === 300 && multiplierOf(10) === 3 && levelOf(5) === 2,
+    `tam süre 200, son saniye 100, 6 seride yarı süre ${scoreFor(0.5, 6)}`,
   );
 }
 
