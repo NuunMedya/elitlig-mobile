@@ -34,12 +34,12 @@
  *
  * GİRİŞ YOKSA `/giris`'e yönlendirilir. Oyuncu profili bağlı değilse
  * (sunucu 403 PLAYER_PROFILE_REQUIRED / `player: null`) boş durum çizilir ve
- * bağlama akışı için elitlig.com'a çıkılır — mobilde profil bağlama yok.
+ * üye `/oyuncum/bagla` ekranına (kendi kaydını bul ve sahiplen) yönlendirilir.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
+import { Redirect, router as appRouter, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -103,7 +103,6 @@ import {
 } from "@/lib/api/team";
 import { formatDateShort, formatTime, mediaUrl } from "@/lib/format";
 import { ApiError, get } from "@/lib/http";
-import { openLink } from "@/lib/links";
 import { useAuth } from "@/providers/AuthProvider";
 import {
   colors,
@@ -298,8 +297,6 @@ function firstParam(value: string | string[] | undefined): string | undefined {
    3) SAF YARDIMCILAR
    ══════════════════════════════════════════════════════════════════════════ */
 
-/** Web sitesi — oyuncu profili bağlama akışı orada yaşıyor. */
-const SITE_URL = "https://elitlig.com";
 
 /** ACTIVE ve PENDING_ACTIVATION birlikte "yürürlükte" sayılır. */
 const ACTIVE_CONTRACT_STATUSES = new Set(["ACTIVE", "PENDING_ACTIVATION"]);
@@ -499,11 +496,11 @@ export default function MyPlayerScreen() {
           icon="person-add-outline"
           title="Oyuncu profilin bağlı değil"
           body={
-            "Bu ekran hesabına bağlı bir oyuncu kaydı ister. Bağlama işlemi şimdilik " +
-            "elitlig.com panelinden yapılıyor; bağlandıktan sonra maçların, " +
+            "Bu ekran hesabına bağlı bir oyuncu kaydı ister. Ligde maça çıktıysan kaydın " +
+            "büyük ihtimalle zaten var: kendini bulup sahiplen. Bağlandıktan sonra maçların, " +
             "istatistiklerin ve sözleşmen burada görünür."
           }
-          action={{ label: "elitlig.com'a git", onPress: () => openLink(SITE_URL) }}
+          action={{ label: "Profilimi bul ve bağla", onPress: () => router.push("/oyuncum/bagla") }}
           secondaryAction={{ label: "Hesap ve güvenlik", onPress: () => router.push("/hesabim") }}
         />
       </SafeAreaView>
@@ -911,8 +908,8 @@ function MyMatchesTab({
       <EmptyState
         icon="person-add-outline"
         title="Oyuncu profili gerekli"
-        body="Maçlarım için hesabına bağlı bir oyuncu profili olmalı. Profil bağlama şimdilik web panelinden yapılıyor."
-        action={{ label: "elitlig.com'a git", onPress: () => openLink(SITE_URL) }}
+        body="Maçlarım için hesabına bağlı bir oyuncu profili olmalı. Veritabanındaki kaydını bulup sahiplenebilirsin."
+        action={{ label: "Profilimi bul ve bağla", onPress: () => appRouter.push("/oyuncum/bagla") }}
       />
     ) : (
       <ErrorState error={query.error} onRetry={query.refetch} />
@@ -1287,7 +1284,7 @@ function StatisticsTab({ scrollProps }: { scrollProps: ScrollChrome }) {
         icon="person-add-outline"
         title="Oyuncu profili gerekli"
         body="İstatistiklerin için hesabına bağlı bir oyuncu profili olmalı."
-        action={{ label: "elitlig.com'a git", onPress: () => openLink(SITE_URL) }}
+        action={{ label: "Profilimi bul ve bağla", onPress: () => appRouter.push("/oyuncum/bagla") }}
       />
     ) : (
       <ErrorState error={query.error} onRetry={query.refetch} />
@@ -1300,7 +1297,7 @@ function StatisticsTab({ scrollProps }: { scrollProps: ScrollChrome }) {
         icon="person-add-outline"
         title="Oyuncu profilin bağlı değil"
         body="Bağlandıktan sonra lig ve sezon kırılımlı istatistiklerin burada oluşur."
-        action={{ label: "elitlig.com'a git", onPress: () => openLink(SITE_URL) }}
+        action={{ label: "Profilimi bul ve bağla", onPress: () => appRouter.push("/oyuncum/bagla") }}
       />
     );
   }

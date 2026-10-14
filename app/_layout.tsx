@@ -136,6 +136,7 @@ export default function RootLayout() {
                       kendisidir: klasör altındaki `index.tsx` "klasör/index"
                       olarak kaydolur. */}
                   <Stack.Screen name="oyuncum/index" />
+                  <Stack.Screen name="oyuncum/bagla" />
                   <Stack.Screen name="teklif/[id]" />
                   <Stack.Screen name="sozlesme/[id]" />
                   <Stack.Screen name="ceza/[id]" />

@@ -393,8 +393,8 @@ export default function AccountScreen() {
         key: "oyuncu-bagla",
         icon: "person-add",
         title: "Oyuncu profili bağla",
-        subtitle: "Sahiplenme talebi elitlig.com panelinde",
-        action: { kind: "link", url: SITE_URL },
+        subtitle: "Veritabanındaki kaydını bul ve sahiplen",
+        action: { kind: "route", route: "/oyuncum/bagla" },
       });
     }
     if (me?.team) {
@@ -556,7 +556,7 @@ export default function AccountScreen() {
             </Text>
             <Text style={styles.onboardBody} {...textScale.long}>
               {me.onboarding.player.description ??
-                "Profil oluşturma ve sahiplenme talepleri şimdilik web panelinden yapılıyor."}
+                "Veritabanındaki kaydını bulup sahiplenmek için “Oyuncu profili bağla” adımını kullan."}
             </Text>
           </Surface>
         ) : null}
