@@ -1162,8 +1162,30 @@ export interface TeamMatchDetailResponse {
   }[];
 }
 
+/**
+ * Kadro satırları daima DİZİ olarak döner. Sunucu MariaDB'de JSON sütununu
+ * metin (`"[{...}]"`) olarak okuyabiliyor; ekranlar `plan.lineup.map/filter`
+ * çağırdığı için metin gelince maç ekranı, analiz sekmesi ve Yönetim
+ * panelindeki maç hazırlığı kartı çöküyordu.
+ */
+export function normalizeLineup(raw: unknown): MatchPlanPlayer[] {
+  let value = raw;
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return [];
+    }
+  }
+  return Array.isArray(value) ? (value as MatchPlanPlayer[]) : [];
+}
+
 export const getTeamMatchPlan = (matchId: number) =>
-  get<TeamMatchDetailResponse>(`/api/match-center/team/matches/${matchId}`);
+  get<TeamMatchDetailResponse>(`/api/match-center/team/matches/${matchId}`).then((data) => ({
+    ...data,
+    plan: data.plan ? { ...data.plan, lineup: normalizeLineup(data.plan.lineup) } : null,
+    lineup: Array.isArray(data.lineup) ? data.lineup : [],
+  }));
 
 /**
  * PUT /api/match-center/team/matches/:matchId/plan
@@ -1182,7 +1204,14 @@ export const saveTeamMatchPlan = (
     tactics?: string;
     lineup: MatchPlanPlayer[];
   }
-) => put<{ message: string; plan: MatchPlan }>(`/api/match-center/team/matches/${matchId}/plan`, body);
+) =>
+  put<{ message: string; plan: MatchPlan; converted_guests?: string[] }>(
+    `/api/match-center/team/matches/${matchId}/plan`,
+    body
+  ).then((data) => ({
+    ...data,
+    plan: data.plan ? { ...data.plan, lineup: normalizeLineup(data.plan.lineup) } : data.plan,
+  }));
 
 /** GET /api/match-center/team/roster — takım oyuncuları + ildeki oyuncu havuzu (misafir seçimi). */
 export interface MatchCenterRosterPlayer {
@@ -1251,10 +1280,15 @@ export const respondMatchAttendance = (matchId: number, status: AttendanceStatus
   post<{ message: string; status: AttendanceStatus }>(`/api/match-availability/${matchId}/respond/${status}`);
 
 /** POST .../guest-players — kadroya misafir oyuncu ekler (takıma bağlanır). */
+/**
+ * Yeni misafir oyuncu. Sunucu adı `playerName` alanından okur
+ * (services/teamMatchCenterService.js → createGuestPlayer); eskiden `name`
+ * gönderildiği için her deneme "Oyuncu adı en az 2 karakter" hatası alıyordu.
+ */
 export const createGuestPlayer = (matchId: number, body: { name: string; position?: string }) =>
   post<{ message: string; player: { id: number; player_name: string } }>(
     `/api/match-center/team/matches/${matchId}/guest-players`,
-    body
+    { playerName: body.name, position: body.position }
   );
 
 /**
