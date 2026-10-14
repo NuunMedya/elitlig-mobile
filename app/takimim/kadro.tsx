@@ -24,9 +24,11 @@
  * SUNUCU SÖZLEŞMESİ (değiştirilmedi):
  *  - PATCH /api/team-management/roster/:playerId — yalnız DEĞİŞEN alanlar
  *    gönderilir; `squad_role: "starter"` bu uçtan kabul edilmez (400).
- *  - DELETE /api/team-management/roster/:playerId — aktif sözleşmeli oyuncuda
- *    önce 409 PLAYER_HAS_ACTIVE_CONTRACT döner; kullanıcı fesih onayı verirse
- *    aynı çağrı `?force=true` ile tekrarlanır.
+ *  - Kadrodan çıkarma ANINDA yapılmaz (yönetim onaylı kadro listesi):
+ *    POST /squad-list/removals ile oyuncu "çıkarılacak" işaretlenir,
+ *    POST /squad-list/submit ile liste yönetime gider; yönetim her çıkarma ve
+ *    transferi tek tek onaylar (web: /editor/kadro-listeleri). Satırlarda
+ *    oyuncunun bu takımda oynadığı maç sayısı GET /squad-list'ten gelir.
  *  - PUT /api/team-management/lineup — { formation, assignments[] }. İlk 8
  *    rolü SUNUCUDA bu uçtan türer; kadro tablosundan `starter` seçilemez.
  *
@@ -102,7 +104,12 @@ import {
   POSITIONS,
   getTeamRoster,
   positionLabel,
-  releaseRosterPlayer,
+  getSquadList,
+  type SquadListResponse,
+  markSquadRemoval,
+  unmarkSquadRemoval,
+  submitSquadList,
+  withdrawSquadList,
   saveLineup,
   updateRosterPlayer,
   type RosterPlayer,
@@ -253,6 +260,22 @@ export default function SquadManagementScreen() {
 
   const roster = useMemo(() => query.data?.roster ?? [], [query.data]);
 
+  /* KADRO LİSTESİ — bu takımdaki maç sayıları, çıkarılacak işaretleri ve
+     yönetime gönderim durumu. Hata hâlinde liste yine çizilir. */
+  const squadQuery = useQuery({
+    queryKey: ["takim", "squad-list"],
+    queryFn: () => getSquadList(),
+    enabled: Boolean(auth.user),
+    staleTime: 30_000,
+    retry: false,
+  });
+  const squadById = useMemo(() => {
+    const map = new Map<number, { matches: number; marked: boolean }>();
+    (squadQuery.data?.players ?? []).forEach((p) => map.set(Number(p.id), { matches: p.stats?.matches ?? 0, marked: Boolean(p.marked_for_removal) }));
+    return map;
+  }, [squadQuery.data]);
+  const listLocked = squadQuery.data?.submission?.status === "submitted";
+
   /* PİYASA DEĞERLERİ — TEK sorguda, takım kapsamında (N+1 yok; web paneli de
      aynı yolu kullanır). Uç herkese açık ve kadro olmadan anlamsız olduğu için
      yalnız takım kimliği çözüldüğünde açılır. Hata hâlinde satırlar değer
@@ -374,10 +397,12 @@ export default function SquadManagementScreen() {
         position={rowPosition(index, section.data.length)}
         marketValue={marketByPlayer.get(item.id)?.value ?? null}
         marketChange={marketByPlayer.get(item.id)?.change ?? null}
+        matches={squadById.get(item.id)?.matches ?? null}
+        marked={squadById.get(item.id)?.marked ?? false}
         onPress={openEditor}
       />
     ),
-    [marketByPlayer, openEditor]
+    [marketByPlayer, openEditor, squadById]
   );
 
   const renderSectionHeader = useCallback(
@@ -549,6 +574,7 @@ export default function SquadManagementScreen() {
         keyboardDismissMode="on-drag"
         initialNumToRender={12}
         ListHeaderComponent={listHeader}
+        ListFooterComponent={squadQuery.data ? <SquadListSubmitCard data={squadQuery.data} /> : null}
         ListEmptyComponent={
           <EmptyState
             icon={term ? "search-outline" : "checkmark-circle-outline"}
@@ -572,6 +598,8 @@ export default function SquadManagementScreen() {
       {editing ? (
         <PlayerEditorSheet
           player={editing}
+          marked={squadById.get(editing.id)?.marked ?? false}
+          locked={listLocked}
           jerseyOwners={jerseyOwners}
           onClose={closeEditor}
           onOpenProfile={(id) => {
@@ -888,14 +916,86 @@ const FormationChip = React.memo(function FormationChip({
  * ölçüleri (64px yükseklik, 12px yatay boşluk, hairline ayraç, grup köşeleri)
  * ListRow ile birebir aynı tutulur.
  */
+/* ══════════════════════════════════════════════════════════════════════════
+   Kadro listesini yönetime gönder
+   ══════════════════════════════════════════════════════════════════════════ */
+
+function SquadListSubmitCard({ data }: { data: SquadListResponse }) {
+  const queryClient = useQueryClient();
+  const toast = useToast();
+  const submission = data.submission;
+  const locked = submission?.status === "submitted";
+  const removals = data.players.filter((p) => p.marked_for_removal).length;
+  const additions = data.additions.length;
+  const review = data.last_review;
+
+  const mutation = useMutation({
+    mutationFn: () => (locked ? withdrawSquadList() : submitSquadList()),
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: ["takim", "squad-list"] });
+      toast.show({ message: result.message, tone: "success" });
+    },
+    onError: (error: unknown) => {
+      toast.show({ message: error instanceof ApiError ? error.message || error.userMessage : "İşlem yapılamadı.", tone: "danger" });
+    },
+  });
+
+  const confirm = useCallback(() => {
+    if (locked) {
+      Alert.alert("Gönderimi geri çek", "Liste yönetimden geri çekilecek; yeniden düzenleyip gönderebilirsin.", [
+        { text: "Vazgeç", style: "cancel" },
+        { text: "Geri çek", onPress: () => mutation.mutate() },
+      ]);
+      return;
+    }
+    Alert.alert(
+      "Listeyi yönetime gönder",
+      `${data.players.length} oyunculuk kadro listen yönetime gönderilecek: ${removals} çıkarma, ${additions} transfer/davet. ` +
+        "Yönetim her çıkarma ve transferi tek tek onaylar; sonuç bildirim olarak gelir.",
+      [
+        { text: "Vazgeç", style: "cancel" },
+        { text: "Gönder", onPress: () => mutation.mutate() },
+      ]
+    );
+  }, [additions, data.players.length, locked, mutation, removals]);
+
+  return (
+    <View style={styles.submitCard}>
+      <Text style={styles.submitTitle} {...textScale.dense}>
+        {locked ? "Liste yönetimde inceleniyor" : "Kadro listesini yönetime gönder"}
+      </Text>
+      <Text style={styles.submitMeta} {...textScale.long}>
+        {removals} çıkarılacak · {additions} transfer/davet
+        {review && !locked
+          ? ` · Son inceleme: ${review.items.filter((i) => i.decision === "approved").length} onay, ${review.items.filter((i) => i.decision === "rejected").length} ret`
+          : ""}
+      </Text>
+      <Button
+        label={locked ? "Gönderimi geri çek" : "Listeyi gönder"}
+        variant={locked ? "secondary" : "primary"}
+        icon={locked ? "arrow-undo-outline" : "paper-plane-outline"}
+        onPress={confirm}
+        loading={mutation.isPending}
+        fullWidth
+      />
+    </View>
+  );
+}
+
 const PlayerRow = React.memo(function PlayerRow({
   player,
   position,
   marketValue,
   marketChange,
+  matches,
+  marked,
   onPress,
 }: {
   player: RosterPlayer;
+  /** Bu takımda oynadığı maç sayısı (kadro listesinden). */
+  matches?: number | null;
+  /** Yönetime gönderilecek listede "çıkarılacak" işaretli mi. */
+  marked?: boolean;
   position: "single" | "first" | "middle" | "last";
   /** Sunucudan gelen piyasa değeri (ETL); yoksa satırda gösterilmez. */
   marketValue?: number | null;
@@ -906,6 +1006,7 @@ const PlayerRow = React.memo(function PlayerRow({
   const handlePress = useCallback(() => onPress(player), [onPress, player]);
 
   const meta = [
+    matches != null ? `${matches} maç` : null,
     positionLabel(player.team_position) || player.profile_position || "Mevki seçilmedi",
     ROLE_LABELS[player.squad_role],
     player.has_linked_account ? null : "Hesabı yok",
@@ -969,6 +1070,7 @@ const PlayerRow = React.memo(function PlayerRow({
       {/* Renk sinyaldir (Arena §1): sözleşmeli olmak NORMAL hâldir ve rozet
           taşımaz; yalnız eksik olan işaretlenir. On altı yeşil rozetin
           arasında iki turuncu kayboluyordu. */}
+      {marked ? <Badge label="ÇIKARILACAK" tone="danger" size="xs" /> : null}
       {player.has_active_contract ? null : <Badge label="SÖZLEŞMESİZ" tone="warn" size="xs" />}
 
       <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
@@ -989,11 +1091,17 @@ const NO_JERSEY = 0;
 
 function PlayerEditorSheet({
   player,
+  marked,
+  locked,
   jerseyOwners,
   onClose,
   onOpenProfile,
 }: {
   player: RosterPlayer;
+  /** Oyuncu yönetime gidecek listede "çıkarılacak" işaretli mi. */
+  marked: boolean;
+  /** Liste yönetimde inceleniyorsa işaret değiştirilemez. */
+  locked: boolean;
   /** Forma numarası → sahibi; aynı numarayı iki oyuncuya vermeyi önceden uyarır. */
   jerseyOwners: Map<number, { id: number; name: string }>;
   onClose: () => void;
@@ -1009,6 +1117,7 @@ function PlayerEditorSheet({
   const invalidate = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ["takim", "roster"] });
     void queryClient.invalidateQueries({ queryKey: ["takim", "dashboard"] });
+    void queryClient.invalidateQueries({ queryKey: ["takim", "squad-list"] });
   }, [queryClient]);
 
   const saveMutation = useMutation({
@@ -1026,54 +1135,38 @@ function PlayerEditorSheet({
     },
   });
 
-  const releaseMutation = useMutation({
-    mutationFn: (force: boolean) => releaseRosterPlayer(player.id, force),
+  /* Kadrodan çıkarma yönetim onaylıdır: oyuncu yalnız "çıkarılacak" olarak
+     işaretlenir; liste yönetime gönderildiğinde yönetim karar verir. */
+  const removalMutation = useMutation({
+    mutationFn: () => (marked ? unmarkSquadRemoval(player.id) : markSquadRemoval(player.id)),
     onSuccess: (result) => {
       invalidate();
       toast.show({ message: result.message, tone: "success" });
       onClose();
     },
     onError: (error: unknown) => {
-      /**
-       * Aktif sözleşme: sunucu ilk çağrıda 409 döner. İKİNCİ ONAY alınır ve
-       * aynı istek `force=true` ile tekrarlanır — sözleşme feshedilir.
-       */
-      if (error instanceof ApiError && error.code === "PLAYER_HAS_ACTIVE_CONTRACT") {
-        Alert.alert(
-          "Sözleşmesi aktif",
-          `${player.player_name} ile aktif bir sözleşme var. Kadrodan çıkarmak bu sözleşmeyi feshedecek ve varsa açık teklifleri geri çekecek. Yine de çıkarılsın mı?`,
-          [
-            { text: "Vazgeç", style: "cancel" },
-            {
-              text: "Feshet ve çıkar",
-              style: "destructive",
-              onPress: () => releaseMutation.mutate(true),
-            },
-          ]
-        );
-        return;
-      }
       toast.show({
-        message: error instanceof ApiError ? error.userMessage : "Çıkarılamadı.",
+        message: error instanceof ApiError ? error.message || error.userMessage : "İşlem yapılamadı.",
         tone: "danger",
       });
     },
   });
 
-  const confirmRelease = useCallback(() => {
+  const confirmRemoval = useCallback(() => {
+    if (marked) {
+      removalMutation.mutate();
+      return;
+    }
     Alert.alert(
-      "Kadrodan çıkar",
-      `${player.player_name} kadrondan çıkarılacak. Emin misin?`,
+      "Listeden çıkar",
+      `${player.player_name} çıkarılacaklar listesine alınacak. Oyuncu hemen çıkarılmaz: listeyi yönetime gönderdiğinde yönetim onaylarsa kadrodan çıkar` +
+        (player.has_active_contract ? " ve aktif sözleşmesi feshedilir." : "."),
       [
         { text: "Vazgeç", style: "cancel" },
-        {
-          text: "Çıkar",
-          style: "destructive",
-          onPress: () => releaseMutation.mutate(false),
-        },
+        { text: "Çıkarılacaklara ekle", style: "destructive", onPress: () => removalMutation.mutate() },
       ]
     );
-  }, [player.player_name, releaseMutation]);
+  }, [marked, player.has_active_contract, player.player_name, removalMutation]);
 
   const togglePosition = useCallback((code: string) => {
     setPosition((prev) => (prev === code ? null : code));
@@ -1094,7 +1187,7 @@ function PlayerEditorSheet({
     saveMutation.mutate(body);
   }, [jersey, onClose, player.jersey_number, player.team_position, player.squad_role, position, role, saveMutation]);
 
-  const busy = saveMutation.isPending || releaseMutation.isPending;
+  const busy = saveMutation.isPending || removalMutation.isPending;
 
   /** Seçilen numara kadroda başka birinde mi? Sunucu engellemiyor; maç
       kadrosunda "forma numaraları benzersiz" kuralına takılmadan uyarılır. */
@@ -1110,12 +1203,12 @@ function PlayerEditorSheet({
       footer={
         <View style={styles.sheetFooter}>
           <Button
-            label="Kadrodan çıkar"
-            variant="danger"
-            icon="person-remove-outline"
-            onPress={confirmRelease}
-            loading={releaseMutation.isPending}
-            disabled={busy}
+            label={marked ? "Çıkarmayı geri al" : "Listeden çıkar"}
+            variant={marked ? "secondary" : "danger"}
+            icon={marked ? "arrow-undo-outline" : "person-remove-outline"}
+            onPress={confirmRemoval}
+            loading={removalMutation.isPending}
+            disabled={busy || locked}
             style={styles.footerButton}
           />
           <Button
@@ -1260,6 +1353,17 @@ const RoleChip = React.memo(function RoleChip({
    ══════════════════════════════════════════════════════════════════════════ */
 
 const styles = StyleSheet.create({
+  submitCard: {
+    marginTop: space.lg,
+    padding: space.lg,
+    gap: space.sm,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+  },
+  submitTitle: { ...type.h3, color: colors.textPrimary },
+  submitMeta: { ...type.bodySm, color: colors.textSecondary },
   screen: {
     flex: 1,
     backgroundColor: colors.bg,
