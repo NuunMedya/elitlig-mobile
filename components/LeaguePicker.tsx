@@ -15,6 +15,10 @@
  * başka bir kipte çip vardı; aynı ayar üç ayrı biçimde okunuyordu. Artık her
  * ekran bu bileşeni başlığın `bottom` yuvasına koyar.
  *
+ * "TÜMÜ" (`allowAll`, yalnız Maçlar): sayfa "Tüm Türkiye" / "Tüm ligler"
+ * satırlarıyla açılır ve hap görünüm genişliğini yazar — "Tüm Türkiye",
+ * "Ankara · Tüm ligler" ya da tek lig kapsamı.
+ *
  * YÜZEYİ KENDİSİ ÖĞRENİR (`HeaderToneContext`): sahne başlığında cam hap,
  * kâğıtta beyaz hap.
  */
@@ -45,15 +49,22 @@ export function shortLeague(label: string): string {
   return label.trim().replace(/^(\d+)\.\s+/, "$1.");
 }
 
-/** Hap metni: "Ankara · FREELİG · 15. Sezon". */
-export function useScopeLabel(): string {
-  const { cityLabel, leagueLabel, seasonLabel } = useScope();
+/** Hap metni: "Ankara · FREELİG · 15. Sezon". `allowAll` ile Maçlar'ın
+ *  görünüm genişliği de okunur: "Tüm Türkiye" / "Ankara · Tüm ligler". */
+export function useScopeLabel(allowAll = false): string {
+  const { cityLabel, leagueLabel, seasonLabel, matchView } = useScope();
+  const view = allowAll ? matchView : "league";
   return useMemo(() => {
+    if (view === "country") return "Tüm Türkiye";
     const parts = [cityLabel || "İl seç"];
+    if (view === "city") {
+      parts.push("Tüm ligler");
+      return parts.join(" · ");
+    }
     if (leagueLabel) parts.push(shortLeague(leagueLabel));
     if (seasonLabel) parts.push(shortSeason(seasonLabel));
     return parts.join(" · ");
-  }, [cityLabel, leagueLabel, seasonLabel]);
+  }, [view, cityLabel, leagueLabel, seasonLabel]);
 }
 
 export interface LeaguePickerProps {
@@ -63,6 +74,8 @@ export interface LeaguePickerProps {
   step?: ScopeStep;
   /** Hap ve çipler kenar boşluğu olmadan çizilir (kart içi kullanım). */
   flush?: boolean;
+  /** "Tüm Türkiye" / "Tüm ligler" seçenekleri (yalnız Maçlar ekranı). */
+  allowAll?: boolean;
   testID?: string;
 }
 
@@ -92,20 +105,24 @@ export const LeaguePicker = React.memo(function LeaguePicker({
   pinned: showPinned = true,
   step = "city",
   flush = false,
+  allowAll = false,
   testID,
 }: LeaguePickerProps) {
   const ink = useHeaderTone("paper") === "ink";
   const scope = useScope();
-  const { openScopeSheet, jumpTo, leagueId, pinnedLeagues } = scope;
-  const label = useScopeLabel();
+  const { openScopeSheet, jumpTo, leagueId, pinnedLeagues, matchView, setMatchView } = scope;
+  const label = useScopeLabel(allowAll);
+  const wide = allowAll && matchView !== "league";
 
-  const open = useCallback(() => openScopeSheet(step), [openScopeSheet, step]);
+  const open = useCallback(() => openScopeSheet(step, { allowAll }), [openScopeSheet, step, allowAll]);
   const goPinned = useCallback(
     (league: PinnedLeague) => {
+      // Sabitli lig çipi daima tek lig görünümüne döner.
+      if (allowAll) setMatchView("league");
       if (league.leagueId === leagueId) return;
       jumpTo(league.cityId, league.leagueId);
     },
-    [jumpTo, leagueId]
+    [jumpTo, leagueId, allowAll, setMatchView]
   );
 
   const chips = showPinned ? pinnedLeagues : [];
@@ -121,7 +138,11 @@ export const LeaguePicker = React.memo(function LeaguePicker({
       accessibilityHint="İl, lig ve sezon seçmek için dokunun"
       testID={testID ?? "league-picker"}
     >
-      <Ionicons name="trophy-outline" size={13} color={ink ? colors.brandOnDark : colors.brandAccent} />
+      <Ionicons
+        name={wide ? "earth" : "trophy-outline"}
+        size={13}
+        color={ink ? colors.brandOnDark : colors.brandAccent}
+      />
       <Text
         style={[styles.pillLabel, ink ? styles.pillLabelInk : null]}
         numberOfLines={1}
@@ -149,7 +170,7 @@ export const LeaguePicker = React.memo(function LeaguePicker({
         <PinnedChip
           key={league.leagueId}
           league={league}
-          selected={league.leagueId === leagueId}
+          selected={!wide && league.leagueId === leagueId}
           onPress={goPinned}
         />
       ))}

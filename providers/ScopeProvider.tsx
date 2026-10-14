@@ -26,6 +26,9 @@ import type { MetaLeague, MetaOption, MetaSeason } from "@/lib/types";
 const STORAGE_KEY = "elitlig.scope.v1";
 /** Sabitlenen ligler — cihazda saklanır, sunucuya yazılmaz (bkz. PinnedLeague). */
 const PINNED_STORAGE_KEY = "elitlig.pinnedLeagues.v1";
+/** Maçlar görünüm genişliği — cihazda saklanır (bkz. MatchView). */
+const MATCH_VIEW_STORAGE_KEY = "elitlig.matchView.v1";
+const MATCH_VIEWS: readonly MatchView[] = ["league", "city", "country"];
 
 /**
  * Sabitlenen lig. Takipten FARKLIDIR: takip bildirim üretir (sunucu), sabitleme
@@ -42,6 +45,19 @@ export interface PinnedLeague {
 
 /** Kapsam sayfasının üç adımı — ScopeSheet bu sırayı izler. */
 export type ScopeStep = "city" | "league" | "season";
+
+/** Maçların görünüm genişliği. Kapsamdan (il · lig · sezon) AYRI tutulur:
+ *  Lig sekmesi, puan durumu, oyuncular hep tek lig ister; yalnız Maçlar
+ *  ekranı bir ilin tamamına ya da tüm Türkiye'ye genişleyebilir.
+ *   · "league"  → seçili lig + sezon (varsayılan)
+ *   · "city"    → seçili ilin bütün ligleri ("Tüm ligler")
+ *   · "country" → bütün iller ("Tüm Türkiye") */
+export type MatchView = "league" | "city" | "country";
+
+export interface ScopeSheetOptions {
+  /** Sayfada "Tüm Türkiye" / "Tüm ligler" satırları gösterilsin (Maçlar). */
+  allowAll?: boolean;
+}
 
 interface StoredScope {
   cityId: number;
@@ -83,7 +99,12 @@ interface ScopeContextValue {
   sheetOpen: boolean;
   /** Sayfa hangi adımda açılacak (varsayılan "city"). */
   sheetStep: ScopeStep;
-  openScopeSheet: (step?: ScopeStep) => void;
+  /** Sayfa "Tümü" satırlarıyla mı açıldı (yalnız Maçlar ekranı). */
+  sheetAllowAll: boolean;
+  openScopeSheet: (step?: ScopeStep, options?: ScopeSheetOptions) => void;
+  /** Maçlar ekranının görünüm genişliği (bkz. MatchView). */
+  matchView: MatchView;
+  setMatchView: (view: MatchView) => void;
   closeScopeSheet: () => void;
 }
 
@@ -96,6 +117,21 @@ export function ScopeProvider({ children }: { children: ReactNode }) {
   const [restored, setRestored] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetStep, setSheetStep] = useState<ScopeStep>("city");
+  const [sheetAllowAll, setSheetAllowAll] = useState(false);
+  const [matchView, setMatchViewState] = useState<MatchView>("league");
+
+  useEffect(() => {
+    AsyncStorage.getItem(MATCH_VIEW_STORAGE_KEY)
+      .then((raw) => {
+        if (raw && MATCH_VIEWS.includes(raw as MatchView)) setMatchViewState(raw as MatchView);
+      })
+      .catch(() => {});
+  }, []);
+
+  const setMatchView = useCallback((view: MatchView) => {
+    setMatchViewState(view);
+    AsyncStorage.setItem(MATCH_VIEW_STORAGE_KEY, view).catch(() => {});
+  }, []);
   const [pinned, setPinned] = useState<PinnedLeague[]>([]);
   const [pinnedRestored, setPinnedRestored] = useState(false);
 
@@ -252,8 +288,9 @@ export function ScopeProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
-  const openScopeSheet = useCallback((step: ScopeStep = "city") => {
+  const openScopeSheet = useCallback((step: ScopeStep = "city", options?: ScopeSheetOptions) => {
     setSheetStep(step);
+    setSheetAllowAll(Boolean(options?.allowAll));
     setSheetOpen(true);
   }, []);
 
@@ -288,8 +325,11 @@ export function ScopeProvider({ children }: { children: ReactNode }) {
       togglePinLeague,
       sheetOpen,
       sheetStep,
+      sheetAllowAll,
       openScopeSheet,
       closeScopeSheet,
+      matchView,
+      setMatchView,
     }),
     [
       cityId,
@@ -311,8 +351,11 @@ export function ScopeProvider({ children }: { children: ReactNode }) {
       togglePinLeague,
       sheetOpen,
       sheetStep,
+      sheetAllowAll,
       openScopeSheet,
       closeScopeSheet,
+      matchView,
+      setMatchView,
     ]
   );
 

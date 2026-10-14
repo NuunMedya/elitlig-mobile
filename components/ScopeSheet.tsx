@@ -28,8 +28,14 @@
  * adımı güncel sezonları ve altında ARŞİV'i (eski Lig ▸ Arşiv sekmesi)
  * gösterir — geçmiş sezona geçmek ayrı bir sekme değil, sezon seçimidir.
  *
+ * "TÜMÜ" SATIRLARI (yalnız Maçlar): `openScopeSheet(step, { allowAll: true })`
+ * ile açıldığında il adımının başında "Tüm Türkiye", lig adımının başında
+ * "Tüm ligler" satırı durur. Bunlar kapsamı DEĞİŞTİRMEZ, yalnız Maçlar'ın
+ * görünüm genişliğini (`matchView`) ayarlar; Lig sekmesi tek ligde kalır.
+ * Bir il seçmek görünümü o ilin tamamına, bir lig/sezon seçmek tek lige çeker.
+ *
  * Tek örnek app/_layout.tsx'te mount edilir; açma/kapama ScopeProvider
- * üstünden yapılır (`openScopeSheet(step?)`).
+ * üstünden yapılır (`openScopeSheet(step?, options?)`).
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -47,6 +53,9 @@ import {
 import { useFavorite } from "@/providers/FavoriteProvider";
 import { useScope, type ScopeStep } from "@/providers/ScopeProvider";
 import { colors, fonts, hairline, layout, radius, space, textScale, touchSlop, type, upperTR } from "@/theme";
+
+/** "Tüm Türkiye" / "Tüm ligler" satırlarının kimliği — gerçek id'lerle çakışmaz. */
+const ALL_ID = 0;
 
 /** Arama kutusunun görüneceği eşik — altında kutu gereksiz yer kaplar. */
 const SEARCH_THRESHOLD = 12;
@@ -68,6 +77,8 @@ interface ScopeOption {
   archived: boolean;
   /** Sabitlenen lig başka bir ildeyse il id'si — seçim `jumpTo` ile yapılır. */
   cityId?: number;
+  /** "Tüm Türkiye" / "Tüm ligler" satırı. */
+  all?: boolean;
 }
 
 /** Türkçe arama: "İzmir" araması "izmir" yazınca da bulunmalı. */
@@ -113,6 +124,11 @@ const OptionRow = React.memo(function OptionRow({
       accessibilityState={{ selected }}
       accessibilityLabel={option.label}
     >
+      {option.all ? (
+        <View style={[styles.allIcon, selected && styles.allIconOn]}>
+          <Ionicons name="earth" size={15} color={selected ? colors.textOnBrand : colors.brandAccent} />
+        </View>
+      ) : null}
       {favorite ? <Ionicons name="star" size={13} color={colors.star} /> : null}
       <View style={styles.rowText}>
         <Text
@@ -225,6 +241,9 @@ export function ScopeSheet() {
     pinnedLeagues,
     isPinnedLeague,
     togglePinLeague,
+    sheetAllowAll,
+    matchView,
+    setMatchView,
   } = scope;
 
   const [step, setStep] = useState<ScopeStep>(sheetStep);
@@ -260,7 +279,20 @@ export function ScopeSheet() {
       archived: false,
     });
 
-    if (step === "city") return scope.cities.map((item) => toOption(item));
+    const allRow = (label: string, caption: string): ScopeOption => ({
+      key: `all:${step}`,
+      kind: "option",
+      id: ALL_ID,
+      label,
+      caption,
+      archived: false,
+      all: true,
+    });
+
+    if (step === "city") {
+      const cities = scope.cities.map((item) => toOption(item));
+      return sheetAllowAll ? [allRow("Tüm Türkiye", "Bütün illerin maçları"), ...cities] : cities;
+    }
 
     if (step === "league") {
       // Sabitlenenler (her ilden) en üstte; ardından bu ilin kalan ligleri,
@@ -278,8 +310,13 @@ export function ScopeSheet() {
         .filter((league) => !isPinnedLeague(league.id))
         .map((league) => toOption(league))
         .sort((a, b) => Number(isFavoriteLeague(b.id)) - Number(isFavoriteLeague(a.id)));
-      if (!pinnedRows.length) return rest;
+      const allRows =
+        sheetAllowAll && cityId
+          ? [allRow("Tüm ligler", scope.cityLabel ? `${scope.cityLabel} ilindeki bütün maçlar` : "Bu ilin bütün maçları")]
+          : [];
+      if (!pinnedRows.length) return [...allRows, ...rest];
       return [
+        ...allRows,
         header("pinned", "Sabitlenenler"),
         ...pinnedRows,
         ...(rest.length ? [header("city", scope.cityLabel ? `${scope.cityLabel} ligleri` : "Ligler"), ...rest] : []),
@@ -295,15 +332,25 @@ export function ScopeSheet() {
       .map((item) => ({ ...toOption(item, yearOf(item)), archived: false }));
     if (!archived.length) return current;
     return [...current, header("archive", "Arşiv · geçmiş sezonlar"), ...archived];
-  }, [step, scope.cities, scope.leagues, scope.seasons, scope.cityLabel, cityId, pinnedLeagues, isPinnedLeague, isFavoriteLeague]);
+  }, [step, scope.cities, scope.leagues, scope.seasons, scope.cityLabel, cityId, pinnedLeagues, isPinnedLeague, isFavoriteLeague, sheetAllowAll]);
 
   const filtered = useMemo(() => {
     const term = fold(search);
     if (!term) return options;
-    return options.filter((option) => option.kind === "option" && fold(option.label).includes(term));
+    return options.filter((option) => option.kind === "option" && !option.all && fold(option.label).includes(term));
   }, [options, search]);
 
-  const selectedId = step === "city" ? cityId : step === "league" ? leagueId : seasonId;
+  /** "Tümü" görünümündeyken seçili satır o adımın "Tümü" satırıdır. */
+  const selectedId =
+    step === "city"
+      ? sheetAllowAll && matchView === "country"
+        ? ALL_ID
+        : cityId
+      : step === "league"
+        ? sheetAllowAll && matchView === "city"
+          ? ALL_ID
+          : leagueId
+        : seasonId;
 
   /**
    * Seçim anında uygulanır; şehir → lig → sezon adımları kendiliğinden
@@ -313,11 +360,22 @@ export function ScopeSheet() {
     (option: ScopeOption) => {
       const id = option.id;
       setSearch("");
+      if (option.all) {
+        // "Tüm Türkiye" / "Tüm ligler": kapsam aynı kalır, görünüm genişler.
+        setMatchView(step === "city" ? "country" : "city");
+        closeScopeSheet();
+        return;
+      }
       if (step === "city") {
         if (id !== cityId) selectCity(id);
+        // Maçlar'da il seçmek önce o ilin tamamını gösterir; lig adımında
+        // "Tüm ligler" seçili durur, istenirse tek lige inilir.
+        if (sheetAllowAll) setMatchView("city");
         setStep("league");
         return;
       }
+      // Lig ya da sezon seçmek her zaman tek lig görünümüdür.
+      setMatchView("league");
       if (step === "league") {
         // Başka ilde sabitlenmiş lig: il ve lig birlikte değişir.
         if (option.cityId && option.cityId !== cityId) jumpTo(option.cityId, id);
@@ -329,7 +387,7 @@ export function ScopeSheet() {
       // Son adım: seçim tamam, sayfa kendiliğinden kapanır.
       closeScopeSheet();
     },
-    [step, cityId, leagueId, seasonId, selectCity, selectLeague, selectSeason, jumpTo, closeScopeSheet],
+    [step, cityId, leagueId, seasonId, selectCity, selectLeague, selectSeason, jumpTo, closeScopeSheet, sheetAllowAll, setMatchView],
   );
 
   const handleTogglePin = useCallback(
@@ -353,7 +411,7 @@ export function ScopeSheet() {
         option={item}
         selected={item.kind === "option" && item.id === selectedId}
         favorite={step === "league" && isFavoriteLeague(item.id)}
-        pinned={step === "league" && cityId ? isPinnedLeague(item.id) : undefined}
+        pinned={step === "league" && cityId && !item.all ? isPinnedLeague(item.id) : undefined}
         onSelect={handleSelect}
         onTogglePin={handleTogglePin}
       />
@@ -378,17 +436,18 @@ export function ScopeSheet() {
   const emptyBody =
     search && options.length > 0 ? `"${search.trim()}" için sonuç çıkmadı.` : undefined;
 
+  const wide = sheetAllowAll ? matchView : "league";
   const values: Record<ScopeStep, string> = {
-    city: scope.cityLabel,
-    league: scope.leagueLabel,
-    season: scope.seasonLabel,
+    city: wide === "country" ? "Tüm Türkiye" : scope.cityLabel,
+    league: wide === "league" ? scope.leagueLabel : "Tümü",
+    season: wide === "league" ? scope.seasonLabel : "Tümü",
   };
 
   return (
     <BottomSheet
       visible={sheetOpen}
       onClose={closeScopeSheet}
-      title="Lig seç"
+      title={sheetAllowAll ? "Maçları süz" : "Lig seç"}
       // NEDEN "full": 81 şehirlik liste + adım kartları + arama + alt çubuk
       // yarım ekranda listeye üç satır bırakıyordu.
       snap="full"
@@ -574,6 +633,18 @@ const styles = StyleSheet.create({
     ...type.body,
     color: colors.textPrimary,
     flexShrink: 1,
+  },
+  /** "Tümü" satırının yuvarlak dünya rozeti. */
+  allIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: radius.pill,
+    backgroundColor: colors.brandDim,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  allIconOn: {
+    backgroundColor: colors.brand,
   },
   rowLabelSelected: {
     color: colors.brandAccent,

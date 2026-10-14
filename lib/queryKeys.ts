@@ -27,6 +27,10 @@ export const queryKeys = {
   results: (scope?: Partial<ScopeKey>) => ["matches", "results", ...scopePart(scope)] as const,
   liveMatches: (scope?: Partial<ScopeKey>) => ["matches", "live", ...scopePart(scope)] as const,
   match: (id: number) => ["matches", "detail", id] as const,
+  /** Lig seçilmeden gün penceresiyle çekilen maçlar: bir il (cityId) ya da
+   *  tüm Türkiye (cityId null). */
+  matchesWindow: (cityId: number | null, from: string, to: string) =>
+    ["matches", "window", cityId, from, to] as const,
   matchSnapshot: (id: number) => ["matches", "snapshot", id] as const,
   teamMatches: (teamId: number) => ["matches", "team", teamId] as const,
 

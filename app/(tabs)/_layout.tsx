@@ -1,11 +1,13 @@
 /**
  * SEKME ÇUBUĞU — uygulamanın beş ana bölümü.
  *
- * NE: Skorlar · Takip · Lig · Kulübüm · Profil. Uygulama SKORLAR ile açılır.
+ * NE: Maçlar · Takip · Lig · Kulübüm · Profil. Uygulama MAÇLAR ile açılır
+ * (rota adı tarihsel olarak `skorlar`; derin bağlantılar bozulmasın diye korunur).
  *
  * BİLGİ MİMARİSİ — her bölüm tek bir soruyu yanıtlar:
- *   · Skorlar → "Şu an ve bugün ne oynanıyor?" Tek lig seçici, gün şeridi,
- *     Tümü/Canlı/Bitti/Yaklaşan; en üstte takip ettiklerin, sonra sabitlenen
+ *   · Maçlar  → "Şu an ve bugün ne oynanıyor?" Altta (alt menünün hemen
+ *     üstünde) segment, lig seçici (Tüm Türkiye / Tüm ligler dahil) ve gün
+ *     şeridi; en üstte takip ettiklerin, sonra sabitlenen
  *     ligler. Takip edilen takımın canlı/bugünkü maçı varsa grafit vitrin.
  *     (Eski Ana Sayfa'nın vitrin ve canlı/bugün bölümleri, eski /canli.)
  *   · Takip   → "Benim takımlarım ne yapıyor?" Takımlarım şeridi, sıradaki/son
@@ -36,7 +38,7 @@ import { useLiveFavoriteCount } from "@/hooks/useLiveFavoriteCount";
 import { useUnreadCount } from "@/hooks/useUnreadCount";
 import { INTRO_SEEN_KEY } from "@/lib/storage";
 
-/** Uygulama Skorlar ile açılır; "/" (index) yalnız yönlendirmedir. */
+/** Uygulama Maçlar ile açılır; "/" (index) yalnız yönlendirmedir. */
 export const unstable_settings = { initialRouteName: "skorlar" };
 
 export default function TabsLayout() {
@@ -58,7 +60,7 @@ export default function TabsLayout() {
 
   /** Çubukta görünen sekmeler — SIRA BURADAKİ SIRADIR. */
   const tabs: readonly GlowTab[] = [
-    { name: "skorlar", label: "Skorlar", icon: "football", badge: live.count, badgeTone: "live" },
+    { name: "skorlar", label: "Maçlar", icon: "football", badge: live.count, badgeTone: "live" },
     { name: "takip", label: "Takip", icon: "star", accessibilityLabel: "Takip: takımların, ligler ve maçlar" },
     { name: "ligler", label: "Lig", icon: "trophy", accessibilityLabel: "Lig: puan, fikstür, oyuncular, istatistik, haber" },
     { name: "kulubum", label: "Kulübüm", icon: "shield" },
@@ -71,7 +73,7 @@ export default function TabsLayout() {
       screenOptions={{ headerShown: false }}
       tabBar={(props) => <GlowTabBar {...props} tabs={tabs} />}
     >
-      <Tabs.Screen name="skorlar" options={{ title: "Skorlar" }} />
+      <Tabs.Screen name="skorlar" options={{ title: "Maçlar" }} />
       <Tabs.Screen name="takip" options={{ title: "Takip" }} />
       <Tabs.Screen name="ligler" options={{ title: "Lig" }} />
       <Tabs.Screen name="kulubum" options={{ title: "Kulübüm" }} />
