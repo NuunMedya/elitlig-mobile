@@ -82,10 +82,10 @@ interface GameMeta {
 
 const GAMES: GameMeta[] = [
   { key: "seri", label: "Arena", icon: "flame", unit: "seri", route: "/arena" },
-  { key: "sektir", label: "Top Sektir", icon: "football", unit: "sekme", route: "/sektir" },
-  { key: "penalti", label: "Penaltı", icon: "golf", unit: "gol", route: "/penalti" },
+  { key: "sektir", label: "Top Sektir", icon: "football", unit: "puan", route: "/sektir" },
+  { key: "penalti", label: "Penaltı", icon: "golf", unit: "puan", route: "/penalti" },
   { key: "kimbu", label: "Kim Bu?", icon: "search", unit: "puan", route: "/kimbu" },
-  { key: "slalom", label: "Slalom", icon: "flag", unit: "koni", route: "/slalom" },
+  { key: "slalom", label: "Slalom", icon: "flag", unit: "puan", route: "/slalom" },
   { key: "gunun", label: "Günün Testi", icon: "bulb", unit: "puan", route: "/gunun" },
 ];
 
@@ -237,7 +237,8 @@ export default function ArenaLeaderboardScreen() {
 
   const [game, setGame] = useState<ArenaGame>(initial);
   const [period, setPeriod] = useState<Period>("weekly");
-  const [scopeMode, setScopeMode] = useState<ScopeMode>("city");
+  // Varsayılan Türkiye geneli: oyunlarda herkes herkesle yarışır; şehir bir süzgeç.
+  const [scopeMode, setScopeMode] = useState<ScopeMode>("turkey");
   const [shareOpen, setShareOpen] = useState(false);
 
   const scope = useScope();
@@ -255,8 +256,8 @@ export default function ArenaLeaderboardScreen() {
   });
 
   const meQuery = useQuery({
-    queryKey: ["arena", "me", game, cityId ?? "tr"],
-    queryFn: () => getMyArenaRank(game, cityId),
+    queryKey: ["arena", "me", game, period, cityId ?? "tr"],
+    queryFn: () => getMyArenaRank(game, cityId, period),
     enabled: Boolean(auth.user),
     staleTime: 30_000,
     retry: false,
@@ -279,8 +280,8 @@ export default function ArenaLeaderboardScreen() {
 
   const scopeItems = useMemo<SegmentedItem<ScopeMode>[]>(
     () => [
-      { key: "city", label: scope.cityLabel || "Şehrim" },
       { key: "turkey", label: "Türkiye" },
+      { key: "city", label: scope.cityLabel || "Şehrim" },
     ],
     [scope.cityLabel]
   );
