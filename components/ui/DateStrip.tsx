@@ -9,7 +9,13 @@
  * `new Date("2026-08-19")` UTC gece yarısı demektir; UTC-… saat diliminde bir
  * gün geriye kayar. Bu yüzden ayrıştırma elle yapılır (Date(y, m-1, d)).
  *
- * PERFORMANS: hücreler sabit 44px genişliktedir → `getItemLayout` sabittir ve
+ * GÖRÜNÜM (Maçlar alt paneli turu): her gün kendi yuvarlak kapsülünde
+ * durur — üstte versal gün adı, altta iri rakam, en altta maç noktası.
+ * Seçili gün dolu marka kapsülü ve hafif gölge; bugün (seçili değilse) ince
+ * marka halkası. Şerit artık alt paneldedir; kenar maskeleri panelin
+ * zeminiyle (`surface`) boyanır, sayfa zemini varsayılmaz.
+ *
+ * PERFORMANS: hücreler sabit genişliktedir genişliktedir → `getItemLayout` sabittir ve
  * seçili güne `scrollToOffset` ile ORTALAYARAK gidilir (spec §4.14). Gün
  * listesi ve etiketleri bir kez hesaplanır (`useMemo`); hücre `memo` ile
  * sarılıdır ve yalnız ilkel prop alır, böylece 43 hücrelik şerit kaydırırken
@@ -21,13 +27,13 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { FlatList, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import type { LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { colors, fonts, layout, radius, space, textScale, touchSlop, type } from "@/theme";
+import { colors, elevate, fonts, hairline, layout, radius, space, textScale, touchSlop, type } from "@/theme";
 import { haptics } from "@/lib/haptics";
 import { withAlpha } from "./Badge";
 
-/** Maske gradyanının saydam ucu — zeminin KENDİ renginin sıfır opaklığı.
-    Düz "transparent" siyahın saydamıdır ve iOS'ta geçişte gri bir bant bırakır. */
-const BG_CLEAR = withAlpha(colors.bg, 0);
+/* Maske gradyanının saydam ucu — zeminin KENDİ renginin sıfır opaklığı
+   (`surfaceClear`). Düz "transparent" siyahın saydamıdır ve iOS'ta geçişte
+   gri bir bant bırakır. */
 
 export interface DateStripProps {
   /** "YYYY-MM-DD" */
@@ -41,6 +47,8 @@ export interface DateStripProps {
   onOpenCalendar?: () => void;
   /** "Bugün"e dön düğmesi; seçili gün bugün değilse görünür */
   showTodayButton?: boolean;
+  /** Şeridin oturduğu zemin — kenar maskeleri bu renge erir (varsayılan sayfa zemini). */
+  surface?: string;
 }
 
 /** getDay() sırasıyla Türkçe gün kısaltmaları (0 = Pazar) — VERSAL, maket
@@ -48,7 +56,7 @@ export interface DateStripProps {
     gerekmez; İ/ı dönüşümü elle doğrudur (ÇAR, PZT). */
 const WEEKDAYS = ["PAZ", "PZT", "SAL", "ÇAR", "PER", "CUM", "CMT"] as const;
 
-const CELL_WIDTH = 44;
+const CELL_WIDTH = 46;
 
 const pad = (value: number) => String(value).padStart(2, "0");
 
@@ -68,8 +76,8 @@ interface DayItem {
   iso: string;
   /** Ayın günü — "19" */
   day: string;
-  /** Her zaman versal kısa gün adı ("PER"). Bugün, rengiyle ve altındaki
-      çizgiyle ayrışır — bkz. `DayCell`. */
+  /** Her zaman versal kısa gün adı ("PER"). Bugün, rengiyle ve kapsül
+      halkasıyla ayrışır — bkz. `DayCell`. */
   weekday: string;
   isToday: boolean;
   /** Ekran okuyucu metni — "19 Ağustos Çarşamba" */
@@ -83,7 +91,9 @@ export const DateStrip = memo(function DateStrip({
   range,
   onOpenCalendar,
   showTodayButton = true,
+  surface = colors.bg,
 }: DateStripProps) {
+  const surfaceClear = useMemo(() => withAlpha(surface, 0), [surface]);
   const listRef = useRef<FlatList<DayItem>>(null);
   const centeredRef = useRef(false);
   /** Kaydırma konumu yalnız görünürlük hesabı için tutulur — state DEĞİL,
@@ -117,7 +127,7 @@ export const DateStrip = memo(function DateStrip({
            dolgu 34px. Yani tek bu hücrede etiket dolgunun iki yanına da
            dayanıyor, üstten de nefes payı bırakmıyor ve kırpılmış görünüyordu.
            Şeritteki her hücre artık aynı biçimde: üç harf gün + rakam. Bugün
-           marka renginden ve altındaki çizgiden okunur; şeridin sağındaki
+           marka renginden ve kapsül halkasından okunur; şeridin sağındaki
            "BUGÜN" hap düğmesi zaten geri dönüşü sağlar. */
         weekday: WEEKDAYS[cursor.getDay()],
         isToday,
@@ -204,7 +214,7 @@ export const DateStrip = memo(function DateStrip({
   );
 
   return (
-    <View style={styles.wrap}>
+    <View style={[styles.wrap, { backgroundColor: surface }]}>
       <View style={styles.listBox}>
         <FlatList
           ref={listRef}
@@ -226,14 +236,14 @@ export const DateStrip = memo(function DateStrip({
         {/* Kenar maskeleri: şeridin iki yöne de devam ettiğini gösterir; sağdaki
             maske "BUGÜN" hapının altında yarım kalan hücreyi de yumuşatır. */}
         <LinearGradient
-          colors={[colors.bg, BG_CLEAR]}
+          colors={[surface, surfaceClear]}
           start={GRADIENT_START}
           end={GRADIENT_END}
           style={styles.mask}
           pointerEvents="none"
         />
         <LinearGradient
-          colors={[BG_CLEAR, colors.bg]}
+          colors={[surfaceClear, surface]}
           start={GRADIENT_START}
           end={GRADIENT_END}
           style={styles.maskRight}
@@ -263,7 +273,7 @@ export const DateStrip = memo(function DateStrip({
           accessibilityRole="button"
           accessibilityLabel="Takvimi aç"
         >
-          <Ionicons name="calendar-outline" size={18} color={colors.textSecondary} />
+          <Ionicons name="calendar-outline" size={17} color={colors.brandAccent} />
         </Pressable>
       ) : null}
     </View>
@@ -293,32 +303,32 @@ const DayCell = memo(function DayCell({
       accessibilityState={{ selected }}
       accessibilityLabel={item.isToday ? `Bugün, ${item.speech}` : item.speech}
     >
-      {/* Seçili gün DOLU MARKA MORUDUR: şerit kâğıtta durur ve kâğıtta seçili
-          durum daima düz `brand` dolgudur (chip, sekme gibi); gradyan burada
-          skor sahnesinin dilini kâğıda taşıyordu. */}
-      {selected ? <View style={styles.cellFill} /> : null}
-      <Text
-        style={[styles.weekday, item.isToday && styles.weekdayToday, selected && styles.onBrand]}
-        numberOfLines={1}
-        {...textScale.badge}
+      {/* Her gün kendi kapsülünde: seçili → dolu marka + gölge; bugün → halka. */}
+      <View
+        style={[
+          styles.capsule,
+          item.isToday && !selected && styles.capsuleToday,
+          selected && styles.capsuleSelected,
+        ]}
       >
-        {item.weekday}
-      </Text>
-      <Text
-        style={[styles.day, item.isToday && !selected && styles.dayToday, selected && styles.onBrand]}
-        {...textScale.badge}
-      >
-        {item.day}
-      </Text>
-      <View style={styles.underlineRow}>
-        {item.isToday ? (
-          <View style={[styles.todayUnderline, selected ? styles.todayUnderlineOnBrand : null]} />
-        ) : null}
-      </View>
-      <View style={styles.dotRow}>
-        {hasMatches ? (
-          <View style={[styles.dot, live && styles.dotLive, selected && styles.dotOnBrand]} />
-        ) : null}
+        <Text
+          style={[styles.weekday, item.isToday && styles.weekdayToday, selected && styles.onBrandSoft]}
+          numberOfLines={1}
+          {...textScale.badge}
+        >
+          {item.weekday}
+        </Text>
+        <Text
+          style={[styles.day, item.isToday && !selected && styles.dayToday, selected && styles.onBrand]}
+          {...textScale.badge}
+        >
+          {item.day}
+        </Text>
+        <View style={styles.dotRow}>
+          {hasMatches ? (
+            <View style={[styles.dot, live && styles.dotLive, selected && styles.dotOnBrand]} />
+          ) : null}
+        </View>
       </View>
     </Pressable>
   );
@@ -362,51 +372,50 @@ const styles = StyleSheet.create({
     bottom: 0,
     width: 20,
   },
-  /*
-   * HÜCRE İÇERİK KADAR YÜKSEK. Eskiden `height: 40` sabitti; içerik (gün
-   * etiketi 13 + rakam 18 + çizgi 4 + nokta 6 = 41 + üst pay) 40'ı aşıyor ve
-   * gün adlarının tepesi (Ç, P) kırpılıyordu. Şimdi hücre `minHeight` +
-   * dikey dolgu taşır; 53px içerik 56px'lik şeridin (layout.dateStripHeight)
-   * içinde durur, "bugün" çizgisi ve maç noktası dolgunun İÇİNDE kalır.
-   */
+  /* HÜCRE: sabit genişlik, içinde kapsül. Kapsül 40×48; 56px şeritte
+     üstte/altta 4px nefes kalır. Rakam hücrenin kahramanıdır. */
   cell: {
     width: CELL_WIDTH,
-    minHeight: 40,
+    height: "100%",
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: radius.sm,
-    paddingVertical: space.s,
   },
-  /* SEÇİLİ GÜN: dolgu hücrenin TAMAMINI kaplamaz. 42px'lik hücreler yan yana
-     dizildiği için tam dolgu, komşu günlere yapışık bir blok gibi duruyor ve
-     şeridi ağırlaştırıyordu. 4px içeri çekilince blok kendi etrafında nefes
-     alır; seçim yine tartışmasız okunur. Köşe: maketin 11px hapına en yakın
-     token (radius.sm). */
-  cellFill: {
-    position: "absolute",
-    left: 3,
-    right: 3,
-    top: space.xxs,
-    bottom: space.xxs,
-    borderRadius: radius.md,
+  capsule: {
+    width: CELL_WIDTH - 6,
+    height: 48,
+    borderRadius: radius.lg,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 1,
+    borderWidth: 1.5,
+    borderColor: "transparent",
+  },
+  capsuleToday: {
+    borderColor: colors.brandBorder,
+    backgroundColor: colors.brandDim,
+  },
+  capsuleSelected: {
+    ...elevate(2),
     backgroundColor: colors.brand,
+    borderColor: colors.brand,
   },
-  /** Gün adı: Archivo versal 10px (Arena'nın etiket tabanı), geniş aralık. */
+  /** Gün adı: Archivo versal 9px, geniş aralık. */
   weekday: {
     ...type.micro,
+    fontSize: 9,
+    lineHeight: 11,
     fontFamily: fonts.display,
-    letterSpacing: 0.8,
+    letterSpacing: 0.9,
     color: colors.textTertiary,
   },
   weekdayToday: {
     color: colors.brandAccent,
   },
-  /** Ayın günü: Archivo kalın 14px (maket), tabular. */
-  /** Ayın günü: Archivo kalın 16px, tabular — şeridin kahramanı rakamdır. */
+  /** Ayın günü: kalın 16px, tabular — şeridin kahramanı rakamdır. */
   day: {
     ...type.tableNumStrong,
     fontSize: 16,
-    lineHeight: 20,
+    lineHeight: 19,
     color: colors.textPrimary,
   },
   dayToday: {
@@ -415,23 +424,13 @@ const styles = StyleSheet.create({
   onBrand: {
     color: colors.textOnBrand,
   },
-  underlineRow: {
-    height: 2,
-    marginTop: space.xxs,
-    justifyContent: "center",
-  },
-  todayUnderline: {
-    width: 14,
-    height: 2,
-    borderRadius: 1,
-    backgroundColor: colors.brandAccent,
-  },
-  todayUnderlineOnBrand: {
-    backgroundColor: colors.textOnBrand,
+  onBrandSoft: {
+    color: colors.textOnBrand,
+    opacity: 0.85,
   },
   dotRow: {
     height: 4,
-    marginTop: space.xxs,
+    marginTop: 1,
     justifyContent: "center",
   },
   dot: {
@@ -452,6 +451,8 @@ const styles = StyleSheet.create({
     marginLeft: space.xxs,
     borderRadius: radius.pill,
     backgroundColor: colors.brandDim,
+    borderWidth: hairline,
+    borderColor: colors.brandBorder,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -460,9 +461,13 @@ const styles = StyleSheet.create({
     color: colors.brandAccent,
   },
   calendarButton: {
-    width: 40,
-    height: 40,
+    width: 36,
+    height: 36,
     marginLeft: space.xs,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface2,
+    borderWidth: hairline,
+    borderColor: colors.border,
     alignItems: "center",
     justifyContent: "center",
   },

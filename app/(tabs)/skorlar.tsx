@@ -1,16 +1,23 @@
 /**
- * SKORLAR — uygulamanın açılış sekmesi: maç listesi, canlı skorlar ve
- * kullanıcının kendi maçları tek ekranda.
+ * MAÇLAR (dosya adı tarihsel: `skorlar`) — uygulamanın açılış sekmesi: maç
+ * listesi, canlı skorlar ve kullanıcının kendi maçları tek ekranda.
  *
- * NE YAPAR: seçili kapsamdaki (il · lig · sezon) maçları GÜNE göre süzer, LİGE
+ * GÖRÜNÜM GENİŞLİĞİ (`useScope().matchView`, lig seçicinin "Tümü" satırları):
+ *   · league  → seçili lig + sezon; sezonun tamamı tek istekte gelir.
+ *   · city    → seçili ilin BÜTÜN ligleri ("Ankara · Tüm ligler").
+ *   · country → bütün iller ("Tüm Türkiye").
+ *   Geniş görünümlerde sezon yoktur; maçlar gün şeridinin penceresi kadar
+ *   (`/maclar?date_from&date_to[&city_id]`) çekilir.
+ *
+ * NE YAPAR: seçili kapsamdaki maçları GÜNE göre süzer, LİGE
  * göre gruplar ve tek dikey eksende okunan satırlar hâlinde listeler. Dört
  * segment aynı veriyi farklı pencereden gösterir: Tümü · Canlı · Bitti ·
  * Yaklaşan. Eski üç ekranın yerini alır:
  *   · Maçlar  → gün şeridi, segmentler, lig grupları, takvim (aynen burada).
- *   · Canlı   → Canlı segmentindeki "Tüm şehirler" anahtarı: açıkken kapsam
- *               yerine `/maclar/live` KAPSAM FİLTRESİZ akışı lige göre gruplu
- *               listelenir; iki yoklama arasındaki skor farkından gol bandı
- *               üretilir. `/canli` rotası `?tab=canli&tum=1` ile buraya düşer.
+ *   · Canlı   → Canlı segmenti + "Tüm Türkiye" görünümü: `/maclar/live`
+ *               KAPSAM FİLTRESİZ akışı lige göre gruplu listelenir; iki
+ *               yoklama arasındaki skor farkından gol bandı üretilir. `/canli`
+ *               rotası `?tab=canli&tum=1` ile buraya düşer (tum=1 → Tüm Türkiye).
  *   · Ana Sayfa → vitrin maçı (grafit sahne) ve "benim maçlarım" kesiti.
  *
  * LİSTE SIRASI (yukarıdan aşağı):
@@ -25,11 +32,12 @@
  *      togglePinLeague`, cihazda). Aynı liste lig seçicide de üstte durur.
  *   4. DİĞERLERİ — takip edilen ligler önce, gerisi Türkçe alfabetik.
  *
- * BAŞLIK: kâğıt `ScreenHeader` "Skorlar", sağda arama ve takvim. `bottom`
- * bandında sırasıyla tek lig seçici hapı (`LeaguePicker`, il · lig · sezon +
- * sabitli lig çipleri), gün şeridi (Canlı'da yerini "N maç oynanıyor · Tüm
- * şehirler" satırına bırakır), segment ve gerekirse gol bandı. Kapsam bir
- * AYARDIR; yalnız hapta yazılır, kâğıtta tekrarlanmaz.
+ * BAŞLIK: kâğıt `ScreenHeader` "Maçlar", sağda arama; altında yalnız gol bandı.
+ * SÜZGEÇLER ALTTA (`MatchesDock`, alt menünün hemen üstünde): segment
+ * (Tümü · Canlı · Bitti · Yaklaşan), lig/sezon seçici hapı (`LeaguePicker
+ * allowAll`, sabitli lig çipleriyle) ve gün şeridi + takvim (Canlı'da yerini
+ * "N maç oynanıyor" satırına bırakır). Kapsam bir AYARDIR; yalnız hapta
+ * yazılır, kâğıtta tekrarlanmaz.
  *
  * TAKİP: maç satırındaki yıldız ve lig başlığındaki yıldız
  * `useFollowFlow().toggle` kullanır — takip edince bildirim türleri alt
@@ -38,7 +46,7 @@
  *
  * URL: `?tab=canli&date=2026-08-18&tum=1`. Gol bildirimi ya da paylaşılan bir
  * bağlantı doğrudan doğru segmente, güne ve kapsama düşsün diye bunlar ekran
- * durumunda değil ROTADA taşınır.
+ * durumunda değil ROTADA taşınır. `tum=1` görünümü "Tüm Türkiye"ye açar.
  *
  * YOKLAMA: canlı uçlar yalnız uygulama ön plandayken yoklanır; Canlı
  * segmentinde 15-20 sn, diğerlerinde 60 sn. Kapsamsız canlı sorgu, sekme
@@ -47,7 +55,7 @@
  * detayında başlar.
  *
  * PERFORMANS SÖZLEŞMESİ: satır yüksekliği sabittir (`matchCardHeight` →
- * compact + saha), bölüm başlığı sabittir → `getItemLayout` kurulur ve
+ * compact + dense, 46px tek satır), bölüm başlığı sabittir → `getItemLayout` kurulur ve
  * SectionList hücre ölçmez. Liste başlığı (vitrin/ipucu) tek ölçülen öğedir;
  * `onLayout` ile ölçülüp ofsetlere eklenir. Satır ve başlık bileşenleri
  * `memo`'lu; render sırasında kapanış üretilmez — dokunma işleyicileri maçı
@@ -61,10 +69,10 @@ import { SectionList, StyleSheet, Text, View } from "react-native";
 import type { LayoutChangeEvent, SectionListData, SectionListRenderItemInfo } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { LeaguePicker } from "@/components/LeaguePicker";
 import { CalendarSheet, type DayMarker } from "@/components/scores/CalendarSheet";
 import { FollowedHint, FollowedSpotlight } from "@/components/scores/FollowedSpotlight";
 import { GoalBand } from "@/components/scores/GoalBand";
+import { MatchesDock } from "@/components/scores/MatchesDock";
 import {
   byKickoff,
   dayPhrase,
@@ -77,17 +85,13 @@ import {
 } from "@/components/scores/scoreUtils";
 import { LEAGUE_GROUP_HEADER_HEIGHT } from "@/components/ui/LeagueGroupHeader";
 import {
-  DateStrip,
   EmptyState,
   ErrorState,
   LeagueGroupHeader,
-  LiveBadge,
   MatchCard,
   matchDayLabel,
   ScreenHeader,
-  SegmentedControl,
   SkeletonMatchRow,
-  Toggle,
   matchCardHeight,
   toIsoDate,
   useHeaderScroll,
@@ -104,7 +108,7 @@ import type { ApiMatch } from "@/lib/types";
 import { useFavorite } from "@/providers/FavoriteProvider";
 import { useFollowFlow } from "@/providers/FollowFlowProvider";
 import { useScope } from "@/providers/ScopeProvider";
-import { animateNextLayout, colors, hairline, layout, radius, space, textScale, type } from "@/theme";
+import { animateNextLayout, colors, hairline, layout, radius, space } from "@/theme";
 
 /* ═══════════════════════ SABİTLER VE KÜÇÜK YARDIMCILAR ═══════════════════════ */
 
@@ -113,10 +117,10 @@ type TabKey = "tumu" | "canli" | "bitti" | "yaklasan";
 const TAB_KEYS: readonly string[] = ["tumu", "canli", "bitti", "yaklasan"];
 
 /** Satır ve başlık yükseklikleri — `getItemLayout` bunlardan kurulur. */
-const ROW_HEIGHT = matchCardHeight({ variant: "compact", showVenue: true, favoritable: true });
+const ROW_HEIGHT = matchCardHeight({ variant: "compact", dense: true });
 /** Gruplar arası boşluk + lig başlığı. Boşluk başlığın İÇİNDE: yapışkan başlık
  *  tepeye yapıştığında altından kayan satır sızmasın diye opak zemin gerekir. */
-const GROUP_GAP = space.lg;
+const GROUP_GAP = space.md;
 const SECTION_HEADER_HEIGHT = GROUP_GAP + LEAGUE_GROUP_HEADER_HEIGHT;
 
 /** Gün şeridinin varsayılan penceresi: bir hafta önce … iki hafta sonrası. */
@@ -129,6 +133,8 @@ const LIVE_ALL_POLL_MS = 15_000;
 const IDLE_POLL_MS = 60_000;
 /** Gol bandı kalıcı değildir; bu süre sonunda kendini toplar. */
 const GOAL_BAND_MS = 90_000;
+/** Geniş görünümde (il / Türkiye) tek istekte gelebilecek en çok maç. */
+const WINDOW_LIMIT = 5000;
 /** Takım başına sorgu açılır; takip listesi uzarsa ilk N takım yeter. */
 const MAX_FOLLOWED_TEAM_QUERIES = 12;
 const TEAM_MATCHES_STALE_MS = 5 * 60_000;
@@ -197,7 +203,6 @@ export default function ScoresScreen() {
 
   const [tab, setTabState] = useState<TabKey>(() => normalizeTab(paramTab));
   const [date, setDateState] = useState<string>(() => normalizeDate(paramDate, todayIso));
-  const [allCities, setAllCitiesState] = useState(() => paramAll === "1");
   const [collapsedKeys, setCollapsedKeys] = useState<Record<string, boolean>>({});
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [listHeaderHeight, setListHeaderHeight] = useState(0);
@@ -212,9 +217,14 @@ export default function ScoresScreen() {
     if (paramDate) setDateState((current) => normalizeDate(paramDate, current));
   }, [paramDate]);
 
+  /** Görünüm genişliği kapsam sağlayıcısında yaşar (cihazda saklı). */
+  const { matchView: view, setMatchView } = scope;
+  const wide = view !== "league";
+
+  // `/canli` ve gol bildirimleri `tum=1` taşır: görünüm Tüm Türkiye'ye açılır.
   useEffect(() => {
-    if (paramAll !== undefined) setAllCitiesState(paramAll === "1");
-  }, [paramAll]);
+    if (paramAll === "1") setMatchView("country");
+  }, [paramAll, setMatchView]);
 
   const setTab = useCallback(
     (next: TabKey) => {
@@ -232,16 +242,9 @@ export default function ScoresScreen() {
     [router],
   );
 
-  const setAllCities = useCallback(
-    (next: boolean) => {
-      setAllCitiesState(next);
-      router.setParams({ tum: next ? "1" : "0" });
-    },
-    [router],
-  );
-
   const isLive = tab === "canli";
-  const showAllLive = isLive && allCities;
+  /** Canlı segmenti + Tüm Türkiye: kapsamsız canlı akış. */
+  const showAllLive = isLive && view === "country";
 
   /* ─────────────────────────── TAKİPLER ─────────────────────────── */
 
@@ -283,13 +286,17 @@ export default function ScoresScreen() {
     (match: ApiMatch) =>
       followedMatchIds.has(Number(match.id)) ||
       involvesFollowedTeam(match) ||
-      (match.league_id != null &&
+      // Geniş görünümde takip edilen ligler zaten kendi gruplarında (en üstte)
+      // durur; lig/sezon takibi gruba yalnız tek lig görünümünde kopyalanır.
+      (!wide &&
+        match.league_id != null &&
         Number(match.league_id) !== scope.leagueId &&
         followedLeagueIds.has(Number(match.league_id))) ||
-      (match.season_id != null &&
+      (!wide &&
+        match.season_id != null &&
         Number(match.season_id) !== scope.seasonId &&
         followedSeasonIds.has(Number(match.season_id))),
-    [followedMatchIds, involvesFollowedTeam, followedLeagueIds, followedSeasonIds, scope.leagueId, scope.seasonId],
+    [followedMatchIds, involvesFollowedTeam, followedLeagueIds, followedSeasonIds, scope.leagueId, scope.seasonId, wide],
   );
 
   /* ───────────────────────────── VERİ ───────────────────────────── */
@@ -316,20 +323,60 @@ export default function ScoresScreen() {
         seasonId: scope.seasonId ?? undefined,
         limit: 1000,
       }),
-    enabled: scope.ready,
+    enabled: scope.ready && !wide,
     staleTime: 30_000,
     refetchInterval: appActive ? 2 * IDLE_POLL_MS : false,
   });
 
-  /** Kapsamlı canlı maçlar — segment rozeti her zaman doğru olsun diye hep açık. */
-  const liveQuery = useQuery({
-    queryKey: queryKeys.liveMatches(scopeKey),
+  /** Şerit penceresi seçili günü DAİMA kapsar (takvimden uzak bir gün seçilebilir). */
+  const stripRange = useMemo(() => {
+    const start = shiftDays(todayIso, -STRIP_BACK_DAYS);
+    const end = shiftDays(todayIso, STRIP_FORWARD_DAYS);
+    return { start: date < start ? date : start, end: date > end ? date : end };
+  }, [todayIso, date]);
+
+  /** Geniş görünümün il kimliği: il → seçili il, Türkiye → yok. */
+  const windowCityId = view === "city" ? scope.cityId : null;
+
+  /**
+   * GENİŞ GÖRÜNÜM (bir ilin bütün ligleri / tüm Türkiye): sezon kavramı yok;
+   * gün şeridinin penceresi kadar maç tek istekte gelir, gün süzmesi yine
+   * istemcide yapılır.
+   */
+  const windowQuery = useQuery({
+    queryKey: queryKeys.matchesWindow(windowCityId, stripRange.start, stripRange.end),
     queryFn: () =>
-      getLiveMatches({
-        leagueId: scope.leagueId ?? undefined,
-        seasonId: scope.seasonId ?? undefined,
+      getMatches({
+        cityId: windowCityId ?? undefined,
+        cityName: scope.cityLabel || undefined,
+        dateFrom: stripRange.start,
+        dateTo: stripRange.end,
+        limit: WINDOW_LIMIT,
       }),
-    enabled: scope.ready,
+    enabled: wide && (view === "country" || windowCityId != null),
+    staleTime: 30_000,
+    refetchInterval: appActive ? 2 * IDLE_POLL_MS : false,
+    placeholderData: (previous) => previous,
+  });
+
+  /**
+   * Kapsamlı canlı maçlar — segment rozeti her zaman doğru olsun diye hep
+   * açık. İl görünümünde ilin tamamı; Türkiye görünümünde kapsamsız akış
+   * (`allLiveQuery`) kullanılır, bu sorgu kapanır.
+   */
+  const liveQuery = useQuery({
+    queryKey:
+      view === "city"
+        ? queryKeys.liveMatches({ cityId: scope.cityId ?? undefined })
+        : queryKeys.liveMatches(scopeKey),
+    queryFn: () =>
+      view === "city"
+        ? getLiveMatches({ cityId: scope.cityId ?? undefined, cityName: scope.cityLabel || undefined })
+        : getLiveMatches({
+            leagueId: scope.leagueId ?? undefined,
+            seasonId: scope.seasonId ?? undefined,
+          }),
+    enabled: view === "league" ? scope.ready : view === "city" ? scope.cityId != null : false,
     staleTime: 10_000,
     refetchInterval: appActive ? (isLive ? LIVE_POLL_MS : IDLE_POLL_MS) : false,
   });
@@ -337,13 +384,14 @@ export default function ScoresScreen() {
   /**
    * KAPSAMSIZ canlı akış (eski Canlı ekranı). Anahtar sekme rozetiyle ortak
    * (`useLiveFavoriteCount` aynı ucu aynı anahtarla yoklar) → tek istek.
-   * Yalnız "Tüm şehirler" açıkken ya da takip varken (başka ligdeki takip
+   * Yalnız "Tüm Türkiye" görünümünde ya da takip varken (başka ligdeki takip
    * edilen takımın canlı maçı vitrine çıksın diye) açılır.
    */
+  const allLiveEnabled = view === "country" || hasAnyFollow;
   const allLiveQuery = useQuery({
     queryKey: queryKeys.liveFavoriteMatches(),
     queryFn: () => getLiveMatches(),
-    enabled: showAllLive || hasAnyFollow,
+    enabled: allLiveEnabled,
     staleTime: 5_000,
     refetchInterval: appActive ? (isLive ? LIVE_ALL_POLL_MS : IDLE_POLL_MS) : false,
   });
@@ -369,15 +417,17 @@ export default function ScoresScreen() {
     [teamDataStamp],
   );
 
-  const allMatches = useMemo(() => matchesQuery.data ?? [], [matchesQuery.data]);
+  const listQuery = wide ? windowQuery : matchesQuery;
+  const allMatches = useMemo(() => listQuery.data ?? [], [listQuery.data]);
+
+  const allLive = useMemo(() => allLiveQuery.data ?? [], [allLiveQuery.data]);
 
   /** Kapsamlı canlı uç henüz cevap vermediyse ana listeden türetilir — rozet boş kalmaz. */
   const scopedLive = useMemo(() => {
-    if (liveQuery.data) return liveQuery.data;
+    if (view === "country" && allLiveQuery.data) return allLiveQuery.data;
+    if (view !== "country" && liveQuery.data) return liveQuery.data;
     return allMatches.filter((match) => matchState(match) === "live");
-  }, [liveQuery.data, allMatches]);
-
-  const allLive = useMemo(() => allLiveQuery.data ?? [], [allLiveQuery.data]);
+  }, [view, allLiveQuery.data, liveQuery.data, allMatches]);
 
   /** Canlı segmentinde gösterilen akış: anahtara göre kapsamlı ya da kapsamsız. */
   const liveSource = showAllLive ? allLive : scopedLive;
@@ -530,7 +580,12 @@ export default function ScoresScreen() {
 
   const previousScores = useRef<{ source: string; map: Map<number, string> } | null>(null);
   const [goal, setGoal] = useState<GoalNews | null>(null);
-  const liveSourceKey = showAllLive ? "tum" : `kapsam-${scope.leagueId ?? ""}-${scope.seasonId ?? ""}`;
+  const liveSourceKey =
+    view === "country"
+      ? "tum"
+      : view === "city"
+        ? `il-${scope.cityId ?? ""}`
+        : `kapsam-${scope.leagueId ?? ""}-${scope.seasonId ?? ""}`;
 
   useEffect(() => {
     if (!isLive) {
@@ -645,8 +700,9 @@ export default function ScoresScreen() {
     setDate(todayIso);
   }, [setTab, setDate, todayIso]);
 
-  const showAllCities = useCallback(() => setAllCities(true), [setAllCities]);
-  const openScope = useCallback(() => scope.openScopeSheet("city"), [scope]);
+  const showAllCities = useCallback(() => setMatchView("country"), [setMatchView]);
+  const { openScopeSheet } = scope;
+  const openScope = useCallback(() => openScopeSheet("city", { allowAll: true }), [openScopeSheet]);
 
   const openGoalMatch = useCallback(() => {
     if (!goal) return;
@@ -658,19 +714,19 @@ export default function ScoresScreen() {
     setGoal(null);
   }, []);
 
-  const refetchMatches = matchesQuery.refetch;
+  const refetchList = listQuery.refetch;
   const refetchLive = liveQuery.refetch;
   const refetchAllLive = allLiveQuery.refetch;
-  const allLiveEnabled = showAllLive || hasAnyFollow;
+  const liveEnabled = view !== "country";
   const handleRefresh = useCallback(() => {
-    void refetchMatches();
-    void refetchLive();
+    void refetchList();
+    if (liveEnabled) void refetchLive();
     if (allLiveEnabled) void refetchAllLive();
     teamQueries.forEach((query) => void query.refetch());
-  }, [refetchMatches, refetchLive, refetchAllLive, allLiveEnabled, teamDataStamp]);
+  }, [refetchList, refetchLive, refetchAllLive, liveEnabled, allLiveEnabled, teamDataStamp]);
 
   const refresh = useRefresh(handleRefresh, {
-    refreshing: matchesQuery.isRefetching || liveQuery.isRefetching || allLiveQuery.isRefetching,
+    refreshing: listQuery.isRefetching || liveQuery.isRefetching || allLiveQuery.isRefetching,
   });
 
   /* ───────────────────────── LİSTE ÇİZİMİ ───────────────────────── */
@@ -764,32 +820,39 @@ export default function ScoresScreen() {
     [liveCount],
   );
 
-  /** Şerit penceresi seçili günü DAİMA kapsar (takvimden uzak bir gün seçilebilir). */
-  const stripRange = useMemo(() => {
-    const start = shiftDays(todayIso, -STRIP_BACK_DAYS);
-    const end = shiftDays(todayIso, STRIP_FORWARD_DAYS);
-    return { start: date < start ? date : start, end: date > end ? date : end };
-  }, [todayIso, date]);
-
-  const liveSourceQuery = showAllLive ? allLiveQuery : liveQuery;
+  const liveSourceQuery = view === "country" ? allLiveQuery : liveQuery;
   const liveUpdated = useMemo(() => {
     if (!liveSourceQuery.dataUpdatedAt) return "";
     return new Date(liveSourceQuery.dataUpdatedAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
   }, [liveSourceQuery.dataUpdatedAt]);
 
-  // "Tüm şehirler" açıkken kapsam gerekmez: akış kapsamsızdır.
-  const needsScope = !showAllLive;
-  const scopeMissing = needsScope && !scope.ready && !scope.loading;
+  // Tüm Türkiye kapsam istemez; il görünümü yalnız ili, tek lig üçünü ister.
+  const scopeMissing =
+    view === "country" ? false : view === "city" ? !scope.cityId && !scope.loading : !scope.ready && !scope.loading;
   const loading = showAllLive
     ? allLiveQuery.isLoading
-    : scope.loading || (scope.ready && (isLive ? liveQuery.isLoading && matchesQuery.isLoading : matchesQuery.isLoading));
-  const primaryQuery = showAllLive ? allLiveQuery : isLive ? liveQuery : matchesQuery;
+    : view === "country"
+      ? isLive
+        ? allLiveQuery.isLoading && windowQuery.isLoading
+        : windowQuery.isLoading
+      : scope.loading ||
+        (isLive ? liveQuery.isLoading && listQuery.isLoading : listQuery.isLoading);
+  const primaryQuery = isLive ? liveSourceQuery : listQuery;
   const hasData = showAllLive ? allLive.length > 0 : allMatches.length > 0 || scopedLive.length > 0;
   const failed = primaryQuery.isError && !hasData;
 
+  const liveText =
+    liveCount > 0
+      ? `${liveCount} maç oynanıyor${liveUpdated ? ` · ${liveUpdated}` : ""}`
+      : view === "country"
+        ? "Şu an Türkiye'de canlı maç yok"
+        : view === "city"
+          ? `${scope.cityLabel || "Bu ilde"} canlı maç yok`
+          : "Bu ligde canlı maç yok";
+
   const listEmpty = useMemo(() => {
     if (isLive) {
-      return showAllLive ? (
+      return view === "country" ? (
         <EmptyState
           icon="radio-outline"
           title="Şu anda canlı maç yok"
@@ -799,9 +862,9 @@ export default function ScoresScreen() {
       ) : (
         <EmptyState
           icon="radio-outline"
-          title="Bu ligde canlı maç yok"
-          body="Başka şehirlerde oynanan maçlara bakabilirsin."
-          action={{ label: "Tüm şehirleri göster", onPress: showAllCities }}
+          title={view === "city" ? "Bu ilde canlı maç yok" : "Bu ligde canlı maç yok"}
+          body="Türkiye genelinde oynanan maçlara bakabilirsin."
+          action={{ label: "Tüm Türkiye'yi göster", onPress: showAllCities }}
           secondaryAction={{ label: "Bugünün maçları", onPress: goToToday }}
         />
       );
@@ -824,7 +887,7 @@ export default function ScoresScreen() {
         secondaryAction={date === todayIso ? undefined : { label: "Bugüne dön", onPress: goToToday }}
       />
     );
-  }, [isLive, showAllLive, tab, date, todayIso, goToToday, showAllCities, goToNextMatchDay, nextMatchDay]);
+  }, [isLive, view, tab, date, todayIso, goToToday, showAllCities, goToNextMatchDay, nextMatchDay]);
 
   /**
    * Takip grubu boşken tek satırlık ipucu. Takip hiç yoksa davet eder; varsa
@@ -856,54 +919,18 @@ export default function ScoresScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      {/* KÂĞIT BAŞLIK — "Skorlar", sağda arama ve takvim. Bant (`bottom`):
-          lig seçici hapı → gün şeridi / canlı satırı → segment → gol bandı. */}
+      {/* KÂĞIT BAŞLIK — "Maçlar", sağda arama. Süzgeçler altta (MatchesDock);
+          bantta yalnız canlı gol bandı durur. */}
       <ScreenHeader
-        title="Skorlar"
+        title="Maçlar"
         scrollY={scrollY}
-        actions={[
-          { icon: "search-outline", accessibilityLabel: "Ara", onPress: openSearch },
-          { icon: "calendar-outline", accessibilityLabel: "Takvimden tarih seç", onPress: openCalendar },
-        ]}
+        actions={[{ icon: "search-outline", accessibilityLabel: "Ara", onPress: openSearch }]}
         bottom={
-          <>
-            <LeaguePicker />
-
-            {/* Canlı segmentinde gün kavramı yok: şerit yerini canlı satırına bırakır. */}
-            {isLive ? (
-              <View style={styles.liveRow}>
-                {liveCount > 0 ? <LiveBadge compact /> : null}
-                <Text style={styles.liveText} numberOfLines={1} {...textScale.dense}>
-                  {liveCount > 0
-                    ? `${liveCount} maç oynanıyor${liveUpdated ? ` · ${liveUpdated}` : ""}`
-                    : allCities
-                      ? "Şu an canlı maç yok"
-                      : "Bu ligde canlı maç yok"}
-                </Text>
-                <Text style={styles.allLabel} {...textScale.dense}>
-                  Tüm şehirler
-                </Text>
-                <Toggle
-                  value={allCities}
-                  onValueChange={setAllCities}
-                  accessibilityLabel="Tüm şehirlerin canlı maçları"
-                  testID="live-all-cities"
-                />
-              </View>
-            ) : (
-              <DateStrip value={date} onChange={setDate} markers={markers} range={stripRange} showTodayButton />
-            )}
-
-            <View style={styles.controls}>
-              <SegmentedControl<TabKey> items={segments} value={tab} onChange={setTab} />
+          isLive && goal ? (
+            <View style={styles.band}>
+              <GoalBand goal={goal} onOpen={openGoalMatch} onDismiss={dismissGoal} />
             </View>
-
-            {isLive && goal ? (
-              <View style={styles.band}>
-                <GoalBand goal={goal} onOpen={openGoalMatch} onDismiss={dismissGoal} />
-              </View>
-            ) : null}
-          </>
+          ) : undefined
         }
       />
 
@@ -912,41 +939,58 @@ export default function ScoresScreen() {
         <ErrorState error={primaryQuery.error} onRetry={handleRefresh} variant="banner" style={styles.band} />
       ) : null}
 
-      {scopeMissing ? (
-        <EmptyState
-          icon="options-outline"
-          title="Lig seçilmedi"
-          body="Maçları görmek için il, lig ve sezon seç."
-          action={{ label: "Lig seç", onPress: openScope }}
-        />
-      ) : loading ? (
-        <View style={styles.skeletonWrap}>
-          <View style={styles.skeletonGroup}>
-            <SkeletonMatchRow count={6} />
+      <View style={styles.body}>
+        {scopeMissing ? (
+          <EmptyState
+            icon="options-outline"
+            title={view === "city" ? "İl seçilmedi" : "Lig seçilmedi"}
+            body="Maçları görmek için il, lig ve sezon seç ya da Tüm Türkiye'ye bak."
+            action={{ label: "Lig seç", onPress: openScope }}
+          />
+        ) : loading ? (
+          <View style={styles.skeletonWrap}>
+            <View style={styles.skeletonGroup}>
+              <SkeletonMatchRow count={6} />
+            </View>
           </View>
-        </View>
-      ) : failed ? (
-        <ErrorState error={primaryQuery.error} onRetry={handleRefresh} />
-      ) : (
-        <SectionList<ApiMatch, ScoreSectionMeta>
-          {...scrollProps}
-          sections={sections}
-          keyExtractor={keyExtractor}
-          renderItem={renderItem}
-          renderSectionHeader={renderSectionHeader}
-          getItemLayout={getItemLayout}
-          stickySectionHeadersEnabled
-          contentContainerStyle={styles.list}
-          ListHeaderComponent={listHeader}
-          ListEmptyComponent={listEmpty}
-          refreshControl={refresh.control}
-          initialNumToRender={12}
-          maxToRenderPerBatch={12}
-          windowSize={8}
-          removeClippedSubviews
-          keyboardShouldPersistTaps="handled"
-        />
-      )}
+        ) : failed ? (
+          <ErrorState error={primaryQuery.error} onRetry={handleRefresh} />
+        ) : (
+          <SectionList<ApiMatch, ScoreSectionMeta>
+            {...scrollProps}
+            sections={sections}
+            keyExtractor={keyExtractor}
+            renderItem={renderItem}
+            renderSectionHeader={renderSectionHeader}
+            getItemLayout={getItemLayout}
+            stickySectionHeadersEnabled
+            contentContainerStyle={styles.list}
+            ListHeaderComponent={listHeader}
+            ListEmptyComponent={listEmpty}
+            refreshControl={refresh.control}
+            initialNumToRender={12}
+            maxToRenderPerBatch={12}
+            windowSize={8}
+            removeClippedSubviews
+            keyboardShouldPersistTaps="handled"
+          />
+        )}
+      </View>
+
+      {/* ALT PANEL — alt menünün hemen üstünde: segment, lig seçici, gün şeridi. */}
+      <MatchesDock<TabKey>
+        segments={segments}
+        tab={tab}
+        onTabChange={setTab}
+        live={isLive}
+        liveCount={liveCount}
+        liveText={liveText}
+        date={date}
+        onDateChange={setDate}
+        markers={markers}
+        range={stripRange}
+        onOpenCalendar={openCalendar}
+      />
 
       <CalendarSheet
         visible={calendarOpen}
@@ -994,11 +1038,11 @@ const MatchListItem = memo(function MatchListItem({
   return (
     <MatchCard
       variant="compact"
+      dense
       position={last ? "last" : "middle"}
       match={match}
       homeLogo={homeLogo}
       awayLogo={awayLogo}
-      showVenue
       isFavorite={isFollowing}
       onToggleFavorite={handleStar}
       onPress={handlePress}
@@ -1093,27 +1137,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
 
-  /* Canlı segmentinin şerit yerine geçen satırı */
-  liveRow: {
-    height: layout.dateStripHeight,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.sm,
-    paddingHorizontal: layout.screenPadding,
-  },
-  liveText: {
-    ...type.bodySm,
-    color: colors.textSecondary,
+  /** Liste alanı — alt panel kendi yüksekliğini alır, kalan her şey liste. */
+  body: {
     flex: 1,
-  },
-  allLabel: {
-    ...type.label,
-    color: colors.textPrimary,
-  },
-
-  controls: {
-    paddingHorizontal: layout.screenPadding,
-    paddingBottom: space.sm,
   },
 
   band: {
@@ -1137,7 +1163,8 @@ const styles = StyleSheet.create({
      içerik başlangıcına göredir (liste başlığı ölçülüp eklenir). */
   list: {
     paddingHorizontal: layout.screenPadding,
-    paddingBottom: layout.tabBarHeight + space.xxl,
+    // Alt panel listenin ALTINDA ayrı durur; yalnız nefes payı yeter.
+    paddingBottom: space.lg,
     flexGrow: 1,
   },
   sectionHeader: {

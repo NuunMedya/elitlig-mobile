@@ -11,6 +11,14 @@ import type { ApiMatch, KadroResponse, LiveSnapshot } from "../types";
 interface MatchQuery {
   leagueId?: number;
   seasonId?: number;
+  /** İl kimliği — lig seçmeden bir ilin TÜM maçları (Maçlar ▸ "Tüm ligler"). */
+  cityId?: number;
+  /** İl adı — `city_id`'si boş eski maç satırları için sunucuda yedek eşleşme. */
+  cityName?: string;
+  /** Gün penceresi ("YYYY-MM-DD", ikisi de dahil). Sunucu sınırı birer gün
+   *  geniş tutar; gün süzmesi istemcide yapılır. */
+  dateFrom?: string;
+  dateTo?: string;
   limit?: number;
   /** Yalnızca listelerde gereken alanlar — mobil bağlantıda yükü küçültür. */
   compact?: boolean;
@@ -18,12 +26,17 @@ interface MatchQuery {
 
 // Not: Lig ve sezon zaten bir şehre bağlı olduğundan (routes/meta.js kapsamı
 // böyle doğrular) sorgularda league_id + season_id göndermek yeterlidir.
+// İl (`city_id`) ve gün penceresi yalnız lig seçilmeyen görünümlerde gönderilir.
 
 /** Kapsamdaki tüm maçlar (tarihe göre yeniden eskiye). */
 export const getMatches = (query: MatchQuery = {}) =>
   get<ApiMatch[]>("/maclar", {
     league_id: query.leagueId,
     season_id: query.seasonId,
+    city_id: query.cityId,
+    city: query.cityId ? query.cityName || undefined : undefined,
+    date_from: query.dateFrom,
+    date_to: query.dateTo,
     limit: query.limit ?? 200,
     compact: query.compact ? 1 : undefined,
   });
@@ -49,6 +62,8 @@ export const getLiveMatches = (query: MatchQuery = {}) =>
   get<ApiMatch[]>("/maclar/live", {
     league_id: query.leagueId,
     season_id: query.seasonId,
+    city_id: query.cityId,
+    city: query.cityId ? query.cityName || undefined : undefined,
   });
 
 /** Bir takımın tüm lig/sezonlardaki maçları. */

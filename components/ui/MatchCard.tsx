@@ -32,6 +32,17 @@
  *   Satırlar `position` ile grup kurar (ListRow ile aynı sözleşme): ilk ve
  *   son satır köşeyi, aradakiler ayracı çizer; listenin kartı ayrıca sarılmaz.
  *
+ * YOĞUN SATIR (`variant="compact"` + `dense`) — Maçlar ekranı:
+ *
+ *   │   KARASANCAK ◆  2 – 1  ◆ TİMUÇİN SK      ☆ │   tek satır, 46px
+ *   │                 MS                          │
+ *
+ *   Bir günde onlarca maç olan "Tüm Türkiye" görünümünde 78px'lik satır
+ *   ekrana altı maç sığdırıyordu. Yoğun satır saha şeridini bırakır (saha maç
+ *   detayında), yıldızı ana satırın sağına alır ve SOLDA aynı genişlikte boş
+ *   bir sütun tutar — skor ekseni yine satırın tam ortasındadır. Adlar tek
+ *   satır, 12px; amblem 20px.
+ *
  * SABİT YÜKSEKLİK: uzun listelerde `getItemLayout` kurulabilsin diye iki
  * biçimin de yüksekliği içerikten değil seçeneklerden gelir (`matchCardHeight`).
  *
@@ -80,6 +91,8 @@ export interface MatchCardProps {
   showDate?: boolean;
   /** Saha adı — kartta alt şerit, satırda skorun altında ikinci satır. */
   showVenue?: boolean;
+  /** Yalnız `compact`: tek satırlık ince biçim (saha şeridi yok, yıldız sağda). */
+  dense?: boolean;
   isFavorite?: boolean;
   onToggleFavorite?: () => void;
   onPress?: () => void;
@@ -116,6 +129,11 @@ const COMPACT_CREST = 24;
 const COMPACT_CENTER_W = 70;
 /** Alt şeridin yan sütunları (yıldızın dokunma genişliği). */
 const COMPACT_META_SIDE_W = 44;
+/** Yoğun satır: tek satır, küçük amblem, yan sütunlar (yıldız | boşluk). */
+const DENSE_LINE_H = 46;
+const DENSE_CREST = 20;
+const DENSE_CENTER_W = 60;
+const DENSE_SIDE_W = 30;
 
 /** Kart/satır yüksekliği (boşluk HARİÇ). Listeler `getItemLayout` için bunu kullanır. */
 export function matchCardHeight(
@@ -126,8 +144,11 @@ export function matchCardHeight(
     variant?: MatchCardVariant;
     /** Yalnız compact: satır yıldız taşıyor mu (`onToggleFavorite` verildi mi). */
     favoritable?: boolean;
+    /** Yalnız compact: tek satırlık yoğun biçim. */
+    dense?: boolean;
   } = {},
 ): number {
+  if (options.variant === "compact" && options.dense) return DENSE_LINE_H;
   if (options.variant === "compact") {
     return options.showVenue || options.favoritable
       ? COMPACT_LINE_H_META + COMPACT_META_H
@@ -226,6 +247,7 @@ function CompactSide({
   lost,
   mine,
   align,
+  dense = false,
 }: {
   name: string | null | undefined;
   logo: string | null | undefined;
@@ -233,20 +255,22 @@ function CompactSide({
   lost: boolean;
   mine: boolean;
   align: "home" | "away";
+  dense?: boolean;
 }) {
   const home = align === "home";
   return (
-    <View style={[styles.cSide, home ? styles.cSideHome : null]}>
-      <TeamLogo name={name} logo={logo} size={COMPACT_CREST} dimmed={lost} />
+    <View style={[styles.cSide, dense && styles.dSide, home ? styles.cSideHome : null]}>
+      <TeamLogo name={name} logo={logo} size={dense ? DENSE_CREST : COMPACT_CREST} dimmed={lost} />
       <Text
         style={[
           styles.cName,
+          dense && styles.dName,
           home ? styles.cNameHome : null,
           won && styles.cNameWon,
           lost && styles.nameLost,
           mine && styles.nameMine,
         ]}
-        numberOfLines={2}
+        numberOfLines={dense ? 1 : 2}
         {...textScale.badge}
       >
         {name}
@@ -266,6 +290,7 @@ export const MatchCard = memo(function MatchCard({
   meta = "league",
   showDate = false,
   showVenue = false,
+  dense = false,
   isFavorite = false,
   onToggleFavorite,
   onPress,
@@ -317,11 +342,11 @@ export const MatchCard = memo(function MatchCard({
       accessibilityRole="button"
       accessibilityState={{ selected: isFavorite }}
       accessibilityLabel={isFavorite ? "Maçı takipten çıkar" : "Maçı takip et"}
-      style={compact ? styles.cStar : styles.star}
+      style={compact ? (dense ? styles.dStar : styles.cStar) : styles.star}
     >
       <Ionicons
         name={isFavorite ? "star" : "star-outline"}
-        size={16}
+        size={dense ? 14 : 16}
         color={isFavorite ? colors.brand : colors.starEmpty}
       />
     </Pressable>
@@ -334,6 +359,85 @@ export const MatchCard = memo(function MatchCard({
       <Text style={homeWon ? styles.scoreDim : null}>{formatScore(match.second_team_score)}</Text>
     </>
   );
+
+  /* ══════════════════════════ YOĞUN SATIR ══════════════════════════ */
+  if (compact && dense) {
+    const grouped = position != null;
+    const divider = position === "first" || position === "middle";
+    const shortDay = showDate ? shortDayLabel(match.date) : "";
+
+    return (
+      <Touchable
+        feedback="row"
+        haptic="selection"
+        onPress={onPress}
+        disabled={!onPress}
+        accessibilityRole="button"
+        accessibilityLabel={speech}
+        style={[
+          styles.cRow,
+          { height: DENSE_LINE_H },
+          grouped ? styles.cGrouped : styles.cSingle,
+          position === "first" ? styles.cFirst : null,
+          position === "last" ? styles.cLast : null,
+          position === "single" ? styles.cSingleGroup : null,
+          style,
+        ]}
+      >
+        {live ? <View style={styles.dLiveEdge} /> : null}
+
+        <View style={styles.dMain}>
+          {/* Sol boş sütun yıldız sütununun eşidir: skor ekseni ortada kalır. */}
+          <View style={styles.dEdge} />
+          <CompactSide
+            name={match.first_team_name}
+            logo={homeLogo}
+            won={homeWon}
+            lost={awayWon}
+            mine={homeMine}
+            align="home"
+            dense
+          />
+
+          <View style={styles.dCenter}>
+            {played ? (
+              <Text style={[styles.dScore, live && styles.scoreLive]} numberOfLines={1} {...textScale.badge}>
+                {scoreText}
+              </Text>
+            ) : (
+              <Text style={styles.dTime} numberOfLines={1} {...textScale.badge}>
+                {formatTime(match.time) || "--:--"}
+              </Text>
+            )}
+            {live ? (
+              <LiveBadge minute={minute} addedTime={addedTime} halftime={halftime} />
+            ) : finished ? (
+              <Text style={styles.dState} numberOfLines={1} {...textScale.badge}>
+                {shortDay ? `MS · ${shortDay}` : "MS"}
+              </Text>
+            ) : shortDay ? (
+              <Text style={styles.dState} numberOfLines={1} {...textScale.badge}>
+                {shortDay}
+              </Text>
+            ) : null}
+          </View>
+
+          <CompactSide
+            name={match.second_team_name}
+            logo={awayLogo}
+            won={awayWon}
+            lost={homeWon}
+            mine={awayMine}
+            align="away"
+            dense
+          />
+          <View style={styles.dEdge}>{star}</View>
+        </View>
+
+        {divider ? <View style={styles.cDivider} /> : null}
+      </Touchable>
+    );
+  }
 
   /* ═════════════════════════════ SATIR ═════════════════════════════ */
   if (compact) {
@@ -793,6 +897,66 @@ const styles = StyleSheet.create({
     lineHeight: 13,
     color: colors.textTertiary,
     flexShrink: 1,
+  },
+  /* ─────────── YOĞUN SATIR ─────────── */
+  dLiveEdge: {
+    position: "absolute",
+    left: 0,
+    top: space.sm,
+    bottom: space.sm,
+    width: 3,
+    borderTopRightRadius: 2,
+    borderBottomRightRadius: 2,
+    backgroundColor: colors.live,
+  },
+  dMain: {
+    height: DENSE_LINE_H,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  dEdge: {
+    width: DENSE_SIDE_W,
+    height: DENSE_LINE_H,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dStar: {
+    width: DENSE_SIDE_W,
+    height: DENSE_LINE_H,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dSide: {
+    gap: space.xs,
+  },
+  dName: {
+    fontSize: 12,
+    lineHeight: 15,
+  },
+  dCenter: {
+    width: DENSE_CENTER_W,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 0,
+  },
+  dScore: {
+    ...type.scoreSm,
+    fontSize: 15,
+    lineHeight: 18,
+    color: colors.textPrimary,
+  },
+  dTime: {
+    ...type.scoreSm,
+    fontFamily: fonts.display,
+    fontSize: 14,
+    lineHeight: 18,
+    color: colors.textPrimary,
+  },
+  dState: {
+    ...type.micro,
+    fontSize: 9,
+    lineHeight: 11,
+    color: colors.textTertiary,
   },
   cDivider: {
     position: "absolute",
