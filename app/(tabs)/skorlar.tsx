@@ -6,14 +6,14 @@
  *   · league  → seçili lig + sezon; sezonun tamamı tek istekte gelir.
  *   · city    → seçili ilin BÜTÜN ligleri ("Ankara · Tüm ligler").
  *   · country → bütün iller ("Tüm Türkiye").
- *   Geniş görünümlerde sezon yoktur; maçlar gün şeridinin penceresi kadar
+ *   Geniş görünümlerde sezon yoktur; maçlar bir gün penceresi kadar
  *   (`/maclar?date_from&date_to[&city_id]`) çekilir.
  *
  * NE YAPAR: seçili kapsamdaki maçları GÜNE göre süzer, LİGE
  * göre gruplar ve tek dikey eksende okunan satırlar hâlinde listeler. Dört
  * segment aynı veriyi farklı pencereden gösterir: Tümü · Canlı · Bitti ·
  * Yaklaşan. Eski üç ekranın yerini alır:
- *   · Maçlar  → gün şeridi, segmentler, lig grupları, takvim (aynen burada).
+ *   · Maçlar  → gün gezgini, segmentler, lig grupları, takvim (aynen burada).
  *   · Canlı   → Canlı segmenti + "Tüm Türkiye" görünümü: `/maclar/live`
  *               KAPSAM FİLTRESİZ akışı lige göre gruplu listelenir; iki
  *               yoklama arasındaki skor farkından gol bandı üretilir. `/canli`
@@ -32,12 +32,12 @@
  *      togglePinLeague`, cihazda). Aynı liste lig seçicide de üstte durur.
  *   4. DİĞERLERİ — takip edilen ligler önce, gerisi Türkçe alfabetik.
  *
- * BAŞLIK: kâğıt `ScreenHeader` "Maçlar", sağda arama; altında yalnız gol bandı.
- * SÜZGEÇLER ALTTA (`MatchesDock`, alt menünün hemen üstünde): segment
- * (Tümü · Canlı · Bitti · Yaklaşan), lig/sezon seçici hapı (`LeaguePicker
- * allowAll`, sabitli lig çipleriyle) ve gün şeridi + takvim (Canlı'da yerini
- * "N maç oynanıyor" satırına bırakır). Kapsam bir AYARDIR; yalnız hapta
- * yazılır, kâğıtta tekrarlanmaz.
+ * BAŞLIK: kâğıt `ScreenHeader` "Maçlar", sağda arama; bantta segment
+ * (Tümü · Canlı · Bitti · Yaklaşan) ve gerekirse gol bandı.
+ * ALT ÇUBUK (`MatchesDock`, alt menünün hemen üstünde, TEK satır): lig/sezon
+ * seçici hapı (`LeaguePicker allowAll`) ve gün gezgini ‹ Bugün › (etikete
+ * dokununca takvim; Canlı'da yerini "N canlı" özetine bırakır). Kapsam bir
+ * AYARDIR; yalnız hapta yazılır, kâğıtta tekrarlanmaz.
  *
  * TAKİP: maç satırındaki yıldız ve lig başlığındaki yıldız
  * `useFollowFlow().toggle` kullanır — takip edince bildirim türleri alt
@@ -91,6 +91,7 @@ import {
   MatchCard,
   matchDayLabel,
   ScreenHeader,
+  SegmentedControl,
   SkeletonMatchRow,
   matchCardHeight,
   toIsoDate,
@@ -123,7 +124,8 @@ const ROW_HEIGHT = matchCardHeight({ variant: "compact", dense: true });
 const GROUP_GAP = space.md;
 const SECTION_HEADER_HEIGHT = GROUP_GAP + LEAGUE_GROUP_HEADER_HEIGHT;
 
-/** Gün şeridinin varsayılan penceresi: bir hafta önce … iki hafta sonrası. */
+/** Geniş görünümde çekilen gün penceresi: bir hafta önce … iki hafta sonrası
+ *  (takvim noktaları da bu pencereden çıkar). */
 const STRIP_BACK_DAYS = 7;
 const STRIP_FORWARD_DAYS = 14;
 
@@ -312,7 +314,7 @@ export default function ScoresScreen() {
 
   /**
    * Sezonun tamamı tek istekte gelir ve gün süzmesi istemcide yapılır: gün
-   * değiştirmek ağ turu olmadan anında sonuç verir, gün şeridindeki "maç var"
+   * değiştirmek ağ turu olmadan anında sonuç verir, takvimdeki "maç var"
    * noktaları da aynı veriden çıkar.
    */
   const matchesQuery = useQuery({
@@ -328,7 +330,7 @@ export default function ScoresScreen() {
     refetchInterval: appActive ? 2 * IDLE_POLL_MS : false,
   });
 
-  /** Şerit penceresi seçili günü DAİMA kapsar (takvimden uzak bir gün seçilebilir). */
+  /** Pencere seçili günü DAİMA kapsar (takvimden uzak bir gün seçilebilir). */
   const stripRange = useMemo(() => {
     const start = shiftDays(todayIso, -STRIP_BACK_DAYS);
     const end = shiftDays(todayIso, STRIP_FORWARD_DAYS);
@@ -340,7 +342,7 @@ export default function ScoresScreen() {
 
   /**
    * GENİŞ GÖRÜNÜM (bir ilin bütün ligleri / tüm Türkiye): sezon kavramı yok;
-   * gün şeridinin penceresi kadar maç tek istekte gelir, gün süzmesi yine
+   * bir gün penceresi kadar maç tek istekte gelir, gün süzmesi yine
    * istemcide yapılır.
    */
   const windowQuery = useQuery({
@@ -695,6 +697,9 @@ export default function ScoresScreen() {
     setDate(nextMatchDay ?? shiftDays(date, 1));
   }, [nextMatchDay, date, setDate]);
 
+  const goToPrevDay = useCallback(() => setDate(shiftDays(date, -1)), [date, setDate]);
+  const goToNextDay = useCallback(() => setDate(shiftDays(date, 1)), [date, setDate]);
+
   const goToToday = useCallback(() => {
     setTab("tumu");
     setDate(todayIso);
@@ -821,10 +826,6 @@ export default function ScoresScreen() {
   );
 
   const liveSourceQuery = view === "country" ? allLiveQuery : liveQuery;
-  const liveUpdated = useMemo(() => {
-    if (!liveSourceQuery.dataUpdatedAt) return "";
-    return new Date(liveSourceQuery.dataUpdatedAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
-  }, [liveSourceQuery.dataUpdatedAt]);
 
   // Tüm Türkiye kapsam istemez; il görünümü yalnız ili, tek lig üçünü ister.
   const scopeMissing =
@@ -840,15 +841,6 @@ export default function ScoresScreen() {
   const primaryQuery = isLive ? liveSourceQuery : listQuery;
   const hasData = showAllLive ? allLive.length > 0 : allMatches.length > 0 || scopedLive.length > 0;
   const failed = primaryQuery.isError && !hasData;
-
-  const liveText =
-    liveCount > 0
-      ? `${liveCount} maç oynanıyor${liveUpdated ? ` · ${liveUpdated}` : ""}`
-      : view === "country"
-        ? "Şu an Türkiye'de canlı maç yok"
-        : view === "city"
-          ? `${scope.cityLabel || "Bu ilde"} canlı maç yok`
-          : "Bu ligde canlı maç yok";
 
   const listEmpty = useMemo(() => {
     if (isLive) {
@@ -926,11 +918,16 @@ export default function ScoresScreen() {
         scrollY={scrollY}
         actions={[{ icon: "search-outline", accessibilityLabel: "Ara", onPress: openSearch }]}
         bottom={
-          isLive && goal ? (
-            <View style={styles.band}>
-              <GoalBand goal={goal} onOpen={openGoalMatch} onDismiss={dismissGoal} />
+          <>
+            <View style={styles.controls}>
+              <SegmentedControl<TabKey> items={segments} value={tab} onChange={setTab} size="sm" />
             </View>
-          ) : undefined
+            {isLive && goal ? (
+              <View style={styles.band}>
+                <GoalBand goal={goal} onOpen={openGoalMatch} onDismiss={dismissGoal} />
+              </View>
+            ) : null}
+          </>
         }
       />
 
@@ -977,18 +974,17 @@ export default function ScoresScreen() {
         )}
       </View>
 
-      {/* ALT PANEL — alt menünün hemen üstünde: segment, lig seçici, gün şeridi. */}
-      <MatchesDock<TabKey>
-        segments={segments}
-        tab={tab}
-        onTabChange={setTab}
+      {/* ALT ÇUBUK — alt menünün hemen üstünde: lig seçici + gün gezgini. */}
+      <MatchesDock
         live={isLive}
         liveCount={liveCount}
-        liveText={liveText}
-        date={date}
-        onDateChange={setDate}
-        markers={markers}
-        range={stripRange}
+        dayLabel={matchDayLabel(date)}
+        isToday={date === todayIso}
+        hasMatches={Boolean(markers[date]?.count)}
+        hasLive={Boolean(markers[date]?.live)}
+        onPrevDay={goToPrevDay}
+        onNextDay={goToNextDay}
+        onToday={goToToday}
         onOpenCalendar={openCalendar}
       />
 
@@ -1137,7 +1133,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
 
-  /** Liste alanı — alt panel kendi yüksekliğini alır, kalan her şey liste. */
+  controls: {
+    paddingHorizontal: layout.screenPadding,
+    paddingBottom: space.sm,
+  },
+
+  /** Liste alanı — alt çubuk kendi yüksekliğini alır, kalan her şey liste. */
   body: {
     flex: 1,
   },

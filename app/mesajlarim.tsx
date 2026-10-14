@@ -1,8 +1,8 @@
 /**
  * /mesajlarim — ESKİ ROTA, yönlendirme.
  *
- * Yönetim başvuruları kutusu Gelen kutusu ▸ Mesajlar ▸ "Yönetim
- * başvuruları"na taşındı (app/gelen-kutusu.tsx, içerik
+ * Yönetim başvuruları Mesajlar sekmesinin "Yönetim" kutusuna taşındı
+ * (app/(tabs)/mesajlar.tsx; yönlendirme /gelen-kutusu üstünden, içerik
  * components/inbox/PanelThreadsPane.tsx). Rota silinmez: `PANEL_MESSAGE`
  * bildirimlerinin liste hedefi (lib/notifications.ts) ve app/mesaj/[id].tsx'in
  * "kutuya dön" / "yeni başvuru" (`?yeni=1`) bağlantıları buraya gelir.

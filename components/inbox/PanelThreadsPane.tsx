@@ -5,7 +5,7 @@
  * (kategori/durum) ve okunmamış sayısını döndürür. Bu bölme KUTU'dur; tek bir
  * konunun yazışması `app/mesaj/[id].tsx` rotasında açılır.
  *
- * NEREDE: app/gelen-kutusu.tsx (`?tab=mesajlar&kutu=basvurular`). Eski
+ * NEREDE: Mesajlar sekmesi ▸ Yönetim kutusu (`/(tabs)/mesajlar?kutu=yonetim`). Eski
  * /mesajlarim rotası buraya yönlendirir; `PANEL_MESSAGE` bildirimlerinin
  * liste hedefi (lib/notifications.ts) ve mesaj ekranının "kutuya dön" /
  * "yeni başvuru" bağlantıları (`?yeni=1`) böylece çalışmaya devam eder.

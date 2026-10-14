@@ -105,7 +105,7 @@ export default function LoginScreen() {
       // Eski `(tabs)/profile` ekranı kaldırıldı; girişten sonra yığında geri
       // dönülecek bir şey yoksa Profil SEKMESİ açılır (hesap detayı oradaki
       // kimlik kartından /hesabim ile açılıyor).
-      else router.replace("/(tabs)/profil");
+      else router.replace("/(tabs)/menu");
     } catch (caught) {
       setError(
         caught instanceof ApiError

@@ -3,7 +3,7 @@
  *
  * NEDEN BURADA DA VAR: yoklama yanıtı yalnız Oyuncu Paneli → Maçlarım
  * sekmesinde veriliyordu (üç dokunuş derinlikte). Başkanın en büyük derdi
- * "yanıtsız" oyuncudur; yanıtı Kulübüm'ün ilk ekranına taşımak o sayıyı
+ * "yanıtsız" oyuncudur; yanıtı Yönetim sekmesinin ilk ekranına taşımak o sayıyı
  * doğrudan düşürür.
  *
  * ÖNBELLEK: `["takim","availability-mine",matchId]` — `app/oyuncum/index.tsx`

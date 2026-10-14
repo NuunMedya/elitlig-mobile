@@ -6,12 +6,17 @@
  * enleri…). Push bildirimi kaçırılmış olsa bile bu liste her şeyi gösterir;
  * "telefonuma düşmedi" ile "hiç olmadı" burada ayrılır.
  *
- * NEREDE: yalnız app/gelen-kutusu.tsx (`?tab=bildirimler`). Eski
- * /bildirimler rotası buraya yönlendirir (lib/notifications.ts'teki
- * `/bildirimler` hedefleri bu sayede çalışmaya devam eder). Bölme kendi
- * başlığını çizmez; ekran başlığı (Bildirimler | Mesajlar sekmeleri, "tümünü
- * okundu" ve ayar eylemleri) gelen kutusundadır. Bölme süzgeç şeridini ve
- * listeyi çizer.
+ * NEREDE: Mesajlar sekmesi (app/(tabs)/mesajlar.tsx). Her bildirim KUTUSU
+ * (İstekler, Disiplin, Transfer, Maç, Diğer) bu bölmenin `category` ile
+ * sabitlenmiş hâlidir; "Bildirimler" kutusu süzgeçsiz tamamıdır. Eski
+ * /bildirimler ve /gelen-kutusu rotaları oraya yönlendirir. Bölme kendi
+ * başlığını çizmez; ekran başlığı ("tümünü okundu", ayarlar) Mesajlar'dadır.
+ *
+ * KATEGORİLER (`notifLook`): istek (maç talebi, kadro isteği, davet,
+ * başvuru, fotoğraf/değişiklik/hesap talebi, görev) · transfer (teklif,
+ * sözleşme, takım transferi) · disiplin (ceza) · maç (gol, sonuç, maçın
+ * adamı, haftanın enleri) · mesaj (yönetim yazışması) · diğer. Sıra önemli:
+ * MATCH_REQUEST / MATCH_LINEUP_REQUEST genel MATCH_'tan ÖNCE eşleşir.
  *
  * TARANABİLİRLİK: liste DAİMA zaman sırasındadır ve gün başlıklarıyla
  * ("Bugün", "Dün", "12 Ağustos Salı") bölünür; her gün tek bir satır
@@ -90,20 +95,26 @@ const POLL_MS = 30_000;
 /** Sorgu anahtarı: başka ekran bu listeyi okumuyor, tek sahibi burası. */
 const NOTIF_KEY = ["panel", "notifications"] as const;
 
-/** Bildirim kategorisi — süzgeç şeridinin çipleri. */
-type NotifCategory = "mac" | "takim" | "disiplin" | "mesaj" | "diger";
+/** Bildirim kategorisi — Mesajlar'ın kutuları ve süzgeç şeridinin çipleri. */
+export type NotifCategory = "istek" | "transfer" | "disiplin" | "mac" | "mesaj" | "diger";
 
 export type NotifFilter = "tumu" | "okunmamis" | NotifCategory;
 
-const CATEGORY_ORDER: { key: NotifCategory; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-  { key: "mac", label: "Maç", icon: "football-outline" },
-  { key: "takim", label: "Takım ve transfer", icon: "people-outline" },
-  { key: "disiplin", label: "Disiplin", icon: "shield-outline" },
-  { key: "mesaj", label: "Mesaj", icon: "chatbubble-ellipses-outline" },
-  { key: "diger", label: "Diğer", icon: "ellipsis-horizontal" },
+export const CATEGORY_ORDER: {
+  key: NotifCategory;
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  tone: Tone;
+}[] = [
+  { key: "istek", label: "İstekler", icon: "hand-left-outline", tone: "warn" },
+  { key: "transfer", label: "Transfer", icon: "swap-horizontal", tone: "brand" },
+  { key: "disiplin", label: "Disiplin", icon: "shield-outline", tone: "danger" },
+  { key: "mac", label: "Maç", icon: "football-outline", tone: "live" },
+  { key: "mesaj", label: "Yönetim", icon: "chatbubble-ellipses-outline", tone: "info" },
+  { key: "diger", label: "Diğer", icon: "ellipsis-horizontal", tone: "neutral" },
 ];
 
-interface NotifLook {
+export interface NotifLook {
   icon: keyof typeof Ionicons.glyphMap;
   tone: Tone;
   category: NotifCategory;
@@ -117,12 +128,12 @@ const DEFAULT_LOOK: NotifLook = { icon: "notifications", tone: "neutral", catego
  * anahtarlar; entity daha dar bir sözleşme olduğu için önce o bakılır.
  */
 const ENTITY_LOOK: Record<string, NotifLook> = {
-  TRANSFER_OFFER: { icon: "swap-horizontal", tone: "brand", category: "takim" },
-  CONTRACT: { icon: "document-text", tone: "info", category: "takim" },
+  TRANSFER_OFFER: { icon: "swap-horizontal", tone: "brand", category: "transfer" },
+  CONTRACT: { icon: "document-text", tone: "info", category: "transfer" },
   PENALTY: { icon: "shield", tone: "danger", category: "disiplin" },
   PANEL_MESSAGE: { icon: "chatbubble-ellipses", tone: "info", category: "mesaj" },
-  MATCH_REQUEST: { icon: "calendar", tone: "warn", category: "mac" },
-  TEAM_JOIN_REQUEST: { icon: "people", tone: "brand", category: "takim" },
+  MATCH_REQUEST: { icon: "calendar", tone: "warn", category: "istek" },
+  TEAM_JOIN_REQUEST: { icon: "person-add", tone: "warn", category: "istek" },
 };
 
 /**
@@ -132,31 +143,45 @@ const ENTITY_LOOK: Record<string, NotifLook> = {
  * durur ki MATCH_REQUEST onun altında kalmasın.
  */
 const TYPE_PREFIX_LOOK: ReadonlyArray<readonly [string, NotifLook]> = [
+  /* İSTEKLER — yanıt bekleyen her şey. Genel MATCH_'tan ÖNCE durmalı. */
+  ["MATCH_REQUEST", { icon: "calendar", tone: "warn", category: "istek" }],
+  ["MATCH_LINEUP_REQUEST", { icon: "list", tone: "warn", category: "istek" }],
+  ["ROSTER_DRAFT", { icon: "list", tone: "warn", category: "istek" }],
+  ["TEAM_INVITE", { icon: "person-add", tone: "warn", category: "istek" }],
+  ["TEAM_APPLICATION", { icon: "person-add", tone: "warn", category: "istek" }],
+  ["TEAM_AVAILABILITY_", { icon: "time", tone: "warn", category: "istek" }],
+  ["PHOTO_REQUEST", { icon: "camera", tone: "warn", category: "istek" }],
+  ["CHANGE_REQUEST", { icon: "create", tone: "warn", category: "istek" }],
+  ["ACCOUNT_REQUEST", { icon: "person-circle", tone: "warn", category: "istek" }],
+  ["CONTACT_REQUEST", { icon: "call", tone: "warn", category: "istek" }],
+  ["TODO_", { icon: "checkbox", tone: "warn", category: "istek" }],
+  /* MAÇ */
   ["MATCH_GOAL", { icon: "football", tone: "live", category: "mac" }],
   ["MATCH_START", { icon: "play-circle", tone: "live", category: "mac" }],
   ["MATCH_HALFTIME", { icon: "pause-circle", tone: "live", category: "mac" }],
   ["MATCH_RESULT", { icon: "flag", tone: "live", category: "mac" }],
   ["MATCH_FIXTURE", { icon: "calendar-number", tone: "live", category: "mac" }],
   ["MATCH_REMINDER", { icon: "alarm", tone: "live", category: "mac" }],
-  ["TRANSFER_", { icon: "swap-horizontal", tone: "brand", category: "takim" }],
-  ["OFFER_", { icon: "swap-horizontal", tone: "brand", category: "takim" }],
-  ["CONTRACT_", { icon: "document-text", tone: "info", category: "takim" }],
+  ["MAN_OF_THE_MATCH", { icon: "star", tone: "warn", category: "mac" }],
+  ["WEEKLY_AWARD", { icon: "trophy", tone: "warn", category: "mac" }],
+  /* TRANSFER VE SÖZLEŞME */
+  ["TRANSFER_", { icon: "swap-horizontal", tone: "brand", category: "transfer" }],
+  ["OFFER_", { icon: "swap-horizontal", tone: "brand", category: "transfer" }],
+  ["CONTRACT_", { icon: "document-text", tone: "info", category: "transfer" }],
+  ["TEAM_TRANSFER", { icon: "swap-horizontal", tone: "brand", category: "transfer" }],
+  /* DİSİPLİN */
   ["PENALTY_", { icon: "shield", tone: "danger", category: "disiplin" }],
+  /* YÖNETİM YAZIŞMASI */
   ["PANEL_MESSAGE", { icon: "chatbubble-ellipses", tone: "info", category: "mesaj" }],
-  ["TEAM_INVITE", { icon: "people", tone: "brand", category: "takim" }],
-  ["TEAM_APPLICATION", { icon: "people", tone: "brand", category: "takim" }],
-  ["MATCH_REQUEST", { icon: "calendar", tone: "warn", category: "mac" }],
-  ["WEEKLY_AWARD", { icon: "trophy", tone: "warn", category: "diger" }],
+  /* DİĞER */
   ["MEMBERSHIP_", { icon: "card", tone: "neutral", category: "diger" }],
-  ["ACCOUNT_REQUEST_", { icon: "person-circle", tone: "neutral", category: "diger" }],
-  ["TEAM_TRANSFER", { icon: "swap-horizontal", tone: "brand", category: "takim" }],
   ["PASSWORD_RESET", { icon: "key", tone: "neutral", category: "diger" }],
   ["MATCH_", { icon: "football", tone: "live", category: "mac" }],
   ["NEWS", { icon: "newspaper", tone: "neutral", category: "diger" }],
 ] as const;
 
 /** Bildirimin ikonu ve tonu — çözümleme sırası routeFromNotif ile aynıdır. */
-function notifLook(notif: PanelNotification): NotifLook {
+export function notifLook(notif: PanelNotification): NotifLook {
   const entity = String(notif.entity_type ?? "").trim().toUpperCase();
   const byEntity = ENTITY_LOOK[entity];
   if (byEntity) return byEntity;
@@ -168,13 +193,15 @@ function notifLook(notif: PanelNotification): NotifLook {
 
 export function normalizeNotifFilter(value: string | undefined): NotifFilter {
   if (value === "okunmamis") return "okunmamis";
+  // Eski "Takım ve transfer" çipi: transfer kutusu.
+  if (value === "takim") return "transfer";
   if (CATEGORY_ORDER.some((item) => item.key === value)) return value as NotifCategory;
   // "kronolojik" (eski değer) ve bilinmeyen her şey: Tümü.
   return "tumu";
 }
 
 /** "Az önce · 12 dk · 5 sa · Dün · Sal · 14 Ağu" */
-function relativeTime(iso: string): string {
+export function relativeTime(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
 
@@ -265,6 +292,8 @@ export function useMarkAllNotificationsRead() {
 /* ══════════════════════════════════ BÖLME ═════════════════════════════════ */
 
 export interface NotificationsPaneProps {
+  /** Kutu: liste yalnız bu kategoriyi gösterir; çip şeridi Tümü/Okunmamış'a iner. */
+  category?: NotifCategory;
   /** Rotadaki süzgeç (`?filtre=`); bilinmeyen değer "Tümü"ye düşer. */
   filter: string | undefined;
   onFilterChange: (next: NotifFilter) => void;
@@ -275,21 +304,20 @@ export interface NotificationsPaneProps {
   scrollEventThrottle?: number;
 }
 
-export function NotificationsPane({
-  filter,
-  onFilterChange,
-  onOpenPrefs,
-  onScroll,
-  scrollEventThrottle,
-}: NotificationsPaneProps) {
+/* ═══════════════════════════════ ORTAK AKIŞ ═══════════════════════════════ */
+
+/**
+ * Bildirim akışı — liste, okunmamış sayısı, okundu işaretleme ve açma.
+ * Mesajlar'ın özet görünümü ve her kutu AYNI önbelleği (`NOTIF_KEY`) okur;
+ * sayfa bir kez çekilir, kutular yalnız süzer.
+ */
+export function useNotificationFeed() {
   const auth = useAuth();
   const router = useRouter();
   const toast = useToast();
   const appActive = useAppActive();
   const queryClient = useQueryClient();
   const patchCache = usePatchNotifCache();
-
-  const tab = normalizeNotifFilter(filter);
 
   /* ───────────────────────────── VERİ ───────────────────────────── */
 
@@ -386,28 +414,48 @@ export function NotificationsPane({
     [isManagement, markRead, router, toast],
   );
 
-  const selectTab = onFilterChange;
   const loadMore = useCallback(() => {
     if (query.hasNextPage && !query.isFetchingNextPage) void query.fetchNextPage();
   }, [query]);
+
+  return { query, items, unread, refetchAll, refresh, openNotif, loadMore };
+}
+
+export function NotificationsPane({
+  category,
+  filter,
+  onFilterChange,
+  onOpenPrefs,
+  onScroll,
+  scrollEventThrottle,
+}: NotificationsPaneProps) {
+  const tab = normalizeNotifFilter(filter);
+  const selectTab = onFilterChange;
+  const { query, items, unread: unreadAll, refetchAll, refresh, openNotif, loadMore } = useNotificationFeed();
+  /** Sabit kutu (`category`) verildiyse liste önce ona daraltılır. */
+  const pool = useMemo(
+    () => (category ? items.filter((item) => notifLook(item).category === category) : items),
+    [items, category],
+  );
+  const unread = category ? pool.filter((item) => !item.is_read).length : unreadAll;
 
   /* ──────────────────────────── BÖLÜMLER ──────────────────────────── */
 
   /** Listede gerçekten bulunan kategoriler — boş çip çizilmez. */
   const categoryCounts = useMemo(() => {
     const counts: Partial<Record<NotifCategory, number>> = {};
-    for (const item of items) {
+    for (const item of pool) {
       const key = notifLook(item).category;
       counts[key] = (counts[key] ?? 0) + 1;
     }
     return counts;
-  }, [items]);
+  }, [pool]);
 
   const visible = useMemo(() => {
-    if (tab === "tumu") return items;
-    if (tab === "okunmamis") return items.filter((item) => !item.is_read);
-    return items.filter((item) => notifLook(item).category === tab);
-  }, [items, tab]);
+    if (tab === "tumu") return pool;
+    if (tab === "okunmamis") return pool.filter((item) => !item.is_read);
+    return pool.filter((item) => notifLook(item).category === tab);
+  }, [pool, tab]);
 
   /* Her süzgeçte zaman sırası + gün başlığı ("Bugün", "Dün", "12 Ağustos Salı"). */
   const sections = useMemo<NotifSection[]>(() => {
@@ -453,12 +501,12 @@ export function NotificationsPane({
     );
   }
 
-  if (query.isError && items.length === 0) {
+  if (query.isError && pool.length === 0) {
     return <ErrorState error={query.error} onRetry={refetchAll} />;
   }
 
   const listHeader =
-    query.isError && items.length > 0 ? (
+    query.isError && pool.length > 0 ? (
       <View style={styles.header}>
         {/* Veri EKRANDAYKEN hata bant olur; liste silinmez (§5.6). */}
         <ErrorState error={query.error} onRetry={refetchAll} variant="banner" />
@@ -468,7 +516,7 @@ export function NotificationsPane({
   /* SÜZGEÇ ŞERİDİ — Tümü · Okunmamış · listede bulunan kategoriler. */
   const presentCategories = CATEGORY_ORDER.filter((item) => categoryCounts[item.key]);
   const filterBar =
-    items.length > 0 ? (
+    pool.length > 0 ? (
       <ChipGroup style={styles.filters}>
         <Chip label="Tümü" selected={tab === "tumu"} onPress={() => selectTab("tumu")} />
         <Chip
@@ -477,7 +525,7 @@ export function NotificationsPane({
           selected={tab === "okunmamis"}
           onPress={() => selectTab("okunmamis")}
         />
-        {presentCategories.length > 1
+        {!category && presentCategories.length > 1
           ? presentCategories.map((item) => (
               <Chip
                 key={item.key}
@@ -493,10 +541,10 @@ export function NotificationsPane({
 
   /* Süzgece göre boş durum: "hiç bildirim yok" ile "bu süzgeçte yok" ayrı. */
   const emptyState =
-    items.length === 0 ? (
+    pool.length === 0 ? (
       <EmptyState
         icon="notifications-off-outline"
-        title="Henüz bildirim yok"
+        title={category ? "Bu kutu boş" : "Henüz bildirim yok"}
         body="Teklifler, sözleşmeler, disiplin kararları ve yönetim mesajları geldikçe burada toplanır."
         action={{ label: "Bildirim türlerini seç", onPress: onOpenPrefs }}
       />
@@ -562,7 +610,7 @@ export function NotificationsPane({
  * kalın, sağda nokta. OKUNMUŞ: pul sönük, başlık normal ağırlık. "Yeni"
  * bilgisini renk tek başına taşımaz; ağırlık ve işaret de söyler.
  */
-const NotificationRow = memo(function NotificationRow({
+export const NotificationRow = memo(function NotificationRow({
   notif,
   onPress,
   first,

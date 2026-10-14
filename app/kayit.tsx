@@ -205,7 +205,7 @@ export default function RegisterScreen() {
       // açar), sonra Profil sekmesi gösterilir. Modal içinden doğrudan
       // replace etmek iOS'ta güvenilir değil.
       if (router.canDismiss()) router.dismissAll();
-      router.replace("/(tabs)/profil");
+      router.replace("/(tabs)/menu");
     } catch (caught) {
       if (caught instanceof ApiError) {
         const fields = serverFieldErrors(caught.detail);

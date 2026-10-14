@@ -46,7 +46,7 @@ export const AttentionList = React.memo(function AttentionList({
     return (
       <View style={[styles.card, styles.clear, style]}>
         <View style={[styles.pip, { backgroundColor: colors.winDim }]}>
-          <Ionicons name="checkmark" size={16} color={colors.win} />
+          <Ionicons name="checkmark" size={14} color={colors.win} />
         </View>
         <Text style={styles.clearText} {...textScale.long}>
           {emptyText}
@@ -109,7 +109,7 @@ const AttentionRow = React.memo(function AttentionRow({
       style={styles.row}
     >
       <View style={[styles.pip, { backgroundColor: palette.dim }]}>
-        <Ionicons name={item.icon} size={16} color={palette.fg} />
+        <Ionicons name={item.icon} size={14} color={palette.fg} />
       </View>
       <View style={styles.texts}>
         <Text style={styles.title} numberOfLines={1} {...textScale.dense}>
@@ -122,13 +122,13 @@ const AttentionRow = React.memo(function AttentionRow({
       <Text style={[styles.count, { color: palette.fg }]} {...textScale.badge}>
         {item.count > 99 ? "99+" : item.count}
       </Text>
-      <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
+      <Ionicons name="chevron-forward" size={14} color={colors.textTertiary} />
       {divider ? <View pointerEvents="none" style={styles.divider} /> : null}
     </Touchable>
   );
 });
 
-const PIP = 32;
+const PIP = 28;
 
 const styles = StyleSheet.create({
   card: {
@@ -143,8 +143,9 @@ const styles = StyleSheet.create({
   clear: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.md,
-    padding: space.md,
+    gap: space.m,
+    paddingHorizontal: space.md,
+    paddingVertical: space.m,
   },
   clearText: {
     ...type.bodySm,
@@ -154,10 +155,11 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.md,
-    minHeight: layout.listRowHeightTwoLine,
+    gap: space.m,
+    // Sıkı satır: h4(18) + caption(15) + 2×8 dolgu ≈ 52 — tek satırlı ListRow boyu.
+    minHeight: layout.listRowHeight,
     paddingHorizontal: space.md,
-    paddingVertical: space.m,
+    paddingVertical: space.sm,
   },
   pip: {
     width: PIP,
@@ -172,21 +174,21 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   title: {
-    ...type.h3,
+    ...type.h4,
     color: colors.textPrimary,
   },
   subtitle: {
-    ...type.bodySm,
+    ...type.caption,
     color: colors.textTertiary,
   },
   count: {
-    ...type.metricSm,
+    ...type.scoreSm,
     minWidth: 24,
     textAlign: "right",
   },
   divider: {
     position: "absolute",
-    left: space.md + PIP + space.md,
+    left: space.md + PIP + space.m,
     right: 0,
     bottom: 0,
     height: hairline,

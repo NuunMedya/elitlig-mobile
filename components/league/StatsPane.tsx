@@ -5,7 +5,8 @@
  * ("CAPITAL FC · EN GOLCÜ ›"). Kimin ne kadar önde olduğu okunmuyordu.
  *
  * YENİ DÜZEN — ÜÇ KATMAN:
- *   1. Sezon özeti: oynanan maç · atılan gol · maç başı gol (MetricGrid).
+ *   1. Sezon özeti: oynanan maç · atılan gol · maç başı gol — tek ince
+ *      kartta üç sütun (`SummaryStrip`; üç ayrı iri karo yerine).
  *      Puan tablosundan türetilir; her maç iki takımın "O" sütununda
  *      sayıldığı için maç sayısı ΣO / 2'dir.
  *   2. Takım liderleri: Hücum (atılan gol), Savunma (yenilen gol — az olan
@@ -21,15 +22,14 @@
  * hâlde gol krallığını "HÜKMEN 1" kazanıyordu.
  */
 
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import React, { useCallback, useMemo } from "react";
-import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import {
   EmptyState,
   ErrorState,
-  MetricGrid,
-  MetricTile,
   SkeletonCard,
   refreshControlProps,
   useRefresh,
@@ -40,9 +40,18 @@ import { formatDecimal, formatNumber } from "@/lib/format";
 import { queryKeys } from "@/lib/queryKeys";
 import type { PlayerRankRow, PlayerSort, StandingRow } from "@/lib/types";
 import { useScope } from "@/providers/ScopeProvider";
-import { layout, space } from "@/theme";
+import { colors, hairline, space, textScale, type, upperTR } from "@/theme";
 import { Leaderboard, type LeaderEntry } from "./Leaderboard";
-import { JUNK_PLAYER, PaneLabel, ScopeMissing, num, paneStyles, useScopeKey, type PaneProps } from "./shared";
+import {
+  JUNK_PLAYER,
+  PaneLabel,
+  ScopeMissing,
+  groupStyles,
+  num,
+  paneStyles,
+  useScopeKey,
+  type PaneProps,
+} from "./shared";
 
 const TOP = 5;
 
@@ -73,6 +82,43 @@ const playerEntry = (row: PlayerRankRow, value: number): LeaderEntry => ({
   image: row.image ?? null,
   meta: row.teamName || "Takımsız",
   value,
+});
+
+interface SummaryItem {
+  label: string;
+  value: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  /** Vurgulu sütun (maç başı gol) — rakam zümrüt. */
+  accent?: boolean;
+}
+
+/**
+ * Sezon özeti — tek kart, üç eşit sütun, sütunlar arası saç teli. Ortak
+ * `MetricGrid` üç ayrı iri karo (26px rakam) çiziyordu; yoğun Lig sekmesinde
+ * özet bir bakışlık bilgidir, ekranın üçte birini yememeli.
+ */
+const SummaryStrip = React.memo(function SummaryStrip({ items }: { items: SummaryItem[] }) {
+  return (
+    <View style={[groupStyles.card, styles.summary]}>
+      {items.map((item, index) => (
+        <View key={item.label} style={[styles.summaryCell, index > 0 ? styles.summaryDivider : null]}>
+          <View style={styles.summaryLabelRow}>
+            <Ionicons name={item.icon} size={10} color={colors.textTertiary} />
+            <Text style={styles.summaryLabel} numberOfLines={1} {...textScale.badge}>
+              {upperTR(item.label)}
+            </Text>
+          </View>
+          <Text
+            style={[styles.summaryValue, item.accent ? styles.summaryValueAccent : null]}
+            numberOfLines={1}
+            {...textScale.dense}
+          >
+            {item.value}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
 });
 
 export interface StatsPaneProps extends PaneProps {
@@ -216,16 +262,18 @@ export function StatsPane({ scrollProps, onOpenPlayers, onOpenStandings }: Stats
           ) : null}
 
           {summary.matches > 0 ? (
-            <MetricGrid columns={3}>
-              <MetricTile label="Maç" value={String(summary.matches)} icon="football-outline" />
-              <MetricTile label="Gol" value={formatNumber(summary.goals)} icon="flame-outline" />
-              <MetricTile
-                label="Gol / Maç"
-                value={formatDecimal(summary.perMatch, 2)}
-                tone="accent"
-                icon="trending-up-outline"
-              />
-            </MetricGrid>
+            <SummaryStrip
+              items={[
+                { label: "Maç", value: String(summary.matches), icon: "football-outline" },
+                { label: "Gol", value: formatNumber(summary.goals), icon: "flame-outline" },
+                {
+                  label: "Gol / Maç",
+                  value: formatDecimal(summary.perMatch, 2),
+                  icon: "trending-up-outline",
+                  accent: true,
+                },
+              ]}
+            />
           ) : null}
 
           {hasPlayers ? (
@@ -303,9 +351,46 @@ export function StatsPane({ scrollProps, onOpenPlayers, onOpenStandings }: Stats
 
 const styles = StyleSheet.create({
   stack: {
-    gap: layout.sectionGap,
+    gap: space.lg,
   },
   cards: {
-    gap: space.md,
+    gap: space.sm,
+  },
+  summary: {
+    flexDirection: "row",
+    paddingVertical: space.sm,
+  },
+  summaryCell: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: "center",
+    gap: space.xxs,
+    paddingHorizontal: space.xs,
+  },
+  summaryDivider: {
+    borderLeftWidth: hairline,
+    borderLeftColor: colors.separator,
+  },
+  summaryLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xxs,
+  },
+  summaryLabel: {
+    ...type.overline,
+    fontSize: 9,
+    lineHeight: 12,
+    letterSpacing: 0.8,
+    color: colors.textTertiary,
+  },
+  summaryValue: {
+    ...type.metricSm,
+    fontSize: 16,
+    lineHeight: 20,
+    letterSpacing: -0.3,
+    color: colors.textPrimary,
+  },
+  summaryValueAccent: {
+    color: colors.accentText,
   },
 });

@@ -1,35 +1,32 @@
 /**
- * KULÜBÜM — takım, oyuncu ve lig yönetiminin TEK kapısı (alt çubuğun 4. sekmesi).
- * `/kulubum?rol=<takim|oyuncu|lig>`
+ * YÖNETİM — takım, oyuncu ve lig yönetiminin TEK kapısı (alt çubuğun 3. sekmesi;
+ * rota adı tarihsel olarak `kulubum`). `/kulubum?rol=<takim|oyuncu|lig>`
  *
- * BİLGİ MİMARİSİ (Arena "Merkez" kalıbı: sıradaki iş → kimlik → bekleyen işler → kapılar):
+ * BİLGİ MİMARİSİ ("önce araç, sonra bağlam"):
  *
  *   1. ROL SEKMELERİ — bir hesap başkan + oyuncu + yönetici olabilir; her rol
  *      kendi sekmesidir, şerit YALNIZ birden çok rol varsa çizilir. Seçim
  *      `?rol=` ile URL'de taşınır (derin bağlantı, geri tuşu).
- *   2. SIRADAKİ ETKİNLİK — her rolde EN ÜSTTE (`NextEventSection`): maç, gün/
- *      saat, saha, yoklama ölçeri (yalnız başkanın yoklama ucu
- *      `/api/match-availability/:id/team` okunabildiğinde) ve kullanıcının
- *      kendi "Geliyorum / Belki / Gelemem" yanıtı (`AvailabilityPicker`,
- *      yalnız oyuncu profili o maçın kadrosundaysa). Kaynak: başkanda
- *      `["takim","matches"]`, oyuncuda `["panel","my-matches"]`; lig
- *      sekmesinde hangisi varsa. Veri yoksa "Planlanmış etkinlik yok" —
- *      uydurma maç yok. Bu kâğıt kart, kimliğin grafit sahnesinin ÜSTÜNDE
- *      durur: kullanıcının en çok sorduğu "ne zaman, nerede, geliyor muyum?".
- *   3. KİMLİK — tek sahne kartı: takım (sıra, puan, averaj, kadro, son 5) ya
- *      da oyuncu (maç, gol, asist, reyting). Karta dokunmak herkese açık
- *      sayfayı, alttaki düğme yönetim panelini açar.
+ *   2. HIZLI ERİŞİM — en üstte `QuickActions`: rolün asıl araçları dört
+ *      sütunlu sıkı ızgarada, tek dokunuşta. Rozet gerçek sayıdır. Eski iki
+ *      satırlık HubGrid karoları buraya toplandı: aynı kapılar, yarı yer.
+ *   3. SIRADAKİ ETKİNLİK — `NextEventSection`: maç, gün/saat, saha, yoklama
+ *      ölçeri (yalnız başkanın yoklama ucu `/api/match-availability/:id/team`
+ *      okunabildiğinde) ve kullanıcının kendi "Geliyorum / Belki / Gelemem"
+ *      yanıtı (`AvailabilityPicker`, yalnız oyuncu profili o maçın
+ *      kadrosundaysa). Kaynak: başkanda `["takim","matches"]`, oyuncuda
+ *      `["panel","my-matches"]`; lig sekmesinde hangisi varsa. Veri yoksa
+ *      "Planlanmış etkinlik yok" — uydurma maç yok.
  *   4. ŞİMDİ İLGİLEN — gerçek bekleyen işler, aciliyete göre sıralı (bkz.
  *      components/club/useClubSignals.ts). İlk üçü burada, tamamı Kulüp
  *      Panelinde. Boşsa yeşil "her şey güncel" satırı — sessizlik değil.
- *   5. ARAÇLAR — `HubGrid`: her iş bir karo, rozet gerçek sayıdır (menekşe).
- *      Takım sohbeti kapısı (`/sohbet`) burada kalır.
- *   6. TAKİP KISA YOLU — takip edilen takımlar artık Takip sekmesinde; burada
- *      yalnız tek satırlık "Takip ettiklerin → /takip".
+ *   5. KİMLİK — sıkı grafit kart: takım (sıra, puan, averaj, kadro, son 5) ya
+ *      da oyuncu (maç, gol, asist, reyting). Karta dokunmak herkese açık
+ *      sayfayı açar; başkanda alttaki düğme Kulüp Panelini.
  *
- * GELEN KUTUSU: başlıktaki mesaj ve zil ikonları ayrı ekranlara değil tek
- * `/gelen-kutusu` ekranına açılır (`?tab=mesajlar` / `?tab=bildirimler`);
- * rozetler menekşe (okunmamış). Takım sohbeti ayrı kalır.
+ * MESAJLAR: başlıktaki mesaj ve zil ikonları Mesajlar sekmesine açılır
+ * (`/(tabs)/mesajlar?kutu=sohbetler` / kutusuz). Takım sohbeti (`/sohbet`)
+ * hızlı erişimde ayrı kalır.
  *
  * MİSAFİR ve KULÜPSÜZ ÜYE: tanıtım kartı yerine EYLEM AKIŞI (`JoinFlow`):
  * 1) Takımını bul → `/ara?tip=takim`, 2) Davet koduyla katıl → `/davetler`
@@ -48,11 +45,10 @@ import { AvailabilityPicker } from "@/components/club/AvailabilityPicker";
 import { ClubIdentity, type IdentityFact } from "@/components/club/ClubIdentity";
 import { JoinFlow } from "@/components/club/JoinFlow";
 import { NextMatchCard } from "@/components/club/NextMatchCard";
+import { QuickActions, type QuickAction } from "@/components/club/QuickActions";
 import { useClubSignals, type AttentionItem } from "@/components/club/useClubSignals";
 import {
   Button,
-  HubGrid,
-  HubTile,
   ListRow,
   ScreenHeader,
   SectionHeader,
@@ -79,8 +75,11 @@ const ROLE_LABELS: Record<RoleTab, string> = {
   lig: "Lig yönetimi",
 };
 
-/** Bekleyen işlerin Kulübüm'de gösterilen en fazla satırı; fazlası panele. */
+/** Bekleyen işlerin Yönetim sekmesinde gösterilen en fazla satırı; fazlası panele. */
 const ATTENTION_LIMIT = 3;
+
+/** Mesajlar sekmesi — `kutu` verilirse o kutu açık gelir. */
+const INBOX = "/(tabs)/mesajlar";
 
 function signed(value: number): string {
   return value > 0 ? `+${value}` : String(value);
@@ -129,7 +128,7 @@ export default function ClubHubScreen() {
 
   const changeRole = useCallback(
     (next: RoleTab) => {
-      // Rol değişince içerik baştan okunur: kimlik kartı ekranın tepesinde.
+      // Rol değişince içerik baştan okunur: hızlı erişim ekranın tepesinde.
       scrollRef.current?.scrollTo({ y: 0, animated: false });
       scrollY.setValue(0);
       router.setParams({ rol: next });
@@ -151,22 +150,22 @@ export default function ClubHubScreen() {
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader
-        title="Kulübüm"
-        overline={user ? (user.fullName ?? user.username ?? undefined) : "Yönetim merkezi"}
+        title="Yönetim"
+        overline={user ? (user.fullName ?? user.username ?? undefined) : "Takım, kariyer, lig"}
         scrollY={scrollY}
         actions={
           user
             ? [
                 {
                   icon: "chatbubbles-outline",
-                  accessibilityLabel: "Gelen kutusu: mesajlar",
-                  onPress: () => go("/gelen-kutusu?tab=mesajlar"),
+                  accessibilityLabel: "Mesajlar: sohbetler",
+                  onPress: () => go(`${INBOX}?kutu=sohbetler`),
                   badge: unread.messages || undefined,
                 },
                 {
                   icon: "notifications-outline",
-                  accessibilityLabel: "Gelen kutusu: bildirimler",
-                  onPress: () => go("/gelen-kutusu?tab=bildirimler"),
+                  accessibilityLabel: "Mesajlar: bildirimler",
+                  onPress: () => go(INBOX),
                   badge: unread.notifications || undefined,
                 },
               ]
@@ -208,12 +207,12 @@ export default function ClubHubScreen() {
           <JoinFlow signedIn go={go} />
         )}
 
-        {/* ── TAKİP KISA YOLU — takip listesi Takip sekmesinde ─────────── */}
+        {/* ── TAKİP KISA YOLU — takip listesi Takip ekranında ─────────── */}
         <View style={styles.followLink}>
           <ListRow
             leading={{ icon: "star", tone: "brand" }}
             title="Takip ettiklerin"
-            subtitle="Takımlar, ligler ve maçlar Takip sekmesinde"
+            subtitle="Takımlar, ligler ve maçlar"
             onPress={() => go("/takip")}
           />
         </View>
@@ -236,6 +235,59 @@ function PresidentSection({
   onAttention: (item: AttentionItem) => void;
 }) {
   const { team, standing, dashboard, counts } = signals;
+
+  // Başkanın asıl araçları — eski "Yönetim araçları" karolarının tamamı.
+  const actions = useMemo<QuickAction[]>(
+    () => [
+      {
+        key: "kadro",
+        icon: "people",
+        label: "Kadro",
+        href: "/takimim/kadro",
+        tone: "brand",
+        badge: signals.withoutContract,
+        hint: `${signals.squadSize} oyuncu`,
+      },
+      {
+        key: "transfer",
+        icon: "swap-horizontal",
+        label: "Transfer",
+        href: "/takimim/kadro?gorunum=transfer",
+        tone: "brand",
+        badge: counts.offersOpen,
+        hint: "Oyuncu ara, davet et, teklif ver",
+      },
+      {
+        key: "davet",
+        icon: "mail-unread",
+        label: "Başvurular",
+        href: "/davetler",
+        tone: "live",
+        badge: counts.applications,
+        hint: "Katılım istekleri ve davetler",
+      },
+      {
+        key: "sezon",
+        icon: "id-card",
+        label: "Lisans",
+        href: "/takimim/kadro?gorunum=sezon",
+        tone: "info",
+        hint: "Sezon kadrosu, transfer hakkı, onay",
+      },
+      { key: "mac-al", icon: "calendar", label: "Maç al", href: "/takimim/mac-al", tone: "win", hint: "Saha panosundan saat seç" },
+      {
+        key: "mac-merkezi",
+        icon: "clipboard",
+        label: "Maçlar",
+        href: "/takimim/mac-merkezi",
+        tone: "info",
+        hint: "Fikstür, yoklama, maç karnesi",
+      },
+      { key: "kasa", icon: "wallet", label: "Kasa", href: "/takimim/kasa", tone: "warn", hint: "Gelir, gider, kadro değeri" },
+      { key: "sohbet", icon: "chatbubbles", label: "Sohbet", href: "/sohbet", tone: "neutral", hint: "Takım grubu" },
+    ],
+    [counts.applications, counts.offersOpen, signals.squadSize, signals.withoutContract],
+  );
 
   if (dashboard.isLoading) {
     return (
@@ -273,8 +325,22 @@ function PresidentSection({
 
   return (
     <>
+      <QuickActions actions={actions} go={go} />
+
       <NextEventSection signals={signals} source="team" go={go} />
 
+      <SectionHeader
+        title="Şimdi ilgilen"
+        meta={signals.clubAttention.length ? `${signals.clubAttention.length} iş` : undefined}
+      />
+      <AttentionList
+        items={signals.clubAttention}
+        onPress={onAttention}
+        limit={ATTENTION_LIMIT}
+        onSeeAll={() => go("/takimim")}
+      />
+
+      <SectionHeader title="Kulüp" action={{ label: "Takım sayfası", onPress: () => go(`/takim/${team.id}`) }} />
       <ClubIdentity
         kind="team"
         framed
@@ -296,86 +362,7 @@ function PresidentSection({
             fullWidth
           />
         }
-        style={styles.identity}
       />
-
-      <SectionHeader
-        title="Şimdi ilgilen"
-        meta={signals.clubAttention.length ? `${signals.clubAttention.length} iş` : undefined}
-      />
-      <AttentionList
-        items={signals.clubAttention}
-        onPress={onAttention}
-        limit={ATTENTION_LIMIT}
-        onSeeAll={() => go("/takimim")}
-      />
-
-      <SectionHeader title="Yönetim araçları" />
-      <HubGrid>
-        <HubTile
-          icon="people"
-          title="Kadro"
-          subtitle={
-            signals.withoutContract
-              ? `${signals.withoutContract} sözleşmesiz · ${signals.squadSize} oyuncu`
-              : `${signals.squadSize} oyuncu · forma, mevki, diziliş`
-          }
-          badge={signals.withoutContract}
-          tone="brand"
-          onPress={() => go("/takimim/kadro")}
-        />
-        <HubTile
-          icon="swap-horizontal"
-          title="Transfer"
-          subtitle={counts.offersOpen ? `${counts.offersOpen} açık teklif` : "Oyuncu ara, davet et, teklif ver"}
-          badge={counts.offersOpen}
-          tone="accent"
-          onPress={() => go("/takimim/kadro?gorunum=transfer")}
-        />
-        <HubTile
-          icon="mail-unread"
-          title="Davet ve başvuru"
-          subtitle={counts.applications ? `${counts.applications} başvuru bekliyor` : "Katılım istekleri, davetler"}
-          badge={counts.applications}
-          tone="live"
-          onPress={() => go("/davetler")}
-        />
-        <HubTile
-          icon="id-card"
-          title="Sezon kadrosu"
-          subtitle="Lisans, transfer hakkı, onay"
-          tone="info"
-          onPress={() => go("/takimim/kadro?gorunum=sezon")}
-        />
-        <HubTile
-          icon="clipboard"
-          title="Maç merkezi"
-          subtitle="Fikstür, yoklama, maç karnesi"
-          tone="info"
-          onPress={() => go("/takimim/mac-merkezi")}
-        />
-        <HubTile
-          icon="calendar"
-          title="Maç al"
-          subtitle="Saha panosundan saat seç"
-          tone="win"
-          onPress={() => go("/takimim/mac-al")}
-        />
-        <HubTile
-          icon="wallet"
-          title="Kulüp kasası"
-          subtitle="Gelir, gider, kadro değeri"
-          tone="warn"
-          onPress={() => go("/takimim/kasa")}
-        />
-        <HubTile
-          icon="chatbubbles"
-          title="Takım sohbeti"
-          subtitle="Takım grubu, oyuncular"
-          tone="neutral"
-          onPress={() => go("/sohbet")}
-        />
-      </HubGrid>
     </>
   );
 }
@@ -397,6 +384,47 @@ function PlayerSection({
   const playerTeam = data?.playerTeam ?? null;
   const stats = data?.stats ?? null;
 
+  // Oyuncunun asıl araçları — eski "Kariyerim" karolarının tamamı + panel.
+  const actions = useMemo<QuickAction[]>(
+    () => [
+      { key: "maclar", icon: "football", label: "Maçlarım", href: "/oyuncum?tab=maclarim", tone: "brand", hint: "Kadro, yoklama, performans" },
+      {
+        key: "teklif",
+        icon: "swap-horizontal",
+        label: "Teklifler",
+        href: "/tekliflerim",
+        tone: "brand",
+        badge: counts.offersAwaiting,
+        hint: "Gelen transfer teklifleri",
+      },
+      { key: "sozlesme", icon: "document-text", label: "Sözleşme", href: "/sozlesmelerim", tone: "info", hint: "Aktif ve geçmiş" },
+      {
+        key: "disiplin",
+        icon: "alert-circle",
+        label: "Disiplin",
+        href: "/cezalarim",
+        tone: "warn",
+        badge: counts.penaltiesOpen,
+        hint: "Savunma ve itiraz",
+      },
+      {
+        key: "davet",
+        icon: "git-pull-request",
+        label: "Davetler",
+        href: "/davetler",
+        tone: "live",
+        badge: counts.invitesReceived,
+        hint: "Takım davetleri, başvurular",
+      },
+      playerTeam
+        ? { key: "takim", icon: "shield", label: "Takımım", href: `/takim/${playerTeam.id}`, tone: "neutral", hint: playerTeam.team_name }
+        : { key: "takim-bul", icon: "search", label: "Takım bul", href: "/davetler", tone: "neutral", hint: "Oyuncu arayan takımlar" },
+      { key: "sohbet", icon: "chatbubbles", label: "Sohbet", href: "/sohbet", tone: "neutral", hint: "Takım grubu" },
+      { key: "panel", icon: "person-circle", label: "Panel", href: "/oyuncum", tone: "neutral", hint: "Oyuncu paneli" },
+    ],
+    [counts.invitesReceived, counts.offersAwaiting, counts.penaltiesOpen, playerTeam],
+  );
+
   const facts: IdentityFact[] = stats
     ? [
         { label: "Maç", value: String(stats.matches ?? 0) },
@@ -408,8 +436,21 @@ function PlayerSection({
 
   return (
     <>
+      <QuickActions actions={actions} go={go} />
+
       <NextEventSection signals={signals} source="player" go={go} />
 
+      <SectionHeader
+        title="Şimdi ilgilen"
+        meta={signals.playerAttention.length ? `${signals.playerAttention.length} iş` : undefined}
+      />
+      <AttentionList
+        items={signals.playerAttention}
+        onPress={onAttention}
+        emptyText="Yanıt bekleyen teklif, davet ya da disiplin dosyan yok."
+      />
+
+      <SectionHeader title="Kariyer" />
       {me.isLoading ? (
         <View style={styles.pad}>
           <SkeletonCard lines={3} />
@@ -424,70 +465,25 @@ function PlayerSection({
           context={[player?.player_position, playerTeam?.team_name ?? "Serbest oyuncu"].filter(Boolean).join(" · ")}
           facts={facts}
           onPress={() => go(player?.id ? `/oyuncu/${player.id}` : "/oyuncum")}
-          footer={
-            <Button
-              label="Oyuncu paneli"
-              onPress={() => go("/oyuncum")}
-              variant="secondary"
-              size="sm"
-              icon="person-circle-outline"
-              onDark
-              fullWidth
-            />
-          }
-          style={styles.identity}
         />
       )}
-
-      <SectionHeader
-        title="Şimdi ilgilen"
-        meta={signals.playerAttention.length ? `${signals.playerAttention.length} iş` : undefined}
-      />
-      <AttentionList
-        items={signals.playerAttention}
-        onPress={onAttention}
-        emptyText="Yanıt bekleyen teklif, davet ya da disiplin dosyan yok."
-      />
-
-      <SectionHeader title="Kariyerim" />
-      <HubGrid>
-        <HubTile icon="football" title="Maçlarım" subtitle="Kadro, yoklama, performans" tone="brand" onPress={() => go("/oyuncum?tab=maclarim")} />
-        <HubTile
-          icon="swap-horizontal"
-          title="Tekliflerim"
-          subtitle={counts.offersAwaiting ? `${counts.offersAwaiting} yanıt bekliyor` : "Gelen transfer teklifleri"}
-          badge={counts.offersAwaiting}
-          tone="accent"
-          onPress={() => go("/tekliflerim")}
-        />
-        <HubTile icon="document-text" title="Sözleşmelerim" subtitle="Aktif ve geçmiş" tone="info" onPress={() => go("/sozlesmelerim")} />
-        <HubTile
-          icon="alert-circle"
-          title="Disiplin"
-          subtitle={counts.penaltiesOpen ? "Süresi işleyen dosya var" : "Savunma ve itiraz"}
-          badge={counts.penaltiesOpen}
-          tone="warn"
-          onPress={() => go("/cezalarim")}
-        />
-        <HubTile
-          icon="git-pull-request"
-          title="Davetlerim"
-          subtitle={counts.invitesReceived ? `${counts.invitesReceived} kadro daveti` : "Takım davetleri, başvurular"}
-          badge={counts.invitesReceived}
-          tone="live"
-          onPress={() => go("/davetler")}
-        />
-        {playerTeam ? (
-          <HubTile icon="shield" title="Takımım" subtitle={playerTeam.team_name} tone="neutral" onPress={() => go(`/takim/${playerTeam.id}`)} />
-        ) : (
-          <HubTile icon="search" title="Takım bul" subtitle="Oyuncu arayan takımlar" tone="neutral" onPress={() => go("/davetler")} />
-        )}
-      </HubGrid>
     </>
   );
 }
 
 /* ═══════════════════════════ LİG YÖNETİMİ ═══════════════════════════ */
+
+/** Lig yönetiminin araçları — hepsi `app/yonetim/*` altında. */
+const MANAGEMENT_ACTIONS: QuickAction[] = [
+  { key: "gorevler", icon: "checkbox", label: "Görevler", href: "/yonetim/gorevler", tone: "brand", hint: "Atanan ve açık görevler" },
+  { key: "gorev-yeni", icon: "add-circle", label: "Yeni görev", href: "/yonetim/gorev-yeni", tone: "brand", hint: "Görev oluştur, ata" },
+  { key: "maclar", icon: "football", label: "Maçlar", href: "/yonetim/maclar", tone: "live", hint: "Skor, durum, yayınlama" },
+  { key: "sahalar", icon: "location", label: "Sahalar", href: "/yonetim/sahalar", tone: "info", hint: "Talepler, haftalık program" },
+  { key: "basvuru", icon: "mail", label: "Başvurular", href: "/yonetim/mesajlar", tone: "warn", hint: "Üye mesajları" },
+  { key: "sohbet", icon: "chatbubbles", label: "Sohbet", href: "/yonetim/sohbet", tone: "neutral", hint: "Üyelerle yazışma" },
+  { key: "kayitlar", icon: "call", label: "Kayıtlar", href: "/yonetim/kayitlar", tone: "neutral", hint: "Yönetim aramaları" },
+  { key: "panel", icon: "grid", label: "Tümü", href: "/yonetim", tone: "neutral", hint: "Web panelinin modülleri" },
+];
 
 function ManagementSection({
   signals,
@@ -498,17 +494,9 @@ function ManagementSection({
 }) {
   return (
     <>
-      <NextEventSection signals={signals} source="auto" go={go} />
+      <QuickActions actions={MANAGEMENT_ACTIONS} go={go} />
 
-      <SectionHeader title="Lig yönetimi" action={{ label: "Panel", onPress: () => go("/yonetim") }} />
-      <HubGrid>
-        <HubTile icon="checkbox" title="Görevlerim" subtitle="Atanan ve açık görevler" tone="brand" onPress={() => go("/yonetim/gorevler")} />
-        <HubTile icon="football" title="Maç yönetimi" subtitle="Skor, durum, yayınlama" tone="live" onPress={() => go("/yonetim/maclar")} />
-        <HubTile icon="location" title="Saha yönetimi" subtitle="Talepler, haftalık program" tone="info" onPress={() => go("/yonetim/sahalar")} />
-        <HubTile icon="mail" title="Başvurular" subtitle="Üye mesajları" tone="warn" onPress={() => go("/yonetim/mesajlar")} />
-        <HubTile icon="chatbubbles" title="Yönetim sohbeti" subtitle="Üyelerle yazışma" tone="accent" onPress={() => go("/yonetim/sohbet")} />
-        <HubTile icon="grid" title="Tüm araçlar" subtitle="Web panelinin modülleri" tone="neutral" onPress={() => go("/yonetim")} />
-      </HubGrid>
+      <NextEventSection signals={signals} source="auto" go={go} />
     </>
   );
 }
@@ -516,7 +504,7 @@ function ManagementSection({
 /* ══════════════════════════ SIRADAKİ ETKİNLİK ══════════════════════════ */
 
 /**
- * Her rolün en üst bloğu. `source` hangi maç listesinin okunacağını söyler:
+ * Hızlı erişimin altındaki blok. `source` hangi maç listesinin okunacağını söyler:
  *   - "team":   başkanın takım fikstürü (`signals.nextTeamMatch`)
  *   - "player": oyuncunun maçları (`signals.nextPlayerMatch`)
  *   - "auto":   lig sekmesi — hesabın hangisi varsa (önce takım)
@@ -634,7 +622,6 @@ function NextEventSection({
             />
           ) : undefined
         }
-        style={styles.event}
       >
         {meter || showPicker ? (
           <View style={styles.eventBody}>
@@ -673,7 +660,7 @@ const InfoCard = React.memo(function InfoCard({
     return (
       <View style={[styles.info, styles.infoCompact]}>
         <View style={styles.infoIcon}>
-          <Ionicons name={icon} size={18} color={colors.brandAccent} />
+          <Ionicons name={icon} size={16} color={colors.brandAccent} />
         </View>
         <View style={styles.infoTexts}>
           <Text style={styles.infoTitleSm} numberOfLines={1} {...textScale.dense}>
@@ -690,9 +677,9 @@ const InfoCard = React.memo(function InfoCard({
     );
   }
   return (
-    <View style={styles.info}>
+    <View style={[styles.info, styles.infoTop]}>
       <View style={styles.infoIcon}>
-        <Ionicons name={icon} size={20} color={colors.brandAccent} />
+        <Ionicons name={icon} size={16} color={colors.brandAccent} />
       </View>
       <Text style={styles.infoTitle} {...textScale.dense}>
         {title}
@@ -712,44 +699,45 @@ const InfoCard = React.memo(function InfoCard({
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
+  // Alt çubuk akışta (üstte yüzmüyor): büyük alt dolguya gerek yok.
   content: {
     paddingTop: space.sm,
-    paddingBottom: layout.tabBarHeight + space.huge,
+    paddingBottom: space.xxl,
   },
   pad: { paddingHorizontal: layout.screenPadding },
-  skeletonGap: { marginTop: space.md },
-  identity: { marginBottom: space.xs },
+  skeletonGap: { marginTop: space.sm },
 
   info: {
     marginHorizontal: layout.screenPadding,
-    padding: space.lg,
-    gap: space.sm,
+    padding: space.md,
+    gap: space.s,
     borderRadius: radius.lg,
     backgroundColor: colors.surface1,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
   },
+  // Rolün ilk bloğu olduğunda (takım yok) bölüm başlığı olmadan üstte durur.
+  infoTop: { marginTop: space.sm },
   infoCompact: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.md,
-    padding: space.md,
+    gap: space.m,
+    paddingVertical: space.m,
   },
   infoIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.md,
+    width: 30,
+    height: 30,
+    borderRadius: radius.sm,
     backgroundColor: colors.brandDim,
     alignItems: "center",
     justifyContent: "center",
   },
-  infoTexts: { flex: 1, minWidth: 0, gap: 2 },
-  infoTitle: { ...type.h2, color: colors.textPrimary },
-  infoTitleSm: { ...type.h3, color: colors.textPrimary },
+  infoTexts: { flex: 1, minWidth: 0, gap: space.xxs },
+  infoTitle: { ...type.h3, color: colors.textPrimary },
+  infoTitleSm: { ...type.h4, color: colors.textPrimary },
   infoBody: { ...type.bodySm, color: colors.textSecondary },
-  infoActions: { flexDirection: "row", gap: space.sm, marginTop: space.xs },
+  infoActions: { flexDirection: "row", gap: space.sm, marginTop: space.xxs },
 
-  event: { marginBottom: space.xs },
-  eventBody: { gap: space.md },
-  followLink: { paddingHorizontal: layout.screenPadding, marginTop: layout.sectionGap },
+  eventBody: { gap: space.m },
+  followLink: { paddingHorizontal: layout.screenPadding, marginTop: space.xl },
 });

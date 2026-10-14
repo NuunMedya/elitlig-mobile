@@ -66,7 +66,7 @@ export const ScopeMissing = React.memo(function ScopeMissing({ body }: { body?: 
 
 /**
  * Bölüm başlığı (lig merkezi içi): küçük versal etiket + sağda bağlam.
- * `SectionHeader`ın kâğıt üstündeki karşılığı; kart grupları arasında 22px
+ * `SectionHeader`ın kâğıt üstündeki karşılığı; kart grupları arasında 16px
  * nefesle durur, kendi yatay boşluğu yoktur (liste kenarına hizalı).
  */
 export const PaneLabel = React.memo(function PaneLabel({
@@ -92,7 +92,12 @@ export const PaneLabel = React.memo(function PaneLabel({
   );
 });
 
-/** Satır grubu (tek kart, satır satır çizilir) — FlatList satırları için kabuk. */
+/**
+ * Satır grubu (tek kart, satır satır çizilir) — FlatList satırları için kabuk.
+ * Lig sekmesi YOĞUN dildedir: kart köşesi 18 değil 14 (`radius.lg`); küçük
+ * puntolu satırların yanında iri köşe kartı şişkin gösteriyordu.
+ */
+export const GROUP_RADIUS = radius.lg;
 const GROUP_SHELL = {
   backgroundColor: colors.surface1,
   borderColor: colors.border,
@@ -104,8 +109,8 @@ export const groupStyles = StyleSheet.create({
     ...GROUP_SHELL,
     borderWidth: hairline,
     borderBottomWidth: 0,
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
+    borderTopLeftRadius: GROUP_RADIUS,
+    borderTopRightRadius: GROUP_RADIUS,
     overflow: "hidden",
   },
   row: {
@@ -119,8 +124,8 @@ export const groupStyles = StyleSheet.create({
     borderLeftWidth: hairline,
     borderRightWidth: hairline,
     borderTopWidth: hairline,
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
+    borderTopLeftRadius: GROUP_RADIUS,
+    borderTopRightRadius: GROUP_RADIUS,
     overflow: "hidden",
   },
   rowLast: {
@@ -128,14 +133,14 @@ export const groupStyles = StyleSheet.create({
     borderLeftWidth: hairline,
     borderRightWidth: hairline,
     borderBottomWidth: hairline,
-    borderBottomLeftRadius: radius.xl,
-    borderBottomRightRadius: radius.xl,
+    borderBottomLeftRadius: GROUP_RADIUS,
+    borderBottomRightRadius: GROUP_RADIUS,
     overflow: "hidden",
   },
   rowSingle: {
     ...GROUP_SHELL,
     borderWidth: hairline,
-    borderRadius: radius.xl,
+    borderRadius: GROUP_RADIUS,
     overflow: "hidden",
   },
   /** Satırlar arası ince ayraç; kartın yan kenarlığını da taşır ki çizgi kesilmesin. */
@@ -150,7 +155,7 @@ export const groupStyles = StyleSheet.create({
   card: {
     ...elevate(1),
     backgroundColor: colors.surface1,
-    borderRadius: radius.xl,
+    borderRadius: GROUP_RADIUS,
     borderWidth: hairline,
     borderColor: colors.border,
   },
@@ -170,14 +175,14 @@ export const GroupSeparator = () => <View style={groupStyles.separator} />;
 export const paneStyles = StyleSheet.create({
   content: {
     paddingHorizontal: layout.screenPadding,
-    paddingTop: space.md,
-    paddingBottom: layout.tabBarHeight + space.xxl,
+    paddingTop: space.sm,
+    paddingBottom: layout.tabBarHeight + space.xl,
     flexGrow: 1,
   },
   skeleton: {
     paddingHorizontal: layout.screenPadding,
-    paddingTop: space.md,
-    gap: space.md,
+    paddingTop: space.sm,
+    gap: space.sm,
   },
 });
 
@@ -188,15 +193,20 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: space.sm,
     paddingHorizontal: space.xxs,
-    paddingBottom: space.sm,
+    paddingBottom: space.s,
   },
   labelText: {
     ...type.overline,
+    fontSize: 9,
+    lineHeight: 12,
+    letterSpacing: 1,
     color: colors.textTertiary,
     flexShrink: 1,
   },
   labelMeta: {
     ...type.caption,
+    fontSize: 10,
+    lineHeight: 13,
     color: colors.textTertiary,
   },
 });

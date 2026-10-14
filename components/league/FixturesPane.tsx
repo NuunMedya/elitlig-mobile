@@ -11,6 +11,11 @@
  *
  * Gün başlıkları yapışkandır; "Bugün" ve "Yarın" gibi göreli adlar
  * `formatDayHeading` ile gelir.
+ *
+ * YOĞUN SATIR: maçlar iri kart (≈146px, 44px amblem) değil, `MatchCard`ın
+ * SATIR biçimidir (`variant="compact"`, ≈78px) ve bir günün maçları tek bir
+ * grup kartında alt alta durur. Saha adı satırın alt şeridinde korunur —
+ * amatör ligde "hangi halısaha" sorusu skor kadar önemlidir.
  */
 
 import { useQuery } from "@tanstack/react-query";
@@ -21,6 +26,7 @@ import {
   EmptyState,
   ErrorState,
   MatchCard,
+  type MatchCardPosition,
   SectionHeader,
   SegmentedControl,
   SkeletonMatchRow,
@@ -35,7 +41,7 @@ import type { ApiMatch } from "@/lib/types";
 import { useFavorite } from "@/providers/FavoriteProvider";
 import { useScope } from "@/providers/ScopeProvider";
 import { space } from "@/theme";
-import { ScopeMissing, paneStyles, useScopeKey, type PaneProps } from "./shared";
+import { GROUP_RADIUS, ScopeMissing, paneStyles, useScopeKey, type PaneProps } from "./shared";
 
 type FixtureWindow = "yaklasan" | "sonuclar";
 
@@ -51,11 +57,14 @@ const MatchItem = React.memo(function MatchItem({
   match,
   homeLogo,
   awayLogo,
+  position,
   favorite,
   onOpen,
   onToggleFavorite,
 }: {
   match: ApiMatch;
+  /** Gün grubundaki konum — köşe ve ayraç buna göre çizilir. */
+  position: MatchCardPosition;
   homeLogo: string | null;
   awayLogo: string | null;
   favorite: boolean;
@@ -69,11 +78,13 @@ const MatchItem = React.memo(function MatchItem({
       match={match}
       homeLogo={homeLogo}
       awayLogo={awayLogo}
-      meta="field"
+      variant="compact"
+      position={position}
+      showVenue
       isFavorite={favorite}
       onToggleFavorite={star}
       onPress={open}
-      style={styles.card}
+      style={POSITION_STYLE[position]}
     />
   );
 });
@@ -153,11 +164,12 @@ export function FixturesPane({ scrollProps }: PaneProps) {
   const openMatch = useCallback((id: number) => router.push(`/mac/${id}`), [router]);
 
   const renderItem = useCallback(
-    ({ item }: { item: ApiMatch }) => (
+    ({ item, index, section }: { item: ApiMatch; index: number; section: DaySection }) => (
       <MatchItem
         match={item}
         homeLogo={teams.logoFor(item.home_team_id, item.first_team_name)}
         awayLogo={teams.logoFor(item.away_team_id, item.second_team_name)}
+        position={positionOf(index, section.data.length)}
         favorite={isFavoriteMatch(item.id)}
         onOpen={openMatch}
         onToggleFavorite={toggleFavoriteMatch}
@@ -197,9 +209,10 @@ export function FixturesPane({ scrollProps }: PaneProps) {
       keyExtractor={matchKey}
       renderItem={renderItem}
       renderSectionHeader={renderSectionHeader}
+      renderSectionFooter={renderSectionFooter}
       stickySectionHeadersEnabled
-      initialNumToRender={12}
-      maxToRenderPerBatch={12}
+      initialNumToRender={14}
+      maxToRenderPerBatch={14}
       windowSize={8}
       contentContainerStyle={[paneStyles.content, styles.content]}
       refreshControl={
@@ -207,7 +220,12 @@ export function FixturesPane({ scrollProps }: PaneProps) {
       }
       ListHeaderComponent={
         <View style={styles.header}>
-          <SegmentedControl items={windowItems} value={activeWindow} onChange={setFixtureWindow} />
+          <SegmentedControl
+            items={windowItems}
+            value={activeWindow}
+            onChange={setFixtureWindow}
+            size="sm"
+          />
           {query.isError ? <ErrorState error={query.error} variant="banner" /> : null}
         </View>
       }
@@ -236,16 +254,46 @@ export function FixturesPane({ scrollProps }: PaneProps) {
 
 const matchKey = (item: ApiMatch) => String(item.id);
 
+/** Satırın gün grubundaki konumu. */
+function positionOf(index: number, total: number): MatchCardPosition {
+  if (total <= 1) return "single";
+  if (index === 0) return "first";
+  if (index === total - 1) return "last";
+  return "middle";
+}
+
+/** Gün grupları arasında kısa nefes — bir sonraki yapışkan başlık hemen gelir. */
+const renderSectionFooter = () => <View style={styles.sectionGap} />;
+
 const styles = StyleSheet.create({
   content: {
-    paddingTop: space.sm,
+    paddingTop: space.xs,
   },
   header: {
-    gap: space.sm,
-    paddingTop: space.xs,
-    paddingBottom: space.xs,
+    gap: space.s,
+    paddingTop: space.xxs,
+    paddingBottom: space.xxs,
   },
-  card: {
-    marginBottom: space.m,
+  sectionGap: {
+    height: space.sm,
+  },
+  /* Grup köşesi diğer Lig kartlarıyla aynı (14); satırın kendi 18'ini ezer. */
+  first: {
+    borderTopLeftRadius: GROUP_RADIUS,
+    borderTopRightRadius: GROUP_RADIUS,
+  },
+  last: {
+    borderBottomLeftRadius: GROUP_RADIUS,
+    borderBottomRightRadius: GROUP_RADIUS,
+  },
+  single: {
+    borderRadius: GROUP_RADIUS,
   },
 });
+
+const POSITION_STYLE: Record<MatchCardPosition, object | undefined> = {
+  single: styles.single,
+  first: styles.first,
+  middle: undefined,
+  last: styles.last,
+};

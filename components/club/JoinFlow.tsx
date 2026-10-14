@@ -1,5 +1,5 @@
 /**
- * KULÜBE KATIL — misafir ve kulüpsüz üyenin Kulübüm'deki EYLEM AKIŞI.
+ * KULÜBE KATIL — misafir ve kulüpsüz üyenin Yönetim sekmesindeki EYLEM AKIŞI.
  *
  * NE: üç numaralı adım, tek kâğıt grupta (ListRow `position` grubu — iç içe
  * kart yok):
@@ -119,8 +119,8 @@ export const JoinFlow = React.memo(function JoinFlow({
 const styles = StyleSheet.create({
   group: { paddingHorizontal: layout.screenPadding },
   pip: {
-    width: 32,
-    height: 32,
+    width: 28,
+    height: 28,
     borderRadius: radius.pill,
     backgroundColor: colors.brandDim,
     alignItems: "center",
@@ -134,8 +134,8 @@ const styles = StyleSheet.create({
   trailing: { flexDirection: "row", alignItems: "center", gap: space.s },
   auth: {
     paddingHorizontal: layout.screenPadding,
-    marginTop: space.lg,
-    gap: space.md,
+    marginTop: space.md,
+    gap: space.m,
   },
   authText: { ...type.bodySm, color: colors.textSecondary },
   authActions: { flexDirection: "row", gap: space.sm },

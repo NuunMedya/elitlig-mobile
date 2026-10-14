@@ -440,7 +440,7 @@ export default function SquadManagementScreen() {
           icon="shield-outline"
           title="Takım başkanlığı gerekli"
           body="Kadro yönetimi yalnızca takımının yönetimini üstlenen başkanlara açıktır."
-          action={{ label: "Kulübüm'e dön", onPress: () => router.replace("/kulubum") }}
+          action={{ label: "Yönetim'e dön", onPress: () => router.replace("/kulubum") }}
         />
       </SafeAreaView>
     );

@@ -7,12 +7,12 @@
  * bir duvara dönüyordu ve tek gerçek haber aralarında kayboluyordu.
  *
  * YENİ DÜZEN — İKİ AĞIRLIK:
- *   · MANŞET: en yeni editör haberi (kapaklı) tam genişlikte, 16:9 görsel +
- *     büyük başlık. Okunacak şey odur.
- *   · AKIŞ: kalan her şey tek bir kartta yoğun satırlar. Editör haberi sağda
- *     kare küçük görsel taşır; transfer/disiplin duyurusu solda oyuncunun
- *     yuvarlak fotoğrafını ve (varsa) yeni takımının armasını taşır — bir
- *     duyuru portre değil, "kim → nereye" bilgisidir.
+ *   · MANŞET: en yeni editör haberi (kapaklı) tam genişlikte, 2:1 görsel +
+ *     15px başlık. Okunacak şey odur.
+ *   · AKIŞ: kalan her şey tek bir kartta yoğun satırlar (12px başlık). Editör
+ *     haberi sağda 48px kare görsel taşır; transfer/disiplin duyurusu solda
+ *     oyuncunun 32px yuvarlak fotoğrafını ve (varsa) yeni takımının armasını
+ *     taşır — bir duyuru portre değil, "kim → nereye" bilgisidir.
  *
  * DOKUNMA: editör haberi detay sayfasına gider. Üretilmiş duyurunun detay
  * sayfası yoktur; sunucu `meta` alanında oyuncu kimliği gönderiyorsa satır
@@ -151,10 +151,10 @@ const FeedRow = React.memo(function FeedRow({
         <Avatar
           name={meta?.player_name ?? item.title}
           image={cover}
-          size={44}
+          size={32}
           badge={
             meta?.team_name ? (
-              <TeamLogo name={meta.team_name} logo={meta.team_logo ?? null} size={18} />
+              <TeamLogo name={meta.team_name} logo={meta.team_logo ?? null} size={14} />
             ) : undefined
           }
         />
@@ -162,9 +162,9 @@ const FeedRow = React.memo(function FeedRow({
       <View style={styles.rowBody}>
         <View style={styles.rowKicker}>
           {item.kind === "penalty" ? (
-            <Ionicons name="warning" size={11} color={colors.danger} />
+            <Ionicons name="warning" size={10} color={colors.danger} />
           ) : item.kind === "transfer" ? (
-            <Ionicons name="swap-horizontal" size={11} color={colors.accentText} />
+            <Ionicons name="swap-horizontal" size={10} color={colors.accentText} />
           ) : null}
           <Text
             style={[
@@ -266,8 +266,8 @@ export function NewsPane({ scrollProps }: PaneProps) {
   if (query.isLoading) {
     return (
       <View style={paneStyles.skeleton}>
-        <Skeleton height={36} width="70%" radius="pill" />
-        <Skeleton height={190} radius="xl" />
+        <Skeleton height={28} width="70%" radius="pill" />
+        <Skeleton height={150} radius="lg" />
         <SkeletonListRow count={5} />
       </View>
     );
@@ -325,12 +325,12 @@ export function NewsPane({ scrollProps }: PaneProps) {
 
 const newsKey = (item: NewsItem) => `${item.kind}-${item.id}`;
 
-const THUMB = 72;
+const THUMB = 48;
 
 const styles = StyleSheet.create({
   header: {
-    gap: space.md,
-    paddingBottom: space.md,
+    gap: space.sm,
+    paddingBottom: space.sm,
   },
   chips: {
     marginHorizontal: -layout.screenPadding,
@@ -339,50 +339,62 @@ const styles = StyleSheet.create({
   featured: {
     overflow: "hidden",
   },
+  /* 16:9 → 2:1: kapak, manşeti öne çıkarmaya yeter; ekranın yarısını yemez. */
   featuredCover: {
-    aspectRatio: 16 / 9,
+    aspectRatio: 2,
     backgroundColor: colors.surface3,
   },
   featuredBody: {
-    padding: space.lg,
-    gap: space.s,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    gap: space.xxs,
   },
   kicker: {
     ...type.overline,
+    fontSize: 9,
+    lineHeight: 12,
+    letterSpacing: 1,
     color: colors.brandAccent,
   },
   kickerTime: {
     color: colors.textTertiary,
   },
   featuredTitle: {
-    ...type.h1,
+    ...type.h2,
+    fontSize: 15,
+    lineHeight: 20,
+    letterSpacing: -0.2,
     color: colors.textPrimary,
   },
   featuredSummary: {
-    ...type.body,
+    ...type.bodySm,
+    lineHeight: 16,
     color: colors.textSecondary,
   },
   /* — Akış satırı — */
   row: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.md,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.md,
-    minHeight: 76,
+    gap: space.sm,
+    paddingHorizontal: space.m,
+    paddingVertical: space.sm,
+    minHeight: 56,
   },
   rowBody: {
     flex: 1,
     minWidth: 0,
-    gap: space.xs,
+    gap: space.xxs,
   },
   rowKicker: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.xs,
+    gap: space.xxs,
   },
   rowKind: {
     ...type.overline,
+    fontSize: 9,
+    lineHeight: 12,
+    letterSpacing: 0.8,
     color: colors.brandAccent,
   },
   rowKindTransfer: {
@@ -393,24 +405,28 @@ const styles = StyleSheet.create({
   },
   rowTime: {
     ...type.caption,
+    fontSize: 10,
+    lineHeight: 12,
     color: colors.textTertiary,
     marginLeft: space.xs,
     flexShrink: 1,
   },
   rowTitle: {
-    ...type.h4,
-    fontSize: 14,
-    lineHeight: 19,
+    ...type.label,
+    fontSize: 12,
+    lineHeight: 16,
     color: colors.textPrimary,
   },
   rowSummary: {
     ...type.caption,
+    fontSize: 10,
+    lineHeight: 13,
     color: colors.textTertiary,
   },
   thumb: {
     width: THUMB,
     height: THUMB,
-    borderRadius: radius.md,
+    borderRadius: radius.sm,
     overflow: "hidden",
     backgroundColor: colors.surface3,
   },

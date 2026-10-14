@@ -17,6 +17,10 @@
  *     "Gol krallığı" (ilk üç) Oyuncular'a kapı açar. Her bölme
  *     `components/league/` altında kendi dosyasındadır; bu dosya yalnız
  *     kabuk, rota ve kapsam bağlantısıdır.
+ *   · YOĞUN ÖLÇÜ: Lig sekmesi bir veri sekmesidir; bölmeler küçük punto
+ *     (ad 12px, rakam 11px), ince satır (34–42px) ve 14px köşeli kartlarla
+ *     çizilir ki tek ekrana olabildiğince çok satır sığsın. Ortak bileşenler
+ *     küçültülmedi; ince varyantlar `components/league/` içindedir.
  *
  * DERİN BAĞLANTI: `/(tabs)/ligler?tab=<puan|fikstur|oyuncular|istatistik|
  * haberler>&leagueId=<id>`. Geçersiz değer sessizce "puan" olur. Eski

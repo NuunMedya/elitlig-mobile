@@ -31,9 +31,9 @@ const MEDAL = [colors.zoneChampion, colors.slate, colors.zoneRelegationPlayoff] 
 /** Podyumdaki çizim sırası — sol, orta, sağ (0 tabanlı sıra dizini). */
 const PODIUM_ORDER = [1, 0, 2] as const;
 
-/** Avatar ölçüsü: birinci büyük (56), diğerleri 44 (tema.html §7/4). */
-const PODIUM_AVATAR_FIRST = 56;
-const PODIUM_AVATAR = 44;
+/** Avatar ölçüsü: birinci büyük (40), diğerleri 32 — Lig sekmesinin yoğun ölçüsü. */
+const PODIUM_AVATAR_FIRST = 40;
+const PODIUM_AVATAR = 32;
 
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -116,83 +116,95 @@ export const Podium = React.memo(function Podium({
 });
 
 /** Basamak yükseklikleri (dizin = sıra − 1): birinci en yüksek. */
-const STEP_HEIGHT = [64, 46, 34] as const;
+const STEP_HEIGHT = [40, 30, 24] as const;
 
 const styles = StyleSheet.create({
   /* — Podyum — */
   podium: {
-    paddingTop: space.md,
-    paddingHorizontal: space.md,
+    paddingTop: space.sm,
+    paddingHorizontal: space.sm,
     overflow: "hidden",
   },
   podiumUnit: {
     ...type.overline,
+    fontSize: 9,
+    lineHeight: 12,
+    letterSpacing: 1,
     color: colors.textTertiary,
     alignSelf: "flex-end",
+    paddingRight: space.xs,
   },
   podiumRow: {
     flexDirection: "row",
     /* Basamaklar tabandan hizalanır: podyum silueti buradan çıkar. */
     alignItems: "flex-end",
-    gap: space.s,
+    gap: space.xs,
   },
   podiumCell: {
     flex: 1,
     alignItems: "center",
-    gap: space.xxs,
+    gap: space.px,
   },
   podiumAvatar: {
     alignItems: "center",
-    marginBottom: space.sm,
+    marginBottom: space.s,
   },
   podiumRing: {
-    padding: 2,
+    padding: 1.5,
     borderRadius: radius.pill,
-    borderWidth: 2,
+    borderWidth: 1.5,
   },
   podiumRankBadge: {
     position: "absolute",
     bottom: -4,
     alignSelf: "center",
-    minWidth: 18,
-    height: 18,
-    paddingHorizontal: 3,
+    minWidth: 14,
+    height: 14,
+    paddingHorizontal: 2,
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderColor: colors.surface1,
   },
   podiumRankText: {
     ...type.micro,
+    fontSize: 9,
+    lineHeight: 11,
+    letterSpacing: 0,
     color: colors.textOnStatus,
   },
   podiumName: {
     ...type.label,
+    fontSize: 11,
+    lineHeight: 14,
     color: colors.textPrimary,
     textAlign: "center",
     alignSelf: "stretch",
   },
   podiumNameFirst: {
-    ...type.h4,
-    fontSize: 14,
+    ...type.label,
+    fontSize: 12,
+    lineHeight: 16,
     color: colors.textPrimary,
     textAlign: "center",
     alignSelf: "stretch",
   },
   podiumTeam: {
     ...type.caption,
+    fontSize: 10,
+    lineHeight: 13,
     color: colors.textTertiary,
     textAlign: "center",
     alignSelf: "stretch",
   },
   podiumStep: {
     alignSelf: "stretch",
-    marginTop: space.sm,
+    marginTop: space.xs,
     alignItems: "center",
-    paddingTop: space.sm,
-    borderTopLeftRadius: radius.md,
-    borderTopRightRadius: radius.md,
+    paddingTop: space.xs,
+    borderTopLeftRadius: radius.sm,
+    borderTopRightRadius: radius.sm,
     backgroundColor: colors.surface2,
     borderWidth: hairline,
     borderBottomWidth: 0,
@@ -200,11 +212,13 @@ const styles = StyleSheet.create({
   },
   podiumMetric: {
     ...type.scoreSm,
+    fontSize: 14,
+    lineHeight: 18,
     color: colors.textSecondary,
   },
   /* Birincinin sayısı büyük: "kim önde" sorusunun tek bakışlık yanıtı. */
   podiumMetricFirst: {
-    ...type.scoreMd,
+    ...type.scoreSm,
     color: colors.textPrimary,
   },
 });

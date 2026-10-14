@@ -12,26 +12,28 @@
  *
  * HÜKMEN KAYITLARI AYIKLANIR: sunucu hükmen maçlar için sistem oyuncuları
  * ("HÜKMEN 1") döndürüyor; ayıklanmazsa gol krallığını onlar kazanıyordu.
+ *
+ * YOĞUN SATIR: liste ortak `PlayerRow` (60px, 34px avatar, 15px ad) yerine bu
+ * dosyadaki ince `RankRow`la çizilir — 42px satır, 24px avatar, 12px ad.
+ * Sıralamada mevki ve forma numarası yoktur; ortak satırın o yükü burada
+ * gereksizdi ve Lig sekmesinde ekrana iki kat oyuncu sığar.
  */
 
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
-import { FlatList, RefreshControl, StyleSheet, View } from "react-native";
-import type { NativeScrollEvent, NativeSyntheticEvent } from "react-native";
+import { FlatList, RefreshControl, StyleSheet, Text, View } from "react-native";
+import type { NativeScrollEvent, NativeSyntheticEvent, StyleProp, ViewStyle } from "react-native";
 
 import {
-
+  Avatar,
   EmptyState,
   ErrorState,
   Input,
-  PlayerRow,
-  PlayerRowHead,
-  PLAYER_ROW_HEIGHT,
   SkeletonListRow,
   Chip,
   ChipGroup,
-
+  Touchable,
   refreshControlProps,
   useRefresh,
 } from "@/components/ui";
@@ -40,9 +42,9 @@ import { formatDecimal } from "@/lib/format";
 import { queryKeys } from "@/lib/queryKeys";
 import type { PlayerRankRow, PlayerSort } from "@/lib/types";
 import { useScope } from "@/providers/ScopeProvider";
-import { colors, hairline, layout, radius, space } from "@/theme";
+import { colors, hairline, layout, space, textScale, type, upperTR } from "@/theme";
 import { Podium } from "./Podium";
-import { JUNK_PLAYER } from "./shared";
+import { GROUP_RADIUS, JUNK_PLAYER } from "./shared";
 
 /** Sunucu sayıları kimi uçlarda string döndürüyor; tek dönüştürücüden geçer. */
 const num = (value: number | string | null | undefined) => Number(value ?? 0) || 0;
@@ -78,12 +80,87 @@ const SKELETON_ROWS = ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8"] as const;
 const GroupSeparator = () => <View style={styles.separator} />;
 
 /* ══════════════════════════════════════════════════════════════════════════
+   İnce sıralama satırı
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/** Satır yüksekliği — `getItemLayout` bunu kullanır; stil ile aynı sabit. */
+const RANK_ROW_HEIGHT = 42;
+const RANK_AVATAR = 24;
+/** Sağdaki rakam sütunu — başlıktaki birim de aynı genişlikte durur. */
+const RANK_METRIC_W = 32;
+
+/** [sıra] · [avatar] · [ad + bağlam] · [tek sayı] — `PlayerRow` anatomisinin küçüğü. */
+const RankRow = React.memo(function RankRow({
+  playerId,
+  rank,
+  name,
+  image,
+  meta,
+  metric,
+  onPress,
+  style,
+}: {
+  playerId: number;
+  rank: number;
+  name: string;
+  image: string | null;
+  meta: (string | null | undefined)[];
+  metric: string;
+  onPress: (playerId: number) => void;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const handlePress = useCallback(() => onPress(playerId), [onPress, playerId]);
+  const metaText = meta.filter(Boolean).join(" · ");
+  return (
+    <Touchable
+      style={[styles.rankRow, style]}
+      onPress={handlePress}
+      feedback="row"
+      haptic="selection"
+      accessibilityLabel={`${rank}. ${name}, ${metric}`}
+    >
+      <Text style={styles.rankNum} {...textScale.dense}>
+        {rank}
+      </Text>
+      <Avatar name={name} image={image} size={RANK_AVATAR} />
+      <View style={styles.rankBody}>
+        <Text style={styles.rankName} numberOfLines={1} {...textScale.dense}>
+          {name}
+        </Text>
+        {metaText ? (
+          <Text style={styles.rankMeta} numberOfLines={1} {...textScale.dense}>
+            {metaText}
+          </Text>
+        ) : null}
+      </View>
+      <Text style={styles.rankMetric} numberOfLines={1} {...textScale.dense}>
+        {metric}
+      </Text>
+    </Touchable>
+  );
+});
+
+/** Sütun başlığı — "OYUNCU … <BİRİM>"; birim satırda değil burada bir kez yazılır. */
+const RankHead = React.memo(function RankHead({ unit }: { unit: string }) {
+  return (
+    <View style={styles.rankHead}>
+      <Text style={styles.headLabel} {...textScale.badge}>
+        {upperTR("Oyuncu")}
+      </Text>
+      <Text style={[styles.headLabel, styles.headMetric]} {...textScale.badge}>
+        {upperTR(unit)}
+      </Text>
+    </View>
+  );
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
    Ekran
    ══════════════════════════════════════════════════════════════════════════ */
 
 const keyExtractor = (item: PlayerRankRow) => String(item.id);
 /* Hücre = satır + ayraç: VirtualizedList ayracı satırla aynı hücreye koyar. */
-const CELL_HEIGHT = PLAYER_ROW_HEIGHT + hairline;
+const CELL_HEIGHT = RANK_ROW_HEIGHT + hairline;
 const getItemLayout = (_data: ArrayLike<PlayerRankRow> | null | undefined, index: number) => ({
   length: CELL_HEIGHT,
   offset: CELL_HEIGHT * index,
@@ -161,7 +238,7 @@ export function PlayersPane({ scrollProps, initialSort = "topScorers" }: Players
 
   const renderItem = useCallback(
     ({ item, index }: { item: PlayerRankRow; index: number }) => (
-      <PlayerRow
+      <RankRow
         playerId={item.id}
         rank={showPodium ? index + 4 : index + 1}
         name={item.name}
@@ -247,7 +324,7 @@ export function PlayersPane({ scrollProps, initialSort = "topScorers" }: Players
               {/* Sütun başlığı kartın TEPESİDİR: üst kenarlık ve üst köşeler onda. */}
               {!busy && listData.length > 0 ? (
                 <View style={styles.groupHead}>
-                  <PlayerRowHead unit={active.unit} />
+                  <RankHead unit={active.unit} />
                 </View>
               ) : null}
             </View>
@@ -297,22 +374,22 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: layout.screenPadding,
-    paddingBottom: layout.tabBarHeight + space.xxl,
+    paddingBottom: layout.tabBarHeight + space.xl,
   },
   sortChips: {
     marginHorizontal: -layout.screenPadding,
   },
   listHeader: {
-    gap: space.md,
-    paddingTop: space.md,
+    gap: space.sm,
+    paddingTop: space.sm,
   },
 
   /* — Satır grubu (tema.html ".group") — */
   groupHead: {
     ...GROUP_SHELL,
     borderWidth: hairline,
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
+    borderTopLeftRadius: GROUP_RADIUS,
+    borderTopRightRadius: GROUP_RADIUS,
     /* Başlığın kendi üst dolgusu ve alt çizgisi yok; kart tepesinde ikisi de gerekir. */
     paddingTop: space.s,
     borderBottomColor: colors.separator,
@@ -328,8 +405,8 @@ const styles = StyleSheet.create({
     borderLeftWidth: hairline,
     borderRightWidth: hairline,
     borderBottomWidth: hairline,
-    borderBottomLeftRadius: radius.xl,
-    borderBottomRightRadius: radius.xl,
+    borderBottomLeftRadius: GROUP_RADIUS,
+    borderBottomRightRadius: GROUP_RADIUS,
     overflow: "hidden",
   },
   separator: {
@@ -342,8 +419,67 @@ const styles = StyleSheet.create({
   skeletonCard: {
     borderWidth: hairline,
     borderColor: colors.border,
-    borderRadius: radius.xl,
+    borderRadius: GROUP_RADIUS,
     overflow: "hidden",
   },
 
+  /* — İnce sıralama satırı — */
+  rankRow: {
+    height: RANK_ROW_HEIGHT,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    paddingHorizontal: space.m,
+  },
+  /* Sıra sabit genişlikte: "4" ile "14" avatar sütununu kaydırmaz. */
+  rankNum: {
+    ...type.tableNum,
+    fontSize: 11,
+    lineHeight: 15,
+    width: 20,
+    textAlign: "center",
+    color: colors.textTertiary,
+  },
+  rankBody: {
+    flex: 1,
+    minWidth: 0,
+  },
+  rankName: {
+    ...type.label,
+    fontSize: 12,
+    lineHeight: 16,
+    color: colors.textPrimary,
+  },
+  rankMeta: {
+    ...type.caption,
+    fontSize: 10,
+    lineHeight: 13,
+    color: colors.textTertiary,
+  },
+  rankMetric: {
+    ...type.tableNumStrong,
+    fontSize: 14,
+    lineHeight: 18,
+    minWidth: RANK_METRIC_W,
+    textAlign: "right",
+    color: colors.textPrimary,
+  },
+  rankHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: space.m,
+    paddingBottom: space.xs,
+  },
+  headLabel: {
+    ...type.overline,
+    fontSize: 9,
+    lineHeight: 12,
+    letterSpacing: 0.8,
+    color: colors.textTertiary,
+  },
+  headMetric: {
+    marginLeft: "auto",
+    minWidth: RANK_METRIC_W,
+    textAlign: "right",
+  },
 });
