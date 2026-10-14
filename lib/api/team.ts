@@ -189,15 +189,68 @@ export interface ReleasePlayerResult {
   withdrawn_offers: number;
 }
 
-/**
- * DELETE /api/team-management/roster/:playerId — kadrodan çıkar.
- * Aktif sözleşme varsa sunucu 409 PLAYER_HAS_ACTIVE_CONTRACT döndürür;
- * kullanıcı fesih onayı verirse force=true ile tekrar çağrılır.
- */
-export const releaseRosterPlayer = (playerId: number, force = false) =>
-  del<ReleasePlayerResult>(
-    `/api/team-management/roster/${playerId}${force ? "?force=true" : ""}`
-  );
+/* ── Tüm Oyuncularım: yönetim onaylı kadro listesi ───────────────────────
+   Oyuncu kadrodan ANINDA çıkarılmaz: başkan "çıkarılacak" olarak işaretler,
+   listeyi yönetime gönderir; yönetim her çıkarma ve transferi tek tek onaylar.
+   Sunucu: routes/teamManagement.js (/squad-list), services/squadListService.js */
+
+export interface SquadListStats {
+  matches: number;
+  goals: number;
+  guest_matches: number;
+  last_match_at: string | null;
+}
+
+export interface SquadListPlayer {
+  id: number;
+  player_name: string;
+  marked_for_removal: boolean;
+  removal_note?: string | null;
+  stats: SquadListStats;
+}
+
+export interface SquadListItem {
+  type: "remove" | "add";
+  player_id: number;
+  decision: "pending" | "approved" | "rejected";
+  decision_note?: string | null;
+}
+
+export interface SquadListSubmission {
+  id: number;
+  status: "draft" | "submitted" | "reviewed";
+  note: string | null;
+  items: SquadListItem[];
+  submitted_at: string | null;
+  reviewed_at: string | null;
+  review_note: string | null;
+}
+
+export interface SquadListResponse {
+  players: SquadListPlayer[];
+  additions: { kind: "offer" | "invite"; player_id: number }[];
+  seasons: { id: number; label: string; matches: number }[];
+  submission: SquadListSubmission | null;
+  last_review: SquadListSubmission | null;
+}
+
+/** GET /api/team-management/squad-list — oyuncular bu takımdaki maç sayısıyla. */
+export const getSquadList = (seasonId?: number | null) =>
+  get<SquadListResponse>("/api/team-management/squad-list", seasonId ? { seasonId } : undefined);
+
+/** Oyuncuyu "çıkarılacak" olarak işaretle (yönetim onayıyla uygulanır). */
+export const markSquadRemoval = (playerId: number, note?: string) =>
+  post<{ message: string }>("/api/team-management/squad-list/removals", { playerId, note });
+
+export const unmarkSquadRemoval = (playerId: number) =>
+  del<{ message: string }>(`/api/team-management/squad-list/removals/${playerId}`);
+
+/** Listenin son hâlini yönetime gönder. */
+export const submitSquadList = (note?: string) =>
+  post<{ message: string }>("/api/team-management/squad-list/submit", { note });
+
+export const withdrawSquadList = () =>
+  post<{ message: string }>("/api/team-management/squad-list/withdraw");
 
 /** PUT /api/team-management/lineup — ideal kadro (diziliş + ilk 8). */
 export const saveLineup = (formation: string, assignments: { playerId: number; slot: string }[]) =>
