@@ -6,7 +6,8 @@
  *   Yoklama  takım içi yoklama, rejiye bildirim. Eskiden kadro sekmesinin en
  *            altında, taktik notunun üstünde kayboluyordu; maç günü başkanın
  *            en çok baktığı yer olduğu için kendi sekmesi oldu.
- *   Analiz   sunucudan gelen karar-destek raporu + skor simülasyonu
+ *   Analiz   taktik simülasyonu (üç senaryo yan yana, önerilen taktik,
+ *            etkenler) + sunucudan gelen rakip raporu
  *            (components/MatchAnalysisView.tsx).
  * "Kadroyu kaydet" listenin sonunda değil, kadro sekmesinde ALTTA SABİT bir
  * çubuktadır: sunucu kuralına takılan sorun (ör. "yalnızca bir kaptan") da
@@ -498,7 +499,11 @@ export default function MacKadrosuScreen() {
       void queryClient.invalidateQueries({ queryKey: ["takim", "matches"] });
       // Sunucu yoklama listesini planla eşitledi (çıkan gruptan alındı, giren eklendi).
       void queryClient.invalidateQueries({ queryKey: ["takim", "attendance", matchId] });
-      router.back();
+      void queryClient.invalidateQueries({ queryKey: ["team", "match-simulations", matchId] });
+      /* Maç hazırlığının sonraki adımı: kayıtlı kadroyla taktik simülasyonu.
+         Eskiden kayıt ekranı kapatıyordu; başkan analize geri dönmek için
+         maçı yeniden açmak zorundaydı. */
+      setTab("analiz");
     },
     onError: (error) => {
       // 409 MATCH_ALREADY_LIVE ayrı anlatılır: kadro artık rejinin elinde.
@@ -547,10 +552,15 @@ export default function MacKadrosuScreen() {
       {tab === "analiz" ? (
         <MatchAnalysisView
           matchId={matchId}
-          /* Simülasyon kadroya göre hesaplanıyor: kadro hiç girilmemişse
-             tahmin yanıltıcı olur. Kaydedilmiş bir plan ya da reji tarafında
-             açılmış kadro satırları varsa yeterli sayılır. */
-          canSimulate={Boolean(planQuery.data?.plan?.lineup?.length || entries.length)}
+          /* Simülasyon KAYITLI maç planına göre hesaplanır (sunucu planı yoksa
+             409 LINEUP_REQUIRED döner); ekrandaki kaydedilmemiş taslak sayılmaz.
+             Parmak izi değişince (kadro kaydedildi) taktik tablosu yenilenir. */
+          canSimulate={Boolean(planQuery.data?.plan?.lineup?.length)}
+          planVersion={[
+            planQuery.data?.plan?.formation ?? "",
+            (planQuery.data?.plan?.lineup ?? []).filter((row) => row.starter).length,
+            planQuery.data?.plan?.lineup?.length ?? 0,
+          ].join("-")}
           onNeedPlan={() => setTab("kadro")}
         />
       ) : tab === "yoklama" ? (

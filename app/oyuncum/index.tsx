@@ -1,6 +1,6 @@
 /**
  * OYUNCUM — girişli üyenin KENDİ oyuncu profili.
- * `/oyuncum?tab=<ozet|maclarim|istatistik|sozlesme>`
+ * `/oyuncum?tab=<maclarim|istatistik|sozlesme>` — Özet: Yönetim ▸ Kariyerim
  *
  * NE: bugüne kadar üyenin kendi oyuncu verisi üç ayrı ekrana dağılmıştı —
  * `(tabs)/profile.tsx` (panel özeti), `maclarim.tsx` (maç merkezi + yoklama),
@@ -12,13 +12,11 @@
  * görebileceği şeyler var — bekleyen değişiklik talepleri, müsaitlik yoklaması,
  * sözleşme durumu. İkisi ayrı yetki dünyaları; ayrı ekranlar.
  *
- * ARENA DÜZENİ: herkese açık profille AYNI kimlik sahnesi (PlayerHero —
- * fotoğraf, mevki, kulüp hapı, bu sezonun sayıları); başlıkta "OYUNCU
- * PROFİLİM" etiketi ve iki eylem (herkese açık profilim, düzenle). Kâğıtta
- * merkez kalıbı (Arena §5): bekleyen işler → kulüp → sezon ayrıntısı → son
- * maçlar → kapı ızgarası. Maç ve istatistik satırları herkese açık profille
- * aynı bileşenlerdir (components/playerpage) — üye kendi sayfasını
- * başkalarının gördüğü dille görür.
+ * DÜZEN: bu ekran KARİYER AYRINTISIdır — sade başlık ("Kariyerim", altında
+ * oyuncunun adı), iki eylem (herkese açık profilim, düzenle) ve üç sekme.
+ * Kimlik, sıradaki maç, yapılacaklar ve sezon özeti Yönetim ▸ Kariyerim
+ * panelindedir; burada tekrar edilmez. Maç ve istatistik satırları herkese
+ * açık profille aynı bileşenlerdir (components/playerpage).
  *
  * VERİ KAYNAKLARI (hepsi oturum gerektirir):
  *   GET  /api/panel/me                       profil + sezon özeti + talepler
@@ -49,8 +47,6 @@ import {
   ChipGroup,
   EmptyState,
   ErrorState,
-  HubGrid,
-  HubTile,
   ListRow,
   ScreenHeader,
   SectionHeader,
@@ -74,7 +70,6 @@ import {
   BarList,
   DateBlock,
   MatchLogRow,
-  PlayerHero,
   StatList,
   StatTable,
   StatTiles,
@@ -82,7 +77,6 @@ import {
   dateWithYear,
   decimalTR,
   surfaces,
-  type HeroFact,
   type StatRow,
   type StatTile,
 } from "@/components/playerpage";
@@ -92,8 +86,6 @@ import {
   getPanelMe,
   type Contract,
   type MyMatch,
-  type PanelPendingChange,
-  type PanelRecentMatch,
 } from "@/lib/api/panel";
 import {
   AVAILABILITY_LABELS,
@@ -247,10 +239,15 @@ const key = {
    2) SEGMENTLER VE ROTA PARAMETRELERİ
    ══════════════════════════════════════════════════════════════════════════ */
 
-type MyTab = "ozet" | "maclarim" | "istatistik" | "sozlesme";
+type MyTab = "maclarim" | "istatistik" | "sozlesme";
 
+/**
+ * ÖZET SEKMESİ YOK: kariyer özeti (kimlik, sıradaki maç, yapılacaklar,
+ * değişiklik talepleri, sezon, son maçlar) TEK panelde — Yönetim ▸ Kariyerim
+ * (`/kulubum?rol=oyuncu`). `?tab=ozet` ve sekmesiz açılış oraya yönlenir;
+ * bu ekran yalnız ayrıntıdır.
+ */
 const TAB_ITEMS: TabItem<MyTab>[] = [
-  { key: "ozet", label: "Özet" },
   { key: "maclarim", label: "Maçlarım" },
   { key: "istatistik", label: "İstatistik" },
   { key: "sozlesme", label: "Sözleşmem" },
@@ -268,8 +265,6 @@ function normalizeKey(raw: unknown): string {
 }
 
 const TAB_ALIASES: Record<string, MyTab> = {
-  genel: "ozet",
-  overview: "ozet",
   maclar: "maclarim",
   matches: "maclarim",
   stats: "istatistik",
@@ -282,8 +277,11 @@ const TAB_ALIASES: Record<string, MyTab> = {
 function resolveTab(raw: unknown): MyTab {
   const normalized = normalizeKey(raw);
   if ((TAB_KEYS as string[]).includes(normalized)) return normalized as MyTab;
-  return TAB_ALIASES[normalized] ?? "ozet";
+  return TAB_ALIASES[normalized] ?? "maclarim";
 }
+
+/** Eski Özet sekmesinin adları — bunlar (ya da sekmesiz açılış) panele gider. */
+const SUMMARY_KEYS = new Set(["", "ozet", "genel", "overview"]);
 
 function resolveMatchFilter(raw: unknown): MatchFilter {
   return normalizeKey(raw) === "oynanan" ? "oynanan" : "yaklasan";
@@ -391,16 +389,10 @@ export default function MyPlayerScreen() {
 
   const me = meQuery.data;
   const player = me?.player ?? null;
-  const playerTeam = me?.playerTeam ?? me?.team ?? null;
-  const stats = me?.stats ?? null;
 
   const openPublicProfile = useCallback(() => {
     if (player?.id) router.push(`/oyuncu/${player.id}`);
   }, [player?.id, router]);
-
-  const openTeam = useCallback(() => {
-    if (player?.team_id) router.push(`/takim/${player.team_id}`);
-  }, [player?.team_id, router]);
 
   /* NOT: profil düzenleme + fotoğraf talebi bugün `/hesabim` içinde yaşıyor.
      `app/oyuncum/duzenle.tsx` eklendiğinde hedef oraya çevrilir; şu an olmayan
@@ -426,44 +418,12 @@ export default function MyPlayerScreen() {
     [openEdit, openPublicProfile, player],
   );
 
-  /*
-   * KİMLİK SAHNESİ — herkese açık profille aynı bileşen. Sayı şeridi BU
-   * SEZONUN rakamlarıdır (panel özeti `stats`); sezon adı künyede yazar ki
-   * "79 maç" ile "bu sezon 12 maç" karışmasın.
-   */
-  const hero = useMemo(() => {
-    if (!player) return null;
-    const facts: HeroFact[] = stats
-      ? [
-          { key: "matches", value: String(num(stats.matches)), label: "MAÇ" },
-          { key: "goals", value: String(num(stats.goals)), label: "GOL" },
-          { key: "assists", value: String(num(stats.assists)), label: "ASİST" },
-          ...(stats.rating != null
-            ? [{ key: "rating", value: ratingLabel(stats.rating), label: "ORT. PUAN", rating: stats.rating }]
-            : []),
-        ]
-      : [];
-    return (
-      <PlayerHero
-        name={player.player_name || "Oyuncu"}
-        image={player.player_img}
-        position={player.player_position}
-        teamName={playerTeam?.team_name ?? null}
-        teamLogo={mediaUrl(playerTeam?.logo ?? null)}
-        onOpenTeam={player.team_id ? openTeam : undefined}
-        details={[player.city, stats?.season ? `Sezon: ${stats.season}` : null]}
-        badges={!player.active ? <Badge label="PASİF" tone="neutral" size="xs" /> : null}
-        facts={facts}
-      />
-    );
-  }, [player, playerTeam, stats, openTeam]);
-
   /* — Kapılar — */
 
   if (auth.initializing) {
     return (
       <SafeAreaView style={styles.screen} edges={["top"]}>
-        <ScreenHeader title="Oyuncu Profilim" back />
+        <ScreenHeader title="Kariyerim" back />
         <View style={styles.loadingBody}>
           <SkeletonCard lines={3} />
         </View>
@@ -475,10 +435,15 @@ export default function MyPlayerScreen() {
     return <Redirect href="/giris" />;
   }
 
+  /* Özet = Yönetim ▸ Kariyerim. İkinci bir özet ekranı tutulmaz. */
+  if (SUMMARY_KEYS.has(normalizeKey(firstParam(params.tab) ?? ""))) {
+    return <Redirect href="/kulubum?rol=oyuncu" />;
+  }
+
   if (meQuery.isLoading) {
     return (
       <SafeAreaView style={styles.screen} edges={["top"]}>
-        <ScreenHeader title="Oyuncu Profilim" back />
+        <ScreenHeader title="Kariyerim" back />
         <View style={styles.loadingBody}>
           <SkeletonCard lines={3} />
           <SkeletonListRow count={5} />
@@ -491,7 +456,7 @@ export default function MyPlayerScreen() {
   if (meQuery.isError ? isProfileMissing(meQuery.error) : !player) {
     return (
       <SafeAreaView style={styles.screen} edges={["top"]}>
-        <ScreenHeader title="Oyuncu Profilim" back />
+        <ScreenHeader title="Kariyerim" back />
         <EmptyState
           icon="person-add-outline"
           title="Oyuncu profilin bağlı değil"
@@ -510,7 +475,7 @@ export default function MyPlayerScreen() {
   if (meQuery.isError || !me || !player) {
     return (
       <SafeAreaView style={styles.screen} edges={["top"]}>
-        <ScreenHeader title="Oyuncu Profilim" back />
+        <ScreenHeader title="Kariyerim" back />
         <ErrorState error={meQuery.error} onRetry={meQuery.refetch} />
       </SafeAreaView>
     );
@@ -519,31 +484,15 @@ export default function MyPlayerScreen() {
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader
-        title={player.player_name}
-        overline="OYUNCU PROFİLİM"
+        title="Kariyerim"
+        overline={upperTR(player.player_name)}
         back
         actions={actions}
         scrollY={scrollY}
-        hero={hero}
         tabs={<Tabs items={TAB_ITEMS} value={tab} onChange={changeTab} sticky />}
       />
 
-      {tab === "ozet" ? (
-        <SummaryTab
-          teamName={playerTeam?.team_name ?? null}
-          teamLogo={playerTeam?.logo ?? null}
-          teamId={player.team_id}
-          league={playerTeam?.current_league ?? null}
-          season={playerTeam?.current_season ?? null}
-          stats={stats}
-          recentMatches={me.recentMatches}
-          pendingChanges={me.pendingChanges}
-          onOpenTab={changeTab}
-          refetch={meQuery.refetch}
-          isRefetching={meQuery.isRefetching}
-          scrollProps={scrollProps}
-        />
-      ) : tab === "maclarim" ? (
+      {tab === "maclarim" ? (
         <MyMatchesTab
           filter={resolveMatchFilter(firstParam(params.durum))}
           scrollProps={scrollProps}
@@ -564,271 +513,6 @@ interface ScrollChrome {
   ) => void;
   scrollEventThrottle: number;
 }
-
-/* ══════════════════════════════════════════════════════════════════════════
-   5) ÖZET — bekleyen işler, kulüp, sezon ayrıntısı, son maçlar, kapılar
-   ══════════════════════════════════════════════════════════════════════════ */
-
-interface SummaryTabProps {
-  teamName: string | null;
-  teamLogo: string | null;
-  teamId: number | null;
-  league: string | null;
-  season: string | null;
-  stats: {
-    matches: number;
-    goals: number;
-    assists: number;
-    yellow_cards: number;
-    red_cards: number;
-    rating: number | null;
-    starts: number;
-    season?: string | null;
-  } | null;
-  recentMatches: PanelRecentMatch[];
-  pendingChanges: PanelPendingChange[];
-  onOpenTab: (tab: MyTab) => void;
-  refetch: () => unknown;
-  isRefetching: boolean;
-  scrollProps: ScrollChrome;
-}
-
-function SummaryTab({
-  teamName,
-  teamLogo,
-  teamId,
-  league,
-  season,
-  stats,
-  recentMatches,
-  pendingChanges,
-  onOpenTab,
-  refetch,
-  isRefetching,
-  scrollProps,
-}: SummaryTabProps) {
-  const router = useRouter();
-  const refresh = useRefresh(refetch, { refreshing: isRefetching });
-
-  const openTeam = useCallback(() => {
-    if (teamId) router.push(`/takim/${teamId}`);
-  }, [router, teamId]);
-
-  const pending = pendingChanges.filter((change) => change.status === "pending");
-  /* Önce bekleyenler: merkez kalıbında bekleyen iş kimliğin hemen altındadır. */
-  const sortedChanges = useMemo(
-    () =>
-      [...pendingChanges]
-        .sort((a, b) => Number(b.status === "pending") - Number(a.status === "pending"))
-        .slice(0, 6),
-    [pendingChanges],
-  );
-
-  /* Sezon ayrıntısı — kimlikte olmayan sayılar (ilk 11, kartlar). */
-  const seasonTiles: StatTile[] = useMemo(() => {
-    if (!stats) return [];
-    const matches = num(stats.matches);
-    return [
-      {
-        key: "starts",
-        value: String(num(stats.starts)),
-        label: "İLK 11",
-        hint: matches > 0 ? `%${Math.round((num(stats.starts) / matches) * 100)}` : undefined,
-      },
-      {
-        key: "ga",
-        value: String(num(stats.goals) + num(stats.assists)),
-        label: "GOL + ASİST",
-        hint: matches > 0 ? `${decimalTR((num(stats.goals) + num(stats.assists)) / matches, 2)} / maç` : undefined,
-      },
-      {
-        key: "cards",
-        value: `${num(stats.yellow_cards)}·${num(stats.red_cards)}`,
-        label: "SARI · KIRMIZI",
-      },
-    ];
-  }, [stats]);
-
-  return (
-    <ScrollView {...scrollProps} contentContainerStyle={styles.content} refreshControl={refresh.control}>
-      {/* ————— Bekleyen talepler ————— */}
-      {sortedChanges.length ? (
-        <>
-          <SectionHeader
-            style={styles.flushHeader}
-            title="Değişiklik taleplerim"
-            meta={pending.length ? `${pending.length} bekliyor` : undefined}
-            action={{ label: "Hesabım", onPress: () => router.push("/hesabim") }}
-          />
-          <View>
-            {sortedChanges.map((change, index, list) => (
-              <ListRow
-                key={change.id}
-                leading={{ icon: "document-attach", tone: changeStatusTone(change.status) }}
-                title={change.type === "player_update" ? "Oyuncu bilgisi" : change.type}
-                subtitle={change.created_at ? formatDateShort(change.created_at) : undefined}
-                badge={
-                  <Badge
-                    label={changeStatusLabel(change.status)}
-                    tone={changeStatusTone(change.status)}
-                    size="xs"
-                  />
-                }
-                chevron={false}
-                position={rowPosition(index, list.length)}
-              />
-            ))}
-          </View>
-        </>
-      ) : null}
-
-      {/* ————— Kulübüm ————— */}
-      {teamName ? (
-        <Touchable
-          feedback="card"
-          haptic="selection"
-          onPress={openTeam}
-          accessibilityRole="button"
-          accessibilityLabel={`${teamName} takım sayfası`}
-          style={[surfaces.cardPadded, styles.teamCard]}
-        >
-          <TeamLogo name={teamName} logo={mediaUrl(teamLogo)} size={layout.crestXl} />
-          <View style={styles.teamBody}>
-            <Text style={styles.overline} {...textScale.badge}>
-              KULÜBÜM
-            </Text>
-            <Text style={styles.teamName} numberOfLines={1} {...textScale.dense}>
-              {teamName}
-            </Text>
-            {league || season ? (
-              <Text style={styles.teamMeta} numberOfLines={1} {...textScale.dense}>
-                {[league, season].filter(Boolean).join(" · ")}
-              </Text>
-            ) : null}
-          </View>
-          <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
-        </Touchable>
-      ) : (
-        <EmptyState
-          icon="shield-outline"
-          title="Kulübün yok"
-          body="Bir takıma katıldığında kulüp bilgin burada görünür."
-          variant="inline"
-          compact
-          action={{ label: "Takım davetlerim", onPress: () => router.push("/davetler") }}
-        />
-      )}
-
-      {/* ————— Sezon ayrıntısı ————— */}
-      {seasonTiles.length ? (
-        <>
-          <SectionHeader
-            style={styles.flushHeader}
-            title="Sezonum"
-            meta={stats?.season ? String(stats.season) : undefined}
-            action={{ label: "Ayrıntı", onPress: () => onOpenTab("istatistik") }}
-          />
-          <StatTiles tiles={seasonTiles} />
-        </>
-      ) : null}
-
-      {/* ————— Son maçlar ————— */}
-      <SectionHeader
-        style={styles.flushHeader}
-        title="Son maçlarım"
-        action={recentMatches.length ? { label: "Tümü", onPress: () => onOpenTab("maclarim") } : undefined}
-      />
-      {recentMatches.length ? (
-        <View style={surfaces.card}>
-          {recentMatches.slice(0, 5).map((match, index) => (
-            <RecentMatchRow
-              key={match.id}
-              match={match}
-              divider={index > 0}
-              onPress={() => router.push(`/mac/${match.id}`)}
-            />
-          ))}
-        </View>
-      ) : (
-        <EmptyState
-          icon="football-outline"
-          title="Henüz maçın yok"
-          body="Takımın yayınlanmış bir maç oynadığında burada görünür."
-          variant="inline"
-          compact
-        />
-      )}
-
-      {/* ————— Kapılar ————— */}
-      <SectionHeader style={styles.flushHeader} title="Kariyerim" />
-      {/*
-       * TEKLİFLER · DAVETLER · DİSİPLİN · MESAJLAR BURADA YOK: dördü de Profil
-       * sekmesinde ("Kariyerim" ve "Kulübüm" bölümleri) aynı başlıklarla
-       * duruyor; bu ekran onların ikinci kopyası olmaz. Burada yalnız BU
-       * EKRANIN kendi sekmeleri ve düzenleme kalır (herkese açık profil
-       * başlıktaki göz ikonundadır).
-       */}
-      <HubGrid style={styles.flushGrid}>
-        <HubTile icon="calendar" title="Maçlarım" subtitle="Fikstür ve yoklama" tone="brand" onPress={() => onOpenTab("maclarim")} />
-        <HubTile icon="stats-chart" title="İstatistiklerim" subtitle="Lig ve sezon kırılımı" tone="accent" onPress={() => onOpenTab("istatistik")} />
-        <HubTile icon="document-text" title="Sözleşmem" subtitle="Yürürlükteki sözleşmen" tone="info" onPress={() => onOpenTab("sozlesme")} />
-        <HubTile icon="create" title="Profilimi düzenle" subtitle="Bilgi ve fotoğraf talebi" tone="neutral" onPress={() => router.push("/hesabim")} />
-      </HubGrid>
-    </ScrollView>
-  );
-}
-
-/**
- * Son maç satırı — panel özeti takımların adını ve skoru verir, oyuncunun
- * hangi tarafta olduğunu vermez; bu yüzden sonuç rengi UYDURULMAZ. Satır iki
- * takımı alt alta, skorları sağda hizalı yazar (skor listesi kalıbı); kazanan
- * taraf kalın, kaybeden sönük.
- */
-const RecentMatchRow = React.memo(function RecentMatchRow({
-  match,
-  divider,
-  onPress,
-}: {
-  match: PanelRecentMatch;
-  divider: boolean;
-  onPress: () => void;
-}) {
-  const hasScore = match.home_score != null && match.away_score != null;
-  const homeWon = hasScore && Number(match.home_score) > Number(match.away_score);
-  const awayWon = hasScore && Number(match.away_score) > Number(match.home_score);
-
-  return (
-    <Touchable
-      feedback="row"
-      haptic="selection"
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={`${match.home_team} ${match.home_score ?? ""}, ${match.away_team} ${match.away_score ?? ""}`}
-      style={[styles.recentRow, divider && styles.rowDivider]}
-    >
-      <DateBlock date={match.date} />
-      <View style={styles.recentTeams}>
-        <View style={styles.recentLine}>
-          <Text style={[styles.recentTeam, awayWon && styles.recentLoser]} numberOfLines={1} {...textScale.dense}>
-            {match.home_team}
-          </Text>
-          <Text style={[styles.recentScore, awayWon && styles.recentLoser]} {...textScale.dense}>
-            {match.home_score ?? "–"}
-          </Text>
-        </View>
-        <View style={styles.recentLine}>
-          <Text style={[styles.recentTeam, homeWon && styles.recentLoser]} numberOfLines={1} {...textScale.dense}>
-            {match.away_team}
-          </Text>
-          <Text style={[styles.recentScore, homeWon && styles.recentLoser]} {...textScale.dense}>
-            {match.away_score ?? "–"}
-          </Text>
-        </View>
-      </View>
-      <Ionicons name="chevron-forward" size={14} color={colors.textTertiary} />
-    </Touchable>
-  );
-});
 
 /* ══════════════════════════════════════════════════════════════════════════
    6) MAÇLARIM — maç merkezi + müsaitlik yoklaması

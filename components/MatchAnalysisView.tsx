@@ -24,21 +24,20 @@
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import React, { useCallback, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 import {
   Avatar,
-  Button,
-  Chip,
-  ChipGroup,
+  Badge,
   EmptyState,
   ErrorState,
   FormChips,
   SectionHeader,
   SkeletonCard,
   TeamLogo,
+  Touchable,
 } from "@/components/ui";
 import {
   SIMULATION_SCENARIOS,
@@ -47,10 +46,11 @@ import {
   type AnalysisForm,
   type AnalysisKeyPlayer,
   type MatchSimulation,
+  type SimulationFactor,
   type SimulationScenario,
 } from "@/lib/api/team";
 import { formatDecimal, mediaUrl } from "@/lib/format";
-import { colors, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
+import { colors, fonts, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
 
 /* ══════════════════════════════════════════════════════════════════════════
    Küçük yapı taşları
@@ -225,15 +225,32 @@ export interface MatchAnalysisViewProps {
   canSimulate?: boolean;
   /** Simülasyon kilitliyken kullanıcıyı kadro sekmesine yollar. */
   onNeedPlan?: () => void;
+  /**
+   * Kayıtlı kadronun parmak izi (ilk 8 sayısı + diziliş). Kadro kaydedilince
+   * değişir ve karşılaştırma yeniden hesaplanır; aksi hâlde eski kadronun
+   * tahmini önbellekten gösterilirdi.
+   */
+  planVersion?: string;
 }
+
+/** Beklenen puan: 3 × kazanma + 1 × beraberlik (yüzdeler 0-100). */
+const expectedPoints = (sim: MatchSimulation): number =>
+  (3 * sim.probabilities.win + sim.probabilities.draw) / 100;
+
+const FACTOR_ICON: Record<SimulationFactor["impact"], { icon: keyof typeof Ionicons.glyphMap; color: string }> = {
+  positive: { icon: "arrow-up-circle", color: colors.win },
+  negative: { icon: "arrow-down-circle", color: colors.loss },
+  neutral: { icon: "remove-circle", color: colors.textTertiary },
+};
 
 export function MatchAnalysisView({
   matchId,
   canSimulate = true,
   onNeedPlan,
+  planVersion = "",
 }: MatchAnalysisViewProps) {
-  const [scenario, setScenario] = useState<SimulationScenario>("balanced");
-  const [simulation, setSimulation] = useState<MatchSimulation | null>(null);
+  /** Kullanıcının incelediği taktik; seçilmediyse önerilen taktik gösterilir. */
+  const [picked, setPicked] = useState<SimulationScenario | null>(null);
 
   const query = useQuery({
     queryKey: ["team", "match-analysis", matchId],
@@ -243,22 +260,32 @@ export function MatchAnalysisView({
     retry: false,
   });
 
-  const simulate = useMutation({
-    mutationFn: (next: SimulationScenario) => simulateMatch(matchId, { scenario: next }),
-    onSuccess: (result) => setSimulation(result),
+  /*
+   * TAKTİK KARŞILAŞTIRMASI: üç senaryo tek seferde, paralel hesaplanır.
+   * Eskiden başkan senaryoları tek tek seçip "hesapla"ya basıyor ve önceki
+   * sonucu aklında tutmak zorunda kalıyordu; asıl soru "hangi taktikle
+   * oynamalıyız?" olduğu için yanıt yan yana bir tablodur. Simülasyon
+   * deterministik ve kayıt üretmez (sunucu yalnız hesaplar), bu yüzden kadro
+   * kayıtlıysa kendiliğinden çalışır ve önbelleğe alınır.
+   */
+  const simulations = useQuery({
+    queryKey: ["team", "match-simulations", matchId, planVersion],
+    queryFn: () => Promise.all(SIMULATION_SCENARIOS.map((item) => simulateMatch(matchId, { scenario: item.key }))),
+    enabled: canSimulate && Number.isInteger(matchId) && matchId > 0,
+    staleTime: 5 * 60_000,
+    retry: false,
   });
 
-  const runScenario = useCallback(
-    (next: SimulationScenario) => {
-      setScenario(next);
-      /* Senaryo değişince önceki sonuç GEÇERSİZDİR ve hemen silinir: eski
-         yüzdeleri yeni senaryonun etiketiyle göstermek yanlış bilgi olurdu. */
-      setSimulation(null);
-      if (!canSimulate) return;
-      simulate.mutate(next);
-    },
-    [canSimulate, simulate],
-  );
+  const recommended = useMemo(() => {
+    const list = simulations.data ?? [];
+    if (!list.length) return null;
+    return list.reduce((best, item) => (expectedPoints(item) > expectedPoints(best) ? item : best)).scenario;
+  }, [simulations.data]);
+
+  const activeKey = picked ?? recommended;
+  const simulation = simulations.data?.find((item) => item.scenario === activeKey) ?? null;
+
+  const choose = useCallback((next: SimulationScenario) => setPicked(next), []);
 
   const data = query.data;
 
@@ -307,6 +334,147 @@ export function MatchAnalysisView({
       <Text style={styles.summary} {...textScale.long}>
         {data.summary}
       </Text>
+
+      {/* ── Taktik simülasyonu (en üstte: maç öncesi asıl karar) ─────── */}
+      <SectionHeader title="Taktik simülasyonu" meta="3 senaryo" />
+      <View style={styles.card}>
+        {!canSimulate ? (
+          <EmptyState
+            icon="clipboard-outline"
+            title="Önce maç kadronu kaydet"
+            body="Tahmin kayıtlı kadroya göre hesaplanır; eksik ilk 8 tahmini düşürür."
+            action={onNeedPlan ? { label: "Kadroya git", onPress: onNeedPlan } : undefined}
+            variant="inline"
+            compact
+          />
+        ) : simulations.isLoading ? (
+          <SkeletonCard lines={3} />
+        ) : simulations.isError || !simulations.data ? (
+          <ErrorState error={simulations.error} onRetry={simulations.refetch} variant="inline" />
+        ) : (
+          <>
+            {/* Karşılaştırma tablosu */}
+            <View style={styles.tableHead}>
+              <Text style={[styles.th, styles.thName]} {...textScale.badge}>TAKTİK</Text>
+              <Text style={styles.th} {...textScale.badge}>G</Text>
+              <Text style={styles.th} {...textScale.badge}>B</Text>
+              <Text style={styles.th} {...textScale.badge}>M</Text>
+              <Text style={styles.th} {...textScale.badge}>SKOR</Text>
+              <Text style={styles.th} {...textScale.badge}>PUAN</Text>
+            </View>
+            {simulations.data.map((item) => {
+              const meta = SIMULATION_SCENARIOS.find((entry) => entry.key === item.scenario);
+              const active = item.scenario === activeKey;
+              return (
+                <Touchable
+                  key={item.scenario}
+                  onPress={() => choose(item.scenario)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                  accessibilityLabel={`${meta?.label ?? item.scenario_label}: kazanma yüzde ${item.probabilities.win}, tahmini skor ${item.predicted_score}`}
+                  style={[styles.tr, active && styles.trActive]}
+                >
+                  <View style={[styles.tdNameWrap]}>
+                    <Text style={[styles.tdName, active && styles.tdNameActive]} numberOfLines={1} {...textScale.dense}>
+                      {meta?.label ?? item.scenario_label}
+                    </Text>
+                    {item.scenario === recommended ? <Badge label="ÖNERİLEN" tone="win" size="xs" /> : null}
+                  </View>
+                  <Text style={[styles.td, { color: colors.win }]} {...textScale.dense}>%{item.probabilities.win}</Text>
+                  <Text style={styles.td} {...textScale.dense}>%{item.probabilities.draw}</Text>
+                  <Text style={[styles.td, { color: colors.loss }]} {...textScale.dense}>%{item.probabilities.loss}</Text>
+                  <Text style={[styles.td, styles.tdStrong]} {...textScale.dense}>{item.predicted_score}</Text>
+                  <Text style={[styles.td, styles.tdStrong]} {...textScale.dense}>{formatDecimal(expectedPoints(item), 2)}</Text>
+                </Touchable>
+              );
+            })}
+
+            {simulation ? (
+              <>
+                <View style={styles.divider} />
+                <Text style={styles.scenarioHint} {...textScale.long}>
+                  {SIMULATION_SCENARIOS.find((item) => item.key === simulation.scenario)?.description}
+                  {simulation.lineup
+                    ? `  Kadro: ${simulation.lineup.starters}/${simulation.lineup.expected_starters} ilk${simulation.lineup.formation ? ` · ${simulation.lineup.formation}` : ""}.`
+                    : ""}
+                </Text>
+
+                <ProbabilityBar
+                  win={simulation.probabilities.win}
+                  draw={simulation.probabilities.draw}
+                  loss={simulation.probabilities.loss}
+                />
+
+                <View style={styles.predictRow}>
+                  <View style={styles.predictBox}>
+                    <Text style={styles.predictLabel} {...textScale.badge}>
+                      {upperTR("Beklenen gol")}
+                    </Text>
+                    <Text style={styles.predictValue} {...textScale.dense}>
+                      {formatDecimal(simulation.expected_goals.team, 1)} – {formatDecimal(simulation.expected_goals.opponent, 1)}
+                    </Text>
+                  </View>
+                  <View style={styles.predictBox}>
+                    <Text style={styles.predictLabel} {...textScale.badge}>
+                      {upperTR("Olası skorlar")}
+                    </Text>
+                    <Text style={styles.predictSmall} numberOfLines={2} {...textScale.dense}>
+                      {simulation.scorelines
+                        .slice(0, 3)
+                        .map((line) => `${line.score} %${line.probability}`)
+                        .join("  ·  ")}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.markets}>
+                  <Text style={styles.marketItem} {...textScale.dense}>
+                    Karşılıklı gol %{simulation.markets.both_teams_score}
+                  </Text>
+                  <Text style={styles.marketItem} {...textScale.dense}>
+                    2.5 üstü %{simulation.markets.over_2_5}
+                  </Text>
+                  <Text style={styles.marketItem} {...textScale.dense}>
+                    Gol yememe %{simulation.markets.clean_sheet}
+                  </Text>
+                </View>
+
+                {simulation.factors?.length ? (
+                  <View style={styles.factors}>
+                    {simulation.factors.map((factor) => (
+                      <View key={factor.label} style={styles.factorRow}>
+                        <Ionicons
+                          name={FACTOR_ICON[factor.impact]?.icon ?? "remove-circle"}
+                          size={13}
+                          color={FACTOR_ICON[factor.impact]?.color ?? colors.textTertiary}
+                          style={styles.insightIcon}
+                        />
+                        <Text style={styles.factorText} {...textScale.long}>
+                          <Text style={styles.factorLabel}>{factor.label}: </Text>
+                          {factor.detail}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+
+                {simulation.lineup && simulation.lineup.starters < simulation.lineup.expected_starters ? (
+                  <Touchable onPress={onNeedPlan} disabled={!onNeedPlan} accessibilityRole="button" style={styles.warnRow}>
+                    <Ionicons name="alert-circle" size={14} color={colors.warn} />
+                    <Text style={styles.warnText} {...textScale.dense}>
+                      İlk {simulation.lineup.expected_starters} eksik: tamamlamak tahmini iyileştirir.
+                    </Text>
+                  </Touchable>
+                ) : null}
+
+                <Text style={styles.disclaimer} {...textScale.long}>
+                  {simulation.disclaimer}
+                </Text>
+              </>
+            ) : null}
+          </>
+        )}
+      </View>
 
       {/* ── Form ──────────────────────────────────────────────────────── */}
       <SectionHeader title="Form" />
@@ -463,129 +631,12 @@ export function MatchAnalysisView({
         </>
       ) : null}
 
-      {/* ── Simülasyon ────────────────────────────────────────────────── */}
-      <SectionHeader title="Skor tahmini" />
-      <View style={styles.card}>
-        <ChipGroup contentPadding={0}>
-          {SIMULATION_SCENARIOS.map((item) => (
-            <ScenarioChip
-              key={item.key}
-              value={item.key}
-              label={item.label}
-              selected={item.key === scenario}
-              onPress={runScenario}
-            />
-          ))}
-        </ChipGroup>
-
-        <Text style={styles.scenarioHint} {...textScale.long}>
-          {SIMULATION_SCENARIOS.find((item) => item.key === scenario)?.description}
-        </Text>
-
-        {!canSimulate ? (
-          <EmptyState
-            icon="clipboard-outline"
-            title="Önce kadronu kaydet"
-            body="Skor tahmini maç kadrona göre hesaplanır."
-            action={onNeedPlan ? { label: "Kadroya git", onPress: onNeedPlan } : undefined}
-            variant="inline"
-          />
-        ) : simulation ? (
-          <>
-            <ProbabilityBar
-              win={simulation.probabilities.win}
-              draw={simulation.probabilities.draw}
-              loss={simulation.probabilities.loss}
-            />
-
-            <View style={styles.predictRow}>
-              <View style={styles.predictBox}>
-                <Text style={styles.predictLabel} {...textScale.badge}>
-                  {upperTR("Tahmini skor")}
-                </Text>
-                <Text style={styles.predictValue} {...textScale.dense}>
-                  {simulation.predicted_score}
-                </Text>
-              </View>
-              <View style={styles.predictBox}>
-                <Text style={styles.predictLabel} {...textScale.badge}>
-                  {upperTR("Beklenen gol")}
-                </Text>
-                <Text style={styles.predictValue} {...textScale.dense}>
-                  {simulation.expected_goals.team} - {simulation.expected_goals.opponent}
-                </Text>
-              </View>
-            </View>
-
-            {simulation.scorelines.length ? (
-              <View style={styles.scorelines}>
-                {simulation.scorelines.map((line) => (
-                  <View key={line.score} style={styles.scoreline}>
-                    <Text style={styles.scorelineScore} {...textScale.dense}>
-                      {line.score}
-                    </Text>
-                    <Text style={styles.scorelineProb} {...textScale.dense}>
-                      %{line.probability}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            ) : null}
-
-            <View style={styles.markets}>
-              <Text style={styles.marketItem} {...textScale.dense}>
-                Karşılıklı gol %{simulation.markets.both_teams_score}
-              </Text>
-              <Text style={styles.marketItem} {...textScale.dense}>
-                2.5 üstü %{simulation.markets.over_2_5}
-              </Text>
-              <Text style={styles.marketItem} {...textScale.dense}>
-                Gol yememe %{simulation.markets.clean_sheet}
-              </Text>
-            </View>
-
-            <Text style={styles.disclaimer} {...textScale.long}>
-              {simulation.disclaimer}
-            </Text>
-          </>
-        ) : (
-          <Button
-            label="Tahmini hesapla"
-            icon="analytics-outline"
-            variant="secondary"
-            onPress={() => runScenario(scenario)}
-            loading={simulate.isPending}
-            fullWidth
-          />
-        )}
-
-        {simulate.isError ? (
-          <ErrorState error={simulate.error} variant="banner" />
-        ) : null}
-      </View>
-
       <Text style={styles.disclaimer} {...textScale.long}>
         {data.basis} {data.disclaimer}
       </Text>
     </ScrollView>
   );
 }
-
-/** Senaryo çipi — memo'lu olsun diye değeri geri verir. */
-const ScenarioChip = React.memo(function ScenarioChip({
-  value,
-  label,
-  selected,
-  onPress,
-}: {
-  value: SimulationScenario;
-  label: string;
-  selected: boolean;
-  onPress: (value: SimulationScenario) => void;
-}) {
-  const handlePress = useCallback(() => onPress(value), [onPress, value]);
-  return <Chip label={label} selected={selected} onPress={handlePress} size="sm" />;
-});
 
 const styles = StyleSheet.create({
   loading: {
@@ -614,7 +665,7 @@ const styles = StyleSheet.create({
     color: colors.accentText,
   },
   heroName: {
-    ...type.h1,
+    ...type.h2,
     color: colors.textPrimary,
   },
   heroMeta: {
@@ -791,6 +842,93 @@ const styles = StyleSheet.create({
   },
 
   /* — Simülasyon — */
+  tableHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: space.s,
+  },
+  th: {
+    ...type.micro,
+    color: colors.textTertiary,
+    width: 40,
+    textAlign: "right",
+  },
+  thName: {
+    flex: 1,
+    width: undefined,
+    textAlign: "left",
+  },
+  tr: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 38,
+    paddingHorizontal: space.s,
+    borderRadius: radius.md,
+  },
+  trActive: {
+    backgroundColor: colors.brandDim,
+  },
+  tdNameWrap: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+    minWidth: 0,
+  },
+  tdName: {
+    ...type.h4,
+    color: colors.textSecondary,
+    flexShrink: 1,
+  },
+  tdNameActive: {
+    color: colors.brandAccent,
+  },
+  td: {
+    ...type.tableNum,
+    fontSize: 12,
+    color: colors.textSecondary,
+    width: 40,
+    textAlign: "right",
+  },
+  tdStrong: {
+    ...type.tableNumStrong,
+    fontSize: 12,
+    color: colors.textPrimary,
+  },
+  predictSmall: {
+    ...type.tableNumStrong,
+    fontSize: 12,
+    color: colors.textPrimary,
+  },
+  factors: {
+    gap: space.xs,
+  },
+  factorRow: {
+    flexDirection: "row",
+    gap: space.s,
+  },
+  factorText: {
+    ...type.caption,
+    color: colors.textSecondary,
+    flex: 1,
+  },
+  factorLabel: {
+    fontFamily: fonts.semibold,
+    color: colors.textPrimary,
+  },
+  warnRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.s,
+    padding: space.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.warnDim,
+  },
+  warnText: {
+    ...type.caption,
+    color: colors.warn,
+    flex: 1,
+  },
   scenarioHint: {
     ...type.caption,
     color: colors.textTertiary,

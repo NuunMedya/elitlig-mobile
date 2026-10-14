@@ -347,7 +347,7 @@ export function useClubSignals() {
         tone: "neutral",
         weight: 30,
         action: "changes",
-        href: "/takimim",
+        href: "/kulubum?rol=takim",
       });
     }
     return list.sort((a, b) => b.weight - a.weight);

@@ -59,11 +59,14 @@ import {
   type Tone,
 } from "@/components/ui";
 import { AttendanceMeter } from "@/components/club/AttendanceMeter";
+import { daysUntil } from "@/components/club/NextMatchCard";
+import { PrepChecklist, StatStrip, type PrepStep } from "@/components/club/Panel";
 import {
   MAX_STARTERS,
   REVIEW_SCORE_FIELDS,
   getMyMatchReview,
   getTeamAvailability,
+  getTeamMatchPlan,
   getTeamMatches,
   submitMatchReview,
   type MatchReviewScores,
@@ -173,6 +176,22 @@ export default function MatchCenterScreen() {
     [query.data, tab]
   );
 
+  /** Oynanan sekmesinin üst şeridi: sezon karnesi bu listeden türer. */
+  const record = useMemo(() => {
+    const past = query.data?.past ?? [];
+    const acc = { G: 0, B: 0, M: 0, scored: 0, conceded: 0 };
+    past.forEach((match) => {
+      const result = resultOf(match);
+      if (!result) return;
+      acc[result] += 1;
+      const { ours, theirs } = ourScore(match);
+      acc.scored += ours ?? 0;
+      acc.conceded += theirs ?? 0;
+    });
+    const played = acc.G + acc.B + acc.M;
+    return played ? { ...acc, played } : null;
+  }, [query.data]);
+
   const openId =
     expandedId === undefined ? (tab === "yaklasan" ? (query.data?.upcoming?.[0]?.id ?? null) : null) : expandedId;
 
@@ -194,7 +213,8 @@ export default function MatchCenterScreen() {
 
   const openMatch = useCallback((matchId: number) => router.push(`/mac/${matchId}`), [router]);
   const editSquad = useCallback(
-    (matchId: number) => router.push(`/takimim/mac/${matchId}`),
+    (matchId: number, sekme: "kadro" | "yoklama" | "analiz" = "kadro") =>
+      router.push(`/takimim/mac/${matchId}?sekme=${sekme}`),
     [router]
   );
   const openReview = useCallback((match: TeamMatch) => setReviewing(match), []);
@@ -293,14 +313,31 @@ export default function MatchCenterScreen() {
         refreshControl={refreshControl}
         initialNumToRender={8}
         ListHeaderComponent={
-          query.isError ? (
-            <ErrorState
-              error={query.error}
-              onRetry={query.refetch}
-              variant="banner"
-              style={styles.banner}
-            />
-          ) : null
+          <>
+            {query.isError ? (
+              <ErrorState
+                error={query.error}
+                onRetry={query.refetch}
+                variant="banner"
+                style={styles.banner}
+              />
+            ) : null}
+            {tab === "oynanan" && record ? (
+              <StatStrip
+                style={styles.banner}
+                items={[
+                  { label: "Maç", value: String(record.played) },
+                  { label: "G-B-M", value: `${record.G}-${record.B}-${record.M}` },
+                  { label: "Gol", value: `${record.scored}:${record.conceded}` },
+                  {
+                    label: "Galibiyet",
+                    value: `%${Math.round((record.G / record.played) * 100)}`,
+                    tone: record.G >= record.M ? "win" : "danger",
+                  },
+                ]}
+              />
+            ) : null}
+          </>
         }
         ListEmptyComponent={
           <EmptyState
@@ -336,11 +373,10 @@ const UpcomingCard = React.memo(function UpcomingCard({
   expanded: boolean;
   onToggle: (matchId: number) => void;
   onOpenMatch: (matchId: number) => void;
-  onEditSquad: (matchId: number) => void;
+  onEditSquad: (matchId: number, sekme?: "kadro" | "yoklama" | "analiz") => void;
 }) {
   const handleToggle = useCallback(() => onToggle(match.id), [match.id, onToggle]);
   const handleOpen = useCallback(() => onOpenMatch(match.id), [match.id, onOpenMatch]);
-  const handleSquad = useCallback(() => onEditSquad(match.id), [match.id, onEditSquad]);
 
   /** Tembel yükleme: yalnızca kart açıldığında istenir. */
   const availability = useQuery({
@@ -351,15 +387,62 @@ const UpcomingCard = React.memo(function UpcomingCard({
     retry: false,
   });
 
+  /** Maç planı — maç ekranıyla AYNI anahtar; kayıt sonrası kart da tazelenir. */
+  const plan = useQuery({
+    queryKey: ["takim", "match-plan", match.id],
+    queryFn: () => getTeamMatchPlan(match.id),
+    enabled: expanded,
+    staleTime: 60_000,
+    retry: false,
+  });
+
   const counts = availability.data?.counts;
   const notComing = useMemo(
     () => (availability.data?.players ?? []).filter((player) => player.status === "not_coming"),
     [availability.data]
   );
 
+  const lineup = plan.data?.plan?.lineup ?? [];
+  const starters = lineup.filter((row) => row.starter).length;
+
+  /* Hazırlık adımları — Yönetim ▸ Kulübüm'deki "Maç hazırlığı" kartıyla aynı
+     kurallar: geliyor ≥ ilk 8 ve ilk 8 dolu → tamam; eksik → uyarı. */
+  const steps: PrepStep[] = [
+    {
+      key: "yoklama",
+      label: "Yoklama",
+      state: !counts ? "todo" : counts.coming >= MAX_STARTERS ? "done" : "warn",
+      detail: counts
+        ? `${counts.coming}/${MAX_STARTERS} geliyor${counts.unanswered ? ` · ${counts.unanswered} yanıtsız` : ""}`
+        : availability.isLoading
+          ? "…"
+          : "Bilgi yok",
+      onPress: () => onEditSquad(match.id, "yoklama"),
+    },
+    {
+      key: "kadro",
+      label: "Maç kadrosu",
+      state: !lineup.length ? "todo" : starters >= MAX_STARTERS ? "done" : "warn",
+      detail: plan.isLoading
+        ? "…"
+        : lineup.length
+          ? `${starters} ilk · ${lineup.length - starters} yedek`
+          : "Girilmedi",
+      onPress: () => onEditSquad(match.id, "kadro"),
+    },
+    {
+      key: "analiz",
+      label: "Analiz ve tahmin",
+      state: "todo",
+      detail: lineup.length ? "Taktikleri karşılaştır" : "Önce kadro",
+      onPress: () => onEditSquad(match.id, "analiz"),
+    },
+  ];
+
   const venue = [match.is_home ? "Ev sahibi" : "Deplasman", match.match_field]
     .filter(Boolean)
     .join(" · ");
+  const countdown = daysUntil(match.date);
 
   return (
     <View style={styles.card}>
@@ -368,7 +451,7 @@ const UpcomingCard = React.memo(function UpcomingCard({
         haptic="selection"
         onPress={handleToggle}
         accessibilityRole="button"
-        accessibilityLabel={`${match.opponent_name ?? "Rakip"} maçının yoklamasını ${expanded ? "kapat" : "aç"}`}
+        accessibilityLabel={`${match.opponent_name ?? "Rakip"} maçının hazırlığını ${expanded ? "kapat" : "aç"}`}
         style={styles.cardHead}
       >
         <View style={styles.dateCol}>
@@ -382,16 +465,22 @@ const UpcomingCard = React.memo(function UpcomingCard({
 
         <View style={styles.cardBody}>
           <Text style={styles.opponent} numberOfLines={1} {...textScale.dense}>
-            {upperTR(String(match.opponent_name ?? "Rakip belirlenmedi"))}
+            {match.opponent_name ?? "Rakip belirlenmedi"}
           </Text>
           <Text style={styles.meta} numberOfLines={1} {...textScale.dense}>
             {venue}
           </Text>
         </View>
 
+        {countdown ? (
+          <Text style={styles.countdown} {...textScale.badge}>
+            {upperTR(countdown)}
+          </Text>
+        ) : null}
+
         <Ionicons
           name={expanded ? "chevron-up" : "chevron-down"}
-          size={16}
+          size={14}
           color={colors.textTertiary}
         />
       </Touchable>
@@ -400,8 +489,7 @@ const UpcomingCard = React.memo(function UpcomingCard({
         <View style={styles.panel}>
           {availability.isLoading ? (
             <View style={styles.availLoading}>
-              <Skeleton width="60%" height={14} radius="sm" />
-              <Skeleton width="90%" height={14} radius="sm" />
+              <Skeleton width="60%" height={10} radius="sm" />
             </View>
           ) : availability.isError ? (
             <ErrorState
@@ -412,35 +500,29 @@ const UpcomingCard = React.memo(function UpcomingCard({
           ) : counts ? (
             <>
               <AttendanceMeter counts={counts} need={MAX_STARTERS} />
-
               {notComing.length > 0 ? (
-                <Text style={styles.notComing} numberOfLines={4} {...textScale.long}>
+                <Text style={styles.notComing} numberOfLines={3} {...textScale.long}>
                   <Text style={styles.notComingLead}>Gelemeyenler: </Text>
                   {notComing.map((player) => player.name).join(", ")}
                 </Text>
-              ) : (
-                <Text style={styles.panelNote} {...textScale.long}>
-                  Kadrondan gelemeyeceğini bildiren yok.
-                </Text>
-              )}
+              ) : null}
             </>
           ) : null}
 
-          {/* Kadro girişi yaklaşan maçın ASIL işi; maç detayı ikincil kalır.
-              Yan yana: iki tam genişlikli düğme kartı 100px uzatıyordu. */}
+          <PrepChecklist steps={steps} />
+
           <View style={styles.actionRow}>
             <Button
-              label="Kadroyu gir"
+              label={lineup.length ? "Kadroyu düzenle" : "Kadroyu kur"}
               size="sm"
               icon="people-outline"
-              onPress={handleSquad}
+              onPress={() => onEditSquad(match.id, "kadro")}
               style={styles.flex}
             />
             <Button
-              label="Maç detayı"
+              label="Maç sayfası"
               variant="secondary"
               size="sm"
-              icon="football-outline"
               onPress={handleOpen}
               style={styles.flex}
             />
@@ -512,16 +594,19 @@ const PastCard = React.memo(function PastCard({
         </Text>
       </Touchable>
 
-      <View style={styles.cardFooter}>
-        <Button
-          label="Maç Karnesi"
-          variant="secondary"
-          size="sm"
-          icon="clipboard-outline"
-          onPress={handleReview}
-          fullWidth
-        />
-      </View>
+      <Touchable
+        feedback="row"
+        onPress={handleReview}
+        accessibilityRole="button"
+        accessibilityLabel="Maç karnesini doldur"
+        style={styles.cardFooter}
+      >
+        <Ionicons name="clipboard-outline" size={13} color={colors.brandAccent} />
+        <Text style={styles.footerLink} {...textScale.dense}>
+          Maç karnesi
+        </Text>
+        <Ionicons name="chevron-forward" size={12} color={colors.textTertiary} />
+      </Touchable>
     </View>
   );
 });
@@ -735,16 +820,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: space.md,
-    minHeight: layout.listRowHeightTwoLine,
-    paddingHorizontal: layout.rowPaddingH,
+    minHeight: 54,
+    paddingHorizontal: space.md,
     paddingVertical: space.sm,
   },
   dateCol: {
-    width: 56,
+    width: 50,
     gap: 2,
   },
   dateText: {
-    ...type.bodySm,
+    ...type.caption,
     fontFamily: fonts.bold,
     color: colors.textPrimary,
   },
@@ -757,13 +842,12 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   opponent: {
-    ...type.body,
-    fontFamily: fonts.bold,
+    ...type.h4,
     color: colors.textPrimary,
   },
   meta: {
     ...type.caption,
-    color: colors.textSecondary,
+    color: colors.textTertiary,
   },
   resultChip: {
     width: 20,
@@ -776,23 +860,43 @@ const styles = StyleSheet.create({
     ...type.micro,
   },
   score: {
-    ...type.scoreSm,
+    ...type.metricSm,
     color: colors.textPrimary,
     minWidth: 38,
     textAlign: "right",
   },
   cardFooter: {
-    paddingHorizontal: layout.rowPaddingH,
-    paddingBottom: space.md,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.s,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    borderTopWidth: hairline,
+    borderTopColor: colors.separator,
+  },
+  footerLink: {
+    ...type.caption,
+    color: colors.brandAccent,
+    flex: 1,
+  },
+  countdown: {
+    ...type.micro,
+    color: colors.brandAccent,
+    backgroundColor: colors.brandDim,
+    paddingHorizontal: space.s,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+    overflow: "hidden",
   },
 
   /* Açılan yoklama paneli */
   panel: {
     borderTopWidth: hairline,
     borderTopColor: colors.separator,
-    paddingHorizontal: layout.rowPaddingH,
-    paddingVertical: space.md,
-    gap: space.md,
+    paddingHorizontal: space.md,
+    paddingTop: space.md,
+    paddingBottom: space.md,
+    gap: space.sm,
   },
   availLoading: {
     gap: space.sm,
