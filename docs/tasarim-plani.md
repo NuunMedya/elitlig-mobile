@@ -577,6 +577,11 @@ components/game/ArenaGameScreen.tsx  Ortak ekran: giriş/bitiş kartı, canlı
                      mini rekor tablosu, skor gönderimi, paylaşım, ses.
 ```
 
+Bilgi yarışmaları (Arena, Kim Bu?, Skor Tahmini) ise yerel RN ekranıdır:
+`components/game/QuizScreen.tsx` ortak yarışma kabuğu (il seçimi, geri sayım,
+can/seri/joker, animasyonlu şıklar), `lib/game/quiz/questions.ts` saf soru
+üreticileri ve puanlama; tur sonu her oyunda `components/game/ArenaResult.tsx`.
+
 Oyunlar WebView'in GPU hızlandırmalı Canvas'ında React'a uğramadan çizilir;
 `npm run check:games` paketin güncelliğini ve oyun kurallarını (ör. slalomda
 kenarda saklanmanın hak götürdüğünü) başsız simülasyonla doğrular.

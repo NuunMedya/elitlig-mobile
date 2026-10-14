@@ -22,6 +22,8 @@ interface MatchQuery {
   limit?: number;
   /** Yalnızca listelerde gereken alanlar — mobil bağlantıda yükü küçültür. */
   compact?: boolean;
+  /** Maç durumu süzgeci ("yayinlanmis" = oynanmış ve sonucu yayınlanmış). */
+  status?: "yayinlanmis" | "zamanlanmis" | "canli";
 }
 
 // Not: Lig ve sezon zaten bir şehre bağlı olduğundan (routes/meta.js kapsamı
@@ -39,6 +41,7 @@ export const getMatches = (query: MatchQuery = {}) =>
     date_to: query.dateTo,
     limit: query.limit ?? 200,
     compact: query.compact ? 1 : undefined,
+    mac_durumu: query.status,
   });
 
 /** Yaklaşan maçlar — `mac_durumu = zamanlanmis`, tarihe göre eskiden yeniye. */

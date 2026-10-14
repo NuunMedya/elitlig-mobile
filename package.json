@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit",
     "check:tokens": "node --experimental-strip-types --no-warnings scripts/check-tokens.mjs",
     "build:games": "node scripts/build-games.mjs",
-    "check:games": "node scripts/check-games.mjs",
+    "check:games": "node --experimental-strip-types --no-warnings scripts/check-games.mjs",
     "check": "npm run check:tokens && npm run check:games && npm run typecheck",
     "postinstall": "patch-package"
   },
