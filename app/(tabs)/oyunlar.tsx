@@ -57,6 +57,7 @@ import {
 import type { Tone } from "@/components/ui";
 import type { ArenaGame } from "@/lib/api/arena";
 import { formatNumber } from "@/lib/format";
+import { ARENA_BEST_KEYS } from "@/lib/game/arenaKeys";
 import { get } from "@/lib/http";
 import { useAuth } from "@/providers/AuthProvider";
 import {
@@ -74,17 +75,17 @@ import {
 /* ===================== SABİTLER (saf veri) ===================== */
 
 /**
- * Oyunların cihazdaki rekor anahtarları. Değerler ilgili oyun ekranındaki
- * `BEST_KEY` sabitiyle BİREBİR aynıdır; biri değişirse burası da değişmeli,
- * yoksa kartlar sessizce boş kalır.
+ * Oyunların cihazdaki rekor anahtarları. Penaltı, slalom ve top sektir
+ * anahtarları `lib/game/arenaKeys.ts`'ten gelir (oyun ekranlarıyla tek kaynak);
+ * diğerleri ilgili ekrandaki `BEST_KEY` sabitiyle BİREBİR aynıdır.
  */
 const BEST_KEYS: Record<ArenaGame, string> = {
   seri: "elitlig.arena.best.v1",
-  sektir: "elitlig.sektir.best.v1",
+  sektir: ARENA_BEST_KEYS.sektir,
   kimbu: "elitlig.kimbu.best.v1",
-  slalom: "elitlig.slalom.best.v1",
+  slalom: ARENA_BEST_KEYS.slalom,
   gunun: "elitlig.gunun.best.v1",
-  penalti: "elitlig.penalti.best.v1",
+  penalti: ARENA_BEST_KEYS.penalti,
 };
 
 /** Sorgu ve depolama okumalarının sabit sırası. */
@@ -111,10 +112,10 @@ const GRID_GAMES: GameMeta[] = [
     key: "penalti",
     route: "/penalti",
     title: "Penaltı",
-    blurb: "Nişan al, vuruş gücünü tuttur, kaleciyi geç. Üç ıska hakkın var.",
+    blurb: "Falsoyla kaleciyi aldat; her golde kaleci ustalaşır. Üç kaçırma hakkın var.",
     icon: "golf",
     tone: "brand",
-    unit: "gol",
+    unit: "puan",
   },
   {
     key: "seri",
@@ -129,10 +130,10 @@ const GRID_GAMES: GameMeta[] = [
     key: "sektir",
     route: "/sektir",
     title: "Top Sektir",
-    blurb: "Topu çime düşürme; her dokunuş bir sekme yazar.",
+    blurb: "Topu çime düşürme; ritim hızlanır, rüzgâr çıkar, top küçülür.",
     icon: "football",
     tone: "win",
-    unit: "sekme",
+    unit: "puan",
   },
   {
     key: "kimbu",
@@ -147,10 +148,10 @@ const GRID_GAMES: GameMeta[] = [
     key: "slalom",
     route: "/slalom",
     title: "Slalom",
-    blurb: "Basılı tut, konileri sıyır; hız her turda artar.",
+    blurb: "Topu sürerek kapılardan geç; hız artar, kapılar daralır.",
     icon: "flag",
     tone: "danger",
-    unit: "koni",
+    unit: "puan",
   },
 ];
 

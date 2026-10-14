@@ -556,26 +556,30 @@ ne oldu + nasıl düzeltilir.
 
 ## 5. Oyun motorları
 
-### 5.0 Ortak altyapı — `lib/game/` (YENİ)
+### 5.0 Ortak altyapı — `games/` (Ekim 2026'da YENİDEN YAPILDI)
+
+> **GÜNCEL DURUM.** Aşağıdaki §5.1–5.3 ilk SVG sürümünün planıdır ve tarihçe
+> olarak duruyor. Üç oyun (penaltı, slalom, top sektir) Ekim 2026'da baştan
+> yazıldı: SVG ile React ağacında kare kare çizim orta segment Android'de
+> takılıyordu ve görsel kalite sınırlıydı. Şimdi:
 
 ```
-lib/game/loop.ts     Sabit zaman adımı: accumulator, dt = 1/120, render
-                     interpolasyonu, requestAnimationFrame. AppState
-                     'background' → döngü durur. 16ms aşılırsa parçacık
-                     bütçesi otomatik düşer.
-lib/game/input.ts    PanResponder sarmalayıcısı (RN çekirdeği; Gesture
-                     Handler gerekmez): sürükle-fırlat + sürekli konum
-                     okuma + klavye alternatifi.
-lib/game/tuning.ts   Üç oyunun TÜM sabitleri tek TUNING objesinde.
-lib/game/paint.ts    Oyun paleti: kağıt zemin, tebeşir, mercan, mavi —
-                     doğrudan @/theme'den okur, ayrı estetik ada yok.
+games/core.js        Ortak çalışma zamanı: Canvas 2D (DPR'li), değişken kare +
+                     ≤1/120 sn alt adımlı döngü, pointer girdisi, 3B top,
+                     parçacık/puan yazısı, sentezlenmiş sesler (WebAudio),
+                     RN köprüsü (ready / haptic / over).
+games/scenery.js     Ortak gece stadyumu: tribün, projektör, LED pano, HUD.
+games/{penalti,slalom,sektir}.js   Oyunların kendisi — kurallar, zorluk
+                     eğrisi ve puanlama dosya başlıklarında belgeli.
+scripts/build-games.mjs  → lib/game/web/games.generated.ts (satır içi HTML)
+components/game/WebGame.tsx          WebView kabuğu.
+components/game/ArenaGameScreen.tsx  Ortak ekran: giriş/bitiş kartı, canlı
+                     mini rekor tablosu, skor gönderimi, paylaşım, ses.
 ```
 
-**Çizim katmanı kararı:** `react-native-svg` (kurulu). Canvas RN'de yok;
-Skia/Reanimated eklemek 2 büyük bağımlılık demek. Düğüm sayıları ölçüldü —
-sektir ~20, penaltı ~60, slalom ~30 — Fabric altında 60fps için yeterli.
-Brief'in asıl şikâyeti *fizik ve kontrol*; o katman çizimden bağımsız ve
-birebir uygulanacak. Alternatif §6-C'de onaya sunuluyor.
+Oyunlar WebView'in GPU hızlandırmalı Canvas'ında React'a uğramadan çizilir;
+`npm run check:games` paketin güncelliğini ve oyun kurallarını (ör. slalomda
+kenarda saklanmanın hak götürdüğünü) başsız simülasyonla doğrular.
 
 ### 5.1 Top sektirme
 
