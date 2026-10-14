@@ -1,76 +1,94 @@
 /**
- * OYUNCU PROFİLİNİ BAĞLA — profili olmayan üyenin kendi kaydını bulduğu ekran.
+ * PROFİL BAĞLA — oyuncu profili ya da takım için "ara ya da yeni ekle".
  *
- * NEDEN VAR: üyeler veritabanındaki kayıtlarına bakmadan "yeni oyuncu" açınca
- * aynı kişi için ikinci bir profil doğuyor, maç ve istatistik geçmişi eski
- * kayıtta kalıyordu. Bu ekran sırayı tersine çevirir: önce KENDİNİ BUL, ancak
- * bulamazsan yeni profil aç.
+ *   /oyuncum/bagla            → oyuncu profili
+ *   /oyuncum/bagla?tur=takim  → takım yönetimi
  *
- *   • Önerilenler: üyelik ad soyadına benzeyen sahipsiz kayıtlar (otomatik)
- *   • Takımımdan: takımı seç, kadrodan kendini seç
- *   • İsimle ara
+ * TEK KUTU: üye adını (takımın adını) yazar; yazdıkça benzer kayıtlar
+ * listelenir. Ya listeden seçer ("Bu benim" / "Yönetiyorum") ya da listenin
+ * altındaki "listede yok, yeni olarak ekle" satırıyla yazdığı adla yeni kayıt
+ * açar. Arama ile oluşturma aynı yerde olduğu için üye mevcut kaydını
+ * görmeden yeni kayıt açamaz; mükerrer profil oluşmaz.
  *
- * AYNI İSİMLİ FARKLI OYUNCULAR: her aday takım, mevki, doğum yılı, il ve maç
- * sayısıyla gösterilir. Yeni profil talebinde sunucu benzer kayıt bulursa
- * (409 POSSIBLE_DUPLICATE) adaylar alt sayfada sorulur; üye "hiçbiri ben
- * değilim" diyerek devam edebilir — engel değil, soru.
+ * AYNI İSİMLİ FARKLI KAYITLAR: adaylar takım, mevki, doğum yılı, il ve maç
+ * (takımda il ve kadro) bilgisiyle gelir; başkasına bağlı kayıt görünür ama
+ * seçilemez. Seçim her zaman üyenindir.
  *
- * Sunucu sözleşmesi: routes/User.js (player-candidates, request-player-claim,
- * request-player-create), services/playerMatchService.js.
+ * Sunucu: routes/User.js (player-candidates, team-candidates, request-*),
+ * services/playerMatchService.js.
  */
 
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Redirect, useRouter } from "expo-router";
-import React, { useMemo, useState } from "react";
+import { Redirect, useLocalSearchParams } from "expo-router";
+import React, { useEffect, useMemo, useState } from "react";
 import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   Avatar,
-  Badge,
   BottomSheet,
   Button,
   Chip,
   ChipGroup,
-  EmptyState,
   Input,
   ScreenHeader,
-  SegmentedControl,
   SkeletonListRow,
   Surface,
   TeamLogo,
   Touchable,
   useToast,
-  type SegmentedItem,
 } from "@/components/ui";
 import { mediaUrl } from "@/lib/format";
 import { ApiError } from "@/lib/http";
 import { POSITIONS } from "@/lib/api/team";
-import { getTeams } from "@/lib/api/teams";
 import {
   candidateFacts,
   getAccountRequests,
   getPlayerCandidates,
+  getTeamCandidates,
   requestPlayerClaim,
   requestPlayerCreate,
+  requestTeamCreate,
+  requestTeamManagement,
+  teamFacts,
   type AccountRequest,
   type PlayerCandidate,
+  type TeamCandidate,
 } from "@/lib/api/playerProfile";
-import type { ApiTeam } from "@/lib/types";
 import { useAuth } from "@/providers/AuthProvider";
 import { colors, layout, radius, space, type } from "@/theme";
 
-type FinderTab = "suggested" | "team" | "search";
+type Kind = "player" | "team";
 
-const TABS: SegmentedItem<FinderTab>[] = [
-  { key: "suggested", label: "Önerilen", icon: "sparkles-outline" },
-  { key: "team", label: "Takımımdan", icon: "shield-outline" },
-  { key: "search", label: "İsimle ara", icon: "search-outline" },
-];
+const COPY = {
+  player: {
+    title: "Oyuncu Profilini Bağla",
+    intro: "Adını soyadını yaz. Listede kendini görürsen “Bu benim” de; maç ve istatistik geçmişin profiline gelir. Listede yoksan aynı yerden yeni oyuncu olarak ekle.",
+    placeholder: "Adını soyadını yaz (ör. Civan Ünver)",
+    pick: "Bu benim",
+    taken: "Başka üyeye bağlı",
+    create: "Yeni oyuncu olarak ekle",
+    sameName: "Aynı isimde birden fazla oyuncu var. Takım, doğum yılı ve maç bilgisine bakarak kendini seç.",
+    pending: "Oyuncu profili talebin yönetici onayı bekliyor.",
+    pendingTypes: ["player_claim", "player_create"],
+  },
+  team: {
+    title: "Takımını Bağla",
+    intro: "Takımının adını yaz. Listede görürsen seç ve yönetim yetkisi iste. Listede yoksa aynı yerden yeni takım olarak ekle; yönetici onayladığında yönetimi sana tanımlanır.",
+    placeholder: "Takımının adını yaz",
+    pick: "Yönetiyorum",
+    taken: "Yönetimi başka üyede",
+    create: "Yeni takım olarak ekle",
+    sameName: "Aynı isimde birden fazla takım var. İl ve kadro bilgisine bakarak takımını seç.",
+    pending: "Takım talebin yönetici onayı bekliyor.",
+    pendingTypes: ["team_management", "team_create"],
+  },
+} as const;
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const lower = (value: unknown) => String(value ?? "").toLocaleLowerCase("tr-TR");
-const errorText = (error: unknown, fallback: string) =>
-  error instanceof ApiError ? error.message || error.userMessage : fallback;
+const lower = (value: unknown) => String(value ?? "").toLocaleLowerCase("tr-TR").trim();
+const errorText = (error: unknown) =>
+  error instanceof ApiError ? error.message || error.userMessage : "Bir hata oluştu.";
 
 function requestList(data: Awaited<ReturnType<typeof getAccountRequests>> | undefined): AccountRequest[] {
   if (!data) return [];
@@ -78,290 +96,248 @@ function requestList(data: Awaited<ReturnType<typeof getAccountRequests>> | unde
   return data.accountRequests ?? data.requests ?? [];
 }
 
+/** Yazarken her harfte istek atmamak için kısa gecikme. */
+function useDebounced(value: string, delay = 300): string {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+  return debounced;
+}
+
 /* ============================== ADAY SATIRI =============================== */
 
-function CandidateRow({ player, onClaim, disabled }: { player: PlayerCandidate; onClaim: () => void; disabled?: boolean }) {
+interface ResultRowProps {
+  title: string;
+  facts: string;
+  id: number;
+  media: string | null;
+  isTeam: boolean;
+  taken: boolean;
+  pickLabel: string;
+  takenLabel: string;
+  onPick: () => void;
+  disabled: boolean;
+}
+
+function ResultRow({ title, facts, id, media, isTeam, taken, pickLabel, takenLabel, onPick, disabled }: ResultRowProps) {
   return (
-    <Surface style={styles.candidate}>
-      <Avatar name={player.player_name} image={mediaUrl(player.player_img)} size={46} />
-      <View style={styles.candidateCopy}>
-        <Text style={styles.candidateName} numberOfLines={1}>{player.player_name}</Text>
-        <Text style={styles.candidateFacts}>{candidateFacts(player)}</Text>
-        <Text style={styles.candidateId}>Kayıt #{player.id}</Text>
+    <Surface style={styles.row}>
+      {isTeam ? <TeamLogo logo={media} name={title} size={42} /> : <Avatar name={title} image={media} size={46} />}
+      <View style={styles.rowCopy}>
+        <Text style={styles.rowTitle} numberOfLines={1}>{title}</Text>
+        <Text style={styles.rowFacts}>{facts}</Text>
+        <Text style={styles.rowId}>Kayıt #{id}</Text>
       </View>
-      <Button label="Bu benim" size="sm" onPress={onClaim} disabled={disabled} />
+      <Button
+        label={taken ? takenLabel : pickLabel}
+        size="sm"
+        variant={taken ? "ghost" : "primary"}
+        onPress={onPick}
+        disabled={disabled || taken}
+      />
     </Surface>
   );
 }
 
 /* ================================= EKRAN ================================== */
 
-export default function PlayerProfileLinkScreen() {
+export default function ProfileLinkScreen() {
   const { user } = useAuth();
-  const router = useRouter();
+  const params = useLocalSearchParams<{ tur?: string }>();
+  const kind: Kind = params.tur === "takim" ? "team" : "player";
+  const copy = COPY[kind];
   const toast = useToast();
   const queryClient = useQueryClient();
 
-  const [tab, setTab] = useState<FinderTab>("suggested");
-  const [query, setQuery] = useState("");
-  const [teamQuery, setTeamQuery] = useState("");
-  const [team, setTeam] = useState<ApiTeam | null>(null);
+  const [query, setQuery] = useState(kind === "player" ? user?.fullName ?? "" : "");
   const [createOpen, setCreateOpen] = useState(false);
-  const [form, setForm] = useState({ player_name: user?.fullName ?? "", player_position: "", birth_date: "" });
-  const [duplicates, setDuplicates] = useState<PlayerCandidate[] | null>(null);
+  const [form, setForm] = useState({ player_position: "", birth_date: "", founded_at: "", colors: "", note: "" });
   const [busy, setBusy] = useState(false);
+
+  const name = query.trim().replace(/\s+/g, " ");
+  const debounced = useDebounced(name);
+  const ready = debounced.length >= 2;
 
   const requestsQuery = useQuery({ queryKey: ["account-requests"], queryFn: getAccountRequests, enabled: Boolean(user) });
   const pending = requestList(requestsQuery.data).some(
-    (item) => item.status === "pending" && ["player_claim", "player_create"].includes(item.type)
+    (item) => item.status === "pending" && (copy.pendingTypes as readonly string[]).includes(item.type)
   );
 
-  const trimmed = query.trim();
-  const candidateParams = tab === "team" ? (team ? { teamId: Number(team.id) } : null)
-    : tab === "search" ? (trimmed.length >= 2 ? { q: trimmed } : null)
-      : {};
-  const candidatesQuery = useQuery({
-    queryKey: ["player-candidates", tab, candidateParams],
-    queryFn: () => getPlayerCandidates(candidateParams ?? {}),
-    enabled: Boolean(user) && candidateParams !== null,
+  const resultsQuery = useQuery({
+    queryKey: ["link-candidates", kind, debounced],
+    queryFn: async (): Promise<(PlayerCandidate | TeamCandidate)[]> =>
+      kind === "team" ? (await getTeamCandidates(debounced)).candidates : (await getPlayerCandidates(debounced)).candidates,
+    enabled: Boolean(user) && ready && !pending,
   });
-  const candidates = candidatesQuery.data?.candidates ?? [];
+  const results = useMemo(() => resultsQuery.data ?? [], [resultsQuery.data]);
+  const searching = name !== debounced || resultsQuery.isFetching;
 
-  const teamsQuery = useQuery({ queryKey: ["teams", "all"], queryFn: getTeams, enabled: tab === "team" });
-  const teamOptions = useMemo(() => {
-    const city = lower(user?.city);
-    const q = lower(teamQuery).trim();
-    return (teamsQuery.data ?? [])
-      .filter((item) => !q || lower(item.team_name).includes(q))
-      .sort((a, b) => Number(lower(b.city) === city) - Number(lower(a.city) === city)
-        || String(a.team_name).localeCompare(String(b.team_name), "tr"))
-      .slice(0, q ? 40 : 20);
-  }, [teamsQuery.data, teamQuery, user?.city]);
-
-  const sameNameShown = useMemo(() => {
+  const sameName = useMemo(() => {
     const counts = new Map<string, number>();
-    candidates.forEach((p) => counts.set(lower(p.player_name), (counts.get(lower(p.player_name)) ?? 0) + 1));
+    results.forEach((item) => {
+      const key = lower("team_name" in item ? item.team_name : item.player_name);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    });
     return [...counts.values()].some((n) => n > 1);
-  }, [candidates]);
+  }, [results]);
 
   if (!user) return <Redirect href="/giris" />;
 
-  const afterSubmit = async (message: string) => {
-    setDuplicates(null);
-    setCreateOpen(false);
-    toast.show({ message, tone: "success" });
-    await queryClient.invalidateQueries({ queryKey: ["account-requests"] });
-  };
-
-  const sendClaim = async (player: PlayerCandidate) => {
+  const send = async (action: () => Promise<unknown>, message: string) => {
     setBusy(true);
     try {
-      await requestPlayerClaim(player.id);
-      await afterSubmit("Sahiplenme talebin yönetici onayına gönderildi.");
+      await action();
+      setCreateOpen(false);
+      toast.show({ message, tone: "success" });
+      await queryClient.invalidateQueries({ queryKey: ["account-requests"] });
     } catch (error) {
-      Alert.alert("Talep gönderilemedi", errorText(error, "Bir hata oluştu."));
+      Alert.alert("Talep gönderilemedi", errorText(error));
     } finally {
       setBusy(false);
     }
   };
 
-  const claim = (player: PlayerCandidate, confirmed = false) => {
-    if (confirmed) { void sendClaim(player); return; }
+  const pick = (item: PlayerCandidate | TeamCandidate) => {
+    if ("team_name" in item) {
+      Alert.alert(
+        "Takım yönetimi talebi",
+        `“${item.team_name}” · ${teamFacts(item)}\n\nAynı isimde başka takımlar olabilir; il ve kadronun doğru olduğundan emin ol. ` +
+          "Yönetici onayladığında takımın yönetimi hesabına tanımlanır.",
+        [
+          { text: "Vazgeç", style: "cancel" },
+          { text: "Talebi gönder", onPress: () => void send(() => requestTeamManagement(item.id), "Takım yönetimi talebin onaya gönderildi.") },
+        ]
+      );
+      return;
+    }
     Alert.alert(
       "Bu oyuncu sen misin?",
-      `“${player.player_name}” (kayıt #${player.id})\n${candidateFacts(player)}\n\n` +
-        "Aynı isimde başka oyuncular olabilir; takım ve doğum yılının sana ait olduğundan emin ol. " +
+      `“${item.player_name}” · ${candidateFacts(item)}\n\nAynı isimde başka oyuncular olabilir; takım ve doğum yılının sana ait olduğundan emin ol. ` +
         "Yönetici onayladığında bu kaydın maç ve istatistik geçmişi hesabına bağlanır.",
       [
         { text: "Vazgeç", style: "cancel" },
-        { text: "Evet, bu benim", onPress: () => void sendClaim(player) },
+        { text: "Evet, bu benim", onPress: () => void send(() => requestPlayerClaim(item.id), "Sahiplenme talebin onaya gönderildi.") },
       ]
     );
   };
 
-  const submitCreate = async (confirmedNew = false) => {
-    const name = form.player_name.trim();
-    if (!name) { Alert.alert("Ad soyad gerekli", "Oyuncu adını ve soyadını yaz."); return; }
-    if (form.birth_date && !DATE_RE.test(form.birth_date)) {
-      Alert.alert("Doğum tarihi", "Tarihi YYYY-AA-GG biçiminde yaz (ör. 1998-04-21).");
+  const submitCreate = () => {
+    const date = kind === "player" ? form.birth_date : form.founded_at;
+    if (date && !DATE_RE.test(date)) {
+      Alert.alert("Tarih", "Tarihi YYYY-AA-GG biçiminde yaz (ör. 1998-04-21).");
       return;
     }
-    setBusy(true);
-    try {
-      await requestPlayerCreate({
-        player_name: name,
-        ...(form.player_position ? { player_position: form.player_position } : {}),
-        ...(form.birth_date ? { birth_date: form.birth_date } : {}),
-        ...(user.city ? { city: user.city } : {}),
-        ...(confirmedNew ? { confirmedNew: true } : {}),
-      });
-      await afterSubmit("Yeni profil talebin yönetici onayına gönderildi.");
-    } catch (error) {
-      const detail = error instanceof ApiError ? (error.detail as { candidates?: PlayerCandidate[] } | undefined) : undefined;
-      if (error instanceof ApiError && error.code === "POSSIBLE_DUPLICATE" && Array.isArray(detail?.candidates)) {
-        setCreateOpen(false);
-        setDuplicates(detail.candidates);
-        return;
-      }
-      Alert.alert("Talep gönderilemedi", errorText(error, "Bir hata oluştu."));
-    } finally {
-      setBusy(false);
+    const common = { ...(user.city ? { city: user.city } : {}), ...(form.note ? { note: form.note } : {}) };
+    if (kind === "player") {
+      // Üye bu adı aradı ve adayları gördü; yeni kayıt bilinçli bir karar.
+      void send(
+        () => requestPlayerCreate({
+          player_name: name,
+          ...(form.player_position ? { player_position: form.player_position } : {}),
+          ...(form.birth_date ? { birth_date: form.birth_date } : {}),
+          ...common,
+          confirmedNew: true,
+        }),
+        "Yeni oyuncu profili talebin onaya gönderildi."
+      );
+    } else {
+      void send(
+        () => requestTeamCreate({
+          team_name: name,
+          ...(form.founded_at ? { founded_at: form.founded_at } : {}),
+          ...(form.colors ? { colors: form.colors } : {}),
+          ...common,
+        }),
+        "Yeni takım talebin onaya gönderildi."
+      );
     }
   };
 
-  const emptyBody = tab === "suggested"
-    ? `“${user.fullName || "Ad soyad"}” adına benzeyen sahipsiz kayıt bulamadık. Takımından ya da isimle aramayı dene.`
-    : tab === "team" ? "Bu takımın kadrosunda sahiplenilebilecek oyuncu yok."
-      : "Aramanla eşleşen sahipsiz oyuncu bulunamadı.";
-
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      <ScreenHeader title="Oyuncu Profilini Bağla" back />
+      <ScreenHeader title={copy.title} back />
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <View style={styles.intro}>
-          <Text style={styles.title}>Önce kendini bul</Text>
-          <Text style={styles.body}>
-            Ligde maça çıktıysan kaydın büyük ihtimalle zaten var. Kendini bulup “Bu benim” dediğinde maç, gol ve
-            istatistik geçmişin profiline gelir. Yeni profil açarsan bu geçmiş görünmez.
-          </Text>
-        </View>
+        <Text style={styles.body}>{copy.intro}</Text>
 
-        {pending && (
-          <View style={styles.notice}>
-            <Text style={styles.noticeText}>⏳ Oyuncu profili talebin yönetici onayı bekliyor.</Text>
-          </View>
-        )}
+        {pending ? (
+          <View style={styles.notice}><Text style={styles.noticeText}>⏳ {copy.pending}</Text></View>
+        ) : (
+          <>
+            <Input value={query} onChangeText={setQuery} placeholder={copy.placeholder} autoCorrect={false} autoFocus={kind === "team"} />
 
-        <SegmentedControl items={TABS} value={tab} onChange={setTab} />
+            {name.length >= 2 && (
+              <View style={styles.block}>
+                {sameName && <View style={styles.notice}><Text style={styles.noticeText}>{copy.sameName}</Text></View>}
+                {searching && !results.length ? (
+                  <SkeletonListRow count={3} />
+                ) : resultsQuery.isError ? (
+                  <Text style={styles.hint}>{errorText(resultsQuery.error)}</Text>
+                ) : results.length ? (
+                  results.map((item) => "team_name" in item ? (
+                    <ResultRow key={item.id} id={item.id} title={item.team_name} facts={teamFacts(item)} media={mediaUrl(item.logo)}
+                      isTeam taken={item.managed} pickLabel={copy.pick} takenLabel={copy.taken} onPick={() => pick(item)} disabled={busy} />
+                  ) : (
+                    <ResultRow key={item.id} id={item.id} title={item.player_name} facts={candidateFacts(item)} media={mediaUrl(item.player_img)}
+                      isTeam={false} taken={item.owned} pickLabel={copy.pick} takenLabel={copy.taken} onPick={() => pick(item)} disabled={busy} />
+                  ))
+                ) : (
+                  <Text style={styles.hint}>“{name}” adında kayıt bulunamadı.</Text>
+                )}
 
-        {tab === "search" && (
-          <Input
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Ad soyad yaz (ör. mehmet yıl)"
-            autoCorrect={false}
-            autoFocus
-          />
-        )}
-
-        {tab === "team" && !team && (
-          <View style={styles.block}>
-            <Input value={teamQuery} onChangeText={setTeamQuery} placeholder="Takımının adını yaz" autoCorrect={false} />
-            {teamsQuery.isLoading ? <SkeletonListRow count={4} /> : teamOptions.map((item) => (
-              <Touchable key={item.id} onPress={() => setTeam(item)} style={styles.teamRow} accessibilityRole="button">
-                <TeamLogo logo={mediaUrl(item.logo)} name={item.team_name} size={30} />
-                <View style={styles.candidateCopy}>
-                  <Text style={styles.teamName} numberOfLines={1}>{item.team_name}</Text>
-                  {item.city ? <Text style={styles.candidateId}>{item.city}</Text> : null}
-                </View>
-              </Touchable>
-            ))}
-          </View>
-        )}
-
-        {tab === "team" && team && (
-          <View style={styles.teamPicked}>
-            <Text style={styles.teamName} numberOfLines={1}>{team.team_name} kadrosu</Text>
-            <Button label="Takımı değiştir" size="sm" variant="ghost" onPress={() => setTeam(null)} />
-          </View>
-        )}
-
-        {(tab !== "team" || team) && (
-          <View style={styles.block}>
-            {sameNameShown && (
-              <View style={styles.notice}>
-                <Text style={styles.noticeText}>
-                  Aynı isimde birden fazla oyuncu var. Takım, doğum yılı ve maç bilgisine bakarak kendini seç.
-                </Text>
+                {!searching && (
+                  <Touchable onPress={() => setCreateOpen(true)} disabled={busy} style={styles.create} accessibilityRole="button">
+                    <View style={styles.createIcon}><Ionicons name="add" size={24} color={colors.textOnBrand} /></View>
+                    <View style={styles.rowCopy}>
+                      <Text style={styles.rowTitle}>{results.length ? "Bunlardan biri değil" : "Listede yok"}</Text>
+                      <Text style={styles.rowFacts}>“{name}” — {copy.create}</Text>
+                    </View>
+                  </Touchable>
+                )}
               </View>
             )}
-            {tab === "search" && trimmed.length < 2 ? (
-              <Text style={styles.hint}>Aramak için en az iki harf yaz.</Text>
-            ) : candidatesQuery.isLoading ? (
-              <SkeletonListRow count={4} />
-            ) : candidatesQuery.isError ? (
-              <EmptyState icon="alert-circle-outline" title="Oyuncular alınamadı" body={errorText(candidatesQuery.error, "Bir hata oluştu.")} action={{ label: "Tekrar dene", onPress: () => void candidatesQuery.refetch() }} />
-            ) : candidates.length ? (
-              candidates.map((player) => (
-                <CandidateRow key={player.id} player={player} onClaim={() => claim(player)} disabled={pending || busy} />
-              ))
-            ) : (
-              <EmptyState icon="person-outline" title="Kayıt bulunamadı" body={emptyBody} />
-            )}
-          </View>
+          </>
         )}
-
-        <View style={styles.footer}>
-          <Text style={styles.footerTitle}>Listede yok musun?</Text>
-          <Text style={styles.hint}>Daha önce hiç lig maçına çıkmadıysan yeni bir oyuncu profili oluşturabilirsin.</Text>
-          <Button label="Yeni oyuncu profili oluştur" variant="secondary" icon="person-add-outline" onPress={() => setCreateOpen(true)} disabled={pending || busy} fullWidth />
-        </View>
       </ScrollView>
 
       {createOpen && (
         <BottomSheet
           visible
           onClose={() => setCreateOpen(false)}
-          title="Yeni oyuncu profili"
+          title={`${copy.create}: “${name}”`}
           snap="full"
-          footer={<Button label="Talebi onaya gönder" onPress={() => void submitCreate()} loading={busy} fullWidth />}
+          footer={<Button label="Talebi onaya gönder" onPress={submitCreate} loading={busy} fullWidth />}
         >
           <View style={styles.block}>
-            <Input label="Ad soyad *" value={form.player_name} onChangeText={(value) => setForm((old) => ({ ...old, player_name: value }))} />
-            <Text style={styles.fieldLabel}>Mevki</Text>
-            <ChipGroup>
-              {POSITIONS.map((item) => (
-                <Chip
-                  key={item.code}
-                  label={item.label}
-                  selected={form.player_position === item.label}
-                  onPress={() => setForm((old) => ({ ...old, player_position: old.player_position === item.label ? "" : item.label }))}
-                />
-              ))}
-            </ChipGroup>
-            <Input
-              label="Doğum tarihi"
-              value={form.birth_date}
-              onChangeText={(value) => setForm((old) => ({ ...old, birth_date: value }))}
-              placeholder="YYYY-AA-GG"
-              keyboardType="numbers-and-punctuation"
-            />
-            <Text style={styles.hint}>İl bilgisi üyelik kaydından alınır{user.city ? `: ${user.city}` : ""}. Yönetici onayladığında profilin yayınlanır.</Text>
-          </View>
-        </BottomSheet>
-      )}
-
-      {duplicates && (
-        <BottomSheet
-          visible
-          onClose={() => setDuplicates(null)}
-          title="Bunlardan biri sen misin?"
-          snap="full"
-          footer={
-            <Button
-              label="Hiçbiri ben değilim, yeni profil oluştur"
-              variant="secondary"
-              onPress={() => void submitCreate(true)}
-              loading={busy}
-              fullWidth
-            />
-          }
-        >
-          <View style={styles.block}>
-            <Text style={styles.body}>
-              Veritabanında “{form.player_name.trim()}” adına benzeyen, henüz kimsenin sahiplenmediği kayıtlar var. Biri
-              sensen onu sahiplen; maç ve istatistik geçmişin korunur.
-            </Text>
-            {duplicates.map((player) => (
-              <CandidateRow key={player.id} player={player} onClaim={() => claim(player, true)} disabled={busy} />
-            ))}
-            <View style={styles.badgeRow}>
-              <Badge label="Aynı isim, farklı kişi olabilir" tone="neutral" />
-            </View>
             <Text style={styles.hint}>
-              Takım, doğum yılı ya da maç bilgisi sana ait değilse aynı isimli farklı bir oyuncudur; yeni profille devam
-              edebilirsin.
+              Adı değiştirmek için arama kutusunu düzenle. İl bilgisi üyelik kaydından alınır{user.city ? `: ${user.city}` : ""}.
             </Text>
+            {kind === "player" ? (
+              <>
+                <Text style={styles.fieldLabel}>Mevki</Text>
+                <ChipGroup>
+                  {POSITIONS.map((item) => (
+                    <Chip
+                      key={item.code}
+                      label={item.label}
+                      selected={form.player_position === item.label}
+                      onPress={() => setForm((old) => ({ ...old, player_position: old.player_position === item.label ? "" : item.label }))}
+                    />
+                  ))}
+                </ChipGroup>
+                <Input label="Doğum tarihi" value={form.birth_date} placeholder="YYYY-AA-GG" keyboardType="numbers-and-punctuation"
+                  onChangeText={(value) => setForm((old) => ({ ...old, birth_date: value }))} />
+              </>
+            ) : (
+              <>
+                <Input label="Kuruluş tarihi" value={form.founded_at} placeholder="YYYY-AA-GG" keyboardType="numbers-and-punctuation"
+                  onChangeText={(value) => setForm((old) => ({ ...old, founded_at: value }))} />
+                <Input label="Renkler" value={form.colors} placeholder="ör. Sarı-Lacivert"
+                  onChangeText={(value) => setForm((old) => ({ ...old, colors: value }))} />
+              </>
+            )}
+            <Input label="Talep notu" value={form.note} onChangeText={(value) => setForm((old) => ({ ...old, note: value }))} />
           </View>
         </BottomSheet>
       )}
@@ -371,30 +347,24 @@ export default function PlayerProfileLinkScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  content: { paddingHorizontal: layout.screenPadding, paddingBottom: space.giant * 2, gap: space.md },
-  intro: { gap: space.xs, paddingTop: space.sm },
-  title: { ...type.h1, color: colors.textPrimary },
+  content: { paddingHorizontal: layout.screenPadding, paddingTop: space.sm, paddingBottom: space.giant * 2, gap: space.md },
   body: { ...type.body, color: colors.textSecondary },
   hint: { ...type.bodySm, color: colors.textSecondary },
   notice: { backgroundColor: colors.warnDim, borderRadius: radius.md, padding: space.md },
   noticeText: { ...type.bodySm, color: colors.warn },
   block: { gap: space.sm },
-  candidate: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderRadius: radius.lg },
-  candidateCopy: { flex: 1, minWidth: 0, gap: 2 },
-  candidateName: { ...type.h3, color: colors.textPrimary },
-  candidateFacts: { ...type.bodySm, color: colors.textSecondary },
-  candidateId: { ...type.caption, color: colors.textTertiary },
-  teamRow: {
-    flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md,
-    borderRadius: radius.lg, backgroundColor: colors.surface1,
+  row: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderRadius: radius.lg },
+  rowCopy: { flex: 1, minWidth: 0, gap: 2 },
+  rowTitle: { ...type.h3, color: colors.textPrimary },
+  rowFacts: { ...type.bodySm, color: colors.textSecondary },
+  rowId: { ...type.caption, color: colors.textTertiary },
+  create: {
+    flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderRadius: radius.lg,
+    borderWidth: 1, borderStyle: "dashed", borderColor: colors.brandBorder, backgroundColor: colors.brandDim,
   },
-  teamName: { ...type.h4, color: colors.textPrimary, flexShrink: 1 },
-  teamPicked: {
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.sm,
-    backgroundColor: colors.brandDim, borderRadius: radius.md, paddingLeft: space.md,
+  createIcon: {
+    width: 46, height: 46, borderRadius: radius.pill, alignItems: "center", justifyContent: "center",
+    backgroundColor: colors.brand,
   },
-  footer: { gap: space.sm, paddingTop: space.lg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
-  footerTitle: { ...type.h3, color: colors.textPrimary },
   fieldLabel: { ...type.label, color: colors.textSecondary },
-  badgeRow: { flexDirection: "row" },
 });
