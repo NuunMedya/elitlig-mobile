@@ -70,7 +70,8 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { PitchBench, PitchLineup, type PitchPlayer } from "@/components/PitchLineup";
-import { SquadSnapshot, countLines } from "@/components/club/SquadSnapshot";
+import { StatStrip } from "@/components/club/Panel";
+import { countLines } from "@/components/club/SquadSnapshot";
 import { SquadBuilderView } from "@/components/team/SquadBuilderView";
 import {
   Avatar,
@@ -355,6 +356,19 @@ export default function SquadManagementScreen() {
 
   const lines = useMemo(() => countLines(roster.map((player) => player.team_position)), [roster]);
   const contracted = useMemo(() => roster.filter((player) => player.has_active_contract).length, [roster]);
+  /** Kadronun toplam piyasa değeri — yalnız hesaplanmış oyuncuların toplamı. */
+  const squadValue = useMemo(() => {
+    let total = 0;
+    let known = 0;
+    roster.forEach((player) => {
+      const entry = marketByPlayer.get(player.id);
+      if (entry) {
+        total += entry.value;
+        known += 1;
+      }
+    });
+    return known ? total : null;
+  }, [marketByPlayer, roster]);
 
   /** Forma numarası → oyuncu adı; düzenleyicide çakışma uyarısı için. */
   const jerseyOwners = useMemo(() => {
@@ -522,7 +536,22 @@ export default function SquadManagementScreen() {
         <ErrorState error={query.error} onRetry={query.refetch} variant="banner" />
       ) : null}
 
-      <SquadSnapshot lines={lines} total={roster.length} contracted={contracted} style={styles.flush} />
+      {/* Kadro dengesi — tek ince şerit: hat sayıları ve sözleşme sağlığı.
+          Sayıya dokunmak ilgili süzgeci açar (mevki boşsa "mevkisiz"). */}
+      <StatStrip
+        items={[
+          { label: "Kaleci", value: String(lines.GK), tone: lines.GK === 0 ? "danger" : "neutral" },
+          { label: "Defans", value: String(lines.DEF) },
+          { label: "Orta", value: String(lines.MID) },
+          { label: "Forvet", value: String(lines.FWD) },
+          {
+            label: "Sözleşme",
+            value: `${contracted}/${roster.length}`,
+            tone: contracted < roster.length ? "danger" : "win",
+            onPress: contracted < roster.length ? () => changeQuick("sozlesmesiz") : undefined,
+          },
+        ]}
+      />
 
       <Input
         variant="search"
@@ -550,6 +579,7 @@ export default function SquadManagementScreen() {
       <View style={styles.listBar}>
         <Text style={styles.listCount} {...textScale.dense}>
           {filtered.length === roster.length ? `${roster.length} oyuncu` : `${filtered.length} / ${roster.length} oyuncu`}
+          {squadValue != null ? ` · ${formatEtlShort(squadValue)}` : ""}
         </Text>
         <SegmentedControl items={GROUP_ITEMS} value={group} onChange={changeGroup} size="sm" stretch={false} />
       </View>
@@ -1032,7 +1062,7 @@ const PlayerRow = React.memo(function PlayerRow({
         {player.jersey_number != null ? player.jersey_number : "—"}
       </Text>
 
-      <Avatar name={player.player_name} image={mediaUrl(player.player_img)} size={36} />
+      <Avatar name={player.player_name} image={mediaUrl(player.player_img)} size={30} />
 
       <View style={styles.rowTexts}>
         <Text style={styles.rowName} numberOfLines={1} {...textScale.dense}>
@@ -1070,10 +1100,14 @@ const PlayerRow = React.memo(function PlayerRow({
       {/* Renk sinyaldir (Arena §1): sözleşmeli olmak NORMAL hâldir ve rozet
           taşımaz; yalnız eksik olan işaretlenir. On altı yeşil rozetin
           arasında iki turuncu kayboluyordu. */}
-      {marked ? <Badge label="ÇIKARILACAK" tone="danger" size="xs" /> : null}
-      {player.has_active_contract ? null : <Badge label="SÖZLEŞMESİZ" tone="warn" size="xs" />}
+      {marked ? <Badge label="ÇIKAR" tone="danger" size="xs" /> : null}
+      {player.has_active_contract ? null : (
+        <View style={styles.flag} accessibilityLabel="Sözleşmesiz">
+          <Ionicons name="document-text" size={11} color={colors.warn} />
+        </View>
+      )}
 
-      <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
+      <Ionicons name="chevron-forward" size={13} color={colors.textTertiary} />
 
       {position === "first" || position === "middle" ? (
         <View pointerEvents="none" style={styles.rowDivider} />
@@ -1457,9 +1491,18 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: space.m,
-    minHeight: layout.listRowHeightTwoLine,
-    paddingHorizontal: layout.rowPaddingH,
+    minHeight: 50,
+    paddingHorizontal: space.md,
+    paddingVertical: space.s,
     backgroundColor: colors.surface1,
+  },
+  flag: {
+    width: 20,
+    height: 20,
+    borderRadius: radius.pill,
+    backgroundColor: colors.warnDim,
+    alignItems: "center",
+    justifyContent: "center",
   },
   rowSingle: {
     borderRadius: radius.lg,
@@ -1476,16 +1519,17 @@ const styles = StyleSheet.create({
   },
   rowDivider: {
     position: "absolute",
-    left: layout.rowPaddingH + 24 + space.m,
+    left: space.md + 22 + space.m,
     right: 0,
     bottom: 0,
     height: hairline,
     backgroundColor: colors.separator,
   },
   jersey: {
-    ...type.tableNumStrong,
+    ...type.caption,
+    fontFamily: fonts.bold,
     color: colors.brandAccent,
-    width: 24,
+    width: 22,
     textAlign: "center",
   },
   rowTexts: {
@@ -1493,13 +1537,12 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   rowName: {
-    ...type.body,
-    fontFamily: fonts.bold,
+    ...type.h4,
     color: colors.textPrimary,
   },
   rowMeta: {
     ...type.caption,
-    color: colors.textSecondary,
+    color: colors.textTertiary,
   },
 
   /* Alt sayfa */

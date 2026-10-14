@@ -48,8 +48,9 @@ app/                       Ekranlar (Expo Router — dosya = rota)
                            ligler, maçlar; her öğede zil
     ligler.tsx             LİG — Puan · Fikstür · Oyuncular · İstatistik ·
                            Haber; puan tablosunda takip yıldızı, gol krallığı
-    kulubum.tsx            KULÜBÜM — sıradaki etkinlik, rol araçları, takım
-                           sohbeti; misafire/kulüpsüze katılma akışı
+    kulubum.tsx            YÖNETİM — tek kulüp paneli: Kulübüm (maç hazırlığı,
+                           yapılacaklar, kadro dengesi, kasa) · Kariyerim ·
+                           Lig; misafire/kulüpsüze katılma akışı
     profil.tsx             PROFİL — kimlik, Günün Testi, gelen kutusu, ayarlar
     oyunlar.tsx            (href: null) Oyun merkezi
     index · maclar · favoriler · takimlar · oyuncular · menu
@@ -60,7 +61,9 @@ app/                       Ekranlar (Expo Router — dosya = rota)
   ayarlar.tsx              Tek Ayarlar: bildirim türleri, takip bildirimleri,
                            görünüm, lig seçimi, hesap ve güvenlik, hesap silme
   sehir.tsx · baslangic.tsx İlk açılış: şehir → lig → takım → bildirim izni
-  takimim/                 Takım paneli: kadro, maç merkezi, maç al, kasa
+  takimim/                 Kulüp araçları: kadro, maç merkezi, maç kadrosu +
+                           taktik simülasyonu, maç al, kasa (`/takimim` →
+                           Yönetim sekmesine yönlenir)
   yonetim/                 Yönetim paneli: maçlar, sahalar, mesajlar
   mac/[id].tsx             Maç detayı — skor, akış, kadrolar (canlı)
   takim/[id].tsx           Takım profili

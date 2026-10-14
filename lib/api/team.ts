@@ -985,6 +985,12 @@ export const SIMULATION_SCENARIOS: {
   { key: "defensive", label: "Savunma", description: "Yenilen gol düşer; gol üretimi de azalır." },
 ];
 
+export interface SimulationFactor {
+  label: string;
+  impact: "positive" | "negative" | "neutral";
+  detail: string;
+}
+
 export interface MatchSimulation {
   scenario: SimulationScenario;
   scenario_label: string;
@@ -993,7 +999,10 @@ export interface MatchSimulation {
   predicted_score: string;
   scorelines: { score: string; probability: number }[];
   markets: { both_teams_score: number; over_2_5: number; clean_sheet: number };
-  factors?: unknown;
+  /** Tahmini etkileyen etkenler (ev sahibi, senaryo, kadro tamlığı, form…). */
+  factors?: SimulationFactor[];
+  /** Simülasyonun dayandığı kayıtlı maç kadrosu. */
+  lineup?: { starters: number; expected_starters: number; formation: string | null };
   basis: string;
   disclaimer: string;
 }
