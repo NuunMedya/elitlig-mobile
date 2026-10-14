@@ -613,7 +613,7 @@ export default function OyunlarScreen() {
         /* Bu ekran sekme çubuğunda yuvası olmayan bir sekmedir (href: null) ve
            Menü'den açılır. Sekme gezgininde geri yığını olmayabilir; o durumda
            geldiği yere, yani Menü'ye dönülür. */
-        onBack={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)/profil"))}
+        onBack={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)/menu"))}
         scrollY={scrollY}
         actions={headerActions}
       />

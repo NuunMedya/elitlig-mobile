@@ -190,7 +190,7 @@ export default function ClubPanelScreen() {
           icon="shield-outline"
           title="Takım başkanlığı gerekli"
           body="Bu alan bir takımın yönetimini üstlenen başkanlara açıktır. Takımını sahiplenmek ya da yeni takım kurmak için elitlig.com üzerinden başvurabilirsin."
-          action={{ label: "Kulübüm'e dön", onPress: () => router.replace("/kulubum") }}
+          action={{ label: "Yönetim'e dön", onPress: () => router.replace("/kulubum") }}
         />
       </SafeAreaView>
     );

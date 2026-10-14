@@ -1,8 +1,10 @@
 /**
  * ScorersStrip — Puan bölmesinin tepesindeki "Gol krallığı" kapısı.
  *
- * NE: tek kart, üç sütun: ilk üç golcünün avatarı, adı ve gol sayısı; başlık
- * satırında "Tümü ›" → Oyuncular bölmesi (gol krallığı ölçütüyle).
+ * NE: tek kart, üç sütun: ilk üç golcünün avatarı (24px) YANINDA adı ve gol
+ * sayısı; başlık satırında "Tümü ›" → Oyuncular bölmesi (gol krallığı
+ * ölçütüyle). Hücreler yataydır: avatarın altına ad dizmek kartı iki kat
+ * uzatıyordu, yan yana dizilince kart tablonun üstünde ince bir şerit olur.
  *
  * NEDEN BURADA VE NEDEN KISA: eski Ana Sayfa "puan özeti + gol krallığı"
  * gösteriyordu; ikisi artık Lig'de. Tam sıralama Oyuncular'da, ilk beş
@@ -49,19 +51,21 @@ const ScorerCell = React.memo(function ScorerCell({
       accessibilityLabel={`${rank}. ${entry.name}, ${goals} gol`}
     >
       <View>
-        <Avatar name={entry.name} image={entry.image ?? null} size={36} />
+        <Avatar name={entry.name} image={entry.image ?? null} size={24} />
         <View style={[styles.rank, rank === 1 ? styles.rankFirst : null]}>
           <Text style={[styles.rankText, rank === 1 ? styles.rankTextFirst : null]} {...textScale.badge}>
             {rank}
           </Text>
         </View>
       </View>
-      <Text style={styles.name} numberOfLines={1} {...textScale.dense}>
-        {entry.name}
-      </Text>
-      <Text style={styles.value} {...textScale.dense}>
-        {goals} <Text style={styles.unit}>gol</Text>
-      </Text>
+      <View style={styles.cellBody}>
+        <Text style={styles.name} numberOfLines={1} {...textScale.dense}>
+          {entry.name}
+        </Text>
+        <Text style={styles.value} {...textScale.dense}>
+          {goals} <Text style={styles.unit}>gol</Text>
+        </Text>
+      </View>
     </Touchable>
   );
 });
@@ -76,7 +80,7 @@ export const ScorersStrip = React.memo(function ScorersStrip({
     <View style={[groupStyles.card, styles.card]}>
       <View style={styles.head}>
         <View style={styles.headIcon}>
-          <Ionicons name="football" size={14} color={colors.accentText} />
+          <Ionicons name="football" size={11} color={colors.accentText} />
         </View>
         <Text style={styles.title} numberOfLines={1} {...textScale.dense}>
           Gol krallığı
@@ -93,7 +97,7 @@ export const ScorersStrip = React.memo(function ScorersStrip({
             <Text style={styles.moreText} {...textScale.dense}>
               Tümü
             </Text>
-            <Ionicons name="chevron-forward" size={14} color={colors.brandAccent} />
+            <Ionicons name="chevron-forward" size={12} color={colors.brandAccent} />
           </Touchable>
         ) : (
           <Text style={styles.overline} {...textScale.badge}>
@@ -117,60 +121,71 @@ const styles = StyleSheet.create({
   head: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.sm,
-    paddingLeft: space.lg,
-    paddingRight: space.sm,
-    paddingTop: space.sm,
+    gap: space.s,
+    paddingLeft: space.m,
+    paddingRight: space.xs,
+    paddingTop: space.s,
   },
   headIcon: {
-    width: 24,
-    height: 24,
-    borderRadius: radius.sm,
+    width: 18,
+    height: 18,
+    borderRadius: radius.xs,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.accentDim,
   },
   title: {
-    ...type.h4,
+    ...type.label,
+    fontSize: 12,
+    lineHeight: 16,
     color: colors.textPrimary,
     flex: 1,
   },
   overline: {
     ...type.overline,
+    fontSize: 9,
+    lineHeight: 12,
     color: colors.textTertiary,
-    paddingRight: space.sm,
+    paddingRight: space.s,
   },
   more: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.xxs,
-    paddingHorizontal: space.sm,
-    paddingVertical: space.xs,
+    gap: space.px,
+    paddingHorizontal: space.s,
+    paddingVertical: space.xxs,
   },
   moreText: {
     ...type.label,
+    fontSize: 11,
+    lineHeight: 15,
     color: colors.brandAccent,
   },
   cells: {
     flexDirection: "row",
-    paddingHorizontal: space.xs,
-    paddingBottom: space.sm,
+    paddingHorizontal: space.xxs,
+    paddingBottom: space.xxs,
   },
   cell: {
     flex: 1,
     minWidth: 0,
+    flexDirection: "row",
     alignItems: "center",
-    gap: space.xxs,
-    paddingVertical: space.sm,
-    paddingHorizontal: space.xs,
-    borderRadius: radius.md,
+    gap: space.s,
+    paddingVertical: space.s,
+    paddingHorizontal: space.sm,
+    borderRadius: radius.sm,
+  },
+  cellBody: {
+    flex: 1,
+    minWidth: 0,
   },
   rank: {
     position: "absolute",
     right: -4,
-    bottom: -2,
-    minWidth: 16,
-    height: 16,
+    bottom: -3,
+    minWidth: 13,
+    height: 13,
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
@@ -183,6 +198,9 @@ const styles = StyleSheet.create({
   },
   rankText: {
     ...type.micro,
+    fontSize: 9,
+    lineHeight: 11,
+    letterSpacing: 0,
     color: colors.textSecondary,
   },
   rankTextFirst: {
@@ -190,16 +208,19 @@ const styles = StyleSheet.create({
   },
   name: {
     ...type.label,
+    fontSize: 11,
+    lineHeight: 14,
     color: colors.textPrimary,
-    maxWidth: "100%",
-    marginTop: space.xxs,
   },
   value: {
     ...type.tableNumStrong,
+    fontSize: 11,
+    lineHeight: 14,
     color: colors.textPrimary,
   },
   unit: {
     ...type.caption,
+    fontSize: 10,
     color: colors.textTertiary,
   },
 });

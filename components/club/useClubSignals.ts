@@ -1,7 +1,7 @@
 /**
  * KULÜP SİNYALLERİ — "şu an neyle ilgilenmem gerekiyor?" sorusunun veri katmanı.
  *
- * NEDEN TEK KANCA: Kulübüm sekmesi ile Takım Paneli aynı soruyu iki
+ * NEDEN TEK KANCA: Yönetim sekmesi ile Takım Paneli aynı soruyu iki
  * ayrıntı düzeyinde yanıtlar (sekme: ilk üç iş, panel: tam liste). İki ekran
  * eskiden aynı dört sorguyu ve aynı sayaç hesaplarını AYRI AYRI kopyalıyordu;
  * bir sayacın tanımı (ör. "açık teklif") birinde değişip ötekinde değişmeyince

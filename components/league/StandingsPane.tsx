@@ -25,6 +25,9 @@
  * BÖLGE RAYI satırın sol kenarındadır, açıklaması tablonun ALTINDA tek
  * satırdır: renk tek başına anlam taşımaz, "altın = şampiyon" bir yerde
  * yazılmalı ve o yer tablonun sonudur.
+ *
+ * YOĞUN ÖLÇÜ: satırlar ortak `TeamRow` değil, bu sekmeye özgü ince
+ * `StandingsRow`dur (34px satır, 12px ad, 18px arma; gerekçe o dosyada).
  */
 
 import { useQuery } from "@tanstack/react-query";
@@ -36,8 +39,6 @@ import {
   ErrorState,
   SegmentedControl,
   SkeletonStandings,
-  TeamRow,
-  TeamRowHead,
   refreshControlProps,
   useRefresh,
   type SegmentedItem,
@@ -57,7 +58,6 @@ import {
   defaultZoneRules,
   hairline,
   palette,
-  radius,
   space,
   textScale,
   type,
@@ -69,7 +69,9 @@ import {
 } from "@/theme";
 import type { LeaderEntry } from "./Leaderboard";
 import { ScorersStrip } from "./ScorersStrip";
+import { StandingsHead, StandingsRow } from "./StandingsRow";
 import {
+  GROUP_RADIUS,
   GroupSeparator,
   JUNK_PLAYER,
   ScopeMissing,
@@ -118,7 +120,7 @@ const ZoneLegend = React.memo(function ZoneLegend({ rules }: { rules: ZoneRule[]
   );
 });
 
-/** Satır sonundaki takip yıldızının genişliği (FollowStar = 32). */
+/** Satır sonundaki takip yıldızının genişliği (FollowStar kutusu = 32, ikon 14). */
 const STAR_SLOT = 32;
 /** Tablonun altındaki gol krallığı kapısında gösterilen golcü sayısı. */
 const SCORER_PREVIEW = 3;
@@ -195,8 +197,7 @@ export function StandingsPane({ scrollProps, onOpenPlayers }: StandingsPaneProps
       const rank = index + 1;
       const favorite = isFavorite(item.team_id);
       return (
-        <TeamRow
-          density="table"
+        <StandingsRow
           columns={columns}
           rank={rank}
           teamId={item.team_id}
@@ -209,12 +210,12 @@ export function StandingsPane({ scrollProps, onOpenPlayers }: StandingsPaneProps
           goalDiff={Number(item.goal_diff ?? 0)}
           points={item.display_points}
           form={item.last5}
-          favorite={favorite}
           highlighted={favorite}
           zone={zoneColor(palette, zoneForRank(rank, zoneRules))}
           onPress={openTeam}
           trailing={
             <FollowStar
+              size={14}
               target={{ type: "team", id: item.team_id, name: item.team_name, logo: item.logo ?? null }}
             />
           }
@@ -249,7 +250,7 @@ export function StandingsPane({ scrollProps, onOpenPlayers }: StandingsPaneProps
       keyExtractor={standingKey}
       renderItem={renderItem}
       ItemSeparatorComponent={GroupSeparator}
-      initialNumToRender={14}
+      initialNumToRender={20}
       windowSize={8}
       contentContainerStyle={paneStyles.content}
       refreshControl={
@@ -279,8 +280,7 @@ export function StandingsPane({ scrollProps, onOpenPlayers }: StandingsPaneProps
             </View>
             {/* Sütun başlığı kartın TEPESİDİR: üst kenarlık ve üst köşeler onda. */}
             <View style={groupStyles.head}>
-              <TeamRowHead
-                density="table"
+              <StandingsHead
                 columns={columns}
                 pointsLabel={powerBalance ? "GP" : "Puan"}
                 trailingWidth={STAR_SLOT}
@@ -317,51 +317,55 @@ const standingKey = (item: StandingRow) => String(item.team_id);
 
 const styles = StyleSheet.create({
   header: {
-    gap: space.md,
+    gap: space.sm,
   },
   toolbar: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: space.md,
+    gap: space.sm,
   },
   toolbarMeta: {
     ...type.caption,
+    fontSize: 10,
+    lineHeight: 13,
     color: colors.textTertiary,
     paddingLeft: space.xxs,
   },
   skeletonSegment: {
     alignSelf: "flex-end",
-    width: 168,
-    height: 32,
-    borderRadius: radius.md,
+    width: 150,
+    height: 28,
+    borderRadius: GROUP_RADIUS / 2,
     backgroundColor: colors.skeletonBase,
   },
   skeletonCard: {
     borderWidth: hairline,
     borderColor: colors.border,
-    borderRadius: radius.xl,
+    borderRadius: GROUP_RADIUS,
     backgroundColor: colors.surface1,
     overflow: "hidden",
   },
   footer: {
-    paddingTop: space.md,
-    gap: space.sm,
+    paddingTop: space.sm,
+    gap: space.xs,
   },
   legend: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: space.lg,
+    columnGap: space.md,
+    rowGap: space.xs,
     paddingHorizontal: space.xxs,
   },
-  legendItem: { flexDirection: "row", alignItems: "center", gap: space.s },
-  legendSwatch: { width: 3, height: 12, borderRadius: 2 },
-  legendLabel: { ...type.caption, color: colors.textSecondary },
+  legendItem: { flexDirection: "row", alignItems: "center", gap: space.xs },
+  legendSwatch: { width: 2, height: 10, borderRadius: 1 },
+  legendLabel: { ...type.caption, fontSize: 10, lineHeight: 13, color: colors.textSecondary },
   footnote: {
     ...type.caption,
+    fontSize: 10,
     color: colors.textTertiary,
     letterSpacing: 0,
-    lineHeight: 17,
+    lineHeight: 14,
     paddingHorizontal: space.xxs,
   },
 });

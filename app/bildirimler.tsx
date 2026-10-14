@@ -1,8 +1,9 @@
 /**
  * /bildirimler — ESKİ ROTA, yönlendirme.
  *
- * Bildirim merkezi Gelen kutusunun "Bildirimler" sekmesine taşındı
- * (app/gelen-kutusu.tsx, içerik components/inbox/NotificationsPane.tsx).
+ * Bildirim merkezi Mesajlar sekmesinin kutularına taşındı
+ * (app/(tabs)/mesajlar.tsx); yönlendirme /gelen-kutusu üstünden kutuyu çözer
+ * (içerik components/inbox/NotificationsPane.tsx).
  * Rota silinmez: lib/notifications.ts bazı bildirim türlerini (MEMBERSHIP_,
  * ACCOUNT_REQUEST_, çözümlenemeyen MATCH_*) buraya gönderir ve eski derin
  * bağlantılar yaşar. Eski süzgeç `?tab=` (okunmamis, mac, takim…) yeni

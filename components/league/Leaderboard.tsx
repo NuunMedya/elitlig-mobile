@@ -8,9 +8,9 @@
  * çubuk, değeri kategorinin birincisine oranlar; beş satıra bakınca yarışın
  * şekli okunur.
  *
- * ARENA: çubuk VERİDİR → `accent`. Birincinin rakamı büyük (metricSm),
+ * ARENA: çubuk VERİDİR → `accent`. Birincinin rakamı bir kademe büyük (15px),
  * diğerleri tablo rakamı; sıra kutusu yoktur, sıra sönük bir rakamdır —
- * vurgu sayıdadır.
+ * vurgu sayıdadır. Yoğun ölçü: satır 38px, arma/avatar 20–22px, ad 12px.
  *
  * "Ters" ölçüt (en az gol yiyen): çubuk yine değeri gösterir ama oran
  * EN İYİYE göre ters kurulur (`invert`): az olan uzun çubuk alır. Aksi hâlde
@@ -21,8 +21,11 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { useCallback } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Avatar, TeamLogo, Touchable } from "@/components/ui";
-import { colors, layout, radius, space, textScale, type, upperTR } from "@/theme";
+import { colors, radius, space, textScale, type, upperTR } from "@/theme";
 import { groupStyles } from "./shared";
+
+/** Satırdaki arma ölçüsü (oyuncu avatarı 2px büyük — yuvarlak, gözde küçük kalır). */
+const CREST = 20;
 
 export interface LeaderEntry {
   id: number;
@@ -79,9 +82,9 @@ const LeaderRow = React.memo(function LeaderRow({
         {rank}
       </Text>
       {kind === "team" ? (
-        <TeamLogo name={entry.name} logo={entry.image ?? null} size={layout.crestMd} />
+        <TeamLogo name={entry.name} logo={entry.image ?? null} size={CREST} />
       ) : (
-        <Avatar name={entry.name} image={entry.image ?? null} size={layout.crestMd + 4} />
+        <Avatar name={entry.name} image={entry.image ?? null} size={CREST + 2} />
       )}
       <View style={styles.body}>
         <View style={styles.titleLine}>
@@ -137,7 +140,7 @@ export const Leaderboard = React.memo(function Leaderboard({
     <View style={[groupStyles.card, styles.card]}>
       <View style={styles.head}>
         <View style={styles.headIcon}>
-          <Ionicons name={icon} size={14} color={colors.accentText} />
+          <Ionicons name={icon} size={11} color={colors.accentText} />
         </View>
         <Text style={styles.title} numberOfLines={1} {...textScale.dense}>
           {title}
@@ -171,7 +174,7 @@ export const Leaderboard = React.memo(function Leaderboard({
           <Text style={styles.moreText} {...textScale.dense}>
             Tüm sıralama
           </Text>
-          <Ionicons name="chevron-forward" size={14} color={colors.brandAccent} />
+          <Ionicons name="chevron-forward" size={12} color={colors.brandAccent} />
         </Touchable>
       ) : null}
     </View>
@@ -185,74 +188,87 @@ const styles = StyleSheet.create({
   head: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.sm,
-    paddingHorizontal: space.lg,
-    paddingTop: space.md,
-    paddingBottom: space.xs,
+    gap: space.s,
+    paddingHorizontal: space.m,
+    paddingTop: space.sm,
+    paddingBottom: space.xxs,
   },
   headIcon: {
-    width: 24,
-    height: 24,
-    borderRadius: radius.sm,
+    width: 18,
+    height: 18,
+    borderRadius: radius.xs,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.accentDim,
   },
   title: {
-    ...type.h2,
+    ...type.label,
+    fontSize: 12,
+    lineHeight: 16,
     color: colors.textPrimary,
     flex: 1,
   },
   unit: {
     ...type.overline,
+    fontSize: 9,
+    lineHeight: 12,
+    letterSpacing: 1,
     color: colors.textTertiary,
   },
   row: {
-    minHeight: 56,
+    minHeight: 38,
     flexDirection: "row",
     alignItems: "center",
-    gap: space.m,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.sm,
+    gap: space.sm,
+    paddingHorizontal: space.m,
+    paddingVertical: space.xs,
   },
   rank: {
     ...type.tableNum,
+    fontSize: 11,
+    lineHeight: 15,
     color: colors.textTertiary,
-    width: 14,
+    width: 12,
     textAlign: "center",
   },
   rankFirst: {
     ...type.tableNumStrong,
+    fontSize: 11,
+    lineHeight: 15,
     color: colors.textPrimary,
   },
   body: {
     flex: 1,
     minWidth: 0,
-    gap: space.s,
+    gap: space.xs,
   },
   titleLine: {
     flexDirection: "row",
     alignItems: "baseline",
-    gap: space.s,
+    gap: space.xs,
   },
   name: {
-    ...type.h4,
+    ...type.label,
+    fontSize: 12,
+    lineHeight: 15,
     color: colors.textPrimary,
     flexShrink: 1,
   },
   meta: {
     ...type.caption,
+    fontSize: 10,
+    lineHeight: 13,
     color: colors.textTertiary,
     flexShrink: 2,
   },
   track: {
-    height: 4,
+    height: 3,
     borderRadius: 2,
     backgroundColor: colors.surface3,
     overflow: "hidden",
   },
   fill: {
-    height: 4,
+    height: 3,
     borderRadius: 2,
     backgroundColor: colors.accentBorder,
   },
@@ -261,28 +277,34 @@ const styles = StyleSheet.create({
   },
   value: {
     ...type.tableNumStrong,
-    fontSize: 15,
+    fontSize: 12,
+    lineHeight: 16,
     color: colors.textPrimary,
-    minWidth: 32,
+    minWidth: 26,
     textAlign: "right",
   },
   valueFirst: {
     ...type.metricSm,
+    fontSize: 15,
+    lineHeight: 19,
+    letterSpacing: -0.2,
     color: colors.textPrimary,
-    minWidth: 32,
+    minWidth: 26,
     textAlign: "right",
   },
   more: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: space.xs,
-    minHeight: layout.minTouch,
+    gap: space.xxs,
+    minHeight: 32,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.separator,
   },
   moreText: {
     ...type.label,
+    fontSize: 11,
+    lineHeight: 15,
     color: colors.brandAccent,
   },
 });

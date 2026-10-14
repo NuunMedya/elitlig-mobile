@@ -92,7 +92,7 @@ export const NextMatchCard = React.memo(function NextMatchCard({
           </Text>
         </View>
       ) : null}
-      {onPress ? <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} /> : null}
+      {onPress ? <Ionicons name="chevron-forward" size={14} color={colors.textTertiary} /> : null}
     </View>
   );
 
@@ -130,8 +130,9 @@ const styles = StyleSheet.create({
   head: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.md,
-    padding: space.md,
+    gap: space.m,
+    paddingHorizontal: space.md,
+    paddingVertical: space.m,
   },
   headTexts: {
     flex: 1,
@@ -152,17 +153,17 @@ const styles = StyleSheet.create({
     color: colors.textTertiary,
   },
   opponent: {
-    ...type.h2,
+    ...type.h3,
     color: colors.textPrimary,
     flexShrink: 1,
   },
   meta: {
-    ...type.bodySm,
+    ...type.caption,
     color: colors.textTertiary,
   },
   countdown: {
     paddingHorizontal: space.sm,
-    paddingVertical: space.xs,
+    paddingVertical: space.xxs,
     borderRadius: radius.pill,
     backgroundColor: colors.surface3,
   },
@@ -170,7 +171,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.brandDim,
   },
   countdownText: {
-    ...type.label,
+    ...type.micro,
+    letterSpacing: 0,
     color: colors.textSecondary,
   },
   countdownTextHot: {
@@ -178,12 +180,12 @@ const styles = StyleSheet.create({
   },
   body: {
     paddingHorizontal: space.md,
-    paddingBottom: space.md,
+    paddingBottom: space.m,
   },
   footer: {
     flexDirection: "row",
     gap: space.sm,
     paddingHorizontal: space.md,
-    paddingBottom: space.md,
+    paddingBottom: space.m,
   },
 });

@@ -2,12 +2,13 @@
  * KULÜP KİMLİĞİ — takımın ya da oyuncunun SAHNE (grafit) üstündeki kimlik bloğu.
  *
  * İKİ KULLANIM:
- *   · `framed` → kendi grafit kartıyla (Kulübüm sekmesi: kâğıt başlığın
- *     altında, ekranın tepesinde tek sahne).
+ *   · `framed` → kendi sıkı grafit kartıyla (Yönetim sekmesi: hızlı
+ *     erişimin altında, bağlam kartı). Amblem, ad ve sayılar bir kademe
+ *     küçük çizilir — sahne değil, özet.
  *   · çerçevesiz → `ScreenHeader`ın `hero` yuvasında; zemini başlık bloğu
  *     verir, kaydırınca kapanır (Takım Paneli).
  * İki yerde aynı bileşen: amblem, ad, bağlam satırı, cam sayı kutuları ve
- * son beş maç. Böylece "kulübüm" her yerde aynı yüzle tanınır.
+ * son beş maç. Böylece kulüp her yerde aynı yüzle tanınır.
  *
  * SAYI KUTULARI veriye bağlıdır: bilinmeyen değer "—" ile kutuda kalmaz,
  * kutu hiç çizilmez (kalanlar genişliği eşit paylaşır). Sahte sıfır yok.
@@ -58,12 +59,14 @@ export const ClubIdentity = React.memo(function ClubIdentity({
   footer,
   style,
 }: ClubIdentityProps) {
+  // Çerçeveli kart bir özettir: amblem bir kademe küçük.
+  const crest = framed ? FRAMED_CREST : layout.crestXl;
   const top = (
     <View style={styles.top}>
       {kind === "team" ? (
-        <TeamLogo name={name} logo={image} size={layout.crestXl} />
+        <TeamLogo name={name} logo={image} size={crest} />
       ) : (
-        <Avatar name={name} image={image} size={layout.crestXl} ring="brand" />
+        <Avatar name={name} image={image} size={crest} ring="brand" />
       )}
       <View style={styles.texts}>
         {role ? (
@@ -71,7 +74,7 @@ export const ClubIdentity = React.memo(function ClubIdentity({
             {upperTR(role)}
           </Text>
         ) : null}
-        <Text style={styles.name} numberOfLines={2} {...textScale.dense}>
+        <Text style={[styles.name, framed ? styles.nameFramed : null]} numberOfLines={2} {...textScale.dense}>
           {name}
         </Text>
         {context ? (
@@ -80,7 +83,7 @@ export const ClubIdentity = React.memo(function ClubIdentity({
           </Text>
         ) : null}
       </View>
-      {onPress ? <Ionicons name="chevron-forward" size={18} color={colors.onDarkMuted} /> : null}
+      {onPress ? <Ionicons name="chevron-forward" size={16} color={colors.onDarkMuted} /> : null}
     </View>
   );
 
@@ -105,11 +108,11 @@ export const ClubIdentity = React.memo(function ClubIdentity({
           {facts.map((fact) => (
             <View
               key={fact.label}
-              style={styles.fact}
+              style={[styles.fact, framed ? styles.factFramed : null]}
               accessible
               accessibilityLabel={`${fact.label.toLocaleLowerCase("tr-TR")} ${fact.value}`}
             >
-              <Text style={styles.factValue} numberOfLines={1} {...textScale.badge}>
+              <Text style={[styles.factValue, framed ? styles.factValueFramed : null]} numberOfLines={1} {...textScale.badge}>
                 {fact.value}
               </Text>
               <Text style={styles.factLabel} numberOfLines={1} {...textScale.badge}>
@@ -137,11 +140,14 @@ export const ClubIdentity = React.memo(function ClubIdentity({
 
   return (
     <View style={[styles.framed, style]}>
-      <GradientFill tone="ink" radius="xxl" />
+      <GradientFill tone="ink" radius="xl" />
       {body}
     </View>
   );
 });
+
+/** Çerçeveli (özet) kartın amblem ölçüsü — crestLg ile crestXl arası. */
+const FRAMED_CREST = 40;
 
 const styles = StyleSheet.create({
   hero: {
@@ -151,9 +157,9 @@ const styles = StyleSheet.create({
   },
   framed: {
     marginHorizontal: layout.screenPadding,
-    padding: space.lg,
-    gap: space.md,
-    borderRadius: radius.xxl,
+    padding: space.md,
+    gap: space.m,
+    borderRadius: radius.xl,
     overflow: "hidden",
     backgroundColor: colors.inkBlock,
   },
@@ -175,6 +181,9 @@ const styles = StyleSheet.create({
     ...type.h1,
     color: colors.onDark,
   },
+  nameFramed: {
+    ...type.h2,
+  },
   context: {
     ...type.caption,
     color: colors.onDarkMuted,
@@ -193,9 +202,16 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.inkTileBorder,
   },
+  factFramed: {
+    paddingVertical: space.s,
+    borderRadius: radius.sm,
+  },
   factValue: {
     ...type.metricSm,
     color: colors.onDark,
+  },
+  factValueFramed: {
+    ...type.scoreSm,
   },
   factLabel: {
     ...type.overline,

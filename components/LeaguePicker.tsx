@@ -197,6 +197,7 @@ const styles = StyleSheet.create({
   pill: {
     height: PILL_HEIGHT,
     maxWidth: 300,
+    flexShrink: 1,
     flexDirection: "row",
     alignItems: "center",
     gap: space.xs,
