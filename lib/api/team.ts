@@ -941,6 +941,13 @@ export interface AnalysisKeyPlayer {
   red_cards: number;
 }
 
+/**
+ * Analiz maddesi. Sunucu (services/matchAnalysisService.js → deriveInsights)
+ * güçlü/zayıf yönleri `{ text, detail }`, dikkat edilecekleri düz metin
+ * olarak döndürür; ikisi de geçerli.
+ */
+export type AnalysisInsight = string | { text?: string | null; detail?: string | null };
+
 export interface MatchAnalysis {
   generated_at: string;
   basis: string;
@@ -966,9 +973,9 @@ export interface MatchAnalysis {
   key_players: AnalysisKeyPlayer[];
   discipline: { opponent: { yellow_cards: number; red_cards: number } };
   summary: string;
-  strengths: string[];
-  weaknesses: string[];
-  watch_outs: string[];
+  strengths: AnalysisInsight[];
+  weaknesses: AnalysisInsight[];
+  watch_outs: AnalysisInsight[];
   disclaimer: string;
 }
 

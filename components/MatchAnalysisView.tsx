@@ -44,6 +44,7 @@ import {
   getMatchAnalysis,
   simulateMatch,
   type AnalysisForm,
+  type AnalysisInsight,
   type AnalysisKeyPlayer,
   type MatchSimulation,
   type SimulationFactor,
@@ -126,22 +127,41 @@ const InsightList = React.memo(function InsightList({
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   tone: string;
-  items: string[];
+  items: AnalysisInsight[] | null | undefined;
 }) {
-  if (!items.length) return null;
+  const list = (items ?? [])
+    .map(insightParts)
+    .filter((item): item is { text: string; detail: string | null } => item != null);
+  if (!list.length) return null;
   return (
     <View style={styles.insightBox}>
-      {items.map((item, index) => (
+      {list.map((item, index) => (
         <View key={index} style={styles.insightRow}>
           <Ionicons name={icon} size={13} color={tone} style={styles.insightIcon} />
           <Text style={styles.insightText} {...textScale.long}>
-            {item}
+            <Text style={styles.insightLead}>{item.text}</Text>
+            {item.detail ? ` — ${item.detail}` : ""}
           </Text>
         </View>
       ))}
     </View>
   );
 });
+
+/**
+ * Sunucu güçlü/zayıf yönleri `{ text, detail }` nesnesi, "dikkat
+ * edilecekleri" düz metin olarak gönderiyor. Nesne doğrudan <Text> içine
+ * konunca React "Objects are not valid as a React child" ile ekranı
+ * çökertiyordu (kadro kaydı analiz sekmesine geçtiği anda). İkisi de
+ * burada tek biçime indirilir.
+ */
+function insightParts(item: AnalysisInsight): { text: string; detail: string | null } | null {
+  if (item == null) return null;
+  if (typeof item === "string") return item.trim() ? { text: item, detail: null } : null;
+  const text = typeof item.text === "string" ? item.text : "";
+  const detail = typeof item.detail === "string" && item.detail ? item.detail : null;
+  return text ? { text, detail } : detail ? { text: detail, detail: null } : null;
+}
 
 const KeyPlayerRow = React.memo(function KeyPlayerRow({ player }: { player: AnalysisKeyPlayer }) {
   const meta = [
@@ -620,7 +640,7 @@ export function MatchAnalysisView({
       ) : null}
 
       {/* ── Çıkarımlar ────────────────────────────────────────────────── */}
-      {data.strengths.length || data.weaknesses.length || data.watch_outs.length ? (
+      {data.strengths?.length || data.weaknesses?.length || data.watch_outs?.length ? (
         <>
           <SectionHeader title="Çıkarımlar" />
           <View style={styles.card}>
@@ -839,6 +859,10 @@ const styles = StyleSheet.create({
     ...type.bodySm,
     color: colors.textSecondary,
     flex: 1,
+  },
+  insightLead: {
+    fontFamily: fonts.semibold,
+    color: colors.textPrimary,
   },
 
   /* — Simülasyon — */
