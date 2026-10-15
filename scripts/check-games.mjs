@@ -204,6 +204,11 @@ for (const game of ["penalti", "slalom", "sektir"]) {
 }
 {
   const { A, run, over } = boot("sektir");
+  const kit = { primary: "#dc2626", secondary: "#ffffff" };
+  A.game.setRoster({
+    juggler: { id: 1, short: "A. Sektirci", back: "SEKTİRCİ", shirt: 8, team: { name: "Takım", kit }, attrs: { agility: 80, control: 80 } },
+    rivals: [3, 6, 10].map((value, i) => ({ id: i + 2, short: `O. ${i}`, team: { name: "Rakip", kit }, value })),
+  });
   A.game.start();
   const g0 = A.game.debug().g;
   let cooldown = 0;
@@ -220,6 +225,11 @@ for (const game of ["penalti", "slalom", "sektir"]) {
     }
   });
   const d = A.game.debug();
+  check(
+    "sektir: sekme sayısı ligin oyuncularını geçer",
+    d.juggler === "A. Sektirci" && d.passed === 3 && d.kicks >= 10,
+    `${d.juggler}, ${d.kicks} sekme → ${d.passed}/3 oyuncu geçildi`,
+  );
   check(
     "sektir: zorlaşıyor",
     d.kicks >= 30 && d.level >= 4 && d.g > g0 * 1.3,
@@ -251,9 +261,11 @@ for (const game of ["penalti", "slalom", "sektir"]) {
   const firstGap = A.game.debug().gates[0].gap;
   const v0 = A.game.debug().speed;
   let livesAt8 = null;
+  let topSpeed = 0;
   run(35, () => {
     const d = A.game.debug();
     if (d.state !== "play") return;
+    topSpeed = Math.max(topSpeed, d.speed);
     const next = d.gates.find((g) => !g.done);
     if (next) d.player.target = next.cx;
     if (livesAt8 == null && d.passed >= 8) livesAt8 = d.lives;
@@ -267,8 +279,9 @@ for (const game of ["penalti", "slalom", "sektir"]) {
   );
   check(
     "slalom: zorlaşıyor",
-    d.speed > v0 * 1.2 && lastGap < firstGap * 0.85,
-    `hız ${v0.toFixed(1)} → ${d.speed.toFixed(1)} m/sn, kapı ${firstGap.toFixed(2)} → ${lastGap.toFixed(2)} m`,
+    // En yüksek hız: bir çarpışma anlık yavaşlatır, ölçüm o ana denk gelebilir.
+    topSpeed > v0 * 1.2 && lastGap < firstGap * 0.85,
+    `hız ${v0.toFixed(1)} → ${topSpeed.toFixed(1)} m/sn, kapı ${firstGap.toFixed(2)} → ${lastGap.toFixed(2)} m`,
   );
 }
 

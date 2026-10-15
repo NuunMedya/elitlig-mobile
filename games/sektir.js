@@ -1,5 +1,19 @@
 /*
- * TOP SEKTİR — topu yere düşürmeden sektir.
+ * TOP SEKTİR 3B — topu yere düşürmeden sektir; ligin oyuncularını geç.
+ *
+ * MİMARİ: fizik ve dokunma kuralları EKRAN koordinatlarında (piksel) kalır;
+ * başsız testler yalnız simülasyonu koşturur. Çizim three.js: top ve
+ * eklemli oyuncu kameraya bakan bir düzlemde (z = 0) durur, piksel → metre
+ * dönüşümü kamerayla birebirdir (dokunduğun yer topun göründüğü yerdir).
+ * Oyuncu topun altına koşar; topun yüksekliğine göre AYAK, DİZ ya da KAFA
+ * ile vurur. Arkada stadyum, tribün oyuncunun takım renklerinde.
+ *
+ * GERÇEK İÇERİK (RN'den {type:"config", roster:{juggler, rivals}}):
+ *   · Topu seçilen gerçek oyuncu sektirir (forma, soyadı, numara). Kontrol
+ *     TAM İSABET penceresini ±%15, denge rüzgârın etkisini ±%10 değiştirir.
+ *   · GEÇTİĞİN OYUNCULAR: sekme sayın ligin oyuncularının sezon gol + asist
+ *     sayısını geçtikçe onları geride bırakırsın ("A. Yılmaz'ı geçtin · 31").
+ *     Sıradaki hedef HUD'da görünür.
  *
  * MEKANİZMA — TEK KURAL, ÖĞRENİLEBİLİR DERİNLİK:
  *   · Topa dokun → top HER ZAMAN aynı tepe yüksekliğine çıkar. Yükseklik
@@ -25,10 +39,45 @@
   "use strict";
   var A = window.Arena;
   var P = A.PAL;
+  var T = window.THREE || (typeof THREE !== "undefined" ? THREE : null); // eslint-disable-line no-undef
+
+  /* ─────────────── kadro ─────────────── */
+  var DEFAULT_JUGGLER = {
+    id: 0,
+    short: "ElitLig",
+    back: "ELİTLİG",
+    shirt: 10,
+    team: { name: "ElitLig", kit: { primary: "#5B3DF5", secondary: "#FFFFFF" } },
+    attrs: { agility: 78, control: 78 },
+  };
+  var juggler = DEFAULT_JUGGLER;
+  var rivals = []; // [{ short, team, value }] — value ARTAN
+  var passedRivals = 0;
+  var rosterSig = "";
+  function setRoster(r) {
+    var j = r && r.juggler && r.juggler.team ? r.juggler : null;
+    var rv = r && Array.isArray(r.rivals) ? r.rivals.filter(function (x) { return x && x.value > 0; }) : [];
+    var sig = (j ? j.id : "d") + ":" + rv.map(function (x) { return x.id + "=" + x.value; }).join(",");
+    if (sig === rosterSig) return;
+    rosterSig = sig;
+    juggler = j || DEFAULT_JUGGLER;
+    rivals = rv.slice().sort(function (a, b) { return a.value - b.value; });
+    if (R) buildJuggler(), (R.boardText = "");
+  }
+  function attr(key) {
+    var v = juggler && juggler.attrs ? Number(juggler.attrs[key]) : NaN;
+    return Number.isFinite(v) ? A.clamp((A.clamp(v, 50, 99) - 77.5) / 17.5, -1, 1) : 0;
+  }
+  function kitOf(person) {
+    var k = person && person.team && person.team.kit ? person.team.kit : {};
+    return { primary: k.primary || "#5B3DF5", secondary: k.secondary || "#FFFFFF" };
+  }
+  function nextRival() {
+    return rivals[passedRivals] || null;
+  }
 
   var W = 0, H = 0, S = 1;
   var groundY = 0, boardsY = 0, boardsH = 0, standTop = 0;
-  var bg = null, vignette = null;
 
   var state = "attract"; // attract | play | dying | over
   var ball, orient;
@@ -43,6 +92,8 @@
   var aiTimer = 0;
 
   var KICKS_PER_LEVEL = 8;
+  var touch = null; // son vuruş: { at, kind: foot|knee|head, side }
+  var passedLine = null;
 
   function diff() {
     // 0 → 1, ilk ~70 sekmede yumuşakça doyar.
@@ -76,89 +127,10 @@
     standTop = h * 0.07;
     boardsH = Math.max(16, h * 0.034);
     boardsY = h * 0.47;
-    buildBackground();
     if (!ball) resetBall();
     else ball.x = A.clamp(ball.x, 0, W);
-  }
-
-  /* ─────────────────────────── statik arka plan ─────────────────────────── */
-
-  function buildBackground() {
-    bg = A.layer(W, H);
-    var c = bg.ctx;
-    A.paintSky(c, W, boardsY);
-    A.paintStands(c, W, standTop + 2, boardsY, 2024);
-    A.paintRoof(c, W, standTop, standTop - 2);
-
-    // Çim — perspektifli zemin: kaçış noktası panoların çok üstünde.
-    var top = boardsY + boardsH;
-    var g = c.createLinearGradient(0, top, 0, H);
-    g.addColorStop(0, P.grassFar);
-    g.addColorStop(1, P.grassNear);
-    c.fillStyle = g;
-    c.fillRect(0, top, W, H - top);
-
-    var vx = W / 2;
-    var vy = top - H * 0.9;
-    var stripes = 14;
-    for (var i = -stripes; i < stripes; i++) {
-      if (i % 2) continue;
-      var x0 = W / 2 + i * (W / 6);
-      var x1 = W / 2 + (i + 1) * (W / 6);
-      // Çizgileri kaçış noktasına doğru uzat
-      var t0 = (top - vy) / (H - vy);
-      c.beginPath();
-      c.moveTo(vx + (x0 - vx) * t0, top);
-      c.lineTo(vx + (x1 - vx) * t0, top);
-      c.lineTo(x1, H);
-      c.lineTo(x0, H);
-      c.closePath();
-      c.fillStyle = "rgba(255,255,255,0.045)";
-      c.fill();
-    }
-    // Yatay biçme bantları (derinlikte sıklaşır)
-    for (var k = 0; k < 9; k++) {
-      if (k % 2) continue;
-      var a = top + (H - top) * Math.pow(k / 9, 1.6);
-      var b = top + (H - top) * Math.pow((k + 1) / 9, 1.6);
-      c.fillStyle = "rgba(0,0,0,0.05)";
-      c.fillRect(0, a, W, b - a);
-    }
-    // Saha çizgileri: panoların önünde taç çizgisi, ortada orta yuvarlak
-    c.strokeStyle = P.chalk;
-    c.lineWidth = 2 * S;
-    c.beginPath();
-    c.moveTo(0, top + 10 * S);
-    c.lineTo(W, top + 10 * S);
-    c.stroke();
-    c.save();
-    c.translate(W / 2, groundY + (H - groundY) * 0.15);
-    c.scale(1, 0.22);
-    c.beginPath();
-    c.arc(0, 0, W * 0.36, 0, Math.PI * 2);
-    c.restore();
-    c.lineWidth = 2.5 * S;
-    c.stroke();
-    c.beginPath();
-    c.moveTo(W / 2, top + 10 * S);
-    c.lineTo(W / 2, H);
-    c.lineWidth = 2 * S;
-    c.stroke();
-
-    // Projektör ışığının çimdeki havuzu
-    c.save();
-    c.globalCompositeOperation = "lighter";
-    var pool = c.createRadialGradient(W / 2, groundY, 0, W / 2, groundY, W * 0.75);
-    pool.addColorStop(0, "rgba(255,247,219,0.14)");
-    pool.addColorStop(1, "rgba(255,247,219,0)");
-    c.fillStyle = pool;
-    c.fillRect(0, top, W, H - top);
-    c.restore();
-    A.paintHaze(c, W, boardsY, H * 0.25, 1);
-
-    vignette = A.layer(W, H);
-    A.paintVignette(vignette.ctx, W, H, 0.6);
-    A.paintTopScrim(vignette.ctx, W, 120);
+    initGL();
+    resizeGL();
   }
 
   /* ─────────────────────────── oyun akışı ─────────────────────────── */
@@ -178,6 +150,8 @@
     starCooldown = 1.5;
     lastKick = -1;
     rings = [];
+    passedRivals = 0;
+    touch = null;
     A.particles.length = 0;
     A.floaters.length = 0;
     A.banner = null;
@@ -201,8 +175,9 @@
     ball.vx = ball.vx * 0.3 - o * 430 * S;
     ball.spin = o * 14;
 
-    var perfect = edge < 0.3;
+    var perfect = edge < 0.3 * (1 + 0.15 * attr("control"));
     kicks += 1;
+    touch = { at: A.time, kind: ball.y < groundY - H * 0.36 ? "head" : ball.y < groundY - H * 0.2 ? "knee" : "foot", side: o > 0 ? -1 : 1 };
     if (perfect) {
       combo += 1;
       bestCombo = Math.max(bestCombo, combo);
@@ -235,6 +210,17 @@
 
     A.sound("kick");
     A.haptic(perfect ? "medium" : "light");
+
+    // Geçtiğin oyuncular: sekme sayısı oyuncunun sezon gol + asist sayısını geçti.
+    var rv = nextRival();
+    if (rv && kicks >= rv.value) {
+      passedRivals += 1;
+      points += 3;
+      boardFlash = 1;
+      passedLine = { text: rv.short + " geçildi · " + rv.value + " gol+asist", age: 0, kit: kitOf(rv) };
+      A.sound("coin");
+      A.haptic("success");
+    }
 
     var newLevel = 1 + Math.floor(kicks / KICKS_PER_LEVEL);
     if (newLevel > level) {
@@ -272,6 +258,10 @@
 
   function update(dt) {
     scoreBump = Math.max(0, scoreBump - dt * 5);
+    if (passedLine) {
+      passedLine.age += dt;
+      if (passedLine.age > 2.4) passedLine = null;
+    }
     boardFlash = Math.max(0, boardFlash - dt * 1.6);
 
     var g = gravity();
@@ -293,7 +283,8 @@
 
     /* Fizik */
     ball.vy += g * dt;
-    ball.vx += (state === "play" ? wind : 0) * dt;
+    // Denge: rüzgârın topa etkisi ±%10.
+    ball.vx += (state === "play" ? wind * (1 - 0.1 * attr("agility")) : 0) * dt;
     ball.vx *= Math.exp(-0.25 * dt);
     ball.spin *= Math.exp(-1.2 * dt);
     ball.x += ball.vx * dt;
@@ -350,7 +341,7 @@
         A.sound("over");
         A.send("over", {
           score: points,
-          stats: { kicks: kicks, level: level, bestCombo: bestCombo, stars: stars },
+          stats: { kicks: kicks, level: level, bestCombo: bestCombo, stars: stars, passed: passedRivals, rivals: rivals.length },
         });
       }
     }
@@ -417,33 +408,436 @@
     }
   }
 
-  /* ─────────────────────────── çizim ─────────────────────────── */
+  /* ═══════════════════════════ 3B ÇİZİM ═══════════════════════════ */
+
+  var K = A.T3;
+  var R = null;
+  var glFailed = false;
+  var CAM_D = 7; // kameranın top düzlemine uzaklığı (m)
+
+  /** Piksel / metre: oyuncu (1,8 m) ekran yüksekliğinin ~%42'si. */
+  function ppm() {
+    return (0.42 * H) / 1.8;
+  }
+  function wx(x) {
+    return (x - W / 2) / ppm();
+  }
+  function wy(y) {
+    return (groundY - y) / ppm();
+  }
+
+  function hasWebGL() {
+    try {
+      var cv = document.getElementById("gl");
+      if (!cv || !T || !K || !cv.getContext) return false;
+      var gl = cv.getContext("webgl2") || cv.getContext("webgl");
+      if (!gl || typeof gl.getParameter !== "function") return false;
+      var v = gl.getParameter(gl.VERSION);
+      return typeof v === "string" && v.length > 0;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function initGL() {
+    if (R || glFailed) return;
+    if (!hasWebGL()) {
+      glFailed = true;
+      return;
+    }
+    try {
+      var renderer = new T.WebGLRenderer({ canvas: document.getElementById("gl"), antialias: true, powerPreference: "high-performance", stencil: false });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = T.PCFSoftShadowMap;
+      renderer.toneMapping = T.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.08;
+      renderer.outputColorSpace = T.SRGBColorSpace;
+      K.init(renderer);
+      var scene = new T.Scene();
+      scene.background = new T.Color(0x0a1030);
+      scene.fog = new T.Fog(0x0e1638, 30, 90);
+      R = { renderer: renderer, scene: scene, camera: new T.PerspectiveCamera(40, 1, 0.1, 300), boardText: "", jx: 0 };
+      buildLights();
+      buildStadium();
+      buildBall();
+      buildStar();
+      buildJuggler();
+      resizeGL();
+    } catch (e) {
+      R = null;
+      glFailed = true;
+    }
+  }
+
+  function resizeGL() {
+    if (!R || !W || !H) return;
+    R.renderer.setSize(W, H, false);
+    var cv = R.renderer.domElement;
+    if (cv && cv.style) {
+      cv.style.width = W + "px";
+      cv.style.height = H + "px";
+    }
+    // Top düzleminde 1 piksel = 1/ppm metre olacak biçimde açı ve konum.
+    var cam = R.camera;
+    cam.aspect = W / H;
+    cam.fov = (2 * Math.atan(H / ppm() / 2 / CAM_D) * 180) / Math.PI;
+    cam.position.set(0, wy(H / 2), CAM_D);
+    cam.lookAt(0, wy(H / 2), 0);
+    cam.updateProjectionMatrix();
+  }
+
+  function buildLights() {
+    var s = R.scene;
+    s.add(new T.HemisphereLight(0x9fb4ff, 0x1d3a22, 0.6));
+    var key = new T.DirectionalLight(0xfff4e0, 2.4);
+    key.position.set(6, 18, 14);
+    key.target.position.set(0, 0, 0);
+    key.castShadow = true;
+    key.shadow.mapSize.set(1024, 1024);
+    var sc = key.shadow.camera;
+    sc.left = -6;
+    sc.right = 6;
+    sc.top = 8;
+    sc.bottom = -4;
+    sc.near = 5;
+    sc.far = 50;
+    key.shadow.bias = -0.0005;
+    key.shadow.normalBias = 0.02;
+    s.add(key, key.target);
+    var rim = new T.DirectionalLight(0xb9c8ff, 1.0);
+    rim.position.set(-4, 12, -20);
+    s.add(rim);
+    var fill = new T.DirectionalLight(0xdfe8ff, 0.6);
+    fill.position.set(-12, 10, 10);
+    s.add(fill);
+  }
+
+  function buildStadium() {
+    var s = R.scene;
+    // Çim: biçme bantları + orta yuvarlak (kameraya dik uzanan saha)
+    var grass = K.canvasTex(1024, 1024, function (c, cw, ch) {
+      for (var i = 0; i < 12; i++) {
+        c.fillStyle = i % 2 ? "#2f8a47" : "#378f4d";
+        c.fillRect(0, (i * ch) / 12, cw, ch / 12 + 1);
+      }
+      var rand = A.seeded(21);
+      for (var n = 0; n < 40000; n++) {
+        c.fillStyle = rand() < 0.5 ? "rgba(255,255,255,0.035)" : "rgba(0,20,0,0.06)";
+        c.fillRect(rand() * cw, rand() * ch, 1, 1 + rand() * 2);
+      }
+      // 60 m × 60 m: orta çizgi ve orta yuvarlak (9,15 m)
+      var m = cw / 60;
+      c.strokeStyle = "rgba(246,248,240,0.95)";
+      c.lineWidth = 0.12 * m;
+      c.beginPath();
+      c.moveTo(0, ch * 0.62);
+      c.lineTo(cw, ch * 0.62);
+      c.stroke();
+      c.beginPath();
+      c.arc(cw / 2, ch * 0.62, 9.15 * m, 0, Math.PI * 2);
+      c.stroke();
+      c.fillStyle = "rgba(246,248,240,0.95)";
+      c.beginPath();
+      c.arc(cw / 2, ch * 0.62, 0.18 * m, 0, Math.PI * 2);
+      c.fill();
+    });
+    var ground = K.mesh(new T.PlaneGeometry(60, 60), K.std(0xffffff, 0.92, 0, { map: grass }), false, true);
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.set(0, 0, -16);
+    s.add(ground);
+    var outer = K.mesh(new T.PlaneGeometry(240, 240), K.std(0x245f37, 0.95), false, true);
+    outer.rotation.x = -Math.PI / 2;
+    outer.position.y = -0.01;
+    s.add(outer);
+
+    // LED panoları
+    R.boardTex = K.canvasTex(2048, 64, function () {}, true);
+    R.boardTex.repeat.set(2, 1);
+    var boardMat = new T.MeshBasicMaterial({ map: R.boardTex, toneMapped: false });
+    var dark = K.std(0x111827, 0.6);
+    var board = K.mesh(new T.BoxGeometry(70, 0.9, 0.2), [dark, dark, dark, dark, boardMat, dark], true, true);
+    board.position.set(0, 0.45, -46);
+    s.add(board);
+    // Uzak kale (derinlik için)
+    var white = K.std(0xf4f6fa, 0.3, 0.15);
+    var postG = new T.CylinderGeometry(0.06, 0.06, 2.5, 12);
+    [-3.72, 3.72].forEach(function (x) {
+      var p = K.mesh(postG, white);
+      p.position.set(x, 1.25, -45);
+      s.add(p);
+    });
+    var bar = K.mesh(new T.CylinderGeometry(0.06, 0.06, 7.6, 12), white);
+    bar.rotation.z = Math.PI / 2;
+    bar.position.set(0, 2.47, -45);
+    s.add(bar);
+
+    // Tribün: eğimli seyirci duvarı (oyuncunun takım renkleri ağırlıklı)
+    R.standMat = K.std(0xa0a4b4, 0.95, 0, {});
+    paintStands();
+    var stand = K.mesh(new T.PlaneGeometry(140, 30), R.standMat, false, true);
+    stand.position.set(0, 11, -58);
+    stand.rotation.x = -0.55;
+    s.add(stand);
+    var roof = K.mesh(new T.BoxGeometry(150, 1, 14), K.std(0x090c18, 0.9), false, false);
+    roof.position.set(0, 25, -66);
+    s.add(roof);
+    var glowMat = new T.SpriteMaterial({ map: K.glowTexture(), color: 0xfff1d6, transparent: true, depthWrite: false, blending: T.AdditiveBlending, opacity: 0.85 });
+    var panelMat = new T.MeshBasicMaterial({ color: 0xfffbea, toneMapped: false });
+    for (var i = -7; i <= 7; i++) {
+      var panel = K.mesh(new T.BoxGeometry(3, 0.8, 0.3), panelMat, false, false);
+      panel.position.set(i * 9, 24.2, -59);
+      s.add(panel);
+      var glow = new T.Sprite(glowMat);
+      glow.position.set(i * 9, 24.2, -58);
+      glow.scale.set(14, 14, 1);
+      s.add(glow);
+    }
+  }
+
+  function paintStands() {
+    var kit = kitOf(juggler);
+    if (R.standTex) R.standTex.dispose();
+    R.standTex = K.canvasTex(1024, 256, function (c, cw, ch) {
+      c.fillStyle = "#151b33";
+      c.fillRect(0, 0, cw, ch);
+      var rand = A.seeded(13);
+      var others = ["#E2E8F0", "#94A3B8", "#5B3DF5", "#A78BFA", "#F43F5E", "#FBBF24", "#38BDF8", "#1E293B"];
+      for (var r = 0; r < 18; r++)
+        for (var x = 0; x < cw; x += 8 + rand() * 3) {
+          if (rand() < 0.07) continue;
+          var y = 6 + r * (ch / 18);
+          c.fillStyle = rand() < 0.5 ? (rand() < 0.65 ? kit.primary : kit.secondary) : others[(rand() * others.length) | 0];
+          c.fillRect(x, y + 4, 6, 6);
+          c.fillStyle = ["#F1C9A5", "#C68B63", "#8D5A3B"][(rand() * 3) | 0];
+          c.beginPath();
+          c.arc(x + 3, y + 1.6, 2.3, 0, Math.PI * 2);
+          c.fill();
+        }
+      c.fillStyle = "rgba(5,8,23,0.3)";
+      c.fillRect(0, 0, cw, ch);
+    });
+    R.standMat.map = R.standTex;
+    R.standMat.needsUpdate = true;
+  }
+
+  function paintBoards(text) {
+    if (text === R.boardText) return;
+    R.boardText = text;
+    var c = R.boardTex.userData.ctx, cw = R.boardTex.userData.canvas.width, ch = R.boardTex.userData.canvas.height;
+    var g = c.createLinearGradient(0, 0, 0, ch);
+    g.addColorStop(0, "#3B1FD1");
+    g.addColorStop(1, "#1E0F7A");
+    c.fillStyle = g;
+    c.fillRect(0, 0, cw, ch);
+    c.font = "900 38px " + A.FONT;
+    c.textBaseline = "middle";
+    c.fillStyle = "#FFFFFF";
+    var unit = c.measureText(text).width || 200;
+    for (var x = 0; x < cw; x += unit) c.fillText(text, x, ch * 0.55);
+    c.fillStyle = "rgba(0,0,0,0.2)";
+    for (var y = 1; y < ch; y += 3) c.fillRect(0, y, cw, 1);
+    R.boardTex.needsUpdate = true;
+  }
+
+  function buildBall() {
+    var geo = new T.SphereGeometry(1, 40, 28); // yarıçap ölçekle verilir
+    var PHI = (1 + Math.sqrt(5)) / 2;
+    var centres = [[0, 1, PHI], [0, -1, PHI], [0, 1, -PHI], [0, -1, -PHI], [1, PHI, 0], [-1, PHI, 0], [1, -PHI, 0], [-1, -PHI, 0], [PHI, 0, 1], [-PHI, 0, 1], [PHI, 0, -1], [-PHI, 0, -1]].map(function (v) {
+      var l = Math.hypot(v[0], v[1], v[2]);
+      return [v[0] / l, v[1] / l, v[2] / l];
+    });
+    var nrm = geo.attributes.normal;
+    var colors = new Float32Array(nrm.count * 3);
+    for (var i = 0; i < nrm.count; i++) {
+      var best = 0;
+      for (var k = 0; k < 12; k++) best = Math.max(best, nrm.getX(i) * centres[k][0] + nrm.getY(i) * centres[k][1] + nrm.getZ(i) * centres[k][2]);
+      var v = best > 0.925 ? 0.06 : best > 0.905 ? 0.45 : 0.95;
+      colors[i * 3] = colors[i * 3 + 1] = v;
+      colors[i * 3 + 2] = v * 1.02;
+    }
+    geo.setAttribute("color", new T.BufferAttribute(colors, 3));
+    R.ball = K.mesh(geo, new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.38 }));
+    R.scene.add(R.ball);
+  }
+
+  function buildStar() {
+    var tex = K.canvasTex(128, 128, function (c) {
+      c.translate(64, 64);
+      var g = c.createRadialGradient(0, 0, 0, 0, 0, 64);
+      g.addColorStop(0, "rgba(255,210,74,0.55)");
+      g.addColorStop(1, "rgba(255,210,74,0)");
+      c.fillStyle = g;
+      c.fillRect(-64, -64, 128, 128);
+      c.beginPath();
+      for (var i = 0; i < 10; i++) {
+        var rr = i % 2 ? 15 : 34;
+        var a = (i / 10) * Math.PI * 2 - Math.PI / 2;
+        c.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+      }
+      c.closePath();
+      var sg = c.createLinearGradient(0, -34, 0, 34);
+      sg.addColorStop(0, "#FFF3B0");
+      sg.addColorStop(1, "#F59E0B");
+      c.fillStyle = sg;
+      c.fill();
+    });
+    R.star = new T.Sprite(new T.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, toneMapped: false }));
+    R.star.visible = false;
+    R.scene.add(R.star);
+  }
+
+  function buildJuggler() {
+    if (R.juggler) {
+      R.scene.remove(R.juggler.root);
+      K.disposeTree(R.juggler.root);
+    }
+    R.juggler = K.makeAthlete(juggler, { keeper: false });
+    R.scene.add(R.juggler.root);
+    if (R.standMat) paintStands();
+  }
+
+  /** Oyuncu topun altına koşar; vuruş türüne göre ayak, diz ya da kafa. */
+  function poseJuggler(dt) {
+    var a = R.juggler;
+    var J = a.J;
+    K.rest(a);
+    var bx = wx(ball.x);
+    var prev = R.jx;
+    var want = state === "dying" || state === "over" ? prev : bx + (touch && touch.kind !== "head" ? touch.side * 0.12 : 0);
+    R.jx = A.damp(R.jx, want, 7, dt);
+    var vx = dt > 0 ? (R.jx - prev) / dt : 0;
+    a.root.position.set(R.jx, 0, -0.32);
+    a.root.rotation.y = A.clamp(vx * 0.08, -0.5, 0.5);
+    var run = A.clamp(Math.abs(vx) / 3, 0, 1);
+    if (run > 0.05) K.runCycle(a, A.time * 13, run);
+    else {
+      // Hazır duruş: dizler hafif kırık, kollar dengede
+      J.hips.position.y = 0.9;
+      J.hpa.rotation.x = -0.2;
+      J.hpb.rotation.x = -0.2;
+      J.kna.rotation.x = 0.4;
+      J.knb.rotation.x = 0.4;
+      J.sha.rotation.z = 0.45;
+      J.shb.rotation.z = -0.45;
+      J.ela.rotation.x = -0.4;
+      J.elb.rotation.x = -0.4;
+    }
+    // Göz topta
+    J.head.rotation.x = -A.clamp(wy(ball.y) / 4, -0.2, 0.6);
+    if (state === "dying" || state === "over") {
+      J.sha.rotation.x = -2.5;
+      J.shb.rotation.x = -2.5;
+      J.sha.rotation.z = 0.7;
+      J.shb.rotation.z = -0.7;
+      J.ela.rotation.x = -2.1;
+      J.elb.rotation.x = -2.1;
+      J.head.rotation.x = 0.4;
+      return;
+    }
+    if (!touch) return;
+    var t = (A.time - touch.at) / 0.32;
+    if (t < 0 || t > 1) return;
+    var k = Math.sin(t * Math.PI); // 0 → 1 → 0
+    var leg = touch.side > 0 ? "a" : "b";
+    if (touch.kind === "foot") {
+      J["hp" + leg].rotation.x = -1.15 * k;
+      J["kn" + leg].rotation.x = 0.35 * (1 - k);
+      J["ft" + leg].rotation.x = -0.4 * k;
+    } else if (touch.kind === "knee") {
+      J["hp" + leg].rotation.x = -1.7 * k;
+      J["kn" + leg].rotation.x = 1.7 * k;
+    } else {
+      // Kafa: sıçrar, başla vurur
+      a.root.position.y = 0.32 * k;
+      J.head.rotation.x = -0.5 + 0.7 * k;
+      J.spine.rotation.x = -0.15 * k;
+      J.sha.rotation.z = 0.9;
+      J.shb.rotation.z = -0.9;
+      J.kna.rotation.x = 0.6 * k;
+      J.knb.rotation.x = 0.6 * k;
+    }
+  }
+
+  function sync(dt) {
+    var r = ball.r / ppm();
+    R.ball.scale.setScalar(r);
+    R.ball.position.set(wx(ball.x), wy(ball.y), 0);
+    R.ball.rotation.z -= (ball.vx / ppm() / Math.max(0.05, r)) * dt;
+    R.ball.rotation.x += ball.spin * dt * 0.6 - (ball.vy / ppm() / Math.max(0.05, r)) * dt * 0.15;
+    if (star) {
+      var appear = A.easeOutBack(star.age / 0.4);
+      var fade = A.clamp((star.life - star.age) / 0.8, 0, 1);
+      var blink = star.life - star.age < 1.5 ? 0.6 + 0.4 * Math.sin(star.age * 20) : 1;
+      R.star.visible = true;
+      R.star.position.set(wx(star.x), wy(star.y), 0.05);
+      var sz = ((star.r * 3.6) / ppm()) * appear;
+      R.star.scale.set(sz, sz, 1);
+      R.star.material.opacity = fade * blink;
+      R.star.material.rotation = star.age * 1.4;
+    } else R.star.visible = false;
+    var nr = nextRival();
+    paintBoards(
+      "ELİTLİG ARENA   •   TOP SEKTİR   •   " +
+        String(juggler.short).toLocaleUpperCase("tr-TR") +
+        (nr ? "   •   SIRADAKİ: " + String(nr.short).toLocaleUpperCase("tr-TR") + " " + nr.value : "") +
+        "   •   ",
+    );
+    R.boardTex.offset.x = (A.time * 0.05) % 1;
+    poseJuggler(dt);
+  }
+
+  /* ═══════════════════════════ ÇİZİM GİRİŞİ ═══════════════════════════ */
+
+  var perf = { acc: 0, n: 0, step: 0 };
+  function adaptQuality(dt) {
+    if (!dt || perf.step >= 2 || state === "attract") return;
+    perf.acc += dt;
+    perf.n += 1;
+    if (perf.acc < 2) return;
+    var avg = perf.acc / perf.n;
+    perf.acc = 0;
+    perf.n = 0;
+    if (avg < 0.024) return;
+    perf.step += 1;
+    if (perf.step === 1) {
+      R.renderer.setPixelRatio(1);
+      resizeGL();
+    } else {
+      R.renderer.shadowMap.enabled = false;
+      R.scene.traverse(function (o) {
+        if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(function (m) { m.needsUpdate = true; });
+      });
+    }
+  }
 
   function render(c, dt) {
-    A.blit(bg);
-    A.drawFlashes(c, W, standTop + 4, boardsY - 4, 1 + Math.min(4, combo));
-    A.drawBoards(c, W, boardsY, boardsH, A.time, boardFlash, "ELİTLİG ARENA  ·  TOP SEKTİR  ·  ");
-
+    if (R) {
+      try {
+        adaptQuality(dt);
+        sync(dt);
+        R.renderer.render(R.scene, R.camera);
+      } catch (e) {
+        glFailed = true;
+        R = null;
+      }
+    }
+    if (glFailed && !R && A.is3d) {
+      c.fillStyle = "#0A0E24";
+      c.fillRect(0, 0, W, H);
+      c.fillStyle = "rgba(255,255,255,0.8)";
+      c.font = A.font(14, 700);
+      c.textAlign = "center";
+      c.fillText("3B grafik bu cihazda açılamadı.", W / 2, H / 2);
+    }
+    drawVignette(c);
     var r = ball.r;
-    /* Gölge: top yükseldikçe büyür ve soluklaşır. */
-    var height = A.clamp((groundY - ball.y - r) / (H * 0.6), 0, 1);
-    c.save();
-    c.globalAlpha = 0.45 * (1 - height * 0.75);
-    c.fillStyle = "#000";
-    c.beginPath();
-    c.ellipse(ball.x, groundY + 2, r * (1 + height * 0.8), r * 0.26 * (1 + height * 0.5), 0, 0, Math.PI * 2);
-    c.fill();
-    c.restore();
-
-    /* Yıldız */
-    if (star) drawStar(c, star);
-
-    /* İz */
+    // İz
     var speed = Math.hypot(ball.vx, ball.vy);
     if (speed > 500 * S) {
       for (var i = 0; i < trail.length - 1; i++) {
         var f = i / trail.length;
-        c.globalAlpha = f * 0.18;
+        c.globalAlpha = f * 0.16;
         c.fillStyle = "#FFFFFF";
         c.beginPath();
         c.arc(trail[i].x, trail[i].y, r * (0.5 + f * 0.45), 0, Math.PI * 2);
@@ -451,21 +845,16 @@
       }
       c.globalAlpha = 1;
     }
-
-    /* Temas halkaları */
+    // Temas halkaları
     for (var k = 0; k < rings.length; k++) {
       var rg = rings[k];
       var t = rg.age / 0.45;
-      c.strokeStyle = rg.perfect ? "rgba(255,210,74," + (1 - t) + ")" : "rgba(255,255,255," + (0.8 * (1 - t)) + ")";
+      c.strokeStyle = rg.perfect ? "rgba(255,210,74," + (1 - t) + ")" : "rgba(255,255,255," + 0.8 * (1 - t) + ")";
       c.lineWidth = 3 * (1 - t) + 1;
       c.beginPath();
       c.ellipse(rg.x, rg.y, r * (0.4 + t * 1.4), r * (0.18 + t * 0.6), 0, 0, Math.PI * 2);
       c.stroke();
     }
-
-    A.drawBall(c, ball.x, ball.y, r, orient);
-
-    /* Top ekranın üstündeyse ok */
     if (ball.y + r < 0) {
       c.fillStyle = "rgba(255,255,255,0.9)";
       c.beginPath();
@@ -475,60 +864,57 @@
       c.closePath();
       c.fill();
     }
-
     A.drawParticles(c);
-    A.blit(vignette);
     A.drawFloaters(c, dt);
-
     if (state === "play" || state === "dying") drawHud(c);
+    if (passedLine) drawPassed(c);
     A.drawBanner(c, W, H * 0.3, dt);
-
     if (state === "dying") {
       var t2 = A.clamp(deathT / 0.5, 0, 1);
-      c.fillStyle = "rgba(251,113,133," + (0.25 * (1 - t2)) + ")";
+      c.fillStyle = "rgba(251,113,133," + 0.25 * (1 - t2) + ")";
       c.fillRect(0, 0, W, H);
     }
   }
 
-  function drawStar(c, s) {
-    var appear = A.easeOutBack(s.age / 0.4);
-    var fade = A.clamp((s.life - s.age) / 0.8, 0, 1);
-    var blink = s.life - s.age < 1.5 ? 0.6 + 0.4 * Math.sin(s.age * 20) : 1;
-    var R = s.r * appear;
-    c.save();
-    c.translate(s.x, s.y);
-    c.globalAlpha = fade * blink;
-    c.globalCompositeOperation = "lighter";
-    var g = c.createRadialGradient(0, 0, 0, 0, 0, R * 2.4);
-    g.addColorStop(0, "rgba(255,210,74,0.6)");
-    g.addColorStop(1, "rgba(255,210,74,0)");
-    c.fillStyle = g;
-    c.fillRect(-R * 2.4, -R * 2.4, R * 4.8, R * 4.8);
-    c.globalCompositeOperation = "source-over";
-    c.rotate(s.age * 1.4);
-    c.beginPath();
-    for (var i = 0; i < 10; i++) {
-      var rr = i % 2 ? R * 0.45 : R;
-      var a = (i / 10) * Math.PI * 2 - Math.PI / 2;
-      c.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+  var vignetteLayer = null;
+  function drawVignette(c) {
+    if (!vignetteLayer || vignetteLayer.w !== W || vignetteLayer.h !== H) {
+      vignetteLayer = A.layer(W, H);
+      A.paintVignette(vignetteLayer.ctx, W, H, 0.5);
+      A.paintTopScrim(vignetteLayer.ctx, W, 130);
     }
-    c.closePath();
-    var sg = c.createLinearGradient(0, -R, 0, R);
-    sg.addColorStop(0, "#FFF3B0");
-    sg.addColorStop(1, "#F59E0B");
-    c.fillStyle = sg;
+    A.blit(vignetteLayer);
+  }
+
+  /** "X geçildi" bandı — altta, oyuncunun takım rengi şeritli. */
+  function drawPassed(c) {
+    var p = passedLine;
+    var inT = A.easeOutBack(p.age / 0.3);
+    var out = A.clamp((2.4 - p.age) / 0.35, 0, 1);
+    c.save();
+    c.globalAlpha = out;
+    c.font = A.font(13, 800);
+    var text = p.text;
+    var tw = Math.min(W - 32, c.measureText(text).width + 40);
+    var x = W / 2 - tw / 2, y = H - 64;
+    c.translate(W / 2, y + 16);
+    c.scale(0.8 + 0.2 * inT, 0.8 + 0.2 * inT);
+    c.translate(-W / 2, -(y + 16));
+    A.roundRect(c, x, y, tw, 32, 10);
+    c.fillStyle = "rgba(8,10,30,0.86)";
     c.fill();
-    c.lineWidth = 2;
-    c.strokeStyle = "rgba(120,60,0,0.6)";
-    c.stroke();
+    c.fillStyle = p.kit.primary;
+    c.fillRect(x, y + 6, 4, 20);
+    c.fillStyle = P.gold;
+    c.textAlign = "center";
+    c.textBaseline = "middle";
+    c.fillText(text, W / 2 + 2, y + 16.5);
     c.restore();
   }
 
   function drawHud(c) {
     var top = 14;
     A.drawScore(c, 18, top, "PUAN", points, scoreBump);
-
-    // Sağ üst: seviye + sekme
     c.save();
     var label = "SEVİYE " + level;
     c.font = A.font(12, 800);
@@ -538,7 +924,6 @@
     c.textAlign = "center";
     c.textBaseline = "middle";
     c.fillText(label, W - 16 - lw / 2, top + 13.5);
-
     var kl = kicks + " sekme";
     c.font = A.font(12, 700);
     var kw = c.measureText(kl).width + 22;
@@ -547,7 +932,6 @@
     c.fillText(kl, W - 16 - kw / 2, top + 45.5);
     c.restore();
 
-    // Çarpan ve kombo çubuğu
     var mult = multiplier();
     var bx = 18, by = top + 66;
     var bw = 110;
@@ -567,7 +951,9 @@
     c.fillStyle = mult > 1 ? P.gold : "rgba(255,255,255,0.75)";
     c.fillText("×" + mult, bx + bw + 8, by + 5.5);
 
-    // Rüzgâr göstergesi
+    // Sıradaki oyuncu hedefi
+    drawTarget(c, top + 96);
+
     if (Math.abs(wind) > 8 * S) {
       var strength = A.clamp(Math.abs(wind) / (520 * S), 0, 1);
       var dir = Math.sign(wind);
@@ -577,8 +963,7 @@
       c.translate(cx, cy);
       c.fillStyle = strength > 0.6 ? P.bad : "#BFE3FF";
       for (var i = 0; i < 3; i++) {
-        var on = strength > i / 3 - 0.05;
-        c.globalAlpha = on ? 1 : 0.25;
+        c.globalAlpha = strength > i / 3 - 0.05 ? 1 : 0.25;
         var x = dir * (-16 + i * 12) + (dir > 0 ? 10 : -10);
         c.beginPath();
         c.moveTo(x + dir * 6, 0);
@@ -594,7 +979,6 @@
       c.fillStyle = "#fff";
       c.fillText("RÜZGÂR", dir > 0 ? -34 : 34, 0.5);
       c.restore();
-      // Rüzgâr çizgileri sahada
       if (!A.reduceMotion) {
         c.save();
         c.strokeStyle = "rgba(220,235,255," + (0.1 + strength * 0.15) + ")";
@@ -602,7 +986,7 @@
         c.lineCap = "round";
         for (var j = 0; j < 6; j++) {
           var yy = H * 0.15 + ((j * 97) % (H * 0.6));
-          var xx = ((windDrift + j * 211) % (W + 120) + W + 120) % (W + 120) - 60;
+          var xx = ((((windDrift + j * 211) % (W + 120)) + W + 120) % (W + 120)) - 60;
           c.beginPath();
           c.moveTo(xx, yy);
           c.lineTo(xx - dir * (30 + strength * 40), yy);
@@ -613,9 +997,47 @@
     }
   }
 
-  function debug() {
-    return { state: state, kicks: kicks, points: points, level: level, combo: combo, wind: wind, ball: ball, g: gravity(), apex: apexHeight(), groundY: groundY, star: star };
+  /** Sıradaki hedef: "Sıradaki: A. Yılmaz · 31 gol+asist" + ilerleme çubuğu. */
+  function drawTarget(c, y) {
+    var rv = nextRival();
+    var w = Math.min(W - 32, 300), h = 30;
+    var x = 18;
+    c.save();
+    A.roundRect(c, x, y, w, h, 8);
+    c.fillStyle = "rgba(8,10,30,0.66)";
+    c.fill();
+    c.textBaseline = "middle";
+    c.textAlign = "left";
+    if (!rv) {
+      c.fillStyle = P.gold;
+      c.font = A.font(12, 800);
+      c.fillText(rivals.length ? "Ligin bütün oyuncularını geçtin!" : (juggler.short || "") + " sektiriyor", x + 12, y + h / 2 + 0.5);
+      c.restore();
+      return;
+    }
+    var prevVal = passedRivals > 0 ? rivals[passedRivals - 1].value : 0;
+    var prog = A.clamp((kicks - prevVal) / Math.max(1, rv.value - prevVal), 0, 1);
+    c.fillStyle = kitOf(rv).primary;
+    c.fillRect(x, y + 5, 4, h - 10);
+    c.font = A.font(11, 700);
+    c.fillStyle = "rgba(255,255,255,0.65)";
+    c.fillText("SIRADAKİ", x + 12, y + h / 2 + 0.5);
+    c.font = A.font(12, 800);
+    c.fillStyle = "#FFFFFF";
+    var label = rv.short + " · " + rv.value;
+    var maxW = w - 90;
+    while (c.measureText(label).width > maxW && label.length > 4) label = label.slice(0, -1);
+    c.fillText(label, x + 74, y + h / 2 + 0.5);
+    c.fillStyle = "rgba(255,255,255,0.15)";
+    c.fillRect(x + 8, y + h - 4, w - 16, 2);
+    c.fillStyle = P.gold;
+    c.fillRect(x + 8, y + h - 4, (w - 16) * prog, 2);
+    c.restore();
   }
 
-  A.register({ resize: resize, start: start, update: update, render: render, down: down, debug: debug });
+  function debug() {
+    return { state: state, kicks: kicks, points: points, level: level, combo: combo, wind: wind, ball: ball, g: gravity(), apex: apexHeight(), groundY: groundY, star: star, juggler: juggler.short, passed: passedRivals, gl: !!R };
+  }
+
+  A.register({ resize: resize, start: start, update: update, render: render, down: down, debug: debug, setRoster: setRoster });
 })();

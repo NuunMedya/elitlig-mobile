@@ -5,6 +5,8 @@
  * için kurulum düğümünü (RosterSetup) ve oyuna gönderilecek kadroyu üretir:
  *   Penaltı  { shooter, keepers }   (bkz. games/penalti.js)
  *   Slalom   { runner, defenses }   (bkz. games/slalom.js)
+ *   Sektir   { juggler, rivals }    (bkz. games/sektir.js; Slalom listesinden:
+ *            rakipler oyuncuların sezon gol + asist sayısı, artan sırada)
  * Kadro gelmezse oyun kendi varsayılan kadrosuyla oynanır (roster null).
  */
 
@@ -28,12 +30,17 @@ export interface GameRoster {
 const KEYS: Partial<Record<WebGameKey, string>> = {
   penalti: "elitlig.penalti.shooter.v1",
   slalom: "elitlig.slalom.runner.v1",
+  sektir: "elitlig.sektir.juggler.v1",
 };
 
+/** Sektir rakipleri: gol + asist değerleri artan, eşit aralıklı en çok 12 oyuncu. */
+const RIVALS = 12;
+
 export function useGameRoster(game: WebGameKey, cityId: number | null, playerId: number | null): GameRoster {
-  const supported = game === "penalti" || game === "slalom";
+  const supported = game === "penalti" || game === "slalom" || game === "sektir";
   const query = useQuery({
-    queryKey: ["arena", game, "roster", cityId ?? 0, playerId ?? 0],
+    // Sektir, Slalom'un oyuncu listesini kullanır (aynı önbellek anahtarı).
+    queryKey: ["arena", game === "sektir" ? "slalom" : game, "roster", cityId ?? 0, playerId ?? 0],
     queryFn: (): Promise<unknown> => (game === "penalti" ? getPenaltyRoster(cityId) : getSlalomRoster(cityId)),
     enabled: supported,
     staleTime: 30 * 60_000,
@@ -92,6 +99,44 @@ export function useGameRoster(game: WebGameKey, cityId: number | null, playerId:
             ladderTitle={`Kaleci merdiveni · ${keepers.length} kaleci`}
             ladder={keepers.map((k) => ({ id: k.id, name: k.name, image: k.image, color: k.team.kit.primary }))}
             finalText={final ? `Final: ${final.short} · ${final.stats.saves} kurtarış${final.team.name ? ` · ${final.team.name}` : ""}` : null}
+          />
+        ),
+      };
+    }
+
+    if (game === "sektir") {
+      const data = query.data as Awaited<ReturnType<typeof getSlalomRoster>> | undefined;
+      const people = data?.runners ?? [];
+      const juggler = people.find((p) => p.id === selectedId) ?? people.find((p) => p.mine) ?? people[0];
+      const pool = people
+        .filter((p) => p.id !== juggler?.id && p.stats.goals + p.stats.assists > 0)
+        .map((p) => ({ id: p.id, short: p.short, name: p.name, image: p.image, team: p.team, value: p.stats.goals + p.stats.assists }))
+        .sort((a, b) => a.value - b.value);
+      const rivals =
+        pool.length <= RIVALS ? pool : Array.from({ length: RIVALS }, (_, i) => pool[Math.round((i * (pool.length - 1)) / (RIVALS - 1))]);
+      const final = rivals[rivals.length - 1];
+      return {
+        roster: juggler ? { juggler, rivals } : null,
+        changeLabel: juggler ? "Oyuncu değiştir" : null,
+        setup: (
+          <RosterSetup
+            loading={loading}
+            people={people}
+            scope={data?.scope}
+            selectedId={juggler?.id ?? null}
+            onSelect={choose}
+            title="Topu kim sektirecek?"
+            loadingText="Ligin oyuncuları yükleniyor…"
+            emptyText="Gerçek kadro şu an yüklenemedi; ElitLig oyuncusuyla oynayabilirsin."
+            attrs={[
+              { key: "control", label: "Kontrol" },
+              { key: "agility", label: "Denge" },
+            ]}
+            chipMeta={(p) => `${p.stats.goals}G ${p.stats.assists}A`}
+            detailMeta={(p) => [p.team.name, `${p.stats.goals} gol`, `${p.stats.assists} asist`].filter(Boolean).join(" · ")}
+            ladderTitle={`Geçeceğin oyuncular · sekme = gol + asist`}
+            ladder={rivals.map((r) => ({ id: r.id, name: r.name, image: r.image, color: r.team.kit.primary }))}
+            finalText={final ? `Final: ${final.short} · ${final.value} gol + asist` : null}
           />
         ),
       };
