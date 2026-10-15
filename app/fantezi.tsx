@@ -86,30 +86,35 @@ function Lineup({ scope }: { scope: Scope }) {
   const toast = useToast();
   const queryClient = useQueryClient();
   const poolQuery = useQuery({ queryKey: ["fantasy", "pool", scope.leagueId, scope.seasonId], queryFn: () => getFantasyPool(scope), staleTime: 10 * 60_000 });
-  const meQuery = useQuery({ queryKey: ["fantasy", "me", scope.leagueId, scope.seasonId], queryFn: () => getFantasyMe(scope), staleTime: 30_000 });
+  const auth = useAuth();
+  const meQuery = useQuery({ queryKey: ["fantasy", "me", auth.user?.id ?? 0, scope.leagueId, scope.seasonId], queryFn: () => getFantasyMe(scope), staleTime: 30_000 });
   const [picks, setPicks] = useState<number[] | null>(null);
   const [captain, setCaptain] = useState<number | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const me = meQuery.data;
-  useEffect(() => {
-    if (!me || picks) return;
-    const base = me.lineup ?? me.suggestion;
-    setPicks(base?.playerIds ?? []);
-    setCaptain(base?.captainId ?? null);
-  }, [me, picks]);
-
   const byId = useMemo(() => new Map((poolQuery.data?.players ?? []).map((player) => [player.id, player])), [poolQuery.data]);
+  /* Başlangıç kadrosu: bu haftanın kadrosu ya da geçen haftanın önerisi.
+     Havuzda artık olmayan (takımından ayrılmış) oyuncular ayıklanır. */
+  useEffect(() => {
+    if (!me || picks || !poolQuery.data) return;
+    const base = me.lineup ?? me.suggestion;
+    const ids = (base?.playerIds ?? []).filter((id) => byId.has(id));
+    setPicks(ids);
+    setCaptain(base?.captainId != null && ids.includes(base.captainId) ? base.captainId : ids[0] ?? null);
+  }, [byId, me, picks, poolQuery.data]);
+
   const budget = poolQuery.data?.budget ?? 40;
   const size = poolQuery.data?.size ?? 5;
   const maxPerTeam = poolQuery.data?.maxPerTeam ?? 2;
   const selected = (picks ?? []).map((id) => byId.get(id)).filter(Boolean) as FantasyPlayer[];
+  const selectedIds = selected.map((player) => player.id);
   const cost = selected.reduce((sum, player) => sum + player.price, 0);
   const locked = Boolean(me?.week.locked);
-  const saved = me?.lineup && JSON.stringify([...me.lineup.playerIds].sort()) === JSON.stringify([...(picks ?? [])].sort()) && me.lineup.captainId === captain;
+  const saved = me?.lineup && JSON.stringify([...me.lineup.playerIds].sort()) === JSON.stringify([...selectedIds].sort()) && me.lineup.captainId === captain;
 
   const save = useMutation({
-    mutationFn: () => saveFantasy(scope, picks ?? [], captain as number),
+    mutationFn: () => saveFantasy(scope, selectedIds, captain as number),
     onSuccess: (data) => {
       toast.show({ message: `${data.message} (${data.cost} kredi)`, tone: "success" });
       void queryClient.invalidateQueries({ queryKey: ["fantasy"] });
@@ -134,9 +139,15 @@ function Lineup({ scope }: { scope: Scope }) {
     if (captain === id) setCaptain(null);
   };
   const add = (player: FantasyPlayer) => {
-    setPicks((current) => [...(current ?? []), player.id]);
-    if (captain == null) setCaptain(player.id);
-    if ((picks?.length ?? 0) + 1 >= size) setPickerOpen(false);
+    // Hızlı çift dokunuşta 6. oyuncu eklenmesin: sınır güncel durumda denetlenir.
+    setPicks((current) => {
+      const list = current ?? [];
+      if (list.length >= size || list.includes(player.id)) return list;
+      const next = [...list, player.id];
+      if (next.length >= size) setPickerOpen(false);
+      return next;
+    });
+    setCaptain((current) => current ?? player.id);
   };
   const breakdown = new Map((me?.lineup?.breakdown ?? []).map((item) => [item.id, item.points]));
 

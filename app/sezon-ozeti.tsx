@@ -33,7 +33,7 @@ export default function SeasonSummaryScreen() {
   const shotRef = useRef<ViewShot>(null);
   const [sharing, setSharing] = useState(false);
 
-  const query = useQuery({ queryKey: ["career", "season-summary"], queryFn: () => getSeasonSummary(), enabled: Boolean(auth.user), staleTime: 10 * 60_000 });
+  const query = useQuery({ queryKey: ["career", "season-summary", auth.user?.id ?? 0], queryFn: () => getSeasonSummary(), enabled: Boolean(auth.user), staleTime: 10 * 60_000 });
   const data = query.data;
 
   if (!auth.user) return <Redirect href="/giris" />;
