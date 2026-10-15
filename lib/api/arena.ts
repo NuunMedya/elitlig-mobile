@@ -1,6 +1,13 @@
 import { get, post } from "../http";
 
-export type ArenaGame = "seri" | "sektir" | "kimbu" | "slalom" | "gunun" | "penalti" | "tahmin";
+export type ArenaGame =
+  | "seri"
+  | "sektir"
+  | "kimbu"
+  | "slalom"
+  | "gunun"
+  | "penalti"
+  | "tahmin";
 
 export interface ArenaEntry {
   rank: number;
@@ -31,19 +38,30 @@ export const ARENA_CLIENT_VERSION = 3;
  * getirir. Oturum açılamazsa skor yine gönderilir (lider tablosuna girer).
  */
 export const startArenaSession = (game: ArenaGame) =>
-  post<{ sessionId: string; game: string; startedAt: string }>("/api/arena/sessions", { game }, { retry: false });
+  post<{ sessionId: string; game: string; startedAt: string }>(
+    "/api/arena/sessions",
+    { game },
+    { retry: false },
+  );
 
-export const submitArenaScore = (game: ArenaGame, score: number, sessionId?: string | null) =>
-  post<{ message?: string; entry?: { verified?: boolean } }>("/api/arena/scores", {
-    game,
-    score,
-    v: ARENA_CLIENT_VERSION,
-    ...(sessionId ? { sessionId } : {}),
-  });
+export const submitArenaScore = (
+  game: ArenaGame,
+  score: number,
+  sessionId?: string | null,
+) =>
+  post<{ message?: string; entry?: { verified?: boolean } }>(
+    "/api/arena/scores",
+    {
+      game,
+      score,
+      v: ARENA_CLIENT_VERSION,
+      ...(sessionId ? { sessionId } : {}),
+    },
+  );
 
 export const getArenaLeaderboard = (
   game: ArenaGame,
-  options?: { cityId?: number; period?: "weekly" | "alltime" }
+  options?: { cityId?: number; period?: "weekly" | "alltime" },
 ) =>
   get<ArenaLeaderboard>("/api/arena/leaderboard", {
     game,
@@ -51,5 +69,56 @@ export const getArenaLeaderboard = (
     period: options?.period ?? "alltime",
   });
 
-export const getMyArenaRank = (game: ArenaGame, cityId?: number, period?: "weekly" | "alltime") =>
-  get<Record<string, unknown>>("/api/arena/leaderboard/me", { game, cityId, period });
+export const getMyArenaRank = (
+  game: ArenaGame,
+  cityId?: number,
+  period?: "weekly" | "alltime",
+) =>
+  get<Record<string, unknown>>("/api/arena/leaderboard/me", {
+    game,
+    cityId,
+    period,
+  });
+
+/* ───────────────────────── Penaltı kadrosu ───────────────────────── */
+
+export interface PenaltyKit {
+  primary: string;
+  secondary: string;
+}
+
+/** Gerçek ligden bir oyuncu (atıcı ya da kaleci) — services/penaltyRoster.js. */
+export interface PenaltyPerson {
+  id: number;
+  name: string;
+  short: string;
+  back: string;
+  image: string | null;
+  position: string | null;
+  shirt: number | null;
+  team: { id: number | null; name: string | null; kit: PenaltyKit };
+  stats: {
+    matches: number;
+    goals: number;
+    penalty_goals: number;
+    free_kick_goals: number;
+    saves: number;
+    rating: number | null;
+  };
+  /** Atıcı: power / accuracy / curve; kaleci: reflex (55–95). */
+  attrs: Record<string, number>;
+  mine?: boolean;
+}
+
+export interface PenaltyRoster {
+  /** "city": seçili ilin oyuncuları; ilde yeterli oyuncu yoksa "all" (Türkiye geneli). */
+  scope?: "city" | "all";
+  shooters: PenaltyPerson[];
+  /** Kurtarışa göre ARTAN: ilk seviyede ilki, son kaleci ligin en çok kurtarış yapanı. */
+  keepers: PenaltyPerson[];
+}
+
+export const getPenaltyRoster = (cityId?: number | null) =>
+  get<PenaltyRoster>("/api/arena/penalti/roster", {
+    cityId: cityId ?? undefined,
+  });

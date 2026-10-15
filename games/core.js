@@ -12,6 +12,7 @@
  * KÖPRÜ — iki yönlü, küçük:
  *   Oyun → RN : {type:"ready"} · {type:"haptic",kind} · {type:"over",score,stats}
  *   RN → Oyun : window.ArenaCmd({type:"start"|"pause"|"resume"|"sound",on})
+ *               window.ArenaCmd({type:"config", sound, reduceMotion, perks, roster})
  *
  * DÖNGÜ: değişken kare süresi, sabit üst sınırlı alt adımlar (≤1/120 sn).
  * 60 Hz'de de 120 Hz'de de aynı oyun; sekme arka plana geçince saat durur,
@@ -21,7 +22,9 @@
   "use strict";
 
   var canvas = document.getElementById("c");
-  var ctx = canvas.getContext("2d", { alpha: false });
+  // 3B oyunlarda (#gl WebGL sahnesi altta) bu tuval saydam HUD katmanıdır.
+  var hud3d = !!window.ARENA_3D;
+  var ctx = canvas.getContext("2d", { alpha: hud3d });
   var dpr = Math.min(window.devicePixelRatio || 1, 3);
 
   var A = (window.Arena = {
@@ -35,6 +38,7 @@
     soundOn: true,
     reduceMotion: false,
     game: null,
+    is3d: hud3d,
     FONT: '-apple-system, "SF Pro Display", Roboto, "Helvetica Neue", Arial, sans-serif',
   });
 
@@ -72,6 +76,11 @@
         if (cmd.sound != null) A.soundOn = !!cmd.sound;
         // Kariyer avantajı (Elit Kart): oyunun okuduğu küçük oranlar, en çok 0.1.
         if (cmd.perks && typeof cmd.perks === "object") A.perks = cmd.perks;
+        // Oyuna özgü kadro (Penaltı: gerçek ligden atıcı + kaleci merdiveni).
+        if (cmd.roster && typeof cmd.roster === "object") {
+          A.roster = cmd.roster;
+          if (A.game.setRoster) A.game.setRoster(cmd.roster);
+        }
         break;
     }
   };
@@ -629,6 +638,7 @@
     }
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (hud3d) ctx.clearRect(0, 0, A.W, A.H);
     if (A.shakeAmt > 0.2) {
       ctx.translate((Math.random() - 0.5) * A.shakeAmt, (Math.random() - 0.5) * A.shakeAmt);
       A.shakeAmt *= Math.exp(-14 * dt);
