@@ -16,8 +16,9 @@
  *   3. SLALOM: kenarda saklanmak ARTIK İŞE YARAMAZ — kaçırılan kapılar hak
  *      götürür ve tur biter. Kapıları izleyen oyuncu puan toplar; hız artar,
  *      kapılar daralır.
- *   4. PENALTI: süre dolarsa kaçırma sayılır ve üç kaçırmada tur biter; gol
- *      puan kazandırır ve oyun sonu skoru köprüden iletilir.
+ *   4. PENALTI: seri penaltı kuralları (erken bitiş, ani ölüm) doğru; atış ve
+ *      kalecilik sırayla; köşeye vuruş gol olur, hep ortaya vuran okunur; zamanında uçan kaleci kurtarır; kazanan sıradaki kulübe
+ *      geçer, kaybeden turnuvayı bitirir ve skor köprüden iletilir.
  *   5. BİLGİ YARIŞMALARI (Arena, Kim Bu?, Skor Tahmini): her soru geçerli
  *      (cevap şıklarda, şıklar tekil), zorluk seviyeyle artar, son sorulan
  *      oyuncu/maç hemen tekrar gelmez, maç sonucu doğru okunur, hızlı ve seri
@@ -322,62 +323,161 @@ for (const game of ["penalti", "slalom", "sektir"]) {
 
 /* ── 4) PENALTI ──────────────────────────────────────────────────────────── */
 
-{
-  const { A, run, over } = boot("penalti");
-  A.game.start();
-  run(1.5 + 3 * (8 + 1.6) + 1); // açılış tanıtımı + üç süre aşımı
-  const end = over();
-  check(
-    "penaltı: süre dolunca hak gider",
-    Boolean(end) && end.score === 0 && A.game.debug().misses === 3,
-    end ? "üç süre aşımında tur bitti" : `tur bitmedi (kaçırma ${A.game.debug().misses})`,
-  );
-}
-{
-  const { A, run, over } = boot("penalti");
-  const kit = { primary: "#dc2626", secondary: "#ffffff" };
-  const person = (id, short, extra) => ({ id, short, back: short.toUpperCase(), shirt: 9, team: { name: "Takım", kit }, ...extra });
-  globalThis.__penaltiRoster = {
-    shooter: person(1, "A. Golcü", { attrs: { power: 80, accuracy: 85, curve: 70 } }),
-    keepers: [person(2, "K. Bir", { attrs: { reflex: 60 } }), person(3, "K. İki", { attrs: { reflex: 75 } }), person(4, "K. Üç", { attrs: { reflex: 92 } })],
-  };
-  A.game.setRoster(globalThis.__penaltiRoster);
-  check("penaltı: atıcı kadrodan gelir", A.game.debug().shooter === "A. Golcü", A.game.debug().shooter);
-  A.game.start();
-  let shots = 0;
-  const outcomes = [];
-  for (let i = 0; i < 90 && !over(); i += 1) {
-    run(0.4);
+/**
+ * Penaltı botu: atışta nişan + güç zamanlaması, kalede tepki. `aim(d)` hedef
+ * (x, y) döndürür; `power` "iyi" ise yeşil bölgenin ortasında, "zayıf" ise
+ * bölgenin altında dokunur; `react` kalecinin tepki süresi (sn, null = hiç).
+ */
+function penaltyBot(A, run, { aim, power = "iyi", react = 0.22, type = "plase", restart = false }) {
+  const W = 390, H = 640;
+  const seen = [];
+  let guard = 0;
+  const step = () => {
     const d = A.game.debug();
-    if (d.state !== "aim") {
-      run(0.5);
-      continue;
+    if (d.state === "over" && restart) {
+      A.game.start();
+      return;
     }
-    // Sol/sağ üst köşeye güçlü, hafif falsolu atış.
-    const side = i % 2 ? 1 : -1;
-    A.game.down({ x: 195, y: 560 });
-    for (let k = 1; k <= 8; k += 1) A.game.move({ x: 195 + side * 140 * (k / 8) + Math.sin((Math.PI * k) / 8) * 20, y: 560 - 230 * (k / 8) });
-    A.game.up({ x: 195 + side * 140, y: 330 });
-    shots += 1;
-    run(1.7); // ~0,9 sn koşu + uçuş
-    outcomes.push(A.game.debug().outcome);
-    run(1);
-  }
-  const goals = outcomes.filter((o) => o === "gol").length;
-  const end = over();
-  const ladderOk = goals < 3 ? true : A.game.debug().keeperIdx >= 1 && end && end.stats.keeper >= 2;
+    if (d.state === "aim") {
+      if (d.shotType !== type) {
+        const order = ["plase", "sert", "kasik"];
+        const bw = Math.min(104, (W - 48) / 3), x0 = W / 2 - (bw * 3 + 16) / 2;
+        A.game.down({ x: x0 + order.indexOf(type) * (bw + 8) + bw / 2, y: H - 44 });
+        A.game.up({ x: x0 + order.indexOf(type) * (bw + 8) + bw / 2, y: H - 44 });
+      }
+      const [tx, ty] = aim(d);
+      const dx = ((tx - d.aim.x) / 8.6) * W, dy = -((ty - d.aim.y) / 4.6) * H;
+      A.game.down({ x: 195, y: 400 });
+      A.game.move({ x: 195 + dx, y: 400 + dy });
+      A.game.up({ x: 195 + dx, y: 400 + dy });
+      return;
+    }
+    if (d.state === "power") {
+      const want = power === "iyi" ? (d.zone[0] + d.zone[1]) / 2 : Math.max(0.05, d.zone[0] - 0.3);
+      if (Math.abs(d.powerV - want) < 0.025) A.game.down({ x: 100, y: 300 });
+      run(1 / 120);
+      return;
+    }
+    if (d.state === "keepFlight" && react != null) {
+      const b = d.ball, k = d.keeper;
+      if (!k.dive && !k.stay && b.t > react) {
+        const ft = (0.35 - b.z) / b.vz;
+        const px = b.x + b.vx * ft, py = b.y + b.vy * ft - 4.9 * ft * ft;
+        const len = Math.hypot(px, py - 1) || 1;
+        const L = Math.min(1, len / 2.8) * W * 0.32 + 40;
+        A.game.down({ x: 195, y: 400 });
+        A.game.up({ x: 195 - (px / len) * L, y: 400 - ((py - 1) / len) * L });
+      }
+    }
+    const before = d.state;
+    run(1 / 60);
+    const after = A.game.debug();
+    if (before !== "result" && after.state === "result") seen.push({ ...after.lastKick, me: after.me.slice(), op: after.op.slice(), matchIdx: after.matchIdx });
+  };
+  return {
+    seen,
+    until(fn, limit = 60000) {
+      while (!fn() && guard++ < limit) step();
+    },
+  };
+}
+const rate = (list, who, result) => {
+  const mine = list.filter((k) => k.who === who);
+  return mine.length ? mine.filter((k) => k.result === result).length / mine.length : 0;
+};
+const kitP = { primary: "#dc2626", secondary: "#ffffff" }, kitB = { primary: "#1d4ed8", secondary: "#ffffff" }, kitY = { primary: "#facc15", secondary: "#111827" };
+const penRoster = {
+  shooter: { id: 1, name: "Ali Golcü", short: "A. Golcü", back: "GOLCÜ", shirt: 9, team: { id: 10, name: "Kırmızı SK", kit: kitP }, attrs: { power: 82, accuracy: 85, curve: 75 } },
+  keepers: [
+    { id: 2, name: "Kaan Bir", short: "K. Bir", team: { id: 20, name: "Mavi FK", kit: kitB }, attrs: { reflex: 60 }, stats: { saves: 10 } },
+    { id: 3, name: "Kerem İki", short: "K. İki", team: { id: 30, name: "Sarı Spor", kit: kitY }, attrs: { reflex: 92 }, stats: { saves: 60 } },
+  ],
+  takers: [{ id: 21, name: "Mert Mavi", short: "M. Mavi", team: { id: 20, name: "Mavi FK", kit: kitB }, attrs: { power: 80, accuracy: 80 }, stats: { goals: 9 } }],
+};
+const corner = () => [(Math.random() < 0.5 ? -1 : 1) * (2.35 + Math.random() * 0.8), 0.35 + Math.random() * 1.5];
+
+{
+  const { A } = boot("penalti");
+  const decide = A.game.debug().decide;
+  const g = "g", x = "x";
+  const cases = [
+    [[g, g, g], [x, x, x], false, "won"], // 3–0, rakibin 2 atışı kaldı: yetişemez
+    [[g, g, g], [x, x], false, null], // rakip hâlâ yetişebilir
+    [[x, x, x], [g, g, g], false, "lost"],
+    [[g, x, g, x, g], [g, g, x, g, x], false, null], // 3–3: ani ölüme
+    [[g, g, g, g, g, g], [g, g, g, g, g, x], true, "won"],
+    [[g, g, g, g, g, x], [g, g, g, g, g, g], true, "lost"],
+    [[g, g, g, g, g, g], [g, g, g, g, g], true, null], // çift tamamlanmadı
+  ];
+  const bad = cases.filter(([m, o, s, want]) => decide(m, o, s) !== want);
+  check("penaltı: seri penaltı kuralları (erken bitiş, ani ölüm)", bad.length === 0, bad.length ? JSON.stringify(bad[0]) : `${cases.length} durum doğru`);
+}
+{
+  const { A, run } = boot("penalti");
+  A.game.setRoster(penRoster);
+  A.game.start();
+  const d0 = A.game.debug();
   check(
-    "penaltı: kaleci merdiveni seviyeyle ilerler",
-    ladderOk,
-    `${goals} gol → ${A.game.debug().keeperIdx + 1}. kaleci (${end ? end.stats.keeper + "/" + end.stats.keepers : "—"})`,
+    "penaltı: atıcı, rakip kulüp ve atıcıları kadrodan gelir",
+    d0.shooter === "A. Golcü" && d0.opponent === "Mavi FK" && d0.oppKeeper === "K. Bir",
+    `${d0.shooter} vs ${d0.opponent} (kaleci ${d0.oppKeeper})`,
   );
+  const bot = penaltyBot(A, run, { aim: corner });
+  let order = true;
+  bot.until(() => bot.seen.length >= 6);
+  bot.seen.forEach((k, i) => {
+    if (k.who !== (i % 2 ? "op" : "me")) order = false;
+  });
+  const takers = bot.seen.filter((k) => k.who === "op").length;
+  check("penaltı: sırayla atış ve kalecilik", order && takers === 3, bot.seen.map((k) => (k.who === "me" ? "A" : "K") + ":" + k.result).join(" "));
+}
+{
+  const { A, run } = boot("penalti");
+  A.game.setRoster(penRoster);
+  A.game.start();
+  const good = penaltyBot(A, run, { aim: corner, react: null, restart: true });
+  good.until(() => good.seen.filter((k) => k.who === "me").length >= 80);
+  const { A: B, run: runB } = boot("penalti");
+  B.game.setRoster(penRoster);
+  B.game.start();
+  const weak = penaltyBot(B, runB, { aim: () => [A.rand(-0.4, 0.4), 0.6], react: null, restart: true });
+  weak.until(() => weak.seen.filter((k) => k.who === "me").length >= 80);
+  const gGood = rate(good.seen, "me", "gol"), gWeak = rate(weak.seen, "me", "gol");
+  check("penaltı: köşeye vuruş gol, hep ortaya vuran okunur", gGood >= 0.7 && gWeak <= 0.62 && gGood > gWeak + 0.22, `köşe %${Math.round(gGood * 100)} gol · hep orta %${Math.round(gWeak * 100)} gol`);
+}
+{
+  const saveRate = (react) => {
+    const { A, run } = boot("penalti");
+    A.game.setRoster(penRoster);
+    A.game.start();
+    const bot = penaltyBot(A, run, { aim: corner, react, restart: true });
+    bot.until(() => bot.seen.filter((k) => k.who === "op").length >= 40);
+    return rate(bot.seen, "op", "kurtaris");
+  };
+  const quick = saveRate(0.2), none = saveRate(null);
+  check("penaltı: zamanında doğru yöne uçan kaleci kurtarır", quick >= 0.4 && none <= 0.22, `tepkili kaleci %${Math.round(quick * 100)} kurtarış · hiç uçmayan %${Math.round(none * 100)}`);
+}
+{
+  // İyi oynayan: kazanır, sıradaki kulübe geçer. Kötü oynayan: kaybeder, tur biter.
+  const { A, run, over } = boot("penalti");
+  A.game.setRoster(penRoster);
+  A.game.start();
+  const bot = penaltyBot(A, run, { aim: corner, react: 0.18 });
+  bot.until(() => A.game.debug().matchIdx >= 1 || A.game.debug().state === "over");
+  const d = A.game.debug();
+  const advanced = d.matchIdx === 1 && d.tally.wins === 1 && d.points >= 400 && d.opponent === "Sarı Spor";
+  const { A: B, run: runB, over: overB } = boot("penalti");
+  B.game.setRoster(penRoster);
+  B.game.start();
+  const loser = penaltyBot(B, runB, { aim: () => [0, 0.4], power: "zayıf", react: null });
+  loser.until(() => B.game.debug().state === "over");
+  const end = overB();
   check(
-    "penaltı: gol puan kazandırır ve seri biter",
-    goals >= 1 && Boolean(end) && end.score >= goals * 100,
-    `${shots} atış, ${goals} gol, skor ${end ? end.score : "—"} (${outcomes.join(" ")})`,
+    "penaltı: kazanan sıradaki kulübe geçer, kaybeden turnuvayı bitirir",
+    (advanced || Boolean(over())) && Boolean(end) && end.stats && end.stats.wins === 0 && end.stats.keepers === 2,
+    `iyi oyuncu: ${advanced ? "2. maça geçti (" + d.opponent + ")" : "ilk maçı kaybetti"} · kötü oyuncu: ${end ? "tur bitti, skor " + end.score : "bitmedi"}`,
   );
 }
-
 
 /* ── 5) BİLGİ YARIŞMALARI ────────────────────────────────────────────────── */
 

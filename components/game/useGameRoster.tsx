@@ -3,7 +3,8 @@
  *
  * Kadroyu sunucudan alır, oyuncunun seçimini cihazda hatırlar, giriş kartı
  * için kurulum düğümünü (RosterSetup) ve oyuna gönderilecek kadroyu üretir:
- *   Penaltı  { shooter, keepers }   (bkz. games/penalti.js)
+ *   Penaltı  { shooter, keepers, takers }   (bkz. games/penalti.js; takers: rakip
+ *            kulüplerin atıcıları — ligin golcü listesinin tamamı)
  *   Slalom   { runner, defenses }   (bkz. games/slalom.js)
  *   Sektir   { juggler, rivals }    (bkz. games/sektir.js; Slalom listesinden:
  *            rakipler oyuncuların sezon gol + asist sayısı, artan sırada)
@@ -75,7 +76,7 @@ export function useGameRoster(game: WebGameKey, cityId: number | null, playerId:
       const keepers = data?.keepers ?? [];
       const final = keepers[keepers.length - 1];
       return {
-        roster: shooter ? { shooter, keepers } : null,
+        roster: shooter ? { shooter, keepers, takers: people.filter((p) => p.id !== shooter.id) } : null,
         changeLabel: shooter ? "Atıcı değiştir" : null,
         setup: (
           <RosterSetup
@@ -96,7 +97,7 @@ export function useGameRoster(game: WebGameKey, cityId: number | null, playerId:
             detailMeta={(p) =>
               [p.team.name, `${p.stats.goals} gol`, p.stats.penalty_goals ? `${p.stats.penalty_goals} penaltı golü` : null].filter(Boolean).join(" · ")
             }
-            ladderTitle={`Kaleci merdiveni · ${keepers.length} kaleci`}
+            ladderTitle={`Rakip kulüpler · ${keepers.length} maç`}
             ladder={keepers.map((k) => ({ id: k.id, name: k.name, image: k.image, color: k.team.kit.primary }))}
             finalText={final ? `Final: ${final.short} · ${final.stats.saves} kurtarış${final.team.name ? ` · ${final.team.name}` : ""}` : null}
           />

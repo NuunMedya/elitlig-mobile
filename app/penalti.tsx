@@ -1,10 +1,10 @@
 /**
- * PENALTI — sonsuz seri: üç kaçırma hakkı, her golde akıllanan kaleci.
- * Atıcı ligin gerçek golcülerinden seçilir; kaleler her seviyede ligin bir
- * sonraki kalecisine geçer (en çok kurtarış yapan en sonda).
+ * PENALTI — seri penaltı düellosu: ligin golcüsüyle atarsın, kalecinle
+ * kurtarırsın. Her maç ligin bir sonraki kulübüne karşı (kaleci merdiveni:
+ * en çok kurtarış yapan kaleci finalde). Kaybedince turnuva biter.
  *
- * Oyunun kendisi `games/penalti.js` (Canvas, WebView içinde); kurallar,
- * zorluk eğrisi ve puanlama orada belgelenmiştir. Bu ekran yalnız ortak Arena
+ * Oyunun kendisi `games/penalti.js` (three.js, WebView içinde); kurallar,
+ * kontroller ve puanlama orada belgelenmiştir. Bu ekran yalnız ortak Arena
  * kabuğunu oyuna bağlar: giriş/bitiş kartları, rekor tablosu, paylaşım.
  */
 
@@ -14,25 +14,25 @@ import { ARENA_BEST_KEYS } from "@/lib/game/arenaKeys";
 const CONFIG: ArenaGameConfig = {
   game: "penalti",
   title: "Penaltı",
-  subtitle: "Ligin golcüsünü seç, ligin kalecilerini geç",
+  subtitle: "Seri penaltılarda ligin kulüplerini tek tek ele",
   icon: "football",
   bestKey: ARENA_BEST_KEYS.penalti,
   rules: [
-    { icon: "hand-left-outline", text: "Yukarı sürükle, bırak: uzunluk gücü, yön köşeyi, kavis falsoyu belirler." },
-    { icon: "shield-outline", text: "Her 3 golde sıradaki gerçek kaleci kaleye geçer; finalde ligin en çok kurtarış yapanı var." },
-    { icon: "git-branch-outline", text: "Parmağınla kavis çiz: top falsolu gider, kaleci aldanır." },
-    { icon: "flash-outline", text: "Köşe, yüksek, falso ve altın hedef ekstra puan; gol serisi puanı katlar." },
-    { icon: "trending-up-outline", text: "Her golde kaleci ustalaşır, rüzgâr ve süre baskısı gelir. 3 kaçırmada biter." },
+    { icon: "people-outline", text: "Seri penaltı: beşer atış, sırayla. Sen atarsın, sonra kaleye geçersin. Eşitlikte ani ölüm." },
+    { icon: "locate-outline", text: "Sürükle, nişan al; bırak ve güç çubuğu yeşildeyken dokun. Köşe riskli: halka direği aşarsa top dışarı gidebilir." },
+    { icon: "options-outline", text: "Plase dengeli, Sert hızlı ama savruk, Kaşık erken yatan kaleciyi rezil eder." },
+    { icon: "hand-left-outline", text: "Kalede: uçmak istediğin yöne kaydır, dokunursan ortada kalırsın. Vuruş anında zaman yavaşlar." },
+    { icon: "trophy-outline", text: "Kazandıkça sıradaki kulübe geçersin; finalde ligin en çok kurtarış yapan kalecisi var." },
   ],
   describe: (stats) =>
     [
-      stats.goals != null ? `${stats.goals} gol` : "",
-      stats.level != null ? `Seviye ${stats.level}` : "",
-      stats.bestStreak ? `En uzun seri ${stats.bestStreak}` : "",
-      stats.keeper && stats.keepers ? `Kaleci ${stats.keeper}/${stats.keepers}` : "",
+      stats.champion ? "Şampiyon!" : stats.wins != null ? `${stats.wins} maç kazandın` : "",
+      stats.goals != null && stats.shots ? `${stats.goals}/${stats.shots} gol` : "",
+      stats.saves ? `${stats.saves} kurtarış` : "",
+      stats.keeper && stats.keepers ? `Tur ${stats.keeper}/${stats.keepers}` : "",
     ].filter(Boolean),
-  overTitle: "Hakların bitti",
-  taunt: "Bu kaleciyi geçebilir misin?",
+  overTitle: "Turnuva bitti",
+  taunt: "Bu kulübü seri penaltılarda geçebilir misin?",
 };
 
 export default function PenaltiScreen() {
