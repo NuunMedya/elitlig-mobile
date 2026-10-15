@@ -164,8 +164,12 @@ export default function CareerScreen() {
           </View>
           <View style={styles.actions}>
             <Button label="Tahmin Ligi" icon="podium-outline" variant="secondary" size="sm" onPress={() => router.push("/tahmin-ligi")} style={styles.flex} />
+            <Button label="Fantezi" icon="people-outline" variant="secondary" size="sm" onPress={() => router.push("/fantezi")} style={styles.flex} />
             <Button label="Arena" icon="game-controller-outline" variant="secondary" size="sm" onPress={() => router.push("/(tabs)/oyunlar")} style={styles.flex} />
           </View>
+          {data.card ? (
+            <Button label="Sezon Özetim" icon="sparkles-outline" variant="secondary" onPress={() => router.push("/sezon-ozeti")} />
+          ) : null}
 
           {/* ── Kupa Dolabı ── */}
           <Text style={styles.section} {...textScale.badge}>

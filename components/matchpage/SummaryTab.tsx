@@ -77,6 +77,7 @@ import {
   type TimelineItem,
   type TimelineOrder,
 } from "./shared";
+import { DuelCard, FanVoteCard, useMatchReactions } from "./Community";
 import { TimelineBreak, TimelineRow } from "./Timeline";
 
 export interface SummaryTabProps {
@@ -134,6 +135,10 @@ export function SummaryTab({
   const flashId = useGoalFlash(live ? timeline : EMPTY_EVENTS);
 
   const openPlayer = useCallback((playerId: number) => router.push(`/oyuncu/${playerId}`), [router]);
+  /* Olay tepkileri (gol ve kart satırlarında); planlı maçta olay yok. */
+  const reactions = useMatchReactions(Number(match.id), !scheduled);
+  const reactionData = reactions.data;
+  const onReact = reactions.onReact;
 
   const total = items.length;
   const renderItem = useCallback(
@@ -150,9 +155,12 @@ export function SummaryTab({
           index={index}
           total={total}
           flash={flashId != null && Number(item.event.id) === flashId}
+          reactions={reactionData?.events[String(item.event.id)]}
+          myReaction={reactionData?.mine[String(item.event.id)] ?? null}
+          onReact={onReact}
         />
       ),
-    [flashId, nameOf, openPlayer, total],
+    [flashId, nameOf, openPlayer, total, reactionData, onReact],
   );
 
   /* — Başlık bölümü: zaman tünelinden ÖNCE gelenler — */
@@ -176,6 +184,10 @@ export function SummaryTab({
       ) : (
         <PostMatchHeader match={match} meetings={meetings} nameOf={nameOf} onOpenPlayer={openPlayer} />
       )}
+
+      {/* Faz 4: maç öncesi arena düellosu, maç sonrası taraftar oylaması. */}
+      {scheduled ? <DuelCard matchId={Number(match.id)} /> : null}
+      {state === "finished" ? <FanVoteCard matchId={Number(match.id)} /> : null}
 
       {scheduled ? null : (
         <SectionHeader

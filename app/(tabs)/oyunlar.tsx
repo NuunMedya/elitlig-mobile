@@ -701,8 +701,22 @@ export default function OyunlarScreen() {
             leading={{ icon: "podium", tone: "win" }}
             title="Tahmin Ligi"
             subtitle="Liginin gerçek maçlarına skor tahmini"
-            position="last"
+            position="middle"
             onPress={() => router.push("/tahmin-ligi")}
+          />
+          <ListRow
+            leading={{ icon: "people", tone: "info" }}
+            title="Fantezi ElitLig"
+            subtitle="Liginin oyuncularıyla haftalık 5 kişilik kadro"
+            position="middle"
+            onPress={() => router.push("/fantezi")}
+          />
+          <ListRow
+            leading={{ icon: "shield", tone: "warn" }}
+            title="Kulüp Arenası"
+            subtitle="Takımların haftalık arena yarışı ve derbi düellosu"
+            position="last"
+            onPress={() => router.push("/kulup-arenasi")}
           />
         </View>
       </Animated.ScrollView>

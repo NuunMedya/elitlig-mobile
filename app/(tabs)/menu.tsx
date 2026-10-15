@@ -301,6 +301,27 @@ export default function MenuTabScreen() {
           action: { kind: "route", route: "/tahmin-ligi" },
         },
         {
+          key: "fantezi",
+          icon: "people",
+          title: "Fantezi ElitLig",
+          subtitle: "Haftalık 5 kişilik kadronu kur",
+          action: { kind: "route", route: "/fantezi" },
+        },
+        {
+          key: "kulup-arenasi",
+          icon: "shield",
+          title: "Kulüp Arenası",
+          subtitle: "Takımların arena yarışı ve derbi düellosu",
+          action: { kind: "route", route: "/kulup-arenasi" },
+        },
+        {
+          key: "sezon-ozeti",
+          icon: "sparkles",
+          title: "Sezon Özeti",
+          subtitle: "Sezonunun paylaşılabilir hikâyesi",
+          action: { kind: "route", route: "/sezon-ozeti" },
+        },
+        {
           key: "canli",
           icon: "radio",
           title: "Canlı maçlar",
