@@ -34,7 +34,7 @@ export const startArenaSession = (game: ArenaGame) =>
   post<{ sessionId: string; game: string; startedAt: string }>("/api/arena/sessions", { game }, { retry: false });
 
 export const submitArenaScore = (game: ArenaGame, score: number, sessionId?: string | null) =>
-  post<{ ok?: boolean; entry?: { verified?: boolean } }>("/api/arena/scores", {
+  post<{ message?: string; entry?: { verified?: boolean } }>("/api/arena/scores", {
     game,
     score,
     v: ARENA_CLIENT_VERSION,

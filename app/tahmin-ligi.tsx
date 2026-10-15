@@ -12,7 +12,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -136,6 +136,13 @@ const PredictionCard = React.memo(function PredictionCard({ match, canEdit }: { 
   const queryClient = useQueryClient();
   const [home, setHome] = useState(match.prediction?.home ?? 0);
   const [away, setAway] = useState(match.prediction?.away ?? 0);
+  /* Sunucudaki tahmin değişince (başka cihaz, yenileme) sayaçlar eşitlenir. */
+  const savedHome = match.prediction?.home;
+  const savedAway = match.prediction?.away;
+  useEffect(() => {
+    if (savedHome != null) setHome(savedHome);
+    if (savedAway != null) setAway(savedAway);
+  }, [savedHome, savedAway]);
   const saved = match.prediction && match.prediction.home === home && match.prediction.away === away;
 
   const save = useMutation({

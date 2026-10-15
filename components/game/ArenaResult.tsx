@@ -95,11 +95,14 @@ export function useArenaScore(game: ArenaGame, bestKey: string) {
       }
       setSubmit("sending");
       // Turun oturumu (reset'te açıldı) skorla gider; sunucu süreyle doğrular.
-      const session = sessionRef.current ?? Promise.resolve(null);
-      sessionRef.current = null;
-      session
+      // Oturum ancak gönderim BAŞARILI olunca bırakılır: ağ hatasından sonra
+      // "Tekrar dene" aynı oturumla gider ve skor yine doğrulanabilir.
+      const pending = sessionRef.current;
+      (pending ?? Promise.resolve(null))
         .then((sessionId) => submitArenaScore(game, value, sessionId))
         .then(() => {
+          // Bu arada yeni tur başladıysa onun oturumuna dokunulmaz.
+          if (sessionRef.current === pending) sessionRef.current = null;
           setSubmit("sent");
           void queryClient.invalidateQueries({ queryKey: ["arena"] });
         })
