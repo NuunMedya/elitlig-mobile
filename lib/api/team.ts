@@ -69,6 +69,28 @@ export function positionLine(value?: string | null): "GK" | "DEF" | "MID" | "FWD
   return "MID";
 }
 
+/**
+ * MAÇ KADROSU MEVKİSİ — reji paneli ve canlı maç ekranı yalnız bu dört değeri
+ * tanır (web: editor_pages/MatchLineupStep.js POS_BTNS). Maç kadrosunda
+ * ayrıntılı kod ("STP") gönderilince reji mevkiyi boş gösteriyordu.
+ */
+export const MATCH_POSITIONS = [
+  { value: "Kaleci", short: "KAL", line: "GK" },
+  { value: "Defans", short: "DEF", line: "DEF" },
+  { value: "Orta Saha", short: "ORT", line: "MID" },
+  { value: "Forvet", short: "FOR", line: "FWD" },
+] as const;
+
+export type MatchPosition = (typeof MATCH_POSITIONS)[number]["value"];
+
+/** Kod, etiket ya da saha yuvasından ("DEF2") maç kadrosu mevkisi; boşsa null. */
+export function matchPositionOf(value?: string | null, slot?: string | null): MatchPosition | null {
+  const raw = String(value ?? "").trim();
+  if (raw) return MATCH_POSITIONS.find((item) => item.line === positionLine(raw))?.value ?? null;
+  const fromSlot = String(slot ?? "").toUpperCase().replace(/[0-9]/g, "");
+  return MATCH_POSITIONS.find((item) => item.line === fromSlot)?.value ?? null;
+}
+
 /* ===================== TAKIM PANELİ (dashboard) ===================== */
 
 /** GET /api/team-management/dashboard — db.Teams satırı aynen döner. */

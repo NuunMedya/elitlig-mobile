@@ -73,7 +73,9 @@ import {
   getTeamRoster,
   MAX_STARTERS,
   positionLabel,
-  POSITIONS,
+  MATCH_POSITIONS,
+  matchPositionOf,
+  type MatchPosition,
   saveTeamMatchPlan,
   type MatchPlanPlayer,
   type RosterPlayer,
@@ -197,6 +199,8 @@ export default function MacKadrosuScreen() {
       setEntries(
         plan.lineup.map((row) => ({
           ...row,
+          // Eski planlarda ayrıntılı kod ("STP") ya da yalnız yuva olabilir.
+          position: matchPositionOf(row.position, row.slot),
           displayName: row.isGuest ? row.guestName || "Misafir" : nameOf(row.playerId),
           photo: row.isGuest ? null : photoOf(row.playerId),
         }))
@@ -209,7 +213,7 @@ export default function MacKadrosuScreen() {
           isGuest: false,
           guestName: null,
           jerseyNumber: row.forma_no ?? null,
-          position: row.mevki ?? null,
+          position: matchPositionOf(row.mevki),
           starter: Boolean(row.ilk11_mi),
           captain: false,
           slot: null,
@@ -295,7 +299,7 @@ export default function MacKadrosuScreen() {
           isGuest: false,
           guestName: null,
           jerseyNumber: null,
-          position: player.team_position ?? player.profile_position ?? null,
+          position: matchPositionOf(player.team_position ?? player.profile_position),
           starter: prev.filter((entry) => entry.starter).length < MAX_STARTERS,
           captain: false,
           slot: null,
@@ -355,7 +359,9 @@ export default function MacKadrosuScreen() {
             return { ...entry, slot: null, starter: false };
           }
           if (Number(entry.playerId) === player.id) {
-            return { ...entry, slot: activeSlot, starter: true };
+            // Sahadaki yer mevkiyi de belirler (DEF2 → Defans); listeden
+            // sonradan değiştirilebilir.
+            return { ...entry, slot: activeSlot, starter: true, position: matchPositionOf(null, activeSlot) };
           }
           return entry;
         }),
@@ -420,7 +426,7 @@ export default function MacKadrosuScreen() {
           isGuest: true,
           guestName: player.player_name,
           jerseyNumber: null,
-          position: player.player_position ?? null,
+          position: matchPositionOf(player.player_position),
           starter: prev.filter((entry) => entry.starter).length < MAX_STARTERS,
           captain: false,
           slot: null,
@@ -683,12 +689,16 @@ export default function MacKadrosuScreen() {
 
           {/* Sahadaki oyuncuların ayrıntısı (forma no, mevki, kaptan) satırdan
               düzenlenir: sahadaki yuva 52px, bu bilgiler oraya sığmaz. */}
+          <Text style={styles.hint}>
+            Sahaya yerleştirmek isteğe bağlı: mevkiyi oyuncu satırındaki KAL · DEF · ORT · FOR ile de seçebilirsin.
+          </Text>
           {starters.length
             ? starters.map((entry) => (
                 <SquadRow
                   key={`s-${entry.isGuest ? entry.displayName : entry.playerId}`}
                   entry={entry}
                   onEdit={() => setEditing(entry)}
+                  onPosition={(position) => patchEntry(entry, { position })}
                   onToggleStarter={() => patchEntry(entry, { starter: false, slot: null })}
                   onCaptain={() => setCaptain(entry)}
                   onRemove={() => removeEntry(entry)}
@@ -704,6 +714,7 @@ export default function MacKadrosuScreen() {
                 key={`b-${entry.isGuest ? entry.displayName : entry.playerId}`}
                 entry={entry}
                 onEdit={() => setEditing(entry)}
+                onPosition={(position) => patchEntry(entry, { position })}
                 onToggleStarter={() =>
                   starters.length >= MAX_STARTERS
                     ? toast.show({ message: `İlk kadro dolu (${MAX_STARTERS}).`, tone: "warn" })
@@ -825,14 +836,14 @@ export default function MacKadrosuScreen() {
 
             <Text style={styles.sheetLabel}>Mevki</Text>
             <ChipGroup scrollable={false} contentPadding={0}>
-              {POSITIONS.map((position) => (
+              {MATCH_POSITIONS.map((position) => (
                 <Chip
-                  key={position.code}
-                  label={position.label}
-                  selected={editing.position === position.code}
+                  key={position.value}
+                  label={position.value}
+                  selected={editing.position === position.value}
                   onPress={() => {
-                    patchEntry(editing, { position: position.code });
-                    setEditing({ ...editing, position: position.code });
+                    patchEntry(editing, { position: position.value });
+                    setEditing({ ...editing, position: position.value });
                   }}
                 />
               ))}
@@ -1040,55 +1051,95 @@ function AttendancePanel({
 function SquadRow({
   entry,
   onEdit,
+  onPosition,
   onToggleStarter,
   onCaptain,
   onRemove,
 }: {
   entry: Entry;
   onEdit: () => void;
+  /** Satırdaki mevki çipi — sahaya yerleştirmeden mevki girilir. */
+  onPosition: (position: MatchPosition | null) => void;
   onToggleStarter: () => void;
   onCaptain: () => void;
   onRemove: () => void;
 }) {
   return (
     <View style={styles.squadRow}>
-      <Touchable feedback="row" onPress={onEdit} style={styles.squadMain} accessibilityLabel={`${entry.displayName} düzenle`}>
-        <Avatar
-          name={entry.displayName}
-          image={entry.photo ? mediaUrl(entry.photo) : undefined}
-          size={30}
-        />
-        <View style={styles.squadText}>
-          <Text style={styles.squadName} numberOfLines={1}>
-            {entry.displayName}
-            {entry.captain ? " (K)" : ""}
-          </Text>
-          <Text style={styles.squadMeta} numberOfLines={1}>
-            {entry.jerseyNumber ? `#${entry.jerseyNumber} · ` : ""}
-            {entry.position ? positionLabel(entry.position) : "Mevki yok"}
-            {entry.isGuest ? " · Misafir" : ""}
-          </Text>
-        </View>
-      </Touchable>
+      <View style={styles.squadTop}>
+        <Touchable feedback="row" onPress={onEdit} style={styles.squadMain} accessibilityLabel={`${entry.displayName} düzenle`}>
+          <Avatar
+            name={entry.displayName}
+            image={entry.photo ? mediaUrl(entry.photo) : undefined}
+            size={28}
+          />
+          <View style={styles.squadText}>
+            <Text style={styles.squadName} numberOfLines={1}>
+              {entry.displayName}
+              {entry.captain ? " (K)" : ""}
+            </Text>
+            <Text style={styles.squadMeta} numberOfLines={1}>
+              {[
+                entry.jerseyNumber ? `#${entry.jerseyNumber}` : null,
+                entry.starter ? (entry.slot ? "Sahada" : "İlk kadro") : "Yedek",
+                entry.isGuest ? "Misafir" : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </Text>
+          </View>
+        </Touchable>
 
-      <View style={styles.squadActions}>
-        <Touchable feedback="icon" onPress={onCaptain} accessibilityLabel="Kaptan yap" style={styles.iconButton}>
-          <Ionicons
-            name={entry.captain ? "ribbon" : "ribbon-outline"}
-            size={20}
-            color={entry.captain ? colors.warn : colors.textTertiary}
-          />
-        </Touchable>
-        <Touchable feedback="icon" onPress={onToggleStarter} accessibilityLabel={entry.starter ? "Yedeğe al" : "İlk kadroya al"} style={styles.iconButton}>
-          <Ionicons
-            name={entry.starter ? "arrow-down-circle-outline" : "arrow-up-circle-outline"}
-            size={20}
-            color={colors.textSecondary}
-          />
-        </Touchable>
-        <Touchable feedback="icon" onPress={onRemove} accessibilityLabel="Kadrodan çıkar" style={styles.iconButton}>
-          <Ionicons name="close-circle-outline" size={20} color={colors.danger} />
-        </Touchable>
+        <View style={styles.squadActions}>
+          <Touchable feedback="icon" onPress={onCaptain} accessibilityLabel="Kaptan yap" style={styles.iconButton}>
+            <Ionicons
+              name={entry.captain ? "ribbon" : "ribbon-outline"}
+              size={18}
+              color={entry.captain ? colors.warn : colors.textTertiary}
+            />
+          </Touchable>
+          <Touchable feedback="icon" onPress={onToggleStarter} accessibilityLabel={entry.starter ? "Yedeğe al" : "İlk kadroya al"} style={styles.iconButton}>
+            <Ionicons
+              name={entry.starter ? "arrow-down-circle-outline" : "arrow-up-circle-outline"}
+              size={18}
+              color={colors.textSecondary}
+            />
+          </Touchable>
+          <Touchable feedback="icon" onPress={onRemove} accessibilityLabel="Kadrodan çıkar" style={styles.iconButton}>
+            <Ionicons name="close-circle-outline" size={18} color={colors.danger} />
+          </Touchable>
+        </View>
+      </View>
+
+      {/* Mevki — tek dokunuş; seçili olana yeniden dokunmak temizler. Reji
+          paneli bu dört değeri okur. */}
+      <View style={styles.posRow} accessibilityRole="radiogroup" accessibilityLabel="Mevki">
+        {MATCH_POSITIONS.map((item) => {
+          const active = entry.position === item.value;
+          return (
+            <Touchable
+              key={item.value}
+              feedback="chip"
+              onPress={() => {
+                haptics.select();
+                onPosition(active ? null : item.value);
+              }}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel={item.value}
+              style={[styles.posChip, active && styles.posChipActive]}
+            >
+              <Text style={[styles.posChipText, active && styles.posChipTextActive]} {...textScale.badge}>
+                {item.short}
+              </Text>
+            </Touchable>
+          );
+        })}
+        {!entry.position ? (
+          <Text style={styles.posMissing} numberOfLines={1}>
+            Mevki seç
+          </Text>
+        ) : null}
       </View>
     </View>
   );
@@ -1174,20 +1225,34 @@ const styles = StyleSheet.create({
   attendanceStatus: { ...type.caption, color: colors.textSecondary },
 
   squadRow: {
-    flexDirection: "row",
-    alignItems: "center",
     gap: space.xs,
-    minHeight: layout.listRowHeightTwoLine - space.sm,
     paddingLeft: space.md,
     paddingRight: space.xs,
+    paddingVertical: space.s,
     borderRadius: radius.md,
     borderWidth: hairline,
     borderColor: colors.border,
     backgroundColor: colors.surface1,
   },
+  squadTop: { flexDirection: "row", alignItems: "center", gap: space.xs },
   squadMain: { flexDirection: "row", alignItems: "center", gap: space.sm, flex: 1 },
+  posRow: { flexDirection: "row", alignItems: "center", gap: space.xs, paddingLeft: 28 + space.sm },
+  posChip: {
+    minWidth: 42,
+    paddingHorizontal: space.s,
+    paddingVertical: 4,
+    borderRadius: radius.pill,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    backgroundColor: colors.surface2,
+    alignItems: "center",
+  },
+  posChipActive: { backgroundColor: colors.brand, borderColor: colors.brand },
+  posChipText: { ...type.micro, color: colors.textSecondary },
+  posChipTextActive: { color: colors.textOnBrand },
+  posMissing: { ...type.caption, color: colors.warn, marginLeft: space.xs },
   squadText: { flex: 1 },
-  squadName: { ...type.body, color: colors.textPrimary },
+  squadName: { ...type.h4, color: colors.textPrimary },
   squadMeta: { ...type.caption, color: colors.textTertiary, marginTop: 1 },
   squadActions: { flexDirection: "row", alignItems: "center" },
 
