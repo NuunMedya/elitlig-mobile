@@ -10,9 +10,9 @@
  *   0. `lib/game/web/games.generated.ts` kaynaklarla güncel; 3B futbolcu modeli
  *      (iskelet, gövde, koşu/bekleme klipleri) eksiksiz.
  *   1. Üç oyun da vitrin modunda ve oyunda hatasız güncellenip çizilir.
- *   2. SEKTİR: topun solundan vurmak topu sağa gönderir (ve tersi); dokunmazsan
- *      top düşer ve tur biter; iyi oynayan oyuncu seviye atlar ve yerçekimi
- *      (ritim) artar.
+ *   2. SEKTİR: dokunmazsan top düşer; zamanında dokunan topu havada tutar;
+ *      bölge dışı dokunuş boşa gider; yüksek top kafaya iner; sekme sayısı
+ *      ligin oyuncularını geçer; ritim hızlanır, rüzgâr çıkar.
  *   3. SLALOM: hiçbir şey yapmayan topu kaptırır ve tur biter; savunmacıdan
  *      kaçan oyuncu gol bulur; kayan savunmacıya zamanında çalım onu düşürür;
  *      gol atan sıradaki (daha kalabalık) savunmaya geçer; kadro gerçek.
@@ -192,34 +192,88 @@ for (const game of ["penalti", "slalom", "sektir"]) {
 
 /* ── 2) SEKTİR ───────────────────────────────────────────────────────────── */
 
-{
-  const { A, run } = boot("sektir");
-  A.game.start();
-  run(0.3);
-  const ball = A.game.debug().ball;
-  ball.vx = 0;
-  A.game.down({ x: ball.x - ball.r * 0.8, y: ball.y });
-  const vxLeftHit = A.game.debug().ball.vx;
-  run(0.2);
-  const b2 = A.game.debug().ball;
-  b2.vx = 0;
-  A.game.down({ x: b2.x + b2.r * 0.8, y: b2.y });
-  const vxRightHit = A.game.debug().ball.vx;
-  check(
-    "sektir: vuruş yönü",
-    vxLeftHit > 50 && vxRightHit < -50,
-    `soldan vuruş vx=${vxLeftHit.toFixed(0)} (sağa), sağdan vuruş vx=${vxRightHit.toFixed(0)} (sola)`,
-  );
+/** Sektir botu: top düşerken `height(d)` yüksekliğine inince sırayla sol/sağ dokunur. */
+function sektirBot(A, run, height, limit = 120) {
+  let side = "L", target = null;
+  for (let i = 0; i < 120 * 200; i++) {
+    const d = A.game.debug();
+    if (d.state !== "play" && d.state !== "intro") break;
+    if (d.touches >= limit) break;
+    if (d.state === "play" && d.ball.vy < 0) {
+      if (target == null) target = height(d);
+      if (d.ball.y <= target) {
+        A.game.down({ x: side === "L" ? 100 : 290, y: 400 });
+        A.game.up({ x: 0, y: 0 });
+        side = side === "L" ? "R" : "L";
+        target = null;
+      }
+    }
+    run(1 / 120);
+  }
+  return A.game.debug();
 }
+
 {
   const { A, run, over } = boot("sektir");
   A.game.start();
   run(5);
   const end = over();
-  check("sektir: dokunmazsan biter", end && end.score === 0, end ? `tur bitti, skor ${end.score}` : "tur bitmedi");
+  check("sektir: dokunmazsan top düşer, tur biter", Boolean(end) && end.score === 0 && end.stats.kicks === 0, end ? `tur bitti, skor ${end.score}` : "tur bitmedi");
 }
 {
-  const { A, run, over } = boot("sektir");
+  // Ayak bölgesinde ideal yükseklikte dokunan oyuncu topu havada tutar; mükemmel vuruşlar çarpanı büyütür.
+  const { A, run } = boot("sektir");
+  A.game.start();
+  const d = sektirBot(A, run, (x) => x.parts.foot.ideal + 0.02, 60);
+  check("sektir: zamanında dokunan topu havada tutar", d.touches >= 60 && d.perfects >= 50 && d.points > d.touches * 2, `${d.touches} sekme, ${d.perfects} mükemmel, ${d.points} puan`);
+}
+{
+  // Bölge dışında (ayakla diz arası) dokunmak boşa gider; top düşmeye devam eder.
+  const { A, run } = boot("sektir");
+  A.game.start();
+  run(1.5);
+  let whiffs = 0;
+  for (let i = 0; i < 2000; i++) {
+    const d = A.game.debug();
+    if (d.state === "play" && d.ball.vy < 0 && d.ball.y < 0.63 && d.ball.y > 0.6) {
+      const before = d.touches;
+      A.game.down({ x: 100, y: 400 });
+      A.game.up({ x: 0, y: 0 });
+      if (A.game.debug().touches === before) whiffs += 1;
+      break;
+    }
+    run(1 / 120);
+  }
+  run(2);
+  check("sektir: bölge dışı dokunuş boşa gider", whiffs === 1 && A.game.debug().touches === 0, whiffs ? "ayak ile diz arasındaki dokunuş sayılmadı, top düştü" : "deneme yapılamadı");
+}
+{
+  // Dokun ve yukarı it: yüksek top → kafa bölgesine iner, kafa vuruşu 3 puandır.
+  const { A, run } = boot("sektir");
+  A.game.start();
+  let apex = 0, header = null;
+  for (let i = 0; i < 120 * 20 && !header; i++) {
+    const d = A.game.debug();
+    if (d.state === "play" && d.ball.vy < 0 && apex === 0 && d.ball.y <= d.parts.foot.ideal) {
+      A.game.down({ x: 100, y: 400 });
+      A.game.move({ x: 100, y: 330 });
+      A.game.up({ x: 100, y: 330 });
+      apex = -1;
+    }
+    if (apex !== 0) apex = Math.max(apex, d.ball.y);
+    if (apex > 0 && d.ball.vy < 0 && d.ball.y <= d.parts.head.ideal) {
+      const p0 = d.points;
+      A.game.down({ x: 290, y: 400 });
+      A.game.up({ x: 0, y: 0 });
+      header = { headers: A.game.debug().headers, gain: A.game.debug().points - p0 };
+    }
+    run(1 / 120);
+  }
+  check("sektir: yüksek top ve kafa", apex > 3 && header && header.headers === 1 && header.gain >= 3, header ? `yüksek top ${apex.toFixed(1)} m, kafa vuruşu +${header.gain}` : `kafa vuruşu olmadı (tepe ${apex.toFixed(1)} m)`);
+}
+{
+  // Gerçek kadro + zorlaşma: sekme sayısı rakiplerin gol+asist sayısını geçer; yerçekimi artar.
+  const { A, run } = boot("sektir");
   const kit = { primary: "#dc2626", secondary: "#ffffff" };
   A.game.setRoster({
     juggler: { id: 1, short: "A. Sektirci", back: "SEKTİRCİ", shirt: 8, team: { name: "Takım", kit }, attrs: { agility: 80, control: 80 } },
@@ -227,30 +281,9 @@ for (const game of ["penalti", "slalom", "sektir"]) {
   });
   A.game.start();
   const g0 = A.game.debug().g;
-  let cooldown = 0;
-  run(70, () => {
-    cooldown -= 1;
-    const d = A.game.debug();
-    if (d.state !== "play" || cooldown > 0) return;
-    const b = d.ball;
-    // Rüzgârı ve duvarları telafi eden "iyi oyuncu": topu merkeze doğru it.
-    if (b.vy > 0 && b.y > d.groundY - 640 * 0.2) {
-      const toCentre = (b.x - 195) / 195;
-      A.game.down({ x: b.x + b.r * (0.18 * toCentre + (b.vx > 0 ? 0.12 : -0.12)), y: b.y });
-      cooldown = 20;
-    }
-  });
-  const d = A.game.debug();
-  check(
-    "sektir: sekme sayısı ligin oyuncularını geçer",
-    d.juggler === "A. Sektirci" && d.passed === 3 && d.kicks >= 10,
-    `${d.juggler}, ${d.kicks} sekme → ${d.passed}/3 oyuncu geçildi`,
-  );
-  check(
-    "sektir: zorlaşıyor",
-    d.kicks >= 30 && d.level >= 4 && d.g > g0 * 1.3,
-    `${d.kicks} sekme, seviye ${d.level}, yerçekimi ${g0.toFixed(0)} → ${d.g.toFixed(0)}${over() ? " (tur bitti)" : ""}`,
-  );
+  const d = sektirBot(A, run, (x) => x.parts.foot.ideal + 0.02, 70);
+  check("sektir: sekme sayısı ligin oyuncularını geçer", d.juggler === "A. Sektirci" && d.passed === 3, `${d.juggler}, ${d.touches} sekme → ${d.passed}/3 oyuncu geçildi`);
+  check("sektir: ritim hızlanır, rüzgâr çıkar", d.g > g0 * 1.3 && Math.abs(d.wind) > 0, `yerçekimi ${g0.toFixed(1)} → ${d.g.toFixed(1)} m/sn², rüzgâr ${d.wind.toFixed(2)}`);
 }
 
 /* ── 3) SLALOM ───────────────────────────────────────────────────────────── */
