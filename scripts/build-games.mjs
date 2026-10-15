@@ -34,8 +34,8 @@ const escape = (code) => code.replace(/<\/script/gi, "<\\/script");
 // r150+ UMD derlemesi açılışta bir kullanımdan kaldırma uyarısı basar; gürültü.
 const readThree = () => readFileSync(THREE_PATH, "utf8").replace(/^console\.warn\([^)]*\)/, "void 0");
 
-/** 3B oyunlarda ortak dosyalar: futbolcu modeli verisi + kit. */
-export const THREE_KIT = ["athlete-data.js", "three-kit.js"];
+/** 3B oyunlarda ortak dosyalar: futbolcu modeli verisi, kit, ortak stadyum. */
+export const THREE_KIT = ["athlete-data.js", "three-kit.js", "stadium3d.js"];
 
 /**
  * Oyun HTML'i parçalar halinde: büyük ortak parçalar (three.js, futbolcu

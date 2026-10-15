@@ -100,7 +100,9 @@ export interface SlalomDefense {
   team: { id: number; name: string | null; kit: PenaltyKit };
   conceded_per_match: number;
   matches: number;
-  defenders: { id: number; short: string; back: string; shirt: number | null }[];
+  defenders: { id: number; name?: string; short: string; back: string; shirt: number | null }[];
+  /** Takımın en çok kurtarış yapan kalecisi (atağın sonunda karşına çıkar). */
+  keeper?: { id: number; name: string; short: string; back: string; shirt: number | null; saves: number } | null;
 }
 
 export interface SlalomRoster {
