@@ -3,9 +3,14 @@ import { get, put } from "../http";
 /**
  * Kariyer Modu — routes/career.js, routes/predictions.js (elitlig-server).
  *
- * Elit Seviye üç katmandan beslenir: saha (gerçek maçlar), tribün (Tahmin
- * Ligi, katılım bildirimi), arena (doğrulanmış mini oyunlar). Oyunlar piyasa
- * değerine dokunmaz; saha dışı XP seviyeyi en çok 30'a taşır.
+ * Elit Seviye üç katmandan beslenir (iç anahtar → ekranda görünen ad):
+ * saha → Saha (gerçek maçlar), tribun → Seyirci (Tahmin Ligi, taraftar oyu,
+ * tepkiler, Fantezi), arena → Oyunlar (doğrulanmış mini oyunlar). Oyunlar
+ * piyasa değerine dokunmaz; saha dışı XP seviyeyi en çok 30'a taşır.
+ *
+ * XP üç yoldan gelir: her maç / oyun / tahminin standart XP'si, haftalık
+ * görevler (20 görevlik sıra, aynı anda 5 açık) ve tüm zamanlar kariyer
+ * görevleri (kademeli) + rozetler.
  */
 
 export type CareerLayer = "saha" | "tribun" | "arena";
@@ -51,6 +56,7 @@ export interface CareerAchievement {
 export interface CareerQuest {
   code: string;
   layer: CareerLayer;
+  tier?: 1 | 2 | 3;
   title: string;
   description: string;
   progress: number;
@@ -59,16 +65,53 @@ export interface CareerQuest {
   xp: number;
 }
 
+/** Haftanın 20 görevlik sırası: 5 açık, biten yerine sıradaki gelir. */
+export interface WeeklyQuests {
+  active: CareerQuest[];
+  completed: CareerQuest[];
+  revealed: number;
+  total: number;
+  done_count: number;
+  locked: number;
+  bonuses: { at: number; xp: number; earned: boolean }[];
+}
+
+/** Tüm zamanlar kariyer görevi: zincirin sıradaki kademesi. */
+export interface CareerChain {
+  code: string;
+  layer: CareerLayer;
+  title: string;
+  description: string;
+  tier: number;
+  tiers: number;
+  completed_tiers: number;
+  value: number;
+  progress: number;
+  target: number;
+  xp: number;
+  done: boolean;
+}
+
+export interface StandardXpRule {
+  layer: CareerLayer;
+  label: string;
+  xp: number;
+}
+
 export interface CareerSummary {
   level: CareerLevel;
   layers: Record<CareerLayer, number>;
+  /** Bu hafta (Pazartesi'den beri) kazanılan XP; eski sunucuda yok. */
+  layers_week?: Record<CareerLayer, number>;
   card: EliteCard | null;
   achievements: CareerAchievement[];
   new_achievements: string[];
   quests: CareerQuest[];
-  week: { key: string; ends_at: string };
+  weekly_quests?: WeeklyQuests;
+  career_quests?: CareerChain[];
+  week: { key: string; starts_at?: string; ends_at: string };
   recent: { layer: CareerLayer; source: string; xp: number; label: string | null; created_at: string }[];
-  rules: { arena_daily_cap: number; quest_xp: number };
+  rules: { arena_daily_cap: number; quest_xp: number; active_slots?: number; standard?: StandardXpRule[] };
 }
 
 export interface PlayerCareer {
@@ -127,4 +170,4 @@ export const getPredictionBoard = (
     { period, cityId: scope.cityId ?? undefined, leagueId: scope.leagueId ?? undefined, seasonId: scope.seasonId ?? undefined },
   );
 
-export const LAYER_LABELS: Record<CareerLayer, string> = { saha: "Saha", tribun: "Tribün", arena: "Arena" };
+export const LAYER_LABELS: Record<CareerLayer, string> = { saha: "Saha", tribun: "Seyirci", arena: "Oyunlar" };

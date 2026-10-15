@@ -1,11 +1,16 @@
 /**
  * KARİYERİM — Kariyer Modu (GET /api/career/me).
  *
- *   Elit Seviye    üç katmandan XP: saha (gerçek maçlar), tribün (Tahmin Ligi,
- *                  katılım bildirimi), arena (doğrulanmış oyunlar). Saha dışı
- *                  XP seviyeyi en çok 30'a taşır; üstü sahadan gelir.
+ *   Elit Seviye    üç katmandan XP: Saha (gerçek maçlar), Seyirci (Tahmin
+ *                  Ligi, taraftar oyu, tepkiler, Fantezi), Oyunlar
+ *                  (doğrulanmış oyunlar). Katman XP'si haftalık ya da tüm
+ *                  zamanlar olarak görülür. Saha dışı XP seviyeyi en çok 30'a
+ *                  taşır; üstü sahadan gelir.
  *   Elit Kart      bağlı oyuncu kaydı varsa (yalnız sahadan hesaplanır).
- *   Haftalık görevler, Kupa Dolabı (rozetler), son XP hareketleri.
+ *   Haftalık görevler  20 görevlik sıra; aynı anda 5 açık, biten yerine
+ *                  sıradaki gelir; 10 ve 20 görevde bonus.
+ *   Kariyer görevleri  tüm zamanlar, kademeli (bir kademe bitince üstü açılır).
+ *   XP nasıl kazanılır (standart XP), Kupa Dolabı (rozetler), son XP hareketleri.
  *
  * Ekranın her açılışı sunucuda XP defterini eşitler; yeni açılan rozetler
  * bir bildirimle kutlanır.
@@ -25,12 +30,21 @@ import {
   ChipGroup,
   ErrorState,
   ScreenHeader,
+  SegmentedControl,
   SkeletonCard,
   useHeaderScroll,
   useRefresh,
   useToast,
 } from "@/components/ui";
-import { getMyCareer, LAYER_LABELS, type CareerAchievement, type CareerLayer } from "@/lib/api/career";
+import {
+  getMyCareer,
+  LAYER_LABELS,
+  type CareerAchievement,
+  type CareerChain,
+  type CareerLayer,
+  type CareerQuest,
+  type StandardXpRule,
+} from "@/lib/api/career";
 import { formatDateShort } from "@/lib/format";
 import { useAuth } from "@/providers/AuthProvider";
 import { colors, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
@@ -38,7 +52,11 @@ import { colors, hairline, layout, radius, space, textScale, type, upperTR } fro
 const LAYER_ICONS: Record<CareerLayer, keyof typeof Ionicons.glyphMap> = { saha: "football", tribun: "megaphone", arena: "game-controller" };
 const LAYER_COLORS: Record<CareerLayer, string> = { saha: colors.win, tribun: colors.info, arena: colors.accent };
 
+const LAYER_ORDER: CareerLayer[] = ["saha", "tribun", "arena"];
+const CHAIN_PREVIEW = 5;
+
 type Filter = "all" | CareerLayer;
+type Period = "week" | "all";
 
 export default function CareerScreen() {
   const auth = useAuth();
@@ -46,6 +64,10 @@ export default function CareerScreen() {
   const toast = useToast();
   const { scrollY, scrollProps } = useHeaderScroll();
   const [filter, setFilter] = useState<Filter>("all");
+  const [period, setPeriod] = useState<Period>("week");
+  const [showCompleted, setShowCompleted] = useState(false);
+  const [showAllChains, setShowAllChains] = useState(false);
+  const [showRules, setShowRules] = useState(false);
 
   const query = useQuery({ queryKey: ["career", "me"], queryFn: getMyCareer, enabled: Boolean(auth.user), staleTime: 30_000 });
   const refresh = useRefresh(query.refetch, { refreshing: query.isRefetching });
@@ -69,6 +91,25 @@ export default function CareerScreen() {
     [data, filter],
   );
   const unlockedCount = (data?.achievements ?? []).filter((item) => item.unlocked).length;
+
+  // Eski sunucu weekly_quests göndermez: düz listeden kurulur.
+  const weekly = useMemo(() => {
+    if (data?.weekly_quests) return data.weekly_quests;
+    const quests = data?.quests ?? [];
+    const completed = quests.filter((quest) => quest.done);
+    return { active: quests.filter((quest) => !quest.done), completed, revealed: quests.length, total: quests.length, done_count: completed.length, locked: 0, bonuses: [] };
+  }, [data]);
+
+  // Kariyer görevleri: bitmeye en yakın olanlar önce; tamamen bitenler sonda.
+  const chains = useMemo(
+    () =>
+      [...(data?.career_quests ?? [])].sort(
+        (a, b) => Number(a.done) - Number(b.done) || b.progress / b.target - a.progress / a.target,
+      ),
+    [data],
+  );
+  const visibleChains = showAllChains ? chains : chains.slice(0, CHAIN_PREVIEW);
+  const layerXp = period === "week" && data?.layers_week ? data.layers_week : data?.layers;
 
   if (!auth.user) return <Redirect href="/giris" />;
 
@@ -102,21 +143,33 @@ export default function CareerScreen() {
               </View>
             </View>
             <Bar value={data.level.progress} color={colors.accent} />
-            {(["saha", "tribun", "arena"] as CareerLayer[]).map((layer) => (
+            {data.layers_week ? (
+              <SegmentedControl
+                size="sm"
+                stretch
+                items={[
+                  { key: "week", label: "Bu hafta" },
+                  { key: "all", label: "Tüm zamanlar" },
+                ]}
+                value={period}
+                onChange={setPeriod}
+              />
+            ) : null}
+            {LAYER_ORDER.map((layer) => (
               <View key={layer} style={styles.layerRow}>
                 <Ionicons name={LAYER_ICONS[layer]} size={16} color={LAYER_COLORS[layer]} />
                 <Text style={styles.layerLabel} {...textScale.dense}>
                   {LAYER_LABELS[layer]}
                 </Text>
                 <Text style={styles.layerValue} {...textScale.dense}>
-                  {`${(data.layers[layer] ?? 0).toLocaleString("tr-TR")} XP`}
+                  {`${period === "week" && data.layers_week ? "+" : ""}${(layerXp?.[layer] ?? 0).toLocaleString("tr-TR")} XP`}
                 </Text>
               </View>
             ))}
             <Text style={styles.hint} {...textScale.long}>
               {data.level.fan_capped
-                ? `Tribün ve arena XP'si seviye ${data.level.fan_level_cap}'a kadar sayılır. Daha yukarısı sahadaki maçlarınla açılır.`
-                : `Gerçek maçlar en çok XP'yi getirir. Tribün ve arena XP'si seviye ${data.level.fan_level_cap}'a kadar sayılır; oyunlar piyasa değerini etkilemez.`}
+                ? `Seyirci ve oyun XP'si seviye ${data.level.fan_level_cap}'a kadar sayılır. Daha yukarısı sahadaki maçlarınla açılır.`
+                : `Gerçek maçlar en çok XP'yi getirir. Seyirci ve oyun XP'si seviye ${data.level.fan_level_cap}'a kadar sayılır; oyunlar piyasa değerini etkilemez.`}
             </Text>
           </View>
 
@@ -137,38 +190,95 @@ export default function CareerScreen() {
 
           {/* ── Haftalık görevler ── */}
           <Text style={styles.section} {...textScale.badge}>
-            {upperTR(`Haftalık görevler · ${formatDateShort(data.week.ends_at)} sıfırlanır`)}
+            {upperTR(`Haftalık görevler · ${formatDateShort(data.week.ends_at)} yenilenir`)}
           </Text>
           <View style={styles.card}>
-            {data.quests.map((quest, index) => (
-              <View key={quest.code} style={[styles.quest, index > 0 && styles.questBorder]}>
-                <Ionicons
-                  name={quest.done ? "checkmark-circle" : LAYER_ICONS[quest.layer]}
-                  size={22}
-                  color={quest.done ? colors.win : LAYER_COLORS[quest.layer]}
-                />
-                <View style={styles.flex}>
-                  <Text style={styles.questTitle} {...textScale.dense}>
-                    {quest.title}
+            <View style={styles.layerRow}>
+              <Text style={styles.questTitle} {...textScale.dense}>
+                {`${weekly.done_count}/${weekly.total} görev tamam`}
+              </Text>
+              <View style={styles.flex} />
+              {weekly.bonuses.map((bonus) => (
+                <View key={bonus.at} style={[styles.bonus, bonus.earned && styles.bonusEarned]}>
+                  <Ionicons name={bonus.earned ? "gift" : "gift-outline"} size={12} color={bonus.earned ? colors.win : colors.textTertiary} />
+                  <Text style={[styles.bonusText, bonus.earned && styles.bonusTextEarned]} {...textScale.badge}>
+                    {`${bonus.at} · +${bonus.xp}`}
                   </Text>
-                  <Text style={styles.hint} {...textScale.long}>
-                    {quest.description}
-                  </Text>
-                  <Bar value={quest.progress / quest.target} color={quest.done ? colors.win : LAYER_COLORS[quest.layer]} />
                 </View>
-                <Text style={styles.xp} {...textScale.dense}>
-                  {quest.done ? "Tamam" : `+${quest.xp}`}
-                </Text>
-              </View>
+              ))}
+            </View>
+            <Bar value={weekly.total ? weekly.done_count / weekly.total : 0} color={colors.win} />
+            {weekly.active.map((quest, index) => (
+              <QuestRow key={quest.code} quest={quest} first={index === 0} />
             ))}
+            {!weekly.active.length ? (
+              <Text style={styles.hint} {...textScale.long}>
+                Bu haftanın bütün görevlerini bitirdin. Yeni görevler Pazartesi gelir.
+              </Text>
+            ) : null}
+            <Text style={styles.hint} {...textScale.long}>
+              {weekly.locked
+                ? `Bir görevi bitirdiğinde yerine yenisi gelir · sırada ${weekly.locked} görev daha var.`
+                : "Bu haftanın bütün görevleri açıldı."}
+            </Text>
+            {weekly.completed.length ? (
+              <>
+                <Button
+                  label={showCompleted ? "Tamamlananları gizle" : `Tamamlananlar (${weekly.completed.length})`}
+                  icon={showCompleted ? "chevron-up" : "chevron-down"}
+                  variant="ghost"
+                  size="sm"
+                  onPress={() => setShowCompleted((value) => !value)}
+                />
+                {showCompleted ? weekly.completed.map((quest) => <QuestRow key={quest.code} quest={quest} />) : null}
+              </>
+            ) : null}
           </View>
+
+          {/* ── Kariyer görevleri (tüm zamanlar) ── */}
+          {chains.length ? (
+            <>
+              <Text style={styles.section} {...textScale.badge}>
+                {upperTR(`Kariyer görevleri · tüm zamanlar · ${chains.reduce((sum, chain) => sum + chain.completed_tiers, 0)} kademe`)}
+              </Text>
+              <View style={styles.card}>
+                {visibleChains.map((chain, index) => (
+                  <ChainRow key={chain.code} chain={chain} first={index === 0} />
+                ))}
+                {chains.length > CHAIN_PREVIEW ? (
+                  <Button
+                    label={showAllChains ? "Daha az göster" : `Tümünü gör (${chains.length})`}
+                    icon={showAllChains ? "chevron-up" : "chevron-down"}
+                    variant="ghost"
+                    size="sm"
+                    onPress={() => setShowAllChains((value) => !value)}
+                  />
+                ) : null}
+              </View>
+            </>
+          ) : null}
+
           <View style={styles.actions}>
             <Button label="Tahmin Ligi" icon="podium-outline" variant="secondary" size="sm" onPress={() => router.push("/tahmin-ligi")} style={styles.flex} />
             <Button label="Fantezi" icon="people-outline" variant="secondary" size="sm" onPress={() => router.push("/fantezi")} style={styles.flex} />
-            <Button label="Arena" icon="game-controller-outline" variant="secondary" size="sm" onPress={() => router.push("/(tabs)/oyunlar")} style={styles.flex} />
+            <Button label="Oyunlar" icon="game-controller-outline" variant="secondary" size="sm" onPress={() => router.push("/(tabs)/oyunlar")} style={styles.flex} />
           </View>
           {data.card ? (
             <Button label="Sezon Özetim" icon="sparkles-outline" variant="secondary" onPress={() => router.push("/sezon-ozeti")} />
+          ) : null}
+
+          {/* ── XP nasıl kazanılır ── */}
+          {data.rules.standard?.length ? (
+            <View style={styles.card}>
+              <Button
+                label="XP nasıl kazanılır?"
+                icon={showRules ? "chevron-up" : "information-circle-outline"}
+                variant="ghost"
+                size="sm"
+                onPress={() => setShowRules((value) => !value)}
+              />
+              {showRules ? <XpRules rules={data.rules.standard} /> : null}
+            </View>
           ) : null}
 
           {/* ── Kupa Dolabı ── */}
@@ -177,7 +287,7 @@ export default function CareerScreen() {
           </Text>
           <ChipGroup contentPadding={0}>
             <Chip size="sm" label="Tümü" selected={filter === "all"} onPress={() => setFilter("all")} />
-            {(["saha", "tribun", "arena"] as CareerLayer[]).map((layer) => (
+            {LAYER_ORDER.map((layer) => (
               <Chip key={layer} size="sm" label={LAYER_LABELS[layer]} selected={filter === layer} onPress={() => setFilter(layer)} />
             ))}
           </ChipGroup>
@@ -220,6 +330,81 @@ function Bar({ value, color }: { value: number; color: string }) {
     <View style={styles.bar}>
       <View style={[styles.barFill, { width: `${Math.round(pct * 100)}%`, backgroundColor: color }]} />
     </View>
+  );
+}
+
+function QuestRow({ quest, first }: { quest: CareerQuest; first?: boolean }) {
+  const color = quest.done ? colors.win : LAYER_COLORS[quest.layer];
+  return (
+    <View style={[styles.quest, !first && styles.questBorder]}>
+      <Ionicons name={quest.done ? "checkmark-circle" : LAYER_ICONS[quest.layer]} size={22} color={color} />
+      <View style={styles.flex}>
+        <Text style={styles.questTitle} {...textScale.dense}>
+          {quest.title}
+        </Text>
+        <Text style={styles.hint} {...textScale.long}>
+          {`${LAYER_LABELS[quest.layer]} · ${quest.description}`}
+        </Text>
+        <Bar value={quest.progress / quest.target} color={color} />
+      </View>
+      <Text style={styles.xp} {...textScale.dense}>
+        {quest.done ? "Tamam" : `+${quest.xp}`}
+      </Text>
+    </View>
+  );
+}
+
+function ChainRow({ chain, first }: { chain: CareerChain; first?: boolean }) {
+  const color = chain.done ? colors.win : LAYER_COLORS[chain.layer];
+  return (
+    <View style={[styles.quest, !first && styles.questBorder]}>
+      <Ionicons name={chain.done ? "medal" : LAYER_ICONS[chain.layer]} size={22} color={color} />
+      <View style={styles.flex}>
+        <Text style={styles.questTitle} {...textScale.dense}>
+          {`${chain.title} · ${chain.tier}/${chain.tiers}. kademe`}
+        </Text>
+        <Text style={styles.hint} {...textScale.long}>
+          {chain.done
+            ? `Bütün kademeler tamam · ${chain.value.toLocaleString("tr-TR")}`
+            : `${chain.description} · ${chain.progress.toLocaleString("tr-TR")}/${chain.target.toLocaleString("tr-TR")}`}
+        </Text>
+        <Bar value={chain.progress / chain.target} color={color} />
+      </View>
+      <Text style={styles.xp} {...textScale.dense}>
+        {chain.done ? "Tamam" : `+${chain.xp}`}
+      </Text>
+    </View>
+  );
+}
+
+function XpRules({ rules }: { rules: StandardXpRule[] }) {
+  return (
+    <>
+      {LAYER_ORDER.map((layer) => {
+        const list = rules.filter((rule) => rule.layer === layer);
+        if (!list.length) return null;
+        return (
+          <View key={layer} style={styles.rules}>
+            <View style={styles.layerRow}>
+              <Ionicons name={LAYER_ICONS[layer]} size={14} color={LAYER_COLORS[layer]} />
+              <Text style={styles.questTitle} {...textScale.dense}>
+                {LAYER_LABELS[layer]}
+              </Text>
+            </View>
+            {list.map((rule) => (
+              <View key={rule.label} style={styles.ruleRow}>
+                <Text style={[styles.flex, styles.recentLabel]} {...textScale.long}>
+                  {rule.label}
+                </Text>
+                <Text style={styles.xp} {...textScale.dense}>
+                  {`+${rule.xp}`}
+                </Text>
+              </View>
+            ))}
+          </View>
+        );
+      })}
+    </>
   );
 }
 
@@ -292,4 +477,19 @@ const styles = StyleSheet.create({
   badgeMeta: { ...type.caption, color: colors.textTertiary, textAlign: "center" },
   recent: { flexDirection: "row", alignItems: "center", gap: space.s, paddingVertical: space.s },
   recentLabel: { ...type.caption, color: colors.textSecondary },
+  rules: { gap: space.xs, paddingTop: space.s },
+  ruleRow: { flexDirection: "row", alignItems: "center", gap: space.s },
+  bonus: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+    paddingHorizontal: space.s,
+    paddingVertical: space.xxs,
+    borderRadius: radius.pill,
+    borderWidth: hairline,
+    borderColor: colors.border,
+  },
+  bonusEarned: { borderColor: colors.win },
+  bonusText: { ...type.overline, color: colors.textTertiary },
+  bonusTextEarned: { color: colors.win },
 });
