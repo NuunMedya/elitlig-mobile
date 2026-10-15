@@ -7,7 +7,8 @@
  * içinde, sahte bir Canvas/DOM ile BAŞSIZ çalıştırılırlar: çizim komutları
  * yutulur, fizik ve kurallar gerçek kodla işler. Ölçülen iddialar:
  *
- *   0. `lib/game/web/games.generated.ts` kaynaklarla güncel.
+ *   0. `lib/game/web/games.generated.ts` kaynaklarla güncel; 3B futbolcu modeli
+ *      (iskelet, gövde, koşu/bekleme klipleri) eksiksiz.
  *   1. Üç oyun da vitrin modunda ve oyunda hatasız güncellenip çizilir.
  *   2. SEKTİR: topun solundan vurmak topu sağa gönderir (ve tersi); dokunmazsan
  *      top düşer ve tur biter; iyi oynayan oyuncu seviye atlar ve yerçekimi
@@ -28,7 +29,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-import { buildModule, GENERATED_PATH, isThreeD, THREE_PATH } from "./build-games.mjs";
+import { buildModule, GENERATED_PATH, isThreeD, THREE_KIT, THREE_PATH } from "./build-games.mjs";
 import {
   arenaQuestion,
   kimbuQuestion,
@@ -58,6 +59,20 @@ check(
   generated === buildModule(),
   generated === buildModule() ? "games.generated.ts kaynaklarla aynı" : "`npm run build:games` çalıştırılmalı",
 );
+
+/* ── Futbolcu modeli (3B oyunlar) ────────────────────────────────────────── */
+
+{
+  const box = { window: {} };
+  vm.runInNewContext(readFileSync(join(root, "games", "athlete-data.js"), "utf8"), box);
+  const d = box.window.ATHLETE_DATA;
+  const clips = ["idle", "walk", "jog", "sprint"];
+  check(
+    "futbolcu modeli eksiksiz",
+    Boolean(d) && d.bones.length === 65 && clips.every((k) => d.clips[k] && d.clips[k].d > 0) && d.parts.body.n > 1000 && /CC0/.test(d.credit),
+    d ? `${d.bones.length} kemik, ${d.parts.body.n} köşe, klipler: ${Object.keys(d.clips).join(", ")}` : "veri yok",
+  );
+}
 
 /* ── Başsız çalışma zamanı ───────────────────────────────────────────────── */
 
@@ -137,7 +152,7 @@ function boot(game) {
   // simülasyonu çizimsiz koşar (çizim katmanı WebGL bulamayınca devre dışı).
   const is3d = isThreeD(game);
   if (is3d) vm.runInContext(readFileSync(THREE_PATH, "utf8"), context, { filename: "three.min.js" });
-  for (const file of ["core.js", "scenery.js", ...(is3d ? ["three-kit.js"] : []), `${game}.js`]) {
+  for (const file of ["core.js", "scenery.js", ...(is3d ? THREE_KIT : []), `${game}.js`]) {
     vm.runInContext(readFileSync(join(root, "games", file), "utf8"), context, { filename: file });
   }
   const A = context.window.Arena;
@@ -344,7 +359,7 @@ for (const game of ["penalti", "slalom", "sektir"]) {
     for (let k = 1; k <= 8; k += 1) A.game.move({ x: 195 + side * 140 * (k / 8) + Math.sin((Math.PI * k) / 8) * 20, y: 560 - 230 * (k / 8) });
     A.game.up({ x: 195 + side * 140, y: 330 });
     shots += 1;
-    run(1.2);
+    run(1.7); // ~0,9 sn koşu + uçuş
     outcomes.push(A.game.debug().outcome);
     run(1);
   }

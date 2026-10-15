@@ -797,7 +797,7 @@
   }
 
   function foeAthlete(fo) {
-    var a = K.makeAthlete({ id: fo.who.id, short: fo.who.short, back: fo.who.back, shirt: fo.who.shirt, team: fo.team }, { keeper: false });
+    var a = K.makeAthlete({ id: fo.who.id, name: fo.who.name, short: fo.who.short, back: fo.who.back, shirt: fo.who.shirt, team: fo.team }, { keeper: false, detail: "lo" });
     R.scene.add(a.root);
     return a;
   }
@@ -887,10 +887,10 @@
     }
     var amp = A.clamp(speed / 14, 0.35, 1.15);
     K.runCycle(a, player.stride * 1.2, amp);
-    // Dönüşte gövde yatar; sendelemede öne düşer
+    // Dönüşte gövde yatar; sendelemede öne düşer (depar klibi zaten öne eğik)
     root.rotation.z = player.lean * 0.35;
-    J.spine.rotation.x = 0.22 + player.stumble * 0.6;
-    J.head.rotation.x = -0.12;
+    J.spine.rotation.x = 0.04 + player.stumble * 0.6;
+    J.head.rotation.x = -0.08;
   }
 
   function poseFoe(a, fo) {
@@ -1010,6 +1010,7 @@
       try {
         adaptQuality(dt);
         sync(dt);
+        K.syncAll();
         R.renderer.render(R.scene, R.camera);
       } catch (e) {
         glFailed = true;
