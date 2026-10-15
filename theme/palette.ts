@@ -5,15 +5,15 @@
  * yalnızca iki sabit nesne tanımlar. Aktif temanın seçilmesi `theme/index.ts`
  * işidir.
  *
- * RENK FELSEFESİ — ARENA: NÖTR SAHNE, RENK SİNYALDİR.
+ * RENK FELSEFESİ — BEYAZ KÂĞIT, KOYU MOR KİMLİK, MOR + PEMBE SİNYAL.
  *
  * Ayrıntılı gerekçe aşağıdaki `light` nesnesinin başlığında ve
  * docs/arena-tasarim-dili.md içindedir. Özet:
  *
- *  1. Kâğıt nötrdür (serin gri), kartlar beyazdır; koyu temada grafit gece.
- *  2. Kimlik ve skor anları ile alt menü GRAFİT SAHNEDE durur (`gradientInk`,
+ *  1. Kâğıt beyazdır ve ferahtır, kartlar beyazdır; koyu temada mor gece.
+ *  2. Kimlik ve skor anları ile alt menü KOYU MOR SAHNEDE durur (`gradientInk`,
  *     `inkBlock`, `tabBar`); iki temada da aynı.
- *  3. Renk yalnız sinyaldir: `brand` aksiyon/seçili, `accent` veri, `live`
+ *  3. Renk yalnız sinyaldir: `brand` (mor) aksiyon/seçili, `accent` (pembe) veri, `live`
  *     canlı, `win/draw/loss` sonuç.
  *  4. Kart gradyanı düzdür; gölge nötr ve çok hafiftir. Gradyanlar tokendır,
  *     yönleri yatay sağdan soladır (bkz. components/ui/GradientFill.tsx).
@@ -319,215 +319,212 @@ export interface Palette {
 }
 
 /**
- * ARENA TASARIM DİLİ — NÖTR SAHNE, RENK SİNYALDİR.
+ * ELİTLİG TASARIM DİLİ — BEYAZ VE FERAH SAHNE, KİMLİK KOYU MOR.
  *
- * Önceki dil (mor kâğıt, mor blok, mor bar, lavanta kartlar) markayı her
- * yüzeye yayıyordu; sonuçta hiçbir şey öne çıkmıyor, ekranlar "temalı bir
- * uygulama" gibi okunuyordu. Arena profesyonel spor/veri ürünlerinin dilini
- * benimser:
- *
- *   1. KÂĞIT NÖTRDÜR. Açıkta serin gri kâğıt (#F3F4F6) + saf beyaz kartlar;
- *      koyuda neredeyse siyah grafit (#0B0D11) + bir kademe açık kartlar.
- *   2. SAHNE GRAFİTTİR. Kimlik ve skor anları (maç skorbordu, takım/oyuncu
- *      kimliği, vitrin, alt menü) koyu grafit "sahne" yüzeyinde durur; mor
- *      değil. Sahne iki temada da aynıdır — kimlik tema değiştikçe değişmez.
- *   3. RENK YALNIZ SİNYALDİR.
- *        brand  (elektrik menekşe) = AKSİYON ve SEÇİLİ DURUM
- *        accent (zümrüt camgöbeği)  = VERİ (bar, oran, vurgulanan takım)
- *        live   (kırmızı)           = CANLI
- *      Bir ekranda renkli olan her şey ya dokunulur ya da bir veri söyler.
- *   4. GÖLGE NÖTR VE ÇOK HAFİFTİR; kartı kâğıttan ayıran asıl şey beyaz dolgu
- *      + 1px kenarlıktır. Kart gradyanı düzdür (iki durak aynı renk).
+ *   1. KÂĞIT BEYAZDIR. Açık temada zemin neredeyse saf beyazdır (#FDFCFF),
+ *      kartlar beyaz; ayrımı 1px lavanta kenarlık ve hafif mor gölge yapar.
+ *      Arayüz geniş boşluklu ve ferah okunmalı.
+ *   2. SİYAH YOK, KOYU MOR VAR. Önceki grafit (neredeyse siyah) yüzeylerin
+ *      tamamı — kimlik blokları (`inkBlock`, `gradientInk`), maç sahnesi,
+ *      alt menü, toast — ElitLig'in koyu moruna (#2E1065) geçti. Metin bile
+ *      saf siyah değil, morun en koyu tonudur.
+ *   3. RENK PALETİ MOR + PEMBE.
+ *        brand  (mor)   = AKSİYON ve SEÇİLİ DURUM
+ *        accent (pembe) = VERİ (bar, oran, vurgulanan takım)
+ *        live   (kırmızı) = CANLI
+ *      Sonuç renkleri (galibiyet yeşili vb.) ve saha yeşili anlam taşıdığı
+ *      için korunur.
+ *   4. GÖLGE MORDUR ve çok hafiftir; kart gradyanı düzdür.
  */
 export const light: Palette = {
-  bg:       "#F3F4F6",
+  bg:       "#FDFCFF",
   surface1: "#FFFFFF",
-  surface2: "#F7F8FA",
-  surface3: "#EDEFF3",
+  surface2: "#F8F5FE",
+  surface3: "#F2EDFC",
   elevated: "#FFFFFF",
-  inverse:  "#111318",
-  inkBlock: "#14161C",
-  overlay:  "rgba(9, 11, 16, 0.52)",
-  pressed:  "#F0F1F4",
-  ripple:   "rgba(17, 19, 24, 0.06)",
+  inverse:  "#2E1065",
+  inkBlock: "#2E1065",
+  overlay:  "rgba(30, 10, 64, 0.50)",
+  pressed:  "#F5F1FD",
+  ripple:   "rgba(46, 16, 101, 0.07)",
 
-  textPrimary:   "#0E1116",
-  textSecondary: "#454B57",
-  textTertiary:  "#5F6672",
-  textDisabled:  "#A3A9B4",
+  textPrimary:   "#1E0F3D",
+  textSecondary: "#4A3F66",
+  textTertiary:  "#625879",
+  textDisabled:  "#AAA2BE",
   textOnBrand:   "#FFFFFF",
   textOnStatus:  "#FFFFFF",
   onDark:        "#FFFFFF",
-  onDarkMuted:   "rgba(255, 255, 255, 0.66)",
+  onDarkMuted:   "rgba(255, 255, 255, 0.70)",
   onInverse:     "#FFFFFF",
 
-  border:       "#E3E6EB",
-  borderStrong: "#C9CED6",
-  separator:    "#ECEEF1",
-  borderOnDark: "rgba(255, 255, 255, 0.10)",
+  border:       "#ECE6F8",
+  borderStrong: "#D4C9EC",
+  separator:    "#F1ECFA",
+  borderOnDark: "rgba(255, 255, 255, 0.14)",
 
-  brand:       "#5B3DF5",
-  brandStrong: "#4A2EDB",
-  brandAccent: "#4A2EDB",
-  brandDim:    "#EFECFF",
-  brandBorder: "#D6CFFF",
-  brandOnDark: "#B4A8FF",
+  brand:       "#7C3AED",
+  brandStrong: "#6D28D9",
+  brandAccent: "#6D28D9",
+  brandDim:    "#F3EDFF",
+  brandBorder: "#DCCDFC",
+  brandOnDark: "#D8C8FF",
 
-  accent:       "#0B7A6E",
-  accentStrong: "#0B7468",
-  accentText:   "#0B7468",
-  accentDim:    "#E2F4F1",
-  accentBorder: "#B4E1DA",
+  accent:       "#DB2777",
+  accentStrong: "#BE185D",
+  accentText:   "#BE185D",
+  accentDim:    "#FDEEF6",
+  accentBorder: "#F8C8DF",
   textOnAccent: "#FFFFFF",
 
-  slate:     "#6B7280",
-  slateSoft: "#D3D7DE",
+  slate:     "#7A7091",
+  slateSoft: "#E1DAEE",
 
   live:       "#E0233A",
   liveDim:    "#FDE8EB",
   liveGlow:   "rgba(224, 35, 58, 0.20)",
-  liveOnDark: "#FF6B7D",
+  liveOnDark: "#FF8A98",
 
   win:    "#0F9F5F",  winDim:    "#E3F6EC",
-  draw:   "#6B7280",  drawDim:   "#EEF0F3",
+  draw:   "#6E6585",  drawDim:   "#F1EDF8",
   loss:   "#D92D20",  lossDim:   "#FDEBE9",
   warn:   "#B54708",  warnDim:   "#FEF2E4",
   danger: "#D92D20",  dangerDim: "#FDEBE9",
-  info:   "#0B7468",  infoDim:   "#E2F4F1",
+  info:   "#6D28D9",  infoDim:   "#F3EDFF",
 
   yellowCard: "#D4A106",
   redCard:    "#D92D20",
-  star:       "#5B3DF5",
-  starEmpty:  "#C9CED6",
+  star:       "#7C3AED",
+  starEmpty:  "#D4C9EC",
   pitch:      "#103A31",
   chalk:      "rgba(255, 255, 255, 0.22)",
-  chalkInk:   "rgba(14, 17, 22, 0.06)",
+  chalkInk:   "rgba(46, 16, 101, 0.06)",
   onPitch:    "#FFFFFF",
 
   ratingPoor:  "#D92D20", ratingPoorBg:  "#FDEBE9",
   ratingFair:  "#B54708", ratingFairBg:  "#FEF2E4",
   ratingGood:  "#0F9F5F", ratingGoodBg:  "#E3F6EC",
   ratingGreat: "#067647", ratingGreatBg: "#D6F2E3",
-  ratingElite: "#5B3DF5", ratingEliteBg: "#EFECFF",
-  ratingNone:  "#5F6672", ratingNoneBg:  "#EEF0F3",
+  ratingElite: "#7C3AED", ratingEliteBg: "#F3EDFF",
+  ratingNone:  "#625879", ratingNoneBg:  "#F1EDF8",
 
   posKeeper:    "#93610A",
   posDefense:   "#0B7468",
-  posMidfield:  "#4A2EDB",
-  posForward:   "#C01048",
-  posUnknown:   "#5F6672",
+  posMidfield:  "#6D28D9",
+  posForward:   "#BE185D",
+  posUnknown:   "#625879",
 
   zoneChampion:          "#B7861A",
   zonePromotion:         "#0F9F5F",
-  zonePlayoff:           "#0B7A6E",
+  zonePlayoff:           "#DB2777",
   zoneRelegationPlayoff: "#B54708",
   zoneRelegation:        "#D92D20",
 
-  /* SAHNE — grafit; sağdan sola çok hafif aydınlanır. */
-  gradientInk:     ["#1F222B", "#121419"],
-  gradientBrand:   ["#6A4FF7", "#5233E8"],
-  gradientAccent:  ["#0E8C7E", "#0B7A6E"],
+  /* SAHNE — koyu mor; sağdan sola çok hafif aydınlanır. */
+  gradientInk:     ["#43198F", "#2E1065"],
+  gradientBrand:   ["#8148F0", "#6D28D9"],
+  gradientAccent:  ["#EC4899", "#DB2777"],
   gradientLive:    ["#EC3A4F", "#D41F35"],
   gradientPitch:   ["#174A40", "#0F2F28"],
-  gradientSurface: ["#FFFFFF", "#F7F8FA"],
+  gradientSurface: ["#FFFFFF", "#F8F5FE"],
   /* Kart DÜZDÜR: iki durak aynı beyaz. */
   gradientCard:    ["#FFFFFF", "#FFFFFF"],
 
-  /* MAÇ SAHNESİ — grafit atmosfer, dipte kâğıt. Son durak matchCanvas ile aynı. */
-  matchCanvas:  "#F3F4F6",
-  matchTint: "#14161C",
-  matchWash: ["rgba(20, 22, 28, 0)", "rgba(20, 22, 28, 0.62)", "#F3F4F6"],
-  glassBorder:  "rgba(255, 255, 255, 0.16)",
-  rimLight: ["#FFFFFF", "#F1F2F5"],
-  rimDark:  ["rgba(255, 255, 255, 0.20)", "rgba(255, 255, 255, 0.04)"],
+  /* MAÇ SAHNESİ — koyu mor atmosfer, dipte beyaz kâğıt. Son durak matchCanvas ile aynı. */
+  matchCanvas:  "#FDFCFF",
+  matchTint: "#2E1065",
+  matchWash: ["rgba(46, 16, 101, 0)", "rgba(46, 16, 101, 0.62)", "#FDFCFF"],
+  glassBorder:  "rgba(255, 255, 255, 0.18)",
+  rimLight: ["#FFFFFF", "#F3EEFC"],
+  rimDark:  ["rgba(255, 255, 255, 0.24)", "rgba(255, 255, 255, 0.05)"],
 
-  shadowColor:       "#0B0F19",
-  skeletonBase:      "#E9EBEF",
-  skeletonHighlight: "#F5F6F8",
+  shadowColor:       "#2E1065",
+  skeletonBase:      "#F0EBF9",
+  skeletonHighlight: "#F9F7FE",
 
-  /* ALT MENÜ — sahne grafiti, iki temada da. */
-  tabBar:         "#14161C",
-  tabBarBorder:   "rgba(255, 255, 255, 0.08)",
-  gradientTabBar: ["#1D2027", "#121419"],
+  /* ALT MENÜ — koyu mor, iki temada da. Seçili sekmenin ışığı pembedir. */
+  tabBar:         "#2E1065",
+  tabBarBorder:   "rgba(255, 255, 255, 0.10)",
+  gradientTabBar: ["#3D1585", "#2A0E5C"],
   tabActive:      "#FFFFFF",
-  tabInactive:    "rgba(255, 255, 255, 0.55)",
-  tabBeam:        "#B4A8FF",
-  tabCapsule:       "rgba(124, 102, 255, 0.24)",
-  tabCapsuleBorder: "rgba(180, 168, 255, 0.30)",
-  inkPill:          "rgba(255, 255, 255, 0.10)",
-  inkPillBorder:    "rgba(255, 255, 255, 0.18)",
-  inkTile:          "rgba(255, 255, 255, 0.06)",
-  inkTileBorder:    "rgba(255, 255, 255, 0.10)",
+  tabInactive:    "rgba(255, 255, 255, 0.60)",
+  tabBeam:        "#F9A8D4",
+  tabCapsule:       "rgba(167, 139, 250, 0.26)",
+  tabCapsuleBorder: "rgba(216, 200, 255, 0.32)",
+  inkPill:          "rgba(255, 255, 255, 0.12)",
+  inkPillBorder:    "rgba(255, 255, 255, 0.22)",
+  inkTile:          "rgba(255, 255, 255, 0.08)",
+  inkTileBorder:    "rgba(255, 255, 255, 0.14)",
 
-  chartGrid:         "#ECEEF1",
-  scrimGradientTop:    "rgba(9, 11, 16, 0.00)",
-  scrimGradientBottom: "rgba(9, 11, 16, 0.88)",
+  chartGrid:         "#F1ECFA",
+  scrimGradientTop:    "rgba(30, 10, 64, 0.00)",
+  scrimGradientBottom: "rgba(30, 10, 64, 0.88)",
 };
 
 /**
- * KOYU TEMA — grafit gece. Kâğıt neredeyse siyah, kartlar bir kademe açık;
- * marka moru bir kademe açılır ki koyu zeminde okunabilsin.
+ * KOYU TEMA — mor gece. Siyah yerine morun en derin tonları; kartlar bir
+ * kademe açık, marka moru ve pembe koyu zeminde okunsun diye açılır.
  */
 export const dark: Palette = {
-  bg:       "#0B0D11",
-  surface1: "#15181E",
-  surface2: "#1B1F26",
-  surface3: "#242932",
-  elevated: "#1B1F26",
-  inverse:  "#F2F4F7",
-  inkBlock: "#14161C",
-  overlay:  "rgba(0, 0, 0, 0.70)",
-  pressed:  "#1B1F26",
+  bg:       "#120A24",
+  surface1: "#1B1232",
+  surface2: "#22183D",
+  surface3: "#2B2049",
+  elevated: "#22183D",
+  inverse:  "#F4F0FC",
+  inkBlock: "#2E1065",
+  overlay:  "rgba(8, 3, 20, 0.72)",
+  pressed:  "#22183D",
   ripple:   "rgba(255, 255, 255, 0.08)",
 
-  textPrimary:   "#F2F4F7",
-  textSecondary: "#B6BCC7",
-  textTertiary:  "#8E96A3",
-  textDisabled:  "#565D69",
+  textPrimary:   "#F4F0FC",
+  textSecondary: "#C4BAD9",
+  textTertiary:  "#9C91B5",
+  textDisabled:  "#5F5478",
   textOnBrand:   "#FFFFFF",
   textOnStatus:  "#FFFFFF",
   onDark:        "#FFFFFF",
-  onDarkMuted:   "rgba(255, 255, 255, 0.66)",
-  onInverse:     "#0E1116",
+  onDarkMuted:   "rgba(255, 255, 255, 0.70)",
+  onInverse:     "#1E0F3D",
 
-  border:       "#262B34",
-  borderStrong: "#3A404C",
-  separator:    "#1F232A",
-  borderOnDark: "rgba(255, 255, 255, 0.10)",
+  border:       "#2F2449",
+  borderStrong: "#463A68",
+  separator:    "#251B3C",
+  borderOnDark: "rgba(255, 255, 255, 0.14)",
 
-  brand:       "#6C55FF",
-  brandStrong: "#5B3DF5",
-  brandAccent: "#B4A8FF",
-  brandDim:    "#1F1B3D",
-  brandBorder: "#3A3275",
-  brandOnDark: "#B4A8FF",
+  brand:       "#7C3AED",
+  brandStrong: "#6D28D9",
+  brandAccent: "#C4B5FD",
+  brandDim:    "#2A1B4E",
+  brandBorder: "#46337A",
+  brandOnDark: "#D8C8FF",
 
-  accent:       "#2DD4BF",
-  accentStrong: "#14B8A6",
-  accentText:   "#5EEAD4",
-  accentDim:    "#0F2E2A",
-  accentBorder: "#1A4A43",
-  textOnAccent: "#06201D",
+  accent:       "#F472B6",
+  accentStrong: "#EC4899",
+  accentText:   "#F9A8D4",
+  accentDim:    "#3A1431",
+  accentBorder: "#5C2149",
+  textOnAccent: "#2A0618",
 
-  slate:     "#8E96A3",
-  slateSoft: "#363C47",
+  slate:     "#9C91B5",
+  slateSoft: "#3A2F56",
 
   live:       "#FF4D61",
   liveDim:    "#3A1219",
   liveGlow:   "rgba(255, 77, 97, 0.28)",
-  liveOnDark: "#FF6B7D",
+  liveOnDark: "#FF8A98",
 
   win:    "#34D399",  winDim:    "#0F2E22",
-  draw:   "#8E96A3",  drawDim:   "#1F232A",
+  draw:   "#9C91B5",  drawDim:   "#251B3C",
   loss:   "#FF7A6E",  lossDim:   "#3A1512",
   warn:   "#F5B544",  warnDim:   "#33240C",
   danger: "#FF7A6E",  dangerDim: "#3A1512",
-  info:   "#5EEAD4",  infoDim:   "#0F2E2A",
+  info:   "#C4B5FD",  infoDim:   "#2A1B4E",
 
   yellowCard: "#F5B544",
   redCard:    "#FF7A6E",
-  star:       "#B4A8FF",
-  starEmpty:  "#3A404C",
+  star:       "#C4B5FD",
+  starEmpty:  "#463A68",
   pitch:      "#0E2E27",
   chalk:      "rgba(255, 255, 255, 0.18)",
   chalkInk:   "rgba(255, 255, 255, 0.05)",
@@ -537,56 +534,56 @@ export const dark: Palette = {
   ratingFair:  "#F5B544", ratingFairBg:  "#33240C",
   ratingGood:  "#34D399", ratingGoodBg:  "#0F2E22",
   ratingGreat: "#10B981", ratingGreatBg: "#0C2A1F",
-  ratingElite: "#B4A8FF", ratingEliteBg: "#1F1B3D",
-  ratingNone:  "#8E96A3", ratingNoneBg:  "#1F232A",
+  ratingElite: "#C4B5FD", ratingEliteBg: "#2A1B4E",
+  ratingNone:  "#9C91B5", ratingNoneBg:  "#251B3C",
 
   posKeeper:    "#E7B54A",
   posDefense:   "#5EEAD4",
-  posMidfield:  "#B4A8FF",
-  posForward:   "#FF8FA8",
-  posUnknown:   "#8E96A3",
+  posMidfield:  "#C4B5FD",
+  posForward:   "#F9A8D4",
+  posUnknown:   "#9C91B5",
 
   zoneChampion:          "#E7B54A",
   zonePromotion:         "#34D399",
-  zonePlayoff:           "#2DD4BF",
+  zonePlayoff:           "#F472B6",
   zoneRelegationPlayoff: "#E39A5B",
   zoneRelegation:        "#FF7A6E",
 
-  gradientInk:     ["#1F222B", "#121419"],
-  gradientBrand:   ["#6C55FF", "#5233E8"],
-  gradientAccent:  ["#2DD4BF", "#14B8A6"],
+  gradientInk:     ["#43198F", "#2E1065"],
+  gradientBrand:   ["#8148F0", "#6D28D9"],
+  gradientAccent:  ["#F472B6", "#EC4899"],
   gradientLive:    ["#FF4D61", "#E02A40"],
   gradientPitch:   ["#174A40", "#0D2822"],
-  gradientSurface: ["#191C23", "#15181E"],
-  gradientCard:    ["#15181E", "#15181E"],
+  gradientSurface: ["#21173A", "#1B1232"],
+  gradientCard:    ["#1B1232", "#1B1232"],
 
-  matchCanvas:  "#0B0D11",
-  matchTint: "#14161C",
-  matchWash: ["rgba(20, 22, 28, 0)", "rgba(20, 22, 28, 0.62)", "#0B0D11"],
-  glassBorder:  "rgba(255, 255, 255, 0.14)",
-  rimLight: ["#2A2F39", "#15181E"],
-  rimDark:  ["rgba(255, 255, 255, 0.16)", "rgba(255, 255, 255, 0.03)"],
+  matchCanvas:  "#120A24",
+  matchTint: "#2E1065",
+  matchWash: ["rgba(46, 16, 101, 0)", "rgba(46, 16, 101, 0.62)", "#120A24"],
+  glassBorder:  "rgba(255, 255, 255, 0.16)",
+  rimLight: ["#34284F", "#1B1232"],
+  rimDark:  ["rgba(255, 255, 255, 0.18)", "rgba(255, 255, 255, 0.04)"],
 
-  shadowColor:       "#000000",
-  skeletonBase:      "#1B1F26",
-  skeletonHighlight: "#242932",
+  shadowColor:       "#05020D",
+  skeletonBase:      "#22183D",
+  skeletonHighlight: "#2B2049",
 
-  tabBar:         "#16191F",
-  tabBarBorder:   "rgba(255, 255, 255, 0.08)",
-  gradientTabBar: ["#20242C", "#16191F"],
+  tabBar:         "#2A0F5C",
+  tabBarBorder:   "rgba(255, 255, 255, 0.10)",
+  gradientTabBar: ["#3A1580", "#2A0F5C"],
   tabActive:      "#FFFFFF",
-  tabInactive:    "rgba(255, 255, 255, 0.55)",
-  tabBeam:        "#B4A8FF",
-  tabCapsule:       "rgba(124, 102, 255, 0.26)",
-  tabCapsuleBorder: "rgba(180, 168, 255, 0.30)",
-  inkPill:          "rgba(255, 255, 255, 0.10)",
-  inkPillBorder:    "rgba(255, 255, 255, 0.18)",
-  inkTile:          "rgba(255, 255, 255, 0.06)",
-  inkTileBorder:    "rgba(255, 255, 255, 0.10)",
+  tabInactive:    "rgba(255, 255, 255, 0.60)",
+  tabBeam:        "#F9A8D4",
+  tabCapsule:       "rgba(167, 139, 250, 0.28)",
+  tabCapsuleBorder: "rgba(216, 200, 255, 0.32)",
+  inkPill:          "rgba(255, 255, 255, 0.12)",
+  inkPillBorder:    "rgba(255, 255, 255, 0.22)",
+  inkTile:          "rgba(255, 255, 255, 0.08)",
+  inkTileBorder:    "rgba(255, 255, 255, 0.14)",
 
-  chartGrid:         "#1F232A",
-  scrimGradientTop:    "rgba(0, 0, 0, 0.00)",
-  scrimGradientBottom: "rgba(0, 0, 0, 0.90)",
+  chartGrid:         "#251B3C",
+  scrimGradientTop:    "rgba(8, 3, 20, 0.00)",
+  scrimGradientBottom: "rgba(8, 3, 20, 0.90)",
 };
 
 /** Tema adı — depolanan tercih ve sistem ayarı bu iki değere indirgenir. */

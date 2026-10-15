@@ -35,8 +35,12 @@ import { colors, elevate, hairline, radius } from "@/theme";
 import { Bloom } from "./Bloom";
 import { GradientFill } from "./GradientFill";
 
-/** Karo kenar uzunlukları. Ara değer yok: üç boy üç bağlam demektir. */
-const SIZES = { sm: 34, md: 56, lg: 108 } as const;
+/**
+ * Karo kenar uzunlukları. Ara değer yok: üç boy üç bağlam demektir.
+ * `lg` açılış sahnesidir ve bilerek KÜÇÜKTÜR: sade açılışta logo ekranı
+ * kaplamaz, sahnenin ortasında küçük bir imza gibi durur.
+ */
+const SIZES = { sm: 34, md: 56, lg: 36 } as const;
 
 /** Karo yarıçapı kenarın oranıdır — her boyda aynı "yumuşaklık" okunur. */
 const CORNER_RATIO = 0.28;
