@@ -25,7 +25,8 @@ const SHARED = ["core.js", "scenery.js"];
  * package.json'da sürümü SABİTLENMİŞ devDependency'dir (0.158.0, UMD derlemesi)
  * ve oyun HTML'ine satır içi gömülür: WebView çevrimdışı da açılır.
  */
-const THREE_D = new Set(["penalti"]);
+const THREE_D = new Set(["penalti", "slalom"]);
+export const isThreeD = (game) => THREE_D.has(game);
 export const THREE_PATH = join(root, "node_modules", "three", "build", "three.min.js");
 
 const read = (file) => readFileSync(join(root, "games", file), "utf8");
@@ -35,7 +36,7 @@ const readThree = () => readFileSync(THREE_PATH, "utf8").replace(/^console\.warn
 
 export function buildHtml(game) {
   const is3d = THREE_D.has(game);
-  const scripts = [...SHARED, `${game}.js`].map((file) => escape(read(file)));
+  const scripts = [...SHARED, ...(is3d ? ["three-kit.js"] : []), `${game}.js`].map((file) => escape(read(file)));
   return [
     "<!doctype html>",
     '<html lang="tr"><head><meta charset="utf-8">',
