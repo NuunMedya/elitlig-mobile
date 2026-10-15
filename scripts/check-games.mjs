@@ -273,7 +273,7 @@ for (const game of ["penalti", "slalom", "sektir"]) {
 {
   const { A, run, over } = boot("penalti");
   A.game.start();
-  run(3 * (8 + 1.6) + 1);
+  run(1.5 + 3 * (8 + 1.6) + 1); // açılış tanıtımı + üç süre aşımı
   const end = over();
   check(
     "penaltı: süre dolunca hak gider",
@@ -283,6 +283,14 @@ for (const game of ["penalti", "slalom", "sektir"]) {
 }
 {
   const { A, run, over } = boot("penalti");
+  const kit = { primary: "#dc2626", secondary: "#ffffff" };
+  const person = (id, short, extra) => ({ id, short, back: short.toUpperCase(), shirt: 9, team: { name: "Takım", kit }, ...extra });
+  globalThis.__penaltiRoster = {
+    shooter: person(1, "A. Golcü", { attrs: { power: 80, accuracy: 85, curve: 70 } }),
+    keepers: [person(2, "K. Bir", { attrs: { reflex: 60 } }), person(3, "K. İki", { attrs: { reflex: 75 } }), person(4, "K. Üç", { attrs: { reflex: 92 } })],
+  };
+  A.game.setRoster(globalThis.__penaltiRoster);
+  check("penaltı: atıcı kadrodan gelir", A.game.debug().shooter === "A. Golcü", A.game.debug().shooter);
   A.game.start();
   let shots = 0;
   const outcomes = [];
@@ -305,6 +313,12 @@ for (const game of ["penalti", "slalom", "sektir"]) {
   }
   const goals = outcomes.filter((o) => o === "gol").length;
   const end = over();
+  const ladderOk = goals < 3 ? true : A.game.debug().keeperIdx >= 1 && end && end.stats.keeper >= 2;
+  check(
+    "penaltı: kaleci merdiveni seviyeyle ilerler",
+    ladderOk,
+    `${goals} gol → ${A.game.debug().keeperIdx + 1}. kaleci (${end ? end.stats.keeper + "/" + end.stats.keepers : "—"})`,
+  );
   check(
     "penaltı: gol puan kazandırır ve seri biter",
     goals >= 1 && Boolean(end) && end.score >= goals * 100,

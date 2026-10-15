@@ -12,6 +12,7 @@
  * KÖPRÜ — iki yönlü, küçük:
  *   Oyun → RN : {type:"ready"} · {type:"haptic",kind} · {type:"over",score,stats}
  *   RN → Oyun : window.ArenaCmd({type:"start"|"pause"|"resume"|"sound",on})
+ *               window.ArenaCmd({type:"config", sound, reduceMotion, perks, roster})
  *
  * DÖNGÜ: değişken kare süresi, sabit üst sınırlı alt adımlar (≤1/120 sn).
  * 60 Hz'de de 120 Hz'de de aynı oyun; sekme arka plana geçince saat durur,
@@ -72,6 +73,11 @@
         if (cmd.sound != null) A.soundOn = !!cmd.sound;
         // Kariyer avantajı (Elit Kart): oyunun okuduğu küçük oranlar, en çok 0.1.
         if (cmd.perks && typeof cmd.perks === "object") A.perks = cmd.perks;
+        // Oyuna özgü kadro (Penaltı: gerçek ligden atıcı + kaleci merdiveni).
+        if (cmd.roster && typeof cmd.roster === "object") {
+          A.roster = cmd.roster;
+          if (A.game.setRoster) A.game.setRoster(cmd.roster);
+        }
         break;
     }
   };

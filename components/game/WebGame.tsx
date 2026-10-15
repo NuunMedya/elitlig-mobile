@@ -9,13 +9,15 @@
  *
  * KÖPRÜ SÖZLEŞMESİ (bkz. games/core.js):
  *   Oyun → RN : {type:"ready"} · {type:"haptic",kind} · {type:"over",score,stats}
- *   RN → Oyun : window.ArenaCmd({type:"start"|"pause"|"resume"|"config"})
+ *   RN → Oyun : window.ArenaCmd({type:"start"|"pause"|"resume"|"config"}) — config
+ *               ses, hareket, Elit Kart avantajı ve (Penaltı) gerçek kadroyu taşır.
  */
 
 import { forwardRef, useImperativeHandle, useMemo, useRef } from "react";
 import { StyleSheet, View } from "react-native";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 
+import type { PenaltyPerson } from "@/lib/api/arena";
 import { WEB_GAMES, type WebGameKey } from "@/lib/game/web/games.generated";
 import { colors, haptics } from "@/theme";
 
@@ -23,7 +25,14 @@ export type GameCommand =
   | { type: "start" }
   | { type: "pause" }
   | { type: "resume" }
-  | { type: "config"; sound?: boolean; reduceMotion?: boolean; perks?: { penalti?: { aimBonus: number } } | null };
+  | {
+      type: "config";
+      sound?: boolean;
+      reduceMotion?: boolean;
+      perks?: { penalti?: { aimBonus: number } } | null;
+      /** Penaltı: gerçek ligden seçilen atıcı + kaleci merdiveni (bkz. games/penalti.js). */
+      roster?: { shooter: PenaltyPerson; keepers: PenaltyPerson[] } | null;
+    };
 
 export interface GameOverPayload {
   score: number;
@@ -49,7 +58,10 @@ const HAPTIC: Record<string, () => void> = {
   error: haptics.error,
 };
 
-export const WebGame = forwardRef<WebGameHandle, Props>(function WebGame({ game, onReady, onOver }, ref) {
+export const WebGame = forwardRef<WebGameHandle, Props>(function WebGame(
+  { game, onReady, onOver },
+  ref,
+) {
   const web = useRef<WebView>(null);
   const handlers = useRef({ onReady, onOver });
   handlers.current = { onReady, onOver };
@@ -58,7 +70,9 @@ export const WebGame = forwardRef<WebGameHandle, Props>(function WebGame({ game,
     ref,
     () => ({
       send: (command) => {
-        web.current?.injectJavaScript(`window.ArenaCmd && window.ArenaCmd(${JSON.stringify(command)});true;`);
+        web.current?.injectJavaScript(
+          `window.ArenaCmd && window.ArenaCmd(${JSON.stringify(command)});true;`,
+        );
       },
     }),
     [],
@@ -68,7 +82,12 @@ export const WebGame = forwardRef<WebGameHandle, Props>(function WebGame({ game,
   const source = useMemo(() => ({ html: WEB_GAMES[game] }), [game]);
 
   const onMessage = (event: WebViewMessageEvent) => {
-    let message: { type?: string; kind?: string; score?: unknown; stats?: unknown };
+    let message: {
+      type?: string;
+      kind?: string;
+      score?: unknown;
+      stats?: unknown;
+    };
     try {
       message = JSON.parse(event.nativeEvent.data);
     } catch {
@@ -85,7 +104,9 @@ export const WebGame = forwardRef<WebGameHandle, Props>(function WebGame({ game,
         const score = Math.max(0, Math.round(Number(message.score) || 0));
         const stats: Record<string, number> = {};
         if (message.stats && typeof message.stats === "object") {
-          for (const [key, value] of Object.entries(message.stats as Record<string, unknown>)) {
+          for (const [key, value] of Object.entries(
+            message.stats as Record<string, unknown>,
+          )) {
             const n = Number(value);
             if (Number.isFinite(n)) stats[key] = n;
           }

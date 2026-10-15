@@ -234,9 +234,11 @@
     c.beginPath();
     c.moveTo(x1 + nx * w1, y1 + ny * w1);
     c.lineTo(x2 + nx * w2, y2 + ny * w2);
-    c.arc(x2, y2, w2, a, a + Math.PI);
+    // Uç kapakları DIŞA doğru (saat yönünün tersi): içe dönen yay uzvun
+    // ucunda yarım daire boşluk bırakıyordu (eklem yerlerinde delik).
+    c.arc(x2, y2, w2, a, a + Math.PI, true);
     c.lineTo(x1 - nx * w1, y1 - ny * w1);
-    c.arc(x1, y1, w1, a + Math.PI, a + Math.PI * 2);
+    c.arc(x1, y1, w1, a + Math.PI, a + Math.PI * 2, true);
     c.closePath();
     c.fill();
   };
