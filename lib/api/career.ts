@@ -4,8 +4,9 @@ import { get, put } from "../http";
  * Kariyer Modu — routes/career.js, routes/predictions.js (elitlig-server).
  *
  * Elit Seviye üç katmandan beslenir (iç anahtar → ekranda görünen ad):
- * saha → Saha (gerçek maçlar), tribun → Seyirci (Tahmin Ligi, taraftar oyu,
- * tepkiler, Fantezi), arena → Oyunlar (doğrulanmış mini oyunlar). Oyunlar
+ * saha → Saha (gerçek maçlar), tribun → Seyirci (maçları değerlendirmek: skor
+ * ve golcü tahmini, maçın oyuncusu, Fantezi), arena → Oyunlar (doğrulanmış
+ * mini oyunlar). Oyunlar
  * piyasa değerine dokunmaz; saha dışı XP seviyeyi en çok 30'a taşır.
  *
  * XP üç yoldan gelir: her maç / oyun / tahminin standart XP'si, haftalık
@@ -57,6 +58,8 @@ export interface CareerQuest {
   code: string;
   layer: CareerLayer;
   tier?: 1 | 2 | 3;
+  /** Görevi yapmak için açılacak yer (bkz. app/kariyer.tsx QUEST_ROUTES). */
+  go?: string | null;
   title: string;
   description: string;
   progress: number;
@@ -138,7 +141,30 @@ export interface PredictionMatch {
   score: { home: number; away: number } | null;
   can_predict: boolean;
   own_match: boolean;
-  prediction: { home: number; away: number; points: number | null; outcome: "exact" | "diff" | "result" | "miss" | "void" | null } | null;
+  prediction: {
+    home: number;
+    away: number;
+    points: number | null;
+    outcome: "exact" | "diff" | "result" | "miss" | "void" | null;
+    /** Golcü tahmini (isteğe bağlı); tutarsa +3 puan. */
+    scorer?: { id: number; name: string } | null;
+    scorer_hit?: boolean | null;
+  } | null;
+}
+
+export interface ScorerOption {
+  id: number;
+  name: string;
+  image: string | null;
+  position: string | null;
+  goals: number;
+}
+
+export interface ScorerOptions {
+  match_id: number;
+  points: number;
+  home: { team_id: number | null; name: string; players: ScorerOption[] };
+  away: { team_id: number | null; name: string; players: ScorerOption[] };
 }
 
 export interface PredictionBoardEntry {
@@ -158,8 +184,14 @@ export const getPredictionMatches = (scope: { cityId?: number | null; leagueId?:
     seasonId: scope.seasonId ?? undefined,
   });
 
-export const savePrediction = (matchId: number, home: number, away: number) =>
-  put<{ match_id: number; home: number; away: number; message: string }>(`/api/predictions/${matchId}`, { home, away });
+/** `scorer` verilmezse sunucudaki golcü korunur; null temizler. */
+export const savePrediction = (matchId: number, home: number, away: number, scorer?: number | null) =>
+  put<{ match_id: number; home: number; away: number; scorer: number | null; message: string }>(
+    `/api/predictions/${matchId}`,
+    scorer === undefined ? { home, away } : { home, away, scorer },
+  );
+
+export const getScorerOptions = (matchId: number) => get<ScorerOptions>(`/api/predictions/${matchId}/scorers`);
 
 export const getPredictionBoard = (
   period: "weekly" | "season",

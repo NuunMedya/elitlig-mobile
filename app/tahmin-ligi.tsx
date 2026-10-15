@@ -5,8 +5,9 @@
  *              başlayana kadar değiştirilebilir. Son biten maçlar puanıyla.
  *   Sıralama   haftalık / sezonluk puan tablosu (kapsamın maçları).
  *
- * Puan: tam skor 5 · doğru sonuç + gol farkı 3 · doğru sonuç 2. Puanlar
- * Kariyer Modu'nun tribün katmanına XP olarak geçer. Oyuncu kendi takımının
+ * Puan: tam skor 5 · doğru sonuç + gol farkı 3 · doğru sonuç 2. İsteğe bağlı
+ * golcü tahmini ("kim gol atar?"): seçilen oyuncu gol atarsa +3. Puanlar
+ * Kariyer Modu'nun Seyirci katmanına XP olarak geçer. Oyuncu kendi takımının
  * maçına tahmin yapamaz.
  */
 
@@ -18,7 +19,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { LeaguePicker } from "@/components/LeaguePicker";
 import {
+  Avatar,
   Badge,
+  BottomSheet,
   Button,
   Chip,
   ChipGroup,
@@ -37,8 +40,10 @@ import {
 import {
   getPredictionBoard,
   getPredictionMatches,
+  getScorerOptions,
   savePrediction,
   type PredictionMatch,
+  type ScorerOption,
 } from "@/lib/api/career";
 import { formatDateShort, formatTime } from "@/lib/format";
 import { ApiError } from "@/lib/http";
@@ -68,7 +73,7 @@ export default function PredictionLeagueScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      <ScreenHeader title="Tahmin Ligi" subtitle="Tam skor 5 · fark 3 · sonuç 2 puan" back scrollY={scrollY} />
+      <ScreenHeader title="Tahmin Ligi" subtitle="Tam skor 5 · fark 3 · sonuç 2 · golcü 3 puan" back scrollY={scrollY} />
       <ScrollView {...scrollProps} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <LeaguePicker pinned={false} flush />
         <SegmentedControl items={SEGMENTS} value={segment} onChange={setSegment} />
@@ -143,10 +148,19 @@ const PredictionCard = React.memo(function PredictionCard({ match, canEdit }: { 
     if (savedHome != null) setHome(savedHome);
     if (savedAway != null) setAway(savedAway);
   }, [savedHome, savedAway]);
-  const saved = match.prediction && match.prediction.home === home && match.prediction.away === away;
+  const savedScorer = match.prediction?.scorer ?? null;
+  const [scorer, setScorer] = useState<{ id: number; name: string } | null>(savedScorer);
+  const savedScorerId = savedScorer?.id ?? null;
+  useEffect(() => {
+    setScorer(savedScorer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedScorerId]);
+  const [picking, setPicking] = useState(false);
+  const saved =
+    match.prediction && match.prediction.home === home && match.prediction.away === away && (scorer?.id ?? null) === savedScorerId;
 
   const save = useMutation({
-    mutationFn: () => savePrediction(match.id, home, away),
+    mutationFn: () => savePrediction(match.id, home, away, scorer?.id ?? null),
     onSuccess: () => {
       toast.show({ message: "Tahminin kaydedildi.", tone: "success" });
       void queryClient.invalidateQueries({ queryKey: ["predictions"] });
@@ -165,6 +179,27 @@ const PredictionCard = React.memo(function PredictionCard({ match, canEdit }: { 
       </Text>
       <Stepper label={match.home.name} value={home} onChange={setHome} min={0} max={30} size="sm" disabled={locked} accessibilityLabel={`${match.home.name} golü`} />
       <Stepper label={match.away.name} value={away} onChange={setAway} min={0} max={30} size="sm" disabled={locked} accessibilityLabel={`${match.away.name} golü`} />
+      {!match.own_match && (scorer || !locked) ? (
+        <ListRow
+          leading={{ icon: "football-outline", tone: scorer ? "brand" : "neutral" }}
+          title={scorer ? scorer.name : "Kim gol atar?"}
+          subtitle={scorer ? "Golcü tahminin · tutarsa +3 puan" : "İsteğe bağlı · bir oyuncu seç, gol atarsa +3 puan"}
+          chevron={!locked}
+          onPress={locked ? undefined : () => setPicking(true)}
+          position="single"
+        />
+      ) : null}
+      {picking ? (
+        <ScorerSheet
+          match={match}
+          selectedId={scorer?.id ?? null}
+          onClose={() => setPicking(false)}
+          onSelect={(player) => {
+            setScorer(player);
+            setPicking(false);
+          }}
+        />
+      ) : null}
       {match.own_match ? (
         <Text style={styles.text} {...textScale.long}>
           Kendi takımının maçına tahmin yapamazsın.
@@ -185,12 +220,68 @@ const PredictionCard = React.memo(function PredictionCard({ match, canEdit }: { 
   );
 });
 
+/** Golcü seçimi: iki takımın kadrosu, çok gol atan üstte. */
+function ScorerSheet({
+  match,
+  selectedId,
+  onClose,
+  onSelect,
+}: {
+  match: PredictionMatch;
+  selectedId: number | null;
+  onClose: () => void;
+  onSelect: (player: { id: number; name: string } | null) => void;
+}) {
+  const [side, setSide] = useState<"home" | "away">("home");
+  const query = useQuery({ queryKey: ["predictions", "scorers", match.id], queryFn: () => getScorerOptions(match.id), staleTime: 10 * 60_000 });
+  const list: ScorerOption[] = query.data?.[side].players ?? [];
+  return (
+    <BottomSheet visible onClose={onClose} title="Kim gol atar?" snap="full">
+      <View style={styles.sheet}>
+        <SegmentedControl
+          size="sm"
+          stretch
+          items={[
+            { key: "home", label: match.home.name },
+            { key: "away", label: match.away.name },
+          ]}
+          value={side}
+          onChange={setSide}
+        />
+        {selectedId ? <Button label="Golcü seçimini kaldır" variant="ghost" size="sm" icon="close-circle-outline" onPress={() => onSelect(null)} /> : null}
+        {query.isLoading ? (
+          <SkeletonCard lines={6} />
+        ) : query.isError ? (
+          <ErrorState variant="inline" error={query.error} onRetry={query.refetch} />
+        ) : !list.length ? (
+          <EmptyState icon="people-outline" title="Kadro bulunamadı" body="Bu takımın oyuncu listesi henüz yok." variant="inline" />
+        ) : (
+          list.map((player, index) => (
+            <ListRow
+              key={player.id}
+              leading={<Avatar name={player.name} image={player.image} size={36} />}
+              title={player.name}
+              subtitle={[player.position, `${player.goals} gol`].filter(Boolean).join(" · ")}
+              badge={player.id === selectedId ? <Badge label="Seçili" tone="win" size="xs" /> : undefined}
+              highlighted={player.id === selectedId}
+              onPress={() => onSelect({ id: player.id, name: player.name })}
+              position={list.length === 1 ? "single" : index === 0 ? "first" : index === list.length - 1 ? "last" : "middle"}
+            />
+          ))
+        )}
+      </View>
+    </BottomSheet>
+  );
+}
+
 function ResultRow({ match }: { match: PredictionMatch }) {
   const outcome = match.prediction?.outcome ? OUTCOME[match.prediction.outcome] : null;
+  const scorer = match.prediction?.scorer;
+  const scorerText = scorer ? ` · Golcü: ${scorer.name}${match.prediction?.scorer_hit ? " (tuttu, +3)" : match.prediction?.scorer_hit === false ? " (tutmadı)" : ""}` : "";
   return (
     <ListRow
       title={`${match.home.name} ${match.score?.home ?? "-"} – ${match.score?.away ?? "-"} ${match.away.name}`}
-      subtitle={match.prediction ? `Tahminin: ${match.prediction.home} – ${match.prediction.away}` : "Tahmin yapmadın"}
+      subtitle={match.prediction ? `Tahminin: ${match.prediction.home} – ${match.prediction.away}${scorerText}` : "Tahmin yapmadın"}
       badge={outcome ? <Badge label={outcome.label} tone={outcome.tone} size="xs" /> : undefined}
       position="single"
       style={styles.row}
@@ -270,4 +361,5 @@ const styles = StyleSheet.create({
   row: { marginBottom: space.s },
   rank: { width: 32, alignItems: "center" },
   rankText: { ...type.h3, color: colors.textPrimary },
+  sheet: { gap: space.s, paddingBottom: space.lg },
 });
