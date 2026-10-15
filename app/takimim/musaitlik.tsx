@@ -80,10 +80,16 @@ export default function AvailabilityScreen() {
         })),
         submit,
       }),
-    onSuccess: (data) => {
-      setDirty(false);
+    onSuccess: async (data) => {
       toast.show({ message: data.message, tone: "success" });
-      void queryClient.invalidateQueries({ queryKey: ["takim", "availability"] });
+      // Taslak, kaydedilen hâl sunucudan gelene kadar korunur; aksi hâlde
+      // eski veriyle yeniden kurulup tablo bir an eski hâline dönerdi.
+      try {
+        await queryClient.refetchQueries({ queryKey: ["takim", "availability"] });
+        setDirty(false);
+      } catch {
+        // Yenileme düşerse ekrandaki (kaydedilmiş) taslak kalır.
+      }
     },
     onError: (error) => toast.show({ message: error instanceof ApiError ? error.userMessage : "Kaydedilemedi.", tone: "danger" }),
   });

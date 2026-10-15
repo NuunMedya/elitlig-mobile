@@ -159,6 +159,9 @@ export interface RosterPlayer {
   sort_order: number;
   has_active_contract: boolean;
   has_linked_account: boolean;
+  /** Kiralık gelen oyuncu: kaydı hâlâ kendi kulübünde (own_team_id). */
+  is_loan?: boolean;
+  own_team_id?: number | null;
 }
 
 export interface TeamRosterResponse {

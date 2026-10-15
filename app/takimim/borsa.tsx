@@ -336,7 +336,10 @@ function CreateListingSheet({
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const players = (rosterQuery.data?.roster ?? []).filter((player) => !takenPlayerIds.includes(player.id));
+  // Kiralık gelen oyuncu ilana konamaz: kaydı kendi kulübünde (sunucu 404 döner).
+  const players = (rosterQuery.data?.roster ?? []).filter(
+    (player) => !player.is_loan && !takenPlayerIds.includes(player.id),
+  );
   const feeNumber = fee.trim() ? Number(fee.replace(",", ".")) : null;
   const feeInvalid = feeNumber != null && (!Number.isFinite(feeNumber) || feeNumber < 0);
 
