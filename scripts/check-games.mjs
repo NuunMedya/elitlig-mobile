@@ -28,7 +28,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-import { buildModule, GENERATED_PATH } from "./build-games.mjs";
+import { buildModule, GENERATED_PATH, THREE_PATH } from "./build-games.mjs";
 import {
   arenaQuestion,
   kimbuQuestion,
@@ -133,6 +133,9 @@ function boot(game) {
   };
   context.window.window = context.window;
   vm.createContext(context);
+  // 3B oyun (penaltı) three.js ile gelir; başsız ortamda WebGL yoktur, oyun
+  // simülasyonu çizimsiz koşar (çizim katmanı WebGL bulamayınca devre dışı).
+  if (game === "penalti") vm.runInContext(readFileSync(THREE_PATH, "utf8"), context, { filename: "three.min.js" });
   for (const file of ["core.js", "scenery.js", `${game}.js`]) {
     vm.runInContext(readFileSync(join(root, "games", file), "utf8"), context, { filename: file });
   }
@@ -294,7 +297,7 @@ for (const game of ["penalti", "slalom", "sektir"]) {
   A.game.start();
   let shots = 0;
   const outcomes = [];
-  for (let i = 0; i < 40 && !over(); i += 1) {
+  for (let i = 0; i < 90 && !over(); i += 1) {
     run(0.4);
     const d = A.game.debug();
     if (d.state !== "aim") {

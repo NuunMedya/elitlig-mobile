@@ -19,11 +19,23 @@ import { fileURLToPath } from "node:url";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const GAMES = ["penalti", "slalom", "sektir"];
 const SHARED = ["core.js", "scenery.js"];
+/**
+ * 3B oyunlar: WebGL (three.js) sahnesi alttaki #gl tuvaline çizilir, HUD
+ * (skor, yazılar, nişan) üstteki saydam #c tuvalinde kalır. three.js
+ * package.json'da sürümü SABİTLENMİŞ devDependency'dir (0.158.0, UMD derlemesi)
+ * ve oyun HTML'ine satır içi gömülür: WebView çevrimdışı da açılır.
+ */
+const THREE_D = new Set(["penalti"]);
+export const THREE_PATH = join(root, "node_modules", "three", "build", "three.min.js");
 
 const read = (file) => readFileSync(join(root, "games", file), "utf8");
+const escape = (code) => code.replace(/<\/script/gi, "<\\/script");
+// r150+ UMD derlemesi açılışta bir kullanımdan kaldırma uyarısı basar; gürültü.
+const readThree = () => readFileSync(THREE_PATH, "utf8").replace(/^console\.warn\([^)]*\)/, "void 0");
 
 export function buildHtml(game) {
-  const scripts = [...SHARED, `${game}.js`].map((file) => read(file).replace(/<\/script/gi, "<\\/script"));
+  const is3d = THREE_D.has(game);
+  const scripts = [...SHARED, `${game}.js`].map((file) => escape(read(file)));
   return [
     "<!doctype html>",
     '<html lang="tr"><head><meta charset="utf-8">',
@@ -31,8 +43,14 @@ export function buildHtml(game) {
     "<style>html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#050817;",
     "touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;",
     "-webkit-tap-highlight-color:transparent;overscroll-behavior:none}",
-    "canvas{display:block;width:100vw;height:100vh;touch-action:none}</style>",
-    "</head><body><canvas id=\"c\"></canvas>",
+    "canvas{display:block;width:100vw;height:100vh;touch-action:none}",
+    is3d ? "#gl,#c{position:absolute;left:0;top:0}#gl{pointer-events:none}" : "",
+    "</style>",
+    "</head><body>",
+    is3d ? '<canvas id="gl"></canvas>' : "",
+    '<canvas id="c"></canvas>',
+    is3d ? "<script>window.ARENA_3D=true</script>" : "",
+    is3d ? `<script>${escape(readThree())}</script>` : "",
     ...scripts.map((code) => `<script>${code}</script>`),
     "</body></html>",
   ].join("");

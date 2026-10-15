@@ -22,7 +22,9 @@
   "use strict";
 
   var canvas = document.getElementById("c");
-  var ctx = canvas.getContext("2d", { alpha: false });
+  // 3B oyunlarda (#gl WebGL sahnesi altta) bu tuval saydam HUD katmanıdır.
+  var hud3d = !!window.ARENA_3D;
+  var ctx = canvas.getContext("2d", { alpha: hud3d });
   var dpr = Math.min(window.devicePixelRatio || 1, 3);
 
   var A = (window.Arena = {
@@ -36,6 +38,7 @@
     soundOn: true,
     reduceMotion: false,
     game: null,
+    is3d: hud3d,
     FONT: '-apple-system, "SF Pro Display", Roboto, "Helvetica Neue", Arial, sans-serif',
   });
 
@@ -635,6 +638,7 @@
     }
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (hud3d) ctx.clearRect(0, 0, A.W, A.H);
     if (A.shakeAmt > 0.2) {
       ctx.translate((Math.random() - 0.5) * A.shakeAmt, (Math.random() - 0.5) * A.shakeAmt);
       A.shakeAmt *= Math.exp(-14 * dt);
