@@ -3,12 +3,6 @@ import { Alert, Linking } from "react-native";
 
 import { WEB_BASE_URL } from "./config";
 
-/**
- * Web panelinde oyuncu profili düzenleyicisini doğrudan açan adres
- * (elitlig-client PlayerTeamPanel `?profil=duzenle`). Profil bilgileri ve
- * fotoğraf mobilde yerel olarak düzenlenene kadar iki kapı da buraya iner.
- */
-export const PROFILE_EDIT_URL = `${WEB_BASE_URL}/panel?profil=duzenle`;
 
 /**
  * Paylaşım metinlerine eklenen web adresleri. Bağlantıyı alan kişi uygulamayı

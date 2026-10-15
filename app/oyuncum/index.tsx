@@ -95,7 +95,6 @@ import {
 } from "@/lib/api/team";
 import { formatDateShort, formatTime, mediaUrl } from "@/lib/format";
 import { ApiError, get } from "@/lib/http";
-import { openLink, PROFILE_EDIT_URL } from "@/lib/links";
 import { useAuth } from "@/providers/AuthProvider";
 import {
   colors,
@@ -395,10 +394,8 @@ export default function MyPlayerScreen() {
     if (player?.id) router.push(`/oyuncu/${player.id}`);
   }, [player?.id, router]);
 
-  /* Profil düzenleme henüz yerel değil: kalem web panelindeki oyuncu profili
-     düzenleyicisini doğrudan açar (eskiden düzenleme yapamayan /hesabim'a
-     iniyordu). Yerel düzenleyici eklendiğinde hedef oraya çevrilir. */
-  const openEdit = useCallback(() => void openLink(PROFILE_EDIT_URL), []);
+  /* Kalem uygulama içi profil düzenleyicisini açar (onaylı talep). */
+  const openEdit = useCallback(() => router.push("/oyuncum/duzenle"), [router]);
 
   const actions = useMemo(
     () =>

@@ -62,7 +62,7 @@ import {
 import { ApiError } from "@/lib/http";
 import { getPanelMe, type PanelPendingChange } from "@/lib/api/panel";
 import { formatDateShort, mediaUrl } from "@/lib/format";
-import { openLink, PROFILE_EDIT_URL } from "@/lib/links";
+import { openLink } from "@/lib/links";
 import { useAuth } from "@/providers/AuthProvider";
 import { colors, hairline, layout, radius, ratingLabel, space, textScale, type, upperTR } from "@/theme";
 
@@ -382,8 +382,8 @@ export default function AccountScreen() {
         key: "foto",
         icon: "camera",
         title: "Profilimi ve fotoğrafımı düzenle",
-        subtitle: "elitlig.com panelinde açılır; yönetim onayından geçer",
-        action: { kind: "link", url: PROFILE_EDIT_URL },
+        subtitle: "Değişiklikler yönetim onayından geçer",
+        action: { kind: "route", route: "/oyuncum/duzenle" },
       });
     } else {
       profile.push({

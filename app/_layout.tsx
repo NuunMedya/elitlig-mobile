@@ -165,6 +165,12 @@ export default function RootLayout() {
 
                   {/* Takım paneli alt ekranları — detay geçişi. */}
                   <Stack.Screen name="takimim/mac-al" />
+                  <Stack.Screen name="takimim/bilgiler" />
+                  <Stack.Screen name="takimim/teklif-ver" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
+                  <Stack.Screen name="takimim/teklifler" />
+                  <Stack.Screen name="takimim/borsa" />
+                  <Stack.Screen name="takimim/musaitlik" />
+                  <Stack.Screen name="transfer-izni/[id]" />
                   <Stack.Screen name="takimim/mac/[matchId]" />
 
                   {/* Kariyer belgeleri ve oyuncu paneli.
@@ -175,6 +181,7 @@ export default function RootLayout() {
                       olarak kaydolur. */}
                   <Stack.Screen name="oyuncum/index" />
                   <Stack.Screen name="oyuncum/bagla" />
+                  <Stack.Screen name="oyuncum/duzenle" />
                   <Stack.Screen name="teklif/[id]" />
                   <Stack.Screen name="sozlesme/[id]" />
                   <Stack.Screen name="ceza/[id]" />

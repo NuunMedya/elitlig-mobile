@@ -315,6 +315,20 @@ export default function MenuTabScreen() {
           action: { kind: "route", route: "/oyuncu-karsilastir" },
         },
         {
+          key: "borsa",
+          icon: "storefront",
+          title: "Transfer borsası",
+          subtitle: "Satılık ve kiralık oyuncular",
+          action: { kind: "route", route: "/takimim/borsa" },
+        },
+        {
+          key: "haftanin-enleri",
+          icon: "trophy",
+          title: "Haftanın enleri",
+          subtitle: "Haftanın kadrosu ve ödülleri",
+          action: { kind: "route", route: "/haftanin-enleri" },
+        },
+        {
           key: "ara",
           icon: "search",
           title: "Takım, oyuncu ara",

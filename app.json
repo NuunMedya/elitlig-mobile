@@ -121,6 +121,13 @@
         {
           "locationWhenInUsePermission": "Sohbette bulunduğunuz konumu paylaşmak için konum kullanılır."
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Profil fotoğrafını ve kulüp logosunu seçmek için fotoğraflarına erişilir.",
+          "cameraPermission": false
+        }
       ]
     ],
     "experiments": {

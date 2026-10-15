@@ -120,6 +120,7 @@ import { formatAge, formatDateShort, mediaUrl } from "@/lib/format";
 import { ApiError, get } from "@/lib/http";
 import { openLink } from "@/lib/links";
 import { queryKeys } from "@/lib/queryKeys";
+import { useAuth } from "@/providers/AuthProvider";
 import { useFavorite } from "@/providers/FavoriteProvider";
 import { useFollowFlow } from "@/providers/FollowFlowProvider";
 import { useScope } from "@/providers/ScopeProvider";
@@ -519,6 +520,7 @@ function logRowProps(row: Appearance) {
 export default function PlayerDetailScreen() {
   const params = useLocalSearchParams<{ id: string; tab?: string }>();
   const router = useRouter();
+  const auth = useAuth();
   const scope = useScope();
   const { scrollY, scrollProps } = useHeaderScroll();
 
@@ -740,15 +742,27 @@ export default function PlayerDetailScreen() {
 
   /* PAYLAŞ: her oyuncuda başlığın SAĞ ÜSTÜNDEKİ tek ikon (detay sayfalarının
      ortak sözleşmesi). Kimlik şeridinde tekrarı yok. */
+  /* TEKLİF VER: yalnız takım başkanına ve başka takımın oyuncusunda görünür
+     (kendi oyuncuna teklif verilmez). Form: /takimim/teklif-ver. */
+  const managedTeamId = auth.user?.managed_team_id ?? null;
+  const canOffer = Boolean(managedTeamId && player && Number(player.team_id) !== Number(managedTeamId));
+  const openOffer = useCallback(() => {
+    if (!player) return;
+    router.push(`/takimim/teklif-ver?playerId=${player.id}&playerName=${encodeURIComponent(playerName)}`);
+  }, [player, playerName, router]);
+
   const actions = useMemo(
     () => [
+      ...(canOffer
+        ? [{ icon: "swap-horizontal" as const, onPress: openOffer, accessibilityLabel: "Transfer teklifi ver" }]
+        : []),
       {
         icon: "share-outline" as const,
         onPress: openShare,
         accessibilityLabel: "Oyuncu kartını paylaş",
       },
     ],
-    [openShare],
+    [canOffer, openOffer, openShare],
   );
 
   if (!validId) {
