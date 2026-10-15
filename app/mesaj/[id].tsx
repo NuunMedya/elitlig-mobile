@@ -67,8 +67,9 @@ import { colors, hairline, layout, radius, space, textScale, type } from "@/them
 
 /* ═══════════════════════════ SABİTLER / YARDIMCILAR ═══════════════════════ */
 
-/** Yazışma açıkken yoklama aralığı — kutudan (10 sn) daha sık. */
-const POLL_MS = 8_000;
+/** Yazışma açıkken yoklama aralığı — kutudan (30 sn) daha sık. 8 sn sunucunun
+ *  saatlik sorgu kotasını gereksiz yakıyordu. */
+const POLL_MS = 20_000;
 
 /** Durum → ton. Kutu ve yönetim yüzüyle birebir aynı sözlük. */
 const STATUS_TONE: Record<string, Tone> = {

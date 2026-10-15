@@ -74,6 +74,7 @@ import {
   type Tone,
 } from "@/components/ui";
 import { useAppActive } from "@/hooks/useLiveFavoriteCount";
+import { useScreenFocused } from "@/hooks/useScreenFocused";
 import {
   getPanelNotifications,
   markAllNotifsRead,
@@ -89,8 +90,12 @@ import { colors, hairline, layout, radius, space, textScale, type } from "@/them
 
 /* ═══════════════════════════ SABİTLER / YARDIMCILAR ═══════════════════════ */
 
-/** Ekran açıkken yoklama — bildirimler için soket yok (sunucu sözleşmesi). */
-const POLL_MS = 30_000;
+/**
+ * Ekran açıkken yoklama — bildirimler için soket yok (sunucu sözleşmesi).
+ * Sonsuz sorgu her turda YÜKLÜ TÜM SAYFALARI yeniden çeker; bu yüzden aralık
+ * 60 sn (yeni bildirim zaten push ile uyandırılır).
+ */
+const POLL_MS = 60_000;
 
 /** Sorgu anahtarı: başka ekran bu listeyi okumuyor, tek sahibi burası. */
 const NOTIF_KEY = ["panel", "notifications"] as const;
@@ -316,6 +321,8 @@ export function useNotificationFeed() {
   const router = useRouter();
   const toast = useToast();
   const appActive = useAppActive();
+  // Sekme ekranı başka sekmedeyken de mount kalır; görünmüyorsa yoklama yok.
+  const screenFocused = useScreenFocused();
   const queryClient = useQueryClient();
   const patchCache = usePatchNotifCache();
 
@@ -332,7 +339,7 @@ export function useNotificationFeed() {
     },
     enabled: Boolean(auth.user),
     staleTime: 15_000,
-    refetchInterval: appActive ? POLL_MS : false,
+    refetchInterval: appActive && screenFocused ? POLL_MS : false,
     retry: false,
   });
 

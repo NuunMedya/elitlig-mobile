@@ -99,7 +99,8 @@ import {
   useRefresh,
 } from "@/components/ui";
 import type { SegmentedItem } from "@/components/ui";
-import { useAppActive } from "@/hooks/useLiveFavoriteCount";
+import { ALL_LIVE_POLL_MS, ALL_LIVE_STALE_MS, useAppActive } from "@/hooks/useLiveFavoriteCount";
+import { useScreenFocused } from "@/hooks/useScreenFocused";
 import { useTeamLogos } from "@/hooks/useTeamLogos";
 import { haptics } from "@/lib/haptics";
 import { getLiveMatches, getMatches, getTeamMatches } from "@/lib/api/matches";
@@ -129,9 +130,9 @@ const SECTION_HEADER_HEIGHT = GROUP_GAP + LEAGUE_GROUP_HEADER_HEIGHT;
 const STRIP_BACK_DAYS = 7;
 const STRIP_FORWARD_DAYS = 14;
 
-/** Canlı segmentinde yoklama; kapsamsız akış eski Canlı ekranının hızında. */
+/** Canlı segmentinde yoklama. Kapsamsız akış sekme rozetiyle ortak aralıkta
+ *  (ALL_LIVE_POLL_MS, hooks/useLiveFavoriteCount). */
 const LIVE_POLL_MS = 20_000;
-const LIVE_ALL_POLL_MS = 15_000;
 const IDLE_POLL_MS = 60_000;
 /** Gol bandı kalıcı değildir; bu süre sonunda kendini toplar. */
 const GOAL_BAND_MS = 90_000;
@@ -192,6 +193,9 @@ export default function ScoresScreen() {
   const favorite = useFavorite();
   const flow = useFollowFlow();
   const appActive = useAppActive();
+  // Sekme ekranı başka sekmedeyken de mount kalır: görünmüyorsa yoklama yok.
+  const screenFocused = useScreenFocused();
+  const polling = appActive && screenFocused;
   const params = useLocalSearchParams();
   /** Başlığın daralması listenin kaydırmasına bağlıdır (bkz. ScreenHeader). */
   const { scrollY, scrollProps } = useHeaderScroll();
@@ -327,7 +331,7 @@ export default function ScoresScreen() {
       }),
     enabled: scope.ready && !wide,
     staleTime: 30_000,
-    refetchInterval: appActive ? 2 * IDLE_POLL_MS : false,
+    refetchInterval: polling ? 2 * IDLE_POLL_MS : false,
   });
 
   /** Pencere seçili günü DAİMA kapsar (takvimden uzak bir gün seçilebilir). */
@@ -357,7 +361,7 @@ export default function ScoresScreen() {
       }),
     enabled: wide && (view === "country" || windowCityId != null),
     staleTime: 30_000,
-    refetchInterval: appActive ? 2 * IDLE_POLL_MS : false,
+    refetchInterval: polling ? 2 * IDLE_POLL_MS : false,
     placeholderData: (previous) => previous,
   });
 
@@ -380,12 +384,15 @@ export default function ScoresScreen() {
           }),
     enabled: view === "league" ? scope.ready : view === "city" ? scope.cityId != null : false,
     staleTime: 10_000,
-    refetchInterval: appActive ? (isLive ? LIVE_POLL_MS : IDLE_POLL_MS) : false,
+    refetchInterval: polling ? (isLive ? LIVE_POLL_MS : IDLE_POLL_MS) : false,
   });
 
   /**
    * KAPSAMSIZ canlı akış (eski Canlı ekranı). Anahtar sekme rozetiyle ortak
-   * (`useLiveFavoriteCount` aynı ucu aynı anahtarla yoklar) → tek istek.
+   * (`useLiveFavoriteCount` aynı ucu aynı anahtarla yoklar) → tek önbellek.
+   * Takip varken rozet kancası (sekme çubuğu, hep mount) bu anahtarı zaten
+   * ALL_LIVE_POLL_MS ile yokluyor; burada ikinci bir zamanlayıcı kurulmaz.
+   * Takip yokken (yalnız Türkiye görünümü) yoklamayı bu ekran yapar.
    * Yalnız "Tüm Türkiye" görünümünde ya da takip varken (başka ligdeki takip
    * edilen takımın canlı maçı vitrine çıksın diye) açılır.
    */
@@ -394,8 +401,8 @@ export default function ScoresScreen() {
     queryKey: queryKeys.liveFavoriteMatches(),
     queryFn: () => getLiveMatches(),
     enabled: allLiveEnabled,
-    staleTime: 5_000,
-    refetchInterval: appActive ? (isLive ? LIVE_ALL_POLL_MS : IDLE_POLL_MS) : false,
+    staleTime: ALL_LIVE_STALE_MS,
+    refetchInterval: polling && !hasAnyFollow ? (isLive ? ALL_LIVE_POLL_MS : IDLE_POLL_MS) : false,
   });
 
   /**

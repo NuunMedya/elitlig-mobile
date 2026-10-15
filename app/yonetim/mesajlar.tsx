@@ -99,8 +99,8 @@ const PRIORITY_TONE: Record<MessagePriority, Tone> = {
 /** Arama her tuşta sunucuya gitmesin. */
 const SEARCH_DEBOUNCE_MS = 300;
 
-/** Ekran açıkken sessiz yoklama aralığı. */
-const POLL_MS = 10_000;
+/** Ekran açıkken sessiz yoklama aralığı (sunucu sorgu kotası için 30 sn). */
+const POLL_MS = 30_000;
 
 function firstParam(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
