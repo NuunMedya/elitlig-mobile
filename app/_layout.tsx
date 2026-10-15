@@ -1,5 +1,6 @@
 import { focusManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+import { Stack, usePathname } from "expo-router";
+import { useEffect } from "react";
 import { StatusBar } from "expo-status-bar";
 import { AppState, type AppStateStatus } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -11,6 +12,7 @@ import { useNotificationBridge } from "@/hooks/useNotificationBridge";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { useChatRealtime } from "@/hooks/useChat";
 import { CallProvider } from "@/providers/CallProvider";
+import { startAnalytics, trackScreen } from "@/lib/analytics";
 import { ApiError } from "@/lib/http";
 import { AuthProvider } from "@/providers/AuthProvider";
 import { FavoriteProvider } from "@/providers/FavoriteProvider";
@@ -100,12 +102,25 @@ function ChatRealtimeSetup() {
   return null;
 }
 
+/** Ekran görüntüleme analitiği: her rota değişiminde bir kayıt (lib/analytics.ts). */
+function AnalyticsSetup() {
+  const pathname = usePathname();
+  useEffect(() => {
+    startAnalytics();
+  }, []);
+  useEffect(() => {
+    trackScreen(pathname);
+  }, [pathname]);
+  return null;
+}
+
 export default function RootLayout() {
   return (
     <CrashCatcher>
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
+          <AnalyticsSetup />
           <NotificationSetup />
           <ChatRealtimeSetup />
           <ScopeProvider>

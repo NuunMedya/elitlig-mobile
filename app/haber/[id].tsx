@@ -62,6 +62,7 @@ import {
 } from "@/components/ui";
 import { getNews } from "@/lib/api/news";
 import { formatDateLong, mediaUrl, stripHtml } from "@/lib/format";
+import { webNewsUrl } from "@/lib/links";
 import { queryKeys } from "@/lib/queryKeys";
 import type { NewsItem } from "@/lib/types";
 import {
@@ -256,20 +257,20 @@ export default function NewsDetailScreen() {
   const links = useMemo(() => (item ? relatedLinks(item) : []), [item]);
 
   /**
-   * Paylaşım metni: başlık + özet. Sitede tekil haberin genel bir adresi
-   * bulunmadığı için (yalnız /haberler listesi var) bağlantı EKLENMEZ —
-   * çalışmayan bir URL paylaşmak, hiç paylaşmamaktan kötüdür.
+   * Paylaşım metni: başlık + özet + sitedeki tekil haber adresi
+   * (`/haberler?haber=<id>` haberi pencerede açar).
    */
   const share = useCallback(() => {
     if (!item) return;
     const summary = item.summary?.trim() || stripHtml(item.content, 220);
+    const url = webNewsUrl(publicId);
     void Share.share({
       title: item.title,
-      message: summary ? `${item.title}\n\n${summary}` : item.title,
+      message: [item.title, summary, url].filter(Boolean).join("\n\n"),
     }).catch(() => {
       toast.show({ message: "Paylaşım penceresi açılamadı.", tone: "danger" });
     });
-  }, [item, toast]);
+  }, [item, publicId, toast]);
 
   const openLink = useCallback((href: string) => router.push(href as never), [router]);
 

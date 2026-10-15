@@ -17,7 +17,11 @@
         "ITSAppUsesNonExemptEncryption": false,
         "NSMicrophoneUsageDescription": "Sesli arama sırasında sesinizi karşı tarafa iletmek için mikrofon kullanılır.",
         "NSLocationWhenInUseUsageDescription": "Sohbette bulunduğunuz konumu paylaşmak için konum kullanılır."
-      }
+      },
+      "associatedDomains": [
+        "applinks:elitlig.com",
+        "applinks:www.elitlig.com"
+      ]
     },
     "android": {
       "package": "com.elitlig.app",
@@ -33,6 +37,38 @@
         "android.permission.BLUETOOTH_CONNECT",
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "pathPrefix": "/sehir"
+            },
+            {
+              "scheme": "https",
+              "host": "elitlig.com",
+              "pathPrefix": "/haberler"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "pathPrefix": "/sehir"
+            },
+            {
+              "scheme": "https",
+              "host": "www.elitlig.com",
+              "pathPrefix": "/haberler"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
       ]
     },
     "plugins": [

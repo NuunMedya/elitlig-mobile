@@ -141,6 +141,9 @@ export default function H2HScreen() {
   const { scrollY, scrollProps } = useHeaderScroll();
 
   const [shareOpen, setShareOpen] = useState(false);
+  /** Menüden parametresiz açılınca iki takım bu seçiciyle seçilir. */
+  const [picking, setPicking] = useState<"home" | "away" | null>(null);
+  const [draftHome, setDraftHome] = useState<StandingRow | null>(null);
 
   const homeId = Number(firstParam(params.homeId)) || null;
   const awayId = Number(firstParam(params.awayId)) || null;
@@ -345,14 +348,56 @@ export default function H2HScreen() {
   );
 
   if (!hasTargets) {
+    /* Menüdeki "Takım karşılaştır" ekranı parametresiz açar: iki takım
+       seçili kapsamın puan tablosundan seçilir, sonra rota parametreleri
+       yazılır ve ekran normal akışına döner. */
+    const pickTeam = (row: StandingRow) => {
+      if (picking === "home") {
+        setDraftHome(row);
+        setPicking("away");
+        return;
+      }
+      const home = draftHome;
+      setPicking(null);
+      setDraftHome(null);
+      if (!home) return;
+      router.setParams({
+        homeId: String(home.team_id),
+        homeName: home.team_name,
+        awayId: String(row.team_id),
+        awayName: row.team_name,
+      });
+    };
     return (
       <SafeAreaView style={styles.screen} edges={["top"]}>
         {header}
         <EmptyState
           icon="git-compare-outline"
-          title="Karşılaştırma bilgisi eksik"
-          body="Bu ekran iki takımla açılır. Takım sayfasındaki “H2H karşılaştır” düğmesini kullan."
-          action={{ label: "Geri dön", onPress: () => router.back() }}
+          title="İki takımı yan yana koy"
+          body={
+            scope.ready
+              ? "Seçili ligin puan tablosundan iki takım seç; aralarındaki maçlar, form ve sıralama karşılaştırılır."
+              : "Takım seçmek için önce bir lig seç."
+          }
+          action={
+            scope.ready
+              ? { label: "Takımları seç", onPress: () => setPicking("home") }
+              : { label: "Geri dön", onPress: () => router.back() }
+          }
+        />
+        <TeamPicker
+          visible={picking !== null}
+          title={picking === "away" ? "İkinci takımı seç" : "Birinci takımı seç"}
+          rows={rows}
+          loading={standingsQuery.isLoading}
+          error={standingsQuery.isError && !standingsQuery.data ? standingsQuery.error : null}
+          onRetry={standingsQuery.refetch}
+          excludeId={picking === "away" ? draftHome?.team_id ?? null : null}
+          onPick={pickTeam}
+          onClose={() => {
+            setPicking(null);
+            setDraftHome(null);
+          }}
         />
       </SafeAreaView>
     );
@@ -475,6 +520,78 @@ function rankOf(rows: StandingRow[], row: StandingRow | null): number | null {
   if (!row) return null;
   const index = rows.indexOf(row);
   return index >= 0 ? index + 1 : null;
+}
+
+/** Puan tablosundan takım seçici — menüden parametresiz açılışta kullanılır. */
+function TeamPicker({
+  visible,
+  title,
+  rows,
+  loading,
+  error,
+  onRetry,
+  excludeId,
+  onPick,
+  onClose,
+}: {
+  visible: boolean;
+  title: string;
+  rows: StandingRow[];
+  loading: boolean;
+  error: unknown;
+  onRetry: () => void;
+  excludeId: number | null;
+  onPick: (row: StandingRow) => void;
+  onClose: () => void;
+}) {
+  const list = useMemo(
+    () => rows.filter((row) => Number(row.team_id) !== excludeId),
+    [excludeId, rows],
+  );
+  return (
+    <BottomSheet visible={visible} onClose={onClose} title={title} snap="full" scrollable={false}>
+      {loading ? (
+        <SkeletonCard lines={5} />
+      ) : error ? (
+        <ErrorState variant="inline" error={error} onRetry={onRetry} />
+      ) : (
+        <FlatList
+          data={list}
+          keyExtractor={(row) => String(row.team_id)}
+          style={styles.pickerList}
+          renderItem={({ item }) => (
+            <Touchable
+              feedback="row"
+              haptic="selection"
+              onPress={() => onPick(item)}
+              style={styles.pickerRow}
+              accessibilityRole="button"
+              accessibilityLabel={item.team_name}
+            >
+              <TeamLogo name={item.team_name} logo={item.logo} size={layout.crestLg} />
+              <View style={styles.pickerRowBody}>
+                <Text style={styles.pickerName} numberOfLines={1} {...textScale.dense}>
+                  {item.team_name}
+                </Text>
+                <Text style={styles.pickerMeta} numberOfLines={1} {...textScale.dense}>
+                  {`${rows.indexOf(item) + 1}. sıra · ${item.display_points} puan`}
+                </Text>
+              </View>
+            </Touchable>
+          )}
+          ListEmptyComponent={
+            <EmptyState
+              variant="inline"
+              compact
+              icon="shield-outline"
+              title="Takım bulunamadı"
+              body="Seçili ligin puan tablosu boş."
+            />
+          }
+        />
+      )}
+    </BottomSheet>
+  );
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -865,6 +982,28 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.bg,
+  },
+  pickerList: {
+    flex: 1,
+  },
+  pickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.m,
+    minHeight: 52,
+    paddingVertical: space.s,
+  },
+  pickerRowBody: {
+    flex: 1,
+    minWidth: 0,
+  },
+  pickerName: {
+    ...type.label,
+    color: colors.textPrimary,
+  },
+  pickerMeta: {
+    ...type.caption,
+    color: colors.textTertiary,
   },
   loading: {
     paddingHorizontal: layout.screenPadding,

@@ -95,6 +95,7 @@ import {
 } from "@/lib/api/team";
 import { formatDateShort, formatTime, mediaUrl } from "@/lib/format";
 import { ApiError, get } from "@/lib/http";
+import { openLink, PROFILE_EDIT_URL } from "@/lib/links";
 import { useAuth } from "@/providers/AuthProvider";
 import {
   colors,
@@ -394,10 +395,10 @@ export default function MyPlayerScreen() {
     if (player?.id) router.push(`/oyuncu/${player.id}`);
   }, [player?.id, router]);
 
-  /* NOT: profil düzenleme + fotoğraf talebi bugün `/hesabim` içinde yaşıyor.
-     `app/oyuncum/duzenle.tsx` eklendiğinde hedef oraya çevrilir; şu an olmayan
-     bir rotaya bağlanıp ölü bağlantı bırakmıyoruz. */
-  const openEdit = useCallback(() => router.push("/hesabim"), [router]);
+  /* Profil düzenleme henüz yerel değil: kalem web panelindeki oyuncu profili
+     düzenleyicisini doğrudan açar (eskiden düzenleme yapamayan /hesabim'a
+     iniyordu). Yerel düzenleyici eklendiğinde hedef oraya çevrilir. */
+  const openEdit = useCallback(() => void openLink(PROFILE_EDIT_URL), []);
 
   const actions = useMemo(
     () =>
@@ -1214,9 +1215,12 @@ const ActiveContractCard = React.memo(function ActiveContractCard({
 }) {
   const router = useRouter();
 
-  /* NOT: tek sözleşme detayı ekranı (`app/sozlesme/[id].tsx`) henüz yok;
-     kart şimdilik sözleşme listesine iner. */
-  const open = useCallback(() => router.push("/sozlesmelerim"), [router]);
+  /* Kart sözleşme belgesini açar; kimlik yoksa (eski kayıt) listeye iner. */
+  const open = useCallback(
+    () =>
+      router.push(contract.public_id ? `/sozlesme/${contract.public_id}` : "/sozlesmelerim"),
+    [contract.public_id, router],
+  );
   const progress = contractProgress(contract);
 
   return (

@@ -95,6 +95,7 @@ import { getStandings } from "@/lib/api/standings";
 import { addMatchToCalendar } from "@/lib/calendar";
 import { formatDateShort, formatTime, mediaUrl, stripTeamSuffix } from "@/lib/format";
 import { isTimelineEvent, matchState } from "@/lib/match";
+import { webMatchUrl } from "@/lib/links";
 import { buildContributions, buildStatRows, buildTopPlayers } from "@/lib/matchStats";
 import { queryKeys } from "@/lib/queryKeys";
 import { useFavorite } from "@/providers/FavoriteProvider";
@@ -345,7 +346,7 @@ export default function MatchDetailScreen() {
       `${match.first_team_name} ${score} ${match.second_team_name}`,
       [match.league_name, match.match_season].filter(Boolean).join(" · "),
       match.match_field ? `Saha: ${match.match_field}` : null,
-      "ElitLig",
+      webMatchUrl(match) ?? "ElitLig",
     ].filter(Boolean) as string[];
     void Share.share({ message: lines.join("\n") });
   }, [awayScore, homeScore, match, state]);
