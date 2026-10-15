@@ -18,6 +18,7 @@
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useQuery } from "@tanstack/react-query";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
@@ -26,7 +27,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ArenaResultCard, ArenaShareSheet, formatCount, SCORE_UNIT, useArenaScore } from "@/components/game/ArenaResult";
 import { WebGame, type GameOverPayload, type WebGameHandle } from "@/components/game/WebGame";
 import { Button, ScreenHeader, Touchable, useReduceMotion } from "@/components/ui";
+import { getPlayerCareer } from "@/lib/api/career";
 import type { WebGameKey } from "@/lib/game/web/games.generated";
+import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
 import { colors, elevate, fonts, layout, radius, space, textScale, type, upperTR } from "@/theme";
 
@@ -66,6 +69,19 @@ export function ArenaGameScreen({ config }: { config: ArenaGameConfig }) {
   const scope = useScope();
   const reduceMotion = useReduceMotion();
   const run = useArenaScore(config.game, config.bestKey);
+  const auth = useAuth();
+
+  /* Kariyer avantajı (Elit Kart): bağlı oyuncunun gerçek istatistiklerinden
+     gelen küçük oranlar oyuna iletilir. Yalnız penaltı bir avantaj okur. */
+  const playerId = auth.user?.player_id ?? null;
+  const careerQuery = useQuery({
+    queryKey: ["career", "player", playerId],
+    queryFn: () => getPlayerCareer(playerId as number),
+    enabled: Boolean(playerId) && config.game === "penalti",
+    staleTime: 10 * 60_000,
+    retry: false,
+  });
+  const perks = careerQuery.data?.card.perks ?? null;
 
   const game = useRef<WebGameHandle>(null);
   const [phase, setPhase] = useState<Phase>("loading");
@@ -87,8 +103,8 @@ export function ArenaGameScreen({ config }: { config: ArenaGameConfig }) {
 
   /* Ses / hareket tercihi oyuna her değiştiğinde iletilir. */
   useEffect(() => {
-    game.current?.send({ type: "config", sound, reduceMotion });
-  }, [sound, reduceMotion, phase]);
+    game.current?.send({ type: "config", sound, reduceMotion, perks });
+  }, [sound, reduceMotion, phase, perks]);
 
   /* Odak: başka ekrana geçince oyun durur, dönünce sürer. */
   useFocusEffect(
@@ -110,15 +126,15 @@ export function ArenaGameScreen({ config }: { config: ArenaGameConfig }) {
   );
 
   const onReady = useCallback(() => {
-    game.current?.send({ type: "config", sound, reduceMotion });
+    game.current?.send({ type: "config", sound, reduceMotion, perks });
     if (phaseRef.current === "loading") setPhaseBoth("ready");
-  }, [sound, reduceMotion]);
+  }, [sound, reduceMotion, perks]);
 
   const start = () => {
     setResult(null);
     run.reset();
     setPhaseBoth("playing");
-    game.current?.send({ type: "config", sound, reduceMotion });
+    game.current?.send({ type: "config", sound, reduceMotion, perks });
     game.current?.send({ type: "start" });
   };
 

@@ -287,6 +287,20 @@ export default function MenuTabScreen() {
       title: "Keşfet",
       data: [
         {
+          key: "kariyer",
+          icon: "ribbon",
+          title: "Kariyerim",
+          subtitle: "Elit Seviye, Elit Kart, rozetler ve görevler",
+          action: { kind: "route", route: "/kariyer" },
+        },
+        {
+          key: "tahmin-ligi",
+          icon: "podium",
+          title: "Tahmin Ligi",
+          subtitle: "Liginin maçlarına skor tahmini yap",
+          action: { kind: "route", route: "/tahmin-ligi" },
+        },
+        {
           key: "canli",
           icon: "radio",
           title: "Canlı maçlar",

@@ -686,6 +686,25 @@ export default function OyunlarScreen() {
             onPress={openTurkey}
           />
         </View>
+
+        {/* 4) Kariyer Modu: doğrulanmış oyunlar Elit Seviye'ye XP getirir. */}
+        <SectionHeader title="Kariyer" />
+        <View style={styles.rows}>
+          <ListRow
+            leading={{ icon: "ribbon", tone: "brand" }}
+            title="Kariyerim"
+            subtitle="Elit Seviye, Elit Kart, rozetler ve haftalık görevler"
+            position="first"
+            onPress={() => router.push("/kariyer")}
+          />
+          <ListRow
+            leading={{ icon: "podium", tone: "win" }}
+            title="Tahmin Ligi"
+            subtitle="Liginin gerçek maçlarına skor tahmini"
+            position="last"
+            onPress={() => router.push("/tahmin-ligi")}
+          />
+        </View>
       </Animated.ScrollView>
     </SafeAreaView>
   );

@@ -112,6 +112,7 @@ import {
   type StatRow,
   type StatTile,
 } from "@/components/playerpage";
+import { getPlayerCareer } from "@/lib/api/career";
 import { getMatchKadro } from "@/lib/api/matches";
 import { getPlayer, getPlayerRankings } from "@/lib/api/players";
 import { positionLabel } from "@/lib/api/team";
@@ -124,6 +125,7 @@ import { useAuth } from "@/providers/AuthProvider";
 import { useFavorite } from "@/providers/FavoriteProvider";
 import { useFollowFlow } from "@/providers/FollowFlowProvider";
 import { useScope } from "@/providers/ScopeProvider";
+import { EliteCard } from "@/components/career/EliteCard";
 import { FollowActions } from "@/components/FollowActions";
 import {
   colors,
@@ -981,6 +983,14 @@ function GeneralTab({
     retry: false,
   });
 
+  /* Elit Kart + bağlı üyenin Elit Seviyesi ve kariyer rozetleri (Kariyer Modu). */
+  const careerQuery = useQuery({
+    queryKey: ["career", "player", playerId],
+    queryFn: () => getPlayerCareer(playerId),
+    staleTime: 10 * 60_000,
+    retry: false,
+  });
+
   const historyQuery = useQuery({
     queryKey: key.marketHistory(playerId),
     queryFn: () => getMarketValueHistory(playerId),
@@ -1087,6 +1097,9 @@ function GeneralTab({
         />
       ) : null}
 
+      {/* ————— Elit Kart ————— */}
+      {careerQuery.data?.card ? <EliteCard card={careerQuery.data.card} level={careerQuery.data.level?.level ?? null} /> : null}
+
       {/* ————— Piyasa değeri ————— */}
       {market ? <MarketValueCard market={market} series={marketSeries} /> : null}
 
@@ -1106,6 +1119,18 @@ function GeneralTab({
         <>
           <SectionHeader style={styles.flushHeader} title="Başarılar" meta={`${achievements.length} rozet`} />
           <Achievements items={achievements} />
+        </>
+      ) : null}
+
+      {/* ————— Kariyer rozetleri (Kupa Dolabı) ————— */}
+      {careerQuery.data?.achievements.length ? (
+        <>
+          <SectionHeader style={styles.flushHeader} title="Kupa dolabı" meta={`${careerQuery.data.achievements.length} kariyer rozeti`} />
+          <View style={styles.trophies}>
+            {careerQuery.data.achievements.map((item) => (
+              <Badge key={item.code} label={item.title} tone={item.layer === "saha" ? "win" : item.layer === "tribun" ? "info" : "brand"} size="sm" />
+            ))}
+          </View>
         </>
       ) : null}
 
@@ -2144,6 +2169,11 @@ const styles = StyleSheet.create({
   flushHeader: {
     paddingHorizontal: 0,
     paddingBottom: space.xs,
+  },
+  trophies: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: space.s,
   },
   content: {
     paddingHorizontal: layout.screenPadding,

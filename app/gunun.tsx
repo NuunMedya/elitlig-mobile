@@ -48,7 +48,7 @@ import {
   Touchable,
   useToast,
 } from "@/components/ui";
-import { submitArenaScore } from "@/lib/api/arena";
+import { startArenaSession, submitArenaScore } from "@/lib/api/arena";
 import { getPlayerRankings } from "@/lib/api/players";
 import { ApiError, get } from "@/lib/http";
 import { queryKeys } from "@/lib/queryKeys";
@@ -343,8 +343,17 @@ export default function DailyQuizScreen() {
     }, 1000);
   };
 
+  /** Resmî denemenin oyun oturumu (Kariyer Modu doğrulaması). */
+  const dailySession = useRef<Promise<string | null> | null>(null);
+
   const start = (isOfficial: boolean) => {
     setOfficial(isOfficial);
+    dailySession.current =
+      isOfficial && auth.user
+        ? startArenaSession("gunun")
+            .then((data) => data.sessionId)
+            .catch(() => null)
+        : null;
     setScore(0);
     setCorrectCount(0);
     setQIndex(0);
@@ -403,7 +412,10 @@ export default function DailyQuizScreen() {
         // Skor yazıldıktan SONRA sıralama tazelenir; sonuç ekranı taze sıra gösterir.
         void refetchStanding();
       };
-      submitArenaScore("gunun", result.score)
+      const session = dailySession.current ?? Promise.resolve(null);
+      dailySession.current = null;
+      session
+        .then((sessionId) => submitArenaScore("gunun", result.score, sessionId))
         .then(settle)
         .catch((error) => {
           if (error instanceof ApiError && error.status === 409) settle();
