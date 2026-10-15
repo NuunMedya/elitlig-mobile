@@ -20,52 +20,20 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQuery } from "@tanstack/react-query";
 import { useFocusEffect, useRouter } from "expo-router";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import {
-  ArenaResultCard,
-  ArenaShareSheet,
-  formatCount,
-  SCORE_UNIT,
-  useArenaScore,
-} from "@/components/game/ArenaResult";
+import { ArenaResultCard, ArenaShareSheet, formatCount, SCORE_UNIT, useArenaScore } from "@/components/game/ArenaResult";
 import { PenaltySetup } from "@/components/game/PenaltySetup";
-import {
-  WebGame,
-  type GameOverPayload,
-  type WebGameHandle,
-} from "@/components/game/WebGame";
-import {
-  Button,
-  ScreenHeader,
-  Touchable,
-  useReduceMotion,
-} from "@/components/ui";
+import { WebGame, type GameOverPayload, type WebGameHandle } from "@/components/game/WebGame";
+import { Button, ScreenHeader, Touchable, useReduceMotion } from "@/components/ui";
 import { getPenaltyRoster } from "@/lib/api/arena";
 import { getPlayerCareer } from "@/lib/api/career";
 import type { WebGameKey } from "@/lib/game/web/games.generated";
 import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
-import {
-  colors,
-  elevate,
-  fonts,
-  layout,
-  radius,
-  space,
-  textScale,
-  type,
-  upperTR,
-} from "@/theme";
+import { colors, elevate, fonts, layout, radius, space, textScale, type, upperTR } from "@/theme";
 
 /* ============================ SÖZLEŞME ============================ */
 
@@ -122,13 +90,7 @@ export function ArenaGameScreen({ config }: { config: ArenaGameConfig }) {
      cihazda hatırlanır; kadro gelmezse oyun varsayılan kadroyla oynanır. */
   const isPenalty = config.game === "penalti";
   const rosterQuery = useQuery({
-    queryKey: [
-      "arena",
-      "penalti",
-      "roster",
-      scope.cityId ?? 0,
-      auth.user?.player_id ?? 0,
-    ],
+    queryKey: ["arena", "penalti", "roster", scope.cityId ?? 0, auth.user?.player_id ?? 0],
     queryFn: () => getPenaltyRoster(scope.cityId),
     enabled: isPenalty,
     staleTime: 30 * 60_000,
@@ -149,10 +111,7 @@ export function ArenaGameScreen({ config }: { config: ArenaGameConfig }) {
     const data = rosterQuery.data;
     if (!isPenalty || !data || !data.shooters.length) return null;
     // Kendi oyuncusu varsa ve henüz seçim yapılmadıysa o seçilir.
-    const shooter =
-      data.shooters.find((item) => item.id === shooterId) ??
-      data.shooters.find((item) => item.mine) ??
-      data.shooters[0];
+    const shooter = data.shooters.find((item) => item.id === shooterId) ?? data.shooters.find((item) => item.mine) ?? data.shooters[0];
     return { shooter, keepers: data.keepers };
   }, [isPenalty, rosterQuery.data, shooterId]);
 
@@ -227,17 +186,11 @@ export function ArenaGameScreen({ config }: { config: ArenaGameConfig }) {
   const headerActions = useMemo(
     () => [
       {
-        icon: (sound
-          ? "volume-high-outline"
-          : "volume-mute-outline") as keyof typeof Ionicons.glyphMap,
+        icon: (sound ? "volume-high-outline" : "volume-mute-outline") as keyof typeof Ionicons.glyphMap,
         onPress: toggleSound,
         accessibilityLabel: sound ? "Sesi kapat" : "Sesi aç",
       },
-      {
-        icon: "trophy-outline" as const,
-        onPress: openBoard,
-        accessibilityLabel: "Rekor tablosu",
-      },
+      { icon: "trophy-outline" as const, onPress: openBoard, accessibilityLabel: "Rekor tablosu" },
     ],
     [sound, toggleSound, openBoard],
   );
@@ -253,12 +206,7 @@ export function ArenaGameScreen({ config }: { config: ArenaGameConfig }) {
       />
 
       <View style={styles.arena}>
-        <WebGame
-          ref={game}
-          game={config.game}
-          onReady={onReady}
-          onOver={onOver}
-        />
+        <WebGame ref={game} game={config.game} onReady={onReady} onOver={onOver} />
 
         {phase === "loading" || phase === "ready" ? (
           <StartCard
@@ -294,15 +242,7 @@ export function ArenaGameScreen({ config }: { config: ArenaGameConfig }) {
             onRestart={start}
             onBoard={openBoard}
             onShare={() => setShareOpen(true)}
-            secondary={
-              isPenalty && roster
-                ? {
-                    label: "Atıcı değiştir",
-                    icon: "swap-horizontal",
-                    onPress: () => setPhaseBoth("ready"),
-                  }
-                : undefined
-            }
+            secondary={isPenalty && roster ? { label: "Atıcı değiştir", icon: "swap-horizontal", onPress: () => setPhaseBoth("ready") } : undefined}
           />
         ) : null}
       </View>
@@ -341,11 +281,7 @@ function StartCard({
   const rules = setup ? config.rules.slice(0, 2) : config.rules;
   return (
     <View style={styles.overlay} pointerEvents="box-none">
-      <ScrollView
-        style={styles.cardScroll}
-        contentContainerStyle={styles.cardScrollContent}
-        showsVerticalScrollIndicator={false}
-      >
+      <ScrollView style={styles.cardScroll} contentContainerStyle={styles.cardScrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.card}>
           <View style={styles.startIcon}>
             <Ionicons name={config.icon} size={22} color={colors.brandAccent} />
@@ -360,12 +296,7 @@ function StartCard({
           <View style={styles.rules}>
             {rules.map((rule) => (
               <View key={rule.text} style={styles.rule}>
-                <Ionicons
-                  name={rule.icon}
-                  size={15}
-                  color={colors.brandAccent}
-                  style={styles.ruleIcon}
-                />
+                <Ionicons name={rule.icon} size={15} color={colors.brandAccent} style={styles.ruleIcon} />
                 <Text style={styles.ruleText} {...textScale.long}>
                   {rule.text}
                 </Text>
@@ -383,27 +314,14 @@ function StartCard({
           >
             <Ionicons name="trophy" size={13} color={colors.star} />
             <Text style={styles.bestText} {...textScale.dense}>
-              {best > 0
-                ? `Rekorun ${formatCount(best)} ${SCORE_UNIT}`
-                : "Henüz rekorun yok"}
+              {best > 0 ? `Rekorun ${formatCount(best)} ${SCORE_UNIT}` : "Henüz rekorun yok"}
             </Text>
-            <Ionicons
-              name="chevron-forward"
-              size={13}
-              color={colors.textTertiary}
-            />
+            <Ionicons name="chevron-forward" size={13} color={colors.textTertiary} />
           </Touchable>
 
           {setup}
 
-          <Button
-            label={loading ? "Hazırlanıyor" : "Başla"}
-            icon="play"
-            size="lg"
-            fullWidth
-            loading={loading}
-            onPress={onStart}
-          />
+          <Button label={loading ? "Hazırlanıyor" : "Başla"} icon="play" size="lg" fullWidth loading={loading} onPress={onStart} />
         </View>
       </ScrollView>
     </View>
@@ -436,11 +354,7 @@ const styles = StyleSheet.create({
     padding: space.lg,
   },
   cardScroll: { alignSelf: "stretch", flexGrow: 0 },
-  cardScrollContent: {
-    flexGrow: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
+  cardScrollContent: { flexGrow: 1, justifyContent: "center", alignItems: "center" },
   card: {
     alignSelf: "stretch",
     maxWidth: 380,
@@ -476,9 +390,6 @@ const styles = StyleSheet.create({
     paddingVertical: space.s,
     marginBottom: space.m,
   },
-  bestText: {
-    ...type.bodySm,
-    fontFamily: fonts.bold,
-    color: colors.textPrimary,
-  },
+  bestText: { ...type.bodySm, fontFamily: fonts.bold, color: colors.textPrimary },
+
 });

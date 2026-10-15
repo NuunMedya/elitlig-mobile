@@ -18,15 +18,7 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { Avatar, Touchable } from "@/components/ui";
 import type { PenaltyPerson, PenaltyRoster } from "@/lib/api/arena";
-import {
-  colors,
-  fonts,
-  radius,
-  space,
-  textScale,
-  type,
-  upperTR,
-} from "@/theme";
+import { colors, fonts, radius, space, textScale, type, upperTR } from "@/theme";
 
 const ATTRS: { key: string; label: string }[] = [
   { key: "power", label: "Şut" },
@@ -63,9 +55,7 @@ export function PenaltySetup({
       </View>
     );
   }
-  const selected =
-    roster.shooters.find((item) => item.id === selectedId) ??
-    roster.shooters[0];
+  const selected = roster.shooters.find((item) => item.id === selectedId) ?? roster.shooters[0];
   const keepers = roster.keepers;
   const final = keepers[keepers.length - 1];
 
@@ -81,52 +71,25 @@ export function PenaltySetup({
           </Text>
         ) : null}
       </View>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.strip}
-      >
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.strip}>
         {roster.shooters.map((item) => (
-          <ShooterChip
-            key={item.id}
-            person={item}
-            selected={item.id === selected.id}
-            onPress={() => onSelect(item.id)}
-          />
+          <ShooterChip key={item.id} person={item} selected={item.id === selected.id} onPress={() => onSelect(item.id)} />
         ))}
       </ScrollView>
 
       <View style={styles.detail}>
-        <View
-          style={[
-            styles.kitBar,
-            { backgroundColor: selected.team.kit.primary },
-          ]}
-        />
+        <View style={[styles.kitBar, { backgroundColor: selected.team.kit.primary }]} />
         <View style={styles.flex}>
           <Text style={styles.name} numberOfLines={1} {...textScale.dense}>
-            {selected.shirt
-              ? `${selected.shirt} · ${selected.name}`
-              : selected.name}
+            {selected.shirt ? `${selected.shirt} · ${selected.name}` : selected.name}
           </Text>
           <Text style={styles.muted} numberOfLines={1} {...textScale.dense}>
-            {[
-              selected.team.name,
-              `${selected.stats.goals} gol`,
-              selected.stats.penalty_goals
-                ? `${selected.stats.penalty_goals} penaltı golü`
-                : null,
-            ]
+            {[selected.team.name, `${selected.stats.goals} gol`, selected.stats.penalty_goals ? `${selected.stats.penalty_goals} penaltı golü` : null]
               .filter(Boolean)
               .join(" · ")}
           </Text>
           {ATTRS.map((attr) => (
-            <AttrBar
-              key={attr.key}
-              label={attr.label}
-              value={selected.attrs[attr.key] ?? 75}
-              color={selected.team.kit.primary}
-            />
+            <AttrBar key={attr.key} label={attr.label} value={selected.attrs[attr.key] ?? 75} color={selected.team.kit.primary} />
           ))}
         </View>
       </View>
@@ -136,27 +99,13 @@ export function PenaltySetup({
           <Text style={styles.overline} {...textScale.badge}>
             {upperTR(`Kaleci merdiveni · ${keepers.length} kaleci`)}
           </Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.ladder}
-          >
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.ladder}>
             {keepers.map((keeper, index) => (
               <View key={keeper.id} style={styles.step}>
-                <View
-                  style={[
-                    styles.ring,
-                    { borderColor: keeper.team.kit.primary },
-                    index === keepers.length - 1 && styles.finalRing,
-                  ]}
-                >
+                <View style={[styles.ring, { borderColor: keeper.team.kit.primary }, index === keepers.length - 1 && styles.finalRing]}>
                   <Avatar name={keeper.name} image={keeper.image} size={30} />
                 </View>
-                <Text
-                  style={styles.stepText}
-                  numberOfLines={1}
-                  {...textScale.badge}
-                >
+                <Text style={styles.stepText} numberOfLines={1} {...textScale.badge}>
                   {index === keepers.length - 1 ? "Final" : `${index + 1}.`}
                 </Text>
               </View>
@@ -176,15 +125,7 @@ export function PenaltySetup({
   );
 }
 
-const ShooterChip = memo(function ShooterChip({
-  person,
-  selected,
-  onPress,
-}: {
-  person: PenaltyPerson;
-  selected: boolean;
-  onPress: () => void;
-}) {
+const ShooterChip = memo(function ShooterChip({ person, selected, onPress }: { person: PenaltyPerson; selected: boolean; onPress: () => void }) {
   return (
     <Touchable
       onPress={onPress}
@@ -198,11 +139,7 @@ const ShooterChip = memo(function ShooterChip({
         <View style={[styles.ring, { borderColor: person.team.kit.primary }]}>
           <Avatar name={person.name} image={person.image} size={40} />
         </View>
-        <Text
-          style={[styles.chipName, selected && styles.chipNameSelected]}
-          numberOfLines={1}
-          {...textScale.badge}
-        >
+        <Text style={[styles.chipName, selected && styles.chipNameSelected]} numberOfLines={1} {...textScale.badge}>
           {person.mine ? "Sen" : person.short}
         </Text>
         <Text style={styles.chipMeta} numberOfLines={1} {...textScale.badge}>
@@ -213,15 +150,7 @@ const ShooterChip = memo(function ShooterChip({
   );
 });
 
-function AttrBar({
-  label,
-  value,
-  color,
-}: {
-  label: string;
-  value: number;
-  color: string;
-}) {
+function AttrBar({ label, value, color }: { label: string; value: number; color: string }) {
   const pct = Math.max(0, Math.min(1, (value - 50) / 50));
   return (
     <View style={styles.attr}>
@@ -229,12 +158,7 @@ function AttrBar({
         {label}
       </Text>
       <View style={styles.attrTrack}>
-        <View
-          style={[
-            styles.attrFill,
-            { width: `${Math.round(pct * 100)}%`, backgroundColor: color },
-          ]}
-        />
+        <View style={[styles.attrFill, { width: `${Math.round(pct * 100)}%`, backgroundColor: color }]} />
       </View>
       <Text style={styles.attrValue} {...textScale.badge}>
         {value}
