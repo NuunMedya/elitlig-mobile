@@ -28,7 +28,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-import { buildModule, GENERATED_PATH, THREE_PATH } from "./build-games.mjs";
+import { buildModule, GENERATED_PATH, isThreeD, THREE_PATH } from "./build-games.mjs";
 import {
   arenaQuestion,
   kimbuQuestion,
@@ -133,10 +133,11 @@ function boot(game) {
   };
   context.window.window = context.window;
   vm.createContext(context);
-  // 3B oyun (penaltı) three.js ile gelir; başsız ortamda WebGL yoktur, oyun
+  // 3B oyunlar (penaltı, slalom) three.js ile gelir; başsız ortamda WebGL yoktur, oyun
   // simülasyonu çizimsiz koşar (çizim katmanı WebGL bulamayınca devre dışı).
-  if (game === "penalti") vm.runInContext(readFileSync(THREE_PATH, "utf8"), context, { filename: "three.min.js" });
-  for (const file of ["core.js", "scenery.js", `${game}.js`]) {
+  const is3d = isThreeD(game);
+  if (is3d) vm.runInContext(readFileSync(THREE_PATH, "utf8"), context, { filename: "three.min.js" });
+  for (const file of ["core.js", "scenery.js", ...(is3d ? ["three-kit.js"] : []), `${game}.js`]) {
     vm.runInContext(readFileSync(join(root, "games", file), "utf8"), context, { filename: file });
   }
   const A = context.window.Arena;
@@ -269,6 +270,26 @@ for (const game of ["penalti", "slalom", "sektir"]) {
     d.speed > v0 * 1.2 && lastGap < firstGap * 0.85,
     `hız ${v0.toFixed(1)} → ${d.speed.toFixed(1)} m/sn, kapı ${firstGap.toFixed(2)} → ${lastGap.toFixed(2)} m`,
   );
+}
+
+{
+  // Gerçek kadro: koşucu kadrodan gelir, her seviyede sıradaki takımın savunması.
+  const { A, run } = boot("slalom");
+  const team = (id, name) => ({ id, name, kit: { primary: "#dc2626", secondary: "#ffffff" } });
+  const defense = (id, name) => ({ team: team(id, name), conceded_per_match: 1, defenders: [{ id: id * 10, short: "D. Bir", back: "BİR", shirt: 4 }] });
+  A.game.setRoster({
+    runner: { id: 1, short: "A. Koşucu", back: "KOŞUCU", shirt: 7, team: team(9, "Bizimkiler"), attrs: { agility: 80, control: 80, pace: 70 } },
+    defenses: [defense(1, "Zayıf Savunma"), defense(2, "Orta Savunma"), defense(3, "En İyi Savunma")],
+  });
+  A.game.start();
+  run(35, () => {
+    const d = A.game.debug();
+    const next = d.gates.find((g) => !g.done);
+    if (d.state === "play" && next) d.player.target = next.cx;
+  });
+  const d = A.game.debug();
+  const want = ["Zayıf Savunma", "Orta Savunma", "En İyi Savunma"][Math.min(d.level, 3) - 1];
+  check("slalom: koşucu ve rakip savunma kadrodan gelir", d.runner === "A. Koşucu" && d.defense === want, `${d.runner}, seviye ${d.level} → ${d.defense}`);
 }
 
 /* ── 4) PENALTI ──────────────────────────────────────────────────────────── */

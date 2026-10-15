@@ -10,14 +10,13 @@
  * KÖPRÜ SÖZLEŞMESİ (bkz. games/core.js):
  *   Oyun → RN : {type:"ready"} · {type:"haptic",kind} · {type:"over",score,stats}
  *   RN → Oyun : window.ArenaCmd({type:"start"|"pause"|"resume"|"config"}) — config
- *               ses, hareket, Elit Kart avantajı ve (Penaltı) gerçek kadroyu taşır.
+ *               ses, hareket, Elit Kart avantajı ve (Penaltı, Slalom) gerçek kadroyu taşır.
  */
 
 import { forwardRef, useImperativeHandle, useMemo, useRef } from "react";
 import { StyleSheet, View } from "react-native";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 
-import type { PenaltyPerson } from "@/lib/api/arena";
 import { WEB_GAMES, type WebGameKey } from "@/lib/game/web/games.generated";
 import { colors, haptics } from "@/theme";
 
@@ -30,8 +29,8 @@ export type GameCommand =
       sound?: boolean;
       reduceMotion?: boolean;
       perks?: { penalti?: { aimBonus: number } } | null;
-      /** Oyuna özgü gerçek kadro (Penaltı: atıcı + kaleci merdiveni). */
-      roster?: { shooter: PenaltyPerson; keepers: PenaltyPerson[] } | null;
+      /** Oyuna özgü gerçek kadro (Penaltı: atıcı + kaleciler, Slalom: koşucu + savunmalar). */
+      roster?: Record<string, unknown> | null;
     };
 
 export interface GameOverPayload {

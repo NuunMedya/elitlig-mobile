@@ -87,3 +87,28 @@ export interface PenaltyRoster {
 
 export const getPenaltyRoster = (cityId?: number | null) =>
   get<PenaltyRoster>("/api/arena/penalti/roster", { cityId: cityId ?? undefined });
+
+/* ───────────────────────── Slalom kadrosu ───────────────────────── */
+
+/** Slalom koşucusu: gerçek ligden top süren oyuncu (çeviklik / kontrol / hız). */
+export interface SlalomRunner extends Omit<PenaltyPerson, "stats"> {
+  stats: { matches: number; goals: number; assists: number; rating: number | null };
+}
+
+/** Merdivenin bir basamağı: bir takımın savunması. */
+export interface SlalomDefense {
+  team: { id: number; name: string | null; kit: PenaltyKit };
+  conceded_per_match: number;
+  matches: number;
+  defenders: { id: number; short: string; back: string; shirt: number | null }[];
+}
+
+export interface SlalomRoster {
+  scope?: "city" | "all";
+  runners: SlalomRunner[];
+  /** Maç başına yenilen gole göre AZALAN: son basamak ligin en iyi savunması. */
+  defenses: SlalomDefense[];
+}
+
+export const getSlalomRoster = (cityId?: number | null) =>
+  get<SlalomRoster>("/api/arena/slalom/roster", { cityId: cityId ?? undefined });

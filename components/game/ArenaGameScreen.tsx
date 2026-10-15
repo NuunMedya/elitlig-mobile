@@ -25,10 +25,9 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ArenaResultCard, ArenaShareSheet, formatCount, SCORE_UNIT, useArenaScore } from "@/components/game/ArenaResult";
-import { PenaltySetup } from "@/components/game/PenaltySetup";
+import { useGameRoster } from "@/components/game/useGameRoster";
 import { WebGame, type GameOverPayload, type WebGameHandle } from "@/components/game/WebGame";
 import { Button, ScreenHeader, Touchable, useReduceMotion } from "@/components/ui";
-import { getPenaltyRoster } from "@/lib/api/arena";
 import { getPlayerCareer } from "@/lib/api/career";
 import type { WebGameKey } from "@/lib/game/web/games.generated";
 import { useAuth } from "@/providers/AuthProvider";
@@ -63,7 +62,6 @@ export interface ArenaGameConfig {
 type Phase = "loading" | "ready" | "playing" | "over";
 
 const SOUND_KEY = "elitlig.arena.sound.v1";
-const SHOOTER_KEY = "elitlig.penalti.shooter.v1";
 
 /* ================================= EKRAN ================================= */
 
@@ -86,34 +84,9 @@ export function ArenaGameScreen({ config }: { config: ArenaGameConfig }) {
   });
   const perks = careerQuery.data?.card.perks ?? null;
 
-  /* Penaltı: gerçek ligden atıcılar ve kaleci merdiveni. Seçilen atıcı
-     cihazda hatırlanır; kadro gelmezse oyun varsayılan kadroyla oynanır. */
-  const isPenalty = config.game === "penalti";
-  const rosterQuery = useQuery({
-    queryKey: ["arena", "penalti", "roster", scope.cityId ?? 0, auth.user?.player_id ?? 0],
-    queryFn: () => getPenaltyRoster(scope.cityId),
-    enabled: isPenalty,
-    staleTime: 30 * 60_000,
-    retry: 1,
-  });
-  const [shooterId, setShooterId] = useState<number | null>(null);
-  useEffect(() => {
-    if (!isPenalty) return;
-    AsyncStorage.getItem(SHOOTER_KEY).then((value) => {
-      if (value) setShooterId((current) => current ?? Number(value));
-    });
-  }, [isPenalty]);
-  const chooseShooter = useCallback((id: number) => {
-    setShooterId(id);
-    void AsyncStorage.setItem(SHOOTER_KEY, String(id));
-  }, []);
-  const roster = useMemo(() => {
-    const data = rosterQuery.data;
-    if (!isPenalty || !data || !data.shooters.length) return null;
-    // Kendi oyuncusu varsa ve henüz seçim yapılmadıysa o seçilir.
-    const shooter = data.shooters.find((item) => item.id === shooterId) ?? data.shooters.find((item) => item.mine) ?? data.shooters[0];
-    return { shooter, keepers: data.keepers };
-  }, [isPenalty, rosterQuery.data, shooterId]);
+  /* Gerçek lig kadrosu (Penaltı: atıcı + kaleciler, Slalom: koşucu +
+     rakip savunmalar). Gelmezse oyun varsayılan kadroyla oynanır. */
+  const { roster, setup, changeLabel } = useGameRoster(config.game, scope.cityId ?? null, auth.user?.player_id ?? null);
 
   const game = useRef<WebGameHandle>(null);
   const [phase, setPhase] = useState<Phase>("loading");
@@ -215,16 +188,7 @@ export function ArenaGameScreen({ config }: { config: ArenaGameConfig }) {
             loading={phase === "loading"}
             onStart={start}
             onBoard={openBoard}
-            setup={
-              isPenalty ? (
-                <PenaltySetup
-                  roster={rosterQuery.data ?? null}
-                  loading={rosterQuery.isLoading}
-                  selectedId={roster?.shooter.id ?? null}
-                  onSelect={chooseShooter}
-                />
-              ) : null
-            }
+            setup={setup}
           />
         ) : null}
 
@@ -242,7 +206,7 @@ export function ArenaGameScreen({ config }: { config: ArenaGameConfig }) {
             onRestart={start}
             onBoard={openBoard}
             onShare={() => setShareOpen(true)}
-            secondary={isPenalty && roster ? { label: "Atıcı değiştir", icon: "swap-horizontal", onPress: () => setPhaseBoth("ready") } : undefined}
+            secondary={changeLabel ? { label: changeLabel, icon: "swap-horizontal", onPress: () => setPhaseBoth("ready") } : undefined}
           />
         ) : null}
       </View>
@@ -275,7 +239,7 @@ function StartCard({
   loading: boolean;
   onStart: () => void;
   onBoard: () => void;
-  /** Oyuna özgü kurulum (Penaltı: atıcı seçimi). Varsa kurallar kısalır. */
+  /** Oyuna özgü kurulum (Penaltı/Slalom: oyuncu seçimi). Varsa kurallar kısalır. */
   setup?: ReactNode;
 }) {
   const rules = setup ? config.rules.slice(0, 2) : config.rules;
