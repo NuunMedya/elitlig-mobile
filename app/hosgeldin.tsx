@@ -69,7 +69,7 @@ const AUTO_ADVANCE_MS = 2200;
  * karosunun (`BrandMark size="lg"`) kenarına denk gelir. Yay karodan belirgin
  * biçimde büyük olmalı, yoksa logonun etrafında bir çerçeve gibi görünür.
  */
-const LOGO_SIZE = 108;
+const LOGO_SIZE = 36;
 
 /**
  * Üç slayt — üç cümle.
@@ -370,7 +370,7 @@ function FastSplash({
             ortasında durur. */}
         <ChalkArc
           width={barWidth}
-          height={LOGO_SIZE * 2.4}
+          height={LOGO_SIZE * 4}
           color={colors.onDarkMuted}
           thickness={1}
         />
