@@ -53,7 +53,7 @@
   var D_GOAL = 17, D_SPOT = 6, D_NET = 19;
   var BALL_R = 0.11;
   var NET_COLS = 29, NET_ROWS = 14;
-  var RUNUP = 0.42; // bırakıştan vuruşa kadar koşu (sn)
+  var RUNUP = 0.8; // bırakıştan vuruşa kadar koşu (sn): ~2,2 m düz, tempolu yaklaşma
   var INTRO = 1.4; // eşleşme / yeni kaleci tanıtımı (sn)
   var RESULT = 1.55; // sonuç ekranı
   var REPLAY_AT = 1.0, REPLAY_LEN = 2.3; // gol tekrarı (yalnız gol)
@@ -1271,48 +1271,51 @@
 
   /* ─────────────── poz: atıcı ─────────────── */
 
-  var START = { x: -0.8, z: 12.7 }, KICK = { x: -0.3, z: 11.3 };
+  /*
+   * Koşu yolu: topun 2,2 m gerisinden ~22° açıyla DÜZ bir çizgi. Destek (sol)
+   * ayağı topun yanına basar, vuran (sağ) bacak geriden gelir. Koşu, gerçek
+   * hareket yakalama "jog" klibidir; klibin zamanı vuruş anında sağ bacağın
+   * geride, sol ayağın yerde olduğu ana (JOG_PLANT) denk gelecek şekilde
+   * geriye doğru kurulur — son adım kendiliğinden vuruşa bağlanır.
+   */
+  var START = { x: -0.95, z: 13.25 }, KICK = { x: -0.14, z: 11.22 };
+  var JOG_PLANT = 0.78;
 
   function poseShooter() {
     var a = R.shooter;
     var J = a.J;
     rest(a);
     var root = a.root;
-    var face = Math.PI + Math.atan2(KICK.x - START.x, KICK.z - START.z) * 0.35;
+    var heading = Math.atan2(KICK.x - START.x, KICK.z - START.z); // koşu yönü
+    var face = Math.PI + heading * 0.12 - Math.PI * 0.12; // vuruşta kaleye dönük (hafif açık kalça)
     var t = A.time;
     if (state === "runup") {
       var p = A.clamp(runT / RUNUP, 0, 1);
-      var e = A.smooth(p);
+      // sabit tempo, son adımda hafif yavaşlama (destek ayağına basış)
+      var e = p * (1.18 - 0.18 * p);
       root.position.set(A.lerp(START.x, KICK.x, e), 0, A.lerp(START.z, KICK.z, e));
-      root.rotation.y = face;
-      runCycle(a, p * Math.PI * 3.2, 1);
-      if (p > 0.72) {
-        // Son adım: vuran bacak (b, sağ) geriye çekilir
-        var w = (p - 0.72) / 0.28;
-        J.hpb.rotation.x = A.lerp(J.hpb.rotation.x, 0.85, w);
-        J.knb.rotation.x = A.lerp(J.knb.rotation.x, 1.5, w);
-        J.hpa.rotation.x = A.lerp(J.hpa.rotation.x, -0.15, w);
-        J.kna.rotation.x = A.lerp(J.kna.rotation.x, 0.2, w);
-        J.shb.rotation.z = -0.7 * w;
-        J.sha.rotation.z = 0.9 * w;
-        J.spine.rotation.x = 0.05;
-      }
+      var turn = A.smooth(A.clamp((p - 0.55) / 0.45, 0, 1));
+      root.rotation.y = A.lerp(heading, face, turn);
+      // son adım: klip ağırlığı azalır, vuruş öncesi duruşa (geri savrulan bacak) geçilir
+      var w = A.smooth(A.clamp((p - 0.7) / 0.3, 0, 1));
+      K.play(a, "jog", JOG_PLANT - (RUNUP - runT) * 1.02, 1 - w);
+      J.hpb.rotation.x = 0.85 * w;
+      J.knb.rotation.x = 1.5 * w;
+      J.hpa.rotation.x = -0.15 * w;
+      J.kna.rotation.x = 0.2 * w;
+      J.shb.rotation.z = -0.5 * w;
+      J.sha.rotation.z = 1.0 * w;
+      J.sha.rotation.x = 0.3 * w;
+      J.spine.rotation.x = 0.08 * w;
+      J.hips.position.y = 0.94 - 0.02 * w;
       return;
     }
     if (state === "aim" || state === "intro" || state === "attract" || (state === "result" && outcome === "sure")) {
+      // Bekleyiş: koşu çizgisinde, topa bakar; gerçek "bekleme" klibi nefes alır
       root.position.set(START.x, 0, START.z);
-      root.rotation.y = face;
-      var br = Math.sin(t * 2.1) * 0.02;
-      J.spine.rotation.x = 0.06 + br;
-      J.sha.rotation.z = 0.12;
-      J.shb.rotation.z = -0.12;
-      J.ela.rotation.x = -0.25;
-      J.elb.rotation.x = -0.25;
-      J.hpa.rotation.x = -0.05;
-      J.hpb.rotation.x = 0.12;
-      J.knb.rotation.x = 0.2;
-      J.hpa.rotation.z = 0.05;
-      J.hpb.rotation.z = -0.05;
+      root.rotation.y = heading;
+      J.spine.rotation.x = 0.05 + Math.sin(t * 2.1) * 0.015;
+      J.head.rotation.x = 0.12;
       return;
     }
     root.position.set(KICK.x, 0, KICK.z);
@@ -1357,18 +1360,22 @@
     kickPose(J, afterStrike);
   }
 
-  /** Vuruş: bacak öne savrulur, gövde geriye yaslanır, kollar denge için açılır. */
+  /**
+   * Vuruş: geri savrulan bacak öne fırlar, gövde geriye yaslanır, kollar
+   * denge için açılır; ardından bacak iner ve oyuncu doğrulur (takip hareketi).
+   */
   function kickPose(J, k) {
-    var sw = A.clamp(k / 0.22, 0, 1);
-    J.hpb.rotation.x = A.lerp(0.85, -1.35, A.easeOut(sw));
-    J.knb.rotation.x = A.lerp(1.5, 0.1, A.easeOut(sw));
-    J.hpa.rotation.x = -0.1;
-    J.kna.rotation.x = 0.25;
-    J.spine.rotation.x = -0.12 * sw;
-    J.sha.rotation.z = 1.0;
-    J.shb.rotation.z = -0.5;
-    J.sha.rotation.x = 0.3;
-    J.hips.position.y = 0.92;
+    var sw = A.easeOut(A.clamp(k / 0.2, 0, 1));
+    var rec = A.smooth(A.clamp((k - 0.45) / 0.5, 0, 1));
+    J.hpb.rotation.x = A.lerp(A.lerp(0.85, -1.35, sw), -0.08, rec);
+    J.knb.rotation.x = A.lerp(A.lerp(1.5, 0.1, sw), 0.12, rec);
+    J.hpa.rotation.x = -0.12 * (1 - rec);
+    J.kna.rotation.x = 0.22 * (1 - rec);
+    J.spine.rotation.x = (0.08 - 0.22 * sw) * (1 - rec);
+    J.sha.rotation.z = 1.0 * (1 - 0.85 * rec);
+    J.shb.rotation.z = -0.5 * (1 - 0.85 * rec);
+    J.sha.rotation.x = 0.3 * (1 - rec);
+    J.hips.position.y = A.lerp(0.92, 0.94, rec);
   }
 
   /* ─────────────── poz: kaleci ─────────────── */
@@ -1616,6 +1623,7 @@
       try {
         adaptQuality(dt);
         sync(dt);
+        K.syncAll();
         R.renderer.render(R.scene, R.camera);
       } catch (e) {
         glFailed = true;

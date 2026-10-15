@@ -34,9 +34,17 @@ const escape = (code) => code.replace(/<\/script/gi, "<\\/script");
 // r150+ UMD derlemesi açılışta bir kullanımdan kaldırma uyarısı basar; gürültü.
 const readThree = () => readFileSync(THREE_PATH, "utf8").replace(/^console\.warn\([^)]*\)/, "void 0");
 
-export function buildHtml(game) {
+/** 3B oyunlarda ortak dosyalar: futbolcu modeli verisi + kit. */
+export const THREE_KIT = ["athlete-data.js", "three-kit.js"];
+
+/**
+ * Oyun HTML'i parçalar halinde: büyük ortak parçalar (three.js, futbolcu
+ * modeli) üç 3B oyunda aynıdır; modül bunları BİR kez tutar, HTML çalışma
+ * anında birleştirilir (paket boyutu üç katına çıkmaz).
+ */
+function htmlParts(game) {
   const is3d = THREE_D.has(game);
-  const scripts = [...SHARED, ...(is3d ? ["three-kit.js"] : []), `${game}.js`].map((file) => escape(read(file)));
+  const own = [...SHARED, ...(is3d ? THREE_KIT : []), `${game}.js`];
   return [
     "<!doctype html>",
     '<html lang="tr"><head><meta charset="utf-8">',
@@ -51,19 +59,45 @@ export function buildHtml(game) {
     is3d ? '<canvas id="gl"></canvas>' : "",
     '<canvas id="c"></canvas>',
     is3d ? "<script>window.ARENA_3D=true</script>" : "",
-    is3d ? `<script>${escape(readThree())}</script>` : "",
-    ...scripts.map((code) => `<script>${code}</script>`),
+    is3d ? { chunk: "THREE_JS" } : "",
+    ...own.map((file) => (file === "athlete-data.js" ? { chunk: "ATHLETE_JS" } : `<script>${escape(read(file))}</script>`)),
     "</body></html>",
-  ].join("");
+  ];
+}
+const chunks = () => ({
+  THREE_JS: `<script>${escape(readThree())}</script>`,
+  ATHLETE_JS: `<script>${escape(read("athlete-data.js"))}</script>`,
+});
+
+export function buildHtml(game) {
+  const ch = chunks();
+  return htmlParts(game)
+    .map((part) => (typeof part === "string" ? part : ch[part.chunk]))
+    .join("");
 }
 
 export function buildModule() {
-  const entries = GAMES.map((game) => `  ${game}: ${JSON.stringify(buildHtml(game))},`).join("\n");
+  const ch = chunks();
+  const expr = (game) => {
+    // ardışık düz metinleri birleştir, ortak parçaları adıyla an
+    const out = [];
+    for (const part of htmlParts(game).filter((p) => p !== "")) {
+      if (typeof part === "string" && typeof out[out.length - 1] === "string") out[out.length - 1] += part;
+      else out.push(part);
+    }
+    return out.map((part) => (typeof part === "string" ? JSON.stringify(part) : part.chunk)).join(" +\n    ");
+  };
+  const consts = Object.entries(ch)
+    .map(([name, code]) => `const ${name} = ${JSON.stringify(code)};`)
+    .join("\n");
+  const entries = GAMES.map((game) => `  ${game}:\n    ${expr(game)},`).join("\n");
   return `/* eslint-disable */
 // BU DOSYA ÜRETİLİR — elle düzenlemeyin. Kaynak: games/*.js
 // Yeniden üretmek için: npm run build:games
 
 export type WebGameKey = ${GAMES.map((g) => JSON.stringify(g)).join(" | ")};
+
+${consts}
 
 export const WEB_GAMES: Record<WebGameKey, string> = {
 ${entries}

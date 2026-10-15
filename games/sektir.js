@@ -816,6 +816,7 @@
       try {
         adaptQuality(dt);
         sync(dt);
+        K.syncAll();
         R.renderer.render(R.scene, R.camera);
       } catch (e) {
         glFailed = true;
