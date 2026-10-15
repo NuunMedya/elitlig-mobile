@@ -46,6 +46,7 @@ import {
   type,
   upperTR,
 } from "@/theme";
+import type { Reaction } from "@/lib/api/community";
 import type { ApiMatchEvent } from "@/lib/types";
 import { compactName, isGoalKind, type NameOf } from "./shared";
 
@@ -77,6 +78,9 @@ export const TimelineRow = memo(function TimelineRow({
   index,
   total,
   flash = false,
+  reactions,
+  myReaction = null,
+  onReact,
 }: {
   event: ApiMatchEvent;
   home: boolean;
@@ -87,6 +91,10 @@ export const TimelineRow = memo(function TimelineRow({
   total: number;
   /** Canlı maçta yeni gelen gol — satır kısa bir parlama yapar. */
   flash?: boolean;
+  /** Olay tepkileri (gol ve kartta): sayılar, üyenin tepkisi, dokunma. */
+  reactions?: Partial<Record<Reaction, number>>;
+  myReaction?: Reaction | null;
+  onReact?: (eventId: number, reaction: Reaction) => void;
 }) {
   const kind = eventKind(event);
   const goal = isGoalKind(kind);
@@ -186,6 +194,58 @@ export const TimelineRow = memo(function TimelineRow({
 
         <View style={styles.half}>{home ? null : content}</View>
       </Touchable>
+      {onReact && (goal || kind === "yellow" || kind === "red") ? (
+        <ReactionBar eventId={Number(event.id)} counts={reactions} mine={myReaction} onReact={onReact} />
+      ) : null}
+    </View>
+  );
+});
+
+/* Olay tepkileri — dört ikon, sayısıyla; seçili olan vurgulu. Aynısına
+   dokunmak geri alır (sunucu: routes/community.js). */
+const REACTION_ICONS: { key: Reaction; icon: keyof typeof Ionicons.glyphMap; label: string }[] = [
+  { key: "alkis", icon: "thumbs-up", label: "Alkış" },
+  { key: "ates", icon: "flame", label: "Ateş" },
+  { key: "vay", icon: "sparkles", label: "Vay" },
+  { key: "gulme", icon: "happy", label: "Gülme" },
+];
+
+const ReactionBar = memo(function ReactionBar({
+  eventId,
+  counts,
+  mine,
+  onReact,
+}: {
+  eventId: number;
+  counts?: Partial<Record<Reaction, number>>;
+  mine: Reaction | null;
+  onReact: (eventId: number, reaction: Reaction) => void;
+}) {
+  return (
+    <View style={styles.reactions}>
+      {REACTION_ICONS.map((item) => {
+        const selected = mine === item.key;
+        const count = counts?.[item.key] ?? 0;
+        return (
+          <Touchable
+            key={item.key}
+            feedback="icon"
+            haptic="selection"
+            onPress={() => onReact(eventId, item.key)}
+            style={[styles.reaction, selected && styles.reactionOn]}
+            accessibilityRole="button"
+            accessibilityState={{ selected }}
+            accessibilityLabel={`${item.label}${count ? `, ${count}` : ""}`}
+          >
+            <Ionicons name={item.icon} size={13} color={selected ? colors.accent : colors.textTertiary} />
+            {count ? (
+              <Text style={[styles.reactionCount, selected && styles.reactionCountOn]} {...textScale.badge}>
+                {count}
+              </Text>
+            ) : null}
+          </Touchable>
+        );
+      })}
     </View>
   );
 });
@@ -272,6 +332,25 @@ function useFlash(active: boolean): Animated.Value | null {
 }
 
 const styles = StyleSheet.create({
+  reactions: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: space.s,
+    paddingBottom: space.s,
+  },
+  reaction: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xxs,
+    minHeight: 26,
+    paddingHorizontal: space.s,
+    borderRadius: radius.pill,
+    borderWidth: hairline,
+    borderColor: colors.border,
+  },
+  reactionOn: { borderColor: colors.accent },
+  reactionCount: { ...type.caption, color: colors.textTertiary },
+  reactionCountOn: { color: colors.accentText },
   /* — Kart dilimi — */
   slice: {
     marginHorizontal: layout.screenPadding,

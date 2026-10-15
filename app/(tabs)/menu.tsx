@@ -287,6 +287,41 @@ export default function MenuTabScreen() {
       title: "Keşfet",
       data: [
         {
+          key: "kariyer",
+          icon: "ribbon",
+          title: "Kariyerim",
+          subtitle: "Elit Seviye, Elit Kart, rozetler ve görevler",
+          action: { kind: "route", route: "/kariyer" },
+        },
+        {
+          key: "tahmin-ligi",
+          icon: "podium",
+          title: "Tahmin Ligi",
+          subtitle: "Liginin maçlarına skor tahmini yap",
+          action: { kind: "route", route: "/tahmin-ligi" },
+        },
+        {
+          key: "fantezi",
+          icon: "people",
+          title: "Fantezi ElitLig",
+          subtitle: "Haftalık 5 kişilik kadronu kur",
+          action: { kind: "route", route: "/fantezi" },
+        },
+        {
+          key: "kulup-arenasi",
+          icon: "shield",
+          title: "Kulüp Arenası",
+          subtitle: "Takımların arena yarışı ve derbi düellosu",
+          action: { kind: "route", route: "/kulup-arenasi" },
+        },
+        {
+          key: "sezon-ozeti",
+          icon: "sparkles",
+          title: "Sezon Özeti",
+          subtitle: "Sezonunun paylaşılabilir hikâyesi",
+          action: { kind: "route", route: "/sezon-ozeti" },
+        },
+        {
           key: "canli",
           icon: "radio",
           title: "Canlı maçlar",
@@ -313,6 +348,20 @@ export default function MenuTabScreen() {
           title: "Oyuncu karşılaştır",
           subtitle: "Gol, maç, kart, piyasa değeri",
           action: { kind: "route", route: "/oyuncu-karsilastir" },
+        },
+        {
+          key: "borsa",
+          icon: "storefront",
+          title: "Transfer borsası",
+          subtitle: "Satılık ve kiralık oyuncular",
+          action: { kind: "route", route: "/takimim/borsa" },
+        },
+        {
+          key: "haftanin-enleri",
+          icon: "trophy",
+          title: "Haftanın enleri",
+          subtitle: "Haftanın kadrosu ve ödülleri",
+          action: { kind: "route", route: "/haftanin-enleri" },
         },
         {
           key: "ara",

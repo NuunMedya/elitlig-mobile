@@ -147,8 +147,10 @@ function targetFromEntity(
          idi, ama maç talepleri orada DEĞİL — Maç Al ekranının "Taleplerim"
          sekmesinde yaşıyor. Bildirime dokunan başkan, talebiyle ilgisi olmayan
          bir maç listesine düşüyordu. */
+      /* YÖNETİM TARAFI DÜZELTİLDİ: maç talepleri /yonetim/maclar'da değil,
+         Saha Yönetimi'nin "Talepler" segmentinde yaşıyor. */
       return ctx.isManagement
-        ? { pathname: "/yonetim/maclar", ...(entityId ? { params: { request: entityId } } : {}) }
+        ? { pathname: "/yonetim/sahalar", params: { tab: "talepler" } }
         : {
             pathname: "/takimim/mac-al",
             params: { tab: "taleplerim", ...(entityId ? { request: entityId } : {}) },
@@ -198,14 +200,17 @@ const TYPE_PREFIX_TARGETS: ReadonlyArray<
   ["MATCH_REQUEST", (id, ctx) => targetFromEntity("MATCH_REQUEST", id, ctx) ?? { pathname: "/bildirimler" }],
   ["MATCH_", (id, ctx) => targetFromEntity("MATCH", id, ctx) ?? { pathname: "/bildirimler" }],
   ["ROSTER_RULES_", () => ({ pathname: "/takimim/kadro", params: { gorunum: "sezon" } })],
-  ["TEAM_AVAILABILITY_", () => ({ pathname: "/yonetim/sahalar" })],
-  // BÜTÜNLEŞTİRME DÜZELTMESİ: `/haftanin-enleri` diye bir rota YOK; bildirime
-  // dokunan üye boş ekrana düşüyordu. Haftanın enlerinin mobildeki en yakın
-  // karşılığı Ligler > İstatistik segmentidir (lig enleri: gol kralı, en golcü,
-  // formda takım). Ayrı bir "Haftanın Enleri" ekranı açılırsa hedef tek satırda
-  // oraya çevrilir.
-  ["WEEKLY_AWARD_SET", () => ({ pathname: "/(tabs)/ligler", params: { tab: "istatistik" } })],
-  ["PASSWORD_RESET", () => ({ pathname: "/yonetim" })],
+  // Müsaitlik takvimi: yönetim haftalık saha panosuna, takım kendi takvimine.
+  ["TEAM_AVAILABILITY_", (_id, ctx) =>
+    ctx.isManagement ? { pathname: "/yonetim/sahalar", params: { tab: "sahalar" } } : { pathname: "/takimim/musaitlik" }],
+  // Haftanın enleri yayınlandı: seçili ligin ödül ekranı.
+  ["WEEKLY_AWARD_SET", () => ({ pathname: "/haftanin-enleri" })],
+  // Şifre sıfırlama talebi yönetime gider; kodu verilecek üye Kullanıcılar
+  // modülünde. Yönetim dışı bir hesaba düşerse kilit ekranı yerine gelen kutusu.
+  ["PASSWORD_RESET", (_id, ctx) =>
+    ctx.isManagement
+      ? { pathname: "/yonetim/web", params: { path: "/yonetim/admin/kullanicilar", title: "Site üyeleri" } }
+      : { pathname: "/bildirimler" }],
   // Hesap/üyelik akışları kendi ekranına sahip değil; bildirim merkezinde okunur.
   ["MEMBERSHIP_", () => ({ pathname: "/bildirimler" })],
   ["ACCOUNT_REQUEST_", () => ({ pathname: "/bildirimler" })],
@@ -282,6 +287,14 @@ export function routeFromNotif(
      gelen kutusuna gidilir. */
   if (String(data.audience ?? "").toLowerCase() === "management") {
     return { pathname: "/yonetim/sohbet" };
+  }
+
+  /* Serbest kalma izni: kart oyuncunun MEVCUT takımına gelir. O takım teklif
+     belgesini göremez (sunucu 403 — teklif başka takımın), bu yüzden belgeye
+     değil izin ekranına gidilir. */
+  const panelType = String(data.type ?? "").trim().toUpperCase();
+  if (panelType === "TRANSFER_RELEASE_REQUESTED" && entityId) {
+    return { pathname: "/transfer-izni/[id]", params: { id: entityId } };
   }
 
   const byEntity = targetFromEntity(entityType, entityId, ctx);

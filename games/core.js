@@ -70,6 +70,8 @@
       case "config":
         if (cmd.reduceMotion != null) A.reduceMotion = !!cmd.reduceMotion;
         if (cmd.sound != null) A.soundOn = !!cmd.sound;
+        // Kariyer avantajı (Elit Kart): oyunun okuduğu küçük oranlar, en çok 0.1.
+        if (cmd.perks && typeof cmd.perks === "object") A.perks = cmd.perks;
         break;
     }
   };

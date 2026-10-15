@@ -394,10 +394,8 @@ export default function MyPlayerScreen() {
     if (player?.id) router.push(`/oyuncu/${player.id}`);
   }, [player?.id, router]);
 
-  /* NOT: profil düzenleme + fotoğraf talebi bugün `/hesabim` içinde yaşıyor.
-     `app/oyuncum/duzenle.tsx` eklendiğinde hedef oraya çevrilir; şu an olmayan
-     bir rotaya bağlanıp ölü bağlantı bırakmıyoruz. */
-  const openEdit = useCallback(() => router.push("/hesabim"), [router]);
+  /* Kalem uygulama içi profil düzenleyicisini açar (onaylı talep). */
+  const openEdit = useCallback(() => router.push("/oyuncum/duzenle"), [router]);
 
   const actions = useMemo(
     () =>
@@ -1214,9 +1212,12 @@ const ActiveContractCard = React.memo(function ActiveContractCard({
 }) {
   const router = useRouter();
 
-  /* NOT: tek sözleşme detayı ekranı (`app/sozlesme/[id].tsx`) henüz yok;
-     kart şimdilik sözleşme listesine iner. */
-  const open = useCallback(() => router.push("/sozlesmelerim"), [router]);
+  /* Kart sözleşme belgesini açar; kimlik yoksa (eski kayıt) listeye iner. */
+  const open = useCallback(
+    () =>
+      router.push(contract.public_id ? `/sozlesme/${contract.public_id}` : "/sozlesmelerim"),
+    [contract.public_id, router],
+  );
   const progress = contractProgress(contract);
 
   return (

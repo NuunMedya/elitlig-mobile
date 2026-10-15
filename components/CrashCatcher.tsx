@@ -11,6 +11,9 @@
  * "Tekrar dene" hata durumunu sıfırlar; "Kopyala" metni panoya alır ki
  * ekran görüntüsü yerine metin paylaşılabilsin.
  *
+ * Her iki yolda da hata `lib/analytics.ts` ile sunucunun ziyaretçi analizine
+ * "error" olayı olarak yazılır (çökme raporu).
+ *
  * Bu ekran bir teşhis aracıdır; normal kullanımda hiç görünmemesi gerekir.
  */
 
@@ -18,6 +21,7 @@ import * as Clipboard from "expo-clipboard";
 import React from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
+import { trackError } from "@/lib/analytics";
 import { colors, radius, space, type } from "@/theme";
 
 interface State {
@@ -45,11 +49,17 @@ export class CrashCatcher extends React.Component<{ children: React.ReactNode },
     return { error, fatal: false };
   }
 
+  /* Render hatası çökme raporu olarak sunucuya gider (lib/analytics.ts). */
+  componentDidCatch(error: Error) {
+    trackError(error, true);
+  }
+
   componentDidMount() {
     const utils = (globalThis as unknown as { ErrorUtils?: ErrorUtilsLike }).ErrorUtils;
     if (!utils?.setGlobalHandler) return;
     this.previousHandler = utils.getGlobalHandler?.();
     utils.setGlobalHandler((error, isFatal) => {
+      trackError(error, Boolean(isFatal));
       // Üretimde ölümcül hata ekranı boşaltır; önce biz gösterelim.
       this.setState({ error: error instanceof Error ? error : new Error(String(error)), fatal: Boolean(isFatal) });
       if (!isFatal) this.previousHandler?.(error, isFatal);

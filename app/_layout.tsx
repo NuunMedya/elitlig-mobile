@@ -1,5 +1,6 @@
 import { focusManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+import { Stack, usePathname } from "expo-router";
+import { useEffect } from "react";
 import { StatusBar } from "expo-status-bar";
 import { AppState, type AppStateStatus } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -11,6 +12,7 @@ import { useNotificationBridge } from "@/hooks/useNotificationBridge";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { useChatRealtime } from "@/hooks/useChat";
 import { CallProvider } from "@/providers/CallProvider";
+import { startAnalytics, trackScreen } from "@/lib/analytics";
 import { ApiError } from "@/lib/http";
 import { AuthProvider } from "@/providers/AuthProvider";
 import { FavoriteProvider } from "@/providers/FavoriteProvider";
@@ -100,12 +102,25 @@ function ChatRealtimeSetup() {
   return null;
 }
 
+/** Ekran görüntüleme analitiği: her rota değişiminde bir kayıt (lib/analytics.ts). */
+function AnalyticsSetup() {
+  const pathname = usePathname();
+  useEffect(() => {
+    startAnalytics();
+  }, []);
+  useEffect(() => {
+    trackScreen(pathname);
+  }, [pathname]);
+  return null;
+}
+
 export default function RootLayout() {
   return (
     <CrashCatcher>
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
+          <AnalyticsSetup />
           <NotificationSetup />
           <ChatRealtimeSetup />
           <ScopeProvider>
@@ -150,6 +165,12 @@ export default function RootLayout() {
 
                   {/* Takım paneli alt ekranları — detay geçişi. */}
                   <Stack.Screen name="takimim/mac-al" />
+                  <Stack.Screen name="takimim/bilgiler" />
+                  <Stack.Screen name="takimim/teklif-ver" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
+                  <Stack.Screen name="takimim/teklifler" />
+                  <Stack.Screen name="takimim/borsa" />
+                  <Stack.Screen name="takimim/musaitlik" />
+                  <Stack.Screen name="transfer-izni/[id]" />
                   <Stack.Screen name="takimim/mac/[matchId]" />
 
                   {/* Kariyer belgeleri ve oyuncu paneli.
@@ -160,6 +181,7 @@ export default function RootLayout() {
                       olarak kaydolur. */}
                   <Stack.Screen name="oyuncum/index" />
                   <Stack.Screen name="oyuncum/bagla" />
+                  <Stack.Screen name="oyuncum/duzenle" />
                   <Stack.Screen name="teklif/[id]" />
                   <Stack.Screen name="sozlesme/[id]" />
                   <Stack.Screen name="ceza/[id]" />

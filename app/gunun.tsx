@@ -48,9 +48,9 @@ import {
   Touchable,
   useToast,
 } from "@/components/ui";
-import { submitArenaScore } from "@/lib/api/arena";
+import { startArenaSession, submitArenaScore } from "@/lib/api/arena";
 import { getPlayerRankings } from "@/lib/api/players";
-import { get } from "@/lib/http";
+import { ApiError, get } from "@/lib/http";
 import { queryKeys } from "@/lib/queryKeys";
 import { instagramUrl } from "@/lib/socials";
 import type { PlayerRankRow } from "@/lib/types";
@@ -75,6 +75,14 @@ const ROUND = 10;
 const SECONDS = 12;
 const BEST_KEY = "elitlig.gunun.best.v1";
 const DAY_KEY = (day: string) => `elitlig.gunun.${day}.v1`;
+
+/**
+ * Günün resmi sonucu (cihazda, gün anahtarıyla). `pending`: skor henüz sunucuya
+ * yazılmadı — misafir oynadı ya da gönderim düştü. Giriş yapılınca / ekran
+ * yeniden açılınca aynı gün içinde yeniden denenir; ertesi gün anahtar değiştiği
+ * için eski günün bekleyen skoru hiç okunmaz (yeni günün hakkını yemez).
+ */
+type DayResult = { score: number; correct: number; pending?: boolean };
 const JUNK = /hükmen|hukmen|antpl/i;
 
 /* Sabit tohumlu rastgelelik: aynı tarih → aynı dizi */
@@ -287,7 +295,7 @@ export default function DailyQuizScreen() {
   const [score, setScore] = useState(0);
   const [correctCount, setCorrectCount] = useState(0);
   const [official, setOfficial] = useState(true);
-  const [todayResult, setTodayResult] = useState<{ score: number; correct: number } | null>(null);
+  const [todayResult, setTodayResult] = useState<DayResult | null>(null);
   const [best, setBest] = useState(0);
   /* — Yalnız sunum: ilerleme şeridi ve tur süresi — */
   const [marks, setMarks] = useState<Mark[]>([]);
@@ -335,8 +343,17 @@ export default function DailyQuizScreen() {
     }, 1000);
   };
 
+  /** Resmî denemenin oyun oturumu (Kariyer Modu doğrulaması). */
+  const dailySession = useRef<Promise<string | null> | null>(null);
+
   const start = (isOfficial: boolean) => {
     setOfficial(isOfficial);
+    dailySession.current =
+      isOfficial && auth.user
+        ? startArenaSession("gunun")
+            .then((data) => data.sessionId)
+            .catch(() => null)
+        : null;
     setScore(0);
     setCorrectCount(0);
     setQIndex(0);
@@ -380,23 +397,57 @@ export default function DailyQuizScreen() {
     answerRef.current = answer;
   });
 
+  /* Bekleyen resmi skoru sunucuya yazar. 409 (bugün zaten skor var — başka
+     cihazda ya da yeniden kurulumdan önce oynanmış) da "tamam" sayılır. */
+  const sendingDaily = useRef(false);
+  const refetchStanding = standingQuery.refetch;
+  const sendDaily = useCallback(
+    (result: DayResult) => {
+      if (sendingDaily.current || !result.pending || result.score <= 0) return;
+      sendingDaily.current = true;
+      const settle = () => {
+        const done = { score: result.score, correct: result.correct };
+        setTodayResult(done);
+        void AsyncStorage.setItem(DAY_KEY(day), JSON.stringify(done));
+        // Skor yazıldıktan SONRA sıralama tazelenir; sonuç ekranı taze sıra gösterir.
+        void refetchStanding();
+      };
+      const session = dailySession.current ?? Promise.resolve(null);
+      dailySession.current = null;
+      session
+        .then((sessionId) => submitArenaScore("gunun", result.score, sessionId))
+        .then(settle)
+        .catch((error) => {
+          if (error instanceof ApiError && error.status === 409) settle();
+          // Diğer hatalarda skor bekler; ekran yeniden açılınca denenir.
+        })
+        .finally(() => {
+          sendingDaily.current = false;
+        });
+    },
+    [day, refetchStanding]
+  );
+
+  /* Misafir giriş yaptıysa ya da önceki gönderim düştüyse bugünün skoru gönderilir. */
+  const triedForUser = useRef<number | null>(null);
+  useEffect(() => {
+    const userId = auth.user?.id ?? null;
+    if (userId == null || !todayResult?.pending) return;
+    // Düşen gönderim bu açılışta bir kez denenir; döngüye girmez.
+    if (triedForUser.current === userId) return;
+    triedForUser.current = userId;
+    sendDaily(todayResult);
+  }, [auth.user?.id, todayResult, sendDaily]);
+
   const finish = (lastGain: number) => {
     const finalScore = score + lastGain;
     const finalCorrect = correctCount + (lastGain > 0 ? 1 : 0);
     setElapsedMs(startedAt.current > 0 ? Date.now() - startedAt.current : 0);
     setPhase("done");
     if (official) {
-      if (auth.user && finalScore > 0) {
-        // Skor yazıldıktan SONRA sıralama tazelenir; sonuç ekranı taze sıra gösterir.
-        void submitArenaScore("gunun", finalScore)
-          .then(() => {
-            void standingQuery.refetch();
-          })
-          .catch(() => {
-            // Gönderim başarısızsa oyun akışı bozulmaz; sıra eski hâlinde kalır.
-          });
-      }
-      const result = { score: finalScore, correct: finalCorrect };
+      /* Skor önce "bekliyor" olarak cihaza yazılır; gönderimi yukarıdaki
+         etki yapar (girişliyse hemen, misafirse giriş yapınca). */
+      const result: DayResult = { score: finalScore, correct: finalCorrect, pending: finalScore > 0 };
       setTodayResult(result);
       AsyncStorage.setItem(DAY_KEY(day), JSON.stringify(result));
       setBest((b) => {

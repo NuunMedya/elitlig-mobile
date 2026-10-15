@@ -23,7 +23,7 @@ export type GameCommand =
   | { type: "start" }
   | { type: "pause" }
   | { type: "resume" }
-  | { type: "config"; sound?: boolean; reduceMotion?: boolean };
+  | { type: "config"; sound?: boolean; reduceMotion?: boolean; perks?: { penalti?: { aimBonus: number } } | null };
 
 export interface GameOverPayload {
   score: number;

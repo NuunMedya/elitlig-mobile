@@ -64,6 +64,7 @@ import {
   type Tone,
 } from "@/components/ui";
 import { acceptOffer, getOffer, rejectOffer, type TransferOffer } from "@/lib/api/panel";
+import { withdrawOffer } from "@/lib/api/transfers";
 import { formatDateShort, formatMoney, mediaUrl } from "@/lib/format";
 import { DeadlineBanner } from "@/components/club/DeadlineBanner";
 import { formatDateWithYear } from "@/components/club/dates";
@@ -349,6 +350,8 @@ export default function OfferDetailScreen() {
 
   const [rejectOpen, setRejectOpen] = useState(false);
   const [reason, setReason] = useState("");
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [withdrawReason, setWithdrawReason] = useState("");
   const [revisionOpen, setRevisionOpen] = useState(false);
   const [revisionFields, setRevisionFields] = useState<string[]>([]);
   const [revisionValues, setRevisionValues] = useState<Record<string, string>>({});
@@ -456,6 +459,20 @@ export default function OfferDetailScreen() {
       setReason("");
       invalidateAll();
       toast.show({ message: "Teklif reddedildi, takıma iletildi.", tone: "neutral" });
+    },
+    onError: handleActionError,
+  });
+
+  /* Takım tarafı: cevap beklenen teklifi geri çek (oyuncuya bildirilir). */
+  const withdrawMutation = useMutation({
+    mutationFn: (input: { offer: OfferDocument; reason: string }) =>
+      withdrawOffer(input.offer.public_id, expectedVersion(input.offer), input.reason),
+    onSuccess: () => {
+      setWithdrawOpen(false);
+      setWithdrawReason("");
+      invalidateAll();
+      void queryClient.invalidateQueries({ queryKey: ["takim", "outbox"] });
+      toast.show({ message: "Teklif geri çekildi, oyuncuya bildirildi.", tone: "neutral" });
     },
     onError: handleActionError,
   });
@@ -571,9 +588,14 @@ export default function OfferDetailScreen() {
   const canAccept = Boolean(offer?.actions?.accept);
   const canReject = Boolean(offer?.actions?.reject);
   const canRevise = Boolean(offer?.actions?.requestRevision);
-  const hasActions = canAccept || canReject || canRevise;
+  const canWithdraw = Boolean(offer?.actions?.withdraw);
+  const canTeamRevise = Boolean(offer?.actions?.revise);
+  const hasActions = canAccept || canReject || canRevise || canWithdraw || canTeamRevise;
   const busy =
-    acceptMutation.isPending || rejectMutation.isPending || revisionMutation.isPending;
+    acceptMutation.isPending ||
+    rejectMutation.isPending ||
+    revisionMutation.isPending ||
+    withdrawMutation.isPending;
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
@@ -623,6 +645,25 @@ export default function OfferDetailScreen() {
 
           {hasActions ? (
             <View style={[styles.actionBar, { paddingBottom: space.md + insets.bottom }]}>
+              {canWithdraw ? (
+                <Button
+                  label="Geri çek"
+                  variant="danger"
+                  onPress={() => setWithdrawOpen(true)}
+                  disabled={busy}
+                  style={styles.actionButton}
+                />
+              ) : null}
+              {canTeamRevise ? (
+                <Button
+                  label="Revize et"
+                  variant="primary"
+                  icon="create-outline"
+                  onPress={() => offer && router.push(`/takimim/teklif-ver?offerId=${offer.public_id}`)}
+                  disabled={busy}
+                  style={styles.actionButton}
+                />
+              ) : null}
               {canReject ? (
                 <Button
                   label="Reddet"
@@ -691,6 +732,40 @@ export default function OfferDetailScreen() {
             value={reason}
             onChangeText={setReason}
             placeholder="Örn. Mevcut takımımda kalmak istiyorum"
+            multiline
+            hint="En az 3 karakter"
+          />
+        </View>
+      </BottomSheet>
+
+      {/* ------------------- GERİ ÇEK (takım tarafı) ------------------- */}
+      <BottomSheet
+        visible={withdrawOpen}
+        onClose={() => setWithdrawOpen(false)}
+        title="Teklifi geri çek"
+        snap="content"
+        footer={
+          <View style={styles.sheetFooter}>
+            <Button label="Vazgeç" variant="ghost" onPress={() => setWithdrawOpen(false)} style={styles.actionButton} />
+            <Button
+              label="Geri çek"
+              variant="danger"
+              onPress={() => offer && withdrawMutation.mutate({ offer, reason: withdrawReason.trim() })}
+              disabled={withdrawReason.trim().length < 3 || withdrawMutation.isPending}
+              loading={withdrawMutation.isPending}
+              style={styles.actionButton}
+            />
+          </View>
+        }
+      >
+        <View style={styles.sheetBody}>
+          <Text style={styles.sheetText} {...textScale.long}>
+            Teklif geri çekilir ve oyuncuya bildirilir. Kısa bir gerekçe yaz.
+          </Text>
+          <Input
+            value={withdrawReason}
+            onChangeText={setWithdrawReason}
+            placeholder="Örn. Kadro planımız değişti"
             multiline
             hint="En az 3 karakter"
           />

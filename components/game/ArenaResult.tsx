@@ -31,7 +31,14 @@ import {
   withAlpha,
   type SegmentedItem,
 } from "@/components/ui";
-import { getArenaLeaderboard, getMyArenaRank, submitArenaScore, type ArenaEntry, type ArenaGame } from "@/lib/api/arena";
+import {
+  getArenaLeaderboard,
+  getMyArenaRank,
+  startArenaSession,
+  submitArenaScore,
+  type ArenaEntry,
+  type ArenaGame,
+} from "@/lib/api/arena";
 import { instagramUrl } from "@/lib/socials";
 import { useAuth } from "@/providers/AuthProvider";
 import { colors, dark as inkPalette, elevate, fonts, hairline, radius, space, textScale, type, upperTR } from "@/theme";
@@ -69,6 +76,8 @@ export function useArenaScore(game: ArenaGame, bestKey: string) {
   const [score, setScore] = useState<number | null>(null);
   const bestRef = useRef(0);
   bestRef.current = best;
+  /** Bu turun oyun oturumu (Kariyer Modu doğrulaması); açılamazsa null. */
+  const sessionRef = useRef<Promise<string | null> | null>(null);
 
   useEffect(() => {
     AsyncStorage.getItem(bestKey).then((value) => setBest(Number(value) || 0));
@@ -85,8 +94,15 @@ export function useArenaScore(game: ArenaGame, bestKey: string) {
         return;
       }
       setSubmit("sending");
-      submitArenaScore(game, value)
+      // Turun oturumu (reset'te açıldı) skorla gider; sunucu süreyle doğrular.
+      // Oturum ancak gönderim BAŞARILI olunca bırakılır: ağ hatasından sonra
+      // "Tekrar dene" aynı oturumla gider ve skor yine doğrulanabilir.
+      const pending = sessionRef.current;
+      (pending ?? Promise.resolve(null))
+        .then((sessionId) => submitArenaScore(game, value, sessionId))
         .then(() => {
+          // Bu arada yeni tur başladıysa onun oturumuna dokunulmaz.
+          if (sessionRef.current === pending) sessionRef.current = null;
           setSubmit("sent");
           void queryClient.invalidateQueries({ queryKey: ["arena"] });
         })
@@ -114,10 +130,16 @@ export function useArenaScore(game: ArenaGame, bestKey: string) {
     [bestKey, send],
   );
 
+  /** Yeni tur: skor sıfırlanır ve girişliyse oyun oturumu açılır. */
   const reset = useCallback(() => {
     setScore(null);
     setSubmit("idle");
-  }, []);
+    sessionRef.current = auth.user
+      ? startArenaSession(game)
+          .then((data) => data.sessionId)
+          .catch(() => null)
+      : null;
+  }, [auth.user, game]);
 
   return {
     best,

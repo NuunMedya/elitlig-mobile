@@ -273,7 +273,10 @@
     outcome = null;
     drag = null;
     zoomTarget = 1;
-    clockMax = lerpD(8, 4);
+    // Kariyer avantajı: gerçek penaltı/frikik golü olan oyuncunun atış süresi
+    // en çok %10 uzar (Elit Kart perks.penalti.aimBonus). Beceri belirleyici kalır.
+    var bonus = A.perks && A.perks.penalti ? A.clamp(Number(A.perks.penalti.aimBonus) || 0, 0, 0.1) : 0;
+    clockMax = lerpD(8, 4) * (1 + bonus);
     clock = clockMax;
     // Rüzgâr: seviye 3'ten sonra her atışta yeni yön/şiddet (metre sapma).
     if (level >= 3) {

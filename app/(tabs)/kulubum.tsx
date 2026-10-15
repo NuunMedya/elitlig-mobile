@@ -263,7 +263,7 @@ export default function ClubHubScreen() {
             </PanelCard>
           )}
           <Text style={styles.sheetNote} {...textScale.long}>
-            Talepler yönetici onayından sonra yayına alınır. Geri çekme işlemi şimdilik elitlig.com üzerinden yapılır.
+            Talepler yönetici onayından sonra yayına alınır. Yanlış gönderdiğin bir profil ya da takım talebini düzenleme ekranından geri çekebilirsin.
           </Text>
         </View>
       </BottomSheet>
@@ -297,8 +297,12 @@ function ClubSection({
       { key: "lisans", icon: "id-card", label: "Lisans", href: "/takimim/kadro?gorunum=sezon", tone: "info" },
       { key: "maclar", icon: "clipboard", label: "Maçlar", href: "/takimim/mac-merkezi", tone: "live" },
       { key: "mac-al", icon: "calendar", label: "Maç al", href: "/takimim/mac-al", tone: "win" },
+      { key: "musaitlik", icon: "time", label: "Müsaitlik", href: "/takimim/musaitlik", tone: "win" },
       { key: "basvuru", icon: "mail-unread", label: "Başvurular", href: "/davetler", tone: "warn", count: counts.applications },
       { key: "kasa", icon: "wallet", label: "Kasa", href: "/takimim/kasa", tone: "neutral" },
+      { key: "teklifler", icon: "paper-plane", label: "Teklifler", href: "/takimim/teklifler" },
+      { key: "borsa", icon: "storefront", label: "Borsa", href: "/takimim/borsa", tone: "warn" },
+      { key: "bilgiler", icon: "shield-half", label: "Kimlik", href: "/takimim/bilgiler", tone: "info" },
     ],
     [counts.applications, counts.offersOpen],
   );

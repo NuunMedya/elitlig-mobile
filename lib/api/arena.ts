@@ -25,8 +25,21 @@ export interface ArenaLeaderboard {
  */
 export const ARENA_CLIENT_VERSION = 3;
 
-export const submitArenaScore = (game: ArenaGame, score: number) =>
-  post<{ ok?: boolean }>("/api/arena/scores", { game, score, v: ARENA_CLIENT_VERSION });
+/**
+ * Oyun oturumu (Kariyer Modu): oyun başlarken açılır, skor bununla gönderilir.
+ * Sunucu süreye bakarak skoru doğrular; yalnız doğrulanmış skor XP ve rozet
+ * getirir. Oturum açılamazsa skor yine gönderilir (lider tablosuna girer).
+ */
+export const startArenaSession = (game: ArenaGame) =>
+  post<{ sessionId: string; game: string; startedAt: string }>("/api/arena/sessions", { game }, { retry: false });
+
+export const submitArenaScore = (game: ArenaGame, score: number, sessionId?: string | null) =>
+  post<{ message?: string; entry?: { verified?: boolean } }>("/api/arena/scores", {
+    game,
+    score,
+    v: ARENA_CLIENT_VERSION,
+    ...(sessionId ? { sessionId } : {}),
+  });
 
 export const getArenaLeaderboard = (
   game: ArenaGame,

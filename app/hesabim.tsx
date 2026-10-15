@@ -68,8 +68,6 @@ import { colors, hairline, layout, radius, ratingLabel, space, textScale, type, 
 
 /* ============================ SABİTLER / TİPLER ============================ */
 
-/** Üyelik, şifre sıfırlama ve talep akışlarının yaşadığı web panel. */
-const SITE_URL = "https://elitlig.com";
 /** App Store 5.1.1(i): gizlilik politikası uygulama içinden erişilebilir olmalı. */
 const PRIVACY_URL = "https://elitlig.com/gizlilik-politikasi";
 
@@ -383,9 +381,9 @@ export default function AccountScreen() {
         kind: "action",
         key: "foto",
         icon: "camera",
-        title: "Profil fotoğrafı talebi",
-        subtitle: "elitlig.com panelinde; yönetim onayından geçer",
-        action: { kind: "link", url: SITE_URL },
+        title: "Profilimi ve fotoğrafımı düzenle",
+        subtitle: "Değişiklikler yönetim onayından geçer",
+        action: { kind: "route", route: "/oyuncum/duzenle" },
       });
     } else {
       profile.push({

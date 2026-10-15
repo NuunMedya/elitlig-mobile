@@ -1,6 +1,24 @@
 import * as WebBrowser from "expo-web-browser";
 import { Alert, Linking } from "react-native";
 
+import { WEB_BASE_URL } from "./config";
+
+
+/**
+ * Paylaşım metinlerine eklenen web adresleri. Bağlantıyı alan kişi uygulamayı
+ * kurmamış olabilir; adres sitede çalışır (elitlig-client App.js rotaları).
+ * İli bilinmeyen maçta adres üretilmez: çalışmayan bağlantı paylaşılmaz.
+ */
+export function webMatchUrl(match: { id: number | string; city_id?: number | null }): string | null {
+  if (!match.city_id) return null;
+  return `${WEB_BASE_URL}/sehir/${match.city_id}/mac/${match.id}`;
+}
+
+/** Tekil haber: haber listesi açılır ve haber penceresi kendiliğinden gelir. */
+export function webNewsUrl(publicId: string): string {
+  return `${WEB_BASE_URL}/haberler?haber=${encodeURIComponent(publicId)}`;
+}
+
 /**
  * Dış bağlantı açıcı.
  *

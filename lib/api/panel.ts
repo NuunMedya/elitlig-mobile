@@ -31,6 +31,8 @@ export interface PanelTeam {
   city_id: number | null;
   current_league?: string | null;
   current_season?: string | null;
+  founded_at?: string | null;
+  colors?: string | null;
 }
 
 export interface PanelStats {
@@ -161,6 +163,10 @@ export interface TransferOffer {
     accept?: boolean;
     reject?: boolean;
     requestRevision?: boolean;
+    /** Takım tarafı: oyuncu revizyon istediğinde yeni sürüm gönder. */
+    revise?: boolean;
+    /** Takım tarafı: cevap beklenirken teklifi geri çek. */
+    withdraw?: boolean;
   };
   contract?: { public_id: string; status: string } | null;
 }
