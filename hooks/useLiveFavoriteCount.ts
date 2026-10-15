@@ -14,9 +14,15 @@
  * istemcide yapılır — canlı maç sayısı zaten onlarla ölçülür, listeyi taramak
  * ucuzdur.
  *
- * NEDEN ARKA PLANDA DURUR: 20 saniyelik yoklama uygulama arka plandayken pil
- * yakar ve sonucu kimse görmez. AppState "active" değilken aralık kapanır,
- * geri dönüldüğünde ilk render'da yeniden başlar.
+ * NEDEN ARKA PLANDA DURUR: yoklama uygulama arka plandayken pil yakar ve
+ * sonucu kimse görmez. AppState "active" değilken aralık kapanır, geri
+ * dönüldüğünde ilk render'da yeniden başlar.
+ *
+ * TEK ZAMANLAYICI: aynı anahtarı (`liveFavoriteMatches`) Maçlar sekmesi de
+ * okur. React Query her gözlemci için AYRI aralık kurar; iki ekran iki ayrı
+ * zamanlayıcıyla aynı ucu vuruyordu. Favori varken yoklamayı yalnız sekme
+ * çubuğundaki bu kanca yapar (ALL_LIVE_POLL_MS); diğer okuyucular aralık
+ * kurmaz, önbelleği okur.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -41,6 +47,10 @@ export function useAppActive(): boolean {
   return active;
 }
 
+/** Kapsamsız canlı akışın (`/maclar/live`) ortak yoklama aralığı ve tazelik süresi. */
+export const ALL_LIVE_POLL_MS = 30_000;
+export const ALL_LIVE_STALE_MS = 10_000;
+
 /** Takım adı karşılaştırması Türkçe küçük harfle yapılır (İ/I tuzağı). */
 const normalizeName = (value: string) => value.trim().toLocaleLowerCase("tr");
 
@@ -52,7 +62,11 @@ export interface LiveFavoriteCount {
   loading: boolean;
 }
 
-export function useLiveFavoriteCount(): LiveFavoriteCount {
+/**
+ * @param options.poll false → yalnız önbelleği okur, kendi aralığını kurmaz
+ *   (sekme çubuğundaki örnek zaten yokluyor; bkz. TEK ZAMANLAYICI).
+ */
+export function useLiveFavoriteCount({ poll = true }: { poll?: boolean } = {}): LiveFavoriteCount {
   const { favorites, favoriteLeagues, favoriteSeasons, favoriteMatches } = useFavorite();
   const appActive = useAppActive();
 
@@ -67,8 +81,8 @@ export function useLiveFavoriteCount(): LiveFavoriteCount {
     queryFn: () => getLiveMatches(),
     // Hiç favori yoksa ağa çıkmanın anlamı yok.
     enabled: hasFavorites,
-    staleTime: 10_000,
-    refetchInterval: hasFavorites && appActive ? 20_000 : false,
+    staleTime: ALL_LIVE_STALE_MS,
+    refetchInterval: poll && hasFavorites && appActive ? ALL_LIVE_POLL_MS : false,
     retry: false,
   });
 

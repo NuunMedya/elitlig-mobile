@@ -1,6 +1,7 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { focusManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { AppState, type AppStateStatus } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { CallScreen } from "@/components/CallScreen";
 import { CrashCatcher } from "@/components/CrashCatcher";
@@ -39,16 +40,38 @@ import { colors } from "@/theme";
  * Profil ▸ Gelen kutusu'ndadır.)
  */
 
+/**
+ * React Query'nin "odak" kavramı uygulamanın ön planda olmasına bağlanır.
+ * RN'de varsayılan dinleyici (tarayıcı visibilitychange) çalışmaz ve odak hep
+ * "açık" sayılırdı: refetchInterval'lar arka planda da istek atıyordu. Artık
+ * uygulama arka plana geçince bütün yoklamalar durur (refetchIntervalInBackground
+ * false). refetchOnWindowFocus kapalı olduğu için öne dönüşte toplu tazeleme
+ * patlaması OLMAZ; aralıklar kaldığı yerden sürer.
+ */
+focusManager.setEventListener((handleFocus) => {
+  const subscription = AppState.addEventListener("change", (state: AppStateStatus) => {
+    handleFocus(state === "active");
+  });
+  return () => subscription.remove();
+});
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       // Canlı skor uygulamasında veri çabuk bayatlar.
       staleTime: 15_000,
-      // http katmanı ağ hatalarını zaten yeniden deniyor; burada tekrarlamak
-      // yalnızca hatanın ekrana düşmesini geciktirir. 4xx hiç denenmemeli.
+      // http katmanı geçici ağ hatalarını (0/502/504) zaten yeniden deniyor;
+      // burada en çok BİR tekrar. 503/429 (sunucu aşırı yükte / DB kotası) ve
+      // 4xx asla tekrarlanmaz: her tekrar sunucunun saatlik sorgu kotasını
+      // yakıp servisi daha uzun süre düşürür.
       retry: (failureCount, error) =>
-        error instanceof ApiError && error.status >= 500 && failureCount < 1,
+        error instanceof ApiError &&
+        error.status >= 500 &&
+        !error.isOverloaded &&
+        failureCount < 1,
       refetchOnWindowFocus: false,
+      // Uygulama arka plandayken yoklama yok (bkz. focusManager yukarıda).
+      refetchIntervalInBackground: false,
     },
   },
 });

@@ -63,6 +63,7 @@ import {
   type Tone,
 } from "@/components/ui";
 import { useAppActive } from "@/hooks/useLiveFavoriteCount";
+import { useScreenFocused } from "@/hooks/useScreenFocused";
 import { MESSAGE_PRIORITY_LABELS } from "@/lib/api/admin";
 import { getMyMessages, sendPanelMessage, type PanelThread } from "@/lib/api/panel";
 import { formatDateShort } from "@/lib/format";
@@ -72,8 +73,9 @@ import { colors, hairline, layout, radius, space, textScale, type } from "@/them
 
 /* ═══════════════════════════ SABİTLER / YARDIMCILAR ═══════════════════════ */
 
-/** Ekran açıkken sessiz yoklama aralığı (sunucu sözleşmesi: soket yok). */
-const POLL_MS = 10_000;
+/** Ekran açıkken sessiz yoklama aralığı (sunucu sözleşmesi: soket yok).
+ *  10 sn sunucunun saatlik sorgu kotasını gereksiz yakıyordu → 30 sn. */
+const POLL_MS = 30_000;
 
 /** Bilinen durumların gösterim sırası; sunucu yenisini eklerse sona düşer. */
 const STATUS_ORDER = ["open", "in_review", "answered", "closed"];
@@ -232,6 +234,8 @@ export function PanelThreadsPane({
   const toast = useToast();
   const insets = useSafeAreaInsets();
   const appActive = useAppActive();
+  // Sekme ekranı başka sekmedeyken de mount kalır; görünmüyorsa yoklama yok.
+  const screenFocused = useScreenFocused();
   const queryClient = useQueryClient();
   const fab = useFabAutoHide();
   const keyboardSpace = useKeyboardSpace();
@@ -250,7 +254,7 @@ export function PanelThreadsPane({
     queryFn: getMyMessages,
     enabled: Boolean(auth.user),
     staleTime: 5_000,
-    refetchInterval: appActive ? POLL_MS : false,
+    refetchInterval: appActive && screenFocused ? POLL_MS : false,
     retry: false,
   });
 

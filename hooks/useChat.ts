@@ -1,8 +1,10 @@
 /**
  * SOHBET VERİ KANCALARI — liste, mesajlar, okunmamış sayacı.
  *
- * Tek önbellek, iki kaynak: React Query yoklaması (30 sn) doğruluğu, soket
- * olayları anındalığı sağlar. Soket `chat:message` getirdiğinde hem listenin
+ * Tek önbellek, iki kaynak: React Query yoklaması doğruluğu, soket olayları
+ * anındalığı sağlar. Yoklama soket bağlıyken seyrekleşir (liste 120 sn, oda
+ * 60 sn); soket yoksa eski sıklığa (30 / 20 sn) döner. Soket yeniden
+ * bağlandığında kopukluk sırasında kaçan mesajlar için liste bir kez tazelenir. Soket `chat:message` getirdiğinde hem listenin
  * hem açık sohbetin önbelleği yerinde güncellenir; ağ isteği atılmaz.
  *
  * Soket aboneliği yalnız oturum açıkken ve uygulama ön plandayken tutulur;
@@ -10,7 +12,7 @@
  */
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useAppActive } from "@/hooks/useLiveFavoriteCount";
 import {
   adminChat,
@@ -22,12 +24,40 @@ import {
   type ConversationsResponse,
   type MessagesResponse,
 } from "@/lib/api/chat";
-import { CHAT_EVENTS, onChatEvent, releaseChatSocket, retainChatSocket } from "@/lib/chatSocket";
+import {
+  CHAT_EVENTS,
+  isChatSocketConnected,
+  onChatEvent,
+  onChatStatus,
+  releaseChatSocket,
+  retainChatSocket,
+} from "@/lib/chatSocket";
 import { queryKeys } from "@/lib/queryKeys";
 import { useAuth } from "@/providers/AuthProvider";
 
 const LIST_POLL_MS = 30_000;
 const ROOM_POLL_MS = 20_000;
+/** Soket bağlıyken olaylar zaten anında geliyor; yoklama yalnız doğrulamadır. */
+const LIST_POLL_SOCKET_MS = 120_000;
+const ROOM_POLL_SOCKET_MS = 60_000;
+
+/** Sohbet soketi şu an bağlı mı — yoklama aralığını seçmek için. */
+function useChatSocketConnected(): boolean {
+  const [connected, setConnected] = useState(isChatSocketConnected);
+  useEffect(() => {
+    setConnected(isChatSocketConnected());
+    return onChatStatus(setConnected);
+  }, []);
+  return connected;
+}
+
+/** Ön planda değilse yoklama yok; soket bağlıysa seyrek, değilse sık. */
+function usePollInterval(fallbackMs: number, socketMs: number): number | false {
+  const appActive = useAppActive();
+  const socketConnected = useChatSocketConnected();
+  if (!appActive) return false;
+  return socketConnected ? socketMs : fallbackMs;
+}
 
 interface MessageEvent {
   conversation_id: number;
@@ -131,7 +161,19 @@ export function useChatRealtime(): void {
       void queryClient.invalidateQueries({ queryKey: ["chat", "admin"] });
     });
 
+    // Soket (yeniden) bağlandı: kopukken kaçan olaylar için listeler bir kez
+    // tazelenir — seyrek yoklamanın bıraktığı boşluğu kapatır.
+    let wasConnected = isChatSocketConnected();
+    const offStatus = onChatStatus((connected) => {
+      if (connected && !wasConnected) {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.chatConversations() });
+        void queryClient.invalidateQueries({ queryKey: ["chat", "admin"] });
+      }
+      wasConnected = connected;
+    });
+
     return () => {
+      offStatus();
       offMessage();
       offDeleted();
       offConversation();
@@ -151,7 +193,7 @@ export interface AdminInboxFilters {
 
 export function useAdminConversations(filters: AdminInboxFilters = {}) {
   const auth = useAuth();
-  const appActive = useAppActive();
+  const pollMs = usePollInterval(LIST_POLL_MS, LIST_POLL_SOCKET_MS);
   const category = filters.category || "";
   const kind = filters.kind || "";
   return useQuery({
@@ -172,7 +214,7 @@ export function useAdminConversations(filters: AdminInboxFilters = {}) {
     },
     enabled: Boolean(auth.user) && auth.isManagement,
     staleTime: 5_000,
-    refetchInterval: appActive ? LIST_POLL_MS : false,
+    refetchInterval: pollMs,
     retry: false,
   });
 }
@@ -180,52 +222,52 @@ export function useAdminConversations(filters: AdminInboxFilters = {}) {
 /** Gelen kutusu özeti (rozetler ve kategori filtreleri). */
 export function useAdminInboxSummary() {
   const auth = useAuth();
-  const appActive = useAppActive();
+  const pollMs = usePollInterval(LIST_POLL_MS, LIST_POLL_SOCKET_MS);
   return useQuery({
     queryKey: ["chat", "admin", "summary"] as const,
     queryFn: () => adminChat.getSummary(),
     enabled: Boolean(auth.user) && auth.isManagement,
     staleTime: 5_000,
-    refetchInterval: appActive ? LIST_POLL_MS : false,
+    refetchInterval: pollMs,
     retry: false,
   });
 }
 
 export function useAdminConversationMessages(conversationId: number) {
   const auth = useAuth();
-  const appActive = useAppActive();
+  const pollMs = usePollInterval(ROOM_POLL_MS, ROOM_POLL_SOCKET_MS);
   return useQuery({
     queryKey: queryKeys.chatMessages(conversationId),
     queryFn: () => adminChat.getMessages(conversationId, { limit: 50 }),
     enabled: Boolean(auth.user) && auth.isManagement && Number.isInteger(conversationId) && conversationId > 0,
     staleTime: 4_000,
-    refetchInterval: appActive ? ROOM_POLL_MS : false,
+    refetchInterval: pollMs,
     retry: false,
   });
 }
 
 export function useConversations() {
   const auth = useAuth();
-  const appActive = useAppActive();
+  const pollMs = usePollInterval(LIST_POLL_MS, LIST_POLL_SOCKET_MS);
   return useQuery({
     queryKey: queryKeys.chatConversations(),
     queryFn: getConversations,
     enabled: Boolean(auth.user),
     staleTime: 5_000,
-    refetchInterval: appActive ? LIST_POLL_MS : false,
+    refetchInterval: pollMs,
     retry: false,
   });
 }
 
 export function useConversationMessages(conversationId: number) {
   const auth = useAuth();
-  const appActive = useAppActive();
+  const pollMs = usePollInterval(ROOM_POLL_MS, ROOM_POLL_SOCKET_MS);
   return useQuery({
     queryKey: queryKeys.chatMessages(conversationId),
     queryFn: () => getMessages(conversationId, { limit: 50 }),
     enabled: Boolean(auth.user) && Number.isInteger(conversationId) && conversationId > 0,
     staleTime: 4_000,
-    refetchInterval: appActive ? ROOM_POLL_MS : false,
+    refetchInterval: pollMs,
     retry: false,
   });
 }

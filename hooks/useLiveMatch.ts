@@ -48,10 +48,14 @@ export function useLiveMatch(matchId: number | null, enabled: boolean) {
 
     const socket = io(SOCKET_URL, {
       transports: ["websocket"],
-      // Mobil ağlar sık kopar; yeniden bağlanma agresif ama sınırlı tutulur.
-      reconnectionAttempts: 10,
+      // Mobil ağlar sık kopar. Deneme SINIRSIZ, gecikme en çok 30 sn (sohbet
+      // soketiyle aynı yaklaşım): 10 denemede vazgeçmek, ekran açık kaldıkça
+      // sonsuza dek yoklamaya düşüp sunucunun sorgu kotasını yakıyordu. Soket
+      // geri gelince yedek yoklama kendiliğinden durur.
+      reconnection: true,
+      reconnectionAttempts: Infinity,
       reconnectionDelay: 1_000,
-      reconnectionDelayMax: 10_000,
+      reconnectionDelayMax: 30_000,
       timeout: 8_000,
     });
     socketRef.current = socket;

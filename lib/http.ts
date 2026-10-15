@@ -5,7 +5,8 @@ import { API_BASE_URL, API_TIMEOUTS, GET_RETRY_DELAYS } from "./config";
  *
  * Web istemcisindeki (src/api/api.js) davranışları taşır:
  *   - zaman aşımı
- *   - GET'lerde ağ/5xx hatalarında sınırlı yeniden deneme
+ *   - GET'lerde yalnız ağ hatası / 502 / 504'te sınırlı yeniden deneme
+ *     (503/429 = sunucu "yük altındayım" diyor; tekrar denemek kotayı yakar)
  *   - eşzamanlı aynı GET'in tekilleştirilmesi (dedupe)
  *   - normalize edilmiş hata nesnesi
  *   - Authorization: Bearer <token>
@@ -18,13 +19,24 @@ export class ApiError extends Error {
   status: number;
   code?: string;
   detail?: unknown;
+  /** 503/429 yanıtındaki Retry-After (saniye); yoksa undefined. */
+  retryAfter?: number;
 
-  constructor(message: string, status: number, code?: string, detail?: unknown) {
+  constructor(message: string, status: number, code?: string, detail?: unknown, retryAfter?: number) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
     this.detail = detail;
+    this.retryAfter = retryAfter;
+  }
+
+  /**
+   * Sunucu aşırı yükte (DB kotası / BUSY) veya hız sınırında: bu hatalar
+   * hiçbir katmanda otomatik yeniden denenmez — her tekrar kotayı daha da yakar.
+   */
+  get isOverloaded(): boolean {
+    return this.status === 503 || this.status === 429;
   }
 
   /** Ekranda gösterilecek Türkçe mesaj. */
@@ -97,8 +109,24 @@ interface RequestOptions {
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * Yalnız geçici ağ/ağ geçidi hataları yeniden denenir: bağlantı yok (0),
+ * 502 ve 504. 503/429 sunucunun "yük altındayım" yanıtıdır; tekrar denemek
+ * veritabanı kotasını tüketip servisi saatlerce düşürüyordu. 500 de
+ * denenmez: aynı istek büyük olasılıkla aynı hatayı verir.
+ */
 const isRetryable = (error: unknown) =>
-  error instanceof ApiError && (error.status === 0 || error.status >= 500);
+  error instanceof ApiError && (error.status === 0 || error.status === 502 || error.status === 504);
+
+/** Retry-After başlığı: saniye ya da HTTP tarihi olabilir. */
+function parseRetryAfter(value: string | null): number | undefined {
+  if (!value) return undefined;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds;
+  const date = Date.parse(value);
+  if (Number.isNaN(date)) return undefined;
+  return Math.max(0, Math.round((date - Date.now()) / 1000));
+}
 
 async function parseBody(response: Response): Promise<unknown> {
   if (response.status === 204 || response.status === 304) return null;
@@ -161,7 +189,8 @@ async function once<T>(path: string, options: RequestOptions): Promise<T> {
         messageFromBody(payload, `İstek başarısız (${response.status})`),
         response.status,
         code,
-        payload
+        payload,
+        parseRetryAfter(response.headers.get("Retry-After"))
       );
       // Jetonsuz istek (ör. yanlış şifreyle giriş) oturumu etkilemez.
       if (response.status === 401 && token && (!code || SESSION_ENDING_CODES.has(code))) {

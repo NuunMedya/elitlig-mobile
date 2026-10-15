@@ -14,6 +14,7 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
+import { useAppActive } from "@/hooks/useLiveFavoriteCount";
 import { getChatUnread } from "@/lib/api/chat";
 import { getUnreadNotifCount } from "@/lib/api/panel";
 import { queryKeys } from "@/lib/queryKeys";
@@ -30,14 +31,17 @@ export interface UnreadCount {
 
 export function useUnreadCount(): UnreadCount {
   const auth = useAuth();
+  const appActive = useAppActive();
   const enabled = Boolean(auth.user);
+  // Uygulama arka plandayken rozet yoklaması durur (pil + sunucu sorgu kotası).
+  const poll = enabled && appActive;
 
   const notifQuery = useQuery({
     queryKey: queryKeys.unreadNotifCount(),
     queryFn: getUnreadNotifCount,
     enabled,
     staleTime: 30_000,
-    refetchInterval: enabled ? 60_000 : false,
+    refetchInterval: poll ? 60_000 : false,
     // Panel rolü olmayan hesapta 403 gelir; rozet sessizce yok sayılır.
     retry: false,
   });
@@ -49,7 +53,7 @@ export function useUnreadCount(): UnreadCount {
     queryFn: getChatUnread,
     enabled,
     staleTime: 30_000,
-    refetchInterval: enabled ? 60_000 : false,
+    refetchInterval: poll ? 60_000 : false,
     retry: false,
   });
 

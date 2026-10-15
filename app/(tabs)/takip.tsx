@@ -211,7 +211,8 @@ export default function TakipScreen() {
   const scope = useScope();
   const flow = useFollowFlow();
   const { logoFor } = useTeamLogos();
-  const live = useLiveFavoriteCount();
+  // Yoklamayı sekme çubuğundaki örnek yapar; burada yalnız önbellek okunur.
+  const live = useLiveFavoriteCount({ poll: false });
   const { scrollY, scrollProps } = useHeaderScroll();
   const { favorites, favoriteLeagues, favoriteSeasons, favoriteCities, favoriteMatches, isFollowing } =
     useFavorite();

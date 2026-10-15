@@ -56,6 +56,7 @@ function connect(): Socket | null {
     socket.removeAllListeners();
     socket.disconnect();
     socket = null;
+    notify(false);
   }
   if (socket) return socket;
   lastToken = token;
@@ -84,6 +85,8 @@ export function releaseChatSocket(): void {
     socket.removeAllListeners();
     socket.disconnect();
     socket = null;
+    // removeAllListeners "disconnect" dinleyicisini de söktü; durum elle bildirilir.
+    notify(false);
   }
 }
 
