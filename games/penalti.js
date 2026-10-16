@@ -8,12 +8,14 @@
  *               başsız testler (scripts/check-games.mjs) yalnız bunu koşturur.
  *   ÇİZİM       three.js gece stadyumu (#gl) + saydam 2B HUD (#c).
  *
- * MAÇ: klasik seri penaltı. Sırayla beşer atış (önce sen atarsın); bir taraf
- * kalan atışlarla yetişemeyecek duruma düşünce maç biter. Beşte eşitlikte ANİ
- * ÖLÜM. Kazanırsan merdivende sıradaki kulübe geçersin (kalecisi ligin daha çok
- * kurtarış yapan kalecisi); kaybedersen tur biter. Son kulübü geçen ŞAMPİYON.
+ * MAÇ: klasik seri penaltı. Sırayla beşer atış: sen atarsın, rakibin atışı
+ * kısa bir kartla gösterilir (rakip kulübün gerçek atıcıları; isabetleri
+ * merdivenle artar). Bir taraf kalan atışlarla yetişemeyecek duruma düşünce
+ * maç biter. Beşte eşitlikte ANİ ÖLÜM. Kazanırsan merdivende sıradaki kulübe
+ * (kalecisi ligin daha çok kurtarış yapan kalecisi) geçersin; kaybedersen tur
+ * biter. Son kulübü geçen ŞAMPİYON. Kaleyi sen korumazsın — yalnız atarsın.
  *
- * ATIŞ (sen atarken) — iki dokunuş:
+ * ATIŞ — iki dokunuş:
  *   1. NİŞAN: parmağını sürükle, kaledeki nişangâh hareket eder. Nişanın
  *      çevresindeki halka İSABET RİSKİDİR: köşeye ve direğe yaklaştıkça
  *      vuruş türü ve baskıyla büyür (direkten dönebilir, auta gidebilir).
@@ -22,20 +24,14 @@
  *   Vuruş türü (altta): PLASE (dengeli), SERT (hızlı ama savruk), KAŞIK
  *   (Panenka — erken yatan kaleciyi rezil eder, bekleyen kaleci kolayca alır).
  *
- * KALECİLİK (rakip atarken): parmağını uçmak istediğin yöne kaydır (kısa
- * kaydırma kısa adım, uzun kaydırma tam uçuş); dokunmak ortada kalmaktır.
- * Atıcı topa vurmadan hemen önce zaman YAVAŞLAR: topu görüp tepki verebilirsin.
- * Erken yatarsan kurnaz atıcı boş köşeye vurur. Her atıcının bir sevdiği köşe
- * vardır ve koşunun sonunda kalçası o yöne açılır — oku.
- *
  * RAKİP KALECİ: vuruş anında ya bir köşeye yatar (senin geçmiş atışlarından
  * öğrendiği köşeye) ya da topu okuyup tepki verir. Uçuşu fizikseldir: gövdesi
  * ve eldivenleri topa değerse kurtarır; köşeye yeterince hızlı giden top
  * yetişilmezdir. Ligdeki kurtarış sayısı (refleks) tepki süresini kısaltır.
  *
  * PUAN: gol 100 (+50 köşe, +50 yüksek, doksana +150, kaşık +150, ani ölüm
- * +50) · kurtarış 150 · rakip kaçırırsa 25 · maç galibiyeti 400 + 200 × maç
- * sırası · beşte beş +300 · şampiyonluk +1500.
+ * +50) · rakip kaçırırsa 25 · maç galibiyeti 400 + 200 × maç sırası · beşte
+ * beş +300 · şampiyonluk +1500.
  *
  * KOORDİNAT (metre): dünya x yatay (kaleye bakınca sağ +), y yukarı, z kale
  * çizgisinden uzaklık (kale çizgisi z = 0, penaltı noktası z = 11, file z < 0).
@@ -56,7 +52,7 @@
   var RUNUP = 0.85; // atıcının koşusu (sn)
   var INTRO = 2.6, TURN = 1.0, MATCH_END = 3.2;
   var REPLAY_AT = 1.1, REPLAY_LEN = 2.6;
-  var SLOW = 0.55; // kalecilikte vuruş anı yavaş çekimi (oyun mekaniği)
+  var OPP_KICK = 2.1; // rakip atış kartı (sn)
 
   var W = 390, H = 640;
 
@@ -109,7 +105,6 @@
   var shooter = DEFAULT_SHOOTER;
   var keepers = DEFAULT_KEEPERS;
   var takers = [];
-  var myKeeperIn = null;
   var rosterSig = "";
 
   function validPerson(p) {
@@ -125,10 +120,8 @@
     shooter = s || DEFAULT_SHOOTER;
     keepers = ks.length ? ks : DEFAULT_KEEPERS;
     takers = tk;
-    myKeeperIn = r && validPerson(r.myKeeper) ? r.myKeeper : null;
     if (state !== "attract" && state !== "over") return; // maç ortasında kadro değişmez
     opp = opponentOf(0);
-    me = myKeeperOf();
     if (R) rebuildCast();
   }
   function attr(obj, key, fallback) {
@@ -150,16 +143,6 @@
     return a && b && a.team && b.team && a.team.id != null && a.team.id === b.team.id;
   }
 
-  /** Senin kalecin: kadrodan (aynı kulüpten) ya da kulübünün forma renginde bir kaleci. */
-  function myKeeperOf() {
-    if (myKeeperIn) return myKeeperIn;
-    var own = keepers.filter(function (k) {
-      return sameTeam(k, shooter);
-    })[0];
-    if (own) return own;
-    var team = shooter.team || DEFAULT_SHOOTER.team;
-    return makePerson(-100, personName(hashStr(teamName(shooter)) + 3), team, { shirt: 1, attrs: { reflex: 76 } });
-  }
   function hashStr(s) {
     var h = 2166136261;
     s = String(s);
@@ -202,15 +185,14 @@
 
   /* ─────────────── durum ─────────────── */
 
-  // attract | intro | turn | aim | power | runup | flight | keepReady | keepRun | keepFlight | result | matchEnd | over
+  // attract | intro | turn | aim | power | runup | flight | result | oppKick | matchEnd | over
   var state = "attract";
   var stateT = 0;
   var opp = opponentOf(0);
-  var me = myKeeperOf();
   var matchIdx = 0;
-  var match = null; // { me: ['g'|'x'], op: ['g'|'x'], sudden, turn: 'shoot'|'keep' }
+  var match = null; // { me: ['g'|'x'], op: ['g'|'x'], sudden }
   var points = 0, scoreBump = 0;
-  var tally = { goals: 0, shots: 0, saves: 0, faced: 0, wins: 0, perfect: 0 };
+  var tally = { goals: 0, shots: 0, wins: 0, perfect: 0 };
   var champion = false;
   var history = []; // senin atışlarının yönü (−1 sol, 0 orta, 1 sağ) — rakip kaleci öğrenir
   var lastKick = null; // { who: 'me'|'op', result, tags, gain, taker }
@@ -226,10 +208,8 @@
   var powerT = 0, powerV = 0;
   var shot = null; // { target, speed, type, quality, sigma, ... }
 
-  // Kalecilik girdisi
-  var swipe = null;
   var kickAt = 0; // atıcının topa değdiği sim zamanı
-  var takerNow = null, takerPlan = null;
+  var oppShot = null; // rakibin atışı: { taker, result, dir }
 
   // Top ve kaleci (fizik)
   var ball = newBall();
@@ -499,7 +479,7 @@
   function start() {
     points = 0;
     matchIdx = 0;
-    tally = { goals: 0, shots: 0, saves: 0, faced: 0, wins: 0, perfect: 0 };
+    tally = { goals: 0, shots: 0, wins: 0, perfect: 0 };
     champion = false;
     history = [];
     A.particles.length = 0;
@@ -513,7 +493,6 @@
   function startMatch(m) {
     matchIdx = m;
     opp = opponentOf(m);
-    me = myKeeperOf();
     match = { me: [], op: [], opDirs: [], sudden: false, turn: "shoot" };
     resetKick();
     if (R) rebuildCast();
@@ -529,12 +508,10 @@
     ball = newBall();
     gk = newKeeper();
     shot = null;
-    swipe = null;
     dragFrom = null;
     powerT = 0;
     powerV = 0;
     slow = 1;
-    takerPlan = null;
     replay = null;
     recording = [];
     lastContact = -1;
@@ -553,18 +530,35 @@
       match.sudden = true;
       A.announce("ANİ ÖLÜM", "İlk kaçıran kaybeder", P.bad);
     }
-    match.turn = match.me.length === match.op.length ? "shoot" : "keep";
-    resetKick();
-    if (match.turn === "shoot") {
-      gk.reflex = attr(opp.keeper, "reflex", 75);
-      aim.x = 0;
-      aim.y = 1.1;
-    } else {
-      gk.reflex = attr(me, "reflex", 76);
-      takerNow = opp.takers[match.op.length % opp.takers.length];
+    if (match.op.length < match.me.length) {
+      oppKick();
+      return;
     }
-    if (R) placeCast();
+    resetKick();
+    gk.reflex = attr(opp.keeper, "reflex", 75);
+    aim.x = 0;
+    aim.y = 1.1;
     setState("turn");
+  }
+
+  /**
+   * Rakibin atışı: kulübün sıradaki gerçek atıcısı. İsabet merdivenle (rakip
+   * kalitesi), atıcının isabet özelliğiyle ve ani ölüm baskısıyla belirlenir.
+   */
+  function oppKick() {
+    var tk = opp.takers[match.op.length % opp.takers.length];
+    var acc = norm(attr(tk.p, "accuracy", 76));
+    var p = 0.66 + 0.17 * opp.diff + 0.05 * acc - (match.sudden ? 0.05 : 0);
+    var scored = Math.random() < A.clamp(p, 0.45, 0.9);
+    var miss = scored ? null : Math.random() < 0.6 ? "kurtaris" : Math.random() < 0.5 ? "direk" : "aut";
+    match.op.push(scored ? "g" : "x");
+    var side = Math.random() < tk.love ? tk.side : -tk.side;
+    match.opDirs.push(side);
+    oppShot = { taker: tk.p, result: scored ? "gol" : miss, dir: side };
+    var gain = scored ? 0 : 25;
+    points += gain;
+    lastKick = { who: "op", result: oppShot.result, tags: gain ? ["BASKI"] : [], gain: gain, good: !scored };
+    setState("oppKick");
   }
 
   /** Maç sonucu: 'won' | 'lost' | null (klasik seri penaltı erken bitiş kuralı). */
@@ -620,8 +614,6 @@
         wins: tally.wins,
         goals: tally.goals,
         shots: tally.shots,
-        saves: tally.saves,
-        faced: tally.faced,
         perfect: tally.perfect,
         champion: champion,
         keeper: Math.min(matchIdx, keepers.length - 1) + 1,
@@ -711,68 +703,7 @@
 
   /* ─────────────── kalecilik (sen) ─────────────── */
 
-  /** Rakip atıcının planı: sevdiği köşe, erken yatana karşı kurnazlık, isabet. */
-  function planTaker() {
-    var tk = takerNow;
-    var p = tk.p;
-    var d = opp.diff;
-    var side = Math.random() < tk.love ? tk.side : -tk.side;
-    var r = Math.random();
-    var type = r < 0.05 + 0.06 * d ? "kasik" : r < 0.4 ? "sert" : "plase";
-    var high = Math.random() < 0.25 + tk.high * 0.35;
-    var tx = side * A.rand(1.8, 3.3);
-    var ty = high ? A.rand(1.35, 2.15) : A.rand(0.2, 0.9);
-    if (type === "kasik") {
-      tx = A.rand(-0.5, 0.5);
-      ty = A.rand(1.2, 1.7);
-    }
-    var tell = Math.random() < 0.72 - 0.25 * d ? side : -side; // kalça açısı: çoğunlukla dürüst
-    takerPlan = { side: side, type: type, tx: tx, ty: ty, tell: tell, switched: false };
-  }
-  function takerFinal() {
-    var tp = takerPlan;
-    var tk = takerNow;
-    // erken yatan kaleciyi gören kurnaz atıcı boş köşeye vurur
-    if (gk.dive && gk.dive.t0 < kickAt - 0.08 && !tp.switched && Math.random() < tk.cunning + 0.25) {
-      var away = gk.dive.dx > 0 ? -1 : 1;
-      tp.tx = away * A.rand(1.6, 3.0);
-      tp.ty = A.rand(0.3, 1.2);
-      tp.type = "plase";
-      tp.switched = true;
-    } else if (gk.stay && gk.stayAt < kickAt - 0.08 && tp.type === "kasik") {
-      tp.type = "plase";
-      tp.tx = tk.side * A.rand(2, 3);
-    }
-    var acc = norm(attr(tk.p, "accuracy", 76));
-    var sig = TYPES[tp.type].sigma * (1.05 - 0.25 * acc) * (1 + 0.3 * pressure());
-    var tx = tp.tx + A.gauss(0, sig), ty = Math.max(BALL_R, tp.ty + A.gauss(0, sig * 0.7));
-    var pw = norm(attr(tk.p, "power", 76));
-    var sp = TYPES[tp.type].speed;
-    var speed = A.rand(sp[0], sp[1]) * (1 + 0.04 * pw);
-    var curl = tp.type === "plase" ? -Math.sign(tx) * 1.4 : 0;
-    return { tx: tx, ty: ty, speed: speed, curl: curl, type: tp.type };
-  }
 
-  /** Kaydırma → uçuş: yön ekranda (kaleci kamerası kaleye ters bakar: sağ = −x). */
-  function keeperSwipe(dx, dy, len) {
-    if (gk.dive || gk.stay) return;
-    var k = gk;
-    if (len < 22) {
-      k.stay = true;
-      k.stayAt = simTime;
-      k.set = 1;
-      return;
-    }
-    var wx = -dx / len, wy = -dy / len;
-    var amt = A.clamp(len / (W * 0.32), 0.4, 1);
-    // yön → hedef nokta (kaleci merkezinden)
-    var reach = (DIVE_REACH + ARM * 0.6) * amt;
-    var tx = k.x + wx * reach * 1.15, ty = A.clamp(0.98 + wy * reach, 0.15, 2.4);
-    var dxx = tx - k.x, dyy = ty - 0.98;
-    var need = Math.hypot(dxx, dyy) || 1;
-    k.dive = { t0: simTime, dx: dxx / need, dy: dyy / need, reach: A.clamp(need - ARM * 0.5, 0.2, DIVE_REACH), dur: diveDur(k) };
-    A.haptic("light");
-  }
 
   /* ─────────────── sonuç ─────────────── */
 
@@ -804,74 +735,56 @@
   }
 
   var resultLen = 1.7;
+  /** Senin atışının sonucu: skorbord, puan, spiker, golde tekrar. */
   function settle(result) {
-    var mine = match.turn === "shoot";
     var scored = result === "gol";
     var tags = [];
     var gain = 0;
-    if (mine) {
-      match.me.push(scored ? "g" : "x");
-      if (scored) {
-        tally.goals += 1;
-        gain = 100;
-        var L = shot ? { x: ball.x, y: ball.y } : { x: 0, y: 0 };
-        var corner = Math.abs(L.x) > 2.4, high = L.y > 1.65;
-        if (corner && high) {
-          gain += 150;
-          tags.push("DOKSAN");
-        } else {
-          if (corner) {
-            gain += 50;
-            tags.push("KÖŞE");
-          }
-          if (high) {
-            gain += 50;
-            tags.push("YÜKSEK");
-          }
-        }
-        if (shot && shot.type === "kasik") {
-          gain += 150;
-          tags.push("KAŞIK");
-        }
-        if (match.sudden) {
+    match.me.push(scored ? "g" : "x");
+    if (scored) {
+      tally.goals += 1;
+      gain = 100;
+      var corner = Math.abs(ball.x) > 2.4, high = ball.y > 1.65;
+      if (corner && high) {
+        gain += 150;
+        tags.push("DOKSAN");
+      } else {
+        if (corner) {
           gain += 50;
-          tags.push("ANİ ÖLÜM");
+          tags.push("KÖŞE");
+        }
+        if (high) {
+          gain += 50;
+          tags.push("YÜKSEK");
         }
       }
-    } else {
-      match.op.push(scored ? "g" : "x");
-      // kaleci kamerasından yön: dünyada +x ekranın solu
-      var sx = shot ? shot.tx : 0;
-      match.opDirs.push(sx > 0.8 ? -1 : sx < -0.8 ? 1 : 0);
-      tally.faced += 1;
-      if (result === "kurtaris") {
-        tally.saves += 1;
-        gain = 150;
-        tags.push("KURTARIŞ");
-      } else if (!scored) {
-        gain = 25;
-        tags.push("BASKI");
+      if (shot && shot.type === "kasik") {
+        gain += 150;
+        tags.push("KAŞIK");
+      }
+      if (match.sudden) {
+        gain += 50;
+        tags.push("ANİ ÖLÜM");
       }
     }
     points += gain;
     if (gain) scoreBump = 1;
-    var good = mine ? scored : !scored;
-    lastKick = { who: mine ? "me" : "op", result: result, tags: tags, gain: gain, good: good };
-    if (good) {
+    lastKick = { who: "me", result: result, tags: tags, gain: gain, good: scored };
+    if (scored) {
       excite = 1;
       A.sound("cheer");
       A.haptic("success");
-      confetti(mine ? kitOf(shooter) : kitOf(me));
-      A.shake(mine ? 6 : 4);
+      confetti(kitOf(shooter));
+      A.shake(6);
     } else {
       A.sound("groan");
       A.haptic("warning");
     }
-    say(result, mine);
-    // Tekrar: senin golün ya da senin kurtarışın
+    say(result);
+    // Tekrar: golün yandan alçak açıyla
     resultLen = 1.7;
-    if (good && result !== "aut" && result !== "direk" && !A.reduceMotion && R && recording.length > 10) {
-      replay = { frames: recording, mine: mine };
+    if (scored && !A.reduceMotion && R && recording.length > 10) {
+      replay = { frames: recording, mine: true };
       resultLen = REPLAY_AT + REPLAY_LEN + 0.2;
     }
     recording = [];
@@ -896,26 +809,25 @@
 
   /* ─────────────── spiker ─────────────── */
 
-  function say(result, mine) {
-    var S = mine ? shooter.short : takerNow.p.short;
-    var K = mine ? opp.keeper.short : me.short;
+  function say(result) {
+    var S = shooter.short;
+    var K = opp.keeper.short;
     var list;
     if (result === "gol") {
-      list = mine
-        ? lastKick.tags.indexOf("KAŞIK") >= 0
+      list =
+        lastKick.tags.indexOf("KAŞIK") >= 0
           ? ["Kaşık! " + S + " kaleciyi erken yatırdı!", "Panenka! Soğukkanlılığın dik âlâsı: " + S]
           : lastKick.tags.indexOf("DOKSAN") >= 0
             ? ["Doksana! " + K + " sadece izledi.", S + " örümcek ağlarını aldı!"]
-            : [S + " affetmedi, gol!", "Ağlar havalandı! " + S, S + " kaleciyi ters köşeye yatırdı."]
-        : [S + " gol buldu.", S + " köşeyi buldu.", "Rakip boş geçmedi: " + S];
+            : [S + " affetmedi, gol!", "Ağlar havalandı! " + S, S + " kaleciyi ters köşeye yatırdı."];
     } else if (result === "kurtaris") {
-      list = mine ? [K + " uçtu, kurtardı!", K + " köşeyi okudu!", "Müthiş refleks: " + K] : ["DEV KURTARIŞ! " + K + "!", K + " köşeyi okudu!", K + " geçit vermedi!"];
+      list = [K + " uçtu, kurtardı!", K + " köşeyi okudu!", "Müthiş refleks: " + K];
     } else if (result === "direk") {
       list = [S + " direği sarstı!", "Direkten döndü!"];
     } else {
       list = [S + " auta gönderdi.", "Top tribünlere gitti!"];
     }
-    line = { text: A.pick(list), good: mine ? result === "gol" : result !== "gol" };
+    line = { text: A.pick(list), good: result === "gol" };
     lineT = 0;
   }
 
@@ -940,13 +852,8 @@
       case "turn":
         gk.crouch = 0.5 + 0.5 * Math.sin(A.time * 3.2);
         if (stateT >= TURN) {
-          if (match.turn === "shoot") {
-            setState("aim");
-            A.sound("whistle");
-          } else {
-            planTaker();
-            setState("keepReady");
-          }
+          setState("aim");
+          A.sound("whistle");
         }
         return;
       case "aim":
@@ -963,26 +870,10 @@
         gk.crouch = Math.min(1, gk.crouch + dt * 2);
         if (stateT >= RUNUP) strikeMine();
         return;
-      case "keepReady":
-        gk.crouch = 0.55 + 0.45 * Math.sin(A.time * 3.4);
-        if (stateT >= 0.7) {
-          setState("keepRun");
-          kickAt = simTime + RUNUP;
-          A.sound("whistle");
-        }
-        return;
-      case "keepRun":
-        if (!gk.dive && !gk.stay) gk.crouch = Math.min(1, gk.crouch + dt * 1.5);
-        // vuruşa yaklaşınca zaman yavaşlar (tepki verebilesin)
-        slow = simTime > kickAt - 0.16 ? SLOW : 1;
-        if (simTime >= kickAt) strikeTaker();
-        return;
       case "flight":
-      case "keepFlight":
-        if (state === "flight") keeperThink();
+        keeperThink();
         stepBall(sdt);
         record();
-        if (state === "keepFlight" && (ball.z < -0.5 || ball.vz > 0 || ball.goal)) slow = A.approach(slow, 1, dt * 2.5);
         var res = judge();
         if (res) {
           slow = 1;
@@ -993,6 +884,19 @@
         stepBall(dt);
         gk.cheer = Math.min(1, gk.cheer + dt * 2);
         if (stateT >= resultLen) nextKick();
+        return;
+      case "oppKick":
+        // rakibin sonucu kartın ortasında açılır
+        if (stateT > 0.75 && !oppShot.shown) {
+          oppShot.shown = true;
+          if (oppShot.result === "gol") A.sound("groan");
+          else {
+            A.sound("cheer");
+            excite = 0.8;
+            scoreBump = 1;
+          }
+        }
+        if (stateT >= OPP_KICK) nextKick();
         return;
       case "matchEnd":
         if (stateT >= MATCH_END) {
@@ -1012,15 +916,6 @@
     setState("flight");
     A.sound("kick");
     A.haptic("medium");
-    kickDust();
-  }
-  function strikeTaker() {
-    var s = takerFinal();
-    shot = { type: s.type, tx: s.tx, ty: s.ty };
-    ball = newBall();
-    launch(ball, s.tx, s.ty, s.speed, s.curl, s.type === "kasik");
-    setState("keepFlight");
-    A.sound("kick");
     kickDust();
   }
   function kickDust() {
@@ -1076,9 +971,6 @@
       takeShot(powerV);
       return;
     }
-    if (state === "keepRun" || state === "keepFlight" || state === "keepReady") {
-      swipe = { x: p.x, y: p.y, t: A.time };
-    }
   }
   function move(p) {
     if (state === "aim" && dragFrom) {
@@ -1088,15 +980,6 @@
       aim.y = A.clamp(dragFrom.ay - (dy / H) * AIM_SENS_Y, 0.15, GOAL_H + 0.8);
       return;
     }
-    if (swipe) swipe.cur = { x: p.x, y: p.y };
-    if (swipe && (state === "keepRun" || state === "keepFlight")) {
-      var sx = p.x - swipe.x, sy = p.y - swipe.y;
-      var len = Math.hypot(sx, sy);
-      if (len > W * 0.12) {
-        keeperSwipe(sx, sy, len);
-        swipe = null;
-      }
-    }
   }
   function up(p) {
     if (state === "aim" && dragFrom) {
@@ -1104,12 +987,6 @@
       dragFrom = null;
       if (moved > 10) lockAim();
       return;
-    }
-    if (swipe && (state === "keepRun" || state === "keepFlight" || state === "keepReady")) {
-      var sx = p.x - swipe.x, sy = p.y - swipe.y;
-      var len = Math.hypot(sx, sy);
-      if (state !== "keepReady") keeperSwipe(sx, sy, len);
-      swipe = null;
     }
   }
 
@@ -1228,7 +1105,7 @@
   }
   var screenSig = "";
   function paintScreen() {
-    var gm = match ? goalsOf(match.me) : 0, go = match ? goalsOf(match.op) : 0;
+    var gm = match ? goalsOf(match.me) : 0, go = match ? goalsOf(shownOp()) : 0;
     var sig = gm + ":" + go + ":" + teamName(shooter) + ":" + teamName(opp.keeper) + ":" + (match && match.sudden);
     if (sig === screenSig) return;
     screenSig = sig;
@@ -1289,16 +1166,9 @@
     if (!R) return;
     athlete("shooter", shooter, { keeper: false });
     athlete("oppKeeper", asKeeper(opp.keeper, kitOf(shooter).primary), { keeper: true });
-    athlete("myKeeper", asKeeper(me, kitOf(opp.keeper).primary), { keeper: true });
     athlete("ref", REFEREE, { keeper: false, detail: "lo" });
-    takerNow = takerNow || opp.takers[0];
-    athlete("taker", takerNow.p, { keeper: false });
     paintCrowd();
     screenSig = "";
-  }
-  function placeCast() {
-    if (!R || !match) return;
-    if (match.turn === "keep") athlete("taker", takerNow.p, { keeper: false });
   }
 
   /* ─────────────── pozlar ─────────────── */
@@ -1486,14 +1356,10 @@
     // yayın penaltı kamerası: atıcının sağ arkası, göz hizası — kale ekranı doldurur
     return { pos: [0.95, 1.72, SPOT_Z + 4.8], look: [0, 1.15, 0], fov: fitFov(GOAL_W * 1.28, SPOT_Z + 4.8, 24, 62) };
   }
-  function camKeep() {
-    return { pos: [0, 2.2, -6.2], look: [0, 1.05, 9], fov: fitFov(6.5, 6.55, 30, 74) };
-  }
   function placeCamera(dt) {
     var cam = R.camera;
     var t = A.time;
     var view = null, follow = 5, cut = false;
-    var turn = match ? match.turn : "shoot";
     if (state === "attract") {
       var a = t * 0.12;
       view = { pos: [Math.sin(a) * 16, 6 + Math.sin(t * 0.2), 14 + Math.cos(a) * 10], look: [0, 1, 2], fov: 50 };
@@ -1520,14 +1386,6 @@
       cut = lastShot !== "replay";
       lastShot = "replay";
       follow = 4;
-    } else if (turn === "keep") {
-      view = camKeep();
-      if (state === "keepFlight" || state === "result") {
-        view.pos[0] += ball.x * 0.08;
-        view.look[0] = ball.x * 0.25;
-      }
-      cut = lastShot !== "keep";
-      lastShot = "keep";
     } else {
       view = camShoot();
       if (state === "power") {
@@ -1588,29 +1446,15 @@
     paintScreen();
     paintBoards(
       state === "result" && lastKick && lastKick.result === "gol"
-        ? "GOOOL!  " + upperTR(lastKick.who === "me" ? shooter.back || shooter.short : takerNow.p.back || takerNow.p.short) + "   •   "
+        ? "GOOOL!  " + upperTR(shooter.back || shooter.short) + "   •   "
         : "ELİTLİG ARENA   •   " + upperTR(teamName(shooter)) + "  vs  " + upperTR(teamName(opp.keeper)) + "   •   ",
     );
     R.boardTex.offset.x = (A.time * 0.04) % 1;
     R.ledTex.offset.x = (A.time * 0.02) % 1;
 
     var cast = R.cast;
-    var turn = match ? match.turn : "shoot";
-    var keepTurn = turn === "keep" && state !== "intro" && state !== "attract" && state !== "matchEnd";
-    var shooterA = keepTurn ? cast.taker.a : cast.shooter.a;
-    var keeperA = keepTurn ? cast.myKeeper.a : cast.oppKeeper.a;
-    var offA = [keepTurn ? cast.shooter.a : cast.taker.a, keepTurn ? cast.oppKeeper.a : cast.myKeeper.a];
-    offA.forEach(function (a) {
-      a.root.visible = false;
-    });
-    // kaleci kamerası file arkasından bakar: arka pano gizlenir, file incelir
-    var behind = keepTurn && !inReplay();
-    R.backBoard.visible = !behind;
-    R.netMats.forEach(function (m) {
-      m.opacity = behind ? 0.45 : 1;
-    });
-    shooterA.root.visible = true;
-    keeperA.root.visible = true;
+    var shooterA = cast.shooter.a;
+    var keeperA = cast.oppKeeper.a;
 
     // top ve kaleci: tekrarda kayıttan
     var bx = ball.x, by = ball.y, bz = ball.z, kstate = gk, know = simTime, keepExtra = {};
@@ -1631,7 +1475,7 @@
       var land = gk.dive ? A.smooth(A.clamp((stateT - 0.2) / 0.5, 0, 1)) : 0;
       keepExtra = { land: lastKick && lastKick.result === "gol" ? land : land * 0.6, caught: ball.caught, cheer: lastKick && lastKick.result !== "gol" && !gk.dive ? Math.min(1, stateT * 2) : 0 };
     }
-    if (state === "aim" || state === "power" || state === "turn" || state === "keepReady" || state === "intro" || state === "runup" || state === "keepRun") {
+    if (state === "aim" || state === "power" || state === "turn" || state === "oppKick" || state === "intro" || state === "runup") {
       bx = 0;
       by = BALL_R;
       bz = SPOT_Z;
@@ -1647,7 +1491,7 @@
     R.ballShadow.position.set(bx, 0.006, bz);
     R.ballShadow.material.opacity = 0.55 * Math.max(0.15, 1 - by * 0.6);
     var trail = R.trail;
-    var flying = (state === "flight" || state === "keepFlight" || inReplay()) && bz < SPOT_Z - 0.3;
+    var flying = (state === "flight" || inReplay()) && bz < SPOT_Z - 0.3;
     if (flying) {
       trail.pts.push(bx, by, bz);
       if (trail.pts.length > 30 * 3) trail.pts.splice(0, 3);
@@ -1661,17 +1505,14 @@
 
     // atıcı
     var sh = shooterA;
-    var tell = keepTurn && takerPlan ? takerPlan.tell : 0;
-    if (state === "attract" || state === "intro" || state === "turn" || state === "aim" || state === "power" || state === "keepReady") poseShooter(sh, "wait");
+    if (state === "attract" || state === "intro" || state === "turn" || state === "aim" || state === "power" || state === "oppKick") poseShooter(sh, "wait");
     else if (state === "runup") poseShooter(sh, "run", A.clamp(stateT / RUNUP, 0, 1), 0);
-    else if (state === "keepRun") poseShooter(sh, "run", A.clamp(1 - (kickAt - simTime) / RUNUP, 0, 1), tell);
     else if (inReplay()) poseShooter(sh, "kick", Math.max(0, know - kickAt + 0.05));
-    else if (state === "flight" || state === "keepFlight") poseShooter(sh, "kick", simTime - kickAt);
+    else if (state === "flight") poseShooter(sh, "kick", simTime - kickAt);
     else if (state === "result") {
-      var mineGoal = lastKick && lastKick.who === "me" && lastKick.result === "gol";
-      var theirGoal = lastKick && lastKick.who === "op" && lastKick.result === "gol";
-      if ((mineGoal || theirGoal) && stateT > 0.5) poseShooter(sh, "celebrate", stateT - 0.5);
-      else if (!mineGoal && !theirGoal && stateT > 0.35) poseShooter(sh, "sad", stateT - 0.35);
+      var mineGoal = lastKick && lastKick.result === "gol";
+      if (mineGoal && stateT > 0.5) poseShooter(sh, "celebrate", stateT - 0.5);
+      else if (!mineGoal && stateT > 0.35) poseShooter(sh, "sad", stateT - 0.35);
       else poseShooter(sh, "kick", simTime - kickAt);
     } else if (state === "matchEnd") {
       if (endResult === "won") poseShooter(cast.shooter.a, "celebrate", 2.3 + stateT);
@@ -1895,7 +1736,7 @@
     c.fillRect(x, y + 10, 4, h - 20);
     c.fillStyle = ok.primary;
     c.fillRect(x + w - 4, y + 10, 4, h - 20);
-    var gm = match ? goalsOf(match.me) : 0, go = match ? goalsOf(match.op) : 0;
+    var gm = match ? goalsOf(match.me) : 0, go = match ? goalsOf(shownOp()) : 0;
     // skor
     var sw = 74;
     A.roundRect(c, W / 2 - sw / 2, y + 8, sw, 30, 8);
@@ -1922,8 +1763,8 @@
     c.fillText(fit(c, upperTR(teamName(opp.keeper)), half), x + w - 42, y + 24);
     // atış noktaları
     if (match) {
-      dots(c, x + 42, y + 47, match.me, match.turn === "shoot" && isLive(), 1);
-      dots(c, x + w - 42, y + 47, match.op, match.turn === "keep" && isLive(), -1);
+      dots(c, x + 42, y + 47, match.me, isLive(), 1);
+      dots(c, x + w - 42, y + 47, shownOp(), oppPending(), -1);
     }
     c.font = A.font(9, 900);
     c.fillStyle = match && match.sudden ? P.bad : "rgba(255,255,255,0.55)";
@@ -1933,8 +1774,15 @@
     if ("letterSpacing" in c) c.letterSpacing = "0px";
     c.restore();
   }
+  /** Rakip atışının sonucu açıklanana dek skorbordda görünmez. */
+  function oppPending() {
+    return state === "oppKick" && stateT < 0.75;
+  }
+  function shownOp() {
+    return oppPending() ? match.op.slice(0, -1) : match.op;
+  }
   function isLive() {
-    return ["turn", "aim", "power", "runup", "flight", "keepReady", "keepRun", "keepFlight"].indexOf(state) >= 0;
+    return ["turn", "aim", "power", "runup", "flight"].indexOf(state) >= 0;
   }
   /** Beş atış noktası (ani ölümde son beşi): gol yeşil ✓, kaçan kırmızı ×, sıradaki nabız. */
   function dots(c, x, y, list, next, dir) {
@@ -2205,78 +2053,6 @@
 
   /* ── kalecilik ── */
 
-  function drawKeepHUD(c) {
-    var tk = takerNow;
-    if (!tk) return;
-    // atıcı kartı
-    var x = 14, y = H - 92, w = Math.min(W - 28, 260), h = 64;
-    c.save();
-    glass(c, x, y, w, h, 14);
-    avatar(c, x + 34, y + h / 2, 22, tk.p);
-    c.textAlign = "left";
-    c.textBaseline = "middle";
-    c.font = A.font(10, 900);
-    c.fillStyle = GOLD;
-    c.fillText("RAKİP ATICI", x + 66, y + 16);
-    c.font = A.font(15, 900);
-    c.fillStyle = "#FFFFFF";
-    c.fillText(fit(c, (tk.p.shirt ? tk.p.shirt + " · " : "") + (tk.p.short || tk.p.name), w - 80), x + 66, y + 34);
-    c.font = A.font(10.5, 700);
-    c.fillStyle = "rgba(255,255,255,0.65)";
-    var dirs = match && match.opDirs ? match.opDirs : [];
-    var hist = dirs.length ? "Son atışlar: " + dirs.slice(-4).map(function (d) { return d < 0 ? "←" : d > 0 ? "→" : "↑"; }).join(" ") : "Kalçasının açıldığı yöne dikkat";
-    c.fillText(fit(c, hist, w - 80), x + 66, y + 51);
-    c.restore();
-    if ((state === "keepReady" || state === "keepRun") && !gk.dive && !gk.stay) {
-      drawHint(c, "Kaydır: o yöne uç · Dokun: ortada kal", H - 124);
-      // yön okları
-      c.save();
-      var a = 0.35 + 0.35 * Math.sin(A.time * 5);
-      c.globalAlpha = a;
-      c.fillStyle = "#FFFFFF";
-      [[-1, 0], [1, 0], [-0.7, -0.7], [0.7, -0.7]].forEach(function (d) {
-        var cx = W / 2 + d[0] * 70, cy = H * 0.52 + d[1] * 70;
-        c.save();
-        c.translate(cx, cy);
-        c.rotate(Math.atan2(d[1], d[0]));
-        c.beginPath();
-        c.moveTo(10, 0);
-        c.lineTo(-6, -8);
-        c.lineTo(-6, 8);
-        c.closePath();
-        c.fill();
-        c.restore();
-      });
-      c.restore();
-    }
-    if (swipe && swipe.cur) {
-      c.save();
-      c.strokeStyle = "rgba(255,255,255,0.75)";
-      c.lineWidth = 4;
-      c.lineCap = "round";
-      c.beginPath();
-      c.moveTo(swipe.x, swipe.y);
-      c.lineTo(swipe.cur.x, swipe.cur.y);
-      c.stroke();
-      c.restore();
-    }
-    if (slow < 0.99) {
-      c.save();
-      var k = (1 - slow) / (1 - SLOW);
-      var g = c.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.75);
-      g.addColorStop(0, "rgba(40,80,200,0)");
-      g.addColorStop(1, "rgba(40,80,200," + 0.28 * k + ")");
-      c.fillStyle = g;
-      c.fillRect(0, 0, W, H);
-      c.globalAlpha = k;
-      c.font = A.font(10, 900);
-      c.fillStyle = "#BFD4FF";
-      c.textAlign = "center";
-      if ("letterSpacing" in c) c.letterSpacing = "2px";
-      c.fillText("● AĞIR ÇEKİM", W / 2, 116);
-      c.restore();
-    }
-  }
 
   /* ── atış kartı (sol alt) ── */
 
@@ -2410,7 +2186,6 @@
     var t = stateT;
     var inT = A.easeOut(t / 0.3);
     var out = A.clamp((TURN - t) / 0.25, 0, 1);
-    var mine = match.turn === "shoot";
     c.save();
     c.globalAlpha = out;
     var y = H * 0.58;
@@ -2424,12 +2199,63 @@
     c.fillRect((1 - inT) * -W * 0.3, y - 34, bw, 68);
     c.textAlign = "center";
     c.textBaseline = "middle";
-    A.bigText(c, mine ? "SIRA SENDE" : "KALEYE GEÇ", W / 2, y - 6, 28, "#FFFFFF");
+    A.bigText(c, "SIRA SENDE", W / 2, y - 6, 28, "#FFFFFF");
     c.font = A.font(12, 800);
     c.fillStyle = "rgba(255,255,255,0.85)";
-    var who = mine ? shooter : takerNow.p;
-    var n = (mine ? match.me.length : match.op.length) + 1;
-    c.fillText((match.sudden ? "Ani ölüm · " : n + ". atış · ") + (mine ? "Atıcın " : "Atıcı ") + (who.short || who.name), W / 2, y + 20);
+    var n = match.me.length + 1;
+    c.fillText((match.sudden ? "Ani ölüm · " : n + ". atış · ") + "Atıcın " + shooter.short, W / 2, y + 20);
+    c.restore();
+  }
+
+  /** Rakibin atışı: atıcı kartı, kısa bekleyiş, sonuç açılır. */
+  function drawOppKick(c) {
+    var t = stateT;
+    var inT = A.easeOutBack(Math.min(1, t / 0.35));
+    var out = A.clamp((OPP_KICK - t) / 0.3, 0, 1);
+    var pk = oppShot.taker;
+    var kit = kitOf(pk);
+    var cw = Math.min(W - 28, 330), ch = 132;
+    var x = W / 2 - cw / 2, y = H * 0.56 - ch / 2;
+    c.save();
+    c.globalAlpha = out;
+    c.translate(W / 2, y + ch / 2);
+    c.scale(0.88 + 0.12 * inT, 0.88 + 0.12 * inT);
+    c.translate(-W / 2, -(y + ch / 2));
+    glass(c, x, y, cw, ch, 18, "rgba(9,11,32,0.88)");
+    c.fillStyle = kit.primary;
+    c.fillRect(x, y + 14, 5, ch - 28);
+    avatar(c, x + 42, y + 50, 24, pk);
+    c.textAlign = "left";
+    c.textBaseline = "middle";
+    c.font = A.font(10, 900);
+    c.fillStyle = GOLD;
+    if ("letterSpacing" in c) c.letterSpacing = "1.5px";
+    c.fillText("RAKİP ATIŞI · " + (match.sudden ? "ANİ ÖLÜM" : match.op.length + ". ATIŞ"), x + 78, y + 30);
+    if ("letterSpacing" in c) c.letterSpacing = "0px";
+    c.font = A.font(16, 900);
+    c.fillStyle = "#FFFFFF";
+    c.fillText(fit(c, (pk.shirt ? pk.shirt + " · " : "") + (pk.short || pk.name), cw - 96), x + 78, y + 52);
+    c.font = A.font(11, 700);
+    c.fillStyle = "rgba(255,255,255,0.6)";
+    c.fillText(fit(c, teamName(pk), cw - 96), x + 78, y + 70);
+    // sonuç: kısa bekleyişten sonra açılır
+    var rv = A.clamp((t - 0.75) / 0.25, 0, 1);
+    var gol = oppShot.result === "gol";
+    if (rv <= 0) {
+      for (var i = 0; i < 3; i++) {
+        c.fillStyle = "rgba(255,255,255," + (0.3 + 0.7 * Math.max(0, Math.sin(A.time * 8 - i))) + ")";
+        c.beginPath();
+        c.arc(W / 2 - 12 + i * 12, y + 104, 3.5, 0, Math.PI * 2);
+        c.fill();
+      }
+    } else {
+      c.globalAlpha = out * rv;
+      var label = gol ? "GOL" : oppShot.result === "kurtaris" ? "KALECİMİZ KURTARDI!" : oppShot.result === "direk" ? "DİREK!" : "KAÇIRDI!";
+      c.font = A.font(gol ? 20 : 17, 900);
+      c.textAlign = "center";
+      c.fillStyle = gol ? P.bad : P.good;
+      c.fillText(label + (gol ? "" : "  +25"), W / 2, y + 104);
+    }
     c.restore();
   }
 
@@ -2513,7 +2339,7 @@
       drawAim(c, true);
       drawPower(c);
       drawTypeChips(c, true);
-    } else if (state === "keepReady" || state === "keepRun" || state === "keepFlight") drawKeepHUD(c);
+    } else if (state === "oppKick") drawOppKick(c);
     else if (state === "result") {
       if (inReplay()) drawReplayBadge(c);
       else drawResult(c);
@@ -2525,7 +2351,6 @@
   function debug() {
     return {
       state: state,
-      turn: match && match.turn,
       me: match ? match.me.slice() : [],
       op: match ? match.op.slice() : [],
       sudden: match ? match.sudden : false,
@@ -2541,9 +2366,7 @@
       shooter: shooter.short,
       opponent: teamName(opp.keeper),
       oppKeeper: opp.keeper.short,
-      myKeeper: me.short,
-      taker: takerNow ? takerNow.p.short : null,
-      takerPlan: takerPlan,
+      oppShot: oppShot,
       lastKick: lastKick,
       decide: decide,
       gl: !!R,
