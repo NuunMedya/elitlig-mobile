@@ -5,7 +5,9 @@
  *                         (yarı saha: kale, ceza sahası, orta saha), kale + dokulu
  *                         file, iki katlı tribün çanağı + LED bant + çatı ışıkları,
  *                         sprite-atlas seyirciler, reklam panoları, dev ekranlar, top.
- *                         Oluşan nesneler R'ye yazılır (R.backNet, R.crowd, R.ball…).
+ *                         Oluşan nesneler R'ye yazılır (R.backNet, R.fanTex, R.ball…).
+ *   atmosphere(R)         yalnız ortam yansıması + gökyüzü (Slalom'un sonsuz şeridi)
+ *   standSegment(boy, o)  tek tribün parçası (beton kesit, LED bant, çatı, seyirci)
  *   paintCrowd(ev, dep)   seyirci atlasını iki kulübün renkleriyle boyar
  *   paintBoards / paintLed  kayan pano ve LED bant yazıları
  *   netReset / netHit / netStep  arka filenin dalga benzetimi (başsızda da çalışır)
@@ -84,6 +86,7 @@
     geo.setAttribute("color", new T.BufferAttribute(col, 3));
     var sky = new T.Mesh(geo, new T.MeshBasicMaterial({ vertexColors: true, side: T.BackSide, fog: false, depthWrite: false }));
     R.scene.add(sky);
+    R.sky = sky;
   }
 
   /* ─────────────── ışık ─────────────── */
@@ -505,43 +508,91 @@
     { cx: 0, cz: 72, len: 76, rot: Math.PI }, // karşı kale arkası (kaleci görüşünde)
   ];
 
+  /* ── tribün parçası (stadyumda ve Slalom'un sonsuz şeridinde ortak) ── */
+
+  var segMats = null;
+  function segmentMaterials() {
+    if (segMats) return segMats;
+    if (!R.ledTex) {
+      R.ledTex = canvasTex(1024, 32, function () {}, true);
+      R.ledTex.repeat.set(4, 1);
+    }
+    segMats = {
+      concrete: std(0x1a2036, 0.92, 0, { envMapIntensity: 0.25 }),
+      led: new T.MeshBasicMaterial({ color: 0xffffff, toneMapped: false, map: R.ledTex }),
+      roof: std(0x070a16, 0.9),
+      strip: new T.MeshBasicMaterial({ color: new T.Color(4, 3.8, 3.4), toneMapped: false }),
+      dot: new T.SpriteMaterial({ map: glowTexture(), color: 0xfff6e2, transparent: true, depthWrite: false, blending: T.AdditiveBlending, opacity: 0.8 }),
+    };
+    return segMats;
+  }
+
+  /**
+   * Bir tribün parçası: iki katlı beton kesit (uzunluk boyunca çekilir), ara
+   * kattaki LED bant, öne sarkan çatı + ışık şeridi + lambalar ve oturan
+   * seyirciler. Yerel eksen: x uzunluk, −z sahadan uzaklaşan derinlik.
+   * opts.density: koltuk doluluğu; opts.side(lx): 1 ev sahibi, 0 rakip.
+   */
+  function standSegment(len, opts) {
+    opts = opts || {};
+    var prof = standProfile();
+    var M = segmentMaterials();
+    var grp = new T.Group();
+    var geo = new T.ExtrudeGeometry(prof.shape, { depth: len, bevelEnabled: false });
+    geo.translate(0, 0, -len / 2);
+    var m = mesh(geo, M.concrete, false, true);
+    m.rotation.y = Math.PI / 2;
+    grp.add(m);
+    var led = mesh(new T.PlaneGeometry(len, 1.2), M.led, false, false);
+    led.position.set(0, 1.1 + LOWER * 0.42 + 1.1, -(LOWER * 0.82 + 0.02));
+    grp.add(led);
+    var roofD = prof.depth * 0.75;
+    var roof = mesh(new T.BoxGeometry(len + (opts.seamless ? 0 : 4), 0.5, roofD), M.roof, false, false);
+    roof.position.set(0, prof.top + 4.2, -prof.depth + roofD / 2 - 2);
+    grp.add(roof);
+    var strip = mesh(new T.BoxGeometry(len, 0.25, 0.6), M.strip, false, false);
+    strip.position.set(0, prof.top + 3.85, -prof.depth + roofD - 2.2);
+    grp.add(strip);
+    for (var x = -len / 2 + 3; x <= len / 2 - 3; x += 6) {
+      var sp = new T.Sprite(M.dot);
+      sp.position.set(x, prof.top + 3.7, -prof.depth + roofD - 2.2);
+      sp.scale.set(5, 5, 1);
+      grp.add(sp);
+    }
+    // seyirciler (yerel koordinatta)
+    var rnd = A.seeded(opts.seed || 31);
+    var spots = [];
+    seatRows().forEach(function (row) {
+      for (var x2 = -len / 2 + 0.5; x2 < len / 2 - 0.4; x2 += 0.62) {
+        if (rnd() > (opts.density || 0.9)) continue;
+        var lx = x2 + (rnd() - 0.5) * 0.16;
+        spots.push({ x: lx, y: row.y, z: -row.d, rot: 0, side: opts.side ? opts.side(lx) : 1 });
+      }
+    });
+    grp.add(makeFans(spots, rnd));
+    grp.userData.depth = prof.depth;
+    return grp;
+  }
+
   function buildStadium() {
     var s = R.scene;
     var prof = standProfile();
     R.standTop = prof.top;
-    var concrete = std(0x1a2036, 0.92, 0, { envMapIntensity: 0.25 });
-    var ledMat = new T.MeshBasicMaterial({ color: 0xffffff, toneMapped: false });
-    R.ledTex = canvasTex(1024, 32, function () {}, true);
-    R.ledTex.repeat.set(4, 1);
-    ledMat.map = R.ledTex;
-    STANDS.forEach(function (st) {
-      var geo = new T.ExtrudeGeometry(prof.shape, { depth: st.len, bevelEnabled: false });
-      geo.translate(0, 0, -st.len / 2);
-      // kesit (x = içeri derinlik, y = yükseklik) → dünyada içeri −z yönü
-      var m = mesh(geo, concrete, false, true);
-      var grp = new T.Group();
-      m.rotation.y = Math.PI / 2;
-      grp.add(m);
-      // ara kattaki LED bandı
-      var led = mesh(new T.PlaneGeometry(st.len, 1.2), ledMat, false, false);
-      var ly = 1.1 + LOWER * 0.42 + 1.1;
-      led.position.set(0, ly, -(LOWER * 0.82 + 0.02));
-      grp.add(led);
-      // çatı: öne doğru sarkan saçak, alt yüzünde ışık şeridi
-      var roofD = prof.depth * 0.75;
-      var roof = mesh(new T.BoxGeometry(st.len + 4, 0.5, roofD), std(0x070a16, 0.9), false, false);
-      roof.position.set(0, prof.top + 4.2, -prof.depth + roofD / 2 - 2);
-      grp.add(roof);
-      var strip = mesh(new T.BoxGeometry(st.len, 0.25, 0.6), new T.MeshBasicMaterial({ color: new T.Color(4, 3.8, 3.4), toneMapped: false }), false, false);
-      strip.position.set(0, prof.top + 3.85, -prof.depth + roofD - 2.2);
-      grp.add(strip);
+    STANDS.forEach(function (st, si) {
+      var grp = standSegment(st.len, {
+        seed: 31 + si,
+        density: si === 3 ? 0.7 : 0.9,
+        side: function (lx) {
+          return si === 0 ? 1 : si === 3 ? 0 : lx > 0 ? 1 : 0;
+        },
+      });
       grp.position.set(st.cx, 0, st.cz);
       grp.rotation.y = st.rot;
       s.add(grp);
       st.grp = grp;
     });
 
-    // köşe projektör kuleleri + parlama + ışık hüzmeleri
+    // köşe projektör kuleleri + parlama
     var glowMat = new T.SpriteMaterial({ map: glowTexture(), color: 0xfff2d8, transparent: true, depthWrite: false, blending: T.AdditiveBlending, opacity: 0.95, fog: false });
     var lamp = new T.MeshBasicMaterial({ color: new T.Color(5, 4.8, 4.2), toneMapped: false, fog: false });
     var mastMat = std(0x0b0f1f, 0.7, 0.5);
@@ -559,16 +610,6 @@
       gl.position.copy(head.position).add(new T.Vector3(-dir.x, 0, -dir.z).multiplyScalar(1.5));
       gl.scale.set(34, 34, 1);
       s.add(gl);
-    });
-    // çatı altı lambaları (parlayan noktalar)
-    var dotMat = new T.SpriteMaterial({ map: glowTexture(), color: 0xfff6e2, transparent: true, depthWrite: false, blending: T.AdditiveBlending, opacity: 0.8 });
-    STANDS.forEach(function (st) {
-      for (var x = -st.len / 2 + 4; x <= st.len / 2 - 4; x += 6) {
-        var sp = new T.Sprite(dotMat);
-        sp.position.set(x, prof.top + 3.7, -prof.depth + prof.depth * 0.75 - 2.2);
-        sp.scale.set(5, 5, 1);
-        st.grp.add(sp);
-      }
     });
     // pist ve reklam panoları
     var track = mesh(new T.PlaneGeometry(140, 140), std(0x16251e, 0.95), false, true);
@@ -600,8 +641,6 @@
     R.screen2.position.set(0, prof.top + 9.5, 72 + prof.depth - 4);
     R.screen2.rotation.y = Math.PI;
     s.add(R.screen2);
-
-    buildCrowd(prof);
   }
 
   /**
@@ -610,31 +649,8 @@
    * havada). Golde sırayla ayağa kalkar, kollar havaya kalkar.
    */
   var FAN_COLS = 16;
-  function buildCrowd() {
-    var rows = seatRows();
-    var spots = [];
-    var rnd = A.seeded(31);
-    STANDS.forEach(function (st, si) {
-      var cos = Math.cos(st.rot), sin = Math.sin(st.rot);
-      rows.forEach(function (row) {
-        for (var x = -st.len / 2 + 0.5; x < st.len / 2 - 0.4; x += 0.62) {
-          if (rnd() > (si === 3 ? 0.7 : 0.9)) continue;
-          var lx = x + (rnd() - 0.5) * 0.16, lz = -row.d;
-          spots.push({ x: st.cx + lx * cos + lz * sin, y: row.y, z: st.cz - lx * sin + lz * cos, rot: st.rot, side: si === 0 ? 1 : si === 3 ? 0 : lx > 0 ? 1 : 0 });
-        }
-      });
-    });
-    var n = spots.length;
-    var geo = new T.PlaneGeometry(0.62, 0.93);
-    geo.translate(0, 0.4, 0);
-    var phase = new Float32Array(n), cell = new Float32Array(n);
-    for (var p = 0; p < n; p++) {
-      phase[p] = rnd();
-      // yarısı kendi kulübünün çeşitleri (0..7), yarısı rakip (8..15)
-      cell[p] = (spots[p].side ? 0 : 8) + Math.floor(rnd() * 8);
-    }
-    geo.setAttribute("aPhase", new T.InstancedBufferAttribute(phase, 1));
-    geo.setAttribute("aCell", new T.InstancedBufferAttribute(cell, 1));
+  function fanMaterial() {
+    if (R.fanMat) return R.fanMat;
     R.fanTex = canvasTex(FAN_COLS * 64, 192, function () {});
     var mat = new T.MeshBasicMaterial({ map: R.fanTex, alphaTest: 0.5, color: 0xc9cfdf });
     mat.onBeforeCompile = function (sh) {
@@ -656,7 +672,22 @@
               "transformed.y += 0.02 * sin(uTime * 1.7 + aPhase * 6.283) + uExcite * max(0.0, sin(uTime * 8.5 + aPhase * 37.0)) * (0.18 + 0.16 * aPhase);\n",
           );
     };
-    var fans = new T.InstancedMesh(geo, mat, n);
+    R.fanMat = mat;
+    return mat;
+  }
+  /** spots: { x, y, z, rot, side } — side 1 ev sahibi çeşitleri (0..7), 0 rakip (8..15). */
+  function makeFans(spots, rnd) {
+    var n = spots.length;
+    var geo = new T.PlaneGeometry(0.62, 0.93);
+    geo.translate(0, 0.4, 0);
+    var phase = new Float32Array(n), cell = new Float32Array(n);
+    for (var p = 0; p < n; p++) {
+      phase[p] = rnd();
+      cell[p] = (spots[p].side ? 0 : 8) + Math.floor(rnd() * 8);
+    }
+    geo.setAttribute("aPhase", new T.InstancedBufferAttribute(phase, 1));
+    geo.setAttribute("aCell", new T.InstancedBufferAttribute(cell, 1));
+    var fans = new T.InstancedMesh(geo, fanMaterial(), n);
     var m4 = new T.Matrix4(), q = new T.Quaternion(), up = new T.Vector3(0, 1, 0), sc = new T.Vector3(), pos = new T.Vector3(), col = new T.Color();
     for (var i = 0; i < n; i++) {
       var s0 = spots[i];
@@ -670,13 +701,12 @@
       fans.setColorAt(i, col.setRGB(b, b, b));
     }
     fans.frustumCulled = false;
-    R.scene.add(fans);
-    R.crowd = { fans: fans, n: n };
+    return fans;
   }
 
   /** Taraftar atlası: üst sıra oturan, alt sıra kollar havada; kulüp renkleri. */
   function paintCrowd(mk, ok) {
-    if (!R || !R.crowd) return;
+    if (!R || !R.fanTex) return;
     var c = R.fanTex.userData.ctx;
     var skins = ["#F1C9A5", "#E0AC84", "#C68B63", "#8D5A3B", "#F8D7B5", "#D9A27C"];
     var hairs = ["#1b130d", "#2a1b12", "#3d2817", "#0e0e0e", "#6b4a2a", "#b38b5d"];
@@ -944,12 +974,25 @@
   }
 
 
-  function build(target) {
+  function use(target) {
+    if (R !== target) {
+      segMats = null;
+      boardText = ledText = "";
+    }
     R = target;
     std = K.std;
     mesh = K.mesh;
     canvasTex = K.canvasTex;
     glowTexture = K.glowTexture;
+  }
+  /** Yalnız atmosfer: ortam yansıması + gökyüzü (Slalom kendi şeridini kurar). */
+  function atmosphere(target) {
+    use(target);
+    buildEnv();
+    buildSky();
+  }
+  function build(target) {
+    use(target);
     buildEnv();
     buildSky();
     buildLights();
@@ -971,6 +1014,12 @@
     MID_Z: MID_Z,
     FLOODS: FLOODS,
     build: build,
+    atmosphere: atmosphere,
+    standSegment: standSegment,
+    grassNormal: function () {
+      return grassNormal();
+    },
+    noiseTile: noiseTile,
     fitFov: fitFov,
     paintCrowd: paintCrowd,
     paintBoards: paintBoards,
