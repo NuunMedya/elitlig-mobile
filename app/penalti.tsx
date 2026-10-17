@@ -19,10 +19,11 @@ const CONFIG: ArenaGameConfig = {
   bestKey: ARENA_BEST_KEYS.penalti,
   rules: [
     { icon: "people-outline", text: "Seri penaltı: beşer atış. Sen atarsın, rakibin atışı sırayla skorborda işlenir. Eşitlikte ani ölüm." },
-    { icon: "locate-outline", text: "Sürükle, nişan al; bırak ve güç çubuğu yeşildeyken dokun. Köşe riskli: halka direği aşarsa top dışarı gidebilir." },
-    { icon: "options-outline", text: "Plase dengeli, Sert hızlı ama savruk, Kaşık erken yatan kaleciyi rezil eder." },
-    { icon: "eye-outline", text: "Rakip kaleci senin atışlarından öğrenir: hep aynı köşeye vurursan okur." },
-    { icon: "trophy-outline", text: "Kazandıkça sıradaki kulübe geçersin; finalde ligin en çok kurtarış yapan kalecisi var." },
+    { icon: "locate-outline", text: "Sürükle, nişan al; bırak ve güç çubuğu yeşildeyken dokun. Yeşilde vurursan top tam nişana gider; fazla güç yükseltir, az güç alçaltıp yavaşlatır." },
+    { icon: "options-outline", text: "Plase dengeli, Sert hızlı ama hata affetmez, Kaşık yavaş aşırtma (rüzgârdan çok etkilenir)." },
+    { icon: "flag-outline", text: "Rüzgâr topu sürükler: oku izle, nişanını ona göre kaydır. İleride yağmur, daralan yeşil bölge ve titreyen nişan seni zorlar." },
+    { icon: "flash-outline", text: "Jokerler: Kaleci Gözü kalecinin yönünü gösterir, Füze kusursuz ve çok hızlı vurur, Dev Kale kaleyi büyütür. Kazandıkça yenisi gelir." },
+    { icon: "trophy-outline", text: "Kazandıkça sıradaki, daha zor kulübe geçersin; finalde ligin en çok kurtarış yapan kalecisi var." },
   ],
   describe: (stats) =>
     [
