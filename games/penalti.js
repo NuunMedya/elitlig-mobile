@@ -16,13 +16,35 @@
  * biter. Son kulübü geçen ŞAMPİYON. Kaleyi sen korumazsın — yalnız atarsın.
  *
  * ATIŞ — iki dokunuş:
- *   1. NİŞAN: parmağını sürükle, kaledeki nişangâh hareket eder. Nişanın
- *      çevresindeki halka İSABET RİSKİDİR: köşeye ve direğe yaklaştıkça
- *      vuruş türü ve baskıyla büyür (direkten dönebilir, auta gidebilir).
+ *   1. NİŞAN: parmağını sürükle, kaledeki nişangâh hareket eder. Çerçeveye
+ *      ve direğe yaklaştıkça uyarı çıkar; rüzgâr varsa nişanın altında
+ *      sürüklenme yönü görünür.
  *   2. GÜÇ: parmağını kaldırınca güç çubuğu salınır; yeşil bölgede dokun.
- *      Fazlası topu yükseltir (üstten auta), azı yavaşlatır (kaleci yetişir).
- *   Vuruş türü (altta): PLASE (dengeli), SERT (hızlı ama savruk), KAŞIK
- *   (Panenka — erken yatan kaleciyi rezil eder, bekleyen kaleci kolayca alır).
+ *   Atış BELİRLENİMCİDİR: güç yeşil bölgedeyse top tam nişangâha gider
+ *   (rüzgâr hariç — onu nişanla telafi edersin). Fazla güç topu yükseltir ve
+ *   dışarı açar (üst direk / aut), az güç alçaltır, ortaya çeker ve yavaşlatır
+ *   (kaleci yetişir). Vuruş türü (altta): PLASE (dengeli, geniş bölge), SERT
+ *   (hızlı ama dar bölge, hatası büyük), KAŞIK (Panenka — yavaş aşırtma,
+ *   rüzgârdan çok etkilenir).
+ *
+ * JOKERLER (sağdaki düğmeler, nişan evresinde; turnuva başında birer tane,
+ * her galibiyette ve beşte beşte yenisi, en çok 3):
+ *   KALECİ GÖZÜ  kalecinin bu atıştaki kararını gösterir (sol / sağ / ortada
+ *                bekler / son anda okur) ve kaleci ona uyar.
+ *   FÜZE         güç ayarı gerekmez: kusursuz, 33 m/sn, rüzgârdan az etkilenir.
+ *   DEV KALE     kale bu atışta her yana 0,8 m, üste 0,3 m büyür.
+ *
+ * ZORLUK: ilk maç sakin havada. Merdivende ilerledikçe rüzgâr sertleşir,
+ * yeşil bölge daralır, güç çubuğu hızlanır, güç evresinde nişan titrer,
+ * son basamaklarda yağmur yağar; rakip kaleci daha geniş uçar, daha çok ezber
+ * bozar, daha hızlı okur; rakip atıcılar daha isabetli vurur. Baskı (son
+ * atışlar, ani ölüm) bunları ayrıca artırır.
+ *
+ * HAREKET: atıcı koşu çizgisinden duruştan hızlanır (koşu klibi yere göre
+ * oynar, ayak kaymaz), son uzun adımda vuran bacak geri savrulur, destek ayağı
+ * topun yanına basar, bacak kamçılanır ve takip eder. Kaleci çizgide yan
+ * adımlarla gezinir, temastan hemen önce sıçrama adımı atar, yüklenip iter,
+ * uçar ve yere iner. Kıl payı anlarda kısa yavaş çekim.
  *
  * RAKİP KALECİ: vuruş anında ya bir köşeye yatar (senin geçmiş atışlarından
  * öğrendiği köşeye) ya da topu okuyup tepki verir. Uçuşu fizikseldir: gövdesi
@@ -49,7 +71,10 @@
   var SPOT_Z = 11, BALL_R = 0.11, GRAV = 9.81;
   var KEEPER_Z = 0.35;
   var KICKS = 5;
-  var RUNUP = 0.85; // atıcının koşusu (sn)
+  var RUNUP = 1.3; // atıcının koşusu: başlangıçtan topa temasa (sn)
+  var SUB = 1 / 240; // top fiziğinin sabit alt adımı (sn)
+  var WIND_K = 0.5, WIND_KY = 0.16; // rüzgârın topa ivmesi (m/sn² / (m/sn))
+  var BIG_W = 0.8, BIG_H = 0.3; // DEV KALE: her yana +0,8 m, üste +0,3 m
   var INTRO = 2.6, TURN = 1.0, MATCH_END = 3.2;
   var REPLAY_AT = 1.1, REPLAY_LEN = 2.6;
   var OPP_KICK = 2.1; // rakip atış kartı (sn)
@@ -209,6 +234,24 @@
   var shot = null; // { target, speed, type, quality, sigma, ... }
 
   var kickAt = 0; // atıcının topa değdiği sim zamanı
+
+  // Atış koşulları (her atışta): rüzgâr, yağmur, zorluk çarpanları
+  var cond = { wind: 0, windZ: 0, rain: false, zoneK: 1, period: 1.3, sway: 0 };
+  var matchRain = false;
+  var kplan = null; // rakip kalecinin bu atıştaki kararı (KALECİ GÖZÜ gösterir)
+  var gHalf = HALF, gTop = GOAL_H; // bu atıştaki kale ölçüsü (DEV KALE büyütür)
+
+  // Jokerler: turnuva başında birer tane; maç kazandıkça yenisi (en çok 3)
+  var JOKERS = {
+    eye: { name: "KALECİ GÖZÜ", short: "GÖZ", desc: "Kalecinin yönünü gör", color: "#38BDF8" },
+    rocket: { name: "FÜZE", short: "FÜZE", desc: "Çok hızlı ve isabetli şut", color: "#FB923C" },
+    big: { name: "DEV KALE", short: "DEV KALE", desc: "Kale bu atışta büyür", color: "#34D399" },
+  };
+  var JOKER_KEYS = ["eye", "rocket", "big"];
+  var JOKER_MAX = 3;
+  var jokers = { eye: 1, rocket: 1, big: 1 };
+  var armed = { eye: false, rocket: false, big: false };
+  var jokerUsed = 0;
   var oppShot = null; // rakibin atışı: { taker, result, dir }
 
   // Top ve kaleci (fizik)
@@ -226,9 +269,11 @@
   /* ─────────────── vuruş türleri ─────────────── */
 
   var TYPES = {
-    plase: { label: "PLASE", sigma: 0.15, zone: [0.52, 0.76], speed: [19, 24] },
-    sert: { label: "SERT", sigma: 0.3, zone: [0.7, 0.88], speed: [25, 30] },
-    kasik: { label: "KAŞIK", sigma: 0.12, zone: [0.28, 0.46], speed: [9.5, 11] },
+    // zone: yeşil güç bölgesi · speed: bölgenin altı→üstü hız · up/wide/low: güç hatası
+    // başına sapma (m): fazla güç topu yükseltir ve dışarı açar, az güç alçaltır ve ortaya çeker
+    plase: { label: "PLASE", zone: [0.5, 0.78], speed: [19, 24], up: 5.0, wide: 1.3, low: 2.4 },
+    sert: { label: "SERT", zone: [0.72, 0.87], speed: [25.5, 30], up: 6.5, wide: 2.4, low: 2.0 },
+    kasik: { label: "KAŞIK", zone: [0.28, 0.46], speed: [9.5, 11], up: 4.0, wide: 0.9, low: 1.6 },
   };
   var TYPE_KEYS = ["plase", "sert", "kasik"];
 
@@ -244,22 +289,100 @@
     for (var i = 0; i < list.length; i++) if (list[i] === "g") n++;
     return n;
   }
+  /**
+   * Yeşil bölge: türün bölgesi, zorlukla (rakip merdiveni, yağmur, baskı)
+   * daralır; atıcının isabet özelliği ve ElitLig avantajı genişletir.
+   */
+  function zoneOf(type) {
+    var z = TYPES[type].zone, mid = (z[0] + z[1]) / 2, half = (z[1] - z[0]) / 2;
+    var acc = norm(attr(shooter, "accuracy", 78));
+    var perk = A.perks && A.perks.penalti ? A.clamp(Number(A.perks.penalti.aimBonus) || 0, 0, 0.1) : 0;
+    half *= cond.zoneK * (1 + 0.12 * acc) * (1 + perk * 2);
+    return [mid - half, mid + half];
+  }
   /** Güç kalitesi: yeşil bölgede 1; dışında uzaklıkla düşer. */
   function powerQuality(type, v) {
-    var z = TYPES[type].zone;
+    var z = zoneOf(type);
     if (v >= z[0] && v <= z[1]) return 1;
     var d = v < z[0] ? z[0] - v : v - z[1];
     return A.clamp(1 - d * 3.2, 0, 1);
   }
-  /** Nişanın sapma (metre, 1σ): türe, isabet özelliğine, kenara yakınlığa, baskıya ve güce göre. */
-  function sigmaOf(type, q, ax, ay) {
-    var acc = norm(attr(shooter, "accuracy", 78));
-    var perk = A.perks && A.perks.penalti ? A.clamp(Number(A.perks.penalti.aimBonus) || 0, 0, 0.1) : 0;
-    var edge = Math.max(0, Math.abs(ax) - 2.2) * 0.12 + Math.max(0, ay - 1.7) * 0.1;
-    var base = TYPES[type].sigma * (1 - 0.22 * acc) + edge;
-    return base * (1 + 1.4 * (1 - q)) * (1 + 0.25 * pressure()) * (1 - perk * 2);
+  /** FÜZE için kusursuz güç: bölgenin üst ucu (en hızlı isabetli an). */
+  function perfectPower(type) {
+    var z = zoneOf(type);
+    return z[1] - (z[1] - z[0]) * 0.1;
   }
-  /** Gidiş noktasından hız vektörü: yerçekimiyle tam hedefe varan atış. */
+
+  /**
+   * ATIŞ MODELİ — belirlenimci: güç yeşil bölgedeyse top TAM nişana gider
+   * (rüzgâr hariç; onu oyuncu nişanla telafi eder). Bölgenin dışında sapma
+   * güç hatasıyla orantılıdır: fazla güç topu yükseltir ve kenara açar (üst
+   * direk / aut), az güç alçaltır, ortaya çeker ve yavaşlatır (kaleci yetişir).
+   * SERT hızlıdır ama bölgesi dar, hatası büyük; KAŞIK yavaş bir aşırtma.
+   */
+  function shotModel(type, ax, ay, v, rocket) {
+    var tp = TYPES[type];
+    var z = zoneOf(type);
+    var acc = norm(attr(shooter, "accuracy", 78));
+    var pw = norm(attr(shooter, "power", 78));
+    var tx = ax, ty = ay;
+    if (type === "kasik") {
+      tx = A.clamp(ax, -2.6, 2.6);
+      ty = Math.max(0.9, ay);
+    }
+    var over = rocket ? 0 : Math.max(0, v - z[1]), under = rocket ? 0 : Math.max(0, z[0] - v);
+    var inZ = A.clamp((v - z[0]) / Math.max(0.01, z[1] - z[0]), 0, 1);
+    var speed = (tp.speed[0] + (tp.speed[1] - tp.speed[0]) * inZ) * (1 + 0.04 * pw);
+    var miss = 1 - 0.18 * acc;
+    if (over > 0) {
+      ty += over * tp.up * miss;
+      tx += (Math.sign(ax) || 1) * over * tp.wide * miss;
+      speed *= 1 + over * 0.25;
+    }
+    if (under > 0) {
+      ty -= under * tp.low;
+      tx *= 1 - Math.min(0.7, under * 1.6);
+      speed *= Math.max(0.45, 1 - under * 1.3);
+    }
+    if (rocket) speed = 33 * (1 + 0.04 * pw);
+    ty = Math.max(BALL_R, ty);
+    var curl = type === "plase" && !rocket ? -Math.sign(tx) * 1.6 * (1 + 0.5 * norm(attr(shooter, "curve", 78))) : 0;
+    return { tx: tx, ty: ty, speed: speed, curl: curl, lob: type === "kasik" && !rocket, windK: rocket ? 0.3 : 1, over: over, under: under };
+  }
+
+  /** Bir fizik alt adımı (uçuşta): yerçekimi, falso, rüzgâr, hava direnci. */
+  function integrate(b, h, windK) {
+    b.vy -= GRAV * h;
+    b.vx += b.curl * h;
+    if (windK) {
+      b.vx += WIND_K * cond.wind * windK * h;
+      b.vy += WIND_KY * cond.windZ * windK * h;
+    }
+    var sp = Math.hypot(b.vx, b.vy, b.vz);
+    var drag = 1 - 0.006 * sp * h;
+    b.vx *= drag;
+    b.vy *= drag;
+    b.vz *= drag;
+    b.x += b.vx * h;
+    b.y += b.vy * h;
+    b.z += b.vz * h;
+  }
+  /** Uçuşu kale çizgisine (z = 0) kadar sür: kesişme noktası ve süresi. */
+  function crossing(b0, windK) {
+    var b = { x: b0.x, y: b0.y, z: b0.z, vx: b0.vx, vy: b0.vy, vz: b0.vz, curl: b0.curl };
+    var t = 0;
+    while (b.z > 0 && t < 4) {
+      var px = b.x, py = b.y, pz = b.z;
+      integrate(b, SUB, windK);
+      t += SUB;
+      if (b.z <= 0) {
+        var f = pz / Math.max(1e-6, pz - b.z);
+        return { x: px + (b.x - px) * f, y: py + (b.y - py) * f, t: t - SUB * (1 - f) };
+      }
+    }
+    return { x: b.x, y: b.y, t: t };
+  }
+  /** Analitik ilk tahmin: yerçekimiyle hedefe varan hız vektörü. */
   function launch(b, tx, ty, speed, curl, lob) {
     var dx = tx - b.x, dz = 0 - b.z;
     var dist = Math.hypot(dx, dz);
@@ -272,6 +395,52 @@
     b.live = true;
     b.t = 0;
     return ft;
+  }
+  /**
+   * Nişan çözücü: hava direnci ve falso dahil, rüzgârsız uçuş kale çizgisini
+   * tam (tx, ty)'de kessin diye ilk hız birkaç adımda düzeltilir.
+   */
+  function aimLaunch(b, tx, ty, speed, curl, lob) {
+    launch(b, tx, ty, speed, curl, lob);
+    for (var it = 0; it < 6; it++) {
+      var c = crossing(b, 0);
+      var ex = tx - c.x, ey = ty - c.y;
+      if (Math.abs(ex) < 0.002 && Math.abs(ey) < 0.002) break;
+      b.vx += ex / Math.max(0.2, c.t);
+      b.vy += ey / Math.max(0.2, c.t);
+    }
+  }
+  /** Bir atışın kale çizgisini keseceği nokta (rüzgâr dahil) — test ve bot için. */
+  function predict(type, ax, ay, v, rocket) {
+    var m = shotModel(type, ax, ay, v, rocket);
+    var b = newBall();
+    aimLaunch(b, m.tx, m.ty, m.speed, m.curl, m.lob);
+    var c = crossing(b, m.windK);
+    return { x: c.x, y: c.y, t: c.t, tx: m.tx, ty: m.ty, speed: m.speed };
+  }
+
+  /**
+   * Atış koşulları: ilk maçta sakin hava; merdivende ilerledikçe rüzgâr
+   * sertleşir, yeşil bölge daralır, güç çubuğu hızlanır, nişan titrer.
+   * Son basamaklarda yağmur (bölge daha da daralır).
+   */
+  function rollConditions() {
+    var d = opp.diff, pr = pressure();
+    var windMax = matchIdx === 0 ? 0 : 1.5 + 6.5 * d;
+    cond = {
+      wind: windMax ? A.rand(0.35, 1) * windMax * (Math.random() < 0.5 ? -1 : 1) : 0,
+      windZ: windMax ? A.rand(-0.5, 0.5) * windMax : 0,
+      rain: matchRain,
+      zoneK: (1 - 0.36 * d) * (matchRain ? 0.86 : 1) * (1 - 0.12 * pr),
+      period: (1.3 - 0.36 * d) * (1 - 0.14 * pr) * (matchRain ? 0.93 : 1),
+      sway: matchIdx === 0 ? 0.03 + 0.08 * pr : 0.05 + 0.2 * d + 0.12 * pr,
+    };
+  }
+  /** Güç evresinde nişan hafifçe titrer (baskı ve zorlukla büyür). */
+  function aimNow() {
+    if (state !== "power" || armed.rocket) return { x: aim.x, y: aim.y };
+    var t = powerT, a = cond.sway;
+    return { x: aim.x + a * (Math.sin(t * 1.9) * 0.7 + Math.sin(t * 3.7 + 1) * 0.3), y: Math.max(0.15, aim.y + a * 0.6 * Math.sin(t * 2.6 + 2)) };
   }
 
   /* ─────────────── kaleci gövdesi ─────────────── */
@@ -340,7 +509,7 @@
   function diveTo(k, now, tx, ty) {
     var dx = tx - k.x, dy = ty - 0.98;
     var need = Math.hypot(dx, dy);
-    var reach = A.clamp(need - ARM * 0.75, 0, DIVE_REACH);
+    var reach = A.clamp(need - ARM * 0.75, 0, DIVE_REACH * (0.94 + 0.12 * opp.diff));
     if (need < 0.55) {
       // yakın top: yerinde kalır, eller topa
       k.stay = true;
@@ -353,23 +522,21 @@
   /* ─────────────── top fiziği ─────────────── */
 
   var lastContact = -1;
+  /** Top fiziği: sabit alt adımlarla (nişan çözücüyle aynı tümleyici). */
   function stepBall(dt) {
+    if (!ball.live) return;
+    var n = Math.max(1, Math.ceil(dt / SUB - 1e-6));
+    for (var i = 0; i < n; i++) stepOnce(dt / n);
+  }
+  function stepOnce(dt) {
     var b = ball;
     if (!b.live) return;
     b.t += dt;
+    var HALF = gHalf, GOAL_H = gTop; // eslint-disable-line no-shadow
     if (!b.caught) {
-      b.vy -= GRAV * dt;
-      b.vx += b.curl * dt;
-      // hava direnci (hafif)
-      var sp = Math.hypot(b.vx, b.vy, b.vz);
-      var drag = 1 - 0.006 * sp * dt;
-      b.vx *= drag;
-      b.vy *= drag;
-      b.vz *= drag;
       var pz = b.z;
-      b.x += b.vx * dt;
-      b.y += b.vy * dt;
-      b.z += b.vz * dt;
+      var airborne = !b.goal && !b.touched && !b.post && b.y > BALL_R + 0.01;
+      integrate(b, dt, airborne && shot ? shot.windK : 0);
       b.wx += (-b.vz / BALL_R) * dt * 0.25;
       b.wy += (b.curl * 4 + b.vx) * dt;
       // zemin
@@ -451,7 +618,7 @@
         var backAt = NET_D - BALL_R - 0.05;
         if (depth > backAt) {
           b.z = -backAt;
-          netHit(b.x, b.y, Math.abs(b.vz));
+          netHit((b.x * S3.HALF) / HALF, (b.y * S3.GOAL_H) / GOAL_H, Math.abs(b.vz));
           b.vz = Math.abs(b.vz) * 0.08;
         }
         if (Math.abs(b.x) > HALF - BALL_R) {
@@ -482,6 +649,9 @@
     tally = { goals: 0, shots: 0, wins: 0, perfect: 0 };
     champion = false;
     history = [];
+    jokers = { eye: 1, rocket: 1, big: 1 };
+    armed = { eye: false, rocket: false, big: false };
+    jokerUsed = 0;
     A.particles.length = 0;
     A.floaters.length = 0;
     A.banner = null;
@@ -494,6 +664,7 @@
     matchIdx = m;
     opp = opponentOf(m);
     match = { me: [], op: [], opDirs: [], sudden: false, turn: "shoot" };
+    matchRain = opp.diff >= 0.55 && Math.random() < 0.3 + 0.45 * opp.diff;
     resetKick();
     if (R) rebuildCast();
     setState("intro");
@@ -517,6 +688,12 @@
     lastContact = -1;
     netReset();
     simTime = 0;
+    armed = { eye: false, rocket: false, big: false };
+    gHalf = HALF;
+    gTop = GOAL_H;
+    kplan = null;
+    slowT = 0;
+    slowDone = false;
   }
 
   /** Sıradaki atış: kim atacak, maç bitti mi? */
@@ -536,6 +713,8 @@
     }
     resetKick();
     gk.reflex = attr(opp.keeper, "reflex", 75);
+    rollConditions();
+    kplan = planKeeper();
     aim.x = 0;
     aim.y = 1.1;
     setState("turn");
@@ -589,7 +768,10 @@
       if (goalsOf(match.me) === KICKS && match.me.length === KICKS) {
         endGain += 300;
         tally.perfect += 1;
+        grantJoker();
       }
+      var gift = grantJoker();
+      if (gift) A.floatText("JOKER: " + JOKERS[gift].name + " +1", W / 2, H * 0.3, JOKERS[gift].color, 20);
       if (matchIdx >= keepers.length - 1) {
         champion = true;
         endGain += 1500;
@@ -617,6 +799,7 @@
         perfect: tally.perfect,
         champion: champion,
         keeper: Math.min(matchIdx, keepers.length - 1) + 1,
+        jokers: jokerUsed,
         keepers: keepers.length,
       },
     });
@@ -625,65 +808,90 @@
   /* ─────────────── atış (sen) ─────────────── */
 
   function lockAim() {
-    setState("power");
     powerT = 0;
+    if (armed.rocket) {
+      // FÜZE: güç ayarı gerekmez — kusursuz ve en hızlı
+      setState("power");
+      takeShot(perfectPower(shotType));
+      return;
+    }
+    setState("power");
   }
 
-  /** Güç salınımı: 0 → 1 → 0 (baskı altında hızlanır). */
+  /** Güç salınımı: 0 → 1 → 0 (zorluk ve baskıyla hızlanır). */
   function powerAt(t) {
-    var period = 1.25 - 0.2 * pressure();
-    return 0.5 - 0.5 * Math.cos((t / period) * Math.PI * 2);
+    return 0.5 - 0.5 * Math.cos((t / cond.period) * Math.PI * 2);
+  }
+
+  /* ─────────────── jokerler ─────────────── */
+
+  function grantJoker() {
+    var pool = JOKER_KEYS.filter(function (k) {
+      return jokers[k] < JOKER_MAX;
+    });
+    if (!pool.length) return null;
+    var k = pool[(Math.random() * pool.length) | 0];
+    jokers[k] += 1;
+    return k;
+  }
+  /** Joker kullan (yalnız nişan evresinde; bu atış için). */
+  function useJoker(key) {
+    if (state !== "aim" || !JOKERS[key] || jokers[key] <= 0 || armed[key]) return false;
+    jokers[key] -= 1;
+    armed[key] = true;
+    jokerUsed += 1;
+    if (key === "big") {
+      gHalf = HALF + BIG_W;
+      gTop = GOAL_H + BIG_H;
+    }
+    A.sound(key === "eye" ? "whoosh" : "level");
+    A.haptic("medium");
+    A.floatText(JOKERS[key].name + "!", W / 2, H * 0.36, JOKERS[key].color, 24);
+    return true;
   }
 
   function takeShot(v) {
-    var tp = TYPES[shotType];
-    var q = powerQuality(shotType, v);
-    var sig = sigmaOf(shotType, q, aim.x, aim.y);
-    var tx = aim.x + A.gauss(0, sig);
-    var ty = aim.y + A.gauss(0, sig * 0.7);
-    var z = tp.zone;
-    if (v > z[1]) ty += (v - z[1]) * 4.2; // fazla güç: top yükselir
-    if (v < z[0]) ty -= (z[0] - v) * 1.2;
-    ty = Math.max(BALL_R, ty);
-    var pw = norm(attr(shooter, "power", 78));
-    var f = A.clamp(v, 0, 1);
-    var speed = (tp.speed[0] + (tp.speed[1] - tp.speed[0]) * f) * (1 + 0.04 * pw) * (0.75 + 0.25 * q);
-    if (shotType === "kasik") {
-      tx = aim.x * 0.35 + A.gauss(0, sig);
-      ty = Math.max(1.0, ty);
-    }
-    var curl = shotType === "plase" ? -Math.sign(tx) * 1.6 * (1 + 0.5 * norm(attr(shooter, "curve", 78))) : 0;
-    shot = { type: shotType, tx: tx, ty: ty, speed: speed, q: q, v: v, curl: curl, aimX: aim.x, aimY: aim.y };
+    var ae = aimNow();
+    var m = shotModel(shotType, ae.x, ae.y, v, armed.rocket);
+    shot = {
+      type: shotType, tx: m.tx, ty: m.ty, speed: m.speed, curl: m.curl, lob: m.lob, windK: m.windK,
+      q: armed.rocket ? 1 : powerQuality(shotType, v), v: v, over: m.over, under: m.under,
+      aimX: ae.x, aimY: ae.y, rocket: armed.rocket, big: armed.big, eye: armed.eye,
+    };
     tally.shots += 1;
-    history.push(aim.x < -1 ? -1 : aim.x > 1 ? 1 : 0);
+    history.push(ae.x < -1 ? -1 : ae.x > 1 ? 1 : 0);
     setState("runup");
   }
 
-  /** Rakip kalecinin kararı: vuruş anında yat ya da oku. */
-  function keeperDecides() {
-    var k = gk;
+  /**
+   * Rakip kalecinin kararı — atıştan ÖNCE verilir (KALECİ GÖZÜ bunu gösterir):
+   * geçmiş atışlarından öğrendiği köşeye yatar, ortada bekler ya da son anda
+   * topu okur. Merdivende ilerledikçe daha çok ezber bozar ve daha hızlı okur.
+   */
+  function planKeeper() {
     var d = opp.diff;
-    var rf = norm(k.reflex);
-    // senin geçmişin: sol / orta / sağ sıklığı (Laplace)
+    var rf = norm(attr(opp.keeper, "reflex", 75));
     var c = { "-1": 1, "0": 0.6, "1": 1 };
-    for (var i = Math.max(0, history.length - 7); i < history.length - 1; i++) c[history[i]] += 1;
+    for (var i = Math.max(0, history.length - 6); i < history.length; i++) c[history[i]] += 1;
     var commit = 0.5 + 0.25 * d;
     if (Math.random() < commit) {
       var sharp = 1 + 2 * d;
       var wl = Math.pow(c["-1"], sharp), wc = Math.pow(c["0"], sharp) * 0.5, wr = Math.pow(c["1"], sharp);
       var r = Math.random() * (wl + wc + wr);
       var side = r < wl ? -1 : r < wl + wc ? 0 : 1;
-      if (side === 0) {
-        k.stay = true;
-        k.set = 1;
-      } else {
-        var lead = A.rand(-0.06, 0.04); // vuruştan hemen önce ya da hemen sonra yatar
-        k.plan = { at: kickAt + lead, tx: side * A.rand(2.0, 2.9), ty: A.rand(0.45, 1.7) };
-      }
-    } else {
-      var react = 0.3 - 0.11 * d - 0.04 * rf;
-      k.plan = { at: kickAt + react, read: true };
+      if (side === 0) return { mode: "stay", side: 0 };
+      return { mode: "commit", side: side, lead: A.rand(-0.06, 0.04), tx: side * A.rand(2.0, 2.9), ty: A.rand(0.45, 1.7) };
     }
+    return { mode: "read", side: 0, react: 0.3 - 0.11 * d - 0.04 * rf };
+  }
+  /** Vuruş anında kararı uygula. */
+  function keeperDecides() {
+    var k = gk, p = kplan || planKeeper();
+    if (p.mode === "stay") {
+      k.stay = true;
+      k.set = 1;
+    } else if (p.mode === "commit") k.plan = { at: kickAt + p.lead, tx: p.tx * (gHalf / HALF), ty: p.ty };
+    else k.plan = { at: kickAt + p.react, read: true };
   }
   function keeperThink() {
     var k = gk;
@@ -744,7 +952,7 @@
     if (scored) {
       tally.goals += 1;
       gain = 100;
-      var corner = Math.abs(ball.x) > 2.4, high = ball.y > 1.65;
+      var corner = Math.abs(ball.x) > gHalf - 1.26, high = ball.y > gTop - 0.8;
       if (corner && high) {
         gain += 150;
         tags.push("DOKSAN");
@@ -767,6 +975,13 @@
         tags.push("ANİ ÖLÜM");
       }
     }
+    if (!scored && shot) {
+      // neden kaçtı: oyuncuya geri bildirim
+      if (shot.over > 0.015) tags.push("FAZLA GÜÇ");
+      else if (shot.under > 0.015) tags.push("ZAYIF VURUŞ");
+      if (Math.abs(cond.wind) > 2 && result !== "kurtaris") tags.push("RÜZGÂR");
+    }
+    if (scored && shot && shot.rocket) tags.push("FÜZE");
     points += gain;
     if (gain) scoreBump = 1;
     lastKick = { who: "me", result: result, tags: tags, gain: gain, good: scored };
@@ -850,15 +1065,16 @@
         if (stateT >= INTRO) nextKick();
         return;
       case "turn":
-        gk.crouch = 0.5 + 0.5 * Math.sin(A.time * 3.2);
+        gk.crouch = 0.72 + 0.06 * Math.sin(A.time * 2.4);
         if (stateT >= TURN) {
           setState("aim");
           A.sound("whistle");
         }
         return;
       case "aim":
-        gk.crouch = 0.5 + 0.5 * Math.sin(A.time * 3.4);
-        gk.x = Math.sin(A.time * 1.3) * 0.08;
+        gk.crouch = 0.75 + 0.06 * Math.sin(A.time * 2.6);
+        // çizgide yan adımlar: zor kaleciler daha hareketli
+        gk.x = (Math.sin(A.time * 1.25) * 0.7 + Math.sin(A.time * 2.9) * 0.3) * (0.08 + 0.22 * opp.diff);
         return;
       case "power":
         powerT += dt;
@@ -873,6 +1089,7 @@
       case "flight":
         keeperThink();
         stepBall(sdt);
+        closeCall(dt);
         record();
         var res = judge();
         if (res) {
@@ -907,10 +1124,28 @@
     }
   }
 
+  /** Kıl payı anlarda yavaş çekim: top eldivenin yanından geçerken. */
+  var slowT = 0, slowDone = false;
+  function closeCall(dt) {
+    if (slowT > 0) {
+      slowT -= dt;
+      if (slowT <= 0) slow = 1;
+      return;
+    }
+    if (slowDone || !gk.dive || A.reduceMotion || ball.z > 2.4 || ball.z < 0.3) return;
+    var kb = keeperBody(gk, simTime);
+    var hx = kb.cx + kb.ax * ARM, hy = kb.cy + kb.ay * ARM;
+    if (Math.hypot(ball.x - hx, ball.y - hy) < 0.8) {
+      slowDone = true;
+      slow = 0.3;
+      slowT = 0.5;
+    }
+  }
+
   function strikeMine() {
     kickAt = simTime;
     ball = newBall();
-    launch(ball, shot.tx, shot.ty, shot.speed, shot.curl, shot.type === "kasik");
+    aimLaunch(ball, shot.tx, shot.ty, shot.speed, shot.curl, shot.lob);
     keeperDecides();
     keeperThink();
     setState("flight");
@@ -944,6 +1179,13 @@
       return { key: k, x: x0 + i * (bw + gap), y: y, w: bw, h: bh };
     });
   }
+  /** Joker düğmeleri: sağ kenarda dikey üç daire. */
+  function jokerButtons() {
+    var r = 21, x = W - 32, y0 = Math.max(250, H * 0.5);
+    return JOKER_KEYS.map(function (k, i) {
+      return { key: k, x: x, y: y0 + i * 62, r: r };
+    });
+  }
   function hitRect(r, p) {
     return p.x >= r.x - 4 && p.x <= r.x + r.w + 4 && p.y >= r.y - 6 && p.y <= r.y + r.h + 6;
   }
@@ -955,6 +1197,13 @@
       return;
     }
     if (state === "aim") {
+      var jb = jokerButtons();
+      for (var j = 0; j < jb.length; j++)
+        if (Math.hypot(p.x - jb[j].x, p.y - jb[j].y) < jb[j].r + 8) {
+          useJoker(jb[j].key);
+          dragFrom = null;
+          return;
+        }
       var rs = typeRects();
       for (var i = 0; i < rs.length; i++)
         if (hitRect(rs[i], p)) {
@@ -976,8 +1225,8 @@
     if (state === "aim" && dragFrom) {
       var dx = p.x - dragFrom.x, dy = p.y - dragFrom.y;
       dragFrom.moved = Math.max(dragFrom.moved, Math.hypot(dx, dy));
-      aim.x = A.clamp(dragFrom.ax + (dx / W) * AIM_SENS_X, -HALF - 0.9, HALF + 0.9);
-      aim.y = A.clamp(dragFrom.ay - (dy / H) * AIM_SENS_Y, 0.15, GOAL_H + 0.8);
+      aim.x = A.clamp(dragFrom.ax + (dx / W) * AIM_SENS_X, -gHalf - 0.9, gHalf + 0.9);
+      aim.y = A.clamp(dragFrom.ay - (dy / H) * AIM_SENS_Y, 0.15, gTop + 0.8);
       return;
     }
   }
@@ -1043,6 +1292,7 @@
       tmpV = new T.Vector3();
       R = { renderer: renderer, scene: scene, camera: camera, U: { time: { value: 0 }, excite: { value: 0 } }, cast: {} };
       S3.build(R);
+      buildWeather();
       rebuildCast();
       resizeGL();
     } catch (e) {
@@ -1145,6 +1395,89 @@
     return t === text ? t : t + "…";
   }
 
+  /* ─────────────── hava: yağmur, rüzgâr bayrakları, füze ışıması ─────────────── */
+
+  function buildWeather() {
+    var N = 1500;
+    var g = new T.BufferGeometry();
+    g.setAttribute("position", new T.BufferAttribute(new Float32Array(N * 6), 3));
+    var rain = new T.LineSegments(g, new T.LineBasicMaterial({ color: 0xc8dcff, transparent: true, opacity: 0.5, depthWrite: false }));
+    rain.frustumCulled = false;
+    rain.visible = false;
+    R.scene.add(rain);
+    var rnd = A.seeded(77), drops = [];
+    for (var i = 0; i < N; i++) drops.push({ x: -13 + rnd() * 26, y: rnd() * 14, z: -3 + rnd() * 25, v: 10 + rnd() * 4 });
+    R.rain = { mesh: rain, drops: drops };
+    // kale arkasında iki bayrak direği: rüzgârın yönü ve şiddeti
+    var poleMat = std(0xe2e8f0, 0.4, 0.6);
+    R.flags = [-1, 1].map(function (side) {
+      var pole = mesh(new T.CylinderGeometry(0.035, 0.045, 4.4, 10), poleMat, true, false);
+      pole.position.set(side * 5.9, 2.2, -5.3);
+      R.scene.add(pole);
+      var geo = new T.PlaneGeometry(1.3, 0.8, 10, 5);
+      var flag = mesh(geo, new T.MeshStandardMaterial({ color: 0xffffff, side: T.DoubleSide, roughness: 0.8 }), false, false);
+      flag.frustumCulled = false;
+      R.scene.add(flag);
+      return { side: side, flag: flag, base: Float32Array.from(geo.attributes.position.array) };
+    });
+    // füze ışıması (topun etrafında)
+    var glow = new T.Sprite(new T.SpriteMaterial({ map: glowTexture(), color: 0xff8a3d, transparent: true, depthWrite: false, blending: T.AdditiveBlending, opacity: 0.9 }));
+    glow.scale.set(0.9, 0.9, 1);
+    glow.visible = false;
+    R.scene.add(glow);
+    R.rocketGlow = glow;
+    R.goalVis = { x: 1, y: 1 };
+  }
+  function syncWeather(dt) {
+    var rain = R.rain, on = cond.rain && state !== "attract";
+    rain.mesh.visible = on;
+    if (on) {
+      var arr = rain.mesh.geometry.attributes.position.array;
+      var wx = cond.wind * 0.35;
+      for (var i = 0; i < rain.drops.length; i++) {
+        var d = rain.drops[i];
+        d.y -= d.v * dt;
+        d.x += wx * dt;
+        if (d.y < 0) {
+          d.y += 14;
+          d.x = -13 + Math.random() * 26;
+        }
+        if (d.x > 13) d.x -= 26;
+        if (d.x < -13) d.x += 26;
+        var o = i * 6;
+        arr[o] = d.x;
+        arr[o + 1] = d.y;
+        arr[o + 2] = d.z;
+        arr[o + 3] = d.x - wx * 0.03;
+        arr[o + 4] = d.y + 0.38;
+        arr[o + 5] = d.z;
+      }
+      rain.mesh.geometry.attributes.position.needsUpdate = true;
+    }
+    R.scene.fog.density = on ? 0.012 : 0.0065;
+    R.renderer.toneMappingExposure = on ? 0.9 : 1.0;
+    // bayraklar: rüzgâr yönünde dalgalanır; rüzgâr yoksa sarkar
+    var str = A.clamp(Math.abs(cond.wind) / 6, 0, 1), dir = cond.wind >= 0 ? 1 : -1;
+    var kit = kitOf(opp.keeper);
+    R.flags.forEach(function (f, fi) {
+      f.flag.material.color.set(fi ? kit.primary : kitOf(shooter).primary);
+      var pos = f.flag.geometry.attributes.position, b = f.base;
+      for (var v = 0; v < pos.count; v++) {
+        var u = (b[v * 3] + 0.65) / 1.3, h = (0.4 - b[v * 3 + 1]) / 0.8;
+        var reach = u * 1.3 * (0.25 + 0.75 * str);
+        var droop = u * (1 - str) * 0.9;
+        pos.setXYZ(v, f.side * 5.9 + dir * reach, 4.3 - h * 0.8 - droop, -5.3 + Math.sin(A.time * (5 + 6 * str) - u * 7 + fi) * 0.14 * u * (0.25 + str));
+      }
+      pos.needsUpdate = true;
+      f.flag.geometry.computeVertexNormals();
+    });
+    // DEV KALE: kale yaylanarak büyür / küçülür
+    var gv = R.goalVis, k2 = Math.min(1, dt * 7);
+    gv.x += (gHalf / HALF - gv.x) * k2;
+    gv.y += (gTop / GOAL_H - gv.y) * k2;
+    R.goalRoot.scale.set(gv.x, gv.y, 1);
+  }
+
   var REFEREE = makePerson(-900, "Hakem", { id: -900, name: "Hakem", kit: { primary: "#111827", secondary: "#FACC15" } }, { shirt: "" });
 
   function athlete(key, person, opts) {
@@ -1173,172 +1506,316 @@
 
   /* ─────────────── pozlar ─────────────── */
 
-  var START = { x: -0.95, z: SPOT_Z + 2.25 }, KICK = { x: -0.14, z: SPOT_Z + 0.22 };
-  var JOG_PLANT = 0.78;
+  /*
+   * ATICI HAREKETİ (sağ ayaklı). Ölçüler iskeletten ölçülmüştür (model +z'ye
+   * bakar, sol +x): temas anında vuran ayağın iç yüzü topun arkasında, destek
+   * (sol) ayağı topun ~30 cm solunda ve hizasında.
+   *   1. Bekleyiş: koşu çizgisinin başında, topa dönük, nefes alır.
+   *   2. Koşu: duruştan hızlanır; koşu klibi YERE GÖRE hızla oynar (ayak kaymaz).
+   *   3. Son uzun adım (−0,32 sn): sağ ayakla itiş, havada uzun adım, vuran
+   *      bacak dizden bükülerek geri savrulur, sol kol dengeye açılır.
+   *   4. Destek ayağı basar (−0,08 sn), bacak aşağı-öne kamçılanır, temas (0).
+   *   5. Takip: bacak yukarı uzanır, destek ayağında parmak ucuna yükselir,
+   *      gövde topla birlikte öne gider; bacak iner, toparlanır.
+   */
+  var KROOT = { x: 0.04, z: SPOT_Z + 0.5 }; // destek ayağı bastığında kök (yön −z)
+  var RDIR = { x: 0.375, z: -0.927 }; // koşu yönü (sol arkadan topa)
+  var STRIDE = 0.85, JOG_LEN = 2.6;
+  var PRP = { x: KROOT.x - RDIR.x * STRIDE, z: KROOT.z - RDIR.z * STRIDE }; // son adımın başı
+  var START = { x: PRP.x - RDIR.x * JOG_LEN, z: PRP.z - RDIR.z * JOG_LEN };
+  var T_STRIDE = 0.32, T_PLANT = 0.08; // temastan önce: son adım başı, destek ayağı
+  var JOG_V1 = 5.8; // koşu klibinin 1× hızdaki yer hızı (m/sn)
+  var JOG_PUSH = 0.47; // klipte sağ ayağın basıp itmeye başladığı an
+  var RUN_HEAD = Math.atan2(RDIR.x, RDIR.z), FACE = Math.PI;
+  /** Koşu: duruştan hızlanan yol (m) ve hız, t ∈ [0, T1]. */
+  var ACC_T = 0.3;
+  function runDist(t, T1) {
+    var vmax = JOG_LEN / (T1 - ACC_T / 2);
+    if (t < ACC_T) return { d: (vmax * t * t) / (2 * ACC_T), v: (vmax * t) / ACC_T };
+    return { d: vmax * (t - ACC_T / 2), v: vmax };
+  }
+  /** Temas sonrası kökün öne kayışı (destek ayağı yerde sabit kalsın diye). */
+  function followOff(tk) {
+    var K2 = [[-0.08, 0], [0, 0.08], [0.08, 0.17], [0.16, 0.28], [0.5, 0.3], [1, 0.42]];
+    if (tk <= K2[0][0]) return 0;
+    for (var i = 1; i < K2.length; i++)
+      if (tk <= K2[i][0]) return A.lerp(K2[i - 1][1], K2[i][1], (tk - K2[i - 1][0]) / (K2[i][0] - K2[i - 1][0]));
+    return K2[K2.length - 1][1];
+  }
+  /** Vuruş eklemleri — tk: temasa göre zaman (sn); w: katman ağırlığı. */
+  function kickJ(J, tk, w, lofted) {
+    var L = A.lerp, S = A.smooth, C = A.clamp;
+    function seg(t0, t1) {
+      return S(C((tk - t0) / (t1 - t0), 0, 1));
+    }
+    var stride = seg(-0.32, -0.08), back = seg(-0.3, -0.07), down = seg(-0.07, 0), thru = seg(0, 0.16), land = seg(0.16, 0.5), rec = seg(0.5, 0.95);
+    var lift = lofted ? 0.15 : 0;
+    // destek (sol) bacak: öne uzanır, basar, dizden yumuşar, parmak ucuna yükselir
+    J.hpa.rotation.x = w * L(L(L(0.45, -0.38, stride), -0.18, thru), 0.0, land);
+    J.kna.rotation.x = w * L(L(L(1.1, 0.28, stride), 0.42, down), 0.15, land);
+    J.hpa.rotation.z = w * 0.14;
+    J.fta.rotation.x = w * L(0, 0.25, thru) * (1 - land);
+    // vuran (sağ) bacak
+    var hip = L(L(L(L(-0.15, 0.62, back), -0.82, down), -1.4 - lift, thru), -0.25, land);
+    J.hpb.rotation.x = w * L(hip, 0, rec);
+    var knee = L(L(L(L(0.5, 1.6, back), 0.28, down), 0.06, thru), 0.35, land);
+    J.knb.rotation.x = w * L(knee, 0.1, rec);
+    J.hpb.rotation.z = w * L(0, 0.12, down) * (1 - land);
+    J.hpb.rotation.y = w * L(0, -0.5, back) * (1 - land);
+    J.ftb.rotation.x = w * L(0.2, 0.45, back) * (1 - land);
+    // gövde: adımda geri ve destek tarafına yatar, omuzlar açılır; temasta öne
+    J.spine.rotation.x = w * (L(L(L(0.12, -0.12 - lift, back), 0.08, down), 0.18, thru) * (1 - rec) + 0.05 * rec);
+    J.spine.rotation.z = w * L(0, -0.22, stride) * (1 - land);
+    J.spine.rotation.y = w * L(L(0, 0.35, back), -0.25, thru) * (1 - land);
+    // kollar: sol kol yana-yukarı (denge), sağ kol öne çapraz
+    J.sha.rotation.z = w * (L(L(0.25, 1.25, back), 0.9, thru) * (1 - rec) + 0.25 * rec);
+    J.sha.rotation.x = w * L(0, -0.35, back) * (1 - rec);
+    J.ela.rotation.x = -0.35 * w;
+    J.shb.rotation.z = w * (L(-0.25, -0.55, back) * (1 - rec) - 0.25 * rec);
+    J.shb.rotation.x = w * L(L(0.2, -0.75, back), 0.35, thru) * (1 - rec);
+    J.elb.rotation.x = -0.5 * w;
+    J.head.rotation.x = w * (L(0.3, 0.45, back) * (1 - land) + 0.1);
+    J.hips.position.y = 0.94 + w * L(L(0.04, -0.05, stride), 0.02, thru) * (1 - rec);
+  }
+  /** Kök: konum + yön (kökün yerel +z'si ileri). */
+  function setRoot(a, x, z, yaw) {
+    a.root.position.set(x, 0, z);
+    a.root.rotation.y = yaw;
+  }
+  /** Temas sonrası kökün dünyadaki yeri (yön −z). */
+  function afterRoot(tk) {
+    var off = followOff(tk);
+    return { x: KROOT.x, z: KROOT.z - off };
+  }
 
   /**
-   * Atıcının pozu. phase: 'wait' | 'run' (p 0..1) | 'kick' (k sn) | 'celebrate'
-   * | 'sad'. tell: koşu sonunda kalçanın açıldığı yön (kalecilikte ipucu).
+   * Atıcının pozu. phase: 'wait' | 'run' (t: koşu başından sn) | 'kick' (k:
+   * temastan sn) | 'celebrate' | 'sad'.
    */
-  function poseShooter(a, phase, p, tell) {
+  function poseShooter(a, phase, t) {
     var J = a.J;
     K.rest(a);
-    var root = a.root;
-    var heading = Math.atan2(KICK.x - START.x, KICK.z - START.z);
-    var face = Math.PI - 0.06;
+    var lofted = shot && (shot.lob || shot.ty > 1.7);
     if (phase === "wait") {
-      root.position.set(START.x, 0, START.z);
-      root.rotation.y = heading;
-      J.spine.rotation.x = 0.05 + Math.sin(A.time * 2.1) * 0.015;
-      J.head.rotation.x = 0.12;
+      setRoot(a, START.x, START.z, RUN_HEAD + 0.1);
+      var ready = state === "power" ? 1 : 0;
+      J.spine.rotation.x = 0.06 + 0.06 * ready + Math.sin(A.time * 2.1) * 0.015;
+      J.head.rotation.x = 0.1;
+      J.head.rotation.y = -0.12;
+      J.hips.position.y = 0.94 - 0.03 * ready + (ready ? Math.max(0, Math.sin(A.time * 5)) * 0.02 : 0);
+      J.kna.rotation.x = J.knb.rotation.x = 0.12 * ready;
+      J.sha.rotation.z = 0.12;
+      J.shb.rotation.z = -0.12;
       return;
     }
     if (phase === "run") {
-      var e = p * (1.18 - 0.18 * p);
-      root.position.set(A.lerp(START.x, KICK.x, e), 0, A.lerp(START.z, KICK.z, e));
-      var turn = A.smooth(A.clamp((p - 0.55) / 0.45, 0, 1));
-      root.rotation.y = A.lerp(heading, face, turn) + (tell || 0) * 0.2 * A.smooth(A.clamp((p - 0.6) / 0.4, 0, 1));
-      var w = A.smooth(A.clamp((p - 0.7) / 0.3, 0, 1));
-      K.play(a, "jog", JOG_PLANT - (1 - p) * RUNUP * 1.02, 1 - w);
-      J.hpb.rotation.x = 0.85 * w;
-      J.knb.rotation.x = 1.5 * w;
-      J.hpa.rotation.x = -0.15 * w;
-      J.kna.rotation.x = 0.2 * w;
-      J.shb.rotation.z = -0.5 * w;
-      J.sha.rotation.z = 1.0 * w;
-      J.sha.rotation.x = 0.3 * w;
-      J.spine.rotation.x = 0.08 * w;
-      J.spine.rotation.y = -(tell || 0) * 0.12 * w;
-      J.hips.position.y = 0.94 - 0.02 * w;
+      var T1 = RUNUP - T_STRIDE;
+      var tk = t - RUNUP;
+      if (t < T1) {
+        var rd = runDist(t, T1);
+        setRoot(a, START.x + RDIR.x * rd.d, START.z + RDIR.z * rd.d, RUN_HEAD);
+        var end = runDist(T1, T1).d;
+        var clipT = JOG_PUSH + 4 * K.clipDur("jog") - (end - rd.d) / JOG_V1;
+        var wj = A.smooth(A.clamp(t / 0.22, 0, 1));
+        K.play(a, "jog", clipT, wj);
+        J.spine.rotation.x = 0.1 * wj + 0.12 * (1 - A.clamp(t / 0.35, 0, 1)) * wj; // ilk adımlarda öne eğik
+        var wk0 = A.smooth(A.clamp((t - (T1 - 0.06)) / 0.1, 0, 1));
+        if (wk0 > 0) kickJ(J, tk, wk0, lofted);
+        return;
+      }
+      if (tk < -T_PLANT) {
+        // son uzun adım: havada, yön topa döner
+        var u = (tk + T_STRIDE) / (T_STRIDE - T_PLANT);
+        setRoot(a, A.lerp(PRP.x, KROOT.x, u), A.lerp(PRP.z, KROOT.z, u), A.lerp(RUN_HEAD, FACE, A.smooth(u)));
+        var wj2 = 1 - A.smooth(A.clamp((tk + T_STRIDE) / 0.1, 0, 1));
+        if (wj2 > 0) K.play(a, "jog", JOG_PUSH + (tk + T_STRIDE) * (3.2 / JOG_V1), wj2);
+        kickJ(J, tk, A.smooth(A.clamp((tk + T_STRIDE + 0.06) / 0.1, 0, 1)), lofted);
+        a.root.position.y = Math.sin(Math.PI * u) * 0.05;
+        return;
+      }
+      var ar = afterRoot(tk);
+      setRoot(a, ar.x, ar.z, FACE);
+      kickJ(J, tk, 1, lofted);
       return;
     }
-    root.position.set(KICK.x, 0, KICK.z);
-    root.rotation.y = face;
     if (phase === "kick") {
-      kickPose(J, p);
+      var r2 = afterRoot(t);
+      setRoot(a, r2.x, r2.z, FACE);
+      kickJ(J, t, 1, lofted);
+      // gözler topta
+      J.head.rotation.x += -0.15 * A.clamp(t / 0.4, 0, 1);
       return;
     }
+    var base = afterRoot(1);
     if (phase === "celebrate") {
-      // uçak: kollar açık, köşe bayrağına koşu
-      var c = A.clamp(p / 2.2, 0, 1);
-      var tx = 7, tz = SPOT_Z + 5;
-      root.position.set(A.lerp(KICK.x, tx, A.smooth(c)), 0, A.lerp(KICK.z, tz, A.smooth(c)));
-      root.rotation.y = Math.atan2(tx - KICK.x, tz - KICK.z);
-      if (c < 1) {
-        K.runCycle(a, p * 9.5, 1);
-        J.sha.rotation.z = 1.45;
-        J.shb.rotation.z = -1.45;
-        J.ela.rotation.x = 0;
-        J.elb.rotation.x = 0;
-        J.spine.rotation.z = Math.sin(p * 2.2) * 0.18;
+      // köşe bayrağına koşu, kollar açık; sonra diz kayışı ve yumruk
+      var c = A.clamp(t / 2.0, 0, 1);
+      var tx = 6.5, tz = SPOT_Z + 4.5;
+      var e = A.smooth(c);
+      setRoot(a, A.lerp(base.x, tx, e), A.lerp(base.z, tz, e), Math.atan2(tx - base.x, tz - base.z));
+      if (c < 0.85) {
+        var amp = A.clamp(0.6 + t * 0.8, 0.6, 1.1);
+        K.runCycle(a, t * 9.5, amp);
+        J.sha.rotation.z = 1.35 * A.clamp(t / 0.4, 0, 1);
+        J.shb.rotation.z = -1.35 * A.clamp(t / 0.4, 0, 1);
+        J.ela.rotation.x = -0.1;
+        J.elb.rotation.x = -0.1;
+        J.spine.rotation.z = Math.sin(t * 2.2) * 0.15;
+        J.head.rotation.x = -0.25;
       } else {
-        root.rotation.y = Math.atan2(0 - tx, 30 - tz);
-        J.sha.rotation.x = -2.8;
-        J.shb.rotation.x = -2.8;
-        J.sha.rotation.z = 0.3;
-        J.shb.rotation.z = -0.3;
-        root.position.y = Math.max(0, Math.sin(p * 9)) * 0.15;
+        // dizlerin üstünde kayış, kollar havada
+        var sl = A.clamp((c - 0.85) / 0.15, 0, 1);
+        a.root.rotation.y = Math.atan2(0 - tx, 30 - tz);
+        J.hpa.rotation.x = J.hpb.rotation.x = -0.2 * sl;
+        J.kna.rotation.x = J.knb.rotation.x = 1.9 * sl;
+        J.hips.position.y = 0.94 - 0.42 * sl;
+        J.spine.rotation.x = -0.35 * sl;
+        J.sha.rotation.x = -2.7 * sl;
+        J.shb.rotation.x = -2.7 * sl;
+        J.sha.rotation.z = 0.35;
+        J.shb.rotation.z = -0.35;
+        J.ela.rotation.x = J.elb.rotation.x = -0.4 * sl;
+        J.head.rotation.x = -0.45 * sl;
       }
       return;
     }
     if (phase === "sad") {
-      var d = A.clamp(p / 0.5, 0, 1);
-      J.sha.rotation.x = -2.5 * d;
-      J.shb.rotation.x = -2.5 * d;
-      J.sha.rotation.z = 0.7 * d;
-      J.shb.rotation.z = -0.7 * d;
-      J.ela.rotation.x = -2.1 * d;
-      J.elb.rotation.x = -2.1 * d;
-      J.head.rotation.x = 0.35 * d;
-      J.spine.rotation.x = 0.18 * d;
+      // eller başta, sonra dizlere eğilir
+      setRoot(a, base.x, base.z, FACE);
+      var d = A.clamp(t / 0.5, 0, 1), d2 = A.smooth(A.clamp((t - 1.1) / 0.6, 0, 1));
+      J.sha.rotation.x = -2.5 * d * (1 - d2) + -0.6 * d2;
+      J.shb.rotation.x = -2.5 * d * (1 - d2) + -0.6 * d2;
+      J.sha.rotation.z = 0.7 * d * (1 - d2) + 0.15 * d2;
+      J.shb.rotation.z = -0.7 * d * (1 - d2) - 0.15 * d2;
+      J.ela.rotation.x = -2.1 * d * (1 - d2) - 0.3 * d2;
+      J.elb.rotation.x = -2.1 * d * (1 - d2) - 0.3 * d2;
+      J.head.rotation.x = 0.35 * d + 0.25 * d2;
+      J.spine.rotation.x = 0.18 * d + 0.55 * d2;
+      J.kna.rotation.x = J.knb.rotation.x = 0.45 * d2;
+      J.hpa.rotation.x = J.hpb.rotation.x = -0.35 * d2;
+      J.hips.position.y = 0.94 - 0.1 * d2;
       return;
     }
-  }
-  function kickPose(J, k) {
-    var sw = A.easeOut(A.clamp(k / 0.2, 0, 1));
-    var rec = A.smooth(A.clamp((k - 0.45) / 0.5, 0, 1));
-    J.hpb.rotation.x = A.lerp(A.lerp(0.85, -1.35, sw), -0.08, rec);
-    J.knb.rotation.x = A.lerp(A.lerp(1.5, 0.1, sw), 0.12, rec);
-    J.hpa.rotation.x = -0.12 * (1 - rec);
-    J.kna.rotation.x = 0.22 * (1 - rec);
-    J.spine.rotation.x = (0.08 - 0.22 * sw) * (1 - rec);
-    J.sha.rotation.z = 1.0 * (1 - 0.85 * rec);
-    J.shb.rotation.z = -0.5 * (1 - 0.85 * rec);
-    J.sha.rotation.x = 0.3 * (1 - rec);
-    J.hips.position.y = A.lerp(0.92, 0.94, rec);
   }
 
   /**
    * Kaleci pozu, simülasyondaki gövdeden: merkez + eksen. Kök ayak hizasındadır;
    * gövde merkezi (kalça ≈ 0,95 m) simülasyon merkezine oturtulur.
+   *   Hazır: geniş duruş, dizler bükülü, eller önde-aşağıda, avuçlar açık;
+   *     çizgide yan adımlarla gezinir, hafifçe yaylanır (zorlukla daha hareketli).
+   *   Sıçrama adımı (split step): atıcı topa varmadan küçük bir zıplama,
+   *     temasta yere yüklenmiş iner.
+   *   Uçuş: yakın bacakla yüklenir, uzak bacakla iter; gövde yana yatar,
+   *     kollar uçuş yönünde uzanır (üstteki kol başın üstünden geçer); alçak
+   *     topta gövde yere kapanır, eller çimden süpürür.
+   *   İniş: kalça ve omuz yere değer, dizler toplanır, kollar topu sarar.
    */
   function poseKeeper(a, k, now, extra) {
     var J = a.J;
     K.rest(a);
     var root = a.root;
     var b = keeperBody(k, now);
+    extra = extra || {};
     root.rotation.y = 0; // kaleci sahaya (+z) bakar
     if (!b.diving) {
       var cr = k.stay ? 1 : k.crouch;
-      J.hips.position.y = 0.94 - cr * 0.16;
-      J.hpa.rotation.x = -0.5 * cr;
-      J.hpb.rotation.x = -0.5 * cr;
-      J.kna.rotation.x = 1.0 * cr;
-      J.knb.rotation.x = 1.0 * cr;
-      J.hpa.rotation.z = 0.2;
-      J.hpb.rotation.z = -0.2;
-      J.spine.rotation.x = 0.3 * cr;
-      J.sha.rotation.z = 0.7 + k.set * 0.25;
-      J.shb.rotation.z = -0.7 - k.set * 0.25;
-      J.sha.rotation.x = -0.5;
-      J.shb.rotation.x = -0.5;
-      J.ela.rotation.x = -0.6;
-      J.elb.rotation.x = -0.6;
-      J.head.rotation.x = -0.15;
-      root.position.set(b.cx, 0, KEEPER_Z);
-      if (extra && extra.caught) {
-        J.sha.rotation.x = -1.3;
-        J.shb.rotation.x = -1.3;
-        J.sha.rotation.z = 0.25;
-        J.shb.rotation.z = -0.25;
-        J.ela.rotation.x = -1.4;
-        J.elb.rotation.x = -1.4;
+      var hop = extra.hop || 0;
+      var load = 1 - 0.55 * hop;
+      J.hips.position.y = 0.94 - cr * 0.18 * load + (extra.bob || 0);
+      J.hpa.rotation.x = -0.55 * cr * load;
+      J.hpb.rotation.x = -0.55 * cr * load;
+      J.kna.rotation.x = 1.08 * cr * load;
+      J.knb.rotation.x = 1.08 * cr * load;
+      J.fta.rotation.x = J.ftb.rotation.x = -0.45 * cr * load + 0.35 * hop;
+      J.hpa.rotation.z = 0.27;
+      J.hpb.rotation.z = -0.27;
+      J.spine.rotation.x = 0.34 * cr;
+      J.spine.rotation.z = extra.lean || 0;
+      var wave = extra.wave || 0;
+      J.sha.rotation.z = 0.6 + k.set * 0.3 + wave;
+      J.shb.rotation.z = -0.6 - k.set * 0.3 - wave;
+      J.sha.rotation.x = -0.7 + wave * 0.4;
+      J.shb.rotation.x = -0.7 + wave * 0.4;
+      J.ela.rotation.x = -0.55;
+      J.elb.rotation.x = -0.55;
+      J.head.rotation.x = -0.28 * cr;
+      root.position.set(b.cx, hop * 0.09, KEEPER_Z);
+      if (extra.caught) {
+        // topu göğse alır
+        J.sha.rotation.x = -1.25;
+        J.shb.rotation.x = -1.25;
+        J.sha.rotation.z = 0.15;
+        J.shb.rotation.z = -0.15;
+        J.ela.rotation.x = -1.6;
+        J.elb.rotation.x = -1.6;
+        J.spine.rotation.x = 0.45;
+        J.head.rotation.x = 0.1;
       }
-      if (extra && extra.cheer > 0) {
+      if (extra.cheer > 0) {
         var ch = extra.cheer;
         J.sha.rotation.x = -2.9 * ch;
         J.sha.rotation.z = 0.25;
         J.ela.rotation.x = -0.5 * ch;
-        J.shb.rotation.x = -1.2 * ch;
+        J.shb.rotation.x = -2.6 * ch;
+        J.shb.rotation.z = -0.25;
         J.hips.position.y = 0.94 + Math.max(0, Math.sin(A.time * 10)) * 0.06 * ch;
         J.hpa.rotation.x = J.hpb.rotation.x = J.kna.rotation.x = J.knb.rotation.x = 0;
-        J.spine.rotation.x = -0.1 * ch;
+        J.fta.rotation.x = J.ftb.rotation.x = 0;
+        J.spine.rotation.x = -0.12 * ch;
+        J.head.rotation.x = -0.3 * ch;
       }
       return;
     }
     // uçuş: gövde ekseni (ax, ay); kök = merkez − eksen × kalça yüksekliği
-    var cy = b.cy;
-    if (extra && extra.land > 0) cy = A.lerp(cy, 0.3, extra.land);
-    var phi = Math.atan2(-b.ax, b.ay);
-    root.rotation.z = phi;
-    root.position.set(b.cx - b.ax * 0.95, cy - b.ay * 0.95, KEEPER_Z);
+    var d = k.dive;
     var side = b.ax >= 0 ? 1 : -1;
+    var low = d.dy < -0.12;
     var e = b.e;
-    // kollar başın üstünde, uçuş yönünde uzanır; bacaklar geride hafif kırık
-    J.sha.rotation.z = A.lerp(0.7, 2.95, e);
-    J.shb.rotation.z = A.lerp(-0.7, -2.95, e);
-    J.sha.rotation.x = A.lerp(-0.5, -0.15, e);
-    J.shb.rotation.x = A.lerp(-0.5, -0.15, e);
-    J.ela.rotation.x = -0.1;
-    J.elb.rotation.x = -0.1;
-    J.spine.rotation.z = side * 0.12 * e;
-    J.head.rotation.z = side * 0.2 * e;
-    J.hpa.rotation.x = 0.15 * e;
-    J.hpb.rotation.x = 0.35 * e;
-    J.kna.rotation.x = 0.35 * e;
-    J.knb.rotation.x = 0.7 * e;
-    J.hpa.rotation.z = side > 0 ? 0.12 : 0.3;
-    J.hpb.rotation.z = side > 0 ? -0.3 : -0.12;
+    var land = extra.land || 0;
+    var cy = b.cy;
+    var phi = Math.atan2(-b.ax, b.ay);
+    if (land > 0) {
+      // yere iniş: gövde yataylaşır, merkez yere oturur
+      var flat = side * Math.PI / 2;
+      phi = A.lerp(phi, -flat * 0.96, land);
+      cy = A.lerp(cy, 0.2, land);
+    }
+    root.rotation.z = phi;
+    var axx = -Math.sin(phi), axy = Math.cos(phi);
+    root.position.set(b.cx - axx * 0.95, cy - axy * 0.95, KEEPER_Z);
+    var push = 1 - A.smooth(A.clamp(e / 0.35, 0, 1));
+    var nearH = side > 0 ? J.hpa : J.hpb, farH = side > 0 ? J.hpb : J.hpa;
+    var nearK = side > 0 ? J.kna : J.knb, farK = side > 0 ? J.knb : J.kna;
+    // itiş: yakın bacak bükülü (yük), uzak bacak itip uzanır; uçuşta makas
+    nearH.rotation.x = A.lerp(-0.1, -0.7, push) - 0.25 * land;
+    nearK.rotation.x = A.lerp(0.3, 1.25, push) + 0.9 * land;
+    farH.rotation.x = A.lerp(0.25, 0.1, push) - 0.5 * land;
+    farK.rotation.x = A.lerp(0.5, 0.15, push) + 0.7 * land;
+    J.hpa.rotation.z = 0.12 + (side > 0 ? 0.1 : 0.25) * (1 - e);
+    J.hpb.rotation.z = -0.12 - (side > 0 ? 0.25 : 0.1) * (1 - e);
+    J.fta.rotation.x = J.ftb.rotation.x = 0.5 * e;
+    // kollar: uçuş yönünde başın üstünde; üstteki kol başın üstünden geçer
+    var reachA = low ? 2.55 : 2.95;
+    var nearArmZ = side > 0 ? J.sha : J.shb, farArmZ = side > 0 ? J.shb : J.sha;
+    var nearEl = side > 0 ? J.ela : J.elb, farEl = side > 0 ? J.elb : J.ela;
+    nearArmZ.rotation.z = side * A.lerp(0.65, reachA, e);
+    farArmZ.rotation.z = -side * A.lerp(0.65, reachA - 0.15, e);
+    farArmZ.rotation.x = A.lerp(-0.6, low ? -0.9 : -0.55, e);
+    nearArmZ.rotation.x = A.lerp(-0.6, -0.12, e);
+    nearEl.rotation.x = -0.12;
+    farEl.rotation.x = A.lerp(-0.5, -0.25, e);
+    if (extra.caught && land > 0) {
+      // yerde topu sarar
+      nearArmZ.rotation.z = side * A.lerp(reachA, 1.6, land);
+      farArmZ.rotation.z = -side * A.lerp(reachA, 1.2, land);
+      nearEl.rotation.x = farEl.rotation.x = -1.3 * land;
+    }
+    J.spine.rotation.z = side * (0.14 * e - 0.1 * land);
+    J.spine.rotation.x = low ? 0.25 * e : -0.08 * e;
+    J.spine.rotation.y = -side * 0.18 * e; // göğüs topa döner
+    J.head.rotation.z = side * 0.22 * e;
+    J.head.rotation.x = -0.12;
+    J.hips.position.y = 0.94;
   }
 
   function poseReferee(a) {
@@ -1353,8 +1830,10 @@
 
   var camPos = null, camLook = null, camFov = 40, lastShot = "";
   function camShoot() {
-    // yayın penaltı kamerası: atıcının sağ arkası, göz hizası — kale ekranı doldurur
-    return { pos: [0.95, 1.72, SPOT_Z + 4.8], look: [0, 1.15, 0], fov: fitFov(GOAL_W * 1.28, SPOT_Z + 4.8, 24, 62) };
+    // yayın penaltı kamerası: atıcının koşu çizgisinin arkası, biraz yüksek —
+    // atıcı alt solda, kale ekranın üst yarısını doldurur
+    var d = SPOT_Z + 9.4;
+    return { pos: [-0.8, 2.35, d], look: [0.1, 1.05, 0], fov: fitFov(GOAL_W * 1.3, d, 18, 60) };
   }
   function placeCamera(dt) {
     var cam = R.camera;
@@ -1402,6 +1881,12 @@
       }
       cut = lastShot !== "shoot" && state !== "intro";
       lastShot = "shoot";
+    }
+    if (state === "runup") view.pos[2] -= 0.9 * A.smooth(A.clamp(stateT / RUNUP, 0, 1));
+    if (window.__cam) {
+      // test/laboratuvar kamerası
+      view = window.__cam;
+      cut = true;
     }
     if (state === "intro" || state === "attract" || state === "matchEnd") lastShot = state;
     var want = new T.Vector3(view.pos[0], view.pos[1], view.pos[2]);
@@ -1472,9 +1957,10 @@
       kstate = rframe.k;
       know = rt;
     } else if (state === "result" || state === "matchEnd") {
-      var land = gk.dive ? A.smooth(A.clamp((stateT - 0.2) / 0.5, 0, 1)) : 0;
-      keepExtra = { land: lastKick && lastKick.result === "gol" ? land : land * 0.6, caught: ball.caught, cheer: lastKick && lastKick.result !== "gol" && !gk.dive ? Math.min(1, stateT * 2) : 0 };
+      keepExtra = { caught: ball.caught, cheer: lastKick && lastKick.result !== "gol" && !gk.dive && !ball.caught ? Math.min(1, stateT * 2) : 0 };
     }
+    // uçuş bitince yere iniş (tekrarda da)
+    if (kstate.dive) keepExtra.land = A.smooth(A.clamp((know - kstate.dive.t0 - kstate.dive.dur) / 0.28, 0, 1));
     if (state === "aim" || state === "power" || state === "turn" || state === "oppKick" || state === "intro" || state === "runup") {
       bx = 0;
       by = BALL_R;
@@ -1487,6 +1973,16 @@
       bz = KEEPER_Z + 0.32;
     }
     R.ball.position.set(bx, by, bz);
+    syncWeather(dt);
+    var rocketOn = shot && shot.rocket && (state === "flight" || inReplay()) && bz < SPOT_Z - 0.2;
+    R.rocketGlow.visible = !!rocketOn;
+    if (rocketOn) {
+      R.rocketGlow.position.set(bx, by, bz);
+      var gsz = 0.75 + Math.random() * 0.25;
+      R.rocketGlow.scale.set(gsz, gsz, 1);
+    }
+    R.trail.line.material.color.set(shot && shot.rocket ? 0xff9a4d : 0xffffff);
+    R.trail.line.material.opacity = shot && shot.rocket ? 0.75 : 0.28;
     R.ball.rotation.set(ball.wx, ball.wy, 0);
     R.ballShadow.position.set(bx, 0.006, bz);
     R.ballShadow.material.opacity = 0.55 * Math.max(0.15, 1 - by * 0.6);
@@ -1506,7 +2002,7 @@
     // atıcı
     var sh = shooterA;
     if (state === "attract" || state === "intro" || state === "turn" || state === "aim" || state === "power" || state === "oppKick") poseShooter(sh, "wait");
-    else if (state === "runup") poseShooter(sh, "run", A.clamp(stateT / RUNUP, 0, 1), 0);
+    else if (state === "runup") poseShooter(sh, "run", Math.min(stateT, RUNUP));
     else if (inReplay()) poseShooter(sh, "kick", Math.max(0, know - kickAt + 0.05));
     else if (state === "flight") poseShooter(sh, "kick", simTime - kickAt);
     else if (state === "result") {
@@ -1517,6 +2013,18 @@
     } else if (state === "matchEnd") {
       if (endResult === "won") poseShooter(cast.shooter.a, "celebrate", 2.3 + stateT);
       else poseShooter(cast.shooter.a, "sad", 1);
+    }
+    if (!inReplay()) {
+      var dz = opp.diff;
+      if (state === "aim" || state === "power" || state === "turn") {
+        keepExtra.bob = Math.sin(A.time * (5 + 2 * dz)) * 0.012;
+        keepExtra.lean = Math.sin(A.time * 1.3) * 0.06;
+        keepExtra.wave = dz > 0.4 && state === "power" ? Math.max(0, Math.sin(A.time * (3 + 2 * dz))) * 0.5 * dz : 0;
+      } else if (state === "runup") {
+        // sıçrama adımı: temastan hemen önce küçük zıplama, temasta yüklenmiş iniş
+        var hu = (stateT - (RUNUP - 0.3)) / 0.26;
+        keepExtra.hop = hu > 0 && hu < 1 ? Math.sin(Math.PI * hu) : 0;
+      }
     }
     poseKeeper(keeperA, kstate, know, keepExtra);
     poseReferee(cast.ref.a);
@@ -1844,66 +2352,52 @@
 
   /* ── nişan ── */
 
-  /** Önizleme yolu: seçili türün orta hızıyla, yerçekimli. */
-  function previewPath(type) {
-    var tp = TYPES[type];
-    var b = { x: 0, y: BALL_R, z: SPOT_Z };
-    var mid = (tp.zone[0] + tp.zone[1]) / 2;
-    var speed = tp.speed[0] + (tp.speed[1] - tp.speed[0]) * mid;
-    var tx = type === "kasik" ? aim.x * 0.35 : aim.x, ty = type === "kasik" ? Math.max(1, aim.y) : aim.y;
-    var ft = Math.hypot(tx, SPOT_Z) / speed * (type === "kasik" ? 1.15 : 1);
-    var vx = tx / ft, vz = -SPOT_Z / ft, vy = (ty - BALL_R + 0.5 * GRAV * ft * ft) / ft;
-    var pts = [];
-    for (var i = 1; i <= 16; i++) {
-      var t = (i / 16) * ft;
-      pts.push([b.x + vx * t, b.y + vy * t - 0.5 * GRAV * t * t, b.z + vz * t]);
+  /** Önizleme yolu: seçili türün yeşil bölge ortasıyla, rüzgârsız (gerçek tümleyiciyle). */
+  function previewPath(type, tx, ty) {
+    var z = zoneOf(type);
+    var m = shotModel(type, tx, ty, (z[0] + z[1]) / 2, false);
+    var b = newBall();
+    aimLaunch(b, m.tx, m.ty, m.speed, m.curl, m.lob);
+    var tot = crossing(b, 0).t;
+    var pts = [], step = tot / 16, acc = 0;
+    var s2 = { x: b.x, y: b.y, z: b.z, vx: b.vx, vy: b.vy, vz: b.vz, curl: b.curl };
+    for (var t = 0; t < tot && pts.length < 16; t += SUB) {
+      integrate(s2, SUB, 0);
+      acc += SUB;
+      if (acc >= step) {
+        acc -= step;
+        pts.push([s2.x, s2.y, s2.z]);
+      }
     }
     return pts;
   }
 
   function drawAim(c, locked) {
     var type = shotType;
-    var q = state === "power" ? powerQuality(type, powerV) : 1;
-    var sig = sigmaOf(type, q, aim.x, aim.y);
-    var tx = type === "kasik" ? aim.x * 0.35 : aim.x, ty = type === "kasik" ? Math.max(1, aim.y) : aim.y;
+    var ae = aimNow();
+    var tx = type === "kasik" ? A.clamp(ae.x, -2.6, 2.6) : ae.x, ty = type === "kasik" ? Math.max(0.9, ae.y) : ae.y;
     var p = screenOf(tx, ty, 0);
-    var edge = screenOf(tx + sig * 2, ty, 0);
-    var rr = Math.max(10, Math.abs(edge.x - p.x));
-    // risk: halkanın ne kadarı çerçeve dışında / direkte
-    var outX = Math.max(0, Math.abs(tx) + sig * 2 - (HALF - 0.12)), outY = Math.max(0, ty + sig * 1.4 - (GOAL_H - 0.12));
-    var risk = A.clamp((outX + outY) / (sig * 2.5), 0, 1);
-    var col = risk > 0.55 ? P.bad : risk > 0.15 ? "#FBBF24" : "#FFFFFF";
+    // risk: çerçeve dışı (aut) ya da direğe/üst direğe yakın (güç hatası affetmez)
+    var out = Math.abs(tx) > gHalf - 0.04 || ty > gTop - 0.04;
+    var near = !out && (Math.abs(tx) > gHalf - 0.4 || ty > gTop - 0.35);
+    var col = out ? P.bad : near ? "#FBBF24" : "#FFFFFF";
     c.save();
-    // yol önizlemesi
     if (!locked || state === "power") {
-      var pts = previewPath(type);
+      var pts = previewPath(type, tx, ty);
       for (var i = 0; i < pts.length; i++) {
         var sp = screenOf(pts[i][0], pts[i][1], pts[i][2]);
         var f = i / pts.length;
-        c.fillStyle = "rgba(255,255,255," + (0.15 + 0.45 * (1 - f)) + ")";
+        c.fillStyle = armed.rocket ? "rgba(251,146,60," + (0.25 + 0.5 * (1 - f)) + ")" : "rgba(255,255,255," + (0.15 + 0.45 * (1 - f)) + ")";
         c.beginPath();
         c.arc(sp.x, sp.y, Math.max(1.4, 3.2 - f * 1.8), 0, Math.PI * 2);
         c.fill();
       }
     }
-    // risk halkası (kesikli)
-    c.setLineDash([5, 5]);
-    c.lineDashOffset = -A.time * 12;
-    c.strokeStyle = col;
-    c.globalAlpha = 0.85;
-    c.lineWidth = 2;
-    c.beginPath();
-    c.ellipse(p.x, p.y, rr, rr * 0.75, 0, 0, Math.PI * 2);
-    c.stroke();
-    c.setLineDash([]);
-    c.globalAlpha = 1;
-    c.fillStyle = risk > 0.55 ? "rgba(251,113,133,0.12)" : "rgba(255,255,255,0.08)";
-    c.fill();
     // nişangâh
-    var r = Math.max(9, p.s * 0.16);
-    c.strokeStyle = "#FFFFFF";
+    var r = Math.max(10, p.s * 0.17);
+    c.strokeStyle = col;
     c.lineWidth = 2.5;
-    c.shadowColor = "rgba(0,0,0,0.5)";
+    c.shadowColor = "rgba(0,0,0,0.55)";
     c.shadowBlur = 6;
     c.beginPath();
     c.arc(p.x, p.y, r, 0, Math.PI * 2);
@@ -1919,12 +2413,225 @@
     c.beginPath();
     c.arc(p.x, p.y, 2.6, 0, Math.PI * 2);
     c.fill();
-    if (risk > 0.15 && !locked) {
+    // rüzgâr: nişandan sürüklenme yönü (kesikli ok, boyu rüzgârla)
+    if (Math.abs(cond.wind) > 0.3 && !armed.rocket) {
+      var len = A.clamp(Math.abs(cond.wind) * 7, 12, 58) * Math.sign(cond.wind);
+      var y0 = p.y + r + 10;
+      c.strokeStyle = "rgba(125,211,252,0.9)";
+      c.fillStyle = "rgba(125,211,252,0.9)";
+      c.lineWidth = 2;
+      c.setLineDash([4, 4]);
+      c.lineDashOffset = -A.time * 20 * Math.sign(cond.wind);
+      c.beginPath();
+      c.moveTo(p.x, y0);
+      c.lineTo(p.x + len, y0);
+      c.stroke();
+      c.setLineDash([]);
+      c.beginPath();
+      c.moveTo(p.x + len + Math.sign(len) * 6, y0);
+      c.lineTo(p.x + len, y0 - 4);
+      c.lineTo(p.x + len, y0 + 4);
+      c.closePath();
+      c.fill();
+    }
+    if ((out || near) && !locked) {
       c.font = A.font(10, 900);
       c.textAlign = "center";
       c.fillStyle = col;
-      c.fillText(risk > 0.55 ? "ÇOK RİSKLİ" : "RİSKLİ", p.x, p.y - rr * 0.75 - 9);
+      c.fillText(out ? "ÇERÇEVE DIŞI" : "DİREK RİSKİ", p.x, p.y - r * 1.6 - 6);
     }
+    c.restore();
+  }
+
+  /* ── koşullar: rüzgâr, yağmur, zorluk ── */
+
+  function drawConditions(c) {
+    var x = W - 14, y = 82;
+    c.save();
+    c.textBaseline = "middle";
+    var chips = [];
+    if (Math.abs(cond.wind) > 0.3) chips.push({ kind: "wind", text: Math.abs(cond.wind).toFixed(1).replace(".", ",") + " m/sn" });
+    if (cond.rain) chips.push({ kind: "rain", text: "YAĞMUR" });
+    chips.push({ kind: "diff", text: "ZORLUK" });
+    chips.forEach(function (ch) {
+      c.font = A.font(11, 900);
+      var extra = ch.kind === "diff" ? 34 : 22;
+      var w = c.measureText(ch.text).width + 18 + extra;
+      A.pill(c, x - w, y, w, 24, "rgba(9,11,32,0.72)");
+      c.fillStyle = "#FFFFFF";
+      c.textAlign = "left";
+      var ix = x - w + 10;
+      if (ch.kind === "wind") {
+        // rüzgâr oku
+        var dir = Math.sign(cond.wind);
+        c.strokeStyle = "#7DD3FC";
+        c.fillStyle = "#7DD3FC";
+        c.lineWidth = 2;
+        c.beginPath();
+        c.moveTo(ix + 7 - dir * 7, y + 12);
+        c.lineTo(ix + 7 + dir * 5, y + 12);
+        c.stroke();
+        c.beginPath();
+        c.moveTo(ix + 7 + dir * 9, y + 12);
+        c.lineTo(ix + 7 + dir * 4, y + 8);
+        c.lineTo(ix + 7 + dir * 4, y + 16);
+        c.closePath();
+        c.fill();
+        c.fillStyle = "#FFFFFF";
+        c.fillText(ch.text, ix + 20, y + 12.5);
+      } else if (ch.kind === "rain") {
+        c.strokeStyle = "#93C5FD";
+        c.lineWidth = 1.6;
+        for (var k = 0; k < 3; k++) {
+          c.beginPath();
+          c.moveTo(ix + 3 + k * 5, y + 7);
+          c.lineTo(ix + k * 5, y + 17);
+          c.stroke();
+        }
+        c.fillText(ch.text, ix + 20, y + 12.5);
+      } else {
+        c.fillStyle = "rgba(255,255,255,0.8)";
+        c.fillText(ch.text, ix, y + 12.5);
+        var lv = 1 + Math.round(opp.diff * 4);
+        for (var j = 0; j < 5; j++) {
+          c.fillStyle = j < lv ? (lv >= 4 ? P.bad : GOLD) : "rgba(255,255,255,0.2)";
+          c.fillRect(x - 10 - (5 - j) * 6, y + 15 - j * 2, 4, 4 + j * 2);
+        }
+      }
+      x -= w + 6;
+    });
+    c.restore();
+  }
+
+  /* ── jokerler ── */
+
+  function drawJokerIcon(c, key, x, y, r, col) {
+    c.save();
+    c.strokeStyle = col;
+    c.fillStyle = col;
+    c.lineWidth = r * 0.16;
+    c.lineCap = "round";
+    c.lineJoin = "round";
+    if (key === "eye") {
+      c.beginPath();
+      c.moveTo(x - r, y);
+      c.quadraticCurveTo(x, y - r * 0.9, x + r, y);
+      c.quadraticCurveTo(x, y + r * 0.9, x - r, y);
+      c.stroke();
+      c.beginPath();
+      c.arc(x, y, r * 0.32, 0, Math.PI * 2);
+      c.fill();
+    } else if (key === "rocket") {
+      // ateşli top: daire + arkada alev çizgileri
+      c.beginPath();
+      c.arc(x + r * 0.3, y - r * 0.3, r * 0.42, 0, Math.PI * 2);
+      c.fill();
+      for (var i = -1; i <= 1; i++) {
+        c.beginPath();
+        c.moveTo(x - r * 0.05 + i * r * 0.22, y + r * 0.05 + i * r * -0.22);
+        c.lineTo(x - r * 0.75 + i * r * 0.22, y + r * 0.75 + i * r * -0.22);
+        c.stroke();
+      }
+    } else {
+      // kale çerçevesi + dışa oklar
+      c.beginPath();
+      c.moveTo(x - r * 0.6, y + r * 0.5);
+      c.lineTo(x - r * 0.6, y - r * 0.35);
+      c.lineTo(x + r * 0.6, y - r * 0.35);
+      c.lineTo(x + r * 0.6, y + r * 0.5);
+      c.stroke();
+      [-1, 1].forEach(function (sd) {
+        c.beginPath();
+        c.moveTo(x + sd * r * 0.75, y + r * 0.1);
+        c.lineTo(x + sd * r * 1.05, y + r * 0.1);
+        c.moveTo(x + sd * r * 0.95, y - r * 0.05);
+        c.lineTo(x + sd * r * 1.08, y + r * 0.1);
+        c.lineTo(x + sd * r * 0.95, y + r * 0.25);
+        c.stroke();
+      });
+    }
+    c.restore();
+  }
+  function drawJokers(c) {
+    var bs = jokerButtons();
+    var live = state === "aim";
+    c.save();
+    c.textAlign = "center";
+    c.textBaseline = "middle";
+    bs.forEach(function (b) {
+      var J = JOKERS[b.key], n = jokers[b.key], on = armed[b.key];
+      if (!live && !on) return;
+      c.globalAlpha = on || n > 0 ? 1 : 0.38;
+      c.save();
+      if (on) {
+        c.shadowColor = J.color;
+        c.shadowBlur = 16 + 4 * Math.sin(A.time * 8);
+      }
+      c.beginPath();
+      c.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+      c.fillStyle = on ? J.color : "rgba(9,11,32,0.78)";
+      c.fill();
+      c.restore();
+      c.lineWidth = 2;
+      c.strokeStyle = on ? "#FFFFFF" : J.color;
+      c.beginPath();
+      c.arc(b.x, b.y, b.r - 1, 0, Math.PI * 2);
+      c.stroke();
+      drawJokerIcon(c, b.key, b.x, b.y, b.r * 0.5, on ? "#0B1030" : J.color);
+      c.font = A.font(8.5, 900);
+      c.fillStyle = "rgba(255,255,255,0.9)";
+      c.fillText(J.short, b.x, b.y + b.r + 9);
+      if (!on) {
+        var bx = b.x - b.r * 0.75, by = b.y - b.r * 0.75;
+        c.beginPath();
+        c.arc(bx, by, 8, 0, Math.PI * 2);
+        c.fillStyle = n > 0 ? J.color : "#334155";
+        c.fill();
+        c.font = A.font(10, 900);
+        c.fillStyle = "#0B1030";
+        c.fillText(String(n), bx, by + 0.5);
+      }
+    });
+    c.restore();
+  }
+  /** KALECİ GÖZÜ: kalecinin kararı kalenin üstünde. */
+  function drawKeeperEye(c) {
+    if (!armed.eye || !kplan) return;
+    var p = kplan;
+    c.save();
+    var x0, x1, label;
+    if (p.mode === "commit") {
+      x0 = p.side < 0 ? -gHalf : 0.6;
+      x1 = p.side < 0 ? -0.6 : gHalf;
+      label = p.side < 0 ? "KALECİ SOLA ATLAYACAK" : "KALECİ SAĞA ATLAYACAK";
+    } else if (p.mode === "stay") {
+      x0 = -0.9;
+      x1 = 0.9;
+      label = "KALECİ ORTADA BEKLEYECEK";
+    } else {
+      x0 = x1 = null;
+      label = "KALECİ SON ANDA OKUYACAK · SERT VE KÖŞEYE";
+    }
+    if (x0 != null) {
+      var a = screenOf(x0, 0, 0), b2 = screenOf(x1, gTop, 0);
+      var pulse = 0.18 + 0.1 * Math.sin(A.time * 6);
+      c.fillStyle = "rgba(56,189,248," + pulse + ")";
+      c.fillRect(Math.min(a.x, b2.x), b2.y, Math.abs(b2.x - a.x), a.y - b2.y);
+      c.strokeStyle = "rgba(56,189,248,0.9)";
+      c.lineWidth = 2;
+      c.setLineDash([6, 4]);
+      c.strokeRect(Math.min(a.x, b2.x), b2.y, Math.abs(b2.x - a.x), a.y - b2.y);
+      c.setLineDash([]);
+    }
+    var top = screenOf(0, gTop + 0.55, 0);
+    c.font = A.font(11, 900);
+    var w = c.measureText(label).width + 40;
+    A.pill(c, W / 2 - w / 2, top.y - 13, w, 26, "rgba(9,11,32,0.85)");
+    drawJokerIcon(c, "eye", W / 2 - w / 2 + 16, top.y, 8, JOKERS.eye.color);
+    c.fillStyle = "#FFFFFF";
+    c.textAlign = "left";
+    c.textBaseline = "middle";
+    c.fillText(label, W / 2 - w / 2 + 30, top.y + 0.5);
     c.restore();
   }
 
@@ -2004,7 +2711,7 @@
 
   function drawPower(c) {
     var w = Math.min(W - 70, 300), h = 16, x = W / 2 - w / 2, y = H - 98;
-    var z = TYPES[shotType].zone;
+    var z = zoneOf(shotType);
     c.save();
     c.font = A.font(11, 900);
     c.textAlign = "left";
@@ -2331,15 +3038,21 @@
     if (state === "intro") drawIntro(c);
     else if (state === "turn") drawTurn(c);
     else if (state === "aim") {
+      drawKeeperEye(c);
       drawAim(c, false);
       drawTypeChips(c, false);
       if (!dragFrom) drawDragHint(c);
       drawShooterCard(c);
+      drawConditions(c);
+      drawJokers(c);
     } else if (state === "power") {
+      drawKeeperEye(c);
       drawAim(c, true);
       drawPower(c);
       drawTypeChips(c, true);
-    } else if (state === "oppKick") drawOppKick(c);
+      drawConditions(c);
+      drawJokers(c);
+    } else if (state === "runup") drawKeeperEye(c); else if (state === "oppKick") drawOppKick(c);
     else if (state === "result") {
       if (inReplay()) drawReplayBadge(c);
       else drawResult(c);
@@ -2362,7 +3075,18 @@
       aim: aim,
       powerV: powerV,
       shotType: shotType,
-      zone: TYPES[shotType].zone,
+      zone: zoneOf(shotType),
+      cond: cond,
+      jokers: Object.assign({}, jokers),
+      armed: Object.assign({}, armed),
+      useJoker: useJoker,
+      kplan: kplan,
+      goal: { half: gHalf, top: gTop },
+      predict: predict,
+      zoneOf: zoneOf,
+      startMatch: startMatch,
+      nextKick: nextKick,
+      shot: shot,
       shooter: shooter.short,
       opponent: teamName(opp.keeper),
       oppKeeper: opp.keeper.short,

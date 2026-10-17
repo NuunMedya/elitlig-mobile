@@ -318,6 +318,10 @@
   }
 
   function buildGoal() {
+    // Kale kökü: direkler, iskelet, file ve gölge tek grupta (DEV KALE ölçekler)
+    var goalRoot = new T.Group();
+    R.scene.add(goalRoot);
+    R.goalRoot = goalRoot;
     var g = new T.Group();
     var white = new T.MeshPhysicalMaterial({ color: 0xf4f6f9, roughness: 0.22, metalness: 0.05, clearcoat: 0.6, clearcoatRoughness: 0.15 });
     var post = new T.CylinderGeometry(POST_R, POST_R, GOAL_H + POST_R, 28);
@@ -350,7 +354,7 @@
     rod(HALF, 0.02, 0, HALF, 0.02, -NET_D, 0.022);
     rod(-HALF, 0, -NET_D, -HALF, NET_BACK_H, -NET_D, 0.018);
     rod(HALF, 0, -NET_D, HALF, NET_BACK_H, -NET_D, 0.018);
-    R.scene.add(g);
+    goalRoot.add(g);
 
     // file: dokulu yüzeyler (yanlar, tavan sabit; arka deforme olur)
     var base = netTexture();
@@ -366,7 +370,7 @@
     R.netMats = [backNet.material];
     backNet.position.set(0, NET_BACK_H / 2, -NET_D);
     backNet.frustumCulled = false;
-    R.scene.add(backNet);
+    goalRoot.add(backNet);
     R.backNet = backNet;
     R.netBase = Float32Array.from(backGeo.attributes.position.array);
     function quad(p, rx, ry) {
@@ -375,7 +379,7 @@
       geo.setAttribute("uv", new T.BufferAttribute(new Float32Array([0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1]), 2));
       geo.computeVertexNormals();
       var m = mesh(geo, netMat(rx, ry), false, false);
-      R.scene.add(m);
+      goalRoot.add(m);
       R.netMats.push(m.material);
       return m;
     }
@@ -387,7 +391,7 @@
     var shade = mesh(new T.PlaneGeometry(GOAL_W, NET_D), new T.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.22, depthWrite: false }), false, false);
     shade.rotation.x = -Math.PI / 2;
     shade.position.set(0, 0.004, -NET_D / 2);
-    R.scene.add(shade);
+    goalRoot.add(shade);
   }
 
   function netReset() {

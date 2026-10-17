@@ -21,6 +21,8 @@
  *   4. PENALTI: seri penaltı kuralları (erken bitiş, ani ölüm) doğru; yalnız sen
  *      atarsın, rakibin atışı sırayla sayılır; köşeye vuruş gol olur, hep ortaya
  *      vuran okunur; kazanan sıradaki kulübe geçer, kaybeden turnuvayı bitirir.
+ *      Doğru güçte top tam nişana gider, güç hatası sapma yapar, rüzgâr
+ *      sürükler; jokerler işini yapar; merdivende koşullar zorlaşır.
  *   5. BİLGİ YARIŞMALARI (Arena, Kim Bu?, Skor Tahmini): her soru geçerli
  *      (cevap şıklarda, şıklar tekil), zorluk seviyeyle artar, son sorulan
  *      oyuncu/maç hemen tekrar gelmez, maç sonucu doğru okunur, hızlı ve seri
@@ -433,7 +435,19 @@ function penaltyBot(A, run, { aim, power = "iyi", type = "plase", restart = fals
         A.game.down({ x: x0 + order.indexOf(type) * (bw + 8) + bw / 2, y: H - 44 });
         A.game.up({ x: x0 + order.indexOf(type) * (bw + 8) + bw / 2, y: H - 44 });
       }
-      const [tx, ty] = aim(d);
+      let [tx, ty] = aim(d);
+      if (power === "iyi" && d.predict) {
+        // iyi oyuncu rüzgârı nişanla telafi eder
+        const v = (d.zone[0] + d.zone[1]) / 2;
+        let ax = tx, ay = ty;
+        for (let k = 0; k < 3; k++) {
+          const pr = d.predict(type, ax, ay, v, false);
+          ax += tx - pr.x;
+          ay += ty - pr.y;
+        }
+        tx = ax;
+        ty = ay;
+      }
       const dx = ((tx - d.aim.x) / 8.6) * W, dy = -((ty - d.aim.y) / 4.6) * H;
       A.game.down({ x: 195, y: 400 });
       A.game.move({ x: 195 + dx, y: 400 + dy });
@@ -538,6 +552,109 @@ const corner = () => [(Math.random() < 0.5 ? -1 : 1) * (2.35 + Math.random() * 0
     "penaltı: kazanan sıradaki kulübe geçer, kaybeden turnuvayı bitirir",
     (advanced || Boolean(over())) && Boolean(end) && end.stats && end.stats.wins < 2 && !end.stats.champion && end.stats.keepers === 2,
     `iyi oyuncu: ${advanced ? "2. maça geçti (" + d.opponent + ")" : "ilk maçı kaybetti"} · kötü oyuncu: ${end ? "tur bitti, skor " + end.score : "bitmedi"}`,
+  );
+}
+
+{
+  // Atış modeli: doğru ayarda top TAM nişana; güç hatası sapma; rüzgâr sürükler.
+  const { A, run } = boot("penalti");
+  A.game.setRoster(penRoster);
+  A.game.start();
+  const d = A.game.debug();
+  d.cond.wind = 0;
+  d.cond.windZ = 0;
+  const targets = [[-3.0, 0.4], [2.9, 2.1], [0.8, 1.2], [-1.6, 1.9]];
+  let worst = 0;
+  for (const type of ["plase", "sert", "kasik"]) {
+    for (const [tx, ty] of targets) {
+      if (type === "kasik" && Math.abs(tx) > 2.6) continue;
+      const z = d.zoneOf ? d.zoneOf(type) : d.zone;
+      for (const v of [z[0] + 0.005, (z[0] + z[1]) / 2, z[1] - 0.005]) {
+        const p = d.predict(type, tx, ty, v, false);
+        worst = Math.max(worst, Math.hypot(p.x - p.tx, p.y - p.ty), Math.hypot(p.tx - tx, p.ty - Math.max(type === "kasik" ? 0.9 : 0, ty)));
+      }
+    }
+  }
+  check("penaltı: güç yeşil bölgede → top tam nişana gider", worst < 0.02, `en büyük sapma ${(worst * 100).toFixed(1)} cm (3 tür × 4 hedef × 3 güç)`);
+  const z = d.zoneOf("plase");
+  const ok = d.predict("plase", 2.4, 1.5, (z[0] + z[1]) / 2, false);
+  const hi = d.predict("plase", 2.4, 1.5, Math.min(1, z[1] + 0.12), false);
+  const lo = d.predict("plase", 2.4, 1.5, Math.max(0, z[0] - 0.15), false);
+  check(
+    "penaltı: fazla güç topu yükseltip dışarı açar, az güç alçaltıp yavaşlatır",
+    hi.y > ok.y + 0.4 && hi.x > ok.x + 0.08 && lo.y < ok.y - 0.25 && Math.abs(lo.x) < Math.abs(ok.x) && lo.speed < ok.speed * 0.9,
+    `doğru (${ok.x.toFixed(2)}, ${ok.y.toFixed(2)}) · fazla (${hi.x.toFixed(2)}, ${hi.y.toFixed(2)}) · az (${lo.x.toFixed(2)}, ${lo.y.toFixed(2)}, ${lo.speed.toFixed(1)} m/sn)`,
+  );
+  d.cond.wind = 5;
+  const wp = d.predict("plase", 0, 1.2, (z[0] + z[1]) / 2, false);
+  const wk = d.predict("kasik", 0, 1.2, d.zoneOf("kasik")[0] + 0.05, false);
+  const wr = d.predict("plase", 0, 1.2, 0, true);
+  d.cond.wind = 0;
+  check(
+    "penaltı: rüzgâr topu sürükler (yavaş top daha çok, FÜZE az)",
+    wp.x > 0.15 && wk.x > wp.x * 2 && wr.x < wp.x * 0.5,
+    `5 m/sn rüzgârda plase ${wp.x.toFixed(2)} m · kaşık ${wk.x.toFixed(2)} m · füze ${wr.x.toFixed(2)} m`,
+  );
+  // Gerçek uçuş tahminle aynı: kaleciyi uzaklaştır, kale çizgisinde topun yerini ölç.
+  const bot = penaltyBot(A, run, { aim: () => [2.6, 1.7] });
+  let cross = null;
+  bot.until(() => {
+    const e = A.game.debug();
+    if (e.state === "runup") e.keeper.x = 40;
+    if (e.state === "flight" && !cross && e.ball.z <= 0.02) cross = { x: e.ball.x, y: e.ball.y, s: e.shot };
+    return cross || e.state === "result";
+  }, 20000);
+  const pr = cross && d.predict("plase", cross.s.aimX, cross.s.aimY, cross.s.v, false);
+  check("penaltı: oyundaki uçuş tahminle aynı yere gider", cross && Math.hypot(cross.x - pr.x, cross.y - pr.y) < 0.08, cross ? `uçuş (${cross.x.toFixed(2)}, ${cross.y.toFixed(2)}) · tahmin (${pr.x.toFixed(2)}, ${pr.y.toFixed(2)})` : "atış yok");
+}
+{
+  // Jokerler: KALECİ GÖZÜ kararı gösterir ve kaleci ona uyar; FÜZE kusursuz ve hızlı; DEV KALE büyütür.
+  const { A, run } = boot("penalti");
+  A.game.setRoster(penRoster);
+  A.game.start();
+  let d = A.game.debug();
+  run(5, () => A.game.debug().state === "aim");
+  for (let i = 0; i < 2000 && A.game.debug().state !== "aim"; i++) run(1 / 60);
+  d = A.game.debug();
+  const usedEye = d.useJoker("eye"), usedRocket = d.useJoker("rocket"), usedBig = d.useJoker("big"), again = d.useJoker("eye");
+  const plan = A.game.debug().kplan;
+  const g = A.game.debug().goal;
+  // nişan: normal kalenin dışı, büyük kalenin içi
+  A.game.down({ x: 195, y: 400 });
+  A.game.move({ x: 195 + ((4.0 - d.aim.x) / 8.6) * 390, y: 400 - ((1.0 - d.aim.y) / 4.6) * 640 });
+  A.game.up({ x: 195 + ((4.0 - d.aim.x) / 8.6) * 390, y: 400 });
+  const sh = A.game.debug().shot;
+  let dive = null;
+  for (let i = 0; i < 4000 && A.game.debug().state !== "result"; i++) {
+    run(1 / 120);
+    const e = A.game.debug();
+    if (!dive && e.keeper.dive) dive = e.keeper.dive;
+  }
+  const after = A.game.debug();
+  const keeperObeyed = plan.mode === "commit" ? dive && Math.sign(dive.dx) === plan.side : plan.mode === "stay" ? !dive : true;
+  check(
+    "penaltı: jokerler — göz kararı gösterir, füze kusursuz ve hızlı, dev kale büyür",
+    usedEye && usedRocket && usedBig && !again && keeperObeyed && sh && sh.rocket && sh.q === 1 && sh.speed >= 33 && g.half > 4.3 && after.jokers.eye === 0,
+    `kaleci: ${plan.mode}${plan.side ? (plan.side < 0 ? " sol" : " sağ") : ""} → ${dive ? (dive.dx < 0 ? "sola uçtu" : "sağa uçtu") : "yerinde"} · füze ${sh ? sh.speed.toFixed(1) : "-"} m/sn · kale yarı genişlik ${g.half.toFixed(2)} m · sonuç ${after.lastKick && after.lastKick.result}`,
+  );
+}
+{
+  // Zorluk merdiveni: ilk maç sakin; son basamakta rüzgâr, dar bölge, hızlı çubuk, titreyen nişan.
+  const { A } = boot("penalti");
+  A.game.setRoster(penRoster);
+  A.game.start();
+  const d0 = A.game.debug();
+  const easy = { zone: d0.zoneOf("plase"), period: d0.cond.period, wind: d0.cond.wind, sway: d0.cond.sway };
+  d0.startMatch(1);
+  const d1 = A.game.debug();
+  d1.nextKick();
+  const d2 = A.game.debug();
+  const hard = { zone: d2.zoneOf("plase"), period: d2.cond.period, wind: d2.cond.wind, sway: d2.cond.sway };
+  const w = (z) => z[1] - z[0];
+  check(
+    "penaltı: merdivende zorlaşır (rüzgâr, dar bölge, hızlı güç, titreyen nişan)",
+    easy.wind === 0 && Math.abs(hard.wind) > 1 && w(hard.zone) < w(easy.zone) * 0.75 && hard.period < easy.period * 0.85 && hard.sway > easy.sway * 2,
+    `bölge ${w(easy.zone).toFixed(2)} → ${w(hard.zone).toFixed(2)} · çubuk ${easy.period.toFixed(2)} → ${hard.period.toFixed(2)} sn · rüzgâr ${easy.wind.toFixed(1)} → ${Math.abs(hard.wind).toFixed(1)} m/sn · titreme ${easy.sway.toFixed(2)} → ${hard.sway.toFixed(2)} m`,
   );
 }
 
