@@ -15,7 +15,9 @@
  *      (ritim) artar.
  *   3. SLALOM: kenarda saklanmak ARTIK İŞE YARAMAZ — kaçırılan kapılar hak
  *      götürür ve tur biter. Kapıları izleyen oyuncu puan toplar; hız artar,
- *      kapılar daralır.
+ *      kapılar daralır. Kayma savrulmadan oturur; jokerler (SÜPÜR, HAYALET,
+ *      AĞIR ÇEKİM) işini yapar, seviye atlayan joker kazanır; rakip adı
+ *      sığmazsa kısalır.
  *   4. PENALTI: seri penaltı kuralları (erken bitiş, ani ölüm) doğru; yalnız sen
  *      atarsın, rakibin atışı sırayla sayılır; köşeye vuruş gol olur, hep ortaya
  *      vuran okunur; kazanan sıradaki kulübe geçer, kaybeden turnuvayı bitirir.
@@ -321,6 +323,93 @@ for (const game of ["penalti", "slalom", "sektir"]) {
   const d = A.game.debug();
   const want = ["Zayıf Savunma", "Orta Savunma", "En İyi Savunma"][Math.min(d.level, 3) - 1];
   check("slalom: koşucu ve rakip savunma kadrodan gelir", d.runner === "A. Koşucu" && d.defense === want, `${d.runner}, seviye ${d.level} → ${d.defense}`);
+}
+
+{
+  // Yanal hareket: hedefe hızla ve savrulmadan oturur.
+  const { A, run } = boot("slalom");
+  A.game.start();
+  const p = A.game.debug().player;
+  let maxX = 0, t90 = null, t = 0;
+  p.target = 3;
+  run(1.2, () => {
+    t += 1 / 120;
+    maxX = Math.max(maxX, p.x);
+    if (t90 == null && p.x >= 2.7) t90 = t;
+  });
+  check(
+    "slalom: kayma dengeli (hızlı oturur, savrulmaz)",
+    t90 != null && t90 < 0.6 && maxX < 3.12 && Math.abs(p.x - 3) < 0.05,
+    `%90'a ${t90 == null ? "—" : t90.toFixed(2)} sn, en çok ${maxX.toFixed(2)} m (hedef 3)`,
+  );
+}
+{
+  // Jokerler: SÜPÜR önü boşaltır, HAYALET hak kaybettirmez, AĞIR ÇEKİM yavaşlatır.
+  const { A, run } = boot("slalom");
+  A.game.start();
+  const d0 = A.game.debug();
+  const edge = () => {
+    const d = A.game.debug();
+    const g = d.gates.find((x) => !x.done);
+    if (g) d.player.target = g.cx > 0 ? -5.3 : 5.3; // hep kapının dışından
+  };
+  // kapının dışından giden oyuncu: SÜPÜR ile 2 sn boyunca hak gitmez, kapılar sayılır
+  run(1.2);
+  const first = A.game.debug().gates.find((x) => !x.done);
+  run(Math.max(0, (first.z - A.game.debug().z - 10) / A.game.debug().speed), edge);
+  const used = d0.useJoker("clear");
+  const twice = d0.useJoker("clear");
+  const p0 = A.game.debug().passed;
+  run(2, edge);
+  const dc = A.game.debug();
+  check(
+    "slalom: SÜPÜR önünü boşaltır",
+    used && !twice && dc.lives === 3 && dc.passed > p0 && dc.jokers.clear === 0,
+    `${dc.passed - p0} kapı kendiliğinden geçildi, hak ${dc.lives}, kalan SÜPÜR ${dc.jokers.clear}`,
+  );
+  d0.useJoker("ghost");
+  run(4.5, edge);
+  const dg = A.game.debug();
+  check("slalom: HAYALET hak kaybettirmez", dg.lives === 3 && dg.active.ghost > 0, `kapının dışından 4,5 sn: hak ${dg.lives}`);
+  run(3, () => {
+    const d = A.game.debug();
+    const g = d.gates.find((x) => !x.done);
+    if (g) d.player.target = g.cx;
+  });
+  const v0 = A.game.debug().speed;
+  d0.useJoker("slow");
+  run(3, () => {
+    const d = A.game.debug();
+    const g = d.gates.find((x) => !x.done);
+    if (g) d.player.target = g.cx;
+  });
+  const ds = A.game.debug();
+  check("slalom: AĞIR ÇEKİM yavaşlatır", ds.speed < v0 * 0.72 && ds.active.slow > 16, `hız ${v0.toFixed(1)} → ${ds.speed.toFixed(1)} m/sn`);
+}
+{
+  // Joker kazanma: seviye atlayan oyuncuya yeni joker, savunmacı adı sığmazsa kısalır.
+  const { A, run } = boot("slalom");
+  A.game.start();
+  const d0 = A.game.debug();
+  d0.useJoker("clear");
+  d0.useJoker("ghost");
+  d0.useJoker("slow");
+  run(30, () => {
+    const d = A.game.debug();
+    const g = d.gates.find((x) => !x.done);
+    if (d.state === "play" && g) d.player.target = g.cx;
+  });
+  const d = A.game.debug();
+  const total = d.jokers.clear + d.jokers.ghost + d.jokers.slow;
+  const ctx = { measureText: (t) => ({ width: t.length * 7 }) };
+  const full = d.foeLabel(ctx, { name: "Mehmet Yıldırım", short: "M. Yıldırım" }, 150);
+  const mid = d.foeLabel(ctx, { name: "Muhammed Abdurrahman Karaosmanoğlu", short: "M. Karaosmanoğlu" }, 150);
+  const tiny = d.foeLabel(ctx, { name: "Muhammed Abdurrahman Karaosmanoğlu", short: "M. Karaosmanoğlu" }, 70);
+  check(
+    "slalom: seviye atlayan joker kazanır, rakip adı tam ya da kısaltılmış",
+    d.level >= 2 && total >= d.level - 1 && full === "Mehmet Yıldırım" && mid === "M. Karaosmanoğlu" && tiny.endsWith("…") && tiny.length * 7 <= 70,
+    `seviye ${d.level}, ${total} joker · "${full}" · "${mid}" · "${tiny}"`,
+  );
 }
 
 /* ── 4) PENALTI ──────────────────────────────────────────────────────────── */
