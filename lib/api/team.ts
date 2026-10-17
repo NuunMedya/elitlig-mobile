@@ -226,12 +226,38 @@ export interface SquadListStats {
   last_match_at: string | null;
 }
 
+/** Oyuncunun oynadığı bir maç (hangi takımda) — services/playerAppearanceService.js. */
+export interface PlayerMatch {
+  match_id: number;
+  date: string | null;
+  team_id: number | null;
+  team_name: string | null;
+  opponent_id: number | null;
+  opponent_name: string | null;
+  team_score: number | null;
+  opponent_score: number | null;
+  goals: number;
+  yellow: number;
+  red: number;
+}
+
+/** Tüm takımlardaki maç geçmişi özeti (sezon süzgecinden bağımsız). */
+export interface PlayerHistory {
+  matches: number;
+  team_matches: number;
+  goals: number;
+  last_match_date: string | null;
+  last_matches: PlayerMatch[];
+}
+
 export interface SquadListPlayer {
   id: number;
   player_name: string;
   marked_for_removal: boolean;
   removal_note?: string | null;
   stats: SquadListStats;
+  /** Sunucu eskiyse gelmeyebilir. */
+  history?: PlayerHistory;
 }
 
 export interface SquadListItem {
@@ -252,6 +278,7 @@ export interface SquadListSubmission {
 }
 
 export interface SquadListResponse {
+  team?: { id: number; team_name: string } | null;
   players: SquadListPlayer[];
   additions: { kind: "offer" | "invite"; player_id: number }[];
   seasons: { id: number; label: string; matches: number }[];

@@ -32,6 +32,13 @@
  *  - PUT /api/team-management/lineup — { formation, assignments[] }. İlk 8
  *    rolü SUNUCUDA bu uçtan türer; kadro tablosundan `starter` seçilemez.
  *
+ * MAÇA GÖRE (`?grup=mac&sira=<takim|toplam|son|uzun|az>`): kadro düz listede
+ * maç sayısına / son maç tarihine göre sıralanır. Her satırda son maç tarihi
+ * ve son 5 maç şeridi (G/B/M; başka takımda oynanan maç turuncu çerçeveli)
+ * görünür; ayrıntısı alt sayfada. Veri GET /squad-list → players[].history
+ * (tüm takımlar, sezon süzgecinden bağımsız). "Son maçını başka takımda
+ * oynamış" oyuncu satırda uyarıyla işaretlenir.
+ *
  * DÖRT GÖRÜNÜM (`?gorunum=`) — başlıktaki SAYFA SEKMELERİ (Arena: sekme
  * sayfayı değiştirir, segment veriyi süzer). Eskiden üç görünüm kâğıttaki bir
  * segmentteydi ve "Transfer & Sezon" tek sekmede iki ayrı işi taşıyordu:
@@ -73,6 +80,7 @@ import { PitchBench, PitchLineup, type PitchPlayer } from "@/components/PitchLin
 import { StatStrip } from "@/components/club/Panel";
 import { countLines } from "@/components/club/SquadSnapshot";
 import { SquadBuilderView } from "@/components/team/SquadBuilderView";
+import { LastMatchesList, LastMatchesStrip, daysAgo, shortDate } from "@/components/team/PlayerMatchHistory";
 import {
   Avatar,
   Badge,
@@ -107,6 +115,7 @@ import {
   positionLabel,
   getSquadList,
   type SquadListResponse,
+  type PlayerHistory,
   markSquadRemoval,
   unmarkSquadRemoval,
   submitSquadList,
@@ -139,7 +148,25 @@ import {
    Sabitler ve saf yardımcılar
    ══════════════════════════════════════════════════════════════════════════ */
 
-type GroupMode = "mevki" | "rol";
+type GroupMode = "mevki" | "rol" | "mac";
+
+/** "Maça göre" görünümünün sıralamaları (`?sira=`). */
+type MatchSort = "takim" | "toplam" | "son" | "uzun" | "az";
+
+const SORT_ITEMS: { key: MatchSort; label: string }[] = [
+  { key: "takim", label: "Bu takımda en çok" },
+  { key: "toplam", label: "Toplamda en çok" },
+  { key: "son", label: "En son oynayan" },
+  { key: "uzun", label: "Uzun süredir oynamayan" },
+  { key: "az", label: "En az maç" },
+];
+
+/** Kadro listesinden gelen maç bilgisi (squad-list). */
+interface SquadInfo {
+  matches: number;
+  marked: boolean;
+  history: PlayerHistory | null;
+}
 
 /** Hızlı süzgeçler — başkanın "kimde eksik var?" soruları. */
 type QuickFilter = "tumu" | "sozlesmesiz" | "hesapsiz" | "numarasiz" | "mevkisiz";
@@ -153,8 +180,9 @@ const QUICK_FILTERS: { key: QuickFilter; label: string; match: (player: RosterPl
 ];
 
 const GROUP_ITEMS: SegmentedItem<GroupMode>[] = [
-  { key: "mevki", label: "Mevkiye göre" },
-  { key: "rol", label: "Role göre" },
+  { key: "mevki", label: "Mevki" },
+  { key: "rol", label: "Rol" },
+  { key: "mac", label: "Maç" },
 ];
 
 /** Ekranın dört görünümü. Seçim `?gorunum=` ile rotada taşınır. */
@@ -211,7 +239,28 @@ function comparePlayers(a: RosterPlayer, b: RosterPlayer): number {
 /** URL parametresini normalleştirir; tanınmayan değer sessizce "mevki" olur. */
 function resolveGroup(raw: string | string[] | undefined): GroupMode {
   const value = Array.isArray(raw) ? raw[0] : raw;
-  return value === "rol" ? "rol" : "mevki";
+  return value === "rol" || value === "mac" ? value : "mevki";
+}
+
+function resolveSort(raw: string | string[] | undefined): MatchSort {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  return SORT_ITEMS.some((item) => item.key === value) ? (value as MatchSort) : "takim";
+}
+
+/** "Maça göre" sıralaması; eşitlikte ad. Hiç maçı olmayan "uzun süredir"de en üstte. */
+function sortByMatches(players: RosterPlayer[], sort: MatchSort, info: Map<number, SquadInfo>): RosterPlayer[] {
+  const teamMatches = (p: RosterPlayer) => info.get(p.id)?.matches ?? 0;
+  const total = (p: RosterPlayer) => info.get(p.id)?.history?.matches ?? 0;
+  const last = (p: RosterPlayer) => info.get(p.id)?.history?.last_match_date ?? "";
+  const byName = (a: RosterPlayer, b: RosterPlayer) => a.player_name.localeCompare(b.player_name, "tr");
+  const compare: Record<MatchSort, (a: RosterPlayer, b: RosterPlayer) => number> = {
+    takim: (a, b) => teamMatches(b) - teamMatches(a) || byName(a, b),
+    toplam: (a, b) => total(b) - total(a) || byName(a, b),
+    son: (a, b) => last(b).localeCompare(last(a)) || byName(a, b),
+    uzun: (a, b) => (last(a) ? 1 : 0) - (last(b) ? 1 : 0) || last(a).localeCompare(last(b)) || byName(a, b),
+    az: (a, b) => teamMatches(a) - teamMatches(b) || byName(a, b),
+  };
+  return players.slice().sort(compare[sort]);
 }
 
 /** Rota parametresinden görünüm — tanınmayan değer sessizce "kadro" olur. */
@@ -236,7 +285,7 @@ const searchKey = (value: string) => value.toLocaleLowerCase("tr-TR").trim();
 export default function SquadManagementScreen() {
   const auth = useAuth();
   const router = useRouter();
-  const params = useLocalSearchParams<{ grup?: string; gorunum?: string; filtre?: string }>();
+  const params = useLocalSearchParams<{ grup?: string; gorunum?: string; filtre?: string; sira?: string }>();
   const { scrollY, scrollProps } = useHeaderScroll();
 
   const [editing, setEditing] = useState<RosterPlayer | null>(null);
@@ -245,6 +294,7 @@ export default function SquadManagementScreen() {
   const group = resolveGroup(params.grup);
   const view = resolveView(params.gorunum);
   const quick = resolveFilter(params.filtre);
+  const sort = resolveSort(params.sira);
 
   const query = useQuery({
     queryKey: ["takim", "roster"],
@@ -271,8 +321,10 @@ export default function SquadManagementScreen() {
     retry: false,
   });
   const squadById = useMemo(() => {
-    const map = new Map<number, { matches: number; marked: boolean }>();
-    (squadQuery.data?.players ?? []).forEach((p) => map.set(Number(p.id), { matches: p.stats?.matches ?? 0, marked: Boolean(p.marked_for_removal) }));
+    const map = new Map<number, SquadInfo>();
+    (squadQuery.data?.players ?? []).forEach((p) =>
+      map.set(Number(p.id), { matches: p.stats?.matches ?? 0, marked: Boolean(p.marked_for_removal), history: p.history ?? null }),
+    );
     return map;
   }, [squadQuery.data]);
   const listLocked = squadQuery.data?.submission?.status === "submitted";
@@ -327,6 +379,11 @@ export default function SquadManagementScreen() {
   const sections = useMemo<RosterSection[]>(() => {
     if (filtered.length === 0) return [];
 
+    if (group === "mac") {
+      const label = SORT_ITEMS.find((item) => item.key === sort)?.label ?? "";
+      return [{ key: "mac", title: label, data: sortByMatches(filtered, sort, squadById) }];
+    }
+
     if (group === "rol") {
       return (["starter", "substitute", "reserve"] as const)
         .map((role) => ({
@@ -352,7 +409,7 @@ export default function SquadManagementScreen() {
     return unknown.length > 0
       ? [...byLine, { key: "bilinmiyor", title: "Mevkisi belirlenmemiş", data: unknown }]
       : byLine;
-  }, [filtered, group]);
+  }, [filtered, group, sort, squadById]);
 
   const lines = useMemo(() => countLines(roster.map((player) => player.team_position)), [roster]);
   const contracted = useMemo(() => roster.filter((player) => player.has_active_contract).length, [roster]);
@@ -386,6 +443,13 @@ export default function SquadManagementScreen() {
     [router]
   );
 
+  const changeSort = useCallback(
+    (next: MatchSort) => {
+      router.setParams({ sira: next });
+    },
+    [router]
+  );
+
   const changeQuick = useCallback(
     (next: QuickFilter) => {
       router.setParams({ filtre: next });
@@ -413,10 +477,12 @@ export default function SquadManagementScreen() {
         marketChange={marketByPlayer.get(item.id)?.change ?? null}
         matches={squadById.get(item.id)?.matches ?? null}
         marked={squadById.get(item.id)?.marked ?? false}
+        history={squadById.get(item.id)?.history ?? null}
+        teamId={teamId}
         onPress={openEditor}
       />
     ),
-    [marketByPlayer, openEditor, squadById]
+    [marketByPlayer, openEditor, squadById, teamId]
   );
 
   const renderSectionHeader = useCallback(
@@ -583,6 +649,14 @@ export default function SquadManagementScreen() {
         </Text>
         <SegmentedControl items={GROUP_ITEMS} value={group} onChange={changeGroup} size="sm" stretch={false} />
       </View>
+
+      {group === "mac" ? (
+        <ChipGroup contentPadding={0}>
+          {SORT_ITEMS.map((item) => (
+            <SortChip key={item.key} value={item.key} label={item.label} selected={sort === item.key} onPress={changeSort} />
+          ))}
+        </ChipGroup>
+      ) : null}
     </View>
   );
 
@@ -629,6 +703,8 @@ export default function SquadManagementScreen() {
         <PlayerEditorSheet
           player={editing}
           marked={squadById.get(editing.id)?.marked ?? false}
+          history={squadById.get(editing.id)?.history ?? null}
+          teamId={teamId}
           locked={listLocked}
           jerseyOwners={jerseyOwners}
           onClose={closeEditor}
@@ -641,6 +717,22 @@ export default function SquadManagementScreen() {
     </SafeAreaView>
   );
 }
+
+/** Sıralama çipi ("Maça göre" görünümü). */
+const SortChip = React.memo(function SortChip({
+  value,
+  label,
+  selected,
+  onPress,
+}: {
+  value: MatchSort;
+  label: string;
+  selected: boolean;
+  onPress: (value: MatchSort) => void;
+}) {
+  const handlePress = useCallback(() => onPress(value), [onPress, value]);
+  return <Chip label={label} selected={selected} onPress={handlePress} />;
+});
 
 /** Hızlı süzgeç çipi — memo'lu olsun diye anahtarı geri verir. */
 const QuickChip = React.memo(function QuickChip({
@@ -1019,11 +1111,16 @@ const PlayerRow = React.memo(function PlayerRow({
   marketChange,
   matches,
   marked,
+  history,
+  teamId,
   onPress,
 }: {
   player: RosterPlayer;
   /** Bu takımda oynadığı maç sayısı (kadro listesinden). */
   matches?: number | null;
+  /** Tüm takımlardaki maç geçmişi: son maç ve son 5 maç. */
+  history?: PlayerHistory | null;
+  teamId?: number | null;
   /** Yönetime gönderilecek listede "çıkarılacak" işaretli mi. */
   marked?: boolean;
   position: "single" | "first" | "middle" | "last";
@@ -1034,6 +1131,12 @@ const PlayerRow = React.memo(function PlayerRow({
   onPress: (player: RosterPlayer) => void;
 }) {
   const handlePress = useCallback(() => onPress(player), [onPress, player]);
+  /** Son maçını başka bir takımda oynadıysa o takımın adı. */
+  const lastMatch = history?.last_matches[0];
+  const otherTeamLast =
+    lastMatch && lastMatch.team_id != null && teamId != null && Number(lastMatch.team_id) !== Number(teamId)
+      ? lastMatch.team_name
+      : null;
 
   const meta = [
     matches != null ? `${matches} maç` : null,
@@ -1050,7 +1153,7 @@ const PlayerRow = React.memo(function PlayerRow({
       haptic="selection"
       onPress={handlePress}
       accessibilityRole="button"
-      accessibilityLabel={`${player.player_name}. ${meta}. Düzenle`}
+      accessibilityLabel={`${player.player_name}. ${meta}.${history?.last_match_date ? ` Son maç ${shortDate(history.last_match_date)}${otherTeamLast ? `, ${otherTeamLast} takımında` : ""}.` : ""} Düzenle`}
       style={[
         styles.row,
         position === "single" ? styles.rowSingle : null,
@@ -1071,6 +1174,22 @@ const PlayerRow = React.memo(function PlayerRow({
         <Text style={styles.rowMeta} numberOfLines={1} {...textScale.dense}>
           {meta}
         </Text>
+        {history && history.last_matches.length > 0 ? (
+          <View style={styles.historyLine}>
+            <LastMatchesStrip matches={history.last_matches} teamId={teamId} />
+            <Text
+              style={[styles.historyText, otherTeamLast ? styles.historyWarn : null]}
+              numberOfLines={1}
+              {...textScale.dense}
+            >
+              {otherTeamLast ? `Son: ${otherTeamLast}` : `Son maç ${shortDate(history.last_match_date)}`}
+            </Text>
+          </View>
+        ) : history ? (
+          <Text style={styles.rowMeta} numberOfLines={1} {...textScale.dense}>
+            Kayıtlı maçı yok
+          </Text>
+        ) : null}
       </View>
 
       {/* Piyasa değeri sözleşme rozetinin YERİNE geçmez, üstüne biner:
@@ -1126,6 +1245,8 @@ const NO_JERSEY = 0;
 function PlayerEditorSheet({
   player,
   marked,
+  history,
+  teamId,
   locked,
   jerseyOwners,
   onClose,
@@ -1134,6 +1255,9 @@ function PlayerEditorSheet({
   player: RosterPlayer;
   /** Oyuncu yönetime gidecek listede "çıkarılacak" işaretli mi. */
   marked: boolean;
+  /** Tüm takımlardaki maç geçmişi (son 5 maç). */
+  history: PlayerHistory | null;
+  teamId: number | null;
   /** Liste yönetimde inceleniyorsa işaret değiştirilemez. */
   locked: boolean;
   /** Forma numarası → sahibi; aynı numarayı iki oyuncuya vermeyi önceden uyarır. */
@@ -1192,8 +1316,8 @@ function PlayerEditorSheet({
       return;
     }
     Alert.alert(
-      "Listeden çıkar",
-      `${player.player_name} çıkarılacaklar listesine alınacak. Oyuncu hemen çıkarılmaz: listeyi yönetime gönderdiğinde yönetim onaylarsa kadrodan çıkar` +
+      "Takımdan çıkar",
+      `${player.player_name} takımdan çıkarılacaklar listesine alınacak. Oyuncu hemen çıkarılmaz: listeyi yönetime gönderdiğinde yönetim onaylarsa kadrodan çıkar` +
         (player.has_active_contract ? " ve aktif sözleşmesi feshedilir." : "."),
       [
         { text: "Vazgeç", style: "cancel" },
@@ -1237,7 +1361,7 @@ function PlayerEditorSheet({
       footer={
         <View style={styles.sheetFooter}>
           <Button
-            label={marked ? "Çıkarmayı geri al" : "Listeden çıkar"}
+            label={marked ? "Çıkarmayı geri al" : "Takımdan çıkar"}
             variant={marked ? "secondary" : "danger"}
             icon={marked ? "arrow-undo-outline" : "person-remove-outline"}
             onPress={confirmRemoval}
@@ -1289,6 +1413,21 @@ function PlayerEditorSheet({
             </Text>
           )}
         </View>
+
+        {/* Son 5 maç — başka takımda oynananlar dahil */}
+        {history ? (
+          <>
+            <Text style={styles.fieldLabel} {...textScale.badge}>
+              {upperTR("Son 5 maç")}
+            </Text>
+            <Text style={styles.fieldHint} {...textScale.dense}>
+              {history.matches
+                ? `Tüm takımlarda ${history.matches} maç (${history.team_matches} bu takımda) · son maç ${shortDate(history.last_match_date)}${daysAgo(history.last_match_date) ? `, ${daysAgo(history.last_match_date)}` : ""}`
+                : "Henüz maç kaydı yok."}
+            </Text>
+            <LastMatchesList matches={history.last_matches} teamId={teamId} />
+          </>
+        ) : null}
 
         {/* Forma numarası */}
         <Text style={styles.fieldLabel} {...textScale.badge}>
@@ -1543,6 +1682,20 @@ const styles = StyleSheet.create({
   rowMeta: {
     ...type.caption,
     color: colors.textTertiary,
+  },
+  historyLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.s,
+    marginTop: 2,
+  },
+  historyText: {
+    ...type.caption,
+    color: colors.textSecondary,
+    flexShrink: 1,
+  },
+  historyWarn: {
+    color: colors.warn,
   },
 
   /* Alt sayfa */
