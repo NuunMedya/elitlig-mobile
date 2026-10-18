@@ -149,8 +149,14 @@
     var gap = gapSize() + (jumper ? 0.28 : 0) + (moving ? 0.12 : 0);
     var amp = moving ? 0.45 : 0;
     var lo = 1.2 + gap / 2 + amp, hi = TOP - 0.8 - gap / 2 - amp;
-    var swing = 1.4 + 1.2 * diff();
-    var gc = gateCount < 2 ? 3.1 : A.clamp(lastGc + A.rand(-swing, swing), lo, hi);
+    // Adil kapı: iki boşluk arasındaki yükseklik farkı, topun aradaki mesafede
+    // dokunuşlarla gerçekten tırmanabileceğinden büyük olmaz (inişte de: son
+    // dokunuştan sonra top önce yükselir).
+    var sp = spacing() * 0.95;
+    var reachT = Math.max(0.2, (sp - 2 * GATE_HW - 2 * BR) / runSpeed());
+    var climb = ((FLAP_RISE * gravity()) / flapV()) * reachT * 0.8;
+    var up = Math.min(1.4 + 1.2 * diff(), climb), down = Math.min(1.6 + 1.2 * diff(), climb * 1.15);
+    var gc = gateCount < 2 ? 3.1 : A.clamp(lastGc + A.rand(-down, up), lo, hi);
     lastGc = gc;
     var g = {
       id: ++uid,
