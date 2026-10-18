@@ -2,7 +2,7 @@
  * SAHA SIRALAMASI — gerçek maçların haftalık ve aylık liderlik tablosu
  * (GET /api/career/leaderboard).
  *
- * NE: üstte iki segment (Oyuncular / Takımlar · Haftalık / Aylık), altında
+ * NE: üstte iki segment (Oyuncular / Takımlar / XP · dönem), altında
  * kapsam çip şeridi (Türkiye + iller; varsayılan seçili il, yoksa Türkiye)
  * ve "bu dönem / geçen dönem" çipi. İlk üç podyumda, kalanı yoğun liste.
  * Kendi satırın (oyuncu ya da takımın) listede vurgulanır; listenin dışında
@@ -13,6 +13,8 @@
  *              reyting, sonuç, kartsız — Kariyerim'deki standart saha XP'si)
  *   Takımlar   takım puanı: maç başına 10, galibiyet başına 5 + biten takım
  *              görevleri (Kariyerim → Takım)
+ *   XP         Elit Seviye XP'si (saha + seyirci + oyunlar): haftalık (bu hafta
+ *              kazanılan) ya da tüm zamanlar (Elit Seviye ile)
  *
  * NEDEN AYRI DÖNEMLER: haftalık tablo her Pazartesi sıfırlanır (her hafta
  * yeni şans, her hafta sahaya çıkma nedeni); aylık tablo ayın emeğini
@@ -41,16 +43,55 @@ import {
   withAlpha,
   type SegmentedItem,
 } from "@/components/ui";
-import { getSahaLeaderboard, type LeaderType, type PeriodKind, type SahaLeaderRow } from "@/lib/api/career";
+import {
+  getSahaLeaderboard,
+  getXpLeaderboard,
+  type LeaderType,
+  type PeriodKind,
+  type SahaLeaderRow,
+  type XpLeaderRow,
+  type XpPeriod,
+} from "@/lib/api/career";
 import { formatDateShort } from "@/lib/format";
 import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
 import { colors, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
 
-const TYPES: SegmentedItem<LeaderType>[] = [
+type Kind = LeaderType | "xp";
+const TYPES: SegmentedItem<Kind>[] = [
   { key: "players", label: "Oyuncular" },
   { key: "teams", label: "Takımlar" },
+  { key: "xp", label: "XP" },
 ];
+const XP_PERIODS: SegmentedItem<XpPeriod>[] = [
+  { key: "week", label: "Haftalık" },
+  { key: "all", label: "Tüm zamanlar" },
+];
+
+/** Ekranın ortak tablosu: saha ve XP sıralaması aynı satırlarla çizilir. */
+interface Board {
+  label: string;
+  total: number;
+  rows: SahaLeaderRow[];
+  me: SahaLeaderRow | null;
+  starts_at: string | null;
+  ends_at: string | null;
+}
+const fromXp = (row: XpLeaderRow): SahaLeaderRow => ({
+  rank: row.rank,
+  score: row.xp,
+  matches: 0,
+  goals: 0,
+  name: row.name,
+  city: row.city,
+  city_id: row.city_id,
+  player_id: row.player_id ?? undefined,
+  image: row.image,
+  user_id: row.user_id,
+  team_name: row.team_name,
+  level: row.level,
+  layers: row.layers,
+});
 const PERIODS: SegmentedItem<PeriodKind>[] = [
   { key: "week", label: "Haftalık" },
   { key: "month", label: "Aylık" },
@@ -63,36 +104,54 @@ export default function SahaSiralamasiScreen() {
   const params = useLocalSearchParams<{ type?: string; period?: string }>();
   const auth = useAuth();
   const scope = useScope();
-  const [kind, setKind] = useState<LeaderType>(params.type === "teams" ? "teams" : "players");
+  const [kind, setKind] = useState<Kind>(params.type === "teams" ? "teams" : params.type === "xp" ? "xp" : "players");
   const [period, setPeriod] = useState<PeriodKind>(params.period === "month" ? "month" : "week");
+  const [xpPeriod, setXpPeriod] = useState<XpPeriod>(params.period === "all" ? "all" : "week");
   const [offset, setOffset] = useState(0);
   // null = Türkiye geneli; varsayılan kullanıcının seçili ili
   const [cityId, setCityId] = useState<number | null>(scope.cityId ?? null);
 
   const query = useQuery({
-    queryKey: ["career", "leaderboard", kind, period, offset, cityId],
-    queryFn: () => getSahaLeaderboard({ type: kind, period, offset, cityId }),
+    queryKey: ["career", "leaderboard", kind, kind === "xp" ? xpPeriod : period, kind === "xp" ? 0 : offset, cityId],
+    queryFn: async (): Promise<Board> => {
+      if (kind === "xp") {
+        const res = await getXpLeaderboard({ period: xpPeriod, cityId });
+        return { label: res.scope.label, total: res.total, rows: res.rows.map(fromXp), me: res.me ? fromXp(res.me) : null, starts_at: res.period.starts_at, ends_at: res.period.ends_at };
+      }
+      const res = await getSahaLeaderboard({ type: kind, period, offset, cityId });
+      return { label: res.scope.label, total: res.total, rows: res.rows, me: res.me, starts_at: res.period.starts_at, ends_at: res.period.ends_at };
+    },
     staleTime: 60_000,
   });
   const refresh = useRefresh(query.refetch, { refreshing: query.isRefetching });
   const data = query.data;
   const myPlayer = auth.user?.player_id ?? null;
 
-  const isMine = (row: SahaLeaderRow) => Boolean(data?.me && (kind === "players" ? row.player_id === data.me.player_id : row.id === data.me.id));
+  const isMine = (row: SahaLeaderRow) =>
+    Boolean(data?.me && (kind === "xp" ? row.user_id === data.me.user_id : kind === "players" ? row.player_id === data.me.player_id : row.id === data.me.id));
   const meOutside = data?.me && !data.rows.some(isMine) ? data.me : null;
   const cities = useMemo(() => scope.cities.filter((city) => !city.is_archived), [scope.cities]);
 
-  const periodLabel = period === "week" ? (offset ? "Geçen hafta" : "Bu hafta") : offset ? "Geçen ay" : "Bu ay";
-  const range = data ? `${formatDateShort(data.period.starts_at)} – ${formatDateShort(new Date(new Date(data.period.ends_at).getTime() - 1000).toISOString())}` : "";
+  const periodLabel =
+    kind === "xp" ? (xpPeriod === "week" ? "Bu hafta" : "Tüm zamanlar") : period === "week" ? (offset ? "Geçen hafta" : "Bu hafta") : offset ? "Geçen ay" : "Bu ay";
+  const range =
+    data && data.starts_at && data.ends_at
+      ? `${formatDateShort(data.starts_at)} – ${formatDateShort(new Date(new Date(data.ends_at).getTime() - 1000).toISOString())} · `
+      : "";
+  const unit = kind === "teams" ? "takım" : kind === "xp" ? "üye" : "oyuncu";
   const open = (row: SahaLeaderRow) => {
-    if (kind === "players" && row.player_id) router.push(`/oyuncu/${row.player_id}`);
+    if ((kind === "players" || kind === "xp") && row.player_id) router.push(`/oyuncu/${row.player_id}`);
     else if (kind === "teams" && row.id) router.push(`/takim/${row.id}`);
   };
 
   const header = (
     <View style={styles.head}>
       <SegmentedControl items={TYPES} value={kind} onChange={setKind} stretch />
-      <SegmentedControl items={PERIODS} value={period} onChange={(next) => { setPeriod(next); setOffset(0); }} stretch />
+      {kind === "xp" ? (
+        <SegmentedControl items={XP_PERIODS} value={xpPeriod} onChange={setXpPeriod} stretch />
+      ) : (
+        <SegmentedControl items={PERIODS} value={period} onChange={(next) => { setPeriod(next); setOffset(0); }} stretch />
+      )}
       <ChipGroup contentPadding={0}>
         <Chip label="Türkiye" icon="earth-outline" selected={cityId == null} onPress={() => setCityId(null)} size="sm" />
         {cities.map((city) => (
@@ -102,18 +161,22 @@ export default function SahaSiralamasiScreen() {
       <View style={styles.metaRow}>
         <View style={styles.flex}>
           <Text style={styles.metaTitle} {...textScale.dense}>
-            {`${data?.scope.label ?? (cityId ? "İl" : "Türkiye")} · ${periodLabel}`}
+            {`${data?.label ?? (cityId ? "İl" : "Türkiye")} · ${periodLabel}`}
           </Text>
           <Text style={styles.caption} {...textScale.dense}>
-            {range ? `${range} · ${data?.total ?? 0} ${kind === "players" ? "oyuncu" : "takım"}` : " "}
+            {data ? `${range}${data.total} ${unit}` : " "}
           </Text>
         </View>
-        <Chip label={offset ? (period === "week" ? "Bu hafta" : "Bu ay") : period === "week" ? "Geçen hafta" : "Geçen ay"} icon="time-outline" onPress={() => setOffset(offset ? 0 : 1)} size="sm" />
+        {kind !== "xp" ? (
+          <Chip label={offset ? (period === "week" ? "Bu hafta" : "Bu ay") : period === "week" ? "Geçen hafta" : "Geçen ay"} icon="time-outline" onPress={() => setOffset(offset ? 0 : 1)} size="sm" />
+        ) : null}
       </View>
       <Text style={styles.rule} {...textScale.long}>
         {kind === "players"
           ? "Puan: dönemde oynadığın maçların saha XP'si (maç, gol, asist, kurtarış, reyting, galibiyet, kartsız)."
-          : "Puan: maç başına 10, galibiyet başına 5 + biten takım görevleri. Daha çok maç, daha çok puan."}
+          : kind === "teams"
+            ? "Puan: maç başına 10, galibiyet başına 5 + biten takım görevleri. Daha çok maç, daha çok puan."
+            : "Elit Seviye XP'si: maçlar, görevler, rozetler, tahminler ve oyunlar. Kariyerim'i açtıkça XP'n güncellenir."}
       </Text>
       {meOutside ? <Row row={meOutside} kind={kind} mine onPress={() => open(meOutside)} pinned /> : null}
       {data && data.rows.length >= 3 ? <Podium rows={data.rows.slice(0, 3)} kind={kind} onPress={open} isMine={isMine} /> : null}
@@ -133,7 +196,7 @@ export default function SahaSiralamasiScreen() {
       ) : (
         <FlatList
           data={data.rows.length >= 3 ? data.rows.slice(3) : data.rows}
-          keyExtractor={(row) => `${kind}-${row.player_id ?? row.id}`}
+          keyExtractor={(row) => `${kind}-${row.user_id ?? row.player_id ?? row.id}`}
           ListHeaderComponent={header}
           contentContainerStyle={styles.content}
           refreshControl={refresh.control}
@@ -143,14 +206,20 @@ export default function SahaSiralamasiScreen() {
               <EmptyState
                 icon="podium-outline"
                 title="Bu dönemde henüz maç yok"
-                body={kind === "players" ? "Maça çık, saha XP'si topla, sıralamaya ilk sen gir." : "Takımınla maç al ve oyna; görevleri bitir, sıralamaya ilk siz girin."}
+                body={
+                  kind === "players"
+                    ? "Maça çık, saha XP'si topla, sıralamaya ilk sen gir."
+                    : kind === "teams"
+                      ? "Takımınla maç al ve oyna; görevleri bitir, sıralamaya ilk siz girin."
+                      : "Görevleri bitir, maça çık, oyun oyna; XP topla, sıralamaya ilk sen gir."
+                }
               />
             )
           }
           ListFooterComponent={
-            !myPlayer && kind === "players" ? (
+            (!myPlayer && kind === "players") || (!auth.user && kind === "xp") ? (
               <Text style={styles.footer} {...textScale.long}>
-                Kendi sıranı görmek için Kariyerim'den oyuncu profilini bağla.
+                {kind === "xp" ? "Kendi sıranı görmek için giriş yap." : "Kendi sıranı görmek için Kariyerim'den oyuncu profilini bağla."}
               </Text>
             ) : null
           }
@@ -160,7 +229,12 @@ export default function SahaSiralamasiScreen() {
   );
 }
 
-function subtitleOf(row: SahaLeaderRow, kind: LeaderType) {
+function subtitleOf(row: SahaLeaderRow, kind: Kind) {
+  if (kind === "xp") {
+    const parts = [row.level ? `Sv ${row.level}` : null, row.team_name, row.city];
+    if (row.layers && !row.level) parts.push(`Saha ${row.layers.saha} · Oyun ${row.layers.arena} · Seyirci ${row.layers.tribun}`);
+    return parts.filter(Boolean).join(" · ");
+  }
   if (kind === "players") {
     const parts = [row.team?.name, `${row.matches} maç`, row.goals ? `${row.goals} gol` : null, row.assists ? `${row.assists} asist` : null];
     return parts.filter(Boolean).join(" · ");
@@ -169,11 +243,11 @@ function subtitleOf(row: SahaLeaderRow, kind: LeaderType) {
   return parts.filter(Boolean).join(" · ");
 }
 
-function Leading({ row, kind, size }: { row: SahaLeaderRow; kind: LeaderType; size: number }) {
-  return kind === "players" ? <Avatar name={row.name} image={row.image ?? null} size={size} /> : <TeamLogo name={row.name} logo={row.logo ?? null} size={size} />;
+function Leading({ row, kind, size }: { row: SahaLeaderRow; kind: Kind; size: number }) {
+  return kind !== "teams" ? <Avatar name={row.name} image={row.image ?? null} size={size} /> : <TeamLogo name={row.name} logo={row.logo ?? null} size={size} />;
 }
 
-function Row({ row, kind, mine, first, pinned, onPress }: { row: SahaLeaderRow; kind: LeaderType; mine?: boolean; first?: boolean; pinned?: boolean; onPress: () => void }) {
+function Row({ row, kind, mine, first, pinned, onPress }: { row: SahaLeaderRow; kind: Kind; mine?: boolean; first?: boolean; pinned?: boolean; onPress: () => void }) {
   return (
     <Touchable onPress={onPress} accessibilityRole="button" accessibilityLabel={`${row.rank}. ${row.name}, ${row.score} puan`}>
       <View style={[styles.row, !first && !pinned && styles.rowBorder, mine && styles.rowMine, pinned && styles.rowPinned]}>
@@ -194,7 +268,7 @@ function Row({ row, kind, mine, first, pinned, onPress }: { row: SahaLeaderRow; 
             {row.score.toLocaleString("tr-TR")}
           </Text>
           <Text style={styles.scoreUnit} {...textScale.badge}>
-            {kind === "players" ? "XP" : upperTR("puan")}
+            {kind === "teams" ? upperTR("puan") : "XP"}
           </Text>
         </View>
       </View>
@@ -202,7 +276,7 @@ function Row({ row, kind, mine, first, pinned, onPress }: { row: SahaLeaderRow; 
   );
 }
 
-function Podium({ rows, kind, onPress, isMine }: { rows: SahaLeaderRow[]; kind: LeaderType; onPress: (row: SahaLeaderRow) => void; isMine: (row: SahaLeaderRow) => boolean }) {
+function Podium({ rows, kind, onPress, isMine }: { rows: SahaLeaderRow[]; kind: Kind; onPress: (row: SahaLeaderRow) => void; isMine: (row: SahaLeaderRow) => boolean }) {
   // ikinci · birinci · üçüncü
   const order = [rows[1], rows[0], rows[2]];
   return (
@@ -211,7 +285,7 @@ function Podium({ rows, kind, onPress, isMine }: { rows: SahaLeaderRow[]; kind: 
         const place = i === 1 ? 0 : i === 0 ? 1 : 2;
         const medal = MEDALS[place];
         return (
-          <Touchable key={`${row.player_id ?? row.id}`} onPress={() => onPress(row)} style={styles.podiumCol} accessibilityRole="button" accessibilityLabel={`${row.rank}. ${row.name}`}>
+          <Touchable key={`${row.user_id ?? row.player_id ?? row.id}`} onPress={() => onPress(row)} style={styles.podiumCol} accessibilityRole="button" accessibilityLabel={`${row.rank}. ${row.name}`}>
             <View style={[styles.podiumRing, { borderColor: medal }, isMine(row) && styles.podiumMine]}>
               <Leading row={row} kind={kind} size={place === 0 ? 60 : 48} />
             </View>
@@ -224,7 +298,7 @@ function Podium({ rows, kind, onPress, isMine }: { rows: SahaLeaderRow[]; kind: 
               {row.name}
             </Text>
             <Text style={styles.podiumScore} {...textScale.dense}>
-              {`${row.score.toLocaleString("tr-TR")} ${kind === "players" ? "XP" : "puan"}`}
+              {`${row.score.toLocaleString("tr-TR")} ${kind === "teams" ? "puan" : "XP"}`}
             </Text>
             <View style={[styles.podiumBase, { height: place === 0 ? 34 : place === 1 ? 24 : 16, backgroundColor: withAlpha(medal, 0.3) }]} />
           </Touchable>

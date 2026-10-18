@@ -297,7 +297,7 @@ export default function MenuTabScreen() {
           key: "saha-siralamasi",
           icon: "trophy",
           title: "Saha Sıralaması",
-          subtitle: "Haftalık ve aylık · Türkiye ve il · oyuncular ve takımlar",
+          subtitle: "Oyuncular, takımlar ve XP · haftalık, aylık, tüm zamanlar · Türkiye ve il",
           action: { kind: "route", route: "/saha-siralamasi" },
         },
         {

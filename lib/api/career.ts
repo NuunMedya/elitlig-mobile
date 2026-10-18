@@ -10,7 +10,7 @@ import { get, put } from "../http";
  * piyasa değerine dokunmaz; saha dışı XP seviyeyi en çok 30'a taşır.
  *
  * XP üç yoldan gelir: her maç / oyun / tahminin standart XP'si, haftalık
- * görevler (20 görevlik sıra, aynı anda 5 açık) ve tüm zamanlar kariyer
+ * görevler (40 görevlik sıra, aynı anda 20 açık) ve tüm zamanlar kariyer
  * görevleri (kademeli) + rozetler.
  */
 
@@ -68,7 +68,7 @@ export interface CareerQuest {
   xp: number;
 }
 
-/** Haftanın 20 görevlik sırası: 5 açık, biten yerine sıradaki gelir. */
+/** Haftanın 40 görevlik sırası: 20 açık, biten yerine sıradaki gelir. */
 export interface WeeklyQuests {
   active: CareerQuest[];
   completed: CareerQuest[];
@@ -196,6 +196,11 @@ export interface SahaLeaderRow {
   wins?: number;
   quests_done?: number;
   quests_total?: number;
+  // XP sıralaması (ekranda ortak satıra çevrilir)
+  user_id?: number;
+  team_name?: string | null;
+  level?: number | null;
+  layers?: Record<CareerLayer, number>;
 }
 
 export interface SahaLeaderboard {
@@ -206,6 +211,35 @@ export interface SahaLeaderboard {
   rows: SahaLeaderRow[];
   me: SahaLeaderRow | null;
 }
+
+/** Elit Seviye XP sıralaması: haftalık (bu hafta kazanılan) ya da tüm zamanlar. */
+export type XpPeriod = "week" | "all";
+
+export interface XpLeaderRow {
+  rank: number;
+  user_id: number;
+  name: string;
+  image: string | null;
+  player_id: number | null;
+  team_name: string | null;
+  city: string | null;
+  city_id: number | null;
+  xp: number;
+  layers: Record<CareerLayer, number>;
+  /** Yalnız tüm zamanlarda. */
+  level: number | null;
+}
+
+export interface XpLeaderboard {
+  period: { kind: XpPeriod; key: string; starts_at: string | null; ends_at: string | null };
+  scope: { city_id: number | null; label: string };
+  total: number;
+  rows: XpLeaderRow[];
+  me: XpLeaderRow | null;
+}
+
+export const getXpLeaderboard = (params: { period: XpPeriod; cityId?: number | null }) =>
+  get<XpLeaderboard>("/api/career/xp-leaderboard", { period: params.period, ...(params.cityId ? { cityId: params.cityId } : {}) });
 
 export const getSahaLeaderboard = (params: { type: LeaderType; period: PeriodKind; offset?: number; cityId?: number | null }) =>
   get<SahaLeaderboard>("/api/career/leaderboard", {
