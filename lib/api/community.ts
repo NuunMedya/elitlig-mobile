@@ -109,9 +109,34 @@ export interface FantasyPlayer {
   price: number;
 }
 
+export interface FantasyLineupView {
+  week: string;
+  playerIds: number[];
+  captainId: number;
+  points: number;
+  breakdown: { id: number; points: number; captain: boolean }[];
+}
+
 export interface FantasyMe {
-  week: { key: string; start: string; end: string; deadline: string; locked: boolean; matches: number };
-  lineup: { week: string; playerIds: number[]; captainId: number; points: number; breakdown: { id: number; points: number; captain: boolean }[] } | null;
+  week: {
+    key: string;
+    start: string;
+    end: string;
+    /** İlk başlamamış maçın saati (o an bir takımın oyuncuları kilitlenir). */
+    deadline: string;
+    /** Eski sunucu: true ise bütün hafta kilitli. Yeni sunucuda hep false. */
+    locked: boolean;
+    matches: number;
+    /** "current": bu haftanın kadrosu düzenleniyor · "next": bu hafta bitti, gelecek hafta. */
+    mode?: "current" | "next";
+    current_key?: string;
+    last_kickoff?: string | null;
+    /** Bu haftaki maçı başlamış takımlar: oyuncuları eklenemez/çıkarılamaz. */
+    lockedTeamIds?: number[];
+  };
+  lineup: FantasyLineupView | null;
+  /** Gelecek hafta düzenlenirken bu haftanın oynanmış kadrosu. */
+  live?: FantasyLineupView | null;
   suggestion: { playerIds: number[]; captainId: number } | null;
   history: { week: string; points: number }[];
   rules: { budget: number; size: number; maxPerTeam: number };

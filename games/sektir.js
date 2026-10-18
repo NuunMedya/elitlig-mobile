@@ -27,7 +27,7 @@
  *   · Tavan açıktır: tribün çatısına çarpan top aşağı döner, tur bitmez.
  *
  * GİDEREK ZORLAŞIR (her 10 golde bir seviye; ilk ~60 golde doyar):
- *   · Top hızlanır (3,1 → 4,6 m/sn), boşluk daralır (2,15 → 1,55 m),
+ *   · Top hızlanır (3,1 → 4,6 m/sn), boşluk daralır (2,25 → 1,65 m),
  *     kapılar sıklaşır, yerçekimi artar.
  *   · Seviye 3: BARAJ ZIPLAR — top yaklaşınca en üstteki savunmacı sıçrar.
  *   · Seviye 5: kayan kapılar — baraj ve kale birlikte yukarı aşağı oynar.
@@ -91,7 +91,7 @@
   }
 
   /* ─────────────── dünya (metre) ─────────────── */
-  var BR = 0.22; // top yarıçapı (sahne topu, okunurluk için iri)
+  var BR = 0.26; // top yarıçapı (sahne topu, okunurluk için iri)
   var TOP = 6.6; // tavan (tribün çatısı hizası)
   var GATE_HW = 0.36; // baraj / kale yarı genişliği
   var LEVEL_STEP = 1.42; // omuz üstüne çıkan her savunmacı bu kadar yükseltir
@@ -117,7 +117,7 @@
     return 1 - Math.exp(-goals / 30);
   }
   function gapSize() {
-    return 2.15 - 0.6 * diff();
+    return 2.25 - 0.6 * diff();
   }
   function spacing() {
     return 3.3 - 0.55 * diff();
@@ -149,8 +149,14 @@
     var gap = gapSize() + (jumper ? 0.28 : 0) + (moving ? 0.12 : 0);
     var amp = moving ? 0.45 : 0;
     var lo = 1.2 + gap / 2 + amp, hi = TOP - 0.8 - gap / 2 - amp;
-    var swing = 1.4 + 1.2 * diff();
-    var gc = gateCount < 2 ? 3.1 : A.clamp(lastGc + A.rand(-swing, swing), lo, hi);
+    // Adil kapı: iki boşluk arasındaki yükseklik farkı, topun aradaki mesafede
+    // dokunuşlarla gerçekten tırmanabileceğinden büyük olmaz (inişte de: son
+    // dokunuştan sonra top önce yükselir).
+    var sp = spacing() * 0.95;
+    var reachT = Math.max(0.2, (sp - 2 * GATE_HW - 2 * BR) / runSpeed());
+    var climb = ((FLAP_RISE * gravity()) / flapV()) * reachT * 0.8;
+    var up = Math.min(1.4 + 1.2 * diff(), climb), down = Math.min(1.6 + 1.2 * diff(), climb * 1.15);
+    var gc = gateCount < 2 ? 3.1 : A.clamp(lastGc + A.rand(-down, up), lo, hi);
     lastGc = gc;
     var g = {
       id: ++uid,
@@ -552,6 +558,7 @@
       buildWorld();
       R.ball = S3.ball(BR);
       R.ballShadow = S3.blob(BR * 3, 0.5);
+      buildFocus();
       buildJuggler();
       paintCrowd();
       resizeGL();
@@ -639,7 +646,8 @@
     R.track = track;
     R.boardTex = K.canvasTex(2048, 64, function () {}, true);
     R.boardTex.repeat.set(STRIP / 40, 1);
-    var boardMat = new T.MeshBasicMaterial({ map: R.boardTex, toneMapped: false });
+    // pano arka plandadır: parlaklığı kısık (göz oyun alanında kalsın)
+    var boardMat = new T.MeshBasicMaterial({ map: R.boardTex, color: 0x8a8a8a, toneMapped: false });
     var dark = K.std(0x111827, 0.6);
     var board = K.mesh(new T.BoxGeometry(STRIP, 0.95, 0.2), [dark, dark, dark, dark, boardMat, dark], true, true);
     board.position.set(0, 0.475, STAND_Z + 3.2);
@@ -688,6 +696,45 @@
       star: starGeometry(),
       boot: bootGeometry(),
     };
+  }
+
+  /**
+   * Odak: oyun alanı öne çıksın, arka plan geri çekilsin.
+   *   · Oyun düzleminin arkasında yarı saydam koyu perde: tribün, seyirci ve
+   *     panolar loşlaşır (renkler kalır ama göz topa ve engellere gider).
+   *   · Topun etrafında beyaz hale + kısa ışık izi: hızlı akan sahnede top
+   *     her an bulunur.
+   */
+  function buildFocus() {
+    var scrim = new T.Mesh(
+      new T.PlaneGeometry(STRIP, 40),
+      new T.MeshBasicMaterial({ color: 0x050816, transparent: true, opacity: 0.72, depthWrite: false, fog: false }),
+    );
+    scrim.position.set(0, 12, -2.6);
+    scrim.renderOrder = 1;
+    R.scene.add(scrim);
+    R.scrim = scrim;
+    var glowTex = K.glowTexture();
+    var halo = new T.Sprite(new T.SpriteMaterial({ map: glowTex, color: 0xffffff, transparent: true, depthWrite: false, blending: T.AdditiveBlending, opacity: 0.55 }));
+    halo.scale.set(BR * 5.2, BR * 5.2, 1);
+    halo.renderOrder = 2;
+    R.scene.add(halo);
+    R.halo = halo;
+    R.trail = [];
+    for (var i = 0; i < 7; i++) {
+      var sp = new T.Sprite(new T.SpriteMaterial({ map: glowTex, color: 0xfff3c4, transparent: true, depthWrite: false, blending: T.AdditiveBlending, opacity: 0.3 * (1 - i / 7) }));
+      var sz = BR * (2.2 - i * 0.22);
+      sp.scale.set(sz, sz, 1);
+      sp.renderOrder = 2;
+      R.scene.add(sp);
+      R.trail.push(sp);
+    }
+    R.trailPts = [];
+    // top biraz kendi ışığını taşır: gece sahnesinde beyaz yüzey parlar
+    if (R.ball.material && R.ball.material.emissive) {
+      R.ball.material.emissive.set(0xffffff);
+      R.ball.material.emissiveIntensity = 0.12;
+    }
   }
 
   /** Beş köşeli yıldız (ekstrüde). */
@@ -1015,6 +1062,18 @@
     R.ball.rotation.set(0, 0, -ball.rot);
     R.ball.visible = !(invuln > 0 && Math.sin(A.time * 40) > 0.3);
     R.ballShadow.position.set(ball.x, 0.006, 0);
+    R.scrim.position.x = camX;
+    R.halo.position.set(ball.x, ball.y, 0.05);
+    R.halo.visible = R.ball.visible && state !== "over";
+    var pts = R.trailPts;
+    if (state === "play" || state === "attract") pts.unshift({ x: ball.x, y: ball.y });
+    else if (pts.length) pts.pop();
+    if (pts.length > 22) pts.length = 22;
+    R.trail.forEach(function (sp, i) {
+      var p = pts[(i + 1) * 3];
+      sp.visible = Boolean(p) && R.halo.visible;
+      if (p) sp.position.set(p.x, p.y, 0.02);
+    });
     R.ballShadow.material.opacity = 0.5 * A.clamp(1 - ball.y / 5, 0.12, 1);
 
     syncPools();
