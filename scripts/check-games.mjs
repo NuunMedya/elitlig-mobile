@@ -10,9 +10,10 @@
  *   0. `lib/game/web/games.generated.ts` kaynaklarla güncel; 3B futbolcu modeli
  *      (iskelet, gövde, koşu/bekleme klipleri) eksiksiz.
  *   1. Üç oyun da vitrin modunda ve oyunda hatasız güncellenip çizilir.
- *   2. SEKTİR: topun solundan vurmak topu sağa gönderir (ve tersi); dokunmazsan
- *      top düşer ve tur biter; iyi oynayan oyuncu seviye atlar ve yerçekimi
- *      (ritim) artar.
+ *   2. SEKTİR (Flappy futbol): dokunmazsan top yere düşer ve tur biter;
+ *      boşluğu izleyen oyuncu gol atar ve seviye atlar; hız artar, boşluk
+ *      daralır; alçak top baraja, yüksek top direğe takılır; gol sayısı
+ *      ligin oyuncularını geçer.
  *   3. SLALOM: kenarda saklanmak ARTIK İŞE YARAMAZ — kaçırılan kapılar hak
  *      götürür ve tur biter. Kapıları izleyen oyuncu puan toplar; hız artar,
  *      kapılar daralır. Kayma savrulmadan oturur; jokerler (SÜPÜR, HAYALET,
@@ -196,64 +197,78 @@ for (const game of ["penalti", "slalom", "sektir"]) {
 
 /* ── 2) SEKTİR ───────────────────────────────────────────────────────────── */
 
+/** Sektir botu: sıradaki boşluğun ortasının biraz altına inince dokunur. */
+function sektirBot(A, { hold = null } = {}) {
+  return () => {
+    const d = A.game.debug();
+    if (d.state === "ready") {
+      A.game.down({ x: 100, y: 300 });
+      return;
+    }
+    if (d.state !== "play") return;
+    let want;
+    if (hold != null) want = hold;
+    else {
+      const g = d.gates.find((x) => x.x + d.GATE_HW > d.ball.x - d.BR);
+      want = g ? g.gc + g.off - g.gap * 0.18 : 3;
+    }
+    if (d.ball.vy < 0.3 && d.ball.y < want) A.game.down({ x: 100, y: 300 });
+  };
+}
 {
-  const { A, run } = boot("sektir");
+  const { A, run, over } = boot("sektir");
   A.game.start();
-  run(0.3);
-  const ball = A.game.debug().ball;
-  ball.vx = 0;
-  A.game.down({ x: ball.x - ball.r * 0.8, y: ball.y });
-  const vxLeftHit = A.game.debug().ball.vx;
-  run(0.2);
-  const b2 = A.game.debug().ball;
-  b2.vx = 0;
-  A.game.down({ x: b2.x + b2.r * 0.8, y: b2.y });
-  const vxRightHit = A.game.debug().ball.vx;
+  run(0.5);
+  const ready = A.game.debug().state === "ready";
+  A.game.down({ x: 100, y: 300 }); // başlama vuruşu
+  run(4);
+  const end = over();
+  check("sektir: dokunmazsan top yere düşer, tur biter", ready && end && end.score === 0 && A.game.debug().death === "yer", end ? `tur bitti (${A.game.debug().death}), skor ${end.score}` : "tur bitmedi");
+}
+{
+  const { A, run, over } = boot("sektir");
+  A.game.start();
+  const d0 = A.game.debug();
+  const s0 = d0.speed, gap0 = d0.gap;
+  const bot = sektirBot(A);
+  run(60, bot);
+  const d = A.game.debug();
+  check("sektir: boşluğu izleyen oyuncu gol atar", d.goals >= 30 && d.level >= 3, `${d.goals} gol, ${d.points} puan, seviye ${d.level}${over() ? " (tur bitti: " + d.death + ")" : ""}`);
   check(
-    "sektir: vuruş yönü",
-    vxLeftHit > 50 && vxRightHit < -50,
-    `soldan vuruş vx=${vxLeftHit.toFixed(0)} (sağa), sağdan vuruş vx=${vxRightHit.toFixed(0)} (sola)`,
+    "sektir: zorlaşıyor (hız artar, boşluk daralır)",
+    d.speed > s0 * 1.25 && d.gap < gap0 * 0.85,
+    `hız ${s0.toFixed(1)} → ${d.speed.toFixed(1)} m/sn · boşluk ${gap0.toFixed(2)} → ${d.gap.toFixed(2)} m`,
   );
 }
 {
-  const { A, run, over } = boot("sektir");
+  // alçakta kalan baraja, yüksekte kalan kalenin direğine çarpar
+  const { A, run } = boot("sektir");
   A.game.start();
-  run(5);
-  const end = over();
-  check("sektir: dokunmazsan biter", end && end.score === 0, end ? `tur bitti, skor ${end.score}` : "tur bitmedi");
+  run(12, sektirBot(A, { hold: 0.7 }));
+  const low = A.game.debug().death;
+  const { A: B, run: runB } = boot("sektir");
+  B.game.start();
+  runB(12, sektirBot(B, { hold: 6.2 }));
+  const high = B.game.debug().death;
+  check("sektir: alçak top baraja, yüksek top direğe takılır", low === "baraj" && high === "direk", `alçak → ${low || "-"} · yüksek → ${high || "-"}`);
 }
 {
-  const { A, run, over } = boot("sektir");
+  const { A, run } = boot("sektir");
   const kit = { primary: "#dc2626", secondary: "#ffffff" };
   A.game.setRoster({
     juggler: { id: 1, short: "A. Sektirci", back: "SEKTİRCİ", shirt: 8, team: { name: "Takım", kit }, attrs: { agility: 80, control: 80 } },
-    rivals: [3, 6, 10].map((value, i) => ({ id: i + 2, short: `O. ${i}`, team: { name: "Rakip", kit }, value })),
+    rivals: [3, 8, 15].map((v, i) => ({ id: 10 + i, short: "R. Rakip" + i, name: "Rakip Oyuncu " + i, shirt: 4 + i, team: { name: "Rakip " + i, kit }, value: v })),
   });
   A.game.start();
-  const g0 = A.game.debug().g;
-  let cooldown = 0;
-  run(70, () => {
-    cooldown -= 1;
-    const d = A.game.debug();
-    if (d.state !== "play" || cooldown > 0) return;
-    const b = d.ball;
-    // Rüzgârı ve duvarları telafi eden "iyi oyuncu": topu merkeze doğru it.
-    if (b.vy > 0 && b.y > d.groundY - 640 * 0.2) {
-      const toCentre = (b.x - 195) / 195;
-      A.game.down({ x: b.x + b.r * (0.18 * toCentre + (b.vx > 0 ? 0.12 : -0.12)), y: b.y });
-      cooldown = 20;
-    }
-  });
+  run(40, sektirBot(A));
   const d = A.game.debug();
+  const ctx = { measureText: (t) => ({ width: t.length * 7 }) };
+  const full = d.fitName(ctx, { name: "Mehmet Yıldırım", short: "M. Yıldırım" }, 140);
+  const cut = d.fitName(ctx, { name: "Muhammed Abdurrahman Karaosmanoğlu", short: "M. Karaosmanoğlu" }, 60);
   check(
-    "sektir: sekme sayısı ligin oyuncularını geçer",
-    d.juggler === "A. Sektirci" && d.passed === 3 && d.kicks >= 10,
-    `${d.juggler}, ${d.kicks} sekme → ${d.passed}/3 oyuncu geçildi`,
-  );
-  check(
-    "sektir: zorlaşıyor",
-    d.kicks >= 30 && d.level >= 4 && d.g > g0 * 1.3,
-    `${d.kicks} sekme, seviye ${d.level}, yerçekimi ${g0.toFixed(0)} → ${d.g.toFixed(0)}${over() ? " (tur bitti)" : ""}`,
+    "sektir: gol sayısı ligin oyuncularını geçer, baraj adları sığar",
+    d.juggler === "A. Sektirci" && d.passed >= 2 && full === "Mehmet Yıldırım" && cut.endsWith("…"),
+    `${d.juggler}, ${d.goals} gol → ${d.passed}/3 oyuncu geçildi · "${full}" · "${cut}"`,
   );
 }
 
