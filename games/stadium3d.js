@@ -1032,6 +1032,15 @@
     netHit: netHit,
     netStep: netStep,
     blob: blob,
+    /** Ortak dokulu top (yarıçap r): Slalom/Sektir gibi kendi sahnesini kuran oyunlar için. */
+    ball: function (r) {
+      var m = mesh(new T.SphereGeometry(r, 40, 28), new T.MeshPhysicalMaterial({ map: ballTexture(), roughness: 0.42, clearcoat: 0.8, clearcoatRoughness: 0.18 }));
+      R.scene.add(m);
+      return m;
+    },
+    netTexture: function () {
+      return netTexture();
+    },
     shadowSet: shadowSet,
     placeShadows: placeShadows,
     asKeeper: asKeeper,

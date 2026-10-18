@@ -1,6 +1,7 @@
 /**
- * TOP SEKTİR — topu çime düşürmeden sektir; ligin oyuncularını geç.
- * Topu ligin gerçek bir oyuncusu sektirir; sekme sayın ligin oyuncularının
+ * TOP SEKTİR — Flappy futbol: top stadyum boyunca ilerler, her dokunuşta
+ * havalanır. Rakip savunmacılardan kurulu barajların üstünden, ters asılı
+ * kalelerin altından geç; her geçiş bir gol. Gol sayın ligin oyuncularının
  * sezon gol + asist sayısını geçtikçe onları geride bırakırsın.
  *
  * Oyunun kendisi `games/sektir.js` (three.js / WebGL, WebView içinde): mekanizma,
@@ -14,25 +15,25 @@ import { ARENA_BEST_KEYS } from "@/lib/game/arenaKeys";
 const CONFIG: ArenaGameConfig = {
   game: "sektir",
   title: "Top Sektir",
-  subtitle: "Sektir, ligin oyuncularını geride bırak",
+  subtitle: "Barajı aş, kalenin altından geç, gol at",
   icon: "football-outline",
   bestKey: ARENA_BEST_KEYS.sektir,
   rules: [
-    { icon: "finger-print-outline", text: "Topa dokun: top yukarı sekip yine aynı yüksekliğe çıkar." },
-    { icon: "people-outline", text: "Sekme sayın bir oyuncunun sezon gol + asist sayısını geçince onu geride bırakırsın." },
-    { icon: "swap-horizontal-outline", text: "Topun solundan vurursan sağa, sağından vurursan sola gider." },
-    { icon: "star-outline", text: "Merkezden vuruşlar çarpanı büyütür; topu yıldızlardan geçir, bonus kazan." },
-    { icon: "trending-up-outline", text: "Ritim hızlanır, rüzgâr çıkar, top küçülür. Top çime değerse biter." },
+    { icon: "finger-print-outline", text: "Ekrana dokun: top havalanır. İlk dokunuş başlama vuruşu." },
+    { icon: "shield-outline", text: "Alttan rakip savunmacıların barajı, üstten ters asılı kale gelir. Aradaki boşluktan geçmek bir gol." },
+    { icon: "star-outline", text: "Boşluğun tam ortası çarpanı büyütür; altın yıldızlar bonus, altın krampon bir çarpışmayı affeder." },
+    { icon: "people-outline", text: "Gol sayın bir oyuncunun sezon gol + asist sayısını geçince onu geride bırakırsın." },
+    { icon: "trending-up-outline", text: "Top hızlanır, boşluk daralır; baraj zıplar, kapılar kayar. Top çime, baraja ya da direğe değerse biter." },
   ],
   describe: (stats) =>
     [
-      stats.kicks != null ? `${stats.kicks} sekme` : "",
+      stats.goals != null ? `${stats.goals} gol` : "",
       stats.level != null ? `Seviye ${stats.level}` : "",
       stats.stars ? `${stats.stars} yıldız` : "",
       stats.rivals ? `${stats.passed ?? 0}/${stats.rivals} oyuncu geçildi` : "",
     ].filter(Boolean),
-  overTitle: "Top yere düştü",
-  taunt: "Bu kadar sektirebilir misin?",
+  overTitle: "Oyun bitti",
+  taunt: "Bu kadar golü sen de atabilir misin?",
 };
 
 export default function SektirScreen() {
