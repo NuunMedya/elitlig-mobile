@@ -3,11 +3,12 @@
  * (routes/fantasy.js).
  *
  *   Kadrom    5 oyuncu, 40 kredi bütçe, takım başına en çok 2, bir kaptan (×2).
- *             Kilit OYUNCU BAŞINA: takımının bu haftaki maçı başlamış oyuncu
- *             kilit simgesiyle durur (eklenemez, çıkarılamaz, kaptanlığı
- *             değişmez); diğerleri serbest. Haftanın maçları bitince ekran
- *             gelecek haftanın kadrosuna geçer, bu haftanın puanı ayrı kartta.
- *             Bu hafta kadro yoksa önceki kadro öneri olarak gelir.
+ *             Kilit HAFTALIK: kadro Cumartesi 00:00 – Pazartesi 16:00 (TR)
+ *             arasında kurulur; Pazartesi 16:00'da bütün kadro kilitlenir.
+ *             Hafta, Pazartesi 16:00'dan Pazar'ı Pazartesi'ye bağlayan gece
+ *             03:00'a kadar oynanan maçları kapsar. Seçim açıkken oynanmakta
+ *             olan haftanın puanı ayrı kartta. Kadro yoksa önceki kadro
+ *             öneri olarak gelir.
  *   Sıralama  bu hafta / sezon toplamı.
  *
  * Puan gerçek maç istatistiklerinden gelir: oynadı 2, gol 4–6 (mevkiye göre),
@@ -113,14 +114,8 @@ function Lineup({ scope }: { scope: Scope }) {
   const selected = (picks ?? []).map((id) => byId.get(id)).filter(Boolean) as FantasyPlayer[];
   const selectedIds = selected.map((player) => player.id);
   const cost = selected.reduce((sum, player) => sum + player.price, 0);
-  // Eski sunucu bütün haftayı kilitler; yenisi yalnız maçı başlamış takımları.
+  // Kilit haftalık: seçim penceresi dışında bütün kadro kilitli.
   const locked = Boolean(me?.week.locked);
-  const lockedTeams = new Set(me?.week.lockedTeamIds ?? []);
-  const savedIds = me?.lineup?.playerIds ?? [];
-  const isLocked = (player: FantasyPlayer) => lockedTeams.has(player.teamId);
-  const captainPlayer = captain != null ? byId.get(captain) : undefined;
-  const captainFrozen = Boolean(captainPlayer && isLocked(captainPlayer) && me?.lineup?.captainId === captain);
-  const nextWeek = me?.week.mode === "next";
   const saved = me?.lineup && JSON.stringify([...me.lineup.playerIds].sort()) === JSON.stringify([...selectedIds].sort()) && me.lineup.captainId === captain;
 
   const save = useMutation({
@@ -141,9 +136,10 @@ function Lineup({ scope }: { scope: Scope }) {
     return <EmptyState icon="people-outline" title="Oyuncu havuzu boş" body="Bu ligde henüz fikstürü olan takım yok." variant="inline" />;
   }
 
-  const deadline = me?.week.deadline
-    ? `${formatDateShort(me.week.deadline)} ${new Date(me.week.deadline).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Istanbul" })}`
-    : "";
+  const when = (iso?: string | null) =>
+    iso ? `${formatDateShort(iso)} ${new Date(iso).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Istanbul" })}` : "";
+  const deadline = when(me?.week.deadline);
+  const nextOpens = when(me?.week.next_opens_at);
   const remove = (id: number) => {
     setPicks((current) => (current ?? []).filter((item) => item !== id));
     if (captain === id) setCaptain(null);
@@ -170,10 +166,8 @@ function Lineup({ scope }: { scope: Scope }) {
           </Text>
           {locked ? (
             <Badge label="Kilitli" tone="neutral" size="xs" />
-          ) : nextWeek ? (
-            <Badge label="Gelecek hafta" tone="info" size="xs" />
           ) : (
-            <Badge label={lockedTeams.size ? "Açık · bazı oyuncular kilitli" : `Açık · ilk maç ${deadline}`} tone="win" size="xs" />
+            <Badge label={deadline ? `Açık · kilit ${deadline}` : "Açık"} tone="win" size="xs" />
           )}
         </View>
         <Text style={styles.text} {...textScale.dense}>
@@ -182,15 +176,11 @@ function Lineup({ scope }: { scope: Scope }) {
         <View style={styles.budget}>
           <View style={[styles.budgetFill, { width: `${Math.min(100, (cost / budget) * 100)}%` }, cost > budget && styles.over]} />
         </View>
-        {!locked ? (
-          <Text style={styles.hint} {...textScale.long}>
-            {nextWeek
-              ? "Bu haftanın maçları oynandı; kadron gelecek hafta için kuruluyor."
-              : lockedTeams.size
-                ? "Maçı başlamış oyuncular kilitli; maçı henüz oynanmamış oyuncuları istediğin gibi değiştirebilirsin."
-                : "Kadronu dilediğin zaman değiştir: bir oyuncu ancak kendi maçı başlayınca kilitlenir."}
-          </Text>
-        ) : null}
+        <Text style={styles.hint} {...textScale.long}>
+          {locked
+            ? `Kadrolar kilitli; puanlar maçlar oynandıkça işlenir.${nextOpens ? ` Sıradaki kadro seçimi ${nextOpens}'da açılır.` : ""}`
+            : "Kadro seçimi Cumartesi 00:00 – Pazartesi 16:00. Hafta, Pazartesi 16:00'dan Pazar'ı Pazartesi'ye bağlayan gece 03:00'a kadar oynanan maçları kapsar."}
+        </Text>
       </View>
 
       {me?.live ? (
@@ -208,23 +198,20 @@ function Lineup({ scope }: { scope: Scope }) {
       ) : null}
 
       <View>
-        {selected.map((player, index) => {
-          // Kayıtlı kadrodaki ve maçı başlamış oyuncu: çıkarılamaz.
-          const frozen = isLocked(player) && savedIds.includes(player.id);
-          return (
+        {selected.map((player, index) => (
           <ListRow
             key={player.id}
             leading={<Avatar name={player.name} image={mediaUrl(player.image)} size={layout.crestLg} />}
             title={player.name}
-            subtitle={[player.teamName, `${player.price} kredi`, breakdown.has(player.id) ? `${breakdown.get(player.id)} puan` : null, isLocked(player) ? "maçı başladı" : null].filter(Boolean).join(" · ")}
+            subtitle={[player.teamName, `${player.price} kredi`, breakdown.has(player.id) ? `${breakdown.get(player.id)} puan` : null].filter(Boolean).join(" · ")}
             position={selected.length === 1 ? "single" : index === 0 ? "first" : index === selected.length - 1 ? "last" : "middle"}
             trailing={
               <View style={styles.actions}>
-                <Touchable feedback="icon" haptic="selection" disabled={locked || captainFrozen || (frozen && captain !== player.id)} onPress={() => setCaptain(player.id)} accessibilityLabel="Kaptan yap" accessibilityState={{ selected: captain === player.id }}>
+                <Touchable feedback="icon" haptic="selection" disabled={locked} onPress={() => setCaptain(player.id)} accessibilityLabel="Kaptan yap" accessibilityState={{ selected: captain === player.id }}>
                   <Ionicons name={captain === player.id ? "star" : "star-outline"} size={20} color={captain === player.id ? colors.star : colors.textTertiary} />
                 </Touchable>
-                {locked || frozen ? (
-                  <Ionicons name="lock-closed" size={18} color={colors.textTertiary} accessibilityLabel="Maçı başladı, kilitli" />
+                {locked ? (
+                  <Ionicons name="lock-closed" size={18} color={colors.textTertiary} accessibilityLabel="Kadro kilitli" />
                 ) : (
                   <Touchable feedback="icon" haptic="selection" onPress={() => remove(player.id)} accessibilityLabel={`${player.name} kadrodan çıkar`}>
                     <Ionicons name="close-circle-outline" size={20} color={colors.textTertiary} />
@@ -233,8 +220,7 @@ function Lineup({ scope }: { scope: Scope }) {
               </View>
             }
           />
-          );
-        })}
+        ))}
       </View>
 
       {!locked ? (
@@ -275,7 +261,6 @@ function Lineup({ scope }: { scope: Scope }) {
         budgetLeft={budget - cost}
         maxPerTeam={maxPerTeam}
         selected={selected}
-        lockedTeams={lockedTeams}
         onPick={add}
       />
     </>
@@ -290,7 +275,6 @@ function PlayerPicker({
   budgetLeft,
   maxPerTeam,
   selected,
-  lockedTeams,
   onPick,
 }: {
   visible: boolean;
@@ -300,7 +284,6 @@ function PlayerPicker({
   budgetLeft: number;
   maxPerTeam: number;
   selected: FantasyPlayer[];
-  lockedTeams: Set<number>;
   onPick: (player: FantasyPlayer) => void;
 }) {
   const [term, setTerm] = useState("");
@@ -320,13 +303,12 @@ function PlayerPicker({
           keyboardShouldPersistTaps="handled"
           style={styles.flex}
           renderItem={({ item }) => {
-            const started = lockedTeams.has(item.teamId);
-            const blocked = started || item.price > budgetLeft || (perTeam.get(item.teamId) || 0) >= maxPerTeam;
+            const blocked = item.price > budgetLeft || (perTeam.get(item.teamId) || 0) >= maxPerTeam;
             return (
               <ListRow
                 leading={<Avatar name={item.name} image={mediaUrl(item.image)} size={layout.crestLg} />}
                 title={item.name}
-                subtitle={[item.position, item.teamName, started ? "maçı başladı" : null].filter(Boolean).join(" · ")}
+                subtitle={[item.position, item.teamName].filter(Boolean).join(" · ")}
                 value={`${item.price} kr`}
                 disabled={blocked}
                 position="single"
