@@ -294,6 +294,13 @@ export default function MenuTabScreen() {
           action: { kind: "route", route: "/kariyer" },
         },
         {
+          key: "saha-siralamasi",
+          icon: "trophy",
+          title: "Saha Sıralaması",
+          subtitle: "Haftalık ve aylık · Türkiye ve il · oyuncular ve takımlar",
+          action: { kind: "route", route: "/saha-siralamasi" },
+        },
+        {
           key: "tahmin-ligi",
           icon: "podium",
           title: "Tahmin Ligi",

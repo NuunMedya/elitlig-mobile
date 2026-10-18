@@ -127,6 +127,94 @@ export const getMyCareer = () => get<CareerSummary>("/api/career/me", undefined,
 
 export const getPlayerCareer = (playerId: number) => get<PlayerCareer>(`/api/career/players/${playerId}`);
 
+/* ───────────────────────── Takım görevleri + saha sıralaması ───────────────────────── */
+
+/** Dönem: haftalık (ISO hafta, Pazartesi) ya da aylık (takvim ayı). */
+export type PeriodKind = "week" | "month";
+
+/** Takımın ortak hedefi: biten görev takıma puan, o dönemde oynayan üyeye XP. */
+export interface TeamQuest {
+  code: string;
+  title: string;
+  description: string;
+  progress: number;
+  target: number;
+  done: boolean;
+  points: number;
+  xp: number;
+}
+
+export interface TeamRank {
+  turkey: number | null;
+  turkey_total: number;
+  city: number | null;
+  city_total: number;
+  city_id: number | null;
+  city_name: string | null;
+}
+
+export interface TeamPeriod {
+  key: string;
+  starts_at: string;
+  ends_at: string;
+  metrics: { matches: number; wins: number; draws: number; goals: number; requests: number; approved: number; players: number; rsvpPlayers: number; matchWeeks: number };
+  quests: TeamQuest[];
+  score: number;
+  quest_points: number;
+  /** Üye bu dönemde takımın bir maçında forma giydi mi (görev XP'si yalnız oynayana). */
+  contributed: boolean;
+  rank: TeamRank | null;
+}
+
+export interface MyTeamQuests {
+  team: { id: number; name: string; logo: string | null; city: string | null; city_id: number | null } | null;
+  periods?: Record<PeriodKind, TeamPeriod>;
+  rules?: { match_points: number; win_points: number };
+}
+
+export const getMyTeamQuests = () => get<MyTeamQuests>("/api/career/team", undefined, { retry: false });
+
+export type LeaderType = "players" | "teams";
+
+export interface SahaLeaderRow {
+  rank: number;
+  /** Oyuncuda dönemin saha XP'si, takımda takım puanı. */
+  score: number;
+  matches: number;
+  goals: number;
+  name: string;
+  city: string | null;
+  city_id: number | null;
+  // oyuncu
+  player_id?: number;
+  image?: string | null;
+  assists?: number;
+  team?: { id: number; name: string; logo: string | null } | null;
+  // takım
+  id?: number;
+  logo?: string | null;
+  wins?: number;
+  quests_done?: number;
+  quests_total?: number;
+}
+
+export interface SahaLeaderboard {
+  type: LeaderType;
+  period: { kind: PeriodKind; key: string; starts_at: string; ends_at: string; offset: number };
+  scope: { city_id: number | null; label: string };
+  total: number;
+  rows: SahaLeaderRow[];
+  me: SahaLeaderRow | null;
+}
+
+export const getSahaLeaderboard = (params: { type: LeaderType; period: PeriodKind; offset?: number; cityId?: number | null }) =>
+  get<SahaLeaderboard>("/api/career/leaderboard", {
+    type: params.type,
+    period: params.period,
+    offset: params.offset ?? 0,
+    ...(params.cityId ? { cityId: params.cityId } : {}),
+  });
+
 /* ───────────────────────── Tahmin Ligi ───────────────────────── */
 
 export interface PredictionMatch {

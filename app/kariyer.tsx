@@ -13,6 +13,9 @@
  *              standart XP'si).
  *   Kariyer    Elit Kart, tüm zamanlar kariyer görevleri (kademeli), Sezon
  *              Özeti, son XP hareketleri.
+ *   Takım      takımın haftalık ve aylık ortak görevleri (maç talebi, maç
+ *              almak, maç sayısı, kadro, katılım), takım puanı, Türkiye ve
+ *              il sırası; Saha Sıralaması ekranına geçiş.
  *   Rozetler   Kupa Dolabı, katmana göre süzülür.
  *
  * Ekranın her açılışı sunucuda XP defterini eşitler; yeni açılan rozetler
@@ -45,7 +48,10 @@ import {
 } from "@/components/ui";
 import {
   getMyCareer,
+  getMyTeamQuests,
   LAYER_LABELS,
+  type PeriodKind,
+  type TeamQuest,
   type CareerAchievement,
   type CareerChain,
   type CareerLayer,
@@ -76,11 +82,13 @@ const QUEST_ROUTES: Record<string, Href> = {
   seri: "/arena",
   tahmin_oyun: "/tahmin",
   gunun: "/gunun",
+  mac_al: "/takimim/mac-al",
 };
 
-type Tab = "gorevler" | "kariyer" | "rozetler";
+type Tab = "gorevler" | "takim" | "kariyer" | "rozetler";
 const TABS: SegmentedItem<Tab>[] = [
   { key: "gorevler", label: "Görevler" },
+  { key: "takim", label: "Takım" },
   { key: "kariyer", label: "Kariyer" },
   { key: "rozetler", label: "Rozetler" },
 ];
@@ -121,7 +129,15 @@ export default function CareerScreen() {
         <ScrollView {...scrollProps} contentContainerStyle={styles.content} refreshControl={refresh.control}>
           <LevelHero data={data} />
           <SegmentedControl items={TABS} value={tab} onChange={setTab} stretch />
-          {tab === "gorevler" ? <QuestsTab data={data} /> : tab === "kariyer" ? <CareerTab data={data} /> : <BadgesTab data={data} />}
+          {tab === "gorevler" ? (
+            <QuestsTab data={data} />
+          ) : tab === "takim" ? (
+            <TeamTab />
+          ) : tab === "kariyer" ? (
+            <CareerTab data={data} />
+          ) : (
+            <BadgesTab data={data} />
+          )}
         </ScrollView>
       )}
     </SafeAreaView>
@@ -269,6 +285,7 @@ function QuestsTab({ data }: { data: CareerSummary }) {
         <Shortcut icon="analytics-outline" label="Tahmin Ligi" onPress={() => router.push("/tahmin-ligi")} />
         <Shortcut icon="people-outline" label="Fantezi" onPress={() => router.push("/fantezi")} />
         <Shortcut icon="game-controller-outline" label="Oyunlar" onPress={() => router.push("/(tabs)/oyunlar")} />
+        <Shortcut icon="podium-outline" label="Sıralama" onPress={() => router.push("/saha-siralamasi")} />
       </View>
 
       {data.rules.standard?.length ? (
@@ -355,6 +372,152 @@ function XpRules({ rules }: { rules: StandardXpRule[] }) {
           </View>
         );
       })}
+    </View>
+  );
+}
+
+/* ═══════════════════════════ TAKIM ═══════════════════════════ */
+
+const PERIODS: SegmentedItem<PeriodKind>[] = [
+  { key: "week", label: "Bu hafta" },
+  { key: "month", label: "Bu ay" },
+];
+
+function TeamTab() {
+  const router = useRouter();
+  const [kind, setKind] = useState<PeriodKind>("week");
+  const query = useQuery({ queryKey: ["career", "team"], queryFn: getMyTeamQuests, staleTime: 30_000 });
+
+  if (query.isLoading) return <SkeletonCard lines={6} />;
+  if (query.isError || !query.data) return <ErrorState error={query.error} onRetry={query.refetch} />;
+  const data = query.data;
+  if (!data.team || !data.periods) {
+    return (
+      <View style={styles.card}>
+        <Text style={styles.cardTitle} {...textScale.dense}>
+          Takım görevleri
+        </Text>
+        <Text style={styles.caption} {...textScale.long}>
+          Oyuncu profilin bir takıma bağlı olduğunda takımının haftalık ve aylık görevleri burada görünür: maç alın, sahaya çıkın, kadroyu genişletin; takım sıralamasında yükselin.
+        </Text>
+        <Button label="Oyuncu profilimi bağla" icon="link-outline" variant="secondary" size="sm" onPress={() => router.push("/oyuncum/bagla")} />
+        <Button label="Saha sıralaması" icon="podium-outline" variant="secondary" size="sm" onPress={() => router.push("/saha-siralamasi")} />
+      </View>
+    );
+  }
+  const period = data.periods[kind];
+  const done = period.quests.filter((quest) => quest.done).length;
+  const rank = period.rank;
+  const rankText = rank
+    ? [
+        rank.turkey ? `Türkiye ${rank.turkey}. / ${rank.turkey_total}` : null,
+        rank.city && rank.city_name ? `${rank.city_name} ${rank.city}. / ${rank.city_total}` : null,
+      ].filter(Boolean).join("  ·  ")
+    : "";
+  const quests = [...period.quests].sort((a, b) => Number(a.done) - Number(b.done) || b.progress / b.target - a.progress / a.target);
+
+  return (
+    <>
+      <SegmentedControl items={PERIODS} value={kind} onChange={setKind} stretch />
+      <View style={styles.card}>
+        <View style={styles.cardHead}>
+          <View style={styles.flex}>
+            <Text style={styles.cardTitle} numberOfLines={1} {...textScale.dense}>
+              {data.team.name}
+            </Text>
+            <Text style={styles.caption} {...textScale.dense}>
+              {`${done}/${period.quests.length} görev · ${formatDateShort(period.ends_at)} yenilenir`}
+            </Text>
+          </View>
+          <View style={styles.teamScore}>
+            <Text style={styles.counter} {...textScale.dense}>
+              {period.score.toLocaleString("tr-TR")}
+            </Text>
+            <Text style={styles.caption} {...textScale.badge}>
+              {upperTR("takım puanı")}
+            </Text>
+          </View>
+        </View>
+        <Segments total={period.quests.length} done={done} />
+        <View style={styles.teamStats}>
+          <TeamStat icon="football-outline" label="Maç" value={period.metrics.matches} />
+          <TeamStat icon="trophy-outline" label="Galibiyet" value={period.metrics.wins} />
+          <TeamStat icon="calendar-outline" label="Talep" value={period.metrics.requests} />
+          <TeamStat icon="people-outline" label="Oyuncu" value={period.metrics.players} />
+        </View>
+        {rankText ? (
+          <Touchable onPress={() => router.push("/saha-siralamasi?type=teams")} accessibilityRole="button" accessibilityLabel={`Takım sırası: ${rankText}`}>
+            <View style={styles.rankRow}>
+              <Ionicons name="podium-outline" size={15} color={colors.accentText} />
+              <Text style={[styles.flex, styles.rankText]} {...textScale.dense}>
+                {rankText}
+              </Text>
+              <Ionicons name="chevron-forward" size={15} color={colors.textTertiary} />
+            </View>
+          </Touchable>
+        ) : null}
+        <Text style={[styles.caption, period.contributed ? styles.contribOk : null]} {...textScale.long}>
+          {period.contributed
+            ? "Bu dönem forma giydin: biten takım görevlerinin XP'si sana da yazılır."
+            : "Takım görevlerinin XP'si bu dönem forma giyen oyunculara yazılır — sen de sahaya çık."}
+        </Text>
+      </View>
+
+      <View style={styles.list}>
+        {quests.map((quest, index) => (
+          <TeamQuestRow key={quest.code} quest={quest} first={index === 0} />
+        ))}
+      </View>
+      <Text style={styles.note} {...textScale.long}>
+        {`Takım puanı: maç başına ${data.rules?.match_points ?? 10}, galibiyet başına ${data.rules?.win_points ?? 5} puan + biten görevler.`}
+      </Text>
+      <View style={styles.shortcuts}>
+        <Shortcut icon="calendar-outline" label="Maç al" onPress={() => router.push("/takimim/mac-al")} />
+        <Shortcut icon="hand-left-outline" label="Katılım bildir" onPress={() => router.push("/(tabs)/kulubum")} />
+        <Shortcut icon="podium-outline" label="Sıralama" onPress={() => router.push("/saha-siralamasi?type=teams")} />
+      </View>
+    </>
+  );
+}
+
+function TeamStat({ icon, label, value }: { icon: keyof typeof Ionicons.glyphMap; label: string; value: number }) {
+  return (
+    <View style={styles.teamStat}>
+      <Ionicons name={icon} size={14} color={colors.textTertiary} />
+      <Text style={styles.teamStatValue} {...textScale.dense}>
+        {value.toLocaleString("tr-TR")}
+      </Text>
+      <Text style={styles.caption} {...textScale.badge}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+function TeamQuestRow({ quest, first }: { quest: TeamQuest; first?: boolean }) {
+  const color = quest.done ? colors.win : colors.info;
+  return (
+    <View style={[styles.row, !first && styles.rowBorder]}>
+      <View style={[styles.rowIcon, { backgroundColor: withAlpha(color, 0.14) }]}>
+        <Ionicons name={quest.done ? "checkmark" : "people"} size={18} color={color} />
+      </View>
+      <View style={styles.flex}>
+        <Text style={[styles.rowTitle, quest.done && styles.rowTitleDone]} numberOfLines={2} {...textScale.dense}>
+          {quest.title}
+        </Text>
+        <Text style={styles.caption} numberOfLines={2} {...textScale.dense}>
+          {quest.done ? `Tamamlandı · +${quest.points} takım puanı` : `${quest.progress}/${quest.target} · ${quest.description}`}
+        </Text>
+        {!quest.done && quest.target > 1 ? <Bar value={quest.progress / quest.target} color={color} /> : null}
+      </View>
+      <View style={styles.teamReward}>
+        <Text style={[styles.xpPill, quest.done && styles.xpPillDone]} {...textScale.dense}>
+          {`+${quest.points}`}
+        </Text>
+        <Text style={styles.caption} {...textScale.badge}>
+          {`+${quest.xp} XP`}
+        </Text>
+      </View>
     </View>
   );
 }
@@ -667,6 +830,14 @@ const styles = StyleSheet.create({
   xpPillDone: { color: colors.win, backgroundColor: withAlpha(colors.win, 0.12) },
   emptyRow: { flexDirection: "row", alignItems: "center", gap: space.s, padding: space.md },
   chainHead: { flexDirection: "row", alignItems: "center", gap: space.s },
+  teamScore: { alignItems: "flex-end" },
+  teamStats: { flexDirection: "row", gap: space.s },
+  teamStat: { flex: 1, alignItems: "center", gap: space.xxs, paddingVertical: space.s, borderRadius: radius.md, backgroundColor: colors.surface2 },
+  teamStatValue: { ...type.h3, color: colors.textPrimary },
+  rankRow: { flexDirection: "row", alignItems: "center", gap: space.s, paddingVertical: space.xs },
+  rankText: { ...type.label, color: colors.textPrimary },
+  contribOk: { color: colors.win },
+  teamReward: { alignItems: "flex-end", gap: space.xxs },
   dots: { flexDirection: "row", gap: space.xxs },
   dot: { width: 6, height: 6, borderRadius: radius.pill, backgroundColor: colors.surface2 },
 
