@@ -6,8 +6,8 @@
  *   Özet       Elit Seviye + üç katman (Saha, Seyirci, Oyunlar): toplam XP
  *              ve bu haftaki artış yan yana. Saha dışı XP seviyeyi en çok
  *              30'a taşır; üstü sahadan gelir.
- *   Görevler   20 görevlik haftalık sıra: 5 açık görev, biri bitince yenisi
- *              gelir; 10 ve 20 görevde bonus. Göreve dokununca görevin
+ *   Görevler   40 görevlik haftalık sıra: 20 görev aynı anda açık, biten
+ *              görevin yerine yenisi gelir; 10, 20, 30 ve 40 görevde bonus. Göreve dokununca görevin
  *              yapılacağı ekran açılır (Tahmin Ligi, Fantezi, oyun…).
  *              Altında "XP nasıl kazanılır?" (her maç / oyun / tahminin
  *              standart XP'si).
@@ -285,7 +285,7 @@ function QuestsTab({ data }: { data: CareerSummary }) {
         <Shortcut icon="analytics-outline" label="Tahmin Ligi" onPress={() => router.push("/tahmin-ligi")} />
         <Shortcut icon="people-outline" label="Fantezi" onPress={() => router.push("/fantezi")} />
         <Shortcut icon="game-controller-outline" label="Oyunlar" onPress={() => router.push("/(tabs)/oyunlar")} />
-        <Shortcut icon="podium-outline" label="Sıralama" onPress={() => router.push("/saha-siralamasi")} />
+        <Shortcut icon="podium-outline" label="XP sıralaması" onPress={() => router.push("/saha-siralamasi?type=xp")} />
       </View>
 
       {data.rules.standard?.length ? (
@@ -790,7 +790,7 @@ const styles = StyleSheet.create({
   segment: { flex: 1, height: 8, borderRadius: radius.pill, backgroundColor: colors.surface2 },
   segmentDone: { backgroundColor: colors.win },
   segmentGoal: { borderWidth: hairline, borderColor: colors.win },
-  bonusRow: { flexDirection: "row", gap: space.s },
+  bonusRow: { flexDirection: "row", flexWrap: "wrap", gap: space.s },
   bonus: {
     flexDirection: "row",
     alignItems: "center",
