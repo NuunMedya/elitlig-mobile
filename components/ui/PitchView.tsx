@@ -457,10 +457,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   ratingText: {
-    fontSize: 9,
-    lineHeight: 12,
-    fontFamily: type.tableNumStrong.fontFamily,
-    fontVariant: ["tabular-nums"],
+    ...type.nano,
     /* Rozet zemini reytingin ÖN PLAN rengidir (açıkta koyu, koyuda açık);
        üstündeki rakam kartın kendi rengiyle yazılır — iki temada da zıt. */
     color: colors.surface1,
@@ -477,9 +474,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   captainText: {
-    fontSize: 9,
-    lineHeight: 12,
-    fontFamily: type.tableNumStrong.fontFamily,
+    ...type.nano,
     color: colors.pitchGreen,
   },
   mowStripe: {
@@ -523,10 +518,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   number: {
-    fontSize: 9,
-    lineHeight: 12,
-    fontFamily: type.tableNumStrong.fontFamily,
-    fontVariant: ["tabular-nums"],
+    ...type.nano,
     color: colors.textPrimary,
   },
   events: {

@@ -402,8 +402,6 @@ const styles = StyleSheet.create({
   /** Gün adı: Archivo versal 9px, geniş aralık. */
   weekday: {
     ...type.micro,
-    fontSize: 9,
-    lineHeight: 11,
     fontFamily: fonts.display,
     letterSpacing: 0.9,
     color: colors.textTertiary,
@@ -413,9 +411,7 @@ const styles = StyleSheet.create({
   },
   /** Ayın günü: kalın 16px, tabular — şeridin kahramanı rakamdır. */
   day: {
-    ...type.tableNumStrong,
-    fontSize: 16,
-    lineHeight: 19,
+    ...type.scoreXs,
     color: colors.textPrimary,
   },
   dayToday: {

@@ -433,9 +433,7 @@ const styles = StyleSheet.create({
   },
   /* Sıra sabit genişlikte: "4" ile "14" avatar sütununu kaydırmaz. */
   rankNum: {
-    ...type.tableNum,
-    fontSize: 11,
-    lineHeight: 15,
+    ...type.numSm,
     width: 20,
     textAlign: "center",
     color: colors.textTertiary,
@@ -445,21 +443,15 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   rankName: {
-    ...type.label,
-    fontSize: 12,
-    lineHeight: 16,
+    ...type.labelSm,
     color: colors.textPrimary,
   },
   rankMeta: {
-    ...type.caption,
-    fontSize: 10,
-    lineHeight: 13,
+    ...type.meta,
     color: colors.textTertiary,
   },
   rankMetric: {
-    ...type.tableNumStrong,
-    fontSize: 14,
-    lineHeight: 18,
+    ...type.scoreXs,
     minWidth: RANK_METRIC_W,
     textAlign: "right",
     color: colors.textPrimary,
@@ -472,8 +464,6 @@ const styles = StyleSheet.create({
   },
   headLabel: {
     ...type.overline,
-    fontSize: 9,
-    lineHeight: 12,
     letterSpacing: 0.8,
     color: colors.textTertiary,
   },

@@ -308,9 +308,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   count: {
-    ...type.tableNumStrong,
-    fontSize: 11,
-    lineHeight: 14,
+    ...type.numSmStrong,
     color: colors.textSecondary,
   },
   iconButton: {

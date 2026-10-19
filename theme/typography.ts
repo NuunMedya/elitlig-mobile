@@ -102,14 +102,33 @@ export const scale = {
    */
   overline:{ fontSize: 10, lineHeight: 13, fontFamily: fonts.semibold, letterSpacing: 0.8 },
 
+  /* — Yoğun basamaklar —
+     Lig tabloları, liderlik listeleri ve maç kartı gibi sıkı düzenler eskiden
+     tokenı yayıp `fontSize`'ı elle eziyordu (`...type.label, fontSize: 12`);
+     34 dosyada 112 elle punto birikmişti ve ölçek fiilen ikiye bölünmüştü.
+     Sık tekrarlanan her ezme burada adlı bir basamak oldu; ekranlar artık
+     punto yazmaz (scripts/check-tokens.mjs denetler). */
+  /** Sıkı satır etiketi (takım adı kısaltması, liste ikincil başlığı). */
+  labelSm: { fontSize: 12, lineHeight: 16, fontFamily: fonts.semibold, letterSpacing: 0 },
+  /** En sıkı etiket (podyum adı, yan yana iki takım adı). */
+  labelXs: { fontSize: 11, lineHeight: 14, fontFamily: fonts.semibold, letterSpacing: 0 },
+  /** Küçük meta — cümle düzeninde (büyük harf değil) 10px açıklama. */
+  meta:    { fontSize: 10, lineHeight: 13, fontFamily: fonts.medium,   letterSpacing: 0.1 },
+  /** Haber/makale gövdesi — uzun okuma. */
+  article: { fontSize: 16, lineHeight: 26, fontFamily: fonts.regular,  letterSpacing: 0 },
+
   /* — Skor ölçeği: tamamı Archivo + tabular —
      Skor ekranın KAHRAMANIDIR. 24px'lik bir "2–1", satır başlığından yalnız
      iki kademe büyüktü; bir skor uygulamasında skorun büyüklüğü, o ürünün
      neyle ilgili olduğunu söyleyen ilk şeydir. */
+  /** Oyun sonucu ve paylaşım kartının dev sayısı. */
+  scoreJumbo:{ fontSize: 48, lineHeight: 52, fontFamily: fonts.bold, letterSpacing: -1.6, ...numeric },
   scoreHero: { fontSize: 40, lineHeight: 44, fontFamily: fonts.bold, letterSpacing: -1.4, ...numeric },
   scoreLg:   { fontSize: 30, lineHeight: 34, fontFamily: fonts.bold, letterSpacing: -1, ...numeric },
   scoreMd:   { fontSize: 22, lineHeight: 26, fontFamily: fonts.bold, letterSpacing: -0.6, ...numeric },
   scoreSm:   { fontSize: 17, lineHeight: 21, fontFamily: fonts.bold, letterSpacing: -0.3, ...numeric },
+  /** Liste içi küçük skor/metrik (yoğun maç kartı, podyum sayısı). */
+  scoreXs:   { fontSize: 15, lineHeight: 19, fontFamily: fonts.bold, letterSpacing: -0.2, ...numeric },
 
   /* — Sayısal yardımcılar — */
   clock:          { fontSize: 12, lineHeight: 16, fontFamily: fonts.display, letterSpacing: 0, ...numeric },
@@ -118,6 +137,12 @@ export const scale = {
   /** Panel kartlarındaki tek rakam (kadro sayısı, kasa, puan). */
   metric:         { fontSize: 26, lineHeight: 31, fontFamily: fonts.bold, letterSpacing: -0.8, ...numeric },
   metricSm:       { fontSize: 18, lineHeight: 22, fontFamily: fonts.bold, letterSpacing: -0.4, ...numeric },
+  /** Sıkı tablo rakamı (puan tablosu sütunları, oran). */
+  numSm:          { fontSize: 11, lineHeight: 15, fontFamily: fonts.display, letterSpacing: 0, ...numeric },
+  /** Sıkı tablo rakamı, vurgulu (puan, gol sayısı). */
+  numSmStrong:    { fontSize: 12, lineHeight: 16, fontFamily: fonts.bold,    letterSpacing: 0, ...numeric },
+  /** Rozet içi en küçük rakam — saha üstü forma numarası, reyting pulu. */
+  nano:           { fontSize: 9,  lineHeight: 12, fontFamily: fonts.bold,    letterSpacing: 0, ...numeric },
 } as const satisfies Record<string, TextStyle>;
 
 /**

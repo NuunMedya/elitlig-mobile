@@ -568,8 +568,6 @@ const styles = StyleSheet.create({
   },
   chipCountText: {
     ...type.micro,
-    fontSize: 9,
-    lineHeight: 11,
     letterSpacing: 0,
     color: colors.textOnBrand,
   },
@@ -621,16 +619,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   tileLabel: {
-    ...type.label,
-    fontSize: 12,
-    lineHeight: 15,
+    ...type.labelSm,
     color: colors.textPrimary,
     flex: 1,
   },
   tileCount: {
-    ...type.tableNumStrong,
-    fontSize: 12,
-    lineHeight: 15,
+    ...type.numSmStrong,
   },
   tileCaption: {
     ...type.caption,
@@ -638,8 +632,6 @@ const styles = StyleSheet.create({
   },
   tileTime: {
     ...type.micro,
-    fontSize: 9,
-    lineHeight: 11,
     color: colors.textTertiary,
   },
   section: {

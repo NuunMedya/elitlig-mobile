@@ -1385,8 +1385,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   recentScore: {
-    ...type.tableNumStrong,
-    fontSize: 15,
+    ...type.scoreXs,
     color: colors.textPrimary,
     minWidth: 20,
     textAlign: "right",

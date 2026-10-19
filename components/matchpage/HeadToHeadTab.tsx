@@ -345,9 +345,7 @@ const styles = StyleSheet.create({
     paddingTop: space.xs,
   },
   countValue: {
-    ...type.metric,
-    fontSize: 34,
-    lineHeight: 40,
+    ...type.scoreLg,
     color: colors.textPrimary,
   },
   countLabel: {

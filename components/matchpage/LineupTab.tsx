@@ -620,9 +620,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   formationText: {
-    ...type.tableNumStrong,
-    fontSize: 12,
-    lineHeight: 16,
+    ...type.numSmStrong,
     color: colors.textPrimary,
   },
 
@@ -650,8 +648,7 @@ const styles = StyleSheet.create({
     gap: 1,
   },
   playerName: {
-    ...type.h4,
-    fontSize: 14,
+    ...type.h3,
     color: colors.textPrimary,
   },
   playerMeta: {

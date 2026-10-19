@@ -201,8 +201,10 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    ...type.body,
-    fontSize: 15,
+    ...type.bodyLg,
+    /* 15px (iOS'ta odakta yakınlaşmayı önleyen eşik) ama tek satırlık alanda
+       makale satır aralığı değil, sıkı satır yüksekliği. */
+    lineHeight: 20,
     color: colors.textPrimary,
     padding: 0,
     // Web'de tarayıcının odak halkası alanın kendi kenarlığıyla çakışıyordu.

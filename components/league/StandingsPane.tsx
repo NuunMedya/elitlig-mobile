@@ -326,9 +326,7 @@ const styles = StyleSheet.create({
     gap: space.sm,
   },
   toolbarMeta: {
-    ...type.caption,
-    fontSize: 10,
-    lineHeight: 13,
+    ...type.meta,
     color: colors.textTertiary,
     paddingLeft: space.xxs,
   },
@@ -359,10 +357,9 @@ const styles = StyleSheet.create({
   },
   legendItem: { flexDirection: "row", alignItems: "center", gap: space.xs },
   legendSwatch: { width: 2, height: 10, borderRadius: 1 },
-  legendLabel: { ...type.caption, fontSize: 10, lineHeight: 13, color: colors.textSecondary },
+  legendLabel: { ...type.meta, color: colors.textSecondary },
   footnote: {
-    ...type.caption,
-    fontSize: 10,
+    ...type.meta,
     color: colors.textTertiary,
     letterSpacing: 0,
     lineHeight: 14,

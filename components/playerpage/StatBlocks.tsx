@@ -199,8 +199,7 @@ const listStyles = StyleSheet.create({
     color: colors.textTertiary,
   },
   value: {
-    ...type.tableNumStrong,
-    fontSize: 15,
+    ...type.scoreXs,
     color: colors.textPrimary,
     minWidth: 28,
     textAlign: "right",

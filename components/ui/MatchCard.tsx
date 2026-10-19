@@ -892,9 +892,7 @@ const styles = StyleSheet.create({
     gap: space.xxs,
   },
   cVenueText: {
-    ...type.caption,
-    fontSize: 10,
-    lineHeight: 13,
+    ...type.meta,
     color: colors.textTertiary,
     flexShrink: 1,
   },
@@ -929,9 +927,10 @@ const styles = StyleSheet.create({
   dSide: {
     gap: space.xs,
   },
+  /* Yalnız punto küçülür; ağırlık (medium, kazananda semibold) cName'den gelir. */
   dName: {
-    fontSize: 12,
-    lineHeight: 15,
+    fontSize: type.labelSm.fontSize,
+    lineHeight: type.labelSm.lineHeight,
   },
   dCenter: {
     width: DENSE_CENTER_W,
@@ -940,22 +939,16 @@ const styles = StyleSheet.create({
     gap: 0,
   },
   dScore: {
-    ...type.scoreSm,
-    fontSize: 15,
-    lineHeight: 18,
+    ...type.scoreXs,
     color: colors.textPrimary,
   },
   dTime: {
-    ...type.scoreSm,
+    ...type.scoreXs,
     fontFamily: fonts.display,
-    fontSize: 14,
-    lineHeight: 18,
     color: colors.textPrimary,
   },
   dState: {
     ...type.micro,
-    fontSize: 9,
-    lineHeight: 11,
     color: colors.textTertiary,
   },
   cDivider: {

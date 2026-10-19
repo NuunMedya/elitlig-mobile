@@ -351,8 +351,6 @@ const styles = StyleSheet.create({
   },
   kicker: {
     ...type.overline,
-    fontSize: 9,
-    lineHeight: 12,
     letterSpacing: 1,
     color: colors.brandAccent,
   },
@@ -360,9 +358,7 @@ const styles = StyleSheet.create({
     color: colors.textTertiary,
   },
   featuredTitle: {
-    ...type.h2,
-    fontSize: 15,
-    lineHeight: 20,
+    ...type.h3,
     letterSpacing: -0.2,
     color: colors.textPrimary,
   },
@@ -392,8 +388,6 @@ const styles = StyleSheet.create({
   },
   rowKind: {
     ...type.overline,
-    fontSize: 9,
-    lineHeight: 12,
     letterSpacing: 0.8,
     color: colors.brandAccent,
   },
@@ -404,23 +398,17 @@ const styles = StyleSheet.create({
     color: colors.danger,
   },
   rowTime: {
-    ...type.caption,
-    fontSize: 10,
-    lineHeight: 12,
+    ...type.meta,
     color: colors.textTertiary,
     marginLeft: space.xs,
     flexShrink: 1,
   },
   rowTitle: {
-    ...type.label,
-    fontSize: 12,
-    lineHeight: 16,
+    ...type.labelSm,
     color: colors.textPrimary,
   },
   rowSummary: {
-    ...type.caption,
-    fontSize: 10,
-    lineHeight: 13,
+    ...type.meta,
     color: colors.textTertiary,
   },
   thumb: {

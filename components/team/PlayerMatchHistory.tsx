@@ -168,9 +168,7 @@ const styles = StyleSheet.create({
     borderColor: colors.warn,
   },
   cellText: {
-    fontFamily: fonts.bold,
-    fontSize: 10,
-    lineHeight: 12,
+    ...type.nano,
   },
   empty: {
     ...type.caption,
@@ -228,7 +226,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   scoreText: {
-    fontFamily: fonts.bold,
-    fontSize: 12,
+    ...type.numSmStrong,
   },
 });
