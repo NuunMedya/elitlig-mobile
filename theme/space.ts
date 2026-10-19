@@ -3,13 +3,7 @@
  *
  * 4 tabanlı ama yarım adımlı (6, 10, 12) bir ölçek kullanılır: skor listesi
  * yoğun bir düzendir, 4→8→16 sıçraması satırları gereksiz şişirir.
- *
- * DİKKAT — `space` ile `spacing` AYNI ŞEY DEĞİLDİR:
- *   space.md = 12  (yeni, yoğun ölçek)
- *   spacing.md = 16 (ESKİ API — 58 dosya bu değere göre yazıldı)
- * Eski adlar `spacing` üstünde birebir korunur ki mevcut ekranların yerleşimi
- * bozulmasın. YENİ KOD DAİMA `space` KULLANIR; `spacing` yalnız geçiş
- * dönemindeki eski dosyalar içindir ve migrasyon bitince silinecektir.
+
  */
 
 /** Yeni uzay ölçeği — yoğun düzen için yarım adımlı. */
@@ -27,20 +21,6 @@ export const space = {
   xxxl: 32,
   huge: 40,
   giant:48,
-} as const;
-
-/**
- * ESKİ API (`spacing.xs/sm/md/lg/xl`) — değerleri birebir korunur.
- * Yeni adlar da aynı nesneden okunabilsin diye `space` üstüne serilir; çakışan
- * anahtarlarda (md/lg/xl) ESKİ değer kazanır, çünkü geriye uyumluluk şarttır.
- */
-export const spacing = {
-  ...space,
-  xs: space.xs,   // 4
-  sm: space.sm,   // 8
-  md: space.lg,   // 16  ← eski md=16 ile birebir (space.md=12 DEĞİL)
-  lg: space.xxl,  // 24  ← eski lg=24 (space.lg=16 DEĞİL)
-  xl: space.xxxl, // 32  ← eski xl=32 (space.xl=20 DEĞİL)
 } as const;
 
 /**

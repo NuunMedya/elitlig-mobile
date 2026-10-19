@@ -159,7 +159,7 @@ export function ReportSheet({ target, onClose, onBlocked }: ReportSheetProps) {
 
 const styles = StyleSheet.create({
   hint: { ...type.bodySm, color: colors.textSecondary, marginBottom: space.md, lineHeight: 19 },
-  excerpt: { backgroundColor: colors.surfaceRaised, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.sm, marginBottom: space.md },
+  excerpt: { backgroundColor: colors.surface2, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.sm, marginBottom: space.md },
   excerptText: { ...type.bodySm, color: colors.textPrimary, fontStyle: "italic" },
   group: { marginTop: space.md, marginBottom: space.sm },
   error: { ...type.caption, color: colors.danger, marginTop: space.sm },

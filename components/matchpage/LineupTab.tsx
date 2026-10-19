@@ -86,7 +86,7 @@ type LineupSide = "home" | "away";
 const HOME_TINT = colors.brand;
 const HOME_INK = colors.textOnBrand;
 const AWAY_TINT = colors.onPitch;
-const AWAY_INK = colors.pitchGreen;
+const AWAY_INK = colors.pitch;
 
 export interface LineupTabProps {
   match: ApiMatch;

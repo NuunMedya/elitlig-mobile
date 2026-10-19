@@ -11,18 +11,15 @@
  * Kullanım:
  *   import { colors, space, type, radius, elevate, haptics } from "@/theme";
  *
- * `colors` = aktif palet + eski takma adlar (bkz. theme/legacy.ts).
- * `palette` = takma adsız, saf yeni palet.
+ * `colors` = aktif palet (`palette` ile aynı nesne; ekranlar `colors` yazar).
  */
 
 import { Appearance, type ViewStyle } from "react-native";
 import { getStoredTheme } from "@/constants/themePreference";
 import { paletteFor, type Palette, type ThemeName } from "./palette";
-import { withLegacy, type LegacyPalette } from "./legacy";
 import { createDividers, elevation, type Dividers, type ElevationLevel } from "./elevation";
 
 export * from "./palette";
-export * from "./legacy";
 export * from "./rating";
 export * from "./zones";
 export * from "./positions";
@@ -52,8 +49,8 @@ export const themeName: ThemeName = isDark ? "dark" : "light";
 /** Aktif palet — yalnız yeni token adları. */
 export const palette: Palette = paletteFor(themeName);
 
-/** Aktif palet + eski token adları. Ekranların kullandığı sözlük budur. */
-export const colors: LegacyPalette = withLegacy(palette);
+/** Aktif palet — ekranların kullandığı sözlük. */
+export const colors: Palette = palette;
 
 /** Aktif temaya bağlı ayraç seti. */
 export const dividers: Dividers = createDividers(palette);

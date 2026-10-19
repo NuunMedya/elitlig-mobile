@@ -82,6 +82,7 @@ import {
   scoreKey,
   shiftDays,
   type GoalNews,
+  toIsoDate,
 } from "@/components/scores/scoreUtils";
 import { LEAGUE_GROUP_HEADER_HEIGHT } from "@/components/ui/LeagueGroupHeader";
 import {
@@ -94,7 +95,6 @@ import {
   SegmentedControl,
   SkeletonMatchRow,
   matchCardHeight,
-  toIsoDate,
   useHeaderScroll,
   useRefresh,
 } from "@/components/ui";

@@ -817,7 +817,7 @@ const styles = StyleSheet.create({
     paddingVertical: space.md,
     borderTopWidth: hairline,
     borderTopColor: colors.border,
-    backgroundColor: colors.surfaceRaised,
+    backgroundColor: colors.surface2,
   },
   blockedText: { ...type.caption, color: colors.textSecondary, flex: 1, lineHeight: 17 },
   composer: { flexDirection: "row", alignItems: "flex-end", gap: space.sm, paddingHorizontal: layout.screenPadding, paddingTop: space.sm, paddingBottom: space.sm, borderTopWidth: hairline, borderTopColor: colors.separator, backgroundColor: colors.surface1 },

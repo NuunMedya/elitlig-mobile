@@ -235,7 +235,7 @@ const styles = StyleSheet.create({
     aspectRatio: 3 / 4,
     width: "100%",
     // Gradyan yüklenemezse düz derin yeşil altta durur.
-    backgroundColor: colors.pitchGreen,
+    backgroundColor: colors.pitch,
     borderRadius: radius.lg,
     borderWidth: hairline,
     borderColor: colors.border,

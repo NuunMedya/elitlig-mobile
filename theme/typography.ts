@@ -154,19 +154,7 @@ export const scale = {
  *   small    → bodySm (12) · ikincil metin
  *   score    → scoreLg (30) · büyük skor
  */
-export const type = {
-  ...scale,
-
-  /* — Eski API takma adları (58 dosya kırılmasın) — */
-  /** ESKİ: büyük skor → scoreLg */
-  score: scale.scoreLg,
-  /** ESKİ: ekran/kart başlığı → h2 */
-  title: scale.h2,
-  /** ESKİ: alt başlık → h4 */
-  subtitle: scale.h4,
-  /** ESKİ: küçük metin → bodySm */
-  small: scale.bodySm,
-} as const satisfies Record<string, TextStyle>;
+export const type = scale;
 
 export type TypeToken = keyof typeof type;
 
