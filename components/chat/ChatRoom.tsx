@@ -107,7 +107,8 @@ export function ChatRoom({ conversationId, admin = false }: ChatRoomProps) {
   const [report, setReport] = useState<ReportTarget | null>(null);
   const [blockBusy, setBlockBusy] = useState(false);
   const lastTypingSent = useRef(0);
-  const basePath = admin ? "/yonetim/sohbet" : "/sohbet";
+  /* Sohbetten çıkış: üye için Mesajlar ▸ Sohbetler (tek gelen kutusu). */
+  const basePath = admin ? "/yonetim/sohbet" : "/(tabs)/mesajlar?kutu=sohbetler";
 
   const api = useMemo(
     () =>

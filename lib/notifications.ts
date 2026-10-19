@@ -81,6 +81,20 @@ export type NotifTarget = {
   params?: Record<string, string>;
 };
 
+/**
+ * GELEN KUTUSU HEDEFLERİ — doğrudan Mesajlar sekmesi.
+ *
+ * Eskiden bildirimler `/bildirimler` ve `/mesajlarim` adreslerine gidiyordu;
+ * ikisi de `/gelen-kutusu`na, o da Mesajlar sekmesine yönlendiren eski
+ * rotalardı (iki-üç atlama, her atlamada bir kare boş ekran). Eski rotalar
+ * derin bağlantılar için yerinde duruyor; uygulamanın kendisi artık hedefe
+ * doğrudan gider.
+ */
+const INBOX_PATH = "/(tabs)/mesajlar";
+const NOTIFICATIONS_BOX: NotifTarget = { pathname: INBOX_PATH, params: { kutu: "bildirimler" } };
+const MANAGEMENT_BOX: NotifTarget = { pathname: INBOX_PATH, params: { kutu: "yonetim" } };
+const CHATS_BOX: NotifTarget = { pathname: INBOX_PATH, params: { kutu: "sohbetler" } };
+
 /** Rotayı etkileyen oturum bağlamı. Maç talebi rolüne göre iki farklı ekrana gider. */
 export interface NotifContext {
   isManagement?: boolean;
@@ -139,7 +153,7 @@ function targetFromEntity(
       // entity_public_id burada thread id'sidir (String(root.thread_id || root.id)).
       return entityId
         ? { pathname: "/mesaj/[id]", params: { id: entityId } }
-        : { pathname: "/mesajlarim" };
+        : MANAGEMENT_BOX;
 
     case "MATCH_REQUEST":
       /* Aynı bildirim hem yönetime hem takım başkanına gider; ekran role göre
@@ -194,11 +208,11 @@ const TYPE_PREFIX_TARGETS: ReadonlyArray<
   ["OFFER_", (id) => (id ? { pathname: "/teklif/[id]", params: { id } } : { pathname: "/tekliflerim" })],
   ["CONTRACT_", (id) => (id ? { pathname: "/sozlesme/[id]", params: { id } } : { pathname: "/sozlesmelerim" })],
   ["PENALTY_", (id) => (id ? { pathname: "/ceza/[id]", params: { id } } : { pathname: "/cezalarim" })],
-  ["PANEL_MESSAGE", (id) => (id ? { pathname: "/mesaj/[id]", params: { id } } : { pathname: "/mesajlarim" })],
+  ["PANEL_MESSAGE", (id) => (id ? { pathname: "/mesaj/[id]", params: { id } } : MANAGEMENT_BOX)],
   ["TEAM_INVITE", () => ({ pathname: "/davetler" })],
   ["TEAM_APPLICATION", () => ({ pathname: "/davetler" })],
-  ["MATCH_REQUEST", (id, ctx) => targetFromEntity("MATCH_REQUEST", id, ctx) ?? { pathname: "/bildirimler" }],
-  ["MATCH_", (id, ctx) => targetFromEntity("MATCH", id, ctx) ?? { pathname: "/bildirimler" }],
+  ["MATCH_REQUEST", (id, ctx) => targetFromEntity("MATCH_REQUEST", id, ctx) ?? NOTIFICATIONS_BOX],
+  ["MATCH_", (id, ctx) => targetFromEntity("MATCH", id, ctx) ?? NOTIFICATIONS_BOX],
   ["ROSTER_RULES_", () => ({ pathname: "/takimim/kadro", params: { gorunum: "sezon" } })],
   // Müsaitlik takvimi: yönetim haftalık saha panosuna, takım kendi takvimine.
   ["TEAM_AVAILABILITY_", (_id, ctx) =>
@@ -210,11 +224,11 @@ const TYPE_PREFIX_TARGETS: ReadonlyArray<
   ["PASSWORD_RESET", (_id, ctx) =>
     ctx.isManagement
       ? { pathname: "/yonetim/web", params: { path: "/yonetim/admin/kullanicilar", title: "Site üyeleri" } }
-      : { pathname: "/bildirimler" }],
+      : NOTIFICATIONS_BOX],
   // Hesap/üyelik akışları kendi ekranına sahip değil; bildirim merkezinde okunur.
-  ["MEMBERSHIP_", () => ({ pathname: "/bildirimler" })],
-  ["ACCOUNT_REQUEST_", () => ({ pathname: "/bildirimler" })],
-  ["TEAM_TRANSFER", () => ({ pathname: "/bildirimler" })],
+  ["MEMBERSHIP_", () => (NOTIFICATIONS_BOX)],
+  ["ACCOUNT_REQUEST_", () => (NOTIFICATIONS_BOX)],
+  ["TEAM_TRANSFER", () => (NOTIFICATIONS_BOX)],
 ] as const;
 
 /**
@@ -258,7 +272,7 @@ export function routeFromNotif(
     const playerId = asId(data.player_id);
     if (playerId) return { pathname: "/oyuncu/[id]", params: { id: playerId } };
     const teamId = asId(data.team_id);
-    return teamId ? { pathname: "/takim/[id]", params: { id: teamId } } : { pathname: "/bildirimler" };
+    return teamId ? { pathname: "/takim/[id]", params: { id: teamId } } : NOTIFICATIONS_BOX;
   }
 
   /* ---------- 3b) Haber push'u ---------- */
@@ -275,7 +289,7 @@ export function routeFromNotif(
     const conversationId = asId(data.conversation_id);
     return conversationId
       ? { pathname: "/sohbet/[id]", params: { id: conversationId } }
-      : { pathname: "/sohbet" };
+      : CHATS_BOX;
   }
 
   /* ---------- 5) Panel bildirimleri ---------- */
@@ -305,7 +319,7 @@ export function routeFromNotif(
     const match = TYPE_PREFIX_TARGETS.find(([prefix]) => type.startsWith(prefix));
     if (match) return match[1](entityId, ctx);
     // Tanınmayan panel türü: bildirim merkezi her zaman geçerli bir liman.
-    return { pathname: "/bildirimler" };
+    return NOTIFICATIONS_BOX;
   }
 
   return null;
@@ -323,6 +337,7 @@ const AUTH_REQUIRED_PREFIXES = [
   "/cezalarim",
   "/ceza",
   "/mesajlarim",
+  INBOX_PATH,
   "/mesaj",
   "/davetler",
   "/bildirimler",
