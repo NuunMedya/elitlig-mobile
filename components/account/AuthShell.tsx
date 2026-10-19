@@ -11,6 +11,10 @@
  * Eski ekranlarda her biri kendi hata kutusunu, göz düğmesini ve dipnot
  * stilini yazıyordu; dört ekranda dört ayrı kırmızı, dört ayrı satır aralığı.
  *
+ * FORM KİPİ (`variant="form"`): hesap içindeki düzenleme ekranları aynı
+ * kartları, hata şeridini ve düğmeleri kullanır ama marka sahnesi yerine düz
+ * kâğıt başlık taşır.
+ *
  * SAHNE BAŞLIKTA: `ScreenHeader variant="stage"` + `hero`. Kaydırınca kimlik
  * kapanır ve başlık satırına sayfanın adı gelir; klavye açıkken form ekranda
  * kalır, marka bloğu yer kaplamaz.
@@ -55,6 +59,16 @@ const SUCCESS = toneColors("win");
 
 /* ================================ KABUK ================================ */
 
+/**
+ * Form kipinde sahnenin büyük başlığı çoğu zaman sayfa adının tekrarıdır
+ * ("Şifre değiştir" / "Şifreni değiştir"); öyleyse alt başlık olarak
+ * yazılmaz. Yalnız yeni bilgi taşıyorsa (teklifteki oyuncu adı) görünür.
+ */
+function restatesTitle(heading: string, title: string): boolean {
+  const stem = (value: string) => value.toLocaleLowerCase("tr-TR").trim().slice(0, 5);
+  return stem(heading) === stem(title);
+}
+
 export interface AuthShellProps {
   /** Başlık satırının adı — kaydırınca görünür, ekran okuyucu bunu okur. */
   title: string;
@@ -70,6 +84,14 @@ export interface AuthShellProps {
   onClose?: () => void;
   back?: boolean;
   actions?: ScreenHeaderAction[];
+  /**
+   * "brand" (varsayılan): giriş, üyelik, şifremi unuttum — koyu mor marka
+   * sahnesi. "form": hesap içindeki düzenleme ekranları (şifre değiştir,
+   * profil, takım bilgileri, teklif, transfer izni) — düz kâğıt başlık, sahne
+   * yok. Kimlik sorusu sormayan bir formun tepesinde marka bloğu, ekranın
+   * yarısını süse harcıyordu.
+   */
+  variant?: "brand" | "form";
   children: React.ReactNode;
 }
 
@@ -82,6 +104,7 @@ export function AuthShell({
   onClose,
   back,
   actions,
+  variant = "brand",
   children,
 }: AuthShellProps) {
   const { scrollY, scrollProps } = useHeaderScroll();
@@ -89,6 +112,36 @@ export function AuthShell({
     ...(actions ?? []),
     ...(onClose ? [{ icon: "close" as const, onPress: onClose, accessibilityLabel: "Kapat" }] : []),
   ];
+
+  if (variant === "form") {
+    return (
+      <SafeAreaView style={styles.screen} edges={["top", "bottom"]}>
+        <ScreenHeader
+          title={title}
+          subtitle={restatesTitle(heading, title) ? undefined : heading}
+          back={back}
+          scrollY={scrollY}
+          actions={headerActions}
+        />
+        <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+          <ScrollView
+            {...scrollProps}
+            contentContainerStyle={styles.content}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            showsVerticalScrollIndicator={false}
+          >
+            {lede ? (
+              <Text style={styles.formLede} {...textScale.long}>
+                {lede}
+              </Text>
+            ) : null}
+            {children}
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.screen} edges={["top", "bottom"]}>
@@ -408,6 +461,12 @@ const styles = StyleSheet.create({
     ...type.bodySm,
     color: colors.onDarkMuted,
     marginTop: 2,
+  },
+
+  /** Form kipinde açıklama: kartların üstünde, kâğıtta ikincil metin. */
+  formLede: {
+    ...type.body,
+    color: colors.textSecondary,
   },
 
   content: {

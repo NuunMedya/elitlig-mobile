@@ -227,6 +227,7 @@ export default function OfferFormScreen() {
   const shell = (children: ReactNode) => (
     <AuthShell
       title={isRevision ? "Teklifi revize et" : "Transfer teklifi"}
+      variant="form"
       overline={isRevision ? "Teklif revizyonu" : "Transfer teklifi"}
       heading={playerName}
       lede={
