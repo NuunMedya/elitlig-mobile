@@ -8,7 +8,7 @@
  * taşımak demekti.
  *
  * SAHA DERİN YEŞİLDİR. Önceki sürüm sahayı gri bir yüzey yapıyordu ve iki
- * sorun üretiyordu: (1) `colors.pitch` eski uyumluluk katmanında EKRAN ZEMİNİ
+ * sorun üretiyordu: (1) eski uyumluluk katmanında `colors.pitch` EKRAN ZEMİNİ
  * anlamına geldiği için saha, üstünde durduğu kâğıtla neredeyse aynı renkti —
  * kadro ekranı "boş bir dikdörtgene dağılmış avatarlar" gibi görünüyordu;
  * (2) tebeşir çizgileri %8 opaklıkta gri üstünde gri kalıyor, saha geometrisi
@@ -437,7 +437,7 @@ const styles = StyleSheet.create({
   },
   pitch: {
     // Gradyan yüklenemezse düz derin yeşil altta durur.
-    backgroundColor: colors.pitchGreen,
+    backgroundColor: colors.pitch,
     /* Saha, sayfanın en büyük tek yüzeyi: yarıçapı da ona göre (`xxl`).
        Kart yarıçapıyla çizilince, ekranın yarısını kaplayan bir dikdörtgen
        "büyütülmüş kart" gibi duruyordu. Kenarlık YOK: derin yeşil kâğıttan
@@ -457,10 +457,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   ratingText: {
-    fontSize: 9,
-    lineHeight: 12,
-    fontFamily: type.tableNumStrong.fontFamily,
-    fontVariant: ["tabular-nums"],
+    ...type.nano,
     /* Rozet zemini reytingin ÖN PLAN rengidir (açıkta koyu, koyuda açık);
        üstündeki rakam kartın kendi rengiyle yazılır — iki temada da zıt. */
     color: colors.surface1,
@@ -477,10 +474,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   captainText: {
-    fontSize: 9,
-    lineHeight: 12,
-    fontFamily: type.tableNumStrong.fontFamily,
-    color: colors.pitchGreen,
+    ...type.nano,
+    color: colors.pitch,
   },
   mowStripe: {
     position: "absolute",
@@ -523,10 +518,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   number: {
-    fontSize: 9,
-    lineHeight: 12,
-    fontFamily: type.tableNumStrong.fontFamily,
-    fontVariant: ["tabular-nums"],
+    ...type.nano,
     color: colors.textPrimary,
   },
   events: {

@@ -908,20 +908,17 @@ const styles = StyleSheet.create({
     color: colors.brandAccent,
   },
   td: {
-    ...type.tableNum,
-    fontSize: 12,
+    ...type.numSm,
     color: colors.textSecondary,
     width: 40,
     textAlign: "right",
   },
   tdStrong: {
-    ...type.tableNumStrong,
-    fontSize: 12,
+    ...type.numSmStrong,
     color: colors.textPrimary,
   },
   predictSmall: {
-    ...type.tableNumStrong,
-    fontSize: 12,
+    ...type.numSmStrong,
     color: colors.textPrimary,
   },
   factors: {

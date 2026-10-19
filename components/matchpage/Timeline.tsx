@@ -487,9 +487,7 @@ const styles = StyleSheet.create({
     borderColor: colors.textPrimary,
   },
   minuteText: {
-    ...type.tableNumStrong,
-    fontSize: 12,
-    lineHeight: 16,
+    ...type.numSmStrong,
     color: colors.textSecondary,
   },
   minuteTextGoal: {

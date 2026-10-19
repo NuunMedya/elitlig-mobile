@@ -100,6 +100,7 @@ export default function TeamInfoScreen() {
   return (
     <AuthShell
       title="Takım bilgileri"
+      variant="form"
       overline={team?.team_name ?? "Takımım"}
       heading="Takım bilgileri"
       lede="Kimlik değişiklikleri yönetim onayından geçer; formalar ve takım sayfası hemen yayınlanır."

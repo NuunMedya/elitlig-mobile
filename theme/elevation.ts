@@ -1,28 +1,21 @@
 /**
  * Yükselti ve ayraç stratejisi.
  *
- * KURAL: ÜÇ KATMAN — gradyan yüzey + 1px kenarlık + mor gölge. Varsayılan
- * kart `gradientCard` geçişi (bkz. `GradientFill`) üstüne 1px `border` ve
- * geniş, mor tonlu bir gölge alır. `elevate()` bu üçlünün zemin+kenarlık+gölge
- * kısmını verir; gradyan katmanını çağıran serer.
+ * KURAL (2026-10 sadeleştirme): KART GÖLGESİZDİR.
  *
- * GÖLGE ARTIK DAHA ÇOK İŞ YAPIYOR. Açık tema kâğıdı BEYAZ olduğu için kart da
- * beyazdır (bkz. theme/palette.ts): iki yüzeyi ayıran tek şey 1px kenarlık ve
- * gölgedir. Önceki ölçekte kâğıt lavantaydı ve kartı zaten dolgu farkı
- * ayırıyordu; gölge yalnızca "hissedilsin" diye vardı ve 0.08 opaklık
- * yetiyordu. Beyaz kâğıtta aynı değer kartı hiç kaldırmıyor, arayüz düz bir
- * sayfaya dönüyordu. Yine de gölge GÖRÜNMEZ kalır: y ofseti küçük, yarıçap
- * geniş, opaklık düşük — gördüğünüz şey gölge değil, kartın yüzdüğüdür.
+ * Kâğıt artık saf beyaz değil, çok açık bir lavanta-gri (#F7F5FB); beyaz kart
+ * onun üstünde DOLGU FARKI + 1px kenarlıkla ayrılır. FotMob, Apple Sports ve
+ * OneFootball'un ortak dili budur: kartın yüzdüğünü gölge değil yüzey söyler.
+ * Her kartın altındaki mor hâle, listeyi "kabarık" ve gürültülü yapıyordu.
+ * Gölge yalnız gerçekten YÜZEN katmanlara kalır.
  *
  * Reçeteler (açık tema):
- *   seviye 1 (kart)         opaklık .09 · yarıçap 18 · y 4  · android 2
- *   seviye 2 (yükseltilmiş)         .12 · 24 · 8  · android 4
- *   seviye 3 (yüzen)                .17 · 30 · 13 · android 8
- *   seviye 4 (sheet)                .24 · 40 · 20 · android 16
+ *   seviye 1 (kart)         gölge yok — dolgu + hairline
+ *   seviye 2 (yükseltilmiş) opaklık .06 · yarıçap 14 · y 3  · android 2
+ *   seviye 3 (yüzen)                .10 · 22 · 8  · android 6
+ *   seviye 4 (sheet)                .16 · 32 · 14 · android 12
  *
- * GÖLGE MORDUR. `shadowColor` derin mordur (#2E1065), siyah değil: beyaz
- * kâğıdın üstünde siyah gölge grileşip kirli görünür. Mor gölge kartın ışıklı
- * gradyanıyla aynı aileden olduğu için yüzey "ışık alıyor" gibi durur.
+ * GÖLGE MORDUR (`shadowColor`), siyah değil: beyaz zeminde siyah gölge grileşir.
  *
  * Koyu temada gölge görünmez (siyah üstüne siyah); orada katmanlar yüzey farkı
  * + kenarlıkla ayrılır ve 3. seviyeden itibaren üst kenara 1px iç ışık eklenir.
@@ -40,11 +33,11 @@ export type ElevationLevel = 0 | 1 | 2 | 3 | 4;
 
 /** Verilen seviyenin zemin + kenarlık (+ yüzen katmanlarda gölge) stilini üretir. */
 /** Seviye başına gölge reçetesi: opaklık · yarıçap · y ofseti · android kotu. */
-const SHADOW: Record<Exclude<ElevationLevel, 0>, { o: number; r: number; y: number; e: number }> = {
-  1: { o: 0.09, r: 18, y: 4, e: 2 },
-  2: { o: 0.12, r: 24, y: 8, e: 4 },
-  3: { o: 0.17, r: 30, y: 13, e: 8 },
-  4: { o: 0.24, r: 40, y: 20, e: 16 },
+const SHADOW: Record<Exclude<ElevationLevel, 0>, { o: number; r: number; y: number; e: number } | null> = {
+  1: null,
+  2: { o: 0.06, r: 14, y: 3, e: 2 },
+  3: { o: 0.10, r: 22, y: 8, e: 6 },
+  4: { o: 0.16, r: 32, y: 14, e: 12 },
 };
 
 /** Koyu temada yalnız gerçekten yüzen katmanlar gölge alır; kart almaz. */

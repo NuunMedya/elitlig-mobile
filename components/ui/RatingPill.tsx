@@ -82,9 +82,9 @@ const styles = StyleSheet.create({
   sm: { height: 22, paddingHorizontal: 6 },
   md: { height: 27, paddingHorizontal: 8 },
   lg: { height: 34, paddingHorizontal: 10 },
-  textSm: { fontSize: 11, lineHeight: 14 },
-  textMd: { fontSize: 13, lineHeight: 16 },
-  textLg: { fontSize: 15, lineHeight: 18 },
+  textSm: { ...type.numSmStrong },
+  textMd: { ...type.tableNumStrong },
+  textLg: { ...type.scoreXs },
 });
 
 /** Stil aramaları modül seviyesinde sabitlenir — render başına nesne üretilmez. */

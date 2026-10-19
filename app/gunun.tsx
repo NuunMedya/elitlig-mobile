@@ -1144,9 +1144,7 @@ const styles = StyleSheet.create({
     marginTop: space.sm,
   },
   shareScore: {
-    ...type.scoreHero,
-    fontSize: 52,
-    lineHeight: 58,
+    ...type.scoreJumbo,
     color: colors.brandAccent,
     marginTop: space.sm,
   },

@@ -194,17 +194,17 @@ const TEXT_MAX = 28;
 const SCORE_MAX = 48;
 const ABSOLUTE_MIN = 9;
 /** 10px'e inmesine izin verilen tokenlar — daima büyük harf kullanılırlar. */
-const UPPERCASE_TOKENS = new Set(["micro", "overline"]);
+const UPPERCASE_TOKENS = new Set(["micro", "overline", "nano"]);
 const UPPERCASE_MIN = 8;
 /** Skor/metrik ailesi: metin tavanı bunlara uygulanmaz. */
 const NUMERIC_TOKENS = new Set([
-  "scoreHero", "scoreLg", "scoreMd", "scoreSm", "metric", "metricSm",
+  "scoreJumbo", "scoreHero", "scoreLg", "scoreMd", "scoreSm", "scoreXs", "metric", "metricSm",
 ]);
 /**
  * Büyükten küçüğe olması gereken PUNTO zinciri. `h4` bilerek dışarıdadır:
  * o bir punto basamağı değil, `body` ile aynı puntonun kalın kesimidir.
  */
-const HIERARCHY = ["display", "h1", "h2", "h3", "body", "bodySm", "caption", "micro"];
+const HIERARCHY = ["largeTitle", "display", "h1", "h2", "h3", "body", "bodySm", "caption", "micro"];
 /** Belirli tokenların taban değerleri — arayüzün okunurluğu bunlara bağlı. */
 const MIN_SIZE = { body: 11, bodySm: 10, bodyLg: 11, label: 11, caption: 9 };
 
@@ -427,6 +427,21 @@ for (const hit of grep("Radius: [0-9]", "app components")) {
   if (RADIUS_EXEMPT.has(file)) continue;
   if (Number(match[1]) <= RADIUS_MAX_FREE) continue;
   note(`yarıçap · ${file}:${line} — borderRadius: ${match[1]} çıplak sayı, \`radius.*\` kullan`);
+}
+
+/*
+ * ÇIPLAK PUNTO — `fontSize: 12` gibi sayı sabitleri yasak; punto daima
+ * `type.*` tokenından gelir (gerekirse `fontSize: type.labelSm.fontSize`).
+ * 2026-10'da 34 dosyada 112 elle punto birikmişti ve ölçek ikiye bölünmüştü;
+ * yoğun düzenlerin ihtiyacı `labelSm`, `labelXs`, `meta`, `numSm`,
+ * `numSmStrong`, `nano`, `scoreXs` basamaklarıyla karşılandı.
+ * `ShareScoreCard` muaf: dışa aktarılan PNG'nin geometrisi donduruldu.
+ */
+const FONT_SIZE_EXEMPT = new Set(["components/ShareScoreCard.tsx"]);
+for (const hit of grep("fontSize: *[0-9]", "app components")) {
+  const [file, line] = hit.split(":");
+  if (FONT_SIZE_EXEMPT.has(file)) continue;
+  note(`çıplak punto · ${file}:${line} — fontSize sayı sabiti, \`type.*\` kullan`);
 }
 
 /* Sonsuz animasyon döngüsü — yalnız iskelet parıltısı meşru. */

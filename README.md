@@ -216,20 +216,21 @@ görünür.
 Uygulamanın tasarım dili **Arena**'dır; tam kılavuz
 [`docs/arena-tasarim-dili.md`](docs/arena-tasarim-dili.md). Özet:
 
-- **Nötr kâğıt, renk sinyaldir.** Açık temada serin gri kâğıt (`bg` #F3F4F6)
-  ve beyaz kartlar; koyu temada grafit gece (#0B0D11). Renk yalnız bir şey
-  söylediğinde kullanılır: `brand` (elektrik menekşe) aksiyon ve seçili durum,
-  `accent` (zümrüt) veri, `live` canlı, `win/draw/loss` sonuç.
-- **Grafit sahne.** Kimlik ve skor anları (maç skorbordu, takım/oyuncu
-  kimliği, vitrin maçı) ve alt menü grafit sahnededir (`gradientInk`,
-  `inkBlock`, `tabBar`); iki temada da aynıdır. Sahne bir ekranda bir kez,
-  tepede kullanılır.
-- **İki başlık.** `ScreenHeader` sekme köklerinde KÂĞIT (22px büyük başlık,
-  beyaz yuvarlak eylem düğmeleri), kimlik sayfalarında SAHNE (`hero` ile)
+- **Sakin kâğıt, renk sinyaldir.** Açık temada lavanta-gri kâğıt (`bg`
+  #F7F5FB) ve gölgesiz beyaz kartlar; koyu temada koyu mor gece (#100820),
+  beyaz metin. Renk yalnız bir şey söylediğinde kullanılır: `brand` (derin
+  mor) aksiyon ve seçili durum, `accent` (pembe) veri ve vurgu, `live` canlı,
+  `win/draw/loss` sonuç.
+- **Koyu mor sahne.** Kimlik ve skor anları (maç skorbordu, takım/oyuncu
+  kimliği, vitrin maçı) koyu mor sahnededir (`gradientInk`, `inkBlock`).
+  Sahne bir ekranda bir kez, tepede kullanılır. Alt menü açık temada beyaz.
+- **Yazı.** Arayüz ve başlıklar Plus Jakarta Sans, skor ve rakamlar Archivo.
+- **İki başlık.** `ScreenHeader` sekme köklerinde KÂĞIT (28px büyük başlık,
+  çıplak eylem ikonları), kimlik sayfalarında SAHNE (`hero` ile)
   çizilir. İçindeki `Tabs` ve `ScopeChip` yüzeyi `HeaderToneContext`'ten
   öğrenir.
-- **Düz yüzeyler.** Kart: beyaz dolgu + saç teli kenarlık + çok hafif nötr
-  gölge, köşe `radius.xl` (18); düğme ve çip hap. Kart gradyanı düzdür.
+- **Düz yüzeyler.** Kart: beyaz dolgu + saç teli kenarlık, gölge yok,
+  köşe `radius.xl` (16); düğme ve çip hap. Kart gradyanı düzdür.
 - **Hiyerarşi tipografiyle.** Bölüm başlıkları cümle düzeninde kalın
   (`SectionHeader`); rakamlar Archivo ile büyük ve tabular; etiketler küçük
   büyük harf (`overline`, `micro`).

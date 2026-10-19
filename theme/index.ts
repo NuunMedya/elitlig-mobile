@@ -11,18 +11,15 @@
  * Kullanım:
  *   import { colors, space, type, radius, elevate, haptics } from "@/theme";
  *
- * `colors` = aktif palet + eski takma adlar (bkz. theme/legacy.ts).
- * `palette` = takma adsız, saf yeni palet.
+ * `colors` = aktif palet (`palette` ile aynı nesne; ekranlar `colors` yazar).
  */
 
 import { Appearance, type ViewStyle } from "react-native";
 import { getStoredTheme } from "@/constants/themePreference";
 import { paletteFor, type Palette, type ThemeName } from "./palette";
-import { withLegacy, type LegacyPalette } from "./legacy";
 import { createDividers, elevation, type Dividers, type ElevationLevel } from "./elevation";
 
 export * from "./palette";
-export * from "./legacy";
 export * from "./rating";
 export * from "./zones";
 export * from "./positions";
@@ -36,13 +33,15 @@ export * from "./motion";
 const override = getStoredTheme();
 
 /**
- * VARSAYILAN TEMA AÇIKTIR. Yeniden tasarımda cilalanan tema açık temadır;
- * koyu tema ikinci sınıf değil ama varsayılan değil. Bu yüzden burada SİSTEM
- * ayarına bakılmaz — yalnız kullanıcının açık tercihi koyuya geçirir. Sistem
- * ayarına uyulsaydı, koyu telefonlu kullanıcıların çoğu ürünün asıl yüzünü
- * hiç görmezdi.
+ * TEMA: kullanıcının açık tercihi (Açık / Koyu) varsa o; yoksa SİSTEM ayarı.
+ *
+ * Eskiden tercih yokken her zaman açık tema açılıyordu; Ayarlar'daki "Sistem"
+ * seçeneği ise sistem koyuyken "koyu olacak" diye hesap yapıyordu — iki taraf
+ * birbirini yalanlıyordu. Koyu tema da artık birinci sınıf (koyu mor + pembe +
+ * beyaz) olduğu için "Sistem" gerçekten sistemi izler.
  */
-export const isDark: boolean = override === "dark";
+export const isDark: boolean =
+  override === "dark" || (override === null && Appearance.getColorScheme() === "dark");
 
 /** Aktif tema adı — bileşenler yerine altyapı (StatusBar, harita) içindir. */
 export const themeName: ThemeName = isDark ? "dark" : "light";
@@ -50,8 +49,8 @@ export const themeName: ThemeName = isDark ? "dark" : "light";
 /** Aktif palet — yalnız yeni token adları. */
 export const palette: Palette = paletteFor(themeName);
 
-/** Aktif palet + eski token adları. Ekranların kullandığı sözlük budur. */
-export const colors: LegacyPalette = withLegacy(palette);
+/** Aktif palet — ekranların kullandığı sözlük. */
+export const colors: Palette = palette;
 
 /** Aktif temaya bağlı ayraç seti. */
 export const dividers: Dividers = createDividers(palette);

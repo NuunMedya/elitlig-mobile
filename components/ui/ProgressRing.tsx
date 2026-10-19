@@ -44,6 +44,7 @@ export interface ProgressRingProps {
 const TONE_COLOR: Record<Tone, string> = {
   neutral: colors.textTertiary,
   brand: colors.brandAccent,
+  accent: colors.accent,
   live: colors.live,
   win: colors.win,
   warn: colors.warn,

@@ -228,8 +228,7 @@ const styles = StyleSheet.create({
     gap: 1,
   },
   topName: {
-    ...type.h4,
-    fontSize: 14,
+    ...type.h3,
     color: colors.textPrimary,
   },
   topMeta: {

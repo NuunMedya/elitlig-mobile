@@ -17,7 +17,7 @@ import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-na
 import { colors, radius, space, textScale, type } from "@/theme";
 
 /** Anlamsal renk tonu — tüm ui bileşenlerinin ortak sözlüğü (§4.3). */
-export type Tone = "neutral" | "brand" | "live" | "win" | "warn" | "danger" | "info";
+export type Tone = "neutral" | "brand" | "accent" | "live" | "win" | "warn" | "danger" | "info";
 
 export interface ToneColors {
   /** Metin/ikon rengi (soft ve outline varyantlarında). */
@@ -42,6 +42,13 @@ const TONES: Record<Tone, ToneColors> = {
     dim: colors.brandDim,
     solidBg: colors.brand,
     solidFg: colors.textOnBrand,
+  },
+  /** Pembe — ikincil marka vurgusu (yarışma, öne çıkan içerik). */
+  accent: {
+    fg: colors.accentText,
+    dim: colors.accentDim,
+    solidBg: colors.accent,
+    solidFg: colors.textOnAccent,
   },
   live: { fg: colors.live, dim: colors.liveDim, solidBg: colors.live, solidFg: colors.textOnStatus },
   win: { fg: colors.win, dim: colors.winDim, solidBg: colors.win, solidFg: colors.textOnStatus },

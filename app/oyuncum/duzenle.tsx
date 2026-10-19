@@ -165,6 +165,7 @@ export default function EditPlayerProfileScreen() {
   const shell = (children: ReactNode) => (
     <AuthShell
       title="Profilimi düzenle"
+      variant="form"
       overline="Oyuncu profilim"
       heading="Profilimi düzenle"
       lede="Değişiklikler lig yönetiminin onayından sonra profilinde ve tüm ekranlarda görünür."

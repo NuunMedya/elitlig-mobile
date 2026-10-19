@@ -6,10 +6,12 @@
  * `/api/panel/me` özetiyle üyenin kendi verileri (oyuncu kartı, sezon
  * istatistikleri, bekleyen talepler) ve hesap eylemleri (şifre, çıkış) yer alır.
  *
- * NEDEN SEKMEDEN ÇIKTI: eski ekran hem hesap sayfası hem de teklif/sözleşme/
- * ceza kapılarının listesiydi; o kapılar artık Profil sekmesindeki KARİYERİM
- * grubunda. Burada YALNIZ "ben kimim ve hesabımı nasıl yönetirim" kalır, o
- * yüzden yığında (stack) tek seferlik ziyaret edilen bir detay ekranıdır.
+ * YALNIZ HESAP: teklif/sözleşme/ceza kapıları, sezon ayrıntısı ve yönetilen
+ * takım Yönetim sekmesindedir (Kulübüm / Kariyerim); lig kuralları Menü ▸
+ * Destek'te. Burada yalnız "ben kimim ve hesabımı nasıl yönetirim" kalır:
+ * bekleyen profil talepleri, bilgiler, şifre ve engeller, profil düzenleme,
+ * oturum. Şifre ve engel listesinin TEK kapısı burasıdır (Ayarlar buraya
+ * gelir).
  *
  * NEDEN 403 EKRANI BOŞALTMAZ: panel rolü olmayan hesaplarda sunucu
  * `PANEL_FORBIDDEN` döndürür. Bu bir hata değil, o hesabın panel verisi
@@ -21,8 +23,8 @@
  *
  * DÜZEN (Arena "detay" kalıbı): sahne başlık + kimlik (avatar, ad, roller) ve
  * oyuncuysa sezonun dört sayısı sahnenin dibinde → kâğıtta önce BEKLEYEN
- * talepler (yapılacak iş), sonra bilgiler, güvenlik, oyuncu profili, sezon
- * ayrıntısı ve en altta oturum (çıkış + hesabı sil — mağaza kapısı).
+ * talepler (yapılacak iş), sonra bilgiler, güvenlik, oyuncu profili ve en
+ * altta oturum (çıkış + hesabı sil — mağaza kapısı).
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -363,14 +365,6 @@ export default function AccountScreen() {
           subtitle: "Hangi verinin neden tutulduğu",
           action: { kind: "link", url: PRIVACY_URL },
         },
-        {
-          kind: "action",
-          key: "kurallar",
-          icon: "book",
-          title: "Lig Kuralları",
-          subtitle: "Sohbet ve saha kuralları",
-          action: { kind: "route", route: "/kurallar" },
-        },
       ],
     });
 
@@ -395,52 +389,10 @@ export default function AccountScreen() {
         action: { kind: "route", route: "/oyuncum/bagla" },
       });
     }
-    if (me?.team) {
-      profile.push({
-        kind: "action",
-        key: "yonetilen-takim",
-        icon: "shield",
-        title: me.team.team_name,
-        subtitle: "Yönettiğin takım",
-        tone: "brand",
-        action: { kind: "route", route: `/takim/${me.team.id}` },
-      });
-    }
     result.push({ key: "profil", title: "Oyuncu profili", data: profile });
 
-    /* 5 — Sezon detayı: başlıca dört sayı sahnede, gerisi burada. */
-    if (me?.stats) {
-      result.push({
-        key: "sezon",
-        title: "Sezon detayı",
-        meta: me.stats.season ?? undefined,
-        data: [
-          {
-            kind: "kv",
-            key: "ilk11",
-            label: "İlk kadro başlangıcı",
-            value: String(me.stats.starts ?? 0),
-            numeric: true,
-          },
-          {
-            kind: "kv",
-            key: "sari",
-            label: "Sarı kart",
-            value: String(me.stats.yellow_cards ?? 0),
-            numeric: true,
-          },
-          {
-            kind: "kv",
-            key: "kirmizi",
-            label: "Kırmızı kart",
-            value: String(me.stats.red_cards ?? 0),
-            numeric: true,
-          },
-        ],
-      });
-    }
 
-    /* 6 — Oturum ve hesap
+    /* 5 — Oturum ve hesap
        Hesap silme bilinçli olarak "Hesap ve güvenlik" grubunda değil en altta,
        çıkışın yanında durur: mağazaların istediği kapı burada aranır ve
        gündelik ayarların arasında kaybolmaz. Sonuçları ayrı ekran anlatır

@@ -31,8 +31,8 @@
  * yoksa iri metin 38px'lik satırların içinde kırpılırdı.
  *
  * KURALLAR (neden böyle):
- *  - İKİ AİLE, ÜÇ ROL: Archivo (skor/rakam), Inter (arayüz metni), Inter
- *    uppercase (yapısal etiket). Bkz. theme/fonts.ts.
+ *  - İKİ AİLE: Archivo (skor/rakam), Plus Jakarta Sans (arayüz metni ve
+ *    başlıklar). Bkz. theme/fonts.ts.
  *  - `fontWeight` KULLANILMAZ. Özel fontlarda RN ağırlık uygulamaz; ağırlık
  *    ailenin adıyla seçilir (`fontFamily: fonts.semibold`). Bu dosyadaki her
  *    token doğru aileyi zaten taşır.
@@ -45,7 +45,7 @@
  *    skor 1 → 10 olduğunda satır kayar.
  *  - Türkçe büyük harf dönüşümü daima toLocaleUpperCase("tr-TR") ile yapılır.
  *
- * ÖLÇEK: 10 · 11 · 12 · 13 · 14 · 15 · 16 · 19 · 22   (metin)
+ * ÖLÇEK: 10 · 11 · 12 · 13 · 14 · 15 · 17 · 19 · 24 · 28   (metin)
  *        17 · 22 · 30 · 40                            (skor)
  *
  * BASAMAKLAR 2–3px ARALIKLI. Eski ölçekte aralık 1px'ti ve hiyerarşi puntoyla
@@ -68,21 +68,18 @@ const numeric: Pick<TextStyle, "fontVariant"> = { fontVariant: ["tabular-nums"] 
 export const scale = {
   /* — Metin ölçeği — */
 
-  /** Ekranın kimlik başlığı: takım adı, oyuncu adı, genişletilmiş sayfa başlığı. */
-  display: { fontSize: 22, lineHeight: 27, fontFamily: fonts.bold, letterSpacing: -0.5 },
   /**
-   * Sayfa/ekran başlığı — ARCHIVO.
-   *
-   * Eskiden Inter SemiBold'du ve ekran başlığı, altındaki satır başlıklarından
-   * (yine Inter SemiBold) yalnız dört punto büyüktü: sayfanın adı, listesinin
-   * bir satırıyla aynı sesle konuşuyordu. Archivo dar ve yüksek x-height'lı bir
-   * grotesk; aynı puntoda daha çok mürekkep taşır ve başlık, gövdeden PUNTOYLA
-   * değil SESLE ayrılır. Kural netleşti: Archivo yüksek sesle söylenen şeydir
-   * (skor, büyük rakam, sayfa adı), Inter okunan şeydir.
+   * BÜYÜK BAŞLIK — sekme köklerinin ekran adı ("Maçlar", "Menü").
+   * iOS'un 34pt büyük başlığı ile Material'ın 28sp başlığı arasında; sekme
+   * kökü, sayfanın ne olduğunu ilk bakışta ve tek kelimeyle söylemeli.
    */
-  h1:      { fontSize: 19, lineHeight: 24, fontFamily: fonts.bold, letterSpacing: -0.4 },
+  largeTitle: { fontSize: 28, lineHeight: 34, fontFamily: fonts.heading, letterSpacing: -0.7 },
+  /** Ekranın kimlik başlığı: takım adı, oyuncu adı, genişletilmiş sayfa başlığı. */
+  display: { fontSize: 24, lineHeight: 30, fontFamily: fonts.heading, letterSpacing: -0.6 },
+  /** Sayfa/ekran başlığı (geri düğmeli ekranlar). */
+  h1:      { fontSize: 19, lineHeight: 25, fontFamily: fonts.heading, letterSpacing: -0.4 },
   /** Kart ve bölüm başlığı. */
-  h2:      { fontSize: 16, lineHeight: 21, fontFamily: fonts.semibold, letterSpacing: -0.3 },
+  h2:      { fontSize: 17, lineHeight: 22, fontFamily: fonts.heading, letterSpacing: -0.3 },
   /** Satır başlığı — liste satırındaki isim, en sık kullanılan başlık. */
   h3:      { fontSize: 15, lineHeight: 20, fontFamily: fonts.semibold, letterSpacing: -0.2 },
   /** Alt başlık / güçlü satır metni. */
@@ -98,22 +95,40 @@ export const scale = {
   /** Küçük meta — tarih, saha adı, satır altı açıklama. */
   caption: { fontSize: 11, lineHeight: 15, fontFamily: fonts.medium,   letterSpacing: 0.05 },
   /** Rozet içi metin — daima büyük harf. */
-  micro:   { fontSize: 10, lineHeight: 13, fontFamily: fonts.semibold, letterSpacing: 0.5 },
+  micro:   { fontSize: 10, lineHeight: 13, fontFamily: fonts.semibold, letterSpacing: 0.4 },
   /**
-   * Yapısal işaretçi — bölüm ve kart başlıklarının üstündeki büyük-harf satır.
-   * Harf aralığı 0.9 → 1.2: 10px'lik bir büyük-harf satırında aralık, satırı
-   * "küçültülmüş başlık" değil BİR ETİKET olarak okutan tek şeydir.
+   * Yapısal işaretçi — kart başlıklarının üstündeki büyük-harf satır.
+   * Sade dilde bağırmaz: harf aralığı 1.2 → 0.8, rengi daima üçüncül metin.
    */
-  overline:{ fontSize: 10, lineHeight: 13, fontFamily: fonts.semibold, letterSpacing: 1.2 },
+  overline:{ fontSize: 10, lineHeight: 13, fontFamily: fonts.semibold, letterSpacing: 0.8 },
+
+  /* — Yoğun basamaklar —
+     Lig tabloları, liderlik listeleri ve maç kartı gibi sıkı düzenler eskiden
+     tokenı yayıp `fontSize`'ı elle eziyordu (`...type.label, fontSize: 12`);
+     34 dosyada 112 elle punto birikmişti ve ölçek fiilen ikiye bölünmüştü.
+     Sık tekrarlanan her ezme burada adlı bir basamak oldu; ekranlar artık
+     punto yazmaz (scripts/check-tokens.mjs denetler). */
+  /** Sıkı satır etiketi (takım adı kısaltması, liste ikincil başlığı). */
+  labelSm: { fontSize: 12, lineHeight: 16, fontFamily: fonts.semibold, letterSpacing: 0 },
+  /** En sıkı etiket (podyum adı, yan yana iki takım adı). */
+  labelXs: { fontSize: 11, lineHeight: 14, fontFamily: fonts.semibold, letterSpacing: 0 },
+  /** Küçük meta — cümle düzeninde (büyük harf değil) 10px açıklama. */
+  meta:    { fontSize: 10, lineHeight: 13, fontFamily: fonts.medium,   letterSpacing: 0.1 },
+  /** Haber/makale gövdesi — uzun okuma. */
+  article: { fontSize: 16, lineHeight: 26, fontFamily: fonts.regular,  letterSpacing: 0 },
 
   /* — Skor ölçeği: tamamı Archivo + tabular —
      Skor ekranın KAHRAMANIDIR. 24px'lik bir "2–1", satır başlığından yalnız
      iki kademe büyüktü; bir skor uygulamasında skorun büyüklüğü, o ürünün
      neyle ilgili olduğunu söyleyen ilk şeydir. */
+  /** Oyun sonucu ve paylaşım kartının dev sayısı. */
+  scoreJumbo:{ fontSize: 48, lineHeight: 52, fontFamily: fonts.bold, letterSpacing: -1.6, ...numeric },
   scoreHero: { fontSize: 40, lineHeight: 44, fontFamily: fonts.bold, letterSpacing: -1.4, ...numeric },
   scoreLg:   { fontSize: 30, lineHeight: 34, fontFamily: fonts.bold, letterSpacing: -1, ...numeric },
   scoreMd:   { fontSize: 22, lineHeight: 26, fontFamily: fonts.bold, letterSpacing: -0.6, ...numeric },
   scoreSm:   { fontSize: 17, lineHeight: 21, fontFamily: fonts.bold, letterSpacing: -0.3, ...numeric },
+  /** Liste içi küçük skor/metrik (yoğun maç kartı, podyum sayısı). */
+  scoreXs:   { fontSize: 15, lineHeight: 19, fontFamily: fonts.bold, letterSpacing: -0.2, ...numeric },
 
   /* — Sayısal yardımcılar — */
   clock:          { fontSize: 12, lineHeight: 16, fontFamily: fonts.display, letterSpacing: 0, ...numeric },
@@ -122,6 +137,12 @@ export const scale = {
   /** Panel kartlarındaki tek rakam (kadro sayısı, kasa, puan). */
   metric:         { fontSize: 26, lineHeight: 31, fontFamily: fonts.bold, letterSpacing: -0.8, ...numeric },
   metricSm:       { fontSize: 18, lineHeight: 22, fontFamily: fonts.bold, letterSpacing: -0.4, ...numeric },
+  /** Sıkı tablo rakamı (puan tablosu sütunları, oran). */
+  numSm:          { fontSize: 11, lineHeight: 15, fontFamily: fonts.display, letterSpacing: 0, ...numeric },
+  /** Sıkı tablo rakamı, vurgulu (puan, gol sayısı). */
+  numSmStrong:    { fontSize: 12, lineHeight: 16, fontFamily: fonts.bold,    letterSpacing: 0, ...numeric },
+  /** Rozet içi en küçük rakam — saha üstü forma numarası, reyting pulu. */
+  nano:           { fontSize: 9,  lineHeight: 12, fontFamily: fonts.bold,    letterSpacing: 0, ...numeric },
 } as const satisfies Record<string, TextStyle>;
 
 /**
@@ -133,19 +154,7 @@ export const scale = {
  *   small    → bodySm (12) · ikincil metin
  *   score    → scoreLg (30) · büyük skor
  */
-export const type = {
-  ...scale,
-
-  /* — Eski API takma adları (58 dosya kırılmasın) — */
-  /** ESKİ: büyük skor → scoreLg */
-  score: scale.scoreLg,
-  /** ESKİ: ekran/kart başlığı → h2 */
-  title: scale.h2,
-  /** ESKİ: alt başlık → h4 */
-  subtitle: scale.h4,
-  /** ESKİ: küçük metin → bodySm */
-  small: scale.bodySm,
-} as const satisfies Record<string, TextStyle>;
+export const type = scale;
 
 export type TypeToken = keyof typeof type;
 

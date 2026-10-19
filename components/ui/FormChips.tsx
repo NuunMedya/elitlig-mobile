@@ -181,8 +181,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
   },
   letterXs: {
-    fontSize: 8,
-    lineHeight: 10,
+    ...type.nano,
+    lineHeight: 11,
   },
   letterEmpty: {
     color: colors.textTertiary,

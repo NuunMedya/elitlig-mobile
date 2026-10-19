@@ -86,7 +86,7 @@ type LineupSide = "home" | "away";
 const HOME_TINT = colors.brand;
 const HOME_INK = colors.textOnBrand;
 const AWAY_TINT = colors.onPitch;
-const AWAY_INK = colors.pitchGreen;
+const AWAY_INK = colors.pitch;
 
 export interface LineupTabProps {
   match: ApiMatch;
@@ -620,9 +620,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   formationText: {
-    ...type.tableNumStrong,
-    fontSize: 12,
-    lineHeight: 16,
+    ...type.numSmStrong,
     color: colors.textPrimary,
   },
 
@@ -650,8 +648,7 @@ const styles = StyleSheet.create({
     gap: 1,
   },
   playerName: {
-    ...type.h4,
-    fontSize: 14,
+    ...type.h3,
     color: colors.textPrimary,
   },
   playerMeta: {

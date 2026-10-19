@@ -20,7 +20,6 @@ Tokenlar AYRI kapıdan: `import { colors, space, type, radius, layout, elevate, 
 | `Button` · `Input` · `Toggle` · `Stepper` | Form öğeleri. `Stepper` skor girişi için (tabular, sabit genişlik) |
 | `MatchRow` | Maç listesi satırı. Yükseklik `matchRowHeight(variant, metaMode)` — `getItemLayout` DAİMA bundan kurulur |
 | `LeagueGroupHeader` | Maç listesinde lig grubu başlığı (katlanır, favori yıldızlı) |
-| `DateStrip` | Fikstür tarih seçici (varsayılan −14…+28 gün, bugün ortalanır) |
 | `TeamLogo` · `Avatar` | Takım amblemi / oyuncu-kullanıcı avatarı (eski `TeamCrest` yerine) |
 | `TeamRow` · `TeamRowHead` | Takım satırının TEK anatomisi: sıra · amblem · ad + bağlam · sayı. `density="list"` (66px) tanımak, `density="table"` (40px) karşılaştırmak için. Yükseklikler `TEAM_ROW_HEIGHT(_TABLE)` — `getItemLayout` DAİMA bunlardan kurulur |
 | `PlayerRow` · `PlayerRowHead` | Oyuncu satırının TEK anatomisi: sıra · mevki halkalı avatar · ad + MEVKİ · tek sayı. Meta, aktif ölçütü tekrar ETMEZ |
@@ -34,7 +33,6 @@ Tokenlar AYRI kapıdan: `import { colors, space, type, radius, layout, elevate, 
 | `PitchView` | Kadroyu GÖSTEREN saha (8 kişilik). Düzenleme için `components/PitchLineup.tsx` — ikisi ayrı bileşendir |
 | `EventIcon` | Maç olaylarının SVG ikon sözlüğü (gol, kart, değişiklik, asist, VAR). Ionicons'ta dikey kart yok; hepsi burada |
 | `Sparkline` | Tek satırlık gidişat çizgisi (son 10 maç reytingi). Eksen/ızgara/etiket yok |
-| `HeroCarousel` | Açılış manşet şeridi. 16:10, yapışkan kaydırma, 6sn otomatik geçiş, dokununca KALICI durur |
 | `Skeleton*` | İLK yükleme. Hazır şablonlar: `SkeletonMatchRow/ListRow/Table/Standings/Card/Hero/ListFooter` |
 | `EmptyState` · `ErrorState` | Veri yok / hata. `ErrorState variant="banner"` ekranda BAYAT VERİ varken (veriyi silme) |
 | `Refresh` / `useRefresh` | Aşağı çekip yenileme |
@@ -58,10 +56,10 @@ Yükleme stratejisi: `isLoading` → iskelet · `isRefetching` → `useRefresh` 
 
 ## Tuzaklar
 
-1. **`space.md = 12` ama `spacing.md = 16`.** Yeni kod DAİMA `space` kullanır; `spacing` yalnız eski dosyalar için.
-2. `colors.pitch` = ekran zemini (eski ad). Saha yeşili `colors.pitchGreen`.
+1. Aralık daima `space.*` (md = 12, lg = 16); eski `spacing` ve renk takma adları (theme/legacy.ts) kaldırıldı.
+2. `colors.pitch` saha yeşilidir; ekran zemini `colors.bg`.
 3. `Touchable` haptiği yalnız `onPress` verilmişse tetiklenir; uzun basma haptiğini çağıran verir.
-4. `MatchRow`/`DateStrip`/`ListRow` memo'lu — `onPress`, `markers`, `onChange` prop'larını `useCallback`/`useMemo` ile sabitle, yoksa memo işe yaramaz.
+4. `MatchRow`/`ListRow` memo'lu — `onPress`, `markers`, `onChange` prop'larını `useCallback`/`useMemo` ile sabitle, yoksa memo işe yaramaz.
 5. `useHeaderScroll` JS sürücüsü kullanır (yükseklik animasyonu); `useNativeDriver: true` ile kendi bağlantını verirsen RN çalışma anında hata atar.
 6. Şartnamedeki `Switch` burada **`Toggle`**; sarmalayıcı `Pressable` değil **`Touchable`**.
 7. Bir ekranda TEK `FAB`, aynı anda TEK toast.

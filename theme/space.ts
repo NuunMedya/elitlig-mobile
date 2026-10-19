@@ -3,13 +3,7 @@
  *
  * 4 tabanlı ama yarım adımlı (6, 10, 12) bir ölçek kullanılır: skor listesi
  * yoğun bir düzendir, 4→8→16 sıçraması satırları gereksiz şişirir.
- *
- * DİKKAT — `space` ile `spacing` AYNI ŞEY DEĞİLDİR:
- *   space.md = 12  (yeni, yoğun ölçek)
- *   spacing.md = 16 (ESKİ API — 58 dosya bu değere göre yazıldı)
- * Eski adlar `spacing` üstünde birebir korunur ki mevcut ekranların yerleşimi
- * bozulmasın. YENİ KOD DAİMA `space` KULLANIR; `spacing` yalnız geçiş
- * dönemindeki eski dosyalar içindir ve migrasyon bitince silinecektir.
+
  */
 
 /** Yeni uzay ölçeği — yoğun düzen için yarım adımlı. */
@@ -27,20 +21,6 @@ export const space = {
   xxxl: 32,
   huge: 40,
   giant:48,
-} as const;
-
-/**
- * ESKİ API (`spacing.xs/sm/md/lg/xl`) — değerleri birebir korunur.
- * Yeni adlar da aynı nesneden okunabilsin diye `space` üstüne serilir; çakışan
- * anahtarlarda (md/lg/xl) ESKİ değer kazanır, çünkü geriye uyumluluk şarttır.
- */
-export const spacing = {
-  ...space,
-  xs: space.xs,   // 4
-  sm: space.sm,   // 8
-  md: space.lg,   // 16  ← eski md=16 ile birebir (space.md=12 DEĞİL)
-  lg: space.xxl,  // 24  ← eski lg=24 (space.lg=16 DEĞİL)
-  xl: space.xxxl, // 32  ← eski xl=32 (space.xl=20 DEĞİL)
 } as const;
 
 /**
@@ -82,13 +62,13 @@ export const layout = {
      yandan 4px geri verir; kart iç dolgusu (12) ve satır dolgusu (14) zaten
      buna oturuyor, yani ferahlık kaybı gözle görülmez ama kırpılan ad
      kalmaz. */
-  screenPadding: 14,
+  screenPadding: 16,
   /** Yoğun tablo düzenleri (puan durumu, istatistik ızgarası) için dar kenar. */
   screenPaddingDense: 12,
   rowPaddingH: 14,
   rowGap: 8,
   /** Bölümler arası nefes. */
-  sectionGap: 22,
+  sectionGap: 24,
   listRowHeight: 52,        // tek satırlı ListRow — h3(20) + 2×16 dolgu
   listRowHeightTwoLine: 66, // iki satırlı ListRow — h3(20) + bodySm(17) + dolgu
   /* MAÇ SATIRI İKİ ÇİZGİDİR: `arma · ev` üstte, `arma · dep` altta; skor sağda
@@ -99,7 +79,7 @@ export const layout = {
      2×18 + 4 = 40 + 2×3 = 46. */
   matchRowHeight: 58,
   matchRowHeightCompact: 46,
-  headerHeightExpanded: 96, // overline(13) + display(27) + dolgu
+  headerHeightExpanded: 104, // overline(13) + display(27) + dolgu
   headerHeightCollapsed: 52,
   /**
    * ALT MENÜ BARI YÜKSEKLİĞİ — güvenli alan HARİÇ.
@@ -178,8 +158,8 @@ export const radius = {
   sm:   8,   // amblem kutusu, küçük pul
   md:  12,   // KART İÇİ ELEMAN: input, chip zemini, bar
   lg:  14,   // küçük kart/karo (eski kart değeri)
-  xl:  18,   // KART ve satır grubu (Arena), panel
-  xxl: 22,   // sahne yüzeyi: skor tablosu, saha, yükselen sayfa
+  xl:  16,   // KART ve satır grubu, panel
+  xxl: 20,   // sahne yüzeyi: skor tablosu, saha, yükselen sayfa
   pill: 999,
 } as const;
 

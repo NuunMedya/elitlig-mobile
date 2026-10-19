@@ -59,31 +59,6 @@ export function useMinimumVisible(active: boolean, ms: number = MIN_VISIBLE_MS):
   return visible;
 }
 
-export interface RefreshProps {
-  refreshing: boolean;
-  onRefresh: () => void;
-  /** Sabit başlık/bant altına kaydırmak için (px). */
-  progressViewOffset?: number;
-}
-
-/** Hazır yapılandırılmış RefreshControl — doğrudan `refreshControl` prop'una verilir. */
-export const Refresh = React.memo(function Refresh({
-  refreshing,
-  onRefresh,
-  progressViewOffset = 0,
-}: RefreshProps) {
-  return (
-    <RefreshControl
-      refreshing={refreshing}
-      onRefresh={onRefresh}
-      progressViewOffset={progressViewOffset}
-      tintColor={refreshTheme.tintColor}
-      colors={[...refreshTheme.colors]}
-      progressBackgroundColor={refreshTheme.progressBackgroundColor}
-    />
-  );
-});
-
 export interface UseRefreshOptions {
   /**
    * Dışarıdan yönetilen yenileme durumu (`query.isRefetching`). Verilirse

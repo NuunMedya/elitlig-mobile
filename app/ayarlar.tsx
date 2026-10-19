@@ -286,27 +286,14 @@ export default function SettingsScreen() {
       result.push({
         key: "hesap",
         title: "Hesap ve güvenlik",
+        /* Şifre, engellenenler ve profil talepleri Hesabım'da (tek kapı). */
         rows: [
           {
             key: "hesabim",
             icon: "person",
             title: "Hesabım",
-            subtitle: "Üyelik bilgilerin ve taleplerin",
+            subtitle: "Bilgiler, şifre, engellenenler, profil talepleri",
             onPress: () => go("/hesabim"),
-          },
-          {
-            key: "sifre",
-            icon: "key",
-            title: "Şifre değiştir",
-            subtitle: "Mevcut şifrenle doğrulanır",
-            onPress: () => go("/sifre-degistir"),
-          },
-          {
-            key: "engel",
-            icon: "ban",
-            title: "Engellediğim üyeler",
-            subtitle: "Sohbette engellediklerin",
-            onPress: () => go("/engellenenler"),
           },
         ],
       });

@@ -57,6 +57,7 @@ export default function ReleaseDecisionScreen() {
   return (
     <AuthShell
       title="Transfer izni"
+      variant="form"
       overline="Takımım"
       heading="Transfer izni bekleniyor"
       lede="Başka bir takım, sezon kadronda bildirdiğin bir oyuncuna teklif verdi. Oyuncu teklifi ancak senin ya da lig yönetiminin izniyle kabul edebilir."

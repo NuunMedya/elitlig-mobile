@@ -43,7 +43,7 @@ export default function RecordsScreen() {
   const openConversation = useCallback((id: number) => router.push(`/yonetim/sohbet/${id}` as never), [router]);
 
   if (!auth.user) return <Redirect href="/giris" />;
-  if (!auth.isManagement) return <Redirect href={"/sohbet" as never} />;
+  if (!auth.isManagement) return <Redirect href={"/(tabs)/mesajlar?kutu=sohbetler" as never} />;
 
   const header = (
     <View style={styles.headerBottom}>

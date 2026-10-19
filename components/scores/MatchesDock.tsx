@@ -170,9 +170,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   dayText: {
-    ...type.label,
-    fontSize: 12,
-    lineHeight: 15,
+    ...type.labelSm,
     fontFamily: fonts.semibold,
     color: colors.textPrimary,
   },

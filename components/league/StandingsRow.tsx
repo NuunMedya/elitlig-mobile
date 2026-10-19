@@ -213,9 +213,7 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
   },
   rank: {
-    ...type.tableNum,
-    fontSize: 11,
-    lineHeight: 15,
+    ...type.numSm,
     width: COL_RANK,
     textAlign: "center",
     color: colors.textTertiary,
@@ -243,9 +241,7 @@ const styles = StyleSheet.create({
     fontFamily: fonts.semibold,
   },
   num: {
-    ...type.tableNum,
-    fontSize: 11,
-    lineHeight: 15,
+    ...type.numSm,
     width: COL_NUM,
     textAlign: "center",
     color: colors.textSecondary,
@@ -260,9 +256,7 @@ const styles = StyleSheet.create({
     color: colors.loss,
   },
   points: {
-    ...type.tableNumStrong,
-    fontSize: 12,
-    lineHeight: 16,
+    ...type.numSmStrong,
     width: COL_POINTS,
     textAlign: "center",
     color: colors.textPrimary,
@@ -287,8 +281,6 @@ const styles = StyleSheet.create({
   },
   headLabel: {
     ...type.overline,
-    fontSize: 9,
-    lineHeight: 12,
     letterSpacing: 0.8,
     color: colors.textTertiary,
   },

@@ -231,15 +231,6 @@ const styles = StyleSheet.create({
     backgroundColor: isDark ? colors.surface3 : colors.surface1,
     borderWidth: hairline,
     borderColor: isDark ? colors.borderStrong : colors.border,
-    ...Platform.select({
-      android: { elevation: 1 },
-      default: {
-        shadowColor: colors.shadowColor,
-        shadowOpacity: isDark ? 0 : 0.1,
-        shadowRadius: 3,
-        shadowOffset: { width: 0, height: 1 },
-      },
-    }),
   },
   segment: {
     flexDirection: "row",

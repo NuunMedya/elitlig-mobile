@@ -646,9 +646,7 @@ const styles = StyleSheet.create({
     gap: space.xxs,
   },
   metricValue: {
-    ...type.metricSm,
-    fontSize: 22,
-    lineHeight: 26,
+    ...type.scoreMd,
     color: colors.onDark,
   },
   metricValueLive: {

@@ -2445,14 +2445,12 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   shareBrand: {
-    fontSize: 15,
-    fontFamily: fonts.bold,
+    ...type.scoreXs,
     color: SHARE.text,
     letterSpacing: -0.3,
   },
   shareKicker: {
-    fontSize: 8,
-    fontFamily: fonts.semibold,
+    ...type.overline,
     letterSpacing: 1.4,
     color: SHARE.brand,
   },
@@ -2480,15 +2478,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   shareName: {
-    fontSize: 19,
-    lineHeight: 23,
+    ...type.h1,
     fontFamily: fonts.bold,
-    letterSpacing: -0.4,
     color: SHARE.text,
   },
   shareSub: {
-    fontSize: 11,
-    fontFamily: fonts.medium,
+    ...type.caption,
     color: SHARE.muted,
   },
   shareCenter: {
@@ -2506,8 +2501,7 @@ const styles = StyleSheet.create({
     ...type.scoreLg,
   },
   shareRatingLabel: {
-    fontSize: 8,
-    fontFamily: fonts.semibold,
+    ...type.overline,
     letterSpacing: 1.2,
     color: SHARE.muted,
   },
@@ -2531,8 +2525,7 @@ const styles = StyleSheet.create({
     color: SHARE.text,
   },
   shareStatLabel: {
-    fontSize: 8,
-    fontFamily: fonts.semibold,
+    ...type.overline,
     letterSpacing: 1,
     color: SHARE.muted,
   },
@@ -2545,14 +2538,12 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   shareRecord: {
-    fontSize: 10,
-    fontFamily: fonts.bold,
+    ...type.nano,
+    fontSize: type.micro.fontSize,
     color: SHARE.text,
-    fontVariant: ["tabular-nums"],
   },
   shareFooter: {
-    fontSize: 8,
-    fontFamily: fonts.bold,
+    ...type.nano,
     letterSpacing: 2.5,
     color: SHARE.muted,
   },

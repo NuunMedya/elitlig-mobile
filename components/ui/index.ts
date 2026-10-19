@@ -40,7 +40,6 @@ export { Surface } from "./Surface";
 
 /** Kartların ışıklı mor gradyan katmanı. */
 export { Bloom, type BloomProps } from "./Bloom";
-export { Frame, type FrameProps, type FrameTone } from "./Frame";
 export { GradientFill, type GradientTone } from "./GradientFill";
 export type { SurfaceProps } from "./Surface";
 
@@ -51,12 +50,8 @@ export type { CardProps } from "./Card";
 export { MetricTile, MetricGrid } from "./MetricTile";
 export type { MetricTileProps, MetricGridProps, MetricTone } from "./MetricTile";
 
-export { ActionTile, ActionRow } from "./ActionTile";
 export { HubTile, HubGrid } from "./HubTile";
-export { ActionBar, ACTION_BAR_SPACE } from "./ActionBar";
-export type { ActionBarProps } from "./ActionBar";
 export type { HubTileProps, HubTone } from "./HubTile";
-export type { ActionTileProps, ActionRowProps } from "./ActionTile";
 
 export { SpotlightCard } from "./SpotlightCard";
 export type { SpotlightCardProps, SpotlightTeam } from "./SpotlightCard";
@@ -144,8 +139,6 @@ export type { MatchCardRailProps } from "./MatchCardRail";
 export { LeagueGroupHeader, LEAGUE_GROUP_HEADER_HEIGHT } from "./LeagueGroupHeader";
 export type { LeagueGroupHeaderProps } from "./LeagueGroupHeader";
 
-export { DateStrip, toIsoDate } from "./DateStrip";
-export type { DateStripProps } from "./DateStrip";
 
 export { StatBar } from "./StatBar";
 export type { StatBarProps } from "./StatBar";
@@ -159,8 +152,6 @@ export type { EventIconProps, EventIconKind } from "./EventIcon";
 export { PitchView } from "./PitchView";
 export type { PitchViewProps, PitchPlayerView } from "./PitchView";
 
-export { HeroCarousel, HERO_AUTOPLAY_MS } from "./HeroCarousel";
-export type { HeroCarouselProps, HeroSlide } from "./HeroCarousel";
 
 export { FormChips } from "./FormChips";
 export type { FormChipsProps, FormResult } from "./FormChips";
@@ -197,8 +188,8 @@ export type { EmptyStateProps } from "./EmptyState";
 export { ErrorState, errorMessage } from "./ErrorState";
 export type { ErrorStateProps } from "./ErrorState";
 
-export { Refresh, useRefresh, useMinimumVisible, refreshControlProps, refreshTheme } from "./Refresh";
-export type { RefreshProps, UseRefreshOptions } from "./Refresh";
+export { useRefresh, useMinimumVisible, refreshControlProps, refreshTheme } from "./Refresh";
+export type { UseRefreshOptions } from "./Refresh";
 
 /* — Kaplamalar ve kabuk — */
 export { ToastProvider, useToast } from "./Toast";

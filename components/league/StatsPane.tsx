@@ -378,15 +378,11 @@ const styles = StyleSheet.create({
   },
   summaryLabel: {
     ...type.overline,
-    fontSize: 9,
-    lineHeight: 12,
     letterSpacing: 0.8,
     color: colors.textTertiary,
   },
   summaryValue: {
-    ...type.metricSm,
-    fontSize: 16,
-    lineHeight: 20,
+    ...type.scoreXs,
     letterSpacing: -0.3,
     color: colors.textPrimary,
   },

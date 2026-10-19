@@ -681,12 +681,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.xxs,
   },
   teamNameSm: {
-    fontSize: 12,
-    lineHeight: 16,
+    ...type.labelSm,
   },
   teamNameXs: {
-    fontSize: 11,
-    lineHeight: 15,
+    ...type.labelXs,
   },
   teamNameDim: {
     color: colors.onDarkMuted,

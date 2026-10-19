@@ -66,7 +66,6 @@ import {
   useRefresh,
   type TabItem,
 } from "@/components/ui";
-import { useUnreadCount } from "@/hooks/useUnreadCount";
 import { MAX_STARTERS, getTeamFinance, getTeamMatchPlan } from "@/lib/api/team";
 import { formatDateShort, formatDecimal, mediaUrl } from "@/lib/format";
 import { useAuth } from "@/providers/AuthProvider";
@@ -80,9 +79,6 @@ const ROLE_LABELS: Record<RoleTab, string> = {
   oyuncu: "Kariyerim",
   lig: "Lig",
 };
-
-/** Mesajlar sekmesi — `kutu` verilirse o kutu açık gelir. */
-const INBOX = "/(tabs)/mesajlar";
 
 function signed(value: number): string {
   return value > 0 ? `+${value}` : String(value);
@@ -102,7 +98,6 @@ export default function ClubHubScreen() {
   const auth = useAuth();
   const scope = useScope();
   const router = useRouter();
-  const unread = useUnreadCount();
   const { scrollY, scrollProps } = useHeaderScroll();
   const params = useLocalSearchParams<{ rol?: string }>();
   const signals = useClubSignals();
@@ -180,26 +175,7 @@ export default function ClubHubScreen() {
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader
         title="Yönetim"
-        overline={user ? (user.fullName ?? user.username ?? undefined) : "Kulüp, kariyer, lig"}
         scrollY={scrollY}
-        actions={
-          user
-            ? [
-                {
-                  icon: "chatbubbles-outline",
-                  accessibilityLabel: "Mesajlar: sohbetler",
-                  onPress: () => go(`${INBOX}?kutu=sohbetler`),
-                  badge: unread.messages || undefined,
-                },
-                {
-                  icon: "notifications-outline",
-                  accessibilityLabel: "Mesajlar: bildirimler",
-                  onPress: () => go(INBOX),
-                  badge: unread.notifications || undefined,
-                },
-              ]
-            : undefined
-        }
         tabs={roles.length > 1 && role ? <Tabs items={tabItems} value={role} onChange={changeRole} sticky /> : undefined}
       />
 
@@ -231,13 +207,6 @@ export default function ClubHubScreen() {
           <JoinFlow signedIn go={go} />
         )}
 
-        {user ? (
-          <PanelSection title="Diğer">
-            <PanelCard padded={false}>
-              <PanelRow icon="star" title="Takip ettiklerin" hint="Takımlar, ligler ve maçlar" onPress={() => go("/takip")} last />
-            </PanelCard>
-          </PanelSection>
-        ) : null}
       </ScrollView>
 
       {/* Onay bekleyen değişiklik talepleri (eski Kulüp Paneli'nden taşındı). */}
@@ -298,9 +267,9 @@ function ClubSection({
       { key: "maclar", icon: "clipboard", label: "Maçlar", href: "/takimim/mac-merkezi", tone: "live" },
       { key: "mac-al", icon: "calendar", label: "Maç al", href: "/takimim/mac-al", tone: "win" },
       { key: "musaitlik", icon: "time", label: "Müsaitlik", href: "/takimim/musaitlik", tone: "win" },
-      { key: "basvuru", icon: "mail-unread", label: "Başvurular", href: "/davetler", tone: "warn", count: counts.applications },
+      { key: "basvuru", icon: "mail-unread", label: "Davetler", href: "/davetler", tone: "warn", count: counts.applications },
       { key: "kasa", icon: "wallet", label: "Kasa", href: "/takimim/kasa", tone: "neutral" },
-      { key: "teklifler", icon: "paper-plane", label: "Teklifler", href: "/takimim/teklifler" },
+      { key: "teklifler", icon: "paper-plane", label: "Giden teklif", href: "/takimim/teklifler" },
       { key: "borsa", icon: "storefront", label: "Borsa", href: "/takimim/borsa", tone: "warn" },
       { key: "bilgiler", icon: "shield-half", label: "Kimlik", href: "/takimim/bilgiler", tone: "info" },
     ],
@@ -598,13 +567,13 @@ function CareerSection({
       { key: "maclar", icon: "football", label: "Maçlarım", href: "/oyuncum?tab=maclarim" },
       { key: "istatistik", icon: "stats-chart", label: "İstatistik", href: "/oyuncum?tab=istatistik" },
       { key: "sozlesme", icon: "document-text", label: "Sözleşme", href: "/oyuncum?tab=sozlesme", tone: "info" },
-      { key: "teklif", icon: "swap-horizontal", label: "Teklifler", href: "/tekliflerim", count: counts.offersAwaiting },
+      { key: "teklif", icon: "swap-horizontal", label: "Gelen teklif", href: "/tekliflerim", count: counts.offersAwaiting },
       { key: "disiplin", icon: "alert-circle", label: "Disiplin", href: "/cezalarim", tone: "warn", count: counts.penaltiesOpen },
       { key: "davet", icon: "git-pull-request", label: "Davetler", href: "/davetler", tone: "live", count: counts.invitesReceived },
       playerTeam
         ? { key: "takim", icon: "shield", label: "Takımım", href: `/takim/${playerTeam.id}`, tone: "neutral" }
         : { key: "takim-bul", icon: "search", label: "Takım bul", href: "/ara?tip=takim", tone: "neutral" },
-      { key: "profil", icon: "create", label: "Profil", href: "/hesabim", tone: "neutral" },
+      { key: "profil", icon: "person-circle", label: "Hesabım", href: "/hesabim", tone: "neutral" },
     ],
     [counts.invitesReceived, counts.offersAwaiting, counts.penaltiesOpen, playerTeam],
   );
@@ -644,9 +613,6 @@ function CareerSection({
       ]
     : [];
 
-  const changes = [...(data?.pendingChanges ?? [])]
-    .sort((a, b) => Number(b.status === "pending") - Number(a.status === "pending"))
-    .slice(0, 4);
   const recent = (data?.recentMatches ?? []).slice(0, 3);
 
   return (
@@ -726,24 +692,6 @@ function CareerSection({
         />
       </PanelSection>
 
-      {changes.length ? (
-        <PanelSection title="Değişiklik taleplerim" action={{ label: "Hesabım", onPress: () => go("/hesabim") }}>
-          <PanelCard padded={false}>
-            {changes.map((change, index) => (
-              <PanelRow
-                key={change.id}
-                icon="document-attach-outline"
-                tone={change.status === "approved" ? "win" : change.status === "rejected" ? "danger" : "warn"}
-                title={CHANGE_LABELS[change.type] ?? change.type}
-                hint={change.created_at ? formatDateShort(change.created_at) : undefined}
-                value={change.status === "approved" ? "Onaylandı" : change.status === "rejected" ? "Reddedildi" : "Bekliyor"}
-                last={index === changes.length - 1}
-              />
-            ))}
-          </PanelCard>
-        </PanelSection>
-      ) : null}
-
       {seasonItems.length ? (
         <PanelSection
           title="Sezonum"
@@ -787,7 +735,7 @@ const LEAGUE_TOOLS: PanelTool[] = [
   { key: "gorev-yeni", icon: "add-circle", label: "Yeni görev", href: "/yonetim/gorev-yeni" },
   { key: "maclar", icon: "football", label: "Maçlar", href: "/yonetim/maclar", tone: "live" },
   { key: "sahalar", icon: "location", label: "Sahalar", href: "/yonetim/sahalar", tone: "info" },
-  { key: "basvuru", icon: "mail", label: "Başvurular", href: "/yonetim/mesajlar", tone: "warn" },
+  { key: "basvuru", icon: "mail", label: "Mesajlar", href: "/yonetim/mesajlar", tone: "warn" },
   { key: "sohbet", icon: "chatbubbles", label: "Sohbet", href: "/yonetim/sohbet", tone: "neutral" },
   { key: "kayitlar", icon: "call", label: "Kayıtlar", href: "/yonetim/kayitlar", tone: "neutral" },
   { key: "panel", icon: "grid", label: "Tümü", href: "/yonetim", tone: "neutral" },
@@ -798,13 +746,6 @@ function LeagueSection({ go }: { go: (href: string) => void }) {
     <>
       <PanelSection title="Araçlar" style={styles.firstSection}>
         <ToolGrid tools={LEAGUE_TOOLS} go={go} />
-      </PanelSection>
-      <PanelSection title="Sık kullanılanlar">
-        <PanelCard padded={false}>
-          <PanelRow icon="football" tone="live" title="Maç yönetimi" hint="Skor, durum, yayınlama" onPress={() => go("/yonetim/maclar")} />
-          <PanelRow icon="location" tone="info" title="Saha talepleri" hint="Haftalık program ve onaylar" onPress={() => go("/yonetim/sahalar")} />
-          <PanelRow icon="checkbox" title="Görevlerim" hint="Atanan ve açık görevler" onPress={() => go("/yonetim/gorevler")} last />
-        </PanelCard>
       </PanelSection>
     </>
   );

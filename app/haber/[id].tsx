@@ -504,8 +504,6 @@ const styles = StyleSheet.create({
   },
   title: {
     ...type.display,
-    fontSize: 26,
-    lineHeight: 32,
     letterSpacing: -0.6,
     color: colors.textPrimary,
   },
@@ -520,16 +518,12 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   lead: {
-    ...type.bodyLg,
-    fontSize: 16,
-    lineHeight: 25,
+    ...type.article,
     color: colors.textPrimary,
     fontFamily: fonts.semibold,
   },
   paragraph: {
-    ...type.bodyLg,
-    fontSize: 16,
-    lineHeight: 27,
+    ...type.article,
     color: colors.textPrimary,
   },
   bodyImage: {

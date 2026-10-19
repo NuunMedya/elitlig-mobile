@@ -135,16 +135,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accentDim,
   },
   title: {
-    ...type.label,
-    fontSize: 12,
-    lineHeight: 16,
+    ...type.labelSm,
     color: colors.textPrimary,
     flex: 1,
   },
   overline: {
     ...type.overline,
-    fontSize: 9,
-    lineHeight: 12,
     color: colors.textTertiary,
     paddingRight: space.s,
   },
@@ -156,9 +152,7 @@ const styles = StyleSheet.create({
     paddingVertical: space.xxs,
   },
   moreText: {
-    ...type.label,
-    fontSize: 11,
-    lineHeight: 15,
+    ...type.labelXs,
     color: colors.brandAccent,
   },
   cells: {
@@ -198,8 +192,6 @@ const styles = StyleSheet.create({
   },
   rankText: {
     ...type.micro,
-    fontSize: 9,
-    lineHeight: 11,
     letterSpacing: 0,
     color: colors.textSecondary,
   },
@@ -207,20 +199,15 @@ const styles = StyleSheet.create({
     color: colors.accentText,
   },
   name: {
-    ...type.label,
-    fontSize: 11,
-    lineHeight: 14,
+    ...type.labelXs,
     color: colors.textPrimary,
   },
   value: {
-    ...type.tableNumStrong,
-    fontSize: 11,
-    lineHeight: 14,
+    ...type.numSmStrong,
     color: colors.textPrimary,
   },
   unit: {
-    ...type.caption,
-    fontSize: 10,
+    ...type.meta,
     color: colors.textTertiary,
   },
 });

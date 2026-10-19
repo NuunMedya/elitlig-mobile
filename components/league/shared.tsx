@@ -197,16 +197,12 @@ const styles = StyleSheet.create({
   },
   labelText: {
     ...type.overline,
-    fontSize: 9,
-    lineHeight: 12,
     letterSpacing: 1,
     color: colors.textTertiary,
     flexShrink: 1,
   },
   labelMeta: {
-    ...type.caption,
-    fontSize: 10,
-    lineHeight: 13,
+    ...type.meta,
     color: colors.textTertiary,
   },
 });

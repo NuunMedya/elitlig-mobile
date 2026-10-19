@@ -596,7 +596,7 @@ const styles = StyleSheet.create({
   },
   shareBrand: { ...type.h2, color: inkPalette.textPrimary },
   shareGame: { ...type.micro, color: inkPalette.brandAccent },
-  shareScore: { ...type.scoreHero, fontSize: 56, lineHeight: 60, color: inkPalette.warn, marginTop: space.sm },
+  shareScore: { ...type.scoreJumbo, color: inkPalette.warn, marginTop: space.sm },
   shareUnit: { ...type.micro, color: inkPalette.textPrimary },
   shareSub: { ...type.caption, color: inkPalette.textSecondary, marginTop: space.xxs },
   shareDivider: { alignSelf: "stretch", height: hairline, backgroundColor: withAlpha(inkPalette.textPrimary, 0.2), marginVertical: space.md },

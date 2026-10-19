@@ -7,7 +7,6 @@
  * fonksiyonlar, testten ve render döngüsünden bağımsız.
  */
 
-import { toIsoDate } from "@/components/ui/DateStrip";
 import type { ApiMatch } from "@/lib/types";
 
 export const MONTHS_TR = [
@@ -29,6 +28,11 @@ export function fromIso(iso: string): Date {
   const parts = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
   if (!parts) return new Date();
   return new Date(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3]));
+}
+
+/** Yerel saatle "YYYY-MM-DD". */
+export function toIsoDate(date: Date): string {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
 }
 
 export function shiftDays(iso: string, delta: number): string {

@@ -7,25 +7,29 @@ kaynağıdır; tokenlar `theme/`, ortak bileşenler `components/ui/` altındadı
 
 ## 1. İlkeler
 
-1. **Nötr sahne, renk sinyaldir.** Zemin gri kâğıt, kartlar beyazdır. Renk
-   yalnız bir şey SÖYLEDİĞİNDE kullanılır:
-   - `brand` (elektrik menekşe) → aksiyon ve seçili durum (birincil düğme,
-     seçili sekme/çip, bağlantı, takip yıldızı).
-   - `accent` (zümrüt) → veri (istatistik barı, oran, vurgulanan takım).
+1. **Sakin kâğıt, renk sinyaldir.** Zemin çok açık lavanta-gri kâğıt
+   (#F7F5FB), kartlar beyaz ve GÖLGESİZDİR. Renk yalnız bir şey
+   SÖYLEDİĞİNDE kullanılır:
+   - `brand` (derin mor #6D28D9) → aksiyon ve seçili durum (birincil düğme,
+     seçili sekme/çip, bağlantı, takip yıldızı, alt menü seçimi).
+   - `accent` (pembe #DB2777, koyuda #F472B6) → veri ve ikincil vurgu
+     (istatistik barı, oran, yarışma/öne çıkan içerik; koyu temada seçili
+     alt menü sekmesi).
    - `live` (kırmızı) → canlı.
    - `win/draw/loss` → sonuç; `warn/danger` → uyarı.
    Süs için renk kullanılmaz; renkli ikon pulları yalnız bir kategori
    kimliği taşıdığında (Kulübüm ızgarası gibi) kabul edilir.
 2. **İki yüzey ailesi.**
    - **Kâğıt** (`colors.bg` zemin, `surface1` kart): listeler, içerik, formlar.
-   - **Sahne** (`gradientInk` / `inkBlock`, grafit): kimlik ve skor anları —
-     maç skorbordu, takım/oyuncu kimliği, vitrin maçı, alt menü. Sahnede metin
+   - **Sahne** (`gradientInk` / `inkBlock`, koyu mor #2A0E5E): kimlik ve skor
+     anları — maç skorbordu, takım/oyuncu kimliği, vitrin maçı. Alt menü
+     artık sahne DEĞİLDİR: açık temada beyaz, koyu temada kart yüzeyi. Sahnede metin
      `onDark`, ikincil metin `onDarkMuted`, marka etiketi `brandOnDark`.
      Sahne bir ekranda en fazla BİR kez, ekranın tepesinde kullanılır.
 3. **Hiyerarşi tipografiyle kurulur, kutuyla değil.** Bölüm başlığı + boşluk
    çoğu zaman yeterlidir; her şeyi karta koyma. İç içe kart yasaktır.
-4. **Yoğun ama nefes alan.** Ekran kenarı 14px (`layout.screenPadding`),
-   bölümler arası 22px (`layout.sectionGap`), kart iç boşluğu 14–16px.
+4. **Yoğun ama nefes alan.** Ekran kenarı 16px (`layout.screenPadding`),
+   bölümler arası 24px (`layout.sectionGap`), kart iç boşluğu 14–16px.
    Satırlar 52/66px; dokunma hedefi en az 44px.
 5. **Rakam kahramandır.** Skor, puan, sıra gibi sayılar Archivo
    (`type.score*`, `type.metric*`, `type.tableNum*`) ile büyük ve tabular
@@ -38,13 +42,14 @@ kaynağıdır; tokenlar `theme/`, ortak bileşenler `components/ui/` altındadı
 
 | Rol | Token |
 | --- | --- |
-| Sayfa zemini | `colors.bg` (#F3F4F6 / koyu #0B0D11) |
-| Kart | `colors.surface1` + `hairline` `colors.border` + `elevate(1)` |
+| Sayfa zemini | `colors.bg` (#F7F5FB / koyu #100820) |
+| Kart | `colors.surface1` + `hairline` `colors.border` + `elevate(1)` (gölgesiz) |
 | İkinci katman (input, çip, ray) | `surface2`, `surface3` |
 | Metin | `textPrimary` / `textSecondary` / `textTertiary` |
 | Sahne | `gradientInk`, `inkBlock`, `onDark`, `onDarkMuted`, `inkPill`, `inkTile` |
-| Yarıçap | kart `radius.xl` (18) · iç eleman `radius.md` (12) · sahne `radius.xxl` · düğme/çip `radius.pill` |
-| Tipografi | sayfa başlığı `display` · kart başlığı `h2` · satır `h3` · gövde `body` · meta `bodySm`/`caption` · etiket `overline` |
+| Yarıçap | kart `radius.xl` (16) · iç eleman `radius.md` (12) · sahne `radius.xxl` · düğme/çip `radius.pill` |
+| Yazı aileleri | arayüz ve başlık **Plus Jakarta Sans** (`fonts.regular/medium/semibold/heading`) · rakam **Archivo** (`fonts.display/bold`) |
+| Tipografi | sekme kökü `largeTitle` (28) · kimlik `display` (24) · ekran `h1` (19) · kart başlığı `h2` · satır `h3` · gövde `body` · meta `bodySm`/`caption` · etiket `overline` |
 
 Kurallar (`npm run check:tokens` denetler): çıplak hex yok, `fontWeight` yok
 (`fontFamily: fonts.semibold`), çıplak `borderRadius: <sayı>` yok (≤4 hariç),
@@ -54,8 +59,8 @@ gradyan ekseni yatay sağdan sola, kontrast ≥ 4.5.
 
 `ScreenHeader` iki yüzey taşır:
 - **Kâğıt** (varsayılan, `hero` yokken): sekme kökleri ve liste ekranları.
-  Kök ekranda (geri oku yok) başlık 22px büyük başlıktır; eylem ikonları
-  beyaz yuvarlak düğmelerdir.
+  Kök ekranda (geri oku yok) başlık 28px büyük başlıktır (`type.largeTitle`);
+  eylem ikonları çıplak ikondur (halkasız), üst satır (`overline`) sessiz gridir.
 - **Sahne** (`hero` verildiğinde ya da `variant="stage"`): takım, oyuncu,
   maç gibi kimlik sayfaları. Kimlik bloğu (`hero`) kaydırınca kapanır.
 

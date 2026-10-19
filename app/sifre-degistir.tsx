@@ -116,6 +116,7 @@ export default function ChangePasswordScreen() {
   return (
     <AuthShell
       title="Şifre değiştir"
+      variant="form"
       overline="Hesap ve güvenlik"
       heading="Şifreni değiştir"
       lede="Önce mevcut şifren sorulur. Bu cihazda oturumun açık kalır; diğer cihazlarda yeniden giriş gerekebilir."

@@ -6,6 +6,6 @@ import { useAuth } from "@/providers/AuthProvider";
 export default function AdminChatInboxScreen() {
   const auth = useAuth();
   if (!auth.user) return <Redirect href="/giris" />;
-  if (!auth.isManagement) return <Redirect href={"/sohbet" as never} />;
+  if (!auth.isManagement) return <Redirect href={"/(tabs)/mesajlar?kutu=sohbetler" as never} />;
   return <ChatInbox admin />;
 }
