@@ -573,7 +573,7 @@ function CareerSection({
       playerTeam
         ? { key: "takim", icon: "shield", label: "Takımım", href: `/takim/${playerTeam.id}`, tone: "neutral" }
         : { key: "takim-bul", icon: "search", label: "Takım bul", href: "/ara?tip=takim", tone: "neutral" },
-      { key: "profil", icon: "create", label: "Profil", href: "/hesabim", tone: "neutral" },
+      { key: "profil", icon: "person-circle", label: "Hesabım", href: "/hesabim", tone: "neutral" },
     ],
     [counts.invitesReceived, counts.offersAwaiting, counts.penaltiesOpen, playerTeam],
   );
@@ -613,9 +613,6 @@ function CareerSection({
       ]
     : [];
 
-  const changes = [...(data?.pendingChanges ?? [])]
-    .sort((a, b) => Number(b.status === "pending") - Number(a.status === "pending"))
-    .slice(0, 4);
   const recent = (data?.recentMatches ?? []).slice(0, 3);
 
   return (
@@ -694,24 +691,6 @@ function CareerSection({
           empty="Yanıt bekleyen teklif, davet ya da disiplin dosyan yok."
         />
       </PanelSection>
-
-      {changes.length ? (
-        <PanelSection title="Değişiklik taleplerim" action={{ label: "Hesabım", onPress: () => go("/hesabim") }}>
-          <PanelCard padded={false}>
-            {changes.map((change, index) => (
-              <PanelRow
-                key={change.id}
-                icon="document-attach-outline"
-                tone={change.status === "approved" ? "win" : change.status === "rejected" ? "danger" : "warn"}
-                title={CHANGE_LABELS[change.type] ?? change.type}
-                hint={change.created_at ? formatDateShort(change.created_at) : undefined}
-                value={change.status === "approved" ? "Onaylandı" : change.status === "rejected" ? "Reddedildi" : "Bekliyor"}
-                last={index === changes.length - 1}
-              />
-            ))}
-          </PanelCard>
-        </PanelSection>
-      ) : null}
 
       {seasonItems.length ? (
         <PanelSection
