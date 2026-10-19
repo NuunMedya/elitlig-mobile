@@ -5,12 +5,10 @@
  *   1. ÜYE PROFİLİ — kimlik sahnesi (ProfileHero): ad, roller, takip
  *      sayıları (her sayı Takip ettiklerin ekranını açar). Misafirde giriş /
  *      üyelik çağrısı.
- *   2. Oyun karoları — Günün Testi ve Oyun merkezi.
- *   3. Mesajlar kısayolu (girişli) — okunmamış toplamıyla; alt menüdeki
- *      Mesajlar sekmesini açar.
- *   4. Takip · Keşfet (canlı, takım ve oyuncu karşılaştırma, rekorlar, arama)
- *      · Bilgi ve destek · Ayarlar (bildirim türleri, hesap, hesabı sil).
- *   5. Dipte sosyal hesaplar ve sürüm.
+ *   2. Oyun karoları — Günün Testi ve Oyun merkezi (Fantezi, Tahmin Ligi,
+ *      mini oyunlar, Elit Kariyer, sıralamalar — hepsi tek merkezde).
+ *   3. Takip · Lig ve istatistik · Destek · Hesap (tek Ayarlar kapısı).
+ *   4. Dipte sosyal hesaplar ve sürüm.
  *
  * Takip ettiklerin artık alt menüde değil (yer Mesajlar'a açıldı); burada
  * ilk grupta durur. Rol araçları (Takım paneli, oyuncu paneli, yönetim)
@@ -54,7 +52,6 @@ import {
   type Tone,
 } from "@/components/ui";
 import { ProfileHero, type ProfileHeroStat } from "@/components/account/ProfileHero";
-import { unreadBadgeLabel, useUnreadCount } from "@/hooks/useUnreadCount";
 import { getPanelMe } from "@/lib/api/panel";
 import { formatNumber, mediaUrl } from "@/lib/format";
 import { openLink } from "@/lib/links";
@@ -146,7 +143,6 @@ export default function MenuTabScreen() {
   const favorite = useFavorite();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const unread = useUnreadCount();
   const { scrollY, scrollProps } = useHeaderScroll();
 
   const user = auth.user;
@@ -233,14 +229,8 @@ export default function MenuTabScreen() {
   // App Store 4 (Design): üyelik tarayıcıda değil, uygulama içindeki
   // /kayit ekranında açılır.
   const openRegister = useCallback(() => router.push("/kayit"), [router]);
-  const openSettings = useCallback(() => router.push("/ayarlar"), [router]);
   const openDaily = useCallback(() => router.push("/gunun"), [router]);
   const openGames = useCallback(() => router.push("/(tabs)/oyunlar"), [router]);
-  /** Bildirim yoksa ama sohbet varsa doğrudan Sohbetler kutusu; değilse Özet. */
-  const openInbox = useCallback(() => {
-    const kutu = unread.notifications === 0 && unread.messages > 0 ? "sohbetler" : "ozet";
-    router.push(`/(tabs)/mesajlar?kutu=${kutu}`);
-  }, [router, unread.messages, unread.notifications]);
 
   /* ------------------------------ SATIRLAR ------------------------------- */
 
@@ -251,13 +241,22 @@ export default function MenuTabScreen() {
   const channelUrl = youtubeChannelUrl(scope.cityLabel);
 
   /**
-   * MENÜ BÖLÜMLERİ — takip, keşif, bilgi, ayarlar. Mesajlar ve oyunlar
-   * listenin başlığında (kimliğin hemen altında) durur.
+   * MENÜ BÖLÜMLERİ — her grup tek bir soruya yanıt verir:
+   *   Takip            → "Neyi izliyorum?"
+   *   Lig ve istatistik→ "Ligin geneline dair ne var?" (karşılaştırma, borsa,
+   *                      haftanın enleri, Türkiye sıralaması, kurul kararları)
+   *   Destek           → kurallar, iletişim
+   *   Hesap            → tek Ayarlar kapısı (bildirimler, görünüm, şifre…
+   *                      hepsi orada) + mağaza kuralı gereği Hesabı sil.
+   *
+   * KALDIRILAN TEKRARLAR: Oyun/yarışma satırları (Fantezi, Tahmin Ligi,
+   * Kariyer, rekorlar) Oyun merkezinde; "Canlı maçlar" Maçlar ▸ Canlı'da;
+   * "Ara" her sekme başlığında; "Bildirim türleri", "Takip bildirimleri" ve
+   * "Hesabım" Ayarlar'da / kimlik kartında; Mesajlar alt menüde.
    */
   const sections = useMemo<MenuSection[]>(() => {
     const result: MenuSection[] = [];
 
-    /* 1 — TAKİP (alt menüden buraya taşındı) */
     result.push({
       key: "takip",
       title: "Takip",
@@ -271,76 +270,27 @@ export default function MenuTabScreen() {
           tone: "brand",
           action: { kind: "route", route: "/(tabs)/takip" },
         },
-        {
-          key: "takip-bildirim",
-          icon: "notifications",
-          title: "Takip bildirimleri",
-          subtitle: "Hangi takip için hangi bildirim",
-          action: { kind: "route", route: "/takip-bildirimleri" },
-        },
       ],
     });
 
-    /* 2 — KEŞFET */
     result.push({
-      key: "kesfet",
-      title: "Keşfet",
+      key: "lig",
+      title: "Lig ve istatistik",
       data: [
         {
-          key: "kariyer",
-          icon: "ribbon",
-          title: "Kariyerim",
-          subtitle: "Elit Seviye, Elit Kart, rozetler ve görevler",
-          action: { kind: "route", route: "/kariyer" },
+          key: "haftanin-enleri",
+          icon: "medal",
+          title: "Haftanın enleri",
+          subtitle: "Haftanın kadrosu ve ödülleri",
+          tone: "accent",
+          action: { kind: "route", route: "/haftanin-enleri" },
         },
         {
-          key: "saha-siralamasi",
-          icon: "trophy",
-          title: "Saha Sıralaması",
-          subtitle: "Oyuncular, takımlar ve XP · haftalık, aylık, tüm zamanlar · Türkiye ve il",
-          action: { kind: "route", route: "/saha-siralamasi" },
-        },
-        {
-          key: "tahmin-ligi",
-          icon: "podium",
-          title: "Tahmin Ligi",
-          subtitle: "Liginin maçlarına skor tahmini yap",
-          action: { kind: "route", route: "/tahmin-ligi" },
-        },
-        {
-          key: "fantezi",
-          icon: "people",
-          title: "Fantezi ElitLig",
-          subtitle: "Haftalık 5 kişilik kadronu kur",
-          action: { kind: "route", route: "/fantezi" },
-        },
-        {
-          key: "kulup-arenasi",
-          icon: "shield",
-          title: "Kulüp Arenası",
-          subtitle: "Takımların arena yarışı ve derbi düellosu",
-          action: { kind: "route", route: "/kulup-arenasi" },
-        },
-        {
-          key: "sezon-ozeti",
-          icon: "sparkles",
-          title: "Sezon Özeti",
-          subtitle: "Sezonunun paylaşılabilir hikâyesi",
-          action: { kind: "route", route: "/sezon-ozeti" },
-        },
-        {
-          key: "canli",
-          icon: "radio",
-          title: "Canlı maçlar",
-          tone: "live",
-          action: { kind: "route", route: "/(tabs)/skorlar?tab=canli&tum=1" },
-        },
-        {
-          key: "siralama",
-          icon: "podium",
-          title: "Rekor tablosu",
-          subtitle: "Oyun rekorları lider tablosu",
-          action: { kind: "route", route: "/siralama" },
+          key: "turkiye",
+          icon: "earth",
+          title: "Türkiye sıralaması",
+          subtitle: "Tüm şehirlerin gol, asist ve takım liderleri",
+          action: { kind: "route", route: "/turkiye" },
         },
         {
           key: "h2h",
@@ -364,35 +314,22 @@ export default function MenuTabScreen() {
           action: { kind: "route", route: "/takimim/borsa" },
         },
         {
-          key: "haftanin-enleri",
-          icon: "trophy",
-          title: "Haftanın enleri",
-          subtitle: "Haftanın kadrosu ve ödülleri",
-          action: { kind: "route", route: "/haftanin-enleri" },
-        },
-        {
-          key: "ara",
-          icon: "search",
-          title: "Takım, oyuncu ara",
-          action: { kind: "route", route: "/ara" },
+          key: "cezalar",
+          icon: "hammer",
+          title: "Kurul kararları",
+          subtitle: "Disiplin talimatı ve verilen cezalar",
+          action: { kind: "route", route: "/cezalar" },
         },
       ],
     });
 
-    /* 3 — BİLGİ VE DESTEK. Sosyal hesaplar ve site liste satırı değil,
-       listenin dibinde üç yuvarlak düğmedir (bkz. `listFooter`). */
+    /* Sosyal hesaplar ve site liste satırı değil, listenin dibinde
+       yuvarlak düğmelerdir (bkz. `listFooter`). */
     result.push({
-      key: "bilgi",
-      title: "Bilgi ve destek",
+      key: "destek",
+      title: "Destek",
       data: [
         { key: "kurallar", icon: "book", title: "Lig kuralları", action: { kind: "route", route: "/kurallar" } },
-        {
-          key: "cezalar",
-          icon: "hammer",
-          title: "Cezalar",
-          subtitle: "Disiplin talimatı ve kurul kararları",
-          action: { kind: "route", route: "/cezalar" },
-        },
         {
           key: "iletisim",
           icon: "call",
@@ -403,12 +340,13 @@ export default function MenuTabScreen() {
       ],
     });
 
-    /* 4 — AYARLAR (app/ayarlar.tsx). Hesabı sil oradaki "Oturum" grubunda
-       da durur; App Store 5.1.1-v için girişli üyede Menü'nün en altında da
-       doğrudan kapı olarak kalır (docs/magaza-inceleme.md §1). */
+    /* HESAP — tek Ayarlar kapısı (app/ayarlar.tsx). Hesabı sil oradaki
+       "Oturum" grubunda da durur; App Store 5.1.1-v için girişli üyede
+       Menü'nün en altında da doğrudan kapı olarak kalır
+       (docs/magaza-inceleme.md §1). */
     result.push({
-      key: "ayarlar",
-      title: "Ayarlar",
+      key: "hesap",
+      title: "Hesap",
       data: [
         {
           key: "ayarlar",
@@ -417,24 +355,10 @@ export default function MenuTabScreen() {
           subtitle: user
             ? "Bildirimler, görünüm, lig, hesap ve güvenlik"
             : "Görünüm, lig ve bildirim seçimi",
-          tone: "brand",
           action: { kind: "route", route: "/ayarlar" },
-        },
-        {
-          key: "bildirim-tercihleri",
-          icon: "notifications-circle",
-          title: "Bildirim türleri",
-          action: { kind: "route", route: "/bildirim-tercihleri" },
         },
         ...(user
           ? [
-              {
-                key: "hesabim",
-                icon: "person-circle",
-                title: "Hesabım",
-                subtitle: "Profil bilgileri, şifre, roller",
-                action: { kind: "route", route: "/hesabim" },
-              } satisfies MenuItem,
               {
                 key: "hesap-sil",
                 icon: "trash",
@@ -515,20 +439,9 @@ export default function MenuTabScreen() {
     };
   }, [auth.isManagement, isPlayer, isPresident, me?.player?.player_img, teamCard?.logo, teamName, user]);
 
-  /** Mesajlar satırının alt metni: "3 bildirim · 1 mesaj" / "Hepsi okundu". */
-  const inboxSubtitle = useMemo(() => {
-    const parts: string[] = [];
-    if (unread.notifications > 0) parts.push(`${formatNumber(unread.notifications)} bildirim`);
-    if (unread.messages > 0) parts.push(`${formatNumber(unread.messages)} mesaj`);
-    return parts.length ? `${parts.join(" · ")} okunmadı` : "Sohbetler, istekler, bildirimler · hepsi okundu";
-  }, [unread.messages, unread.notifications]);
-
-  const inboxBadge = unreadBadgeLabel(unread.total);
-
   const listHeader = useMemo(
     () => (
       <>
-        <SectionHeader title="Üye profili" inset="flush" />
         {auth.initializing ? (
           <Skeleton height={196} radius="xxl" style={styles.heroSkeleton} />
         ) : (
@@ -552,27 +465,13 @@ export default function MenuTabScreen() {
           />
           <HubTile
             icon="game-controller"
-            title="Oyunlar"
-            subtitle="Penaltı, Arena, Kim Bu? ve daha fazlası"
-            tone="win"
+            title="Oyun merkezi"
+            subtitle="Fantezi, Tahmin Ligi, mini oyunlar, kariyer"
+            tone="accent"
             onPress={openGames}
           />
         </HubGrid>
 
-        {user ? (
-          <ListRow
-            leading={{ icon: "mail-unread", tone: "brand" }}
-            title="Mesajlar"
-            subtitle={inboxSubtitle}
-            badge={inboxBadge ? <Badge label={inboxBadge} tone="brand" variant="solid" size="xs" /> : undefined}
-            position="single"
-            onPress={openInbox}
-            accessibilityLabel={
-              inboxBadge ? `Mesajlar, ${inboxBadge} okunmamış` : "Mesajlar, hepsi okundu"
-            }
-            style={styles.inbox}
-          />
-        ) : null}
         <View style={styles.sectionGap} />
       </>
     ),
@@ -581,15 +480,11 @@ export default function MenuTabScreen() {
       dailyDone,
       heroStats,
       heroUser,
-      inboxBadge,
-      inboxSubtitle,
       openAccount,
       openDaily,
       openGames,
-      openInbox,
       openRegister,
       openSignIn,
-      user,
     ]
   );
 
@@ -627,7 +522,6 @@ export default function MenuTabScreen() {
       <ScreenHeader
         title="Menü"
         scrollY={scrollY}
-        actions={[{ icon: "settings-outline", onPress: openSettings, accessibilityLabel: "Ayarlar" }]}
       />
 
       <SectionList
@@ -699,9 +593,6 @@ const styles = StyleSheet.create({
     marginTop: space.xs,
   },
   games: {
-    marginTop: space.md,
-  },
-  inbox: {
     marginTop: space.md,
   },
 

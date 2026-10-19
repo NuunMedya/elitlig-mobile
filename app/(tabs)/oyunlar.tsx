@@ -600,7 +600,6 @@ export default function OyunlarScreen() {
   const openGame = useCallback((route: string) => router.push(route as never), [router]);
   const openDaily = useCallback(() => router.push("/gunun"), [router]);
   const openBoard = useCallback(() => router.push("/siralama"), [router]);
-  const openTurkey = useCallback(() => router.push("/turkiye"), [router]);
   const openSignIn = useCallback(() => router.push("/giris"), [router]);
 
   const headerActions = useMemo(
@@ -619,7 +618,7 @@ export default function OyunlarScreen() {
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader
-        title="Oyunlar"
+        title="Oyun merkezi"
         back
         /* Bu ekran sekme çubuğunda yuvası olmayan bir sekmedir (href: null) ve
            Menü'den açılır. Sekme gezgininde geri yığını olmayabilir; o durumda
@@ -651,8 +650,35 @@ export default function OyunlarScreen() {
           onSignIn={openSignIn}
         />
 
-        {/* 2) Oyun kartları — ilki öne çıkan, tam genişlik; kalan dördü 2×2. */}
-        <SectionHeader title="Oyna" meta={`${GRID_GAMES.length} oyun`} />
+        {/* 2) Rekabet — gerçek maçlarla oynanan, sezon boyu süren yarışmalar.
+            Mini oyunlardan ÖNCE gelir: haftalık geri dönüşü bunlar üretir. */}
+        <SectionHeader title="Rekabet" />
+        <View style={styles.rows}>
+          <ListRow
+            leading={{ icon: "people", tone: "brand" }}
+            title="Fantezi ElitLig"
+            subtitle="Liginin oyuncularıyla haftalık 5 kişilik kadro"
+            position="first"
+            onPress={() => router.push("/fantezi")}
+          />
+          <ListRow
+            leading={{ icon: "podium", tone: "accent" }}
+            title="Tahmin Ligi"
+            subtitle="Liginin gerçek maçlarına skor tahmini"
+            position="middle"
+            onPress={() => router.push("/tahmin-ligi")}
+          />
+          <ListRow
+            leading={{ icon: "shield", tone: "brand" }}
+            title="Kulüp Arenası"
+            subtitle="Takımların haftalık arena yarışı ve derbi düellosu"
+            position="last"
+            onPress={() => router.push("/kulup-arenasi")}
+          />
+        </View>
+
+        {/* 3) Mini oyunlar — ilki öne çıkan, tam genişlik; kalanlar 2×2. */}
+        <SectionHeader title="Mini oyunlar" meta={`${GRID_GAMES.length} oyun`} />
         <View style={styles.grid}>
           {GRID_GAMES.map((meta, index) => (
             <GameCard
@@ -668,55 +694,38 @@ export default function OyunlarScreen() {
           ))}
         </View>
 
-        {/* 3) Rekorlar */}
-        <SectionHeader title="Sıralamalar" />
-        <View style={styles.rows}>
-          <ListRow
-            leading={{ icon: "trophy", tone: "warn" }}
-            title="Rekor tablosu"
-            subtitle="Her oyunun haftalık ve tüm zamanlar sıralaması"
-            position="first"
-            onPress={openBoard}
-          />
-          <ListRow
-            leading={{ icon: "earth", tone: "info" }}
-            title="Türkiye sıralaması"
-            subtitle="Tüm şehirler · oyuncu ve takım rekorları"
-            position="last"
-            onPress={openTurkey}
-          />
-        </View>
-
-        {/* 4) Kariyer Modu: doğrulanmış oyunlar Elit Seviye'ye XP getirir. */}
-        <SectionHeader title="Kariyer" />
+        {/* 4) Kariyer ve sıralamalar — XP, rozetler, rekorlar. Türkiye
+            sıralaması gerçek futbol istatistiği olduğu için Menü ▸ Lig ve
+            istatistik grubundadır. */}
+        <SectionHeader title="Kariyer ve sıralamalar" />
         <View style={styles.rows}>
           <ListRow
             leading={{ icon: "ribbon", tone: "brand" }}
-            title="Kariyerim"
+            title="Elit Kariyer"
             subtitle="Elit Seviye, Elit Kart, rozetler ve haftalık görevler"
             position="first"
             onPress={() => router.push("/kariyer")}
           />
           <ListRow
-            leading={{ icon: "podium", tone: "win" }}
-            title="Tahmin Ligi"
-            subtitle="Liginin gerçek maçlarına skor tahmini"
+            leading={{ icon: "trophy", tone: "accent" }}
+            title="Saha Sıralaması"
+            subtitle="Oyuncu ve takım XP'si · haftalık, aylık, tüm zamanlar"
             position="middle"
-            onPress={() => router.push("/tahmin-ligi")}
+            onPress={() => router.push("/saha-siralamasi")}
           />
           <ListRow
-            leading={{ icon: "people", tone: "info" }}
-            title="Fantezi ElitLig"
-            subtitle="Liginin oyuncularıyla haftalık 5 kişilik kadro"
+            leading={{ icon: "podium", tone: "neutral" }}
+            title="Rekor tablosu"
+            subtitle="Her oyunun haftalık ve tüm zamanlar sıralaması"
             position="middle"
-            onPress={() => router.push("/fantezi")}
+            onPress={openBoard}
           />
           <ListRow
-            leading={{ icon: "shield", tone: "warn" }}
-            title="Kulüp Arenası"
-            subtitle="Takımların haftalık arena yarışı ve derbi düellosu"
+            leading={{ icon: "sparkles", tone: "neutral" }}
+            title="Sezon Özeti"
+            subtitle="Sezonunun paylaşılabilir hikâyesi"
             position="last"
-            onPress={() => router.push("/kulup-arenasi")}
+            onPress={() => router.push("/sezon-ozeti")}
           />
         </View>
       </Animated.ScrollView>

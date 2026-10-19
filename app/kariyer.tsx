@@ -117,7 +117,7 @@ export default function CareerScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      <ScreenHeader title="Kariyerim" back scrollY={scrollY} />
+      <ScreenHeader title="Elit Kariyer" back scrollY={scrollY} />
       {query.isLoading ? (
         <View style={styles.pad}>
           <SkeletonCard lines={4} />

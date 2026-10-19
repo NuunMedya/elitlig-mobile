@@ -349,7 +349,12 @@ export default function TakipScreen() {
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader
-        title="Takip"
+        title="Takip ettiklerin"
+        back
+        /* Sekme çubuğunda yuvası olmayan bir sekmedir (href: null); Menü'den,
+           Maçlar'daki ipucundan ve takip bildirimlerinden açılır. Geri yığını
+           yoksa Menü'ye döner — eskiden geri düğmesi yoktu ve ekran çıkmazdı. */
+        onBack={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)/menu"))}
         scrollY={scrollY}
         actions={[
           { icon: "search-outline", onPress: openTeamSearch, accessibilityLabel: "Takım ara" },

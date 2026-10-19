@@ -66,7 +66,6 @@ import {
   useRefresh,
   type TabItem,
 } from "@/components/ui";
-import { useUnreadCount } from "@/hooks/useUnreadCount";
 import { MAX_STARTERS, getTeamFinance, getTeamMatchPlan } from "@/lib/api/team";
 import { formatDateShort, formatDecimal, mediaUrl } from "@/lib/format";
 import { useAuth } from "@/providers/AuthProvider";
@@ -80,9 +79,6 @@ const ROLE_LABELS: Record<RoleTab, string> = {
   oyuncu: "Kariyerim",
   lig: "Lig",
 };
-
-/** Mesajlar sekmesi — `kutu` verilirse o kutu açık gelir. */
-const INBOX = "/(tabs)/mesajlar";
 
 function signed(value: number): string {
   return value > 0 ? `+${value}` : String(value);
@@ -102,7 +98,6 @@ export default function ClubHubScreen() {
   const auth = useAuth();
   const scope = useScope();
   const router = useRouter();
-  const unread = useUnreadCount();
   const { scrollY, scrollProps } = useHeaderScroll();
   const params = useLocalSearchParams<{ rol?: string }>();
   const signals = useClubSignals();
@@ -181,24 +176,6 @@ export default function ClubHubScreen() {
       <ScreenHeader
         title="Yönetim"
         scrollY={scrollY}
-        actions={
-          user
-            ? [
-                {
-                  icon: "chatbubbles-outline",
-                  accessibilityLabel: "Mesajlar: sohbetler",
-                  onPress: () => go(`${INBOX}?kutu=sohbetler`),
-                  badge: unread.messages || undefined,
-                },
-                {
-                  icon: "notifications-outline",
-                  accessibilityLabel: "Mesajlar: bildirimler",
-                  onPress: () => go(INBOX),
-                  badge: unread.notifications || undefined,
-                },
-              ]
-            : undefined
-        }
         tabs={roles.length > 1 && role ? <Tabs items={tabItems} value={role} onChange={changeRole} sticky /> : undefined}
       />
 
@@ -230,13 +207,6 @@ export default function ClubHubScreen() {
           <JoinFlow signedIn go={go} />
         )}
 
-        {user ? (
-          <PanelSection title="Diğer">
-            <PanelCard padded={false}>
-              <PanelRow icon="star" title="Takip ettiklerin" hint="Takımlar, ligler ve maçlar" onPress={() => go("/takip")} last />
-            </PanelCard>
-          </PanelSection>
-        ) : null}
       </ScrollView>
 
       {/* Onay bekleyen değişiklik talepleri (eski Kulüp Paneli'nden taşındı). */}
@@ -797,13 +767,6 @@ function LeagueSection({ go }: { go: (href: string) => void }) {
     <>
       <PanelSection title="Araçlar" style={styles.firstSection}>
         <ToolGrid tools={LEAGUE_TOOLS} go={go} />
-      </PanelSection>
-      <PanelSection title="Sık kullanılanlar">
-        <PanelCard padded={false}>
-          <PanelRow icon="football" tone="live" title="Maç yönetimi" hint="Skor, durum, yayınlama" onPress={() => go("/yonetim/maclar")} />
-          <PanelRow icon="location" tone="info" title="Saha talepleri" hint="Haftalık program ve onaylar" onPress={() => go("/yonetim/sahalar")} />
-          <PanelRow icon="checkbox" title="Görevlerim" hint="Atanan ve açık görevler" onPress={() => go("/yonetim/gorevler")} last />
-        </PanelCard>
       </PanelSection>
     </>
   );

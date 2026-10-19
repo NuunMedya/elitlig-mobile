@@ -10,8 +10,8 @@
  * gerçektir — uydurma bir istatistik yoktur. Her sayı takip ekranının ilgili
  * sekmesine götürür; yönetmek bir dokunuştur.
  *
- * MİSAFİRDE: kimlik yerine giriş çağrısı çizilir, sayılar yine görünür (takip
- * cihazdadır) — "giriş yapınca bunlar kaybolmaz" mesajını kendiliğinden verir.
+ * MİSAFİRDE: kimlik yerine giriş çağrısı çizilir; takip varsa sayılar yine
+ * görünür (takip cihazdadır), hiç takip yoksa sayı satırı çizilmez.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -59,14 +59,17 @@ export const ProfileHero = React.memo(function ProfileHero({
     <View style={styles.stage}>
       <GradientFill tone="ink" radius="xxl" />
       {user ? <Identity user={user} onAccount={onAccount} /> : <Guest onSignIn={onSignIn} onRegister={onRegister} />}
-      <View style={styles.statRow}>
-        {stats.map((stat, index) => (
-          <React.Fragment key={stat.key}>
-            {index > 0 ? <View style={styles.statDivider} /> : null}
-            <StatCell stat={stat} />
-          </React.Fragment>
-        ))}
-      </View>
+      {/* Misafirin hiç takibi yoksa üç sıfır yalnız gürültüdür; çizilmez. */}
+      {user || stats.some((stat) => stat.value > 0) ? (
+        <View style={styles.statRow}>
+          {stats.map((stat, index) => (
+            <React.Fragment key={stat.key}>
+              {index > 0 ? <View style={styles.statDivider} /> : null}
+              <StatCell stat={stat} />
+            </React.Fragment>
+          ))}
+        </View>
+      ) : null}
     </View>
   );
 });

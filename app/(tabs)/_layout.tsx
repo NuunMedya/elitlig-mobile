@@ -14,8 +14,10 @@
  *     sıradaki etkinlik, ilgilenilecekler; kulüpsüz üyeye ve misafire akış.
  *   · Mesajlar → "Bana ne geldi?" Sohbetler, istekler, transfer, disiplin,
  *     maç ve yönetim kutuları; Özet hepsinin sayısını tek bakışta verir.
- *   · Menü     → Üye profili, oyunlar, takip ettiklerin, karşılaştırmalar,
- *     kurallar, iletişim, ayarlar.
+ *   · Menü     → Üye kimliği, Günün Testi + Oyun merkezi (Fantezi, Tahmin
+ *     Ligi, mini oyunlar, Elit Kariyer, sıralamalar), Takip, Lig ve
+ *     istatistik (haftanın enleri, Türkiye sıralaması, karşılaştırmalar,
+ *     borsa, kurul kararları), Destek, Hesap (tek Ayarlar kapısı).
  *
  * GİZLİ SEKMELER (`href: null`) — eski derin bağlantılar ve kısayollar:
  *   index → skorlar · maclar → skorlar · favoriler → takip · profil → menu ·
@@ -63,7 +65,7 @@ export default function TabsLayout() {
     { name: "kulubum", label: "Yönetim", icon: "shield", accessibilityLabel: "Yönetim: takımın, kariyerin ve araçların" },
     // Okunmamış bildirim + sohbet mesajı: hepsi Mesajlar'da.
     { name: "mesajlar", label: "Mesajlar", icon: "chatbubbles", badge: unread.total },
-    { name: "menu", label: "Menü", icon: "menu", accessibilityLabel: "Menü: üye profili, oyunlar, ayarlar" },
+    { name: "menu", label: "Menü", icon: "menu", accessibilityLabel: "Menü: profil, oyun merkezi, lig araçları, ayarlar" },
   ];
 
   return (
