@@ -113,10 +113,12 @@ uyumludur (takım yönetimi uygulamalarında sohbet sekmesi standarttır).
    tokenlarına bağlanmalı; `check-tokens` bunu da denetlemeli.
 2. **Bildirim rotaları** — `lib/notifications.ts` hâlâ `/bildirimler` ve
    `/mesajlarim` eski adreslerine gidiyor (iki-üç yönlendirme atlaması).
-   Doğrudan `/(tabs)/mesajlar?kutu=…` yazılmalı.
-3. **Ad çakışmaları** — "Başvurular" (kulüp, lig, mesajlar) ve "Teklifler"
-   (giden/gelen) ayrı adlar almalı: "Kulübe başvurular", "Giden teklifler",
-   "Gelen teklifler".
+   Doğrudan `/(tabs)/mesajlar?kutu=…` yazılmalı — DİKKAT: aynı dosyadaki
+   `AUTH_REQUIRED_PREFIXES` giriş kapısı bu eski adreslere bakıyor; hedef
+   değişirken kapı da güncellenmeli.
+3. ~~Ad çakışmaları~~ — yapıldı: Yönetim araçlarında "Davetler",
+   "Giden teklif", "Gelen teklif" ve lig rolünde "Mesajlar" (hedef ekranların
+   adlarıyla aynı).
 4. **Hesabım ↔ Kariyerim tekrarları** — sözleşme, teklif ve ceza kapıları
    hem Hesabım'da hem Yönetim ▸ Kariyerim'de; Hesabım yalnız hesap ve
    güvenliğe inmeli.
