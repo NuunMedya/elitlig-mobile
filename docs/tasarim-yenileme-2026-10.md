@@ -106,25 +106,33 @@ Alt menünün beş sekmesi (Maçlar · Lig · Yönetim · Mesajlar · Menü) bil
 olarak korundu: 14 Ekim'de belirlenmiş bir karardır ve araştırmayla da
 uyumludur (takım yönetimi uygulamalarında sohbet sekmesi standarttır).
 
-## 4. Sıradaki işler (öneri)
+## 4. İkinci tur (tamamlandı)
 
-1. **Ham punto temizliği** — 34 dosyada 112 ham `fontSize`; en çok
-   `components/league/*`, `ui/MatchCard`, `app/oyuncu/[id].tsx`. Hepsi ölçek
-   tokenlarına bağlanmalı; `check-tokens` bunu da denetlemeli.
-2. **Bildirim rotaları** — `lib/notifications.ts` hâlâ `/bildirimler` ve
-   `/mesajlarim` eski adreslerine gidiyor (iki-üç yönlendirme atlaması).
-   Doğrudan `/(tabs)/mesajlar?kutu=…` yazılmalı — DİKKAT: aynı dosyadaki
-   `AUTH_REQUIRED_PREFIXES` giriş kapısı bu eski adreslere bakıyor; hedef
-   değişirken kapı da güncellenmeli.
-3. ~~Ad çakışmaları~~ — yapıldı: Yönetim araçlarında "Davetler",
-   "Giden teklif", "Gelen teklif" ve lig rolünde "Mesajlar" (hedef ekranların
-   adlarıyla aynı).
-4. **Hesabım ↔ Kariyerim tekrarları** — sözleşme, teklif ve ceza kapıları
-   hem Hesabım'da hem Yönetim ▸ Kariyerim'de; Hesabım yalnız hesap ve
-   güvenliğe inmeli.
-5. **Kullanılmayan bileşenler** — `Frame`, `HeroCarousel`, `ActionTile`,
-   `ActionBar`, `DateStrip`, `Refresh`; `lib/themeToggle.ts`,
-   `constants/theme.ts`; `theme/legacy.ts` takma adlarının son 8 kullanımı.
-6. **Form ekranları** — `sifre-degistir`, `oyuncum/duzenle`,
-   `takimim/bilgiler`, `teklif-ver` giriş ekranının marka kabuğunu
-   (`AuthShell`) kullanıyor; düz kâğıt başlığa geçmeli.
+1. **Ham punto temizliği** — 34 dosyadaki 112 elle punto ölçeğe bağlandı.
+   Yoğun düzenler için adlı basamaklar eklendi: `labelSm` 12, `labelXs` 11,
+   `meta` 10, `article` 16, `numSm` 11, `numSmStrong` 12, `nano` 9,
+   `scoreXs` 15, `scoreJumbo` 48. `check-tokens` artık sayı sabiti
+   `fontSize` görürse kırmızı verir (yalnız dondurulmuş `ShareScoreCard` muaf).
+2. **Bildirim rotaları** — bildirimler ve sohbet doğrudan
+   `/(tabs)/mesajlar?kutu=bildirimler|yonetim|sohbetler` açar; `/sohbet`
+   artık kopya bir gelen kutusu değil yönlendirmedir. Eski rotalar derin
+   bağlantılar için duruyor. (`requiresAuth` hiçbir yerde çağrılmıyordu;
+   listesi yine de güncellendi.)
+3. **Ad çakışmaları** — Yönetim araçlarında "Davetler", "Giden teklif",
+   "Gelen teklif", lig rolünde "Mesajlar"; Kariyerim'de "Profil" → "Hesabım".
+4. **Hesabım yalnız hesap** — lig kuralları, yönetilen takım ve sezon
+   ayrıntısı çıktı; şifre ve engellenenlerin tek kapısı Hesabım (Ayarlar
+   oraya gider); Kariyerim'deki "Değişiklik taleplerim" tekrarı kaldırıldı.
+5. **Ölü kod** — `Frame`, `HeroCarousel`, `ActionTile`, `ActionBar`,
+   `DateStrip`, `Refresh` bileşeni, `lib/themeToggle.ts`,
+   `constants/theme.ts`, `theme/legacy.ts`, `spacing` ve `type.score/title/…`
+   takma adları silindi (~1500 satır).
+6. **Form ekranları** — `AuthShell variant="form"`: şifre değiştir, profil
+   düzenle, takım bilgileri, transfer teklifi, transfer izni düz kâğıt
+   başlıkta; marka sahnesi yalnız giriş / üye ol / şifremi unuttum'da.
+
+## 5. Bilinen not
+
+`npm run check:games` içindeki "penaltı: kazanan sıradaki kulübe geçer"
+iddiası rastgele simülasyona bağlı ve ara sıra kırmızı veriyor (6 koşuda 1);
+bu turdaki değişikliklerle ilgisi yok, oyun koduna dokunulmadı.
