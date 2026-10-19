@@ -10,9 +10,9 @@
  * Ayrıntılı gerekçe aşağıdaki `light` nesnesinin başlığında ve
  * docs/arena-tasarim-dili.md içindedir. Özet:
  *
- *  1. Kâğıt beyazdır ve ferahtır, kartlar beyazdır; koyu temada mor gece.
- *  2. Kimlik ve skor anları ile alt menü KOYU MOR SAHNEDE durur (`gradientInk`,
- *     `inkBlock`, `tabBar`); iki temada da aynı.
+ *  1. Kâğıt açık lavanta-gri, kartlar beyaz ve gölgesiz; koyu temada mor gece.
+ *  2. Kimlik ve skor anları KOYU MOR SAHNEDE durur (`gradientInk`,
+ *     `inkBlock`); iki temada da aynı. Alt menü sakin yüzeydedir.
  *  3. Renk yalnız sinyaldir: `brand` (mor) aksiyon/seçili, `accent` (pembe) veri, `live`
  *     canlı, `win/draw/loss` sonuç.
  *  4. Kart gradyanı düzdür; gölge nötr ve çok hafiftir. Gradyanlar tokendır,
@@ -261,14 +261,13 @@ export interface Palette {
   skeletonBase: string;
   skeletonHighlight: string;
 
-  /* — Alt menü barı — İKİ TEMADA DA KOYU MOR —
+  /* — Alt menü barı —
    *
-   * Bar, ekranın altında YÜZEN bir hap. Zemini iki temada da derin mordur:
-   * açık temada beyaz kâğıdın üstünde duran tek koyu blok odur ve uygulamanın
-   * kimliğini her ekranda taşır; koyu temada kâğıttan bir kademe AÇIK durur ki
-   * gece de "yüzen" okunsun. Bar iki temada da koyu olduğu için üstündeki
-   * bütün renkler (ikon, etiket, ışık) tema değiştirse de aynı kalır — sekme
-   * çubuğu, uygulamanın tema değişiminden etkilenmeyen tek yüzeyidir.
+   * 2026-10: bar artık koyu mor bir şerit DEĞİL. Açık temada beyaz yüzey +
+   * üst hairline, seçili sekme derin mor ikon/etiket ve açık lavanta kapsül;
+   * koyu temada kart yüzeyi, seçili sekme pembe. Her ekranın dibindeki koyu
+   * şerit, sayfanın en baskın yüzeyiydi ve içerikle yarışıyordu (FotMob,
+   * Apple Sports, OneFootball barı içerikle aynı sakin yüzeyde tutar).
    */
   /** Barın düz zemini — gradyan yüklenemezse yedek, rozet halkası bunu kullanır. */
   tabBar: string;
@@ -319,14 +318,13 @@ export interface Palette {
 }
 
 /**
- * ELİTLİG TASARIM DİLİ — BEYAZ VE FERAH SAHNE, KİMLİK KOYU MOR.
+ * ELİTLİG TASARIM DİLİ — SAKİN KÂĞIT, KİMLİK KOYU MOR, VURGU PEMBE.
  *
- *   1. KÂĞIT BEYAZDIR. Açık temada zemin neredeyse saf beyazdır (#FDFCFF),
- *      kartlar beyaz; ayrımı 1px lavanta kenarlık ve hafif mor gölge yapar.
- *      Arayüz geniş boşluklu ve ferah okunmalı.
+ *   1. KÂĞIT ÇOK AÇIK LAVANTA-GRİDİR (#F7F5FB), kartlar beyaz ve GÖLGESİZ;
+ *      ayrımı dolgu farkı + 1px kenarlık yapar. Arayüz ferah ve sade okunur.
  *   2. SİYAH YOK, KOYU MOR VAR. Önceki grafit (neredeyse siyah) yüzeylerin
  *      tamamı — kimlik blokları (`inkBlock`, `gradientInk`), maç sahnesi,
- *      alt menü, toast — ElitLig'in koyu moruna (#2E1065) geçti. Metin bile
+ *      toast — ElitLig'in koyu moruna (#2A0E5E) geçti. Metin bile
  *      saf siyah değil, morun en koyu tonudur.
  *   3. RENK PALETİ MOR + PEMBE.
  *        brand  (mor)   = AKSİYON ve SEÇİLİ DURUM
@@ -334,7 +332,7 @@ export interface Palette {
  *        live   (kırmızı) = CANLI
  *      Sonuç renkleri (galibiyet yeşili vb.) ve saha yeşili anlam taşıdığı
  *      için korunur.
- *   4. GÖLGE MORDUR ve çok hafiftir; kart gradyanı düzdür.
+ *   4. GÖLGE yalnız yüzen katmandadır (sheet, toast) ve mordur; kart gradyanı düzdür.
  */
 export const light: Palette = {
   bg:       "#F7F5FB",
@@ -442,7 +440,7 @@ export const light: Palette = {
   skeletonBase:      "#EEEAF6",
   skeletonHighlight: "#F8F6FC",
 
-  /* ALT MENÜ — koyu mor, iki temada da. Seçili sekmenin ışığı pembedir. */
+  /* ALT MENÜ — beyaz; seçili sekme derin mor. */
   tabBar:         "#FFFFFF",
   tabBarBorder:   "#EAE6F2",
   gradientTabBar: ["#FFFFFF", "#FFFFFF"],

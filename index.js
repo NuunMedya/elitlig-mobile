@@ -8,7 +8,7 @@
  *
  *   1. TEMA — AsyncStorage'daki tercih okunur. Ekran modülleri ve içlerindeki
  *      StyleSheet'ler tema bilindikten SONRA değerlendirilsin diye şart.
- *   2. FONT — Archivo ve Inter yüklenir. Bu adım olmadan uygulama ilk karesini
+ *   2. FONT — Archivo ve Plus Jakarta Sans yüklenir. Bu adım olmadan uygulama ilk karesini
  *      sistem fontuyla çizer, fontlar gelince tüm metin zıplar (FOUT). Skor
  *      listesinde bu kabul edilemez.
  *

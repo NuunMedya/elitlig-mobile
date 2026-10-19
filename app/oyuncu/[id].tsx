@@ -2451,7 +2451,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
   },
   shareKicker: {
-    fontSize: 8,
+    fontSize: 9,
     fontFamily: fonts.semibold,
     letterSpacing: 1.4,
     color: SHARE.brand,
@@ -2506,7 +2506,7 @@ const styles = StyleSheet.create({
     ...type.scoreLg,
   },
   shareRatingLabel: {
-    fontSize: 8,
+    fontSize: 9,
     fontFamily: fonts.semibold,
     letterSpacing: 1.2,
     color: SHARE.muted,
@@ -2531,7 +2531,7 @@ const styles = StyleSheet.create({
     color: SHARE.text,
   },
   shareStatLabel: {
-    fontSize: 8,
+    fontSize: 9,
     fontFamily: fonts.semibold,
     letterSpacing: 1,
     color: SHARE.muted,
@@ -2551,7 +2551,7 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
   },
   shareFooter: {
-    fontSize: 8,
+    fontSize: 9,
     fontFamily: fonts.bold,
     letterSpacing: 2.5,
     color: SHARE.muted,
