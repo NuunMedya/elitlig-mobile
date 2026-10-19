@@ -24,7 +24,7 @@
       ]
     },
     "android": {
-      "package": "com.elitlig.app",
+      "package": "com.elitligtr",
       "edgeToEdgeEnabled": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
