@@ -31,8 +31,8 @@
  * yoksa iri metin 38px'lik satırların içinde kırpılırdı.
  *
  * KURALLAR (neden böyle):
- *  - İKİ AİLE, ÜÇ ROL: Archivo (skor/rakam), Inter (arayüz metni), Inter
- *    uppercase (yapısal etiket). Bkz. theme/fonts.ts.
+ *  - İKİ AİLE: Archivo (skor/rakam), Plus Jakarta Sans (arayüz metni ve
+ *    başlıklar). Bkz. theme/fonts.ts.
  *  - `fontWeight` KULLANILMAZ. Özel fontlarda RN ağırlık uygulamaz; ağırlık
  *    ailenin adıyla seçilir (`fontFamily: fonts.semibold`). Bu dosyadaki her
  *    token doğru aileyi zaten taşır.
@@ -45,7 +45,7 @@
  *    skor 1 → 10 olduğunda satır kayar.
  *  - Türkçe büyük harf dönüşümü daima toLocaleUpperCase("tr-TR") ile yapılır.
  *
- * ÖLÇEK: 10 · 11 · 12 · 13 · 14 · 15 · 16 · 19 · 22   (metin)
+ * ÖLÇEK: 10 · 11 · 12 · 13 · 14 · 15 · 17 · 19 · 24 · 28   (metin)
  *        17 · 22 · 30 · 40                            (skor)
  *
  * BASAMAKLAR 2–3px ARALIKLI. Eski ölçekte aralık 1px'ti ve hiyerarşi puntoyla
@@ -68,21 +68,18 @@ const numeric: Pick<TextStyle, "fontVariant"> = { fontVariant: ["tabular-nums"] 
 export const scale = {
   /* — Metin ölçeği — */
 
-  /** Ekranın kimlik başlığı: takım adı, oyuncu adı, genişletilmiş sayfa başlığı. */
-  display: { fontSize: 22, lineHeight: 27, fontFamily: fonts.bold, letterSpacing: -0.5 },
   /**
-   * Sayfa/ekran başlığı — ARCHIVO.
-   *
-   * Eskiden Inter SemiBold'du ve ekran başlığı, altındaki satır başlıklarından
-   * (yine Inter SemiBold) yalnız dört punto büyüktü: sayfanın adı, listesinin
-   * bir satırıyla aynı sesle konuşuyordu. Archivo dar ve yüksek x-height'lı bir
-   * grotesk; aynı puntoda daha çok mürekkep taşır ve başlık, gövdeden PUNTOYLA
-   * değil SESLE ayrılır. Kural netleşti: Archivo yüksek sesle söylenen şeydir
-   * (skor, büyük rakam, sayfa adı), Inter okunan şeydir.
+   * BÜYÜK BAŞLIK — sekme köklerinin ekran adı ("Maçlar", "Menü").
+   * iOS'un 34pt büyük başlığı ile Material'ın 28sp başlığı arasında; sekme
+   * kökü, sayfanın ne olduğunu ilk bakışta ve tek kelimeyle söylemeli.
    */
-  h1:      { fontSize: 19, lineHeight: 24, fontFamily: fonts.bold, letterSpacing: -0.4 },
+  largeTitle: { fontSize: 28, lineHeight: 34, fontFamily: fonts.heading, letterSpacing: -0.7 },
+  /** Ekranın kimlik başlığı: takım adı, oyuncu adı, genişletilmiş sayfa başlığı. */
+  display: { fontSize: 24, lineHeight: 30, fontFamily: fonts.heading, letterSpacing: -0.6 },
+  /** Sayfa/ekran başlığı (geri düğmeli ekranlar). */
+  h1:      { fontSize: 19, lineHeight: 25, fontFamily: fonts.heading, letterSpacing: -0.4 },
   /** Kart ve bölüm başlığı. */
-  h2:      { fontSize: 16, lineHeight: 21, fontFamily: fonts.semibold, letterSpacing: -0.3 },
+  h2:      { fontSize: 17, lineHeight: 22, fontFamily: fonts.heading, letterSpacing: -0.3 },
   /** Satır başlığı — liste satırındaki isim, en sık kullanılan başlık. */
   h3:      { fontSize: 15, lineHeight: 20, fontFamily: fonts.semibold, letterSpacing: -0.2 },
   /** Alt başlık / güçlü satır metni. */
@@ -98,13 +95,12 @@ export const scale = {
   /** Küçük meta — tarih, saha adı, satır altı açıklama. */
   caption: { fontSize: 11, lineHeight: 15, fontFamily: fonts.medium,   letterSpacing: 0.05 },
   /** Rozet içi metin — daima büyük harf. */
-  micro:   { fontSize: 10, lineHeight: 13, fontFamily: fonts.semibold, letterSpacing: 0.5 },
+  micro:   { fontSize: 10, lineHeight: 13, fontFamily: fonts.semibold, letterSpacing: 0.4 },
   /**
-   * Yapısal işaretçi — bölüm ve kart başlıklarının üstündeki büyük-harf satır.
-   * Harf aralığı 0.9 → 1.2: 10px'lik bir büyük-harf satırında aralık, satırı
-   * "küçültülmüş başlık" değil BİR ETİKET olarak okutan tek şeydir.
+   * Yapısal işaretçi — kart başlıklarının üstündeki büyük-harf satır.
+   * Sade dilde bağırmaz: harf aralığı 1.2 → 0.8, rengi daima üçüncül metin.
    */
-  overline:{ fontSize: 10, lineHeight: 13, fontFamily: fonts.semibold, letterSpacing: 1.2 },
+  overline:{ fontSize: 10, lineHeight: 13, fontFamily: fonts.semibold, letterSpacing: 0.8 },
 
   /* — Skor ölçeği: tamamı Archivo + tabular —
      Skor ekranın KAHRAMANIDIR. 24px'lik bir "2–1", satır başlığından yalnız

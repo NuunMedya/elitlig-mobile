@@ -219,7 +219,8 @@ export function ScreenHeader({
 
   const ink = dark ? colors.onDark : colors.textPrimary;
   const inkMuted = dark ? colors.onDarkMuted : colors.textSecondary;
-  const inkOverline = dark ? colors.brandOnDark : colors.brandAccent;
+  /* Üst satır sessizdir: kâğıtta üçüncül gri, blokta açık lavanta. */
+  const inkOverline = dark ? colors.brandOnDark : colors.textTertiary;
 
   /* Üst/alt başlık daralmanın ilk yarısında söner; satır 52px'e inerken
      ortalanmış başlık yerinde kalır, sönen satırlar kırpılır. */
@@ -451,10 +452,9 @@ const styles = StyleSheet.create({
   title: {
     ...type.h1,
   },
-  /** Sekme kökü başlığı — 22px, sıkı harf aralığı. */
+  /** Sekme kökü başlığı — 28px büyük başlık (Plus Jakarta Bold). */
   titleLarge: {
-    ...type.display,
-    fontSize: 22,
+    ...type.largeTitle,
   },
   subtitle: {
     ...type.bodySm,
@@ -469,11 +469,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginLeft: space.xs,
   },
+  /* Kâğıtta eylem ÇIPLAK ikondur: her ikonun etrafındaki beyaz halka başlığı
+     bir düğme dizisine çeviriyordu. Dokunma alanı 36px kutuda korunur. */
   actionOnPaper: {
     borderRadius: radius.pill,
-    backgroundColor: colors.surface1,
-    borderWidth: hairline,
-    borderColor: colors.border,
   },
   actionBadgePaper: {
     borderColor: colors.bg,

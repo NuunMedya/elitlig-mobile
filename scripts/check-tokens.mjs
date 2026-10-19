@@ -204,7 +204,7 @@ const NUMERIC_TOKENS = new Set([
  * Büyükten küçüğe olması gereken PUNTO zinciri. `h4` bilerek dışarıdadır:
  * o bir punto basamağı değil, `body` ile aynı puntonun kalın kesimidir.
  */
-const HIERARCHY = ["display", "h1", "h2", "h3", "body", "bodySm", "caption", "micro"];
+const HIERARCHY = ["largeTitle", "display", "h1", "h2", "h3", "body", "bodySm", "caption", "micro"];
 /** Belirli tokenların taban değerleri — arayüzün okunurluğu bunlara bağlı. */
 const MIN_SIZE = { body: 11, bodySm: 10, bodyLg: 11, label: 11, caption: 9 };
 

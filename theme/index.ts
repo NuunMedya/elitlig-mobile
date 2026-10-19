@@ -36,13 +36,15 @@ export * from "./motion";
 const override = getStoredTheme();
 
 /**
- * VARSAYILAN TEMA AÇIKTIR. Yeniden tasarımda cilalanan tema açık temadır;
- * koyu tema ikinci sınıf değil ama varsayılan değil. Bu yüzden burada SİSTEM
- * ayarına bakılmaz — yalnız kullanıcının açık tercihi koyuya geçirir. Sistem
- * ayarına uyulsaydı, koyu telefonlu kullanıcıların çoğu ürünün asıl yüzünü
- * hiç görmezdi.
+ * TEMA: kullanıcının açık tercihi (Açık / Koyu) varsa o; yoksa SİSTEM ayarı.
+ *
+ * Eskiden tercih yokken her zaman açık tema açılıyordu; Ayarlar'daki "Sistem"
+ * seçeneği ise sistem koyuyken "koyu olacak" diye hesap yapıyordu — iki taraf
+ * birbirini yalanlıyordu. Koyu tema da artık birinci sınıf (koyu mor + pembe +
+ * beyaz) olduğu için "Sistem" gerçekten sistemi izler.
  */
-export const isDark: boolean = override === "dark";
+export const isDark: boolean =
+  override === "dark" || (override === null && Appearance.getColorScheme() === "dark");
 
 /** Aktif tema adı — bileşenler yerine altyapı (StatusBar, harita) içindir. */
 export const themeName: ThemeName = isDark ? "dark" : "light";

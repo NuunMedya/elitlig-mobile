@@ -82,13 +82,13 @@ export const layout = {
      yandan 4px geri verir; kart iç dolgusu (12) ve satır dolgusu (14) zaten
      buna oturuyor, yani ferahlık kaybı gözle görülmez ama kırpılan ad
      kalmaz. */
-  screenPadding: 14,
+  screenPadding: 16,
   /** Yoğun tablo düzenleri (puan durumu, istatistik ızgarası) için dar kenar. */
   screenPaddingDense: 12,
   rowPaddingH: 14,
   rowGap: 8,
   /** Bölümler arası nefes. */
-  sectionGap: 22,
+  sectionGap: 24,
   listRowHeight: 52,        // tek satırlı ListRow — h3(20) + 2×16 dolgu
   listRowHeightTwoLine: 66, // iki satırlı ListRow — h3(20) + bodySm(17) + dolgu
   /* MAÇ SATIRI İKİ ÇİZGİDİR: `arma · ev` üstte, `arma · dep` altta; skor sağda
@@ -99,7 +99,7 @@ export const layout = {
      2×18 + 4 = 40 + 2×3 = 46. */
   matchRowHeight: 58,
   matchRowHeightCompact: 46,
-  headerHeightExpanded: 96, // overline(13) + display(27) + dolgu
+  headerHeightExpanded: 104, // overline(13) + display(27) + dolgu
   headerHeightCollapsed: 52,
   /**
    * ALT MENÜ BARI YÜKSEKLİĞİ — güvenli alan HARİÇ.
@@ -178,8 +178,8 @@ export const radius = {
   sm:   8,   // amblem kutusu, küçük pul
   md:  12,   // KART İÇİ ELEMAN: input, chip zemini, bar
   lg:  14,   // küçük kart/karo (eski kart değeri)
-  xl:  18,   // KART ve satır grubu (Arena), panel
-  xxl: 22,   // sahne yüzeyi: skor tablosu, saha, yükselen sayfa
+  xl:  16,   // KART ve satır grubu, panel
+  xxl: 20,   // sahne yüzeyi: skor tablosu, saha, yükselen sayfa
   pill: 999,
 } as const;
 

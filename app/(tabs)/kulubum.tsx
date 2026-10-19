@@ -180,7 +180,6 @@ export default function ClubHubScreen() {
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader
         title="Yönetim"
-        overline={user ? (user.fullName ?? user.username ?? undefined) : "Kulüp, kariyer, lig"}
         scrollY={scrollY}
         actions={
           user
