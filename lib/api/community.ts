@@ -122,21 +122,20 @@ export interface FantasyMe {
     key: string;
     start: string;
     end: string;
-    /** Kadro seçiminin açıldığı an (Cumartesi 00:00 TR). */
-    opens_at?: string;
-    /** Kadro kilidi (Pazartesi 16:00 TR); bütün kadro birden kilitlenir. */
+    /** İlk başlamamış maçın saati (o an bir takımın oyuncuları kilitlenir). */
     deadline: string;
-    /** Seçim penceresi dışında true. */
+    /** Eski sunucu: true ise bütün hafta kilitli. Yeni sunucuda hep false. */
     locked: boolean;
     matches: number;
-    /** "open": seçim açık (key = kurulan hafta) · "live": kilitli, key = oynanan hafta. */
-    mode?: "open" | "live";
-    /** Kilitliyken sıradaki seçimin açılışı ve haftası. */
-    next_opens_at?: string | null;
-    next_key?: string | null;
+    /** "current": bu haftanın kadrosu düzenleniyor · "next": bu hafta bitti, gelecek hafta. */
+    mode?: "current" | "next";
+    current_key?: string;
+    last_kickoff?: string | null;
+    /** Bu haftaki maçı başlamış takımlar: oyuncuları eklenemez/çıkarılamaz. */
+    lockedTeamIds?: number[];
   };
   lineup: FantasyLineupView | null;
-  /** Seçim açıkken oynanmakta olan haftanın kadrosu. */
+  /** Gelecek hafta düzenlenirken bu haftanın oynanmış kadrosu. */
   live?: FantasyLineupView | null;
   suggestion: { playerIds: number[]; captainId: number } | null;
   history: { week: string; points: number }[];
