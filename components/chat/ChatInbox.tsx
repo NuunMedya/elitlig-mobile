@@ -338,8 +338,8 @@ const MEMBER_GROUPS: { key: Exclude<MemberFilter, "" | "unread">; label: string 
   { key: "grup", label: "Gruplar" },
 ];
 
-const KIND_CHIPS: [string, string][] = [["", "Tümü"], ["team", "Takımlar"], ["player", "Oyuncular"], ["member", "Üyeler"]];
-const KIND_LABEL: Record<string, string> = { team: "Takım", player: "Oyuncu", member: "Üye", general: "Genel" };
+const KIND_CHIPS: [string, string][] = [["", "Tümü"], ["team", "Takımlar"], ["player", "Oyuncular"], ["member", "Üyeler"], ["staff", "Ekip"]];
+const KIND_LABEL: Record<string, string> = { team: "Takım", player: "Oyuncu", member: "Üye", general: "Genel", staff: "Yönetim Ekibi" };
 
 const ConversationRow = memo(function ConversationRow({
   conversation,

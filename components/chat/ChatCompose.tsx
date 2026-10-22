@@ -1,7 +1,10 @@
 /**
  * MESAJ OLUŞTUR — kime yazılacağını seçme ekranı.
  *
- * Sekmeler: Tümü / Yönetim / Takım / Yöneticiler / Oyuncular / Grup kur.
+ * Sekmeler: Tümü / Yönetim / Takım / Yöneticiler / Takım arkadaşları / Grup kur.
+ * Üye rehberinde yalnız takım arkadaşları gelir (sunucu kuralı). Yönetim
+ * modunda "Yönetim ekibi" sekmesi diğer yönetim hesaplarını listeler; ekip
+ * sohbeti birebir açılır ve sesli aranabilir.
  * Rehber sunucudan (GET /api/chat/directory?q=) gelir; seçim yapılınca
  * konuşma açılır (varsa mevcut olan döner) ve sohbet ekranına geçilir.
  */
@@ -33,10 +36,11 @@ import { queryKeys } from "@/lib/queryKeys";
 import { useAuth } from "@/providers/AuthProvider";
 import { colors, hairline, layout, space, textScale, type } from "@/theme";
 
-type Tab = "all" | "management" | "team" | "managers" | "players" | "group";
+type Tab = "all" | "staff" | "management" | "team" | "managers" | "players" | "group";
 
 const ALL_TABS: { key: Tab; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
   { key: "all", label: "Tümü", icon: "apps" },
+  { key: "staff", label: "Yönetim ekibi", icon: "briefcase-outline" },
   { key: "management", label: "Yönetim", icon: "shield-checkmark" },
   { key: "team", label: "Takım", icon: "people" },
   { key: "managers", label: "Yöneticiler", icon: "briefcase" },
@@ -60,7 +64,9 @@ export function ChatCompose({ admin = false }: ChatComposeProps) {
   const toast = useToast();
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<Tab>("all");
-  const TABS = admin ? ALL_TABS.filter((item) => item.key !== "management") : ALL_TABS;
+  const TABS = admin
+    ? ALL_TABS.filter((item) => item.key !== "management")
+    : ALL_TABS.filter((item) => item.key !== "staff").map((item) => (item.key === "players" ? { ...item, label: "Takım arkadaşları" } : item));
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
   const [title, setTitle] = useState("");
@@ -95,7 +101,7 @@ export function ChatCompose({ admin = false }: ChatComposeProps) {
 
   const people = useMemo(() => {
     const map = new Map<number, ChatUser>();
-    [...(query.data?.managers ?? []), ...(query.data?.players ?? [])].forEach((user) => {
+    [...(query.data?.staff ?? []), ...(query.data?.managers ?? []), ...(query.data?.players ?? [])].forEach((user) => {
       if (!map.has(user.user_id)) map.set(user.user_id, user);
     });
     return [...map.values()];
@@ -108,6 +114,10 @@ export function ChatCompose({ admin = false }: ChatComposeProps) {
     if (tab === "group") {
       people.forEach((user) => out.push({ kind: "user", key: `u-${user.user_id}`, user }));
       return out;
+    }
+    if ((tab === "all" || tab === "staff") && data.staff?.length) {
+      out.push({ kind: "section", key: "s-staff", title: "Yönetim ekibi" });
+      data.staff.forEach((user) => out.push({ kind: "user", key: `s-${user.user_id}`, user }));
     }
     if ((tab === "all" || tab === "management") && data.management) {
       out.push({ kind: "section", key: "s-management", title: "Yönetim" });
@@ -124,11 +134,11 @@ export function ChatCompose({ admin = false }: ChatComposeProps) {
       data.managers.forEach((user) => out.push({ kind: "user", key: `m-${user.user_id}`, user }));
     }
     if ((tab === "all" || tab === "players") && data.players.length) {
-      out.push({ kind: "section", key: "s-players", title: "Oyuncular" });
+      out.push({ kind: "section", key: "s-players", title: admin ? "Oyuncular" : "Takım arkadaşlarım" });
       data.players.forEach((user) => out.push({ kind: "user", key: `p-${user.user_id}`, user }));
     }
     return out;
-  }, [people, query.data, tab]);
+  }, [admin, people, query.data, tab]);
 
   const toggle = useCallback((id: number) => {
     setSelected((list) => (list.includes(id) ? list.filter((item) => item !== id) : [...list, id]));
@@ -172,12 +182,16 @@ export function ChatCompose({ admin = false }: ChatComposeProps) {
           subtitle={item.user.subtitle}
           avatar={item.user.avatar}
           selected={tab === "group" ? picked : undefined}
-          onPress={() => (tab === "group" ? toggle(item.user.user_id) : open.mutate(admin ? { type: "member", user_id: item.user.user_id } : { type: "direct", user_id: item.user.user_id }))}
+          onPress={() =>
+            tab === "group"
+              ? toggle(item.user.user_id)
+              : open.mutate(admin && item.user.kind !== "staff" ? { type: "member", user_id: item.user.user_id } : { type: "direct", user_id: item.user.user_id })
+          }
           disabled={open.isPending}
         />
       );
     },
-    [open, selected, tab, toggle],
+    [admin, open, selected, tab, toggle],
   );
 
   if (!auth.user) return <Redirect href="/giris" />;
@@ -202,7 +216,7 @@ export function ChatCompose({ admin = false }: ChatComposeProps) {
               <Input
                 value={search}
                 onChangeText={setSearch}
-                placeholder="Yönetim, takım veya oyuncu ara"
+                placeholder={admin ? "Yönetici, takım veya oyuncu ara" : "Yönetim, takım veya takım arkadaşı ara"}
                 variant="search"
                 size="sm"
                 leadingIcon="search"
@@ -247,7 +261,9 @@ export function ChatCompose({ admin = false }: ChatComposeProps) {
               body={
                 debounced
                   ? "Adı farklı yazmayı dene."
-                  : "Takım yöneticileri ve hesabı bağlı oyuncular burada listelenir."
+                  : admin
+                    ? "Yönetim ekibi, takım yöneticileri ve hesabı bağlı oyuncular burada listelenir."
+                    : "Yalnızca kendi takım arkadaşlarınla ve yönetimle mesajlaşabilirsin."
               }
             />
           }
