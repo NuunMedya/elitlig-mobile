@@ -653,6 +653,11 @@ export function ChatRoom({ conversationId, admin = false }: ChatRoomProps) {
             <Text style={styles.blockedText} {...textScale.long}>Bu üyeyi engelledin. Mesaj yazamaz ve arayamazsın.</Text>
             <Button label="Engeli kaldır" variant="secondary" size="sm" onPress={toggleBlock} loading={blockBusy} />
           </View>
+        ) : !canWrite && conversation.restricted_reason ? (
+          <View style={styles.blockedBar}>
+            <Ionicons name="lock-closed" size={18} color={colors.textSecondary} />
+            <Text style={styles.blockedText} {...textScale.long}>{conversation.restricted_reason}</Text>
+          </View>
         ) : canWrite ? (
           recorder.isRecording ? (
             <View style={styles.composer}>

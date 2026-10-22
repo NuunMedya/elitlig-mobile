@@ -151,7 +151,8 @@ export interface ChatUser {
   name: string;
   avatar: string | null;
   subtitle: string;
-  kind?: "player" | "manager" | "both" | "member";
+  /** staff: başka bir yönetim hesabı (ekip sohbeti). */
+  kind?: "player" | "manager" | "both" | "member" | "staff";
   team_name?: string | null;
 }
 
@@ -168,6 +169,8 @@ export interface ChatConversation {
   is_admin_feed?: boolean;
   can_call: boolean;
   can_write?: boolean;
+  /** Yazılamayan eski sohbetin sebebi (ör. başka takımın oyuncusuyla birebir). */
+  restricted_reason?: string | null;
   /** Birebir: karşı tarafı engelledim (composer yerine "engelledin" şeridi). */
   blocked_by_me?: boolean;
   /** Birebir: karşı taraf beni engelledi (gönderim 403 USER_BLOCKED döner). */
@@ -182,7 +185,7 @@ export interface ChatConversation {
   /** Grup kurarken mesaj tercihi nedeniyle dışarıda kalanlar (yalnızca açılış yanıtında). */
   skipped_members?: { user_id: number; name: string }[];
   /** Yönetim gelen kutusu: sohbetin ait olduğu varlık (takım / oyuncu / üye / genel). */
-  entity?: { kind: "team" | "player" | "member" | "general"; id: number | null; name: string; avatar: string | null; user_id?: number | null } | null;
+  entity?: { kind: "team" | "player" | "member" | "general" | "staff"; id: number | null; name: string; avatar: string | null; user_id?: number | null } | null;
   /** Yönetim gelen kutusu: bekleyen talep kartları (kategori → adet). */
   pending?: { total: number; categories: Record<string, number>; latest_category?: string | null };
 }
@@ -219,6 +222,8 @@ export interface DirectoryResponse {
   teams: { type: "team"; team_id: number; name: string; avatar: string | null; subtitle: string }[];
   managers: (ChatUser & { type: "direct" })[];
   players: (ChatUser & { type: "direct" })[];
+  /** Yönetim hesapları: diğer yönetim hesapları (ekip sohbeti). Üyede boş. */
+  staff?: (ChatUser & { type: "direct" })[];
 }
 
 export type OpenConversationInput =
