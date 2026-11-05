@@ -6,6 +6,8 @@
 
 import React from "react";
 
+import { formatDuration } from "@/lib/matchMedia";
+
 import { VideoCard } from "./VideoCard";
 
 export interface MatchHighlightProps {
@@ -14,15 +16,18 @@ export interface MatchHighlightProps {
 
 export function MatchHighlight({ highlight }: MatchHighlightProps) {
   if (!highlight?.url || !/^https?:\/\//i.test(highlight.url)) return null;
-  const minutes = highlight.duration_ms ? Math.max(1, Math.round(highlight.duration_ms / 60000)) : null;
+  const duration = formatDuration(highlight.duration_ms);
   return (
     <VideoCard
       title="Maç özeti"
-      meta={minutes ? `${minutes} dk` : undefined}
+      meta="Maçın en önemli anları"
       url={highlight.url}
       posterUrl={highlight.poster_url}
       cta="Özeti izle"
       accessibilityLabel="Maç özetini izle"
+      badge="MAÇ ÖZETİ"
+      badgeTone="gold"
+      corner={duration}
     />
   );
 }

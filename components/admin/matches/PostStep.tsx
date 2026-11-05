@@ -138,7 +138,7 @@ export function PostStep({ match }: { match: AdminMatch }) {
     JSON.stringify(content) !== JSON.stringify(savedContent) ||
     HIGHLIGHT_FIELDS.some(({ key }) => (highlights[key] || "") !== (savedHighlights[key] || ""));
 
-  const contentMut = useAdminMutation(() => updateMatch(matchId, buildPostPayload(content, highlights, nameOf)), {
+  const contentMut = useAdminMutation(() => updateMatch(matchId, buildPostPayload(content, highlights, nameOf, match)), {
     success: "Maç sonu içerikleri kaydedildi.",
     invalidate: [["admin", "matches"]],
   });

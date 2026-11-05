@@ -20,14 +20,9 @@
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useRouter } from "expo-router";
-import { MatchGoalClips } from "@/components/live/MatchGoalClips";
-import { MatchHighlight } from "@/components/live/MatchHighlight";
-import { VideoCard } from "@/components/live/VideoCard";
-import { directVideoUrl } from "@/lib/video";
 import React, { memo, useCallback, useMemo, useState } from "react";
 import {
   FlatList,
-  Image,
   StyleSheet,
   Text,
   View,
@@ -45,7 +40,8 @@ import {
   Touchable,
 } from "@/components/ui";
 import { useLiveClock } from "@/hooks/useLiveMatch";
-import { formatDateLong, formatDateShort, formatTime, mediaUrl } from "@/lib/format";
+import { formatDateLong, formatDateShort, formatTime } from "@/lib/format";
+import { broadcastOf } from "@/lib/matchMedia";
 import { openLink } from "@/lib/links";
 import { matchState } from "@/lib/match";
 import { youtubeChannelUrl, youtubeLiveUrl } from "@/lib/youtube";
@@ -63,7 +59,6 @@ import type { StatRow, TopPlayer } from "@/lib/matchStats";
 import type { ApiMatch, ApiMatchEvent, LiveSnapshot, MatchState, StandingRow } from "@/lib/types";
 import { InfoRow, PaperCard, partStyles } from "./parts";
 import {
-  extractYouTubeId,
   headlineOf,
   isTrivialTitle,
   statLabel,
@@ -82,6 +77,7 @@ import {
   type TimelineOrder,
 } from "./shared";
 import { DuelCard, FanVoteCard, useMatchReactions } from "./Community";
+import { BroadcastCard, MatchMedia, useBroadcast } from "./MatchMedia";
 import { TimelineBreak, TimelineRow } from "./Timeline";
 
 export interface SummaryTabProps {
@@ -167,10 +163,36 @@ export function SummaryTab({
     [flashId, nameOf, openPlayer, total, reactionData, onReact],
   );
 
+  /* Medya / yayın: canlı yayın linki, özet, maçın anları, gol videoları, röportaj. */
+  const broadcast = useBroadcast(match);
+  const teams = useMemo(
+    () => ({
+      homeTeamId,
+      awayTeamId,
+      homeName: match.first_team_name,
+      awayName: match.second_team_name,
+      homeLogo,
+      awayLogo,
+    }),
+    [homeTeamId, awayTeamId, match.first_team_name, match.second_team_name, homeLogo, awayLogo],
+  );
+  const media = scheduled ? null : (
+    <MatchMedia match={match} state={state} nameOf={nameOf} teams={teams} onOpenPlayer={openPlayer} skipLiveBroadcast />
+  );
+
   /* — Başlık bölümü: zaman tünelinden ÖNCE gelenler — */
   const header = (
     <View style={styles.block}>
-      {live ? <LivePanel match={match} snapshot={snapshot} realtime={realtime} /> : null}
+      {/* Canlı yayın sekmenin en üstünde: maç sürerken ilk aranan şey. */}
+      {live && broadcast ? (
+        <BroadcastCard
+          source={broadcast}
+          live
+          title={`${match.first_team_name} ${snapshot?.homeScore ?? match.first_team_score ?? 0}–${snapshot?.awayScore ?? match.second_team_score ?? 0} ${match.second_team_name}`}
+        />
+      ) : null}
+      {live ? <LivePanel match={match} snapshot={snapshot} realtime={realtime} hasBroadcast={Boolean(broadcast)} /> : null}
+      {live ? media : null}
 
       {scheduled ? (
         <PreMatch
@@ -186,18 +208,12 @@ export function SummaryTab({
           onOpenTab={onOpenTab}
         />
       ) : (
-        <PostMatchHeader match={match} meetings={meetings} nameOf={nameOf} onOpenPlayer={openPlayer} />
+        <PostMatchHeader match={match} meetings={meetings} nameOf={nameOf} onOpenPlayer={openPlayer} media={live ? null : media} />
       )}
 
       {/* Faz 4: maç öncesi arena düellosu, maç sonrası taraftar oylaması. */}
       {scheduled ? <DuelCard matchId={Number(match.id)} /> : null}
       {state === "finished" ? <FanVoteCard matchId={Number(match.id)} /> : null}
-
-      {scheduled ? null : <MatchHighlight highlight={match.highlight} />}
-
-      {scheduled ? null : <MatchInterview match={match} />}
-
-      {scheduled ? null : <MatchGoalClips matchId={Number(match.id)} nameOf={nameOf} live={live} />}
 
       {scheduled ? null : (
         <SectionHeader
@@ -280,12 +296,15 @@ const LivePanel = memo(function LivePanel({
   match,
   snapshot,
   realtime,
+  hasBroadcast,
 }: {
   match: ApiMatch;
   snapshot: LiveSnapshot | undefined;
   realtime: boolean;
+  /** Maçın kendi yayın linki üstte kart olarak çiziliyorsa kanal satırı tekrarlanmaz. */
+  hasBroadcast?: boolean;
 }) {
-  const liveUrl = youtubeLiveUrl(match.city);
+  const liveUrl = hasBroadcast ? null : youtubeLiveUrl(match.city);
   const halftime = isHalftime(snapshot);
   const period = snapshot?.period === 1 || snapshot?.period === 2 ? snapshot.period : null;
   const title = halftime ? "Devre arası" : period ? `${period}. yarı oynanıyor` : "Maç sürüyor";
@@ -337,20 +356,20 @@ const PostMatchHeader = memo(function PostMatchHeader({
   meetings,
   nameOf,
   onOpenPlayer,
+  media,
 }: {
   match: ApiMatch;
   meetings: ApiMatch[];
   nameOf: NameOf;
   onOpenPlayer: (playerId: number) => void;
+  /** Maç sonu medya bloğu (özet, yayın kaydı, anlar, gol videoları, röportaj) — yıldızdan hemen sonra. */
+  media?: React.ReactNode;
 }) {
   const mvpId = match.match_mvp ? Number(match.match_mvp) : null;
   const mvpName = mvpId ? nameOf(mvpId) : null;
   const headline = headlineOf(match);
   const report = match.post_rapor?.trim() || null;
 
-  const videoUrl = mediaUrl(match.match_video);
-  const videoId = videoUrl ? extractYouTubeId(videoUrl) : null;
-  const thumbnail = videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : null;
 
   /** Fotoğraf şeridi: bu maç + aynı eşleşmenin geçmiş maçları (fotoğrafı olanlar). */
   const photoMatches = useMemo(() => {
@@ -396,42 +415,10 @@ const PostMatchHeader = memo(function PostMatchHeader({
       ) : null}
 
       {/*
-        VİDEO GERÇEKTEN VARSA AFİŞ, YOKSA HİÇ. Bu ligdeki maçların çoğunda
-        video yok, yalnız kanal bağlantısı var; o durumda ekranın yarısını boş
-        bir afiş kaplıyordu. Kanal bağlantısı künye kartında tek satırdır.
+        MEDYA GERÇEKTEN VARSA, YOKSA HİÇ. Bu ligdeki maçların çoğunda video yok;
+        yayın kaydı, özet, gol videoları ve röportaj ancak veri geldiyse çizilir.
       */}
-      {videoUrl ? (
-        <Touchable
-          feedback="card"
-          haptic="light"
-          onPress={() => void openLink(videoUrl)}
-          style={[partStyles.card, styles.video]}
-          accessibilityRole="link"
-          accessibilityLabel="Maç videosunu YouTube'da izle"
-        >
-          <View style={styles.videoThumb}>
-            {thumbnail ? (
-              <Image source={{ uri: thumbnail }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-            ) : (
-              <Ionicons name="logo-youtube" size={34} color={colors.textTertiary} />
-            )}
-            <View style={styles.videoPlay}>
-              <Ionicons name="play" size={18} color={colors.onDark} />
-            </View>
-          </View>
-          <View style={styles.videoFoot}>
-            <View style={styles.flex}>
-              <Text style={styles.videoTitle} numberOfLines={1} {...textScale.dense}>
-                Maçın videosu
-              </Text>
-              <Text style={styles.videoSub} numberOfLines={1} {...textScale.dense}>
-                YouTube'da izle
-              </Text>
-            </View>
-            <Ionicons name="open-outline" size={16} color={colors.textTertiary} />
-          </View>
-        </Touchable>
-      ) : null}
+      {media}
 
       {headline || report ? (
         <>
@@ -730,7 +717,7 @@ const StatsPreview = memo(function StatsPreview({
 const MatchFacts = memo(function MatchFacts({ match, state }: { match: ApiMatch; state: MatchState }) {
   const referee = refereeOf(match);
   const channelUrl = youtubeChannelUrl(match.city);
-  const hasVideo = Boolean(mediaUrl(match.match_video));
+  const hasVideo = Boolean(broadcastOf(match as unknown as Record<string, unknown>));
   const rawNote = (match.post_manset || match.match_comment || "").trim();
   const note = rawNote && !isTrivialTitle(rawNote, match) ? rawNote : "";
   const league = [match.league_name, match.match_season].filter(Boolean).join(" · ");
@@ -864,41 +851,6 @@ const styles = StyleSheet.create({
     ...type.h2,
     color: colors.textPrimary,
     marginTop: 2,
-  },
-
-  /* — Video — */
-  video: {
-    marginTop: space.lg,
-  },
-  videoThumb: {
-    aspectRatio: 16 / 9,
-    backgroundColor: colors.surface3,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  videoPlay: {
-    position: "absolute",
-    width: 52,
-    height: 52,
-    borderRadius: radius.pill,
-    backgroundColor: colors.overlay,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  videoFoot: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.md,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.md,
-  },
-  videoTitle: {
-    ...type.h3,
-    color: colors.textPrimary,
-  },
-  videoSub: {
-    ...type.bodySm,
-    color: colors.textTertiary,
   },
 
   /* — Rapor — */
@@ -1049,13 +1001,3 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
 });
-
-/**
- * Maç sonu röportajı — `post_roportaj` doğrudan bir video dosyasıysa (MP4)
- * uygulama içinde oynatılır. YouTube bağlantısı ise burada çizilmez.
- */
-function MatchInterview({ match }: { match: ApiMatch }) {
-  const url = directVideoUrl(match.match_interview || match.post_roportaj || match.interview_url);
-  if (!url) return null;
-  return <VideoCard title="Röportaj" meta="Maç sonu açıklamaları" url={url} cta="Röportajı izle" accessibilityLabel="Maç sonu röportajını izle" icon="mic" />;
-}

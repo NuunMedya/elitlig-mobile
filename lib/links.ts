@@ -40,3 +40,18 @@ export async function openLink(url: string): Promise<void> {
     Alert.alert("Bağlantı açılamadı", "Lütfen daha sonra tekrar deneyin.");
   }
 }
+
+/**
+ * YouTube bağlantısı: önce sistem (evrensel bağlantı) — YouTube uygulaması
+ * kuruluysa canlı yayın orada, tam ekran ve sohbetle açılır; açılamazsa
+ * uygulama içi tarayıcıya (`openLink`) düşer.
+ */
+export async function openYouTube(url: string): Promise<void> {
+  try {
+    await Linking.openURL(url);
+    return;
+  } catch {
+    // Sistem açamadı; uygulama içi tarayıcı denensin.
+  }
+  await openLink(url);
+}
