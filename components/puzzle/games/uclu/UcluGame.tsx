@@ -107,8 +107,12 @@ export default function UcluGame(props: PuzzleGameProps) {
     setBusyState(v);
   }, []);
 
-  useEffect(() => () => {
-    alive.current = false;
+  // StrictMode bağla-çöz-bağla yaptığında da doğru kalsın diye bağlanınca yeniden true.
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
   }, []);
 
   const wait = useCallback((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)), []);

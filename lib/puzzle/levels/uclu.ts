@@ -30,7 +30,7 @@ export const UCLU_PIECES = [
   { key: "krampon", name: "Krampon", plural: "krampon", icon: "footsteps" },
   { key: "eldiven", name: "Eldiven", plural: "eldiven", icon: "hand-left" },
   { key: "duduk", name: "Düdük", plural: "düdük", icon: "volume-high" },
-  { key: "kupa", name: "Kupa", plural: "kupa", icon: "trophy" },
+  { key: "kupa", name: "Kupa", plural: "kupa", icon: "trophy-outline" },
 ] as const;
 
 export type UcluGoalType = "color" | "mud" | "crate" | "snow" | "trophy";

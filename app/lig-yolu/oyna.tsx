@@ -161,6 +161,7 @@ export default function PuzzlePlayScreen() {
       {stock ? (
         <View style={styles.board}>
           <Game
+            key={`${module.key}-${level}`}
             level={level}
             maxWidth={Math.min(width - layout.screenPadding * 2, 520)}
             preBoosters={preBoosters}
