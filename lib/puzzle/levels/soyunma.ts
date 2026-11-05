@@ -294,16 +294,16 @@ function astar(board: SoyunmaBoard, start: SoyunmaRack[], weight: number, budget
  * kanıtı); sonra daha düşük ağırlıkla ve en son ağırlıksız A* ile (bütçe
  * içinde) kısaltılır. Ağırlıksız arama biterse çözüm EN KISADIR. Belirlenimci.
  */
-export function solveSoyunma(board: SoyunmaBoard, racks: SoyunmaRack[], exactBudget = 2500): SolveResult | null {
+export function solveSoyunma(board: SoyunmaBoard, racks: SoyunmaRack[], exactBudget = 2000): SolveResult | null {
   let found: { sol: SoyunmaMove[]; expanded: number } | null = null;
-  for (const [w, b] of [[3, 12000], [6, 30000]] as const) {
+  for (const [w, b] of [[3, 5000], [8, 10000]] as const) {
     found = astar(board, racks, w, b);
     if (found) break;
   }
   if (!found) return null;
   let expanded = found.expanded;
   let best = found.sol;
-  const mid = astar(board, racks, 1.5, 3000);
+  const mid = astar(board, racks, 1.5, 1500);
   if (mid) {
     expanded += mid.expanded;
     if (mid.sol.length < best.length) best = mid.sol;
@@ -497,6 +497,11 @@ function starThresholds(par: number, hidden: boolean): { star3: number; star2: n
 
 const cache = new Map<number, SoyunmaLevel>();
 
+/** Denetim betiği için: önbelleği boşaltır (belirlenimcilik sınaması). */
+export function resetSoyunmaCache(): void {
+  cache.clear();
+}
+
 /** Seviye üretir (belirlenimci, önbellekli). Çözücü bir çözüm bulana dek tohum ilerler. */
 export function generateSoyunmaLevel(levelIn: number): SoyunmaLevel {
   const level = Math.max(1, Math.floor(levelIn));
@@ -564,7 +569,7 @@ export function generateSoyunmaLevel(levelIn: number): SoyunmaLevel {
       hidden,
       lock: pick.cand.locks.some((l) => l != null),
       small: pick.cand.caps.some((c) => c < T),
-      fewEmpty: pick.cand.racks.filter((r, i) => r.items.length === 0 && pick.cand.caps[i] === T && pick.cand.locks[i] == null).length <= 1,
+      fewEmpty: !HANDMADE[level] && plan.empties <= 1,
     },
   };
   cache.set(level, out);

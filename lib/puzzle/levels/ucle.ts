@@ -200,6 +200,8 @@ interface Plan {
   maxLayers: number;
   shape: string;
   width: number;
+  /** Yeni üçlü açma olasılığı: büyüdükçe bir üçlünün karoları sırada dağılır. */
+  spread: number;
   hiddenRate: number;
   lockGroups: number;
   chains: number;
@@ -241,6 +243,7 @@ function planFor(level: number, rng: () => number): Plan {
     return {
       tutorial: true,
       width: 2,
+      spread: 0.3,
       hiddenRate: 0,
       lockGroups: 0,
       chains: 0,
@@ -255,7 +258,7 @@ function planFor(level: number, rng: () => number): Plan {
   if (cup) target *= 1.2;
   if (breath) target *= 0.72;
   target = Math.max(24, Math.min(135, Math.round(target)));
-  const kinds = Math.min(13, 6 + Math.floor(level / 20) + (cup ? 1 : 0) - (breath ? 1 : 0));
+  const kinds = Math.min(11, 6 + Math.floor(level / 30) + (cup ? 1 : 0) - (breath ? 1 : 0));
   const maxLayers = level < 20 ? 3 : level < 50 ? 4 : level < 120 ? 5 : 6;
   const pool = breath ? SMALL_SHAPES : BIG_SHAPES;
   const shape = cup && level % 20 === 0 ? "kupa" : level === 30 ? "bayrak" : pool[Math.floor(rng() * pool.length)];
@@ -273,7 +276,8 @@ function planFor(level: number, rng: () => number): Plan {
   else if (level > 30 && (cup || rng() < 0.45)) chains = 2 + Math.floor(rng() * Math.min(6, 2 + level / 40));
   if (breath) chains = Math.min(chains, 2);
   const timed = level === 15 || (cup && level >= 20);
-  return { tutorial: false, target, kinds, maxLayers, shape, width, hiddenRate, lockGroups, chains, timed, tip };
+  const spread = Math.min(0.5, 0.28 + level / 1200 + (cup ? 0.08 : 0) - (breath ? 0.08 : 0));
+  return { tutorial: false, target, kinds, maxLayers, shape, width, spread, hiddenRate, lockGroups, chains, timed, tip };
 }
 
 interface Pos { x: number; y: number; z: number }
@@ -408,7 +412,7 @@ function attempt(level: number, plan: Plan, rng: () => number): UcleLevel | null
     const canStart = open.length < plan.width && left - owed >= 3;
     const mustStart = open.length === 0;
     let slot: { kind: number; left: number };
-    if (mustStart || (canStart && rng() < 0.5)) {
+    if (mustStart || (canStart && rng() < plan.spread)) {
       const busy = new Set(open.map((o) => o.kind));
       const avail = [...Array(kinds).keys()].filter((k) => !busy.has(k));
       const min = Math.min(...avail.map((k) => used[k]));
