@@ -74,6 +74,13 @@ interface AuthContextValue {
   /** Şifre değiştirir ve sunucunun verdiği taze jetonu saklar. Mesajı döndürür. */
   changePassword: (currentPassword: string, newPassword: string) => Promise<string>;
   signOut: () => Promise<void>;
+  /**
+   * Oturumdaki kullanıcıyı sunucudan yeniden okur (GET /api/users/verify).
+   * Profil modu, takım bağlama gibi kullanıcı kaydını değiştiren işlemlerden
+   * sonra çağrılır; yoksa değişiklik bir sonraki doğrulamaya (≤5 dk) kadar
+   * görünmez.
+   */
+  refreshUser: () => Promise<void>;
   isManagement: boolean;
 }
 
@@ -278,6 +285,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await queryClient.invalidateQueries();
   }, [forgetSession, queryClient]);
 
+  const refreshUser = useCallback(() => revalidate(true), [revalidate]);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
@@ -287,13 +296,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signUp,
       changePassword,
       signOut,
+      refreshUser,
       // Sunucunun rol kaydı esas alınır (panelden eklenen yönetim rolleri de
       // yönetim sayılır); eski sunucu yanıtında alan yoksa sabit listeye düşülür.
       isManagement: Boolean(
         user && (typeof user.isManagement === "boolean" ? user.isManagement : MANAGEMENT_ROLES.includes(user.role))
       ),
     }),
-    [user, initializing, signingIn, signIn, signUp, changePassword, signOut]
+    [user, initializing, signingIn, signIn, signUp, changePassword, signOut, refreshUser]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

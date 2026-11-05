@@ -66,6 +66,7 @@ import {
   useRefresh,
   type TabItem,
 } from "@/components/ui";
+import { CareerHome } from "@/components/career/home/CareerHome";
 import { QuestSpotlight } from "@/components/quests/QuestSpotlight";
 import { useNotificationBell } from "@/hooks/useNotificationBell";
 import { MAX_STARTERS, getTeamFinance, getTeamMatchPlan } from "@/lib/api/team";
@@ -211,7 +212,7 @@ export default function ClubHubScreen() {
             onAttention={openAttention}
           />
         ) : role === "oyuncu" ? (
-          <CareerSection signals={signals} go={go} onAttention={openAttention} />
+          <CareerHome signals={signals} go={go} onAttention={openAttention} />
         ) : role === "lig" ? (
           <LeagueSection go={go} />
         ) : (

@@ -200,7 +200,7 @@ export function CareerHome({ signals, go, onAttention }: CareerHomeProps) {
         subtitle: `${nextMatch.opponent_name ?? "Sıradaki"} maçı · ${matchWhen(nextMatch.date, nextMatch.time)}`,
         cta: "Yanıtla",
         weight: 85,
-        onPress: () => go(`/mac/${nextMatch.id}`),
+        onPress: () => go("/oyuncum?tab=maclarim&durum=yaklasan"),
       });
     }
     if (contractDays != null && contractDays >= 0 && contractDays <= CONTRACT_WARN_DAYS) {

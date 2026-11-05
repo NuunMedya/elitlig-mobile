@@ -89,6 +89,8 @@ export default function ProfileModesScreen() {
       toast.show({ message: `Üye profilin “${label}” olarak güncellendi.`, tone: "success" });
       void queryClient.invalidateQueries({ queryKey: ["panel", "me"] });
       void queryClient.invalidateQueries({ queryKey: ["takim", "dashboard"] });
+      // Oturumdaki profil modu hemen güncellensin (sekmeler ve kapılar ona bakar).
+      void auth.refreshUser();
     },
     onError: (error: unknown) =>
       toast.show({
@@ -207,8 +209,7 @@ export default function ProfileModesScreen() {
           </PanelSection>
 
           <Text style={styles.note} {...textScale.long}>
-            Mod değişikliği hesabına hemen işlenir; Yönetim sekmesindeki alanlar oturumun bir sonraki
-            tazelenmesinde (uygulamaya döndüğünde) güncellenir.
+            Mod değişikliği hesabına ve Yönetim sekmesine hemen işlenir.
           </Text>
         </ScrollView>
       )}
