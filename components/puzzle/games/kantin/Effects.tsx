@@ -8,7 +8,7 @@ import React, { memo, useEffect, useRef } from "react";
 import { Animated, Easing, StyleSheet, Text, View } from "react-native";
 
 import { kantinConfetti, kantinScene as S } from "@/lib/puzzle/kantinPalette";
-import { radius, textScale, type } from "@/theme";
+import { textScale, type } from "@/theme";
 
 import { FanFigure } from "./Fan";
 import { CoinIcon, ProductIcon } from "./ProductIcon";
@@ -227,4 +227,3 @@ const styles = StyleSheet.create({
   },
 });
 
-void radius;
