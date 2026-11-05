@@ -128,7 +128,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { paddingHorizontal: layout.screenPadding, paddingBottom: space.giant * 2, gap: space.md, paddingTop: space.sm },
   sceneWrap: { borderRadius: radius.xl, overflow: "hidden", borderWidth: hairline, borderColor: colors.inkTileBorder },
-  flash: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.star },
+  flash: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.yellowCard },
   zone: { borderRadius: radius.xl, padding: space.lg, gap: space.sm, backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border },
   zoneActive: { borderColor: colors.brandAccent },
   zoneLocked: { opacity: 0.6 },

@@ -375,8 +375,16 @@ export const StackColumn = memo(function StackColumn({
       style={[styles.stackCol, { width, height }]}
     >
       <View style={[styles.shelf, { width, height }]} />
+      {/* Ürünler sütunun kendi koordinatlarında konumlanır: sarmalayıcı
+          sütunu tam kaplar (yoksa ortalanan sıfır genişlikli kap kartları
+          yarım sütun sağa kaydırıyordu). */}
       <Animated.View
         style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          width,
+          height,
           transform: [
             { translateY: slide },
             { translateX: shake.interpolate({ inputRange: [-1, 1], outputRange: [-5, 5] }) },

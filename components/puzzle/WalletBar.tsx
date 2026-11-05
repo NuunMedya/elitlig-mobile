@@ -42,7 +42,7 @@ export function WalletBar({
       />
       <Pill
         icon="disc"
-        tint={colors.star}
+        tint={colors.yellowCard}
         value={profile ? profile.coins.toLocaleString("tr-TR") : "–"}
         onPress={onCoins}
         label={`Jeton ${profile?.coins ?? 0}`}
@@ -51,7 +51,7 @@ export function WalletBar({
       />
       <Pill
         icon="star"
-        tint={colors.star}
+        tint={colors.yellowCard}
         value={profile ? String(profile.stadium.available) : "–"}
         hint={profile ? "stadyum" : null}
         onPress={onStars}

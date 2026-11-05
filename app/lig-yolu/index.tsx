@@ -56,7 +56,7 @@ export default function PuzzleHubScreen() {
 
             {me.profile.daily.available ? (
               <Touchable onPress={() => setDaily(true)} style={styles.daily} haptic="medium" accessibilityRole="button">
-                <Ionicons name="gift" size={26} color={colors.star} />
+                <Ionicons name="gift" size={26} color={colors.yellowCard} />
                 <View style={styles.dailyTexts}>
                   <Text style={styles.dailyTitle} {...textScale.dense}>Günlük ödülün hazır</Text>
                   <Text style={styles.dailySub} {...textScale.dense}>
@@ -79,7 +79,7 @@ export default function PuzzleHubScreen() {
                   </Text>
                 </View>
                 <View style={styles.starPill}>
-                  <Ionicons name="star" size={16} color={colors.star} />
+                  <Ionicons name="star" size={16} color={colors.yellowCard} />
                   <Text style={styles.starPillText} {...textScale.badge}>{stadium?.available ?? 0}</Text>
                 </View>
               </View>
@@ -103,7 +103,7 @@ export default function PuzzleHubScreen() {
                     <Text style={styles.cardSub} numberOfLines={2} {...textScale.dense}>{game.tagline}</Text>
                     <View style={styles.cardMeta}>
                       <Text style={[styles.cardTier, { color: tone.fg }]} {...textScale.badge}>{tierOf(next)}</Text>
-                      <Ionicons name="star" size={12} color={colors.star} />
+                      <Ionicons name="star" size={12} color={colors.yellowCard} />
                       <Text style={styles.cardStars} {...textScale.badge}>{progress?.total_stars ?? 0}</Text>
                     </View>
                   </View>
@@ -145,7 +145,7 @@ const styles = StyleSheet.create({
   starPill: { flexDirection: "row", alignItems: "center", gap: space.xs, paddingHorizontal: space.sm, paddingVertical: space.xs, borderRadius: radius.pill, backgroundColor: colors.inkPill },
   starPillText: { ...type.label, fontFamily: fonts.bold, color: colors.onDark },
   progressTrack: { height: 4, backgroundColor: colors.inkTile },
-  progressFill: { height: 4, backgroundColor: colors.star },
+  progressFill: { height: 4, backgroundColor: colors.yellowCard },
   card: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderRadius: radius.xl, backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border },
   cardIcon: { width: 58, height: 58, borderRadius: radius.lg, alignItems: "center", justifyContent: "center" },
   cardTexts: { flex: 1, gap: 2 },

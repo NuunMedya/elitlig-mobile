@@ -65,7 +65,7 @@ export function LevelStartSheet({
         <Text style={styles.tier} {...textScale.dense}>{tierOf(level)}</Text>
         {goal.badge ? (
           <View style={styles.badge}>
-            <Ionicons name="trophy" size={14} color={colors.star} />
+            <Ionicons name="trophy" size={14} color={colors.yellowCard} />
             <Text style={styles.badgeText} {...textScale.badge}>{goal.badge}</Text>
           </View>
         ) : null}
@@ -157,9 +157,9 @@ export function ResultSheet({
             ))}
           </View>
           <View style={styles.rewards}>
-            <Reward icon="disc" tint={colors.star} value={`+${coins}`} label="jeton" />
+            <Reward icon="disc" tint={colors.yellowCard} value={`+${coins}`} label="jeton" />
             {xp > 0 ? <Reward icon="flash" tint={colors.brandAccent} value={`+${xp}`} label="XP" /> : null}
-            {firstClear ? <Reward icon="star" tint={colors.star} value={`+${stars}`} label="stadyum yıldızı" /> : null}
+            {firstClear ? <Reward icon="star" tint={colors.yellowCard} value={`+${stars}`} label="stadyum yıldızı" /> : null}
           </View>
         </>
       ) : (
@@ -193,7 +193,7 @@ function BigStar({ index, lit, visible }: { index: number; lit: boolean; visible
   const scale = v.interpolate({ inputRange: [0, 1], outputRange: [0.2, 1] });
   return (
     <Animated.View style={[index === 2 ? styles.starBig : styles.starSide, { opacity: v, transform: [{ scale }] }]}>
-      <Ionicons name="star" size={index === 2 ? 64 : 48} color={lit ? colors.star : colors.starEmpty} />
+      <Ionicons name="star" size={index === 2 ? 64 : 48} color={lit ? colors.yellowCard : colors.starEmpty} />
     </Animated.View>
   );
 }

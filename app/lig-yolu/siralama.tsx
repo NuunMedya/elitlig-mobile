@@ -79,7 +79,7 @@ export default function PuzzleLeaderboardScreen() {
                   {item.city ? `${item.city} · ` : ""}{item.level}. seviye
                 </Text>
               </View>
-              <Ionicons name="star" size={16} color={colors.star} />
+              <Ionicons name="star" size={16} color={colors.yellowCard} />
               <Text style={styles.stars} {...textScale.badge}>{item.stars}</Text>
             </View>
           )}
@@ -97,7 +97,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderRadius: radius.lg, backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border },
   rowMe: { borderColor: colors.brandAccent, backgroundColor: colors.brandDim },
   rank: { ...type.h3, fontFamily: fonts.bold, color: colors.textSecondary, width: 28, textAlign: "center" },
-  rankTop: { color: colors.star },
+  rankTop: { color: colors.yellowCard },
   texts: { flex: 1, gap: 2 },
   name: { ...type.body, color: colors.textPrimary },
   sub: { ...type.caption, color: colors.textTertiary },

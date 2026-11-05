@@ -50,7 +50,7 @@ export function ShopSheet({
   return (
     <BottomSheet visible={visible} onClose={onClose} title="Mağaza" snap="half">
       <View style={styles.balance}>
-        <Ionicons name="disc" size={20} color={colors.star} />
+        <Ionicons name="disc" size={20} color={colors.yellowCard} />
         <Text style={styles.balanceText} {...textScale.dense}>
           {coins.toLocaleString("tr-TR")} jeton
         </Text>
@@ -127,7 +127,7 @@ export function DailySheet({ visible, onClose, me }: { visible: boolean; onClose
           return (
             <View key={day} style={[styles.day, today ? styles.dayToday : null, done ? styles.dayDone : null]}>
               <Text style={styles.dayLabel} {...textScale.badge}>{day}. gün</Text>
-              <Ionicons name={done ? "checkmark-circle" : reward.boosters ? "gift" : "disc"} size={22} color={done ? colors.win : reward.boosters ? colors.brandAccent : colors.star} />
+              <Ionicons name={done ? "checkmark-circle" : reward.boosters ? "gift" : "disc"} size={22} color={done ? colors.win : reward.boosters ? colors.brandAccent : colors.yellowCard} />
               <Text style={styles.dayValue} {...textScale.badge}>{reward.coins}</Text>
             </View>
           );

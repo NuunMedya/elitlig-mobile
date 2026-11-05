@@ -150,7 +150,7 @@ const LevelNode = React.memo(function LevelNode({ row, tone, onPlay }: { row: Ro
           {row.state === "locked" ? (
             <Ionicons name={cup ? "trophy-outline" : "lock-closed"} size={20} color={colors.textTertiary} />
           ) : cup ? (
-            <Ionicons name="trophy" size={isCurrent ? 30 : 24} color={colors.star} />
+            <Ionicons name="trophy" size={isCurrent ? 30 : 24} color={colors.yellowCard} />
           ) : (
             <Text style={[styles.nodeText, isCurrent ? styles.nodeTextCurrent : null]} {...textScale.badge}>
               {row.level}
@@ -160,7 +160,7 @@ const LevelNode = React.memo(function LevelNode({ row, tone, onPlay }: { row: Ro
         {row.state === "done" ? (
           <View style={styles.stars}>
             {[1, 2, 3].map((n) => (
-              <Ionicons key={n} name="star" size={n === 2 ? 16 : 13} color={n <= row.stars ? colors.star : colors.starEmpty} style={n === 2 ? styles.starMid : null} />
+              <Ionicons key={n} name="star" size={n === 2 ? 16 : 13} color={n <= row.stars ? colors.yellowCard : colors.starEmpty} style={n === 2 ? styles.starMid : null} />
             ))}
           </View>
         ) : isCurrent ? (
@@ -185,7 +185,7 @@ const styles = StyleSheet.create({
   nodeWrap: { position: "absolute", alignItems: "center" },
   node: { alignItems: "center", justifyContent: "center", borderWidth: 3, borderColor: colors.surface1 },
   nodeLocked: { backgroundColor: colors.surface3, borderColor: colors.border },
-  nodeCup: { borderColor: colors.star },
+  nodeCup: { borderColor: colors.yellowCard },
   nodeCurrent: { borderWidth: 4, borderColor: colors.surface1 },
   nodeText: { ...type.h3, fontFamily: fonts.bold, color: colors.textOnBrand },
   nodeTextCurrent: { ...type.h1, fontFamily: fonts.bold, color: colors.textOnBrand },
