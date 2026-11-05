@@ -39,7 +39,8 @@ export default function ClubArenaScreen() {
   const scope = useScope();
   const router = useRouter();
   const { scrollY, scrollProps } = useHeaderScroll();
-  const [cityOnly, setCityOnly] = useState(true);
+  // Varsayılan Türkiye geneli; il yalnız süzgeç.
+  const [cityOnly, setCityOnly] = useState(false);
   const cityId = cityOnly ? scope.cityId : null;
 
   const board = useQuery({ queryKey: ["arena", "clubs", cityId], queryFn: () => getClubBoard(cityId), staleTime: 60_000 });
@@ -63,8 +64,8 @@ export default function ClubArenaScreen() {
         {duel.data?.duel ? <DuelCard matchId={duel.data.duel.matchId} /> : null}
 
         <ChipGroup contentPadding={0}>
-          <Chip size="sm" label={scope.cityLabel || "Şehrim"} selected={cityOnly} onPress={() => setCityOnly(true)} />
           <Chip size="sm" label="Tüm Türkiye" selected={!cityOnly} onPress={() => setCityOnly(false)} />
+          <Chip size="sm" label={scope.cityLabel || "Şehrim"} selected={cityOnly} onPress={() => setCityOnly(true)} />
         </ChipGroup>
 
         {mine ? (

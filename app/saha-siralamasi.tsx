@@ -3,7 +3,7 @@
  * (GET /api/career/leaderboard).
  *
  * NE: üstte iki segment (Oyuncular / Takımlar / XP · dönem), altında
- * kapsam çip şeridi (Türkiye + iller; varsayılan seçili il, yoksa Türkiye)
+ * kapsam çip şeridi (Türkiye + iller; varsayılan Türkiye geneli)
  * ve "bu dönem / geçen dönem" çipi. İlk üç podyumda, kalanı yoğun liste.
  * Kendi satırın (oyuncu ya da takımın) listede vurgulanır; listenin dışında
  * kalıyorsa üstte sabit bir kartla gösterilir.
@@ -108,8 +108,8 @@ export default function SahaSiralamasiScreen() {
   const [period, setPeriod] = useState<PeriodKind>(params.period === "month" ? "month" : "week");
   const [xpPeriod, setXpPeriod] = useState<XpPeriod>(params.period === "all" ? "all" : "week");
   const [offset, setOffset] = useState(0);
-  // null = Türkiye geneli; varsayılan kullanıcının seçili ili
-  const [cityId, setCityId] = useState<number | null>(scope.cityId ?? null);
+  // null = Türkiye geneli (varsayılan): herkes herkesle yarışır; il bir süzgeç.
+  const [cityId, setCityId] = useState<number | null>(null);
 
   const query = useQuery({
     queryKey: ["career", "leaderboard", kind, kind === "xp" ? xpPeriod : period, kind === "xp" ? 0 : offset, cityId],
