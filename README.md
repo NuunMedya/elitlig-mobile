@@ -64,7 +64,14 @@ app/                       Ekranlar (Expo Router — dosya = rota)
   takimim/                 Kulüp araçları: kadro, maç merkezi, maç kadrosu +
                            taktik simülasyonu, maç al, kasa (`/takimim` →
                            Yönetim sekmesine yönlenir)
-  yonetim/                 Yönetim paneli: maçlar, sahalar, mesajlar
+  yonetim/                 Yönetim paneli — web panelinin TÜM sayfaları yerel
+                           ekran (WebView yok), yetkiye göre: maç iş akışı,
+                           lig/sezon/takım/oyuncu, disiplin, içerik, üyeler,
+                           personel, kura, yayın, sistem; araclar/ altında
+                           Araçlar (projeler, ajanda, not defteri, muhasebe,
+                           tablolar, rehber, hesap araçları, odak sayacı).
+                           Kayıt defteri lib/adminModules.ts, ortak kit
+                           components/admin, rehber docs/yonetim-yerel-ekranlar.md
   mac/[id].tsx             Maç detayı — skor, akış, kadrolar (canlı)
   takim/[id].tsx           Takım profili
   oyuncu/[id].tsx          Oyuncu profili

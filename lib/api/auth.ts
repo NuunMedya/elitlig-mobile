@@ -45,14 +45,6 @@ export const verifySession = () =>
 export const refreshSession = () =>
   post<Omit<LoginResponse, "message">>("/api/users/session/refresh", undefined, { retry: false });
 
-/**
- * Web yönetim paneli için kısa ömürlü (24 saat) oturum jetonu —
- * POST /api/users/session/web. Uzun ömürlü mobil jeton web sayfasına hiç
- * verilmez; uygulama içi tarayıcı (app/yonetim/web.tsx) yalnız bunu kullanır.
- */
-export const webSession = () =>
-  post<{ token: string; expiresIn: number; user: AuthUser }>("/api/users/session/web", undefined, { retry: false });
-
 export const logout = () => post<{ message: string }>("/api/users/logout");
 
 /** Oturum açıkken şifre değiştirme — PATCH /api/users/me/password. Sunucu
