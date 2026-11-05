@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["ElitligLiveModule"]
+  },
+  "android": {
+    "modules": ["com.elitlig.live.ElitligLiveModule"]
+  }
+}

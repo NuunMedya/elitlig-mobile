@@ -140,6 +140,9 @@ export default function RootLayout() {
                     // Varsayılan: detay ekranı sağdan girer, geri tuşu sola çıkar —
                     // "içeri girdim / geri çıktım" hissi yığın derinliğini anlatır.
                     animation: "slide_from_right",
+                    // Uygulama dikeydir; yalnız mobil reji (canlı yayın) yatay açılır.
+                    // app.json "orientation": "default" — kilit ekran başına buradan.
+                    orientation: "portrait",
                   }}
                 >
                   {/* Kök: sekme çubuğu. Yığının dibi olduğu için kaydırma değil, sönüm. */}
@@ -147,6 +150,13 @@ export default function RootLayout() {
 
                   {/* Karşılama — animasyonsuz açılır, arkasında bir şey yok. */}
                   <Stack.Screen name="hosgeldin" options={{ animation: "none" }} />
+
+                  {/* Mobil reji + canlı yayın: yatay, kenar kaydırmasıyla kapanmaz
+                      (yayın sırasında yanlışlıkla çıkılmasın). */}
+                  <Stack.Screen
+                    name="yonetim/canli-yayin/[id]"
+                    options={{ orientation: "landscape", animation: "fade", gestureEnabled: false, statusBarHidden: true }}
+                  />
 
                   {/* Eski /canli: Skorlar ▸ Canlı ▸ Tüm şehirler'e yönlendirir. */}
                   <Stack.Screen name="canli" options={{ animation: "none" }} />
