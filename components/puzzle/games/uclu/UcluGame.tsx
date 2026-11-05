@@ -16,7 +16,7 @@ import type { PuzzleGameProps } from "@/lib/puzzle/types";
 import { ucluLevel } from "@/lib/puzzle/levels/uclu";
 import { UCLU_BOARD, UCLU_PIECE_COLORS } from "@/lib/puzzle/ucluPalette";
 import {
-  adjacent, bonusConvert, canSwapCell, cloneCells, createGame, detonateAll, findMove, goalsDone,
+  adjacent, bonusConvert, canHammer, canSwapCell, cloneCells, createGame, detonateAll, findMove, goalsDone,
   hammerCell, hasSpecials, H, placeSpecial, shuffleBoard, starsFor, trySwap, W,
   type Cell, type ClearedTile, type GameState, type Special, type Step,
 } from "@/lib/puzzle/ucluEngine";
@@ -76,6 +76,9 @@ export default function UcluGame(props: PuzzleGameProps) {
     });
     return { cells: cloneCells(s.cells), dying: [], spawn };
   });
+  /** Ekranda en son gösterilen hücreler (engel vuruşunun rengini seçmek için). */
+  const shown = useRef<Cell[]>(board.cells);
+  shown.current = board.cells;
   const [goals, setGoals] = useState<HudGoal[]>(() => S().goals.map((g) => ({ type: g.type, color: g.color, left: g.left, target: g.target })));
   const [moves, setMoves] = useState(() => S().moves);
   const [score, setScore] = useState(0);
@@ -174,6 +177,14 @@ export default function UcluGame(props: PuzzleGameProps) {
           await wait(420);
         }
         const items: FxInput[] = [];
+        const prev = shown.current;
+        st.hits.slice(0, 24).forEach((i) => {
+          const c = prev[i];
+          if (!c) return;
+          const color = c.crate > 0 ? UCLU_BOARD.woodHi : c.snow > 0 ? UCLU_BOARD.snowEdge : c.net > 0 ? UCLU_BOARD.net : UCLU_BOARD.mud;
+          const p = center(i);
+          items.push({ kind: "burst", x: p.x, y: p.y, color, size: cell * 0.9 });
+        });
         st.cleared.slice(0, 30).forEach(({ tile, cell: i }) => {
           const p = center(i);
           const color = tile.kind === "trophy" || tile.color < 0 ? UCLU_BOARD.gold : UCLU_PIECE_COLORS[tile.color].base;
@@ -355,8 +366,7 @@ export default function UcluGame(props: PuzzleGameProps) {
   const hammerAt = useCallback(
     async (i: number) => {
       const s = S();
-      const c = s.cells[i];
-      if (!c || c.hole || (!c.tile && c.crate === 0 && c.mud === 0)) {
+      if (!canHammer(s, i)) {
         haptics.light();
         return;
       }
@@ -566,7 +576,6 @@ export default function UcluGame(props: PuzzleGameProps) {
           style={{ width: boardPx, height: boardPx }}
           {...pan.panHandlers}
           accessible
-          accessibilityRole="adjustable"
           accessibilityLabel={`Oyun tahtası, 8'e 8. ${moves} hamle kaldı.`}
           accessibilityHint="Komşu iki taşı kaydırarak yer değiştir; aynı türden üç taşı diz."
         >

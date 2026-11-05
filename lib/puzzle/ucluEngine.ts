@@ -828,11 +828,18 @@ export function trySwap(s: GameState, a: number, b: number, record = true): Swap
   return { ok: true, steps: resolve(s, null, [b, a], record) };
 }
 
+/** Krampon Darbesi bu hücrede bir şey kırar mı? (kupa kırılmaz) */
+export function canHammer(s: GameState, i: number): boolean {
+  const c = s.cells[i];
+  if (!c || c.hole) return false;
+  if (c.crate > 0) return true;
+  if (!c.tile) return c.mud > 0;
+  return c.tile.kind !== "trophy";
+}
+
 /** Krampon Darbesi: tek hücreyi kırar (hamle harcamaz). */
 export function hammerCell(s: GameState, i: number, record = true): Step[] {
-  const c = s.cells[i];
-  if (!c || c.hole) return [];
-  if (!c.tile && c.crate === 0 && c.mud === 0) return [];
+  if (!canHammer(s, i)) return [];
   const p: Pending = { consumed: [], hitCells: [], blasts: [], convert: false, hammer: i };
   return resolve(s, p, [], record);
 }
