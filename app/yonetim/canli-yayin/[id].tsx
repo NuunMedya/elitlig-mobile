@@ -31,6 +31,8 @@ import { captureRef, releaseCapture } from "react-native-view-shot";
 
 import { BroadcastPanel, Btn } from "@/components/live/BroadcastPanel";
 import { PlayerPicker } from "@/components/live/PlayerPicker";
+import { ReplayPanel } from "@/components/live/ReplayPanel";
+import { useGoalClips, type LocalClip } from "@/components/live/useGoalClips";
 import { ScoreBug } from "@/components/live/ScoreBug";
 import { HALF_MS, PHASE_LABEL, useLiveMatch, type ControlAction, type LiveMatch } from "@/components/live/useLiveMatch";
 import { Touchable, useToast } from "@/components/ui";
@@ -56,7 +58,9 @@ import {
   LiveCameraView,
   isLiveAvailable,
   requestLivePermissions,
+  playReplay,
   setMuted as nativeSetMuted,
+  stopReplay,
   setOverlay,
   startStream,
   stopStream,
@@ -64,12 +68,13 @@ import {
   type LiveStats,
 } from "@/modules/elitlig-live";
 
-type Tab = "mac" | "olay" | "yayin" | "kamera";
+type Tab = "mac" | "olay" | "tekrar" | "yayin" | "kamera";
 type Side = "home" | "away";
 
 const TABS: { key: Tab; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
   { key: "mac", label: "Maç", icon: "football" },
   { key: "olay", label: "Olay", icon: "flag" },
+  { key: "tekrar", label: "Tekrar", icon: "repeat" },
   { key: "yayin", label: "Yayın", icon: "radio" },
   { key: "kamera", label: "Kamera", icon: "videocam" },
 ];
@@ -146,6 +151,13 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
   const [stats, setStats] = useState<LiveStats | null>(null);
   const [facing, setFacing] = useState<"back" | "front">("back");
   const [muted, setMutedState] = useState(false);
+  const toggleMic = useCallback(() => {
+    setMutedState((prev) => {
+      const next = !prev;
+      void nativeSetMuted(next).catch(() => undefined);
+      return next;
+    });
+  }, []);
   const [overlayOn, setOverlayOn] = useState(true);
   const [quality, setQuality] = useState<QualityKey>("720p");
   const [onAirSince, setOnAirSince] = useState<number | null>(null);
@@ -361,13 +373,15 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
 
   /* ───────── olay girişi ───────── */
   const [tab, setTab] = useState<Tab>("mac");
-  const [picker, setPicker] = useState<{ side: Side; code: string; title: string } | null>(null);
+  const [picker, setPicker] = useState<{ side: Side; code: string; title: string; clipKey: string | null } | null>(null);
   const [saving, setSaving] = useState(false);
+  const goalClips = useGoalClips(matchId);
 
   const record = async (side: Side, code: string, playerId: string | null) => {
     setSaving(true);
     try {
-      await live.addEvent({ side, code, playerId });
+      const created = await live.addEvent({ side, code, playerId });
+      if (picker?.clipKey) goalClips.attach(picker.clipKey, Number(created?.id) || null, live.nameOf(playerId), side, code);
       toast.show({ message: `${eventLabel(code)} kaydedildi (${live.minute}').`, tone: "success" });
       setPicker(null);
     } catch (error) {
@@ -377,12 +391,42 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
     }
   };
 
+  const cancelPicker = () => {
+    // Gol kaydedilmedi: klip (varsa) yalnız bu telefonda tekrar için kalır.
+    if (picker?.clipKey) goalClips.attach(picker.clipKey, null, null);
+    setPicker(null);
+  };
+
   const ask = (side: Side, code: string, title: string) => {
     if (live.status !== "canli") {
       Alert.alert("Maç canlı değil", "Olay girmek için önce Maç sekmesinden maçı başlat.");
       return;
     }
-    setPicker({ side, code, title });
+    // GOL: dokunuş anında yayının son 10 saniyesi klip olarak yazılır.
+    const isGoal = code.toUpperCase().startsWith("GOAL_");
+    const clipKey = isGoal && nativeReady && encoderOn ? goalClips.capture({ side, code, minute: live.minute }) : null;
+    setPicker({ side, code, title, clipKey });
+  };
+
+  /* ───────── tekrar (replay) ───────── */
+  const [replaying, setReplaying] = useState<LocalClip | null>(null);
+  const startReplay = async (clip: LocalClip | null) => {
+    if (!clip?.uri) {
+      toast.show({ message: "Tekrar için henüz kayıtlı gol klibi yok.", tone: "warn" });
+      return;
+    }
+    try {
+      setReplaying(clip);
+      // Yayının sağ üstüne modül "TEKRAR" rozetini çizer; skorbord bandı golü söyler.
+      await playReplay(clip.uri, { label: "TEKRAR" });
+    } catch (error) {
+      setReplaying(null);
+      toast.show({ message: liveErrorText(error, "Tekrar oynatılamadı."), tone: "danger" });
+    }
+  };
+  const endReplay = () => {
+    void stopReplay().catch(() => undefined);
+    setReplaying(null);
   };
 
   const runControl = async (action: ControlAction) => {
@@ -434,6 +478,9 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
                 facing={facing}
                 onStateChange={onState}
                 onStats={(e) => setStats(e.nativeEvent)}
+                onReplayStateChange={(e) => {
+                  if (!e.nativeEvent.playing) setReplaying(null);
+                }}
               />
             ) : (
               <View style={[StyleSheet.absoluteFill, styles.center, styles.noCam]}>
@@ -465,7 +512,15 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
                   clockMs={live.clockMs}
                   period={live.period}
                   finished={finished}
-                  event={live.bannerEvent}
+                  event={
+                    replaying
+                      ? {
+                          kind: "goal",
+                          label: replaying.code === "GOAL_OWN" ? "KENDİ KALESİNE" : "GOL",
+                          player: replaying.scorer ? replaying.scorer.toLocaleUpperCase("tr-TR") : null,
+                        }
+                      : live.bannerEvent
+                  }
                   scale={bugScale}
                 />
               </View>
@@ -492,11 +547,51 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
                   </Text>
                 </View>
               ) : null}
-              {muted ? (
-                <View style={[styles.pill, { backgroundColor: RIG.glass }]}>
-                  <Ionicons name="mic-off" size={11} color={RIG.text} />
+              {replaying ? (
+                <View style={[styles.pill, { backgroundColor: RIG.brand }]}>
+                  <Ionicons name="repeat" size={11} color={RIG.text} />
+                  <Text style={styles.pillText} allowFontScaling={false}>
+                    TEKRAR YAYINDA
+                  </Text>
                 </View>
               ) : null}
+            </View>
+
+            {/* Sahne üstü hızlı düğmeler: mikrofon ve tekrar (yayına gitmez) */}
+            <View style={styles.stageBar}>
+              <Touchable
+                style={[styles.stageBtn, muted && styles.stageBtnOff]}
+                onPress={toggleMic}
+                disabled={!nativeReady}
+                accessibilityLabel={muted ? "Mikrofonu aç" : "Mikrofonu kapat"}
+                haptic="medium"
+              >
+                <Ionicons name={muted ? "mic-off" : "mic"} size={20} color={RIG.text} />
+                <Text style={styles.stageBtnText} allowFontScaling={false}>
+                  {muted ? "SES KAPALI" : "SES AÇIK"}
+                </Text>
+              </Touchable>
+              {replaying ? (
+                <Touchable style={[styles.stageBtn, styles.stageBtnReplay]} onPress={endReplay} accessibilityLabel="Tekrarı durdur" haptic="medium">
+                  <Ionicons name="stop" size={18} color={RIG.text} />
+                  <Text style={styles.stageBtnText} allowFontScaling={false}>
+                    CANLIYA DÖN
+                  </Text>
+                </Touchable>
+              ) : (
+                <Touchable
+                  style={[styles.stageBtn, styles.stageBtnReplay, !goalClips.latest && styles.stageBtnDisabled]}
+                  onPress={() => void startReplay(goalClips.latest)}
+                  disabled={!nativeReady}
+                  accessibilityLabel="Son golün tekrarını yayına ver"
+                  haptic="medium"
+                >
+                  <Ionicons name="repeat" size={18} color={RIG.text} />
+                  <Text style={styles.stageBtnText} allowFontScaling={false}>
+                    TEKRAR
+                  </Text>
+                </Touchable>
+              )}
             </View>
           </View>
         </View>
@@ -508,6 +603,7 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
               <RailIcon icon="chevron-back" label="Rejiyi aç" onPress={() => setCollapsed(false)} />
               <RailIcon icon="add-circle" label="Ev sahibi gol" color={RIG.home} onPress={() => ask("home", "GOAL_RIGHT_FOOT", `${homeName} — golü atan`)} />
               <RailIcon icon="add-circle" label="Deplasman gol" color={RIG.away} onPress={() => ask("away", "GOAL_RIGHT_FOOT", `${awayName} — golü atan`)} />
+              <RailIcon icon={muted ? "mic-off" : "mic"} label={muted ? "Mikrofonu aç" : "Mikrofonu kapat"} color={muted ? RIG.live : RIG.text} onPress={toggleMic} />
               <RailIcon icon="camera-reverse" label="Kamerayı çevir" onPress={() => setFacing((f) => (f === "back" ? "front" : "back"))} />
               <RailIcon icon="close" label="Kapat" onPress={close} />
             </View>
@@ -549,6 +645,19 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
                   />
                 ) : tab === "olay" ? (
                   <EventPanel live={live} homeName={homeName} awayName={awayName} onAsk={ask} onToast={(m, ok) => toast.show({ message: m, tone: ok ? "success" : "danger" })} />
+                ) : tab === "tekrar" ? (
+                  <ReplayPanel
+                    clips={goalClips.clips}
+                    replayingKey={replaying?.key ?? null}
+                    nativeReady={nativeReady}
+                    encoderOn={encoderOn}
+                    homeName={homeName}
+                    awayName={awayName}
+                    onPlay={(clip) => void startReplay(clip)}
+                    onStop={endReplay}
+                    onRetry={goalClips.retry}
+                    onRemove={goalClips.remove}
+                  />
                 ) : tab === "yayin" ? (
                   <BroadcastPanel
                     config={config.data}
@@ -579,11 +688,7 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
                       icon={muted ? "mic" : "mic-off"}
                       tone="soft"
                       disabled={!nativeReady}
-                      onPress={() => {
-                        const next = !muted;
-                        setMutedState(next);
-                        void nativeSetMuted(next).catch(() => undefined);
-                      }}
+                      onPress={toggleMic}
                     />
                     <Btn
                       label={overlayOn ? "Skorbordu gizle" : "Skorbordu göster"}
@@ -634,7 +739,7 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
           accent={picker.side === "home" ? RIG.home : RIG.away}
           busy={saving}
           onPick={(playerId) => void record(picker.side, picker.code, playerId)}
-          onClose={() => setPicker(null)}
+          onClose={cancelPicker}
         />
       ) : null}
     </View>
@@ -902,6 +1007,22 @@ const styles = StyleSheet.create({
   pill: { flexDirection: "row", alignItems: "center", gap: space.xs, height: 22, paddingHorizontal: space.sm, borderRadius: radius.pill },
   pillDot: { width: 6, height: 6, borderRadius: radius.pill },
   pillText: { ...type.micro, color: RIG.text },
+  stageBar: { position: "absolute", left: space.sm, bottom: space.sm, flexDirection: "row", gap: space.sm },
+  stageBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+    height: 40,
+    paddingHorizontal: space.md,
+    borderRadius: radius.pill,
+    backgroundColor: RIG.glass,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: RIG.line,
+  },
+  stageBtnOff: { backgroundColor: RIG.live },
+  stageBtnReplay: { backgroundColor: RIG.brand },
+  stageBtnDisabled: { opacity: 0.5 },
+  stageBtnText: { ...type.micro, color: RIG.text },
 
   rail: { backgroundColor: RIG.panel, borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: RIG.line },
   collapsed: { flex: 1, alignItems: "center", justifyContent: "space-evenly", paddingVertical: space.sm },

@@ -12,6 +12,7 @@ import VideoToolbox
 final class LiveCameraView: ExpoView {
   let onStateChange = EventDispatcher()
   let onStats = EventDispatcher()
+  let onReplayStateChange = EventDispatcher()
 
   static let maxRetries = 5
 
@@ -42,6 +43,15 @@ final class LiveCameraView: ExpoView {
   // Overlay
   private let overlayObject = ImageScreenObject()
   private var overlayAdded = false
+
+  // Gol klibi (dönen segment kaydı) ve tekrar (replay)
+  private lazy var clipRecorder = ClipRecorder(outDir: ElitligLiveModule.clipsDirectory)
+  private var clipRecorderAttached = false
+  private var replayObject: AssetScreenObject?
+  private let replayLabelObject = ImageScreenObject()
+  private var replayLabelShown = false
+  private var replayUri: String?
+  private var replayTimer: Timer?
   private var overlaySource: CGImage?
   private var overlayFrame = CGRect(x: 0, y: 0, width: 1, height: 1)
 
@@ -102,6 +112,7 @@ final class LiveCameraView: ExpoView {
   /// Görünüm RN ağacından kaldırıldı: yayını ve kamerayı kapat.
   func release() {
     guard !released else { return }
+    stopReplay(emit: false)
     stop()
     released = true
     stream.attachCamera(nil, track: 0)
@@ -232,6 +243,7 @@ final class LiveCameraView: ExpoView {
     connection.connect(appUrl)
     UIApplication.shared.isIdleTimerDisabled = true
     startStatsTimer()
+    attachClipRecorder()
   }
 
   func stop() {
@@ -241,6 +253,7 @@ final class LiveCameraView: ExpoView {
     connected = false
     publishing = false
     stopStatsTimer()
+    detachClipRecorder()
     stream.close()
     connection.close()
     UIApplication.shared.isIdleTimerDisabled = false
@@ -378,6 +391,7 @@ final class LiveCameraView: ExpoView {
     connected = false
     publishing = false
     stopStatsTimer()
+    detachClipRecorder()
     stream.close()
     connection.close()
     UIApplication.shared.isIdleTimerDisabled = false
@@ -451,6 +465,7 @@ final class LiveCameraView: ExpoView {
       overlayObject.cgImage = nil
       return
     }
+    if overlayAdded && overlayObject.parent == nil { overlayAdded = false }
     let canvas = streamSize
     // floor: konum + boyut tuval dışına taşmasın (renderer sınır denetimi yapmaz).
     let left = (overlayFrame.origin.x * canvas.width).rounded(.down)
@@ -463,13 +478,153 @@ final class LiveCameraView: ExpoView {
     overlayObject.cgImage = scaled
     overlayObject.invalidateLayout()
     if !overlayAdded {
-      do {
-        try stream.screen.addChild(overlayObject)
-        overlayAdded = true
-      } catch {
-        NSLog("[ElitligLive] overlay addChild: \(error)")
-      }
+      overlayAdded = true
+      restackScreenObjects()
     }
+  }
+
+  /// Ekran nesnesi sırası: [kamera (HaishinKit iç nesnesi), tekrar videosu, tekrar etiketi, skorbord].
+  /// ScreenObjectContainer ekleme sırasına göre çizer; araya eklemek için üsttekiler çıkarılıp yeniden eklenir.
+  private func restackScreenObjects() {
+    let screen = stream.screen
+    screen.removeChild(overlayObject)
+    screen.removeChild(replayLabelObject)
+    if let replayObject { screen.removeChild(replayObject) }
+    do {
+      if let replayObject { try screen.addChild(replayObject) }
+      if replayLabelShown { try screen.addChild(replayLabelObject) }
+      if overlayAdded { try screen.addChild(overlayObject) }
+    } catch {
+      NSLog("[ElitligLive] restack: \(error)")
+    }
+  }
+
+  // MARK: - Tekrar (replay)
+
+  /// Klibi yayına ve önizlemeye tam kare oynatır (HaishinKit AssetScreenObject, gerçek zamanlı).
+  func playReplay(uri: String, label: String?) throws {
+    guard !released, cameraAttached else {
+      throw LiveCodedException(code: "ERR_REPLAY", message: "Kamera önizlemesi yok (önce önizleme ya da yayın başlamalı).")
+    }
+    let url: URL? = uri.hasPrefix("/") ? URL(fileURLWithPath: uri) : URL(string: uri)
+    guard let url, url.isFileURL, FileManager.default.fileExists(atPath: url.path) else {
+      throw LiveCodedException(code: "ERR_REPLAY", message: "Klip dosyası yok: \(uri)")
+    }
+    stopReplay(emit: false)
+    let object = AssetScreenObject()
+    object.videoGravity = .resizeAspectFill
+    object.size = .zero // tüm kareyi kapla
+    do {
+      try object.startReading(AVURLAsset(url: url))
+    } catch {
+      throw LiveCodedException(code: "ERR_REPLAY", message: "Klip okunamadı: \(error.localizedDescription)")
+    }
+    replayObject = object
+    if let label, !label.trimmingCharacters(in: .whitespaces).isEmpty, let image = LiveCameraView.renderLabel(label, canvasHeight: streamSize.height) {
+      replayLabelObject.cgImage = image
+      replayLabelObject.size = CGSize(width: image.width, height: image.height)
+      replayLabelObject.horizontalAlignment = .right
+      replayLabelObject.verticalAlignment = .top
+      replayLabelObject.layoutMargin = UIEdgeInsets(
+        top: (streamSize.height * 0.03).rounded(.down),
+        left: 0,
+        bottom: 0,
+        right: (streamSize.width * 0.02).rounded(.down)
+      )
+      replayLabelObject.invalidateLayout()
+      replayLabelShown = true
+    }
+    replayUri = uri
+    restackScreenObjects()
+    let timer = Timer(timeInterval: 0.2, repeats: true) { [weak self] _ in
+      guard let self, let object = self.replayObject else { return }
+      // AssetScreenObject son kareden sonra okuyucuyu kapatır → isReading false.
+      if !object.isReading { self.stopReplay() }
+    }
+    RunLoop.main.add(timer, forMode: .common)
+    replayTimer = timer
+    onReplayStateChange(["playing": true, "uri": uri])
+  }
+
+  func stopReplay(emit: Bool = true) {
+    replayTimer?.invalidate()
+    replayTimer = nil
+    let wasActive = replayObject != nil
+    if let object = replayObject {
+      object.cancelReading()
+      stream.screen.removeChild(object)
+    }
+    replayObject = nil
+    if replayLabelShown {
+      stream.screen.removeChild(replayLabelObject)
+      replayLabelShown = false
+      replayLabelObject.cgImage = nil
+    }
+    let uri = replayUri
+    replayUri = nil
+    if emit && wasActive {
+      var payload: [String: Any] = ["playing": false]
+      if let uri { payload["uri"] = uri }
+      onReplayStateChange(payload)
+    }
+  }
+
+  private static func renderLabel(_ text: String, canvasHeight: CGFloat) -> CGImage? {
+    let fontSize = max(18, (canvasHeight * 0.045).rounded())
+    let font = UIFont.boldSystemFont(ofSize: fontSize)
+    let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.white]
+    let textSize = (text as NSString).size(withAttributes: attrs)
+    let padH = (fontSize * 0.5).rounded()
+    let padV = (fontSize * 0.25).rounded()
+    let size = CGSize(width: (textSize.width + padH * 2).rounded(.up), height: (textSize.height + padV * 2).rounded(.up))
+    let format = UIGraphicsImageRendererFormat()
+    format.scale = 1 // piksel = nokta (yayın karesi pikseli)
+    format.opaque = false
+    let image = UIGraphicsImageRenderer(size: size, format: format).image { _ in
+      UIColor(red: 0.78, green: 0.06, blue: 0.18, alpha: 0.8).setFill()
+      UIBezierPath(roundedRect: CGRect(origin: .zero, size: size), cornerRadius: size.height / 4).fill()
+      (text as NSString).draw(at: CGPoint(x: padH, y: padV), withAttributes: attrs)
+    }
+    return image.cgImage
+  }
+
+  // MARK: - Gol klibi
+
+  private func attachClipRecorder() {
+    guard !clipRecorderAttached else { return }
+    clipRecorder.start()
+    stream.addObserver(clipRecorder)
+    clipRecorderAttached = true
+  }
+
+  private func detachClipRecorder() {
+    guard clipRecorderAttached else { return }
+    stream.removeObserver(clipRecorder)
+    clipRecorder.stop()
+    clipRecorderAttached = false
+  }
+
+  /// Yayın sürerken (live / reconnecting) son `seconds` saniyeyi MP4'e yazar.
+  func saveClip(
+    seconds: Double,
+    afterSeconds: Double,
+    completion: @escaping (Swift.Result<ClipRecorder.Result, ClipRecorder.Failure>) -> Void
+  ) {
+    guard isStreamingForClip else {
+      completion(.failure(.init(code: "NOT_STREAMING", message: "Klip yalnız yayın sürerken alınabilir.")))
+      return
+    }
+    DispatchQueue.main.asyncAfter(deadline: .now() + max(0, afterSeconds)) { [weak self] in
+      guard let self, self.isStreamingForClip else {
+        completion(.failure(.init(code: "NOT_STREAMING", message: "Yayın klip yazılmadan durdu.")))
+        return
+      }
+      self.clipRecorder.cut(seconds: seconds, completion: completion)
+    }
+  }
+
+  private var isStreamingForClip: Bool {
+    !released && !userStopped && clipRecorderAttached && (state == "live" || state == "reconnecting")
   }
 
   private static func scale(_ image: CGImage, width: Int, height: Int) -> CGImage? {

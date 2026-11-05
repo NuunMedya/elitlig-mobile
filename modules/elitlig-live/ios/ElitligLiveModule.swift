@@ -17,13 +17,39 @@ struct OverlayFrame: Record {
   @Field var height: Double = 1
 }
 
+struct SaveClipOptions: Record {
+  @Field var seconds: Double = 10
+  @Field var afterSeconds: Double = 0
+}
+
+struct ReplayOptions: Record {
+  @Field var label: String?
+  @Field var rate: Double = 1
+}
+
 final class LiveException: GenericException<String> {
   override var reason: String { param }
+}
+
+/// JS tarafında `error.code` olarak görünen kodla (ör. "NOT_STREAMING", "NO_BUFFER").
+final class LiveCodedException: GenericException<(code: String, message: String)> {
+  convenience init(code: String, message: String) {
+    self.init((code: code, message: message))
+  }
+
+  override var code: String { param.code }
+  override var reason: String { param.message }
 }
 
 public class ElitligLiveModule: Module {
   /// Tek seferde tek LiveCameraView varsayılır; modül fonksiyonları buna yönlenir.
   static weak var activeView: LiveCameraView?
+
+  /// cache/elitlig-clips — saveClip çıktıları.
+  static var clipsDirectory: URL {
+    let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+    return caches.appendingPathComponent("elitlig-clips", isDirectory: true)
+  }
 
   private static func requireView() throws -> LiveCameraView {
     guard let view = activeView else {
@@ -102,8 +128,65 @@ public class ElitligLiveModule: Module {
       }
     }
 
+    // MARK: Gol klibi / tekrar
+
+    AsyncFunction("saveClip") { (options: SaveClipOptions, promise: Promise) in
+      guard let view = ElitligLiveModule.activeView else {
+        promise.reject(LiveCodedException(code: "NOT_STREAMING", message: "Ekranda LiveCameraView yok."))
+        return
+      }
+      let seconds = min(max(options.seconds, 1), 13)
+      let after = min(max(options.afterSeconds, 0), 10)
+      view.saveClip(seconds: seconds, afterSeconds: after) { result in
+        switch result {
+        case .success(let clip):
+          promise.resolve([
+            "uri": clip.url.absoluteString,
+            "durationMs": clip.durationMs,
+            "width": clip.width,
+            "height": clip.height,
+            "sizeBytes": clip.sizeBytes
+          ])
+        case .failure(let failure):
+          promise.reject(LiveCodedException(code: failure.code, message: failure.message))
+        }
+      }
+    }.runOnQueue(.main)
+
+    // iOS: options.rate yok sayılır (AssetScreenObject gerçek zamanlı oynatır).
+    AsyncFunction("playReplay") { (uri: String, options: ReplayOptions) throws in
+      let view = try ElitligLiveModule.requireView()
+      try view.playReplay(uri: uri, label: options.label)
+    }.runOnQueue(.main)
+
+    AsyncFunction("stopReplay") { () -> Void in
+      if let view = ElitligLiveModule.activeView {
+        view.stopReplay()
+      }
+    }.runOnQueue(.main)
+
+    AsyncFunction("clearClips") { () -> Void in
+      let fm = FileManager.default
+      let dir = ElitligLiveModule.clipsDirectory
+      for url in (try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? [] {
+        try? fm.removeItem(at: url)
+      }
+    }
+
+    OnCreate {
+      // 24 saatten eski klipleri temizle.
+      let fm = FileManager.default
+      let cutoff = Date().addingTimeInterval(-24 * 3600)
+      let dir = ElitligLiveModule.clipsDirectory
+      let urls = (try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
+      for url in urls {
+        let date = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+        if let date, date < cutoff { try? fm.removeItem(at: url) }
+      }
+    }
+
     View(LiveCameraView.self) {
-      Events("onStateChange", "onStats")
+      Events("onStateChange", "onStats", "onReplayStateChange")
 
       Prop("facing") { (view: LiveCameraView, facing: String?) in
         view.setFacing(facing)

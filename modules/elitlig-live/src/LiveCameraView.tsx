@@ -17,7 +17,7 @@ const NativeLiveCameraView: React.ComponentType<LiveCameraViewProps> | null = Na
  */
 export function LiveCameraView(props: LiveCameraViewProps) {
   if (!NativeLiveCameraView) {
-    const { facing: _facing, onStateChange: _s, onStats: _t, style, ...rest } = props;
+    const { facing: _facing, onStateChange: _s, onStats: _t, onReplayStateChange: _r, style, ...rest } = props;
     return <View {...rest} style={[{ backgroundColor: "#000" }, style]} />;
   }
   return <NativeLiveCameraView facing="back" {...props} />;

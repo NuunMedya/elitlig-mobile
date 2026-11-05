@@ -63,6 +63,52 @@ Geçersiz URL, izin yok, kodlayıcı desteklemiyor, görünüm yok gibi durumlar
 Yeniden bağlanma en fazla 5 deneme yapar. Bekleme süresi artarak gider: 2, 4, 8, 16, 16 sn.
 Bağlantı başarılı olunca sayaç sıfırlanır.
 
+## Gol klibi ve tekrar (replay)
+
+```ts
+import { saveClip, playReplay, stopReplay, clearClips } from "@/modules/elitlig-live";
+
+// GOL: yayına gidenin son ~10 sn'si (kamera + gömülü skorbord + ses) → MP4
+const clip = await saveClip({ seconds: 10, afterSeconds: 2 });
+// { uri: "file:///…/cache/elitlig-clips/clip-<ts>.mp4", durationMs, width, height, sizeBytes }
+
+// Tekrar: klip yayına ve önizlemeye tam kare girer, skorbord üstte kalır, ses mikrofondan sürer.
+await playReplay(clip.uri, { label: "TEKRAR", rate: 0.5 /* yalnız Android */ });
+await stopReplay();     // ya da klip bitince kendiliğinden kameraya dönülür
+await clearClips();     // yüklemeler bitince / ekrandan çıkışta
+```
+
+`<LiveCameraView onReplayStateChange={(e) => e.nativeEvent /* { playing, uri? } */} />`
+
+`saveClip` hata kodları (`error.code`):
+- `NOT_STREAMING`: durum `live` / `reconnecting` değil.
+- `NO_BUFFER`: tamponda 1 sn'den az görüntü var.
+- `CLIP_WRITE_FAILED`: MP4 yazılamadı.
+
+`seconds` 1..13 aralığına, `afterSeconds` 0..10 aralığına kırpılır.
+`playReplay` önizleme sırasında da çalışır.
+Modül açılışında 24 saatten eski klipler silinir.
+
+**Android: yeniden kodlama yok.**
+- `ClipRingBuffer`, RootEncoder'ın `Camera2Base.setRecordController` kancasına takılır. Camera2Base her kodlanmış kareyi (kayıt yapılmasa da) `recordController.recordVideo/recordAudio`'ya verir.
+- Tampon kodlanmış H.264 + AAC örneklerini son 16 sn boyunca tutar (en fazla 24 MB).
+- `saveClip`, (şimdi − seconds) anındaki ya da ondan önceki son anahtar kareden başlar. MediaMuxer ile MP4 yazar ve zaman damgalarını 0'a çeker.
+- Klip anahtar karede başladığı için istenenden en fazla ~2 sn uzun olabilir. faststart (moov başta) yok.
+- Tekrar: `SurfaceFilterRender` (OES dokusu) + sessiz `MediaPlayer`. Filtre zinciri şöyle: `[tekrar videosu, etiket, skorbord]`.
+- GL yeniden başlarsa tekrar durur: arka plana geçiş, yayın başlangıcında çözünürlük değişimi gibi.
+
+**iOS: segmentli yeniden kodlama.**
+- HaishinKit 1.9.9 kodlanmış örnekleri dışarı vermiyor. `IOStreamObserver` yalnız bileşik ham kare + PCM alıyor.
+- `ClipRecorder`, yayın sürerken bu kareleri AVAssetWriter ile 2 sn'lik MP4 segmentlerine yazar (H.264 3 Mbps, AAC 128 kbps). Son 8 segment tutulur.
+- `saveClip` açık segmenti kapatır ve gereken son segmentleri AVMutableComposition ile birleştirir. AVAssetExportSession passthrough ile dışa aktarır; faststart açık.
+- Klip segment sınırında başlar: 10–12 sn.
+- İkinci bir donanım kodlayıcı çalıştığı için ısınma ve pil kullanımı artar.
+- Tekrar: HaishinKit `AssetScreenObject` ile gerçek zamanlı oynatılır. `rate` (ağır çekim) iOS'ta yok sayılır.
+
+Ortak notlar:
+- Klip, o anda **yayınlanan** görüntüdür. O andaki skorbord ve varsa o sırada oynayan tekrar da klibin içindedir.
+- Tekrar sırasında güncel skorbord, klipteki eski skorbordun üstüne çizilir. Konum aynıysa eskisini örter.
+
 ## Kurulum (app.json)
 
 ```jsonc

@@ -5,7 +5,12 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
 import android.graphics.RectF
+import android.graphics.Typeface
+import android.media.MediaPlayer
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -14,6 +19,7 @@ import android.view.ViewGroup
 import androidx.core.content.ContextCompat
 import com.pedro.common.ConnectChecker
 import com.pedro.encoder.input.gl.render.filters.`object`.ImageObjectFilterRender
+import com.pedro.encoder.input.gl.render.filters.`object`.SurfaceFilterRender
 import com.pedro.encoder.input.video.CameraCallbacks
 import com.pedro.encoder.input.video.CameraHelper
 import com.pedro.encoder.utils.gl.AspectRatioMode
@@ -22,6 +28,8 @@ import com.pedro.library.view.OpenGlView
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
+import java.io.File
+import java.util.concurrent.Executors
 
 /**
  * Kamera önizlemesi + RTMP yayıncısı. Tek seferde tek bir örnek varsayılır;
@@ -43,10 +51,13 @@ class LiveCameraView(context: Context, appContext: AppContext) :
     const val MAX_RETRIES = 5
     private const val AUDIO_SAMPLE_RATE = 44100
     private const val KEYFRAME_INTERVAL_SEC = 2
+    /** MP4 yazımı için tek arka plan iş parçacığı (görünümler arasında paylaşılır). */
+    private val clipExecutor = Executors.newSingleThreadExecutor()
   }
 
   private val onStateChange by EventDispatcher()
   private val onStats by EventDispatcher()
+  private val onReplayStateChange by EventDispatcher()
 
   override val shouldUseAndroidLayout: Boolean = true
 
@@ -80,6 +91,16 @@ class LiveCameraView(context: Context, appContext: AppContext) :
   private var overlayFilter: ImageObjectFilterRender? = null
   /** GL arayüzü yeniden başladıysa (filtre listesi boşalır) yeni filtre gerekir. */
   private var overlayNeedsNewFilter = true
+
+  // Gol klibi: kodlanmış örneklerin halka tamponu (yeniden kodlama yok).
+  private val clipBuffer = ClipRingBuffer()
+  private val clipHandler = Handler(Looper.getMainLooper())
+
+  // Tekrar (replay): filtre zinciri = [replay video, replay etiketi?, skorbord overlay?]
+  private var replayPlayer: MediaPlayer? = null
+  private var replayFilter: SurfaceFilterRender? = null
+  private var replayLabelFilter: ImageObjectFilterRender? = null
+  private var replayUri: String? = null
 
   init {
     glView.setAspectRatioMode(AspectRatioMode.Fill)
@@ -119,6 +140,7 @@ class LiveCameraView(context: Context, appContext: AppContext) :
       }
     })
     camera.getStreamClient().setReTries(MAX_RETRIES)
+    camera.setRecordController(clipBuffer)
 
     ElitligLiveModule.setActiveView(this)
   }
@@ -158,7 +180,7 @@ class LiveCameraView(context: Context, appContext: AppContext) :
         Log.e(TAG, "replaceView(glView) failed", e)
       }
       offscreen = false
-      overlayNeedsNewFilter = true
+      markGlCleared()
       if (wasStreaming) {
         applyOverlayToGl()
         keepScreenOn = true
@@ -169,6 +191,7 @@ class LiveCameraView(context: Context, appContext: AppContext) :
     if (!camera.isStreaming && camera.isOnPreview && desiredRotation() != rotation) {
       // Ekran döndü (yatay ↔ ters yatay): önizlemeyi yeni açıyla yeniden başlat.
       camera.stopPreview()
+      markGlCleared()
     }
     startPreviewIfPossible()
   }
@@ -182,15 +205,16 @@ class LiveCameraView(context: Context, appContext: AppContext) :
       try {
         camera.replaceView(context)
         offscreen = true
-        overlayNeedsNewFilter = true
-        applyOverlayToGl()
+        onGlRestarted()
         emitState("reconnecting", "app_background")
       } catch (e: Exception) {
         Log.e(TAG, "replaceView(context) failed", e)
       }
     } else if (camera.isOnPreview) {
       camera.stopPreview()
-      overlayNeedsNewFilter = true
+      markGlCleared()
+    } else {
+      markGlCleared()
     }
   }
 
@@ -221,8 +245,7 @@ class LiveCameraView(context: Context, appContext: AppContext) :
     try {
       rotation = desiredRotation()
       camera.startPreview(facing, streamWidth, streamHeight, streamFps, rotation)
-      overlayNeedsNewFilter = true
-      applyOverlayToGl()
+      onGlRestarted()
       if (muted) camera.disableAudio()
       emitState("previewing")
     } catch (e: Exception) {
@@ -247,10 +270,14 @@ class LiveCameraView(context: Context, appContext: AppContext) :
     videoKbps = videoBitrateKbps
     audioKbps = audioBitrateKbps
     rotation = if (camera.isOnPreview) rotation else desiredRotation()
+    val wasPreview = camera.isOnPreview
 
     // prepareVideo çözünürlük/fps/açı değişirse önizlemeyi durdurur; startStream
     // GL'i ve kamerayı yeniden açar (filtreler sıfırlanır → overlay yeniden uygulanır).
     val videoOk = camera.prepareVideo(width, height, fps, videoBitrateKbps * 1000, KEYFRAME_INTERVAL_SEC, rotation)
+    // prepareVideo ayar farkında önizlemeyi durdurur → GL (ve filtreler) startStream'de yeniden kurulur.
+    val glRestarts = !(wasPreview && camera.isOnPreview)
+    if (glRestarts) markGlCleared()
     if (!videoOk) throw IllegalStateException("H.264 kodlayıcı bu ayarları desteklemiyor (${width}x$height@$fps).")
     // Maç ortamı: yankı/gürültü bastırma kapalı (seyirci sesi bozulmasın).
     val audioOk = camera.prepareAudio(audioBitrateKbps * 1000, AUDIO_SAMPLE_RATE, true, false, false)
@@ -261,10 +288,10 @@ class LiveCameraView(context: Context, appContext: AppContext) :
     attempts = 0
     camera.getStreamClient().setReTries(MAX_RETRIES)
     emitState("connecting")
+    clipBuffer.clear()
     camera.startStream(url)
     if (muted) camera.disableAudio() else camera.enableAudio()
-    overlayNeedsNewFilter = true
-    applyOverlayToGl()
+    if (glRestarts) applyOverlayToGl()
     keepScreenOn = true
   }
 
@@ -288,6 +315,7 @@ class LiveCameraView(context: Context, appContext: AppContext) :
     facing = camera.cameraFacing
   }
 
+  /** Anında etkili (mikrofon verisi sıfırlanır); yeniden bağlanma ve tekrar boyunca korunur. */
   fun setMutedNow(value: Boolean) {
     muted = value
     if (value) camera.disableAudio() else camera.enableAudio()
@@ -303,23 +331,39 @@ class LiveCameraView(context: Context, appContext: AppContext) :
     applyOverlayToGl()
   }
 
+  /**
+   * GL arayüzü durdu/değişti: MainRender.release() filtre listesini boşalttı.
+   * Referansları bırak (eski filtreler için kaldırma eylemi KUYRUKLANMAZ — serbest
+   * bırakılmış GL nesnelerini ikinci kez silmemek için). Tekrar varsa durur.
+   */
+  private fun markGlCleared() {
+    if (replayFilter != null || replayPlayer != null) stopReplayInternal(glCleared = true)
+    overlayFilter = null
+    overlayNeedsNewFilter = true
+  }
+
+  /** GL yeni başladı (filtre listesi boş): overlay'i yeniden kur. */
+  private fun onGlRestarted() {
+    markGlCleared()
+    applyOverlayToGl()
+  }
+
   private fun applyOverlayToGl() {
     val gl = camera.getGlInterface()
     val bmp = overlayBitmap
+    if (overlayNeedsNewFilter) overlayFilter = null
+    val existing = overlayFilter
     if (bmp == null) {
-      if (overlayFilter != null || overlayNeedsNewFilter) {
-        gl.clearFilters()
-        overlayFilter = null
-        overlayNeedsNewFilter = false
-      }
+      if (existing != null) gl.removeFilter(existing)
+      overlayFilter = null
+      overlayNeedsNewFilter = false
       return
     }
     val scaleX = overlayFrame.width() * 100f
     val scaleY = overlayFrame.height() * 100f
     val posX = overlayFrame.left * 100f
     val posY = overlayFrame.top * 100f
-    val existing = overlayFilter
-    if (existing != null && !overlayNeedsNewFilter) {
+    if (existing != null) {
       // Aynı GL oturumu: dokuyu ve konumu yerinde güncelle (shader yeniden derlenmez).
       existing.setImage(bmp)
       existing.setScale(scaleX, scaleY) // önce ölçek (Sprite.scale konumu yeniden ölçekler)
@@ -330,11 +374,188 @@ class LiveCameraView(context: Context, appContext: AppContext) :
     filter.setImage(bmp)
     filter.setScale(scaleX, scaleY)
     filter.setPosition(posX, posY)
-    // setFilter: liste boşsa ekler, doluysa 0. filtrenin yerine koyar.
-    gl.setFilter(filter)
+    // Sona ekle: overlay her zaman zincirin en üstünde (tekrar videosunun üstünde) kalır.
+    gl.addFilter(filter)
     overlayFilter = filter
     overlayNeedsNewFilter = false
   }
+
+  // ---------------------------------------------------------------------------
+  // Tekrar (replay) — klip, yayına ve önizlemeye tam kare olarak girer
+
+  val isReplaying: Boolean
+    get() = replayFilter != null
+
+  @Throws(Exception::class)
+  fun playReplay(uri: String, path: String, label: String?, rate: Float) {
+    if (released) throw IllegalStateException("Görünüm kaldırıldı.")
+    if (!camera.isOnPreview && !camera.isStreaming) {
+      throw IllegalStateException("Kamera önizlemesi yok (önce önizleme ya da yayın başlamalı).")
+    }
+    if (!File(path).isFile) throw IllegalArgumentException("Klip dosyası yok: $path")
+    if (replayFilter != null) stopReplayInternal(glCleared = false, emit = false)
+
+    val gl = camera.getGlInterface()
+    var created: SurfaceFilterRender? = null
+    val filter = SurfaceFilterRender { _ ->
+      // initGl sonrası ana iş parçacığında: yüzey hazır → oynatıcıyı başlat.
+      val f = created
+      if (f != null && replayFilter === f) startReplayPlayer(f, path, rate)
+    }
+    created = filter
+    filter.setScale(100f, 100f)
+    filter.setPosition(0f, 0f)
+    // Zincirin başına: kamera görüntüsünün üstünde, etiket ve skorbordun altında.
+    gl.addFilter(0, filter)
+    replayFilter = filter
+    if (!label.isNullOrBlank()) {
+      val bmp = renderLabel(label)
+      val hPct = 7f
+      val wPct = hPct * (bmp.width.toFloat() / bmp.height) * (streamHeight.toFloat() / streamWidth)
+      val lf = ImageObjectFilterRender()
+      lf.setImage(bmp)
+      lf.setScale(wPct, hPct)
+      lf.setPosition(100f - wPct - 2f, 3f)
+      gl.addFilter(1, lf)
+      replayLabelFilter = lf
+    }
+    replayUri = uri
+    emitReplay(true, uri)
+  }
+
+  private fun startReplayPlayer(filter: SurfaceFilterRender, path: String, rate: Float) {
+    val surface = filter.getSurface() ?: run {
+      stopReplay()
+      return
+    }
+    try {
+      val mp = MediaPlayer()
+      replayPlayer = mp
+      mp.setDataSource(path)
+      mp.setSurface(surface)
+      mp.setVolume(0f, 0f) // klip sesi karışmaz; yayın sesi mikrofondan sürer
+      mp.isLooping = false
+      mp.setOnPreparedListener { p ->
+        if (replayPlayer !== p) return@setOnPreparedListener
+        try {
+          if (rate != 1f) p.playbackParams = p.playbackParams.setSpeed(rate)
+        } catch (e: Exception) {
+          Log.w(TAG, "replay rate unsupported", e)
+        }
+        p.start()
+      }
+      mp.setOnCompletionListener { p -> if (replayPlayer === p) stopReplay() }
+      mp.setOnErrorListener { p, what, extra ->
+        Log.e(TAG, "replay error $what/$extra")
+        if (replayPlayer === p) stopReplay()
+        true
+      }
+      mp.prepareAsync()
+    } catch (e: Exception) {
+      Log.e(TAG, "replay start failed", e)
+      stopReplay()
+    }
+  }
+
+  fun stopReplay() {
+    stopReplayInternal(glCleared = false)
+  }
+
+  private fun stopReplayInternal(glCleared: Boolean, emit: Boolean = true) {
+    val wasActive = replayFilter != null || replayPlayer != null
+    val p = replayPlayer
+    replayPlayer = null
+    if (p != null) {
+      try {
+        p.stop()
+      } catch (_: Exception) {
+      }
+      try {
+        p.release()
+      } catch (_: Exception) {
+      }
+    }
+    if (!glCleared) {
+      val gl = camera.getGlInterface()
+      replayLabelFilter?.let { gl.removeFilter(it) }
+      replayFilter?.let { gl.removeFilter(it) }
+    }
+    replayFilter = null
+    replayLabelFilter = null
+    val uri = replayUri
+    replayUri = null
+    if (emit && wasActive) emitReplay(false, uri)
+  }
+
+  private fun renderLabel(text: String): Bitmap {
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+      color = Color.WHITE
+      textSize = 56f
+      typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+    }
+    val padH = 28f
+    val padV = 14f
+    val textW = paint.measureText(text)
+    val fm = paint.fontMetrics
+    val w = (textW + padH * 2).toInt().coerceAtLeast(1)
+    val h = (fm.descent - fm.ascent + padV * 2).toInt().coerceAtLeast(1)
+    val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+    val c = Canvas(bmp)
+    val bg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(200, 200, 16, 46) }
+    c.drawRoundRect(RectF(0f, 0f, w.toFloat(), h.toFloat()), h / 4f, h / 4f, bg)
+    c.drawText(text, padH, padV - fm.ascent, paint)
+    return bmp
+  }
+
+  private fun emitReplay(playing: Boolean, uri: String?) {
+    val payload = HashMap<String, Any>()
+    payload["playing"] = playing
+    if (uri != null) payload["uri"] = uri
+    if (Looper.myLooper() == Looper.getMainLooper()) {
+      if (!released) onReplayStateChange(payload)
+    } else {
+      main.post { if (!released) onReplayStateChange(payload) }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Gol klibi
+
+  /**
+   * Yayın sürerken son [seconds] saniyeyi MP4'e yazar ([afterSeconds] sonra).
+   * Sonuç [onDone] ile (ana iş parçacığında değil) bildirilir.
+   */
+  fun saveClip(
+    seconds: Double,
+    afterSeconds: Double,
+    outDir: File,
+    onDone: (ClipRingBuffer.Clip?, ClipRingBuffer.ClipException?) -> Unit
+  ) {
+    if (!isStreamingForClip()) {
+      onDone(null, ClipRingBuffer.ClipException("NOT_STREAMING", "Klip yalnız yayın sürerken alınabilir."))
+      return
+    }
+    val delayMs = (afterSeconds * 1000).toLong().coerceIn(0L, 10_000L)
+    clipHandler.postDelayed({
+      if (released || !camera.isStreaming) {
+        onDone(null, ClipRingBuffer.ClipException("NOT_STREAMING", "Yayın klip yazılmadan durdu."))
+        return@postDelayed
+      }
+      val file = File(outDir, "clip-${System.currentTimeMillis()}.mp4")
+      clipExecutor.execute {
+        try {
+          onDone(clipBuffer.writeClip(seconds, file), null)
+        } catch (e: ClipRingBuffer.ClipException) {
+          onDone(null, e)
+        } catch (e: Exception) {
+          onDone(null, ClipRingBuffer.ClipException("CLIP_WRITE_FAILED", e.message ?: "Klip yazılamadı."))
+        }
+      }
+    }, delayMs)
+  }
+
+  private fun isStreamingForClip(): Boolean =
+    !released && camera.isStreaming && !userStopped && (state == "live" || state == "reconnecting")
 
   // ---------------------------------------------------------------------------
   // ConnectChecker
@@ -429,6 +650,8 @@ class LiveCameraView(context: Context, appContext: AppContext) :
     } catch (e: Exception) {
       Log.e(TAG, "stopCamera on release failed", e)
     }
+    stopReplayInternal(glCleared = true, emit = false)
+    // Bekleyen saveClip çağrıları iptal edilmez: çalışınca `released` görüp NOT_STREAMING ile döner.
     released = true
     keepScreenOn = false
     glView.holder.removeCallback(this)

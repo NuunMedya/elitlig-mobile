@@ -4,6 +4,9 @@ import { Platform } from "react-native";
 import type {
   ElitligLiveNativeModule,
   OverlayFrame,
+  ReplayOptions,
+  SaveClipOptions,
+  SavedClip,
   StartStreamOptions,
 } from "./ElitligLive.types";
 
@@ -92,4 +95,52 @@ export async function setOverlay(uri: string | null, frame?: OverlayFrame): Prom
     height: clamp01(f.height),
   };
   return NativeLive.setOverlay(uri, clean);
+}
+
+/** Yerel modül yoksa NOT_STREAMING koduyla reddedilen hata. */
+function notAvailable(): Error & { code: string } {
+  const e = new Error("ElitligLive yerel modülü bu derlemede yok.") as Error & { code: string };
+  e.code = "NOT_STREAMING";
+  return e;
+}
+
+/**
+ * Yayına gidenin (kamera + gömülü skorbord + ses) son `seconds` saniyesini MP4 yapar.
+ * Yeniden kodlama yok (Android); klip (şimdi − seconds) anındaki ya da ondan önceki
+ * anahtar kareden başlar, bu yüzden en fazla ~2 sn daha uzun olabilir.
+ * Hata kodları (error.code): "NOT_STREAMING" (yayın live/reconnecting değil),
+ * "NO_BUFFER" (tamponda < 1 sn), "CLIP_WRITE_FAILED".
+ */
+export async function saveClip(options?: SaveClipOptions): Promise<SavedClip> {
+  if (!NativeLive) throw notAvailable();
+  const seconds = Number.isFinite(options?.seconds) ? Number(options?.seconds) : 10;
+  const afterSeconds = Number.isFinite(options?.afterSeconds) ? Number(options?.afterSeconds) : 0;
+  return NativeLive.saveClip({
+    seconds: Math.min(13, Math.max(1, seconds)),
+    afterSeconds: Math.min(10, Math.max(0, afterSeconds)),
+  });
+}
+
+/**
+ * Klibi yayına ve önizlemeye tam kare oynatır (kamera görüntüsünün yerine);
+ * skorbord overlay'i üstte kalır, ses mikrofondan sürer. Bitince ya da
+ * stopReplay ile kamera görüntüsüne dönülür. Önizleme sırasında da çalışır.
+ */
+export async function playReplay(uri: string, options?: ReplayOptions): Promise<void> {
+  const rate = Number.isFinite(options?.rate) ? Number(options?.rate) : 1;
+  return native().playReplay(uri, {
+    label: options?.label ?? null,
+    rate: Math.min(2, Math.max(0.25, rate)),
+  });
+}
+
+export async function stopReplay(): Promise<void> {
+  if (!NativeLive) return;
+  return NativeLive.stopReplay();
+}
+
+/** cache/elitlig-clips dizinindeki tüm klipleri siler. */
+export async function clearClips(): Promise<void> {
+  if (!NativeLive) return;
+  return NativeLive.clearClips();
 }

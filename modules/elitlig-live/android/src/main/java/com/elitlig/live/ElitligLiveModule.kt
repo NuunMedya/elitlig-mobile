@@ -31,6 +31,16 @@ class OverlayFrameRecord : Record {
   @Field val height: Double = 1.0
 }
 
+class SaveClipOptions : Record {
+  @Field val seconds: Double = 10.0
+  @Field val afterSeconds: Double = 0.0
+}
+
+class ReplayOptions : Record {
+  @Field val label: String? = null
+  @Field val rate: Double = 1.0
+}
+
 class LiveException(code: String, message: String, cause: Throwable? = null) :
   CodedException(code, message, cause)
 
@@ -144,7 +154,7 @@ class ElitligLiveModule : Module() {
     }
 
     View(LiveCameraView::class) {
-      Events("onStateChange", "onStats")
+      Events("onStateChange", "onStats", "onReplayStateChange")
 
       Prop("facing") { view: LiveCameraView, facing: String? ->
         view.setFacing(facing)
@@ -155,9 +165,74 @@ class ElitligLiveModule : Module() {
       }
     }
 
+    // ---- Gol klibi / tekrar ----
+
+    AsyncFunction("saveClip") { options: SaveClipOptions, promise: Promise ->
+      val view = activeView
+      if (view == null) {
+        promise.reject(LiveException("NOT_STREAMING", "Ekranda LiveCameraView yok."))
+        return@AsyncFunction
+      }
+      val seconds = options.seconds.coerceIn(1.0, 13.0)
+      val after = options.afterSeconds.coerceIn(0.0, 10.0)
+      view.saveClip(seconds, after, clipsDir()) { clip, error ->
+        if (clip != null) {
+          promise.resolve(
+            mapOf(
+              "uri" to Uri.fromFile(clip.file).toString(),
+              "durationMs" to clip.durationMs.toDouble(),
+              "width" to clip.width.toDouble(),
+              "height" to clip.height.toDouble(),
+              "sizeBytes" to clip.sizeBytes.toDouble()
+            )
+          )
+        } else {
+          val e = error ?: ClipRingBuffer.ClipException("CLIP_WRITE_FAILED", "Klip yazılamadı.")
+          promise.reject(LiveException(e.code, e.message ?: e.code))
+        }
+      }
+    }.runOnQueue(Queues.MAIN)
+
+    AsyncFunction("playReplay") { uri: String, options: ReplayOptions ->
+      val view = requireView()
+      val path = Uri.parse(uri).let { if (it.scheme == null || it.scheme == "file") it.path ?: uri else null }
+        ?: throw LiveException("ERR_REPLAY", "Yalnız file:// klipler oynatılabilir: $uri")
+      try {
+        view.playReplay(uri, path, options.label, options.rate.toFloat().coerceIn(0.25f, 2f))
+      } catch (e: CodedException) {
+        throw e
+      } catch (e: Exception) {
+        throw LiveException("ERR_REPLAY", e.message ?: "Tekrar oynatılamadı.", e)
+      }
+    }.runOnQueue(Queues.MAIN)
+
+    AsyncFunction("stopReplay") {
+      activeView?.stopReplay()
+      Unit
+    }.runOnQueue(Queues.MAIN)
+
+    AsyncFunction("clearClips") {
+      clipsDir().listFiles()?.forEach { it.delete() }
+      Unit
+    }
+
+    OnCreate {
+      // 24 saatten eski klipleri temizle.
+      val cutoff = System.currentTimeMillis() - 24L * 3600 * 1000
+      try {
+        clipsDir().listFiles()?.forEach { if (it.lastModified() < cutoff) it.delete() }
+      } catch (_: Exception) {
+      }
+    }
+
     OnDestroy {
       activeView?.release()
     }
+  }
+
+  private fun clipsDir(): File {
+    val ctx = appContext.reactContext ?: throw LiveException("ERR_CONTEXT", "context yok")
+    return File(ctx.cacheDir, "elitlig-clips").apply { mkdirs() }
   }
 
   private fun decodeBitmap(uriString: String): Bitmap? {

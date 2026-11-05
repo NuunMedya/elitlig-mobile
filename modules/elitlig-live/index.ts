@@ -6,6 +6,9 @@ export type {
   LiveCameraViewProps,
   StartStreamOptions,
   OverlayFrame,
+  SaveClipOptions,
+  SavedClip,
+  ReplayOptions,
 } from "./src/ElitligLive.types";
 
 export {
@@ -16,6 +19,10 @@ export {
   switchCamera,
   setMuted,
   setOverlay,
+  saveClip,
+  playReplay,
+  stopReplay,
+  clearClips,
 } from "./src/ElitligLive";
 
 export { LiveCameraView } from "./src/LiveCameraView";

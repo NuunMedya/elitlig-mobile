@@ -48,13 +48,15 @@ export interface ClipFile {
 
 export function uploadGoalClip(matchId: number, eventId: number, clip: ClipFile) {
   const form = new FormData();
-  // RN fetch dosya nesnesini { uri, name, type } üçlüsüyle tanır.
-  form.append("file", { uri: clip.uri, name: `gol-${matchId}-${eventId}.mp4`, type: "video/mp4" } as unknown as Blob);
+  // Alanlar dosyadan ÖNCE: sunucu nesne anahtarına olay kimliğini yazar.
   form.append("event_id", String(eventId));
   form.append("duration_ms", String(Math.round(clip.durationMs)));
   form.append("width", String(clip.width));
   form.append("height", String(clip.height));
-  return post<GoalClip>(`/api/admin/live-streams/matches/${matchId}/clips`, form, { timeout: 180_000 });
+  // RN fetch dosya nesnesini { uri, name, type } üçlüsüyle tanır.
+  form.append("file", { uri: clip.uri, name: `gol-${matchId}-${eventId}.mp4`, type: "video/mp4" } as unknown as Blob);
+  // event_id sorguda da: olay, dosya depoya yazılmadan önce doğrulanır.
+  return post<GoalClip>(`/api/admin/live-streams/matches/${matchId}/clips?event_id=${eventId}`, form, { timeout: 180_000 });
 }
 
 export const updateGoalClip = (clipId: number, body: { player_id?: number | null; hidden?: boolean }) =>
