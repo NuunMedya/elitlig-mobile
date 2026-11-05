@@ -26,6 +26,9 @@ export type Fx =
   | { id: number; kind: "burst"; at: Pt; delay: number }
   | { id: number; kind: "text"; at: Pt; text: string; tone: "win" | "warn" | "danger" | "gold"; big: boolean; delay: number };
 
+/** Kimliksiz efekt (birleşim üyelerine dağıtılmış Omit). */
+export type FxInput = Fx extends infer T ? (T extends Fx ? Omit<T, "id"> : never) : never;
+
 type Done = (id: number) => void;
 
 function useRun(duration: number, delay: number, onDone: () => void, easing = Easing.out(Easing.cubic)) {
@@ -34,7 +37,9 @@ function useRun(duration: number, delay: number, onDone: () => void, easing = Ea
   done.current = onDone;
   useEffect(() => {
     const anim = Animated.timing(t, { toValue: 1, duration, delay, easing, useNativeDriver: true });
-    anim.start(() => done.current());
+    anim.start(({ finished }) => {
+      if (finished) done.current();
+    });
     return () => anim.stop();
   }, [t, duration, delay, easing]);
   return t;

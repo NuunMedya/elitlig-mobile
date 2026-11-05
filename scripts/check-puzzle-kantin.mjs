@@ -17,6 +17,7 @@
 import {
   KANTIN_HOLD_CAP,
   KANTIN_PRODUCTS,
+  buildKantinLevel,
   canTake,
   initialState,
   kantinItemCount,
@@ -114,11 +115,8 @@ for (let L = 1; L <= COUNT; L += 1) {
     continue;
   }
 
-  // 1. Belirlenimcilik: önbellek dışı ikinci üretim yerine yapının izi
-  //    karşılaştırılır (önbellek aynı nesneyi döndürür; tohum yeterli kanıt
-  //    değil, bu yüzden içerik izi tutulur).
-  const sig = JSON.stringify([level.seed, level.orders, level.stacks]);
-  if (sig !== JSON.stringify([kantinLevel(L).seed, kantinLevel(L).orders, kantinLevel(L).stacks])) fail(L, "belirlenimci değil");
+  // 1. Belirlenimcilik: önbelleksiz ikinci üretim birebir aynı olmalı.
+  if (JSON.stringify(level) !== JSON.stringify(buildKantinLevel(L))) fail(L, "belirlenimci değil");
 
   // 2. Yapı.
   const need = new Map();
@@ -235,14 +233,14 @@ for (let L = 1; L <= COUNT; L += 1) {
 
 const f1 = (x) => x.toFixed(1);
 console.log(`Stadyum Kantini — ${COUNT} seviye, ${((Date.now() - t0) / 1000).toFixed(1)} sn, çözücü düğümü ${totalNodes}`);
-console.log("aralık    | sipariş | hamle(ürün) | tabak | tanık tepe (en çok) | çözücü en düşük tepe | tezgâha giden | aceleci kaybı | süreli | VIP | kilit | koli");
+console.log("aralık    | sipariş | hamle(ürün) | tabak | tanık tepe (en çok) | çözücü en düşük tepe | çözücü yolunda tezgâha giden | aceleci kaybı | süreli | VIP | kilit | koli");
 for (const [key, b] of buckets) {
   console.log(
-    `${key} | ${f1(b.orders / b.n).padStart(7)} | ${f1(b.items / b.n).padStart(11)} | ${f1(b.plates / b.n).padStart(5)} | ${f1(b.wPeak / b.n).padStart(14)} (${b.maxPeak}) | ${f1(b.minPeak / b.n).padStart(20)} | ${f1(b.holdMoves / b.n).padStart(13)} | ${(100 * b.diff / b.n).toFixed(0).padStart(12)}% | ${String(b.timed).padStart(6)} | ${String(b.vip).padStart(3)} | ${String(b.locks).padStart(5)} | ${String(b.crates).padStart(4)}`,
+    `${key} | ${f1(b.orders / b.n).padStart(7)} | ${f1(b.items / b.n).padStart(11)} | ${f1(b.plates / b.n).padStart(5)} | ${f1(b.wPeak / b.n).padStart(14)} (${b.maxPeak}) | ${f1(b.minPeak / b.n).padStart(20)} | ${f1(b.holdMoves / b.n).padStart(28)} | ${(100 * b.diff / b.n).toFixed(0).padStart(12)}% | ${String(b.timed).padStart(6)} | ${String(b.vip).padStart(3)} | ${String(b.locks).padStart(5)} | ${String(b.crates).padStart(4)}`,
   );
 }
 console.log(`mekanik ilk görülme: çoklu tabak ${intro.plates2}, süre ${intro.timed}, VIP ${intro.vip}, kilit ${intro.lock}, iki kat ${intro.crate}, kupa ${intro.cup}`);
-console.log(`güvenli kuruluma düşen seviye: ${fallbacks}; en düşük tepesi bütçe içinde kesinleşmeyen: ${inexact}`);
+console.log(`zorluk bandını tutturamayıp banda en yakın denemeyi alan seviye: ${fallbacks}; en düşük tepesi bütçe içinde kesinleşmeyen: ${inexact}`);
 
 if (fails.length) {
   console.error(`\n${fails.length} hata:`);

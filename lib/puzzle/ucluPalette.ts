@@ -46,7 +46,7 @@ export const UCLU_BOARD = {
   strap: "#C9CED6",
   strapLo: "#7D8590",
   /** Kar ve kale ağı. */
-  snow: "rgba(226, 242, 255, 0.80)",
+  snow: "rgba(226, 242, 255, 0.58)",
   snowEdge: "#FFFFFF",
   snowInk: "#5C9BD6",
   net: "rgba(255, 255, 255, 0.88)",

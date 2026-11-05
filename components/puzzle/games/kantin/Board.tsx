@@ -104,22 +104,24 @@ export const Hud = memo(function Hud({
 
 export const FanSpot = memo(function FanSpot({
   order,
-  filled,
+  filledMask,
   mood,
   vipRatio,
-  look,
+  jersey,
+  face,
   width,
   bubbleH,
   fanSize,
   enterDelay,
 }: {
   order: KantinOrder;
-  /** Siparişteki her ürün için dolu mu. */
-  filled: boolean[];
+  /** Siparişteki i. ürün dolu mu (bit maskesi — memo dostu). */
+  filledMask: number;
   mood: FanMood;
   /** VIP sabır oranı (0–1); VIP değilse null. */
   vipRatio: number | null;
-  look: { jersey: number; face: number };
+  jersey: number;
+  face: number;
   width: number;
   bubbleH: number;
   fanSize: number;
@@ -141,6 +143,7 @@ export const FanSpot = memo(function FanSpot({
     ]).start();
   }, [mood, shake]);
   const n = order.items.length;
+  const filled = order.items.map((_, i) => Boolean(filledMask & (1 << i)));
   const icon = Math.min(22, Math.floor((width - 16) / n) - 2);
   const vip = vipRatio !== null;
   const need = order.items.filter((_, i) => !filled[i]).map(productName);
@@ -173,7 +176,7 @@ export const FanSpot = memo(function FanSpot({
         <View style={[styles.tail, vip && styles.tailVip]} />
       </View>
       <View style={styles.fanWrap}>
-        <FanFigure size={fanSize} jersey={look.jersey} face={look.face} mood={mood} vip={vip} />
+        <FanFigure size={fanSize} jersey={jersey} face={face} mood={mood} vip={vip} />
         {vip ? (
           <View style={styles.vipBar} accessibilityLabel={`VIP sabrı yüzde ${Math.round((vipRatio ?? 0) * 100)}`}>
             <View
@@ -196,7 +199,7 @@ export const FanSpot = memo(function FanSpot({
 
 export const PlateSpot = memo(function PlateSpot({
   items,
-  shown,
+  shownMask,
   width,
   height,
   icon,
@@ -204,8 +207,8 @@ export const PlateSpot = memo(function PlateSpot({
 }: {
   /** Siparişin ürünleri (yer tutucular). */
   items: number[];
-  /** Her konum için görünür ürün var mı (uçuşta olanlar gizli). */
-  shown: boolean[];
+  /** i. konumda görünür ürün var mı (bit maskesi; uçuştakiler gizli). */
+  shownMask: number;
   width: number;
   height: number;
   icon: number;
@@ -216,7 +219,7 @@ export const PlateSpot = memo(function PlateSpot({
       <View style={[styles.plateInner, { borderRadius: (height - 10) / 2 }]}>
         {items.map((p, i) => (
           <View key={i} style={{ width: icon, height: icon, alignItems: "center", justifyContent: "center" }}>
-            {shown[i] ? <ProductIcon p={p} size={icon} /> : <View style={[styles.ghostDot, { width: icon * 0.5, height: icon * 0.5, borderRadius: icon / 4 }]} />}
+            {shownMask & (1 << i) ? <ProductIcon p={p} size={icon} /> : <View style={[styles.ghostDot, { width: icon * 0.5, height: icon * 0.5, borderRadius: icon / 4 }]} />}
           </View>
         ))}
       </View>

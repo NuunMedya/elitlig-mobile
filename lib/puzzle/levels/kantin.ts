@@ -433,7 +433,8 @@ function paramsFor(L: number): Params {
   const perturb = Math.min(0.95, 0.7 + L * 0.002 + (cup ? 0.1 : 0)) * (breather ? 0.6 : 1);
   const dist = Math.min(10, 5 + Math.floor(L / 25));
   // Zorluk bandı: dalgalı taban, kupada belirgin zor, nefeste kolay.
-  const base = Math.min(0.45, 0.2 + L * 0.0015);
+  // 12–29: üçüncü tabak ve süre yeni — taban yumuşak başlar.
+  const base = Math.min(0.45, L < 30 ? 0.12 + (L - 10) * 0.005 : 0.2 + L * 0.0015);
   let [failLo, failHi] = [base, base + 0.3];
   if (breather) [failLo, failHi] = [0, 0.2];
   if (cup) [failLo, failHi] = [Math.min(0.6, base + 0.2), Math.min(0.9, base + 0.5)];
@@ -477,7 +478,7 @@ export function hastyRun(level: KantinLevel, r: () => number, cap = level.holdCa
 const HASTY_RUNS = 32;
 
 const SALT = 4421;
-const MAX_ATTEMPTS = 80;
+const MAX_ATTEMPTS = 50;
 
 function seedFor(L: number, attempt: number): number {
   return (L * 7919 + SALT + attempt * 104729) >>> 0;
@@ -645,6 +646,14 @@ export function kantinLevel(level: number): KantinLevel {
   const L = Math.max(1, Math.floor(level));
   const hit = CACHE.get(L);
   if (hit) return hit;
+  const built = buildKantinLevel(L);
+  CACHE.set(L, built);
+  return built;
+}
+
+/** Önbelleksiz üretim (denetim belirlenimciliği bununla sınar). */
+export function buildKantinLevel(level: number): KantinLevel {
+  const L = Math.max(1, Math.floor(level));
   const P = paramsFor(L);
   let built: KantinLevel | null = null;
   // Zorluk bandı tutmazsa banda EN YAKIN deneme seçilir (fallback işaretli).
@@ -661,7 +670,6 @@ export function kantinLevel(level: number): KantinLevel {
   // Güvenli kurulum: kaydırmasız tanık (tezgâh hiç gerekmez) — her zaman çözülür.
   for (let a = 0; a < MAX_ATTEMPTS && !built; a += 1) built = attemptBuild(L, P, a, true);
   if (!built) throw new Error(`kantin: seviye ${L} üretilemedi`);
-  CACHE.set(L, built);
   return built;
 }
 

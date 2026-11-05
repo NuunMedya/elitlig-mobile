@@ -230,13 +230,11 @@ function TileViewBase({ tile, row, col, cell, spawnRow, dying, selected, hintDx,
   useEffect(() => {
     if (!hintTick) return;
     wiggle.setValue(0);
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(wiggle, { toValue: 1, duration: 140, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-        Animated.timing(wiggle, { toValue: 0, duration: 200, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-      ]),
-      { iterations: 3 },
-    ).start();
+    const swing = Animated.sequence([
+      Animated.timing(wiggle, { toValue: 1, duration: 140, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+      Animated.timing(wiggle, { toValue: 0, duration: 200, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+    ]);
+    Animated.loop(swing, { iterations: 3 }).start();
   }, [hintTick, wiggle]);
 
   const inset = Math.round(cell * 0.06);

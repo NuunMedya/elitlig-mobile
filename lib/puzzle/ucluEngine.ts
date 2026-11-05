@@ -829,7 +829,7 @@ export function trySwap(s: GameState, a: number, b: number, record = true): Swap
 }
 
 /** Krampon Darbesi: tek hücreyi kırar (hamle harcamaz). */
-export function useHammer(s: GameState, i: number, record = true): Step[] {
+export function hammerCell(s: GameState, i: number, record = true): Step[] {
   const c = s.cells[i];
   if (!c || c.hole) return [];
   if (!c.tile && c.crate === 0 && c.mud === 0) return [];
