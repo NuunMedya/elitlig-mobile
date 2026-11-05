@@ -2,7 +2,7 @@
   "expo": {
     "name": "ElitLig",
     "slug": "elitlig-mobile",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "runtimeVersion": {
       "policy": "appVersion"
     },
@@ -143,7 +143,8 @@
           "photosPermission": "Profil fotoğrafını ve kulüp logosunu seçmek için fotoğraflarına erişilir.",
           "cameraPermission": false
         }
-      ]
+      ],
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true

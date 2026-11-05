@@ -113,6 +113,8 @@ import {
   type StatTile,
 } from "@/components/playerpage";
 import { getPlayerCareer } from "@/lib/api/career";
+import { GoalClipPlayer } from "@/components/live/GoalClipPlayer";
+import { listGoalClips, type GoalClip } from "@/lib/live/clips";
 import { getMatchKadro } from "@/lib/api/matches";
 import { getPlayer, getPlayerRankings } from "@/lib/api/players";
 import { positionLabel } from "@/lib/api/team";
@@ -1526,6 +1528,26 @@ function MatchesTab({ playerId, scrollProps }: { playerId: number; scrollProps: 
 
   const openMatch = useCallback((matchId: number) => router.push(`/mac/${matchId}`), [router]);
 
+  /* Gol videoları — canlı yayında kaydedilen klipler (uç yoksa boş liste). */
+  const clipsQuery = useQuery({
+    queryKey: ["goal-clips", "player", playerId],
+    queryFn: () => listGoalClips({ player_id: playerId }),
+    staleTime: 5 * 60_000,
+  });
+  const clipsByMatch = useMemo(() => {
+    const map = new Map<number, GoalClip[]>();
+    for (const clip of clipsQuery.data ?? []) {
+      const list = map.get(Number(clip.match_id)) ?? [];
+      list.push(clip);
+      map.set(Number(clip.match_id), list);
+    }
+    map.forEach((list) => list.sort((a, b) => (Number(a.minute) || 0) - (Number(b.minute) || 0)));
+    return map;
+  }, [clipsQuery.data]);
+  const [clipMatch, setClipMatch] = useState<number | null>(null);
+  const openClip = useCallback((matchId: number) => setClipMatch(matchId), []);
+  const clipRow = clipMatch != null ? rows.find((r) => Number(r.match_id) === clipMatch) : null;
+
   const renderItem = useCallback(
     ({ item }: { item: MatchListItem }) =>
       item.kind === "head" ? (
@@ -1543,9 +1565,11 @@ function MatchesTab({ playerId, scrollProps }: { playerId: number; scrollProps: 
           venue={item.row.season?.name ?? item.row.match?.season_name ?? null}
           position={item.position}
           onPress={openMatch}
+          clipCount={clipsByMatch.get(Number(item.row.match_id))?.length ?? 0}
+          onClip={openClip}
         />
       ),
-    [openMatch],
+    [clipsByMatch, openClip, openMatch],
   );
 
   const keyExtractor = useCallback((item: MatchListItem) => item.key, []);
@@ -1590,22 +1614,35 @@ function MatchesTab({ playerId, scrollProps }: { playerId: number; scrollProps: 
   }
 
   return (
-    <FlatList
-      {...scrollProps}
-      data={items}
-      renderItem={renderItem}
-      keyExtractor={keyExtractor}
-      getItemLayout={getItemLayout}
-      contentContainerStyle={styles.listContent}
-      refreshControl={refresh.control}
-      initialNumToRender={14}
-      windowSize={9}
-      ListHeaderComponent={
-        <View style={styles.matchesSummary} onLayout={(event) => setHeadHeight(event.nativeEvent.layout.height)}>
-          <StatTiles tiles={summary} />
-        </View>
-      }
-    />
+    <>
+      <FlatList
+        {...scrollProps}
+        data={items}
+        renderItem={renderItem}
+        keyExtractor={keyExtractor}
+        getItemLayout={getItemLayout}
+        contentContainerStyle={styles.listContent}
+        refreshControl={refresh.control}
+        initialNumToRender={14}
+        windowSize={9}
+        extraData={clipsByMatch}
+        ListHeaderComponent={
+          <View style={styles.matchesSummary} onLayout={(event) => setHeadHeight(event.nativeEvent.layout.height)}>
+            <StatTiles tiles={summary} />
+          </View>
+        }
+      />
+      <GoalClipPlayer
+        visible={clipMatch != null}
+        onClose={() => setClipMatch(null)}
+        clips={clipMatch != null ? clipsByMatch.get(clipMatch) ?? [] : []}
+        subtitle={
+          clipRow
+            ? `${clipRow.played_for_team?.name ?? ""} – ${clipRow.opponent_team?.name ?? ""}`.trim()
+            : null
+        }
+      />
+    </>
   );
 }
 
