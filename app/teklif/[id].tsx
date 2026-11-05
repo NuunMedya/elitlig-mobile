@@ -64,6 +64,7 @@ import {
   type Tone,
 } from "@/components/ui";
 import { acceptOffer, getOffer, rejectOffer, type TransferOffer } from "@/lib/api/panel";
+import { OFFER_QUERY_KEYS } from "@/lib/api/club/offers";
 import { withdrawOffer } from "@/lib/api/transfers";
 import { formatDateShort, formatMoney, mediaUrl } from "@/lib/format";
 import { DeadlineBanner } from "@/components/club/DeadlineBanner";
@@ -471,7 +472,8 @@ export default function OfferDetailScreen() {
       setWithdrawOpen(false);
       setWithdrawReason("");
       invalidateAll();
-      void queryClient.invalidateQueries({ queryKey: ["takim", "outbox"] });
+      // Kulübün tüm teklif sayaçları (Kulübüm, Transfer masası, oyuncu ara).
+      for (const queryKey of OFFER_QUERY_KEYS) void queryClient.invalidateQueries({ queryKey: [...queryKey] });
       toast.show({ message: "Teklif geri çekildi, oyuncuya bildirildi.", tone: "neutral" });
     },
     onError: handleActionError,

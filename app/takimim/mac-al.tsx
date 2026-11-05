@@ -69,6 +69,7 @@ import {
 } from "@/lib/api/team";
 import { ApiError } from "@/lib/http";
 import { useAuth } from "@/providers/AuthProvider";
+import { useTeamAccess } from "@/components/club/team/useTeamAccess";
 import { colors, elevate, hairline, haptics, layout, radius, space, textScale, type } from "@/theme";
 
 type Tab = "pano" | "taleplerim";
@@ -209,6 +210,7 @@ function statusColor(status: SlotStatus): string {
 
 export default function MacAlScreen() {
   const auth = useAuth();
+  const access = useTeamAccess();
   const toast = useToast();
   const queryClient = useQueryClient();
 
@@ -348,7 +350,9 @@ export default function MacAlScreen() {
 
   if (!auth.user) return <Redirect href="/giris" />;
 
+  // Takım yetkisi panel/me'den de okunur (oturum alanı girişten sonra tazelenmez).
   const canManageTeam =
+    access.canManage ||
     Boolean(auth.user.managed_team_id) ||
     auth.user.profile_type === "takim_baskani" ||
     auth.user.profile_type === "double";

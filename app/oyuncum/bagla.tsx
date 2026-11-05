@@ -14,18 +14,27 @@
  * (takımda il ve kadro) bilgisiyle gelir; başkasına bağlı kayıt görünür ama
  * seçilemez. Seçim her zaman üyenindir.
  *
+ * BEKLEYEN TALEP: aynı türden ikinci talep sunucuda engellenir; bu yüzden
+ * bekleyen talep aramayı kilitler ama "Geri çek" (DELETE
+ * /api/users/account-requests/:id) kilidi üyenin elinde açar. Reddedilen
+ * talebin yönetici notu aramanın üstünde görünür.
+ *
+ * YENİ KAYIT FORMU: web'deki gibi fotoğraf/logo (önce /api/panel/me/uploads
+ * ile yüklenir) ve oyuncu için uyruk da talebe girer.
+ *
  * Sunucu: routes/User.js (player-candidates, team-candidates, request-*),
  * services/playerMatchService.js.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Redirect, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   Avatar,
+  Badge,
   BottomSheet,
   Button,
   Chip,
@@ -38,7 +47,9 @@ import {
   Touchable,
   useToast,
 } from "@/components/ui";
-import { mediaUrl } from "@/lib/format";
+import { ImagePickField } from "@/components/account/ImagePickField";
+import { REQUEST_STATUS, REQUEST_TYPE_LABELS, cancelAccountRequest } from "@/lib/api/member/player";
+import { formatDateShort, mediaUrl } from "@/lib/format";
 import { ApiError } from "@/lib/http";
 import { POSITIONS } from "@/lib/api/team";
 import {
@@ -56,7 +67,7 @@ import {
   type TeamCandidate,
 } from "@/lib/api/playerProfile";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, layout, radius, space, type } from "@/theme";
+import { colors, layout, radius, space, type, upperTR } from "@/theme";
 
 type Kind = "player" | "team";
 
@@ -88,9 +99,11 @@ const COPY = {
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const lower = (value: unknown) => String(value ?? "").toLocaleLowerCase("tr-TR").trim();
 const errorText = (error: unknown) =>
-  error instanceof ApiError ? error.message || error.userMessage : "Bir hata oluştu.";
+  error instanceof ApiError ? error.message || error.userMessage : "Talep işlenemedi; bağlantını kontrol edip yeniden dene.";
 
-function requestList(data: Awaited<ReturnType<typeof getAccountRequests>> | undefined): AccountRequest[] {
+type RequestRow = AccountRequest & { adminNote?: string | null; admin_note?: string | null; created_at?: string };
+
+function requestList(data: Awaited<ReturnType<typeof getAccountRequests>> | undefined): RequestRow[] {
   if (!data) return [];
   if (Array.isArray(data)) return data;
   return data.accountRequests ?? data.requests ?? [];
@@ -153,7 +166,16 @@ export default function ProfileLinkScreen() {
 
   const [query, setQuery] = useState(kind === "player" ? user?.fullName ?? "" : "");
   const [createOpen, setCreateOpen] = useState(false);
-  const [form, setForm] = useState({ player_position: "", birth_date: "", founded_at: "", colors: "", note: "" });
+  const [form, setForm] = useState({
+    player_position: "",
+    birth_date: "",
+    nationality: "",
+    player_img: null as string | null,
+    founded_at: "",
+    colors: "",
+    logo: null as string | null,
+    note: "",
+  });
   const [busy, setBusy] = useState(false);
 
   const name = query.trim().replace(/\s+/g, " ");
@@ -161,9 +183,41 @@ export default function ProfileLinkScreen() {
   const ready = debounced.length >= 2;
 
   const requestsQuery = useQuery({ queryKey: ["account-requests"], queryFn: getAccountRequests, enabled: Boolean(user) });
-  const pending = requestList(requestsQuery.data).some(
+  /* Bu türdeki talepler (oyuncu_* ya da team_*): bekleyen talep aramayı
+     kilitler; kilit, "geri çek" ile üyenin elinde açılır — web'deki gibi.
+     Yanlış gönderilen bir talep üyeyi yönetici karar verene kadar
+     kilitlemesin. */
+  const familyRequests = useMemo(
+    () =>
+      requestList(requestsQuery.data).filter(
+        (item) => String(item.type).startsWith(kind === "team" ? "team_" : "player_") && item.status !== "cancelled",
+      ),
+    [kind, requestsQuery.data]
+  );
+  const pendingRequests = familyRequests.filter(
     (item) => item.status === "pending" && (copy.pendingTypes as readonly string[]).includes(item.type)
   );
+  const pending = pendingRequests.length > 0;
+  const recentDecisions = familyRequests.filter((item) => item.status === "rejected").slice(0, 2);
+
+  const cancelMutation = useMutation({
+    mutationFn: (id: number) => cancelAccountRequest(id),
+    onSuccess: (result) => {
+      toast.show({ message: result.message || "Talebin geri çekildi.", tone: "success" });
+      void queryClient.invalidateQueries({ queryKey: ["account-requests"] });
+    },
+    onError: (error) => Alert.alert("Talep geri çekilemedi", errorText(error)),
+  });
+  const confirmCancel = (item: RequestRow) =>
+    Alert.alert(
+      "Talebi geri çek",
+      `“${REQUEST_TYPE_LABELS[item.type] ?? item.type}” talebin geri çekilecek. Geri çekilen talep yönetici önüne gitmez; ` +
+        "dilediğin zaman aynı türde yeni bir talep gönderebilirsin.",
+      [
+        { text: "Vazgeç", style: "cancel" },
+        { text: "Geri çek", style: "destructive", onPress: () => cancelMutation.mutate(item.id) },
+      ]
+    );
 
   const resultsQuery = useQuery({
     queryKey: ["link-candidates", kind, debounced],
@@ -230,6 +284,7 @@ export default function ProfileLinkScreen() {
       return;
     }
     const common = { ...(user.city ? { city: user.city } : {}), ...(form.note ? { note: form.note } : {}) };
+    const media = kind === "player" ? form.player_img : form.logo;
     if (kind === "player") {
       // Üye bu adı aradı ve adayları gördü; yeni kayıt bilinçli bir karar.
       void send(
@@ -237,6 +292,8 @@ export default function ProfileLinkScreen() {
           player_name: name,
           ...(form.player_position ? { player_position: form.player_position } : {}),
           ...(form.birth_date ? { birth_date: form.birth_date } : {}),
+          ...(form.nationality.trim() ? { nationality: form.nationality.trim() } : {}),
+          ...(media ? { player_img: media } : {}),
           ...common,
           confirmedNew: true,
         }),
@@ -248,6 +305,7 @@ export default function ProfileLinkScreen() {
           team_name: name,
           ...(form.founded_at ? { founded_at: form.founded_at } : {}),
           ...(form.colors ? { colors: form.colors } : {}),
+          ...(media ? { logo: media } : {}),
           ...common,
         }),
         "Yeni takım talebin onaya gönderildi."
@@ -262,9 +320,44 @@ export default function ProfileLinkScreen() {
         <Text style={styles.body}>{copy.intro}</Text>
 
         {pending ? (
-          <View style={styles.notice}><Text style={styles.noticeText}>⏳ {copy.pending}</Text></View>
+          <View style={styles.block}>
+            <View style={styles.notice}>
+              <Ionicons name="hourglass-outline" size={15} color={colors.warn} />
+              <Text style={[styles.noticeText, styles.flex]}>{copy.pending}</Text>
+            </View>
+            {pendingRequests.map((item) => (
+              <Surface key={item.id} style={styles.request}>
+                <View style={styles.rowCopy}>
+                  <Text style={styles.requestTitle} numberOfLines={1}>{REQUEST_TYPE_LABELS[item.type] ?? item.type}</Text>
+                  <Text style={styles.rowFacts}>
+                    {[item.createdAt || item.created_at ? `${formatDateShort(item.createdAt ?? item.created_at)} tarihinde gönderildi` : null, "Yönetici incelemesinde"].filter(Boolean).join(" · ")}
+                  </Text>
+                </View>
+                <Button
+                  label="Geri çek"
+                  size="sm"
+                  variant="secondary"
+                  icon="arrow-undo-outline"
+                  loading={cancelMutation.isPending && cancelMutation.variables === item.id}
+                  onPress={() => confirmCancel(item)}
+                />
+              </Surface>
+            ))}
+          </View>
         ) : (
           <>
+            {recentDecisions.map((item) => {
+              const note = item.adminNote ?? item.admin_note ?? null;
+              return (
+                <Surface key={item.id} style={styles.request}>
+                  <View style={styles.rowCopy}>
+                    <Text style={styles.requestTitle} numberOfLines={1}>{REQUEST_TYPE_LABELS[item.type] ?? item.type}</Text>
+                    <Text style={styles.rowFacts}>{note ? `Yönetici notu: ${note}` : "Talep reddedildi; bilgileri kontrol edip yeniden gönderebilirsin."}</Text>
+                  </View>
+                  <Badge label={upperTR(REQUEST_STATUS[item.status]?.label ?? item.status)} tone="danger" size="xs" />
+                </Surface>
+              );
+            })}
             <Input value={query} onChangeText={setQuery} placeholder={copy.placeholder} autoCorrect={false} autoFocus={kind === "team"} />
 
             {name.length >= 2 && (
@@ -313,6 +406,13 @@ export default function ProfileLinkScreen() {
             <Text style={styles.hint}>
               Adı değiştirmek için arama kutusunu düzenle. İl bilgisi üyelik kaydından alınır{user.city ? `: ${user.city}` : ""}.
             </Text>
+            <ImagePickField
+              kind={kind}
+              name={name}
+              value={kind === "player" ? form.player_img : form.logo}
+              onChange={(url) => setForm((old) => (kind === "player" ? { ...old, player_img: url } : { ...old, logo: url }))}
+              disabled={busy}
+            />
             {kind === "player" ? (
               <>
                 <Text style={styles.fieldLabel}>Mevki</Text>
@@ -328,6 +428,8 @@ export default function ProfileLinkScreen() {
                 </ChipGroup>
                 <Input label="Doğum tarihi" value={form.birth_date} placeholder="YYYY-AA-GG" keyboardType="numbers-and-punctuation"
                   onChangeText={(value) => setForm((old) => ({ ...old, birth_date: value }))} />
+                <Input label="Uyruk" value={form.nationality} placeholder="ör. Türkiye"
+                  onChangeText={(value) => setForm((old) => ({ ...old, nationality: value }))} />
               </>
             ) : (
               <>
@@ -350,7 +452,10 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: layout.screenPadding, paddingTop: space.sm, paddingBottom: space.giant * 2, gap: space.md },
   body: { ...type.body, color: colors.textSecondary },
   hint: { ...type.bodySm, color: colors.textSecondary },
-  notice: { backgroundColor: colors.warnDim, borderRadius: radius.md, padding: space.md },
+  notice: { flexDirection: "row", alignItems: "center", gap: space.sm, backgroundColor: colors.warnDim, borderRadius: radius.md, padding: space.md },
+  flex: { flex: 1, minWidth: 0 },
+  request: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderRadius: radius.lg },
+  requestTitle: { ...type.label, color: colors.textPrimary },
   noticeText: { ...type.bodySm, color: colors.warn },
   block: { gap: space.sm },
   row: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderRadius: radius.lg },

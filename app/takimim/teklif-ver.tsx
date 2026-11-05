@@ -8,15 +8,23 @@
  * revizyon istediğinde). Şartlar web'deki OfferForm ile aynı: tür, bedel,
  * para birimi, başlangıç/bitiş (boş bitiş = süresiz; kiralıkta zorunlu),
  * koşullar ve mesaj. Yeni teklifin bir cevap süresi vardır (expiresAt).
+ *
+ * YETKİ: takım yetkisi oturum alanından değil `/api/panel/me`den okunur
+ * (useTeamAccess). Oyuncu seçilmeden açılırsa ekran çıkmaz sokak değildir:
+ * "Oyuncu seç" futbolcu veritabanını açar. Sunucunun bilinen ret kodları
+ * (aynı oyuncuya ikinci teklif, kendi oyuncun, kiralık sınırları) Türkçe
+ * cümleyle gösterilir.
  */
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { AuthCard, AuthNotice, AuthShell } from "@/components/account/AuthShell";
+import { useTeamAccess } from "@/components/club/team/useTeamAccess";
 import { Button, Chip, ErrorState, Input, SkeletonCard, Toggle, useToast } from "@/components/ui";
+import { OFFER_QUERY_KEYS } from "@/lib/api/club/offers";
 import { getOffer } from "@/lib/api/panel";
 import { toDisplayDate, toIsoDate } from "@/lib/api/profile";
 import {
@@ -141,6 +149,17 @@ function fromVersion(version: VersionLike | null): Form {
   };
 }
 
+/** Sunucu kodları (services/transfer, teamSuiteApi MESSAGES) → Türkçe cümle. */
+const OFFER_ERRORS: Record<string, string> = {
+  TRANSFER_OFFER_ALREADY_EXISTS: "Bu oyuncuya zaten açık bir teklifin var. Transfer yönetiminden mevcut teklifi aç.",
+  TRANSFER_OFFER_OWN_PLAYER: "Kendi oyuncuna teklif gönderemezsin.",
+  TRANSFER_OFFER_FORBIDDEN: "Bu işlem için takım yönetim yetkisi gerekiyor.",
+  PLAYER_NOT_FOUND: "Oyuncu bulunamadı.",
+  LOAN_SAME_LEAGUE: "Oyuncu bu sezon başka bir takımın kadrosunda; aynı ligde iki takımda oynayamaz.",
+  LOAN_LIMIT_EXCEEDED: "Oyuncu zaten iki ayrı sezonda kiralık oynuyor.",
+  SEASON_LIMIT_EXCEEDED: "Oyuncu aynı anda en fazla üç sezon kadrosunda yer alabilir.",
+};
+
 const first = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value) ?? "";
 
 export default function OfferFormScreen() {
@@ -148,6 +167,7 @@ export default function OfferFormScreen() {
   const router = useRouter();
   const toast = useToast();
   const queryClient = useQueryClient();
+  const access = useTeamAccess();
   const offerId = first(params.offerId);
   const playerId = Number(first(params.playerId)) || null;
   const isRevision = Boolean(offerId);
@@ -209,14 +229,14 @@ export default function OfferFormScreen() {
         toast.show({ message: `${playerName} için teklif gönderildi.`, tone: "success" });
         router.replace(`/teklif/${result.offer.public_id}`);
       }
-      void queryClient.invalidateQueries({ queryKey: ["takim", "outbox"] });
+      for (const queryKey of OFFER_QUERY_KEYS) void queryClient.invalidateQueries({ queryKey: [...queryKey] });
       if (isRevision && router.canGoBack()) router.back();
     } catch (caught) {
       setError(
         caught instanceof ApiError
           ? caught.status === 409 && caught.code === "TRANSFER_OFFER_VERSION_CONFLICT"
             ? "Teklif bu arada değişti. Geri dönüp güncel hâlini açıp yeniden dene."
-            : caught.userMessage
+            : (OFFER_ERRORS[caught.code ?? ""] ?? caught.userMessage)
           : "Teklif gönderilemedi.",
       );
     } finally {
@@ -242,8 +262,21 @@ export default function OfferFormScreen() {
     </AuthShell>
   );
 
+  if (!access.loading && !access.canManage) {
+    return shell(
+      <>
+        <AuthNotice message="Transfer teklifi yalnız takım başkanı gönderebilir. Takımını bağlayıp yönetim yetkisi iste." />
+        <Button label="Takımını bağla" icon="shield-outline" variant="secondary" onPress={() => router.push("/oyuncum/bagla?tur=takim" as Href)} fullWidth />
+      </>,
+    );
+  }
   if (!isRevision && !playerId) {
-    return shell(<AuthNotice message="Teklif verilecek oyuncu seçilmedi. Oyuncu profilinden “Teklif ver” ile aç." />);
+    return shell(
+      <>
+        <AuthNotice message="Teklif verilecek oyuncuyu seç. Futbolcu veritabanında ara; satırdaki “Teklif ver” bu formu oyuncuyla açar." />
+        <Button label="Oyuncu seç" icon="search" onPress={() => router.replace("/takimim/oyuncu-ara" as Href)} size="lg" fullWidth />
+      </>,
+    );
   }
   if (isRevision && offerQuery.isError) {
     return shell(<ErrorState variant="inline" error={offerQuery.error} onRetry={offerQuery.refetch} />);

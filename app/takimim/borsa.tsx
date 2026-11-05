@@ -5,16 +5,19 @@
  *   İLANLARIM  GET /api/transfer-market/mine       takımın ilanları (başkan)
  *              POST /listings  ·  DELETE /listings/:id
  *
- * İlana teklif, normal transfer teklifi akışıyla verilir (/takimim/teklif-ver).
+ * İlana teklif, normal transfer teklifi akışıyla verilir (/takimim/teklif-ver);
+ * düğme satırın sağındadır (OfferCta), alt sayfada da tekrarlanır.
  * Oyuncu başına tek açık ilan olur; oyuncu takımdan ayrılınca ilan kapanır.
  */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
+import { Redirect, useLocalSearchParams, useRouter, type Href } from "expo-router";
 import React, { useMemo, useState } from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { OfferCta, offerHref } from "@/components/club/team/OfferCta";
+import { useTeamAccess } from "@/components/club/team/useTeamAccess";
 import {
   Avatar,
   Badge,
@@ -34,7 +37,6 @@ import {
   useToast,
   type SegmentedItem,
 } from "@/components/ui";
-import { getPanelMe } from "@/lib/api/panel";
 import { getTeamRoster } from "@/lib/api/team";
 import {
   closeListing,
@@ -63,8 +65,9 @@ export default function TransferMarketScreen() {
   const router = useRouter();
   const { scrollY, scrollProps } = useHeaderScroll();
 
-  const meQuery = useQuery({ queryKey: ["panel", "me"], queryFn: getPanelMe, enabled: Boolean(auth.user), staleTime: 60_000 });
-  const isPresident = Boolean(meQuery.data?.team);
+  // Takım yetkisi web ile aynı kaynaktan (panel/me) — bkz. useTeamAccess.
+  const access = useTeamAccess();
+  const isPresident = access.canManage;
   const [segment, setSegment] = useState<Segment>(params.bolum === "ilanlarim" ? "ilanlarim" : "borsa");
   const segments: SegmentedItem<Segment>[] = [
     { key: "borsa", label: "Borsa" },
@@ -80,7 +83,7 @@ export default function TransferMarketScreen() {
         subtitle="Satılık ve kiralık oyuncular"
         back
         scrollY={scrollY}
-        actions={isPresident ? [{ icon: "paper-plane-outline", onPress: () => router.push("/takimim/teklifler"), accessibilityLabel: "Giden teklifler" }] : undefined}
+        actions={isPresident ? [{ icon: "paper-plane-outline", onPress: () => router.push("/takimim/transfer" as Href), accessibilityLabel: "Transfer yönetimi" }] : undefined}
       />
       {segments.length > 1 ? (
         <View style={styles.segment}>
@@ -90,7 +93,7 @@ export default function TransferMarketScreen() {
       {segment === "ilanlarim" && isPresident ? (
         <MyListings scrollProps={scrollProps} />
       ) : (
-        <Market scrollProps={scrollProps} canOffer={isPresident} ownTeamId={meQuery.data?.team?.id ?? null} />
+        <Market scrollProps={scrollProps} canOffer={isPresident} ownTeamId={access.teamId} />
       )}
     </SafeAreaView>
   );
@@ -145,9 +148,28 @@ function Market({ scrollProps, canOffer, ownTeamId }: { scrollProps: ScrollProps
         ListEmptyComponent={
           <EmptyState icon="storefront-outline" title="İlan yok" body="Şu an bu süzgece uyan açık ilan bulunmuyor." variant="inline" />
         }
-        renderItem={({ item, index }) => (
-          <ListingRow listing={item} position={positionOf(index, items.length)} onPress={() => setPicked(item)} />
-        )}
+        renderItem={({ item, index }) => {
+          /* Teklif düğmesi SATIRDA: eskiden yalnız ilana dokununca açılan alt
+             sayfadaydı; başkan teklif verebildiğini görmüyordu. */
+          const mine = item.is_mine || (ownTeamId != null && item.team.id === ownTeamId);
+          return (
+            <ListingRow
+              listing={item}
+              position={positionOf(index, items.length)}
+              onPress={() => setPicked(item)}
+              trailing={
+                canOffer && !mine ? (
+                  <OfferCta
+                    layout="compact"
+                    playerId={item.player.id}
+                    playerName={item.player.name ?? "Oyuncu"}
+                    playerTeamId={item.team.id}
+                  />
+                ) : undefined
+              }
+            />
+          );
+        }}
       />
       <BottomSheet visible={Boolean(picked)} onClose={() => setPicked(null)} title={picked?.player.name ?? "İlan"} snap="content">
         {picked ? (
@@ -173,9 +195,7 @@ function Market({ scrollProps, canOffer, ownTeamId }: { scrollProps: ScrollProps
                 icon="swap-horizontal"
                 onPress={() => {
                   setPicked(null);
-                  router.push(
-                    `/takimim/teklif-ver?playerId=${picked.player.id}&playerName=${encodeURIComponent(picked.player.name ?? "")}&tur=${picked.listing_type}`,
-                  );
+                  router.push(offerHref(picked.player.id, picked.player.name ?? "", picked.listing_type) as Href);
                 }}
                 fullWidth
               />
@@ -199,6 +219,8 @@ const ListingRow = React.memo(function ListingRow({
   trailing?: React.ReactNode;
 }) {
   const subtitle = [
+    // Sağ taraf düğmeye ayrıldığında ilan türü rozet yerine satırda yazar.
+    trailing ? listing.type_label : null,
     listing.player.position,
     listing.team.name,
     listing.asking_fee != null ? formatMoney(listing.asking_fee) : null,

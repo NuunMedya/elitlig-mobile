@@ -55,6 +55,9 @@ export interface PlayerCreateBody {
   city?: string;
   note?: string;
   confirmedNew?: boolean;
+  /** Web talep formuyla aynı: önce /api/panel/me/uploads/player ile yüklenen adres. */
+  player_img?: string;
+  nationality?: string;
 }
 
 export const getPlayerCandidates = (q: string) =>
@@ -66,7 +69,7 @@ export const getTeamCandidates = (q: string) =>
 export const requestTeamManagement = (teamId: number, note?: string) =>
   put<{ message: string }>("/api/users/request-team-management", { teamId, note });
 
-export const requestTeamCreate = (body: { team_name: string; founded_at?: string; colors?: string; city?: string; note?: string }) =>
+export const requestTeamCreate = (body: { team_name: string; founded_at?: string; colors?: string; city?: string; note?: string; logo?: string }) =>
   post<{ message: string }>("/api/users/request-team-create", body);
 
 export const getAccountRequests = () =>

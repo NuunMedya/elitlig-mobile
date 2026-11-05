@@ -121,11 +121,11 @@ import { formatAge, formatDateShort, mediaUrl } from "@/lib/format";
 import { ApiError, get } from "@/lib/http";
 import { openLink } from "@/lib/links";
 import { queryKeys } from "@/lib/queryKeys";
-import { useAuth } from "@/providers/AuthProvider";
 import { useFavorite } from "@/providers/FavoriteProvider";
 import { useFollowFlow } from "@/providers/FollowFlowProvider";
 import { useScope } from "@/providers/ScopeProvider";
 import { EliteCard } from "@/components/career/EliteCard";
+import { OfferCta } from "@/components/club/team/OfferCta";
 import { FollowActions } from "@/components/FollowActions";
 import {
   colors,
@@ -522,7 +522,6 @@ function logRowProps(row: Appearance) {
 export default function PlayerDetailScreen() {
   const params = useLocalSearchParams<{ id: string; tab?: string }>();
   const router = useRouter();
-  const auth = useAuth();
   const scope = useScope();
   const { scrollY, scrollProps } = useHeaderScroll();
 
@@ -729,14 +728,26 @@ export default function PlayerDetailScreen() {
         }
         facts={facts}
         actions={
-          teamTarget ? (
-            <FollowActions
-              following={isFavorite(teamTarget.id)}
-              onToggleFollow={toggleTeamFollow}
-              onOpenNotifications={openTeamNotifications}
-              labels={{ follow: "Takımını takip et", following: "Takımı takip ediliyor" }}
+          <View style={styles.heroActions}>
+            {/* TEKLİF VER: kimliğin hemen altında, birincil düğme. Yalnız takım
+                yöneten üyeye ve başka takımın/serbest oyuncuda çizilir
+                (OfferCta kendi karar verir). Eskiden başlıktaki küçük bir
+                ikondu ve tazelenmeyen oturum alanına bağlıydı. */}
+            <OfferCta
+              playerId={player.id}
+              playerName={playerName}
+              playerTeamId={player.team_id != null ? Number(player.team_id) : null}
+              onDark
             />
-          ) : null
+            {teamTarget ? (
+              <FollowActions
+                following={isFavorite(teamTarget.id)}
+                onToggleFollow={toggleTeamFollow}
+                onOpenNotifications={openTeamNotifications}
+                labels={{ follow: "Takımını takip et", following: "Takımı takip ediliyor" }}
+              />
+            ) : null}
+          </View>
         }
       />
     );
@@ -744,27 +755,17 @@ export default function PlayerDetailScreen() {
 
   /* PAYLAŞ: her oyuncuda başlığın SAĞ ÜSTÜNDEKİ tek ikon (detay sayfalarının
      ortak sözleşmesi). Kimlik şeridinde tekrarı yok. */
-  /* TEKLİF VER: yalnız takım başkanına ve başka takımın oyuncusunda görünür
-     (kendi oyuncuna teklif verilmez). Form: /takimim/teklif-ver. */
-  const managedTeamId = auth.user?.managed_team_id ?? null;
-  const canOffer = Boolean(managedTeamId && player && Number(player.team_id) !== Number(managedTeamId));
-  const openOffer = useCallback(() => {
-    if (!player) return;
-    router.push(`/takimim/teklif-ver?playerId=${player.id}&playerName=${encodeURIComponent(playerName)}`);
-  }, [player, playerName, router]);
-
+  /* TEKLİF VER artık başlık ikonu değil, kimlik bloğundaki birincil düğmedir
+     (OfferCta — bkz. hero `actions`). */
   const actions = useMemo(
     () => [
-      ...(canOffer
-        ? [{ icon: "swap-horizontal" as const, onPress: openOffer, accessibilityLabel: "Transfer teklifi ver" }]
-        : []),
       {
         icon: "share-outline" as const,
         onPress: openShare,
         accessibilityLabel: "Oyuncu kartını paylaş",
       },
     ],
-    [canOffer, openOffer, openShare],
+    [openShare],
   );
 
   if (!validId) {
@@ -2165,6 +2166,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.bg,
   },
+  /* Kimlik bloğundaki eylemler: teklif düğmesi üstte, takip altta. */
+  heroActions: { gap: space.sm },
   /* İçerik kabı ekran dolgusunu basıyor; başlık kendi dolgusunu basmaz. */
   flushHeader: {
     paddingHorizontal: 0,

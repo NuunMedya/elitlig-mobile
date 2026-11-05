@@ -20,12 +20,17 @@
  *
  * Ekranın her açılışı sunucuda XP defterini eşitler; yeni açılan rozetler
  * bir bildirimle kutlanır.
+ *
+ * KARİYERİM KÖPRÜSÜ: `/kariyer?tab=kariyer|rozetler|takim` doğrudan o sekmeyi
+ * açar (Yönetim ▸ Kariyerim'deki OVR rozeti ve seviye çubuğu buraya gelir);
+ * Kariyer sekmesindeki kısayollar da geri, Kariyerim / Maçlarım / Profilim'e
+ * götürür. İki ekran aynı ["career","me"] önbelleğini okur.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
-import { Redirect, useRouter, type Href } from "expo-router";
+import { Redirect, useLocalSearchParams, useRouter, type Href } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -86,6 +91,14 @@ const QUEST_ROUTES: Record<string, Href> = {
 };
 
 type Tab = "gorevler" | "takim" | "kariyer" | "rozetler";
+const TAB_KEYS: Tab[] = ["gorevler", "takim", "kariyer", "rozetler"];
+/** `?tab=` derin bağlantısı: Kariyerim panelindeki Elit Kart / OVR kapıları
+ *  doğrudan Kariyer sekmesini açar. Bilinmeyen değer Görevler'e düşer. */
+const resolveTab = (raw: unknown): Tab => {
+  const value = String(Array.isArray(raw) ? raw[0] : raw ?? "").toLowerCase();
+  return (TAB_KEYS as string[]).includes(value) ? (value as Tab) : "gorevler";
+};
+
 const TABS: SegmentedItem<Tab>[] = [
   { key: "gorevler", label: "Görevler" },
   { key: "takim", label: "Takım" },
@@ -97,7 +110,10 @@ export default function CareerScreen() {
   const auth = useAuth();
   const toast = useToast();
   const { scrollY, scrollProps } = useHeaderScroll();
-  const [tab, setTab] = useState<Tab>("gorevler");
+  const params = useLocalSearchParams<{ tab?: string }>();
+  const routeTab = resolveTab(params.tab);
+  const [tab, setTab] = useState<Tab>(routeTab);
+  useEffect(() => setTab(routeTab), [routeTab]);
 
   const query = useQuery({ queryKey: ["career", "me"], queryFn: getMyCareer, enabled: Boolean(auth.user), staleTime: 30_000 });
   const refresh = useRefresh(query.refetch, { refreshing: query.isRefetching });
@@ -541,6 +557,14 @@ function CareerTab({ data }: { data: CareerSummary }) {
         <>
           <EliteCard card={data.card} level={data.level.level} />
           <Button label="Sezon Özetim" icon="sparkles-outline" variant="secondary" size="sm" onPress={() => router.push("/sezon-ozeti")} />
+          {/* Elit Kariyer ↔ Kariyerim köprüsü: kartın arkasındaki gerçek maçlar,
+              teklifler ve profil Yönetim ▸ Kariyerim'de. */}
+          <View style={styles.shortcuts}>
+            <Shortcut icon="briefcase-outline" label="Kariyerim" onPress={() => router.push("/kulubum?rol=oyuncu" as Href)} />
+            <Shortcut icon="football-outline" label="Maçlarım" onPress={() => router.push("/oyuncum?tab=maclarim" as Href)} />
+            <Shortcut icon="stats-chart-outline" label="İstatistik" onPress={() => router.push("/oyuncum?tab=istatistik" as Href)} />
+            <Shortcut icon="person-circle-outline" label="Profilim" onPress={() => router.push("/oyuncum/profil" as Href)} />
+          </View>
         </>
       ) : (
         <View style={styles.card}>
