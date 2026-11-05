@@ -337,7 +337,7 @@ const TIPS: Record<number, string> = {
   10: "Kupa maçı: hamle sınırı var — her hamleyi hesapla!",
   15: "Kilitli dolap: üstündeki renkteki takım hazır olunca kapısı açılır.",
   22: "Dar askı: bazı askılar daha az forma alır; ara durak olarak kullan.",
-  35: "Az boş dolap: artık tek boş dolabın var, sırayı iyi planla.",
+  37: "Az boş dolap: artık tek boş dolabın var, sırayı iyi planla.",
 };
 
 function planFor(level: number): Plan {
