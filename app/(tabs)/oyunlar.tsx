@@ -650,6 +650,21 @@ export default function OyunlarScreen() {
           onSignIn={openSignIn}
         />
 
+        {/* LİG YOLU — seviyeli bulmacalar (Elit Üçlü, Üçle Kazan, Soyunma
+            Odası, Stadyum Kantini) ve Stadyumunu Kur. Uzun soluklu ilerleme
+            burada; mini oyunlar rekor odaklıdır. */}
+        <SectionHeader title="Lig Yolu" meta="Seviyeli bulmacalar" />
+        <View style={styles.rows}>
+          <ListRow
+            leading={{ icon: "trophy", tone: "warn" }}
+            title="Lig Yolu"
+            subtitle="Elit Üçlü, Üçle Kazan, Soyunma Odası, Stadyum Kantini · stadyumunu kur"
+            position="single"
+            chevron
+            onPress={() => router.push(signedIn ? "/lig-yolu" : "/giris")}
+          />
+        </View>
+
         {/* 2) Rekabet — gerçek maçlarla oynanan, sezon boyu süren yarışmalar.
             Mini oyunlardan ÖNCE gelir: haftalık geri dönüşü bunlar üretir. */}
         <SectionHeader title="Rekabet" />
