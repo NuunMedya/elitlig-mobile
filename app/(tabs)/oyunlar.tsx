@@ -715,10 +715,17 @@ export default function OyunlarScreen() {
         <SectionHeader title="Kariyer ve sıralamalar" />
         <View style={styles.rows}>
           <ListRow
+            leading={{ icon: "flash", tone: "warn" }}
+            title="Haftalık görevler"
+            subtitle="Görev tamamla, XP kazan · Yönetim sekmesinin en üstünde de"
+            position="first"
+            onPress={() => router.push(signedIn ? "/gorevler" : "/giris")}
+          />
+          <ListRow
             leading={{ icon: "ribbon", tone: "brand" }}
             title="Elit Kariyer"
-            subtitle="Elit Seviye, Elit Kart, rozetler ve haftalık görevler"
-            position="first"
+            subtitle="Elit Seviye, Elit Kart, rozetler ve kariyer görevleri"
+            position="middle"
             onPress={() => router.push("/kariyer")}
           />
           <ListRow

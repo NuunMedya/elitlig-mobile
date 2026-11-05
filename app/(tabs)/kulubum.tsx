@@ -66,6 +66,7 @@ import {
   useRefresh,
   type TabItem,
 } from "@/components/ui";
+import { QuestSpotlight } from "@/components/quests/QuestSpotlight";
 import { useNotificationBell } from "@/hooks/useNotificationBell";
 import { MAX_STARTERS, getTeamFinance, getTeamMatchPlan } from "@/lib/api/team";
 import { formatDateShort, formatDecimal, mediaUrl } from "@/lib/format";
@@ -188,6 +189,13 @@ export default function ClubHubScreen() {
         contentContainerStyle={styles.content}
         refreshControl={user ? <RefreshControl {...refreshControlProps(refresh.refreshing, refresh.onRefresh)} /> : undefined}
       >
+        {/* HAFTALIK GÖREVLER — her rolün en üstünde; XP'nin ana kaynağı. */}
+        {!auth.initializing ? (
+          <View style={styles.quests}>
+            <QuestSpotlight />
+          </View>
+        ) : null}
+
         {auth.initializing ? (
           <View style={styles.pad}>
             <SkeletonCard lines={3} />
@@ -788,6 +796,7 @@ function AttentionRows({
 }
 
 const styles = StyleSheet.create({
+  quests: { paddingHorizontal: layout.screenPadding, paddingTop: space.sm },
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { paddingTop: space.sm, paddingBottom: space.xxl },
   pad: { paddingHorizontal: layout.screenPadding },
