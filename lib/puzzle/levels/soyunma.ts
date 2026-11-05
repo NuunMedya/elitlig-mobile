@@ -497,6 +497,11 @@ function starThresholds(par: number, hidden: boolean): { star3: number; star2: n
 
 const cache = new Map<number, SoyunmaLevel>();
 
+/** Önbellekte varsa seviyeyi döner (üretmeden) — ekran ilk karede hazırsa bekletmez. */
+export function peekSoyunmaLevel(level: number): SoyunmaLevel | null {
+  return cache.get(Math.max(1, Math.floor(level))) ?? null;
+}
+
 /** Denetim betiği için: önbelleği boşaltır (belirlenimcilik sınaması). */
 export function resetSoyunmaCache(): void {
   cache.clear();

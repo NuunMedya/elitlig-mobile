@@ -180,26 +180,24 @@ function placeTrophies(g: Grid, rng: () => number, amount: number): number {
  * Hedeflerin "iş yükü"nden hamle sayısı. Katsayılar denetim betiğindeki
  * açgözlü botla ayarlandı: kolay seviyelerde bol pay, zorlarda dar pay.
  */
-function estimateMoves(goals: UcluGoalDef[], colors: number, d: number, layout: string[]): number {
-  let work = 0;
-  const colorRate = colors >= 6 ? 1.15 : 1.45;
+function estimateMoves(goals: UcluGoalDef[], colors: number, d: number, layout: string[], cup: boolean): number {
+  const count = (set: string) => layout.reduce((n, row) => n + [...row].filter((ch) => set.includes(ch)).length, 0);
   const deepMud = layout.reduce((n, row, r) => n + (r >= UCLU_H - 2 ? [...row].filter((ch) => ch === "m" || ch === "M").length : 0), 0);
+  const parts: number[] = [];
   for (const g of goals) {
-    if (g.type === "color") work += g.count / colorRate;
-    else if (g.type === "mud") {
-      const layers = layout.reduce((n, row) => n + [...row].filter((ch) => ch === "M").length, 0);
-      work += (g.count + layers) / 2.1 + deepMud * 0.12;
-    } else if (g.type === "crate") {
-      const hp = layout.reduce((n, row) => n + [...row].reduce((k, ch) => k + (ch === "b" ? 1 : ch === "B" ? 2 : ch === "C" ? 3 : 0), 0), 0);
-      work += hp / 2.0;
-    } else if (g.type === "snow") work += g.count / 2.4;
-    else if (g.type === "trophy") work += g.count * 2.6;
+    if (g.type === "color") parts.push(g.count / 3.0);
+    else if (g.type === "mud") parts.push((g.count + count("M")) / 1.5 + deepMud * 0.15);
+    else if (g.type === "crate") parts.push((count("b") + count("B") * 2 + count("C") * 3) / 1.3);
+    else if (g.type === "snow") parts.push(g.count / 0.95);
+    else if (g.type === "trophy") parts.push(g.count * 6);
   }
-  const nets = layout.reduce((n, row) => n + [...row].filter((ch) => ch === "n").length, 0);
-  work += nets * 0.15;
-  if (goals.length > 1) work *= 0.86; // hedefler aynı hamlede birlikte ilerler
-  const slack = 1.55 - 0.5 * d;
-  return clamp(Math.round(work * slack + 6), 14, 42);
+  // Birden çok hedef aynı hamlelerde birlikte ilerler: en büyüğü tam, kalanlar kısmen.
+  parts.sort((a, b) => b - a);
+  let work = parts.reduce((sum, p, i) => sum + p * (i === 0 ? 1 : 0.55), 0);
+  work += count("n") * 0.35;
+  if (colors >= 6) work *= 1.7;
+  const slack = (cup ? 1.6 : 1.75) - 0.65 * d;
+  return Math.round(work * slack + 3);
 }
 
 /* ───────────────────────────── zorluk eğrisi ───────────────────────────── */
@@ -226,9 +224,9 @@ const TIPS: Record<number, string> = {
   7: "İki özel taşı birbiriyle değiştir: dev kombo patlar!",
   9: "Koyu çamur iki katlıdır: iki kez temizlemen gerekir.",
   11: "Krampon kutusu düşmeyi engeller. Yanında eşleşme yap ya da patlat.",
-  16: "Kar kaplı taş yerinden oynamaz. Üstünde ya da yanında eşleşme kırar.",
+  16: "Kar kaplı taş yerinden oynamaz. Onu bir eşleşmeye kat ya da patlat: kar kırılır.",
   21: "Şampiyonluk kupasını en alt sıraya indir: altındaki taşları temizle.",
-  26: "Kale ağındaki taş tutsak. Onu bir eşleşmeye kat ya da patlat, serbest kalsın.",
+  26: "Kale ağındaki taş tutsak. Onu bir eşleşmeye kat ya da patlat: ağ yırtılır, taş serbest kalır.",
   31: "Yeni taş: Kupa! Şekilli sahalar ve altı taş türü başlıyor.",
 };
 
@@ -256,8 +254,8 @@ function tutorial(n: number): Omit<UcluLevel, "level" | "seed" | "tip" | "cup" |
       return { moves: 22, colors: 5, layout: toRows(g), goals: [{ type: "color", color: 1, count: 22 }], trophySpawn: 0 };
     }
     case 6: {
-      for (let r = 6; r < 8; r++) for (let c = 0; c < 8; c++) g[r][c] = "m";
-      return { moves: 22, colors: 5, layout: toRows(g), goals: [{ type: "mud", count: 16 }], trophySpawn: 0 };
+      for (let r = 4; r < 6; r++) for (let c = 0; c < 8; c++) g[r][c] = "m";
+      return { moves: 24, colors: 5, layout: toRows(g), goals: [{ type: "mud", count: 16 }], trophySpawn: 0 };
     }
     case 7: {
       for (let r = 5; r < 8; r++) for (let c = 2; c < 6; c++) g[r][c] = "m";
@@ -270,12 +268,12 @@ function tutorial(n: number): Omit<UcluLevel, "level" | "seed" | "tip" | "cup" |
     }
     case 9: {
       for (let c = 0; c < 8; c++) { g[7][c] = "M"; g[6][c] = c % 2 === 0 ? "m" : "M"; }
-      return { moves: 26, colors: 5, layout: toRows(g), goals: [{ type: "mud", count: 16 }], trophySpawn: 0 };
+      return { moves: 30, colors: 5, layout: toRows(g), goals: [{ type: "mud", count: 16 }], trophySpawn: 0 };
     }
     default: {
       // 10 — ilk kupa maçı: çamur çerçeve + iki renk.
       for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (r === 7 || c === 0 || c === 7 || r === 6) g[r][c] = r >= 6 ? "M" : "m";
-      return { moves: 28, colors: 5, layout: toRows(g), goals: [{ type: "mud", count: 28 }, { type: "color", color: 3, count: 14 }], trophySpawn: 0 };
+      return { moves: 36, colors: 5, layout: toRows(g), goals: [{ type: "mud", count: 28 }, { type: "color", color: 3, count: 14 }], trophySpawn: 0 };
     }
   }
 }
@@ -284,14 +282,13 @@ function tutorial(n: number): Omit<UcluLevel, "level" | "seed" | "tip" | "cup" |
 
 type Mech = "color" | "mud" | "crate" | "snow" | "trophy";
 
-function generated(n: number, rng: () => number, d: number): Omit<UcluLevel, "level" | "seed" | "tip" | "cup" | "breather"> {
+function generated(n: number, rng: () => number, d: number, load: number): Omit<UcluLevel, "level" | "seed" | "tip" | "cup" | "breather"> & { raw: number } {
   const cup = n % 10 === 0;
   const g = blank();
-  const colors = n >= 31 && (cup || rng() < clamp(0.25 + (n - 31) / 400, 0.25, 0.6)) && n !== 35 ? 6 : 5;
 
   // Şekilli tahta (31+): kupa maçlarında ve bazı seviyelerde.
   if (n >= 31 && (n === 31 || cup || rng() < 0.45)) {
-    const mask = MASKS[Math.floor(rng() * MASKS.length)];
+    const mask = n === 31 ? MASKS[0] : MASKS[Math.floor(rng() * MASKS.length)];
     mask.rows.forEach((row, r) => [...row].forEach((ch, c) => { if (ch === "#") g[r][c] = "#"; }));
   }
 
@@ -300,59 +297,62 @@ function generated(n: number, rng: () => number, d: number): Omit<UcluLevel, "le
   if (n >= 11) avail.push("crate");
   if (n >= 16) avail.push("snow");
   if (n >= 21) avail.push("trophy");
-  const nets = n >= 26;
 
   // Ana mekanik: tanıtım seviyesinde yenisi, diğerlerinde ağırlıklı seçim.
-  const intro: Record<number, Mech> = { 11: "crate", 12: "crate", 16: "snow", 17: "snow", 21: "trophy", 22: "trophy" };
-  let main: Mech = intro[n] ?? avail[Math.floor(rng() * avail.length)];
-  if (n === 26 || n === 27) main = "color";
+  const intro: Record<number, Mech> = { 11: "crate", 12: "crate", 16: "snow", 17: "snow", 21: "trophy", 22: "trophy", 26: "color", 27: "color", 31: "color" };
+  const main: Mech = intro[n] ?? avail[Math.floor(rng() * avail.length)];
   const mechs = new Set<Mech>([main]);
-  const extra = cup ? 2 : d > 0.45 && rng() < 0.6 ? 1 : 0;
+  const extra = cup ? 1 + (d > 0.6 ? 1 : 0) : d > 0.45 && rng() < 0.55 ? 1 : 0;
   for (let i = 0; i < extra && !(n in intro); i++) mechs.add(avail[Math.floor(rng() * avail.length)]);
+
+  // 6. taş türü (31+): tahtayı belirgin zorlaştırır; kutu ve kupa ile birleşmez.
+  const heavy = mechs.has("crate") || mechs.has("trophy") || mechs.size > 1;
+  const colors = n === 31 || (n > 31 && !heavy && rng() < clamp(0.3 + (n - 31) / 500, 0.3, 0.55)) ? 6 : 5;
 
   const goals: UcluGoalDef[] = [];
   const free = () => cellsWhere(g, () => true).length;
 
   if (mechs.has("crate")) {
-    const amount = Math.round(clamp(6 + d * 10 + rng() * 4, 6, 16));
+    const amount = Math.round(clamp((6 + d * 8 + rng() * 4) * load, 5, 14));
     const placed = placeCrates(g, rng, amount, d);
     if (placed > 0) goals.push({ type: "crate", count: placed });
   }
   if (mechs.has("mud")) {
-    const amount = Math.round(clamp(10 + d * 16 + rng() * 6, 8, Math.min(30, free() - 20)));
+    const amount = Math.round(clamp((10 + d * 14 + rng() * 6) * load, 8, Math.min(28, free() - 20)));
     const layers2 = Math.round(amount * clamp(d - 0.2, 0, 0.6) * rng());
     const placed = placeMud(g, rng, amount, layers2);
     if (placed > 0) goals.push({ type: "mud", count: placed });
   }
   if (mechs.has("snow")) {
-    const amount = Math.round(clamp(6 + d * 10 + rng() * 4, 6, 16));
+    const amount = Math.round(clamp((6 + d * 8 + rng() * 4) * load, 5, 14));
     const placed = placeScatter(g, rng, "s", amount, 2);
     if (placed > 0) goals.push({ type: "snow", count: placed });
   }
   let trophySpawn = 0;
   if (mechs.has("trophy")) {
-    const total = Math.round(clamp(2 + d * 3 + rng() * 1.5, 2, 6));
+    const total = Math.round(clamp((2 + d * 2 + rng() * 1.2) * load, 2, 4));
     const onBoard = Math.min(total, 2 + (rng() < 0.4 ? 1 : 0));
     const placed = placeTrophies(g, rng, onBoard);
     trophySpawn = total - placed;
     goals.push({ type: "trophy", count: total });
   }
   // Kale ağı (26+): ek engel, hedef değil.
-  if (nets && (n === 26 || n === 27 || rng() < 0.4)) {
-    placeScatter(g, rng, "n", Math.round(clamp(4 + d * 8 + rng() * 3, 4, 12)), 1);
+  if (n >= 26 && (n === 26 || n === 27 || rng() < 0.4)) {
+    placeScatter(g, rng, "n", Math.round(clamp((3 + d * 5 + rng() * 2) * load, 3, 8)), 1);
   }
   if (mechs.has("color") || goals.length === 0) {
-    const count = Math.round(clamp(14 + d * 22 + rng() * 6, 12, 40));
+    const count = Math.round(clamp((18 + d * 26 + rng() * 6) * load, 14, 48) * (colors === 6 ? 0.75 : 1));
     const c1 = Math.floor(rng() * colors);
     goals.push({ type: "color", color: c1, count });
-    if (d > 0.55 && rng() < 0.5) {
+    if (d > 0.5 && rng() < 0.5) {
       const c2 = (c1 + 1 + Math.floor(rng() * (colors - 1))) % colors;
       goals.push({ type: "color", color: c2, count: Math.round(count * 0.7) });
     }
   }
 
   const layout = toRows(g);
-  return { moves: estimateMoves(goals, colors, d, layout), colors, layout, goals, trophySpawn };
+  const raw = estimateMoves(goals, colors, d, layout, cup);
+  return { moves: clamp(raw, 14, 42), raw, colors, layout, goals, trophySpawn };
 }
 
 /* ───────────────────────────── dışa açık API ───────────────────────────── */
@@ -365,9 +365,17 @@ export function ucluLevel(level: number): UcluLevel {
   const hit = cache.get(n);
   if (hit) return hit;
   const seed = (n * 7919 + SALT) >>> 0;
-  const rng = ucluRandom(seed);
   const d = ucluDifficulty(n);
-  const body = n <= 10 ? tutorial(n) : generated(n, rng, d);
+  let body: Omit<UcluLevel, "level" | "seed" | "tip" | "cup" | "breather"> = tutorial(1);
+  if (n <= 10) body = tutorial(n);
+  else {
+    // İş yükü hamle tavanını (40) aşarsa hedefler küçültülerek yeniden üretilir.
+    for (let attempt = 0, load = 1; attempt < 6; attempt++, load *= 0.85) {
+      const { raw, ...rest } = generated(n, ucluRandom(seed), d, load);
+      body = rest;
+      if (raw <= 40) break;
+    }
+  }
   const out: UcluLevel = {
     level: n,
     seed,

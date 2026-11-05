@@ -385,7 +385,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     minWidth: 14,
     height: 14,
-    borderRadius: 7,
+    borderRadius: radius.pill,
     backgroundColor: SOYUNMA_LOCKER.rail,
     alignItems: "center",
     justifyContent: "center",

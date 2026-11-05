@@ -24,6 +24,8 @@ import {
 } from "../lib/puzzle/ucluEngine.ts";
 
 const COUNT = Number(process.argv[2]) || 300;
+/** `--detay`: seviye başına satır (ayar için): hamle, sınırsız hamlede botun harcadığı. */
+const DETAIL = process.argv.includes("--detay");
 const VALID = new Set([..."#.012345RVOGmMbBCsnt"]);
 const errors = [];
 const fail = (lvl, msg) => errors.push(`seviye ${lvl}: ${msg}`);
@@ -52,8 +54,18 @@ function value(before, after, s) {
   if (has("snow")) v += (before.snow - after.snow) * 3;
   if (has("trophy")) v += (after.trophyDepth - before.trophyDepth) * 3;
   v += (before.net - after.net) * 1.2;
-  v += (after.specials - before.specials) * 4;
+  v += (after.specials - before.specials) * 2.5;
   return v;
+}
+
+/** Kupanın altındaki hücreler (kupa sütununda temizlenen her taş kupayı indirir). */
+function trophyLanes(s) {
+  const lanes = new Set();
+  s.cells.forEach((c, i) => {
+    if (c.tile?.kind !== "trophy") return;
+    for (let r = Math.floor(i / W) + 1; r < H; r++) lanes.add(r * W + (i % W));
+  });
+  return lanes;
 }
 
 /**
@@ -61,8 +73,10 @@ function value(before, after, s) {
  * bot yeni düşecek taşları göremez (insan gibi). `noise`: eşit-yakın hamleler
  * arasında tohumlu rastgelelik (kanıt aramasında farklı yollar denemek için).
  */
-function play(level, { fair, noise = 0, seed = 1 }) {
+function play(level, { fair, noise = 0, seed = 1, unlimited = false }) {
   const s = createGame(level);
+  if (unlimited) s.moves = 400;
+  let used = 0;
   let x = seed >>> 0;
   const r = () => {
     x = (x + 0x6d2b79f5) >>> 0;
@@ -80,6 +94,7 @@ function play(level, { fair, noise = 0, seed = 1 }) {
       if (!moves.length) return { won: false, left: s.moves, shuffles };
     }
     const base = features(s);
+    const lanes = trophyLanes(s);
     let best = null;
     let bestV = -Infinity;
     for (const [a, b] of moves) {
@@ -88,7 +103,9 @@ function play(level, { fair, noise = 0, seed = 1 }) {
         if (fair) c.rng = (c.rng ^ 0x9e3779b9) >>> 0;
         const res = trySwap(c, p, q, false);
         if (!res.ok) continue;
-        const v = value(base, features(c), c) + (goalsDone(c) ? 1000 : 0) + (noise ? r() * noise : 0);
+        let lane = 0;
+        if (lanes.size) for (const st of res.steps) for (const cl of st.cleared) if (lanes.has(cl.cell)) lane++;
+        const v = value(base, features(c), c) + lane * 2 + (goalsDone(c) ? 1000 : 0) + (noise ? r() * noise : 0);
         if (v > bestV) {
           bestV = v;
           best = [p, q];
@@ -97,8 +114,9 @@ function play(level, { fair, noise = 0, seed = 1 }) {
     }
     if (!best) return { won: false, left: s.moves, shuffles };
     trySwap(s, best[0], best[1], false);
+    used++;
   }
-  return { won: goalsDone(s), left: s.moves, shuffles };
+  return { won: goalsDone(s), left: s.moves, shuffles, used };
 }
 
 /* ───────────────────────────── yapısal denetim ───────────────────────────── */
@@ -172,6 +190,7 @@ let proved = 0;
 const unproved = [];
 const mechs = { mud: 0, crate: 0, snow: 0, trophy: 0, net: 0, shaped: 0, six: 0, cup: 0 };
 let movesSum = 0;
+const cupStats = { wins: 0, total: 0 };
 let minMoves = 99;
 let maxMoves = 0;
 
@@ -190,6 +209,17 @@ for (const L of levels) {
   maxMoves = Math.max(maxMoves, L.moves);
 
   const fair = play(L, { fair: true });
+  if (L.cup) {
+    cupStats.total++;
+    if (fair.won) cupStats.wins++;
+  }
+  if (DETAIL) {
+    const used = [1, 2, 3].map((k) => play({ ...L, seed: L.seed }, { fair: true, unlimited: true, noise: k === 1 ? 0 : 2, seed: k }).used);
+    console.log(
+      `${L.level}\thamle ${L.moves}\tbot ${used.join(",")}\t${fair.won ? "K" : "-"}\t${L.colors}\t` +
+        L.goals.map((g) => `${g.type}${g.count}`).join(" "),
+    );
+  }
   if (fair.won) fairWins++;
   const b = Math.floor((L.level - 1) / BUCKET);
   curve[b] ??= { wins: 0, total: 0, left: 0 };
@@ -226,7 +256,7 @@ curve.forEach((c, i) => {
   console.log(`  ${String(from).padStart(3)}–${String(to).padEnd(3)} ${bar} ${String(pct).padStart(3)}%  (kazanınca kalan hamle ort. %${spare})`);
 });
 const fairPct = Math.round((fairWins / COUNT) * 100);
-console.log(`\nAdil bot toplam: ${fairWins}/${COUNT} (%${fairPct}).`);
+console.log(`\nAdil bot toplam: ${fairWins}/${COUNT} (%${fairPct}); kupa maçları ${cupStats.wins}/${cupStats.total}.`);
 console.log(`Kanıtlı çözülebilir (hamle sınırında kazanan somut dizi): ${proved}/${COUNT}.`);
 if (unproved.length) fail("-", `kanıt bulunamayan seviyeler: ${unproved.join(", ")}`);
 if (fairPct < 55) fail("-", `adil bot kazanma oranı %${fairPct} < %55 (seviyelerin çoğunluğu kazanılabilir olmalı)`);

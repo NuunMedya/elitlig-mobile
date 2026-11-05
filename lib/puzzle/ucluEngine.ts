@@ -477,7 +477,9 @@ function hit(s: GameState, ctx: StepCtx, i: number) {
   if (c.crate > 0) return damageCrate(s, ctx, i);
   const t = c.tile;
   if (!t) return hitMud(s, ctx, i);
-  if (locked(c)) return breakLock(s, ctx, i);
+  // Ağ: kırılır, taş serbest kalır. Kar: kırılır ve altındaki taş da gider.
+  if (c.net > 0) return breakLock(s, ctx, i);
+  if (c.snow > 0) breakLock(s, ctx, i);
   if (t.kind === "trophy") return;
   if (ctx.clear.has(i)) return;
   ctx.clear.add(i);
@@ -485,7 +487,7 @@ function hit(s: GameState, ctx: StepCtx, i: number) {
   if (t.special !== "none" && !ctx.consumed.has(i)) ctx.queue.push(i);
 }
 
-/** Eşleşen hücrenin yanındaki kutu ve kar da vuruş alır. */
+/** Eşleşen hücrenin yanındaki krampon kutusu vuruş alır. */
 function hitNeighbours(s: GameState, ctx: StepCtx, i: number) {
   const [r, c] = rc(i);
   for (const [dr, dc] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
@@ -493,9 +495,7 @@ function hitNeighbours(s: GameState, ctx: StepCtx, i: number) {
     const cc = c + dc;
     if (!inside(rr, cc)) continue;
     const j = idx(rr, cc);
-    const n = s.cells[j];
-    if (n.crate > 0) damageCrate(s, ctx, j);
-    else if (n.snow > 0 && n.tile) breakLock(s, ctx, j);
+    if (s.cells[j].crate > 0) damageCrate(s, ctx, j);
   }
 }
 
@@ -681,11 +681,6 @@ function resolve(s: GameState, first: Pending | null, prefer: number[], record: 
         if (c.crate > 0) {
           c.crate = 1;
           damageCrate(s, ctx, i);
-        } else if (c.tile && locked(c)) {
-          c.snow = Math.min(c.snow, 1);
-          c.net = Math.min(c.net, 1);
-          breakLock(s, ctx, i);
-          if (c.net > 0) breakLock(s, ctx, i);
         } else hit(s, ctx, i);
       }
       ctx.blasts.push(...pending.blasts);
