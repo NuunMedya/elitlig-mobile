@@ -48,6 +48,10 @@ export interface MatchLogRowProps {
   venue?: string | null;
   position: RowPosition;
   onPress: (matchId: number) => void;
+  /** Bu maçtaki gol videosu sayısı (canlı yayında kaydedilen klipler). */
+  clipCount?: number;
+  /** Video düğmesi — verilirse ve clipCount > 0 ise satırda "VİDEO" çıkar. */
+  onClip?: (matchId: number) => void;
 }
 
 const MONTHS = ["OCA", "ŞUB", "MAR", "NİS", "MAY", "HAZ", "TEM", "AĞU", "EYL", "EKİ", "KAS", "ARA"];
@@ -95,8 +99,11 @@ export const MatchLogRow = React.memo(function MatchLogRow({
   venue,
   position,
   onPress,
+  clipCount = 0,
+  onClip,
 }: MatchLogRowProps) {
   const handlePress = useCallback(() => onPress(matchId), [onPress, matchId]);
+  const handleClip = useCallback(() => onClip?.(matchId), [onClip, matchId]);
   const name = opponent || "Rakip";
 
   const speech = [
@@ -157,6 +164,21 @@ export const MatchLogRow = React.memo(function MatchLogRow({
           ) : null}
         </View>
       </View>
+
+      {clipCount > 0 && onClip ? (
+        <Touchable
+          style={styles.clip}
+          onPress={handleClip}
+          haptic="light"
+          accessibilityRole="button"
+          accessibilityLabel={`${name} maçının gol videosunu izle`}
+        >
+          <Ionicons name="play" size={10} color={colors.textOnBrand} />
+          <Text style={styles.clipText} {...textScale.badge}>
+            {clipCount > 1 ? `${clipCount} VİDEO` : "VİDEO"}
+          </Text>
+        </Touchable>
+      ) : null}
 
       <View
         style={[
@@ -235,6 +257,16 @@ function Card({ color, count }: { color: string; count: number }) {
 }
 
 const styles = StyleSheet.create({
+  clip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xxs,
+    height: 22,
+    paddingHorizontal: space.s,
+    borderRadius: radius.pill,
+    backgroundColor: colors.live,
+  },
+  clipText: { ...type.micro, color: colors.textOnBrand },
   row: {
     flexDirection: "row",
     alignItems: "center",

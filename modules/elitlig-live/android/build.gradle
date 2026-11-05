@@ -1,0 +1,30 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.elitlig.live'
+version = '0.1.0'
+
+// RootEncoder JitPack'ten gelir. Uygulama düzeyindeki allprojects.repositories'e
+// app.plugin.js de ekler; burada da tanımlı ki modül tek başına çözümlensin.
+repositories {
+  google()
+  mavenCentral()
+  maven { url 'https://jitpack.io' }
+}
+
+android {
+  namespace "com.elitlig.live"
+  defaultConfig {
+    versionCode 1
+    versionName "0.1.0"
+  }
+}
+
+dependencies {
+  // 2.6.1: Kotlin 2.1.20 ile derlenmiş son sürüm (RN 0.81 / Expo 54 = Kotlin 2.1.20).
+  // 2.6.2+ Kotlin 2.2, 2.7.3+ Kotlin 2.3/2.4 metadata'sı taşır; yükseltmeden önce
+  // projenin kotlinVersion'ını da yükseltin.
+  implementation 'com.github.pedroSG94.RootEncoder:library:2.6.1'
+}

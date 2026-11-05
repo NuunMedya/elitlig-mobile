@@ -16,6 +16,7 @@
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
 
@@ -83,6 +84,7 @@ const PHASE_LABEL: Record<Phase, string> = {
 
 export function LiveStep({ match, onScore }: { match: AdminMatch; onScore?: (score: { home: number; away: number }) => void }) {
   const auth = useAuth();
+  const router = useRouter();
   const queryClient = useQueryClient();
   const matchId = Number(match.id);
   const homeTeamId = Number(match.home_team_id) || null;
@@ -365,6 +367,29 @@ export function LiveStep({ match, onScore }: { match: AdminMatch; onScore?: (sco
     <View style={styles.stack}>
       {manual ? <Note tone="warn" text="Skor elle / hükmen tescil edildi. Girilen olaylar skoru değiştirmez." /> : null}
 
+      {/* Telefondan YouTube canlı yayın + yatay mobil reji */}
+      {canLive ? (
+        <Touchable
+          style={styles.liveCta}
+          onPress={() => router.push(`/yonetim/canli-yayin/${matchId}`)}
+          accessibilityLabel="Telefondan canlı yayın başlat"
+          haptic="light"
+        >
+          <View style={styles.liveCtaIcon}>
+            <Ionicons name="videocam" size={20} color={colors.textOnBrand} />
+          </View>
+          <View style={styles.flex}>
+            <Text style={styles.liveCtaTitle} {...textScale.dense}>
+              Canlı yayın başlat
+            </Text>
+            <Text style={styles.liveCtaBody} {...textScale.long}>
+              Telefon kamerasıyla YouTube'da yayın; skorbord görüntünün üstünde, reji yatay ekranda.
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+        </Touchable>
+      ) : null}
+
       {/* Skor ve saat */}
       <View style={styles.board}>
         <View style={styles.boardRow}>
@@ -617,6 +642,19 @@ function StatLine({ label, home, away }: { label: string; home: number; away: nu
 
 const styles = StyleSheet.create({
   stack: { gap: space.md },
+  liveCta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    padding: space.md,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.live,
+  },
+  liveCtaIcon: { width: 40, height: 40, borderRadius: radius.md, alignItems: "center", justifyContent: "center", backgroundColor: colors.live },
+  liveCtaTitle: { ...type.h4, color: colors.textPrimary },
+  liveCtaBody: { ...type.caption, color: colors.textSecondary, marginTop: space.xxs },
   flex: { flex: 1 },
   right: { textAlign: "right" },
   board: {

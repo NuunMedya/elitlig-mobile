@@ -2,7 +2,7 @@
   "expo": {
     "name": "ElitLig",
     "slug": "elitlig-mobile",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "runtimeVersion": {
       "policy": "appVersion"
     },
@@ -11,7 +11,7 @@
       "checkAutomatically": "ON_LOAD",
       "fallbackToCacheTimeout": 0
     },
-    "orientation": "portrait",
+    "orientation": "default",
     "scheme": "elitlig",
     "userInterfaceStyle": "automatic",
     "backgroundColor": "#FFFFFF",
@@ -114,14 +114,14 @@
       [
         "@config-plugins/react-native-webrtc",
         {
-          "cameraPermission": "Kamera yalnızca ileride görüntülü arama özelliği açılırsa, aramada görüntünüzü karşı tarafa iletmek için kullanılır.",
-          "microphonePermission": "Sesli arama sırasında sesinizi karşı tarafa iletmek için mikrofon kullanılır."
+          "cameraPermission": "Kamera, yönetici hesabıyla maçı telefondan canlı yayınlamak için kullanılır.",
+          "microphonePermission": "Mikrofon; sesli arama, sesli mesaj ve maçın canlı yayınında sesi iletmek için kullanılır."
         }
       ],
       [
         "expo-audio",
         {
-          "microphonePermission": "Sesli mesaj kaydetmek ve sesli arama yapmak için mikrofon kullanılır."
+          "microphonePermission": "Mikrofon; sesli arama, sesli mesaj ve maçın canlı yayınında sesi iletmek için kullanılır."
         }
       ],
       [
@@ -131,12 +131,20 @@
         }
       ],
       [
+        "./modules/elitlig-live/app.plugin.js",
+        {
+          "cameraPermission": "Kamera, yönetici hesabıyla maçı telefondan canlı yayınlamak için kullanılır.",
+          "microphonePermission": "Mikrofon; sesli arama, sesli mesaj ve maçın canlı yayınında sesi iletmek için kullanılır."
+        }
+      ],
+      [
         "expo-image-picker",
         {
           "photosPermission": "Profil fotoğrafını ve kulüp logosunu seçmek için fotoğraflarına erişilir.",
           "cameraPermission": false
         }
-      ]
+      ],
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true

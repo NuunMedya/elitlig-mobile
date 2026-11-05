@@ -1,0 +1,11 @@
+{
+  "name": "elitlig-live",
+  "version": "0.1.0",
+  "description": "ElitLig: telefon kamerasindan RTMP/RTMPS canli yayin, yayina gomulu skorbord overlay'i (Android: RootEncoder, iOS: HaishinKit 1.9).",
+  "main": "index.ts",
+  "types": "index.ts",
+  "license": "UNLICENSED",
+  "private": true,
+  "author": "ElitLig",
+  "homepage": "https://elitlig.com"
+}

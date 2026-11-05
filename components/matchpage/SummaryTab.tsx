@@ -20,6 +20,7 @@
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useRouter } from "expo-router";
+import { MatchGoalClips } from "@/components/live/MatchGoalClips";
 import React, { memo, useCallback, useMemo, useState } from "react";
 import {
   FlatList,
@@ -188,6 +189,8 @@ export function SummaryTab({
       {/* Faz 4: maç öncesi arena düellosu, maç sonrası taraftar oylaması. */}
       {scheduled ? <DuelCard matchId={Number(match.id)} /> : null}
       {state === "finished" ? <FanVoteCard matchId={Number(match.id)} /> : null}
+
+      {scheduled ? null : <MatchGoalClips matchId={Number(match.id)} nameOf={nameOf} live={live} />}
 
       {scheduled ? null : (
         <SectionHeader
