@@ -92,13 +92,11 @@ function BoardTileBase(p: Props) {
       glowFx.setValue(0);
       return;
     }
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(glowFx, { toValue: 1, duration: 260, useNativeDriver: true }),
-        Animated.timing(glowFx, { toValue: 0.3, duration: 260, useNativeDriver: true }),
-      ]),
-      { iterations: 3 },
-    ).start();
+    const pulse = Animated.sequence([
+      Animated.timing(glowFx, { toValue: 1, duration: 260, useNativeDriver: true }),
+      Animated.timing(glowFx, { toValue: 0.3, duration: 260, useNativeDriver: true }),
+    ]);
+    Animated.loop(pulse, { iterations: 3 }).start();
   }, [p.glow, glowFx]);
 
   const onPressIn = () => {
