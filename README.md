@@ -22,6 +22,25 @@ Telefona **Expo Go** kurup terminaldeki QR kodu okutmanız yeterli.
 > `--legacy-peer-deps`: Expo 54'ün web bağımlılıklarından gelen `react-dom`
 > sürüm çakışması yüzünden gerekli. Mobil çalışma zamanını etkilemez.
 
+## Mağazasız güncelleme (EAS Update)
+
+Uygulama `expo-updates` ile mağazaya gitmeden JS/görsel güncellemesi alır.
+`runtimeVersion` politikası `appVersion`: güncelleme yalnız aynı uygulama
+sürümüne (app.json `version`) gider; eski mağaza sürümleri etkilenmez.
+
+```bash
+eas update --channel production --message "Kısa açıklama"
+```
+
+Kanallar `eas.json` yapı profillerinde: `production`, `preview`,
+`development`. Kullanıcı güncellemeyi uygulamayı açarken arkada indirir,
+bir sonraki açılışta görür.
+
+Mağaza sürümü GEREKTİRENLER: yeni yerel paket (kamera, ödeme SDK'sı…),
+app.json izin/simge/açılış ekranı/paket adı değişikliği, Expo ya da React
+Native sürüm yükseltmesi. Bunlarda `version` artırılır (yeni runtime) ve
+`eas build` + `eas submit` yapılır.
+
 ## Mimari
 
 Uygulamanın omurgası web sitesindekiyle aynı: **şehir → lig → sezon** kapsamı.

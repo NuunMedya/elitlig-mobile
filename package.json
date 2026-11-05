@@ -11,8 +11,9 @@
     "check:tokens": "node --experimental-strip-types --no-warnings scripts/check-tokens.mjs",
     "build:games": "node scripts/build-games.mjs",
     "check:games": "node --experimental-strip-types --no-warnings scripts/check-games.mjs",
-    "check": "npm run check:tokens && npm run check:games && npm run typecheck",
-    "postinstall": "patch-package"
+    "check": "npm run check:tokens && npm run check:games && npm run check:puzzles && npm run typecheck",
+    "postinstall": "patch-package",
+    "check:puzzles": "node --experimental-strip-types --no-warnings scripts/check-puzzle-uclu.mjs && node --experimental-strip-types --no-warnings scripts/check-puzzle-ucle.mjs && node --experimental-strip-types --no-warnings scripts/check-puzzle-soyunma.mjs && node --experimental-strip-types --no-warnings scripts/check-puzzle-kantin.mjs"
   },
   "dependencies": {
     "@config-plugins/react-native-webrtc": "^13.0.0",
@@ -38,6 +39,7 @@
     "expo-sharing": "~14.0.8",
     "expo-splash-screen": "~31.0.13",
     "expo-status-bar": "~3.0.9",
+    "expo-updates": "~29.0.20",
     "expo-web-browser": "~15.0.11",
     "react": "19.1.0",
     "react-native": "0.81.5",
