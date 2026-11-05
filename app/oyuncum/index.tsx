@@ -13,7 +13,9 @@
  * sözleşme durumu. İkisi ayrı yetki dünyaları; ayrı ekranlar.
  *
  * DÜZEN: bu ekran KARİYER AYRINTISIdır — sade başlık ("Kariyerim", altında
- * oyuncunun adı), iki eylem (herkese açık profilim, düzenle) ve üç sekme.
+ * oyuncunun adı), iki eylem (herkese açık profilim, Oyuncu Profilim) ve üç
+ * sekme. Oynanan maçlarda kadrodaysan "Maçı değerlendir" satırı çıkar
+ * (web Maçlarım ▸ Değerlendir; components/career/MatchReviewSheet).
  * Kimlik, sıradaki maç, yapılacaklar ve sezon özeti Yönetim ▸ Kariyerim
  * panelindedir; burada tekrar edilmez. Maç ve istatistik satırları herkese
  * açık profille aynı bileşenlerdir (components/playerpage).
@@ -37,7 +39,7 @@
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Redirect, router as appRouter, useLocalSearchParams, useRouter } from "expo-router";
+import { Redirect, router as appRouter, useLocalSearchParams, useRouter, type Href } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -93,6 +95,7 @@ import {
   setMyAvailability,
   type AvailabilityStatus,
 } from "@/lib/api/team";
+import { MatchReviewSheet } from "@/components/career/MatchReviewSheet";
 import { formatDateShort, formatTime, mediaUrl } from "@/lib/format";
 import { ApiError, get } from "@/lib/http";
 import { useAuth } from "@/providers/AuthProvider";
@@ -394,8 +397,9 @@ export default function MyPlayerScreen() {
     if (player?.id) router.push(`/oyuncu/${player.id}`);
   }, [player?.id, router]);
 
-  /* Kalem uygulama içi profil düzenleyicisini açar (onaylı talep). */
-  const openEdit = useCallback(() => router.push("/oyuncum/duzenle"), [router]);
+  /* Kişi ikonu "Oyuncu Profilim"i açar: kişisel bilgiler, onay bekleyen
+     değişiklikler, taleplerim; düzenleme oradan (onaylı talep). */
+  const openEdit = useCallback(() => router.push("/oyuncum/profil" as Href), [router]);
 
   const actions = useMemo(
     () =>
@@ -407,9 +411,9 @@ export default function MyPlayerScreen() {
               accessibilityLabel: "Herkese açık profilimi gör",
             },
             {
-              icon: "create-outline" as const,
+              icon: "person-circle-outline" as const,
               onPress: openEdit,
-              accessibilityLabel: "Oyuncu profilimi düzenle",
+              accessibilityLabel: "Oyuncu profilim",
             },
           ]
         : undefined,
@@ -549,9 +553,19 @@ function MyMatchesTab({
   const past = filter === "oynanan";
   const rows = past ? query.data?.past ?? [] : query.data?.upcoming ?? [];
 
+  /* Maç değerlendirmesi (web Maçlarım ▸ "Değerlendir"): yalnız kadroda
+     olduğun oynanmış maçlar (`can_review`). */
+  const [reviewing, setReviewing] = useState<MyMatch | null>(null);
+  const closeReview = useCallback(() => setReviewing(null), []);
+
   const renderItem = useCallback(
     ({ item }: { item: MyMatch }) => (
-      <MyMatchCard match={item} past={past} onPress={() => router.push(`/mac/${item.id}`)} />
+      <MyMatchCard
+        match={item}
+        past={past}
+        onPress={() => router.push(`/mac/${item.id}`)}
+        onReview={past && item.can_review ? () => setReviewing(item) : undefined}
+      />
     ),
     [past, router],
   );
@@ -599,6 +613,7 @@ function MyMatchesTab({
   }
 
   return (
+    <>
     <FlatList
       {...scrollProps}
       data={rows}
@@ -621,6 +636,15 @@ function MyMatchesTab({
         />
       }
     />
+    {reviewing ? (
+      <MatchReviewSheet
+        matchId={reviewing.id}
+        title={`${reviewing.opponent_name ?? (reviewing.is_home ? reviewing.second_team_name : reviewing.first_team_name)} maçı`}
+        subtitle={formatDateShort(reviewing.date)}
+        onClose={closeReview}
+      />
+    ) : null}
+    </>
   );
 }
 
@@ -635,10 +659,13 @@ const MyMatchCard = React.memo(function MyMatchCard({
   match,
   past,
   onPress,
+  onReview,
 }: {
   match: MyMatch;
   past: boolean;
   onPress: () => void;
+  /** Verilirse kartın altında "Maçı değerlendir" satırı çıkar. */
+  onReview?: () => void;
 }) {
   const ours = match.is_home ? match.first_team_score : match.second_team_score;
   const theirs = match.is_home ? match.second_team_score : match.first_team_score;
@@ -708,6 +735,27 @@ const MyMatchCard = React.memo(function MyMatchCard({
 
       {/* Yaklaşan maçta müsaitlik yoklaması */}
       {!past ? <AvailabilityStrip matchId={match.id} /> : null}
+
+      {/* Oynanan maçta değerlendirme (yalnız kadrodaysan) */}
+      {onReview ? (
+        <Touchable
+          feedback="row"
+          haptic="selection"
+          onPress={onReview}
+          accessibilityRole="button"
+          accessibilityLabel={`${opponent ?? "Rakip"} maçını değerlendir`}
+          style={styles.reviewRow}
+        >
+          <Ionicons name="star-outline" size={14} color={colors.brandAccent} />
+          <Text style={styles.reviewText} {...textScale.dense}>
+            Maçı değerlendir
+          </Text>
+          <Text style={styles.reviewHint} numberOfLines={1} {...textScale.dense}>
+            Hakem · yayın · rakip
+          </Text>
+          <Ionicons name="chevron-forward" size={13} color={colors.textTertiary} />
+        </Touchable>
+      ) : null}
     </View>
   );
 });
@@ -1397,6 +1445,25 @@ const styles = StyleSheet.create({
   /* — Maç kartı — */
   matchCard: {
     marginBottom: space.sm,
+  },
+  reviewRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.s,
+    borderTopWidth: hairline,
+    borderTopColor: colors.separator,
+    paddingHorizontal: space.md,
+    paddingVertical: space.m,
+  },
+  reviewText: {
+    ...type.labelSm,
+    color: colors.brandAccent,
+  },
+  reviewHint: {
+    ...type.caption,
+    color: colors.textTertiary,
+    flex: 1,
+    textAlign: "right",
   },
   matchRow: {
     flexDirection: "row",

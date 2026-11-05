@@ -41,10 +41,11 @@
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useTeamAccess } from "@/components/club/team/useTeamAccess";
 import { FollowActions } from "@/components/FollowActions";
 import {
   EmptyState,
@@ -584,15 +585,29 @@ export default function TeamDetailScreen() {
    * denetim, hangisinin "asıl" olduğunu sorduruyordu. Takip tek yerde,
    * metinli düğmede; başlık satırı sayfadan çıkan eylemleri (paylaş) taşır.
    */
+  /* Yönetilen takım: kulüp paneli ve kimlik düzenleme kısayolları. */
+  const access = useTeamAccess();
+  const isManagedTeam = access.canManage && access.teamId === teamId;
+  const openClubPanel = useCallback(() => router.push("/kulubum?rol=takim" as Href), [router]);
+
   const headerActions = useMemo(
     () => [
+      ...(isManagedTeam
+        ? [
+            {
+              icon: "create-outline" as keyof typeof Ionicons.glyphMap,
+              onPress: () => router.push("/takimim/bilgiler" as Href),
+              accessibilityLabel: "Takım bilgilerini düzenle",
+            },
+          ]
+        : []),
       {
         icon: "share-outline" as keyof typeof Ionicons.glyphMap,
         onPress: openShare,
         accessibilityLabel: "Takım kartını paylaş",
       },
     ],
-    [openShare],
+    [isManagedTeam, openShare, router],
   );
 
   /* ------------------------------ Kabuk ------------------------------ */
@@ -636,12 +651,17 @@ export default function TeamDetailScreen() {
               following={favorite}
               onToggleFollow={handleToggleFavorite}
               onOpenNotifications={openNotifications}
-              extra={rivals.length > 0 ? [{ icon: "git-compare-outline", label: "Karşılaştır", onPress: openH2h }] : []}
+              extra={[
+                /* YÖNETİLEN TAKIM: başkan kendi takım sayfasından tek dokunuşla
+                   kulüp paneline döner (web panelindeki "Takımım" kısayolu). */
+                ...(isManagedTeam ? [{ icon: "briefcase-outline" as const, label: "Yönet", onPress: openClubPanel }] : []),
+                ...(rivals.length > 0 ? [{ icon: "git-compare-outline" as const, label: "Karşılaştır", onPress: openH2h }] : []),
+              ]}
             />
           }
         />
       ) : null,
-    [team, teamLabel, followerCount, standing, squad.length, favorite, handleToggleFavorite, openNotifications, rivals.length, openH2h],
+    [team, teamLabel, followerCount, standing, squad.length, favorite, handleToggleFavorite, openNotifications, rivals.length, openH2h, isManagedTeam, openClubPanel],
   );
 
   if (!validId) {

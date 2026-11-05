@@ -9,7 +9,7 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
-import { Redirect, useRouter } from "expo-router";
+import { Redirect, useRouter, type Href } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
 import { FlatList, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -75,7 +75,10 @@ export default function OutboxScreen() {
         subtitle="Takımının gönderdiği transfer teklifleri"
         back
         scrollY={scrollY}
-        actions={[{ icon: "storefront-outline", onPress: () => router.push("/takimim/borsa"), accessibilityLabel: "Transfer borsası" }]}
+        actions={[
+          { icon: "add-circle-outline", onPress: () => router.push("/takimim/oyuncu-ara" as Href), accessibilityLabel: "Yeni teklif ver" },
+          { icon: "storefront-outline", onPress: () => router.push("/takimim/borsa"), accessibilityLabel: "Transfer borsası" },
+        ]}
       />
       {query.isLoading ? (
         <View style={styles.loading}>
@@ -102,8 +105,9 @@ export default function OutboxScreen() {
             <EmptyState
               icon="swap-horizontal-outline"
               title={filter === "acik" ? "Açık teklifin yok" : "Henüz teklif göndermedin"}
-              body="Bir oyuncunun profilinden ya da transfer borsasından teklif verebilirsin."
-              action={{ label: "Transfer borsasını aç", onPress: () => router.push("/takimim/borsa") }}
+              body="Futbolcu veritabanında oyuncu bul; satırdaki “Teklif ver” ile şartları gönder."
+              action={{ label: "Oyuncu ara", onPress: () => router.push("/takimim/oyuncu-ara" as Href) }}
+              secondaryAction={{ label: "Transfer borsası", onPress: () => router.push("/takimim/borsa") }}
               variant="inline"
             />
           }
