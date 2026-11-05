@@ -301,14 +301,14 @@ export default function ThreadDetailScreen() {
     return () => clearTimeout(timer);
   }, [entryCount]);
 
-  /* Doğrudan Mesajlar ▸ Yönetim kutusu (eski /mesajlarim → /gelen-kutusu
+  /* Doğrudan Bildirimler ▸ Başvurularım (eski /mesajlarim → /gelen-kutusu
      zinciri atlanır). */
   const goToInbox = useCallback(
-    () => router.replace({ pathname: "/(tabs)/mesajlar", params: { kutu: "yonetim" } }),
+    () => router.replace({ pathname: "/bildirimler", params: { bolum: "basvurular" } }),
     [router],
   );
   const startNewThread = useCallback(
-    () => router.replace({ pathname: "/(tabs)/mesajlar", params: { kutu: "yonetim", yeni: "1" } }),
+    () => router.replace({ pathname: "/bildirimler", params: { bolum: "basvurular", yeni: "1" } }),
     [router],
   );
 

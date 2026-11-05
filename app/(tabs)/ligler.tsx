@@ -44,6 +44,7 @@ import { PlayersPane } from "@/components/league/PlayersPane";
 import { StandingsPane } from "@/components/league/StandingsPane";
 import { StatsPane } from "@/components/league/StatsPane";
 import { ScreenHeader, Tabs, useHeaderScroll, type TabItem } from "@/components/ui";
+import { useNotificationBell } from "@/hooks/useNotificationBell";
 import type { PlayerSort } from "@/lib/types";
 import { useFavorite } from "@/providers/FavoriteProvider";
 import { useFollowFlow } from "@/providers/FollowFlowProvider";
@@ -216,11 +217,13 @@ export default function LeaguesScreen() {
     togglePinLeague({ cityId, cityLabel: cityLabel || "", leagueId, label: leagueLabel || "Lig" });
   }, [cityId, cityLabel, leagueId, leagueLabel, togglePinLeague]);
 
+  const bell = useNotificationBell();
   const actions = useMemo(
     () =>
       leagueId == null
-        ? undefined
+        ? bell ? [bell] : undefined
         : [
+            ...(bell ? [bell] : []),
             {
               icon: "search-outline" as keyof typeof Ionicons.glyphMap,
               onPress: () => router.push("/ara"),
@@ -239,7 +242,7 @@ export default function LeaguesScreen() {
               accessibilityLabel: leagueFollowed ? "Lig takibini bırak" : "Ligi takip et",
             },
           ],
-    [leagueFollowed, leagueId, leaguePinned, router, toggleFollow, togglePin],
+    [bell, leagueFollowed, leagueId, leaguePinned, router, toggleFollow, togglePin],
   );
 
   return (

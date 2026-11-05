@@ -1,13 +1,16 @@
 /**
  * SOHBETLER — WhatsApp mantığında mesaj kutusu (üye ve yönetim ortak).
  *
- * Tek liste: yönetim sohbeti (bildirimler + yönetimle yazışma), takım grubu,
+ * Tek liste: yönetim sohbeti (ElitLig Yönetimi ile yazışma), takım grubu,
  * birebir sohbetler ve kurulan gruplar; son mesaja göre sıralı. Sağ üstteki
  * kalem "Mesaj oluştur" ekranına götürür (yönetim / takım / oyuncu / grup).
  *
  * Üye, sağ üstteki ayar simgesinden kimden mesaj kabul edeceğini seçer
- * (yönetim her zaman açık). Yönetim modunda yalnızca üyelerin yönetimle
- * yazışmaları, yöneticinin kendi grupları ve bildirim akışı listelenir.
+ * (yönetim her zaman açık). Yönetim modunda ("Üye mesajları", messages.view)
+ * üyelerin "ElitLig Yönetimi" yazışmaları listelenir; yanıtlar yönetim adına
+ * gider. Bildirimler ve yönetim talepleri SOHBETE DÜŞMEZ (web ile aynı tek
+ * mesajlaşma kuralı): bildirimler üst çubuktaki zilde (/bildirimler),
+ * talepler Yönetim ▸ Talepler'dedir.
  *
  * Gerçek zamanlı güncelleme hooks/useChat.ts (soket + yoklama).
  *
@@ -105,15 +108,14 @@ export function ChatInbox({ admin = false, embedded = false, onScroll }: ChatInb
   const fab = useFabAutoHide();
   const [search, setSearch] = useState("");
   const [prefsOpen, setPrefsOpen] = useState(false);
-  // Yönetim gelen kutusu filtreleri: varlık türü ve talep kategorisi.
+  // Üye mesajları süzgeci: varlık türü (Takımlar / Oyuncular / Üyeler).
   const [kind, setKind] = useState("");
-  const [category, setCategory] = useState("");
   // Üye süzgeci: "" tümü, "unread" okunmamış, yoksa sohbet türü grubu.
   const [memberFilter, setMemberFilter] = useState<MemberFilter>("");
   const basePath = admin ? "/yonetim/sohbet" : "/sohbet";
 
   const memberQuery = useConversations();
-  const adminQuery = useAdminConversations({ kind, category });
+  const adminQuery = useAdminConversations({ kind, enabled: admin });
   const summaryQuery = useAdminInboxSummary();
   const summary = admin ? summaryQuery.data : undefined;
   const query = admin ? adminQuery : memberQuery;
@@ -198,15 +200,9 @@ export function ChatInbox({ admin = false, embedded = false, onScroll }: ChatInb
             )}
             {admin ? (
               <>
-                <ChipGroup>
+                <ChipGroup contentPadding={embedded ? 0 : undefined}>
                   {KIND_CHIPS.map(([key, label]) => (
                     <Chip key={key || "all"} label={key && summary?.kinds?.[key] ? `${label} ${summary.kinds[key]}` : label} selected={kind === key} onPress={() => setKind(key)} size="sm" />
-                  ))}
-                </ChipGroup>
-                <ChipGroup>
-                  <Chip label={summary?.pending ? `Tüm talepler ${summary.pending}` : "Tüm talepler"} selected={!category} onPress={() => setCategory("")} size="sm" />
-                  {(summary?.categories ?? []).filter((item) => item.pending > 0 || item.key === category).map((item) => (
-                    <Chip key={item.key} label={item.pending ? `${item.label} ${item.pending}` : item.label} selected={category === item.key} onPress={() => setCategory(category === item.key ? "" : item.key)} size="sm" />
                   ))}
                 </ChipGroup>
               </>
@@ -300,8 +296,8 @@ export function ChatInbox({ admin = false, embedded = false, onScroll }: ChatInb
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader
-        title={admin ? "Yönetim Sohbeti" : "Mesajlar"}
-        subtitle={unread > 0 ? `${unread} okunmamış mesaj` : admin ? "Yönetimle yazışmalar, gruplar, bildirimler" : "Yönetim, takımın ve oyuncular"}
+        title={admin ? "Üye mesajları" : "Mesajlar"}
+        subtitle={unread > 0 ? `${unread} okunmamış mesaj` : admin ? "Üyelerin ElitLig Yönetimi yazışmaları" : "Yönetim, takımın ve oyuncular"}
         back
         scrollY={scrollY}
         actions={
@@ -338,7 +334,7 @@ const MEMBER_GROUPS: { key: Exclude<MemberFilter, "" | "unread">; label: string 
   { key: "grup", label: "Gruplar" },
 ];
 
-const KIND_CHIPS: [string, string][] = [["", "Tümü"], ["team", "Takımlar"], ["player", "Oyuncular"], ["member", "Üyeler"], ["staff", "Ekip"]];
+const KIND_CHIPS: [string, string][] = [["", "Tümü"], ["team", "Takımlar"], ["player", "Oyuncular"], ["member", "Üyeler"]];
 const KIND_LABEL: Record<string, string> = { team: "Takım", player: "Oyuncu", member: "Üye", general: "Genel", staff: "Yönetim Ekibi" };
 
 const ConversationRow = memo(function ConversationRow({
@@ -382,9 +378,6 @@ const ConversationRow = memo(function ConversationRow({
               {preview}
             </Text>
           </View>
-          {conversation.pending?.total ? (
-            <Badge label={`${conversation.pending.total} bekleyen`} tone="warn" size="sm" />
-          ) : null}
           {unread ? (
             <Badge label={conversation.unread > 99 ? "99+" : conversation.unread} tone="brand" variant="solid" size="sm" />
           ) : conversation.muted ? (

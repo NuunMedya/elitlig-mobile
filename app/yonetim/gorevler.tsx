@@ -8,9 +8,9 @@
  * Karta dokununca açılır: açıklama, maç bilgisi, aşamalar, cevap ve durum
  * düğmeleri (Başla / Tamamla / Yeniden aç).
  *
- * Panonun tamamı (sürükle-bırak, etiketler, ekip takibi, haftanın enleri
- * koordinasyonu, maç masası) web sürümündedir; sağ üstteki düğme onu
- * uygulama içinde açar (app/yonetim/web.tsx).
+ * Panonun tamamı (akıllı listeler, pano sütunları ve kart taşıma, etiketler,
+ * ekip takibi, maç masası) yerel Yapılacaklar panosundadır; sağ üstteki
+ * düğme onu açar (app/yonetim/gorev-panosu.tsx).
  *
  * BİLDİRİM: görev atandığında, atadığın görev ilerlediğinde / bittiğinde ve
  * süresi dolarken push gelir (elitlig-server services/todoNotifications.js);
@@ -159,14 +159,7 @@ export default function AdminTodosScreen() {
   const change = useCallback((id: number, patch: TodoPatch) => mutation.mutate({ id, patch }), [mutation]);
   const toggle = useCallback((id: number) => setExpanded((current) => (current === id ? null : id)), []);
 
-  const openBoard = useCallback(
-    () =>
-      router.push({
-        pathname: "/yonetim/web",
-        params: { path: "/yonetim/yapilacaklar", title: "Yapılacaklar Panosu" },
-      }),
-    [router]
-  );
+  const openBoard = useCallback(() => router.push("/yonetim/gorev-panosu"), [router]);
   const openCreate = useCallback(() => router.push("/yonetim/gorev-yeni"), [router]);
 
   const summary = summaryQuery.data;
@@ -201,7 +194,7 @@ export default function AdminTodosScreen() {
         title="Görevlerim"
         back
         scrollY={scrollY}
-        actions={[{ icon: "albums-outline", onPress: openBoard, accessibilityLabel: "Web panosunu aç" }]}
+        actions={[{ icon: "albums-outline", onPress: openBoard, accessibilityLabel: "Yapılacaklar panosunu aç" }]}
         bottom={
           <View style={styles.segmentWrap}>
             <SegmentedControl<TodoTab> items={TABS} value={tab} onChange={setTab} />

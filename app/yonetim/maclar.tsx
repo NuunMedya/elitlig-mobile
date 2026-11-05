@@ -12,6 +12,10 @@
  * gruplama (durum, gün) çiftiyle yapılır; başlığın adı GÜN, metası DURUM olur.
  * Bir durum çipi seçiliyken başlıklar saf gün başlığına iner.
  *
+ * İŞ AKIŞI: alt sayfanın ilk düğmesi maçın dört adımlı ekranını açar
+ * (/yonetim/mac/[id]); üst çubukta yetkiye göre "Yeni maç" ve "Toplu
+ * düzenle" kısayolları durur.
+ *
  * NEDEN SATIRA DOKUNUNCA ALT SAYFA: skor girişi, durum değişimi ve maç
  * sayfasına geçiş aynı maçın üç farklı işidir; ayrı ekranlara dağıtmak maç
  * gününde her işlem için üç dokunuş ekler. Alt sayfa maçın bağlamını koruyarak
@@ -64,6 +68,8 @@ import {
   patchMatchScore,
   patchMatchStatus,
 } from "@/lib/api/admin";
+import { hasAnyPermission } from "@/lib/admin/access";
+import { normalizeMatchStatus } from "@/lib/api/admin/matches";
 import { formatDayHeading, formatTime } from "@/lib/format";
 import type { ApiMatch, MacDurumu } from "@/lib/types";
 import { useAuth } from "@/providers/AuthProvider";
@@ -127,7 +133,8 @@ const matchDay = (match: ApiMatch) => String(match.date ?? "").slice(0, 10);
 /** Aynı gün içindeki sıralama saate göredir. */
 const startKey = (match: ApiMatch) => `${matchDay(match)}T${match.time ?? "00:00:00"}`;
 
-const statusKey = (match: ApiMatch): string => match.mac_durumu ?? UNKNOWN_STATUS;
+/** "zamanlandi" (fikstür maçları) ile "zamanlanmis" aynı kovaya düşer. */
+const statusKey = (match: ApiMatch): string => normalizeMatchStatus(match.mac_durumu) ?? UNKNOWN_STATUS;
 
 const statusLabel = (status: MacDurumu | null): string =>
   status ? MATCH_STATUS_LABELS[status] : "Durumsuz";
@@ -218,7 +225,7 @@ export default function AdminMatchesScreen() {
   }, [searched]);
 
   const visible = useMemo(
-    () => (status ? searched.filter((match) => match.mac_durumu === status) : searched),
+    () => (status ? searched.filter((match) => statusKey(match) === status) : searched),
     [searched, status],
   );
 
@@ -358,6 +365,28 @@ export default function AdminMatchesScreen() {
     scoreMutation.mutate({ id: Number(selected.id), home: homeScore, away: awayScore });
   }, [awayScore, homeScore, scoreMutation, selected]);
 
+  /** Maçın dört adımlı iş akışı (öncesi · kadro · canlı · maç sonu). */
+  const openWorkflow = useCallback(() => {
+    if (!selected) return;
+    const id = Number(selected.id);
+    closeSheet();
+    router.push(`/yonetim/mac/${id}`);
+  }, [closeSheet, router, selected]);
+
+  /** Yetkiye göre üst kısayollar: yeni maç, toplu düzenleme. */
+  const headerActions = useMemo(
+    () =>
+      [
+        hasAnyPermission(auth.user, ["matches.bulk_edit"])
+          ? { icon: "layers-outline" as const, accessibilityLabel: "Toplu düzenle", onPress: () => router.push("/yonetim/toplu-duzenle") }
+          : null,
+        hasAnyPermission(auth.user, ["matches.create"])
+          ? { icon: "add-circle-outline" as const, accessibilityLabel: "Yeni maç", onPress: () => router.push("/yonetim/mac-olustur") }
+          : null,
+      ].filter((a): a is NonNullable<typeof a> => a !== null),
+    [auth.user, router],
+  );
+
   const openMatchPage = useCallback(() => {
     if (!selected) return;
     const id = Number(selected.id);
@@ -455,6 +484,7 @@ export default function AdminMatchesScreen() {
         title="Maç Yönetimi"
         subtitle={scopeLabel}
         back
+        actions={headerActions}
         scrollY={scrollY}
         bottom={
           <View style={styles.controls}>
@@ -567,8 +597,8 @@ export default function AdminMatchesScreen() {
           <View style={styles.sheet}>
             <View style={styles.sheetMetaRow}>
               <Badge
-                label={statusLabel(selected.mac_durumu).toLocaleUpperCase("tr-TR")}
-                tone={selected.mac_durumu ? STATUS_TONE[selected.mac_durumu] : "neutral"}
+                label={statusLabel(normalizeMatchStatus(selected.mac_durumu)).toLocaleUpperCase("tr-TR")}
+                tone={statusKey(selected) in STATUS_TONE ? STATUS_TONE[statusKey(selected) as MacDurumu] : "neutral"}
                 size="xs"
               />
               <Text style={styles.sheetMeta} numberOfLines={1} {...textScale.dense}>
@@ -582,6 +612,15 @@ export default function AdminMatchesScreen() {
                   .join(" · ")}
               </Text>
             </View>
+
+            <Button
+              label="Maç iş akışını aç"
+              icon="git-branch-outline"
+              onPress={openWorkflow}
+              haptic="light"
+              fullWidth
+              accessibilityHint="Maç öncesi, kadro, canlı akış ve maç sonu adımları"
+            />
 
             {/* Skor girişi — tabular Stepper, sabit genişlik, basılı tutunca hızlanır. */}
             <Text style={styles.sheetLabel} {...textScale.dense}>
@@ -639,8 +678,8 @@ export default function AdminMatchesScreen() {
                   key={item}
                   label={MATCH_STATUS_LABELS[item]}
                   tone={STATUS_TONE[item]}
-                  selected={selected.mac_durumu === item}
-                  disabled={selected.mac_durumu === item || statusMutation.isPending}
+                  selected={statusKey(selected) === item}
+                  disabled={statusKey(selected) === item || statusMutation.isPending}
                   onPress={() => changeStatus(item)}
                 />
               ))}

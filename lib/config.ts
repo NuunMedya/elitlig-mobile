@@ -31,8 +31,9 @@ export const API_BASE_URL = asString(
 ).replace(/\/+$/, "");
 
 /**
- * Web sitesi kökü — yönetim panelinin web sürümü uygulama içinde buradan
- * açılır (app/yonetim/web.tsx). Sonda eğik çizgi yok.
+ * Web sitesi kökü — paylaşım bağlantıları ve yayın (OBS) adresleri için.
+ * Yönetim paneli uygulamada YEREL ekranlardır; web sayfası gömülmez.
+ * Sonda eğik çizgi yok.
  */
 export const WEB_BASE_URL = asString(extra.webBaseUrl, "https://elitlig.com").replace(/\/+$/, "");
 

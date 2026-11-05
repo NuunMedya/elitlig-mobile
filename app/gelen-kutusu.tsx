@@ -1,13 +1,12 @@
 /**
  * /gelen-kutusu — ESKİ ROTA, yönlendirme.
  *
- * Gelen kutusu (Bildirimler | Mesajlar) alt menüdeki MESAJLAR sekmesine
- * taşındı (app/(tabs)/mesajlar.tsx): içerik türüne göre kutular. Eski
- * parametreler kutuya çevrilir:
- *   · tab=bildirimler&filtre=<kategori> → o kategorinin kutusu (takim → transfer,
- *     mesaj → yonetim, okunmamis → Tümü + okunmamış süzgeci)
- *   · tab=mesajlar&kutu=sohbetler|basvurular → sohbetler | yonetim
- *     (`durum`, `yeni` korunur)
+ * TEK MESAJLAŞMA KURALI: sohbetler Mesajlar sekmesinde, bildirimler zilin
+ * açtığı /bildirimler ekranında, yönetime başvurular onun "Başvurularım"
+ * bölümünde. Eski parametreler buna çevrilir:
+ *   · tab=mesajlar&kutu=sohbetler     → Mesajlar
+ *   · tab=mesajlar&kutu=basvurular    → Bildirimler ▸ Başvurularım (`durum`, `yeni` korunur)
+ *   · tab=bildirimler&filtre=<kategori> → Bildirimler (süzgeçle)
  */
 
 import { Redirect, useLocalSearchParams } from "expo-router";
@@ -16,14 +15,15 @@ function first(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
 
-const FILTER_BOX: Record<string, string> = {
+const FILTER: Record<string, string> = {
   mac: "mac",
   takim: "transfer",
   transfer: "transfer",
-  istek: "istekler",
+  istek: "istek",
   disiplin: "disiplin",
-  mesaj: "yonetim",
+  mesaj: "mesaj",
   diger: "diger",
+  okunmamis: "okunmamis",
 };
 
 export default function InboxRedirect() {
@@ -39,19 +39,15 @@ export default function InboxRedirect() {
   const durum = first(params.durum);
   const yeni = first(params.yeni);
 
-  let next: Record<string, string>;
   if (tab === "mesajlar") {
-    next =
-      first(params.kutu) === "basvurular"
-        ? { kutu: "yonetim", ...(durum ? { durum } : {}), ...(yeni ? { yeni } : {}) }
-        : { kutu: "sohbetler" };
-  } else if (filtre && FILTER_BOX[filtre]) {
-    next = { kutu: FILTER_BOX[filtre] };
-  } else if (filtre === "okunmamis") {
-    next = { kutu: "bildirimler", filtre };
-  } else {
-    next = { kutu: tab === "bildirimler" ? "bildirimler" : "ozet" };
+    if (first(params.kutu) === "basvurular") {
+      return (
+        <Redirect
+          href={{ pathname: "/bildirimler", params: { bolum: "basvurular", ...(durum ? { durum } : {}), ...(yeni ? { yeni } : {}) } }}
+        />
+      );
+    }
+    return <Redirect href="/(tabs)/mesajlar" />;
   }
-
-  return <Redirect href={{ pathname: "/(tabs)/mesajlar", params: next }} />;
+  return <Redirect href={{ pathname: "/bildirimler", params: filtre && FILTER[filtre] ? { filtre: FILTER[filtre] } : {} }} />;
 }

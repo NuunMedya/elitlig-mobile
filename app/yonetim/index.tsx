@@ -27,7 +27,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Redirect, useRouter } from "expo-router";
-import { memo, useCallback, useMemo } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -35,6 +35,9 @@ import {
   Badge,
   EmptyState,
   ErrorState,
+  HubGrid,
+  HubTile,
+  Input,
   ListRow,
   ScreenHeader,
   SectionHeader,
@@ -42,17 +45,37 @@ import {
   Touchable,
   useHeaderScroll,
   useRefresh,
+  type HubTone,
   type Tone,
 } from "@/components/ui";
+import { DashboardSummary } from "@/components/admin/dashboard/DashboardSummary";
 import { useAppActive } from "@/hooks/useLiveFavoriteCount";
-import { visibleModuleGroups, type AdminModule } from "@/lib/adminModules";
-import { getAdminMatches, getAdminMessages, getAdminRequests, ROLE_LABELS } from "@/lib/api/admin";
+import { searchModules, TOOL_MODULES, visibleModuleGroups, type AdminModule } from "@/lib/adminModules";
+import { getAdminMatches, getAdminRequests, ROLE_LABELS } from "@/lib/api/admin";
+import { getRequestsSummary } from "@/lib/api/admin/requests";
+import { NotificationRow, useNotificationFeed } from "@/components/inbox/NotificationsPane";
+import { useAdminInboxSummary } from "@/hooks/useChat";
+import { useNotificationBell } from "@/hooks/useNotificationBell";
 import { getTodoSummary, todoKeys } from "@/lib/api/todos";
 import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
 import { colors, fonts, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
 
 /* ═══════════════════════════ SABİTLER VE TİPLER ═══════════════════════════ */
+
+/** Araç karolarının tonu — renk aracı tanıtır, durum taşımaz. */
+const TOOL_TONES: Record<string, HubTone> = {
+  projeler: "brand",
+  gorevler: "danger",
+  ajanda: "info",
+  "not-defteri": "warn",
+  muhasebe: "win",
+  tablolar: "accent",
+  mesajlar: "brand",
+  rehber: "info",
+  "hesap-araclari": "neutral",
+  "odak-sayaci": "live",
+};
 
 /** Sayaçların tazelenme aralığı — uygulama arkadayken hiç yoklanmaz. */
 const POLL_MS = 30_000;
@@ -89,14 +112,19 @@ export default function AdminHomeScreen() {
 
   /* — Bekleyen iş sayaçları — */
 
+  /* Talepler (onay merkezi) — web ile aynı: yönetime gelen bütün onay işleri. */
   const messagesQuery = useQuery({
-    queryKey: ["admin", "messages", "badge"],
-    queryFn: () => getAdminMessages({ limit: 100 }),
+    queryKey: ["admin", "requests", "summary"],
+    queryFn: getRequestsSummary,
     enabled: canQuery,
     staleTime: 15_000,
     refetchInterval: poll,
     retry: false,
   });
+  /* Üye mesajları (ElitLig Yönetimi yazışmaları) okunmamış sayısı. */
+  const chatSummary = useAdminInboxSummary();
+  const bell = useNotificationBell();
+  const notifFeed = useNotificationFeed();
 
   const requestsQuery = useQuery({
     queryKey: ["admin", "match-requests", "badge"],
@@ -142,7 +170,9 @@ export default function AdminHomeScreen() {
 
   /* — Kartlar — */
 
-  const unread = messagesQuery.data?.counts.unread ?? null;
+  const unread = messagesQuery.data?.total ?? null;
+  const memberUnread = chatSummary.data?.unread ?? null;
+  const latestNotifs = notifFeed.items.slice(0, 4);
   const pendingRequests = requestsQuery.data?.items.length ?? null;
   const liveMatches = liveQuery.data?.length ?? null;
   const openTodos = todoQuery.data?.open ?? null;
@@ -180,26 +210,26 @@ export default function AdminHomeScreen() {
       },
       {
         key: "mesajlar",
-        route: "/yonetim/mesajlar",
-        icon: "chatbubbles-outline",
-        title: "Mesaj Yönetimi",
-        body: "Üye başvurularını yanıtla, önceliklendir, kapat",
+        route: "/yonetim/talepler",
+        icon: "file-tray-full-outline",
+        title: "Talepler",
+        body: "Onay bekleyen profil, transfer, kadro, disiplin ve üye talepleri",
         pending: unread,
-        pendingLabel:
-          unread && unread > 0 ? `${unread} okunmamış başvuru` : "Okunmamış başvuru yok",
+        pendingLabel: unread && unread > 0 ? `${unread} talep onay bekliyor` : "Bekleyen talep yok",
         tone: "warn",
         loading: messagesQuery.isLoading,
       },
       {
         key: "sohbet",
-        route: "/yonetim/sohbet",
+        route: "/mesajlar?bolum=uye",
         icon: "chatbubbles",
-        title: "Sohbet",
-        body: "Üyelerin yönetimle yazışmaları: sesli ara, konum ve maç teklifi gönder; onay bekleyen işlemleri kartlardan sonuçlandır",
-        pending: null,
-        pendingLabel: "WhatsApp mantığında yönetim sohbeti",
+        title: "Mesajlar",
+        body: "WhatsApp gibi doğrudan yazışma; üyelerin ElitLig Yönetimi mesajları",
+        pending: memberUnread,
+        pendingLabel:
+          memberUnread && memberUnread > 0 ? `${memberUnread} okunmamış üye mesajı` : "Okunmamış üye mesajı yok",
         tone: "brand",
-        loading: false,
+        loading: chatSummary.isLoading,
       },
       {
         key: "kayitlar",
@@ -237,18 +267,23 @@ export default function AdminHomeScreen() {
       pendingRequests,
       requestsQuery.isLoading,
       unread,
+      memberUnread,
+      chatSummary.isLoading,
     ],
   );
 
   const openSection = useCallback((route: string) => router.push(route as never), [router]);
 
-  /* Web panelindeki her yönetim sayfası (yetkiye göre) — uygulama içinde açılır. */
+  /* Web panelindeki her yönetim sayfası (yetkiye göre) — hepsi YEREL ekran. */
   const moduleGroups = useMemo(() => visibleModuleGroups(auth.user), [auth.user]);
-  const openModule = useCallback(
-    (module: AdminModule) =>
-      router.push({ pathname: "/yonetim/web", params: { path: module.path, title: module.title } }),
-    [router]
+  const [moduleQuery, setModuleQuery] = useState("");
+  const moduleHits = useMemo(() => searchModules(auth.user, moduleQuery), [auth.user, moduleQuery]);
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const toggleGroup = useCallback(
+    (key: string) => setCollapsed((current) => ({ ...current, [key]: !current[key] })),
+    []
   );
+  const openModule = useCallback((module: AdminModule) => router.push(module.route as never), [router]);
 
   /* — Kapı: misafir giriş ekranına, yetkisiz üye nazik uyarıya — */
 
@@ -295,10 +330,10 @@ export default function AdminHomeScreen() {
     },
     {
       key: "mesajlar",
-      label: "Okunmamış",
+      label: "Talep",
       value: unread,
       loading: messagesQuery.isLoading,
-      route: "/yonetim/mesajlar",
+      route: "/yonetim/talepler",
     },
     {
       key: "sahalar",
@@ -311,7 +346,7 @@ export default function AdminHomeScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      <ScreenHeader title="Yönetim Paneli" back scrollY={scrollY} />
+      <ScreenHeader title="Yönetim Paneli" back scrollY={scrollY} actions={bell ? [bell] : undefined} />
 
       <ScrollView
         {...scrollProps}
@@ -372,6 +407,37 @@ export default function AdminHomeScreen() {
           />
         ) : null}
 
+        {/* KONTROL PANELİ — web /editor özetinin yerel karşılığı. */}
+        <DashboardSummary onNavigate={openSection} />
+
+        {/* BİLDİRİMLER — sohbete düşmeyen her şey (transfer, disiplin, maç,
+            istek, hesap); tamamı üst çubuktaki zilde. */}
+        <SectionHeader
+          title="Son bildirimler"
+          meta={notifFeed.unread > 0 ? `${notifFeed.unread} okunmamış` : undefined}
+          action={{ label: "Tümü", onPress: () => router.push("/bildirimler") }}
+          style={styles.sectionHeader}
+        />
+        {notifFeed.query.isLoading ? (
+          <Skeleton height={64} radius="lg" />
+        ) : latestNotifs.length ? (
+          <View style={styles.notifList}>
+            {latestNotifs.map((item, index) => (
+              <NotificationRow
+                key={item.id}
+                notif={item}
+                onPress={notifFeed.openNotif}
+                first={index === 0}
+                last={index === latestNotifs.length - 1}
+              />
+            ))}
+          </View>
+        ) : (
+          <Text style={styles.footnote} {...textScale.long}>
+            Yeni bildirim yok.
+          </Text>
+        )}
+
         <SectionHeader title="Bölümler" style={styles.sectionHeader} />
 
         <View>
@@ -385,32 +451,95 @@ export default function AdminHomeScreen() {
           ))}
         </View>
 
-        <SectionHeader title="Tüm yönetim araçları" meta="Web paneli" style={styles.sectionHeader} />
-        <Text style={styles.toolsIntro} {...textScale.long}>
-          Web sürümündeki bütün yönetim sayfaları burada; yetkine göre listelenir ve uygulamadan
-          çıkmadan, yeniden giriş yapmadan açılır.
-        </Text>
-        {moduleGroups.map((group) => (
-          <View key={group.key} style={styles.toolGroup}>
-            <Text style={styles.toolGroupTitle} {...textScale.dense}>
-              {upperTR(group.title)}
-            </Text>
-            <View>
-              {group.modules.map((module, index) => (
+        {/* ARAÇLARIM — kişisel çalışma araçları; her yönetim kullanıcısına açık. */}
+        <SectionHeader
+          title="Araçlarım"
+          action={{ label: "Araçlar merkezi", onPress: () => router.push("/yonetim/araclar") }}
+          style={styles.sectionHeader}
+        />
+        <HubGrid inset="flush">
+          {TOOL_MODULES.map((module) => (
+            <HubTile
+              key={module.key}
+              icon={module.icon}
+              title={module.title}
+              tone={TOOL_TONES[module.key] ?? "neutral"}
+              onPress={() => openModule(module)}
+            />
+          ))}
+        </HubGrid>
+
+        <SectionHeader title="Tüm yönetim sayfaları" meta="Yetkine göre" style={styles.sectionHeader} />
+        <Input
+          variant="search"
+          leadingIcon="search"
+          value={moduleQuery}
+          onChangeText={setModuleQuery}
+          placeholder="Sayfa ara: ceza, transfer, kura, personel…"
+          autoCorrect={false}
+          autoCapitalize="none"
+          containerStyle={styles.moduleSearch}
+          clearButtonMode="while-editing"
+        />
+        {moduleQuery.trim() ? (
+          moduleHits.length ? (
+            <View style={styles.toolGroup}>
+              {moduleHits.map((module, index) => (
                 <ListRow
-                  key={module.key}
+                  key={module.route}
                   leading={{ icon: module.icon }}
                   title={module.title}
                   subtitle={module.description}
                   chevron
-                  position={groupPosition(index, group.modules.length)}
+                  position={groupPosition(index, moduleHits.length)}
                   onPress={() => openModule(module)}
-                  testID={`admin-module-${module.key}`}
                 />
               ))}
             </View>
-          </View>
-        ))}
+          ) : (
+            <EmptyState icon="search-outline" title="Eşleşen sayfa yok" body="Başka bir sözcükle dene." variant="inline" compact />
+          )
+        ) : (
+          moduleGroups.map((group) => (
+            <View key={group.key} style={styles.toolGroup}>
+              <Touchable
+                onPress={() => toggleGroup(group.key)}
+                style={styles.groupHead}
+                accessibilityRole="button"
+                accessibilityState={{ expanded: !collapsed[group.key] }}
+              >
+                <Ionicons name={group.icon} size={16} color={colors.textTertiary} />
+                <Text style={styles.toolGroupTitle} {...textScale.dense}>
+                  {upperTR(group.title)}
+                </Text>
+                <Text style={styles.groupCount} {...textScale.dense}>
+                  {group.modules.length}
+                </Text>
+                <Ionicons
+                  name={collapsed[group.key] ? "chevron-down" : "chevron-up"}
+                  size={16}
+                  color={colors.textTertiary}
+                />
+              </Touchable>
+              {collapsed[group.key] ? null : (
+                <View>
+                  {group.modules.map((module, index) => (
+                    <ListRow
+                      key={module.key}
+                      leading={{ icon: module.icon }}
+                      title={module.title}
+                      subtitle={module.description}
+                      chevron
+                      position={groupPosition(index, group.modules.length)}
+                      onPress={() => openModule(module)}
+                      testID={`admin-module-${module.key}`}
+                    />
+                  ))}
+                </View>
+              )}
+            </View>
+          ))
+        )}
 
         <ListRow
           leading={{ icon: "notifications-outline" }}
@@ -683,10 +812,20 @@ const styles = StyleSheet.create({
   },
 
   /* — Araçlar — */
-  toolsIntro: {
-    ...type.bodySm,
-    color: colors.textSecondary,
+  moduleSearch: {
     marginBottom: space.md,
+  },
+  groupHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    paddingHorizontal: space.xxs,
+    paddingVertical: space.xs,
+  },
+  groupCount: {
+    ...type.caption,
+    color: colors.textTertiary,
+    marginLeft: "auto",
   },
   toolGroup: {
     marginBottom: space.lg,
@@ -695,7 +834,10 @@ const styles = StyleSheet.create({
   toolGroupTitle: {
     ...type.overline,
     color: colors.textTertiary,
-    paddingHorizontal: space.xxs,
+  },
+  notifList: {
+    borderRadius: radius.xl,
+    overflow: "hidden",
   },
   notifRow: {
     marginTop: space.xs,

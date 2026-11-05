@@ -33,6 +33,7 @@ import {
   retainChatSocket,
 } from "@/lib/chatSocket";
 import { queryKeys } from "@/lib/queryKeys";
+import { hasAnyPermission } from "@/lib/admin/access";
 import { useAuth } from "@/providers/AuthProvider";
 
 const LIST_POLL_MS = 30_000;
@@ -187,32 +188,23 @@ export function useChatRealtime(): void {
 /* ---------- yönetim modu ---------- */
 
 export interface AdminInboxFilters {
-  category?: string;
   kind?: string;
+  /** false: sorgu kapalı (sekme görünmüyorken). */
+  enabled?: boolean;
 }
 
 export function useAdminConversations(filters: AdminInboxFilters = {}) {
   const auth = useAuth();
   const pollMs = usePollInterval(LIST_POLL_MS, LIST_POLL_SOCKET_MS);
-  const category = filters.category || "";
   const kind = filters.kind || "";
+  const canView = hasAnyPermission(auth.user, ["messages.view"]);
   return useQuery({
-    queryKey: ["chat", "admin", "conversations", category, kind] as const,
-    queryFn: async () => {
-      // Varlık bazlı yönetim sohbetleri (talep kartları burada) + yöneticinin
-      // katıldığı gruplar tek listede. Eski kişisel bildirim akışı listelenmez;
-      // üyelerin kendi aralarındaki sohbetler yönetime görünmez.
-      const filtered = Boolean(category || kind);
-      const [own, managed] = await Promise.all([
-        filtered ? Promise.resolve({ conversations: [], unread: 0 } as ConversationsResponse) : getConversations().catch(() => ({ conversations: [], unread: 0 }) as ConversationsResponse),
-        adminChat.getConversations({ limit: 100, ...(category ? { category } : {}), ...(kind ? { kind } : {}) }),
-      ]);
-      const ownList = own.conversations.filter((item) => item.type !== "admin");
-      const seen = new Set(ownList.map((item) => item.id));
-      const merged = [...ownList, ...managed.conversations.filter((item) => !seen.has(item.id))];
-      return { conversations: merged, unread: ownList.reduce((sum, item) => sum + item.unread, 0) + managed.unread, total: managed.total } as ConversationsResponse;
-    },
-    enabled: Boolean(auth.user) && auth.isManagement,
+    queryKey: ["chat", "admin", "conversations", kind] as const,
+    // ÜYE MESAJLARI: üyelerin "ElitLig Yönetimi" yazışmaları (web Mesajlar ▸
+    // Üye mesajları). Yöneticinin kendi sohbetleri ve grupları burada DEĞİL,
+    // Mesajlar ▸ Sohbetlerim'dedir; bildirim ve talep kartları sohbete düşmez.
+    queryFn: () => adminChat.getConversations({ limit: 100, ...(kind ? { kind } : {}) }),
+    enabled: Boolean(auth.user) && auth.isManagement && canView && filters.enabled !== false,
     staleTime: 5_000,
     refetchInterval: pollMs,
     retry: false,

@@ -66,6 +66,7 @@ import {
   useRefresh,
   type TabItem,
 } from "@/components/ui";
+import { useNotificationBell } from "@/hooks/useNotificationBell";
 import { MAX_STARTERS, getTeamFinance, getTeamMatchPlan } from "@/lib/api/team";
 import { formatDateShort, formatDecimal, mediaUrl } from "@/lib/format";
 import { useAuth } from "@/providers/AuthProvider";
@@ -99,6 +100,7 @@ export default function ClubHubScreen() {
   const scope = useScope();
   const router = useRouter();
   const { scrollY, scrollProps } = useHeaderScroll();
+  const bell = useNotificationBell();
   const params = useLocalSearchParams<{ rol?: string }>();
   const signals = useClubSignals();
   const scrollRef = useRef<ScrollView>(null);
@@ -176,6 +178,7 @@ export default function ClubHubScreen() {
       <ScreenHeader
         title="Yönetim"
         scrollY={scrollY}
+        actions={bell ? [bell] : undefined}
         tabs={roles.length > 1 && role ? <Tabs items={tabItems} value={role} onChange={changeRole} sticky /> : undefined}
       />
 
@@ -732,11 +735,12 @@ function CareerSection({
 
 const LEAGUE_TOOLS: PanelTool[] = [
   { key: "gorevler", icon: "checkbox", label: "Görevler", href: "/yonetim/gorevler" },
-  { key: "gorev-yeni", icon: "add-circle", label: "Yeni görev", href: "/yonetim/gorev-yeni" },
+  { key: "araclar", icon: "construct", label: "Araçlar", href: "/yonetim/araclar", tone: "brand" },
+  { key: "talepler", icon: "file-tray-full", label: "Talepler", href: "/yonetim/talepler", tone: "warn" },
   { key: "maclar", icon: "football", label: "Maçlar", href: "/yonetim/maclar", tone: "live" },
   { key: "sahalar", icon: "location", label: "Sahalar", href: "/yonetim/sahalar", tone: "info" },
-  { key: "basvuru", icon: "mail", label: "Mesajlar", href: "/yonetim/mesajlar", tone: "warn" },
-  { key: "sohbet", icon: "chatbubbles", label: "Sohbet", href: "/yonetim/sohbet", tone: "neutral" },
+  { key: "mesajlar", icon: "chatbubbles", label: "Mesajlar", href: "/mesajlar", tone: "neutral" },
+  { key: "bildirimler", icon: "notifications", label: "Bildirimler", href: "/bildirimler", tone: "live" },
   { key: "kayitlar", icon: "call", label: "Kayıtlar", href: "/yonetim/kayitlar", tone: "neutral" },
   { key: "panel", icon: "grid", label: "Tümü", href: "/yonetim", tone: "neutral" },
 ];

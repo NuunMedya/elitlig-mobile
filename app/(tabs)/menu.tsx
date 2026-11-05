@@ -52,6 +52,7 @@ import {
   type Tone,
 } from "@/components/ui";
 import { ProfileHero, type ProfileHeroStat } from "@/components/account/ProfileHero";
+import { useNotificationBell } from "@/hooks/useNotificationBell";
 import { getPanelMe } from "@/lib/api/panel";
 import { formatNumber, mediaUrl } from "@/lib/format";
 import { openLink } from "@/lib/links";
@@ -144,6 +145,7 @@ export default function MenuTabScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { scrollY, scrollProps } = useHeaderScroll();
+  const bell = useNotificationBell();
 
   const user = auth.user;
 
@@ -522,6 +524,7 @@ export default function MenuTabScreen() {
       <ScreenHeader
         title="Menü"
         scrollY={scrollY}
+        actions={bell ? [bell] : undefined}
       />
 
       <SectionList

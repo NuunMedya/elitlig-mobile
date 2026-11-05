@@ -7,5 +7,5 @@ import { Redirect } from "expo-router";
  * sohbet kutusu ayrıdır: /yonetim/sohbet.
  */
 export default function ChatInboxRedirect() {
-  return <Redirect href={{ pathname: "/(tabs)/mesajlar", params: { kutu: "sohbetler" } }} />;
+  return <Redirect href={{ pathname: "/(tabs)/mesajlar", params: { bolum: "sohbetler" } }} />;
 }
