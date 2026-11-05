@@ -122,7 +122,7 @@ export function FinanceEntrySheet({
       { key: "type", label: "Tür", kind: "segment", options: [{ value: "income", label: "Gelir" }, { value: "expense", label: "Gider" }] },
       { key: "amount", label: "Tutar (₺)", kind: "money", placeholder: "0,00", hint: "kesinleşen" },
       { key: "estimate", label: "Tahmini tutar (₺)", kind: "money", placeholder: "0,00", hint: "henüz kesin değilse" },
-      { key: "status", label: "Durum", kind: "chips", options: statuses.map((s) => ({ value: s, label: statusLabel(s, String(v.type)) })) },
+      { key: "status", label: "Durum", kind: "chips", required: true, options: statuses.map((s) => ({ value: s, label: statusLabel(s, String(v.type)) })) },
       { key: "account_id", label: "Hesap", kind: "select", required: true, options },
       { key: "entry_date", label: "İşlem tarihi", kind: "date" },
       { key: "due_date", label: income ? "Tahsil vadesi" : "Ödeme vadesi", kind: "date", clearable: true },
