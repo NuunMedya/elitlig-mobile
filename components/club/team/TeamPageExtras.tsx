@@ -30,7 +30,7 @@ import {
 import { HOMEPAGE_KEYS, updateTeamCaptain, updateTeamHomepage, type HomepageKey } from "@/lib/api/club/details";
 import { getTeamDetails } from "@/lib/api/profile";
 import { getTeamRoster } from "@/lib/api/team";
-import { formatDateShort, mediaUrl } from "@/lib/format";
+import { formatDateShort } from "@/lib/format";
 import { ApiError } from "@/lib/http";
 import { colors, layout, space, textScale, type } from "@/theme";
 
@@ -226,7 +226,7 @@ export function TeamAuthorityCard() {
                 {(candidates.data?.candidates ?? []).map((candidate, index, list) => (
                   <ListRow
                     key={candidate.username}
-                    leading={<Avatar name={candidate.fullName ?? candidate.username} image={mediaUrl(null)} size={layout.crestMd} />}
+                    leading={<Avatar name={candidate.fullName ?? candidate.username} image={null} size={layout.crestMd} />}
                     title={candidate.fullName ?? candidate.username}
                     subtitle={[`@${candidate.username}`, candidate.city, candidate.hasTeam ? "Zaten bir takımı yönetiyor" : null].filter(Boolean).join(" · ")}
                     disabled={candidate.hasTeam}

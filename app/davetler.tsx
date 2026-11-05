@@ -83,6 +83,7 @@ import { formatDateShort, mediaUrl } from "@/lib/format";
 import { ApiError } from "@/lib/http";
 import { queryKeys } from "@/lib/queryKeys";
 import type { ApiTeam } from "@/lib/types";
+import { useTeamAccess } from "@/components/club/team/useTeamAccess";
 import { useAuth } from "@/providers/AuthProvider";
 import {
   colors,
@@ -149,7 +150,10 @@ export default function InvitesScreen() {
   const tab = resolveTab(firstParam(params.tab));
 
   const isPlayer = Boolean(auth.user?.player_id);
-  const isPresident = Boolean(auth.user?.managed_team_id);
+  // Başkanlık oturum alanından değil panelden (/api/panel/me) okunur: yetki
+  // girişten sonra onaylanınca oturum alanı tazelenmiyordu.
+  const teamAccess = useTeamAccess();
+  const isPresident = teamAccess.canManage;
 
   const [selected, setSelected] = useState<{ request: JoinRequest; inbox: boolean } | null>(null);
   const [applyOpen, setApplyOpen] = useState(false);
