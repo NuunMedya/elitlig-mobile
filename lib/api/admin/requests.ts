@@ -152,7 +152,7 @@ export function adminPathToRoute(path: string | null | undefined): string | null
     "/editor/sahalar": "/yonetim/sahalar",
     "/editor/maclar": "/yonetim/maclar",
     "/editor/musaitlik": "/yonetim/musaitlik",
-    "/yonetim/araclar/mesajlar": "/yonetim/sohbet",
+    "/yonetim/araclar/mesajlar": "/mesajlar",
     "/editor/oyuncular": "/yonetim/oyuncular",
     "/editor/takimlar": "/yonetim/takimlar",
     "/yonetim/admin/sifre-talepleri": "/yonetim/sifre-talepleri",

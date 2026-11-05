@@ -51,7 +51,11 @@ import {
 import { DashboardSummary } from "@/components/admin/dashboard/DashboardSummary";
 import { useAppActive } from "@/hooks/useLiveFavoriteCount";
 import { searchModules, TOOL_MODULES, visibleModuleGroups, type AdminModule } from "@/lib/adminModules";
-import { getAdminMatches, getAdminMessages, getAdminRequests, ROLE_LABELS } from "@/lib/api/admin";
+import { getAdminMatches, getAdminRequests, ROLE_LABELS } from "@/lib/api/admin";
+import { getRequestsSummary } from "@/lib/api/admin/requests";
+import { NotificationRow, useNotificationFeed } from "@/components/inbox/NotificationsPane";
+import { useAdminInboxSummary } from "@/hooks/useChat";
+import { useNotificationBell } from "@/hooks/useNotificationBell";
 import { getTodoSummary, todoKeys } from "@/lib/api/todos";
 import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
@@ -108,14 +112,19 @@ export default function AdminHomeScreen() {
 
   /* — Bekleyen iş sayaçları — */
 
+  /* Talepler (onay merkezi) — web ile aynı: yönetime gelen bütün onay işleri. */
   const messagesQuery = useQuery({
-    queryKey: ["admin", "messages", "badge"],
-    queryFn: () => getAdminMessages({ limit: 100 }),
+    queryKey: ["admin", "requests", "summary"],
+    queryFn: getRequestsSummary,
     enabled: canQuery,
     staleTime: 15_000,
     refetchInterval: poll,
     retry: false,
   });
+  /* Üye mesajları (ElitLig Yönetimi yazışmaları) okunmamış sayısı. */
+  const chatSummary = useAdminInboxSummary();
+  const bell = useNotificationBell();
+  const notifFeed = useNotificationFeed();
 
   const requestsQuery = useQuery({
     queryKey: ["admin", "match-requests", "badge"],
@@ -161,7 +170,9 @@ export default function AdminHomeScreen() {
 
   /* — Kartlar — */
 
-  const unread = messagesQuery.data?.counts.unread ?? null;
+  const unread = messagesQuery.data?.total ?? null;
+  const memberUnread = chatSummary.data?.unread ?? null;
+  const latestNotifs = notifFeed.items.slice(0, 4);
   const pendingRequests = requestsQuery.data?.items.length ?? null;
   const liveMatches = liveQuery.data?.length ?? null;
   const openTodos = todoQuery.data?.open ?? null;
@@ -199,26 +210,26 @@ export default function AdminHomeScreen() {
       },
       {
         key: "mesajlar",
-        route: "/yonetim/mesajlar",
-        icon: "chatbubbles-outline",
-        title: "Mesaj Yönetimi",
-        body: "Üye başvurularını yanıtla, önceliklendir, kapat",
+        route: "/yonetim/talepler",
+        icon: "file-tray-full-outline",
+        title: "Talepler",
+        body: "Onay bekleyen profil, transfer, kadro, disiplin ve üye talepleri",
         pending: unread,
-        pendingLabel:
-          unread && unread > 0 ? `${unread} okunmamış başvuru` : "Okunmamış başvuru yok",
+        pendingLabel: unread && unread > 0 ? `${unread} talep onay bekliyor` : "Bekleyen talep yok",
         tone: "warn",
         loading: messagesQuery.isLoading,
       },
       {
         key: "sohbet",
-        route: "/yonetim/sohbet",
+        route: "/mesajlar?bolum=uye",
         icon: "chatbubbles",
-        title: "Sohbet",
-        body: "Üyelerin yönetimle yazışmaları: sesli ara, konum ve maç teklifi gönder; onay bekleyen işlemleri kartlardan sonuçlandır",
-        pending: null,
-        pendingLabel: "WhatsApp mantığında yönetim sohbeti",
+        title: "Mesajlar",
+        body: "WhatsApp gibi doğrudan yazışma; üyelerin ElitLig Yönetimi mesajları",
+        pending: memberUnread,
+        pendingLabel:
+          memberUnread && memberUnread > 0 ? `${memberUnread} okunmamış üye mesajı` : "Okunmamış üye mesajı yok",
         tone: "brand",
-        loading: false,
+        loading: chatSummary.isLoading,
       },
       {
         key: "kayitlar",
@@ -256,6 +267,8 @@ export default function AdminHomeScreen() {
       pendingRequests,
       requestsQuery.isLoading,
       unread,
+      memberUnread,
+      chatSummary.isLoading,
     ],
   );
 
@@ -317,10 +330,10 @@ export default function AdminHomeScreen() {
     },
     {
       key: "mesajlar",
-      label: "Okunmamış",
+      label: "Talep",
       value: unread,
       loading: messagesQuery.isLoading,
-      route: "/yonetim/mesajlar",
+      route: "/yonetim/talepler",
     },
     {
       key: "sahalar",
@@ -333,7 +346,7 @@ export default function AdminHomeScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      <ScreenHeader title="Yönetim Paneli" back scrollY={scrollY} />
+      <ScreenHeader title="Yönetim Paneli" back scrollY={scrollY} actions={bell ? [bell] : undefined} />
 
       <ScrollView
         {...scrollProps}
@@ -396,6 +409,34 @@ export default function AdminHomeScreen() {
 
         {/* KONTROL PANELİ — web /editor özetinin yerel karşılığı. */}
         <DashboardSummary onNavigate={openSection} />
+
+        {/* BİLDİRİMLER — sohbete düşmeyen her şey (transfer, disiplin, maç,
+            istek, hesap); tamamı üst çubuktaki zilde. */}
+        <SectionHeader
+          title="Son bildirimler"
+          meta={notifFeed.unread > 0 ? `${notifFeed.unread} okunmamış` : undefined}
+          action={{ label: "Tümü", onPress: () => router.push("/bildirimler") }}
+          style={styles.sectionHeader}
+        />
+        {notifFeed.query.isLoading ? (
+          <Skeleton height={64} radius="lg" />
+        ) : latestNotifs.length ? (
+          <View style={styles.notifList}>
+            {latestNotifs.map((item, index) => (
+              <NotificationRow
+                key={item.id}
+                notif={item}
+                onPress={notifFeed.openNotif}
+                first={index === 0}
+                last={index === latestNotifs.length - 1}
+              />
+            ))}
+          </View>
+        ) : (
+          <Text style={styles.footnote} {...textScale.long}>
+            Yeni bildirim yok.
+          </Text>
+        )}
 
         <SectionHeader title="Bölümler" style={styles.sectionHeader} />
 
@@ -793,6 +834,10 @@ const styles = StyleSheet.create({
   toolGroupTitle: {
     ...type.overline,
     color: colors.textTertiary,
+  },
+  notifList: {
+    borderRadius: radius.xl,
+    overflow: "hidden",
   },
   notifRow: {
     marginTop: space.xs,

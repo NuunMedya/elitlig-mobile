@@ -64,7 +64,7 @@ export default function TabsLayout() {
     { name: "ligler", label: "Lig", icon: "trophy", accessibilityLabel: "Lig: puan, fikstür, oyuncular, istatistik, haber" },
     { name: "kulubum", label: "Yönetim", icon: "shield", accessibilityLabel: "Yönetim: takımın, kariyerin ve araçların" },
     // Okunmamış bildirim + sohbet mesajı: hepsi Mesajlar'da.
-    { name: "mesajlar", label: "Mesajlar", icon: "chatbubbles", badge: unread.total },
+    { name: "mesajlar", label: "Mesajlar", icon: "chatbubbles", badge: unread.messages },
     { name: "menu", label: "Menü", icon: "menu", accessibilityLabel: "Menü: profil, oyun merkezi, lig araçları, ayarlar" },
   ];
 

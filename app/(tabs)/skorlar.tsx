@@ -99,6 +99,7 @@ import {
   useRefresh,
 } from "@/components/ui";
 import type { SegmentedItem } from "@/components/ui";
+import { useNotificationBell } from "@/hooks/useNotificationBell";
 import { ALL_LIVE_POLL_MS, ALL_LIVE_STALE_MS, useAppActive } from "@/hooks/useLiveFavoriteCount";
 import { useScreenFocused } from "@/hooks/useScreenFocused";
 import { useTeamLogos } from "@/hooks/useTeamLogos";
@@ -199,6 +200,7 @@ export default function ScoresScreen() {
   const params = useLocalSearchParams();
   /** Başlığın daralması listenin kaydırmasına bağlıdır (bkz. ScreenHeader). */
   const { scrollY, scrollProps } = useHeaderScroll();
+  const bell = useNotificationBell();
 
   /** Bugün ekran ömrü boyunca bir kez hesaplanır (gece yarısı geçişi nadir). */
   const todayIso = useMemo(() => toIsoDate(new Date()), []);
@@ -923,7 +925,7 @@ export default function ScoresScreen() {
       <ScreenHeader
         title="Maçlar"
         scrollY={scrollY}
-        actions={[{ icon: "search-outline", accessibilityLabel: "Ara", onPress: openSearch }]}
+        actions={bell ? [bell, { icon: "search-outline", accessibilityLabel: "Ara", onPress: openSearch }] : [{ icon: "search-outline", accessibilityLabel: "Ara", onPress: openSearch }]}
         bottom={
           <>
             <View style={styles.controls}>

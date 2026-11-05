@@ -1,12 +1,6 @@
 /**
- * /mesajlarim — ESKİ ROTA, yönlendirme.
- *
- * Yönetim başvuruları Mesajlar sekmesinin "Yönetim" kutusuna taşındı
- * (app/(tabs)/mesajlar.tsx; yönlendirme /gelen-kutusu üstünden, içerik
- * components/inbox/PanelThreadsPane.tsx). Rota silinmez: `PANEL_MESSAGE`
- * bildirimlerinin liste hedefi (lib/notifications.ts) ve app/mesaj/[id].tsx'in
- * "kutuya dön" / "yeni başvuru" (`?yeni=1`) bağlantıları buraya gelir.
- * `durum` ve `yeni` parametreleri olduğu gibi taşınır.
+ * /mesajlarim — ESKİ ROTA: yönetime yapılan başvurular artık
+ * Bildirimler ▸ Başvurularım'da (`durum`, `yeni` korunur).
  */
 
 import { Redirect, useLocalSearchParams } from "expo-router";
@@ -21,15 +15,7 @@ export default function MessagesRedirect() {
   const yeni = first(params.yeni);
   return (
     <Redirect
-      href={{
-        pathname: "/gelen-kutusu",
-        params: {
-          tab: "mesajlar",
-          kutu: "basvurular",
-          ...(durum ? { durum } : {}),
-          ...(yeni ? { yeni } : {}),
-        },
-      }}
+      href={{ pathname: "/bildirimler", params: { bolum: "basvurular", ...(durum ? { durum } : {}), ...(yeni ? { yeni } : {}) } }}
     />
   );
 }

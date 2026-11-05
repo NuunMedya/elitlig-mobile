@@ -82,18 +82,18 @@ export type NotifTarget = {
 };
 
 /**
- * GELEN KUTUSU HEDEFLERİ — doğrudan Mesajlar sekmesi.
+ * HEDEFLER — TEK MESAJLAŞMA KURALI (web ile aynı).
  *
- * Eskiden bildirimler `/bildirimler` ve `/mesajlarim` adreslerine gidiyordu;
- * ikisi de `/gelen-kutusu`na, o da Mesajlar sekmesine yönlendiren eski
- * rotalardı (iki-üç atlama, her atlamada bir kare boş ekran). Eski rotalar
- * derin bağlantılar için yerinde duruyor; uygulamanın kendisi artık hedefe
- * doğrudan gider.
+ * Mesajlar sekmesi yalnız doğrudan yazışmadır (sohbet bildirimleri oraya).
+ * Diğer bütün bildirimler üst çubuktaki zilin açtığı /bildirimler ekranına,
+ * yönetime yapılan başvurular onun "Başvurularım" bölümüne, yönetim talepleri
+ * Yönetim ▸ Talepler'e gider. Eski rotalar (/gelen-kutusu, /mesajlarim)
+ * derin bağlantılar için yerinde duruyor; uygulama hedefe doğrudan gider.
  */
 const INBOX_PATH = "/(tabs)/mesajlar";
-const NOTIFICATIONS_BOX: NotifTarget = { pathname: INBOX_PATH, params: { kutu: "bildirimler" } };
-const MANAGEMENT_BOX: NotifTarget = { pathname: INBOX_PATH, params: { kutu: "yonetim" } };
-const CHATS_BOX: NotifTarget = { pathname: INBOX_PATH, params: { kutu: "sohbetler" } };
+const NOTIFICATIONS_BOX: NotifTarget = { pathname: "/bildirimler" };
+const MANAGEMENT_BOX: NotifTarget = { pathname: "/bildirimler", params: { bolum: "basvurular" } };
+const CHATS_BOX: NotifTarget = { pathname: INBOX_PATH, params: { bolum: "sohbetler" } };
 
 /** Rotayı etkileyen oturum bağlamı. Maç talebi rolüne göre iki farklı ekrana gider. */
 export interface NotifContext {
@@ -296,11 +296,11 @@ export function routeFromNotif(
   const entityType = String(data.entity_type ?? "").trim().toUpperCase();
   const entityId = asId(data.entity_public_id);
 
-  /* Yönetim gelen kutusu (services/chat/managementInbox.js): talep kartları
-     yönetim sohbetlerinde yaşar. Üye ekranına (ör. /teklif) değil yönetim
-     gelen kutusuna gidilir. */
+  /* Yönetim talepleri (services/chat/managementInbox.js → management_requests):
+     artık sohbette değil Talepler onay merkezinde. Üye ekranına (ör. /teklif)
+     değil Yönetim ▸ Talepler'e gidilir. */
   if (String(data.audience ?? "").toLowerCase() === "management") {
-    return { pathname: "/yonetim/sohbet" };
+    return { pathname: "/yonetim/talepler" };
   }
 
   /* Serbest kalma izni: kart oyuncunun MEVCUT takımına gelir. O takım teklif

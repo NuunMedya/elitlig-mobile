@@ -56,8 +56,10 @@ app/                       Ekranlar (Expo Router — dosya = rota)
     index · maclar · favoriler · takimlar · oyuncular · menu
                            (href: null) Eski rotalar → yeni yerlerine yönlendirir
   canli.tsx                Eski rota → Skorlar ▸ Canlı ▸ Tüm şehirler
-  gelen-kutusu.tsx         Bildirimler | Mesajlar (/bildirimler ve /mesajlarim
-                           buraya yönlendirir)
+  bildirimler.tsx          Bildirimler (üst çubuktaki zil) + Başvurularım; yönetimde
+                           Talepler şeridi. Mesajlar sekmesi YALNIZ sohbettir
+                           (WhatsApp benzeri; yönetimde Üye mesajları da orada).
+  gelen-kutusu.tsx         Eski rota (/mesajlarim da) → Bildirimler ya da Mesajlar
   ayarlar.tsx              Tek Ayarlar: bildirim türleri, takip bildirimleri,
                            görünüm, lig seçimi, hesap ve güvenlik, hesap silme
   sehir.tsx · baslangic.tsx İlk açılış: şehir → lig → takım → bildirim izni

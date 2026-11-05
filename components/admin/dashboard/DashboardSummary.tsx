@@ -86,7 +86,7 @@ export function DashboardSummary({ onNavigate, showQuickActions = true, maxMatch
           hint={data.unread ? "okunmamış mesaj" : "Gelen kutusu temiz"}
           tone={data.unread ? "brand" : "neutral"}
           icon="chatbubbles-outline"
-          onPress={() => go("/yonetim/sohbet")}
+          onPress={() => go("/mesajlar")}
         />
         {data.canTeams ? (
           <MetricTile
