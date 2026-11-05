@@ -25,6 +25,8 @@ export interface GoalClip {
   olay_kodu: string | null;
   own_goal?: boolean;
   url: string;
+  /** Kapak görseli (sunucu yüklemede alır; eski kliplerde yok). */
+  poster_url?: string | null;
   duration_ms: number | null;
   width?: number | null;
   height?: number | null;

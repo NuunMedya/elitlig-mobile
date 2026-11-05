@@ -86,6 +86,8 @@ export interface ApiMatch {
   lineup?: ApiLineupRow[];
   /** ?include=timeline ile gelir */
   timeline?: ApiMatchEvent[];
+  /** Yayın stüdyosunda tekrarlardan üretilen maç özeti (GET /maclar/:id). */
+  highlight?: { url: string; poster_url: string | null; duration_ms: number | null } | null;
 }
 
 /** mac_kadrolari satırı. */

@@ -7,7 +7,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
 import React, { useMemo, useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { SectionHeader, Touchable } from "@/components/ui";
 import { clipLabel, listGoalClips, type GoalClip } from "@/lib/live/clips";
@@ -53,6 +53,7 @@ export function MatchGoalClips({
             accessibilityLabel={`${clipLabel(clip)} ${scorer(clip) ?? ""} videosunu izle`}
           >
             <View style={styles.thumb}>
+              {clip.poster_url ? <Image source={{ uri: clip.poster_url }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : null}
               <View style={styles.play}>
                 <Ionicons name="play" size={16} color={colors.textOnBrand} />
               </View>
@@ -88,6 +89,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.matchTint,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
   },
   play: { width: 34, height: 34, borderRadius: radius.pill, backgroundColor: colors.live, alignItems: "center", justifyContent: "center" },
   title: { ...type.label, color: colors.textPrimary },
