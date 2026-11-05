@@ -88,7 +88,7 @@ import {
   type Workbook,
 } from "@/lib/admin/sheetEngine";
 import { conflictItem, getSheet, getSheetVersion, updateSheet, ACCESS_LABELS, type SheetMeta } from "@/lib/api/admin/sheets";
-import { colors, hairline, space, textScale, type } from "@/theme";
+import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
 const HISTORY = 100;
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
@@ -119,7 +119,11 @@ const sheetPrefix = (name: string) => (/^[\wÇĞİÖŞÜçğıöşü]+$/.test(na
 export default function SheetEditorScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const sheetId = Number(id);
-  const toast = useToast();
+  const toastApi = useToast();
+  // Toast nesnesi değişse de yükleme/kayıt geri çağrıları yeniden kurulmasın.
+  const toastRef = useRef(toastApi);
+  toastRef.current = toastApi;
+  const toast = useMemo(() => ({ show: (o: Parameters<typeof toastApi.show>[0]) => toastRef.current.show(o) }), []);
 
   const [meta, setMeta] = useState<SheetMeta | null>(null);
   const [book, setBook] = useState<Workbook | null>(null);
@@ -199,7 +203,7 @@ export default function SheetEditorScreen() {
       if (restored) {
         dirty.current = true;
         setSaveState("dirty");
-        toast.show({ message: "Kaydedilmemiş değişikliklerin geri yüklendi.", tone: "info" });
+        toast.show({ message: "Kaydedilmemiş değişikliklerin geri yüklendi.", tone: "neutral" });
       }
     } catch (error) {
       setLoadError(error);
@@ -242,7 +246,7 @@ export default function SheetEditorScreen() {
         setBook(merged);
         past.current = [];
         future.current = [];
-        toast.show({ message: `${latest.updated_by_name || "Başka biri"} de bu tabloyu değiştirdi; değişiklikler birleştirildi.`, tone: "info" });
+        toast.show({ message: `${latest.updated_by_name || "Başka biri"} de bu tabloyu değiştirdi; değişiklikler birleştirildi.`, tone: "neutral" });
         await attempt(merged, tries + 1);
       }
     };
@@ -353,7 +357,7 @@ export default function SheetEditorScreen() {
         setBook(workbook);
         setMeta((m) => (m ? { ...m, ...rest, access: m.access } : m));
         setSi((cur) => Math.min(cur, workbook.sheets.length - 1));
-        toast.show({ message: `${v.updated_by_name || "Başka biri"} tabloyu güncelledi.`, tone: "info" });
+        toast.show({ message: `${v.updated_by_name || "Başka biri"} tabloyu güncelledi.`, tone: "neutral" });
       } catch {
         // bir sonraki denemede
       }
@@ -406,9 +410,13 @@ export default function SheetEditorScreen() {
     return rangeStats(values);
   }, [sheet, evaluator, si, range.r1, range.r2, range.c1, range.c2]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Etkin hücre görünür kalsın; tüm satır/sütun seçiminde kaydırılmaz (uca atlamasın).
+  const wholeRow = Boolean(sheet && range.c1 === 0 && range.c2 === sheet.cols - 1);
+  const wholeCol = Boolean(sheet && range.r1 === 0 && range.r2 === sheet.rows - 1);
   useEffect(() => {
+    if (wholeRow || wholeCol) return;
     gridRef.current?.reveal(sel.focus.row, sel.focus.col);
-  }, [sel.focus.row, sel.focus.col, si]);
+  }, [sel.focus.row, sel.focus.col, si, wholeRow, wholeCol]);
 
   /* ─────────────────────────── düzenleme ─────────────────────────── */
 
@@ -766,7 +774,7 @@ export default function SheetEditorScreen() {
   const errHint = isError(activeValue) ? ERROR_HINTS[activeValue.code] ?? activeValue.code : null;
 
   const tools: ToolItem[] = [
-    { key: "b", icon: "text", label: "Kalın", text: "K", active: Boolean(activeStyle.b), onPress: () => toggleStyle("b") },
+    { key: "b", label: "Kalın", text: "K", active: Boolean(activeStyle.b), onPress: () => toggleStyle("b") },
     { key: "i", text: "İ", label: "İtalik", active: Boolean(activeStyle.i), onPress: () => toggleStyle("i") },
     { key: "u", text: "A̲", label: "Altı çizili", active: Boolean(activeStyle.u), onPress: () => toggleStyle("u") },
     { key: "d1", divider: true },
@@ -1120,7 +1128,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.md,
     height: 30,
     justifyContent: "center",
-    borderRadius: space.s,
+    borderRadius: radius.sm,
     backgroundColor: colors.surface3,
     maxWidth: 160,
   },

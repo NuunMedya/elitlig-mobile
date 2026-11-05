@@ -161,7 +161,7 @@ export function ProjectProvider({
   const queryClient = useQueryClient();
   const toast = useToast();
   const people = usePeopleDirectory();
-  const key = projectKeys.detail(id);
+  const key = useMemo(() => projectKeys.detail(id), [id]);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dataRef = useRef(data);
   dataRef.current = data;
@@ -410,7 +410,7 @@ export function ProjectProvider({
         }
       },
     };
-  }, [id, key, notify, queryClient]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [id, notify, queryClient]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const directory = useMemo(() => people.data ?? [], [people.data]);
 

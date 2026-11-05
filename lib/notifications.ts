@@ -223,7 +223,7 @@ const TYPE_PREFIX_TARGETS: ReadonlyArray<
   // modülünde. Yönetim dışı bir hesaba düşerse kilit ekranı yerine gelen kutusu.
   ["PASSWORD_RESET", (_id, ctx) =>
     ctx.isManagement
-      ? { pathname: "/yonetim/web", params: { path: "/yonetim/admin/kullanicilar", title: "Site üyeleri" } }
+      ? { pathname: "/yonetim/uyeler" }
       : NOTIFICATIONS_BOX],
   // Hesap/üyelik akışları kendi ekranına sahip değil; bildirim merkezinde okunur.
   ["MEMBERSHIP_", () => (NOTIFICATIONS_BOX)],

@@ -187,24 +187,22 @@ export const PARAM_LABELS: Record<string, string> = {
   type: "Sahne",
 };
 
-/** Kaplama adresleri: her konuk alt kümesi için çıplak ve içerikli bağlantı (web panoramaLayout). */
+/** Kaplama adresleri: her konuk alt kümesi için çıplak ve içerikli bağlantı, sonda "yalnız içerik" (web panoramaLayout). */
 export function overlayLinks(origin: string, id: number, guests: PanoramaGuest[], layout: PanoramaLayout) {
   const count = layout === "solo" ? 1 : layout === "trio" ? 3 : 2;
   const names = Array.from({ length: count }, (_, i) => (guests[i]?.name || "").trim() || `${i + 1}. konuk`);
   const indices = names.map((_, i) => i + 1);
-  const subsets: number[][] = [[]];
-  indices.forEach((n) => {
-    const len = subsets.length;
-    for (let i = 0; i < len; i += 1) subsets.push([...subsets[i], n]);
-  });
-  subsets.sort((a, b) => a.length - b.length || a.join().localeCompare(b.join()));
-  const slug = (slots: number[]) => (slots.length ? slots.join("-") : "0");
+  const subsets: number[][] = [];
+  for (let mask = 1; mask < 2 ** indices.length; mask += 1) subsets.push(indices.filter((_, i) => mask & (1 << i)));
+  subsets.sort((a, b) => a.length - b.length || a[0] - b[0] || (a[1] || 0) - (b[1] || 0));
+  const slug = (slots: number[]) => (slots.length ? slots.join("-") : "yok");
   const out: { key: string; label: string; url: string }[] = [];
   subsets.forEach((slots) => {
     const people = slots.map((s) => names[s - 1]).join(" · ");
-    if (slots.length) out.push({ key: slug(slots), label: people, url: `${origin}/panorama/${id}/${slug(slots)}` });
-    out.push({ key: `${slug(slots)}-icerik`, label: slots.length ? `${people} + İçerik` : "Yalnız İçerik", url: `${origin}/panorama/${id}/${slug(slots)}/icerik` });
+    out.push({ key: slug(slots), label: people, url: `${origin}/panorama/${id}/${slug(slots)}` });
+    out.push({ key: `${slug(slots)}-icerik`, label: `${people} + İçerik`, url: `${origin}/panorama/${id}/${slug(slots)}/icerik` });
   });
+  out.push({ key: "yok-icerik", label: "Yalnız İçerik", url: `${origin}/panorama/${id}/yok/icerik` });
   return out;
 }
 

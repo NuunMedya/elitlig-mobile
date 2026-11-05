@@ -240,7 +240,7 @@ export default function FocusTimerScreen() {
     }
     haptics.light();
     setState(next);
-  }, [settings.notify]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [settings]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const reset = () => {
     void cancelEnd();

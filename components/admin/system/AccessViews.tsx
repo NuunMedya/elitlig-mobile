@@ -144,11 +144,13 @@ export function PersonAccessView({ id }: { id: number }) {
   const [picker, setPicker] = useState<"user" | "role" | null>(null);
 
   // Kişi değişince ya da kayıt sunucudan güncel hâliyle dönünce taslak sıfırlanır.
+  // Bağımlılık içerik imzasıdır: arka plan tazelemesi aynı veriyi getirirse taslak silinmez.
+  const personSig = person ? `${person.id}|${[...person.permissions].sort().join(",")}|${person.title ?? ""}` : "";
   useEffect(() => {
     setPerms([...(person?.permissions ?? [])]);
     setTitle(person?.title ?? "");
     setCopySource(null);
-  }, [person]);
+  }, [personSig]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = useAdminMutation((body: AccessSaveBody) => saveUserAccess(id, body), {
     success: (r) => r.message || "Kaydedildi.",
@@ -346,9 +348,10 @@ export function RoleTemplateView({ roleKey }: { roleKey: string }) {
   const [draft, setDraft] = useState<string[]>([]);
   const [dialog, setDialog] = useState<"edit" | "copy" | "delete" | "users" | "copyFrom" | null>(null);
 
+  const roleSig = role ? `${role.key}|${[...role.permissions].sort().join(",")}` : "";
   useEffect(() => {
     setDraft([...(role?.permissions ?? [])]);
-  }, [role]);
+  }, [roleSig]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const users = useQuery({
     queryKey: systemKeys.roleUsers(roleKey),

@@ -245,7 +245,7 @@ export function LinkExisting({
   }, [text]);
   const search = useQuery({
     queryKey: ["admin", "members", "candidates", kind, q],
-    queryFn: () => (isTeam ? searchTeamCandidates(q) : searchPlayerCandidates(q)),
+    queryFn: (): Promise<(RequestPlayer | RequestTeam)[]> => (isTeam ? searchTeamCandidates(q) : searchPlayerCandidates(q)),
     enabled: q.length >= 2,
   });
   const suggestedIds = new Set(suggestions.map((s) => s.id));

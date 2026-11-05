@@ -111,9 +111,23 @@ export default function ManagementUsersScreen() {
         city: nationwide ? "" : String(values.city ?? "").trim(),
         status: (values.status === "suspended" ? "suspended" : "active") as ManagementStatus,
       };
-      return editing === "new" || editing == null
-        ? createManagementUser({ ...body, username: String(values.username ?? "").trim(), password: String(values.password ?? "") })
-        : updateManagementUser(editing.id, body);
+      if (editing === "new" || editing == null) {
+        return createManagementUser({ ...body, username: String(values.username ?? "").trim(), password: String(values.password ?? "") });
+      }
+      // Yalnız değişen alanlar gider: sunucu kişinin KENDİ rolünü/durumunu
+      // göndermesini (aynı değer olsa bile) CANNOT_CHANGE_OWN_ROLE ile reddeder.
+      const before: Record<string, unknown> = {
+        fullName: editing.fullName ?? null,
+        title: editing.title ?? null,
+        email: editing.email ?? null,
+        phone: editing.phone ?? null,
+        role: editing.role,
+        city: editing.nationwide ? "" : editing.city ?? "",
+        status: editing.status === "suspended" ? "suspended" : "active",
+      };
+      const changes = Object.fromEntries(Object.entries(body).filter(([key, value]) => value !== before[key]));
+      if (!Object.keys(changes).length) return Promise.resolve({ message: "Değişiklik yok.", user: editing });
+      return updateManagementUser(editing.id, changes);
     },
     { success: (r) => r.message || "Yönetim hesabı kaydedildi.", invalidate, silentError: true }
   );
