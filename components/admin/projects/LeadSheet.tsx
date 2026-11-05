@@ -13,7 +13,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { ChipsField, DateField, SelectField, confirmAction } from "@/components/admin";
@@ -51,9 +51,13 @@ import { QuestionForm, QuestionItem } from "./Questions";
 import { ContactBar, Pill, SaveOnBlurInput, SubHead } from "./ui";
 
 export function LeadSheet({ lead, stepId, onClose }: { lead: Lead | null; stepId?: number | null; onClose: () => void }) {
+  // Kapanış animasyonu sürerken içerik boşalmasın: son kişi tutulur.
+  const last = useRef<Lead | null>(lead);
+  if (lead) last.current = lead;
+  const shown = lead ?? last.current;
   return (
-    <BottomSheet visible={lead != null} onClose={onClose} title={lead ? (kindOf(lead) === "supplier" ? "Tedarik görüşmesi" : "Kişi kartı") : undefined} snap="full">
-      {lead ? <LeadBody lead={lead} stepId={stepId ?? null} onClose={onClose} /> : <View />}
+    <BottomSheet visible={lead != null} onClose={onClose} title={shown && kindOf(shown) === "supplier" ? "Tedarik görüşmesi" : "Kişi kartı"} snap="full">
+      {shown ? <LeadBody key={shown.id} lead={shown} stepId={stepId ?? null} onClose={onClose} /> : <View />}
     </BottomSheet>
   );
 }

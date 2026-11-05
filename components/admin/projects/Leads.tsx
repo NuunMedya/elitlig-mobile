@@ -71,10 +71,7 @@ export function Leads({ fixedKind = null, initialStage = "" }: { fixedKind?: Lea
     setStage(st && stagesOf(settings, k).some((x) => x.key === st) ? st : "");
     setDue(nav.params.takip ? "due" : "");
   }, [nav.version]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (fixedKind) setKind(fixedKind);
-    setStage(initialStage && stagesOf(settings, fixedKind || kind).some((x) => x.key === initialStage) ? initialStage : "");
-  }, [fixedKind, initialStage]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Araç modu (fixedKind / initialStage) değişince bileşen anahtarla yeniden kurulur.
 
   const switchKind = (k: LeadKind) => {
     setKind(k);

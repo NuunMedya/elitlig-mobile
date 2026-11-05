@@ -7,7 +7,7 @@
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useRouter } from "expo-router";
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { ChipsField, DateField, SelectField, confirmAction } from "@/components/admin";
@@ -44,9 +44,13 @@ import { Pill, SaveOnBlurInput, SubHead, openUrl } from "./ui";
 const uid = () => `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
 export function StepSheet({ step, onClose }: { step: Step | null; onClose: () => void }) {
+  // Kapanış animasyonu sürerken içerik boşalmasın: son adım tutulur.
+  const last = useRef<Step | null>(step);
+  if (step) last.current = step;
+  const shown = step ?? last.current;
   return (
-    <BottomSheet visible={step != null} onClose={onClose} title={step ? "Adım ayrıntısı" : undefined} snap="full">
-      {step ? <StepBody step={step} onClose={onClose} /> : <View />}
+    <BottomSheet visible={step != null} onClose={onClose} title="Adım ayrıntısı" snap="full">
+      {shown ? <StepBody key={shown.id} step={shown} onClose={onClose} /> : <View />}
     </BottomSheet>
   );
 }
