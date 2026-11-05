@@ -80,6 +80,10 @@ export interface ApiMatch {
   kadro_tamamlandi?: number;
   post_manset?: string | null;
   post_rapor?: string | null;
+  /** Maç sonu röportajı: YouTube bağlantısı ya da doğrudan video (MP4) adresi. */
+  post_roportaj?: string | null;
+  match_interview?: string | null;
+  interview_url?: string | null;
   createdAt?: string;
   updatedAt?: string;
   /** ?include=lineup ile gelir */

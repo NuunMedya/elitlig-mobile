@@ -22,6 +22,8 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useRouter } from "expo-router";
 import { MatchGoalClips } from "@/components/live/MatchGoalClips";
 import { MatchHighlight } from "@/components/live/MatchHighlight";
+import { VideoCard } from "@/components/live/VideoCard";
+import { directVideoUrl } from "@/lib/video";
 import React, { memo, useCallback, useMemo, useState } from "react";
 import {
   FlatList,
@@ -192,6 +194,8 @@ export function SummaryTab({
       {state === "finished" ? <FanVoteCard matchId={Number(match.id)} /> : null}
 
       {scheduled ? null : <MatchHighlight highlight={match.highlight} />}
+
+      {scheduled ? null : <MatchInterview match={match} />}
 
       {scheduled ? null : <MatchGoalClips matchId={Number(match.id)} nameOf={nameOf} live={live} />}
 
@@ -1045,3 +1049,13 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
 });
+
+/**
+ * Maç sonu röportajı — `post_roportaj` doğrudan bir video dosyasıysa (MP4)
+ * uygulama içinde oynatılır. YouTube bağlantısı ise burada çizilmez.
+ */
+function MatchInterview({ match }: { match: ApiMatch }) {
+  const url = directVideoUrl(match.match_interview || match.post_roportaj || match.interview_url);
+  if (!url) return null;
+  return <VideoCard title="Röportaj" meta="Maç sonu açıklamaları" url={url} cta="Röportajı izle" accessibilityLabel="Maç sonu röportajını izle" icon="mic" />;
+}
