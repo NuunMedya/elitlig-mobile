@@ -732,7 +732,8 @@ function CareerSection({
 
 const LEAGUE_TOOLS: PanelTool[] = [
   { key: "gorevler", icon: "checkbox", label: "Görevler", href: "/yonetim/gorevler" },
-  { key: "gorev-yeni", icon: "add-circle", label: "Yeni görev", href: "/yonetim/gorev-yeni" },
+  { key: "araclar", icon: "construct", label: "Araçlar", href: "/yonetim/araclar", tone: "brand" },
+  { key: "talepler", icon: "file-tray-full", label: "Talepler", href: "/yonetim/talepler", tone: "warn" },
   { key: "maclar", icon: "football", label: "Maçlar", href: "/yonetim/maclar", tone: "live" },
   { key: "sahalar", icon: "location", label: "Sahalar", href: "/yonetim/sahalar", tone: "info" },
   { key: "basvuru", icon: "mail", label: "Mesajlar", href: "/yonetim/mesajlar", tone: "warn" },

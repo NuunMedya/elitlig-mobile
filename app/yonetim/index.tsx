@@ -27,7 +27,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Redirect, useRouter } from "expo-router";
-import { memo, useCallback, useMemo } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -35,6 +35,9 @@ import {
   Badge,
   EmptyState,
   ErrorState,
+  HubGrid,
+  HubTile,
+  Input,
   ListRow,
   ScreenHeader,
   SectionHeader,
@@ -42,10 +45,11 @@ import {
   Touchable,
   useHeaderScroll,
   useRefresh,
+  type HubTone,
   type Tone,
 } from "@/components/ui";
 import { useAppActive } from "@/hooks/useLiveFavoriteCount";
-import { visibleModuleGroups, type AdminModule } from "@/lib/adminModules";
+import { searchModules, TOOL_MODULES, visibleModuleGroups, type AdminModule } from "@/lib/adminModules";
 import { getAdminMatches, getAdminMessages, getAdminRequests, ROLE_LABELS } from "@/lib/api/admin";
 import { getTodoSummary, todoKeys } from "@/lib/api/todos";
 import { useAuth } from "@/providers/AuthProvider";
@@ -53,6 +57,20 @@ import { useScope } from "@/providers/ScopeProvider";
 import { colors, fonts, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
 
 /* ═══════════════════════════ SABİTLER VE TİPLER ═══════════════════════════ */
+
+/** Araç karolarının tonu — renk aracı tanıtır, durum taşımaz. */
+const TOOL_TONES: Record<string, HubTone> = {
+  projeler: "brand",
+  gorevler: "danger",
+  ajanda: "info",
+  "not-defteri": "warn",
+  muhasebe: "win",
+  tablolar: "accent",
+  mesajlar: "brand",
+  rehber: "info",
+  "hesap-araclari": "neutral",
+  "odak-sayaci": "live",
+};
 
 /** Sayaçların tazelenme aralığı — uygulama arkadayken hiç yoklanmaz. */
 const POLL_MS = 30_000;
@@ -242,13 +260,16 @@ export default function AdminHomeScreen() {
 
   const openSection = useCallback((route: string) => router.push(route as never), [router]);
 
-  /* Web panelindeki her yönetim sayfası (yetkiye göre) — uygulama içinde açılır. */
+  /* Web panelindeki her yönetim sayfası (yetkiye göre) — hepsi YEREL ekran. */
   const moduleGroups = useMemo(() => visibleModuleGroups(auth.user), [auth.user]);
-  const openModule = useCallback(
-    (module: AdminModule) =>
-      router.push({ pathname: "/yonetim/web", params: { path: module.path, title: module.title } }),
-    [router]
+  const [moduleQuery, setModuleQuery] = useState("");
+  const moduleHits = useMemo(() => searchModules(auth.user, moduleQuery), [auth.user, moduleQuery]);
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const toggleGroup = useCallback(
+    (key: string) => setCollapsed((current) => ({ ...current, [key]: !current[key] })),
+    []
   );
+  const openModule = useCallback((module: AdminModule) => router.push(module.route as never), [router]);
 
   /* — Kapı: misafir giriş ekranına, yetkisiz üye nazik uyarıya — */
 
@@ -385,32 +406,95 @@ export default function AdminHomeScreen() {
           ))}
         </View>
 
-        <SectionHeader title="Tüm yönetim araçları" meta="Web paneli" style={styles.sectionHeader} />
-        <Text style={styles.toolsIntro} {...textScale.long}>
-          Web sürümündeki bütün yönetim sayfaları burada; yetkine göre listelenir ve uygulamadan
-          çıkmadan, yeniden giriş yapmadan açılır.
-        </Text>
-        {moduleGroups.map((group) => (
-          <View key={group.key} style={styles.toolGroup}>
-            <Text style={styles.toolGroupTitle} {...textScale.dense}>
-              {upperTR(group.title)}
-            </Text>
-            <View>
-              {group.modules.map((module, index) => (
+        {/* ARAÇLARIM — kişisel çalışma araçları; her yönetim kullanıcısına açık. */}
+        <SectionHeader
+          title="Araçlarım"
+          action={{ label: "Araçlar merkezi", onPress: () => router.push("/yonetim/araclar") }}
+          style={styles.sectionHeader}
+        />
+        <HubGrid inset="flush">
+          {TOOL_MODULES.map((module) => (
+            <HubTile
+              key={module.key}
+              icon={module.icon}
+              title={module.title}
+              tone={TOOL_TONES[module.key] ?? "neutral"}
+              onPress={() => openModule(module)}
+            />
+          ))}
+        </HubGrid>
+
+        <SectionHeader title="Tüm yönetim sayfaları" meta="Yetkine göre" style={styles.sectionHeader} />
+        <Input
+          variant="search"
+          leadingIcon="search"
+          value={moduleQuery}
+          onChangeText={setModuleQuery}
+          placeholder="Sayfa ara: ceza, transfer, kura, personel…"
+          autoCorrect={false}
+          autoCapitalize="none"
+          containerStyle={styles.moduleSearch}
+          clearButtonMode="while-editing"
+        />
+        {moduleQuery.trim() ? (
+          moduleHits.length ? (
+            <View style={styles.toolGroup}>
+              {moduleHits.map((module, index) => (
                 <ListRow
-                  key={module.key}
+                  key={module.route}
                   leading={{ icon: module.icon }}
                   title={module.title}
                   subtitle={module.description}
                   chevron
-                  position={groupPosition(index, group.modules.length)}
+                  position={groupPosition(index, moduleHits.length)}
                   onPress={() => openModule(module)}
-                  testID={`admin-module-${module.key}`}
                 />
               ))}
             </View>
-          </View>
-        ))}
+          ) : (
+            <EmptyState icon="search-outline" title="Eşleşen sayfa yok" body="Başka bir sözcükle dene." variant="inline" compact />
+          )
+        ) : (
+          moduleGroups.map((group) => (
+            <View key={group.key} style={styles.toolGroup}>
+              <Touchable
+                onPress={() => toggleGroup(group.key)}
+                style={styles.groupHead}
+                accessibilityRole="button"
+                accessibilityState={{ expanded: !collapsed[group.key] }}
+              >
+                <Ionicons name={group.icon} size={16} color={colors.textTertiary} />
+                <Text style={styles.toolGroupTitle} {...textScale.dense}>
+                  {upperTR(group.title)}
+                </Text>
+                <Text style={styles.groupCount} {...textScale.dense}>
+                  {group.modules.length}
+                </Text>
+                <Ionicons
+                  name={collapsed[group.key] ? "chevron-down" : "chevron-up"}
+                  size={16}
+                  color={colors.textTertiary}
+                />
+              </Touchable>
+              {collapsed[group.key] ? null : (
+                <View>
+                  {group.modules.map((module, index) => (
+                    <ListRow
+                      key={module.key}
+                      leading={{ icon: module.icon }}
+                      title={module.title}
+                      subtitle={module.description}
+                      chevron
+                      position={groupPosition(index, group.modules.length)}
+                      onPress={() => openModule(module)}
+                      testID={`admin-module-${module.key}`}
+                    />
+                  ))}
+                </View>
+              )}
+            </View>
+          ))
+        )}
 
         <ListRow
           leading={{ icon: "notifications-outline" }}
@@ -683,10 +767,20 @@ const styles = StyleSheet.create({
   },
 
   /* — Araçlar — */
-  toolsIntro: {
-    ...type.bodySm,
-    color: colors.textSecondary,
+  moduleSearch: {
     marginBottom: space.md,
+  },
+  groupHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    paddingHorizontal: space.xxs,
+    paddingVertical: space.xs,
+  },
+  groupCount: {
+    ...type.caption,
+    color: colors.textTertiary,
+    marginLeft: "auto",
   },
   toolGroup: {
     marginBottom: space.lg,
@@ -695,7 +789,6 @@ const styles = StyleSheet.create({
   toolGroupTitle: {
     ...type.overline,
     color: colors.textTertiary,
-    paddingHorizontal: space.xxs,
   },
   notifRow: {
     marginTop: space.xs,
