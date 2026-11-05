@@ -344,7 +344,16 @@ export default function StaffBulkAssignScreen() {
         contentContainerStyle={[styles.content, { paddingBottom: dirty ? 140 + insets.bottom : space.giant * 2 }]}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
-        refreshControl={<RefreshControl {...refreshControlProps(matchesQuery.isRefetching, () => void matchesQuery.refetch())} />}
+        refreshControl={
+          <RefreshControl
+            {...refreshControlProps(matchesQuery.isRefetching, () => {
+              // Sunucunun taze listesi gelince yerinde işlenen kayıtlar düşer.
+              setSaved({});
+              void matchesQuery.refetch();
+              void staffQuery.refetch();
+            })}
+          />
+        }
         renderSectionHeader={({ section }) => (
           <Text style={styles.day} {...textScale.dense}>
             {section.day ? formatLongDay(`${section.day}T12:00:00`) : "Tarihi belirsiz"}

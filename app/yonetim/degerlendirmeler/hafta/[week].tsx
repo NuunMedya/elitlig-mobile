@@ -9,7 +9,7 @@
  */
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import { StyleSheet, Text } from "react-native";
 
@@ -32,6 +32,8 @@ export default function WeekEvaluationScreen() {
   const toast = useToast();
   const queryClient = useQueryClient();
   const canSubmit = hasAnyPermission(auth.user, ["evaluations.submit"]);
+  const canManage = hasAnyPermission(auth.user, ["evaluations.manage"]);
+  const router = useRouter();
 
   const key = ["admin", "evaluations", "week", week, cityId];
   const query = useQuery({ queryKey: key, queryFn: () => getWeekDetail(week, cityId) });
@@ -126,6 +128,7 @@ export default function WeekEvaluationScreen() {
               canSubmit={canSubmit}
               onSave={save}
               emptyHint="Sosyal medya için henüz soru tanımlanmadı."
+              emptyAction={canManage ? { label: "Sorular ve Ücretler’e git", onPress: () => router.push({ pathname: "/yonetim/degerlendirmeler", params: { tab: "questions" } }) } : null}
             />
           ) : (
             <EmptyState icon="share-social-outline" title="Bu hafta değerlendirme yok" variant="inline" />

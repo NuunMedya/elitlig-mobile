@@ -160,7 +160,7 @@ export default function MatchEvaluationScreen() {
                       }
                     : undefined
                 }
-                emptyAction={canManage ? { label: "Sorular ve Ücretler’e git", onPress: () => router.back() } : null}
+                emptyAction={canManage ? { label: "Sorular ve Ücretler’e git", onPress: () => router.push({ pathname: "/yonetim/degerlendirmeler", params: { tab: "questions" } }) } : null}
               />
             </View>
           ) : (

@@ -15,6 +15,7 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
+import { useLocalSearchParams } from "expo-router";
 import { useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
@@ -47,7 +48,10 @@ export default function EvaluationsScreen() {
   const canSubmit = hasAnyPermission(auth.user, ["evaluations.submit"]);
   const canManage = hasAnyPermission(auth.user, ["evaluations.manage"]);
 
-  const [tab, setTab] = useState<TabKey>(canView ? "overview" : "forms");
+  const params = useLocalSearchParams<{ tab?: string }>();
+  const [tab, setTab] = useState<TabKey>(
+    params.tab === "questions" && canManage ? "questions" : canView ? "overview" : "forms"
+  );
   const [period, setPeriod] = useState<PeriodKey>("30");
   const [cityId, setCityId] = useState("");
   const [leagueId, setLeagueId] = useState("");
