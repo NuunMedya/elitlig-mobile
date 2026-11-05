@@ -48,6 +48,7 @@ import {
   type HubTone,
   type Tone,
 } from "@/components/ui";
+import { DashboardSummary } from "@/components/admin/dashboard/DashboardSummary";
 import { useAppActive } from "@/hooks/useLiveFavoriteCount";
 import { searchModules, TOOL_MODULES, visibleModuleGroups, type AdminModule } from "@/lib/adminModules";
 import { getAdminMatches, getAdminMessages, getAdminRequests, ROLE_LABELS } from "@/lib/api/admin";
@@ -392,6 +393,9 @@ export default function AdminHomeScreen() {
             style={styles.banner}
           />
         ) : null}
+
+        {/* KONTROL PANELİ — web /editor özetinin yerel karşılığı. */}
+        <DashboardSummary onNavigate={openSection} />
 
         <SectionHeader title="Bölümler" style={styles.sectionHeader} />
 
