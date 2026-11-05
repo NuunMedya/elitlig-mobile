@@ -173,6 +173,13 @@ export default function TeamsDirectoryScreen() {
           { label: "Notlar ve iletişim bilgisi", icon: "document-text-outline", onPress: () => setNotesFor(menu), hidden: !canNotes },
           { label: "Rehber takım kartı", icon: "call-outline", hint: "Başkanlar, kadro, maçlar", onPress: () => menu && router.push(`/yonetim/araclar/rehber/takim/${menu.id}` as never), hidden: !canRehber },
           { label: "Takım sayfası", icon: "open-outline", onPress: () => menu && router.push(`/takim/${menu.id}` as never) },
+          {
+            label: "Takımı düzenle",
+            icon: "create-outline",
+            hint: "Takım yönetimi",
+            onPress: () => router.push("/yonetim/takimlar" as never),
+            hidden: !hasAnyPermission(auth.user, ["teams.update"]),
+          },
           { label: "Yetkiliye mesaj", icon: "paper-plane-outline", onPress: () => menu?.manager && void actions.message(menu.manager.id), hidden: !menu?.manager },
         ]}
       />

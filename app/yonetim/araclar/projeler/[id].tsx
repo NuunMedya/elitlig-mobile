@@ -35,7 +35,7 @@ import { Pill, ProgressBar } from "@/components/admin/projects/ui";
 import { Button, EmptyState, ErrorState, SkeletonCard, SkeletonHero, Tabs, useToast } from "@/components/ui";
 import { formatDate } from "@/lib/admin/format";
 import { PROJECT_STATUS_META, TABS, TOOL_META, isProjectTab, stageOf, type ProjectTab } from "@/lib/admin/projectUtils";
-import { getProject, projectKeys, type Step } from "@/lib/api/admin/projects";
+import { getProject, projectKeys, type Lead, type Step } from "@/lib/api/admin/projects";
 import { ApiError } from "@/lib/http";
 import { colors, radius, space, textScale, type } from "@/theme";
 
@@ -204,7 +204,7 @@ function DetailBody({
   refreshing: boolean;
   onRefresh: () => void;
   step: Step | null;
-  lead: import("@/lib/api/admin/projects").Lead | null;
+  lead: Lead | null;
   onCloseStep: () => void;
   onCloseLead: () => void;
   onTab: (t: ProjectTab) => void;

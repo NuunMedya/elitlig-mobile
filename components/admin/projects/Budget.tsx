@@ -12,7 +12,7 @@ import React, { useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { ActionSheet, FormSheet, Panel, RecordCard, confirmAction, type FieldDef, type FormValues } from "@/components/admin";
-import { Button, EmptyState, ErrorState, MetricGrid, MetricTile, SegmentedControl, SkeletonListRow } from "@/components/ui";
+import { Button, ErrorState, MetricGrid, MetricTile, SegmentedControl, SkeletonListRow } from "@/components/ui";
 import { errorText } from "@/lib/admin/errors";
 import { formatDate, formatMoney } from "@/lib/admin/format";
 import { ENTRY_STATUS_META, entryStatusLabel, entryTotals, isoDate, moneyText, paidVerb, parseAmount } from "@/lib/admin/projectUtils";

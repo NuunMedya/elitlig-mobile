@@ -40,7 +40,8 @@ export function ShareSheet({ visible, onClose, sheetId, title, initialShares, on
       setText("");
       setQ("");
     }
-  }, [visible, initialShares]);
+    // Yalnız açılışta: üst ekranın yeniden çizimi seçimleri silmesin.
+  }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const timer = setTimeout(() => setQ(text.trim()), 250);
