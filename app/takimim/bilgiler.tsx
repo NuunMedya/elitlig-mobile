@@ -10,7 +10,12 @@
  *                                               ana, ikincil ve şerit renkleri.
  *   SAYFA     PATCH /api/panel/me/team/details  DOĞRUDAN: slogan, tarihçe,
  *                                               başarılar, sosyal hesaplar,
- *                                               gol müziği.
+ *                                               gol müziği; ayrıca kaptan ve
+ *                                               ana sayfa görünürlüğü
+ *                                               (components/club/team/
+ *                                               TeamPageExtras).
+ *   YETKİ     Kimlik altında: takımı devret / istifa / talebi geri çek
+ *             (routes/User.js, yönetici onaylı).
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -23,6 +28,7 @@ import { AuthCard, AuthNotice, AuthShell } from "@/components/account/AuthShell"
 import { CityPickerSheet } from "@/components/account/CityPickerSheet";
 import { ImagePickField } from "@/components/account/ImagePickField";
 import { PendingChangeNotice } from "@/components/account/PendingChangeNotice";
+import { CaptainHomepageCard, TeamAuthorityCard } from "@/components/club/team/TeamPageExtras";
 import {
   Button,
   EmptyState,
@@ -92,7 +98,21 @@ export default function TeamInfoScreen() {
     body = (
       <>
         <SegmentedControl items={SEGMENTS} value={segment} onChange={setSegment} />
-        {segment === "kimlik" ? <IdentitySection /> : segment === "formalar" ? <KitSection /> : <PageSection />}
+        {segment === "kimlik" ? (
+          <>
+            <IdentitySection />
+            {/* Web'deki "Takımı devret / İstifa" eylemleri (yönetici onaylı). */}
+            <TeamAuthorityCard />
+          </>
+        ) : segment === "formalar" ? (
+          <KitSection />
+        ) : (
+          <>
+            <PageSection />
+            {/* Kaptan ve ana sayfa görünürlüğü — anında yazılır, ayrı kaydedilir. */}
+            <CaptainHomepageCard />
+          </>
+        )}
       </>
     );
   }
