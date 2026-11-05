@@ -232,8 +232,8 @@ export function useClubSignals() {
   }, [standings.data, team]);
 
   const roster = dashboard.data?.roster;
-  const contracted = roster?.contracted.length ?? 0;
-  const withoutContract = roster?.withoutContract.length ?? 0;
+  const contracted = roster?.contracted?.length ?? 0;
+  const withoutContract = roster?.withoutContract?.length ?? 0;
   const squadSize = contracted + withoutContract;
   const pendingChanges = dashboard.data?.pendingChanges ?? [];
 

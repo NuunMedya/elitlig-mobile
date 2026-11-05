@@ -28,7 +28,7 @@ import { LAYER_ICON, LAYER_TITLES, openXp, questRoute, sortByCloseness, timeLeft
 import { useAuth } from "@/providers/AuthProvider";
 import { colors, fonts, hairline, radius, space, textScale, type, upperTR } from "@/theme";
 
-const LAYER_TINT: Record<CareerLayer, string> = { saha: colors.win, tribun: colors.info, arena: colors.brandOnDark };
+const LAYER_TINT: Record<CareerLayer, string> = { saha: colors.win, tribun: colors.yellowCard, arena: colors.brandOnDark };
 const RAIL_LIMIT = 8;
 
 export function QuestSpotlight() {

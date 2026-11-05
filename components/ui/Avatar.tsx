@@ -75,7 +75,12 @@ export const Avatar = memo(function Avatar({
         : { width: size + 8, height: size + 8, padding: 2, borderRadius: corner + 2 },
     [size, ring, corner],
   );
-  const initialsSize = useMemo(() => ({ fontSize: Math.max(11, Math.round(size * 0.38)) }), [size]);
+  // Satır yüksekliği yazı boyuyla büyür: `micro` tokenının sabit satır
+  // yüksekliği büyük avatarlarda (64px+) harflerin üstünü kesiyordu.
+  const initialsSize = useMemo(() => {
+    const fontSize = Math.max(11, Math.round(size * 0.38));
+    return { fontSize, lineHeight: Math.round(fontSize * 1.2) };
+  }, [size]);
 
   return (
     <View

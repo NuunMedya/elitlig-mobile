@@ -78,7 +78,7 @@ export function useClubExtras(managed: boolean) {
   );
 
   const draft = squad.data?.draft ?? null;
-  const seasonName = squad.data?.seasons.find((season) => season.id === squad.data?.selectedSeasonId)?.name ?? null;
+  const seasonName = squad.data?.seasons?.find((season) => season.id === squad.data?.selectedSeasonId)?.name ?? null;
 
   const attention = useMemo<AttentionItem[]>(() => {
     if (!managed) return [];
@@ -106,7 +106,7 @@ export function useClubExtras(managed: boolean) {
         href: "/takimim/transfer" as AttentionItem["href"],
       });
     }
-    const revisionCount = revisions.data?.items.length ?? 0;
+    const revisionCount = revisions.data?.items?.length ?? 0;
     if (revisionCount > 0) {
       const only = revisionCount === 1 ? revisions.data!.items[0] : null;
       list.push({
@@ -137,13 +137,13 @@ export function useClubExtras(managed: boolean) {
         icon: "list",
         title: "Kadro taslağı gönderilmedi",
         subtitle: `${seasonName ?? "Sezon"} değişiklikleri yönetime gitmedi`,
-        count: draft.diff.additions.length + draft.diff.removals.length + draft.diff.license_changes.length,
+        count: (draft.diff.additions?.length ?? 0) + (draft.diff.removals?.length ?? 0) + (draft.diff.license_changes?.length ?? 0),
         tone: "warn",
         weight: 65,
         href: "/takimim/kadro?gorunum=sezon" as AttentionItem["href"],
       });
     }
-    if (finance.data?.ffp.status === "BREACH") {
+    if (finance.data?.ffp?.status === "BREACH") {
       list.push({
         key: "ffp",
         icon: "wallet",
@@ -172,7 +172,7 @@ export function useClubExtras(managed: boolean) {
     finance,
     releaseRequests,
     unreadNotifications,
-    revisionCount: revisions.data?.items.length ?? 0,
+    revisionCount: revisions.data?.items?.length ?? 0,
     attention,
     refetch,
   };

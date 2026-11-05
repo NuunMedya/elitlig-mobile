@@ -25,7 +25,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Redirect, useLocalSearchParams, useRouter, type Href } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -115,7 +115,14 @@ export default function PlayerSearchScreen() {
   }, [draft]);
 
   // Seçim URL'de taşınır: geri tuşu ve paylaşılan bağlantı aynı listeyi açar.
+  // İlk çizimde yazılmaz: değerler zaten URL'den geldi ve derin bağlantıyla
+  // soğuk açılışta gezgin henüz hazır olmadığı için setParams hata veriyordu.
+  const paramsReady = useRef(false);
   useEffect(() => {
+    if (!paramsReady.current) {
+      paramsReady.current = true;
+      return;
+    }
     router.setParams({ q: search || undefined, mevki: position || undefined, serbest: freeOnly ? "1" : undefined, siralama: sort });
   }, [freeOnly, position, router, search, sort]);
 

@@ -92,8 +92,8 @@ export function ClubHome({ signals, go, onAttention }: ClubHomeProps) {
   const lines = useMemo(
     () =>
       countLines([
-        ...(data?.roster.contracted ?? []).map((player) => player.player_position),
-        ...(data?.roster.withoutContract ?? []).map((player) => player.player_position),
+        ...(data?.roster?.contracted ?? []).map((player) => player.player_position),
+        ...(data?.roster?.withoutContract ?? []).map((player) => player.player_position),
       ]),
     [data],
   );
@@ -260,7 +260,7 @@ export function ClubHome({ signals, go, onAttention }: ClubHomeProps) {
 
   const finance = extras.finance.data;
   const financeItems: StatItem[] = [];
-  if (finance) {
+  if (finance?.totals && finance.ffp) {
     const balance = finance.totals.income - finance.totals.expense;
     financeItems.push({ label: "Bakiye", value: shortMoney(balance), tone: balance < 0 ? "danger" : "neutral", onPress: () => go("/takimim/kasa") });
     financeItems.push({ label: "Kadro değeri", value: shortMoney(finance.squadValue), tone: "brand", onPress: () => go("/takimim/kasa?tab=kadro") });
