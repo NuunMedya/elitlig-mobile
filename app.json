@@ -3,6 +3,14 @@
     "name": "ElitLig",
     "slug": "elitlig-mobile",
     "version": "1.0.1",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/41ea7390-0047-4d2c-bb8b-94d3d4b20c83",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
     "orientation": "portrait",
     "scheme": "elitlig",
     "userInterfaceStyle": "automatic",
