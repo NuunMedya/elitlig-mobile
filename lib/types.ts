@@ -80,12 +80,30 @@ export interface ApiMatch {
   kadro_tamamlandi?: number;
   post_manset?: string | null;
   post_rapor?: string | null;
+  /** Maç sonu röportajı: YouTube bağlantısı ya da doğrudan video (MP4) adresi. */
+  post_roportaj?: string | null;
+  match_interview?: string | null;
+  interview_url?: string | null;
   createdAt?: string;
   updatedAt?: string;
   /** ?include=lineup ile gelir */
   lineup?: ApiLineupRow[];
   /** ?include=timeline ile gelir */
   timeline?: ApiMatchEvent[];
+  /** Yayın stüdyosunda tekrarlardan üretilen maç özeti (GET /maclar/:id). */
+  highlight?: { url: string; poster_url: string | null; duration_ms: number | null } | null;
+  /** Röportaj kapağı (sunucu yollarsa). */
+  interview_poster_url?: string | null;
+  /** Eski kayıtlarda canlı yayın linki bu sütunlarda olabilir. */
+  live_stream_url?: string | null;
+  canli_yayin_linki?: string | null;
+  /**
+   * "Maçın Enleri" JSON'u (metin). Maçın golü / kurtarışı yayın stüdyosunda
+   * olaylardan seçilir ve { id, name, event_id, minute, team_id, clip_url,
+   * poster_url } taşıyabilir — okuyucu: lib/matchMedia.ts `readAwardMoments`.
+   */
+  post_macin_enleri?: string | Record<string, unknown> | null;
+  post_enler?: string | Record<string, unknown> | null;
 }
 
 /** mac_kadrolari satırı. */

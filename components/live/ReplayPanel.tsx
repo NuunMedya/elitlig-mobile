@@ -4,11 +4,16 @@
  * Her klip: dakika, takım, golcü, yükleme durumu. "Yayına ver" klibi canlı
  * yayının içine oynatır (izleyici tekrarı görür, sonra kamera geri gelir).
  * Yüklenemeyen klip "Yeniden dene" ile tekrar yüklenir.
+ *
+ * AĞIR ÇEKİM: hız (0.25–1×) tekrar başlarken yerel modüle verilir
+ * (playReplay(uri, { rate })). Yalnız Android uygular; iOS yok sayar. Oynatma
+ * sürerken hız değiştirilemez (modül canlı hız değişimini desteklemiyor) —
+ * yeni hız bir sonraki "Yayına ver"de geçerli olur.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Platform, StyleSheet, Text, View } from "react-native";
 
 import { Touchable } from "@/components/ui";
 import { RIG } from "@/lib/live/rig";
@@ -17,7 +22,18 @@ import { radius, space, type } from "@/theme";
 import { Btn } from "./BroadcastPanel";
 import { CLIP_SECONDS, clipStatusLabel, type LocalClip } from "./useGoalClips";
 
+/** Seçilebilir tekrar hızları (1 = normal). */
+export const REPLAY_RATES = [0.25, 0.5, 0.75, 1] as const;
+export type ReplayRate = (typeof REPLAY_RATES)[number];
+
+/** Yerel modül hızı yalnız Android'de uygular. */
+export const REPLAY_RATE_SUPPORTED = Platform.OS === "android";
+
+const rateLabel = (rate: number) => (rate === 1 ? "Normal" : `${rate}×`);
+
 export interface ReplayPanelProps {
+  rate: ReplayRate;
+  onRate: (rate: ReplayRate) => void;
   clips: LocalClip[];
   replayingKey: string | null;
   nativeReady: boolean;
@@ -47,6 +63,37 @@ export function ReplayPanel(props: ReplayPanelProps) {
         </View>
       ) : null}
       {props.replayingKey ? <Btn label="Tekrarı bitir, canlıya dön" icon="stop" tone="live" onPress={props.onStop} /> : null}
+
+      <Text style={styles.groupTitle} allowFontScaling={false}>
+        TEKRAR HIZI{REPLAY_RATE_SUPPORTED ? "" : " (yalnız Android)"}
+      </Text>
+      <View style={styles.rates}>
+        {REPLAY_RATES.map((rate) => {
+          const on = props.rate === rate;
+          return (
+            <Touchable
+              key={rate}
+              style={[styles.rate, on && styles.rateOn, !REPLAY_RATE_SUPPORTED && styles.disabled]}
+              onPress={() => props.onRate(rate)}
+              disabled={!REPLAY_RATE_SUPPORTED}
+              accessibilityLabel={`Tekrar hızı ${rateLabel(rate)}`}
+              accessibilityState={{ selected: on, disabled: !REPLAY_RATE_SUPPORTED }}
+              haptic="selection"
+            >
+              <Text style={[styles.rateText, on && styles.rateTextOn]} allowFontScaling={false}>
+                {rateLabel(rate)}
+              </Text>
+            </Touchable>
+          );
+        })}
+      </View>
+      <Text style={styles.hint} allowFontScaling={false}>
+        {REPLAY_RATE_SUPPORTED
+          ? props.replayingKey
+            ? "Hız oynatma sırasında değişmez; yeni hız bir sonraki tekrarda uygulanır."
+            : "Ağır çekim için 0.5× ya da 0.25× seç; hız tekrar başlarken uygulanır."
+          : "Ağır çekim bu cihazda desteklenmiyor; tekrar normal hızda oynar."}
+      </Text>
 
       {clips.length === 0 ? (
         <Text style={styles.empty} allowFontScaling={false}>
@@ -146,5 +193,11 @@ const styles = StyleSheet.create({
   },
   playOn: { backgroundColor: RIG.live },
   disabled: { opacity: 0.4 },
+  groupTitle: { ...type.micro, color: RIG.textMute, marginTop: space.xs },
+  rates: { flexDirection: "row", gap: space.xs },
+  rate: { flex: 1, height: 32, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: RIG.panelSoft },
+  rateOn: { backgroundColor: RIG.brand },
+  rateText: { ...type.micro, color: RIG.textMute },
+  rateTextOn: { color: RIG.text },
   playText: { ...type.micro, color: RIG.text },
 });

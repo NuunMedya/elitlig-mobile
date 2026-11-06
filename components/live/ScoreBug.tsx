@@ -12,14 +12,29 @@
  */
 
 import { LinearGradient } from "expo-linear-gradient";
-import React, { forwardRef, memo } from "react";
+import React, { forwardRef, memo, useState } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
 
-import { BUG, clockText, periodLabel, teamShortCode } from "@/lib/live/scorebug";
+import { DEFAULT_PALETTE, type BugPalette } from "@/lib/live/branding";
+import { clockText, periodLabel, teamShortCode } from "@/lib/live/scorebug";
 import { fonts } from "@/theme";
 
-const C = BUG.colors;
-const LOGO = require("../../assets/images/elitlig-beyaz.png");
+export const ELITLIG_LOGO = require("../../assets/images/elitlig-beyaz.png");
+
+/**
+ * Marka logosu: maçın yayın görünümünde yüklenmiş logo varsa o, yoksa (ya da
+ * açılamazsa) Elitlig logosu.
+ */
+export function useBrandLogoSource(logoUrl?: string | null) {
+  const [failed, setFailed] = useState<string | null>(null);
+  const custom = logoUrl && logoUrl !== failed ? logoUrl : null;
+  return {
+    source: custom ? { uri: custom } : ELITLIG_LOGO,
+    onError: () => {
+      if (custom) setFailed(custom);
+    },
+  };
+}
 
 export interface ScoreBugEvent {
   /** "GOL", "SARI KART", "KIRMIZI KART"… */
@@ -42,6 +57,10 @@ export interface ScoreBugProps {
   scale: number;
   homeColor?: string | null;
   awayColor?: string | null;
+  /** Maçın yayın görünümünden (sunucu verisi): renk takımı, logo, logo boyutu %. */
+  palette?: BugPalette | null;
+  logoUrl?: string | null;
+  logoScale?: number | null;
 }
 
 const BAR_START = { x: 0.5, y: 0 } as const;
@@ -50,6 +69,9 @@ const BAR_END = { x: 0.5, y: 1 } as const;
 export const ScoreBug = memo(
   forwardRef<View, ScoreBugProps>(function ScoreBug(props, ref) {
     const s = props.scale;
+    const C = props.palette ?? DEFAULT_PALETTE;
+    const logo = useBrandLogoSource(props.logoUrl);
+    const logoSize = s * 60 * ((props.logoScale ?? 100) / 100);
     const code = (name: string) => teamShortCode(name);
     const crest = (uri?: string | null) => (
       <View style={{ width: s * 26, height: s * 26, alignItems: "center", justifyContent: "center" }}>
@@ -95,9 +117,9 @@ export const ScoreBug = memo(
           </View>
           {score(props.homeScore)}
           <View style={{ width: s * 62, backgroundColor: C.p900, alignItems: "center", justifyContent: "center" }}>
-            <View style={[styles.divider, { left: 0, top: s * 12, bottom: s * 12 }]} />
-            <View style={[styles.divider, { right: 0, top: s * 12, bottom: s * 12 }]} />
-            <Image source={LOGO} style={{ position: "absolute", width: s * 60, height: s * 60 }} resizeMode="contain" />
+            <View style={[styles.divider, { left: 0, top: s * 12, bottom: s * 12, backgroundColor: C.hair }]} />
+            <View style={[styles.divider, { right: 0, top: s * 12, bottom: s * 12, backgroundColor: C.hair }]} />
+            <Image source={logo.source} onError={logo.onError} style={{ position: "absolute", width: logoSize, height: logoSize }} resizeMode="contain" />
           </View>
           {score(props.awayScore)}
           <View style={[styles.team, { width: s * 106, justifyContent: "flex-start", paddingHorizontal: s * 10, gap: s * 8 }]}>
@@ -156,5 +178,5 @@ const styles = StyleSheet.create({
   root: { alignSelf: "flex-start", backgroundColor: "transparent" },
   team: { flexDirection: "row", alignItems: "center" },
   cell: { alignItems: "center", justifyContent: "center" },
-  divider: { position: "absolute", width: StyleSheet.hairlineWidth, backgroundColor: C.hair },
+  divider: { position: "absolute", width: StyleSheet.hairlineWidth },
 });

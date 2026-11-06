@@ -7,7 +7,12 @@
  *   Maç    skor (+ GOL), saat ve devre düğmesi, saat düzeltme, maçı bitir
  *   Olay   kart / penaltı / kendi kalesine, son olaylar (silinebilir)
  *   Yayın  YouTube yayınını aç → başlat → bitir, izleme bağlantısı, elle RTMP
- *   Kamera ön/arka, mikrofon, skorbord aç/kapa, kalite
+ *   Tekrar gol klipleri, ağır çekim hızı (yalnız Android)
+ *   Kamera ön/arka, mikrofon, skorbord aç/kapa + tipi (köşe / orta-alt), kalite
+ *
+ * SKORBORD GÖRÜNÜMÜ: maçın web "Yayın Tasarımı"nda seçilen logo ve renk teması
+ * (GET /api/maclar/:id/overlay-branding) skorborda uygulanır; uç yanıt vermezse
+ * Elitlig varsayılanı kalır.
  *
  * YAYINA GÖMME: ekrandaki skorbord saniyede bir PNG'ye çekilir
  * (react-native-view-shot) ve yerel modüle verilir; modül onu videonun her
@@ -29,18 +34,20 @@ import { Alert, ScrollView, StyleSheet, Text, useWindowDimensions, View, type La
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { captureRef, releaseCapture } from "react-native-view-shot";
 
+import { BottomBoard } from "@/components/live/BottomBoard";
 import { BroadcastPanel, Btn } from "@/components/live/BroadcastPanel";
 import { PlayerPicker } from "@/components/live/PlayerPicker";
-import { ReplayPanel } from "@/components/live/ReplayPanel";
+import { REPLAY_RATE_SUPPORTED, ReplayPanel, type ReplayRate } from "@/components/live/ReplayPanel";
 import { useGoalClips, type LocalClip } from "@/components/live/useGoalClips";
-import { ScoreBug } from "@/components/live/ScoreBug";
+import { ScoreBug, type ScoreBugProps } from "@/components/live/ScoreBug";
 import { HALF_MS, PHASE_LABEL, useLiveMatch, type ControlAction, type LiveMatch } from "@/components/live/useLiveMatch";
 import { Touchable, useToast } from "@/components/ui";
 import { useTeamLogos } from "@/hooks/useTeamLogos";
 import { hasAnyPermission } from "@/lib/admin/access";
 import { errorText } from "@/lib/admin/errors";
 import { eventLabel } from "@/lib/api/admin/matches";
-import { BUG, clockText, teamShortCode } from "@/lib/live/scorebug";
+import { bugPalette, fetchOverlayBranding } from "@/lib/live/branding";
+import { BUG, BUG_VARIANTS, clockText, teamShortCode, type BugVariant } from "@/lib/live/scorebug";
 import { QUALITY_PRESETS, RIG, elapsedText, type QualityKey } from "@/lib/live/rig";
 import {
   createMatchLiveStream,
@@ -315,6 +322,19 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
   const awayLogo = match ? teams.logoFor(match.away_team_id, match.second_team_name) : null;
   const finished = live.phase === "finished";
 
+  // Maçın yayın görünümü (logo + renk teması). Hata/yetki yoksa varsayılan.
+  const brandingQuery = useQuery({
+    queryKey: ["live", "overlay-branding", matchId],
+    queryFn: () => fetchOverlayBranding(matchId),
+    enabled: Number.isFinite(matchId) && matchId > 0,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+    retry: false,
+  });
+  const branding = brandingQuery.data ?? null;
+  const palette = useMemo(() => bugPalette(branding?.scoreboard), [branding?.scoreboard]);
+  const [bugVariant, setBugVariant] = useState<BugVariant>("premier");
+
   const bugRef = useRef<View>(null);
   const [bugBox, setBugBox] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const onBugLayout = (e: LayoutChangeEvent) => {
@@ -333,6 +353,9 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
     bugBox ? `${Math.round(bugBox.w)}x${Math.round(bugBox.h)}` : "",
     homeLogo ?? "",
     awayLogo ?? "",
+    bugVariant,
+    branding?.logoUrl ?? "",
+    branding ? JSON.stringify(branding.scoreboard) : "",
   ].join("|");
 
   const lastFile = useRef<string | null>(null);
@@ -410,6 +433,8 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
 
   /* ───────── tekrar (replay) ───────── */
   const [replaying, setReplaying] = useState<LocalClip | null>(null);
+  // Ağır çekim hızı: bir sonraki oynatmada uygulanır (yalnız Android).
+  const [replayRate, setReplayRate] = useState<ReplayRate>(1);
   const startReplay = async (clip: LocalClip | null) => {
     if (!clip?.uri) {
       toast.show({ message: "Tekrar için henüz kayıtlı gol klibi yok.", tone: "warn" });
@@ -418,7 +443,8 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
     try {
       setReplaying(clip);
       // Yayının sağ üstüne modül "TEKRAR" rozetini çizer; skorbord bandı golü söyler.
-      await playReplay(clip.uri, { label: "TEKRAR" });
+      const slow = REPLAY_RATE_SUPPORTED && replayRate < 1;
+      await playReplay(clip.uri, { label: slow ? "AĞIR ÇEKİM" : "TEKRAR", rate: REPLAY_RATE_SUPPORTED ? replayRate : 1 });
     } catch (error) {
       setReplaying(null);
       toast.show({ message: liveErrorText(error, "Tekrar oynatılamadı."), tone: "danger" });
@@ -447,6 +473,30 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
     ]);
 
   const close = () => router.back();
+
+  /* ───────── skorbord çizimi (köşe ya da orta-alt; ikisi aynı veriyi alır) ───────── */
+  const bugProps: ScoreBugProps = {
+    homeName,
+    awayName,
+    homeLogo,
+    awayLogo,
+    homeScore: live.score.home,
+    awayScore: live.score.away,
+    clockMs: live.clockMs,
+    period: live.period,
+    finished,
+    event: replaying
+      ? {
+          kind: "goal",
+          label: replaying.code === "GOAL_OWN" ? "KENDİ KALESİNE" : "GOL",
+          player: replaying.scorer ? replaying.scorer.toLocaleUpperCase("tr-TR") : null,
+        }
+      : live.bannerEvent,
+    scale: bugScale,
+    palette,
+    logoUrl: branding?.logoUrl ?? null,
+    logoScale: branding?.scoreboard.logoScale ?? 100,
+  };
 
   /* ───────── çizim ───────── */
   const elapsed = onAirSince ? Date.now() - onAirSince : 0;
@@ -497,32 +547,25 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
 
             {overlayOn ? (
               <View
-                style={{ position: "absolute", left: stageW * (BUG.left / BUG.stageW), top: stageH * (BUG.top / BUG.stageH) }}
+                key={bugVariant}
+                style={
+                  bugVariant === "bottom"
+                    ? {
+                        position: "absolute",
+                        left: (stageW - BUG.low.width * bugScale) / 2,
+                        bottom: stageH * (BUG.low.bottom / BUG.stageH),
+                      }
+                    : { position: "absolute", left: stageW * (BUG.left / BUG.stageW), top: stageH * (BUG.top / BUG.stageH) }
+                }
                 onLayout={onBugLayout}
                 pointerEvents="none"
               >
-                <ScoreBug
-                  ref={bugRef}
-                  homeName={homeName}
-                  awayName={awayName}
-                  homeLogo={homeLogo}
-                  awayLogo={awayLogo}
-                  homeScore={live.score.home}
-                  awayScore={live.score.away}
-                  clockMs={live.clockMs}
-                  period={live.period}
-                  finished={finished}
-                  event={
-                    replaying
-                      ? {
-                          kind: "goal",
-                          label: replaying.code === "GOAL_OWN" ? "KENDİ KALESİNE" : "GOL",
-                          player: replaying.scorer ? replaying.scorer.toLocaleUpperCase("tr-TR") : null,
-                        }
-                      : live.bannerEvent
-                  }
-                  scale={bugScale}
-                />
+                {/* Hangi skorbord görünüyorsa o PNG'ye çekilip yayına gömülür. */}
+                {bugVariant === "bottom" ? (
+                  <BottomBoard ref={bugRef} {...bugProps} />
+                ) : (
+                  <ScoreBug ref={bugRef} {...bugProps} />
+                )}
               </View>
             ) : null}
 
@@ -647,6 +690,8 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
                   <EventPanel live={live} homeName={homeName} awayName={awayName} onAsk={ask} onToast={(m, ok) => toast.show({ message: m, tone: ok ? "success" : "danger" })} />
                 ) : tab === "tekrar" ? (
                   <ReplayPanel
+                    rate={replayRate}
+                    onRate={setReplayRate}
                     clips={goalClips.clips}
                     replayingKey={replaying?.key ?? null}
                     nativeReady={nativeReady}
@@ -696,6 +741,37 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
                       tone="soft"
                       onPress={() => setOverlayOn((v) => !v)}
                     />
+                    <Text style={styles.groupTitle} allowFontScaling={false}>
+                      SKORBORD
+                    </Text>
+                    {BUG_VARIANTS.map((v) => (
+                      <Touchable
+                        key={v.key}
+                        style={[styles.option, bugVariant === v.key && styles.optionOn]}
+                        onPress={() => setBugVariant(v.key)}
+                        accessibilityLabel={v.label}
+                        accessibilityState={{ selected: bugVariant === v.key }}
+                      >
+                        <Ionicons
+                          name={bugVariant === v.key ? "radio-button-on" : "radio-button-off"}
+                          size={16}
+                          color={bugVariant === v.key ? RIG.brand : RIG.textMute}
+                        />
+                        <View style={styles.flex}>
+                          <Text style={styles.optionTitle} allowFontScaling={false}>
+                            {v.label}
+                          </Text>
+                          <Text style={styles.railSub} allowFontScaling={false}>
+                            {v.hint}
+                          </Text>
+                        </View>
+                      </Touchable>
+                    ))}
+                    <Text style={styles.railSub} allowFontScaling={false}>
+                      {branding && (branding.logoUrl || branding.scoreboard.theme !== "elitlig")
+                        ? "Logo ve renkler bu maçın web “Yayın Tasarımı” ayarından geliyor."
+                        : "Logo ve renkler web reji panelindeki “Yayın Tasarımı”ndan değiştirilebilir."}
+                    </Text>
                     <Text style={styles.groupTitle} allowFontScaling={false}>
                       YAYIN KALİTESİ
                     </Text>

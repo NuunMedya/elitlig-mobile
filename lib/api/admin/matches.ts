@@ -452,9 +452,12 @@ export function readHighlights(
   const raw = parseJson(match?.post_macin_enleri ?? match?.post_enler);
   const out = {} as Record<HighlightKey, string>;
   for (const { key } of HIGHLIGHT_FIELDS) {
-    let id = raw[`${key}_id`] == null ? "" : String(raw[`${key}_id`]);
+    // Yayın stüdyosu maçın golü/kurtarışını nesne olarak yazabilir: { id, name, event_id, clip_url, … }.
+    const obj = asRecord(raw[key]);
+    const rawId = raw[`${key}_id`] ?? obj.id ?? obj.player_id;
+    let id = rawId == null ? "" : String(rawId);
     if (!id) {
-      const name = String(raw[`${key}_name`] ?? raw[key] ?? "").trim();
+      const name = String(raw[`${key}_name`] ?? (typeof raw[key] === "string" ? raw[key] : obj.name ?? obj.player_name) ?? "").trim();
       const found = name ? players.find((p) => p.name.trim() === name) : null;
       if (found) id = found.id;
     }
@@ -463,19 +466,47 @@ export function readHighlights(
   return out;
 }
 
-/** Maç Sonu içerik gövdesi (buildContentPayload) — yalnız modeldeki sütunlar. */
+const asRecord = (value: unknown): Record<string, unknown> =>
+  value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+
+/* Maçın golü / kurtarışı için yayın stüdyosunun olaylardan seçtiği an ve videosu. */
+const MOMENT_FIELDS = ["event_id", "minute", "team_id", "clip_url", "poster_url"] as const;
+
+/** Aynı oyuncu seçili kaldıysa önceki kayıttaki olay/video alanları; yoksa null. */
+function previousMoment(raw: Record<string, unknown>, key: string, id: string): Record<string, unknown> | null {
+  if (key !== "best_goal" && key !== "best_save") return null;
+  const obj = asRecord(raw[key]);
+  const prevId = String(raw[`${key}_id`] ?? obj.id ?? obj.player_id ?? "");
+  if (!id || prevId !== id) return null;
+  const out: Record<string, unknown> = {};
+  for (const field of MOMENT_FIELDS) {
+    const value = obj[field] ?? raw[`${key}_${field}`];
+    if (value != null && value !== "") out[field] = value;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+/**
+ * Maç Sonu içerik gövdesi (buildContentPayload) — yalnız modeldeki sütunlar.
+ * `previous` verilirse maçın golü / kurtarışı aynı oyuncuda kaldığında yayın
+ * stüdyosunun eklediği olay/video alanları korunur.
+ */
 export function buildPostPayload(
   content: PostContent,
   highlights: Record<string, string>,
-  nameOf: (id: string) => string
+  nameOf: (id: string) => string,
+  previous?: AdminMatch | null
 ) {
-  const award: Record<string, string> = {};
+  const previousRaw = parseJson(previous?.post_macin_enleri ?? previous?.post_enler);
+  const award: Record<string, unknown> = {};
   for (const { key } of HIGHLIGHT_FIELDS) {
     const id = highlights[key] || "";
     const name = id ? nameOf(id) : "";
     award[`${key}_id`] = id;
     award[`${key}_name`] = name;
-    award[key] = name;
+    const moment = previousMoment(previousRaw, key, id);
+    award[key] = moment ? { id, name, ...moment } : name;
+    if (moment) for (const [field, value] of Object.entries(moment)) award[`${key}_${field}`] = value;
   }
   const json = JSON.stringify(award);
   const mvp = Number(highlights.best_player);

@@ -17,6 +17,19 @@ export const BUG = {
   scoreW: 38,
   medalW: 62,
   radius: 6,
+  /** "Orta-alt" skorbord (web BottomScoreBoard, 1920 sahnesinde). */
+  low: {
+    width: 1000,
+    bottom: 64,
+    bandH: 84,
+    teamW: 356,
+    scoreW: 82,
+    medalW: 74,
+    logo: 66,
+    crest: 52,
+    clockH: 34,
+    radius: 12,
+  },
   colors: {
     barTop: "#360a36",
     barBottom: "#240024",
@@ -33,6 +46,14 @@ export const BUG = {
     lowerRed: "#dc2626",
   },
 } as const;
+
+/** Reji "Skorbord" seçimi: köşe (premier) ya da orta-alt bant. */
+export type BugVariant = "premier" | "bottom";
+
+export const BUG_VARIANTS: { key: BugVariant; label: string; hint: string }[] = [
+  { key: "premier", label: "Köşe skorbord", hint: "Sol üstte ince çubuk (varsayılan)" },
+  { key: "bottom", label: "Orta-alt skorbord", hint: "Ekranın altında ortalanmış geniş bant" },
+];
 
 const GENERIC = new Set(["spor", "sk", "fk", "sc", "fc", "kulubu", "kulübü", "gücü", "gucu", "birliği", "birligi", "takımı", "takimi"]);
 
