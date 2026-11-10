@@ -210,7 +210,7 @@ export function overlayLinks(origin: string, id: number, guests: PanoramaGuest[]
 
 export interface SponsorCatalog {
   imageSlots: { key: string; label: string; size: string }[];
-  placements: { key: string; group: "broadcast" | "led" | "web"; label: string; image: string; fallback: string | null }[];
+  placements: { key: string; group: "broadcast" | "led" | "web" | "app"; label: string; image: string; fallback: string | null }[];
   tiers: { key: string; label: string }[];
   scope: { nationwide: boolean; cityId: number | null };
 }
@@ -258,8 +258,9 @@ export function uploadSponsorImage(file: UploadFile) {
   return post<{ url: string; message?: string }>(`${SPON}/upload`, form, { timeout: 120_000 }).then((d) => d.url);
 }
 
-export const PLACEMENT_GROUPS: { key: "broadcast" | "led" | "web"; label: string }[] = [
+export const PLACEMENT_GROUPS: { key: "broadcast" | "led" | "web" | "app"; label: string }[] = [
   { key: "broadcast", label: "Canlı yayın" },
   { key: "led", label: "Saha LED ekranı" },
   { key: "web", label: "Web sitesi" },
+  { key: "app", label: "Mobil uygulama" },
 ];

@@ -112,6 +112,7 @@ import { useFavorite } from "@/providers/FavoriteProvider";
 import { useFollowFlow } from "@/providers/FollowFlowProvider";
 import { useScope } from "@/providers/ScopeProvider";
 import { animateNextLayout, colors, hairline, layout, radius, space } from "@/theme";
+import { AdBanner } from "@/components/ads/AdBanner";
 
 /* ═══════════════════════ SABİTLER VE KÜÇÜK YARDIMCILAR ═══════════════════════ */
 
@@ -915,6 +916,8 @@ export default function ScoresScreen() {
       {followedHint ? (
         <FollowedHint text={followedHint.text} actionLabel={followedHint.action} onAction={openFollow} />
       ) : null}
+      {/* Reklam alanı "app_home": açılış ekranında maç listesinin üstünde. */}
+      <AdBanner zone="app_home" style={styles.homeAd} />
     </View>
   );
 
@@ -1177,6 +1180,7 @@ const styles = StyleSheet.create({
     paddingBottom: space.lg,
     flexGrow: 1,
   },
+  homeAd: { marginTop: space.sm, marginBottom: 0 },
   sectionHeader: {
     height: SECTION_HEADER_HEIGHT,
     paddingTop: GROUP_GAP,

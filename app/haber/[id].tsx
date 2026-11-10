@@ -75,6 +75,7 @@ import {
   type,
   upperTR,
 } from "@/theme";
+import { AdBanner } from "@/components/ads/AdBanner";
 
 /* ============================ SABİTLER / TİPLER ============================ */
 
@@ -404,6 +405,9 @@ export default function NewsDetailScreen() {
               compact
             />
           )}
+
+          {/* Reklam alanı "app_inline": haber metninin sonunda. */}
+          <AdBanner zone="app_inline" />
 
           {links.length ? (
             <View style={styles.related}>
