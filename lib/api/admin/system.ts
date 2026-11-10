@@ -498,9 +498,29 @@ export interface SiteFilters {
 /** Ham rapor — bölümlere göre alanlar değişir; ekran kendi parçasını okur. */
 export type AnalyticsReport = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
-/** Raporlar ağır (400 güne kadar tarama); sunucu sırayla çalıştırır, zaman aşımı uzun. */
+/**
+ * Raporlar ağır (400 güne kadar tarama). İstek ?async=1 ile gider: sunucu
+ * hesabı birkaç saniyede bitiremezse 202 { pending: true } döner ve hesabı arka
+ * planda sürdürür; burada kısa aralıklarla yeniden sorulur (hesap baştan
+ * başlamaz). En fazla 3 dk beklenir.
+ */
+const REPORT_MAX_WAIT_MS = 3 * 60 * 1000;
+const pause = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+async function getReport(path: string, params: QueryParams): Promise<AnalyticsReport> {
+  const startedAt = Date.now();
+  for (;;) {
+    const data = await get<AnalyticsReport>(path, { ...params, async: 1 }, { timeout: 60_000, retry: false });
+    if (!data?.pending) return data;
+    if (Date.now() - startedAt > REPORT_MAX_WAIT_MS) {
+      throw new Error("Rapor hazırlanması beklenenden uzun sürdü. Biraz sonra yeniden deneyin.");
+    }
+    await pause(Math.min(Math.max(Number(data.retryAfterMs) || 3000, 1000), 10_000));
+  }
+}
+
 export const getSiteReport = (section: SiteSection, params: QueryParams) =>
-  get<AnalyticsReport>(`/api/admin/analytics/${section}`, params, { timeout: 60_000, retry: false });
+  getReport(`/api/admin/analytics/${section}`, params);
 
 /* ═══════════════════════════ UYGULAMA ANALİZİ ═══════════════════════════ */
 
@@ -517,15 +537,11 @@ export const APP_PLATFORMS = [
 ] as const;
 
 export const getAppReport = (params: { range: string; platform?: string; withManagement?: boolean }) =>
-  get<AnalyticsReport>(
-    "/api/admin/analytics/app",
-    {
-      range: params.range,
-      platform: params.platform || undefined,
-      audiences: params.withManagement ? "visitor,member,management" : "visitor,member",
-    },
-    { timeout: 60_000, retry: false }
-  );
+  getReport("/api/admin/analytics/app", {
+    range: params.range,
+    platform: params.platform || undefined,
+    audiences: params.withManagement ? "visitor,member,management" : "visitor,member",
+  });
 
 /* ═══════════════════════════ BİÇİMLENDİRME ═══════════════════════════ */
 
