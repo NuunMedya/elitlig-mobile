@@ -37,7 +37,10 @@ const FILTERS = [
   { key: "inactive", label: "Pasif / süresi dolan" },
   { key: "broadcast", label: "Yayın alanı" },
   { key: "web", label: "Web alanı" },
+  { key: "app", label: "Uygulama alanı" },
 ];
+
+const onAirGroup = (group?: string) => group === "broadcast" || group === "led";
 
 export default function SponsorsScreen() {
   const auth = useAuth();
@@ -58,16 +61,17 @@ export default function SponsorsScreen() {
   const stats = {
     total: items.length,
     live: items.filter((s) => s.live).length,
-    broadcast: items.filter((s) => s.live && s.placements.some((k) => groupOf(k) !== "web")).length,
-    web: items.filter((s) => s.live && s.placements.some((k) => groupOf(k) === "web")).length,
+    broadcast: items.filter((s) => s.live && s.placements.some((k) => onAirGroup(groupOf(k)))).length,
+    web: items.filter((s) => s.live && s.placements.some((k) => groupOf(k) === "web" || groupOf(k) === "app")).length,
   };
   const visible = items.filter((s) => {
     const text = q.trim().toLocaleLowerCase("tr-TR");
     if (text && ![s.name, s.tagline, s.contactName].join(" ").toLocaleLowerCase("tr-TR").includes(text)) return false;
     if (filter === "live") return s.live;
     if (filter === "inactive") return !s.live;
-    if (filter === "broadcast") return s.placements.some((k) => groupOf(k) !== "web");
+    if (filter === "broadcast") return s.placements.some((k) => onAirGroup(groupOf(k)));
     if (filter === "web") return s.placements.some((k) => groupOf(k) === "web");
+    if (filter === "app") return s.placements.some((k) => groupOf(k) === "app");
     return true;
   });
 
@@ -126,7 +130,7 @@ export default function SponsorsScreen() {
             <MetricTile label="Toplam" value={String(stats.total)} icon="megaphone-outline" />
             <MetricTile label="Aktif" value={String(stats.live)} icon="checkmark-circle-outline" tone="win" />
             <MetricTile label="Yayında" value={String(stats.broadcast)} icon="tv-outline" tone="brand" />
-            <MetricTile label="Web sitesinde" value={String(stats.web)} icon="globe-outline" tone="accent" />
+            <MetricTile label="Web / uygulamada" value={String(stats.web)} icon="globe-outline" tone="accent" />
           </MetricGrid>
         }
         emptyIcon="megaphone-outline"
@@ -150,6 +154,7 @@ export default function SponsorsScreen() {
               item.placements.some((k) => groupOf(k) === "broadcast") ? { label: "Yayın", tone: "brand", icon: "tv-outline" } : null,
               item.placements.some((k) => groupOf(k) === "led") ? { label: "LED", tone: "accent" } : null,
               item.placements.some((k) => groupOf(k) === "web") ? { label: "Web", tone: "info", icon: "globe-outline" } : null,
+              item.placements.some((k) => groupOf(k) === "app") ? { label: "Uygulama", tone: "info", icon: "phone-portrait-outline" } : null,
               item.editable === false ? { label: "Salt okunur", tone: "neutral", icon: "lock-closed-outline" } : null,
             ]}
             onPress={() => setEditing(item)}

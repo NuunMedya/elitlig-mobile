@@ -79,6 +79,7 @@ import {
 import { DuelCard, FanVoteCard, useMatchReactions } from "./Community";
 import { BroadcastCard, MatchMedia, useBroadcast } from "./MatchMedia";
 import { TimelineBreak, TimelineRow } from "./Timeline";
+import { AdBanner } from "@/components/ads/AdBanner";
 
 export interface SummaryTabProps {
   match: ApiMatch;
@@ -210,6 +211,9 @@ export function SummaryTab({
       ) : (
         <PostMatchHeader match={match} meetings={meetings} nameOf={nameOf} onOpenPlayer={openPlayer} media={live ? null : media} />
       )}
+
+      {/* Reklam alanı "app_match" (yönetim → Sponsorlar → Reklam alanları). */}
+      <AdBanner zone="app_match" />
 
       {/* Faz 4: maç öncesi arena düellosu, maç sonrası taraftar oylaması. */}
       {scheduled ? <DuelCard matchId={Number(match.id)} /> : null}

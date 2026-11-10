@@ -5,6 +5,7 @@ import { StatusBar } from "expo-status-bar";
 import { AppState, type AppStateStatus } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { CallScreen } from "@/components/CallScreen";
+import { AdLaunchPopup } from "@/components/ads/AdLaunchPopup";
 import { CrashCatcher } from "@/components/CrashCatcher";
 import { ScopeSheet } from "@/components/ScopeSheet";
 import { ToastProvider } from "@/components/ui";
@@ -220,6 +221,10 @@ export default function RootLayout() {
 
                 {/* Kapsam seçici — uygulamada TEK örnek. */}
                 <ScopeSheet />
+
+                {/* Reklam alanı "app_popup": açılışta sıklık sınırlı sponsor
+                    kartı ya da Google geçiş reklamı (yönetimden ayarlanır). */}
+                <AdLaunchPopup />
 
                 {/* Sesli arama katmanı: gelen arama hangi ekranda olunursa
                     olunsun üstte açılır (CallProvider kökte). */}
