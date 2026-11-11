@@ -148,6 +148,8 @@ export function TeamAuthorityCard() {
     setTerm("");
     setPicked(null);
     void queryClient.invalidateQueries({ queryKey: ["club", "account-requests"] });
+    // Aynı uç oyuncu ekranlarında ["account-requests"] anahtarıyla durur.
+    void queryClient.invalidateQueries({ queryKey: ["account-requests"] });
   };
   const resign = useMutation({
     mutationFn: () => requestTeamResign(),

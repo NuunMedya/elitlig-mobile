@@ -60,7 +60,7 @@ export default function MemberCardScreen() {
   );
 
   return (
-    <AdminScreen title={m?.name ?? "Üye kartı"} subtitle="Rehber" onRefresh={() => void query.refetch()} refreshing={query.isRefetching}>
+    <AdminScreen app="rehber" title={m?.name ?? "Üye kartı"} subtitle="Üye kartı" onRefresh={() => void query.refetch()} refreshing={query.isRefetching}>
       {query.isLoading ? (
         <>
           <SkeletonCard />

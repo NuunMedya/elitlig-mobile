@@ -41,6 +41,15 @@ app.json izin/simge/açılış ekranı/paket adı değişikliği, Expo ya da Rea
 Native sürüm yükseltmesi. Bunlarda `version` artırılır (yeni runtime) ve
 `eas build` + `eas submit` yapılır.
 
+## İki mod: üye uygulaması ve yönetim modu
+
+Yönetim rolündeki hesap giriş yaptığında uygulama **yönetim moduna** geçer:
+gece laciverti alt menü (Panel · İşler · ◉ Uygulamalar · Mesajlar · Lig),
+yönetim ana ekranı ve her aracı ayrı bir uygulama gibi açan çekmece. "Üye
+gözünden gör" düğmesi uygulamayı normal kullanıcının gördüğü hâle çevirir;
+alt menünün üstündeki "Yönetime dön" şeridi geri getirir. Ayrıntı:
+`docs/yonetim-modu.md`.
+
 ## Mimari
 
 Uygulamanın omurgası web sitesindekiyle aynı: **şehir → lig → sezon** kapsamı.

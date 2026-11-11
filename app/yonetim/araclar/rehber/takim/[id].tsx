@@ -114,8 +114,9 @@ export default function TeamCardScreen() {
 
   return (
     <AdminScreen
+      app="rehber"
       title={t?.team_name ?? "Takım kartı"}
-      subtitle="Rehber"
+      subtitle="Takım kartı"
       onRefresh={() => void query.refetch()}
       refreshing={query.isRefetching}
       actions={card ? [{ icon: "ellipsis-horizontal", onPress: () => setMoreOpen(true), accessibilityLabel: "Diğer eylemler" }] : undefined}

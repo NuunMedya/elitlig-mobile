@@ -65,6 +65,7 @@ import { matchState } from "@/lib/match";
 import type { ApiMatch } from "@/lib/types";
 import { GradientFill } from "./GradientFill";
 import { LiveBadge } from "./LiveBadge";
+import { ScoreFlash } from "./Motion";
 import { TeamLogo } from "./TeamLogo";
 import { Touchable } from "./Pressable";
 
@@ -309,6 +310,8 @@ export const MatchCard = memo(function MatchCard({
 
   const homeScore = Number(match.first_team_score ?? 0);
   const awayScore = Number(match.second_team_score ?? 0);
+  /* Canlı skor değişince rakam bir kez büyür (bkz. Motion.tsx ▸ ScoreFlash). */
+  const scoreKey = `${homeScore}-${awayScore}`;
   const homeWon = finished && homeScore > awayScore;
   const awayWon = finished && awayScore > homeScore;
 
@@ -401,9 +404,11 @@ export const MatchCard = memo(function MatchCard({
 
           <View style={styles.dCenter}>
             {played ? (
-              <Text style={[styles.dScore, live && styles.scoreLive]} numberOfLines={1} {...textScale.badge}>
-                {scoreText}
-              </Text>
+              <ScoreFlash value={scoreKey} active={live}>
+                <Text style={[styles.dScore, live && styles.scoreLive]} numberOfLines={1} {...textScale.badge}>
+                  {scoreText}
+                </Text>
+              </ScoreFlash>
             ) : (
               <Text style={styles.dTime} numberOfLines={1} {...textScale.badge}>
                 {formatTime(match.time) || "--:--"}
@@ -484,9 +489,11 @@ export const MatchCard = memo(function MatchCard({
           {/* ORTA: skor ya da saat; altında durum (dakika, MS, gün). */}
           <View style={styles.cCenter}>
             {played ? (
-              <Text style={[styles.cScore, live && styles.scoreLive]} numberOfLines={1} {...textScale.badge}>
-                {scoreText}
-              </Text>
+              <ScoreFlash value={scoreKey} active={live}>
+                <Text style={[styles.cScore, live && styles.scoreLive]} numberOfLines={1} {...textScale.badge}>
+                  {scoreText}
+                </Text>
+              </ScoreFlash>
             ) : (
               <Text style={styles.cTime} numberOfLines={1} {...textScale.badge}>
                 {formatTime(match.time) || "--:--"}
@@ -581,9 +588,11 @@ export const MatchCard = memo(function MatchCard({
 
         <View style={styles.center}>
           {played ? (
-            <Text style={[styles.score, live && styles.scoreLive]} numberOfLines={1} {...textScale.badge}>
-              {scoreText}
-            </Text>
+            <ScoreFlash value={scoreKey} active={live}>
+              <Text style={[styles.score, live && styles.scoreLive]} numberOfLines={1} {...textScale.badge}>
+                {scoreText}
+              </Text>
+            </ScoreFlash>
           ) : (
             <Text style={styles.time} numberOfLines={1} {...textScale.badge}>
               {formatTime(match.time) || "--:--"}

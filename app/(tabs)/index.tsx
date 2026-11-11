@@ -1,16 +1,17 @@
 /**
- * ANA SAYFA — kaldırıldı; kök rota Skorlar'a yönlendirir.
+ * KÖK ROTA — "/" yalnız yönlendirmedir.
  *
- * Bilgi mimarisi turunda Ana Sayfa'nın bölümleri asıl evlerine dağıtıldı:
- *   · vitrin maç, canlı ve bugün          → Skorlar
- *   · takip edilen takımlar               → Takip
- *   · puan özeti, gol krallığı            → Lig
- *   · haberler                            → Takip akışı ve Lig ▸ Haber
- * Uygulama Skorlar ile açılır; "/" adresi eski bağlantılar için durur.
+ * Üye uygulaması Maçlar (skorlar) ile, YÖNETİM MODU Panel ile açılır.
+ * Mod tercihi okunana kadar hiçbir şey çizilmez (yanlış sekmeye kısa bir
+ * sıçrama olmasın).
  */
 
 import { Redirect } from "expo-router";
 
+import { ADMIN_HOME, MEMBER_HOME, useAdminMode } from "@/providers/AdminModeProvider";
+
 export default function HomeRedirect() {
-  return <Redirect href="/(tabs)/skorlar" />;
+  const mode = useAdminMode();
+  if (!mode.ready) return null;
+  return <Redirect href={mode.adminActive ? ADMIN_HOME : MEMBER_HOME} />;
 }

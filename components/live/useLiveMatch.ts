@@ -25,6 +25,7 @@ import {
   getEvents,
   getLineup,
   getTimer,
+  isGoalCode,
   isManualResult,
   normalizeMatchStatus,
   putTimer,
@@ -134,34 +135,44 @@ export function useLiveMatch(matchId: number, userId?: number | null) {
 
   /* ───────── skorbord alt bandı: son gol / kart ───────── */
   const timeline = useMemo(() => events.filter((e) => TIMELINE_CODES.has(String(e.olay_kodu).toUpperCase())), [events]);
-  const lastTimeline = timeline.length ? timeline[timeline.length - 1] : null;
+  // EN YENİ olay = en büyük kimlik. Liste dakikaya göre sıralıdır; sona bakmak,
+  // geriye dönük dakikayla girilen (ya da başka rejiden gelen) olayı kaçırırdı.
+  const newestTimeline = useMemo(
+    () => timeline.reduce<MatchEvent | null>((best, e) => (!best || Number(e.id) > Number(best.id) ? e : best), null),
+    [timeline]
+  );
+  const newestId = newestTimeline ? Number(newestTimeline.id) : 0;
   const seenRef = useRef<number | null>(null);
-  const [banner, setBanner] = useState<{ id: number; until: number } | null>(null);
+  const [banner, setBanner] = useState<{ id: number; since: number; until: number } | null>(null);
   useEffect(() => {
-    if (!lastTimeline) return;
+    if (!eventsQuery.isSuccess) return;
     // İlk yüklemede eski olayı bant olarak gösterme.
     if (seenRef.current === null) {
-      seenRef.current = Number(lastTimeline.id);
+      seenRef.current = newestId;
       return;
     }
-    if (Number(lastTimeline.id) > seenRef.current) {
-      seenRef.current = Number(lastTimeline.id);
-      if (bugEventOf(lastTimeline)) setBanner({ id: Number(lastTimeline.id), until: Date.now() + BUG_EVENT_MS });
+    if (newestId > seenRef.current) {
+      seenRef.current = newestId;
+      if (bugEventOf(newestTimeline)) {
+        const since = Date.now();
+        setBanner({ id: newestId, since, until: since + BUG_EVENT_MS });
+      }
     }
-  }, [lastTimeline]);
-  useEffect(() => {
-    if (!eventsQuery.isSuccess || seenRef.current !== null) return;
-    seenRef.current = lastTimeline ? Number(lastTimeline.id) : 0;
-  }, [eventsQuery.isSuccess, lastTimeline]);
+  }, [eventsQuery.isSuccess, newestId, newestTimeline]);
 
-  const bannerEvent = useMemo(() => {
+  const bannerSource = useMemo(() => {
     if (!banner || banner.until < now) return null;
     const ev = events.find((e) => Number(e.id) === banner.id);
+    return ev ? { event: ev, since: banner.since } : null;
+  }, [banner, events, now]);
+
+  const bannerEvent = useMemo(() => {
+    const ev = bannerSource?.event;
     const meta = bugEventOf(ev);
     if (!ev || !meta) return null;
     const player = nameOf(ev.oyuncu_id ?? ev.oyuncu_giren_id);
     return { ...meta, player: player ? player.toLocaleUpperCase("tr-TR") : null };
-  }, [banner, events, nameOf, now]);
+  }, [bannerSource, nameOf]);
 
   /* ───────── eylemler ───────── */
   const refresh = useCallback(() => {
@@ -222,41 +233,80 @@ export function useLiveMatch(matchId: number, userId?: number | null) {
     [clockMs, matchId, running]
   );
 
+  /**
+   * Skoru maç kaydına yaz. Olay zaten kaydedildi/silindi; bu adım başarısız
+   * olursa işlem "başarısız" SAYILMAZ (aksi halde kullanıcı aynı golü bir daha
+   * girerdi). Skor, bir sonraki olayda ya da web rejide yeniden eşitlenir.
+   */
+  const syncScoreSafely = useCallback(async () => {
+    try {
+      await syncScore();
+    } catch {
+      void queryClient.invalidateQueries({ queryKey: eventsKey });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queryClient, syncScore]);
+
   const addEvent = useCallback(
-    async (input: { side: "home" | "away"; code: string; playerId?: string | null }) => {
+    async (input: {
+      side: "home" | "away";
+      code: string;
+      playerId?: string | null;
+      /** Değişiklik: çıkan / giren oyuncu. */
+      outPlayerId?: string | null;
+      inPlayerId?: string | null;
+      /** Aynı dokunuşun yeniden denemesi çift kayıt üretmesin diye sabit kimlik. */
+      clientId?: string;
+    }) => {
       const teamId = input.side === "home" ? homeTeamId : awayTeamId;
+      const sub = input.code.toUpperCase() === "SUBSTITUTION";
       const created = await createEvent(matchId, {
         takim_id: teamId,
         olay_kodu: input.code,
         dakika: minute,
         devre: period,
-        oyuncu_id: Number(input.playerId) || null,
-        oyuncu_cikan_id: null,
-        oyuncu_giren_id: null,
+        oyuncu_id: sub ? null : Number(input.playerId) || null,
+        oyuncu_cikan_id: sub ? Number(input.outPlayerId) || null : null,
+        oyuncu_giren_id: sub ? Number(input.inPlayerId) || null : null,
         aciklama: null,
         olusturan_kullanici_id: userId ?? null,
-        client_event_id: clientEventId(),
+        client_event_id: input.clientId ?? clientEventId(),
       });
       queryClient.setQueryData<MatchEvent[]>(eventsKey, (prev) => {
         const list = prev ?? [];
         return list.some((e) => Number(e.id) === Number(created.id)) ? list : [...list, created];
       });
-      await syncScore();
+      if (isGoalCode(input.code)) await syncScoreSafely();
       return created;
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [awayTeamId, homeTeamId, matchId, minute, period, queryClient, syncScore, userId]
+    [awayTeamId, homeTeamId, matchId, minute, period, queryClient, syncScoreSafely, userId]
   );
 
   const removeEvent = useCallback(
     async (eventId: number) => {
       await deleteEvent(matchId, eventId);
       queryClient.setQueryData<MatchEvent[]>(eventsKey, (prev) => (prev ?? []).filter((e) => Number(e.id) !== eventId));
-      await syncScore();
+      await syncScoreSafely();
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [matchId, queryClient, syncScore]
+    [matchId, queryClient, syncScoreSafely]
   );
+
+  /** Sahadaki oyuncular: ilk 11 + girenler − çıkanlar (değişiklik seçicisi için). */
+  const onPitch = useMemo(() => {
+    const build = (side: "home" | "away") => {
+      const teamId = side === "home" ? homeTeamId : awayTeamId;
+      const set = new Set(squads[side].filter((p) => p.role === "starter").map((p) => p.id));
+      for (const ev of events) {
+        if (String(ev.olay_kodu).toUpperCase() !== "SUBSTITUTION" || Number(ev.takim_id) !== Number(teamId)) continue;
+        if (ev.oyuncu_cikan_id) set.delete(String(ev.oyuncu_cikan_id));
+        if (ev.oyuncu_giren_id) set.add(String(ev.oyuncu_giren_id));
+      }
+      return set;
+    };
+    return { home: build("home"), away: build("away") };
+  }, [awayTeamId, events, homeTeamId, squads]);
 
   return {
     match,
@@ -278,6 +328,9 @@ export function useLiveMatch(matchId: number, userId?: number | null) {
     phase,
     score,
     bannerEvent,
+    /** Bandın ham olayı ve başladığı an (GOL bandı aşamaları için). */
+    bannerSource,
+    onPitch,
     control,
     nudgeClock,
     addEvent,

@@ -21,6 +21,7 @@ import { useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { AdminScreen, Panel, RecordCard, StatRow, confirmAction, useAdminMutation } from "@/components/admin";
+import { AccountingNav } from "@/components/admin/accounting/AccountingNav";
 import { CityDetail, MonthRangeFields, NaEntrySheet, NaRateSheet, NationalWarnings, type NaEntryDialog } from "@/components/admin/accounting/national";
 import { AccountStrip, Muted, Note } from "@/components/admin/accounting/parts";
 import { TransferSheet } from "@/components/admin/accounting/financeSheets";
@@ -134,6 +135,8 @@ export default function NationalAccountingScreen() {
 
   return (
     <AdminScreen
+      app="muhasebe"
+      appTabs={city ? undefined : <AccountingNav current="turkiye" />}
       title={city ? `${city.name} hesabı` : "Türkiye Geneli"}
       subtitle="İl tahsilatları ve maç başı ücretler"
       permission={NATIONAL_ACCOUNTING_PERMISSIONS}

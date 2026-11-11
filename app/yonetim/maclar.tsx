@@ -53,7 +53,6 @@ import {
   SectionHeader,
   SkeletonMatchRow,
   Stepper,
-  errorMessage,
   matchRowHeight,
   useHeaderScroll,
   useRefresh,
@@ -69,7 +68,8 @@ import {
   patchMatchStatus,
 } from "@/lib/api/admin";
 import { hasAnyPermission } from "@/lib/admin/access";
-import { normalizeMatchStatus } from "@/lib/api/admin/matches";
+import { errorText } from "@/lib/admin/errors";
+import { normalizeMatchStatus, updateMatch } from "@/lib/api/admin/matches";
 import { formatDayHeading, formatTime } from "@/lib/format";
 import type { ApiMatch, MacDurumu } from "@/lib/types";
 import { useAuth } from "@/providers/AuthProvider";
@@ -109,6 +109,14 @@ const ROW_HEIGHT = matchRowHeight("default", "none");
    kenarı dolgusu burada sıfırlanır (iki kez içeri kaçıyordu). */
 const SECTION_HEADER_HEIGHT = 40;
 const SECTION_GAP = space.md;
+
+/**
+ * Ekranı açabilen yetkiler. Menüdeki modül matches.view/create/update ister;
+ * yalnız kadro / canlı akış / istatistik yetkisi olan operatör de (Lig
+ * Yönetimi ana ekranındaki "Tüm maçlar" ya da bildirim bağlantısıyla) listeye
+ * gelebilmeli — iş akışı ekranı zaten aynı kümeyi kabul eder.
+ */
+const SCREEN_PERMS = ["matches.view", "matches.create", "matches.update", "matches.lineup", "matches.live", "matches.stats"];
 
 /** Canlı bölüm varken hızlı, yokken sakin yoklama. */
 const LIVE_POLL_MS = 20_000;
@@ -167,6 +175,19 @@ export default function AdminMatchesScreen() {
   /** Durum süzgeci ROTADA taşınır: paylaşılan bağlantı doğru çipe düşer. */
   const status = resolveStatus(firstParam(params.durum));
 
+  /* Yetkiler — düğmeler sunucunun isteyeceği yetkiye göre açılır; aksi hâlde
+     yönetici dokunup 403 alıyordu. */
+  const allowed = auth.isManagement && hasAnyPermission(auth.user, SCREEN_PERMS);
+  const canScore = hasAnyPermission(auth.user, ["matches.live"]);
+  const canUpdate = hasAnyPermission(auth.user, ["matches.update"]);
+  const canLive = hasAnyPermission(auth.user, ["matches.live"]);
+  const canPublish = hasAnyPermission(auth.user, ["matches.publish"]);
+  /** Bu duruma geçişi kullanıcı yapabilir mi (sunucu kuralı: lib/matchLivePatch.js). */
+  const canSetStatus = useCallback(
+    (next: MacDurumu) => canPublish || canUpdate || (canLive && (next === "canli" || next === "yayinlanmis")),
+    [canLive, canPublish, canUpdate],
+  );
+
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [homeScore, setHomeScore] = useState(0);
@@ -187,7 +208,7 @@ export default function AdminMatchesScreen() {
         seasonId: scope.seasonId ?? undefined,
         limit: 500,
       }),
-    enabled: Boolean(auth.user) && auth.isManagement && scope.ready,
+    enabled: Boolean(auth.user) && allowed && scope.ready,
     staleTime: 10_000,
     retry: false,
     /**
@@ -198,7 +219,7 @@ export default function AdminMatchesScreen() {
     refetchInterval: (query) => {
       if (!appActive) return false;
       const rows = query.state.data ?? [];
-      return rows.some((item) => item.mac_durumu === "canli") ? LIVE_POLL_MS : IDLE_POLL_MS;
+      return rows.some((item) => normalizeMatchStatus(item.mac_durumu) === "canli") ? LIVE_POLL_MS : IDLE_POLL_MS;
     },
   });
 
@@ -238,8 +259,8 @@ export default function AdminMatchesScreen() {
   /* ─────────────────────────── BÖLÜMLER ─────────────────────────── */
 
   const sections = useMemo<MatchSection[]>(() => {
-    const live = visible.filter((match) => match.mac_durumu === "canli");
-    const rest = visible.filter((match) => match.mac_durumu !== "canli");
+    const live = visible.filter((match) => statusKey(match) === "canli");
+    const rest = visible.filter((match) => statusKey(match) !== "canli");
 
     const result: MatchSection[] = [];
 
@@ -323,16 +344,35 @@ export default function AdminMatchesScreen() {
       closeSheet();
       toast.show({ message: "Skor kaydedildi. Puan durumu yeniden hesaplandı.", tone: "success" });
     },
-    onError: (error) => Alert.alert("Skor kaydedilemedi", errorMessage(error)),
+    onError: (error) => Alert.alert("Skor kaydedilemedi", errorText(error)),
   });
 
   const statusMutation = useMutation({
-    mutationFn: (input: { id: number; status: MacDurumu }) =>
-      patchMatchStatus(input.id, input.status),
-    // Alt sayfa açık kalır: yeni durum çipi anında seçili görünür, üstelik
-    // yönetici aynı maçta arka arkaya işlem yapabilir.
+    /**
+     * UÇ SEÇİMİ: genel güncelleme ucu (PATCH /maclar/:id; matches.update ya da
+     * canlı/yayınlandı geçişinde matches.live) durum geçişinde "maç başladı"
+     * ve "maç bitti" bildirimlerini gönderir — web reji paneliyle aynı yol.
+     * Kullanıcının yalnız matches.publish yetkisi varsa durum ucuna düşülür.
+     */
+    mutationFn: (input: { id: number; status: MacDurumu }): Promise<unknown> =>
+      canUpdate || (canLive && (input.status === "canli" || input.status === "yayinlanmis"))
+        ? updateMatch(input.id, { mac_durumu: input.status })
+        : patchMatchStatus(input.id, input.status),
+    // İYİMSER: çip anında seçili görünür; sunucu reddederse liste eski hâline döner.
+    onMutate: async (input) => {
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<ApiMatch[]>(queryKey);
+      queryClient.setQueryData<ApiMatch[]>(queryKey, (old) =>
+        (old ?? []).map((item) => (Number(item.id) === input.id ? { ...item, mac_durumu: input.status } : item)),
+      );
+      return { previous };
+    },
+    // Alt sayfa açık kalır: yönetici aynı maçta arka arkaya işlem yapabilir.
     onSuccess: () => refetch(),
-    onError: (error) => Alert.alert("Durum değiştirilemedi", errorMessage(error)),
+    onError: (error, _input, context) => {
+      if (context?.previous) queryClient.setQueryData(queryKey, context.previous);
+      Alert.alert("Durum değiştirilemedi", errorText(error));
+    },
   });
 
   const changeStatus = useCallback(
@@ -469,6 +509,19 @@ export default function AdminMatchesScreen() {
   }
   if (!auth.isManagement) {
     return <Redirect href="/yonetim" />;
+  }
+  if (!allowed) {
+    return (
+      <SafeAreaView style={styles.screen} edges={["top"]}>
+        <ScreenHeader title="Maç Yönetimi" back />
+        <EmptyState
+          icon="lock-closed-outline"
+          title="Bu bölüme yetkin yok"
+          body="Maç yönetimi için gereken yetki hesabında tanımlı değil. Yetki için yöneticinle görüş."
+          action={{ label: "Yönetim paneline dön", onPress: () => router.replace("/yonetim") }}
+        />
+      </SafeAreaView>
+    );
   }
 
   const scopeLabel =
@@ -623,6 +676,8 @@ export default function AdminMatchesScreen() {
             />
 
             {/* Skor girişi — tabular Stepper, sabit genişlik, basılı tutunca hızlanır. */}
+            {canScore ? (
+              <>
             <Text style={styles.sheetLabel} {...textScale.dense}>
               SKOR
             </Text>
@@ -667,6 +722,12 @@ export default function AdminMatchesScreen() {
               haptic="medium"
               fullWidth
             />
+            <Text style={styles.sheetNote} {...textScale.long}>
+              Hızlı skor yalnız rakamı yazar. Canlı akışta olay girilen maçta skor olaylardan
+              hesaplanır; kalıcı elle ya da hükmen sonuç için iş akışındaki &quot;Sonucu tescil et&quot;i kullan.
+            </Text>
+              </>
+            ) : null}
 
             {/* Durum değiştirme */}
             <Text style={styles.sheetLabel} {...textScale.dense}>
@@ -679,14 +740,15 @@ export default function AdminMatchesScreen() {
                   label={MATCH_STATUS_LABELS[item]}
                   tone={STATUS_TONE[item]}
                   selected={statusKey(selected) === item}
-                  disabled={statusKey(selected) === item || statusMutation.isPending}
+                  disabled={statusKey(selected) === item || statusMutation.isPending || !canSetStatus(item)}
                   onPress={() => changeStatus(item)}
                 />
               ))}
             </ChipGroup>
             <Text style={styles.sheetNote} {...textScale.long}>
-              &quot;Canlı&quot; durumu üyelere maç başladı bildirimi gönderir. &quot;Yayınlandı&quot;
-              ve &quot;Taslak&quot; puan durumunu değiştirdiği için onay ister.
+              {STATUS_ORDER.some(canSetStatus)
+                ? "“Canlı” durumu üyelere maç başladı bildirimi gönderir. “Yayınlandı” ve “Taslak” puan durumunu değiştirdiği için onay ister."
+                : "Maç durumunu değiştirmek için hesabında maç güncelleme, canlı akış ya da yayınlama yetkisi olmalı."}
             </Text>
 
             <Button

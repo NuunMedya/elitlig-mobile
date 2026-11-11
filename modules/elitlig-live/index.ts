@@ -9,6 +9,9 @@ export type {
   SaveClipOptions,
   SavedClip,
   ReplayOptions,
+  CameraCapabilities,
+  DeviceStatus,
+  NetworkKind,
 } from "./src/ElitligLive.types";
 
 export {
@@ -23,6 +26,11 @@ export {
   playReplay,
   stopReplay,
   clearClips,
+  supportsCameraControls,
+  getCameraCapabilities,
+  setZoom,
+  setTorch,
+  getDeviceStatus,
 } from "./src/ElitligLive";
 
 export { LiveCameraView } from "./src/LiveCameraView";

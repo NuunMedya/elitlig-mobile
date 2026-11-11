@@ -23,11 +23,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { ActionSheet, AdminScreen } from "@/components/admin";
+import { ToolFab } from "@/components/admin/tools/ToolApp";
 import { MembersTab, type MembersTabHandle } from "@/components/admin/contacts/MembersTab";
 import { MyContactsTab, type MyContactsTabHandle } from "@/components/admin/contacts/MyContactsTab";
 import { TeamsTab } from "@/components/admin/contacts/TeamsTab";
 import { useContactActions } from "@/components/admin/contacts/useContactActions";
-import { EmptyState, FAB, SegmentedControl, type SegmentedItem } from "@/components/ui";
+import { EmptyState, SegmentedControl, type SegmentedItem } from "@/components/ui";
 import { hasAnyPermission } from "@/lib/admin/access";
 import { listContacts, type PersonalContact } from "@/lib/api/admin/contacts";
 import { useAuth } from "@/providers/AuthProvider";
@@ -83,6 +84,7 @@ export default function ContactsScreen() {
 
   return (
     <AdminScreen
+      app="rehber"
       title="Rehber"
       subtitle="Takımlar, üyeler ve kişilerin"
       scroll={false}
@@ -98,7 +100,7 @@ export default function ContactsScreen() {
       }
       overlay={
         view === "kisiler" ? (
-          <FAB icon="person-add" label="Yeni kişi" extended onPress={() => mineRef.current?.create()} accessibilityLabel="Yeni kişi" />
+          <ToolFab app="rehber" icon="person-add" label="Yeni kişi" onPress={() => mineRef.current?.create()} accessibilityLabel="Yeni kişi" />
         ) : null
       }
     >

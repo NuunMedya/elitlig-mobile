@@ -152,21 +152,18 @@ export function StatsPane({ scrollProps, onOpenPlayers, onOpenStandings }: Stats
     staleTime: 60_000,
   });
 
-  const cards = useQuery({
-    queryKey: queryKeys.playerRankings(scopeKey, "mostCards"),
-    queryFn: () => getPlayerRankings(scopeKey, "mostCards"),
-    enabled: scope.ready,
-    staleTime: 60_000,
-  });
+  /* Kart liderleri AYNI yanıttan çıkar: `/api/oyuncu-listesi` hangi `sort` ile
+     çağrılırsa çağrılsın sezonun tüm oyuncularını aynı alanlarla döndürür;
+     ikinci bir ≈1 MB'lık "mostCards" isteği yalnız sırayı değiştiriyordu. */
+  const cards = scorers;
 
   const refetchAll = useCallback(() => {
     void standings.refetch();
     void scorers.refetch();
-    void cards.refetch();
-  }, [cards, scorers, standings]);
+  }, [scorers, standings]);
 
   const refresh = useRefresh(refetchAll, {
-    refreshing: standings.isRefetching || scorers.isRefetching || cards.isRefetching,
+    refreshing: standings.isRefetching || scorers.isRefetching,
   });
 
   /* — Sezon özeti — */

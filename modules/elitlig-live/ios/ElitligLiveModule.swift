@@ -1,5 +1,6 @@
 import AVFoundation
 import ExpoModulesCore
+import Network
 import UIKit
 
 struct StartStreamOptions: Record {
@@ -104,6 +105,69 @@ public class ElitligLiveModule: Module {
     AsyncFunction("setMuted") { (muted: Bool) throws in
       try ElitligLiveModule.requireView().setMuted(muted)
     }.runOnQueue(.main)
+
+    // MARK: Yakınlaştırma / fener / cihaz durumu (JS varlığını denetleyerek çağırır)
+
+    AsyncFunction("getCameraCapabilities") { () -> [String: Any] in
+      if let view = ElitligLiveModule.activeView {
+        return view.cameraCapabilities()
+      }
+      return ["minZoom": 1.0, "maxZoom": 1.0, "zoom": 1.0, "torch": false, "torchOn": false]
+    }.runOnQueue(.main)
+
+    AsyncFunction("setZoom") { (level: Double) throws -> Double in
+      return try ElitligLiveModule.requireView().setZoom(level)
+    }.runOnQueue(.main)
+
+    AsyncFunction("setTorch") { (on: Bool) throws -> Bool in
+      return try ElitligLiveModule.requireView().setTorch(on)
+    }.runOnQueue(.main)
+
+    AsyncFunction("getDeviceStatus") { (promise: Promise) in
+      DispatchQueue.main.async {
+        let device = UIDevice.current
+        let wasMonitoring = device.isBatteryMonitoringEnabled
+        device.isBatteryMonitoringEnabled = true
+        let level = Double(device.batteryLevel) // bilinmiyorsa -1
+        let charging = device.batteryState == .charging || device.batteryState == .full
+        if !wasMonitoring { device.isBatteryMonitoringEnabled = false }
+        let lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
+
+        // Ağ türü: tek seferlik yol sorgusu (ilk güncellemede sonuçlanır; 1.5 sn'de yanıt yoksa "unknown").
+        let monitor = NWPathMonitor()
+        var finished = false
+        let finish: (String) -> Void = { network in
+          DispatchQueue.main.async {
+            guard !finished else { return }
+            finished = true
+            monitor.cancel()
+            promise.resolve([
+              "batteryLevel": level,
+              "charging": charging,
+              "lowPower": lowPower,
+              "network": network
+            ])
+          }
+        }
+        monitor.pathUpdateHandler = { path in
+          let network: String
+          if path.status != .satisfied {
+            network = "none"
+          } else if path.usesInterfaceType(.wifi) {
+            network = "wifi"
+          } else if path.usesInterfaceType(.cellular) {
+            network = "cellular"
+          } else if path.usesInterfaceType(.wiredEthernet) {
+            network = "ethernet"
+          } else {
+            network = "unknown"
+          }
+          finish(network)
+        }
+        monitor.start(queue: DispatchQueue.global(qos: .utility))
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { finish("unknown") }
+      }
+    }
 
     // Görsel arka planda çözülür, ekrana (Screen) ana iş parçacığında eklenir.
     AsyncFunction("setOverlay") { (uri: String?, frame: OverlayFrame?, promise: Promise) in

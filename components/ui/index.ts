@@ -209,4 +209,8 @@ export type { TabBarIconProps } from "./TabBarIcon";
 
 /** Yüzen alt menü barı — seçili sekmeye uzanan ışık. */
 export { GlowTabBar } from "./GlowTabBar";
-export type { GlowTabBarProps, GlowTab } from "./GlowTabBar";
+export type { GlowTabBarProps, GlowTab, GlowTabCenter } from "./GlowTabBar";
+
+/* — Hareket kiti: giriş, skor vurgusu, canlı halkası, sayfa noktaları — */
+export { Reveal, ScoreFlash, Ping, PagerDots } from "./Motion";
+export type { RevealProps, ScoreFlashProps, PingProps, PagerDotsProps } from "./Motion";

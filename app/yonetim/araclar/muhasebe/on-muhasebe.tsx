@@ -7,7 +7,8 @@
  *            borç, KDV dengesi) ve 12 aylık gelir-gider trendi.
  *   Sekmeler: Hareketler (arama + tür/durum/kategori/hesap süzgeci, toplam),
  *            Vade takibi (bekleyenler vade sırasıyla, kalan gün), Kategoriler
- *            (gelir/gider dağılımı) ve Cariler (kişi/firma bakiyeleri).
+ *            (gelir/gider dağılımı), Cariler (kişi/firma bakiyeleri) ve
+ *            Düzenli ödemeler (fatura/kira/maaş: dönemi tek dokunuşla işle).
  * Göstergeye, kategoriye ya da cariye dokunmak Hareketler'i o süzgeçle açar.
  *
  * DIŞA AKTARMA: süzülmüş kayıtlar Excel uyumlu CSV olarak paylaşılır. Web'deki
@@ -18,12 +19,16 @@
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQuery } from "@tanstack/react-query";
+import { useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { ActionSheet, AdminScreen, DateField, Panel, RecordCard, SelectField, StatRow, confirmAction, useAdminMutation, type FormValues } from "@/components/admin";
+import { AccountingNav } from "@/components/admin/accounting/AccountingNav";
+import { ToolFab } from "@/components/admin/tools/ToolApp";
 import { LedgerEntrySheet, blankLedger, ledgerToForm } from "@/components/admin/accounting/LedgerEntrySheet";
 import { AccountStrip, BarRow, Muted, Note, TrendBars } from "@/components/admin/accounting/parts";
+import { RecurringTab } from "@/components/admin/accounting/RecurringTab";
 import { TransferSheet } from "@/components/admin/accounting/financeSheets";
 import { shareCsv } from "@/components/admin/accounting/share";
 import { Button, Chip, ChipGroup, EmptyState, Input, MetricGrid, MetricTile, SegmentedControl, SkeletonCard, Tabs } from "@/components/ui";
@@ -60,7 +65,7 @@ import {
 import { space } from "@/theme";
 
 const PERIOD_KEY = "tools:ledger:period";
-type Tab = "entries" | "pending" | "categories" | "parties";
+type Tab = "entries" | "pending" | "recurring" | "categories" | "parties";
 const EMPTY_FILTERS: LedgerFilters = { type: "", status: "", category: "", query: "", account: "" };
 const EMPTY_SUMMARY: LedgerSummary = {
   income: 0, expense: 0, net: 0, receivable: 0, payable: 0, overdue: 0, overdue_amount: 0, vat_balance: 0, vat_collected: 0, vat_paid: 0, categories: [], parties: [],
@@ -75,6 +80,12 @@ export default function LedgerScreen() {
   const [editor, setEditor] = useState<{ initial: FormValues; id?: number; nonce: number } | null>(null);
   const [menu, setMenu] = useState<LedgerEntry | null>(null);
   const [transfer, setTransfer] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const params = useLocalSearchParams<{ yeni?: string }>();
+  // Özet ekranındaki "Gider ekle / Gelir ekle" kısayolu formu açık getirir.
+  useEffect(() => {
+    if (params.yeni === "income" || params.yeni === "expense") setEditor({ initial: blankLedger(params.yeni), nonce: Date.now() });
+  }, [params.yeni]);
 
   useEffect(() => {
     AsyncStorage.getItem(PERIOD_KEY)
@@ -147,6 +158,9 @@ export default function LedgerScreen() {
 
   return (
     <AdminScreen
+      app="muhasebe"
+      appTabs={<AccountingNav current="on-muhasebe" />}
+      overlay={<ToolFab app="muhasebe" label="Yeni kayıt" onPress={() => setAdding(true)} onLongPress={() => open(blankLedger("expense"))} accessibilityLabel="Yeni gelir ya da gider kaydı" />}
       title="Ön Muhasebe"
       subtitle="Kişisel gelir-gider defteri"
       onRefresh={query.refetch}
@@ -216,6 +230,7 @@ export default function LedgerScreen() {
         items={[
           { key: "entries", label: "Hareketler" },
           { key: "pending", label: "Vade takibi", badge: pending.length || undefined },
+          { key: "recurring", label: "Düzenli ödemeler" },
           { key: "categories", label: "Kategoriler" },
           { key: "parties", label: "Cariler" },
         ]}
@@ -330,6 +345,8 @@ export default function LedgerScreen() {
         )
       ) : null}
 
+      {tab === "recurring" ? <RecurringTab /> : null}
+
       {tab === "categories" ? (
         summary.categories.length ? (
           (["income", "expense"] as EntryType[]).map((t) => {
@@ -395,6 +412,17 @@ export default function LedgerScreen() {
               ]
             : []
         }
+      />
+
+      <ActionSheet
+        visible={adding}
+        onClose={() => setAdding(false)}
+        title="Yeni kayıt"
+        actions={[
+          { label: "Gider ekle", icon: "arrow-up-circle-outline", onPress: () => open(blankLedger("expense")) },
+          { label: "Gelir ekle", icon: "arrow-down-circle-outline", onPress: () => open(blankLedger("income")) },
+          { label: "Virman yap", icon: "swap-horizontal", hidden: (allAccounts.data?.items || []).filter((a) => !a.archived).length < 2, onPress: () => setTransfer(true) },
+        ]}
       />
 
       {editor ? (

@@ -201,6 +201,10 @@ export default function InvitesScreen() {
     void queryClient.invalidateQueries({ queryKey: ["takim", "join-requests"] });
     void queryClient.invalidateQueries({ queryKey: ["takim", "roster"] });
     void queryClient.invalidateQueries({ queryKey: ["takim", "dashboard"] });
+    // Oyuncu daveti kabul edince takımı değişir: Kariyerim ve maçlarım bayatlar.
+    void queryClient.invalidateQueries({ queryKey: ["panel", "me"] });
+    void queryClient.invalidateQueries({ queryKey: ["panel", "overview"] });
+    void queryClient.invalidateQueries({ queryKey: ["panel", "my-matches"] });
   }, [queryClient]);
 
   const invalidateRecruitments = useCallback(() => {

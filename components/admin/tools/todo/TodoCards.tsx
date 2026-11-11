@@ -71,11 +71,14 @@ export const TodoRow = memo(function TodoRow({
   hidePerson,
   onOpen,
   onStatus,
+  onMenu,
 }: {
   task: TodoTask;
   hidePerson?: boolean;
   onOpen: (task: TodoTask) => void;
   onStatus: (task: TodoTask, status: TodoStatus) => void;
+  /** Basılı tutunca hızlı eylem menüsü (ertele, sabitle, sil…). */
+  onMenu?: (task: TodoTask) => void;
 }) {
   const canMove = Boolean(task.permissions?.canChangeStatus);
   const done = task.status === "done";
@@ -105,7 +108,15 @@ export const TodoRow = memo(function TodoRow({
         </View>
       )}
 
-      <Touchable feedback="row" onPress={() => onOpen(task)} style={styles.rowMain} accessibilityRole="button" accessibilityLabel={`${task.title} kartını aç`}>
+      <Touchable
+        feedback="row"
+        onPress={() => onOpen(task)}
+        onLongPress={onMenu ? () => onMenu(task) : undefined}
+        style={styles.rowMain}
+        accessibilityRole="button"
+        accessibilityLabel={`${task.title} kartını aç`}
+        accessibilityHint={onMenu ? "Hızlı eylemler için basılı tut" : undefined}
+      >
         <View style={styles.titleRow}>
           <Text style={[styles.title, done ? styles.doneText : null]} numberOfLines={2} {...textScale.dense}>
             {task.title}

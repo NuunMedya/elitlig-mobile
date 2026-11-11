@@ -1,5 +1,6 @@
 import { del, get, patch, post, put, type QueryParams } from "../../http";
 import type { AuthUser } from "../../types";
+import { isoDay } from "../../admin/format";
 
 /**
  * MUHASEBE uçları — web "Araçlar → Muhasebe" merkezinin dört bölümü:
@@ -33,8 +34,14 @@ const clean = (params: Record<string, unknown> = {}): QueryParams => {
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
-/** Yerel saatle YYYY-MM-DD. */
-export function todayKey(now = new Date()): string {
+/**
+ * Bugünün günü (YYYY-MM-DD) — muhasebe kayıtları Türkiye saatiyle tutulur:
+ * argümansız çağrıda cihazın saat dilimi ne olursa olsun İstanbul günü döner
+ * (yurt dışındaki telefonda gece yarısına yakın kayıt bir gün kaymasın).
+ * Bir tarih verilirse o tarihin yerel takvim günü döner (dönem hesapları).
+ */
+export function todayKey(now?: Date): string {
+  if (!now) return isoDay();
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
 
@@ -1225,3 +1232,129 @@ export function nationalLinesCsv(data: NaStatement): string {
     ...data.cities.flatMap((c) => c.lines.map((l) => [c.name, l.period, l.seasonName, l.leagueName || "", l.matchCount, csvNumber(l.fee), csvNumber(l.calculated), csvNumber(l.amount), l.override?.note || ""])),
   ]);
 }
+
+/* ===================== Düzenli ödemeler (/api/tools/recurring) ===================== */
+
+/** Web Muhasebe → Ön Muhasebe → Düzenli Ödemeler (elitlig-server services/recurringPayments.js). */
+export type RecurringKind = "bill" | "salary" | "rent" | "subscription" | "loan" | "tax" | "insurance" | "income" | "other";
+export type RecurringFrequency = "weekly" | "monthly" | "bimonthly" | "quarterly" | "semiannual" | "yearly";
+export type OccurrenceStatus = "paid" | "accrued" | "skipped" | "untracked" | "overdue" | "due_soon" | "upcoming";
+
+export const RECURRING_KINDS: { key: RecurringKind; label: string }[] = [
+  { key: "bill", label: "Fatura" },
+  { key: "salary", label: "Maaş" },
+  { key: "rent", label: "Kira" },
+  { key: "subscription", label: "Abonelik" },
+  { key: "loan", label: "Kredi / taksit" },
+  { key: "tax", label: "Vergi / SGK" },
+  { key: "insurance", label: "Sigorta" },
+  { key: "income", label: "Düzenli gelir" },
+  { key: "other", label: "Diğer" },
+];
+
+export const RECURRING_FREQUENCIES: { key: RecurringFrequency; label: string }[] = [
+  { key: "weekly", label: "Haftalık" },
+  { key: "monthly", label: "Aylık" },
+  { key: "bimonthly", label: "2 ayda bir" },
+  { key: "quarterly", label: "3 ayda bir" },
+  { key: "semiannual", label: "6 ayda bir" },
+  { key: "yearly", label: "Yıllık" },
+];
+
+export interface RecurringItem {
+  id: number;
+  type: EntryType;
+  kind: RecurringKind;
+  kind_label: string;
+  name: string;
+  category: string | null;
+  party: string | null;
+  amount: number;
+  variable_amount: boolean;
+  vat_rate: number;
+  method: string | null;
+  account_id: number | null;
+  frequency: RecurringFrequency;
+  start_date: string;
+  end_date: string | null;
+  total_count: number | null;
+  reminder_days: number | null;
+  active: boolean;
+  monthly_amount: number;
+  note: string | null;
+  next_due?: { period: string; due_date: string; status: OccurrenceStatus; amount: number } | null;
+  last_paid?: { period: string; entry_date: string; amount: number } | null;
+}
+
+export interface RecurringOccurrence {
+  key: string;
+  recurring_id: number;
+  period: string;
+  period_label: string;
+  name: string;
+  kind: RecurringKind;
+  type: EntryType;
+  party: string | null;
+  category: string | null;
+  variable_amount: boolean;
+  amount: number;
+  estimated: boolean;
+  status: OccurrenceStatus;
+  late: boolean;
+  due_date: string;
+  days: number;
+  entry_id: number | null;
+  entry_date: string | null;
+}
+
+export interface RecurringSummary {
+  monthly_expense: number;
+  monthly_income: number;
+  expected_expense: number;
+  expected_income: number;
+  paid_expense: number;
+  paid_income: number;
+  remaining_expense: number;
+  remaining_income: number;
+  count: number;
+  paid_count: number;
+  open_count: number;
+  overdue_count: number;
+  overdue_amount: number;
+  active_count: number;
+}
+
+export interface RecurringResponse {
+  items: RecurringItem[];
+  occurrences: RecurringOccurrence[];
+  overdue: RecurringOccurrence[];
+  summary: RecurringSummary;
+}
+
+export interface RecurringBody {
+  type: EntryType;
+  kind: RecurringKind;
+  name: string;
+  amount: number;
+  variable_amount: boolean;
+  frequency: RecurringFrequency;
+  start_date: string;
+  end_date?: string | null;
+  method: string;
+  party?: string;
+  category?: string;
+  account_id?: number | null;
+  note?: string;
+  active?: boolean;
+}
+
+/** `month` = "YYYY-MM"; boşsa sunucu içinde bulunulan ayı döndürür. */
+export const getRecurring = (month?: string) => get<RecurringResponse>("/api/tools/recurring", clean({ month }));
+export const createRecurring = (body: RecurringBody) => post<{ item: RecurringItem }>("/api/tools/recurring", body);
+export const updateRecurring = (id: number, body: Partial<RecurringBody>) => patch<{ item: RecurringItem }>(`/api/tools/recurring/${id}`, body);
+export const removeRecurring = (id: number) => del<unknown>(`/api/tools/recurring/${id}`);
+/** Dönemi Ön Muhasebe'ye işler: paid = ödendi/tahsil edildi, pending = tahakkuk (bekliyor). */
+export const postRecurringOccurrence = (id: number, body: { period: string; amount?: number; status?: "paid" | "pending"; entry_date?: string; account_id?: number | null }) =>
+  post<{ item: LedgerEntry }>(`/api/tools/recurring/${id}/post`, body);
+export const skipRecurringOccurrence = (id: number, body: { period: string; undo?: boolean }) =>
+  post<{ item: RecurringItem }>(`/api/tools/recurring/${id}/skip`, body);

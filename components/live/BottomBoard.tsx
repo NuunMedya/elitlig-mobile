@@ -31,13 +31,14 @@ export const BottomBoard = memo(
   forwardRef<View, ScoreBugProps>(function BottomBoard(props, ref) {
     const s = props.scale;
     const C = props.palette ?? DEFAULT_PALETTE;
-    const logo = useBrandLogoSource(props.logoUrl);
+    const logo = useBrandLogoSource(props.logoUrl, props.onAssetLoad);
+    const clockOn = props.finished || props.showClock !== false;
     // Bant taşmayı kırptığı için logo bant yüksekliğini aşmaz.
     const logoSize = Math.min(s * L.bandH, s * L.logo * ((props.logoScale ?? 100) / 100));
 
     const crest = (uri?: string | null) => (
       <View style={{ width: s * L.crest, height: s * L.crest, alignItems: "center", justifyContent: "center" }}>
-        {uri ? <Image source={{ uri }} style={{ width: s * L.crest, height: s * L.crest }} resizeMode="contain" /> : null}
+        {uri ? <Image source={{ uri }} onLoad={props.onAssetLoad} style={{ width: s * L.crest, height: s * L.crest }} resizeMode="contain" /> : null}
       </View>
     );
     const name = (text: string, align: "left" | "right") => (
@@ -97,7 +98,7 @@ export const BottomBoard = memo(
             <View style={[styles.cell, { width: s * L.medalW, backgroundColor: C.p900 }]}>
               <View style={[styles.divider, { left: 0, top: s * 22, bottom: s * 22, backgroundColor: C.hair }]} />
               <View style={[styles.divider, { right: 0, top: s * 22, bottom: s * 22, backgroundColor: C.hair }]} />
-              <Image source={logo.source} onError={logo.onError} style={{ width: logoSize, height: logoSize }} resizeMode="contain" />
+              <Image source={logo.source} onError={logo.onError} onLoad={logo.onLoad} style={{ width: logoSize, height: logoSize }} resizeMode="contain" />
             </View>
             {score(props.awayScore)}
             <View style={[styles.team, { width: s * L.teamW, justifyContent: "flex-start", paddingHorizontal: s * 24, gap: s * 16 }]}>
@@ -112,23 +113,25 @@ export const BottomBoard = memo(
           </View>
         </View>
 
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            gap: s * 10,
-            height: s * L.clockH,
-            paddingHorizontal: s * 26,
-            borderBottomLeftRadius: s * L.radius,
-            borderBottomRightRadius: s * L.radius,
-            backgroundColor: props.finished ? C.p900 : C.v800,
-          }}
-        >
-          {props.finished ? null : <View style={{ width: s * 7, height: s * 7, borderRadius: s * 4, backgroundColor: C.live }} />}
-          <Text allowFontScaling={false} style={{ fontFamily: fonts.bold, fontSize: s * 13, lineHeight: s * 18, letterSpacing: s * 2.6, color: C.white }}>
-            {props.finished ? "MAÇ SONU" : `${periodLabel(props.period)} · ${clockText(props.clockMs)}`}
-          </Text>
-        </View>
+        {clockOn ? (
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: s * 10,
+              height: s * L.clockH,
+              paddingHorizontal: s * 26,
+              borderBottomLeftRadius: s * L.radius,
+              borderBottomRightRadius: s * L.radius,
+              backgroundColor: props.finished ? C.p900 : C.v800,
+            }}
+          >
+            {props.finished ? null : <View style={{ width: s * 7, height: s * 7, borderRadius: s * 4, backgroundColor: C.live }} />}
+            <Text allowFontScaling={false} style={{ fontFamily: fonts.bold, fontSize: s * 13, lineHeight: s * 18, letterSpacing: s * 2.6, color: C.white }}>
+              {props.finished ? "MAÇ SONU" : `${periodLabel(props.period)} · ${clockText(props.clockMs)}`}
+            </Text>
+          </View>
+        ) : null}
       </View>
     );
   })

@@ -387,6 +387,10 @@ export default function OfferDetailScreen() {
     void queryClient.invalidateQueries({ queryKey: ["panel", "offers"] });
     void queryClient.invalidateQueries({ queryKey: ["panel", "contracts"] });
     void queryClient.invalidateQueries({ queryKey: ["panel", "me"] });
+    // Kabul takımı değiştirir: Kariyerim özeti, maçlarım ve davet kutusu da bayatlar.
+    void queryClient.invalidateQueries({ queryKey: ["panel", "overview"] });
+    void queryClient.invalidateQueries({ queryKey: ["panel", "my-matches"] });
+    void queryClient.invalidateQueries({ queryKey: ["takim", "join-requests"] });
   }, [publicId, queryClient]);
 
   /**

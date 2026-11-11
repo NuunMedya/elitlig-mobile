@@ -63,6 +63,26 @@ export interface ReplayOptions {
   rate?: number;
 }
 
+export interface CameraCapabilities {
+  minZoom: number;
+  maxZoom: number;
+  zoom: number;
+  /** Etkin kamerada fener var mı (ön kamerada genellikle yok). */
+  torch: boolean;
+  torchOn: boolean;
+}
+
+export type NetworkKind = "wifi" | "cellular" | "ethernet" | "none" | "unknown";
+
+export interface DeviceStatus {
+  /** 0..1; bilinmiyorsa -1. */
+  batteryLevel: number;
+  charging: boolean;
+  /** Pil tasarrufu / düşük güç kipi açık mı (kodlayıcıyı kısabilir). */
+  lowPower: boolean;
+  network: NetworkKind;
+}
+
 /** Yerel modülün JS'e açtığı yüzey (Android: ElitligLiveModule.kt, iOS: ElitligLiveModule.swift). */
 export interface ElitligLiveNativeModule {
   requestPermissions(): Promise<boolean>;
@@ -75,4 +95,12 @@ export interface ElitligLiveNativeModule {
   playReplay(uri: string, options: { label: string | null; rate: number }): Promise<void>;
   stopReplay(): Promise<void>;
   clearClips(): Promise<void>;
+  /*
+   * Sonradan eklenenler — mağazadaki eski derlemede YOKTUR (JS güncellemesi
+   * eski yerel modülle de çalışmalı). Her zaman varlığı denetlenerek çağrılır.
+   */
+  getCameraCapabilities?(): Promise<CameraCapabilities>;
+  setZoom?(level: number): Promise<number>;
+  setTorch?(on: boolean): Promise<boolean>;
+  getDeviceStatus?(): Promise<DeviceStatus>;
 }

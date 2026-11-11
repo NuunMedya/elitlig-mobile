@@ -19,6 +19,8 @@ const ANDROID_PERMISSIONS = [
   "android.permission.RECORD_AUDIO",
   "android.permission.INTERNET",
   "android.permission.WAKE_LOCK",
+  // Stüdyo ön kontrolü: Wi-Fi / mobil veri ayrımı (getDeviceStatus). Normal izin, kullanıcıya sorulmaz.
+  "android.permission.ACCESS_NETWORK_STATE",
 ];
 
 const JITPACK_LINE = "maven { url 'https://jitpack.io' }";

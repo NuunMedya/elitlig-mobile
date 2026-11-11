@@ -315,6 +315,7 @@ export default function FocusTimerScreen() {
 
   return (
     <AdminScreen
+      app="odak-sayaci"
       title="Odak sayacı"
       bottom={
         <View style={styles.segment}>

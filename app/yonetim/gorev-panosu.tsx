@@ -27,6 +27,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { FlatList, RefreshControl, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 
 import { ActionSheet, AdminScreen, SegmentField, confirmAction, type SheetAction } from "@/components/admin";
+import { ToolFab, ToolSummary, ToolTabs } from "@/components/admin/tools/ToolApp";
 import { QuickAddBar } from "@/components/admin/tools/todo/QuickAddBar";
 import { TeamOverview } from "@/components/admin/tools/todo/TeamOverview";
 import { TodoComposerSheet, type ComposerState } from "@/components/admin/tools/todo/TodoComposerSheet";
@@ -41,6 +42,7 @@ import {
   TEAM_VIEWS,
   VIEWS,
   buildGroups,
+  endOfDay,
   inView,
   isDelegated,
   isDueToday,
@@ -57,10 +59,8 @@ import {
 import {
   BottomSheet,
   Chip,
-  ChipGroup,
   EmptyState,
   ErrorState,
-  FAB,
   Input,
   SkeletonListRow,
   Touchable,
@@ -68,6 +68,7 @@ import {
   useRefresh,
   useToast,
 } from "@/components/ui";
+import { useAppActive } from "@/hooks/useLiveFavoriteCount";
 import { errorText } from "@/lib/admin/errors";
 import {
   archiveDoneTodos,
@@ -111,10 +112,13 @@ export default function TodoBoardScreen() {
   const auth = useAuth();
   const queryClient = useQueryClient();
   const { width } = useWindowDimensions();
-  const params = useLocalSearchParams<{ id?: string; list?: string }>();
+  const params = useLocalSearchParams<{ id?: string; list?: string; tab?: string }>();
+  const appActive = useAppActive();
+  // Eski "Görevlerim" bağlantıları (?tab=assigned|done) ilgili listeye açılır.
+  const paramList = params.list || (params.tab === "assigned" ? "assigned_by_me" : params.tab === "done" ? "done" : "");
 
   const [mode, setMode] = useState<"list" | "board">("list");
-  const [list, setList] = useState<string>(params.list || "all");
+  const [list, setList] = useState<string>(paramList || "all");
   const [groupBy, setGroupBy] = useState<"date" | "status">("date");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [search, setSearch] = useState("");
@@ -123,6 +127,7 @@ export default function TodoBoardScreen() {
   const [openId, setOpenId] = useState<number | null>(params.id ? Number(params.id) : null);
   const [composer, setComposer] = useState<ComposerState | null>(null);
   const [moving, setMoving] = useState<TodoTask | null>(null);
+  const [menu, setMenu] = useState<TodoTask | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -134,7 +139,7 @@ export default function TodoBoardScreen() {
           AsyncStorage.getItem(COLLAPSE_KEY),
         ]);
         if (m === "board" || m === "list") setMode(m);
-        if (l && !params.list) setList(JSON.parse(l));
+        if (l && !paramList) setList(JSON.parse(l));
         if (g === "status" || g === "date") setGroupBy(g);
         if (c) setCollapsed(JSON.parse(c));
       } catch {
@@ -149,7 +154,7 @@ export default function TodoBoardScreen() {
   const remember = (key: string, value: string) => void AsyncStorage.setItem(key, value).catch(() => undefined);
 
   const boardKey = todoKeys.board();
-  const boardQuery = useQuery({ queryKey: boardKey, queryFn: getBoardTodos, staleTime: 15_000 });
+  const boardQuery = useQuery({ queryKey: boardKey, queryFn: getBoardTodos, staleTime: 15_000, refetchInterval: appActive ? 60_000 : false });
   const catalogQuery = useQuery({ queryKey: todoKeys.catalog(), queryFn: getTodoCatalog, staleTime: 5 * 60_000 });
   const catalog = catalogQuery.data;
   const canAssign = Boolean(catalog?.canAssign);
@@ -407,6 +412,45 @@ export default function TodoBoardScreen() {
     ];
   })();
 
+  /* ───────────── basılı tut: hızlı eylemler ───────────── */
+
+  const quickPatch = (task: TodoTask, payload: TodoPatch, message: string) =>
+    void patchTask(task, payload)
+      .then(() => {
+        if (!payload.archived) toast.show({ message, tone: "success" });
+      })
+      .catch((error) => fail(error, "Kart güncellenemedi."));
+
+  const menuActions: SheetAction[] = (() => {
+    if (!menu) return [];
+    const task = menu;
+    const canStatus = Boolean(task.permissions?.canChangeStatus);
+    const canEdit = Boolean(task.permissions?.canEdit);
+    const done = task.status === "done";
+    return [
+      { label: "Tamamla", icon: "checkmark-circle-outline", hidden: !canStatus || done, onPress: () => void handleStatus(task, "done") },
+      { label: "Başladım (sürüyor)", icon: "play-outline", hidden: !canStatus || task.status !== "open", onPress: () => void handleStatus(task, "in_progress") },
+      { label: "Yeniden aç", icon: "refresh-outline", hidden: !canStatus || !done, onPress: () => void handleStatus(task, "open") },
+      { label: "Bugüne al", icon: "sunny-outline", hidden: !canEdit || done, onPress: () => quickPatch(task, { due_at: endOfDay(0).toISOString() }, "Bugüne alındı.") },
+      { label: "Yarına ertele", icon: "arrow-redo-outline", hidden: !canEdit || done, onPress: () => quickPatch(task, { due_at: endOfDay(1).toISOString() }, "Yarına ertelendi.") },
+      { label: "Haftaya ertele", icon: "calendar-outline", hidden: !canEdit || done, onPress: () => quickPatch(task, { due_at: endOfDay(7).toISOString() }, "Bir hafta ertelendi.") },
+      {
+        label: task.priority === "high" ? "Önceliği normale çek" : "Önemli olarak işaretle",
+        icon: "flag-outline",
+        hidden: !canEdit || done,
+        onPress: () => quickPatch(task, { priority: task.priority === "high" ? "normal" : "high" }, task.priority === "high" ? "Öncelik normale çekildi." : "Önemli olarak işaretlendi."),
+      },
+      {
+        label: task.pinned ? "Sabitlemeyi kaldır" : "Üste sabitle",
+        icon: "pin-outline",
+        hidden: !task.permissions?.isOwner,
+        onPress: () => quickPatch(task, { pinned: !task.pinned }, task.pinned ? "Sabitleme kaldırıldı." : "Üste sabitlendi."),
+      },
+      { label: "Düzenle", icon: "create-outline", hidden: !canEdit, onPress: () => openComposer({ task }) },
+      { label: "Sil", icon: "trash-outline", danger: true, hidden: !task.permissions?.canDelete, onPress: () => void handleRemove(task) },
+    ];
+  })();
+
   /* ───────────── liste satırları ───────────── */
 
   const rows = useMemo<Row[]>(() => {
@@ -434,7 +478,7 @@ export default function TodoBoardScreen() {
         ? "assign"
         : {
             defaultWhen: (current === "today" ? "today" : current === "upcoming" ? "tomorrow" : "") as "" | "today" | "tomorrow",
-            placeholder: current === "today" ? "Bugün ne yapacaksın?" : undefined,
+            placeholder: current === "today" ? "Bugün ne yapacaksın? Örn. 14:00 sahayı ara !" : undefined,
             hint: currentLabelEntry ? `“${currentLabelEntry.text}” etiketiyle eklenir` : undefined,
           };
 
@@ -444,6 +488,17 @@ export default function TodoBoardScreen() {
 
   const listHeader = (
     <View style={styles.header}>
+      {items.length ? (
+        <ToolSummary
+          app="gorevler"
+          stats={[
+            { label: "AÇIK", value: counts.open, tone: "accent", onPress: () => chooseList("all") },
+            { label: "GECİKMİŞ", value: counts.overdue, tone: counts.overdue ? "danger" : undefined, onPress: () => chooseList("today") },
+            { label: "BUGÜN", value: counts.dueToday, onPress: () => chooseList("today") },
+            { label: "BANA ATANAN", value: counts.assigned_to_me ?? 0, onPress: () => chooseList("assigned_to_me") },
+          ]}
+        />
+      ) : null}
       <View style={styles.titleRow}>
         <Ionicons name={meta.icon} size={22} color={colors.brandAccent} />
         <View style={styles.flex}>
@@ -611,7 +666,7 @@ export default function TodoBoardScreen() {
           item.type === "group" ? (
             <GroupHeader group={item.group} closed={item.closed} onToggle={() => toggleGroup(item.group)} onArchive={item.group.archive ? handleArchiveDone : undefined} />
           ) : (
-            <TodoRow task={item.task} hidePerson={item.hidePerson} onOpen={(t) => setOpenId(t.id)} onStatus={handleStatus} />
+            <TodoRow task={item.task} hidePerson={item.hidePerson} onOpen={(t) => setOpenId(t.id)} onStatus={handleStatus} onMenu={setMenu} />
           )
         }
         ItemSeparatorComponent={() => <View style={styles.sep} />}
@@ -629,7 +684,8 @@ export default function TodoBoardScreen() {
 
   return (
     <AdminScreen
-      title="Yapılacaklar panosu"
+      app="gorevler"
+      title="Yapılacaklar"
       subtitle={headline}
       scroll={false}
       actions={[
@@ -648,25 +704,22 @@ export default function TodoBoardScreen() {
           : []),
         { icon: "options-outline", onPress: () => setFiltersOpen(true), accessibilityLabel: "Süzgeç ve gruplama", badge: kind ? ("dot" as const) : undefined },
       ]}
-      bottom={
-        <ChipGroup>
-          {listChips.map((chip) => (
-            <Chip
-              key={chip.key}
-              label={chip.label}
-              icon={chip.icon}
-              count={chip.count || undefined}
-              tone={chip.alert ? "danger" : undefined}
-              size="sm"
-              selected={current === chip.key}
-              onPress={() => chooseList(chip.key)}
-            />
-          ))}
-        </ChipGroup>
+      appTabs={
+        <ToolTabs
+          app="gorevler"
+          items={listChips.map((chip) => ({ key: chip.key, label: chip.label, icon: chip.icon, count: chip.count || undefined, alert: chip.alert }))}
+          value={current}
+          onChange={chooseList}
+        />
       }
       overlay={
         current === "team" ? null : (
-          <FAB icon="add" label={current === "assigned_by_me" && canAssign ? "Görev ata" : "Yeni iş"} extended onPress={() => openComposer({ audience: current === "assigned_by_me" ? "team" : "me" })} accessibilityLabel="Yeni iş" />
+          <ToolFab
+            app="gorevler"
+            label={current === "assigned_by_me" && canAssign ? "Görev ata" : "Yeni iş"}
+            onPress={() => openComposer({ audience: current === "assigned_by_me" ? "team" : "me" })}
+            accessibilityLabel={current === "assigned_by_me" && canAssign ? "Ekibe görev ata" : "Yeni iş ekle"}
+          />
         )
       }
     >
@@ -700,6 +753,8 @@ export default function TodoBoardScreen() {
           toast.show({ message: "Kart güncellendi.", tone: "success" });
         }}
       />
+
+      <ActionSheet visible={menu != null} onClose={() => setMenu(null)} title={menu?.title} actions={menuActions} />
 
       <ActionSheet visible={moving != null} onClose={() => setMoving(null)} title={moving ? `Taşı: ${moving.title}` : "Taşı"} actions={moveActions} />
 

@@ -28,6 +28,7 @@
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";
@@ -39,12 +40,14 @@ import {
   EmptyState,
   Input,
   ListRow,
+  Reveal,
   ScreenHeader,
   SectionHeader,
   Skeleton,
   SkeletonListRow,
   useHeaderScroll,
 } from "@/components/ui";
+import { queryKeys } from "@/lib/queryKeys";
 import { INTRO_SEEN_KEY } from "@/lib/storage";
 import type { MetaOption } from "@/lib/types";
 import { useScope } from "@/providers/ScopeProvider";
@@ -113,8 +116,24 @@ export default function CityIntroScreen() {
   const router = useRouter();
   const { scrollY, scrollProps } = useHeaderScroll();
 
+  const queryClient = useQueryClient();
+
   const [selectedId, setSelectedId] = useState<number | null>(scope.cityId);
   const [query, setQuery] = useState("");
+
+  /* Kapsam bu ekrandan SONRA yüklenebilir (ilk açılış: önerilen şehir sunucudan
+     gelir). Kullanıcı henüz seçim yapmadıysa öneri seçili gelsin — yoksa alt
+     düğme "Bir şehir seç" diye pasif kalıyor ve kullanıcı neden ilerleyemediğini
+     anlamıyordu. Kullanıcının kendi seçimi asla ezilmez. */
+  const scopeCityId = scope.cityId;
+  useEffect(() => {
+    if (scopeCityId != null) setSelectedId((current) => current ?? scopeCityId);
+  }, [scopeCityId]);
+
+  /** Şehir listesi alınamadıysa yeniden dene (bağlantı geri geldiğinde). */
+  const retryCities = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.cities() });
+  }, [queryClient]);
 
   /** Geri oku yalnız menüden gelindiğinde anlamlı; ilk açılışta yığın boştur. */
   const canGoBack = useMemo(() => router.canGoBack(), [router]);
@@ -197,12 +216,12 @@ export default function CityIntroScreen() {
   const listHeader = (
     <View style={styles.listHeader}>
       {/* Harita: illere dokunmak da seçim yapar, liste ile aynı durumu yazar. */}
-      <View style={styles.mapCard}>
+      <Reveal style={styles.mapCard} scaleFrom={0.97}>
         <TurkeyMap cities={cities} selectedId={selectedId} onSelect={select} />
         <Text style={styles.mapHint} {...textScale.dense}>
           Renkli illerde lig var — haritadan ya da listeden seç
         </Text>
-      </View>
+      </Reveal>
 
       <SectionHeader
         title="Şehirler"
@@ -249,7 +268,8 @@ export default function CityIntroScreen() {
               <EmptyState
                 icon="cloud-offline-outline"
                 title="Şehir listesi alınamadı"
-                body="Bağlantını kontrol edip ekranı yeniden açar mısın?"
+                body="Bağlantını kontrol edip yeniden dene."
+                action={{ label: "Yeniden dene", onPress: retryCities }}
                 variant="inline"
               />
             ) : (

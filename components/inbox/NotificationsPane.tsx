@@ -82,6 +82,7 @@ import {
   type PanelNotification,
   type PanelNotificationsResponse,
 } from "@/lib/api/panel";
+import { isReleaseRequest } from "@/lib/api/club/notifications";
 import { formatDateShort, formatDayHeading } from "@/lib/format";
 import { routeFromNotif } from "@/lib/notifications";
 import { queryKeys } from "@/lib/queryKeys";
@@ -392,7 +393,11 @@ export function useNotificationFeed() {
 
   const openNotif = useCallback(
     (notif: PanelNotification) => {
-      if (!notif.is_read) markRead(notif.id);
+      /* Transfer izni talebi AÇILINCA değil KARAR verilince kapanır: Kulübüm'deki
+         "izin isteniyor" işi okunmamış bildirimden türer; burada okundu
+         işaretlemek kararsız talebi iş listesinden düşürüyordu. Kararı
+         /transfer-izni ekranı verir ve bildirimi kendisi kapatır. */
+      if (!notif.is_read && !isReleaseRequest(notif)) markRead(notif.id);
 
       /**
        * Hedef, push bildirimiyle AYNI çözümleyiciden geçer: uygulama içi satır

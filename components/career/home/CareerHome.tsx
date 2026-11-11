@@ -2,18 +2,21 @@
  * KARİYERİM — Yönetim sekmesinin oyuncu bölümü (web PlayerTeamPanel `player`
  * kapsamının mobil ana sayfası).
  *
- * "HER ŞEY İKİ DOKUNUŞTA" DÜZENİ (yukarıdan aşağı):
+ * DÜZEN — ÖNCE İŞ (yukarıdan aşağı):
  *   1. KAHRAMAN — fotoğraf, ad, mevki/takım, Elit Kart OVR, sezonun dört
  *      sayısı, Elit Seviye çubuğu, son 5 maç formu; "Profilim" · "Kartımı paylaş".
  *   2. ŞİMDİ İLGİLEN — yatay eylem rayı: disiplin süresi, yanıt bekleyen teklif,
  *      kadro daveti, yoklama ("geliyor musun?"), biten sözleşme, değerlendirilecek
  *      maç, onay bekleyen değişiklik / talep. Dokununca işin yapılacağı yer.
  *   3. SIRADAKİ MAÇ — iki takım + geri sayım + kart İÇİNDE katılım yanıtı.
- *   4. HIZLI İŞLEMLER — renkli ikonlu, rozetli 2×4 karo ızgarası.
- *   5. MENÜ GRUPLARI — web panelinin oyuncu menüsünün birebir karşılığı
- *      (Genel · Maç · Kariyer · Bildirimler ve hesap): web'de yapılan her
- *      işlemin buradan bir kapısı var.
+ *   4. KISAYOLLAR — altı sık iş, DURUM satırı ve rozetle: Tekliflerim ·
+ *      Sözleşmelerim · İstatistik · Profilim · Maçlarım · Davetler.
+ *   5. TÜM ARAÇLAR — web oyuncu menüsünün kalanı, gruplu açık ızgara
+ *      (Kariyer · İletişim). Eski düzende aynı kapılar hem karo hem dört ayrı
+ *      menü listesinde İKİ KEZ duruyordu; sayfa yarı yarıya kısaldı.
  *   6. ÖZET — sezonum şeridi, son performansım, takımımın ligdeki durumu.
+ *   7. OYUNCU AYARLARI — bilgileri düzenle, bildirim tercihleri, profil
+ *      modları, hesap: oyuncu modunun ayarları TEK yerde, sayfanın sonunda.
  *
  * VERİ: sinyaller (`useClubSignals`) panel/me, maçlarım, teklif, davet ve
  * ceza sayaçlarını zaten taşır. Bu bileşen yalnız kendine özgü dört sorguyu
@@ -44,9 +47,12 @@ import {
 import type { AttentionItem, ClubSignals } from "@/components/club/useClubSignals";
 import { MatchReviewSheet } from "@/components/career/MatchReviewSheet";
 import { ShareProfileCard } from "@/components/career/ShareProfileCard";
-import { HubGrid, HubTile, SkeletonCard, type FormResult, type HubTone } from "@/components/ui";
+import { HomeSkeleton } from "@/components/club/home/HomeSkeleton";
+import { ShortcutGrid, ToolBoard, type BoardSection, type Shortcut } from "@/components/club/home/ToolBoard";
+import { Reveal, SkeletonCard, type FormResult } from "@/components/ui";
 import { getMyCareer } from "@/lib/api/career";
 import {
+  REQUEST_TYPE_LABELS,
   accountRequestList,
   getMyReview,
   getPlayerOverview,
@@ -275,37 +281,46 @@ export function CareerHome({ signals, go, onAttention }: CareerHomeProps) {
 
   /* ------------------------------- ÇİZİM ------------------------------- */
 
-  if (me.isLoading) {
-    return (
-      <View style={styles.loading}>
-        <SkeletonCard lines={4} />
-        <SkeletonCard lines={2} />
-        <SkeletonCard lines={3} />
-      </View>
-    );
-  }
+  if (me.isLoading) return <HomeSkeleton />;
 
   if (!player) {
+    /* Bekleyen sahiplenme / yeni profil talebi varsa DURUMU göster: aynı
+       talebi ikinci kez göndertmek yerine "onay bekliyor" de. */
+    const linkRequest = pendingRequests.find((item) => item.type === "player_claim" || item.type === "player_create") ?? null;
     return (
-      <PanelSection title="Oyuncu profili" style={styles.first}>
-        <PanelEmpty
-          icon="person-add-outline"
-          text={
-            me.isError
-              ? "Oyuncu bilgisi alınamadı. Aşağı çekerek yeniden dene."
-              : "Oyuncu profilin bağlı değil. Kaydını bul ve sahiplen ya da yeni profil aç."
-          }
-          action={
-            me.isError
-              ? { label: "Tekrar dene", onPress: () => void me.refetch() }
-              : { label: "Bağla", onPress: () => go("/oyuncum/bagla") }
-          }
-        />
-        <PanelCard padded={false} style={styles.gap}>
-          <PanelRow icon="toggle" tone="neutral" title="Profil modları" hint="Oyuncu / takım başkanı alanını aç-kapat" onPress={() => go("/oyuncum/modlar")} />
-          <PanelRow icon="mail-unread" tone="win" title="Davet ve başvurular" hint="Takımlara başvur, gelen davetleri yanıtla" onPress={() => go("/davetler")} last />
-        </PanelCard>
-      </PanelSection>
+      <Reveal>
+        <PanelSection title="Oyuncu profili" style={styles.first}>
+          {me.isError ? (
+            <PanelEmpty
+              icon="cloud-offline-outline"
+              text="Oyuncu bilgisi alınamadı. Bağlantını kontrol edip yeniden dene."
+              action={{ label: "Tekrar dene", onPress: () => void me.refetch() }}
+            />
+          ) : linkRequest ? (
+            <PanelCard padded={false}>
+              <PanelRow
+                icon="hourglass"
+                tone="warn"
+                title={`${REQUEST_TYPE_LABELS[linkRequest.type] ?? "Talebin"} — onay bekliyor`}
+                hint="Lig yönetimi inceliyor; onaylanınca Kariyerim açılır"
+                onPress={() => go("/oyuncum/bagla")}
+                last
+              />
+            </PanelCard>
+          ) : (
+            <PanelEmpty
+              icon="person-add-outline"
+              text="Oyuncu profilin bağlı değil. Kaydını bul ve sahiplen ya da yeni profil aç."
+              action={{ label: "Bağla", onPress: () => go("/oyuncum/bagla") }}
+            />
+          )}
+          <PanelCard padded={false} style={styles.gap}>
+            <PanelRow icon="mail-unread" tone="win" title="Davet ve başvurular" hint="Takımlara başvur, gelen davetleri yanıtla" onPress={() => go("/davetler")} />
+            <PanelRow icon="toggle" tone="neutral" title="Profil modları" hint="Oyuncu / takım başkanı alanını aç-kapat" onPress={() => go("/oyuncum/modlar")} />
+            <PanelRow icon="person-circle" tone="neutral" title="Hesabım" hint="Üyelik bilgileri ve güvenlik" onPress={() => go("/hesabim")} last />
+          </PanelCard>
+        </PanelSection>
+      </Reveal>
     );
   }
 
@@ -335,15 +350,87 @@ export function CareerHome({ signals, go, onAttention }: CareerHomeProps) {
   const upcomingCount = myMatches.data?.upcoming?.length ?? 0;
   const level = career.data?.level ?? null;
 
-  const tiles: { key: string; icon: Parameters<typeof HubTile>[0]["icon"]; title: string; subtitle: string; tone: HubTone; badge?: number; href: string }[] = [
-    { key: "maclar", icon: "football", title: "Maçlarım", subtitle: upcomingCount ? `${upcomingCount} yaklaşan maç` : "Geçmiş ve gelecek", tone: "brand", href: "/oyuncum?tab=maclarim" },
-    { key: "istatistik", icon: "stats-chart", title: "İstatistiklerim", subtitle: "Lig ve sezon süzgeçli", tone: "accent", href: "/oyuncum?tab=istatistik" },
-    { key: "teklif", icon: "swap-horizontal", title: "Transfer teklifleri", subtitle: counts.offersAwaiting ? "Yanıtını bekliyor" : "Gelen teklifler", tone: "brand", badge: counts.offersAwaiting, href: "/tekliflerim" },
-    { key: "davet", icon: "mail-unread", title: "Davet ve başvuru", subtitle: counts.invitesReceived ? "Kadro daveti var" : "Takımlara başvur", tone: "win", badge: counts.invitesReceived, href: "/davetler" },
-    { key: "sozlesme", icon: "document-text", title: "Sözleşmelerim", subtitle: contractEnd ? `Bitiş ${formatDateShort(contractEnd)}` : "Aktif ve geçmiş", tone: "info", href: "/sozlesmelerim" },
-    { key: "ceza", icon: "shield-checkmark", title: "Cezalar ve savunma", subtitle: counts.penaltiesOpen ? "Süre işliyor" : "Disiplin dosyaların", tone: counts.penaltiesOpen ? "danger" : "warn", badge: counts.penaltiesOpen, href: "/cezalarim" },
-    { key: "kariyer", icon: "trophy", title: "Elit Kariyer", subtitle: level ? `Seviye ${level.level}${card ? ` · OVR ${card.ovr}` : ""}` : "Kart, rozet, görev", tone: "warn", href: "/kariyer?tab=kariyer" },
-    { key: "ara", icon: "search", title: "Futbolcu veritabanı", subtitle: "Bölgendeki oyuncuları ara", tone: "neutral", href: "/takimim/oyuncu-ara" },
+  const playedCount = Number(stats?.matches ?? 0);
+  const shortcuts: Shortcut[] = [
+    {
+      key: "teklif",
+      icon: "swap-horizontal",
+      label: "Tekliflerim",
+      status: counts.offersAwaiting ? "Yanıtını bekliyor" : "Gelen teklifler",
+      href: counts.offersAwaiting ? "/tekliflerim?durum=bekleyen" : "/tekliflerim",
+      tone: "brand",
+      count: counts.offersAwaiting || undefined,
+      primary: counts.offersAwaiting > 0,
+    },
+    {
+      key: "sozlesme",
+      icon: "document-text",
+      label: "Sözleşmelerim",
+      status: contractEnd ? `Bitiş ${formatDateShort(contractEnd)}` : "Aktif ve geçmiş",
+      href: "/sozlesmelerim",
+      tone: "info",
+    },
+    {
+      key: "istatistik",
+      icon: "stats-chart",
+      label: "İstatistik",
+      status: playedCount ? `${playedCount} maç · ${Number(stats?.goals ?? 0)} gol` : "Lig ve sezon süzgeçli",
+      href: "/oyuncum?tab=istatistik",
+      tone: "accent",
+    },
+    {
+      key: "profil",
+      icon: "person",
+      label: "Profilim",
+      status: pendingChanges.length ? "Değişiklik onayda" : "Bilgiler ve talepler",
+      href: "/oyuncum/profil",
+      tone: "brand",
+      count: pendingChanges.length + pendingRequests.length || undefined,
+    },
+    {
+      key: "maclar",
+      icon: "football",
+      label: "Maçlarım",
+      status: upcomingCount ? `${upcomingCount} yaklaşan maç` : "Geçmiş ve gelecek",
+      href: "/oyuncum?tab=maclarim",
+      tone: "live",
+    },
+    {
+      key: "davet",
+      icon: "mail-unread",
+      label: "Davetler",
+      status: counts.invitesReceived ? "Kadro daveti var" : "Takımlara başvur",
+      href: "/davetler",
+      tone: "win",
+      count: counts.invitesReceived || undefined,
+    },
+  ];
+
+  const sections: BoardSection[] = [
+    {
+      key: "kariyer",
+      title: "Kariyer",
+      tools: [
+        { key: "ceza", icon: "shield-checkmark", label: "Ceza ve savunma", href: "/cezalarim", tone: "danger", count: counts.penaltiesOpen || undefined, urgent: true },
+        { key: "sponsor", icon: "ribbon", label: "Sponsorluk", href: "/oyuncum/sponsorlar", tone: "warn" },
+        { key: "kariyer", icon: "trophy", label: level ? `Elit Kariyer · Sv ${level.level}` : "Elit Kariyer", href: "/kariyer?tab=kariyer", tone: "warn" },
+        { key: "ozet", icon: "sparkles", label: "Sezon özetim", href: "/sezon-ozeti", tone: "brand" },
+        { key: "gecmis", icon: "time", label: "Geçmiş maçlar", href: "/oyuncum?tab=maclarim&durum=oynanan", tone: "neutral" },
+        { key: "ara", icon: "search", label: "Futbolcu ara", href: "/takimim/oyuncu-ara", tone: "info" },
+        { key: "takim", icon: "shield", label: "Takımım", href: playerTeam ? `/takim/${playerTeam.id}` : "/davetler", tone: "brand" },
+        { key: "acik-profil", icon: "open-outline", label: "Açık profilim", href: `/oyuncu/${player.id}`, tone: "neutral" },
+      ],
+    },
+    {
+      key: "iletisim",
+      title: "İletişim",
+      tools: [
+        { key: "bildirim", icon: "notifications", label: "Bildirimler", href: "/bildirimler", tone: "brand" },
+        { key: "mesaj", icon: "chatbubbles", label: "Mesajlar", href: "/mesajlar", tone: "info" },
+        { key: "b-transfer", icon: "swap-horizontal", label: "Transfer bildirimi", href: "/bildirimler?filtre=transfer", tone: "accent" },
+        { key: "b-mac", icon: "football", label: "Maç bildirimi", href: "/bildirimler?filtre=mac", tone: "live" },
+      ],
+    },
   ];
 
   const matches = Number(stats?.matches ?? 0);
@@ -365,7 +452,7 @@ export function CareerHome({ signals, go, onAttention }: CareerHomeProps) {
   return (
     <>
       {/* 1 — KAHRAMAN */}
-      <View style={styles.hero}>
+      <Reveal index={0} style={styles.hero}>
         <CareerHero
           name={name}
           image={mediaUrl(player.player_img)}
@@ -382,141 +469,122 @@ export function CareerHome({ signals, go, onAttention }: CareerHomeProps) {
           onOpenCareer={() => go("/kariyer?tab=kariyer")}
           onShare={() => setShareOpen(true)}
         />
-      </View>
+      </Reveal>
 
       {/* 2 — ŞİMDİ İLGİLEN */}
-      <PanelSection
-        title="Şimdi ilgilen"
-        meta={actions.length ? `${actions.length} iş` : undefined}
-      >
-        <ActionRail items={actions} />
-      </PanelSection>
+      <Reveal index={1}>
+        <PanelSection title="Şimdi ilgilen" meta={actions.length ? `${actions.length} iş` : undefined}>
+          <ActionRail items={actions} />
+        </PanelSection>
+      </Reveal>
 
       {/* 3 — SIRADAKİ MAÇ */}
-      <PanelSection
-        title="Sıradaki maç"
-        action={{ label: "Maçlarım", onPress: () => go("/oyuncum?tab=maclarim") }}
-      >
-        {myMatches.isLoading ? (
-          <SkeletonCard lines={2} />
-        ) : nextMatch ? (
-          <NextMatchPanel
-            match={nextMatch}
-            teamName={playerTeam?.team_name ?? null}
-            teamLogo={mediaUrl(playerTeam?.logo ?? null)}
-            onOpen={() => go(`/mac/${nextMatch.id}`)}
-          />
-        ) : (
-          <PanelEmpty
-            icon="calendar-outline"
-            text={myMatches.isError ? "Maç bilgisi alınamadı." : "Takımına maç yazılınca burada görünür."}
-            action={playerTeam ? undefined : { label: "Takım bul", onPress: () => go("/davetler") }}
-          />
-        )}
-      </PanelSection>
-
-      {/* 4 — HIZLI İŞLEMLER */}
-      <PanelSection title="Hızlı işlemler">
-        <HubGrid inset="flush">
-          {tiles.map((tile) => (
-            <HubTile
-              key={tile.key}
-              icon={tile.icon}
-              title={tile.title}
-              subtitle={tile.subtitle}
-              tone={tile.tone}
-              badge={tile.badge}
-              onPress={() => go(tile.href)}
+      <Reveal index={2}>
+        <PanelSection title="Sıradaki maç" action={{ label: "Maçlarım", onPress: () => go("/oyuncum?tab=maclarim") }}>
+          {myMatches.isLoading ? (
+            <SkeletonCard lines={2} />
+          ) : nextMatch ? (
+            <NextMatchPanel
+              match={nextMatch}
+              teamName={playerTeam?.team_name ?? null}
+              teamLogo={mediaUrl(playerTeam?.logo ?? null)}
+              onOpen={() => go(`/mac/${nextMatch.id}`)}
             />
-          ))}
-        </HubGrid>
-      </PanelSection>
-
-      {/* 5 — ÖZET */}
-      <PanelSection
-        title="Sezonum"
-        meta={stats?.season ?? undefined}
-        action={{ label: "Ayrıntı", onPress: () => go("/oyuncum?tab=istatistik") }}
-      >
-        <StatStrip items={seasonItems} />
-      </PanelSection>
-
-      {recent.length ? (
-        <PanelSection
-          title="Son performansım"
-          action={{ label: "Tümü", onPress: () => go("/oyuncum?tab=maclarim&durum=oynanan") }}
-         
-        >
-          <RecentForm rows={recent} onOpen={(id) => go(`/mac/${id}`)} />
-        </PanelSection>
-      ) : null}
-
-      {playerTeam ? (
-        <PanelSection
-          title="Takımım"
-          meta={ov?.season?.name ?? undefined}
-          action={{ label: "Takım sayfası", onPress: () => go(`/takim/${playerTeam.id}`) }}
-        >
-          <PanelCard padded={false}>
-            <PanelRow
-              icon="shield"
-              tone="brand"
-              title={playerTeam.team_name}
-              hint={
-                standing
-                  ? `${standing.played} maç · ${standing.wins}G ${standing.draws}B ${standing.losses}M · averaj ${standing.goal_diff > 0 ? "+" : ""}${standing.goal_diff}`
-                  : "Puan durumu kaydı yok"
+          ) : (
+            <PanelEmpty
+              icon="calendar-outline"
+              text={
+                myMatches.isError
+                  ? "Maç bilgisi alınamadı."
+                  : playerTeam
+                    ? "Takımına maç yazılınca burada görünür."
+                    : "Bir takımın yok. Takımlara başvur ya da gelen davetleri yanıtla."
               }
-              value={standing?.position ? `${standing.position}. · ${standing.points} P` : undefined}
-              onPress={() => go(`/takim/${playerTeam.id}`)}
-              last={!teamForm}
+              action={
+                myMatches.isError
+                  ? { label: "Tekrar dene", onPress: () => void myMatches.refetch() }
+                  : playerTeam
+                    ? undefined
+                    : { label: "Takım bul", onPress: () => go("/davetler") }
+              }
             />
-            {teamForm ? (
-              <PanelRow icon="pulse" tone="info" title="Takımın son maçları" value={teamForm.split("").map((r) => (r === "W" ? "G" : r === "L" ? "M" : "B")).join(" ")} last />
-            ) : null}
+          )}
+        </PanelSection>
+      </Reveal>
+
+      {/* 4 — KISAYOLLAR */}
+      <Reveal index={3}>
+        <PanelSection title="Kısayollar">
+          <ShortcutGrid items={shortcuts} go={go} />
+        </PanelSection>
+      </Reveal>
+
+      {/* 5 — TÜM ARAÇLAR */}
+      <Reveal index={4}>
+        <PanelSection title="Tüm araçlar">
+          <ToolBoard sections={sections} go={go} />
+        </PanelSection>
+      </Reveal>
+
+      {/* 6 — ÖZET */}
+      <Reveal index={5}>
+        <PanelSection
+          title="Sezonum"
+          meta={stats?.season ?? undefined}
+          action={{ label: "Ayrıntı", onPress: () => go("/oyuncum?tab=istatistik") }}
+        >
+          <StatStrip items={seasonItems} />
+        </PanelSection>
+
+        {recent.length ? (
+          <PanelSection title="Son performansım" action={{ label: "Tümü", onPress: () => go("/oyuncum?tab=maclarim&durum=oynanan") }}>
+            <RecentForm rows={recent} onOpen={(id) => go(`/mac/${id}`)} />
+          </PanelSection>
+        ) : null}
+
+        {playerTeam ? (
+          <PanelSection
+            title="Takımım"
+            meta={ov?.season?.name ?? undefined}
+            action={{ label: "Takım sayfası", onPress: () => go(`/takim/${playerTeam.id}`) }}
+          >
+            <PanelCard padded={false}>
+              <PanelRow
+                icon="shield"
+                tone="brand"
+                title={playerTeam.team_name}
+                hint={
+                  standing
+                    ? `${standing.played} maç · ${standing.wins}G ${standing.draws}B ${standing.losses}M · averaj ${standing.goal_diff > 0 ? "+" : ""}${standing.goal_diff}`
+                    : "Puan durumu kaydı yok"
+                }
+                value={standing?.position ? `${standing.position}. · ${standing.points} P` : undefined}
+                onPress={() => go(`/takim/${playerTeam.id}`)}
+                last={!teamForm}
+              />
+              {teamForm ? (
+                <PanelRow icon="pulse" tone="info" title="Takımın son maçları" value={teamForm.split("").map((r) => (r === "W" ? "G" : r === "L" ? "M" : "B")).join(" ")} last />
+              ) : null}
+            </PanelCard>
+          </PanelSection>
+        ) : null}
+
+        {/* 7 — OYUNCU AYARLARI */}
+        <PanelSection title="Oyuncu ayarları">
+          <PanelCard padded={false}>
+            <PanelRow icon="create" tone="info" title="Bilgilerimi düzenle" hint="Fotoğraf, mevki, iletişim — onayla yayınlanır" onPress={() => go("/oyuncum/duzenle")} />
+            <PanelRow
+              icon="notifications"
+              tone="brand"
+              title="Bildirim tercihleri"
+              hint="Maç, teklif, disiplin — hangisi telefonuna gelsin"
+              onPress={() => go("/bildirim-tercihleri")}
+            />
+            <PanelRow icon="toggle" tone="neutral" title="Profil modları" hint="Oyuncu / takım başkanı alanını aç-kapat" onPress={() => go("/oyuncum/modlar")} />
+            <PanelRow icon="person-circle" tone="neutral" title="Hesabım" hint="Üyelik bilgileri ve güvenlik" onPress={() => go("/hesabim")} last />
           </PanelCard>
         </PanelSection>
-      ) : null}
-
-      {/* 6 — MENÜ GRUPLARI (web oyuncu menüsü) */}
-      <PanelSection title="Genel">
-        <PanelCard padded={false}>
-          <PanelRow icon="person" title="Oyuncu profilim" hint="Kişisel bilgiler · değişiklikler onayla yayınlanır" count={pendingChanges.length} onPress={() => go("/oyuncum/profil")} />
-          <PanelRow icon="create" tone="info" title="Bilgilerimi düzenle" hint="Fotoğraf, mevki, iletişim" onPress={() => go("/oyuncum/duzenle")} />
-          <PanelRow icon="stats-chart" tone="accent" title="Detaylı istatistikler" hint="Tüm kariyer · lig ve sezon süzgeci" onPress={() => go("/oyuncum?tab=istatistik")} last />
-        </PanelCard>
-      </PanelSection>
-
-      <PanelSection title="Maç">
-        <PanelCard padded={false}>
-          <PanelRow icon="calendar" tone="brand" title="Gelecek maçlarım" hint="Katılım yanıtı · kadro durumu" value={upcomingCount ? String(upcomingCount) : undefined} onPress={() => go("/oyuncum?tab=maclarim&durum=yaklasan")} />
-          <PanelRow icon="time" tone="neutral" title="Geçmiş maçlarım" hint="Maç detayı, performansım ve değerlendirme" onPress={() => go("/oyuncum?tab=maclarim&durum=oynanan")} last />
-        </PanelCard>
-      </PanelSection>
-
-      <PanelSection title="Kariyer">
-        <PanelCard padded={false}>
-          <PanelRow icon="megaphone" tone="warn" title="Sponsorluklarım" hint="Profil sayfandaki sponsor alanları" onPress={() => go("/oyuncum/sponsorlar")} />
-          <PanelRow icon="mail-unread" tone="win" title="Davet ve başvurular" hint="Takımlara başvur · davetleri yanıtla" count={counts.invitesReceived} onPress={() => go("/davetler")} />
-          <PanelRow icon="swap-horizontal" tone="brand" title="Transfer tekliflerim" hint="Kabul et, reddet ya da revizyon iste" count={counts.offersAwaiting} onPress={() => go("/tekliflerim")} />
-          <PanelRow icon="document-text" tone="info" title="Sözleşmelerim" hint="Aktif ve geçmiş sözleşmeler" onPress={() => go("/sozlesmelerim")} />
-          <PanelRow icon="shield-checkmark" tone="danger" title="Cezalarım ve savunma" hint="Savunma ve itiraz hakkın" count={counts.penaltiesOpen} onPress={() => go("/cezalarim")} />
-          <PanelRow icon="search" tone="neutral" title="Futbolcu veritabanı" hint="Bölgendeki tüm oyuncular" onPress={() => go("/takimim/oyuncu-ara")} />
-          <PanelRow icon="trophy" tone="warn" title="Elit Kariyer" hint="Elit Kart, rozetler, kariyer görevleri" onPress={() => go("/kariyer?tab=kariyer")} />
-          <PanelRow icon="sparkles" tone="brand" title="Sezon özetim" hint="Sezonun hikâyesi, paylaşılabilir" onPress={() => go("/sezon-ozeti")} last />
-        </PanelCard>
-      </PanelSection>
-
-      <PanelSection title="Bildirimler ve hesap">
-        <PanelCard padded={false}>
-          <PanelRow icon="swap-horizontal" tone="brand" title="Transfer bildirimleri" hint="Teklif, sözleşme, davet, başvuru" onPress={() => go("/bildirimler?filtre=transfer")} />
-          <PanelRow icon="alert-circle" tone="danger" title="Disiplin bildirimleri" hint="Dosya, ceza ve savunma" onPress={() => go("/bildirimler?filtre=disiplin")} />
-          <PanelRow icon="football" tone="live" title="Maç bildirimleri" hint="Maç, kadro ve yoklama" onPress={() => go("/bildirimler?filtre=mac")} />
-          <PanelRow icon="chatbubbles" tone="info" title="Mesajlar" hint="Takımın, oyuncular ve lig yönetimi" onPress={() => go("/mesajlar")} />
-          <PanelRow icon="toggle" tone="neutral" title="Profil modları" hint="Oyuncu / takım başkanı alanı" onPress={() => go("/oyuncum/modlar")} />
-          <PanelRow icon="person-circle" tone="neutral" title="Hesabım" hint="Üyelik bilgileri ve güvenlik" onPress={() => go("/hesabim")} last />
-        </PanelCard>
-      </PanelSection>
+      </Reveal>
 
       <ShareProfileCard
         visible={shareOpen}
@@ -549,7 +617,6 @@ export function CareerHome({ signals, go, onAttention }: CareerHomeProps) {
 }
 
 const styles = StyleSheet.create({
-  loading: { gap: space.md, paddingTop: space.sm, paddingHorizontal: layout.screenPadding },
   hero: { paddingHorizontal: layout.screenPadding, paddingTop: space.xs },
   first: { marginTop: space.sm },
   gap: { marginTop: space.sm },

@@ -27,8 +27,12 @@ import {
   type ScreenHeaderAction,
 } from "@/components/ui";
 import { hasAnyPermission, hasRole } from "@/lib/admin/access";
+import type { ToolAppKey } from "@/lib/admin/toolApps";
+import { AdminTabRootContext } from "@/providers/AdminModeProvider";
 import { useAuth } from "@/providers/AuthProvider";
 import { colors, layout, space } from "@/theme";
+
+import { ToolAppHeader } from "./tools/ToolApp";
 
 export interface AdminScreenProps {
   title: string;
@@ -49,6 +53,14 @@ export interface AdminScreenProps {
   /** Kaydırılan alanın dışında, en üstte çizilen katman (FAB vb.). */
   overlay?: React.ReactNode;
   back?: boolean;
+  /**
+   * Araç kimliği (lib/admin/toolApps.ts). Verilirse ekran, ortak başlık
+   * yerine aracın KENDİ uygulama başlığıyla açılır: renkli simge pulu, ad,
+   * vurgu renginde eylemler. Verilmezse davranış değişmez.
+   */
+  app?: ToolAppKey;
+  /** Araç içi bölüm sekmeleri (ToolTabs) — yalnız `app` ile birlikte. */
+  appTabs?: React.ReactNode;
 }
 
 export function AdminScreen({
@@ -64,10 +76,15 @@ export function AdminScreen({
   refreshing,
   contentStyle,
   overlay,
-  back = true,
+  back: backProp = true,
+  app,
+  appTabs,
 }: AdminScreenProps) {
   const auth = useAuth();
   const router = useRouter();
+  /* Alt menüde SEKME olarak çizilen ekranda geri düğmesi yoktur. */
+  const tabRoot = React.useContext(AdminTabRootContext);
+  const back = backProp && !tabRoot;
   const { scrollY, scrollProps } = useHeaderScroll();
   const refresh = useRefresh(onRefresh ?? noop, { refreshing });
 
@@ -81,7 +98,7 @@ export function AdminScreen({
   if (!allowed) {
     return (
       <SafeAreaView style={styles.screen} edges={["top"]}>
-        <ScreenHeader title={title} back={back} />
+        {app ? <ToolAppHeader app={app} title={title} back={back} /> : <ScreenHeader title={title} back={back} />}
         <EmptyState
           icon="lock-closed-outline"
           title="Bu bölüme yetkin yok"
@@ -98,14 +115,18 @@ export function AdminScreen({
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      <ScreenHeader
-        title={title}
-        subtitle={subtitle}
-        back={back}
-        actions={actions}
-        bottom={bottom}
-        scrollY={scroll ? scrollY : undefined}
-      />
+      {app ? (
+        <ToolAppHeader app={app} title={title} subtitle={subtitle} back={back} actions={actions} tabs={appTabs} bottom={bottom} />
+      ) : (
+        <ScreenHeader
+          title={title}
+          subtitle={subtitle}
+          back={back}
+          actions={actions}
+          bottom={bottom}
+          scrollY={scroll ? scrollY : undefined}
+        />
+      )}
       {scroll ? (
         <ScrollView
           {...scrollProps}

@@ -21,6 +21,8 @@ import { useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { ActionSheet, AdminScreen, Panel, RecordCard, confirmAction, useAdminMutation, type SheetAction } from "@/components/admin";
+import { AccountingNav } from "@/components/admin/accounting/AccountingNav";
+import { ToolFab } from "@/components/admin/tools/ToolApp";
 import {
   AccessSheet,
   AccountSheet,
@@ -154,12 +156,14 @@ export default function AccountsScreen() {
 
   return (
     <AdminScreen
+      app="muhasebe"
+      appTabs={<AccountingNav current="hesaplar" />}
       title="Hesaplar ve Virman"
       subtitle="Kasa · banka · aktarma"
       onRefresh={refresh}
       refreshing={query.isRefetching}
       actions={canTransfer ? [{ icon: "swap-horizontal", accessibilityLabel: "Virman yap", onPress: () => setTransfer({}) }] : undefined}
-      overlay={canCreate ? <FAB icon="add" label="Hesap aç" extended onPress={() => setEditing("new")} accessibilityLabel="Hesap aç" /> : null}
+      overlay={canCreate ? <ToolFab app="muhasebe" label="Hesap aç" onPress={() => setEditing("new")} accessibilityLabel="Yeni hesap aç" /> : null}
     >
       {query.isLoading ? (
         <>

@@ -335,6 +335,32 @@ export interface AdminVenuesResponse {
 export const getAdminVenues = () =>
   get<AdminVenuesResponse>("/api/match-requests/admin/venues");
 
+/** Saha formu gövdesi (matchRequestService.validateVenueInput). Saatler "HH:MM". */
+export interface VenueInput {
+  name: string;
+  location?: string;
+  description?: string;
+  city_id?: number | null;
+  open_hour: string;
+  close_hour: string;
+  slot_minutes: number;
+  /** 1 = Pazartesi … 7 = Pazar */
+  active_days: number[];
+  status?: "active" | "passive";
+}
+
+/** POST /api/match-requests/admin/venues — yeni saha (venues.manage). */
+export const createVenue = (input: VenueInput) =>
+  post<{ message: string; item: AdminVenue }>("/api/match-requests/admin/venues", input);
+
+/** PUT /api/match-requests/admin/venues/:publicId — saha bilgisi / program / durum. */
+export const updateVenue = (publicId: string, input: Partial<VenueInput>) =>
+  put<{ message: string; item: AdminVenue }>(`/api/match-requests/admin/venues/${publicId}`, input);
+
+/** DELETE /api/match-requests/admin/venues/:publicId — saha, programı ve talepleri çöp kutusuna. */
+export const deleteVenue = (publicId: string) =>
+  del<{ message: string; deleted: boolean }>(`/api/match-requests/admin/venues/${publicId}`);
+
 /** GET /api/match-requests/admin/venues/:publicId/board?weekStart= */
 export const getAdminBoard = (publicId: string, weekStart?: string) =>
   get<AdminBoardResponse>(`/api/match-requests/admin/venues/${publicId}/board`, {
@@ -433,6 +459,13 @@ export interface AdminMatchQuery {
   /** Sunucu durum adı (mac_durumu); boşsa tüm durumlar. */
   status?: MacDurumu;
   limit?: number;
+  /** "YYYY-AA-GG" gün aralığı (sunucu sınırı birer gün genişletir; gün süzmesi istemcide). */
+  dateFrom?: string;
+  dateTo?: string;
+  /** Lig seçili değilken il kapsamı (city_id). */
+  cityId?: number;
+  /** Eski satırlarda city_id boş olabilir; il adı birlikte gönderilirse ikisi VEYA'lanır. */
+  cityName?: string;
 }
 
 /**
@@ -444,6 +477,10 @@ export const getAdminMatches = (query: AdminMatchQuery = {}) =>
     league_id: query.leagueId,
     season_id: query.seasonId,
     mac_durumu: query.status,
+    date_from: query.dateFrom,
+    date_to: query.dateTo,
+    city_id: query.cityId,
+    city: query.cityId ? query.cityName : undefined,
     limit: query.limit ?? 300,
     includeDraft: 1,
   });

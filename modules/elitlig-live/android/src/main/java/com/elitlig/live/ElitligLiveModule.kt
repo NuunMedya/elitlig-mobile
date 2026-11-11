@@ -1,9 +1,16 @@
 package com.elitlig.live
 
 import android.Manifest
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.Uri
+import android.os.BatteryManager
+import android.os.PowerManager
 import expo.modules.interfaces.permissions.PermissionsResponse
 import expo.modules.interfaces.permissions.PermissionsStatus
 import expo.modules.kotlin.Promise
@@ -125,6 +132,37 @@ class ElitligLiveModule : Module() {
       requireView().setMutedNow(muted)
     }.runOnQueue(Queues.MAIN)
 
+    // ---- Yakınlaştırma / fener / cihaz durumu (JS tarafı varlığını denetleyerek çağırır) ----
+
+    AsyncFunction("getCameraCapabilities") {
+      activeView?.cameraCapabilities()
+        ?: mapOf("minZoom" to 1.0, "maxZoom" to 1.0, "zoom" to 1.0, "torch" to false, "torchOn" to false)
+    }.runOnQueue(Queues.MAIN)
+
+    AsyncFunction("setZoom") { level: Double ->
+      try {
+        requireView().setZoomNow(level.toFloat()).toDouble()
+      } catch (e: CodedException) {
+        throw e
+      } catch (e: Exception) {
+        throw LiveException("ERR_CAMERA", e.message ?: "Yakınlaştırma uygulanamadı.", e)
+      }
+    }.runOnQueue(Queues.MAIN)
+
+    AsyncFunction("setTorch") { on: Boolean ->
+      try {
+        requireView().setTorchNow(on)
+      } catch (e: CodedException) {
+        throw e
+      } catch (e: Exception) {
+        throw LiveException("ERR_CAMERA", e.message ?: "Fener açılamadı.", e)
+      }
+    }.runOnQueue(Queues.MAIN)
+
+    AsyncFunction("getDeviceStatus") {
+      deviceStatus()
+    }
+
     // Görsel çözme arka planda; GL'e uygulama ana iş parçacığında.
     AsyncFunction("setOverlay") { uri: String?, frame: OverlayFrameRecord?, promise: Promise ->
       val view = activeView
@@ -228,6 +266,54 @@ class ElitligLiveModule : Module() {
     OnDestroy {
       activeView?.release()
     }
+  }
+
+  /** { batteryLevel 0..1 (-1 bilinmiyor), charging, lowPower, network: wifi|cellular|ethernet|none|unknown } */
+  private fun deviceStatus(): Map<String, Any> {
+    val ctx = appContext.reactContext
+    var level = -1.0
+    var charging = false
+    var lowPower = false
+    var network = "unknown"
+    if (ctx != null) {
+      try {
+        val intent = ctx.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        if (intent != null) {
+          val raw = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+          val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+          if (raw >= 0 && scale > 0) level = raw.toDouble() / scale.toDouble()
+          val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
+          charging = status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL
+        }
+      } catch (_: Exception) {
+      }
+      try {
+        val pm = ctx.getSystemService(Context.POWER_SERVICE) as? PowerManager
+        lowPower = pm?.isPowerSaveMode == true
+      } catch (_: Exception) {
+      }
+      try {
+        // ACCESS_NETWORK_STATE yoksa SecurityException → "unknown" kalır.
+        val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        val active = cm?.activeNetwork
+        val caps = if (cm != null && active != null) cm.getNetworkCapabilities(active) else null
+        network = when {
+          cm == null -> "unknown"
+          active == null || caps == null -> "none"
+          caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "wifi"
+          caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "cellular"
+          caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "ethernet"
+          else -> "unknown"
+        }
+      } catch (_: Exception) {
+      }
+    }
+    return mapOf(
+      "batteryLevel" to level,
+      "charging" to charging,
+      "lowPower" to lowPower,
+      "network" to network
+    )
   }
 
   private fun clipsDir(): File {

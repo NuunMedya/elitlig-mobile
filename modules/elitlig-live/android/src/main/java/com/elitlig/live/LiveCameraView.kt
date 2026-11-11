@@ -322,6 +322,59 @@ class LiveCameraView(context: Context, appContext: AppContext) :
   }
 
   // ---------------------------------------------------------------------------
+  // Yakınlaştırma / fener (kamera açıkken; kamera değişince sıfırlanır)
+
+  /** { minZoom, maxZoom, zoom, torch, torchOn } — kamera kapalıysa 1×, fener yok. */
+  fun cameraCapabilities(): Map<String, Any> {
+    var minZoom = 1f
+    var maxZoom = 1f
+    var zoom = 1f
+    var torch = false
+    var torchOn = false
+    if (!released && (camera.isOnPreview || camera.isStreaming)) {
+      try {
+        val range = camera.getZoomRange()
+        minZoom = range.lower.toFloat()
+        maxZoom = range.upper.toFloat()
+        zoom = camera.getZoom()
+        torch = camera.isLanternSupported()
+        torchOn = camera.isLanternEnabled()
+      } catch (e: Exception) {
+        Log.w(TAG, "cameraCapabilities failed", e)
+      }
+    }
+    if (maxZoom < minZoom) maxZoom = minZoom
+    return mapOf(
+      "minZoom" to minZoom.toDouble(),
+      "maxZoom" to maxZoom.toDouble(),
+      "zoom" to zoom.coerceIn(minZoom, maxZoom).toDouble(),
+      "torch" to torch,
+      "torchOn" to torchOn
+    )
+  }
+
+  /** İstenen düzeyi kameranın aralığına kırpıp uygular; uygulanan düzeyi döndürür. */
+  @Throws(Exception::class)
+  fun setZoomNow(level: Float): Float {
+    if (released || !(camera.isOnPreview || camera.isStreaming)) throw IllegalStateException("Kamera açık değil.")
+    val range = camera.getZoomRange()
+    val lower = range.lower.toFloat()
+    val upper = range.upper.toFloat()
+    val clamped = if (upper > lower) level.coerceIn(lower, upper) else lower
+    camera.setZoom(clamped)
+    return clamped
+  }
+
+  /** Feneri açar / kapatır; son durumu döndürür (desteklenmiyorsa false). */
+  @Throws(Exception::class)
+  fun setTorchNow(on: Boolean): Boolean {
+    if (released || !(camera.isOnPreview || camera.isStreaming)) throw IllegalStateException("Kamera açık değil.")
+    if (!camera.isLanternSupported()) return false
+    if (on) camera.enableLantern() else camera.disableLantern()
+    return camera.isLanternEnabled()
+  }
+
+  // ---------------------------------------------------------------------------
   // Overlay
 
   /** bitmap null → kaldır. frame: 0..1 normalize (sol-üst orijin). */

@@ -191,8 +191,10 @@ export default function PlayerCompareScreen() {
 
   /* Seçici listesi + "Bu kapsamda" kartı — ara ekranıyla aynı anahtar. */
   const rankingsQuery = useQuery({
-    queryKey: queryKeys.playerRankings(scopeKey, "mostValuable"),
-    queryFn: () => getPlayerRankings(scopeKey, "mostValuable"),
+    /* Lig sekmesiyle AYNI anahtar: uç her `sort` için aynı (≈1 MB) listeyi
+       döndürür; ayrı anahtar aynı veriyi ikinci kez indiriyordu. */
+    queryKey: queryKeys.playerRankings(scopeKey, "topScorers"),
+    queryFn: () => getPlayerRankings(scopeKey, "topScorers"),
     enabled: scope.ready,
     staleTime: 60_000,
   });

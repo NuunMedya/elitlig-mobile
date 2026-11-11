@@ -160,7 +160,7 @@ export default function ProjectDetailScreen() {
   if (!data) {
     const notFound = query.error instanceof ApiError && (query.error.status === 404 || query.error.status === 403);
     return (
-      <AdminScreen title="Proje" onRefresh={() => void query.refetch()} refreshing={query.isRefetching}>
+      <AdminScreen app="projeler" title="Proje" onRefresh={() => void query.refetch()} refreshing={query.isRefetching}>
         {query.isLoading || id <= 0 ? (
           id <= 0 ? (
             <EmptyState icon="alert-circle-outline" title="Proje açılamadı" body="Bağlantıdaki proje numarası geçersiz." />
@@ -239,6 +239,7 @@ function DetailBody({
 
   return (
     <AdminScreen
+      app="projeler"
       title={p.name}
       subtitle={subtitle}
       onRefresh={onRefresh}

@@ -19,6 +19,7 @@ import { useCallback, useMemo, useState } from "react";
 import { FlatList, RefreshControl, Share, StyleSheet, Text, View } from "react-native";
 
 import { ActionSheet, AdminScreen, confirmAction, useAdminMutation, type SheetAction } from "@/components/admin";
+import { ToolFab } from "@/components/admin/tools/ToolApp";
 import { NoteCard } from "@/components/admin/tools/NoteParts";
 import { NoteEditorSheet, draftFromNote, emptyDraft, type NoteDraft } from "@/components/admin/tools/NoteEditorSheet";
 import {
@@ -26,7 +27,6 @@ import {
   ChipGroup,
   EmptyState,
   ErrorState,
-  FAB,
   Input,
   SectionHeader,
   SegmentedControl,
@@ -216,6 +216,7 @@ export default function NotebookScreen() {
 
   return (
     <AdminScreen
+      app="not-defteri"
       title="Not defteri"
       scroll={false}
       actions={[{ icon: "share-outline", onPress: exportAll, accessibilityLabel: "Notları dışa aktar" }]}
@@ -236,7 +237,7 @@ export default function NotebookScreen() {
       }
       overlay={
         archived ? null : (
-          <FAB icon="add" label="Not" extended onPress={() => setEditor(emptyDraft())} accessibilityLabel="Yeni not" />
+          <ToolFab app="not-defteri" label="Not" onPress={() => setEditor(emptyDraft())} accessibilityLabel="Yeni not" />
         )
       }
     >

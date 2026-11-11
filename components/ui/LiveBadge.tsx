@@ -16,8 +16,9 @@
  * canlı işareti DAİREDİR ve yanında dakika yazar.
  */
 
-import { memo, useEffect, useState } from "react";
-import { AccessibilityInfo, StyleSheet, Text, View } from "react-native";
+import { memo } from "react";
+import { StyleSheet, Text, View } from "react-native";
+import { Ping } from "./Motion";
 import { colors, space, textScale, type } from "@/theme";
 
 export interface LiveBadgeProps {
@@ -38,31 +39,9 @@ export interface LiveBadgeProps {
   onDark?: boolean;
 }
 
-/**
- * Sistem "Hareketi azalt" ayarı.
- *
- * NOT: şartname bunu `hooks/useReduceMotion.ts` altında konumlandırıyor; hook
- * dosyası açılana kadar tek kopya burada durur ve animasyonlu bileşenler
- * (MatchRow skor flash'ı, ProgressRing, StatBar) buradan içe aktarır. Hook
- * dosyası eklendiğinde burası ona yönlendiren bir yeniden dışa aktarım olur.
- */
-export function useReduceMotion(): boolean {
-  const [on, setOn] = useState(false);
-
-  useEffect(() => {
-    let alive = true;
-    void AccessibilityInfo.isReduceMotionEnabled().then((value) => {
-      if (alive) setOn(value);
-    });
-    const sub = AccessibilityInfo.addEventListener("reduceMotionChanged", setOn);
-    return () => {
-      alive = false;
-      sub.remove();
-    };
-  }, []);
-
-  return on;
-}
+/* Sistem "Hareketi azalt" ayarı kendi dosyasında; eski içe aktarımlar kırılmasın
+   diye buradan da dışa aktarılır. */
+export { useReduceMotion } from "./useReduceMotion";
 
 /** Rozetin okunacak metni — ekran okuyucu "67 kesme işareti" demesin diye ayrı. */
 function speech(minute: number | null | undefined, addedTime: number | null | undefined, halftime?: boolean): string {
@@ -93,6 +72,11 @@ export const LiveBadge = memo(function LiveBadge({
       accessibilityLabel={speech(minute, addedTime, halftime)}
     >
       <View style={styles.dotBox}>
+        {/* Tek atımlık halka: dakika ilerleyince bir kez yayılır (sonsuz nabız
+            değil — bkz. dosya başı). Devre arasında oynamaz. */}
+        {halftime ? null : (
+          <Ping trigger={label} color={onDark ? colors.liveOnDark : colors.live} size={DOT} />
+        )}
         <View
           style={[
             styles.dot,

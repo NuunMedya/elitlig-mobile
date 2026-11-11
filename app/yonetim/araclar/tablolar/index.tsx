@@ -28,9 +28,10 @@ import {
   useAdminMutation,
   type BadgeSpec,
 } from "@/components/admin";
+import { ToolFab } from "@/components/admin/tools/ToolApp";
 import { ShareSheet } from "@/components/admin/sheets/ShareSheet";
 import { shareCsv } from "@/components/admin/sheets/shareFile";
-import { BottomSheet, FAB, Touchable, useToast } from "@/components/ui";
+import { BottomSheet, Touchable, useToast } from "@/components/ui";
 import { errorText } from "@/lib/admin/errors";
 import { formatDateTime } from "@/lib/admin/format";
 import {
@@ -194,10 +195,11 @@ export default function SheetsScreen() {
 
   return (
     <AdminScreen
+      app="tablolar"
       title="Tablolar"
       subtitle="Formüllü hesap tabloları"
       scroll={false}
-      overlay={<FAB icon="add" label="Yeni tablo" extended onPress={() => setPicker(true)} accessibilityLabel="Yeni tablo" />}
+      overlay={<ToolFab app="tablolar" label="Yeni tablo" onPress={() => setPicker(true)} accessibilityLabel="Yeni tablo" />}
     >
       <AdminList<Row>
         data={rows}

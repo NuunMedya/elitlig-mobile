@@ -4,16 +4,22 @@
  * Taraf → olay kodu → oyuncu (değişiklikte çıkan + giren) → dakika / devre.
  * Dakika maç saatinden önerilir, elle değiştirilebilir. Aynı sayfa mevcut bir
  * olayı düzenlemek için de açılır (PUT /api/maclar/:id/olaylar/:olayId).
+ *
+ * SAHA KENARI İÇİN: oyuncu açılır listeden değil, forma numarası büyük yazılı
+ * KAROLARDAN seçilir (48px+ dokunma hedefi, sahadakiler önce). Canlı akıştaki
+ * hızlı düğmeler sayfayı olay kodu seçili açar; gol üç dokunuşta girilir
+ * (Gol → oyuncu → Kaydet).
  */
 
+import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { useEffect, useMemo, useState } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
 
-import { SegmentField, SelectField, type Option } from "@/components/admin";
-import { BottomSheet, Button, Chip, ChipGroup, Input, Stepper } from "@/components/ui";
+import { SegmentField } from "@/components/admin";
+import { BottomSheet, Button, Chip, ChipGroup, Input, Stepper, Touchable } from "@/components/ui";
 import { errorText } from "@/lib/admin/errors";
 import { EVENT_GROUPS, type EventBody, type MatchEvent } from "@/lib/api/admin/matches";
-import { colors, space, textScale, type } from "@/theme";
+import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
 import type { Side, SquadPlayer } from "./model";
 import { SidePicker } from "./parts";
@@ -62,25 +68,18 @@ export function EventSheet({
   const squad = squads[draft.side] ?? [];
   const sub = draft.code === "SUBSTITUTION";
 
-  const toOption = (p: SquadPlayer): Option<string> => ({
-    value: p.id,
-    label: `${p.number ? `#${p.number} ` : ""}${p.name}`,
-    hint: p.role === "starter" ? "İlk 11" : p.role === "bench" ? "Yedek" : null,
-  });
-
-  const playerOptions = useMemo(() => {
-    if (!sub) return squad.map(toOption);
-    // Çıkan oyuncu: sahadakiler önce.
+  /** Çıkan / olayın oyuncusu: değişiklikte sahadakiler önce. */
+  const playerList = useMemo(() => {
     const pitch = onPitch[draft.side];
-    return [...squad.filter((p) => pitch.has(p.id)), ...squad.filter((p) => !pitch.has(p.id))].map(toOption);
+    return [...squad.filter((p) => pitch.has(p.id)), ...squad.filter((p) => !pitch.has(p.id))];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [squad, sub, onPitch, draft.side]);
+  }, [squad, onPitch, draft.side]);
 
-  const inOptions = useMemo(() => {
+  /** Giren oyuncu: henüz oyuna girmemiş yedekler önce, sahadakiler hiç. */
+  const inList = useMemo(() => {
     const pitch = onPitch[draft.side];
-    // Giren oyuncu: henüz oyuna girmemiş yedekler önce, sahadakiler hiç.
     const free = squad.filter((p) => p.id !== draft.playerId && !pitch.has(p.id));
-    return [...free.filter((p) => p.role === "bench"), ...free.filter((p) => p.role !== "bench")].map(toOption);
+    return [...free.filter((p) => p.role === "bench"), ...free.filter((p) => p.role !== "bench")];
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [squad, onPitch, draft.side, draft.playerId]);
 
@@ -141,21 +140,20 @@ export function EventSheet({
           </Text>
         ) : null}
 
-        <SelectField<string>
+        <PlayerGrid
           label={sub ? "Oyundan çıkan" : "Oyuncu"}
+          players={playerList}
           value={draft.playerId}
-          options={playerOptions}
-          icon="person-outline"
-          placeholder="Oyuncu seç"
-          onChange={(v) => setDraft((d) => ({ ...d, playerId: v }))}
+          pitch={onPitch[draft.side]}
+          onChange={(v) => setDraft((d) => ({ ...d, playerId: v, inPlayerId: d.inPlayerId === v ? null : d.inPlayerId }))}
         />
         {sub ? (
-          <SelectField<string>
+          <PlayerGrid
             label="Oyuna giren"
+            players={inList}
             value={draft.inPlayerId}
-            options={inOptions}
-            icon="swap-vertical-outline"
-            placeholder="Yedekten seç"
+            pitch={onPitch[draft.side]}
+            emptyText="Oyuna girebilecek yedek kalmadı."
             onChange={(v) => setDraft((d) => ({ ...d, inPlayerId: v }))}
           />
         ) : null}
@@ -182,6 +180,69 @@ export function EventSheet({
   );
 }
 
+/** Oyuncu karoları: forma numarası büyük, ad altında; iki sütun, 52px. */
+function PlayerGrid({
+  label,
+  players,
+  value,
+  pitch,
+  emptyText,
+  onChange,
+}: {
+  label: string;
+  players: SquadPlayer[];
+  value: string | null;
+  pitch: Set<string>;
+  emptyText?: string;
+  onChange: (id: string) => void;
+}) {
+  return (
+    <View style={styles.group} accessibilityRole="radiogroup" accessibilityLabel={label}>
+      <Text style={styles.groupTitle} {...textScale.dense}>
+        {label}
+      </Text>
+      {players.length === 0 ? (
+        emptyText ? (
+          <Text style={styles.warn} {...textScale.long}>
+            {emptyText}
+          </Text>
+        ) : null
+      ) : (
+        <View style={styles.playerGrid}>
+          {players.map((p) => {
+            const on = value === p.id;
+            return (
+              <Touchable
+                key={p.id}
+                onPress={() => onChange(p.id)}
+                haptic="selection"
+                style={[styles.player, on ? styles.playerOn : null]}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: on }}
+                accessibilityLabel={`${p.number ? `${p.number} numara ` : ""}${p.name}${pitch.has(p.id) ? ", sahada" : ""}`}
+              >
+                <Text style={[styles.playerNo, on ? styles.playerTextOn : null]} {...textScale.badge}>
+                  {p.number || "–"}
+                </Text>
+                <View style={styles.playerTexts}>
+                  <Text style={[styles.playerName, on ? styles.playerTextOn : null]} numberOfLines={1} {...textScale.dense}>
+                    {p.name}
+                  </Text>
+                  <Text style={styles.playerMeta} numberOfLines={1} {...textScale.dense}>
+                    {pitch.has(p.id) ? "Sahada" : p.role === "bench" ? "Yedek" : p.role === "starter" ? "Oyundan çıktı" : "Kadro dışı"}
+                    {p.captain ? " · Kaptan" : ""}
+                  </Text>
+                </View>
+                {on ? <Ionicons name="checkmark-circle" size={18} color={colors.brandAccent} /> : null}
+              </Touchable>
+            );
+          })}
+        </View>
+      )}
+    </View>
+  );
+}
+
 /** Taslaktan sunucu gövdesi. */
 export function draftToBody(draft: EventDraft, teamId: number | null, userId?: number | null): EventBody {
   const sub = draft.code === "SUBSTITUTION";
@@ -205,4 +266,25 @@ const styles = StyleSheet.create({
   inline: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   label: { ...type.label, color: colors.textSecondary },
   warn: { ...type.bodySm, color: colors.warn },
+  playerGrid: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
+  player: {
+    flexGrow: 1,
+    flexBasis: "46%",
+    minHeight: 52,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    borderRadius: radius.md,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    backgroundColor: colors.surface2,
+  },
+  playerOn: { backgroundColor: colors.brandDim, borderColor: colors.brandBorder },
+  playerNo: { ...type.tableNumStrong, color: colors.textPrimary, minWidth: 24, textAlign: "center" },
+  playerTexts: { flex: 1 },
+  playerName: { ...type.label, color: colors.textPrimary },
+  playerMeta: { ...type.caption, color: colors.textTertiary },
+  playerTextOn: { color: colors.brandAccent },
 });

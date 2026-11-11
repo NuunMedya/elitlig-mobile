@@ -30,6 +30,7 @@ export function PendingChangeNotice({
     onSuccess: (data) => {
       toast.show({ message: data.message || "Talebin geri çekildi.", tone: "success" });
       void queryClient.invalidateQueries({ queryKey: ["panel", "me"] });
+      void queryClient.invalidateQueries({ queryKey: ["takim", "dashboard"] });
     },
     onError: (error) =>
       toast.show({

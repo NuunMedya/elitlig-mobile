@@ -28,6 +28,7 @@ import { useEffect, useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { ActionSheet, AdminScreen, DateField, Panel, SelectField, confirmAction } from "@/components/admin";
+import { AccountingNav } from "@/components/admin/accounting/AccountingNav";
 import { GeneralEntrySheet, StatementSheet } from "@/components/admin/accounting/match/MatchSheets";
 import { MatchSettings, SeasonPicker } from "@/components/admin/accounting/match/MatchSettings";
 import { MatchSheet } from "@/components/admin/accounting/match/MatchSheet";
@@ -346,6 +347,8 @@ export default function MatchAccountingScreen() {
 
   return (
     <AdminScreen
+      app="muhasebe"
+      appTabs={<AccountingNav current="mac" />}
       title="Maç Muhasebesi"
       subtitle={cityName ? `İl defteri · ${cityName}` : nationwide ? "Tüm iller (ortak defter)" : "İl defteri"}
       permission={ACCOUNTING_PERMISSIONS}
