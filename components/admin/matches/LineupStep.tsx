@@ -6,18 +6,28 @@
  * forma no, mevki ve kaptan. Kadroda olmayan oyuncu adla aranıp eklenir; hiç
  * kaydı yoksa maçın takımına bağlı yeni oyuncu oluşturulur.
  *
+ * HIZLI GİRİŞ: rol satırda tek dokunuş; seçilen oyuncunun altında mevki
+ * (KAL / DEF / ORT / FOR) ve kaptan düğmeleri açılır (web PlayerRow). "Son
+ * maçın kadrosu" takımın önceki maçındaki kadroyu getirir; "Saha önizleme"
+ * İlk 11'i mevki hatlarına dizer ve dizilişi (4-4-2) gösterir. Oyuncu
+ * ayrıntısında forma no ve fotoğraf güncellenir (PATCH /oyuncular/updateImage).
+ *
  * KAYIT: sunucu kadroyu iki takım birlikte yazar (POST /api/maclar/:id/kadro);
  * rolü olmayan oyuncular kadroya girmez. Kalıcı takımı başka olan oyuncu bu
- * maç için misafir sayılır (isGuest).
+ * maç için misafir sayılır (isGuest). Sunucu kadroyu silip yeniden yazdığı
+ * için kayıtlı oyuncu puanları gövdede geri gönderilir (yoksa silinirdi).
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import * as ImagePicker from "expo-image-picker";
 import { Alert, FlatList, StyleSheet, Text, View } from "react-native";
 
 import { ChipsField, ToggleField, confirmAction, useAdminMutation } from "@/components/admin";
 import {
+  Avatar,
+  Badge,
   BottomSheet,
   Button,
   Chip,
@@ -32,6 +42,7 @@ import { hasAnyPermission } from "@/lib/admin/access";
 import { errorText } from "@/lib/admin/errors";
 import {
   createRosterPlayer,
+  findLastLineup,
   getLineup,
   getTeamRoster,
   rosterPlayerId,
@@ -41,11 +52,12 @@ import {
   type LineupPayloadRow,
   type RosterPlayer,
 } from "@/lib/api/admin/matches";
+import { uploadPlayerImage } from "@/lib/api/admin/players";
 import { useAuth } from "@/providers/AuthProvider";
 import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
-import { POSITIONS, type Side } from "./model";
-import { Note, SidePicker } from "./parts";
+import { POSITIONS, dayOf, shortDay, type Side } from "./model";
+import { Note, SidePicker, StepSaveBar } from "./parts";
 
 type Role = "" | "starter" | "bench";
 
@@ -61,7 +73,31 @@ interface Pick {
   /** Takımın kalıcı kadrosundan değil, sonradan eklendi. */
   extra: boolean;
   guestFlag?: boolean;
+  img?: string | null;
+  /** Maç sonunda verilmiş puan — kadro yeniden kaydedilirken korunur. */
+  puan?: number | null;
 }
+
+const POS_SHORT: Record<string, string> = { Kaleci: "KAL", Defans: "DEF", "Orta Saha": "ORT", Forvet: "FOR" };
+
+/** Serbest yazılmış mevkiyi dört hattan birine indirger (web previewLineOf). */
+function lineOf(position: string): string {
+  const v = position.toLocaleLowerCase("tr-TR");
+  if (!v) return "";
+  if (v.includes("kaleci") || v === "gk") return "Kaleci";
+  if (v.includes("defans") || v.includes("stoper") || v.includes("bek")) return "Defans";
+  if (v.includes("orta") || v.includes("kanat")) return "Orta Saha";
+  if (v.includes("forvet") || v.includes("santrafor")) return "Forvet";
+  return "";
+}
+
+function shortName(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) return parts[0] || "Oyuncu";
+  return `${parts[0][0]}. ${parts[parts.length - 1]}`;
+}
+
+const isGuestOf = (p: Pick, teamId: number | null) => p.guestFlag === true || !p.teamId || p.teamId !== teamId;
 
 type SideState = Record<string, Pick>;
 
@@ -103,6 +139,8 @@ export function LineupStep({ match, onDirtyChange }: { match: AdminMatch; onDirt
   const [editing, setEditing] = useState<Pick | null>(null);
   const [adding, setAdding] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [preview, setPreview] = useState(false);
+  const [copying, setCopying] = useState(false);
 
   /* Kalıcı kadro + kayıtlı maç kadrosu tek durumda birleşir. */
   useEffect(() => {
@@ -122,6 +160,7 @@ export function LineupStep({ match, onDirtyChange }: { match: AdminMatch; onDirt
           position: positionOf(p),
           captain: false,
           extra: false,
+          img: p.player_img ?? null,
         };
       }
       for (const row of saved) {
@@ -138,6 +177,8 @@ export function LineupStep({ match, onDirtyChange }: { match: AdminMatch; onDirt
           captain: Boolean(row.captain),
           extra: !base,
           guestFlag: row.isGuest,
+          img: base?.img ?? row.playerImg ?? null,
+          puan: row.puan ?? null,
         };
       }
       return out;
@@ -197,7 +238,7 @@ export function LineupStep({ match, onDirtyChange }: { match: AdminMatch; onDirt
     return Object.values(state[s])
       .filter((p): p is Pick & { role: "starter" | "bench" } => p.role === "starter" || p.role === "bench")
       .map((p) => {
-        const guest = p.guestFlag === true || !p.teamId || p.teamId !== tid;
+        const guest = isGuestOf(p, tid);
         const n = Number(p.number);
         return {
           playerId: Number(p.id),
@@ -208,6 +249,7 @@ export function LineupStep({ match, onDirtyChange }: { match: AdminMatch; onDirt
           captain: p.captain,
           isGuest: guest,
           ...(guest ? { guestName: p.name } : {}),
+          ...(p.puan != null ? { puan: p.puan } : {}),
         };
       });
   };
@@ -216,7 +258,7 @@ export function LineupStep({ match, onDirtyChange }: { match: AdminMatch; onDirt
     () => saveLineup(matchId, { home: buildPayload("home"), away: buildPayload("away") }),
     {
       success: (res) => res?.message || "Kadro kaydedildi.",
-      invalidate: [["admin", "matches"]],
+      invalidate: [["admin", "matches"], ["studio"]],
       onSuccess: () => setDirty(false),
     }
   );
@@ -266,6 +308,7 @@ export function LineupStep({ match, onDirtyChange }: { match: AdminMatch; onDirt
           position: positionOf(p),
           captain: false,
           extra: true,
+          img: p.player_img ?? null,
         },
       },
     }));
@@ -283,7 +326,124 @@ export function LineupStep({ match, onDirtyChange }: { match: AdminMatch; onDirt
     setEditing(null);
   };
 
+  /* ───────── toplu yardımcılar ───────── */
+  const clearSide = async () => {
+    if (!counts[side].starters && !counts[side].bench) return;
+    const ok = await confirmAction({
+      title: "Seçimi temizle",
+      message: `${teamName} için İlk 11 ve yedek seçimleri kaldırılsın mı? Kaydedene kadar sunucudaki kadro değişmez.`,
+      confirmLabel: "Temizle",
+      destructive: true,
+    });
+    if (!ok) return;
+    setDirty(true);
+    setState((prev) => ({
+      ...prev,
+      [side]: Object.fromEntries(Object.entries(prev[side]).map(([k, v]) => [k, { ...v, role: "" as Role, captain: false }])),
+    }));
+  };
+
+  /** Takımın önceki maçındaki kadroyu bu maça uygular (kaydetmez). */
+  const copyLast = async () => {
+    if (!teamId) return;
+    setCopying(true);
+    try {
+      const found = await findLastLineup(teamId, matchId, dayOf(match.date));
+      if (!found) {
+        Alert.alert("Önceki kadro bulunamadı", `${teamName} için son 120 günde kadrosu girilmiş başka maç yok.`);
+        return;
+      }
+      const label = `${found.match.first_team_name} – ${found.match.second_team_name} (${shortDay(found.match.date)})`;
+      const ok = await confirmAction({
+        title: "Son maçın kadrosunu getir",
+        message: `${label} maçındaki ${found.rows.length} oyuncu ${teamName} için seçilecek. Şu anki seçimler değişir; kaydetmeden önce düzenleyebilirsin.`,
+        confirmLabel: "Kadroyu getir",
+      });
+      if (!ok) return;
+      const other: Side = side === "home" ? "away" : "home";
+      // Rakip kadroda seçili oyuncu iki takımda birden oynayamaz; atlanır.
+      const skipped = found.rows.filter((row) => state[other][String(row.playerId ?? row.oyuncu_id ?? "")]?.role).length;
+      setDirty(true);
+      setState((prev) => {
+        const next: SideState = Object.fromEntries(Object.entries(prev[side]).map(([k, v]) => [k, { ...v, role: "" as Role, captain: false }]));
+        for (const row of found.rows) {
+          const id = String(row.playerId ?? row.oyuncu_id ?? "");
+          if (!id) continue;
+          if (prev[other][id]?.role) continue;
+          const base = next[id];
+          next[id] = {
+            id,
+            name: base?.name ?? row.guestName ?? row.playerName ?? `Oyuncu #${id}`,
+            teamId: base ? base.teamId : row.isGuest ? null : teamId,
+            role: row.role === "starter" ? "starter" : "bench",
+            number: row.number === "" || row.number == null ? base?.number ?? "" : String(row.number),
+            position: row.position || base?.position || "",
+            captain: Boolean(row.captain),
+            extra: base ? base.extra : true,
+            guestFlag: base ? base.guestFlag : row.isGuest,
+            img: base?.img ?? row.playerImg ?? null,
+            puan: base?.puan ?? null,
+          };
+        }
+        return { ...prev, [side]: next };
+      });
+      toast.show({
+        message: skipped ? `Kadro getirildi; ${skipped} oyuncu rakip kadroda seçili olduğu için atlandı.` : "Kadro getirildi. Kontrol edip kaydet.",
+        tone: skipped ? "warn" : "success",
+      });
+    } catch (error) {
+      Alert.alert("Kadro getirilemedi", errorText(error));
+    } finally {
+      setCopying(false);
+    }
+  };
+
+  /* ───────── fotoğraf ───────── */
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const pickPhoto = async (p: Pick) => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("İzin gerekli", "Oyuncu fotoğrafı seçmek için fotoğraflarına erişim izni ver.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsEditing: true, aspect: [1, 1], quality: 0.85 });
+    if (result.canceled || !result.assets?.[0]) return;
+    const asset = result.assets[0];
+    const mime = asset.mimeType ?? "image/jpeg";
+    setPhotoBusy(true);
+    try {
+      const res = await uploadPlayerImage(Number(p.id), {
+        uri: asset.uri,
+        name: asset.fileName ?? `oyuncu-${p.id}-${Date.now()}.${mime.split("/")[1]?.replace("jpeg", "jpg") || "jpg"}`,
+        type: mime,
+      });
+      const url = res?.photoUrl || res?.url || asset.uri;
+      // Fotoğraf oyuncu kaydına yazılır; kadro taslağını "kaydedilmemiş" yapmaz.
+      setState((prev) => ({
+        home: prev.home[p.id] ? { ...prev.home, [p.id]: { ...prev.home[p.id], img: url } } : prev.home,
+        away: prev.away[p.id] ? { ...prev.away, [p.id]: { ...prev.away[p.id], img: url } } : prev.away,
+      }));
+      setEditing((e) => (e && e.id === p.id ? { ...e, img: url } : e));
+      toast.show({ message: "Oyuncu fotoğrafı güncellendi.", tone: "success" });
+    } catch (error) {
+      Alert.alert("Fotoğraf yüklenemedi", errorText(error));
+    } finally {
+      setPhotoBusy(false);
+    }
+  };
+
+  /* ───────── saha önizleme ───────── */
+  const starters = useMemo(() => Object.values(state[side]).filter((p) => p.role === "starter"), [state, side]);
+  const lines = useMemo(() => {
+    const groups: Record<string, Pick[]> = { Forvet: [], "Orta Saha": [], Defans: [], Kaleci: [], "": [] };
+    for (const p of starters) groups[lineOf(p.position)].push(p);
+    const formation = [groups.Defans.length, groups["Orta Saha"].length, groups.Forvet.length].filter(Boolean).join("-") || "–";
+    return { groups, formation };
+  }, [starters]);
+  const captains = Object.values(state[side]).filter((p) => p.role && p.captain).length;
+
   const loading = lineupQuery.isLoading || homeRoster.isLoading || awayRoster.isLoading;
+  const pickedTotal = counts.home.starters + counts.home.bench + counts.away.starters + counts.away.bench;
 
   return (
     <View style={styles.stack}>
@@ -302,14 +462,67 @@ export function LineupStep({ match, onDirtyChange }: { match: AdminMatch; onDirt
       />
 
       <Text style={styles.summary} {...textScale.dense}>
-        {teamName}: İlk 11 {counts[side].starters} · Yedek {counts[side].bench}
+        {teamName}: İlk 11 {counts[side].starters} · Yedek {counts[side].bench} · Diziliş {lines.formation}
+        {counts[side].starters && !captains ? " · Kaptan seçilmedi" : ""}
       </Text>
 
       <Input variant="search" leadingIcon="search" value={q} onChangeText={setQ} placeholder="Kadroda ara (ad, forma no)" autoCorrect={false} />
       <ChipGroup scrollable={false} contentPadding={0}>
         <Chip label="Yalnız seçilenler" selected={onlyPicked} onPress={() => setOnlyPicked((v) => !v)} size="sm" icon="checkmark-done-outline" />
+        <Chip label="Saha önizleme" selected={preview} onPress={() => setPreview((v) => !v)} size="sm" icon="grid-outline" />
         {canEdit ? <Chip label="Oyuncu ekle" icon="person-add-outline" onPress={() => setAdding(true)} size="sm" /> : null}
+        {canEdit ? (
+          <Chip label={copying ? "Getiriliyor…" : "Son maçın kadrosu"} icon="copy-outline" onPress={() => void copyLast()} disabled={copying || !teamId} size="sm" />
+        ) : null}
+        {canEdit && (counts[side].starters || counts[side].bench) ? (
+          <Chip label="Seçimi temizle" icon="close-circle-outline" onPress={() => void clearSide()} size="sm" />
+        ) : null}
       </ChipGroup>
+
+      {preview ? (
+        <View style={styles.pitch} accessibilityLabel={`${teamName} ilk 11 saha önizlemesi, diziliş ${lines.formation}`}>
+          <View style={styles.pitchHead}>
+            <Text style={styles.pitchTitle} {...textScale.dense}>
+              SAHA ÖNİZLEME
+            </Text>
+            <Text style={styles.pitchFormation} {...textScale.badge}>
+              {lines.formation}
+            </Text>
+            <Text style={styles.pitchCount} {...textScale.dense}>
+              {starters.length} oyuncu
+            </Text>
+          </View>
+          {(["Forvet", "Orta Saha", "Defans", "Kaleci"] as const).map((line) => (
+            <View key={line} style={styles.pitchLine}>
+              <Text style={styles.pitchLabel} {...textScale.dense}>
+                {POS_SHORT[line]}
+              </Text>
+              <View style={styles.pitchPlayers}>
+                {lines.groups[line].length ? (
+                  lines.groups[line].map((p) => (
+                    <View key={p.id} style={styles.pitchChip}>
+                      <Text style={styles.pitchChipText} numberOfLines={1} {...textScale.dense}>
+                        {p.number ? `${p.number} ` : ""}
+                        {shortName(p.name)}
+                        {p.captain ? " (K)" : ""}
+                      </Text>
+                    </View>
+                  ))
+                ) : (
+                  <Text style={styles.pitchEmpty} {...textScale.dense}>
+                    –
+                  </Text>
+                )}
+              </View>
+            </View>
+          ))}
+          {lines.groups[""].length ? (
+            <Text style={styles.pitchLoose} {...textScale.long}>
+              Mevki seçilmedi: {lines.groups[""].map((p) => shortName(p.name)).join(", ")}
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
 
       {loading ? (
         <SkeletonListRow count={6} />
@@ -327,25 +540,25 @@ export function LineupStep({ match, onDirtyChange }: { match: AdminMatch; onDirt
             <PlayerLine
               key={p.id}
               player={p}
+              guest={isGuestOf(p, teamId)}
               disabled={!canEdit}
-              onRole={(role) => update(side, p.id, { role: p.role === role ? "" : role })}
+              onRole={(role) => update(side, p.id, { role: p.role === role ? "" : role, ...(p.role === role ? { captain: false } : {}) })}
+              onPosition={(position) => update(side, p.id, { position: p.position === position ? "" : position })}
+              onCaptain={() => update(side, p.id, { captain: !p.captain })}
               onOpen={() => setEditing(p)}
             />
           ))}
         </View>
       )}
 
-      {canEdit ? (
-        <Button
-          label={dirty ? "Kadroyu kaydet" : "Kadro kayıtlı"}
-          icon="save-outline"
-          onPress={askSave}
-          loading={save.isPending}
-          disabled={!dirty}
-          haptic="success"
-          fullWidth
-        />
-      ) : null}
+      <StepSaveBar
+        visible={canEdit}
+        label={dirty ? "Kadroyu kaydet" : "Kadro kayıtlı"}
+        note={dirty ? `Kaydedilmedi · ${match.first_team_name} ${counts.home.starters}+${counts.home.bench} · ${match.second_team_name} ${counts.away.starters}+${counts.away.bench}` : undefined}
+        onPress={() => void askSave()}
+        loading={save.isPending}
+        disabled={!dirty || !pickedTotal}
+      />
 
       <PlayerEditSheet
         player={editing}
@@ -356,6 +569,8 @@ export function LineupStep({ match, onDirtyChange }: { match: AdminMatch; onDirt
           setEditing((e) => (e ? { ...e, ...patchValue } : e));
         }}
         onRemove={editing?.extra ? () => removeExtra(editing) : undefined}
+        onPhoto={editing ? () => void pickPhoto(editing) : undefined}
+        photoBusy={photoBusy}
       />
 
       <AddPlayerSheet
@@ -382,37 +597,91 @@ export function LineupStep({ match, onDirtyChange }: { match: AdminMatch; onDirt
 
 const PlayerLine = React.memo(function PlayerLine({
   player,
+  guest,
   disabled,
   onRole,
+  onPosition,
+  onCaptain,
   onOpen,
 }: {
   player: Pick;
+  guest: boolean;
   disabled?: boolean;
   onRole: (role: "starter" | "bench") => void;
+  onPosition: (position: string) => void;
+  onCaptain: () => void;
   onOpen: () => void;
 }) {
+  const picked = player.role !== "";
   return (
-    <View style={[styles.row, player.role ? styles.rowOn : null]}>
-      <Touchable onPress={onOpen} disabled={disabled} style={styles.rowMain} accessibilityRole="button" accessibilityLabel={`${player.name} ayrıntıları`}>
-        <View style={styles.number}>
-          <Text style={styles.numberText} {...textScale.badge}>
-            {player.number || "–"}
-          </Text>
+    <View style={[styles.row, picked ? styles.rowOn : null]}>
+      <View style={styles.rowTop}>
+        <Touchable
+          onPress={onOpen}
+          disabled={disabled}
+          style={styles.rowMain}
+          accessibilityRole="button"
+          accessibilityLabel={`${player.name} ayrıntıları: forma no, fotoğraf`}
+        >
+          <View style={styles.number}>
+            <Text style={styles.numberText} {...textScale.badge}>
+              {player.number || "–"}
+            </Text>
+          </View>
+          <View style={styles.rowText}>
+            <View style={styles.nameLine}>
+              <Text style={styles.name} numberOfLines={1} {...textScale.dense}>
+                {player.name}
+              </Text>
+              {player.captain ? <Badge label="K" tone="warn" size="xs" dot={false} accessibilityLabel="Kaptan" /> : null}
+              {guest ? <Badge label="Misafir" tone="info" size="xs" dot={false} /> : null}
+            </View>
+            <Text style={styles.meta} numberOfLines={1} {...textScale.dense}>
+              {[player.position || "Mevki yok", player.extra ? "Sonradan eklendi" : null].filter(Boolean).join(" · ")}
+            </Text>
+          </View>
+        </Touchable>
+        <View style={styles.roles}>
+          <Chip label="İlk 11" tone="brand" selected={player.role === "starter"} onPress={() => onRole("starter")} disabled={disabled} />
+          <Chip label="Yedek" tone="info" selected={player.role === "bench"} onPress={() => onRole("bench")} disabled={disabled} />
         </View>
-        <View style={styles.rowText}>
-          <Text style={styles.name} numberOfLines={1} {...textScale.dense}>
-            {player.name}
-            {player.captain ? "  (K)" : ""}
-          </Text>
-          <Text style={styles.meta} numberOfLines={1} {...textScale.dense}>
-            {[player.position || "Mevki yok", player.extra ? "Sonradan eklendi" : null].filter(Boolean).join(" · ")}
-          </Text>
-        </View>
-      </Touchable>
-      <View style={styles.roles}>
-        <Chip label="İlk 11" size="sm" tone="brand" selected={player.role === "starter"} onPress={() => onRole("starter")} disabled={disabled} />
-        <Chip label="Yedek" size="sm" tone="info" selected={player.role === "bench"} onPress={() => onRole("bench")} disabled={disabled} />
       </View>
+      {picked ? (
+        <View style={styles.quick}>
+          {POSITIONS.map((pos) => {
+            const on = lineOf(player.position) === pos.key;
+            return (
+              <Touchable
+                key={pos.key}
+                onPress={() => onPosition(pos.key)}
+                disabled={disabled}
+                haptic="selection"
+                style={[styles.quickBtn, on ? styles.quickOn : null]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: on }}
+                accessibilityLabel={`Mevki: ${pos.label}`}
+              >
+                <Text style={[styles.quickText, on ? styles.quickTextOn : null]} {...textScale.badge}>
+                  {POS_SHORT[pos.key]}
+                </Text>
+              </Touchable>
+            );
+          })}
+          <Touchable
+            onPress={onCaptain}
+            disabled={disabled}
+            haptic="selection"
+            style={[styles.quickBtn, player.captain ? styles.quickCaptain : null]}
+            accessibilityRole="button"
+            accessibilityState={{ selected: player.captain }}
+            accessibilityLabel="Kaptan"
+          >
+            <Text style={[styles.quickText, player.captain ? styles.quickTextOn : null]} {...textScale.badge}>
+              Kaptan
+            </Text>
+          </Touchable>
+        </View>
+      ) : null}
     </View>
   );
 });
@@ -422,11 +691,15 @@ function PlayerEditSheet({
   onClose,
   onChange,
   onRemove,
+  onPhoto,
+  photoBusy,
 }: {
   player: Pick | null;
   onClose: () => void;
   onChange: (patch: Partial<Pick>) => void;
   onRemove?: () => void;
+  onPhoto?: () => void;
+  photoBusy?: boolean;
 }) {
   return (
     <BottomSheet
@@ -438,6 +711,15 @@ function PlayerEditSheet({
     >
       {player ? (
         <View style={styles.stack}>
+          <View style={styles.photoRow}>
+            <Avatar name={player.name} image={player.img ?? null} size={56} />
+            <View style={styles.rowText}>
+              <Text style={styles.meta} {...textScale.long}>
+                Fotoğraf oyuncunun profiline yazılır; kadro görsellerinde ve yayında kullanılır.
+              </Text>
+              {onPhoto ? <Button label="Fotoğrafı güncelle" icon="camera-outline" variant="secondary" size="sm" onPress={onPhoto} loading={photoBusy} /> : null}
+            </View>
+          </View>
           <ChipsField<string>
             label="Rol"
             value={player.role || null}
@@ -591,8 +873,6 @@ const styles = StyleSheet.create({
   summary: { ...type.caption, color: colors.textTertiary },
   list: { gap: space.sm },
   row: {
-    flexDirection: "row",
-    alignItems: "center",
     gap: space.sm,
     padding: space.sm,
     borderRadius: radius.lg,
@@ -601,6 +881,43 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   rowOn: { borderColor: colors.brandBorder },
+  rowTop: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  nameLine: { flexDirection: "row", alignItems: "center", gap: space.xs },
+  quick: { flexDirection: "row", gap: space.xs },
+  quickBtn: {
+    flex: 1,
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.md,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    backgroundColor: colors.surface2,
+  },
+  quickOn: { backgroundColor: colors.brandDim, borderColor: colors.brandBorder },
+  quickCaptain: { backgroundColor: colors.warnDim, borderColor: colors.warn },
+  quickText: { ...type.labelSm, color: colors.textSecondary },
+  quickTextOn: { color: colors.textPrimary },
+  photoRow: { flexDirection: "row", alignItems: "center", gap: space.md },
+  pitch: {
+    gap: space.sm,
+    padding: space.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+  },
+  pitchHead: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  pitchTitle: { ...type.overline, color: colors.textTertiary, flex: 1 },
+  pitchFormation: { ...type.tableNumStrong, color: colors.textPrimary },
+  pitchCount: { ...type.caption, color: colors.textSecondary },
+  pitchLine: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  pitchLabel: { ...type.labelXs, color: colors.textTertiary, width: 32 },
+  pitchPlayers: { flex: 1, flexDirection: "row", flexWrap: "wrap", gap: space.xs },
+  pitchChip: { paddingHorizontal: space.sm, paddingVertical: space.xs, borderRadius: radius.pill, backgroundColor: colors.surface3 },
+  pitchChipText: { ...type.labelXs, color: colors.textPrimary },
+  pitchEmpty: { ...type.caption, color: colors.textTertiary },
+  pitchLoose: { ...type.caption, color: colors.warn },
   rowMain: { flex: 1, flexDirection: "row", alignItems: "center", gap: space.sm },
   number: {
     width: 32,

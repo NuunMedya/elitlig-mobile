@@ -9,7 +9,11 @@
  *                 ilk maçı kendiliğinden seçilir.
  *   ÖN KONTROL    kamera / mikrofon izni, ağ türü ve sunucu yanıt süresi, pil,
  *                 yayın hedefi (YouTube bağlantısı ya da kayıtlı RTMP anahtarı).
- *   MAÇLAR        canlı · bugün · yaklaşan (14 gün), aranabilir.
+ *   YENİ MAÇ      maç oluşturma yetkisi olan, listede olmayan maçı buradan
+ *                 açar (`/yonetim/mac-olustur?donus=studyo`); kayıttan sonra
+ *                 stüdyoya dönülür, yeni maç listede seçili gelir.
+ *   MAÇLAR        canlı · bugün · yaklaşan (14 gün), aranabilir. Seçili maçın
+ *                 altında "Kadro" ve "Maç sonu" kısayolları açılır.
  *   SON YAYINLAR  son 30 günde yayın / kayıt bağlantısı olan maçlar.
  *
  * Maç listesi masaüstü stüdyoyla aynı uçtan gelir
@@ -18,18 +22,21 @@
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { AppState, Linking, StyleSheet, Text, View } from "react-native";
 
 import { AdminScreen } from "@/components/admin";
 import { dayOf, hhmm, shortDay } from "@/components/admin/matches/model";
 import { Badge, Button, EmptyState, ErrorState, GradientFill, Input, SectionHeader, Touchable, useToast } from "@/components/ui";
+import { hasAnyPermission } from "@/lib/admin/access";
+import { takeStudioMatch } from "@/lib/admin/studioHandoff";
 import { normalizeMatchStatus } from "@/lib/api/admin/matches";
 import { get } from "@/lib/http";
 import { loadRtmpTarget } from "@/lib/live/studioSettings";
 import { listStudioMatches, type StudioMatch } from "@/lib/live/studioApi";
 import { getLiveStreamConfig } from "@/lib/live/youtube";
+import { useAuth } from "@/providers/AuthProvider";
 import { colors, hairline, radius, space, type } from "@/theme";
 import { getDeviceStatus, isLiveAvailable, requestLivePermissions, type DeviceStatus } from "@/modules/elitlig-live";
 
@@ -53,9 +60,14 @@ const fold = (v: string) => v.toLocaleLowerCase("tr-TR");
 
 export default function StudioHomeScreen() {
   const router = useRouter();
+  const auth = useAuth();
   const toast = useToast();
   const queryClient = useQueryClient();
   const today = isoDay(0);
+  const canCreate = hasAnyPermission(auth.user, ["matches.create"]);
+  const canLineup = hasAnyPermission(auth.user, ["matches.lineup"]);
+  const canPost = hasAnyPermission(auth.user, ["matches.stats", "matches.update"]);
+  const canWorkflow = hasAnyPermission(auth.user, ["matches.view", "matches.update", "matches.lineup", "matches.live", "matches.stats"]);
 
   const matchesQuery = useQuery({
     queryKey: ["studio", "matches", today],
@@ -89,6 +101,20 @@ export default function StudioHomeScreen() {
   }, [matchesQuery.data, query, today]);
 
   const [pickedId, setPickedId] = useState<number | null>(null);
+
+  /* "Yeni maç"tan dönüş: yeni maç listeye gelsin ve seçili olsun. */
+  const refetchMatches = matchesQuery.refetch;
+  useFocusEffect(
+    useCallback(() => {
+      const createdId = takeStudioMatch();
+      if (!createdId) return;
+      setQuery("");
+      setPickedId(createdId);
+      void refetchMatches();
+    }, [refetchMatches])
+  );
+  const createMatch = () => router.push("/yonetim/mac-olustur?donus=studyo");
+  const openStep = (m: StudioMatch, step?: "kadro" | "mac-sonu") => router.push(`/yonetim/mac/${m.id}${step ? `?adim=${step}` : ""}`);
   const candidates = useMemo(() => [...groups.liveNow, ...groups.todays, ...groups.upcoming], [groups]);
   const selected = candidates.find((m) => m.id === pickedId) ?? groups.liveNow[0] ?? groups.todays.find((m) => normalizeMatchStatus(m.mac_durumu) !== "yayinlanmis") ?? null;
 
@@ -192,8 +218,8 @@ export default function StudioHomeScreen() {
     const on = mode === "pick" && selected?.id === m.id;
     const video = String(m.match_video ?? "").trim();
     return (
+      <React.Fragment key={`${mode}-${m.id}`}>
       <Touchable
-        key={`${mode}-${m.id}`}
         style={[styles.match, on && styles.matchOn]}
         onPress={() => (mode === "recent" ? void Linking.openURL(video).catch(() => toast.show({ message: "Yayın bağlantısı açılamadı.", tone: "danger" })) : setPickedId(m.id))}
         accessibilityLabel={`${m.first_team_name ?? "Ev sahibi"} – ${m.second_team_name ?? "Deplasman"}${mode === "recent" ? ", yayını aç" : ", seç"}`}
@@ -229,6 +255,14 @@ export default function StudioHomeScreen() {
           <Ionicons name={on ? "radio-button-on" : "radio-button-off"} size={20} color={on ? colors.brand : colors.textTertiary} />
         )}
       </Touchable>
+      {on && (canLineup || canPost || canWorkflow) ? (
+        <View style={styles.quick}>
+          {canLineup ? <Button label="Kadro" icon="people-outline" size="sm" variant="secondary" onPress={() => openStep(m, "kadro")} style={styles.flex} accessibilityHint="Bu maçın kadro girişini aç" /> : null}
+          {canPost ? <Button label="Maç sonu" icon="star-outline" size="sm" variant="secondary" onPress={() => openStep(m, "mac-sonu")} style={styles.flex} accessibilityHint="Sonuç, puanlar, içerik ve istatistikler" /> : null}
+          {canWorkflow ? <Button label="İş akışı" icon="git-branch-outline" size="sm" variant="ghost" onPress={() => openStep(m)} style={styles.flex} /> : null}
+        </View>
+      ) : null}
+      </React.Fragment>
     );
   };
 
@@ -243,6 +277,7 @@ export default function StudioHomeScreen() {
       onRefresh={refresh}
       refreshing={matchesQuery.isRefetching}
       contentStyle={styles.content}
+      actions={canCreate ? [{ icon: "add-circle-outline", accessibilityLabel: "Yeni maç oluştur", onPress: createMatch }] : undefined}
     >
       {/* ═════════ SAHNE KARTI ═════════ */}
       <View style={styles.stage}>
@@ -309,6 +344,17 @@ export default function StudioHomeScreen() {
       </View>
 
       {/* ═════════ MAÇLAR ═════════ */}
+      <SectionHeader title="Maçlar" meta="Canlı · bugün · yaklaşan" inset="flush" />
+      {canCreate ? (
+        <Button
+          label="Yeni maç oluştur"
+          icon="add-circle-outline"
+          variant="secondary"
+          fullWidth
+          onPress={createMatch}
+          accessibilityHint="Listede olmayan maçı oluştur; kayıttan sonra stüdyoya dönersin"
+        />
+      ) : null}
       <Input variant="search" value={query} onChangeText={setQuery} placeholder="Takım, lig ya da saha ara" accessibilityLabel="Maç ara" />
 
       {matchesQuery.isLoading ? (
@@ -323,7 +369,14 @@ export default function StudioHomeScreen() {
           icon="calendar-outline"
           title={query.trim() ? "Aramayla eşleşen maç yok" : "Önümüzdeki 14 günde yayınlanacak maç yok"}
           body={query.trim() ? "Takım ya da lig adını kontrol et." : "Maç zamanlandığında burada görünür."}
-          action={query.trim() ? { label: "Aramayı temizle", onPress: () => setQuery(""), haptic: "light" } : { label: "Maçlara git", onPress: () => router.push("/yonetim/maclar") }}
+          action={
+            query.trim()
+              ? { label: "Aramayı temizle", onPress: () => setQuery(""), haptic: "light" }
+              : canCreate
+                ? { label: "Yeni maç oluştur", onPress: createMatch }
+                : { label: "Maçlara git", onPress: () => router.push("/yonetim/maclar") }
+          }
+          secondaryAction={!query.trim() && canCreate ? { label: "Maçlara git", onPress: () => router.push("/yonetim/maclar") } : undefined}
         />
       ) : (
         <>
@@ -380,6 +433,7 @@ const styles = StyleSheet.create({
 
   match: { flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 56, paddingHorizontal: space.md, paddingVertical: space.sm },
   matchOn: { backgroundColor: colors.brandDim },
+  quick: { flexDirection: "row", gap: space.sm, paddingHorizontal: space.md, paddingBottom: space.md, backgroundColor: colors.brandDim },
   matchTime: { width: 56 },
   time: { ...type.tableNumStrong, color: colors.textPrimary },
   timeLive: { color: colors.live },

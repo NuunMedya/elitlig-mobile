@@ -9,12 +9,19 @@
  * maç geçersiz sayılmaz; maç ekranından tamamlanabilir. Başarıda yeni maçın
  * iş akışı ekranı açılır.
  *
+ * BAŞLANGIÇ DURUMU varsayılanı "Zamanlandı"dır: taslak maç sitede ve Yayın
+ * Stüdyosu listesinde görünmez, canlı akış ve maç sonu adımları kilitli kalır;
+ * saha kenarında maç açan operatör bunu "bölüm yok" diye okuyordu.
+ *
+ * `?donus=studyo`: Yayın Stüdyosu'ndan açıldıysa kayıttan sonra stüdyoya geri
+ * dönülür; yeni maç listede seçili gelir (lib/admin/studioHandoff).
+ *
  * HAFTA: maç kaydında hafta / tur alanı yok (models/matches.js); bu yüzden
  * sorulmaz.
  */
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
 
@@ -25,6 +32,7 @@ import { Button, useToast } from "@/components/ui";
 import { hasAnyPermission } from "@/lib/admin/access";
 import { errorText } from "@/lib/admin/errors";
 import { isoDay } from "@/lib/admin/format";
+import { leaveStudioMatch } from "@/lib/admin/studioHandoff";
 import {
   FALLBACK_DUTIES,
   createFixture,
@@ -45,6 +53,8 @@ export default function MatchCreateScreen() {
   const toast = useToast();
   const queryClient = useQueryClient();
   const initial = useInitialScope();
+  const params = useLocalSearchParams<{ donus?: string }>();
+  const fromStudio = (Array.isArray(params.donus) ? params.donus[0] : params.donus) === "studyo";
   const canAssign = hasAnyPermission(auth.user, ["staff.assign"]);
 
   const [scope, setScope] = useState<AdminScope | null>(null);
@@ -54,7 +64,7 @@ export default function MatchCreateScreen() {
   const [date, setDate] = useState<string>(isoDay());
   const [time, setTime] = useState<string>("20:00");
   const [venue, setVenue] = useState<string>("");
-  const [status, setStatus] = useState<"taslak" | "zamanlanmis">("taslak");
+  const [status, setStatus] = useState<"taslak" | "zamanlanmis">("zamanlanmis");
   const [assignments, setAssignments] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -134,13 +144,29 @@ export default function MatchCreateScreen() {
         await updateMatch(newId, { mac_durumu: status }).catch(() => warnings.push("durum"));
       }
       void queryClient.invalidateQueries({ queryKey: ["admin", "matches"] });
+      void queryClient.invalidateQueries({ queryKey: ["studio"] });
+      const stayedDraft = status === "taslak" || warnings.includes("durum");
+      if (fromStudio) {
+        /* Stüdyo taslak maçı ve 14 günden ileri / geçmiş maçı listelemez. */
+        const days = Math.round((new Date(`${date}T00:00:00`).getTime() - new Date(`${isoDay()}T00:00:00`).getTime()) / 86_400_000);
+        const hidden = stayedDraft
+          ? "Maç taslak olduğu için stüdyo listesinde görünmez; Maçlar'dan zamanla."
+          : days < 0 || days > 14
+            ? "Maç oluşturuldu; stüdyo yalnız bugünü ve önümüzdeki 14 günü listeler."
+            : null;
+        toast.show({ message: hidden ?? "Maç oluşturuldu ve stüdyoda seçildi.", tone: hidden ? "warn" : "success" });
+        if (!hidden) leaveStudioMatch(newId);
+        if (router.canGoBack()) router.back();
+        else router.replace("/yonetim/studyo");
+        return;
+      }
       toast.show({
         message: warnings.length
           ? `Maç oluşturuldu; ${warnings.join(" ve ")} kaydedilemedi. Maç öncesi adımından tamamla.`
           : "Maç oluşturuldu.",
         tone: warnings.length ? "warn" : "success",
       });
-      router.replace({ pathname: "/yonetim/mac/[id]", params: { id: String(newId), adim: "bilgiler" } });
+      router.replace({ pathname: "/yonetim/mac/[id]", params: { id: String(newId), adim: stayedDraft ? "bilgiler" : "kadro" } });
     } catch (e) {
       setError(errorText(e));
       Alert.alert("Maç oluşturulamadı", errorText(e));
@@ -151,7 +177,13 @@ export default function MatchCreateScreen() {
 
   return (
     <AdminScreen title="Maç oluştur" subtitle="Eşleşme, zaman ve saha" permission={PERMS}>
-      <Note text="Kadro, canlı akış ve maç sonu adımları maç kaydedildikten sonra açılır." />
+      <Note
+        text={
+          fromStudio
+            ? "Kayıttan sonra stüdyoya dönersin; maç listede seçili gelir. Kadro ve maç sonu kısayolları seçili maçın altındadır."
+            : "Kadro, canlı akış ve maç sonu adımları maç kaydedildikten sonra açılır."
+        }
+      />
 
       <Panel title="KAPSAM">
         {scope ? (
@@ -218,7 +250,9 @@ export default function MatchCreateScreen() {
           ]}
         />
         <Text style={styles.hint} {...textScale.long}>
-          {status === "taslak" ? "Taslak maç sitede görünmez." : "Zamanlanan maç fikstürde yayınlanır ve kadro girişi açılır."}
+          {status === "taslak"
+            ? "Taslak maç sitede ve Yayın Stüdyosu'nda görünmez; canlı akış ve maç sonu, maç zamanlanana kadar kilitlidir."
+            : "Zamanlanan maç fikstürde yayınlanır; kadro, canlı akış ve maç sonu adımlarının hepsi açılır."}
         </Text>
       </Panel>
 

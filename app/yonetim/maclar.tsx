@@ -413,6 +413,19 @@ export default function AdminMatchesScreen() {
     router.push(`/yonetim/mac/${id}`);
   }, [closeSheet, router, selected]);
 
+  /** Doğrudan bir adıma: kadro girişi, canlı akış ya da maç sonu ayrıntıları. */
+  const openStep = useCallback(
+    (step: "kadro" | "canli" | "mac-sonu") => {
+      if (!selected) return;
+      const id = Number(selected.id);
+      closeSheet();
+      router.push(`/yonetim/mac/${id}?adim=${step}`);
+    },
+    [closeSheet, router, selected],
+  );
+  const canLineup = hasAnyPermission(auth.user, ["matches.lineup"]);
+  const canPost = hasAnyPermission(auth.user, ["matches.stats", "matches.update"]);
+
   /** Yetkiye göre üst kısayollar: yeni maç, toplu düzenleme. */
   const headerActions = useMemo(
     () =>
@@ -675,6 +688,33 @@ export default function AdminMatchesScreen() {
               accessibilityHint="Maç öncesi, kadro, canlı akış ve maç sonu adımları"
             />
 
+            {canLineup || canPost ? (
+              <View style={styles.quickRow}>
+                {canLineup ? (
+                  <Button
+                    label="Kadro gir"
+                    icon="people-outline"
+                    variant="secondary"
+                    onPress={() => openStep("kadro")}
+                    haptic="light"
+                    style={styles.quickBtn}
+                    accessibilityHint="İki takımın ilk 11 ve yedeklerini gir"
+                  />
+                ) : null}
+                {canPost ? (
+                  <Button
+                    label="Maç sonu"
+                    icon="star-outline"
+                    variant="secondary"
+                    onPress={() => openStep("mac-sonu")}
+                    haptic="light"
+                    style={styles.quickBtn}
+                    accessibilityHint="Sonuç tescili, puanlar, maçın enleri, içerik, istatistik ve olaylar"
+                  />
+                ) : null}
+              </View>
+            ) : null}
+
             {/* Skor girişi — tabular Stepper, sabit genişlik, basılı tutunca hızlanır. */}
             {canScore ? (
               <>
@@ -843,6 +883,13 @@ const styles = StyleSheet.create({
   sheet: {
     gap: space.md,
     paddingBottom: space.sm,
+  },
+  quickRow: {
+    flexDirection: "row",
+    gap: space.sm,
+  },
+  quickBtn: {
+    flex: 1,
   },
   sheetMetaRow: {
     flexDirection: "row",
