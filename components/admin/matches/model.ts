@@ -2,8 +2,16 @@
  * Maç iş akışı ekranlarının ortak yardımcıları: adım tanımları, adım kilidi,
  * tarih/saat biçimleri ve kadro satırlarının sade biçimi.
  *
- * Web panelindeki matchUi/matchMeta.js ile aynı kurallar: taslak maçta kadro,
- * canlı akış ve maç sonu kapalıdır; zamanlanmış maçta maç sonu kapalıdır.
+ * KİLİT KURALI — sunucu hiçbir maç yazımını duruma göre reddetmez
+ * (routes/MatchFlow.js kadro / puan / olaylar, routes/Matches.js result,
+ * routes/PlayerStatistics.js). Web paneli (matchUi/matchMeta.js) taslakta üç
+ * adımı, zamanlanmış maçta maç sonunu kapatır; saha kenarında bu, "bölüm yok"
+ * diye okunuyordu. Mobil kural:
+ *   · Kadro      — her durumda açık (taslakta bilgi notuyla).
+ *   · Canlı akış — taslakta kapalı; tek dokunuşla "Maçı zamanla" ile açılır.
+ *   · Maç sonu   — taslakta kapalı (aynı düğme); zamanlanmış maçta AÇIK:
+ *                  canlı takip edilmeden oynanan maçın sonucu, puanları ve
+ *                  içerikleri buradan girilir.
  */
 
 import type Ionicons from "@expo/vector-icons/Ionicons";
@@ -21,15 +29,45 @@ export const STEPS: { key: StepKey; label: string; short: string; icon: keyof ty
   { key: "bilgiler", label: "Maç öncesi", short: "Öncesi", icon: "clipboard-outline", permission: ["matches.update"] },
   { key: "kadro", label: "Kadro", short: "Kadro", icon: "people-outline", permission: ["matches.lineup"] },
   { key: "canli", label: "Canlı akış", short: "Canlı", icon: "radio-outline", permission: ["matches.live"] },
-  { key: "mac-sonu", label: "Maç sonu", short: "Maç sonu", icon: "star-outline", permission: ["matches.stats"] },
+  { key: "mac-sonu", label: "Maç sonu", short: "Maç sonu", icon: "star-outline", permission: ["matches.stats", "matches.update"] },
 ];
 
-/** Adım bu durumda açılabilir mi; kapalıysa neden. */
-export function stepAvailability(step: StepKey, raw: unknown): { ready: boolean; hint?: string } {
+export interface StepAvailability {
+  ready: boolean;
+  /** Kapalıyken: neden kapalı. */
+  hint?: string;
+  /** Açıkken gösterilecek kısa bilgi (ör. maç henüz başlamadı). */
+  note?: string;
+  /** Kilidi tek dokunuşla çözen eylem: maçı "Zamanlandı" yap. */
+  fix?: "schedule";
+}
+
+/** Adım bu durumda açılabilir mi; kapalıysa neden ve nasıl açılır. */
+export function stepAvailability(step: StepKey, raw: unknown): StepAvailability {
   const status = normalizeMatchStatus(raw);
   if (step === "bilgiler") return { ready: true };
-  if (!status || status === "taslak") return { ready: false, hint: "Önce maçı zamanla: Maç öncesi adımında durumu “Zamanlandı” yapıp kaydet." };
-  if (step === "mac-sonu" && status === "zamanlanmis") return { ready: false, hint: "Maç sonu, maç başladıktan sonra açılır." };
+  const draft = !status || status === "taslak";
+  if (step === "kadro") {
+    return draft
+      ? { ready: true, note: "Maç taslak: kadro kaydedilir ama maç sitede görünmez. Fikstürde yayınlamak için maçı zamanla.", fix: "schedule" }
+      : { ready: true };
+  }
+  if (draft) {
+    return {
+      ready: false,
+      fix: "schedule",
+      hint:
+        step === "canli"
+          ? "Taslak maç canlıya alınamaz. Maçı zamanladığında canlı akış açılır."
+          : "Taslak maçın sonucu girilemez. Maçı zamanladığında maç sonu açılır.",
+    };
+  }
+  if (step === "mac-sonu" && status === "zamanlanmis") {
+    return {
+      ready: true,
+      note: "Maç henüz başlatılmadı. Canlı takip edilmeden oynandıysa sonucu “Sonucu tescil et” ile gir; puan, içerik ve istatistikleri buradan tamamla.",
+    };
+  }
   return { ready: true };
 }
 

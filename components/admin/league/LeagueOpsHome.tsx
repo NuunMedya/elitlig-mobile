@@ -284,6 +284,13 @@ export function LeagueOpsHome({ asTab = false }: LeagueOpsHomeProps) {
     },
     [go]
   );
+  /** Kartın altındaki kısayollar: doğrudan kadro girişi ya da maç sonu ayrıntıları. */
+  const openStep = useCallback(
+    (match: ApiMatch, step: "kadro" | "mac-sonu") => go(`/yonetim/mac/${Number(match.id)}?adim=${step}`),
+    [go]
+  );
+  const canLineup = hasAnyPermission(user, ["matches.lineup"]);
+  const canPost = hasAnyPermission(user, ["matches.stats", "matches.update"]);
 
   const refresh = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ["admin", "matches", "today"] });
@@ -410,6 +417,9 @@ export function LeagueOpsHome({ asTab = false }: LeagueOpsHomeProps) {
                       homeLogo={teams.logoFor(match.home_team_id, match.first_team_name)}
                       awayLogo={teams.logoFor(match.away_team_id, match.second_team_name)}
                       onOpen={openMatch}
+                      onStep={openStep}
+                      canLineup={canLineup}
+                      canPost={canPost}
                     />
                   ))}
                 </ScrollView>
@@ -476,12 +486,18 @@ const TodayCard = memo(function TodayCard({
   homeLogo,
   awayLogo,
   onOpen,
+  onStep,
+  canLineup,
+  canPost,
 }: {
   match: ApiMatch;
   showDay: boolean;
   homeLogo: string | null;
   awayLogo: string | null;
   onOpen: (match: ApiMatch) => void;
+  onStep: (match: ApiMatch, step: "kadro" | "mac-sonu") => void;
+  canLineup: boolean;
+  canPost: boolean;
 }) {
   const status = normalizeMatchStatus(match.mac_durumu);
   const meta = status ? STATUS_META[status] : { label: "Durumsuz", tone: "neutral" as Tone };
@@ -516,6 +532,38 @@ const TodayCard = memo(function TodayCard({
         </Text>
         <Ionicons name="chevron-forward" size={14} color={live ? colors.live : colors.brandAccent} />
       </View>
+      {canLineup || canPost ? (
+        <View style={styles.cardSteps}>
+          {canLineup ? (
+            <Touchable
+              haptic="selection"
+              onPress={() => onStep(match, "kadro")}
+              style={styles.cardStep}
+              accessibilityRole="button"
+              accessibilityLabel={`${match.first_team_name} – ${match.second_team_name} kadro girişi`}
+            >
+              <Ionicons name="people-outline" size={16} color={colors.brandAccent} />
+              <Text style={styles.cardStepText} numberOfLines={1} {...textScale.dense}>
+                Kadro
+              </Text>
+            </Touchable>
+          ) : null}
+          {canPost ? (
+            <Touchable
+              haptic="selection"
+              onPress={() => onStep(match, "mac-sonu")}
+              style={styles.cardStep}
+              accessibilityRole="button"
+              accessibilityLabel={`${match.first_team_name} – ${match.second_team_name} maç sonu ayrıntıları`}
+            >
+              <Ionicons name="star-outline" size={16} color={colors.brandAccent} />
+              <Text style={styles.cardStepText} numberOfLines={1} {...textScale.dense}>
+                Maç sonu
+              </Text>
+            </Touchable>
+          ) : null}
+        </View>
+      ) : null}
     </Touchable>
   );
 });
@@ -614,6 +662,18 @@ const styles = StyleSheet.create({
   },
   cardField: { ...type.caption, color: colors.textTertiary, flex: 1 },
   cardCta: { ...type.labelSm, color: colors.brandAccent },
+  cardSteps: { flexDirection: "row", gap: space.sm },
+  cardStep: {
+    flex: 1,
+    minHeight: 44,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: space.xs,
+    borderRadius: radius.md,
+    backgroundColor: colors.brandDim,
+  },
+  cardStepText: { ...type.labelSm, color: colors.brandAccent },
   cardCtaLive: { color: colors.live },
 
   notice: {

@@ -177,6 +177,12 @@ export interface LineupPayloadRow {
   captain: boolean;
   isGuest: boolean;
   guestName?: string;
+  /**
+   * Kayıtlı oyuncu puanı. Sunucu kadroyu SİLİP YENİDEN yazar
+   * (normalizeKadroPayload → puan: toDecimalOrNull(p.puan)); gönderilmezse
+   * maç sonunda verilen puanlar kadro yeniden kaydedildiğinde silinir.
+   */
+  puan?: number | null;
 }
 
 /** POST /api/maclar/:id/kadro — iki takımın kadrosu birlikte yazılır (matches.lineup). */
@@ -209,6 +215,49 @@ export const rosterPlayerId = (p: RosterPlayer) => Number(p.player_id ?? p.id ??
 
 /** GET /oyuncu-takimlari/:teamId — takımın kalıcı kadrosu. */
 export const getTeamRoster = (teamId: number) => get<RosterPlayer[]>(`/oyuncu-takimlari/${teamId}`);
+
+/** "Son maçın kadrosu" aramasında geriye doğru bakılan en çok maç sayısı. */
+export const LAST_LINEUP_SCAN = 20;
+
+/**
+ * Takımın bu maçtan önceki EN SON kadrosu ("son maçın kadrosunu getir").
+ * GET /maclar?team_id=&date_from=&date_to= ile takımın son 120 gündeki maçları
+ * okunur; en yeniden geriye doğru (en çok LAST_LINEUP_SCAN maç) kadrosu girilmiş
+ * ilk maç döner. Web panelinde
+ * karşılığı yoktur; yalnız mevcut okuma uçlarını kullanır.
+ */
+export async function findLastLineup(
+  teamId: number,
+  currentMatchId: number,
+  beforeDay: string
+): Promise<{ match: ApiMatch; rows: LineupRow[] } | null> {
+  const day = /^\d{4}-\d{2}-\d{2}$/.test(beforeDay) ? beforeDay : new Date().toISOString().slice(0, 10);
+  const from = new Date(`${day}T00:00:00Z`);
+  from.setUTCDate(from.getUTCDate() - 120);
+  const list = await get<ApiMatch[]>("/maclar", {
+    team_id: teamId,
+    date_from: from.toISOString().slice(0, 10),
+    date_to: day,
+    limit: 100,
+    includeDraft: 1,
+    _t: Date.now(),
+  });
+  const key = (m: ApiMatch) => `${String(m.date ?? "").slice(0, 10)} ${String(m.time ?? "")}`;
+  const candidates = (Array.isArray(list) ? list : [])
+    .filter((m) => Number(m.id) !== currentMatchId && String(m.date ?? "").slice(0, 10) <= day)
+    .sort((a, b) => key(b).localeCompare(key(a)))
+    // Sıralı istek sayısı sınırlı kalsın; ekrandaki ileti de bu sınırı söyler.
+    .slice(0, LAST_LINEUP_SCAN);
+  for (const candidate of candidates) {
+    const lineup = await getLineup(Number(candidate.id)).catch(() => null);
+    if (!lineup) continue;
+    const rows = [...(lineup.home ?? []), ...(lineup.away ?? [])].filter(
+      (row) => Number(row.team_id) === teamId && (row.role === "starter" || row.role === "bench")
+    );
+    if (rows.length) return { match: candidate, rows };
+  }
+  return null;
+}
 
 /** GET /oyuncular?search=&limit= — ad araması (sunucu en çok 100 satır). */
 export const searchPlayers = (q: string, limit = 40) =>

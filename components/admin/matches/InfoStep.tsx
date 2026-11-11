@@ -44,7 +44,7 @@ import { useAuth } from "@/providers/AuthProvider";
 import { space } from "@/theme";
 
 import { dayOf, hhmm, stepAvailability, type StepKey } from "./model";
-import { Note, TimeField } from "./parts";
+import { Note, StepSaveBar, TimeField } from "./parts";
 import { ResultSheet } from "./ResultSheet";
 
 interface InfoForm {
@@ -82,8 +82,16 @@ const toForm = (m: AdminMatch): InfoForm => ({
 });
 
 const NEXT_STEP: Record<string, { text: string; step?: StepKey; label?: string }> = {
-  taslak: { text: "Maçı yayına hazırlamak için durumunu “Zamanlandı” yapıp kaydet. Ardından kadrolar girilebilir." },
-  zamanlanmis: { text: "Sıradaki adım iki takımın kadrosunu girmek.", step: "kadro", label: "Kadroya geç" },
+  taslak: {
+    text: "Maç taslak: sitede görünmez, canlı akış ve maç sonu kilitlidir. Durumu “Zamanlandı” yapıp kaydet; kadroyu şimdiden girebilirsin.",
+    step: "kadro",
+    label: "Kadroya geç",
+  },
+  zamanlanmis: {
+    text: "Sıradaki adım iki takımın kadrosunu girmek. Maç canlı takip edilmeden oynandıysa sonucu ve ayrıntıları Maç sonu adımından girebilirsin.",
+    step: "kadro",
+    label: "Kadroya geç",
+  },
   canli: { text: "Maç canlı. Olaylar ve skor Canlı akış adımından yönetilir.", step: "canli", label: "Canlı akışa git" },
   yayinlanmis: { text: "Maç tamamlandı. Puanlar, manşet ve maçın enleri Maç sonu adımında.", step: "mac-sonu", label: "Maç sonuna git" },
 };
@@ -433,17 +441,13 @@ export function InfoStep({
         </Panel>
       ) : null}
 
-      {canEdit || canAssign ? (
-        <Button
-          label={dirty ? "Değişiklikleri kaydet" : "Kaydedildi"}
-          icon="save-outline"
-          onPress={askSave}
-          loading={save.isPending}
-          disabled={!dirty || sameTeams}
-          haptic="success"
-          fullWidth
-        />
-      ) : null}
+      <StepSaveBar
+        visible={canEdit || canAssign}
+        label={dirty ? "Değişiklikleri kaydet" : "Kaydedildi"}
+        onPress={() => void askSave()}
+        loading={save.isPending}
+        disabled={!dirty || sameTeams}
+      />
 
       {canResult ? (
         <Panel title="SONUÇ TESCİLİ">

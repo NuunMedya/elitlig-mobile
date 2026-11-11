@@ -92,16 +92,23 @@ export function StepBar({
   value,
   status,
   onChange,
+  done,
 }: {
   value: StepKey;
   status: unknown;
   onChange: (step: StepKey) => void;
+  /** Tamamlanan adımlar (ör. kadro girildi) — köşede onay işareti. */
+  done?: Partial<Record<StepKey, boolean>>;
 }) {
   return (
     <View style={styles.steps} accessibilityRole="tablist">
       {STEPS.map((step, index) => {
         const active = step.key === value;
         const { ready } = stepAvailability(step.key, status);
+        const finished = Boolean(done?.[step.key]);
+        /* Kilitli adım da gerçek bir bölüm olarak okunur: kendi ikonu ve adı
+           kalır, yalnız köşesine küçük kilit gelir. Dokununca kilidin nedeni
+           ve tek dokunuşla açma düğmesi görünür. */
         return (
           <Touchable
             key={step.key}
@@ -109,20 +116,73 @@ export function StepBar({
             haptic="selection"
             style={[styles.step, active ? styles.stepOn : null]}
             accessibilityRole="tab"
-            accessibilityState={{ selected: active, disabled: !ready }}
-            accessibilityLabel={`${index + 1}. adım: ${step.label}${ready ? "" : ", kilitli"}`}
+            accessibilityState={{ selected: active }}
+            accessibilityLabel={`${index + 1}. adım: ${step.label}${ready ? "" : ", kilitli, açmak için dokun"}${finished ? ", tamamlandı" : ""}`}
           >
-            <Ionicons
-              name={ready ? step.icon : "lock-closed-outline"}
-              size={16}
-              color={active ? colors.textOnBrand : ready ? colors.textSecondary : colors.textTertiary}
-            />
-            <Text style={[styles.stepText, active ? styles.stepTextOn : !ready ? styles.stepTextOff : null]} numberOfLines={1} {...textScale.badge}>
-              {step.short}
+            <View style={styles.stepIcon}>
+              <Ionicons name={step.icon} size={20} color={active ? colors.textOnBrand : colors.textSecondary} />
+              {!ready || finished ? (
+                <View style={[styles.stepMark, !ready ? styles.stepMarkLock : styles.stepMarkDone]}>
+                  <Ionicons name={!ready ? "lock-closed" : "checkmark"} size={10} color={colors.textOnStatus} />
+                </View>
+              ) : null}
+            </View>
+            <Text style={[styles.stepText, active ? styles.stepTextOn : null]} numberOfLines={1} {...textScale.badge}>
+              {index + 1} · {step.short}
             </Text>
           </Touchable>
         );
       })}
+    </View>
+  );
+}
+
+/* ───────────────────────── Sabit kaydet çubuğu ─────────────────────────
+   Adımlar uzun listelerdir; kaydet düğmesi listenin sonunda kalınca saha
+   kenarında bulunmuyordu. Adım `<StepSaveBar />` çizer, ekran (mac/[id])
+   çubuğu kaydırılan alanın DIŞINDA, altta sabit gösterir. */
+
+export interface SaveBarSpec {
+  label: string;
+  onPress: () => void;
+  loading?: boolean;
+  disabled?: boolean;
+  /** Düğmenin üstündeki kısa durum metni ("3 değişiklik kaydedilmedi"). */
+  note?: string;
+  icon?: keyof typeof Ionicons.glyphMap;
+}
+
+export const SaveBarContext = React.createContext<((spec: SaveBarSpec | null) => void) | null>(null);
+
+/** Görünür olduğu sürece ekranın altındaki sabit çubuğu doldurur. */
+export function StepSaveBar({ visible = true, label, onPress, loading, disabled, note, icon }: SaveBarSpec & { visible?: boolean }) {
+  const setBar = React.useContext(SaveBarContext);
+  const handler = React.useRef(onPress);
+  handler.current = onPress;
+  const press = React.useCallback(() => handler.current(), []);
+
+  useEffect(() => {
+    if (!setBar) return;
+    setBar(visible ? { label, onPress: press, loading, disabled, note, icon } : null);
+  }, [setBar, visible, label, press, loading, disabled, note, icon]);
+  useEffect(() => () => setBar?.(null), [setBar]);
+
+  // Çubuğu barındıran ekran yoksa (adım başka yerde kullanılırsa) düğme yerinde çizilir.
+  if (setBar || !visible) return null;
+  return <Button label={label} icon={icon ?? "save-outline"} onPress={onPress} loading={loading} disabled={disabled} fullWidth haptic="success" />;
+}
+
+/** Ekranın altındaki sabit çubuk (AdminScreen `overlay`). */
+export function SaveBar({ spec, bottomInset }: { spec: SaveBarSpec | null; bottomInset: number }) {
+  if (!spec) return null;
+  return (
+    <View style={[styles.saveBar, { paddingBottom: Math.max(bottomInset, space.md) }]}>
+      {spec.note ? (
+        <Text style={styles.saveNote} numberOfLines={2} {...textScale.dense}>
+          {spec.note}
+        </Text>
+      ) : null}
+      <Button label={spec.label} icon={spec.icon ?? "save-outline"} onPress={spec.onPress} loading={spec.loading} disabled={spec.disabled} fullWidth haptic="success" />
     </View>
   );
 }
@@ -269,14 +329,41 @@ const styles = StyleSheet.create({
   step: {
     flex: 1,
     alignItems: "center",
+    justifyContent: "center",
     gap: space.xxs,
+    minHeight: 56,
     paddingVertical: space.sm,
     borderRadius: radius.md,
   },
   stepOn: { backgroundColor: colors.brand },
-  stepText: { ...type.labelXs, color: colors.textSecondary },
+  stepIcon: { width: 28, height: 22, alignItems: "center", justifyContent: "center" },
+  stepMark: {
+    position: "absolute",
+    right: -4,
+    top: -4,
+    width: 16,
+    height: 16,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  stepMarkLock: { backgroundColor: colors.warn },
+  stepMarkDone: { backgroundColor: colors.win },
+  stepText: { ...type.labelXs, color: colors.textPrimary },
   stepTextOn: { color: colors.textOnBrand },
-  stepTextOff: { color: colors.textTertiary },
+  saveBar: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    gap: space.xs,
+    paddingHorizontal: space.lg,
+    paddingTop: space.sm,
+    backgroundColor: colors.surface1,
+    borderTopWidth: hairline,
+    borderTopColor: colors.border,
+  },
+  saveNote: { ...type.caption, color: colors.textSecondary, textAlign: "center" },
   note: { flexDirection: "row", gap: space.sm, padding: space.md, borderRadius: radius.md, alignItems: "flex-start" },
   noteText: { ...type.bodySm, color: colors.textPrimary, flex: 1 },
   timeRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.lg, paddingVertical: space.lg },
