@@ -70,35 +70,35 @@ export function VideoCard({
       {hideHeader ? null : <SectionHeader title={title} meta={meta} />}
       <View style={[styles.frame, footer ? styles.frameWithFooter : null]}>
         <View style={styles.video}>
-            <Touchable style={StyleSheet.absoluteFill} onPress={() => setPlaying(true)} accessibilityLabel={accessibilityLabel} accessibilityRole="button" haptic="light">
-              {poster ? (
-                <Image source={{ uri: poster }} style={StyleSheet.absoluteFill} resizeMode="cover" onError={() => setPosterFailed(true)} />
-              ) : null}
-              <View style={styles.shade} />
-              {badge ? (
-                <View style={[styles.badge, badgeTone === "live" ? styles.badgeLive : badgeTone === "gold" ? styles.badgeGold : null]}>
-                  {badgeTone === "live" ? <View style={styles.liveDot} /> : null}
-                  <Text style={[styles.badgeText, badgeTone === "gold" ? styles.badgeTextGold : null]} numberOfLines={1} {...textScale.badge}>
-                    {badge}
-                  </Text>
-                </View>
-              ) : null}
-              <View style={styles.center}>
-                <View style={styles.play}>
-                  <Ionicons name={icon} size={22} color={colors.textOnBrand} />
-                </View>
-                <Text style={styles.caption} {...textScale.dense}>
-                  {cta}
+          <Touchable style={StyleSheet.absoluteFill} onPress={() => setPlaying(true)} accessibilityLabel={accessibilityLabel} accessibilityRole="button" haptic="light">
+            {poster ? (
+              <Image source={{ uri: poster }} style={StyleSheet.absoluteFill} resizeMode="cover" onError={() => setPosterFailed(true)} />
+            ) : null}
+            <View style={styles.shade} />
+            {badge ? (
+              <View style={[styles.badge, badgeTone === "live" ? styles.badgeLive : badgeTone === "gold" ? styles.badgeGold : null]}>
+                {badgeTone === "live" ? <View style={styles.liveDot} /> : null}
+                <Text style={[styles.badgeText, badgeTone === "gold" ? styles.badgeTextGold : null]} numberOfLines={1} {...textScale.badge}>
+                  {badge}
                 </Text>
               </View>
-              {corner ? (
-                <View style={styles.corner}>
-                  <Text style={styles.cornerText} {...textScale.badge}>
-                    {corner}
-                  </Text>
-                </View>
-              ) : null}
-            </Touchable>
+            ) : null}
+            <View style={styles.center}>
+              <View style={styles.play}>
+                <Ionicons name={icon} size={22} color={colors.textOnBrand} />
+              </View>
+              <Text style={styles.caption} {...textScale.dense}>
+                {cta}
+              </Text>
+            </View>
+            {corner ? (
+              <View style={styles.corner}>
+                <Text style={styles.cornerText} {...textScale.badge}>
+                  {corner}
+                </Text>
+              </View>
+            ) : null}
+          </Touchable>
         </View>
         {footer}
       </View>

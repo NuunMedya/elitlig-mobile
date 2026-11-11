@@ -126,6 +126,13 @@ export function mediaUrl(value?: string | null): string | null {
   // Sunucunun yer tutucu görselleri (default_player.png vb.) soluk ve bilgisiz;
   // bunlar yerine baş harfli yedek gösterilsin diye adres yok sayılır.
   if (/\/default[_-][a-z]*\.(png|jpe?g|webp)$/i.test(raw)) return null;
+  // Varsayılan takım arması (logos/elitlig_logo.png) da yer tutucudur — ve
+  // 6044×5488 piksellik bir PNG'dir: 22–40 px'lik bir amblem için çözülünce
+  // ~130 MB bellek ister, bellek önbelleğine sığmaz ve takımların yarıya
+  // yakınında (kendi arması olmayanlar) her satırda YENİDEN çözülür. Listeleri
+  // kaydırırken takılmanın başlıca kaynağıydı. Yönetim tarafı zaten "logo yok"
+  // sayıyor (lib/api/admin/teams.ts `hasRealLogo`); burada da baş harfli yedek.
+  if (/\/logos\/elitlig_logo\.png$/i.test(raw)) return null;
   if (/^https?:\/\//i.test(raw)) return raw;
 
   const path = raw.replace(/^\.{0,2}\//, "");

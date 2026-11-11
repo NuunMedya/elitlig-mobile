@@ -102,9 +102,6 @@ export const Touchable = React.memo(function Touchable({
   accessibilityRole = "button",
   ...rest
 }: TouchableProps) {
-  const scale = useRef(new Animated.Value(1)).current;
-  const fade = useRef(new Animated.Value(1)).current;
-  const tint = useRef(new Animated.Value(0)).current;
   const [isPressed, setIsPressed] = useState(false);
 
   const targetScale =
@@ -124,20 +121,37 @@ export const Touchable = React.memo(function Touchable({
   // Yeniden render yalnız gerçekten stil değişecekse yapılır (liste başına maliyet).
   const tracksPressState = feedback === "card" || pressedStyle != null;
 
+  /*
+   * LİSTE SATIRI MALİYETİ: uygulamadaki satırların çoğu "row" geri bildirimli
+   * bir Touchable'dır ve Android'de bu kipte HİÇBİR animasyon yoktur (yalnız
+   * dalga). Eskiden her Touchable yine de animasyonlu bileşen olarak kuruluyor
+   * ve HER render'da üç `Animated.Value` yeniden yaratılıyordu
+   * (`useRef(new Animated.Value())` argümanı her seferinde çalışır). Uzun
+   * listede kaydırırken yeni satırlar bağlandıkça bu boşa iş birikiyordu.
+   * Artık değerler yalnız gerçekten animasyon varsa ve BİR kez yaratılır;
+   * animasyon yoksa yalın `Pressable` kullanılır.
+   */
+  const animates = targetScale !== 1 || targetOpacity !== 1 || tinted;
+  const values = useRef<{ scale: Animated.Value; fade: Animated.Value; tint: Animated.Value } | null>(null);
+  if (animates && values.current == null) {
+    values.current = { scale: new Animated.Value(1), fade: new Animated.Value(1), tint: new Animated.Value(0) };
+  }
+  const anim = values.current;
+
   const handlePressIn = useCallback(
     (event: GestureResponderEvent) => {
-      if (targetScale !== 1) {
-        Animated.spring(scale, { toValue: targetScale, ...spring.press }).start();
+      if (anim && targetScale !== 1) {
+        Animated.spring(anim.scale, { toValue: targetScale, ...spring.press }).start();
       }
-      if (targetOpacity !== 1) {
-        Animated.timing(fade, {
+      if (anim && targetOpacity !== 1) {
+        Animated.timing(anim.fade, {
           toValue: targetOpacity,
           duration: duration.instant,
           useNativeDriver: true,
         }).start();
       }
-      if (tinted) {
-        Animated.timing(tint, {
+      if (anim && tinted) {
+        Animated.timing(anim.tint, {
           toValue: 1,
           duration: duration.instant,
           useNativeDriver: true,
@@ -146,23 +160,23 @@ export const Touchable = React.memo(function Touchable({
       if (tracksPressState) setIsPressed(true);
       onPressIn?.(event);
     },
-    [fade, onPressIn, scale, targetOpacity, targetScale, tint, tinted, tracksPressState],
+    [anim, onPressIn, targetOpacity, targetScale, tinted, tracksPressState],
   );
 
   const handlePressOut = useCallback(
     (event: GestureResponderEvent) => {
-      if (targetScale !== 1) {
-        Animated.spring(scale, { toValue: 1, ...spring.press }).start();
+      if (anim && targetScale !== 1) {
+        Animated.spring(anim.scale, { toValue: 1, ...spring.press }).start();
       }
-      if (targetOpacity !== 1) {
-        Animated.timing(fade, {
+      if (anim && targetOpacity !== 1) {
+        Animated.timing(anim.fade, {
           toValue: 1,
           duration: duration.fast,
           useNativeDriver: true,
         }).start();
       }
-      if (tinted) {
-        Animated.timing(tint, {
+      if (anim && tinted) {
+        Animated.timing(anim.tint, {
           toValue: 0,
           duration: duration.fast,
           useNativeDriver: true,
@@ -171,7 +185,7 @@ export const Touchable = React.memo(function Touchable({
       if (tracksPressState) setIsPressed(false);
       onPressOut?.(event);
     },
-    [fade, onPressOut, scale, targetOpacity, targetScale, tint, tinted, tracksPressState],
+    [anim, onPressOut, targetOpacity, targetScale, tinted, tracksPressState],
   );
 
   const handlePress = useCallback(
@@ -186,13 +200,16 @@ export const Touchable = React.memo(function Touchable({
   );
 
   const animatedStyle = useMemo<StyleProp<ViewStyle>>(() => {
-    if (targetScale !== 1) return { transform: [{ scale }] };
-    if (targetOpacity !== 1) return { opacity: fade };
+    if (!anim) return null;
+    if (targetScale !== 1) return { transform: [{ scale: anim.scale }] };
+    if (targetOpacity !== 1) return { opacity: anim.fade };
     return null;
-  }, [fade, scale, targetOpacity, targetScale]);
+  }, [anim, targetOpacity, targetScale]);
+
+  const Root = animates ? AnimatedPressable : RNPressable;
 
   return (
-    <AnimatedPressable
+    <Root
       {...rest}
       disabled={disabled}
       accessibilityRole={accessibilityRole}
@@ -211,14 +228,14 @@ export const Touchable = React.memo(function Touchable({
         disabled ? null : animatedStyle,
       ]}
     >
-      {tinted ? (
+      {tinted && anim ? (
         <Animated.View
           pointerEvents="none"
-          style={[StyleSheet.absoluteFill, styles.tint, { opacity: tint }]}
+          style={[StyleSheet.absoluteFill, styles.tint, { opacity: anim.tint }]}
         />
       ) : null}
       {children}
-    </AnimatedPressable>
+    </Root>
   );
 });
 

@@ -98,7 +98,7 @@ const FeaturedCard = React.memo(function FeaturedCard({
     >
       {cover ? (
         <View style={styles.featuredCover}>
-          <Image source={{ uri: cover }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+          <Image source={{ uri: cover }} style={StyleSheet.absoluteFill} resizeMode="cover" resizeMethod="resize" />
         </View>
       ) : null}
       <View style={styles.featuredBody}>
@@ -191,7 +191,7 @@ const FeedRow = React.memo(function FeedRow({
       </View>
       {editorial && cover ? (
         <View style={styles.thumb}>
-          <Image source={{ uri: cover }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+          <Image source={{ uri: cover }} style={StyleSheet.absoluteFill} resizeMode="cover" resizeMethod="resize" />
         </View>
       ) : null}
     </>

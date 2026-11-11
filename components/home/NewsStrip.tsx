@@ -53,6 +53,7 @@ export const NewsStrip = React.memo(function NewsStrip({ items, onOpen }: NewsSt
               source={{ uri: mediaUrl(item.cover_image_url) ?? undefined }}
               style={styles.image}
               resizeMode="cover"
+              resizeMethod="resize"
               accessibilityIgnoresInvertColors
             />
             <View style={styles.body}>

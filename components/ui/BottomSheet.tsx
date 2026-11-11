@@ -238,7 +238,7 @@ export function BottomSheet({
       {children}
     </ScrollView>
   ) : (
-    <View style={styles.plainBody}>{children}</View>
+    <View style={snap === "content" ? styles.plainBodyContent : styles.plainBody}>{children}</View>
   );
 
   return (
@@ -374,6 +374,14 @@ const styles = StyleSheet.create({
   },
   plainBody: {
     flex: 1,
+  },
+  /**
+   * "content" snap'inde panelin yüksekliği tanımsızdır (yalnız `maxHeight`);
+   * `flex: 1` gövdeyi düzen motorunun kipine göre ya %86'ya gerer ya da sıfıra
+   * çökertir. İçerik kadar yer kaplar, sığmazsa küçülür.
+   */
+  plainBodyContent: {
+    flexShrink: 1,
   },
   footer: {
     paddingHorizontal: space.lg + space.xxs,

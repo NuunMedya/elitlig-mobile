@@ -17,11 +17,12 @@
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { useQuery } from "@tanstack/react-query";
 import React, { memo } from "react";
 import { Image, Linking, StyleSheet, Text, View } from "react-native";
 
 import { Touchable } from "@/components/ui";
-import type { ChatMessage } from "@/lib/api/chat";
+import { getAwardStatus, type ChatMessage } from "@/lib/api/chat";
 import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
 const clock = (iso: string) => {
@@ -61,12 +62,15 @@ export const PollBubble = memo(function PollBubble({
   viewerId,
   busy,
   onVote,
+  onVoters,
 }: {
   message: ChatMessage;
   showSender?: boolean;
   viewerId: number | null | undefined;
   busy: boolean;
   onVote: (message: ChatMessage, optionIds: string[]) => void;
+  /** Kimlerin hangi seçeneğe oy verdiğini açar. */
+  onVoters?: (message: ChatMessage) => void;
 }) {
   const poll = message.meta?.poll;
   if (!poll) return null;
@@ -125,6 +129,14 @@ export const PollBubble = memo(function PollBubble({
         {total ? `${total} kişi oy verdi` : "Henüz oy yok"}
         {mineIds.length ? " · oyunu değiştirmek için başka seçeneğe, geri almak için aynı seçeneğe dokun" : ""}
       </Text>
+      {onVoters && total ? (
+        <Touchable feedback="chip" haptic="selection" onPress={() => onVoters(message)} style={styles.slotBtn} accessibilityRole="button" accessibilityLabel="Oyları gör">
+          <Ionicons name="people-outline" size={14} color={colors.brandAccent} />
+          <Text style={styles.slotBtnText} {...textScale.badge}>
+            Oyları gör
+          </Text>
+        </Touchable>
+      ) : null}
     </Frame>
   );
 });
@@ -225,12 +237,18 @@ export const SignupCard = memo(function SignupCard({
   viewerId,
   busySlot,
   onToggle,
+  onAssignMenu,
+  onCloseToggle,
 }: {
   message: ChatMessage;
   showSender?: boolean;
   viewerId: number | null | undefined;
   busySlot: string | null;
   onToggle: (message: ChatMessage, slotId: string, on: boolean) => void;
+  /** Görevlendirme yetkisi (staff.assign) varsa: satırın talipleri arasından görevli seçilir. */
+  onAssignMenu?: (message: ChatMessage, slotId: string) => void;
+  /** Anketi gönderen kapatıp yeniden açabilir. */
+  onCloseToggle?: (message: ChatMessage, closed: boolean) => void;
 }) {
   const signup = message.meta?.signup;
   if (!signup) return null;
@@ -278,10 +296,31 @@ export const SignupCard = memo(function SignupCard({
                   </Text>
                 </Touchable>
               ) : null}
+              {onAssignMenu && (assigned || volunteers.length) ? (
+                <Touchable
+                  feedback="icon"
+                  haptic="selection"
+                  onPress={() => onAssignMenu(message, slot.id)}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={assigned ? `${slot.duty_label} görevlisini değiştir` : `${slot.duty_label} için görevlendir`}
+                  style={styles.slotIcon}
+                >
+                  <Ionicons name={assigned ? "person-circle" : "person-add-outline"} size={20} color={assigned ? colors.win : colors.brandAccent} />
+                </Touchable>
+              ) : null}
             </View>
           );
         })}
       </View>
+      {onCloseToggle && message.sender.is_me ? (
+        <Touchable feedback="chip" haptic="selection" onPress={() => onCloseToggle(message, !signup.closed)} style={styles.slotBtn} accessibilityRole="button" accessibilityLabel={signup.closed ? "Anketi yeniden aç" : "Anketi kapat"}>
+          <Ionicons name={signup.closed ? "lock-open-outline" : "lock-closed-outline"} size={14} color={colors.brandAccent} />
+          <Text style={styles.slotBtnText} {...textScale.badge}>
+            {signup.closed ? "Anketi yeniden aç" : "Anketi kapat"}
+          </Text>
+        </Touchable>
+      ) : null}
     </Frame>
   );
 });
@@ -290,6 +329,19 @@ export const SignupCard = memo(function SignupCard({
 
 export const AwardPollCard = memo(function AwardPollCard({ message, showSender, onOpenTodos }: { message: ChatMessage; showSender?: boolean; onOpenTodos?: () => void }) {
   const award = message.meta?.award;
+  // İlerleme: kimler aday önerisini gönderdi (yalnız yönetim hesapları görür; üyede sorgu 403 döner ve satır çizilmez).
+  const status = useQuery({
+    queryKey: ["chat", "award-status", message.conversation_id, message.id] as const,
+    queryFn: () => getAwardStatus(message.conversation_id, message.id),
+    enabled: Boolean(onOpenTodos) && message.id > 0,
+    staleTime: 30_000,
+    retry: false,
+  });
+  const total = status.data?.total ?? 0;
+  const submitted = status.data?.submitted ?? 0;
+  const waiting = (status.data?.people ?? []).filter((person) => !person.submitted);
+  const mineTask = Boolean(status.data?.my_task_id);
+  const coordinator = Boolean(status.data?.coordination_task_id);
   return (
     <Frame message={message} showSender={showSender} icon="trophy" label="Haftanın Enleri">
       <Text style={styles.title} {...textScale.long}>
@@ -300,14 +352,29 @@ export const AwardPollCard = memo(function AwardPollCard({ message, showSender, 
           {award.note}
         </Text>
       ) : null}
+      {total ? (
+        <View style={styles.progressBox}>
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${Math.round((submitted / total) * 100)}%` }]} />
+          </View>
+          <Text style={styles.muted} {...textScale.dense}>
+            {submitted === total ? `${total}/${total} öneri geldi · hepsi tamam` : `${submitted}/${total} öneri geldi`}
+            {waiting.length && submitted !== total ? ` · bekleyen: ${waiting.map((person) => person.name).join(", ")}` : ""}
+          </Text>
+        </View>
+      ) : null}
       <Text style={styles.muted} {...textScale.dense}>
-        Aday önerin Yapılacaklar'daki “Aday önerisi” kartından gönderilir.
+        {coordinator
+          ? "Önerileri Yapılacaklar'daki koordinasyon kartında toplayıp listeyi yayına alırsın."
+          : mineTask
+            ? "Aday önerin Yapılacaklar'daki “Aday önerisi” kartından gönderilir."
+            : "Aday önerileri Yapılacaklar'daki “Aday önerisi” kartından gönderilir."}
       </Text>
       {onOpenTodos ? (
         <Touchable feedback="chip" onPress={onOpenTodos} style={styles.slotBtn} accessibilityRole="button" accessibilityLabel="Yapılacaklar'ı aç">
           <Ionicons name="checkbox-outline" size={14} color={colors.brandAccent} />
           <Text style={styles.slotBtnText} {...textScale.badge}>
-            Yapılacaklar'ı aç
+            {coordinator ? "Önerileri topla" : mineTask ? "Adaylarını öner" : "Yapılacaklar'ı aç"}
           </Text>
         </Touchable>
       ) : null}
@@ -316,6 +383,10 @@ export const AwardPollCard = memo(function AwardPollCard({ message, showSender, 
 });
 
 const styles = StyleSheet.create({
+  slotIcon: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
+  progressBox: { gap: space.xs },
+  progressTrack: { height: 6, borderRadius: 3, backgroundColor: colors.surface3, overflow: "hidden" },
+  progressFill: { height: 6, borderRadius: 3, backgroundColor: colors.accent },
   flex: { flex: 1, minWidth: 0 },
   card: {
     width: "88%",
