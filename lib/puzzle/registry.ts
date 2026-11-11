@@ -4,13 +4,14 @@
  * sunucu rules.js GAMES/BOOSTERS.
  */
 import { kantinModule } from "@/components/puzzle/games/kantin";
+import { kariyerModule } from "@/components/puzzle/games/kariyer";
 import { soyunmaModule } from "@/components/puzzle/games/soyunma";
 import { ucleModule } from "@/components/puzzle/games/ucle";
 import { ucluModule } from "@/components/puzzle/games/uclu";
 
 import type { PuzzleGameKey, PuzzleGameModule } from "./types";
 
-export const PUZZLE_GAMES: readonly PuzzleGameModule[] = [ucluModule, ucleModule, soyunmaModule, kantinModule];
+export const PUZZLE_GAMES: readonly PuzzleGameModule[] = [kariyerModule, ucluModule, ucleModule, soyunmaModule, kantinModule];
 
 const BY_KEY = new Map<string, PuzzleGameModule>(PUZZLE_GAMES.map((m) => [m.key, m]));
 
