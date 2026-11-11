@@ -63,6 +63,22 @@ Geçersiz URL, izin yok, kodlayıcı desteklemiyor, görünüm yok gibi durumlar
 Yeniden bağlanma en fazla 5 deneme yapar. Bekleme süresi artarak gider: 2, 4, 8, 16, 16 sn.
 Bağlantı başarılı olunca sayaç sıfırlanır.
 
+## Yakınlaştırma, fener, cihaz durumu (sonradan eklendi)
+
+```ts
+import { supportsCameraControls, getCameraCapabilities, setZoom, setTorch, getDeviceStatus } from "@/modules/elitlig-live";
+
+supportsCameraControls();            // yerel modül bu işlevleri içeriyor mu (eski mağaza derlemesinde false)
+await getCameraCapabilities();       // { minZoom, maxZoom, zoom, torch, torchOn } | null
+await setZoom(2);                    // uygulanan düzey | null  (Android: Camera2 zoom aralığı; iOS: 1..min(8, cihaz))
+await setTorch(true);                // son durum | null        (ön kamerada genellikle false)
+await getDeviceStatus();             // { batteryLevel 0..1 | -1, charging, lowPower, network } | null
+```
+
+Bu dört işlev eski derlemede yoktur; JS sarmalayıcıları varlığı denetler ve yoksa `null` döner
+(OTA ile giden JS, eski yerel modülle de çalışır). Kamera değişince yakınlaştırma ve fener sıfırlanır.
+Android'de ağ türü için `ACCESS_NETWORK_STATE` (normal izin) manifest'e eklenir.
+
 ## Gol klibi ve tekrar (replay)
 
 ```ts
