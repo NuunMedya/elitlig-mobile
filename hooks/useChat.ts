@@ -35,7 +35,7 @@ import {
   releaseChatSocket,
   retainChatSocket,
 } from "@/lib/chatSocket";
-import { loadChatDrafts, outboxAll, outboxRemove } from "@/lib/chatDrafts";
+import { chatDraftOwner, loadChatDrafts, outboxAll, outboxRemove, setChatDraftOwner } from "@/lib/chatDrafts";
 import { markReadUntil, mergeMessages, upsertChat } from "@/lib/chatUtils";
 import { ApiError } from "@/lib/http";
 import { queryKeys } from "@/lib/queryKeys";
@@ -248,9 +248,15 @@ export function useChatRealtime(): void {
   const queryClient = useQueryClient();
   const enabled = Boolean(auth.user) && appActive;
 
+  // Taslaklar ve giden kutusu oturumdaki hesaba aittir: hesap değişince (çıkış,
+  // başka üyenin girişi) bellek boşalır ve yalnız o hesabın kaydı okunur.
+  // Çizimde çağrılır ki sohbet ekranları kendi etkilerinden ÖNCE doğru sahibi görsün.
+  setChatDraftOwner(auth.user?.id ?? null);
+
   useEffect(() => {
     if (!enabled) return;
     retainChatSocket();
+    const groupRefresh = new Map<number, ReturnType<typeof setTimeout>>();
 
     const patchLast = (conversationId: number, fn: (last: ChatMessage, conversation: ChatConversation) => ChatMessage | null) => {
       queryClient.setQueryData<ConversationsResponse>(queryKeys.chatConversations(), (previous) => {
@@ -355,6 +361,22 @@ export function useChatRealtime(): void {
       const open = queryClient.getQueryData<MessagesResponse>(queryKeys.chatMessages(conversation_id));
       const type = list?.conversations.find((item) => item.id === conversation_id)?.type ?? open?.conversation.type;
       const group = type === "group" || type === "team";
+      if (group) {
+        // Grupta sayaç yerelde artırılmaz (aynı üyenin tekrar eden olayları
+        // sayacı şişirirdi): gerçek okunma sayıları kısa bir gecikmeyle
+        // sunucudan yeniden okunur; art arda gelen olaylar tek isteğe iner.
+        const pending = groupRefresh.get(conversation_id);
+        if (pending) clearTimeout(pending);
+        groupRefresh.set(
+          conversation_id,
+          setTimeout(() => {
+            groupRefresh.delete(conversation_id);
+            void queryClient.invalidateQueries({ queryKey: queryKeys.chatMessages(conversation_id) });
+            void queryClient.invalidateQueries({ queryKey: queryKeys.chatConversations() });
+          }, 900),
+        );
+        return;
+      }
       updateMessagesCache(queryClient, conversation_id, (messages) => markReadUntil(messages, read_at || new Date(), group));
       patchLast(conversation_id, (last) => {
         if (!last.sender.is_me || last.status === "read") return null;
@@ -398,7 +420,10 @@ export function useChatRealtime(): void {
       flushing = true;
       try {
         await loadChatDrafts();
+        const sender = chatDraftOwner();
         for (const item of outboxAll()) {
+          // Kuyruk boşalırken hesap değiştiyse kalanlar yeni hesap adına gönderilmez.
+          if (!sender || chatDraftOwner() !== sender) break;
           if (item.conversation_id === activeConversationId) continue;
           try {
             const input = { kind: "text" as const, body: item.body, reply_to_id: item.reply_to_id, client_id: item.client_id, ...(item.mentions?.length ? { mentions: item.mentions } : {}) };
@@ -425,6 +450,8 @@ export function useChatRealtime(): void {
       offConversation();
       offUpdated();
       offRead();
+      groupRefresh.forEach((timer) => clearTimeout(timer));
+      groupRefresh.clear();
       offTyping();
       offAdminInbox();
       releaseChatSocket();

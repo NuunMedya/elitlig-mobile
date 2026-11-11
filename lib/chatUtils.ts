@@ -410,18 +410,21 @@ export function mergeMessages(list: ChatMessage[], incoming: (ChatMessage | null
   return changed ? out.sort((a, b) => sortValue(a) - sortValue(b)) : list;
 }
 
-/** Okundu olayı: okuma anına kadarki kendi mesajlarım okundu (grupta sayaç artar). */
+/**
+ * Okundu olayı (BİREBİR sohbet): okuma anına kadarki kendi mesajlarım okundu.
+ *
+ * Grupta burada sayaç ARTIRILMAZ: aynı üyenin art arda gelen okuma olayları
+ * (sohbeti yeniden açması, sonraki mesajı okuması) önceki mesajların sayacını
+ * tekrar tekrar artırır ve herkes okumadan mavi tik gösterirdi. Grupta gerçek
+ * sayılar sunucudan yeniden okunur (hooks/useChat.ts → okundu olayı).
+ */
 export function markReadUntil(list: ChatMessage[], readAt: string | Date, group: boolean): ChatMessage[] {
+  if (group) return list;
   const at = toDate(readAt).getTime();
   let changed = false;
   const out = list.map((m) => {
     if (!m.sender.is_me || m.id <= 0 || m.status === "read" || toDate(m.created_at).getTime() > at + 1000) return m;
     changed = true;
-    if (group) {
-      const total = Number(m.recipient_count) || 0;
-      const count = total ? Math.min(total, (Number(m.read_count) || 0) + 1) : (Number(m.read_count) || 0) + 1;
-      return { ...m, read_count: count, status: total && count >= total ? ("read" as const) : m.status };
-    }
     return { ...m, status: "read" as const, read_count: Math.max(1, Number(m.read_count) || 0) };
   });
   return changed ? out : list;

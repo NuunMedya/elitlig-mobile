@@ -92,7 +92,7 @@ import {
   type SendMessageInput,
 } from "@/lib/api/chat";
 import { addMatchAttendancePlayers, getTeamRoster, removeMatchAttendancePlayer, respondMatchAttendance, type AttendancePlayer } from "@/lib/api/team";
-import { outboxAdd, outboxFor, outboxRemove, loadChatDrafts } from "@/lib/chatDrafts";
+import { chatDraftOwner, outboxAdd, outboxFor, outboxRemove, loadChatDrafts } from "@/lib/chatDrafts";
 import { pickFromLibrary, takePhoto, type PickedFile, type VoiceRecording } from "@/lib/chatMedia";
 import { chatPalette } from "@/lib/chatPalette";
 import {
@@ -539,8 +539,11 @@ export function ChatRoom({ conversationId, admin = false, jumpTo = null }: ChatR
   /* ---------- giden kutusu: sohbet açılınca ve bağlantı gelince yeniden dene ---------- */
   const flushOutbox = useCallback(async () => {
     await loadChatDrafts();
+    const sender = chatDraftOwner();
     const items = outboxFor(conversationId).filter((item) => Boolean(item.admin) === admin);
     for (const item of items) {
+      // Kuyruk boşalırken hesap değiştiyse kalanlar yeni hesap adına gönderilmez.
+      if (!sender || chatDraftOwner() !== sender) break;
       const known = queryClient.getQueryData<MessagesResponse>(queryKeys.chatMessages(conversationId))?.messages.find((message) => message.client_id === item.client_id);
       if (known?.pending) continue;
       if (known && known.id > 0) {
