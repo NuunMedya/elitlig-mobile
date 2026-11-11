@@ -547,6 +547,49 @@
         }, i * 80);
       });
     },
+    /* Arcade oyunları (Slalom koşusu, Savunma Hattı, Kadro Koşusu). */
+    jump: function () {
+      tone(300, 0.16, "sine", 0.16, 620);
+    },
+    slide: function () {
+      noise(0.26, 900, 0.5, 0.14, 0.02, "bandpass");
+      tone(160, 0.2, "triangle", 0.06, 90);
+    },
+    swish: function () {
+      noise(0.1, 2600, 0.9, 0.07, 0.01, "bandpass");
+    },
+    pop: function () {
+      tone(520, 0.07, "sine", 0.16, 880);
+      setTimeout(function () {
+        if (audio) tone(1040, 0.1, "triangle", 0.1);
+      }, 50);
+    },
+    bad: function () {
+      tone(240, 0.2, "sawtooth", 0.07, 110);
+    },
+    shoot: function () {
+      tone(190, 0.07, "sine", 0.16, 80);
+      noise(0.03, 2800, 1, 0.07);
+    },
+    thud: function () {
+      tone(120, 0.1, "sine", 0.22, 60);
+      noise(0.04, 700, 0.8, 0.12);
+    },
+    place: function () {
+      tone(330, 0.09, "triangle", 0.14, 495);
+      noise(0.06, 500, 0.7, 0.12);
+    },
+    power: function () {
+      [523, 784, 1047, 1568].forEach(function (f, i) {
+        setTimeout(function () {
+          if (audio) tone(f, 0.12, "square", 0.05);
+        }, i * 55);
+      });
+    },
+    boom: function () {
+      noise(0.5, 220, 0.5, 0.45, 0.005, "lowpass");
+      tone(70, 0.4, "sine", 0.4, 35);
+    },
     over: function () {
       [392, 330, 262].forEach(function (f, i) {
         setTimeout(function () {

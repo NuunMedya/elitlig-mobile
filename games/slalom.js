@@ -1,62 +1,52 @@
 /*
- * SLALOM 3B — topu sürerek KAPILARDAN geç; karşında ligin gerçek savunmaları.
+ * SLALOM KOŞUSU 3B — üç şeritli sonsuz koşu: topu sürerek stadyum bulvarında
+ * ilerle, şerit değiştir, ZIPLA, KAY. Karşında ligin gerçek savunmaları.
  *
- * MİMARİ: simülasyon (kurallar, kapılar, savunmacılar, puan) çizimden
- * bağımsızdır; başsız testler yalnız onu koşturur. Çizim three.js (WebGL):
- * sonsuz saha ve kenar panoları oyuncuyla akar; ortak stadyumun
- * (games/stadium3d.js) iki katlı tribün parçaları yol boyunca öne taşınır.
- * Eklemli 3B oyuncu topu sürer, savunmacılar rakip takımın formasıyla
- * durur/kayar. Ortak 3B parçalar games/three-kit.js'te. HUD üstteki saydam 2B tuvalde.
+ * MİMARİ: simülasyon (şeritler, engeller, çarpışma, puan) çizimden
+ * bağımsızdır; başsız testler yalnız onu koşturur. Çizim arcade motorunda
+ * (games/arcade3d.js): KIVRIK DÜNYA (ufuk aşağı ve yana bükülür; engeller
+ * ufuktan doğar), gündüz → gün batımı → gece tema geçişleri, GPU parçacıkları.
+ * Koşucu ve savunmacılar iskeletli gerçek futbolcu modelidir (three-kit.js):
+ * formada ad, soyad, numara.
  *
  * GERÇEK İÇERİK (RN'den {type:"config", roster:{runner, defenses}}; bkz.
  * elitlig-server services/penaltyRoster.js buildSlalomRoster):
- *   · KOŞUCU: oyuncunun seçtiği gerçek oyuncu (forma, soyadı, numara). Üç
- *     özelliği küçük ve DENGELİ etki yapar: çeviklik (yana kayış ±%8),
- *     kontrol (MÜKEMMEL penceresi ±%15, direğe sürtünme payı ±%5), hız
- *     (koşu hızı ±%3).
- *   · SAVUNMA MERDİVENİ: her seviyede (8 kapı) ligin bir takımının savunması:
- *     kapı bayrakları o takımın renklerinde, savunmacılar o takımın gerçek
- *     oyuncuları (numara + soyadı). Son basamak ligin en iyi savunması.
+ *   · KOŞUCU: seçilen gerçek oyuncu. Çeviklik şerit değiştirmeyi ±%8, hız
+ *     koşuyu ±%3 etkiler; kontrol sendelemeden toparlanmayı ±%15 kısaltır.
+ *   · SAVUNMA MERDİVENİ: her seviyede (14 engel sırası) ligin bir takımı:
+ *     savunmacılar o takımın gerçek oyuncuları, takım otobüsü o takımın
+ *     renklerinde ve adıyla. Son basamak ligin en iyi savunması.
  *
- * NEDEN BAŞTAN: eski sürümde tek tek koniler vardı ve konilerden kaçmak
- * yetiyordu; oyuncu kenara saklanıp sonsuza dek ilerleyebiliyordu. Gerçek
- * slalomda olduğu gibi artık iki direkten oluşan KAPILAR var ve HER KAPIDAN
- * GEÇMEK ZORUNLU:
- *   · Kapının dışından geçmek  → "KAPI KAÇTI", bir hak gider.
- *   · Direğe / rakibe çarpmak  → düşersin, bir hak gider, hız düşer.
- *   · Üç hak bitince tur biter. Kenarda beklemek artık hiçbir şey kazandırmaz.
+ * KONTROL (kaydırma): sola/sağa şerit değiştir · yukarı ZIPLA · aşağı KAY.
+ * Havadayken aşağı kaydırmak hızla yere indirir ve kaymaya geçirir.
  *
- * KONTROL: parmağını sağa sola KAYDIR — oyuncu parmağını izler (göreli
- * sürükleme, ekranın neresinden başladığın önemsiz). Yanal hareket kritik
- * sönümlü bir yay: hedefe hızla ama savrulmadan oturur, parmak titremesi
- * süzülür; gövde dönüşe yatar.
+ * ENGELLER:
+ *   · ANTRENMAN ENGELİ (alçak)  → üstünden zıpla ya da şerit değiştir.
+ *   · PANKART (yüksek)          → altından kay ya da şerit değiştir.
+ *   · TAKIM OTOBÜSÜ             → yalnız şerit değiştirerek geçilir. Yanına
+ *                                 sürtünürsen şeride geri itilirsin (hak gitmez).
+ *   · KAYAN SAVUNMACI (sv. 2+)  → yaklaşınca kayarak müdahale eder: zıpla.
+ *   · DUVAR SAVUNMACI (sv. 2+)  → kolları açık durur: şerit değiştir.
+ * Çarpışma bir hak götürür (3 hak), seriyi sıfırlar, hızı düşürür.
  *
- * JOKERLER (alttaki üç düğme; her biri turda bir kez başlar, her seviye
- * atlayışında ve yoldaki parlayan joker kutularından yenisi gelir, en çok 3):
- *   · SÜPÜR      2 sn boyunca önün boşalır: kapılar kendiliğinden geçilir,
- *                savunmacılar kenara savrulur, altın toplar mıknatısla gelir.
- *   · HAYALET    5 sn direklerden ve rakiplerden geçersin; kaçan kapı hak
- *                götürmez (puan da getirmez).
- *   · AĞIR ÇEKİM 20 sn koşu hızı %38 düşer.
+ * GÜÇLER (yoldaki parlayan kutular, alınınca kendiliğinden başlar):
+ *   MIKNATIS 8 sn altınları çeker · KALKAN bir çarpışmayı affeder (20 sn) ·
+ *   ×2 PUAN 10 sn · TURBO 4 sn dokunulmaz, engelleri devirir.
  *
- * KIL PAYI: bir savunmacının yanından 1,5 m'den yakın geçmek +5.
+ * PUAN: her 10 m 1 × çarpan; temiz geçilen her sıra 3 × çarpan; altın +1.
+ * Arka arkaya her 8 temiz sıra çarpanı bir artırır (en çok ×5).
  *
- * PUAN: her kapı 10 × çarpan; kapının tam ortasından geçmek +5 (MÜKEMMEL);
- * yoldaki altın toplar +2. Arka arkaya her 5 kapı çarpanı bir artırır (en çok
- * ×5); hata çarpanı sıfırlar.
- *
- * GİDEREK ZORLAŞIR (her 8 kapıda bir seviye):
- *   · Koşu hızı 9 → 21 m/sn (≈650 m ölçeğinde); kapılar daralır (4,6 → 2,1 m), sıklaşır ve
- *     sahanın iki yanına daha çok savrulur.
- *   · Seviye 3: kapıların arasına RAKİP savunmacılar girer.
- *   · Seviye 4: bazı kapılar sağa sola KAYAR.
- *   · Seviye 5: savunmacılar da kayar.
+ * GİDEREK ZORLAŞIR: hız 11 → 23 m/sn; sıralar sıklaşır, dolu şerit artar;
+ * 2. seviyeden sonra savunmacılar sahaya girer.
  */
 (function () {
   "use strict";
   var A = window.Arena;
   var P = A.PAL;
   var T = window.THREE || (typeof THREE !== "undefined" ? THREE : null); // eslint-disable-line no-undef
+  var G3 = A.G3;
+  var K = A.T3;
+  var S3 = A.S3;
 
   /* ─────────────────────────── kadro ─────────────────────────── */
   var DEFAULT_RUNNER = {
@@ -96,8 +86,7 @@
     defenses = ds.length ? ds : DEFAULT_DEFENSES;
     if (R) {
       buildRunner();
-      R.boardText = "";
-      R.foeTeam = null;
+      R.teamKey = "";
     }
   }
   function attr(key) {
@@ -112,175 +101,125 @@
     return { primary: k.primary || "#5B3DF5", secondary: k.secondary || "#FFFFFF" };
   }
 
-  /* ─────────────────────────── dünya (metre) ─────────────────────────── */
-  var FIELD = 5.6; // taç çizgisi
-  var CAM_H = 11;
-  var CAM_BACK = 13;
-  var VIEW_HALF = 6.4; // oyuncu derinliğinde ekranın yarı genişliği (m)
-  var FAR = 150;
-  var LINE_FAR = 600;
-  var POLE_H = 1.75;
+  /* ─────────────────────────── kurallar ─────────────────────────── */
+  var LANE = 2.3; // şerit aralığı (m)
   var LIVES = 3;
-  var GATES_PER_LEVEL = 8;
-
-  var W = 0, H = 0, horizon = 0, f = 1, feetY = 0;
-  var intro = null; // { def, idx, age } — rakip savunma tanıtımı
-
-  /* ─────────────────────────── durum ─────────────────────────── */
-  var state = "attract"; // attract | play | dying | over
-  var z = 0; // oyuncunun ileri konumu
-  var speed = 9;
-  var player = { x: 0, target: 0, vx: 0, lean: 0, stride: 0, stumble: 0, invuln: 0 };
-  var camX = 0;
-  var gates = [], foes = [], coins = [];
-  var nextGateZ = 0, gateSide = 1, gateCount = 0;
-  var passed = 0, points = 0, combo = 0, bestCombo = 0, lives = LIVES, level = 1, coinCount = 0;
-  var orient = null;
-  var scoreBump = 0, flashRed = 0, dyingT = 0;
-  var lastTouchX = null;
-  var boardOffset = 0;
-
-  /* ─────────────────────────── jokerler ─────────────────────────── */
-  var JOKERS = {
-    clear: { name: "SÜPÜR", desc: "Önün 2 sn boşalır", dur: 2, color: "#FBBF24" },
-    ghost: { name: "HAYALET", desc: "5 sn her şeyin içinden geç", dur: 5, color: "#67E8F9" },
-    slow: { name: "AĞIR ÇEKİM", desc: "20 sn yavaşla", dur: 20, color: "#C4B5FD" },
+  var ROWS_PER_LEVEL = 14;
+  var GRAV = 34, JUMP_V = 10.8, SLIDE_T = 0.62;
+  var FAR = 170; // üretim ufku
+  var DEPTH = { hurdle: 0.5, bar: 0.5, bus: 9, tackler: 1.1, wall: 0.7 };
+  var POWERS = {
+    magnet: { name: "MIKNATIS", dur: 8, color: "#F43F5E" },
+    shield: { name: "KALKAN", dur: 20, color: "#38BDF8" },
+    x2: { name: "×2 PUAN", dur: 10, color: "#FACC15" },
+    turbo: { name: "TURBO", dur: 4, color: "#FB923C" },
   };
-  var JOKER_KEYS = ["clear", "ghost", "slow"];
-  var JOKER_MAX = 3;
-  var SLOW_K = 0.62;
-  var jokers = { clear: 1, ghost: 1, slow: 1 };
-  var active = { clear: 0, ghost: 0, slow: 0 };
-  var pickups = [];
-  var jokerUsed = 0, nearMisses = 0;
-  var sweepAt = -9; // SÜPÜR şok dalgasının başladığı an
-  var fx = []; // çizime giden tek seferlik efektler (kapı halkası vb.)
+  var POWER_KEYS = ["magnet", "shield", "x2", "turbo"];
+  var THEME_ORDER = ["day", "sunset", "night"];
+
+  var W = 0, H = 0;
+  var state = "attract"; // attract | play | dying | over
+  var z = 0, speed = 11;
+  var player = null;
+  var rows = [], obstacles = [], coins = [], pickups = [];
+  var nextRowZ = 0, rowCount = 0, pathLane = 0, foeCount = 0;
+  var passed = 0, points = 0, combo = 0, bestCombo = 0, lives = LIVES, level = 1, coinCount = 0, powerUsed = 0;
+  var distAcc = 0;
+  var active = { magnet: 0, shield: 0, x2: 0, turbo: 0 };
+  var scoreBump = 0, flashRed = 0, dyingT = 0, coinBump = 0;
+  var intro = null;
+  var uid = 0;
+  var fx = []; // çizime giden tek seferlik efektler
+  var touch = null;
+
+  function laneX(l) {
+    return l * LANE;
+  }
+  function runSpeed() {
+    return (11 + 12 * (1 - Math.exp(-z / 900))) * (1 + 0.03 * attr("pace"));
+  }
+  function multiplier() {
+    return Math.min(5, 1 + Math.floor(combo / 8)) * (active.x2 > 0 ? 2 : 1);
+  }
   function pushFx(e) {
     e.at = A.time;
     fx.push(e);
-    if (fx.length > 24) fx.shift();
-  }
-
-  function n() {
-    return passed;
-  }
-  function gateGap() {
-    return 2.1 + 2.5 * Math.exp(-n() / 22);
-  }
-  function gateSpacing() {
-    return 12 + 10 * Math.exp(-n() / 26);
-  }
-  function gateAmp(gap) {
-    return Math.min(FIELD - gap / 2 - 0.35, 1.3 + n() * 0.1);
-  }
-  function runSpeed() {
-    return (9 + 12 * (1 - Math.exp(-z / 650))) * (1 + 0.03 * attr("pace"));
-  }
-
-  /* ─────────────────────────── kamera ─────────────────────────── */
-
-  function resize(w, h) {
-    W = w;
-    H = h;
-    f = ((W * 0.5) / VIEW_HALF) * CAM_BACK;
-    feetY = H * 0.83;
-    horizon = Math.max(H * 0.2, feetY - (f * CAM_H) / CAM_BACK);
-    if (!orient) {
-      orient = A.orientation();
-      resetWorld();
-    }
-    initGL();
-    resizeGL();
-  }
-
-  /** Dünya → ekran (HUD yazıları için). WebGL yoksa basit iz düşüm. */
-  function proj(X, Y, Z) {
-    if (R) return screenOf(X, Y, Z);
-    var dz = Math.max(0.3, Z - (z - CAM_BACK));
-    var s = f / dz;
-    return { x: W / 2 + (X - camX) * s, y: horizon + (CAM_H - Y) * s, s: s };
+    if (fx.length > 30) fx.shift();
   }
 
   /* ─────────────────────────── dünya üretimi ─────────────────────────── */
 
   function resetWorld() {
     z = 0;
-    speed = 9;
-    player = { x: 0, target: 0, aim: 0, vx: 0, lean: 0, stride: 0, stumble: 0, invuln: 0, fallen: 0 };
-    camX = 0;
-    gates = [];
-    foes = [];
+    speed = 11;
+    player = { lane: 0, x: 0, y: 0, vy: 0, slide: 0, stumble: 0, invuln: 0, stride: 0, lean: 0, bump: 0, wantJump: 0, wantSlide: false, airT: 0 };
+    rows = [];
+    obstacles = [];
     coins = [];
     pickups = [];
-    nextGateZ = 28;
-    gateSide = Math.random() < 0.5 ? -1 : 1;
-    gateCount = 0;
+    nextRowZ = 34;
+    rowCount = 0;
+    pathLane = 0;
+    foeCount = 0;
     passed = 0;
-    while (nextGateZ < z + FAR) spawnGate();
+    while (nextRowZ < z + FAR) spawnRow();
   }
 
-  var uid = 0, foeCount = 0;
-  function spawnGate() {
-    var gap = gateGap();
-    var amp = gateAmp(gap);
-    // Taraf değiştir; yüksek seviyede ara sıra aynı tarafta kal (sürpriz)
-    if (!(gateCount > 16 && Math.random() < 0.2)) gateSide = -gateSide;
-    var cx = gateSide * A.rand(0.35, 1) * amp;
-    if (gateCount < 2) cx = gateSide * 1.2;
-    var lvl = 1 + Math.floor(gateCount / GATES_PER_LEVEL);
+  /**
+   * Bir engel sırası. Her sırada geçilebilir bir YOL şeridi vardır (boş,
+   * zıplanır ya da kayılır); yol bir sıradan ötekine en çok bir şerit kayar.
+   * Diğer şeritler seviyeye göre dolar.
+   */
+  function spawnRow() {
+    var lvl = 1 + Math.floor(rowCount / ROWS_PER_LEVEL);
     var def = defenseAt(lvl);
-    var moving = lvl >= 4 && Math.random() < Math.min(0.55, 0.2 + (lvl - 4) * 0.1);
-    var gate = {
-      z: nextGateZ,
-      cx: cx,
-      baseX: cx,
-      gap: gap,
-      color: gateCount % 2 ? "blue" : "red",
-      moving: moving,
-      phase: Math.random() * 6.28,
-      amp: moving ? Math.min(1.4, FIELD - Math.abs(cx) - gap / 2 - 0.2) : 0,
-      done: false,
-      result: null,
-      at: 0,
-      hitPole: 0,
-      id: ++uid,
-      kit: def.team.kit,
-    };
-    gates.push(gate);
+    if (rowCount > 0 && Math.random() < 0.62) pathLane = A.clamp(pathLane + (Math.random() < 0.5 ? -1 : 1), -1, 1);
+    var cells = [null, null, null];
+    var soft = ["hurdle", "bar"];
+    if (lvl >= 2) soft.push("tackler");
+    // yol şeridi: ilk sıralar boş, sonra çoğunlukla zıpla/kay
+    var pathType = null;
+    if (rowCount >= 2 && Math.random() < Math.min(0.72, 0.3 + lvl * 0.09)) pathType = A.pick(soft);
+    cells[pathLane + 1] = pathType;
+    var block = Math.min(0.8, 0.32 + 0.085 * lvl);
+    for (var l = -1; l <= 1; l++) {
+      if (l === pathLane) continue;
+      if (rowCount < 1 || Math.random() > block) continue;
+      var r = Math.random();
+      cells[l + 1] = r < 0.42 ? "bus" : lvl >= 2 && r < 0.6 ? "wall" : A.pick(soft);
+    }
+    // en az bir engel olsun (ilk sıra hariç)
+    if (rowCount >= 1 && !cells[0] && !cells[1] && !cells[2]) cells[pathLane + 1] = A.pick(soft);
+    var row = { z: nextRowZ, cells: cells, path: pathLane, scored: false, hit: false, id: ++uid, level: lvl };
+    rows.push(row);
+    for (var i = 0; i < 3; i++) {
+      var type = cells[i];
+      if (!type) continue;
+      var o = { id: ++uid, type: type, lane: i - 1, z: nextRowZ + (type === "bus" ? 4.5 : 0), depth: DEPTH[type], row: row, hit: false, smashed: false, at: 0, kit: def.team.kit, team: def.team };
+      if (type === "tackler" || type === "wall") o.who = def.defenders[foeCount++ % def.defenders.length];
+      obstacles.push(o);
+    }
 
-    // Önceki kapıdan buna giden yola altın toplar
-    var prev = gates[gates.length - 2];
-    if (prev && gateCount % 2 === 0) {
-      for (var i = 1; i <= 3; i++) {
-        var t = i / 4;
-        coins.push({ z: A.lerp(prev.z, gate.z, t), x: A.lerp(prev.baseX, gate.baseX, A.smooth(t)), taken: false, at: 0 });
+    // Önceki sıradan buna: yol şeridinde altın dizisi (zıplanacaksa yay çizer)
+    var prev = rows[rows.length - 2];
+    var from = prev ? prev.z : z;
+    var span = nextRowZ - from;
+    var wantPickup = rowCount >= 5 && rowCount % 10 === 5;
+    if (wantPickup) {
+      pickups.push({ id: ++uid, type: POWER_KEYS[(Math.random() * POWER_KEYS.length) | 0], lane: pathLane, z: from + span * 0.55, taken: false, at: 0 });
+    } else if (rowCount % 3 !== 2) {
+      var n = 5;
+      for (var c = 0; c < n; c++) {
+        var cz = nextRowZ - 6.4 + c * 1.6 + (pathType ? 3.2 : 0);
+        if (cz <= from + 2) continue;
+        var arc = pathType === "hurdle" || pathType === "tackler" ? Math.sin(((c + 0.5) / n) * Math.PI) * 1.55 : 0;
+        coins.push({ id: ++uid, lane: pathLane, x: laneX(pathLane), y: 0.7 + arc, z: cz, taken: false, at: 0 });
       }
     }
-
-    // Ara sıra iki kapının arasında bir joker kutusu (en az 6 kapıda bir)
-    if (prev && gateCount >= 6 && gateCount % 7 === 3) {
-      var have = JOKER_KEYS.filter(function (k) {
-        return jokers[k] < JOKER_MAX;
-      });
-      if (have.length) {
-        var pt = gateCount % 2 === 0 ? 0.3 : 0.5;
-        pickups.push({ z: A.lerp(prev.z, gate.z, pt), x: A.lerp(prev.baseX, gate.baseX, A.smooth(pt)), type: have[(Math.random() * have.length) | 0], taken: false, at: 0, id: ++uid });
-      }
-    }
-
-    // Seviye 3+: kapı aralarına savunmacı (yolun dışına değil, yolun ÜSTÜNE)
-    if (prev && lvl >= 3 && Math.random() < Math.min(0.75, 0.35 + (lvl - 3) * 0.1)) {
-      var mz = A.lerp(prev.z, gate.z, A.rand(0.42, 0.58));
-      var line = A.lerp(prev.baseX, gate.baseX, 0.5);
-      var off = (Math.random() < 0.5 ? -1 : 1) * A.rand(0.6, 1.6);
-      var fx = A.clamp(line + off, -FIELD + 0.6, FIELD - 0.6);
-      var slide = lvl >= 5 && Math.random() < 0.5;
-      var who = def.defenders[foeCount++ % def.defenders.length];
-      foes.push({ z: mz, x: fx, baseX: fx, slide: slide, swept: false, judged: false, dir: 1, phase: Math.random() * 6.28, amp: slide ? A.rand(1, 2) : 0, done: false, hit: false, at: 0, id: ++uid, who: who, team: def.team });
-    }
-
-    gateCount += 1;
-    nextGateZ += gateSpacing() * A.rand(0.9, 1.1);
+    rowCount += 1;
+    var v = 11 + 12 * (1 - Math.exp(-nextRowZ / 900));
+    var T2 = Math.max(0.72, 1.08 - 0.04 * (lvl - 1));
+    nextRowZ += A.clamp(v * T2, 12.5, 26) * A.rand(0.94, 1.06);
   }
 
   /* ─────────────────────────── akış ─────────────────────────── */
@@ -294,674 +233,895 @@
     lives = LIVES;
     level = 1;
     coinCount = 0;
-    jokers = { clear: 1, ghost: 1, slow: 1 };
-    active = { clear: 0, ghost: 0, slow: 0 };
-    jokerUsed = 0;
-    nearMisses = 0;
-    sweepAt = -9;
+    powerUsed = 0;
+    distAcc = 0;
+    active = { magnet: 0, shield: 0, x2: 0, turbo: 0 };
     fx = [];
     A.particles.length = 0;
     A.floaters.length = 0;
     A.banner = null;
     A.sound("whistle");
-    A.announce("SLALOM!", "Parmağını kaydır, kapılardan geç");
+    A.announce("SLALOM!", "Kaydır: şerit değiştir, zıpla, kay");
     intro = { def: defenseAt(1), idx: 1, age: -1.8 };
+    if (R) G3.setTheme(R, THEME_ORDER[0]);
   }
 
-  function multiplier() {
-    return Math.min(5, 1 + Math.floor(combo / 5));
-  }
-
-  function loseLife(kind, x, y) {
+  function loseLife(o) {
     combo = 0;
     lives -= 1;
     flashRed = 1;
+    player.stumble = 1;
+    player.invuln = 1.5 * (1 - 0.15 * attr("control"));
+    speed *= 0.6;
     A.haptic("error");
-    if (kind === "crash") {
-      player.stumble = 1;
-      player.invuln = 1.3;
-      speed *= 0.55;
-      A.shake(9);
-      A.sound("crash");
-      A.floatText("ÇARPTIN!", x, y, P.bad, 24);
-    } else {
-      player.invuln = 0.6;
-      speed *= 0.82;
-      A.shake(4);
-      A.sound("groan");
-      A.floatText("KAPI KAÇTI", x, y, P.bad, 22);
-    }
+    A.shake(10);
+    A.sound("crash");
+    floatAt("ÇARPTIN!", player.x, 2.2, z, P.bad, 24);
+    pushFx({ kind: "crash", x: player.x, z: z });
+    if (o && o.row) o.row.hit = true;
     if (lives <= 0) {
       state = "dying";
       dyingT = 0;
-      player.fallen = 1;
     }
+  }
+
+  function smash(o, gain) {
+    o.smashed = true;
+    o.at = A.time;
+    o.dir = o.lane === 0 ? (Math.random() < 0.5 ? -1 : 1) : o.lane;
+    if (gain) {
+      points += gain;
+      scoreBump = 0.8;
+    }
+    A.sound("thud");
+    A.haptic("medium");
+    A.shake(5);
+    pushFx({ kind: "smash", x: laneX(o.lane), z: o.z });
   }
 
   function levelUp() {
-    var sub = "Hız artıyor, kapılar daralıyor";
-    if (level === 3) sub = "Rakip savunmacılar sahada!";
-    else if (level === 4) sub = "Kayan kapılara dikkat";
-    else if (level === 5) sub = "Savunmacılar da kayıyor";
+    var sub = "Hız artıyor, sıralar sıklaşıyor";
+    if (level === 2) sub = "Savunmacılar sahada: zıpla ya da kaç";
     var nextDef = defenseAt(level);
-    // Yeni savunma gelince tek, küçük bir üst kart yeter (ekranın ortası açık kalır).
     if (nextDef !== defenseAt(level - 1)) intro = { def: nextDef, idx: Math.min(level, defenses.length), age: 0, level: level, sub: sub };
     else A.announce("SEVİYE " + level, sub);
-    var gift = grantJoker();
-    if (gift) A.floatText("JOKER: " + JOKERS[gift].name + " +1", W / 2, H - 120, JOKERS[gift].color, 18);
     A.sound("level");
     A.haptic("success");
+    if (R) G3.setTheme(R, THEME_ORDER[(level - 1) % THEME_ORDER.length]);
   }
 
-  /** Rastgele bir joker hakkı (dolu olmayanlardan). */
-  function grantJoker(type) {
-    var pool = JOKER_KEYS.filter(function (k) {
-      return jokers[k] < JOKER_MAX;
-    });
-    if (type) pool = pool.indexOf(type) >= 0 ? [type] : [];
-    if (!pool.length) return null;
-    var k = pool[(Math.random() * pool.length) | 0];
-    jokers[k] += 1;
-    return k;
-  }
-
-  /** Joker kullan: hak varsa ve aynı joker zaten etkin değilse. */
-  function useJoker(type) {
-    if (state !== "play" || !JOKERS[type] || jokers[type] <= 0 || active[type] > 0) return false;
-    jokers[type] -= 1;
-    active[type] = JOKERS[type].dur;
-    jokerUsed += 1;
-    var sp = proj(player.x, 1.4, z);
-    A.floatText(JOKERS[type].name + "!", sp.x, sp.y - 70, JOKERS[type].color, 24);
+  function grant(type) {
+    active[type] = POWERS[type].dur;
+    powerUsed += 1;
+    A.sound("power");
     A.haptic("medium");
-    A.sound(type === "slow" ? "level" : "whoosh");
-    if (type === "clear") {
-      sweepAt = A.time;
-      A.shake(5);
-      sweep();
+    floatAt(POWERS[type].name + "!", player.x, 2.6, z, POWERS[type].color, 24);
+    pushFx({ kind: "power", x: player.x, z: z, color: POWERS[type].color });
+  }
+
+  /* ─────────────────────────── hareket ─────────────────────────── */
+
+  function grounded() {
+    return player.y <= 0.001;
+  }
+  /** Şerit değiştir: yanında otobüs/duvar varsa sürtünür, şeride geri itilir. */
+  function shift(dir) {
+    if (state !== "play" && state !== "attract") return false;
+    var to = A.clamp(player.lane + dir, -1, 1);
+    if (to === player.lane) {
+      player.bump = dir * 0.6;
+      return false;
     }
+    if (active.turbo <= 0)
+      for (var i = 0; i < obstacles.length; i++) {
+        var o = obstacles[i];
+        if (o.smashed || o.lane !== to || (o.type !== "bus" && o.type !== "wall")) continue;
+        if (Math.abs(o.z - z) < o.depth / 2 + 0.7) {
+          player.bump = dir;
+          if (A.time - (player.bumpAt || -9) < 0.5) return false;
+          player.bumpAt = A.time;
+          speed *= 0.9;
+          if (state === "play") {
+            A.sound("thud");
+            A.haptic("warning");
+            A.shake(4);
+          }
+          return false;
+        }
+      }
+    player.lane = to;
+    if (state === "play") A.sound("swish");
     return true;
   }
-
-  /** SÜPÜR: önündeki (kalan süre boyunca koşacağın) yoldaki kapı ve rakipleri temizle. */
-  function sweep() {
-    var reach = z + Math.max(speed, 9) * active.clear + 7;
-    gates.forEach(function (g) {
-      if (!g.done && g.z <= reach && !g.cleared) {
-        g.cleared = true;
-        g.clearAt = A.time;
-      }
-    });
-    foes.forEach(function (fo) {
-      if (!fo.done && !fo.hit && !fo.swept && fo.z <= reach) {
-        fo.swept = true;
-        fo.at = A.time;
-        fo.dir = fo.x >= player.x ? 1 : -1;
-      }
-    });
-    coins.forEach(function (co) {
-      if (!co.taken && co.z <= reach) co.magnet = true;
-    });
+  function jump() {
+    if (state !== "play" && state !== "attract") return;
+    if (grounded() || player.airT < 0.09) {
+      player.vy = JUMP_V;
+      player.y = Math.max(player.y, 0.01);
+      player.slide = 0;
+      player.wantJump = 0;
+      player.wantSlide = false;
+      player.airT = 1;
+      if (state === "play") A.sound("jump");
+      pushFx({ kind: "hop", x: player.x, z: z });
+    } else player.wantJump = 0.14;
+  }
+  function slide() {
+    if (state !== "play" && state !== "attract") return;
+    if (!grounded()) {
+      player.vy = Math.min(player.vy, -20);
+      player.wantSlide = true;
+      return;
+    }
+    player.slide = SLIDE_T;
+    if (state === "play") A.sound("slide");
   }
 
   /* ─────────────────────────── güncelleme ─────────────────────────── */
 
   function update(dt) {
     scoreBump = Math.max(0, scoreBump - dt * 4);
+    coinBump = Math.max(0, coinBump - dt * 5);
+    flashRed = Math.max(0, flashRed - dt * 2.5);
     if (intro) {
       intro.age += dt;
-      if (intro.age > 2.2) intro = null;
+      if (intro.age > 2.6) intro = null;
     }
-    flashRed = Math.max(0, flashRed - dt * 2.5);
-    JOKER_KEYS.forEach(function (k) {
+    POWER_KEYS.forEach(function (k) {
       if (active[k] > 0) {
         active[k] = Math.max(0, active[k] - dt);
         if (active[k] === 0 && state === "play") A.sound("tap");
       }
     });
-    if (active.clear > 0) sweep();
     player.invuln = Math.max(0, player.invuln - dt);
-    player.stumble = Math.max(0, player.stumble - dt * 1.6);
+    player.stumble = Math.max(0, player.stumble - dt * 1.5);
+    player.bump = A.damp(player.bump, 0, 9, dt);
+    var playing = state === "play";
 
-    var target = state === "dying" ? 0 : state === "attract" ? 9 : runSpeed() * (active.slow > 0 ? SLOW_K : 1);
+    /* Hız */
+    var target = state === "dying" || state === "over" ? 0 : state === "attract" ? 12 : runSpeed() * (active.turbo > 0 ? 1.45 : 1);
     if (state === "dying") {
-      speed = A.damp(speed, 0, 2.2, dt);
+      speed = A.damp(speed, 0, 2.4, dt);
       dyingT += dt;
-      if (dyingT > 1.4 && state !== "over") {
+      if (dyingT > 1.4) {
         state = "over";
         A.sound("over");
-        A.send("over", { score: points, stats: { gates: passed, level: level, bestCombo: bestCombo, coins: coinCount, jokers: jokerUsed, nearMisses: nearMisses, metres: Math.round(z), defense: Math.min(level, defenses.length), defenses: defenses.length } });
+        A.send("over", {
+          score: points,
+          stats: { metres: Math.round(z), coins: coinCount, level: level, rows: passed, bestCombo: bestCombo, powers: powerUsed, defense: Math.min(level, defenses.length), defenses: defenses.length },
+        });
       }
-    } else speed = A.approach(speed, target, (speed < target ? 3.5 : 6) * dt);
+    } else speed = A.approach(speed, target, (speed < target ? 4.5 : 9) * dt);
     if (state === "over") speed = 0;
-
     var dz = speed * dt;
     z += dz;
-    boardOffset += dz;
 
-    /* Vitrin: yapay oyuncu kapıların ortasına yönelir */
-    if (state === "attract") {
-      var ng = null;
-      for (var i = 0; i < gates.length; i++)
-        if (!gates[i].done) {
-          ng = gates[i];
-          break;
-        }
-      if (ng) player.target = ng.cx * (ng.z - z < 14 ? 1 : 0.6);
-    }
+    /* Vitrin: yapay oyuncu yolu izler */
+    if (state === "attract") autopilot();
 
-    /* Yanal hareket — kritik sönümlü yay: hızlı oturur, savrulmaz */
-    // Çeviklik: yayın sertliği ve azami yana kayış ±%8.
+    /* Yanal: şerit merkezine üstel yaklaşma (savrulmaz) */
     var agi = 1 + 0.08 * attr("agility");
-    var maxLat = (6.5 + speed * 0.4) * agi;
-    var w0 = 9.5 * agi, aMax = 80 * agi;
-    var stopped = state === "dying" || state === "over";
-    var steps = Math.max(1, Math.ceil(dt / (1 / 120)));
-    var h = dt / steps;
-    for (var st = 0; st < steps; st++) {
-      player.aim = A.damp(player.aim, player.target, 24, h); // parmak titremesini süz
-      var acc = stopped ? -player.vx * 8 : w0 * w0 * (player.aim - player.x) - 2 * 0.95 * w0 * player.vx;
-      player.vx = A.clamp(player.vx + A.clamp(acc, -aMax, aMax) * h, -maxLat, maxLat);
-      var nx = player.x + player.vx * h;
-      if (Math.abs(nx) > FIELD - 0.25) {
-        nx = Math.sign(nx) * (FIELD - 0.25);
-        player.vx = 0;
+    var tx = laneX(player.lane) + player.bump * 0.5;
+    var px = player.x;
+    player.x = A.damp(player.x, tx, 17 * agi, dt);
+    var vx = dt > 0 ? (player.x - px) / dt : 0;
+    player.lean = A.damp(player.lean, A.clamp(vx / 14, -1, 1), 12, dt);
+
+    /* Dikey: zıplama + kayma */
+    if (!grounded() || player.vy > 0) {
+      player.vy -= GRAV * dt;
+      player.y += player.vy * dt;
+      player.airT = Math.max(player.airT, 0.1);
+      if (player.y <= 0) {
+        player.y = 0;
+        player.vy = 0;
+        player.airT = 0;
+        pushFx({ kind: "land", x: player.x, z: z });
+        if (player.wantSlide) {
+          player.wantSlide = false;
+          player.slide = SLIDE_T;
+          if (playing) A.sound("slide");
+        } else if (player.wantJump > 0) jump();
       }
-      player.x = nx;
-    }
-    player.lean = A.damp(player.lean, player.vx / maxLat, 8, dt);
+    } else player.airT = 0;
+    player.wantJump = Math.max(0, player.wantJump - dt);
+    if (player.slide > 0) player.slide = Math.max(0, player.slide - dt);
     player.stride += dt * (5 + speed * 0.55);
-    camX = A.damp(camX, player.x * 0.6, 6, dt);
 
-    A.rotate(orient, [1, 0, 0], -(speed / 0.11) * dt * 0.5);
-    A.rotate(orient, [0, 1, 0], (player.vx / 0.11) * dt * 0.3);
-
-    /* Hareketli kapı ve savunmacılar */
-    for (var g = 0; g < gates.length; g++) {
-      var gt = gates[g];
-      if (gt.moving && !gt.done) gt.cx = gt.baseX + Math.sin(A.time * 1.6 + gt.phase) * gt.amp;
-    }
-    for (var q = 0; q < foes.length; q++) {
-      var fo = foes[q];
-      if (fo.slide && !fo.done) fo.x = A.clamp(fo.baseX + Math.sin(A.time * 1.9 + fo.phase) * fo.amp, -FIELD + 0.5, FIELD - 0.5);
-    }
-
-    /* Kapı geçişi — oyuncu kapının çizgisini geçtiği AN değerlendirilir */
-    var playing = state === "play";
-    for (var k = 0; k < gates.length; k++) {
-      var gate = gates[k];
-      if (gate.done || gate.z > z) continue;
-      gate.done = true;
-      gate.at = A.time;
-      if (!playing) {
-        gate.result = "pass";
-        continue;
+    /* Mesafe puanı */
+    if (playing) {
+      distAcc += dz;
+      while (distAcc >= 10) {
+        distAcc -= 10;
+        points += multiplier();
       }
-      var half = gate.gap / 2;
-      var dx = player.x - gate.cx;
-      var poleL = gate.cx - half, poleR = gate.cx + half;
-      var nearPole = Math.min(Math.abs(player.x - poleL), Math.abs(player.x - poleR));
-      var sp = proj(player.x, 1.2, z);
-      var ctrl = attr("control");
-      var ghost = active.ghost > 0;
-      if (gate.cleared) {
-        // SÜPÜR: kapı kendiliğinden geçilir (MÜKEMMEL yok)
-        gate.result = "pass";
-        passed += 1;
-        combo += 1;
-        bestCombo = Math.max(bestCombo, combo);
-        var cg = 10 * multiplier();
-        points += cg;
-        scoreBump = 1;
-        A.floatText("+" + cg, sp.x, sp.y - 50, JOKERS.clear.color, 20);
-        A.sound("gate");
-        pushFx({ kind: "ring", x: gate.cx, z: gate.z, color: JOKERS.clear.color });
-        if (1 + Math.floor(passed / GATES_PER_LEVEL) > level) {
-          level += 1;
-          levelUp();
+    }
+
+    /* Savunmacılar: yaklaşınca kayarak gelir */
+    for (var q = 0; q < obstacles.length; q++) {
+      var ob = obstacles[q];
+      if (ob.type === "tackler" && !ob.smashed && ob.z - z < 12 && ob.z - z > -1) {
+        if (!ob.tackleAt) ob.tackleAt = A.time;
+        ob.z -= 3.2 * dt;
+      }
+    }
+
+    /* Çarpışma */
+    if (playing || state === "attract")
+      for (var i = 0; i < obstacles.length; i++) {
+        var o = obstacles[i];
+        if (o.hit || o.smashed) continue;
+        if (Math.abs(o.z - z) > o.depth / 2 + 0.35) continue;
+        if (Math.abs(player.x - laneX(o.lane)) > 0.95) continue;
+        var safe = false;
+        if (o.type === "hurdle") safe = player.y > 0.7;
+        else if (o.type === "tackler") safe = player.y > 0.5;
+        else if (o.type === "bar") safe = player.slide > 0 && player.y < 0.3;
+        if (safe) {
+          o.cleared = true;
+          continue;
         }
-      } else if (ghost && Math.abs(dx) >= half) {
-        // HAYALET: kaçan kapı hak götürmez, seri bozulmaz
-        gate.result = "ghost";
-        A.floatText("HAYALET", sp.x, sp.y - 40, JOKERS.ghost.color, 18);
-      } else if (!ghost && nearPole < 0.42 * (1 - 0.05 * ctrl) && player.invuln <= 0) {
-        gate.result = "pole";
-        gate.hitPole = Math.abs(player.x - poleL) < Math.abs(player.x - poleR) ? -1 : 1;
-        loseLife("crash", sp.x, sp.y - 40);
-      } else if (Math.abs(dx) < half) {
-        gate.result = "pass";
-        passed += 1;
+        if (state === "attract") {
+          o.hit = true;
+          continue;
+        }
+        if (active.turbo > 0) smash(o, 3);
+        else if (player.invuln > 0) continue;
+        else if (active.shield > 0) {
+          active.shield = 0;
+          player.invuln = 0.9;
+          smash(o, 0);
+          o.row.hit = true;
+          floatAt("KALKAN!", player.x, 2.4, z, POWERS.shield.color, 22);
+        } else {
+          o.hit = true;
+          o.at = A.time;
+          loseLife(o);
+        }
+        if (state !== "play") break;
+      }
+
+    /* Sıra geçişi: temiz geçilen sıra puan + seri */
+    for (var k = 0; k < rows.length; k++) {
+      var row = rows[k];
+      if (row.scored || row.z + 1.2 > z) continue;
+      row.scored = true;
+      if (!playing) continue;
+      passed += 1;
+      if (!row.hit) {
         combo += 1;
         bestCombo = Math.max(bestCombo, combo);
-        var mult = multiplier();
-        var gain = 10 * mult;
-        var perfect = Math.abs(dx) < half * 0.28 * (1 + 0.15 * ctrl);
-        if (perfect) gain += 5;
+        var gain = 3 * multiplier();
         points += gain;
         scoreBump = 1;
-        A.floatText((perfect ? "MÜKEMMEL +" : "+") + gain, sp.x, sp.y - 50, perfect ? P.gold : "#FFFFFF", perfect ? 22 : 20);
-        if (combo % 5 === 0) {
-          A.floatText("ÇARPAN ×" + multiplier(), W / 2, H * 0.42, P.gold, 24);
+        var stylish = obstacles.some(function (ob2) { return ob2.row === row && ob2.cleared; });
+        floatAt((stylish ? "ÇALIM +" : "+") + gain, player.x, 2.1, z, stylish ? P.gold : "#FFFFFF", stylish ? 20 : 17);
+        if (combo % 8 === 0 && combo <= 32) {
+          A.floatText("ÇARPAN ×" + Math.min(5, 1 + Math.floor(combo / 8)), W / 2, H * 0.4, P.gold, 24);
           A.sound("level");
-        } else A.sound("gate");
-        A.haptic(perfect ? "medium" : "light");
-        pushFx({ kind: "ring", x: gate.cx, z: gate.z, color: perfect ? P.gold : "#FFFFFF", big: perfect });
-        var lp = proj(gate.cx, 0.2, gate.z);
-        A.burst(lp.x, lp.y, perfect ? 22 : 10, {
-          angle: -Math.PI / 2,
-          spread: Math.PI,
-          speed: 220,
-          gravity: 300,
-          life: 0.6,
-          size: 3.5,
-          color: gate.color === "red" ? ["#FCA5A5", "#FFFFFF", P.gold] : ["#93C5FD", "#FFFFFF", P.gold],
-          shape: "spark",
-        });
-        var lvl = 1 + Math.floor(passed / GATES_PER_LEVEL);
-        if (lvl > level) {
-          level = lvl;
-          levelUp();
-        }
-      } else if (player.invuln <= 0) {
-        gate.result = "miss";
-        loseLife("miss", sp.x, sp.y - 40);
-      } else gate.result = "miss";
-      if (state !== "play") break;
-    }
-
-    /* Savunmacılar */
-    for (var m = 0; m < foes.length; m++) {
-      var foe = foes[m];
-      if (foe.done || foe.z > z + 0.3) continue;
-      if (foe.z < z - 0.5) {
-        foe.done = true;
-        continue;
+        } else if (stylish) A.sound("gate");
+        A.haptic(stylish ? "medium" : "light");
       }
-      if (foe.swept) continue;
-      if (playing && !foe.hit && Math.abs(player.x - foe.x) < 0.78 && player.invuln <= 0 && active.ghost <= 0) {
-        foe.hit = true;
-        foe.at = A.time;
-        foe.done = true;
-        var fp = proj(player.x, 1.2, z);
-        loseLife("crash", fp.x, fp.y - 40);
-      } else if (playing && !foe.judged && foe.z <= z) {
-        // Kıl payı: savunmacının yanından yakın ama çarpmadan geçmek
-        foe.judged = true;
-        var gapX = Math.abs(player.x - foe.x);
-        if (gapX < 1.5 && active.ghost <= 0) {
-          nearMisses += 1;
-          points += 5;
-          scoreBump = 0.8;
-          var np = proj(foe.x, 1.8, foe.z);
-          A.floatText("KIL PAYI +5", np.x, np.y - 30, "#7DD3FC", 18);
-          A.sound("whoosh");
-          A.haptic("light");
-        }
+      var lvl = 1 + Math.floor(passed / ROWS_PER_LEVEL);
+      if (lvl > level) {
+        level = lvl;
+        levelUp();
       }
     }
 
-    /* Joker kutuları */
-    for (var pI = 0; pI < pickups.length; pI++) {
-      var pk = pickups[pI];
-      if (pk.taken || pk.z > z + 0.5 || pk.z < z - 0.7) continue;
-      if (playing && Math.abs(player.x - pk.x) < 0.85) {
-        pk.taken = true;
-        pk.at = A.time;
-        var got = grantJoker(pk.type);
-        var kp = proj(pk.x, 0.8, pk.z);
-        if (got) A.floatText(JOKERS[got].name + " +1", kp.x, kp.y - 40, JOKERS[got].color, 20);
-        else {
-          points += 10;
-          A.floatText("+10", kp.x, kp.y - 40, P.gold, 20);
-        }
-        A.sound("level");
-        A.haptic("medium");
-        A.burst(kp.x, kp.y, 16, { speed: 200, gravity: 120, life: 0.6, size: 3.5, color: [JOKERS[pk.type].color, "#FFF"], shape: "spark" });
-      }
-    }
-
-    /* Altın toplar */
+    /* Altınlar */
+    var magnet = active.magnet > 0 || active.turbo > 0;
     for (var cI = 0; cI < coins.length; cI++) {
       var co = coins[cI];
-      if (co.magnet && !co.taken && co.z - z < 9) co.x = A.damp(co.x, player.x, 9, dt);
-      if (co.taken || co.z > z + 0.4 || co.z < z - 0.6) continue;
-      if (playing && Math.abs(player.x - co.x) < 0.7) {
+      if (co.taken) continue;
+      var d = co.z - z;
+      if (magnet && d < 11 && d > -1) {
+        co.x = A.damp(co.x, player.x, 10, dt);
+        co.y = A.damp(co.y, 0.9 + player.y, 10, dt);
+        co.z = A.damp(co.z, z + 0.2, 6, dt);
+        d = co.z - z;
+      }
+      if (d > 0.75 || d < -0.75) continue;
+      if (Math.abs(player.x - co.x) < 0.8 && Math.abs(player.y + 0.9 - co.y) < 1.15) {
         co.taken = true;
         co.at = A.time;
-        points += 2;
-        coinCount += 1;
-        scoreBump = 0.6;
-        A.sound("coin");
-        var cp = proj(co.x, 0.4, co.z);
-        A.burst(cp.x, cp.y, 8, { speed: 160, gravity: 200, life: 0.45, size: 3, color: [P.gold, "#FFF"], shape: "spark" });
+        if (playing) {
+          points += 1;
+          coinCount += 1;
+          coinBump = 1;
+          A.sound("coin");
+        }
+        pushFx({ kind: "coin", x: co.x, y: co.y, z: co.z });
       }
     }
 
-    /* Çim tozu — dönüşlerde ayaktan */
-    if (playing && Math.abs(player.vx) > 4 && Math.random() < 0.5 && !A.reduceMotion) {
-      var pp = proj(player.x, 0, z);
-      A.burst(pp.x, pp.y, 1, { angle: Math.PI + (player.vx > 0 ? 0.3 : -0.3) * -1 - Math.PI / 2 - Math.sign(player.vx) * 1.2, spread: 0.6, speed: 140, gravity: 500, life: 0.4, size: 2.5, color: ["#5BC27F", "#2F9A55", "#A7E3B9"] });
-    }
-
-    /* Seri ateşi: çarpan ×3 ve üstünde topun arkasında altın kıvılcım */
-    if (playing && multiplier() >= 3 && !A.reduceMotion && Math.random() < 0.6) {
-      var bp = proj(player.x, 0.12, z + 0.8);
-      A.burst(bp.x, bp.y, 1, { angle: Math.PI / 2, spread: 1.2, speed: 90, gravity: -40, life: 0.45, size: 2.6, color: [P.gold, "#FB923C", "#FFF7D6"], shape: "spark" });
+    /* Güç kutuları */
+    for (var pI = 0; pI < pickups.length; pI++) {
+      var pk = pickups[pI];
+      if (pk.taken || Math.abs(pk.z - z) > 0.9) continue;
+      if (Math.abs(player.x - laneX(pk.lane)) < 0.95 && player.y < 1.6) {
+        pk.taken = true;
+        pk.at = A.time;
+        if (playing) grant(pk.type);
+      }
     }
 
     /* Temizlik ve üretim */
-    var cut = z - CAM_BACK + 0.6;
-    pickups = pickups.filter(function (o) {
-      return o.z > cut;
-    });
-    gates = gates.filter(function (o) {
-      return o.z > cut;
-    });
-    foes = foes.filter(function (o) {
-      return o.z > cut;
-    });
-    coins = coins.filter(function (o) {
-      return o.z > cut;
-    });
-    while (nextGateZ < z + FAR) spawnGate();
+    var cut = z - 9;
+    rows = rows.filter(function (o2) { return o2.z > cut - 6; });
+    obstacles = obstacles.filter(function (o2) { return o2.z + o2.depth / 2 > cut; });
+    coins = coins.filter(function (o2) { return o2.z > cut && !(o2.taken && A.time - o2.at > 0.4); });
+    pickups = pickups.filter(function (o2) { return o2.z > cut; });
+    while (nextRowZ < z + FAR) spawnRow();
+  }
+
+  /** Vitrin pilotu: sıradaki sıranın yol şeridine geçer, gerekirse zıplar/kayar. */
+  function autopilot() {
+    var next = null;
+    for (var i = 0; i < rows.length; i++)
+      if (rows[i].z > z - 0.5) {
+        next = rows[i];
+        break;
+      }
+    if (!next) return;
+    var d = next.z - z;
+    if (d < 16 && player.lane !== next.path) shift(next.path > player.lane ? 1 : -1);
+    var type = next.cells[next.path + 1];
+    if ((type === "hurdle" || type === "tackler") && d < speed * 0.3 + (type === "tackler" ? 1.2 : 0) && d > 0.5 && grounded()) jump();
+    if (type === "bar" && d < speed * 0.22 && d > 0.3 && grounded() && player.slide <= 0) slide();
   }
 
   /* ─────────────────────────── girdi ─────────────────────────── */
 
-  /** Joker düğmeleri: altta ortada üç daire. */
-  function jokerButtons() {
-    var r = Math.min(27, W * 0.068), gap = r * 2 + 22;
-    var y = H - r - Math.max(22, H * 0.035);
-    return JOKER_KEYS.map(function (k, i) {
-      return { key: k, x: W / 2 + (i - 1) * gap, y: y, r: r };
-    });
-  }
+  var SWIPE = 20;
   function down(p) {
-    if (state === "play") {
-      var bs = jokerButtons();
-      for (var i = 0; i < bs.length; i++)
-        if (Math.hypot(p.x - bs[i].x, p.y - bs[i].y) < bs[i].r + 10) {
-          useJoker(bs[i].key);
-          lastTouchX = null;
-          return;
-        }
-    }
-    lastTouchX = p.x;
+    touch = { x: p.x, y: p.y, moved: false };
   }
   function move(p) {
-    if (state !== "play" || lastTouchX == null) return;
-    var mpp = (VIEW_HALF * 2) / W; // metre / piksel (oyuncu derinliğinde)
-    player.target = A.clamp(player.target + (p.x - lastTouchX) * mpp * 1.2, -FIELD + 0.25, FIELD - 0.25);
-    lastTouchX = p.x;
+    if (!touch || state !== "play") return;
+    var dx = p.x - touch.x, dy = p.y - touch.y;
+    if (Math.abs(dx) < SWIPE && Math.abs(dy) < SWIPE) return;
+    if (Math.abs(dx) > Math.abs(dy)) shift(dx > 0 ? 1 : -1);
+    else if (dy < 0) jump();
+    else slide();
+    // hareket sürerse yeni bir kaydırma sayılır (çift şerit)
+    touch = { x: p.x, y: p.y, moved: true };
   }
   function up() {
-    lastTouchX = null;
+    touch = null;
   }
+  if (typeof window !== "undefined" && window.addEventListener)
+    window.addEventListener("keydown", function (e) {
+      if (state !== "play") return;
+      if (e.key === "ArrowLeft") shift(-1);
+      else if (e.key === "ArrowRight") shift(1);
+      else if (e.key === "ArrowUp" || e.key === " ") jump();
+      else if (e.key === "ArrowDown") slide();
+    });
 
   /* ═══════════════════════════ 3B ÇİZİM ═══════════════════════════ */
 
-  var K = A.T3;
-  var R = null;
-  var glFailed = false;
-  var tmpV = null;
-  var S3 = A.S3;
-  var STRIP = 220; // oyuncuyla akan saha/pano şeridinin boyu (m)
-  var SEG = 44, SEGS = 5; // her yanda dönüşümlü kullanılan tribün parçaları
-  var STAND_X = FIELD + 3.4; // tribün ön yüzünün taç çizgisine uzaklığı
-  var FOE_POOL = 8;
-
-  /** Dünya: x = X, y = Y, z = −Z (ileri −z). */
+  var R = null, glFailed = false;
+  var STRIP = 240;
+  var SLOT = 40; // kenar manzarası parça boyu
+  var EDGE = LANE * 1.5 + 0.5; // koşu yolunun yarı genişliği
+  var SIDE = EDGE + 3.4; // manzaranın başladığı uzaklık
   function wz(Z) {
     return -Z;
   }
-
-  function screenOf(X, Y, Z) {
-    tmpV.set(X, Y, wz(Z));
-    var dist = R.camera.position.distanceTo(tmpV);
-    tmpV.project(R.camera);
-    var s = H / (2 * Math.tan((R.camera.fov * Math.PI) / 360) * Math.max(0.5, dist));
-    return { x: (tmpV.x * 0.5 + 0.5) * W, y: (-tmpV.y * 0.5 + 0.5) * H, s: s, behind: tmpV.z > 1 };
+  function floatAt(text, wx, wy, Z, color, size) {
+    if (R) {
+      var p = G3.project(R, wx, wy, wz(Z));
+      A.floatText(text, p.x, p.y, color, size);
+    }
   }
 
-  function hasWebGL() {
-    try {
-      var cv = document.getElementById("gl");
-      if (!cv || !T || !K || !cv.getContext) return false;
-      var gl = cv.getContext("webgl2") || cv.getContext("webgl");
-      if (!gl || typeof gl.getParameter !== "function") return false;
-      var v = gl.getParameter(gl.VERSION);
-      return typeof v === "string" && v.length > 0;
-    } catch (e) {
-      return false;
-    }
+  function resize(w, h) {
+    W = w;
+    H = h;
+    if (!player) resetWorld();
+    initGL();
+    if (R) G3.resize(R, W, H, function (aspect) { return A.clamp((2 * Math.atan(0.5 / aspect) * 180) / Math.PI, 46, 80); });
   }
 
   function initGL() {
     if (R || glFailed) return;
-    if (!hasWebGL()) {
-      glFailed = true;
-      return;
-    }
     try {
-      var renderer = new T.WebGLRenderer({ canvas: document.getElementById("gl"), antialias: true, powerPreference: "high-performance", stencil: false });
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-      renderer.shadowMap.enabled = true;
-      renderer.shadowMap.type = T.PCFSoftShadowMap;
-      renderer.toneMapping = T.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 1.08;
-      renderer.outputColorSpace = T.SRGBColorSpace;
-      K.init(renderer);
-      var scene = new T.Scene();
-      scene.background = new T.Color(0x070b1e);
-      scene.fog = new T.Fog(0x141c40, 60, 190);
-      tmpV = new T.Vector3();
-      R = { renderer: renderer, scene: scene, camera: new T.PerspectiveCamera(60, 1, 0.1, 700), gates: new Map(), coins: new Map(), foes: new Map(), pickups: new Map(), rings: [], foePool: [], boardText: "", U: { time: { value: 0 }, excite: { value: 0 } } };
-      S3.atmosphere(R);
-      buildLights();
+      R = G3.stage({ theme: "day", fog: [70, 185], far: 500, curve: [0.00016, -0.00042], shadow: { size: 1536, box: [-12, 12, 26, -10], far: 150 }, fxMax: 400, dustMax: 300 });
+      if (!R) {
+        glFailed = true;
+        return;
+      }
       buildWorld();
       buildRunner();
-      buildBall();
-      resizeGL();
     } catch (e) {
+      A.glError = String((e && e.stack) || e);
       R = null;
       glFailed = true;
     }
   }
 
-  function resizeGL() {
-    if (!R) return;
-    R.renderer.setSize(W, H, false);
-    var cv = R.renderer.domElement;
-    if (cv && cv.style) {
-      cv.style.width = W + "px";
-      cv.style.height = H + "px";
-    }
-    var aspect = W / Math.max(1, H);
-    R.camera.aspect = aspect;
-    // Oyuncu derinliğinde ~±4,6 m görünsün (dikey açı en boy oranından).
-    R.baseFov = A.clamp((2 * Math.atan(0.44 / aspect) * 180) / Math.PI, 44, 78);
-    R.camera.fov = R.baseFov;
-    R.camera.updateProjectionMatrix();
-  }
+  /* ─────────────── dünya ─────────────── */
 
-  function buildLights() {
-    var s = R.scene;
-    s.add(new T.HemisphereLight(0x9fb4ff, 0x1d3a22, 0.6));
-    var key = new T.DirectionalLight(0xfff4e0, 2.5);
-    key.castShadow = true;
-    key.shadow.mapSize.set(1536, 1536);
-    var sc = key.shadow.camera;
-    sc.left = -12;
-    sc.right = 12;
-    sc.top = 22;
-    sc.bottom = -10;
-    sc.near = 2;
-    sc.far = 80;
-    key.shadow.bias = -0.0004;
-    key.shadow.normalBias = 0.02;
-    s.add(key);
-    s.add(key.target);
-    var fill = new T.DirectionalLight(0xdfe8ff, 0.8);
-    fill.position.set(-20, 25, 10);
-    s.add(fill);
-    var rim = new T.DirectionalLight(0xb9c8ff, 0.9);
-    rim.position.set(6, 18, -40);
-    s.add(rim);
-    R.key = key;
-  }
-
-  /** Saha, kenar panoları ve tribünler: oyuncuyla birlikte akan şeritler. */
   function buildWorld() {
     var s = R.scene;
-    // Saha dokusu: 11 m'lik bir biçme deseni tekrar eder; dokunun yatay ekseni 60 m.
-    var grass = K.canvasTex(512, 256, function (c, cw, ch) {
-      var sx = cw / 60;
-      c.fillStyle = "#245f37";
-      c.fillRect(0, 0, cw, ch);
-      // İç saha: iki bant
-      var x0 = (30 - FIELD) * sx, x1 = (30 + FIELD) * sx;
-      c.fillStyle = "#378f4d";
-      c.fillRect(x0, 0, x1 - x0, ch / 2);
-      c.fillStyle = "#2f8a47";
-      c.fillRect(x0, ch / 2, x1 - x0, ch / 2);
-      // Dış saha bantları
-      c.fillStyle = "rgba(255,255,255,0.03)";
-      c.fillRect(0, 0, x0, ch / 2);
-      c.fillRect(x1, 0, cw - x1, ch / 2);
-      var rand = A.seeded(5);
-      for (var n = 0; n < 9000; n++) {
-        c.fillStyle = rand() < 0.5 ? "rgba(255,255,255,0.04)" : "rgba(0,20,0,0.07)";
-        c.fillRect(rand() * cw, rand() * ch, 1, 1 + rand() * 2);
+    // Koşu yolu: üç şeritli çim (biçme bantları + şerit çizgileri)
+    var turf = K.canvasTex(256, 256, function (c, w, h) {
+      for (var r = 0; r < 4; r++) {
+        c.fillStyle = r % 2 ? "#47b85a" : "#3ca84f";
+        c.fillRect(0, (r * h) / 4, w, h / 4);
       }
-      // Taç çizgileri
-      c.fillStyle = "rgba(246,248,240,0.95)";
-      c.fillRect(x0 - 0.06 * sx, 0, 0.12 * sx, ch);
-      c.fillRect(x1 - 0.06 * sx, 0, 0.12 * sx, ch);
+      var rnd = A.seeded(4);
+      for (var k = 0; k < 6000; k++) {
+        c.fillStyle = rnd() < 0.5 ? "rgba(255,255,255,0.05)" : "rgba(0,50,0,0.07)";
+        c.fillRect(rnd() * w, rnd() * h, 1.5, 2 + rnd() * 4);
+      }
+      var mx = (0.5 / (EDGE * 2)) * w;
+      c.fillStyle = "rgba(255,255,255,0.95)";
+      c.fillRect(mx - 3, 0, 6, h);
+      c.fillRect(w - mx - 3, 0, 6, h);
+      c.fillStyle = "rgba(255,255,255,0.4)";
+      [-0.5, 0.5].forEach(function (l) {
+        var x = ((EDGE + l * LANE) / (EDGE * 2)) * w;
+        for (var y = 0; y < h; y += 64) c.fillRect(x - 2, y, 4, 34);
+      });
     }, true);
-    grass.repeat.set(1, STRIP / 11);
-    var gN = S3.grassNormal();
-    gN.repeat.set(60 / 3, STRIP / 3);
-    var ground = K.mesh(new T.PlaneGeometry(60, STRIP), K.std(0xffffff, 0.9, 0, { map: grass, normalMap: gN, normalScale: new T.Vector2(0.55, 0.55), envMapIntensity: 0.35 }), false, true);
-    ground.rotation.x = -Math.PI / 2;
-    s.add(ground);
-    R.ground = ground;
-    R.grass = grass;
-    R.grassN = gN;
-
-    // Kenar LED panoları
-    R.boardTex = K.canvasTex(2048, 64, function () {}, true);
-    R.boardTex.repeat.set(STRIP / 40, 1);
+    turf.repeat.set(1, STRIP / 14);
+    R.turf = turf;
+    R.track = K.mesh(new T.PlaneGeometry(EDGE * 2, STRIP, 1, 24), K.std(0xffffff, 0.92, 0, { map: turf, envMapIntensity: 0.3 }), false, true);
+    R.track.rotation.x = -Math.PI / 2;
+    s.add(R.track);
+    // Kaldırım
+    var pave = K.canvasTex(128, 128, function (c, w, h) {
+      c.fillStyle = "#d9dee8";
+      c.fillRect(0, 0, w, h);
+      c.strokeStyle = "rgba(90,100,130,0.35)";
+      c.lineWidth = 2;
+      for (var i = 0; i <= 2; i++) {
+        c.beginPath();
+        c.moveTo(0, (i * h) / 2);
+        c.lineTo(w, (i * h) / 2);
+        c.moveTo((i * w) / 2, 0);
+        c.lineTo((i * w) / 2, h);
+        c.stroke();
+      }
+    }, true);
+    pave.repeat.set(2, STRIP / 2);
+    R.pave = pave;
+    R.walks = [-1, 1].map(function (side) {
+      var m = K.mesh(new T.PlaneGeometry(SIDE - EDGE, STRIP, 1, 24), K.std(0xffffff, 0.85, 0, { map: pave, envMapIntensity: 0.3 }), false, true);
+      m.rotation.x = -Math.PI / 2;
+      m.position.set((side * (SIDE + EDGE)) / 2, 0.04, 0);
+      s.add(m);
+      return m;
+    });
+    // bordür
+    R.kerbs = [-1, 1].map(function (side) {
+      var m = K.mesh(new T.BoxGeometry(0.22, 0.16, STRIP, 1, 1, 24), K.std(0xf8fafc, 0.6), false, true);
+      m.position.set(side * (EDGE + 0.1), 0.08, 0);
+      s.add(m);
+      return m;
+    });
+    // uzak zemin (parka kadar çim)
+    R.apron = K.mesh(new T.PlaneGeometry(260, STRIP, 8, 24), K.std(0x4a9f52, 0.95, 0, { envMapIntensity: 0.25 }), false, true);
+    R.apron.rotation.x = -Math.PI / 2;
+    R.apron.position.y = -0.04;
+    s.add(R.apron);
+    // LED panolar (kaldırımın dış kenarı)
+    R.boardTex = K.canvasTex(1024, 64, function () {}, true);
+    R.boardTex.repeat.set(STRIP / 26, 1);
     var boardMat = new T.MeshBasicMaterial({ map: R.boardTex, toneMapped: false });
-    var dark = K.std(0x111827, 0.6);
+    var dark = K.std(0x16204a, 0.6);
     R.boards = [-1, 1].map(function (side) {
-      var b = K.mesh(new T.BoxGeometry(0.2, 0.9, STRIP), [side < 0 ? dark : boardMat, side < 0 ? boardMat : dark, dark, dark, dark, dark], true, true);
-      b.position.set(side * (FIELD + 2.2), 0.45, 0);
+      var b = K.mesh(new T.BoxGeometry(0.2, 0.95, STRIP, 1, 1, 24), [side < 0 ? dark : boardMat, side < 0 ? boardMat : dark, dark, dark, dark, dark], true, true);
+      b.position.set(side * (SIDE - 0.2), 0.5, 0);
       s.add(b);
       return b;
     });
 
-    // Tribünler: ortak stadyumun iki katlı tribün parçaları, oyuncuyla birlikte
-    // ileri taşınır (her parça dünyada yerinde kalır, arkada kalan öne geçer).
-    R.stands = [];
+    buildScenery();
+    buildProps();
+  }
+
+  /** Bina cephesi dokusu: pencere ızgarası (gece ışıkları emissive haritada). */
+  function windowTextures() {
+    var S = 256, cols = 6, rws = 8;
+    var lit = [];
+    var rnd = A.seeded(21);
+    for (var i = 0; i < cols * rws; i++) lit.push(rnd() < 0.42);
+    var map = K.canvasTex(S, S, function (c) {
+      c.fillStyle = "#ffffff";
+      c.fillRect(0, 0, S, S);
+      for (var y = 0; y < rws; y++)
+        for (var x = 0; x < cols; x++) {
+          var px = x * (S / cols) + 7, py = y * (S / rws) + 6;
+          c.fillStyle = "#3b4a6b";
+          c.fillRect(px, py, S / cols - 14, S / rws - 12);
+          c.fillStyle = "rgba(160,200,255,0.55)";
+          c.fillRect(px, py, S / cols - 14, (S / rws - 12) * 0.45);
+        }
+    }, true);
+    var glow = K.canvasTex(S, S, function (c) {
+      c.fillStyle = "#000000";
+      c.fillRect(0, 0, S, S);
+      for (var y = 0; y < rws; y++)
+        for (var x = 0; x < cols; x++) {
+          if (!lit[y * cols + x]) continue;
+          c.fillStyle = x % 3 === 0 ? "#ffd98a" : "#fff2c4";
+          c.fillRect(x * (S / cols) + 7, y * (S / rws) + 6, S / cols - 14, S / rws - 12);
+        }
+    }, true);
+    return { map: map, glow: glow };
+  }
+
+  /**
+   * Kenar manzarası: 40 m'lik parçalar (bina sırası · ağaçlık · taraftar
+   * tribünü) dünyada sabit yuvalara oturur; geride kalan öne taşınır.
+   */
+  var PATTERN = ["B", "T", "B", "S", "T", "B", "B", "S", "T", "S"];
+  function buildScenery() {
+    var s = R.scene;
+    var wt = windowTextures();
+    var wallCols = [0xfde2c4, 0xcfe8ff, 0xffd1dc, 0xe7dcff, 0xd6f5dc, 0xfff3b0, 0xf4f4f5, 0xffc9a8];
+    R.buildingMats = wallCols.map(function (col) {
+      var m = new T.MeshStandardMaterial({ color: col, map: wt.map, roughness: 0.85, emissive: 0xffffff, emissiveMap: wt.glow, emissiveIntensity: 0 });
+      return m;
+    });
+    var roofMat = K.std(0x8792a8, 0.8);
+    var awnings = [0xf43f5e, 0x5b3df5, 0x16a34a, 0xf97316].map(function (c) { return K.std(c, 0.7); });
+    function buildings(side, seed) {
+      var g = new T.Group();
+      var rnd = A.seeded(seed);
+      var zz = -SLOT / 2;
+      while (zz < SLOT / 2 - 4) {
+        var w = 7 + rnd() * 6, h = 7 + rnd() * 13, d = 8 + rnd() * 4;
+        if (zz + w > SLOT / 2) w = SLOT / 2 - zz;
+        var mat = R.buildingMats[(rnd() * R.buildingMats.length) | 0];
+        var geo = new T.BoxGeometry(d, h, w - 0.4);
+        // pencere yoğunluğu boyuta göre
+        var uv = geo.attributes.uv;
+        for (var i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * Math.max(1, Math.round(w / 7)), uv.getY(i) * Math.max(1, Math.round(h / 9)));
+        var b = K.mesh(geo, [mat, mat, roofMat, roofMat, mat, mat], true, true);
+        b.position.set(side * (SIDE + 2.2 + d / 2), h / 2, zz + w / 2);
+        g.add(b);
+        // tente
+        var aw = K.mesh(new T.BoxGeometry(1.5, 0.14, w - 1.4), awnings[(rnd() * awnings.length) | 0], true, false);
+        aw.position.set(side * (SIDE + 2.2 - 0.6), 3.0, zz + w / 2);
+        aw.rotation.z = side * 0.28;
+        g.add(aw);
+        zz += w;
+      }
+      s.add(g);
+      return g;
+    }
+    var trunkGeo = new T.CylinderGeometry(0.22, 0.3, 2.6, 8), leafGeo = new T.IcosahedronGeometry(1.7, 1);
+    var trunkMat = K.std(0x7a5536, 0.9), leafMats = [K.std(0x3fa34d, 0.85), K.std(0x58b85a, 0.85), K.std(0x2f8f45, 0.85)];
+    function trees(side, seed) {
+      var g = new T.Group();
+      var rnd = A.seeded(seed);
+      for (var i = 0; i < 9; i++) {
+        var x = side * (SIDE + 2 + rnd() * 16), zz = -SLOT / 2 + 2 + rnd() * (SLOT - 4), k = 0.8 + rnd() * 0.7;
+        var tr = K.mesh(trunkGeo, trunkMat, true, false);
+        tr.position.set(x, 1.3 * k, zz);
+        tr.scale.setScalar(k);
+        var lf = K.mesh(leafGeo, leafMats[i % 3], true, false);
+        lf.position.set(x, 3.4 * k, zz);
+        lf.scale.set(k, k * 1.1, k);
+        var lf2 = K.mesh(leafGeo, leafMats[(i + 1) % 3], true, false);
+        lf2.position.set(x + 0.7 * k, 4.4 * k, zz + 0.4);
+        lf2.scale.setScalar(k * 0.7);
+        g.add(tr, lf, lf2);
+      }
+      s.add(g);
+      return g;
+    }
+    R.crowdTex = G3.crowdTexture(kitOf(runner), kitOf(defenseAt(1)));
+    function stand(side) {
+      return G3.standStrip(R, SLOT - 2, side, SIDE + 1.4, R.crowdTex, { depth: 9, rise: 5.6 });
+    }
+    R.scenery = { B: [], T: [], S: [] };
     [-1, 1].forEach(function (side) {
-      for (var k = 0; k < SEGS; k++) {
-        var seg = S3.standSegment(SEG, {
-          seed: 41 + k + (side > 0 ? 10 : 0),
-          density: 0.88,
-          seamless: true,
-          side: function () {
-            return side < 0 ? 1 : 0;
-          },
-        });
-        seg.rotation.y = side < 0 ? Math.PI / 2 : -Math.PI / 2;
-        seg.position.x = side * STAND_X;
-        seg.userData.side = side;
-        s.add(seg);
-        R.stands.push(seg);
+      for (var i = 0; i < 4; i++) R.scenery.B.push({ side: side, obj: buildings(side, 100 + i * 7 + (side > 0 ? 50 : 0)) });
+      for (var j = 0; j < 3; j++) R.scenery.T.push({ side: side, obj: trees(side, 300 + j * 5 + (side > 0 ? 40 : 0)) });
+      for (var k = 0; k < 3; k++) R.scenery.S.push({ side: side, obj: stand(side) });
+    });
+
+    // Sokak lambaları: direk + gece parlaması
+    var poleGeo = new T.CylinderGeometry(0.08, 0.11, 6, 8), poleMat = K.std(0x334155, 0.5, 0.4);
+    R.lampGlow = new T.SpriteMaterial({ map: K.glowTexture(), color: 0xffe9b0, transparent: true, depthWrite: false, blending: T.AdditiveBlending, opacity: 0 });
+    R.lampHead = new T.MeshBasicMaterial({ color: 0xfff4d6, toneMapped: false });
+    R.lamps = [];
+    for (var i = 0; i < 12; i++) {
+      var g = new T.Group();
+      var pole = K.mesh(poleGeo, poleMat, true, false);
+      pole.position.y = 3;
+      var head = K.mesh(new T.BoxGeometry(1.3, 0.14, 0.4), R.lampHead, false, false);
+      head.position.set(0.5, 6, 0);
+      var glow = new T.Sprite(R.lampGlow);
+      glow.position.set(0.9, 5.8, 0);
+      glow.scale.set(5, 5, 1);
+      g.add(pole, head, glow);
+      g.userData.side = i % 2 ? 1 : -1;
+      if (g.userData.side > 0) g.scale.x = -1;
+      s.add(g);
+      R.lamps.push(g);
+    }
+
+    // Yolun üstünden geçen pankart kemerleri
+    R.archTex = K.canvasTex(1024, 128, function () {});
+    R.arches = [0, 1].map(function () {
+      var g = new T.Group();
+      var steel = K.std(0xe2e8f0, 0.4, 0.5);
+      [-1, 1].forEach(function (sd) {
+        var p = K.mesh(new T.CylinderGeometry(0.2, 0.26, 8.4, 10), steel, true, false);
+        p.position.set(sd * (SIDE - 0.9), 4.2, 0);
+        g.add(p);
+      });
+      var beam = K.mesh(new T.BoxGeometry((SIDE - 0.9) * 2 + 0.8, 1.9, 0.3), [steel, steel, steel, steel, new T.MeshBasicMaterial({ map: R.archTex, toneMapped: false }), steel], true, false);
+      beam.position.y = 7.4;
+      g.add(beam);
+      s.add(g);
+      return g;
+    });
+  }
+
+  /** Engel, altın ve güç kutusu havuzları. */
+  function buildProps() {
+    var s = R.scene;
+    // antrenman engeli
+    var stripe = K.canvasTex(128, 32, function (c) {
+      for (var i = 0; i < 8; i++) {
+        c.fillStyle = i % 2 ? "#ffffff" : "#f43f5e";
+        c.fillRect(i * 16, 0, 16, 32);
       }
     });
-    // Tribün önü: koyu pist (panoların arkası)
-    var track = K.mesh(new T.PlaneGeometry(STAND_X - FIELD - 2.2, STRIP), K.std(0x16251e, 0.95), false, true);
-    R.tracks = [-1, 1].map(function (side) {
-      var t = track.clone();
-      t.rotation.x = -Math.PI / 2;
-      t.position.set((side * (STAND_X + FIELD + 2.2)) / 2, 0.006, 0);
-      s.add(t);
-      return t;
-    });
-    // Uzaktaki projektör kuleleri: ufukta parlayan çiftler
-    var glowMat = new T.SpriteMaterial({ map: K.glowTexture(), color: 0xfff1d6, transparent: true, depthWrite: false, blending: T.AdditiveBlending, opacity: 0.9, fog: false });
-    var panelMat = new T.MeshBasicMaterial({ color: new T.Color(5, 4.8, 4.2), toneMapped: false, fog: false });
-    R.lamps = [];
-    for (var i = 0; i < 4; i++) {
-      [-1, 1].forEach(function (side) {
-        var lamp = new T.Group();
-        var panel = K.mesh(new T.BoxGeometry(0.6, 4, 8), panelMat, false, false);
-        lamp.add(panel);
-        var glow = new T.Sprite(glowMat);
-        glow.scale.set(30, 30, 1);
-        glow.position.x = -side * 1.2;
-        lamp.add(glow);
-        lamp.userData = { side: side, k: i };
-        s.add(lamp);
-        R.lamps.push(lamp);
+    var barMat = K.std(0xffffff, 0.45, 0, { map: stripe });
+    var legMat = K.std(0x1f2937, 0.5);
+    R.hurdles = [];
+    for (var i = 0; i < 8; i++) {
+      var g = new T.Group();
+      var bar = K.mesh(new T.BoxGeometry(LANE - 0.5, 0.16, 0.16), barMat);
+      bar.position.y = 0.82;
+      var bar2 = K.mesh(new T.BoxGeometry(LANE - 0.5, 0.1, 0.1), barMat);
+      bar2.position.y = 0.48;
+      g.add(bar, bar2);
+      [-1, 1].forEach(function (sd) {
+        var leg = K.mesh(new T.BoxGeometry(0.1, 0.9, 0.1), legMat);
+        leg.position.set(sd * (LANE / 2 - 0.3), 0.45, 0);
+        var foot = K.mesh(new T.BoxGeometry(0.12, 0.08, 0.7), legMat);
+        foot.position.set(sd * (LANE / 2 - 0.3), 0.04, 0);
+        g.add(leg, foot);
       });
+      g.visible = false;
+      s.add(g);
+      R.hurdles.push(g);
     }
-    // Ortak kapı/top/coin geometrileri
-    R.geo = {
-      pole: new T.CylinderGeometry(0.035, 0.045, POLE_H, 10),
-      base: new T.CylinderGeometry(0.16, 0.2, 0.05, 14),
-      flag: new T.PlaneGeometry(0.42, 0.3),
-      coin: new T.CylinderGeometry(0.17, 0.17, 0.04, 24),
-      ring: new T.RingGeometry(0.82, 1, 48),
-      box: new T.OctahedronGeometry(0.32, 0),
-    };
-    R.mat = {
-      pole: K.std(0xf1f5f9, 0.35, 0.2),
-      base: K.std(0x1f2937, 0.6),
-      coin: new T.MeshStandardMaterial({ color: 0xffd24a, emissive: 0x8a5a00, emissiveIntensity: 0.6, roughness: 0.22, metalness: 0.9 }),
-      glow: new T.SpriteMaterial({ map: K.glowTexture(), color: 0xffd24a, transparent: true, depthWrite: false, blending: T.AdditiveBlending, opacity: 0.55 }),
-      flags: new Map(),
-    };
-  }
-
-  function flagMat(color) {
-    var m = R.mat.flags.get(color);
-    if (!m) {
-      m = K.std(color, 0.75, 0, { side: T.DoubleSide });
-      R.mat.flags.set(color, m);
+    // pankart (altından kayılır)
+    R.bannerTex = K.canvasTex(512, 128, function () {});
+    var bannerMat = new T.MeshStandardMaterial({ map: R.bannerTex, roughness: 0.7, side: T.DoubleSide });
+    var poleMat = K.std(0xf1f5f9, 0.35, 0.3);
+    R.bars = [];
+    for (var j = 0; j < 6; j++) {
+      var g2 = new T.Group();
+      var ban = K.mesh(new T.BoxGeometry(LANE - 0.3, 1.25, 0.12), bannerMat);
+      ban.position.y = 1.9;
+      g2.add(ban);
+      [-1, 1].forEach(function (sd) {
+        var p = K.mesh(new T.CylinderGeometry(0.06, 0.07, 2.6, 8), poleMat);
+        p.position.set(sd * (LANE / 2 - 0.15), 1.3, 0);
+        g2.add(p);
+      });
+      g2.visible = false;
+      s.add(g2);
+      R.bars.push(g2);
     }
-    return m;
+    // takım otobüsü
+    R.busSide = K.canvasTex(1024, 256, function () {});
+    R.busFront = K.canvasTex(256, 256, function () {});
+    var sideMat = new T.MeshStandardMaterial({ map: R.busSide, roughness: 0.35, metalness: 0.1, envMapIntensity: 0.9 });
+    var frontMat = new T.MeshStandardMaterial({ map: R.busFront, roughness: 0.3, metalness: 0.1, envMapIntensity: 0.9 });
+    R.busRoof = new T.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4, metalness: 0.1 });
+    var tyre = K.std(0x111827, 0.8), wheelGeo = new T.CylinderGeometry(0.46, 0.46, 0.3, 16);
+    wheelGeo.rotateZ(Math.PI / 2);
+    R.buses = [];
+    for (var b = 0; b < 6; b++) {
+      var g3 = new T.Group();
+      var body = K.mesh(new T.BoxGeometry(LANE - 0.25, 2.75, 9), [sideMat, sideMat, R.busRoof, R.busRoof, frontMat, frontMat], true, false);
+      body.position.y = 0.5 + 2.75 / 2;
+      g3.add(body);
+      [-1, 1].forEach(function (sx) {
+        [-2.9, 2.9].forEach(function (sz) {
+          var wh = K.mesh(wheelGeo, tyre, true, false);
+          wh.position.set(sx * (LANE / 2 - 0.22), 0.46, sz);
+          g3.add(wh);
+        });
+      });
+      // farlar (gece)
+      [-1, 1].forEach(function (sx) {
+        var hl = new T.Sprite(new T.SpriteMaterial({ map: K.glowTexture(), color: 0xfff6d8, transparent: true, depthWrite: false, blending: T.AdditiveBlending, opacity: 0.85 }));
+        hl.position.set(sx * 0.7, 1.0, 4.6);
+        hl.scale.set(1.5, 1.5, 1);
+        g3.add(hl);
+      });
+      g3.visible = false;
+      s.add(g3);
+      R.buses.push(g3);
+    }
+    // altınlar (örneklenmiş)
+    var coinGeo = new T.CylinderGeometry(0.3, 0.3, 0.07, 22);
+    coinGeo.rotateX(Math.PI / 2);
+    R.coins = new T.InstancedMesh(coinGeo, new T.MeshStandardMaterial({ color: 0xffd24a, emissive: 0xc27a00, emissiveIntensity: 0.9, roughness: 0.3, metalness: 0.35 }), 90);
+    R.coins.frustumCulled = false;
+    R.coins.castShadow = false;
+    R.coins.count = 0;
+    s.add(R.coins);
+    // güç kutuları
+    R.pickups = [];
+    for (var p = 0; p < 3; p++) {
+      var g4 = new T.Group();
+      var box = K.mesh(new T.OctahedronGeometry(0.42, 0), new T.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.6, roughness: 0.15, metalness: 0.3, transparent: true, opacity: 0.9 }));
+      var icon = new T.Sprite(new T.SpriteMaterial({ depthWrite: false, toneMapped: false, transparent: true }));
+      icon.position.y = 0.95;
+      icon.scale.set(0.8, 0.8, 1);
+      var glow = new T.Sprite(new T.SpriteMaterial({ map: K.glowTexture(), transparent: true, depthWrite: false, blending: T.AdditiveBlending, opacity: 0.85 }));
+      glow.scale.set(3, 3, 1);
+      g4.add(box, icon, glow);
+      g4.userData = { box: box, icon: icon, glow: glow, type: "" };
+      g4.visible = false;
+      s.add(g4);
+      R.pickups.push(g4);
+    }
+    // top + kalkan balonu + temas gölgesi
+    R.ball = G3.ball(R, 0.11);
+    R.shadow = S3.blob(1.0, 0.5);
+    R.bubble = new T.Mesh(new T.SphereGeometry(1.15, 24, 16), new T.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.22, depthWrite: false, blending: T.AdditiveBlending, toneMapped: false }));
+    R.bubble.visible = false;
+    s.add(R.bubble);
+    R.foes = new Map();
   }
 
-  /** Seyirci formaları: solda koşucunun kulübü, sağda rakip savunma. LED bantta iki renk. */
-  var standKey = "";
-  function paintStands(def) {
-    var mk = kitOf(runner), ok = kitOf(def.defenders[0] || { team: def.team });
-    var key = mk.primary + mk.secondary + ok.primary + ok.secondary;
-    if (key === standKey) return;
-    standKey = key;
-    S3.paintCrowd(mk, ok);
-    S3.paintLed(mk.primary, ok.primary);
+  var iconTex = {};
+  function powerIcon(type) {
+    if (iconTex[type]) return iconTex[type];
+    var col = POWERS[type].color;
+    iconTex[type] = K.canvasTex(128, 128, function (c) {
+      c.beginPath();
+      c.arc(64, 64, 58, 0, Math.PI * 2);
+      c.fillStyle = "rgba(8,10,30,0.88)";
+      c.fill();
+      c.lineWidth = 7;
+      c.strokeStyle = col;
+      c.stroke();
+      drawPower(c, type, 64, 64, 34, col);
+    });
+    return iconTex[type];
   }
 
-  function paintBoards(text) {
-    if (text === R.boardText) return;
-    R.boardText = text;
-    var c = R.boardTex.userData.ctx, cw = R.boardTex.userData.canvas.width, ch = R.boardTex.userData.canvas.height;
-    var g = c.createLinearGradient(0, 0, 0, ch);
-    g.addColorStop(0, "#3B1FD1");
-    g.addColorStop(1, "#1E0F7A");
-    c.fillStyle = g;
-    c.fillRect(0, 0, cw, ch);
-    c.font = "900 38px " + A.FONT;
+  /** Seviyenin takımı değişince: otobüs, pankart, kemer, pano ve seyirci boyanır. */
+  function paintTeam() {
+    var def = defenseAt(level);
+    var key = rosterSig + ":" + def.team.id + ":" + level;
+    if (key === R.teamKey) return;
+    R.teamKey = key;
+    var kit = def.team.kit || { primary: "#DC2626", secondary: "#FFFFFF" };
+    var name = String(def.team.name || "RAKİP").toLocaleUpperCase("tr-TR");
+    var mk = kitOf(runner);
+    // otobüs yanı
+    var c = R.busSide.userData.ctx, w = 1024, h = 256;
+    c.fillStyle = kit.primary;
+    c.fillRect(0, 0, w, h);
+    c.fillStyle = kit.secondary;
+    c.fillRect(0, h * 0.62, w, h * 0.09);
+    c.fillStyle = "rgba(0,0,0,0.18)";
+    c.fillRect(0, h * 0.86, w, h * 0.14);
+    // camlar
+    for (var i = 0; i < 7; i++) {
+      var x = 40 + i * 136;
+      var g = c.createLinearGradient(0, 30, 0, 130);
+      g.addColorStop(0, "#9bd0ff");
+      g.addColorStop(1, "#1e3a5f");
+      c.fillStyle = g;
+      A.roundRect(c, x, 28, 116, 100, 12);
+      c.fill();
+      c.fillStyle = "rgba(255,255,255,0.35)";
+      c.beginPath();
+      c.moveTo(x + 14, 32);
+      c.lineTo(x + 50, 32);
+      c.lineTo(x + 24, 124);
+      c.lineTo(x + 4, 124);
+      c.closePath();
+      c.fill();
+    }
+    c.font = "900 56px " + A.FONT;
+    c.textAlign = "center";
+    c.textBaseline = "middle";
+    c.lineWidth = 8;
+    c.strokeStyle = "rgba(0,0,0,0.35)";
+    var ink = kit.secondary;
+    c.strokeText(name, w / 2, h * 0.76, w - 80);
+    c.fillStyle = ink;
+    c.fillText(name, w / 2, h * 0.76, w - 80);
+    R.busSide.needsUpdate = true;
+    // otobüs önü
+    c = R.busFront.userData.ctx;
+    c.fillStyle = kit.primary;
+    c.fillRect(0, 0, 256, 256);
+    var gw = c.createLinearGradient(0, 30, 0, 150);
+    gw.addColorStop(0, "#b6dcff");
+    gw.addColorStop(1, "#16304f");
+    c.fillStyle = gw;
+    A.roundRect(c, 18, 26, 220, 124, 16);
+    c.fill();
+    c.fillStyle = "rgba(255,255,255,0.3)";
+    c.beginPath();
+    c.moveTo(40, 30);
+    c.lineTo(110, 30);
+    c.lineTo(60, 146);
+    c.lineTo(24, 146);
+    c.closePath();
+    c.fill();
+    c.fillStyle = kit.secondary;
+    c.fillRect(0, 164, 256, 16);
+    c.fillStyle = "#0b1020";
+    c.fillRect(70, 196, 116, 34);
+    c.fillStyle = "#fff6d8";
+    c.beginPath();
+    c.arc(34, 212, 16, 0, Math.PI * 2);
+    c.arc(222, 212, 16, 0, Math.PI * 2);
+    c.fill();
+    R.busFront.needsUpdate = true;
+    R.busRoof.color.set(kit.primary).multiplyScalar(0.8);
+    // pankart
+    c = R.bannerTex.userData.ctx;
+    var gb = c.createLinearGradient(0, 0, 512, 0);
+    gb.addColorStop(0, kit.primary);
+    gb.addColorStop(1, kit.secondary);
+    c.fillStyle = gb;
+    c.fillRect(0, 0, 512, 128);
+    c.fillStyle = "rgba(8,10,30,0.55)";
+    c.fillRect(0, 96, 512, 32);
+    c.font = "900 54px " + A.FONT;
+    c.textAlign = "center";
+    c.textBaseline = "middle";
+    c.lineWidth = 8;
+    c.strokeStyle = "rgba(8,10,30,0.8)";
+    c.strokeText(name, 256, 50, 480);
+    c.fillStyle = "#FFFFFF";
+    c.fillText(name, 256, 50, 480);
+    c.font = "900 22px " + A.FONT;
+    c.fillStyle = "#FDE68A";
+    c.fillText("▼  ALTINDAN KAY  ▼", 256, 113);
+    R.bannerTex.needsUpdate = true;
+    // kemer
+    c = R.archTex.userData.ctx;
+    var ga = c.createLinearGradient(0, 0, 1024, 0);
+    ga.addColorStop(0, mk.primary);
+    ga.addColorStop(0.5, "#2A1680");
+    ga.addColorStop(1, kit.primary);
+    c.fillStyle = ga;
+    c.fillRect(0, 0, 1024, 128);
+    c.font = "900 70px " + A.FONT;
+    c.textAlign = "center";
     c.textBaseline = "middle";
     c.fillStyle = "#FFFFFF";
+    c.fillText("ELİTLİG ARENA  •  SEVİYE " + level, 512, 68, 980);
+    R.archTex.needsUpdate = true;
+    // pano
+    c = R.boardTex.userData.ctx;
+    var gp = c.createLinearGradient(0, 0, 0, 64);
+    gp.addColorStop(0, "#5B3DF5");
+    gp.addColorStop(1, "#2A1680");
+    c.fillStyle = gp;
+    c.fillRect(0, 0, 1024, 64);
+    c.font = "900 36px " + A.FONT;
+    c.textAlign = "left";
+    c.textBaseline = "middle";
+    c.fillStyle = "#FFFFFF";
+    var text = "ELİTLİG ARENA  •  SLALOM  •  RAKİP: " + name + "  •  ";
     var unit = c.measureText(text).width || 200;
-    for (var x = 0; x < cw; x += unit) c.fillText(text, x, ch * 0.55);
-    c.fillStyle = "rgba(0,0,0,0.2)";
-    for (var y = 1; y < ch; y += 3) c.fillRect(0, y, cw, 1);
+    for (var px = 0; px < 1024; px += unit) c.fillText(text, px, 35);
     R.boardTex.needsUpdate = true;
+    G3.paintCrowd(R.crowdTex, mk, kit);
   }
 
   function buildRunner() {
@@ -970,404 +1130,361 @@
       K.disposeTree(R.runner.root);
     }
     R.runner = K.makeAthlete(runner, { keeper: false });
-    ghostOn = false;
     R.scene.add(R.runner.root);
   }
 
-  function buildBall() {
-    var geo = new T.SphereGeometry(0.11, 32, 24);
-    var PHI = (1 + Math.sqrt(5)) / 2;
-    var centres = [[0, 1, PHI], [0, -1, PHI], [0, 1, -PHI], [0, -1, -PHI], [1, PHI, 0], [-1, PHI, 0], [1, -PHI, 0], [-1, -PHI, 0], [PHI, 0, 1], [-PHI, 0, 1], [PHI, 0, -1], [-PHI, 0, -1]].map(function (v) {
-      var l = Math.hypot(v[0], v[1], v[2]);
-      return [v[0] / l, v[1] / l, v[2] / l];
-    });
-    var nrm = geo.attributes.normal;
-    var colors = new Float32Array(nrm.count * 3);
-    for (var i = 0; i < nrm.count; i++) {
-      var best = 0;
-      for (var k = 0; k < 12; k++) best = Math.max(best, nrm.getX(i) * centres[k][0] + nrm.getY(i) * centres[k][1] + nrm.getZ(i) * centres[k][2]);
-      var v = best > 0.925 ? 0.06 : best > 0.905 ? 0.45 : 0.95;
-      colors[i * 3] = colors[i * 3 + 1] = v;
-      colors[i * 3 + 2] = v * 1.02;
-    }
-    geo.setAttribute("color", new T.BufferAttribute(colors, 3));
-    R.ball = K.mesh(geo, new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.38 }));
-    R.scene.add(R.ball);
-  }
-
-  /* ─────────────── nesne havuzları ─────────────── */
-
-  function gateMesh(g) {
-    var grp = new T.Group();
-    var pair = [];
-    [-1, 1].forEach(function (s, i) {
-      var post = new T.Group();
-      var pole = K.mesh(R.geo.pole, R.mat.pole);
-      pole.position.y = POLE_H / 2;
-      var base = K.mesh(R.geo.base, R.mat.base, false, true);
-      base.position.y = 0.025;
-      var flag = K.mesh(R.geo.flag, flagMat(i ? g.kit.secondary : g.kit.primary));
-      flag.position.set(-s * 0.23, POLE_H - 0.2, 0);
-      post.add(pole, base, flag);
-      post.userData = { s: s, flag: flag };
-      grp.add(post);
-      pair.push(post);
-    });
-    grp.userData = { posts: pair };
-    R.scene.add(grp);
-    return grp;
-  }
-
-  /** Joker kutusu: dönen parlak kristal + üstünde simge + ışıma. */
-  var iconTex = {};
-  function pickupMesh(pk) {
-    var col = JOKERS[pk.type].color;
-    if (!iconTex[pk.type])
-      iconTex[pk.type] = K.canvasTex(128, 128, function (c) {
-        c.beginPath();
-        c.arc(64, 64, 58, 0, Math.PI * 2);
-        c.fillStyle = "rgba(8,10,30,0.85)";
-        c.fill();
-        c.lineWidth = 7;
-        c.strokeStyle = col;
-        c.stroke();
-        drawIcon(c, pk.type, 64, 66, 40, col);
-      });
-    var g = new T.Group();
-    var box = K.mesh(R.geo.box, new T.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.55, roughness: 0.15, metalness: 0.3, transparent: true, opacity: 0.85 }));
-    g.add(box);
-    var icon = new T.Sprite(new T.SpriteMaterial({ map: iconTex[pk.type], depthWrite: false, toneMapped: false }));
-    icon.position.y = 0.75;
-    icon.scale.set(0.62, 0.62, 1);
-    g.add(icon);
-    var glow = new T.Sprite(new T.SpriteMaterial({ map: K.glowTexture(), color: col, transparent: true, depthWrite: false, blending: T.AdditiveBlending, opacity: 0.8 }));
-    glow.scale.set(2.4, 2.4, 1);
-    g.add(glow);
-    g.userData = { box: box };
-    R.scene.add(g);
-    return g;
-  }
-
-  function foeAthlete(fo) {
-    var a = K.makeAthlete({ id: fo.who.id, name: fo.who.name, short: fo.who.short, back: fo.who.back, shirt: fo.who.shirt, team: fo.team }, { keeper: false, detail: "lo" });
-    R.scene.add(a.root);
-    return a;
-  }
-
-  function syncPools() {
-    var seen = new Set();
-    gates.forEach(function (g) {
-      seen.add(g.id);
-      var m = R.gates.get(g.id);
-      if (!m) {
-        m = gateMesh(g);
-        R.gates.set(g.id, m);
-      }
-      var half = g.gap / 2;
-      m.position.set(0, 0, wz(g.z));
-      m.userData.posts.forEach(function (post) {
-        var s = post.userData.s;
-        post.position.x = g.cx + s * half;
-        // Direğe çarpınca direk devrilir, bayrak dalgalanır
-        var hit = g.result === "pole" && g.hitPole === s ? A.clamp((A.time - g.at) / 0.25, 0, 1) : 0;
-        post.rotation.z = -s * hit * 0.9;
-        // SÜPÜR: direkler yere gömülür
-        post.position.y = g.cleared ? -POLE_H * A.smooth(A.clamp((A.time - g.clearAt) / 0.35, 0, 1)) : 0;
-        post.userData.flag.rotation.y = Math.sin(A.time * 6 + g.z) * 0.25;
-      });
-    });
-    R.gates.forEach(function (m, id) {
-      if (seen.has(id)) return;
-      R.scene.remove(m);
-      R.gates.delete(id);
-    });
-
-    var seenC = new Set();
-    coins.forEach(function (co, i) {
-      var key = co.z + ":" + co.x;
-      seenC.add(key);
-      var m = R.coins.get(key);
-      if (!m) {
-        m = K.mesh(R.geo.coin, R.mat.coin);
-        R.scene.add(m);
-        R.coins.set(key, m);
-      }
-      var taken = co.taken ? A.clamp((A.time - co.at) / 0.3, 0, 1) : 0;
-      m.visible = taken < 1;
-      m.position.set(co.x, 0.45 + Math.sin(A.time * 3 + i) * 0.08 + taken * 1.2, wz(co.z));
-      m.scale.setScalar(1 - taken * 0.6);
-      m.rotation.set(Math.PI / 2, 0, A.time * 3 + i);
-    });
-    R.coins.forEach(function (m, key) {
-      if (seenC.has(key)) return;
-      R.scene.remove(m);
-      R.coins.delete(key);
-    });
-
-    var seenP = new Set();
-    pickups.forEach(function (pk) {
-      seenP.add(pk.id);
-      var g = R.pickups.get(pk.id);
-      if (!g) {
-        g = pickupMesh(pk);
-        R.pickups.set(pk.id, g);
-      }
-      var taken = pk.taken ? A.clamp((A.time - pk.at) / 0.35, 0, 1) : 0;
-      g.visible = taken < 1;
-      g.position.set(pk.x, 0.9 + Math.sin(A.time * 2.6 + pk.id) * 0.12 + taken * 1.5, wz(pk.z));
-      g.userData.box.rotation.y = A.time * 2.2;
-      g.scale.setScalar((1 + Math.sin(A.time * 5) * 0.05) * (1 + taken));
-    });
-    R.pickups.forEach(function (g, id) {
-      if (seenP.has(id)) return;
-      R.scene.remove(g);
-      R.pickups.delete(id);
-    });
-
-    // Kapı halkaları: geçişte yerde genişleyip sönen ışık halkası
-    while (fx.length) {
-      var e = fx.shift();
-      if (e.kind !== "ring") continue;
-      var ring = R.rings.find(function (r) {
-        return !r.visible;
-      });
-      if (!ring) {
-        if (R.rings.length >= 8) ring = R.rings[0];
-        else {
-          ring = new T.Mesh(R.geo.ring, new T.MeshBasicMaterial({ transparent: true, depthWrite: false, blending: T.AdditiveBlending, side: T.DoubleSide, toneMapped: false }));
-          ring.rotation.x = -Math.PI / 2;
-          R.scene.add(ring);
-          R.rings.push(ring);
-        }
-      }
-      ring.material.color.set(e.color);
-      ring.userData = { at: A.time, big: !!e.big };
-      ring.position.set(e.x, 0.03, wz(e.z));
-      ring.visible = true;
-    }
-    R.rings.forEach(function (ring) {
-      if (!ring.visible) return;
-      var t = (A.time - ring.userData.at) / 0.6;
-      if (t >= 1) {
-        ring.visible = false;
-        return;
-      }
-      ring.scale.setScalar(0.6 + t * (ring.userData.big ? 2.6 : 1.8));
-      ring.material.opacity = (1 - t) * 0.9;
-    });
-
-    var seenF = new Set();
-    foes.forEach(function (fo) {
-      seenF.add(fo.id);
-      var a = R.foes.get(fo.id);
+  /**
+   * Savunmacının 3B modeli. Aynı oyuncu ekranda birden çok engelde olabilir
+   * (kısa kadrolar): oyuncu başına en çok üç model tutulur, boşalan yeniden
+   * kullanılır. Doku boyama pahalıdır: karede en çok bir yeni model kurulur.
+   */
+  function foeAthlete(o) {
+    var free = null;
+    for (var i = 0; i < 3; i++) {
+      var key = o.who.id + (i ? ":" + i : "");
+      var a = R.foes.get(key);
       if (!a) {
-        a = foeAthlete(fo);
-        R.foes.set(fo.id, a);
+        if (free == null) free = key;
+        continue;
       }
-      poseFoe(a, fo);
-    });
-    R.foes.forEach(function (a, id) {
-      if (seenF.has(id)) return;
-      R.scene.remove(a.root);
-      K.disposeTree(a.root);
-      R.foes.delete(id);
-    });
+      if (a.busy === o.id || a.busyUntil <= z) {
+        a.busy = o.id;
+        a.busyUntil = o.z + 12;
+        return a;
+      }
+    }
+    if (free == null || R.madeAt === A.time) return null;
+    R.madeAt = A.time;
+    var made = K.makeAthlete({ id: o.who.id, name: o.who.name, short: o.who.short, back: o.who.back, shirt: o.who.shirt, team: o.team }, { keeper: false, detail: "lo" });
+    R.scene.add(made.root);
+    R.foes.set(free, made);
+    made.busy = o.id;
+    made.busyUntil = o.z + 12;
+    return made;
   }
 
   /* ─────────────── pozlar ─────────────── */
 
-  /** HAYALET: koşucu yarı saydam, camgöbeği ışıyan. */
-  var ghostOn = false;
-  function setGhost(on) {
-    if (on === ghostOn) return;
-    ghostOn = on;
-    R.runner.root.traverse(function (o) {
-      if (!o.material) return;
-      (Array.isArray(o.material) ? o.material : [o.material]).forEach(function (m) {
-        m.transparent = on;
-        m.opacity = on ? 0.42 : 1;
-        m.depthWrite = !on;
-        if (m.emissive) m.emissive.set(on ? 0x0e7490 : 0x000000);
-        m.needsUpdate = true;
-      });
-      o.castShadow = !on;
-    });
-  }
-
   function posePlayer() {
-    var a = R.runner;
-    setGhost(active.ghost > 0 && !(active.ghost < 1 && Math.sin(A.time * 30) > 0));
-    var J = a.J;
+    var a = R.runner, J = a.J;
     K.rest(a);
     var root = a.root;
-    root.position.set(player.x, 0, wz(z));
-    root.rotation.y = Math.PI - player.vx * 0.05; // ileri (−z) bakar
+    root.position.set(player.x, player.y, wz(z));
+    root.rotation.y = Math.PI - player.lean * 0.35;
+    var blink = player.invuln > 0 && Math.sin(A.time * 34) > 0.2;
+    root.visible = !blink;
     var fallen = state === "dying" || state === "over" ? A.clamp(dyingT * 2, 0, 1) : 0;
     if (fallen > 0) {
+      root.visible = true;
       root.rotation.x = -fallen * 1.35;
       root.position.y = fallen * 0.15;
       J.sha.rotation.x = -2.6 * fallen;
       J.shb.rotation.x = -2.6 * fallen;
       return;
     }
-    var amp = A.clamp(speed / 14, 0.35, 1.15);
-    K.runCycle(a, player.stride * 1.2, amp);
-    // Dönüşte gövde yatar; sendelemede öne düşer (depar klibi zaten öne eğik)
-    root.rotation.z = player.lean * 0.35;
-    J.spine.rotation.x = 0.04 + player.stumble * 0.6;
-    J.head.rotation.x = -0.08;
+    var amp = A.clamp(speed / 14, 0.5, 1.15);
+    var air = player.y > 0.02;
+    var sl = player.slide > 0 ? A.smooth(A.clamp((SLIDE_T - player.slide) / 0.12, 0, 1)) * A.smooth(A.clamp(player.slide / 0.14, 0, 1)) : 0;
+    if (sl > 0) {
+      // kayma: gövde geriye yatar, bir bacak öne uzanır
+      K.play(a, "sprint", player.stride * 0.2, 1 - sl);
+      root.rotation.x = 1.12 * sl;
+      root.position.y = 0.06 * sl;
+      J.hpa.rotation.x = -0.35 * sl;
+      J.kna.rotation.x = 0.1 * sl;
+      J.hpb.rotation.x = -0.9 * sl;
+      J.knb.rotation.x = 1.7 * sl;
+      J.sha.rotation.x = 0.9 * sl;
+      J.sha.rotation.z = 0.5 * sl;
+      J.shb.rotation.x = -0.6 * sl;
+      J.shb.rotation.z = -0.9 * sl;
+      J.head.rotation.x = -0.75 * sl;
+      J.spine.rotation.x = -0.35 * sl;
+    } else if (air) {
+      // zıplama: dizler karna, kollar yukarı
+      var k = A.clamp(player.y / 1.2, 0, 1);
+      K.play(a, "sprint", player.stride * 0.25, 1 - 0.8 * k);
+      J.hpa.rotation.x = -1.25 * k;
+      J.kna.rotation.x = 1.7 * k;
+      J.hpb.rotation.x = -0.55 * k;
+      J.knb.rotation.x = 1.35 * k;
+      J.sha.rotation.x = -2.2 * k;
+      J.shb.rotation.x = -1.8 * k;
+      J.sha.rotation.z = 0.35 * k;
+      J.shb.rotation.z = -0.35 * k;
+      J.spine.rotation.x = 0.12 * k;
+      root.rotation.x = -0.1 * k;
+    } else {
+      K.runCycle(a, player.stride * 1.2, amp);
+      J.spine.rotation.x = 0.04 + player.stumble * 0.7;
+      J.head.rotation.x = -0.08;
+    }
+    root.rotation.z = player.lean * 0.42;
   }
 
-  function poseFoe(a, fo) {
+  function poseFoe(a, o) {
     var J = a.J;
     K.rest(a);
-    a.root.position.set(fo.x, 0, wz(fo.z));
-    a.root.rotation.y = 0; // oyuncuya (+z) bakar
-    if (fo.hit) {
-      var t = A.clamp((A.time - fo.at) / 0.4, 0, 1);
-      a.root.rotation.x = t * 1.3;
-      a.root.position.y = t * 0.12;
+    a.root.visible = true;
+    a.root.position.set(laneX(o.lane), 0, wz(o.z));
+    a.root.rotation.y = 0;
+    if (o.smashed || o.hit) {
+      var t = A.clamp((A.time - o.at) / 0.55, 0, 1);
+      var dir = o.dir || 1;
+      if (o.smashed) {
+        a.root.position.x += dir * A.easeOut(t) * 3.4;
+        a.root.position.y = Math.sin(t * Math.PI) * 1.1;
+        a.root.rotation.z = -dir * t * 1.5;
+      } else {
+        a.root.rotation.x = -t * 1.35;
+        a.root.position.y = t * 0.14;
+      }
+      J.sha.rotation.x = -2.4 * t;
+      J.shb.rotation.x = -2.4 * t;
       return;
     }
-    if (fo.swept) {
-      // SÜPÜR: savunmacı kenara savrulup yere düşer
-      var u = A.clamp((A.time - fo.at) / 0.55, 0, 1);
-      a.root.position.x = fo.x + fo.dir * A.easeOut(u) * 3.2;
-      a.root.position.y = Math.sin(u * Math.PI) * 0.9;
-      a.root.rotation.z = -fo.dir * u * 1.45;
-      J.sha.rotation.x = -2.4 * u;
-      J.shb.rotation.x = -2.4 * u;
+    if (o.type === "tackler" && o.tackleAt) {
+      // kayarak müdahale
+      var k = A.smooth(A.clamp((A.time - o.tackleAt) / 0.28, 0, 1));
+      a.root.rotation.x = -1.12 * k;
+      a.root.position.y = 0.05 * k;
+      J.hpa.rotation.x = -0.4 * k;
+      J.hpb.rotation.x = -0.95 * k;
+      J.knb.rotation.x = 1.7 * k;
+      J.sha.rotation.x = 0.9 * k;
+      J.sha.rotation.z = 0.6 * k;
+      J.shb.rotation.z = -0.9 * k;
+      J.head.rotation.x = -0.7 * k;
       return;
     }
-    // Savunma duruşu: dizler kırık, kollar açık; kayarken yan adım
-    var slide = fo.slide ? Math.cos(A.time * 1.9 + fo.phase) : 0;
-    J.hips.position.y = 0.84;
-    J.hpa.rotation.x = -0.35;
-    J.hpb.rotation.x = -0.35;
-    J.kna.rotation.x = 0.7;
-    J.knb.rotation.x = 0.7;
-    J.hpa.rotation.z = 0.25 + Math.max(0, slide) * 0.25;
-    J.hpb.rotation.z = -0.25 - Math.max(0, -slide) * 0.25;
-    J.spine.rotation.x = 0.35;
-    J.sha.rotation.z = 0.6;
-    J.shb.rotation.z = -0.6;
-    J.sha.rotation.x = -0.3;
-    J.shb.rotation.x = -0.3;
-    J.ela.rotation.x = -0.5;
-    J.elb.rotation.x = -0.5;
-    J.head.rotation.x = -0.2;
+    var wide = o.type === "wall";
+    var bob = Math.sin(A.time * 4 + o.id) * 0.02;
+    J.hips.position.y = 0.86 + bob;
+    J.hpa.rotation.x = -0.32;
+    J.hpb.rotation.x = -0.32;
+    J.kna.rotation.x = 0.64;
+    J.knb.rotation.x = 0.64;
+    J.hpa.rotation.z = wide ? 0.42 : 0.24;
+    J.hpb.rotation.z = wide ? -0.42 : -0.24;
+    J.spine.rotation.x = wide ? 0.12 : 0.34;
+    J.sha.rotation.z = wide ? 1.35 : 0.6;
+    J.shb.rotation.z = wide ? -1.35 : -0.6;
+    J.sha.rotation.x = wide ? 0 : -0.3;
+    J.shb.rotation.x = wide ? 0 : -0.3;
+    J.ela.rotation.x = wide ? 0 : -0.5;
+    J.elb.rotation.x = wide ? 0 : -0.5;
+    J.head.rotation.x = -0.15;
   }
 
   /* ─────────────── kamera + sahne ─────────────── */
 
-  var cam = null, look = null;
+  var camPos = null, camLook = null, coinM = null, coinQ = null, coinE = null, coinP = null, coinS = null;
   function sync(dt) {
+    paintTeam();
     var c = R.camera;
-    var wantPos = new T.Vector3(camX, 5.4, wz(z - 7.8));
-    var wantLook = new T.Vector3(camX * 0.85 + player.x * 0.15, 0.6, wz(z + 13));
+    var wantPos = new T.Vector3(player.x * 0.72, 4.5 + player.y * 0.28, wz(z - 7.2));
+    var wantLook = new T.Vector3(player.x * 0.72, 1.35 + player.y * 0.2, wz(z + 10));
     if (A.shakeAmt > 0.2) {
-      wantPos.x += (Math.random() - 0.5) * A.shakeAmt * 0.015;
-      wantPos.y += (Math.random() - 0.5) * A.shakeAmt * 0.015;
+      wantPos.x += (Math.random() - 0.5) * A.shakeAmt * 0.02;
+      wantPos.y += (Math.random() - 0.5) * A.shakeAmt * 0.02;
     }
-    if (!cam) {
-      cam = wantPos.clone();
-      look = wantLook.clone();
+    if (!camPos) {
+      camPos = wantPos.clone();
+      camLook = wantLook.clone();
     } else {
-      cam.lerp(wantPos, 1 - Math.exp(-12 * dt));
-      look.lerp(wantLook, 1 - Math.exp(-12 * dt));
-      cam.z = wantPos.z; // ileri eksende gecikme olmasın
-      look.z = wantLook.z;
+      var kk = 1 - Math.exp(-11 * dt);
+      camPos.lerp(wantPos, kk);
+      camLook.lerp(wantLook, kk);
+      camPos.z = wantPos.z;
+      camLook.z = wantLook.z;
     }
-    c.position.copy(cam);
-    c.lookAt(look);
-    c.rotateZ(-player.lean * 0.035); // dönüşe hafif yatış
-    var fovK = A.clamp((speed - 9) / 12, 0, 1);
-    var fov = R.baseFov * (1 + 0.07 * fovK - (active.slow > 0 ? 0.04 : 0));
+    c.position.copy(camPos);
+    c.lookAt(camLook);
+    c.rotateZ(-player.lean * 0.05);
+    var fovK = A.clamp((speed - 11) / 12, 0, 1);
+    var fov = R.baseFov * (1 + 0.08 * fovK + (active.turbo > 0 ? 0.12 : 0));
     if (Math.abs(c.fov - fov) > 0.01) {
-      c.fov = A.damp(c.fov, fov, 3, dt);
+      c.fov = A.damp(c.fov, fov, 4, dt);
       c.updateProjectionMatrix();
     }
+    G3.focus(R, player.x * 0.5, 0, wz(z + 8));
 
-    // Akan şeritler: dünyada sabit desen için doku kayar
-    var mid = z + STRIP * 0.35;
-    R.ground.position.set(0, 0, wz(mid));
-    R.grass.offset.y = ((mid % 11) / 11) % 1;
-    R.boards.forEach(function (b) {
-      b.position.z = wz(mid);
+    /* Akan şeritler */
+    var mid = z + STRIP * 0.36;
+    R.track.position.z = wz(mid);
+    R.turf.offset.y = ((mid % 14) / 14) % 1;
+    R.apron.position.z = wz(mid);
+    R.walks.forEach(function (m) { m.position.z = wz(mid); });
+    R.pave.offset.y = ((mid % 2) / 2) % 1;
+    R.kerbs.forEach(function (m) { m.position.z = wz(mid); });
+    R.boards.forEach(function (m) { m.position.z = wz(mid); });
+    R.boardTex.offset.x = (mid / 26 + A.time * 0.03) % 1;
+
+    /* Kenar manzarası: yuvalar */
+    var first = Math.floor((z - 30) / SLOT);
+    var used = { B: [0, 0], T: [0, 0], S: [0, 0] };
+    ["B", "T", "S"].forEach(function (ty) {
+      R.scenery[ty].forEach(function (e) { e.obj.visible = false; });
     });
-    R.boardTex.offset.x = (A.time * 0.04 + mid / 40) % 1;
-    R.grassN.offset.y = ((mid % 3) / 3) % 1;
-    R.tracks.forEach(function (t) {
-      t.position.z = wz(mid);
-    });
-    // Tribün parçaları: her biri sabit bir dünya yuvasında; geride kalan öne geçer.
-    var first = Math.floor((z - 16) / SEG);
-    for (var j = 0; j < SEGS; j++) {
-      var slot = first + j;
-      var idx = ((slot % SEGS) + SEGS) % SEGS;
-      [0, SEGS].forEach(function (off) {
-        R.stands[off + idx].position.z = wz(slot * SEG + SEG / 2);
+    for (var sI = 0; sI < 6; sI++) {
+      var slot = first + sI;
+      [-1, 1].forEach(function (side, si) {
+        var ty = PATTERN[(((slot + (side > 0 ? 3 : 0)) % PATTERN.length) + PATTERN.length) % PATTERN.length];
+        var pool = R.scenery[ty].filter(function (e) { return e.side === side; });
+        var e = pool[used[ty][si]++ % pool.length];
+        if (!e || e.obj.visible) return;
+        e.obj.visible = true;
+        e.obj.position.z = wz(slot * SLOT + SLOT / 2);
       });
     }
-    R.lamps.forEach(function (lamp) {
-      var u = lamp.userData;
-      var spacing = 70;
-      var base = Math.floor(z / spacing) * spacing;
-      lamp.position.set(u.side * (STAND_X + 34), 44, wz(base + 40 + u.k * spacing));
+    var night = R.th.stars;
+    R.buildingMats.forEach(function (m) { m.emissiveIntensity = night * 0.9; });
+    R.lampGlow.opacity = night * 0.9;
+    var lampBase = Math.floor(z / 30) * 30;
+    R.lamps.forEach(function (g, i) {
+      g.position.set(g.userData.side * (SIDE - 1.2), 0, wz(lampBase + (Math.floor(i / 2) - 0.5) * 30));
     });
-    R.sky.position.set(0, 0, wz(z));
-    R.U.time.value = A.time;
-    R.U.excite.value = A.clamp(R.U.excite.value + ((combo >= 5 ? 1 : 0) - R.U.excite.value) * Math.min(1, dt * 2), 0, 1);
-    R.key.position.set(player.x + 10, 26, wz(z - 14));
-    R.key.target.position.set(player.x, 0, wz(z + 8));
+    var archBase = Math.floor((z + 20) / 150) * 150;
+    R.arches.forEach(function (g, i) {
+      g.position.z = wz(archBase + i * 150 + 75);
+    });
 
-    var def = defenseAt(level);
-    paintBoards("ELİTLİG ARENA   •   SLALOM   •   RAKİP: " + String(def.team.name || "").toLocaleUpperCase("tr-TR") + " SAVUNMASI   •   ");
-    paintStands(def);
+    /* Engeller */
+    var hi = 0, bi = 0, ui = 0;
+    var seen = {};
+    obstacles.forEach(function (o) {
+      var g = null;
+      if (o.type === "hurdle") g = R.hurdles[hi++];
+      else if (o.type === "bar") g = R.bars[bi++];
+      else if (o.type === "bus") g = R.buses[ui++];
+      else {
+        if (o.z - z > 120) return;
+        var a = foeAthlete(o);
+        if (!a) return;
+        seen[a.busy] = a;
+        poseFoe(a, o);
+        return;
+      }
+      if (!g) return;
+      g.visible = true;
+      var t = o.smashed ? A.clamp((A.time - o.at) / 0.6, 0, 1) : 0;
+      var dir = o.dir || 1;
+      g.position.set(laneX(o.lane) + dir * A.easeOut(t) * 5, Math.sin(t * Math.PI) * 1.6, wz(o.z));
+      g.rotation.set(0, t * dir * 0.6, -dir * t * 1.4);
+      if (o.hit && o.type !== "bus") {
+        var ht = A.clamp((A.time - o.at) / 0.3, 0, 1);
+        g.rotation.x = -ht * 1.3;
+      }
+    });
+    for (; hi < R.hurdles.length; hi++) R.hurdles[hi].visible = false;
+    for (; bi < R.bars.length; bi++) R.bars[bi].visible = false;
+    for (; ui < R.buses.length; ui++) R.buses[ui].visible = false;
+    R.foes.forEach(function (a, key) {
+      if (seen[a.busy] === a) return;
+      a.root.visible = false;
+      // seviyesi geçmiş takımın oyuncuları bellekten çıkar
+      if (a.person.team !== defenseAt(level).team && a.busyUntil < z - 20) {
+        R.scene.remove(a.root);
+        K.disposeTree(a.root);
+        R.foes.delete(key);
+      }
+    });
 
-    // Top: oyuncunun önünde, adımla vurulur
-    var touch = (Math.sin(player.stride * 1.2) + 1) * 0.5;
-    R.ball.position.set(player.x + player.vx * 0.03, 0.11, wz(z + 0.75 + touch * 0.25));
+    /* Altınlar */
+    if (!coinM) {
+      coinM = new T.Matrix4();
+      coinQ = new T.Quaternion();
+      coinE = new T.Euler();
+      coinP = new T.Vector3();
+      coinS = new T.Vector3();
+    }
+    var cn = 0;
+    for (var ci = 0; ci < coins.length && cn < 90; ci++) {
+      var co = coins[ci];
+      if (co.z - z > 110) continue;
+      var tk = co.taken ? A.clamp((A.time - co.at) / 0.3, 0, 1) : 0;
+      if (tk >= 1) continue;
+      coinE.set(0, A.time * 4 + co.z * 0.4, 0);
+      coinQ.setFromEuler(coinE);
+      coinP.set(co.x, co.y + tk * 1.3 + Math.sin(A.time * 3 + co.z) * 0.06, wz(co.z));
+      coinS.setScalar(1 - tk * 0.7);
+      coinM.compose(coinP, coinQ, coinS);
+      R.coins.setMatrixAt(cn++, coinM);
+    }
+    R.coins.count = cn;
+    R.coins.instanceMatrix.needsUpdate = true;
+
+    /* Güç kutuları */
+    R.pickups.forEach(function (g, i) {
+      var pk = pickups[i];
+      if (!pk || (pk.taken && A.time - pk.at > 0.35)) {
+        g.visible = false;
+        return;
+      }
+      g.visible = true;
+      if (g.userData.type !== pk.type) {
+        g.userData.type = pk.type;
+        var col = POWERS[pk.type].color;
+        g.userData.box.material.color.set(col);
+        g.userData.box.material.emissive.set(col);
+        g.userData.glow.material.color.set(col);
+        g.userData.icon.material.map = powerIcon(pk.type);
+        g.userData.icon.material.needsUpdate = true;
+      }
+      var tk2 = pk.taken ? A.clamp((A.time - pk.at) / 0.35, 0, 1) : 0;
+      g.position.set(laneX(pk.lane), 1.0 + Math.sin(A.time * 2.6 + pk.id) * 0.12 + tk2 * 1.5, wz(pk.z));
+      g.userData.box.rotation.y = A.time * 2.4;
+      g.scale.setScalar((1 + Math.sin(A.time * 5) * 0.05) * (1 + tk2));
+    });
+
+    /* Top: ayağın önünde; zıplayınca birlikte yükselir, kayarken öne kaçar */
+    var touchK = (Math.sin(player.stride * 1.2) + 1) * 0.5;
+    var ahead = 0.8 + touchK * 0.25 + (player.slide > 0 ? 0.9 : 0);
+    R.ball.position.set(player.x + player.lean * 0.12, 0.11 + player.y * 0.92, wz(z + ahead));
     R.ball.rotation.x -= (speed / 0.11) * dt;
-    R.ball.rotation.z += (player.vx / 0.11) * dt * 0.5;
     R.ball.visible = !(state === "dying" || state === "over") || dyingT < 0.3;
+    R.shadow.position.set(player.x, 0.012, wz(z));
+    R.shadow.material.opacity = 0.5 * Math.max(0.25, 1 - player.y * 0.45);
+    R.shadow.scale.setScalar(1 + player.y * 0.25);
+    R.bubble.visible = active.shield > 0;
+    if (active.shield > 0) {
+      R.bubble.position.set(player.x, 1.0 + player.y, wz(z));
+      R.bubble.material.opacity = (active.shield < 3 ? 0.12 + 0.12 * Math.sin(A.time * 14) : 0.2) + 0.04 * Math.sin(A.time * 5);
+      R.bubble.scale.setScalar(1 + Math.sin(A.time * 4) * 0.03);
+    }
 
-    syncPools();
+    /* Parçacıklar */
+    while (fx.length) {
+      var e2 = fx.shift();
+      var ez = wz(e2.z);
+      if (e2.kind === "coin") R.fx.burst(6, { x: e2.x, y: e2.y, z: ez, speed: 3, life: 0.35, size: 0.28, color: [P.gold, "#FFFFFF"], gravity: 3, vz: -speed * 0.8 });
+      else if (e2.kind === "land" || e2.kind === "hop") R.dust.burst(e2.kind === "land" ? 10 : 6, { x: e2.x, y: 0.08, z: ez, speed: 2.4, up: 0.3, life: 0.45, size: 0.3, size2: 0.75, color: ["#D9F2C4", "#B7E08F"], alpha: 0.55, gravity: 1, vz: -speed * 0.4 });
+      else if (e2.kind === "crash") {
+        R.fx.burst(24, { x: e2.x, y: 1.1, z: ez, speed: 8, life: 0.5, size: 0.4, color: ["#FCA5A5", "#FFFFFF", "#FDBA74"], vz: -speed * 0.7 });
+        R.dust.burst(14, { x: e2.x, y: 0.4, z: ez, speed: 4, life: 0.7, size: 0.5, size2: 1.3, color: ["#E2E8F0", "#CBD5E1"], alpha: 0.6, gravity: -0.5, vz: -speed * 0.6 });
+      } else if (e2.kind === "smash") R.fx.burst(26, { x: e2.x, y: 1.2, z: ez, speed: 9, life: 0.5, size: 0.45, color: ["#FDBA74", "#FDE047", "#FFFFFF"] });
+      else if (e2.kind === "power") R.fx.burst(30, { x: e2.x, y: 1.2, z: ez, speed: 6, life: 0.6, size: 0.4, color: [e2.color, "#FFFFFF"], gravity: 2, vz: -speed * 0.9 });
+    }
+    if (state === "play" && !A.reduceMotion) {
+      if (player.slide > 0 && Math.random() < 0.8) R.dust.emit({ x: player.x + A.rand(-0.3, 0.3), y: 0.1, z: wz(z - 0.4), vx: A.rand(-1, 1), vy: A.rand(0.5, 1.5), vz: -speed * 0.5, life: 0.4, size: 0.3, size2: 0.8, color: "#CFE8B4", alpha: 0.6, gravity: 1 });
+      if (active.turbo > 0)
+        for (var tI = 0; tI < 2; tI++) R.fx.emit({ x: player.x + A.rand(-0.35, 0.35), y: 0.3 + Math.random() * 1.4, z: wz(z - 0.6), vz: 2, life: 0.35, size: 0.5, size2: 0.05, color: ["#FB923C", "#FDE047", "#FFFFFF"], alpha: 0.8, gravity: 0, drag: 0 });
+      else if (multiplier() >= 3 && Math.random() < 0.5) R.fx.emit({ x: player.x, y: 0.15, z: wz(z + 0.6), vy: 1, vz: 1, life: 0.3, size: 0.25, size2: 0.05, color: [P.gold, "#FB923C"], gravity: -1, drag: 0 });
+    }
     posePlayer();
   }
 
   /* ═══════════════════════════ ÇİZİM GİRİŞİ ═══════════════════════════ */
 
-  var perf = { acc: 0, n: 0, step: 0 };
-  function adaptQuality(dt) {
-    if (!dt || perf.step >= 2 || state === "attract") return;
-    perf.acc += dt;
-    perf.n += 1;
-    if (perf.acc < 2) return;
-    var avg = perf.acc / perf.n;
-    perf.acc = 0;
-    perf.n = 0;
-    if (avg < 0.024) return;
-    perf.step += 1;
-    if (perf.step === 1) {
-      R.renderer.setPixelRatio(1);
-      resizeGL();
-    } else {
-      R.renderer.shadowMap.enabled = false;
-      R.scene.traverse(function (o) {
-        if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(function (m) { m.needsUpdate = true; });
-      });
-    }
-  }
-
   function render(c, dt) {
     if (R) {
       try {
-        adaptQuality(dt);
+        G3.adapt(R, dt, state === "attract");
         sync(dt);
-        K.syncAll();
-        R.renderer.render(R.scene, R.camera);
+        G3.tick(R, dt);
+        G3.draw(R);
       } catch (e) {
+        A.glError = String((e && e.stack) || e);
         glFailed = true;
         R = null;
       }
@@ -1380,21 +1497,18 @@
       c.textAlign = "center";
       c.fillText("3B grafik bu cihazda açılamadı.", W / 2, H / 2);
     }
-    drawVignette(c);
-    drawJokerTint(c);
-    if (R) drawFoeLabels(c);
+    drawScrim(c);
+    drawTint(c);
     drawSpeedLines(c);
-    drawSweep(c);
+    if (R) drawFoeLabels(c);
     A.drawParticles(c);
     A.drawFloaters(c, dt);
     if (state !== "attract") drawHud(c);
-    if (state === "play") drawJokers(c);
     if (intro && intro.age >= 0) drawIntro(c);
-    // Duyuru bandı küçük ve üstte: yol ve kapılar açık kalsın.
     var by = Math.max(196, H * 0.25);
     c.save();
     c.translate(W / 2, by);
-    c.scale(0.78, 0.78);
+    c.scale(0.8, 0.8);
     c.translate(-W / 2, -by);
     A.drawBanner(c, W, by, dt);
     c.restore();
@@ -1404,20 +1518,60 @@
     }
   }
 
-  var vignetteLayer = null;
-  function drawVignette(c) {
-    if (!vignetteLayer || vignetteLayer.w !== W || vignetteLayer.h !== H) {
-      vignetteLayer = A.layer(W, H);
-      A.paintVignette(vignetteLayer.ctx, W, H, 0.45);
-      A.paintTopScrim(vignetteLayer.ctx, W, 140);
+  var scrim = null;
+  function drawScrim(c) {
+    if (!scrim || scrim.w !== W || scrim.h !== H) {
+      scrim = A.layer(W, H);
+      A.paintVignette(scrim.ctx, W, H, 0.3);
+      A.paintTopScrim(scrim.ctx, W, 120);
     }
-    A.blit(vignetteLayer);
+    A.blit(scrim);
   }
 
-  /**
-   * Savunmacının adı: sığarsa tam ad soyad, sığmazsa "A. Soyadı", o da
-   * sığmazsa sonu "…" ile kısaltılır.
-   */
+  /** Etkin gücün ekran kenarı tonu: TURBO turuncu, MIKNATIS kırmızı, ×2 altın. */
+  var tints = {};
+  function drawTint(c) {
+    ["turbo", "magnet", "x2"].forEach(function (k) {
+      var left = active[k];
+      if (!(left > 0)) return;
+      var L = tints[k];
+      if (!L || L.w !== W || L.h !== H) {
+        L = tints[k] = A.layer(W, H);
+        var g = L.ctx.createRadialGradient(W / 2, H * 0.55, Math.min(W, H) * 0.38, W / 2, H * 0.55, Math.max(W, H) * 0.78);
+        g.addColorStop(0, "rgba(0,0,0,0)");
+        g.addColorStop(1, k === "turbo" ? "rgba(251,146,60,0.5)" : k === "magnet" ? "rgba(244,63,94,0.3)" : "rgba(250,204,21,0.3)");
+        L.ctx.fillStyle = g;
+        L.ctx.fillRect(0, 0, W, H);
+      }
+      c.save();
+      c.globalAlpha = A.clamp(left / 0.6, 0, 1) * (0.8 + 0.2 * Math.sin(A.time * 5));
+      A.blit(L);
+      c.restore();
+    });
+  }
+
+  function drawSpeedLines(c) {
+    if (state !== "play" || A.reduceMotion) return;
+    var k = Math.max(A.clamp((speed - 15) / 9, 0, 1), active.turbo > 0 ? 1 : 0);
+    if (k <= 0) return;
+    c.save();
+    c.strokeStyle = "rgba(255,255,255," + (0.22 * k).toFixed(3) + ")";
+    c.lineWidth = 1.6;
+    var rand = A.seeded(Math.floor(A.time * 30));
+    for (var i = 0; i < 16; i++) {
+      var side = rand() < 0.5 ? -1 : 1;
+      var x = W / 2 + side * (W * 0.3 + rand() * W * 0.22);
+      var y = H * (0.28 + rand() * 0.62);
+      var len = 30 + rand() * 70 * k;
+      c.beginPath();
+      c.moveTo(x, y);
+      c.lineTo(x + side * len * 0.32, y + len);
+      c.stroke();
+    }
+    c.restore();
+  }
+
+  /** Savunmacının adı: sığarsa tam ad, sığmazsa "A. Soyadı", o da sığmazsa "…". */
   function foeLabel(c, who, max) {
     var full = String(who.name || who.short || who.back || "").trim();
     if (c.measureText(full).width <= max) return full;
@@ -1428,82 +1582,54 @@
     while (t.length > 2 && c.measureText(t + "…").width > max) t = t.slice(0, -1);
     return t + "…";
   }
-
-  /** Yaklaşan savunmacıların başının üstünde numara + ad soyad. */
   function drawFoeLabels(c) {
     c.save();
     c.textAlign = "center";
     c.textBaseline = "middle";
-    for (var i = 0; i < foes.length; i++) {
-      var fo = foes[i];
-      var d = fo.z - z;
-      if (d < 1.5 || d > 32 || fo.hit) continue;
-      var p = screenOf(fo.x, 2.25, fo.z);
-      if (p.behind) continue;
-      var a = A.clamp((32 - d) / 8, 0, 1) * A.clamp((d - 1.5) / 2, 0, 1);
-      if (fo.swept) a *= A.clamp(1 - (A.time - fo.at) / 0.3, 0, 1);
-      if (a <= 0.01) continue;
+    obstacles.forEach(function (o) {
+      if (!o.who || o.hit || o.smashed) return;
+      var d = o.z - z;
+      if (d < 3 || d > 42 || (o.type === "tackler" && o.tackleAt)) return;
+      var p = G3.project(R, laneX(o.lane), 2.25, wz(o.z));
+      if (p.behind) return;
+      var a = A.clamp((42 - d) / 8, 0, 1) * A.clamp((d - 3) / 3, 0, 1);
+      if (a <= 0.01) return;
       c.globalAlpha = a;
       c.font = A.font(11, 800);
-      var label = foeLabel(c, fo.who, Math.min(150, W * 0.38));
-      var num = fo.who.shirt ? String(fo.who.shirt) : "";
-      var tw = c.measureText(label).width;
-      var nw = num ? 22 : 0;
+      var label = foeLabel(c, o.who, Math.min(130, W * 0.32));
+      var num = o.who.shirt ? String(o.who.shirt) : "";
+      var tw = c.measureText(label).width, nw = num ? 22 : 0;
       var bw = tw + nw + 14, bx = p.x - bw / 2;
-      var kit = kitOf(fo);
       A.roundRect(c, bx, p.y - 11, bw, 22, 7);
       c.fillStyle = "rgba(8,10,30,0.82)";
       c.fill();
       if (num) {
         A.roundRect(c, bx + 3, p.y - 8, 20, 16, 5);
-        c.fillStyle = kit.primary;
+        c.fillStyle = (o.kit && o.kit.primary) || "#5B3DF5";
         c.fill();
         c.font = A.font(10, 900);
-        c.fillStyle = A.textOn ? A.textOn(kit.primary) : "#FFFFFF";
+        c.fillStyle = "#FFFFFF";
         c.fillText(num, bx + 13, p.y + 0.5);
         c.font = A.font(11, 800);
       }
       c.fillStyle = "#FFFFFF";
       c.fillText(label, bx + nw + 7 + tw / 2, p.y + 0.5);
-    }
+    });
     c.restore();
   }
 
-  function drawSpeedLines(c) {
-    if (state !== "play" || A.reduceMotion) return;
-    var k = A.clamp((speed - 13) / 8, 0, 1);
-    if (k <= 0) return;
-    c.save();
-    c.strokeStyle = "rgba(255,255,255," + (0.18 * k).toFixed(3) + ")";
-    c.lineWidth = 1.5;
-    var rand = A.seeded(Math.floor(A.time * 30));
-    for (var i = 0; i < 14; i++) {
-      var side = rand() < 0.5 ? -1 : 1;
-      var x = W / 2 + side * (W * 0.32 + rand() * W * 0.2);
-      var y = H * (0.3 + rand() * 0.6);
-      var len = 30 + rand() * 60 * k;
-      c.beginPath();
-      c.moveTo(x, y);
-      c.lineTo(x + side * len * 0.3, y + len);
-      c.stroke();
-    }
-    c.restore();
-  }
-
-  /** Rakip savunma tanıtımı: skor bandının hemen altında küçük, ince kart (oyun durmaz). */
   function drawIntro(c) {
-    var d = intro.def;
-    var t = intro.age;
+    var d = intro.def, t = intro.age;
     var inT = A.easeOut(A.clamp(t / 0.3, 0, 1));
     var out = A.clamp((2.6 - t) / 0.35, 0, 1);
     if (out <= 0) return;
     var kit = d.team.kit || { primary: "#5B3DF5" };
     var cw = Math.min(W - 64, 264), ch = 40;
-    var x = W / 2 - cw / 2, y = 14 + 116 + 36 - (1 - inT) * 14;
+    var x = W / 2 - cw / 2, y = 150 - (1 - inT) * 14;
     c.save();
     c.globalAlpha = out * inT;
     A.roundRect(c, x, y, cw, ch, 10);
-    c.fillStyle = "rgba(8,10,30,0.72)";
+    c.fillStyle = "rgba(8,10,30,0.74)";
     c.fill();
     c.fillStyle = kit.primary;
     c.fillRect(x, y + 8, 4, ch - 16);
@@ -1511,8 +1637,7 @@
     c.textAlign = "left";
     c.font = A.font(9, 900);
     c.fillStyle = P.gold;
-    var head = (intro.level ? "SEVİYE " + intro.level + " · " : "") + "RAKİP " + intro.idx + "/" + defenses.length + (intro.idx >= defenses.length ? " · FİNAL" : "");
-    c.fillText(head, x + 14, y + 12);
+    c.fillText((intro.level ? "SEVİYE " + intro.level + " · " : "") + "RAKİP " + intro.idx + "/" + defenses.length + (intro.idx >= defenses.length ? " · FİNAL" : ""), x + 14, y + 12);
     c.font = A.font(14, 900);
     c.fillStyle = "#FFFFFF";
     var name = String(d.team.name || "Rakip");
@@ -1526,174 +1651,61 @@
     c.restore();
   }
 
-  /* ─────────────── jokerler (HUD) ─────────────── */
-
-  /** Joker simgeleri: SÜPÜR çift ok, HAYALET hayalet, AĞIR ÇEKİM kum saati. */
-  function drawIcon(c, type, x, y, r, col) {
+  /** Güç simgeleri: mıknatıs, kalkan, ×2, şimşek. */
+  function drawPower(c, type, x, y, r, col) {
     c.save();
     c.lineCap = "round";
     c.lineJoin = "round";
     c.strokeStyle = col;
     c.fillStyle = col;
-    if (type === "clear") {
-      c.lineWidth = r * 0.2;
-      for (var i = 0; i < 2; i++) {
-        var y0 = y + r * 0.32 - i * r * 0.5;
-        c.beginPath();
-        c.moveTo(x - r * 0.5, y0 + r * 0.22);
-        c.lineTo(x, y0 - r * 0.22);
-        c.lineTo(x + r * 0.5, y0 + r * 0.22);
-        c.stroke();
-      }
-      c.lineWidth = r * 0.1;
+    if (type === "magnet") {
+      c.lineWidth = r * 0.42;
       c.beginPath();
-      c.moveTo(x - r * 0.75, y + r * 0.62);
-      c.lineTo(x + r * 0.75, y + r * 0.62);
+      c.arc(x, y - r * 0.05, r * 0.52, Math.PI, 0);
+      c.lineTo(x + r * 0.52, y + r * 0.55);
+      c.moveTo(x - r * 0.52, y - r * 0.05);
+      c.lineTo(x - r * 0.52, y + r * 0.55);
       c.stroke();
-    } else if (type === "ghost") {
-      var w = r * 0.58;
+      c.strokeStyle = "#FFFFFF";
+      c.lineCap = "butt";
       c.beginPath();
-      c.moveTo(x - w, y + r * 0.62);
-      c.lineTo(x - w, y - r * 0.08);
-      c.arc(x, y - r * 0.08, w, Math.PI, 0);
-      c.lineTo(x + w, y + r * 0.62);
-      for (var k = 0; k < 3; k++) {
-        var x1 = x + w - (k + 0.5) * ((2 * w) / 3), x2 = x + w - (k + 1) * ((2 * w) / 3);
-        c.quadraticCurveTo(x1, y + r * (k % 2 ? 0.75 : 0.35), x2, y + r * 0.62);
-      }
+      c.moveTo(x - r * 0.52, y + r * 0.4);
+      c.lineTo(x - r * 0.52, y + r * 0.72);
+      c.moveTo(x + r * 0.52, y + r * 0.4);
+      c.lineTo(x + r * 0.52, y + r * 0.72);
+      c.stroke();
+    } else if (type === "shield") {
+      c.beginPath();
+      c.moveTo(x - r * 0.72, y - r * 0.8);
+      c.lineTo(x + r * 0.72, y - r * 0.8);
+      c.lineTo(x + r * 0.72, y + r * 0.05);
+      c.quadraticCurveTo(x + r * 0.72, y + r * 0.7, x, y + r * 0.95);
+      c.quadraticCurveTo(x - r * 0.72, y + r * 0.7, x - r * 0.72, y + r * 0.05);
       c.closePath();
       c.fill();
-      c.fillStyle = "#0B1030";
+      c.strokeStyle = "#0B1030";
+      c.lineWidth = r * 0.16;
       c.beginPath();
-      c.arc(x - w * 0.38, y - r * 0.1, r * 0.11, 0, Math.PI * 2);
-      c.arc(x + w * 0.38, y - r * 0.1, r * 0.11, 0, Math.PI * 2);
-      c.fill();
+      c.moveTo(x - r * 0.3, y);
+      c.lineTo(x - r * 0.05, y + r * 0.28);
+      c.lineTo(x + r * 0.36, y - r * 0.3);
+      c.stroke();
+    } else if (type === "x2") {
+      c.font = "900 " + Math.round(r * 1.25) + "px " + A.FONT;
+      c.textAlign = "center";
+      c.textBaseline = "middle";
+      c.fillText("×2", x, y + r * 0.06);
     } else {
-      var hw = r * 0.45, hh = r * 0.62;
-      c.lineWidth = r * 0.12;
       c.beginPath();
-      c.moveTo(x - hw - r * 0.1, y - hh);
-      c.lineTo(x + hw + r * 0.1, y - hh);
-      c.moveTo(x - hw - r * 0.1, y + hh);
-      c.lineTo(x + hw + r * 0.1, y + hh);
-      c.stroke();
-      c.lineWidth = r * 0.09;
-      c.beginPath();
-      c.moveTo(x - hw, y - hh);
-      c.lineTo(x + hw, y - hh);
-      c.lineTo(x + r * 0.06, y);
-      c.lineTo(x + hw, y + hh);
-      c.lineTo(x - hw, y + hh);
-      c.lineTo(x - r * 0.06, y);
-      c.closePath();
-      c.stroke();
-      c.beginPath();
-      c.moveTo(x - hw * 0.7, y + hh - r * 0.04);
-      c.lineTo(x + hw * 0.7, y + hh - r * 0.04);
-      c.lineTo(x, y + hh * 0.35);
+      c.moveTo(x + r * 0.2, y - r);
+      c.lineTo(x - r * 0.6, y + r * 0.12);
+      c.lineTo(x - r * 0.05, y + r * 0.12);
+      c.lineTo(x - r * 0.25, y + r);
+      c.lineTo(x + r * 0.6, y - r * 0.22);
+      c.lineTo(x + r * 0.05, y - r * 0.22);
       c.closePath();
       c.fill();
     }
-    c.restore();
-  }
-
-  function drawJokers(c) {
-    var bs = jokerButtons();
-    c.save();
-    c.textAlign = "center";
-    c.textBaseline = "middle";
-    bs.forEach(function (b) {
-      var J = JOKERS[b.key], n = jokers[b.key], on = active[b.key] > 0;
-      var usable = n > 0 && !on;
-      c.globalAlpha = usable || on ? 1 : 0.4;
-      if (on) {
-        c.save();
-        c.shadowColor = J.color;
-        c.shadowBlur = 18 + Math.sin(A.time * 10) * 4;
-        c.beginPath();
-        c.arc(b.x, b.y, b.r, 0, Math.PI * 2);
-        c.fillStyle = "rgba(8,10,30,0.85)";
-        c.fill();
-        c.restore();
-      } else {
-        c.beginPath();
-        c.arc(b.x, b.y, b.r, 0, Math.PI * 2);
-        c.fillStyle = "rgba(8,10,30,0.72)";
-        c.fill();
-      }
-      c.lineWidth = 2.5;
-      c.strokeStyle = on ? "rgba(255,255,255,0.18)" : J.color;
-      c.beginPath();
-      c.arc(b.x, b.y, b.r - 1.5, 0, Math.PI * 2);
-      c.stroke();
-      if (on) {
-        // kalan süre halkası
-        c.lineWidth = 4;
-        c.strokeStyle = J.color;
-        c.beginPath();
-        c.arc(b.x, b.y, b.r - 1.5, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (active[b.key] / J.dur));
-        c.stroke();
-      }
-      drawIcon(c, b.key, b.x, b.y, b.r * 0.62, on ? "#FFFFFF" : J.color);
-      if (on) {
-        c.font = A.font(10, 900);
-        c.fillStyle = "#FFFFFF";
-        c.fillText(Math.ceil(active[b.key]) + " sn", b.x, b.y + b.r + 11);
-      } else {
-        c.font = A.font(9, 900);
-        c.fillStyle = "rgba(255,255,255,0.85)";
-        c.fillText(J.name, b.x, b.y + b.r + 11);
-      }
-      // hak sayısı
-      if (!on) {
-        var bx = b.x + b.r * 0.72, byy = b.y - b.r * 0.72;
-        c.beginPath();
-        c.arc(bx, byy, 9, 0, Math.PI * 2);
-        c.fillStyle = n > 0 ? J.color : "#334155";
-        c.fill();
-        c.font = A.font(11, 900);
-        c.fillStyle = "#0B1030";
-        c.fillText(String(n), bx, byy + 0.5);
-      }
-    });
-    c.restore();
-  }
-
-  /** Etkin jokerin ekran kenarı tonu: HAYALET camgöbeği, AĞIR ÇEKİM mor. */
-  var tintLayers = {};
-  function drawJokerTint(c) {
-    ["ghost", "slow"].forEach(function (k) {
-      var left = active[k];
-      if (!(left > 0)) return;
-      var L = tintLayers[k];
-      if (!L || L.w !== W || L.h !== H) {
-        L = tintLayers[k] = A.layer(W, H);
-        var g = L.ctx.createRadialGradient(W / 2, H * 0.55, Math.min(W, H) * 0.35, W / 2, H * 0.55, Math.max(W, H) * 0.75);
-        g.addColorStop(0, "rgba(0,0,0,0)");
-        g.addColorStop(1, k === "ghost" ? "rgba(34,211,238,0.42)" : "rgba(139,92,246,0.42)");
-        L.ctx.fillStyle = g;
-        L.ctx.fillRect(0, 0, W, H);
-      }
-      var fade = A.clamp(left / 0.6, 0, 1) * A.clamp((JOKERS[k].dur - left) / 0.3, 0, 1);
-      c.save();
-      c.globalAlpha = fade * (0.8 + 0.2 * Math.sin(A.time * 4));
-      A.blit(L);
-      c.restore();
-    });
-  }
-
-  /** SÜPÜR şok dalgası: oyuncunun ayağından ileri genişleyen altın halka. */
-  function drawSweep(c) {
-    var t = (A.time - sweepAt) / 0.7;
-    if (t < 0 || t > 1) return;
-    var p = proj(player.x, 0, z + 1);
-    c.save();
-    c.globalAlpha = 1 - t;
-    c.strokeStyle = JOKERS.clear.color;
-    c.lineWidth = 6 * (1 - t) + 1;
-    c.beginPath();
-    c.ellipse(p.x, p.y, 30 + t * W * 0.9, 10 + t * H * 0.18, 0, 0, Math.PI * 2);
-    c.stroke();
     c.restore();
   }
 
@@ -1702,24 +1714,35 @@
     A.drawScore(c, 18, top, "PUAN", points, scoreBump);
     A.drawLives(c, W - 26, top + 12, lives, LIVES, 9);
     c.save();
+    c.textBaseline = "middle";
     var lbl = "SEVİYE " + level;
     c.font = A.font(12, 800);
     var lw = c.measureText(lbl).width + 22;
-    A.pill(c, W - 16 - lw, top + 30, lw, 26, "rgba(60,36,200,0.75)");
+    A.pill(c, W - 16 - lw, top + 30, lw, 26, "rgba(60,36,200,0.8)");
     c.fillStyle = "#fff";
     c.textAlign = "center";
-    c.textBaseline = "middle";
     c.fillText(lbl, W - 16 - lw / 2, top + 43.5);
-    var sp = Math.round(speed * 3.6) + " km/s";
-    var sw = c.measureText(sp).width + 22;
-    A.pill(c, W - 16 - sw, top + 62, sw, 26);
-    c.fillStyle = "rgba(255,255,255,0.9)";
-    c.fillText(sp, W - 16 - sw / 2, top + 75.5);
+    // altın sayacı
+    var cs = String(coinCount);
+    var cw = c.measureText(cs).width + 40;
+    A.pill(c, W - 16 - cw, top + 62, cw, 26);
+    var cx = W - 16 - cw + 15, cy = top + 75;
+    c.beginPath();
+    c.arc(cx, cy, 7 * (1 + coinBump * 0.3), 0, Math.PI * 2);
+    c.fillStyle = P.gold;
+    c.fill();
+    c.strokeStyle = "#B7791F";
+    c.lineWidth = 1.5;
+    c.stroke();
+    c.fillStyle = "rgba(255,255,255,0.95)";
+    c.textAlign = "left";
+    c.fillText(cs, cx + 12, cy + 0.5);
 
-    var mult = multiplier();
+    // çarpan
+    var base = Math.min(5, 1 + Math.floor(combo / 8));
     var bx = 18, by = top + 66, bw = 110;
     A.pill(c, bx, by, bw, 10);
-    var prog = mult >= 5 ? 1 : (combo % 5) / 5;
+    var prog = base >= 5 ? 1 : (combo % 8) / 8;
     if (prog > 0) {
       var pg = c.createLinearGradient(bx, 0, bx + bw, 0);
       pg.addColorStop(0, P.brandGlow);
@@ -1729,64 +1752,39 @@
       c.fill();
     }
     c.font = A.font(13, 900);
-    c.textAlign = "left";
-    c.fillStyle = mult > 1 ? P.gold : "rgba(255,255,255,0.75)";
-    c.fillText("×" + mult, bx + bw + 8, by + 5.5);
+    c.fillStyle = multiplier() > 1 ? P.gold : "rgba(255,255,255,0.75)";
+    c.fillText("×" + multiplier(), bx + bw + 8, by + 5.5);
     c.font = A.font(11, 700);
-    c.fillStyle = "rgba(255,255,255,0.7)";
-    c.fillText(passed + " kapı · " + Math.round(z) + " m", bx, by + 24);
-    c.restore();
-    drawMatchup(c, top + 116);
-  }
+    c.fillStyle = "rgba(255,255,255,0.75)";
+    c.fillText(Math.round(z) + " m · " + Math.round(speed * 3.6) + " km/s", bx, by + 24);
 
-  /** Yayın bandı: koşucu (sol) — rakip savunma (sağ) + merdiven. */
-  function drawMatchup(c, y) {
-    var def = defenseAt(level);
-    var sk = kitOf(runner), dk = def.team.kit || { primary: "#5B3DF5" };
-    var w = Math.min(W - 32, 360), h = 28;
-    var x = W / 2 - w / 2;
-    c.save();
-    A.roundRect(c, x, y, w, h, 8);
-    c.fillStyle = "rgba(8,10,30,0.7)";
-    c.fill();
-    c.fillStyle = sk.primary;
-    c.fillRect(x, y + 5, 4, h - 10);
-    c.fillStyle = dk.primary;
-    c.fillRect(x + w - 4, y + 5, 4, h - 10);
-    c.textBaseline = "middle";
-    c.font = A.font(12, 800);
-    c.fillStyle = "#FFFFFF";
-    var half = w / 2 - 18;
-    function fit(text, max) {
-      var t = text;
-      while (c.measureText(t).width > max && t.length > 3) t = t.slice(0, -1);
-      return t === text ? t : t + "…";
-    }
-    c.textAlign = "left";
-    c.fillText(fit((runner.shirt ? runner.shirt + " " : "") + runner.short, half), x + 12, y + h / 2 + 0.5);
-    c.textAlign = "right";
-    c.fillText(fit(String(def.team.name || "Rakip"), half), x + w - 12, y + h / 2 + 0.5);
-    c.textAlign = "center";
-    c.fillStyle = "rgba(255,255,255,0.5)";
-    c.font = A.font(11, 900);
-    c.fillText("vs", W / 2, y + h / 2 + 0.5);
-    var n = defenses.length;
-    var cur = Math.min(level, n) - 1;
-    if (n > 1) {
-      var dotW = Math.min(8, (half - 10) / n);
-      for (var i = 0; i < n; i++) {
-        c.fillStyle = i < cur ? "rgba(255,255,255,0.35)" : i === cur ? P.gold : "rgba(255,255,255,0.15)";
-        c.fillRect(x + w - 12 - (n - i) * dotW, y + h + 3, dotW - 2, 3);
-      }
-    }
+    // etkin güçler
+    var py = top + 112;
+    POWER_KEYS.forEach(function (k) {
+      if (!(active[k] > 0)) return;
+      var Pw = POWERS[k];
+      A.pill(c, 14, py, 112, 28, "rgba(8,10,30,0.72)");
+      drawPower(c, k, 30, py + 14, 9, Pw.color);
+      c.font = A.font(10, 900);
+      c.fillStyle = "#FFFFFF";
+      c.textAlign = "left";
+      c.fillText(Pw.name, 44, py + 10);
+      A.roundRect(c, 44, py + 17, 72, 5, 2.5);
+      c.fillStyle = "rgba(255,255,255,0.18)";
+      c.fill();
+      c.fillStyle = Pw.color;
+      A.roundRect(c, 44, py + 17, Math.max(4, 72 * (active[k] / Pw.dur)), 5, 2.5);
+      c.fill();
+      py += 33;
+    });
     c.restore();
   }
 
   function debug() {
     return {
-      state: state, z: z, speed: speed, passed: passed, points: points, lives: lives, level: level, player: player,
-      gates: gates.slice(0, 4), foes: foes.length, foeList: foes, pickups: pickups.length, runner: runner.short, defense: defenseAt(level).team.name, gl: !!R,
-      jokers: Object.assign({}, jokers), active: Object.assign({}, active), useJoker: useJoker, buttons: jokerButtons(), foeLabel: foeLabel,
+      state: state, z: z, speed: speed, passed: passed, points: points, lives: lives, level: level, coins: coinCount, combo: combo, player: player,
+      rows: rows, obstacles: obstacles, coinList: coins, pickups: pickups, runner: runner.short, defense: defenseAt(level).team.name, gl: !!R,
+      active: active, shift: shift, jump: jump, slide: slide, grant: grant, foeLabel: foeLabel, multiplier: multiplier, autopilot: autopilot,
     };
   }
 

@@ -1282,7 +1282,7 @@
       renderer.shadowMap.enabled = true;
       renderer.shadowMap.type = T.PCFSoftShadowMap;
       renderer.toneMapping = T.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 1.0;
+      renderer.toneMappingExposure = 1.14;
       renderer.outputColorSpace = T.SRGBColorSpace;
       K.init(renderer);
       var scene = new T.Scene();
@@ -1455,7 +1455,7 @@
       rain.mesh.geometry.attributes.position.needsUpdate = true;
     }
     R.scene.fog.density = on ? 0.012 : 0.0065;
-    R.renderer.toneMappingExposure = on ? 0.9 : 1.0;
+    R.renderer.toneMappingExposure = on ? 1.0 : 1.14;
     // bayraklar: rüzgâr yönünde dalgalanır; rüzgâr yoksa sarkar
     var str = A.clamp(Math.abs(cond.wind) / 6, 0, 1), dir = cond.wind >= 0 ? 1 : -1;
     var kit = kitOf(opp.keeper);

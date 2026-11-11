@@ -571,6 +571,13 @@ games/core.js        Ortak çalışma zamanı: Canvas 2D (DPR'li), değişken ka
 games/scenery.js     Ortak gece stadyumu: tribün, projektör, LED pano, HUD.
 games/{penalti,slalom,sektir}.js   Oyunların kendisi — kurallar, zorluk
                      eğrisi ve puanlama dosya başlıklarında belgeli.
+games/arcade3d.js    Arcade motoru (Kasım 2026): gündüz/gün batımı/gece tema
+                     geçişleri, gölgelendirici gökyüzü, GPU parçacıkları,
+                     ÖRNEKLENMİŞ mini futbolcular (yüzlerce oyuncu, iki çizim
+                     çağrısı), örneklenmiş toplar, "kıvrık dünya".
+games/{savunma,kadro}.js   Savunma Hattı (şeritli kale savunması) ve Kadro
+                     Koşusu (kapılı kalabalık koşusu). Slalom aynı tarihte üç
+                     şeritli sonsuz koşuya dönüştü (şerit · zıpla · kay).
 scripts/build-games.mjs  → lib/game/web/games.generated.ts (satır içi HTML)
 components/game/WebGame.tsx          WebView kabuğu.
 components/game/ArenaGameScreen.tsx  Ortak ekran: giriş/bitiş kartı, canlı
@@ -583,8 +590,9 @@ can/seri/joker, animasyonlu şıklar), `lib/game/quiz/questions.ts` saf soru
 üreticileri ve puanlama; tur sonu her oyunda `components/game/ArenaResult.tsx`.
 
 Oyunlar WebView'in GPU hızlandırmalı Canvas'ında React'a uğramadan çizilir;
-`npm run check:games` paketin güncelliğini ve oyun kurallarını (ör. slalomda
-kenarda saklanmanın hak götürdüğünü) başsız simülasyonla doğrular.
+`npm run check:games` paketin güncelliğini ve oyun kurallarını (ör. koşuda her
+sırada geçilebilir bir yol olduğunu, savunmada forvetin koridorunu koruduğunu,
+kadro koşusunda kapı aritmetiğini) başsız simülasyonla doğrular.
 
 ### 5.1 Top sektirme
 

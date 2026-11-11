@@ -32,6 +32,8 @@ export const QUEST_ROUTES: Record<string, Href> = {
   penalti: "/penalti",
   slalom: "/slalom",
   sektir: "/sektir",
+  savunma: "/savunma",
+  kadro: "/kadro",
   kimbu: "/kimbu",
   seri: "/arena",
   tahmin_oyun: "/tahmin",

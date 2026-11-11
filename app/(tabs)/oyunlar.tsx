@@ -87,10 +87,12 @@ const BEST_KEYS: Record<ArenaGame, string> = {
   gunun: "elitlig.gunun.best.v1",
   penalti: ARENA_BEST_KEYS.penalti,
   tahmin: ARENA_BEST_KEYS.tahmin,
+  savunma: ARENA_BEST_KEYS.savunma,
+  kadro: ARENA_BEST_KEYS.kadro,
 };
 
 /** Sorgu ve depolama okumalarının sabit sırası. */
-const GAME_ORDER: ArenaGame[] = ["gunun", "tahmin", "penalti", "seri", "sektir", "kimbu", "slalom"];
+const GAME_ORDER: ArenaGame[] = ["gunun", "tahmin", "penalti", "seri", "sektir", "kimbu", "slalom", "savunma", "kadro"];
 
 /** Günün Testi'nin o güne ait sonucu — `app/gunun.tsx` ile aynı anahtar. */
 const dailyResultKey = (day: string) => `elitlig.gunun.${day}.v1`;
@@ -158,9 +160,27 @@ const GRID_GAMES: GameMeta[] = [
     key: "slalom",
     route: "/slalom",
     title: "Slalom",
-    blurb: "Topu sürerek kapılardan geç; hız artar, kapılar daralır.",
+    blurb: "Üç şeritli sonsuz koşu: şerit değiştir, zıpla, kay; otobüsleri ve savunmayı geç.",
     icon: "flag",
     tone: "danger",
+    unit: "puan",
+  },
+  {
+    key: "savunma",
+    route: "/savunma",
+    title: "Savunma Hattı",
+    blurb: "Oyuncularını sahaya diz, enerji üret, dalga dalga gelen hücumu durdur.",
+    icon: "shield",
+    tone: "brand",
+    unit: "puan",
+  },
+  {
+    key: "kadro",
+    route: "/kadro",
+    title: "Kadro Koşusu",
+    blurb: "Kapılardan geç, kadronu büyüt; şut yağmuruyla kaleciyi düşür, gol at.",
+    icon: "people",
+    tone: "win",
     unit: "puan",
   },
 ];

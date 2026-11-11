@@ -17,7 +17,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const GAMES = ["penalti", "slalom", "sektir"];
+const GAMES = ["penalti", "slalom", "sektir", "savunma", "kadro"];
 const SHARED = ["core.js", "scenery.js"];
 /**
  * 3B oyunlar: WebGL (three.js) sahnesi alttaki #gl tuvaline çizilir, HUD
@@ -25,7 +25,18 @@ const SHARED = ["core.js", "scenery.js"];
  * package.json'da sürümü SABİTLENMİŞ devDependency'dir (0.158.0, UMD derlemesi)
  * ve oyun HTML'ine satır içi gömülür: WebView çevrimdışı da açılır.
  */
-const THREE_D = new Set(["penalti", "slalom", "sektir"]);
+const THREE_D = new Set(["penalti", "slalom", "sektir", "savunma", "kadro"]);
+/**
+ * Arcade motorunu (games/arcade3d.js) kullanan oyunlar. Savunma Hattı ve Kadro
+ * Koşusu yalnız örneklenmiş mini futbolcularla çizilir: iskeletli futbolcu
+ * verisi (athlete-data.js, ~570 KB) onların HTML'ine GİRMEZ.
+ */
+const ARCADE = new Set(["slalom", "savunma", "kadro"]);
+const NO_ATHLETE = new Set(["savunma", "kadro"]);
+export const kitFiles = (game) => [
+  ...THREE_KIT.filter((file) => !(file === "athlete-data.js" && NO_ATHLETE.has(game))),
+  ...(ARCADE.has(game) ? ["arcade3d.js"] : []),
+];
 export const isThreeD = (game) => THREE_D.has(game);
 export const THREE_PATH = join(root, "node_modules", "three", "build", "three.min.js");
 
@@ -44,7 +55,7 @@ export const THREE_KIT = ["athlete-data.js", "three-kit.js", "stadium3d.js"];
  */
 function htmlParts(game) {
   const is3d = THREE_D.has(game);
-  const own = [...SHARED, ...(is3d ? THREE_KIT : []), `${game}.js`];
+  const own = [...SHARED, ...(is3d ? kitFiles(game) : []), `${game}.js`];
   return [
     "<!doctype html>",
     '<html lang="tr"><head><meta charset="utf-8">',

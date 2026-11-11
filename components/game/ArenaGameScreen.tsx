@@ -1,8 +1,9 @@
 /**
- * ARENA OYUN EKRANI — penaltı, slalom ve top sektir'in ORTAK kabuğu.
+ * ARENA OYUN EKRANI — WebView oyunlarının (penaltı, slalom, top sektir, savunma
+ * hattı, kadro koşusu) ORTAK kabuğu.
  *
  * Oyunun kendisi `WebGame` içindeki Canvas'tadır (bkz. games/*.js). Bu dosya
- * yalnız oyunun ÇEVRESİNİ çizer ve üç oyunda birebir aynıdır:
+ * yalnız oyunun ÇEVRESİNİ çizer ve bütün oyunlarda birebir aynıdır:
  *   · Başlık: geri, ses aç/kapa, rekor tablosu.
  *   · Giriş kartı: kurallar, kişisel rekor, "Başla". Arkada oyun vitrin
  *     modunda canlı oynar — kart boş bir zeminin üstünde durmaz.
