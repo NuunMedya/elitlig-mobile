@@ -42,6 +42,7 @@ import { hasAnyPermission } from "@/lib/admin/access";
 import { errorText } from "@/lib/admin/errors";
 import {
   createRosterPlayer,
+  LAST_LINEUP_SCAN,
   findLastLineup,
   getLineup,
   getTeamRoster,
@@ -350,7 +351,7 @@ export function LineupStep({ match, onDirtyChange }: { match: AdminMatch; onDirt
     try {
       const found = await findLastLineup(teamId, matchId, dayOf(match.date));
       if (!found) {
-        Alert.alert("Önceki kadro bulunamadı", `${teamName} için son 120 günde kadrosu girilmiş başka maç yok.`);
+        Alert.alert("Önceki kadro bulunamadı", `${teamName} takımının son 120 gündeki son ${LAST_LINEUP_SCAN} maçında girilmiş kadro yok.`);
         return;
       }
       const label = `${found.match.first_team_name} – ${found.match.second_team_name} (${shortDay(found.match.date)})`;

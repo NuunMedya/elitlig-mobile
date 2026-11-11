@@ -216,10 +216,14 @@ export const rosterPlayerId = (p: RosterPlayer) => Number(p.player_id ?? p.id ??
 /** GET /oyuncu-takimlari/:teamId — takımın kalıcı kadrosu. */
 export const getTeamRoster = (teamId: number) => get<RosterPlayer[]>(`/oyuncu-takimlari/${teamId}`);
 
+/** "Son maçın kadrosu" aramasında geriye doğru bakılan en çok maç sayısı. */
+export const LAST_LINEUP_SCAN = 20;
+
 /**
  * Takımın bu maçtan önceki EN SON kadrosu ("son maçın kadrosunu getir").
  * GET /maclar?team_id=&date_from=&date_to= ile takımın son 120 gündeki maçları
- * okunur; en yeniden geriye doğru kadrosu girilmiş ilk maç döner. Web panelinde
+ * okunur; en yeniden geriye doğru (en çok LAST_LINEUP_SCAN maç) kadrosu girilmiş
+ * ilk maç döner. Web panelinde
  * karşılığı yoktur; yalnız mevcut okuma uçlarını kullanır.
  */
 export async function findLastLineup(
@@ -242,7 +246,8 @@ export async function findLastLineup(
   const candidates = (Array.isArray(list) ? list : [])
     .filter((m) => Number(m.id) !== currentMatchId && String(m.date ?? "").slice(0, 10) <= day)
     .sort((a, b) => key(b).localeCompare(key(a)))
-    .slice(0, 6);
+    // Sıralı istek sayısı sınırlı kalsın; ekrandaki ileti de bu sınırı söyler.
+    .slice(0, LAST_LINEUP_SCAN);
   for (const candidate of candidates) {
     const lineup = await getLineup(Number(candidate.id)).catch(() => null);
     if (!lineup) continue;
