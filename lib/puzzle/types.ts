@@ -21,7 +21,7 @@
  *   · Tahta en fazla `maxWidth` genişliğe sığar; telefon dikey kullanımı esas.
  */
 
-export type PuzzleGameKey = "uclu" | "ucle" | "soyunma" | "kantin";
+export type PuzzleGameKey = "uclu" | "ucle" | "soyunma" | "kantin" | "kariyer";
 
 export interface PuzzleResult {
   won: boolean;
