@@ -1,6 +1,8 @@
 /**
  * VideoCard — maç sayfasındaki doğrudan video (MP4) kartı: başlık, kapak ve
- * oynat düğmesi. Dokununca oynatıcı aynı yerde yüklenir (veri harcamasın diye).
+ * oynat düğmesi. Kart yalnız kapaktır (hafif); dokununca video tam ekran
+ * oynatıcıda açılır. Eskiden oynatıcı kartın yerinde, kaydırılan listenin
+ * içinde yükleniyordu: liste kayınca video ekrandan çıkıyordu.
  *
  * Kullananlar: MatchHighlight (maç özeti), maç sonu röportajı, "Maçın golü" /
  * "Maçın kurtarışı" kartları ve yayın kaydı (doğrudan video ise).
@@ -10,13 +12,14 @@
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { useVideoPlayer, VideoView } from "expo-video";
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
 
 import { SectionHeader, Touchable } from "@/components/ui";
 import { RIG } from "@/lib/live/rig";
 import { colors, fonts, layout, radius, space, textScale, type } from "@/theme";
+
+import { VideoPlayerModal, type PlayerItem } from "./VideoPlayerModal";
 
 export type VideoBadgeTone = "live" | "brand" | "gold";
 
@@ -58,14 +61,15 @@ export function VideoCard({
   const [playing, setPlaying] = useState(false);
   const [posterFailed, setPosterFailed] = useState(false);
   const poster = posterUrl && !posterFailed ? posterUrl : null;
+  const items: PlayerItem[] = useMemo(
+    () => [{ id: url, url, poster: posterUrl ?? null, title, subtitle: meta ?? null }],
+    [url, posterUrl, title, meta],
+  );
   return (
     <View style={styles.wrap}>
       {hideHeader ? null : <SectionHeader title={title} meta={meta} />}
       <View style={[styles.frame, footer ? styles.frameWithFooter : null]}>
         <View style={styles.video}>
-          {playing ? (
-            <Player url={url} />
-          ) : (
             <Touchable style={StyleSheet.absoluteFill} onPress={() => setPlaying(true)} accessibilityLabel={accessibilityLabel} accessibilityRole="button" haptic="light">
               {poster ? (
                 <Image source={{ uri: poster }} style={StyleSheet.absoluteFill} resizeMode="cover" onError={() => setPosterFailed(true)} />
@@ -95,19 +99,12 @@ export function VideoCard({
                 </View>
               ) : null}
             </Touchable>
-          )}
         </View>
         {footer}
       </View>
+      <VideoPlayerModal visible={playing} onClose={() => setPlaying(false)} items={items} heading={title} />
     </View>
   );
-}
-
-function Player({ url }: { url: string }) {
-  const player = useVideoPlayer(url, (p) => {
-    p.play();
-  });
-  return <VideoView player={player} style={StyleSheet.absoluteFill} contentFit="contain" nativeControls allowsFullscreen />;
 }
 
 const styles = StyleSheet.create({

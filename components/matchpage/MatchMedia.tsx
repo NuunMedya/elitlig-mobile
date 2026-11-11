@@ -16,7 +16,8 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { memo, useMemo, useState } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
 
-import { MatchGoalClips, useMatchGoalClips, type ClipTeams } from "@/components/live/MatchGoalClips";
+import { MatchGoalClips, type ClipTeams } from "@/components/live/MatchGoalClips";
+import type { GoalClip } from "@/lib/live/clips";
 import { MatchHighlight } from "@/components/live/MatchHighlight";
 import { VideoCard } from "@/components/live/VideoCard";
 import { SectionHeader, TeamLogo, Touchable } from "@/components/ui";
@@ -279,13 +280,23 @@ export interface MatchMediaProps {
   onOpenPlayer: (playerId: number) => void;
   /** Canlı yayın kartı ayrıca sekmenin en üstünde çiziliyorsa burada tekrarlanmaz. */
   skipLiveBroadcast?: boolean;
+  /** Maçın gol klipleri (dakika sırasıyla) — sorgu ve oynatıcı üst bileşende (SummaryTab). */
+  clips: GoalClip[];
+  onOpenClip: (clipId: number) => void;
 }
 
-export function MatchMedia({ match, state, nameOf, teams, onOpenPlayer, skipLiveBroadcast }: MatchMediaProps) {
+export const MatchMedia = memo(function MatchMedia({
+  match,
+  state,
+  nameOf,
+  teams,
+  onOpenPlayer,
+  skipLiveBroadcast,
+  clips,
+  onOpenClip,
+}: MatchMediaProps) {
   const live = state === "live";
-  const matchId = Number(match.id);
   const broadcast = useBroadcast(match);
-  const clips = useMatchGoalClips(matchId, live);
   const moments = useMemo(() => readAwardMoments(match), [match]);
 
   // Maçın golü videosu: kayıttaki clip_url; yoksa seçilen olayın gol klibi.
@@ -303,11 +314,11 @@ export function MatchMedia({ match, state, nameOf, teams, onOpenPlayer, skipLive
       {live ? null : <MatchHighlight highlight={match.highlight} />}
       {broadcast && !live ? <BroadcastCard source={broadcast} live={false} title={scoreTitle} /> : null}
       {live ? null : <MomentCards moments={moments} clipFor={clipFor} nameOf={nameOf} teams={teams} onOpenPlayer={onOpenPlayer} />}
-      <MatchGoalClips matchId={matchId} nameOf={nameOf} live={live} teams={teams} />
+      <MatchGoalClips clips={clips} nameOf={nameOf} teams={teams} onOpen={onOpenClip} />
       {live ? null : <Interview match={match} />}
     </>
   );
-}
+});
 
 function scoreText(match: ApiMatch): string | null {
   const home = match.first_team_score;

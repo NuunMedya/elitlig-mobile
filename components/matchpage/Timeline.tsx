@@ -81,6 +81,8 @@ export const TimelineRow = memo(function TimelineRow({
   reactions,
   myReaction = null,
   onReact,
+  hasClip = false,
+  onClip,
 }: {
   event: ApiMatchEvent;
   home: boolean;
@@ -95,6 +97,9 @@ export const TimelineRow = memo(function TimelineRow({
   reactions?: Partial<Record<Reaction, number>>;
   myReaction?: Reaction | null;
   onReact?: (eventId: number, reaction: Reaction) => void;
+  /** Bu golün videosu var mı (canlı yayında kaydedilen klip). */
+  hasClip?: boolean;
+  onClip?: (eventId: number) => void;
 }) {
   const kind = eventKind(event);
   const goal = isGoalKind(kind);
@@ -127,6 +132,8 @@ export const TimelineRow = memo(function TimelineRow({
     : `${event.dakika ?? "?"}. dakika ${EVENT_LABEL[kind] || "olay"}: ${name}${score ? `, skor ${score}` : ""}`;
 
   const glow = useFlash(flash);
+  const eventId = Number(event.id);
+  const watch = useCallback(() => onClip?.(eventId), [onClip, eventId]);
 
   const content = (
     <View style={[styles.side, home ? styles.sideHome : styles.sideAway]}>
@@ -194,6 +201,23 @@ export const TimelineRow = memo(function TimelineRow({
 
         <View style={styles.half}>{home ? null : content}</View>
       </Touchable>
+      {hasClip && onClip ? (
+        <View style={styles.clipRow}>
+          <Touchable
+            style={styles.clipBtn}
+            onPress={watch}
+            hitSlop={8}
+            haptic="light"
+            accessibilityRole="button"
+            accessibilityLabel={`${event.dakika ?? "?"}. dakikadaki golün videosunu izle`}
+          >
+            <Ionicons name="play" size={11} color={colors.textOnBrand} />
+            <Text style={styles.clipText} {...textScale.badge}>
+              GOLÜ İZLE
+            </Text>
+          </Touchable>
+        </View>
+      ) : null}
       {onReact && (goal || kind === "yellow" || kind === "red") ? (
         <ReactionBar eventId={Number(event.id)} counts={reactions} mine={myReaction} onReact={onReact} />
       ) : null}
@@ -332,6 +356,17 @@ function useFlash(active: boolean): Animated.Value | null {
 }
 
 const styles = StyleSheet.create({
+  clipRow: { alignItems: "center", paddingBottom: space.s },
+  clipBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+    height: 28,
+    paddingHorizontal: space.md,
+    borderRadius: radius.pill,
+    backgroundColor: colors.live,
+  },
+  clipText: { ...type.micro, color: colors.textOnBrand },
   reactions: {
     flexDirection: "row",
     justifyContent: "center",
