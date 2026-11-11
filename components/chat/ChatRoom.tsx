@@ -765,7 +765,7 @@ export function ChatRoom({ conversationId, admin = false }: ChatRoomProps) {
         ) : null}
       </KeyboardAvoidingView>
 
-      <AttachSheet mode={attach} onChangeMode={setAttach} conversation={conversation} admin={admin} onSendLocation={onSendLocation} onSendPoll={canWrite ? onSendPoll : undefined} />
+      <AttachSheet mode={attach} onChangeMode={setAttach} conversation={conversation} admin={admin} onSendLocation={onSendLocation} onSendPoll={canWrite && !(admin && conversation?.type === "management") ? onSendPoll : undefined} />
       <ReportSheet target={report} onClose={() => setReport(null)} onBlocked={refreshAfterBlock} />
       <BottomSheet visible={Boolean(attendancePick)} onClose={() => setAttendancePick(null)} title="Yoklamaya oyuncu ekle" snap="half" scrollable={false}>
         <Text style={styles.attendanceHint} {...textScale.long}>Seçtiğin oyuncu gruba alınır ve maç kadrosuna yedek olarak eklenir.</Text>
