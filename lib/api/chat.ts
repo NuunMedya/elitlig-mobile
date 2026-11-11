@@ -355,6 +355,8 @@ export interface DirectoryResponse {
   players: (ChatUser & { type: "direct" })[];
   /** Yönetim hesapları: diğer yönetim hesapları (ekip sohbeti). Üyede boş. */
   staff?: (ChatUser & { type: "direct" })[];
+  /** Yönetim hesabının rehberi: henüz profil seçmemiş üyeler (yalnız 2+ harfli aramada dolar). */
+  members?: (ChatUser & { type: "direct" })[];
 }
 
 export type OpenConversationInput =
@@ -774,34 +776,6 @@ export const endCall = (callId: number, reason?: string) =>
   post<{ call: ChatCall }>(`/api/chat/calls/${callId}/end`, reason ? { reason } : undefined);
 export const sendIceCandidate = (callId: number, candidate: unknown) =>
   post<{ relayed: boolean }>(`/api/chat/calls/${callId}/ice`, { candidate });
-
-/** Liste satırındaki önizleme metni. */
-export function conversationPreview(conversation: ChatConversation): string {
-  const message = conversation.last_message;
-  if (!message) {
-    return conversation.type === "management" ? "Bildirimler ve duyurular burada" : "Henüz mesaj yok";
-  }
-  if (message.kind === "call") return message.body ?? "Sesli arama";
-  if (message.deleted) return "Bu mesaj silindi";
-  if (message.kind === "audio") return `${message.sender.is_me ? "Sen: " : ""}Sesli mesaj`;
-  // Zengin türlerde sunucu gövdesi simgeyle başlar; listede düz Türkçe etiket gösterilir.
-  const rich: Partial<Record<MessageKind, string>> = {
-    image: message.meta?.caption ? `Fotoğraf: ${message.meta.caption}` : "Fotoğraf",
-    file: `Belge: ${message.meta?.file?.name ?? "dosya"}`,
-    poll: `Anket: ${message.meta?.poll?.question ?? ""}`.trim(),
-    matches: "Günün maçları",
-    signup: message.meta?.signup?.title ?? "Görev anketi",
-    award_poll: "Haftanın Enleri: aday önerisi",
-  };
-  const richLabel = rich[message.kind];
-  if (richLabel) return `${message.sender.is_me ? "Sen: " : ""}${richLabel}`;
-  const prefix = message.sender.is_me
-    ? "Sen: "
-    : conversation.type !== "direct" && conversation.type !== "management" && message.kind === "text" && message.sender.name
-      ? `${message.sender.name}: `
-      : "";
-  return `${prefix}${String(message.body ?? "").split("\n")[0]}`;
-}
 
 /** Yeni mesaj için istemci kimliği (çift gönderim önleme). */
 /** Konum mesajı için harita bağlantısı. */

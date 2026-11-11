@@ -20,6 +20,7 @@ import {
   getConversations,
   getMessages,
   getPresence,
+  sendMessage,
   type ChatConversation,
   type ChatMessage,
   type ChatPresence,
@@ -34,7 +35,9 @@ import {
   releaseChatSocket,
   retainChatSocket,
 } from "@/lib/chatSocket";
+import { loadChatDrafts, outboxAll, outboxRemove } from "@/lib/chatDrafts";
 import { markReadUntil, mergeMessages, upsertChat } from "@/lib/chatUtils";
+import { ApiError } from "@/lib/http";
 import { queryKeys } from "@/lib/queryKeys";
 import { hasAnyPermission } from "@/lib/admin/access";
 import { useAuth } from "@/providers/AuthProvider";
@@ -382,9 +385,38 @@ export function useChatRealtime(): void {
         void queryClient.invalidateQueries({ queryKey: queryKeys.chatConversations() });
         void queryClient.invalidateQueries({ queryKey: ["chat", "admin"] });
         if (activeConversationId) void queryClient.invalidateQueries({ queryKey: queryKeys.chatMessages(activeConversationId) });
+        void flushOutbox();
       }
       wasConnected = connected;
     });
+
+    // Giden kutusu: bağlantı yokken yazılan metinler. Açık sohbetinkini oda
+    // kendisi gönderir (balonunu günceller); diğer sohbetlerinki burada gider.
+    let flushing = false;
+    const flushOutbox = async () => {
+      if (flushing) return;
+      flushing = true;
+      try {
+        await loadChatDrafts();
+        for (const item of outboxAll()) {
+          if (item.conversation_id === activeConversationId) continue;
+          try {
+            const input = { kind: "text" as const, body: item.body, reply_to_id: item.reply_to_id, client_id: item.client_id, ...(item.mentions?.length ? { mentions: item.mentions } : {}) };
+            // eslint-disable-next-line no-await-in-loop
+            const { message } = await (item.admin ? adminChat.sendMessage(item.conversation_id, input) : sendMessage(item.conversation_id, input));
+            outboxRemove(item.client_id);
+            updateMessagesCache(queryClient, item.conversation_id, (messages) => mergeMessages(messages, [message]));
+          } catch (error) {
+            // Sunucu reddettiyse (4xx) yeniden denemek anlamsız; bağlantı hatasında sırada kalır.
+            if (error instanceof ApiError && error.status >= 400 && error.status < 500) outboxRemove(item.client_id);
+            else break;
+          }
+        }
+      } finally {
+        flushing = false;
+      }
+    };
+    if (wasConnected) void flushOutbox();
 
     return () => {
       offStatus();

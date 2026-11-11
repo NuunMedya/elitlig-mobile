@@ -163,7 +163,7 @@ export function ChatInbox({ admin = false, embedded = false, onScroll }: ChatInb
   );
   const openHit = useCallback((hit: ChatSearchHit) => router.push({ pathname: "/sohbet/[id]", params: { id: String(hit.conversation_id), mesaj: String(hit.id) } }), [router]);
   const onLongPress = useCallback((conversation: ChatConversation, inbox: boolean) => setRowMenu({ conversation, inbox }), []);
-  const compose = useCallback(() => router.push((filter === "inbox" ? "/yonetim/sohbet/yeni" : auth.isManagement ? "/yonetim/sohbet/yeni" : "/sohbet/yeni") as never), [auth.isManagement, filter, router]);
+  const compose = useCallback(() => router.push((filter === "inbox" ? "/yonetim/sohbet/yeni" : "/sohbet/yeni") as never), [filter, router]);
 
   const handleScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -214,7 +214,7 @@ export function ChatInbox({ admin = false, embedded = false, onScroll }: ChatInb
   }, [actions, conversations, toast]);
 
   const listMenu: MessageMenuItem[] = [
-    { key: "group", label: "Yeni grup", icon: "people-outline", onPress: () => router.push({ pathname: (auth.isManagement ? "/yonetim/sohbet/yeni" : "/sohbet/yeni") as never, params: { sekme: "grup" } }) },
+    { key: "group", label: "Yeni grup", icon: "people-outline", onPress: () => router.push({ pathname: "/sohbet/yeni", params: { sekme: "grup" } }) },
     { key: "starred", label: "Yıldızlı mesajlar", icon: "star-outline", onPress: () => router.push("/sohbet/yildizli" as never) },
     { key: "read", label: "Tümünü okundu say", icon: "checkmark-done-outline", onPress: markAllRead },
     ...(auth.isManagement ? [] : [{ key: "prefs", label: "Kimden mesaj kabul edeyim?", icon: "options-outline" as const, onPress: () => setPrefsOpen(true) }]),

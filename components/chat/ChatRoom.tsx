@@ -558,6 +558,13 @@ export function ChatRoom({ conversationId, admin = false, jumpTo = null }: ChatR
   useEffect(() => {
     if (loaded && (connected || !LIVE_SOCKET_ENABLED)) void flushOutbox();
   }, [connected, flushOutbox, loaded]);
+  // Kuyrukta bekleyen varken 15 sn'de bir yeniden denenir (soket bağlıyken HTTP kopmuş olabilir).
+  const hasQueued = useMemo(() => rawMessages.some((item) => item.queued), [rawMessages]);
+  useEffect(() => {
+    if (!hasQueued) return undefined;
+    const timer = setInterval(() => void flushOutbox(), 15_000);
+    return () => clearInterval(timer);
+  }, [flushOutbox, hasQueued]);
 
   /* ---------- mesaj eylemleri ---------- */
   const mergeUpdated = useCallback(
@@ -1295,7 +1302,6 @@ export function ChatRoom({ conversationId, admin = false, jumpTo = null }: ChatR
               initialNumToRender={18}
               maxToRenderPerBatch={12}
               windowSize={11}
-              removeClippedSubviews={Platform.OS === "android"}
               ListFooterComponent={
                 loadingOlder ? (
                   <SystemChip text="Eski mesajlar yükleniyor…" icon="time-outline" />
@@ -1469,7 +1475,7 @@ const styles = StyleSheet.create({
   downBadge: { position: "absolute", top: -space.s, right: -space.xs, minWidth: 20, height: 20, paddingHorizontal: space.xs, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.brand },
   downBadgeText: { ...type.nano, color: colors.textOnBrand },
 
-  notice: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: layout.screenPadding, paddingVertical: space.md, borderTopWidth: hairline, borderTopColor: colors.border, backgroundColor: colors.surface2 },
+  notice: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: layout.screenPadding, paddingVertical: space.md, borderTopWidth: hairline, borderTopColor: colors.border, backgroundColor: colors.surface1 },
   noticeText: { ...type.caption, color: colors.textSecondary, flex: 1 },
 
   attendanceHint: { ...type.bodySm, color: colors.textSecondary, paddingVertical: space.xs },

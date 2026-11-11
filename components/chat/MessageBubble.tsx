@@ -292,7 +292,7 @@ function VoiceFrame({
         accessibilityLabel={playing ? "Sesli mesajı duraklat" : "Sesli mesajı oynat"}
         style={[styles.voicePlay, { backgroundColor: mine ? chatPalette.voiceMine : chatPalette.waveActive }]}
       >
-        <Ionicons name={disabled ? "cloud-upload-outline" : playing ? "pause" : "play"} size={18} color={colors.textOnBrand} />
+        <Ionicons name={disabled ? "cloud-upload-outline" : playing ? "pause" : "play"} size={18} color={mine ? chatPalette.bubbleMine : chatPalette.bubbleTheirs} />
       </Touchable>
       <View style={styles.voiceBody}>
         <Wave bars={bars} progress={progress} mine={mine} />
@@ -430,10 +430,16 @@ export interface RowShellProps {
   center?: boolean;
   children: ReactNode;
   accessibilityLabel?: string;
+  /**
+   * Satır tek erişilebilirlik öğesi mi? İçinde kendi düğmeleri olan satırlarda
+   * (fotoğraf, ses, belge, kartlar) false verilir ki ekran okuyucu iç
+   * düğmelere ulaşabilsin; seçim kipinde satırın tamamı tek öğedir.
+   */
+  whole?: boolean;
 }
 
 /** Hizalama, seçim işareti ve "mesaja git" vurgusu — balonlar ve kartlar ortak kullanır. */
-export function RowShell({ mine, selecting, selected, highlighted, last, onPress, onLongPress, center, children, accessibilityLabel }: RowShellProps) {
+export function RowShell({ mine, selecting, selected, highlighted, last, onPress, onLongPress, center, children, accessibilityLabel, whole = false }: RowShellProps) {
   return (
     <Touchable
       feedback="none"
@@ -441,8 +447,11 @@ export function RowShell({ mine, selecting, selected, highlighted, last, onPress
       onPress={onPress}
       onLongPress={onLongPress}
       delayLongPress={260}
+      accessible={selecting || whole}
+      accessibilityRole={selecting ? "checkbox" : "text"}
       accessibilityLabel={accessibilityLabel}
-      accessibilityState={selecting ? { selected } : undefined}
+      accessibilityHint={selecting ? undefined : whole ? "Mesaj seçenekleri için basılı tut" : undefined}
+      accessibilityState={selecting ? { checked: selected } : undefined}
       style={[styles.row, last ? styles.rowLast : null, selected || highlighted ? styles.rowMarked : null]}
     >
       {selecting ? (
@@ -499,6 +508,7 @@ export const MessageBubble = memo(function MessageBubble({ message, album, first
       last={last}
       onPress={() => actions.onPress(message)}
       onLongPress={onLong}
+      whole={deleted || (kind === "text" && !message.reply_to)}
       accessibilityLabel={`${mine ? "Sen" : message.sender.name ?? "Üye"}: ${summary.text}, ${clockTime(message.created_at)}`}
     >
       <View style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleTheirs, first ? (mine ? styles.tailCornerMine : styles.tailCornerTheirs) : null, mediaOnly ? styles.bubbleMedia : null, message.pending ? styles.bubblePending : null]}>

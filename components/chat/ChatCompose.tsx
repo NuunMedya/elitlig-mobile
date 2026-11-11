@@ -70,9 +70,14 @@ export function ChatCompose({ admin = false, initialTab }: ChatComposeProps) {
   const [description, setDescription] = useState("");
   const [onlyAdminsSend, setOnlyAdminsSend] = useState(false);
   const [onlyAdminsEdit, setOnlyAdminsEdit] = useState(false);
+  // Yönetim hesabının KİŞİSEL rehberi (/api/chat/directory): yönetim ekibi, takım
+  // başkanları, oyuncular ve (aramayla) üyeler — masaüstü "Yeni sohbet" ile aynı.
+  const staffSelf = !admin && auth.isManagement;
   const TABS = admin
     ? ALL_TABS.filter((item) => item.key !== "management")
-    : ALL_TABS.filter((item) => item.key !== "staff").map((item) => (item.key === "players" ? { ...item, label: "Takım arkadaşları" } : item));
+    : staffSelf
+      ? ALL_TABS.filter((item) => item.key !== "management" && item.key !== "team")
+      : ALL_TABS.filter((item) => item.key !== "staff").map((item) => (item.key === "players" ? { ...item, label: "Takım arkadaşları" } : item));
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
   const [title, setTitle] = useState("");
@@ -116,7 +121,7 @@ export function ChatCompose({ admin = false, initialTab }: ChatComposeProps) {
 
   const people = useMemo(() => {
     const map = new Map<number, ChatUser>();
-    [...(query.data?.staff ?? []), ...(query.data?.managers ?? []), ...(query.data?.players ?? [])].forEach((user) => {
+    [...(query.data?.staff ?? []), ...(query.data?.managers ?? []), ...(query.data?.players ?? []), ...(query.data?.members ?? [])].forEach((user) => {
       if (!map.has(user.user_id)) map.set(user.user_id, user);
     });
     return [...map.values()];
@@ -149,11 +154,15 @@ export function ChatCompose({ admin = false, initialTab }: ChatComposeProps) {
       data.managers.forEach((user) => out.push({ kind: "user", key: `m-${user.user_id}`, user }));
     }
     if ((tab === "all" || tab === "players") && data.players.length) {
-      out.push({ kind: "section", key: "s-players", title: admin ? "Oyuncular" : "Takım arkadaşlarım" });
+      out.push({ kind: "section", key: "s-players", title: admin || staffSelf ? "Oyuncular" : "Takım arkadaşlarım" });
       data.players.forEach((user) => out.push({ kind: "user", key: `p-${user.user_id}`, user }));
     }
+    if (tab === "all" && data.members?.length) {
+      out.push({ kind: "section", key: "s-members", title: "Üyeler" });
+      data.members.forEach((user) => out.push({ kind: "user", key: `u-${user.user_id}`, user }));
+    }
     return out;
-  }, [admin, people, query.data, tab]);
+  }, [admin, people, query.data, staffSelf, tab]);
 
   const toggle = useCallback((id: number) => {
     setSelected((list) => (list.includes(id) ? list.filter((item) => item !== id) : [...list, id]));
@@ -235,7 +244,7 @@ export function ChatCompose({ admin = false, initialTab }: ChatComposeProps) {
     <SafeAreaView style={styles.screen} edges={["top", "bottom"]}>
       <ScreenHeader
         title={groupMode ? "Yeni grup" : "Yeni sohbet"}
-        subtitle={admin ? "Kime yazacaksınız?" : "Kime yazmak istiyorsun?"}
+        subtitle={admin ? "ElitLig Yönetimi adına: kime yazacaksın?" : "Kime yazmak istiyorsun?"}
         back
         bottom={
           <View style={styles.headerBottom}>
@@ -248,7 +257,7 @@ export function ChatCompose({ admin = false, initialTab }: ChatComposeProps) {
               <Input
                 value={search}
                 onChangeText={setSearch}
-                placeholder={admin ? "Yönetici, takım veya oyuncu ara" : "Yönetim, takım veya takım arkadaşı ara"}
+                placeholder={admin ? "Yönetici, takım veya oyuncu ara" : staffSelf ? "Kişi ara (üyeler için en az 2 harf)" : "Yönetim, takım veya takım arkadaşı ara"}
                 variant="search"
                 size="sm"
                 leadingIcon="search"
@@ -281,7 +290,7 @@ export function ChatCompose({ admin = false, initialTab }: ChatComposeProps) {
               body={
                 debounced
                   ? "Adı farklı yazmayı dene."
-                  : admin
+                  : admin || staffSelf
                     ? "Yönetim ekibi, takım yöneticileri ve hesabı bağlı oyuncular burada listelenir."
                     : "Yalnızca kendi takım arkadaşlarınla ve yönetimle mesajlaşabilirsin."
               }

@@ -7,7 +7,7 @@
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
-import { memo, useMemo, useState } from "react";
+import { memo, useMemo, useRef, useState } from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";
 
 import { Avatar, BottomSheet, Button, EmptyState, ErrorState, Input, SkeletonListRow, Touchable } from "@/components/ui";
@@ -21,6 +21,16 @@ import { colors, hairline, layout, radius, space, textScale, type } from "@/them
  * kapanıyor; eylem, sayfa tamamen indikten sonra çalıştırılır.
  */
 const runAfterSheet = (fn: () => void) => setTimeout(fn, 260);
+
+/**
+ * Sayfa kapanırken içeriği boşalmasın: değer null'a döndüğünde kapanış
+ * animasyonu boyunca son dolu değer çizilmeye devam eder.
+ */
+function useLast<T>(value: T | null | undefined): T | null {
+  const last = useRef<T | null>(value ?? null);
+  if (value != null) last.current = value;
+  return value ?? last.current;
+}
 
 /* ---------- eylem menüsü ---------- */
 
@@ -40,8 +50,13 @@ export interface MessageMenuProps {
   onClose: () => void;
 }
 
-export function MessageMenu({ message, items, onReact, onClose }: MessageMenuProps) {
+export function MessageMenu({ message: liveMessage, items: liveItems, onReact: liveReact, onClose }: MessageMenuProps) {
   const [more, setMore] = useState(false);
+  const message = useLast(liveMessage);
+  const items = useLast(liveItems.length ? liveItems : null) ?? liveItems;
+  const reactRef = useRef(liveReact);
+  if (liveMessage) reactRef.current = liveReact;
+  const onReact = reactRef.current;
   const mine = message?.reactions?.find((item) => item.mine)?.emoji ?? null;
   const summary = message ? messageSummary(message) : null;
   const close = () => {
@@ -53,7 +68,7 @@ export function MessageMenu({ message, items, onReact, onClose }: MessageMenuPro
     onReact?.(emoji);
   };
   return (
-    <BottomSheet visible={Boolean(message)} onClose={close} snap="content">
+    <BottomSheet visible={Boolean(liveMessage)} onClose={close} snap="content">
       {summary ? (
         <View style={styles.preview}>
           {summary.icon ? <Ionicons name={summary.icon} size={14} color={colors.textSecondary} /> : null}
@@ -110,7 +125,9 @@ export function MessageMenu({ message, items, onReact, onClose }: MessageMenuPro
 
 /* ---------- genel eylem sayfası (sohbet menüsü) ---------- */
 
-export function ActionMenu({ visible, title, items, onClose }: { visible: boolean; title?: string; items: MessageMenuItem[]; onClose: () => void }) {
+export function ActionMenu({ visible, title: liveTitle, items: liveItems, onClose }: { visible: boolean; title?: string; items: MessageMenuItem[]; onClose: () => void }) {
+  const items = useLast(visible && liveItems.length ? liveItems : null) ?? liveItems;
+  const title = useLast(visible ? liveTitle ?? null : null) ?? liveTitle;
   return (
     <BottomSheet visible={visible} onClose={onClose} title={title} snap="content">
       <View style={styles.menu}>
@@ -154,7 +171,8 @@ const PersonRow = memo(function PersonRow({ name, avatar, sub, trailing }: { nam
 /* ---------- tepki verenler ---------- */
 
 export function ReactionsSheet({ message, viewerId, onClose, onRemoveMine }: { message: ChatMessage | null; viewerId: number | null | undefined; onClose: () => void; onRemoveMine: (message: ChatMessage) => void }) {
-  const list = message?.reactions ?? [];
+  const shown = useLast(message);
+  const list = shown?.reactions ?? [];
   const mine = list.some((item) => item.mine);
   return (
     <BottomSheet
@@ -219,7 +237,7 @@ export function MessageInfoSheet({ conversationId, message, onClose }: { convers
 /* ---------- anket oyları ---------- */
 
 export function VotersSheet({ message, participants, viewerId, onClose }: { message: ChatMessage | null; participants: ChatParticipant[]; viewerId: number | null | undefined; onClose: () => void }) {
-  const poll = message?.meta?.poll;
+  const poll = useLast(message)?.meta?.poll;
   const nameOf = (id: number) => (Number(id) === Number(viewerId) ? "Sen" : participants.find((p) => p.user_id === Number(id))?.name ?? `Üye #${id}`);
   return (
     <BottomSheet visible={Boolean(message && poll)} onClose={onClose} title="Anket oyları" snap="half">

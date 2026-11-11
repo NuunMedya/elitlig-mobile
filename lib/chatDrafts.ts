@@ -126,3 +126,8 @@ export function outboxRemove(clientId: string | null | undefined): void {
 export function outboxFor(conversationId: number): OutboxItem[] {
   return outbox.filter((x) => x.conversation_id === conversationId);
 }
+
+/** Bekleyen bütün mesajlar (soket yeniden bağlanınca açık olmayan sohbetler için). */
+export function outboxAll(): OutboxItem[] {
+  return outbox.slice();
+}

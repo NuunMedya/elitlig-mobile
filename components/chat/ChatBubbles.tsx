@@ -1,6 +1,7 @@
 /**
- * ZENGİN MESAJ BALONLARI — sesli mesaj, konum, maç teklifi, bildirim kartı.
- * Üye ve yönetim sohbet ekranları ortak kullanır.
+ * SOHBET KARTLARI — maç teklifi, yoklama, bildirim kartı, arama kaydı ve
+ * sistem satırı. Metin, fotoğraf, belge, sesli mesaj ve konum balonları
+ * MessageBubble.tsx'tedir. Üye ve yönetim sohbet ekranları ortak kullanır.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -10,7 +11,6 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { Button, Touchable, withAlpha } from "@/components/ui";
 import { formatDurationMs, type ChatAction, type ChatMessage } from "@/lib/api/chat";
-import { openMap } from "@/lib/chatMedia";
 import type { AttendancePlayer } from "@/lib/api/team";
 import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
@@ -65,44 +65,6 @@ export const AudioPlayerRow = memo(function AudioPlayerRow({ url, durationMs, on
       </View>
       <Ionicons name="mic" size={14} color={fg} />
     </View>
-  );
-});
-
-export const AudioBubble = memo(function AudioBubble({ message, showSender }: { message: ChatMessage; showSender: boolean }) {
-  const mine = message.sender.is_me;
-  const audio = message.meta?.audio;
-  return (
-    <View style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleTheirs]}>
-      {showSender && !mine ? <Text style={styles.sender} numberOfLines={1} {...textScale.dense}>{message.sender.name ?? "Üye"}</Text> : null}
-      <AudioPlayerRow url={audio?.url} durationMs={audio?.duration_ms} onDark={mine} />
-      <Text style={[styles.stamp, mine ? styles.stampMine : null]} {...textScale.badge}>{clockLabel(message.created_at)}</Text>
-    </View>
-  );
-});
-
-/* ---------- konum ---------- */
-
-export const LocationBubble = memo(function LocationBubble({ message, showSender }: { message: ChatMessage; showSender: boolean }) {
-  const mine = message.sender.is_me;
-  const location = message.meta?.location;
-  const title = location?.venue_name ?? location?.label ?? "Konum";
-  return (
-    <Touchable feedback="card" haptic="selection" onPress={() => void openMap(location)} accessibilityRole="button" accessibilityLabel={`${title} konumunu haritada aç`} style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleTheirs]}>
-      {showSender && !mine ? <Text style={styles.sender} numberOfLines={1} {...textScale.dense}>{message.sender.name ?? "Üye"}</Text> : null}
-      <View style={styles.locationRow}>
-        <View style={styles.pin}><Ionicons name="location" size={18} color={colors.danger} /></View>
-        <View style={styles.locationBody}>
-          <Text style={[styles.locationTitle, mine ? styles.textMine : null]} numberOfLines={2} {...textScale.dense}>{title}</Text>
-          {location?.address ? <Text style={[styles.locationSub, mine ? styles.subMine : null]} numberOfLines={2} {...textScale.dense}>{location.address}</Text> : null}
-          {location?.lat != null && location?.lng != null ? <Text style={[styles.locationSub, mine ? styles.subMine : null]} {...textScale.badge}>{location.lat.toFixed(5)}, {location.lng.toFixed(5)}</Text> : null}
-        </View>
-      </View>
-      <View style={styles.linkRow}>
-        <Ionicons name="map-outline" size={13} color={mine ? colors.textOnBrand : colors.brandAccent} />
-        <Text style={[styles.linkText, mine ? styles.textMine : null]} {...textScale.dense}>Haritada aç</Text>
-      </View>
-      <Text style={[styles.stamp, mine ? styles.stampMine : null]} {...textScale.badge}>{clockLabel(message.created_at)}</Text>
-    </Touchable>
   );
 });
 
@@ -372,7 +334,6 @@ const styles = StyleSheet.create({
   bubble: { maxWidth: "86%", borderRadius: radius.lg, padding: space.md, gap: space.xs },
   bubbleMine: { alignSelf: "flex-end", backgroundColor: colors.brand, borderBottomRightRadius: radius.xs },
   bubbleTheirs: { alignSelf: "flex-start", backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border, borderBottomLeftRadius: radius.xs },
-  sender: { ...type.micro, color: colors.brandAccent },
   stamp: { ...type.micro, color: colors.textTertiary, alignSelf: "flex-end", marginTop: space.xxs },
   stampMine: { color: withAlpha(colors.textOnBrand, 0.72) },
   textMine: { color: colors.textOnBrand },
@@ -385,13 +346,6 @@ const styles = StyleSheet.create({
   trackFill: { height: 4, borderRadius: radius.xs },
   audioTime: { ...type.micro },
 
-  locationRow: { flexDirection: "row", alignItems: "flex-start", gap: space.sm },
-  pin: { width: 36, height: 36, borderRadius: radius.md, backgroundColor: colors.dangerDim, alignItems: "center", justifyContent: "center" },
-  locationBody: { flex: 1, minWidth: 0, gap: space.xxs },
-  locationTitle: { ...type.h4, color: colors.textPrimary },
-  locationSub: { ...type.caption, color: colors.textSecondary },
-  linkRow: { flexDirection: "row", alignItems: "center", gap: space.xs, marginTop: space.xs },
-  linkText: { ...type.label, color: colors.brandAccent },
 
   card: { maxWidth: "92%", borderLeftWidth: 3, gap: space.sm },
   cardHead: { flexDirection: "row", alignItems: "center", gap: space.sm },

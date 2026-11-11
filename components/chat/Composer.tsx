@@ -19,7 +19,7 @@ import { Avatar, Touchable, errorMessage, fireHaptic, useToast } from "@/compone
 import { formatDurationMs, type ChatMessage, type ChatParticipant } from "@/lib/api/chat";
 import { getDraft, loadChatDrafts, setDraft } from "@/lib/chatDrafts";
 import { MAX_VOICE_MS, useVoiceRecorder, type VoiceRecording } from "@/lib/chatMedia";
-import { chatPalette, senderColor } from "@/lib/chatPalette";
+import { senderColor } from "@/lib/chatPalette";
 import { emitTyping } from "@/lib/chatSocket";
 import { extractMentions, insertMention, mentionQuery, messageSummary } from "@/lib/chatUtils";
 import { colors, hairline, radius, space, textScale, type } from "@/theme";
@@ -324,9 +324,9 @@ export const Composer = memo(function Composer({ conversationId, placeholder, pa
 });
 
 const styles = StyleSheet.create({
-  wrap: { backgroundColor: chatPalette.composerBar, borderTopWidth: hairline, borderTopColor: colors.separator },
+  wrap: { backgroundColor: colors.surface1, borderTopWidth: hairline, borderTopColor: colors.separator },
   bar: { flexDirection: "row", alignItems: "flex-end", gap: space.sm, paddingHorizontal: space.sm, paddingVertical: space.s },
-  field: { flex: 1, minHeight: 44, flexDirection: "row", alignItems: "flex-end", borderRadius: radius.xxl + space.xxs, backgroundColor: chatPalette.composerField, borderWidth: hairline, borderColor: colors.border },
+  field: { flex: 1, minHeight: 44, flexDirection: "row", alignItems: "flex-end", borderRadius: radius.xxl + space.xxs, backgroundColor: colors.surface2, borderWidth: hairline, borderColor: colors.border },
   fieldButton: { width: 42, height: 44, alignItems: "center", justifyContent: "center" },
   input: {
     ...type.body,
@@ -355,7 +355,7 @@ const styles = StyleSheet.create({
   recHintText: { ...type.caption, color: colors.textTertiary },
   recCancel: { color: colors.danger },
 
-  banner: { flexDirection: "row", alignItems: "center", gap: space.sm, marginHorizontal: space.sm, marginTop: space.s, borderRadius: radius.md, backgroundColor: chatPalette.composerField, overflow: "hidden" },
+  banner: { flexDirection: "row", alignItems: "center", gap: space.sm, marginHorizontal: space.sm, marginTop: space.s, borderRadius: radius.md, backgroundColor: colors.surface2, overflow: "hidden" },
   bannerBar: { width: 4, alignSelf: "stretch" },
   bannerBody: { flex: 1, minWidth: 0, paddingVertical: space.s, gap: space.px },
   bannerTitle: { ...type.labelSm },

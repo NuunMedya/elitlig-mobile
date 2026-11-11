@@ -7,7 +7,6 @@
  * olunamıyordu. Buradaki kartlar o boşluğu kapatır:
  *
  *   PollBubble     anket: seçeneğe dokun → oy (tek/çok seçimli), canlı yüzdeler
- *   FileBubble     fotoğraf (önizleme, dokununca tam boy) ve belge (dokununca açılır)
  *   MatchesCard    "Günün maçları" kartı; maça dokununca maç sayfası
  *   SignupCard     "Ben talibim" görev anketi: satır satır talip ol / vazgeç
  *   AwardPollCard  Haftanın Enleri aday çağrısı → Yapılacaklar'daki aday kartı
@@ -19,7 +18,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
 import React, { memo } from "react";
-import { Image, Linking, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
 import { Touchable } from "@/components/ui";
 import { getAwardStatus, type ChatMessage } from "@/lib/api/chat";
@@ -136,45 +135,6 @@ export const PollBubble = memo(function PollBubble({
             Oyları gör
           </Text>
         </Touchable>
-      ) : null}
-    </Frame>
-  );
-});
-
-/* ═══════════════════════════ FOTOĞRAF / BELGE ═══════════════════════════ */
-
-const sizeLabel = (bytes: number) => (bytes >= 1_048_576 ? `${(bytes / 1_048_576).toLocaleString("tr-TR", { maximumFractionDigits: 1 })} MB` : bytes >= 1024 ? `${Math.round(bytes / 1024)} KB` : bytes ? `${bytes} B` : "");
-
-export const FileBubble = memo(function FileBubble({ message, showSender, onOpenError }: { message: ChatMessage; showSender?: boolean; onOpenError: () => void }) {
-  const file = message.meta?.file;
-  if (!file) return null;
-  const image = message.kind === "image";
-  const open = () => void Linking.openURL(file.url).catch(onOpenError);
-  const ratio = file.width && file.height ? Math.min(1.6, Math.max(0.6, file.width / file.height)) : 4 / 3;
-  return (
-    <Frame message={message} showSender={showSender} icon={image ? "image" : "document-attach"} label={image ? "Fotoğraf" : "Belge"}>
-      {image ? (
-        <Touchable feedback="card" onPress={open} accessibilityRole="imagebutton" accessibilityLabel={`Fotoğraf${message.meta?.caption ? `: ${message.meta.caption}` : ""}. Tam boy açmak için dokun`}>
-          <Image source={{ uri: file.url }} style={[styles.image, { aspectRatio: ratio }]} resizeMode="cover" />
-        </Touchable>
-      ) : (
-        <Touchable feedback="row" onPress={open} style={styles.fileRow} accessibilityRole="link" accessibilityLabel={`${file.name} belgesini aç`}>
-          <Ionicons name="document-text-outline" size={26} color={colors.brandAccent} />
-          <View style={styles.flex}>
-            <Text style={styles.fileName} numberOfLines={2} {...textScale.dense}>
-              {file.name}
-            </Text>
-            <Text style={styles.muted} {...textScale.dense}>
-              {[sizeLabel(file.size), "Açmak için dokun"].filter(Boolean).join(" · ")}
-            </Text>
-          </View>
-          <Ionicons name="open-outline" size={18} color={colors.textTertiary} />
-        </Touchable>
-      )}
-      {message.meta?.caption ? (
-        <Text style={styles.body} {...textScale.long}>
-          {message.meta.caption}
-        </Text>
       ) : null}
     </Frame>
   );
@@ -423,9 +383,6 @@ const styles = StyleSheet.create({
   optionFill: { position: "absolute", left: 0, top: 0, bottom: 0, backgroundColor: colors.brandDim },
   optionText: { ...type.bodySm, color: colors.textPrimary, flex: 1, paddingVertical: space.sm },
   optionCount: { ...type.numSmStrong, color: colors.textSecondary },
-  image: { width: "100%", borderRadius: radius.md, backgroundColor: colors.surface3 },
-  fileRow: { flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 48 },
-  fileName: { ...type.h4, color: colors.textPrimary },
   rows: { borderRadius: radius.md, borderWidth: hairline, borderColor: colors.border, overflow: "hidden" },
   divided: { borderTopWidth: hairline, borderTopColor: colors.separator },
   matchRow: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.md, paddingVertical: space.sm, minHeight: 48 },
