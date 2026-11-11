@@ -8,9 +8,12 @@
  */
 export const ARENA_BEST_KEYS = {
   penalti: "elitlig.penalti.best.v3",
-  slalom: "elitlig.slalom.best.v3",
+  // v4: Slalom sonsuz koşuya dönüştü; eski kapı slalomunun rekoru taşınmaz.
+  slalom: "elitlig.slalom.best.v4",
   sektir: "elitlig.sektir.best.v3",
   seri: "elitlig.arena.best.v2",
   kimbu: "elitlig.kimbu.best.v2",
   tahmin: "elitlig.tahmin.best.v1",
+  savunma: "elitlig.savunma.best.v1",
+  kadro: "elitlig.kadro.best.v1",
 } as const;

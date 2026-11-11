@@ -536,12 +536,12 @@
       renderer.shadowMap.enabled = true;
       renderer.shadowMap.type = T.PCFSoftShadowMap;
       renderer.toneMapping = T.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 1.0;
+      renderer.toneMappingExposure = 1.16;
       renderer.outputColorSpace = T.SRGBColorSpace;
       K.init(renderer);
       var scene = new T.Scene();
       scene.background = new T.Color(0x070b1e);
-      scene.fog = new T.Fog(0x121a3c, 30, 90);
+      scene.fog = new T.Fog(0x1a2456, 55, 170);
       tmpV = new T.Vector3();
       R = {
         renderer: renderer,
@@ -586,7 +586,7 @@
 
   function buildLights() {
     var s = R.scene;
-    s.add(new T.HemisphereLight(0x9fb4ff, 0x1d3a22, 0.55));
+    s.add(new T.HemisphereLight(0x9fb4ff, 0x1d3a22, 0.7));
     var key = new T.DirectionalLight(0xfff4e0, 2.3);
     key.castShadow = true;
     key.shadow.mapSize.set(1536, 1536);
@@ -647,7 +647,7 @@
     R.boardTex = K.canvasTex(2048, 64, function () {}, true);
     R.boardTex.repeat.set(STRIP / 40, 1);
     // pano arka plandadır: parlaklığı kısık (göz oyun alanında kalsın)
-    var boardMat = new T.MeshBasicMaterial({ map: R.boardTex, color: 0x8a8a8a, toneMapped: false });
+    var boardMat = new T.MeshBasicMaterial({ map: R.boardTex, color: 0xc4c4c4, toneMapped: false });
     var dark = K.std(0x111827, 0.6);
     var board = K.mesh(new T.BoxGeometry(STRIP, 0.95, 0.2), [dark, dark, dark, dark, boardMat, dark], true, true);
     board.position.set(0, 0.475, STAND_Z + 3.2);
@@ -708,7 +708,7 @@
   function buildFocus() {
     var scrim = new T.Mesh(
       new T.PlaneGeometry(STRIP, 40),
-      new T.MeshBasicMaterial({ color: 0x050816, transparent: true, opacity: 0.72, depthWrite: false, fog: false }),
+      new T.MeshBasicMaterial({ color: 0x070c2a, transparent: true, opacity: 0.46, depthWrite: false, fog: false }),
     );
     scrim.position.set(0, 12, -2.6);
     scrim.renderOrder = 1;

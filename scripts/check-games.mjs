@@ -9,16 +9,20 @@
  *
  *   0. `lib/game/web/games.generated.ts` kaynaklarla güncel; 3B futbolcu modeli
  *      (iskelet, gövde, koşu/bekleme klipleri) eksiksiz.
- *   1. Üç oyun da vitrin modunda ve oyunda hatasız güncellenip çizilir.
+ *   1. Beş oyun da vitrin modunda ve oyunda hatasız güncellenip çizilir.
  *   2. SEKTİR (Flappy futbol): dokunmazsan top yere düşer ve tur biter;
  *      boşluğu izleyen oyuncu gol atar ve seviye atlar; hız artar, boşluk
  *      daralır; alçak top baraja, yüksek top direğe takılır; gol sayısı
  *      ligin oyuncularını geçer.
- *   3. SLALOM: kenarda saklanmak ARTIK İŞE YARAMAZ — kaçırılan kapılar hak
- *      götürür ve tur biter. Kapıları izleyen oyuncu puan toplar; hız artar,
- *      kapılar daralır. Kayma savrulmadan oturur; jokerler (SÜPÜR, HAYALET,
- *      AĞIR ÇEKİM) işini yapar, seviye atlayan joker kazanır; rakip adı
- *      sığmazsa kısalır.
+ *   3. SLALOM (sonsuz koşu): kıpırdamayan oyuncu elenir; yolu izleyen ilerler,
+ *      hız ve seviye artar; her sırada geçilebilir bir yol vardır ve sıralar
+ *      tepki payı bırakır. Şerit değiştirme savrulmadan oturur, zıplama engeli
+ *      aşar; güçler (KALKAN, TURBO, ×2) işini yapar; rakip adı sığmazsa kısalır.
+ *      SAVUNMA HATTI: boş saha gol yer; kart ekonomisi (enerji, dolum, kilit);
+ *      forvet koridorunu korur, stoper oyalar, pres yavaşlatır, füze 3×3
+ *      temizler; dalgalar ilerler, kaptan gelir.
+ *      KADRO KOŞUSU: kapı aritmetiği; kötü kapılar kadroyu bitirir, iyi kapılar
+ *      büyütür; şut hasarı analitiktir; kaleci düşer, bölüm atlanır.
  *   4. PENALTI: seri penaltı kuralları (erken bitiş, ani ölüm) doğru; yalnız sen
  *      atarsın, rakibin atışı sırayla sayılır; köşeye vuruş gol olur, hep ortaya
  *      vuran okunur; kazanan sıradaki kulübe geçer, kaybeden turnuvayı bitirir.
@@ -35,7 +39,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
-import { buildModule, GENERATED_PATH, isThreeD, THREE_KIT, THREE_PATH } from "./build-games.mjs";
+import { buildModule, GENERATED_PATH, isThreeD, kitFiles, THREE_PATH } from "./build-games.mjs";
 import {
   arenaQuestion,
   kimbuQuestion,
@@ -150,7 +154,8 @@ function boot(game) {
     Float32Array,
     Number,
     String,
-    console,
+    // three.js'in UMD derlemesi her yüklemede kullanımdan kaldırma uyarısı basar; gürültü.
+    console: { ...console, warn: (...args) => (/build\/three/.test(String(args[0])) ? undefined : console.warn(...args)) },
   };
   context.window.window = context.window;
   vm.createContext(context);
@@ -158,7 +163,7 @@ function boot(game) {
   // simülasyonu çizimsiz koşar (çizim katmanı WebGL bulamayınca devre dışı).
   const is3d = isThreeD(game);
   if (is3d) vm.runInContext(readFileSync(THREE_PATH, "utf8"), context, { filename: "three.min.js" });
-  for (const file of ["core.js", "scenery.js", ...(is3d ? THREE_KIT : []), `${game}.js`]) {
+  for (const file of ["core.js", "scenery.js", ...(is3d ? kitFiles(game) : []), `${game}.js`]) {
     vm.runInContext(readFileSync(join(root, "games", file), "utf8"), context, { filename: file });
   }
   const A = context.window.Arena;
@@ -179,9 +184,9 @@ function boot(game) {
   return { A, run, log, over };
 }
 
-/* ── 1) Üç oyun da hatasız döner ─────────────────────────────────────────── */
+/* ── 1) Beş oyun da hatasız döner ─────────────────────────────────────────── */
 
-for (const game of ["penalti", "slalom", "sektir"]) {
+for (const game of ["penalti", "slalom", "sektir", "savunma", "kadro"]) {
   let error = null;
   try {
     const { A, run, log } = boot(game);
@@ -272,54 +277,56 @@ function sektirBot(A, { hold = null } = {}) {
   );
 }
 
-/* ── 3) SLALOM ───────────────────────────────────────────────────────────── */
+/* ── 3) SLALOM (sonsuz koşu) ─────────────────────────────────────────────── */
+
+/** Koşu botu: oyunun kendi vitrin pilotu (yol şeridine geçer, zıplar, kayar). */
+const pilot = (A) => {
+  const d = A.game.debug();
+  if (d.state === "play") d.autopilot();
+};
 
 {
+  // Hiçbir şey yapmayan oyuncu: engellere çarpa çarpa hakları biter.
   const { A, run, over } = boot("slalom");
   A.game.start();
-  // Kenara saklan: parmağı sağa sürükle ve orada tut.
-  A.game.down({ x: 100, y: 400 });
-  A.game.move({ x: 390, y: 400 });
-  A.game.move({ x: 390, y: 400 });
-  run(40);
+  run(60);
   const end = over();
   const d = A.game.debug();
   check(
-    "slalom: kenarda saklanmak biter",
-    Boolean(end) && d.lives === 0 && d.passed < 3,
-    end ? `kenarda bekleyen oyuncu ${Math.round(d.z)} m'de elendi (geçilen kapı ${d.passed})` : `tur bitmedi, ${Math.round(d.z)} m`,
+    "slalom: kıpırdamayan oyuncu elenir",
+    Boolean(end) && d.lives === 0,
+    end ? `${Math.round(d.z)} m'de elendi (geçilen sıra ${d.passed})` : `tur bitmedi, ${Math.round(d.z)} m`,
   );
 }
 {
+  // Yolu izleyen oyuncu: sıralar hatasız geçilir, puan ve hız artar.
   const { A, run } = boot("slalom");
   A.game.start();
-  const firstGap = A.game.debug().gates[0].gap;
   const v0 = A.game.debug().speed;
-  let livesAt8 = null;
-  let topSpeed = 0;
-  run(35, () => {
-    const d = A.game.debug();
-    if (d.state !== "play") return;
+  let topSpeed = 0, livesAt14 = null;
+  run(45, (arena) => {
+    pilot(arena);
+    const d = arena.game.debug();
     topSpeed = Math.max(topSpeed, d.speed);
-    const next = d.gates.find((g) => !g.done);
-    if (next) d.player.target = next.cx;
-    if (livesAt8 == null && d.passed >= 8) livesAt8 = d.lives;
+    if (livesAt14 == null && d.passed >= 14) livesAt14 = d.lives;
   });
   const d = A.game.debug();
-  const lastGap = d.gates[d.gates.length - 1].gap;
   check(
-    "slalom: kapıları izleyen oyuncu ilerler",
-    d.passed >= 15 && livesAt8 === 3 && d.points > d.passed * 10,
-    `${d.passed} kapı, ${d.points} puan, 8. kapıda kalan hak ${livesAt8}`,
+    "slalom: yolu izleyen oyuncu ilerler",
+    d.passed >= 30 && livesAt14 === 3 && d.points > d.passed * 3 && d.coins > 20,
+    `${d.passed} sıra, ${d.points} puan, ${d.coins} altın, 14. sırada kalan hak ${livesAt14}`,
   );
-  check(
-    "slalom: zorlaşıyor",
-    // En yüksek hız: bir çarpışma anlık yavaşlatır, ölçüm o ana denk gelebilir.
-    topSpeed > v0 * 1.2 && lastGap < firstGap * 0.85,
-    `hız ${v0.toFixed(1)} → ${topSpeed.toFixed(1)} m/sn, kapı ${firstGap.toFixed(2)} → ${lastGap.toFixed(2)} m`,
-  );
+  check("slalom: zorlaşıyor", topSpeed > v0 * 1.25 && d.level >= 3, `hız ${v0.toFixed(1)} → ${topSpeed.toFixed(1)} m/sn, seviye ${d.level}`);
+  // Her sırada geçilebilir bir yol var; yol bir sıradan ötekine en çok bir şerit kayar.
+  const rows = d.rows;
+  const fair = rows.every((r, i) => {
+    const cell = r.cells[r.path + 1];
+    const passable = cell == null || cell === "hurdle" || cell === "bar" || cell === "tackler";
+    return passable && (i === 0 || Math.abs(r.path - rows[i - 1].path) <= 1);
+  });
+  const gaps = rows.slice(1).map((r, i) => r.z - rows[i].z);
+  check("slalom: her sırada yol var, sıralar tepki payı bırakır", fair && Math.min(...gaps) >= 11.5, `${rows.length} sıra, en dar aralık ${Math.min(...gaps).toFixed(1)} m`);
 }
-
 {
   // Gerçek kadro: koşucu kadrodan gelir, her seviyede sıradaki takımın savunması.
   const { A, run } = boot("slalom");
@@ -330,100 +337,276 @@ function sektirBot(A, { hold = null } = {}) {
     defenses: [defense(1, "Zayıf Savunma"), defense(2, "Orta Savunma"), defense(3, "En İyi Savunma")],
   });
   A.game.start();
-  run(35, () => {
-    const d = A.game.debug();
-    const next = d.gates.find((g) => !g.done);
-    if (d.state === "play" && next) d.player.target = next.cx;
-  });
+  run(40, pilot);
   const d = A.game.debug();
   const want = ["Zayıf Savunma", "Orta Savunma", "En İyi Savunma"][Math.min(d.level, 3) - 1];
-  check("slalom: koşucu ve rakip savunma kadrodan gelir", d.runner === "A. Koşucu" && d.defense === want, `${d.runner}, seviye ${d.level} → ${d.defense}`);
+  const who = d.obstacles.find((o) => o.who);
+  check(
+    "slalom: koşucu ve rakip savunma kadrodan gelir",
+    d.runner === "A. Koşucu" && d.defense === want && d.level >= 2 && (!who || who.who.short === "D. Bir"),
+    `${d.runner}, seviye ${d.level} → ${d.defense}`,
+  );
 }
-
 {
-  // Yanal hareket: hedefe hızla ve savrulmadan oturur.
+  // Hareket: şerit değiştirme hızlı oturur, savrulmaz; zıplama engeli aşar, kayma pankartın altından geçirir.
   const { A, run } = boot("slalom");
   A.game.start();
-  const p = A.game.debug().player;
+  const d = A.game.debug();
+  const p = d.player;
+  d.shift(1);
   let maxX = 0, t90 = null, t = 0;
-  p.target = 3;
-  run(1.2, () => {
+  run(0.6, () => {
     t += 1 / 120;
     maxX = Math.max(maxX, p.x);
-    if (t90 == null && p.x >= 2.7) t90 = t;
+    if (t90 == null && p.x >= 2.3 * 0.9) t90 = t;
   });
+  const edge = d.shift(1) === false && p.lane === 1;
   check(
-    "slalom: kayma dengeli (hızlı oturur, savrulmaz)",
-    t90 != null && t90 < 0.6 && maxX < 3.12 && Math.abs(p.x - 3) < 0.05,
-    `%90'a ${t90 == null ? "—" : t90.toFixed(2)} sn, en çok ${maxX.toFixed(2)} m (hedef 3)`,
+    "slalom: şerit değiştirme dengeli (hızlı oturur, savrulmaz)",
+    t90 != null && t90 < 0.25 && maxX <= 2.3 + 0.01 && Math.abs(p.x - 2.3) < 0.02 && edge,
+    `%90'a ${t90 == null ? "—" : t90.toFixed(2)} sn, en çok ${maxX.toFixed(2)} m (şerit 2,30)`,
+  );
+  d.jump();
+  let top = 0, air = 0;
+  run(1, () => {
+    top = Math.max(top, p.y);
+    if (p.y > 0.7) air += 1 / 120;
+  });
+  d.slide();
+  const sliding = p.slide > 0.5;
+  run(1);
+  check(
+    "slalom: zıplama engeli aşar, kayma biter",
+    top > 1.5 && top < 2 && air > 0.35 && sliding && p.slide === 0 && p.y === 0,
+    `tepe ${top.toFixed(2)} m, engel üstünde ${air.toFixed(2)} sn`,
   );
 }
 {
-  // Jokerler: SÜPÜR önü boşaltır, HAYALET hak kaybettirmez, AĞIR ÇEKİM yavaşlatır.
+  // Güçler: KALKAN bir çarpışmayı affeder, TURBO engelleri devirir, ×2 çarpanı katlar.
   const { A, run } = boot("slalom");
   A.game.start();
-  const d0 = A.game.debug();
-  const edge = () => {
-    const d = A.game.debug();
-    const g = d.gates.find((x) => !x.done);
-    if (g) d.player.target = g.cx > 0 ? -5.3 : 5.3; // hep kapının dışından
-  };
-  // kapının dışından giden oyuncu: SÜPÜR ile 2 sn boyunca hak gitmez, kapılar sayılır
-  run(1.2);
-  const first = A.game.debug().gates.find((x) => !x.done);
-  run(Math.max(0, (first.z - A.game.debug().z - 10) / A.game.debug().speed), edge);
-  const used = d0.useJoker("clear");
-  const twice = d0.useJoker("clear");
-  const p0 = A.game.debug().passed;
-  run(2, edge);
-  const dc = A.game.debug();
-  check(
-    "slalom: SÜPÜR önünü boşaltır",
-    used && !twice && dc.lives === 3 && dc.passed > p0 && dc.jokers.clear === 0,
-    `${dc.passed - p0} kapı kendiliğinden geçildi, hak ${dc.lives}, kalan SÜPÜR ${dc.jokers.clear}`,
-  );
-  d0.useJoker("ghost");
-  run(4.5, edge);
-  const dg = A.game.debug();
-  check("slalom: HAYALET hak kaybettirmez", dg.lives === 3 && dg.active.ghost > 0, `kapının dışından 4,5 sn: hak ${dg.lives}`);
-  run(3, () => {
-    const d = A.game.debug();
-    const g = d.gates.find((x) => !x.done);
-    if (g) d.player.target = g.cx;
-  });
-  const v0 = A.game.debug().speed;
-  d0.useJoker("slow");
-  run(3, () => {
-    const d = A.game.debug();
-    const g = d.gates.find((x) => !x.done);
-    if (g) d.player.target = g.cx;
-  });
-  const ds = A.game.debug();
-  check("slalom: AĞIR ÇEKİM yavaşlatır", ds.speed < v0 * 0.72 && ds.active.slow > 16, `hız ${v0.toFixed(1)} → ${ds.speed.toFixed(1)} m/sn`);
-}
-{
-  // Joker kazanma: seviye atlayan oyuncuya yeni joker, savunmacı adı sığmazsa kısalır.
-  const { A, run } = boot("slalom");
-  A.game.start();
-  const d0 = A.game.debug();
-  d0.useJoker("clear");
-  d0.useJoker("ghost");
-  d0.useJoker("slow");
-  run(30, () => {
-    const d = A.game.debug();
-    const g = d.gates.find((x) => !x.done);
-    if (d.state === "play" && g) d.player.target = g.cx;
-  });
   const d = A.game.debug();
-  const total = d.jokers.clear + d.jokers.ghost + d.jokers.slow;
+  d.grant("shield");
+  // kıpırdamadan: ilk çarpışmayı kalkan alır, hak gitmez
+  let afterShield = null;
+  run(16, (arena) => {
+    const x = arena.game.debug();
+    if (!afterShield && x.active.shield === 0) afterShield = { lives: x.lives, z: x.z };
+  });
+  const shieldSaved = Boolean(afterShield) && afterShield.lives === 3 && afterShield.z > 20;
+  const { A: B, run: runB } = boot("slalom");
+  B.game.start();
+  const db = B.game.debug();
+  runB(4, pilot);
+  db.grant("turbo");
+  const m1 = db.multiplier();
+  db.grant("x2");
+  const m2 = db.multiplier();
+  runB(3.5); // pilot yok: turbo boyunca çarpışmalar hak götürmez
+  const dt = B.game.debug();
+  check(
+    "slalom: güçler işini yapar",
+    shieldSaved && dt.lives === 3 && m2 === m1 * 2 && dt.active.turbo > 0,
+    `kalkan sonrası hak ${afterShield ? afterShield.lives : "—"}, turbo boyunca hak ${dt.lives}, çarpan ×${m1} → ×${m2}`,
+  );
   const ctx = { measureText: (t) => ({ width: t.length * 7 }) };
   const full = d.foeLabel(ctx, { name: "Mehmet Yıldırım", short: "M. Yıldırım" }, 150);
   const mid = d.foeLabel(ctx, { name: "Muhammed Abdurrahman Karaosmanoğlu", short: "M. Karaosmanoğlu" }, 150);
   const tiny = d.foeLabel(ctx, { name: "Muhammed Abdurrahman Karaosmanoğlu", short: "M. Karaosmanoğlu" }, 70);
   check(
-    "slalom: seviye atlayan joker kazanır, rakip adı tam ya da kısaltılmış",
-    d.level >= 2 && total >= d.level - 1 && full === "Mehmet Yıldırım" && mid === "M. Karaosmanoğlu" && tiny.endsWith("…") && tiny.length * 7 <= 70,
-    `seviye ${d.level}, ${total} joker · "${full}" · "${mid}" · "${tiny}"`,
+    "slalom: rakip adı tam ya da kısaltılmış",
+    full === "Mehmet Yıldırım" && mid === "M. Karaosmanoğlu" && tiny.endsWith("…") && tiny.length * 7 <= 70,
+    `"${full}" · "${mid}" · "${tiny}"`,
+  );
+}
+
+/* ── 3b) SAVUNMA HATTI ───────────────────────────────────────────────────── */
+
+{
+  // Savunmasız kale: rakipler yürür, üç gol yenir, maç biter.
+  const { A, run, over } = boot("savunma");
+  A.game.start();
+  run(170);
+  const end = over();
+  const d = A.game.debug();
+  check("savunma: boş saha gol yer ve biter", Boolean(end) && d.lives === 0 && d.conceded === 3, end ? `3 gol yenildi (${d.wave}. dalga)` : `maç bitmedi, hak ${d.lives}`);
+}
+{
+  // Kartlar: enerji düşer, dolum süresi ve dolu kare engeller; kurucu enerji üretir.
+  const { A, run } = boot("savunma");
+  A.game.start();
+  const d = A.game.debug();
+  const e0 = d.energy;
+  const ok1 = d.place("kurucu", 0, 0);
+  const again = d.place("kurucu", 1, 0); // dolum süresi
+  const same = d.place("forvet", 0, 0); // dolu kare
+  const locked = d.place("cift", 3, 0); // 4. dalgada açılır
+  const e1 = A.game.debug().energy;
+  d.clearQueue();
+  let made = 0;
+  for (let i = 0; i < 2; i += 1) {
+    run(i === 0 ? 6 : 9);
+    const orbs = A.game.debug().orbs.filter((o) => !o.taken && !o.sky);
+    orbs.forEach((o) => d.collect(o));
+    made += orbs.length;
+  }
+  const e2 = A.game.debug().energy;
+  check(
+    "savunma: kart ekonomisi",
+    // (rakipsiz dalga "temiz" sayılır ve +75 enerji verir; üretim 25'in katıdır)
+    ok1 && !again && !same && !locked && e1 === e0 - 50 && made === 2 && e2 >= e1 + 50 && (e2 - e1) % 25 === 0,
+    `enerji ${e0} → ${e1} → ${e2} (${made} üretim)`,
+  );
+}
+{
+  // Forvet koridorundaki rakibi durdurur; boş koridor gol yer. Pres yavaşlatır, stoper oyalar, füze temizler.
+  const { A, run } = boot("savunma");
+  A.game.start();
+  const d = A.game.debug();
+  d.clearQueue();
+  d.setEnergy(5000);
+  d.place("forvet", 2, 0);
+  const guarded = d.spawn("hucum", 2);
+  const open = d.spawn("hucum", 4);
+  run(40);
+  const mid = A.game.debug();
+  check(
+    "savunma: forvet koridorunu korur, boş koridor gol yer",
+    guarded.dead && mid.defeated === 1 && mid.conceded === 1 && mid.points >= 10 && !open.dead,
+    `korunan koridorda rakip ${guarded.dead ? "durduruldu" : "geçti"}, boş koridordan ${mid.conceded} gol`,
+  );
+  // Stoper: 2400 can / 100 hasar ≈ 24 sn oyalar
+  d.place("stoper", 0, 2);
+  const eater = d.spawn("hucum", 0, 9);
+  let held = 0;
+  run(34, (arena) => {
+    const x = arena.game.debug();
+    x.clearQueue(); // yalnız sınanan rakip sahada kalsın
+    if (x.state === "play" && eater.eating) held += 1 / 120;
+  });
+  // Pres: yavaşlatılan rakip aynı sürede daha az yol alır
+  const { A: B, run: runB } = boot("savunma");
+  B.game.start();
+  const db = B.game.debug();
+  db.clearQueue();
+  db.setEnergy(5000);
+  db.place("stoper", 3, 0); // 3. dalga gerekmeden pres'i sınamak için serbest yerleştirme
+  db.place("pres", 1, 0, true);
+  const slowed = db.spawn("santrfor", 1);
+  const free = db.spawn("santrfor", 3);
+  runB(9);
+  check(
+    "savunma: stoper oyalar, pres yavaşlatır",
+    held > 15 && held < 30 && slowed.slow > 0 && slowed.z > free.z + 0.4,
+    `stoper ${held.toFixed(0)} sn oyaladı; yavaşlatılan ${slowed.z.toFixed(1)} m, serbest ${free.z.toFixed(1)} m`,
+  );
+  // Füze: 3×3 alanı temizler, alan dışına dokunmaz
+  db.place("fuze", 2, 3, true);
+  const near = [db.spawn("hucum", 1, 9.6), db.spawn("hucum", 2, 10.5), db.spawn("hucum", 3, 8.2)];
+  const farLane = db.spawn("hucum", 0, 9.6);
+  runB(1.2);
+  check("savunma: füze 3×3 alanı temizler", near.every((f) => f.dead) && !farLane.dead && !db.units.some((u) => u.type === "fuze"), `${near.filter((f) => f.dead).length}/3 rakip, alan dışındaki ayakta`);
+}
+{
+  // Dalgalar: kurulu savunma ilk dalgayı temizler, ikinci dalgada yeni kart açılır ve kaptan gelir.
+  const { A, run } = boot("savunma");
+  A.game.start();
+  const d = A.game.debug();
+  d.setEnergy(5000);
+  for (let l = 0; l < 5; l += 1) {
+    d.place("forvet", l, 0, true);
+    d.place("forvet", l, 1, true);
+    d.place("stoper", l, 4, true);
+  }
+  let sawBoss = false, maxWave = 1;
+  run(150, (arena) => {
+    const x = arena.game.debug();
+    maxWave = Math.max(maxWave, x.wave);
+    if (x.foes.some((f) => f.type === "kaptan")) sawBoss = true;
+  });
+  const x = A.game.debug();
+  check(
+    "savunma: dalgalar ilerler, kaptan gelir, kartlar açılır",
+    maxWave >= 2 && sawBoss && x.lives === 3 && x.points >= 50 + 10 * 5 && x.usable("fuze"),
+    `${maxWave}. dalga, ${x.defeated} rakip durduruldu, ${x.points} puan, hak ${x.lives}`,
+  );
+  const team = (id, name) => ({ id, name, kit: { primary: "#dc2626", secondary: "#ffffff" } });
+  A.game.setRoster({ captain: { id: 5, short: "K. Kaptan", team: team(9, "Bizimkiler") }, rivals: [{ team: team(1, "Birinci Rakip") }, { team: team(2, "İkinci Rakip") }] });
+  const r = A.game.debug();
+  check("savunma: kaptan ve rakip takımlar kadrodan gelir", r.captain === "K. Kaptan" && /Rakip$/.test(r.rival), `${r.captain} · ${r.wave}. dalga → ${r.rival}`);
+}
+
+/* ── 3c) KADRO KOŞUSU ────────────────────────────────────────────────────── */
+
+/** Kadro botu: iyi kapıyı seçer, yarım sahadaki gruptan kaçar, kalecinin şutundan çekilir. */
+const squadBot = (A) => {
+  const d = A.game.debug();
+  if (d.state !== "play") return;
+  const next = d.segs.find((s) => !s.done && s.z > d.z);
+  if (d.boss && d.boss.shot) d.setTarget(d.boss.shot.x > 0 ? d.boss.shot.x - 3.4 : d.boss.shot.x + 3.4);
+  else if (next && next.type === "gate") d.setTarget(d.apply(d.n, next.left) >= d.apply(d.n, next.right) ? -2.2 : 2.2);
+  else if (next && next.type === "rivals" && !next.full) d.setTarget(next.x0 < -4 ? 3.2 : -3.2);
+  else if (next && next.type === "bar") d.setTarget(next.x > 0 ? -3.4 : 3.4);
+};
+
+{
+  // Kapı aritmetiği ve kötü kapı: hep küçülten kapıyı seçen kadro tükenir.
+  const { A, run, over } = boot("kadro");
+  A.game.start();
+  const d = A.game.debug();
+  const math = d.apply(10, { op: "+", v: 5 }) === 15 && d.apply(10, { op: "x", v: 3 }) === 30 && d.apply(10, { op: "-", v: 4 }) === 6 && d.apply(9, { op: "/", v: 2 }) === 5 && d.apply(900, { op: "x", v: 3 }) === 999;
+  run(120, (arena) => {
+    const x = arena.game.debug();
+    const next = x.segs.find((s) => !s.done && s.z > x.z && s.type === "gate");
+    if (x.state === "play" && next) x.setTarget(x.apply(x.n, next.left) <= x.apply(x.n, next.right) ? -2.2 : 2.2);
+  });
+  const end = over();
+  const x = A.game.debug();
+  check("kadro: kapı aritmetiği doğru, kötü kapılar kadroyu bitirir", math && Boolean(end) && x.n === 0 && x.goals === 0, end ? `kadro ${Math.round(x.z)} m'de tükendi` : `tur bitmedi (kadro ${x.n})`);
+}
+{
+  // İyi oynayan kadro: büyür, grupları eritir, kaleciyi düşürür, bölüm atlar.
+  const { A, run } = boot("kadro");
+  const team = (id, name) => ({ id, name, kit: { primary: "#dc2626", secondary: "#ffffff" } });
+  A.game.setRoster({ captain: { id: 5, short: "K. Kaptan", team: team(9, "Bizimkiler") }, rivals: [{ team: team(1, "Birinci Rakip"), keeper: { short: "K. Eldiven" } }, { team: team(2, "İkinci Rakip") }] });
+  A.game.start();
+  const first = A.game.debug().rival;
+  let maxLevel = 1;
+  run(75, (arena) => {
+    squadBot(arena);
+    maxLevel = Math.max(maxLevel, arena.game.debug().level);
+  });
+  const x = A.game.debug();
+  check(
+    "kadro: iyi kapılar kadroyu büyütür, kaleci düşer, bölüm atlanır",
+    x.maxN >= 15 && x.goals >= 1 && maxLevel >= 2 && x.cleared >= 2 && x.points >= 125 + 20,
+    `en kalabalık ${x.maxN}, ${x.goals} gol, ${x.cleared} grup, bölüm ${maxLevel}, ${x.points} puan`,
+  );
+  check("kadro: kaptan ve rakip takımlar kadrodan gelir", x.captain === "K. Kaptan" && first === "Birinci Rakip", `${x.captain} · ilk rakip ${first}`);
+}
+{
+  // Grup hasarı analitik: menzilde kadro × 1,1 / sn; temas bire bir götürür.
+  const { A, run } = boot("kadro");
+  A.game.start();
+  const d = A.game.debug();
+  d.setN(20);
+  d.segs.forEach((s) => {
+    if (s.type === "gate") s.done = true; // kapılar kadroyu değiştirmesin
+  });
+  const g = d.segs.find((s) => s.type === "rivals");
+  g.hp = g.hp0 = 500; // eritilemeyecek kadar kalabalık
+  g.x0 = -4.4;
+  g.x1 = 4.4;
+  let n0 = null;
+  run(12, (arena) => {
+    const x = arena.game.debug();
+    if (n0 == null && g.z - x.z < 1.4) n0 = { n: x.n, hp: g.hp };
+  });
+  const x = A.game.debug();
+  check(
+    "kadro: şut hasarı ve temas kaybı",
+    n0 != null && n0.n === 20 && n0.hp < 500 - 20 && x.n === 0 && x.state !== "play",
+    n0 ? `temasa kadar ${Math.round(500 - n0.hp)} hasar; kalabalık grup kadroyu bitirdi` : "temas olmadı",
   );
 }
 

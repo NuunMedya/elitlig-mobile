@@ -10,7 +10,8 @@
  * KÖPRÜ SÖZLEŞMESİ (bkz. games/core.js):
  *   Oyun → RN : {type:"ready"} · {type:"haptic",kind} · {type:"over",score,stats}
  *   RN → Oyun : window.ArenaCmd({type:"start"|"pause"|"resume"|"config"}) — config
- *               ses, hareket, Elit Kart avantajı ve (Penaltı, Slalom, Sektir) gerçek kadroyu taşır.
+ *               ses, hareket, Elit Kart avantajı ve gerçek kadroyu (Penaltı, Slalom, Sektir,
+ *               Savunma Hattı, Kadro Koşusu) taşır.
  */
 
 import { forwardRef, useImperativeHandle, useMemo, useRef } from "react";
@@ -29,7 +30,7 @@ export type GameCommand =
       sound?: boolean;
       reduceMotion?: boolean;
       perks?: { penalti?: { aimBonus: number } } | null;
-      /** Oyuna özgü gerçek kadro (Penaltı: atıcı + kaleciler, Slalom: koşucu + savunmalar, Sektir: oyuncu + geçilecekler). */
+      /** Oyuna özgü gerçek kadro (Penaltı: atıcı + kaleciler, Slalom: koşucu + savunmalar, Sektir: oyuncu + geçilecekler, Savunma Hattı / Kadro Koşusu: kaptan + rakip takımlar). */
       roster?: Record<string, unknown> | null;
     };
 

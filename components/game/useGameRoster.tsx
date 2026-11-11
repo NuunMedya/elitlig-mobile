@@ -8,6 +8,9 @@
  *   Slalom   { runner, defenses }   (bkz. games/slalom.js)
  *   Sektir   { juggler, rivals }    (bkz. games/sektir.js; Slalom listesinden:
  *            rakipler oyuncuların sezon gol + asist sayısı, artan sırada)
+ *   Savunma Hattı / Kadro Koşusu   { captain, rivals }   (bkz. games/savunma.js,
+ *            games/kadro.js; Slalom listesinden: kaptanın kulübünün forması
+ *            giyilir, her dalga/bölüm ligin bir takımına karşıdır)
  * Kadro gelmezse oyun kendi varsayılan kadrosuyla oynanır (roster null).
  */
 
@@ -32,16 +35,21 @@ const KEYS: Partial<Record<WebGameKey, string>> = {
   penalti: "elitlig.penalti.shooter.v1",
   slalom: "elitlig.slalom.runner.v1",
   sektir: "elitlig.sektir.juggler.v1",
+  savunma: "elitlig.savunma.captain.v1",
+  kadro: "elitlig.kadro.captain.v1",
 };
+
+/** Slalom'un kadro ucunu (oyuncular + takım merdiveni) kullanan oyunlar. */
+const SLALOM_FED = new Set<WebGameKey>(["slalom", "sektir", "savunma", "kadro"]);
 
 /** Sektir rakipleri: gol + asist değerleri artan, eşit aralıklı en çok 12 oyuncu. */
 const RIVALS = 12;
 
 export function useGameRoster(game: WebGameKey, cityId: number | null, playerId: number | null): GameRoster {
-  const supported = game === "penalti" || game === "slalom" || game === "sektir";
+  const supported = game === "penalti" || SLALOM_FED.has(game);
   const query = useQuery({
     // Sektir, Slalom'un oyuncu listesini kullanır (aynı önbellek anahtarı).
-    queryKey: ["arena", game === "sektir" ? "slalom" : game, "roster", cityId ?? 0, playerId ?? 0],
+    queryKey: ["arena", SLALOM_FED.has(game) ? "slalom" : game, "roster", cityId ?? 0, playerId ?? 0],
     queryFn: (): Promise<unknown> => (game === "penalti" ? getPenaltyRoster(cityId) : getSlalomRoster(cityId)),
     enabled: supported,
     staleTime: 30 * 60_000,
@@ -138,6 +146,38 @@ export function useGameRoster(game: WebGameKey, cityId: number | null, playerId:
             ladderTitle={`Geçeceğin oyuncular · sekme = gol + asist`}
             ladder={rivals.map((r) => ({ id: r.id, name: r.name, image: r.image, color: r.team.kit.primary }))}
             finalText={final ? `Final: ${final.short} · ${final.value} gol + asist` : null}
+          />
+        ),
+      };
+    }
+
+    if (game === "savunma" || game === "kadro") {
+      const data = query.data as Awaited<ReturnType<typeof getSlalomRoster>> | undefined;
+      const people = data?.runners ?? [];
+      const captain = people.find((p) => p.id === selectedId) ?? people.find((p) => p.mine) ?? people[0];
+      // Kendi kulübünle karşılaşma: kaptanın takımı rakip listesinden çıkar.
+      const rivals = (data?.defenses ?? []).filter((d) => d.team.id !== captain?.team.id);
+      const final = rivals[rivals.length - 1];
+      const waves = game === "savunma";
+      return {
+        roster: captain ? { captain, rivals } : null,
+        changeLabel: captain ? "Kaptan değiştir" : null,
+        setup: (
+          <RosterSetup
+            loading={loading}
+            people={people}
+            scope={data?.scope}
+            selectedId={captain?.id ?? null}
+            onSelect={choose}
+            title={waves ? "Kaptanını seç · takımın onun formasını giyer" : "Kaptanını seç · kadron onun formasını giyer"}
+            loadingText="Ligin oyuncuları yükleniyor…"
+            emptyText="Gerçek kadro şu an yüklenemedi; ElitLig formasıyla oynayabilirsin."
+            attrs={[]}
+            chipMeta={(p) => `${p.stats.goals}G ${p.stats.assists}A`}
+            detailMeta={(p) => [p.team.name, `${p.stats.goals} gol`, `${p.stats.assists} asist`].filter(Boolean).join(" · ")}
+            ladderTitle={waves ? `Rakip takımlar · her dalga biri` : `Rakip takımlar · her bölüm biri`}
+            ladder={rivals.map((d) => ({ id: d.team.id, name: d.team.name ?? "Takım", color: d.team.kit.primary }))}
+            finalText={final ? `En zorlu rakip: ${final.team.name ?? "Takım"}` : null}
           />
         ),
       };

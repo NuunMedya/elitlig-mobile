@@ -87,6 +87,8 @@ const GAMES: GameMeta[] = [
   { key: "penalti", label: "Penaltı", icon: "golf", unit: "puan", route: "/penalti" },
   { key: "kimbu", label: "Kim Bu?", icon: "search", unit: "puan", route: "/kimbu" },
   { key: "slalom", label: "Slalom", icon: "flag", unit: "puan", route: "/slalom" },
+  { key: "savunma", label: "Savunma Hattı", icon: "shield", unit: "puan", route: "/savunma" },
+  { key: "kadro", label: "Kadro Koşusu", icon: "people", unit: "puan", route: "/kadro" },
   { key: "gunun", label: "Günün Testi", icon: "bulb", unit: "puan", route: "/gunun" },
 ];
 

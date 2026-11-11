@@ -1,6 +1,6 @@
 import { get, post } from "../http";
 
-export type ArenaGame = "seri" | "sektir" | "kimbu" | "slalom" | "gunun" | "penalti" | "tahmin";
+export type ArenaGame = "seri" | "sektir" | "kimbu" | "slalom" | "gunun" | "penalti" | "tahmin" | "savunma" | "kadro";
 
 export interface ArenaEntry {
   rank: number;
@@ -20,10 +20,12 @@ export interface ArenaLeaderboard {
 
 /**
  * Oyun kuralları sürümü. Penaltı, slalom ve top sektir v3'te baştan yazıldı;
- * sunucu bu oyunlarda `v`si 3'ten küçük (eski uygulama) skorları reddeder ki
- * eski kurallarla yapılmış skorlar yeni tabloya karışmasın.
+ * v4'te Slalom üç şeritli sonsuz koşuya dönüştü (kapılar gitti; şerit, zıplama,
+ * kayma) ve Savunma Hattı ile Kadro Koşusu eklendi. Sunucu her oyunda kendi
+ * alt sürümünden küçük `v` ile gelen skorları reddeder ki eski kurallarla
+ * yapılmış skorlar yeni tabloya karışmasın.
  */
-export const ARENA_CLIENT_VERSION = 3;
+export const ARENA_CLIENT_VERSION = 4;
 
 /**
  * Oyun oturumu (Kariyer Modu): oyun başlarken açılır, skor bununla gönderilir.

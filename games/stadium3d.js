@@ -70,21 +70,48 @@
     pm.dispose();
   }
 
-  /** Gökyüzü kubbesi: yukarıda gece mavisi, ufukta projektör pusu. */
+  /**
+   * Gökyüzü kubbesi (gölgelendiricide): yukarıda gece mavisi, ufukta projektör
+   * pusu, göz kırpan yıldızlar, ay ve önünden süzülen ince bulutlar.
+   */
+  var SKY_FRAG = [
+    "uniform float uTime; varying vec3 vDir;",
+    "float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }",
+    "float noise(vec2 p){ vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);",
+    "  return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y); }",
+    "float fbm(vec2 p){ float a = 0.5; float s = 0.0; for (int i = 0; i < 4; i++) { s += a * noise(p); p = p * 2.03 + vec2(1.7, 9.2); a *= 0.5; } return s; }",
+    "void main(){",
+    "  vec3 d = normalize(vDir);",
+    "  float h = d.y;",
+    "  vec3 top = vec3(0.004, 0.008, 0.035); vec3 mid = vec3(0.022, 0.045, 0.16); vec3 low = vec3(0.10, 0.14, 0.42);",
+    "  vec3 c = mix(low, mid, smoothstep(-0.05, 0.25, h));",
+    "  c = mix(c, top, smoothstep(0.25, 0.85, h));",
+    "  vec3 moonDir = normalize(vec3(-0.42, 0.62, -0.66));",
+    "  float m = max(dot(d, moonDir), 0.0);",
+    "  c += vec3(0.85, 0.9, 1.0) * (smoothstep(0.9993, 0.9996, m) * 1.4 + pow(m, 90.0) * 0.22 + pow(m, 9.0) * 0.06);",
+    "  if (h > 0.0) {",
+    "    vec2 g = d.xz / (h + 0.35) * 52.0;",
+    "    float r = hash(floor(g));",
+    "    float tw = 0.55 + 0.45 * sin(uTime * 2.2 + r * 40.0);",
+    "    c += vec3(step(0.972, r) * smoothstep(0.5, 0.0, length(fract(g) - 0.5)) * tw) * smoothstep(0.02, 0.3, h);",
+    "    vec2 uv = d.xz / (h + 0.18) * 1.1 + vec2(uTime * 0.008, 0.0);",
+    "    float cl = smoothstep(0.52, 0.82, fbm(uv)) * smoothstep(0.02, 0.2, h);",
+    "    c = mix(c, vec3(0.16, 0.2, 0.46) + vec3(0.2, 0.22, 0.3) * pow(m, 5.0), cl * 0.55);",
+    "  }",
+    "  gl_FragColor = vec4(c, 1.0);",
+    "  #include <colorspace_fragment>",
+    "}",
+  ].join("\n");
   function buildSky() {
-    var geo = new T.SphereGeometry(320, 32, 16);
-    var col = new Float32Array(geo.attributes.position.count * 3);
-    var top = new T.Color(0x02040d), mid = new T.Color(0x0b1330), low = new T.Color(0x24305e), c = new T.Color();
-    for (var i = 0; i < geo.attributes.position.count; i++) {
-      var y = geo.attributes.position.getY(i) / 320;
-      if (y > 0.25) c.copy(mid).lerp(top, A.clamp((y - 0.25) / 0.6, 0, 1));
-      else c.copy(low).lerp(mid, A.clamp((y + 0.05) / 0.3, 0, 1));
-      col[i * 3] = c.r;
-      col[i * 3 + 1] = c.g;
-      col[i * 3 + 2] = c.b;
-    }
-    geo.setAttribute("color", new T.BufferAttribute(col, 3));
-    var sky = new T.Mesh(geo, new T.MeshBasicMaterial({ vertexColors: true, side: T.BackSide, fog: false, depthWrite: false }));
+    var mat = new T.ShaderMaterial({
+      uniforms: { uTime: R.U && R.U.time ? R.U.time : { value: 0 } },
+      vertexShader: "varying vec3 vDir;\nvoid main(){ vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
+      fragmentShader: SKY_FRAG,
+      side: T.BackSide,
+      fog: false,
+      depthWrite: false,
+    });
+    var sky = new T.Mesh(new T.SphereGeometry(320, 32, 16), mat);
     R.scene.add(sky);
     R.sky = sky;
   }
@@ -182,7 +209,7 @@
       var pz = function (z) { return (z - PZ0) * sz; };
       // biçme bantları (kaleye paralel, 5,5 m) + çok hafif dama
       for (var z = -16.5, i = 0; z < PZ1; z += 5.5, i++) {
-        c.fillStyle = i % 2 ? "#2c7f41" : "#358a49";
+        c.fillStyle = i % 2 ? "#2f9148" : "#3ba556";
         c.fillRect(0, pz(z), cw, 5.5 * sz + 1);
       }
       for (var x = PX0, j = 0; x < PX1; x += 5.5, j++) {
@@ -574,6 +601,7 @@
       }
     });
     grp.add(makeFans(spots, rnd));
+    grp.add(makeFlashes(spots, rnd));
     grp.userData.depth = prof.depth;
     return grp;
   }
@@ -615,6 +643,27 @@
       gl.scale.set(34, 34, 1);
       s.add(gl);
     });
+    // projektör hüzmeleri: kule başından sahaya inen soluk ışık konileri
+    var beamTex = canvasTex(8, 128, function (c) {
+      var g = c.createLinearGradient(0, 0, 0, 128);
+      g.addColorStop(0, "rgba(255,246,222,0)");
+      g.addColorStop(0.12, "rgba(255,246,222,0.9)");
+      g.addColorStop(0.55, "rgba(255,246,222,0.22)");
+      g.addColorStop(1, "rgba(255,246,222,0)");
+      c.fillStyle = g;
+      c.fillRect(0, 0, 8, 128);
+    });
+    var beamMat = new T.MeshBasicMaterial({ map: beamTex, transparent: true, opacity: 0.085, depthWrite: false, side: T.DoubleSide, blending: T.AdditiveBlending, fog: false, toneMapped: false });
+    FLOODS.forEach(function (f) {
+      var dir = new T.Vector3(f[0], 0, f[2]).normalize();
+      var from = new T.Vector3(dir.x * 62, 46, dir.z * 62), to = new T.Vector3(dir.x * 6, 0, 8 + dir.z * 6);
+      var len = from.distanceTo(to);
+      var beam = new T.Mesh(new T.CylinderGeometry(2.5, 24, len, 24, 1, true), beamMat);
+      beam.position.copy(from).add(to).multiplyScalar(0.5);
+      beam.quaternion.setFromUnitVectors(new T.Vector3(0, 1, 0), from.clone().sub(to).normalize());
+      beam.renderOrder = 4;
+      s.add(beam);
+    });
     // pist ve reklam panoları
     var track = mesh(new T.PlaneGeometry(140, 140), std(0x16251e, 0.95), false, true);
     track.rotation.x = -Math.PI / 2;
@@ -645,6 +694,58 @@
     R.screen2.position.set(0, prof.top + 9.5, 72 + prof.depth - 4);
     R.screen2.rotation.y = Math.PI;
     s.add(R.screen2);
+  }
+
+  /**
+   * Flaşlar: seyircilerin arasında rastgele yanıp sönen telefon/fotoğraf
+   * flaşları. Tek Points nesnesi; hangi noktanın o an parladığına gölgelendirici
+   * karar verir (JS'te kare başı iş yok). Coşku (uExcite) arttıkça sıklaşır.
+   */
+  var flashMat = null;
+  function makeFlashes(spots, rnd) {
+    var n = Math.min(spots.length, Math.max(24, Math.round(spots.length / 26)));
+    var pos = new Float32Array(n * 3), seed = new Float32Array(n);
+    for (var i = 0; i < n; i++) {
+      var sp = spots[(rnd() * spots.length) | 0];
+      pos[i * 3] = sp.x;
+      pos[i * 3 + 1] = sp.y + 0.72;
+      pos[i * 3 + 2] = sp.z + 0.12;
+      seed[i] = rnd() * 100;
+    }
+    var geo = new T.BufferGeometry();
+    geo.setAttribute("position", new T.BufferAttribute(pos, 3));
+    geo.setAttribute("aSeed", new T.BufferAttribute(seed, 1));
+    if (!flashMat || flashMat.userData.owner !== R)
+      flashMat = new T.ShaderMaterial({
+        uniforms: { uTime: R.U.time, uExcite: R.U.excite },
+        vertexShader:
+          "attribute float aSeed; uniform float uTime; uniform float uExcite; varying float vA;\n" +
+          "float hash(float x){ return fract(sin(x * 12.9898) * 43758.5453); }\n" +
+          "void main(){\n" +
+          "  float slot = floor(uTime * 7.0 + aSeed);\n" +
+          "  float on = step(0.955 - uExcite * 0.12, hash(slot * 1.31 + aSeed * 7.7));\n" +
+          "  float ph = fract(uTime * 7.0 + aSeed);\n" +
+          "  vA = on * (1.0 - ph) * (1.0 - ph);\n" +
+          "  vec4 mv = modelViewMatrix * vec4(position, 1.0);\n" +
+          "  gl_PointSize = (vA > 0.01 ? 1.0 : 0.0) * 620.0 / max(1.0, -mv.z);\n" +
+          "  gl_Position = projectionMatrix * mv;\n" +
+          "}",
+        fragmentShader:
+          "varying float vA;\nvoid main(){\n" +
+          "  float d = length(gl_PointCoord - 0.5) * 2.0;\n" +
+          "  float a = (smoothstep(1.0, 0.0, d) * 0.55 + smoothstep(0.28, 0.0, d)) * vA;\n" +
+          "  if (a < 0.01) discard;\n" +
+          "  gl_FragColor = vec4(vec3(1.0, 0.98, 0.92) * a, a);\n" +
+          "}",
+        transparent: true,
+        depthWrite: false,
+        blending: T.AdditiveBlending,
+        fog: false,
+      });
+    flashMat.userData.owner = R;
+    var pts = new T.Points(geo, flashMat);
+    pts.frustumCulled = false;
+    return pts;
   }
 
   /**
@@ -1044,5 +1145,10 @@
     shadowSet: shadowSet,
     placeShadows: placeShadows,
     asKeeper: asKeeper,
+    /** Arcade motoru (games/arcade3d.js) kendi sahnesinde ortak top dokusunu kullanır. */
+    use: use,
+    ballTexture: function () {
+      return ballTexture();
+    },
   };
 })();
