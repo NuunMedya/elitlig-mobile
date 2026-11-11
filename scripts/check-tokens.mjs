@@ -171,6 +171,18 @@ const PAIRS = (p) => [
      "gözle seçilebilir" olmalı (koyuda 1.1 civarı), üç kat açık bir bar gece
      ekranında göz alan bir şerit üretiyordu. */
   [p.tabBar, p.bg, 1.05, "menü barı / kâğıt (gözle seçilebilir)"],
+
+  /* YÖNETİM MODU. Gece laciverti bar ve sahne iki temada da aynıdır; üstündeki
+     altın vurgu ve sönük etiket AA metin eşiğini geçmek zorunda. */
+  [p.adminTabActive, p.adminBar, 4.5, "yönetim · seçili sekme / bar"],
+  [p.adminTabInactive, p.adminBar, 4.5, "yönetim · sönük sekme / bar"],
+  [p.adminTabActive, p.gradientAdminBar[0], 4.5, "yönetim · seçili sekme / bar gradyanının açık ucu"],
+  [p.adminTabInactive, p.gradientAdminBar[0], 4.5, "yönetim · sönük sekme / bar gradyanının açık ucu"],
+  [p.adminAccentInk, p.adminAccent, 4.5, "yönetim · altın düğme üstü metin"],
+  [p.adminAccentInk, p.gradientAdminAccent[1], 4.5, "yönetim · altın gradyanın koyu ucu üstü metin"],
+  [p.adminAccent, p.gradientAdminStage[0], 4.5, "yönetim · altın / sahne gradyanının açık ucu"],
+  [p.onDark, p.gradientAdminStage[0], 4.5, "yönetim · beyaz metin / sahne"],
+  [p.adminAccentText, p.adminAccentDim.startsWith("#") ? p.adminAccentDim : p.bg, 4.5, "yönetim · altın metin / yumuşak altın zemin"],
 ];
 
 /**

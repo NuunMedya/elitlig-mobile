@@ -59,7 +59,7 @@ const POSITION_WORDS: Partial<Record<HighlightKey, string[]>> = {
   best_forward: ["forvet", "forward", "santrafor", "kanat"],
 };
 
-export function PostStep({ match }: { match: AdminMatch }) {
+export function PostStep({ match, onDirtyChange }: { match: AdminMatch; onDirtyChange?: (dirty: boolean) => void }) {
   const auth = useAuth();
   const queryClient = useQueryClient();
   const matchId = Number(match.id);
@@ -113,7 +113,11 @@ export function PostStep({ match }: { match: AdminMatch }) {
   }, [lineupQuery.data]);
   const [ratings, setRatings] = useState<Record<string, string>>({});
   const [ratingSide, setRatingSide] = useState<Side>("home");
-  useEffect(() => setRatings(savedRatings), [savedRatings]);
+  const savedRatingsKey = JSON.stringify(savedRatings);
+  useEffect(() => {
+    setRatings(savedRatings);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedRatingsKey]);
   const ratingsDirty = allPlayers.some((p) => (ratings[p.id] ?? "") !== (savedRatings[p.id] ?? ""));
   const invalidCount = allPlayers.filter((p) => isRatingInvalid(ratings[p.id])).length;
   const filled = allPlayers.filter((p) => ratings[p.id] && !isRatingInvalid(ratings[p.id])).length;
@@ -132,11 +136,28 @@ export function PostStep({ match }: { match: AdminMatch }) {
   const savedHighlights = useMemo(() => readHighlights(match, allPlayers), [match, allPlayers]);
   const [content, setContent] = useState<PostContent>(savedContent);
   const [highlights, setHighlights] = useState<Record<string, string>>(savedHighlights);
-  useEffect(() => setContent(savedContent), [savedContent]);
-  useEffect(() => setHighlights(savedHighlights), [savedHighlights]);
+  /* Form yalnız KAYITLI DEĞER gerçekten değişince yenilenir. Nesne kimliğine
+     bağlansaydı, puanlar kaydedilip kadro yeniden okunduğunda (yeni dizi =
+     yeni nesne) kaydedilmemiş "Enler" seçimleri sessizce sıfırlanırdı. */
+  const savedContentKey = JSON.stringify(savedContent);
+  const savedHighlightsKey = JSON.stringify(savedHighlights);
+  useEffect(() => {
+    setContent(savedContent);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedContentKey]);
+  useEffect(() => {
+    setHighlights(savedHighlights);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedHighlightsKey]);
   const contentDirty =
     JSON.stringify(content) !== JSON.stringify(savedContent) ||
     HIGHLIGHT_FIELDS.some(({ key }) => (highlights[key] || "") !== (savedHighlights[key] || ""));
+
+  const anyDirty = ratingsDirty || contentDirty;
+  useEffect(() => {
+    onDirtyChange?.(anyDirty);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anyDirty]);
 
   const contentMut = useAdminMutation(() => updateMatch(matchId, buildPostPayload(content, highlights, nameOf, match)), {
     success: "Maç sonu içerikleri kaydedildi.",

@@ -122,6 +122,7 @@ export default function RequestsScreen() {
 
   return (
     <AdminScreen
+      app="talepler"
       title="Talepler"
       subtitle={summary.data ? `${summary.data.total} bekleyen talep` : "Onay merkezi"}
       scroll={false}

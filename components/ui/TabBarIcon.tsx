@@ -41,6 +41,8 @@ export interface TabBarIconProps {
    * aynı menekşedir. "live" → kırmızı: yalnız "şu an oynanan N maç".
    */
   badgeTone?: "unread" | "live";
+  /** Rozet halkasının rengi — barın zemini (yönetim barı laciverttir). */
+  ringColor?: string;
 }
 
 /** 99'dan büyük sayaçlar rozete sığmaz. */
@@ -55,6 +57,7 @@ export const TabBarIcon = React.memo(function TabBarIcon({
   size = 22,
   badge,
   badgeTone = "unread",
+  ringColor,
 }: TabBarIconProps) {
   /* NABIZ KALDIRILDI: canlı rozeti sekme çubuğunda sürekli nabız atıyordu.
      Sekme çubuğu her ekranda görünür — yani bu, uygulamanın tamamında hiç
@@ -65,18 +68,19 @@ export const TabBarIcon = React.memo(function TabBarIcon({
 
   const iconName = (focused ? name : `${name}-outline`) as keyof typeof Ionicons.glyphMap;
   const hasCount = typeof badge === "number" && badge > 0;
+  const ring = ringColor ? { borderColor: ringColor } : null;
 
   return (
     <View style={styles.container}>
       <View style={styles.iconBox}>
         <Ionicons name={iconName} size={size} color={color} />
 
-        {isLive ? <View style={styles.liveDot} /> : null}
+        {isLive ? <View style={[styles.liveDot, ring]} /> : null}
 
-        {badge === "dot" ? <View style={styles.dot} /> : null}
+        {badge === "dot" ? <View style={[styles.dot, ring]} /> : null}
 
         {hasCount ? (
-          <View style={[styles.countBadge, badgeTone === "live" ? styles.countBadgeLive : null]}>
+          <View style={[styles.countBadge, badgeTone === "live" ? styles.countBadgeLive : null, ring]}>
             <Text style={styles.countText} {...textScale.badge}>
               {formatCount(badge)}
             </Text>

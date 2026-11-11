@@ -1,17 +1,28 @@
 /**
  * KULÜBÜM — takım başkanının ana sayfası (Yönetim sekmesi ▸ Kulübüm).
  *
- * `app/(tabs)/kulubum.tsx` bu bileşeni `ClubSection` yerine çizer:
+ * `app/(tabs)/kulubum.tsx` bu bileşeni çizer:
  *   <ClubHome signals={signals} go={go} onAttention={openAttention} />
  *
- * DÜZEN ("her şey iki dokunuşta"):
+ * DÜZEN — ÖNCE İŞ ("şimdi ne yapmalıyım?" → "nereye gideceğim?" → "durum ne?"):
  *   1. Kahraman kartı   arma, ad, lig/sezon, sıra · puan · averaj · kadro, form
- *   2. Şimdi ilgilen     yatay renkli iş kartları (izin, revizyon, başvuru,
- *                        yoklama, sözleşmesiz, kadro taslağı, FFP, disiplin…)
+ *   2. Şimdi ilgilen     yatay iş kartları (izin, revizyon, başvuru, yoklama,
+ *                        sözleşmesiz, kadro taslağı, FFP, disiplin…)
  *   3. Sıradaki maç      rakip, geri sayım, hazırlık yüzdesi ve üç adım
- *   4. Hızlı işlemler    4×2 renkli ızgara; ilk karo vurgulu "Teklif ver"
- *   5. Kısa özet         gol katkısı ilk 3 · kadro dengesi · kasa
- *   6. Kulüp menüsü      web panelinin menü gruplarının tamamı (katlanır)
+ *   4. Kısayollar        haftalık döngünün altı işi, DURUM satırıyla:
+ *                        Kadro · Maç kadrosu · Maç al · Teklifler · Kasa ·
+ *                        Teklif ver — hepsi tek dokunuş
+ *   5. Araçlar           kalan her şey dört grupta, açık ızgara (Maç ·
+ *                        Kadro ve transfer · Kulüp · İletişim) — web panelinin
+ *                        menüsünün tamamı, katlama yok
+ *   6. Durum             gol katkısı · kadro dengesi · kasa
+ *   7. Kulüp ayarları    yönetim yetkisi (devir/istifa), bildirim tercihleri,
+ *                        profil modları, hesap — başkan modunun ayarları TEK
+ *                        yerde, sayfanın sonunda
+ *
+ * TAKIMSIZ BAŞKAN: mod açık ama takım bağlı değilse boş durum bekleyen
+ * yönetim talebini (onay bekliyor / reddedildi + not) gösterir; yeniden
+ * "takımını bağla"ya itmez.
  *
  * VERİ: kimlik/kadro/maç/sayaçlar `useClubSignals`tan (Yönetim sekmesiyle
  * ortak önbellek); özet, kasa, bildirim ve kadro taslağı `useClubExtras`tan.
@@ -19,20 +30,23 @@
  * bileşen `signals.refreshing` açıldığında kendi sorgularını da tazeler.
  */
 
+import { useQuery } from "@tanstack/react-query";
 import React, { useEffect, useMemo, useRef } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { AttentionRail } from "@/components/club/home/AttentionRail";
 import { ClubHero, type HeroFact } from "@/components/club/home/ClubHero";
-import { MenuGroups, type MenuGroup } from "@/components/club/home/MenuGroups";
+import { HomeSkeleton } from "@/components/club/home/HomeSkeleton";
 import { NextMatchPrep } from "@/components/club/home/NextMatchPrep";
-import { QuickActions, type QuickAction } from "@/components/club/home/QuickActions";
+import { ShortcutGrid, ToolBoard, type BoardSection, type Shortcut } from "@/components/club/home/ToolBoard";
 import { useClubExtras } from "@/components/club/home/useClubExtras";
 import { PanelCard, PanelEmpty, PanelRow, PanelSection, StatStrip, type StatItem } from "@/components/club/Panel";
 import { countLines } from "@/components/club/SquadSnapshot";
 import type { AttentionItem, ClubSignals } from "@/components/club/useClubSignals";
-import { Avatar, SkeletonCard } from "@/components/ui";
-import { formatDecimal, mediaUrl } from "@/lib/format";
+import { matchWhen } from "@/components/club/NextMatchCard";
+import { Avatar, Reveal } from "@/components/ui";
+import { ACCOUNT_REQUEST_LABELS, TEAM_REQUEST_TYPES, getAccountRequests } from "@/lib/api/club/account";
+import { formatDateShort, formatDecimal, mediaUrl } from "@/lib/format";
 import { colors, layout, space, textScale, type } from "@/theme";
 
 export interface ClubHomeProps {
@@ -101,128 +115,112 @@ export function ClubHome({ signals, go, onAttention }: ClubHomeProps) {
   const overview = extras.overview.data;
   const pendingApplications = counts.applications;
 
-  const quick = useMemo<QuickAction[]>(
+  const finance = extras.finance.data;
+  const balance = finance?.totals ? finance.totals.income - finance.totals.expense : null;
+  const nextMatch = signals.nextTeamMatch;
+  const transferWork = extras.revisionCount + extras.releaseRequests.length;
+
+  const shortcuts = useMemo<Shortcut[]>(
     () => [
-      { key: "teklif", icon: "swap-horizontal", label: "Teklif ver", href: "/takimim/oyuncu-ara", tone: "brand", primary: true },
-      { key: "mac-al", icon: "calendar", label: "Maç al", href: "/takimim/mac-al", tone: "win" },
-      { key: "maclar", icon: "football", label: "Maçlar", href: "/takimim/mac-merkezi", tone: "live" },
-      { key: "kadro", icon: "people", label: "Kadro", href: "/takimim/kadro", tone: "info", count: signals.withoutContract || undefined },
       {
-        key: "transfer",
-        icon: "briefcase",
-        label: "Transfer",
+        key: "kadro",
+        icon: "people",
+        label: "Kadro",
+        status: signals.withoutContract ? `${signals.withoutContract} sözleşmesiz` : `${signals.squadSize} oyuncu`,
+        href: signals.withoutContract ? "/takimim/kadro?filtre=sozlesmesiz" : "/takimim/kadro",
+        tone: "info",
+        count: signals.withoutContract || undefined,
+      },
+      {
+        key: "mac-kadrosu",
+        icon: "clipboard",
+        label: "Maç kadrosu",
+        status: nextMatch ? matchWhen(nextMatch.date, nextMatch.time) : "Programda maç yok",
+        href: nextMatch ? `/takimim/mac/${nextMatch.id}?sekme=kadro` : "/takimim/mac-merkezi",
+        tone: "live",
+      },
+      { key: "mac-al", icon: "calendar", label: "Maç al", status: "Saha ve saat seç", href: "/takimim/mac-al", tone: "win" },
+      {
+        key: "teklifler",
+        icon: "swap-horizontal",
+        label: "Teklifler",
+        status: transferWork ? "Senden karar bekliyor" : counts.offersOpen ? `${counts.offersOpen} açık teklif` : "Transfer masası",
         href: "/takimim/transfer",
         tone: "accent",
-        count: extras.revisionCount + extras.releaseRequests.length || undefined,
+        count: transferWork || undefined,
+        urgent: extras.releaseRequests.length > 0,
       },
-      { key: "ilan", icon: "megaphone", label: "Başvurular", href: "/takimim/ilanlar", tone: "warn", count: pendingApplications || undefined },
-      { key: "musaitlik", icon: "time", label: "Müsaitlik", href: "/takimim/musaitlik", tone: "win" },
-      { key: "kasa", icon: "wallet", label: "Bütçe", href: "/takimim/kasa", tone: "neutral" },
+      {
+        key: "kasa",
+        icon: "wallet",
+        label: "Kasa",
+        status: balance != null ? shortMoney(balance) : "Bütçe ve FFP",
+        href: "/takimim/kasa",
+        tone: finance?.ffp?.status === "BREACH" ? "danger" : "neutral",
+      },
+      { key: "teklif-ver", icon: "person-add", label: "Teklif ver", status: "Oyuncu ara", href: "/takimim/oyuncu-ara", tone: "brand", primary: true },
     ],
-    [extras.releaseRequests.length, extras.revisionCount, pendingApplications, signals.withoutContract],
+    [balance, counts.offersOpen, extras.releaseRequests.length, finance?.ffp?.status, nextMatch, signals.squadSize, signals.withoutContract, transferWork],
   );
 
-  const groups = useMemo<MenuGroup[]>(
+  const sections = useMemo<BoardSection[]>(
     () => [
       {
         key: "mac",
-        title: "Maç yönetimi",
-        items: [
-          { key: "yaklasan", icon: "calendar-number", label: "Gelecek maçlar", hint: "Kadro kur, yoklama yap, rakip analizi", href: "/takimim/mac-merkezi?tab=yaklasan", tone: "live" },
-          { key: "oynanan", icon: "time", label: "Geçmiş maçlar", hint: "Sonuçlar ve maç karnesi", href: "/takimim/mac-merkezi?tab=oynanan", tone: "neutral" },
-          { key: "mac-al", icon: "add-circle", label: "Maç al", hint: "Boş saha saatinden maç talep et", href: "/takimim/mac-al", tone: "win" },
-          { key: "musaitlik", icon: "checkbox", label: "Müsaitlik takvimi", hint: "Oynayabileceğin saha ve saatler", href: "/takimim/musaitlik", tone: "win" },
+        title: "Maç",
+        tools: [
+          { key: "fikstur", icon: "calendar-number", label: "Fikstür", href: "/takimim/mac-merkezi?tab=yaklasan", tone: "live" },
+          { key: "sonuclar", icon: "time", label: "Sonuçlar", href: "/takimim/mac-merkezi?tab=oynanan", tone: "neutral" },
+          { key: "musaitlik", icon: "checkbox", label: "Müsaitlik", href: "/takimim/musaitlik", tone: "win" },
+          { key: "istatistik", icon: "stats-chart", label: "İstatistik", href: "/takimim/istatistik", tone: "brand" },
         ],
       },
       {
         key: "kadro",
         title: "Kadro ve transfer",
-        items: [
-          { key: "oyuncular", icon: "people", label: "Tüm oyuncularım", hint: "Forma no, mevki, rol, sözleşme durumu", href: "/takimim/kadro", tone: "info", count: signals.withoutContract || undefined },
-          { key: "sezon", icon: "id-card", label: "Sezon kadrolarım", hint: "Lisans ve kadro kuralları, onaya gönder", href: "/takimim/kadro?gorunum=sezon", tone: "info" },
-          { key: "ideal", icon: "grid", label: "İdeal kadrom", hint: "Dizilişi sahada kur", href: "/takimim/kadro?gorunum=dizilis", tone: "info" },
-          {
-            key: "transfer",
-            icon: "swap-horizontal",
-            label: "Transfer yönetimi",
-            hint: "Gönderilen teklifler, izinler, satılık listesi",
-            href: "/takimim/transfer",
-            tone: "brand",
-            count: counts.offersOpen || undefined,
-          },
-          { key: "ara", icon: "search", label: "Oyuncu ara · teklif ver", hint: "İlindeki futbolcu veritabanı", href: "/takimim/oyuncu-ara", tone: "brand" },
-          { key: "ilan", icon: "megaphone", label: "İlanlar ve başvurular", hint: "Oyuncu arıyoruz ilanı, başvuru, davet", href: "/takimim/ilanlar", tone: "warn", count: pendingApplications || undefined },
-          { key: "borsa", icon: "storefront", label: "Transfer borsası", hint: "Satılık ve kiralık oyuncular", href: "/takimim/borsa", tone: "warn" },
+        tools: [
+          { key: "sezon", icon: "id-card", label: "Sezon kadrosu", href: "/takimim/kadro?gorunum=sezon", tone: "info" },
+          { key: "dizilis", icon: "grid", label: "İdeal diziliş", href: "/takimim/kadro?gorunum=dizilis", tone: "info" },
+          { key: "basvuru", icon: "megaphone", label: "İlan ve başvuru", href: "/takimim/ilanlar", tone: "warn", count: pendingApplications || undefined },
+          { key: "davet", icon: "paper-plane", label: "Davetler", href: "/takimim/ilanlar?bolum=davet", tone: "info", count: counts.invitesSent || undefined },
+          { key: "borsa", icon: "storefront", label: "Transfer borsası", href: "/takimim/borsa", tone: "accent" },
+          { key: "sozlesme", icon: "document-text", label: "Sözleşmeler", href: "/takimim/sozlesmeler", tone: "info" },
         ],
       },
       {
-        key: "genel",
-        title: "Performans",
-        items: [
-          { key: "istatistik", icon: "stats-chart", label: "Detaylı istatistikler", hint: "Lig ve sezon bazında tüm maç geçmişi", href: "/takimim/istatistik", tone: "brand" },
-          { key: "sayfa", icon: "shield", label: "Takım sayfası", hint: "Herkesin gördüğü profil", href: team ? `/takim/${team.id}` : "/kulubum", tone: "neutral" },
+        key: "kulup",
+        title: "Kulüp",
+        tools: [
+          { key: "kimlik", icon: "shield-half", label: "Kimlik ve logo", href: "/takimim/bilgiler?bolum=kimlik", tone: "brand", count: signals.pendingChanges.length || undefined },
+          { key: "forma", icon: "shirt", label: "Formalar", href: "/takimim/bilgiler?bolum=formalar", tone: "accent" },
+          { key: "icerik", icon: "book", label: "Sayfa içeriği", href: "/takimim/bilgiler?bolum=sayfa", tone: "accent" },
+          { key: "sponsor", icon: "ribbon", label: "Sponsorlar", href: "/takimim/sponsorlar", tone: "warn" },
+          { key: "disiplin", icon: "alert-circle", label: "Disiplin", href: "/takimim/disiplin", tone: "danger", count: counts.penaltiesOpen || undefined, urgent: true },
+          { key: "sayfa", icon: "open-outline", label: "Takım sayfası", href: team ? `/takim/${team.id}` : "/kulubum", tone: "neutral" },
         ],
       },
       {
-        key: "bilgi",
-        title: "Takım bilgileri",
-        items: [
-          { key: "kimlik", icon: "shield-half", label: "Kimlik ve logo", hint: "Ad, il, kuruluş, logo — onaylı", href: "/takimim/bilgiler?bolum=kimlik", tone: "info", count: signals.pendingChanges.length || undefined },
-          { key: "forma", icon: "color-palette", label: "Renkler ve formalar", hint: "İç saha ve deplasman forması", href: "/takimim/bilgiler?bolum=formalar", tone: "accent" },
-          { key: "icerik", icon: "book", label: "Takım sayfası içeriği", hint: "Tarihçe, başarılar, gol müziği, kaptan", href: "/takimim/bilgiler?bolum=sayfa", tone: "accent" },
-          { key: "sponsor", icon: "megaphone", label: "Sponsorlar", hint: "Takım sayfasındaki sponsor alanları", href: "/takimim/sponsorlar", tone: "warn" },
-        ],
-      },
-      {
-        key: "evrak",
-        title: "Evrak ve süreç",
-        items: [
-          { key: "disiplin", icon: "alert-circle", label: "Disiplin süreçleri", hint: "Savunma ve itiraz hakkı", href: "/takimim/disiplin", tone: "danger", count: counts.penaltiesOpen || undefined },
-          { key: "sozlesme", icon: "document-text", label: "Sözleşmeler", hint: "Oyuncularla yapılan sözleşmeler", href: "/takimim/sozlesmeler", tone: "info" },
-          { key: "kasa", icon: "wallet", label: "Kulüp bütçesi · FFP", hint: "Gelir-gider, kadro değeri, fair play", href: "/takimim/kasa", tone: "neutral" },
-        ],
-      },
-      {
-        key: "bildirim",
-        title: "Mesajlar ve bildirimler",
-        items: [
-          { key: "b-transfer", icon: "swap-horizontal", label: "Transfer bildirimleri", hint: "Teklif, sözleşme, izin, davet", href: "/takimim/bildirimler?tur=transfer", tone: "brand" },
-          { key: "b-disiplin", icon: "warning", label: "Disiplin bildirimleri", hint: "Dosya, karar, savunma", href: "/takimim/bildirimler?tur=disiplin", tone: "danger" },
-          { key: "b-mac", icon: "football", label: "Maç bildirimleri", hint: "Maç, kadro, yoklama, maç talebi", href: "/takimim/bildirimler?tur=mac", tone: "live" },
-          { key: "mesaj", icon: "chatbubbles", label: "Mesajlar", hint: "Yönetim, takımın ve oyuncularla yazış", href: "/mesajlar", tone: "neutral" },
+        key: "iletisim",
+        title: "İletişim",
+        tools: [
+          { key: "bildirim", icon: "notifications", label: "Bildirimler", href: "/takimim/bildirimler", tone: "brand", count: extras.unreadNotifications || undefined },
+          { key: "mesaj", icon: "chatbubbles", label: "Mesajlar", href: "/mesajlar", tone: "info" },
         ],
       },
     ],
-    [counts.offersOpen, counts.penaltiesOpen, pendingApplications, signals.pendingChanges.length, signals.withoutContract, team],
+    [counts.invitesSent, counts.penaltiesOpen, extras.unreadNotifications, pendingApplications, signals.pendingChanges.length, team],
   );
 
-  if (dashboard.isLoading) {
-    return (
-      <View style={[styles.pad, styles.loading]}>
-        <SkeletonCard lines={3} />
-        <SkeletonCard lines={2} />
-        <SkeletonCard lines={4} />
-      </View>
-    );
-  }
+  if (dashboard.isLoading) return <HomeSkeleton />;
 
   if (!team) {
     return (
-      <PanelSection title="Kulüp">
-        <PanelEmpty
-          icon="shield-outline"
-          text={
-            dashboard.isError
-              ? "Takım bilgisi alınamadı. Aşağı çekerek yeniden dene."
-              : (data?.onboarding?.description ?? "Hesabına bağlı bir takım görünmüyor. Takımını bul ve yönetim yetkisi iste.")
-          }
-          action={
-            dashboard.isError
-              ? { label: "Tekrar dene", onPress: () => void dashboard.refetch() }
-              : { label: "Takımını bağla", onPress: () => go("/oyuncum/bagla?tur=takim") }
-          }
-        />
-      </PanelSection>
+      <NoTeam
+        error={dashboard.isError}
+        description={data?.onboarding?.description ?? null}
+        onRetry={() => void dashboard.refetch()}
+        go={go}
+      />
     );
   }
 
@@ -258,10 +256,8 @@ export function ClubHome({ signals, go, onAttention }: ClubHomeProps) {
     },
   ];
 
-  const finance = extras.finance.data;
   const financeItems: StatItem[] = [];
-  if (finance?.totals && finance.ffp) {
-    const balance = finance.totals.income - finance.totals.expense;
+  if (finance?.totals && finance.ffp && balance != null) {
     financeItems.push({ label: "Bakiye", value: shortMoney(balance), tone: balance < 0 ? "danger" : "neutral", onPress: () => go("/takimim/kasa") });
     financeItems.push({ label: "Kadro değeri", value: shortMoney(finance.squadValue), tone: "brand", onPress: () => go("/takimim/kasa?tab=kadro") });
     financeItems.push({
@@ -275,7 +271,7 @@ export function ClubHome({ signals, go, onAttention }: ClubHomeProps) {
 
   return (
     <View style={styles.root}>
-      <View style={styles.pad}>
+      <Reveal index={0} style={styles.pad}>
         <ClubHero
           name={team.team_name}
           logo={mediaUrl(team.logo)}
@@ -287,62 +283,172 @@ export function ClubHome({ signals, go, onAttention }: ClubHomeProps) {
           onOpen={() => go(`/takim/${team.id}`)}
           onEdit={() => go("/takimim/bilgiler")}
         />
-      </View>
+      </Reveal>
 
-      <View style={styles.block}>
+      <Reveal index={1} style={styles.block}>
         <SectionTitle title="Şimdi ilgilen" meta={attention.length ? `${attention.length} iş` : undefined} />
         <AttentionRail items={attention} onPress={onAttention} />
-      </View>
+      </Reveal>
 
-      <PanelSection title="Sıradaki maç" action={{ label: "Fikstür", onPress: () => go("/takimim/mac-merkezi") }}>
-        <NextMatchPrep signals={signals} teamName={team.team_name} teamLogo={mediaUrl(team.logo)} go={go} />
-      </PanelSection>
+      <Reveal index={2}>
+        <PanelSection title="Sıradaki maç" action={{ label: "Fikstür", onPress: () => go("/takimim/mac-merkezi") }}>
+          <NextMatchPrep signals={signals} teamName={team.team_name} teamLogo={mediaUrl(team.logo)} go={go} />
+        </PanelSection>
+      </Reveal>
 
-      <PanelSection title="Hızlı işlemler">
-        <QuickActions actions={quick} go={go} />
-      </PanelSection>
+      <Reveal index={3}>
+        <PanelSection title="Kısayollar">
+          <ShortcutGrid items={shortcuts} go={go} />
+        </PanelSection>
+      </Reveal>
 
-      {contributors.length ? (
-        <PanelSection title="Gol katkısı" meta={overview?.season?.name ?? undefined} action={{ label: "İstatistik", onPress: () => go("/takimim/istatistik") }}>
+      <Reveal index={4}>
+        <PanelSection title="Tüm araçlar">
+          <ToolBoard sections={sections} go={go} />
+        </PanelSection>
+      </Reveal>
+
+      <Reveal index={5}>
+        <PanelSection title="Kadro dengesi" meta={`${signals.squadSize} oyuncu`} action={{ label: "Yönet", onPress: () => go("/takimim/kadro") }}>
+          {signals.squadSize > 0 ? (
+            <StatStrip items={squadItems} />
+          ) : (
+            <PanelEmpty
+              icon="people-outline"
+              text="Kadron boş. Oyuncu ara; davet ya da transfer teklifi gönder."
+              action={{ label: "Oyuncu ara", onPress: () => go("/takimim/oyuncu-ara") }}
+            />
+          )}
+        </PanelSection>
+
+        {financeItems.length ? (
+          <PanelSection title="Kulüp bütçesi" meta={team.current_season ?? undefined} action={{ label: "Kasa", onPress: () => go("/takimim/kasa") }}>
+            <StatStrip items={financeItems} />
+          </PanelSection>
+        ) : null}
+
+        {contributors.length ? (
+          <PanelSection title="Gol katkısı" meta={overview?.season?.name ?? undefined} action={{ label: "İstatistik", onPress: () => go("/takimim/istatistik") }}>
+            <PanelCard padded={false}>
+              {contributors.map((player, index) => (
+                <PanelRow
+                  key={player.id}
+                  leading={<Avatar name={player.name} image={mediaUrl(player.image)} size={layout.crestMd} />}
+                  title={player.name}
+                  hint={[player.position, `${player.matches} maç`].filter(Boolean).join(" · ")}
+                  value={`${player.goals} G · ${player.assists} A`}
+                  onPress={() => go(`/oyuncu/${player.id}`)}
+                  last={index === contributors.length - 1}
+                />
+              ))}
+            </PanelCard>
+          </PanelSection>
+        ) : null}
+
+        <PanelSection title="Kulüp ayarları">
           <PanelCard padded={false}>
-            {contributors.map((player, index) => (
-              <PanelRow
-                key={player.id}
-                leading={<Avatar name={player.name} image={mediaUrl(player.image)} size={layout.crestMd} />}
-                title={player.name}
-                hint={[player.position, `${player.matches} maç`].filter(Boolean).join(" · ")}
-                value={`${player.goals} G · ${player.assists} A`}
-                onPress={() => go(`/oyuncu/${player.id}`)}
-                last={index === contributors.length - 1}
-              />
-            ))}
+            <PanelRow
+              icon="key"
+              tone="info"
+              title="Yönetim yetkisi"
+              hint="Takımı devret ya da başkanlıktan istifa et"
+              onPress={() => go("/takimim/bilgiler?bolum=kimlik")}
+            />
+            <PanelRow
+              icon="notifications"
+              tone="brand"
+              title="Bildirim tercihleri"
+              hint="Maç, transfer, disiplin — hangisi telefonuna gelsin"
+              onPress={() => go("/bildirim-tercihleri")}
+            />
+            <PanelRow
+              icon="toggle"
+              tone="neutral"
+              title="Profil modları"
+              hint="Takım başkanı / oyuncu alanını aç-kapat"
+              onPress={() => go("/oyuncum/modlar")}
+            />
+            <PanelRow icon="person-circle" tone="neutral" title="Hesabım" hint="Üyelik bilgileri ve güvenlik" onPress={() => go("/hesabim")} last />
           </PanelCard>
         </PanelSection>
-      ) : null}
+      </Reveal>
+    </View>
+  );
+}
 
-      <PanelSection title="Kadro dengesi" meta={`${signals.squadSize} oyuncu`} action={{ label: "Yönet", onPress: () => go("/takimim/kadro") }}>
-        {signals.squadSize > 0 ? (
-          <StatStrip items={squadItems} />
+/* ══════════════════════════ TAKIMSIZ BAŞKAN ══════════════════════════ */
+
+/**
+ * Başkan modu açık ama yönetilen takım yok. Bekleyen bir yönetim / takım
+ * kurma talebi varsa DURUMU gösterilir (aynı talebi ikinci kez göndertmek
+ * yerine); yoksa takımını bağlama ve takım kurma yolları.
+ */
+function NoTeam({
+  error,
+  description,
+  onRetry,
+  go,
+}: {
+  error: boolean;
+  description: string | null;
+  onRetry: () => void;
+  go: (href: string) => void;
+}) {
+  const requests = useQuery({
+    queryKey: ["club", "account-requests"],
+    queryFn: getAccountRequests,
+    enabled: !error,
+    staleTime: 60_000,
+    retry: false,
+  });
+  const teamRequests = (requests.data?.requests ?? []).filter(
+    (item) => TEAM_REQUEST_TYPES.has(item.type) && (item.type === "team_management" || item.type === "team_create"),
+  );
+  const pending = teamRequests.find((item) => item.status === "pending") ?? null;
+  const rejected = !pending ? (teamRequests.find((item) => item.status === "rejected") ?? null) : null;
+  const rejectedNote = rejected ? (rejected.adminNote ?? rejected.admin_note ?? rejected.reviewNote ?? null) : null;
+  const sentAt = pending?.createdAt ?? pending?.created_at ?? null;
+
+  if (error) {
+    return (
+      <PanelSection title="Kulüp">
+        <PanelEmpty icon="cloud-offline-outline" text="Takım bilgisi alınamadı. Bağlantını kontrol edip yeniden dene." action={{ label: "Tekrar dene", onPress: onRetry }} />
+      </PanelSection>
+    );
+  }
+
+  return (
+    <Reveal>
+      <PanelSection title="Kulüp">
+        {pending ? (
+          <PanelCard padded={false}>
+            <PanelRow
+              icon="hourglass"
+              tone="warn"
+              title={`${ACCOUNT_REQUEST_LABELS[pending.type] ?? "Talebin"} — onay bekliyor`}
+              hint={sentAt ? `${formatDateShort(sentAt)} tarihinde gönderildi · lig yönetimi inceliyor` : "Lig yönetimi inceliyor"}
+              onPress={() => go("/oyuncum/bagla?tur=takim")}
+              last
+            />
+          </PanelCard>
         ) : (
           <PanelEmpty
-            icon="people-outline"
-            text="Kadron boş. Oyuncu ara; davet ya da transfer teklifi gönder."
-            action={{ label: "Oyuncu ara", onPress: () => go("/takimim/oyuncu-ara") }}
+            icon="shield-outline"
+            text={
+              rejected
+                ? `Son talebin reddedildi${rejectedNote ? `: ${rejectedNote}` : "."} Bilgileri düzeltip yeniden gönderebilirsin.`
+                : (description ?? "Hesabına bağlı bir takım görünmüyor. Takımını bul ve yönetim yetkisi iste.")
+            }
+            action={{ label: "Takımını bağla", onPress: () => go("/oyuncum/bagla?tur=takim") }}
           />
         )}
+        <PanelCard padded={false}>
+          <PanelRow icon="search" tone="info" title="Takımları keşfet" hint="Adıyla ara, takım sayfasını aç" onPress={() => go("/ara?tip=takim")} />
+          <PanelRow icon="toggle" tone="neutral" title="Profil modları" hint="Takım başkanı / oyuncu alanını aç-kapat" onPress={() => go("/oyuncum/modlar")} />
+          <PanelRow icon="person-circle" tone="neutral" title="Hesabım" hint="Üyelik bilgileri ve güvenlik" onPress={() => go("/hesabim")} last />
+        </PanelCard>
       </PanelSection>
-
-      {financeItems.length ? (
-        <PanelSection title="Kulüp bütçesi" meta={team.current_season ?? undefined} action={{ label: "Kasa", onPress: () => go("/takimim/kasa") }}>
-          <StatStrip items={financeItems} />
-        </PanelSection>
-      ) : null}
-
-      <View style={styles.block}>
-        <SectionTitle title="Kulüp menüsü" meta={extras.unreadNotifications ? `${extras.unreadNotifications} okunmamış bildirim` : undefined} />
-        <MenuGroups groups={groups} go={go} />
-      </View>
-    </View>
+    </Reveal>
   );
 }
 
@@ -360,7 +466,6 @@ function SectionTitle({ title, meta }: { title: string; meta?: string }) {
 const styles = StyleSheet.create({
   root: { paddingTop: space.md },
   pad: { paddingHorizontal: layout.screenPadding },
-  loading: { gap: space.md, paddingTop: space.md },
   block: { marginTop: space.xl, gap: space.sm },
   sectionHead: { paddingHorizontal: layout.screenPadding },
   sectionTitle: { ...type.overline, color: colors.textTertiary },

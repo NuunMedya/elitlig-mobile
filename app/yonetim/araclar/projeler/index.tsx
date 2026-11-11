@@ -18,6 +18,7 @@ import React, { useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { ActionSheet, AdminScreen, RecordCard, ToggleField, confirmAction, type SheetAction } from "@/components/admin";
+import { ToolFab } from "@/components/admin/tools/ToolApp";
 import { GlobalPortfolio } from "@/components/admin/projects/Portfolio";
 import { NewProjectSheet } from "@/components/admin/projects/NewProjectSheet";
 import { ContactActions, Pill, ProgressBar, SubHead } from "@/components/admin/projects/ui";
@@ -26,7 +27,6 @@ import {
   ChipGroup,
   EmptyState,
   ErrorState,
-  FAB,
   Input,
   MetricGrid,
   MetricTile,
@@ -178,6 +178,7 @@ export default function ProjectsHome() {
 
   return (
     <AdminScreen
+      app="projeler"
       title="Projeler"
       subtitle="Süreç, sorumlular, aranan kişiler, sorular ve portföy"
       onRefresh={() => {
@@ -187,7 +188,7 @@ export default function ProjectsHome() {
       }}
       refreshing={refreshing}
       bottom={<SegmentedControl items={VIEWS} value={view} onChange={setView} />}
-      overlay={<FAB icon="add" label="Yeni proje" extended onPress={() => setCreating(true)} accessibilityLabel="Yeni proje" />}
+      overlay={<ToolFab app="projeler" label="Yeni proje" onPress={() => setCreating(true)} accessibilityLabel="Yeni proje" />}
     >
       <MetricGrid columns={2}>
         <MetricTile label="Aktif proje" value={items ? String(totals.active) : "—"} icon="git-branch-outline" tone="brand" onPress={() => setView("projeler")} />

@@ -205,6 +205,7 @@ export default function ProfileLinkScreen() {
     onSuccess: (result) => {
       toast.show({ message: result.message || "Talebin geri çekildi.", tone: "success" });
       void queryClient.invalidateQueries({ queryKey: ["account-requests"] });
+      void queryClient.invalidateQueries({ queryKey: ["club", "account-requests"] });
     },
     onError: (error) => Alert.alert("Talep geri çekilemedi", errorText(error)),
   });
@@ -246,6 +247,7 @@ export default function ProfileLinkScreen() {
       setCreateOpen(false);
       toast.show({ message, tone: "success" });
       await queryClient.invalidateQueries({ queryKey: ["account-requests"] });
+      void queryClient.invalidateQueries({ queryKey: ["club", "account-requests"] });
     } catch (error) {
       Alert.alert("Talep gönderilemedi", errorText(error));
     } finally {

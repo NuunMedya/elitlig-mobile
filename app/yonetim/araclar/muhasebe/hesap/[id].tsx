@@ -54,6 +54,7 @@ export default function AccountDetailScreen() {
 
   return (
     <AdminScreen
+      app="muhasebe"
       title={account?.name || "Hesap"}
       subtitle={account ? `${SCOPE_LABEL[account.scope]}${account.city_name ? ` · ${account.city_name}` : ""}` : undefined}
       onRefresh={accounts.refetch}

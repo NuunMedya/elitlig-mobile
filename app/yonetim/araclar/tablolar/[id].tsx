@@ -756,14 +756,14 @@ export default function SheetEditorScreen() {
 
   if (loadError && !book) {
     return (
-      <AdminScreen title="Tablo">
+      <AdminScreen app="tablolar" title="Tablo">
         <ErrorState error={loadError} onRetry={() => void loadBook()} variant="inline" />
       </AdminScreen>
     );
   }
   if (!book || !sheet || !meta) {
     return (
-      <AdminScreen title="Tablo">
+      <AdminScreen app="tablolar" title="Tablo">
         <SkeletonTable />
       </AdminScreen>
     );
@@ -844,6 +844,7 @@ export default function SheetEditorScreen() {
 
   return (
     <AdminScreen
+      app="tablolar"
       title={meta.title}
       subtitle={`${readOnly ? ACCESS_LABELS.viewer : SAVE_LABEL[saveState]}${meta.updated_by_name ? ` · ${meta.updated_by_name}` : ""}`}
       scroll={false}
@@ -1003,7 +1004,7 @@ export default function SheetEditorScreen() {
       <ActionSheet
         visible={more}
         onClose={() => setMore(false)}
-        title={meta.title}
+      title={meta.title}
         actions={[
           { label: "Şimdi kaydet", icon: "cloud-upload-outline", hint: SAVE_LABEL[saveState], onPress: () => void save(), hidden: readOnly },
           { label: "Dosyayı yeniden adlandır", icon: "create-outline", onPress: () => setRenameFile(true), hidden: readOnly },
@@ -1110,7 +1111,7 @@ export default function SheetEditorScreen() {
           visible={shareOpen}
           onClose={() => setShareOpen(false)}
           sheetId={sheetId}
-          title={meta.title}
+      title={meta.title}
           initialShares={meta.shares ?? []}
           onSaved={(shares) => setMeta((m) => (m ? { ...m, shares } : m))}
         />

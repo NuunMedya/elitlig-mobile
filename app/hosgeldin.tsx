@@ -32,6 +32,14 @@
  * kombinasyon zeminin koyu olmasına BEL BAĞLIYORDU. `BrandMark` kendi mor
  * karosunu getirir; ekran hangi zeminde olursa olsun marka görünür.
  *
+ * HAREKET (yerel sürücü, "Hareketi azalt"a uyar):
+ *   · Slaytlar parmakla birlikte akar: ikon sahnesi kayarken hafifçe küçülüp
+ *     sönükleşir, metin biraz daha hızlı kayar (derinlik hissi); sayfa
+ *     noktaları kaydırma konumundan beslenir (`PagerDots`).
+ *   · İlk slayt açılışta aşağıdan belirir; düğme metni slayta göre değişir.
+ *   · Hızlı yolda ekranın HERHANGİ bir yerine dokunmak beklemeyi keser —
+ *     2,2 saniyelik kare bir karşılamadır, gişe değil.
+ *
  * NEDEN ODAĞA BAĞLI ZAMANLAYICI (hızlı yol): "Hesabım var, giriş yap" giriş
  * modalını yığına PUSH eder; hosgeldin unmount OLMAZ, dolayısıyla sıradan bir
  * `useEffect` temizliği koşmaz ve zamanlayıcı ateşlenmeye devam ederdi.
@@ -43,11 +51,12 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useFocusEffect, useNavigation, useRouter } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Easing,
-  FlatList,
+  type FlatList,
+  Pressable,
   StyleSheet,
   Text,
   View,
@@ -57,7 +66,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { BrandMark, Button, ChalkArc, Touchable, useReduceMotion } from "@/components/ui";
+import { BrandMark, Button, ChalkArc, PagerDots, Reveal, Touchable, useReduceMotion } from "@/components/ui";
 import { INTRO_SEEN_KEY } from "@/lib/storage";
 import { colors, radius, space, textScale, type, upperTR } from "@/theme";
 
@@ -127,6 +136,7 @@ export default function HosgeldinScreen() {
       onIndex={setIndex}
       onSkip={finish}
       onFinish={chooseLeague}
+      onLogin={() => router.push("/giris")}
     />
   ) : (
     <FastSplash
@@ -147,14 +157,23 @@ function IntroSlides({
   onIndex,
   onSkip,
   onFinish,
+  onLogin,
 }: {
   width: number;
   index: number;
   onIndex: (value: number) => void;
   onSkip: () => void;
   onFinish: () => void;
+  onLogin: () => void;
 }) {
   const listRef = useRef<FlatList<(typeof SLIDES)[number]>>(null);
+  /* Kaydırma konumu yerel sürücüde: noktalar ve slayt paralaksı JS'e uğramaz. */
+  const scrollX = useRef(new Animated.Value(0)).current;
+  const progress = useMemo(() => Animated.divide(scrollX, Math.max(1, width)), [scrollX, width]);
+  const handleScroll = useMemo(
+    () => Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], { useNativeDriver: true }),
+    [scrollX],
+  );
   const last = index === SLIDES.length - 1;
   /* Slayt yüksekliği listenin ölçülen yüksekliğidir: yatay listede öğe
      yüksekliği içerikten gelir ve slayt ekranın üst yarısına yapışıyordu;
@@ -197,13 +216,16 @@ function IntroSlides({
         </Touchable>
       </View>
 
-      <FlatList
+      <Animated.FlatList
         ref={listRef}
         data={SLIDES}
         keyExtractor={(item) => item.key}
         renderItem={({ item, index: i }) => (
-          <Slide slide={item} width={width} height={listHeight} step={i + 1} />
+          <Slide slide={item} width={width} height={listHeight} step={i + 1} progress={progress} />
         )}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+        bounces={false}
         onLayout={(event) => setListHeight(Math.round(event.nativeEvent.layout.height))}
         horizontal
         pagingEnabled
@@ -214,19 +236,32 @@ function IntroSlides({
 
       <View style={styles.footer}>
         {/* Sayfa noktaları — aktif olan mercan, diğerleri sönük. */}
-        <View style={styles.dots}>
-          {SLIDES.map((slide, i) => (
-            <View key={slide.key} style={[styles.dot, i === index && styles.dotActive]} />
-          ))}
-        </View>
+        <PagerDots count={SLIDES.length} progress={progress} onDark />
 
         <Button
           label={last ? "Ligini seç" : "Devam"}
+          icon={last ? "arrow-forward" : undefined}
+          iconPosition="right"
           size="lg"
           fullWidth
           onPress={next}
           accessibilityHint={last ? "Şehir ve lig seçim ekranını açar" : undefined}
+          testID="intro-next"
         />
+
+        {/* Üyesi olan kullanıcı üç slaytı ve sihirbazı beklemeden girebilsin. */}
+        <Touchable
+          feedback="button"
+          haptic="none"
+          onPress={onLogin}
+          accessibilityRole="button"
+          accessibilityLabel="Hesabım var, giriş yap"
+          style={styles.introLogin}
+        >
+          <Text style={styles.fastLink} {...textScale.dense}>
+            Hesabım var, giriş yap
+          </Text>
+        </Touchable>
       </View>
     </SafeAreaView>
   );
@@ -241,39 +276,76 @@ function Slide({
   width,
   height,
   step,
+  progress,
 }: {
   slide: (typeof SLIDES)[number];
   width: number;
   height: number;
   step: number;
+  /** Sayfa ilerlemesi (0 … SLIDES.length-1), kaydırmayla akar. */
+  progress: Animated.AnimatedInterpolation<number> | Animated.AnimatedDivision<number>;
 }) {
+  const reduceMotion = useReduceMotion();
+  const page = step - 1;
+  const inputRange = [page - 1, page, page + 1];
+
+  /* Sahne yerinde hafifçe küçülür ve söner; metin sayfadan biraz hızlı kayar.
+     "Hareketi azalt" açıkken slaytlar düz kayar. */
+  const artStyle = reduceMotion
+    ? null
+    : {
+        opacity: progress.interpolate({ inputRange, outputRange: [0.25, 1, 0.25], extrapolate: "clamp" }),
+        transform: [
+          { scale: progress.interpolate({ inputRange, outputRange: [0.86, 1, 0.86], extrapolate: "clamp" }) },
+        ],
+      };
+  const textStyle = reduceMotion
+    ? null
+    : {
+        opacity: progress.interpolate({ inputRange, outputRange: [0, 1, 0], extrapolate: "clamp" }),
+        transform: [
+          {
+            translateX: progress.interpolate({
+              inputRange,
+              outputRange: [width * 0.18, 0, -width * 0.18],
+              extrapolate: "clamp",
+            }),
+          },
+        ],
+      };
+
   return (
     <View style={[styles.slide, { width }, height > 0 ? { height } : null]}>
-      <View style={styles.art}>
+      <Animated.View style={[styles.art, artStyle]}>
         <ChalkArc
           width={width - space.xl * 2}
           height={260}
           color={colors.onDarkMuted}
           thickness={1}
         />
-        <View style={styles.artHalo}>
+        {/* Yalnız ilk slaytın ikonu açılışta büyüyerek gelir. */}
+        <Reveal enabled={page === 0} distance={0} scaleFrom={0.8} style={styles.artHalo}>
           <View style={styles.artIcon}>
             {/* Koyu blok üstünde `brand` (dolgu moru) mor üstüne mor kalıyor;
                 kimlik bloklarının marka rengi `brandOnDark` açık lavantadır. */}
             <Ionicons name={slide.icon} size={40} color={colors.brandOnDark} />
           </View>
-        </View>
-      </View>
+        </Reveal>
+      </Animated.View>
 
-      <Text style={styles.slideStep} {...textScale.badge}>
-        {upperTR(`${step} / ${SLIDES.length}`)}
-      </Text>
-      <Text style={styles.slideTitle} {...textScale.dense}>
-        {slide.title}
-      </Text>
-      <Text style={styles.slideBody} {...textScale.long}>
-        {slide.body}
-      </Text>
+      <Animated.View style={[styles.slideTexts, textStyle]}>
+        <Reveal enabled={page === 0} delay={120} style={styles.slideTexts}>
+          <Text style={styles.slideStep} {...textScale.badge}>
+            {upperTR(`${step} / ${SLIDES.length}`)}
+          </Text>
+          <Text style={styles.slideTitle} {...textScale.dense}>
+            {slide.title}
+          </Text>
+          <Text style={styles.slideBody} {...textScale.long}>
+            {slide.body}
+          </Text>
+        </Reveal>
+      </Animated.View>
     </View>
   );
 }
@@ -364,7 +436,14 @@ function FastSplash({
 
   return (
     <SafeAreaView style={[styles.screen, styles.dark]} edges={["top", "bottom"]}>
-      <View style={styles.fast}>
+      {/* Ekranın tamamı "devam"dır: bekleme isteğe bağlı, dokunan hemen geçer. */}
+      <Pressable
+        style={styles.fast}
+        onPress={onFinish}
+        accessibilityRole="button"
+        accessibilityLabel="Devam et"
+        accessibilityHint="Beklemeden maçlara geçer"
+      >
         {/* İmza geometrisi markanın ARKASINDA: tebeşir yayı sahneyi
             "bir futbol sahasının orta yuvarlağı" yapar, logo o sahnenin
             ortasında durur. */}
@@ -387,7 +466,7 @@ function FastSplash({
             Ligin başlıyor
           </Text>
         </Animated.View>
-      </View>
+      </Pressable>
 
       <View style={styles.fastFooter}>
         <View style={[styles.barTrack, { width: barWidth }]}>
@@ -484,26 +563,15 @@ const styles = StyleSheet.create({
   },
   footer: {
     paddingHorizontal: space.xl,
-    paddingBottom: space.xl,
+    paddingBottom: space.lg,
     gap: space.lg,
   },
-  dots: {
-    flexDirection: "row",
-    gap: space.s,
-    justifyContent: "center",
+  slideTexts: {
+    gap: space.sm,
   },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.onDarkMuted,
-    opacity: 0.4,
-  },
-  /* Etkin nokta uzar: "neredeyim" bilgisi renkle değil biçimle de okunur. */
-  dotActive: {
-    width: 20,
-    backgroundColor: colors.brandOnDark,
-    opacity: 1,
+  introLogin: {
+    alignSelf: "center",
+    paddingVertical: space.xs,
   },
 
   /* — Hızlı yol —

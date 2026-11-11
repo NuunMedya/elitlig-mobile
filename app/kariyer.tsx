@@ -64,6 +64,7 @@ import {
   type CareerSummary,
   type StandardXpRule,
 } from "@/lib/api/career";
+import { questRoute } from "@/lib/quests";
 import { formatDateShort } from "@/lib/format";
 import { useAuth } from "@/providers/AuthProvider";
 import { colors, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
@@ -72,23 +73,6 @@ const LAYER_ORDER: CareerLayer[] = ["saha", "tribun", "arena"];
 const LAYER_ICONS: Record<CareerLayer, keyof typeof Ionicons.glyphMap> = { saha: "football", tribun: "analytics", arena: "game-controller" };
 const LAYER_COLORS: Record<CareerLayer, string> = { saha: colors.win, tribun: colors.info, arena: colors.accent };
 const CHAIN_PREVIEW = 5;
-
-/** Sunucudaki görev `go` anahtarı → açılacak ekran. */
-const QUEST_ROUTES: Record<string, Href> = {
-  tahmin: "/tahmin-ligi",
-  fantezi: "/fantezi",
-  maclar: "/(tabs)/maclar",
-  kulubum: "/(tabs)/kulubum",
-  oyunlar: "/(tabs)/oyunlar",
-  penalti: "/penalti",
-  slalom: "/slalom",
-  sektir: "/sektir",
-  kimbu: "/kimbu",
-  seri: "/arena",
-  tahmin_oyun: "/tahmin",
-  gunun: "/gunun",
-  mac_al: "/takimim/mac-al",
-};
 
 type Tab = "gorevler" | "takim" | "kariyer" | "rozetler";
 const TAB_KEYS: Tab[] = ["gorevler", "takim", "kariyer", "rozetler"];
@@ -232,7 +216,7 @@ function QuestsTab({ data }: { data: CareerSummary }) {
     return { active: data.quests.filter((quest) => !quest.done), completed, revealed: data.quests.length, total: data.quests.length, done_count: completed.length, locked: 0, bonuses: [] };
   }, [data]);
   const open = (quest: CareerQuest) => {
-    const route = quest.go ? QUEST_ROUTES[quest.go] : undefined;
+    const route = questRoute(quest);
     if (route) router.push(route);
   };
 
@@ -269,7 +253,7 @@ function QuestsTab({ data }: { data: CareerSummary }) {
 
       <View style={styles.list}>
         {weekly.active.map((quest, index) => (
-          <QuestRow key={quest.code} quest={quest} first={index === 0} onPress={quest.go && QUEST_ROUTES[quest.go] ? () => open(quest) : undefined} />
+          <QuestRow key={quest.code} quest={quest} first={index === 0} onPress={questRoute(quest) ? () => open(quest) : undefined} />
         ))}
         {!weekly.active.length ? (
           <View style={styles.emptyRow}>

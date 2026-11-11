@@ -25,7 +25,7 @@ export const ELITLIG_LOGO = require("../../assets/images/elitlig-beyaz.png");
  * Marka logosu: maçın yayın görünümünde yüklenmiş logo varsa o, yoksa (ya da
  * açılamazsa) Elitlig logosu.
  */
-export function useBrandLogoSource(logoUrl?: string | null) {
+export function useBrandLogoSource(logoUrl?: string | null, onAssetLoad?: () => void) {
   const [failed, setFailed] = useState<string | null>(null);
   const custom = logoUrl && logoUrl !== failed ? logoUrl : null;
   return {
@@ -33,6 +33,7 @@ export function useBrandLogoSource(logoUrl?: string | null) {
     onError: () => {
       if (custom) setFailed(custom);
     },
+    onLoad: onAssetLoad,
   };
 }
 
@@ -61,6 +62,21 @@ export interface ScoreBugProps {
   palette?: BugPalette | null;
   logoUrl?: string | null;
   logoScale?: number | null;
+  /** Elle girilen kısa kodlar (boşsa takım adından türetilir). */
+  homeCode?: string | null;
+  awayCode?: string | null;
+  /** Saat + devre bloğu görünsün mü (varsayılan evet; "MAÇ SONU" hep görünür). */
+  showClock?: boolean;
+  /** Olay bandının hizası: skorbord sağ köşedeyse "right". */
+  align?: "left" | "right";
+  /** Arma / logo yüklendi: yayına gömülen görsel yeniden çekilsin. */
+  onAssetLoad?: () => void;
+}
+
+/** Skorborddaki kısa kod: elle girilen (en çok 3 harf) ya da addan türetilen. */
+export function bugCode(name: string, custom?: string | null): string {
+  const c = String(custom ?? "").trim();
+  return c ? c.slice(0, 3).toLocaleUpperCase("tr-TR") : teamShortCode(name);
 }
 
 const BAR_START = { x: 0.5, y: 0 } as const;
@@ -70,20 +86,21 @@ export const ScoreBug = memo(
   forwardRef<View, ScoreBugProps>(function ScoreBug(props, ref) {
     const s = props.scale;
     const C = props.palette ?? DEFAULT_PALETTE;
-    const logo = useBrandLogoSource(props.logoUrl);
+    const logo = useBrandLogoSource(props.logoUrl, props.onAssetLoad);
     const logoSize = s * 60 * ((props.logoScale ?? 100) / 100);
-    const code = (name: string) => teamShortCode(name);
+    const clockOn = props.finished || props.showClock !== false;
     const crest = (uri?: string | null) => (
       <View style={{ width: s * 26, height: s * 26, alignItems: "center", justifyContent: "center" }}>
-        {uri ? <Image source={{ uri }} style={{ width: s * 26, height: s * 26 }} resizeMode="contain" /> : null}
+        {uri ? <Image source={{ uri }} onLoad={props.onAssetLoad} style={{ width: s * 26, height: s * 26 }} resizeMode="contain" /> : null}
       </View>
     );
-    const codeText = (name: string) => (
+    const codeText = (name: string, custom?: string | null) => (
       <Text
         allowFontScaling={false}
+        numberOfLines={1}
         style={{ fontFamily: fonts.bold, fontSize: s * 18, lineHeight: s * 20, color: C.white, letterSpacing: s * 0.2 }}
       >
-        {code(name)}
+        {bugCode(name, custom)}
       </Text>
     );
     const score = (value: number) => (
@@ -96,7 +113,7 @@ export const ScoreBug = memo(
     const lowerColor = props.event?.kind === "goal" ? C.lowerGoal : props.event?.kind === "red" ? C.lowerRed : props.event?.kind === "yellow" ? C.lowerCard : C.v700;
 
     return (
-      <View ref={ref} collapsable={false} style={styles.root}>
+      <View ref={ref} collapsable={false} style={[styles.root, props.align === "right" && styles.rootRight]}>
         <View style={{ height: s * 44, borderRadius: s * 6, flexDirection: "row", alignItems: "stretch" }}>
           <LinearGradient
             colors={[C.barTop, C.barBottom]}
@@ -113,40 +130,44 @@ export const ScoreBug = memo(
           />
           <View style={[styles.team, { width: s * 106, justifyContent: "flex-end", paddingLeft: s * 13, paddingRight: s * 10, gap: s * 8 }]}>
             {crest(props.homeLogo)}
-            {codeText(props.homeName)}
+            {codeText(props.homeName, props.homeCode)}
           </View>
           {score(props.homeScore)}
           <View style={{ width: s * 62, backgroundColor: C.p900, alignItems: "center", justifyContent: "center" }}>
             <View style={[styles.divider, { left: 0, top: s * 12, bottom: s * 12, backgroundColor: C.hair }]} />
             <View style={[styles.divider, { right: 0, top: s * 12, bottom: s * 12, backgroundColor: C.hair }]} />
-            <Image source={logo.source} onError={logo.onError} style={{ position: "absolute", width: logoSize, height: logoSize }} resizeMode="contain" />
+            <Image source={logo.source} onError={logo.onError} onLoad={logo.onLoad} style={{ position: "absolute", width: logoSize, height: logoSize }} resizeMode="contain" />
           </View>
           {score(props.awayScore)}
           <View style={[styles.team, { width: s * 106, justifyContent: "flex-start", paddingHorizontal: s * 10, gap: s * 8 }]}>
-            {codeText(props.awayName)}
+            {codeText(props.awayName, props.awayCode)}
             {crest(props.awayLogo)}
           </View>
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: s * 6,
-              paddingHorizontal: s * 12,
-              backgroundColor: C.v700,
-              borderTopRightRadius: s * 6,
-              borderBottomRightRadius: s * 6,
-            }}
-          >
-            {props.finished ? null : <View style={{ width: s * 5, height: s * 5, borderRadius: s * 3, backgroundColor: C.live }} />}
-            <Text allowFontScaling={false} style={{ fontFamily: fonts.bold, fontSize: s * 17, lineHeight: s * 20, color: C.white }}>
-              {props.finished ? "MAÇ SONU" : clockText(props.clockMs)}
-            </Text>
-            {props.finished ? null : (
-              <Text allowFontScaling={false} style={{ fontFamily: fonts.bold, fontSize: s * 11, lineHeight: s * 14, color: C.white, opacity: 0.75 }}>
-                {periodLabel(props.period)}
+          {clockOn ? (
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: s * 6,
+                paddingHorizontal: s * 12,
+                backgroundColor: C.v700,
+                borderTopRightRadius: s * 6,
+                borderBottomRightRadius: s * 6,
+              }}
+            >
+              {props.finished ? null : <View style={{ width: s * 5, height: s * 5, borderRadius: s * 3, backgroundColor: C.live }} />}
+              <Text allowFontScaling={false} style={{ fontFamily: fonts.bold, fontSize: s * 17, lineHeight: s * 20, color: C.white }}>
+                {props.finished ? "MAÇ SONU" : clockText(props.clockMs)}
               </Text>
-            )}
-          </View>
+              {props.finished ? null : (
+                <Text allowFontScaling={false} style={{ fontFamily: fonts.bold, fontSize: s * 11, lineHeight: s * 14, color: C.white, opacity: 0.75 }}>
+                  {periodLabel(props.period)}
+                </Text>
+              )}
+            </View>
+          ) : (
+            <View style={{ width: s * 6, backgroundColor: C.v700, borderTopRightRadius: s * 6, borderBottomRightRadius: s * 6 }} />
+          )}
           {/* Alt şerit: takım renkleri */}
           <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: s * 2, flexDirection: "row", overflow: "hidden", borderBottomLeftRadius: s * 6, borderBottomRightRadius: s * 6 }}>
             <View style={{ flex: 1, backgroundColor: props.homeColor || C.homeBright }} />
@@ -154,7 +175,16 @@ export const ScoreBug = memo(
           </View>
         </View>
         {props.event ? (
-          <View style={{ flexDirection: "row", alignItems: "stretch", marginTop: s * 4, borderRadius: s * 4, overflow: "hidden" }}>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "stretch",
+              alignSelf: props.align === "right" ? "flex-end" : "flex-start",
+              marginTop: s * 4,
+              borderRadius: s * 4,
+              overflow: "hidden",
+            }}
+          >
             <View style={{ backgroundColor: lowerColor, paddingHorizontal: s * 10, justifyContent: "center" }}>
               <Text allowFontScaling={false} style={{ fontFamily: fonts.bold, fontSize: s * 13, lineHeight: s * 26, color: C.white }}>
                 {props.event.label}
@@ -176,6 +206,7 @@ export const ScoreBug = memo(
 
 const styles = StyleSheet.create({
   root: { alignSelf: "flex-start", backgroundColor: "transparent" },
+  rootRight: { alignSelf: "flex-end" },
   team: { flexDirection: "row", alignItems: "center" },
   cell: { alignItems: "center", justifyContent: "center" },
   divider: { position: "absolute", width: StyleSheet.hairlineWidth },

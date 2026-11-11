@@ -11,7 +11,7 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import {
@@ -92,10 +92,13 @@ export function InfoStep({
   match,
   cityId,
   onGoStep,
+  onDirtyChange,
 }: {
   match: AdminMatch;
   cityId: number | null;
   onGoStep: (step: StepKey) => void;
+  /** Kaydedilmemiş değişiklik var mı (adım değişiminde uyarı için). */
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const auth = useAuth();
   const router = useRouter();
@@ -113,7 +116,25 @@ export function InfoStep({
   const [savedAssignments, setSavedAssignments] = useState<Record<string, string>>({});
   const [resultOpen, setResultOpen] = useState(false);
 
-  useEffect(() => setForm(original), [original]);
+  /**
+   * Maç kaydı arka planda tazelenince (yoklama, başka bir adımın kaydı, skor
+   * eşitlemesi) form KÖRLEMESİNE sıfırlanmaz: yalnız sunucuda gerçekten değişen
+   * alanlar yenilenir, yöneticinin o an düzenlediği alanlar korunur.
+   */
+  const previousOriginal = useRef(original);
+  useEffect(() => {
+    const before = previousOriginal.current;
+    previousOriginal.current = original;
+    if (before === original) return;
+    setForm((current) => {
+      const next = { ...current };
+      (Object.keys(original) as (keyof InfoForm)[]).forEach((key) => {
+        const untouched = String(current[key] ?? "") === String(before[key] ?? "");
+        if (untouched) (next as Record<keyof InfoForm, unknown>)[key] = original[key];
+      });
+      return next;
+    });
+  }, [original]);
 
   const effectiveCity = match.city_id ?? cityId;
 
@@ -203,7 +224,12 @@ export function InfoStep({
   /* ───────── kaydet ───────── */
   const changed = (Object.keys(form) as (keyof InfoForm)[]).filter((k) => String(form[k] ?? "") !== String(original[k] ?? ""));
   const assignmentsChanged = JSON.stringify(assignments) !== JSON.stringify(savedAssignments);
-  const dirty = changed.length > 0 || assignmentsChanged;
+  // Kaydedilebilir değişiklik: her bölüm kendi yetkisiyle sayılır (403 önlenir).
+  const dirty = (changed.length > 0 && canEdit) || (assignmentsChanged && canAssign);
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dirty]);
   const sameTeams = Boolean(form.home_team_id && form.home_team_id === form.away_team_id);
   const hasGroups = groups.length > 0;
 
@@ -213,7 +239,7 @@ export function InfoStep({
 
   const save = useAdminMutation(
     async () => {
-      if (changed.length) {
+      if (changed.length && canEdit) {
         await updateMatch(matchId, {
           first_team_name: form.first_team_name,
           second_team_name: form.second_team_name,

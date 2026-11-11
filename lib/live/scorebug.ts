@@ -47,13 +47,32 @@ export const BUG = {
   },
 } as const;
 
-/** Reji "Skorbord" seçimi: köşe (premier) ya da orta-alt bant. */
-export type BugVariant = "premier" | "bottom";
+/** Reji "Skorbord" seçimi: köşe çubuğu (premier), kompakt (dikey istif) ya da orta-alt bant. */
+export type BugVariant = "premier" | "compact" | "bottom";
 
 export const BUG_VARIANTS: { key: BugVariant; label: string; hint: string }[] = [
-  { key: "premier", label: "Köşe skorbord", hint: "Sol üstte ince çubuk (varsayılan)" },
-  { key: "bottom", label: "Orta-alt skorbord", hint: "Ekranın altında ortalanmış geniş bant" },
+  { key: "premier", label: "Köşe çubuğu", hint: "Üst köşede ince yatay çubuk (varsayılan)" },
+  { key: "compact", label: "Kompakt", hint: "Üst köşede iki satırlı küçük kutu" },
+  { key: "bottom", label: "Orta-alt bant", hint: "Ekranın altında ortalanmış geniş bant" },
 ];
+
+/** Köşe skorbordlarının (premier / kompakt) yeri. Orta-alt bant hep ortadadır. */
+export type BugCorner = "left" | "right";
+
+/**
+ * Yayına gömülen diğer grafiklerin 1920×1080 sahnesindeki ölçüleri: altyazı
+ * (lower third), sponsor yuvası, GOL bandı ve TEKRAR rozeti.
+ */
+export const GFX = {
+  /** Altyazı: sol altta; orta-alt skorbord açıkken onun üstüne kalkar. */
+  caption: { left: 56, bottom: 64, liftOverBoard: 244, maxWidth: 1100 },
+  /** Sponsor yuvası: skorbordun karşı üst köşesi. */
+  sponsor: { side: 56, top: 48, height: 64, maxWidth: 260 },
+  /** GOL bandı: alt üçte birde ortalı. */
+  goal: { bottom: 250, bottomOverBoard: 300 },
+  /** TEKRAR rozeti (skorbord sağ üstteyken sol üste gömülür). */
+  replay: { side: 56, top: 48 },
+} as const;
 
 const GENERIC = new Set(["spor", "sk", "fk", "sc", "fc", "kulubu", "kulübü", "gücü", "gucu", "birliği", "birligi", "takımı", "takimi"]);
 

@@ -30,6 +30,7 @@ import {
   type FormValues,
 } from "@/components/admin";
 import { ImageUploadRow } from "@/components/admin/team/ImageUpload";
+import { TeamDetailsPanel } from "@/components/admin/team/TeamDetailsPanel";
 import { TeamPlayersTab } from "@/components/admin/team/TeamPlayersTab";
 import { TeamSeasonsTab } from "@/components/admin/team/TeamSeasonsTab";
 import { Button, EmptyState, ErrorState, SegmentedControl, SkeletonCard } from "@/components/ui";
@@ -252,6 +253,7 @@ export default function TeamProfileScreen() {
             <InfoLine label="Katılım" value={team.attendence_date ? formatDate(team.attendence_date) : "—"} />
             <InfoLine label="Kayıt no" value={`#${team.id}`} />
           </Panel>
+          <TeamDetailsPanel teamId={teamId} players={data.players} />
           {pendingCount ? (
             <RecordCard
               title={`${pendingCount} bekleyen talep`}

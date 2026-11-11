@@ -205,6 +205,8 @@ function IdentitySection() {
       const result = await requestTeamUpdate(payload);
       toast.show({ message: result.message || "Talebin yönetime gönderildi.", tone: "success" });
       await queryClient.invalidateQueries({ queryKey: ["panel", "me"] });
+      // Kulübüm'deki "onay bekleyen değişiklik" işi ve rozet panodan okunur.
+      void queryClient.invalidateQueries({ queryKey: ["takim", "dashboard"] });
       setForm(null);
     } catch (caught) {
       setError(errorText(caught, "Talep gönderilemedi."));

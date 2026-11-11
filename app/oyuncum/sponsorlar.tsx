@@ -18,7 +18,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as ImagePicker from "expo-image-picker";
 import { Redirect } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
-import { Image, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Image, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
@@ -257,7 +257,13 @@ function SlotEditor({ slot, onClose }: { slot: SponsorSlot; onClose: () => void 
       snap="full"
       footer={
         <View style={styles.footer}>
-          <Button label="Temizle" variant="secondary" onPress={() => clear.mutate()} loading={clear.isPending} disabled={busy} style={styles.flex} />
+          <Button label="Temizle" variant="secondary" onPress={() =>
+              Alert.alert("Sponsor alanını temizle", "Bu alandaki sponsor adı, görsel ve bağlantı kaldırılır. Devam edilsin mi?", [
+                { text: "Vazgeç", style: "cancel" },
+                { text: "Temizle", style: "destructive", onPress: () => clear.mutate() },
+              ])
+            }
+            loading={clear.isPending} disabled={busy} style={styles.flex} />
           <Button label="Kaydet" icon="checkmark" onPress={submit} loading={save.isPending} disabled={busy} style={styles.flex} />
         </View>
       }

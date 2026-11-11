@@ -30,7 +30,21 @@ export const RIG = {
   red: "#ef4444",
   home: "#8a6cf0",
   away: "#f5c518",
+  /* Stüdyo eklemeleri */
+  info: "#38bdf8",
+  infoDim: "rgba(56,189,248,0.2)",
+  gold: "#f5c518",
+  /** Sarı / altın zemin üstündeki koyu metin. */
+  ink: "#1a001a",
+  scrim: "rgba(4,2,8,0.78)",
+  sheet: "#140a1e",
+  flash: "rgba(255,255,255,0.9)",
 } as const;
+
+/** Takım şeridi için hazır renkler (skorbord altındaki ince çizgi). */
+export const TEAM_SWATCHES = [
+  "#8a6cf0", "#f5c518", "#ef4444", "#22c55e", "#38bdf8", "#f97316", "#ec4899", "#ffffff", "#0f172a",
+] as const;
 
 export type BugEventKind = "goal" | "yellow" | "red" | "other";
 
@@ -57,6 +71,75 @@ export const QUALITY_PRESETS = [
 ] as const;
 
 export type QualityKey = (typeof QUALITY_PRESETS)[number]["key"];
+
+export const FPS_OPTIONS = [25, 30] as const;
+export type FpsOption = (typeof FPS_OPTIONS)[number];
+
+/** Elle bit hızı seçenekleri (kbps). null = kalite ön ayarının değeri. */
+export const BITRATE_OPTIONS = [1000, 1500, 2500, 3500, 4500, 6000] as const;
+
+export interface EncoderConfig {
+  key: QualityKey;
+  label: string;
+  width: number;
+  height: number;
+  fps: number;
+  videoBitrateKbps: number;
+}
+
+/** Kalite ön ayarı + (varsa) elle seçilen kare hızı / bit hızı → kodlayıcı ayarı. */
+export function resolveEncoder(quality: QualityKey, fps?: number | null, bitrateKbps?: number | null): EncoderConfig {
+  const preset = QUALITY_PRESETS.find((q) => q.key === quality) ?? QUALITY_PRESETS[0];
+  const f = FPS_OPTIONS.includes(fps as FpsOption) ? (fps as number) : preset.fps;
+  const b = Number(bitrateKbps) > 0 ? Math.min(8000, Math.max(300, Math.round(Number(bitrateKbps)))) : preset.videoBitrateKbps;
+  return { key: preset.key, label: preset.label, width: preset.width, height: preset.height, fps: f, videoBitrateKbps: b };
+}
+
+/**
+ * Yerel modülün durum iletisini (İngilizce / kod) kullanıcıya gösterilecek
+ * Türkçe cümleye çevirir. Bilinmeyen neden parantez içinde korunur (destek için).
+ */
+export function encoderMessageText(state: string, message?: string | null): string {
+  const raw = String(message ?? "").trim();
+  const lower = raw.toLowerCase();
+  if (lower === "permission_missing") return "Kamera ve mikrofon izni verilmedi.";
+  if (lower === "app_background") return "Uygulama arka planda: görüntü durdu. Ekrana dönünce yayın sürer.";
+  if (lower === "auth_error") return "Yayın sunucusu bağlantıyı reddetti. Yayın anahtarını kontrol et.";
+  if (lower === "bad_stream_key") return "Yayın anahtarı geçersiz ya da başka bir cihazda kullanılıyor.";
+  if (lower.startsWith("camera_error")) return "Kamera açılamadı. Başka bir uygulama kamerayı kullanıyor olabilir.";
+  const retry = /^\((\d+)\/(\d+)\)/.exec(raw);
+  if (state === "reconnecting" && retry) return `Bağlantı koptu, yeniden bağlanılıyor (${retry[1]}/${retry[2]}).`;
+  if (state === "reconnecting") return "Bağlantı koptu, yeniden bağlanılıyor.";
+  if (state === "failed") {
+    const reason = raw.replace(/^\(\d+\/\d+\)\s*/, "");
+    if (/timed? ?out|timeout/i.test(reason)) return "Yayın sunucusu yanıt vermedi (zaman aşımı). İnternet bağlantını kontrol et.";
+    if (/unknown ?host|resolve|unreachable|no address|enetunreach|network is/i.test(reason)) return "Yayın sunucusuna ulaşılamadı. İnternet bağlantını kontrol et.";
+    if (/refused|reset|broken pipe|closed|io_error|econn/i.test(reason)) return "Yayın bağlantısı koptu ve yeniden kurulamadı. Ağı kontrol edip yayını yeniden başlat.";
+    if (/malformed|endpoint|url/i.test(reason)) return "Yayın adresi hatalı. rtmp://sunucu/uygulama/anahtar biçiminde olmalı.";
+    return reason ? `Yayın bağlantısı kurulamadı (${reason}).` : "Yayın bağlantısı kurulamadı.";
+  }
+  return raw;
+}
+
+/** Ölçülen bit hızının hedefe oranına göre bağlantı sağlığı. */
+export type HealthLevel = "good" | "weak" | "bad" | "idle";
+
+export function healthLevel(state: string, bitrateKbps: number | null | undefined, targetKbps: number, fps?: number | null, targetFps?: number): HealthLevel {
+  if (state !== "live") return state === "connecting" || state === "reconnecting" ? "weak" : "idle";
+  if (bitrateKbps == null) return "good";
+  const ratio = targetKbps > 0 ? bitrateKbps / targetKbps : 1;
+  const fpsRatio = fps != null && targetFps ? fps / targetFps : 1;
+  if (ratio < 0.4 || fpsRatio < 0.5) return "bad";
+  if (ratio < 0.7 || fpsRatio < 0.8) return "weak";
+  return "good";
+}
+
+export const HEALTH_LABEL: Record<HealthLevel, string> = {
+  good: "Bağlantı iyi",
+  weak: "Bağlantı zayıf",
+  bad: "Bağlantı yetersiz",
+  idle: "Yayın kapalı",
+};
 
 /** "1:05:09" / "05:09" — yayın süresi. */
 export function elapsedText(ms: number): string {

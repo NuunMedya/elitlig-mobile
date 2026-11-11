@@ -2,18 +2,27 @@
  * HIZLI EKLEME — başlığı yaz, isteğe bağlı gün ve önem seç, gönder
  * (web todos/QuickAddBar.js). Açıklama, aşama, bağlantı ya da kişiye atama
  * gerekiyorsa "Ayrıntılı" yazılan başlıkla tam formu açar.
+ *
+ * DOĞAL DİL (masaüstü hızlı kayıt ile aynı): "yarın 14:00 sahayı ara !" yazınca
+ * gün, saat ve öncelik başlıktan ayıklanır; ne anlaşıldığı kutunun altında
+ * gönderilmeden ÖNCE gösterilir. Yazıdan anlaşılan tarih çiplerdeki seçimin
+ * önüne geçer (lib/admin/quickParse.ts).
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 
 import { DateSheet } from "@/components/admin";
 import { Chip, ChipGroup, Touchable } from "@/components/ui";
+import { parseQuickTask } from "@/lib/admin/quickParse";
+import { TOOL_APPS } from "@/lib/admin/toolApps";
 import type { TodoPriority } from "@/lib/api/todos";
 import { colors, hairline, radius, space, textScale, touchSlop, type } from "@/theme";
 
-import { endOfDay } from "./boardUtils";
+import { endOfDay, formatDue } from "./boardUtils";
+
+const APP = TOOL_APPS.gorevler;
 
 type When = "" | "today" | "tomorrow" | "pick";
 
@@ -55,11 +64,18 @@ export function QuickAddBar({
 
   useEffect(() => setWhen(defaultWhen), [defaultWhen]);
 
+  const parsed = useMemo(() => parseQuickTask(title), [title]);
+  const understood = [parsed.dueAt ? formatDue(parsed.dueAt) : null, parsed.priority === "high" && !important ? "Önemli" : null].filter(Boolean).join(" · ");
+
   const submit = async () => {
     const value = title.trim();
     if (!value || busy) return;
     setBusy(true);
-    const ok = await onAdd({ title: value, due_at: dueFromChoice(when, picked), priority: important ? "high" : "normal" });
+    const ok = await onAdd({
+      title: (parsed.title || value).slice(0, 200),
+      due_at: parsed.dueAt ?? dueFromChoice(when, picked),
+      priority: important || parsed.priority === "high" ? "high" : "normal",
+    });
     setBusy(false);
     if (ok) {
       setTitle("");
@@ -75,12 +91,12 @@ export function QuickAddBar({
   return (
     <View style={styles.box}>
       <View style={styles.line}>
-        <Ionicons name="add" size={22} color={colors.brandAccent} />
+        <Ionicons name="add" size={22} color={APP.accent} />
         <TextInput
           value={title}
           onChangeText={setTitle}
           maxLength={200}
-          placeholder={placeholder || "Ne yapılacak? Yaz ve gönder"}
+          placeholder={placeholder || "Ne yapılacak? Örn. yarın 14:00 sahayı ara !"}
           placeholderTextColor={colors.textTertiary}
           style={styles.input}
           returnKeyType="send"
@@ -93,13 +109,24 @@ export function QuickAddBar({
           haptic="success"
           onPress={submit}
           disabled={busy || !title.trim()}
-          style={[styles.send, !title.trim() ? styles.sendOff : null]}
+          style={[styles.send, { backgroundColor: APP.accent }, !title.trim() ? styles.sendOff : null]}
           hitSlop={touchSlop(32)}
           accessibilityLabel="Ekle"
         >
-          <Ionicons name="arrow-up" size={18} color={colors.textOnBrand} />
+          <Ionicons name="arrow-up" size={18} color={APP.onAccent} />
         </Touchable>
       </View>
+      {understood ? (
+        <View style={styles.understood} accessibilityLiveRegion="polite">
+          <Ionicons name="sparkles-outline" size={14} color={APP.accent} />
+          <Text style={[styles.understoodText, { color: APP.accent }]} numberOfLines={1} {...textScale.dense}>
+            {understood}
+          </Text>
+          <Text style={styles.hint} numberOfLines={1} {...textScale.dense}>
+            “{parsed.title}”
+          </Text>
+        </View>
+      ) : null}
       <ChipGroup contentPadding={0}>
         <Chip label="Tarihsiz" size="sm" selected={when === ""} onPress={() => setWhen("")} />
         <Chip label="Bugün" icon="sunny-outline" size="sm" selected={when === "today"} onPress={() => setWhen("today")} />
@@ -141,7 +168,9 @@ const styles = StyleSheet.create({
   },
   line: { flexDirection: "row", alignItems: "center", gap: space.sm },
   input: { flex: 1, ...type.body, color: colors.textPrimary, paddingVertical: space.xs },
-  send: { width: 32, height: 32, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.brand },
+  send: { width: 32, height: 32, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
   sendOff: { opacity: 0.4 },
-  hint: { ...type.caption, color: colors.textTertiary },
+  hint: { ...type.caption, color: colors.textTertiary, flexShrink: 1 },
+  understood: { flexDirection: "row", alignItems: "center", gap: space.xs },
+  understoodText: { ...type.labelSm },
 });

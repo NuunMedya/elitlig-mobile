@@ -102,6 +102,7 @@ export default function CalculatorsScreen() {
 
   return (
     <AdminScreen
+      app="hesap-araclari"
       title="Hesap araçları"
       subtitle="Anında, kayıt gerektirmeden"
     >

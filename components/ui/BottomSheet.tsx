@@ -18,6 +18,13 @@
  * ve iki animasyon da `useNativeDriver: true` ile JS'e uğramaz.
  *
  * "Hareketi azalt" açıkken yaylanma yerine 120ms'lik opaklık kullanılır (§5.8).
+ *
+ * KLAVYE: panel ekranın altına yapışıktır; içindeki bir alan (ret gerekçesi,
+ * savunma metni, not) odaklanınca klavye alanın ÜSTÜNE biniyordu — Modal
+ * penceresi iOS'ta hiç, kenardan kenara Android'de güvenilir biçimde
+ * küçülmez. Panel artık klavyenin örttüğü kadar alt boşluk alır: örtüşme
+ * kökün ÖLÇÜLEN yüksekliği ile klavyenin üst kenarından hesaplanır, yani
+ * pencere kendiliğinden küçüldüyse (örtüşme 0) ikinci kez itilmez.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -25,8 +32,11 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
   Dimensions,
+  Keyboard,
+  LayoutAnimation,
   Modal,
   PanResponder,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -80,6 +90,30 @@ export function BottomSheet({
   const translateY = useRef(new Animated.Value(screenHeight)).current;
   const scrim = useRef(new Animated.Value(0)).current;
   const closingRef = useRef(false);
+
+  /* Klavye örtüşmesi — ayrıntı dosya başındaki KLAVYE notunda. */
+  const [keyboardTop, setKeyboardTop] = useState<number | null>(null);
+  const [rootHeight, setRootHeight] = useState(0);
+  useEffect(() => {
+    if (!mounted) return;
+    const ios = Platform.OS === "ios";
+    const show = Keyboard.addListener(ios ? "keyboardWillChangeFrame" : "keyboardDidShow", (event) => {
+      if (ios && !reduceMotion) {
+        LayoutAnimation.configureNext({
+          duration: event.duration || duration.base,
+          update: { type: LayoutAnimation.Types.keyboard },
+        });
+      }
+      setKeyboardTop(event.endCoordinates.screenY);
+    });
+    const hide = Keyboard.addListener(ios ? "keyboardWillHide" : "keyboardDidHide", () => setKeyboardTop(null));
+    return () => {
+      show.remove();
+      hide.remove();
+      setKeyboardTop(null);
+    };
+  }, [mounted, reduceMotion]);
+  const keyboardInset = keyboardTop != null && rootHeight > 0 ? Math.max(0, Math.round(rootHeight - keyboardTop)) : 0;
 
   const animateIn = useCallback(() => {
     closingRef.current = false;
@@ -187,9 +221,10 @@ export function BottomSheet({
     snap === "full"
       ? { height: screenHeight - insets.top - space.md }
       : snap === "half"
-        ? { height: screenHeight * 0.5 }
+        ? // Klavye açıkken yarım panel klavye kadar uzar; içerik alanı korunur.
+          { height: Math.min(screenHeight * 0.5 + keyboardInset, screenHeight - insets.top - space.md) }
         : { maxHeight: screenHeight * 0.86 },
-    { paddingBottom: insets.bottom + space.md },
+    { paddingBottom: keyboardInset > 0 ? keyboardInset + space.sm : insets.bottom + space.md },
     { transform: [{ translateY }] },
   ];
 
@@ -214,7 +249,7 @@ export function BottomSheet({
       statusBarTranslucent
       onRequestClose={requestClose}
     >
-      <View style={styles.root}>
+      <View style={styles.root} onLayout={(event) => setRootHeight(event.nativeEvent.layout.height)}>
         <Animated.View style={[StyleSheet.absoluteFill, styles.scrim, { opacity: scrim }]}>
           <Pressable
             style={StyleSheet.absoluteFill}

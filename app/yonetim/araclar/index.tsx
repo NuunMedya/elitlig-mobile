@@ -17,29 +17,21 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { AdminScreen, RecordCard, StatRow, useAdminMutation, type BadgeSpec } from "@/components/admin";
+import Ionicons from "@expo/vector-icons/Ionicons";
+
+import { AdminScreen, StatRow, type BadgeSpec } from "@/components/admin";
+import { QuickCapture } from "@/components/admin/tools/QuickCapture";
 import { formatClock, relativeDayLocal } from "@/components/admin/tools/agendaUtils";
 import { readTodayFocus, type FocusStats } from "@/components/admin/tools/focusUtils";
-import { Button, EmptyState, Input, SectionHeader, Skeleton, Touchable, withAlpha, type Tone } from "@/components/ui";
-import { TOOL_MODULES } from "@/lib/adminModules";
+import { Badge, EmptyState, SectionHeader, Skeleton, Touchable, withAlpha } from "@/components/ui";
 import { formatMoney } from "@/lib/admin/format";
+import { TOOL_APP_LIST, toolApp } from "@/lib/admin/toolApps";
 import { eventColor } from "@/lib/admin/toolPalette";
-import { createNote, getProjectSummaries, getToolsOverview, toolKeys } from "@/lib/api/admin/tools";
+import { getProjectSummaries, getToolsOverview, toolKeys } from "@/lib/api/admin/tools";
 import { getTodoSummary, todoKeys } from "@/lib/api/todos";
 import { useAuth } from "@/providers/AuthProvider";
 import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
-const TONES: Record<string, Tone> = {
-  projeler: "brand",
-  gorevler: "danger",
-  ajanda: "info",
-  "not-defteri": "warn",
-  muhasebe: "win",
-  tablolar: "accent",
-  rehber: "info",
-  "hesap-araclari": "neutral",
-  "odak-sayaci": "brand",
-};
 
 const greeting = (hour: number) => (hour < 6 ? "İyi geceler" : hour < 12 ? "Günaydın" : hour < 18 ? "İyi günler" : "İyi akşamlar");
 
@@ -52,14 +44,13 @@ function useClock() {
   return now;
 }
 
-const routeOf = (key: string) => TOOL_MODULES.find((m) => m.key === key)?.route ?? "/yonetim/araclar";
+const routeOf = (key: string) => toolApp(key)?.route ?? "/yonetim/araclar";
 
 export default function ToolsHubScreen() {
   const router = useRouter();
   const auth = useAuth();
   const queryClient = useQueryClient();
   const now = useClock();
-  const [quick, setQuick] = useState("");
   const [focus, setFocus] = useState<FocusStats | null>(null);
 
   const overview = useQuery({ queryKey: toolKeys.overview(), queryFn: getToolsOverview });
@@ -71,18 +62,6 @@ export default function ToolsHubScreen() {
     useCallback(() => {
       void readTodayFocus().then(setFocus);
     }, [])
-  );
-
-  const saveQuick = useAdminMutation(
-    (text: string) => {
-      const [first, ...rest] = text.split("\n");
-      return createNote(rest.length ? { title: first, body: rest.join("\n") } : { title: "", body: first });
-    },
-    {
-      success: "Not defterine eklendi.",
-      invalidate: [toolKeys.overview(), toolKeys.notesAll()],
-      onSuccess: () => setQuick(""),
-    }
   );
 
   const refresh = () => {
@@ -128,10 +107,11 @@ export default function ToolsHubScreen() {
   }, [projects.data, summary, nextEvent, data, ledger, focus]);
 
   const name = (auth.user?.fullName || auth.user?.username || "").split(" ")[0];
-  const tools = TOOL_MODULES.filter((m) => m.key !== "mesajlar");
+  // Mesajlar ve Talepler de birer uygulamadır; sayıları kendi rozetlerinde (sekme çubuğu, zil) görünür.
+  const tools = TOOL_APP_LIST;
 
   return (
-    <AdminScreen title="Araçlar" onRefresh={refresh} refreshing={overview.isRefetching}>
+    <AdminScreen title="Araçlar" subtitle="Her araç kendi uygulaması" onRefresh={refresh} refreshing={overview.isRefetching}>
       <View style={styles.hero}>
         <View style={styles.flex}>
           <Text style={styles.hello} {...textScale.dense}>
@@ -161,22 +141,37 @@ export default function ToolsHubScreen() {
         </Text>
       ) : null}
 
-      <SectionHeader title="Araçlar" size="group" inset="flush" />
-      <View style={styles.cards}>
+      <SectionHeader title="Hızlı kayıt" size="group" inset="flush" />
+      <QuickCapture />
+
+      <SectionHeader title="Uygulamalar" size="group" inset="flush" />
+      <View style={styles.grid}>
         {tools.map((tool) => {
-          const preview = previews[tool.key] ?? { text: tool.description };
+          const preview = previews[tool.key] ?? { text: tool.tagline };
+          const badge = preview.badge;
           return (
-            <RecordCard
+            <Touchable
               key={tool.key}
-              title={tool.title}
-              subtitle={tool.description}
-              meta={overview.isLoading && !preview.badge ? null : preview.text}
-              icon={tool.icon}
-              iconTone={TONES[tool.key] ?? "brand"}
-              badges={[preview.badge]}
+              feedback="card"
+              haptic="light"
               onPress={() => router.push(tool.route as never)}
-              numberOfLines={2}
-            />
+              style={styles.tile}
+              accessibilityRole="button"
+              accessibilityLabel={`${tool.title}. ${preview.text}${badge ? `. ${badge.label}` : ""}`}
+            >
+              <View style={styles.tileHead}>
+                <View style={[styles.tileIcon, { backgroundColor: tool.accent }]}>
+                  <Ionicons name={tool.icon} size={20} color={tool.onAccent} />
+                </View>
+                {badge ? <Badge label={badge.label} tone={badge.tone} size="xs" /> : null}
+              </View>
+              <Text style={styles.tileTitle} numberOfLines={1} {...textScale.dense}>
+                {tool.shortTitle}
+              </Text>
+              <Text style={styles.tileText} numberOfLines={2} {...textScale.dense}>
+                {preview.text}
+              </Text>
+            </Touchable>
           );
         })}
       </View>
@@ -223,28 +218,7 @@ export default function ToolsHubScreen() {
         <EmptyState compact variant="inline" icon="calendar-clear-outline" title="Takvim boş" body="Maç, toplantı ya da ödeme günlerinizi ajandaya ekleyin." />
       )}
 
-      <SectionHeader title="Hızlı not" size="group" inset="flush" action={{ label: "Tüm notlar", onPress: () => router.push(routeOf("not-defteri") as never) }} />
-      <View style={styles.quick}>
-        <Input
-          value={quick}
-          onChangeText={setQuick}
-          placeholder="Aklınıza geleni yazın… İlk satır başlık olur."
-          multiline
-          numberOfLines={3}
-          accessibilityLabel="Hızlı not"
-        />
-        <Button
-          label="Kaydet"
-          size="sm"
-          icon="checkmark"
-          onPress={() => saveQuick.mutate(quick.trim())}
-          disabled={!quick.trim()}
-          loading={saveQuick.isPending}
-          style={styles.quickBtn}
-          haptic="success"
-        />
-      </View>
-
+      {data?.notes?.length ? <SectionHeader title="Son notlar" size="group" inset="flush" action={{ label: "Tüm notlar", onPress: () => router.push(routeOf("not-defteri") as never) }} /> : null}
       {data?.notes?.length ? (
         <View style={styles.notes}>
           {data.notes.map((note) => {
@@ -290,7 +264,22 @@ const styles = StyleSheet.create({
   date: { ...type.bodySm, color: colors.textSecondary, marginTop: 2 },
   clock: { ...type.scoreLg, color: colors.brandAccent },
   muted: { ...type.caption, color: colors.textTertiary },
-  cards: { gap: space.sm },
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
+  tile: {
+    flexBasis: "47%",
+    flexGrow: 1,
+    gap: space.xs,
+    padding: space.md,
+    borderRadius: radius.xl,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    backgroundColor: colors.surface1,
+    minHeight: 112,
+  },
+  tileHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.xs, marginBottom: space.xxs },
+  tileIcon: { width: 38, height: 38, borderRadius: radius.md, alignItems: "center", justifyContent: "center" },
+  tileTitle: { ...type.h3, color: colors.textPrimary },
+  tileText: { ...type.caption, color: colors.textSecondary },
   list: { borderRadius: radius.xl, borderWidth: hairline, borderColor: colors.border, backgroundColor: colors.surface1, overflow: "hidden" },
   upcoming: { flexDirection: "row", alignItems: "center", gap: space.md, paddingVertical: space.m, paddingRight: space.md },
   divided: { borderTopWidth: hairline, borderTopColor: colors.separator },
@@ -299,8 +288,6 @@ const styles = StyleSheet.create({
   whenDay: { ...type.labelSm, color: colors.textPrimary },
   whenTime: { ...type.numSm, color: colors.textTertiary },
   upTitle: { ...type.h4, color: colors.textPrimary },
-  quick: { gap: space.sm },
-  quickBtn: { alignSelf: "flex-end" },
   notes: { gap: space.sm },
   note: {
     gap: 2,

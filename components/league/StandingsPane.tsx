@@ -26,6 +26,13 @@
  * satırdır: renk tek başına anlam taşımaz, "altın = şampiyon" bir yerde
  * yazılmalı ve o yer tablonun sonudur.
  *
+ * GRUPLAR VE KUPALAR (web'deki puan durumu sekmeleriyle aynı kurgu, bkz.
+ * `cups.ts`): sezon gruplara/etaplara bölünmüşse tablonun üstünde bir çip
+ * şeridi çıkar — "Genel" (yönetici kapatabilir) · lig usulü gruplar (kendi
+ * maçlarından hesaplanan tablo) · kupalar (eleme ağacı, `CupView`) · bağımsız
+ * etaplar (eşleşme listesi). Grupsuz sezonda şerit hiç çizilmez. Eleme
+ * bölgeleri statüden gelir: "1–8. sıra → Altın Kupa Son 16".
+ *
  * YOĞUN ÖLÇÜ: satırlar ortak `TeamRow` değil, bu sekmeye özgü ince
  * `StandingsRow`dur (34px satır, 12px ad, 18px arma; gerekçe o dosyada).
  */
@@ -33,8 +40,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
-import { FlatList, RefreshControl, StyleSheet, Text, View } from "react-native";
+import { FlatList, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import {
+  Chip,
+  ChipGroup,
   EmptyState,
   ErrorState,
   SegmentedControl,
@@ -48,6 +57,7 @@ import {
 import type { TeamRowColumns } from "@/components/ui/TeamRow";
 import { FollowStar } from "@/components/FollowControls";
 import { getPlayerRankings } from "@/lib/api/players";
+import { getGroupStandings, getSeasonOverview, seasonGroupKeys } from "@/lib/api/seasonGroups";
 import { getStandings } from "@/lib/api/standings";
 import { queryKeys } from "@/lib/queryKeys";
 import type { PlayerSort, StandingRow } from "@/lib/types";
@@ -57,6 +67,7 @@ import {
   colors,
   defaultZoneRules,
   hairline,
+  layout,
   palette,
   space,
   textScale,
@@ -67,6 +78,8 @@ import {
   type StandingZone,
   type ZoneRule,
 } from "@/theme";
+import { CupView } from "./CupView";
+import { buildQualification, buildStandingsTabs, looseStage, type QualificationLegend } from "./cups";
 import type { LeaderEntry } from "./Leaderboard";
 import { ScorersStrip } from "./ScorersStrip";
 import { StandingsHead, StandingsRow } from "./StandingsRow";
@@ -120,6 +133,37 @@ const ZoneLegend = React.memo(function ZoneLegend({ rules }: { rules: ZoneRule[]
   );
 });
 
+/**
+ * Eleme bölgesi tonları (statüden gelen "kim nereye kalır"): tablo bölgelerinin
+ * ray renkleri yeniden kullanılır — yeni renk icat edilmez.
+ */
+const QUALIFICATION_COLORS = [
+  colors.zoneChampion,
+  colors.zonePromotion,
+  colors.zonePlayoff,
+  colors.zoneRelegationPlayoff,
+] as const;
+
+/** Statüden gelen bölgelerin açıklaması — her hedef kendi satırında. */
+const QualificationLegendList = React.memo(function QualificationLegendList({
+  items,
+}: {
+  items: QualificationLegend[];
+}) {
+  return (
+    <View style={styles.qualLegend}>
+      {items.map((item) => (
+        <View key={item.label} style={styles.legendItem}>
+          <View style={[styles.legendSwatch, { backgroundColor: QUALIFICATION_COLORS[item.tone] }]} />
+          <Text style={styles.legendLabel} numberOfLines={2} {...textScale.dense}>
+            {item.label}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+});
+
 /** Satır sonundaki takip yıldızının genişliği (FollowStar kutusu = 32, ikon 14). */
 const STAR_SLOT = 32;
 /** Tablonun altındaki gol krallığı kapısında gösterilen golcü sayısı. */
@@ -149,6 +193,32 @@ export function StandingsPane({ scrollProps, onOpenPlayers }: StandingsPaneProps
     staleTime: 60_000,
   });
 
+  /* Sezonun grup/etap kurgusu. Okunamazsa sezon grupsuz kabul edilir: tablo
+     bugünkü gibi tek parça çizilir, yalnız sekme şeridi çıkmaz. */
+  const seasonId = scope.seasonId;
+  const overviewQuery = useQuery({
+    queryKey: seasonGroupKeys.overview(seasonId),
+    queryFn: () => getSeasonOverview(seasonId as number),
+    enabled: scope.ready && seasonId != null,
+    staleTime: 60_000,
+    retry: 1,
+  });
+  const { tabs } = useMemo(() => buildStandingsTabs(overviewQuery.data), [overviewQuery.data]);
+  const [selectedTab, setSelectedTab] = useState<string>("");
+  /* Seçim türetilir: sezon değişince (ya da "Genel" kapatılınca) geçersiz
+     kalan anahtar sessizce ilk sekmeye düşer — efekt ve ara çizim yok. */
+  const activeTab = tabs.find((tab) => tab.key === selectedTab) ?? tabs[0];
+  const activeGroupId = activeTab.kind === "group" ? Number(activeTab.group.id) : null;
+
+  /* Grup tablosu sezon geneli tablodan türetilemez: grubun KENDİ maçlarından
+     hesaplanır (bir takım birden fazla etapta yer alabilir). */
+  const groupQuery = useQuery({
+    queryKey: seasonGroupKeys.standings(activeGroupId),
+    queryFn: () => getGroupStandings(activeGroupId as number),
+    enabled: activeGroupId != null,
+    staleTime: 60_000,
+  });
+
   /* Gol krallığı — İstatistik/Oyuncular ile aynı sorgu anahtarı: önbellek ortak. */
   const scorersQuery = useQuery({
     queryKey: queryKeys.playerRankings(scopeKey, "topScorers"),
@@ -159,11 +229,17 @@ export function StandingsPane({ scrollProps, onOpenPlayers }: StandingsPaneProps
 
   const { refetch: refetchStandings } = query;
   const { refetch: refetchScorers } = scorersQuery;
+  const { refetch: refetchOverview } = overviewQuery;
+  const { refetch: refetchGroup } = groupQuery;
   const refetchAll = useCallback(() => {
     void refetchScorers();
+    void refetchOverview();
+    if (activeGroupId != null) void refetchGroup();
     return refetchStandings();
-  }, [refetchScorers, refetchStandings]);
-  const refresh = useRefresh(refetchAll, { refreshing: query.isRefetching });
+  }, [activeGroupId, refetchGroup, refetchOverview, refetchScorers, refetchStandings]);
+  const refresh = useRefresh(refetchAll, {
+    refreshing: query.isRefetching || overviewQuery.isRefetching || groupQuery.isRefetching,
+  });
 
   const scorers = useMemo<LeaderEntry[]>(
     () =>
@@ -180,8 +256,21 @@ export function StandingsPane({ scrollProps, onOpenPlayers }: StandingsPaneProps
         })),
     [scorersQuery.data],
   );
-  const rows = useMemo(() => query.data ?? [], [query.data]);
+  const tableQuery = activeGroupId != null ? groupQuery : query;
+  const rows = useMemo(() => tableQuery.data ?? [], [tableQuery.data]);
   const zoneRules = useMemo(() => defaultZoneRules(rows.length), [rows.length]);
+  /* Eleme bölgeleri: grup sekmesinde o grubun, aksi hâlde genel tablonun.
+     Statü bölge tanımlamadıysa takım sayısından türetilen varsayılan kalır. */
+  const qualification = useMemo(
+    () =>
+      buildQualification(
+        activeGroupId != null
+          ? overviewQuery.data?.qualification.groups[String(activeGroupId)]
+          : overviewQuery.data?.qualification.overall,
+      ),
+    [activeGroupId, overviewQuery.data],
+  );
+  const hasQualification = qualification.legend.length > 0;
   const powerBalance = rows[0]?.standings_type === "gucdengesi";
   const followedCount = useMemo(
     () => rows.filter((row) => isFavorite(row.team_id)).length,
@@ -191,6 +280,24 @@ export function StandingsPane({ scrollProps, onOpenPlayers }: StandingsPaneProps
   const openTeam = useCallback((teamId: number) => router.push(`/takim/${teamId}`), [router]);
   const openPlayer = useCallback((id: number) => router.push(`/oyuncu/${id}`), [router]);
   const openScorers = useCallback(() => onOpenPlayers?.("topScorers"), [onOpenPlayers]);
+  const openMatch = useCallback((matchId: number) => router.push(`/mac/${matchId}`), [router]);
+
+  /* Grup / kupa şeridi — tek sekmede (grupsuz sezon) hiç çizilmez. */
+  const groupBar =
+    tabs.length > 1 ? (
+      <ChipGroup style={styles.groupBar} testID="standings-groups">
+        {tabs.map((tab) => (
+          <Chip
+            key={tab.key}
+            label={tab.label}
+            size="sm"
+            icon={tab.kind === "cup" ? "trophy-outline" : tab.kind === "stage" ? "git-network-outline" : undefined}
+            selected={tab.key === activeTab.key}
+            onPress={() => setSelectedTab(tab.key)}
+          />
+        ))}
+      </ChipGroup>
+    ) : null;
 
   const renderItem = useCallback(
     ({ item, index }: { item: StandingRow; index: number }) => {
@@ -211,7 +318,11 @@ export function StandingsPane({ scrollProps, onOpenPlayers }: StandingsPaneProps
           points={item.display_points}
           form={item.last5}
           highlighted={favorite}
-          zone={zoneColor(palette, zoneForRank(rank, zoneRules))}
+          zone={
+            hasQualification
+              ? QUALIFICATION_COLORS[qualification.byRank.get(rank) ?? -1] ?? null
+              : zoneColor(palette, zoneForRank(rank, zoneRules))
+          }
           onPress={openTeam}
           trailing={
             <FollowStar
@@ -223,11 +334,11 @@ export function StandingsPane({ scrollProps, onOpenPlayers }: StandingsPaneProps
         />
       );
     },
-    [columns, isFavorite, openTeam, rows.length, zoneRules],
+    [columns, hasQualification, isFavorite, openTeam, qualification, rows.length, zoneRules],
   );
 
   if (!scope.ready && !scope.loading) return <ScopeMissing />;
-  if (query.isLoading || scope.loading) {
+  if (query.isLoading || overviewQuery.isLoading || scope.loading) {
     /* İskelet de kartta durur; yükleme bitince çerçeve zıplamaz. */
     return (
       <View style={paneStyles.skeleton}>
@@ -238,15 +349,41 @@ export function StandingsPane({ scrollProps, onOpenPlayers }: StandingsPaneProps
       </View>
     );
   }
-  if (query.isError && rows.length === 0) {
-    return <ErrorState error={query.error} onRetry={query.refetch} />;
+  /* KUPA / ETAP SEKMESİ — tablo yerine eleme ağacı ya da eşleşme listesi. */
+  if (activeTab.kind === "cup" || activeTab.kind === "stage") {
+    return (
+      <ScrollView
+        {...scrollProps}
+        contentContainerStyle={[paneStyles.content, styles.cupContent]}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl {...refreshControlProps(refresh.refreshing, refresh.onRefresh)} />
+        }
+      >
+        {groupBar}
+        <CupView
+          key={activeTab.key}
+          cup={activeTab.kind === "cup" ? activeTab.cup : null}
+          stage={activeTab.kind === "stage" ? looseStage(activeTab.group) : null}
+          onOpenMatch={openMatch}
+        />
+      </ScrollView>
+    );
   }
+
+  if (tableQuery.isError && rows.length === 0 && tabs.length <= 1) {
+    return <ErrorState error={tableQuery.error} onRetry={tableQuery.refetch} />;
+  }
+
+  const tableLoading = activeGroupId != null && groupQuery.isLoading;
 
   return (
     <FlatList
       {...scrollProps}
       data={rows}
       extraData={columns}
+      /* Sekme değişince liste tepeden başlar; eski grubun kaydırma konumu kalmaz. */
+      key={activeTab.key}
       keyExtractor={standingKey}
       renderItem={renderItem}
       ItemSeparatorComponent={GroupSeparator}
@@ -257,9 +394,12 @@ export function StandingsPane({ scrollProps, onOpenPlayers }: StandingsPaneProps
         <RefreshControl {...refreshControlProps(refresh.refreshing, refresh.onRefresh)} />
       }
       ListHeaderComponent={
-        rows.length > 0 ? (
+        rows.length === 0 ? (
+          groupBar ? <View style={styles.header}>{groupBar}</View> : null
+        ) : (
           <View style={styles.header}>
-            {query.isError ? <ErrorState error={query.error} variant="banner" /> : null}
+            {groupBar}
+            {tableQuery.isError ? <ErrorState error={tableQuery.error} variant="banner" /> : null}
             <ScorersStrip
               entries={scorers}
               onPressEntry={openPlayer}
@@ -287,19 +427,35 @@ export function StandingsPane({ scrollProps, onOpenPlayers }: StandingsPaneProps
               />
             </View>
           </View>
-        ) : null
+        )
       }
       ListEmptyComponent={
-        <EmptyState
-          icon="podium-outline"
-          title="Puan tablosu boş"
-          body="Bu sezonda henüz maç oynanmamış. İlk maçlardan sonra sıralama burada oluşur."
-        />
+        tableLoading ? (
+          <View style={styles.skeletonCard}>
+            <SkeletonStandings density="table" />
+          </View>
+        ) : tableQuery.isError ? (
+          <ErrorState error={tableQuery.error} onRetry={tableQuery.refetch} />
+        ) : (
+          <EmptyState
+            icon="podium-outline"
+            title={activeGroupId != null ? "Bu grupta henüz tablo yok" : "Puan tablosu boş"}
+            body={
+              activeGroupId != null
+                ? "Grubun ilk maçları oynanınca sıralama burada oluşur."
+                : "Bu sezonda henüz maç oynanmamış. İlk maçlardan sonra sıralama burada oluşur."
+            }
+          />
+        )
       }
       ListFooterComponent={
         rows.length > 0 ? (
           <View style={styles.footer}>
-            <ZoneLegend rules={zoneRules} />
+            {hasQualification ? (
+              <QualificationLegendList items={qualification.legend} />
+            ) : (
+              <ZoneLegend rules={zoneRules} />
+            )}
             {powerBalance ? (
               <Text style={styles.footnote} {...textScale.long}>
                 Bu sezon Güç Dengesi puanlaması kullanılıyor: bir maçtan alınan puan
@@ -318,6 +474,17 @@ const standingKey = (item: StandingRow) => String(item.team_id);
 const styles = StyleSheet.create({
   header: {
     gap: space.sm,
+  },
+  /* Çip şeridi ekran kenarına kadar kayar (liste dolgusunu geri alır). */
+  groupBar: {
+    marginHorizontal: -layout.screenPadding,
+  },
+  cupContent: {
+    gap: space.md,
+  },
+  qualLegend: {
+    gap: space.xs,
+    paddingHorizontal: space.xxs,
   },
   toolbar: {
     flexDirection: "row",

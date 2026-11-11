@@ -28,7 +28,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, FlatList, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -48,7 +48,6 @@ import {
   SkeletonListRow,
   TeamLogo,
   Touchable,
-  errorMessage,
   toneColors,
   useHeaderScroll,
   useRefresh,
@@ -57,7 +56,15 @@ import {
   type SegmentedItem,
   type Tone,
 } from "@/components/ui";
+import { FormSheet, SelectField, confirmAction, type FieldDef, type FormValues, type Option } from "@/components/admin";
+import { hasAnyPermission } from "@/lib/admin/access";
+import { errorText } from "@/lib/admin/errors";
+import { getTeamsForCity } from "@/lib/api/admin/matches";
+import { ApiError } from "@/lib/http";
+import { useScope } from "@/providers/ScopeProvider";
 import {
+  createVenue,
+  deleteVenue,
   getAdminBoard,
   getAdminRequests,
   getAdminVenues,
@@ -65,6 +72,8 @@ import {
   REQUEST_STATUS_LABELS,
   reviewMatchRequest,
   setSlotStatus,
+  setSlotTeams,
+  updateVenue,
   SLOT_STATUS_LABELS,
   type AdminBoardCell,
   type AdminMatchRequest,
@@ -72,6 +81,7 @@ import {
   type RequestStatus,
   type SlotStatus,
   type VenueGridDay,
+  type VenueInput,
 } from "@/lib/api/admin";
 import { formatDateShort, mediaUrl } from "@/lib/format";
 import { useAuth } from "@/providers/AuthProvider";
@@ -107,6 +117,30 @@ const SLOT_TONE: Record<SlotStatus, Tone> = {
 /** Panonun üstündeki açıklama şeridi — sunucudaki durum adlarıyla birebir. */
 const LEGEND: SlotStatus[] = ["open", "closed", "awaiting", "booked"];
 
+const PERMS = ["venues.view", "venues.manage"];
+
+const WEEKDAY_OPTIONS: Option<number>[] = [
+  { value: 1, label: "Pazartesi" },
+  { value: 2, label: "Salı" },
+  { value: 3, label: "Çarşamba" },
+  { value: 4, label: "Perşembe" },
+  { value: 5, label: "Cuma" },
+  { value: 6, label: "Cumartesi" },
+  { value: 7, label: "Pazar" },
+];
+
+const HHMM = /^([01]?\d|2[0-4]):([0-5]\d)$/;
+
+/** Doğrulama hatasında sunucunun alan alan gerekçesi (fieldErrors) tek cümleye iner. */
+function venueErrorText(error: unknown): string {
+  if (error instanceof ApiError) {
+    const fields = (error.detail as { fieldErrors?: Record<string, string> } | null)?.fieldErrors;
+    const lines = fields ? Object.values(fields).filter(Boolean) : [];
+    if (lines.length) return lines.join(" ");
+  }
+  return errorText(error);
+}
+
 function firstParam(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
@@ -141,7 +175,11 @@ export default function AdminVenuesScreen() {
   const tab = resolveTab(params.tab);
   const requestFilter = resolveRequestStatus(firstParam(params.durum));
 
-  const canQuery = Boolean(auth.user) && auth.isManagement;
+  const scope = useScope();
+  const allowed = auth.isManagement && hasAnyPermission(auth.user, PERMS);
+  /** Yazma eylemleri (onay, saat, saha) sunucuda venues.manage ister. */
+  const canManage = hasAnyPermission(auth.user, ["venues.manage"]);
+  const canQuery = Boolean(auth.user) && allowed;
 
   /* ─────────────────────────── TALEPLER ─────────────────────────── */
 
@@ -171,7 +209,7 @@ export default function AdminVenuesScreen() {
     },
     // Hata alt sayfa AÇIKKEN düşer; Toast yerel Modal'ın altında kalacağı için
     // sebep Alert ile söylenir. Başarıda sayfa kapandığından Toast görünür.
-    onError: (error) => Alert.alert("İşlem yapılamadı", errorMessage(error)),
+    onError: (error) => Alert.alert("İşlem yapılamadı", errorText(error)),
   });
 
   const openReview = useCallback((request: AdminMatchRequest, decision: "approve" | "reject") => {
@@ -231,7 +269,7 @@ export default function AdminVenuesScreen() {
     },
     // Hata alt sayfa AÇIKKEN düşer; Toast yerel Modal'ın altında kalacağı için
     // sebep Alert ile söylenir. Başarıda sayfa kapandığından Toast görünür.
-    onError: (error) => Alert.alert("İşlem yapılamadı", errorMessage(error)),
+    onError: (error) => Alert.alert("İşlem yapılamadı", errorText(error)),
   });
 
   const releaseMutation = useMutation({
@@ -245,8 +283,166 @@ export default function AdminVenuesScreen() {
     },
     // Hata alt sayfa AÇIKKEN düşer; Toast yerel Modal'ın altında kalacağı için
     // sebep Alert ile söylenir. Başarıda sayfa kapandığından Toast görünür.
-    onError: (error) => Alert.alert("İşlem yapılamadı", errorMessage(error)),
+    onError: (error) => Alert.alert("İşlem yapılamadı", errorText(error)),
   });
+
+  /* ── Saate takım yaz: tek takım = rakip bekliyor, iki takım = maç alındı ── */
+  const [homeId, setHomeId] = useState<number | null>(null);
+  const [awayId, setAwayId] = useState<number | null>(null);
+  useEffect(() => {
+    setHomeId(cell?.home?.team_id ?? null);
+    setAwayId(cell?.away?.team_id ?? null);
+  }, [cell]);
+
+  const teamsQuery = useQuery({
+    queryKey: ["admin", "matches", "teams", venue?.city || "all"],
+    queryFn: () => getTeamsForCity(venue?.city || null),
+    enabled: canQuery && canManage && cell !== null,
+    staleTime: 5 * 60_000,
+  });
+  const teamOptions = useMemo<Option<number>[]>(
+    () => (teamsQuery.data ?? []).map((t) => ({ value: Number(t.id), label: t.team_name, hint: t.current_league ?? null })),
+    [teamsQuery.data],
+  );
+
+  const teamsMutation = useMutation({
+    mutationFn: (input: { publicId: string; date: string; hour: number; minute: number; homeTeamId: number | null; awayTeamId: number | null }) =>
+      setSlotTeams(input.publicId, {
+        date: input.date,
+        hour: input.hour,
+        minute: input.minute,
+        homeTeamId: input.homeTeamId,
+        awayTeamId: input.awayTeamId,
+        // Fikstür maçı seçili kapsamın lig ve sezonuna açılır; kapsam yoksa
+        // hücredeki kayıtlı lig/sezon korunur (sunucu kuralı).
+        ...(scope.ready ? { leagueId: scope.leagueId, seasonId: scope.seasonId } : {}),
+      }),
+    onSuccess: (result) => {
+      setCell(null);
+      refreshBoard();
+      void queryClient.invalidateQueries({ queryKey: ["admin", "matches"] });
+      void queryClient.invalidateQueries({ queryKey: ["admin", "match-requests"] });
+      toast.show({ message: result.message, tone: result.fixture_pending ? "warn" : "success" });
+    },
+    onError: (error) => Alert.alert("Takımlar yazılamadı", errorText(error)),
+  });
+
+  const teamsDirty = cell !== null && (homeId !== (cell.home?.team_id ?? null) || awayId !== (cell.away?.team_id ?? null));
+  const sameTeams = Boolean(homeId && homeId === awayId);
+
+  const saveTeams = useCallback(() => {
+    if (!venue || !cell || sameTeams) return;
+    teamsMutation.mutate({ publicId: venue.public_id, date: cell.date, hour: cell.hour, minute: cell.minute, homeTeamId: homeId, awayTeamId: awayId });
+  }, [awayId, cell, homeId, sameTeams, teamsMutation, venue]);
+
+  /* ── Saha ekle / düzenle / sil ── */
+  const [venueForm, setVenueForm] = useState<{ venue: AdminVenue | null } | null>(null);
+
+  const venueFields = useMemo<FieldDef[]>(
+    () => [
+      { key: "name", label: "Saha adı", kind: "text", required: true, maxLength: 160, icon: "location-outline" },
+      {
+        key: "city_id",
+        label: "İl",
+        kind: "select",
+        required: true,
+        options: scope.cities.map((c) => ({ value: c.id, label: c.label })),
+        hint: "Saha yalnız bu ilin takımlarına görünür.",
+      },
+      { key: "location", label: "Adres / konum", kind: "text", maxLength: 255 },
+      { key: "description", label: "Açıklama", kind: "multiline", maxLength: 500 },
+      { key: "open_hour", label: "Açılış saati", kind: "text", required: true, placeholder: "18:00", hint: "SS:DD — dakika 00, 15, 30 ya da 45" },
+      { key: "close_hour", label: "Kapanış saati", kind: "text", required: true, placeholder: "24:00" },
+      {
+        key: "slot_minutes",
+        label: "Maç dilimi",
+        kind: "segment",
+        options: [
+          { value: "60", label: "60 dk" },
+          { value: "30", label: "30 dk" },
+          { value: "15", label: "15 dk" },
+        ],
+      },
+      { key: "active_days", label: "Açık günler", kind: "multiselect", options: WEEKDAY_OPTIONS, required: true },
+      { key: "active", label: "Aktif", kind: "toggle", hint: "Pasif saha takımlara görünmez; programı korunur." },
+    ],
+    [scope.cities],
+  );
+
+  const venueInitial = useMemo<FormValues>(() => {
+    const v = venueForm?.venue;
+    return v
+      ? {
+          name: v.name,
+          city_id: v.city_id,
+          location: v.location,
+          description: v.description,
+          open_hour: v.open_label,
+          close_hour: v.close_label,
+          slot_minutes: String(v.slot_minutes || 60),
+          active_days: v.active_days ?? [],
+          active: v.status !== "passive",
+        }
+      : { city_id: scope.cityId, open_hour: "18:00", close_hour: "24:00", slot_minutes: "60", active_days: [1, 2, 3, 4, 5, 6, 7], active: true };
+  }, [scope.cityId, venueForm]);
+
+  const submitVenue = useCallback(
+    async (values: FormValues) => {
+      const open = String(values.open_hour ?? "").trim();
+      const close = String(values.close_hour ?? "").trim();
+      if (!HHMM.test(open) || !HHMM.test(close)) throw new Error("Açılış ve kapanış saatini SS:DD biçiminde yaz (ör. 18:00, 23:30).");
+      const days = Array.isArray(values.active_days) ? (values.active_days as number[]).map(Number) : [];
+      if (!days.length) throw new Error("Sahanın açık olduğu en az bir gün seç.");
+      const body: VenueInput = {
+        name: String(values.name ?? "").trim(),
+        city_id: values.city_id ? Number(values.city_id) : null,
+        location: String(values.location ?? "").trim(),
+        description: String(values.description ?? "").trim(),
+        open_hour: open,
+        close_hour: close,
+        slot_minutes: Number(values.slot_minutes) || 60,
+        active_days: days,
+        status: values.active === false ? "passive" : "active",
+      };
+      try {
+        const editing = venueForm?.venue;
+        const result = editing ? await updateVenue(editing.public_id, body) : await createVenue(body);
+        if (editing && venue?.public_id === editing.public_id) setVenue(result.item);
+        void queryClient.invalidateQueries({ queryKey: ["admin", "venues"] });
+        void queryClient.invalidateQueries({ queryKey: ["admin", "venue-board"] });
+        toast.show({ message: result.message, tone: "success" });
+      } catch (error) {
+        throw new Error(venueErrorText(error));
+      }
+    },
+    [queryClient, toast, venue?.public_id, venueForm],
+  );
+
+  const removeVenueMutation = useMutation({
+    mutationFn: (publicId: string) => deleteVenue(publicId),
+    onSuccess: (result) => {
+      setVenueForm(null);
+      setVenue(null);
+      setWeekStart(undefined);
+      void queryClient.invalidateQueries({ queryKey: ["admin", "venues"] });
+      void queryClient.invalidateQueries({ queryKey: ["admin", "match-requests"] });
+      void queryClient.invalidateQueries({ queryKey: ["admin", "matches"] });
+      toast.show({ message: result.message, tone: "success" });
+    },
+    onError: (error) => Alert.alert("Saha silinemedi", errorText(error)),
+  });
+
+  const askRemoveVenue = useCallback(async () => {
+    const target = venueForm?.venue;
+    if (!target) return;
+    const ok = await confirmAction({
+      title: "Sahayı sil",
+      message: `${target.name}\n\nSaha, haftalık programı ve bu sahaya gelen talepler çöp kutusuna taşınır; bu sahadan açılmış fikstür maçları geri alınır.`,
+      confirmLabel: "Sil",
+      destructive: true,
+    });
+    if (ok) removeVenueMutation.mutate(target.public_id);
+  }, [removeVenueMutation, venueForm]);
 
   /** Hücreler gün gün gruplanır: dikey gün listesi, yatay saat çipleri. */
   const days = useMemo(() => {
@@ -373,9 +569,9 @@ export default function AdminVenuesScreen() {
 
   const renderRequest = useCallback(
     ({ item }: { item: AdminMatchRequest }) => (
-      <RequestCard request={item} onReview={openReview} busy={reviewMutation.isPending} />
+      <RequestCard request={item} onReview={openReview} busy={reviewMutation.isPending || !canManage} />
     ),
-    [openReview, reviewMutation.isPending],
+    [canManage, openReview, reviewMutation.isPending],
   );
 
   const renderVenue = useCallback(
@@ -401,6 +597,26 @@ export default function AdminVenuesScreen() {
   if (!auth.isManagement) {
     return <Redirect href="/yonetim" />;
   }
+  if (!allowed) {
+    return (
+      <SafeAreaView style={styles.screen} edges={["top"]}>
+        <ScreenHeader title="Saha Yönetimi" back />
+        <EmptyState
+          icon="lock-closed-outline"
+          title="Bu bölüme yetkin yok"
+          body="Saha ve maç planlama için gereken yetki hesabında tanımlı değil. Yetki için yöneticinle görüş."
+          action={{ label: "Yönetim paneline dön", onPress: () => router.replace("/yonetim") }}
+        />
+      </SafeAreaView>
+    );
+  }
+
+  const headerActions =
+    tab === "sahalar" && canManage
+      ? venue
+        ? [{ icon: "create-outline" as const, accessibilityLabel: "Sahayı düzenle", onPress: () => setVenueForm({ venue }) }]
+        : [{ icon: "add-circle-outline" as const, accessibilityLabel: "Yeni saha", onPress: () => setVenueForm({ venue: null }) }]
+      : undefined;
 
   const requests = requestsQuery.data?.items ?? [];
   const venues = venuesQuery.data?.items ?? [];
@@ -412,6 +628,7 @@ export default function AdminVenuesScreen() {
         title="Saha Yönetimi"
         subtitle={venue && tab === "sahalar" ? venue.name : "Maç talepleri ve saha programı"}
         back
+        actions={headerActions}
         scrollY={scrollY}
         bottom={
           <View style={styles.controls}>
@@ -603,7 +820,8 @@ export default function AdminVenuesScreen() {
             <EmptyState
               icon="location-outline"
               title="Saha yok"
-              body="Henüz tanımlı bir saha bulunmuyor. Sahalar web panelinden eklenir."
+              body={canManage ? "Henüz tanımlı bir saha yok. İlk sahayı ekleyip haftalık programını aç." : "Henüz tanımlı bir saha bulunmuyor."}
+              action={canManage ? { label: "Saha ekle", onPress: () => setVenueForm({ venue: null }) } : undefined}
             />
           }
         />
@@ -738,7 +956,54 @@ export default function AdminVenuesScreen() {
               </View>
             ) : null}
 
-            {cell.status === "open" || cell.status === "closed" ? (
+            {canManage && !cell.is_past && cell.status !== "closed" ? (
+              <View style={styles.pendingBox}>
+                <Text style={styles.sheetLabel} {...textScale.dense}>
+                  TAKIM YAZ
+                </Text>
+                <SelectField<number>
+                  label="Ev sahibi"
+                  value={homeId}
+                  valueLabel={cell.home?.team_id === homeId ? cell.home?.team_name ?? null : null}
+                  options={teamOptions}
+                  icon="shield-outline"
+                  placeholder={teamsQuery.isLoading ? "Takımlar yükleniyor…" : "Takım seç"}
+                  clearable
+                  onChange={setHomeId}
+                />
+                <SelectField<number>
+                  label="Deplasman"
+                  value={awayId}
+                  valueLabel={cell.away?.team_id === awayId ? cell.away?.team_name ?? null : null}
+                  options={teamOptions}
+                  icon="shield-outline"
+                  placeholder="Rakip belli değilse boş bırak"
+                  clearable
+                  error={sameTeams ? "Bir takım kendisiyle eşleşemez." : undefined}
+                  onChange={setAwayId}
+                />
+                <Text style={styles.sheetNote} {...textScale.long}>
+                  {scope.ready
+                    ? `İki takım yazılırsa maç ${[scope.leagueLabel, scope.seasonLabel].filter(Boolean).join(" · ")} fikstürüne eklenir. Tek takım "rakip bekliyor" olur.`
+                    : "Lig ve sezon seçili değil: iki takım yazılırsa saat dolar ama maç fikstüre eklenmez. Önce kapsam seç."}
+                </Text>
+                <Button
+                  label={homeId || awayId ? "Takımları kaydet" : "Takımları kaldır"}
+                  icon="save-outline"
+                  loading={teamsMutation.isPending}
+                  disabled={!teamsDirty || sameTeams}
+                  haptic="medium"
+                  onPress={saveTeams}
+                  fullWidth
+                />
+              </View>
+            ) : null}
+
+            {!canManage ? (
+              <Text style={styles.sheetNote} {...textScale.long}>
+                Saat programını değiştirmek için saha yönetimi yetkisi gerekir; yalnız görüntülüyorsun.
+              </Text>
+            ) : cell.status === "open" || cell.status === "closed" ? (
               <>
                 <Input
                   label="Saat notu (isteğe bağlı)"
@@ -778,6 +1043,17 @@ export default function AdminVenuesScreen() {
           </View>
         ) : null}
       </BottomSheet>
+
+      <FormSheet
+        visible={venueForm !== null}
+        onClose={() => setVenueForm(null)}
+        title={venueForm?.venue ? "Sahayı düzenle" : "Yeni saha"}
+        intro="Açılış – kapanış saati ve maç dilimi haftalık saat programını üretir. Program daralırsa boş saatlerin kaydı silinir; takım yazılmış saatler korunur."
+        fields={venueFields}
+        initial={venueInitial}
+        onSubmit={submitVenue}
+        secondary={venueForm?.venue ? { label: "Sahayı sil", onPress: () => void askRemoveVenue(), danger: true } : undefined}
+      />
     </SafeAreaView>
   );
 }

@@ -36,6 +36,7 @@ import {
   type NaOptions,
   type NaRate,
   type NaRateBody,
+  parseAmount,
 } from "@/lib/api/admin/accounting";
 import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
@@ -166,13 +167,13 @@ export function NaEntrySheet({
       }
       secondary={onDelete ? { label: kind === "override" ? "Düzeltmeyi kaldır" : "Sil", danger: true, onPress: onDelete } : undefined}
       validate={(v) => {
-        const n = Number(s(v.amount).replace(/\./g, "").replace(",", "."));
-        if (!Number.isFinite(n)) return "Tutar geçersiz.";
+        const n = parseAmount(v.amount);
+        if (n == null || !Number.isFinite(n)) return "Tutar geçersiz. Örnek: 1.250,50";
         if (kind !== "charge" && n < 0) return "Tutar eksi olamaz.";
         return null;
       }}
       onSubmit={async (v) => {
-        const amount = s(v.amount).replace(/\./g, "").replace(",", ".");
+        const amount = String(parseAmount(v.amount) ?? 0);
         const body: NaEntryBody = { kind, cityId: kind === "override" ? Number(line?.cityId ?? init.cityId) || null : Number(v.cityId) || null, amount, note: s(v.note) };
         if (kind === "payment") Object.assign(body, { date: s(v.date), paymentMethod: s(v.paymentMethod), title: s(v.title) });
         if (kind === "charge") Object.assign(body, { period: s(v.period), seasonId: Number(v.seasonId) || null, title: s(v.title) });
@@ -231,12 +232,12 @@ export function NaRateSheet({
       extra={() => <Muted>En özel tarife uygulanır: il + sezon &gt; il &gt; genel. Aynı kapsamda birden fazla ücret varsa o ay için başlamış en yeni ücret geçerlidir. Ücreti almadığınız il ya da sezon için 0 ₺ girin.</Muted>}
       secondary={onDelete ? { label: "Sil", danger: true, onPress: onDelete } : undefined}
       validate={(v) => {
-        const n = Number(s(v.fee).replace(/\./g, "").replace(",", "."));
-        return Number.isFinite(n) && n >= 0 ? null : "Ücret geçersiz.";
+        const n = parseAmount(v.fee);
+        return n != null && Number.isFinite(n) && n >= 0 ? null : "Ücret geçersiz. Örnek: 150 ya da 150,50";
       }}
       onSubmit={(v) =>
         onSave(
-          { cityId: s(v.cityId) || null, seasonId: s(v.seasonId) || null, validFrom: s(v.validFrom) || null, fee: s(v.fee).replace(/\./g, "").replace(",", "."), note: s(v.note) },
+          { cityId: s(v.cityId) || null, seasonId: s(v.seasonId) || null, validFrom: s(v.validFrom) || null, fee: String(parseAmount(v.fee) ?? 0), note: s(v.note) },
           rate?.id
         )
       }

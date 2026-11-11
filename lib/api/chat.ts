@@ -10,7 +10,73 @@ import { del, get, patch, post } from "../http";
  */
 
 export type ConversationType = "direct" | "group" | "team" | "management" | "admin";
-export type MessageKind = "text" | "system" | "notification" | "call" | "audio" | "location" | "match_offer" | "attendance";
+export type MessageKind =
+  | "text"
+  | "system"
+  | "notification"
+  | "call"
+  | "audio"
+  | "location"
+  | "match_offer"
+  | "attendance"
+  /* WhatsApp benzeri: fotoğraf, belge, anket (elitlig-server services/chat/chatExtras.js) */
+  | "image"
+  | "file"
+  | "poll"
+  /* Yönetimin hazır içerikleri (services/chat/chatContent.js) */
+  | "matches"
+  | "signup"
+  | "award_poll";
+
+/** Anket: `votes` seçenek kimliği → oy veren kullanıcı kimlikleri. */
+export interface ChatPollMeta {
+  question: string;
+  multiple: boolean;
+  options: { id: string; text: string }[];
+  votes: Record<string, number[]>;
+}
+
+/** Fotoğraf / belge eki. */
+export interface ChatFileMeta {
+  url: string;
+  name: string;
+  mime: string | null;
+  size: number;
+  width: number | null;
+  height: number | null;
+}
+
+/** "Günün maçları" kartındaki tek maç. */
+export interface ChatMatchItem {
+  id: number;
+  date: string | null;
+  time: string | null;
+  home: string | null;
+  away: string | null;
+  home_score: number | null;
+  away_score: number | null;
+  field: string | null;
+  league: string | null;
+  city?: string | null;
+}
+
+/** "Ben talibim" görev anketi (spiker, reji…). */
+export interface ChatSignupMeta {
+  title: string;
+  note: string | null;
+  deadline: string | null;
+  duties: string[];
+  slots: {
+    id: string;
+    match_id: number;
+    duty: string;
+    duty_label: string;
+    match: { home: string | null; away: string | null; time: string | null; date: string | null; field: string | null; league: string | null };
+    assigned: { user_id?: number | null; name: string | null } | null;
+  }[];
+  volunteers: Record<string, { user_id: number; name: string; city?: string | null; at?: string }[]>;
+  closed: boolean;
+}
 
 export interface ChatSender {
   user_id: number | null;
@@ -113,6 +179,12 @@ export interface ChatMessageMeta {
   match_offer?: ChatMatchOfferMeta;
   /** Maç yoklaması kartı (services/matchAttendanceService.js). */
   attendance?: import("./team").AttendanceMeta;
+  poll?: ChatPollMeta;
+  file?: ChatFileMeta;
+  caption?: string | null;
+  matches?: { date: string | null; note: string | null; items: ChatMatchItem[] };
+  signup?: ChatSignupMeta;
+  award?: { week?: string | null; note?: string | null; due_at?: string | null; categories?: unknown[] };
   /** Eylem kartı tamamlandı (Onayla/Reddet sonrası). */
   resolved?: { key: string; user_id: number; at: string; label?: string | null };
   admin_user_id?: number;
@@ -237,7 +309,13 @@ export type OpenConversationInput =
 export interface SendMessageInput {
   kind?: MessageKind;
   body?: string;
-  meta?: { audio?: ChatAudioMeta; location?: Partial<ChatLocationMeta>; match_offer?: MatchOfferInput };
+  meta?: {
+    audio?: ChatAudioMeta;
+    location?: Partial<ChatLocationMeta>;
+    match_offer?: MatchOfferInput;
+    /** Anket: soru + 2–12 seçenek (sunucu kimlikleri kendisi verir). */
+    poll?: { question: string; multiple?: boolean; options: string[] };
+  };
   client_id?: string;
   reply_to_id?: number | null;
   /** Yönetim modu: katılımcı olunan grupta bile "ElitLig Yönetimi" adına yaz. */
@@ -295,6 +373,21 @@ export const respondMatchOffer = (id: number, messageId: number, body: { respons
   post<{ message: ChatMessage }>(`/api/chat/conversations/${id}/messages/${messageId}/respond`, body);
 export const resolveAction = (id: number, messageId: number, body: { key: string; label?: string }) =>
   post<{ message: ChatMessage }>(`/api/chat/conversations/${id}/messages/${messageId}/resolve`, body);
+/** Ankete oy ver: tek seçimlide `option_id`, çok seçimlide `option_ids` (boş dizi oyu geri alır). */
+export const votePoll = (id: number, messageId: number, body: { option_id?: string; option_ids?: string[] }) =>
+  post<{ message: ChatMessage }>(`/api/chat/conversations/${id}/messages/${messageId}/vote`, body);
+/** "Ben talibim" satırına talip ol / vazgeç. */
+export const toggleSignup = (id: number, messageId: number, body: { slot_id: string; on: boolean }) =>
+  post<{ message: ChatMessage }>(`/api/chat/conversations/${id}/messages/${messageId}/signup`, body);
+
+export interface ChatSearchHit extends ChatMessage {
+  conversation_title: string | null;
+  conversation_type: ConversationType | null;
+}
+/** Katıldığım sohbetlerde mesaj araması (en az 2 harf, son 60 eşleşme). */
+export const searchMessages = (q: string, conversationId?: number) =>
+  get<{ items: ChatSearchHit[] }>("/api/chat/search", conversationId ? { q, conversation_id: conversationId } : { q }).then((d) => d.items ?? []);
+
 export const getVenues = (q = "") => get<{ venues: ChatVenue[] }>("/api/chat/venues", q ? { q } : undefined);
 
 /** Sesli mesaj dosyasını yükler; dönen url mesaj meta'sına yazılır. */
@@ -466,6 +559,17 @@ export function conversationPreview(conversation: ChatConversation): string {
   if (message.kind === "call") return message.body ?? "Sesli arama";
   if (message.deleted) return "Bu mesaj silindi";
   if (message.kind === "audio") return `${message.sender.is_me ? "Sen: " : ""}Sesli mesaj`;
+  // Zengin türlerde sunucu gövdesi simgeyle başlar; listede düz Türkçe etiket gösterilir.
+  const rich: Partial<Record<MessageKind, string>> = {
+    image: message.meta?.caption ? `Fotoğraf: ${message.meta.caption}` : "Fotoğraf",
+    file: `Belge: ${message.meta?.file?.name ?? "dosya"}`,
+    poll: `Anket: ${message.meta?.poll?.question ?? ""}`.trim(),
+    matches: "Günün maçları",
+    signup: message.meta?.signup?.title ?? "Görev anketi",
+    award_poll: "Haftanın Enleri: aday önerisi",
+  };
+  const richLabel = rich[message.kind];
+  if (richLabel) return `${message.sender.is_me ? "Sen: " : ""}${richLabel}`;
   const prefix = message.sender.is_me
     ? "Sen: "
     : conversation.type !== "direct" && conversation.type !== "management" && message.kind === "text" && message.sender.name

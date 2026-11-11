@@ -22,6 +22,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { AdminScreen, ToggleField, confirmAction, useAdminMutation } from "@/components/admin";
+import { ToolFab } from "@/components/admin/tools/ToolApp";
 import { DayList, MonthView, TimeGrid, groupByDay } from "@/components/admin/tools/AgendaViews";
 import { disableReminders, enableReminders, exportToDeviceCalendar, readNotifyPref, syncReminders } from "@/components/admin/tools/agendaDevice";
 import {
@@ -43,7 +44,6 @@ import {
   BottomSheet,
   EmptyState,
   ErrorState,
-  FAB,
   SectionHeader,
   SegmentedControl,
   Touchable,
@@ -293,6 +293,7 @@ export default function AgendaScreen() {
 
   return (
     <AdminScreen
+      app="ajanda"
       title="Ajanda ve takvim"
       scroll={false}
       actions={[
@@ -304,7 +305,7 @@ export default function AgendaScreen() {
           <SegmentedControl items={VIEWS} value={view} onChange={changeView} />
         </View>
       }
-      overlay={<FAB icon="add" label="Etkinlik" extended onPress={() => openCreate()} accessibilityLabel="Yeni etkinlik" />}
+      overlay={<ToolFab app="ajanda" label="Etkinlik" onPress={() => openCreate()} accessibilityLabel="Yeni etkinlik" />}
     >
       {navBar}
       {body}

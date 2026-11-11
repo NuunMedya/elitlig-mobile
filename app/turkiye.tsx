@@ -155,8 +155,11 @@ export default function TurkeyRankingsScreen() {
   }, []);
 
   const query = useQuery({
-    queryKey: ["turkey", period, category.sort, startDate],
-    queryFn: () => getPlayerRankings(period === "recent" ? { startDate } : {}, category.sort),
+    /* Kategori anahtarda YOK: uç her `sort` için aynı oyuncu kümesini döndürür
+       (tüm zamanlar ≈8,5 MB), liste zaten aşağıda `category.value` ile bellekte
+       dizilir. Kategori değişimi artık yeni indirme değil, anında yeniden sıralama. */
+    queryKey: ["turkey", period, startDate],
+    queryFn: () => getPlayerRankings(period === "recent" ? { startDate } : {}, "topScorers"),
     staleTime: 10 * 60_000,
   });
 

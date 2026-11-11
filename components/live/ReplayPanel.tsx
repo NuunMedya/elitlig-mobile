@@ -44,7 +44,14 @@ export interface ReplayPanelProps {
   onStop: () => void;
   onRetry: (key: string) => void;
   onRemove: (key: string) => void;
+  /** Anlık tekrar: son N saniyeyi kaydedip hemen yayına ver. */
+  instantSeconds: number;
+  onInstantSeconds: (seconds: 6 | 10 | 13) => void;
+  onInstant: () => void;
+  instantBusy: boolean;
 }
+
+const INSTANT_SECONDS = [6, 10, 13] as const;
 
 export function ReplayPanel(props: ReplayPanelProps) {
   const { clips } = props;
@@ -65,7 +72,7 @@ export function ReplayPanel(props: ReplayPanelProps) {
       {props.replayingKey ? <Btn label="Tekrarı bitir, canlıya dön" icon="stop" tone="live" onPress={props.onStop} /> : null}
 
       <Text style={styles.groupTitle} allowFontScaling={false}>
-        TEKRAR HIZI{REPLAY_RATE_SUPPORTED ? "" : " (yalnız Android)"}
+        AĞIR ÇEKİM{REPLAY_RATE_SUPPORTED ? "" : " (yalnız Android)"}
       </Text>
       <View style={styles.rates}>
         {REPLAY_RATES.map((rate) => {
@@ -92,12 +99,16 @@ export function ReplayPanel(props: ReplayPanelProps) {
           ? props.replayingKey
             ? "Hız oynatma sırasında değişmez; yeni hız bir sonraki tekrarda uygulanır."
             : "Ağır çekim için 0.5× ya da 0.25× seç; hız tekrar başlarken uygulanır."
-          : "Ağır çekim bu cihazda desteklenmiyor; tekrar normal hızda oynar."}
+          : "Ağır çekim iPhone'da desteklenmiyor; tekrar normal hızda oynar."}
+      </Text>
+
+      <Text style={styles.groupTitle} allowFontScaling={false}>
+        KLİPLER
       </Text>
 
       {clips.length === 0 ? (
         <Text style={styles.empty} allowFontScaling={false}>
-          Bu yayında henüz gol klibi yok.
+          Bu yayında henüz kayıtlı klip yok.
         </Text>
       ) : (
         clips.map((clip) => {
@@ -114,10 +125,12 @@ export function ReplayPanel(props: ReplayPanelProps) {
                   : RIG.warn;
           return (
             <View key={clip.key} style={[styles.row, playing && styles.rowOn]}>
-              <View style={[styles.stripe, { backgroundColor: clip.side === "home" ? RIG.home : RIG.away }]} />
+              <View style={[styles.stripe, { backgroundColor: clip.kind === "instant" ? RIG.info : clip.side === "home" ? RIG.home : RIG.away }]} />
               <View style={styles.flex}>
                 <Text style={styles.title} numberOfLines={1} allowFontScaling={false}>
-                  {clip.minute}' {clip.code === "GOAL_OWN" ? "Kendi kalesine" : "Gol"} · {clip.scorer ?? team}
+                  {clip.kind === "instant"
+                    ? `${clip.minute}' Anlık tekrar`
+                    : `${clip.minute}' ${clip.code === "GOAL_OWN" ? "Kendi kalesine" : "Gol"} · ${clip.scorer ?? team}`}
                 </Text>
                 <View style={styles.statusRow}>
                   <View style={[styles.dot, { backgroundColor: statusColor }]} />

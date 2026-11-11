@@ -61,6 +61,7 @@ import {
   ListRow,
   MatchCard,
   MatchCardRail,
+  Reveal,
   ScreenHeader,
   SectionHeader,
   SkeletonListRow,
@@ -69,11 +70,13 @@ import {
   refreshControlProps,
   useHeaderScroll,
   useRefresh,
+  useToast,
 } from "@/components/ui";
 import type { LeadingIcon } from "@/components/ui";
 import { useLiveFavoriteCount } from "@/hooks/useLiveFavoriteCount";
 import { useTeamLogos } from "@/hooks/useTeamLogos";
 import { getMatch, getTeamMatches } from "@/lib/api/matches";
+import { getLeagues } from "@/lib/api/meta";
 import { timeAgo } from "@/lib/format";
 import { matchState } from "@/lib/match";
 import { queryKeys } from "@/lib/queryKeys";
@@ -210,6 +213,7 @@ export default function TakipScreen() {
   const queryClient = useQueryClient();
   const scope = useScope();
   const flow = useFollowFlow();
+  const toast = useToast();
   const { logoFor } = useTeamLogos();
   // Yoklamayı sekme çubuğundaki örnek yapar; burada yalnız önbellek okunur.
   const live = useLiveFavoriteCount({ poll: false });
@@ -319,22 +323,64 @@ export default function TakipScreen() {
   const openHref = useCallback((href: string) => router.push(href as never), [router]);
   const openSignIn = useCallback(() => router.push("/giris"), [router]);
 
+  /**
+   * Takip edilen lig / sezon / il → Lig sekmesi, DOĞRU kapsamla.
+   *
+   * Takip kaydı ligin ilini tutmaz. Eskiden başka ildeki bir lige dokununca
+   * `selectLeague` seçili ilde o kimliği arıyor, bulamayınca ScopeProvider
+   * sessizce ilin İLK ligine kayıyordu: kullanıcı "X Ligi"ne dokunup başka
+   * bir ligin tablosunu görüyordu. Artık lig seçili ilde yoksa diğer illerin
+   * lig listeleri (küçük, 10 dk önbellekli) taranır ve il + lig birlikte
+   * atlanır; hiçbir yerde yoksa (arşivlenmiş) kullanıcıya söylenir.
+   */
   const openScope = useCallback(
-    (item: FavoriteScope, kind: "league" | "season" | "city") => {
+    async (item: FavoriteScope, kind: "league" | "season" | "city") => {
       if (kind === "league") {
-        // Takip kaydı ligin ilini tutmaz; sabitlenmiş lig kaydı tutar. Varsa
-        // il + lig birlikte atlanır, yoksa seçili ilde lig seçilir.
         const pinned = scope.pinnedLeagues.find((entry) => entry.leagueId === item.id);
-        if (pinned) scope.jumpTo(pinned.cityId, item.id);
-        else scope.selectLeague(item.id);
+        if (item.id === scope.leagueId) {
+          // Zaten bu ligdeyiz: `selectLeague` sezonu sıfırlar, dokunma.
+        } else if (pinned) {
+          scope.jumpTo(pinned.cityId, item.id);
+        } else if (scope.leagues.some((league) => league.id === item.id)) {
+          scope.selectLeague(item.id);
+        } else {
+          const lists = await Promise.all(
+            scope.cities
+              .filter((city) => city.id !== scope.cityId)
+              .map((city) =>
+                queryClient
+                  .fetchQuery({
+                    queryKey: queryKeys.leagues(city.id),
+                    queryFn: () => getLeagues(city.id),
+                    staleTime: 10 * 60_000,
+                  })
+                  .then((leagues) => ({ cityId: city.id, leagues }))
+                  .catch(() => null),
+              ),
+          );
+          const home = lists.find((entry) => entry?.leagues.some((league) => league.id === item.id));
+          if (!home) {
+            toast.show({ message: `${item.name} şu an yayında değil ya da arşivlenmiş.`, tone: "neutral" });
+            return;
+          }
+          scope.jumpTo(home.cityId, item.id);
+        }
       } else if (kind === "season") {
-        scope.selectSeason(item.id);
-      } else {
+        if (item.id !== scope.seasonId) {
+          if (!scope.seasons.some((season) => season.id === item.id)) {
+            // Sezon başka bir ligin: yanlış ligde seçmek yerine seçiciye yönlendir.
+            toast.show({ message: "Bu sezon başka bir ligde. Lig seçiciden açabilirsin.", tone: "neutral" });
+            scope.openScopeSheet("league");
+            return;
+          }
+          scope.selectSeason(item.id);
+        }
+      } else if (item.id !== scope.cityId) {
         scope.selectCity(item.id);
       }
       router.push("/(tabs)/ligler");
     },
-    [router, scope]
+    [queryClient, router, scope, toast]
   );
 
   const followTeam = useCallback(
@@ -372,9 +418,9 @@ export default function TakipScreen() {
         refreshControl={<RefreshControl {...refreshControlProps(refresh.refreshing, refresh.onRefresh)} />}
       >
         {auth.user ? null : (
-          <View style={styles.pad}>
+          <Reveal style={styles.pad}>
             <GuestBanner onSignIn={openSignIn} />
-          </View>
+          </Reveal>
         )}
 
         {/* ── 1) TAKIMLARIM ── */}
@@ -441,6 +487,14 @@ export default function TakipScreen() {
             <View style={[styles.pad, styles.stack]}>
               {matchesLoading && !followedMatches.length ? (
                 <SkeletonMatchRow count={Math.min(favoriteMatches.length, 2)} />
+              ) : !followedMatches.length ? (
+                /* Sorgular bitti ama tek maç bile gelmedi (ağ hatası ya da maç
+                   silinmiş): başlığın altında boşluk yerine ne olduğunu söyle. */
+                <ErrorState
+                  error={matchQueries.find((query) => query.isError)?.error ?? null}
+                  variant="banner"
+                  onRetry={refetchAll}
+                />
               ) : (
                 followedMatches.map((match) => (
                   <FollowedMatchCard

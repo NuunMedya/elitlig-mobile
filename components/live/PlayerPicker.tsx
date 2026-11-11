@@ -23,9 +23,28 @@ export interface PlayerPickerProps {
   busy?: boolean;
   onPick: (playerId: string | null) => void;
   onClose: () => void;
+  /** "Oyuncusuz kaydet" düğmesinin metni; null → düğme gizli (oyuncu zorunlu). */
+  skipLabel?: string | null;
+  /** Grup başlıkları (değişiklikte "SAHADA" / "YEDEK" gibi). */
+  starterLabel?: string;
+  otherLabel?: string;
+  /** Kadro boşken gösterilen açıklama. */
+  emptyText?: string;
 }
 
-export function PlayerPicker({ title, subtitle, players, accent, busy, onPick, onClose }: PlayerPickerProps) {
+export function PlayerPicker({
+  title,
+  subtitle,
+  players,
+  accent,
+  busy,
+  onPick,
+  onClose,
+  skipLabel = "Oyuncusuz kaydet",
+  starterLabel = "İLK 11",
+  otherLabel = "YEDEKLER",
+  emptyText = "Bu takımın maç kadrosu girilmemiş. Olayı oyuncusuz kaydedebilirsin.",
+}: PlayerPickerProps) {
   const starters = players.filter((p) => p.role === "starter");
   const others = players.filter((p) => p.role !== "starter");
   const renderGroup = (label: string, list: SquadPlayer[]) =>
@@ -72,24 +91,26 @@ export function PlayerPicker({ title, subtitle, players, accent, busy, onPick, o
               </Text>
             ) : null}
           </View>
-          <Touchable style={styles.skip} onPress={() => onPick(null)} disabled={busy} accessibilityLabel="Oyuncusuz kaydet">
-            <Text style={styles.skipText} allowFontScaling={false}>
-              Oyuncusuz kaydet
-            </Text>
-          </Touchable>
+          {skipLabel ? (
+            <Touchable style={styles.skip} onPress={() => onPick(null)} disabled={busy} accessibilityLabel={skipLabel}>
+              <Text style={styles.skipText} allowFontScaling={false}>
+                {skipLabel}
+              </Text>
+            </Touchable>
+          ) : null}
           <Touchable style={styles.close} onPress={onClose} accessibilityLabel="Vazgeç">
             <Ionicons name="close" size={20} color={RIG.text} />
           </Touchable>
         </View>
         {players.length ? (
           <ScrollView contentContainerStyle={styles.body}>
-            {renderGroup("İLK 11", starters)}
-            {renderGroup("YEDEKLER", others)}
+            {renderGroup(starterLabel, starters)}
+            {renderGroup(otherLabel, others)}
           </ScrollView>
         ) : (
           <View style={styles.empty}>
             <Text style={styles.subtitle} allowFontScaling={false}>
-              Bu takımın maç kadrosu girilmemiş. Olayı oyuncusuz kaydedebilirsin.
+              {emptyText}
             </Text>
           </View>
         )}
@@ -130,14 +151,14 @@ const styles = StyleSheet.create({
   subtitle: { ...type.caption, color: RIG.textSoft, marginTop: space.xxs },
   skip: {
     paddingHorizontal: space.md,
-    height: 34,
+    height: 40,
     borderRadius: radius.pill,
     backgroundColor: RIG.panelStrong,
     alignItems: "center",
     justifyContent: "center",
   },
   skipText: { ...type.label, color: RIG.text },
-  close: { width: 34, height: 34, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: RIG.panelSoft },
+  close: { width: 40, height: 40, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: RIG.panelSoft },
   body: { padding: space.lg, gap: space.md },
   group: { gap: space.sm },
   groupTitle: { ...type.micro, color: RIG.textMute },

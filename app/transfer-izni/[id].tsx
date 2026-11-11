@@ -11,17 +11,27 @@
  *   POST /api/transfer-offers/:id/release/reject   { note }
  *
  * Teklif belgesi bu takıma açık değildir (teklif başka takımın); ekran bu
- * yüzden kararın ne anlama geldiğini anlatır, şartları göstermez.
+ * yüzden kararın ne anlama geldiğini anlatır, şartları göstermez. Kimin kimi
+ * istediği bildirimin metninden okunur (takım + oyuncu adı orada yazar).
+ *
+ * KARAR SONRASI: sunucu izin BİLDİRİMİNİ okundu yapmaz; Kulübüm'deki "izin
+ * isteniyor" işi ve Transfer masasındaki liste okunmamış bildirimden
+ * türediği için karar verilmiş talep sonsuza dek "bekliyor" görünüyordu.
+ * Karar (ya da "zaten karar verilmiş" 409'u) gelince bu teklifin izin
+ * bildirimleri okundu işaretlenir ve ilgili önbellekler tazelenir.
  */
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from "react";
-import { StyleSheet, Text } from "react-native";
+import { useCallback, useMemo, useState } from "react";
+import { Alert, StyleSheet, Text } from "react-native";
 
 import { AuthCard, AuthNotice, AuthShell } from "@/components/account/AuthShell";
 import { Button, Input, useToast } from "@/components/ui";
+import { isReleaseRequest } from "@/lib/api/club/notifications";
+import { getPanelNotifications, markNotifRead } from "@/lib/api/panel";
 import { decideRelease } from "@/lib/api/transfers";
+import { queryKeys } from "@/lib/queryKeys";
 import { ApiError } from "@/lib/http";
 import { colors, textScale, type } from "@/theme";
 
@@ -34,6 +44,27 @@ export default function ReleaseDecisionScreen() {
   const [note, setNote] = useState("");
   const [done, setDone] = useState<"approve" | "reject" | null>(null);
 
+  /* Kulübüm ve Transfer masasıyla ORTAK anahtar — ikinci istek atılmaz. */
+  const notifications = useQuery({
+    queryKey: ["club", "notifications"],
+    queryFn: () => getPanelNotifications(1),
+    staleTime: 30_000,
+    retry: false,
+  });
+  const related = useMemo(
+    () => (notifications.data?.items ?? []).filter((item) => isReleaseRequest(item) && item.entity_public_id === offerId),
+    [notifications.data, offerId],
+  );
+  const summary = related[0]?.description ?? null;
+
+  /** Bu teklifin izin bildirimlerini kapat, işi gösteren her listeyi tazele. */
+  const settle = useCallback(async () => {
+    await Promise.all(related.filter((item) => !item.is_read).map((item) => markNotifRead(item.id).catch(() => undefined)));
+    void queryClient.invalidateQueries({ queryKey: ["club", "notifications"] });
+    void queryClient.invalidateQueries({ queryKey: ["panel", "notifications"] });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.unreadNotifCount() });
+  }, [queryClient, related]);
+
   const decide = useMutation({
     mutationFn: (decision: "approve" | "reject") => decideRelease(offerId, decision, note.trim()),
     onSuccess: (data, decision) => {
@@ -42,9 +73,29 @@ export default function ReleaseDecisionScreen() {
         message: data?.message || (decision === "approve" ? "İzin verildi." : "İzin verilmedi."),
         tone: decision === "approve" ? "success" : "neutral",
       });
-      void queryClient.invalidateQueries({ queryKey: ["panel", "notifications"] });
+      void settle();
+    },
+    onError: (error) => {
+      // Karar başka yerden (lig yönetimi, diğer yönetici) verilmiş: iş kapanmıştır.
+      if (error instanceof ApiError && error.status === 409) void settle();
     },
   });
+
+  const confirm = (decision: "approve" | "reject") =>
+    Alert.alert(
+      decision === "approve" ? "Transfere izin ver" : "Transfere izin verme",
+      decision === "approve"
+        ? "Oyuncu teklifi kabul ederse takımından ayrılır. Bu karar geri alınamaz."
+        : "Teklif kapanır; teklifi veren takım ve oyuncu bilgilendirilir. Bu karar geri alınamaz.",
+      [
+        { text: "Vazgeç", style: "cancel" },
+        {
+          text: decision === "approve" ? "İzin ver" : "İzin verme",
+          style: decision === "approve" ? "default" : "destructive",
+          onPress: () => decide.mutate(decision),
+        },
+      ],
+    );
 
   const error = decide.error
     ? decide.error instanceof ApiError
@@ -75,6 +126,13 @@ export default function ReleaseDecisionScreen() {
         />
       ) : (
         <>
+          {summary ? (
+            <AuthCard title="Talep">
+              <Text style={styles.text} {...textScale.long}>
+                {summary}
+              </Text>
+            </AuthCard>
+          ) : null}
           <AuthCard title="Ne anlama geliyor?">
             <Text style={styles.text} {...textScale.long}>
               İzin verirsen oyuncu teklifi kabul ettiğinde takımından ayrılır. İzin vermezsen teklif bu hâliyle kabul edilemez;
@@ -94,7 +152,7 @@ export default function ReleaseDecisionScreen() {
           <Button
             label="İzin ver"
             icon="checkmark"
-            onPress={() => decide.mutate("approve")}
+            onPress={() => confirm("approve")}
             loading={decide.isPending && decide.variables === "approve"}
             disabled={decide.isPending || !offerId}
             size="lg"
@@ -103,7 +161,7 @@ export default function ReleaseDecisionScreen() {
           <Button
             label="İzin verme"
             variant="danger"
-            onPress={() => decide.mutate("reject")}
+            onPress={() => confirm("reject")}
             loading={decide.isPending && decide.variables === "reject"}
             disabled={decide.isPending || !offerId}
             size="lg"

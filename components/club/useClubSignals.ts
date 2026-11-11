@@ -38,6 +38,7 @@ import {
   getPanelMe,
   type Penalty,
 } from "@/lib/api/panel";
+import { resolveProfileType, scopesForProfileType } from "@/lib/api/member/player";
 import {
   getJoinRequests,
   getTeamAvailability,
@@ -114,10 +115,23 @@ export function useClubSignals() {
   const scope = useScope();
   const user = auth.user;
 
-  const isPresident = Boolean(
-    user && (user.managed_team_id || PRESIDENT_PROFILES.has(String(user.profile_type ?? ""))),
+  /**
+   * ROLLER = PROFİL MODLARI. Sunucu oturuma ÇÖZÜLMÜŞ profil tipini yazar
+   * (routes/User.js → resolveProfileType): yönetilen takım varken takım
+   * kapsamı her koşulda açıktır. Eskiden Kariyerim yalnız `player_id`ye
+   * bakıyordu; üye "Oyuncu modu"nu kapatsa da sekme ve oyuncu işleri
+   * görünmeye devam ediyor, Profil modları ekranı mobilde hiçbir şeyi
+   * değiştirmiyordu. Artık kapalı mod sekmeyi de sorgularını da kapatır.
+   */
+  const scopes = scopesForProfileType(
+    resolveProfileType({
+      profile_type: user?.profile_type,
+      player_id: user?.player_id,
+      managed_team_id: user?.managed_team_id,
+    }),
   );
-  const isPlayer = Boolean(user?.player_id);
+  const isPresident = Boolean(user && scopes.team);
+  const isPlayer = Boolean(user?.player_id) && scopes.player;
   const isManagement = Boolean(user && auth.isManagement);
 
   /* ------------------------------ BAŞKAN ------------------------------- */
@@ -298,7 +312,7 @@ export function useClubSignals() {
         count: unanswered,
         tone: "warn",
         weight: 80,
-        href: `/takimim/mac/${nextTeamMatch.id}`,
+        href: `/takimim/mac/${nextTeamMatch.id}?sekme=yoklama`,
       });
     }
     if (withoutContract > 0) {

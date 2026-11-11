@@ -53,12 +53,14 @@ import {
 } from "@/components/ui";
 import { ProfileHero, type ProfileHeroStat } from "@/components/account/ProfileHero";
 import { useNotificationBell } from "@/hooks/useNotificationBell";
+import { resolveProfileType, scopesForProfileType } from "@/lib/api/member/player";
 import { getPanelMe } from "@/lib/api/panel";
 import { formatNumber, mediaUrl } from "@/lib/format";
 import { openLink } from "@/lib/links";
 import { instagramUrl } from "@/lib/socials";
 import { youtubeChannelUrl } from "@/lib/youtube";
 import { queryKeys } from "@/lib/queryKeys";
+import { useAdminMode } from "@/providers/AdminModeProvider";
 import { useAuth } from "@/providers/AuthProvider";
 import { useFavorite } from "@/providers/FavoriteProvider";
 import { useScope } from "@/providers/ScopeProvider";
@@ -69,8 +71,6 @@ import { colors, hairline, layout, radius, space, textScale, type } from "@/them
 /** Web sitesi — üyelik, şifre sıfırlama ve kurumsal sayfalar orada yaşıyor. */
 const SITE_URL = "https://elitlig.com";
 
-/** Takım başkanı sayılan profil tipleri (sunucudaki `profile_type` değerleri). */
-const PRESIDENT_PROFILES = new Set(["takim_baskani", "double"]);
 
 /** Satırın dokunulduğunda ne yapacağı — hepsi tek `onSelect` içinde çözülür. */
 type MenuAction =
@@ -140,6 +140,7 @@ function versionLabel(): string {
 
 export default function MenuTabScreen() {
   const auth = useAuth();
+  const adminMode = useAdminMode();
   const scope = useScope();
   const favorite = useFavorite();
   const router = useRouter();
@@ -206,10 +207,11 @@ export default function MenuTabScreen() {
   const teamCard = me?.team ?? me?.playerTeam ?? null;
   const teamName = teamCard?.team_name ?? user?.teamName ?? null;
 
-  const isPresident = Boolean(
-    user && (user.managed_team_id || PRESIDENT_PROFILES.has(String(user.profile_type ?? "")))
-  );
-  const isPlayer = Boolean(user?.player_id);
+  /* Roller = PROFİL MODLARI (Kulübüm/Kariyerim ile aynı kural): "Oyuncu modu"
+     kapalıysa rozet de çizilmez. */
+  const profileScopes = user ? scopesForProfileType(resolveProfileType(user)) : null;
+  const isPresident = Boolean(profileScopes?.team);
+  const isPlayer = Boolean(profileScopes?.player && user?.player_id);
 
   /* ------------------------------ EYLEMLER ------------------------------- */
 
@@ -271,6 +273,28 @@ export default function MenuTabScreen() {
           value: followCount ? formatNumber(followCount) : undefined,
           tone: "brand",
           action: { kind: "route", route: "/(tabs)/takip" },
+        },
+      ],
+    });
+
+    result.push({
+      key: "gorev",
+      title: "Görevler ve ödüller",
+      data: [
+        {
+          key: "gorevler",
+          icon: "flag",
+          title: "Haftalık görevler",
+          subtitle: "Görevleri tamamla, XP ve rozet kazan",
+          tone: "accent",
+          action: { kind: "route", route: "/gorevler" },
+        },
+        {
+          key: "rekorlar",
+          icon: "podium",
+          title: "Rekor tablosu",
+          subtitle: "Oyunlarda en iyi skorlar ve sıran",
+          action: { kind: "route", route: "/siralama" },
         },
       ],
     });
@@ -456,6 +480,32 @@ export default function MenuTabScreen() {
           />
         )}
 
+        {/* Yönetici üye görünümünde: yönetim moduna tek dokunuşla dönüş. */}
+        {adminMode.memberPreview ? (
+          <Touchable
+            feedback="card"
+            haptic="selection"
+            onPress={adminMode.enterAdmin}
+            style={styles.adminGate}
+            accessibilityRole="button"
+            accessibilityLabel="Yönetim moduna geç"
+            testID="menu-enter-admin"
+          >
+            <View style={styles.adminGateIcon}>
+              <Ionicons name="shield-checkmark" size={18} color={colors.adminAccent} />
+            </View>
+            <View style={styles.adminGateBody}>
+              <Text style={styles.adminGateTitle} numberOfLines={1} {...textScale.dense}>
+                Yönetim moduna geç
+              </Text>
+              <Text style={styles.adminGateHint} numberOfLines={1} {...textScale.dense}>
+                Şu an üye gözünden bakıyorsun
+              </Text>
+            </View>
+            <Ionicons name="arrow-forward" size={18} color={colors.adminAccent} />
+          </Touchable>
+        ) : null}
+
         {/* Oyunlar: Günün Testi kimliğin hemen altında; oyun merkezi yanında. */}
         <HubGrid inset="flush" style={styles.games}>
           <HubTile
@@ -478,6 +528,8 @@ export default function MenuTabScreen() {
       </>
     ),
     [
+      adminMode.enterAdmin,
+      adminMode.memberPreview,
       auth.initializing,
       dailyDone,
       heroStats,
@@ -580,6 +632,29 @@ const MenuRow = React.memo(function MenuRow({
 /* ================================ STİLLER ================================= */
 
 const styles = StyleSheet.create({
+  adminGate: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    marginTop: space.md,
+    padding: space.md,
+    borderRadius: radius.xl,
+    backgroundColor: colors.adminBar,
+    borderWidth: hairline,
+    borderColor: colors.adminBarBorder,
+  },
+  adminGateIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.md,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.adminCapsule,
+  },
+  adminGateBody: { flex: 1, minWidth: 0 },
+  adminGateTitle: { ...type.h3, color: colors.onDark },
+  adminGateHint: { ...type.caption, color: colors.onDarkMuted, marginTop: 1 },
+
   screen: {
     flex: 1,
     backgroundColor: colors.bg,

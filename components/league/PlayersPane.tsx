@@ -13,6 +13,14 @@
  * HÜKMEN KAYITLARI AYIKLANIR: sunucu hükmen maçlar için sistem oyuncuları
  * ("HÜKMEN 1") döndürüyor; ayıklanmazsa gol krallığını onlar kazanıyordu.
  *
+ * TEK İSTEK, ANINDA SIRALAMA: `/api/oyuncu-listesi` hangi `sort` ile çağrılırsa
+ * çağrılsın sezonun BÜTÜN oyuncularını aynı alanlarla döndürür (≈1 MB); `sort`
+ * yalnız satır sırasını değiştirir. Eskiden her çip yeni bir 1 MB'lık istek
+ * atıp iskelet gösteriyordu. Artık liste bir kez çekilir (Puan ve İstatistik
+ * bölmeleriyle AYNI önbellek anahtarı) ve ölçüt değişince bellekte yeniden
+ * dizilir; sıra kuralları sunucudaki `SORT_SQL` ile aynıdır. "Asist Krallığı"
+ * (web'de var, sunucuda sıralaması yok) bu sayede eklenebildi.
+ *
  * YOĞUN SATIR: liste ortak `PlayerRow` (60px, 34px avatar, 15px ad) yerine bu
  * dosyadaki ince `RankRow`la çizilir — 42px satır, 24px avatar, 12px ad.
  * Sıralamada mevki ve forma numarası yoktur; ortak satırın o yükü burada
@@ -49,13 +57,32 @@ import { GROUP_RADIUS, JUNK_PLAYER } from "./shared";
 /** Sunucu sayıları kimi uçlarda string döndürüyor; tek dönüştürücüden geçer. */
 const num = (value: number | string | null | undefined) => Number(value ?? 0) || 0;
 
+/** Bölmenin ölçütleri: sunucunun bildikleri + istemcide dizilen asist. */
+type PaneSort = PlayerSort | "mostAssists";
+
 interface SortDef {
-  key: PlayerSort;
+  key: PaneSort;
   label: string;
   /** Sağdaki büyük rakam. */
   metric: (row: PlayerRankRow) => string;
   unit: string;
+  /** Sıra kuralı — sunucudaki SORT_SQL ile aynı öncelikler. */
+  compare: (a: PlayerRankRow, b: PlayerRankRow) => number;
 }
+
+const by =
+  (...keys: ((row: PlayerRankRow) => number)[]) =>
+  (a: PlayerRankRow, b: PlayerRankRow) => {
+    for (const key of keys) {
+      const diff = key(b) - key(a);
+      if (diff !== 0) return diff;
+    }
+    return a.id - b.id;
+  };
+const goals = (r: PlayerRankRow) => num(r.goals);
+const assists = (r: PlayerRankRow) => num(r.assists);
+const matches = (r: PlayerRankRow) => num(r.matches);
+const points = (r: PlayerRankRow) => num(r.points);
 
 /**
  * Sıralama ölçütleri — listenin tepesinde küçük (sm) çip şeridi. Lig
@@ -64,12 +91,15 @@ interface SortDef {
  * sıralaması" olduğunu söyleyen daha sessiz bir dil.
  */
 const SORTS: SortDef[] = [
-  { key: "mostValuable", label: "En Değerliler", metric: (r) => String(num(r.points)), unit: "puan" },
-  { key: "topScorers", label: "Gol Krallığı", metric: (r) => String(num(r.goals)), unit: "gol" },
-  { key: "mostMatches", label: "En Çok Maç", metric: (r) => String(num(r.matches)), unit: "maç" },
-  { key: "pointsPerMatch", label: "Puan / Maç", metric: (r) => formatDecimal(num(r.pointsPerMatch), 2), unit: "puan" },
-  { key: "goalsPerMatch", label: "Gol / Maç", metric: (r) => formatDecimal(num(r.goalsPerMatch), 2), unit: "gol" },
-  { key: "mostCards", label: "Kartlar", metric: (r) => String(num(r.cards)), unit: "kart" },
+  { key: "topScorers", label: "Gol Krallığı", metric: (r) => String(goals(r)), unit: "gol", compare: by(goals, assists, matches) },
+  { key: "mostAssists", label: "Asist Krallığı", metric: (r) => String(assists(r)), unit: "asist", compare: by(assists, goals, matches) },
+  /* "En Değerliler" maç PUANI toplamıdır (ekranda yazan sayı); ETL piyasa
+     değeri oyuncu sayfasındadır. */
+  { key: "mostValuable", label: "En Değerliler", metric: (r) => String(points(r)), unit: "puan", compare: by(points, goals, matches) },
+  { key: "mostMatches", label: "En Çok Maç", metric: (r) => String(matches(r)), unit: "maç", compare: by(matches, goals) },
+  { key: "pointsPerMatch", label: "Puan / Maç", metric: (r) => formatDecimal(num(r.pointsPerMatch), 2), unit: "puan", compare: by((r) => num(r.pointsPerMatch), points, matches) },
+  { key: "goalsPerMatch", label: "Gol / Maç", metric: (r) => formatDecimal(num(r.goalsPerMatch), 2), unit: "gol", compare: by((r) => num(r.goalsPerMatch), goals, matches) },
+  { key: "mostCards", label: "Kartlar", metric: (r) => String(num(r.cards)), unit: "kart", compare: by((r) => num(r.cards), (r) => num(r.red), (r) => num(r.yellow)) },
 ];
 
 const normalize = (value: string) => value.trim().toLocaleLowerCase("tr-TR");
@@ -181,7 +211,7 @@ export function PlayersPane({ scrollProps, initialSort = "topScorers" }: Players
   const scope = useScope();
   const router = useRouter();
 
-  const [sort, setSort] = useState<PlayerSort>(initialSort);
+  const [sort, setSort] = useState<PaneSort>(initialSort);
   const [search, setSearch] = useState("");
 
   const active = SORTS.find((item) => item.key === sort) ?? SORTS[0];
@@ -192,9 +222,10 @@ export function PlayersPane({ scrollProps, initialSort = "topScorers" }: Players
     seasonId: scope.seasonId ?? undefined,
   };
 
+  /* Tek istek: Puan / İstatistik bölmeleriyle ortak anahtar (bkz. dosya başı). */
   const query = useQuery({
-    queryKey: queryKeys.playerRankings(scopeKey, sort),
-    queryFn: () => getPlayerRankings(scopeKey, sort),
+    queryKey: queryKeys.playerRankings(scopeKey, "topScorers"),
+    queryFn: () => getPlayerRankings(scopeKey, "topScorers"),
     enabled: scope.ready,
     staleTime: 60_000,
   });
@@ -213,11 +244,8 @@ export function PlayersPane({ scrollProps, initialSort = "topScorers" }: Players
             normalize(player.teamName ?? "").includes(term),
         )
       : players;
-    /* "En Değerliler"de sunucu piyasa değerine göre sıralar ama yanıt bu alanı
-       taşımaz; ekranda puan gösterildiği için liste puana göre yeniden dizilir. */
-    if (sort !== "mostValuable") return filtered;
-    return [...filtered].sort((a, b) => num(b.points) - num(a.points));
-  }, [query.data, search, sort]);
+    return [...filtered].sort(active.compare);
+  }, [active, query.data, search]);
 
   const openPlayer = useCallback(
     (playerId: number) => router.push(`/oyuncu/${playerId}`),
@@ -249,7 +277,7 @@ export function PlayersPane({ scrollProps, initialSort = "topScorers" }: Players
         meta={[
           active.unit === "maç" ? null : `${num(item.matches)} maç`,
           active.unit === "gol" ? null : `${num(item.goals)} gol`,
-          `${num(item.assists)} asist`,
+          active.unit === "asist" ? null : `${num(item.assists)} asist`,
           /* Takım adı SONDA: satır taşarsa kırpılan şey en uzun ve en az
              bilgi taşıyan parça olsun, "2 as…" değil. */
           item.teamName || "Takımsız",

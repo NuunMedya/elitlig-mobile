@@ -25,6 +25,7 @@
  * MİSAFİR ve KULÜPSÜZ ÜYE: `JoinFlow` eylem akışı.
  */
 
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -38,6 +39,7 @@ import {
   ScreenHeader,
   SkeletonCard,
   Tabs,
+  Touchable,
   refreshControlProps,
   useHeaderScroll,
   useRefresh,
@@ -48,6 +50,7 @@ import { ClubHome } from "@/components/club/home/ClubHome";
 import { QuestSpotlight } from "@/components/quests/QuestSpotlight";
 import { useNotificationBell } from "@/hooks/useNotificationBell";
 import { formatDateShort } from "@/lib/format";
+import { useAdminMode } from "@/providers/AdminModeProvider";
 import { useAuth } from "@/providers/AuthProvider";
 import { colors, layout, radius, space, textScale, type } from "@/theme";
 
@@ -199,22 +202,50 @@ export default function ClubHubScreen() {
 
 /* ═══════════════════════════════ LİG ═══════════════════════════════ */
 
+/**
+ * LİG (yönetici, ÜYE GÖRÜNÜMÜNDE): yönetim araçları burada yaşamaz — yönetim
+ * modunun kendi ana ekranı, alt menüsü ve uygulamaları vardır. Bu bölüm o moda
+ * geri dönen kapıdır; altta en sık açılan üç kısayol durur.
+ */
 const LEAGUE_TOOLS: PanelTool[] = [
-  { key: "gorevler", icon: "checkbox", label: "Görevler", href: "/yonetim/gorevler" },
-  { key: "araclar", icon: "construct", label: "Araçlar", href: "/yonetim/araclar", tone: "brand" },
+  { key: "gorevler", icon: "checkbox", label: "Yapılacaklar", href: "/yonetim/gorevler" },
   { key: "talepler", icon: "file-tray-full", label: "Talepler", href: "/yonetim/talepler", tone: "warn" },
   { key: "maclar", icon: "football", label: "Maçlar", href: "/yonetim/maclar", tone: "live" },
-  { key: "sahalar", icon: "location", label: "Sahalar", href: "/yonetim/sahalar", tone: "info" },
-  { key: "mesajlar", icon: "chatbubbles", label: "Mesajlar", href: "/mesajlar", tone: "neutral" },
-  { key: "bildirimler", icon: "notifications", label: "Bildirimler", href: "/bildirimler", tone: "live" },
-  { key: "kayitlar", icon: "call", label: "Kayıtlar", href: "/yonetim/kayitlar", tone: "neutral" },
-  { key: "panel", icon: "grid", label: "Tümü", href: "/yonetim", tone: "neutral" },
 ];
 
 function LeagueSection({ go }: { go: (href: string) => void }) {
+  const mode = useAdminMode();
   return (
     <>
-      <PanelSection title="Araçlar" style={styles.firstSection}>
+      <View style={styles.adminGate}>
+        <View style={styles.adminGateHead}>
+          <View style={styles.adminGateIcon}>
+            <Ionicons name="shield-checkmark" size={20} color={colors.adminAccent} />
+          </View>
+          <View style={styles.flex}>
+            <Text style={styles.adminGateTitle} {...textScale.dense}>
+              Yönetim modu
+            </Text>
+            <Text style={styles.adminGateBody} {...textScale.long}>
+              Şu an uygulamaya üye gözünden bakıyorsun. Muhasebe, yapılacaklar, projeler, lig yönetimi ve yayın stüdyosu yönetim modunda.
+            </Text>
+          </View>
+        </View>
+        <Touchable
+          feedback="button"
+          haptic="selection"
+          onPress={mode.enterAdmin}
+          style={styles.adminGateButton}
+          accessibilityRole="button"
+          testID="kulubum-enter-admin"
+        >
+          <Text style={styles.adminGateButtonText} {...textScale.dense}>
+            Yönetim moduna geç
+          </Text>
+          <Ionicons name="arrow-forward" size={16} color={colors.adminAccentInk} />
+        </Touchable>
+      </View>
+      <PanelSection title="Kısayollar">
         <ToolGrid tools={LEAGUE_TOOLS} go={go} />
       </PanelSection>
     </>
@@ -233,6 +264,36 @@ const styles = StyleSheet.create({
   loading: { gap: space.md, paddingTop: space.sm },
   top: { paddingHorizontal: layout.screenPadding, paddingTop: space.xs },
   firstSection: { marginTop: space.sm },
+
+  adminGate: {
+    marginHorizontal: layout.screenPadding,
+    marginTop: space.sm,
+    padding: space.lg,
+    gap: space.md,
+    borderRadius: radius.xxl,
+    backgroundColor: colors.adminBar,
+  },
+  adminGateHead: { flexDirection: "row", alignItems: "flex-start", gap: space.md },
+  adminGateIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.adminCapsule,
+  },
+  adminGateTitle: { ...type.h2, color: colors.onDark },
+  adminGateBody: { ...type.bodySm, color: colors.onDarkMuted, marginTop: 2 },
+  adminGateButton: {
+    minHeight: 44,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: space.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.adminAccent,
+  },
+  adminGateButtonText: { ...type.labelSm, color: colors.adminAccentInk },
 
   matchHead: { flexDirection: "row", alignItems: "flex-start", gap: space.m },
   matchSide: { ...type.micro, color: colors.brandAccent },

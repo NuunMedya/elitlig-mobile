@@ -30,7 +30,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   Alert,
   RefreshControl,
@@ -61,6 +61,7 @@ import {
   useToast,
   type Tone,
 } from "@/components/ui";
+import { AccountEditSheet } from "@/components/account/AccountEditSheet";
 import { ApiError } from "@/lib/http";
 import { getPanelMe, type PanelPendingChange } from "@/lib/api/panel";
 import { formatDateShort, mediaUrl } from "@/lib/format";
@@ -94,6 +95,7 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 type AccountAction =
+  | { kind: "edit" }
   | { kind: "route"; route: string }
   | { kind: "link"; url: string }
   | { kind: "signOut" };
@@ -237,6 +239,7 @@ export default function AccountScreen() {
 
   /* ------------------------------ EYLEMLER ------------------------------- */
 
+  const [editOpen, setEditOpen] = useState(false);
   const openSignIn = useCallback(() => router.push("/giris"), [router]);
 
   const leaveScreen = useCallback(() => {
@@ -263,6 +266,9 @@ export default function AccountScreen() {
   const onAction = useCallback(
     (action: AccountAction) => {
       switch (action.kind) {
+        case "edit":
+          setEditOpen(true);
+          return;
         case "route":
           router.push(action.route as never);
           return;
@@ -329,8 +335,24 @@ export default function AccountScreen() {
         { kind: "kv", key: "sehir", label: "Şehir", value: orDash(user.city ?? player?.city) },
         { kind: "kv", key: "takim", label: "Takım", value: orDash(teamName) },
         { kind: "kv", key: "rol", label: "Hesap türü", value: roleLabel(user.role) },
+        {
+          kind: "action",
+          key: "duzenle",
+          icon: "create",
+          title: "Bilgilerimi düzenle",
+          subtitle: "Ad soyad, kullanıcı adı, e-posta, telefon, il",
+          tone: "brand",
+          action: { kind: "edit" },
+        },
+        {
+          kind: "action",
+          key: "modlar",
+          icon: "toggle",
+          title: "Profil modları",
+          subtitle: "Oyuncu / takım başkanı alanını aç-kapat",
+          action: { kind: "route", route: "/oyuncum/modlar" },
+        },
       ],
-      footnote: "Bilgilerini değiştirmek için lig yönetimiyle iletişime geç.",
     });
 
     /* 3 — Güvenlik ve gizlilik: şifre ve engeller en üstte. */
@@ -565,6 +587,18 @@ export default function AccountScreen() {
           initialNumToRender={16}
         />
       )}
+
+      {user ? (
+        <AccountEditSheet
+          visible={editOpen}
+          user={user}
+          onClose={() => setEditOpen(false)}
+          onSaved={async () => {
+            await auth.refreshUser();
+            void meQuery.refetch();
+          }}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }

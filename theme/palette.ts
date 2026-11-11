@@ -294,6 +294,26 @@ export interface Palette {
   /** Kapsülün ince ışıklı çerçevesi. */
   tabCapsuleBorder: string;
 
+  /* YÖNETİM MODU — yönetici oturumunda uygulama başka bir kimliğe bürünür:
+     gece laciverti yüzey + altın vurgu. İki temada da AYNI (koyu) kalır ki
+     "şu an yönetim modundayım" bilgisi tema değişse de kaybolmasın. */
+  adminBar: string;
+  adminBarBorder: string;
+  gradientAdminBar: readonly [string, string];
+  /** Yönetim sahnesi (ana ekran kimlik bloğu) gradyanı. */
+  gradientAdminStage: readonly [string, string];
+  adminTabActive: string;
+  adminTabInactive: string;
+  adminCapsule: string;
+  /** Altın vurgu: orta düğme, seçili işaretler, mod rozetleri. */
+  adminAccent: string;
+  gradientAdminAccent: readonly [string, string];
+  /** Altın yüzeyin üstündeki metin/ikon. */
+  adminAccentInk: string;
+  /** Açık/koyu kâğıt üstünde altın tonlu yumuşak zemin ve onun metni. */
+  adminAccentDim: string;
+  adminAccentText: string;
+
   /* — Mor blok üstündeki SAYFA SEKMESİ hapı —
    *
    * Alt menü kapsülünden AYRI token: kapsül morun içinde mor bir puldur
@@ -449,6 +469,19 @@ export const light: Palette = {
   tabBeam:        "#DB2777",
   tabCapsule:       "#F1EBFE",
   tabCapsuleBorder: "rgba(109, 40, 217, 0)",
+
+  adminBar:           "#0E1424",
+  adminBarBorder:     "#232B42",
+  gradientAdminBar:   ["#141C31", "#0E1424"],
+  gradientAdminStage: ["#1B2440", "#0E1424"],
+  adminTabActive:     "#F7C948",
+  adminTabInactive:   "#9AA3BC",
+  adminCapsule:       "rgba(247, 201, 72, 0.14)",
+  adminAccent:        "#F7C948",
+  gradientAdminAccent: ["#FBD86A", "#F2B420"],
+  adminAccentInk:     "#1A1405",
+  adminAccentDim:     "#FBF1D3",
+  adminAccentText:    "#7A5600",
   inkPill:          "rgba(255, 255, 255, 0.12)",
   inkPillBorder:    "rgba(255, 255, 255, 0.22)",
   inkTile:          "rgba(255, 255, 255, 0.08)",
@@ -574,6 +607,19 @@ export const dark: Palette = {
   tabBeam:        "#F472B6",
   tabCapsule:       "rgba(244, 114, 182, 0.16)",
   tabCapsuleBorder: "rgba(216, 200, 255, 0)",
+
+  adminBar:           "#0E1424",
+  adminBarBorder:     "#232B42",
+  gradientAdminBar:   ["#141C31", "#0E1424"],
+  gradientAdminStage: ["#1B2440", "#0E1424"],
+  adminTabActive:     "#F7C948",
+  adminTabInactive:   "#9AA3BC",
+  adminCapsule:       "rgba(247, 201, 72, 0.14)",
+  adminAccent:        "#F7C948",
+  gradientAdminAccent: ["#FBD86A", "#F2B420"],
+  adminAccentInk:     "#1A1405",
+  adminAccentDim:     "rgba(247, 201, 72, 0.14)",
+  adminAccentText:    "#F7C948",
   inkPill:          "rgba(255, 255, 255, 0.12)",
   inkPillBorder:    "rgba(255, 255, 255, 0.22)",
   inkTile:          "rgba(255, 255, 255, 0.08)",

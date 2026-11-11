@@ -20,6 +20,7 @@ import { getAdmob, unitFor } from "@/lib/ads/admob";
 import { colors, radius, space, textScale, type } from "@/theme";
 import { openSponsor } from "./AdBanner";
 import { useAppAds } from "./useAppAds";
+import { useAdminMode } from "@/providers/AdminModeProvider";
 
 const STORE_KEY = "elitlig.adPopup.v1";
 const BLOCKED = ["/giris", "/kayit", "/hosgeldin", "/baslangic", "/sifremi-unuttum", "/yonetim", "/canli"];
@@ -48,7 +49,9 @@ export function AdLaunchPopup() {
   const [open, setOpen] = useState<AdSponsor | null>(null);
   const done = useRef(false);
   const { width, height } = useWindowDimensions();
-  const blocked = BLOCKED.some((p) => pathname?.startsWith(p));
+  const adminMode = useAdminMode();
+  /* Yönetim modunda reklam gösterilmez: orası bir çalışma aracıdır. */
+  const blocked = adminMode.adminActive || !adminMode.ready || BLOCKED.some((p) => pathname?.startsWith(p));
   const sponsorKey = useMemo(() => sponsors.map((s) => s.id).join(","), [sponsors]);
 
   useEffect(() => {

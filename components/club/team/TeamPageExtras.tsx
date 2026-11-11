@@ -148,6 +148,8 @@ export function TeamAuthorityCard() {
     setTerm("");
     setPicked(null);
     void queryClient.invalidateQueries({ queryKey: ["club", "account-requests"] });
+    // Aynı uç oyuncu ekranlarında ["account-requests"] anahtarıyla durur.
+    void queryClient.invalidateQueries({ queryKey: ["account-requests"] });
   };
   const resign = useMutation({
     mutationFn: () => requestTeamResign(),
@@ -248,7 +250,18 @@ export function TeamAuthorityCard() {
               size="sm"
               disabled={!picked}
               loading={transfer.isPending}
-              onPress={() => picked && transfer.mutate(picked.username)}
+              onPress={() => {
+                if (!picked) return;
+                // Devir geri dönüşü zor bir yetki değişimi: gönderilmeden önce kime gittiği teyit edilir.
+                Alert.alert(
+                  "Takımı devret",
+                  `${picked.fullName || `@${picked.username}`} (@${picked.username}) takımın yeni yöneticisi olacak. Yönetici onayından sonra takım araçların kapanır. Devir talebi gönderilsin mi?`,
+                  [
+                    { text: "Vazgeç", style: "cancel" },
+                    { text: "Talebi gönder", style: "destructive", onPress: () => transfer.mutate(picked.username) },
+                  ],
+                );
+              }}
               style={styles.flex}
             />
           </View>

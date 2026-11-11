@@ -15,6 +15,7 @@ import { useChatRealtime } from "@/hooks/useChat";
 import { CallProvider } from "@/providers/CallProvider";
 import { startAnalytics, trackScreen } from "@/lib/analytics";
 import { ApiError } from "@/lib/http";
+import { AdminModeProvider } from "@/providers/AdminModeProvider";
 import { AuthProvider } from "@/providers/AuthProvider";
 import { FavoriteProvider } from "@/providers/FavoriteProvider";
 import { FollowFlowProvider } from "@/providers/FollowFlowProvider";
@@ -28,6 +29,8 @@ import { colors } from "@/theme";
  *   SafeAreaProvider → Toast ve BottomSheet güvenli alan ölçüsü okur.
  *   QueryClient      → altındaki her sağlayıcı sorgu açabilsin.
  *   Auth             → kapsam ve favori senkronu oturuma bağlı.
+ *   AdminMode        → yönetim modu / üye görünümü (oturumu okur; sekme
+ *                      düzeni ve yönetim ekranları bunu okur).
  *   Scope            → ScopeSheet ve ekranlar kapsamı okur.
  *   Favorite         → rozetler (canlı favori sayısı) favorileri okur.
  *   Toast            → en altta: her ekranın üstünde tek katman.
@@ -121,6 +124,7 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
+         <AdminModeProvider>
           <AnalyticsSetup />
           <NotificationSetup />
           <ChatRealtimeSetup />
@@ -234,6 +238,7 @@ export default function RootLayout() {
               </ToastProvider>
             </FavoriteProvider>
           </ScopeProvider>
+         </AdminModeProvider>
         </AuthProvider>
       </QueryClientProvider>
     </SafeAreaProvider>

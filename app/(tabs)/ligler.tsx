@@ -23,10 +23,12 @@
  *     küçültülmedi; ince varyantlar `components/league/` içindedir.
  *
  * DERİN BAĞLANTI: `/(tabs)/ligler?tab=<puan|fikstur|oyuncular|istatistik|
- * haberler>&leagueId=<id>`. Geçersiz değer sessizce "puan" olur. Eski
+ * haberler>&leagueId=<id>[&cityId=<id>]`. Geçersiz değer sessizce "puan" olur. Eski
  * değerler kırılmaz: `takimlar` → puan; `arsiv` → puan + lig seçicinin sezon
  * adımı açılır. `leagueId` verilirse kapsam o lige çevrilir (maç listesindeki
- * lig başlığı buraya bu parametreyle gelir).
+ * lig başlığı buraya bu parametreyle gelir). Lig başka bir ildeyse `cityId`
+ * de verilir: il + lig birlikte atlanır (`jumpTo`); verilmezse lig seçili
+ * ilde aranır.
  *
  * PERFORMANS: aynı anda YALNIZ bir bölmenin listesi mount edilir; her bölme
  * kendi sorgusunu `enabled` ile açar, arka plandaki bölmeler istek atmaz.
@@ -128,7 +130,7 @@ function firstParam(value: string | string[] | undefined): string | undefined {
 export default function LeaguesScreen() {
   const scope = useScope();
   const router = useRouter();
-  const params = useLocalSearchParams<{ tab?: string; leagueId?: string }>();
+  const params = useLocalSearchParams<{ tab?: string; leagueId?: string; cityId?: string }>();
   const { isFollowing } = useFavorite();
   const flow = useFollowFlow();
   const { scrollY, scrollProps } = useHeaderScroll();
@@ -167,7 +169,8 @@ export default function LeaguesScreen() {
   // kararlı `selectLeague` referansına bağlanır, uygulanan değer ref'te
   // işaretlenir ve parametre rotadan düşürülür.
   const routeLeagueId = Number(firstParam(params.leagueId));
-  const { selectLeague, leagueId: scopeLeagueId } = scope;
+  const routeCityId = Number(firstParam(params.cityId));
+  const { selectLeague, jumpTo, leagueId: scopeLeagueId, cityId: scopeCityId } = scope;
   const appliedLeagueRef = useRef<number | null>(null);
   useEffect(() => {
     if (!Number.isFinite(routeLeagueId) || routeLeagueId <= 0) {
@@ -177,11 +180,18 @@ export default function LeaguesScreen() {
     }
     if (appliedLeagueRef.current === routeLeagueId) return;
     appliedLeagueRef.current = routeLeagueId;
-    router.setParams({ leagueId: undefined });
+    router.setParams({ leagueId: undefined, cityId: undefined });
+    // Lig başka bir ildeyse il + lig BİRLİKTE değişir. Yalnız `selectLeague`
+    // çağrılsaydı kimlik seçili ilin listesinde bulunamaz, ScopeProvider
+    // sessizce o ilin ilk ligine kayardı (yanlış lig açılırdı).
+    if (Number.isFinite(routeCityId) && routeCityId > 0 && routeCityId !== scopeCityId) {
+      jumpTo(routeCityId, routeLeagueId);
+      return;
+    }
     // Zaten o ligdeysek dokunma: `selectLeague` sezonu sıfırlar, kullanıcının
     // seçtiği (ör. arşiv) sezon boşuna kaybolur.
     if (routeLeagueId !== scopeLeagueId) selectLeague(routeLeagueId);
-  }, [routeLeagueId, scopeLeagueId, selectLeague, router]);
+  }, [routeLeagueId, routeCityId, scopeLeagueId, scopeCityId, selectLeague, jumpTo, router]);
 
   const changeTab = useCallback(
     (next: LeagueTab) => {

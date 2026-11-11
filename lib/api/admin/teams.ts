@@ -171,6 +171,55 @@ export interface TeamOverview {
 
 export const getTeamOverview = (teamId: number) => get<TeamOverview>(`/api/admin/teams/${teamId}/overview`);
 
+/* ---------- kulüp sayfası içeriği (Teams.details) ---------- */
+
+/** services/teamDetailsService.js SOCIAL_KEYS / HOMEPAGE_KEYS ile birebir. */
+export const TEAM_SOCIAL_FIELDS = [
+  { key: "instagram", label: "Instagram" },
+  { key: "x", label: "X (Twitter)" },
+  { key: "facebook", label: "Facebook" },
+  { key: "youtube", label: "YouTube" },
+  { key: "tiktok", label: "TikTok" },
+  { key: "website", label: "Web sitesi" },
+  { key: "whatsapp", label: "WhatsApp numarası" },
+] as const;
+
+export const TEAM_HOMEPAGE_FIELDS = [
+  { key: "show_history", label: "Tarihçe" },
+  { key: "show_achievements", label: "Başarılar" },
+  { key: "show_social", label: "Sosyal medya" },
+  { key: "show_captain", label: "Takım kaptanı" },
+  { key: "show_sponsors", label: "Sponsorlar" },
+  { key: "show_goal_music", label: "Gol müziği" },
+] as const;
+
+export interface TeamDetails {
+  history: string;
+  motto: string;
+  goal_music_url: string;
+  goal_music_title: string;
+  achievements: { title: string; season?: string; rank?: string; note?: string }[];
+  social: Record<string, string>;
+  homepage: Record<string, boolean>;
+  captain_player_id: number | null;
+  updated_at: string | null;
+}
+
+export interface TeamDetailsResponse {
+  team_id: number;
+  details: TeamDetails;
+  captain: { id: number; name: string; image: string | null; position: string | null } | null;
+}
+
+/** GET /api/admin/teams/:id/details — takım sayfası içeriği (teams.update). */
+export const getTeamDetails = (teamId: number) => get<TeamDetailsResponse>(`/api/admin/teams/${teamId}/details`);
+
+/** PATCH /api/admin/teams/:id/details — yalnız gönderilen alanlar yazılır; başarılar gönderilmezse korunur. */
+export const updateTeamDetails = (
+  teamId: number,
+  body: Partial<Omit<TeamDetails, "updated_at" | "achievements">> & { achievements?: TeamDetails["achievements"] }
+) => patch<TeamDetailsResponse & { message: string }>(`/api/admin/teams/${teamId}/details`, body);
+
 /* ---------- kadro bağı (oyuncu-takım) ---------- */
 
 export const addPlayerToTeam = (b: { playerId: number; playerName: string; teamId: number; teamName: string }) =>

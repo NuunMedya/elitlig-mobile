@@ -40,6 +40,10 @@ final class LiveCameraView: ExpoView {
   private var inBackground = false
   private var statsTimer: Timer?
 
+  // Yakınlaştırma / fener için etkin kamera
+  private var cameraDevice: AVCaptureDevice?
+  private var torchOn = false
+
   // Overlay
   private let overlayObject = ImageScreenObject()
   private var overlayAdded = false
@@ -157,6 +161,11 @@ final class LiveCameraView: ExpoView {
 
   private func attachCamera() {
     let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: position)
+    cameraDevice = device
+    if torchOn {
+      stream.torch = false
+      torchOn = false
+    }
     stream.attachCamera(device, track: 0) { [weak self] _, error in
       guard let error else { return }
       DispatchQueue.main.async {
@@ -274,6 +283,52 @@ final class LiveCameraView: ExpoView {
     var settings = stream.audioMixerSettings
     settings.isMuted = muted
     stream.audioMixerSettings = settings
+  }
+
+  // MARK: - Yakınlaştırma / fener
+
+  /// Dijital yakınlaştırma üst sınırı (kalite için kameranın sınırı 8× ile kırpılır).
+  private var maxZoom: CGFloat {
+    guard let device = cameraDevice else { return 1 }
+    return max(1, min(device.activeFormat.videoMaxZoomFactor, 8))
+  }
+
+  func cameraCapabilities() -> [String: Any] {
+    guard cameraAttached, let device = cameraDevice else {
+      return ["minZoom": 1.0, "maxZoom": 1.0, "zoom": 1.0, "torch": false, "torchOn": false]
+    }
+    return [
+      "minZoom": 1.0,
+      "maxZoom": Double(maxZoom),
+      "zoom": Double(min(max(device.videoZoomFactor, 1), maxZoom)),
+      "torch": device.hasTorch && device.isTorchAvailable,
+      "torchOn": torchOn
+    ]
+  }
+
+  func setZoom(_ level: Double) throws -> Double {
+    guard cameraAttached, let device = cameraDevice else {
+      throw LiveException("Kamera açık değil.")
+    }
+    let clamped = min(max(CGFloat(level), 1), maxZoom)
+    do {
+      try device.lockForConfiguration()
+      device.videoZoomFactor = clamped
+      device.unlockForConfiguration()
+    } catch {
+      throw LiveException("Yakınlaştırma uygulanamadı: \(error.localizedDescription)")
+    }
+    return Double(clamped)
+  }
+
+  func setTorch(_ on: Bool) throws -> Bool {
+    guard cameraAttached, let device = cameraDevice else {
+      throw LiveException("Kamera açık değil.")
+    }
+    guard device.hasTorch, device.isTorchAvailable else { return false }
+    stream.torch = on
+    torchOn = on
+    return on
   }
 
   /// "rtmp://a.rtmp.youtube.com/live2/ANAHTAR" → ("rtmp://a.rtmp.youtube.com/live2", "ANAHTAR")

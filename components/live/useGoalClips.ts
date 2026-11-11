@@ -25,6 +25,8 @@ export type ClipStatus = "saving" | "ready" | "uploading" | "uploaded" | "failed
 
 export interface LocalClip {
   key: string;
+  /** "goal": GOL dokunuşunda alınır, olaya bağlanıp yüklenir. "instant": anlık tekrar, yalnız bu telefonda. */
+  kind: "goal" | "instant";
   createdAt: number;
   side: "home" | "away";
   code: string;
@@ -43,6 +45,17 @@ export interface LocalClip {
 }
 
 export const CLIP_SECONDS = 10;
+/** Listede tutulan en çok klip (eskiler listeden düşer; dosyaları modül 24 saatte siler). */
+const MAX_CLIPS = 14;
+
+/** Yerel modülün klip hata kodlarının Türkçesi. */
+export function clipErrorText(error: unknown): string {
+  const code = String((error as { code?: unknown } | null)?.code ?? "");
+  if (code === "NOT_STREAMING") return "Klip yalnız yayın sürerken alınabilir.";
+  if (code === "NO_BUFFER") return "Henüz yeterli görüntü birikmedi; birkaç saniye sonra yeniden dene.";
+  if (code === "CLIP_WRITE_FAILED") return "Klip yazılamadı. Telefonda boş yer kalmamış olabilir.";
+  return error instanceof Error && error.message ? error.message : "Klip kaydedilemedi.";
+}
 
 export function useGoalClips(matchId: number) {
   const queryClient = useQueryClient();
@@ -60,6 +73,7 @@ export function useGoalClips(matchId: number) {
       setClips((list) => [
         {
           key,
+          kind: "goal" as const,
           createdAt: Date.now(),
           side: input.side,
           code: input.code,
@@ -71,18 +85,55 @@ export function useGoalClips(matchId: number) {
           eventId: null,
           scorer: null,
           settled: false,
-          status: "saving",
+          status: "saving" as const,
         },
         ...list,
-      ]);
+      ].slice(0, MAX_CLIPS));
       saveClip({ seconds: CLIP_SECONDS, afterSeconds: 0 })
         .then((res) =>
           patchClip(key, { uri: res.uri, durationMs: res.durationMs, width: res.width, height: res.height, status: "ready" })
         )
         .catch((error: unknown) =>
-          patchClip(key, { status: "error", error: error instanceof Error ? error.message : "Klip kaydedilemedi." })
+          patchClip(key, { status: "error", error: clipErrorText(error) })
         );
       return key;
+    },
+    [patchClip]
+  );
+
+  /**
+   * ANLIK TEKRAR: yayının son `seconds` saniyesini kaydeder ve klibi döndürür
+   * (çağıran hemen yayına verir). Olaya bağlanmaz, sunucuya yüklenmez.
+   */
+  const captureInstant = useCallback(
+    async (input: { seconds: number; minute: number }): Promise<LocalClip> => {
+      const key = `clip-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+      const base: LocalClip = {
+        key,
+        kind: "instant",
+        createdAt: Date.now(),
+        side: "home",
+        code: "REPLAY",
+        minute: input.minute,
+        uri: null,
+        durationMs: 0,
+        width: 0,
+        height: 0,
+        eventId: null,
+        scorer: null,
+        settled: true,
+        status: "saving",
+      };
+      setClips((list) => [base, ...list].slice(0, MAX_CLIPS));
+      try {
+        const res = await saveClip({ seconds: input.seconds, afterSeconds: 0 });
+        const done: LocalClip = { ...base, uri: res.uri, durationMs: res.durationMs, width: res.width, height: res.height, status: "local" };
+        patchClip(key, done);
+        return done;
+      } catch (error) {
+        patchClip(key, { status: "error", error: clipErrorText(error) });
+        throw new Error(clipErrorText(error));
+      }
     },
     [patchClip]
   );
@@ -141,7 +192,10 @@ export function useGoalClips(matchId: number) {
   /** Tekrar için en yeni oynatılabilir klip. */
   const latest = clips.find((c) => c.uri && c.status !== "saving" && c.status !== "error") ?? null;
 
-  return { clips, capture, attach, retry, remove, latest };
+  /** En yeni oynatılabilir GOL klibi. */
+  const latestGoal = clips.find((c) => c.kind === "goal" && c.uri && c.status !== "saving" && c.status !== "error") ?? null;
+
+  return { clips, capture, captureInstant, attach, retry, remove, latest, latestGoal };
 }
 
 export function clipStatusLabel(clip: LocalClip): string {

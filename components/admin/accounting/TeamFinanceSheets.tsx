@@ -11,13 +11,15 @@
 import React from "react";
 
 import { type FormValues } from "@/components/admin";
+import { parseAmount } from "@/lib/api/admin/accounting";
 import { type FfpSettings, type TeamEntryType } from "@/lib/api/admin/teamFinance";
 
 import { EditorSheet } from "./EditorSheet";
 import { Muted } from "./parts";
 
 const s = (v: unknown) => (v == null ? "" : String(v));
-const num = (v: unknown) => Number(s(v).replace(/\./g, "").replace(",", "."));
+/** Türkçe yazım ("1.250,50") da noktalı ondalık ("1250.50") da doğru okunur; okunamayan NaN. */
+const num = (v: unknown) => parseAmount(v) ?? NaN;
 
 export function FfpSettingsSheet({
   visible,

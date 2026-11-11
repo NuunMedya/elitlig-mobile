@@ -74,6 +74,8 @@ export function useArenaScore(game: ArenaGame, bestKey: string) {
   const [prevBest, setPrevBest] = useState(0);
   const [submit, setSubmit] = useState<SubmitState>("idle");
   const [score, setScore] = useState<number | null>(null);
+  /** Sunucunun rekor hükmü (yanıt gelince); null: henüz bilinmiyor, cihaza bakılır. */
+  const [serverRecord, setServerRecord] = useState<boolean | null>(null);
   const bestRef = useRef(0);
   bestRef.current = best;
   /** Bu turun oyun oturumu (Kariyer Modu doğrulaması); açılamazsa null. */
@@ -100,15 +102,25 @@ export function useArenaScore(game: ArenaGame, bestKey: string) {
       const pending = sessionRef.current;
       (pending ?? Promise.resolve(null))
         .then((sessionId) => submitArenaScore(game, value, sessionId))
-        .then(() => {
+        .then((response) => {
           // Bu arada yeni tur başladıysa onun oturumuna dokunulmaz.
           if (sessionRef.current === pending) sessionRef.current = null;
           setSubmit("sent");
+          // Rekor sunucuda da tutulur: başka cihazda yapılmış daha yüksek skor
+          // varsa cihazdaki rekor ona çekilir ve bu tur "rekor" sayılmaz.
+          const entry = response?.entry;
+          if (entry && typeof entry.best === "number" && entry.best > bestRef.current) {
+            setBest(entry.best);
+            void AsyncStorage.setItem(bestKey, String(entry.best));
+          }
+          if (entry && typeof entry.record === "boolean") setServerRecord(Boolean(entry.record || entry.first));
           void queryClient.invalidateQueries({ queryKey: ["arena"] });
+          // Oyun görevleri ve XP: Görevler / Kariyer bir sonraki açılışta tazelensin.
+          void queryClient.invalidateQueries({ queryKey: ["career"] });
         })
         .catch(() => setSubmit("failed"));
     },
-    [auth.user, game, queryClient],
+    [auth.user, bestKey, game, queryClient],
   );
 
   /* Misafir giriş yapıp döndüyse bekleyen skor kendiliğinden gönderilir. */
@@ -120,6 +132,7 @@ export function useArenaScore(game: ArenaGame, bestKey: string) {
   const finish = useCallback(
     (value: number) => {
       setScore(value);
+      setServerRecord(null);
       setPrevBest(bestRef.current);
       if (value > bestRef.current) {
         setBest(value);
@@ -134,6 +147,7 @@ export function useArenaScore(game: ArenaGame, bestKey: string) {
   const reset = useCallback(() => {
     setScore(null);
     setSubmit("idle");
+    setServerRecord(null);
     sessionRef.current = auth.user
       ? startArenaSession(game)
           .then((data) => data.sessionId)
@@ -144,7 +158,7 @@ export function useArenaScore(game: ArenaGame, bestKey: string) {
   return {
     best,
     score: score ?? 0,
-    isRecord: score != null && score > 0 && score > prevBest,
+    isRecord: serverRecord ?? (score != null && score > 0 && score > prevBest),
     submit,
     finish,
     retry: () => send(score ?? 0),

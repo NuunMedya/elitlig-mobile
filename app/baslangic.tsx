@@ -30,14 +30,15 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import React, { useCallback, useMemo, useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { BackHandler, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { TeamPickerGrid } from "@/components/follow/TeamPickerGrid";
 import {
   Button,
   EmptyState,
   ListRow,
+  Reveal,
   ScreenHeader,
   SkeletonListRow,
   Surface,
@@ -82,7 +83,20 @@ const Progress = React.memo(function Progress({ current }: { current: number }) 
   return (
     <View style={styles.progress} accessibilityLabel={`Adım ${current} / ${TOTAL}`}>
       {Array.from({ length: TOTAL }, (_, index) => (
-        <View key={index} style={[styles.progressBar, index < current ? styles.progressOn : null]} />
+        <View key={index} style={styles.progressBar}>
+          {index < current ? (
+            /* Yeni tamamlanan çubuk belirerek dolar; öncekiler yerinde durur. */
+            <Reveal
+              enabled={index === current - 1}
+              replayKey={current}
+              distance={-12}
+              axis="x"
+              style={styles.progressOn}
+            >
+              {null}
+            </Reveal>
+          ) : null}
+        </View>
       ))}
     </View>
   );
@@ -257,6 +271,18 @@ export default function BaslangicScreen() {
   const [finishing, setFinishing] = useState(false);
 
   const index = STEPS.indexOf(step);
+  const scrollRef = useRef<ScrollView>(null);
+  /** Son geçişin yönü: ileri adım sağdan, geri adım soldan kayarak gelir. */
+  const [direction, setDirection] = useState<1 | -1>(1);
+
+  /* Adım değişince içerik TEPEDEN başlar. Eskiden yalnız başlığın `scrollY`
+     değeri sıfırlanıyordu: uzun takım ızgarasında aşağı inmiş kullanıcı
+     bildirim adımına ortadan giriyor, başlık açık görünürken liste kaymış
+     kalıyordu. */
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
+    scrollY.setValue(0);
+  }, [step, scrollY]);
 
   const togglePick = useCallback((team: FavoriteTeam) => {
     setPicked((prev) => {
@@ -284,9 +310,9 @@ export default function BaslangicScreen() {
       void finish();
       return;
     }
+    setDirection(1);
     setStep(STEPS[index + 1]);
-    scrollY.setValue(0);
-  }, [finish, index, scrollY, step]);
+  }, [finish, index, step]);
 
   /** Birincil düğme: takım adımında seçilenleri takibe ekler. */
   const primary = useCallback(() => {
@@ -301,9 +327,24 @@ export default function BaslangicScreen() {
   }, [favorite, goNext, picked, step]);
 
   const goBack = useCallback(() => {
-    if (index === 0) router.replace("/sehir");
-    else setStep(STEPS[index - 1]);
+    if (index === 0) {
+      router.replace("/sehir");
+      return;
+    }
+    setDirection(-1);
+    setStep(STEPS[index - 1]);
   }, [index, router]);
+
+  /* Android donanım geri tuşu sihirbazın "geri"sidir. Yığında dönülecek ekran
+     olmadığı için (akış `replace` ile ilerler) varsayılan davranış uygulamayı
+     kapatıyordu. */
+  useEffect(() => {
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      goBack();
+      return true;
+    });
+    return () => sub.remove();
+  }, [goBack]);
 
   const primaryLabel =
     step === "takim"
@@ -329,11 +370,14 @@ export default function BaslangicScreen() {
       />
 
       <ScrollView
+        ref={scrollRef}
         {...scrollProps}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
+        {/* Adım içeriği yönüne göre yandan kayarak gelir (bir kez, 320ms). */}
+        <Reveal replayKey={step} axis="x" distance={28 * direction} style={styles.step}>
         {step === "lig" ? (
           <>
             {scope.cityLabel ? (
@@ -353,6 +397,7 @@ export default function BaslangicScreen() {
         ) : (
           <NotificationStep />
         )}
+        </Reveal>
       </ScrollView>
 
       <View style={styles.footer}>
@@ -392,9 +437,15 @@ const styles = StyleSheet.create({
     height: 4,
     borderRadius: radius.pill,
     backgroundColor: colors.surface3,
+    overflow: "hidden",
   },
   progressOn: {
+    flex: 1,
+    borderRadius: radius.pill,
     backgroundColor: colors.brand,
+  },
+  step: {
+    gap: space.md,
   },
   content: {
     paddingHorizontal: layout.screenPadding,

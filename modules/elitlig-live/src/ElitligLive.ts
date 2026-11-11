@@ -2,6 +2,8 @@ import { requireOptionalNativeModule } from "expo";
 import { Platform } from "react-native";
 
 import type {
+  CameraCapabilities,
+  DeviceStatus,
   ElitligLiveNativeModule,
   OverlayFrame,
   ReplayOptions,
@@ -143,4 +145,63 @@ export async function stopReplay(): Promise<void> {
 export async function clearClips(): Promise<void> {
   if (!NativeLive) return;
   return NativeLive.clearClips();
+}
+
+/* ───────── yakınlaştırma / fener / cihaz durumu ─────────
+ * Bu işlevler modüle sonradan eklendi. Mağazadaki eski derlemede yoktur; JS
+ * güncellemesi o derlemeye de gittiği için hepsi "yoksa sessizce null" döner. */
+
+/** Yerel modül yakınlaştırma / feneri destekliyor mu (yeni derleme). */
+export function supportsCameraControls(): boolean {
+  return typeof NativeLive?.setZoom === "function" && typeof NativeLive?.getCameraCapabilities === "function";
+}
+
+/** Etkin kameranın yakınlaştırma aralığı ve fener durumu; desteklenmiyorsa null. */
+export async function getCameraCapabilities(): Promise<CameraCapabilities | null> {
+  if (typeof NativeLive?.getCameraCapabilities !== "function") return null;
+  try {
+    const c = await NativeLive.getCameraCapabilities();
+    const minZoom = Number(c?.minZoom) > 0 ? Number(c.minZoom) : 1;
+    const maxZoom = Math.max(minZoom, Number(c?.maxZoom) || minZoom);
+    return {
+      minZoom,
+      maxZoom,
+      zoom: Math.min(maxZoom, Math.max(minZoom, Number(c?.zoom) || minZoom)),
+      torch: Boolean(c?.torch),
+      torchOn: Boolean(c?.torchOn),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Yakınlaştırma düzeyi (1 = yok). Uygulanan düzeyi döndürür; desteklenmiyorsa null. */
+export async function setZoom(level: number): Promise<number | null> {
+  if (typeof NativeLive?.setZoom !== "function") return null;
+  const applied = await NativeLive.setZoom(Number.isFinite(level) ? Math.max(0.5, level) : 1);
+  return Number(applied) || null;
+}
+
+/** Fener. Son durumu döndürür; desteklenmiyorsa null. */
+export async function setTorch(on: boolean): Promise<boolean | null> {
+  if (typeof NativeLive?.setTorch !== "function") return null;
+  return Boolean(await NativeLive.setTorch(!!on));
+}
+
+/** Pil ve ağ türü (stüdyo ön kontrolü); desteklenmiyorsa / okunamazsa null. */
+export async function getDeviceStatus(): Promise<DeviceStatus | null> {
+  if (typeof NativeLive?.getDeviceStatus !== "function") return null;
+  try {
+    const s = await NativeLive.getDeviceStatus();
+    const level = Number(s?.batteryLevel);
+    const network = String(s?.network ?? "unknown");
+    return {
+      batteryLevel: Number.isFinite(level) && level >= 0 ? Math.min(1, level) : -1,
+      charging: Boolean(s?.charging),
+      lowPower: Boolean(s?.lowPower),
+      network: (["wifi", "cellular", "ethernet", "none"].includes(network) ? network : "unknown") as DeviceStatus["network"],
+    };
+  } catch {
+    return null;
+  }
 }

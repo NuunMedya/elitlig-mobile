@@ -33,8 +33,7 @@ import {
   NOTIFICATION_KINDS,
   notificationHref,
   notificationKind,
-  type NotificationKind,
-} from "@/lib/api/club/notifications";
+  type NotificationKind, isReleaseRequest } from "@/lib/api/club/notifications";
 import { getPanelNotifications, markAllNotifsRead, markNotifRead, type PanelNotification } from "@/lib/api/panel";
 import { timeAgo } from "@/lib/format";
 import { queryKeys } from "@/lib/queryKeys";
@@ -89,7 +88,9 @@ export default function TeamNotificationsScreen() {
   const readAll = useMutation({ mutationFn: markAllNotifsRead, onSuccess: invalidate });
 
   const open = (item: PanelNotification) => {
-    if (!item.is_read) readOne.mutate(item.id);
+    // İzin talebi karar verilince kapanır (transfer-izni ekranı işaretler);
+    // açarken okundu yapmak kararsız talebi Kulübüm'ün iş listesinden düşürür.
+    if (!item.is_read && !isReleaseRequest(item)) readOne.mutate(item.id);
     const href = notificationHref(item);
     if (href) router.push(href as Href);
   };

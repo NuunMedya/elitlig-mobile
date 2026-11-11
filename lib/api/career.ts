@@ -54,12 +54,23 @@ export interface CareerAchievement {
   unlocked_at: string | null;
 }
 
+/** Görev süzgeci (ekrandaki çipler). Eski sunucu göndermez: katmandan türetilir (lib/quests.ts). */
+export type QuestCategory = "saha" | "oyun" | "tribun" | "kesif";
+
 export interface CareerQuest {
   code: string;
+  /** XP'nin yazıldığı katman. */
   layer: CareerLayer;
+  category?: QuestCategory;
   tier?: 1 | 2 | 3;
-  /** Görevi yapmak için açılacak yer (bkz. app/kariyer.tsx QUEST_ROUTES). */
+  /** Görevi yapmak için açılacak yer (bkz. lib/quests.ts QUEST_ROUTES). */
   go?: string | null;
+  /** Görev tek bir mini oyuna bağlıysa oyun anahtarı. */
+  game?: string | null;
+  /** Haftanın oyununun görevi. */
+  featured?: boolean;
+  /** Üyenin geçen haftaki sırasında olmayan görev. */
+  is_new?: boolean;
   title: string;
   description: string;
   progress: number;
@@ -77,6 +88,12 @@ export interface WeeklyQuests {
   done_count: number;
   locked: number;
   bonuses: { at: number; xp: number; earned: boolean }[];
+  /** Açık görevlerin kategori dökümü (yeni sunucu). */
+  categories?: { key: QuestCategory; label: string; total: number; done: number }[];
+  /** Haftanın oyunu: görevleri sıraya öncelikli girer. */
+  featured?: { game: string; title: string } | null;
+  /** Açık ve bitmemiş "bu hafta yeni" görev sayısı. */
+  new_count?: number;
 }
 
 /** Tüm zamanlar kariyer görevi: zincirin sıradaki kademesi. */
@@ -112,9 +129,18 @@ export interface CareerSummary {
   quests: CareerQuest[];
   weekly_quests?: WeeklyQuests;
   career_quests?: CareerChain[];
-  week: { key: string; starts_at?: string; ends_at: string };
+  /** Hafta Türkiye saatiyle döner (Pazartesi 00:00). server_time: sunucunun "şimdi"si. */
+  week: { key: string; starts_at?: string; ends_at: string; server_time?: string };
   recent: { layer: CareerLayer; source: string; xp: number; label: string | null; created_at: string }[];
-  rules: { arena_daily_cap: number; quest_xp: number; active_slots?: number; standard?: StandardXpRule[] };
+  rules: {
+    arena_daily_cap: number;
+    quest_xp: number;
+    quest_tier_xp?: Record<string, number>;
+    quest_bonus?: Record<string, number>;
+    quest_categories?: { key: QuestCategory; label: string }[];
+    active_slots?: number;
+    standard?: StandardXpRule[];
+  };
 }
 
 export interface PlayerCareer {
