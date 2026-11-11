@@ -13,11 +13,23 @@
   role sahipse üstte rol sekmeleri durur (`?rol=takim|oyuncu|lig` →
   Kulübüm · Kariyerim · Lig). Tasarım `components/club/Panel.tsx` kitiyle
   kurulur (10px bölüm etiketi, 13px satır, beyaz kart + kıl çizgisi).
-  - Kulübüm: kimlik satırı → araçlar → **Maç hazırlığı** (yoklama · maç
-    kadrosu · analiz adımları, gerçek veriden durum ve hazırlık yüzdesi) →
-    yapılacaklar (tamamı) → kadro dengesi → sezon ve kasa.
-  - Kariyerim: kimlik satırı → araçlar → sıradaki maç + "geliyor musun?" →
-    yapılacaklar → değişiklik taleplerim → sezonum → son maçlarım.
+  - Kulübüm (`components/club/home/ClubHome`): kahraman → **şimdi ilgilen** →
+    **sıradaki maç + hazırlık** → **kısayollar** (Kadro · Maç kadrosu · Maç al ·
+    Teklifler · Kasa · Teklif ver; her karo gerçek veriden durum satırı ve
+    rozet taşır) → **tüm araçlar** (Maç · Kadro ve transfer · Kulüp · İletişim;
+    açık ızgara, katlama yok) → kadro dengesi · kasa · gol katkısı → **kulüp
+    ayarları** (yönetim yetkisi, bildirim tercihleri, profil modları, hesap).
+  - Kariyerim (`components/career/home/CareerHome`): kahraman → şimdi ilgilen →
+    sıradaki maç + "geliyor musun?" → kısayollar (Tekliflerim · Sözleşmelerim ·
+    İstatistik · Profilim · Maçlarım · Davetler) → tüm araçlar → sezonum · son
+    performans · takımım → **oyuncu ayarları**.
+  - Roller PROFİL MODLARINA uyar (`useClubSignals`): oturumdaki çözülmüş
+    `profile_type` hangi sekmenin açık olduğunu belirler; "Oyuncu modu" kapalı
+    üye `player_id` taşısa da Kariyerim'i görmez. Hiçbir role bağlı olmayan
+    üye `JoinFlow`da hesabını bağlama adımlarını ve bekleyen taleplerinin
+    durumunu görür.
+  - Ortak parçalar: `components/club/home/ToolBoard` (`ShortcutGrid`,
+    `ToolBoard`), `HomeSkeleton`; bölümler `Reveal` ile kademeli girer.
 - **`/takimim`** artık yalnız `/kulubum?rol=takim`'a yönlendirir;
   **`/oyuncum`** Özet sekmesini kaybetti (Maçlarım · İstatistik · Sözleşme),
   `?tab=ozet` ve sekmesiz açılış `/kulubum?rol=oyuncu`'ya gider. İkinci bir

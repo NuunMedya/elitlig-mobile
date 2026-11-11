@@ -17,6 +17,7 @@ import { AdminScreen, InfoLine, Panel, RecordCard } from "@/components/admin";
 import { shareCsv } from "@/components/admin/evaluations/shareCsv";
 import { LevelBadge, ScoreBar } from "@/components/admin/evaluations/widgets";
 import { Badge, EmptyState, ErrorState, MetricGrid, MetricTile, SegmentedControl, SkeletonCard } from "@/components/ui";
+import { isoDay } from "@/lib/admin/format";
 import {
   csvNumber,
   formatDay,
@@ -37,7 +38,7 @@ export default function StaffCardScreen() {
   const router = useRouter();
   const [view, setView] = useState<"summary" | "history">("summary");
   const [expanded, setExpanded] = useState<number | null>(null);
-  const range = { from: p.from || "2020-01-01", to: p.to || new Date().toISOString().slice(0, 10) };
+  const range = { from: p.from || "2020-01-01", to: p.to || isoDay() };
   const scope = { cityId: p.cityId || "", leagueId: p.leagueId || "", seasonId: p.seasonId || "" };
 
   const query = useQuery({

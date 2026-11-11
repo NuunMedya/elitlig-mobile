@@ -6,7 +6,7 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Alert, StyleSheet, Text, View } from "react-native";
 
 import { Button, useToast } from "@/components/ui";
 import { cancelChangeRequest } from "@/lib/api/profile";
@@ -53,7 +53,12 @@ export function PendingChangeNotice({
         variant="secondary"
         size="sm"
         icon="arrow-undo-outline"
-        onPress={() => cancel.mutate()}
+        onPress={() =>
+          Alert.alert("Talebi geri çek", "Onay bekleyen değişikliğin iptal edilir; istersen yeniden düzenleyip gönderebilirsin.", [
+            { text: "Vazgeç", style: "cancel" },
+            { text: "Geri çek", style: "destructive", onPress: () => cancel.mutate() },
+          ])
+        }
         loading={cancel.isPending}
       />
     </View>

@@ -312,7 +312,7 @@ export function useClubSignals() {
         count: unanswered,
         tone: "warn",
         weight: 80,
-        href: `/takimim/mac/${nextTeamMatch.id}`,
+        href: `/takimim/mac/${nextTeamMatch.id}?sekme=yoklama`,
       });
     }
     if (withoutContract > 0) {

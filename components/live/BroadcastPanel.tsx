@@ -12,11 +12,12 @@
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import * as Clipboard from "expo-clipboard";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Share, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { Touchable } from "@/components/ui";
 import { RIG } from "@/lib/live/rig";
+import { DEFAULT_RTMP_URL, clearRtmpTarget, loadRtmpTarget, saveRtmpTarget, validateRtmp } from "@/lib/live/studioSettings";
 import {
   PRIVACY_LABELS,
   streamStatusLabel,
@@ -40,14 +41,56 @@ export interface BroadcastPanelProps {
   onStartManual: (url: string) => void;
   onStop: () => void;
   onEndYoutube: () => void;
-  onToast: (message: string) => void;
+  onToast: (message: string, tone?: "success" | "danger") => void;
+  /** Durum kartının altına eklenen içerik (yayın sağlığı). */
+  health?: React.ReactNode;
 }
 
 export function BroadcastPanel(props: BroadcastPanelProps) {
   const { config, stream, encoderOn, busy } = props;
   const [manualOpen, setManualOpen] = useState(false);
-  const [rtmp, setRtmp] = useState("rtmp://a.rtmp.youtube.com/live2");
+  const [rtmp, setRtmp] = useState(DEFAULT_RTMP_URL);
   const [key, setKey] = useState("");
+  const [showKey, setShowKey] = useState(false);
+  const [remember, setRemember] = useState(true);
+  const [saved, setSaved] = useState(false);
+
+  // Cihazda saklı elle yayın hedefi (güvenli depo). Sunucuda YouTube bağlantısı
+  // yoksa elle bölümü kendiliğinden açılır.
+  useEffect(() => {
+    let alive = true;
+    void loadRtmpTarget().then((target) => {
+      if (!alive || !target) return;
+      setRtmp(target.url);
+      setKey(target.key);
+      setSaved(true);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const noYoutube = config != null && !config.configured;
+  useEffect(() => {
+    if (noYoutube) setManualOpen(true);
+  }, [noYoutube]);
+
+  const startManual = async () => {
+    const problem = validateRtmp(rtmp, key);
+    if (problem) {
+      props.onToast(problem, "danger");
+      return;
+    }
+    if (remember) setSaved(await saveRtmpTarget({ url: rtmp, key }));
+    props.onStartManual(`${rtmp.trim().replace(/\/+$/, "")}/${key.trim()}`);
+  };
+
+  const forget = async () => {
+    await clearRtmpTarget();
+    setSaved(false);
+    setKey("");
+    setRtmp(DEFAULT_RTMP_URL);
+    props.onToast("Kayıtlı yayın anahtarı bu telefondan silindi.");
+  };
 
   const watchUrl = stream?.watch_url ?? null;
   const ytDone = stream?.active === false || ["complete", "revoked", "deleted"].includes(String(stream?.status ?? "").toLowerCase());
@@ -63,8 +106,12 @@ export function BroadcastPanel(props: BroadcastPanelProps) {
   };
   const copy = async () => {
     if (!watchUrl) return;
-    await Clipboard.setStringAsync(watchUrl);
-    props.onToast("İzleme bağlantısı kopyalandı.");
+    try {
+      await Clipboard.setStringAsync(watchUrl);
+      props.onToast("İzleme bağlantısı kopyalandı.");
+    } catch {
+      props.onToast("Bağlantı kopyalanamadı.", "danger");
+    }
   };
 
   return (
@@ -90,6 +137,8 @@ export function BroadcastPanel(props: BroadcastPanelProps) {
           </Text>
         </View>
       </View>
+
+      {props.health}
 
       {watchUrl ? (
         <View style={styles.linkRow}>
@@ -168,29 +217,55 @@ export function BroadcastPanel(props: BroadcastPanelProps) {
               <TextInput
                 value={rtmp}
                 onChangeText={setRtmp}
-                placeholder="rtmp://a.rtmp.youtube.com/live2"
+                placeholder={DEFAULT_RTMP_URL}
                 placeholderTextColor={RIG.textMute}
                 autoCapitalize="none"
                 autoCorrect={false}
+                keyboardType="url"
+                disableFullscreenUI
                 style={styles.input}
+                accessibilityLabel="RTMP sunucu adresi"
               />
-              <TextInput
-                value={key}
-                onChangeText={setKey}
-                placeholder="Yayın anahtarı (xxxx-xxxx-xxxx-xxxx)"
-                placeholderTextColor={RIG.textMute}
-                autoCapitalize="none"
-                autoCorrect={false}
-                secureTextEntry
-                style={styles.input}
-              />
+              <View style={styles.keyRow}>
+                <TextInput
+                  value={key}
+                  onChangeText={setKey}
+                  placeholder="Yayın anahtarı (xxxx-xxxx-xxxx-xxxx)"
+                  placeholderTextColor={RIG.textMute}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  secureTextEntry={!showKey}
+                  disableFullscreenUI
+                  style={[styles.input, styles.flex]}
+                  accessibilityLabel="Yayın anahtarı"
+                />
+                <Touchable style={styles.iconBtn} onPress={() => setShowKey((v) => !v)} accessibilityLabel={showKey ? "Anahtarı gizle" : "Anahtarı göster"} hitSlop={6}>
+                  <Ionicons name={showKey ? "eye-off-outline" : "eye-outline"} size={16} color={RIG.text} />
+                </Touchable>
+              </View>
+              <Touchable
+                style={styles.remember}
+                onPress={() => setRemember((v) => !v)}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: remember }}
+                accessibilityLabel="Anahtarı bu telefonda sakla"
+              >
+                <Ionicons name={remember ? "checkbox" : "square-outline"} size={18} color={remember ? RIG.brand : RIG.textMute} />
+                <Text style={styles.manualTitle} allowFontScaling={false}>
+                  Bu telefonda sakla (güvenli depo)
+                </Text>
+              </Touchable>
               <Btn
                 label="Bu anahtarla yayına başla"
                 icon="radio"
-                tone="soft"
+                tone="live"
                 disabled={busy || !props.nativeReady || !rtmp.trim() || !key.trim()}
-                onPress={() => props.onStartManual(`${rtmp.trim().replace(/\/+$/, "")}/${key.trim()}`)}
+                onPress={() => void startManual()}
               />
+              {saved ? <Btn label="Kayıtlı anahtarı sil" icon="trash-outline" tone="soft" disabled={busy} onPress={() => void forget()} /> : null}
+              <Text style={styles.muted} allowFontScaling={false}>
+                YouTube Studio ▸ Canlı yayın ▸ Yayın anahtarı. Anahtar yalnız bu telefonda tutulur; sunucuya gönderilmez.
+              </Text>
             </View>
           ) : null}
         </>
@@ -278,11 +353,14 @@ const styles = StyleSheet.create({
   segTextOn: { color: RIG.text },
   manualHead: { flexDirection: "row", alignItems: "center", gap: space.xs, paddingVertical: space.xs, marginTop: space.xs },
   manualTitle: { ...type.caption, color: RIG.textSoft },
+  keyRow: { flexDirection: "row", alignItems: "center", gap: space.xs },
+  remember: { flexDirection: "row", alignItems: "center", gap: space.sm, minHeight: 36 },
   input: {
     ...type.bodySm,
     color: RIG.text,
-    height: 40,
+    height: 44,
     paddingHorizontal: space.md,
+    paddingVertical: 0,
     borderRadius: radius.md,
     backgroundColor: RIG.panelSoft,
     borderWidth: StyleSheet.hairlineWidth,

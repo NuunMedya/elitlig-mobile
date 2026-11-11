@@ -12,9 +12,10 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { AvailabilityPicker } from "@/components/club/AvailabilityPicker";
 import { daysUntil, matchWhen } from "@/components/club/NextMatchCard";
 import { Badge, GradientFill, TeamLogo, Touchable, toneColors, type Tone } from "@/components/ui";
+import { useTeamLogos } from "@/hooks/useTeamLogos";
 import type { OverviewRecentRow } from "@/lib/api/member/player";
 import type { MyMatch } from "@/lib/api/panel";
-import { formatDateShort, formatDecimal } from "@/lib/format";
+import { formatDateShort, formatDecimal, mediaUrl } from "@/lib/format";
 import { colors, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
 
 type IconName = keyof typeof Ionicons.glyphMap;
@@ -130,8 +131,11 @@ export const NextMatchPanel = React.memo(function NextMatchPanel({
 }) {
   const opponent = match.opponent_name ?? (match.is_home ? match.second_team_name : match.first_team_name);
   const ours = teamName ?? (match.is_home ? match.first_team_name : match.second_team_name);
-  const home = match.is_home ? { name: ours, logo: teamLogo } : { name: opponent, logo: null };
-  const away = match.is_home ? { name: opponent, logo: null } : { name: ours, logo: teamLogo };
+  /* Maç kaydı rakibin armasını taşımaz; il takım listesinden (ortak önbellek) çözülür. */
+  const logos = useTeamLogos();
+  const opponentLogo = mediaUrl(logos.logoFor(match.opponent_team_id, opponent));
+  const home = match.is_home ? { name: ours, logo: teamLogo } : { name: opponent, logo: opponentLogo };
+  const away = match.is_home ? { name: opponent, logo: opponentLogo } : { name: ours, logo: teamLogo };
   const countdown = daysUntil(match.date);
 
   return (

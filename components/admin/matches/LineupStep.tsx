@@ -69,7 +69,7 @@ const nameOf = (p: RosterPlayer) => String(p.player_name ?? "").trim();
 const numberOf = (p: RosterPlayer) => String(p.jersey_number ?? p.player_number ?? "").trim();
 const positionOf = (p: RosterPlayer) => String(p.team_position ?? p.player_position ?? "").trim();
 
-export function LineupStep({ match }: { match: AdminMatch }) {
+export function LineupStep({ match, onDirtyChange }: { match: AdminMatch; onDirtyChange?: (dirty: boolean) => void }) {
   const auth = useAuth();
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -150,6 +150,12 @@ export function LineupStep({ match }: { match: AdminMatch }) {
     setDirty(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lineupQuery.data, homeRoster.data, awayRoster.data, homeRoster.isLoading, awayRoster.isLoading]);
+
+  /* Kaydedilmemiş kadro değişikliği üst ekrana bildirilir: adım değişirken uyarılır. */
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dirty]);
 
   const teamId = side === "home" ? homeTeamId : awayTeamId;
   const teamName = side === "home" ? match.first_team_name : match.second_team_name;

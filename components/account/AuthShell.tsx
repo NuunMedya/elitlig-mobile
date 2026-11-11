@@ -35,6 +35,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   BrandMark,
+  Reveal,
   ScreenHeader,
   Touchable,
   toneColors,
@@ -153,14 +154,17 @@ export function AuthShell({
         actions={headerActions}
         hero={
           <View style={styles.hero}>
-            {icon ? (
-              <View style={styles.heroIcon}>
-                <Ionicons name={icon} size={24} color={colors.brandOnDark} />
-              </View>
-            ) : (
-              <BrandMark size="md" />
-            )}
-            <View style={styles.heroText}>
+            {/* Kimlik anı: marka hafifçe büyüyerek, metin ardından belirir. */}
+            <Reveal distance={0} scaleFrom={0.82}>
+              {icon ? (
+                <View style={styles.heroIcon}>
+                  <Ionicons name={icon} size={24} color={colors.brandOnDark} />
+                </View>
+              ) : (
+                <BrandMark size="md" />
+              )}
+            </Reveal>
+            <Reveal delay={60} axis="x" distance={12} style={styles.heroText}>
               <Text style={styles.overline} {...textScale.badge}>
                 {upperTR(overline)}
               </Text>
@@ -172,7 +176,7 @@ export function AuthShell({
                   {lede}
                 </Text>
               ) : null}
-            </View>
+            </Reveal>
           </View>
         }
       />
@@ -185,7 +189,10 @@ export function AuthShell({
           keyboardDismissMode="on-drag"
           showsVerticalScrollIndicator={false}
         >
-          {children}
+          {/* Form tek blok hâlinde alttan belirir (tek seferlik, 320ms). */}
+          <Reveal delay={90} distance={14} style={styles.stack}>
+            {children}
+          </Reveal>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -228,6 +235,7 @@ export const AuthNotice = React.memo(function AuthNotice({
 }) {
   const palette = tone === "danger" ? DANGER : SUCCESS;
   return (
+    <Reveal distance={-6} replayKey={message}>
     <View
       style={[styles.notice, { backgroundColor: palette.dim, borderColor: palette.fg }]}
       accessibilityRole="alert"
@@ -242,6 +250,7 @@ export const AuthNotice = React.memo(function AuthNotice({
         {message}
       </Text>
     </View>
+    </Reveal>
   );
 });
 
@@ -473,6 +482,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: layout.screenPadding,
     paddingTop: space.lg,
     paddingBottom: space.giant,
+    gap: space.md,
+  },
+  /* Giriş animasyonu sarmalayıcısı — `content` ile aynı aralık. */
+  stack: {
     gap: space.md,
   },
 

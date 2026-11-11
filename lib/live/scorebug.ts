@@ -65,7 +65,7 @@ export type BugCorner = "left" | "right";
  */
 export const GFX = {
   /** Altyazı: sol altta; orta-alt skorbord açıkken onun üstüne kalkar. */
-  caption: { left: 56, bottom: 64, liftOverBoard: 196, maxWidth: 1100 },
+  caption: { left: 56, bottom: 64, liftOverBoard: 244, maxWidth: 1100 },
   /** Sponsor yuvası: skorbordun karşı üst köşesi. */
   sponsor: { side: 56, top: 48, height: 64, maxWidth: 260 },
   /** GOL bandı: alt üçte birde ortalı. */

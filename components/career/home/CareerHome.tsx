@@ -32,7 +32,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import React, { useCallback, useMemo, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet } from "react-native";
 
 import { availabilityMineKey } from "@/components/club/AvailabilityPicker";
 import { matchWhen } from "@/components/club/NextMatchCard";

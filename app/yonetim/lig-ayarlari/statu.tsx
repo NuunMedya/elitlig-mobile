@@ -199,7 +199,8 @@ export default function LeagueStructureScreen() {
         includeTeams: Boolean(v.includeTeams),
         includeSettings: v.includeSettings !== false,
       }),
-    { success: (r) => r?.message || "Kurgu kopyalandı." }
+    // Hedef sezonun kurgusu değişti: o sezon seçildiğinde eski önbellek gösterilmesin.
+    { success: (r) => r?.message || "Kurgu kopyalandı.", invalidate: [["admin", "season-groups"]] }
   );
 
   /** Boyut ayarı; küçültme dolu kutu silecekse sunucu onay ister (force). */

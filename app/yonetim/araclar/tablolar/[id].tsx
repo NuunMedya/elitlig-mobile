@@ -1004,7 +1004,6 @@ export default function SheetEditorScreen() {
       <ActionSheet
         visible={more}
         onClose={() => setMore(false)}
-        app="tablolar"
       title={meta.title}
         actions={[
           { label: "Şimdi kaydet", icon: "cloud-upload-outline", hint: SAVE_LABEL[saveState], onPress: () => void save(), hidden: readOnly },
@@ -1112,7 +1111,6 @@ export default function SheetEditorScreen() {
           visible={shareOpen}
           onClose={() => setShareOpen(false)}
           sheetId={sheetId}
-          app="tablolar"
       title={meta.title}
           initialShares={meta.shares ?? []}
           onSaved={(shares) => setMeta((m) => (m ? { ...m, shares } : m))}

@@ -693,11 +693,21 @@ export default function ScoresScreen() {
     setCollapsedKeys((current) => ({ ...current, [key]: !current[key] }));
   }, []);
 
+  /* Lig başlığı → Lig sekmesi. İL DE TAŞINIR: "Tüm Türkiye" görünümünde başka
+     ilin ligine dokununca yalnız `leagueId` gidiyor, Lig sekmesi o kimliği
+     seçili ilde bulamayıp sessizce ilin ilk ligini açıyordu. */
   const openLeague = useCallback(
     (leagueId: number | null) => {
-      router.push(leagueId != null ? `/(tabs)/ligler?leagueId=${leagueId}&tab=fikstur` : "/(tabs)/ligler");
+      if (leagueId == null) {
+        router.push("/(tabs)/ligler");
+        return;
+      }
+      const cityId = sections.find((section) => section.leagueId === leagueId)?.cityId ?? null;
+      router.push(
+        `/(tabs)/ligler?leagueId=${leagueId}${cityId != null ? `&cityId=${cityId}` : ""}&tab=fikstur`,
+      );
     },
-    [router],
+    [router, sections],
   );
 
   /** Seçili günden sonraki ilk maç günü — boş durum düğmesi onu adıyla söyler. */

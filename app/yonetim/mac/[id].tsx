@@ -13,10 +13,10 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
-import { AdminScreen } from "@/components/admin";
+import { AdminScreen, confirmAction } from "@/components/admin";
 import { InfoStep } from "@/components/admin/matches/InfoStep";
 import { LineupStep } from "@/components/admin/matches/LineupStep";
 import { LiveStep } from "@/components/admin/matches/LiveStep";
@@ -79,7 +79,26 @@ export default function MatchWorkflowScreen() {
     [match]
   );
 
-  const changeStep = (next: StepKey) => {
+  /* Adımın kaydedilmemiş değişikliği: adım değişince bileşen kapanır ve girilen
+     kadro / puan / form kaybolurdu; geçişten önce sorulur. */
+  const dirtyRef = useRef(false);
+  const setDirty = useCallback((dirty: boolean) => {
+    dirtyRef.current = dirty;
+  }, []);
+
+  const changeStep = async (next: StepKey) => {
+    if (next === current) return;
+    if (dirtyRef.current) {
+      const ok = await confirmAction({
+        title: "Kaydedilmemiş değişiklikler var",
+        message: `${stepMeta.label} adımındaki değişiklikler kaydedilmedi. Adımdan çıkarsan kaybolur.`,
+        confirmLabel: "Kaydetmeden çık",
+        cancelLabel: "Adımda kal",
+        destructive: true,
+      });
+      if (!ok) return;
+    }
+    dirtyRef.current = false;
     setStep(next);
     router.setParams({ adim: next });
   };
@@ -113,14 +132,14 @@ export default function MatchWorkflowScreen() {
             awayLogo={teams.logoFor(match.away_team_id, match.second_team_name)}
             score={current === "canli" ? liveScore : null}
           />
-          <StepBar value={current} status={match.mac_durumu} onChange={changeStep} />
+          <StepBar value={current} status={match.mac_durumu} onChange={(next) => void changeStep(next)} />
 
           {!availability.ready ? (
             <EmptyState
               icon="lock-closed-outline"
               title={`${stepMeta.label} henüz açılmadı`}
               body={availability.hint}
-              action={{ label: "Maç öncesine git", onPress: () => changeStep("bilgiler") }}
+              action={{ label: "Maç öncesine git", onPress: () => void changeStep("bilgiler") }}
               variant="inline"
             />
           ) : !allowed ? (
@@ -131,13 +150,13 @@ export default function MatchWorkflowScreen() {
               variant="inline"
             />
           ) : current === "bilgiler" ? (
-            <InfoStep key={`info-${match.id}`} match={match} cityId={scope.cityId} onGoStep={changeStep} />
+            <InfoStep key={`info-${match.id}`} match={match} cityId={scope.cityId} onGoStep={(next) => void changeStep(next)} onDirtyChange={setDirty} />
           ) : current === "kadro" ? (
-            <LineupStep key={`lineup-${match.id}`} match={match} />
+            <LineupStep key={`lineup-${match.id}`} match={match} onDirtyChange={setDirty} />
           ) : current === "canli" ? (
             <LiveStep key={`live-${match.id}`} match={match} onScore={setLiveScore} />
           ) : (
-            <PostStep key={`post-${match.id}`} match={match} />
+            <PostStep key={`post-${match.id}`} match={match} onDirtyChange={setDirty} />
           )}
         </View>
       )}

@@ -92,10 +92,13 @@ export function InfoStep({
   match,
   cityId,
   onGoStep,
+  onDirtyChange,
 }: {
   match: AdminMatch;
   cityId: number | null;
   onGoStep: (step: StepKey) => void;
+  /** Kaydedilmemiş değişiklik var mı (adım değişiminde uyarı için). */
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const auth = useAuth();
   const router = useRouter();
@@ -223,6 +226,10 @@ export function InfoStep({
   const assignmentsChanged = JSON.stringify(assignments) !== JSON.stringify(savedAssignments);
   // Kaydedilebilir değişiklik: her bölüm kendi yetkisiyle sayılır (403 önlenir).
   const dirty = (changed.length > 0 && canEdit) || (assignmentsChanged && canAssign);
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dirty]);
   const sameTeams = Boolean(form.home_team_id && form.home_team_id === form.away_team_id);
   const hasGroups = groups.length > 0;
 

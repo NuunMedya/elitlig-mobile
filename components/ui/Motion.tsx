@@ -9,7 +9,7 @@
  *
  * KURALLAR (bkz. docs/arena-tasarim-dili.md, LiveBadge.tsx):
  *   · Hareket BİLGİ taşır ya da girişi yumuşatır; süs için dönmez.
- *   · Sonsuz döngü YOK (`Animated.loop` yasak — check-tokens denetler). Her
+ *   · Sonsuz döngü YOK (döngülü animasyon yasak — check-tokens denetler). Her
  *     parça bir kez oynar ve durur.
  *   · Liste girişleri yalnız ilk ekran dolusu satırda oynar (`index` tavanı):
  *     kaydırırken beliren satırlar parlamaz, liste akıcı kalır.

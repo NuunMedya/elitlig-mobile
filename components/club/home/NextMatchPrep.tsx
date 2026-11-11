@@ -20,7 +20,9 @@ import { daysUntil, matchWhen } from "@/components/club/NextMatchCard";
 import { PanelCard, PanelEmpty, PrepChecklist, ThinProgress, prepProgress, type PrepStep } from "@/components/club/Panel";
 import type { ClubSignals } from "@/components/club/useClubSignals";
 import { Badge, Button, SkeletonCard, TeamLogo, toneColors } from "@/components/ui";
+import { useTeamLogos } from "@/hooks/useTeamLogos";
 import { MAX_STARTERS, getTeamMatchPlan } from "@/lib/api/team";
+import { mediaUrl } from "@/lib/format";
 import { colors, radius, space, textScale, type, upperTR } from "@/theme";
 
 export function NextMatchPrep({
@@ -36,6 +38,8 @@ export function NextMatchPrep({
 }) {
   const { nextTeamMatch: match, teamAvailability, teamMatches } = signals;
   const matchId = match?.id ?? 0;
+  /* Maç kaydı rakibin armasını taşımaz; il takım listesinden (ortak önbellek) çözülür. */
+  const logos = useTeamLogos();
 
   const plan = useQuery({
     queryKey: ["takim", "match-plan", matchId],
@@ -100,6 +104,7 @@ export function NextMatchPrep({
   const progressTone = progress >= 100 ? "win" : progress >= 50 ? "brand" : "warn";
   const homeName = match.is_home ? teamName : (match.opponent_name ?? "Rakip");
   const awayName = match.is_home ? (match.opponent_name ?? "Rakip") : teamName;
+  const opponentLogo = mediaUrl(logos.logoFor(match.opponent_team_id, match.opponent_name));
 
   return (
     <PanelCard style={styles.card}>
@@ -109,11 +114,11 @@ export function NextMatchPrep({
       </View>
 
       <View style={styles.versus}>
-        <Side name={homeName} logo={match.is_home ? teamLogo : null} />
+        <Side name={homeName} logo={match.is_home ? teamLogo : opponentLogo} />
         <Text style={styles.vs} {...textScale.badge}>
           VS
         </Text>
-        <Side name={awayName} logo={match.is_home ? null : teamLogo} />
+        <Side name={awayName} logo={match.is_home ? opponentLogo : teamLogo} />
       </View>
       <View style={styles.when}>
         <Ionicons name="calendar-outline" size={13} color={colors.textTertiary} />

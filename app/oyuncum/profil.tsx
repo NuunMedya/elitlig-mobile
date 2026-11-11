@@ -335,7 +335,12 @@ export default function MyPlayerProfileScreen() {
                       variant="secondary"
                       icon="arrow-undo-outline"
                       loading={cancelChange.isPending && cancelChange.variables === change.id}
-                      onPress={() => cancelChange.mutate(change.id)}
+                      onPress={() =>
+                        Alert.alert("Talebi geri çek", "Onay bekleyen değişikliğin iptal edilir; istersen yeniden düzenleyip gönderebilirsin.", [
+                          { text: "Vazgeç", style: "cancel" },
+                          { text: "Geri çek", style: "destructive", onPress: () => cancelChange.mutate(change.id) },
+                        ])
+                      }
                     />
                   </View>
                 </PanelCard>

@@ -65,6 +65,17 @@ const EMPTY: Form = {
   passwordRepeat: "",
 };
 
+/** Alanların kullanıcıya görünen adları — eksik alan özeti için. */
+const FIELD_LABELS: Record<FieldName, string> = {
+  fullName: "Ad soyad",
+  username: "Kullanıcı adı",
+  email: "E-posta",
+  phone: "Telefon",
+  city: "Şehir",
+  password: "Şifre",
+  passwordRepeat: "Şifre tekrarı",
+};
+
 function validate(form: Form): Errors {
   const errors: Errors = {};
   const fullName = form.fullName.trim();
@@ -118,6 +129,8 @@ export default function RegisterScreen() {
   const [serverErrors, setServerErrors] = useState<Errors>({});
   const [error, setError] = useState<string | null>(null);
   const [secure, setSecure] = useState(true);
+  /** "Üye ol"a en az bir kez basıldı mı — eksik alan özeti ancak ondan sonra çıkar. */
+  const [attempted, setAttempted] = useState(false);
 
   const usernameRef = useRef<TextInput>(null);
   const emailRef = useRef<TextInput>(null);
@@ -142,6 +155,10 @@ export default function RegisterScreen() {
 
   const errors = useMemo(() => validate({ ...form, city: effectiveCity }), [form, effectiveCity]);
   const canSubmit = Object.keys(errors).length === 0 && !signingIn;
+  const missingFields = useMemo(
+    () => (Object.keys(FIELD_LABELS) as FieldName[]).filter((name) => errors[name]).map((name) => FIELD_LABELS[name]),
+    [errors],
+  );
 
   const errorFor = useCallback(
     (name: FieldName) => serverErrors[name] ?? (touched[name] ? errors[name] : undefined),
@@ -189,6 +206,7 @@ export default function RegisterScreen() {
       password: true,
       passwordRepeat: true,
     });
+    setAttempted(true);
     if (!canSubmit) return;
     setError(null);
     setServerErrors({});
@@ -383,6 +401,13 @@ export default function RegisterScreen() {
       </AuthCard>
 
       {error ? <AuthNotice message={error} /> : null}
+
+      {/* Düğme formun EN ALTINDA, hatalı alan çoğu zaman ekranın dışında
+          (yukarıda) kalır: basınca "hiçbir şey olmuyor" gibi görünüyordu.
+          Eksikler düğmenin hemen üstünde adlarıyla söylenir. */}
+      {attempted && !error && missingFields.length > 0 ? (
+        <AuthNotice message={`Şu alanları kontrol et: ${missingFields.join(", ")}.`} />
+      ) : null}
 
       <Button label="Üye ol" onPress={submit} loading={signingIn} size="lg" fullWidth />
 

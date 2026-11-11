@@ -14,7 +14,7 @@
  *
  * YÖNLENDİRME KORUNUR: girişten sonra yığında geri dönülecek bir ekran varsa
  * oraya dönülür (kullanıcı korumalı bir sayfadan buraya yollanmıştır); yoksa
- * Profil SEKMESİ açılır. Bu davranış değiştirilmemelidir.
+ * sekmeler açılır. Yönetim hesabını yönetim ana ekranına sekme düzeni geçirir.
  *
  * KLAVYE: iOS'ta içerik klavyenin üstüne itilir, "İleri" tuşu şifre alanına
  * atlar, "Git" tuşu formu gönderir; boşluğa dokunmak klavyeyi kapatır ama
@@ -47,8 +47,7 @@ export default function LoginScreen() {
   const params = useLocalSearchParams<{ yonetim?: string }>();
 
   /* YÖNETİM GİRİŞİ: `/giris?yonetim=1` ya da alttaki bağlantı. Sunucuya
-     scope=management gider; yönetim rolü olmayan hesap reddedilir ve giriş
-     sonrası doğrudan Yönetim Paneli açılır. Web'deki /yonetim/giris ile aynı. */
+     scope=management gider; yönetim rolü olmayan hesap reddedilir. Web'deki /yonetim/giris ile aynı. */
   const [managementMode, setManagementMode] = useState(params.yonetim === "1");
   const toggleMode = useCallback(() => {
     setManagementMode((value) => !value);
@@ -94,18 +93,11 @@ export default function LoginScreen() {
     if (!canSubmit) return;
     setError(null);
     try {
-      const signedUser = await signIn(username, password, managementMode ? "management" : undefined);
-      // Yönetim girişinde (ya da yönetim hesabı yığında dönülecek ekran
-      // yokken) doğrudan Yönetim Paneli açılır.
-      if (managementMode || (signedUser?.isManagement && !router.canGoBack())) {
-        router.replace("/yonetim");
-        return;
-      }
+      await signIn(username, password, managementMode ? "management" : undefined);
+      // Yönetim hesabı da üye gibi döner: sekme düzeni yönetim kullanıcısını
+      // kendiliğinden yönetim ana ekranına geçirir; burada ayrı yönlendirme yok.
       if (router.canGoBack()) router.back();
-      // Eski `(tabs)/profile` ekranı kaldırıldı; girişten sonra yığında geri
-      // dönülecek bir şey yoksa Profil SEKMESİ açılır (hesap detayı oradaki
-      // kimlik kartından /hesabim ile açılıyor).
-      else router.replace("/(tabs)/menu");
+      else router.replace("/(tabs)");
     } catch (caught) {
       setError(
         caught instanceof ApiError
