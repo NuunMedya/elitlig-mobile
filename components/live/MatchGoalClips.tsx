@@ -1,13 +1,13 @@
 /**
- * Maç sayfası — "Gol videoları" şeridi. Canlı yayında kaydedilen gol klipleri
- * dakika sırasıyla: kapak, dakika, golcü ve takım arması; dokununca oynatıcı
- * açılır. Klip yoksa (ya da uç henüz yoksa) hiçbir şey çizilmez.
+ * "Gol videoları" şeridi (maç sayfası ve oyuncu profili). Canlı yayında
+ * kaydedilen gol klipleri: kapak, dakika, iki satır yazı; dokununca tam ekran
+ * oynatıcı açılır. Klip yoksa (ya da uç henüz yoksa) hiçbir şey çizilmez.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
-import React, { useMemo, useState } from "react";
-import { Image, ScrollView, StyleSheet, Text, View } from "react-native";
+import React, { memo, useCallback, useMemo, useState } from "react";
+import { FlatList, Image, StyleSheet, Text, View } from "react-native";
 
 import { SectionHeader, TeamLogo, Touchable } from "@/components/ui";
 import { clipLabel, listGoalClips, type GoalClip } from "@/lib/live/clips";
@@ -15,13 +15,12 @@ import { RIG } from "@/lib/live/rig";
 import { formatDuration } from "@/lib/matchMedia";
 import { colors, fonts, layout, radius, space, textScale, type } from "@/theme";
 
-import { GoalClipPlayer } from "./GoalClipPlayer";
-
 /** Maçın gol klipleri, dakika sırasıyla. Aynı sorgu anahtarı: şerit ve "Maçın golü" kartı tek istek paylaşır. */
-export function useMatchGoalClips(matchId: number, live?: boolean): GoalClip[] {
+export function useMatchGoalClips(matchId: number, live?: boolean, enabled = true): GoalClip[] {
   const query = useQuery({
     queryKey: ["goal-clips", "match", matchId],
     queryFn: () => listGoalClips({ match_id: matchId }),
+    enabled: enabled && Number.isFinite(matchId) && matchId > 0,
     staleTime: live ? 20_000 : 5 * 60_000,
     refetchInterval: live ? 30_000 : false,
   });
@@ -41,98 +40,159 @@ export interface ClipTeams {
   awayLogo?: string | null;
 }
 
-export function MatchGoalClips({
-  matchId,
-  nameOf,
-  live,
-  teams,
+/** Şeritteki bir kart: klip + iki satır yazı (+ isteğe bağlı arma). */
+export interface ClipStripItem {
+  clip: GoalClip;
+  title: string;
+  sub: string;
+  team?: { name: string | null; logo: string | null } | null;
+}
+
+const CARD_WIDTH = 168;
+const stripKey = (item: ClipStripItem) => String(item.clip.id);
+const stripLayout = (_data: ArrayLike<ClipStripItem> | null | undefined, index: number) => ({
+  length: CARD_WIDTH + space.sm,
+  offset: (CARD_WIDTH + space.sm) * index,
+  index,
+});
+
+/**
+ * "Gol videoları" şeridi — yalnız kapak kartları (oynatıcı İÇERMEZ; dokununca
+ * `onOpen` ile üst bileşendeki tam ekran oynatıcı açılır). Yatay liste
+ * sanaldır: gol sayısı çok olan maçta kapakların hepsi birden çözülmez.
+ */
+export const GoalClipStrip = memo(function GoalClipStrip({
+  items,
+  onOpen,
+  title = "Gol videoları",
+  meta,
 }: {
-  matchId: number;
-  nameOf: (playerId?: number | null) => string | null;
-  live?: boolean;
-  teams?: ClipTeams;
+  items: ClipStripItem[];
+  onOpen: (clipId: number) => void;
+  title?: string;
+  meta?: string;
 }) {
-  const clips = useMatchGoalClips(matchId, live);
-  const [openId, setOpenId] = useState<number | null>(null);
-
-  if (!clips.length) return null;
-
-  const scorer = (clip: GoalClip) => nameOf(clip.player_id);
-  const teamOf = (clip: GoalClip) => {
-    if (!teams || clip.team_id == null) return null;
-    if (Number(clip.team_id) === teams.homeTeamId) return { name: teams.homeName ?? null, logo: teams.homeLogo ?? null };
-    if (Number(clip.team_id) === teams.awayTeamId) return { name: teams.awayName ?? null, logo: teams.awayLogo ?? null };
-    return null;
-  };
-
+  const renderItem = useCallback(
+    ({ item }: { item: ClipStripItem }) => <ClipCard item={item} onOpen={onOpen} />,
+    [onOpen],
+  );
+  if (!items.length) return null;
   return (
     <View style={styles.wrap}>
-      <SectionHeader title="Gol videoları" meta={`${clips.length} gol`} />
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.strip}>
-        {clips.map((clip) => {
-          const team = teamOf(clip);
-          const duration = formatDuration(clip.duration_ms);
-          return (
-            <Touchable
-              key={clip.id}
-              style={styles.card}
-              onPress={() => setOpenId(clip.id)}
-              haptic="light"
-              accessibilityRole="button"
-              accessibilityLabel={`${clipLabel(clip)} ${scorer(clip) ?? ""} videosunu izle`}
-            >
-              <View style={styles.thumb}>
-                {clip.poster_url ? <Image source={{ uri: clip.poster_url }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : null}
-                <View style={styles.play}>
-                  <Ionicons name="play" size={16} color={colors.textOnBrand} />
-                </View>
-                {clip.minute != null ? (
-                  <View style={styles.minute}>
-                    <Text style={styles.minuteText} {...textScale.badge}>
-                      {`${clip.minute}'`}
-                    </Text>
-                  </View>
-                ) : null}
-                {duration ? (
-                  <View style={styles.duration}>
-                    <Text style={styles.durationText} {...textScale.badge}>
-                      {duration}
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
-              <View style={styles.body}>
-                {team ? <TeamLogo name={team.name} logo={team.logo} size={22} /> : null}
-                <View style={styles.flex}>
-                  <Text style={styles.title} numberOfLines={1} {...textScale.dense}>
-                    {scorer(clip) ?? clipLabel(clip)}
-                  </Text>
-                  <Text style={styles.sub} numberOfLines={1} {...textScale.dense}>
-                    {[clip.own_goal ? "Kendi kalesine" : null, team?.name].filter(Boolean).join(" · ") || clipLabel(clip)}
-                  </Text>
-                </View>
-              </View>
-            </Touchable>
-          );
-        })}
-      </ScrollView>
-      <GoalClipPlayer
-        visible={openId != null}
-        initialId={openId}
-        clips={clips}
-        onClose={() => setOpenId(null)}
-        nameFor={scorer}
+      <SectionHeader title={title} meta={meta ?? `${items.length} video`} />
+      <FlatList
+        horizontal
+        data={items}
+        keyExtractor={stripKey}
+        renderItem={renderItem}
+        getItemLayout={stripLayout}
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.strip}
+        initialNumToRender={3}
+        maxToRenderPerBatch={3}
+        windowSize={5}
       />
     </View>
   );
-}
+});
+
+const ClipCard = memo(function ClipCard({ item, onOpen }: { item: ClipStripItem; onOpen: (clipId: number) => void }) {
+  const { clip, team } = item;
+  const [posterFailed, setPosterFailed] = useState(false);
+  const duration = formatDuration(clip.duration_ms);
+  const open = useCallback(() => onOpen(clip.id), [onOpen, clip.id]);
+  return (
+    <Touchable
+      style={styles.card}
+      onPress={open}
+      haptic="light"
+      accessibilityRole="button"
+      accessibilityLabel={`${clipLabel(clip)} ${item.title} videosunu izle`}
+    >
+      <View style={styles.thumb}>
+        {clip.poster_url && !posterFailed ? (
+          <Image
+            source={{ uri: clip.poster_url }}
+            style={StyleSheet.absoluteFill}
+            resizeMode="cover"
+            resizeMethod="resize"
+            onError={() => setPosterFailed(true)}
+          />
+        ) : null}
+        <View style={styles.play}>
+          <Ionicons name="play" size={16} color={colors.textOnBrand} />
+        </View>
+        {clip.minute != null ? (
+          <View style={styles.minute}>
+            <Text style={styles.minuteText} {...textScale.badge}>
+              {`${clip.minute}'`}
+            </Text>
+          </View>
+        ) : null}
+        {duration ? (
+          <View style={styles.duration}>
+            <Text style={styles.durationText} {...textScale.badge}>
+              {duration}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+      <View style={styles.body}>
+        {team ? <TeamLogo name={team.name} logo={team.logo} size={22} /> : null}
+        <View style={styles.flex}>
+          <Text style={styles.title} numberOfLines={1} {...textScale.dense}>
+            {item.title}
+          </Text>
+          <Text style={styles.sub} numberOfLines={1} {...textScale.dense}>
+            {item.sub}
+          </Text>
+        </View>
+      </View>
+    </Touchable>
+  );
+});
+
+/** Maç sayfası şeridi: kartta golcü ve takımı. Oynatıcı üst bileşendedir (SummaryTab). */
+export const MatchGoalClips = memo(function MatchGoalClips({
+  clips,
+  nameOf,
+  teams,
+  onOpen,
+}: {
+  clips: GoalClip[];
+  nameOf: (playerId?: number | null) => string | null;
+  teams?: ClipTeams;
+  onOpen: (clipId: number) => void;
+}) {
+  const items = useMemo<ClipStripItem[]>(
+    () =>
+      clips.map((clip) => {
+        const team =
+          !teams || clip.team_id == null
+            ? null
+            : Number(clip.team_id) === teams.homeTeamId
+              ? { name: teams.homeName ?? null, logo: teams.homeLogo ?? null }
+              : Number(clip.team_id) === teams.awayTeamId
+                ? { name: teams.awayName ?? null, logo: teams.awayLogo ?? null }
+                : null;
+        return {
+          clip,
+          team,
+          title: nameOf(clip.player_id) ?? clipLabel(clip),
+          sub: [clip.own_goal ? "Kendi kalesine" : null, team?.name].filter(Boolean).join(" · ") || clipLabel(clip),
+        };
+      }),
+    [clips, nameOf, teams],
+  );
+  return <GoalClipStrip items={items} onOpen={onOpen} meta={`${clips.length} gol`} />;
+});
 
 const styles = StyleSheet.create({
   wrap: { gap: space.sm },
   strip: { gap: space.sm, paddingHorizontal: layout.screenPadding },
-  card: { width: 168, gap: space.xs },
+  card: { width: CARD_WIDTH, gap: space.xs },
   thumb: {
-    width: 168,
+    width: CARD_WIDTH,
     aspectRatio: 16 / 9,
     borderRadius: radius.md,
     backgroundColor: colors.matchTint,

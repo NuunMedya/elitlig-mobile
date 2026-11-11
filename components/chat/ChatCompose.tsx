@@ -24,6 +24,7 @@ import {
   EmptyState,
   ErrorState,
   Input,
+  ListRow,
   ScreenHeader,
   SectionHeader,
   SkeletonListRow,
@@ -31,7 +32,7 @@ import {
   errorMessage,
   useToast,
 } from "@/components/ui";
-import { adminChat, getDirectory, openConversation, type ChatUser, type OpenConversationInput } from "@/lib/api/chat";
+import { adminChat, getDirectory, openConversation, updateGroup, type ChatUser, type OpenConversationInput } from "@/lib/api/chat";
 import { queryKeys } from "@/lib/queryKeys";
 import { useAuth } from "@/providers/AuthProvider";
 import { colors, hairline, layout, space, textScale, type } from "@/theme";
@@ -56,17 +57,27 @@ type Row =
 
 export interface ChatComposeProps {
   admin?: boolean;
+  /** Açılışta seçili sekme ("Yeni grup" kısayolu doğrudan grup kurmaya iner). */
+  initialTab?: "group";
 }
 
-export function ChatCompose({ admin = false }: ChatComposeProps) {
+export function ChatCompose({ admin = false, initialTab }: ChatComposeProps) {
   const auth = useAuth();
   const router = useRouter();
   const toast = useToast();
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<Tab>("all");
+  const [tab, setTab] = useState<Tab>(initialTab ?? "all");
+  const [description, setDescription] = useState("");
+  const [onlyAdminsSend, setOnlyAdminsSend] = useState(false);
+  const [onlyAdminsEdit, setOnlyAdminsEdit] = useState(false);
+  // Yönetim hesabının KİŞİSEL rehberi (/api/chat/directory): yönetim ekibi, takım
+  // başkanları, oyuncular ve (aramayla) üyeler — masaüstü "Yeni sohbet" ile aynı.
+  const staffSelf = !admin && auth.isManagement;
   const TABS = admin
     ? ALL_TABS.filter((item) => item.key !== "management")
-    : ALL_TABS.filter((item) => item.key !== "staff").map((item) => (item.key === "players" ? { ...item, label: "Takım arkadaşları" } : item));
+    : staffSelf
+      ? ALL_TABS.filter((item) => item.key !== "management" && item.key !== "team")
+      : ALL_TABS.filter((item) => item.key !== "staff").map((item) => (item.key === "players" ? { ...item, label: "Takım arkadaşları" } : item));
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
   const [title, setTitle] = useState("");
@@ -94,14 +105,23 @@ export function ChatCompose({ admin = false }: ChatComposeProps) {
       if (conversation.skipped_members?.length) {
         toast.show({ message: `Mesaj tercihi nedeniyle gruba eklenemeyenler: ${conversation.skipped_members.map((item) => item.name).join(", ")}`, tone: "warn" });
       }
-      router.replace(`${basePath}/${conversation.id}` as never);
+      // Katılımcısı olduğum sohbet (birebir, kurduğum grup) kişisel sohbettir:
+      // tepki, yıldız, sabitleme gibi özelliklerin tamamı üye odasındadır.
+      const mine = conversation.participants.some((item) => item.is_me);
+      const go = () => router.replace((admin && !mine ? `/yonetim/sohbet/${conversation.id}` : `/sohbet/${conversation.id}`) as never);
+      // Grup kurulurken girilen açıklama ve izinler (masaüstü "Yeni grup" ile aynı alanlar).
+      const extra = conversation.type === "group" && mine
+        ? { ...(description.trim() ? { description: description.trim() } : {}), ...(onlyAdminsSend ? { only_admins_send: true } : {}), ...(onlyAdminsEdit ? { only_admins_edit: true } : {}) }
+        : {};
+      if (Object.keys(extra).length) void updateGroup(conversation.id, extra).catch(() => {}).finally(go);
+      else go();
     },
     onError: (error) => toast.show({ message: errorMessage(error), tone: "danger" }),
   });
 
   const people = useMemo(() => {
     const map = new Map<number, ChatUser>();
-    [...(query.data?.staff ?? []), ...(query.data?.managers ?? []), ...(query.data?.players ?? [])].forEach((user) => {
+    [...(query.data?.staff ?? []), ...(query.data?.managers ?? []), ...(query.data?.players ?? []), ...(query.data?.members ?? [])].forEach((user) => {
       if (!map.has(user.user_id)) map.set(user.user_id, user);
     });
     return [...map.values()];
@@ -134,11 +154,15 @@ export function ChatCompose({ admin = false }: ChatComposeProps) {
       data.managers.forEach((user) => out.push({ kind: "user", key: `m-${user.user_id}`, user }));
     }
     if ((tab === "all" || tab === "players") && data.players.length) {
-      out.push({ kind: "section", key: "s-players", title: admin ? "Oyuncular" : "Takım arkadaşlarım" });
+      out.push({ kind: "section", key: "s-players", title: admin || staffSelf ? "Oyuncular" : "Takım arkadaşlarım" });
       data.players.forEach((user) => out.push({ kind: "user", key: `p-${user.user_id}`, user }));
     }
+    if (tab === "all" && data.members?.length) {
+      out.push({ kind: "section", key: "s-members", title: "Üyeler" });
+      data.members.forEach((user) => out.push({ kind: "user", key: `u-${user.user_id}`, user }));
+    }
     return out;
-  }, [admin, people, query.data, tab]);
+  }, [admin, people, query.data, staffSelf, tab]);
 
   const toggle = useCallback((id: number) => {
     setSelected((list) => (list.includes(id) ? list.filter((item) => item !== id) : [...list, id]));
@@ -199,11 +223,28 @@ export function ChatCompose({ admin = false }: ChatComposeProps) {
   const groupMode = tab === "group";
   const canCreate = groupMode && title.trim().length >= 2 && selected.length > 0 && !open.isPending;
 
+  // Grup formu listenin başında kayar: üye listesine yer kalır, klavye açıkken de erişilir.
+  const groupForm = (
+    <View style={styles.groupForm}>
+          <Input
+            label="Grup adı"
+            value={title}
+            onChangeText={setTitle}
+            placeholder="Örn. Antrenman planı"
+            maxLength={120}
+            hint={`${selected.length} üye seçildi`}
+          />
+          <Input label="Açıklama (isteğe bağlı)" value={description} onChangeText={setDescription} placeholder="Grubun amacı" maxLength={2000} size="sm" />
+          <ListRow title="Yalnız yöneticiler mesaj göndersin" subtitle="Duyuru grubu: üyeler yalnız okur" toggle={{ value: onlyAdminsSend, onValueChange: setOnlyAdminsSend }} position="first" />
+          <ListRow title="Grup bilgisini yalnız yöneticiler düzenlesin" subtitle="Ad, fotoğraf, üye ekleme ve sabitleme" toggle={{ value: onlyAdminsEdit, onValueChange: setOnlyAdminsEdit }} position="last" />
+        </View>
+  );
+
   return (
     <SafeAreaView style={styles.screen} edges={["top", "bottom"]}>
       <ScreenHeader
-        title="Mesaj oluştur"
-        subtitle={admin ? "Kime yazacaksınız?" : "Kime yazmak istiyorsun?"}
+        title={groupMode ? "Yeni grup" : "Yeni sohbet"}
+        subtitle={admin ? "ElitLig Yönetimi adına: kime yazacaksın?" : "Kime yazmak istiyorsun?"}
         back
         bottom={
           <View style={styles.headerBottom}>
@@ -216,7 +257,7 @@ export function ChatCompose({ admin = false }: ChatComposeProps) {
               <Input
                 value={search}
                 onChangeText={setSearch}
-                placeholder={admin ? "Yönetici, takım veya oyuncu ara" : "Yönetim, takım veya takım arkadaşı ara"}
+                placeholder={admin ? "Yönetici, takım veya oyuncu ara" : staffSelf ? "Kişi ara (üyeler için en az 2 harf)" : "Yönetim, takım veya takım arkadaşı ara"}
                 variant="search"
                 size="sm"
                 leadingIcon="search"
@@ -226,19 +267,6 @@ export function ChatCompose({ admin = false }: ChatComposeProps) {
           </View>
         }
       />
-
-      {groupMode ? (
-        <View style={styles.groupForm}>
-          <Input
-            label="Grup adı"
-            value={title}
-            onChangeText={setTitle}
-            placeholder="Örn. Antrenman planı"
-            maxLength={120}
-            hint={`${selected.length} üye seçildi`}
-          />
-        </View>
-      ) : null}
 
       {query.isLoading ? (
         <View style={styles.skeleton}>
@@ -254,6 +282,7 @@ export function ChatCompose({ admin = false }: ChatComposeProps) {
           contentContainerStyle={styles.list}
           keyboardShouldPersistTaps="handled"
           initialNumToRender={16}
+          ListHeaderComponent={groupMode ? groupForm : null}
           ListEmptyComponent={
             <EmptyState
               icon="search-outline"
@@ -261,7 +290,7 @@ export function ChatCompose({ admin = false }: ChatComposeProps) {
               body={
                 debounced
                   ? "Adı farklı yazmayı dene."
-                  : admin
+                  : admin || staffSelf
                     ? "Yönetim ekibi, takım yöneticileri ve hesabı bağlı oyuncular burada listelenir."
                     : "Yalnızca kendi takım arkadaşlarınla ve yönetimle mesajlaşabilirsin."
               }
@@ -339,7 +368,7 @@ const styles = StyleSheet.create({
   searchWrap: { paddingHorizontal: layout.screenPadding },
   skeleton: { paddingHorizontal: layout.screenPadding, paddingTop: space.sm },
   list: { flexGrow: 1, paddingBottom: space.huge },
-  groupForm: { paddingHorizontal: layout.screenPadding, paddingTop: space.md },
+  groupForm: { paddingHorizontal: layout.screenPadding, paddingTop: space.md, gap: space.xs },
   row: {
     flexDirection: "row",
     alignItems: "center",

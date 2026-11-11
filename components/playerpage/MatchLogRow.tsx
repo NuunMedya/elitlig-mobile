@@ -169,6 +169,7 @@ export const MatchLogRow = React.memo(function MatchLogRow({
         <Touchable
           style={styles.clip}
           onPress={handleClip}
+          hitSlop={10}
           haptic="light"
           accessibilityRole="button"
           accessibilityLabel={`${name} maçının gol videosunu izle`}

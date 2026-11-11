@@ -1,5 +1,5 @@
 /**
- * SOHBET MEDYASI — sesli mesaj kaydı, konum alma, harita açma.
+ * SOHBET MEDYASI — sesli mesaj kaydı, konum alma, harita açma, fotoğraf / video seçimi.
  *
  * expo-audio (kayıt/oynatma) ve expo-location Expo Go'da da çalışır; yalnız
  * izin gerektirir. İzin verilmezse fonksiyonlar açıklayıcı hata fırlatır,
@@ -13,6 +13,7 @@ import {
   useAudioRecorder,
   useAudioRecorderState,
 } from "expo-audio";
+import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import { Linking, Platform } from "react-native";
 import { useCallback, useRef, useState } from "react";
@@ -105,4 +106,57 @@ export async function openMap(location: ChatLocationMeta | null | undefined): Pr
     // yerel harita yoksa web bağlantısına düş
   }
   if (fallback) await Linking.openURL(fallback);
+}
+
+/* ---------- fotoğraf / video seçimi (expo-image-picker) ---------- */
+
+/** Sunucu sınırı (middleware/chatFileUpload.js). */
+export const MAX_FILE_BYTES = 25 * 1024 * 1024;
+
+export interface PickedFile {
+  uri: string;
+  name: string;
+  type: string;
+  width: number | null;
+  height: number | null;
+  size: number | null;
+  isImage: boolean;
+}
+
+function toPicked(asset: ImagePicker.ImagePickerAsset, index: number): PickedFile {
+  const isImage = asset.type !== "video";
+  const fromUri = asset.uri.split("/").pop()?.split("?")[0] ?? "";
+  const ext = (asset.fileName ?? fromUri).split(".").pop()?.toLowerCase() || (isImage ? "jpg" : "mp4");
+  const mime = asset.mimeType ?? (isImage ? (ext === "png" ? "image/png" : ext === "heic" ? "image/heic" : "image/jpeg") : ext === "mov" ? "video/quicktime" : "video/mp4");
+  return {
+    uri: asset.uri,
+    name: asset.fileName || `${isImage ? "fotograf" : "video"}-${Date.now()}-${index + 1}.${ext}`,
+    type: mime,
+    width: asset.width || null,
+    height: asset.height || null,
+    size: asset.fileSize ?? null,
+    isImage,
+  };
+}
+
+/** Galeriden fotoğraf (en çok 10) ya da tek video seçer. İzin yoksa hata fırlatır; vazgeçilirse boş dizi. */
+export async function pickFromLibrary(kind: "images" | "videos"): Promise<PickedFile[]> {
+  const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (!permission.granted) throw new Error("Galeri izni verilmedi. Ayarlardan izin verip tekrar deneyin.");
+  const result = await ImagePicker.launchImageLibraryAsync(
+    kind === "images"
+      ? { mediaTypes: ["images"], allowsMultipleSelection: true, selectionLimit: 10, quality: 0.8, orderedSelection: true }
+      : { mediaTypes: ["videos"], allowsMultipleSelection: false, videoMaxDuration: 180 },
+  );
+  if (result.canceled) return [];
+  return result.assets.map(toPicked);
+}
+
+/** Kamerayla fotoğraf çeker. */
+export async function takePhoto(): Promise<PickedFile[]> {
+  const permission = await ImagePicker.requestCameraPermissionsAsync();
+  if (!permission.granted) throw new Error("Kamera izni verilmedi. Ayarlardan izin verip tekrar deneyin.");
+  const result = await ImagePicker.launchCameraAsync({ mediaTypes: ["images"], quality: 0.8 });
+  if (result.canceled) return [];
+  return result.assets.map(toPicked);
 }

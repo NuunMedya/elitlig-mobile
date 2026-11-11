@@ -114,6 +114,7 @@ import {
 } from "@/components/playerpage";
 import { getPlayerCareer } from "@/lib/api/career";
 import { GoalClipPlayer } from "@/components/live/GoalClipPlayer";
+import { GoalClipStrip, type ClipStripItem } from "@/components/live/MatchGoalClips";
 import { listGoalClips, type GoalClip } from "@/lib/live/clips";
 import { getMatchKadro } from "@/lib/api/matches";
 import { getPlayer, getPlayerRankings } from "@/lib/api/players";
@@ -496,6 +497,49 @@ function ratedAverageBySeason(rows: Appearance[]): Map<string, number> {
   const out = new Map<string, number>();
   acc.forEach((value, keyId) => out.set(keyId, value.sum / value.count));
   return out;
+}
+
+/**
+ * Oyuncunun gol videoları (canlı yayında kaydedilen klipler; uç yoksa boş
+ * liste). Genel sekmesindeki şerit ve Maçlar sekmesindeki "VİDEO" hapları
+ * aynı sorguyu paylaşır.
+ *   all     — en yeni maç başta, maç içinde dakika sırasıyla
+ *   byMatch — maç kimliği → o maçtaki klipler (dakika sırasıyla)
+ */
+function usePlayerGoalClips(playerId: number) {
+  const query = useQuery({
+    queryKey: ["goal-clips", "player", playerId],
+    queryFn: () => listGoalClips({ player_id: playerId }),
+    enabled: Number.isFinite(playerId) && playerId > 0,
+    staleTime: 5 * 60_000,
+  });
+  return useMemo(() => {
+    const order = (a: GoalClip, b: GoalClip) =>
+      (Number(a.period) || 1) - (Number(b.period) || 1) || (Number(a.minute) || 0) - (Number(b.minute) || 0);
+    const time = (clip: GoalClip) => {
+      const t = clip.match?.date ? Date.parse(clip.match.date) : NaN;
+      return Number.isFinite(t) ? t : 0;
+    };
+    const all = [...(query.data ?? [])].sort(
+      (a, b) => time(b) - time(a) || Number(b.match_id) - Number(a.match_id) || order(a, b),
+    );
+    const byMatch = new Map<number, GoalClip[]>();
+    for (const clip of all) {
+      const id = Number(clip.match_id);
+      const list = byMatch.get(id);
+      if (list) list.push(clip);
+      else byMatch.set(id, [clip]);
+    }
+    return { all, byMatch };
+  }, [query.data]);
+}
+
+/** Klibin maçı: "Kartal 3–1 Şahin". */
+function clipMatchTitle(clip: GoalClip): string {
+  const m = clip.match;
+  if (!m) return "Gol";
+  const score = m.home_team_score != null && m.away_team_score != null ? ` ${m.home_team_score}–${m.away_team_score} ` : " – ";
+  return `${m.home_team_name ?? "Ev sahibi"}${score}${m.away_team_name ?? "Deplasman"}`;
 }
 
 /** Maç kaydı → ortak maç satırının düz alanları. */
@@ -1081,11 +1125,34 @@ function GeneralTab({
   const openMatch = useCallback((matchId: number) => router.push(`/mac/${matchId}`), [router]);
   const seeAllMatches = useCallback(() => onOpenTab("maclar"), [onOpenTab]);
 
+  /* Gol videoları — web profilindeki "Gol videoları" kartının karşılığı. */
+  const goalClips = usePlayerGoalClips(playerId);
+  const clipItems = useMemo<ClipStripItem[]>(
+    () =>
+      goalClips.all.map((clip) => ({
+        clip,
+        title: clipMatchTitle(clip),
+        sub: [clip.match?.date ? formatDateShort(clip.match.date) : null, clip.own_goal ? "Kendi kalesine" : null]
+          .filter(Boolean)
+          .join(" · ") || "Gol videosu",
+      })),
+    [goalClips.all],
+  );
+  const [openClipId, setOpenClipId] = useState<number | null>(null);
+  const openClip = useCallback((clipId: number) => setOpenClipId(clipId), []);
+  const closeClip = useCallback(() => setOpenClipId(null), []);
+
   const market = marketQuery.data ?? null;
   const nothingYet =
-    !profileQuery.isLoading && formItems.length === 0 && !market && decided === 0 && achievements.length === 0;
+    !profileQuery.isLoading &&
+    formItems.length === 0 &&
+    !market &&
+    decided === 0 &&
+    achievements.length === 0 &&
+    clipItems.length === 0;
 
   return (
+    <>
     <ScrollView {...scrollProps} contentContainerStyle={styles.content} refreshControl={refresh.control}>
       {/* ————— Form: son maçlar sütun sütun ————— */}
       {profileQuery.isLoading ? (
@@ -1098,6 +1165,13 @@ function GeneralTab({
           onSeeAll={seeAllMatches}
           slots={FORM_COUNT}
         />
+      ) : null}
+
+      {/* ————— Gol videoları (şerit kenardan kenara) ————— */}
+      {clipItems.length ? (
+        <View style={styles.bleed}>
+          <GoalClipStrip items={clipItems} onOpen={openClip} />
+        </View>
       ) : null}
 
       {/* ————— Elit Kart ————— */}
@@ -1173,6 +1247,8 @@ function GeneralTab({
         </>
       ) : null}
     </ScrollView>
+    <GoalClipPlayer visible={openClipId != null} initialId={openClipId} clips={goalClips.all} onClose={closeClip} />
+    </>
   );
 }
 
@@ -1529,21 +1605,7 @@ function MatchesTab({ playerId, scrollProps }: { playerId: number; scrollProps: 
   const openMatch = useCallback((matchId: number) => router.push(`/mac/${matchId}`), [router]);
 
   /* Gol videoları — canlı yayında kaydedilen klipler (uç yoksa boş liste). */
-  const clipsQuery = useQuery({
-    queryKey: ["goal-clips", "player", playerId],
-    queryFn: () => listGoalClips({ player_id: playerId }),
-    staleTime: 5 * 60_000,
-  });
-  const clipsByMatch = useMemo(() => {
-    const map = new Map<number, GoalClip[]>();
-    for (const clip of clipsQuery.data ?? []) {
-      const list = map.get(Number(clip.match_id)) ?? [];
-      list.push(clip);
-      map.set(Number(clip.match_id), list);
-    }
-    map.forEach((list) => list.sort((a, b) => (Number(a.minute) || 0) - (Number(b.minute) || 0)));
-    return map;
-  }, [clipsQuery.data]);
+  const clipsByMatch = usePlayerGoalClips(playerId).byMatch;
   const [clipMatch, setClipMatch] = useState<number | null>(null);
   const openClip = useCallback((matchId: number) => setClipMatch(matchId), []);
   const clipRow = clipMatch != null ? rows.find((r) => Number(r.match_id) === clipMatch) : null;
@@ -2206,6 +2268,10 @@ const styles = StyleSheet.create({
   /* Kimlik bloğundaki eylemler: teklif düğmesi üstte, takip altta. */
   heroActions: { gap: space.sm },
   /* İçerik kabı ekran dolgusunu basıyor; başlık kendi dolgusunu basmaz. */
+  /** Kenar boşluklu içerikte kenardan kenara taşan blok (yatay şerit). */
+  bleed: {
+    marginHorizontal: -layout.screenPadding,
+  },
   flushHeader: {
     paddingHorizontal: 0,
     paddingBottom: space.xs,

@@ -8,11 +8,14 @@
  * /bildirimler ekranındadır. Yönetim talepleri (onay merkezi) Yönetim ▸
  * Talepler'dedir.
  *
- * YÖNETİM KULLANICISI: üstte iki bölüm —
- *   Sohbetlerim   → yöneticiler, takım başkanları, oyuncular ve üyelerle
- *                   birebir sohbet ve karma gruplar (/api/chat)
- *   Üye mesajları → messages.view yetkisiyle üyelerin "ElitLig Yönetimi"
- *                   yazışmaları; yanıt yönetim adına gider (/api/admin/chat)
+ * GÖRÜNÜM: WhatsApp düzeni (web ve masaüstü Mesajlar ile aynı) — arama,
+ * süzgeç hapları (Tümü · Okunmamış · Sabitlenen · Gruplar · Arşiv), sohbet
+ * satırları ve yüzen "yeni sohbet" düğmesi `ChatInbox` içindedir.
+ *
+ * YÖNETİM KULLANICISI: süzgeç haplarında ayrıca "Üye mesajları" vardır
+ * (messages.view): üyelerin "ElitLig Yönetimi" yazışmaları ortak gelen kutusu
+ * olarak aynı listede açılır; yanıt yönetim adına gider (/api/admin/chat).
+ * Kişisel sohbetler ve karma gruplar /api/chat'tedir.
  * Arama kayıtları (messages.calls_view) başlıktaki simgeden açılır.
  *
  * ESKİ ROTALAR: `?kutu=sohbetler` sohbetlere, `?kutu=uye` üye mesajlarına
@@ -22,26 +25,19 @@
  */
 
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useMemo } from "react";
+import { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ChatInbox } from "@/components/chat/ChatInbox";
-import {
-  EmptyState,
-  ScreenHeader,
-  SegmentedControl,
-  useHeaderScroll,
-  type ScreenHeaderAction,
-  type SegmentedItem,
-} from "@/components/ui";
+import { EmptyState, ScreenHeader, useHeaderScroll, type ScreenHeaderAction } from "@/components/ui";
 import { useAdminInboxSummary } from "@/hooks/useChat";
 import { useNotificationBell } from "@/hooks/useNotificationBell";
 import { useUnreadCount } from "@/hooks/useUnreadCount";
 import { hasAnyPermission } from "@/lib/admin/access";
 import { formatNumber } from "@/lib/format";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, layout, space } from "@/theme";
+import { colors } from "@/theme";
 
 type Section = "sohbetler" | "uye";
 
@@ -83,16 +79,6 @@ export default function MessagesScreen() {
   const summary = useAdminInboxSummary();
   const memberUnread = canMemberMessages ? Number(summary.data?.unread ?? 0) : 0;
 
-  const sections = useMemo<SegmentedItem<Section>[]>(
-    () => [
-      { key: "sohbetler", label: unread.messages > 0 ? `Sohbetlerim (${unread.messages})` : "Sohbetlerim" },
-      { key: "uye", label: memberUnread > 0 ? `Üye mesajları (${memberUnread})` : "Üye mesajları", dot: memberUnread > 0 },
-    ],
-    [memberUnread, unread.messages]
-  );
-
-  const setSection = useCallback((next: Section) => router.setParams({ bolum: next, kutu: "" }), [router]);
-
   const actions = useMemo<ScreenHeaderAction[]>(() => {
     if (!auth.user) return [];
     const list: ScreenHeaderAction[] = [];
@@ -129,13 +115,6 @@ export default function MessagesScreen() {
         subtitle={!auth.user ? undefined : total > 0 ? `${formatNumber(total)} okunmamış mesaj` : unread.loading ? undefined : "Hepsi okundu"}
         scrollY={scrollY}
         actions={actions}
-        bottom={
-          canMemberMessages ? (
-            <View style={styles.segment}>
-              <SegmentedControl items={sections} value={section} onChange={setSection} stretch size="sm" />
-            </View>
-          ) : undefined
-        }
       />
       <View style={styles.body}>
         {!auth.user ? (
@@ -145,10 +124,8 @@ export default function MessagesScreen() {
             body="Yönetimle, takımınla ve oyuncularla yazışmak için giriş yap."
             action={{ label: "Giriş yap", onPress: () => router.push("/giris") }}
           />
-        ) : section === "uye" ? (
-          <ChatInbox key="uye" admin embedded onScroll={scrollProps.onScroll} />
         ) : (
-          <ChatInbox key="sohbetler" embedded onScroll={scrollProps.onScroll} />
+          <ChatInbox admin={section === "uye"} embedded onScroll={scrollProps.onScroll} />
         )}
       </View>
     </SafeAreaView>
@@ -158,5 +135,4 @@ export default function MessagesScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   body: { flex: 1 },
-  segment: { paddingHorizontal: layout.screenPadding, paddingBottom: space.sm },
 });

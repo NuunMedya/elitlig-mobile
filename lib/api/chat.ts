@@ -1,4 +1,4 @@
-import { del, get, patch, post } from "../http";
+import { del, get, patch, post, put } from "../http";
 
 /**
  * Sohbet ve sesli arama uçları — routes/chat.js (docs/chat-api.md).
@@ -76,6 +76,27 @@ export interface ChatSignupMeta {
   }[];
   volunteers: Record<string, { user_id: number; name: string; city?: string | null; at?: string }[]>;
   closed: boolean;
+}
+
+/** Emoji tepkisi özeti (services/chat/chatExtras.js summarizeReactions). */
+export interface ChatReaction {
+  emoji: string;
+  count: number;
+  mine: boolean;
+  users: { user_id: number; name: string | null }[];
+}
+
+/** Haftanın Enleri anketi meta'sı (services/chat/chatContent.js sendAwardPoll). */
+export interface ChatAwardMeta {
+  batch_id?: string | number | null;
+  week?: string | null;
+  note?: string | null;
+  due_at?: string | null;
+  categories?: string[];
+  coordinator_id?: number | null;
+  coordination_task_id?: number | null;
+  skipped?: { user_id: number; name: string }[];
+  tasks?: Record<string, number>;
 }
 
 export interface ChatSender {
@@ -184,7 +205,11 @@ export interface ChatMessageMeta {
   caption?: string | null;
   matches?: { date: string | null; note: string | null; items: ChatMatchItem[] };
   signup?: ChatSignupMeta;
-  award?: { week?: string | null; note?: string | null; due_at?: string | null; categories?: unknown[] };
+  award?: ChatAwardMeta;
+  /** @bahsetme: bahsedilen kullanıcı kimlikleri. */
+  mentions?: number[];
+  /** İletilen mesaj işareti. */
+  forwarded?: boolean;
   /** Eylem kartı tamamlandı (Onayla/Reddet sonrası). */
   resolved?: { key: string; user_id: number; at: string; label?: string | null };
   admin_user_id?: number;
@@ -204,9 +229,30 @@ export interface ChatMessage {
   deleted: boolean;
   edited_at: string | null;
   created_at: string;
+  /* — WhatsApp ekleri: sunucu `decorateMessages` ile doldurur (yönetim görünümünde gelmez) — */
+  reactions?: ChatReaction[];
+  starred?: boolean;
+  forwarded?: boolean;
+  /** Yalnız kendi mesajımda: "read" = karşı taraftaki herkes okudu. */
+  status?: "sent" | "read";
+  read_count?: number;
+  recipient_count?: number;
   /** Yalnız istemcide: iyimser gönderim durumu. */
   pending?: boolean;
   failed?: boolean;
+  /** Yalnız istemcide: gönderilemedi, bağlantı gelince kendiliğinden yeniden denenecek. */
+  queued?: boolean;
+  /** Yalnız istemcide: yüklenmekte olan fotoğraf / ses dosyasının cihazdaki adresi. */
+  local_uri?: string | null;
+  /** Yalnız istemcide: yeniden denemede kullanılacak gönderim girdisi. */
+  retry?: ChatRetry | null;
+}
+
+/** Başarısız gönderimi yeniden kurmak için gerekenler. */
+export interface ChatRetry {
+  input: SendMessageInput;
+  /** Henüz yüklenmemiş dosya (fotoğraf, video, sesli mesaj). */
+  upload?: { field: "file" | "audio"; uri: string; name: string; type: string; width?: number | null; height?: number | null; duration_ms?: number } | null;
 }
 
 export interface ChatParticipant {
@@ -226,6 +272,8 @@ export interface ChatUser {
   /** staff: başka bir yönetim hesabı (ekip sohbeti). */
   kind?: "player" | "manager" | "both" | "member" | "staff";
   team_name?: string | null;
+  managed_team_id?: number | null;
+  manager_name?: string | null;
 }
 
 export interface ChatConversation {
@@ -260,6 +308,17 @@ export interface ChatConversation {
   entity?: { kind: "team" | "player" | "member" | "general" | "staff"; id: number | null; name: string; avatar: string | null; user_id?: number | null } | null;
   /** Yönetim gelen kutusu: bekleyen talep kartları (kategori → adet). */
   pending?: { total: number; categories: Record<string, number>; latest_category?: string | null };
+  /* — kişisel durum ve grup ayarları (chatExtras.decorateConversations; yönetim listesinde gelmez) — */
+  pinned?: boolean;
+  pinned_at?: string | null;
+  archived?: boolean;
+  marked_unread?: boolean;
+  description?: string | null;
+  only_admins_send?: boolean;
+  only_admins_edit?: boolean;
+  pinned_message_id?: number | null;
+  /** chat:conversation yayını: gruptan çıkarıldım. */
+  removed?: boolean;
 }
 
 export interface InboxCategory {
@@ -296,6 +355,8 @@ export interface DirectoryResponse {
   players: (ChatUser & { type: "direct" })[];
   /** Yönetim hesapları: diğer yönetim hesapları (ekip sohbeti). Üyede boş. */
   staff?: (ChatUser & { type: "direct" })[];
+  /** Yönetim hesabının rehberi: henüz profil seçmemiş üyeler (yalnız 2+ harfli aramada dolar). */
+  members?: (ChatUser & { type: "direct" })[];
 }
 
 export type OpenConversationInput =
@@ -315,7 +376,11 @@ export interface SendMessageInput {
     match_offer?: MatchOfferInput;
     /** Anket: soru + 2–12 seçenek (sunucu kimlikleri kendisi verir). */
     poll?: { question: string; multiple?: boolean; options: string[] };
+    /** Fotoğraf / belge: `uploadFile` yanıtı (+ varsa boyutlar). */
+    file?: { url: string; name?: string | null; mime?: string | null; size?: number | null; width?: number | null; height?: number | null };
   };
+  /** @bahsetme: bahsedilen kullanıcı kimlikleri (grup). */
+  mentions?: number[];
   client_id?: string;
   reply_to_id?: number | null;
   /** Yönetim modu: katılımcı olunan grupta bile "ElitLig Yönetimi" adına yaz. */
@@ -399,6 +464,168 @@ export function uploadAudio(file: { uri: string; name: string; type: string }) {
     timeout: 120_000,
   });
 }
+
+/** Fotoğraf / belge / video yükler (≤25 MB); dönen bilgi `meta.file`'a yazılır. */
+export function uploadFile(file: { uri: string; name: string; type: string }) {
+  const form = new FormData();
+  form.append("file", file as unknown as Blob);
+  return post<{ url: string; name: string | null; mime: string | null; size: number | null; is_image: boolean }>("/api/chat/uploads/file", form, {
+    timeout: 180_000,
+  });
+}
+
+/* ---------- WhatsApp ekleri (services/chat/chatExtras.js) ---------- */
+
+const msgPath = (id: number, messageId: number) => `/api/chat/conversations/${id}/messages/${messageId}`;
+
+/** Emoji tepkisi: aynı emoji ya da boş dize tepkiyi kaldırır. */
+export const reactToMessage = (id: number, messageId: number, emoji: string) =>
+  post<{ message: ChatMessage }>(`${msgPath(id, messageId)}/reactions`, { emoji });
+/** Kendi metin mesajını düzenle (gönderimden sonra 15 dk). */
+export const editMessage = (id: number, messageId: number, body: string) =>
+  patch<{ message: ChatMessage }>(msgPath(id, messageId), { body });
+export const starMessage = (id: number, messageId: number, on: boolean) =>
+  on
+    ? put<{ message_id: number; starred: boolean }>(`${msgPath(id, messageId)}/star`, {})
+    : del<{ message_id: number; starred: boolean }>(`${msgPath(id, messageId)}/star`);
+
+export interface StarredMessage extends ChatMessage {
+  starred_at?: string | null;
+  conversation_title: string | null;
+  conversation_type: ConversationType | null;
+}
+export const getStarred = () => get<{ items: StarredMessage[] }>("/api/chat/starred").then((d) => d.items ?? []);
+
+export interface MessageInfoPerson {
+  user_id: number;
+  name: string;
+  avatar: string | null;
+  read_at: string | null;
+}
+export interface MessageInfo {
+  message_id: number;
+  sent_at: string;
+  read_by: MessageInfoPerson[];
+  not_read: MessageInfoPerson[];
+}
+export const getMessageInfo = (id: number, messageId: number) => get<MessageInfo>(`${msgPath(id, messageId)}/info`);
+
+/** İlet: en çok 30 mesaj, 20 sohbet. */
+export const forwardMessages = (messageIds: number[], conversationIds: number[]) =>
+  post<{ sent: number; messages: ChatMessage[] }>("/api/chat/forward", { message_ids: messageIds, conversation_ids: conversationIds });
+
+export interface ConversationState {
+  conversation_id: number;
+  pinned: boolean;
+  archived: boolean;
+  marked_unread: boolean;
+}
+/** Kişisel sohbet durumu: sabitle (en çok 3), arşivle, okunmadı olarak işaretle. */
+export const setConversationState = (id: number, body: { pinned?: boolean; archived?: boolean; marked_unread?: boolean }) =>
+  patch<ConversationState>(`/api/chat/conversations/${id}/state`, body);
+/** Mesajı sohbete sabitle; `null` sabitlemeyi kaldırır. */
+export const pinMessage = (id: number, messageId: number | null) =>
+  put<{ pinned_message_id: number | null }>(`/api/chat/conversations/${id}/pin`, { message_id: messageId });
+
+export interface GroupMember {
+  user_id: number;
+  role: "member" | "admin";
+  name: string;
+  subtitle: string | null;
+  avatar: string | null;
+  joined_at: string | null;
+  is_me: boolean;
+}
+export interface GroupInfo {
+  conversation: ChatConversation;
+  description: string | null;
+  only_admins_send: boolean;
+  only_admins_edit: boolean;
+  is_admin: boolean;
+  members: GroupMember[];
+}
+export interface GroupPatch {
+  title?: string;
+  description?: string;
+  avatar_url?: string;
+  only_admins_send?: boolean;
+  only_admins_edit?: boolean;
+}
+export const getGroupInfo = (id: number) => get<GroupInfo>(`/api/chat/conversations/${id}/group`);
+export const updateGroup = (id: number, body: GroupPatch) => patch<GroupInfo>(`/api/chat/conversations/${id}/group`, body);
+export const addGroupMembers = (id: number, userIds: number[]) =>
+  post<{ added: number[]; skipped: number[] }>(`/api/chat/conversations/${id}/members`, { user_ids: userIds });
+export const removeGroupMember = (id: number, userId: number) =>
+  del<{ removed: number }>(`/api/chat/conversations/${id}/members/${userId}`);
+export const setGroupMemberRole = (id: number, userId: number, role: "admin" | "member") =>
+  patch<{ user_id: number; role: "admin" | "member" }>(`/api/chat/conversations/${id}/members/${userId}`, { role });
+
+export interface ConversationMedia {
+  images: { id: number; url: string; created_at: string }[];
+  files: { id: number; url: string; name: string; mime: string | null; size: number; created_at: string }[];
+  links: { id: number; urls: string[]; body: string | null; created_at: string }[];
+}
+export const getConversationMedia = (id: number) => get<ConversationMedia>(`/api/chat/conversations/${id}/media`);
+
+export interface ChatPresence {
+  online: boolean;
+  last_seen: string | null;
+}
+/** Çevrimiçi / son görülme (en çok 200 kimlik). */
+export const getPresence = (userIds: number[]) =>
+  get<{ presence: Record<string, ChatPresence> }>("/api/chat/presence", { user_ids: userIds.join(",") }).then((d) => d.presence ?? {});
+
+/* ---------- hazır içerikler (services/chat/chatContent.js; yalnız yönetim hesapları) ---------- */
+
+export interface ContentMatch extends ChatMatchItem {
+  /** Göreve atanmış kişiler: görev anahtarı → kişi. */
+  crew?: Record<string, { user_id?: number | null; name: string | null }>;
+}
+export const getContentMatches = (date: string) =>
+  get<{ date: string; items: ContentMatch[] }>("/api/chat/content/matches", { date });
+export const sendContentMatches = (id: number, body: { match_ids: number[]; date?: string; note?: string | null }) =>
+  post<{ message: ChatMessage }>(`/api/chat/conversations/${id}/content/matches`, body);
+export const sendContentSignup = (
+  id: number,
+  body: { title?: string | null; match_ids: number[]; duties: string[]; note?: string | null; deadline?: string | null },
+) => post<{ message: ChatMessage }>(`/api/chat/conversations/${id}/content/signup`, body);
+export interface AwardPollInput {
+  week?: string | null;
+  categories: string[];
+  league_id: number;
+  season_id: number;
+  start_date: string;
+  end_date: string;
+  squad_size: number;
+  due_at?: string | null;
+  note?: string | null;
+}
+export const sendContentAward = (id: number, body: AwardPollInput) =>
+  post<{ message: ChatMessage }>(`/api/chat/conversations/${id}/content/award`, body);
+/** Görevlendir (staff.assign): `user_id: null` görevi boşaltır. */
+export const assignSignup = (id: number, messageId: number, body: { slot_id: string; user_id: number | null }) =>
+  post<{ message: ChatMessage }>(`${msgPath(id, messageId)}/signup/assign`, body);
+/** Anketi kapat / yeniden aç (yalnız gönderen). */
+export const closeSignup = (id: number, messageId: number, closed: boolean) =>
+  post<{ message: ChatMessage }>(`${msgPath(id, messageId)}/signup/close`, { closed });
+export interface AwardStatus {
+  my_task_id: number | null;
+  coordination_task_id: number | null;
+  people: { user_id: number; name: string; task_id: number; submitted: boolean }[];
+  submitted: number;
+  total: number;
+}
+export const getAwardStatus = (id: number, messageId: number) => get<AwardStatus>(`${msgPath(id, messageId)}/award`);
+/** Haftanın Enleri kapsamı: lig ve sezon listeleri (masaüstü AwardScope ile aynı uçlar). */
+export interface AwardScopeOption {
+  id: number;
+  label?: string | null;
+  name?: string | null;
+  seasonName?: string | null;
+}
+export const getAwardLeagues = () => get<{ items: AwardScopeOption[] }>("/api/admin/weekly-awards/leagues").then((d) => d.items ?? []);
+export const getAwardSeasons = (leagueId: number) =>
+  get<{ items: AwardScopeOption[] }>("/api/admin/weekly-awards/seasons", { leagueId }).then((d) => d.items ?? []);
 
 /** Bildirim kartı düğmesinin isteğini atar (api: { method, url, body }). */
 export function callAction(action: ChatAction) {
@@ -549,34 +776,6 @@ export const endCall = (callId: number, reason?: string) =>
   post<{ call: ChatCall }>(`/api/chat/calls/${callId}/end`, reason ? { reason } : undefined);
 export const sendIceCandidate = (callId: number, candidate: unknown) =>
   post<{ relayed: boolean }>(`/api/chat/calls/${callId}/ice`, { candidate });
-
-/** Liste satırındaki önizleme metni. */
-export function conversationPreview(conversation: ChatConversation): string {
-  const message = conversation.last_message;
-  if (!message) {
-    return conversation.type === "management" ? "Bildirimler ve duyurular burada" : "Henüz mesaj yok";
-  }
-  if (message.kind === "call") return message.body ?? "Sesli arama";
-  if (message.deleted) return "Bu mesaj silindi";
-  if (message.kind === "audio") return `${message.sender.is_me ? "Sen: " : ""}Sesli mesaj`;
-  // Zengin türlerde sunucu gövdesi simgeyle başlar; listede düz Türkçe etiket gösterilir.
-  const rich: Partial<Record<MessageKind, string>> = {
-    image: message.meta?.caption ? `Fotoğraf: ${message.meta.caption}` : "Fotoğraf",
-    file: `Belge: ${message.meta?.file?.name ?? "dosya"}`,
-    poll: `Anket: ${message.meta?.poll?.question ?? ""}`.trim(),
-    matches: "Günün maçları",
-    signup: message.meta?.signup?.title ?? "Görev anketi",
-    award_poll: "Haftanın Enleri: aday önerisi",
-  };
-  const richLabel = rich[message.kind];
-  if (richLabel) return `${message.sender.is_me ? "Sen: " : ""}${richLabel}`;
-  const prefix = message.sender.is_me
-    ? "Sen: "
-    : conversation.type !== "direct" && conversation.type !== "management" && message.kind === "text" && message.sender.name
-      ? `${message.sender.name}: `
-      : "";
-  return `${prefix}${String(message.body ?? "").split("\n")[0]}`;
-}
 
 /** Yeni mesaj için istemci kimliği (çift gönderim önleme). */
 /** Konum mesajı için harita bağlantısı. */

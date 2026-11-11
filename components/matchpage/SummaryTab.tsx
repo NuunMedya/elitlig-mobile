@@ -41,6 +41,9 @@ import {
 } from "@/components/ui";
 import { useLiveClock } from "@/hooks/useLiveMatch";
 import { formatDateLong, formatDateShort, formatTime } from "@/lib/format";
+import { GoalClipPlayer } from "@/components/live/GoalClipPlayer";
+import { useMatchGoalClips } from "@/components/live/MatchGoalClips";
+import type { GoalClip } from "@/lib/live/clips";
 import { broadcastOf } from "@/lib/matchMedia";
 import { openLink } from "@/lib/links";
 import { matchState } from "@/lib/match";
@@ -141,6 +144,28 @@ export function SummaryTab({
   const reactionData = reactions.data;
   const onReact = reactions.onReact;
 
+  /* Gol videoları: tek sorgu; şerit (başlıkta), maç akışındaki "Golü izle"
+     düğmeleri ve "maçın golü" kartı aynı listeyi paylaşır. Oynatıcı listenin
+     DIŞINDA, sekmenin kökünde tek kez durur (tam ekran pencere). */
+  const clips = useMatchGoalClips(Number(match.id), live, !scheduled);
+  const clipByEvent = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const clip of clips) if (clip.event_id != null) map.set(Number(clip.event_id), clip.id);
+    return map;
+  }, [clips]);
+  const [openClipId, setOpenClipId] = useState<number | null>(null);
+  const openClip = useCallback((clipId: number) => setOpenClipId(clipId), []);
+  const openEventClip = useCallback(
+    (eventId: number) => {
+      const clipId = clipByEvent.get(eventId);
+      if (clipId != null) setOpenClipId(clipId);
+    },
+    [clipByEvent],
+  );
+  const closeClip = useCallback(() => setOpenClipId(null), []);
+  const clipScorer = useCallback((clip: GoalClip) => nameOf(clip.player_id), [nameOf]);
+  const clipSubtitle = [match.first_team_name, match.second_team_name].filter(Boolean).join(" – ") || null;
+
   const total = items.length;
   const renderItem = useCallback(
     ({ item, index }: { item: TimelineItem; index: number }) =>
@@ -159,9 +184,11 @@ export function SummaryTab({
           reactions={reactionData?.events[String(item.event.id)]}
           myReaction={reactionData?.mine[String(item.event.id)] ?? null}
           onReact={onReact}
+          hasClip={clipByEvent.has(Number(item.event.id))}
+          onClip={openEventClip}
         />
       ),
-    [flashId, nameOf, openPlayer, total, reactionData, onReact],
+    [flashId, nameOf, openPlayer, total, reactionData, onReact, clipByEvent, openEventClip],
   );
 
   /* Medya / yayın: canlı yayın linki, özet, maçın anları, gol videoları, röportaj. */
@@ -178,7 +205,16 @@ export function SummaryTab({
     [homeTeamId, awayTeamId, match.first_team_name, match.second_team_name, homeLogo, awayLogo],
   );
   const media = scheduled ? null : (
-    <MatchMedia match={match} state={state} nameOf={nameOf} teams={teams} onOpenPlayer={openPlayer} skipLiveBroadcast />
+    <MatchMedia
+      match={match}
+      state={state}
+      nameOf={nameOf}
+      teams={teams}
+      onOpenPlayer={openPlayer}
+      skipLiveBroadcast
+      clips={clips}
+      onOpenClip={openClip}
+    />
   );
 
   /* — Başlık bölümü: zaman tünelinden ÖNCE gelenler — */
@@ -250,6 +286,7 @@ export function SummaryTab({
   );
 
   return (
+    <>
     <FlatList
       {...scrollProps}
       data={scheduled ? EMPTY_ITEMS : items}
@@ -279,6 +316,15 @@ export function SummaryTab({
       }
       ListFooterComponent={footer}
     />
+    <GoalClipPlayer
+      visible={openClipId != null}
+      initialId={openClipId}
+      clips={clips}
+      onClose={closeClip}
+      nameFor={clipScorer}
+      subtitle={clipSubtitle}
+    />
+    </>
   );
 }
 

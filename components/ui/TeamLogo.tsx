@@ -116,6 +116,11 @@ export const TeamLogo = memo(function TeamLogo({
       source={{ uri }}
       style={[plain ? styles.plain : styles.image, box, dimmed && styles.dimmed]}
       resizeMode="contain"
+      // Android: uzak görseller varsayılan olarak TAM boyutta çözülür; armalar
+      // çoğu zaman 500–3000 px'lik yüklemeler. "resize" görseli amblemin
+      // boyutuna indirerek çözer — liste kaydırırken
+      // çözme süresi ve bellek baskısı düşer.
+      resizeMethod="resize"
       onError={() => setFailed(true)}
       accessibilityRole="image"
       accessibilityLabel={name ? `${name} amblemi` : "Takım amblemi"}

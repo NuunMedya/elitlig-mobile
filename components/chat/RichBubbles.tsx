@@ -7,7 +7,6 @@
  * olunamıyordu. Buradaki kartlar o boşluğu kapatır:
  *
  *   PollBubble     anket: seçeneğe dokun → oy (tek/çok seçimli), canlı yüzdeler
- *   FileBubble     fotoğraf (önizleme, dokununca tam boy) ve belge (dokununca açılır)
  *   MatchesCard    "Günün maçları" kartı; maça dokununca maç sayfası
  *   SignupCard     "Ben talibim" görev anketi: satır satır talip ol / vazgeç
  *   AwardPollCard  Haftanın Enleri aday çağrısı → Yapılacaklar'daki aday kartı
@@ -17,11 +16,12 @@
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { useQuery } from "@tanstack/react-query";
 import React, { memo } from "react";
-import { Image, Linking, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
 import { Touchable } from "@/components/ui";
-import type { ChatMessage } from "@/lib/api/chat";
+import { getAwardStatus, type ChatMessage } from "@/lib/api/chat";
 import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
 const clock = (iso: string) => {
@@ -61,12 +61,15 @@ export const PollBubble = memo(function PollBubble({
   viewerId,
   busy,
   onVote,
+  onVoters,
 }: {
   message: ChatMessage;
   showSender?: boolean;
   viewerId: number | null | undefined;
   busy: boolean;
   onVote: (message: ChatMessage, optionIds: string[]) => void;
+  /** Kimlerin hangi seçeneğe oy verdiğini açar. */
+  onVoters?: (message: ChatMessage) => void;
 }) {
   const poll = message.meta?.poll;
   if (!poll) return null;
@@ -125,44 +128,13 @@ export const PollBubble = memo(function PollBubble({
         {total ? `${total} kişi oy verdi` : "Henüz oy yok"}
         {mineIds.length ? " · oyunu değiştirmek için başka seçeneğe, geri almak için aynı seçeneğe dokun" : ""}
       </Text>
-    </Frame>
-  );
-});
-
-/* ═══════════════════════════ FOTOĞRAF / BELGE ═══════════════════════════ */
-
-const sizeLabel = (bytes: number) => (bytes >= 1_048_576 ? `${(bytes / 1_048_576).toLocaleString("tr-TR", { maximumFractionDigits: 1 })} MB` : bytes >= 1024 ? `${Math.round(bytes / 1024)} KB` : bytes ? `${bytes} B` : "");
-
-export const FileBubble = memo(function FileBubble({ message, showSender, onOpenError }: { message: ChatMessage; showSender?: boolean; onOpenError: () => void }) {
-  const file = message.meta?.file;
-  if (!file) return null;
-  const image = message.kind === "image";
-  const open = () => void Linking.openURL(file.url).catch(onOpenError);
-  const ratio = file.width && file.height ? Math.min(1.6, Math.max(0.6, file.width / file.height)) : 4 / 3;
-  return (
-    <Frame message={message} showSender={showSender} icon={image ? "image" : "document-attach"} label={image ? "Fotoğraf" : "Belge"}>
-      {image ? (
-        <Touchable feedback="card" onPress={open} accessibilityRole="imagebutton" accessibilityLabel={`Fotoğraf${message.meta?.caption ? `: ${message.meta.caption}` : ""}. Tam boy açmak için dokun`}>
-          <Image source={{ uri: file.url }} style={[styles.image, { aspectRatio: ratio }]} resizeMode="cover" />
+      {onVoters && total ? (
+        <Touchable feedback="chip" haptic="selection" onPress={() => onVoters(message)} style={styles.slotBtn} accessibilityRole="button" accessibilityLabel="Oyları gör">
+          <Ionicons name="people-outline" size={14} color={colors.brandAccent} />
+          <Text style={styles.slotBtnText} {...textScale.badge}>
+            Oyları gör
+          </Text>
         </Touchable>
-      ) : (
-        <Touchable feedback="row" onPress={open} style={styles.fileRow} accessibilityRole="link" accessibilityLabel={`${file.name} belgesini aç`}>
-          <Ionicons name="document-text-outline" size={26} color={colors.brandAccent} />
-          <View style={styles.flex}>
-            <Text style={styles.fileName} numberOfLines={2} {...textScale.dense}>
-              {file.name}
-            </Text>
-            <Text style={styles.muted} {...textScale.dense}>
-              {[sizeLabel(file.size), "Açmak için dokun"].filter(Boolean).join(" · ")}
-            </Text>
-          </View>
-          <Ionicons name="open-outline" size={18} color={colors.textTertiary} />
-        </Touchable>
-      )}
-      {message.meta?.caption ? (
-        <Text style={styles.body} {...textScale.long}>
-          {message.meta.caption}
-        </Text>
       ) : null}
     </Frame>
   );
@@ -225,12 +197,18 @@ export const SignupCard = memo(function SignupCard({
   viewerId,
   busySlot,
   onToggle,
+  onAssignMenu,
+  onCloseToggle,
 }: {
   message: ChatMessage;
   showSender?: boolean;
   viewerId: number | null | undefined;
   busySlot: string | null;
   onToggle: (message: ChatMessage, slotId: string, on: boolean) => void;
+  /** Görevlendirme yetkisi (staff.assign) varsa: satırın talipleri arasından görevli seçilir. */
+  onAssignMenu?: (message: ChatMessage, slotId: string) => void;
+  /** Anketi gönderen kapatıp yeniden açabilir. */
+  onCloseToggle?: (message: ChatMessage, closed: boolean) => void;
 }) {
   const signup = message.meta?.signup;
   if (!signup) return null;
@@ -278,10 +256,31 @@ export const SignupCard = memo(function SignupCard({
                   </Text>
                 </Touchable>
               ) : null}
+              {onAssignMenu && (assigned || volunteers.length) ? (
+                <Touchable
+                  feedback="icon"
+                  haptic="selection"
+                  onPress={() => onAssignMenu(message, slot.id)}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={assigned ? `${slot.duty_label} görevlisini değiştir` : `${slot.duty_label} için görevlendir`}
+                  style={styles.slotIcon}
+                >
+                  <Ionicons name={assigned ? "person-circle" : "person-add-outline"} size={20} color={assigned ? colors.win : colors.brandAccent} />
+                </Touchable>
+              ) : null}
             </View>
           );
         })}
       </View>
+      {onCloseToggle && message.sender.is_me ? (
+        <Touchable feedback="chip" haptic="selection" onPress={() => onCloseToggle(message, !signup.closed)} style={styles.slotBtn} accessibilityRole="button" accessibilityLabel={signup.closed ? "Anketi yeniden aç" : "Anketi kapat"}>
+          <Ionicons name={signup.closed ? "lock-open-outline" : "lock-closed-outline"} size={14} color={colors.brandAccent} />
+          <Text style={styles.slotBtnText} {...textScale.badge}>
+            {signup.closed ? "Anketi yeniden aç" : "Anketi kapat"}
+          </Text>
+        </Touchable>
+      ) : null}
     </Frame>
   );
 });
@@ -290,6 +289,19 @@ export const SignupCard = memo(function SignupCard({
 
 export const AwardPollCard = memo(function AwardPollCard({ message, showSender, onOpenTodos }: { message: ChatMessage; showSender?: boolean; onOpenTodos?: () => void }) {
   const award = message.meta?.award;
+  // İlerleme: kimler aday önerisini gönderdi (yalnız yönetim hesapları görür; üyede sorgu 403 döner ve satır çizilmez).
+  const status = useQuery({
+    queryKey: ["chat", "award-status", message.conversation_id, message.id] as const,
+    queryFn: () => getAwardStatus(message.conversation_id, message.id),
+    enabled: Boolean(onOpenTodos) && message.id > 0,
+    staleTime: 30_000,
+    retry: false,
+  });
+  const total = status.data?.total ?? 0;
+  const submitted = status.data?.submitted ?? 0;
+  const waiting = (status.data?.people ?? []).filter((person) => !person.submitted);
+  const mineTask = Boolean(status.data?.my_task_id);
+  const coordinator = Boolean(status.data?.coordination_task_id);
   return (
     <Frame message={message} showSender={showSender} icon="trophy" label="Haftanın Enleri">
       <Text style={styles.title} {...textScale.long}>
@@ -300,14 +312,29 @@ export const AwardPollCard = memo(function AwardPollCard({ message, showSender, 
           {award.note}
         </Text>
       ) : null}
+      {total ? (
+        <View style={styles.progressBox}>
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${Math.round((submitted / total) * 100)}%` }]} />
+          </View>
+          <Text style={styles.muted} {...textScale.dense}>
+            {submitted === total ? `${total}/${total} öneri geldi · hepsi tamam` : `${submitted}/${total} öneri geldi`}
+            {waiting.length && submitted !== total ? ` · bekleyen: ${waiting.map((person) => person.name).join(", ")}` : ""}
+          </Text>
+        </View>
+      ) : null}
       <Text style={styles.muted} {...textScale.dense}>
-        Aday önerin Yapılacaklar'daki “Aday önerisi” kartından gönderilir.
+        {coordinator
+          ? "Önerileri Yapılacaklar'daki koordinasyon kartında toplayıp listeyi yayına alırsın."
+          : mineTask
+            ? "Aday önerin Yapılacaklar'daki “Aday önerisi” kartından gönderilir."
+            : "Aday önerileri Yapılacaklar'daki “Aday önerisi” kartından gönderilir."}
       </Text>
       {onOpenTodos ? (
         <Touchable feedback="chip" onPress={onOpenTodos} style={styles.slotBtn} accessibilityRole="button" accessibilityLabel="Yapılacaklar'ı aç">
           <Ionicons name="checkbox-outline" size={14} color={colors.brandAccent} />
           <Text style={styles.slotBtnText} {...textScale.badge}>
-            Yapılacaklar'ı aç
+            {coordinator ? "Önerileri topla" : mineTask ? "Adaylarını öner" : "Yapılacaklar'ı aç"}
           </Text>
         </Touchable>
       ) : null}
@@ -316,6 +343,10 @@ export const AwardPollCard = memo(function AwardPollCard({ message, showSender, 
 });
 
 const styles = StyleSheet.create({
+  slotIcon: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
+  progressBox: { gap: space.xs },
+  progressTrack: { height: 6, borderRadius: 3, backgroundColor: colors.surface3, overflow: "hidden" },
+  progressFill: { height: 6, borderRadius: 3, backgroundColor: colors.accent },
   flex: { flex: 1, minWidth: 0 },
   card: {
     width: "88%",
@@ -352,9 +383,6 @@ const styles = StyleSheet.create({
   optionFill: { position: "absolute", left: 0, top: 0, bottom: 0, backgroundColor: colors.brandDim },
   optionText: { ...type.bodySm, color: colors.textPrimary, flex: 1, paddingVertical: space.sm },
   optionCount: { ...type.numSmStrong, color: colors.textSecondary },
-  image: { width: "100%", borderRadius: radius.md, backgroundColor: colors.surface3 },
-  fileRow: { flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 48 },
-  fileName: { ...type.h4, color: colors.textPrimary },
   rows: { borderRadius: radius.md, borderWidth: hairline, borderColor: colors.border, overflow: "hidden" },
   divided: { borderTopWidth: hairline, borderTopColor: colors.separator },
   matchRow: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.md, paddingVertical: space.sm, minHeight: 48 },

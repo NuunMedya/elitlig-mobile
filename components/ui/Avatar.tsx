@@ -94,6 +94,9 @@ export const Avatar = memo(function Avatar({
           source={{ uri }}
           style={[styles.image, onPitch && styles.onPitchSurface, box]}
           resizeMode="cover"
+          // Profil fotoğrafları kamera çıktısıdır (ör. 2448×3264); Android'de
+          // "resize" olmadan her avatar tam boyutta (~30 MB) çözülür.
+          resizeMethod="resize"
           onError={() => setFailed(true)}
         />
       ) : (

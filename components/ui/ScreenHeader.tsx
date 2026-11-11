@@ -22,12 +22,12 @@
  * mor, ad iki kez. Artık kimlik bloğun içindedir; başlık satırı o sırada
  * yalnız geri oku ve eylemleri taşır, ad kaydırınca daralan satırda belirir.
  *
- * DARALMA: `scrollY` verilirse 0 → 56px kaydırma arasında
+ * DARALMA: `scrollY` verilirse başlık iki durumludur (açık / dar); geçişte
  *   · kimlik ölçülen yüksekliğinden 0'a iner ve söner,
  *   · üst/alt başlık söner, satır 52px'e iner,
  *   · kimlik varsa başlık adı belirir.
- * Yükseklik animasyonu düzen özelliği olduğu için `useHeaderScroll()`
- * ZORUNLUDUR (yerel sürücüsüz `Animated.event`).
+ * Durumu `useHeaderScroll()` yönetir (eşikli, zamanlı geçiş — gerekçesi orada);
+ * yükseklik düzen özelliği olduğu için animasyon yerel sürücüsüzdür.
  *
  * BLOK GÜVENLİ ALANI DA BOYAR: durum çubuğunun arkası da mordur. Bunu
  * `marginTop: -insets.top` + `paddingTop: insets.top` çifti kurar — blok
@@ -50,7 +50,7 @@ import { HeaderToneContext } from "./HeaderTone";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   StyleSheet,
@@ -62,7 +62,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { colors, hairline, layout, radius, space, textScale, touchSlop, type } from "@/theme";
+import { colors, duration, easing, hairline, layout, radius, space, textScale, touchSlop, type } from "@/theme";
 import { Badge, toneColors, type Tone } from "./Badge";
 import { Touchable } from "./Pressable";
 
@@ -128,8 +128,39 @@ export interface ScreenHeaderProps {
 }
 
 /**
- * Daralan başlık için doğru yapılandırılmış kaydırma bağlantısı.
- * `useNativeDriver: false` ZORUNLUDUR — bloğun yüksekliği animasyonlanıyor.
+ * Başlığın daralınca kaybettiği yükseklik (kimlik + üst/alt satırlar), kaydırma
+ * değeri başına. ScreenHeader ölçtükçe yazar, `useHeaderScroll` eşiği buradan okur.
+ */
+const collapseExtents = new WeakMap<Animated.Value, { current: number }>();
+/** Daralma eşiğinin, kaybedilen yüksekliğin üstündeki payı. */
+const COLLAPSE_MARGIN = 24;
+
+/**
+ * Daralan başlık için kaydırma bağlantısı.
+ *
+ * NEDEN ARTIK KAYDIRMAYA BİREBİR BAĞLI DEĞİL (takılmanın kök nedeni):
+ * başlık daralırken YÜKSEKLİĞİ değişir, yani altındaki liste ekranda yukarı
+ * kayar. Eskiden yükseklik kaydırma konumuna kare kare bağlıydı. İki sorun:
+ *
+ *   1. GERİ BESLEME. Android'de liste, parmağın konumunu KENDİ üst kenarına
+ *      göre okur. Başlık 56 piksellik kaydırmada yüzlerce piksel (kimlik,
+ *      skor tablosu) kısalınca liste parmağın altında yukarı kaçıyor, liste
+ *      bunu "parmak aşağı gitti" diye okuyup geri sarıyor, başlık yeniden
+ *      açılıyordu… Düzen JS üzerinden bir-iki kare gecikmeyle geldiği için
+ *      döngü sönmüyor, kaydırmanın başında sayfa titriyor/takılıyordu
+ *      (kimlikli sayfalar: maç, takım, oyuncu).
+ *   2. HER KAREDE İŞ. `Animated.event` listenin TAMAMI boyunca her kaydırma
+ *      olayında değeri yeniden yazıyordu; sonuç hep "tam daralmış" olduğu
+ *      hâlde başlıktaki her animasyonlu görünüm her karede güncelleniyordu.
+ *
+ * ŞİMDİ: başlık iki durumludur (açık / dar) ve durum eşikle değişir; geçiş
+ * kısa, zamanlı bir animasyondur. Yükseklik artık kaydırma konumuna sürekli
+ * bağlı olmadığı için geri besleme döngüsü kurulamaz; eşikler arasında
+ * kaydırmanın başlığa maliyeti sıfırdır.
+ *   · Daralma: konum, başlığın kaybedeceği yükseklikten fazla olunca
+ *     (liste, daralmanın açtığı boşluğu kaldırabilsin; kısa içerikte başlık
+ *     hiç daralmaz, açılıp kapanma olmaz).
+ *   · Açılma: listenin tepesine dönünce.
  */
 export function useHeaderScroll(): {
   scrollY: Animated.Value;
@@ -139,11 +170,54 @@ export function useHeaderScroll(): {
   };
 } {
   const scrollY = useRef(new Animated.Value(0)).current;
+  /** Hedef durum: dar mı? Ekranlar sekme değişiminde `scrollY.setValue(0)` da çağırır. */
+  const collapsed = useRef(false);
+  /** Kendi geçiş animasyonumuz sürüyor mu (dışarıdan `setValue` ile ayırt etmek için). */
+  const animating = useRef(false);
+  const sequence = useRef(0);
+
+  // Render sırasında (etkiden önce): ScreenHeader'ın etkisi bu kaydı bulabilsin.
+  if (!collapseExtents.has(scrollY)) collapseExtents.set(scrollY, { current: 0 });
+
+  useEffect(() => {
+    // Dışarıdan sıfırlama (sekme değişimi) → durum da "açık"a döner.
+    const id = scrollY.addListener(({ value }) => {
+      if (value <= 0 && !animating.current) collapsed.current = false;
+    });
+    return () => {
+      scrollY.removeListener(id);
+      scrollY.stopAnimation();
+    };
+  }, [scrollY]);
 
   const scrollProps = useMemo(() => {
-    const onScroll = Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
-      useNativeDriver: false,
-    }) as unknown as (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+    const run = (toValue: number) => {
+      const token = ++sequence.current;
+      animating.current = true;
+      Animated.timing(scrollY, {
+        toValue,
+        duration: duration.base,
+        easing: easing.standard,
+        useNativeDriver: false, // yükseklik (düzen özelliği) animasyonlanıyor
+      }).start(() => {
+        if (sequence.current === token) animating.current = false;
+      });
+    };
+    const onScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const y = event.nativeEvent.contentOffset.y;
+      if (collapsed.current) {
+        if (y <= 1) {
+          collapsed.current = false;
+          run(0);
+        }
+        return;
+      }
+      const extent = collapseExtents.get(scrollY)?.current ?? 0;
+      if (y > extent + COLLAPSE_MARGIN) {
+        collapsed.current = true;
+        run(COLLAPSE_RANGE);
+      }
+    };
     return { onScroll, scrollEventThrottle: 16 };
   }, [scrollY]);
 
@@ -239,6 +313,13 @@ export function ScreenHeader({
       : hasExtras
         ? null
         : { height: BAR_HEIGHT };
+  /* Daralınca kaybedilecek yükseklik → `useHeaderScroll` eşiği (bkz. orada). */
+  const collapseExtent = (hero ? heroHeight : 0) + (hasExtras && titleHeight > 0 ? rowNatural - BAR_HEIGHT : 0);
+  useEffect(() => {
+    const slot = scrollY ? collapseExtents.get(scrollY) : undefined;
+    if (slot) slot.current = collapseExtent;
+  }, [scrollY, collapseExtent]);
+
   const heroStyle =
     scrollY && heroHeight > 0
       ? {
