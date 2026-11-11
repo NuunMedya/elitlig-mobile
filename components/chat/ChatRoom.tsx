@@ -18,6 +18,7 @@ import { Alert, FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, View
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AttachSheet, type AttachMode } from "@/components/chat/AttachSheet";
+import { AwardPollCard, FileBubble, MatchesCard, PollBubble, SignupCard } from "@/components/chat/RichBubbles";
 import { ReportSheet, type ReportTarget } from "@/components/chat/ReportSheet";
 import { ComposerField } from "@/components/chat/ComposerField";
 import { AttendanceCard, AudioBubble, CallChip, LocationBubble, MatchOfferBubble, NotificationCard, SystemChip, clockLabel } from "@/components/chat/ChatBubbles";
@@ -44,6 +45,8 @@ import {
   type ConversationsResponse,
   type MessagesResponse,
   type SendMessageInput,
+  toggleSignup,
+  votePoll,
 } from "@/lib/api/chat";
 import { useVoiceRecorder } from "@/lib/chatMedia";
 import { addMatchAttendancePlayers, getTeamRoster, removeMatchAttendancePlayer, respondMatchAttendance, type AttendancePlayer } from "@/lib/api/team";
@@ -488,6 +491,45 @@ export function ChatRoom({ conversationId, admin = false }: ChatRoomProps) {
 
   const onSendLocation = useCallback((location: Partial<ChatLocationMeta>) => sendRich({ kind: "location", meta: { location } }), [sendRich]);
 
+  const onSendPoll = useCallback(
+    (poll: { question: string; multiple: boolean; options: string[] }) => sendRich({ kind: "poll", body: poll.question, meta: { poll } }),
+    [sendRich],
+  );
+
+  /* Anket oyu ve "Ben talibim": sunucu güncel mesajı döndürür; soket kopuksa da kart yerinde yenilenir. */
+  const applyUpdated = useCallback(
+    (message: ChatMessage) => {
+      queryClient.setQueryData<MessagesResponse>(queryKeys.chatMessages(conversationId), (previous) =>
+        previous ? { ...previous, messages: previous.messages.map((item) => (item.id === message.id ? { ...item, ...message, sender: item.sender } : item)) } : previous,
+      );
+      if (admin) void queryClient.invalidateQueries({ queryKey: ["chat", "admin"] });
+    },
+    [admin, conversationId, queryClient],
+  );
+  const vote = useCallback(
+    (message: ChatMessage, optionIds: string[]) => {
+      setBusyKey(`poll-${message.id}`);
+      void votePoll(conversationId, message.id, { option_ids: optionIds })
+        .then(({ message: updated }) => applyUpdated(updated))
+        .catch((error: unknown) => toast.show({ message: errorMessage(error), tone: "danger" }))
+        .finally(() => setBusyKey(null));
+    },
+    [applyUpdated, conversationId, toast],
+  );
+  const signup = useCallback(
+    (message: ChatMessage, slotId: string, on: boolean) => {
+      setBusyKey(`signup-${message.id}-${slotId}`);
+      void toggleSignup(conversationId, message.id, { slot_id: slotId, on })
+        .then(({ message: updated }) => {
+          applyUpdated(updated);
+          toast.show({ message: on ? "Talip oldun; görevlendirilince bildirim gelir." : "Taliplikten vazgeçtin.", tone: "success" });
+        })
+        .catch((error: unknown) => toast.show({ message: errorMessage(error), tone: "danger" }))
+        .finally(() => setBusyKey(null));
+    },
+    [applyUpdated, conversationId, toast],
+  );
+
   /* Yoklama kartı: yanıt sunucuya yazılır, sunucu kartı günceller (chat:updated). */
   const respondAttendance = useCallback(
     (message: ChatMessage, status: "coming" | "not_coming" | "maybe") => {
@@ -575,11 +617,36 @@ export function ChatRoom({ conversationId, admin = false }: ChatRoomProps) {
           return <AttendanceCard message={message} viewerPlayerId={auth.user?.player_id} viewerUserId={auth.user?.id} busy={busyKey === `att-${message.id}`} onRespond={respondAttendance} onRemove={removeAttendancePlayer} onAdd={openAttendancePicker} />;
         case "system":
           return <SystemChip text={message.body ?? ""} />;
+        case "poll":
+          if (message.deleted || !message.meta?.poll) break;
+          return <PollBubble message={message} showSender={item.showSender} viewerId={auth.user?.id} busy={busyKey === `poll-${message.id}`} onVote={vote} />;
+        case "image":
+        case "file":
+          if (message.deleted || !message.meta?.file) break;
+          return <FileBubble message={message} showSender={item.showSender} onOpenError={() => toast.show({ message: "Dosya açılamadı. Bağlantını kontrol edip tekrar dene.", tone: "danger" })} />;
+        case "matches":
+          if (message.deleted || !message.meta?.matches) break;
+          return <MatchesCard message={message} showSender={item.showSender} onOpenMatch={(matchId) => router.push({ pathname: "/mac/[id]", params: { id: String(matchId) } })} />;
+        case "signup":
+          if (message.deleted || !message.meta?.signup) break;
+          return (
+            <SignupCard
+              message={message}
+              showSender={item.showSender}
+              viewerId={auth.user?.id}
+              busySlot={busyKey?.startsWith(`signup-${message.id}-`) ? busyKey.slice(`signup-${message.id}-`.length) : null}
+              onToggle={signup}
+            />
+          );
+        case "award_poll":
+          if (message.deleted) break;
+          return <AwardPollCard message={message} showSender={item.showSender} onOpenTodos={auth.isManagement ? () => router.push("/yonetim/gorevler") : undefined} />;
         default:
-          return <Bubble message={message} showSender={item.showSender} onLongPress={onLongPress} onRetry={retry} />;
+          break;
       }
+      return <Bubble message={message} showSender={item.showSender} onLongPress={onLongPress} onRetry={retry} />;
     },
-    [admin, auth.user?.id, auth.user?.player_id, busyKey, onLongPress, openAttendancePicker, removeAttendancePlayer, respondAttendance, respondOffer, retry, runAction],
+    [admin, auth.isManagement, auth.user?.id, auth.user?.player_id, busyKey, router, signup, toast, vote, onLongPress, openAttendancePicker, removeAttendancePlayer, respondAttendance, respondOffer, retry, runAction],
   );
 
   if (!auth.user) return <Redirect href="/giris" />;
@@ -698,7 +765,7 @@ export function ChatRoom({ conversationId, admin = false }: ChatRoomProps) {
         ) : null}
       </KeyboardAvoidingView>
 
-      <AttachSheet mode={attach} onChangeMode={setAttach} conversation={conversation} admin={admin} onSendLocation={onSendLocation} />
+      <AttachSheet mode={attach} onChangeMode={setAttach} conversation={conversation} admin={admin} onSendLocation={onSendLocation} onSendPoll={canWrite ? onSendPoll : undefined} />
       <ReportSheet target={report} onClose={() => setReport(null)} onBlocked={refreshAfterBlock} />
       <BottomSheet visible={Boolean(attendancePick)} onClose={() => setAttendancePick(null)} title="Yoklamaya oyuncu ekle" snap="half" scrollable={false}>
         <Text style={styles.attendanceHint} {...textScale.long}>Seçtiğin oyuncu gruba alınır ve maç kadrosuna yedek olarak eklenir.</Text>

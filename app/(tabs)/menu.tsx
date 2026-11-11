@@ -53,6 +53,7 @@ import {
 } from "@/components/ui";
 import { ProfileHero, type ProfileHeroStat } from "@/components/account/ProfileHero";
 import { useNotificationBell } from "@/hooks/useNotificationBell";
+import { resolveProfileType, scopesForProfileType } from "@/lib/api/member/player";
 import { getPanelMe } from "@/lib/api/panel";
 import { formatNumber, mediaUrl } from "@/lib/format";
 import { openLink } from "@/lib/links";
@@ -70,8 +71,6 @@ import { colors, hairline, layout, radius, space, textScale, type } from "@/them
 /** Web sitesi — üyelik, şifre sıfırlama ve kurumsal sayfalar orada yaşıyor. */
 const SITE_URL = "https://elitlig.com";
 
-/** Takım başkanı sayılan profil tipleri (sunucudaki `profile_type` değerleri). */
-const PRESIDENT_PROFILES = new Set(["takim_baskani", "double"]);
 
 /** Satırın dokunulduğunda ne yapacağı — hepsi tek `onSelect` içinde çözülür. */
 type MenuAction =
@@ -208,10 +207,11 @@ export default function MenuTabScreen() {
   const teamCard = me?.team ?? me?.playerTeam ?? null;
   const teamName = teamCard?.team_name ?? user?.teamName ?? null;
 
-  const isPresident = Boolean(
-    user && (user.managed_team_id || PRESIDENT_PROFILES.has(String(user.profile_type ?? "")))
-  );
-  const isPlayer = Boolean(user?.player_id);
+  /* Roller = PROFİL MODLARI (Kulübüm/Kariyerim ile aynı kural): "Oyuncu modu"
+     kapalıysa rozet de çizilmez. */
+  const profileScopes = user ? scopesForProfileType(resolveProfileType(user)) : null;
+  const isPresident = Boolean(profileScopes?.team);
+  const isPlayer = Boolean(profileScopes?.player && user?.player_id);
 
   /* ------------------------------ EYLEMLER ------------------------------- */
 

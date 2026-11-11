@@ -14,7 +14,7 @@ import { getVenues, type ChatConversation, type ChatLocationMeta, type ChatVenue
 import { getCurrentLocation } from "@/lib/chatMedia";
 import { colors, layout, space, textScale, type } from "@/theme";
 
-export type AttachMode = "menu" | "location" | null;
+export type AttachMode = "menu" | "location" | "poll" | null;
 
 export interface AttachSheetProps {
   mode: AttachMode;
@@ -22,20 +22,83 @@ export interface AttachSheetProps {
   conversation: ChatConversation | null;
   admin?: boolean;
   onSendLocation: (location: Partial<ChatLocationMeta>) => Promise<void>;
+  /** Verilirse menüde "Anket oluştur" görünür (web/masaüstü Mesajlar ile aynı anket). */
+  onSendPoll?: (poll: { question: string; multiple: boolean; options: string[] }) => Promise<void>;
 }
 
 
-export function AttachSheet({ mode, onChangeMode, onSendLocation }: AttachSheetProps) {
+export function AttachSheet({ mode, onChangeMode, onSendLocation, onSendPoll }: AttachSheetProps) {
   const toast = useToast();
   const close = useCallback(() => onChangeMode(null), [onChangeMode]);
 
   return (
     <>
       <BottomSheet visible={mode === "menu"} onClose={close} title="Ek gönder" snap="content">
-        <ListRow leading={{ icon: "location", tone: "danger" }} title="Konum / saha paylaş" subtitle="Bulunduğun yer ya da saha listesinden" onPress={() => onChangeMode("location")} chevron position="single" />
+        <ListRow leading={{ icon: "location", tone: "danger" }} title="Konum / saha paylaş" subtitle="Bulunduğun yer ya da saha listesinden" onPress={() => onChangeMode("location")} chevron position={onSendPoll ? "first" : "single"} />
+        {onSendPoll ? <ListRow leading={{ icon: "stats-chart", tone: "brand" }} title="Anket oluştur" subtitle="Soru ve seçenekler; herkes oy verir" onPress={() => onChangeMode("poll")} chevron position="last" /> : null}
       </BottomSheet>
+      {onSendPoll ? <PollSheet visible={mode === "poll"} onClose={close} onSend={onSendPoll} toastError={(error) => toast.show({ message: errorMessage(error), tone: "danger" })} /> : null}
       <LocationSheet visible={mode === "location"} onClose={close} onSend={onSendLocation} toastError={(error) => toast.show({ message: errorMessage(error), tone: "danger" })} />
     </>
+  );
+}
+
+/* ---------- anket ---------- */
+
+function PollSheet({ visible, onClose, onSend, toastError }: { visible: boolean; onClose: () => void; onSend: NonNullable<AttachSheetProps["onSendPoll"]>; toastError: (error: unknown) => void }) {
+  const [question, setQuestion] = useState("");
+  const [options, setOptions] = useState<string[]>(["", ""]);
+  const [multiple, setMultiple] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const filled = options.map((o) => o.trim()).filter(Boolean);
+  const ready = question.trim().length > 0 && filled.length >= 2;
+
+  const submit = async () => {
+    if (!ready || busy) return;
+    setBusy(true);
+    try {
+      await onSend({ question: question.trim(), multiple, options: filled });
+      // Yalnız başarıda temizlenir: gönderilemezse yazılanlar kaybolmaz.
+      setQuestion("");
+      setOptions(["", ""]);
+      setMultiple(false);
+      onClose();
+    } catch (error) {
+      toastError(error);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <BottomSheet visible={visible} onClose={onClose} title="Anket oluştur" snap="full">
+      <View style={styles.section}>
+        <Input label="Soru" value={question} onChangeText={setQuestion} placeholder="Ör. Cumartesi maçı kaçta olsun?" maxLength={300} />
+        {options.map((option, index) => (
+          <Input
+            key={index}
+            label={`Seçenek ${index + 1}`}
+            value={option}
+            onChangeText={(text) => setOptions((list) => list.map((item, i) => (i === index ? text : item)))}
+            maxLength={100}
+            size="sm"
+          />
+        ))}
+        {options.length < 12 ? <Button label="Seçenek ekle" icon="add" size="sm" variant="ghost" onPress={() => setOptions((list) => [...list, ""])} /> : null}
+        <ListRow
+          leading={{ icon: multiple ? "checkbox" : "square-outline", tone: "brand" }}
+          title="Birden fazla seçenek işaretlenebilsin"
+          onPress={() => setMultiple((value) => !value)}
+          position="single"
+        />
+        <Button label="Anketi gönder" icon="send" onPress={() => void submit()} disabled={!ready} loading={busy} />
+        {!ready ? (
+          <Text style={styles.pollHint} {...textScale.dense}>
+            Bir soru ve en az iki seçenek yaz.
+          </Text>
+        ) : null}
+      </View>
+    </BottomSheet>
   );
 }
 
@@ -108,6 +171,7 @@ function LocationSheet({ visible, onClose, onSend, toastError }: { visible: bool
 }
 
 const styles = StyleSheet.create({
+  pollHint: { ...type.caption, color: colors.textTertiary },
   section: { paddingHorizontal: layout.screenPadding, paddingVertical: space.sm, gap: space.sm },
   sectionTitle: { ...type.overline, color: colors.textTertiary, paddingHorizontal: layout.screenPadding, paddingTop: space.md, paddingBottom: space.xs, letterSpacing: 1.2 },
   hint: { ...type.caption, color: colors.textSecondary, paddingHorizontal: layout.screenPadding, paddingVertical: space.xs },

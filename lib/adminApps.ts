@@ -70,7 +70,7 @@ const MATCHES_APP: AdminApp = {
   accent: isDark ? "#86EFAC" : "#15803D",
   accentSoft: isDark ? "#123B22" : "#DCFCE7",
   onAccent: on,
-  permission: ["matches.view", "matches.create", "matches.update"],
+  permission: ["matches.view", "matches.create", "matches.update", "matches.live", "matches.lineup", "matches.stats"],
 };
 
 const VENUES_APP: AdminApp = {

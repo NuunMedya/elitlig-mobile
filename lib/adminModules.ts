@@ -82,9 +82,10 @@ export const ADMIN_MODULE_GROUPS: AdminModuleGroup[] = [
     description: "Maç listesi, saha planlama ve maç personeli",
     icon: "football-outline",
     modules: [
-      { key: "maclar", title: "Maç listesi", description: "Maç öncesi, kadro, canlı akış, maç sonu ve skor", icon: "football-outline", route: "/yonetim/maclar", permission: ["matches.view", "matches.create", "matches.update"], keywords: "fikstür skor sonuç canlı" },
+      { key: "maclar", title: "Maç listesi", description: "Maç öncesi, kadro, canlı akış, maç sonu ve skor", icon: "football-outline", route: "/yonetim/maclar", permission: ["matches.view", "matches.create", "matches.update", "matches.live", "matches.lineup", "matches.stats"], keywords: "fikstür skor sonuç canlı" },
       { key: "mac-olustur", title: "Maç oluştur", description: "Yeni maç ve fikstür girişi", icon: "add-circle-outline", route: "/yonetim/mac-olustur", permission: ["matches.create"] },
       { key: "toplu-duzenle", title: "Toplu düzenleme", description: "Birden çok maçın saat, saha ve durumunu tek ekranda değiştir", icon: "layers-outline", route: "/yonetim/toplu-duzenle", permission: ["matches.bulk_edit"] },
+      { key: "studyo", title: "Yayın stüdyosu", description: "Telefondan maç yayını: skorbord, tekrar, altyazı ve reji", icon: "videocam-outline", route: "/yonetim/studyo", permission: ["matches.live"], keywords: "canlı yayın youtube reji kamera" },
       { key: "sahalar", title: "Saha ve maç planlama", description: "Maç talepleri ve haftalık saha programı", icon: "location-outline", route: "/yonetim/sahalar", permission: ["venues.view", "venues.manage"] },
       { key: "musaitlik", title: "Takım müsaitliği", description: "Takımların uygun gün ve saatleri", icon: "time-outline", route: "/yonetim/musaitlik", permission: ["venues.view"] },
       { key: "personel", title: "Personel", description: "Spiker, reji, hakem, fotoğrafçı, sağlıkçı", icon: "briefcase-outline", route: "/yonetim/personel", permission: ["staff.view"] },

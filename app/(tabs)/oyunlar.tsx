@@ -36,7 +36,7 @@
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useQueries, useQueryClient } from "@tanstack/react-query";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
 import { Animated, RefreshControl, StyleSheet, Text, View } from "react-native";
@@ -55,7 +55,7 @@ import {
   useRefresh,
 } from "@/components/ui";
 import type { Tone } from "@/components/ui";
-import type { ArenaGame } from "@/lib/api/arena";
+import { getMyArenaSummary, type ArenaGame } from "@/lib/api/arena";
 import { formatNumber } from "@/lib/format";
 import { ARENA_BEST_KEYS } from "@/lib/game/arenaKeys";
 import { get } from "@/lib/http";
@@ -563,12 +563,28 @@ export default function OyunlarScreen() {
     if (bestRank == null || entry.rank < bestRank) bestRank = entry.rank;
   });
 
+  /* — Sunucudaki kişisel rekorlar: başka cihazda yapılan rekor da kartta görünsün.
+     Uç eski sunucuda yoktur; hata sessizdir ve cihazdaki rekor gösterilir. — */
+  const summary = useQuery({
+    queryKey: ["arena", "me", "summary"],
+    queryFn: getMyArenaSummary,
+    enabled: signedIn,
+    staleTime: 60_000,
+    retry: false,
+  });
+  const bestOf = (game: ArenaGame): number | null => {
+    const device = local.best[game] ?? null;
+    const server = signedIn ? summary.data?.games?.[game]?.best ?? null : null;
+    if (device == null) return server;
+    return server == null ? device : Math.max(device, server);
+  };
+
   const standingsLoading = signedIn && standings.some((query) => query.isLoading);
   const standingsRefreshing = standings.some((query) => query.isRefetching);
 
   const onRefresh = useCallback(async () => {
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["arena", "me", "weekly"] }),
+      queryClient.invalidateQueries({ queryKey: ["arena", "me"] }),
       loadLocal(),
     ]);
   }, [loadLocal, queryClient]);
@@ -702,7 +718,7 @@ export default function OyunlarScreen() {
               wide={index === 0 || (index === GRID_GAMES.length - 1 && index % 2 === 1)}
               meta={meta}
               ready={local.loaded}
-              best={local.best[meta.key] ?? null}
+              best={bestOf(meta.key)}
               rank={standingByGame[meta.key]?.entry?.rank ?? null}
               onPress={openGame}
             />

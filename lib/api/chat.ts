@@ -559,6 +559,17 @@ export function conversationPreview(conversation: ChatConversation): string {
   if (message.kind === "call") return message.body ?? "Sesli arama";
   if (message.deleted) return "Bu mesaj silindi";
   if (message.kind === "audio") return `${message.sender.is_me ? "Sen: " : ""}Sesli mesaj`;
+  // Zengin türlerde sunucu gövdesi simgeyle başlar; listede düz Türkçe etiket gösterilir.
+  const rich: Partial<Record<MessageKind, string>> = {
+    image: message.meta?.caption ? `Fotoğraf: ${message.meta.caption}` : "Fotoğraf",
+    file: `Belge: ${message.meta?.file?.name ?? "dosya"}`,
+    poll: `Anket: ${message.meta?.poll?.question ?? ""}`.trim(),
+    matches: "Günün maçları",
+    signup: message.meta?.signup?.title ?? "Görev anketi",
+    award_poll: "Haftanın Enleri: aday önerisi",
+  };
+  const richLabel = rich[message.kind];
+  if (richLabel) return `${message.sender.is_me ? "Sen: " : ""}${richLabel}`;
   const prefix = message.sender.is_me
     ? "Sen: "
     : conversation.type !== "direct" && conversation.type !== "management" && message.kind === "text" && message.sender.name
