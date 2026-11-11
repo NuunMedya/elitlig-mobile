@@ -24,6 +24,7 @@ import {
   EmptyState,
   ErrorState,
   Input,
+  ListRow,
   ScreenHeader,
   SectionHeader,
   SkeletonListRow,
@@ -31,7 +32,7 @@ import {
   errorMessage,
   useToast,
 } from "@/components/ui";
-import { adminChat, getDirectory, openConversation, type ChatUser, type OpenConversationInput } from "@/lib/api/chat";
+import { adminChat, getDirectory, openConversation, updateGroup, type ChatUser, type OpenConversationInput } from "@/lib/api/chat";
 import { queryKeys } from "@/lib/queryKeys";
 import { useAuth } from "@/providers/AuthProvider";
 import { colors, hairline, layout, space, textScale, type } from "@/theme";
@@ -56,14 +57,19 @@ type Row =
 
 export interface ChatComposeProps {
   admin?: boolean;
+  /** Açılışta seçili sekme ("Yeni grup" kısayolu doğrudan grup kurmaya iner). */
+  initialTab?: "group";
 }
 
-export function ChatCompose({ admin = false }: ChatComposeProps) {
+export function ChatCompose({ admin = false, initialTab }: ChatComposeProps) {
   const auth = useAuth();
   const router = useRouter();
   const toast = useToast();
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<Tab>("all");
+  const [tab, setTab] = useState<Tab>(initialTab ?? "all");
+  const [description, setDescription] = useState("");
+  const [onlyAdminsSend, setOnlyAdminsSend] = useState(false);
+  const [onlyAdminsEdit, setOnlyAdminsEdit] = useState(false);
   const TABS = admin
     ? ALL_TABS.filter((item) => item.key !== "management")
     : ALL_TABS.filter((item) => item.key !== "staff").map((item) => (item.key === "players" ? { ...item, label: "Takım arkadaşları" } : item));
@@ -94,7 +100,16 @@ export function ChatCompose({ admin = false }: ChatComposeProps) {
       if (conversation.skipped_members?.length) {
         toast.show({ message: `Mesaj tercihi nedeniyle gruba eklenemeyenler: ${conversation.skipped_members.map((item) => item.name).join(", ")}`, tone: "warn" });
       }
-      router.replace(`${basePath}/${conversation.id}` as never);
+      // Katılımcısı olduğum sohbet (birebir, kurduğum grup) kişisel sohbettir:
+      // tepki, yıldız, sabitleme gibi özelliklerin tamamı üye odasındadır.
+      const mine = conversation.participants.some((item) => item.is_me);
+      const go = () => router.replace((admin && !mine ? `/yonetim/sohbet/${conversation.id}` : `/sohbet/${conversation.id}`) as never);
+      // Grup kurulurken girilen açıklama ve izinler (masaüstü "Yeni grup" ile aynı alanlar).
+      const extra = conversation.type === "group" && mine
+        ? { ...(description.trim() ? { description: description.trim() } : {}), ...(onlyAdminsSend ? { only_admins_send: true } : {}), ...(onlyAdminsEdit ? { only_admins_edit: true } : {}) }
+        : {};
+      if (Object.keys(extra).length) void updateGroup(conversation.id, extra).catch(() => {}).finally(go);
+      else go();
     },
     onError: (error) => toast.show({ message: errorMessage(error), tone: "danger" }),
   });
@@ -199,10 +214,27 @@ export function ChatCompose({ admin = false }: ChatComposeProps) {
   const groupMode = tab === "group";
   const canCreate = groupMode && title.trim().length >= 2 && selected.length > 0 && !open.isPending;
 
+  // Grup formu listenin başında kayar: üye listesine yer kalır, klavye açıkken de erişilir.
+  const groupForm = (
+    <View style={styles.groupForm}>
+          <Input
+            label="Grup adı"
+            value={title}
+            onChangeText={setTitle}
+            placeholder="Örn. Antrenman planı"
+            maxLength={120}
+            hint={`${selected.length} üye seçildi`}
+          />
+          <Input label="Açıklama (isteğe bağlı)" value={description} onChangeText={setDescription} placeholder="Grubun amacı" maxLength={2000} size="sm" />
+          <ListRow title="Yalnız yöneticiler mesaj göndersin" subtitle="Duyuru grubu: üyeler yalnız okur" toggle={{ value: onlyAdminsSend, onValueChange: setOnlyAdminsSend }} position="first" />
+          <ListRow title="Grup bilgisini yalnız yöneticiler düzenlesin" subtitle="Ad, fotoğraf, üye ekleme ve sabitleme" toggle={{ value: onlyAdminsEdit, onValueChange: setOnlyAdminsEdit }} position="last" />
+        </View>
+  );
+
   return (
     <SafeAreaView style={styles.screen} edges={["top", "bottom"]}>
       <ScreenHeader
-        title="Mesaj oluştur"
+        title={groupMode ? "Yeni grup" : "Yeni sohbet"}
         subtitle={admin ? "Kime yazacaksınız?" : "Kime yazmak istiyorsun?"}
         back
         bottom={
@@ -227,19 +259,6 @@ export function ChatCompose({ admin = false }: ChatComposeProps) {
         }
       />
 
-      {groupMode ? (
-        <View style={styles.groupForm}>
-          <Input
-            label="Grup adı"
-            value={title}
-            onChangeText={setTitle}
-            placeholder="Örn. Antrenman planı"
-            maxLength={120}
-            hint={`${selected.length} üye seçildi`}
-          />
-        </View>
-      ) : null}
-
       {query.isLoading ? (
         <View style={styles.skeleton}>
           <SkeletonListRow count={8} avatar />
@@ -254,6 +273,7 @@ export function ChatCompose({ admin = false }: ChatComposeProps) {
           contentContainerStyle={styles.list}
           keyboardShouldPersistTaps="handled"
           initialNumToRender={16}
+          ListHeaderComponent={groupMode ? groupForm : null}
           ListEmptyComponent={
             <EmptyState
               icon="search-outline"
@@ -339,7 +359,7 @@ const styles = StyleSheet.create({
   searchWrap: { paddingHorizontal: layout.screenPadding },
   skeleton: { paddingHorizontal: layout.screenPadding, paddingTop: space.sm },
   list: { flexGrow: 1, paddingBottom: space.huge },
-  groupForm: { paddingHorizontal: layout.screenPadding, paddingTop: space.md },
+  groupForm: { paddingHorizontal: layout.screenPadding, paddingTop: space.md, gap: space.xs },
   row: {
     flexDirection: "row",
     alignItems: "center",

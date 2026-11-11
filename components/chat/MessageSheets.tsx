@@ -16,6 +16,12 @@ import { getMessageInfo, type ChatConversation, type ChatMessage, type ChatParti
 import { MORE_REACTIONS, QUICK_REACTIONS, clockTime, dayLabel, filterChats, isGroupChat, messageSummary } from "@/lib/chatUtils";
 import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
 
+/**
+ * Menü kapanırken (220 ms) açılan onay kutusu iOS'ta sayfayla birlikte
+ * kapanıyor; eylem, sayfa tamamen indikten sonra çalıştırılır.
+ */
+const runAfterSheet = (fn: () => void) => setTimeout(fn, 260);
+
 /* ---------- eylem menüsü ---------- */
 
 export interface MessageMenuItem {
@@ -87,7 +93,35 @@ export function MessageMenu({ message, items, onReact, onClose }: MessageMenuPro
             haptic="selection"
             onPress={() => {
               close();
-              item.onPress();
+              runAfterSheet(item.onPress);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={item.label}
+            style={styles.menuRow}
+          >
+            <Ionicons name={item.icon} size={20} color={item.danger ? colors.danger : colors.textSecondary} />
+            <Text style={[styles.menuLabel, item.danger ? styles.danger : null]} {...textScale.dense}>{item.label}</Text>
+          </Touchable>
+        ))}
+      </View>
+    </BottomSheet>
+  );
+}
+
+/* ---------- genel eylem sayfası (sohbet menüsü) ---------- */
+
+export function ActionMenu({ visible, title, items, onClose }: { visible: boolean; title?: string; items: MessageMenuItem[]; onClose: () => void }) {
+  return (
+    <BottomSheet visible={visible} onClose={onClose} title={title} snap="content">
+      <View style={styles.menu}>
+        {items.map((item) => (
+          <Touchable
+            key={item.key}
+            feedback="row"
+            haptic="selection"
+            onPress={() => {
+              onClose();
+              runAfterSheet(item.onPress);
             }}
             accessibilityRole="button"
             accessibilityLabel={item.label}

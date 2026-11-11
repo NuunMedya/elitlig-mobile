@@ -13,11 +13,11 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Image, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { BottomSheet, Button, Input, ListRow, Touchable, errorMessage, useToast } from "@/components/ui";
 import { getVenues, type ChatConversation, type ChatLocationMeta, type ChatVenue } from "@/lib/api/chat";
-import { getCurrentLocation } from "@/lib/chatMedia";
+import { MAX_FILE_BYTES, getCurrentLocation, type PickedFile } from "@/lib/chatMedia";
 import { attachTones } from "@/lib/chatPalette";
 import { colors, layout, radius, space, textScale, type } from "@/theme";
 
@@ -110,6 +110,58 @@ export function AttachSheet({ mode, onChangeMode, onSendLocation, onSendPoll, on
       {onSendPoll ? <PollSheet visible={mode === "poll"} onClose={close} onSend={onSendPoll} toastError={(error) => toast.show({ message: errorMessage(error), tone: "danger" })} /> : null}
       <LocationSheet visible={mode === "location"} onClose={close} onSend={onSendLocation} toastError={(error) => toast.show({ message: errorMessage(error), tone: "danger" })} />
     </>
+  );
+}
+
+/* ---------- gönderim önizlemesi (fotoğraf / video + açıklama) ---------- */
+
+export function AttachPreviewSheet({ files, onClose, onSend }: { files: PickedFile[] | null; onClose: () => void; onSend: (files: PickedFile[], caption: string) => void }) {
+  const [caption, setCaption] = useState("");
+  const list = files ?? [];
+  const tooLarge = list.filter((file) => (file.size ?? 0) > MAX_FILE_BYTES);
+  const sendable = list.filter((file) => (file.size ?? 0) <= MAX_FILE_BYTES);
+  const close = () => {
+    setCaption("");
+    onClose();
+  };
+  return (
+    <BottomSheet
+      visible={Boolean(files?.length)}
+      onClose={close}
+      title={list.length > 1 ? `${list.length} fotoğraf gönder` : list[0]?.isImage === false ? "Video gönder" : "Fotoğraf gönder"}
+      snap="content"
+      footer={
+        <Button
+          label={sendable.length > 1 ? `${sendable.length} öğeyi gönder` : "Gönder"}
+          icon="send"
+          disabled={!sendable.length}
+          onPress={() => {
+            onSend(sendable, caption.trim());
+            setCaption("");
+          }}
+          fullWidth
+        />
+      }
+    >
+      <View style={styles.section}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.thumbs}>
+          {list.map((file) =>
+            file.isImage ? (
+              <Image key={file.uri} source={{ uri: file.uri }} style={styles.thumb} resizeMode="cover" accessibilityLabel="Seçilen fotoğraf" />
+            ) : (
+              <View key={file.uri} style={[styles.thumb, styles.thumbVideo]}>
+                <Ionicons name="videocam" size={28} color={colors.textSecondary} />
+                <Text style={styles.thumbName} numberOfLines={2} {...textScale.dense}>{file.name}</Text>
+              </View>
+            ),
+          )}
+        </ScrollView>
+        {tooLarge.length ? (
+          <Text style={styles.warn} {...textScale.dense}>{tooLarge.length} dosya 25 MB sınırını aşıyor ve gönderilmeyecek.</Text>
+        ) : null}
+        <Input value={caption} onChangeText={setCaption} placeholder="Açıklama ekle (isteğe bağlı)" maxLength={1000} multiline accessibilityLabel="Açıklama" />
+      </View>
+    </BottomSheet>
   );
 }
 
@@ -241,6 +293,11 @@ function LocationSheet({ visible, onClose, onSend, toastError }: { visible: bool
 }
 
 const styles = StyleSheet.create({
+  thumbs: { gap: space.sm, paddingVertical: space.xs },
+  thumb: { width: 96, height: 96, borderRadius: radius.md, backgroundColor: colors.surface3 },
+  thumbVideo: { alignItems: "center", justifyContent: "center", gap: space.xs, padding: space.xs },
+  thumbName: { ...type.caption, color: colors.textSecondary, textAlign: "center" },
+  warn: { ...type.caption, color: colors.danger },
   grid: { flexDirection: "row", flexWrap: "wrap", paddingHorizontal: layout.screenPadding - space.xs, paddingBottom: space.md, rowGap: space.md },
   tile: { width: "25%", alignItems: "center", gap: space.s, paddingVertical: space.xs },
   tileIcon: { width: 54, height: 54, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
