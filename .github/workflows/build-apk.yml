@@ -4,6 +4,7 @@ on:
   workflow_dispatch:   # elle tetikleme butonu
   push:
     branches: [main]
+  pull_request:        # PR'daki her gönderimde deneme APK'sı
 
 jobs:
   build:
