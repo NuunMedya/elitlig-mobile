@@ -33,6 +33,8 @@ export type GameCommand =
       sound?: boolean;
       reduceMotion?: boolean;
       perks?: { penalti?: { aimBonus: number } } | null;
+      /** Oyun HUD'unun boş bırakacağı köşe (RN durdur düğmesi), CSS px. */
+      hudInset?: { top: number; right: number };
       /** Oyuna özgü gerçek kadro (Penaltı: atıcı + kaleciler, Slalom: koşucu + savunmalar, Sektir: oyuncu + geçilecekler, Savunma Hattı / Kadro Koşusu: kaptan + rakip takımlar). */
       roster?: Record<string, unknown> | null;
     };

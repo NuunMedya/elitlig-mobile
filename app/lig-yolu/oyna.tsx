@@ -20,7 +20,8 @@ import { BackHandler, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { confirmAction } from "@/components/admin";
-import { ResultSheet } from "@/components/puzzle/LevelSheets";
+import { GameButton, ResultSheet } from "@/components/puzzle/LevelSheets";
+import { CARTOON } from "@/lib/game/cartoon";
 import { ShopSheet } from "@/components/puzzle/sheets";
 import { StageBackdrop } from "@/components/puzzle/StageBackdrop";
 import { ConfettiBurst } from "@/components/game/Celebration";
@@ -164,7 +165,8 @@ export default function PuzzlePlayScreen() {
     <SafeAreaView style={styles.screen} edges={["top", "bottom"]}>
       <StageBackdrop game={module.key} />
       <View style={styles.top}>
-        <RoundButton icon="close" onPress={() => void leave()} label="Seviyeden çık" colors={stage.button} />
+        {/* Çıkış düğmesi yok: oyundan çıkış mola kartında (durdur → Oyundan çık). */}
+        <View style={styles.roundSpacer} />
         <View style={styles.ribbonWrap}>
           <LinearGradient colors={stage.ribbon} start={LEFT} end={RIGHT} style={styles.ribbon}>
             <Text style={styles.ribbonSmall} numberOfLines={1} {...textScale.badge}>
@@ -209,15 +211,11 @@ export default function PuzzlePlayScreen() {
             <Text style={styles.pauseText} {...textScale.dense}>
               {module.title} · {level}. seviye
             </Text>
-            <Touchable onPress={() => setPaused(false)} style={styles.resume} accessibilityRole="button" haptic="medium">
-              <LinearGradient colors={stage.button} start={TOP} end={BOTTOM} style={styles.resumeFill}>
-                <Ionicons name="play" size={22} color={STAGE_COMMON.white} />
-                <Text style={styles.resumeText} {...textScale.badge}>DEVAM ET</Text>
-              </LinearGradient>
-            </Touchable>
-            <Touchable onPress={() => void leave()} style={styles.quit} accessibilityRole="button">
-              <Text style={styles.quitText} {...textScale.dense}>Seviyeden çık</Text>
-            </Touchable>
+            <View style={styles.pauseBtns}>
+              <GameButton label="DEVAM ET" icon="play" onPress={() => setPaused(false)} />
+              <GameButton label="OYUNDAN ÇIK" icon="exit-outline" tone="danger" small onPress={() => void leave()} />
+            </View>
+            <Text style={styles.quitText} {...textScale.dense}>Çıkarsan bu seviye kaybedilmiş sayılır, 1 can gider.</Text>
           </View>
         </View>
       ) : null}
@@ -280,6 +278,8 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   top: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: layout.screenPadding, paddingTop: space.xs, paddingBottom: space.sm },
   round: { width: 46, height: 50 },
+  roundSpacer: { width: 46, height: 50 },
+  pauseBtns: { alignSelf: "stretch", gap: space.sm },
   roundShadow: { position: "absolute", top: 4, left: 0, width: 46, height: 46, borderRadius: radius.pill, backgroundColor: STAGE_COMMON.shadow },
   roundFill: { width: 46, height: 46, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", borderWidth: 3, borderColor: STAGE_COMMON.white },
   ribbonWrap: { flex: 1, alignItems: "center" },
@@ -308,7 +308,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.xxl,
     backgroundColor: STAGE_COMMON.card[0],
     borderWidth: 4,
-    borderColor: STAGE_COMMON.white,
+    borderColor: CARTOON.outline,
   },
   pauseHead: { position: "absolute", top: -22, paddingHorizontal: space.xl, paddingVertical: space.xs, borderRadius: radius.md, borderWidth: 3, borderColor: STAGE_COMMON.white },
   pauseTitle: { ...type.h2, fontFamily: fonts.bold, color: STAGE_COMMON.ink, letterSpacing: 3 },
