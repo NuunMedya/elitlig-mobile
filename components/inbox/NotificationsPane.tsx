@@ -512,6 +512,7 @@ export function NotificationsPane({
         iconTone={section.key === dayKey(new Date().toISOString()) ? "violet" : "neutral"}
         size="group"
         inset="flush"
+        style={styles.dayHeader}
       />
     ),
     [],
@@ -748,6 +749,9 @@ const styles = StyleSheet.create({
   },
   more: {
     marginTop: space.md,
+  },
+  dayHeader: {
+    paddingTop: space.md,
   },
 
   /* Bildirim satırı — grup içi konumla köşe ve ayraç. */
