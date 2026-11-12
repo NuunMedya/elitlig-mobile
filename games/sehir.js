@@ -44,16 +44,16 @@
   var PLOTS = {
     saha: { x: 0, z: 0, r: 14 },
     tribun: { x: 0, z: 17, r: 8, label: [0, 22] },
-    soyunma: { x: -58, z: -20, r: 11 },
-    kantin: { x: -58, z: 6, r: 11 },
-    magaza: { x: -58, z: 32, r: 11 },
-    kulup: { x: 58, z: -20, r: 11 },
-    saglik: { x: 58, z: 6, r: 11 },
-    medya: { x: 58, z: 32, r: 11 },
-    antrenman: { x: -28, z: -62, r: 14 },
-    akademi: { x: 28, z: -62, r: 14 },
-    kamp: { x: -32, z: 66, r: 13 },
-    ulasim: { x: 30, z: 66, r: 13 },
+    soyunma: { x: -78, z: -36, r: 13 },
+    kantin: { x: -78, z: 4, r: 13 },
+    magaza: { x: -78, z: 44, r: 13 },
+    kulup: { x: 78, z: -36, r: 13 },
+    saglik: { x: 78, z: 4, r: 13 },
+    medya: { x: 78, z: 44, r: 13 },
+    antrenman: { x: -36, z: -92, r: 18 },
+    akademi: { x: 36, z: -92, r: 18 },
+    kamp: { x: -40, z: 96, r: 15 },
+    ulasim: { x: 40, z: 96, r: 15 },
   };
   var levels = {};
   ORDER.forEach(function (k) {
@@ -67,7 +67,7 @@
 
   /* ─────────────────────────── kamera ─────────────────────────── */
 
-  var HOME_DIST = 265;
+  var HOME_DIST = 360;
   var cam = { yaw: -0.3, pitch: 0.8, dist: HOME_DIST, tx: 0, tz: 4 };
   var camGoal = { yaw: -0.3, pitch: 0.8, dist: HOME_DIST, tx: 0, tz: 4 };
   var idleT = 0;
@@ -83,7 +83,7 @@
     }
     camGoal.tx = p.x;
     camGoal.tz = p.z;
-    camGoal.dist = key === "saha" || key === "tribun" ? 135 : 78;
+    camGoal.dist = key === "saha" || key === "tribun" ? 135 : 82;
     idleT = 0;
   }
 
@@ -1118,7 +1118,255 @@
     R.sirens.push(siren);
   }
 
+  /** Soyunma: PROFESYONEL SOYUNMA TESİSİ — yeşil çatılı cam pavyon, oyuncu tüneli, hidroterapi havuzları. */
+  function landmarkLockerRoom(g) {
+    plane(g, 26, 22, mat("#b9b4ae", 0.9), 0, 0.03, 0);
+    // ana pavyon: cam cephe + koyu taş yan duvarlar
+    box(g, 20, 5, 10, "#334155", 0, 0, -4, 0.6);
+    var glass = new T.MeshStandardMaterial({ color: 0x1e3a5f, roughness: 0.05, metalness: 0.85, envMapIntensity: 1.5, emissive: 0xfff1c9, emissiveIntensity: 0 });
+    R.nightMats.push(glass);
+    box(g, 18, 4.2, 0.2, glass, 0, 0.3, 1.05);
+    // yeşil çatı (bitki dokusu)
+    var green = G3.turfTexture(4, 2, "#3f9d4a", "#4caf55", 32);
+    var roof = K.mesh(new T.BoxGeometry(21, 0.5, 11), K.std(0xffffff, 0.95, 0, { map: green }), true, true);
+    roof.position.set(0, 5.2, -4);
+    g.add(roof);
+    for (var b = -4; b <= 4; b++) {
+      var bush = K.mesh(R.leafGeo, mat(b % 2 ? "#16a34a" : "#22c55e", 0.8), true, false);
+      bush.position.set(b * 2.2, 5.9, -4 + (b % 2) * 2);
+      bush.scale.setScalar(0.55);
+      g.add(bush);
+    }
+    // kulüp rengi ışık şeridi ve isim
+    var band = new T.Mesh(new T.BoxGeometry(20.2, 0.3, 10.2), new T.MeshBasicMaterial({ color: kit.primary, toneMapped: false }));
+    band.position.set(0, 4.85, -4);
+    g.add(band);
+    sign(g, "SOYUNMA · PERFORMANS", 9, 1, 0, 3.9, 1.2, kit.primary);
+    crest(g, -8.2, 2.6, 1.3, 0.9, false);
+    // oyuncu tüneli: stadyuma uzanan kapalı geçit (kulüp renginde kemer halkalar)
+    var tunnelMat = new T.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.3, metalness: 0.2, side: T.DoubleSide, transparent: true, opacity: 0.9 });
+    var tunnel = new T.Mesh(new T.CylinderGeometry(2.2, 2.2, 7, 20, 1, true, 0, Math.PI), tunnelMat);
+    tunnel.rotation.z = Math.PI / 2;
+    tunnel.position.set(9.5, 0, -4);
+    g.add(tunnel);
+    for (var r = 0; r < 5; r++) {
+      var hoop = new T.Mesh(new T.TorusGeometry(2.25, 0.12, 6, 20, Math.PI), new T.MeshBasicMaterial({ color: kit.primary, toneMapped: false }));
+      hoop.rotation.y = Math.PI / 2;
+      hoop.position.set(6.6 + r * 1.45, 0, -4);
+      g.add(hoop);
+    }
+    // hidroterapi: sıcak ve buz havuzu, buhar
+    pool(g, 4.5, 3, -6, 7, 0.3, 0x7dd3fc);
+    pool(g, 4.5, 3, 0.5, 7, 0.3, 0x38bdf8);
+    R.steam.push({ x: WP.x + 0.5, y: 0.8, z: WP.z + 7 });
+    lounger(g, 6, 7.5, -0.4);
+    lounger(g, 7.6, 7.5, -0.4);
+  }
+
+  /** Medya: KULÜP TV — dev LED cepheli stüdyo, kafes yayın kulesi, uydu çanağı çiftliği, yayın araçları. */
+  function landmarkTV(g) {
+    plane(g, 26, 22, mat("#b9b4ae", 0.9), 0, 0.03, 0);
+    box(g, 14, 9, 10, "#0f172a", -3, 0, -4, 0.4);
+    // LED cephe: canlı yayın ekranı
+    var led = new T.Mesh(new T.PlaneGeometry(13, 7.5), new T.MeshBasicMaterial({ map: R.screenTex, toneMapped: false }));
+    led.position.set(-3, 4.8, 1.06);
+    g.add(led);
+    box(g, 14.4, 0.5, 10.4, kit.primary, -3, 9, -4, 0.4);
+    sign(g, "ELİTLİG TV", 6, 1.2, -3, 10.6, 1.0, "#0f172a", "#facc15");
+    // "CANLI" ışığı
+    var live = new T.Sprite(new T.SpriteMaterial({ map: K.glowTexture(), color: 0xff2244, transparent: true, depthWrite: false, blending: T.AdditiveBlending }));
+    live.position.set(3.2, 10.6, 1.2);
+    live.scale.set(2.2, 2.2, 1);
+    g.add(live);
+    R.sirens.push(live);
+    // kafes yayın kulesi (kırmızı-beyaz), tepede dönen anten
+    var tw = new T.Group();
+    for (var y = 0; y < 12; y++) {
+      var col = y % 2 ? "#f8fafc" : "#ef4444";
+      var w = 1.6 - y * 0.08;
+      [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(function (q) {
+        cyl(tw, 0.07, 0.07, 2.6, col, q[0] * w, y * 2.5, q[1] * w, 5);
+      });
+      box(tw, w * 2 + 0.2, 0.1, w * 2 + 0.2, "#e2e8f0", 0, y * 2.5 + 2.45, 0);
+    }
+    var dish = K.mesh(new T.SphereGeometry(1.1, 16, 8, 0, Math.PI * 2, 0, Math.PI / 3), mat("#f8fafc", 0.4, { side: T.DoubleSide }), true, false);
+    dish.rotation.x = -Math.PI / 2;
+    dish.position.y = 30.5;
+    tw.add(dish);
+    tw.position.set(9, 0, -6);
+    g.add(tw);
+    R.spin.push(dish);
+    var beacon = new T.Sprite(new T.SpriteMaterial({ map: K.glowTexture(), color: 0xff3344, transparent: true, depthWrite: false, blending: T.AdditiveBlending }));
+    beacon.position.set(9, 31.8, -6);
+    beacon.scale.set(2, 2, 1);
+    g.add(beacon);
+    R.sirens.push(beacon);
+    // uydu çanağı çiftliği
+    [[4, 4], [7, 4], [10, 4], [7, 7.5]].forEach(function (p, i) {
+      cyl(g, 0.12, 0.18, 1.4, "#94a3b8", p[0], 0, p[1], 6);
+      var d = K.mesh(new T.SphereGeometry(1.3, 16, 8, 0, Math.PI * 2, 0, Math.PI / 3), mat("#f8fafc", 0.4, { side: T.DoubleSide }), true, false);
+      d.rotation.set(-1.0, 0.4 * (i - 1.5), 0);
+      d.position.set(p[0], 2, p[1]);
+      g.add(d);
+    });
+    // yayın araçları (OB van)
+    [-8, -3].forEach(function (x) {
+      var van = new T.Group();
+      box(van, 2.4, 2.8, 7, "#f8fafc", 0, 0.5, 0, 0.4);
+      box(van, 2.42, 0.5, 7.02, kit.primary, 0, 1.6, 0, 0.4);
+      var vd = K.mesh(new T.SphereGeometry(0.8, 12, 6, 0, Math.PI * 2, 0, Math.PI / 3), mat("#e2e8f0", 0.4, { side: T.DoubleSide }), true, false);
+      vd.rotation.x = -0.9;
+      vd.position.set(0, 3.8, -2);
+      van.add(vd);
+      [[-1.1, -2.4], [1.1, -2.4], [-1.1, 2.4], [1.1, 2.4]].forEach(function (q) {
+        var wh = K.mesh(R.wheelGeo, mat("#111827"), true, false);
+        wh.position.set(q[0], 0.4, q[1]);
+        wh.scale.setScalar(1.3);
+        van.add(wh);
+      });
+      van.position.set(x, 0, 7);
+      van.rotation.y = Math.PI / 2;
+      g.add(van);
+    });
+  }
+
+  /** Antrenman: PERFORMANS MERKEZİ — üç saha, tonoz çatılı cam merkez, rüzgâr tüneli, koşu pisti, projektörler. */
+  function landmarkPerformance(g) {
+    plane(g, 46, 32, mat("#2f8f45", 0.95), 0, 0.02, 0);
+    // üç antrenman sahası
+    [-15, 0, 15].forEach(function (fx) {
+      plane(g, 13, 17, new T.MeshStandardMaterial({ map: pitchTexture(6, { w: 40, d: 26 }), roughness: 0.85 }), fx, 0.04, 2);
+      goal(g, fx, -6, 3.6, 2, 0, true, true);
+      goal(g, fx, 10, 3.6, 2, Math.PI, true, true);
+    });
+    // koşu pisti (çevre)
+    var track = new T.Mesh(new T.RingGeometry(1, 1.06, 64), mat("#c2410c", 0.9, { side: T.DoubleSide }));
+    track.rotation.x = -Math.PI / 2;
+    track.scale.set(23, 14.5, 1);
+    track.position.set(0, 0.03, 2);
+    g.add(track);
+    [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(function (q) {
+      flood(g, q[0] * 22, 2 + q[1] * 11, 14, q[0] * 10, 2);
+    });
+    // tonoz çatılı cam performans merkezi
+    var vault = new T.MeshStandardMaterial({ color: 0x1e3a5f, roughness: 0.05, metalness: 0.85, envMapIntensity: 1.5, emissive: 0xbaf3ff, emissiveIntensity: 0, side: T.DoubleSide });
+    R.nightMats.push(vault);
+    var hall = new T.Mesh(new T.CylinderGeometry(6, 6, 26, 28, 1, false, 0, Math.PI), vault);
+    hall.rotation.z = Math.PI / 2;
+    hall.position.set(0, 0, -15);
+    hall.castShadow = true;
+    g.add(hall);
+    for (var r = -12; r <= 12; r += 3) {
+      var rib = new T.Mesh(new T.TorusGeometry(6.05, 0.12, 6, 24, Math.PI), mat("#e2e8f0", 0.3));
+      rib.rotation.y = Math.PI / 2;
+      rib.position.set(r, 0, -15);
+      g.add(rib);
+    }
+    sign(g, "PERFORMANS MERKEZİ", 9, 1.1, 0, 4.2, -8.95, "#0f172a", "#22d3ee");
+    // rüzgâr tüneli ve veri kulesi
+    var tunnel = K.mesh(new T.CylinderGeometry(1.8, 1.8, 12, 20), new T.MeshStandardMaterial({ color: 0xe2e8f0, metalness: 0.7, roughness: 0.25 }), true, false);
+    tunnel.rotation.z = Math.PI / 2;
+    tunnel.position.set(-17, 2, -15);
+    g.add(tunnel);
+    var dc = new T.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.15, metalness: 0.6, emissive: 0x22d3ee, emissiveIntensity: 0.25 });
+    box(g, 4, 9, 4, dc, 18, 0, -15);
+    var band = new T.Mesh(new T.BoxGeometry(4.1, 0.25, 4.1), new T.MeshBasicMaterial({ color: 0x22d3ee, toneMapped: false }));
+    for (var b = 1; b < 4; b++) {
+      var bb = band.clone();
+      bb.position.set(18, b * 2.4, -15);
+      g.add(bb);
+    }
+  }
+
+  /** Akademi: YATILI AKADEMİ — okul binası, yurt kulesi, tribünlü mini stadyum, bahçe. */
+  function landmarkAcademy(g) {
+    plane(g, 44, 30, mat("#2f8f45", 0.95), 0, 0.02, 0);
+    // mini stadyum sahası + tek tribün
+    plane(g, 22, 14, new T.MeshStandardMaterial({ map: pitchTexture(5, { w: 40, d: 26 }), roughness: 0.85 }), -6, 0.04, 3);
+    [-1, 1].forEach(function (sd) {
+      goal(g, -6 + sd * 10.4, 3, 4, 2, sd > 0 ? -Math.PI / 2 : Math.PI / 2, true, true);
+    });
+    stand(g, 20, 4, 1.0, 0.6, -6, 10.6, Math.PI, { roof: true, roofColor: "#16a34a", back: "#334155" });
+    [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(function (q) {
+      flood(g, -6 + q[0] * 12.5, 3 + q[1] * 8.5, 10, -6, 3);
+    });
+    // okul binası (eğik çatılı, renkli cephe panelleri)
+    house(g, 18, 7, 7, "#fef3c7", "#16a34a", "gable", -6, -12);
+    for (var p = -3; p <= 3; p++) {
+      var panel = new T.Mesh(new T.PlaneGeometry(1.6, 5), mat(["#f97316", "#22c55e", "#3b82f6", "#facc15"][(p + 3) % 4], 0.6));
+      panel.position.set(-6 + p * 2.4, 3.6, -8.44);
+      g.add(panel);
+    }
+    sign(g, "ELİTLİG AKADEMİ", 7, 1.1, -6, 6.4, -8.4, "#16a34a");
+    // yurt kulesi (cam)
+    glassTower(g, 7, 7, 16, 14, -8, 0x9fd3c7);
+    sign(g, "YURT", 2.6, 0.9, 14, 14.2, -4.44, "#1d4ed8");
+    // bahçe: ağaçlar ve bank
+    tree(g, 13, 4, 1);
+    tree(g, 17, 9, 0.9);
+    bench(g, 14.5, 7, 0, 3);
+  }
+
+  /** Ulaşım: METRO DURAĞI — tonoz cam istasyon, yürüyen merdiven girişi, otobüs terminali, katlı otopark. */
+  function landmarkTransit(g) {
+    plane(g, 30, 26, mat("#475569", 0.95), 0, 0.03, 0);
+    // tonoz cam istasyon
+    var glass = new T.MeshStandardMaterial({ color: 0x9cc9ef, roughness: 0.05, metalness: 0.6, transparent: true, opacity: 0.6, emissive: 0xfff2c4, emissiveIntensity: 0, side: T.DoubleSide });
+    R.nightMats.push(glass);
+    var vault = new T.Mesh(new T.CylinderGeometry(5, 5, 18, 28, 1, true, 0, Math.PI), glass);
+    vault.rotation.z = Math.PI / 2;
+    vault.position.set(-4, 2.5, -6);
+    g.add(vault);
+    for (var r = -8; r <= 8; r += 2) {
+      var rib = new T.Mesh(new T.TorusGeometry(5.05, 0.12, 6, 24, Math.PI), mat("#e2e8f0", 0.3));
+      rib.rotation.y = Math.PI / 2;
+      rib.position.set(-4 + r, 2.5, -6);
+      g.add(rib);
+    }
+    box(g, 18, 2.5, 10, "#e2e8f0", -4, 0, -6, 0.5);
+    // giriş: M simgesi ve yürüyen merdiven
+    var mTex = tex("metroM", 128, 128, function (c) {
+      c.fillStyle = "#dc2626";
+      c.beginPath();
+      c.arc(64, 64, 60, 0, Math.PI * 2);
+      c.fill();
+      c.fillStyle = "#fff";
+      c.font = "900 84px " + A.FONT;
+      c.textAlign = "center";
+      c.textBaseline = "middle";
+      c.fillText("M", 64, 70);
+    });
+    cyl(g, 0.12, 0.12, 5, "#94a3b8", 7, 0, 1, 8);
+    var mSign = new T.Sprite(new T.SpriteMaterial({ map: mTex, toneMapped: false }));
+    mSign.position.set(7, 5.8, 1);
+    mSign.scale.set(2.2, 2.2, 1);
+    g.add(mSign);
+    var esc = K.mesh(new T.BoxGeometry(3, 0.4, 7), mat("#94a3b8", 0.4), true, false);
+    esc.rotation.x = -0.32;
+    esc.position.set(-4, 1.1, 2.2);
+    g.add(esc);
+    sign(g, "STADYUM İSTASYONU", 9, 1, -4, 4.3, -0.9, "#dc2626");
+    // otobüs terminali: kanopi + iki kulüp otobüsü
+    box(g, 12, 0.25, 4, "#f8fafc", 6, 3.6, 9, 0.4);
+    [0, 4, 8, 12].forEach(function (x) {
+      cyl(g, 0.12, 0.12, 3.6, "#94a3b8", x, 0, 10.6, 8);
+    });
+    vehicle(g, "bus", 2.5, 8.5, Math.PI / 2);
+    vehicle(g, "bus", 9.5, 8.5, Math.PI / 2);
+    // katlı otopark (üç kat, arabalı)
+    for (var f = 0; f < 3; f++) {
+      box(g, 9, 0.35, 9, "#94a3b8", 10, f * 3, -6, 0.6);
+      [-2.5, 0, 2.5].forEach(function (x, i) {
+        if ((f + i) % 3 !== 2) carMesh(g, ["#ef4444", "#3b82f6", "#f8fafc", "#111827"][(f + i) % 4], 10 + x, -6 - 1.6, 0).position.y = f * 3 + 0.35;
+      });
+    }
+    box(g, 9.2, 0.6, 9.2, kit.primary, 10, 9, -6, 0.4);
+    sign(g, "P", 1.6, 1.6, 10, 10.6, -1.35, "#2563eb");
+    R.metro = true;
+  }
+
   BUILD.soyunma = function (g, lv) {
+    if (lv >= 6) return landmarkLockerRoom(g);
     if (lv === 0) return emptyPlot(g);
     if (lv === 1) {
       tree(g, 0, -1, 1.5);
@@ -1384,6 +1632,7 @@
   };
 
   BUILD.medya = function (g, lv) {
+    if (lv >= 5) return landmarkTV(g);
     if (lv === 0) return emptyPlot(g);
     if (lv === 1) {
       // tripod + telefon
@@ -1459,6 +1708,10 @@
   };
 
   BUILD.antrenman = function (g, lv) {
+    if (lv >= 6) {
+      R.drills = { x: WP.x, z: WP.z, n: 15, wide: true };
+      return landmarkPerformance(g);
+    }
     if (lv === 0) return emptyPlot(g, 24, 18);
     R.drills = { x: WP.x, z: WP.z, n: 3 + lv * 2, wide: lv >= 4 };
     var cones = function (n, x0, z0, dx) {
@@ -1510,6 +1763,10 @@
   };
 
   BUILD.akademi = function (g, lv) {
+    if (lv >= 4) {
+      R.kids = { x: WP.x - 6, z: WP.z + 3, n: 16 };
+      return landmarkAcademy(g);
+    }
     if (lv === 0) return emptyPlot(g, 24, 18);
     R.kids = { x: WP.x, z: WP.z, n: 4 + lv * 3 };
     if (lv === 1) {
@@ -1583,6 +1840,7 @@
   };
 
   BUILD.ulasim = function (g, lv) {
+    if (lv >= 6) return landmarkTransit(g);
     if (lv === 0) return emptyPlot(g, 22, 18);
     if (lv === 1) {
       box(g, 4, 0.1, 1.5, "#94a3b8", 0, 0, 0);
@@ -1690,12 +1948,18 @@
   function initGL() {
     if (R || glFailed) return;
     try {
-      R = G3.stage({ theme: themeNow(), fog: [170, 420], far: 800, shadow: { size: 2048, box: [-90, 90, 90, -90], far: 320, dist: 160 }, fxMax: 700, dustMax: 500 });
+      R = G3.stage({ theme: themeNow(), fog: [240, 560], far: 1000, shadow: { size: 2048, box: [-125, 125, 125, -125], far: 420, dist: 200 }, fxMax: 700, dustMax: 500 });
       if (!R) {
         glFailed = true;
         return;
       }
       R.renderer.shadowMap.autoUpdate = true;
+      // geniş gölge kutusu: çimde çizgi (gölge akne) olmasın diye sapma büyütülür
+      // uzak kamera: yakın düzlem açılır (zemin katmanları derinlikte çakışmasın)
+      R.camera.near = 1.5;
+      R.camera.updateProjectionMatrix();
+      R.sun.shadow.bias = -0.0015;
+      R.sun.shadow.normalBias = 0.18;
       R.groups = {};
       R.flags = [];
       R.spin = [];
@@ -1756,16 +2020,16 @@
     // ada: çim + kenarda kum + su
     var grass = G3.turfTexture(8, 8, "#5aa856", "#61b05c", 64);
     grass.repeat.set(12, 12);
-    var ground = K.mesh(new T.PlaneGeometry(240, 230), K.std(0xffffff, 0.95, 0, { map: grass, envMapIntensity: 0.25 }), false, true);
+    var ground = K.mesh(new T.PlaneGeometry(330, 320), K.std(0xffffff, 0.95, 0, { map: grass, envMapIntensity: 0.25 }), false, true);
     ground.rotation.x = -Math.PI / 2;
     s.add(ground);
-    var sand = K.mesh(new T.CircleGeometry(185, 48), K.std(0xe9d8a6, 0.95), false, true);
+    var sand = K.mesh(new T.CircleGeometry(250, 56), K.std(0xe9d8a6, 0.95), false, true);
     sand.rotation.x = -Math.PI / 2;
-    sand.position.y = -0.08;
+    sand.position.y = -0.6;
     s.add(sand);
     var water = new T.Mesh(new T.PlaneGeometry(900, 900), new T.MeshStandardMaterial({ color: 0x2c8bd6, roughness: 0.12, metalness: 0.3, envMapIntensity: 1 }));
     water.rotation.x = -Math.PI / 2;
-    water.position.y = -0.3;
+    water.position.y = -1.6;
     s.add(water);
     R.sea = water.material;
     // yollar: stadyum çevresinde halka + arsalara kollar
@@ -1798,10 +2062,33 @@
       strip(j, RZS, 1.8, 0.15, dash, 0.13);
     }
     R.roadLoop = { x: RX, zn: RZN, zs: RZS };
+    // Arsalara giden yan yollar: çevre yolunun en yakın noktasından arsanın kenarına
+    // (geniş yerleşimde her birimin kendi girişi olsun, yönetmesi kolay).
+    ORDER.forEach(function (k) {
+      if (k === "saha" || k === "tribun") return;
+      var pl = PLOTS[k];
+      var qx = Math.max(-RX, Math.min(RX, pl.x)), qz = Math.max(RZN, Math.min(RZS, pl.z));
+      var edge = pl.r + 2;
+      if (Math.abs(pl.x) > RX) {
+        var x0 = qx + Math.sign(pl.x) * 2.2, x1 = pl.x - Math.sign(pl.x) * edge;
+        strip((x0 + x1) / 2, pl.z, Math.abs(x1 - x0), 5.6, walk, 0.03);
+        strip((x0 + x1) / 2, pl.z, Math.abs(x1 - x0), 4.0, road, 0.08);
+        if (Math.abs(pl.z - qz) > 1) {
+          strip(qx, (pl.z + qz) / 2, 5.6, Math.abs(pl.z - qz), walk, 0.03);
+          strip(qx, (pl.z + qz) / 2, 4.0, Math.abs(pl.z - qz), road, 0.08);
+        }
+        lampPost((x0 + x1) / 2, pl.z + 3.6);
+      } else {
+        var z0 = qz + Math.sign(pl.z) * 2.2, z1 = pl.z - Math.sign(pl.z) * edge;
+        strip(pl.x, (z0 + z1) / 2, 5.6, Math.abs(z1 - z0), walk, 0.03);
+        strip(pl.x, (z0 + z1) / 2, 4.0, Math.abs(z1 - z0), road, 0.08);
+        lampPost(pl.x + 3.6, (z0 + z1) / 2);
+      }
+    });
     // ağaçlar ve sokak lambaları
     var rnd = A.seeded(42);
     for (var t = 0; t < 70; t++) {
-      var a = rnd() * Math.PI * 2, r = 98 + rnd() * 20;
+      var a = rnd() * Math.PI * 2, r = 132 + rnd() * 24;
       treeAt(Math.cos(a) * r, Math.sin(a) * r * 0.95, 0.8 + rnd() * 0.8);
     }
     [[-RX - 3.6, -20], [-RX - 3.6, 0], [-RX - 3.6, 20], [RX + 3.6, -20], [RX + 3.6, 0], [RX + 3.6, 20], [-20, RZS + 3.6], [20, RZS + 3.6], [-20, RZN - 3.6], [20, RZN - 3.6]].forEach(function (p) {
@@ -1809,7 +2096,7 @@
     });
     // uzak tepeler
     for (var hI = 0; hI < 14; hI++) {
-      var ang = (hI / 14) * Math.PI * 2, rr = 260 + (hI % 3) * 30;
+      var ang = (hI / 14) * Math.PI * 2, rr = 330 + (hI % 3) * 35;
       var hill = new T.Mesh(new T.ConeGeometry(40 + (hI % 4) * 12, 26 + (hI % 5) * 9, 7), new T.MeshLambertMaterial({ color: hI % 2 ? 0x4b8f5a : 0x5f9e6a }));
       hill.position.set(Math.cos(ang) * rr, 0, Math.sin(ang) * rr);
       s.add(hill);
@@ -1995,11 +2282,11 @@
       }
       R.scene.add(R.train);
       // ray: yüksek köprü
-      var rail = new T.Mesh(new T.BoxGeometry(4, 0.6, 400), mat("#94a3b8"));
-      rail.position.set(98, 5.5, 0);
+      var rail = new T.Mesh(new T.BoxGeometry(4, 0.6, 440), mat("#94a3b8"));
+      rail.position.set(124, 5.5, 0);
       rail.castShadow = true;
       R.scene.add(rail);
-      for (var p = -180; p <= 180; p += 20) cyl(R.scene, 0.6, 0.6, 5.5, "#cbd5e1", 98, 0, p, 8);
+      for (var p = -200; p <= 200; p += 20) cyl(R.scene, 0.6, 0.6, 5.5, "#cbd5e1", 124, 0, p, 8);
     }
   }
 
@@ -2301,8 +2588,8 @@
       R.bus.rotation.y = bp.ry;
     }
     if (R.train) {
-      var tz = ((A.time * 14) % 420) - 210;
-      R.train.position.set(98, 6.4, tz);
+      var tz = ((A.time * 14) % 460) - 230;
+      R.train.position.set(124, 6.4, tz);
     }
     // inşaat sahnesi
     var con = R.construct;
@@ -2452,7 +2739,7 @@
     if (!drag.moved) return;
     // yatay sürükleme: kamerayı döndür; dikey: yakınlaş/uzaklaş
     camGoal.yaw -= dx * 0.006;
-    camGoal.dist = A.clamp(camGoal.dist + dy * 0.45, 50, 300);
+    camGoal.dist = A.clamp(camGoal.dist + dy * 0.55, 50, 420);
     cam.yaw = camGoal.yaw;
   }
   function up(p) {
