@@ -13,12 +13,12 @@ import { get, post } from "../http";
  * Alan anahtarları sunucudaki constants/adZones.js ile aynıdır.
  */
 
-export type AppAdZoneKey = "app_home" | "app_match" | "app_inline" | "app_popup";
+export type AppAdZoneKey = "app_home" | "app_match" | "app_inline" | "app_popup" | "app_rewarded";
 export type AdMode = "sponsor" | "google" | "auto";
 
 export interface AdZoneConfig {
   mode: AdMode;
-  kind: "banner" | "inline" | "popup";
+  kind: "banner" | "inline" | "popup" | "rewarded";
   google: { android?: string; ios?: string; format: string } | null;
   rotateSeconds: number;
   delaySeconds?: number;
@@ -58,6 +58,7 @@ const ZONE_IMAGE: Record<AppAdZoneKey, [keyof AdSponsor["images"], keyof AdSpons
   app_match: ["app_banner", "web_mobile"],
   app_inline: ["app_banner", "web_mobile"],
   app_popup: ["app_popup", "web_popup"],
+  app_rewarded: ["app_popup", "web_popup"],
 };
 
 export function adImage(sponsor: AdSponsor, zone: AppAdZoneKey): string | null {

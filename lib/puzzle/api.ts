@@ -50,6 +50,8 @@ export interface PuzzleProfile {
   stars: number;
   stadium: StadiumState;
   daily: { available: boolean; streak: number; next_streak: number; reward: DailyReward; rewards: DailyReward[] };
+  /** Reklamla can: bugün kalan hak (eski sunucuda yok). */
+  ad_lives?: { left: number; per_day: number; seconds: number };
 }
 
 export interface PuzzleGameProgress {
@@ -113,6 +115,10 @@ export const finishLevel = (
 export const buyItem = (item: string) => post<{ item: string; profile: PuzzleProfile }>("/api/puzzle/shop", { item });
 export const buildStadium = (id: string) =>
   post<{ item: StadiumItem; zone_done: boolean; bonus_coins: number; profile: PuzzleProfile }>("/api/puzzle/stadium/build", { id });
+/** Ödüllü reklam: başlat (jeton) → reklam biter → ödülü iste (+1 can). */
+export const startAdLife = () => post<{ token: string; seconds: number; left: number }>("/api/puzzle/ad-life/start", undefined, { retry: false });
+export const claimAdLife = (token: string) =>
+  post<{ lives_added: number; profile: PuzzleProfile }>("/api/puzzle/ad-life/claim", { token }, { retry: false });
 export const claimDaily = () =>
   post<{ reward: DailyReward; streak: number; profile: PuzzleProfile }>("/api/puzzle/daily");
 /* ───────────────────────── KULÜP ŞEHRİ ───────────────────────── */

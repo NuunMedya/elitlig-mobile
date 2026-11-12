@@ -44,16 +44,16 @@
   var PLOTS = {
     saha: { x: 0, z: 0, r: 14 },
     tribun: { x: 0, z: 17, r: 8, label: [0, 22] },
-    soyunma: { x: -50, z: -16, r: 10 },
-    kantin: { x: -50, z: 8, r: 10 },
-    magaza: { x: -50, z: 32, r: 10 },
-    kulup: { x: 50, z: -16, r: 10 },
-    saglik: { x: 50, z: 8, r: 10 },
-    medya: { x: 50, z: 32, r: 10 },
-    antrenman: { x: -26, z: -50, r: 13 },
-    akademi: { x: 26, z: -50, r: 13 },
-    kamp: { x: -30, z: 54, r: 12 },
-    ulasim: { x: 26, z: 54, r: 12 },
+    soyunma: { x: -58, z: -20, r: 11 },
+    kantin: { x: -58, z: 6, r: 11 },
+    magaza: { x: -58, z: 32, r: 11 },
+    kulup: { x: 58, z: -20, r: 11 },
+    saglik: { x: 58, z: 6, r: 11 },
+    medya: { x: 58, z: 32, r: 11 },
+    antrenman: { x: -28, z: -62, r: 14 },
+    akademi: { x: 28, z: -62, r: 14 },
+    kamp: { x: -32, z: 66, r: 13 },
+    ulasim: { x: 30, z: 66, r: 13 },
   };
   var levels = {};
   ORDER.forEach(function (k) {
@@ -67,7 +67,7 @@
 
   /* ─────────────────────────── kamera ─────────────────────────── */
 
-  var HOME_DIST = 225;
+  var HOME_DIST = 265;
   var cam = { yaw: -0.3, pitch: 0.8, dist: HOME_DIST, tx: 0, tz: 4 };
   var camGoal = { yaw: -0.3, pitch: 0.8, dist: HOME_DIST, tx: 0, tz: 4 };
   var idleT = 0;
@@ -83,7 +83,7 @@
     }
     camGoal.tx = p.x;
     camGoal.tz = p.z;
-    camGoal.dist = key === "saha" || key === "tribun" ? 105 : 72;
+    camGoal.dist = key === "saha" || key === "tribun" ? 135 : 78;
     idleT = 0;
   }
 
@@ -620,35 +620,503 @@
       stand(g, P.w * 0.7, 3, 1.2, 0.6, 0, -hd - 0.8, 0, { concrete: "#d1d5db" });
       return;
     }
-    // 5+: dört taraflı stadyum (6: çatılı + LED, 7: Elit Arena)
-    var rows = lv >= 7 ? 12 : lv >= 6 ? 10 : 8;
-    var rise = lv >= 7 ? 0.8 : 0.68, step = 1.0;
-    var depth = rows * step;
-    var opts = { roof: lv >= 6, roofColor: lv >= 7 ? "#e2e8f0" : kit.primary, led: lv >= 6, back: lv >= 7 ? "#0f172a" : "#334155" };
-    stand(g, P.w + 6, rows, step, rise, 0, hd, Math.PI, opts);
-    stand(g, P.w + 6, rows, step, rise, 0, -hd, 0, opts);
-    stand(g, P.d + 6, rows, step, rise, -hw, 0, Math.PI / 2, opts);
-    stand(g, P.d + 6, rows, step, rise, hw, 0, -Math.PI / 2, opts);
-    // köşe kuleleri (projektör)
-    [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(function (q) {
-      flood(g, q[0] * (hw + depth * 0.7), q[1] * (hd + depth * 0.7), lv >= 6 ? 26 : 20, 0, 0);
-    });
+    bowl(g, lv, P);
+  };
+
+  /* ─────────────── stadyum kasesi (5+) ─────────────── */
+
+  /** Yuvarlak köşeli dikdörtgen yol (yarı genişlik, yarı derinlik, köşe yarıçapı). */
+  function rrect(path, hw, hd, r, hole) {
+    r = Math.min(r, hw - 0.01, hd - 0.01);
+    if (hole) {
+      path.moveTo(-hw + r, -hd);
+      path.quadraticCurveTo(-hw, -hd, -hw, -hd + r);
+      path.lineTo(-hw, hd - r);
+      path.quadraticCurveTo(-hw, hd, -hw + r, hd);
+      path.lineTo(hw - r, hd);
+      path.quadraticCurveTo(hw, hd, hw, hd - r);
+      path.lineTo(hw, -hd + r);
+      path.quadraticCurveTo(hw, -hd, hw - r, -hd);
+      path.closePath();
+      return path;
+    }
+    path.moveTo(-hw + r, -hd);
+    path.lineTo(hw - r, -hd);
+    path.quadraticCurveTo(hw, -hd, hw, -hd + r);
+    path.lineTo(hw, hd - r);
+    path.quadraticCurveTo(hw, hd, hw - r, hd);
+    path.lineTo(-hw + r, hd);
+    path.quadraticCurveTo(-hw, hd, -hw, hd - r);
+    path.lineTo(-hw, -hd + r);
+    path.quadraticCurveTo(-hw, -hd, -hw + r, -hd);
+    return path;
+  }
+  /**
+   * Halka katı: iç kenar (hw, hd) + off, kalınlık w, yükseklik h, taban y.
+   * Köşe yarıçapı içten dışa büyür: kase köşelerde yumuşak döner.
+   */
+  function ringSolid(g, hw, hd, off, w, h, y, mats, r0) {
+    var sh = new T.Shape();
+    rrect(sh, hw + off + w, hd + off + w, (r0 || 6) + off + w);
+    sh.holes.push(rrect(new T.Path(), hw + off, hd + off, (r0 || 6) + off, true));
+    var geo = new T.ExtrudeGeometry(sh, { depth: h, bevelEnabled: false, curveSegments: 10 });
+    geo.rotateX(-Math.PI / 2);
+    var m = new T.Mesh(geo, mats);
+    m.position.y = y || 0;
+    m.castShadow = true;
+    m.receiveShadow = true;
+    g.add(m);
+    return m;
+  }
+
+  /** Tribünlerin kuşbakışı seyirci dokusu: koyu koltuk zemini üstünde renkli kafalar/formalar. */
+  function seatTexture() {
+    return tex("seats:" + kit.primary + kit.secondary, 256, 256, function (c) {
+      c.fillStyle = "#1f2742";
+      c.fillRect(0, 0, 256, 256);
+      var rnd = A.seeded(77);
+      var cols = [kit.primary, kit.primary, kit.secondary, "#f8fafc", "#e2e8f0", "#facc15", "#334155", kit.primary];
+      for (var y = 0; y < 256; y += 8)
+        for (var x = 0; x < 256; x += 8) {
+          if (rnd() < 0.08) continue;
+          c.fillStyle = cols[(rnd() * cols.length) | 0];
+          c.fillRect(x + 1 + rnd() * 1.5, y + 2, 5, 5);
+          c.fillStyle = ["#f3cda8", "#d09a6e", "#7a4b2e", "#1b130d"][(rnd() * 4) | 0];
+          c.fillRect(x + 2.5, y + 0.5, 2.5, 2.5);
+        }
+    }, true);
+  }
+
+  /** Bernabéu tarzı cephe: yatay paslanmaz çelik şeritler; gece aralarında kulüp rengi LED. */
+  function louverMats() {
+    var map = tex("louver", 64, 256, function (c) {
+      for (var y = 0; y < 256; y += 16) {
+        var gr = c.createLinearGradient(0, y, 0, y + 12);
+        gr.addColorStop(0, "#f1f5f9");
+        gr.addColorStop(1, "#94a3b8");
+        c.fillStyle = gr;
+        c.fillRect(0, y, 64, 12);
+        c.fillStyle = "#1e293b";
+        c.fillRect(0, y + 12, 64, 4);
+      }
+    }, true);
+    var glow = tex("louverGlow:" + kit.primary, 64, 256, function (c) {
+      c.fillStyle = "#000";
+      c.fillRect(0, 0, 64, 256);
+      c.fillStyle = kit.primary;
+      for (var y = 12; y < 256; y += 16) c.fillRect(0, y, 64, 4);
+    }, true);
+    // 256 px = 12 m: şeritler ~0,75 m (uzaktan titreşim/moiré yapmaz)
+    map.repeat.set(0.08, 0.083);
+    glow.repeat.set(0.08, 0.083);
+    var m = new T.MeshStandardMaterial({ map: map, emissive: 0xffffff, emissiveMap: glow, emissiveIntensity: 0, roughness: 0.3, metalness: 0.75, envMapIntensity: 1.1 });
+    R.nightMats.push(m);
+    return m;
+  }
+
+  function bowl(g, lv, P) {
+    var hw = P.w / 2 + 2.2, hd = P.d / 2 + 2.2, r0 = 5;
+    var concrete = mat("#cbd5e1", 0.85);
+    var seatTex = seatTexture();
+    seatTex.repeat.set(0.22, 0.22);
+    var seats = new T.MeshLambertMaterial({ map: seatTex });
+    var lower = lv >= 7 ? 8 : lv >= 6 ? 9 : 7;
+    var step = 1.0, rise = 0.62;
+    var off = 0;
+    var y = 0;
+    // reklam panosu çemberi (saha kenarı)
+    var adMat = new T.MeshBasicMaterial({ map: R.ledTex, toneMapped: false });
+    ringSolid(g, hw - 1.2, hd - 1.2, 0, 0.25, 0.9, 0, [adMat, adMat], r0 - 1.2);
+    // alt kat
+    for (var i = 0; i < lower; i++) {
+      ringSolid(g, hw, hd, off, step, rise, y, [seats, concrete], r0);
+      off += step;
+      y += rise;
+    }
+    var top = y;
+    if (lv >= 7) {
+      // VIP locaları: ışıklı cam kuşak
+      var vip = new T.MeshStandardMaterial({ color: 0x0b1020, emissive: 0xffe2a0, emissiveIntensity: 0.25, roughness: 0.1, metalness: 0.6 });
+      R.nightMats.push(vip);
+      ringSolid(g, hw, hd, off, 1.6, 2.2, y, [concrete, vip], r0);
+      off += 1.6;
+      y += 2.2;
+      // üst kat: daha dik
+      for (var j = 0; j < 9; j++) {
+        ringSolid(g, hw, hd, off, step, 0.82, y, [seats, concrete], r0);
+        off += step;
+        y += 0.82;
+      }
+      top = y;
+    }
+    // arka duvar / cephe
+    var facadeH = top + (lv >= 6 ? 4.5 : 1.4);
+    if (lv >= 7) ringSolid(g, hw, hd, off, 0.8, facadeH, 0, [mat("#e2e8f0", 0.4), louverMats()], r0);
+    else ringSolid(g, hw, hd, off, 0.6, facadeH, 0, [concrete, mat(lv >= 6 ? "#e2e8f0" : "#94a3b8", 0.6)], r0);
+    var outer = off + (lv >= 7 ? 0.8 : 0.6);
+    // çatı
     if (lv >= 6) {
-      // dev ekran (kuzey çatısında)
-      var scr = new T.Mesh(new T.PlaneGeometry(14, 5), new T.MeshBasicMaterial({ map: R.screenTex, toneMapped: false }));
-      scr.position.set(0, rows * rise + 9.5, -hd - depth - 0.2);
-      g.add(scr);
-      box(g, 14.6, 5.6, 0.4, "#0b1020", 0, rows * rise + 6.7, -hd - depth - 0.6);
+      var roofMat = new T.MeshStandardMaterial({ color: lv >= 7 ? 0xf8fafc : 0xe2e8f0, roughness: 0.35, metalness: 0.3, transparent: true, opacity: lv >= 7 ? 0.9 : 1, side: T.DoubleSide });
+      var inner = off * (lv >= 7 ? 0.5 : 0.55);
+      ringSolid(g, hw, hd, inner, outer - inner + 0.6, 0.45, facadeH, [roofMat, mat("#94a3b8", 0.5)], r0);
+      // çatı iç kenarı: ışık bandı
+      var band = new T.MeshBasicMaterial({ color: new T.Color(kit.primary).lerp(new T.Color(0xffffff), 0.35), toneMapped: false });
+      ringSolid(g, hw, hd, inner - 0.15, 0.3, 0.25, facadeH - 0.2, [band, band], r0);
+      // makas kirişleri
+      var steel = mat("#94a3b8", 0.35);
+      for (var k = 0; k < 16; k++) {
+        var ang = (k / 16) * Math.PI * 2;
+        var cx = Math.cos(ang), cz = Math.sin(ang);
+        var ex = cx * (hw + outer), ez = cz * (hd + outer);
+        var ix = cx * (hw + inner), iz = cz * (hd + inner);
+        var len = Math.hypot(ex - ix, ez - iz);
+        var beam = K.mesh(new T.BoxGeometry(0.35, 0.6, len), steel, true, false);
+        beam.position.set((ex + ix) / 2, facadeH + 0.7, (ez + iz) / 2);
+        beam.lookAt(ex, facadeH + 0.7, ez);
+        g.add(beam);
+      }
+      // iki uçta dev ekran (çatı altında)
+      [-1, 1].forEach(function (sd) {
+        var scr = new T.Mesh(new T.PlaneGeometry(14, 5.2), new T.MeshBasicMaterial({ map: R.screenTex, toneMapped: false, side: T.DoubleSide }));
+        scr.position.set(sd * (hw + inner + 1.5), facadeH - 3.4, 0);
+        scr.rotation.y = sd > 0 ? -Math.PI / 2 : Math.PI / 2;
+        g.add(scr);
+      });
+    } else {
+      // açık stadyum: köşe projektör kuleleri
+      [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(function (q) {
+        flood(g, q[0] * (hw + outer * 0.75), q[1] * (hd + outer * 0.75), 22, 0, 0);
+      });
+    }
+    if (lv >= 6) {
+      // çatı üstü projektör sırası (gece yanar)
+      for (var f = 0; f < 4; f++) {
+        var fg = new T.Sprite(R.glowMat);
+        var aa = (f / 4) * Math.PI * 2 + Math.PI / 4;
+        fg.position.set(Math.cos(aa) * (hw + outer * 0.5), facadeH + 1.2, Math.sin(aa) * (hd + outer * 0.5));
+        fg.scale.set(14, 14, 1);
+        g.add(fg);
+        R.floodGlows.push(fg);
+      }
     }
     if (lv >= 7) {
-      // arena dış cephesi: kulüp rengi ışıklı cam kuşak
-      var ring = new T.Mesh(new T.CylinderGeometry(1, 1, 3, 48, 1, true), new T.MeshStandardMaterial({ color: kit.primary, emissive: kit.primary, emissiveIntensity: 0.4, transparent: true, opacity: 0.75, side: T.DoubleSide, roughness: 0.2, metalness: 0.4 }));
-      ring.scale.set(hw + depth + 1.5, 1, hd + depth + 1.5);
-      ring.position.y = rows * rise + 2.5;
-      g.add(ring);
-      R.arenaRing = ring.material;
+      // WEMBLEY KEMERİ: stadyumun üstünden geçen dev beyaz kemer + çatıya inen kablolar
+      var span = hw + outer + 5;
+      var lean = -(hd + outer) * 0.25;
+      var pts = [];
+      for (var s2 = 0; s2 <= 24; s2++) {
+        var u = s2 / 24, xx = -span + u * span * 2;
+        var hh = Math.sin(u * Math.PI) * 58;
+        pts.push(new T.Vector3(xx, hh, lean * Math.sin(u * Math.PI)));
+      }
+      var arch = new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3(pts), 80, 1.05, 12, false), new T.MeshStandardMaterial({ color: 0xffffff, roughness: 0.25, metalness: 0.4, emissive: 0xffffff, emissiveIntensity: 0 }));
+      arch.castShadow = true;
+      g.add(arch);
+      R.nightMats.push(arch.material);
+      var cable = new T.LineBasicMaterial({ color: 0xe2e8f0, transparent: true, opacity: 0.7 });
+      for (var c3 = 3; c3 < 22; c3 += 2) {
+        var p0 = pts[c3];
+        [-1, 1].forEach(function (sd) {
+          var geo = new T.BufferGeometry().setFromPoints([p0, new T.Vector3(p0.x * 0.92, facadeH + 0.5, sd * (hd + outer * 0.6))]);
+          g.add(new T.Line(geo, cable));
+        });
+      }
+      // dev ışıklı isim (güney cephesi)
+      var nameTex = tex("arenaName:" + kit.primary, 1024, 128, function (c) {
+        c.clearRect(0, 0, 1024, 128);
+        c.font = "900 96px " + A.FONT;
+        c.textAlign = "center";
+        c.textBaseline = "middle";
+        c.fillStyle = "#ffffff";
+        c.shadowColor = kit.primary;
+        c.shadowBlur = 24;
+        c.fillText("ELİTLİG ARENA", 512, 68);
+      });
+      var name = new T.Mesh(new T.PlaneGeometry(30, 3.8), new T.MeshBasicMaterial({ map: nameTex, transparent: true, toneMapped: false }));
+      name.position.set(0, facadeH - 3, hd + outer + 0.12);
+      g.add(name);
+      // meydan: taş zemin, bayrak direkleri, ışık direkleri
+      var plaza = new T.Mesh(new T.PlaneGeometry((hw + outer) * 2 + 14, (hd + outer) * 2 + 12), mat("#a8a29e", 0.9));
+      plaza.rotation.x = -Math.PI / 2;
+      plaza.position.y = 0.01;
+      plaza.receiveShadow = true;
+      g.add(plaza);
+      for (var fl = -3; fl <= 3; fl++) {
+        cyl(g, 0.08, 0.08, 9, "#e2e8f0", fl * 5, 0, hd + outer + 4, 6);
+        var flag = new T.Mesh(new T.PlaneGeometry(2.2, 1.3), mat(fl % 2 ? kit.primary : kit.secondary, 0.7, { side: T.DoubleSide }));
+        flag.position.set(fl * 5 + 1.1, 8.2, hd + outer + 4);
+        g.add(flag);
+        R.flags.push(flag);
+      }
     }
-  };
+  }
+  /* ─────────────── son seviye: simge yapılar ─────────────── */
+
+  /** Cam kule: yansıtan cam, kat bantları, gece yanan pencereler. */
+  function glassTower(g, w, d, h, x, z, tint, y0) {
+    // koyu, yansıtan cam: gökyüzünü yansıtır, gece pencereler yanar
+    var glass = new T.MeshStandardMaterial({ color: new T.Color(tint || 0x7fb6e8).multiplyScalar(0.55), map: windowMats("#ffffff").map, roughness: 0.06, metalness: 0.9, envMapIntensity: 1.6, emissive: 0xffe9b8, emissiveMap: windowMats("#ffffff").emissiveMap, emissiveIntensity: 0 });
+    R.nightMats.push(glass);
+    var geo = new T.BoxGeometry(w, h, d);
+    var uv = geo.attributes.uv;
+    for (var i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * Math.max(1, Math.round(w / 3)), uv.getY(i) * Math.max(1, Math.round(h / 3.2)));
+    var top = mat("#e2e8f0", 0.4);
+    var m = K.mesh(geo, [glass, glass, top, top, glass, glass], true, true);
+    m.position.set(x || 0, (y0 || 0) + h / 2, z || 0);
+    g.add(m);
+    for (var f = 3.2; f < h; f += 3.2) box(g, w + 0.2, 0.18, d + 0.2, "#f1f5f9", x, (y0 || 0) + f, z, 0.4);
+    box(g, w + 0.6, 0.5, d + 0.6, "#e2e8f0", x, (y0 || 0) + h, z, 0.4);
+    return m;
+  }
+  /** Kulüp arması (kalkan + top), istenen boyda ve dönebilir. */
+  function crest(g, x, y, z, scale, spin) {
+    var c = new T.Group();
+    var sh = new T.Shape();
+    sh.moveTo(-1, 1);
+    sh.lineTo(1, 1);
+    sh.lineTo(1, -0.1);
+    sh.quadraticCurveTo(1, -0.9, 0, -1.3);
+    sh.quadraticCurveTo(-1, -0.9, -1, -0.1);
+    sh.closePath();
+    var shield = K.mesh(new T.ExtrudeGeometry(sh, { depth: 0.25, bevelEnabled: true, bevelSize: 0.08, bevelThickness: 0.08, bevelSegments: 2 }), new T.MeshStandardMaterial({ color: kit.primary, roughness: 0.3, metalness: 0.3, emissive: kit.primary, emissiveIntensity: 0.15 }), true, false);
+    shield.geometry.translate(0, 0, -0.125);
+    c.add(shield);
+    R.nightMats.push(shield.material);
+    var rim = new T.Mesh(new T.ExtrudeGeometry(sh, { depth: 0.1, bevelEnabled: false }), mat("#facc15", 0.3, { metalness: 0.8 }));
+    rim.scale.set(1.12, 1.12, 1);
+    rim.geometry.translate(0, 0, -0.18);
+    c.add(rim);
+    var ball = new T.Mesh(new T.SphereGeometry(0.45, 16, 12), new T.MeshStandardMaterial({ map: R.ballTex, roughness: 0.5 }));
+    ball.position.z = 0.25;
+    c.add(ball);
+    c.position.set(x, y, z);
+    c.scale.setScalar(scale);
+    g.add(c);
+    if (spin) R.spin.push(c);
+    return c;
+  }
+  /** Palmiye: kavisli gövde + yaprak yıldızı. */
+  function palm(g, x, z, h) {
+    h = h || 5;
+    for (var i = 0; i < 6; i++) {
+      var seg = K.mesh(new T.CylinderGeometry(0.16, 0.2, h / 6, 7), mat("#a16207", 0.9), true, false);
+      seg.position.set(x + Math.sin(i * 0.25) * 0.25, (i + 0.5) * (h / 6), z);
+      g.add(seg);
+    }
+    for (var l = 0; l < 7; l++) {
+      var leaf = K.mesh(new T.ConeGeometry(0.5, 3, 4), mat("#16a34a", 0.8), true, false);
+      var a = (l / 7) * Math.PI * 2;
+      leaf.position.set(x + 0.4 + Math.cos(a) * 1.2, h + 0.1, z + Math.sin(a) * 1.2);
+      leaf.rotation.set(Math.sin(a) * 1.25, 0, -Math.cos(a) * 1.25);
+      g.add(leaf);
+    }
+  }
+  /** Su yüzeyi (havuz, çeşme). */
+  function pool(g, w, d, x, z, y, color) {
+    box(g, w + 0.8, (y || 0.25) - 0.02, d + 0.8, "#f5f5f4", x, 0, z, 0.6);
+    var p = plane(g, w, d, new T.MeshStandardMaterial({ color: color || 0x22d3ee, roughness: 0.03, metalness: 0.15, transparent: true, opacity: 0.92, envMapIntensity: 1.3 }), x, (y || 0.25) + 0.01, z);
+    R.water.push(p.material);
+    return p;
+  }
+  /** Şezlong. */
+  function lounger(g, x, z, ry) {
+    var l = new T.Group();
+    box(l, 0.7, 0.12, 1.9, "#f8fafc", 0, 0.35, 0);
+    var back = box(l, 0.7, 0.1, 0.8, "#f8fafc", 0, 0.55, -0.75);
+    back.rotation.x = -0.7;
+    l.position.set(x, 0, z);
+    l.rotation.y = ry || 0;
+    g.add(l);
+  }
+
+  /** Kulüp: MODERN GENEL MERKEZ — iki cam kule, gökyüzü köprüsü, dev arma, çeşmeli meydan. */
+  function landmarkHQ(g) {
+    plane(g, 26, 22, mat("#b9b4ae", 0.9), 0, 0.03, 0);
+    box(g, 22, 4.5, 12, "#f8fafc", 0, 0, -2, 0.5);
+    var band = new T.Mesh(new T.BoxGeometry(22.2, 0.6, 12.2), new T.MeshBasicMaterial({ color: kit.primary, toneMapped: false }));
+    band.position.set(0, 4.2, -2);
+    g.add(band);
+    glassTower(g, 8, 8, 26, -6, -3, 0x6fa8dc, 4.5);
+    glassTower(g, 7, 7, 18, 6.5, -2, 0x8ec5f0, 4.5);
+    // gökyüzü köprüsü
+    var bridge = glassTower(g, 6, 3, 3, 0.2, -2.5, 0xa5d8ff, 16);
+    void bridge;
+    crest(g, -6, 4.5 + 26 + 3.4, -3, 2.4, true);
+    sign(g, "ELİTLİG KULÜBÜ", 10, 1.4, 0, 3.0, 4.06, kit.primary);
+    // çeşme ve bayraklar
+    pool(g, 7, 3.4, 0, 7.5, 0.35, 0x38bdf8);
+    for (var j = 0; j < 3; j++) R.steam.push({ x: WP.x - 2 + j * 2, y: 1.2, z: WP.z + 7.5, fountain: true });
+    [-9, -6, 6, 9].forEach(function (x) {
+      cyl(g, 0.07, 0.07, 8, "#e2e8f0", x, 0, 9, 6);
+      var fl = new T.Mesh(new T.PlaneGeometry(2, 1.2), mat(x % 2 ? kit.secondary : kit.primary, 0.7, { side: T.DoubleSide }));
+      fl.position.set(x + 1, 7.3, 9);
+      g.add(fl);
+      R.flags.push(fl);
+    });
+  }
+
+  /** Kulüp: KUPA MÜZESİ — sütunlu klasik bina, altın kubbe. */
+  function landmarkMuseum(g) {
+    plane(g, 22, 20, mat("#b9b4ae", 0.9), 0, 0.03, 0);
+    box(g, 18, 1.2, 12, "#f5f5f4", 0, 0, -1, 0.7);
+    box(g, 15, 7, 9, "#fafaf9", 0, 1.2, -1.5, 0.7);
+    for (var c = -6; c <= 6; c += 2) cyl(g, 0.45, 0.5, 7, "#f5f5f4", c, 1.2, 3.4, 14);
+    var pedi = new T.Shape();
+    pedi.moveTo(-8, 0);
+    pedi.lineTo(8, 0);
+    pedi.lineTo(0, 2.6);
+    pedi.closePath();
+    var pm = K.mesh(new T.ExtrudeGeometry(pedi, { depth: 11, bevelEnabled: false }), mat("#f5f5f4", 0.7), true, false);
+    pm.position.set(0, 8.2, -7);
+    g.add(pm);
+    var dome = K.mesh(new T.SphereGeometry(4, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), new T.MeshStandardMaterial({ color: 0xfacc15, metalness: 0.9, roughness: 0.2, envMapIntensity: 1.3 }), true, false);
+    dome.position.set(0, 8.2, -1.5);
+    g.add(dome);
+    sign(g, "KUPA MÜZESİ", 7, 1, 0, 9.2, 4.05, "#7c2d12", "#facc15");
+    crest(g, 0, 13.5, -1.5, 1.2, true);
+  }
+
+  /** Mağaza: MEGASTORE — kavisli cam cephe, çatıda dev forma, dev ekran. */
+  function landmarkMegastore(g) {
+    plane(g, 26, 22, mat("#b9b4ae", 0.9), 0, 0.03, 0);
+    var glass = new T.MeshStandardMaterial({ color: 0x9cc9ef, roughness: 0.04, metalness: 0.7, envMapIntensity: 1.4, transparent: true, opacity: 0.8, emissive: 0xfff2c4, emissiveIntensity: 0, side: T.DoubleSide });
+    R.nightMats.push(glass);
+    var front = new T.Mesh(new T.CylinderGeometry(11, 11, 9, 32, 1, true, -Math.PI / 2.6, Math.PI / 1.3), glass);
+    front.position.set(0, 4.5, -4);
+    g.add(front);
+    box(g, 20, 9, 7, "#f8fafc", 0, 0, -9, 0.5);
+    var roof = K.mesh(new T.CylinderGeometry(11.3, 11.3, 0.5, 32, 1, false, -Math.PI / 2.6, Math.PI / 1.3), mat(kit.primary, 0.5), true, false);
+    roof.position.set(0, 9.2, -4);
+    g.add(roof);
+    // vitrin içi: forma mankenleri
+    for (var f = -3; f <= 3; f++) {
+      var jer = new T.Mesh(new T.PlaneGeometry(1.4, 1.6), mat(f % 2 ? kit.secondary : kit.primary, 0.8));
+      jer.position.set(f * 2.3, 2.2, 5.6 - Math.abs(f) * 0.35);
+      g.add(jer);
+    }
+    // çatıda dev forma
+    var shirtTex = tex("bigshirt:" + kit.primary, 256, 256, function (c) {
+      c.clearRect(0, 0, 256, 256);
+      c.fillStyle = kit.primary;
+      c.beginPath();
+      c.moveTo(70, 30);
+      c.lineTo(100, 20);
+      c.quadraticCurveTo(128, 50, 156, 20);
+      c.lineTo(186, 30);
+      c.lineTo(246, 80);
+      c.lineTo(214, 120);
+      c.lineTo(190, 104);
+      c.lineTo(190, 236);
+      c.lineTo(66, 236);
+      c.lineTo(66, 104);
+      c.lineTo(42, 120);
+      c.lineTo(10, 80);
+      c.closePath();
+      c.fill();
+      c.fillStyle = kit.secondary;
+      c.font = "900 92px " + A.FONT;
+      c.textAlign = "center";
+      c.fillText("10", 128, 190);
+    });
+    var shirt = new T.Mesh(new T.PlaneGeometry(9, 9), new T.MeshStandardMaterial({ map: shirtTex, transparent: true, side: T.DoubleSide, emissive: 0xffffff, emissiveMap: shirtTex, emissiveIntensity: 0.1 }));
+    shirt.position.set(0, 14.2, -6);
+    g.add(shirt);
+    R.glowSigns.push(shirt.material);
+    sign(g, "MEGASTORE", 8, 1.3, 0, 7.6, 7.05, kit.primary);
+    var scr = new T.Mesh(new T.PlaneGeometry(8, 3.4), new T.MeshBasicMaterial({ map: R.screenTex, toneMapped: false }));
+    scr.position.set(10.06, 5.5, -9);
+    scr.rotation.y = Math.PI / 2;
+    g.add(scr);
+    R.queue.push({ x: WP.x + 3, z: WP.z + 9, n: 9, line: true });
+  }
+
+  /** Kafeterya: ŞEF'İN MASASI — cam serali restoran, teras, ışık zinciri, çatı bahçesi. */
+  function landmarkRestaurant(g) {
+    plane(g, 24, 20, mat("#d6d3d1", 0.9), 0, 0.03, 0);
+    box(g, 16, 6, 9, "#1f2937", 0, 0, -4, 0.5);
+    var glass = new T.MeshStandardMaterial({ color: 0xbfe3ff, roughness: 0.05, metalness: 0.5, transparent: true, opacity: 0.55, emissive: 0xffd590, emissiveIntensity: 0, side: T.DoubleSide });
+    R.nightMats.push(glass);
+    var conserv = new T.Mesh(new T.CylinderGeometry(4.5, 4.5, 14, 24, 1, true, 0, Math.PI), glass);
+    conserv.rotation.z = Math.PI / 2;
+    conserv.position.set(0, 0, 3);
+    g.add(conserv);
+    box(g, 14.2, 0.2, 9.2, "#a16207", 0, 0, 3, 0.7);
+    // teras masaları ve şemsiyeler
+    for (var t = -2; t <= 2; t++) {
+      cyl(g, 0.6, 0.6, 0.08, "#f8fafc", t * 3, 0.8, 9, 14);
+      cyl(g, 0.05, 0.05, 0.8, "#334155", t * 3, 0, 9, 6);
+      cyl(g, 0.04, 0.04, 2.6, "#94a3b8", t * 3, 0, 9, 6);
+      var um = K.mesh(new T.ConeGeometry(1.5, 0.5, 8), mat(t % 2 ? kit.primary : "#f8fafc", 0.7), true, false);
+      um.position.set(t * 3, 2.7, 9);
+      g.add(um);
+    }
+    for (var l = 0; l < 14; l++) {
+      var bulb = new T.Mesh(R.bulbGeo, R.bulbMat);
+      bulb.position.set(-8 + l * (16 / 13), 3.2 - Math.sin((l / 13) * Math.PI) * 0.6, 11);
+      g.add(bulb);
+    }
+    // çatı bahçesi
+    for (var b = -3; b <= 3; b++) {
+      var bush = K.mesh(R.leafGeo, mat("#22c55e", 0.8), true, false);
+      bush.position.set(b * 2, 6.6, -4);
+      bush.scale.setScalar(0.8);
+      g.add(bush);
+    }
+    sign(g, "ŞEF'İN MASASI", 7, 1.2, 0, 4.6, 0.52, "#b45309");
+    cyl(g, 0.5, 0.5, 2.4, "#f8fafc", 6, 6, -6, 10);
+    R.steam.push({ x: WP.x + 6, y: 8.8, z: WP.z - 6 });
+    var st = new T.Mesh(new T.CircleGeometry(0.9, 5), new T.MeshBasicMaterial({ color: 0xfacc15, toneMapped: false, side: T.DoubleSide }));
+    st.position.set(-6.5, 4.6, 0.53);
+    st.rotation.z = Math.PI / 2;
+    g.add(st);
+  }
+
+  /** Kamp: 5 YILDIZLI KAMP TESİSİ — U biçimli otel, balkonlar, sonsuzluk havuzu, palmiyeler. */
+  function landmarkResort(g) {
+    plane(g, 28, 24, mat("#b9b4ae", 0.9), 0, 0.03, 0);
+    glassTower(g, 20, 6, 15, 0, -8, 0xe0f2fe);
+    glassTower(g, 6, 12, 11, -7, 1, 0xe0f2fe);
+    glassTower(g, 6, 12, 11, 7, 1, 0xe0f2fe);
+    for (var f = 3; f < 15; f += 3.2) box(g, 20.6, 0.15, 1.2, "#f8fafc", 0, f, -4.4, 0.5);
+    sign(g, "ELİTLİG RESORT ★★★★★", 12, 1.4, 0, 13.4, -4.94, "#0f766e");
+    pool(g, 7, 9, 0, 3, 0.3, 0x22d3ee);
+    [-3, 0, 3].forEach(function (x) {
+      lounger(g, x, 9.8, 0);
+    });
+    [[-11, 8], [11, 8], [-11, -2], [11, -2]].forEach(function (p) {
+      palm(g, p[0], p[1], 5.5);
+    });
+    // çatıda helikopter pisti
+    cyl(g, 2.6, 2.6, 0.12, "#334155", 0, 15.5, -8, 24);
+  }
+
+  /** Sağlık: SPOR HASTANESİ — üç kanatlı cam bina, dev kırmızı haç, helikopter pisti. */
+  function landmarkHospital(g) {
+    plane(g, 26, 22, mat("#b9b4ae", 0.9), 0, 0.03, 0);
+    glassTower(g, 18, 8, 12, 0, -5, 0xdbeafe);
+    glassTower(g, 6, 8, 8, -9, 3, 0xdbeafe);
+    glassTower(g, 6, 8, 8, 9, 3, 0xdbeafe);
+    var cr = new T.MeshBasicMaterial({ color: 0xef4444, toneMapped: false });
+    var a = new T.Mesh(new T.BoxGeometry(1.2, 3.6, 0.3), cr);
+    a.position.set(0, 9, -0.85);
+    g.add(a);
+    var b = new T.Mesh(new T.BoxGeometry(3.6, 1.2, 0.3), cr);
+    b.position.set(0, 9, -0.85);
+    g.add(b);
+    cyl(g, 3.6, 3.6, 0.15, "#334155", 0, 12.4, -5, 28);
+    sign(g, "SPOR HASTANESİ", 8, 1.1, 0, 2.6, -0.94, "#0ea5e9");
+    pool(g, 6, 3, 0, 7.5, 0.3, 0x38bdf8);
+    var amb = new T.Group();
+    box(amb, 2, 1.8, 4, "#f8fafc", 0, 0.4, 0);
+    box(amb, 2.02, 0.3, 4.02, "#dc2626", 0, 1.3, 0);
+    amb.position.set(-10, 0, 9);
+    g.add(amb);
+    var siren = new T.Sprite(new T.SpriteMaterial({ map: K.glowTexture(), color: 0x60a5fa, transparent: true, depthWrite: false, blending: T.AdditiveBlending }));
+    siren.position.set(-10, 2.6, 9);
+    siren.scale.set(2, 2, 1);
+    g.add(siren);
+    R.sirens.push(siren);
+  }
 
   BUILD.soyunma = function (g, lv) {
     if (lv === 0) return emptyPlot(g);
@@ -696,6 +1164,7 @@
   };
 
   BUILD.kantin = function (g, lv) {
+    if (lv >= 6) return landmarkRestaurant(g);
     if (lv === 0) return emptyPlot(g);
     R.queue.push({ x: WP.x, z: WP.z + (lv >= 3 ? 7 : 3.4), n: Math.min(2 + lv, 7) });
     if (lv === 1) {
@@ -757,6 +1226,7 @@
   };
 
   BUILD.magaza = function (g, lv) {
+    if (lv >= 5) return landmarkMegastore(g);
     if (lv === 0) return emptyPlot(g);
     if (lv === 1) {
       box(g, 2.6, 0.9, 1.1, "#e2e8f0", 0, 0, 0);
@@ -801,6 +1271,8 @@
   };
 
   BUILD.kulup = function (g, lv) {
+    if (lv >= 6) return landmarkHQ(g);
+    if (lv === 5) return landmarkMuseum(g);
     if (lv === 0) return emptyPlot(g);
     if (lv === 1) {
       box(g, 1.8, 0.8, 0.9, "#a16207", 0, 0, 0);
@@ -869,6 +1341,7 @@
   };
 
   BUILD.saglik = function (g, lv) {
+    if (lv >= 5) return landmarkHospital(g);
     if (lv === 0) return emptyPlot(g);
     var cross = function (x, y, z, s) {
       box(g, 0.35 * s, 1.1 * s, 0.1, "#dc2626", x, y - 0.55 * s, z);
@@ -1062,6 +1535,7 @@
   };
 
   BUILD.kamp = function (g, lv) {
+    if (lv >= 5) return landmarkResort(g);
     if (lv === 0) return emptyPlot(g, 22, 18);
     R.camp = { x: WP.x, z: WP.z, fire: lv === 1 };
     if (lv === 1) {
@@ -1216,7 +1690,7 @@
   function initGL() {
     if (R || glFailed) return;
     try {
-      R = G3.stage({ theme: themeNow(), fog: [140, 330], far: 700, shadow: { size: 2048, box: [-70, 70, 70, -70], far: 260, dist: 130 }, fxMax: 700, dustMax: 500 });
+      R = G3.stage({ theme: themeNow(), fog: [170, 420], far: 800, shadow: { size: 2048, box: [-90, 90, 90, -90], far: 320, dist: 160 }, fxMax: 700, dustMax: 500 });
       if (!R) {
         glFailed = true;
         return;
@@ -1282,10 +1756,10 @@
     // ada: çim + kenarda kum + su
     var grass = G3.turfTexture(8, 8, "#5aa856", "#61b05c", 64);
     grass.repeat.set(12, 12);
-    var ground = K.mesh(new T.PlaneGeometry(190, 180), K.std(0xffffff, 0.95, 0, { map: grass, envMapIntensity: 0.25 }), false, true);
+    var ground = K.mesh(new T.PlaneGeometry(240, 230), K.std(0xffffff, 0.95, 0, { map: grass, envMapIntensity: 0.25 }), false, true);
     ground.rotation.x = -Math.PI / 2;
     s.add(ground);
-    var sand = K.mesh(new T.CircleGeometry(150, 48), K.std(0xe9d8a6, 0.95), false, true);
+    var sand = K.mesh(new T.CircleGeometry(185, 48), K.std(0xe9d8a6, 0.95), false, true);
     sand.rotation.x = -Math.PI / 2;
     sand.position.y = -0.08;
     s.add(sand);
@@ -1304,7 +1778,7 @@
       p.receiveShadow = true;
       s.add(p);
     }
-    var RX = 37, RZN = -34, RZS = 41;
+    var RX = 44, RZN = -44, RZS = 50;
     strip(-RX, (RZN + RZS) / 2, 6, RZS - RZN + 6, walk, 0.03);
     strip(RX, (RZN + RZS) / 2, 6, RZS - RZN + 6, walk, 0.03);
     strip(0, RZN, RX * 2 + 6, 6, walk, 0.03);
@@ -1327,7 +1801,7 @@
     // ağaçlar ve sokak lambaları
     var rnd = A.seeded(42);
     for (var t = 0; t < 70; t++) {
-      var a = rnd() * Math.PI * 2, r = 78 + rnd() * 18;
+      var a = rnd() * Math.PI * 2, r = 98 + rnd() * 20;
       treeAt(Math.cos(a) * r, Math.sin(a) * r * 0.95, 0.8 + rnd() * 0.8);
     }
     [[-RX - 3.6, -20], [-RX - 3.6, 0], [-RX - 3.6, 20], [RX + 3.6, -20], [RX + 3.6, 0], [RX + 3.6, 20], [-20, RZS + 3.6], [20, RZS + 3.6], [-20, RZN - 3.6], [20, RZN - 3.6]].forEach(function (p) {
@@ -1478,7 +1952,6 @@
     if (key === "kamp") R.camp = null;
     if (key === "ulasim") R.metro = false;
     if (key === "saha" && R.heat) R.heat = null;
-    if (key === "tribun") R.arenaRing = null;
     var inner = new T.Group();
     g.add(inner);
     g.userData.inner = inner;
@@ -1523,10 +1996,10 @@
       R.scene.add(R.train);
       // ray: yüksek köprü
       var rail = new T.Mesh(new T.BoxGeometry(4, 0.6, 400), mat("#94a3b8"));
-      rail.position.set(78, 5.5, 0);
+      rail.position.set(98, 5.5, 0);
       rail.castShadow = true;
       R.scene.add(rail);
-      for (var p = -180; p <= 180; p += 20) cyl(R.scene, 0.6, 0.6, 5.5, "#cbd5e1", 78, 0, p, 8);
+      for (var p = -180; p <= 180; p += 20) cyl(R.scene, 0.6, 0.6, 5.5, "#cbd5e1", 98, 0, p, 8);
     }
   }
 
@@ -1772,7 +2245,6 @@
       g.visible = night > 0.2;
     });
     if (R.heat) R.heat.opacity = night * 0.08 * (0.8 + 0.2 * Math.sin(A.time * 1.5));
-    if (R.arenaRing) R.arenaRing.emissiveIntensity = 0.35 + night * 0.9 + Math.sin(A.time * 2) * 0.1;
     R.sea.color.setHSL(0.57, 0.65, 0.42 - night * 0.22);
 
     // bayraklar dalgalanır, armalar döner
@@ -1799,7 +2271,10 @@
     // buhar ve kamp ateşi kıvılcımı
     if (!A.reduceMotion) {
       R.steam.forEach(function (s) {
-        if (Math.random() < dt * 3) R.dust.emit({ x: s.x + A.rand(-0.2, 0.2), y: s.y, z: s.z, vx: 0.3, vy: 1.1, vz: 0, life: 2.4, size: 0.6, size2: 2.2, color: "#f8fafc", alpha: 0.35, gravity: -0.15, drag: 0.4 });
+        if (s.fountain) {
+          // çeşme: yukarı fışkırıp düşen su damlaları
+          if (Math.random() < dt * 14) R.fx.emit({ x: s.x + A.rand(-0.1, 0.1), y: s.y, z: s.z, vx: A.rand(-0.6, 0.6), vy: A.rand(4.5, 6), vz: A.rand(-0.6, 0.6), life: 1.1, size: 0.22, size2: 0.12, color: ["#e0f2fe", "#bae6fd"], alpha: 0.8, gravity: 9, drag: 0.2 });
+        } else if (Math.random() < dt * 3) R.dust.emit({ x: s.x + A.rand(-0.2, 0.2), y: s.y, z: s.z, vx: 0.3, vy: 1.1, vz: 0, life: 2.4, size: 0.6, size2: 2.2, color: "#f8fafc", alpha: 0.35, gravity: -0.15, drag: 0.4 });
       });
       R.fires.forEach(function (f) {
         if (Math.random() < dt * 6) {
@@ -1827,7 +2302,7 @@
     }
     if (R.train) {
       var tz = ((A.time * 14) % 420) - 210;
-      R.train.position.set(78, 6.4, tz);
+      R.train.position.set(98, 6.4, tz);
     }
     // inşaat sahnesi
     var con = R.construct;
@@ -1977,7 +2452,7 @@
     if (!drag.moved) return;
     // yatay sürükleme: kamerayı döndür; dikey: yakınlaş/uzaklaş
     camGoal.yaw -= dx * 0.006;
-    camGoal.dist = A.clamp(camGoal.dist + dy * 0.4, 50, 240);
+    camGoal.dist = A.clamp(camGoal.dist + dy * 0.45, 50, 300);
     cam.yaw = camGoal.yaw;
   }
   function up(p) {

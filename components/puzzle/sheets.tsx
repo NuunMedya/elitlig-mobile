@@ -14,6 +14,7 @@ import { useAdminMutation } from "@/components/admin";
 import { BottomSheet, Button, Touchable } from "@/components/ui";
 import { buyItem, claimDaily, type PuzzleMe } from "@/lib/puzzle/api";
 import { usePuzzleCache } from "@/lib/puzzle/usePuzzle";
+import { WatchAdForLife } from "./RewardedLife";
 import type { PuzzleGameKey } from "@/lib/puzzle/types";
 import { colors, fonts, hairline, radius, space, textScale, type } from "@/theme";
 
@@ -55,6 +56,11 @@ export function ShopSheet({
           {coins.toLocaleString("tr-TR")} jeton
         </Text>
       </View>
+      {me.profile.ad_lives && me.profile.lives < me.profile.max_lives ? (
+        <View style={styles.adRow}>
+          <WatchAdForLife profile={me.profile} />
+        </View>
+      ) : null}
       {[...(focus === "lives" ? lives : []), ...(focus === "lives" ? packs : [...lives, ...packs])].map(([key, item]) => {
         const stock = item.booster ? me.profile.boosters[item.booster] ?? 0 : null;
         const full = Boolean(item.lives && me.profile.lives >= me.profile.max_lives);
@@ -82,7 +88,7 @@ export function ShopSheet({
         );
       })}
       <Text style={styles.foot} {...textScale.long}>
-        Jeton, seviye geçerek, günlük ödülle ve stadyum bölgelerini tamamlayarak kazanılır.
+        Jeton, seviye geçerek ve günlük ödülle kazanılır. Canın bitince reklam izleyip can da alabilirsin.
       </Text>
     </BottomSheet>
   );
@@ -162,6 +168,7 @@ export function BoosterChip({
 }
 
 const styles = StyleSheet.create({
+  adRow: { marginBottom: space.sm },
   balance: { flexDirection: "row", alignItems: "center", gap: space.sm, marginBottom: space.md },
   balanceText: { ...type.h3, color: colors.textPrimary },
   row: { flexDirection: "row", alignItems: "center", gap: space.md, paddingVertical: space.sm, borderBottomWidth: hairline, borderBottomColor: colors.separator },

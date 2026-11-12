@@ -19,6 +19,9 @@ type AdmobModule = {
   BannerAdSize: Record<string, string>;
   InterstitialAd: { createForAdRequest: (unitId: string, opts?: Record<string, unknown>) => AdmobInterstitial };
   AdEventType: Record<string, string>;
+  /** Ödüllü reklam (Lig Yolu: reklam izle, +1 can). */
+  RewardedAd?: { createForAdRequest: (unitId: string, opts?: Record<string, unknown>) => AdmobInterstitial };
+  RewardedAdEventType?: Record<string, string>;
   default?: () => { initialize: () => Promise<unknown> };
 };
 

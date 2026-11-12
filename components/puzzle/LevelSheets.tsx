@@ -12,10 +12,12 @@ import React, { useEffect, useRef } from "react";
 import { Animated, StyleSheet, Text, View } from "react-native";
 
 import { BottomSheet, Button, useReduceMotion } from "@/components/ui";
+import type { PuzzleProfile } from "@/lib/puzzle/api";
 import type { PuzzleBoosterDef, PuzzleGameModule } from "@/lib/puzzle/types";
 import { colors, fonts, hairline, radius, space, textScale, type } from "@/theme";
 
 import { tierOf } from "./LevelMap";
+import { WatchAdForLife } from "./RewardedLife";
 import { BoosterChip } from "./sheets";
 
 export function LevelStartSheet({
@@ -29,6 +31,7 @@ export function LevelStartSheet({
   onPlay,
   busy,
   lives,
+  profile,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -40,6 +43,8 @@ export function LevelStartSheet({
   onPlay: () => void;
   busy?: boolean;
   lives: number;
+  /** Reklamla can düğmesi için (can bitince gösterilir). */
+  profile?: PuzzleProfile;
 }) {
   const goal = module.goalSummary(level);
   const pre = module.boosters.filter((b) => b.kind === "pre");
@@ -49,16 +54,20 @@ export function LevelStartSheet({
       onClose={onClose}
       title={`${level}. seviye`}
       footer={
-        <Button
-          label={lives > 0 ? "Oyna" : "Canın kalmadı"}
-          icon={lives > 0 ? "play" : "heart-dislike"}
-          onPress={onPlay}
-          loading={busy}
-          disabled={lives < 1}
-          fullWidth
-          size="lg"
-          haptic="medium"
-        />
+        lives < 1 && profile?.ad_lives ? (
+          <WatchAdForLife profile={profile} size="lg" />
+        ) : (
+          <Button
+            label={lives > 0 ? "Oyna" : "Canın kalmadı"}
+            icon={lives > 0 ? "play" : "heart-dislike"}
+            onPress={onPlay}
+            loading={busy}
+            disabled={lives < 1}
+            fullWidth
+            size="lg"
+            haptic="medium"
+          />
+        )
       }
     >
       <View style={styles.headRow}>
@@ -118,6 +127,7 @@ export function ResultSheet({
   onRetry,
   onMap,
   livesLeft,
+  profile,
 }: {
   visible: boolean;
   won: boolean;
@@ -131,6 +141,8 @@ export function ResultSheet({
   onRetry: () => void;
   onMap: () => void;
   livesLeft: number;
+  /** Kaybedip canı biten oyuncuya "Reklam izle · +1 can". */
+  profile?: PuzzleProfile;
 }) {
   return (
     <BottomSheet
@@ -139,6 +151,8 @@ export function ResultSheet({
       dismissible={false}
       title={won ? (level % 10 === 0 ? "Kupa senin!" : "Seviye geçildi!") : "Bu sefer olmadı"}
       footer={
+        <View style={styles.footerCol}>
+          {!won && livesLeft < 1 && profile?.ad_lives ? <WatchAdForLife profile={profile} /> : null}
         <View style={styles.footer}>
           <Button label="Harita" variant="secondary" onPress={onMap} />
           {won ? (
@@ -146,6 +160,7 @@ export function ResultSheet({
           ) : (
             <Button label={livesLeft > 0 ? "Tekrar dene" : "Can yok"} icon="refresh" onPress={onRetry} disabled={livesLeft < 1} style={styles.grow} />
           )}
+        </View>
         </View>
       }
     >
@@ -226,6 +241,7 @@ const styles = StyleSheet.create({
   booster: { alignItems: "center", gap: space.xs, width: 72 },
   boosterName: { ...type.micro, color: colors.textSecondary, textAlign: "center" },
   footer: { flexDirection: "row", gap: space.sm },
+  footerCol: { gap: space.sm },
   grow: { flex: 1 },
   starRow: { flexDirection: "row", justifyContent: "center", alignItems: "flex-end", gap: space.md, marginVertical: space.md },
   starBig: { marginBottom: space.md },

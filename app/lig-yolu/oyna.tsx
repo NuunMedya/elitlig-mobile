@@ -216,7 +216,8 @@ export default function PuzzlePlayScreen() {
           xp={result.server?.reward?.xp ?? 0}
           firstClear={Boolean(result.server?.reward?.firstClear)}
           summary={result.res.summary}
-          livesLeft={result.server?.profile.lives ?? me?.profile.lives ?? 0}
+          livesLeft={me?.profile.lives ?? result.server?.profile.lives ?? 0}
+          profile={me?.profile ?? result.server?.profile}
           onNext={() => goToMap(level + 1)}
           onRetry={() => goToMap(level)}
           onMap={() => goToMap()}
