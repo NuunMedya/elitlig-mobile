@@ -85,6 +85,7 @@ export const TimelineRow = memo(function TimelineRow({
   onReact,
   hasClip = false,
   onClip,
+  mine = false,
 }: {
   event: ApiMatchEvent;
   home: boolean;
@@ -102,6 +103,8 @@ export const TimelineRow = memo(function TimelineRow({
   /** Bu golün videosu var mı (canlı yayında kaydedilen klip). */
   hasClip?: boolean;
   onClip?: (eventId: number) => void;
+  /** Oturumdaki üyenin golü — satır vurgulanır, "Senin golün" rozeti. */
+  mine?: boolean;
 }) {
   const kind = eventKind(event);
   const goal = isGoalKind(kind);
@@ -184,14 +187,18 @@ export const TimelineRow = memo(function TimelineRow({
 
   const reactable = Boolean(onReact) && (goal || kind === "yellow" || kind === "red");
   const clip = hasClip && Boolean(onClip);
+  const own = mine && goal;
   /* Eylemler (golü izle + tepkiler) olayın KENDİ tarafında, adın altında
      durur; eskiden ortada iki ayrı satır rayı kesiyor ve her golü üç satıra
      çıkarıyordu. */
   const actions =
-    reactable || clip ? (
+    reactable || clip || own ? (
       <View style={[styles.actions, home ? styles.actionsHome : null]}>
         {clip ? (
+          /* "▶ Golü izle" — videosu olan golün açık işareti. Satırın kendisi
+             de oynatıcıyı açar; hap, dokunulacak yeri söyler. */
           <Touchable
+            feedback="button"
             style={styles.clipBtn}
             onPress={watch}
             hitSlop={6}
@@ -199,8 +206,25 @@ export const TimelineRow = memo(function TimelineRow({
             accessibilityRole="button"
             accessibilityLabel={`${event.dakika ?? "?"}. dakikadaki golün videosunu izle`}
           >
-            <Ionicons name="play" size={12} color={colors.textOnBrand} />
+            <LinearGradient
+              colors={colors.gradientLive}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[StyleSheet.absoluteFill, styles.clipFill]}
+            />
+            <Ionicons name="play" size={11} color={colors.onDark} />
+            <Text style={styles.clipText} {...textScale.badge}>
+              Golü izle
+            </Text>
           </Touchable>
+        ) : null}
+        {own ? (
+          <View style={styles.mineBadge}>
+            <Ionicons name="star" size={10} color={colors.medalGold} />
+            <Text style={styles.mineText} {...textScale.badge}>
+              Senin golün
+            </Text>
+          </View>
         ) : null}
         {reactable && onReact ? (
           <ReactionBar eventId={Number(event.id)} counts={reactions} mine={myReaction} onReact={onReact} />
@@ -208,19 +232,36 @@ export const TimelineRow = memo(function TimelineRow({
       </View>
     ) : null;
 
+  /* Videosu olan golde satıra dokunmak videoyu açar ("golüme tıklayıp
+     izleyeyim"); oyuncu profili uzun basışta ve erişilebilirlik eyleminde. */
+  const rowPress = clip ? watch : open;
   return (
     <View style={sliceStyle(index, total)}>
+      {own ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.mineWash]} /> : null}
+      {own ? (
+        <LinearGradient
+          pointerEvents="none"
+          colors={colors.gradientSignature}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          style={styles.mineStripe}
+        />
+      ) : null}
       {glow ? (
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.flash, { opacity: glow }]} />
       ) : null}
       <Touchable
         feedback="row"
         haptic="selection"
-        disabled={!playerId}
-        onPress={open}
+        disabled={!playerId && !clip}
+        onPress={rowPress}
+        onLongPress={clip && playerId ? open : undefined}
         style={styles.row}
-        accessibilityRole={playerId ? "button" : "text"}
-        accessibilityLabel={speech}
+        accessibilityRole={playerId || clip ? "button" : "text"}
+        accessibilityLabel={`${speech}${own ? ", senin golün" : ""}`}
+        accessibilityHint={clip ? "Golün videosunu açar" : undefined}
+        accessibilityActions={clip && playerId ? [{ name: "longpress", label: "Oyuncu profilini aç" }] : undefined}
+        onAccessibilityAction={clip && playerId ? open : undefined}
       >
         <View style={styles.half}>{home ? content : null}</View>
 
@@ -448,13 +489,50 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   clipBtn: {
-    width: 24,
-    height: 24,
-    borderRadius: radius.pill,
-    backgroundColor: colors.live,
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    gap: space.xxs,
+    height: 24,
+    paddingLeft: space.s,
+    paddingRight: space.sm,
+    borderRadius: radius.pill,
     ...glowStyle(colors.live, 1),
+  },
+  clipFill: {
+    borderRadius: radius.pill,
+  },
+  clipText: {
+    ...type.labelXs,
+    fontFamily: fonts.bold,
+    color: colors.onDark,
+  },
+  /* — Üyenin kendi golü — */
+  mineWash: {
+    backgroundColor: colors.brandDim,
+  },
+  mineStripe: {
+    position: "absolute",
+    left: 0,
+    top: space.xs,
+    bottom: space.xs,
+    width: 3,
+    borderRadius: radius.pill,
+  },
+  mineBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xxs,
+    height: 24,
+    paddingHorizontal: space.s,
+    borderRadius: radius.pill,
+    backgroundColor: colors.warnDim,
+    borderWidth: hairline,
+    borderColor: colors.medalGold,
+  },
+  mineText: {
+    ...type.labelXs,
+    fontFamily: fonts.bold,
+    color: colors.textPrimary,
   },
   reactions: {
     flexDirection: "row",

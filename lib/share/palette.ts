@@ -60,6 +60,8 @@ export interface ShareTheme {
   silver: readonly [string, string];
   bronze: readonly [string, string];
   medalInk: string;
+  /** Parlak rozet (form harfi) üstündeki mürekkep. */
+  chipInk: string;
   /** Arma karosu ve yedek baş harf mürekkebi. */
   crestTile: string;
   crestInk: string;
@@ -129,6 +131,7 @@ const gece: ShareTheme = {
   silver: dark.medalSilver,
   bronze: dark.medalBronze,
   medalInk: dark.medalInk,
+  chipInk: NIGHT_BOTTOM,
   crestTile: alpha(dark.onDark, 0.94),
   crestInk: light.inverse,
   logoTint: null,
@@ -183,6 +186,7 @@ const gunduz: ShareTheme = {
   silver: light.medalSilver,
   bronze: light.medalBronze,
   medalInk: light.medalInk,
+  chipInk: light.textOnBrand,
   crestTile: light.surface1,
   crestInk: light.inverse,
   logoTint: light.brand,

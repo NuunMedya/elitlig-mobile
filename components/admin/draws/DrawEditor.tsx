@@ -23,7 +23,7 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { OptionSheet, Panel, SelectField, ToggleField, confirmAction, useAdminMutation } from "@/components/admin";
 import { Badge, Button, Chip, ChipGroup, GradientBar, Input, Reveal, SegmentedControl, Stepper, TeamLogo, Touchable, useReduceMotion, useToast } from "@/components/ui";
-import { OpsStage } from "@/components/admin/matches/opsKit";
+import { OpsStage, StepRail } from "@/components/admin/matches/opsKit";
 import { mediaUrl } from "@/lib/format";
 import { hasAnyPermission } from "@/lib/admin/access";
 import { WEB_BASE_URL } from "@/lib/config";
@@ -308,18 +308,17 @@ export function DrawEditor({ initial, onClose }: { initial: Draw | null; onClose
         <Button label="Kura listesi" icon="chevron-back" variant="ghost" size="sm" onPress={onClose} disabled={isRevealing} />
         {current ? <Badge label={DRAW_STATUS_LABELS[current.status] || current.status} tone={current.status === "COMPLETED" ? "win" : current.status === "READY" ? "accent" : "neutral"} /> : null}
       </View>
-      <SegmentedControl<Step>
+      <StepRail<Step>
         items={[
-          { key: "setup", label: "1 · Kurulum" },
-          { key: "pots", label: "2 · Torbalar" },
-          { key: "draw", label: "3 · Çekiliş" },
+          { key: "setup", label: "Kurulum", icon: "construct-outline", done: Boolean(current) },
+          { key: "pots", label: "Torbalar", icon: "basket-outline", done: Boolean(current?.isRosterComplete), meta: current ? `${current.selectedTeamCount}/${current.teamCount}` : undefined },
+          { key: "draw", label: "Çekiliş", icon: "shuffle-outline", done: current?.status === "COMPLETED" },
         ]}
         value={step}
         onChange={(s) => {
-          if (s !== "setup" && !current) return toast.show({ message: "Önce kurulumu kaydet.", tone: "warn" });
+          if (s !== "setup" && !current) return void toast.show({ message: "Önce kurulumu kaydet.", tone: "warn" });
           setStep(s);
         }}
-        size="sm"
       />
 
       {step === "setup" ? (

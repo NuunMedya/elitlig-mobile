@@ -18,7 +18,8 @@ import React, { useCallback, useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { DateField, InfoLine, Panel, SelectField, confirmAction } from "@/components/admin";
-import { Avatar, Badge, Button, Chip, ChipGroup, Input, SegmentedControl, TeamLogo, Touchable, useToast } from "@/components/ui";
+import { Avatar, Badge, Button, Chip, ChipGroup, Input, TeamLogo, Touchable, useToast } from "@/components/ui";
+import { StepRail } from "@/components/admin/matches/opsKit";
 import { hasAnyPermission } from "@/lib/admin/access";
 import { errorText } from "@/lib/admin/errors";
 import { formatDate } from "@/lib/admin/format";
@@ -179,16 +180,15 @@ export function AwardSetEditor({ initial, onClose }: { initial: AwardForm; onClo
         <Button label="Set listesi" icon="chevron-back" variant="ghost" size="sm" onPress={onClose} disabled={Boolean(busy)} />
         <Badge label={SET_STATUS_LABELS[status] ?? status} tone={status === "PUBLISHED" ? "win" : status === "UNPUBLISHED" ? "warn" : "neutral"} />
       </View>
-      <SegmentedControl<Step>
+      <StepRail<Step>
         items={[
-          { key: "scope", label: "Kapsam" },
-          { key: "awards", label: "Ödüller" },
-          { key: "squad", label: `Kadro ${f.squad.length}/${MAX_SQUAD}` },
-          { key: "preview", label: "Önizleme" },
+          { key: "scope", label: "Kapsam", icon: "options-outline", done: Boolean(f.league_id && f.season_id && f.start_date && f.end_date) },
+          { key: "awards", label: "Ödüller", icon: "ribbon-outline", done: Boolean(f.teamId) && INDIVIDUAL.every(({ type: t }) => f.individual[t]) },
+          { key: "squad", label: "Kadro", icon: "people-outline", done: f.squad.length >= MAX_SQUAD, meta: `${f.squad.length}/${MAX_SQUAD}` },
+          { key: "preview", label: "Önizleme", icon: "eye-outline" },
         ]}
         value={step}
         onChange={setStep}
-        size="sm"
       />
 
       {step === "scope" ? (

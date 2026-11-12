@@ -217,7 +217,7 @@ export default function ToolsHubScreen() {
           <SectionHeader title="Son notlar" inset="flush" action={{ label: "Tümü", onPress: () => router.push(routeOf("not-defteri") as never) }} />
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.noteRail} style={styles.noteScroller}>
             {notes.map((note, index) => {
-              const preview = note.body ? note.body.slice(0, 120) : note.checklist.map((item) => `${item.done ? "✓" : "○"} ${item.text}`).join("\n");
+              const preview = note.body ? note.body.slice(0, 120) : note.checklist.map((item) => `${item.done ? "[x]" : "[ ]"} ${item.text}`).join("\n");
               const tint = note.color || colors.brand;
               return (
                 <Reveal key={note.id} index={index} axis="x">

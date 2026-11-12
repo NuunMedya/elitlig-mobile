@@ -49,8 +49,8 @@ import {
 } from "@/components/ui";
 import { useLiveClock } from "@/hooks/useLiveMatch";
 import { formatDateLong, formatDateShort, formatTime } from "@/lib/format";
-import { GoalClipPlayer } from "@/components/live/GoalClipPlayer";
 import { useMatchGoalClips } from "@/components/live/MatchGoalClips";
+import { useAuth } from "@/providers/AuthProvider";
 import type { GoalClip } from "@/lib/live/clips";
 import { broadcastOf } from "@/lib/matchMedia";
 import { openLink } from "@/lib/links";
@@ -90,6 +90,8 @@ import {
 import { DuelCard, FanVoteCard, useMatchReactions } from "./Community";
 import { BroadcastCard, MatchMedia, useBroadcast } from "./MatchMedia";
 import { TimelineBreak, TimelineRow } from "./Timeline";
+import { GoalVideoPlayer } from "./GoalVideoPlayer";
+import { useClipDownloads } from "./clipDownload";
 import { AdBanner } from "@/components/ads/AdBanner";
 
 export interface SummaryTabProps {
@@ -172,7 +174,17 @@ export function SummaryTab({
   );
   const closeClip = useCallback(() => setOpenClipId(null), []);
   const clipScorer = useCallback((clip: GoalClip) => nameOf(clip.player_id), [nameOf]);
-  const clipSubtitle = [match.first_team_name, match.second_team_name].filter(Boolean).join(" – ") || null;
+  /* Üyenin KENDİ golleri: oturumdaki hesabın oyuncu kimliği golcüyle eşleşirse
+     satır ve video "Senin golün" olarak vurgulanır; ızgarada "Gollerim". */
+  const myPlayerId = Number(useAuth().user?.player_id) || null;
+  const isMyClip = useCallback(
+    (clip: GoalClip) => myPlayerId != null && !clip.own_goal && Number(clip.player_id) === myPlayerId,
+    [myPlayerId],
+  );
+  /* İndirme durumu tek yerde: oynatıcı ve ızgara aynı ilerlemeyi gösterir. */
+  const downloads = useClipDownloads();
+  const clipSubtitle =
+    [match.first_team_name, scoreLine(match), match.second_team_name].filter(Boolean).join(" ") || null;
 
   const total = items.length;
   const renderItem = useCallback(
@@ -194,9 +206,10 @@ export function SummaryTab({
           onReact={onReact}
           hasClip={clipByEvent.has(Number(item.event.id))}
           onClip={openEventClip}
+          mine={myPlayerId != null && Number(item.event.oyuncu_id) === myPlayerId && eventKind(item.event) === "goal"}
         />
       ),
-    [flashId, nameOf, openPlayer, total, reactionData, onReact, clipByEvent, openEventClip],
+    [flashId, nameOf, openPlayer, total, reactionData, onReact, clipByEvent, openEventClip, myPlayerId],
   );
 
   /* Medya / yayın: canlı yayın linki, özet, maçın anları, gol videoları, röportaj. */
@@ -222,6 +235,8 @@ export function SummaryTab({
       skipLiveBroadcast
       clips={clips}
       onOpenClip={openClip}
+      isMine={isMyClip}
+      downloads={downloads}
     />
   );
 
@@ -324,19 +339,28 @@ export function SummaryTab({
       }
       ListFooterComponent={footer}
     />
-    <GoalClipPlayer
+    <GoalVideoPlayer
       visible={openClipId != null}
       initialId={openClipId}
       clips={clips}
       onClose={closeClip}
       nameFor={clipScorer}
       subtitle={clipSubtitle}
+      isMine={isMyClip}
+      downloads={downloads}
     />
     </>
   );
 }
 
 const EMPTY_ITEMS: TimelineItem[] = [];
+
+/** Oynatıcı alt başlığındaki skor: "16–1" (yoksa ayraç). */
+function scoreLine(match: ApiMatch): string {
+  const home = match.first_team_score;
+  const away = match.second_team_score;
+  return home != null && away != null ? `${home}–${away}` : "–";
+}
 
 /** Akış başlığının yanındaki kısa döküm: "17 gol · 2 kart · 3 değişiklik". */
 function flowSummary(timeline: ApiMatchEvent[]): string | undefined {

@@ -403,16 +403,17 @@ function LinkPicker({ value, onChange }: { value: Link; onChange: (link: Link) =
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   fields: { gap: space.lg },
-  field: { gap: space.sm },
+  /* Gece teması: alan grupları cam kartlarda (FormSheet dili). */
+  field: { gap: space.sm, padding: space.md, borderRadius: radius.xl, borderWidth: hairline, borderColor: colors.border, backgroundColor: colors.surface1 },
   hint: { ...type.caption, color: colors.textTertiary },
   error: { ...type.bodySm, color: colors.danger },
-  people: { borderRadius: radius.md, borderWidth: hairline, borderColor: colors.border, overflow: "hidden" },
+  people: { borderRadius: radius.lg, borderWidth: hairline, borderColor: colors.border, overflow: "hidden", backgroundColor: colors.surface2 },
   person: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.md, paddingVertical: space.sm, borderTopWidth: hairline, borderTopColor: colors.separator },
   personOn: { backgroundColor: colors.brandDim },
-  personName: { ...type.body, color: colors.textPrimary },
+  personName: { ...type.h4, color: colors.textPrimary },
   extras: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
-  linkChosen: { flexDirection: "row", alignItems: "center", gap: space.sm, padding: space.md, borderRadius: radius.md, backgroundColor: colors.surface2 },
+  linkChosen: { flexDirection: "row", alignItems: "center", gap: space.sm, padding: space.md, borderRadius: radius.lg, backgroundColor: colors.brandDim, borderWidth: hairline, borderColor: colors.brandBorder },
   linkType: { ...type.micro, color: colors.brandAccent },
-  results: { borderRadius: radius.md, borderWidth: hairline, borderColor: colors.border, overflow: "hidden" },
+  results: { borderRadius: radius.lg, borderWidth: hairline, borderColor: colors.border, overflow: "hidden", backgroundColor: colors.surface2 },
   result: { paddingHorizontal: space.md, paddingVertical: space.sm, borderTopWidth: hairline, borderTopColor: colors.separator, gap: 2 },
 });

@@ -21,7 +21,17 @@ import type { ClipTeams } from "@/components/live/MatchGoalClips";
 import { clipLabel, type GoalClip } from "@/lib/live/clips";
 import { MatchHighlight } from "@/components/live/MatchHighlight";
 import { VideoCard } from "@/components/live/VideoCard";
-import { IconTile, Reveal, SectionHeader, TeamLogo, Touchable, withAlpha } from "@/components/ui";
+import {
+  Button,
+  IconTile,
+  Reveal,
+  SectionHeader,
+  SegmentedControl,
+  TeamLogo,
+  Touchable,
+  withAlpha,
+  type SegmentedItem,
+} from "@/components/ui";
 import { openLink, openYouTube } from "@/lib/links";
 import { RIG } from "@/lib/live/rig";
 import {
@@ -35,6 +45,7 @@ import {
 import type { ApiMatch, MatchState } from "@/lib/types";
 import { colors, dark as darkPalette, fonts, glowStyle, hairline, layout, radius, space, textScale, type } from "@/theme";
 
+import { progressLabel, type ClipDownloads, type DownloadState } from "./clipDownload";
 import { partStyles } from "./parts";
 import type { NameOf } from "./shared";
 
@@ -298,6 +309,10 @@ export interface MatchMediaProps {
   /** Maçın gol klipleri (dakika sırasıyla) — sorgu ve oynatıcı üst bileşende (SummaryTab). */
   clips: GoalClip[];
   onOpenClip: (clipId: number) => void;
+  /** Oturumdaki üyenin golü mü ("Senin golün", "Gollerim" süzgeci). */
+  isMine?: (clip: GoalClip) => boolean;
+  /** Tek tıkla indirme (durum SummaryTab'da). Verilmezse indir düğmesi çıkmaz. */
+  downloads?: ClipDownloads;
 }
 
 export const MatchMedia = memo(function MatchMedia({
@@ -309,6 +324,8 @@ export const MatchMedia = memo(function MatchMedia({
   skipLiveBroadcast,
   clips,
   onOpenClip,
+  isMine,
+  downloads,
 }: MatchMediaProps) {
   const live = state === "live";
   const broadcast = useBroadcast(match);
@@ -329,7 +346,7 @@ export const MatchMedia = memo(function MatchMedia({
       {live ? null : <MatchHighlight highlight={match.highlight} />}
       {broadcast && !live ? <BroadcastCard source={broadcast} live={false} title={scoreTitle} /> : null}
       {live ? null : <MomentCards moments={moments} clipFor={clipFor} nameOf={nameOf} teams={teams} onOpenPlayer={onOpenPlayer} />}
-      <GoalClipGrid clips={clips} nameOf={nameOf} teams={teams} onOpen={onOpenClip} />
+      <GoalClipGrid clips={clips} nameOf={nameOf} teams={teams} onOpen={onOpenClip} isMine={isMine} downloads={downloads} />
       {live ? null : <Interview match={match} />}
     </>
   );
@@ -352,23 +369,41 @@ const CLIP_SCRIM = [withAlpha(darkPalette.bg, 0), withAlpha(darkPalette.bg, 0.78
  * Izgara ilk altı golü tek bakışta verir, kalanı tek dokunuşla açılır.
  * Oynatıcı üst bileşendedir (SummaryTab) — kart yalnız `onOpen` çağırır.
  */
+type ClipFilter = "all" | "mine";
+
 const GoalClipGrid = memo(function GoalClipGrid({
   clips,
   nameOf,
   teams,
   onOpen,
+  isMine,
+  downloads,
 }: {
   clips: GoalClip[];
   nameOf: NameOf;
   teams: ClipTeams;
   onOpen: (clipId: number) => void;
+  isMine?: (clip: GoalClip) => boolean;
+  downloads?: ClipDownloads;
 }) {
   const { width } = useWindowDimensions();
   const [expanded, setExpanded] = useState(false);
+  const [filter, setFilter] = useState<ClipFilter>("all");
   const cardWidth = Math.floor((width - layout.screenPadding * 2 - space.sm) / 2);
+  const mine = useMemo(() => (isMine ? clips.filter(isMine) : []), [clips, isMine]);
   if (!clips.length) return null;
-  const shown = expanded ? clips : clips.slice(0, GRID_PREVIEW);
-  const hidden = clips.length - shown.length;
+
+  /* "Gollerim" süzgeci yalnız üyenin bu maçta videolu golü varsa çıkar. */
+  const hasMine = mine.length > 0;
+  const list = hasMine && filter === "mine" ? mine : clips;
+  const shown = expanded ? list : list.slice(0, GRID_PREVIEW);
+  const hidden = list.length - shown.length;
+  const filterItems: SegmentedItem<ClipFilter>[] = [
+    { key: "all", label: `Tümü · ${clips.length}` },
+    { key: "mine", label: `Gollerim · ${mine.length}`, icon: "star" },
+  ];
+  const batch = downloads?.batch;
+  const batchRunning = Boolean(batch?.running);
 
   const teamOf = (teamId: number | null) =>
     teamId == null
@@ -382,6 +417,27 @@ const GoalClipGrid = memo(function GoalClipGrid({
   return (
     <View style={styles.block}>
       <SectionHeader title="Gol videoları" meta={`${clips.length} gol`} />
+      {hasMine ? (
+        <View style={styles.mineBar}>
+          <SegmentedControl items={filterItems} value={filter} onChange={setFilter} size="sm" />
+          {filter === "mine" && downloads ? (
+            /* Üyenin bütün golleri sırayla iner; her biri için paylaşım
+               sayfası açılır (sistem tek seferde tek dosya paylaştırır). */
+            <Button
+              label={
+                batchRunning && batch
+                  ? `İndiriliyor ${Math.min(batch.done + 1, batch.total)}/${batch.total}`
+                  : `Gollerimin hepsini indir · ${mine.length}`
+              }
+              icon="download-outline"
+              size="md"
+              loading={batchRunning}
+              disabled={batchRunning}
+              onPress={() => void downloads.downloadAll(mine)}
+            />
+          ) : null}
+        </View>
+      ) : null}
       <View style={styles.grid}>
         {shown.map((clip, index) => (
           <Reveal key={clip.id} index={Math.min(index, 7)} distance={8}>
@@ -391,6 +447,9 @@ const GoalClipGrid = memo(function GoalClipGrid({
               title={nameOf(clip.player_id) ?? clipLabel(clip)}
               team={teamOf(clip.team_id)}
               onOpen={onOpen}
+              mine={isMine?.(clip) ?? false}
+              download={downloads ? downloads.stateOf(clip.id) : null}
+              onDownload={downloads?.download}
             />
           </Reveal>
         ))}
@@ -401,7 +460,7 @@ const GoalClipGrid = memo(function GoalClipGrid({
           haptic="selection"
           onPress={() => setExpanded((value) => !value)}
           accessibilityRole="button"
-          accessibilityLabel={expanded ? "Gol videolarını daralt" : `Tüm gol videolarını göster, ${clips.length}`}
+          accessibilityLabel={expanded ? "Gol videolarını daralt" : `Tüm gol videolarını göster, ${list.length}`}
           style={styles.more}
         >
           <Text style={styles.moreText} {...textScale.dense}>
@@ -420,68 +479,119 @@ const ClipTile = memo(function ClipTile({
   title,
   team,
   onOpen,
+  mine,
+  download,
+  onDownload,
 }: {
   clip: GoalClip;
   width: number;
   title: string;
   team: { name: string | null; logo: string | null } | null;
   onOpen: (clipId: number) => void;
+  mine: boolean;
+  download: DownloadState | null;
+  onDownload?: (clip: GoalClip) => Promise<void>;
 }) {
   const [posterFailed, setPosterFailed] = useState(false);
   const duration = formatDuration(clip.duration_ms);
   const open = useCallback(() => onOpen(clip.id), [onOpen, clip.id]);
+  const busy = download?.status === "downloading" || download?.status === "saving";
+  const done = download?.status === "done";
   return (
-    <Touchable
-      feedback="card"
-      haptic="light"
-      onPress={open}
-      style={[styles.tile, { width }]}
-      accessibilityRole="button"
-      accessibilityLabel={`${clip.minute != null ? `${clip.minute}. dakika, ` : ""}${title} golünü izle`}
-    >
-      <View style={styles.tileThumb}>
-        {clip.poster_url && !posterFailed ? (
-          <Image
-            source={{ uri: clip.poster_url }}
-            style={StyleSheet.absoluteFill}
-            resizeMode="cover"
-            resizeMethod="resize"
-            onError={() => setPosterFailed(true)}
-          />
-        ) : (
-          <LinearGradient colors={colors.gradientInk} start={{ x: 1, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} />
-        )}
-        <LinearGradient colors={CLIP_SCRIM} style={StyleSheet.absoluteFill} pointerEvents="none" />
-        <View style={styles.tilePlay}>
-          <Ionicons name="play" size={14} color={colors.onDark} />
-        </View>
-        {clip.minute != null ? (
-          <View style={styles.tileMinute}>
-            <LinearGradient
-              colors={colors.gradientSignature}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={[StyleSheet.absoluteFill, styles.tileMinuteFill]}
+    <View style={[styles.tile, mine && styles.tileMine, { width }]}>
+      <Touchable
+        feedback="card"
+        haptic="light"
+        onPress={open}
+        accessibilityRole="button"
+        accessibilityLabel={`${clip.minute != null ? `${clip.minute}. dakika, ` : ""}${title} golünü izle${mine ? ", senin golün" : ""}`}
+      >
+        <View style={styles.tileThumb}>
+          {clip.poster_url && !posterFailed ? (
+            <Image
+              source={{ uri: clip.poster_url }}
+              style={StyleSheet.absoluteFill}
+              resizeMode="cover"
+              resizeMethod="resize"
+              onError={() => setPosterFailed(true)}
             />
-            <Text style={styles.tileMinuteText} {...textScale.badge}>
-              {`${clip.minute}'`}
-            </Text>
+          ) : (
+            <LinearGradient colors={colors.gradientInk} start={{ x: 1, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} />
+          )}
+          <LinearGradient colors={CLIP_SCRIM} style={StyleSheet.absoluteFill} pointerEvents="none" />
+          <View style={styles.tilePlay}>
+            <Ionicons name="play" size={14} color={colors.onDark} />
           </View>
-        ) : null}
-        {duration ? (
-          <Text style={styles.tileDuration} {...textScale.badge}>
-            {duration}
-          </Text>
-        ) : null}
-      </View>
+          {clip.minute != null ? (
+            <View style={styles.tileMinute}>
+              <LinearGradient
+                colors={colors.gradientSignature}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={[StyleSheet.absoluteFill, styles.tileMinuteFill]}
+              />
+              <Text style={styles.tileMinuteText} {...textScale.badge}>
+                {`${clip.minute}'`}
+              </Text>
+            </View>
+          ) : null}
+          {mine ? (
+            <View style={styles.tileMineBadge}>
+              <Ionicons name="star" size={9} color={colors.medalGold} />
+              <Text style={styles.tileMineText} {...textScale.badge}>
+                Senin golün
+              </Text>
+            </View>
+          ) : null}
+          {duration ? (
+            <Text style={styles.tileDuration} {...textScale.badge}>
+              {duration}
+            </Text>
+          ) : null}
+          {busy && download && download.progress >= 0 ? (
+            <View style={styles.tileProgressTrack} pointerEvents="none">
+              <LinearGradient
+                colors={colors.gradientSignature}
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 1, y: 0.5 }}
+                style={[styles.tileProgress, { width: `${Math.round(download.progress * 100)}%` }]}
+              />
+            </View>
+          ) : null}
+        </View>
+      </Touchable>
       <View style={styles.tileBody}>
         {team ? <TeamLogo name={team.name} logo={team.logo} size={20} /> : null}
         <Text style={styles.tileTitle} numberOfLines={1} {...textScale.dense}>
           {title}
           {clip.own_goal ? " (k.k.)" : ""}
         </Text>
+        {onDownload && download ? (
+          <Touchable
+            feedback="icon"
+            haptic="light"
+            hitSlop={6}
+            disabled={busy}
+            onPress={() => void onDownload(clip)}
+            style={[styles.tileDl, done && styles.tileDlDone]}
+            accessibilityRole="button"
+            accessibilityLabel={busy ? `İndiriliyor ${progressLabel(download)}` : `${title} golünün videosunu indir`}
+          >
+            {busy ? (
+              <Text style={styles.tileDlText} {...textScale.badge}>
+                {progressLabel(download)}
+              </Text>
+            ) : (
+              <Ionicons
+                name={done ? "checkmark" : "download-outline"}
+                size={15}
+                color={done ? colors.win : colors.brandAccent}
+              />
+            )}
+          </Touchable>
+        ) : null}
       </View>
-    </Touchable>
+    </View>
   );
 });
 
@@ -569,9 +679,54 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: space.s,
-    paddingHorizontal: space.sm,
-    paddingVertical: space.sm,
+    paddingLeft: space.sm,
+    paddingRight: space.xs,
+    paddingVertical: space.xs,
+    minHeight: 44,
   },
+  tileMine: {
+    borderColor: colors.medalGold,
+    borderWidth: 1,
+    backgroundColor: colors.brandDim,
+  },
+  tileMineBadge: {
+    position: "absolute",
+    top: space.xs,
+    right: space.xs,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xxs,
+    height: 20,
+    paddingHorizontal: space.s,
+    borderRadius: radius.pill,
+    backgroundColor: withAlpha(darkPalette.bg, 0.72),
+    borderWidth: hairline,
+    borderColor: colors.medalGold,
+  },
+  tileMineText: { ...type.micro, fontFamily: fonts.bold, color: colors.onDark },
+  tileProgressTrack: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 3,
+    backgroundColor: withAlpha(darkPalette.bg, 0.5),
+  },
+  tileProgress: { height: 3 },
+  tileDl: {
+    minWidth: 32,
+    height: 32,
+    paddingHorizontal: space.xxs,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.brandDim,
+    borderWidth: hairline,
+    borderColor: colors.brandBorder,
+  },
+  tileDlDone: { backgroundColor: colors.winDim, borderColor: colors.win },
+  tileDlText: { ...type.numSmStrong, color: colors.brandAccent },
+  mineBar: { gap: space.sm, paddingHorizontal: layout.screenPadding },
   tileTitle: { ...type.labelSm, color: colors.textPrimary, flex: 1, minWidth: 0 },
   more: {
     flexDirection: "row",

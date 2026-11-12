@@ -616,6 +616,72 @@ export const OpsRecord = memo(function OpsRecord({
   );
 });
 
+/* ═══════════════════════════════ ADIM RAYI ═══════════════════════════════ */
+
+export interface StepRailItem<K extends string> {
+  key: K;
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  done?: boolean;
+  /** Etiketin yanında küçük sayaç ("7/11"). */
+  meta?: string;
+}
+
+/**
+ * Sihirbaz adım göstergesi: numaralı yuvarlak duraklar, aralarında imza
+ * degradesiyle dolan çizgi. Biten adım yeşil onay taşır. Dokununca adım değişir.
+ */
+export function StepRail<K extends string>({ items, value, onChange }: { items: StepRailItem<K>[]; value: K; onChange: (key: K) => void }) {
+  const active = Math.max(0, items.findIndex((i) => i.key === value));
+  return (
+    <View style={styles.rail} accessibilityRole="tablist">
+      <View style={[styles.railTrack, { left: `${50 / items.length}%`, right: `${50 / items.length}%` }]} pointerEvents="none">
+        <View style={styles.railBase} />
+        <LinearGradient
+          colors={colors.gradientSignature}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={[styles.railFill, { width: items.length > 1 ? `${(active / (items.length - 1)) * 100}%` : "0%" }]}
+        />
+      </View>
+      {items.map((item, index) => {
+        const on = index === active;
+        const passed = index < active;
+        return (
+          <Touchable
+            key={item.key}
+            feedback="none"
+            haptic="selection"
+            onPress={() => onChange(item.key)}
+            style={styles.railStep}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: on }}
+            accessibilityLabel={`${index + 1}. adım: ${item.label}${item.done ? ", tamam" : ""}`}
+          >
+            <View style={[styles.railDot, on ? styles.railDotOn : passed ? styles.railDotPassed : null]}>
+              {on ? <LinearGradient colors={colors.gradientSignature} style={[StyleSheet.absoluteFill, styles.railDotFill]} /> : null}
+              <Ionicons name={item.icon} size={16} color={on ? colors.onDark : colors.textSecondary} />
+              {item.done && !on ? (
+                <View style={styles.railDone}>
+                  <Ionicons name="checkmark" size={9} color={colors.textOnStatus} />
+                </View>
+              ) : null}
+            </View>
+            <Text style={[styles.railLabel, on ? styles.railLabelOn : null]} numberOfLines={1} {...textScale.badge}>
+              {item.label}
+            </Text>
+            {item.meta ? (
+              <Text style={styles.railMeta} numberOfLines={1} {...textScale.badge}>
+                {item.meta}
+              </Text>
+            ) : null}
+          </Touchable>
+        );
+      })}
+    </View>
+  );
+}
+
 /* ═══════════════════════════════ STİLLER ═══════════════════════════════ */
 
 const styles = StyleSheet.create({
@@ -784,6 +850,49 @@ const styles = StyleSheet.create({
   rowTitle: { ...type.h4, color: colors.textPrimary },
   rowMeta: { ...type.caption, color: colors.textTertiary, marginTop: space.xxs },
   rowValue: { ...type.tableNumStrong, fontFamily: fonts.bold, color: colors.textPrimary },
+
+  rail: {
+    flexDirection: "row",
+    paddingVertical: space.md,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+  },
+  railTrack: { position: "absolute", top: space.md + 17, height: 2 },
+  railBase: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.surface3, borderRadius: 1 },
+  railFill: { position: "absolute", left: 0, top: 0, bottom: 0, borderRadius: 1 },
+  railStep: { flex: 1, alignItems: "center", gap: space.xxs },
+  railDot: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: space.xxs,
+  },
+  railDotOn: { borderColor: colors.brandBorder },
+  railDotPassed: { backgroundColor: colors.brandDim, borderColor: colors.brandBorder },
+  railDotFill: { borderRadius: 18 },
+  railDone: {
+    position: "absolute",
+    right: -3,
+    top: -3,
+    width: 15,
+    height: 15,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.win,
+    borderWidth: 2,
+    borderColor: colors.surface1,
+  },
+  railLabel: { ...type.labelXs, color: colors.textSecondary },
+  railLabelOn: { color: colors.textPrimary },
+  railMeta: { ...type.nano, color: colors.textTertiary },
 
   rec: {
     gap: space.m,
