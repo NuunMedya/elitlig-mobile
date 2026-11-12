@@ -3,6 +3,7 @@ import { StyleSheet, View } from "react-native";
 import Svg, { Defs, Ellipse, LinearGradient, RadialGradient, Rect, Stop } from "react-native-svg";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { UCLE_COLORS, UCLE_KINDS } from "@/lib/puzzle/uclePalette";
+import { colors } from "@/theme";
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];
 
@@ -43,8 +44,8 @@ function TileFaceBase({ kind, w, h, slab, back }: Props) {
               <Stop offset="1" stopColor={deepColor} stopOpacity={1} />
             </RadialGradient>
             <LinearGradient id="ukdome" x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0" stopColor={UCLE_COLORS.white} stopOpacity={0.35} />
-              <Stop offset="0.5" stopColor={UCLE_COLORS.white} stopOpacity={0} />
+              <Stop offset="0" stopColor={colors.onDark} stopOpacity={0.35} />
+              <Stop offset="0.5" stopColor={colors.onDark} stopOpacity={0} />
             </LinearGradient>
           </Defs>
           <Rect x={0} y={0} width={w} height={faceH} rx={r} fill={`url(#${gid})`} />
