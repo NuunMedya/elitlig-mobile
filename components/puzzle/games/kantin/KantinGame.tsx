@@ -29,7 +29,10 @@ import {
   type KantinStep,
 } from "@/lib/puzzle/levels/kantin";
 import type { PuzzleGameProps } from "@/lib/puzzle/types";
-import { colors, haptics, radius, space, textScale, type } from "@/theme";
+import { CARTOON } from "@/lib/game/cartoon";
+import { fonts, haptics, radius, space, textScale, type } from "@/theme";
+
+import { OUT, toonShadow, useIdleDriver } from "../soyunma/CartoonKit";
 
 import { BoosterDock, FanSpot, HoldRow, Hud, PlateSpot, STACK_VISIBLE, StackColumn, Stands } from "./Board";
 import { FxLayer, type Fx, type FxInput, type Pt } from "./Effects";
@@ -193,6 +196,7 @@ export function KantinGame({ level: levelNo, maxWidth, maxHeight, preBoosters, b
   const [nudges, setNudges] = useState<Record<number, number>>({});
   const [showTip, setShowTip] = useState(Boolean(level.tip));
   const [ended, setEnded] = useState<null | "won" | "lost">(null);
+  const idle = useIdleDriver(2200, !paused && !ended);
 
   const meta = useRef<Meta>({
     arrivedAt: new Map(st.plates.filter(Boolean).map((p) => [p!.order, 0])),
@@ -534,6 +538,8 @@ export function KantinGame({ level: levelNo, maxWidth, maxHeight, preBoosters, b
               fanSize={geo.fanSize}
               enterDelay={arrived > 0 || escaped ? 560 : 0}
               iconMax={Math.max(14, BUBBLE_H - 14)}
+              idle={idle}
+              phase={slot * 0.31}
             />
           </View>
         );
@@ -595,6 +601,7 @@ export function KantinGame({ level: levelNo, maxWidth, maxHeight, preBoosters, b
             onTap={onTap}
             nudge={nudges[i] ?? 0}
             padTop={geo.padTop}
+            idle={idle}
           />
         ))}
       </View>
@@ -650,7 +657,7 @@ function TipBanner({ text, top, width }: { text: string; top: number; width: num
 const styles = StyleSheet.create({
   root: { alignSelf: "center", backgroundColor: S.wall, borderRadius: radius.xxl, overflow: "hidden" },
   abs: { position: "absolute", left: 0 },
-  wallTiles: { backgroundColor: S.wallTile, borderTopWidth: 4, borderColor: S.wallEdge },
+  wallTiles: { backgroundColor: S.wallTile, borderTopWidth: OUT, borderColor: CARTOON.outline },
   stands: {
     overflow: "hidden",
     borderTopLeftRadius: radius.xl,
@@ -658,20 +665,21 @@ const styles = StyleSheet.create({
   },
   counter: {
     backgroundColor: S.wood,
-    borderRadius: radius.md,
-    borderBottomWidth: 5,
-    borderColor: S.woodEdge,
+    borderTopWidth: OUT,
+    borderBottomWidth: 6,
+    borderColor: CARTOON.outline,
   },
   stacksRow: { flexDirection: "row" },
   tip: {
     position: "absolute",
     paddingHorizontal: space.md,
     paddingVertical: space.m,
-    borderRadius: radius.lg,
-    backgroundColor: colors.inkBlock,
-    borderWidth: 1,
-    borderColor: colors.borderOnDark,
+    borderRadius: radius.xl,
+    backgroundColor: CARTOON.pill[1],
+    borderWidth: OUT,
+    borderBottomWidth: 6,
+    borderColor: CARTOON.outline,
     zIndex: 20,
   },
-  tipText: { ...type.bodySm, color: colors.onDark, textAlign: "center" },
+  tipText: { ...type.bodySm, fontFamily: fonts.semibold, color: CARTOON.white, textAlign: "center", ...toonShadow },
 });

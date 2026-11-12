@@ -609,36 +609,98 @@ function glow(color: string, sigma: number, alpha = 1) {
   return paint;
 }
 
+const INK = "#1B1446";
+const SKINS = ["#F7D7B8", "#EBB894", "#C98D63", "#8D5A3B"];
+const HAIRS = ["#2A1B12", "#6B4226", "#D9A441", "#1C1C1C"];
+
+function rrect(x: number, y: number, w: number, h: number, r: number) {
+  "worklet";
+  return Skia.RRectXY(Skia.XYWHRect(x, y, w, h), r, r);
+}
+
 /**
- * Oyuncu (kuşbakışı mini futbolcu): zemin gölgesi, parıltı, formalı omuzlar
- * (sol üstten ışık alan radyal gradyan), beyaz kenar, ten rengi baş ve saç.
+ * Oyuncu: arcade oyunlarının iri kafalı çizgi film futbolcusu (lacivert
+ * kontur, düz forma + parlama, beyaz şort, tozluk, pembe yanaklar).
+ * Çarpışma dairesi (x, y, r) gövdenin ortasıdır; kafa yukarı taşar.
  * `pulse` (top sende): genişleyip sönen halka.
  */
-function drawPlayer(canvas: SkCanvas, x: number, y: number, r: number, color: string, halo: string, t: number, pulse: boolean) {
+function drawPlayer(canvas: SkCanvas, x: number, y0: number, r: number, color: string, halo: string, t: number, pulse: boolean, variant = 0, back = false) {
   "worklet";
-  canvas.drawOval(Skia.XYWHRect(x - r * 1.05, y + r * 0.45, r * 2.1, r * 0.75), fill("#000000", 0.25));
+  // Arkadan görünen (sen): figür topun gerisinde, kafa çarpışma noktasında.
+  // Hafif zıplama (idle): her oyuncu kendi fazında.
+  const hop = Math.abs(Math.sin(t * 5 + variant * 1.3)) * r * 0.1;
+  const y = (back ? y0 + r * 1.05 : y0) - hop;
+  const lw = Math.max(1.6, r * 0.13);
+  const ink = stroke(INK, lw);
+  canvas.drawOval(Skia.XYWHRect(x - r * 1.0, y + r * 0.78, r * 2.0, r * 0.5), fill("#000000", 0.25));
   const breathe = pulse ? 1 + Math.sin(t * 5) * 0.08 : 1;
-  canvas.drawCircle(x, y, r * 1.35 * breathe, glow(halo, r * 0.8, 0.55));
+  canvas.drawCircle(x, y, r * 1.25 * breathe, glow(halo, r * 0.7, 0.45));
   if (pulse) {
     const k = (t * 1.4) % 1;
-    canvas.drawCircle(x, y, r * (1.1 + k * 1.2), stroke(halo, r * 0.14 * (1 - k), 0.8 * (1 - k)));
+    canvas.drawCircle(x, y + r * 0.2, r * (1.1 + k * 1.2), stroke(halo, r * 0.14 * (1 - k), 0.8 * (1 - k)));
   }
-  // omuzlar / forma
-  const body = Skia.Paint();
-  body.setAntiAlias(true);
-  body.setShader(
-    Skia.Shader.MakeRadialGradient({ x: x - r * 0.35, y: y - r * 0.35 }, r * 1.6, [Skia.Color("#FFFFFF"), Skia.Color(color), Skia.Color(color)], [0, 0.32, 1], TileMode.Clamp),
-  );
-  const shoulders = Skia.XYWHRect(x - r, y - r * 0.62, r * 2, r * 1.3);
-  canvas.drawOval(shoulders, body);
-  canvas.drawOval(shoulders, stroke("#FFFFFF", r * 0.13, 0.95));
-  canvas.drawOval(shoulders, fill("#000000", 0.08));
-  // baş (ten) + saç
-  const hr = r * 0.42;
-  canvas.drawCircle(x, y - r * 0.02, hr * 1.08, fill("#000000", 0.25));
-  canvas.drawCircle(x, y - r * 0.08, hr, fill("#F1C7A0"));
-  canvas.drawOval(Skia.XYWHRect(x - hr * 0.95, y - r * 0.08 - hr, hr * 1.9, hr * 1.25), fill("#2A1B12", 0.92));
-  canvas.drawCircle(x - hr * 0.35, y - r * 0.08 - hr * 0.45, hr * 0.28, fill("#FFFFFF", 0.35));
+  // koşu adımı: bacaklar karşılıklı oynar
+  const step = Math.sin(t * 9 + variant) * r * 0.08;
+  for (let side = -1; side <= 1; side += 2) {
+    const lx = x + side * r * 0.3 - r * 0.15;
+    const ly = y + r * 0.35 + (side < 0 ? step : -step);
+    const leg = rrect(lx, ly, r * 0.3, r * 0.55, r * 0.12);
+    canvas.drawRRect(leg, fill("#FFFFFF"));
+    canvas.drawRRect(rrect(lx, ly + r * 0.36, r * 0.3, r * 0.2, r * 0.1), fill(INK));
+    canvas.drawRRect(leg, ink);
+  }
+  // şort
+  const shorts = rrect(x - r * 0.62, y + r * 0.08, r * 1.24, r * 0.45, r * 0.16);
+  canvas.drawRRect(shorts, fill("#FFFFFF"));
+  canvas.drawRRect(shorts, ink);
+  // kollar (ten) + forma gövdesi
+  for (let side = -1; side <= 1; side += 2) {
+    const ax = x + side * r * 0.78;
+    canvas.drawCircle(ax, y + r * 0.08, r * 0.17, fill(SKINS[variant % SKINS.length]));
+    canvas.drawCircle(ax, y + r * 0.08, r * 0.17, ink);
+    canvas.drawCircle(x + side * r * 0.62, y - r * 0.28, r * 0.24, fill(color));
+    canvas.drawCircle(x + side * r * 0.62, y - r * 0.28, r * 0.24, ink);
+  }
+  const shirt = rrect(x - r * 0.66, y - r * 0.52, r * 1.32, r * 0.82, r * 0.26);
+  canvas.drawRRect(shirt, fill(color));
+  canvas.drawRRect(rrect(x - r * 0.5, y - r * 0.44, r * 0.22, r * 0.5, r * 0.11), fill("#FFFFFF", 0.4));
+  canvas.drawRRect(shirt, ink);
+  // iri kafa
+  const hy = y - r * 1.05;
+  const hr = r * 0.74;
+  const skin = SKINS[variant % SKINS.length];
+  canvas.drawCircle(x - hr * 0.98, hy + hr * 0.1, hr * 0.2, fill(skin));
+  canvas.drawCircle(x - hr * 0.98, hy + hr * 0.1, hr * 0.2, ink);
+  canvas.drawCircle(x + hr * 0.98, hy + hr * 0.1, hr * 0.2, fill(skin));
+  canvas.drawCircle(x + hr * 0.98, hy + hr * 0.1, hr * 0.2, ink);
+  canvas.drawCircle(x, hy, hr, fill(skin));
+  // saç: üst yarım daire + kakül
+  const hair = Skia.Path.Make();
+  hair.addArc(Skia.XYWHRect(x - hr, hy - hr, hr * 2, hr * 2), 180, 180);
+  hair.lineTo(x + hr * 0.95, hy - hr * 0.1);
+  hair.quadTo(x + hr * 0.2, hy - hr * 0.55, x - hr * 0.95, hy - hr * 0.05);
+  hair.close();
+  canvas.drawPath(hair, fill(HAIRS[(variant * 3 + 1) % HAIRS.length]));
+  if (back) {
+    // ense: saç başın tamamını örter, altta ten rengi boyun şeridi
+    canvas.drawCircle(x, hy - hr * 0.06, hr * 0.94, fill(HAIRS[(variant * 3 + 1) % HAIRS.length]));
+    canvas.drawCircle(x, hy, hr, ink);
+    canvas.drawOval(Skia.XYWHRect(x - hr * 0.62, hy - hr * 0.72, hr * 0.42, hr * 0.22), fill("#FFFFFF", 0.3));
+    return;
+  }
+  canvas.drawCircle(x, hy, hr, ink);
+  // yüz: iri gözler (parıltılı), pembe yanaklar, gülümseme
+  for (let side = -1; side <= 1; side += 2) {
+    const ex = x + side * hr * 0.36;
+    canvas.drawOval(Skia.XYWHRect(ex - hr * 0.12, hy + hr * 0.02, hr * 0.24, hr * 0.32), fill(INK));
+    canvas.drawCircle(ex + hr * 0.04, hy + hr * 0.1, hr * 0.06, fill("#FFFFFF"));
+    canvas.drawOval(Skia.XYWHRect(x + side * hr * 0.62 - hr * 0.15, hy + hr * 0.34, hr * 0.3, hr * 0.18), fill("#FF6B81", 0.6));
+  }
+  const smile = Skia.Path.Make();
+  smile.moveTo(x - hr * 0.2, hy + hr * 0.5);
+  smile.quadTo(x, hy + hr * 0.68, x + hr * 0.2, hy + hr * 0.5);
+  canvas.drawPath(smile, stroke(INK, Math.max(1.2, lw * 0.75)));
+  canvas.drawOval(Skia.XYWHRect(x - hr * 0.62, hy - hr * 0.72, hr * 0.42, hr * 0.22), fill("#FFFFFF", 0.35));
 }
 
 /** Zemin: gökyüzü, şeritli çim, çizgiler, köşelerde karartma. */
@@ -698,7 +760,12 @@ function drawPitch(canvas: SkCanvas, s: MomentState, pal: KariyerPalette) {
       canvas.drawLine(x, s.goalY - depth, x, s.goalY, mesh);
     }
     for (let i = 1; i < 4; i += 1) canvas.drawLine(s.goalX - s.goalHalf, s.goalY - (depth / 4) * i, s.goalX + s.goalHalf, s.goalY - (depth / 4) * i, mesh);
-    const post = stroke(pal.post, Math.max(3, w * 0.014));
+    const pw = Math.max(3, w * 0.014);
+    const postInk = stroke(INK, pw + Math.max(3, w * 0.008));
+    canvas.drawLine(s.goalX - s.goalHalf, s.goalY, s.goalX - s.goalHalf, s.goalY - depth, postInk);
+    canvas.drawLine(s.goalX + s.goalHalf, s.goalY, s.goalX + s.goalHalf, s.goalY - depth, postInk);
+    canvas.drawLine(s.goalX - s.goalHalf, s.goalY - depth, s.goalX + s.goalHalf, s.goalY - depth, postInk);
+    const post = stroke(pal.post, pw);
     canvas.drawLine(s.goalX - s.goalHalf, s.goalY, s.goalX - s.goalHalf, s.goalY - depth, post);
     canvas.drawLine(s.goalX + s.goalHalf, s.goalY, s.goalX + s.goalHalf, s.goalY - depth, post);
     canvas.drawLine(s.goalX - s.goalHalf, s.goalY - depth, s.goalX + s.goalHalf, s.goalY - depth, post);
@@ -772,17 +839,17 @@ export function drawMoment(canvas: SkCanvas, s: MomentState, touch: TouchInput, 
   // Rakipler.
   for (let i = 0; i < s.rivals.length; i += 1) {
     const r = s.rivals[i];
-    drawPlayer(canvas, r.x, r.y, r.r, pal.rival, pal.rivalGlow, s.t + i, false);
+    drawPlayer(canvas, r.x, r.y, r.r, pal.rival, pal.rivalGlow, s.t + i, false, i + 1);
   }
 
   if (s.kind === KIND_SHOT) {
     const k = s.keeper;
     // Kalecinin uzanma alanı: zemin üstünde soluk bir bant.
     canvas.drawRRect(Skia.RRectXY(Skia.XYWHRect(k.x - k.b, k.y - k.r * 0.4, k.b * 2, k.r * 0.8), k.r * 0.4, k.r * 0.4), fill(pal.keeper, 0.25));
-    drawPlayer(canvas, k.x, k.y, k.r, pal.keeper, pal.keeper, s.t, false);
+    drawPlayer(canvas, k.x, k.y, k.r, pal.keeper, pal.keeper, s.t, false, 2);
   }
-  if (s.kind === KIND_PASS) drawPlayer(canvas, s.mate.x, s.mate.y, s.mate.r, pal.mate, pal.mate, s.t, true);
-  drawPlayer(canvas, s.me.x, s.me.y, s.me.r, pal.me, pal.meGlow, s.t, s.phase === PHASE_READY);
+  if (s.kind === KIND_PASS) drawPlayer(canvas, s.mate.x, s.mate.y, s.mate.r, pal.mate, pal.mate, s.t, true, 3);
+  drawPlayer(canvas, s.me.x, s.me.y, s.me.r, pal.me, pal.meGlow, s.t, s.phase === PHASE_READY, 0, true);
 
   // Top izi: eskiden yeniye kalınlaşan parlak şerit.
   const n = s.trail.length / 2;
@@ -813,6 +880,7 @@ export function drawMoment(canvas: SkCanvas, s: MomentState, touch: TouchInput, 
   canvas.drawCircle(b.x + Math.cos(s.t * 3) * b.r * 0.1, b.y, b.r * 0.24, fill("#1B1B2F", 0.85));
   canvas.restore();
   canvas.drawCircle(b.x - b.r * 0.35, b.y - b.r * 0.4, b.r * 0.28, fill("#FFFFFF", 0.7));
+  canvas.drawCircle(b.x, b.y, b.r, stroke(INK, Math.max(1.5, b.r * 0.16)));
 
   // Parçacıklar (konfeti): dönen küçük dikdörtgenler.
   for (let i = 0; i < s.particles.length; i += 1) {

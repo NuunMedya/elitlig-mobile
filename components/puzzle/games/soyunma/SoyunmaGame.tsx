@@ -9,8 +9,9 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { memo, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { Animated, Easing, InteractionManager, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
-import Svg, { Line, Rect } from "react-native-svg";
+import Svg, { Line, Path, Rect } from "react-native-svg";
 import { fonts, haptics, radius, space, textScale, type } from "@/theme";
+import { CARTOON } from "@/lib/game/cartoon";
 import { SOYUNMA_UI as UI } from "@/lib/puzzle/soyunmaPalette";
 import type { PuzzleGameProps } from "@/lib/puzzle/types";
 import {
@@ -29,6 +30,7 @@ import {
   type SoyunmaLevel,
   type SoyunmaRack,
 } from "@/lib/puzzle/levels/soyunma";
+import { BoosterButton3D, Button3D, CountBadge, IconDisc, OUT, useIdleDriver, usePop } from "./CartoonKit";
 import { TextBurst } from "./Effects";
 import { bodyTop, computeGeometry, liftOffset, slotTop, type BoardGeometry } from "./geometry";
 import { Crest, Jersey } from "./Jersey";
@@ -266,9 +268,14 @@ const shadowText = { textShadowColor: UI.textShadow, textShadowOffset: { width: 
 
 /** Kabartmalı (3D) sayaç: alt kalınlık + parlak yüz. */
 function MovesCounter({ label, value, warn, height }: { label: string; value: string; warn: boolean; height: number }) {
+  const pop = usePop(value, 1.22);
   return (
-    <View style={[styles.counter, { height, backgroundColor: warn ? UI.redDeep : UI.orangeDeep }]} accessible accessibilityLabel={`${label}: ${value}`}>
-      <View style={[styles.counterFace, { height: height - 4, backgroundColor: warn ? UI.red : UI.orange }]}>
+    <Animated.View
+      style={[styles.counter, { height, backgroundColor: warn ? UI.redDeep : UI.orangeDeep, transform: [{ scale: pop }] }]}
+      accessible
+      accessibilityLabel={`${label}: ${value}`}
+    >
+      <View style={[styles.counterFace, { height: height - 5, backgroundColor: warn ? UI.red : UI.orange }]}>
         <View style={styles.counterShine} />
         <Text {...textScale.badge} style={styles.counterLabel}>
           {label}
@@ -277,7 +284,7 @@ function MovesCounter({ label, value, warn, height }: { label: string; value: st
           {value}
         </Text>
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -297,59 +304,6 @@ function StarMeter({ stars, size }: { stars: number; size: number }) {
   );
 }
 
-function BoosterButton({
-  icon,
-  label,
-  stock,
-  disabled,
-  onPress,
-  height,
-}: {
-  icon: React.ComponentProps<typeof Ionicons>["name"];
-  label: string;
-  stock: number;
-  disabled?: boolean;
-  onPress: () => void;
-  height: number;
-}) {
-  const down = useRef(new Animated.Value(0)).current;
-  const disc = height - 5 - 14;
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={disabled}
-      onPressIn={() => Animated.timing(down, { toValue: 1, duration: 60, useNativeDriver: true }).start()}
-      onPressOut={() => Animated.spring(down, { toValue: 0, speed: 30, bounciness: 12, useNativeDriver: true }).start()}
-      accessibilityRole="button"
-      accessibilityLabel={`${label}, stok ${stock}`}
-      accessibilityState={{ disabled: !!disabled }}
-      style={[styles.booster, { height }, disabled ? styles.boosterOff : null]}
-    >
-      <View style={[styles.boosterBase, { top: 5, height: height - 5 }]} />
-      <Animated.View
-        style={[styles.boosterFace, { height: height - 5, transform: [{ translateY: down.interpolate({ inputRange: [0, 1], outputRange: [0, 4] }) }] }]}
-      >
-        <View style={styles.counterShine} />
-        <View style={[styles.boosterDisc, { width: disc, height: disc, borderRadius: disc / 2 }]}>
-          <Ionicons name={icon} size={Math.round(disc * 0.6)} color={UI.text} />
-        </View>
-        <Text {...textScale.badge} style={styles.boosterLabel}>
-          {label.toLocaleUpperCase("tr-TR")}
-        </Text>
-        <View style={[styles.stockBadge, { backgroundColor: stock > 0 ? UI.red : UI.greenDeep }]}>
-          {stock > 0 ? (
-            <Text {...textScale.badge} style={styles.stockText}>
-              {String(stock)}
-            </Text>
-          ) : (
-            <Ionicons name="add" size={14} color={UI.text} />
-          )}
-        </View>
-      </Animated.View>
-    </Pressable>
-  );
-}
-
 /** Soyunma odası zemini: fayans duvar + parke zemin (saf çizim). */
 const RoomBackdrop = memo(function RoomBackdrop({ width, height, floorH }: { width: number; height: number; floorH: number }) {
   const tile = 30;
@@ -357,6 +311,7 @@ const RoomBackdrop = memo(function RoomBackdrop({ width, height, floorH }: { wid
   const cols = Math.ceil(width / tile);
   const rows = Math.ceil(wallH / tile);
   const planks = Math.ceil(width / 46);
+  const flagN = Math.max(5, Math.round(width / 34));
   return (
     <Svg width={width} height={height} style={StyleSheet.absoluteFill} pointerEvents="none">
       <Rect x={0} y={0} width={width} height={wallH} fill={UI.wall} />
@@ -367,9 +322,27 @@ const RoomBackdrop = memo(function RoomBackdrop({ width, height, floorH }: { wid
       {Array.from({ length: rows }, (_, i) => (
         <Line key={`r${i}`} x1={0} y1={wallH - (i + 1) * tile} x2={width} y2={wallH - (i + 1) * tile} stroke={UI.wallLine} strokeWidth={1.5} />
       ))}
-      <Rect x={0} y={wallH - 6} width={width} height={6} fill={UI.wallDeep} />
+      {/* Flama dizisi: lacivert ip, konturlu üçgen bayraklar. */}
+      <Path d={`M0 6 Q${width / 2} 26 ${width} 6`} stroke={CARTOON.outline} strokeWidth={2} fill="none" />
+      {Array.from({ length: flagN }, (_, i) => {
+        const x = ((i + 0.5) / flagN) * width;
+        const u = x / width;
+        const y = 6 + 4 * 20 * u * (1 - u);
+        return (
+          <Path
+            key={`f${i}`}
+            d={`M${x - 8} ${y - 1} L${x + 8} ${y + 1} L${x} ${y + 17} Z`}
+            fill={UI.flags[i % UI.flags.length]}
+            stroke={CARTOON.outline}
+            strokeWidth={2}
+            strokeLinejoin="round"
+          />
+        );
+      })}
+      <Rect x={0} y={wallH - 10} width={width} height={10} fill={UI.wallDeep} stroke={CARTOON.outline} strokeWidth={2.5} />
       <Rect x={0} y={wallH} width={width} height={floorH} fill={UI.floor} />
       <Rect x={0} y={wallH} width={width} height={Math.max(2, floorH * 0.3)} fill={UI.floorHi} />
+      <Line x1={0} y1={wallH} x2={width} y2={wallH} stroke={CARTOON.outline} strokeWidth={2.5} />
       {Array.from({ length: planks }, (_, i) => (
         <Line key={`p${i}`} x1={i * 46 + (i % 2) * 18} y1={wallH} x2={i * 46 + (i % 2) * 18} y2={height} stroke={UI.floorLine} strokeWidth={1.5} />
       ))}
@@ -438,6 +411,7 @@ function SoyunmaBoardView({ lvl, maxWidth, maxHeight, preBoosters, boosterStock,
   const goalChip = useRef({ x: 0, y: 0, w: 0, h: 0 });
   const [tipOpen, setTipOpen] = useState(!!lvl.tip);
   const finished = useRef(false);
+  const idle = useIdleDriver(2600, !paused && s.phase === "play");
   const combo = useRef({ n: 0, lastMove: -10 });
   const prevComplete = useRef(0);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -708,6 +682,7 @@ function SoyunmaBoardView({ lvl, maxWidth, maxHeight, preBoosters, boosterStock,
                 hint={hintRack === i}
                 geom={geom}
                 onPress={onPress}
+                idle={idle}
               />
             );
           })}
@@ -731,9 +706,7 @@ function SoyunmaBoardView({ lvl, maxWidth, maxHeight, preBoosters, boosterStock,
           <View style={styles.blockedWrap}>
             <View style={styles.blockedBase} accessibilityRole="alert">
               <View style={styles.blocked}>
-                <View style={styles.blockedIcon}>
-                  <Ionicons name={s.blockReason === "limit" ? "hourglass" : "close"} size={28} color={UI.text} />
-                </View>
+                <IconDisc icon={s.blockReason === "limit" ? "hourglass" : "close"} size={56} tone="red" />
                 <Text {...textScale.dense} style={styles.blockedTitle}>
                   {s.blockReason === "limit" ? "Hamle hakkın bitti" : "Hamle kalmadı"}
                 </Text>
@@ -741,31 +714,17 @@ function SoyunmaBoardView({ lvl, maxWidth, maxHeight, preBoosters, boosterStock,
                   Son hamleyi geri alıp yeni bir yol deneyebilirsin.
                 </Text>
                 <View style={styles.blockedRow}>
-                  <Pressable
-                    onPress={onUndo}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Geri al, stok ${geriStock}`}
-                    style={({ pressed }) => [styles.btnBase, { backgroundColor: UI.orangeDeep }, pressed ? styles.btnPressed : null]}
-                  >
-                    <View style={[styles.btn, { backgroundColor: UI.orange }]}>
-                      <Ionicons name="arrow-undo" size={18} color={UI.text} />
-                      <Text {...textScale.dense} style={styles.btnText}>
-                        Geri al ({geriStock})
-                      </Text>
-                    </View>
-                  </Pressable>
-                  <Pressable
-                    onPress={giveUp}
-                    accessibilityRole="button"
-                    accessibilityLabel="Pes et"
-                    style={({ pressed }) => [styles.btnBase, { backgroundColor: UI.panelDeep }, pressed ? styles.btnPressed : null]}
-                  >
-                    <View style={[styles.btn, { backgroundColor: UI.panelRim }]}>
-                      <Text {...textScale.dense} style={styles.btnText}>
-                        Pes et
-                      </Text>
-                    </View>
-                  </Pressable>
+                  <Button3D tone="orange" height={46} onPress={onUndo} accessibilityLabel={`Geri al, stok ${geriStock}`} badge={<CountBadge value={geriStock} size={24} />}>
+                    <Ionicons name="arrow-undo" size={18} color={UI.text} />
+                    <Text {...textScale.dense} style={styles.btnText}>
+                      GERİ AL
+                    </Text>
+                  </Button3D>
+                  <Button3D tone="red" height={46} onPress={giveUp} accessibilityLabel="Pes et">
+                    <Text {...textScale.dense} style={styles.btnText}>
+                      PES ET
+                    </Text>
+                  </Button3D>
                 </View>
               </View>
             </View>
@@ -793,13 +752,15 @@ function SoyunmaBoardView({ lvl, maxWidth, maxHeight, preBoosters, boosterStock,
             </View>
           ) : null}
         </View>
-        <BoosterButton
+        <BoosterButton3D
           icon="arrow-undo"
           label="Geri al"
           stock={geriStock}
           disabled={s.moves === 0 || s.phase === "won"}
           onPress={onUndo}
-          height={barH - 6}
+          height={barH - 12}
+          tone="blue"
+          style={styles.booster}
         />
       </View>
 
@@ -848,7 +809,7 @@ export default function SoyunmaGame(props: PuzzleGameProps) {
 const ROOM_RIM = 4;
 
 const styles = StyleSheet.create({
-  hud: { borderRadius: radius.xl, backgroundColor: UI.panelDeep },
+  hud: { borderRadius: radius.xl, backgroundColor: CARTOON.outline },
   hudFace: {
     flexDirection: "row",
     alignItems: "center",
@@ -856,20 +817,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.sm,
     borderRadius: radius.xl,
     backgroundColor: UI.panel,
-    borderWidth: 2,
-    borderColor: UI.panelRim,
+    borderWidth: OUT,
+    borderColor: CARTOON.outline,
   },
-  counter: { minWidth: 76, borderRadius: radius.lg },
+  counter: { minWidth: 78, borderRadius: radius.lg, borderWidth: OUT, borderColor: CARTOON.outline },
   counterFace: {
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: space.sm,
-    borderRadius: radius.lg,
-    borderWidth: 2,
-    borderColor: UI.shine,
+    borderTopLeftRadius: radius.md,
+    borderTopRightRadius: radius.md,
+    borderBottomLeftRadius: radius.sm,
+    borderBottomRightRadius: radius.sm,
   },
-  counterShine: { position: "absolute", left: space.sm, right: space.sm, top: 3, height: 4, borderRadius: radius.pill, backgroundColor: UI.shine },
-  counterLabel: { ...type.nano, color: UI.text, letterSpacing: 0.6 },
+  counterShine: { position: "absolute", left: space.sm, right: space.sm, top: 3, height: 5, borderRadius: radius.pill, backgroundColor: UI.shine },
+  counterLabel: { ...type.nano, fontFamily: fonts.bold, color: UI.text, letterSpacing: 0.6, ...shadowText },
   counterValue: { ...type.scoreMd, color: UI.text, ...shadowText },
   goal: {
     flex: 1,
@@ -879,52 +841,22 @@ const styles = StyleSheet.create({
     gap: space.s,
     paddingHorizontal: space.sm,
     paddingVertical: space.xs,
-    borderRadius: radius.lg,
+    borderRadius: radius.pill,
     backgroundColor: UI.panelDeep,
+    borderWidth: 2,
+    borderColor: CARTOON.outline,
   },
   goalBody: { flex: 1, minWidth: 0, gap: space.xxs },
   goalRow: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: space.xs },
-  goalLabel: { ...type.micro, color: UI.textSoft },
+  goalLabel: { ...type.micro, fontFamily: fonts.bold, color: UI.textSoft },
   goalValue: { ...type.scoreSm, color: UI.text, ...shadowText },
-  bar: { height: 10, borderRadius: radius.pill, backgroundColor: UI.barTrack, overflow: "hidden" },
-  barFill: { height: 10, borderRadius: radius.pill, backgroundColor: UI.green, borderBottomWidth: 3, borderBottomColor: UI.greenDeep },
+  bar: { height: 12, borderRadius: radius.pill, backgroundColor: UI.barTrack, overflow: "hidden", borderWidth: 2, borderColor: CARTOON.outline },
+  barFill: { height: 8, borderRadius: radius.pill, backgroundColor: UI.green, borderBottomWidth: 3, borderBottomColor: UI.greenDeep },
   score: { alignItems: "flex-end", minWidth: 64 },
   scoreValue: { ...type.scoreMd, color: UI.gold, ...shadowText },
   stars: { flexDirection: "row", alignItems: "flex-end" },
   starMid: { marginBottom: space.xxs },
-  booster: { width: 150 },
-  boosterOff: { opacity: 0.5 },
-  boosterBase: { position: "absolute", left: 0, right: 0, borderRadius: radius.xl, backgroundColor: UI.blueDeep },
-  boosterFace: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    top: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.sm,
-    paddingHorizontal: space.sm,
-    borderRadius: radius.xl,
-    backgroundColor: UI.blue,
-    borderWidth: 2,
-    borderColor: UI.shine,
-  },
-  boosterDisc: { alignItems: "center", justifyContent: "center", backgroundColor: UI.blueDeep },
-  boosterLabel: { ...type.label, fontFamily: fonts.heading, color: UI.text, letterSpacing: 0.6, flexShrink: 1, ...shadowText },
-  stockBadge: {
-    position: "absolute",
-    top: -10,
-    right: -8,
-    minWidth: 26,
-    height: 26,
-    paddingHorizontal: space.xs,
-    borderRadius: radius.pill,
-    borderWidth: 2,
-    borderColor: UI.text,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  stockText: { ...type.numSmStrong, color: UI.text },
+  booster: { width: 150, marginBottom: space.xs },
   bottomBar: { flexDirection: "row", alignItems: "flex-end", gap: space.sm, paddingRight: space.xs },
   bottomInfo: { flex: 1, minWidth: 0, gap: space.xs, justifyContent: "center", alignSelf: "stretch" },
   starHint: {
@@ -937,10 +869,10 @@ const styles = StyleSheet.create({
     paddingVertical: space.xs,
     borderRadius: radius.pill,
     backgroundColor: UI.panel,
-    borderWidth: 1,
-    borderColor: UI.panelRim,
+    borderWidth: 2.5,
+    borderColor: CARTOON.outline,
   },
-  subText: { ...type.caption, fontFamily: fonts.semibold, color: UI.text, flexShrink: 1 },
+  subText: { ...type.caption, fontFamily: fonts.bold, color: UI.text, flexShrink: 1, ...shadowText },
   cupTag: {
     flexDirection: "row",
     alignItems: "center",
@@ -950,15 +882,16 @@ const styles = StyleSheet.create({
     paddingVertical: space.xxs,
     borderRadius: radius.pill,
     backgroundColor: UI.gold,
-    borderBottomWidth: 2,
-    borderColor: UI.goldDeep,
+    borderWidth: 2.5,
+    borderBottomWidth: 4,
+    borderColor: CARTOON.outline,
   },
-  cupText: { ...type.micro, color: UI.goldInk },
+  cupText: { ...type.micro, fontFamily: fonts.bold, color: UI.goldInk },
   tip: {
     position: "absolute",
     left: space.md,
     right: space.md,
-    top: space.sm,
+    top: space.lg + space.s,
     flexDirection: "row",
     alignItems: "center",
     gap: space.sm,
@@ -966,11 +899,20 @@ const styles = StyleSheet.create({
     paddingVertical: space.sm,
     borderRadius: radius.xl,
     backgroundColor: UI.tipFace,
-    borderWidth: 2,
-    borderBottomWidth: 4,
-    borderColor: UI.tipDeep,
+    borderWidth: OUT,
+    borderBottomWidth: 6,
+    borderColor: CARTOON.outline,
   },
-  tipIcon: { width: 26, height: 26, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: UI.gold },
+  tipIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: UI.gold,
+    borderWidth: 2,
+    borderColor: CARTOON.outline,
+  },
   tipText: { ...type.bodySm, fontFamily: fonts.semibold, color: UI.tipInk, flex: 1 },
   room: {
     borderRadius: radius.xxl,
@@ -981,41 +923,20 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   blockedWrap: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", backgroundColor: UI.scrim },
-  blockedBase: { width: "88%", maxWidth: 360, borderRadius: radius.xxl, backgroundColor: UI.cardDeep, paddingBottom: 6 },
+  blockedBase: { width: "88%", maxWidth: 360, borderRadius: radius.xxl, backgroundColor: CARTOON.outline, paddingBottom: 6 },
   blocked: {
     alignItems: "center",
     padding: space.lg,
     borderRadius: radius.xxl,
-    backgroundColor: UI.card,
-    borderWidth: 2,
-    borderColor: UI.panelRim,
+    backgroundColor: CARTOON.card,
+    borderWidth: OUT,
+    borderColor: CARTOON.outline,
     gap: space.s,
   },
-  blockedIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: radius.pill,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: UI.red,
-    borderWidth: 3,
-    borderColor: UI.redDeep,
-  },
-  blockedTitle: { ...type.h2, color: UI.text, ...shadowText },
-  blockedText: { ...type.bodySm, color: UI.textSoft, textAlign: "center" },
+  blockedTitle: { ...type.h2, fontFamily: fonts.bold, color: CARTOON.cardInk },
+  blockedText: { ...type.bodySm, color: CARTOON.cardMuted, textAlign: "center" },
   blockedRow: { flexDirection: "row", gap: space.sm, marginTop: space.s },
-  btnBase: { borderRadius: radius.pill, paddingBottom: 4 },
-  btnPressed: { transform: [{ translateY: 2 }] },
-  btn: {
-    minHeight: 44,
-    paddingHorizontal: space.lg,
-    borderRadius: radius.pill,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: space.s,
-  },
-  btnText: { ...type.label, fontFamily: fonts.heading, color: UI.text, ...shadowText },
+  btnText: { ...type.label, fontFamily: fonts.bold, color: UI.text, ...shadowText },
   loading: { alignItems: "center", justifyContent: "center", gap: space.sm },
   loadingText: { ...type.label, color: UI.text, ...shadowText },
 });

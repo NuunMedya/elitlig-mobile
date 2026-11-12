@@ -56,11 +56,22 @@ export const SOYUNMA_LOCKER = {
   sparkle: "#FFD84D",
   crest: "#FFD84D",
   crestInk: "#5C3B00",
+  crestShine: "rgba(255, 255, 255, 0.7)",
   /** Ahşap damarı, metal parlaklık ve iç gölge. */
   woodHi: "#8C6343",
   grain: "#3E2818",
   railHi: "#F1F3F7",
   inner: "#2E1E12",
+  /** Çizgi film metal dolap: parlak mavi gövde, lacivert iç boşluk. */
+  lockerHi: "#7CC4FF",
+  locker: "#3D8EF2",
+  lockerLo: "#2763C4",
+  cavity: "#D6E2FF",
+  cavityLo: "#A9BCEB",
+  vent: "#1D4FA8",
+  doorHi: "#FFB547",
+  door: "#F57F22",
+  doorLo: "#C9560C",
 } as const;
 
 /** Kumaş ışığı ve gölgesi (formalar). */
@@ -79,9 +90,9 @@ export const SOYUNMA_SHADE = {
  */
 export const SOYUNMA_UI = {
   /** HUD paneli — lacivert gece. */
-  panel: "#173A7A",
-  panelDeep: "#0B1F4A",
-  panelRim: "#2F5FC0",
+  panel: "#3A2E9E",
+  panelDeep: "#1C1760",
+  panelRim: "#5A4BD0",
   /** Hamle sayacı turuncusu. */
   orange: "#FF9A2E",
   orangeDeep: "#C25E00",
@@ -98,22 +109,26 @@ export const SOYUNMA_UI = {
   /** Güçlendirici mavisi. */
   blue: "#3FA9FF",
   blueDeep: "#1A63B8",
-  /** Soyunma odası: fayans duvar + parke zemin + çerçeve. */
-  wall: "#2C7FA8",
-  wallHi: "#3E97C2",
-  wallDeep: "#1B5776",
-  wallLine: "rgba(255, 255, 255, 0.12)",
-  floor: "#B9773F",
-  floorHi: "#D08E52",
-  floorLine: "#8A5428",
-  rim: "#123A55",
-  rimDeep: "#08202F",
+  /** Soyunma odası: krem fayans duvar + turuncu parke + lacivert çerçeve. */
+  wall: "#FFE2A8",
+  wallHi: "#FFF4D8",
+  wallDeep: "#F2B84B",
+  wallLine: "rgba(201, 135, 40, 0.35)",
+  floor: "#E8904A",
+  floorHi: "#FFB46A",
+  floorLine: "#B45E22",
+  rim: "#1B1446",
+  rimDeep: "#1B1446",
+  bench: "#C9772E",
+  benchHi: "#F0A250",
+  /** Duvardaki flama dizisi. */
+  flags: ["#FF4D6D", "#FFD23F", "#2F80ED", "#22C55E", "#7C4DFF"] as readonly string[],
   starOff: "rgba(255, 255, 255, 0.28)",
-  barTrack: "rgba(0, 0, 0, 0.38)",
+  barTrack: "#120A35",
   shine: "rgba(255, 255, 255, 0.35)",
   text: "#FFFFFF",
   textSoft: "rgba(255, 255, 255, 0.75)",
-  textShadow: "rgba(0, 0, 0, 0.45)",
+  textShadow: "rgba(27, 20, 70, 0.85)",
   scrim: "rgba(5, 12, 30, 0.6)",
   card: "#1F4A96",
   cardDeep: "#0E2659",

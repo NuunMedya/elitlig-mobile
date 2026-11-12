@@ -8,7 +8,9 @@ import React, { memo, useEffect, useRef } from "react";
 import { Animated, Easing, StyleSheet, Text, View } from "react-native";
 
 import { kantinConfetti, kantinScene as S } from "@/lib/puzzle/kantinPalette";
-import { textScale, type } from "@/theme";
+import { CARTOON } from "@/lib/game/cartoon";
+import { fonts, radius, space, textScale, type } from "@/theme";
+import { OUT, toonShadow } from "../soyunma/CartoonKit";
 
 import { FanFigure } from "./Fan";
 import { CoinIcon, ProductIcon } from "./ProductIcon";
@@ -169,14 +171,17 @@ const FloatText = memo(function FloatText({ fx, onDone }: { fx: Extract<Fx, { ki
     transform: [
       { translateX: fx.at.x - 110 },
       { translateY: t.interpolate({ inputRange: [0, 1], outputRange: [fx.at.y - 14, fx.at.y - (fx.big ? 46 : 34)] }) },
-      { scale: t.interpolate({ inputRange: [0, 0.18, 0.3, 1], outputRange: [0.5, fx.big ? 1.25 : 1.1, 1, 1] }) },
+      { scaleX: t.interpolate({ inputRange: [0, 0.14, 0.22, 0.3, 1], outputRange: [0.4, fx.big ? 1.25 : 1.12, 0.95, 1, 1] }) },
+      { scaleY: t.interpolate({ inputRange: [0, 0.14, 0.22, 0.3, 1], outputRange: [0.4, 0.88, 1.08, 1, 1] }) },
     ],
   };
   return (
     <Animated.View pointerEvents="none" style={[styles.abs, styles.textBox, style]}>
-      <Text {...textScale.badge} style={[fx.big ? styles.bigText : styles.smallText, { color }]} numberOfLines={1}>
-        {fx.text}
-      </Text>
+      <View style={[styles.textPill, { backgroundColor: color }, fx.big ? styles.textPillBig : null]}>
+        <Text {...textScale.badge} style={fx.big ? styles.bigText : styles.smallText} numberOfLines={1}>
+          {fx.text}
+        </Text>
+      </View>
     </Animated.View>
   );
 });
@@ -214,21 +219,21 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 2,
     backgroundColor: S.plate,
-    borderWidth: 2,
-    borderColor: S.plateRim,
+    borderWidth: 2.5,
+    borderColor: CARTOON.outline,
   },
   textBox: { width: 220, alignItems: "center" },
-  bigText: {
-    ...type.scoreMd,
-    textShadowColor: S.white,
-    textShadowRadius: 6,
-    textShadowOffset: { width: 0, height: 1 },
+  textPill: {
+    paddingHorizontal: space.md,
+    paddingVertical: space.xxs,
+    borderRadius: radius.pill,
+    borderWidth: OUT,
+    borderBottomWidth: 5,
+    borderColor: CARTOON.outline,
+    maxWidth: 220,
   },
-  smallText: {
-    ...type.h3,
-    textShadowColor: S.white,
-    textShadowRadius: 4,
-    textShadowOffset: { width: 0, height: 1 },
-  },
+  textPillBig: { paddingHorizontal: space.lg, transform: [{ rotate: "-3deg" }] },
+  bigText: { ...type.scoreMd, color: S.white, ...toonShadow },
+  smallText: { ...type.h3, fontFamily: fonts.bold, color: S.white, ...toonShadow },
 });
 

@@ -6,13 +6,15 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { memo, useEffect, useRef } from "react";
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from "react-native";
-import Svg, { Defs, Ellipse, Line, LinearGradient, Path, RadialGradient, Rect, Stop } from "react-native-svg";
+import Svg, { Circle, G, Defs, Ellipse, Line, LinearGradient, Path, RadialGradient, Rect, Stop } from "react-native-svg";
 
+import { CARTOON } from "@/lib/game/cartoon";
 import { kantinScene as S } from "@/lib/puzzle/kantinPalette";
 import { KANTIN_PRODUCTS, type KantinItem, type KantinOrder } from "@/lib/puzzle/levels/kantin";
 import { fonts, radius, space, textScale, type } from "@/theme";
 
 import { FanFigure, type FanMood } from "./Fan";
+import { BoosterButton3D, HudPill, IconDisc, OUT, toonShadow, usePop, wave } from "../soyunma/CartoonKit";
 import { CoinIcon, CrateIcon, ProductIcon } from "./ProductIcon";
 
 export const productName = (p: number) => KANTIN_PRODUCTS[p]?.name ?? "Ürün";
@@ -83,9 +85,9 @@ const PlateShine = memo(function PlateShine({ w, h }: { w: number; h: number }) 
 export const Stands = memo(function Stands({ w, h, awn }: { w: number; h: number; awn: number }) {
   const seg = Math.max(22, Math.round(w / 14));
   const segs = Math.ceil(w / seg);
-  const rowH = 17;
+  const rowH = 19;
   const rows = Math.max(2, Math.min(7, Math.floor((h - awn - 6) / rowH)));
-  const step = 17;
+  const step = 19;
   const cols = Math.ceil(w / step) + 1;
   return (
     <Svg width={w} height={h} style={StyleSheet.absoluteFill} pointerEvents="none">
@@ -97,26 +99,29 @@ export const Stands = memo(function Stands({ w, h, awn }: { w: number; h: number
       </Defs>
       <Rect x={0} y={0} width={w} height={h} fill="url(#kstand)" />
       {Array.from({ length: rows }, (_, r) => (
-        <Rect key={`row${r}`} x={0} y={awn + 8 + r * rowH + 9} width={w} height={rowH - 9} fill={r % 2 ? S.seatA : S.seatB} />
+        <Rect key={`row${r}`} x={0} y={awn + 8 + r * rowH + 11} width={w} height={rowH - 11} fill={r % 2 ? S.seatA : S.seatB} />
       ))}
+      {/* Kalabalık: konturlu mini taraftarlar (baş + forma), soluk: öndeki müşteriler öne çıksın. */}
       {Array.from({ length: rows }, (_, r) =>
         Array.from({ length: cols }, (_, c) => {
           const x = c * step + (r % 2 ? step / 2 : 0) - 4;
           const y = awn + 8 + r * rowH + 6;
           const tone = S.crowd[(c * 5 + r * 3 + ((c * r) % 4)) % S.crowd.length];
+          const skin = S.crowdSkins[(c * 3 + r) % S.crowdSkins.length];
           return (
-            <React.Fragment key={`c${r}-${c}`}>
-              <Ellipse cx={x} cy={y + 7} rx={6.5} ry={5} fill={tone} fillOpacity={0.55} />
-              <Ellipse cx={x} cy={y} rx={3.8} ry={3.8} fill={S.crowdSkin} fillOpacity={0.5} />
-            </React.Fragment>
+            <G key={`c${r}-${c}`} opacity={0.62}>
+              <Path d={`M${x - 7} ${y + 13} Q${x - 7} ${y + 4} ${x} ${y + 4} Q${x + 7} ${y + 4} ${x + 7} ${y + 13} Z`} fill={tone} stroke={CARTOON.outline} strokeWidth={1.6} />
+              <Circle cx={x} cy={y} r={4.6} fill={skin} stroke={CARTOON.outline} strokeWidth={1.6} />
+            </G>
           );
         }),
       )}
       {Array.from({ length: segs }, (_, i) => {
         const x = i * seg;
-        const d = `M ${x} 0 H ${x + seg} V ${awn * 0.62} Q ${x + seg / 2} ${awn * 1.25} ${x} ${awn * 0.62} Z`;
-        return <Path key={`a${i}`} d={d} fill={i % 2 ? S.awningB : S.awningA} stroke={S.awningEdge} strokeOpacity={0.35} strokeWidth={1} />;
+        const d = `M ${x} 0 H ${x + seg} V ${awn * 0.62} Q ${x + seg / 2} ${awn * 1.3} ${x} ${awn * 0.62} Z`;
+        return <Path key={`a${i}`} d={d} fill={i % 2 ? S.awningB : S.awningA} stroke={CARTOON.outline} strokeWidth={2} strokeLinejoin="round" />;
       })}
+      <Rect x={0} y={0} width={w} height={3} fill={CARTOON.outline} />
     </Svg>
   );
 });
@@ -161,13 +166,16 @@ export const Hud = memo(function Hud({
     Animated.spring(pop, { toValue: 1, friction: 5, tension: 180, useNativeDriver: true }).start();
   }, [low, ss, pop]);
   const pct = total ? served / total : 0;
-  const pill = Math.max(34, Math.min(46, height - 10));
+  const pill = Math.max(34, Math.min(44, height - 14));
   return (
     <View style={[styles.hud, { height }]}>
-      <View style={[styles.hudGoal, { height: pill, borderRadius: pill / 2 }]} accessibilityLabel={`Sipariş ${served} / ${total}`}>
-        <Animated.View style={[styles.hudIcon, { width: pill + 4, height: pill + 4, borderRadius: (pill + 4) / 2, transform: [{ scale: goalPop }] }]}>
-          <Ionicons name="restaurant" size={Math.round(pill * 0.46)} color={S.white} />
-        </Animated.View>
+      <HudPill
+        height={pill}
+        style={styles.hudGoalWrap}
+        scale={goalPop}
+        accessibilityLabel={`Sipariş ${served} / ${total}`}
+        disc={<IconDisc icon="restaurant" size={pill + 2} tone="orange" />}
+      >
         <View style={styles.hudGoalText}>
           <Text {...textScale.badge} style={styles.hudValue}>
             {served}
@@ -177,24 +185,25 @@ export const Hud = memo(function Hud({
             <View style={[styles.hudBarFill, { width: `${Math.round(pct * 100)}%` }]} />
           </View>
         </View>
-      </View>
+      </HudPill>
       {timeLeft !== null ? (
-        <Animated.View
-          style={[styles.hudTimer, { height: pill, borderRadius: pill / 2, transform: [{ scale: pop }] }, low && styles.hudTimerLow]}
+        <HudPill
+          height={pill}
+          tone={low ? "red" : "blue"}
+          scale={pop}
           accessibilityLabel={`Kalan süre ${mm} dakika ${ss} saniye`}
         >
-          <Ionicons name="alarm" size={Math.round(pill * 0.44)} color={S.white} />
+          <Ionicons name="alarm" size={Math.round(pill * 0.5)} color={S.white} />
           <Text {...textScale.badge} style={styles.hudTime}>
             {mm}:{String(ss).padStart(2, "0")}
           </Text>
-        </Animated.View>
+        </HudPill>
       ) : null}
-      <Animated.View style={[styles.hudTips, { height: pill, borderRadius: pill / 2, transform: [{ scale: bump }] }]} accessibilityLabel={`Bahşiş ${tips}`}>
-        <CoinIcon size={Math.round(pill * 0.52)} />
+      <HudPill height={pill} scale={bump} accessibilityLabel={`Bahşiş ${tips}`} disc={<CoinIcon size={pill + 4} />}>
         <Text {...textScale.badge} style={styles.hudTipsValue}>
           {tips}
         </Text>
-      </Animated.View>
+      </HudPill>
     </View>
   );
 });
@@ -217,24 +226,28 @@ export const BoosterDock = memo(function BoosterDock({
   /** Seviye öncesi etkin güçlendiricilerin kısa etiketleri. */
   extras: string[];
 }) {
-  const btnH = Math.max(40, Math.min(58, height - 16));
+  const btnH = Math.max(40, Math.min(54, height - 22));
   return (
     <View style={[styles.dock, { height }]}>
       <View style={styles.dockLeft}>
-        <View style={styles.queueChip} accessibilityLabel={queueLeft > 0 ? `Sırada ${queueLeft} taraftar` : "Sırada taraftar kalmadı"}>
-          <Ionicons name="people" size={16} color={S.white} />
+        <HudPill
+          height={32}
+          style={styles.queueChip}
+          accessibilityLabel={queueLeft > 0 ? `Sırada ${queueLeft} taraftar` : "Sırada taraftar kalmadı"}
+          disc={<IconDisc icon="people" size={32} tone="purple" />}
+        >
           <Text {...textScale.badge} style={styles.queueValue}>
             {queueLeft}
           </Text>
           <Text {...textScale.badge} style={styles.queueLabel} numberOfLines={1}>
             {queueLeft > 0 ? "sırada" : "son tur"}
           </Text>
-        </View>
+        </HudPill>
         {extras.length ? (
           <View style={styles.extras}>
             {extras.map((e) => (
               <View key={e} style={styles.extraChip}>
-                <Ionicons name="checkmark-circle" size={11} color={S.progress} />
+                <Ionicons name="checkmark-circle" size={12} color={S.progress} />
                 <Text {...textScale.badge} style={styles.extraText} numberOfLines={1}>
                   {e}
                 </Text>
@@ -243,37 +256,27 @@ export const BoosterDock = memo(function BoosterDock({
           </View>
         ) : null}
       </View>
-      <Pressable
+      <BoosterButton3D
+        icon="flash"
+        label={"Hızlı\nservis"}
+        stock={hizliStock}
         onPress={onHizli}
         disabled={disabled}
-        accessibilityRole="button"
+        height={btnH}
+        tone="orange"
         accessibilityLabel={`Hızlı Servis, stok ${hizliStock}`}
-        style={({ pressed }) => [
-          styles.boost,
-          { height: btnH, borderRadius: radius.xl },
-          pressed && styles.boostPressed,
-          disabled && styles.disabled,
-        ]}
-        hitSlop={4}
-      >
-        <View style={[styles.boostShine, { borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl }]} />
-        <View style={[styles.boostIcon, { width: btnH - 14, height: btnH - 14, borderRadius: (btnH - 14) / 2 }]}>
-          <Ionicons name="flash" size={Math.round(btnH * 0.42)} color={S.boostFace} />
-        </View>
-        <Text {...textScale.badge} style={styles.boostText}>
-          HIZLI{"\n"}SERVİS
-        </Text>
-        <View style={[styles.badge, hizliStock > 0 ? null : styles.badgePlus]}>
-          <Text {...textScale.badge} style={styles.badgeText}>
-            {hizliStock > 0 ? hizliStock : "+"}
-          </Text>
-        </View>
-      </Pressable>
+        style={styles.boost}
+      />
     </View>
   );
 });
 
 /* ───────────────────────────── taraftar + balon ───────────────────────────── */
+
+/** Faz kaydırmalı hafif sallanma açısı (derece dizileri). */
+function rot(phase: number, amp: number) {
+  return [0, 0.25, 0.5, 0.75, 1].map((x) => `${(Math.sin((x + phase) * Math.PI * 2) * amp).toFixed(2)}deg`);
+}
 
 export const FanSpot = memo(function FanSpot({
   order,
@@ -287,7 +290,12 @@ export const FanSpot = memo(function FanSpot({
   fanSize,
   enterDelay,
   iconMax,
+  idle,
+  phase,
 }: {
+  /** Paylaşılan "nefes" sürücüsü + bu taraftarın fazı. */
+  idle: Animated.Value;
+  phase: number;
   order: KantinOrder;
   /** Siparişteki i. ürün dolu mu (bit maskesi — memo dostu). */
   filledMask: number;
@@ -318,6 +326,7 @@ export const FanSpot = memo(function FanSpot({
       Animated.timing(shake, { toValue: 0, duration: 70, useNativeDriver: true }),
     ]).start();
   }, [mood, shake]);
+  const moodPop = usePop(mood, 1.2);
   const n = order.items.length;
   const filled = order.items.map((_, i) => Boolean(filledMask & (1 << i)));
   const icon = Math.max(10, Math.min(iconMax, Math.floor((width - 16) / n) - 2));
@@ -351,7 +360,19 @@ export const FanSpot = memo(function FanSpot({
         ))}
         <View style={[styles.tail, vip && styles.tailVip]} />
       </View>
-      <View style={styles.fanWrap}>
+      <Animated.View
+        style={[
+          styles.fanWrap,
+          {
+            transform: [
+              { translateY: wave(idle, phase, mood === "joy" || mood === "happy" ? 2.6 : 1.4) },
+              { rotate: idle.interpolate({ inputRange: [0, 0.25, 0.5, 0.75, 1], outputRange: rot(phase, mood === "angry" ? 1 : 3) }) },
+              { scaleX: moodPop.interpolate({ inputRange: [1, 1.25], outputRange: [1, 0.9] }) },
+              { scaleY: moodPop },
+            ],
+          },
+        ]}
+      >
         <FanFigure size={fanSize} jersey={jersey} face={face} mood={mood} vip={vip} />
         {vip ? (
           <View style={styles.vipBar} accessibilityLabel={`VIP sabrı yüzde ${Math.round((vipRatio ?? 0) * 100)}`}>
@@ -366,7 +387,7 @@ export const FanSpot = memo(function FanSpot({
             />
           </View>
         ) : null}
-      </View>
+      </Animated.View>
     </Animated.View>
   );
 });
@@ -408,11 +429,32 @@ export const PlateSpot = memo(function PlateSpot({
 
 const HoldItemView = memo(function HoldItemView({ item, index, step, size, hidden }: { item: KantinItem; index: number; step: number; size: number; hidden: boolean }) {
   const x = useRef(new Animated.Value(index * step)).current;
+  const land = useRef(new Animated.Value(hidden ? 0 : 1)).current;
   useEffect(() => {
     Animated.spring(x, { toValue: index * step, friction: 7, tension: 120, useNativeDriver: true }).start();
   }, [index, step, x]);
+  // İniş: uçuş bitince ezilip-gerilerek oturur.
+  useEffect(() => {
+    if (hidden) return;
+    land.setValue(0);
+    Animated.spring(land, { toValue: 1, damping: 6, stiffness: 260, mass: 0.6, useNativeDriver: true }).start();
+  }, [hidden, land]);
   return (
-    <Animated.View style={[styles.holdItem, { width: size, height: size, opacity: hidden ? 0 : 1, transform: [{ translateX: x }] }]}>
+    <Animated.View
+      style={[
+        styles.holdItem,
+        {
+          width: size,
+          height: size,
+          opacity: hidden ? 0 : 1,
+          transform: [
+            { translateX: x },
+            { scaleX: land.interpolate({ inputRange: [0, 0.5, 1, 2], outputRange: [1.3, 0.9, 1, 1] }) },
+            { scaleY: land.interpolate({ inputRange: [0, 0.5, 1, 2], outputRange: [0.7, 1.12, 1, 1] }) },
+          ],
+        },
+      ]}
+    >
       <ProductIcon p={item.p} size={size - 8} />
     </Animated.View>
   );
@@ -474,14 +516,14 @@ export const HoldRow = memo(function HoldRow({
         ]}
         accessibilityLabel={`Bekleme tezgâhı ${hold.length} / ${cap}: ${hold.map((it) => productName(it.p)).join(", ") || "boş"}`}
       >
-        {!(danger || lost) ? <WoodGrain w={rowW + 12} h={Math.max(10, height - headH)} r={radius.md} base={S.wood} dark={S.woodDark} light={S.woodLight} /> : null}
+        {!(danger || lost) ? <WoodGrain w={rowW + 6} h={Math.max(10, height - headH - 9)} r={radius.md} base={S.wood} dark={S.woodDark} light={S.woodLight} /> : null}
         {Array.from({ length: cap }, (_, k) => (
           <View
             key={k}
-            style={[styles.holdSlot, { width: size, height: size, left: 6 + k * (size + gap) }, k === cap - 1 && styles.holdSlotLast]}
+            style={[styles.holdSlot, { width: size, height: size, left: 3 + k * (size + gap) }, k === cap - 1 && styles.holdSlotLast]}
           />
         ))}
-        <View style={[styles.holdItems, { left: 6 }]}>
+        <View style={[styles.holdItems, { left: 3 }]}>
           {hold.map((it, k) => (
             <HoldItemView key={it.uid} item={it} index={k} step={size + gap} size={size} hidden={hidden.has(it.uid)} />
           ))}
@@ -513,7 +555,9 @@ export const StackColumn = memo(function StackColumn({
   onTap,
   nudge,
   padTop,
+  idle,
 }: {
+  idle: Animated.Value;
   stack: KantinItem[];
   index: number;
   /** Yalnız kilitli ürün içeren yığına gerçek değer gelir (gereksiz çizim yok). */
@@ -568,7 +612,7 @@ export const StackColumn = memo(function StackColumn({
       style={[styles.stackCol, { width, height }]}
     >
       <View style={[styles.shelf, { width, height }]}>
-        <WoodGrain w={width - 2} h={height - 2} r={radius.md} base={S.shelf} dark={S.counterEdge} light={S.counter} />
+        <WoodGrain w={width - 6} h={height - 6} r={radius.md} base={S.shelf} dark={S.counterEdge} light={S.counter} />
       </View>
       {/* Ürünler sütunun kendi koordinatlarında konumlanır: sarmalayıcı
           sütunu tam kaplar (yoksa ortalanan sıfır genişlikli kap kartları
@@ -593,9 +637,10 @@ export const StackColumn = memo(function StackColumn({
             const isTop = d === 0;
             const size = isTop ? tile : tile * 0.84;
             return (
-              <View
+              <Animated.View
                 key={it.uid}
                 style={[
+                  isTop ? { transform: [{ translateY: wave(idle, index * 0.23, 1.8) }, { scale: Animated.add(1, wave(idle, index * 0.23 + 0.25, 0.025)) }] } : null,
                   styles.tile,
                   {
                     position: "absolute",
@@ -619,7 +664,7 @@ export const StackColumn = memo(function StackColumn({
                     </Text>
                   </View>
                 ) : null}
-              </View>
+              </Animated.View>
             );
           })
           .reverse()}
@@ -638,119 +683,44 @@ export const StackColumn = memo(function StackColumn({
 /* ───────────────────────────── stiller ───────────────────────────── */
 
 const styles = StyleSheet.create({
-  hud: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.sm },
-  hudGoal: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.sm,
-    backgroundColor: S.hudFace,
-    paddingRight: space.md,
-    borderBottomWidth: 4,
-    borderColor: S.hudEdge,
-  },
-  hudIcon: {
-    marginLeft: -2,
-    backgroundColor: S.goalFace,
-    borderBottomWidth: 4,
-    borderColor: S.goalEdge,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  hud: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingLeft: space.sm + 4, paddingRight: space.sm },
+  hudGoalWrap: { flex: 1 },
   hudGoalText: { flex: 1, gap: 2 },
-  hudValue: { ...type.scoreSm, color: S.inkOnLight },
-  hudOf: { ...type.numSmStrong, color: S.inkSoft },
-  hudBar: { height: 8, borderRadius: radius.xs, backgroundColor: S.hudTrack, overflow: "hidden" },
-  hudBarFill: { height: 8, borderRadius: radius.xs, backgroundColor: S.progress, borderBottomWidth: 2, borderColor: S.progressEdge },
-  hudTimer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: S.timerFace,
-    paddingHorizontal: space.md,
-    borderBottomWidth: 4,
-    borderColor: S.timerEdge,
-  },
-  hudTimerLow: { backgroundColor: S.timerLowFace, borderColor: S.timerLowEdge },
-  hudTime: { ...type.scoreSm, color: S.white, minWidth: 40, textShadowColor: S.textShadow, textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 1 },
-  hudTips: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: S.tipsFace,
-    paddingLeft: space.xs,
-    paddingRight: space.md,
-    borderBottomWidth: 4,
-    borderColor: S.tipsEdge,
-  },
-  hudTipsValue: { ...type.scoreSm, color: S.inkOnLight, minWidth: 18 },
+  hudValue: { ...type.scoreSm, color: S.white, ...toonShadow },
+  hudOf: { ...type.numSmStrong, fontFamily: fonts.bold, color: S.hudOfInk },
+  hudBar: { height: 10, borderRadius: radius.pill, backgroundColor: CARTOON.outline, overflow: "hidden", borderWidth: 1.5, borderColor: CARTOON.outline },
+  hudBarFill: { height: 7, borderRadius: radius.pill, backgroundColor: S.progress, borderBottomWidth: 2, borderColor: S.progressEdge },
+  hudTime: { ...type.scoreSm, color: S.white, minWidth: 40, ...toonShadow },
+  hudTipsValue: { ...type.scoreSm, color: S.white, minWidth: 18, ...toonShadow },
 
   dock: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.sm,
     paddingHorizontal: space.md,
+    paddingLeft: space.md + 4,
     backgroundColor: S.dock,
-    borderTopWidth: 3,
-    borderColor: S.dockTop,
+    borderTopWidth: OUT,
+    borderColor: CARTOON.outline,
   },
   dockLeft: { flex: 1, gap: space.xs, minWidth: 0 },
-  queueChip: {
-    alignSelf: "flex-start",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.xs,
-    height: 30,
-    paddingHorizontal: space.m,
-    borderRadius: radius.pill,
-    backgroundColor: S.chipFace,
-    borderWidth: 1,
-    borderColor: S.chipBorder,
-  },
-  queueValue: { ...type.scoreXs, color: S.white },
-  queueLabel: { ...type.labelXs, color: S.white },
+  queueChip: { alignSelf: "flex-start" },
+  queueValue: { ...type.scoreXs, color: S.white, ...toonShadow },
+  queueLabel: { ...type.labelXs, fontFamily: fonts.bold, color: S.white },
   extras: { flexDirection: "row", gap: space.xs, flexWrap: "wrap" },
   extraChip: {
     flexDirection: "row",
     alignItems: "center",
     gap: 3,
-    height: 18,
+    height: 20,
     paddingHorizontal: space.s,
     borderRadius: radius.pill,
-    backgroundColor: S.chipFace,
+    backgroundColor: CARTOON.outline,
+    borderWidth: 1.5,
+    borderColor: S.chipBorder,
   },
-  extraText: { ...type.nano, color: S.white },
-  boost: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.sm,
-    paddingLeft: space.s,
-    paddingRight: space.lg,
-    backgroundColor: S.boostFace,
-    borderBottomWidth: 5,
-    borderColor: S.boostEdge,
-  },
-  boostPressed: { borderBottomWidth: 2, transform: [{ translateY: 3 }] },
-  boostShine: { position: "absolute", left: 6, right: 6, top: 3, height: "38%", backgroundColor: S.boostShine },
-  boostIcon: { backgroundColor: S.white, alignItems: "center", justifyContent: "center" },
-  boostText: { ...type.labelSm, fontFamily: fonts.bold, color: S.white, textShadowColor: S.textShadow, textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 1 },
-  disabled: { opacity: 0.5 },
-  badge: {
-    position: "absolute",
-    right: -6,
-    top: -8,
-    minWidth: 24,
-    height: 24,
-    borderRadius: radius.pill,
-    paddingHorizontal: 5,
-    backgroundColor: S.badgeRed,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
-    borderColor: S.white,
-  },
-  badgePlus: { backgroundColor: S.badgeGreen },
-  badgeText: { ...type.numSmStrong, color: S.white },
+  extraText: { ...type.nano, fontFamily: fonts.bold, color: S.white },
+  boost: { width: 150, marginTop: space.xs },
 
   fanSpot: { alignItems: "center" },
   bubble: {
@@ -759,13 +729,13 @@ const styles = StyleSheet.create({
     gap: 2,
     paddingHorizontal: space.s,
     backgroundColor: S.bubble,
-    borderRadius: radius.md,
-    borderWidth: 1.5,
-    borderColor: S.bubbleEdge,
+    borderRadius: radius.lg,
+    borderWidth: 2.5,
+    borderColor: CARTOON.outline,
   },
-  bubbleVip: { borderColor: S.vip, borderWidth: 2 },
+  bubbleVip: { backgroundColor: S.vipBubble },
   bubbleItem: { alignItems: "center", justifyContent: "center" },
-  bubbleItemDone: { opacity: 0.45 },
+  bubbleItemDone: { opacity: 0.4 },
   check: {
     position: "absolute",
     right: -3,
@@ -774,97 +744,108 @@ const styles = StyleSheet.create({
     height: 13,
     borderRadius: radius.pill,
     backgroundColor: S.check,
+    borderWidth: 1.5,
+    borderColor: CARTOON.outline,
     alignItems: "center",
     justifyContent: "center",
   },
   tail: {
     position: "absolute",
-    bottom: -6,
+    bottom: -7,
     left: "50%",
-    marginLeft: -5,
-    width: 10,
-    height: 10,
+    marginLeft: -6,
+    width: 12,
+    height: 12,
     backgroundColor: S.bubble,
-    borderRightWidth: 1.5,
-    borderBottomWidth: 1.5,
-    borderColor: S.bubbleEdge,
+    borderRightWidth: 2.5,
+    borderBottomWidth: 2.5,
+    borderColor: CARTOON.outline,
     transform: [{ rotate: "45deg" }],
   },
-  tailVip: { borderColor: S.vip },
+  tailVip: { backgroundColor: S.vipBubble },
   fanWrap: { marginTop: 6, alignItems: "center" },
   vipBar: {
     position: "absolute",
     bottom: 2,
-    width: 40,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: S.shadow,
+    width: 44,
+    height: 9,
+    borderRadius: radius.pill,
+    backgroundColor: CARTOON.outline,
+    borderWidth: 1.5,
+    borderColor: CARTOON.outline,
     overflow: "hidden",
   },
-  vipFill: { height: 6, borderRadius: 3 },
+  vipFill: { height: 6, borderRadius: radius.pill },
 
   plateOuter: {
     backgroundColor: S.plate,
-    borderWidth: 2,
-    borderColor: S.plateRim,
+    borderWidth: 2.5,
+    borderColor: CARTOON.outline,
+    borderBottomWidth: 5,
     padding: 3,
-    shadowColor: S.ink,
-    shadowOpacity: 0.18,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
   },
-  plateVip: { borderColor: S.vip },
+  plateVip: { backgroundColor: S.vipBubble },
   plateInner: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 2,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: S.plateRim,
   },
-  ghostDot: { borderWidth: 1.5, borderColor: S.plateRim, borderStyle: "dashed" },
+  ghostDot: { borderWidth: 2, borderColor: S.plateRim, borderStyle: "dashed" },
 
   holdWrap: { alignItems: "center" },
-  holdHead: { flexDirection: "row", alignItems: "center", gap: space.sm, marginBottom: 4 },
-  holdLabel: { ...type.labelSm, fontFamily: fonts.bold, color: S.inkSoft },
-  holdCount: { ...type.scoreXs, color: S.inkOnLight },
-  holdLabelDanger: { color: S.danger },
+  holdHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    marginBottom: 4,
+    paddingHorizontal: space.md,
+    height: 22,
+    borderRadius: radius.pill,
+    backgroundColor: CARTOON.outline,
+  },
+  holdLabel: { ...type.labelSm, fontFamily: fonts.bold, color: S.white },
+  holdCount: { ...type.scoreXs, color: S.white },
+  holdLabelDanger: { color: S.dangerText },
   holdRow: {
     flex: 1,
     backgroundColor: S.wood,
-    borderRadius: radius.md,
-    borderBottomWidth: 4,
-    borderColor: S.woodEdge,
+    borderRadius: radius.lg,
+    borderWidth: OUT,
+    borderBottomWidth: 5,
+    borderColor: CARTOON.outline,
+    overflow: "hidden",
   },
-  holdRowDanger: { backgroundColor: S.danger, borderColor: S.woodEdge },
+  holdRowDanger: { backgroundColor: S.danger },
   holdSlot: {
     position: "absolute",
-    top: 5,
+    top: 2,
     borderRadius: radius.sm,
     backgroundColor: S.holdSlot,
-    borderWidth: 1,
-    borderColor: S.holdEdge,
+    borderWidth: 2,
+    borderColor: CARTOON.outline,
   },
   holdBadge: {
     position: "absolute",
-    right: -8,
-    top: -8,
-    minWidth: 30,
-    height: 18,
+    right: -6,
+    top: -6,
+    minWidth: 32,
+    height: 20,
     paddingHorizontal: 4,
     borderRadius: radius.pill,
-    backgroundColor: S.woodDark,
-    borderWidth: 1.5,
+    backgroundColor: CARTOON.outline,
+    borderWidth: 2,
     borderColor: S.white,
     alignItems: "center",
     justifyContent: "center",
   },
   holdBadgeDanger: { backgroundColor: S.danger },
-  holdBadgeText: { ...type.nano, color: S.white },
-  holdSlotLast: { borderColor: S.danger, borderWidth: 1.5, borderStyle: "dashed" },
-  holdItems: { position: "absolute", top: 5 },
+  holdBadgeText: { ...type.nano, fontFamily: fonts.bold, color: S.white },
+  holdSlotLast: { borderColor: S.danger, borderWidth: 2.5, borderStyle: "dashed" },
+  holdItems: { position: "absolute", top: 2 },
   holdItem: {
     position: "absolute",
     left: 0,
@@ -878,46 +859,43 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 0,
     top: 0,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     backgroundColor: S.shelf,
-    borderWidth: 1,
-    borderColor: S.counterEdge,
+    borderWidth: OUT,
+    borderColor: CARTOON.outline,
     overflow: "hidden",
   },
   tile: {
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: radius.sm,
-    borderWidth: 1,
+    borderRadius: radius.md,
+    borderWidth: 2.5,
+    borderColor: CARTOON.outline,
   },
   tileTop: {
     backgroundColor: S.tile,
-    borderColor: S.tileEdge,
-    borderBottomWidth: 3,
-    shadowColor: S.ink,
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
+    borderBottomWidth: 6,
   },
-  tileLow: { backgroundColor: S.tileDim, borderColor: S.tileEdge, opacity: 0.88 },
-  tileCrate: { backgroundColor: S.crate, borderColor: S.crateDark },
+  tileLow: { backgroundColor: S.tileDim },
+  tileCrate: { backgroundColor: S.crate },
   lock: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: S.lockBg,
     alignItems: "center",
     justifyContent: "center",
   },
-  lockText: { ...type.nano, color: S.white },
+  lockText: { ...type.nano, fontFamily: fonts.bold, color: S.white },
   more: {
     position: "absolute",
     bottom: 4,
     paddingHorizontal: 6,
-    height: 16,
+    height: 18,
     borderRadius: radius.pill,
-    backgroundColor: S.woodDark,
+    backgroundColor: CARTOON.outline,
+    borderWidth: 1.5,
+    borderColor: S.white,
     alignItems: "center",
     justifyContent: "center",
   },
-  moreText: { ...type.nano, color: S.white },
+  moreText: { ...type.nano, fontFamily: fonts.bold, color: S.white },
 });

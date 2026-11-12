@@ -23,6 +23,8 @@ export const kantinScene = {
   holdSlot: "#FBF2E2",
   holdEdge: "#C9A273",
   danger: "#E5484D",
+  dangerText: "#FF8A8E",
+  vipBubble: "#FFF3C4",
   dangerSoft: "rgba(229, 72, 77, 0.16)",
   ink: "#3A271A",
   inkSoft: "#6B4F3A",
@@ -50,12 +52,13 @@ export const kantinScene = {
   wallTile: "#FFD79A",
   wallEdge: "#F0B86A",
   standSky: "#3FA9F5",
-  standTop: "#2A62D8",
-  standBottom: "#1C3F99",
-  seatA: "#2F55C4",
-  seatB: "#2A4BB0",
+  standTop: "#3B1F9E",
+  standBottom: "#22125F",
+  seatA: "#4A2E9E",
+  seatB: "#3A2488",
   crowd: ["#FF5A5F", "#FFD23F", "#FFFFFF", "#3EC7A5", "#FF9F43", "#B388FF", "#5AD1FF"],
   crowdSkin: "#F2C7A0",
+  crowdSkins: ["#F7D7B8", "#EBB894", "#C98D63", "#8D5A3B"],
   awningA: "#F23A4B",
   awningB: "#FFFFFF",
   awningEdge: "#B71C2C",
@@ -84,6 +87,7 @@ export const kantinScene = {
   badgeGreen: "#2FBF5A",
   chipFace: "rgba(255, 255, 255, 0.14)",
   chipBorder: "rgba(255, 255, 255, 0.28)",
+  hudOfInk: "rgba(255, 255, 255, 0.72)",
   inkOnLight: "#2B1A0E",
   textShadow: "rgba(0, 0, 0, 0.28)",
 } as const;
@@ -92,7 +96,7 @@ export const kantinConfetti = ["#F2B705", "#E5484D", "#2E8BEA", "#2FA35A", "#9B5
 
 export const kantinSkins = ["#F7D7B8", "#EBB894", "#C98D63", "#8D5A3B"] as const;
 export const kantinHair = ["#2B1D14", "#6B4226", "#D9A441", "#1C1C1C", "#A0522D", "#4A3426"] as const;
-export const kantinCheek = "rgba(240, 110, 110, 0.35)";
+export const kantinCheek = "rgba(255, 105, 120, 0.55)";
 export const kantinMouth = "#9E2B2B";
 
 /** Forma çeşitleri — `style`: düz / çubuklu / kuşak / ikiye bölünmüş. */
@@ -113,15 +117,15 @@ export const kantinFood = {
   crustLight: "#E0A458",
   sesame: "#FFF1CC",
   cupWhite: "#FFFFFF",
-  cupEdge: "#C9D2DE",
+  cupEdge: "#1B1446",
   ayranBlue: "#2E7BD6",
   foil: "#DDE3EA",
-  foilEdge: "#AEB7C2",
+  foilEdge: "#1B1446",
   toast: "#F2C67E",
   toastDark: "#A86424",
   cheese: "#FFD23F",
   glass: "rgba(255, 255, 255, 0.75)",
-  glassEdge: "#B9C3CF",
+  glassEdge: "#1B1446",
   tea: "#B3341C",
   teaLight: "#D9573A",
   corn: "#FFCF33",
@@ -129,11 +133,11 @@ export const kantinFood = {
   husk: "#59A84B",
   huskDark: "#3E7F34",
   water: "#CDEBFF",
-  waterEdge: "#5AA6E6",
+  waterEdge: "#1B1446",
   waterLabel: "#2E8BEA",
   waterCap: "#1B5FB0",
   paper: "#F6EEE1",
-  paperEdge: "#D9C6A8",
+  paperEdge: "#1B1446",
   paperStripe: "#E5484D",
   lavash: "#E9C48A",
   meat: "#8E4F25",

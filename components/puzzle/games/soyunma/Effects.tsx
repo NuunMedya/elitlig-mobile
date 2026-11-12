@@ -5,9 +5,11 @@
 import { memo, useEffect, useRef } from "react";
 import { Animated, Easing, StyleSheet, Text, View } from "react-native";
 import { radius, space, textScale, type } from "@/theme";
+import { CARTOON } from "@/lib/game/cartoon";
 import { SOYUNMA_LOCKER, SOYUNMA_UI as UI } from "@/lib/puzzle/soyunmaPalette";
 
-const PARTICLES = 10;
+const PARTICLES = 14;
+const CONFETTI = [CARTOON.star, CARTOON.heart, CARTOON.blue[1], CARTOON.green[1], CARTOON.purple[1], CARTOON.white];
 
 interface SparkleProps {
   /** Değişince bir kez patlar (0 → yok). */
@@ -26,16 +28,32 @@ function SparkleBurstBase({ token, spread }: SparkleProps) {
   if (!token) return null;
   return (
     <View pointerEvents="none" style={styles.center}>
+      {/* Halka parlaması: açılıp sönen beyaz halka. */}
+      <Animated.View
+        style={[
+          styles.ring,
+          {
+            width: spread * 1.2,
+            height: spread * 1.2,
+            marginLeft: -spread * 0.6,
+            marginTop: -spread * 0.6,
+            borderRadius: spread * 0.6,
+            opacity: t.interpolate({ inputRange: [0, 0.1, 0.6], outputRange: [0, 1, 0], extrapolate: "clamp" }),
+            transform: [{ scale: t.interpolate({ inputRange: [0, 0.6], outputRange: [0.2, 1.5], extrapolate: "clamp" }) }],
+          },
+        ]}
+      />
       {Array.from({ length: PARTICLES }, (_, i) => {
         const a = (i / PARTICLES) * Math.PI * 2 + (i % 2) * 0.3;
         const d = spread * (i % 2 ? 0.75 : 1);
-        const s = i % 3 === 0 ? 7 : 5;
+        const s = i % 3 === 0 ? 9 : 6;
         return (
           <Animated.View
             key={i}
             style={[
               styles.particle,
               {
+                backgroundColor: CONFETTI[i % CONFETTI.length],
                 width: s,
                 height: s,
                 marginLeft: -s / 2,
@@ -74,7 +92,7 @@ function TextBurstBase({ text, id, tone = "brand" }: BurstProps) {
   }, [id, text, t]);
   if (!text) return null;
   const bg = tone === "win" ? UI.green : tone === "loss" ? UI.red : UI.gold;
-  const edge = tone === "win" ? UI.greenDeep : tone === "loss" ? UI.redDeep : UI.goldDeep;
+  const edge = CARTOON.outline;
   const fg = tone === "brand" ? UI.goldInk : UI.text;
   return (
     <View pointerEvents="none" style={styles.burstWrap}>
@@ -86,7 +104,9 @@ function TextBurstBase({ text, id, tone = "brand" }: BurstProps) {
             borderColor: edge,
             opacity: t.interpolate({ inputRange: [0, 0.1, 0.75, 1], outputRange: [0, 1, 1, 0] }),
             transform: [
-              { scale: t.interpolate({ inputRange: [0, 0.12, 0.22, 1], outputRange: [0.5, 1.18, 1, 1.02] }) },
+              { scaleX: t.interpolate({ inputRange: [0, 0.12, 0.2, 0.28, 1], outputRange: [0.4, 1.25, 0.94, 1, 1.02] }) },
+              { scaleY: t.interpolate({ inputRange: [0, 0.12, 0.2, 0.28, 1], outputRange: [0.4, 0.86, 1.1, 1, 1.02] }) },
+              { rotate: "-3deg" },
               { translateY: t.interpolate({ inputRange: [0, 0.75, 1], outputRange: [0, -4, -26] }) },
             ],
           },
@@ -104,7 +124,8 @@ export const TextBurst = memo(TextBurstBase);
 
 const styles = StyleSheet.create({
   center: { position: "absolute", left: "50%", top: "50%", width: 0, height: 0 },
-  particle: { position: "absolute", backgroundColor: SOYUNMA_LOCKER.sparkle, borderRadius: 1 },
+  ring: { position: "absolute", borderWidth: 4, borderColor: CARTOON.white },
+  particle: { position: "absolute", backgroundColor: SOYUNMA_LOCKER.sparkle, borderRadius: 1, borderWidth: 1, borderColor: CARTOON.outline },
   burstWrap: {
     ...StyleSheet.absoluteFillObject,
     alignItems: "center",
