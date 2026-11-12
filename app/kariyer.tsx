@@ -282,9 +282,7 @@ function QuestsTab({ data }: { data: CareerSummary }) {
       ) : null}
 
       <View style={styles.shortcuts}>
-        <Shortcut icon="analytics-outline" label="Tahmin Ligi" onPress={() => router.push("/tahmin-ligi")} />
-        <Shortcut icon="people-outline" label="Fantezi" onPress={() => router.push("/fantezi")} />
-        <Shortcut icon="game-controller-outline" label="Oyunlar" onPress={() => router.push("/(tabs)/oyunlar")} />
+        <Shortcut icon="game-controller-outline" label="Oyun merkezi" onPress={() => router.push("/(tabs)/oyunlar")} />
         <Shortcut icon="podium-outline" label="XP sıralaması" onPress={() => router.push("/saha-siralamasi?type=xp")} />
       </View>
 

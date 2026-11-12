@@ -13,7 +13,7 @@ import { matchQuestion } from "@/lib/game/quiz/questions";
 
 const CONFIG: QuizConfig = {
   game: "tahmin",
-  title: "Skor Tahmini",
+  title: "Kim Kazandı?",
   subtitle: "Oynanmış maçları kim kazandı?",
   icon: "stats-chart",
   bestKey: ARENA_BEST_KEYS.tahmin,

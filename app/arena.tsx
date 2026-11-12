@@ -15,7 +15,7 @@ import { arenaQuestion } from "@/lib/game/quiz/questions";
 
 const CONFIG: QuizConfig = {
   game: "seri",
-  title: "Arena",
+  title: "Gol Düellosu",
   subtitle: "Oyuncu düelloları: kim daha iyi?",
   icon: "flame",
   bestKey: ARENA_BEST_KEYS.seri,

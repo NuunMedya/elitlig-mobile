@@ -52,9 +52,9 @@ export const ARENA_TITLES: Record<string, string> = {
   penalti: "Penaltı",
   savunma: "Savunma Hattı",
   kadro: "Kadro Koşusu",
-  seri: "Arena",
+  seri: "Gol Düellosu",
   kimbu: "Kim Bu?",
-  tahmin: "Skor Tahmini",
+  tahmin: "Kim Kazandı?",
   gunun: "Günün Testi",
 };
 
