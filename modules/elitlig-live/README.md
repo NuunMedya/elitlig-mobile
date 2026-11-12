@@ -125,6 +125,60 @@ Ortak notlar:
 - Klip, o anda **yayınlanan** görüntüdür. O andaki skorbord ve varsa o sırada oynayan tekrar da klibin içindedir.
 - Tekrar sırasında güncel skorbord, klipteki eski skorbordun üstüne çizilir. Konum aynıysa eskisini örter.
 
+## Yerel kayıt: yayının tamamı telefon hafızasına
+
+```ts
+import {
+  supportsLocalRecording, getStorageInfo,
+  startLocalRecording, stopLocalRecording, getLocalRecordingStatus,
+} from "@/modules/elitlig-live";
+
+supportsLocalRecording();              // yerel modül bu işlevleri içeriyor mu (eski derlemede false)
+await getStorageInfo();                // { freeBytes, totalBytes, minFreeBytes, location, gallery } | null
+await startStream(url, options);
+await startLocalRecording("ElitLig_Ev-Deplasman_2026-11-12_20-30"); // { path, uri? } — yayın sürerken
+await getLocalRecordingStatus();       // { recording, paused, bytes, durationMs, parts, path, freeBytes } | null
+await stopLocalRecording();            // { path, uri?, bytes, durationMs, parts } | null
+```
+
+`<LiveCameraView onRecordingStateChange={(e) => e.nativeEvent} />`:
+
+| state | ne zaman | alanlar |
+|---|---|---|
+| `started` | bir parça yazılmaya başladı | `path`, `part` |
+| `saved` | bir parça güvenle kapatıldı | `reason`, `final`, `path`, `uri`, `part`, `parts`, `bytes`, `durationMs` (toplam) |
+| `error` | yazılamadı / kapatılamadı | `reason` (`disk_full`, `error`, `finalize_failed`), `message`, `final` |
+
+`saved.reason`: `stopped` (stopLocalRecording), `stream_end` (stopStream), `stream_failed` (yayın 5 denemeden sonra düştü),
+`disk_full`, `released` (görünüm kaldırıldı), `background` ve `split` (`final: false`, kayıt sürüyor).
+
+Davranış (iki platform):
+- Kayıt, yayına giden görüntüdür: gömülü skorbord, altyazı, tekrar ve ses dosyanın içindedir.
+- **RTMP yeniden bağlanmaları kaydı kesmez** (kodlayıcılar / gözlemci bağlantıdan bağımsız çalışır).
+  Yayın tümüyle durunca (`stopStream`, `failed`) ya da görünüm kaldırılınca dosya kendiliğinden kapatılır.
+- **Arka plan:** MP4'ün dizini dosya kapanırken yazılır; süreç ölürse dosya okunmaz kalır. Bu yüzden uygulama arka
+  plana geçince açık parça kapatılır (`saved`, `reason: "background"`), ön plana dönünce `_p2`, `_p3`… adıyla yeni
+  parça açılır. Arka plandaki süre kayıtta yoktur.
+- **Boş alan tabanı 300 MB:** altındaysa kayıt başlamaz; sürerken altına inerse düzgünce kapatılır (`disk_full`).
+- Uygulama zorla öldürülürse (çökme, sistem) o an açık olan parça kaybedilebilir.
+
+**Android: yeniden kodlama yok.** `LocalRecorder`, `ClipRingBuffer` ile aynı `recordController` kancasından gelen
+kodlanmış H.264/AAC örneklerini MediaMuxer ile doğrudan yazar (ek ısınma / pil yükü yok denecek kadar az).
+- Android 10+ (API 29+): MediaStore → **`Movies/ElitLig/<ad>.mp4`**, Galeri'de görünür, depolama izni gerekmez
+  (yazım sürerken `IS_PENDING=1`).
+- Android 7–9: `Android/data/<paket>/files/Movies/ElitLig/` (izin gerekmez; Galeri'de görünmez).
+- Parça ~3,5 GB'ı aşınca bir sonraki anahtar karede yeni parçaya geçilir (`split`): eski Android'de MediaMuxer 4 GB sınırı.
+- Not: `Camera2Base.startRecord()` KULLANILMAZ; modülün kendi `recordController`'ı (`ClipRingBuffer`) takılı olduğu için
+  o çağrı zaten reddedilir. Yayın olmadan "yalnız kayıt" bu yüzden yok.
+
+**iOS: ikinci kodlama.** HaishinKit 1.9.9 `IOStreamRecorder` (bir `IOStreamObserver`) bileşik kareyi AVAssetWriter ile
+yeniden kodlar (yayınla aynı görüntü bit hızı, `movieFragmentInterval = 10 sn`). Gol klibi kaydıyla birlikte üç
+H.264 kodlaması çalışır: ısınma ve pil tüketimi artar.
+- Dosya uygulamanın **Belgeler** klasörüne yazılır (IOStreamRecorder'da sabit). Eklenti `UIFileSharingEnabled` ve
+  `LSSupportsOpeningDocumentsInPlace` ekler: **Dosyalar ▸ iPhone'umda ▸ ElitLig**.
+- Boş alan `volumeAvailableCapacityForImportantUsage` ile okunur (gizlilik bildirimi: DiskSpace `E174.1`; Expo/RN
+  şablonundaki `PrivacyInfo.xcprivacy` bunu zaten içerir).
+
 ## Kurulum (app.json)
 
 ```jsonc
@@ -143,11 +197,11 @@ Ortak notlar:
 ]
 ```
 
-Eklenti seçenekleri (isteğe bağlı): `{ "cameraPermission": "...", "microphonePermission": "..." }`.
+Eklenti seçenekleri (isteğe bağlı): `{ "cameraPermission": "...", "microphonePermission": "...", "exposeRecordings": true }`.
 
 Eklentinin yaptıkları:
 - **Android:** `CAMERA`, `RECORD_AUDIO`, `INTERNET` ve `WAKE_LOCK` izinlerini ekler; CAMERA/RECORD_AUDIO üzerindeki `tools:node="remove"` engelini kaldırır; `android/build.gradle` içindeki `allprojects.repositories`'e JitPack'i ekler (Expo şablonunda zaten varsa dokunmaz). Modülün kendi `build.gradle`'ında da JitPack tanımlı.
-- **iOS:** `NSCameraUsageDescription` = "Maçı canlı yayınlamak için kamera kullanılır." `NSMicrophoneUsageDescription` zaten tanımlıysa ezilmez, yoksa eklenir. `UIBackgroundModes`'e dokunulmaz.
+- **iOS:** `NSCameraUsageDescription` = "Maçı canlı yayınlamak için kamera kullanılır." `NSMicrophoneUsageDescription` zaten tanımlıysa ezilmez, yoksa eklenir. `UIBackgroundModes`'e dokunulmaz. Yerel yayın kaydı Dosyalar uygulamasında görünsün diye `UIFileSharingEnabled` ve `LSSupportsOpeningDocumentsInPlace` açılır (`"exposeRecordings": false` ile kapatılır).
 
 minSdk: RootEncoder minSdk 16 istiyor, Expo 54 varsayılanı 24. Ek bir ayar gerekmiyor.
 iOS: HaishinKit iOS 13+ istiyor, Expo 54 varsayılanı 15.1. Swift 5.10, yani Xcode 15.3+ gerekiyor.

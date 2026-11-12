@@ -10,6 +10,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 
+import { formatBytes } from "@/lib/live/localRecording";
 import { HEALTH_LABEL, RIG, elapsedText, encoderMessageText, healthLevel, type EncoderConfig, type HealthLevel } from "@/lib/live/rig";
 import { radius, space, type } from "@/theme";
 import type { DeviceStatus, LiveState, LiveStats } from "@/modules/elitlig-live";
@@ -42,6 +43,21 @@ export const NETWORK_LABEL: Record<DeviceStatus["network"], string> = {
 export const batteryText = (d: DeviceStatus | null) =>
   !d || d.batteryLevel < 0 ? "Bilinmiyor" : `%${Math.round(d.batteryLevel * 100)}${d.charging ? " · şarjda" : ""}`;
 
+/** Süren yerel kayıt (yayının tamamı → telefon hafızası). */
+export interface RecordingHealth {
+  bytes: number;
+  /** Bilinmiyorsa -1. */
+  freeBytes: number;
+  /** Uygulama arka plandaydı: parça kapatıldı, yenisi açılıyor. */
+  paused: boolean;
+}
+
+/** Boş alan bu değerin altına inince kayıt hapı uyarı rengine döner. */
+const LOW_SPACE_BYTES = 1_000_000_000;
+
+export const recordingText = (r: RecordingHealth) =>
+  `${formatBytes(r.bytes)}${r.freeBytes >= 0 ? ` · boş ${formatBytes(r.freeBytes)}` : ""}`;
+
 export interface HealthProps {
   state: LiveState;
   message?: string;
@@ -51,13 +67,16 @@ export interface HealthProps {
   device: DeviceStatus | null;
   muted: boolean;
   replaying: boolean;
+  /** null / tanımsız → telefona kayıt yapılmıyor. */
+  recording?: RecordingHealth | null;
 }
 
 /** Sahne üstü haplar. */
-export function HealthHud({ state, stats, elapsedMs, encoder, device, muted, replaying }: HealthProps) {
+export function HealthHud({ state, stats, elapsedMs, encoder, device, muted, replaying, recording }: HealthProps) {
   const on = state === "live" || state === "connecting" || state === "reconnecting";
   const level = healthLevel(state, stats?.bitrateKbps, encoder.videoBitrateKbps, stats?.fps, encoder.fps);
   const lowBattery = device != null && device.batteryLevel >= 0 && device.batteryLevel <= 0.2 && !device.charging;
+  const lowSpace = recording != null && recording.freeBytes >= 0 && recording.freeBytes < LOW_SPACE_BYTES;
   return (
     <View style={styles.hud} pointerEvents="none">
       <View style={[styles.pill, { backgroundColor: state === "live" ? RIG.live : on ? RIG.warn : state === "failed" ? RIG.liveDim : RIG.glass }]}>
@@ -71,6 +90,14 @@ export function HealthHud({ state, stats, elapsedMs, encoder, device, muted, rep
           <View style={[styles.pillDot, { backgroundColor: LEVEL_COLOR[level] }]} />
           <Text style={styles.pillText} allowFontScaling={false}>
             {Math.round(stats.bitrateKbps)} kbps · {Math.round(stats.fps)} fps
+          </Text>
+        </View>
+      ) : null}
+      {recording ? (
+        <View style={[styles.pill, lowSpace || recording.paused ? { backgroundColor: RIG.warn } : styles.glass]}>
+          <Ionicons name={recording.paused ? "pause" : "radio-button-on"} size={11} color={lowSpace || recording.paused ? RIG.ink : RIG.live} />
+          <Text style={[styles.pillText, lowSpace || recording.paused ? { color: RIG.ink } : null]} allowFontScaling={false}>
+            {recording.paused ? "KAYIT DURAKLADI" : `KAYIT ${recordingText(recording)}`}
           </Text>
         </View>
       ) : null}
@@ -103,7 +130,7 @@ export function HealthHud({ state, stats, elapsedMs, encoder, device, muted, rep
 }
 
 /** Yayın sekmesindeki ayrıntı kartı. */
-export function HealthCard({ state, message, stats, elapsedMs, encoder, device }: HealthProps) {
+export function HealthCard({ state, message, stats, elapsedMs, encoder, device, recording }: HealthProps) {
   const level = healthLevel(state, stats?.bitrateKbps, encoder.videoBitrateKbps, stats?.fps, encoder.fps);
   const detail = message ? encoderMessageText(state, message) : "";
   const live = state === "live";
@@ -115,6 +142,7 @@ export function HealthCard({ state, message, stats, elapsedMs, encoder, device }
     ["Çözünürlük", `${encoder.width}×${encoder.height}`],
     ["Ağ", device ? NETWORK_LABEL[device.network] : "–"],
     ["Pil", device ? batteryText(device) : "–"],
+    ["Telefon kaydı", recording ? (recording.paused ? "Duraklatıldı" : recordingText(recording)) : "Kapalı"],
   ];
   return (
     <View style={styles.card}>

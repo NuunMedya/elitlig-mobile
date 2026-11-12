@@ -33,12 +33,14 @@ import { hasAnyPermission } from "@/lib/admin/access";
 import { takeStudioMatch } from "@/lib/admin/studioHandoff";
 import { normalizeMatchStatus } from "@/lib/api/admin/matches";
 import { get } from "@/lib/http";
-import { loadRtmpTarget } from "@/lib/live/studioSettings";
+import { MATCH_MINUTES, durationText, estimateStorage, formatBytes } from "@/lib/live/localRecording";
+import { resolveEncoder } from "@/lib/live/rig";
+import { DEFAULT_SETTINGS, loadRtmpTarget, loadStudioSettings, type StudioSettings } from "@/lib/live/studioSettings";
 import { listStudioMatches, type StudioMatch } from "@/lib/live/studioApi";
 import { getLiveStreamConfig } from "@/lib/live/youtube";
 import { useAuth } from "@/providers/AuthProvider";
 import { colors, hairline, radius, space, type } from "@/theme";
-import { getDeviceStatus, isLiveAvailable, requestLivePermissions, type DeviceStatus } from "@/modules/elitlig-live";
+import { getDeviceStatus, getStorageInfo, isLiveAvailable, requestLivePermissions, supportsLocalRecording, type DeviceStatus, type StorageInfo } from "@/modules/elitlig-live";
 
 const isoDay = (offsetDays: number) => {
   const d = new Date();
@@ -123,6 +125,10 @@ export default function StudioHomeScreen() {
   const [permission, setPermission] = useState<boolean | null>(null);
   const [device, setDevice] = useState<DeviceStatus | null>(null);
   const [hasRtmp, setHasRtmp] = useState(false);
+  // Telefona kayıt: boş alan ve seçili kalitede bir maçın tutacağı yer.
+  const recordSupported = nativeReady && supportsLocalRecording();
+  const [storage, setStorage] = useState<StorageInfo | null | undefined>(undefined);
+  const [studio, setStudio] = useState<StudioSettings>(DEFAULT_SETTINGS);
   const config = useQuery({ queryKey: ["live-stream", "config"], queryFn: getLiveStreamConfig, staleTime: 5 * 60_000, retry: false });
   const ping = useQuery({
     queryKey: ["studio", "ping"],
@@ -138,6 +144,8 @@ export default function StudioHomeScreen() {
   const readDevice = useCallback(() => {
     void getDeviceStatus().then(setDevice);
     void loadRtmpTarget().then((t) => setHasRtmp(Boolean(t)));
+    void getStorageInfo().then(setStorage);
+    void loadStudioSettings().then(setStudio);
   }, []);
   useEffect(() => {
     readDevice();
@@ -209,6 +217,29 @@ export default function StudioHomeScreen() {
       tone: config.data?.configured || hasRtmp ? "ok" : config.isLoading ? "wait" : "warn",
     },
   ];
+  if (recordSupported) {
+    const estimate = estimateStorage(resolveEncoder(studio.quality, studio.fps, studio.bitrateKbps), storage?.freeBytes, storage?.minFreeBytes);
+    const freeText = storage ? `Boş alan ${formatBytes(storage.freeBytes)}${storage.totalBytes > 0 ? ` / ${formatBytes(storage.totalBytes)}` : ""}` : "";
+    checks.push({
+      key: "storage",
+      icon: "save",
+      title: "Telefon hafızası",
+      detail:
+        storage === undefined
+          ? "Boş alan okunuyor…"
+          : storage === null
+            ? "Boş alan okunamadı. Yayın telefona kaydedilecekse hafızayı kontrol et."
+            : estimate.belowFloor
+              ? `${freeText} · telefona kayıt için en az 300 MB gerekir; yer açmazsan yayın kayıtsız yapılır`
+              : !studio.saveLocal
+                ? `${freeText} · telefona kayıt kapalı (yayın başlarken açabilirsin)`
+                : estimate.tight
+                  ? `${freeText} · ${MATCH_MINUTES} dakikalık maç ~${formatBytes(estimate.match)} tutar; alan ${durationText(estimate.minutesLeft ?? 0)} kayda yeter`
+                  : `${freeText} · yayın telefona da kaydedilecek (${MATCH_MINUTES} dk maç ~${formatBytes(estimate.match)})`,
+      // Yayını engellemez: en kötü durumda kayıtsız yayın yapılır.
+      tone: storage == null ? "wait" : estimate.belowFloor || (studio.saveLocal && estimate.tight) ? "warn" : "ok",
+    });
+  }
   const blocking = checks.filter((c) => c.tone === "bad").length;
 
   const row = (m: StudioMatch, mode: "pick" | "recent") => {
