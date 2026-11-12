@@ -50,6 +50,7 @@
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useNavigation, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -66,9 +67,9 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { BrandMark, Button, ChalkArc, PagerDots, Reveal, Touchable, useReduceMotion } from "@/components/ui";
+import { Aurora, BrandMark, Button, ChalkArc, PagerDots, Reveal, Touchable, useReduceMotion } from "@/components/ui";
 import { INTRO_SEEN_KEY } from "@/lib/storage";
-import { colors, radius, space, textScale, type, upperTR } from "@/theme";
+import { colors, glowStyle, radius, space, textScale, type, upperTR } from "@/theme";
 
 /** Hızlı yolun süresi. İlerleme çubuğu bu süreyi birebir çizer. */
 const AUTO_ADVANCE_MS = 2200;
@@ -199,6 +200,8 @@ function IntroSlides({
 
   return (
     <SafeAreaView style={[styles.screen, styles.dark]} edges={["top", "bottom"]}>
+      {/* Gece teması: tanıtımın arkasında kayan aurora ışığı. */}
+      <Aurora variant="stage" style={StyleSheet.absoluteFill} />
       {/* Marka tanıtım boyunca ekranda kalır: üç slayt boyunca kullanıcının
           NEREDE olduğunu söyleyen tek sabit öğe odur. */}
       <View style={styles.skipRow}>
@@ -325,10 +328,15 @@ function Slide({
         />
         {/* Yalnız ilk slaytın ikonu açılışta büyüyerek gelir. */}
         <Reveal enabled={page === 0} distance={0} scaleFrom={0.8} style={styles.artHalo}>
-          <View style={styles.artIcon}>
-            {/* Koyu blok üstünde `brand` (dolgu moru) mor üstüne mor kalıyor;
-                kimlik bloklarının marka rengi `brandOnDark` açık lavantadır. */}
-            <Ionicons name={slide.icon} size={40} color={colors.brandOnDark} />
+          <View style={[styles.artIcon, glowStyle(colors.glow, 3)]}>
+            {/* Gece teması: ikon kutusu imza degradesiyle parlar. */}
+            <LinearGradient
+              colors={colors.gradientSignature}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[StyleSheet.absoluteFill, { borderRadius: radius.xl }]}
+            />
+            <Ionicons name={slide.icon} size={40} color={colors.onDark} />
           </View>
         </Reveal>
       </Animated.View>
@@ -436,6 +444,7 @@ function FastSplash({
 
   return (
     <SafeAreaView style={[styles.screen, styles.dark]} edges={["top", "bottom"]}>
+      <Aurora variant="stage" style={StyleSheet.absoluteFill} />
       {/* Ekranın tamamı "devam"dır: bekleme isteğe bağlı, dokunan hemen geçer. */}
       <Pressable
         style={styles.fast}
