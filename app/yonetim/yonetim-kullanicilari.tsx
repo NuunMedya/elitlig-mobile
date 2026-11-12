@@ -17,21 +17,22 @@
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 import {
   ActionSheet,
   AdminList,
   AdminScreen,
   FormSheet,
-  RecordCard,
-  StatRow,
   confirmAction,
   useAdminMutation,
   type FieldDef,
   type FormValues,
 } from "@/components/admin";
-import { FAB, SegmentedControl } from "@/components/ui";
+import { roleIcon, roleTone } from "@/components/admin/system/AccessParts";
+import { SysStage } from "@/components/admin/system/SysKit";
+import { Avatar, Badge, FAB, IconTile, SegmentedControl, Touchable } from "@/components/ui";
 import { hasAnyPermission } from "@/lib/admin/access";
 import { formatDate } from "@/lib/admin/format";
 import {
@@ -48,7 +49,7 @@ import {
   type ManagementUser,
 } from "@/lib/api/admin/system";
 import { useAuth } from "@/providers/AuthProvider";
-import { space } from "@/theme";
+import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
 const PERMS = ["management_users.view"];
 type StatusFilter = "all" | ManagementStatus;
@@ -157,12 +158,13 @@ export default function ManagementUsersScreen() {
         disabled: !isNew,
         placeholder: "Örn. ankara.temsilci",
         icon: "at-outline",
+        group: "Giriş bilgileri",
         hint: isNew ? undefined : "Kullanıcı adı değiştirilemez.",
       },
       ...(isNew
         ? [{ key: "password", label: "Şifre", kind: "password", required: true, placeholder: "En az 8 karakter, harf ve rakam" } as FieldDef]
         : []),
-      { key: "fullName", label: "Ad soyad", kind: "text", placeholder: "Örn. Ada Yılmaz" },
+      { key: "fullName", label: "Ad soyad", kind: "text", placeholder: "Örn. Ada Yılmaz", group: "Kimlik" },
       { key: "title", label: "Ünvan", kind: "text", maxLength: 80, placeholder: "Örn. Ankara İl Temsilcisi" },
       {
         key: "role",
@@ -175,6 +177,7 @@ export default function ManagementUsersScreen() {
           hint: r.nationwide ? "Türkiye geneli" : "İl bazlı",
         })),
         icon: "shield-checkmark-outline",
+        group: "Rol ve kapsam",
       },
       {
         key: "city",
@@ -186,12 +189,13 @@ export default function ManagementUsersScreen() {
         hint: "Yetkiler yalnız bu ilde geçerli olur.",
         hidden: (v) => Boolean(roleByKey.get(String(v.role))?.nationwide),
       },
-      { key: "email", label: "E-posta", kind: "email", placeholder: "ornek@mail.com" },
+      { key: "email", label: "E-posta", kind: "email", placeholder: "ornek@mail.com", group: "İletişim" },
       { key: "phone", label: "Telefon", kind: "phone", placeholder: "0555..." },
       {
         key: "status",
         label: "Hesap durumu",
         kind: "segment",
+        group: "Durum",
         options: [
           { value: "active", label: "Aktif" },
           { value: "suspended", label: "Askıda" },
@@ -268,22 +272,49 @@ export default function ManagementUsersScreen() {
         search={q}
         onSearch={setQ}
         searchPlaceholder="Ad, kullanıcı adı, e-posta ara"
-        filters={roleFilters}
-        filter={role}
-        onFilter={setRole}
         extraHeader={
           <View style={styles.header}>
-            <SegmentedControl items={STATUS_ITEMS} value={status} onChange={setStatus} size="sm" />
             {list.data ? (
-              <StatRow
-                items={[
-                  { label: "Yönetim hesabı", value: list.data.users.length },
-                  { label: "Admin", value: counts.admin ?? 0 },
-                  { label: "Editör", value: counts.editor ?? 0 },
-                  { label: "İl yöneticisi", value: counts.il_yoneticisi ?? 0 },
+              <SysStage
+                eyebrow="Panel hesapları"
+                title="Yönetim ekibi"
+                icon="id-card"
+                tone="violet"
+                value={list.data.users.length}
+                valueLabel="hesap"
+                stats={[
+                  { label: "Aktif", value: list.data.users.filter((u) => u.status !== "suspended").length, icon: "checkmark-circle", tone: "win" },
+                  { label: "Askıda", value: list.data.users.filter((u) => u.status === "suspended").length, icon: "pause-circle", tone: "danger" },
                 ]}
               />
             ) : null}
+            {/* Rol karoları: rengi rolün kimliği, sayı o roldeki hesap; dokununca süzgeç. */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.roles}>
+              {roleFilters.map((r) => {
+                const on = role === r.key;
+                return (
+                  <Touchable
+                    key={r.key}
+                    feedback="card"
+                    haptic="selection"
+                    onPress={() => setRole(r.key)}
+                    style={[styles.roleTile, on ? styles.roleTileOn : null]}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: on }}
+                    accessibilityLabel={`${r.label}: ${r.count ?? 0}`}
+                  >
+                    <IconTile icon={r.key === "all" ? "apps" : roleIcon(r.key)} tone={r.key === "all" ? "signature" : roleTone(r.key)} size={32} glow={on} />
+                    <Text style={styles.roleCount} {...textScale.badge}>
+                      {r.count ?? 0}
+                    </Text>
+                    <Text style={[styles.roleLabel, on ? { color: colors.textPrimary } : null]} numberOfLines={2} {...textScale.badge}>
+                      {r.label}
+                    </Text>
+                  </Touchable>
+                );
+              })}
+            </ScrollView>
+            <SegmentedControl items={STATUS_ITEMS} value={status} onChange={setStatus} size="sm" />
           </View>
         }
         summary={list.data ? `${visible.length} hesap` : null}
@@ -291,29 +322,55 @@ export default function ManagementUsersScreen() {
         emptyIcon="id-card-outline"
         emptyTitle={list.data?.users.length ? "Eşleşen hesap yok" : "Henüz yönetim hesabı açılmadı"}
         emptyBody={list.data?.users.length ? "Aramayı ya da süzgeci değiştir." : undefined}
-        renderItem={({ item }) => (
-          <RecordCard
-            title={item.fullName || item.username}
-            subtitle={item.title || `@${item.username}`}
-            meta={[
-              item.title ? `@${item.username}` : null,
-              item.nationwide ? "Türkiye geneli" : item.city || "İl yok",
-              item.createdAt ? formatDate(item.createdAt) : null,
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-            avatar={{ name: item.fullName || item.username }}
-            muted={item.status === "suspended"}
-            badges={[
-              { label: item.roleLabel, tone: item.role === "admin" ? "accent" : "brand" },
-              {
-                label: MANAGEMENT_STATUS_LABELS[item.status as ManagementStatus] ?? String(item.status),
-                tone: item.status === "suspended" ? "danger" : "win",
-              },
-            ]}
-            onPress={() => setActionFor(item)}
-          />
-        )}
+        renderItem={({ item }) => {
+          const suspended = item.status === "suspended";
+          return (
+            <Touchable
+              feedback="card"
+              onPress={() => setActionFor(item)}
+              style={[styles.card, suspended ? styles.cardMuted : null]}
+              accessibilityRole="button"
+              accessibilityLabel={`${item.fullName || item.username}, ${item.roleLabel}${suspended ? ", askıda" : ""}`}
+            >
+              <View>
+                <Avatar name={item.fullName || item.username} size={46} />
+                <View style={[styles.statusDot, { backgroundColor: suspended ? colors.danger : colors.win }]} />
+              </View>
+              <View style={styles.main}>
+                <Text style={[styles.name, suspended ? styles.nameMuted : null]} numberOfLines={1} {...textScale.dense}>
+                  {item.fullName || item.username}
+                </Text>
+                <Text style={styles.handle} numberOfLines={1} {...textScale.dense}>
+                  @{item.username}
+                  {item.title ? ` · ${item.title}` : ""}
+                </Text>
+                <View style={styles.metaRow}>
+                  <IconTile icon={roleIcon(item.role)} tone={roleTone(item.role)} size={20} glow={false} />
+                  <Text style={styles.roleName} numberOfLines={1} {...textScale.dense}>
+                    {item.roleLabel}
+                  </Text>
+                  <Ionicons name={item.nationwide ? "globe-outline" : "location-outline"} size={11} color={colors.textTertiary} />
+                  <Text style={styles.meta} numberOfLines={1} {...textScale.dense}>
+                    {item.nationwide ? "Türkiye geneli" : item.city || "İl yok"}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.side}>
+                <Badge
+                  label={MANAGEMENT_STATUS_LABELS[item.status as ManagementStatus] ?? String(item.status)}
+                  tone={suspended ? "danger" : "win"}
+                  size="xs"
+                />
+                {item.createdAt ? (
+                  <Text style={styles.since} {...textScale.badge}>
+                    {formatDate(item.createdAt)}
+                  </Text>
+                ) : null}
+                <Ionicons name="ellipsis-horizontal" size={16} color={colors.textTertiary} />
+              </View>
+            </Touchable>
+          );
+        }}
       />
 
       <ActionSheet
@@ -392,5 +449,22 @@ function trimOrNull(value: unknown): string | null {
 }
 
 const styles = StyleSheet.create({
-  header: { gap: space.sm },
+  header: { gap: space.md },
+  roles: { gap: space.sm, paddingRight: space.lg },
+  roleTile: { width: 84, alignItems: "center", gap: 3, paddingVertical: space.sm, paddingHorizontal: space.xs, borderRadius: radius.xl, backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border },
+  roleTileOn: { backgroundColor: colors.brandDim, borderColor: colors.brand },
+  roleCount: { ...type.scoreSm, color: colors.textPrimary },
+  roleLabel: { ...type.micro, color: colors.textTertiary, textAlign: "center" },
+  card: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderRadius: radius.xl, backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border },
+  cardMuted: { backgroundColor: colors.surface2 },
+  statusDot: { position: "absolute", right: 0, bottom: 0, width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: colors.surface1 },
+  main: { flex: 1, minWidth: 0, gap: 3 },
+  name: { ...type.h4, color: colors.textPrimary },
+  nameMuted: { color: colors.textTertiary },
+  handle: { ...type.caption, color: colors.textSecondary },
+  metaRow: { flexDirection: "row", alignItems: "center", gap: 5 },
+  roleName: { ...type.labelSm, color: colors.textPrimary, flexShrink: 1 },
+  meta: { ...type.caption, color: colors.textTertiary, flexShrink: 1 },
+  side: { alignItems: "flex-end", gap: space.xs },
+  since: { ...type.micro, color: colors.textTertiary },
 });

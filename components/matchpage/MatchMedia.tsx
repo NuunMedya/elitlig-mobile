@@ -537,7 +537,7 @@ const ClipTile = memo(function ClipTile({
           ) : null}
           {mine ? (
             <View style={styles.tileMineBadge}>
-              <Ionicons name="star" size={9} color={colors.medalGold} />
+              <Ionicons name="star" size={9} color={colors.star} />
               <Text style={styles.tileMineText} {...textScale.badge}>
                 Senin golün
               </Text>
@@ -685,7 +685,7 @@ const styles = StyleSheet.create({
     minHeight: 44,
   },
   tileMine: {
-    borderColor: colors.medalGold,
+    borderColor: colors.star,
     borderWidth: 1,
     backgroundColor: colors.brandDim,
   },
@@ -701,7 +701,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     backgroundColor: withAlpha(darkPalette.bg, 0.72),
     borderWidth: hairline,
-    borderColor: colors.medalGold,
+    borderColor: colors.star,
   },
   tileMineText: { ...type.micro, fontFamily: fonts.bold, color: colors.onDark },
   tileProgressTrack: {

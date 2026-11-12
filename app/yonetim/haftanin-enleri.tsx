@@ -278,7 +278,7 @@ const styles = StyleSheet.create({
   medal: {
     width: 30,
     height: 30,
-    borderRadius: 15,
+    borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.surface3,

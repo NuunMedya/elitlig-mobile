@@ -253,7 +253,7 @@ const styles = StyleSheet.create({
   pot: {
     width: 38,
     height: 38,
-    borderRadius: 19,
+    borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.surface3,
@@ -280,7 +280,7 @@ const styles = StyleSheet.create({
   stageDot: {
     width: 16,
     height: 16,
-    borderRadius: 8,
+    borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.surface3,

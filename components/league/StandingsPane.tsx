@@ -27,11 +27,14 @@
  * yazılmalı ve o yer tablonun sonudur.
  *
  * GRUPLAR VE KUPALAR (web'deki puan durumu sekmeleriyle aynı kurgu, bkz.
- * `cups.ts`): sezon gruplara/etaplara bölünmüşse tablonun üstünde bir çip
- * şeridi çıkar — "Genel" (yönetici kapatabilir) · lig usulü gruplar (kendi
- * maçlarından hesaplanan tablo) · kupalar (eleme ağacı, `CupView`) · bağımsız
- * etaplar (eşleşme listesi). Grupsuz sezonda şerit hiç çizilmez. Eleme
- * bölgeleri statüden gelir: "1–8. sıra → Altın Kupa Son 16".
+ * `cups.ts`): sezon gruplara/etaplara bölünmüşse tablonun üstünde iki katlı
+ * sekme düzeni çıkar (`StageNav`) — "Genel" (yönetici kapatabilir) · lig
+ * usulü gruplar (kendi maçlarından hesaplanan tablo) · kupalar (eleme ağacı,
+ * `CupView`) · bağımsız etaplar (eşleşme listesi). Ağaç kipindeki sezonda
+ * "Genel"in üstünde turnuva yolu (`StageFlow`). Grupsuz sezonda hiçbiri
+ * çizilmez. Liderlik özeti, gol krallığı dışındaki her şey ve bölge anahtarı
+ * seçili gruba göredir; eleme bölgeleri statüden gelir: "1–8. sıra → Altın
+ * Kupa Son 16".
  *
  * YOĞUN ÖLÇÜ: satırlar ortak `TeamRow` değil, bu sekmeye özgü ince
  * `StandingsRow`dur (40px satır, madalyalı ilk üç, puan sütunu şeridi).
@@ -54,8 +57,6 @@ import { useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
 import { FlatList, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import {
-  Chip,
-  ChipGroup,
   EmptyState,
   ErrorState,
   Reveal,
@@ -81,7 +82,6 @@ import {
   colors,
   defaultZoneRules,
   hairline,
-  layout,
   palette,
   radius,
   space,
@@ -98,6 +98,7 @@ import { buildQualification, buildStandingsTabs, looseStage, type QualificationL
 import type { LeaderEntry } from "./Leaderboard";
 import { ZoneKey, type ZoneKeyItem } from "./kit";
 import { ScorersStrip } from "./ScorersStrip";
+import { StageFlow, StageNav } from "./StageNav";
 import { StandingsPodium } from "./StandingsPodium";
 import { StandingsHead, StandingsRow } from "./StandingsRow";
 import {
@@ -293,22 +294,20 @@ export function StandingsPane({ scrollProps, onOpenPlayers }: StandingsPaneProps
   const openScorers = useCallback(() => onOpenPlayers?.("topScorers"), [onOpenPlayers]);
   const openMatch = useCallback((matchId: number) => router.push(`/mac/${matchId}`), [router]);
 
-  /* Grup / kupa şeridi — tek sekmede (grupsuz sezon) hiç çizilmez. */
+  /* Grup / etap / kupa gezinmesi — tek sekmede (grupsuz sezon) hiç çizilmez
+     ve görünüm bugünküyle aynı kalır. */
   const groupBar =
-    tabs.length > 1 ? (
-      <ChipGroup style={styles.groupBar} testID="standings-groups">
-        {tabs.map((tab) => (
-          <Chip
-            key={tab.key}
-            label={tab.label}
-            size="sm"
-            icon={tab.kind === "cup" ? "trophy-outline" : tab.kind === "stage" ? "git-network-outline" : undefined}
-            selected={tab.key === activeTab.key}
-            onPress={() => setSelectedTab(tab.key)}
-          />
-        ))}
-      </ChipGroup>
+    tabs.length > 1 ? <StageNav tabs={tabs} activeKey={activeTab.key} onChange={setSelectedTab} /> : null;
+  /* Ağaç kipi (web: eleme şeması + genel tablo): "Genel" sekmesinde tablonun
+     üstünde turnuva yolu. */
+  const treeMode =
+    overviewQuery.data?.settings?.group_display_mode === "agac" &&
+    (overviewQuery.data?.groups ?? []).some((group) => !group.is_default);
+  const stageFlow =
+    treeMode && activeTab.kind === "overall" ? (
+      <StageFlow groups={overviewQuery.data?.groups ?? []} tabs={tabs} onOpenTab={setSelectedTab} />
     ) : null;
+  const tableTitle = activeTab.kind === "group" ? activeTab.group.group_name : tabs.length > 1 ? "Genel puan durumu" : "Puan tablosu";
 
   const renderItem = useCallback(
     ({ item, index: listIndex }: { item: TableItem; index: number }) => {
@@ -427,10 +426,16 @@ export function StandingsPane({ scrollProps, onOpenPlayers }: StandingsPaneProps
       }
       ListHeaderComponent={
         rows.length === 0 ? (
-          groupBar ? <View style={styles.header}>{groupBar}</View> : null
+          groupBar ? (
+            <View style={styles.header}>
+              {groupBar}
+              {stageFlow}
+            </View>
+          ) : null
         ) : (
           <View style={styles.header}>
             {groupBar}
+            {stageFlow}
             {tableQuery.isError ? <ErrorState error={tableQuery.error} variant="banner" /> : null}
             <Reveal index={0}>
               <StandingsPodium
@@ -450,8 +455,8 @@ export function StandingsPane({ scrollProps, onOpenPlayers }: StandingsPaneProps
             <View style={styles.tableIntro}>
               <View style={styles.toolbar}>
                 <View style={styles.toolbarText}>
-                  <Text style={styles.toolbarTitle} {...textScale.dense}>
-                    Puan tablosu
+                  <Text style={styles.toolbarTitle} numberOfLines={1} {...textScale.dense}>
+                    {tableTitle}
                   </Text>
                   <Text style={styles.toolbarMeta} numberOfLines={1} {...textScale.dense}>
                     {`${formatNumber(rows.length)} takım`}
@@ -513,10 +518,6 @@ const styles = StyleSheet.create({
   header: {
     gap: space.md,
     paddingBottom: space.sm,
-  },
-  /* Çip şeridi ekran kenarına kadar kayar (liste dolgusunu geri alır). */
-  groupBar: {
-    marginHorizontal: -layout.screenPadding,
   },
   cupContent: {
     gap: space.md,

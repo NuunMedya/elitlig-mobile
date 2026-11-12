@@ -9,6 +9,10 @@
  * Her olay oyuncu seçicisini açar (ekran [id].tsx yönetir). Kurallar masaüstü
  * rejiyle aynıdır: skor olaylardan hesaplanır, elle / hükmen tescilde goller
  * skoru değiştirmez.
+ *
+ * İSİMSİZ GOL: GOL düğmesinin altındaki "İsimsiz gol" kadro girilmemiş maçta da
+ * tek dokunuşla takıma gol yazar (oyuncu belirtilmez; skorbord ve maç skoru
+ * değişir). Kayıttaki fazla goller "N isimsiz · geri al" ile geri alınır.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -34,6 +38,10 @@ export interface RejiPanelProps {
   saving: boolean;
   /** Olayın oyuncusunu sor (oyuncu seçici açılır). */
   onAsk: (side: Side, code: string, title: string) => void;
+  /** Tek dokunuşla oyuncu belirtmeden gol (kadro girilmemiş maçta da çalışır). */
+  onAnonymousGoal: (side: Side) => void;
+  /** Son isimsiz golü geri al. */
+  onRemoveAnonymousGoal: (side: Side) => void;
   /** Oyuncu değişikliği akışını başlat (çıkan → giren). */
   onSubstitution: (side: Side) => void;
   onControl: (action: ControlAction) => void;
@@ -115,6 +123,18 @@ export function RejiPanel(props: RejiPanelProps) {
                   <GroupTitle>{name.toLocaleUpperCase("tr-TR")}</GroupTitle>
                 </View>
                 <View style={styles.quickGrid}>
+                  <Touchable
+                    style={[styles.quick, styles.quickWide, (saving || live.manual) && styles.disabled]}
+                    onPress={() => props.onAnonymousGoal(side)}
+                    disabled={saving || live.manual}
+                    accessibilityLabel={`${name} isimsiz gol (oyuncu belirtmeden)`}
+                    haptic="medium"
+                  >
+                    <Ionicons name="football" size={15} color={RIG.ok} />
+                    <Text style={styles.quickText} numberOfLines={1} allowFontScaling={false}>
+                      İsimsiz gol (oyuncu belirtmeden)
+                    </Text>
+                  </Touchable>
                   {QUICK_EVENTS.map((q) => (
                     <Touchable
                       key={q.code}
@@ -182,7 +202,7 @@ export function RejiPanel(props: RejiPanelProps) {
   );
 }
 
-function MatchView({ live, homeName, awayName, saving, onAsk, onControl, onFinish, onToast, undoRow }: RejiPanelProps & { undoRow: React.ReactNode }) {
+function MatchView({ live, homeName, awayName, saving, onAsk, onAnonymousGoal, onRemoveAnonymousGoal, onControl, onFinish, onToast, undoRow }: RejiPanelProps & { undoRow: React.ReactNode }) {
   const primary: { label: string; icon: IconName; action?: ControlAction; finish?: boolean } = (() => {
     switch (live.phase) {
       case "notStarted":
@@ -229,6 +249,32 @@ function MatchView({ live, homeName, awayName, saving, onAsk, onControl, onFinis
                   GOL
                 </Text>
               </Touchable>
+              <Touchable
+                style={[styles.anonBtn, (saving || live.manual) && styles.disabled]}
+                onPress={() => onAnonymousGoal(side)}
+                disabled={saving || live.manual}
+                accessibilityLabel={`${name} isimsiz gol (oyuncu belirtmeden)`}
+                haptic="medium"
+              >
+                <Ionicons name="add" size={15} color={RIG.text} />
+                <Text style={styles.anonText} numberOfLines={1} allowFontScaling={false}>
+                  İsimsiz gol
+                </Text>
+              </Touchable>
+              {live.anonGoals[side] > 0 ? (
+                <Touchable
+                  style={[styles.anonUndo, saving && styles.disabled]}
+                  onPress={() => onRemoveAnonymousGoal(side)}
+                  disabled={saving}
+                  accessibilityLabel={`${name} son isimsiz golü geri al`}
+                  hitSlop={4}
+                >
+                  <Ionicons name="arrow-undo" size={12} color={RIG.textSoft} />
+                  <Text style={styles.anonUndoText} numberOfLines={1} allowFontScaling={false}>
+                    {live.anonGoals[side]} isimsiz · geri al
+                  </Text>
+                </Touchable>
+              ) : null}
             </View>
           );
         })}
@@ -299,6 +345,18 @@ const styles = StyleSheet.create({
     backgroundColor: RIG.brand,
   },
   goalText: { ...type.h3, color: RIG.text },
+  anonBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: space.xxs,
+    height: 36,
+    borderRadius: radius.md,
+    backgroundColor: RIG.panelStrong,
+  },
+  anonText: { ...type.caption, color: RIG.text },
+  anonUndo: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.xxs, minHeight: 24 },
+  anonUndoText: { ...type.micro, color: RIG.textSoft },
   undo: {
     flexDirection: "row",
     alignItems: "center",

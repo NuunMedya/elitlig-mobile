@@ -14,13 +14,12 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
 import {
   ActionSheet,
   AdminScreen,
   FormSheet,
-  Panel,
   SegmentField,
   SelectField,
   ToggleField,
@@ -30,6 +29,7 @@ import {
   type FormValues,
 } from "@/components/admin";
 import { GroupCard } from "@/components/admin/league/GroupCard";
+import { OpsGroup, StatusTiles } from "@/components/admin/matches/opsKit";
 import { ScheduleSheet } from "@/components/admin/league/ScheduleSheet";
 import { StructureSheet } from "@/components/admin/league/StructureSheet";
 import { Button, EmptyState, ErrorState, SkeletonCard, useToast } from "@/components/ui";
@@ -57,7 +57,7 @@ import {
 } from "@/lib/api/admin/leagues";
 import { isArchived, seasonBelongsToLeague, teamOptionsLoader } from "@/lib/api/admin/lookups";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, space, textScale, type } from "@/theme";
+import { colors, space, type } from "@/theme";
 
 const PERMS = ["groups.view", "groups.create", "groups.update", "groups.delete"];
 
@@ -344,9 +344,12 @@ export default function LeagueStructureScreen() {
       onRefresh={seasonId ? refresh : undefined}
       refreshing={overview.isRefetching}
     >
-      <Text style={styles.intro} {...textScale.long}>
-        Sezonun gruplarını, eleme turlarını ve hangi takımın hangi etaba kalacağını kur. Kutuya dokun: kaynağını seç; basılı tut: taşı ya da boşalt.
-      </Text>
+      <OpsGroup
+        title="Sezon seç"
+        icon="git-network"
+        tone="cyan"
+        hint="Grupları, eleme turlarını ve hangi takımın hangi etaba kalacağını kur. Kutuya dokun: kaynağını seç; basılı tut: taşı ya da boşalt."
+      >
       <SelectField<number>
         label="Lig"
         value={leagueId}
@@ -367,6 +370,7 @@ export default function LeagueStructureScreen() {
         icon="calendar-outline"
         disabled={!leagueId && !seasonId}
       />
+      </OpsGroup>
 
       {!seasonId ? (
         <EmptyState icon="git-network-outline" variant="inline" title="Lig ve sezon seç" body="Statüyü düzenlemek için önce lig ve sezon seç." />
@@ -376,7 +380,17 @@ export default function LeagueStructureScreen() {
         <ErrorState error={overview.error} onRetry={overview.refetch} variant="inline" />
       ) : (
         <>
-          <Panel title="GÖRÜNÜM">
+          {/* Sezonun kurgu özeti: grup / etap / dolu kutu sayaçları. */}
+          {groups.length ? (
+            <StatusTiles
+              items={[
+                { key: "g", label: "Grup", value: groups.filter((g) => g.group_kind !== "etap").length, tone: "brand", icon: "grid-outline" },
+                { key: "e", label: "Etap", value: groups.filter((g) => g.group_kind === "etap").length, tone: "info", icon: "git-merge-outline" },
+                { key: "t", label: "Dolu kutu", value: groups.reduce((n, g) => n + (g.team_count ?? 0), 0), tone: "win", icon: "shield-checkmark-outline" },
+              ]}
+            />
+          ) : null}
+          <OpsGroup title="Görünüm" icon="eye-outline" tone="violet">
             <ToggleField
               label="Genel puan tablosu gösterilsin"
               hint="Gruplu sezonda 'Genel' sekmesi"
@@ -393,7 +407,7 @@ export default function LeagueStructureScreen() {
               ]}
               onChange={(v) => can.update && saveSettings.mutate({ groupDisplayMode: v })}
             />
-          </Panel>
+          </OpsGroup>
 
           <View style={styles.actions}>
             {can.create ? <Button label="Hazır statü" icon="construct-outline" size="sm" onPress={() => setBuilder(true)} /> : null}

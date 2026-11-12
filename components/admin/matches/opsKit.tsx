@@ -866,7 +866,7 @@ const styles = StyleSheet.create({
   railDot: {
     width: 36,
     height: 36,
-    borderRadius: 18,
+    borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.surface2,
@@ -883,7 +883,7 @@ const styles = StyleSheet.create({
     top: -3,
     width: 15,
     height: 15,
-    borderRadius: 8,
+    borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.win,

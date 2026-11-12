@@ -139,6 +139,8 @@ export const TimelineRow = memo(function TimelineRow({
   const glow = useFlash(flash);
   const eventId = Number(event.id);
   const watch = useCallback(() => onClip?.(eventId), [onClip, eventId]);
+  const clip = hasClip && Boolean(onClip);
+  const own = mine && goal;
 
   const content = (
     <View style={[styles.side, home ? styles.sideHome : styles.sideAway]}>
@@ -163,7 +165,7 @@ export const TimelineRow = memo(function TimelineRow({
               {name}
             </Text>
             {/* Alt satır: koşan skor hapı + olayın nasıl olduğu. */}
-            {score || detail ? (
+            {score || detail || clip ? (
               <View style={[styles.metaLine, home ? styles.metaLineHome : null]}>
                 {score ? (
                   <View style={styles.scoreChip}>
@@ -172,6 +174,10 @@ export const TimelineRow = memo(function TimelineRow({
                     </Text>
                   </View>
                 ) : null}
+                {/* "▶ Golü izle" — videosu olan golün açık işareti, skorun
+                    hemen yanında. Satırın kendisi de oynatıcıyı açar; hap,
+                    dokunulacak yeri söyler. */}
+                {clip ? <WatchPill minute={event.dakika} onPress={watch} /> : null}
                 {detail ? (
                   <Text style={[styles.detail, styles.detailFlex, home ? styles.alignRight : null]} numberOfLines={1} {...textScale.dense}>
                     {upperTR(detail.slice(0, 1)) + detail.slice(1)}
@@ -186,41 +192,15 @@ export const TimelineRow = memo(function TimelineRow({
   );
 
   const reactable = Boolean(onReact) && (goal || kind === "yellow" || kind === "red");
-  const clip = hasClip && Boolean(onClip);
-  const own = mine && goal;
-  /* Eylemler (golü izle + tepkiler) olayın KENDİ tarafında, adın altında
+  /* Eylemler ("Senin golün" + tepkiler) olayın KENDİ tarafında, adın altında
      durur; eskiden ortada iki ayrı satır rayı kesiyor ve her golü üç satıra
      çıkarıyordu. */
   const actions =
-    reactable || clip || own ? (
+    reactable || own ? (
       <View style={[styles.actions, home ? styles.actionsHome : null]}>
-        {clip ? (
-          /* "▶ Golü izle" — videosu olan golün açık işareti. Satırın kendisi
-             de oynatıcıyı açar; hap, dokunulacak yeri söyler. */
-          <Touchable
-            feedback="button"
-            style={styles.clipBtn}
-            onPress={watch}
-            hitSlop={6}
-            haptic="light"
-            accessibilityRole="button"
-            accessibilityLabel={`${event.dakika ?? "?"}. dakikadaki golün videosunu izle`}
-          >
-            <LinearGradient
-              colors={colors.gradientLive}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={[StyleSheet.absoluteFill, styles.clipFill]}
-            />
-            <Ionicons name="play" size={11} color={colors.onDark} />
-            <Text style={styles.clipText} {...textScale.badge}>
-              Golü izle
-            </Text>
-          </Touchable>
-        ) : null}
         {own ? (
           <View style={styles.mineBadge}>
-            <Ionicons name="star" size={10} color={colors.medalGold} />
+            <Ionicons name="star" size={10} color={colors.star} />
             <Text style={styles.mineText} {...textScale.badge}>
               Senin golün
             </Text>
@@ -302,6 +282,32 @@ export const TimelineRow = memo(function TimelineRow({
         </View>
       ) : null}
     </View>
+  );
+});
+
+/** "▶ Golü izle" hapı — canlı pembe degrade, mor gecede ilk bakışta seçilir. */
+const WatchPill = memo(function WatchPill({ minute, onPress }: { minute: number | null; onPress: () => void }) {
+  return (
+    <Touchable
+      feedback="button"
+      style={styles.clipBtn}
+      onPress={onPress}
+      hitSlop={6}
+      haptic="light"
+      accessibilityRole="button"
+      accessibilityLabel={`${minute ?? "?"}. dakikadaki golün videosunu izle`}
+    >
+      <LinearGradient
+        colors={colors.gradientLive}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[StyleSheet.absoluteFill, styles.clipFill]}
+      />
+      <Ionicons name="play" size={10} color={colors.onDark} />
+      <Text style={styles.clipText} {...textScale.badge}>
+        Golü izle
+      </Text>
+    </Touchable>
   );
 });
 
@@ -492,9 +498,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: space.xxs,
-    height: 24,
+    height: 20,
     paddingLeft: space.s,
-    paddingRight: space.sm,
+    paddingRight: space.s,
     borderRadius: radius.pill,
     ...glowStyle(colors.live, 1),
   },
@@ -527,7 +533,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     backgroundColor: colors.warnDim,
     borderWidth: hairline,
-    borderColor: colors.medalGold,
+    borderColor: colors.star,
   },
   mineText: {
     ...type.labelXs,

@@ -63,9 +63,11 @@ import {
 import { useAuth } from "@/providers/AuthProvider";
 import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
 
+import { RoleTile } from "./AccessParts";
 import { PermissionEditor } from "./PermissionEditor";
 import { DeleteRoleSheet, RoleSettingsSheet } from "./RoleSheets";
 import { SaveBar } from "./SaveBar";
+import { StageStat, SysStage } from "./SysKit";
 
 /** Ekranın altındaki kaydet çubuğu içeriği örtmesin. */
 export const SAVEBAR_SPACE = 120;
@@ -76,6 +78,18 @@ const changeList = (diff: { added: string[]; removed: string[] }, labels: Map<st
   ...diff.added.map((k) => `+ ${labels.get(k) ?? k}`),
   ...diff.removed.map((k) => `− ${labels.get(k) ?? k}`),
 ];
+
+/** Koyu sahne üstündeki cam hap. */
+function StagePill({ icon, text }: { icon: keyof typeof Ionicons.glyphMap; text: string }) {
+  return (
+    <View style={styles.pill}>
+      <Ionicons name={icon} size={11} color={colors.onDarkMuted} />
+      <Text style={styles.pillText} numberOfLines={1} {...textScale.badge}>
+        {text}
+      </Text>
+    </View>
+  );
+}
 
 function Notice({ icon = "information-circle-outline", text, tone = "info" }: { icon?: keyof typeof Ionicons.glyphMap; text: string; tone?: "info" | "warn" }) {
   return (
@@ -207,33 +221,36 @@ export function PersonAccessView({ id }: { id: number }) {
 
   return (
     <Body bar={bar} refreshing={query.isRefetching} onRefresh={query.refetch}>
-      <Panel>
+      <SysStage>
         <View style={styles.head}>
-          <Avatar name={person.name} size={48} />
+          <Avatar name={person.name} size={56} ring="brand" />
           <View style={styles.headText}>
-            <Text style={styles.name} {...textScale.dense}>
+            <Text style={styles.eyebrow} {...textScale.badge}>
+              {(ACCESS_SOURCE_LABELS[person.source] ?? person.source).toLocaleUpperCase("tr-TR")}
+            </Text>
+            <Text style={styles.stageName} numberOfLines={2} {...textScale.dense}>
               {person.name}
             </Text>
             {person.title ? (
-              <Text style={styles.sub} {...textScale.dense}>
+              <Text style={styles.stageSub} numberOfLines={1} {...textScale.dense}>
                 {person.title}
               </Text>
             ) : null}
-            <View style={styles.badges}>
-              <Badge label={`@${person.username}`} size="xs" />
-              <Badge label={person.roleLabel} tone="brand" size="xs" />
-              <Badge label={person.nationwide ? "Türkiye geneli" : person.city || "İl yok"} icon={person.nationwide ? "earth-outline" : "location-outline"} size="xs" />
-              <Badge label={ACCESS_SOURCE_LABELS[person.source] ?? person.source} tone={person.source === "personal" ? "accent" : "neutral"} size="xs" />
-              {person.status === "suspended" ? <Badge label="Askıda" tone="warn" size="xs" /> : null}
-            </View>
-            {person.copiedFrom ? (
-              <Text style={styles.meta} {...textScale.dense}>
-                Kopyalandı: {person.copiedFrom.name || `#${person.copiedFrom.id}`}
-              </Text>
-            ) : null}
           </View>
+          <RoleTile roleKey={person.role} color={data.roles.find((r) => r.key === person.role)?.color} size={40} />
         </View>
-      </Panel>
+        <View style={styles.pills}>
+          <StagePill icon="at" text={person.username} />
+          <StagePill icon="shield-half" text={person.roleLabel} />
+          <StagePill icon={person.nationwide ? "earth" : "location"} text={person.nationwide ? "Türkiye geneli" : person.city || "İl yok"} />
+          {person.status === "suspended" ? <StagePill icon="pause-circle" text="Askıda" /> : null}
+          {person.copiedFrom ? <StagePill icon="copy" text={`Kopya: ${person.copiedFrom.name || `#${person.copiedFrom.id}`}`} /> : null}
+        </View>
+        <View style={styles.stageStats}>
+          <StageStat label="Açık yetki" value={readOnly ? person.permissions.length : perms.length} icon="key" tone="win" />
+          <StageStat label="Kayıtlı" value={person.permissions.length} icon="save" />
+        </View>
+      </SysStage>
 
       {person.lockReason ? <Notice icon="lock-closed-outline" text={person.lockReason} tone="warn" /> : null}
       {!canManage ? <Notice text="Yetkileri yalnız görüntüleyebilirsin; değiştirmek için “Kişilere yetki ve ünvan verme” yetkisi gerekir." /> : null}
@@ -423,28 +440,32 @@ export function RoleTemplateView({ roleKey }: { roleKey: string }) {
 
   return (
     <Body bar={bar} refreshing={query.isRefetching} onRefresh={query.refetch}>
-      <Panel>
+      <SysStage>
         <View style={styles.head}>
-          <View style={[styles.roleColor, { backgroundColor: role.color || ROLE_FALLBACK_COLOR }]} />
+          <RoleTile roleKey={role.key} color={role.color} size={52} />
           <View style={styles.headText}>
-            <Text style={styles.name} {...textScale.dense}>
+            <Text style={styles.eyebrow} {...textScale.badge}>
+              {(role.isManagement ? (role.nationwide ? "Yönetim · Türkiye geneli" : "Yönetim · il bazlı") : "Üye rolü").toLocaleUpperCase("tr-TR")}
+            </Text>
+            <Text style={styles.stageName} numberOfLines={2} {...textScale.dense}>
               {role.label}
             </Text>
-            <Text style={styles.sub} {...textScale.long}>
+            <Text style={styles.stageSub} numberOfLines={2} {...textScale.long}>
               {role.description || (role.custom ? "Panelden eklenen rol." : "Yerleşik rol.")}
             </Text>
-            <View style={styles.badges}>
-              <Badge label={role.key} size="xs" />
-              <Badge
-                label={role.isManagement ? (role.nationwide ? "Türkiye geneli" : "İl bazlı") : "Üye rolü"}
-                icon={role.nationwide ? "earth-outline" : "location-outline"}
-                size="xs"
-              />
-              <Badge label={role.custom ? "Özel rol" : "Yerleşik"} tone={role.custom ? "accent" : "neutral"} size="xs" />
-              {role.editable ? <Badge label={role.isDefault ? "Varsayılan yetkiler" : "Özelleştirilmiş yetkiler"} tone="info" size="xs" /> : null}
-            </View>
           </View>
         </View>
+        <View style={styles.pills}>
+          <StagePill icon="code-slash" text={role.key} />
+          <StagePill icon={role.custom ? "sparkles" : "cube"} text={role.custom ? "Özel rol" : "Yerleşik"} />
+          {role.editable ? <StagePill icon="options" text={role.isDefault ? "Varsayılan yetkiler" : "Özelleştirilmiş"} /> : null}
+        </View>
+        <View style={styles.stageStats}>
+          <StageStat label="Kişi" value={role.userCount} icon="people" tone="info" />
+          <StageStat label="Yetki" value={role.editable ? draft.length : "Tümü"} icon="key" tone="win" />
+        </View>
+      </SysStage>
+      <Panel>
         {role.isManagement && role.homePath ? <InfoLine label="Giriş sayfası" value={homeLabel ?? "—"} /> : null}
         <Touchable onPress={() => setDialog("users")} style={styles.usersLink} accessibilityRole="button">
           <Ionicons name="people-outline" size={16} color={colors.brandAccent} />
@@ -657,6 +678,7 @@ export function BulkAccessView({ ids, onIdsChange }: { ids: number[]; onIdsChang
           const removed = next ? u.permissions.filter((k) => !after.has(k)).length : 0;
           return (
             <View key={u.id} style={styles.personRow}>
+              <Avatar name={u.name} size={34} />
               <View style={styles.headText}>
                 <Text style={styles.personName} numberOfLines={1} {...textScale.dense}>
                   {u.name}
@@ -769,7 +791,14 @@ const styles = StyleSheet.create({
   fill: { flex: 1 },
   content: { paddingHorizontal: layout.screenPadding, paddingTop: space.sm, paddingBottom: space.giant * 2 },
   gap: { gap: space.md },
-  head: { flexDirection: "row", gap: space.md, alignItems: "flex-start" },
+  head: { flexDirection: "row", gap: space.md, alignItems: "center" },
+  eyebrow: { ...type.overline, color: colors.adminAccent },
+  stageName: { ...type.h2, color: colors.onDark },
+  stageSub: { ...type.caption, color: colors.onDarkMuted },
+  pills: { flexDirection: "row", flexWrap: "wrap", gap: space.xs },
+  pill: { flexDirection: "row", alignItems: "center", gap: 4, maxWidth: "100%", paddingHorizontal: space.sm, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: colors.inkPill, borderWidth: hairline, borderColor: colors.inkPillBorder },
+  pillText: { ...type.labelXs, color: colors.onDark, flexShrink: 1 },
+  stageStats: { flexDirection: "row", gap: space.sm },
   headText: { flex: 1, gap: space.xxs },
   name: { ...type.h3, color: colors.textPrimary },
   sub: { ...type.bodySm, color: colors.textSecondary },
@@ -786,14 +815,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: space.sm,
     padding: space.md,
-    borderRadius: radius.md,
+    borderRadius: radius.xl,
     backgroundColor: colors.infoDim,
     borderWidth: hairline,
     borderColor: colors.border,
   },
   noticeWarn: { backgroundColor: colors.warnDim },
   noticeText: { ...type.caption, color: colors.textSecondary, flex: 1 },
-  personRow: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: space.xs },
+  personRow: { flexDirection: "row", alignItems: "center", gap: space.md, paddingVertical: space.sm, borderBottomWidth: hairline, borderBottomColor: colors.separator },
   personName: { ...type.body, color: colors.textPrimary },
   plus: { color: colors.win },
   minus: { color: colors.danger },

@@ -738,7 +738,7 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
     const ev = goalSource.event;
     const code = String(ev.olay_kodu).toUpperCase();
     const own = code === "GOAL_OWN";
-    const eventSide: Side = Number(ev.takim_id) === Number(live.homeTeamId) ? "home" : "away";
+    const eventSide: Side = live.sideOfEvent(ev);
     // Kendi kalesine gol rakibin hanesine yazılır.
     const scoringSide: Side = own ? (eventSide === "home" ? "away" : "home") : eventSide;
     return {
@@ -920,10 +920,38 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
       });
       return;
     }
+    if (!playerId) {
+      if (!isGoalCode(p.code)) {
+        toast.show({ message: "Kart için oyuncu seçmelisin; sunucu oyuncusuz kartı kabul etmiyor.", tone: "warn" });
+        return;
+      }
+      anonymousGoal(p.side, p.code, p.clipKey);
+      return;
+    }
     void save(async () => {
       const created = await live.addEvent({ side: p.side, code: p.code, playerId, clientId: p.clientId });
       if (p.clipKey) goalClips.attach(p.clipKey, Number(created?.id) || null, live.nameOf(playerId), p.side, p.code);
       toast.show({ message: `${eventLabel(p.code)} kaydedildi (${live.minute}').`, tone: "success" });
+    });
+  };
+
+  /**
+   * İSİMSİZ GOL — oyuncu seçmeden takıma gol (skorbord + maç skoru). Kadro
+   * girilmemiş maçta da çalışır. Sunucu oyuncusuz gol OLAYINI kabul etmediği
+   * için skor maç kaydına yazılır (bkz. useLiveMatch → addAnonymousGoal).
+   */
+  const anonymousGoal = (side: Side, code = "GOAL_RIGHT_FOOT", clipKey: string | null = null) => {
+    if (!requireLive()) return;
+    if (live.manual) {
+      toast.show({ message: "Skor elle / hükmen tescil edildi; gol skoru değiştirmez.", tone: "warn" });
+      return;
+    }
+    // Seçiciden gelmiyorsa (tek dokunuş) klip burada alınır.
+    const key = clipKey ?? (nativeReady && encoderOn ? goalClips.capture({ side, code, minute: live.minute }) : null);
+    void save(async () => {
+      const out = await live.addAnonymousGoal(side, code);
+      if (key) goalClips.attach(key, null, nameOfSide(out.side), out.side, code);
+      toast.show({ message: `${nameOfSide(out.side)} golü kaydedildi (oyuncu belirtilmeden) · ${out.score.home}-${out.score.away}.`, tone: "success" });
     });
   };
 
@@ -1310,6 +1338,13 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
                     awayName={awayName}
                     saving={saving}
                     onAsk={ask}
+                    onAnonymousGoal={(side) => anonymousGoal(side)}
+                    onRemoveAnonymousGoal={(side) =>
+                      void live
+                        .removeAnonymousGoal(side)
+                        .then(() => toast.show({ message: "İsimsiz gol geri alındı.", tone: "success" }))
+                        .catch((e: unknown) => toast.show({ message: errorText(e, "Gol geri alınamadı. Bağlantını kontrol et."), tone: "danger" }))
+                    }
                     onSubstitution={askSubstitution}
                     onControl={(a) => void runControl(a)}
                     onFinish={askFinish}
@@ -1450,7 +1485,9 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
           busy={saving}
           onPick={onPick}
           onClose={cancelPicker}
-          skipLabel={picker.kind === "caption" || picker.kind === "interview" ? null : picker.kind === "event" ? "Oyuncusuz kaydet" : picker.kind === "subOut" ? "Çıkanı atla" : "Gireni atla"}
+          skipLabel={picker.kind === "caption" || picker.kind === "interview" || picker.kind === "event" ? null : picker.kind === "subOut" ? "Çıkanı atla" : "Gireni atla"}
+          anonymousLabel={picker.kind === "event" && isGoalCode(picker.code) ? `İsimsiz gol · ${nameOfSide(picker.code === "GOAL_OWN" ? (picker.side === "home" ? "away" : "home") : picker.side)}` : null}
+          anonymousHint="Oyuncu belirtmeden kaydet: skorborda ve maç sonucuna işlenir, golcü yerine takım adı görünür."
           starterLabel={picker.kind === "subOut" ? "SAHADA" : picker.kind === "subIn" ? "YEDEKLER" : "İLK 11"}
           otherLabel={picker.kind === "subOut" || picker.kind === "subIn" ? "DİĞER" : "YEDEKLER"}
           emptyText={
@@ -1458,7 +1495,11 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
               ? "Bu takımın maç kadrosu girilmemiş. Oyuncu adını Altyazı sekmesinden elle yazabilirsin."
               : picker.kind === "interview"
                 ? "Bu takımın maç kadrosu girilmemiş. Konuğun adını Röportaj sekmesinden elle yazabilirsin."
-              : "Bu takımın maç kadrosu girilmemiş. Olayı oyuncusuz kaydedebilirsin."
+              : picker.kind === "event" && isGoalCode(picker.code)
+                ? "Bu takımın maç kadrosu girilmemiş. Golü yukarıdaki İsimsiz gol düğmesiyle kaydet."
+                : picker.kind === "event"
+                  ? "Bu takımın maç kadrosu girilmemiş. Kart için önce kadroya oyuncu eklenmeli."
+                  : "Bu takımın maç kadrosu girilmemiş. Olayı oyuncusuz kaydedebilirsin."
           }
         />
       ) : null}

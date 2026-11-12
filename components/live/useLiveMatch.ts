@@ -8,6 +8,13 @@
  *          ilerletilir. Devre 25 dakika (web ile aynı).
  *   SKOR   olaylardan hesaplanır, her olaydan sonra maç kaydına yazılır (elle /
  *          hükmen tescilde kayıttaki skor esas).
+ *   İSİMSİZ GOL  oyuncu belirtilmeden yazılan gol. Sunucu olay ucu
+ *          (POST /maclar/:id/olaylar) oyuncusuz golü REDDEDİYOR
+ *          (OYUNCU_ID_REQUIRED); bu yüzden isimsiz gol olay olarak değil,
+ *          doğrudan maç skoruna (PATCH /maclar/:id) +1 olarak yazılır.
+ *          Kayıttaki skorun olaylardan fazlası "isimsiz gol" sayılır ve her
+ *          eşitlemede korunur: skor = olay golleri + isimsiz goller. Sayfa
+ *          yenilenince de aynı hesap kayıttaki skordan yeniden çıkar.
  *   OLAY   createEvent / deleteEvent; client_event_id ile çift gönderim güvenli.
  *
  * Skoroverlay (web /skoroverlay) aynı sunucu kayıtlarını okuduğu için mobil
@@ -118,20 +125,61 @@ export function useLiveMatch(matchId: number, userId?: number | null) {
 
   /* ───────── skor ───────── */
   const eventScore = useMemo(() => scoreFromEvents(events, homeTeamId, awayTeamId), [events, homeTeamId, awayTeamId]);
-  const score = manual
-    ? { home: Number(match?.first_team_score) || 0, away: Number(match?.second_team_score) || 0 }
-    : eventScore;
+  const serverScore = { home: Number(match?.first_team_score) || 0, away: Number(match?.second_team_score) || 0 };
+  /*
+   * Maç ayrıntısı sunucuda 15 sn önbellekte (GET /maclar/:id). Kendi yazdığımız
+   * skor o süre içinde eski görünebilir; yazılan değer, sunucu aynısını
+   * döndürene kadar (en çok 30 sn) esas alınır.
+   */
+  const writtenRef = useRef<{ home: number; away: number; until: number } | null>(null);
+  const written = writtenRef.current;
+  const holdWritten = Boolean(written && written.until > now && (written.home !== serverScore.home || written.away !== serverScore.away));
+  const recorded = holdWritten && written ? { home: written.home, away: written.away } : serverScore;
+  /** İşlem sürerken isimsiz gol sayısı sabit tutulur (olay önbelleği skordan önce güncellenir). */
+  const [opAnon, setOpAnon] = useState<{ home: number; away: number } | null>(null);
+  const anon = manual
+    ? { home: 0, away: 0 }
+    : opAnon ?? { home: Math.max(0, recorded.home - eventScore.home), away: Math.max(0, recorded.away - eventScore.away) };
+  const score = manual ? serverScore : { home: eventScore.home + anon.home, away: eventScore.away + anon.away };
+  const anonRef = useRef(anon);
+  anonRef.current = anon;
+  const recordedRef = useRef(recorded);
+  recordedRef.current = recorded;
 
-  const syncScore = useCallback(async () => {
-    const fresh = await queryClient.fetchQuery({ queryKey: eventsKey, queryFn: () => getEvents(matchId), staleTime: 0 });
-    if (manual || !match) return;
-    const next = scoreFromEvents(fresh, homeTeamId, awayTeamId);
-    if (next.home !== Number(match.first_team_score) || next.away !== Number(match.second_team_score)) {
+  const writeScore = useCallback(
+    async (next: { home: number; away: number }) => {
+      const cur = recordedRef.current;
+      if (next.home === cur.home && next.away === cur.away) return;
       await updateMatch(matchId, { first_team_score: next.home, second_team_score: next.away });
+      writtenRef.current = { ...next, until: Date.now() + 30_000 };
       void queryClient.invalidateQueries({ queryKey: detailKey });
-    }
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [awayTeamId, homeTeamId, manual, match, matchId, queryClient]);
+    [matchId, queryClient]
+  );
+
+  /** Skor = (taze) olay golleri + isimsiz goller (`base`: işlem başındaki sayı). */
+  const syncScore = useCallback(
+    async (base?: { home: number; away: number }) => {
+      const fresh = await queryClient.fetchQuery({ queryKey: eventsKey, queryFn: () => getEvents(matchId), staleTime: 0 });
+      if (manual || !match) return;
+      const extra = base ?? anonRef.current;
+      const fromEvents = scoreFromEvents(fresh, homeTeamId, awayTeamId);
+      await writeScore({ home: fromEvents.home + extra.home, away: fromEvents.away + extra.away });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [awayTeamId, homeTeamId, manual, match, matchId, queryClient, writeScore]
+  );
+
+  /* ───────── isimsiz goller için yerel GOL bandı ───────── */
+  // Sunucuda olay kaydı olmadığı için bant / GOL kartı yerel bir sahte olayla çizilir.
+  const [localGoals, setLocalGoals] = useState<{ event: MatchEvent; side: "home" | "away" }[]>([]);
+  const localSide = useMemo(() => new Map(localGoals.map((g) => [Number(g.event.id), g.side])), [localGoals]);
+  /** Olayın (sahte isimsiz gol dahil) takımı. */
+  const sideOfEvent = useCallback(
+    (ev: MatchEvent): "home" | "away" => localSide.get(Number(ev.id)) ?? (Number(ev.takim_id) === Number(homeTeamId) ? "home" : "away"),
+    [homeTeamId, localSide]
+  );
 
   /* ───────── skorbord alt bandı: son gol / kart ───────── */
   const timeline = useMemo(() => events.filter((e) => TIMELINE_CODES.has(String(e.olay_kodu).toUpperCase())), [events]);
@@ -162,17 +210,21 @@ export function useLiveMatch(matchId: number, userId?: number | null) {
 
   const bannerSource = useMemo(() => {
     if (!banner || banner.until < now) return null;
-    const ev = events.find((e) => Number(e.id) === banner.id);
+    const ev = events.find((e) => Number(e.id) === banner.id) ?? localGoals.find((g) => Number(g.event.id) === banner.id)?.event;
     return ev ? { event: ev, since: banner.since } : null;
-  }, [banner, events, now]);
+  }, [banner, events, localGoals, now]);
 
   const bannerEvent = useMemo(() => {
     const ev = bannerSource?.event;
     const meta = bugEventOf(ev);
     if (!ev || !meta) return null;
-    const player = nameOf(ev.oyuncu_id ?? ev.oyuncu_giren_id);
+    const anonSide = localSide.get(Number(ev.id));
+    // İsimsiz gol: oyuncu adı yerine golü atan takımın adı.
+    const player = anonSide
+      ? (anonSide === "home" ? match?.first_team_name : match?.second_team_name) || null
+      : nameOf(ev.oyuncu_id ?? ev.oyuncu_giren_id);
     return { ...meta, player: player ? player.toLocaleUpperCase("tr-TR") : null };
-  }, [bannerSource, nameOf]);
+  }, [bannerSource, localSide, match?.first_team_name, match?.second_team_name, nameOf]);
 
   /* ───────── eylemler ───────── */
   const refresh = useCallback(() => {
@@ -209,7 +261,8 @@ export function useLiveMatch(matchId: number, userId?: number | null) {
         case "finish":
           await updateMatch(matchId, {
             mac_durumu: "yayinlanmis",
-            ...(manual ? {} : { first_team_score: eventScore.home, second_team_score: eventScore.away }),
+            // İsimsiz goller dahil (olay golleri + isimsiz).
+            ...(manual ? {} : { first_team_score: score.home, second_team_score: score.away }),
           });
           writeTimer(await putTimer(matchId, false, clockMs));
           refresh();
@@ -221,7 +274,7 @@ export function useLiveMatch(matchId: number, userId?: number | null) {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [clockMs, eventScore.away, eventScore.home, manual, matchId, refresh]
+    [clockMs, score.away, score.home, manual, matchId, refresh]
   );
 
   /** Saati elle düzelt (± saniye). */
@@ -238,9 +291,9 @@ export function useLiveMatch(matchId: number, userId?: number | null) {
    * olursa işlem "başarısız" SAYILMAZ (aksi halde kullanıcı aynı golü bir daha
    * girerdi). Skor, bir sonraki olayda ya da web rejide yeniden eşitlenir.
    */
-  const syncScoreSafely = useCallback(async () => {
+  const syncScoreSafely = useCallback(async (base?: { home: number; away: number }) => {
     try {
-      await syncScore();
+      await syncScore(base);
     } catch {
       void queryClient.invalidateQueries({ queryKey: eventsKey });
     }
@@ -260,24 +313,31 @@ export function useLiveMatch(matchId: number, userId?: number | null) {
     }) => {
       const teamId = input.side === "home" ? homeTeamId : awayTeamId;
       const sub = input.code.toUpperCase() === "SUBSTITUTION";
-      const created = await createEvent(matchId, {
-        takim_id: teamId,
-        olay_kodu: input.code,
-        dakika: minute,
-        devre: period,
-        oyuncu_id: sub ? null : Number(input.playerId) || null,
-        oyuncu_cikan_id: sub ? Number(input.outPlayerId) || null : null,
-        oyuncu_giren_id: sub ? Number(input.inPlayerId) || null : null,
-        aciklama: null,
-        olusturan_kullanici_id: userId ?? null,
-        client_event_id: input.clientId ?? clientEventId(),
-      });
-      queryClient.setQueryData<MatchEvent[]>(eventsKey, (prev) => {
-        const list = prev ?? [];
-        return list.some((e) => Number(e.id) === Number(created.id)) ? list : [...list, created];
-      });
-      if (isGoalCode(input.code)) await syncScoreSafely();
-      return created;
+      const goal = isGoalCode(input.code);
+      const base = { ...anonRef.current };
+      if (goal) setOpAnon(base);
+      try {
+        const created = await createEvent(matchId, {
+          takim_id: teamId,
+          olay_kodu: input.code,
+          dakika: minute,
+          devre: period,
+          oyuncu_id: sub ? null : Number(input.playerId) || null,
+          oyuncu_cikan_id: sub ? Number(input.outPlayerId) || null : null,
+          oyuncu_giren_id: sub ? Number(input.inPlayerId) || null : null,
+          aciklama: null,
+          olusturan_kullanici_id: userId ?? null,
+          client_event_id: input.clientId ?? clientEventId(),
+        });
+        queryClient.setQueryData<MatchEvent[]>(eventsKey, (prev) => {
+          const list = prev ?? [];
+          return list.some((e) => Number(e.id) === Number(created.id)) ? list : [...list, created];
+        });
+        if (goal) await syncScoreSafely(base);
+        return created;
+      } finally {
+        if (goal) setOpAnon(null);
+      }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [awayTeamId, homeTeamId, matchId, minute, period, queryClient, syncScoreSafely, userId]
@@ -285,12 +345,67 @@ export function useLiveMatch(matchId: number, userId?: number | null) {
 
   const removeEvent = useCallback(
     async (eventId: number) => {
-      await deleteEvent(matchId, eventId);
-      queryClient.setQueryData<MatchEvent[]>(eventsKey, (prev) => (prev ?? []).filter((e) => Number(e.id) !== eventId));
-      await syncScoreSafely();
+      const base = { ...anonRef.current };
+      setOpAnon(base);
+      try {
+        await deleteEvent(matchId, eventId);
+        queryClient.setQueryData<MatchEvent[]>(eventsKey, (prev) => (prev ?? []).filter((e) => Number(e.id) !== eventId));
+        await syncScoreSafely(base);
+      } finally {
+        setOpAnon(null);
+      }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [matchId, queryClient, syncScoreSafely]
+  );
+
+  /**
+   * İSİMSİZ GOL: oyuncu belirtmeden takıma gol yazar (maç skoru +1).
+   * `own` → kendi kalesine: gol rakibin hanesine yazılır.
+   * Elle / hükmen tescilli maçta skor değişmez (genel güncelleme ucu yok sayar).
+   */
+  const addAnonymousGoal = useCallback(
+    async (side: "home" | "away", code = "GOAL_RIGHT_FOOT") => {
+      if (manual) throw new Error("Skor elle / hükmen tescil edildi; gol skoru değiştirmez.");
+      if (!match) throw new Error("Maç yüklenmedi.");
+      const own = code.toUpperCase() === "GOAL_OWN";
+      const scoring: "home" | "away" = own ? (side === "home" ? "away" : "home") : side;
+      const cur = { home: eventScore.home + anonRef.current.home, away: eventScore.away + anonRef.current.away };
+      const next = { ...cur, [scoring]: cur[scoring] + 1 };
+      await writeScore(next);
+      const id = -Date.now();
+      const event = {
+        id,
+        mac_id: matchId,
+        takim_id: (scoring === "home" ? homeTeamId : awayTeamId) ?? null,
+        olay_kodu: own ? "GOAL_RIGHT_FOOT" : code,
+        dakika: minute,
+        devre: period,
+        oyuncu_id: null,
+      } as unknown as MatchEvent;
+      setLocalGoals((list) => [...list.slice(-9), { event, side: scoring }]);
+      const since = Date.now();
+      setBanner({ id, since, until: since + BUG_EVENT_MS });
+      return { side: scoring, score: next };
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [awayTeamId, eventScore.away, eventScore.home, homeTeamId, manual, match, matchId, minute, period, writeScore]
+  );
+
+  /** Son isimsiz golü geri al (o takımda isimsiz gol yoksa hata). */
+  const removeAnonymousGoal = useCallback(
+    async (side: "home" | "away") => {
+      if (manual) throw new Error("Skor elle / hükmen tescil edildi.");
+      if (anonRef.current[side] <= 0) throw new Error("Bu takımın isimsiz golü yok.");
+      const cur = { home: eventScore.home + anonRef.current.home, away: eventScore.away + anonRef.current.away };
+      await writeScore({ ...cur, [side]: Math.max(0, cur[side] - 1) });
+      setLocalGoals((list) => {
+        const i = list.map((g) => g.side).lastIndexOf(side);
+        return i < 0 ? list : [...list.slice(0, i), ...list.slice(i + 1)];
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [eventScore.away, eventScore.home, manual, writeScore]
   );
 
   /** Sahadaki oyuncular: ilk 11 + girenler − çıkanlar (değişiklik seçicisi için). */
@@ -327,6 +442,8 @@ export function useLiveMatch(matchId: number, userId?: number | null) {
     running,
     phase,
     score,
+    /** Kayıttaki skorun olaylardan fazlası: oyuncu belirtilmeden yazılmış goller. */
+    anonGoals: anon,
     bannerEvent,
     /** Bandın ham olayı ve başladığı an (GOL bandı aşamaları için). */
     bannerSource,
@@ -335,6 +452,9 @@ export function useLiveMatch(matchId: number, userId?: number | null) {
     nudgeClock,
     addEvent,
     removeEvent,
+    addAnonymousGoal,
+    removeAnonymousGoal,
+    sideOfEvent,
   };
 }
 

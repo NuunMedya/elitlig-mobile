@@ -27,7 +27,7 @@
  *
  * EYLEMLER (detay sayfalarının ortak sözleşmesi):
  *   - PAYLAŞ başlığın SAĞ ÜSTÜNDEKİ tek ikon ("share-outline"): oynanmamış ve
- *     biten maçta `ShareScoreCard` görsel kartı, canlı maçta RN `Share` ile
+ *     biten maçta paylaşım stüdyosu (`components/share`), canlı maçta RN `Share` ile
  *     skor metni. Başka yerde paylaş düğmesi yok.
  *   - TAKİP = BİLDİRİM: skor tablosundaki "Takip et" `useFollowFlow().toggle`
  *     ile maçı takip eder ve bildirim türleri alt sayfasını açar; zil aynı
@@ -56,7 +56,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshControl, Share, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { ShareScoreCard } from "@/components/ShareScoreCard";
+import { MatchShare } from "@/components/share/MatchShare";
 import { HeadToHeadTab } from "@/components/matchpage/HeadToHeadTab";
 import { LineupTab } from "@/components/matchpage/LineupTab";
 import { MatchAtmosphere } from "@/components/matchpage/MatchAtmosphere";
@@ -514,20 +514,23 @@ export default function MatchDetailScreen() {
         />
       )}
 
+      {/* Paylaşım stüdyosu: oynanmamış maçta maç günü, biten maçta maç sonucu
+          tasarımları (components/share). Canlı maçta skor metin paylaşılır. */}
       {state !== "live" ? (
-        <ShareScoreCard
-          mode={state === "finished" ? "fulltime" : "matchday"}
-          match={match}
-          homeScore={homeScore}
-          awayScore={awayScore}
-          mvp={bestPlayers[0] ?? null}
-          stats={statRows}
-          contributions={contributions}
-          homeLogo={homeLogo}
-          awayLogo={awayLogo}
+        <MatchShare
           visible={shareOpen}
           onClose={() => setShareOpen(false)}
-          hideTrigger
+          match={match}
+          finished={state === "finished"}
+          homeScore={homeScore}
+          awayScore={awayScore}
+          homeLogo={homeLogo}
+          awayLogo={awayLogo}
+          homeTeamId={homeTeamId}
+          awayTeamId={awayTeamId}
+          scorers={scorers}
+          bestPlayers={bestPlayers}
+          stats={statRows}
         />
       ) : null}
     </View>

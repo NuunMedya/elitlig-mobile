@@ -419,7 +419,7 @@ const styles = StyleSheet.create({
   stepDot: {
     width: 40,
     height: 40,
-    borderRadius: 20,
+    borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.surface2,

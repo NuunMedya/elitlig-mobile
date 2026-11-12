@@ -197,7 +197,7 @@ function PlayerWindow({ clips, initialId, onClose, nameFor, subtitle, isMine, do
                 </Text>
                 {mine ? (
                   <View style={styles.mineBadge}>
-                    <Ionicons name="star" size={10} color={S.medalGold} />
+                    <Ionicons name="star" size={10} color={S.star} />
                     <Text style={styles.mineText} {...textScale.badge}>
                       Senin golün
                     </Text>
@@ -288,7 +288,7 @@ function PlayerWindow({ clips, initialId, onClose, nameFor, subtitle, isMine, do
                     accessibilityState={{ selected: on }}
                     accessibilityLabel={`${clipLabel(clip)}${who ? `, ${who}` : ""}`}
                   >
-                    {clipMine ? <Ionicons name="star" size={10} color={on ? S.bg : S.medalGold} /> : null}
+                    {clipMine ? <Ionicons name="star" size={10} color={on ? S.bg : S.star} /> : null}
                     <Text style={[styles.chipMinute, on && styles.chipTextOn]} {...textScale.badge}>
                       {clip.minute != null ? `${clip.minute}'` : "—"}
                     </Text>
@@ -548,11 +548,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.s,
     height: 20,
     borderRadius: radius.pill,
-    backgroundColor: withAlpha(S.medalGold, 0.16),
+    backgroundColor: withAlpha(S.star, 0.16),
     borderWidth: hairline,
-    borderColor: withAlpha(S.medalGold, 0.5),
+    borderColor: withAlpha(S.star, 0.5),
   },
-  mineText: { ...type.micro, fontFamily: fonts.bold, color: S.medalGold },
+  mineText: { ...type.micro, fontFamily: fonts.bold, color: S.star },
   sub: { ...type.bodySm, color: S.textSecondary, marginTop: space.xxs },
   actions: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.lg, paddingTop: space.xs },
   navBtn: {
@@ -577,7 +577,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     ...glowStyle(S.glow, 1),
   },
-  downloadMine: { borderWidth: 1, borderColor: withAlpha(S.medalGold, 0.7) },
+  downloadMine: { borderWidth: 1, borderColor: withAlpha(S.star, 0.7) },
   downloadFill: { borderRadius: radius.pill },
   downloadText: { ...type.label, fontFamily: fonts.semibold, color: S.textOnBrand },
   progress: { marginHorizontal: space.lg },
@@ -596,7 +596,7 @@ const styles = StyleSheet.create({
     borderColor: S.border,
   },
   chipOn: { backgroundColor: S.textPrimary, borderColor: S.textPrimary },
-  chipMine: { borderColor: withAlpha(S.medalGold, 0.6) },
+  chipMine: { borderColor: withAlpha(S.star, 0.6) },
   chipMinute: { ...type.numSmStrong, color: S.brandAccent },
   chipText: { ...type.caption, color: S.textSecondary, maxWidth: 110 },
   chipTextOn: { color: S.bg },

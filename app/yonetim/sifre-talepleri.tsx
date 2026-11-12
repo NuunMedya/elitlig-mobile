@@ -20,10 +20,11 @@ import { useRouter, type Href } from "expo-router";
 import React, { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { AdminList, AdminScreen, confirmAction, InfoLine, RecordCard, useAdminMutation, type FilterOption } from "@/components/admin";
-import { openExternal } from "@/components/admin/members/contact";
+import { AdminList, AdminScreen, confirmAction, useAdminMutation, type FilterOption } from "@/components/admin";
+import { ContactActions } from "@/components/admin/members/MemberCard";
+import { CountStrip, DangerNote, FactRow, GroupCard, RequestCard } from "@/components/admin/team/ManageKit";
 import { ResetCodeCard } from "@/components/admin/members/MemberSections";
-import { BottomSheet, Button, type Tone } from "@/components/ui";
+import { Avatar, Badge, BottomSheet, Button, Chip, ChipGroup, type Tone } from "@/components/ui";
 import { hasAnyPermission } from "@/lib/admin/access";
 import { formatDateTime, timeAgo } from "@/lib/admin/format";
 import {
@@ -33,7 +34,6 @@ import {
   listPasswordResets,
   personName,
   RESET_STATUS_LABELS,
-  whatsappUrl,
   type PasswordReset,
 } from "@/lib/api/admin/users";
 import { useAuth } from "@/providers/AuthProvider";
@@ -109,7 +109,6 @@ export default function PasswordResetsScreen() {
   const filters: FilterOption[] = TABS.map((t) => ({ ...t, count: counts[t.key] ?? undefined }));
   const open = selected && (selected.status === "requested" || selected.status === "issued");
   const shownCode = issued && selected && issued.userId === selected.user.id ? issued : null;
-  const wa = selected ? whatsappUrl(selected.user.phone) : null;
 
   return (
     <AdminScreen title="Şifre sıfırlama talepleri" subtitle={counts.requested ? `${counts.requested} kod bekliyor` : "Şifremi unuttum talepleri"} permission={["users.password_reset"]} scroll={false}>
@@ -123,28 +122,56 @@ export default function PasswordResetsScreen() {
         search={q}
         onSearch={setQ}
         searchPlaceholder="Kullanıcı adı, ad, e-posta, telefon"
-        filters={filters}
-        filter={tab}
-        onFilter={setTab}
+        extraHeader={
+          <View style={styles.head}>
+            <CountStrip
+              items={[
+                { key: "requested", label: "Kod bekliyor", value: counts.requested ?? 0, tone: "warn", icon: "hourglass", selected: tab === "requested", onPress: () => setTab("requested") },
+                { key: "issued", label: "Kod iletildi", value: counts.issued ?? 0, tone: "info", icon: "key", selected: tab === "issued", onPress: () => setTab("issued") },
+                { key: "used", label: "Yenilendi", value: counts.used ?? 0, tone: "win", icon: "checkmark-circle", selected: tab === "used", onPress: () => setTab("used") },
+              ]}
+            />
+            <ChipGroup scrollable contentPadding={0}>
+              {filters.map((f) => (
+                <Chip key={f.key} label={f.label} count={f.count} size="sm" selected={tab === f.key} onPress={() => setTab(f.key)} />
+              ))}
+            </ChipGroup>
+          </View>
+        }
         keyExtractor={(r) => String(r.id)}
         emptyIcon="lock-open-outline"
         emptyTitle={q ? "Aramayla eşleşen talep yok" : tab === "requested" ? "Bekleyen şifre sıfırlama talebi yok" : "Bu listede talep yok"}
-        renderItem={({ item }) => (
-          <RecordCard
-            title={personName(item.user)}
-            subtitle={[item.user.username ? `@${item.user.username}` : null, item.user.city].filter(Boolean).join(" · ") || null}
-            meta={`${formatDateTime(item.created_at)} · ${timeAgo(item.created_at)}`}
-            avatar={{ name: personName(item.user) }}
-            badges={[
-              { label: statusText(item), tone: item.expired ? "danger" : TONE[item.status] },
-              ...(item.channel === "sms" ? [{ label: "SMS", tone: "info" as const }] : []),
-            ]}
-            onPress={() => {
-              setSnapshot(item);
-              setSelectedId(item.id);
-            }}
-          />
-        )}
+        renderItem={({ item }) => {
+          const openItem = item.status === "requested" || item.status === "issued";
+          const openSheet = () => {
+            setSnapshot(item);
+            setSelectedId(item.id);
+          };
+          /* Bekleyen talep 12 saati geçtiyse öncelikli. */
+          const late = item.status === "requested" && Date.now() - new Date(item.created_at).getTime() > 12 * 3_600_000;
+          return (
+            <RequestCard
+              leading={<Avatar name={personName(item.user)} size={38} />}
+              who={personName(item.user)}
+              when={[timeAgo(item.created_at), item.user.username ? `@${item.user.username}` : null, item.user.city].filter(Boolean).join(" · ")}
+              priority={openItem ? (late ? { label: "Gecikti", tone: "danger", icon: "alert-circle" } : { label: statusText(item), tone: item.expired ? "danger" : TONE[item.status], icon: item.status === "issued" ? "key" : "hourglass" }) : null}
+              status={openItem ? null : { label: statusText(item), tone: item.expired ? "danger" : TONE[item.status] }}
+              title={item.status === "issued" ? "Kod iletildi, üyenin kullanması bekleniyor" : item.status === "requested" ? "Şifremi unuttum: kod istiyor" : statusText(item)}
+              done={!openItem}
+              onPress={openSheet}
+              onApprove={item.status === "requested" ? () => void askIssue(item) : undefined}
+              approveLabel="Kod üret"
+              busy={issue.isPending}
+              extraActions={item.status === "issued" ? <Button label="Ayrıntı ve iletim" icon="key-outline" variant="secondary" onPress={openSheet} style={styles.grow} /> : null}
+            >
+              <View style={styles.pills}>
+                {item.user.phone ? <Badge label={item.user.phone} icon="call-outline" size="xs" /> : <Badge label="Telefon yok" tone="warn" size="xs" />}
+                {item.channel === "sms" ? <Badge label="SMS otomatik" tone="info" icon="chatbubble-outline" size="xs" /> : null}
+                {item.attempts ? <Badge label={`${item.attempts} hatalı deneme`} tone="warn" size="xs" /> : null}
+              </View>
+            </RequestCard>
+          );
+        }}
       />
 
       <BottomSheet
@@ -155,10 +182,11 @@ export default function PasswordResetsScreen() {
         footer={
           open ? (
             <View style={styles.footer}>
-              <Button label="Talebi kapat" variant="secondary" onPress={() => void askCancel(selected!)} loading={cancel.isPending} disabled={issue.isPending} />
+              <Button label="Talebi kapat" variant="secondary" size="lg" onPress={() => void askCancel(selected!)} loading={cancel.isPending} disabled={issue.isPending} />
               <Button
                 label={selected!.status === "issued" ? "Yeni kod üret" : "Kod üret"}
                 icon="key-outline"
+                size="lg"
                 onPress={() => void askIssue(selected!)}
                 loading={issue.isPending}
                 disabled={cancel.isPending}
@@ -170,59 +198,71 @@ export default function PasswordResetsScreen() {
       >
         {selected ? (
           <View style={styles.sheet}>
-            <Text style={styles.meta} {...textScale.dense}>
-              {selected.user.username ? `@${selected.user.username}` : "Kullanıcı adı yok"}
-              {selected.user.city ? ` · ${selected.user.city}` : ""} · {statusText(selected)}
-            </Text>
+            <View style={styles.from}>
+              <Avatar name={personName(selected.user)} size={48} ring="brand" />
+              <View style={styles.grow}>
+                <Text style={styles.name} numberOfLines={1} {...textScale.dense}>
+                  {personName(selected.user)}
+                </Text>
+                <Text style={styles.meta} numberOfLines={1} {...textScale.dense}>
+                  {selected.user.username ? `@${selected.user.username}` : "Kullanıcı adı yok"}
+                  {selected.user.city ? ` · ${selected.user.city}` : ""}
+                </Text>
+              </View>
+              <Badge label={statusText(selected)} tone={selected.expired ? "danger" : TONE[selected.status]} size="sm" />
+            </View>
 
             {shownCode ? <ResetCodeCard code={shownCode.code} expiresAt={shownCode.expiresAt} username={selected.user.username} phone={selected.user.phone} /> : null}
 
-            <View>
-              <Text style={styles.section} {...textScale.dense}>
-                İletişim bilgileri
-              </Text>
-              <InfoLine label="Telefon" value={selected.user.phone || "—"} />
-              <InfoLine label="E-posta" value={selected.user.email || "—"} />
-              <InfoLine label="İl" value={selected.user.city || "—"} />
-              <InfoLine label="Hesap durumu" value={ACCOUNT_STATUS_LABELS[String(selected.user.status ?? "")] ?? (selected.user.status || "—")} />
-            </View>
-            <View style={styles.row}>
-              {selected.user.phone ? <Button label="Ara" icon="call-outline" size="sm" variant="secondary" onPress={() => void openExternal(`tel:${selected.user.phone}`)} /> : null}
-              {wa ? <Button label="WhatsApp" icon="logo-whatsapp" size="sm" variant="secondary" onPress={() => void openExternal(wa)} /> : null}
-              {selected.user.email ? <Button label="E-posta" icon="mail-outline" size="sm" variant="secondary" onPress={() => void openExternal(`mailto:${selected.user.email}`)} /> : null}
-              {hasAnyPermission(auth.user, ["users.view"]) ? (
-                <Button
-                  label="Üye kartı"
-                  icon="person-outline"
-                  size="sm"
-                  variant="ghost"
-                  onPress={() => {
-                    const id = selected.user.id;
-                    setSelectedId(null);
-                    router.push(`/yonetim/uyeler/${id}` as Href);
-                  }}
-                />
-              ) : null}
-            </View>
+            <ContactActions phone={selected.user.phone} email={selected.user.email} />
 
-            <View>
-              <Text style={styles.section} {...textScale.dense}>
-                Talep geçmişi
-              </Text>
-              <InfoLine label="Talep tarihi" value={formatDateTime(selected.created_at)} />
-              <InfoLine label="Talep IP" value={selected.requested_ip || "—"} />
-              <InfoLine label="Kod iletimi" value={selected.channel === "sms" ? "SMS (NetGSM, otomatik)" : "Yönetim"} />
-              {selected.attempts ? <InfoLine label="Hatalı deneme" value={String(selected.attempts)} /> : null}
-              {selected.issued_by ? <InfoLine label="Kodu üreten" value={selected.issued_by.fullName || `@${selected.issued_by.username}`} /> : null}
-              {selected.expires_at ? <InfoLine label="Kod geçerlilik sonu" value={formatDateTime(selected.expires_at)} /> : null}
-              {selected.used_at ? <InfoLine label="Şifre yenilendi" value={formatDateTime(selected.used_at)} /> : null}
-              {selected.status === "cancelled" ? <InfoLine label="Kapatıldı" value={formatDateTime(selected.updated_at)} /> : null}
-            </View>
+            <GroupCard title="İletişim bilgileri" icon="call" tone="cyan">
+              <View>
+                <FactRow icon="call-outline" label="Telefon" value={selected.user.phone || null} />
+                <FactRow icon="mail-outline" label="E-posta" value={selected.user.email || null} />
+                <FactRow icon="location-outline" label="İl" value={selected.user.city || null} />
+                <FactRow
+                  icon="pulse-outline"
+                  label="Hesap durumu"
+                  value={ACCOUNT_STATUS_LABELS[String(selected.user.status ?? "")] ?? (selected.user.status || null)}
+                  last={!hasAnyPermission(auth.user, ["users.view"])}
+                />
+                {hasAnyPermission(auth.user, ["users.view"]) ? (
+                  <FactRow
+                    icon="person-outline"
+                    label="Üye kartı"
+                    value="Aç"
+                    last
+                    onPress={() => {
+                      const id = selected.user.id;
+                      setSelectedId(null);
+                      router.push(`/yonetim/uyeler/${id}` as Href);
+                    }}
+                  />
+                ) : null}
+              </View>
+            </GroupCard>
+
+            <GroupCard title="Talep geçmişi" icon="time" tone="neutral">
+              <View>
+                <FactRow icon="calendar-outline" label="Talep tarihi" value={formatDateTime(selected.created_at)} />
+                <FactRow icon="globe-outline" label="Talep IP" value={selected.requested_ip || null} />
+                <FactRow icon="send-outline" label="Kod iletimi" value={selected.channel === "sms" ? "SMS (otomatik)" : "Yönetim"} last={!selected.attempts && !selected.issued_by && !selected.expires_at && !selected.used_at && selected.status !== "cancelled"} />
+                {selected.attempts ? <FactRow icon="warning-outline" label="Hatalı deneme" value={String(selected.attempts)} tone="warn" /> : null}
+                {selected.issued_by ? <FactRow icon="key-outline" label="Kodu üreten" value={selected.issued_by.fullName || `@${selected.issued_by.username}`} /> : null}
+                {selected.expires_at ? <FactRow icon="hourglass-outline" label="Geçerlilik sonu" value={formatDateTime(selected.expires_at)} tone={selected.expired ? "danger" : undefined} /> : null}
+                {selected.used_at ? <FactRow icon="checkmark-circle-outline" label="Şifre yenilendi" value={formatDateTime(selected.used_at)} tone="win" /> : null}
+                {selected.status === "cancelled" ? <FactRow icon="close-circle-outline" label="Kapatıldı" value={formatDateTime(selected.updated_at)} /> : null}
+              </View>
+            </GroupCard>
 
             {open ? (
-              <Text style={styles.note} {...textScale.long}>
-                Kodu ilettikten sonra üye giriş ekranındaki “Şifremi unuttum” adımında kodu girerek yeni şifresini belirler; talep o zaman “Tamamlanan”a geçer.
-              </Text>
+              <DangerNote
+                tone="info"
+                icon="information-circle"
+                title="Sonraki adım üyede"
+                body="Kodu ilettikten sonra üye giriş ekranındaki “Şifremi unuttum” adımında kodu girerek yeni şifresini belirler; talep o zaman “Tamamlanan”a geçer."
+              />
             ) : null}
           </View>
         ) : null}
@@ -232,11 +272,12 @@ export default function PasswordResetsScreen() {
 }
 
 const styles = StyleSheet.create({
-  sheet: { gap: space.lg },
+  head: { gap: space.md },
+  sheet: { gap: space.md },
+  from: { flexDirection: "row", alignItems: "center", gap: space.md },
+  name: { ...type.h2, color: colors.textPrimary },
   meta: { ...type.caption, color: colors.textTertiary },
-  section: { ...type.overline, color: colors.textTertiary, marginBottom: space.xs },
-  row: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
-  note: { ...type.bodySm, color: colors.textSecondary },
+  pills: { flexDirection: "row", flexWrap: "wrap", gap: space.xs },
   footer: { flexDirection: "row", gap: space.sm },
-  grow: { flex: 1 },
+  grow: { flex: 1, minWidth: 0 },
 });

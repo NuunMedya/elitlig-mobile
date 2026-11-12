@@ -614,7 +614,7 @@ const styles = StyleSheet.create({
   ball: {
     width: 64,
     height: 64,
-    borderRadius: 32,
+    borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.inkTile,

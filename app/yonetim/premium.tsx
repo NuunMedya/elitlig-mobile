@@ -14,14 +14,16 @@ import * as Clipboard from "expo-clipboard";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter, type Href } from "expo-router";
 import React, { useMemo, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { StyleSheet, Text, View } from "react-native";
 
-import { AdminList, AdminScreen, confirmAction, RecordCard, useAdminMutation, type FilterOption } from "@/components/admin";
-import { Button, useToast } from "@/components/ui";
-import { formatDate, formatMoney } from "@/lib/admin/format";
+import { AdminList, AdminScreen, confirmAction, useAdminMutation, type FilterOption } from "@/components/admin";
+import { CountStrip, RequestCard } from "@/components/admin/team/ManageKit";
+import { Chip, ChipGroup, IconTile, Touchable, useToast } from "@/components/ui";
+import { formatDate, formatMoney, timeAgo } from "@/lib/admin/format";
 import { decidePremiumOrder, listPremiumOrders, ORDER_STATUS_LABELS, PLAN_LABELS, type PremiumOrder } from "@/lib/api/admin/users";
 import { REVIEW_TONE } from "@/components/admin/members/RequestParts";
-import { space } from "@/theme";
+import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
 const FILTERS: FilterOption[] = [
   { key: "pending", label: "Bekleyen" },
@@ -82,43 +84,103 @@ export default function PremiumApprovalScreen() {
         search={q}
         onSearch={setQ}
         searchPlaceholder="Üye ya da açıklama kodu ara"
-        filters={FILTERS.map((f) => (f.key === status && query.data ? { ...f, count: query.data.length } : f))}
-        filter={status}
-        onFilter={setStatus}
-        summary={query.data ? `${items.length} sipariş` : null}
+        extraHeader={
+          <View style={styles.head}>
+            {status === "pending" && query.data ? (
+              <CountStrip
+                items={[
+                  { key: "count", label: "Bekleyen", value: query.data.length, tone: "warn", icon: "hourglass" },
+                  { key: "sum", label: "Tutar", value: formatMoney(query.data.reduce((n, o) => n + Number(o.amount || 0), 0), true), tone: "win", icon: "cash" },
+                  { key: "team", label: "Takım planı", value: query.data.filter((o) => o.plan === "team").length, tone: "brand", icon: "shield-half" },
+                ]}
+              />
+            ) : null}
+            <ChipGroup scrollable contentPadding={0}>
+              {FILTERS.map((f) => (
+                <Chip key={f.key} label={f.label} count={f.key === status && query.data ? query.data.length : undefined} size="sm" selected={status === f.key} onPress={() => setStatus(f.key)} />
+              ))}
+            </ChipGroup>
+          </View>
+        }
+        summary={query.data ? `${items.length} sipariş · kodu kopyalamak için karta basılı tut` : null}
         keyExtractor={(o) => String(o.id)}
         emptyIcon="diamond-outline"
         emptyTitle="Bu durumda sipariş yok"
-        renderItem={({ item }) => (
-          <RecordCard
-            title={item.user?.fullName || item.user?.username || `Üye #${item.user?.id ?? "?"}`}
-            subtitle={[PLAN_LABELS[item.plan] ?? item.plan, `${item.months} ay`, item.user?.teamName || item.user?.phone || item.user?.email].filter(Boolean).join(" · ")}
-            meta={`Kod ${item.referenceCode} · ${formatDate(item.createdAt)}${item.approvedAt ? ` · Sonuç ${formatDate(item.approvedAt)}` : ""}`}
-            icon="diamond-outline"
-            iconTone={item.status === "pending" ? "brand" : "neutral"}
-            value={formatMoney(item.amount)}
-            valueTone={item.status === "approved" ? "win" : "neutral"}
-            badges={[{ label: ORDER_STATUS_LABELS[item.status] ?? item.status, tone: REVIEW_TONE[item.status] }]}
-            onPress={item.user?.id ? () => router.push(`/yonetim/uyeler/${item.user!.id}` as Href) : undefined}
-            onLongPress={async () => {
-              await Clipboard.setStringAsync(item.referenceCode);
-              toast.show({ message: "Açıklama kodu kopyalandı.", tone: "success" });
-            }}
-          >
-            {item.status === "pending" ? (
-              <View style={styles.actions}>
-                <Button label="Reddet" variant="danger" size="sm" onPress={() => void ask(item, "reject")} disabled={busyId === item.id} />
-                <Button label="Onayla" icon="checkmark" size="sm" onPress={() => void ask(item, "approve")} loading={busyId === item.id && decide.variables?.action === "approve"} disabled={busyId === item.id} style={styles.grow} />
+        renderItem={({ item }) => {
+          const pending = item.status === "pending";
+          const who = item.user?.fullName || item.user?.username || `Üye #${item.user?.id ?? "?"}`;
+          const copy = async () => {
+            await Clipboard.setStringAsync(item.referenceCode);
+            toast.show({ message: "Açıklama kodu kopyalandı.", tone: "success" });
+          };
+          return (
+            <RequestCard
+              leading={<IconTile icon={item.plan === "team" ? "shield-half" : "diamond"} tone={pending ? (item.plan === "team" ? "violet" : "pink") : "neutral"} size={38} glow={false} />}
+              who={who}
+              when={[timeAgo(item.createdAt), item.user?.teamName || item.user?.phone || item.user?.email].filter(Boolean).join(" · ")}
+              priority={pending ? { label: PLAN_LABELS[item.plan] ?? item.plan, tone: item.plan === "team" ? "brand" : "info", icon: "diamond" } : null}
+              status={pending ? null : { label: ORDER_STATUS_LABELS[item.status] ?? item.status, tone: REVIEW_TONE[item.status] }}
+              title={`${item.planLabel || PLAN_LABELS[item.plan] || item.plan} premium · ${item.months} ay`}
+              done={!pending}
+              onPress={item.user?.id ? () => router.push(`/yonetim/uyeler/${item.user!.id}` as Href) : undefined}
+              onApprove={pending ? () => void ask(item, "approve") : undefined}
+              onReject={pending ? () => void ask(item, "reject") : undefined}
+              busy={busyId === item.id}
+            >
+              <View style={styles.money}>
+                <View style={styles.grow}>
+                  <Text style={styles.amount} numberOfLines={1} {...textScale.badge}>
+                    {formatMoney(item.amount)}
+                  </Text>
+                  <Text style={styles.period} numberOfLines={1} {...textScale.dense}>
+                    {item.startDate ? `${formatDate(item.startDate)} → ${formatDate(item.endDate)}` : formatDate(item.createdAt)}
+                    {item.approvedAt ? ` · sonuç ${formatDate(item.approvedAt)}` : ""}
+                  </Text>
+                </View>
+                <Touchable feedback="card" haptic="selection" onPress={() => void copy()} style={styles.code} accessibilityRole="button" accessibilityLabel={`Açıklama kodunu kopyala: ${item.referenceCode}`}>
+                  <Text style={styles.codeText} {...textScale.badge}>
+                    {item.referenceCode}
+                  </Text>
+                  <Ionicons name="copy-outline" size={13} color={colors.brandAccent} />
+                </Touchable>
               </View>
-            ) : null}
-          </RecordCard>
-        )}
+              {item.paymentDescription ? (
+                <Text style={styles.period} numberOfLines={1} {...textScale.dense}>
+                  Ödeme: {item.paymentDescription}
+                </Text>
+              ) : null}
+            </RequestCard>
+          );
+        }}
       />
     </AdminScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  actions: { flexDirection: "row", gap: space.sm, marginTop: space.sm },
-  grow: { flex: 1 },
+  head: { gap: space.md },
+  grow: { flex: 1, minWidth: 0 },
+  money: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    padding: space.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface2,
+    marginTop: space.xxs,
+  },
+  amount: { ...type.scoreMd, color: colors.textPrimary },
+  period: { ...type.caption, color: colors.textTertiary, marginTop: 2 },
+  code: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xs,
+    borderRadius: radius.md,
+    backgroundColor: colors.brandDim,
+    borderWidth: hairline,
+    borderColor: colors.brandBorder,
+  },
+  codeText: { ...type.numSmStrong, color: colors.brandAccent, letterSpacing: 1 },
 });

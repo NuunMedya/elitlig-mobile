@@ -348,7 +348,7 @@ function Calculator() {
             value={expr}
             onChangeText={(t) => setExpr(t.replace(/[^0-9+\-*/().,%×÷−\s]/g, ""))}
             placeholder="0"
-            placeholderTextColor={colors.textTertiary}
+            placeholderTextColor={colors.onDarkMuted}
             style={styles.expr}
             keyboardType="numbers-and-punctuation"
             onSubmitEditing={() => press("=")}
