@@ -68,7 +68,8 @@ export function useQuestCelebration(data: CareerSummary | undefined, userId: num
         await AsyncStorage.setItem(storageKey, JSON.stringify([...seen]));
 
         const xp = newQuests.reduce((sum, quest) => sum + quest.xp, 0) + newBonuses.reduce((sum, bonus) => sum + bonus.xp, 0);
-        const amount = `+${xp.toLocaleString("tr-TR")} XP`;
+        const stars = newQuests.reduce((sum, quest) => sum + (quest.stars ?? 0), 0);
+        const amount = `+${xp.toLocaleString("tr-TR")} XP${stars ? ` · +${stars.toLocaleString("tr-TR")} yıldız` : ""}`;
         const message =
           newQuests.length === 1 && !newBonuses.length
             ? `Görev tamamlandı: ${newQuests[0].title} · ${amount}`

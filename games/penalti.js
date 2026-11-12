@@ -2816,40 +2816,47 @@
   /* ── skorbord ── */
 
   function drawScoreboard(c) {
-    var w = Math.min(W - 20, 384), h = 58, x = W / 2 - w / 2, y = 10;
+    // Sağ üstteki RN duraklat düğmesine yer: skorbord [10, slot.x1] aralığına
+    // sığar; sığmazsa daralır ve o aralıkta ortalanır.
+    var slot = A.hudSlot(10);
+    var w = Math.min(slot.w, 384), h = 58, y = 10;
+    var cx = A.clamp(W / 2, slot.x0 + w / 2, slot.x1 - w / 2), x = cx - w / 2;
+    var tight = w < 340;
     c.save();
     navyPill(c, x, y, w, h, null, 20);
     var gm = match ? goalsOf(match.me) : 0, go = match ? goalsOf(shownOp()) : 0;
     // skor kutusu
-    var sw = 78, sx = W / 2 - sw / 2;
+    var sw = tight ? 70 : 78, sx = cx - sw / 2;
     A.roundRect(c, sx, y + 6, sw, 30, 12);
     c.fillStyle = INK;
     c.fill();
     var bump = 1 + 0.2 * scoreBump;
     c.save();
-    c.translate(W / 2, y + 21.5);
+    c.translate(cx, y + 21.5);
     c.scale(bump, bump);
-    label(c, gm + " – " + go, 0, 0, 22, scoreBump > 0.1 ? "#FFE58A" : "#FFFFFF");
+    label(c, gm + " – " + go, 0, 0, tight ? 20 : 22, scoreBump > 0.1 ? "#FFE58A" : "#FFFFFF");
     c.restore();
-    badge(c, x + 24, y + 22, 24, shooter);
-    badge(c, x + w - 24, y + 22, 24, opp.keeper);
-    var half = w / 2 - sw / 2 - 50;
-    c.font = A.font(12, 900);
+    var bi = tight ? 21 : 24, ti = tight ? 38 : 43;
+    badge(c, x + bi, y + 22, tight ? 21 : 24, shooter);
+    badge(c, x + w - bi, y + 22, tight ? 21 : 24, opp.keeper);
+    var half = w / 2 - sw / 2 - (tight ? 42 : 50);
+    c.font = A.font(tight ? 11 : 12, 900);
     c.fillStyle = "#FFFFFF";
     c.textAlign = "left";
     c.textBaseline = "middle";
-    c.fillText(fit(c, upperTR(teamName(shooter)), half), x + 43, y + 20);
+    c.fillText(fit(c, upperTR(teamName(shooter)), half), x + ti, y + 20);
     c.textAlign = "right";
-    c.fillText(fit(c, upperTR(teamName(opp.keeper)), half), x + w - 43, y + 20);
+    c.fillText(fit(c, upperTR(teamName(opp.keeper)), half), x + w - ti, y + 20);
     if (match) {
-      dots(c, x + 43, y + 41, match.me, isLive(), 1);
-      dots(c, x + w - 43, y + 41, shownOp(), oppPending(), -1);
+      var gap = tight ? 14 : 16;
+      dots(c, x + ti, y + 41, match.me, isLive(), 1, gap);
+      dots(c, x + w - ti, y + 41, shownOp(), oppPending(), -1, gap);
     }
     c.font = A.font(9.5, 900);
     c.fillStyle = match && match.sudden ? BAD : GOLD;
     c.textAlign = "center";
     if ("letterSpacing" in c) c.letterSpacing = "1px";
-    c.fillText(match && match.sudden ? "ANİ ÖLÜM" : stageName(matchIdx), W / 2, y + 46);
+    c.fillText(match && match.sudden ? "ANİ ÖLÜM" : stageName(matchIdx), cx, y + 46);
     if ("letterSpacing" in c) c.letterSpacing = "0px";
     c.restore();
   }
@@ -2864,10 +2871,11 @@
     return ["turn", "aim", "power", "runup", "flight"].indexOf(state) >= 0;
   }
   /** Beş atış noktası: gol yeşil ✓, kaçan kırmızı ×, sıradaki sarı nabız. */
-  function dots(c, x, y, list, next, dir) {
+  function dots(c, x, y, list, next, dir, gap) {
     var n = Math.max(KICKS, list.length + (next ? 1 : 0));
     var from = Math.max(0, n - KICKS);
-    var r = 6.2, gap = 16;
+    var r = 6.2;
+    gap = gap || 16;
     c.lineCap = "round";
     c.lineJoin = "round";
     for (var i = 0; i < KICKS; i++) {
@@ -3469,7 +3477,7 @@
   }
   function drawReplayBadge(c) {
     c.save();
-    var x = W - 112, y = 54;
+    var x = A.hudSlot(14).x1 - 98, y = 54;
     navyPill(c, x, y, 98, 28);
     c.fillStyle = Math.sin(A.time * 6) > 0 ? "#EF4444" : "rgba(239,68,68,0.4)";
     c.beginPath();

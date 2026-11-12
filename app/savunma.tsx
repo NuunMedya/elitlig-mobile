@@ -6,6 +6,8 @@
  * Takımın seçtiğin kaptanın kulübünün formasını giyer; her dalga ligin bir
  * takımıdır.
  *
+ * Oyun 20 bölümdür: bölüm seçimi, yıldızlar ve kayıt tuvalde (kayıt RN
+ * üzerinden {type:"store"} ile saklanır).
  * Oyunun kendisi `games/savunma.js` (Canvas 2D, WebView içinde; ortak çalışma
  * zamanı `games/core.js`): ızgara, kartlar, kart açılış takvimi, dalgalar ve
  * puanlama orada belgelenmiştir. Bu ekran yalnız ortak Arena kabuğunu oyuna bağlar.
@@ -16,24 +18,26 @@ import { ARENA_BEST_KEYS } from "@/lib/game/arenaKeys";
 
 const CONFIG: ArenaGameConfig = {
   game: "savunma",
+  levelGame: true,
   title: "Savunma Hattı",
   subtitle: "Oyuncularını diz, kaleni koru",
   icon: "shield",
   bestKey: ARENA_BEST_KEYS.savunma,
   rules: [
-    { icon: "grid-outline", text: "Rakipler sağdan, uzaktan koşarak gelir ve soldaki kalene yürür. Alttaki karttan oyuncu seç, koridordaki kareye dokun ya da sürükle." },
-    { icon: "sunny-outline", text: "TARAFTAR güneş üretir: çıkan güneşe dokunup topla. Gökten düşen güneşleri de kaçırma; oyuncular güneşle alınır." },
-    { icon: "football-outline", text: "Başta üç kartın var: TARAFTAR, FORVET (şut atar) ve STOPER (duvar olur). Dalgalar ilerledikçe YENİ OYUNCU kartları açılır." },
-    { icon: "sparkles-outline", text: "Sırayla FÜZE alanı temizler, FISKİYE yavaşlatır, ÇİFT iki şut atar, KALECİ rakibi kapar, PRES yavaşlatır, ORTACI üç koridora orta yapar, HAKEM herkesi dondurur." },
-    { icon: "shield-outline", text: "Kalene ulaşan her rakip bir gol: üç gol yersen maç biter. Dalga sonunda rakip takımın kaptanı gelir." },
+    { icon: "map-outline", text: "Oyun 20 BÖLÜM'den oluşur. Bölüm seç; her bölüm birkaç dalga ve bir SON HÜCUM'dur. Bitirince yıldız kazanır, sıradaki bölümü açarsın." },
+    { icon: "grid-outline", text: "Rakipler sağdan gelir, soldaki kalene yürür. Alttaki karttan oyuncu seç, kareye dokun ya da sürükle. TARAFTAR güneş üretir: güneşleri topla." },
+    { icon: "flash-outline", text: "Yeni rakipler çıkar: HIZLI koşar, TANK sağlamdır, ZIPLAYAN önündeki oyuncunun üstünden atlar (STOPER durdurur), KALKANLI şutları keser, TOPÇU uzaktan top atar." },
+    { icon: "sparkles-outline", text: "Bölümler ilerledikçe yeni oyuncular açılır: FÜZE, FISKİYE, ÇİFT, KALECİ, PRES, ORTACI, HAKEM. 8. bölümden itibaren saha altı koridordur." },
+    { icon: "star-outline", text: "Üç gol yersen bölüm kaybedilir. Hiç gol yemeden bitirirsen üç yıldız." },
   ],
   describe: (stats) =>
     [
-      stats.wave != null ? `${stats.wave}. dalga` : "",
+      stats.level != null ? `${stats.level}. bölüm ${stats.won ? "kazanıldı" : "kaybedildi"}` : "",
+      stats.won && stats.stars ? `${stats.stars} yıldız` : "",
       stats.defeated != null ? `${stats.defeated} rakip durduruldu` : "",
       stats.placed ? `${stats.placed} oyuncu dizildi` : "",
     ].filter(Boolean),
-  overTitle: "Savunma çöktü",
+  overTitle: "Bölüm bitti",
   taunt: "Bu hücumu sen durdurabilir misin?",
 };
 

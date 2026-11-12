@@ -7,8 +7,9 @@
  *
  * Puan: tam skor 5 · doğru sonuç + gol farkı 3 · doğru sonuç 2. İsteğe bağlı
  * golcü tahmini ("kim gol atar?"): seçilen oyuncu gol atarsa +3. Puanlar
- * Kariyer Modu'nun Seyirci katmanına XP olarak geçer. Oyuncu kendi takımının
- * maçına tahmin yapamaz.
+ * Kulüp Şehri'ne YILDIZ olarak geçer (haftalık tavanla; tahminler XP vermez,
+ * XP yalnız sahadan ve görevlerden gelir). Oyuncu kendi takımının maçına
+ * tahmin yapamaz.
  */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -18,6 +19,7 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { LeaguePicker } from "@/components/LeaguePicker";
+import { PredictionHero, PredictionMatchCard, ResultCard, Standings, summarizeForm } from "@/components/predictions";
 import {
   Avatar,
   Badge,
@@ -28,14 +30,13 @@ import {
   EmptyState,
   ErrorState,
   ListRow,
+  Reveal,
   ScreenHeader,
   SegmentedControl,
   SkeletonCard,
-  Stepper,
   useHeaderScroll,
   useToast,
   type SegmentedItem,
-  type Tone,
 } from "@/components/ui";
 import {
   getPredictionBoard,
@@ -45,25 +46,16 @@ import {
   type PredictionMatch,
   type ScorerOption,
 } from "@/lib/api/career";
-import { formatDateShort, formatTime } from "@/lib/format";
 import { ApiError } from "@/lib/http";
 import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
-import { colors, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
+import { colors, haptics, layout, space, textScale, type, upperTR } from "@/theme";
 
 type Segment = "tahmin" | "siralama";
 const SEGMENTS: SegmentedItem<Segment>[] = [
   { key: "tahmin", label: "Tahminler" },
   { key: "siralama", label: "Sıralama" },
 ];
-
-const OUTCOME: Record<string, { label: string; tone: Tone }> = {
-  exact: { label: "Tam skor · 5", tone: "win" },
-  diff: { label: "Fark · 3", tone: "info" },
-  result: { label: "Sonuç · 2", tone: "info" },
-  miss: { label: "0 puan", tone: "neutral" },
-  void: { label: "Geçersiz", tone: "neutral" },
-};
 
 export default function PredictionLeagueScreen() {
   const scope = useScope();
@@ -73,7 +65,7 @@ export default function PredictionLeagueScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      <ScreenHeader title="Tahmin Ligi" subtitle="Tam skor 5 · fark 3 · sonuç 2 · golcü 3 puan" back scrollY={scrollY} />
+      <ScreenHeader title="Tahmin Ligi" subtitle="Gerçek maçlara skor tahmini" back scrollY={scrollY} />
       <ScrollView {...scrollProps} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <LeaguePicker pinned={false} flush />
         <SegmentedControl items={SEGMENTS} value={segment} onChange={setSegment} />
@@ -91,6 +83,9 @@ export default function PredictionLeagueScreen() {
 
 type ScopeArgs = { cityId: number | null; leagueId: number | null; seasonId: number | null };
 
+const boardKey = (period: "weekly" | "season", scope: ScopeArgs) =>
+  ["predictions", "board", period, scope.cityId, scope.leagueId, scope.seasonId] as const;
+
 function Predictions({ scope }: { scope: ScopeArgs }) {
   const auth = useAuth();
   const router = useRouter();
@@ -99,40 +94,65 @@ function Predictions({ scope }: { scope: ScopeArgs }) {
     queryFn: () => getPredictionMatches(scope),
     staleTime: 30_000,
   });
+  /* Başlıktaki sezon sırası: Sıralama sekmesinin sezon sorgusuyla AYNI anahtar,
+     yani iki sekme tek önbelleği paylaşır. Yalnız girişliyken sorulur. */
+  const season = useQuery({
+    queryKey: boardKey("season", scope),
+    queryFn: () => getPredictionBoard("season", scope),
+    staleTime: 60_000,
+    enabled: Boolean(auth.user),
+  });
 
   if (query.isLoading) return <SkeletonCard lines={5} />;
   if (query.isError || !query.data) return <ErrorState variant="inline" error={query.error} onRetry={query.refetch} />;
-  const { upcoming, recent } = query.data;
+  const { upcoming, recent, points } = query.data;
+  const me = season.data?.me ?? null;
 
   return (
     <>
-      {!auth.user ? (
-        <View style={styles.card}>
-          <Text style={styles.text} {...textScale.long}>
-            Tahmin yapmak ve sıralamaya girmek için giriş yap.
-          </Text>
-          <Button label="Giriş yap" onPress={() => router.push("/giris")} />
-        </View>
-      ) : null}
-      <Text style={styles.section} {...textScale.badge}>
-        {upperTR("Yaklaşan maçlar")}
-      </Text>
+      <PredictionHero
+        signedIn={Boolean(auth.user)}
+        onSignIn={() => router.push("/giris")}
+        season={me ? { rank: me.rank, points: me.points, exact: me.exact } : null}
+        totalPlayers={season.data?.totalPlayers ?? null}
+        form={auth.user ? summarizeForm(recent) : null}
+        rules={points}
+      />
+      <SectionTitle title="Yaklaşan maçlar" count={upcoming.length} />
       {upcoming.length ? (
-        upcoming.map((match) => <PredictionCard key={match.id} match={match} canEdit={Boolean(auth.user)} />)
+        upcoming.map((match, index) => (
+          <Reveal key={match.id} index={index} limit={6}>
+            <PredictionCard match={match} canEdit={Boolean(auth.user)} />
+          </Reveal>
+        ))
       ) : (
         <EmptyState icon="calendar-outline" title="Yaklaşan maç yok" body="Bu ligde önümüzdeki iki haftada maç görünmüyor." variant="inline" />
       )}
       {recent.length ? (
         <>
-          <Text style={styles.section} {...textScale.badge}>
-            {upperTR("Son maçlar")}
-          </Text>
+          <SectionTitle title="Son maçlar" count={recent.length} />
           {recent.map((match) => (
-            <ResultRow key={match.id} match={match} />
+            <ResultCard key={match.id} match={match} />
           ))}
         </>
       ) : null}
     </>
+  );
+}
+
+function SectionTitle({ title, count }: { title: string; count?: number }) {
+  return (
+    <View style={styles.sectionRow} accessibilityRole="header">
+      <Text style={styles.section} {...textScale.badge}>
+        {upperTR(title)}
+      </Text>
+      {count ? (
+        <Text style={styles.sectionCount} {...textScale.badge}>
+          {count}
+        </Text>
+      ) : null}
+      <View style={styles.sectionRule} />
+    </View>
   );
 }
 
@@ -156,12 +176,15 @@ const PredictionCard = React.memo(function PredictionCard({ match, canEdit }: { 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedScorerId]);
   const [picking, setPicking] = useState(false);
+  const [savedPulse, setSavedPulse] = useState(0);
   const saved =
     match.prediction && match.prediction.home === home && match.prediction.away === away && (scorer?.id ?? null) === savedScorerId;
 
   const save = useMutation({
     mutationFn: () => savePrediction(match.id, home, away, scorer?.id ?? null),
     onSuccess: () => {
+      haptics.success();
+      setSavedPulse((n) => n + 1);
       toast.show({ message: "Tahminin kaydedildi.", tone: "success" });
       void queryClient.invalidateQueries({ queryKey: ["predictions"] });
       void queryClient.invalidateQueries({ queryKey: ["career", "me"] });
@@ -169,26 +192,22 @@ const PredictionCard = React.memo(function PredictionCard({ match, canEdit }: { 
     onError: (error) => toast.show({ message: error instanceof ApiError ? error.userMessage : "Tahmin kaydedilemedi.", tone: "danger" }),
   });
 
-  const meta = [formatDateShort(match.date), match.time ? formatTime(match.time) : null, match.league_name].filter(Boolean).join(" · ");
-  const locked = !canEdit || !match.can_predict;
-
   return (
-    <View style={styles.card}>
-      <Text style={styles.meta} {...textScale.dense}>
-        {meta}
-      </Text>
-      <Stepper label={match.home.name} value={home} onChange={setHome} min={0} max={30} size="sm" disabled={locked} accessibilityLabel={`${match.home.name} golü`} />
-      <Stepper label={match.away.name} value={away} onChange={setAway} min={0} max={30} size="sm" disabled={locked} accessibilityLabel={`${match.away.name} golü`} />
-      {!match.own_match && (scorer || !locked) ? (
-        <ListRow
-          leading={{ icon: "football-outline", tone: scorer ? "brand" : "neutral" }}
-          title={scorer ? scorer.name : "Kim gol atar?"}
-          subtitle={scorer ? "Golcü tahminin · tutarsa +3 puan" : "İsteğe bağlı · bir oyuncu seç, gol atarsa +3 puan"}
-          chevron={!locked}
-          onPress={locked ? undefined : () => setPicking(true)}
-          position="single"
-        />
-      ) : null}
+    <>
+      <PredictionMatchCard
+        match={match}
+        home={home}
+        away={away}
+        onHome={setHome}
+        onAway={setAway}
+        canEdit={canEdit}
+        scorer={scorer}
+        onScorerPress={() => setPicking(true)}
+        saved={Boolean(saved)}
+        saving={save.isPending}
+        onSave={() => save.mutate()}
+        savedPulse={savedPulse}
+      />
       {picking ? (
         <ScorerSheet
           match={match}
@@ -200,23 +219,7 @@ const PredictionCard = React.memo(function PredictionCard({ match, canEdit }: { 
           }}
         />
       ) : null}
-      {match.own_match ? (
-        <Text style={styles.text} {...textScale.long}>
-          Kendi takımının maçına tahmin yapamazsın.
-        </Text>
-      ) : match.status === "live" ? (
-        <Badge label="Canlı · tahmin kapandı" tone="live" size="xs" />
-      ) : canEdit && match.can_predict ? (
-        <Button
-          label={saved ? "Kaydedildi" : match.prediction ? "Tahmini güncelle" : "Tahmini kaydet"}
-          size="sm"
-          variant={saved ? "secondary" : "primary"}
-          disabled={Boolean(saved)}
-          loading={save.isPending}
-          onPress={() => save.mutate()}
-        />
-      ) : null}
-    </View>
+    </>
   );
 });
 
@@ -274,25 +277,10 @@ function ScorerSheet({
   );
 }
 
-function ResultRow({ match }: { match: PredictionMatch }) {
-  const outcome = match.prediction?.outcome ? OUTCOME[match.prediction.outcome] : null;
-  const scorer = match.prediction?.scorer;
-  const scorerText = scorer ? ` · Golcü: ${scorer.name}${match.prediction?.scorer_hit ? " (tuttu, +3)" : match.prediction?.scorer_hit === false ? " (tutmadı)" : ""}` : "";
-  return (
-    <ListRow
-      title={`${match.home.name} ${match.score?.home ?? "-"} – ${match.score?.away ?? "-"} ${match.away.name}`}
-      subtitle={match.prediction ? `Tahminin: ${match.prediction.home} – ${match.prediction.away}${scorerText}` : "Tahmin yapmadın"}
-      badge={outcome ? <Badge label={outcome.label} tone={outcome.tone} size="xs" /> : undefined}
-      position="single"
-      style={styles.row}
-    />
-  );
-}
-
 function Board({ scope }: { scope: ScopeArgs }) {
   const [period, setPeriod] = useState<"weekly" | "season">("weekly");
   const query = useQuery({
-    queryKey: ["predictions", "board", period, scope.cityId, scope.leagueId, scope.seasonId],
+    queryKey: boardKey(period, scope),
     queryFn: () => getPredictionBoard(period, scope),
     staleTime: 60_000,
   });
@@ -310,34 +298,12 @@ function Board({ scope }: { scope: ScopeArgs }) {
       ) : !query.data.entries.length ? (
         <EmptyState icon="podium-outline" title="Henüz puan yok" body="Maçlar bitip tahminler puanlandıkça sıralama oluşur." variant="inline" />
       ) : (
-        <>
-          {query.data.me ? (
-            <View style={[styles.card, styles.me]}>
-              <Text style={styles.text} {...textScale.dense}>
-                {`Sıran: ${query.data.me.rank}. · ${query.data.me.points} puan · ${query.data.me.exact} tam skor`}
-              </Text>
-            </View>
-          ) : null}
-          <View>
-            {query.data.entries.map((entry, index, list) => (
-              <ListRow
-                key={entry.userId}
-                leading={
-                  <View style={styles.rank}>
-                    <Text style={styles.rankText} {...textScale.dense}>
-                      {entry.rank}
-                    </Text>
-                  </View>
-                }
-                title={entry.name}
-                subtitle={[entry.teamName, `${entry.predictions} tahmin · ${entry.exact} tam skor`].filter(Boolean).join(" · ")}
-                value={`${entry.points} p`}
-                highlighted={entry.userId === query.data?.me?.userId}
-                position={list.length === 1 ? "single" : index === 0 ? "first" : index === list.length - 1 ? "last" : "middle"}
-              />
-            ))}
-          </View>
-        </>
+        <Standings
+          entries={query.data.entries}
+          me={query.data.me}
+          totalPlayers={query.data.totalPlayers}
+          periodLabel={period === "weekly" ? "Bu hafta" : "Sezon"}
+        />
       )}
     </>
   );
@@ -346,20 +312,9 @@ function Board({ scope }: { scope: ScopeArgs }) {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { paddingHorizontal: layout.screenPadding, paddingTop: space.md, paddingBottom: space.giant, gap: space.md },
-  card: {
-    gap: space.s,
-    padding: space.md,
-    borderRadius: radius.lg,
-    borderWidth: hairline,
-    borderColor: colors.border,
-    backgroundColor: colors.surface1,
-  },
-  me: { borderColor: colors.accent },
-  section: { ...type.overline, color: colors.textTertiary, marginTop: space.s },
-  meta: { ...type.caption, color: colors.textTertiary },
-  text: { ...type.body, color: colors.textSecondary },
-  row: { marginBottom: space.s },
-  rank: { width: 32, alignItems: "center" },
-  rankText: { ...type.h3, color: colors.textPrimary },
+  sectionRow: { flexDirection: "row", alignItems: "center", gap: space.sm, marginTop: space.sm },
+  section: { ...type.overline, color: colors.textTertiary },
+  sectionCount: { ...type.numSmStrong, color: colors.brandAccent },
+  sectionRule: { flex: 1, height: 1, backgroundColor: colors.border },
   sheet: { gap: space.s, paddingBottom: space.lg },
 });

@@ -170,6 +170,13 @@ export interface CityState {
   stars: {
     puzzle: number;
     arena: number;
+    /** Tahmin Ligi + Fantezi yıldızı (yeni sunucu; eskisinde yok). */
+    tribun?: number;
+    tribun_detail?: {
+      predictions: number;
+      fantasy: number;
+      week: { predictions: number; fantasy: number; cap_predictions: number; cap_fantasy: number };
+    };
     xp: number;
     total: number;
     spent: number;
@@ -189,13 +196,46 @@ export interface CityLeaderRow {
   city: string | null;
   dev: number;
   tier: string;
+  /** Yeni sunucu: statü basamağı (0 = Okul takımı … 9 = Avrupa devi). */
+  tier_index?: number | null;
+  /** Yeni sunucu: toplam kazanılan yıldız. */
+  stars_total?: number | null;
+  /** Yeni sunucu: [from, to] penceresinde kazanılan yıldız. */
+  stars_period?: number | null;
   levels: Record<string, number>;
   me: boolean;
 }
 
+/** dev = gelişim puanı · stars = toplam yıldız · period_stars = aralıkta kazanılan yıldız. */
+export type CityBoardMetric = "dev" | "stars" | "period_stars";
+
+export interface CityBoardOptions {
+  metric?: CityBoardMetric;
+  /** period_stars için kısayol (sunucu haftayı/ayı kendi hesaplar). */
+  period?: "week" | "month" | "alltime";
+  from?: string;
+  to?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface CityLeaderboard {
+  scope: string;
+  /** Yeni sunucu alanları (eski sunucuda yok → gelişim puanı, tek sayfa). */
+  metric?: CityBoardMetric;
+  from?: string | null;
+  to?: string | null;
+  total?: number | null;
+  limit?: number | null;
+  offset?: number | null;
+  items: CityLeaderRow[];
+  me?: { rank: number | null; dev?: number | null; stars_total?: number | null; stars_period?: number | null } | null;
+}
+
 export const cityKeys = {
   me: () => ["puzzle", "city"] as const,
-  leaderboard: (scope: string) => ["puzzle", "city", "leaderboard", scope] as const,
+  leaderboard: (scope: string, ...extra: (string | number | null | undefined)[]) =>
+    ["puzzle", "city", "leaderboard", scope, ...extra] as const,
 };
 
 export const getCity = () => get<{ city: CityState; tiers: Omit<CityTier, "index">[] }>("/api/puzzle/city", undefined, { retry: false });
@@ -206,8 +246,16 @@ export const upgradeCity = (building: string) =>
     { retry: false },
   );
 export const collectCityStars = () => post<{ stars: number; xp: number; city: CityState }>("/api/puzzle/city/collect", undefined, { retry: false });
-export const getCityLeaderboard = (scope: "all" | "city") =>
-  get<{ scope: string; items: CityLeaderRow[] }>("/api/puzzle/city/leaderboard", { scope });
+export const getCityLeaderboard = (scope: "all" | "city", options?: CityBoardOptions) =>
+  get<CityLeaderboard>("/api/puzzle/city/leaderboard", {
+    scope,
+    metric: options?.metric,
+    period: options?.period,
+    from: options?.from,
+    to: options?.to,
+    limit: options?.limit,
+    offset: options?.offset || undefined,
+  });
 
 export const getLeaderboard = (game: string, scope: "all" | "city") =>
   get<{ game: string; scope: string; items: LeaderboardRow[] }>("/api/puzzle/leaderboard", { game, scope });

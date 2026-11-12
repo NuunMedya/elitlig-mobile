@@ -233,7 +233,6 @@ export default function MenuTabScreen() {
   // App Store 4 (Design): üyelik tarayıcıda değil, uygulama içindeki
   // /kayit ekranında açılır.
   const openRegister = useCallback(() => router.push("/kayit"), [router]);
-  const openDaily = useCallback(() => router.push("/gunun"), [router]);
   const openGames = useCallback(() => router.push("/(tabs)/oyunlar"), [router]);
 
   /* ------------------------------ SATIRLAR ------------------------------- */
@@ -288,13 +287,6 @@ export default function MenuTabScreen() {
           subtitle: "Görevleri tamamla, XP ve rozet kazan",
           tone: "accent",
           action: { kind: "route", route: "/gorevler" },
-        },
-        {
-          key: "rekorlar",
-          icon: "podium",
-          title: "Rekor tablosu",
-          subtitle: "Oyunlarda en iyi skorlar ve sıran",
-          action: { kind: "route", route: "/siralama" },
         },
       ],
     });
@@ -506,19 +498,13 @@ export default function MenuTabScreen() {
           </Touchable>
         ) : null}
 
-        {/* Oyunlar: Günün Testi kimliğin hemen altında; oyun merkezi yanında. */}
+        {/* Oyunlar: bütün oyunlar, Günün Testi ve oyun sıralamaları yalnız Oyun
+            merkezinde. Menüde tek kapı vardır. */}
         <HubGrid inset="flush" style={styles.games}>
-          <HubTile
-            icon="bulb"
-            title="Günün Testi"
-            subtitle={dailyDone ? `Bugün oynadın · ${dailyDone}` : "Bugünün 10 sorusu seni bekliyor"}
-            tone="brand"
-            onPress={openDaily}
-          />
           <HubTile
             icon="game-controller"
             title="Oyun merkezi"
-            subtitle="Fantezi, Tahmin Ligi, mini oyunlar, kariyer"
+            subtitle={dailyDone ? `Kulüp Şehri, bütün oyunlar · Günün Testi ${dailyDone}` : "Kulüp Şehri, bütün oyunlar ve sıralamalar"}
             tone="accent"
             onPress={openGames}
           />
@@ -535,7 +521,6 @@ export default function MenuTabScreen() {
       heroStats,
       heroUser,
       openAccount,
-      openDaily,
       openGames,
       openRegister,
       openSignIn,

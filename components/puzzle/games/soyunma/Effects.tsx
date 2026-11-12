@@ -8,6 +8,8 @@ import { radius, space, textScale, type } from "@/theme";
 import { SOYUNMA_LOCKER, SOYUNMA_UI as UI } from "@/lib/puzzle/soyunmaPalette";
 
 const PARTICLES = 10;
+/** Sade parıltı: altın + beyaz (renk karnavalı yok). */
+const CONFETTI = [SOYUNMA_LOCKER.sparkle, UI.text];
 
 interface SparkleProps {
   /** Değişince bir kez patlar (0 → yok). */
@@ -26,16 +28,32 @@ function SparkleBurstBase({ token, spread }: SparkleProps) {
   if (!token) return null;
   return (
     <View pointerEvents="none" style={styles.center}>
+      {/* Halka parlaması: açılıp sönen beyaz halka. */}
+      <Animated.View
+        style={[
+          styles.ring,
+          {
+            width: spread * 1.2,
+            height: spread * 1.2,
+            marginLeft: -spread * 0.6,
+            marginTop: -spread * 0.6,
+            borderRadius: spread * 0.6,
+            opacity: t.interpolate({ inputRange: [0, 0.1, 0.6], outputRange: [0, 0.7, 0], extrapolate: "clamp" }),
+            transform: [{ scale: t.interpolate({ inputRange: [0, 0.6], outputRange: [0.2, 1.5], extrapolate: "clamp" }) }],
+          },
+        ]}
+      />
       {Array.from({ length: PARTICLES }, (_, i) => {
         const a = (i / PARTICLES) * Math.PI * 2 + (i % 2) * 0.3;
         const d = spread * (i % 2 ? 0.75 : 1);
-        const s = i % 3 === 0 ? 7 : 5;
+        const s = i % 3 === 0 ? 6 : 4;
         return (
           <Animated.View
             key={i}
             style={[
               styles.particle,
               {
+                backgroundColor: CONFETTI[i % CONFETTI.length],
                 width: s,
                 height: s,
                 marginLeft: -s / 2,
@@ -45,7 +63,7 @@ function SparkleBurstBase({ token, spread }: SparkleProps) {
                   { translateX: t.interpolate({ inputRange: [0, 1], outputRange: [0, Math.cos(a) * d] }) },
                   { translateY: t.interpolate({ inputRange: [0, 1], outputRange: [0, Math.sin(a) * d] }) },
                   { rotate: "45deg" },
-                  { scale: t.interpolate({ inputRange: [0, 0.3, 1], outputRange: [0.4, 1.3, 0.2] }) },
+                  { scale: t.interpolate({ inputRange: [0, 0.3, 1], outputRange: [0.4, 1.1, 0.2] }) },
                 ],
               },
             ]}
@@ -73,9 +91,8 @@ function TextBurstBase({ text, id, tone = "brand" }: BurstProps) {
     Animated.timing(t, { toValue: 1, duration: 1150, easing: Easing.linear, useNativeDriver: true }).start();
   }, [id, text, t]);
   if (!text) return null;
-  const bg = tone === "win" ? UI.green : tone === "loss" ? UI.red : UI.gold;
-  const edge = tone === "win" ? UI.greenDeep : tone === "loss" ? UI.redDeep : UI.goldDeep;
-  const fg = tone === "brand" ? UI.goldInk : UI.text;
+  const bg = tone === "win" ? UI.green : tone === "loss" ? UI.red : UI.card;
+  const fg = tone === "brand" ? UI.cardInk : UI.text;
   return (
     <View pointerEvents="none" style={styles.burstWrap}>
       <Animated.View
@@ -83,11 +100,11 @@ function TextBurstBase({ text, id, tone = "brand" }: BurstProps) {
           styles.burst,
           {
             backgroundColor: bg,
-            borderColor: edge,
             opacity: t.interpolate({ inputRange: [0, 0.1, 0.75, 1], outputRange: [0, 1, 1, 0] }),
             transform: [
-              { scale: t.interpolate({ inputRange: [0, 0.12, 0.22, 1], outputRange: [0.5, 1.18, 1, 1.02] }) },
-              { translateY: t.interpolate({ inputRange: [0, 0.75, 1], outputRange: [0, -4, -26] }) },
+              { scaleX: t.interpolate({ inputRange: [0, 0.12, 0.2, 0.28, 1], outputRange: [0.6, 1.08, 0.98, 1, 1] }) },
+              { scaleY: t.interpolate({ inputRange: [0, 0.12, 0.2, 0.28, 1], outputRange: [0.6, 0.96, 1.03, 1, 1] }) },
+              { translateY: t.interpolate({ inputRange: [0, 0.75, 1], outputRange: [0, -4, -18] }) },
             ],
           },
         ]}
@@ -104,6 +121,7 @@ export const TextBurst = memo(TextBurstBase);
 
 const styles = StyleSheet.create({
   center: { position: "absolute", left: "50%", top: "50%", width: 0, height: 0 },
+  ring: { position: "absolute", borderWidth: 2, borderColor: UI.text },
   particle: { position: "absolute", backgroundColor: SOYUNMA_LOCKER.sparkle, borderRadius: 1 },
   burstWrap: {
     ...StyleSheet.absoluteFillObject,
@@ -114,9 +132,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.xl,
     paddingVertical: space.sm,
     borderRadius: radius.pill,
-    borderWidth: 3,
-    borderBottomWidth: 6,
+    shadowColor: UI.roomBottom,
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
   },
-  burstText: { ...type.scoreLg },
-  burstShadow: { textShadowColor: UI.textShadow, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
+  burstText: { ...type.scoreMd },
+  burstShadow: { textShadowColor: UI.textShadow, textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 },
 });

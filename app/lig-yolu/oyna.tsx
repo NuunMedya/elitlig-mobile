@@ -5,7 +5,7 @@
  *   · oyunun Game bileşenini çizer (tahta + oyunun kendi hedef çubuğu);
  *   · güçlendirici stoğunu yerelde tutar, oyunun isteğini onaylar ve harcananı
  *     sayar (seviye sonunda sunucuya tek seferde bildirilir);
- *   · oyun bitince sonucu sunucuya yazar (yıldız, jeton, XP ya da can kaybı)
+ *   · oyun bitince sonucu sunucuya yazar (yıldız, jeton ya da can kaybı)
  *     ve Sonuç penceresini açar;
  *   · seviyeden çıkmak isteyene "çıkarsan 1 can gider" diye sorar (türün
  *     alışık olunan kuralı).
@@ -15,29 +15,23 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useNavigation } from "@react-navigation/native";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { LinearGradient } from "expo-linear-gradient";
 import { BackHandler, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { confirmAction } from "@/components/admin";
-import { ResultSheet } from "@/components/puzzle/LevelSheets";
+import { GameButton, ResultSheet } from "@/components/puzzle/LevelSheets";
 import { ShopSheet } from "@/components/puzzle/sheets";
 import { StageBackdrop } from "@/components/puzzle/StageBackdrop";
 import { ConfettiBurst } from "@/components/game/Celebration";
 import { Touchable, useToast } from "@/components/ui";
 import { errorText } from "@/lib/admin/errors";
 import { finishLevel, livesFor, type FinishResponse } from "@/lib/puzzle/api";
-import { STAGE_COMMON, STAGE_THEMES } from "@/lib/puzzle/stagePalette";
+import { STAGE_COMMON } from "@/lib/puzzle/stagePalette";
 import { puzzleGame } from "@/lib/puzzle/registry";
 import type { PuzzleResult } from "@/lib/puzzle/types";
 import { usePuzzleCache, usePuzzleMe } from "@/lib/puzzle/usePuzzle";
 import { useAuth } from "@/providers/AuthProvider";
 import { colors, fonts, layout, radius, space, textScale, touchSlop, type } from "@/theme";
-
-const LEFT = { x: 0, y: 0.5 } as const;
-const RIGHT = { x: 1, y: 0.5 } as const;
-const TOP = { x: 0.5, y: 0 } as const;
-const BOTTOM = { x: 0.5, y: 1 } as const;
 
 export default function PuzzlePlayScreen() {
   const auth = useAuth();
@@ -151,7 +145,6 @@ export default function PuzzlePlayScreen() {
   if (!module) return <Redirect href="/lig-yolu" />;
 
   const Game = module.Game;
-  const stage = STAGE_THEMES[module.key];
   const gameProfile = livesFor(me?.profile ?? result?.server?.profile, module.key);
   const lives = gameProfile?.lives ?? 0;
   const maxLives = gameProfile?.max_lives ?? 5;
@@ -164,23 +157,24 @@ export default function PuzzlePlayScreen() {
     <SafeAreaView style={styles.screen} edges={["top", "bottom"]}>
       <StageBackdrop game={module.key} />
       <View style={styles.top}>
-        <RoundButton icon="close" onPress={() => void leave()} label="Seviyeden çık" colors={stage.button} />
-        <View style={styles.ribbonWrap}>
-          <LinearGradient colors={stage.ribbon} start={LEFT} end={RIGHT} style={styles.ribbon}>
-            <Text style={styles.ribbonSmall} numberOfLines={1} {...textScale.badge}>
+        {/* Çıkış düğmesi yok: oyundan çıkış mola kartında (durdur → Oyundan çık). */}
+        <View style={styles.roundSpacer} />
+        <View style={styles.titleWrap}>
+          <View style={styles.titlePill} accessibilityRole="header">
+            <Text style={styles.titleSmall} numberOfLines={1} {...textScale.badge}>
               {module.title.toLocaleUpperCase("tr-TR")}
             </Text>
-            <Text style={styles.ribbonBig} numberOfLines={1} {...textScale.badge}>
-              SEVİYE {level}
+            <Text style={styles.titleBig} numberOfLines={1} {...textScale.badge}>
+              Seviye {level}
             </Text>
-          </LinearGradient>
+          </View>
           <View style={styles.hearts} accessibilityLabel={`${lives} can`}>
             {Array.from({ length: maxLives }, (_, i) => (
-              <Ionicons key={i} name={i < lives ? "heart" : "heart-outline"} size={14} color={i < lives ? STAGE_COMMON.heart : STAGE_COMMON.white} style={styles.heart} />
+              <Ionicons key={i} name={i < lives ? "heart" : "heart-outline"} size={13} color={i < lives ? STAGE_COMMON.heart : STAGE_COMMON.inkSoft} style={styles.heart} />
             ))}
           </View>
         </View>
-        <RoundButton icon={paused ? "play" : "pause"} onPress={() => setPaused((p) => !p)} label={paused ? "Devam et" : "Duraklat"} colors={stage.button} />
+        <RoundButton icon={paused ? "play" : "pause"} onPress={() => setPaused((p) => !p)} label={paused ? "Devam et" : "Duraklat"} />
       </View>
 
       <View style={styles.board} onLayout={(e) => setArea({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}>
@@ -201,23 +195,18 @@ export default function PuzzlePlayScreen() {
 
       {paused && !shopOpen && !result ? (
         <View style={styles.pauseLayer}>
-          <View style={styles.pauseCard}>
-            <LinearGradient colors={stage.ribbon} start={LEFT} end={RIGHT} style={styles.pauseHead}>
-              <Text style={styles.pauseTitle} {...textScale.badge}>MOLA</Text>
-            </LinearGradient>
-            <Ionicons name="pause-circle" size={64} color={stage.button[1]} />
-            <Text style={styles.pauseText} {...textScale.dense}>
-              {module.title} · {level}. seviye
-            </Text>
-            <Touchable onPress={() => setPaused(false)} style={styles.resume} accessibilityRole="button" haptic="medium">
-              <LinearGradient colors={stage.button} start={TOP} end={BOTTOM} style={styles.resumeFill}>
-                <Ionicons name="play" size={22} color={STAGE_COMMON.white} />
-                <Text style={styles.resumeText} {...textScale.badge}>DEVAM ET</Text>
-              </LinearGradient>
-            </Touchable>
-            <Touchable onPress={() => void leave()} style={styles.quit} accessibilityRole="button">
-              <Text style={styles.quitText} {...textScale.dense}>Seviyeden çık</Text>
-            </Touchable>
+          <View style={styles.pauseCard} accessibilityViewIsModal>
+            <View style={styles.pauseHead} accessibilityRole="header">
+              <Text style={styles.pauseOver} numberOfLines={1} {...textScale.badge}>
+                {module.title.toLocaleUpperCase("tr-TR")} · SEVİYE {level}
+              </Text>
+              <Text style={styles.pauseTitle} {...textScale.badge}>Mola</Text>
+            </View>
+            <View style={styles.pauseBtns}>
+              <GameButton label="DEVAM ET" icon="play" onPress={() => setPaused(false)} />
+              <GameButton label="OYUNDAN ÇIK" icon="exit-outline" tone="danger" small onPress={() => void leave()} />
+            </View>
+            <Text style={styles.quitText} {...textScale.dense}>Çıkarsan bu seviye kaybedilmiş sayılır, 1 can gider.</Text>
           </View>
         </View>
       ) : null}
@@ -241,7 +230,7 @@ export default function PuzzlePlayScreen() {
         game={module.key}
       />
 
-      <ConfettiBurst trigger={result?.res.won ? level : 0} count={48} />
+      <ConfettiBurst trigger={result?.res.won ? level : 0} count={24} />
       {result ? (
         <ResultSheet
           visible
@@ -249,7 +238,6 @@ export default function PuzzlePlayScreen() {
           stars={result.res.stars}
           level={level}
           coins={result.server?.reward?.coins ?? 0}
-          xp={result.server?.reward?.xp ?? 0}
           firstClear={Boolean(result.server?.reward?.firstClear)}
           summary={result.res.summary}
           livesLeft={lives}
@@ -264,14 +252,11 @@ export default function PuzzlePlayScreen() {
   );
 }
 
-/** Oyun içi yuvarlak 3B düğme (kapat / duraklat). */
-function RoundButton({ icon, onPress, label, colors: fill }: { icon: keyof typeof Ionicons.glyphMap; onPress: () => void; label: string; colors: [string, string] }) {
+/** Üst şeritteki yuvarlak cam düğme (duraklat / devam). */
+function RoundButton({ icon, onPress, label }: { icon: keyof typeof Ionicons.glyphMap; onPress: () => void; label: string }) {
   return (
-    <Touchable onPress={onPress} hitSlop={touchSlop(44)} accessibilityLabel={label} style={styles.round} haptic="light">
-      <View style={styles.roundShadow} />
-      <LinearGradient colors={fill} start={TOP} end={BOTTOM} style={styles.roundFill}>
-        <Ionicons name={icon} size={22} color={STAGE_COMMON.white} />
-      </LinearGradient>
+    <Touchable onPress={onPress} hitSlop={touchSlop(44)} accessibilityRole="button" accessibilityLabel={label} style={styles.round} haptic="light">
+      <Ionicons name={icon} size={20} color={STAGE_COMMON.white} />
     </Touchable>
   );
 }
@@ -279,43 +264,44 @@ function RoundButton({ icon, onPress, label, colors: fill }: { icon: keyof typeo
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   top: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: layout.screenPadding, paddingTop: space.xs, paddingBottom: space.sm },
-  round: { width: 46, height: 50 },
-  roundShadow: { position: "absolute", top: 4, left: 0, width: 46, height: 46, borderRadius: radius.pill, backgroundColor: STAGE_COMMON.shadow },
-  roundFill: { width: 46, height: 46, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", borderWidth: 3, borderColor: STAGE_COMMON.white },
-  ribbonWrap: { flex: 1, alignItems: "center" },
-  ribbon: { minWidth: 170, alignItems: "center", paddingHorizontal: space.lg, paddingVertical: space.xs, borderRadius: radius.md, borderWidth: 3, borderColor: STAGE_COMMON.white },
-  ribbonSmall: { ...type.micro, fontFamily: fonts.bold, color: STAGE_COMMON.ink, letterSpacing: 1.2, opacity: 0.9 },
-  ribbonBig: {
-    ...type.h2,
-    fontFamily: fonts.bold,
-    color: STAGE_COMMON.ink,
-    letterSpacing: 1,
-    textShadowColor: STAGE_COMMON.inkShadow,
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 2,
+  round: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: STAGE_COMMON.glass,
+    borderWidth: 1,
+    borderColor: STAGE_COMMON.glassEdge,
   },
-  hearts: { flexDirection: "row", marginTop: space.xs, paddingHorizontal: space.sm, paddingVertical: 2, borderRadius: radius.pill, backgroundColor: STAGE_COMMON.shadow },
+  roundSpacer: { width: 44, height: 44 },
+  titleWrap: { flex: 1, alignItems: "center", gap: space.xs },
+  titlePill: { alignItems: "center" },
+  titleSmall: { ...type.micro, fontFamily: fonts.bold, color: STAGE_COMMON.inkSoft, letterSpacing: 1.5 },
+  titleBig: { ...type.h2, fontFamily: fonts.bold, color: STAGE_COMMON.ink },
+  hearts: { flexDirection: "row", paddingHorizontal: space.sm, paddingVertical: space.xxs, borderRadius: radius.pill, backgroundColor: STAGE_COMMON.glass },
   heart: { marginHorizontal: 1 },
   board: { flex: 1, alignItems: "center", justifyContent: "center" },
-  pauseLayer: { ...StyleSheet.absoluteFillObject, backgroundColor: STAGE_COMMON.dim, alignItems: "center", justifyContent: "center" },
+  pauseLayer: { ...StyleSheet.absoluteFillObject, backgroundColor: STAGE_COMMON.dim, alignItems: "center", justifyContent: "center", padding: space.lg },
   pauseCard: {
-    width: 290,
+    width: "100%",
+    maxWidth: 320,
     alignItems: "center",
-    gap: space.md,
-    paddingTop: space.xxl,
+    gap: space.lg,
+    paddingTop: space.xl,
     paddingBottom: space.lg,
     paddingHorizontal: space.lg,
     borderRadius: radius.xxl,
     backgroundColor: STAGE_COMMON.card[0],
-    borderWidth: 4,
-    borderColor: STAGE_COMMON.white,
+    shadowColor: STAGE_COMMON.cardShadow,
+    shadowOpacity: 0.3,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 12,
   },
-  pauseHead: { position: "absolute", top: -22, paddingHorizontal: space.xl, paddingVertical: space.xs, borderRadius: radius.md, borderWidth: 3, borderColor: STAGE_COMMON.white },
-  pauseTitle: { ...type.h2, fontFamily: fonts.bold, color: STAGE_COMMON.ink, letterSpacing: 3 },
-  pauseText: { ...type.h3, fontFamily: fonts.bold, color: STAGE_COMMON.cardInk },
-  resume: { alignSelf: "stretch", borderRadius: radius.pill, overflow: "hidden" },
-  resumeFill: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.sm, paddingVertical: space.md, borderRadius: radius.pill },
-  resumeText: { ...type.h3, fontFamily: fonts.bold, color: STAGE_COMMON.white, letterSpacing: 1.5 },
-  quit: { paddingVertical: space.xs },
-  quitText: { ...type.label, color: STAGE_COMMON.cardInk, opacity: 0.7 },
+  pauseHead: { alignItems: "center", gap: space.xxs },
+  pauseOver: { ...type.micro, fontFamily: fonts.bold, color: STAGE_COMMON.cardSoft, letterSpacing: 1.5 },
+  pauseTitle: { ...type.display, fontFamily: fonts.bold, color: STAGE_COMMON.cardInk },
+  pauseBtns: { alignSelf: "stretch", gap: space.sm },
+  quitText: { ...type.caption, color: STAGE_COMMON.cardSoft, textAlign: "center" },
 });

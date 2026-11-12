@@ -266,6 +266,11 @@
     A.burst(p.x, p.y, 8, { angle: Math.PI / 2, spread: 1.4, speed: 160, gravity: 300, life: 0.4, size: 3, color: ["#FFFFFF", "#CFE8D6", P.gold], shape: "spark" });
   }
 
+  // Her baraj geçişinde oyun AKIŞTA kalır: "file" ve "jeton" seslerinin genel
+  // efekti (anlık donma, beyaz parlama, sarsıntı, halka) kapalı; yalnız küçük
+  // skor yazısı ve ağın dalgalanması kalır.
+  A.juiceOff = { net: true, coin: true };
+
   function scoreGate(g) {
     g.passed = true;
     g.netAt = A.time;
@@ -283,8 +288,7 @@
     A.floatText((center ? "TAM ORTA +" : "GOL +") + gain, sp.x, sp.y, center ? P.gold : "#FFFFFF", center ? 22 : 19);
     if (center && combo % 5 === 0) {
       A.floatText("ÇARPAN ×" + multiplier(), W / 2, H * 0.36, P.gold, 24);
-      A.sound("level");
-      flash = 1;
+      A.sound("coin");
     } else A.sound("net");
     A.haptic(center ? "medium" : "light");
     // geçtiğin oyuncular
@@ -295,7 +299,8 @@
       passedLine = { text: rv.short + " geçildi · " + rv.value + " gol+asist", age: 0, kit: kitOf(rv) };
       A.sound("coin");
       A.haptic("success");
-      bgKey = "";
+      // Fon oyun sırasında yeniden çizilmez (bütün katmanları aynı karede
+      // boyamak akışta takılma yapıyordu); tribün renkleri tur başında belirlenir.
     }
     var nl = levelAt(goals);
     if (nl > level) {
@@ -550,7 +555,9 @@
     var wide = W > H * 1.15;
     var grassH = A.clamp(H * 0.12, 44, 96);
     var gy = H - grassH;
-    var hud = wide ? 50 : 92;
+    // dikeyde ilerleme çubuğu RN düğmesinin altına inerse saha da o kadar iner
+    var slot = A.hudSlot(12);
+    var hud = wide ? 50 : 92 + Math.max(0, (slot.right > 0 ? slot.top + 6 : 0) - 54);
     var k = Math.max(20, (gy - hud) / TOP);
     L.wide = wide;
     L.k = k;
@@ -578,7 +585,7 @@
   var LY = { sky: null, city: null, stand: null, roof: null, glow: null };
 
   function paintLayers() {
-    var key = W + "x" + H + ":" + rosterSig + ":" + passedRivals;
+    var key = W + "x" + H + ":" + rosterSig;
     if (bgKey === key && LY.sky) return;
     bgKey = key;
     var mine = kitP(juggler), nr = nextRival(), rk = nr ? kitP(nr) : { p: "#E11D48", s: "#FFFFFF" };
@@ -1803,15 +1810,17 @@
     c.restore();
     A.scoreAnchor = { x: 12 + h / 2, y: y + h / 2 };
     label(c, txt, 12 + h + 6, y + h / 2 + 1, h * 0.56, kick > 0.1 ? "#FFE58A" : "#FFFFFF", "left");
-    // SEVİYE hapı (sağ) + kalkan
+    // SEVİYE hapı (sağ; RN duraklat düğmesi varsa onun solunda) + kalkan
+    var slot = A.hudSlot(12);
     c.font = A.font(h * 0.42, 900);
     var lv = "SEVİYE " + level;
     var lw = c.measureText(lv).width + 26;
-    navyPill(c, W - 12 - lw, y, lw, h, "#4C2FD8");
-    label(c, lv, W - 12 - lw / 2, y + h / 2 + 1, h * 0.42, "#FFFFFF", "center", false);
+    navyPill(c, slot.x1 - lw, y, lw, h, "#4C2FD8");
+    label(c, lv, slot.x1 - lw / 2, y + h / 2 + 1, h * 0.42, "#FFFFFF", "center", false);
     if (shield) shieldIcon(c, 12 + h * 0.92, y + h * 0.82, h * 0.3);
     // GOL sayacı: dikeyde üstte ortada; yatayda puan hapı ile çubuk arasında
-    var gx = wide ? (12 + h * 0.4 + pw + (W / 2 - Math.min(W * 0.36, 300) / 2)) / 2 + 8 : W / 2;
+    // (dikeyde seviye hapı sola kaydıysa iki hap arasında ortalanır)
+    var gx = wide ? (12 + h * 0.4 + pw + (W / 2 - Math.min(W * 0.36, 300) / 2)) / 2 + 8 : Math.min(W / 2, (12 + h * 0.4 + pw + slot.x1 - lw) / 2);
     var gyy = y + h / 2 + 1;
     var gs = (wide ? 30 : 34) * (1 + 0.28 * scoreBump);
     label(c, String(goals), gx, gyy, gs, "#FFFFFF", "center", NAVY);
@@ -1844,7 +1853,8 @@
     } else {
       bx = 14;
       bw = W - 28;
-      byy = y + h + 10;
+      // düğme yuvası varsa çubuk onun altına iner
+      byy = Math.max(y + h + 10, slot.right > 0 ? slot.top + 6 : 0);
       bh = 22;
     }
     var nr = nextRival();

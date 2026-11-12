@@ -11,26 +11,24 @@
  *
  * Canvas oyunları (`ArenaGameScreen`) ve bilgi yarışmaları (`QuizScreen`)
  * aynı parçaları kullanır: oyuncu hangi oyunu oynarsa oynasın tur sonu aynı
- * yerde, aynı biçimde biter.
+ * yerde, aynı biçimde biter. Görünüm oyunların "canlı ama sade" temasıdır
+ * (bkz. `lib/game/cartoon.ts`, `components/game/QuizKit.tsx`): yumuşak
+ * gölgeli beyaz kart, kurdele, tek yeşil birincil düğme, nötr çip ve ikincil
+ * düğmeler, sade madalyalı tablo satırları. Altın yalnız rekor ve yıldızda.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, View } from "react-native";
+import Svg, { Defs, RadialGradient, Rect, Stop } from "react-native-svg";
 import ViewShot, { captureRef } from "react-native-view-shot";
 
-import {
-  Badge,
-  Button,
-  SegmentedControl,
-  Touchable,
-  useToast,
-  withAlpha,
-  type SegmentedItem,
-} from "@/components/ui";
+import { Touchable, useToast, type SegmentedItem } from "@/components/ui";
 import {
   getArenaLeaderboard,
   getMyArenaRank,
@@ -39,10 +37,14 @@ import {
   type ArenaEntry,
   type ArenaGame,
 } from "@/lib/api/arena";
-import { ConfettiBurst, Sunburst } from "@/components/game/Celebration";
+import { ConfettiBurst } from "@/components/game/Celebration";
+import { CartoonButton, CartoonPanel, IconBubble, PopIn, Ribbon } from "@/components/game/QuizKit";
+import { ARENA_RESULT } from "@/lib/game/arenaResultPalette";
+import { CARTOON } from "@/lib/game/cartoon";
+import { QUIZ } from "@/lib/game/quizPalette";
 import { instagramUrl } from "@/lib/socials";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, dark as inkPalette, elevate, fonts, hairline, radius, space, textScale, type, upperTR } from "@/theme";
+import { fonts, radius, space, textScale, type, upperTR } from "@/theme";
 
 export type SubmitState = "idle" | "guest" | "sending" | "sent" | "failed";
 type Period = "weekly" | "alltime";
@@ -81,6 +83,8 @@ export function useArenaScore(game: ArenaGame, bestKey: string) {
   const [stars, setStars] = useState(0);
   const bestRef = useRef(0);
   bestRef.current = best;
+  /** Bu turun bitiş istatistikleri (görev ilerlemesi için skorla gider). */
+  const statsRef = useRef<Record<string, number> | null>(null);
   /** Bu turun oyun oturumu (Kariyer Modu doğrulaması); açılamazsa null. */
   const sessionRef = useRef<Promise<string | null> | null>(null);
 
@@ -104,7 +108,7 @@ export function useArenaScore(game: ArenaGame, bestKey: string) {
       // "Tekrar dene" aynı oturumla gider ve skor yine doğrulanabilir.
       const pending = sessionRef.current;
       (pending ?? Promise.resolve(null))
-        .then((sessionId) => submitArenaScore(game, value, sessionId))
+        .then((sessionId) => submitArenaScore(game, value, sessionId, statsRef.current))
         .then((response) => {
           // Bu arada yeni tur başladıysa onun oturumuna dokunulmaz.
           if (sessionRef.current === pending) sessionRef.current = null;
@@ -135,7 +139,8 @@ export function useArenaScore(game: ArenaGame, bestKey: string) {
 
   /** Tur bitti: rekoru güncelle, skoru gönder. */
   const finish = useCallback(
-    (value: number) => {
+    (value: number, stats?: Record<string, number> | null) => {
+      statsRef.current = stats ?? null;
       setScore(value);
       setServerRecord(null);
       setStars(0);
@@ -198,6 +203,12 @@ export interface ArenaResultCardProps {
   onCity?: () => void;
 }
 
+/**
+ * Sade bitiş kartı: yumuşak gölgeli beyaz kart, üst kenarda kurdele (tur
+ * başlığı ya da altın "YENİ REKOR!"), lacivert dev skor, nötr istatistik
+ * çipleri, Kulüp Şehri yıldız hapı, TEK vurgu (yeşil "Tekrar oyna"), nötr
+ * ikincil düğmeler ve rekor tablosu. Altın yalnız rekor ve yıldızlar içindir.
+ */
 export function ArenaResultCard({
   game,
   score,
@@ -217,79 +228,133 @@ export function ArenaResultCard({
   onCity,
 }: ArenaResultCardProps) {
   return (
-    <View style={styles.scrim}>
-      <ScrollView contentContainerStyle={styles.scrimContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.card}>
-          {isRecord ? (
-            <View pointerEvents="none" style={styles.recordBurst}>
-              <Sunburst size={320} />
-            </View>
-          ) : null}
-          {isRecord ? <Badge label={upperTR("Yeni rekor")} tone="warn" icon="trophy" variant="soft" /> : null}
-          <Text style={styles.resultTitle} {...textScale.dense}>
-            {isRecord ? "Rekorunu kırdın!" : overTitle}
-          </Text>
-          <Text style={styles.resultScore} {...textScale.dense}>
-            {formatCount(score)}
-          </Text>
-          <Text style={styles.resultUnit} {...textScale.badge}>
-            {upperTR(SCORE_UNIT)}
-          </Text>
-
-          {facts.length ? (
-            <View style={styles.facts}>
-              {facts.map((fact) => (
-                <View key={fact} style={styles.fact}>
-                  <Text style={styles.factText} {...textScale.dense}>
-                    {fact}
-                  </Text>
+    <View style={styles.scrim} accessibilityViewIsModal>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrimContent} showsVerticalScrollIndicator={false}>
+        <PopIn style={styles.cardWrap}>
+          <CartoonPanel style={styles.card}>
+            {isRecord ? (
+              <View style={styles.recordBadge}>
+                <View pointerEvents="none" style={styles.recordGlow}>
+                  <Svg width={GLOW} height={GLOW}>
+                    <Defs>
+                      <RadialGradient id="arenaRecordGlow" cx="50%" cy="50%" r="50%">
+                        <Stop offset="0" stopColor={ARENA_RESULT.recordGlow} stopOpacity={0.55} />
+                        <Stop offset="0.55" stopColor={ARENA_RESULT.recordGlow} stopOpacity={0.18} />
+                        <Stop offset="1" stopColor={ARENA_RESULT.recordGlow} stopOpacity={0} />
+                      </RadialGradient>
+                    </Defs>
+                    <Rect x="0" y="0" width={GLOW} height={GLOW} fill="url(#arenaRecordGlow)" />
+                  </Svg>
                 </View>
-              ))}
-            </View>
-          ) : null}
-
-          {extra}
-
-          {stars > 0 ? (
-            <Touchable
-              feedback="button"
-              haptic="light"
-              onPress={onCity}
-              style={styles.cityStars}
-              accessibilityRole="button"
-              accessibilityLabel={`${stars} yıldız Kulüp Şehri'ne eklendi, şehre git`}
-            >
-              <Ionicons name="star" size={16} color={colors.yellowCard} />
-              <Text style={styles.cityStarsText} {...textScale.dense}>
-                +{stars} yıldız · Kulüp Şehri'ne
-              </Text>
-              <Ionicons name="chevron-forward" size={14} color={colors.textTertiary} />
-            </Touchable>
-          ) : null}
-
-          <Text style={styles.resultBest} {...textScale.dense}>
-            {`Kişisel rekorun ${formatCount(best)} ${SCORE_UNIT}`}
-          </Text>
-
-          <SubmitLine state={submit} onRetry={onRetrySubmit} onSignIn={onSignIn} />
-
-          <View style={styles.replayRow}>
-            <Button label="Tekrar oyna" icon="refresh" size="lg" onPress={onRestart} style={styles.flex} />
-            {secondary ? (
-              <Button label={secondary.label} icon={secondary.icon} size="lg" variant="secondary" onPress={secondary.onPress} style={styles.flex} />
+                <IconBubble icon="trophy" tone="gold" size={60} />
+                <Text style={styles.recordTitle} {...textScale.dense}>
+                  Rekorunu kırdın!
+                </Text>
+              </View>
             ) : null}
-          </View>
 
-          <MiniBoard game={game} justSent={submit === "sent"} onBoard={onBoard} />
+            <View style={styles.scoreBlock} accessible accessibilityLabel={`${formatCount(score)} ${SCORE_UNIT}`}>
+              <Text style={styles.score} numberOfLines={1} adjustsFontSizeToFit {...textScale.dense}>
+                {formatCount(score)}
+              </Text>
+              <Text style={styles.unit} {...textScale.badge}>
+                {upperTR(SCORE_UNIT)}
+              </Text>
+            </View>
 
-          <View style={styles.resultRow}>
-            <Button label="Tüm tablo" icon="trophy-outline" variant="secondary" onPress={onBoard} style={styles.flex} />
-            <Button label="Meydan oku" icon="share-social" variant="ghost" onPress={onShare} style={styles.flex} />
+            {facts.length ? (
+              <View style={styles.facts}>
+                {facts.map((fact) => (
+                  <View key={fact} style={styles.fact}>
+                    <Text style={styles.factText} {...textScale.dense}>
+                      {fact}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+
+            {extra}
+
+            {stars > 0 ? (
+              <Touchable
+                feedback="button"
+                haptic="light"
+                onPress={onCity}
+                style={styles.cityStars}
+                accessibilityRole="button"
+                accessibilityLabel={`${stars} yıldız Kulüp Şehri'ne eklendi, şehre git`}
+              >
+                <Ionicons name="star" size={16} color={CARTOON.warn} />
+                <Text style={styles.cityStarsText} numberOfLines={1} {...textScale.dense}>
+                  {`+${stars} yıldız · Kulüp Şehri'ne`}
+                </Text>
+                <Ionicons name="chevron-forward" size={14} color={ARENA_RESULT.starInk} />
+              </Touchable>
+            ) : null}
+
+            <View style={styles.bestRow}>
+              <Ionicons name="trophy-outline" size={13} color={ARENA_RESULT.faint} />
+              <Text style={styles.bestText} {...textScale.dense}>
+                {`Kişisel rekorun ${formatCount(best)} ${SCORE_UNIT}`}
+              </Text>
+            </View>
+
+            <SubmitLine state={submit} onRetry={onRetrySubmit} onSignIn={onSignIn} />
+
+            <View style={styles.actions}>
+              <CartoonButton label="Tekrar oyna" icon="refresh" tone="green" size="lg" onPress={onRestart} style={styles.stretch} />
+              {secondary ? <SoftButton label={secondary.label} icon={secondary.icon} onPress={secondary.onPress} /> : null}
+            </View>
+
+            <MiniBoard game={game} justSent={submit === "sent"} onBoard={onBoard} />
+
+            <View style={styles.resultRow}>
+              <SoftButton label="Tüm tablo" icon="podium-outline" onPress={onBoard} compact />
+              <SoftButton label="Meydan oku" icon="share-social-outline" onPress={onShare} compact />
+            </View>
+          </CartoonPanel>
+          <View style={styles.ribbonLayer} pointerEvents="none">
+            {isRecord ? <Ribbon label="Yeni rekor!" icon="trophy" fill={QUIZ.ribbonGold} /> : <Ribbon label={overTitle} icon="flag" />}
           </View>
-        </View>
+        </PopIn>
       </ScrollView>
-      <ConfettiBurst trigger={isRecord ? Math.max(1, score) : 0} count={44} />
+      <ConfettiBurst trigger={isRecord ? Math.max(1, score) : 0} count={24} />
     </View>
+  );
+}
+
+/**
+ * Nötr ikincil düğme (beyaz kart üstünde): açık gri yüz, ince kenar, 3 px alt
+ * dudak; basınca dudağa çöker. Renk yok — vurgu yalnız birincil düğmede.
+ */
+function SoftButton({
+  label,
+  icon,
+  onPress,
+  compact = false,
+}: {
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  onPress: () => void;
+  compact?: boolean;
+}) {
+  return (
+    <Touchable
+      feedback="button"
+      haptic="light"
+      onPress={onPress}
+      style={compact ? styles.softWrapCompact : styles.softWrap}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
+      <View style={[styles.softFace, compact && styles.softFaceCompact]}>
+        <Ionicons name={icon} size={compact ? 16 : 18} color={ARENA_RESULT.ink} />
+        <Text style={compact ? styles.softTextCompact : styles.softText} numberOfLines={1} {...textScale.badge}>
+          {upperTR(label)}
+        </Text>
+      </View>
+    </Touchable>
   );
 }
 
@@ -299,9 +364,12 @@ export function ArenaResultCard({
  * Türkiye geneli ilk 5 + senin sıran. Kapsam bilerek Türkiye: oyunlar herkesin
  * birbiriyle yarıştığı tek tablodur; şehir kırılımı Rekor Tablosu ekranında.
  */
-function MiniBoard({ game, justSent, onBoard }: { game: ArenaGame; justSent: boolean; onBoard: () => void }) {
+function MiniBoard({ game, justSent }: { game: ArenaGame; justSent: boolean; onBoard: () => void }) {
   const auth = useAuth();
+  const router = useRouter();
   const [period, setPeriod] = useState<Period>("weekly");
+  // Tüm tablo: aynı oyun ve önizlemede seçili dönemle açılır.
+  const openFull = useCallback(() => router.push({ pathname: "/siralama", params: { game, period } }), [router, game, period]);
   const myId = auth.user ? Number(auth.user.id) : null;
 
   const board = useQuery({
@@ -328,17 +396,39 @@ function MiniBoard({ game, justSent, onBoard }: { game: ArenaGame; justSent: boo
   return (
     <View style={styles.board}>
       <View style={styles.boardHead}>
-        <Ionicons name="podium-outline" size={15} color={colors.brandAccent} />
+        <View style={styles.boardIcon}>
+          <Ionicons name="podium" size={14} color={ARENA_RESULT.ink} />
+        </View>
         <Text style={styles.boardTitle} {...textScale.dense}>
-          Türkiye sıralaması
+          {upperTR("Türkiye sıralaması")}
         </Text>
-        {board.isFetching || (justSent && me.isFetching) ? <ActivityIndicator size="small" color={colors.textTertiary} /> : null}
+        {board.isFetching || (justSent && me.isFetching) ? <ActivityIndicator size="small" color={ARENA_RESULT.muted} /> : null}
       </View>
-      <SegmentedControl items={PERIOD_ITEMS} value={period} onChange={setPeriod} size="sm" />
+
+      <View style={styles.tabs} accessibilityRole="tablist">
+        {PERIOD_ITEMS.map((item) => {
+          const on = item.key === period;
+          return (
+            <Touchable
+              key={item.key}
+              haptic="light"
+              onPress={() => setPeriod(item.key)}
+              style={[styles.tab, on && styles.tabOn]}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: on }}
+              accessibilityLabel={item.label}
+            >
+              <Text style={[styles.tabText, on && styles.tabTextOn]} numberOfLines={1} {...textScale.badge}>
+                {item.label}
+              </Text>
+            </Touchable>
+          );
+        })}
+      </View>
 
       {board.isLoading ? (
         <View style={styles.boardEmpty}>
-          <ActivityIndicator color={colors.textTertiary} />
+          <ActivityIndicator color={ARENA_RESULT.muted} />
         </View>
       ) : board.isError ? (
         <Text style={styles.boardEmptyText} {...textScale.dense}>
@@ -365,7 +455,9 @@ function MiniBoard({ game, justSent, onBoard }: { game: ArenaGame; justSent: boo
           {mine && !meInTop ? (
             <>
               <View style={styles.boardGap}>
-                <Text style={styles.boardGapText}>···</Text>
+                {[0, 1, 2].map((dot) => (
+                  <View key={dot} style={styles.boardGapDot} />
+                ))}
               </View>
               <BoardRow rank={mine.rank} name="Sen" score={mine.score} mine />
             </>
@@ -383,29 +475,30 @@ function MiniBoard({ game, justSent, onBoard }: { game: ArenaGame; justSent: boo
         </Text>
       ) : null}
 
-      <Touchable feedback="button" haptic="light" onPress={onBoard} style={styles.boardMore} accessibilityRole="button" accessibilityLabel="Tüm rekor tablosu">
+      <Touchable feedback="button" haptic="light" onPress={openFull} style={styles.boardMore} accessibilityRole="button" accessibilityLabel="Tüm rekor tablosu">
         <Text style={styles.boardMoreText} {...textScale.dense}>
           Şehrine göre ve tüm liste
         </Text>
-        <Ionicons name="chevron-forward" size={13} color={colors.brandAccent} />
+        <Ionicons name="chevron-forward" size={14} color={ARENA_RESULT.muted} />
       </Touchable>
     </View>
   );
 }
 
 function BoardRow({ rank, name, score, mine }: { rank: number; name: string; score: number; mine: boolean }) {
-  const medal = rank === 1 ? colors.yellowCard : rank === 2 ? colors.textTertiary : rank === 3 ? colors.zoneRelegationPlayoff : null;
+  // Madalya: yalnız ilk üçte yumuşak bir zemin; gerisi sade sıra numarası.
+  const medal = rank === 1 ? ARENA_RESULT.medal.gold : rank === 2 ? ARENA_RESULT.medal.silver : rank === 3 ? ARENA_RESULT.medal.bronze : ARENA_RESULT.medal.plain;
   return (
-    <View style={[styles.row, mine && styles.rowMine]}>
-      <View style={[styles.rank, medal ? { backgroundColor: withAlpha(medal, 0.18) } : null]}>
-        <Text style={[styles.rankText, medal ? { color: medal } : null]} {...textScale.badge}>
+    <View style={[styles.row, mine && styles.rowMine]} accessible accessibilityLabel={`${rank}. ${name}, ${formatCount(score)} ${SCORE_UNIT}`}>
+      <View style={[styles.rank, { backgroundColor: medal.bg }]}>
+        <Text style={[styles.rankText, { color: medal.ink }]} {...textScale.badge}>
           {rank}
         </Text>
       </View>
       <Text style={[styles.rowName, mine && styles.rowNameMine]} numberOfLines={1} {...textScale.dense}>
         {name}
       </Text>
-      <Text style={styles.rowScore} {...textScale.dense}>
+      <Text style={[styles.rowScore, mine && styles.rowNameMine]} {...textScale.dense}>
         {formatCount(score)}
       </Text>
     </View>
@@ -423,14 +516,15 @@ function SubmitLine({ state, onRetry, onSignIn }: { state: SubmitState; onRetry:
         feedback="button"
         haptic="light"
         onPress={onSignIn}
-        style={[styles.submitLine, styles.submitGuest]}
+        style={[styles.submitPill, styles.submitGuest]}
         accessibilityRole="button"
         accessibilityLabel="Giriş yap, skorun rekor tablosuna yazılsın"
       >
-        <Ionicons name="log-in-outline" size={14} color={colors.brandAccent} />
-        <Text style={styles.submitLink} {...textScale.dense}>
+        <Ionicons name="log-in" size={16} color={ARENA_RESULT.guestInk} />
+        <Text style={[styles.submitPillText, { color: ARENA_RESULT.guestInk }]} {...textScale.dense}>
           Giriş yap — bu skor tabloya yazılsın
         </Text>
+        <Ionicons name="chevron-forward" size={14} color={ARENA_RESULT.guestInk} />
       </Touchable>
     );
   }
@@ -441,27 +535,24 @@ function SubmitLine({ state, onRetry, onSignIn }: { state: SubmitState; onRetry:
         feedback="button"
         haptic="light"
         onPress={onRetry}
-        style={styles.submitLine}
+        style={[styles.submitPill, styles.submitFail]}
         accessibilityRole="button"
         accessibilityLabel="Skor gönderilemedi, tekrar dene"
       >
-        <Ionicons name="refresh" size={13} color={colors.danger} />
-        <Text style={styles.submitFail} {...textScale.dense}>
+        <Ionicons name="refresh" size={15} color={ARENA_RESULT.failInk} />
+        <Text style={[styles.submitPillText, { color: ARENA_RESULT.failInk }]} {...textScale.dense}>
           Skor gönderilemedi · tekrar dene
         </Text>
       </Touchable>
     );
   }
 
+  const sent = state === "sent";
   return (
-    <View style={styles.submitLine}>
-      <Ionicons
-        name={state === "sent" ? "checkmark-circle" : "cloud-upload-outline"}
-        size={13}
-        color={state === "sent" ? colors.win : colors.textTertiary}
-      />
-      <Text style={styles.submitInfo} {...textScale.dense}>
-        {state === "sent" ? "Rekor tablosuna yazıldı" : "Rekor tablosuna gönderiliyor…"}
+    <View style={styles.submitLine} accessibilityLiveRegion="polite">
+      {sent ? <Ionicons name="checkmark-circle" size={16} color={ARENA_RESULT.sentInk} /> : <ActivityIndicator size="small" color={ARENA_RESULT.muted} />}
+      <Text style={[styles.submitInfo, sent && { color: ARENA_RESULT.sentInk }]} {...textScale.dense}>
+        {sent ? "Rekor tablosuna yazıldı" : "Rekor tablosuna gönderiliyor…"}
       </Text>
     </View>
   );
@@ -521,18 +612,24 @@ export function ArenaShareSheet({
       <View style={styles.shareBackdrop}>
         <ViewShot ref={shotRef} options={{ format: "png", quality: 1 }}>
           <View style={styles.shareCard}>
+            <LinearGradient colors={CARTOON.night} start={TOP} end={BOTTOM} style={StyleSheet.absoluteFill} />
             <Text style={styles.shareBrand} {...textScale.badge}>
               elitlig
             </Text>
-            <Text style={styles.shareGame} {...textScale.badge}>
-              {upperTR(`Arena · ${title}`)}
-            </Text>
+            <View style={styles.shareGamePill}>
+              <Text style={styles.shareGame} numberOfLines={1} {...textScale.badge}>
+                {upperTR(`Arena · ${title}`)}
+              </Text>
+            </View>
             <Text style={styles.shareScore} {...textScale.badge}>
               {formatCount(score)}
             </Text>
-            <Text style={styles.shareUnit} {...textScale.badge}>
-              {upperTR(isRecord ? `${SCORE_UNIT} · yeni rekor` : SCORE_UNIT)}
-            </Text>
+            <View style={styles.shareUnitRow}>
+              {isRecord ? <Ionicons name="trophy" size={14} color={CARTOON.star} /> : null}
+              <Text style={styles.shareUnit} {...textScale.badge}>
+                {upperTR(isRecord ? `${SCORE_UNIT} · yeni rekor` : SCORE_UNIT)}
+              </Text>
+            </View>
             {subline ? (
               <Text style={styles.shareSub} {...textScale.badge}>
                 {subline}
@@ -549,14 +646,17 @@ export function ArenaShareSheet({
         </ViewShot>
 
         <View style={styles.shareActions}>
-          <Button label="Kapat" variant="secondary" onPress={onClose} />
-          <Button
+          <CartoonButton label="Kapat" icon="close" tone="navy" size="sm" onPress={onClose} style={styles.flex} />
+          <CartoonButton
             label="Paylaş"
             icon="share-social"
+            tone="green"
+            size="sm"
             loading={busy}
             onPress={() => {
               void share();
             }}
+            style={styles.flex}
           />
         </View>
       </View>
@@ -566,103 +666,210 @@ export function ArenaShareSheet({
 
 /* ═════════════════════════ STİLLER ═════════════════════════ */
 
+const TOP = { x: 0.5, y: 0 } as const;
+const BOTTOM = { x: 0.5, y: 1 } as const;
+/** Rekor kupasının arkasındaki yumuşak altın hale (kart içinde kalır). */
+const GLOW = 170;
+
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.overlay },
-  scrimContent: { flexGrow: 1, alignItems: "center", justifyContent: "center", padding: space.md },
-  card: {
-    alignSelf: "stretch",
-    maxWidth: 380,
-    width: "100%",
-    borderRadius: radius.xl,
-    ...elevate(4),
-    padding: space.xl,
-    gap: space.xs,
-    alignItems: "center",
+  stretch: { alignSelf: "stretch" },
+  // overflow: hidden — kart dışına taşan hale/konfeti web'de yatay kaydırma açmasın.
+  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: CARTOON.dim, overflow: "hidden" },
+  scroll: { flex: 1, width: "100%" },
+  scrimContent: { flexGrow: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: space.md, paddingVertical: space.xl },
+  cardWrap: { maxWidth: 380, width: "100%", alignSelf: "center", paddingTop: 18 },
+  card: { alignItems: "center", gap: space.s, paddingTop: space.xxxl, paddingBottom: space.lg, paddingHorizontal: space.md },
+  ribbonLayer: { position: "absolute", top: 0, left: space.md, right: space.md, alignItems: "center" },
+
+  recordBadge: { alignItems: "center", gap: space.xs, marginTop: space.xxs },
+  // Kupanın arkasında tek, yumuşak altın hale (dönen ışın yok); kupaya ortalı.
+  recordGlow: { position: "absolute", top: 30 - GLOW / 2, width: GLOW, height: GLOW },
+  recordTitle: { ...type.h1, fontFamily: fonts.bold, color: ARENA_RESULT.recordInk, textAlign: "center" },
+
+  scoreBlock: { alignItems: "center", alignSelf: "stretch" },
+  score: {
+    ...type.scoreJumbo,
+    fontSize: type.scoreJumbo.fontSize * 1.3,
+    lineHeight: type.scoreJumbo.lineHeight * 1.3,
+    color: ARENA_RESULT.score,
+    textAlign: "center",
   },
-  resultTitle: { ...type.h1, color: colors.textPrimary, marginTop: space.xs, textAlign: "center" },
-  resultScore: { ...type.scoreHero, color: colors.brandAccent, marginTop: space.xs },
-  resultUnit: { ...type.micro, color: colors.textTertiary },
-  facts: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: space.xs, marginTop: space.sm },
-  fact: { backgroundColor: colors.surface3, borderRadius: radius.pill, paddingHorizontal: space.m, paddingVertical: space.xxs + 1 },
-  factText: { ...type.caption, fontFamily: fonts.bold, letterSpacing: 0, color: colors.textSecondary },
-  resultBest: { ...type.bodySm, color: colors.textSecondary, marginTop: space.s },
-  recordBurst: { position: "absolute", top: -90, left: 0, right: 0, alignItems: "center" },
+  unit: { ...type.label, fontFamily: fonts.bold, color: ARENA_RESULT.faint, letterSpacing: 2, marginTop: -space.xs },
+
+  facts: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: space.xs, marginTop: space.xs },
+  fact: {
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: ARENA_RESULT.edge,
+    backgroundColor: ARENA_RESULT.surface,
+    paddingHorizontal: space.m,
+    paddingVertical: space.xxs + 1,
+  },
+  factText: { ...type.label, fontFamily: fonts.semibold, color: ARENA_RESULT.ink },
+
   cityStars: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.xs,
-    marginTop: space.sm,
+    marginTop: space.xs,
     paddingHorizontal: space.md,
-    paddingVertical: space.s,
+    paddingVertical: space.xs,
     borderRadius: radius.pill,
-    backgroundColor: colors.surface3,
+    borderWidth: 1,
+    borderColor: ARENA_RESULT.starEdge,
+    backgroundColor: ARENA_RESULT.starBg,
+    maxWidth: "100%",
   },
-  cityStarsText: { ...type.bodySm, fontFamily: fonts.bold, color: colors.textPrimary },
-  replayRow: { flexDirection: "row", gap: space.m, alignSelf: "stretch", marginTop: space.md },
-  resultRow: { flexDirection: "row", gap: space.m, alignSelf: "stretch", marginTop: space.sm },
+  cityStarsText: { ...type.label, fontFamily: fonts.bold, color: ARENA_RESULT.starInk, flexShrink: 1 },
+
+  bestRow: { flexDirection: "row", alignItems: "center", gap: space.xxs, marginTop: space.xs },
+  bestText: { ...type.bodySm, fontFamily: fonts.semibold, color: ARENA_RESULT.muted },
+
+  actions: { alignSelf: "stretch", gap: space.sm, marginTop: space.s },
+  resultRow: { flexDirection: "row", gap: space.sm, alignSelf: "stretch", marginTop: space.xs },
+
+  softWrap: { alignSelf: "stretch" },
+  softWrapCompact: { flex: 1, minWidth: 0 },
+  softFace: {
+    minHeight: 50,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: space.sm,
+    paddingHorizontal: space.md,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderBottomWidth: 3,
+    borderColor: ARENA_RESULT.edgeStrong,
+    borderBottomColor: ARENA_RESULT.surfaceLip,
+    backgroundColor: ARENA_RESULT.surface,
+  },
+  softFaceCompact: { minHeight: 44, borderRadius: radius.md, gap: space.xs, paddingHorizontal: space.s },
+  softText: { ...type.h3, fontFamily: fonts.bold, color: ARENA_RESULT.ink, letterSpacing: 0.6, flexShrink: 1 },
+  softTextCompact: { ...type.label, fontFamily: fonts.bold, color: ARENA_RESULT.ink, letterSpacing: 0.6, flexShrink: 1 },
 
   board: {
     alignSelf: "stretch",
-    marginTop: space.md,
+    marginTop: space.sm,
     padding: space.m,
     gap: space.s,
-    borderRadius: radius.lg,
-    borderWidth: hairline,
-    borderColor: colors.border,
-    backgroundColor: colors.surface2,
+    borderRadius: radius.xl,
+    backgroundColor: ARENA_RESULT.surface,
   },
   boardHead: { flexDirection: "row", alignItems: "center", gap: space.xs },
-  boardTitle: { ...type.h4, color: colors.textPrimary, flex: 1 },
-  boardEmpty: { paddingVertical: space.md, alignItems: "center" },
-  boardEmptyText: { ...type.bodySm, color: colors.textTertiary, textAlign: "center", paddingVertical: space.sm },
-  boardList: { gap: 2 },
-  boardGap: { alignItems: "center" },
-  boardGapText: { ...type.caption, color: colors.textTertiary },
-  boardHint: { ...type.caption, fontFamily: fonts.semibold, letterSpacing: 0, color: colors.brandAccent, textAlign: "center" },
-  boardMore: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.xxs, paddingVertical: space.xxs },
-  boardMoreText: { ...type.caption, fontFamily: fonts.bold, letterSpacing: 0, color: colors.brandAccent },
-  row: { flexDirection: "row", alignItems: "center", gap: space.s, paddingVertical: space.xs, paddingHorizontal: space.s, borderRadius: radius.md },
-  rowMine: { backgroundColor: colors.brandDim },
-  rank: {
-    minWidth: 26,
-    height: 22,
-    borderRadius: radius.sm,
+  boardIcon: {
+    width: 26,
+    height: 26,
+    borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: space.xxs,
-    backgroundColor: colors.surface3,
+    backgroundColor: ARENA_RESULT.row,
+    borderWidth: 1,
+    borderColor: ARENA_RESULT.edge,
   },
-  rankText: { ...type.tableNumStrong, color: colors.textSecondary },
-  rowName: { ...type.bodySm, color: colors.textPrimary, flex: 1 },
-  rowNameMine: { fontFamily: fonts.bold, color: colors.brandAccent },
-  rowScore: { ...type.tableNumStrong, color: colors.textPrimary },
+  boardTitle: { ...type.label, fontFamily: fonts.bold, color: ARENA_RESULT.ink, letterSpacing: 1, flex: 1 },
+  tabs: { flexDirection: "row", padding: 3, borderRadius: radius.pill, backgroundColor: ARENA_RESULT.tabTrack },
+  tab: {
+    flex: 1,
+    minHeight: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.pill,
+    paddingHorizontal: space.s,
+  },
+  tabOn: {
+    backgroundColor: ARENA_RESULT.tabOn,
+    shadowColor: ARENA_RESULT.tabShadow,
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 2,
+  },
+  tabText: { ...type.label, fontFamily: fonts.semibold, color: ARENA_RESULT.muted },
+  tabTextOn: { fontFamily: fonts.bold, color: ARENA_RESULT.ink },
+  boardEmpty: { paddingVertical: space.md, alignItems: "center" },
+  boardEmptyText: { ...type.bodySm, fontFamily: fonts.semibold, color: ARENA_RESULT.muted, textAlign: "center", paddingVertical: space.sm },
+  boardList: { gap: space.xxs + 2 },
+  boardGap: { flexDirection: "row", justifyContent: "center", gap: space.xxs, paddingVertical: space.xxs },
+  boardGapDot: { width: 4, height: 4, borderRadius: radius.pill, backgroundColor: ARENA_RESULT.faint },
+  boardHint: { ...type.label, fontFamily: fonts.semibold, color: ARENA_RESULT.muted, textAlign: "center" },
+  boardMore: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.xxs, paddingVertical: space.xxs },
+  boardMoreText: { ...type.label, fontFamily: fonts.semibold, color: ARENA_RESULT.muted },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.s,
+    minHeight: 44,
+    paddingVertical: space.xs,
+    paddingLeft: space.xs,
+    paddingRight: space.m,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: ARENA_RESULT.edge,
+    backgroundColor: ARENA_RESULT.row,
+  },
+  rowMine: { backgroundColor: ARENA_RESULT.rowMine, borderColor: ARENA_RESULT.rowMineEdge },
+  rank: {
+    width: 30,
+    height: 30,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  rankText: { ...type.tableNumStrong },
+  rowName: { ...type.body, fontFamily: fonts.semibold, color: CARTOON.cardInk, flex: 1 },
+  rowNameMine: { fontFamily: fonts.bold, color: ARENA_RESULT.rowMineInk },
+  rowScore: { ...type.h3, fontFamily: fonts.bold, color: ARENA_RESULT.ink },
 
-  submitLine: { flexDirection: "row", alignItems: "center", gap: space.xs, marginTop: space.s, paddingVertical: space.xs },
-  submitGuest: { backgroundColor: colors.brandDim, borderRadius: radius.pill, paddingHorizontal: space.md },
-  submitInfo: { ...type.caption, fontFamily: fonts.semibold, letterSpacing: 0, color: colors.textTertiary },
-  submitLink: { ...type.caption, fontFamily: fonts.bold, letterSpacing: 0, color: colors.brandAccent },
-  submitFail: { ...type.caption, fontFamily: fonts.bold, letterSpacing: 0, color: colors.danger },
+  submitLine: { flexDirection: "row", alignItems: "center", gap: space.xs, paddingVertical: space.xxs },
+  submitPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+    paddingVertical: space.s,
+    paddingHorizontal: space.md,
+    borderRadius: radius.pill,
+    maxWidth: "100%",
+  },
+  submitGuest: { backgroundColor: ARENA_RESULT.guestBg },
+  submitFail: { backgroundColor: ARENA_RESULT.failBg },
+  submitPillText: { ...type.label, fontFamily: fonts.bold, flexShrink: 1 },
+  submitInfo: { ...type.label, fontFamily: fonts.semibold, color: ARENA_RESULT.muted },
 
-  shareBackdrop: { flex: 1, backgroundColor: colors.overlay, alignItems: "center", justifyContent: "center", padding: space.xl, gap: space.lg },
+  shareBackdrop: { flex: 1, backgroundColor: CARTOON.dim, alignItems: "center", justifyContent: "center", padding: space.xl, gap: space.lg },
   shareCard: {
-    backgroundColor: inkPalette.bg,
-    width: 268,
-    borderRadius: radius.xl,
-    borderWidth: hairline,
-    borderColor: inkPalette.brandBorder,
+    width: 280,
+    borderRadius: radius.xxl,
+    borderWidth: 1,
+    borderColor: ARENA_RESULT.shareEdge,
+    overflow: "hidden",
     paddingVertical: space.xxl,
     paddingHorizontal: space.xl,
     alignItems: "center",
     gap: space.xxs,
   },
-  shareBrand: { ...type.h2, color: inkPalette.textPrimary },
-  shareGame: { ...type.micro, color: inkPalette.brandAccent },
-  shareScore: { ...type.scoreJumbo, color: inkPalette.warn, marginTop: space.sm },
-  shareUnit: { ...type.micro, color: inkPalette.textPrimary },
-  shareSub: { ...type.caption, color: inkPalette.textSecondary, marginTop: space.xxs },
-  shareDivider: { alignSelf: "stretch", height: hairline, backgroundColor: withAlpha(inkPalette.textPrimary, 0.2), marginVertical: space.md },
-  shareTaunt: { ...type.bodySm, fontFamily: fonts.bold, color: inkPalette.textSecondary },
-  shareFooter: { ...type.micro, color: inkPalette.textTertiary, marginTop: space.sm },
-  shareActions: { flexDirection: "row", gap: space.m },
+  shareBrand: { ...type.h1, fontFamily: fonts.bold, color: CARTOON.white },
+  shareGamePill: {
+    marginTop: space.xs,
+    paddingHorizontal: space.md,
+    paddingVertical: space.xxs,
+    borderRadius: radius.pill,
+    backgroundColor: ARENA_RESULT.sharePill,
+  },
+  shareGame: { ...type.label, fontFamily: fonts.bold, color: CARTOON.white, letterSpacing: 1.2 },
+  shareScore: {
+    ...type.scoreJumbo,
+    fontSize: type.scoreJumbo.fontSize * 1.4,
+    lineHeight: type.scoreJumbo.lineHeight * 1.4,
+    color: CARTOON.white,
+    marginTop: space.sm,
+  },
+  shareUnitRow: { flexDirection: "row", alignItems: "center", gap: space.xxs },
+  shareUnit: { ...type.label, fontFamily: fonts.bold, color: QUIZ.muted, letterSpacing: 1.6 },
+  shareSub: { ...type.caption, fontFamily: fonts.semibold, color: QUIZ.muted, marginTop: space.xxs },
+  shareDivider: { alignSelf: "stretch", height: 1, backgroundColor: ARENA_RESULT.shareEdge, marginVertical: space.md },
+  shareTaunt: { ...type.h3, fontFamily: fonts.bold, color: CARTOON.white, textAlign: "center" },
+  shareFooter: { ...type.micro, color: QUIZ.faint, marginTop: space.sm },
+  shareActions: { flexDirection: "row", gap: space.m, alignSelf: "stretch", maxWidth: 320, width: "100%" },
 });

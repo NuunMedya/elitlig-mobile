@@ -23,6 +23,8 @@ export const kantinScene = {
   holdSlot: "#FBF2E2",
   holdEdge: "#C9A273",
   danger: "#E5484D",
+  dangerText: "#FF8A8E",
+  vipBubble: "#FFF3C4",
   dangerSoft: "rgba(229, 72, 77, 0.16)",
   ink: "#3A271A",
   inkSoft: "#6B4F3A",
@@ -45,55 +47,42 @@ export const kantinScene = {
   white: "#FFFFFF",
   shadow: "rgba(40, 25, 10, 0.25)",
 
-  /* — sahne zemini (tam ekran): kantin duvarı, tribün, tente, alt dok — */
-  wall: "#FFE3B8",
-  wallTile: "#FFD79A",
-  wallEdge: "#F0B86A",
-  standSky: "#3FA9F5",
-  standTop: "#2A62D8",
-  standBottom: "#1C3F99",
-  seatA: "#2F55C4",
-  seatB: "#2A4BB0",
-  crowd: ["#FF5A5F", "#FFD23F", "#FFFFFF", "#3EC7A5", "#FF9F43", "#B388FF", "#5AD1FF"],
-  crowdSkin: "#F2C7A0",
-  awningA: "#F23A4B",
-  awningB: "#FFFFFF",
-  awningEdge: "#B71C2C",
-  dock: "#3A2A6B",
-  dockTop: "#5B45A8",
-  dockEdge: "#24184A",
+  /* — sahne zemini (sade): koyu lacivert, tek yumuşak ışık — */
+  base: "#1A1E4C",
+  standTop: "#2C3374",
+  standBottom: "#1F2459",
+  standGlow: "#4650A6",
+  counterTop: "#2B3172",
+  counterLip: "#151941",
+  panel: "#232860",
+  panelDeep: "#181C48",
+  glass: "rgba(255, 255, 255, 0.07)",
+  slot: "rgba(255, 255, 255, 0.10)",
+  tileLip: "#CDD3E4",
+  tileLow: "#DDE1ED",
+  plateLip: "#C9CFE0",
+  hudText: "#FFFFFF",
+  hudSoft: "rgba(255, 255, 255, 0.68)",
+  track: "rgba(255, 255, 255, 0.14)",
+  dropShadow: "#080A26",
+  tipCard: "#FFFFFF",
+  tipInk: "#1B1F3F",
 
-  /* — HUD ve güçlendirici: hiper-casual "3B" düğmeler (yüz + alt kenar) — */
-  hudFace: "#FFFFFF",
-  hudEdge: "#D9C3A0",
-  hudTrack: "#F1E4CF",
-  goalFace: "#FF7A1A",
-  goalEdge: "#C2510A",
-  progress: "#3CCB5A",
-  progressEdge: "#24963C",
-  timerFace: "#2E7BEA",
-  timerEdge: "#1A4FA8",
-  timerLowFace: "#E5484D",
-  timerLowEdge: "#A82A2E",
-  tipsFace: "#FFD23F",
-  tipsEdge: "#C99A00",
-  boostFace: "#FF8A1F",
-  boostEdge: "#B85500",
-  boostShine: "rgba(255, 255, 255, 0.35)",
-  badgeRed: "#F23A4B",
-  badgeGreen: "#2FBF5A",
-  chipFace: "rgba(255, 255, 255, 0.14)",
-  chipBorder: "rgba(255, 255, 255, 0.28)",
-  inkOnLight: "#2B1A0E",
+  /* — HUD ve güçlendirici — */
+  progress: "#2FCB6E",
+  badgeRed: "#E5484D",
+  hudOfInk: "rgba(255, 255, 255, 0.6)",
   textShadow: "rgba(0, 0, 0, 0.28)",
 } as const;
 
-export const kantinConfetti = ["#F2B705", "#E5484D", "#2E8BEA", "#2FA35A", "#9B5DE5", "#FF8A3D"] as const;
+/** Servis kutlaması: sade altın + beyaz + yeşil. */
+export const kantinConfetti = ["#FFC93C", "#FFFFFF", "#2FCB6E"] as const;
 
 export const kantinSkins = ["#F7D7B8", "#EBB894", "#C98D63", "#8D5A3B"] as const;
 export const kantinHair = ["#2B1D14", "#6B4226", "#D9A441", "#1C1C1C", "#A0522D", "#4A3426"] as const;
-export const kantinCheek = "rgba(240, 110, 110, 0.35)";
-export const kantinMouth = "#9E2B2B";
+export const kantinMouth = "#7A3A2E";
+/** Yüz çizgileri (göz, kaş, ağız): koyu kahve, ince. */
+export const kantinFaceInk = "#3A2A22";
 
 /** Forma çeşitleri — `style`: düz / çubuklu / kuşak / ikiye bölünmüş. */
 export const kantinJerseys = [
@@ -113,15 +102,15 @@ export const kantinFood = {
   crustLight: "#E0A458",
   sesame: "#FFF1CC",
   cupWhite: "#FFFFFF",
-  cupEdge: "#C9D2DE",
+  cupEdge: "#A9B1C8",
   ayranBlue: "#2E7BD6",
   foil: "#DDE3EA",
-  foilEdge: "#AEB7C2",
+  foilEdge: "#9CA5BE",
   toast: "#F2C67E",
   toastDark: "#A86424",
   cheese: "#FFD23F",
   glass: "rgba(255, 255, 255, 0.75)",
-  glassEdge: "#B9C3CF",
+  glassEdge: "#A9B1C8",
   tea: "#B3341C",
   teaLight: "#D9573A",
   corn: "#FFCF33",
@@ -129,11 +118,11 @@ export const kantinFood = {
   husk: "#59A84B",
   huskDark: "#3E7F34",
   water: "#CDEBFF",
-  waterEdge: "#5AA6E6",
+  waterEdge: "#8FB6D9",
   waterLabel: "#2E8BEA",
   waterCap: "#1B5FB0",
   paper: "#F6EEE1",
-  paperEdge: "#D9C6A8",
+  paperEdge: "#C9BBA4",
   paperStripe: "#E5484D",
   lavash: "#E9C48A",
   meat: "#8E4F25",

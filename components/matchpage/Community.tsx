@@ -59,7 +59,7 @@ export const DuelCard = memo(function DuelCard({ matchId }: { matchId: number })
           {`${duel.home.participants} – ${duel.away.participants} oyuncu katıldı`}
         </Text>
         {duel.status === "open" ? (
-          <Button label="Takımın için penaltı at" icon="football" onPress={() => router.push("/penalti")} size="sm" />
+          <Button label="Oyun merkezi" icon="game-controller" onPress={() => router.push("/(tabs)/oyunlar")} size="sm" />
         ) : null}
       </PaperCard>
     </>

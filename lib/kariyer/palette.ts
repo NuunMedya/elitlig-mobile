@@ -1,8 +1,9 @@
 /**
  * KARİYER YOLU — sahne paletleri (oyun VERİSİ; tema rengi değildir).
  *
- * Her kariyer basamağının kendi atmosferi vardır: mahalle sahası gün batımı
- * turuncusu ve asfalt yeşili, amatör lig gece maçı (projektör, canlı çim).
+ * Her kariyer basamağının kendi atmosferi vardır: mahalle sahası
+ * alacakaranlığı, amatör lig gece maçı. Sade dil: zemin sakin, oyuncu
+ * renkleri ayırt edici (sen sarı, arkadaş mavi, rakip kırmızı, kaleci mor).
  * Tasarım denetimi app/ ve components/ altında çıplak hex'i yasaklar; oyun
  * renkleri bu yüzden lib/ altında durur ve çizim kodu (lib/kariyer/sim.ts)
  * buradan okur.
@@ -34,45 +35,45 @@ export interface KariyerPalette {
 }
 
 export const TIER_PALETTES: KariyerPalette[] = [
-  // 1 · MAHALLE SAHASI — gün batımı
+  // 1 · MAHALLE SAHASI — alacakaranlık (sade, düşük doygunluk zemin)
   {
-    sky: ["#FF8A5B", "#7B2FF7"],
-    pitch: ["#2FBF71", "#25A862"],
+    sky: ["#3A3F7E", "#252A62"],
+    pitch: ["#3BB26C", "#35A563"],
     line: "#F4FFF8",
-    me: "#FFD23F",
-    meGlow: "#FFE98A",
-    mate: "#3ABEFF",
-    rival: "#FF4D6D",
-    rivalGlow: "#FF8FA3",
-    keeper: "#9B5DE5",
+    me: "#FFC93C",
+    meGlow: "#FFE08A",
+    mate: "#3B9BFF",
+    rival: "#E5484D",
+    rivalGlow: "#F58A8D",
+    keeper: "#8E6BE8",
     ball: "#FFFFFF",
-    trail: "#FFE98A",
+    trail: "#FFFFFF",
     net: "#FFFFFF",
     post: "#FFFFFF",
-    confetti: ["#FFD23F", "#FF4D6D", "#3ABEFF", "#9B5DE5", "#2FBF71", "#FFFFFF"],
+    confetti: ["#FFC93C", "#FFFFFF", "#2FCB6E"],
     aim: "#FFFFFF",
-    good: "#B8FF6A",
-    bad: "#FF4D6D",
+    good: "#7BE495",
+    bad: "#FF6B6E",
   },
   // 2 · AMATÖR LİG — gece maçı
   {
-    sky: ["#0B1E5B", "#12C2E9"],
-    pitch: ["#11C58F", "#0EAE7E"],
+    sky: ["#161B4A", "#1F2A66"],
+    pitch: ["#2EAA74", "#299C6A"],
     line: "#E9FFFA",
-    me: "#F15BB5",
-    meGlow: "#FF9BD8",
-    mate: "#FEE440",
-    rival: "#5A6BFF",
-    rivalGlow: "#A0AAFF",
-    keeper: "#FF9F1C",
+    me: "#FFC93C",
+    meGlow: "#FFE08A",
+    mate: "#3B9BFF",
+    rival: "#E5484D",
+    rivalGlow: "#F58A8D",
+    keeper: "#8E6BE8",
     ball: "#FFFFFF",
-    trail: "#9BF6FF",
+    trail: "#FFFFFF",
     net: "#E9FFFA",
     post: "#FFFFFF",
-    confetti: ["#F15BB5", "#FEE440", "#00F5D4", "#9B5DE5", "#00BBF9", "#FFFFFF"],
+    confetti: ["#FFC93C", "#FFFFFF", "#2FCB6E"],
     aim: "#FFFFFF",
-    good: "#00F5D4",
-    bad: "#FF5C7A",
+    good: "#7BE495",
+    bad: "#FF6B6E",
   },
 ];
 
@@ -94,7 +95,7 @@ export const HUD = {
   glassBorder: "rgba(255, 255, 255, 0.18)",
   text: "#FFFFFF",
   muted: "rgba(255, 255, 255, 0.72)",
-  scrim: "rgba(10, 8, 24, 0.72)",
+  scrim: "rgba(12, 14, 40, 0.72)",
   /** Hiper-casual 3B parçalar: çip yüzü, çubuk rayı, metin gölgesi, altın. */
   chip: "rgba(255, 255, 255, 0.12)",
   track: "rgba(255, 255, 255, 0.16)",
@@ -106,9 +107,9 @@ export const HUD = {
   cardInk: "#1E1440",
   cardMuted: "#6B6390",
   badge: "#FF4D6D",
-  good: "#2FBF5A",
+  good: "#2FCB6E",
   goodEdge: "#1E8A3E",
-  bad: "#FF4D6D",
+  bad: "#E5484D",
   badEdge: "#B02A44",
   ok: "#FFB020",
   okEdge: "#B87700",

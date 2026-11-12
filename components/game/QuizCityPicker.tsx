@@ -4,15 +4,23 @@
  * İlk satır "Tüm Türkiye"dir; ardından kullanıcının kendi ili, sonra bütün
  * iller alfabetik (Türkçe sıralama). Uzun liste için arama kutusu vardır.
  * Seçim cihazda oyun başına saklanır (bkz. QuizScreen).
+ *
+ * GÖRÜNÜM: oyunun çizgi film dili — gece zemininin üstünde aşağıdan yükselen
+ * beyaz, lacivert konturlu kart; kurdele başlık, kalın satırlar, seçili il
+ * yeşil onay kabarcığıyla işaretlenir.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { useMemo, useState } from "react";
-import { FlatList, StyleSheet, Text, View } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Animated, FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { BottomSheet, Input, Touchable } from "@/components/ui";
+import { IconBubble, OUTLINE, PopIn, Ribbon, RoundButton } from "@/components/game/QuizKit";
+import { Touchable, useReduceMotion } from "@/components/ui";
+import { CARTOON } from "@/lib/game/cartoon";
+import { QUIZ } from "@/lib/game/quizPalette";
 import type { MetaOption } from "@/lib/types";
-import { colors, fonts, hairline, radius, space, textScale, type } from "@/theme";
+import { fonts, radius, space, textScale, type } from "@/theme";
 
 /** null = Tüm Türkiye */
 export type QuizCity = { id: number; label: string } | null;
@@ -35,6 +43,18 @@ export function QuizCityPicker({
   onChange: (city: QuizCity) => void;
 }) {
   const [query, setQuery] = useState("");
+  const insets = useSafeAreaInsets();
+  const reduceMotion = useReduceMotion();
+  const rise = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!visible) {
+      rise.setValue(0);
+      return;
+    }
+    if (reduceMotion) rise.setValue(1);
+    else Animated.spring(rise, { toValue: 1, friction: 8, tension: 70, useNativeDriver: true }).start();
+  }, [visible, rise, reduceMotion]);
 
   const rows = useMemo(() => {
     const sorted = cities.slice().sort((a, b) => a.label.localeCompare(b.label, "tr"));
@@ -51,78 +71,161 @@ export function QuizCityPicker({
   }, [cities, homeCityId, query]);
 
   return (
-    <BottomSheet visible={visible} onClose={onClose} title="Sorular nereden gelsin?" snap="full" scrollable={false}>
-      <Input variant="search" placeholder="İl ara" value={query} onChangeText={setQuery} leadingIcon="search" containerStyle={styles.search} />
-      <FlatList
-        data={rows}
-        keyExtractor={(row) => row.key}
-        keyboardShouldPersistTaps="handled"
-        renderItem={({ item }) => {
-          const selected = (item.city?.id ?? null) === (value?.id ?? null);
-          return (
-            <Touchable
-              feedback="row"
-              haptic="selection"
-              onPress={() => {
-                onChange(item.city);
-                onClose();
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
+      <View style={styles.root}>
+        <Pressable style={styles.scrim} onPress={onClose} accessibilityRole="button" accessibilityLabel="Kapat" />
+        <Animated.View
+          style={[
+            styles.sheetWrap,
+            { paddingTop: insets.top + space.xxl },
+            { transform: [{ translateY: rise.interpolate({ inputRange: [0, 1], outputRange: [500, 0] }) }] },
+          ]}
+          pointerEvents="box-none"
+        >
+          <View style={styles.ribbon} pointerEvents="none">
+            <Ribbon label="İl seç" icon="location" />
+          </View>
+          <View style={[styles.sheet, { paddingBottom: insets.bottom + space.md }]}>
+            <View style={styles.head}>
+              <Text style={styles.title} numberOfLines={2} {...textScale.dense}>
+                Sorular nereden gelsin?
+              </Text>
+              <RoundButton icon="close" tone="ghost" size={40} onPress={onClose} accessibilityLabel="Kapat" />
+            </View>
+
+            <View style={styles.search}>
+              <Ionicons name="search" size={18} color={CARTOON.cardMuted} />
+              <TextInput
+                value={query}
+                onChangeText={setQuery}
+                placeholder="İl ara"
+                placeholderTextColor={CARTOON.cardMuted}
+                style={styles.searchInput}
+                autoCorrect={false}
+                accessibilityLabel="İl ara"
+                returnKeyType="search"
+              />
+              {query ? (
+                <Pressable onPress={() => setQuery("")} hitSlop={10} accessibilityRole="button" accessibilityLabel="Aramayı temizle">
+                  <Ionicons name="close-circle" size={18} color={CARTOON.cardMuted} />
+                </Pressable>
+              ) : null}
+            </View>
+
+            <FlatList
+              data={rows}
+              keyExtractor={(row) => row.key}
+              keyboardShouldPersistTaps="handled"
+              style={styles.list}
+              contentContainerStyle={styles.listContent}
+              renderItem={({ item, index }) => {
+                const selected = (item.city?.id ?? null) === (value?.id ?? null);
+                return (
+                  /* İlk satırlar sırayla yaylanarak gelir; kaydırınca çizilenler doğrudan yerinde. */
+                  <PopIn delay={180 + index * 45} bouncy skip={index >= 9}>
+                  <Touchable
+                    feedback="card"
+                    haptic="selection"
+                    onPress={() => {
+                      onChange(item.city);
+                      onClose();
+                    }}
+                    style={[styles.row, selected && styles.rowSelected]}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    accessibilityLabel={item.city ? item.city.label : "Tüm Türkiye"}
+                  >
+                    <IconBubble icon={item.city ? (item.home ? "home" : "location") : "earth"} tone="indigo" size={36} />
+                    <View style={styles.flex}>
+                      <Text style={styles.label} {...textScale.dense}>
+                        {item.city ? item.city.label : "Tüm Türkiye"}
+                      </Text>
+                      {!item.city ? (
+                        <Text style={styles.sub} {...textScale.dense}>
+                          Bütün illerden karışık sorular
+                        </Text>
+                      ) : item.home ? (
+                        <Text style={styles.sub} {...textScale.dense}>
+                          Senin ilin
+                        </Text>
+                      ) : null}
+                    </View>
+                    {selected ? (
+                      <PopIn bouncy delay={420}>
+                        <View style={styles.check}>
+                          <Ionicons name="checkmark" size={16} color={CARTOON.white} />
+                        </View>
+                      </PopIn>
+                    ) : null}
+                  </Touchable>
+                  </PopIn>
+                );
               }}
-              style={[styles.row, selected && styles.rowSelected]}
-              accessibilityRole="button"
-              accessibilityState={{ selected }}
-              accessibilityLabel={item.city ? item.city.label : "Tüm Türkiye"}
-            >
-              <View style={[styles.icon, !item.city && styles.iconAll]}>
-                <Ionicons name={item.city ? "location" : "earth"} size={16} color={item.city ? colors.textSecondary : colors.brandAccent} />
-              </View>
-              <View style={styles.flex}>
-                <Text style={styles.label} {...textScale.dense}>
-                  {item.city ? item.city.label : "Tüm Türkiye"}
-                </Text>
-                {!item.city ? (
-                  <Text style={styles.sub} {...textScale.dense}>
-                    Bütün illerden karışık sorular
-                  </Text>
-                ) : item.home ? (
-                  <Text style={styles.sub} {...textScale.dense}>
-                    Senin ilin
-                  </Text>
-                ) : null}
-              </View>
-              {selected ? <Ionicons name="checkmark-circle" size={20} color={colors.brandAccent} /> : null}
-            </Touchable>
-          );
-        }}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
-        contentContainerStyle={styles.list}
-      />
-    </BottomSheet>
+            />
+          </View>
+        </Animated.View>
+      </View>
+    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  root: { flex: 1, justifyContent: "flex-end" },
+  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: CARTOON.dim },
   flex: { flex: 1 },
-  search: { marginBottom: space.sm },
-  list: { paddingBottom: space.xxl },
+  sheetWrap: { flex: 1, justifyContent: "flex-end", paddingHorizontal: space.sm },
+  sheet: {
+    flexShrink: 1,
+    maxHeight: "100%",
+    backgroundColor: CARTOON.card,
+    borderTopLeftRadius: radius.xxl,
+    borderTopRightRadius: radius.xxl,
+    borderWidth: OUTLINE,
+    borderBottomWidth: 0,
+    borderColor: QUIZ.edge,
+    paddingHorizontal: space.lg,
+    paddingTop: space.xxl,
+    gap: space.md,
+  },
+  ribbon: { alignItems: "center", marginBottom: -22, zIndex: 2, elevation: 2 },
+  head: { flexDirection: "row", alignItems: "center", gap: space.md },
+  title: { ...type.h1, fontFamily: fonts.heading, color: CARTOON.cardInk, flex: 1 },
+  search: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    paddingHorizontal: space.md,
+    minHeight: 46,
+    borderRadius: radius.pill,
+    borderWidth: OUTLINE,
+    borderColor: QUIZ.edge,
+    backgroundColor: CARTOON.cardSoft,
+  },
+  searchInput: { ...type.body, fontFamily: fonts.semibold, color: CARTOON.cardInk, flex: 1, paddingVertical: space.sm },
+  list: { flexGrow: 0 },
+  listContent: { gap: space.sm, paddingBottom: space.lg },
   row: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.m,
-    paddingVertical: space.m,
-    paddingHorizontal: space.s,
-    borderRadius: radius.md,
+    paddingVertical: space.sm,
+    paddingHorizontal: space.m,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: QUIZ.edge,
+    backgroundColor: CARTOON.card,
   },
-  rowSelected: { backgroundColor: colors.brandDim },
-  icon: {
-    width: 32,
-    height: 32,
+  rowSelected: { borderWidth: 1.5, borderColor: QUIZ.indigoInk, backgroundColor: CARTOON.cardSoft },
+  label: { ...type.h3, fontFamily: fonts.heading, color: CARTOON.cardInk },
+  sub: { ...type.caption, fontFamily: fonts.semibold, letterSpacing: 0, color: CARTOON.cardMuted },
+  check: {
+    width: 28,
+    height: 28,
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.surface3,
+    backgroundColor: CARTOON.correct,
+    borderWidth: 1,
+    borderColor: QUIZ.edge,
   },
-  iconAll: { backgroundColor: colors.brandDim },
-  label: { ...type.body, fontFamily: fonts.semibold, color: colors.textPrimary },
-  sub: { ...type.caption, letterSpacing: 0, color: colors.textTertiary },
-  separator: { height: hairline, backgroundColor: colors.separator, marginLeft: space.s + 32 + space.m },
 });

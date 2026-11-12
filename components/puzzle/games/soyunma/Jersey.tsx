@@ -3,7 +3,7 @@
  * edicidir (renk körlüğü). Gizli forma koyu gövde üstünde "?" taşır.
  */
 import { memo } from "react";
-import Svg, { ClipPath, Defs, G, LinearGradient, Path, Polygon, RadialGradient, Rect, Stop, Text as SvgText } from "react-native-svg";
+import Svg, { ClipPath, Defs, G, Path, Polygon, Rect, Text as SvgText } from "react-native-svg";
 import { fonts, type } from "@/theme";
 import { SOYUNMA_HIDDEN, SOYUNMA_LOCKER, SOYUNMA_SHADE as SH, SOYUNMA_TEAMS } from "@/lib/puzzle/soyunmaPalette";
 
@@ -20,18 +20,32 @@ interface JerseyProps {
   height: number;
 }
 
+const EDGE_W = 1.2;
+/** Rengin koyu tonu (ince kenar çizgisi için): kendi renginden türetilir. */
+function shade(hex: string, k: number) {
+  const n = parseInt(hex.slice(1), 16);
+  const ch = (v: number) => Math.max(0, Math.min(255, Math.round(v * (1 - k))));
+  const r = ch((n >> 16) & 255);
+  const g = ch((n >> 8) & 255);
+  const b = ch(n & 255);
+  return `rgb(${r}, ${g}, ${b})`;
+}
+/** Omuz parlaması (sol üst): yumuşak ışık. */
+const SHINE = "M7 9.5 L14.5 5.5 Q15.6 5 16 6.2 L16.3 7.4 Q16.4 8.4 15.4 8.9 L8.6 12.6 Q7.4 13.2 6.9 12 L6.6 10.9 Q6.4 10 7 9.5 Z";
+
 function JerseyBase({ team, width, height }: JerseyProps) {
   const clip = `sjc${team < 0 ? "h" : team}`;
   if (team < 0) {
     return (
-      <Svg width={width} height={height} viewBox="-2 -3 52 46">
-        <Path d={SHIRT} transform="translate(0.8 2)" fill={SH.drop} />
-        <Path d={SHIRT} fill={SOYUNMA_HIDDEN.body} stroke={SOYUNMA_HIDDEN.trim} strokeWidth={1.2} />
+      <Svg width={width} height={height} viewBox="-3 -4 54 48">
+        <Path d={SHIRT} transform="translate(0 1.6)" fill={SH.drop} />
+        <Path d={SHIRT} fill={SOYUNMA_HIDDEN.body} stroke={shade(SOYUNMA_HIDDEN.body, 0.3)} strokeWidth={EDGE_W} strokeLinejoin="round" />
         <Path d={COLLAR} fill={SOYUNMA_HIDDEN.trim} />
+        <Path d={SHINE} fill={SH.light} fillOpacity={0.14} />
         <SvgText
           x={24}
-          y={30}
-          fontSize={NUMBER_SIZE + 2}
+          y={31}
+          fontSize={NUMBER_SIZE + 4}
           fontFamily={fonts.bold}
           fill={SOYUNMA_HIDDEN.ink}
           textAnchor="middle"
@@ -42,31 +56,18 @@ function JerseyBase({ team, width, height }: JerseyProps) {
     );
   }
   const t = SOYUNMA_TEAMS[team % SOYUNMA_TEAMS.length];
-  const light = `sjl${team}`;
-  const side = `sjs${team}`;
-  const patch = t.pattern === "yarim" || t.pattern === "cizgili" || t.pattern === "bantli";
-  const edge = t.ink === SH.light ? SH.inkEdgeDark : SH.inkEdgeLight;
-  // Kumaş: zemin gölgesi, desen, yanlarda koyulaşan gövde, sol üstten ışık,
-  // iki dikey kıvrım, kol dikişleri, etek gölgesi; numara konturlu.
+  const patch = t.pattern === "yarim" || t.pattern === "cizgili" || t.pattern === "bantli" || t.pattern === "kusak";
+  // Sade forma: düz dolgu + desen, sol omuzda yumuşak ışık, sağda hafif
+  // gölge; kenar kendi renginin koyu tonunda ince çizgi.
+  const edge = shade(t.primary, 0.3);
   return (
-    <Svg width={width} height={height} viewBox="-2 -3 52 46">
+    <Svg width={width} height={height} viewBox="-3 -4 54 48">
       <Defs>
         <ClipPath id={clip}>
           <Path d={SHIRT} />
         </ClipPath>
-        <RadialGradient id={light} cx="30%" cy="18%" r="85%">
-          <Stop offset="0" stopColor={SH.light} stopOpacity={0.42} />
-          <Stop offset="0.45" stopColor={SH.light} stopOpacity={0.06} />
-          <Stop offset="1" stopColor={SH.dark} stopOpacity={0.28} />
-        </RadialGradient>
-        <LinearGradient id={side} x1="0" y1="0" x2="1" y2="0">
-          <Stop offset="0" stopColor={SH.dark} stopOpacity={0.3} />
-          <Stop offset="0.24" stopColor={SH.dark} stopOpacity={0} />
-          <Stop offset="0.76" stopColor={SH.dark} stopOpacity={0} />
-          <Stop offset="1" stopColor={SH.dark} stopOpacity={0.3} />
-        </LinearGradient>
       </Defs>
-      <Path d={SHIRT} transform="translate(0.8 2)" fill={SH.drop} />
+      <Path d={SHIRT} transform="translate(0 1.6)" fill={SH.drop} />
       <Path d={SHIRT} fill={t.primary} />
       <G clipPath={`url(#${clip})`}>
         {t.pattern === "cizgili" ? (
@@ -97,31 +98,18 @@ function JerseyBase({ team, width, height }: JerseyProps) {
             <Rect x={37.5} y={16} width={10.5} height={2.4} transform="rotate(20 43 17)" />
           </G>
         ) : null}
-        <Rect x={0} y={0} width={48} height={40} fill={`url(#${side})`} />
-        <Rect x={0} y={0} width={48} height={40} fill={`url(#${light})`} />
-        <Path d="M17 10 Q15 24 17.5 38" stroke={SH.dark} strokeOpacity={0.12} strokeWidth={1.6} fill="none" />
-        <Path d="M31 10 Q33 24 30.5 38" stroke={SH.dark} strokeOpacity={0.12} strokeWidth={1.6} fill="none" />
-        <Path d="M10.5 15.5 L8.5 20" stroke={SH.dark} strokeOpacity={0.25} strokeWidth={1} />
-        <Path d="M37.5 15.5 L39.5 20" stroke={SH.dark} strokeOpacity={0.25} strokeWidth={1} />
-        <Rect x={0} y={35.5} width={48} height={5} fill={SH.dark} fillOpacity={0.12} />
+        {/* Sağ kenar gölgesi + etek bandı (düz, çizgi film tonu). */}
+        <Path d="M37.5 15.5 L37.5 40 L33 40 Q35 26 33.5 9 Z" fill={SH.dark} fillOpacity={0.1} />
+        <Rect x={0} y={36} width={48} height={5} fill={SH.dark} fillOpacity={0.1} />
+        <Path d={SHINE} fill={SH.light} fillOpacity={0.3} />
       </G>
-      <Path d={COLLAR} fill={t.secondary} />
-      <Path d="M17.5 1.2 Q20.5 5 24 5 Q27.5 5 30.5 1.2" stroke={SH.light} strokeOpacity={0.5} strokeWidth={0.6} fill="none" />
+      <Path d={SHIRT} fill="none" stroke={edge} strokeWidth={EDGE_W} strokeLinejoin="round" />
+      <Path d={COLLAR} fill={t.secondary} stroke={edge} strokeWidth={0.8} strokeLinejoin="round" />
       {/* Numara yaması: iki renkli desende numara okunaklı kalsın. */}
-      {patch ? <Rect x={16.5} y={15.5} width={15} height={14.5} rx={3} fill={t.primary} /> : null}
-      <SvgText
-        x={24}
-        y={27.5}
-        fontSize={t.number >= 10 ? NUMBER_SIZE - 3 : NUMBER_SIZE}
-        fontFamily={fonts.bold}
-        fill={t.ink}
-        stroke={edge}
-        strokeWidth={1.2}
-        textAnchor="middle"
-      >
+      {patch ? <Rect x={16.5} y={15.5} width={15} height={14} rx={4} fill={t.primary} /> : null}
+      <SvgText x={24} y={28} fontSize={t.number >= 10 ? NUMBER_SIZE - 2 : NUMBER_SIZE + 1} fontFamily={fonts.bold} fill={t.ink} textAnchor="middle">
         {String(t.number)}
       </SvgText>
-      <Path d={SHIRT} fill="none" stroke={SH.dark} strokeOpacity={0.28} strokeWidth={0.9} />
     </Svg>
   );
 }
@@ -138,9 +126,10 @@ function CrestBase({ team, size }: CrestProps) {
   const t = SOYUNMA_TEAMS[team % SOYUNMA_TEAMS.length];
   return (
     <Svg width={size} height={size} viewBox="0 0 32 32">
-      <Path d="M16 1 L29 5 L29 15 Q29 25 16 31 Q3 25 3 15 L3 5 Z" fill={SOYUNMA_LOCKER.crest} />
-      <Path d="M16 4 L26 7 L26 15 Q26 23 16 28 Q6 23 6 15 L6 7 Z" fill={t.primary} />
-      <Path d="M16 4 L26 7 L26 11 L6 11 L6 7 Z" fill={t.secondary} />
+      <Path d="M16 1.6 L29 5.4 L29 15 Q29 25 16 30.6 Q3 25 3 15 L3 5.4 Z" fill={SOYUNMA_LOCKER.crest} stroke={SOYUNMA_LOCKER.crestEdge} strokeWidth={1} strokeLinejoin="round" />
+      <Path d="M16 4.6 L26 7.6 L26 15 Q26 23 16 27.6 Q6 23 6 15 L6 7.6 Z" fill={t.primary} />
+      <Path d="M16 4.6 L26 7.6 L26 11 L6 11 L6 7.6 Z" fill={t.secondary} />
+      <Path d="M6.5 13 Q7 8.5 11 8.2" stroke={SOYUNMA_LOCKER.crestShine} strokeWidth={1.2} strokeLinecap="round" fill="none" />
       <SvgText x={16} y={23} fontSize={type.caption.fontSize} fontFamily={fonts.bold} fill={t.ink} textAnchor="middle">
         {String(t.number)}
       </SvgText>

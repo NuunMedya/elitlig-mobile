@@ -23,7 +23,7 @@ function goalSummary(level: number): PuzzleGoalSummary {
 export const ucleModule: PuzzleGameModule = {
   key: "ucle",
   title: "Üçle Kazan",
-  tagline: "Karoları rafa topla, aynı üçlüyü patlat, tahtayı temizle.",
+  tagline: "Kulüp armalarını rafa topla, aynı üçlüyü patlat, sahayı temizle.",
   icon: "layers",
   tone: "accent",
   boosters: [

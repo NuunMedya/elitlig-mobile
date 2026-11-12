@@ -1,4 +1,4 @@
-import type Ionicons from "@expo/vector-icons/Ionicons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import type { Href } from "expo-router";
 
 import {
@@ -7,6 +7,7 @@ import {
   type CareerQuest,
   type CareerSummary,
   type QuestCategory,
+  type QuestDifficulty,
   type WeeklyQuests,
 } from "./api/career";
 
@@ -19,9 +20,10 @@ import {
 type IconName = keyof typeof Ionicons.glyphMap;
 
 /**
- * Sunucudaki görev `go` anahtarı → görevi yapmak için açılacak ekran
- * (elitlig-server constants/career.js). Sözlükte olmayan anahtar düğme
- * çizmez: "Git" hiçbir zaman boş bir yere gitmez.
+ * Görevi yapmak için açılacak ekran. Yeni sunucu görevde `route` (uygulama içi
+ * bağlantı, "/savunma") gönderir; eski sunucu yalnız `go` anahtarını
+ * (elitlig-server constants/career.js). Bu sözlük `go` için YEDEK haritadır;
+ * sözlükte olmayan anahtar düğme çizmez: "Yap" hiçbir zaman boş bir yere gitmez.
  */
 export const QUEST_ROUTES: Record<string, Href> = {
   tahmin: "/tahmin-ligi",
@@ -40,6 +42,22 @@ export const QUEST_ROUTES: Record<string, Href> = {
   gunun: "/gunun",
   mac_al: "/takimim/mac-al",
   lig_yolu: "/lig-yolu",
+  // Lig Yolu bulmacaları (oyun anahtarıyla da gelebilir).
+  uclu: "/lig-yolu/uclu",
+  ucle: "/lig-yolu/ucle",
+  soyunma: "/lig-yolu/soyunma",
+  kantin: "/lig-yolu/kantin",
+  kariyer_yolu: "/lig-yolu/kariyer",
+  arena: "/arena",
+  // Kulüp Şehri ve yarışmalar.
+  sehir: "/kulup-sehri",
+  kulup_sehri: "/kulup-sehri",
+  sehir_siralama: "/kulup-sehri-siralama",
+  tahmin_ligi: "/tahmin-ligi",
+  kulup_arenasi: "/kulup-arenasi",
+  gorevler: "/gorevler",
+  kariyer: "/kariyer",
+  saha_siralamasi: "/saha-siralamasi",
   // Topluluk ve keşif: takım / oyuncu / haber Lig sekmesinin ilgili bölümünde.
   lig: "/(tabs)/ligler",
   takimlar: { pathname: "/(tabs)/ligler", params: { tab: "puan" } },
@@ -48,7 +66,36 @@ export const QUEST_ROUTES: Record<string, Href> = {
   siralama: "/siralama",
 };
 
-export const questRoute = (quest: Pick<CareerQuest, "go">): Href | null => (quest.go ? QUEST_ROUTES[quest.go] ?? null : null);
+/** Sunucunun `route`u yalnız uygulama içi yol olabilir ("/…"; şema, "//" yok). */
+const isAppPath = (value: unknown): value is string =>
+  typeof value === "string" && /^\/[A-Za-z0-9\-_/()[\]?=&.%]*$/.test(value) && !value.startsWith("//");
+
+/** Görevin "Yap" bağlantısı: önce `route`, sonra `go` / `game` yedek haritası. */
+export function questRoute(quest: Pick<CareerQuest, "go" | "route" | "game">): Href | null {
+  if (isAppPath(quest.route)) return quest.route as Href;
+  if (quest.go && QUEST_ROUTES[quest.go]) return QUEST_ROUTES[quest.go];
+  return gameRoute(quest.game);
+}
+
+/** Oyun anahtarı → oyunun ekranı (görevin `game`i, "haftanın oyunu"). */
+export const GAME_ROUTES: Record<string, Href> = {
+  penalti: "/penalti",
+  slalom: "/slalom",
+  sektir: "/sektir",
+  savunma: "/savunma",
+  kadro: "/kadro",
+  kimbu: "/kimbu",
+  seri: "/arena",
+  tahmin: "/tahmin",
+  gunun: "/gunun",
+  uclu: "/lig-yolu/uclu",
+  ucle: "/lig-yolu/ucle",
+  soyunma: "/lig-yolu/soyunma",
+  kantin: "/lig-yolu/kantin",
+  kariyer: "/lig-yolu/kariyer",
+};
+
+export const gameRoute = (game: string | null | undefined): Href | null => (game ? GAME_ROUTES[game] ?? null : null);
 
 export const LAYER_TITLES: Record<CareerLayer, string> = LAYER_LABELS;
 export const LAYER_ICON: Record<CareerLayer, "football" | "megaphone" | "game-controller"> = {
@@ -59,32 +106,69 @@ export const LAYER_ICON: Record<CareerLayer, "football" | "megaphone" | "game-co
 
 /* ───────────────────────── Kategoriler ───────────────────────── */
 
-export const QUEST_CATEGORY_ORDER: QuestCategory[] = ["saha", "oyun", "tribun", "kesif"];
+/** Ekrandaki sekmeler (Hepsi'den sonra). `kesif` ekranda Tribün'e düşer. */
+export type QuestTab = Exclude<QuestCategory, "kesif">;
+export const QUEST_CATEGORY_ORDER: QuestTab[] = ["saha", "oyun", "sehir", "tribun"];
 
 export const QUEST_CATEGORY_LABEL: Record<QuestCategory, string> = {
   saha: "Saha",
-  oyun: "Oyunlar",
+  oyun: "Oyun",
+  sehir: "Şehir",
   tribun: "Tribün",
-  kesif: "Keşif",
+  kesif: "Tribün",
+};
+
+/** Sekmenin bir satırlık açıklaması (seçili sekmenin özetinde). */
+export const QUEST_CATEGORY_BLURB: Record<QuestTab, string> = {
+  saha: "Gerçek maçlarda: oyna, gol at, kazan",
+  oyun: "Bulmaca, arcade ve bilgi oyunları",
+  sehir: "Kulüp Şehri'ni büyüt, binaları yükselt",
+  tribun: "Tahmin Ligi, Fantezi ve maçın oyuncusu",
 };
 
 export const QUEST_CATEGORY_ICON: Record<QuestCategory, IconName> = {
   saha: "football",
   oyun: "game-controller",
+  sehir: "business",
   tribun: "megaphone",
-  kesif: "compass",
+  kesif: "megaphone",
 };
 
-/** Eski sunucu `category` göndermez: katmandan türetilir. */
-export const categoryOf = (quest: Pick<CareerQuest, "category" | "layer">): QuestCategory =>
-  quest.category ?? (quest.layer === "arena" ? "oyun" : quest.layer);
+const CITY_GO = new Set(["sehir", "kulup_sehri", "sehir_siralama"]);
+
+/** Görevin sekmesi. Eski sunucu `category` göndermez: katmandan / bağlantıdan türetilir. */
+export function categoryOf(quest: Pick<CareerQuest, "category" | "layer"> & Partial<Pick<CareerQuest, "go" | "route">>): QuestTab {
+  const category = quest.category;
+  if (category === "kesif") return "tribun";
+  if (category && category in QUEST_CATEGORY_LABEL) return category;
+  if ((quest.go && CITY_GO.has(quest.go)) || quest.route?.startsWith("/kulup-sehri")) return "sehir";
+  return quest.layer === "arena" ? "oyun" : quest.layer === "saha" ? "saha" : "tribun";
+}
+
+/** Görevin simgesi: sunucu geçerli bir Ionicons adı verdiyse o, yoksa sekmenin simgesi. */
+export function questIcon(quest: CareerQuest): IconName {
+  const icon = quest.icon;
+  if (icon && Object.prototype.hasOwnProperty.call(Ionicons.glyphMap, icon)) return icon as IconName;
+  return QUEST_CATEGORY_ICON[categoryOf(quest)];
+}
 
 export const TIER_LABEL: Record<number, string> = { 1: "Kolay", 2: "Orta", 3: "Zor" };
+export const DIFFICULTY_LABEL: Record<QuestDifficulty, string> = { kolay: "Kolay", orta: "Orta", zor: "Zor" };
+
+/** Görevin zorluğu (yeni `difficulty`, yoksa `tier`). */
+export const difficultyOf = (quest: Pick<CareerQuest, "difficulty" | "tier">): QuestDifficulty =>
+  quest.difficulty ?? (quest.tier === 3 ? "zor" : quest.tier === 2 ? "orta" : "kolay");
+
+/** "2 / 5 maç" — birim yoksa yalnız sayılar. */
+export function progressText(quest: Pick<CareerQuest, "progress" | "target" | "unit">): string {
+  const fmt = (value: number) => value.toLocaleString("tr-TR");
+  return `${fmt(quest.progress)} / ${fmt(quest.target)}${quest.unit ? ` ${quest.unit}` : ""}`;
+}
 
 /** Rotası olmayan görevin nerede tamamlandığı (düğme yerine kısa ipucu). */
 export function questHint(quest: CareerQuest): string | null {
   if (questRoute(quest)) return null;
-  if (quest.layer === "saha") return "Sahada tamamlanır";
+  if (categoryOf(quest) === "saha") return "Sahada tamamlanır";
   return "Kendiliğinden sayılır";
 }
 
@@ -106,8 +190,10 @@ export function weeklyOf(data: CareerSummary): WeeklyQuests {
 }
 
 /** Açık görevlerin kategori sayıları (bitmemişler). Sıra QUEST_CATEGORY_ORDER. */
-export function categoryCounts(weekly: WeeklyQuests): { key: QuestCategory; open: number; done: number; total: number }[] {
-  const map = new Map<QuestCategory, { open: number; done: number }>();
+export type CategoryCount = { key: QuestTab; open: number; done: number; total: number };
+
+export function categoryCounts(weekly: WeeklyQuests): CategoryCount[] {
+  const map = new Map<QuestTab, { open: number; done: number }>();
   for (const quest of weekly.active) {
     const key = categoryOf(quest);
     const item = map.get(key) ?? { open: 0, done: 0 };
@@ -192,6 +278,16 @@ export function weekXp(data: CareerSummary): number | null {
 
 /** Açık görevlerin toplam kalan XP'si — "bu hafta X XP daha kazanabilirsin". */
 export const openXp = (weekly: WeeklyQuests) => weekly.active.reduce((sum, q) => sum + (q.done ? 0 : q.xp), 0);
+
+/** Açık görevlerin bonus yıldızları (yeni sunucu; eski sunucuda 0). */
+export const openStars = (weekly: WeeklyQuests) => weekly.active.reduce((sum, q) => sum + (q.done ? 0 : q.stars ?? 0), 0);
+
+/** Biten görevlerin XP / yıldız toplamı. */
+export const earnedXp = (weekly: WeeklyQuests) => weekly.completed.reduce((sum, q) => sum + q.xp, 0);
+export const earnedStars = (weekly: WeeklyQuests) => weekly.completed.reduce((sum, q) => sum + (q.stars ?? 0), 0);
+
+/** XP'den yıldıza çevrim (Kulüp Şehri "Yıldızları topla"). */
+export const XP_PER_STAR = 10;
 
 /** Sıradaki seviyeye KALAN XP (seviyenin tamamı değil); en üst seviyede null. */
 export const xpToNextLevel = (level: CareerSummary["level"]): number | null =>

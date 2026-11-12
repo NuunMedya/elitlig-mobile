@@ -30,7 +30,7 @@ function Simit() {
       <Circle cx={20} cy={20} r={12.5} fill="none" stroke={F.crust} strokeWidth={8.5} />
       <Circle cx={20} cy={20} r={12.5} fill="none" stroke={F.crustLight} strokeWidth={3} opacity={0.7} />
       {SESAME.map((s, i) => (
-        <Ellipse key={i} cx={s.x} cy={s.y} rx={1.3} ry={0.7} fill={F.sesame} rotation={s.r} origin={`${s.x}, ${s.y}`} />
+        <Ellipse key={i} cx={s.x} cy={s.y} rx={1.3} ry={0.7} fill={F.sesame} stroke="none" rotation={s.r} origin={`${s.x}, ${s.y}`} />
       ))}
     </G>
   );
@@ -82,7 +82,7 @@ function Misir() {
     <G>
       <Ellipse cx={20} cy={18} rx={7.2} ry={13} fill={F.corn} />
       {KERNELS.map((k, i) => (
-        <Circle key={i} cx={k.x} cy={k.y} r={1.15} fill={F.cornDark} opacity={0.55} />
+        <Circle key={i} cx={k.x} cy={k.y} r={1.15} fill={F.cornDark} stroke="none" opacity={0.55} />
       ))}
       <Path d="M20 37 Q7 32 9 14 Q13 26 20 30 Z" fill={F.husk} />
       <Path d="M20 37 Q33 32 31 14 Q27 26 20 30 Z" fill={F.huskDark} />
@@ -214,7 +214,8 @@ const DRAW: Record<string, () => React.JSX.Element> = {
 export const ProductIcon = memo(function ProductIcon({ p, size }: { p: number; size: number }) {
   const Draw = DRAW[KANTIN_PRODUCTS[p]?.id ?? "simit"];
   return (
-    <Svg width={size} height={size} viewBox="0 0 40 40">
+    <Svg width={size} height={size} viewBox="-1 -1 42 42">
+      {/* Sade ikon: düz dolgu, yalnız açık renkli parçalar kendi ince kenarını taşır. */}
       <Draw />
     </Svg>
   );
@@ -224,9 +225,10 @@ export const ProductIcon = memo(function ProductIcon({ p, size }: { p: number; s
 export const CrateIcon = memo(function CrateIcon({ size }: { size: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 40 40">
-      <Rect x={5} y={8} width={30} height={26} rx={3} fill={S.crate} stroke={S.crateDark} strokeWidth={1.4} />
-      <Path d="M5 17 H35 M5 25 H35" stroke={S.crateDark} strokeWidth={1.1} opacity={0.7} />
-      <Rect x={17} y={8} width={6} height={26} fill={S.crateTape} opacity={0.9} />
+      <Rect x={5} y={8} width={30} height={26} rx={3} fill={S.crate} />
+      <Path d="M6.5 17 H33.5 M6.5 25 H33.5" stroke={S.crateDark} strokeWidth={1.4} />
+      <Rect x={17} y={8} width={6} height={26} fill={S.crateTape} />
+      <Rect x={8} y={10.5} width={7} height={2.4} rx={1.2} fill={S.white} opacity={0.55} />
     </Svg>
   );
 });
@@ -235,7 +237,7 @@ export const CrateIcon = memo(function CrateIcon({ size }: { size: number }) {
 export const CoinIcon = memo(function CoinIcon({ size }: { size: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 40 40">
-      <Circle cx={20} cy={20} r={17} fill={S.coin} stroke={S.coinEdge} strokeWidth={2.5} />
+      <Circle cx={20} cy={20} r={17} fill={S.coin} stroke={S.coinEdge} strokeWidth={1.5} />
       <Circle cx={20} cy={20} r={11} fill="none" stroke={S.coinEdge} strokeWidth={1.6} opacity={0.6} />
       <Path d="M14 13 Q17 10 21 10.5" stroke={S.coinShine} strokeWidth={2.4} strokeLinecap="round" fill="none" />
       <Path d="M20 13 L22 18 L27 18.3 L23 21.4 L24.4 26.4 L20 23.6 L15.6 26.4 L17 21.4 L13 18.3 L18 18 Z" fill={S.coinEdge} opacity={0.75} />

@@ -7,15 +7,40 @@ export interface ArenaEntry {
   userId: number;
   name: string;
   teamName?: string | null;
+  city?: string | null;
   score: number;
   date: string;
 }
+
+/**
+ * Rekor tablosu dönemi. `monthly` = içinde bulunulan takvim ayı; `range` için
+ * `from`/`to` (YYYY-MM-DD, İstanbul günü, dahil) zorunludur.
+ */
+export type ArenaPeriod = "weekly" | "monthly" | "alltime" | "range";
 
 export interface ArenaLeaderboard {
   game: string;
   period: string;
   cityId: number | null;
+  /** Yeni sunucu: pencere ve sayfa bilgisi (eski sunucuda yok). */
+  from?: string | null;
+  to?: string | null;
+  /** Kapsamdaki FARKLI oyuncu sayısı. */
+  total?: number | null;
+  limit?: number | null;
+  offset?: number | null;
   entries: ArenaEntry[];
+}
+
+export interface ArenaBoardOptions {
+  cityId?: number;
+  period?: ArenaPeriod;
+  /** period = "range" için. */
+  from?: string;
+  to?: string;
+  /** Verilmezse sunucunun varsayılanı (geriye uyum: kısa önizleme). */
+  limit?: number;
+  offset?: number;
 }
 
 /**
@@ -53,37 +78,72 @@ export interface ArenaScoreEntry {
   stars?: number;
 }
 
-export const submitArenaScore = (game: ArenaGame, score: number, sessionId?: string | null) =>
-  post<{ message?: string; entry?: ArenaScoreEntry }>("/api/arena/scores", {
+/** Oyun sonu istatistiklerinden yalnız sonlu sayılar gider (görev ilerlemesi: bölüm, gol, metre…). */
+function cleanStats(stats?: Record<string, unknown> | null): Record<string, number> | null {
+  if (!stats) return null;
+  const out: Record<string, number> = {};
+  for (const [key, value] of Object.entries(stats)) {
+    if (typeof value === "number" && Number.isFinite(value)) out[key] = value;
+    else if (typeof value === "boolean") out[key] = value ? 1 : 0;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+/**
+ * `stats`: oyunun bitiş istatistikleri (WebGame `over`). Sunucu doğrulanmış
+ * skorda saklar ve "Savunma Hattı'nda 5. bölüme ulaş" gibi görevleri bunlarla
+ * ilerletir; eski sunucu alanı yok sayar.
+ */
+export const submitArenaScore = (game: ArenaGame, score: number, sessionId?: string | null, stats?: Record<string, unknown> | null) => {
+  const clean = cleanStats(stats);
+  return post<{ message?: string; entry?: ArenaScoreEntry }>("/api/arena/scores", {
     game,
     score,
     v: ARENA_CLIENT_VERSION,
     ...(sessionId ? { sessionId } : {}),
+    ...(clean ? { stats: clean } : {}),
   });
+};
 
-export const getArenaLeaderboard = (
-  game: ArenaGame,
-  options?: { cityId?: number; period?: "weekly" | "alltime" }
-) =>
-  get<ArenaLeaderboard>("/api/arena/leaderboard", {
+export const getArenaLeaderboard = (game: ArenaGame, options?: ArenaBoardOptions) => {
+  const period = options?.period ?? "alltime";
+  const ranged = period === "range" && options?.from && options?.to;
+  return get<ArenaLeaderboard>("/api/arena/leaderboard", {
     game,
     cityId: options?.cityId,
-    period: options?.period ?? "alltime",
+    period,
+    from: ranged ? options?.from : undefined,
+    to: ranged ? options?.to : undefined,
+    limit: options?.limit,
+    offset: options?.offset || undefined,
   });
+};
 
 /** GET /api/arena/leaderboard/me — kullanıcının o kapsamdaki en iyi skoru ve sırası. */
 export interface ArenaStanding {
   game: string;
   period: string;
   cityId: number | null;
+  from?: string | null;
+  to?: string | null;
   /** Bu kapsamda skoru olan FARKLI oyuncu sayısı. */
   totalPlayers: number;
   /** Hiç oynamadıysa null. */
   entry: (Omit<ArenaEntry, "date"> & { date: string | null }) | null;
 }
 
-export const getMyArenaRank = (game: ArenaGame, cityId?: number, period?: "weekly" | "alltime") =>
-  get<ArenaStanding>("/api/arena/leaderboard/me", { game, cityId, period }, { retry: false });
+export const getMyArenaRank = (game: ArenaGame, cityId?: number, period?: ArenaPeriod, range?: { from: string; to: string } | null) =>
+  get<ArenaStanding>(
+    "/api/arena/leaderboard/me",
+    {
+      game,
+      cityId,
+      period,
+      from: period === "range" ? range?.from : undefined,
+      to: period === "range" ? range?.to : undefined,
+    },
+    { retry: false },
+  );
 
 /** Bir oyundaki kişisel durum: rekor + sıra (tüm zamanlar) ve son 7 günün en iyisi + sırası. */
 export interface ArenaGameSummary {
