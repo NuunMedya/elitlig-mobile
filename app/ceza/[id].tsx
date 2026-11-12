@@ -255,10 +255,6 @@ export default function PenaltyDetailScreen() {
     mutation.mutate({ penalty, kind: compose, text: text.trim(), side: effectiveSide });
   }, [compose, effectiveSide, mutation, penalty, text]);
 
-  if (!auth.user) {
-    return <Redirect href="/giris" />;
-  }
-
   /* -------------------------------- DURUM -------------------------------- */
 
   const defenseOpen = penalty ? windowOpen(penalty.defense_deadline_at) : false;
@@ -321,6 +317,12 @@ export default function PenaltyDetailScreen() {
     }
     return rows;
   }, [penalty]);
+
+  /* Giriş kapısı TÜM kancalardan sonra: oturum açılınca kanca sayısı değişmesin
+     ("Rendered more hooks…" hatası). Davranış aynı: oturum yoksa /giris. */
+  if (!auth.user) {
+    return <Redirect href="/giris" />;
+  }
 
   /* -------------------------------- ÇİZİM -------------------------------- */
 

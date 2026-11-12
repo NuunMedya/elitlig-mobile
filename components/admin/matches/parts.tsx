@@ -52,7 +52,8 @@ export function MatchHero({
   const home = score?.home ?? match.first_team_score;
   const away = score?.away ?? match.second_team_score;
   const status = normalizeMatchStatus(match.mac_durumu);
-  const scored = home != null && away != null && status !== "taslak";
+  /* Zamanlanmış maçta kayıt skoru 0–0 gelir; oynanmamış maçta saat gösterilir. */
+  const scored = home != null && away != null && (Boolean(score) || status === "canli" || status === "yayinlanmis");
   const live = status === "canli";
   const source = resultSourceLabel(match);
   const h = Number(home ?? 0);

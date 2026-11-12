@@ -11,10 +11,10 @@ import React, { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { SelectField } from "@/components/admin";
-import { Badge, Chip, ChipGroup, EmptyState, ErrorState, SkeletonListRow, Touchable } from "@/components/ui";
+import { Badge, Chip, ChipGroup, EmptyState, ErrorState, Odometer, SkeletonListRow, Touchable } from "@/components/ui";
 import { ROLE_LABELS } from "@/lib/api/admin";
 import { getTodoOverview, todoKeys, type TodoTask } from "@/lib/api/todos";
-import { colors, hairline, radius, space, textScale, type } from "@/theme";
+import { colors, hairline, radius, space, textScale, type, upperTR } from "@/theme";
 
 import { PersonDot, ProgressBar } from "./TodoCards";
 import { formatDue } from "./boardUtils";
@@ -63,13 +63,25 @@ export function TeamOverview() {
         ))}
       </ChipGroup>
       {data ? (
-        <Text style={styles.muted} {...textScale.dense}>
-          {data.totals.active} yapılmayan · {data.totals.overdue} geciken · {data.totals.done} yapılan
-        </Text>
+        <View style={styles.totals}>
+          {([
+            ["Yapılmayan", data.totals.active, colors.info, "active"],
+            ["Geciken", data.totals.overdue, colors.danger, "overdue"],
+            ["Yapılan", data.totals.done, colors.win, "done"],
+          ] as const).map(([label, value, color, key]) => (
+            <Touchable key={key} feedback="card" onPress={() => setStatus(key)} style={[styles.total, status === key ? { borderColor: color } : null]} accessibilityRole="button" accessibilityLabel={`${label}: ${value}`}>
+              <View style={[styles.totalMark, { backgroundColor: color }]} />
+              <Odometer value={value} style={[styles.totalValue, { color }]} />
+              <Text style={styles.totalLabel} {...textScale.badge}>
+                {upperTR(label)}
+              </Text>
+            </Touchable>
+          ))}
+        </View>
       ) : null}
 
-      <Text style={styles.label} {...textScale.dense}>
-        Kişiler
+      <Text style={styles.label} accessibilityRole="header" {...textScale.dense}>
+        {upperTR("Kişiler")}
       </Text>
       <ChipGroup contentPadding={0}>
         <Chip label={`Herkes · ${people.length}`} size="sm" selected={!userId} onPress={() => setUserId(null)} />
@@ -191,15 +203,20 @@ function OverviewRow({ task }: { task: TodoTask }) {
 const styles = StyleSheet.create({
   wrap: { gap: space.md },
   flex: { flex: 1 },
-  label: { ...type.label, color: colors.textSecondary },
+  label: { ...type.overline, color: colors.textTertiary, marginTop: space.xs },
+  totals: { flexDirection: "row", gap: space.sm },
+  total: { flex: 1, gap: 2, padding: space.md, borderRadius: radius.lg, borderWidth: hairline, borderColor: colors.border, backgroundColor: colors.surface1, overflow: "hidden" },
+  totalMark: { width: 14, height: 3, borderRadius: radius.pill, marginBottom: space.xs },
+  totalValue: { ...type.metric },
+  totalLabel: { ...type.nano, color: colors.textTertiary },
   muted: { ...type.caption, color: colors.textTertiary },
   h4: { ...type.h4, color: colors.textPrimary },
   body: { ...type.bodySm, color: colors.textPrimary },
   link: { ...type.labelSm, color: colors.brandAccent },
   done: { textDecorationLine: "line-through", color: colors.textTertiary },
-  personCard: { flexDirection: "row", gap: space.md, padding: space.md, borderRadius: radius.lg, backgroundColor: colors.surface2 },
-  row: { gap: space.xs, padding: space.md, borderRadius: radius.lg, borderWidth: hairline, borderColor: colors.border, backgroundColor: colors.surface1 },
-  rowLate: { borderLeftWidth: 3, borderLeftColor: colors.danger },
+  personCard: { flexDirection: "row", gap: space.md, padding: space.md, borderRadius: radius.xl, backgroundColor: colors.brandDim, borderWidth: hairline, borderColor: colors.brandBorder },
+  row: { gap: space.xs, padding: space.md, borderRadius: radius.xl, borderWidth: hairline, borderColor: colors.border, backgroundColor: colors.surface1 },
+  rowLate: { borderColor: colors.danger, backgroundColor: colors.dangerDim },
   rowTop: { flexDirection: "row", flexWrap: "wrap", gap: space.xs },
   detail: { gap: space.xs, paddingTop: space.xs },
   step: { flexDirection: "row", alignItems: "center", gap: space.xs },

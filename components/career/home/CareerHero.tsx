@@ -18,7 +18,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { Avatar, Bloom, FormChips, GradientFill, TeamLogo, Touchable, type FormResult } from "@/components/ui";
+import { Aurora, Avatar, FormChips, GradientBar, GradientFill, Odometer, TeamLogo, Touchable, type FormResult } from "@/components/ui";
 import type { CareerSummary } from "@/lib/api/career";
 import { TIER_ACCENT } from "@/lib/careerTiers";
 import { colors, radius, space, textScale, type, upperTR } from "@/theme";
@@ -66,7 +66,7 @@ export const CareerHero = React.memo(function CareerHero({
   return (
     <View style={styles.card}>
       <GradientFill tone="ink" radius="xxl" />
-      <Bloom width={260} height={200} color={colors.brand} intensity={0.45} style={styles.bloom} />
+      <Aurora variant="stage" style={StyleSheet.absoluteFill} />
 
       {/* Kimlik — dokununca herkese açık profil. */}
       <Touchable
@@ -121,9 +121,13 @@ export const CareerHero = React.memo(function CareerHero({
       <View style={styles.stats}>
         {stats.map((item) => (
           <View key={item.label} style={styles.stat}>
-            <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit {...textScale.badge}>
-              {item.value}
-            </Text>
+            {/^[0-9.,]+$/.test(item.value) ? (
+              <Odometer value={item.value} style={styles.statValue} />
+            ) : (
+              <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit {...textScale.badge}>
+                {item.value}
+              </Text>
+            )}
             <Text style={styles.statLabel} numberOfLines={1} {...textScale.badge}>
               {upperTR(item.label)}
             </Text>
@@ -162,10 +166,7 @@ export const CareerHero = React.memo(function CareerHero({
             </Text>
             <Ionicons name="chevron-forward" size={12} color={colors.onDarkMuted} />
           </View>
-          <View style={styles.track}>
-            <View style={[styles.fill, { flex: progress }]} />
-            <View style={{ flex: 1 - progress }} />
-          </View>
+          <GradientBar value={progress} height={6} track={colors.inkTile} />
         </Touchable>
       ) : null}
 
@@ -203,8 +204,9 @@ const styles = StyleSheet.create({
     padding: space.lg,
     gap: space.md,
     backgroundColor: colors.inkBlock,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderOnDark,
   },
-  bloom: { position: "absolute", top: -60, left: -50 },
   identity: { flexDirection: "row", alignItems: "center", gap: space.md },
   identityText: { flex: 1, minWidth: 0 },
   overline: { ...type.overline, color: colors.brandOnDark },
@@ -234,7 +236,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.inkTileBorder,
   },
-  statValue: { ...type.metricSm, color: colors.onDark },
+  statValue: { ...type.metric, color: colors.onDark },
   statLabel: { ...type.micro, color: colors.onDarkMuted, marginTop: space.xxs },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: space.s },
   chip: {

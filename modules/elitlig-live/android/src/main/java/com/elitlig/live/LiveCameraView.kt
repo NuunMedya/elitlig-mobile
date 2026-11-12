@@ -10,6 +10,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Typeface
+import android.media.MediaCodecInfo
 import android.media.MediaPlayer
 import android.os.Handler
 import android.os.Looper
@@ -253,6 +254,17 @@ class LiveCameraView(context: Context, appContext: AppContext) :
     }
     try {
       rotation = desiredRotation()
+      // ÖNEMLİ: kodlayıcı ÖNCE hazırlanır. RootEncoder (Camera2Base.prepareGlView)
+      // kamerayı videoEncoder'ın genişlik/yüksekliğiyle açar; prepareVideo hiç
+      // çağrılmadıysa bu değer kütüphanenin varsayılanı 640×480'dir (4:3). Kamera
+      // önizlemede o boyutta açılınca yayın başladığında yeniden açılmıyor
+      // (aynı çözünürlük → önizleme durdurulmuyor) ve 640×480'lik 4:3 kare
+      // 1280×720'lik 16:9 yüzeye SÜNDÜRÜLÜYORDU: hem bulanık (yukarı ölçekleme)
+      // hem dikeyde basık görüntü. Kodlayıcı burada hazırlanınca kamera akış
+      // boyutunda (16:9) açılır.
+      if (!prepareVideoEncoder(streamWidth, streamHeight, streamFps, videoKbps, rotation)) {
+        Log.w(TAG, "prepareVideo before preview failed (${streamWidth}x$streamHeight@$streamFps)")
+      }
       camera.startPreview(facing, streamWidth, streamHeight, streamFps, rotation)
       onGlRestarted()
       if (muted) camera.disableAudio()
@@ -283,7 +295,7 @@ class LiveCameraView(context: Context, appContext: AppContext) :
 
     // prepareVideo çözünürlük/fps/açı değişirse önizlemeyi durdurur; startStream
     // GL'i ve kamerayı yeniden açar (filtreler sıfırlanır → overlay yeniden uygulanır).
-    val videoOk = camera.prepareVideo(width, height, fps, videoBitrateKbps * 1000, KEYFRAME_INTERVAL_SEC, rotation)
+    val videoOk = prepareVideoEncoder(width, height, fps, videoBitrateKbps, rotation)
     // prepareVideo ayar farkında önizlemeyi durdurur → GL (ve filtreler) startStream'de yeniden kurulur.
     val glRestarts = !(wasPreview && camera.isOnPreview)
     if (glRestarts) markGlCleared()
@@ -302,6 +314,30 @@ class LiveCameraView(context: Context, appContext: AppContext) :
     if (muted) camera.disableAudio() else camera.enableAudio()
     if (glRestarts) applyOverlayToGl()
     keepScreenOn = true
+  }
+
+  /**
+   * H.264 kodlayıcıyı hazırlar: önce High profil (aynı bit hızında Baseline'dan
+   * belirgin daha temiz görüntü; Android kodlayıcılarının çoğu profil
+   * verilmezse Baseline seçer), desteklenmezse kodlayıcının varsayılanı.
+   * Anahtar kare aralığı YouTube'un istediği 2 sn. OMX kodlayıcıları profil
+   * verilip seviye verilmezse yapılandırmayı reddettiği için seviye de verilir.
+   */
+  private fun prepareVideoEncoder(width: Int, height: Int, fps: Int, kbps: Int, rot: Int): Boolean {
+    val bitrate = kbps * 1000
+    val level = when {
+      width * height > 1280 * 720 -> if (fps > 30) MediaCodecInfo.CodecProfileLevel.AVCLevel42 else MediaCodecInfo.CodecProfileLevel.AVCLevel4
+      else -> if (fps > 30) MediaCodecInfo.CodecProfileLevel.AVCLevel32 else MediaCodecInfo.CodecProfileLevel.AVCLevel31
+    }
+    val high = try {
+      camera.prepareVideo(width, height, fps, bitrate, KEYFRAME_INTERVAL_SEC, rot, MediaCodecInfo.CodecProfileLevel.AVCProfileHigh, level)
+    } catch (e: Exception) {
+      Log.w(TAG, "prepareVideo (High) failed", e)
+      false
+    }
+    if (high) return true
+    Log.i(TAG, "H.264 High profile unsupported, using encoder default")
+    return camera.prepareVideo(width, height, fps, bitrate, KEYFRAME_INTERVAL_SEC, rot)
   }
 
   fun stop() {
