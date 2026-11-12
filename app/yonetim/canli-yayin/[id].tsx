@@ -53,6 +53,7 @@ import { useGoalClips, type LocalClip } from "@/components/live/useGoalClips";
 import { PHASE_LABEL, useLiveMatch, type ControlAction } from "@/components/live/useLiveMatch";
 import { unionBox, useOverlayBurn, type BurnBox } from "@/components/live/useOverlayBurn";
 import { useStudioSettings } from "@/components/live/useStudioSettings";
+import { coverWhen, useYoutubeCover } from "@/components/live/YoutubeCover";
 import { Touchable, useReduceMotion, useToast } from "@/components/ui";
 import { useTeamLogos } from "@/hooks/useTeamLogos";
 import { hasAnyPermission } from "@/lib/admin/access";
@@ -76,12 +77,15 @@ import { RIG, encoderMessageText, resolveEncoder } from "@/lib/live/rig";
 import { BUG, GFX, clockText, teamShortCode } from "@/lib/live/scorebug";
 import { getBroadcastDesk, sponsorLogo } from "@/lib/live/studioApi";
 import {
+  broadcastTitle,
   createMatchLiveStream,
   endMatchLiveStream,
   getLiveStreamConfig,
   getMatchLiveStream,
   ingestUrl,
   liveErrorText,
+  updateMatchYoutube,
+  uploadMatchThumbnail,
   type MatchLiveStream,
   type YoutubePrivacy,
 } from "@/lib/live/youtube";
@@ -503,8 +507,17 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
     if (busy || encoderOn) return;
     setBusy(true);
     try {
-      const open = ytStream && ytStream.active !== false && ingestUrl(ytStream) ? ytStream : await createMatchLiveStream(matchId, { privacy });
+      const reuse = ytStream && ytStream.active !== false && ingestUrl(ytStream) ? ytStream : null;
+      // Başlık otomatik (ELİTLİG {LİG} - {SEZON} | {EV} - {DEP}); kullanıcı Yayın sekmesinde düzenleyebilir.
+      const open = reuse ?? (await createMatchLiveStream(matchId, { privacy, title: ytTitle }));
       setYt(open);
+      if (!reuse && !open.reused) {
+        // Yeni YouTube yayını: masaüstü stüdyodaki gibi kapak görseli otomatik üretilip yüklenir.
+        void publishCover(true);
+      } else if (titleDraft != null) {
+        // Açık yayına devam: başlık elle değiştirildiyse YouTube'a yaz (en iyi çaba).
+        void updateMatchYoutube(matchId, { title: ytTitle }).catch(() => undefined);
+      }
       const url = ingestUrl(open);
       if (!url) throw new Error("YouTube yayın adresi alınamadı. Birkaç saniye sonra yeniden dene.");
       if (await begin(url, record)) {
@@ -628,6 +641,60 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
   });
   const branding = brandingQuery.data ?? null;
   const palette = useMemo(() => bugPalette(branding?.scoreboard), [branding?.scoreboard]);
+
+  /* ───────── YouTube başlığı ve kapağı (otomatik) ───────── */
+  // Lig adı: yayın görünümünün marka yazısı (ayarlardan değişen), yoksa maçın ligi.
+  const autoTitle = useMemo(
+    () =>
+      broadcastTitle({
+        brandName: branding?.brandName,
+        league: match?.league_name,
+        season: match?.match_season,
+        home: match?.first_team_name,
+        away: match?.second_team_name,
+      }),
+    [branding?.brandName, match?.league_name, match?.match_season, match?.first_team_name, match?.second_team_name]
+  );
+  /** null → otomatik başlık; metin → kullanıcının düzenlediği başlık. */
+  const [titleDraft, setTitleDraft] = useState<string | null>(null);
+  const ytTitle = (titleDraft ?? autoTitle).trim() || autoTitle;
+  const cover = useYoutubeCover();
+  const [coverBusy, setCoverBusy] = useState(false);
+  const publishCover = async (auto: boolean) => {
+    if (coverBusy || !match) return;
+    setCoverBusy(true);
+    let file: string | null = null;
+    try {
+      // Kapak yazısı başlıkla aynı kaynaktan: "ELİTLİG {LİG}" + sezon.
+      const [headline, ...seasonParts] = autoTitle.split(" | ")[0].split(" - ");
+      file = await cover.make({
+        headline,
+        season: seasonParts.join(" - "),
+        homeName,
+        awayName,
+        homeLogo: mediaUrl(homeLogo),
+        awayLogo: mediaUrl(awayLogo),
+        when: coverWhen(match.date, match.time, match.match_field),
+        logoUrl: branding?.logoUrl ?? null,
+        palette,
+      });
+      await uploadMatchThumbnail(matchId, file);
+      toast.show({ message: auto ? "YouTube kapak görseli otomatik yüklendi." : "Kapak görseli YouTube'a yüklendi.", tone: "success" });
+    } catch (error) {
+      toast.show({ message: liveErrorText(error, "Kapak görseli yüklenemedi. Yayın sekmesinden yeniden dene."), tone: "danger" });
+    } finally {
+      if (file) cover.release(file);
+      setCoverBusy(false);
+    }
+  };
+  const applyTitle = async () => {
+    try {
+      await updateMatchYoutube(matchId, { title: ytTitle });
+      toast.show({ message: "Yayın başlığı YouTube'da güncellendi.", tone: "success" });
+    } catch (error) {
+      toast.show({ message: liveErrorText(error, "Başlık güncellenemedi. Yeniden dene."), tone: "danger" });
+    }
+  };
 
   // Sponsorlar ve web / masaüstü rejide yazılmış altyazı satırları.
   const deskQuery = useQuery({ queryKey: ["live", "broadcast-desk", matchId], queryFn: () => getBroadcastDesk(matchId), staleTime: 5 * 60_000, retry: false });
@@ -1150,6 +1217,8 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
 
   return (
     <View style={[styles.root, { paddingLeft: insets.left, paddingRight: insets.right, paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+      {/* YouTube kapağı yalnız çekim anında, arayüzün ARKASINDA çizilir */}
+      {cover.element}
       <StatusBar hidden />
       <View style={styles.row}>
         {/* ═════════ SAHNE ═════════ */}
@@ -1427,6 +1496,12 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
                     onStartManual={(url) => askStart({ kind: "manual", url })}
                     onStop={() => void stopEncoder().then(showSaved)}
                     onEndYoutube={endYoutube}
+                    title={titleDraft ?? autoTitle}
+                    titleEdited={titleDraft != null}
+                    onTitle={(next) => setTitleDraft(next != null && next !== autoTitle ? next : null)}
+                    onApplyTitle={() => void applyTitle()}
+                    coverBusy={coverBusy}
+                    onUploadCover={() => void publishCover(false)}
                     onToast={(m, tone) => toast.show({ message: m, tone: tone ?? "success" })}
                     health={nativeReady ? <HealthCard {...healthProps} /> : null}
                   />
