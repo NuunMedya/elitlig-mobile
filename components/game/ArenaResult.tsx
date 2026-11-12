@@ -21,6 +21,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -360,9 +361,12 @@ function SoftButton({
  * Türkiye geneli ilk 5 + senin sıran. Kapsam bilerek Türkiye: oyunlar herkesin
  * birbiriyle yarıştığı tek tablodur; şehir kırılımı Rekor Tablosu ekranında.
  */
-function MiniBoard({ game, justSent, onBoard }: { game: ArenaGame; justSent: boolean; onBoard: () => void }) {
+function MiniBoard({ game, justSent }: { game: ArenaGame; justSent: boolean; onBoard: () => void }) {
   const auth = useAuth();
+  const router = useRouter();
   const [period, setPeriod] = useState<Period>("weekly");
+  // Tüm tablo: aynı oyun ve önizlemede seçili dönemle açılır.
+  const openFull = useCallback(() => router.push({ pathname: "/siralama", params: { game, period } }), [router, game, period]);
   const myId = auth.user ? Number(auth.user.id) : null;
 
   const board = useQuery({
@@ -468,7 +472,7 @@ function MiniBoard({ game, justSent, onBoard }: { game: ArenaGame; justSent: boo
         </Text>
       ) : null}
 
-      <Touchable feedback="button" haptic="light" onPress={onBoard} style={styles.boardMore} accessibilityRole="button" accessibilityLabel="Tüm rekor tablosu">
+      <Touchable feedback="button" haptic="light" onPress={openFull} style={styles.boardMore} accessibilityRole="button" accessibilityLabel="Tüm rekor tablosu">
         <Text style={styles.boardMoreText} {...textScale.dense}>
           Şehrine göre ve tüm liste
         </Text>

@@ -1,15 +1,18 @@
 /**
- * REKOR TABLOSU — Arena oyunlarının haftalık ve tüm zamanlar sıralaması.
+ * REKOR TABLOSU — bütün Arena oyunlarının sıralaması: /siralama?game=&period=&from=&to=&scope=
  *
- * NE: oyun seçicisi (çip şeridi) + iki filtre segmenti (dönem, kapsam) +
- * podyum (ilk üç) + yoğun liste (`ListRow`). Kullanıcının kendi satırı hem
- * listede vurgulanır hem de listenin dışında kalıyorsa üstte sabit bir kartla
- * gösterilir — "ben neredeyim" sorusu kaydırmadan yanıtlanır.
+ * NE: oyun seçicisi (çip şeridi) + dönem şeridi (Bu hafta · Bu ay · Tüm
+ * zamanlar · Tarih aralığı) + kapsam segmenti (Türkiye / Şehrim) + podyum
+ * (ilk üç) + BÜTÜN oyuncuların yoğun listesi. Liste 50'şer satırlık
+ * sayfalarla (limit + offset) sonsuz kayar. Kendi satırın listede vurgulanır;
+ * ekranda değilse altta "Sen: 37." şeridi sabit durur, dokununca oraya kayar.
  *
- * NEDEN ÇİP + SEGMENT: beş oyun bir segmente sığmaz (segment 2–4 seçenek
- * içindir), o yüzden oyun seçimi kaydırılabilir çip şerididir ve başlığın
- * altında sabit durur. Dönem ve kapsam ise ikişer seçenek olduğu için
- * `SegmentedControl`dür.
+ * ROTA PARAMETRELERİ: `game` (oyun ekranları ve bitiş kartı açar), `period`
+ * (weekly | monthly | alltime), `from`+`to` (YYYY-MM-DD → tarih aralığı) ve
+ * `scope=city`.
+ *
+ * ESKİ SUNUCU: sayfa bilgisi (`total`/`offset`) dönmezse gelen liste tek sayfa
+ * sayılır; "Bu ay" / "Tarih aralığı" 400 alırsa "yakında" durumu gösterilir.
  *
  * PAYLAŞIM KARTI KORUNDU: aynı içerik (marka, oyun + dönem satırı, ilk beş,
  * alt bilgi) ve iki boy (hikâye 9:16 / gönderi 3:4). Değişen yalnız kabuk:
@@ -26,17 +29,15 @@ import { useQuery } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
-import React, { useCallback, useMemo, useRef, useState } from "react";
-import { FlatList, RefreshControl, StyleSheet, Text, View } from "react-native";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FlatList, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import ViewShot, { captureRef } from "react-native-view-shot";
 import {
   Avatar,
-  Badge,
   BottomSheet,
   Button,
   Chip,
-  ChipGroup,
   EmptyState,
   ErrorState,
   GradientFill,
@@ -50,7 +51,17 @@ import {
   useRefresh,
   type SegmentedItem,
 } from "@/components/ui";
-import { getArenaLeaderboard, getMyArenaRank, type ArenaEntry, type ArenaGame } from "@/lib/api/arena";
+import { BoardFooter, PeriodBar, PinnedMe, RankBadge, useBoardPages, useRowVisibility } from "@/components/leaderboards";
+import {
+  getArenaLeaderboard,
+  getMyArenaRank,
+  type ArenaEntry,
+  type ArenaGame,
+  type ArenaLeaderboard,
+  type ArenaPeriod,
+} from "@/lib/api/arena";
+import { ApiError } from "@/lib/http";
+import { BOARD_PAGE_SIZE, formatCount, periodCaption, periodFromParams, type PeriodValue } from "@/lib/leaderboard";
 import { formatDateShort } from "@/lib/format";
 import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
@@ -92,13 +103,7 @@ const GAMES: GameMeta[] = [
   { key: "gunun", label: "Günün Testi", icon: "bulb", unit: "puan", route: "/gunun" },
 ];
 
-type Period = "weekly" | "alltime";
 type ScopeMode = "city" | "turkey";
-
-const PERIOD_ITEMS: SegmentedItem<Period>[] = [
-  { key: "weekly", label: "Haftalık" },
-  { key: "alltime", label: "Tümü" },
-];
 
 /**
  * Podyum basamağı renkleri — altın, gümüş, bronz. Podyum sahnede (grafit)
@@ -123,11 +128,6 @@ const SHARE_ITEMS: SegmentedItem<ShareFormat>[] = [
 ];
 
 /* ═════════════════════════ SAF YARDIMCILAR ═════════════════════════ */
-
-/** 1240 → "1.240" (binlik ayracı Türkçe nokta). */
-function formatCount(value: number): string {
-  return String(Math.round(value)).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-}
 
 function readNumber(source: unknown, key: string): number | null {
   if (typeof source !== "object" || source === null) return null;
@@ -234,15 +234,33 @@ const EmptyStep = React.memo(function EmptyStep({ place }: { place: 2 | 3 }) {
 
 /* ═════════════════════════ EKRAN ═════════════════════════ */
 
+/** Ekran dönemi → sunucu dönemi. */
+function arenaPeriodOf(value: PeriodValue): ArenaPeriod {
+  if (value.period === "week") return "weekly";
+  if (value.period === "month") return "monthly";
+  if (value.period === "range" && value.range) return "range";
+  return "alltime";
+}
+
+const rowsOf = (page: ArenaLeaderboard) => page.entries ?? [];
+const keyOf = (entry: ArenaEntry) => entry.userId;
+
 export default function ArenaLeaderboardScreen() {
-  const params = useLocalSearchParams<{ game?: string }>();
+  const params = useLocalSearchParams<{ game?: string; period?: string; from?: string; to?: string; scope?: string }>();
   const initial = GAMES.find((g) => g.key === params.game)?.key ?? "seri";
 
   const [game, setGame] = useState<ArenaGame>(initial);
-  const [period, setPeriod] = useState<Period>("weekly");
+  const [pv, setPv] = useState<PeriodValue>(() => periodFromParams(params, "week"));
   // Varsayılan Türkiye geneli: oyunlarda herkes herkesle yarışır; şehir bir süzgeç.
-  const [scopeMode, setScopeMode] = useState<ScopeMode>("turkey");
+  const [scopeMode, setScopeMode] = useState<ScopeMode>(params.scope === "city" ? "city" : "turkey");
   const [shareOpen, setShareOpen] = useState(false);
+  const listRef = useRef<FlatList<ArenaEntry>>(null);
+
+  // Rota parametresi sonradan değişirse (bildirimden / oyundan yeniden açılış) seçimi izle.
+  useEffect(() => {
+    const next = GAMES.find((g) => g.key === params.game)?.key;
+    if (next) setGame(next);
+  }, [params.game]);
 
   const scope = useScope();
   const auth = useAuth();
@@ -251,35 +269,77 @@ export default function ArenaLeaderboardScreen() {
 
   const cityId = scopeMode === "city" && scope.cityId ? Number(scope.cityId) : undefined;
   const meta = GAMES.find((item) => item.key === game) ?? GAMES[0];
+  const period = arenaPeriodOf(pv);
+  const range = period === "range" ? pv.range ?? null : null;
+  const caption = periodCaption(pv);
 
-  const boardQuery = useQuery({
-    queryKey: ["arena", "board", game, period, cityId ?? "tr"],
-    queryFn: () => getArenaLeaderboard(game, { cityId, period }),
-    staleTime: 30_000,
+  const fetchPage = useCallback(
+    (offset: number) =>
+      getArenaLeaderboard(game, {
+        cityId,
+        period,
+        from: range?.from,
+        to: range?.to,
+        limit: BOARD_PAGE_SIZE,
+        offset,
+      }),
+    [game, cityId, period, range?.from, range?.to]
+  );
+
+  const { query: boardQuery, rows: entries, first, loadMore } = useBoardPages({
+    queryKey: ["arena", "board", game, period, cityId ?? "tr", range?.from ?? null, range?.to ?? null, "paged"],
+    fetchPage,
+    rowsOf,
+    keyOf,
   });
 
   const meQuery = useQuery({
-    queryKey: ["arena", "me", game, period, cityId ?? "tr"],
-    queryFn: () => getMyArenaRank(game, cityId, period),
+    queryKey: ["arena", "me", game, period, cityId ?? "tr", range?.from ?? null, range?.to ?? null],
+    queryFn: () => getMyArenaRank(game, cityId, period, range),
     enabled: Boolean(auth.user),
     staleTime: 30_000,
     retry: false,
   });
 
-  const entries = useMemo(() => boardQuery.data?.entries ?? [], [boardQuery.data]);
   const myRank = readMyField(meQuery.data, "rank");
   const myScore = readMyField(meQuery.data, "score") ?? readMyField(meQuery.data, "best");
   const myId = auth.user ? Number(auth.user.id) : null;
+  const total = first?.total ?? readNumber(meQuery.data, "totalPlayers");
+
+  /**
+   * ESKİ SUNUCU: "Bu ay" ve "Tarih aralığı"nı tanımaz, 400 döner. Hata yerine
+   * "yakında" durumu gösterilir ve hafta / tüm zamanlar önerilir.
+   */
+  const unsupported =
+    boardQuery.isError &&
+    entries.length === 0 &&
+    (period === "monthly" || period === "range") &&
+    boardQuery.error instanceof ApiError &&
+    boardQuery.error.status === 400;
 
   /** İlk üç podyuma çıkar; kalanlar yoğun listede kalır. */
   const podium = useMemo(() => entries.slice(0, 3), [entries]);
   const rest = useMemo(() => entries.slice(3), [entries]);
 
-  /** Kendi satırım listede görünüyor mu — görünmüyorsa üstte sabit kart. */
-  const meInList = useMemo(
-    () => (myId == null ? false : entries.some((entry) => Number(entry.userId) === myId)),
-    [entries, myId]
+  const myIndex = useMemo(
+    () => (myId == null ? -1 : rest.findIndex((entry) => Number(entry.userId) === myId)),
+    [rest, myId]
   );
+  const inPodium = myId != null && podium.some((entry) => Number(entry.userId) === myId);
+
+  const isMine = useCallback(
+    (item: unknown) => myId != null && Number((item as ArenaEntry | null)?.userId) === myId,
+    [myId]
+  );
+  const visibility = useRowVisibility(isMine);
+  // Podyumdaysan: listenin başı görünürken şerit gereksiz.
+  const podiumOnScreen = rest.length === 0 || visibility.topIndex <= 1;
+  const showPinned =
+    Boolean(auth.user) &&
+    myRank != null &&
+    entries.length > 0 &&
+    !visibility.visible &&
+    !(inPodium && podiumOnScreen);
 
   const scopeItems = useMemo<SegmentedItem<ScopeMode>[]>(
     () => [
@@ -289,7 +349,10 @@ export default function ArenaLeaderboardScreen() {
     [scope.cityLabel]
   );
 
-  const refresh = useRefresh(boardQuery.refetch, { refreshing: boardQuery.isRefetching });
+  const refresh = useRefresh(
+    () => Promise.all([boardQuery.refetch(), meQuery.refetch()]),
+    { refreshing: boardQuery.isRefetching && !boardQuery.isFetchingNextPage }
+  );
   const refreshControl = useMemo(
     () => <RefreshControl {...refreshControlProps(refresh.refreshing, refresh.onRefresh)} />,
     [refresh.refreshing, refresh.onRefresh]
@@ -297,6 +360,11 @@ export default function ArenaLeaderboardScreen() {
 
   const openShare = useCallback(() => setShareOpen(true), []);
   const closeShare = useCallback(() => setShareOpen(false), []);
+
+  const jumpToMe = useCallback(() => {
+    if (myIndex >= 0) listRef.current?.scrollToIndex({ index: myIndex, viewPosition: 0.5, animated: true });
+    else if (inPodium) listRef.current?.scrollToOffset({ offset: 0, animated: true });
+  }, [myIndex, inPodium]);
 
   const headerActions = useMemo(
     () => [
@@ -309,22 +377,43 @@ export default function ArenaLeaderboardScreen() {
     [openShare]
   );
 
-  /** Oyun çipleri — başlığın altında sabit şerit. */
+  /**
+   * Oyun çipleri — başlığın altında sabit şerit. Seçili oyun (ör. oyundan
+   * `?game=kadro` ile gelince) şeridin sonundaysa görünür yere kaydırılır.
+   */
+  const stripRef = useRef<ScrollView>(null);
+  const chipX = useRef<Partial<Record<ArenaGame, number>>>({});
+  const revealChip = useCallback((key: ArenaGame) => {
+    const x = chipX.current[key];
+    if (x != null) stripRef.current?.scrollTo({ x: Math.max(0, x - layout.screenPadding), animated: true });
+  }, []);
+  useEffect(() => {
+    revealChip(game);
+  }, [game, revealChip]);
+
   const gameStrip = useMemo(
     () => (
-      <ChipGroup style={styles.chipStrip}>
+      <ScrollView
+        ref={stripRef}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.chipStripContent}
+        style={styles.chipStrip}
+      >
         {GAMES.map((item) => (
-          <Chip
+          <View
             key={item.key}
-            label={item.label}
-            icon={item.icon}
-            selected={item.key === game}
-            onPress={() => setGame(item.key)}
-          />
+            onLayout={(event) => {
+              chipX.current[item.key] = event.nativeEvent.layout.x;
+              if (item.key === game) revealChip(item.key);
+            }}
+          >
+            <Chip label={item.label} icon={item.icon} selected={item.key === game} onPress={() => setGame(item.key)} />
+          </View>
         ))}
-      </ChipGroup>
+      </ScrollView>
     ),
-    [game]
+    [game, revealChip]
   );
 
   const renderItem = useCallback(
@@ -332,13 +421,9 @@ export default function ArenaLeaderboardScreen() {
       const mine = myId != null && Number(item.userId) === myId;
       return (
         <ListRow
-          leading={
-            <Text style={styles.rowRank} {...textScale.dense}>
-              {item.rank}
-            </Text>
-          }
+          leading={<RankBadge rank={item.rank} mine={mine} />}
           title={mine ? `${item.name} (sen)` : item.name}
-          subtitle={item.teamName ?? undefined}
+          subtitle={[item.teamName, item.city].filter(Boolean).join(" · ") || undefined}
           highlighted={mine}
           position={
             rest.length === 1 ? "single" : index === 0 ? "first" : index === rest.length - 1 ? "last" : "middle"
@@ -359,91 +444,68 @@ export default function ArenaLeaderboardScreen() {
     [myId, rest.length]
   );
 
+  const filters = (
+    <View style={styles.filterBlock}>
+      <PeriodBar value={pv} onChange={setPv} />
+      <View style={styles.scopeRow}>
+        <SegmentedControl items={scopeItems} value={scopeMode} onChange={setScopeMode} size="sm" />
+      </View>
+    </View>
+  );
+
   const listHeader = (
     <View style={styles.listHeader}>
-      {boardQuery.isError ? <ErrorState error={boardQuery.error} variant="banner" /> : null}
-
-      {/* İki süzgeç tek satırda: ikisi de iki seçenekli, alt alta iki bant
-          ekranın ilk üçte birini podyumdan önce yiyordu. */}
-      <View style={styles.filters}>
-        <View style={styles.flex}>
-          <SegmentedControl items={PERIOD_ITEMS} value={period} onChange={setPeriod} size="sm" />
-        </View>
-        <View style={styles.flex}>
-          <SegmentedControl items={scopeItems} value={scopeMode} onChange={setScopeMode} size="sm" />
-        </View>
-      </View>
-
-      {/* Kendi sıran listede yoksa üstte sabit kart olarak gösterilir. */}
-      {auth.user && !meInList && (myRank != null || myScore != null) ? (
-        <View style={styles.meCard}>
-          <View style={styles.meBadge}>
-            <Text style={styles.meBadgeText} {...textScale.badge}>
-              {myRank != null ? `#${myRank}` : "—"}
-            </Text>
-          </View>
-          <View style={styles.flex}>
-            <Text style={styles.meTitle} numberOfLines={1} {...textScale.dense}>
-              Senin sıran
-            </Text>
-            <Text style={styles.meMeta} numberOfLines={1} {...textScale.badge}>
-              {myScore != null
-                ? `${formatCount(myScore)} ${meta.unit} · ${period === "weekly" ? "bu hafta" : "tüm zamanlar"}`
-                : "Bu listede henüz skorun yok"}
-            </Text>
-          </View>
-          <Badge label={meta.label} tone="brand" size="xs" />
-        </View>
-      ) : null}
+      {filters}
+      {boardQuery.isError && entries.length > 0 ? <ErrorState error={boardQuery.error} variant="banner" /> : null}
 
       {podium.length > 0 ? (
         <>
           <View style={styles.podium}>
             <GradientFill tone="ink" radius="xxl" />
             <Text style={styles.podiumOverline} {...textScale.badge}>
-              {upperTR(`${meta.label} · ${period === "weekly" ? "bu hafta" : "tüm zamanlar"}`)}
+              {upperTR(`${meta.label} · ${caption}`)}
             </Text>
             <View style={styles.podiumRow}>
-            {/* 2 · 1 · 3 sırası: birinci ortada ve en yüksek basamakta. */}
-            {podium[1] ? (
-              <PodiumStep
-                place={2}
-                name={podium[1].name}
-                teamName={podium[1].teamName ?? null}
-                score={podium[1].score}
-                unit={meta.unit}
-                mine={myId != null && Number(podium[1].userId) === myId}
-              />
-            ) : (
-              <EmptyStep place={2} />
-            )}
+              {/* 2 · 1 · 3 sırası: birinci ortada ve en yüksek basamakta. */}
+              {podium[1] ? (
+                <PodiumStep
+                  place={2}
+                  name={podium[1].name}
+                  teamName={podium[1].teamName ?? null}
+                  score={podium[1].score}
+                  unit={meta.unit}
+                  mine={myId != null && Number(podium[1].userId) === myId}
+                />
+              ) : (
+                <EmptyStep place={2} />
+              )}
 
-            <PodiumStep
-              place={1}
-              name={podium[0].name}
-              teamName={podium[0].teamName ?? null}
-              score={podium[0].score}
-              unit={meta.unit}
-              mine={myId != null && Number(podium[0].userId) === myId}
-            />
-
-            {podium[2] ? (
               <PodiumStep
-                place={3}
-                name={podium[2].name}
-                teamName={podium[2].teamName ?? null}
-                score={podium[2].score}
+                place={1}
+                name={podium[0].name}
+                teamName={podium[0].teamName ?? null}
+                score={podium[0].score}
                 unit={meta.unit}
-                mine={myId != null && Number(podium[2].userId) === myId}
+                mine={myId != null && Number(podium[0].userId) === myId}
               />
-            ) : (
-              <EmptyStep place={3} />
-            )}
+
+              {podium[2] ? (
+                <PodiumStep
+                  place={3}
+                  name={podium[2].name}
+                  teamName={podium[2].teamName ?? null}
+                  score={podium[2].score}
+                  unit={meta.unit}
+                  mine={myId != null && Number(podium[2].userId) === myId}
+                />
+              ) : (
+                <EmptyStep place={3} />
+              )}
             </View>
           </View>
 
           {rest.length > 0 ? (
-            <SectionHeader title="Sıralama" meta={`${formatCount(entries.length)} oyuncu`} />
+            <SectionHeader title="Sıralama" meta={`${formatCount(total ?? entries.length)} oyuncu`} />
           ) : null}
         </>
       ) : null}
@@ -463,25 +525,55 @@ export default function ArenaLeaderboardScreen() {
 
       {boardQuery.isLoading ? (
         <View style={styles.loading}>
+          <View style={styles.loadingFilters}>{filters}</View>
           <SkeletonListRow count={8} />
         </View>
-      ) : boardQuery.isError && entries.length === 0 ? (
-        <ErrorState error={boardQuery.error} onRetry={boardQuery.refetch} />
+      ) : boardQuery.isError && entries.length === 0 && !unsupported ? (
+        <View style={styles.flex}>
+          <View style={[styles.errorFilters, styles.loadingFilters]}>{filters}</View>
+          <ErrorState error={boardQuery.error} onRetry={boardQuery.refetch} />
+        </View>
       ) : (
         <FlatList
           {...scrollProps}
+          ref={listRef}
           data={rest}
           keyExtractor={(item) => `${item.userId}-${item.rank}`}
           renderItem={renderItem}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, showPinned ? styles.listPinned : null]}
           showsVerticalScrollIndicator={false}
           refreshControl={refreshControl}
           ListHeaderComponent={listHeader}
+          ListFooterComponent={
+            entries.length > 0 ? (
+              <BoardFooter
+                loading={boardQuery.isFetchingNextPage}
+                done={!boardQuery.hasNextPage}
+                count={entries.length}
+                total={total}
+              />
+            ) : null
+          }
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.6}
+          onViewableItemsChanged={visibility.onViewableItemsChanged}
+          viewabilityConfig={visibility.viewabilityConfig}
+          onScrollToIndexFailed={(info) =>
+            listRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: true })
+          }
           ListEmptyComponent={
-            entries.length === 0 ? (
+            entries.length > 0 ? null : unsupported ? (
+              <EmptyState
+                icon="calendar-outline"
+                title="Bu dönem yakında"
+                body="Aylık ve tarih aralıklı rekor tabloları sunucu güncellemesiyle açılacak."
+                variant="inline"
+                action={{ label: "Bu haftaya dön", onPress: () => setPv({ period: "week" }), haptic: "light" }}
+              />
+            ) : (
               <EmptyState
                 icon="trophy-outline"
-                title="Henüz skor yok"
+                title={pv.period === "alltime" ? "Henüz skor yok" : "Bu dönemde skor yok"}
                 body={
                   auth.user
                     ? "İlk rekoru gönderen sen ol — oyna, skorun otomatik sıralamaya yazılsın."
@@ -490,17 +582,28 @@ export default function ArenaLeaderboardScreen() {
                 variant="inline"
                 action={{ label: `${meta.label} oyna`, onPress: () => router.push(meta.route as never) }}
               />
-            ) : null
+            )
           }
         />
       )}
+
+      {showPinned && auth.user ? (
+        <PinnedMe
+          name={auth.user.fullName || auth.user.username}
+          rank={myRank}
+          value={myScore}
+          unit={meta.unit}
+          caption={`${meta.label} · ${caption}`}
+          onPress={myIndex >= 0 || inPodium ? jumpToMe : undefined}
+        />
+      ) : null}
 
       <ShareSheet
         visible={shareOpen}
         onClose={closeShare}
         gameLabel={meta.label}
         unit={meta.unit}
-        period={period}
+        periodLabel={caption}
         scopeLabel={scopeMode === "city" ? scope.cityLabel || "Şehrim" : "Türkiye"}
         entries={entries}
       />
@@ -515,7 +618,7 @@ function ShareSheet({
   onClose,
   gameLabel,
   unit,
-  period,
+  periodLabel,
   scopeLabel,
   entries,
 }: {
@@ -523,7 +626,7 @@ function ShareSheet({
   onClose: () => void;
   gameLabel: string;
   unit: string;
-  period: Period;
+  periodLabel: string;
   scopeLabel: string;
   entries: ArenaEntry[];
 }) {
@@ -569,7 +672,7 @@ function ShareSheet({
               </View>
 
               <Text style={styles.shareTitle} numberOfLines={1} {...textScale.badge}>
-                {upperTR(`${gameLabel} · ${period === "weekly" ? "haftalık" : "tüm zamanlar"}`)}
+                {upperTR(`${gameLabel} · ${periodLabel}`)}
               </Text>
               <Text style={styles.shareScopeLabel} numberOfLines={1} {...textScale.badge}>
                 {upperTR(scopeLabel)}
@@ -630,62 +733,44 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
 
   chipStrip: {
+    flexGrow: 0,
     paddingBottom: space.sm,
   },
+  chipStripContent: {
+    gap: space.s,
+    paddingHorizontal: layout.screenPadding,
+    alignItems: "center",
+  },
   loading: {
-    padding: layout.screenPadding,
+    paddingHorizontal: layout.screenPadding,
+  },
+  errorFilters: {
+    paddingHorizontal: layout.screenPadding,
+  },
+  loadingFilters: {
+    paddingTop: space.md,
+    paddingBottom: space.md,
   },
   list: {
     paddingHorizontal: layout.screenPadding,
     paddingBottom: space.giant,
+  },
+  /** Altta "Sen" şeridi varken son satır şeridin altında kalmasın. */
+  listPinned: {
+    paddingBottom: 110,
   },
   listHeader: {
     gap: space.md,
     paddingTop: space.md,
     paddingBottom: space.sm,
   },
-  filters: {
-    flexDirection: "row",
+  /** Dönem çipleri ekran kenarına kadar kayar (ChipGroup kendi iç boşluğunu verir). */
+  filterBlock: {
     gap: space.sm,
+    marginHorizontal: -layout.screenPadding,
   },
-
-  /* — Kendi sıran (liste dışındaysa) — */
-  meCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.md,
-    borderRadius: radius.lg,
-    borderColor: colors.brandBorder,
-    paddingHorizontal: space.m,
-    paddingVertical: space.m,
-    backgroundColor: colors.surface1,
-    ...elevate(1),
-    borderWidth: 1,
-  },
-  meBadge: {
-    minWidth: 52,
-    /* `type.tableNumStrong` 10 → 13px oldu (satır yüksekliği 18); 32px'lik
-       kutu sırayı kenarlara yaslıyordu. */
-    height: 38,
-    borderRadius: radius.md,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: space.sm,
-    backgroundColor: colors.brandDim,
-  },
-  meBadgeText: {
-    ...type.tableNumStrong,
-    color: colors.brandAccent,
-  },
-  meTitle: {
-    ...type.h3,
-    color: colors.textPrimary,
-  },
-  meMeta: {
-    ...type.caption,
-    fontFamily: fonts.semibold,
-    letterSpacing: 0,
-    color: colors.textTertiary,
+  scopeRow: {
+    paddingHorizontal: layout.screenPadding,
   },
 
   /* — Podyum: ekranın tek sahnesi — */
@@ -783,12 +868,6 @@ const styles = StyleSheet.create({
   },
 
   /* — Liste satırı — */
-  rowRank: {
-    ...type.tableNumStrong,
-    color: colors.textSecondary,
-    minWidth: 24,
-    textAlign: "center",
-  },
   rowScore: {
     alignItems: "flex-end",
     gap: space.xxs,
