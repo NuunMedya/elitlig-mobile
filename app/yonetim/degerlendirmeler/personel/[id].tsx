@@ -13,10 +13,13 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { AdminScreen, InfoLine, Panel, RecordCard } from "@/components/admin";
+import Ionicons from "@expo/vector-icons/Ionicons";
+
+import { AdminScreen, InfoLine } from "@/components/admin";
+import { areaIcon, areaTone, levelGradient, ScoreDial } from "@/components/admin/evaluations/EvalParts";
+import { CountTiles, MeterRow, ScorePlate, StageStat, SysGroup, SysStage, toneFg } from "@/components/admin/system/SysKit";
 import { shareCsv } from "@/components/admin/evaluations/shareCsv";
-import { LevelBadge, ScoreBar } from "@/components/admin/evaluations/widgets";
-import { Badge, EmptyState, ErrorState, MetricGrid, MetricTile, SegmentedControl, SkeletonCard } from "@/components/ui";
+import { Avatar, Badge, EmptyState, ErrorState, GradientBar, IconTile, RankBadge, Reveal, SegmentedControl, SkeletonCard, Touchable, type IconTileTone } from "@/components/ui";
 import { isoDay } from "@/lib/admin/format";
 import {
   csvNumber,
@@ -25,10 +28,11 @@ import {
   formatPct,
   formatTl,
   getStaffCard,
+  scoreLevel,
   toCsv,
   type StaffCard,
 } from "@/lib/api/admin/evaluations";
-import { colors, space, textScale, type } from "@/theme";
+import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
 const PERMS = ["evaluations.view"] as const;
 
@@ -85,35 +89,55 @@ export default function StaffCardScreen() {
         <ErrorState error={query.error} onRetry={query.refetch} variant="inline" />
       ) : (
         <>
-          <View style={styles.head}>
-            <Text style={styles.meta} {...textScale.long}>
-              {data.byArea.map((a) => a.label).join(", ") || "Değerlendirme yok"}
-              {s.rank ? ` · ${s.peerCount} kişi içinde ${s.rank}. sırada` : ""}
-            </Text>
-            <LevelBadge value={s.averageScore} />
-          </View>
+          {/* Karne sahnesi: kişi, sıra, skor halkası ve alan ortalamasıyla kıyas. */}
+          <SysStage>
+            <View style={styles.hero}>
+              <Avatar name={data.staff.fullName} size={52} ring="brand" />
+              <View style={styles.flex}>
+                <Text style={styles.eyebrow} {...textScale.badge}>
+                  {s.rank ? `${s.peerCount} KİŞİ İÇİNDE ${s.rank}. SIRA` : "PERSONEL KARNESİ"}
+                </Text>
+                <Text style={styles.heroName} numberOfLines={1} {...textScale.dense}>
+                  {data.staff.fullName}
+                </Text>
+                <Text style={styles.heroMeta} numberOfLines={1} {...textScale.dense}>
+                  {data.byArea.map((a) => a.label).join(", ") || "Değerlendirme yok"}
+                </Text>
+              </View>
+              {s.rank ? <RankBadge rank={s.rank} size={34} /> : null}
+            </View>
+            {data.history.length ? (
+              <View style={styles.stageRow}>
+                <ScoreDial value={s.averageScore} size={96} onDark />
+                <View style={styles.stageGrid}>
+                  <View style={styles.cell}>
+                    <StageStat label="Alan ort." value={formatPct(s.peerAverage)} icon="people" />
+                  </View>
+                  <View style={styles.cell}>
+                    <StageStat label="Fark" value={s.gap == null ? "—" : formatDelta(s.gap)} icon="swap-vertical" tone={(s.gap ?? 0) >= 0 ? "win" : "danger"} />
+                  </View>
+                  <View style={styles.cell}>
+                    <StageStat label="Önceki" value={s.previous.averageScore == null ? "—" : formatPct(s.previous.averageScore)} icon="time" />
+                  </View>
+                  <View style={styles.cell}>
+                    <StageStat label="Form" value={s.evaluationCount} icon="document-text" />
+                  </View>
+                </View>
+              </View>
+            ) : null}
+          </SysStage>
+
           {!data.history.length ? (
             <EmptyState icon="person-outline" title="Bu dönemde değerlendirme yok" variant="inline" />
           ) : (
             <>
-              <MetricGrid columns={2}>
-                <MetricTile label="Ortalama skor" value={formatPct(s.averageScore)} hint={`Alan ort. ${formatPct(s.peerAverage)}${s.gap != null ? ` · ${formatDelta(s.gap)}` : ""}`} tone="brand" icon="speedometer-outline" />
-                <MetricTile
-                  label="Önceki dönem"
-                  value={s.previous.averageScore == null ? "—" : formatPct(s.previous.averageScore)}
-                  hint={s.change.averageScore != null ? formatDelta(s.change.averageScore) : undefined}
-                  icon="time-outline"
-                />
-                <MetricTile label="Aksayan madde" value={formatPct(s.failRate)} hint={`${s.failCount} madde · ${s.evaluationCount} form`} tone="warn" icon="warning-outline" />
-                <MetricTile
-                  label={hasPayout ? "Hakediş" : "Net"}
-                  value={hasPayout ? formatTl(s.payout) : formatTl(s.net, true)}
-                  hint={`Bonus ${formatTl(s.bonus)} · Kesinti ${formatTl(s.deduction)}`}
-                  tone={s.net >= 0 ? "win" : "danger"}
-                  icon="cash-outline"
-                />
-              </MetricGrid>
-
+              <CountTiles
+                items={[
+                  { key: "fail", label: "Aksayan", value: formatPct(s.failRate), icon: "warning-outline", tone: "warn" },
+                  { key: "bonus", label: "Bonus", value: formatTl(s.bonus), icon: "add-circle-outline", tone: "win" },
+                  { key: "pay", label: hasPayout ? "Hakediş" : "Net", value: hasPayout ? formatTl(s.payout) : formatTl(s.net, true), icon: "cash-outline", tone: s.net >= 0 ? "win" : "danger" },
+                ]}
+              />
               <SegmentedControl<"summary" | "history">
                 items={[
                   { key: "summary", label: "Özet" },
@@ -123,92 +147,103 @@ export default function StaffCardScreen() {
                 onChange={setView}
                 size="sm"
               />
-
               {view === "summary" ? (
                 <>
-                  <QuestionList title="Güçlü yanlar" items={data.strengths} empty="Henüz yeterli veri yok." />
-                  <QuestionList title="Gelişmesi gerekenler" items={data.weaknesses} empty="Aksayan madde yok." />
-                  <Panel title="Alanlar">
+                  <QuestionList title="Güçlü yanlar" icon="thumbs-up" tone="mint" items={data.strengths} empty="Henüz yeterli veri yok." />
+                  <QuestionList title="Gelişmesi gerekenler" icon="construct" tone="red" items={data.weaknesses} empty="Aksayan madde yok." />
+                  <SysGroup title="Alanlar · alan ortalamasıyla" icon="layers" tone="violet">
                     {data.byArea.map((a) => (
-                      <View key={a.area} style={styles.row}>
+                      <View key={a.area} style={styles.areaRow}>
+                        <IconTile icon={areaIcon(a.area)} tone={areaTone(a.area)} size={30} glow={false} />
                         <View style={styles.flex}>
-                          <Text style={styles.label} {...textScale.dense}>
-                            {a.label}
-                          </Text>
+                          <MeterRow label={a.label} hint={`${a.evaluationCount} form`} value={formatPct(a.averageScore)} ratio={(a.averageScore ?? 0) / 100} gradient={levelGradient(a.averageScore)} />
+                          <View style={styles.peer}>
+                            <View style={[styles.peerMark, { left: `${Math.max(0, Math.min(100, a.peerAverage ?? 0))}%` }]} />
+                          </View>
                           <Text style={styles.meta} {...textScale.dense}>
-                            {a.evaluationCount} form · ort. {formatPct(a.peerAverage)}
+                            Alan ortalaması {formatPct(a.peerAverage)}
                             {a.gap != null ? ` · ${formatDelta(a.gap)}` : ""}
                           </Text>
                         </View>
-                        <ScoreBar value={a.averageScore} compact />
                       </View>
                     ))}
-                  </Panel>
+                  </SysGroup>
                   {data.byCategory.length ? (
-                    <Panel title="Kategoriler">
+                    <SysGroup title="Kategoriler" icon="pie-chart" tone="cyan">
                       {data.byCategory.map((c) => (
-                        <View key={c.category} style={styles.row}>
-                          <View style={styles.flex}>
-                            <Text style={styles.label} {...textScale.dense}>
-                              {c.category}
-                            </Text>
-                            <Text style={styles.meta} {...textScale.dense}>
-                              {c.answered} cevap · {c.failCount} aksama
-                            </Text>
-                          </View>
-                          <ScoreBar value={c.successPct} compact />
-                        </View>
+                        <MeterRow key={c.category} label={c.category} hint={`${c.answered} cevap · ${c.failCount} aksama`} value={formatPct(c.successPct)} ratio={(c.successPct ?? 0) / 100} gradient={levelGradient(c.successPct)} />
                       ))}
-                    </Panel>
+                    </SysGroup>
                   ) : null}
                 </>
               ) : (
                 <>
                   {data.notes.length ? (
-                    <Panel title="Notlar">
+                    <SysGroup title="Notlar" icon="chatbubbles" tone="gold">
                       {data.notes.map((n) => (
                         <View key={n.id} style={styles.note}>
-                          <Text style={styles.meta} {...textScale.dense}>
-                            {formatDay(n.date, false)} · {n.label}
+                          <Text style={styles.noteMeta} {...textScale.badge}>
+                            {`${formatDay(n.date, false)} · ${n.label}`.toLocaleUpperCase("tr-TR")}
                           </Text>
                           <Text style={styles.label} {...textScale.long}>
-                            {n.note}
+                            “{n.note}”
                           </Text>
                         </View>
                       ))}
-                    </Panel>
+                    </SysGroup>
                   ) : null}
-                  {data.history.map((row) => (
-                    <RecordCard
-                      key={row.id}
-                      title={row.label}
-                      subtitle={`${row.areaLabel} · ${formatDay(row.periodDate, false)}`}
-                      icon="document-text-outline"
-                      value={formatPct(row.scorePct)}
-                      badges={[
-                        row.failCount ? { label: `${row.failCount} aksayan`, tone: "danger" } : null,
-                        { label: hasPayout ? formatTl(row.payout) : formatTl(row.net, true), tone: row.net >= 0 ? "win" : "danger" },
-                      ]}
-                      onPress={() => setExpanded(expanded === row.id ? null : row.id)}
-                      onLongPress={row.matchId ? () => router.push({ pathname: "/yonetim/degerlendirmeler/mac/[id]", params: { id: String(row.matchId) } }) : undefined}
-                      trailing={<Badge label={expanded === row.id ? "Kapat" : "Cevaplar"} size="xs" />}
-                    >
-                      {expanded === row.id ? (
-                        <View style={styles.answers}>
-                          {row.answers.map((a) => (
-                            <InfoLine
-                              key={a.questionId}
-                              label={a.text}
-                              value={`${a.na ? "Uygulanamaz" : a.type === "yes_no" ? (a.value ? "Yapıldı" : "Yapılmadı") : `${a.value}/10`}${a.amount ? ` · ${formatTl(a.amount, true)}` : ""}${a.comment ? ` · “${a.comment}”` : ""}`}
-                              tone={a.points != null && a.points < 5 ? "danger" : undefined}
-                            />
-                          ))}
-                          {row.note ? <InfoLine label="Not" value={row.note} /> : null}
-                          {row.evaluatorName ? <InfoLine label="Değerlendiren" value={row.evaluatorName} /> : null}
-                        </View>
-                      ) : null}
-                    </RecordCard>
-                  ))}
+                  {data.history.map((row, i) => {
+                    const open = expanded === row.id;
+                    return (
+                      <Reveal key={row.id} index={i}>
+                        <Touchable
+                          feedback="card"
+                          style={[styles.hist, open ? styles.histOpen : null]}
+                          onPress={() => setExpanded(open ? null : row.id)}
+                          onLongPress={row.matchId ? () => router.push({ pathname: "/yonetim/degerlendirmeler/mac/[id]", params: { id: String(row.matchId) } }) : undefined}
+                          accessibilityRole="button"
+                          accessibilityState={{ expanded: open }}
+                          accessibilityLabel={`${row.label}, ${formatPct(row.scorePct)}`}
+                        >
+                          <View style={styles.histHead}>
+                            <ScorePlate value={row.scorePct == null ? "—" : String(Math.round(row.scorePct))} tone={scoreLevel(row.scorePct).tone} size="sm" />
+                            <View style={styles.flex}>
+                              <Text style={styles.histTitle} numberOfLines={1} {...textScale.dense}>
+                                {row.label}
+                              </Text>
+                              <Text style={styles.meta} numberOfLines={1} {...textScale.dense}>
+                                {row.areaLabel} · {formatDay(row.periodDate, false)}
+                              </Text>
+                              <View style={styles.badges}>
+                                {row.failCount ? <Badge label={`${row.failCount} aksayan`} tone="danger" size="xs" /> : null}
+                                <Badge label={hasPayout ? formatTl(row.payout) : formatTl(row.net, true)} tone={row.net >= 0 ? "win" : "danger"} size="xs" />
+                              </View>
+                            </View>
+                            <Ionicons name={open ? "chevron-up" : "chevron-down"} size={16} color={colors.textTertiary} />
+                          </View>
+                          {open ? (
+                            <View style={styles.answers}>
+                              {row.answers.map((a) => (
+                                <InfoLine
+                                  key={a.questionId}
+                                  label={a.text}
+                                  value={`${a.na ? "Uygulanamaz" : a.type === "yes_no" ? (a.value ? "Yapıldı" : "Yapılmadı") : `${a.value}/10`}${a.amount ? ` · ${formatTl(a.amount, true)}` : ""}${a.comment ? ` · “${a.comment}”` : ""}`}
+                                  tone={a.points != null && a.points < 5 ? "danger" : undefined}
+                                />
+                              ))}
+                              {row.note ? <InfoLine label="Not" value={row.note} /> : null}
+                              {row.evaluatorName ? <InfoLine label="Değerlendiren" value={row.evaluatorName} /> : null}
+                              {!row.answers.length && !row.note ? (
+                                <Text style={styles.meta} {...textScale.dense}>
+                                  Bu formun ayrıntısı yok.
+                                </Text>
+                              ) : null}
+                            </View>
+                          ) : null}
+                        </Touchable>
+                      </Reveal>
+                    );
+                  })}
                 </>
               )}
             </>
@@ -219,41 +254,58 @@ export default function StaffCardScreen() {
   );
 }
 
-function QuestionList({ title, items, empty }: { title: string; items: StaffCard["strengths"]; empty: string }) {
+function QuestionList({ title, icon, tone, items, empty }: { title: string; icon: React.ComponentProps<typeof Ionicons>["name"]; tone: IconTileTone; items: StaffCard["strengths"]; empty: string }) {
   return (
-    <Panel title={title}>
+    <SysGroup title={title} icon={icon} tone={tone}>
       {!items.length ? (
         <Text style={styles.meta} {...textScale.long}>
           {empty}
         </Text>
       ) : (
         items.map((q) => (
-          <View key={q.questionId} style={styles.row}>
-            <View style={styles.flex}>
-              <Text style={styles.label} {...textScale.long}>
+          <View key={q.questionId} style={styles.q}>
+            <View style={styles.qHead}>
+              <Text style={[styles.label, styles.flex]} {...textScale.long}>
                 {q.text}
               </Text>
-              <Text style={styles.meta} {...textScale.dense}>
-                {q.areaLabel} · {q.answered} cevap{q.failCount ? ` · ${q.failCount} aksama` : ""} · ort. {formatPct(q.peerSuccessPct)}
+              <Text style={[styles.pct, { color: toneFg(scoreLevel(q.successPct).tone) }]} {...textScale.badge}>
+                {formatPct(q.successPct)}
               </Text>
             </View>
-            <Text style={styles.pct} {...textScale.dense}>
-              {formatPct(q.successPct)}
+            <GradientBar value={Math.max(0, Math.min(1, (q.successPct ?? 0) / 100))} height={5} gradient={levelGradient(q.successPct)} />
+            <Text style={styles.meta} {...textScale.dense}>
+              {q.areaLabel} · {q.answered} cevap{q.failCount ? ` · ${q.failCount} aksama` : ""} · herkes {formatPct(q.peerSuccessPct)}
             </Text>
           </View>
         ))
       )}
-    </Panel>
+    </SysGroup>
   );
 }
 
 const styles = StyleSheet.create({
-  head: { flexDirection: "row", alignItems: "center", gap: space.sm },
-  flex: { flex: 1 },
-  row: { flexDirection: "row", alignItems: "center", gap: space.md, paddingVertical: space.xs },
+  flex: { flex: 1, minWidth: 0, gap: 2 },
+  hero: { flexDirection: "row", alignItems: "center", gap: space.md },
+  eyebrow: { ...type.overline, color: colors.adminAccent },
+  heroName: { ...type.h2, color: colors.onDark },
+  heroMeta: { ...type.caption, color: colors.onDarkMuted },
+  stageRow: { flexDirection: "row", alignItems: "center", gap: space.md },
+  stageGrid: { flex: 1, flexDirection: "row", flexWrap: "wrap", gap: space.sm },
+  cell: { width: "47%", flexGrow: 1, flexDirection: "row" },
+  areaRow: { flexDirection: "row", alignItems: "flex-start", gap: space.md },
+  peer: { height: 8, marginTop: -7 },
+  peerMark: { position: "absolute", top: 0, width: 2, height: 8, marginLeft: -1, borderRadius: 1, backgroundColor: colors.textPrimary },
   label: { ...type.bodySm, color: colors.textPrimary },
   meta: { ...type.caption, color: colors.textTertiary, flexShrink: 1 },
-  pct: { ...type.numSmStrong, color: colors.textPrimary },
-  note: { gap: 2, paddingVertical: space.xs },
-  answers: { marginTop: space.sm },
+  pct: { ...type.scoreXs },
+  q: { gap: space.xs },
+  qHead: { flexDirection: "row", alignItems: "flex-start", gap: space.sm },
+  note: { gap: 2, paddingLeft: space.sm, borderLeftWidth: 2, borderLeftColor: colors.adminAccent },
+  noteMeta: { ...type.micro, color: colors.textTertiary },
+  hist: { gap: space.sm, padding: space.md, borderRadius: radius.xl, backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border },
+  histOpen: { borderColor: colors.brand },
+  histHead: { flexDirection: "row", alignItems: "center", gap: space.md },
+  histTitle: { ...type.h4, color: colors.textPrimary },
+  badges: { flexDirection: "row", flexWrap: "wrap", gap: space.xs, marginTop: 2 },
+  answers: { paddingTop: space.sm, borderTopWidth: hairline, borderTopColor: colors.separator },
 });
