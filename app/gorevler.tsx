@@ -795,10 +795,12 @@ function TeamQuestRow({ quest }: { quest: TeamQuest }) {
         ) : null}
       </View>
       <View style={styles.teamEnd}>
-        <Text style={[styles.teamPoints, quest.done ? styles.teamPointsDone : null]} {...textScale.badge}>
-          {quest.done ? "✓ " : "+"}
-          {quest.points}
-        </Text>
+        <View style={styles.teamPointsRow}>
+          {quest.done ? <Ionicons name="checkmark" size={14} color={colors.win} /> : null}
+          <Text style={[styles.teamPoints, quest.done ? styles.teamPointsDone : null]} {...textScale.badge}>
+            {quest.done ? quest.points : `+${quest.points}`}
+          </Text>
+        </View>
         <Text style={styles.teamXp} {...textScale.badge}>
           {quest.xp ? `puan · ${quest.xp} XP` : "puan"}
         </Text>
@@ -935,6 +937,7 @@ const styles = StyleSheet.create({
   teamEnd: { alignItems: "flex-end", minWidth: 48 },
   teamPoints: { ...type.scoreSm, color: colors.warn },
   teamPointsDone: { color: colors.win },
+  teamPointsRow: { flexDirection: "row", alignItems: "center", gap: space.xxs },
   teamXp: { ...type.micro, color: colors.textTertiary },
 
   /* — XP ve yıldız — */

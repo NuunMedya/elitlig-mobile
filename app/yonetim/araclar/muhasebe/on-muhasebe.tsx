@@ -509,7 +509,8 @@ function LedgerCard({ entry: e, accountName, onPress, onLongPress }: { entry: Le
 /** Kayıtları gün gün toplar (sıra korunur); her günün net toplamıyla. */
 function groupByDay(entries: LedgerEntry[]) {
   const map = new Map<string, { day: string; items: LedgerEntry[]; net: number }>();
-  for (const e of entries) {
+  const sorted = [...entries].sort((a, b) => (b.entry_date || "").localeCompare(a.entry_date || ""));
+  for (const e of sorted) {
     const day = e.entry_date || "";
     const group = map.get(day) ?? { day, items: [], net: 0 };
     group.items.push(e);

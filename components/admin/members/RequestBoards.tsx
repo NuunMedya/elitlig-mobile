@@ -15,8 +15,11 @@ import { useQuery } from "@tanstack/react-query";
 import React, { useEffect, useState } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
 
-import { AdminList, confirmAction, InfoLine, Panel, RecordCard, SelectField, useAdminMutation, type FilterOption } from "@/components/admin";
-import { BottomSheet, Chip, ChipGroup } from "@/components/ui";
+import Ionicons from "@expo/vector-icons/Ionicons";
+
+import { AdminList, confirmAction, useAdminMutation, type FilterOption } from "@/components/admin";
+import { DiffLine, FactRow, GroupCard, PickerChip, RequestCard } from "@/components/admin/team/ManageKit";
+import { Avatar, Badge, BottomSheet, Button, Chip, ChipGroup, IconTile, type Tone } from "@/components/ui";
 import { timeAgo } from "@/lib/admin/format";
 import {
   ACCOUNT_REQUEST_TYPES,
@@ -40,7 +43,7 @@ import {
 } from "@/lib/api/admin/users";
 import { colors, radius, space, textScale, type } from "@/theme";
 
-import { DecisionBlock, DiffList, LinkExisting, Outcome, PersonPanel, PlayerPanel, REVIEW_TONE, TeamPanel, Warnings } from "./RequestParts";
+import { DecisionBlock, DiffList, LinkExisting, Outcome, PersonPanel, PlayerPanel, REVIEW_TONE, StatusBadge, TeamPanel, Warnings } from "./RequestParts";
 
 const TAB_LABELS: Record<string, string> = { ...REVIEW_STATUS_LABELS, pending: "Bekleyen", approved: "Onaylanan", rejected: "Reddedilen", all: "Tümü" };
 
@@ -71,23 +74,32 @@ function BoardHeader({
   return (
     <View style={styles.header}>
       <ChipGroup scrollable contentPadding={0}>
+        {cities.length > 1 ? (
+          <PickerChip<string>
+            icon="location-outline"
+            placeholder="Tüm iller"
+            title="İl"
+            value={city}
+            onChange={setCity}
+            options={cities.map((c) => ({ value: c, label: c }))}
+          />
+        ) : null}
         <Chip label="Tüm türler" selected={!kind} onPress={() => setKind("")} size="sm" tone="info" />
         {shown.map(([key, label]) => (
           <Chip key={key} label={label} selected={kind === key} onPress={() => setKind(key)} size="sm" tone="info" />
         ))}
       </ChipGroup>
-      {cities.length > 1 ? (
-        <SelectField<string>
-          value={city}
-          options={cities.map((c) => ({ value: c, label: c }))}
-          placeholder="Tüm iller"
-          clearable
-          icon="location-outline"
-          onChange={setCity}
-        />
-      ) : null}
     </View>
   );
+}
+
+/** Bekleme süresine göre öncelik hapı: 3 günden eski talep acil sayılır. */
+function waitPill(status: string, created?: string | null): { label: string; tone: Tone; icon?: keyof typeof Ionicons.glyphMap } {
+  if (status !== "pending") return { label: REVIEW_STATUS_LABELS[status] ?? status, tone: REVIEW_TONE[status] ?? "neutral" };
+  const hours = created ? (Date.now() - new Date(created).getTime()) / 3_600_000 : 0;
+  if (hours > 72) return { label: "Gecikti", tone: "danger", icon: "alert-circle" };
+  if (hours > 24) return { label: "Bekliyor", tone: "warn", icon: "hourglass" };
+  return { label: "Yeni", tone: "info", icon: "sparkles" };
 }
 
 /* ═══════════════════════ HESAP TALEPLERİ ═══════════════════════ */
@@ -168,58 +180,83 @@ export function AccountRequestsBoard({ canDecide }: { canDecide: boolean }) {
         keyExtractor={(r) => String(r.id)}
         emptyIcon="id-card-outline"
         emptyTitle="Bu filtrede talep yok"
-        renderItem={({ item: r }) => (
-          <RecordCard
-            title={ACCOUNT_REQUEST_TYPES[r.type] ?? r.type}
-            subtitle={accountRequestSummary(r)}
-            meta={[r.requester?.city, timeAgo(r.createdAt || r.created_at), `#${r.id}`].filter(Boolean).join(" · ")}
-            icon="id-card-outline"
-            iconTone={r.status === "pending" ? "brand" : "neutral"}
-            badges={[
-              { label: REVIEW_STATUS_LABELS[r.status] ?? r.status, tone: REVIEW_TONE[r.status] },
-              r.status === "pending" && r.warnings?.length ? { label: `${r.warnings.length} uyarı`, tone: "warn", icon: "warning-outline" } : null,
-            ]}
-            onPress={() => setSelected(r)}
-          />
-        )}
+        renderItem={({ item: r }) => {
+          const pending = r.status === "pending";
+          /* Yeni kayıt talepleri mükerrer kontrolü ister: hızlı onay yerine ayrıntı açılır. */
+          const quick = canDecide && pending && r.type !== "player_create" && r.type !== "team_create";
+          return (
+            <RequestCard
+              leading={<Avatar name={r.requester ? personName(r.requester) : "?"} size={38} />}
+              who={r.requester ? personName(r.requester) : "Bilinmeyen üye"}
+              when={[timeAgo(r.createdAt || r.created_at), r.requester?.city, `#${r.id}`].filter(Boolean).join(" · ")}
+              priority={pending ? waitPill(r.status, r.createdAt || r.created_at) : null}
+              status={pending ? null : waitPill(r.status)}
+              title={ACCOUNT_REQUEST_TYPES[r.type] ?? r.type}
+              subtitle={accountRequestSummary(r)}
+              onPress={() => setSelected(r)}
+              done={!pending}
+              onApprove={quick ? () => void decide(r, "approved") : undefined}
+              onReject={quick ? () => void decide(r, "rejected") : undefined}
+              busy={review.isPending}
+              extraActions={canDecide && pending && !quick ? <Button label="İncele ve karar ver" icon="search" size="md" variant="secondary" onPress={() => setSelected(r)} style={styles.grow} /> : null}
+            >
+              {pending && r.warnings?.length ? (
+                <View style={styles.inlinePills}>
+                  <Badge label={`${r.warnings.length} uyarı`} tone="warn" icon="warning-outline" size="xs" />
+                </View>
+              ) : null}
+            </RequestCard>
+          );
+        }}
       />
 
       <BottomSheet visible={item != null} onClose={review.isPending ? () => undefined : () => setSelected(null)} title={item ? `${ACCOUNT_REQUEST_TYPES[item.type] ?? item.type} · #${item.id}` : "Talep"} snap="full">
         {item ? (
           <View style={styles.sheet}>
-            <Text style={styles.lead} {...textScale.long}>
-              {accountRequestSummary(item)}
-            </Text>
+            <View style={styles.leadBox}>
+              <StatusBadge status={item.status} />
+              <Text style={styles.lead} {...textScale.long}>
+                {accountRequestSummary(item)}
+              </Text>
+            </View>
             {item.status === "pending" ? <Warnings items={item.warnings} /> : null}
             {item.status === "pending" ? <Outcome text={accountRequestOutcome(item.type)} /> : null}
             {item.note ? (
-              <Panel title="Üyenin notu">
+              <GroupCard title="Üyenin notu" icon="chatbox-ellipses" tone="cyan">
                 <Text style={styles.quote} {...textScale.long}>
                   “{item.note}”
                 </Text>
-              </Panel>
+              </GroupCard>
             ) : null}
             <PersonPanel user={item.requester} />
             <TeamPanel team={item.target_team} title={item.type === "team_create" ? "Açılan takım" : "Talep edilen takım"} />
             <PlayerPanel player={item.target_player} title={item.type === "player_create" ? "Bağlanan oyuncu kaydı" : "Talep edilen oyuncu profili"} />
             {item.transfer_target ? (
-              <Panel title="Devralacak üye">
-                <InfoLine label="Ad" value={personName(item.transfer_target)} />
-                <InfoLine label="Kullanıcı adı" value={`@${item.transfer_target.username ?? "—"}`} />
-                <InfoLine label="İl" value={item.transfer_target.city || "—"} />
-                <InfoLine label="Yönettiği takım" value={item.transfer_target.managed_team_id ? `#${item.transfer_target.managed_team_id}` : "Yok"} />
-              </Panel>
+              <GroupCard title="Devralacak üye" icon="swap-horizontal" tone="gold">
+                <View>
+                  <FactRow icon="person-outline" label="Ad" value={personName(item.transfer_target)} />
+                  <FactRow icon="at-outline" label="Kullanıcı adı" value={`@${item.transfer_target.username ?? "—"}`} />
+                  <FactRow icon="location-outline" label="İl" value={item.transfer_target.city || null} />
+                  <FactRow icon="shield-half-outline" label="Yönettiği takım" value={item.transfer_target.managed_team_id ? `#${item.transfer_target.managed_team_id}` : "Yok"} last />
+                </View>
+              </GroupCard>
             ) : null}
             {item.type === "player_create" || item.type === "team_create" ? (
-              <Panel title="Gönderilen bilgiler">
+              <GroupCard title="Gönderilen bilgiler" icon="document-text" tone="violet">
                 {image ? <Image source={{ uri: image }} style={styles.preview} resizeMode="cover" /> : null}
-                {payloadRows.length ? payloadRows.map(([key, value]) => <InfoLine key={key} label={PAYLOAD_LABELS[key]} value={String(value)} />) : <InfoLine label="Bilgi" value="Yok" />}
+                <View>
+                  {payloadRows.length ? (
+                    payloadRows.map(([key, value], i) => <FactRow key={key} label={PAYLOAD_LABELS[key]} value={String(value)} last={i === payloadRows.length - 1} />)
+                  ) : (
+                    <FactRow label="Bilgi" value="Yok" last />
+                  )}
+                </View>
                 {item.payload?.duplicate_check?.confirmed_new ? (
                   <Text style={styles.note} {...textScale.dense}>
                     Üye, benzer isimli kayıtları gördü ve bunların kendisi olmadığını belirtti.
                   </Text>
                 ) : null}
-              </Panel>
+              </GroupCard>
             ) : null}
             {canDecide && item.status === "pending" && (item.type === "player_create" || item.type === "team_create") ? (
               <LinkExisting
@@ -308,19 +345,32 @@ export function ChangeRequestsBoard({ canDecide }: { canDecide: boolean }) {
         emptyTitle="Bu filtrede değişiklik talebi yok"
         renderItem={({ item: r }) => {
           const n = (r.diff ?? []).filter((d) => d.changed).length;
+          const pending = r.status === "pending";
+          const changedRows = (r.diff ?? []).filter((d) => d.changed && d.kind !== "image").slice(0, 2);
           return (
-            <RecordCard
+            <RequestCard
+              leading={<IconTile icon={r.type === "team_logo" ? "image" : r.type === "player_release" ? "person-remove" : "create"} tone={pending ? "violet" : "neutral"} size={38} glow={false} />}
+              who={r.requester ? personName(r.requester) : "Bilinmeyen üye"}
+              when={[timeAgo(r.createdAt || r.created_at), r.requester?.city, r.type !== "player_release" ? `${n} alan` : null].filter(Boolean).join(" · ")}
+              priority={pending ? waitPill(r.status, r.createdAt || r.created_at) : null}
+              status={pending ? null : waitPill(r.status)}
               title={CHANGE_REQUEST_TYPES[r.type] ?? r.type}
               subtitle={changeRequestSummary(r)}
-              meta={[r.requester?.city, r.type !== "player_release" ? `${n} alan` : null, timeAgo(r.createdAt || r.created_at)].filter(Boolean).join(" · ")}
-              icon={r.type === "team_logo" ? "image-outline" : r.type === "player_release" ? "person-remove-outline" : "create-outline"}
-              iconTone={r.status === "pending" ? "brand" : "neutral"}
-              badges={[
-                { label: REVIEW_STATUS_LABELS[r.status] ?? r.status, tone: REVIEW_TONE[r.status] },
-                r.status === "pending" && r.warnings?.length ? { label: `${r.warnings.length} uyarı`, tone: "warn", icon: "warning-outline" } : null,
-              ]}
               onPress={() => setSelected(r)}
-            />
+              done={!pending}
+              onApprove={canDecide && pending ? () => void decide(r, "approved") : undefined}
+              onReject={canDecide && pending ? () => void decide(r, "rejected") : undefined}
+              busy={review.isPending}
+            >
+              {changedRows.map((d) => (
+                <DiffLine key={d.field} label={d.label} from={d.before == null ? null : String(d.before)} to={d.after == null ? null : String(d.after)} />
+              ))}
+              {pending && r.warnings?.length ? (
+                <View style={styles.inlinePills}>
+                  <Badge label={`${r.warnings.length} uyarı`} tone="warn" icon="warning-outline" size="xs" />
+                </View>
+              ) : null}
+            </RequestCard>
           );
         }}
       />
@@ -328,9 +378,12 @@ export function ChangeRequestsBoard({ canDecide }: { canDecide: boolean }) {
       <BottomSheet visible={item != null} onClose={review.isPending ? () => undefined : () => setSelected(null)} title={item ? `${CHANGE_REQUEST_TYPES[item.type] ?? item.type} · #${item.id}` : "Talep"} snap="full">
         {item ? (
           <View style={styles.sheet}>
-            <Text style={styles.lead} {...textScale.long}>
-              {changeRequestSummary(item)}
-            </Text>
+            <View style={styles.leadBox}>
+              <StatusBadge status={item.status} />
+              <Text style={styles.lead} {...textScale.long}>
+                {changeRequestSummary(item)}
+              </Text>
+            </View>
             {item.status === "pending" ? <Warnings items={item.warnings} /> : null}
             {item.status === "pending" ? <Outcome text={changeRequestOutcome(item)} /> : null}
             {item.diff?.length ? <DiffList diff={item.diff} /> : null}
@@ -348,7 +401,10 @@ export function ChangeRequestsBoard({ canDecide }: { canDecide: boolean }) {
 const styles = StyleSheet.create({
   header: { gap: space.sm },
   sheet: { gap: space.md },
-  lead: { ...type.h4, color: colors.textPrimary },
+  grow: { flex: 1 },
+  inlinePills: { flexDirection: "row", flexWrap: "wrap", gap: space.xs },
+  leadBox: { gap: space.sm, padding: space.lg, borderRadius: radius.xl, backgroundColor: colors.surface2, alignItems: "flex-start" },
+  lead: { ...type.h3, color: colors.textPrimary },
   quote: { ...type.bodySm, color: colors.textSecondary },
   note: { ...type.caption, color: colors.textSecondary },
   preview: { width: 96, height: 96, borderRadius: radius.md, backgroundColor: colors.surface2 },

@@ -103,7 +103,7 @@ export function CountStrip({ items, style }: { items: CountItem[]; style?: Style
               </Text>
             </View>
             {typeof item.value === "number" ? (
-              <Odometer value={item.value} style={[kit.stripValue, { color }]} />
+              <Odometer value={item.value.toLocaleString("tr-TR")} style={[kit.stripValue, { color }]} />
             ) : (
               <Text style={[kit.stripValue, { color }]} numberOfLines={1} adjustsFontSizeToFit {...textScale.badge}>
                 {item.value}

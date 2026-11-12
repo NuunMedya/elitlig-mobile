@@ -10,39 +10,44 @@
 import React, { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { InfoLine, Panel, RecordCard, StatRow, confirmAction, useAdminMutation } from "@/components/admin";
-import { BottomSheet, Button, Input, TeamLogo } from "@/components/ui";
+import { confirmAction, useAdminMutation } from "@/components/admin";
+import { Badge, BottomSheet, Button, Input, TeamLogo } from "@/components/ui";
 import { formatDateTime } from "@/lib/admin/format";
 import { positionLabel } from "@/lib/api/admin/players";
 import { ROW_STATUS_LABELS, approveRosterDraft, rejectRosterDraft, type DraftMember, type RosterDraft } from "@/lib/api/admin/rosters";
-import { colors, space, textScale, type } from "@/theme";
+import { colors, radius, space, textScale, type, upperTR } from "@/theme";
+
+import { DangerNote, GroupCard, ListLine, PositionAvatar, QuotaBar } from "./ManageKit";
 
 const rightsText = (r?: { unlimited?: boolean; none?: boolean; available?: number } | null) =>
   !r ? "Sınırsız" : r.unlimited ? "Limitsiz" : r.none ? "0" : String(r.available ?? 0);
 
+const DIFF_TONE = {
+  add: { icon: "add-circle" as const, tile: "mint" as const, sign: "+" },
+  remove: { icon: "remove-circle" as const, tile: "red" as const, sign: "−" },
+  license: { icon: "id-card" as const, tile: "cyan" as const, sign: "±" },
+};
+
 function DiffList({ title, list, tone }: { title: string; list?: DraftMember[]; tone: "add" | "remove" | "license" }) {
+  const t = DIFF_TONE[tone];
+  if (!list?.length) return null;
   return (
-    <Panel title={`${title} · ${list?.length ?? 0}`}>
-      {list?.length ? (
-        list.map((m) => (
-          <RecordCard
+    <GroupCard title={`${title} · ${t.sign}${list.length}`} icon={t.icon} tone={t.tile} padded={false}>
+      <View style={styles.listFoot}>
+        {list.map((m, i) => (
+          <ListLine
             key={m.player_id}
+            leading={<PositionAvatar name={m.name} image={m.image} position={m.position} size={34} />}
             title={m.name}
-            subtitle={[
-              m.position ? positionLabel(m.position) : null,
-              m.kind === "loan" ? "Kiralık" : null,
-              tone === "license" ? (m.is_licensed ? "Lisanslı olacak" : "Lisans kalkacak") : m.is_licensed ? "Lisanslı" : null,
-            ]
-              .filter(Boolean)
-              .join(" · ") || "—"}
-            avatar={{ name: m.name, image: m.image }}
-            iconTone={tone === "add" ? "win" : tone === "remove" ? "danger" : "info"}
+            subtitle={[m.position ? positionLabel(m.position) : null, m.kind === "loan" ? "Kiralık" : null].filter(Boolean).join(" · ") || "Mevki yok"}
+            pills={[
+              tone === "license" ? { label: m.is_licensed ? "Lisanslı olacak" : "Lisans kalkacak", tone: m.is_licensed ? "info" : "warn" } : m.is_licensed && { label: "Lisanslı", tone: "info" },
+            ]}
+            last={i === list.length - 1}
           />
-        ))
-      ) : (
-        <Text style={styles.muted}>Yok</Text>
-      )}
-    </Panel>
+        ))}
+      </View>
+    </GroupCard>
   );
 }
 
@@ -110,10 +115,11 @@ export function DraftReviewSheet({
       footer={
         pending ? (
           <View style={styles.footer}>
-            <Button label="Reddet" variant="danger" icon="close" onPress={() => void decide("reject")} loading={reject.isPending} />
+            <Button label="Reddet" variant="secondary" icon="close" size="lg" onPress={() => void decide("reject")} loading={reject.isPending} />
             <Button
               label="Onayla ve uygula"
               icon="checkmark"
+              size="lg"
               onPress={() => void decide("approve")}
               loading={approve.isPending}
               disabled={problems.length > 0}
@@ -126,53 +132,79 @@ export function DraftReviewSheet({
     >
       <View style={styles.stack}>
         <View style={styles.head}>
-          <TeamLogo name={draft.team?.name} logo={draft.team?.logo} size={44} />
+          <TeamLogo name={draft.team?.name} logo={draft.team?.logo} size={52} />
           <View style={styles.grow}>
-            <Text style={styles.title} {...textScale.dense}>
+            <Text style={styles.title} numberOfLines={2} {...textScale.dense}>
               {draft.team?.name ?? `Takım #${draft.team_id}`}
             </Text>
-            <Text style={styles.muted} {...textScale.dense}>
+            <Text style={styles.muted} numberOfLines={1} {...textScale.dense}>
               {[draft.team?.city, draft.season?.league_name, draft.season?.name].filter(Boolean).join(" · ")}
             </Text>
+            <View style={styles.pills}>
+              <Badge
+                label={pending ? ROW_STATUS_LABELS.pending : decided ? ROW_STATUS_LABELS[decided] : "Taslak"}
+                tone={pending ? "warn" : decided === "approved" ? "win" : decided === "rejected" ? "danger" : "neutral"}
+                size="xs"
+              />
+              <Text style={styles.time} {...textScale.dense}>
+                {formatDateTime(pending ? draft.submitted_at : draft.last_decision_at)}
+              </Text>
+            </View>
           </View>
         </View>
-        <InfoLine
-          label="Durum"
-          value={
-            pending
-              ? `${ROW_STATUS_LABELS.pending} · ${formatDateTime(draft.submitted_at)}`
-              : `${decided ? ROW_STATUS_LABELS[decided] : "Taslak"} · ${formatDateTime(draft.last_decision_at)}`
-          }
-          tone={pending ? "warn" : decided === "approved" ? "win" : decided === "rejected" ? "danger" : undefined}
-        />
-        {draft.note ? <InfoLine label="Takımın notu" value={`“${draft.note}”`} /> : null}
-        {!pending && draft.last_decision_note ? <InfoLine label="Yönetim notu" value={`“${draft.last_decision_note}”`} /> : null}
-        <StatRow
-          items={[
-            { label: "Taslak kadro", value: `${draft.members?.length ?? 0}${rules.applies && rules.general && !rules.general.unlimited ? `/${rules.general.cap}` : ""}` },
-            { label: "Lisanslı", value: `${licensed}${rules.applies && rules.licensed && !rules.licensed.unlimited ? `/${rules.licensed.cap}` : ""}` },
-            {
-              label: "Transfer hakkı",
-              value: rules.applies ? `${rightsText(rules.transfer_rights)}${rules.transfer_rights && !rules.transfer_rights.unlimited ? ` → ${rules.rights_after ?? "?"}` : ""}` : "Sınırsız",
-            },
-            { label: "Hak tüketimi", value: rules.rights_needed ?? diff.additions?.length ?? 0 },
-          ]}
-        />
-        {problems.length ? (
-          <Panel title="KURAL HATALARI">
-            {problems.map((e, i) => (
-              <Text key={`${e.code}-${i}`} style={styles.error} {...textScale.long}>
-                • {e.message}
+
+        {/* FARK ÖZETİ — büyük +/− rakamlar. */}
+        <View style={styles.delta}>
+          {[
+            { label: "Eklenecek", value: diff.additions?.length ?? 0, color: colors.win, sign: "+" },
+            { label: "Çıkarılacak", value: diff.removals?.length ?? 0, color: colors.danger, sign: "−" },
+            { label: "Lisans", value: diff.license_changes?.length ?? 0, color: colors.info, sign: "" },
+          ].map((d) => (
+            <View key={d.label} style={styles.deltaCell}>
+              <Text style={[styles.deltaValue, { color: d.value ? d.color : colors.textTertiary }]} {...textScale.badge}>
+                {d.value ? d.sign : ""}
+                {d.value}
               </Text>
-            ))}
-            <Text style={styles.muted} {...textScale.long}>
-              Kural hatası olan taslak onaylanamaz; gerekçeyle reddet.
-            </Text>
-          </Panel>
+              <Text style={styles.deltaLabel} {...textScale.badge}>
+                {upperTR(d.label)}
+              </Text>
+            </View>
+          ))}
+        </View>
+
+        <GroupCard title="Kural durumu" icon="speedometer" tone="violet">
+          <QuotaBar label="Taslak kadro" used={draft.members?.length ?? 0} cap={rules.applies && rules.general && !rules.general.unlimited ? rules.general.cap ?? null : null} />
+          <QuotaBar label="Lisanslı" used={licensed} cap={rules.applies && rules.licensed && !rules.licensed.unlimited ? rules.licensed.cap ?? null : null} />
+          <View style={styles.rights}>
+            <Badge
+              label={`Transfer hakkı: ${rules.applies ? `${rightsText(rules.transfer_rights)}${rules.transfer_rights && !rules.transfer_rights.unlimited ? ` → ${rules.rights_after ?? "?"}` : ""}` : "Sınırsız"}`}
+              tone="info"
+              icon="swap-horizontal"
+              size="sm"
+            />
+            <Badge label={`Hak tüketimi: ${rules.rights_needed ?? diff.additions?.length ?? 0}`} tone="neutral" size="sm" />
+          </View>
+        </GroupCard>
+
+        {problems.length ? (
+          <DangerNote
+            title={`${problems.length} kural hatası · onaylanamaz`}
+            body={`${problems.map((e) => `• ${e.message}`).join("\n")}\nGerekçeyle reddet; takım düzeltip yeniden gönderir.`}
+          />
         ) : null}
-        <DiffList title="EKLENECEK" list={diff.additions} tone="add" />
-        <DiffList title="ÇIKARILACAK" list={diff.removals} tone="remove" />
-        <DiffList title="LİSANS DEĞİŞİKLİĞİ" list={diff.license_changes} tone="license" />
+
+        {draft.note ? <DangerNote tone="info" icon="chatbox-ellipses" title="Takımın notu" body={`“${draft.note}”`} /> : null}
+        {!pending && draft.last_decision_note ? <DangerNote tone="info" icon="shield-checkmark" title="Yönetim notu" body={`“${draft.last_decision_note}”`} /> : null}
+
+        <DiffList title="Eklenecek" list={diff.additions} tone="add" />
+        <DiffList title="Çıkarılacak" list={diff.removals} tone="remove" />
+        <DiffList title="Lisans değişikliği" list={diff.license_changes} tone="license" />
+        {!diff.additions?.length && !diff.removals?.length && !diff.license_changes?.length ? (
+          <Text style={styles.muted} {...textScale.long}>
+            Taslak aktif kadroyla aynı; değişiklik yok.
+          </Text>
+        ) : null}
+
         {pending ? (
           <Input
             label="Takıma not"
@@ -195,9 +227,16 @@ export function DraftReviewSheet({
 const styles = StyleSheet.create({
   stack: { gap: space.md },
   head: { flexDirection: "row", alignItems: "center", gap: space.md },
-  grow: { flex: 1 },
+  grow: { flex: 1, minWidth: 0 },
   footer: { flexDirection: "row", gap: space.sm },
-  title: { ...type.h3, color: colors.textPrimary },
+  title: { ...type.h2, color: colors.textPrimary },
   muted: { ...type.bodySm, color: colors.textTertiary },
-  error: { ...type.bodySm, color: colors.danger },
+  pills: { flexDirection: "row", alignItems: "center", gap: space.sm, marginTop: space.xs },
+  time: { ...type.caption, color: colors.textTertiary },
+  delta: { flexDirection: "row", borderRadius: radius.xl, backgroundColor: colors.surface2, paddingVertical: space.md },
+  deltaCell: { flex: 1, alignItems: "center", gap: 2 },
+  deltaValue: { ...type.scoreLg },
+  deltaLabel: { ...type.micro, color: colors.textTertiary },
+  rights: { flexDirection: "row", flexWrap: "wrap", gap: space.xs },
+  listFoot: { paddingBottom: space.xs },
 });

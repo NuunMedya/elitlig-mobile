@@ -152,9 +152,9 @@ export function SysStage({
         </View>
       ) : null}
       {value != null || stats?.length ? (
-        <View style={styles.stageBody}>
+        <View style={[styles.stageBody, (stats?.length ?? 0) > 2 ? styles.stageBodyStack : null]}>
           {value != null ? (
-            <View style={styles.stageHero} accessible accessibilityLabel={`${valueLabel ?? ""} ${value}`}>
+            <View style={[styles.stageHero, (stats?.length ?? 0) > 2 ? styles.stageHeroRow : null]} accessible accessibilityLabel={`${valueLabel ?? ""} ${value}`}>
               {typeof value === "number" ? (
                 <Odometer value={value} style={styles.stageValue} />
               ) : (
@@ -170,7 +170,7 @@ export function SysStage({
             </View>
           ) : null}
           {stats?.length ? (
-            <View style={styles.stageStats}>
+            <View style={[styles.stageStats, (stats?.length ?? 0) > 2 ? styles.stageStatsFull : null]}>
               {stats.map((s) => (
                 <StageStat key={s.label} {...s} />
               ))}
@@ -531,10 +531,13 @@ const styles = StyleSheet.create({
   stageEyebrow: { ...type.overline, color: colors.adminAccent },
   stageTitle: { ...type.h3, color: colors.onDark },
   stageBody: { flexDirection: "row", alignItems: "flex-end", gap: space.md },
+  stageBodyStack: { flexDirection: "column", alignItems: "stretch" },
   stageHero: { minWidth: 84, gap: 2 },
+  stageHeroRow: { flexDirection: "row", alignItems: "flex-end", gap: space.sm },
   stageValue: { ...type.scoreHero, color: colors.onDark },
-  stageValueLabel: { ...type.micro, color: colors.onDarkMuted },
+  stageValueLabel: { ...type.micro, color: colors.onDarkMuted, paddingBottom: 6, flexShrink: 1 },
   stageStats: { flex: 1, flexDirection: "row", gap: space.sm },
+  stageStatsFull: { flex: 0 },
   stageStat: {
     flex: 1,
     minWidth: 0,

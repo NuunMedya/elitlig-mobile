@@ -859,7 +859,7 @@ const styles = StyleSheet.create({
   heroXpRow: { flexDirection: "row", alignItems: "flex-end", gap: space.xs },
   heroTitle: { ...type.scoreLg, color: colors.onDark },
   heroUnit: { ...type.h3, color: colors.brandOnDark, marginBottom: space.xxs },
-  heroWeek: { ...type.labelSm, color: colors.win },
+  heroWeek: { ...type.labelSm, color: colors.tileTones.mint[0] },
   heroBar: { gap: space.xs },
   heroBarHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" },
   heroSub: { ...type.caption, color: colors.onDarkMuted },
@@ -879,7 +879,7 @@ const styles = StyleSheet.create({
   layerName: { ...type.nano, color: colors.onDarkMuted, flexShrink: 1 },
   layerXp: { ...type.metricSm, color: colors.onDark },
   layerWeek: { ...type.caption, color: colors.onDarkMuted },
-  layerWeekUp: { color: colors.win },
+  layerWeekUp: { color: colors.tileTones.mint[0] },
 
   card: { gap: space.s, padding: space.md, borderRadius: radius.xl, borderWidth: hairline, borderColor: colors.glassLine, backgroundColor: colors.surface1 },
   cardHead: { flexDirection: "row", alignItems: "center", gap: space.s },

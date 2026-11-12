@@ -14,7 +14,7 @@
  *
  * Rol araçları (Takım paneli, oyuncu paneli, yönetim) YÖNETİM sekmesindedir.
  *
- * GİRİŞSİZ: kimlik kartı yerine davet çizilir; Hesabım / Hesabı sil satırları
+ * GİRİŞSİZ: kimlik kartı yerine davet çizilir; Hesabım / Oturumu kapat satırları
  * üretilmez. Takip sayıları ve Günün Testi cihazda saklandığı için misafirde
  * de gerçektir.
  */
@@ -25,7 +25,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Constants from "expo-constants";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   IconTile,
@@ -386,9 +386,9 @@ export default function MenuTabScreen() {
     [go]
   );
 
-  /* AYARLAR — tema anahtarı + tek Ayarlar kapısı. Hesabı sil App Store
-     5.1.1-v için girişli üyede Menü'de de doğrudan kapı olarak kalır
-     (docs/magaza-inceleme.md §1). */
+  /* AYARLAR — tema anahtarı + tek Ayarlar kapısı. Hesabı sil (App Store
+     5.1.1-v) profil ayarlarında durur: Hesabım ▸ Hesabı sil ve Ayarlar ▸
+     Oturum. Menünün en altında yalnız "Oturumu kapat" vardır. */
   const settingsItems = useMemo<MenuItemSpec[]>(() => {
     const list: MenuItemSpec[] = [
       {
@@ -423,28 +423,45 @@ export default function MenuTabScreen() {
         icon: "person",
         tone: "violet",
         title: "Hesabım",
-        subtitle: "Bilgiler, şifre, engellenenler",
+        subtitle: "Bilgiler, şifre, engellenenler, hesabı sil",
         onPress: openAccount,
       });
     }
     return list;
   }, [darkOn, go, openAccount, scope, toggleTheme, user]);
 
+  /* Oturumu kapat — onaylı; Ayarlar'daki çıkışla aynı akış. */
+  const confirmSignOut = useCallback(() => {
+    Alert.alert("Oturumu kapat", "Bu cihazdaki oturumu kapatmak istediğine emin misin?", [
+      { text: "Vazgeç", style: "cancel" },
+      {
+        text: "Oturumu kapat",
+        style: "destructive",
+        onPress: () => {
+          void auth.signOut().then(() => {
+            toast.show({ message: "Oturum kapatıldı.", tone: "neutral" });
+          });
+        },
+      },
+    ]);
+  }, [auth, toast]);
+
   const dangerItems = useMemo<MenuItemSpec[]>(
     () =>
       user
         ? [
             {
-              key: "hesap-sil",
-              icon: "trash",
-              title: "Hesabı sil",
-              subtitle: "Hesabını ve kişisel verilerini kalıcı olarak sil",
+              key: "cikis",
+              icon: "log-out",
+              title: "Oturumu kapat",
+              subtitle: "Bu cihazdaki oturumdan çık",
               destructive: true,
-              onPress: () => go("/hesap-sil"),
+              onPress: confirmSignOut,
+              testID: "menu-sign-out",
             },
           ]
         : [],
-    [go, user]
+    [confirmSignOut, user]
   );
 
   const socials = useMemo(() => {

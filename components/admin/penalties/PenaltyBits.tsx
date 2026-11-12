@@ -6,11 +6,13 @@
  *   PenaltyDecisionFields aşama + süre türü + maç sayısı (detay, sevk, savunma kutusu)
  */
 
+import Ionicons from "@expo/vector-icons/Ionicons";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { FieldLabel, RecordCard, type BadgeSpec } from "@/components/admin";
-import { Input, SegmentedControl, type Tone } from "@/components/ui";
+import { FieldLabel, type BadgeSpec } from "@/components/admin";
+import { EntityCard } from "@/components/admin/team/ManageKit";
+import { Avatar, GradientBar, Input, SegmentedControl, toneColors, type Tone } from "@/components/ui";
 import { formatDate, formatDateTime } from "@/lib/admin/format";
 import {
   banSummary,
@@ -57,21 +59,61 @@ export function penaltyBadges(penalty: Penalty, short = true): BadgeSpec[] {
   return badges;
 }
 
+/** Aşamanın kart rengi (IconTile/şerit). */
+export const STATUS_ICON: Record<PenaltyStatus, keyof typeof Ionicons.glyphMap> = {
+  sevk: "paper-plane",
+  kurul_karari: "hammer",
+  cas_basvuru: "document-attach",
+  cas_karari: "ribbon",
+};
+
 export const PenaltyCard = React.memo(function PenaltyCard({ penalty, onPress }: { penalty: Penalty; onPress?: () => void }) {
-  const match = penalty.match_label ? `${penalty.match_label}${penalty.match_date ? ` · ${formatDate(penalty.match_date)}` : ""}` : null;
+  const state = penalty.ban_state;
+  const active = !!state?.active;
+  const byMatch = state?.duration_type === "mac" && state.matches_required;
+  const durationLabel =
+    penalty.duration_type === "suresiz" ? "Süresiz ihraç" : penalty.duration_type === "mac" ? `${penalty.match_count ?? 1} maç men` : "Süre belirlenmedi";
   return (
-    <RecordCard
+    <EntityCard
+      leading={
+        <View style={[styles.ring, { borderColor: active ? colors.danger : colors.border }]}>
+          <Avatar name={penalty.player_name} image={penalty.player_img} size={44} />
+          <View style={[styles.stageDot, { backgroundColor: toneColors(STATUS_TONE[penalty.status]).fg }]}>
+            <Ionicons name={STATUS_ICON[penalty.status] ?? "hammer"} size={10} color={colors.onDark} />
+          </View>
+        </View>
+      }
+      overline={PENALTY_STATUS_SHORT[penalty.status] ?? penalty.status}
       title={penalty.player_name || "Oyuncu"}
       subtitle={penalty.team_name || "Takım belirtilmedi"}
-      meta={match}
-      avatar={{ name: penalty.player_name, image: penalty.player_img }}
-      badges={penaltyBadges(penalty)}
+      meta={penalty.match_label ? `${penalty.match_label}${penalty.match_date ? ` · ${formatDate(penalty.match_date)}` : ""}` : null}
+      pills={[
+        { label: durationLabel, tone: penalty.duration_type === "suresiz" ? "danger" : penalty.duration_type ? "warn" : "neutral", icon: penalty.duration_type === "suresiz" ? "ban" : "football-outline" },
+        state && state.active != null ? (active ? { label: "Cezalı", tone: "danger", icon: "alert-circle" } : { label: "Sona erdi", tone: "neutral" }) : null,
+        !!penalty.submission_summary?.pending && { label: `${penalty.submission_summary!.pending} başvuru`, tone: "info", icon: "document-attach-outline" },
+      ]}
+      footer={
+        byMatch ? (
+          <View style={styles.serve}>
+            <View style={styles.serveHead}>
+              <Text style={styles.serveLabel} {...textScale.badge}>
+                CEZA İLERLEMESİ
+              </Text>
+              <Text style={styles.serveValue} {...textScale.badge}>
+                {state!.matches_played ?? 0}
+                <Text style={styles.serveOf}> / {state!.matches_required} maç</Text>
+              </Text>
+            </View>
+            <GradientBar value={(state!.matches_played ?? 0) / (state!.matches_required || 1)} height={5} gradient={(state!.matches_remaining ?? 0) > 0 ? colors.tileTones.red : colors.tileTones.mint} />
+          </View>
+        ) : (
+          <Text style={styles.summary} numberOfLines={2} {...textScale.dense}>
+            {banSummary(penalty)}
+          </Text>
+        )
+      }
       onPress={onPress}
-    >
-      <Text style={styles.summary} numberOfLines={2} {...textScale.dense}>
-        {banSummary(penalty)}
-      </Text>
-    </RecordCard>
+    />
   );
 });
 
@@ -211,7 +253,25 @@ export function durationBody(value: DecisionValue): { duration_type?: DurationTy
 }
 
 const styles = StyleSheet.create({
-  summary: { ...type.caption, color: colors.textSecondary, marginTop: space.xs },
+  summary: { ...type.caption, color: colors.textSecondary },
+  ring: { borderWidth: 2, borderRadius: radius.pill, padding: 1 },
+  stageDot: {
+    position: "absolute",
+    right: -3,
+    bottom: -3,
+    width: 18,
+    height: 18,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: colors.surface1,
+  },
+  serve: { gap: space.xs },
+  serveHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" },
+  serveLabel: { ...type.micro, color: colors.textTertiary },
+  serveValue: { ...type.numSmStrong, color: colors.textPrimary },
+  serveOf: { ...type.numSm, color: colors.textTertiary },
   fields: { gap: space.lg },
   field: { gap: space.sm },
   hint: { ...type.caption, color: colors.textTertiary },

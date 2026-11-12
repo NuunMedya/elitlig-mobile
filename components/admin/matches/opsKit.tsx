@@ -512,6 +512,110 @@ export function OpsRow({
   );
 }
 
+/* ═══════════════════════════════ KAYIT KARTI ═══════════════════════════════ */
+
+export interface OpsSpec {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  /** "warn" eksik bilgi, "win" tamam; verilmezse nötr. */
+  tone?: Tone;
+}
+
+/**
+ * Lig/sezon/kitapçık/kura kaydı: solda IconTile (ya da logo), başlık + alt
+ * metin, altında ikonlu "özellik" hapları; sağda Archivo değer ya da durum
+ * rozeti. Solda 3 px şerit kaydın durum rengidir.
+ */
+export const OpsRecord = memo(function OpsRecord({
+  icon,
+  tone = "violet",
+  leading,
+  title,
+  subtitle,
+  specs,
+  status,
+  value,
+  valueLabel,
+  rail,
+  muted,
+  footer,
+  onPress,
+  accessibilityLabel,
+}: {
+  icon?: keyof typeof Ionicons.glyphMap;
+  tone?: IconTileTone;
+  leading?: React.ReactNode;
+  title: string;
+  subtitle?: string | null;
+  specs?: (OpsSpec | null | false | undefined)[];
+  status?: { label: string; tone: Tone; dot?: boolean } | null;
+  value?: string | number | null;
+  valueLabel?: string;
+  rail?: Tone | null;
+  muted?: boolean;
+  footer?: React.ReactNode;
+  onPress?: () => void;
+  accessibilityLabel?: string;
+}) {
+  const list = (specs ?? []).filter(Boolean) as OpsSpec[];
+  const body = (
+    <>
+      {rail ? <View style={[styles.recRail, { backgroundColor: toneColor(rail) }]} /> : null}
+      <View style={styles.recTop}>
+        {leading ?? (icon ? <IconTile icon={icon} tone={muted ? "neutral" : tone} size={42} glow={!muted} /> : null)}
+        <View style={styles.flex}>
+          <View style={styles.recTitleRow}>
+            <Text style={[styles.recTitle, muted ? styles.recMuted : null]} numberOfLines={1} {...textScale.dense}>
+              {title}
+            </Text>
+          </View>
+          {subtitle ? (
+            <Text style={styles.recSub} numberOfLines={1} {...textScale.dense}>
+              {subtitle}
+            </Text>
+          ) : null}
+          {status ? (
+            <View style={styles.recStatus}>
+              <Badge label={status.label} tone={status.tone} size="xs" dot={status.dot} />
+            </View>
+          ) : null}
+        </View>
+        {value != null && value !== "" ? (
+          <View style={styles.recValueBox}>
+            <Text style={styles.recValue} numberOfLines={1} {...textScale.badge}>
+              {value}
+            </Text>
+            {valueLabel ? (
+              <Text style={styles.recValueLabel} numberOfLines={1} {...textScale.badge}>
+                {upperTR(valueLabel)}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
+        {onPress ? <Ionicons name="chevron-forward" size={15} color={colors.textTertiary} /> : null}
+      </View>
+      {list.length ? (
+        <View style={styles.recSpecs}>
+          {list.map((spec) => (
+            <InfoPill key={`${spec.icon}-${spec.label}`} icon={spec.icon} label={spec.label} tone={spec.tone} />
+          ))}
+        </View>
+      ) : null}
+      {footer}
+    </>
+  );
+  const label = accessibilityLabel ?? [title, subtitle, status?.label, value].filter(Boolean).join(", ");
+  return onPress ? (
+    <Touchable feedback="card" onPress={onPress} style={[styles.rec, muted ? styles.recMutedBox : null]} accessibilityRole="button" accessibilityLabel={label}>
+      {body}
+    </Touchable>
+  ) : (
+    <View style={[styles.rec, muted ? styles.recMutedBox : null]} accessible accessibilityLabel={label}>
+      {body}
+    </View>
+  );
+});
+
 /* ═══════════════════════════════ STİLLER ═══════════════════════════════ */
 
 const styles = StyleSheet.create({
@@ -680,4 +784,27 @@ const styles = StyleSheet.create({
   rowTitle: { ...type.h4, color: colors.textPrimary },
   rowMeta: { ...type.caption, color: colors.textTertiary, marginTop: space.xxs },
   rowValue: { ...type.tableNumStrong, fontFamily: fonts.bold, color: colors.textPrimary },
+
+  rec: {
+    gap: space.m,
+    padding: space.md,
+    paddingLeft: space.md + space.xxs,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+    overflow: "hidden",
+  },
+  recMutedBox: { backgroundColor: colors.surface2 },
+  recRail: { position: "absolute", left: 0, top: 0, bottom: 0, width: 3 },
+  recTop: { flexDirection: "row", alignItems: "center", gap: space.md },
+  recTitleRow: { flexDirection: "row", alignItems: "center", gap: space.xs },
+  recTitle: { ...type.h3, color: colors.textPrimary, flexShrink: 1 },
+  recMuted: { color: colors.textSecondary },
+  recSub: { ...type.caption, color: colors.textTertiary, marginTop: space.xxs },
+  recStatus: { flexDirection: "row", marginTop: space.xs },
+  recValueBox: { alignItems: "flex-end", minWidth: 36 },
+  recValue: { ...type.scoreSm, color: colors.textPrimary },
+  recValueLabel: { ...type.overline, color: colors.textTertiary },
+  recSpecs: { flexDirection: "row", flexWrap: "wrap", gap: space.xs, paddingLeft: 42 + space.md },
 });

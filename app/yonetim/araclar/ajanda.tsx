@@ -22,7 +22,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { AdminScreen, ToggleField, confirmAction, useAdminMutation } from "@/components/admin";
-import { ToolFab } from "@/components/admin/tools/ToolApp";
+import { ToolFab, ToolSummary } from "@/components/admin/tools/ToolApp";
 import { DayList, MonthView, TimeGrid, groupByDay } from "@/components/admin/tools/AgendaViews";
 import { disableReminders, enableReminders, exportToDeviceCalendar, readNotifyPref, syncReminders } from "@/components/admin/tools/agendaDevice";
 import {
@@ -236,6 +236,15 @@ export default function AgendaScreen() {
   } else if (view === "month") {
     body = (
       <ScrollView contentContainerStyle={styles.scroll} refreshControl={refreshControl}>
+        <ToolSummary
+          app="ajanda"
+          stats={[
+            { label: "Bugün", value: itemsOnDay(items, startOfDay(today)).length, tone: "accent" },
+            { label: "7 günde", value: weekCount },
+            { label: "Maç", value: items.filter((i) => i.category === "match" && new Date(i.occurrence_start) >= startOfDay(today)).length, tone: "win" },
+            { label: "Son tarih", value: items.filter((i) => (i.category === "deadline" || i.source === "todo") && new Date(i.occurrence_start) >= startOfDay(today)).length, tone: "danger" },
+          ]}
+        />
         <MonthView
           cursor={cursor}
           items={items}
@@ -256,8 +265,8 @@ export default function AgendaScreen() {
                 {selected.toLocaleDateString("tr-TR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
               </Text>
             </View>
-            <Touchable feedback="icon" onPress={() => openCreate(selected)} hitSlop={touchSlop(28)} accessibilityLabel="Seçili güne etkinlik ekle">
-              <Ionicons name="add-circle-outline" size={28} color={colors.brandAccent} />
+            <Touchable feedback="icon" onPress={() => openCreate(selected)} hitSlop={touchSlop(36)} accessibilityLabel="Seçili güne etkinlik ekle" style={styles.addBtn}>
+              <Ionicons name="add" size={20} color={colors.onDark} />
             </Touchable>
           </View>
           <DayList items={selectedItems} onOpen={openItem} emptyText="Bu gün için plan yok. Takvimde güne basılı tutarak da ekleyebilirsiniz." />
@@ -377,14 +386,8 @@ const styles = StyleSheet.create({
   navTitle: { flex: 1, ...type.h3, color: colors.textPrimary, textAlign: "center" },
   scroll: { paddingHorizontal: layout.screenPadding, paddingBottom: space.giant * 2, gap: space.md },
   timeWrap: { flex: 1, paddingHorizontal: space.sm, paddingBottom: space.sm },
-  dayPanel: {
-    gap: space.sm,
-    padding: space.md,
-    borderRadius: radius.xl,
-    borderWidth: hairline,
-    borderColor: colors.border,
-    backgroundColor: colors.surface2,
-  },
+  dayPanel: { gap: space.sm },
+  addBtn: { width: 36, height: 36, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.brand },
   dayHead: { flexDirection: "row", alignItems: "center", gap: space.sm },
   flex: { flex: 1 },
   dayTitle: { ...type.h2, color: colors.textPrimary },

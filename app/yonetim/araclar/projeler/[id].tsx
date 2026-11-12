@@ -32,12 +32,13 @@ import { Questions } from "@/components/admin/projects/Questions";
 import { Settings } from "@/components/admin/projects/Settings";
 import { StepSheet } from "@/components/admin/projects/StepSheet";
 import { Pill, ProgressBar } from "@/components/admin/projects/ui";
-import { Button, EmptyState, ErrorState, SkeletonCard, SkeletonHero, Tabs, useToast } from "@/components/ui";
+import { StageChip, ToolStage } from "@/components/admin/tools/ToolKit";
+import { Button, EmptyState, ErrorState, GradientBar, Reveal, SkeletonCard, SkeletonHero, Tabs, useToast, withAlpha } from "@/components/ui";
 import { formatDate } from "@/lib/admin/format";
-import { PROJECT_STATUS_META, TABS, TOOL_META, isProjectTab, stageOf, type ProjectTab } from "@/lib/admin/projectUtils";
+import { PROJECT_STATUS_META, TABS, TOOL_META, isProjectTab, projectIcon, stageOf, type ProjectTab } from "@/lib/admin/projectUtils";
 import { getProject, projectKeys, type Lead, type Step } from "@/lib/api/admin/projects";
 import { ApiError } from "@/lib/http";
-import { colors, radius, space, textScale, type } from "@/theme";
+import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
 type RouteParams = {
   id?: string;
@@ -246,16 +247,43 @@ function DetailBody({
       refreshing={refreshing}
       bottom={<Tabs<ProjectTab> items={tabItems} value={nav.tab} onChange={onTab} distribute="scroll" />}
     >
-      <View style={styles.head}>
-        <View style={styles.headRow}>
-          <Pill label={st.label} color={st.color} icon={st.icon} />
-          {!canEdit ? <Pill label="Yalnız görüntüleme" color={colors.textSecondary} icon="eye-outline" /> : null}
-          {p.archived ? <Pill label="Arşivde" color={colors.textSecondary} icon="archive-outline" /> : null}
-          <View style={styles.flex} />
-          <Text style={styles.progress} {...textScale.dense}>%{s.steps.progress} · {s.steps.done}/{s.steps.total} adım</Text>
+      {nav.tab === "genel" ? (
+        <Reveal index={0}>
+          <ToolStage
+            icon={projectIcon(p.icon)}
+            tone="cyan"
+            overline={`${st.label} · ilerleme`}
+            value={`%${s.steps.progress}`}
+            caption={subtitle}
+            chips={
+              <>
+                {!canEdit ? <StageChip icon="eye-outline" label="Yalnız görüntüleme" /> : null}
+                {p.archived ? <StageChip icon="archive-outline" tone="warn" label="Arşivde" /> : null}
+                <StageChip icon="git-commit-outline" label={`${s.steps.done}/${s.steps.total} adım`} />
+              </>
+            }
+            stats={[
+              { label: "Geciken", value: s.steps.overdue, tone: s.steps.overdue ? "danger" : undefined, onPress: () => onTab("surec") },
+              { label: "Bugün ara", value: s.leads.due + s.suppliers.due, tone: s.leads.due ? "warn" : undefined, onPress: () => onTab("kisiler") },
+              { label: "Açık soru", value: data.questions.filter((q) => q.status === "open").length, onPress: () => onTab("sorular") },
+            ]}
+          >
+            <GradientBar value={s.steps.progress / 100} height={6} gradient={[withAlpha(p.color || colors.brand, 0.6), p.color || colors.brand]} track={colors.inkTile} />
+          </ToolStage>
+        </Reveal>
+      ) : (
+        <View style={styles.head}>
+          <View style={styles.headRow}>
+            <Pill label={st.label} color={st.color} icon={st.icon} />
+            {!canEdit ? <Pill label="Yalnız görüntüleme" color={colors.textSecondary} icon="eye-outline" /> : null}
+            {p.archived ? <Pill label="Arşivde" color={colors.textSecondary} icon="archive-outline" /> : null}
+            <View style={styles.flex} />
+            <Text style={styles.progress} {...textScale.badge}>%{s.steps.progress}</Text>
+            <Text style={styles.progressSub} {...textScale.dense}>{s.steps.done}/{s.steps.total} adım</Text>
+          </View>
+          <ProgressBar value={s.steps.progress} color={p.color} thin />
         </View>
-        <ProgressBar value={s.steps.progress} color={p.color} thin />
-      </View>
+      )}
 
       {scoped && toolMeta ? (
         <View style={styles.banner}>
@@ -322,8 +350,9 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   head: { gap: space.sm },
   headRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: space.xs },
-  progress: { ...type.labelSm, color: colors.textSecondary },
-  banner: { flexDirection: "row", alignItems: "center", gap: space.sm, padding: space.md, borderRadius: radius.lg, backgroundColor: colors.brandDim },
+  progress: { ...type.tableNumStrong, color: colors.textPrimary },
+  progressSub: { ...type.caption, color: colors.textTertiary },
+  banner: { flexDirection: "row", alignItems: "center", gap: space.sm, padding: space.md, borderRadius: radius.xl, backgroundColor: colors.brandDim, borderWidth: hairline, borderColor: colors.brandBorder },
   bannerTitle: { ...type.label, color: colors.textPrimary },
   bannerSub: { ...type.caption, color: colors.textSecondary },
 });

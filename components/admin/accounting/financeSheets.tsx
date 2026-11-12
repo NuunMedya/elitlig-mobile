@@ -16,6 +16,7 @@ import React, { useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { RecordCard, SelectField, SegmentField, type FieldDef, type FormValues } from "@/components/admin";
+import { LineRow, categoryVisual } from "@/components/admin/tools/ToolKit";
 import { BottomSheet, Button, Input, SegmentedControl, Touchable } from "@/components/ui";
 import { errorText } from "@/lib/admin/errors";
 import { formatDate } from "@/lib/admin/format";
@@ -211,14 +212,16 @@ export function FinanceEntryCard({
     .filter(Boolean)
     .join(" · ");
   const date = entry.status === "paid" ? entry.paid_date || entry.entry_date : entry.entry_date;
+  const visual = categoryVisual(entry.category, entry.type);
   return (
-    <RecordCard
+    <LineRow
+      icon={visual.icon}
+      tone={visual.tone}
       title={entry.description || entry.category || (entry.type === "income" ? "Gelir" : "Gider")}
-      subtitle={sub || null}
+      sub={sub || null}
       meta={`${formatDate(date)}${entry.amount == null && entry.estimate != null ? " · tahmini" : ""}`}
-      icon={entry.type === "income" ? "trending-up" : "trending-down"}
-      iconTone={entry.type === "income" ? "win" : "danger"}
-      badges={[{ label: statusLabel(entry.status, entry.type), tone: st.tone, icon: st.icon }]}
+      metaIcon="time-outline"
+      badge={entry.status === "paid" ? null : { label: statusLabel(entry.status, entry.type), tone: st.tone, icon: st.icon }}
       value={`${entry.type === "income" ? "+" : "−"}${money(entry.effective)}`}
       valueTone={entry.status === "cancelled" ? "neutral" : entry.type === "income" ? "win" : "danger"}
       muted={entry.status === "cancelled"}
@@ -230,7 +233,7 @@ export function FinanceEntryCard({
           <Button label={paidVerb(entry.type)} icon="checkmark" size="sm" variant="secondary" onPress={() => onPaid(entry)} />
         </View>
       ) : null}
-    </RecordCard>
+    </LineRow>
   );
 }
 
@@ -669,14 +672,16 @@ export function AccessSheet({
 }
 
 /** Tek virman satırı. */
+/** Virman satırı: iki hesap ok ile, tutar Archivo (Lines içinde de tek başına da durur). */
 export function TransferCard({ t, onPress }: { t: FinanceTransfer; onPress?: () => void }) {
   return (
-    <RecordCard
-      title={`${t.from_name || `Hesap #${t.from_account_id}`} → ${t.to_name || `Hesap #${t.to_account_id}`}`}
-      subtitle={t.note || null}
-      meta={formatDate(t.transfer_date)}
+    <LineRow
       icon="swap-horizontal"
-      iconTone="brand"
+      tone="violet"
+      title={`${t.from_name || `Hesap #${t.from_account_id}`} → ${t.to_name || `Hesap #${t.to_account_id}`}`}
+      sub={t.note || null}
+      meta={formatDate(t.transfer_date)}
+      metaIcon="time-outline"
       value={money(t.amount)}
       onPress={onPress}
     />

@@ -230,7 +230,7 @@ export default function AccountingHubScreen() {
 
       {accounts.length ? (
         <View style={styles.section}>
-          <SectionHeader title="Hesaplarım" meta={scopes.map((s) => SCOPE_LABEL[s]).join(" · ")} inset="flush" action={{ label: "Tümü", onPress: () => router.push("/yonetim/araclar/muhasebe/hesaplar" as never) }} />
+          <SectionHeader title="Hesaplarım" meta={`${accounts.length}`} inset="flush" action={{ label: "Tümü", onPress: () => router.push("/yonetim/araclar/muhasebe/hesaplar" as never) }} />
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.railScroller} contentContainerStyle={styles.rail}>
             {accounts.map((a, index) => (
               <Reveal key={a.id} index={index} axis="x">

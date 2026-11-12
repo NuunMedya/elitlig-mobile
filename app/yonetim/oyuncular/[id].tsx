@@ -237,7 +237,7 @@ export default function PlayerProfileScreen() {
                 { label: "Maç", value: player.total_matches ?? 0 },
                 { label: "Gol", value: player.total_goals ?? 0 },
                 { label: "Takım", value: data.teams.length },
-                { label: "Değer · ETL", value: compactEtl(player.value) },
+                { label: "Piyasa · ETL", value: compactEtl(player.value) },
               ]}
             />
           </Reveal>

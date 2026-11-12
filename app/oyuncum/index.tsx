@@ -1526,6 +1526,7 @@ const styles = StyleSheet.create({
   },
   filterBar: {
     paddingVertical: space.md,
+    gap: space.md,
   },
   overline: {
     ...type.overline,
@@ -1639,8 +1640,8 @@ const styles = StyleSheet.create({
     color: colors.textTertiary,
   },
   scoreBox: {
-    minWidth: 48,
-    height: 28,
+    minWidth: 54,
+    height: 32,
     paddingHorizontal: space.s,
     borderRadius: radius.xs,
     borderWidth: hairline,
@@ -1650,7 +1651,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   scoreText: {
-    ...type.tableNumStrong,
+    ...type.scoreXs,
     color: colors.textPrimary,
   },
   timeBox: {

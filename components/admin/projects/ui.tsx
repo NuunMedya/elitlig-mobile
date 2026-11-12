@@ -11,9 +11,11 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { useEffect, useState } from "react";
 import { Linking, Share, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 
-import { Chip, ChipGroup, Input, Touchable, withAlpha, type InputProps } from "@/components/ui";
+import { LinearGradient } from "expo-linear-gradient";
+
+import { Chip, ChipGroup, GradientBar, Input, Touchable, withAlpha, type InputProps } from "@/components/ui";
 import { mailHref, prettyPhone, telHref, waHref } from "@/lib/admin/projectUtils";
-import { colors, radius, space, textScale, type } from "@/theme";
+import { colors, radius, space, textScale, type, upperTR } from "@/theme";
 
 /* ------------------------------- bağlantı aç ------------------------------- */
 
@@ -41,13 +43,11 @@ export async function shareCsv(title: string, csv: string) {
 
 export function ProgressBar({ value, color, thin, style }: { value: number; color?: string | null; thin?: boolean; style?: StyleProp<ViewStyle> }) {
   const pct = Math.max(0, Math.min(100, Number(value) || 0));
+  const c = color || colors.brand;
   return (
-    <View
-      style={[styles.track, thin ? styles.trackThin : null, style]}
-      accessibilityRole="progressbar"
-      accessibilityValue={{ min: 0, max: 100, now: pct }}
-    >
-      <View style={[styles.fill, { width: `${pct}%`, backgroundColor: color || colors.brand }]} />
+    <View style={style} accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: 100, now: pct }}>
+      {/* Gece teması: proje renginde degrade, yaylı dolum (GradientBar). */}
+      <GradientBar value={pct / 100} height={thin ? 5 : 8} gradient={[withAlpha(c, 0.55), c]} />
     </View>
   );
 }
@@ -84,11 +84,18 @@ export function Muted({ children, style }: { children: React.ReactNode; style?: 
 export function SubHead({ icon, title, count, right }: { icon?: keyof typeof Ionicons.glyphMap; title: string; count?: number; right?: React.ReactNode }) {
   return (
     <View style={styles.subhead}>
-      {icon ? <Ionicons name={icon} size={16} color={colors.textSecondary} /> : null}
-      <Text style={styles.subheadText} {...textScale.dense}>
-        {title}
-        {count != null ? <Text style={styles.subheadCount}> {count}</Text> : null}
+      <LinearGradient colors={colors.gradientSignature} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} style={styles.subheadRail} />
+      {icon ? <Ionicons name={icon} size={14} color={colors.textSecondary} /> : null}
+      <Text style={styles.subheadText} accessibilityRole="header" {...textScale.dense}>
+        {upperTR(title)}
       </Text>
+      {count != null ? (
+        <View style={styles.subheadCountBox}>
+          <Text style={styles.subheadCount} {...textScale.badge}>
+            {count}
+          </Text>
+        </View>
+      ) : null}
       <View style={styles.flex} />
       {right}
     </View>
@@ -275,9 +282,6 @@ export function useChunk<T>(items: T[], size = 40) {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  track: { height: 8, borderRadius: radius.pill, backgroundColor: colors.surface3, overflow: "hidden" },
-  trackThin: { height: 4 },
-  fill: { height: "100%", borderRadius: radius.pill },
   pill: {
     flexDirection: "row",
     alignItems: "center",
@@ -290,9 +294,11 @@ const styles = StyleSheet.create({
   },
   pillText: { ...type.labelXs },
   muted: { ...type.bodySm, color: colors.textTertiary },
-  subhead: { flexDirection: "row", alignItems: "center", gap: space.s, marginTop: space.md, marginBottom: space.s },
-  subheadText: { ...type.label, color: colors.textPrimary },
-  subheadCount: { ...type.label, color: colors.textTertiary },
+  subhead: { flexDirection: "row", alignItems: "center", gap: space.s, marginTop: space.lg, marginBottom: space.xs },
+  subheadRail: { width: 3, height: 14, borderRadius: radius.pill },
+  subheadText: { ...type.overline, color: colors.textSecondary },
+  subheadCountBox: { minWidth: 20, height: 18, paddingHorizontal: space.xs, borderRadius: radius.pill, backgroundColor: colors.surface3, alignItems: "center", justifyContent: "center" },
+  subheadCount: { ...type.numSmStrong, color: colors.textSecondary },
   actRow: { flexDirection: "row", gap: space.s },
   iconAct: { width: 36, height: 36, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
   bigRow: { flexDirection: "row", gap: space.sm },

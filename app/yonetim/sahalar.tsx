@@ -1262,7 +1262,7 @@ const WeekGrid = memo(function WeekGrid({
           <View key={day.date} style={[styles.gridHead, day.is_today ? styles.gridHeadToday : null]}>
             {day.is_today ? <LinearGradient colors={colors.gradientSignature} style={[StyleSheet.absoluteFill, styles.gridHeadFill]} /> : null}
             <Text style={[styles.gridHeadDay, day.is_today ? styles.gridHeadOn : null, day.is_past ? styles.gridPast : null]} {...textScale.badge}>
-              {upperTR(day.label.slice(0, 3))}
+              {upperTR(WEEK_INITIALS[day.day - 1] ?? day.label.slice(0, 2))}
             </Text>
             <Text style={[styles.gridHeadNum, day.is_today ? styles.gridHeadOn : null, day.is_past ? styles.gridPast : null]} {...textScale.badge}>
               {day.date.slice(8, 10).replace(/^0/, "")}

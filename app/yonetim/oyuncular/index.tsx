@@ -134,7 +134,7 @@ export default function PlayersScreen() {
               items={[
                 { key: "total", label: "Toplam", value: counts?.total ?? "—", icon: "people", selected: status === "", onPress: () => setStatus("") },
                 { key: "passive", label: "Pasif", value: counts?.passive ?? "—", icon: "pause-circle", selected: status === "passive", onPress: () => setStatus(status === "passive" ? "" : "passive") },
-                { key: "nophoto", label: "Fotoğrafsız", value: counts?.missingPhoto ?? "—", tone: "warn", icon: "camera-outline", selected: status === "nophoto", onPress: () => setStatus(status === "nophoto" ? "" : "nophoto") },
+                { key: "nophoto", label: "Foto yok", value: counts?.missingPhoto ?? "—", tone: "warn", icon: "camera-outline", selected: status === "nophoto", onPress: () => setStatus(status === "nophoto" ? "" : "nophoto") },
               ]}
             />
             <ChipGroup scrollable contentPadding={0}>
