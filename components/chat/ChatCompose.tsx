@@ -16,26 +16,13 @@ import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import {
-  Avatar,
-  Button,
-  Chip,
-  ChipGroup,
-  EmptyState,
-  ErrorState,
-  Input,
-  ListRow,
-  ScreenHeader,
-  SectionHeader,
-  SkeletonListRow,
-  Touchable,
-  errorMessage,
-  useToast,
-} from "@/components/ui";
+import { Avatar, Button, Chip, ChipGroup, EmptyState, ErrorState, Input, ListRow, SkeletonListRow, Touchable, WaHeader, errorMessage } from "@/components/chat/kit";
+import { useToast } from "@/components/ui";
 import { adminChat, getDirectory, openConversation, updateGroup, type ChatUser, type OpenConversationInput } from "@/lib/api/chat";
 import { queryKeys } from "@/lib/queryKeys";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, hairline, layout, space, textScale, type } from "@/theme";
+import { colors } from "@/lib/chatPalette";
+import { hairline, layout, space, textScale, type } from "@/theme";
 
 type Tab = "all" | "staff" | "management" | "team" | "managers" | "players" | "group";
 
@@ -175,7 +162,7 @@ export function ChatCompose({ admin = false, initialTab }: ChatComposeProps) {
 
   const renderItem = useCallback(
     ({ item }: { item: Row }) => {
-      if (item.kind === "section") return <SectionHeader title={item.title} />;
+      if (item.kind === "section") return <Text style={styles.section} accessibilityRole="header" {...textScale.dense}>{item.title}</Text>;
       if (item.kind === "management") {
         return (
           <DirectoryRow
@@ -242,7 +229,7 @@ export function ChatCompose({ admin = false, initialTab }: ChatComposeProps) {
 
   return (
     <SafeAreaView style={styles.screen} edges={["top", "bottom"]}>
-      <ScreenHeader
+      <WaHeader
         title={groupMode ? "Yeni grup" : "Yeni sohbet"}
         subtitle={admin ? "ElitLig Yönetimi adına: kime yazacaksın?" : "Kime yazmak istiyorsun?"}
         back
@@ -365,6 +352,7 @@ const ICON_BUBBLE = 44;
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   headerBottom: { gap: space.sm, paddingBottom: space.sm },
+  section: { ...type.label, color: colors.textSecondary, paddingHorizontal: layout.screenPadding, paddingTop: space.lg, paddingBottom: space.s },
   searchWrap: { paddingHorizontal: layout.screenPadding },
   skeleton: { paddingHorizontal: layout.screenPadding, paddingTop: space.sm },
   list: { flexGrow: 1, paddingBottom: space.huge },

@@ -16,10 +16,11 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { BottomSheet, Button, Chip, ChipGroup, ErrorState, Input, SegmentedControl, SkeletonListRow, Touchable } from "@/components/ui";
+import { BottomSheet, Button, Chip, ChipGroup, ErrorState, Input, SegmentedControl, SkeletonListRow, Touchable } from "@/components/chat/kit";
 import { getAwardLeagues, getAwardSeasons, getContentMatches, type AwardPollInput, type ContentMatch } from "@/lib/api/chat";
 import { AWARD_CATEGORIES, DUTIES, isoDate, lastWeekRange, matchDayLabel, shiftDate } from "@/lib/chatUtils";
-import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
+import { colors } from "@/lib/chatPalette";
+import { hairline, layout, radius, space, textScale, type } from "@/theme";
 
 /* ---------- gün ve maç seçimi ---------- */
 

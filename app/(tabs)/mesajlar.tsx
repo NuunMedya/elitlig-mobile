@@ -37,7 +37,7 @@ import type { InboxHeaderAction } from "@/components/chat/InboxChrome";
 import { useNotificationBell } from "@/hooks/useNotificationBell";
 import { hasAnyPermission } from "@/lib/admin/access";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors } from "@/theme";
+import { colors } from "@/lib/chatPalette";
 
 type Section = "sohbetler" | "uye";
 

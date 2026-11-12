@@ -3,7 +3,7 @@
  *
  *   [ avatar 54 ]  Ad (onay) [Takım]                   14:05  ← saat (okunmamışsa vurgu)
  *                  tik  Ali: fotoğraf        @ sessiz sabit (3) ← bahsetme · sessiz · sabit · sayaç
- *                  ──────────────────────────────────────────  ← ayraç avatardan SONRA başlar
+ *   (satırlar arasında ayraç YOKTUR — güncel WhatsApp listesi gibi; boşluk ayırır)
  *
  * ÖLÇÜ SABİTTİR: her sohbet / arama / kişi satırı 72 px'tir (üçüncü satır
  * yok; takım adı ve yönetim kutusundaki kategori ilk satırda adın yanındadır).
@@ -21,14 +21,14 @@ import { Image, StyleSheet, Text, View } from "react-native";
 import { TypingLine } from "@/components/chat/ChatHeader";
 import { useOnline } from "@/components/chat/inboxPresence";
 import { Ticks } from "@/components/chat/MessageBubble";
-import { Skeleton, Touchable } from "@/components/ui";
+import { Skeleton, Touchable } from "@/components/chat/kit";
 import { useTypingNames } from "@/hooks/useChat";
 import type { ChatConversation, ChatSearchHit, ChatUser, ConversationType } from "@/lib/api/chat";
 import { useDraft } from "@/lib/chatDrafts";
-import { avatarTint } from "@/lib/chatPalette";
+import { avatarTone, colors, wa } from "@/lib/chatPalette";
 import { chatPreview, isGroupChat, isUnread, listTime, messageSummary, tickStatus } from "@/lib/chatUtils";
 import { initials, mediaUrl } from "@/lib/format";
-import { colors, fonts, hairline, layout, radius, space, textScale, type } from "@/theme";
+import { fonts, hairline, layout, radius, space, textScale, type } from "@/theme";
 
 /** Sohbet, mesaj sonucu ve kişi satırının yüksekliği. */
 export const INBOX_ROW_HEIGHT = 72;
@@ -46,8 +46,8 @@ export interface InboxAvatarProps {
   type: ConversationType | "person";
   title: string;
   image?: string | null;
-  /** Renk tohumu: kişi ya da sohbet kimliği (aynı sohbet hep aynı ton). */
-  seed: number | string;
+  /** Sohbet / kişi kimliği (çağıranlar verir; avatar rengi artık sohbete göre değişmez). */
+  seed?: number | string;
   /** Yönetim gelen kutusu: yazışmanın sahibi (takım / oyuncu / üye) gösterilir. */
   owner?: boolean;
   online?: boolean;
@@ -55,15 +55,15 @@ export interface InboxAvatarProps {
 
 /**
  * Fotoğraf → takım arması (kırpılmadan) → resmî sohbet simgesi → grup simgesi
- * → baş harfler. Fotoğrafsız hâllerde zemin, sohbete özgü yumuşak bir tondur.
+ * → baş harfler. Fotoğrafsız hâllerde zemin WhatsApp'ın yumuşak gri dairesidir
+ * (simge açık, baş harf koyu gri); resmî sohbet yeşil dairedir.
  */
-export const InboxAvatar = memo(function InboxAvatar({ type: kind, title, image, seed, owner = false, online = false }: InboxAvatarProps) {
+export const InboxAvatar = memo(function InboxAvatar({ type: kind, title, image, owner = false, online = false }: InboxAvatarProps) {
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [image]);
   const uri = failed ? null : mediaUrl(image);
   const official = !owner && (kind === "management" || kind === "admin");
   const group = kind === "group" || kind === "team";
-  const tint = avatarTint(seed);
 
   return (
     <View style={styles.avatar}>
@@ -81,12 +81,12 @@ export const InboxAvatar = memo(function InboxAvatar({ type: kind, title, image,
           <Ionicons name={kind === "admin" ? "notifications" : "shield-checkmark"} size={26} color={colors.textOnBrand} />
         </View>
       ) : group ? (
-        <View style={[styles.avatarFill, { backgroundColor: tint.bg }]}>
-          <Ionicons name={kind === "team" ? "shield-half" : "people"} size={26} color={tint.fg} />
+        <View style={styles.avatarFill}>
+          <Ionicons name={kind === "team" ? "shield-half" : "people"} size={28} color={avatarTone.glyph} />
         </View>
       ) : (
-        <View style={[styles.avatarFill, { backgroundColor: tint.bg }]}>
-          <Text style={[styles.avatarInitials, { color: tint.fg }]} numberOfLines={1} {...textScale.badge}>{initials(title)}</Text>
+        <View style={styles.avatarFill}>
+          <Text style={styles.avatarInitials} numberOfLines={1} {...textScale.badge}>{initials(title)}</Text>
         </View>
       )}
       {online ? <View style={styles.online} /> : null}
@@ -176,8 +176,8 @@ export const ConversationRow = memo(function ConversationRow({ conversation, inb
             </Text>
           ) : (
             <View style={styles.previewRow}>
-              {mineLast ? <Ticks status={tickStatus(last)} size={16} color={colors.textTertiary} /> : null}
-              {preview.icon ? <Ionicons name={preview.icon} size={15} color={unread ? colors.textSecondary : colors.textTertiary} /> : null}
+              {mineLast ? <Ticks status={tickStatus(last)} size={16} color={wa.tickSent} /> : null}
+              {preview.icon ? <Ionicons name={preview.icon} size={15} color={wa.listMeta} /> : null}
               <Text style={[styles.preview, preview.deleted ? styles.previewDeleted : null, unread ? styles.previewUnread : null]} numberOfLines={1} {...textScale.dense}>
                 {prefix}
                 {preview.text}
@@ -187,14 +187,14 @@ export const ConversationRow = memo(function ConversationRow({ conversation, inb
           <View style={styles.marks}>
             {mentioned ? (
               <View style={styles.mention} accessibilityLabel="Senden bahsedildi">
-                <Ionicons name="at" size={13} color={colors.textOnBrand} />
+                <Ionicons name="at" size={13} color={wa.onBadge} />
               </View>
             ) : null}
-            {conversation.muted ? <Ionicons name="volume-mute" size={16} color={colors.textTertiary} /> : null}
-            {conversation.pinned ? <Ionicons name="pin" size={15} color={colors.textTertiary} /> : null}
+            {conversation.muted ? <Ionicons name="volume-mute" size={16} color={wa.tickSent} /> : null}
+            {conversation.pinned ? <Ionicons name="pin" size={15} color={wa.tickSent} /> : null}
             {conversation.unread > 0 ? (
               <View style={[styles.badge, conversation.muted ? styles.badgeMuted : null]}>
-                <Text style={styles.badgeText} {...textScale.badge}>{conversation.unread > 99 ? "99+" : conversation.unread}</Text>
+                <Text style={[styles.badgeText, conversation.muted ? styles.badgeTextMuted : null]} {...textScale.badge}>{conversation.unread > 99 ? "99+" : conversation.unread}</Text>
               </View>
             ) : conversation.marked_unread ? (
               <View style={styles.dot} />
@@ -261,7 +261,7 @@ export const HitRow = memo(function HitRow({
           <Text style={styles.time} numberOfLines={1} {...textScale.badge}>{listTime(hit.created_at)}</Text>
         </View>
         <View style={styles.line}>
-          {summary.icon ? <Ionicons name={summary.icon} size={15} color={colors.textTertiary} /> : null}
+          {summary.icon ? <Ionicons name={summary.icon} size={15} color={wa.listMeta} /> : null}
           <Text style={styles.preview} numberOfLines={1} {...textScale.dense}>
             {who}
             <Highlight text={excerpt(summary.text, query)} needle={query} />
@@ -300,11 +300,11 @@ export const ArchiveRow = memo(function ArchiveRow({ count, unread, onPress }: {
   return (
     <Touchable feedback="row" haptic="selection" onPress={onPress} accessibilityRole="button" accessibilityLabel={`Arşivlenmiş sohbetler, ${count} sohbet${unread ? `, ${unread} okunmamış` : ""}`} style={styles.archive}>
       <View style={styles.archiveIcon}>
-        <Ionicons name="archive-outline" size={22} color={colors.textSecondary} />
+        <Ionicons name="archive-outline" size={22} color={colors.brandAccent} />
       </View>
       <View style={styles.archiveBody}>
         <Text style={styles.archiveLabel} numberOfLines={1} {...textScale.dense}>Arşivlenmiş</Text>
-        <Text style={[styles.archiveCount, unread ? styles.timeUnread : null]} {...textScale.badge}>{unread || count}</Text>
+        <Text style={styles.archiveCount} {...textScale.badge}>{unread || count}</Text>
       </View>
     </Touchable>
   );
@@ -352,10 +352,10 @@ export const InboxSkeleton = memo(function InboxSkeleton({ count = 8 }: { count?
 });
 
 const styles = StyleSheet.create({
-  /* Satır: sol 16 px boşluk + avatar + 12 px; gövde sağ kenara kadar uzanır ve
-     ayracı taşır (ayraç avatarın SAĞINDAN başlar, kenara dayanır). */
+  /* Satır: sol 16 px boşluk + avatar + 12 px; gövde sağ kenara kadar uzanır.
+     Ayraç yok (güncel WhatsApp): satırları 72 px'lik ritim ayırır. */
   row: { height: INBOX_ROW_HEIGHT, flexDirection: "row", alignItems: "center", gap: space.md, paddingLeft: layout.screenPadding },
-  body: { flex: 1, minWidth: 0, alignSelf: "stretch", justifyContent: "center", gap: space.xxs, paddingRight: layout.screenPadding, borderBottomWidth: hairline, borderBottomColor: colors.border },
+  body: { flex: 1, minWidth: 0, alignSelf: "stretch", justifyContent: "center", gap: space.xxs, paddingRight: layout.screenPadding },
   line: { flexDirection: "row", alignItems: "center", gap: space.sm },
   who: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: space.xs },
   name: { ...type.h3, fontSize: type.article.fontSize, lineHeight: type.h2.lineHeight, color: colors.textPrimary, flexShrink: 1 },
@@ -363,36 +363,38 @@ const styles = StyleSheet.create({
   aside: { ...type.bodySm, color: colors.textTertiary, flexShrink: 4, maxWidth: "42%" },
   kind: { height: 18, paddingHorizontal: space.s, borderRadius: radius.xs, justifyContent: "center", backgroundColor: colors.surface3 },
   kindText: { ...type.labelXs, color: colors.textSecondary },
-  time: { ...type.bodySm, fontFamily: fonts.medium, color: colors.textTertiary },
-  timeUnread: { color: colors.brandAccent, fontFamily: fonts.semibold },
+  time: { ...type.bodySm, color: wa.listMeta },
+  timeUnread: { color: wa.unreadTime, fontFamily: fonts.semibold },
 
   previewRow: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: space.xs },
-  preview: { ...type.body, color: colors.textSecondary, flex: 1 },
-  previewUnread: { color: colors.textPrimary, fontFamily: fonts.medium },
+  preview: { ...type.body, color: wa.listMeta, flex: 1 },
+  /* WhatsApp'ta okunmamış sohbetin önizlemesi renk değiştirmez; vurgu saat ve sayaçtadır. */
+  previewUnread: { color: colors.textSecondary },
   previewDeleted: { fontStyle: "italic" },
-  draft: { color: colors.warn, fontFamily: fonts.semibold },
+  draft: { color: colors.brandAccent, fontFamily: fonts.semibold },
   match: { color: colors.brandAccent, fontFamily: fonts.semibold },
 
   marks: { flexDirection: "row", alignItems: "center", gap: space.s },
-  mention: { width: 20, height: 20, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.brand },
-  badge: { minWidth: 20, height: 20, paddingHorizontal: space.s, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.brand },
-  badgeMuted: { backgroundColor: colors.textTertiary },
-  badgeText: { ...type.numSmStrong, color: colors.textOnBrand },
-  dot: { width: 12, height: 12, borderRadius: radius.pill, backgroundColor: colors.brand },
+  mention: { width: 20, height: 20, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: wa.badge },
+  badge: { minWidth: 22, height: 22, paddingHorizontal: space.s, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: wa.badge },
+  badgeMuted: { backgroundColor: wa.badgeMuted },
+  badgeText: { ...type.numSmStrong, color: wa.onBadge },
+  badgeTextMuted: { color: wa.onBadgeMuted },
+  dot: { width: 12, height: 12, borderRadius: radius.pill, backgroundColor: wa.badge },
 
   avatar: { width: AVATAR, height: AVATAR },
-  avatarFill: { width: AVATAR, height: AVATAR, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface3 },
+  avatarFill: { width: AVATAR, height: AVATAR, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: avatarTone.bg },
   avatarCrest: { backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border },
   avatarOfficial: { backgroundColor: colors.brand },
-  avatarInitials: { ...type.h1, fontFamily: fonts.semibold },
+  avatarInitials: { ...type.h1, fontFamily: fonts.semibold, color: avatarTone.ink },
   /* Çevrimiçi noktası: liste zemini renginde halkayla avatardan ayrılır. */
-  online: { position: "absolute", right: 0, bottom: 0, width: 16, height: 16, borderRadius: radius.pill, borderWidth: 2.5, borderColor: colors.bg, backgroundColor: colors.win },
+  online: { position: "absolute", right: 0, bottom: 0, width: 16, height: 16, borderRadius: radius.pill, borderWidth: 2.5, borderColor: colors.bg, backgroundColor: wa.online },
 
   archive: { height: INBOX_ARCHIVE_HEIGHT, flexDirection: "row", alignItems: "center", gap: space.md, paddingLeft: layout.screenPadding },
   archiveIcon: { width: AVATAR, alignItems: "center" },
-  archiveBody: { flex: 1, alignSelf: "stretch", flexDirection: "row", alignItems: "center", gap: space.sm, paddingRight: layout.screenPadding, borderBottomWidth: hairline, borderBottomColor: colors.border },
+  archiveBody: { flex: 1, alignSelf: "stretch", flexDirection: "row", alignItems: "center", gap: space.sm, paddingRight: layout.screenPadding },
   archiveLabel: { ...type.h3, color: colors.textPrimary, flex: 1 },
-  archiveCount: { ...type.numSmStrong, color: colors.textTertiary },
+  archiveCount: { ...type.numSmStrong, color: wa.unreadTime },
 
   section: { height: INBOX_SECTION_HEIGHT, flexDirection: "row", alignItems: "flex-end", gap: space.s, paddingHorizontal: layout.screenPadding, paddingBottom: space.s },
   sectionText: { ...type.overline, color: colors.textTertiary },

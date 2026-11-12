@@ -3,6 +3,8 @@
  *
  * Bu script gözle bakmadan yanıtlanabilecek soruları yanıtlar:
  *   1. Metin/zemin çiftleri WCAG AA'yı geçiyor mu (her iki temada)?
+ *   1b. Mesajlar bölümünün WhatsApp paleti (`lib/chatPalette.ts`) aynı
+ *       eşikleri geçiyor mu?
  *   2. Tipografi ölçeği sağlıklı mı (taban, tavan, monoton hiyerarşi, satır
  *      yüksekliği)?
  *   3. Kodda çıplak hex kaldı mı (alan verisi ve dış marka renkleri hariç)?
@@ -238,6 +240,126 @@ for (const [name, p] of [["açık", light], ["koyu", dark]]) {
     if (r < min) {
       note(`kontrast · ${name} tema · ${label}: ${r.toFixed(2)}:1 < ${min}:1  (${fg} / ${bg})`);
     }
+  }
+}
+
+/*
+ * SOHBET PALETİ (WhatsApp görünümü) — `lib/chatPalette.ts`.
+ *
+ * Mesajlar bölümü tema paletini değil kendi renk sistemini kullanır; o renkler
+ * de aynı AA denetiminden geçer. Dosya `@/theme` içe aktardığı için Node'da
+ * yüklenemez; tipografi ölçeği gibi METİN olarak okunur. `LIGHT` ve `DARK`
+ * düz sözlüklerdir (her satır `ad: "değer"`), `NAME_COLORS` iki dizidir.
+ */
+function readChatPalette() {
+  const src = readFileSync(new URL("../lib/chatPalette.ts", import.meta.url), "utf8");
+  const dict = (name) => {
+    const start = src.indexOf(`const ${name}`);
+    if (start < 0) throw new Error(`chatPalette: ${name} bulunamadı`);
+    const body = src.slice(src.indexOf("{", start), src.indexOf("\n};", start));
+    const out = {};
+    for (const m of body.matchAll(/^ {2}(\w+):\s*"([^"]+)",/gm)) out[m[1]] = m[2];
+    return out;
+  };
+  const names = src.slice(src.indexOf("const NAME_COLORS"), src.indexOf("export function senderColor"));
+  const lists = [...names.matchAll(/\[([^\]]+)\]/g)].map((m) => m[1].match(/#[0-9A-Fa-f]{6}/g) ?? []);
+  const tones = src.slice(src.indexOf("export const attachTones"), src.indexOf("} as const", src.indexOf("export const attachTones")));
+  const attach = {};
+  for (const m of tones.matchAll(/^ {2}(\w+):\s*"([^"]+)",/gm)) attach[m[1]] = m[2];
+  // Dosyada sıra: koyu dizi önce, açık dizi sonra (isDark ? [...] : [...]).
+  return { light: dict("LIGHT"), dark: dict("DARK"), namesDark: lists[0] ?? [], namesLight: lists[1] ?? [], attach };
+}
+
+/** [ön plan, zemin, en az oran, açıklama] — 4.5 metin, 3.0 simge / büyük başlık. */
+const CHAT_PAIRS = (c) => [
+  [c.text, c.bg, 4.5, "metin / liste zemini"],
+  [c.text, c.surface, 4.5, "metin / başlık ve alt sayfa"],
+  [c.text, c.raised, 4.5, "metin / hap ve alan zemini"],
+  [c.text, c.composerField, 4.5, "yazılan metin / yazma hapı"],
+  [c.textSecondary, c.bg, 4.5, "ikincil metin / liste zemini"],
+  [c.textSecondary, c.surface, 4.5, "ikincil metin / yüzey"],
+  [c.textSecondary, c.raised, 4.5, "ikincil metin / hap zemini"],
+  [c.textSecondary, c.composerBar, 4.5, "ikincil metin / yazma çubuğu (duvar)"],
+  [c.textSecondary, c.composerField, 4.5, "ikincil metin / yazma hapı"],
+  [c.textTertiary, c.bg, 4.5, "etiket metni / liste zemini"],
+  [c.textTertiary, c.surface, 4.5, "etiket metni / yüzey"],
+  [c.textTertiary, c.raised, 4.5, "etiket metni / hap zemini"],
+  [c.listMeta, c.bg, 4.5, "önizleme ve saat / liste zemini"],
+  [c.unreadTime, c.bg, 4.5, "okunmamış saati / liste zemini"],
+  [c.title, c.bg, 3.0, "büyük başlık / liste zemini"],
+  [c.headerIcon, c.bg, 3.0, "başlık simgesi / liste zemini"],
+  [c.headerIcon, c.surface, 3.0, "başlık simgesi / sohbet başlığı"],
+  [c.accentText, c.bg, 4.5, "yeşil metin / liste zemini"],
+  [c.accentText, c.surface, 4.5, "yeşil metin / yüzey"],
+  [c.accentText, c.raised, 4.5, "yeşil metin / hap zemini"],
+  [c.accentText, c.accentDim, 4.5, "yeşil metin / açık yeşil dolgu"],
+  [c.accentText, c.composerField, 4.5, "düzenleme başlığı / yazma hapı"],
+  [c.onAccent, c.accent, 4.5, "düğme metni / yeşil dolgu"],
+  [c.onBadge, c.badge, 4.5, "sayaç metni / okunmamış rozeti"],
+  [c.onBadgeMuted, c.badgeMuted, 4.5, "sayaç metni / sessiz rozet"],
+  [c.onFab, c.fab, 3.0, "simge / yüzen düğme"],
+  [c.onSend, c.send, 3.0, "simge / gönder-mikrofon düğmesi"],
+  [c.chipText, c.chip, 4.5, "süzgeç hapı metni"],
+  [c.chipSelectedText, c.chipSelected, 4.5, "seçili süzgeç hapı metni"],
+  [c.avatarInk, c.avatarBg, 4.5, "baş harfler / gri avatar"],
+  [c.composerIcon, c.composerField, 3.0, "ataş ve kamera / yazma hapı"],
+  [c.bubbleText, c.bubbleMine, 4.5, "balon metni / giden balon"],
+  [c.bubbleText, c.bubbleTheirs, 4.5, "balon metni / gelen balon"],
+  [c.bubbleMeta, c.bubbleMine, 4.5, "saat / giden balon"],
+  [c.bubbleMeta, c.bubbleTheirs, 4.5, "saat / gelen balon"],
+  [c.bubbleMeta, c.quoteMine, 4.5, "alıntı metni / giden alıntı"],
+  [c.bubbleMeta, c.quoteTheirs, 4.5, "alıntı metni / gelen alıntı"],
+  [c.bubbleMeta, c.insetMine, 4.5, "ikincil metin / giden gömme kutu"],
+  [c.bubbleMeta, c.insetTheirs, 4.5, "ikincil metin / gelen gömme kutu"],
+  [c.bubbleText, c.insetMine, 4.5, "metin / giden gömme kutu"],
+  [c.bubbleText, c.insetTheirs, 4.5, "metin / gelen gömme kutu"],
+  [c.bubbleAccentMine, c.bubbleMine, 4.5, "vurgu / giden balon"],
+  [c.bubbleAccentMine, c.bubbleTheirs, 4.5, "vurgu (kartlar) / gelen balon"],
+  [c.bubbleAccentTheirs, c.bubbleTheirs, 4.5, "vurgu / gelen balon"],
+  [c.link, c.bubbleMine, 4.5, "bağlantı / giden balon"],
+  [c.link, c.bubbleTheirs, 4.5, "bağlantı / gelen balon"],
+  [c.tickRead, c.bubbleMine, 1.5, "okundu tiki / giden balon (WhatsApp mavisi; simge, etiketi var)"],
+  [c.dayText, c.dayPill, 4.5, "gün ve sistem hapı metni"],
+  [c.voicePlayMine, c.bubbleMine, 3.0, "oynat simgesi / giden balon"],
+  [c.voicePlayTheirs, c.bubbleTheirs, 3.0, "oynat simgesi / gelen balon"],
+  [c.danger, c.bg, 4.5, "tehlike metni / liste zemini"],
+  [c.danger, c.surface, 4.5, "tehlike metni / yüzey"],
+  [c.danger, c.dangerDim, 4.5, "tehlike metni / tehlike dolgusu"],
+  [c.danger, c.bubbleTheirs, 4.5, "tehlike metni / gelen balon"],
+  [c.warn, c.bubbleTheirs, 4.5, "uyarı metni / gelen balon"],
+  [c.positive, c.bubbleTheirs, 4.5, "olumlu metin / gelen balon"],
+  [c.positive, c.bubbleMine, 4.5, "olumlu metin / giden balon"],
+  [c.onAccent, c.positive, 4.5, "etiket / yoklama sahası"],
+  [c.onAccent, c.danger, 4.5, "rozet metni / bildirim rozeti"],
+];
+
+{
+  const chat = readChatPalette();
+  for (const [name, c, senders] of [["açık", chat.light, chat.namesLight], ["koyu", chat.dark, chat.namesDark]]) {
+    if (Object.keys(c).length < 40 || senders.length < 5) {
+      note(`sohbet paleti · ${name} tema okunamadı (lib/chatPalette.ts biçimi değişmiş olabilir)`);
+      continue;
+    }
+    for (const [fg, bg, min, label] of CHAT_PAIRS(c)) {
+      if (!fg || !bg) {
+        note(`sohbet paleti · ${name} tema · ${label}: token eksik`);
+        continue;
+      }
+      const r = ratio(fg, bg);
+      if (r < min) note(`kontrast · sohbet · ${name} tema · ${label}: ${r.toFixed(2)}:1 < ${min}:1  (${fg} / ${bg})`);
+    }
+    // Gönderen adı / yanıt çubuğu renkleri: gelen balon, iki alıntı zemini ve yazma hapı.
+    for (const color of senders) {
+      for (const [bg, label] of [[c.bubbleTheirs, "gelen balon"], [c.quoteMine, "giden alıntı"], [c.quoteTheirs, "gelen alıntı"], [c.composerField, "yazma hapı"]]) {
+        const r = ratio(color, bg);
+        if (r < 4.5) note(`kontrast · sohbet · ${name} tema · gönderen adı ${color} / ${label}: ${r.toFixed(2)}:1 < 4.5:1`);
+      }
+    }
+  }
+  for (const [key, tone] of Object.entries(chat.attach)) {
+    if (key === "onTone") continue;
+    const r = ratio(chat.attach.onTone, tone);
+    if (r < 3) note(`kontrast · sohbet · ek ızgarası ${key}: ${r.toFixed(2)}:1 < 3:1  (${chat.attach.onTone} / ${tone})`);
   }
 }
 

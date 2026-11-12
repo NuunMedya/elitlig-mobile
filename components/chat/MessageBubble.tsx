@@ -18,12 +18,12 @@ import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 import { memo, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Image, Linking, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 
-import { Touchable } from "@/components/ui";
+import { Touchable } from "@/components/chat/kit";
 import { formatDurationMs, type ChatMessage, type ChatParticipant } from "@/lib/api/chat";
 import { openMap } from "@/lib/chatMedia";
-import { chatPalette, senderColor } from "@/lib/chatPalette";
+import { chatPalette, colors, senderColor } from "@/lib/chatPalette";
 import { clockTime, emojiOnlyCount, formatBytes, isVideoFile, messageSummary, parseRich, tickStatus, waveform, type TickStatus } from "@/lib/chatUtils";
-import { colors, fonts, hairline, radius, space, textScale, type } from "@/theme";
+import { fonts, radius, space, textScale, type } from "@/theme";
 
 export interface BubbleActions {
   onLongPress: (message: ChatMessage) => void;
@@ -35,7 +35,6 @@ export interface BubbleActions {
   onOpenError: () => void;
 }
 
-const BUBBLE_MAX = 300;
 const MEDIA_W = 248;
 const NBSP = " ";
 
@@ -80,13 +79,18 @@ function MetaRow({ message, pinned, onMedia }: { message: ChatMessage; pinned: b
 }
 
 /** Metnin son satırında saat + tik için yer ayıran görünmez boşluk. */
+/**
+ * Balonun son satırında saat + tik için yer ayıran GÖRÜNMEZ metin. Boşluk
+ * karakterleri dar olduğu (ve satır sonunda kırpılabildiği) için yer, gerçek
+ * içerikle aynı genişlikteki karakterlerle ayrılır: saat "00:00", her simge "M".
+ */
 function metaSpacer(message: ChatMessage, pinned: boolean): string {
-  let n = 9;
-  if (message.sender.is_me) n += 4;
-  if (message.edited_at) n += 12;
-  if (message.starred) n += 3;
-  if (pinned) n += 3;
-  return ` ${NBSP.repeat(n)}`;
+  let text = `${NBSP}${NBSP}${NBSP}00:00`;
+  if (message.sender.is_me) text += `${NBSP}MM`;
+  if (message.edited_at) text += `${NBSP}düzenlendi`;
+  if (message.starred) text += `${NBSP}M`;
+  if (pinned) text += `${NBSP}M`;
+  return ` ${text}`;
 }
 
 /* ---------- metin ---------- */
@@ -247,8 +251,8 @@ const SPEED_LABEL: Record<number, string> = { 1: "1×", 1.5: "1,5×", 2: "2×" }
 /** Aynı anda tek sesli mesaj çalar: yeni başlayan öncekini duraklatır. */
 let pauseCurrent: (() => void) | null = null;
 
-function Wave({ bars, progress, mine }: { bars: number[]; progress: number; mine: boolean }) {
-  const active = mine ? chatPalette.voiceMine : chatPalette.waveActive;
+function Wave({ bars, progress }: { bars: number[]; progress: number }) {
+  const active = chatPalette.waveActive;
   const cut = Math.round(progress * bars.length);
   return (
     <View style={styles.wave} pointerEvents="none">
@@ -261,6 +265,7 @@ function Wave({ bars, progress, mine }: { bars: number[]; progress: number; mine
 
 function VoiceFrame({
   playing,
+  played = false,
   progress,
   label,
   bars,
@@ -271,6 +276,8 @@ function VoiceFrame({
   disabled,
 }: {
   playing: boolean;
+  /** Dinlenmeye başlandı: mikrofon simgesi yeşilden maviye döner (WhatsApp). */
+  played?: boolean;
   progress: number;
   label: string;
   bars: number[];
@@ -290,21 +297,20 @@ function VoiceFrame({
         hitSlop={8}
         accessibilityRole="button"
         accessibilityLabel={playing ? "Sesli mesajı duraklat" : "Sesli mesajı oynat"}
-        style={[styles.voicePlay, { backgroundColor: mine ? chatPalette.voiceMine : chatPalette.waveActive }]}
+        style={styles.voicePlay}
       >
-        <Ionicons name={disabled ? "cloud-upload-outline" : playing ? "pause" : "play"} size={18} color={mine ? chatPalette.bubbleMine : chatPalette.bubbleTheirs} />
+        <Ionicons name={disabled ? "cloud-upload-outline" : playing ? "pause" : "play"} size={disabled ? 24 : 30} color={mine ? chatPalette.voicePlayMine : chatPalette.voicePlayTheirs} />
       </Touchable>
       <View style={styles.voiceBody}>
-        <Wave bars={bars} progress={progress} mine={mine} />
+        <Wave bars={bars} progress={progress} />
         <Text style={styles.voiceTime} {...textScale.badge}>{label}</Text>
       </View>
       {onSpeed ? (
         <Touchable feedback="chip" haptic="selection" onPress={onSpeed} hitSlop={6} accessibilityRole="button" accessibilityLabel={`Oynatma hızı ${SPEED_LABEL[speed ?? 1]}. Değiştirmek için dokun`} style={styles.speed}>
           <Text style={styles.speedText} {...textScale.badge}>{SPEED_LABEL[speed ?? 1]}</Text>
         </Touchable>
-      ) : (
-        <Ionicons name="mic" size={16} color={mine ? chatPalette.voiceMine : chatPalette.waveActive} />
-      )}
+      ) : null}
+      <Ionicons name="mic" size={18} color={played ? chatPalette.voiceMicPlayed : chatPalette.voiceMic} accessibilityLabel={played ? "Dinlendi" : "Sesli mesaj"} />
     </View>
   );
 }
@@ -356,6 +362,7 @@ function VoicePlayer({ url, durationMs, bars, mine }: { url: string; durationMs:
   return (
     <VoiceFrame
       playing={status.playing}
+      played
       progress={progress}
       label={status.playing || status.currentTime > 0 ? formatDurationMs(status.currentTime * 1000) : formatDurationMs(total)}
       bars={bars}
@@ -604,14 +611,16 @@ const styles = StyleSheet.create({
   rowTheirs: { alignItems: "flex-start" },
   rowCenter: { alignItems: "stretch" },
 
-  bubble: { maxWidth: BUBBLE_MAX, minWidth: 76, borderRadius: radius.md, paddingHorizontal: space.sm, paddingTop: space.s, paddingBottom: space.s, borderWidth: hairline, borderColor: chatPalette.bubbleBorder },
-  bubbleMine: { backgroundColor: chatPalette.bubbleMine, marginLeft: space.huge },
-  bubbleTheirs: { backgroundColor: chatPalette.bubbleTheirs, marginRight: space.huge },
+  /* WhatsApp balonu: 8 px köşe, altta 1 px gölge çizgisi. Genişlik satırın en çok
+     %84'ü: 360 pt ekranda seçim kipinde (30 pt işaret sütunu) 248 pt medya sığsın. */
+  bubble: { maxWidth: "84%", minWidth: 76, borderRadius: radius.sm, paddingHorizontal: space.sm, paddingTop: space.s, paddingBottom: space.s, borderBottomWidth: 1, borderBottomColor: chatPalette.bubbleShade },
+  bubbleMine: { backgroundColor: chatPalette.bubbleMine },
+  bubbleTheirs: { backgroundColor: chatPalette.bubbleTheirs },
   bubbleMedia: { paddingHorizontal: space.xxs + 1, paddingTop: space.xxs + 1, paddingBottom: space.xxs + 1 },
   bubblePending: { opacity: 0.86 },
   tailCornerMine: { borderTopRightRadius: 0 },
   tailCornerTheirs: { borderTopLeftRadius: 0 },
-  tail: { position: "absolute", top: -hairline, width: 0, height: 0, borderTopWidth: TAIL, borderBottomWidth: 0, borderBottomColor: "transparent" },
+  tail: { position: "absolute", top: 0, width: 0, height: 0, borderTopWidth: TAIL, borderBottomWidth: 0, borderBottomColor: "transparent" },
   tailMine: { right: -TAIL, borderTopColor: chatPalette.bubbleMine, borderRightWidth: TAIL, borderRightColor: "transparent" },
   tailTheirs: { left: -TAIL, borderTopColor: chatPalette.bubbleTheirs, borderLeftWidth: TAIL, borderLeftColor: "transparent" },
   padded: { paddingHorizontal: space.s, paddingTop: space.xxs },
@@ -656,7 +665,7 @@ const styles = StyleSheet.create({
   fileMeta: { ...type.caption, color: chatPalette.bubbleMeta },
 
   voice: { width: MEDIA_W, flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: space.xxs },
-  voicePlay: { width: 38, height: 38, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
+  voicePlay: { width: 36, height: 38, alignItems: "center", justifyContent: "center" },
   voiceBody: { flex: 1, gap: space.xxs },
   wave: { height: 26, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   waveBar: { width: 3, borderRadius: 2 },
@@ -669,16 +678,16 @@ const styles = StyleSheet.create({
   locationBody: { paddingTop: space.s, gap: space.px },
   locationLink: { ...type.labelSm, color: chatPalette.link, marginTop: space.xxs },
 
-  reactions: { flexDirection: "row", alignItems: "center", gap: space.xs, marginTop: -space.s, marginHorizontal: space.sm, paddingHorizontal: space.sm, height: 24, borderRadius: radius.pill, backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border },
-  reactionsMine: { borderColor: colors.brandBorder, backgroundColor: colors.brandDim },
-  reactionEmoji: { ...type.label, color: colors.textPrimary },
-  reactionCount: { ...type.numSmStrong, color: colors.textSecondary },
+  reactions: { flexDirection: "row", alignItems: "center", gap: space.xs, marginTop: -space.s, marginHorizontal: space.sm, paddingHorizontal: space.sm, height: 24, borderRadius: radius.pill, backgroundColor: chatPalette.bubbleTheirs, borderWidth: 1, borderColor: chatPalette.wall },
+  reactionsMine: { backgroundColor: colors.brandDim },
+  reactionEmoji: { ...type.label, color: chatPalette.bubbleText },
+  reactionCount: { ...type.numSmStrong, color: chatPalette.bubbleMeta },
 
   failed: { flexDirection: "row", alignItems: "center", gap: space.xs, paddingVertical: space.xs },
   failedText: { ...type.labelXs, color: colors.danger },
 
   dayRow: { alignItems: "center", paddingVertical: space.sm },
-  unreadRow: { alignItems: "center", paddingVertical: space.sm, marginVertical: space.xs, backgroundColor: chatPalette.quoteTheirs },
-  dayPill: { paddingHorizontal: space.md, paddingVertical: space.xs, borderRadius: radius.sm, backgroundColor: chatPalette.dayPill },
+  unreadRow: { alignItems: "center", paddingVertical: space.s, marginVertical: space.xs, backgroundColor: chatPalette.highlight },
+  dayPill: { paddingHorizontal: space.md, paddingVertical: space.xs, borderRadius: radius.sm, backgroundColor: chatPalette.dayPill, borderBottomWidth: 1, borderBottomColor: chatPalette.bubbleShade },
   dayText: { ...type.labelXs, color: chatPalette.dayText },
 });

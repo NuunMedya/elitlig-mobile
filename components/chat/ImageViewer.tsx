@@ -11,7 +11,7 @@ import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { FlatList, Image, Linking, Modal, ScrollView, StatusBar, StyleSheet, Text, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Touchable } from "@/components/ui";
+import { Touchable } from "@/components/chat/kit";
 import { chatPalette } from "@/lib/chatPalette";
 import { clockTime, dayLabel } from "@/lib/chatUtils";
 import { space, textScale, type } from "@/theme";

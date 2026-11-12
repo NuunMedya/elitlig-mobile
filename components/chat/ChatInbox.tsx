@@ -12,7 +12,7 @@
  *   · SÜZGEÇLER: Tümü · Okunmamış · Sabitlenen · Gruplar · Üye mesajları
  *     (messages.view) · Arşiv. Haplar listeyle birlikte kayar.
  *   · SATIR: `InboxRow.tsx` — 54 px avatar, ad + saat, tik + önizleme, sağda
- *     bahsetme / sessiz / sabit / okunmamış sayacı; ayraç avatardan sonra başlar.
+ *     bahsetme / sessiz / sabit / okunmamış sayacı; satırlar arasında ayraç yok.
  *     Sabitlenenler üsttedir; arşiv varsa en üstte "Arşivlenmiş" satırı durur.
  *   · UZUN BAS: sabitle, sessize al, arşivle, okundu / okunmadı, gruptan çık,
  *     sil. (Kaydırma hareketi ve çoklu seçim yok: gesture-handler kurulu değil;
@@ -56,14 +56,16 @@ import {
 } from "@/components/chat/InboxRow";
 import { ActionMenu, type MessageMenuItem } from "@/components/chat/MessageSheets";
 import { useConversationActions } from "@/components/chat/useConversationActions";
-import { EmptyState, ErrorState, errorMessage, useFabAutoHide, useReduceMotion, useRefresh, useToast } from "@/components/ui";
+import { ChatStatusBar, EmptyState, ErrorState, errorMessage, useRefresh } from "@/components/chat/kit";
+import { useFabAutoHide, useReduceMotion, useToast } from "@/components/ui";
 import { useAdminConversations, useConversations } from "@/hooks/useChat";
 import { hasAnyPermission } from "@/lib/admin/access";
 import { adminChat, getDirectory, openConversation, searchMessages, type ChatConversation, type ChatSearchHit, type ChatUser } from "@/lib/api/chat";
 import { chatCounts, filterChats, isUnread, sortChats, type ChatFilter } from "@/lib/chatUtils";
 import { queryKeys } from "@/lib/queryKeys";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, duration, easing, space, upperTR } from "@/theme";
+import { colors } from "@/lib/chatPalette";
+import { duration, easing, space, upperTR } from "@/theme";
 
 type Filter = ChatFilter | "inbox";
 type InboxKind = "all" | "team" | "player" | "member";
@@ -438,6 +440,7 @@ export function ChatInbox({ admin = false, embedded = false, headerActions, onSc
     if (!embedded) return <Redirect href="/giris" />;
     return (
       <View style={styles.pane}>
+        <ChatStatusBar />
         <InboxHeader title="Mesajlar" actions={headerActions ?? []} searchable={false} searching={false} value="" placeholder="" onChangeText={setSearch} onOpenSearch={openSearch} onCloseSearch={closeSearch} />
         <EmptyState
           icon="chatbubbles-outline"
@@ -485,6 +488,7 @@ export function ChatInbox({ admin = false, embedded = false, headerActions, onSc
 
   const content = (
     <View style={styles.pane}>
+      <ChatStatusBar />
       <PresenceBridge userIds={presenceIds} />
       <InboxHeader
         title="Mesajlar"
@@ -492,7 +496,8 @@ export function ChatInbox({ admin = false, embedded = false, headerActions, onSc
         actions={barActions}
         searching={searching}
         value={search}
-        placeholder={filter === "inbox" ? "Takım, oyuncu ya da üye ara" : "Sohbetlerde ve mesajlarda ara"}
+        placeholder={filter === "inbox" ? "Takım, oyuncu ya da üye ara" : "Ara…"}
+        searchLabel={filter === "inbox" ? undefined : "Sohbetlerde ve mesajlarda ara"}
         onChangeText={setSearch}
         onOpenSearch={openSearch}
         onCloseSearch={closeSearch}

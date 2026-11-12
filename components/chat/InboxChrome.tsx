@@ -8,7 +8,10 @@
  *     kapanır, alan ekranın tepesine çıkar ve solunda "geri" belirir; liste
  *     arama sonuçlarına döner. Geçiş tek, kısa bir animasyondur ("hareketi
  *     azalt" açıkken anında).
- *   · HAPLAR: yatay kayan süzgeçler; seçili hap dolu, sayaç hapın içinde.
+ *   · HAPLAR: yatay kayan süzgeçler; hap gri, seçili hap açık yeşil + koyu
+ *     yeşil metin (WhatsApp), sayaç hapın içinde.
+ *   · RENK: mesajlar bölümü WhatsApp paletini kullanır (`lib/chatPalette.ts`);
+ *     başlık yazısı yeşil, zemin beyaz (koyuda lacivert-siyah).
  *   · FAB: köşeleri yumuşak kare; ilk çizimde aşağıdan belirir, kaydırınca ve
  *     arama sırasında gizlenir.
  */
@@ -17,8 +20,10 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { memo, useEffect, useRef } from "react";
 import { Animated, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
-import { Touchable, useReduceMotion } from "@/components/ui";
-import { colors, duration, easing, elevate, fonts, layout, radius, space, textScale, type } from "@/theme";
+import { Touchable } from "@/components/chat/kit";
+import { useReduceMotion } from "@/components/ui";
+import { colors, elevate, wa } from "@/lib/chatPalette";
+import { duration, easing, fonts, layout, radius, space, textScale, type } from "@/theme";
 
 /* --------------------------------- başlık --------------------------------- */
 
@@ -39,6 +44,8 @@ export interface InboxHeaderProps {
   searching: boolean;
   value: string;
   placeholder: string;
+  /** Ekran okuyucu etiketi; verilmezse `placeholder` okunur. */
+  searchLabel?: string;
   onChangeText: (value: string) => void;
   onOpenSearch: () => void;
   onCloseSearch: () => void;
@@ -48,7 +55,7 @@ const TITLE_HEIGHT = 52;
 const SEARCH_HEIGHT = 40;
 const BACK_WIDTH = 40;
 
-export const InboxHeader = memo(function InboxHeader({ title, onBack, actions, searchable = true, searching, value, placeholder, onChangeText, onOpenSearch, onCloseSearch }: InboxHeaderProps) {
+export const InboxHeader = memo(function InboxHeader({ title, onBack, actions, searchable = true, searching, value, placeholder, searchLabel, onChangeText, onOpenSearch, onCloseSearch }: InboxHeaderProps) {
   const reduceMotion = useReduceMotion();
   const input = useRef<TextInput>(null);
   const mode = useRef(new Animated.Value(searching ? 1 : 0)).current;
@@ -73,14 +80,14 @@ export const InboxHeader = memo(function InboxHeader({ title, onBack, actions, s
       <Animated.View style={[styles.titleRow, titleStyle]} pointerEvents={searching ? "none" : "auto"} accessibilityElementsHidden={searching} importantForAccessibility={searching ? "no-hide-descendants" : "auto"}>
         {onBack ? (
           <Touchable feedback="icon" haptic="light" onPress={onBack} hitSlop={6} accessibilityRole="button" accessibilityLabel="Geri" style={styles.back}>
-            <Ionicons name="chevron-back" size={26} color={colors.textPrimary} />
+            <Ionicons name="arrow-back" size={24} color={wa.headerIcon} />
           </Touchable>
         ) : null}
         <Text style={styles.title} numberOfLines={1} accessibilityRole="header" {...textScale.dense}>{title}</Text>
         <View style={styles.actions}>
           {actions.map((action) => (
             <Touchable key={action.icon} feedback="icon" haptic="light" onPress={action.onPress} hitSlop={2} accessibilityRole="button" accessibilityLabel={action.accessibilityLabel} style={styles.action}>
-              <Ionicons name={action.icon} size={23} color={colors.textPrimary} />
+              <Ionicons name={action.icon} size={23} color={wa.headerIcon} />
               {action.badge === "dot" ? (
                 <View style={styles.actionDot} />
               ) : action.badge ? (
@@ -97,11 +104,11 @@ export const InboxHeader = memo(function InboxHeader({ title, onBack, actions, s
         <View style={styles.searchRow}>
           <Animated.View style={[styles.searchBack, backStyle]} pointerEvents={searching ? "auto" : "none"}>
             <Touchable feedback="icon" haptic="light" onPress={onCloseSearch} hitSlop={6} accessibilityRole="button" accessibilityLabel="Aramayı kapat" style={styles.searchBackButton}>
-              <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
+              <Ionicons name="arrow-back" size={24} color={wa.headerIcon} />
             </Touchable>
           </Animated.View>
           <View style={styles.field}>
-            <Ionicons name="search" size={18} color={colors.textTertiary} />
+            <Ionicons name="search" size={18} color={wa.chipText} />
             <TextInput
               ref={input}
               value={value}
@@ -110,10 +117,11 @@ export const InboxHeader = memo(function InboxHeader({ title, onBack, actions, s
               placeholder={placeholder}
               placeholderTextColor={colors.textTertiary}
               selectionColor={colors.brand}
+              cursorColor={colors.brand}
               returnKeyType="search"
               autoCapitalize="none"
               autoCorrect={false}
-              accessibilityLabel={placeholder}
+              accessibilityLabel={searchLabel ?? placeholder}
               style={styles.input}
               {...textScale.dense}
             />
@@ -155,7 +163,7 @@ function FilterPillsInner<K extends string>({ items, value, onChange, secondary 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.pillTrack} accessibilityRole="tablist" accessibilityLabel={accessibilityLabel}>
         {items.map((item) => {
           const selected = item.key === value;
-          const tint = selected ? colors.textOnBrand : colors.textSecondary;
+          const tint = selected ? wa.chipSelectedText : wa.chipText;
           return (
             <Touchable
               key={item.key}
@@ -202,7 +210,9 @@ export const InboxFab = memo(function InboxFab({ visible, bottom, onPress }: { v
       ]}
     >
       <Touchable feedback="fab" haptic="medium" onPress={onPress} accessibilityRole="button" accessibilityLabel="Yeni sohbet" style={[elevate(3), styles.fab]}>
-        <Ionicons name="chatbubble-ellipses" size={24} color={colors.textOnBrand} />
+        {/* WhatsApp "yeni sohbet" simgesi: konuşma balonu + içinde artı. */}
+        <Ionicons name="chatbubble" size={27} color={wa.onFab} />
+        <Ionicons name="add" size={17} color={wa.fab} style={styles.fabPlus} />
       </Touchable>
     </Animated.View>
   );
@@ -212,7 +222,7 @@ const styles = StyleSheet.create({
   header: { backgroundColor: colors.bg, paddingBottom: space.xs },
   titleRow: { flexDirection: "row", alignItems: "center", paddingLeft: layout.screenPadding, paddingRight: space.xs, overflow: "hidden" },
   back: { width: 36, height: 44, marginLeft: -space.sm, alignItems: "center", justifyContent: "center" },
-  title: { ...type.largeTitle, color: colors.textPrimary, flex: 1 },
+  title: { ...type.largeTitle, color: wa.title, flex: 1 },
   actions: { flexDirection: "row", alignItems: "center" },
   action: { width: 42, height: 44, alignItems: "center", justifyContent: "center" },
   actionDot: { position: "absolute", top: 10, right: 9, width: 9, height: 9, borderRadius: radius.pill, borderWidth: 1.5, borderColor: colors.bg, backgroundColor: colors.live },
@@ -222,18 +232,19 @@ const styles = StyleSheet.create({
   searchRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: layout.screenPadding, paddingVertical: space.xs },
   searchBack: { height: SEARCH_HEIGHT, overflow: "hidden", justifyContent: "center" },
   searchBackButton: { width: BACK_WIDTH, height: SEARCH_HEIGHT, marginLeft: -space.sm, alignItems: "center", justifyContent: "center" },
-  field: { flex: 1, height: SEARCH_HEIGHT, flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.md + space.xxs, borderRadius: radius.pill, backgroundColor: colors.surface3 },
+  field: { flex: 1, height: SEARCH_HEIGHT, flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.md + space.xxs, borderRadius: radius.pill, backgroundColor: wa.searchField },
   input: { ...type.bodyLg, lineHeight: undefined, color: colors.textPrimary, flex: 1, paddingVertical: 0 },
 
   pillBar: { height: FILTER_BAR_HEIGHT, justifyContent: "center" },
   pillBarSecondary: { height: FILTER_BAR_HEIGHT - space.sm, justifyContent: "flex-start" },
   pillTrack: { alignItems: "center", gap: space.sm, paddingHorizontal: layout.screenPadding },
-  pill: { height: 34, flexDirection: "row", alignItems: "center", gap: space.s, paddingHorizontal: space.md + space.xxs, borderRadius: radius.pill, backgroundColor: colors.surface3 },
-  pillSelected: { backgroundColor: colors.brand },
+  pill: { height: 32, flexDirection: "row", alignItems: "center", gap: space.s, paddingHorizontal: space.md + space.xxs, borderRadius: radius.pill, backgroundColor: wa.chip },
+  pillSelected: { backgroundColor: wa.chipSelected },
   pillLabel: { ...type.label, fontFamily: fonts.semibold },
   pillCount: { ...type.numSmStrong, color: colors.brandAccent },
-  pillCountSelected: { color: colors.textOnBrand, opacity: 0.85 },
+  pillCountSelected: { color: wa.chipSelectedText },
 
   fabWrap: { position: "absolute", right: layout.screenPadding },
-  fab: { width: 56, height: 56, borderRadius: radius.xl, alignItems: "center", justifyContent: "center", backgroundColor: colors.brand },
+  fab: { width: 56, height: 56, borderRadius: radius.xl, alignItems: "center", justifyContent: "center", backgroundColor: wa.fab, borderWidth: 0 },
+  fabPlus: { position: "absolute", top: 18 },
 });

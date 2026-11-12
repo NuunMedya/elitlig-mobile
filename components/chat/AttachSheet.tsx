@@ -15,11 +15,12 @@ import { useQuery } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 import { Image, ScrollView, StyleSheet, Text, View } from "react-native";
 
-import { BottomSheet, Button, Input, ListRow, Touchable, errorMessage, useToast } from "@/components/ui";
+import { BottomSheet, Button, Input, ListRow, Touchable, errorMessage } from "@/components/chat/kit";
+import { useToast } from "@/components/ui";
 import { getVenues, type ChatConversation, type ChatLocationMeta, type ChatVenue } from "@/lib/api/chat";
 import { MAX_FILE_BYTES, getCurrentLocation, type PickedFile } from "@/lib/chatMedia";
-import { attachTones } from "@/lib/chatPalette";
-import { colors, layout, radius, space, textScale, type } from "@/theme";
+import { attachTones, colors } from "@/lib/chatPalette";
+import { layout, radius, space, textScale, type } from "@/theme";
 
 export type AttachMode = "menu" | "location" | "poll" | null;
 export type AttachPick = "images" | "camera" | "video";

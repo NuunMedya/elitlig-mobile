@@ -11,9 +11,11 @@ import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { BottomSheet, Button, ListRow, errorMessage, useToast } from "@/components/ui";
+import { BottomSheet, Button, ListRow, errorMessage } from "@/components/chat/kit";
+import { useToast } from "@/components/ui";
 import { ACCEPT_FROM_OPTIONS, getChatPreferences, setChatPreferences, type AcceptFrom } from "@/lib/api/chat";
-import { colors, space, type } from "@/theme";
+import { colors } from "@/lib/chatPalette";
+import { space, type } from "@/theme";
 
 const QUERY_KEY = ["chat", "preferences"] as const;
 

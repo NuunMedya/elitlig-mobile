@@ -16,10 +16,12 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { BottomSheet, Button, Input, ListRow, errorMessage, useToast } from "@/components/ui";
+import { BottomSheet, Button, Input, ListRow, errorMessage } from "@/components/chat/kit";
+import { useToast } from "@/components/ui";
 import { REPORT_REASONS, reportAbuse, type ReportReason } from "@/lib/api/chat";
 import { queryKeys } from "@/lib/queryKeys";
-import { colors, radius, space, textScale, type } from "@/theme";
+import { colors } from "@/lib/chatPalette";
+import { radius, space, textScale, type } from "@/theme";
 
 export interface ReportTarget {
   /** Şikayet edilen üye (biliniyorsa). Engelleme anahtarı buna bağlı. */

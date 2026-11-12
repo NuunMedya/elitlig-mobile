@@ -13,11 +13,12 @@ import { memo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { ChatAvatar } from "@/components/chat/MessageSheets";
-import { Touchable } from "@/components/ui";
+import { Touchable } from "@/components/chat/kit";
 import { useTypingNames } from "@/hooks/useChat";
 import type { ChatConversation } from "@/lib/api/chat";
 import { isGroupChat } from "@/lib/chatUtils";
-import { colors, hairline, space, textScale, type } from "@/theme";
+import { colors, wa } from "@/lib/chatPalette";
+import { hairline, space, textScale, type } from "@/theme";
 
 export interface HeaderAction {
   icon: keyof typeof Ionicons.glyphMap;
@@ -53,7 +54,7 @@ export const ChatHeader = memo(function ChatHeader({ conversation, title, status
   return (
     <View style={styles.bar}>
       <Touchable feedback="icon" haptic="light" onPress={onBack} hitSlop={6} accessibilityRole="button" accessibilityLabel="Geri" style={styles.back}>
-        <Ionicons name="chevron-back" size={26} color={colors.textPrimary} />
+        <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
       </Touchable>
       <Touchable
         feedback="none"
@@ -64,7 +65,7 @@ export const ChatHeader = memo(function ChatHeader({ conversation, title, status
         accessibilityLabel={onPressTitle ? `${title}. Bilgileri görmek için dokun` : title}
         style={styles.who}
       >
-        {conversation ? <ChatAvatar conversation={conversation} size={38} online={online} /> : <View style={styles.avatarGap} />}
+        {conversation ? <ChatAvatar conversation={conversation} size={40} online={online} /> : <View style={styles.avatarGap} />}
         <View style={styles.titles}>
           <Text style={styles.title} numberOfLines={1} {...textScale.dense}>{title}</Text>
           {conversation ? <TypingLine conversationId={conversation.id} group={isGroupChat(conversation)} fallback={status} /> : null}
@@ -72,7 +73,7 @@ export const ChatHeader = memo(function ChatHeader({ conversation, title, status
       </Touchable>
       {actions.map((action) => (
         <Touchable key={action.icon} feedback="icon" haptic="light" onPress={action.onPress} hitSlop={4} accessibilityRole="button" accessibilityLabel={action.label} style={styles.action}>
-          <Ionicons name={action.icon} size={22} color={colors.textPrimary} />
+          <Ionicons name={action.icon} size={22} color={wa.headerIcon} />
         </Touchable>
       ))}
     </View>
@@ -97,10 +98,10 @@ export const SelectionHeader = memo(function SelectionHeader({ count, onClose, a
 });
 
 const styles = StyleSheet.create({
-  bar: { minHeight: 56, flexDirection: "row", alignItems: "center", paddingHorizontal: space.xs, backgroundColor: colors.surface1, borderBottomWidth: hairline, borderBottomColor: colors.separator },
-  back: { width: 40, height: 48, alignItems: "center", justifyContent: "center" },
+  bar: { minHeight: 58, flexDirection: "row", alignItems: "center", paddingHorizontal: space.xs, backgroundColor: colors.surface1, borderBottomWidth: hairline, borderBottomColor: colors.separator },
+  back: { width: 38, height: 48, alignItems: "center", justifyContent: "center" },
   who: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: space.m, paddingVertical: space.s },
-  avatarGap: { width: 38, height: 38 },
+  avatarGap: { width: 40, height: 40 },
   titles: { flex: 1, minWidth: 0 },
   title: { ...type.h2, color: colors.textPrimary },
   selectionTitle: { flex: 1, marginLeft: space.sm },
