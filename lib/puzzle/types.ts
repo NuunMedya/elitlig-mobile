@@ -18,7 +18,8 @@
  *   · Güçlendirici kullanımı `useBooster(key)` ile istenir; çerçeve stoğu
  *     kontrol eder, true dönerse oyun etkisini uygular. Seviye öncesi seçilen
  *     güçlendiriciler `preBoosters` ile gelir (stoktan çerçeve düşer).
- *   · Tahta en fazla `maxWidth` genişliğe sığar; telefon dikey kullanımı esas.
+ *   · Oyun `maxWidth` × `maxHeight` alanını TAM doldurur (tam ekran): tahta
+ *     alana göre büyür, boş kalan alt bölge bırakılmaz. Telefon dikey kullanımı esas.
  */
 
 export type PuzzleGameKey = "uclu" | "ucle" | "soyunma" | "kantin" | "kariyer";
@@ -56,6 +57,12 @@ export interface PuzzleGameProps {
   level: number;
   /** Ekran genişliğinden kenar boşlukları düşülmüş kullanılabilir genişlik. */
   maxWidth: number;
+  /**
+   * Oyun alanının kullanılabilir yüksekliği (üst şerit ve alt güvenli alan
+   * düşülmüş). Oyun bu yüksekliği DOLDURMALIDIR: tahta / sahne büyür, hedef
+   * çubuğu üste, güçlendiriciler alta yaslanır; ekranın altı boş kalmaz.
+   */
+  maxHeight: number;
   /** Seviye öncesi seçilen güçlendiriciler (stoktan düşülmüş). */
   preBoosters: string[];
   /** Oyun içi güçlendirici stoğu (gösterim için). */

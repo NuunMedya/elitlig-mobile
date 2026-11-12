@@ -1,14 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Easing, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { Animated, Easing, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { colors, haptics, radius, space, textScale, type } from "@/theme";
+import { fonts, haptics, radius, space, textScale, type } from "@/theme";
 import type { PuzzleGameProps } from "@/lib/puzzle/types";
 import { UCLE_RACK, generateUcleLevel, tileBlock, ucleStars, type TileBlock, type UcleLevel } from "@/lib/puzzle/levels/ucle";
-import { UCLE_COLORS } from "@/lib/puzzle/uclePalette";
+import { UCLE_COLORS, UCLE_UI as UI } from "@/lib/puzzle/uclePalette";
 import { BoardTile } from "./BoardTile";
 import { RackPiece, type FlyFrom } from "./RackPiece";
 import { Confetti, PopText } from "./Effects";
-import { Hud } from "./Hud";
+import { BoosterBar, Hud, boosterBarHeight, hudHeight } from "./Hud";
+import { BoardFrame, FRAME_DEPTH, FRAME_RIM } from "./Frame";
 
 /* ───────────────────────────── durum ───────────────────────────── */
 
@@ -43,7 +44,8 @@ interface Fx {
 }
 
 const COMBO_TEXT = ["", "", "Harika!", "Muhteşem!", "Efsane!", "Gol gibi!"];
-const DEPTH = 3;
+/** Tepsinin alt kalınlığı (3D). */
+const TRAY_DEPTH = 5;
 
 const live = (rack: Entry[]) => rack.filter((e) => !e.clearing);
 
@@ -87,10 +89,9 @@ function insertEntry(rack: Entry[], e: Entry): Entry[] {
 
 /* ───────────────────────────── oyun ───────────────────────────── */
 
-export function UcleGame({ level, maxWidth, preBoosters, boosterStock, useBooster, onFinish, paused }: PuzzleGameProps) {
+export function UcleGame({ level, maxWidth, maxHeight, preBoosters, boosterStock, useBooster, onFinish, paused }: PuzzleGameProps) {
   const lvl = useMemo(() => generateUcleLevel(level), [level]);
   const rackSize = UCLE_RACK + (preBoosters.includes("raf") ? 1 : 0);
-  const { height: winH } = useWindowDimensions();
 
   const [st, setSt] = useState<GameState>(() => initialState(lvl));
   const stRef = useRef(st);
@@ -117,31 +118,45 @@ export function UcleGame({ level, maxWidth, preBoosters, boosterStock, useBooste
   const hintBusy = useRef(false);
   const finished = useRef(false);
 
-  /* ── geometri ── */
+  /* ── geometri ──
+   * Dikey düzen (toplam = maxHeight): HUD | sahne (tahta çerçevesi + raf) | güçlendiriciler.
+   * Tahta, çerçevenin içindeki alana EN BÜYÜK karo boyuyla sığdırılır ve
+   * ortalanır; raf sahnenin altına yaslanır. Boşluk kalmaz. */
+  const compact = maxHeight < 560;
+  const hudH = hudHeight(compact);
+  const barH = boosterBarHeight(compact);
+  const gapV = compact ? space.s : space.sm;
+  const stageH = Math.max(220, maxHeight - hudH - barH - gapV * 2);
+
+  const rackPad = compact ? space.s : space.sm;
+  const rackGap = space.xs;
+  const rc = Math.floor(Math.min(compact ? 50 : 60, (maxWidth - 2 * rackPad - (rackSize - 1) * rackGap - 4) / rackSize));
+  const rackW = rackSize * rc + (rackSize - 1) * rackGap + 2 * rackPad;
+  const rackH = rc + 2 * rackPad;
+  const rackLeft = (maxWidth - rackW) / 2;
+  const rackTop = stageH - rackH - TRAY_DEPTH;
+
   const maxZ = lvl.layers - 1;
   const cols = lvl.spanX / 2;
   const rows = lvl.spanY / 2;
-  const byW = (maxWidth - maxZ * DEPTH - 6) / cols;
-  const byH = (Math.max(260, winH - 380) - maxZ * DEPTH) / (rows * 1.1);
-  const tw = Math.floor(Math.max(40, Math.min(64, byW, byH)));
+  const frameH = rackTop - gapV;
+  const feltPad = FRAME_RIM + (compact ? space.s : space.sm);
+  const availW = maxWidth - feltPad * 2;
+  const availH = frameH - FRAME_DEPTH - feltPad * 2;
+  const fitTile = (depth: number) => Math.min((availW - maxZ * depth) / cols, (availH - maxZ * depth) / (rows * 1.1));
+  // Katman kayması karo boyuyla büyür; iki geçiş: büyük kayma → küçük karo, sığma garanti.
+  const depthPx = Math.max(3, Math.round(fitTile(3) * 0.065));
+  const tw = Math.floor(Math.max(26, Math.min(92, fitTile(depthPx))));
   const th = Math.round(tw * 1.1);
   const slab = Math.max(3, Math.round(tw * 0.1));
   const hx = tw / 2;
   const hy = th / 2;
-  const boardW = lvl.spanX * hx + maxZ * DEPTH;
-  const boardH = lvl.spanY * hy + maxZ * DEPTH;
-  const boardLeft = Math.max(0, (maxWidth - boardW) / 2);
-  const boardTop = space.xl;
-  const tileLeft = useCallback((i: number) => boardLeft + lvl.tiles[i].x * hx + (maxZ - lvl.tiles[i].z) * DEPTH, [boardLeft, lvl, hx, maxZ]);
-  const tileTop = useCallback((i: number) => boardTop + lvl.tiles[i].y * hy + (maxZ - lvl.tiles[i].z) * DEPTH, [boardTop, lvl, hy, maxZ]);
-
-  const rackPad = space.sm;
-  const rackGap = space.xs;
-  const rc = Math.min(tw, Math.floor((maxWidth - 2 * rackPad - (rackSize - 1) * rackGap) / rackSize));
-  const rackW = rackSize * rc + (rackSize - 1) * rackGap + 2 * rackPad;
-  const rackLeft = (maxWidth - rackW) / 2;
-  const rackTop = boardTop + boardH + space.xxl;
-  const stageH = rackTop + rc + 2 * rackPad + space.sm;
+  const boardW = lvl.spanX * hx + maxZ * depthPx;
+  const boardH = lvl.spanY * hy + maxZ * depthPx;
+  const boardLeft = Math.max(feltPad, (maxWidth - boardW) / 2);
+  const boardTop = Math.max(feltPad, (frameH - FRAME_DEPTH - boardH) / 2);
+  const tileLeft = useCallback((i: number) => boardLeft + lvl.tiles[i].x * hx + (maxZ - lvl.tiles[i].z) * depthPx, [boardLeft, lvl, hx, maxZ, depthPx]);
+  const tileTop = useCallback((i: number) => boardTop + lvl.tiles[i].y * hy + (maxZ - lvl.tiles[i].z) * depthPx, [boardTop, lvl, hy, maxZ, depthPx]);
 
   const slotX = useCallback(
     (i: number, count: number) => {
@@ -422,8 +437,11 @@ export function UcleGame({ level, maxWidth, preBoosters, boosterStock, useBooste
     return () => clearTimeout(t);
   }, []);
 
+  const liveCount = live(st.rack).length;
+  const rackWarn = st.status === "full" || (st.status === "play" && liveCount >= rackSize - 1);
+
   return (
-    <View style={{ width: maxWidth }}>
+    <View style={{ width: maxWidth, height: maxHeight }}>
       <Hud
         level={level}
         shapeTitle={lvl.shapeTitle}
@@ -434,29 +452,27 @@ export function UcleGame({ level, maxWidth, preBoosters, boosterStock, useBooste
         timeLimit={lvl.timeLimit}
         locksLeft={locksLeft}
         chainsLeft={chainsLeft}
-        stock={boosterStock}
-        canUndo={canUndo}
-        canHint={canHint}
-        onUndo={onUndo}
-        onHint={onHint}
         extraRack={rackSize > UCLE_RACK}
+        compact={compact}
       />
-      <View style={[styles.stage, { height: stageH }]}>
-        {/* Raf zemini ve hücreler */}
+      <View style={[styles.stage, { height: stageH, marginTop: gapV }]}>
+        {/* Tahta çerçevesi: çim keçe + ahşap kenar; tahta içine ortalanır. */}
+        <BoardFrame left={0} top={0} width={maxWidth} height={frameH} />
+
+        {/* Raf tepsisi ve hücreler */}
         <Animated.View
-          style={[
-            styles.rack,
-            { left: rackLeft, top: rackTop, width: rackW, height: rc + 2 * rackPad, transform: [{ translateX: rackShakeX }] },
-            st.status === "full" && styles.rackFull,
-          ]}
-          accessibilityLabel={`Raf: ${live(st.rack).length} / ${rackSize}`}
+          style={[styles.trayWrap, { left: rackLeft, top: rackTop, width: rackW, height: rackH + TRAY_DEPTH, transform: [{ translateX: rackShakeX }] }]}
+          accessibilityLabel={`Raf: ${liveCount} / ${rackSize}`}
         >
-          {Array.from({ length: rackSize }, (_, i) => (
-            <View
-              key={i}
-              style={[styles.cell, { left: rackPad + i * (rc + rackGap), top: rackPad, width: rc, height: rc }, i === UCLE_RACK && styles.cellBonus]}
-            />
-          ))}
+          <View style={[styles.trayBase, { top: TRAY_DEPTH, height: rackH }]} />
+          <View style={[styles.tray, { height: rackH }, rackWarn && styles.trayWarn]}>
+            {Array.from({ length: rackSize }, (_, i) => (
+              <View
+                key={i}
+                style={[styles.cell, { left: rackPad - 2 + i * (rc + rackGap), top: rackPad - 2, width: rc, height: rc }, i === UCLE_RACK && styles.cellBonus]}
+              />
+            ))}
+          </View>
         </Animated.View>
 
         {/* Tahta: dizi z sırasında, üst katman en son çizilir. */}
@@ -501,16 +517,23 @@ export function UcleGame({ level, maxWidth, preBoosters, boosterStock, useBooste
         </Animated.View>
 
         {tipOpen && lvl.tip ? (
-          <Pressable style={styles.tip} onPress={() => setTipOpen(false)} accessibilityRole="button" accessibilityLabel={`İpucu: ${lvl.tip}. Kapatmak için dokun`}>
-            <Ionicons name="bulb" size={16} color={colors.star} />
+          <Pressable
+            style={[styles.tip, { top: FRAME_RIM + space.xs }]}
+            onPress={() => setTipOpen(false)}
+            accessibilityRole="button"
+            accessibilityLabel={`İpucu: ${lvl.tip}. Kapatmak için dokun`}
+          >
+            <View style={styles.tipIcon}>
+              <Ionicons name="bulb" size={16} color={UI.tipInk} />
+            </View>
             <Text style={styles.tipText} {...textScale.long}>
               {lvl.tip}
             </Text>
-            <Ionicons name="close" size={14} color={colors.onDarkMuted} />
+            <Ionicons name="close" size={16} color={UI.tipInk} />
           </Pressable>
         ) : null}
 
-        {fx ? <PopText key={fx.seq} text={fx.text} tone={fx.tone} top={rackTop - 52} /> : null}
+        {fx ? <PopText key={fx.seq} text={fx.text} tone={fx.tone} top={rackTop - 56} /> : null}
 
         {st.status === "won" ? <Confetti width={maxWidth} height={stageH} palette={UCLE_COLORS.sparks} /> : null}
 
@@ -525,6 +548,9 @@ export function UcleGame({ level, maxWidth, preBoosters, boosterStock, useBooste
             onGiveUp={() => finish(false)}
           />
         ) : null}
+      </View>
+      <View style={{ marginTop: gapV }}>
+        <BoosterBar width={maxWidth} compact={compact} stock={boosterStock} canUndo={canUndo} canHint={canHint} onUndo={onUndo} onHint={onHint} />
       </View>
     </View>
   );
@@ -556,87 +582,129 @@ function EndCard({
   return (
     <View style={styles.endWrap} pointerEvents="box-none">
       <Animated.View
-        style={[styles.endCard, { opacity: v, transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) }] }]}
+        style={[styles.endCardBase, { opacity: v, transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) }] }]}
         accessibilityRole="alert"
       >
-        <Ionicons name={full ? "file-tray-full" : "time"} size={28} color={colors.danger} />
-        <Text style={styles.endTitle}>{full ? "Raf doldu!" : "Süre doldu!"}</Text>
-        {full ? (
-          <>
+        <View style={styles.endCard}>
+          <View style={styles.endIcon}>
+            <Ionicons name={full ? "file-tray-full" : "time"} size={30} color={UI.text} />
+          </View>
+          <Text style={styles.endTitle}>{full ? "Raf doldu!" : "Süre doldu!"}</Text>
+          {full ? (
+            <>
+              <Text style={styles.endBody} {...textScale.long}>
+                Son karoyu geri al ya da ipucuyla bir üçlüyü tamamla; maç devam etsin.
+              </Text>
+              <View style={styles.endRow}>
+                <EndButton icon="arrow-undo" label={`Geri Al (${undoStock})`} onPress={onUndo} disabled={!canUndo} face={UI.orange} deep={UI.orangeDeep} />
+                <EndButton icon="bulb" label={`İpucu (${hintStock})`} onPress={onHint} face={UI.blue} deep={UI.blueDeep} />
+              </View>
+              <EndButton icon="flag" label="Maçı bitir" onPress={onGiveUp} face={UI.panelRim} deep={UI.panelDeep} />
+            </>
+          ) : (
             <Text style={styles.endBody} {...textScale.long}>
-              Son karoyu geri al ya da ipucuyla bir üçlüyü tamamla; maç devam etsin.
+              Bir dahaki sefere daha hızlı!
             </Text>
-            <View style={styles.endRow}>
-              <EndButton icon="arrow-undo" label={`Geri Al (${undoStock})`} onPress={onUndo} disabled={!canUndo} primary />
-              <EndButton icon="bulb" label={`İpucu (${hintStock})`} onPress={onHint} />
-            </View>
-            <EndButton icon="flag" label="Maçı bitir" onPress={onGiveUp} />
-          </>
-        ) : (
-          <Text style={styles.endBody} {...textScale.long}>
-            Bir dahaki sefere daha hızlı!
-          </Text>
-        )}
+          )}
+        </View>
       </Animated.View>
     </View>
   );
 }
 
-function EndButton({ icon, label, onPress, disabled, primary }: { icon: React.ComponentProps<typeof Ionicons>["name"]; label: string; onPress: () => void; disabled?: boolean; primary?: boolean }) {
+function EndButton({
+  icon,
+  label,
+  onPress,
+  disabled,
+  face,
+  deep,
+}: {
+  icon: React.ComponentProps<typeof Ionicons>["name"];
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+  face: string;
+  deep: string;
+}) {
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled}
       accessibilityRole="button"
       accessibilityLabel={label}
-      style={({ pressed }) => [styles.endBtn, primary && styles.endBtnPrimary, disabled && styles.endBtnOff, pressed && styles.endBtnPressed]}
+      style={({ pressed }) => [styles.endBtnBase, { backgroundColor: deep }, disabled && styles.endBtnOff, pressed && styles.endBtnPressed]}
     >
-      <Ionicons name={icon} size={16} color={primary ? colors.textOnBrand : colors.textPrimary} />
-      <Text style={[styles.endBtnText, primary && styles.endBtnTextPrimary]}>{label}</Text>
+      <View style={[styles.endBtn, { backgroundColor: face }]}>
+        <Ionicons name={icon} size={18} color={UI.text} />
+        <Text style={styles.endBtnText}>{label}</Text>
+      </View>
     </Pressable>
   );
 }
 
+const shadowText = { textShadowColor: UI.textShadow, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 } as const;
+
 const styles = StyleSheet.create({
   stage: { width: "100%" },
-  rack: {
+  trayWrap: { position: "absolute" },
+  trayBase: { position: "absolute", left: 0, right: 0, borderRadius: radius.xl, backgroundColor: UI.trayDeep },
+  tray: {
     position: "absolute",
-    borderRadius: radius.lg,
-    backgroundColor: colors.inkBlock,
+    left: 0,
+    right: 0,
+    top: 0,
+    borderRadius: radius.xl,
+    backgroundColor: UI.tray,
     borderWidth: 2,
-    borderColor: colors.borderOnDark,
+    borderColor: UI.trayHi,
   },
-  rackFull: { borderColor: colors.danger },
-  cell: { position: "absolute", borderRadius: radius.sm, backgroundColor: colors.glassBorder },
-  cellBonus: { borderWidth: 1, borderColor: colors.star, borderStyle: "dashed" },
+  trayWarn: { borderColor: UI.red },
+  cell: { position: "absolute", borderRadius: radius.md, backgroundColor: UI.cell, borderWidth: 1, borderColor: UI.cellRim },
+  cellBonus: { borderWidth: 2, borderColor: UI.gold, borderStyle: "dashed" },
   tip: {
     position: "absolute",
-    left: space.sm,
-    right: space.sm,
-    top: 0,
+    left: space.lg,
+    right: space.lg,
     flexDirection: "row",
     alignItems: "center",
-    gap: space.s,
+    gap: space.sm,
     paddingHorizontal: space.md,
     paddingVertical: space.sm,
-    borderRadius: radius.md,
-    backgroundColor: colors.inkBlock,
+    borderRadius: radius.xl,
+    backgroundColor: UI.tipFace,
+    borderWidth: 2,
+    borderBottomWidth: 4,
+    borderColor: UI.tipDeep,
   },
-  tipText: { ...type.bodySm, color: colors.onDark, flex: 1 },
-  endWrap: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", backgroundColor: colors.overlay },
+  tipIcon: { width: 26, height: 26, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: UI.gold },
+  tipText: { ...type.bodySm, fontFamily: fonts.semibold, color: UI.tipInk, flex: 1 },
+  endWrap: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", backgroundColor: UI.scrim, borderRadius: radius.xxl },
+  endCardBase: { width: "86%", maxWidth: 360, borderRadius: radius.xxl, backgroundColor: UI.cardDeep, paddingBottom: 6 },
   endCard: {
-    width: "86%",
     alignItems: "center",
     gap: space.sm,
     padding: space.lg,
-    borderRadius: radius.xl,
-    backgroundColor: colors.elevated,
-    borderWidth: 1,
-    borderColor: colors.border,
+    paddingTop: space.xl,
+    borderRadius: radius.xxl,
+    backgroundColor: UI.card,
+    borderWidth: 2,
+    borderColor: UI.panelRim,
   },
-  endTitle: { ...type.h1, color: colors.textPrimary },
-  endBody: { ...type.body, color: colors.textSecondary, textAlign: "center" },
+  endIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: UI.red,
+    borderWidth: 3,
+    borderColor: UI.redDeep,
+  },
+  endTitle: { ...type.h1, color: UI.text, ...shadowText },
+  endBody: { ...type.body, color: UI.textSoft, textAlign: "center" },
   endRow: { flexDirection: "row", gap: space.sm },
+  endBtnBase: { borderRadius: radius.pill, paddingBottom: 4 },
   endBtn: {
     minHeight: 44,
     flexDirection: "row",
@@ -644,11 +712,8 @@ const styles = StyleSheet.create({
     gap: space.s,
     paddingHorizontal: space.lg,
     borderRadius: radius.pill,
-    backgroundColor: colors.surface3,
   },
-  endBtnPrimary: { backgroundColor: colors.brand },
   endBtnOff: { opacity: 0.45 },
-  endBtnPressed: { opacity: 0.8 },
-  endBtnText: { ...type.label, color: colors.textPrimary },
-  endBtnTextPrimary: { color: colors.textOnBrand },
+  endBtnPressed: { transform: [{ translateY: 2 }] },
+  endBtnText: { ...type.label, fontFamily: fonts.heading, color: UI.text, ...shadowText },
 });

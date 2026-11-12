@@ -1,6 +1,7 @@
 /**
- * SAVUNMA HATTI — şeritli kale savunması: rakip hücumcular beş koridordan
- * kalene yürür; oyuncularını sahaya dizip dalga dalga gelen hücumu durdurursun.
+ * SAVUNMA HATTI — şeritli kale savunması: rakip hücumcular sağdan, beş yatay
+ * koridordan soldaki kalene yürür; oyuncularını koridorlara dizip dalga dalga
+ * gelen hücumu durdurursun.
  * Takımın seçtiğin kaptanın kulübünün formasını giyer; her dalga ligin bir
  * takımıdır.
  *
@@ -19,11 +20,11 @@ const CONFIG: ArenaGameConfig = {
   icon: "shield",
   bestKey: ARENA_BEST_KEYS.savunma,
   rules: [
-    { icon: "grid-outline", text: "Alttaki karttan oyuncu seç, sahadaki kareye dokun ya da kartı sürükle. Her oyuncu enerji ister." },
-    { icon: "flash-outline", text: "KURUCU enerji üretir; gökten düşen enerjiye dokunup topla. Önce ekonomini kur." },
-    { icon: "football-outline", text: "FORVET koridorundaki rakibe şut atar, STOPER duvar olur. Yeni dalgalarda FÜZE, PRES ve ÇİFT FORVET açılır." },
-    { icon: "shield-outline", text: "Kalene ulaşan her rakip bir gol: üç gol yersen maç biter." },
-    { icon: "trending-up-outline", text: "Her dalga ligin bir takımı; sonunda BÜYÜK HÜCUM ve o takımın kaptanı gelir." },
+    { icon: "grid-outline", text: "Rakipler sağdan gelir, soldaki kalene yürür. Alttaki karttan oyuncu seç, koridordaki kareye dokun ya da sürükle." },
+    { icon: "flash-outline", text: "KURUCU enerji üretir, enerjisi kendiliğinden toplanır. Düşen enerjiye dokunup daha çok topla." },
+    { icon: "football-outline", text: "FORVET koridorundaki rakibe şut atar, STOPER duvar olur. Yeni dalgalarda yeni kartlar açılır." },
+    { icon: "sparkles-outline", text: "FISKİYE yavaşlatır, FÜZE alanı temizler, KALECİ rakibi kapar, ORTACI üç koridora orta yapar, HAKEM herkesi dondurur." },
+    { icon: "shield-outline", text: "Kalene ulaşan her rakip bir gol: üç gol yersen maç biter. Dalga sonunda kaptan gelir." },
   ],
   describe: (stats) =>
     [

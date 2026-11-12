@@ -31,13 +31,10 @@ import {
 import type { PuzzleGameProps } from "@/lib/puzzle/types";
 import { colors, haptics, radius, space, textScale, type } from "@/theme";
 
-import { FanSpot, HoldRow, Hud, PlateSpot, STACK_VISIBLE, StackColumn } from "./Board";
+import { BoosterDock, FanSpot, HoldRow, Hud, PlateSpot, STACK_VISIBLE, StackColumn, Stands } from "./Board";
 import { FxLayer, type Fx, type FxInput, type Pt } from "./Effects";
 import type { FanMood } from "./Fan";
 
-const HUD_H = 56;
-const BUBBLE_H = 38;
-const PLATES_H = 54;
 const HOLD_GAP = 6;
 const STACK_GAP = 8;
 const TICK_MS = 250;
@@ -58,54 +55,130 @@ interface Meta {
   lastServe: number;
 }
 
-export function KantinGame({ level: levelNo, maxWidth, preBoosters, boosterStock, useBooster, onFinish, paused }: PuzzleGameProps) {
+/** Bölümler arası sabit boşluklar (üst, tabak→tezgâh, tezgâh→yığın, yığın→dok). */
+const GAP_TOP = 4;
+const GAP_PH = 10;
+const GAP_HS = 12;
+const GAP_BOT = 8;
+
+/**
+ * TAM EKRAN YERLEŞİM. Bütün bölümler tek bir ölçek `k` ile büyür/küçülür
+ * (genişlik sınırları ayrıca kırpar); `k`, toplam yükseklik `H`'yi aşmayan en
+ * büyük değer olarak ikili aramayla bulunur. Genişlik sınırları yüzünden artan
+ * pay kalırsa yığın satır aralığına, tribüne ve bölüm aralarına dağıtılır:
+ * sahne tam olarak `H` yüksekliğini doldurur, altta boşluk kalmaz.
+ */
+function computeLayout(W: number, H: number, plates: number, cap: number, n: number) {
+  const small = H < 520;
+  const hudH = small ? 48 : 60;
+  const dockH = small ? 54 : 70;
+  const A = H - hudH - dockH;
+  const colW = W / plates;
+  const holdMax = Math.floor((W - 24 - (cap - 1) * HOLD_GAP) / cap);
+  const stackMax = Math.floor((W - 8 - (n - 1) * STACK_GAP) / n);
+  const build = (k: number) => {
+    const awnH = Math.round(Math.max(10, Math.min(18, 13 * k)));
+    const bubbleH = Math.round(Math.max(30, Math.min(58, 38 * k)));
+    const fanSize = Math.min(colW * 0.62, 56 * k, 86);
+    const fanH = (fanSize * 72) / 64;
+    const fansH = bubbleH + 6 + fanH;
+    const platesH = Math.round(Math.min(74, 54 * k));
+    const holdSize = Math.max(22, Math.min(holdMax, Math.round(46 * k), 68));
+    const headH = k < 0.8 ? 0 : 24;
+    const holdH = holdSize + 10 + headH;
+    const stackW = Math.max(28, Math.min(stackMax, Math.round(66 * k), 104));
+    const tile = Math.max(22, Math.min(stackW - 6, Math.round(54 * k), 86));
+    // Dar alanda alt ürünler daha sık dizilir (oran k ile sürekli artar → arama tekdüze kalır).
+    const rowStep = Math.round(tile * Math.min(0.8, 0.58 + (k - 0.45) * 0.55));
+    const moreH = k < 0.8 ? 18 : 24;
+    const stacksH = 6 + tile + rowStep * (STACK_VISIBLE - 1) + moreH;
+    const used = GAP_TOP + awnH + fansH + platesH + GAP_PH + holdH + GAP_HS + stacksH + GAP_BOT;
+    return { k, awnH, bubbleH, fanSize, fanH, fansH, platesH, holdSize, headH, holdH, stackW, tile, rowStep, moreH, stacksH, used };
+  };
+  let lo = 0.45;
+  let hi = 2;
+  if (build(lo).used <= A) {
+    for (let i = 0; i < 22; i += 1) {
+      const mid = (lo + hi) / 2;
+      if (build(mid).used <= A) lo = mid;
+      else hi = mid;
+    }
+  }
+  const b = build(lo);
+  // Artan pay: önce yığın aralığı (alt ürünler daha görünür), sonra tribün,
+  // bölüm araları ve raf iç boşluğu.
+  let rest = Math.max(0, A - b.used);
+  const rowExtra = Math.min(b.tile * 0.24, (rest * 0.4) / (STACK_VISIBLE - 1));
+  const rowStep = b.rowStep + rowExtra;
+  rest -= rowExtra * (STACK_VISIBLE - 1);
+  const standExtra = rest * 0.34;
+  const gapPH = GAP_PH + rest * 0.18;
+  const gapHS = GAP_HS + rest * 0.2;
+  const shelfExtra = rest - standExtra - (gapPH - GAP_PH) - (gapHS - GAP_HS);
+  const padTop = 6 + shelfExtra * 0.4;
+  const stacksH = b.stacksH + rowExtra * (STACK_VISIBLE - 1) + shelfExtra;
+
+  const standY = hudH + GAP_TOP;
+  const fansY = standY + b.awnH + standExtra;
+  const platesY = fansY + b.fansH;
+  const holdY = platesY + b.platesH + gapPH;
+  const stacksY = holdY + b.holdH + gapHS;
+  const stackLeft = (W - (n * b.stackW + (n - 1) * STACK_GAP)) / 2;
+  const holdLeft = (W - (cap * b.holdSize + (cap - 1) * HOLD_GAP)) / 2;
+  return {
+    ...b,
+    hudH,
+    dockH,
+    colW,
+    rowStep,
+    padTop,
+    stacksH,
+    standY,
+    fansY,
+    platesY,
+    holdY,
+    stacksY,
+    stackLeft,
+    holdLeft,
+    plateW: colW - 12,
+    dockY: H - dockH,
+    total: H,
+  };
+}
+
+export function KantinGame({ level: levelNo, maxWidth, maxHeight, preBoosters, boosterStock, useBooster, onFinish, paused }: PuzzleGameProps) {
   const level = useMemo(() => kantinLevel(levelNo), [levelNo]);
   const cap = level.holdCap + (preBoosters.includes("tezgah") ? 2 : 0);
   const totalTime = level.timeLimit > 0 ? level.timeLimit + (preBoosters.includes("sure") ? KANTIN_EXTRA_TIME : 0) : 0;
 
   /* ── ölçüler ── */
   const W = maxWidth;
-  const geo = useMemo(() => {
-    const colW = W / level.plates;
-    const fanSize = Math.min(56, colW * 0.6);
-    const fanH = (fanSize * 72) / 64;
-    const fansY = HUD_H + 4;
-    const fansH = BUBBLE_H + 6 + fanH;
-    const platesY = fansY + fansH;
-    const holdSize = Math.min(46, Math.floor((W - 12 - 12 - (cap - 1) * HOLD_GAP) / cap));
-    const holdY = platesY + PLATES_H + 10;
-    const holdH = holdSize + 10 + 22;
-    const n = level.stacks.length;
-    const stackW = Math.min(66, Math.floor((W - (n - 1) * STACK_GAP) / n));
-    const tile = Math.min(54, stackW - 6);
-    const rowStep = Math.round(tile * 0.8);
-    const stacksY = holdY + holdH + 12;
-    const stacksH = 6 + tile + rowStep * (STACK_VISIBLE - 1) + 24;
-    const stackLeft = (W - (n * stackW + (n - 1) * STACK_GAP)) / 2;
-    const holdLeft = (W - (cap * holdSize + (cap - 1) * HOLD_GAP)) / 2;
-    const plateW = colW - 12;
-    return { colW, fanSize, fanH, fansY, fansH, platesY, holdSize, holdY, holdH, stackW, tile, rowStep, stacksY, stacksH, stackLeft, holdLeft, plateW, total: stacksY + stacksH + 8 };
-  }, [W, level, cap]);
+  const geo = useMemo(() => computeLayout(W, Math.round(maxHeight), level.plates, cap, level.stacks.length), [W, maxHeight, level, cap]);
+  const BUBBLE_H = geo.bubbleH;
+  const PLATES_H = geo.platesH;
 
-  const plateIcon = useCallback((n: number) => Math.min(24, Math.floor((geo.plateW - 18) / Math.max(1, n)) - 2), [geo.plateW]);
+  const plateIcon = useCallback(
+    (n: number) => Math.max(10, Math.min(Math.round(geo.platesH * 0.46), Math.floor((geo.plateW - 18) / Math.max(1, n)) - 2)),
+    [geo.plateW, geo.platesH],
+  );
 
   const pos = useMemo(
     () => ({
       stack: (s: number, d: number): Pt => ({
         x: geo.stackLeft + s * (geo.stackW + STACK_GAP) + geo.stackW / 2,
-        y: geo.stacksY + 6 + geo.tile / 2 + Math.min(d, STACK_VISIBLE - 1) * geo.rowStep,
+        y: geo.stacksY + geo.padTop + geo.tile / 2 + Math.min(d, STACK_VISIBLE - 1) * geo.rowStep,
       }),
       plate: (slot: number, j: number, n: number): Pt => {
         const icon = plateIcon(n);
         return { x: geo.colW * slot + geo.colW / 2 + (j - (n - 1) / 2) * (icon + 2), y: geo.platesY + PLATES_H / 2 };
       },
       plateCenter: (slot: number): Pt => ({ x: geo.colW * slot + geo.colW / 2, y: geo.platesY + PLATES_H / 2 }),
-      hold: (k: number): Pt => ({ x: geo.holdLeft + k * (geo.holdSize + HOLD_GAP) + geo.holdSize / 2, y: geo.holdY + 22 + 5 + geo.holdSize / 2 }),
+      hold: (k: number): Pt => ({ x: geo.holdLeft + k * (geo.holdSize + HOLD_GAP) + geo.holdSize / 2, y: geo.holdY + geo.headH + 5 + geo.holdSize / 2 }),
       fan: (slot: number): Pt => ({ x: geo.colW * slot + geo.colW / 2, y: geo.fansY + BUBBLE_H - 2 + geo.fanH / 2 }),
-      tips: (): Pt => ({ x: W - 84, y: HUD_H / 2 }),
+      tips: (): Pt => ({ x: W - 40, y: geo.hudH / 2 }),
       center: (): Pt => ({ x: W / 2, y: geo.fansY + geo.fansH / 2 }),
     }),
-    [geo, plateIcon, W],
+    [geo, plateIcon, W, BUBBLE_H, PLATES_H],
   );
 
   /* ── durum ── */
@@ -415,32 +488,23 @@ export function KantinGame({ level: levelNo, maxWidth, preBoosters, boosterStock
   const timeLeft = totalTime > 0 ? Math.max(0, totalTime - m.penalty - elapsed / 1000) : null;
   const holdHiddenKey = st.hold.filter((it) => hidden.has(it.uid)).map((it) => it.uid).join(",");
   const queueLeft = level.orders.length - st.next;
+  const extras = [preBoosters.includes("tezgah") ? "+2 yuva" : null, preBoosters.includes("sure") && totalTime > 0 ? `+${KANTIN_EXTRA_TIME} sn` : null].filter(
+    (e): e is string => Boolean(e),
+  );
 
   return (
     <View style={[styles.root, { width: W, height: geo.total }]}>
+      {/* Kantin duvarı: alt yarıda karo şeritleri */}
+      <View style={[styles.abs, styles.wallTiles, { top: geo.holdY - 4, width: W, height: geo.dockY - geo.holdY + 4 }]} />
+
       <View style={[styles.abs, { top: 0, width: W }]}>
-        <Hud
-          served={st.served}
-          total={level.orders.length}
-          timeLeft={timeLeft}
-          tips={m.tips}
-          tipsBump={tipsBump}
-          hizliStock={boosterStock.hizli ?? 0}
-          onHizli={onHizli}
-          disabled={Boolean(ended)}
-          height={HUD_H}
-        />
+        <Hud served={st.served} total={level.orders.length} timeLeft={timeLeft} tips={m.tips} tipsBump={tipsBump} height={geo.hudH} />
       </View>
 
-      {/* Kantin önü: taraftarlar + balonlar */}
-      <View style={[styles.abs, styles.stands, { top: geo.fansY, width: W, height: geo.fansH + PLATES_H / 2 }]} />
-      {queueLeft > 0 ? (
-        <View style={[styles.queue, { top: geo.holdY }]} accessibilityLabel={`Sırada ${queueLeft} taraftar`}>
-          <Text {...textScale.badge} style={styles.queueText}>
-            Sırada {queueLeft}
-          </Text>
-        </View>
-      ) : null}
+      {/* Kantin önü: tribün + tente, taraftarlar + balonlar */}
+      <View style={[styles.abs, styles.stands, { top: geo.standY, width: W, height: geo.platesY + PLATES_H / 2 - geo.standY }]}>
+        <Stands w={W} h={geo.platesY + PLATES_H / 2 - geo.standY} awn={geo.awnH} />
+      </View>
       {st.plates.map((pl, slot) => {
         const show = serving.get(slot);
         const orderIdx = show ? show.order : pl?.order;
@@ -469,6 +533,7 @@ export function KantinGame({ level: levelNo, maxWidth, preBoosters, boosterStock
               bubbleH={BUBBLE_H}
               fanSize={geo.fanSize}
               enterDelay={arrived > 0 || escaped ? 560 : 0}
+              iconMax={Math.max(14, BUBBLE_H - 14)}
             />
           </View>
         );
@@ -511,6 +576,7 @@ export function KantinGame({ level: levelNo, maxWidth, preBoosters, boosterStock
           danger={st.hold.length === cap - 1}
           lost={ended === "lost" && st.hold.length >= cap}
           height={geo.holdH}
+          headH={geo.headH}
         />
       </View>
 
@@ -528,6 +594,7 @@ export function KantinGame({ level: levelNo, maxWidth, preBoosters, boosterStock
             height={geo.stacksH}
             onTap={onTap}
             nudge={nudges[i] ?? 0}
+            padTop={geo.padTop}
           />
         ))}
       </View>
@@ -535,6 +602,18 @@ export function KantinGame({ level: levelNo, maxWidth, preBoosters, boosterStock
       {showTip && level.tip ? (
         <TipBanner text={level.tip} top={geo.stacksY + geo.tile + 10} width={W - space.xl * 2} />
       ) : null}
+
+      {/* Alt dok: sıra sayacı + Hızlı Servis güçlendiricisi */}
+      <View style={[styles.abs, { top: geo.dockY, width: W }]}>
+        <BoosterDock
+          height={geo.dockH}
+          queueLeft={queueLeft}
+          hizliStock={boosterStock.hizli ?? 0}
+          onHizli={onHizli}
+          disabled={Boolean(ended)}
+          extras={extras}
+        />
+      </View>
 
       <FxLayer fx={fx} onDone={onFxDone} />
     </View>
@@ -569,24 +648,14 @@ function TipBanner({ text, top, width }: { text: string; top: number; width: num
 }
 
 const styles = StyleSheet.create({
-  root: { alignSelf: "center" },
+  root: { alignSelf: "center", backgroundColor: S.wall, borderRadius: radius.xxl, overflow: "hidden" },
   abs: { position: "absolute", left: 0 },
+  wallTiles: { backgroundColor: S.wallTile, borderTopWidth: 4, borderColor: S.wallEdge },
   stands: {
-    backgroundColor: colors.surface2,
+    overflow: "hidden",
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
   },
-  queue: {
-    position: "absolute",
-    left: space.xs,
-    paddingHorizontal: space.s,
-    height: 18,
-    borderRadius: radius.pill,
-    backgroundColor: colors.inkPill,
-    justifyContent: "center",
-    zIndex: 2,
-  },
-  queueText: { ...type.nano, color: colors.onDark },
   counter: {
     backgroundColor: S.wood,
     borderRadius: radius.md,

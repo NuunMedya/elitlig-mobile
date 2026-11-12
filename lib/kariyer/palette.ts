@@ -80,8 +80,8 @@ export const paletteForTier = (tier: number): KariyerPalette => TIER_PALETTES[Ma
 
 /** Arayüz (RN görünümleri) için basamak vurgu renkleri. */
 export const TIER_UI = [
-  { accent: "#FF8A5B", soft: "rgba(255, 138, 91, 0.16)", ink: "#3D1404" },
-  { accent: "#12C2E9", soft: "rgba(18, 194, 233, 0.16)", ink: "#04222B" },
+  { accent: "#FF8A5B", edge: "#C2521F", soft: "rgba(255, 138, 91, 0.16)", ink: "#3D1404", panel: "#3B1E6E", panelEdge: "#241046" },
+  { accent: "#12C2E9", edge: "#0A7F9C", soft: "rgba(18, 194, 233, 0.16)", ink: "#04222B", panel: "#10265F", panelEdge: "#081639" },
 ];
 export const uiForTier = (tier: number) => TIER_UI[Math.max(0, Math.min(TIER_UI.length - 1, tier - 1))];
 
@@ -89,4 +89,27 @@ export const uiForTier = (tier: number) => TIER_UI[Math.max(0, Math.min(TIER_UI.
 export const ATTR_COLORS = { sut: "#FF4D6D", pas: "#3ABEFF", teknik: "#FFD23F", hiz: "#2FBF71" } as const;
 
 /** HUD üstündeki koyu cam yüzeyi. */
-export const HUD = { glass: "rgba(10, 8, 24, 0.55)", glassBorder: "rgba(255, 255, 255, 0.18)", text: "#FFFFFF", muted: "rgba(255, 255, 255, 0.72)", scrim: "rgba(10, 8, 24, 0.72)" } as const;
+export const HUD = {
+  glass: "rgba(10, 8, 24, 0.55)",
+  glassBorder: "rgba(255, 255, 255, 0.18)",
+  text: "#FFFFFF",
+  muted: "rgba(255, 255, 255, 0.72)",
+  scrim: "rgba(10, 8, 24, 0.72)",
+  /** Hiper-casual 3B parçalar: çip yüzü, çubuk rayı, metin gölgesi, altın. */
+  chip: "rgba(255, 255, 255, 0.12)",
+  track: "rgba(255, 255, 255, 0.16)",
+  shadow: "rgba(0, 0, 0, 0.35)",
+  gold: "#FFD23F",
+  goldEdge: "#C99A00",
+  card: "#FFFFFF",
+  cardEdge: "#D7D2E8",
+  cardInk: "#1E1440",
+  cardMuted: "#6B6390",
+  badge: "#FF4D6D",
+  good: "#2FBF5A",
+  goodEdge: "#1E8A3E",
+  bad: "#FF4D6D",
+  badEdge: "#B02A44",
+  ok: "#FFB020",
+  okEdge: "#B87700",
+} as const;

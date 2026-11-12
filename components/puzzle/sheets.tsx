@@ -12,7 +12,7 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { useAdminMutation } from "@/components/admin";
 import { BottomSheet, Button, Touchable } from "@/components/ui";
-import { buyItem, claimDaily, type PuzzleMe } from "@/lib/puzzle/api";
+import { buyItem, claimDaily, livesFor, type PuzzleMe } from "@/lib/puzzle/api";
 import { usePuzzleCache } from "@/lib/puzzle/usePuzzle";
 import { WatchAdForLife } from "./RewardedLife";
 import type { PuzzleGameKey } from "@/lib/puzzle/types";
@@ -34,11 +34,14 @@ export function ShopSheet({
   focus?: "lives" | null;
 }) {
   const cache = usePuzzleCache();
-  const buy = useAdminMutation((item: string) => buyItem(item), {
-    success: (res) => (res.item === "can_doldur" ? "Canların doldu." : "Güçlendirici alındı."),
+  const buy = useAdminMutation((item: string) => buyItem(item, game), {
+    success: (res) => (res.item === "can_doldur" ? (game ? "Bu oyunun canları doldu." : "Bütün oyunların canları doldu.") : "Güçlendirici alındı."),
     onSuccess: (res) => cache(res.profile),
   });
   if (!me) return null;
+  // Oyun içindeyken canlar o oyunun; Lig Yolu ana sayfasında "can doldur" bütün oyunları doldurur.
+  const profile = livesFor(me.profile, game);
+  const allFull = !game && profile.lives_by_game ? Object.values(profile.lives_by_game).every((g) => g && g.lives >= profile.max_lives) : null;
   const coins = me.profile.coins;
   const entries = Object.entries(me.catalog.shop).filter(([key, item]) => {
     if (item.lives) return true;
@@ -56,14 +59,14 @@ export function ShopSheet({
           {coins.toLocaleString("tr-TR")} jeton
         </Text>
       </View>
-      {me.profile.ad_lives && me.profile.lives < me.profile.max_lives ? (
+      {game && profile.ad_lives && profile.lives < profile.max_lives ? (
         <View style={styles.adRow}>
-          <WatchAdForLife profile={me.profile} />
+          <WatchAdForLife profile={profile} />
         </View>
       ) : null}
       {[...(focus === "lives" ? lives : []), ...(focus === "lives" ? packs : [...lives, ...packs])].map(([key, item]) => {
         const stock = item.booster ? me.profile.boosters[item.booster] ?? 0 : null;
-        const full = Boolean(item.lives && me.profile.lives >= me.profile.max_lives);
+        const full = Boolean(item.lives && (allFull ?? profile.lives >= profile.max_lives));
         return (
           <View key={key} style={styles.row}>
             <View style={[styles.icon, item.lives ? styles.iconLive : null]}>
@@ -72,7 +75,13 @@ export function ShopSheet({
             <View style={styles.texts}>
               <Text style={styles.title} {...textScale.dense}>{item.title}</Text>
               <Text style={styles.sub} {...textScale.dense}>
-                {item.lives ? (full ? "Canların dolu" : `${me.profile.lives}/${me.profile.max_lives} can`) : `Elinde ${stock}`}
+                {item.lives
+                  ? full
+                    ? "Canların dolu"
+                    : game
+                      ? `Bu oyunda ${profile.lives}/${profile.max_lives} can`
+                      : "Bütün oyunların canını doldurur"
+                  : `Elinde ${stock}`}
               </Text>
             </View>
             <Button

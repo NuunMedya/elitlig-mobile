@@ -4,8 +4,8 @@
  */
 import { memo, useEffect, useRef } from "react";
 import { Animated, Easing, StyleSheet, Text, View } from "react-native";
-import { colors, radius, textScale, type } from "@/theme";
-import { SOYUNMA_LOCKER } from "@/lib/puzzle/soyunmaPalette";
+import { radius, space, textScale, type } from "@/theme";
+import { SOYUNMA_LOCKER, SOYUNMA_UI as UI } from "@/lib/puzzle/soyunmaPalette";
 
 const PARTICLES = 10;
 
@@ -73,8 +73,9 @@ function TextBurstBase({ text, id, tone = "brand" }: BurstProps) {
     Animated.timing(t, { toValue: 1, duration: 1150, easing: Easing.linear, useNativeDriver: true }).start();
   }, [id, text, t]);
   if (!text) return null;
-  const bg = tone === "win" ? colors.win : tone === "loss" ? colors.inkBlock : colors.brand;
-  const fg = tone === "win" ? colors.textOnStatus : tone === "loss" ? colors.onDark : colors.textOnBrand;
+  const bg = tone === "win" ? UI.green : tone === "loss" ? UI.red : UI.gold;
+  const edge = tone === "win" ? UI.greenDeep : tone === "loss" ? UI.redDeep : UI.goldDeep;
+  const fg = tone === "brand" ? UI.goldInk : UI.text;
   return (
     <View pointerEvents="none" style={styles.burstWrap}>
       <Animated.View
@@ -82,6 +83,7 @@ function TextBurstBase({ text, id, tone = "brand" }: BurstProps) {
           styles.burst,
           {
             backgroundColor: bg,
+            borderColor: edge,
             opacity: t.interpolate({ inputRange: [0, 0.1, 0.75, 1], outputRange: [0, 1, 1, 0] }),
             transform: [
               { scale: t.interpolate({ inputRange: [0, 0.12, 0.22, 1], outputRange: [0.5, 1.18, 1, 1.02] }) },
@@ -90,7 +92,7 @@ function TextBurstBase({ text, id, tone = "brand" }: BurstProps) {
           },
         ]}
       >
-        <Text {...textScale.badge} style={[styles.burstText, { color: fg }]}>
+        <Text {...textScale.badge} style={[styles.burstText, { color: fg }, tone !== "brand" && styles.burstShadow]}>
           {text}
         </Text>
       </Animated.View>
@@ -109,9 +111,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   burst: {
-    paddingHorizontal: 18,
-    paddingVertical: 8,
+    paddingHorizontal: space.xl,
+    paddingVertical: space.sm,
     borderRadius: radius.pill,
+    borderWidth: 3,
+    borderBottomWidth: 6,
   },
-  burstText: { ...type.scoreMd },
+  burstText: { ...type.scoreLg },
+  burstShadow: { textShadowColor: UI.textShadow, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
 });

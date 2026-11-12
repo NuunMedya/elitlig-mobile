@@ -71,3 +71,53 @@ export const SOYUNMA_SHADE = {
   inkEdgeDark: "rgba(0, 0, 0, 0.35)",
   inkEdgeLight: "rgba(255, 255, 255, 0.4)",
 } as const;
+
+/**
+ * Oyun içi arayüz: HUD, soyunma odası duvarı / zemini, güçlendirici
+ * butonları. Tema tokenından bağımsız: sahne iki temada da aynı renkli
+ * "oyun içi" atmosferi taşır.
+ */
+export const SOYUNMA_UI = {
+  /** HUD paneli — lacivert gece. */
+  panel: "#173A7A",
+  panelDeep: "#0B1F4A",
+  panelRim: "#2F5FC0",
+  /** Hamle sayacı turuncusu. */
+  orange: "#FF9A2E",
+  orangeDeep: "#C25E00",
+  /** Hedef / ilerleme yeşili. */
+  green: "#41E070",
+  greenDeep: "#1C9C43",
+  /** Yıldız ve skor altını. */
+  gold: "#FFC531",
+  goldDeep: "#C47F00",
+  goldInk: "#4A2E00",
+  /** Uyarı (az hamle kaldı). */
+  red: "#FF4D5E",
+  redDeep: "#B11C2C",
+  /** Güçlendirici mavisi. */
+  blue: "#3FA9FF",
+  blueDeep: "#1A63B8",
+  /** Soyunma odası: fayans duvar + parke zemin + çerçeve. */
+  wall: "#2C7FA8",
+  wallHi: "#3E97C2",
+  wallDeep: "#1B5776",
+  wallLine: "rgba(255, 255, 255, 0.12)",
+  floor: "#B9773F",
+  floorHi: "#D08E52",
+  floorLine: "#8A5428",
+  rim: "#123A55",
+  rimDeep: "#08202F",
+  starOff: "rgba(255, 255, 255, 0.28)",
+  barTrack: "rgba(0, 0, 0, 0.38)",
+  shine: "rgba(255, 255, 255, 0.35)",
+  text: "#FFFFFF",
+  textSoft: "rgba(255, 255, 255, 0.75)",
+  textShadow: "rgba(0, 0, 0, 0.45)",
+  scrim: "rgba(5, 12, 30, 0.6)",
+  card: "#1F4A96",
+  cardDeep: "#0E2659",
+  tipFace: "#FFF3C4",
+  tipDeep: "#E2B93B",
+  tipInk: "#4A3500",
+} as const;
