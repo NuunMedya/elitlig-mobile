@@ -96,25 +96,76 @@ export const sendReaction = (matchId: number, eventId: number, reaction: Reactio
 
 /* ───────────── Fantezi ElitLig ───────────── */
 
+export type FantasyLine = "GK" | "DEF" | "MID" | "FWD" | "ANY";
+
 export interface FantasyPlayer {
   id: number;
   name: string;
   image: string | null;
   position: string | null;
-  line: string;
+  line: FantasyLine | string;
+  /** "Kaleci", "Defans", "Orta saha", "Hücum", "Mevkisiz" (yeni sunucu). */
+  lineLabel?: string;
   teamId: number;
   teamName: string | null;
   teamLogo: string | null;
   value: number;
+  /** Haftanın fiyatı (4,0–13,0, 0,5 adım). Hafta içinde değişmez. */
   price: number;
+  /** Geçen haftanın fiyatı; veri yoksa null. */
+  prevPrice?: number | null;
+  trend?: "up" | "down" | "same" | "new";
+  /** 0–100 fiyat reytingi. */
+  rating?: number;
+  /** Son 5 maçın yeniye ağırlıklı maç başı puanı. */
+  form?: number | null;
+  /** Sezon maç başı puanı. */
+  ppm?: number | null;
+  matches?: number;
+  points?: number;
+  goals?: number;
+  assists?: number;
+  /** Takımının son maçlarında oynama oranı (0–1). */
+  activity?: number | null;
+  /** Takımının son 3 maçında hiç oynamadı. */
+  inactive?: boolean;
+  /** Takımının son 5 maçındaki puanı (eskiden yeniye; oynamadıysa null). */
+  last5?: (number | null)[];
+}
+
+export interface FantasyBreakdownItem {
+  id: number;
+  points: number;
+  captain: boolean;
+  vice?: boolean;
+  base?: number;
+  multiplier?: number;
+  played?: boolean;
+  /** Takımının bu haftada yayınlanmamış maçı var: puan henüz kesin değil. */
+  pending?: boolean;
 }
 
 export interface FantasyLineupView {
   week: string;
   playerIds: number[];
   captainId: number;
+  viceCaptainId?: number | null;
   points: number;
-  breakdown: { id: number; points: number; captain: boolean }[];
+  breakdown: FantasyBreakdownItem[];
+}
+
+export interface FantasyRules {
+  budget: number;
+  size: number;
+  maxPerTeam: number;
+  maxPerLine?: number;
+  goalkeepers?: number;
+  requireGoalkeeper?: boolean;
+  captainMultiplier?: number;
+  viceCaptain?: boolean;
+  priceMin?: number;
+  priceMax?: number;
+  points?: Record<string, unknown>;
 }
 
 export interface FantasyMe {
@@ -137,20 +188,44 @@ export interface FantasyMe {
   lineup: FantasyLineupView | null;
   /** Gelecek hafta düzenlenirken bu haftanın oynanmış kadrosu. */
   live?: FantasyLineupView | null;
-  suggestion: { playerIds: number[]; captainId: number } | null;
+  suggestion: { playerIds: number[]; captainId: number; viceCaptainId?: number | null } | null;
   history: { week: string; points: number }[];
-  rules: { budget: number; size: number; maxPerTeam: number };
+  rules: FantasyRules;
+}
+
+export interface FantasyPool {
+  budget: number;
+  size: number;
+  maxPerTeam: number;
+  /** Fiyatların geçerli olduğu hafta. */
+  week?: string;
+  rules?: FantasyRules;
+  players: FantasyPlayer[];
+}
+
+export interface FantasyBoardEntry {
+  userId: number;
+  rank: number;
+  name: string;
+  teamName: string | null;
+  points: number;
+  weeks: number;
+  bestWeek?: number;
 }
 
 type Scope = { leagueId: number; seasonId: number };
 
-export const getFantasyPool = (scope: Scope) =>
-  get<{ budget: number; size: number; maxPerTeam: number; players: FantasyPlayer[] }>("/api/fantasy/pool", scope);
+export const getFantasyPool = (scope: Scope) => get<FantasyPool>("/api/fantasy/pool", scope);
 export const getFantasyMe = (scope: Scope) => get<FantasyMe>("/api/fantasy/me", scope, { retry: false });
-export const saveFantasy = (scope: Scope, playerIds: number[], captainId: number) =>
-  put<{ message: string; cost: number; week: string }>("/api/fantasy/me", { ...scope, playerIds, captainId });
+export const saveFantasy = (scope: Scope, playerIds: number[], captainId: number, viceCaptainId?: number | null) =>
+  put<{ message: string; cost: number; week: string; remaining?: number; viceCaptainId?: number | null }>("/api/fantasy/me", {
+    ...scope,
+    playerIds,
+    captainId,
+    ...(viceCaptainId ? { viceCaptainId } : {}),
+  });
 export const getFantasyBoard = (scope: Scope, period: "week" | "season") =>
-  get<{ entries: { userId: number; rank: number; name: string; teamName: string | null; points: number; weeks: number }[]; me: { rank: number; points: number; userId: number } | null }>(
+  get<{ period?: string; week?: string | null; entries: FantasyBoardEntry[]; me: FantasyBoardEntry | null; totalPlayers?: number }>(
     "/api/fantasy/leaderboard",
     { ...scope, period },
   );
