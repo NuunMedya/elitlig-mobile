@@ -1643,7 +1643,13 @@
     shownPts = shownPts < points ? Math.min(points, shownPts + Math.max(1, (points - shownPts) * 0.15)) : points;
     A.blit(LY.sky);
     tile(LY.city, 0.12, L.ceil);
+    // Arka plan karartması: şehir ve tribün geride kalsın, baraj / kale / top
+    // öne çıksın (oyuncu engelleri arka plandan hemen ayırt etmeli).
+    c.fillStyle = "rgba(10,8,34,0.5)";
+    c.fillRect(0, 0, W, H);
     tile(LY.stand, 0.45, L.standTop);
+    c.fillStyle = "rgba(10,8,34,0.38)";
+    c.fillRect(0, 0, W, H);
     drawGrass(c);
     drawJuggler(c);
     gates.forEach(function (g) {
