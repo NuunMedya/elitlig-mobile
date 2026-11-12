@@ -6,11 +6,11 @@
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Animated, Easing, StyleSheet, View } from "react-native";
 import Svg, { Circle, Defs, G, Line, LinearGradient, RadialGradient, Rect, Stop } from "react-native-svg";
 import { radius } from "@/theme";
-import { UCLU_BOARD, UCLU_OUTLINE } from "@/lib/puzzle/ucluPalette";
+import { UCLU_BOARD } from "@/lib/puzzle/ucluPalette";
 
 /* ───────────────────────────── zemin ───────────────────────────── */
 
@@ -25,7 +25,7 @@ export interface CellViewProps {
 function Mud({ size, layers }: { size: number; layers: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 100 100" style={StyleSheet.absoluteFill}>
-      <Rect x={5} y={5} width={90} height={90} rx={20} fill={layers >= 2 ? UCLU_BOARD.mudDeep : UCLU_BOARD.mud} stroke={UCLU_OUTLINE} strokeWidth={4} />
+      <Rect x={5} y={5} width={90} height={90} rx={20} fill={layers >= 2 ? UCLU_BOARD.mudDeep : UCLU_BOARD.mud} stroke={UCLU_BOARD.mudDeep} strokeWidth={1.5} />
       <Circle cx={28} cy={30} r={9} fill={UCLU_BOARD.mudSpot} />
       <Circle cx={70} cy={66} r={12} fill={UCLU_BOARD.mudSpot} />
       <Circle cx={66} cy={24} r={5} fill={UCLU_BOARD.mudSpot} />
@@ -43,14 +43,14 @@ function Crate({ size, hp }: { size: number; hp: number }) {
           <Stop offset="1" stopColor={UCLU_BOARD.wood} />
         </LinearGradient>
       </Defs>
-      <Rect x={6} y={11} width={88} height={84} rx={14} fill={UCLU_BOARD.woodLo} stroke={UCLU_OUTLINE} strokeWidth={5} />
-      <Rect x={6} y={5} width={88} height={84} rx={14} fill="url(#uwood)" stroke={UCLU_OUTLINE} strokeWidth={5} />
+      <Rect x={6} y={11} width={88} height={84} rx={14} fill={UCLU_BOARD.woodLo} />
+      <Rect x={6} y={5} width={88} height={84} rx={14} fill="url(#uwood)" stroke={UCLU_BOARD.crateEdge} strokeWidth={2} />
       <Rect x={14} y={10} width={50} height={7} rx={3.5} fill={UCLU_BOARD.beamCore} fillOpacity={0.55} />
       <Line x1={10} y1={34} x2={90} y2={34} stroke={UCLU_BOARD.woodLo} strokeWidth={3.5} />
       <Line x1={10} y1={62} x2={90} y2={62} stroke={UCLU_BOARD.woodLo} strokeWidth={3.5} />
-      {hp >= 2 ? <Rect x={6} y={41} width={88} height={13} fill={UCLU_BOARD.strap} stroke={UCLU_OUTLINE} strokeWidth={3} /> : null}
-      {hp >= 3 ? <Rect x={43.5} y={5} width={13} height={84} fill={UCLU_BOARD.strap} stroke={UCLU_OUTLINE} strokeWidth={3} /> : null}
-      <G fill={UCLU_OUTLINE}>
+      {hp >= 2 ? <Rect x={6} y={41} width={88} height={13} fill={UCLU_BOARD.strap} stroke={UCLU_BOARD.strapLo} strokeWidth={1.5} /> : null}
+      {hp >= 3 ? <Rect x={43.5} y={5} width={13} height={84} fill={UCLU_BOARD.strap} stroke={UCLU_BOARD.strapLo} strokeWidth={1.5} /> : null}
+      <G fill={UCLU_BOARD.woodLo}>
         <Circle cx={17} cy={16} r={3.5} />
         <Circle cx={83} cy={16} r={3.5} />
         <Circle cx={17} cy={78} r={3.5} />
@@ -69,10 +69,18 @@ function CellViewBase({ row, col, cell, mud, crate }: CellViewProps) {
     prev.current = { mud, crate };
     if (was.mud === mud && was.crate === crate) return;
     shake.setValue(0);
-    Animated.timing(shake, { toValue: 1, duration: 260, easing: Easing.linear, useNativeDriver: true }).start();
+    Animated.timing(shake, {
+      toValue: 1,
+      duration: 260,
+      easing: Easing.linear,
+      useNativeDriver: true,
+    }).start();
   }, [mud, crate, shake]);
 
-  const dx = shake.interpolate({ inputRange: [0, 0.2, 0.4, 0.6, 0.8, 1], outputRange: [0, -3, 3, -2, 2, 0] });
+  const dx = shake.interpolate({
+    inputRange: [0, 0.2, 0.4, 0.6, 0.8, 1],
+    outputRange: [0, -3, 3, -2, 2, 0],
+  });
   // Saha biçimi: satır şeritleri (A/B) + her şeritte hafif dama.
   const stripe = row % 2 === 0;
   const check = (row + col) % 2 === 0;
@@ -124,14 +132,14 @@ export const BoardLight = React.memo(function BoardLight({ size }: { size: numbe
           <Stop offset="1" stopColor={UCLU_BOARD.ink} stopOpacity={0.12} />
         </RadialGradient>
       </Defs>
-      <G fill="none" stroke={UCLU_BOARD.pitchLine} strokeWidth={0.8}>
+      <G fill="none" stroke={UCLU_BOARD.pitchLine} strokeOpacity={0.55} strokeWidth={0.6}>
         <Rect x={1.2} y={1.2} width={97.6} height={97.6} rx={1.5} />
         <Line x1={1.2} y1={50} x2={98.8} y2={50} />
         <Circle cx={50} cy={50} r={12} />
         <Rect x={30} y={1.2} width={40} height={12} />
         <Rect x={30} y={86.8} width={40} height={12} />
       </G>
-      <Circle cx={50} cy={50} r={1.4} fill={UCLU_BOARD.pitchLine} />
+      <Circle cx={50} cy={50} r={1.1} fill={UCLU_BOARD.pitchLine} fillOpacity={0.55} />
       <Rect x={0} y={0} width={100} height={100} fill="url(#ublight)" />
       <Rect x={0} y={0} width={100} height={100} fill="url(#ubvig)" />
     </Svg>
@@ -139,58 +147,83 @@ export const BoardLight = React.memo(function BoardLight({ size }: { size: numbe
 });
 
 /**
- * Çizgi film tahta çerçevesi (arcade HUD panelleriyle aynı dil): kalın
- * lacivert dış kontur, mor-lacivert dolgu bandı, üstte beyaz parlama şeridi,
- * ve sahayı saran lacivert iç kenar. Çekiç seçiliyken iç kenar altın yanar (hedef seçme kipi).
+ * Sade tahta çerçevesi: koyu lacivert, yumuşak köşeli zemin ve sahayı saran
+ * ince kenar (kalın kontur yok). Çekiç seçiliyken iç kenar vurgu renginde
+ * yanar (hedef seçme kipi).
  */
 export const FrameTrim = React.memo(function FrameTrim({ width, height, pad, hammer }: { width: number; height: number; pad: number; hammer: boolean }) {
   const r = 20;
   return (
     <Svg width={width} height={height} style={StyleSheet.absoluteFill} pointerEvents="none">
-      <Defs>
-        <LinearGradient id="ubband" x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0" stopColor={UCLU_BOARD.rimHi} />
-          <Stop offset="0.5" stopColor={UCLU_BOARD.rimMid} />
-          <Stop offset="1" stopColor={UCLU_BOARD.rimLo} />
-        </LinearGradient>
-      </Defs>
-      <Rect x={1.5} y={1.5} width={width - 3} height={height - 3} rx={r} fill="url(#ubband)" stroke={UCLU_OUTLINE} strokeWidth={3} />
-      <Rect x={r} y={4} width={width - r * 2} height={Math.max(2, pad * 0.28)} rx={pad * 0.14} fill={UCLU_BOARD.beamCore} fillOpacity={0.35} />
+      <Rect x={0} y={3} width={width} height={height - 3} rx={r} fill={UCLU_BOARD.chromeLip} />
+      <Rect x={0} y={0} width={width} height={height - 3} rx={r} fill={UCLU_BOARD.pitchFrame} />
+      <Rect x={0.5} y={0.5} width={width - 1} height={height - 4} rx={r} fill="none" stroke={UCLU_BOARD.chromeEdge} strokeWidth={1} />
       <Rect
-        x={pad - 3}
-        y={pad - 3}
-        width={width - pad * 2 + 6}
-        height={height - pad * 2 + 6}
-        rx={9}
-        fill={UCLU_OUTLINE}
-        stroke={hammer ? UCLU_BOARD.comboWarm : UCLU_OUTLINE}
-        strokeWidth={hammer ? 4 : 3}
+        x={pad - 1.5}
+        y={pad - 1.5}
+        width={width - pad * 2 + 3}
+        height={height - pad * 2 + 3}
+        rx={8}
+        fill="none"
+        stroke={hammer ? UCLU_BOARD.accent : UCLU_BOARD.pitchEdge}
+        strokeWidth={hammer ? 3 : 1.5}
       />
     </Svg>
   );
 });
 
 /**
- * Seviye açılışında tahtanın üstünden BİR KEZ geçen ışık süpürmesi (sonlu
- * animasyon): eğik, yumuşak bir parıltı soldan sağa akar.
+ * Tahtanın üstünden geçen ışık süpürmesi: seviye açılışında bir kez, sonra
+ * `repeat` açıkken ara ara (her süpürme sonlu bir animasyon; zamanlayıcı
+ * bileşen kalkınca / repeat kapanınca temizlenir). Eğik, yumuşak bir parıltı
+ * soldan sağa akar.
  */
-export function ShineSweep({ size, tick }: { size: number; tick: number }) {
+export function ShineSweep({ size, tick, repeat = false }: { size: number; tick: number; repeat?: boolean }) {
   const t = useRef(new Animated.Value(0)).current;
+  const [round, setRound] = useState(0);
   useEffect(() => {
     t.setValue(0);
-    Animated.timing(t, { toValue: 1, duration: 1100, delay: 250, easing: Easing.inOut(Easing.quad), useNativeDriver: true }).start();
-  }, [tick, t]);
+    const anim = Animated.timing(t, {
+      toValue: 1,
+      duration: 1100,
+      delay: 250,
+      easing: Easing.inOut(Easing.quad),
+      useNativeDriver: true,
+    });
+    anim.start();
+    return () => anim.stop();
+  }, [tick, round, t]);
+  useEffect(() => {
+    if (!repeat) return;
+    const timer = setTimeout(() => setRound((r) => r + 1), 7000 + (round % 3) * 1500);
+    return () => clearTimeout(timer);
+  }, [repeat, round]);
   const band = size * 0.42;
-  const x = t.interpolate({ inputRange: [0, 1], outputRange: [-band * 1.6, size + band * 0.6] });
-  const opacity = t.interpolate({ inputRange: [0, 0.1, 0.85, 1], outputRange: [0, 1, 1, 0] });
+  const x = t.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-band * 1.6, size + band * 0.6],
+  });
+  const opacity = t.interpolate({
+    inputRange: [0, 0.1, 0.85, 1],
+    outputRange: [0, 1, 1, 0],
+  });
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.sweepClip]}>
-      <Animated.View style={{ position: "absolute", top: -size * 0.2, width: band, height: size * 1.4, opacity, transform: [{ translateX: x }, { rotate: "18deg" }] }}>
+      <Animated.View
+        style={{
+          position: "absolute",
+          top: -size * 0.2,
+          width: band,
+          height: size * 1.4,
+          opacity,
+          transform: [{ translateX: x }, { rotate: "18deg" }],
+        }}
+      >
         <Svg width="100%" height="100%" viewBox="0 0 10 10" preserveAspectRatio="none">
           <Defs>
             <LinearGradient id="ubsweep" x1="0" y1="0" x2="1" y2="0">
               <Stop offset="0" stopColor={UCLU_BOARD.floodlight} stopOpacity={0} />
-              <Stop offset="0.5" stopColor={UCLU_BOARD.floodlight} stopOpacity={0.28} />
+              <Stop offset="0.5" stopColor={UCLU_BOARD.floodlight} stopOpacity={0.38} />
               <Stop offset="1" stopColor={UCLU_BOARD.floodlight} stopOpacity={0} />
             </LinearGradient>
           </Defs>
@@ -218,14 +251,31 @@ function LockViewBase({ row, col, cell, snow, net }: LockViewProps) {
   if (on) kind.current = snow > 0 ? "snow" : "net";
 
   useEffect(() => {
-    Animated.timing(fade, { toValue: on ? 1 : 0, duration: 240, useNativeDriver: true }).start();
+    Animated.timing(fade, {
+      toValue: on ? 1 : 0,
+      duration: 240,
+      useNativeDriver: true,
+    }).start();
   }, [on, fade]);
 
-  const scale = fade.interpolate({ inputRange: [0, 1], outputRange: [1.35, 1] });
+  const scale = fade.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1.35, 1],
+  });
   return (
     <Animated.View
       pointerEvents="none"
-      style={[styles.cell, { left: col * cell, top: row * cell, width: cell, height: cell, opacity: fade, transform: [{ scale }] }]}
+      style={[
+        styles.cell,
+        {
+          left: col * cell,
+          top: row * cell,
+          width: cell,
+          height: cell,
+          opacity: fade,
+          transform: [{ scale }],
+        },
+      ]}
     >
       {kind.current === "snow" ? (
         <View style={[styles.snow, { margin: cell * 0.04 }]}>
@@ -239,7 +289,7 @@ function LockViewBase({ row, col, cell, snow, net }: LockViewProps) {
         </View>
       ) : (
         <Svg width={cell} height={cell} viewBox="0 0 100 100">
-          <Rect x={4} y={4} width={92} height={92} rx={14} fill={UCLU_BOARD.netShade} stroke={UCLU_OUTLINE} strokeWidth={8} />
+          <Rect x={4} y={4} width={92} height={92} rx={14} fill={UCLU_BOARD.netShade} />
           <Rect x={4} y={4} width={92} height={92} rx={14} fill="none" stroke={UCLU_BOARD.net} strokeWidth={3.5} />
           <G stroke={UCLU_BOARD.net} strokeWidth={3}>
             {[22, 40, 58, 76].map((p) => (
@@ -259,13 +309,17 @@ export const LockView = React.memo(LockViewBase);
 
 const styles = StyleSheet.create({
   cell: { position: "absolute" },
-  center: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
+  center: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   snow: {
     flex: 1,
     borderRadius: radius.md,
     backgroundColor: UCLU_BOARD.snow,
-    borderWidth: 3,
-    borderColor: UCLU_OUTLINE,
+    borderWidth: 1.5,
+    borderColor: UCLU_BOARD.snowEdge,
     overflow: "hidden",
   },
   snowBadge: { position: "absolute", right: 2, bottom: 1 },

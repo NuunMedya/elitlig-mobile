@@ -9,21 +9,41 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { PanResponder, StyleSheet, View } from "react-native";
+import { Animated, Easing, PanResponder, StyleSheet, View } from "react-native";
 import type { LayoutChangeEvent } from "react-native";
 import { haptics, radius, space } from "@/theme";
+import { useReduceMotion } from "@/components/ui/useReduceMotion";
 import type { PuzzleGameProps } from "@/lib/puzzle/types";
 import { ucluLevel } from "@/lib/puzzle/levels/uclu";
 import { UCLU_BOARD, UCLU_PIECE_COLORS } from "@/lib/puzzle/ucluPalette";
 import {
-  adjacent, bonusConvert, canHammer, canSwapCell, cloneCells, createGame, detonateAll, findMove, goalsDone,
-  hammerCell, hasSpecials, H, placeSpecial, shuffleBoard, starsFor, trySwap, W,
-  type Cell, type ClearedTile, type GameState, type Special, type Step,
+  adjacent,
+  bonusConvert,
+  canHammer,
+  canSwapCell,
+  cloneCells,
+  createGame,
+  detonateAll,
+  findMove,
+  goalsDone,
+  hammerCell,
+  hasSpecials,
+  H,
+  placeSpecial,
+  shuffleBoard,
+  starsFor,
+  trySwap,
+  W,
+  type Cell,
+  type ClearedTile,
+  type GameState,
+  type Special,
+  type Step,
 } from "@/lib/puzzle/ucluEngine";
 import { BoardLight, CellView, FrameTrim, LockView, ShineSweep } from "./BoardLayers";
 import { FxLayer, type Fx, type FlyGlyph, type FxInput } from "./Effects";
 import { BoosterBar, HintBubble, Hud, type HudGoal, type LiveBooster } from "./Hud";
-import { TileView } from "./Piece";
+import { TileView, phased, type IdleAnim } from "./Piece";
 
 interface BoardView {
   cells: Cell[];
@@ -38,10 +58,21 @@ interface Hint {
 }
 
 const COMBO_WORDS = ["", "", "Güzel!", "Harika!", "Süper!", "Muhteşem!", "Efsane!"];
-const SPECIAL_NAMES: Record<Special, string> = { none: "", h: "Füze Şut!", v: "Füze Şut!", bomb: "Röveşata!", ball: "Altın Top!" };
+const SPECIAL_NAMES: Record<Special, string> = {
+  none: "",
+  h: "Füze Şut!",
+  v: "Füze Şut!",
+  bomb: "Röveşata!",
+  ball: "Altın Top!",
+};
 const LIVE_BOOSTERS = [
   { key: "cekic", title: "Krampon Darbesi", short: "DARBE", icon: "hammer" },
-  { key: "karistir", title: "Taktik Değişikliği", short: "TAKTİK", icon: "shuffle" },
+  {
+    key: "karistir",
+    title: "Taktik Değişikliği",
+    short: "TAKTİK",
+    icon: "shuffle",
+  },
 ] as const;
 /** Çizgi film çerçevenin bir kenarı (tahta bu kadar içeride başlar). */
 const PAD = 12;
@@ -53,6 +84,9 @@ const BAR_MAX = 92;
 /** Bölümler arası en küçük boşluk. */
 const GAP = space.sm;
 const BONUS_MAX = 15;
+/** Boşta-yaşam: ortak sürücünün bir turu (ms) ve faz sayısı. */
+const IDLE_MS = 2800;
+const IDLE_PHASES = 8;
 
 export default function UcluGame(props: PuzzleGameProps) {
   const { level, maxWidth, preBoosters, boosterStock, onFinish, paused } = props;
@@ -98,7 +132,14 @@ export default function UcluGame(props: PuzzleGameProps) {
   /** Ekranda en son gösterilen hücreler (engel vuruşunun rengini seçmek için). */
   const shown = useRef<Cell[]>(board.cells);
   shown.current = board.cells;
-  const [goals, setGoals] = useState<HudGoal[]>(() => S().goals.map((g) => ({ type: g.type, color: g.color, left: g.left, target: g.target })));
+  const [goals, setGoals] = useState<HudGoal[]>(() =>
+    S().goals.map((g) => ({
+      type: g.type,
+      color: g.color,
+      left: g.left,
+      target: g.target,
+    })),
+  );
   const [moves, setMoves] = useState(() => S().moves);
   const [score, setScore] = useState(0);
   const [fx, setFx] = useState<Fx[]>([]);
@@ -107,6 +148,37 @@ export default function UcluGame(props: PuzzleGameProps) {
   const [hammer, setHammer] = useState(false);
   const [busy, setBusyState] = useState(true);
   const [tip, setTip] = useState<string | null>(def.tip);
+
+  /*
+   * BOŞTA YAŞAM: tek ortak Animated.Value (yerel sürücü) 0→1 döner; her taş
+   * kendi fazına göre bu değerden türetilmiş nefes / salınım alır. Hücre
+   * başına döngü yoktur. Döngü sonludur (iterations) ve duraklatınca /
+   * "hareketi azalt" açıkken / bileşen kalkınca durur.
+   */
+  const still = useReduceMotion();
+  const idleV = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (still || paused) {
+      idleV.stopAnimation();
+      return;
+    }
+    const turn = Animated.timing(idleV, { toValue: 1, duration: IDLE_MS, easing: Easing.linear, useNativeDriver: true });
+    const loop = Animated.loop(turn, { iterations: 400 });
+    loop.start();
+    return () => loop.stop();
+  }, [still, paused, idleV]);
+  const idleAnims = useMemo<IdleAnim[]>(
+    () =>
+      Array.from({ length: IDLE_PHASES }, (_, k) => {
+        const ph = k / IDLE_PHASES;
+        return {
+          bob: phased(idleV, ph, -cell * 0.035, cell * 0.035),
+          breathe: phased(idleV, ph + 0.25, 0.965, 1.005),
+          pulse: phased(idleV, ph * 2, 0.93, 1.07),
+        };
+      }),
+    [idleV, cell],
+  );
 
   const busyRef = useRef(true);
   const finished = useRef(false);
@@ -143,7 +215,10 @@ export default function UcluGame(props: PuzzleGameProps) {
   const rowPos = useRef({ x: 0, y: 0 });
   const slotPos = useRef<{ x: number; y: number; w: number; h: number }[]>([]);
   const onBoardLayout = useCallback((e: LayoutChangeEvent) => {
-    boardPos.current = { x: e.nativeEvent.layout.x + PAD, y: e.nativeEvent.layout.y + PAD };
+    boardPos.current = {
+      x: e.nativeEvent.layout.x + PAD,
+      y: e.nativeEvent.layout.y + PAD,
+    };
   }, []);
   const onHudLayout = useCallback((e: LayoutChangeEvent) => {
     hudPos.current = { x: e.nativeEvent.layout.x, y: e.nativeEvent.layout.y };
@@ -159,7 +234,10 @@ export default function UcluGame(props: PuzzleGameProps) {
   }, []);
 
   const center = useCallback(
-    (i: number) => ({ x: boardPos.current.x + (i % W) * cell + cell / 2, y: boardPos.current.y + Math.floor(i / W) * cell + cell / 2 }),
+    (i: number) => ({
+      x: boardPos.current.x + (i % W) * cell + cell / 2,
+      y: boardPos.current.y + Math.floor(i / W) * cell + cell / 2,
+    }),
     [cell],
   );
   const goalTarget = useCallback((gi: number) => {
@@ -168,7 +246,10 @@ export default function UcluGame(props: PuzzleGameProps) {
     const by = hudPos.current.y + rightPos.current.y + rowPos.current.y;
     if (!slot) return { x: bx + 20, y: by + 20 };
     // Çipin solundaki simgenin merkezi (simge çip yüksekliğinde kare).
-    return { x: bx + slot.x + Math.min(slot.w, slot.h) / 2, y: by + slot.y + slot.h / 2 };
+    return {
+      x: bx + slot.x + Math.min(slot.w, slot.h) / 2,
+      y: by + slot.y + slot.h / 2,
+    };
   }, []);
 
   /* ── efekt listesi: toplu ekle, toplu kaldır ── */
@@ -184,7 +265,19 @@ export default function UcluGame(props: PuzzleGameProps) {
 
   const banner = useCallback(
     (text: string, icon: "shuffle" | "flag" | "sparkles" | "rocket" | "hammer") => {
-      addFx([{ kind: "banner", x: boardPos.current.x, y: boardPos.current.y + boardPx / 2, w: boardPx, text, icon }], 1500);
+      addFx(
+        [
+          {
+            kind: "banner",
+            x: boardPos.current.x,
+            y: boardPos.current.y + boardPx / 2,
+            w: boardPx,
+            text,
+            icon,
+          },
+        ],
+        1500,
+      );
     },
     [addFx, boardPx],
   );
@@ -192,7 +285,10 @@ export default function UcluGame(props: PuzzleGameProps) {
   /* ── adım oynatıcı ── */
   const playSteps = useCallback(
     async (steps: Step[]) => {
-      const mid = { x: boardPos.current.x + boardPx / 2, y: boardPos.current.y + boardPx / 2 };
+      const mid = {
+        x: boardPos.current.x + boardPx / 2,
+        y: boardPos.current.y + boardPx / 2,
+      };
       for (const st of steps) {
         if (!alive.current) return;
         if (st.convert) {
@@ -207,39 +303,121 @@ export default function UcluGame(props: PuzzleGameProps) {
           if (!c) return;
           const color = c.crate > 0 ? UCLU_BOARD.woodHi : c.snow > 0 ? UCLU_BOARD.snowEdge : c.net > 0 ? UCLU_BOARD.net : UCLU_BOARD.mud;
           const p = center(i);
-          items.push({ kind: "burst", x: p.x, y: p.y, color, size: cell * 0.9 });
+          items.push({
+            kind: "burst",
+            x: p.x,
+            y: p.y,
+            color,
+            size: cell * 0.9,
+          });
         });
         st.cleared.slice(0, 30).forEach(({ tile, cell: i }) => {
           const p = center(i);
           const color = tile.kind === "trophy" || tile.color < 0 ? UCLU_BOARD.gold : UCLU_PIECE_COLORS[tile.color].base;
-          items.push({ kind: "burst", x: p.x, y: p.y, color, size: cell, big: tile.special !== "none" });
+          items.push({
+            kind: "burst",
+            x: p.x,
+            y: p.y,
+            color,
+            size: cell,
+            big: tile.special !== "none",
+          });
         });
         let delay = 0;
         for (const bl of st.blasts) {
           const p = center(bl.cell);
-          if (bl.kind === "row") items.push({ kind: "beam", dir: "row", x: mid.x, y: p.y, length: boardPx, thick: cell * 0.62, delay: (delay += 30) });
-          else if (bl.kind === "col") items.push({ kind: "beam", dir: "col", x: p.x, y: mid.y, length: boardPx, thick: cell * 0.62, delay: (delay += 30) });
-          else if (bl.kind === "bomb") items.push({ kind: "ring", x: p.x, y: p.y, size: cell * ((bl.radius ?? 1) * 2 + 1.4), color: UCLU_BOARD.comboWarm });
+          if (bl.kind === "row")
+            items.push({
+              kind: "beam",
+              dir: "row",
+              x: mid.x,
+              y: p.y,
+              length: boardPx,
+              thick: cell * 0.62,
+              delay: (delay += 30),
+            });
+          else if (bl.kind === "col")
+            items.push({
+              kind: "beam",
+              dir: "col",
+              x: p.x,
+              y: mid.y,
+              length: boardPx,
+              thick: cell * 0.62,
+              delay: (delay += 30),
+            });
+          else if (bl.kind === "bomb")
+            items.push({
+              kind: "ring",
+              x: p.x,
+              y: p.y,
+              size: cell * ((bl.radius ?? 1) * 2 + 1.4),
+              color: UCLU_BOARD.comboWarm,
+            });
           else if (bl.kind === "ball") {
-            items.push({ kind: "ring", x: p.x, y: p.y, size: cell * 3, color: UCLU_BOARD.gold });
+            items.push({
+              kind: "ring",
+              x: p.x,
+              y: p.y,
+              size: cell * 3,
+              color: UCLU_BOARD.gold,
+            });
             (bl.targets ?? []).slice(0, 20).forEach((t) => {
               const q = center(t);
-              items.push({ kind: "ring", x: q.x, y: q.y, size: cell * 1.1, color: UCLU_BOARD.goldHi });
+              items.push({
+                kind: "ring",
+                x: q.x,
+                y: q.y,
+                size: cell * 1.1,
+                color: UCLU_BOARD.goldHi,
+              });
             });
-          } else items.push({ kind: "flash", x: boardPos.current.x, y: boardPos.current.y, w: boardPx, h: boardPx });
+          } else
+            items.push({
+              kind: "flash",
+              x: boardPos.current.x,
+              y: boardPos.current.y,
+              w: boardPx,
+              h: boardPx,
+            });
         }
         for (const cr of st.created) {
           const p = center(cr.cell);
-          items.push({ kind: "ring", x: p.x, y: p.y, size: cell * 1.6, color: UCLU_BOARD.goldHi });
-          if (st.chain === 1) items.push({ kind: "text", x: p.x, y: p.y - cell * 0.6, text: SPECIAL_NAMES[cr.special], big: false });
+          items.push({
+            kind: "ring",
+            x: p.x,
+            y: p.y,
+            size: cell * 1.6,
+            color: UCLU_BOARD.goldHi,
+          });
+          if (st.chain === 1)
+            items.push({
+              kind: "text",
+              x: p.x,
+              y: p.y - cell * 0.6,
+              text: SPECIAL_NAMES[cr.special],
+              big: false,
+            });
         }
         // Kombo metni: dev kombo > zincir sözcüğü.
         if (st.combo === "mega" && st.chain === 1) {
           const kind = st.blasts[0]?.kind;
           const word = kind === "board" ? "Tribünler ayakta!" : kind === "ball" ? "Altın vuruş!" : "Gol gibi!";
-          items.push({ kind: "text", x: mid.x, y: mid.y, text: word, big: true });
+          items.push({
+            kind: "text",
+            x: mid.x,
+            y: mid.y,
+            text: word,
+            big: true,
+          });
         } else if (st.chain >= 2) {
-          items.push({ kind: "text", x: mid.x, y: mid.y, text: COMBO_WORDS[Math.min(st.chain, 6)], big: st.chain >= 4 });
+          items.push({
+            kind: "text",
+            x: mid.x,
+            y: mid.y,
+            text: COMBO_WORDS[Math.min(st.chain, 6)],
+            big: st.chain >= 4,
+          });
         }
         // Hedefe uçan simgeler (adım başına en çok 10).
         st.collects.slice(0, 10).forEach((co, k) => {
@@ -247,12 +425,25 @@ export default function UcluGame(props: PuzzleGameProps) {
           const from = center(co.cell);
           const to = goalTarget(co.goal);
           const glyph: FlyGlyph =
-            g.type === "color" ? { piece: g.color } :
-            g.type === "trophy" ? { trophy: true } :
-            g.type === "mud" ? { icon: "water", color: UCLU_BOARD.mud } :
-            g.type === "crate" ? { icon: "cube", color: UCLU_BOARD.woodHi } :
-            { icon: "snow", color: UCLU_BOARD.snowEdge };
-          items.push({ kind: "fly", x: from.x, y: from.y, tx: to.x, ty: to.y, size: Math.round(cell * 0.7), glyph, delay: 60 + k * 35 });
+            g.type === "color"
+              ? { piece: g.color }
+              : g.type === "trophy"
+                ? { trophy: true }
+                : g.type === "mud"
+                  ? { icon: "water", color: UCLU_BOARD.mud }
+                  : g.type === "crate"
+                    ? { icon: "cube", color: UCLU_BOARD.woodHi }
+                    : { icon: "snow", color: UCLU_BOARD.snowEdge };
+          items.push({
+            kind: "fly",
+            x: from.x,
+            y: from.y,
+            tx: to.x,
+            ty: to.y,
+            size: Math.round(cell * 0.7),
+            glyph,
+            delay: 60 + k * 35,
+          });
         });
 
         if (st.blasts.length) haptics.goal();
@@ -261,7 +452,13 @@ export default function UcluGame(props: PuzzleGameProps) {
         const counts = new Map<number, number>();
         for (const co of st.collects) counts.set(co.goal, (counts.get(co.goal) ?? 0) + 1);
         setBoard({ cells: st.afterClear, dying: st.cleared, spawn: {} });
-        if (counts.size) setGoals((prev) => prev.map((g, i) => ({ ...g, left: Math.max(0, g.left - (counts.get(i) ?? 0)) })));
+        if (counts.size)
+          setGoals((prev) =>
+            prev.map((g, i) => ({
+              ...g,
+              left: Math.max(0, g.left - (counts.get(i) ?? 0)),
+            })),
+          );
         addFx(items, 1300);
         await wait(st.blasts.length ? 300 : 200);
         if (!alive.current) return;
@@ -276,7 +473,14 @@ export default function UcluGame(props: PuzzleGameProps) {
     const s = S();
     setMoves(s.moves);
     setScore(s.score);
-    setGoals(s.goals.map((g) => ({ type: g.type, color: g.color, left: g.left, target: g.target })));
+    setGoals(
+      s.goals.map((g) => ({
+        type: g.type,
+        color: g.color,
+        left: g.left,
+        target: g.target,
+      })),
+    );
   }, []);
 
   const reported = useRef(false);
@@ -303,7 +507,18 @@ export default function UcluGame(props: PuzzleGameProps) {
       setMoves(s.moves);
       setBoard({ cells: cloneCells(s.cells), dying: [], spawn: {} });
       const p = center(i);
-      addFx([{ kind: "ring", x: p.x, y: p.y, size: cell * 1.5, color: UCLU_BOARD.comboWarm }], 700);
+      addFx(
+        [
+          {
+            kind: "ring",
+            x: p.x,
+            y: p.y,
+            size: cell * 1.5,
+            color: UCLU_BOARD.comboWarm,
+          },
+        ],
+        700,
+      );
       haptics.light();
       await wait(110);
     }
@@ -402,7 +617,18 @@ export default function UcluGame(props: PuzzleGameProps) {
       setHammer(false);
       setBusy(true);
       const p = center(i);
-      addFx([{ kind: "ring", x: p.x, y: p.y, size: cell * 1.8, color: UCLU_BOARD.comboWarm }], 700);
+      addFx(
+        [
+          {
+            kind: "ring",
+            x: p.x,
+            y: p.y,
+            size: cell * 1.8,
+            color: UCLU_BOARD.comboWarm,
+          },
+        ],
+        700,
+      );
       haptics.goal();
       await wait(120);
       await playSteps(hammerCell(s, i));
@@ -521,7 +747,15 @@ export default function UcluGame(props: PuzzleGameProps) {
       const cells = preCells.current.filter((i) => i >= 0);
       if (cells.length) {
         banner("Güçlendiriciler sahada!", "rocket");
-        addFx(cells.map((i) => ({ kind: "ring" as const, ...center(i), size: cell * 1.8, color: UCLU_BOARD.goldHi })), 900);
+        addFx(
+          cells.map((i) => ({
+            kind: "ring" as const,
+            ...center(i),
+            size: cell * 1.8,
+            color: UCLU_BOARD.goldHi,
+          })),
+          900,
+        );
         haptics.medium();
         await wait(600);
       }
@@ -540,18 +774,25 @@ export default function UcluGame(props: PuzzleGameProps) {
   /* ── ipucu: 5 sn hareketsizlikte olası hamle sallanır (sonlu), sonra 6 sn'de bir ── */
   useEffect(() => {
     if (busy || paused || hammer || finished.current) return;
-    const timer = setTimeout(() => {
-      const m = findMove(S());
-      if (!m || !alive.current) return;
-      hintTick.current += 1;
-      setHint({ a: m[0], b: m[1], tick: hintTick.current });
-    }, hint ? 6000 : 5000);
+    const timer = setTimeout(
+      () => {
+        const m = findMove(S());
+        if (!m || !alive.current) return;
+        hintTick.current += 1;
+        setHint({ a: m[0], b: m[1], tick: hintTick.current });
+      },
+      hint ? 6000 : 5000,
+    );
     return () => clearTimeout(timer);
   }, [busy, paused, hammer, hint, selected]);
 
   /* ── çizim ── */
   const tiles = useMemo(() => {
-    const out: { tile: NonNullable<Cell["tile"]>; i: number; dying: boolean }[] = [];
+    const out: {
+      tile: NonNullable<Cell["tile"]>;
+      i: number;
+      dying: boolean;
+    }[] = [];
     board.cells.forEach((c, i) => {
       if (c.tile) out.push({ tile: c.tile, i, dying: false });
     });
@@ -582,7 +823,11 @@ export default function UcluGame(props: PuzzleGameProps) {
     if (!hint) return { dx: 0, dy: 0, tick: 0 };
     if (i !== hint.a && i !== hint.b) return { dx: 0, dy: 0, tick: 0 };
     const other = i === hint.a ? hint.b : hint.a;
-    return { dx: (other % W) - (i % W), dy: Math.floor(other / W) - Math.floor(i / W), tick: hint.tick };
+    return {
+      dx: (other % W) - (i % W),
+      dy: Math.floor(other / W) - Math.floor(i / W),
+      tick: hint.tick,
+    };
   };
 
   const bubbleW = Math.min(maxWidth - space.md * 2, framePx - PAD);
@@ -604,9 +849,7 @@ export default function UcluGame(props: PuzzleGameProps) {
           accessibilityHint="Komşu iki taşı kaydırarak yer değiştir; aynı türden üç taşı diz."
         >
           <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-            {board.cells.map((c, i) =>
-              c.hole ? null : <CellView key={i} row={Math.floor(i / W)} col={i % W} cell={cell} mud={c.mud} crate={c.crate} />,
-            )}
+            {board.cells.map((c, i) => (c.hole ? null : <CellView key={i} row={Math.floor(i / W)} col={i % W} cell={cell} mud={c.mud} crate={c.crate} />))}
             <BoardLight size={boardPx} />
           </View>
           <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.clip]}>
@@ -625,6 +868,8 @@ export default function UcluGame(props: PuzzleGameProps) {
                   hintDx={h.dx}
                   hintDy={h.dy}
                   hintTick={dying ? 0 : h.tick}
+                  idle={still ? undefined : idleAnims[((i % W) + (tile.id % 3) * 3) % IDLE_PHASES]}
+                  still={still}
                 />
               );
             })}
@@ -633,12 +878,17 @@ export default function UcluGame(props: PuzzleGameProps) {
             {lockCells.map((i) => (
               <LockView key={i} row={Math.floor(i / W)} col={i % W} cell={cell} snow={board.cells[i].snow} net={board.cells[i].net} />
             ))}
-            <ShineSweep size={boardPx} tick={def.level} />
+            <ShineSweep size={boardPx} tick={def.level} repeat={!still && !paused} />
             {selected >= 0 ? (
               <View
                 style={[
                   styles.selectRing,
-                  { left: (selected % W) * cell, top: Math.floor(selected / W) * cell, width: cell, height: cell },
+                  {
+                    left: (selected % W) * cell,
+                    top: Math.floor(selected / W) * cell,
+                    width: cell,
+                    height: cell,
+                  },
                 ]}
               />
             ) : null}
@@ -646,10 +896,15 @@ export default function UcluGame(props: PuzzleGameProps) {
         </View>
       </View>
 
-      <BoosterBar boosters={liveBoosters} disabled={busy} onPress={onBooster} score={score} width={maxWidth} height={barH} />
+      <BoosterBar boosters={liveBoosters} disabled={busy} onPress={onBooster} score={score} width={maxWidth} height={barH} still={still} />
 
       {barHint ? (
-        <HintBubble text={barHint} bottom={barH + Math.max(0, (maxHeight - hudH - framePx - barH) / 2) + PAD + space.xs} left={(maxWidth - bubbleW) / 2} width={bubbleW} />
+        <HintBubble
+          text={barHint}
+          bottom={barH + Math.max(0, (maxHeight - hudH - framePx - barH) / 2) + PAD + space.xs}
+          left={(maxWidth - bubbleW) / 2}
+          width={bubbleW}
+        />
       ) : null}
 
       <FxLayer items={fx} />

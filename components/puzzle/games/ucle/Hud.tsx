@@ -1,5 +1,5 @@
 import React, { memo, useEffect, useRef } from "react";
-import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
+import { Animated, Easing, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { fonts, radius, space, textScale, type } from "@/theme";
 import { UCLE_UI as UI } from "@/lib/puzzle/uclePalette";
@@ -29,11 +29,16 @@ interface HudProps {
   chainsLeft: number;
   extraRack: boolean;
   compact: boolean;
+  still?: boolean;
 }
 
 const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.max(0, Math.floor(s % 60))).padStart(2, "0")}`;
 
-const shadowText = { textShadowColor: UI.textShadow, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 } as const;
+const shadowText = {
+  textShadowColor: UI.textShadow,
+  textShadowOffset: { width: 0, height: 1 },
+  textShadowRadius: 3,
+} as const;
 
 /**
  * Üst panel — arcade HUD'u gibi ÇİZGİ FİLM dili: kalın lacivert konturlu
@@ -42,12 +47,31 @@ const shadowText = { textShadowColor: UI.textShadow, textShadowOffset: { width: 
  * süre çipi. Hepsi altta koyu dudaklı, kabartmalı.
  */
 function HudBase(p: HudProps) {
+  // Süre azalınca her saniye sayaç "tık" diye zıplar.
+  const tick = useRef(new Animated.Value(1)).current;
+  const lowNow = p.timeLimit != null && p.timeLeft != null && p.timeLeft <= Math.max(10, p.timeLimit * 0.2);
+  useEffect(() => {
+    if (!lowNow || p.still) return;
+    tick.setValue(1.14);
+    Animated.spring(tick, {
+      toValue: 1,
+      damping: 8,
+      stiffness: 320,
+      mass: 0.6,
+      useNativeDriver: true,
+    }).start();
+  }, [p.timeLeft, lowNow, p.still, tick]);
   const bump = useRef(new Animated.Value(1)).current;
   const prev = useRef(p.remaining);
   useEffect(() => {
     if (p.remaining < prev.current) {
       bump.setValue(1.3);
-      Animated.spring(bump, { toValue: 1, speed: 18, bounciness: 14, useNativeDriver: true }).start();
+      Animated.spring(bump, {
+        toValue: 1,
+        speed: 18,
+        bounciness: 14,
+        useNativeDriver: true,
+      }).start();
     }
     prev.current = p.remaining;
   }, [p.remaining, bump]);
@@ -78,7 +102,7 @@ function HudBase(p: HudProps) {
         <View style={styles.mid}>
           <View style={styles.midRow}>
             <Animated.View style={[styles.countWrap, { transform: [{ scale: bump }] }]} accessibilityLabel={`Kalan karo ${p.remaining} / ${p.total}`}>
-              <Ionicons name="layers" size={p.compact ? 18 : 22} color={UI.gold} style={shadowText} />
+              <Ionicons name="layers" size={p.compact ? 18 : 22} color={UI.textSoft} />
               <Text style={[styles.count, p.compact && styles.countSm]} {...textScale.badge}>
                 {p.remaining}
               </Text>
@@ -95,14 +119,23 @@ function HudBase(p: HudProps) {
         </View>
 
         {/* Hedef çipleri */}
-        {p.locksLeft > 0 ? <GoalChip icon="lock-closed" value={p.locksLeft} face={UI.lockChip} deep={UI.lockChipDeep} label="Kilitli karo" /> : null}
-        {p.chainsLeft > 0 ? <GoalChip icon="link" value={p.chainsLeft} face={UI.chainChip} deep={UI.chainChipDeep} label="Zincirli karo" /> : null}
-        {p.extraRack ? <GoalChip icon="file-tray-stacked" value={8} face={UI.green} deep={UI.greenDeep} label="Ek raf etkin, hücre" /> : null}
+        {p.locksLeft > 0 ? <GoalChip icon="lock-closed" value={p.locksLeft} face={UI.chromeHi} deep={UI.lip} label="Kilitli karo" /> : null}
+        {p.chainsLeft > 0 ? <GoalChip icon="link" value={p.chainsLeft} face={UI.chromeHi} deep={UI.lip} label="Zincirli karo" /> : null}
+        {p.extraRack ? <GoalChip icon="file-tray-stacked" value={8} face={UI.chromeHi} deep={UI.lip} label="Ek raf etkin, hücre" /> : null}
 
         {/* Süre */}
         {timed ? (
-          <View style={[styles.timer, { backgroundColor: lowTime ? UI.redDeep : UI.blueDeep }]} accessibilityLabel={`Kalan süre ${fmt(p.timeLeft!)}`}>
-            <View style={[styles.timerFace, { backgroundColor: lowTime ? UI.red : UI.blue }]}>
+          <Animated.View
+            style={[
+              styles.timer,
+              {
+                backgroundColor: lowTime ? UI.redDeep : UI.lip,
+                transform: [{ scale: tick }],
+              },
+            ]}
+            accessibilityLabel={`Kalan süre ${fmt(p.timeLeft!)}`}
+          >
+            <View style={[styles.timerFace, { backgroundColor: lowTime ? UI.red : UI.chromeHi }]}>
               <Ionicons name="time" size={16} color={UI.text} style={shadowText} />
               <Text style={styles.timerText} {...textScale.badge}>
                 {fmt(p.timeLeft!)}
@@ -111,7 +144,7 @@ function HudBase(p: HudProps) {
             <View style={styles.timerBar}>
               <View style={[styles.timerBarFill, { width: `${Math.round(timeFrac * 100)}%` }]} />
             </View>
-          </View>
+          </Animated.View>
         ) : null}
       </View>
     </View>
@@ -143,6 +176,7 @@ interface BoosterBarProps {
   canHint: boolean;
   onUndo: () => void;
   onHint: () => void;
+  still?: boolean;
 }
 
 function BoosterBarBase(p: BoosterBarProps) {
@@ -157,10 +191,12 @@ function BoosterBarBase(p: BoosterBarProps) {
         count={p.stock.geri_al ?? 0}
         enabled={p.canUndo}
         onPress={p.onUndo}
-        face={UI.orange}
-        deep={UI.orangeDeep}
+        face={UI.panel}
+        deep={UI.lip}
         width={w}
         height={H}
+        still={!!p.still}
+        phase={0}
       />
       <BoosterButton
         icon="bulb"
@@ -169,10 +205,12 @@ function BoosterBarBase(p: BoosterBarProps) {
         count={p.stock.ipucu ?? 0}
         enabled={p.canHint}
         onPress={p.onHint}
-        face={UI.blue}
-        deep={UI.blueDeep}
+        face={UI.panel}
+        deep={UI.lip}
         width={w}
         height={H}
+        still={!!p.still}
+        phase={900}
       />
     </View>
   );
@@ -191,6 +229,8 @@ function BoosterButton({
   deep,
   width,
   height,
+  still,
+  phase,
 }: {
   icon: IonName;
   label: string;
@@ -202,86 +242,217 @@ function BoosterButton({
   deep: string;
   width: number;
   height: number;
+  still: boolean;
+  phase: number;
 }) {
   const down = useRef(new Animated.Value(0)).current;
+  // Kullanılabilir düğme ara ara kıpırdar (sonlu döngü; devre dışıyken / hareketi azalt açıkken durur).
+  const wig = useRef(new Animated.Value(0)).current;
+  const usable = enabled && count > 0;
+  useEffect(() => {
+    wig.setValue(0);
+    if (!usable || still) return;
+    const shakeSeq = Animated.sequence([
+      Animated.delay(4200 + phase),
+      Animated.timing(wig, {
+        toValue: 1,
+        duration: 90,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
+      Animated.timing(wig, {
+        toValue: -1,
+        duration: 140,
+        easing: Easing.inOut(Easing.quad),
+        useNativeDriver: true,
+      }),
+      Animated.timing(wig, {
+        toValue: 0.6,
+        duration: 120,
+        easing: Easing.inOut(Easing.quad),
+        useNativeDriver: true,
+      }),
+      Animated.timing(wig, {
+        toValue: -0.3,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(wig, { toValue: 0, duration: 90, useNativeDriver: true }),
+      Animated.delay(1600 - phase),
+    ]);
+    const shake = Animated.loop(shakeSeq, { iterations: 200 });
+    shake.start();
+    return () => shake.stop();
+  }, [usable, still, phase, wig]);
   const depth = DEPTH + 1;
   const disc = height - depth - 14;
   return (
     <Pressable
       onPress={onPress}
       disabled={!enabled}
-      onPressIn={() => Animated.timing(down, { toValue: 1, duration: 60, useNativeDriver: true }).start()}
-      onPressOut={() => Animated.spring(down, { toValue: 0, speed: 30, bounciness: 12, useNativeDriver: true }).start()}
+      onPressIn={() =>
+        Animated.timing(down, {
+          toValue: 1,
+          duration: 60,
+          useNativeDriver: true,
+        }).start()
+      }
+      onPressOut={() =>
+        Animated.spring(down, {
+          toValue: 0,
+          speed: 30,
+          bounciness: 12,
+          useNativeDriver: true,
+        }).start()
+      }
       accessibilityRole="button"
       accessibilityLabel={`${a11y} güçlendiricisi, ${count} adet`}
       accessibilityState={{ disabled: !enabled }}
       style={[{ width, height }, !enabled && styles.boostOff]}
     >
-      <View style={[styles.boostBase, { height: height - depth, top: depth, backgroundColor: deep }]} />
       <Animated.View
-        style={[
-          styles.boostFace,
-          { height: height - depth, backgroundColor: face, transform: [{ translateY: down.interpolate({ inputRange: [0, 1], outputRange: [0, depth - 1] }) }] },
-        ]}
+        style={{
+          width,
+          height,
+          transform: [
+            {
+              rotate: wig.interpolate({
+                inputRange: [-1, 1],
+                outputRange: ["-5deg", "5deg"],
+              }),
+            },
+            {
+              scale: wig.interpolate({
+                inputRange: [-1, 0, 1],
+                outputRange: [1.05, 1, 1.05],
+              }),
+            },
+          ],
+        }}
       >
-        <View style={styles.boostShine} />
-        <View style={[styles.boostDisc, { width: disc, height: disc, borderRadius: disc / 2, backgroundColor: deep }]}>
-          <Ionicons name={icon} size={Math.round(disc * 0.62)} color={UI.text} style={shadowText} />
-        </View>
-        <Text style={styles.boostLabel} numberOfLines={1} {...textScale.badge}>
-          {label}
-        </Text>
-        <View style={[styles.badge, count === 0 && styles.badgeEmpty]}>
-          {count > 0 ? (
-            <Text style={styles.badgeText} {...textScale.badge}>
-              {count}
-            </Text>
-          ) : (
-            <Ionicons name="add" size={14} color={UI.text} />
-          )}
-        </View>
+        <View style={[styles.boostBase, { height: height - depth, top: depth, backgroundColor: deep }]} />
+        <Animated.View
+          style={[
+            styles.boostFace,
+            {
+              height: height - depth,
+              backgroundColor: face,
+              transform: [
+                {
+                  translateY: down.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0, depth - 1],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
+          <View
+            style={[
+              styles.boostDisc,
+              {
+                width: disc,
+                height: disc,
+                borderRadius: disc / 2,
+                backgroundColor: UI.chromeHi,
+              },
+            ]}
+          >
+            <Ionicons name={icon} size={Math.round(disc * 0.62)} color={UI.text} style={shadowText} />
+          </View>
+          <Text style={styles.boostLabel} numberOfLines={1} {...textScale.badge}>
+            {label}
+          </Text>
+          <View style={[styles.badge, count === 0 && styles.badgeEmpty]}>
+            {count > 0 ? (
+              <Text style={styles.badgeText} {...textScale.badge}>
+                {count}
+              </Text>
+            ) : (
+              <Ionicons name="add" size={14} color={UI.text} />
+            )}
+          </View>
+        </Animated.View>
       </Animated.View>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  hud: { borderRadius: radius.xl, backgroundColor: UI.panelDeep, borderWidth: 3, borderColor: UI.outline },
+  hud: {
+    borderRadius: radius.xl,
+    backgroundColor: UI.panelDeep,
+    borderWidth: 1,
+    borderColor: UI.outline,
+  },
   hudFace: {
     position: "absolute",
-    left: -3,
-    right: -3,
-    top: -3,
+    left: -1,
+    right: -1,
+    top: -1,
     flexDirection: "row",
     alignItems: "center",
     gap: space.s,
     paddingHorizontal: space.s,
     borderRadius: radius.xl,
     backgroundColor: UI.panel,
-    borderWidth: 3,
+    borderWidth: 1,
     borderColor: UI.outline,
     overflow: "hidden",
   },
   levelBadge: {
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: UI.gold,
-    borderWidth: 3,
-    borderBottomWidth: 5,
+    backgroundColor: UI.white,
+    borderWidth: 1,
+    borderBottomWidth: 3,
     borderColor: UI.outline,
   },
-  levelNum: { ...type.scoreMd, color: UI.goldInk },
+  levelNum: { ...type.scoreMd, color: UI.ink },
   levelNumSm: { ...type.scoreXs },
   mid: { flex: 1, minWidth: 0, gap: space.xs },
   midRow: { flexDirection: "row", alignItems: "center", gap: space.s },
   countWrap: { flexDirection: "row", alignItems: "center", gap: space.xxs },
   count: { ...type.scoreLg, color: UI.text, ...shadowText },
   countSm: { ...type.scoreMd },
-  shape: { ...type.micro, fontFamily: fonts.bold, color: UI.text, flexShrink: 1, ...shadowText },
-  bar: { height: 12, borderRadius: radius.pill, backgroundColor: UI.barTrack, borderWidth: 2, borderColor: UI.outline, overflow: "hidden" },
-  barFill: { height: 8, borderRadius: radius.pill, backgroundColor: UI.green, borderBottomWidth: 2, borderBottomColor: UI.greenDeep },
-  barShine: { position: "absolute", left: space.xs, right: space.xs, top: 1, height: 2, borderRadius: 1, backgroundColor: UI.barShine },
-  chip: { borderRadius: radius.md, borderWidth: 2.5, borderColor: UI.outline, paddingBottom: 3 },
+  shape: {
+    ...type.micro,
+    fontFamily: fonts.bold,
+    color: UI.text,
+    flexShrink: 1,
+    ...shadowText,
+  },
+  bar: {
+    height: 12,
+    borderRadius: radius.pill,
+    backgroundColor: UI.barTrack,
+    borderWidth: 2,
+    borderColor: UI.outline,
+    overflow: "hidden",
+  },
+  barFill: {
+    height: 8,
+    borderRadius: radius.pill,
+    backgroundColor: UI.green,
+    borderBottomWidth: 2,
+    borderBottomColor: UI.greenDeep,
+  },
+  barShine: {
+    position: "absolute",
+    left: space.xs,
+    right: space.xs,
+    top: 1,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: UI.barShine,
+  },
+  chip: {
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: UI.outline,
+    paddingBottom: 3,
+  },
   chipFace: {
     flexDirection: "row",
     alignItems: "center",
@@ -291,7 +462,13 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
   },
   chipText: { ...type.scoreXs, color: UI.text, ...shadowText },
-  timer: { borderRadius: radius.md, borderWidth: 2.5, borderColor: UI.outline, paddingBottom: 3, overflow: "hidden" },
+  timer: {
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: UI.outline,
+    paddingBottom: 3,
+    overflow: "hidden",
+  },
   timerFace: {
     flexDirection: "row",
     alignItems: "center",
@@ -301,12 +478,31 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
   },
   timerText: { ...type.scoreSm, color: UI.text, ...shadowText },
-  timerBar: { position: "absolute", left: 0, right: 0, bottom: 0, height: 3, backgroundColor: UI.barTrack },
+  timerBar: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 3,
+    backgroundColor: UI.barTrack,
+  },
   timerBarFill: { height: 3, backgroundColor: UI.text },
 
-  boostBar: { flexDirection: "row", alignItems: "flex-end", justifyContent: "center", gap: space.md },
+  boostBar: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "center",
+    gap: space.md,
+  },
   boostOff: { opacity: 0.5 },
-  boostBase: { position: "absolute", left: 0, right: 0, borderRadius: radius.xl, borderWidth: 3, borderColor: UI.outline },
+  boostBase: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: UI.outline,
+  },
   boostFace: {
     position: "absolute",
     left: 0,
@@ -317,12 +513,23 @@ const styles = StyleSheet.create({
     gap: space.sm,
     paddingHorizontal: space.sm,
     borderRadius: radius.xl,
-    borderWidth: 3,
+    borderWidth: 1,
     borderColor: UI.outline,
   },
-  boostShine: { position: "absolute", left: space.lg, right: space.lg, top: 4, height: 5, borderRadius: radius.pill, backgroundColor: UI.shine },
-  boostDisc: { alignItems: "center", justifyContent: "center", borderWidth: 2.5, borderColor: UI.outline },
-  boostLabel: { ...type.h3, fontFamily: fonts.bold, color: UI.text, letterSpacing: 0.6, flexShrink: 1, ...shadowText },
+  boostDisc: {
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: UI.outline,
+  },
+  boostLabel: {
+    ...type.h3,
+    fontFamily: fonts.bold,
+    color: UI.text,
+    letterSpacing: 0.6,
+    flexShrink: 1,
+    ...shadowText,
+  },
   badge: {
     position: "absolute",
     right: -10,
@@ -331,12 +538,12 @@ const styles = StyleSheet.create({
     height: 28,
     paddingHorizontal: space.xs,
     borderRadius: radius.pill,
-    borderWidth: 2.5,
+    borderWidth: 1,
     borderColor: UI.outline,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: UI.red,
+    backgroundColor: UI.white,
   },
-  badgeEmpty: { backgroundColor: UI.greenDeep },
-  badgeText: { ...type.scoreXs, color: UI.text, ...shadowText },
+  badgeEmpty: { backgroundColor: UI.accent },
+  badgeText: { ...type.scoreXs, color: UI.ink },
 });

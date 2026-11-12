@@ -227,7 +227,7 @@ const TIPS: Record<number, string> = {
   16: "Kar kaplı taş yerinden oynamaz. Onu bir eşleşmeye kat ya da patlat: kar kırılır.",
   21: "Şampiyonluk kupasını en alt sıraya indir: altındaki taşları temizle.",
   26: "Kale ağındaki taş tutsak. Onu bir eşleşmeye kat ya da patlat: ağ yırtılır, taş serbest kalır.",
-  31: "Yeni taş: Kupa! Şekilli sahalar ve altı taş türü başlıyor.",
+  31: "Yeni top: Pembe! Şekilli sahalar ve altı top rengi başlıyor.",
 };
 
 /** Seviye 1–10: elle ayarlanmış öğretici eğri. */

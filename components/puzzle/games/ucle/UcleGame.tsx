@@ -10,6 +10,8 @@ import { RackPiece, type FlyFrom } from "./RackPiece";
 import { Confetti, PopText } from "./Effects";
 import { BoosterBar, Hud, boosterBarHeight, hudHeight } from "./Hud";
 import { BoardFrame, FRAME_DEPTH, FRAME_RIM } from "./Frame";
+import { BoardShine } from "./Effects";
+import { useReduceMotion } from "@/components/ui/useReduceMotion";
 
 /* ───────────────────────────── durum ───────────────────────────── */
 
@@ -46,6 +48,9 @@ interface Fx {
 const COMBO_TEXT = ["", "", "Harika!", "Muhteşem!", "Efsane!", "Gol gibi!"];
 /** Tepsinin alt kalınlığı (3D). */
 const TRAY_DEPTH = 5;
+/** Boşta-yaşam sürücüsünün bir turu (ms) ve faz sayısı. */
+const IDLE_MS = 3000;
+const IDLE_PHASES = 8;
 
 const live = (rack: Entry[]) => rack.filter((e) => !e.clearing);
 
@@ -80,7 +85,11 @@ function reveal(lvl: UcleLevel, onBoard: boolean[], revealed: boolean[]): boolea
 /** Rafa yerleştir: aynı türün en sağına, yoksa sona. */
 function insertEntry(rack: Entry[], e: Entry): Entry[] {
   let at = -1;
-  for (let i = rack.length - 1; i >= 0; i--) if (!rack[i].clearing && rack[i].kind === e.kind) { at = i + 1; break; }
+  for (let i = rack.length - 1; i >= 0; i--)
+    if (!rack[i].clearing && rack[i].kind === e.kind) {
+      at = i + 1;
+      break;
+    }
   const next = rack.slice();
   if (at < 0) next.push(e);
   else next.splice(at, 0, e);
@@ -114,6 +123,24 @@ export function UcleGame({ level, maxWidth, maxHeight, preBoosters, boosterStock
     const t = setTimeout(() => setTipOpen(false), 7000);
     return () => clearTimeout(t);
   }, [tipOpen]);
+  /*
+   * BOŞTA YAŞAM: tek ortak Animated.Value (yerel sürücü) 0→1 döner; serbest
+   * karolar kendi fazlarına göre hafifçe süzülür (oynanabilir karolar
+   * canlı görünür). Karo başına döngü yok; döngü sonlu ve duraklatınca /
+   * "hareketi azalt" açıkken / bileşen kalkınca durur.
+   */
+  const still = useReduceMotion();
+  const idleV = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (still || paused) {
+      idleV.stopAnimation();
+      return;
+    }
+    const turn = Animated.timing(idleV, { toValue: 1, duration: IDLE_MS, easing: Easing.linear, useNativeDriver: true });
+    const loop = Animated.loop(turn, { iterations: 400 });
+    loop.start();
+    return () => loop.stop();
+  }, [still, paused, idleV]);
   const boostersUsed = useRef(0);
   const hintBusy = useRef(false);
   const finished = useRef(false);
@@ -155,6 +182,19 @@ export function UcleGame({ level, maxWidth, maxHeight, preBoosters, boosterStock
   const boardH = lvl.spanY * hy + maxZ * depthPx;
   const boardLeft = Math.max(feltPad, (maxWidth - boardW) / 2);
   const boardTop = Math.max(feltPad, (frameH - FRAME_DEPTH - boardH) / 2);
+  const idleBob = useMemo(
+    () =>
+      Array.from({ length: IDLE_PHASES }, (_, k) => {
+        const n = 12;
+        const inputRange = Array.from({ length: n + 1 }, (_, i) => i / n);
+        const amp = Math.max(1, tw * 0.03);
+        return idleV.interpolate({
+          inputRange,
+          outputRange: inputRange.map((x) => -amp * Math.sin((x + k / IDLE_PHASES) * Math.PI * 2)),
+        });
+      }),
+    [idleV, tw],
+  );
   const tileLeft = useCallback((i: number) => boardLeft + lvl.tiles[i].x * hx + (maxZ - lvl.tiles[i].z) * depthPx, [boardLeft, lvl, hx, maxZ, depthPx]);
   const tileTop = useCallback((i: number) => boardTop + lvl.tiles[i].y * hy + (maxZ - lvl.tiles[i].z) * depthPx, [boardTop, lvl, hy, maxZ, depthPx]);
 
@@ -169,7 +209,11 @@ export function UcleGame({ level, maxWidth, maxHeight, preBoosters, boosterStock
   const slotY = rackTop + rackPad;
 
   const flyFrom = useCallback(
-    (i: number): FlyFrom => ({ x: tileLeft(i) + tw / 2 - rc / 2, y: tileTop(i) + th / 2 - rc / 2, scale: tw / rc }),
+    (i: number): FlyFrom => ({
+      x: tileLeft(i) + tw / 2 - rc / 2,
+      y: tileTop(i) + th / 2 - rc / 2,
+      scale: tw / rc,
+    }),
     [tileLeft, tileTop, tw, th, rc],
   );
 
@@ -208,11 +252,21 @@ export function UcleGame({ level, maxWidth, maxHeight, preBoosters, boosterStock
       finished.current = true;
       const s = stRef.current;
       if (!won) {
-        onFinish({ won: false, stars: 0, summary: s.status === "lost" ? "Süre doldu" : "Raf doldu" });
+        onFinish({
+          won: false,
+          stars: 0,
+          summary: s.status === "lost" ? "Süre doldu" : "Raf doldu",
+        });
         return;
       }
       const left = Math.ceil(timeRef.current);
-      const stars = ucleStars({ timeLimit: lvl.timeLimit, timeLeft: left, boostersUsed: boostersUsed.current, peakRack: s.peak, rackSize: UCLE_RACK });
+      const stars = ucleStars({
+        timeLimit: lvl.timeLimit,
+        timeLeft: left,
+        boostersUsed: boostersUsed.current,
+        peakRack: s.peak,
+        rackSize: UCLE_RACK,
+      });
       const score = lvl.tiles.length * 10 + s.bestCombo * 25 + (lvl.timeLimit ? left * 5 : 0);
       onFinish({
         won: true,
@@ -249,9 +303,17 @@ export function UcleGame({ level, maxWidth, maxHeight, preBoosters, boosterStock
   const rackShake = useRef(new Animated.Value(0)).current;
   const shakeRack = () => {
     rackShake.setValue(0);
-    Animated.timing(rackShake, { toValue: 1, duration: 420, easing: Easing.linear, useNativeDriver: true }).start();
+    Animated.timing(rackShake, {
+      toValue: 1,
+      duration: 420,
+      easing: Easing.linear,
+      useNativeDriver: true,
+    }).start();
   };
-  const rackShakeX = rackShake.interpolate({ inputRange: [0, 0.15, 0.3, 0.45, 0.6, 0.75, 1], outputRange: [0, -9, 8, -6, 5, -2, 0] });
+  const rackShakeX = rackShake.interpolate({
+    inputRange: [0, 0.15, 0.3, 0.45, 0.6, 0.75, 1],
+    outputRange: [0, -9, 8, -6, 5, -2, 0],
+  });
 
   /* ── toplama ── */
 
@@ -265,7 +327,12 @@ export function UcleGame({ level, maxWidth, maxHeight, preBoosters, boosterStock
       for (const id of ids) {
         onBoard[id] = false;
         if (lvl.tiles[id].key != null) keyOpened = true;
-        rack = insertEntry(rack, { id, kind: lvl.tiles[id].kind, clearing: false, from: flyFrom(id) });
+        rack = insertEntry(rack, {
+          id,
+          kind: lvl.tiles[id].kind,
+          clearing: false,
+          from: flyFrom(id),
+        });
       }
       const kind = lvl.tiles[ids[ids.length - 1]].kind;
       const same = rack.filter((e) => !e.clearing && e.kind === kind);
@@ -373,7 +440,14 @@ export function UcleGame({ level, maxWidth, maxHeight, preBoosters, boosterStock
     onBoard[target] = true;
     const h = cur.history.slice();
     h.splice(h.lastIndexOf(target), 1);
-    commit({ ...cur, onBoard, rack: cur.rack.filter((e) => e.id !== target), history: h, status: "play", combo: 0 });
+    commit({
+      ...cur,
+      onBoard,
+      rack: cur.rack.filter((e) => e.id !== target),
+      history: h,
+      status: "play",
+      combo: 0,
+    });
     haptics.medium();
     pop("Geri alındı");
   }, [commit, pop, useBooster]);
@@ -385,12 +459,20 @@ export function UcleGame({ level, maxWidth, maxHeight, preBoosters, boosterStock
     for (let i = 0; i < lvl.tiles.length; i++) if (s.onBoard[i] && tileBlock(lvl, i, s.onBoard) === "free") freeIds.push(i);
     let kind = -1;
     let best = -1;
-    for (const [k, c] of counts) if (c > best) { best = c; kind = k; }
+    for (const [k, c] of counts)
+      if (c > best) {
+        best = c;
+        kind = k;
+      }
     if (kind < 0) {
       // Raf boşsa: tahtada en çok açık eşi olan tür.
       const fc = new Map<number, number>();
       for (const i of freeIds) fc.set(lvl.tiles[i].kind, (fc.get(lvl.tiles[i].kind) || 0) + 1);
-      for (const [k, c] of fc) if (c > best) { best = c; kind = k; }
+      for (const [k, c] of fc)
+        if (c > best) {
+          best = c;
+          kind = k;
+        }
       best = 0;
     }
     if (kind < 0) return null;
@@ -454,14 +536,27 @@ export function UcleGame({ level, maxWidth, maxHeight, preBoosters, boosterStock
         chainsLeft={chainsLeft}
         extraRack={rackSize > UCLE_RACK}
         compact={compact}
+        still={still}
       />
       <View style={[styles.stage, { height: stageH, marginTop: gapV }]}>
         {/* Tahta çerçevesi: çim keçe + ahşap kenar; tahta içine ortalanır. */}
         <BoardFrame left={0} top={0} width={maxWidth} height={frameH} />
 
+        {/* Ara ara keçenin üstünden geçen ışık süpürmesi. */}
+        <BoardShine width={maxWidth} height={frameH - FRAME_DEPTH} active={!still && !paused} />
+
         {/* Raf tepsisi ve hücreler */}
         <Animated.View
-          style={[styles.trayWrap, { left: rackLeft, top: rackTop, width: rackW, height: rackH + TRAY_DEPTH, transform: [{ translateX: rackShakeX }] }]}
+          style={[
+            styles.trayWrap,
+            {
+              left: rackLeft,
+              top: rackTop,
+              width: rackW,
+              height: rackH + TRAY_DEPTH,
+              transform: [{ translateX: rackShakeX }],
+            },
+          ]}
           accessibilityLabel={`Raf: ${liveCount} / ${rackSize}`}
         >
           <View style={[styles.trayBase, { top: TRAY_DEPTH, height: rackH }]} />
@@ -469,7 +564,16 @@ export function UcleGame({ level, maxWidth, maxHeight, preBoosters, boosterStock
             {Array.from({ length: rackSize }, (_, i) => (
               <View
                 key={i}
-                style={[styles.cell, { left: rackPad - 2 + i * (rc + rackGap), top: rackPad - 2, width: rc, height: rc }, i === UCLE_RACK && styles.cellBonus]}
+                style={[
+                  styles.cell,
+                  {
+                    left: rackPad - 2 + i * (rc + rackGap),
+                    top: rackPad - 2,
+                    width: rc,
+                    height: rc,
+                  },
+                  i === UCLE_RACK && styles.cellBonus,
+                ]}
               />
             ))}
           </View>
@@ -493,6 +597,8 @@ export function UcleGame({ level, maxWidth, maxHeight, preBoosters, boosterStock
               keyGroup={t.key}
               glow={glow.has(t.id)}
               introDelay={introDone.current ? 0 : introDelay(t.id)}
+              idle={still ? undefined : idleBob[(t.x + t.y * 3) % IDLE_PHASES]}
+              still={still}
               onPress={onTilePress}
               onBlockedPress={onBlockedPress}
             />
@@ -512,6 +618,7 @@ export function UcleGame({ level, maxWidth, maxHeight, preBoosters, boosterStock
               from={e.from}
               clearing={e.clearing}
               onCleared={onCleared}
+              still={still}
             />
           ))}
         </Animated.View>
@@ -524,7 +631,7 @@ export function UcleGame({ level, maxWidth, maxHeight, preBoosters, boosterStock
             accessibilityLabel={`İpucu: ${lvl.tip}. Kapatmak için dokun`}
           >
             <View style={styles.tipIcon}>
-              <Ionicons name="bulb" size={16} color={UI.tipInk} />
+              <Ionicons name="bulb" size={16} color={UI.white} />
             </View>
             <Text style={styles.tipText} {...textScale.long}>
               {lvl.tip}
@@ -550,7 +657,7 @@ export function UcleGame({ level, maxWidth, maxHeight, preBoosters, boosterStock
         ) : null}
       </View>
       <View style={{ marginTop: gapV }}>
-        <BoosterBar width={maxWidth} compact={compact} stock={boosterStock} canUndo={canUndo} canHint={canHint} onUndo={onUndo} onHint={onHint} />
+        <BoosterBar width={maxWidth} compact={compact} stock={boosterStock} canUndo={canUndo} canHint={canHint} onUndo={onUndo} onHint={onHint} still={still} />
       </View>
     </View>
   );
@@ -576,13 +683,31 @@ function EndCard({
 }) {
   const v = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    Animated.spring(v, { toValue: 1, speed: 14, bounciness: 9, useNativeDriver: true }).start();
+    Animated.spring(v, {
+      toValue: 1,
+      speed: 14,
+      bounciness: 9,
+      useNativeDriver: true,
+    }).start();
   }, [v]);
   const full = status === "full";
   return (
     <View style={styles.endWrap} pointerEvents="box-none">
       <Animated.View
-        style={[styles.endCardBase, { opacity: v, transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) }] }]}
+        style={[
+          styles.endCardBase,
+          {
+            opacity: v,
+            transform: [
+              {
+                scale: v.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0.85, 1],
+                }),
+              },
+            ],
+          },
+        ]}
         accessibilityRole="alert"
       >
         <View style={styles.endCard}>
@@ -596,8 +721,8 @@ function EndCard({
                 Son karoyu geri al ya da ipucuyla bir üçlüyü tamamla; maç devam etsin.
               </Text>
               <View style={styles.endRow}>
-                <EndButton icon="arrow-undo" label={`Geri Al (${undoStock})`} onPress={onUndo} disabled={!canUndo} face={UI.orange} deep={UI.orangeDeep} />
-                <EndButton icon="bulb" label={`İpucu (${hintStock})`} onPress={onHint} face={UI.blue} deep={UI.blueDeep} />
+                <EndButton icon="arrow-undo" label={`Geri Al (${undoStock})`} onPress={onUndo} disabled={!canUndo} face={UI.accent} deep={UI.accentDeep} />
+                <EndButton icon="bulb" label={`İpucu (${hintStock})`} onPress={onHint} face={UI.panel} deep={UI.lip} />
               </View>
               <EndButton icon="flag" label="Maçı bitir" onPress={onGiveUp} face={UI.panelRim} deep={UI.panelDeep} />
             </>
@@ -643,12 +768,24 @@ function EndButton({
   );
 }
 
-const shadowText = { textShadowColor: UI.textShadow, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 } as const;
+const shadowText = {
+  textShadowColor: UI.textShadow,
+  textShadowOffset: { width: 0, height: 1 },
+  textShadowRadius: 3,
+} as const;
 
 const styles = StyleSheet.create({
   stage: { width: "100%" },
   trayWrap: { position: "absolute" },
-  trayBase: { position: "absolute", left: 0, right: 0, borderRadius: radius.xl, backgroundColor: UI.trayDeep, borderWidth: 3, borderColor: UI.outline },
+  trayBase: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    borderRadius: radius.xl,
+    backgroundColor: UI.trayDeep,
+    borderWidth: 1,
+    borderColor: UI.outline,
+  },
   tray: {
     position: "absolute",
     left: 0,
@@ -656,11 +793,17 @@ const styles = StyleSheet.create({
     top: 0,
     borderRadius: radius.xl,
     backgroundColor: UI.tray,
-    borderWidth: 3,
+    borderWidth: 1,
     borderColor: UI.outline,
   },
   trayWarn: { backgroundColor: UI.redDeep },
-  cell: { position: "absolute", borderRadius: radius.md, backgroundColor: UI.cell, borderWidth: 1.5, borderColor: UI.cellRim },
+  cell: {
+    position: "absolute",
+    borderRadius: radius.md,
+    backgroundColor: UI.cell,
+    borderWidth: 1.5,
+    borderColor: UI.cellRim,
+  },
   cellBonus: { borderWidth: 2, borderColor: UI.gold, borderStyle: "dashed" },
   tip: {
     position: "absolute",
@@ -673,14 +816,40 @@ const styles = StyleSheet.create({
     paddingVertical: space.sm,
     borderRadius: radius.xl,
     backgroundColor: UI.tipFace,
-    borderWidth: 3,
-    borderBottomWidth: 5,
-    borderColor: UI.tipDeep,
+    borderWidth: 1,
+    borderBottomWidth: 3,
+    borderColor: UI.lip,
   },
-  tipIcon: { width: 28, height: 28, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: UI.gold, borderWidth: 2.5, borderColor: UI.outline },
-  tipText: { ...type.bodySm, fontFamily: fonts.bold, color: UI.tipInk, flex: 1 },
-  endWrap: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", backgroundColor: UI.scrim, borderRadius: radius.xxl },
-  endCardBase: { width: "86%", maxWidth: 360, borderRadius: radius.xxl, backgroundColor: UI.cardDeep, paddingBottom: 6, borderWidth: 3, borderColor: UI.outline },
+  tipIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: UI.accent,
+  },
+  tipText: {
+    ...type.bodySm,
+    fontFamily: fonts.bold,
+    color: UI.tipInk,
+    flex: 1,
+  },
+  endWrap: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: UI.scrim,
+    borderRadius: radius.xxl,
+  },
+  endCardBase: {
+    width: "86%",
+    maxWidth: 360,
+    borderRadius: radius.xxl,
+    backgroundColor: UI.cardDeep,
+    paddingBottom: 6,
+    borderWidth: 1,
+    borderColor: UI.outline,
+  },
   endCard: {
     alignItems: "center",
     gap: space.sm,
@@ -688,8 +857,8 @@ const styles = StyleSheet.create({
     paddingTop: space.xl,
     borderRadius: radius.xxl,
     backgroundColor: UI.card,
-    margin: -3,
-    borderWidth: 3,
+    margin: -1,
+    borderWidth: 1,
     borderColor: UI.outline,
   },
   endIcon: {
@@ -699,14 +868,29 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: UI.red,
-    borderWidth: 3,
-    borderBottomWidth: 5,
+    borderWidth: 1,
+    borderBottomWidth: 3,
     borderColor: UI.outline,
   },
-  endTitle: { ...type.display, fontFamily: fonts.bold, color: UI.text, ...shadowText },
-  endBody: { ...type.body, fontFamily: fonts.semibold, color: UI.text, textAlign: "center" },
+  endTitle: {
+    ...type.display,
+    fontFamily: fonts.bold,
+    color: UI.text,
+    ...shadowText,
+  },
+  endBody: {
+    ...type.body,
+    fontFamily: fonts.semibold,
+    color: UI.text,
+    textAlign: "center",
+  },
   endRow: { flexDirection: "row", gap: space.sm },
-  endBtnBase: { borderRadius: radius.pill, paddingBottom: 4, borderWidth: 3, borderColor: UI.outline },
+  endBtnBase: {
+    borderRadius: radius.pill,
+    paddingBottom: 4,
+    borderWidth: 1,
+    borderColor: UI.outline,
+  },
   endBtn: {
     minHeight: 44,
     flexDirection: "row",
@@ -714,12 +898,17 @@ const styles = StyleSheet.create({
     gap: space.s,
     paddingHorizontal: space.lg,
     borderRadius: radius.pill,
-    margin: -3,
+    margin: -1,
     marginBottom: 0,
-    borderWidth: 3,
+    borderWidth: 1,
     borderColor: UI.outline,
   },
   endBtnOff: { opacity: 0.45 },
   endBtnPressed: { transform: [{ translateY: 2 }] },
-  endBtnText: { ...type.label, fontFamily: fonts.heading, color: UI.text, ...shadowText },
+  endBtnText: {
+    ...type.label,
+    fontFamily: fonts.heading,
+    color: UI.text,
+    ...shadowText,
+  },
 });

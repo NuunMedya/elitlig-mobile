@@ -12,13 +12,12 @@
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { useEffect, useRef } from "react";
-import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
+import { Animated, Easing, Pressable, StyleSheet, Text, View } from "react-native";
 import type { LayoutChangeEvent } from "react-native";
-import Svg, { Circle, Defs, LinearGradient, Path, Rect, Stop } from "react-native-svg";
+import Svg, { Circle, Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { fonts, radius, space, textScale, type } from "@/theme";
-import { CARTOON } from "@/lib/game/cartoon";
-import { UCLU_BOARD, UCLU_OUTLINE } from "@/lib/puzzle/ucluPalette";
-import { UCLU_PIECES, type UcluGoalType } from "@/lib/puzzle/levels/uclu";
+import { UCLU_BOARD, UCLU_PIECE_COLORS } from "@/lib/puzzle/ucluPalette";
+import type { UcluGoalType } from "@/lib/puzzle/levels/uclu";
 import { PieceGlyph } from "./Piece";
 
 type IconName = keyof typeof Ionicons.glyphMap;
@@ -33,7 +32,7 @@ export interface HudGoal {
 export function goalLabel(g: { type: UcluGoalType; color: number }): string {
   switch (g.type) {
     case "color":
-      return UCLU_PIECES[g.color]?.name ?? "Taş";
+      return UCLU_PIECE_COLORS[g.color]?.name ?? "Top";
     case "mud":
       return "Çamur";
     case "crate":
@@ -49,13 +48,39 @@ export function GoalIcon({ type: kind, color, size }: { type: UcluGoalType; colo
   if (kind === "color") return <PieceGlyph kind="gem" color={color} special="none" size={size} />;
   if (kind === "trophy") return <PieceGlyph kind="trophy" color={-1} special="none" size={size} />;
   const map: Record<string, { icon: IconName; tint: string; bg: string; edge: string }> = {
-    mud: { icon: "water", tint: UCLU_BOARD.woodHi, bg: UCLU_BOARD.mud, edge: UCLU_BOARD.mudDeep },
-    crate: { icon: "cube", tint: UCLU_BOARD.woodHi, bg: UCLU_BOARD.woodLo, edge: UCLU_BOARD.rimInner },
-    snow: { icon: "snow", tint: UCLU_BOARD.snowInk, bg: UCLU_BOARD.snowEdge, edge: UCLU_BOARD.snowInk },
+    mud: {
+      icon: "water",
+      tint: UCLU_BOARD.woodHi,
+      bg: UCLU_BOARD.mud,
+      edge: UCLU_BOARD.mudDeep,
+    },
+    crate: {
+      icon: "cube",
+      tint: UCLU_BOARD.woodHi,
+      bg: UCLU_BOARD.woodLo,
+      edge: UCLU_BOARD.rimInner,
+    },
+    snow: {
+      icon: "snow",
+      tint: UCLU_BOARD.snowInk,
+      bg: UCLU_BOARD.snowEdge,
+      edge: UCLU_BOARD.snowInk,
+    },
   };
   const m = map[kind];
   return (
-    <View style={[styles.iconTile, { width: size, height: size, borderRadius: size * 0.28, backgroundColor: m.bg, borderBottomColor: m.edge }]}>
+    <View
+      style={[
+        styles.iconTile,
+        {
+          width: size,
+          height: size,
+          borderRadius: size * 0.28,
+          backgroundColor: m.bg,
+          borderBottomColor: m.edge,
+        },
+      ]}
+    >
       <Ionicons name={m.icon} size={Math.round(size * 0.66)} color={m.tint} />
     </View>
   );
@@ -80,7 +105,13 @@ function GoalChip({
     if (prev.current === goal.left) return;
     prev.current = goal.left;
     pop.setValue(1.35);
-    Animated.spring(pop, { toValue: 1, damping: 8, stiffness: 280, mass: 0.6, useNativeDriver: true }).start();
+    Animated.spring(pop, {
+      toValue: 1,
+      damping: 8,
+      stiffness: 280,
+      mass: 0.6,
+      useNativeDriver: true,
+    }).start();
   }, [goal.left, pop]);
   const done = goal.left <= 0;
   const icon = Math.max(20, height - 12);
@@ -111,7 +142,15 @@ function GoalChip({
         </Text>
       )}
       <View style={styles.track} pointerEvents="none">
-        <View style={[styles.fill, { width: `${Math.round(progress * 100)}%`, backgroundColor: done ? UCLU_BOARD.barDone : UCLU_BOARD.barFill }]} />
+        <View
+          style={[
+            styles.fill,
+            {
+              width: `${Math.round(progress * 100)}%`,
+              backgroundColor: done ? UCLU_BOARD.barDone : UCLU_BOARD.barFill,
+            },
+          ]}
+        />
       </View>
     </View>
   );
@@ -125,34 +164,31 @@ function MovesBadge({ moves, size }: { moves: number; size: number }) {
     if (prev.current === moves) return;
     prev.current = moves;
     pulse.setValue(1.18);
-    Animated.spring(pulse, { toValue: 1, damping: 9, stiffness: 300, mass: 0.6, useNativeDriver: true }).start();
+    Animated.spring(pulse, {
+      toValue: 1,
+      damping: 9,
+      stiffness: 300,
+      mass: 0.6,
+      useNativeDriver: true,
+    }).start();
   }, [moves, pulse]);
   const low = moves <= 5;
   const id = low ? "umvl" : "umv";
   return (
-    <Animated.View
-      style={{ width: size, height: size, transform: [{ scale: pulse }] }}
-      accessible
-      accessibilityLabel={`${moves} hamle kaldı`}
-    >
+    <Animated.View style={{ width: size, height: size, transform: [{ scale: pulse }] }} accessible accessibilityLabel={`${moves} hamle kaldı`}>
       <Svg width={size} height={size} viewBox="0 0 100 100" style={StyleSheet.absoluteFill}>
         <Defs>
           <LinearGradient id={id} x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor={low ? UCLU_BOARD.lowHi : UCLU_BOARD.movesHi} />
-            <Stop offset="0.75" stopColor={low ? UCLU_BOARD.lowLo : UCLU_BOARD.movesLo} />
-          </LinearGradient>
-          <LinearGradient id="umvring" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor={UCLU_BOARD.trimHi} />
-            <Stop offset="1" stopColor={UCLU_BOARD.trimLo} />
+            <Stop offset="0" stopColor={UCLU_BOARD.hintBg} />
+            <Stop offset="1" stopColor={UCLU_BOARD.cardSoft} />
           </LinearGradient>
         </Defs>
-        <Circle cx={50} cy={52} r={45} fill={low ? UCLU_BOARD.lowRim : UCLU_BOARD.movesRim} stroke={UCLU_OUTLINE} strokeWidth={4} />
-        <Circle cx={50} cy={47} r={45} fill={`url(#${id})`} stroke={UCLU_OUTLINE} strokeWidth={4} />
-        <Circle cx={50} cy={47} r={38} fill="none" stroke="url(#umvring)" strokeWidth={3} strokeOpacity={0.9} />
-        <Path d="M22 36 C26 22 38 14 52 13 C57 13 57 20 52 20.5 C41 21.5 33 27 29 37 C27 42 20.5 41 22 36 Z" fill={UCLU_BOARD.beamCore} fillOpacity={0.8} />
+        <Circle cx={50} cy={51} r={46} fill={UCLU_BOARD.chromeLip} />
+        <Circle cx={50} cy={48} r={46} fill={`url(#${id})`} />
+        <Circle cx={50} cy={48} r={45} fill="none" stroke={low ? UCLU_BOARD.lowLo : UCLU_BOARD.chromeEdge} strokeWidth={low ? 3 : 1.5} />
       </Svg>
       <View style={styles.badgeCenter} pointerEvents="none">
-        <Text style={[size >= 84 ? styles.movesHero : styles.movesValue]} {...textScale.badge}>
+        <Text style={[size >= 84 ? styles.movesHero : styles.movesValue, low && styles.movesLow]} {...textScale.badge}>
           {moves}
         </Text>
         <Text style={styles.movesLabel} {...textScale.badge}>
@@ -169,13 +205,13 @@ function Panel({ width, height, id }: { width: number; height: number; id: strin
     <Svg width={width} height={height} style={StyleSheet.absoluteFill} pointerEvents="none">
       <Defs>
         <LinearGradient id={id} x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0" stopColor={UCLU_BOARD.hudTop} />
-          <Stop offset="1" stopColor={UCLU_BOARD.hudLow} />
+          <Stop offset="0" stopColor={UCLU_BOARD.panelTop} />
+          <Stop offset="1" stopColor={UCLU_BOARD.panelLow} />
         </LinearGradient>
       </Defs>
-      <Rect x={1.5} y={4.5} width={width - 3} height={height - 6} rx={18} fill={UCLU_BOARD.hudLow} stroke={UCLU_OUTLINE} strokeWidth={3} />
-      <Rect x={1.5} y={1.5} width={width - 3} height={height - 6} rx={18} fill={`url(#${id})`} stroke={UCLU_OUTLINE} strokeWidth={3} />
-      <Rect x={16} y={5} width={Math.max(0, width - 32)} height={5} rx={2.5} fill={UCLU_BOARD.beamCore} fillOpacity={0.3} />
+      <Rect x={0} y={3} width={width} height={height - 3} rx={18} fill={UCLU_BOARD.chromeLip} />
+      <Rect x={0} y={0} width={width} height={height - 3} rx={18} fill={`url(#${id})`} />
+      <Rect x={0.5} y={0.5} width={width - 1} height={height - 4} rx={18} fill="none" stroke={UCLU_BOARD.chromeEdge} strokeWidth={1} />
     </Svg>
   );
 }
@@ -252,11 +288,21 @@ export interface LiveBooster {
 
 const LIP = 6;
 
-const BTN_TONES: Record<string, { hi: string; base: string; lo: string }> = {
-  cekic: { hi: UCLU_BOARD.btnHammerHi, base: UCLU_BOARD.btnHammer, lo: UCLU_BOARD.btnHammerLo },
-  karistir: { hi: UCLU_BOARD.btnShuffleHi, base: UCLU_BOARD.btnShuffle, lo: UCLU_BOARD.btnShuffleLo },
+/** Güçlendirici düğmeleri nötr (lacivert); seçili olan tek vurgu renginde (yeşil). */
+const NEUTRAL_TONE = {
+  hi: UCLU_BOARD.panelTop,
+  base: UCLU_BOARD.panelLow,
+  lo: UCLU_BOARD.chromeLip,
 };
-const ACTIVE_TONE = { hi: UCLU_BOARD.btnActiveHi, base: UCLU_BOARD.btnActive, lo: UCLU_BOARD.btnActiveLo };
+const BTN_TONES: Record<string, { hi: string; base: string; lo: string }> = {
+  cekic: NEUTRAL_TONE,
+  karistir: NEUTRAL_TONE,
+};
+const ACTIVE_TONE = {
+  hi: UCLU_BOARD.accentHi,
+  base: UCLU_BOARD.accent,
+  lo: UCLU_BOARD.accentLo,
+};
 
 function BoosterButton({
   b,
@@ -264,16 +310,66 @@ function BoosterButton({
   height,
   disabled,
   onPress,
+  still,
+  phase,
 }: {
   b: LiveBooster;
   width: number;
   height: number;
   disabled: boolean;
   onPress: (key: string) => void;
+  still: boolean;
+  phase: number;
 }) {
-  const tone = b.active ? ACTIVE_TONE : BTN_TONES[b.key] ?? BTN_TONES.karistir;
+  // Kullanılabilir düğme ara ara kıpırdar (sonlu döngü; devre dışıyken / hareketi azalt açıkken durur).
+  const wig = useRef(new Animated.Value(0)).current;
+  const usable = !disabled && !b.active && b.stock > 0;
+  useEffect(() => {
+    wig.setValue(0);
+    if (!usable || still) return;
+    const shakeSeq = Animated.sequence([
+      Animated.delay(3600 + phase),
+      Animated.timing(wig, {
+        toValue: 1,
+        duration: 90,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
+      Animated.timing(wig, {
+        toValue: -1,
+        duration: 140,
+        easing: Easing.inOut(Easing.quad),
+        useNativeDriver: true,
+      }),
+      Animated.timing(wig, {
+        toValue: 0.6,
+        duration: 120,
+        easing: Easing.inOut(Easing.quad),
+        useNativeDriver: true,
+      }),
+      Animated.timing(wig, {
+        toValue: -0.3,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(wig, { toValue: 0, duration: 90, useNativeDriver: true }),
+      Animated.delay(1400 - phase),
+    ]);
+    const shake = Animated.loop(shakeSeq, { iterations: 200 });
+    shake.start();
+    return () => shake.stop();
+  }, [usable, still, phase, wig]);
+  const wigRotate = wig.interpolate({
+    inputRange: [-1, 1],
+    outputRange: ["-7deg", "7deg"],
+  });
+  const wigScale = wig.interpolate({
+    inputRange: [-1, 0, 1],
+    outputRange: [1.05, 1, 1.05],
+  });
+  const tone = b.active ? ACTIVE_TONE : (BTN_TONES[b.key] ?? BTN_TONES.karistir);
   const face = height - LIP;
-  const ink = b.active ? UCLU_BOARD.goldInk : UCLU_BOARD.hudText;
+  const ink = UCLU_BOARD.hudText;
   const gid = `ubtn${b.key}${b.active ? 1 : 0}`;
   return (
     <Pressable
@@ -285,9 +381,23 @@ function BoosterButton({
       style={[{ width, height }, disabled && styles.boosterOff]}
     >
       {({ pressed }) => (
-        <>
+        <Animated.View
+          style={{
+            width,
+            height,
+            transform: [{ rotate: wigRotate }, { scale: wigScale }],
+          }}
+        >
           <View style={[styles.btnLip, { top: LIP, height: face, backgroundColor: tone.lo }]} />
-          <View style={[styles.btnFace, { height: face, transform: [{ translateY: pressed ? LIP - 1 : 0 }] }]}>
+          <View
+            style={[
+              styles.btnFace,
+              {
+                height: face,
+                transform: [{ translateY: pressed ? LIP - 1 : 0 }],
+              },
+            ]}
+          >
             <Svg width={width} height={face} style={StyleSheet.absoluteFill} pointerEvents="none">
               <Defs>
                 <LinearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
@@ -295,8 +405,8 @@ function BoosterButton({
                   <Stop offset="1" stopColor={tone.base} />
                 </LinearGradient>
               </Defs>
-              <Rect x={1.5} y={1.5} width={width - 3} height={face - 3} rx={16} fill={`url(#${gid})`} stroke={UCLU_OUTLINE} strokeWidth={3} />
-              <Rect x={14} y={6} width={Math.max(0, width - 28)} height={Math.max(4, face * 0.1)} rx={4} fill={UCLU_BOARD.beamCore} fillOpacity={0.5} />
+              <Rect x={0} y={0} width={width} height={face} rx={16} fill={`url(#${gid})`} />
+              <Rect x={0.5} y={0.5} width={width - 1} height={face - 1} rx={16} fill="none" stroke={UCLU_BOARD.chromeEdge} strokeWidth={1} />
             </Svg>
             <Ionicons name={b.icon as IconName} size={Math.round(face * 0.46)} color={ink} style={styles.btnIcon} />
             <Text style={[styles.btnText, { color: ink }]} {...textScale.badge} numberOfLines={1}>
@@ -309,10 +419,10 @@ function BoosterButton({
                 {b.stock}
               </Text>
             ) : (
-              <Ionicons name="add" size={16} color={UCLU_BOARD.hudText} />
+              <Ionicons name="add" size={16} color={UCLU_BOARD.accentInk} />
             )}
           </View>
-        </>
+        </Animated.View>
       )}
     </Pressable>
   );
@@ -325,6 +435,7 @@ export const BoosterBar = React.memo(function BoosterBar({
   score,
   width,
   height,
+  still = false,
 }: {
   boosters: LiveBooster[];
   disabled: boolean;
@@ -332,31 +443,46 @@ export const BoosterBar = React.memo(function BoosterBar({
   score: number;
   width: number;
   height: number;
+  still?: boolean;
 }) {
+  // Skor artınca rakam zıplar.
+  const bump = useRef(new Animated.Value(1)).current;
+  const prevScore = useRef(score);
+  useEffect(() => {
+    if (prevScore.current === score) return;
+    prevScore.current = score;
+    if (still) return;
+    bump.setValue(1.25);
+    Animated.spring(bump, {
+      toValue: 1,
+      damping: 7,
+      stiffness: 300,
+      mass: 0.6,
+      useNativeDriver: true,
+    }).start();
+  }, [score, still, bump]);
   const btnW = Math.min(Math.round(height * 1.25), Math.floor((width - space.sm * 2) / 3));
   const [first, ...rest] = boosters;
   const centerW = width - btnW * boosters.length - space.sm * 2;
   const centerH = height - LIP;
-  const button = (b: LiveBooster) => (
-    <BoosterButton key={b.key} b={b} width={btnW} height={height} disabled={disabled && !b.active} onPress={onPress} />
+  const button = (b: LiveBooster, i: number) => (
+    <BoosterButton key={b.key} b={b} width={btnW} height={height} disabled={disabled && !b.active} onPress={onPress} still={still} phase={i * 700} />
   );
   return (
     <View style={[styles.bar, { width, height }]}>
-      {first ? button(first) : null}
+      {first ? button(first, 0) : null}
       <View style={[styles.scoreBox, { width: centerW, height: centerH }]} accessible accessibilityLabel={`Skor ${score}`}>
         <Panel width={centerW} height={centerH} id="uscore" />
         <View style={styles.scoreRow}>
-          <Ionicons name="star" size={14} color={CARTOON.star} />
           <Text style={styles.scoreLabel} {...textScale.badge}>
             SKOR
           </Text>
-          <Ionicons name="star" size={14} color={CARTOON.star} />
         </View>
-        <Text style={styles.scoreValue} {...textScale.badge} numberOfLines={1} adjustsFontSizeToFit>
+        <Animated.Text style={[styles.scoreValue, { transform: [{ scale: bump }] }]} {...textScale.badge} numberOfLines={1} adjustsFontSizeToFit>
           {score.toLocaleString("tr-TR")}
-        </Text>
+        </Animated.Text>
       </View>
-      {rest.map(button)}
+      {rest.map((b, i) => button(b, i + 1))}
     </View>
   );
 });
@@ -369,7 +495,13 @@ export function HintBubble({ text, bottom, left, width }: { text: string; bottom
   const t = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     t.setValue(0);
-    Animated.spring(t, { toValue: 1, damping: 12, stiffness: 220, mass: 0.7, useNativeDriver: true }).start();
+    Animated.spring(t, {
+      toValue: 1,
+      damping: 12,
+      stiffness: 220,
+      mass: 0.7,
+      useNativeDriver: true,
+    }).start();
   }, [text, t]);
   return (
     <Animated.View
@@ -381,12 +513,19 @@ export function HintBubble({ text, bottom, left, width }: { text: string; bottom
           left,
           width,
           opacity: t,
-          transform: [{ translateY: t.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }],
+          transform: [
+            {
+              translateY: t.interpolate({
+                inputRange: [0, 1],
+                outputRange: [12, 0],
+              }),
+            },
+          ],
         },
       ]}
     >
       <View style={styles.bubbleIcon}>
-        <Ionicons name="bulb" size={18} color={UCLU_BOARD.ribbonInk} />
+        <Ionicons name="bulb" size={18} color={UCLU_BOARD.accentInk} />
       </View>
       <Text style={styles.bubbleText} {...textScale.dense} numberOfLines={3}>
         {text}
@@ -397,17 +536,29 @@ export function HintBubble({ text, bottom, left, width }: { text: string; bottom
 
 /** Arcade yazısı: beyaz, lacivert gölgeli (bulanıklıksız). */
 const outline = {
-  textShadowColor: CARTOON.textShadow,
-  textShadowRadius: 0,
-  textShadowOffset: { width: 0, height: 2 },
+  textShadowColor: UCLU_BOARD.textShadowSoft,
+  textShadowRadius: 3,
+  textShadowOffset: { width: 0, height: 1 },
 };
 
 const styles = StyleSheet.create({
   hud: { flexDirection: "row", alignItems: "center" },
-  badgeCenter: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", paddingTop: 2 },
-  movesLabel: { ...type.nano, color: UCLU_BOARD.hudText, letterSpacing: 1, marginTop: -2, ...outline },
-  movesValue: { ...type.scoreLg, color: UCLU_BOARD.hudText, ...outline },
-  movesHero: { ...type.scoreHero, color: UCLU_BOARD.hudText, ...outline },
+  badgeCenter: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingTop: 2,
+  },
+  movesLabel: {
+    ...type.nano,
+    color: UCLU_BOARD.hintInk,
+    opacity: 0.6,
+    letterSpacing: 1,
+    marginTop: -2,
+  },
+  movesValue: { ...type.scoreLg, color: UCLU_BOARD.hintInk },
+  movesHero: { ...type.scoreHero, color: UCLU_BOARD.hintInk },
+  movesLow: { color: UCLU_BOARD.lowLo },
   right: { flex: 1, alignSelf: "stretch", justifyContent: "space-between" },
   titleRow: { flexDirection: "row", alignItems: "center", gap: space.s },
   ribbon: {
@@ -415,13 +566,15 @@ const styles = StyleSheet.create({
     height: 22,
     justifyContent: "center",
     borderRadius: radius.pill,
-    backgroundColor: UCLU_BOARD.ribbon,
-    borderWidth: 2.5,
-    borderBottomWidth: 4,
-    borderColor: UCLU_OUTLINE,
+    backgroundColor: UCLU_BOARD.chromeHi,
     flexShrink: 1,
   },
-  ribbonText: { ...type.label, fontFamily: fonts.bold, color: UCLU_BOARD.ribbonInk, letterSpacing: 0.6 },
+  ribbonText: {
+    ...type.label,
+    fontFamily: fonts.bold,
+    color: UCLU_BOARD.hudText,
+    letterSpacing: 0.6,
+  },
   cupBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -429,12 +582,22 @@ const styles = StyleSheet.create({
     height: 22,
     paddingHorizontal: space.s,
     borderRadius: radius.pill,
-    backgroundColor: UCLU_BOARD.badge,
-    borderWidth: 2.5,
-    borderColor: UCLU_OUTLINE,
+    backgroundColor: UCLU_BOARD.chromeHi,
   },
-  cupText: { ...type.micro, fontFamily: fonts.bold, color: UCLU_BOARD.hudText, ...outline },
-  goalsLabel: { ...type.micro, fontFamily: fonts.bold, color: UCLU_BOARD.hudText, marginLeft: "auto", letterSpacing: 1, ...outline },
+  cupText: {
+    ...type.micro,
+    fontFamily: fonts.bold,
+    color: UCLU_BOARD.hudText,
+    ...outline,
+  },
+  goalsLabel: {
+    ...type.micro,
+    fontFamily: fonts.bold,
+    color: UCLU_BOARD.hudText,
+    marginLeft: "auto",
+    letterSpacing: 1,
+    ...outline,
+  },
   goals: { flexDirection: "row", gap: space.s },
   goal: {
     flex: 1,
@@ -443,13 +606,16 @@ const styles = StyleSheet.create({
     gap: space.s,
     paddingRight: space.s,
     borderRadius: radius.lg,
-    borderWidth: 3,
-    borderColor: UCLU_OUTLINE,
-    backgroundColor: UCLU_BOARD.hudWell,
+    backgroundColor: UCLU_BOARD.chrome,
     overflow: "hidden",
   },
   goalCompact: { justifyContent: "center", paddingRight: 0 },
-  goalCount: { ...type.scoreLg, color: UCLU_BOARD.hudText, flexShrink: 1, ...outline },
+  goalCount: {
+    ...type.scoreLg,
+    color: UCLU_BOARD.hudText,
+    flexShrink: 1,
+    ...outline,
+  },
   countPill: {
     minWidth: 20,
     height: 18,
@@ -457,11 +623,9 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: UCLU_BOARD.badge,
-    borderWidth: 2,
-    borderColor: UCLU_OUTLINE,
+    backgroundColor: UCLU_BOARD.hintBg,
   },
-  countSmall: { ...type.numSmStrong, color: UCLU_BOARD.hudText },
+  countSmall: { ...type.numSmStrong, color: UCLU_BOARD.hintInk },
   overlayBadge: { position: "absolute", right: 2, top: 2 },
   check: {
     width: 24,
@@ -469,18 +633,44 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: UCLU_BOARD.check,
-    borderWidth: 2.5,
-    borderColor: UCLU_OUTLINE,
+    backgroundColor: UCLU_BOARD.accent,
   },
-  track: { position: "absolute", left: 6, right: 6, bottom: 3, height: 4, borderRadius: radius.pill, backgroundColor: UCLU_BOARD.barTrack, overflow: "hidden" },
+  track: {
+    position: "absolute",
+    left: 6,
+    right: 6,
+    bottom: 3,
+    height: 4,
+    borderRadius: radius.pill,
+    backgroundColor: UCLU_BOARD.barTrack,
+    overflow: "hidden",
+  },
   fill: { height: 4, borderRadius: radius.pill },
-  iconTile: { alignItems: "center", justifyContent: "center", borderWidth: 2.5, borderBottomWidth: 4, borderColor: UCLU_OUTLINE },
-  bar: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between" },
-  btnLip: { position: "absolute", left: 0, right: 0, borderRadius: radius.xl, borderWidth: 3, borderColor: UCLU_OUTLINE },
-  btnFace: { alignItems: "center", justifyContent: "center", borderRadius: radius.xl, overflow: "hidden" },
+  iconTile: {
+    alignItems: "center",
+    justifyContent: "center",
+    borderBottomWidth: 3,
+  },
+  bar: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+  },
+  btnLip: { position: "absolute", left: 0, right: 0, borderRadius: radius.xl },
+  btnFace: {
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.xl,
+    overflow: "hidden",
+  },
   btnIcon: { ...outline },
-  btnText: { ...type.label, fontFamily: fonts.bold, letterSpacing: 0.5, marginTop: 1, ...outline },
+  btnText: {
+    ...type.label,
+    fontFamily: fonts.bold,
+    letterSpacing: 0.5,
+    marginTop: 1,
+    ...outline,
+  },
   boosterOff: { opacity: 0.55 },
   stock: {
     position: "absolute",
@@ -492,15 +682,19 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: UCLU_BOARD.badge,
-    borderWidth: 2.5,
-    borderColor: UCLU_OUTLINE,
+    backgroundColor: UCLU_BOARD.hintBg,
   },
-  stockEmpty: { backgroundColor: UCLU_BOARD.badgePlus },
-  stockText: { ...type.scoreXs, color: UCLU_BOARD.hudText, ...outline },
+  stockEmpty: { backgroundColor: UCLU_BOARD.accent },
+  stockText: { ...type.scoreXs, color: UCLU_BOARD.hintInk },
   scoreBox: { alignItems: "center", justifyContent: "center" },
   scoreRow: { flexDirection: "row", alignItems: "center", gap: space.xs },
-  scoreLabel: { ...type.micro, fontFamily: fonts.bold, color: UCLU_BOARD.hudText, letterSpacing: 1.5, ...outline },
+  scoreLabel: {
+    ...type.micro,
+    fontFamily: fonts.bold,
+    color: UCLU_BOARD.hudText,
+    letterSpacing: 1.5,
+    ...outline,
+  },
   scoreValue: { ...type.scoreLg, color: UCLU_BOARD.hudText, ...outline },
   bubble: {
     position: "absolute",
@@ -511,9 +705,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.md,
     borderRadius: radius.xl,
     backgroundColor: UCLU_BOARD.hintBg,
-    borderWidth: 3,
-    borderBottomWidth: 5,
-    borderColor: UCLU_OUTLINE,
+    shadowColor: UCLU_BOARD.ink,
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
   },
   bubbleIcon: {
     width: 28,
@@ -521,9 +716,12 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: UCLU_BOARD.ribbon,
-    borderWidth: 2.5,
-    borderColor: UCLU_OUTLINE,
+    backgroundColor: UCLU_BOARD.accent,
   },
-  bubbleText: { ...type.bodySm, fontFamily: fonts.bold, color: UCLU_BOARD.hintInk, flex: 1 },
+  bubbleText: {
+    ...type.bodySm,
+    fontFamily: fonts.bold,
+    color: UCLU_BOARD.hintInk,
+    flex: 1,
+  },
 });

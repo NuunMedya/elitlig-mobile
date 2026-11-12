@@ -17,18 +17,10 @@ interface Props {
   back?: boolean;
 }
 
-/** İkonun lacivert dış çizgisi: dört çapraz kopya (ikon fontu kontur almaz). */
-const RING: readonly (readonly [number, number])[] = [
-  [-1, -1],
-  [1, -1],
-  [-1, 1],
-  [1, 1],
-];
-
 /**
- * Karo yüzü — ÇİZGİ FİLM dili: kalın lacivert konturlu düz, doygun yüz (alt
- * kısmı bir ton koyu), altta lacivert konturlu koyu "dudak" (2.5D kalınlık),
- * üstte beyaz parlama şeridi ve lacivert dış çizgili, gölgeli iri ikon.
+ * Karo yüzü — "canlı ama temiz": doygun, parlak yüz (alt kısmı bir ton koyu,
+ * ince kendi tonunda kenar), altta koyu "dudak" (2.5D kalınlık), üstte beyaz
+ * parlama şeridi ve yumuşak gölgeli iri beyaz ikon (kontur yok).
  * Saf çizim (SVG + ikon).
  */
 function TileFaceBase({ kind, w, h, slab, back }: Props) {
@@ -40,14 +32,37 @@ function TileFaceBase({ kind, w, h, slab, back }: Props) {
   const iconName = (back ? "shield-half-full" : k.icon) as IconName;
   const iconSize = Math.round(w * (back ? 0.52 : 0.64));
   const ink = back ? UCLE_COLORS.backInk : k.ink;
-  const bw = w >= 40 ? 2.5 : 2;
+  // İnce, kendi renginin koyu tonunda kenar (kalın lacivert kontur yok).
+  const bw = 1;
   const o = w >= 40 ? 1.4 : 1;
   const sw = w - bw * 2;
   const sh = faceH - bw * 2;
   return (
     <View style={{ width: w, height: h }} pointerEvents="none">
-      <View style={[styles.abs, styles.edge, { top: slab, height: faceH, borderRadius: r, borderWidth: bw, backgroundColor: deepColor }]} />
-      <View style={[styles.abs, styles.face, styles.edge, { height: faceH, borderRadius: r, borderWidth: bw, backgroundColor: faceColor }]}>
+      <View
+        style={[
+          styles.abs,
+          {
+            top: slab,
+            height: faceH,
+            borderRadius: r,
+            backgroundColor: deepColor,
+          },
+        ]}
+      />
+      <View
+        style={[
+          styles.abs,
+          styles.face,
+          {
+            height: faceH,
+            borderRadius: r,
+            borderWidth: bw,
+            borderColor: deepColor,
+            backgroundColor: faceColor,
+          },
+        ]}
+      >
         <Svg width={sw} height={sh} style={StyleSheet.absoluteFill}>
           {/* Düz iki ton: alt kısım koyu bant. */}
           <Rect x={0} y={sh * 0.62} width={sw} height={sh * 0.38} fill={UCLE_COLORS.faceLow} />
@@ -57,14 +72,10 @@ function TileFaceBase({ kind, w, h, slab, back }: Props) {
             fill={UCLE_COLORS.shine}
           />
         </Svg>
-        <View style={[styles.iconLayer, { transform: [{ translateY: 2 }] }]}>
-          <MaterialCommunityIcons name={iconName} size={iconSize} color={UCLE_COLORS.outline} />
+        {/* Yumuşak ikon gölgesi (kontur yok). */}
+        <View style={[styles.iconLayer, { transform: [{ translateY: o * 1.5 }] }]}>
+          <MaterialCommunityIcons name={iconName} size={iconSize} color={deepColor} />
         </View>
-        {RING.map(([dx, dy], i) => (
-          <View key={i} style={[styles.iconLayer, { transform: [{ translateX: dx * o }, { translateY: dy * o }] }]}>
-            <MaterialCommunityIcons name={iconName} size={iconSize} color={UCLE_COLORS.outline} />
-          </View>
-        ))}
         <View style={styles.iconLayer}>
           <MaterialCommunityIcons name={iconName} size={iconSize} color={ink} />
         </View>
@@ -77,7 +88,10 @@ export const TileFace = memo(TileFaceBase);
 
 const styles = StyleSheet.create({
   abs: { position: "absolute", left: 0, right: 0, top: 0 },
-  edge: { borderColor: UCLE_COLORS.outline },
   face: { overflow: "hidden" },
-  iconLayer: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
+  iconLayer: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 });

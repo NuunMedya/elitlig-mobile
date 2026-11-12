@@ -6,14 +6,15 @@
  */
 
 import type { PuzzleGameModule, PuzzleGoalSummary } from "@/lib/puzzle/types";
-import { UCLU_PIECES, ucluLevel, type UcluGoalDef } from "@/lib/puzzle/levels/uclu";
+import { ucluLevel, type UcluGoalDef } from "@/lib/puzzle/levels/uclu";
+import { UCLU_PIECE_COLORS } from "@/lib/puzzle/ucluPalette";
 import UcluGame from "./UcluGame";
 
 function goalRow(g: UcluGoalDef): PuzzleGoalSummary["goals"][number] {
   switch (g.type) {
     case "color": {
-      const p = UCLU_PIECES[g.color ?? 0];
-      return { icon: p.icon, label: `${p.name} topla`, count: g.count };
+      const p = UCLU_PIECE_COLORS[g.color ?? 0];
+      return { icon: "football", label: `${p.name} topla`, count: g.count };
     }
     case "mud":
       return { icon: "water", label: "Çamuru temizle", count: g.count };
@@ -22,7 +23,11 @@ function goalRow(g: UcluGoalDef): PuzzleGoalSummary["goals"][number] {
     case "snow":
       return { icon: "snow", label: "Karı kır", count: g.count };
     default:
-      return { icon: "trophy", label: "Şampiyonluk kupasını indir", count: g.count };
+      return {
+        icon: "trophy",
+        label: "Şampiyonluk kupasını indir",
+        count: g.count,
+      };
   }
 }
 

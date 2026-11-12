@@ -5,10 +5,10 @@
  * aynı renkle tanınmalı. Bu yüzden hex burada, lib/ altında durur;
  * components/ yalnız bu dosyayı içe aktarır.
  *
- * ÇİZGİ FİLM dili (lib/game/cartoon.ts, arcade oyunlarıyla ortak): karolar,
- * raf, HUD ve düğmeler kalın lacivert `UCLE_OUTLINE` konturlu; dolgular düz
- * ve doygun, üstte beyaz parlama şeridi, altta koyu "dudak"; saha arcade
- * sahasıyla aynı parlak yeşil biçim şeritlerindedir.
+ * "CANLI AMA TEMİZ" dil: karolar doygun ve parlak (ince, kendi renginin koyu
+ * tonunda kenar; kalın kontur yok), derinlik yumuşak gölge + ince alt dudakla.
+ * Çevre arayüz (HUD, raf, düğmeler) nötr lacivert / yarı saydam beyaz; eylemler
+ * için tek vurgu rengi (yeşil).
  */
 
 /*
@@ -39,20 +39,104 @@ export interface UcleKind {
 }
 
 export const UCLE_KINDS: UcleKind[] = [
-  { icon: "soccer", label: "Top", face: "#22A45D", deep: "#14703D", ink: "#FFFFFF" },
-  { icon: "tshirt-crew", label: "Forma", face: "#E5383B", deep: "#9E1F22", ink: "#FFFFFF" },
-  { icon: "shoe-cleat", label: "Krampon", face: "#F28C28", deep: "#A85810", ink: "#FFFFFF" },
-  { icon: "hand-back-left", label: "Eldiven", face: "#2F7DE1", deep: "#1A4F99", ink: "#FFFFFF" },
-  { icon: "whistle", label: "Düdük", face: "#8E44AD", deep: "#5B2871", ink: "#FFFFFF" },
-  { icon: "trophy", label: "Kupa", face: "#F2C230", deep: "#B08410", ink: "#3A2A00" },
-  { icon: "flag-variant", label: "Bayrak", face: "#16A3B8", deep: "#0C6A78", ink: "#FFFFFF" },
-  { icon: "medal", label: "Madalya", face: "#D81B72", deep: "#8E0F49", ink: "#FFFFFF" },
-  { icon: "soccer-field", label: "Kale", face: "#5E9E2F", deep: "#3B661A", ink: "#FFFFFF" },
-  { icon: "scoreboard", label: "Skorboard", face: "#4F6DA8", deep: "#2E4573", ink: "#FFFFFF" },
-  { icon: "bullhorn", label: "Megafon", face: "#FF7A59", deep: "#B8452A", ink: "#FFFFFF" },
-  { icon: "ticket-confirmation", label: "Bilet", face: "#B5774A", deep: "#7A4A26", ink: "#FFFFFF" },
-  { icon: "card", label: "Hakem kartı", face: "#FFE14D", deep: "#C7A600", ink: "#7A1010" },
-  { icon: "timer-outline", label: "Kronometre", face: "#5C6BC0", deep: "#35408A", ink: "#FFFFFF" },
+  {
+    icon: "soccer",
+    label: "Top",
+    face: "#22A45D",
+    deep: "#14703D",
+    ink: "#FFFFFF",
+  },
+  {
+    icon: "tshirt-crew",
+    label: "Forma",
+    face: "#E5383B",
+    deep: "#9E1F22",
+    ink: "#FFFFFF",
+  },
+  {
+    icon: "shoe-cleat",
+    label: "Krampon",
+    face: "#F28C28",
+    deep: "#A85810",
+    ink: "#FFFFFF",
+  },
+  {
+    icon: "hand-back-left",
+    label: "Eldiven",
+    face: "#2F7DE1",
+    deep: "#1A4F99",
+    ink: "#FFFFFF",
+  },
+  {
+    icon: "whistle",
+    label: "Düdük",
+    face: "#8E44AD",
+    deep: "#5B2871",
+    ink: "#FFFFFF",
+  },
+  {
+    icon: "trophy",
+    label: "Kupa",
+    face: "#F2C230",
+    deep: "#B08410",
+    ink: "#3A2A00",
+  },
+  {
+    icon: "flag-variant",
+    label: "Bayrak",
+    face: "#16A3B8",
+    deep: "#0C6A78",
+    ink: "#FFFFFF",
+  },
+  {
+    icon: "medal",
+    label: "Madalya",
+    face: "#D81B72",
+    deep: "#8E0F49",
+    ink: "#FFFFFF",
+  },
+  {
+    icon: "soccer-field",
+    label: "Kale",
+    face: "#5E9E2F",
+    deep: "#3B661A",
+    ink: "#FFFFFF",
+  },
+  {
+    icon: "scoreboard",
+    label: "Skorboard",
+    face: "#4F6DA8",
+    deep: "#2E4573",
+    ink: "#FFFFFF",
+  },
+  {
+    icon: "bullhorn",
+    label: "Megafon",
+    face: "#FF7A59",
+    deep: "#B8452A",
+    ink: "#FFFFFF",
+  },
+  {
+    icon: "ticket-confirmation",
+    label: "Bilet",
+    face: "#B5774A",
+    deep: "#7A4A26",
+    ink: "#FFFFFF",
+  },
+  {
+    icon: "card",
+    label: "Hakem kartı",
+    face: "#FFE14D",
+    deep: "#C7A600",
+    ink: "#7A1010",
+  },
+  {
+    icon: "timer-outline",
+    label: "Kronometre",
+    face: "#5C6BC0",
+    deep: "#35408A",
+    ink: "#FFFFFF",
+  },
 ];
 
 export const UCLE_COLORS = {
@@ -65,10 +149,11 @@ export const UCLE_COLORS = {
   /** Karo gölgesi. */
   shadow: "rgba(8, 6, 30, 0.35)",
   /** Yüzün üst parlaklık şeridi. */
-  shine: "rgba(255, 255, 255, 0.55)",
+  shine: "rgba(255, 255, 255, 0.35)",
   /** Karo yüzünün alt koyu bandı (düz iki ton). */
   faceLow: "rgba(8, 6, 30, 0.16)",
-  outline: CARTOON.outline,
+  /** İnce, yumuşak kenar (kalın lacivert kontur yok — "canlı ama temiz"). */
+  outline: "rgba(10, 8, 40, 0.3)",
   /** Kilit grupları (anahtar rozeti ve kilit halkası aynı renk). */
   locks: ["#FFC21A", "#22D3EE", "#FF5CAA"],
   lockInk: "#1B1446",
@@ -88,10 +173,22 @@ export const UCLE_COLORS = {
  */
 export const UCLE_UI = {
   /** HUD paneli — gece moru. */
-  panel: CARTOON.pill[0],
-  panelDeep: CARTOON.pill[1],
+  panel: "#2A2470",
+  panelDeep: "#1C1856",
   panelRim: CARTOON.outline,
-  outline: CARTOON.outline,
+  /** İnce, yumuşak kenar (kalın kontur yerine). */
+  outline: "rgba(255, 255, 255, 0.1)",
+  /** Nötr çerçeve: yarı saydam beyaz paneller, koyu dudak, TEK vurgu (yeşil). */
+  chrome: "rgba(255, 255, 255, 0.08)",
+  chromeHi: "rgba(255, 255, 255, 0.14)",
+  lip: "rgba(0, 0, 0, 0.28)",
+  accent: "#22C55E",
+  accentDeep: "#15803D",
+  ink: "#1F2333",
+  inkSoft: "rgba(31, 35, 51, 0.6)",
+  white: "#FFFFFF",
+  pitchFrame: "#1F1A5E",
+  pitchEdge: "#3E9E36",
   well: "#17114A",
   /** Seviye rozeti / kupa altını. */
   gold: "#FFD23F",
@@ -124,19 +221,19 @@ export const UCLE_UI = {
   rimHi: "#5A48D6",
   rimDeep: "#1C1760",
   /** Raf tepsisi. */
-  tray: "#3A2E9E",
-  trayHi: "#5A48D6",
-  trayDeep: "#1C1760",
+  tray: "#2A2470",
+  trayHi: "#3A3390",
+  trayDeep: "#1C1856",
   cell: "#17114A",
   cellRim: "rgba(255, 255, 255, 0.16)",
   /** Metin. */
   text: "#FFFFFF",
   textSoft: "rgba(255, 255, 255, 0.72)",
-  textShadow: CARTOON.textShadow,
+  textShadow: "rgba(0, 0, 0, 0.25)",
   /** Pencere arka örtüsü ve kart. */
   scrim: "rgba(10, 6, 30, 0.62)",
-  card: "#3A2E9E",
-  cardDeep: "#1C1760",
+  card: "#2A2470",
+  cardDeep: "#1C1856",
   /** İpucu balonu. */
   tipFace: "#FFFFFF",
   tipDeep: CARTOON.outline,

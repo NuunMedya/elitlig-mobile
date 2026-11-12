@@ -2,16 +2,18 @@
  * ELİT ÜÇLÜ — oyun içi renk paleti (veri).
  *
  * Tahta iki temada da aynı "gece maçı" sahasıdır: taşların renk kimliği tema
- * değişince kaymamalı (oyuncu "mavi = top" diye öğrenir). Bu yüzden renkler
+ * değişince kaymamalı (oyuncu "mavi top" diye öğrenir). Bu yüzden renkler
  * tema tokenı değil, oyun verisidir ve burada hex olarak durur; bileşenler
  * bu dosyayı içe aktarır (components/ altında çıplak hex yazılmaz).
  *
- * Taş renkleri bilerek DOYGUN ve birbirinden UZAK seçildi (mavi, kırmızı,
- * limon yeşili, turuncu, mor, pembe); ayrıca her rengin kendi şekli vardır
- * (renk körlüğü). Her taşın dört tonu var: açık parıltı (hi), gövde (base),
- * gölge (lo) ve 3B "dudak"ı veren koyu kenar (rim). ÇİZGİ FİLM dili
- * (lib/game/cartoon.ts): her taşın ve beyaz sembolün dış çizgisi kalın
- * lacivert `UCLU_OUTLINE`'dır; saha arcade sahasıyla aynı parlak yeşildir.
+ * TAŞLAR = PARLAK ÇİZGİ FİLM FUTBOL TOPLARI: her renk bir top. Renkler
+ * bilerek DOYGUN ve birbirinden UZAK (mavi, kırmızı, yeşil, sarı, mor,
+ * pembe); topun klasik beşgen/altıgen panelleri aynı rengin daha koyu
+ * tonuyla (`panel`) çizilir — içte beyaz simge yoktur. Renk körlüğü için
+ * karışabilecek komşu renklerin panel deseni farklıdır (`pattern`: klasik
+ * beşgen, girdap, yıldız) ama hepsi sade bir top olarak okunur.
+ * Her topun tonları: açık parıltı (hi), gövde (base), gölge (lo), en koyu
+ * kenar (rim) ve panel. Dış çizgi kalın lacivert `UCLU_OUTLINE`'dır.
  */
 
 import { CARTOON } from "@/lib/game/cartoon";
@@ -19,24 +21,86 @@ import { CARTOON } from "@/lib/game/cartoon";
 /** Kalın lacivert kontur (arcade oyunlarıyla ortak). */
 export const UCLU_OUTLINE = CARTOON.outline;
 
+export type UcluBallPattern = "classic" | "swirl" | "star";
+
 export interface UcluPieceColors {
   base: string;
   hi: string;
   lo: string;
-  /** 3B taban ve dış çizgi (en koyu ton). */
+  /** En koyu ton (rim ışığı altı, gölge). */
   rim: string;
-  /** Sembolün rengi (taşın üstünde). */
+  /** Top panellerinin rengi (gövdenin koyu tonu). */
+  panel: string;
+  /** Eski sembol rengi (geriye dönük; toplar beyaz simge taşımaz). */
   ink: string;
+  /** Panel deseni (renk körlüğünde komşu renkleri ayırır). */
+  pattern: UcluBallPattern;
+  /** Topun adı (hedef etiketleri, erişilebilirlik). */
+  name: string;
 }
 
-/** Sıra = taş dizini: top, forma, krampon, eldiven, düdük, kupa. */
+/** Sıra = taş (renk) dizini; motorun renk sayısı (4–6) bu sırayla kullanılır. */
 export const UCLU_PIECE_COLORS: readonly UcluPieceColors[] = [
-  { base: "#1E7BFF", hi: "#9AD0FF", lo: "#0B47C4", rim: "#06296F", ink: "#FFFFFF" },
-  { base: "#FF2E45", hi: "#FFA3AD", lo: "#C30C27", rim: "#6E0414", ink: "#FFFFFF" },
-  { base: "#3BD43A", hi: "#B5F7A0", lo: "#169A27", rim: "#0A5216", ink: "#FFFFFF" },
-  { base: "#FF8A00", hi: "#FFD58A", lo: "#D45200", rim: "#7A2C00", ink: "#FFFFFF" },
-  { base: "#A64DFF", hi: "#E0BAFF", lo: "#6C1FD0", rim: "#3B0A80", ink: "#FFFFFF" },
-  { base: "#FF3DBE", hi: "#FFB0E6", lo: "#C8128D", rim: "#6A044B", ink: "#FFFFFF" },
+  {
+    base: "#1E7BFF",
+    hi: "#9AD8FF",
+    lo: "#0B47C4",
+    rim: "#06296F",
+    panel: "#0A36A0",
+    ink: "#FFFFFF",
+    pattern: "classic",
+    name: "Mavi top",
+  },
+  {
+    base: "#FF2E45",
+    hi: "#FFB0B8",
+    lo: "#C30C27",
+    rim: "#6E0414",
+    panel: "#A3061E",
+    ink: "#FFFFFF",
+    pattern: "swirl",
+    name: "Kırmızı top",
+  },
+  {
+    base: "#2FD447",
+    hi: "#C4FAAE",
+    lo: "#139A2A",
+    rim: "#0A5216",
+    panel: "#0C7A20",
+    ink: "#FFFFFF",
+    pattern: "classic",
+    name: "Yeşil top",
+  },
+  {
+    base: "#FFD21A",
+    hi: "#FFF6B8",
+    lo: "#E89A00",
+    rim: "#7A4A00",
+    panel: "#D07E00",
+    ink: "#FFFFFF",
+    pattern: "star",
+    name: "Sarı top",
+  },
+  {
+    base: "#A64DFF",
+    hi: "#E6C6FF",
+    lo: "#6C1FD0",
+    rim: "#3B0A80",
+    panel: "#5512B0",
+    ink: "#FFFFFF",
+    pattern: "swirl",
+    name: "Mor top",
+  },
+  {
+    base: "#FF45C4",
+    hi: "#FFC2EC",
+    lo: "#C8128D",
+    rim: "#6A044B",
+    panel: "#A80A78",
+    ink: "#FFFFFF",
+    pattern: "classic",
+    name: "Pembe top",
+  },
 ];
 
 export const UCLU_BOARD = {
@@ -134,6 +198,33 @@ export const UCLU_BOARD = {
   badge: "#E02D3C",
   badgeEdge: "#FFFFFF",
   badgePlus: "#22C55E",
+  /** Kupa balonu (cam küre). */
+  bubble: "rgba(200, 236, 255, 0.42)",
+  bubbleRim: "#E8F7FF",
+  /** Füze hız çizgileri ve Röveşata patlama halkası. */
+  speed: "#FFFFFF",
+  burstHot: "#FF7A1A",
+  /*
+   * SADE ÇERÇEVE ("canlı ama temiz"): çevre arayüz nötr — koyu lacivert
+   * zemin, yarı saydam beyaz paneller, TEK vurgu rengi (yeşil) eylemler için.
+   * Kalın lacivert kontur yok; derinlik yumuşak gölge ve ince alt dudakla.
+   */
+  chrome: "rgba(255, 255, 255, 0.08)",
+  cardSoft: "#E6E9F5",
+  chromeHi: "rgba(255, 255, 255, 0.14)",
+  chromeEdge: "rgba(255, 255, 255, 0.12)",
+  chromeLip: "rgba(0, 0, 0, 0.28)",
+  panelTop: "#2A2470",
+  panelLow: "#1C1856",
+  accent: "#22C55E",
+  accentHi: "#4ADE80",
+  accentLo: "#15803D",
+  accentInk: "#FFFFFF",
+  textShadowSoft: "rgba(0, 0, 0, 0.25)",
+  /** Saha çerçevesi (ince, kendi tonunda). */
+  pitchEdge: "#3E9E36",
+  pitchFrame: "#1F1A5E",
+  crateEdge: "#8A4F18",
   hintBg: "#FFFFFF",
   hintInk: "#1F2333",
 } as const;
