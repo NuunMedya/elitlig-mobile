@@ -11,9 +11,10 @@
  *
  * Canvas oyunları (`ArenaGameScreen`) ve bilgi yarışmaları (`QuizScreen`)
  * aynı parçaları kullanır: oyuncu hangi oyunu oynarsa oynasın tur sonu aynı
- * yerde, aynı biçimde biter. Görünüm çizgi film oyun temasıdır (bkz.
- * `lib/game/cartoon.ts`, `components/game/QuizKit.tsx`): lacivert konturlu
- * beyaz kart, kurdele, 3B düğmeler, madalyalı tablo satırları.
+ * yerde, aynı biçimde biter. Görünüm oyunların "canlı ama sade" temasıdır
+ * (bkz. `lib/game/cartoon.ts`, `components/game/QuizKit.tsx`): yumuşak
+ * gölgeli beyaz kart, kurdele, tek yeşil birincil düğme, nötr çip ve ikincil
+ * düğmeler, sade madalyalı tablo satırları. Altın yalnız rekor ve yıldızda.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -23,6 +24,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as Sharing from "expo-sharing";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, View } from "react-native";
+import Svg, { Defs, RadialGradient, Rect, Stop } from "react-native-svg";
 import ViewShot, { captureRef } from "react-native-view-shot";
 
 import { Touchable, useToast, type SegmentedItem } from "@/components/ui";
@@ -34,8 +36,8 @@ import {
   type ArenaEntry,
   type ArenaGame,
 } from "@/lib/api/arena";
-import { ConfettiBurst, Sunburst } from "@/components/game/Celebration";
-import { CartoonButton, CartoonPanel, cartoonText, IconBubble, OUTLINE, PopIn, Ribbon } from "@/components/game/QuizKit";
+import { ConfettiBurst } from "@/components/game/Celebration";
+import { CartoonButton, CartoonPanel, IconBubble, PopIn, Ribbon } from "@/components/game/QuizKit";
 import { ARENA_RESULT } from "@/lib/game/arenaResultPalette";
 import { CARTOON } from "@/lib/game/cartoon";
 import { QUIZ } from "@/lib/game/quizPalette";
@@ -198,9 +200,10 @@ export interface ArenaResultCardProps {
 }
 
 /**
- * Çizgi film bitiş kartı: lacivert konturlu beyaz kart, üst kenarda kurdele
- * (tur başlığı ya da altın "YENİ REKOR!"), lacivert gölgeli dev skor, renkli
- * istatistik çipleri, Kulüp Şehri yıldız hapı, 3B düğmeler ve tablonun kendisi.
+ * Sade bitiş kartı: yumuşak gölgeli beyaz kart, üst kenarda kurdele (tur
+ * başlığı ya da altın "YENİ REKOR!"), lacivert dev skor, nötr istatistik
+ * çipleri, Kulüp Şehri yıldız hapı, TEK vurgu (yeşil "Tekrar oyna"), nötr
+ * ikincil düğmeler ve rekor tablosu. Altın yalnız rekor ve yıldızlar içindir.
  */
 export function ArenaResultCard({
   game,
@@ -222,15 +225,24 @@ export function ArenaResultCard({
 }: ArenaResultCardProps) {
   return (
     <View style={styles.scrim} accessibilityViewIsModal>
-      <ScrollView contentContainerStyle={styles.scrimContent} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrimContent} showsVerticalScrollIndicator={false}>
         <PopIn style={styles.cardWrap}>
           <CartoonPanel style={styles.card}>
             {isRecord ? (
               <View style={styles.recordBadge}>
-                <View pointerEvents="none" style={styles.recordBurst}>
-                  <Sunburst size={240} color={CARTOON.star} opacity={0.5} />
+                <View pointerEvents="none" style={styles.recordGlow}>
+                  <Svg width={GLOW} height={GLOW}>
+                    <Defs>
+                      <RadialGradient id="arenaRecordGlow" cx="50%" cy="50%" r="50%">
+                        <Stop offset="0" stopColor={ARENA_RESULT.recordGlow} stopOpacity={0.55} />
+                        <Stop offset="0.55" stopColor={ARENA_RESULT.recordGlow} stopOpacity={0.18} />
+                        <Stop offset="1" stopColor={ARENA_RESULT.recordGlow} stopOpacity={0} />
+                      </RadialGradient>
+                    </Defs>
+                    <Rect x="0" y="0" width={GLOW} height={GLOW} fill="url(#arenaRecordGlow)" />
+                  </Svg>
                 </View>
-                <IconBubble icon="trophy" tone="gold" size={68} />
+                <IconBubble icon="trophy" tone="gold" size={60} />
                 <Text style={styles.recordTitle} {...textScale.dense}>
                   Rekorunu kırdın!
                 </Text>
@@ -238,7 +250,7 @@ export function ArenaResultCard({
             ) : null}
 
             <View style={styles.scoreBlock} accessible accessibilityLabel={`${formatCount(score)} ${SCORE_UNIT}`}>
-              <Text style={styles.score} {...textScale.dense}>
+              <Text style={styles.score} numberOfLines={1} adjustsFontSizeToFit {...textScale.dense}>
                 {formatCount(score)}
               </Text>
               <Text style={styles.unit} {...textScale.badge}>
@@ -248,11 +260,9 @@ export function ArenaResultCard({
 
             {facts.length ? (
               <View style={styles.facts}>
-                {facts.map((fact, i) => (
+                {facts.map((fact) => (
                   <View key={fact} style={styles.fact}>
-                    <LinearGradient colors={ARENA_RESULT.chips[i % ARENA_RESULT.chips.length]} start={TOP} end={BOTTOM} style={StyleSheet.absoluteFill} />
-                    <View style={styles.factShine} />
-                    <Text style={[styles.factText, cartoonText.shadow]} {...textScale.dense}>
+                    <Text style={styles.factText} {...textScale.dense}>
                       {fact}
                     </Text>
                   </View>
@@ -271,20 +281,16 @@ export function ArenaResultCard({
                 accessibilityRole="button"
                 accessibilityLabel={`${stars} yıldız Kulüp Şehri'ne eklendi, şehre git`}
               >
-                <LinearGradient colors={CARTOON.gold} start={TOP} end={BOTTOM} style={StyleSheet.absoluteFill} />
-                <View style={styles.factShine} />
-                <View style={styles.starCoin}>
-                  <Ionicons name="star" size={16} color={CARTOON.star} />
-                </View>
-                <Text style={styles.cityStarsText} {...textScale.dense}>
+                <Ionicons name="star" size={16} color={CARTOON.warn} />
+                <Text style={styles.cityStarsText} numberOfLines={1} {...textScale.dense}>
                   {`+${stars} yıldız · Kulüp Şehri'ne`}
                 </Text>
-                <Ionicons name="chevron-forward" size={16} color={CARTOON.goldInk} />
+                <Ionicons name="chevron-forward" size={14} color={ARENA_RESULT.starInk} />
               </Touchable>
             ) : null}
 
             <View style={styles.bestRow}>
-              <Ionicons name="trophy" size={14} color={CARTOON.warn} />
+              <Ionicons name="trophy-outline" size={13} color={ARENA_RESULT.faint} />
               <Text style={styles.bestText} {...textScale.dense}>
                 {`Kişisel rekorun ${formatCount(best)} ${SCORE_UNIT}`}
               </Text>
@@ -294,16 +300,14 @@ export function ArenaResultCard({
 
             <View style={styles.actions}>
               <CartoonButton label="Tekrar oyna" icon="refresh" tone="green" size="lg" onPress={onRestart} style={styles.stretch} />
-              {secondary ? (
-                <CartoonButton label={secondary.label} icon={secondary.icon} tone="blue" size="md" onPress={secondary.onPress} style={styles.stretch} />
-              ) : null}
+              {secondary ? <SoftButton label={secondary.label} icon={secondary.icon} onPress={secondary.onPress} /> : null}
             </View>
 
             <MiniBoard game={game} justSent={submit === "sent"} onBoard={onBoard} />
 
             <View style={styles.resultRow}>
-              <CartoonButton label="Tüm tablo" icon="trophy" tone="gold" size="sm" onPress={onBoard} style={styles.flex} />
-              <CartoonButton label="Meydan oku" icon="share-social" tone="purple" size="sm" onPress={onShare} style={styles.flex} />
+              <SoftButton label="Tüm tablo" icon="podium-outline" onPress={onBoard} compact />
+              <SoftButton label="Meydan oku" icon="share-social-outline" onPress={onShare} compact />
             </View>
           </CartoonPanel>
           <View style={styles.ribbonLayer} pointerEvents="none">
@@ -311,8 +315,42 @@ export function ArenaResultCard({
           </View>
         </PopIn>
       </ScrollView>
-      <ConfettiBurst trigger={isRecord ? Math.max(1, score) : 0} count={44} />
+      <ConfettiBurst trigger={isRecord ? Math.max(1, score) : 0} count={24} />
     </View>
+  );
+}
+
+/**
+ * Nötr ikincil düğme (beyaz kart üstünde): açık gri yüz, ince kenar, 3 px alt
+ * dudak; basınca dudağa çöker. Renk yok — vurgu yalnız birincil düğmede.
+ */
+function SoftButton({
+  label,
+  icon,
+  onPress,
+  compact = false,
+}: {
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  onPress: () => void;
+  compact?: boolean;
+}) {
+  return (
+    <Touchable
+      feedback="button"
+      haptic="light"
+      onPress={onPress}
+      style={compact ? styles.softWrapCompact : styles.softWrap}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
+      <View style={[styles.softFace, compact && styles.softFaceCompact]}>
+        <Ionicons name={icon} size={compact ? 16 : 18} color={ARENA_RESULT.ink} />
+        <Text style={compact ? styles.softTextCompact : styles.softText} numberOfLines={1} {...textScale.badge}>
+          {upperTR(label)}
+        </Text>
+      </View>
+    </Touchable>
   );
 }
 
@@ -352,12 +390,12 @@ function MiniBoard({ game, justSent, onBoard }: { game: ArenaGame; justSent: boo
     <View style={styles.board}>
       <View style={styles.boardHead}>
         <View style={styles.boardIcon}>
-          <Ionicons name="podium" size={15} color={CARTOON.white} />
+          <Ionicons name="podium" size={14} color={ARENA_RESULT.ink} />
         </View>
         <Text style={styles.boardTitle} {...textScale.dense}>
           {upperTR("Türkiye sıralaması")}
         </Text>
-        {board.isFetching || (justSent && me.isFetching) ? <ActivityIndicator size="small" color={CARTOON.outline} /> : null}
+        {board.isFetching || (justSent && me.isFetching) ? <ActivityIndicator size="small" color={ARENA_RESULT.muted} /> : null}
       </View>
 
       <View style={styles.tabs} accessibilityRole="tablist">
@@ -373,8 +411,7 @@ function MiniBoard({ game, justSent, onBoard }: { game: ArenaGame; justSent: boo
               accessibilityState={{ selected: on }}
               accessibilityLabel={item.label}
             >
-              {on ? <LinearGradient colors={CARTOON.pill} start={TOP} end={BOTTOM} style={StyleSheet.absoluteFill} /> : null}
-              <Text style={[styles.tabText, on && styles.tabTextOn, on && cartoonText.shadow]} numberOfLines={1} {...textScale.badge}>
+              <Text style={[styles.tabText, on && styles.tabTextOn]} numberOfLines={1} {...textScale.badge}>
                 {item.label}
               </Text>
             </Touchable>
@@ -384,7 +421,7 @@ function MiniBoard({ game, justSent, onBoard }: { game: ArenaGame; justSent: boo
 
       {board.isLoading ? (
         <View style={styles.boardEmpty}>
-          <ActivityIndicator color={CARTOON.outline} />
+          <ActivityIndicator color={ARENA_RESULT.muted} />
         </View>
       ) : board.isError ? (
         <Text style={styles.boardEmptyText} {...textScale.dense}>
@@ -435,20 +472,19 @@ function MiniBoard({ game, justSent, onBoard }: { game: ArenaGame; justSent: boo
         <Text style={styles.boardMoreText} {...textScale.dense}>
           Şehrine göre ve tüm liste
         </Text>
-        <Ionicons name="chevron-forward" size={14} color={CARTOON.outline} />
+        <Ionicons name="chevron-forward" size={14} color={ARENA_RESULT.muted} />
       </Touchable>
     </View>
   );
 }
 
 function BoardRow({ rank, name, score, mine }: { rank: number; name: string; score: number; mine: boolean }) {
+  // Madalya: yalnız ilk üçte yumuşak bir zemin; gerisi sade sıra numarası.
   const medal = rank === 1 ? ARENA_RESULT.medal.gold : rank === 2 ? ARENA_RESULT.medal.silver : rank === 3 ? ARENA_RESULT.medal.bronze : ARENA_RESULT.medal.plain;
   return (
     <View style={[styles.row, mine && styles.rowMine]} accessible accessibilityLabel={`${rank}. ${name}, ${formatCount(score)} ${SCORE_UNIT}`}>
-      <View style={styles.rank}>
-        <LinearGradient colors={medal} start={TOP} end={BOTTOM} style={StyleSheet.absoluteFill} />
-        <View style={styles.rankShine} />
-        <Text style={styles.rankText} {...textScale.badge}>
+      <View style={[styles.rank, { backgroundColor: medal.bg }]}>
+        <Text style={[styles.rankText, { color: medal.ink }]} {...textScale.badge}>
           {rank}
         </Text>
       </View>
@@ -507,7 +543,7 @@ function SubmitLine({ state, onRetry, onSignIn }: { state: SubmitState; onRetry:
   const sent = state === "sent";
   return (
     <View style={styles.submitLine} accessibilityLiveRegion="polite">
-      {sent ? <Ionicons name="checkmark-circle" size={16} color={ARENA_RESULT.sentInk} /> : <ActivityIndicator size="small" color={CARTOON.cardMuted} />}
+      {sent ? <Ionicons name="checkmark-circle" size={16} color={ARENA_RESULT.sentInk} /> : <ActivityIndicator size="small" color={ARENA_RESULT.muted} />}
       <Text style={[styles.submitInfo, sent && { color: ARENA_RESULT.sentInk }]} {...textScale.dense}>
         {sent ? "Rekor tablosuna yazıldı" : "Rekor tablosuna gönderiliyor…"}
       </Text>
@@ -570,12 +606,11 @@ export function ArenaShareSheet({
         <ViewShot ref={shotRef} options={{ format: "png", quality: 1 }}>
           <View style={styles.shareCard}>
             <LinearGradient colors={CARTOON.night} start={TOP} end={BOTTOM} style={StyleSheet.absoluteFill} />
-            <Text style={[styles.shareBrand, cartoonText.shadow]} {...textScale.badge}>
+            <Text style={styles.shareBrand} {...textScale.badge}>
               elitlig
             </Text>
             <View style={styles.shareGamePill}>
-              <LinearGradient colors={QUIZ.ribbon} start={LEFT} end={RIGHT} style={StyleSheet.absoluteFill} />
-              <Text style={[styles.shareGame, cartoonText.shadow]} numberOfLines={1} {...textScale.badge}>
+              <Text style={styles.shareGame} numberOfLines={1} {...textScale.badge}>
                 {upperTR(`Arena · ${title}`)}
               </Text>
             </View>
@@ -584,7 +619,7 @@ export function ArenaShareSheet({
             </Text>
             <View style={styles.shareUnitRow}>
               {isRecord ? <Ionicons name="trophy" size={14} color={CARTOON.star} /> : null}
-              <Text style={[styles.shareUnit, cartoonText.shadow]} {...textScale.badge}>
+              <Text style={styles.shareUnit} {...textScale.badge}>
                 {upperTR(isRecord ? `${SCORE_UNIT} · yeni rekor` : SCORE_UNIT)}
               </Text>
             </View>
@@ -594,7 +629,7 @@ export function ArenaShareSheet({
               </Text>
             ) : null}
             <View style={styles.shareDivider} />
-            <Text style={[styles.shareTaunt, cartoonText.shadow]} {...textScale.badge}>
+            <Text style={styles.shareTaunt} {...textScale.badge}>
               {taunt}
             </Text>
             <Text style={styles.shareFooter} {...textScale.badge}>
@@ -626,121 +661,134 @@ export function ArenaShareSheet({
 
 const TOP = { x: 0.5, y: 0 } as const;
 const BOTTOM = { x: 0.5, y: 1 } as const;
-const LEFT = { x: 0, y: 0.5 } as const;
-const RIGHT = { x: 1, y: 0.5 } as const;
+/** Rekor kupasının arkasındaki yumuşak altın hale (kart içinde kalır). */
+const GLOW = 170;
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   stretch: { alignSelf: "stretch" },
-  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: CARTOON.dim },
+  // overflow: hidden — kart dışına taşan hale/konfeti web'de yatay kaydırma açmasın.
+  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: CARTOON.dim, overflow: "hidden" },
+  scroll: { flex: 1, width: "100%" },
   scrimContent: { flexGrow: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: space.md, paddingVertical: space.xl },
-  cardWrap: { maxWidth: 380, width: "100%", alignSelf: "center", paddingTop: 20 },
+  cardWrap: { maxWidth: 380, width: "100%", alignSelf: "center", paddingTop: 18 },
   card: { alignItems: "center", gap: space.s, paddingTop: space.xxxl, paddingBottom: space.lg, paddingHorizontal: space.md },
   ribbonLayer: { position: "absolute", top: 0, left: space.md, right: space.md, alignItems: "center" },
 
-  recordBadge: { alignItems: "center", gap: space.xs, marginTop: space.xs },
-  recordBurst: { position: "absolute", top: 34 - 120, left: -120, right: -120, alignItems: "center" },
-  recordTitle: { ...type.display, fontFamily: fonts.bold, color: CARTOON.warn, textAlign: "center", textShadowColor: CARTOON.outline, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
+  recordBadge: { alignItems: "center", gap: space.xs, marginTop: space.xxs },
+  // Kupanın arkasında tek, yumuşak altın hale (dönen ışın yok); kupaya ortalı.
+  recordGlow: { position: "absolute", top: 30 - GLOW / 2, width: GLOW, height: GLOW },
+  recordTitle: { ...type.h1, fontFamily: fonts.bold, color: ARENA_RESULT.recordInk, textAlign: "center" },
 
-  scoreBlock: { alignItems: "center" },
+  scoreBlock: { alignItems: "center", alignSelf: "stretch" },
   score: {
     ...type.scoreJumbo,
-    fontSize: type.scoreJumbo.fontSize * 1.5,
-    lineHeight: type.scoreJumbo.lineHeight * 1.45,
+    fontSize: type.scoreJumbo.fontSize * 1.3,
+    lineHeight: type.scoreJumbo.lineHeight * 1.3,
     color: ARENA_RESULT.score,
-    textShadowColor: CARTOON.outline,
-    textShadowOffset: { width: 0, height: 4 },
-    textShadowRadius: 0,
+    textAlign: "center",
   },
-  unit: { ...type.label, fontFamily: fonts.bold, color: CARTOON.cardMuted, letterSpacing: 2, marginTop: -space.xs },
+  unit: { ...type.label, fontFamily: fonts.bold, color: ARENA_RESULT.faint, letterSpacing: 2, marginTop: -space.xs },
 
   facts: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: space.xs, marginTop: space.xs },
   fact: {
     borderRadius: radius.pill,
-    borderWidth: 2,
-    borderColor: CARTOON.outline,
-    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: ARENA_RESULT.edge,
+    backgroundColor: ARENA_RESULT.surface,
     paddingHorizontal: space.m,
-    paddingVertical: space.xs,
+    paddingVertical: space.xxs + 1,
   },
-  factShine: { position: "absolute", top: 2, left: 10, right: 10, height: "28%", borderRadius: radius.pill, backgroundColor: CARTOON.shine },
-  factText: { ...type.label, fontFamily: fonts.bold, color: CARTOON.white },
+  factText: { ...type.label, fontFamily: fonts.semibold, color: ARENA_RESULT.ink },
 
   cityStars: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.xs,
     marginTop: space.xs,
-    paddingLeft: space.xs,
-    paddingRight: space.m,
+    paddingHorizontal: space.md,
     paddingVertical: space.xs,
     borderRadius: radius.pill,
-    borderWidth: OUTLINE,
-    borderColor: CARTOON.outline,
-    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: ARENA_RESULT.starEdge,
+    backgroundColor: ARENA_RESULT.starBg,
+    maxWidth: "100%",
   },
-  starCoin: {
-    width: 28,
-    height: 28,
-    borderRadius: radius.pill,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: CARTOON.outline,
-  },
-  cityStarsText: { ...type.h3, fontFamily: fonts.bold, color: CARTOON.goldInk },
+  cityStarsText: { ...type.label, fontFamily: fonts.bold, color: ARENA_RESULT.starInk, flexShrink: 1 },
 
   bestRow: { flexDirection: "row", alignItems: "center", gap: space.xxs, marginTop: space.xs },
-  bestText: { ...type.bodySm, fontFamily: fonts.semibold, color: CARTOON.cardMuted },
+  bestText: { ...type.bodySm, fontFamily: fonts.semibold, color: ARENA_RESULT.muted },
 
-  actions: { alignSelf: "stretch", gap: space.xs, marginTop: space.s },
+  actions: { alignSelf: "stretch", gap: space.sm, marginTop: space.s },
   resultRow: { flexDirection: "row", gap: space.sm, alignSelf: "stretch", marginTop: space.xs },
+
+  softWrap: { alignSelf: "stretch" },
+  softWrapCompact: { flex: 1, minWidth: 0 },
+  softFace: {
+    minHeight: 50,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: space.sm,
+    paddingHorizontal: space.md,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderBottomWidth: 3,
+    borderColor: ARENA_RESULT.edgeStrong,
+    borderBottomColor: ARENA_RESULT.surfaceLip,
+    backgroundColor: ARENA_RESULT.surface,
+  },
+  softFaceCompact: { minHeight: 44, borderRadius: radius.md, gap: space.xs, paddingHorizontal: space.s },
+  softText: { ...type.h3, fontFamily: fonts.bold, color: ARENA_RESULT.ink, letterSpacing: 0.6, flexShrink: 1 },
+  softTextCompact: { ...type.label, fontFamily: fonts.bold, color: ARENA_RESULT.ink, letterSpacing: 0.6, flexShrink: 1 },
 
   board: {
     alignSelf: "stretch",
-    marginTop: space.xs,
+    marginTop: space.sm,
     padding: space.m,
     gap: space.s,
     borderRadius: radius.xl,
-    borderWidth: OUTLINE,
-    borderColor: CARTOON.outline,
-    backgroundColor: ARENA_RESULT.boardBg,
+    backgroundColor: ARENA_RESULT.surface,
   },
   boardHead: { flexDirection: "row", alignItems: "center", gap: space.xs },
   boardIcon: {
-    width: 28,
-    height: 28,
+    width: 26,
+    height: 26,
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: CARTOON.purple[1],
-    borderWidth: 2,
-    borderColor: CARTOON.outline,
+    backgroundColor: ARENA_RESULT.row,
+    borderWidth: 1,
+    borderColor: ARENA_RESULT.edge,
   },
-  boardTitle: { ...type.h3, fontFamily: fonts.bold, color: CARTOON.outline, letterSpacing: 0.6, flex: 1 },
-  tabs: { flexDirection: "row", gap: space.xs },
+  boardTitle: { ...type.label, fontFamily: fonts.bold, color: ARENA_RESULT.ink, letterSpacing: 1, flex: 1 },
+  tabs: { flexDirection: "row", padding: 3, borderRadius: radius.pill, backgroundColor: ARENA_RESULT.tabTrack },
   tab: {
     flex: 1,
-    minHeight: 34,
+    minHeight: 32,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: radius.pill,
-    borderWidth: 2,
-    borderColor: CARTOON.outline,
-    backgroundColor: ARENA_RESULT.tabIdle,
-    overflow: "hidden",
     paddingHorizontal: space.s,
   },
-  tabOn: { borderColor: CARTOON.outline },
-  tabText: { ...type.label, fontFamily: fonts.bold, color: CARTOON.cardMuted },
-  tabTextOn: { color: CARTOON.white },
+  tabOn: {
+    backgroundColor: ARENA_RESULT.tabOn,
+    shadowColor: ARENA_RESULT.tabShadow,
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 2,
+  },
+  tabText: { ...type.label, fontFamily: fonts.semibold, color: ARENA_RESULT.muted },
+  tabTextOn: { fontFamily: fonts.bold, color: ARENA_RESULT.ink },
   boardEmpty: { paddingVertical: space.md, alignItems: "center" },
-  boardEmptyText: { ...type.bodySm, fontFamily: fonts.semibold, color: CARTOON.cardMuted, textAlign: "center", paddingVertical: space.sm },
-  boardList: { gap: space.xs },
+  boardEmptyText: { ...type.bodySm, fontFamily: fonts.semibold, color: ARENA_RESULT.muted, textAlign: "center", paddingVertical: space.sm },
+  boardList: { gap: space.xxs + 2 },
   boardGap: { flexDirection: "row", justifyContent: "center", gap: space.xxs, paddingVertical: space.xxs },
-  boardGapDot: { width: 5, height: 5, borderRadius: radius.pill, backgroundColor: CARTOON.outlineSoft },
-  boardHint: { ...type.label, fontFamily: fonts.bold, color: CARTOON.purple[1], textAlign: "center" },
+  boardGapDot: { width: 4, height: 4, borderRadius: radius.pill, backgroundColor: ARENA_RESULT.faint },
+  boardHint: { ...type.label, fontFamily: fonts.semibold, color: ARENA_RESULT.muted, textAlign: "center" },
   boardMore: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.xxs, paddingVertical: space.xxs },
-  boardMoreText: { ...type.label, fontFamily: fonts.bold, color: CARTOON.outline, textDecorationLine: "underline" },
+  boardMoreText: { ...type.label, fontFamily: fonts.semibold, color: ARENA_RESULT.muted },
   row: {
     flexDirection: "row",
     alignItems: "center",
@@ -750,29 +798,24 @@ const styles = StyleSheet.create({
     paddingLeft: space.xs,
     paddingRight: space.m,
     borderRadius: radius.lg,
-    borderWidth: 2,
-    borderColor: CARTOON.outline,
+    borderWidth: 1,
+    borderColor: ARENA_RESULT.edge,
     backgroundColor: ARENA_RESULT.row,
-    borderBottomWidth: 4,
   },
-  rowMine: { backgroundColor: ARENA_RESULT.rowMine },
+  rowMine: { backgroundColor: ARENA_RESULT.rowMine, borderColor: ARENA_RESULT.rowMineEdge },
   rank: {
-    width: 32,
-    height: 32,
+    width: 30,
+    height: 30,
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 2,
-    borderColor: CARTOON.outline,
-    overflow: "hidden",
   },
-  rankShine: { position: "absolute", top: 2, left: "22%", right: "22%", height: "32%", borderRadius: radius.pill, backgroundColor: CARTOON.shine },
-  rankText: { ...type.tableNumStrong, color: ARENA_RESULT.medalInk },
-  rowName: { ...type.h3, fontFamily: fonts.bold, color: CARTOON.cardInk, flex: 1 },
-  rowNameMine: { color: ARENA_RESULT.rowMineInk },
-  rowScore: { ...type.h2, fontFamily: fonts.bold, color: CARTOON.outline },
+  rankText: { ...type.tableNumStrong },
+  rowName: { ...type.body, fontFamily: fonts.semibold, color: CARTOON.cardInk, flex: 1 },
+  rowNameMine: { fontFamily: fonts.bold, color: ARENA_RESULT.rowMineInk },
+  rowScore: { ...type.h3, fontFamily: fonts.bold, color: ARENA_RESULT.ink },
 
-  submitLine: { flexDirection: "row", alignItems: "center", gap: space.xs, paddingVertical: space.xs },
+  submitLine: { flexDirection: "row", alignItems: "center", gap: space.xs, paddingVertical: space.xxs },
   submitPill: {
     flexDirection: "row",
     alignItems: "center",
@@ -780,51 +823,45 @@ const styles = StyleSheet.create({
     paddingVertical: space.s,
     paddingHorizontal: space.md,
     borderRadius: radius.pill,
-    borderWidth: 2,
-    borderColor: CARTOON.outline,
+    maxWidth: "100%",
   },
   submitGuest: { backgroundColor: ARENA_RESULT.guestBg },
   submitFail: { backgroundColor: ARENA_RESULT.failBg },
-  submitPillText: { ...type.label, fontFamily: fonts.bold },
-  submitInfo: { ...type.label, fontFamily: fonts.bold, color: CARTOON.cardMuted },
+  submitPillText: { ...type.label, fontFamily: fonts.bold, flexShrink: 1 },
+  submitInfo: { ...type.label, fontFamily: fonts.semibold, color: ARENA_RESULT.muted },
 
   shareBackdrop: { flex: 1, backgroundColor: CARTOON.dim, alignItems: "center", justifyContent: "center", padding: space.xl, gap: space.lg },
   shareCard: {
     width: 280,
     borderRadius: radius.xxl,
-    borderWidth: 4,
-    borderColor: CARTOON.white,
+    borderWidth: 1,
+    borderColor: ARENA_RESULT.shareEdge,
     overflow: "hidden",
     paddingVertical: space.xxl,
     paddingHorizontal: space.xl,
     alignItems: "center",
     gap: space.xxs,
   },
-  shareBrand: { ...type.display, fontFamily: fonts.bold, color: CARTOON.white },
+  shareBrand: { ...type.h1, fontFamily: fonts.bold, color: CARTOON.white },
   shareGamePill: {
     marginTop: space.xs,
     paddingHorizontal: space.md,
     paddingVertical: space.xxs,
-    borderRadius: radius.md,
-    borderWidth: 2,
-    borderColor: CARTOON.outline,
-    overflow: "hidden",
+    borderRadius: radius.pill,
+    backgroundColor: ARENA_RESULT.sharePill,
   },
   shareGame: { ...type.label, fontFamily: fonts.bold, color: CARTOON.white, letterSpacing: 1.2 },
   shareScore: {
     ...type.scoreJumbo,
     fontSize: type.scoreJumbo.fontSize * 1.4,
     lineHeight: type.scoreJumbo.lineHeight * 1.4,
-    color: CARTOON.star,
+    color: CARTOON.white,
     marginTop: space.sm,
-    textShadowColor: CARTOON.outline,
-    textShadowOffset: { width: 0, height: 4 },
-    textShadowRadius: 0,
   },
   shareUnitRow: { flexDirection: "row", alignItems: "center", gap: space.xxs },
-  shareUnit: { ...type.label, fontFamily: fonts.bold, color: CARTOON.white, letterSpacing: 1.6 },
+  shareUnit: { ...type.label, fontFamily: fonts.bold, color: QUIZ.muted, letterSpacing: 1.6 },
   shareSub: { ...type.caption, fontFamily: fonts.semibold, color: QUIZ.muted, marginTop: space.xxs },
-  shareDivider: { alignSelf: "stretch", height: 3, borderRadius: radius.pill, backgroundColor: CARTOON.track, marginVertical: space.md },
+  shareDivider: { alignSelf: "stretch", height: 1, backgroundColor: ARENA_RESULT.shareEdge, marginVertical: space.md },
   shareTaunt: { ...type.h3, fontFamily: fonts.bold, color: CARTOON.white, textAlign: "center" },
   shareFooter: { ...type.micro, color: QUIZ.faint, marginTop: space.sm },
   shareActions: { flexDirection: "row", gap: space.m, alignSelf: "stretch", maxWidth: 320, width: "100%" },

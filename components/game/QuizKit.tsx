@@ -159,7 +159,7 @@ export const QuizBackdrop = memo(function QuizBackdrop({ paused = false }: { pau
   const glowClock = useLoopClock(9000, live);
   const glow = Math.max(width, height * 0.55) * 1.2;
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+    <View style={[StyleSheet.absoluteFill, styles.clip]} pointerEvents="none">
       <LinearGradient colors={QUIZ.base} start={TOP} end={BOTTOM} style={StyleSheet.absoluteFill} />
       <Animated.View
         style={[
@@ -782,6 +782,7 @@ export const cartoonText = StyleSheet.create({
 });
 
 const styles = StyleSheet.create({
+  clip: { overflow: "hidden" },
   stretch: { alignSelf: "stretch" },
   dim: { opacity: 0.5 },
   shadowed: { textShadowColor: QUIZ.textShadow, textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 },
