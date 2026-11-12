@@ -207,6 +207,22 @@ export function UcleGame({ level, maxWidth, maxHeight, preBoosters, boosterStock
     [rackSize, rc, rackGap, rackLeft, rackPad],
   );
   const slotY = rackTop + rackPad;
+  // Patlayan üçlüler: her tür için birleşme noktası (üçlünün ortası) ve patlamayı çizen rozet.
+  const mergeOf = useMemo(() => {
+    const out = new Map<number, { x: number; leader: number }>();
+    const byKind = new Map<number, number[]>();
+    st.rack.forEach((e, i) => {
+      if (!e.clearing) return;
+      const list = byKind.get(e.kind) ?? [];
+      list.push(i);
+      byKind.set(e.kind, list);
+    });
+    byKind.forEach((idx, kind) => {
+      const mid = idx[Math.floor(idx.length / 2)];
+      out.set(kind, { x: slotX(mid, st.rack.length), leader: st.rack[mid].id });
+    });
+    return out;
+  }, [st.rack, slotX]);
 
   const flyFrom = useCallback(
     (i: number): FlyFrom => ({
@@ -571,6 +587,7 @@ export function UcleGame({ level, maxWidth, maxHeight, preBoosters, boosterStock
                     top: rackPad - 2,
                     width: rc,
                     height: rc,
+                    borderRadius: rc / 2,
                   },
                   i === UCLE_RACK && styles.cellBonus,
                 ]}
@@ -607,7 +624,9 @@ export function UcleGame({ level, maxWidth, maxHeight, preBoosters, boosterStock
 
         {/* Raftaki karolar (sahne koordinatında: tahtadan uçabilsinler). */}
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { transform: [{ translateX: rackShakeX }] }]}>
-          {st.rack.map((e, i) => (
+          {st.rack.map((e, i) => {
+            const merge = e.clearing ? mergeOf.get(e.kind) : undefined;
+            return (
             <RackPiece
               key={e.id}
               id={e.id}
@@ -619,8 +638,11 @@ export function UcleGame({ level, maxWidth, maxHeight, preBoosters, boosterStock
               clearing={e.clearing}
               onCleared={onCleared}
               still={still}
+              mergeX={merge?.x}
+              leader={merge ? merge.leader === e.id : true}
             />
-          ))}
+            );
+          })}
         </Animated.View>
 
         {tipOpen && lvl.tip ? (

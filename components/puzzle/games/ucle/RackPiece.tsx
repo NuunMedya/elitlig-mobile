@@ -21,19 +21,25 @@ interface Props {
   onCleared: (id: number) => void;
   /** Hareketi azalt açık: kıvılcım / kırık yok, yalın sönme. */
   still?: boolean;
+  /** Üçlü birleşme noktası (üçlünün ortası, sahne x'i). */
+  mergeX?: number;
+  /** Üçlünün patlamasını (halka + kıvılcım) bu rozet çizer. */
+  leader?: boolean;
 }
 
 const FLIGHT_MS = 230;
-const SPARKS = 6;
+const SPARKS = 8;
+/** Rozetin raf yuvasına oranı. */
+const INNER = 0.9;
 
 /**
  * Raftaki karo. Tahtadaki yerinden rafa uçar, raf kayınca yaylanarak
  * yer değiştirir; üçlü olunca şişip söner ve kıvılcım saçar.
  */
-function RackPieceBase({ id, kind, x, y, size, from, clearing, onCleared, still }: Props) {
+function RackPieceBase({ id, kind, x, y, size, from, clearing, onCleared, still, mergeX, leader = true }: Props) {
   const tx = useRef(new Animated.Value(from ? from.x : x)).current;
   const ty = useRef(new Animated.Value(from ? from.y : y)).current;
-  const scale = useRef(new Animated.Value(from ? from.scale : 0.4)).current;
+  const scale = useRef(new Animated.Value(from ? from.scale / INNER : 0.4)).current;
   const fade = useRef(new Animated.Value(1)).current;
   const boom = useRef(new Animated.Value(0)).current;
   const squash = useRef(new Animated.Value(1)).current;
@@ -115,12 +121,28 @@ function RackPieceBase({ id, kind, x, y, size, from, clearing, onCleared, still 
 
   useEffect(() => {
     if (!clearing) return;
+    const target = mergeX ?? x;
     Animated.sequence([
       Animated.delay(FLIGHT_MS + 20),
+      // Üçlü birleşir: yanlardaki rozetler ortadakinin üstüne kayar.
+      Animated.parallel([
+        Animated.timing(tx, {
+          toValue: still ? x : target,
+          duration: 150,
+          easing: Easing.in(Easing.back(1.4)),
+          useNativeDriver: true,
+        }),
+        Animated.timing(scale, {
+          toValue: 1.12,
+          duration: 150,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]),
       Animated.parallel([
         Animated.sequence([
           Animated.timing(scale, {
-            toValue: 1.3,
+            toValue: 1.38,
             duration: 90,
             easing: Easing.out(Easing.quad),
             useNativeDriver: true,
@@ -132,37 +154,40 @@ function RackPieceBase({ id, kind, x, y, size, from, clearing, onCleared, still 
             useNativeDriver: true,
           }),
         ]),
-        // Çizgi film "pop": yassılıp (squash) uzayarak söner.
+        // "Pop": yassılıp (squash) uzayarak söner.
         Animated.sequence([
           Animated.timing(squash, {
-            toValue: 0.8,
+            toValue: 0.82,
             duration: 80,
             useNativeDriver: true,
           }),
           Animated.timing(squash, {
-            toValue: 1.18,
+            toValue: 1.16,
             duration: 140,
             useNativeDriver: true,
           }),
         ]),
         Animated.timing(fade, {
           toValue: 0,
-          duration: 260,
-          delay: 90,
+          duration: leader ? 240 : 60,
+          delay: leader ? 90 : 0,
           useNativeDriver: true,
         }),
         Animated.timing(boom, {
           toValue: 1,
-          duration: 480,
+          duration: 520,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
       ]),
     ]).start(() => onCleared(id));
-  }, [clearing, id, onCleared, scale, squash, fade, boom]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clearing]);
 
-  const slab = Math.max(2, Math.round(size * 0.09));
+  const inner = Math.round(size * INNER);
+  const slab = Math.max(2, Math.round(inner * 0.09));
   const color = UCLE_KINDS[kind].face;
+  const burst = clearing && leader;
   return (
     <Animated.View
       pointerEvents="none"
@@ -175,7 +200,7 @@ function RackPieceBase({ id, kind, x, y, size, from, clearing, onCleared, still 
         },
       ]}
     >
-      {clearing ? (
+      {burst ? (
         <>
           <Animated.View
             style={[
@@ -227,8 +252,8 @@ function RackPieceBase({ id, kind, x, y, size, from, clearing, onCleared, still 
           />
           {Array.from({ length: still ? 0 : SPARKS }, (_, i) => {
             const a = (i / SPARKS) * Math.PI * 2 + id * 0.7;
-            const d = size * (0.9 + (i % 3) * 0.25);
-            const dot = Math.max(5, Math.round(size * 0.16));
+            const d = size * (0.85 + (i % 3) * 0.2);
+            const dot = Math.max(5, Math.round(size * (i % 2 ? 0.12 : 0.17)));
             return (
               <Animated.View
                 key={i}
@@ -237,12 +262,12 @@ function RackPieceBase({ id, kind, x, y, size, from, clearing, onCleared, still 
                   {
                     width: dot,
                     height: dot,
-                    borderRadius: dot / 2,
+                    borderRadius: dot * 0.18,
                     left: size / 2 - dot / 2,
                     top: size / 2 - dot / 2,
-                    backgroundColor: i % 2 ? color : UCLE_COLORS.white,
+                    backgroundColor: i % 2 ? UCLE_COLORS.white : UCLE_COLORS.rim,
                     opacity: boom.interpolate({
-                      inputRange: [0, 0.1, 0.8, 1],
+                      inputRange: [0, 0.1, 0.75, 1],
                       outputRange: [0, 1, 1, 0],
                     }),
                     transform: [
@@ -258,10 +283,11 @@ function RackPieceBase({ id, kind, x, y, size, from, clearing, onCleared, still 
                           outputRange: [0, Math.sin(a) * d],
                         }),
                       },
+                      { rotate: "45deg" },
                       {
                         scale: boom.interpolate({
                           inputRange: [0, 1],
-                          outputRange: [1, 0.3],
+                          outputRange: [1, 0.2],
                         }),
                       },
                     ],
@@ -288,7 +314,12 @@ function RackPieceBase({ id, kind, x, y, size, from, clearing, onCleared, still 
           ],
         }}
       >
-        <TileFace kind={kind} w={size} h={size} slab={slab} />
+        {/* Rozet raf yuvasının içinde biraz küçük durur (yuvanın kenarı görünsün). */}
+        <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
+          <View style={{ width: inner, height: inner }}>
+            <TileFace kind={kind} w={inner} h={inner} slab={slab} />
+          </View>
+        </View>
       </Animated.View>
     </Animated.View>
   );

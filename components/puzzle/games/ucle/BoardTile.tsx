@@ -3,7 +3,7 @@ import { Animated, Easing, Pressable, StyleSheet, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { UCLE_COLORS, UCLE_KINDS } from "@/lib/puzzle/uclePalette";
 import type { TileBlock } from "@/lib/puzzle/levels/ucle";
-import { TileFace } from "./TileFace";
+import { TileFace, TileSilhouette } from "./TileFace";
 
 interface Props {
   id: number;
@@ -226,7 +226,6 @@ function BoardTileBase(p: Props) {
   const lockColor = p.lockGroup != null ? UCLE_COLORS.locks[p.lockGroup % UCLE_COLORS.locks.length] : UCLE_COLORS.white;
   const keyColor = p.keyGroup != null ? UCLE_COLORS.locks[p.keyGroup % UCLE_COLORS.locks.length] : UCLE_COLORS.white;
   const faceH = p.h - p.slab;
-  const r = Math.round(p.w * 0.2);
   const badge = Math.max(16, Math.round(p.w * 0.38));
 
   return (
@@ -271,19 +270,6 @@ function BoardTileBase(p: Props) {
         },
       ]}
     >
-      {/* Alt katmana düşen gölge — 2.5D derinlik. */}
-      <View
-        style={[
-          styles.shadow,
-          {
-            top: p.slab + 2,
-            left: 2,
-            width: p.w,
-            height: faceH,
-            borderRadius: r,
-          },
-        ]}
-      />
       <Pressable
         onPress={handlePress}
         onPressIn={onPressIn}
@@ -310,60 +296,54 @@ function BoardTileBase(p: Props) {
           </View>
         ) : null}
         {lockShown ? (
-          <Animated.View
-            style={[
-              styles.center,
-              {
-                height: faceH,
-                opacity: lockOpacity,
-                transform: [{ scale: lockScale }],
-              },
-            ]}
-          >
-            <View style={[styles.veil, { borderRadius: r, borderColor: lockColor }]} />
-            <View
-              style={[
-                styles.lockDisc,
-                {
-                  width: badge * 1.35,
-                  height: badge * 1.35,
-                  borderRadius: badge,
-                  backgroundColor: lockColor,
-                },
-              ]}
-            >
-              <MaterialCommunityIcons name="lock" size={Math.round(badge * 0.85)} color={UCLE_COLORS.lockInk} />
-            </View>
+          <Animated.View style={[styles.cover, { width: p.w, height: p.h, opacity: lockOpacity }]}>
+            <TileSilhouette kind={p.kind} w={p.w} h={p.h} slab={p.slab} back={!showFace} color={UCLE_COLORS.veil} alpha={0.45} mode="fill" />
+            <TileSilhouette kind={p.kind} w={p.w} h={p.h} slab={p.slab} back={!showFace} color={lockColor} mode="ring" ring={6} />
+            <Animated.View style={[styles.center, { height: faceH, transform: [{ scale: lockScale }] }]}>
+              <View
+                style={[
+                  styles.lockDisc,
+                  {
+                    width: badge * 1.35,
+                    height: badge * 1.35,
+                    borderRadius: badge,
+                    backgroundColor: lockColor,
+                  },
+                ]}
+              >
+                <MaterialCommunityIcons name="lock" size={Math.round(badge * 0.85)} color={UCLE_COLORS.lockInk} />
+              </View>
+            </Animated.View>
           </Animated.View>
         ) : null}
         {chainShown ? (
-          <Animated.View
-            style={[
-              styles.center,
-              {
-                height: faceH,
-                opacity: chainOpacity,
-                transform: [{ scale: chainScale }],
-              },
-            ]}
-          >
-            <View style={[styles.chainFrame, { borderRadius: r }]} />
-            <View
-              style={[
-                styles.chainDisc,
-                {
-                  width: badge * 1.25,
-                  height: badge * 1.25,
-                  borderRadius: badge,
-                },
-              ]}
-            >
-              <MaterialCommunityIcons name="link-variant" size={Math.round(badge * 0.85)} color={UCLE_COLORS.chainInk} />
-            </View>
+          <Animated.View style={[styles.cover, { width: p.w, height: p.h, opacity: chainOpacity }]}>
+            <TileSilhouette kind={p.kind} w={p.w} h={p.h} slab={p.slab} back={!showFace} color={UCLE_COLORS.chain} mode="ring" ring={5} dashed />
+            <Animated.View style={[styles.center, { height: faceH, transform: [{ scale: chainScale }] }]}>
+              <View
+                style={[
+                  styles.chainDisc,
+                  {
+                    width: badge * 1.25,
+                    height: badge * 1.25,
+                    borderRadius: badge,
+                  },
+                ]}
+              >
+                <MaterialCommunityIcons name="link-variant" size={Math.round(badge * 0.85)} color={UCLE_COLORS.chainInk} />
+              </View>
+            </Animated.View>
           </Animated.View>
         ) : null}
-        <Animated.View pointerEvents="none" style={[styles.shade, { height: p.h, borderRadius: r, opacity: shade }]} />
-        {p.glow ? <Animated.View pointerEvents="none" style={[styles.glow, { height: faceH, borderRadius: r, opacity: glowFx }]} /> : null}
+        <Animated.View pointerEvents="none" style={[styles.cover, { width: p.w, height: p.h, opacity: shade }]}>
+          <TileSilhouette kind={p.kind} w={p.w} h={p.h} slab={p.slab} back={!showFace} color={UCLE_COLORS.shade} alpha={0.5} mode="fill" />
+        </Animated.View>
+        {p.glow ? (
+          <Animated.View pointerEvents="none" style={[styles.cover, { width: p.w, height: p.h, opacity: glowFx }]}>
+            <TileSilhouette kind={p.kind} w={p.w} h={p.h} slab={p.slab} back={!showFace} color={UCLE_COLORS.glow} alpha={0.45} mode="ring" ring={13} />
+            <TileSilhouette kind={p.kind} w={p.w} h={p.h} slab={p.slab} back={!showFace} color={UCLE_COLORS.white} mode="ring" ring={5} />
+          </Animated.View>
+        ) : null}
       </Pressable>
     </Animated.View>
   );
@@ -373,22 +353,7 @@ export const BoardTile = memo(BoardTileBase);
 
 const styles = StyleSheet.create({
   root: { position: "absolute" },
-  shadow: { position: "absolute", backgroundColor: UCLE_COLORS.shadow },
-  shade: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    top: 0,
-    backgroundColor: UCLE_COLORS.shade,
-  },
-  glow: {
-    position: "absolute",
-    left: -3,
-    right: -3,
-    top: -3,
-    borderWidth: 4,
-    borderColor: UCLE_COLORS.glow,
-  },
+  cover: { position: "absolute", left: 0, top: 0 },
   center: {
     position: "absolute",
     left: 0,
@@ -397,23 +362,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  veil: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: UCLE_COLORS.shade,
-    borderWidth: 1,
-  },
   lockDisc: {
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
     borderBottomWidth: 3,
     borderColor: UCLE_COLORS.outline,
-  },
-  chainFrame: {
-    ...StyleSheet.absoluteFillObject,
-    borderWidth: 1,
-    borderColor: UCLE_COLORS.chain,
-    borderStyle: "dashed",
   },
   chainDisc: {
     alignItems: "center",
@@ -429,7 +383,7 @@ const styles = StyleSheet.create({
     top: -4,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: UCLE_COLORS.outline,
+    borderWidth: 1.5,
+    borderColor: UCLE_COLORS.white,
   },
 });

@@ -5,8 +5,9 @@
  * aynı renkle tanınmalı. Bu yüzden hex burada, lib/ altında durur;
  * components/ yalnız bu dosyayı içe aktarır.
  *
- * "CANLI AMA TEMİZ" dil: karolar doygun ve parlak (ince, kendi renginin koyu
- * tonunda kenar; kalın kontur yok), derinlik yumuşak gölge + ince alt dudakla.
+ * "CANLI AMA TEMİZ" dil: karolar KULÜP ARMASI rozetleridir — her türün kendi
+ * silüeti ve iki renkli forma deseni, ortak altın metal çerçeve, emaye
+ * parlaklığı ve gerçek bir rozet kalınlığı (kalın kontur yok).
  * Çevre arayüz (HUD, raf, düğmeler) nötr lacivert / yarı saydam beyaz; eylemler
  * için tek vurgu rengi (yeşil).
  */
@@ -23,129 +24,93 @@ const CARTOON = {
   pill: ["#3A2E9E", "#1C1760"],
 } as const;
 
-/** Kalın lacivert kontur. */
-export const UCLE_OUTLINE = CARTOON.outline;
+/**
+ * Arma silueti. Her tür kendi silüetiyle okunur (renk + desen + biçim).
+ */
+export type UcleShape =
+  | "shield"
+  | "round"
+  | "hex"
+  | "diamond"
+  | "crown"
+  | "rosette"
+  | "octagon"
+  | "pennant"
+  | "ushield"
+  | "drop"
+  | "star"
+  | "heater"
+  | "square"
+  | "pentagon";
 
+/** Forma deseni (ikinci renkle çizilir). */
+export type UclePattern =
+  | "stripes"
+  | "hoops"
+  | "halves"
+  | "sash"
+  | "chevron"
+  | "quarters"
+  | "band"
+  | "hband"
+  | "checks"
+  | "diagonal"
+  | "disc"
+  | "cross"
+  | "pinstripes"
+  | "yoke";
+
+/**
+ * Karo türü = bir KULÜP ARMASI rozeti: kendine özgü silüet, iki renkli forma
+ * deseni ve ortak altın metal çerçeve. İkon ya da harf yok; tür biçim + renk +
+ * desenle tanınır.
+ */
 export interface UcleKind {
-  /** MaterialCommunityIcons adı. */
-  icon: string;
+  /** Erişilebilirlik / hedef metinlerinde geçen ad. */
   label: string;
-  /** Karo yüzü. */
+  shape: UcleShape;
+  pattern: UclePattern;
+  /** Ana (zemin) renk. */
   face: string;
-  /** Karo kalınlığı (alt yüz) — yüzün koyu tonu. */
+  /** Desen rengi. */
+  trim: string;
+  /** Ana rengin koyu tonu (kıvılcım, halka). */
   deep: string;
-  /** İkon rengi. */
-  ink: string;
 }
 
 export const UCLE_KINDS: UcleKind[] = [
-  {
-    icon: "soccer",
-    label: "Top",
-    face: "#22A45D",
-    deep: "#14703D",
-    ink: "#FFFFFF",
-  },
-  {
-    icon: "tshirt-crew",
-    label: "Forma",
-    face: "#E5383B",
-    deep: "#9E1F22",
-    ink: "#FFFFFF",
-  },
-  {
-    icon: "shoe-cleat",
-    label: "Krampon",
-    face: "#F28C28",
-    deep: "#A85810",
-    ink: "#FFFFFF",
-  },
-  {
-    icon: "hand-back-left",
-    label: "Eldiven",
-    face: "#2F7DE1",
-    deep: "#1A4F99",
-    ink: "#FFFFFF",
-  },
-  {
-    icon: "whistle",
-    label: "Düdük",
-    face: "#8E44AD",
-    deep: "#5B2871",
-    ink: "#FFFFFF",
-  },
-  {
-    icon: "trophy",
-    label: "Kupa",
-    face: "#F2C230",
-    deep: "#B08410",
-    ink: "#3A2A00",
-  },
-  {
-    icon: "flag-variant",
-    label: "Bayrak",
-    face: "#16A3B8",
-    deep: "#0C6A78",
-    ink: "#FFFFFF",
-  },
-  {
-    icon: "medal",
-    label: "Madalya",
-    face: "#D81B72",
-    deep: "#8E0F49",
-    ink: "#FFFFFF",
-  },
-  {
-    icon: "soccer-field",
-    label: "Kale",
-    face: "#5E9E2F",
-    deep: "#3B661A",
-    ink: "#FFFFFF",
-  },
-  {
-    icon: "scoreboard",
-    label: "Skorboard",
-    face: "#4F6DA8",
-    deep: "#2E4573",
-    ink: "#FFFFFF",
-  },
-  {
-    icon: "bullhorn",
-    label: "Megafon",
-    face: "#FF7A59",
-    deep: "#B8452A",
-    ink: "#FFFFFF",
-  },
-  {
-    icon: "ticket-confirmation",
-    label: "Bilet",
-    face: "#B5774A",
-    deep: "#7A4A26",
-    ink: "#FFFFFF",
-  },
-  {
-    icon: "card",
-    label: "Hakem kartı",
-    face: "#FFE14D",
-    deep: "#C7A600",
-    ink: "#7A1010",
-  },
-  {
-    icon: "timer-outline",
-    label: "Kronometre",
-    face: "#5C6BC0",
-    deep: "#35408A",
-    ink: "#FFFFFF",
-  },
+  { label: "Kırmızı kalkan", shape: "shield", pattern: "stripes", face: "#E2283A", trim: "#FFFFFF", deep: "#9C1424" },
+  { label: "Mavi yuvarlak arma", shape: "round", pattern: "hoops", face: "#1F6FE5", trim: "#FFFFFF", deep: "#0F4296" },
+  { label: "Sarı altıgen", shape: "hex", pattern: "halves", face: "#FFCB1F", trim: "#1B2C6B", deep: "#B88A00" },
+  { label: "Yeşil baklava", shape: "diamond", pattern: "sash", face: "#14A85A", trim: "#FFFFFF", deep: "#0A6B37" },
+  { label: "Mor taç", shape: "crown", pattern: "chevron", face: "#7B3FD6", trim: "#FFFFFF", deep: "#4B2192" },
+  { label: "Turuncu mühür", shape: "rosette", pattern: "quarters", face: "#FF7A1A", trim: "#1B2C6B", deep: "#B04A00" },
+  { label: "Siyah sekizgen", shape: "octagon", pattern: "band", face: "#22252E", trim: "#FFFFFF", deep: "#0B0C10" },
+  { label: "Pembe flama", shape: "pennant", pattern: "hband", face: "#F0388C", trim: "#FFFFFF", deep: "#A3155A" },
+  { label: "Turkuaz kalkan", shape: "ushield", pattern: "checks", face: "#10B5C4", trim: "#FFFFFF", deep: "#077580" },
+  { label: "Bordo damla", shape: "drop", pattern: "diagonal", face: "#8E1238", trim: "#5EC8FF", deep: "#560A21" },
+  { label: "Beyaz yıldız", shape: "star", pattern: "disc", face: "#F4F6FA", trim: "#E2283A", deep: "#A9B0BF" },
+  { label: "Lacivert kalkan", shape: "heater", pattern: "cross", face: "#1B2C6B", trim: "#E2283A", deep: "#0C1640" },
+  { label: "Gök mavisi arma", shape: "square", pattern: "pinstripes", face: "#5EC8FF", trim: "#FFFFFF", deep: "#1E86C0" },
+  { label: "Limon beşgen", shape: "pentagon", pattern: "yoke", face: "#B4E61E", trim: "#1B2C6B", deep: "#6E9408" },
 ];
 
 export const UCLE_COLORS = {
+  /** Arma rozetlerinin ortak metal çerçevesi (altın) ve kalınlığı. */
+  rim: "#F6C945",
+  rimHi: "#FFF1B8",
+  rimDeep: "#A86E12",
+  rimEdge: "#7A4C08",
+  /** Emaye parlaklığının koyu ucu. */
+  dark: "#0B0A24",
   /** Ters karonun sırtı. */
-  back: "#5A48D6",
+  back: "#4B3FC4",
   backDeep: "#2E2380",
-  backInk: "#B9ACFF",
-  /** Üstü kapalı karonun karartması. */
-  shade: "rgba(12, 10, 28, 0.52)",
+  backInk: "#8F84F0",
+  /** Üstü kapalı karonun karartması (rozet silüetinde). */
+  shade: "#141A33",
+  /** Kilitli karonun örtüsü. */
+  veil: "#141A33",
   /** Karo gölgesi. */
   shadow: "rgba(8, 6, 30, 0.35)",
   /** Yüzün üst parlaklık şeridi. */
@@ -162,7 +127,7 @@ export const UCLE_COLORS = {
   /** Patlama parçacıkları. */
   sparks: ["#FFD24A", "#FFFFFF", "#7CF29A", "#FF7AB6", "#6EC3FF"],
   /** İpucu parlaması. */
-  glow: "#FFE066",
+  glow: "#7DF9FF",
   white: "#FFFFFF",
 };
 
@@ -188,7 +153,7 @@ export const UCLE_UI = {
   inkSoft: "rgba(31, 35, 51, 0.6)",
   white: "#FFFFFF",
   pitchFrame: "#1F1A5E",
-  pitchEdge: "#3E9E36",
+  pitchEdge: "#1F7A3A",
   well: "#17114A",
   /** Seviye rozeti / kupa altını. */
   gold: "#FFD23F",
@@ -213,10 +178,10 @@ export const UCLE_UI = {
   barTrack: "#17114A",
   barShine: "rgba(255, 255, 255, 0.35)",
   /** Tahta: çim keçe + ahşap çerçeve. */
-  felt: "#74DA64",
-  feltStripe: "#5BC24E",
+  felt: "#33A653",
+  feltStripe: "#2D984B",
   feltDeep: "#2F8F2E",
-  feltLine: "rgba(255, 255, 255, 0.7)",
+  feltLine: "rgba(255, 255, 255, 0.55)",
   rim: "#3A2E9E",
   rimHi: "#5A48D6",
   rimDeep: "#1C1760",
