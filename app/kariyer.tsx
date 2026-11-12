@@ -195,7 +195,7 @@ function LevelHero({ data }: { data: CareerSummary }) {
       </View>
       {level.fan_capped ? (
         <Text style={styles.heroNote} {...textScale.long}>
-          {`Seyirci ve oyun XP'si seviye ${level.fan_level_cap}'a kadar sayılır; daha yukarısı sahadaki maçlarınla açılır.`}
+          {`Saha dışı XP (görevler, tribün) seviye ${level.fan_level_cap}'a kadar sayılır; daha yukarısı sahadaki maçlarınla açılır.`}
         </Text>
       ) : null}
     </LinearGradient>

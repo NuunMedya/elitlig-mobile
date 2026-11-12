@@ -367,9 +367,10 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
   useEffect(() => {
     if (phase === "over" && !finishedRef.current) {
       finishedRef.current = true;
-      finishRun(score);
+      // Bitiş istatistikleri skorla gider (görev ilerlemesi; eski sunucu yok sayar).
+      finishRun(score, { correct, asked, bestStreak });
     }
-  }, [phase, score, finishRun]);
+  }, [phase, score, finishRun, correct, asked, bestStreak]);
 
   const start = () => {
     if (!pool || !enough) return;

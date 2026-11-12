@@ -78,13 +78,32 @@ export interface ArenaScoreEntry {
   stars?: number;
 }
 
-export const submitArenaScore = (game: ArenaGame, score: number, sessionId?: string | null) =>
-  post<{ message?: string; entry?: ArenaScoreEntry }>("/api/arena/scores", {
+/** Oyun sonu istatistiklerinden yalnız sonlu sayılar gider (görev ilerlemesi: bölüm, gol, metre…). */
+function cleanStats(stats?: Record<string, unknown> | null): Record<string, number> | null {
+  if (!stats) return null;
+  const out: Record<string, number> = {};
+  for (const [key, value] of Object.entries(stats)) {
+    if (typeof value === "number" && Number.isFinite(value)) out[key] = value;
+    else if (typeof value === "boolean") out[key] = value ? 1 : 0;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+/**
+ * `stats`: oyunun bitiş istatistikleri (WebGame `over`). Sunucu doğrulanmış
+ * skorda saklar ve "Savunma Hattı'nda 5. bölüme ulaş" gibi görevleri bunlarla
+ * ilerletir; eski sunucu alanı yok sayar.
+ */
+export const submitArenaScore = (game: ArenaGame, score: number, sessionId?: string | null, stats?: Record<string, unknown> | null) => {
+  const clean = cleanStats(stats);
+  return post<{ message?: string; entry?: ArenaScoreEntry }>("/api/arena/scores", {
     game,
     score,
     v: ARENA_CLIENT_VERSION,
     ...(sessionId ? { sessionId } : {}),
+    ...(clean ? { stats: clean } : {}),
   });
+};
 
 export const getArenaLeaderboard = (game: ArenaGame, options?: ArenaBoardOptions) => {
   const period = options?.period ?? "alltime";

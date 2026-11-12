@@ -80,7 +80,7 @@ export const PredictionHero = memo(function PredictionHero({ signedIn, onSignIn,
             Skoru bil, puanı topla
           </Text>
           <Text style={styles.guestBody} {...textScale.long}>
-            Gerçek maçlara skor tahmini yap; puanların Kariyer Modu'na XP olarak geçer.
+            Gerçek maçlara skor tahmini yap; puanların Kulüp Şehri'ne yıldız olarak geçer.
           </Text>
           <Button label="Giriş yap" size="sm" onDark onPress={onSignIn} style={styles.guestButton} />
         </View>

@@ -6,9 +6,11 @@
  * MANTIK — her şey Kulüp Şehri için oynanır:
  *   · En üstte Kulüp Şehri kartı: statü, harcanabilir yıldız, sıradaki statüye
  *     ilerleme, toplanmayı bekleyen XP yıldızı ve "Şehrini geliştir".
- *   · Altında yıldızın üç kaynağı tek şeritte: bulmaca seviyeleri (1–3 ★),
- *     bilgi ve arcade skorları (skora göre ★, günlük tavanlı), görev ve maç
- *     XP'si (10 XP = 1 ★).
+ *   · Altında yıldızın kaynakları tek şeritte. OYUNLAR doğrudan YILDIZ verir
+ *     (XP vermez): bulmaca seviyeleri (1–3 yıldız), bilgi ve arcade skorları
+ *     (skora göre, günlük tavanlı), Tahmin Ligi ve Fantezi puanları (haftalık
+ *     tavanlı). XP yalnız SAHADAN ve GÖREVLERDEN gelir; o da yıldıza çevrilir
+ *     (10 XP = 1 yıldız, Kulüp Şehri'nde "Yıldızları topla").
  *   · Oyunlar EŞİT satırlar halinde, yalnız kategori başlıkları altında:
  *       Bilgi yarışmaları · Bulmacalar · Arcade · Lig yarışmaları
  *     Hiçbir oyun ötekinden büyük ya da önde değildir. Her satır aynı bilgiyi
@@ -98,8 +100,15 @@ const CATEGORIES: { key: Category; title: string; hint: string; icon: keyof type
   { key: "quiz", title: "BİLGİ YARIŞMALARI", hint: "Skoruna göre şehrine yıldız", icon: "bulb" },
   { key: "puzzle", title: "BULMACALAR", hint: "Her seviye 1–3 yıldız · oyun başına 5 can", icon: "extension-puzzle" },
   { key: "arcade", title: "ARCADE", hint: "Skoruna göre şehrine yıldız", icon: "game-controller" },
-  { key: "league", title: "LİG YARIŞMALARI", hint: "Gerçek maçlarla XP · 10 XP = 1 yıldız", icon: "trophy" },
+  { key: "league", title: "LİG YARIŞMALARI", hint: "Gerçek maçlarla puan · puana göre yıldız", icon: "trophy" },
 ];
+
+/** Lig yarışmalarının satır alt yazısı (oyunlar XP vermez; puan yıldıza döner). */
+const LEAGUE_LINE: Record<string, string> = {
+  fantezi: "Haftalık puanına göre yıldız",
+  tahminLigi: "Tahmin puanına göre yıldız",
+  kulupArenasi: "Takımının haftalık yarışı",
+};
 
 /** Cihazdaki rekor anahtarları (oyun ekranlarıyla birebir). */
 const BEST_KEYS: Record<ArenaGame, string> = {
@@ -218,7 +227,7 @@ export default function OyunlarScreen() {
       const badge = g.key === "gunun" ? (local.daily ? `Bugün ${local.daily.correct}/${local.daily.total}` : "Bugünkü test hazır") : null;
       return { line: best != null ? `Rekor ${fmt(best)}` : "İlk rekorunu kur", stars, badge };
     }
-    return { line: "XP kazandırır", stars: null };
+    return { line: LEAGUE_LINE[g.key] ?? "Puanına göre yıldız", stars: null };
   };
 
   return (
@@ -263,7 +272,8 @@ export default function OyunlarScreen() {
         <View style={styles.sources}>
           <Source icon="extension-puzzle" tint={HUB.ribbon.puzzle[0]} title="Bulmaca" text="1–3 yıldız / seviye" />
           <Source icon="game-controller" tint={HUB.ribbon.arcade[0]} title="Bilgi · Arcade" text={city ? `bugün +${city.stars.arena_today ?? 0}/45 yıldız` : "skora göre yıldız"} />
-          <Source icon="ribbon" tint={HUB.ribbon.league[0]} title="Görev · Maç" text="10 XP = 1 yıldız" />
+          <Source icon="podium" tint={HUB.ribbon.league[0]} title="Lig oyunları" text="Tahmin · Fantezi puanı" />
+          <Source icon="flash" tint={HUB.ribbon.career[0]} title="Saha · Görev" text="10 XP = 1 yıldız" />
         </View>
 
         {me?.profile.daily.available ? (
@@ -308,9 +318,9 @@ export default function OyunlarScreen() {
 
         {/* 4) GÖREVLER VE KARİYER — XP buradan, şehirde yıldıza döner */}
         <View style={styles.section}>
-          <Ribbon icon="ribbon" title="GÖREVLER VE KARİYER" hint="XP kazan, şehirde yıldıza çevir" colors={HUB.ribbon.career} />
+          <Ribbon icon="ribbon" title="GÖREVLER VE KARİYER" hint="Saha + görev XP'si · 10 XP = 1 yıldız" colors={HUB.ribbon.career} />
           <View style={styles.list}>
-            <LinkRow icon="flag" title="Haftalık görevler" sub="Görev tamamla, XP kazan" onPress={() => go("/gorevler", true)} />
+            <LinkRow icon="flag" title="Haftalık görevler" sub="Oyun, şehir ve saha görevleriyle XP kazan" onPress={() => go("/gorevler", true)} />
             <LinkRow icon="ribbon" title="Elit Kariyer" sub="Seviye, Elit Kart ve rozetler" onPress={() => go("/kariyer")} />
             <LinkRow icon="sparkles" title="Sezon Özeti" sub="Sezonunun paylaşılabilir hikâyesi" onPress={() => go("/sezon-ozeti")} />
           </View>
@@ -475,8 +485,8 @@ function Source({ icon, tint, title, text }: { icon: keyof typeof Ionicons.glyph
       <View style={[styles.sourceIcon, { backgroundColor: tint }]}>
         <Ionicons name={icon} size={15} color={HUB.white} />
       </View>
-      <Text style={styles.sourceTitle} numberOfLines={1} {...textScale.badge}>{title}</Text>
-      <Text style={styles.sourceText} numberOfLines={1} {...textScale.badge}>{text}</Text>
+      <Text style={styles.sourceTitle} numberOfLines={1} adjustsFontSizeToFit {...textScale.badge}>{title}</Text>
+      <Text style={styles.sourceText} numberOfLines={2} {...textScale.badge}>{text}</Text>
     </View>
   );
 }
@@ -599,11 +609,11 @@ const styles = StyleSheet.create({
   goldText: { ...type.h3, fontFamily: fonts.bold, color: HUB.goldInk, letterSpacing: 1 },
   ghostBtn: { width: 56, height: 52, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: HUB.card, borderWidth: 2, borderColor: HUB.cardEdge },
 
-  sources: { flexDirection: "row", gap: space.sm },
-  source: { flex: 1, alignItems: "center", gap: 2, paddingVertical: space.sm, paddingHorizontal: space.xs, borderRadius: radius.lg, backgroundColor: HUB.card, borderWidth: 1, borderColor: HUB.cardEdge },
+  sources: { flexDirection: "row", gap: space.s },
+  source: { flex: 1, alignItems: "center", gap: 2, paddingVertical: space.sm, paddingHorizontal: space.xxs, borderRadius: radius.lg, backgroundColor: HUB.card, borderWidth: 1, borderColor: HUB.cardEdge },
   sourceIcon: { width: 28, height: 28, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", marginBottom: 2 },
   sourceTitle: { ...type.micro, fontFamily: fonts.bold, color: HUB.white },
-  sourceText: { ...type.micro, color: HUB.muted },
+  sourceText: { ...type.micro, color: HUB.muted, textAlign: "center" },
 
   dailyBar: { flexDirection: "row", alignItems: "center", gap: space.sm, padding: space.md, borderRadius: radius.lg, backgroundColor: HUB.card, borderWidth: 2, borderColor: HUB.star },
   dailyText: { ...type.label, fontFamily: fonts.bold, color: HUB.white, flex: 1 },

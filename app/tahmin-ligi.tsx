@@ -7,8 +7,9 @@
  *
  * Puan: tam skor 5 · doğru sonuç + gol farkı 3 · doğru sonuç 2. İsteğe bağlı
  * golcü tahmini ("kim gol atar?"): seçilen oyuncu gol atarsa +3. Puanlar
- * Kariyer Modu'nun Seyirci katmanına XP olarak geçer. Oyuncu kendi takımının
- * maçına tahmin yapamaz.
+ * Kulüp Şehri'ne YILDIZ olarak geçer (haftalık tavanla; tahminler XP vermez,
+ * XP yalnız sahadan ve görevlerden gelir). Oyuncu kendi takımının maçına
+ * tahmin yapamaz.
  */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";

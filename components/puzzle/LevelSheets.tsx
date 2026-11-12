@@ -9,7 +9,8 @@
  * "OYNA" düğmesi (4 px alt dudak).
  *
  * SONUÇ: kazanınca yıldızların tek tek yerine oturması (sonlu yay animasyonu),
- * jeton / XP / yıldız ödül hapları; kaybedince kırık kalp ve "Tekrar dene".
+ * jeton / şehir yıldızı ödül hapları (oyunlar XP vermez: XP yalnız sahadan ve
+ * görevlerden gelir); kaybedince kırık kalp ve "Tekrar dene".
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -358,7 +359,6 @@ export function ResultSheet({
   stars,
   level,
   coins,
-  xp,
   firstClear,
   summary,
   onNext,
@@ -373,7 +373,6 @@ export function ResultSheet({
   stars: number;
   level: number;
   coins: number;
-  xp: number;
   firstClear: boolean;
   summary?: string;
   onNext: () => void;
@@ -419,7 +418,6 @@ export function ResultSheet({
           </View>
           <View style={styles.rewards}>
             <Reward icon="disc" tint={S.gold} value={`+${coins}`} label="jeton" />
-            {xp > 0 ? <Reward icon="flash" tint={colors.brandAccent} value={`+${xp}`} label="XP" /> : null}
             {firstClear ? <Reward icon="star" tint={S.gold} value={`+${stars}`} label="şehir yıldızı" /> : null}
           </View>
         </>

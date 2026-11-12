@@ -87,7 +87,8 @@ export const CITY_UI = {
   goldLip: "#B07800",
   green: ["#6BEA62", "#22B33A"] as [string, string],
   greenLip: "#147A26",
-  sources: ["#FF7AA8", "#7EC8FF", "#FFD23F"] as [string, string, string],
+  /** Yıldız kaynakları: Lig Yolu · Oyunlar · Saha+Görev XP · Tahmin+Fantezi. */
+  sources: ["#FF7AA8", "#7EC8FF", "#FFD23F", "#5BE36B"] as [string, string, string, string],
   lockBg: "#C9CDD6",
   done: "#22C55E",
 } as const;

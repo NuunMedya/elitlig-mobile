@@ -5,7 +5,7 @@
  *   · oyunun Game bileşenini çizer (tahta + oyunun kendi hedef çubuğu);
  *   · güçlendirici stoğunu yerelde tutar, oyunun isteğini onaylar ve harcananı
  *     sayar (seviye sonunda sunucuya tek seferde bildirilir);
- *   · oyun bitince sonucu sunucuya yazar (yıldız, jeton, XP ya da can kaybı)
+ *   · oyun bitince sonucu sunucuya yazar (yıldız, jeton ya da can kaybı)
  *     ve Sonuç penceresini açar;
  *   · seviyeden çıkmak isteyene "çıkarsan 1 can gider" diye sorar (türün
  *     alışık olunan kuralı).
@@ -238,7 +238,6 @@ export default function PuzzlePlayScreen() {
           stars={result.res.stars}
           level={level}
           coins={result.server?.reward?.coins ?? 0}
-          xp={result.server?.reward?.xp ?? 0}
           firstClear={Boolean(result.server?.reward?.firstClear)}
           summary={result.res.summary}
           livesLeft={lives}

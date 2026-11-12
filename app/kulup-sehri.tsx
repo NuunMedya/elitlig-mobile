@@ -10,8 +10,9 @@
  *   · Üstte canlı 3B şehir (games/sehir.js, WebView): birime dokununca kamera
  *     uçar ve birimin kartı açılır; geliştirince inşaat oynar.
  *   · Yıldız cüzdanı: harcanabilir yıldız, kaynakları (Lig Yolu · Oyunlar ·
- *     Kariyer XP) ve "Yıldızları topla" — haftalık görev ve maç XP'sini
- *     yıldıza çevirir (10 XP = 1 yıldız).
+ *     Tahmin+Fantezi · Saha+Görev XP) ve "Yıldızları topla". Oyunlar ve lig
+ *     yarışmaları YILDIZI doğrudan verir (XP vermez); XP yalnız sahadan ve
+ *     görevlerden gelir ve burada yıldıza çevrilir (10 XP = 1 yıldız).
  *   · Kulüp statüsü ve gelişim puanı.
  *   · Birim kartları: şimdiki hâl, sıradaki basamak, maliyet ya da kilit.
  *
@@ -292,7 +293,8 @@ function Wallet({ city, collecting, onCollect, onHow }: { city: CityState; colle
       <View style={styles.sources}>
         <Source icon="extension-puzzle" label="Lig Yolu" value={s.puzzle} tint={CITY_UI.sources[0]} />
         <Source icon="game-controller" label="Oyunlar" value={s.arena} extra={s.arena_today ? `bugün +${s.arena_today}` : null} tint={CITY_UI.sources[1]} />
-        <Source icon="ribbon" label="Kariyer XP" value={s.xp} tint={CITY_UI.sources[2]} />
+        {s.tribun != null ? <Source icon="podium" label="Lig oyunları" value={s.tribun} tint={CITY_UI.sources[3]} /> : null}
+        <Source icon="flash" label="XP yıldızı" value={s.xp} tint={CITY_UI.sources[2]} />
       </View>
       <ChunkyButton
         label={collecting ? "TOPLANIYOR…" : claim > 0 ? `YILDIZLARI TOPLA · +${fmt(claim)}` : "TOPLANACAK YILDIZ YOK"}
@@ -307,7 +309,7 @@ function Wallet({ city, collecting, onCollect, onHow }: { city: CityState; colle
           ? `${fmt(city.xp.pending)} XP bekliyor · ${city.xp.per_star} XP = 1 yıldız`
           : city.xp.pending > 0
             ? `${fmt(city.xp.pending)} XP birikti · ${city.xp.per_star} XP'de bir yıldız`
-            : "Haftalık görevler ve gerçek maçlarla XP kazan, burada yıldıza çevir."}
+            : "XP sahadan ve haftalık görevlerden gelir; burada yıldıza çevir."}
       </Text>
     </View>
   );
@@ -513,7 +515,16 @@ function HowSheet({ visible, onClose, city, onGames, onQuests }: { visible: bool
           title="Oyunlar"
           text="Bölümlü oyunlarda (Penaltı, Savunma Hattı, Kadro Koşusu) geçtiğin her bölüm yaklaşık bir yıldız; puanlı oyunlarda (Slalom, Top Sektir, yarışmalar) puan eşikleri giderek uzar. Bir oyundan günde en çok 15, bütün oyunlardan 45 yıldız."
         />
-        <HowRow icon="ribbon" title="Kariyer XP" text={`Haftalık görevler, gerçek maçların, ödüllerin ve tahminlerin XP'si: ${city?.xp.per_star ?? 10} XP = 1 yıldız. "Yıldızları topla" ile havuza aktar.`} />
+        <HowRow
+          icon="podium"
+          title="Tahmin Ligi ve Fantezi"
+          text="Tutan tahminlerinin puanı ve biten Fantezi haftalarının puanı yıldız olarak gelir (haftalık tavanla). Bunlar XP vermez."
+        />
+        <HowRow
+          icon="flash"
+          title="XP: saha ve görevler"
+          text={`Oyunlar XP vermez. XP gerçek maçlardaki performansından ve haftalık görevlerden gelir: ${city?.xp.per_star ?? 10} XP = 1 yıldız. "Yıldızları topla" ile havuza aktar.`}
+        />
         {byGame.length ? (
           <View style={styles.byGame}>
             <Text style={styles.byGameTitle} {...textScale.dense}>

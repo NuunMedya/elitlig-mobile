@@ -1,21 +1,33 @@
 /**
- * GÖREVLER — haftalık XP görevlerinin tam ekranı (/gorevler).
+ * GÖREVLER — haftalık görevlerin tam ekranı (/gorevler).
+ *
+ * EKONOMİ (bu ekranın anlatması gereken ayrım):
+ *   · XP yalnız SAHADAN (gerçek maç performansı) ve GÖREVLERDEN gelir →
+ *     Elit Seviye ve XP sıralaması (Saha sıralaması ▸ XP).
+ *   · YILDIZ oyunlardan gelir (bulmaca, arcade, bilgi, Tahmin Ligi, Fantezi)
+ *     → Kulüp Şehri. XP de yıldıza çevrilir: 10 XP = 1 yıldız (Kulüp
+ *     Şehri'nde "Yıldızları topla"). Oyunlar doğrudan XP VERMEZ; oyun
+ *     oynatan GÖREVLER XP verir.
  *
  * NE (yukarıdan aşağı):
- *   · SAHNE: haftanın görev halkası (biten / toplam), Elit Seviye ilerlemesi
- *     ve sıradaki seviyeye KALAN XP, bu haftanın XP'si, bekleyen XP ve haftanın
- *     bitimine kalan süre (sunucu saatine göre; dakikada bir tazelenir).
- *   · BONUS YOLU: 10 · 20 · 30 · 40. görev durakları ve sıradaki bonusa kalan.
- *   · HAFTANIN OYUNU: o hafta görevleri öne çıkan mini oyun (tek dokunuşla oyna).
- *   · AÇIK GÖREVLER: kategori çipleri (Saha · Oyunlar · Tribün · Keşif) ve
- *     "Yeni" süzgeci; kartta zorluk, ilerleme, XP ve görevin yapıldığı ekrana
- *     giden "Git".
- *   · TAKIM GÖREVLERİ (haftalık + aylık; takımın varsa), tamamlananlar ve
- *     "XP nasıl kazanılır".
+ *   · SAHNE: bu haftanın XP'si, görev halkası (biten / toplam), Elit Seviye
+ *     ilerlemesi, XP sıralamasındaki yerin (dokununca Saha sıralaması ▸ XP),
+ *     bekleyen ödül ve haftanın yenilenmesine kalan süre (sunucu saatiyle).
+ *   · BONUS YOLU ve HAFTANIN OYUNU.
+ *   · SEKMELER: Hepsi · Saha · Oyun · Şehir · Tribün (açık görev sayılarıyla);
+ *     kartta kategori rengi / simgesi, zorluk, ilerleme (2 / 5 maç), ödül
+ *     (+XP, varsa +yıldız) ve görevin yapıldığı ekrana giden "Yap".
+ *   · TAKIM GÖREVLERİ, TAMAMLANANLAR (yeni bitenler kutlanır), "XP ve
+ *     Yıldız" açıklama kartı ve XP kuralları.
  *
- * ÖDÜL: görev XP'si sunucuda kendiliğinden yazılır (ayrı "ödülü al" adımı yok,
- * iki kez alınamaz). Yeni biten görevler bu ekran açıldığında bir kez toast +
- * titreşimle kutlanır (components/quests/useQuestCelebration).
+ * ÖDÜL: görev XP'si (ve varsa yıldızı) sunucuda kendiliğinden yazılır (ayrı
+ * "ödülü al" adımı yok, iki kez alınamaz). Yeni biten görevler bu ekran
+ * açıldığında bir kez toast + titreşim + kart kutlamasıyla gösterilir
+ * (components/quests/useQuestCelebration).
+ *
+ * ESKİ SUNUCU: `category`, `route`, `rewardXp`, `rewardStars`, `unit`,
+ * `difficulty` gelmeyebilir; lib/api/career.ts normalizeQuest eksikleri eski
+ * alanlardan doldurur, lib/quests.ts yedek rota haritasını tutar.
  *
  * Yönetim sekmesinin tepesindeki vitrin (components/quests/QuestSpotlight)
  * buraya açılır. Veri Elit Kariyer ile aynı önbellekten (["career","me"]).
@@ -24,17 +36,15 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ComponentProps } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { QuestCard, QUEST_CATEGORY_TINT } from "@/components/quests/QuestCard";
+import { QuestCard } from "@/components/quests/QuestCard";
 import { QuestBar, QuestRing } from "@/components/quests/QuestProgress";
 import { useQuestCelebration } from "@/components/quests/useQuestCelebration";
 import {
   Button,
-  Chip,
-  ChipGroup,
   EmptyState,
   ErrorState,
   GradientFill,
@@ -49,24 +59,23 @@ import {
   useRefresh,
   withAlpha,
 } from "@/components/ui";
-import {
-  getMyCareer,
-  getMyTeamQuests,
-  type CareerLayer,
-  type CareerQuest,
-  type QuestCategory,
-  type TeamQuest,
-} from "@/lib/api/career";
+import { getMyCareer, getMyTeamQuests, getXpLeaderboard, type CareerQuest, type TeamQuest } from "@/lib/api/career";
+import { questTone } from "@/lib/questPalette";
 import {
   LAYER_ICON,
-  LAYER_TITLES,
+  QUEST_CATEGORY_BLURB,
   QUEST_CATEGORY_ICON,
   QUEST_CATEGORY_LABEL,
-  QUEST_ROUTES,
+  QUEST_CATEGORY_ORDER,
+  XP_PER_STAR,
   categoryCounts,
   categoryOf,
+  earnedStars,
+  earnedXp,
   endsSoon,
+  gameRoute,
   nextBonus,
+  openStars,
   openXp,
   questRoute,
   serverNow,
@@ -75,13 +84,13 @@ import {
   weekXp,
   weeklyOf,
   xpToNextLevel,
+  type CategoryCount,
+  type QuestTab,
 } from "@/lib/quests";
 import { useAuth } from "@/providers/AuthProvider";
 import { animateNextLayout, colors, fonts, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
 
-const LAYERS: CareerLayer[] = ["saha", "tribun", "arena"];
-const LAYER_TINT: Record<CareerLayer, string> = { saha: colors.win, tribun: colors.yellowCard, arena: colors.brandOnDark };
-type Filter = "all" | "new" | QuestCategory;
+type Filter = "all" | QuestTab;
 
 const formatInt = (value: number) => value.toLocaleString("tr-TR");
 
@@ -108,10 +117,19 @@ export default function QuestsScreen() {
   const signedIn = Boolean(auth.user);
   const query = useQuery({ queryKey: ["career", "me"], queryFn: getMyCareer, enabled: signedIn, staleTime: 30_000 });
   const team = useQuery({ queryKey: ["career", "team"], queryFn: getMyTeamQuests, enabled: signedIn, staleTime: 30_000, retry: false });
+  /* XP sıralamasındaki yer (bu hafta): sahnedeki "Sıralama" kutusu. Gelmezse kutu "—" der. */
+  const rank = useQuery({
+    queryKey: ["career", "xp-rank", "week"],
+    queryFn: () => getXpLeaderboard({ period: "week" }),
+    enabled: signedIn,
+    staleTime: 60_000,
+    retry: false,
+  });
   const { refetch: refetchCareer } = query;
   const { refetch: refetchTeam } = team;
+  const { refetch: refetchRank } = rank;
 
-  /* Bir görevi yapıp geri dönünce ilerleme tazelensin (oyun, tahmin, takip…). */
+  /* Bir görevi yapıp geri dönünce ilerleme tazelensin (oyun, tahmin, şehir…). */
   useFocusEffect(
     useCallback(() => {
       if (signedIn) void refetchCareer();
@@ -122,6 +140,7 @@ export default function QuestsScreen() {
     () => {
       void refetchCareer();
       void refetchTeam();
+      void refetchRank();
     },
     { refreshing: query.isRefetching && !query.isLoading }
   );
@@ -130,21 +149,16 @@ export default function QuestsScreen() {
   const fresh = useQuestCelebration(data, auth.user?.id ?? null);
   const weekly = useMemo(() => (data ? weeklyOf(data) : null), [data]);
   const counts = useMemo(() => (weekly ? categoryCounts(weekly) : []), [weekly]);
-  const newCount = useMemo(() => weekly?.active.filter((quest) => quest.is_new).length ?? 0, [weekly]);
   const active = useMemo(() => {
     if (!weekly) return [];
     const list = sortForList(weekly.active);
-    if (filter === "all") return list;
-    if (filter === "new") return list.filter((quest) => quest.is_new);
-    return list.filter((quest) => categoryOf(quest) === filter);
+    return filter === "all" ? list : list.filter((quest) => categoryOf(quest) === filter);
   }, [filter, weekly]);
-
-  /* Süzgeçteki kategori boşaldıysa (görevler bitti) "Tümü"ne dön. */
-  useEffect(() => {
-    if (!weekly || filter === "all") return;
-    const stillThere = filter === "new" ? newCount > 0 : counts.some((item) => item.key === filter && item.open > 0);
-    if (!stillThere) setFilter("all");
-  }, [weekly, filter, counts, newCount]);
+  const completed = useMemo(() => {
+    if (!weekly) return [];
+    /* Yeni bitenler en üstte. */
+    return [...weekly.completed].sort((a, b) => Number(fresh.has(b.code)) - Number(fresh.has(a.code)));
+  }, [weekly, fresh]);
 
   const open = useCallback(
     (quest: CareerQuest) => {
@@ -161,7 +175,7 @@ export default function QuestsScreen() {
         <EmptyState
           icon="flash-outline"
           title="Haftalık görevler üyelere açık"
-          body="Giriş yap; maç, tahmin, oyun ve keşif görevleriyle her hafta XP kazan, Elit Seviye'ni yükselt."
+          body="Giriş yap; saha, oyun, şehir ve tribün görevleriyle her hafta XP kazan, Elit Seviye'ni yükselt."
           action={{ label: "Giriş yap", onPress: () => router.push("/giris") }}
         />
       </SafeAreaView>
@@ -171,15 +185,22 @@ export default function QuestsScreen() {
   const now = data ? serverNow(data.week?.server_time, query.dataUpdatedAt, clock) : clock;
   const left = data ? timeLeft(data.week?.ends_at, now) : null;
   const soon = data ? endsSoon(data.week?.ends_at, now) : false;
-  const featuredRoute = weekly?.featured ? QUEST_ROUTES[weekly.featured.game === "tahmin" ? "tahmin_oyun" : weekly.featured.game] : undefined;
+  const featuredRoute = weekly?.featured ? gameRoute(weekly.featured.game) : null;
+  const myRank = rank.data?.me?.rank ?? null;
+  const thisWeek = data ? weekXp(data) : null;
+  const pendingXp = weekly ? openXp(weekly) : 0;
+  const pendingStars = weekly ? openStars(weekly) : 0;
+  const toNext = data ? xpToNextLevel(data.level) : null;
+  const selected = filter === "all" ? null : counts.find((item) => item.key === filter);
+  const rules = (data?.rules.standard ?? []).filter((rule) => rule.layer !== "arena");
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      <ScreenHeader title="Görevler" subtitle="Görev tamamla, XP kazan, seviye atla" back scrollY={scrollY} />
+      <ScreenHeader title="Haftalık görevler" subtitle="Görev bitir, XP kazan, sıralamada yüksel" back scrollY={scrollY} />
       {query.isLoading ? (
         <View style={styles.pad}>
-          <Skeleton height={196} radius="xxl" />
-          <SkeletonCard lines={2} />
+          <Skeleton height={236} radius="xxl" />
+          <Skeleton height={64} radius="xl" />
           <SkeletonCard lines={3} />
           <SkeletonCard lines={3} />
         </View>
@@ -187,12 +208,41 @@ export default function QuestsScreen() {
         <ErrorState error={query.error} onRetry={() => query.refetch()} />
       ) : (
         <ScrollView {...scrollProps} contentContainerStyle={styles.content} refreshControl={refresh.control} showsVerticalScrollIndicator={false}>
-          {/* SAHNE: hafta + seviye */}
+          {/* SAHNE */}
           <Reveal index={0}>
             <View style={styles.hero}>
               <GradientFill tone="ink" />
+              <View style={styles.heroBadges}>
+                <View style={styles.weekPill}>
+                  <Ionicons name="calendar-outline" size={12} color={colors.brandOnDark} />
+                  <Text style={styles.weekPillText} {...textScale.badge}>
+                    {upperTR("Bu hafta")}
+                  </Text>
+                </View>
+                {left ? (
+                  <View style={[styles.timePill, soon ? styles.timePillSoon : null]}>
+                    <Ionicons name="time-outline" size={12} color={soon ? colors.yellowCard : colors.onDarkMuted} />
+                    <Text style={[styles.timeText, soon ? styles.timeTextSoon : null]} {...textScale.badge}>
+                      Yenilenmeye {left}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+
               <View style={styles.heroTop}>
-                <QuestRing value={weekly.total ? weekly.done_count / weekly.total : 0}>
+                <View style={styles.flex}>
+                  <Text style={styles.heroOverline} {...textScale.badge}>
+                    {upperTR("Bu haftaki XP'n")}
+                  </Text>
+                  <Text style={styles.heroXp} numberOfLines={1} {...textScale.badge}>
+                    {thisWeek != null ? `+${formatInt(thisWeek)}` : `+${formatInt(earnedXp(weekly))}`}
+                    <Text style={styles.heroXpUnit}> XP</Text>
+                  </Text>
+                  <Text style={styles.heroSub} {...textScale.dense}>
+                    Saha + görevler
+                  </Text>
+                </View>
+                <QuestRing value={weekly.total ? weekly.done_count / weekly.total : 0} size={88}>
                   <Text style={styles.ringValue} {...textScale.badge}>
                     {weekly.done_count}
                   </Text>
@@ -200,60 +250,51 @@ export default function QuestsScreen() {
                     / {weekly.total} GÖREV
                   </Text>
                 </QuestRing>
-                <View style={styles.flex}>
-                  <View style={styles.heroBadges}>
-                    <View style={styles.weekPill}>
-                      <Text style={styles.weekPillText} {...textScale.badge}>
-                        {upperTR("Bu hafta")}
-                      </Text>
-                    </View>
-                    {left ? (
-                      <View style={[styles.timePill, soon ? styles.timePillSoon : null]}>
-                        <Ionicons name="time-outline" size={12} color={soon ? colors.yellowCard : colors.onDarkMuted} />
-                        <Text style={[styles.timeText, soon ? styles.timeTextSoon : null]} {...textScale.badge}>
-                          {left} kaldı
-                        </Text>
-                      </View>
-                    ) : null}
-                  </View>
-                  <Text style={styles.heroTitle} {...textScale.dense}>
-                    Elit Seviye {data.level.level}
-                  </Text>
-                  <Text style={styles.heroSub} {...textScale.dense}>
-                    {xpToNextLevel(data.level) != null
-                      ? `Sıradaki seviyeye ${formatInt(xpToNextLevel(data.level) ?? 0)} XP`
-                      : "En üst seviyedesin"}
-                  </Text>
-                  <QuestBar
-                    value={data.level.progress}
-                    color={colors.yellowCard}
-                    track={colors.inkTile}
-                    height={8}
-                    style={styles.levelBar}
-                  />
-                </View>
               </View>
+
+              <Touchable
+                onPress={() => router.push("/kariyer")}
+                style={styles.levelRow}
+                accessibilityRole="button"
+                accessibilityLabel={`Elit Seviye ${data.level.level}. ${toNext != null ? `Sıradaki seviyeye ${toNext} XP` : "En üst seviye"}`}
+              >
+                <View style={styles.levelBadge}>
+                  <Text style={styles.levelBadgeLabel} {...textScale.badge}>
+                    SEVİYE
+                  </Text>
+                  <Text style={styles.levelBadgeValue} {...textScale.badge}>
+                    {data.level.level}
+                  </Text>
+                </View>
+                <View style={styles.flex}>
+                  <View style={styles.levelHead}>
+                    <Text style={styles.levelTitle} {...textScale.dense}>
+                      Elit Seviye
+                    </Text>
+                    <Text style={styles.levelHint} numberOfLines={1} {...textScale.badge}>
+                      {toNext != null ? `${formatInt(toNext)} XP kaldı` : "En üst seviye"}
+                    </Text>
+                  </View>
+                  <QuestBar value={data.level.progress} color={colors.yellowCard} track={colors.inkTile} height={8} />
+                </View>
+              </Touchable>
 
               <View style={styles.heroStats}>
-                <HeroStat label="Bu hafta" value={weekXp(data) != null ? `+${formatInt(weekXp(data) ?? 0)}` : "—"} unit="XP" />
+                <HeroStat
+                  icon="podium"
+                  label="XP sırası"
+                  value={myRank ? `${formatInt(myRank)}.` : "—"}
+                  onPress={() => router.push({ pathname: "/saha-siralamasi", params: { type: "xp" } })}
+                />
                 <View style={styles.heroDivider} />
-                <HeroStat label="Bekleyen" value={formatInt(openXp(weekly))} unit="XP" />
+                <HeroStat icon="flash" label="Bekleyen" value={`${formatInt(pendingXp)} XP`} />
                 <View style={styles.heroDivider} />
-                <HeroStat label="Sırada" value={String(weekly.locked)} unit="görev" />
+                {pendingStars ? (
+                  <HeroStat icon="star" label="Bonus yıldız" value={`+${formatInt(pendingStars)}`} />
+                ) : (
+                  <HeroStat icon="lock-closed" label="Sırada" value={`${weekly.locked} görev`} />
+                )}
               </View>
-
-              {data.layers_week ? (
-                <View style={styles.layerRow}>
-                  {LAYERS.map((layer) => (
-                    <View key={layer} style={styles.layerChip}>
-                      <Ionicons name={LAYER_ICON[layer]} size={13} color={LAYER_TINT[layer]} />
-                      <Text style={styles.layerChipText} {...textScale.badge}>
-                        {LAYER_TITLES[layer]} +{formatInt(data.layers_week?.[layer] ?? 0)}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              ) : null}
             </View>
           </Reveal>
 
@@ -275,58 +316,34 @@ export default function QuestsScreen() {
                 accessibilityRole="button"
                 accessibilityLabel={`Haftanın oyunu ${weekly.featured.title}. Görevleri bu hafta öncelikli. Oyna.`}
               >
-                <View style={styles.featuredIcon}>
-                  <Ionicons name="star" size={18} color={colors.warn} />
+                <View style={[styles.featuredIcon, { backgroundColor: questTone("oyun").bg }]}>
+                  <Ionicons name="flame" size={20} color={questTone("oyun").fg} />
                 </View>
                 <View style={styles.flex}>
-                  <Text style={styles.featuredOverline} {...textScale.badge}>
+                  <Text style={[styles.featuredOverline, { color: questTone("oyun").fg }]} {...textScale.badge}>
                     {upperTR("Haftanın oyunu")}
                   </Text>
                   <Text style={styles.featuredTitle} numberOfLines={1} {...textScale.dense}>
                     {weekly.featured.title}
                   </Text>
                   <Text style={styles.featuredSub} numberOfLines={1} {...textScale.dense}>
-                    Bu oyunun görevleri bu hafta sırada önde.
+                    Görevleri bu hafta sırada önde
                   </Text>
                 </View>
-                <View style={styles.featuredGo}>
-                  <Text style={styles.featuredGoText} {...textScale.badge}>
+                <View style={[styles.featuredGo, { backgroundColor: questTone("oyun").solid }]}>
+                  <Text style={[styles.featuredGoText, { color: questTone("oyun").onSolid }]} {...textScale.badge}>
                     Oyna
                   </Text>
-                  <Ionicons name="play" size={12} color={colors.textOnBrand} />
+                  <Ionicons name="play" size={12} color={questTone("oyun").onSolid} />
                 </View>
               </Touchable>
             </Reveal>
           ) : null}
 
-          {/* AÇIK GÖREVLER */}
-          <SectionHeader
-            title="Açık görevler"
-            meta={newCount ? `${newCount} yeni görev` : `${weekly.active.length} görev`}
-            inset="flush"
-          />
-          <ChipGroup contentPadding={0}>
-            <Chip label="Tümü" count={weekly.active.length} selected={filter === "all"} onPress={() => setFilter("all")} size="sm" />
-            {newCount ? (
-              <Chip label="Yeni" icon="sparkles" count={newCount} selected={filter === "new"} onPress={() => setFilter("new")} size="sm" />
-            ) : null}
-            {counts.map((item) =>
-              item.open ? (
-                <Chip
-                  key={item.key}
-                  label={QUEST_CATEGORY_LABEL[item.key]}
-                  icon={QUEST_CATEGORY_ICON[item.key]}
-                  count={item.open}
-                  selected={filter === item.key}
-                  onPress={() => setFilter(item.key)}
-                  size="sm"
-                />
-              ) : null
-            )}
-          </ChipGroup>
-
-          {/* Kategori özeti: seçili kategoride kaç görev bitti. */}
-          {filter !== "all" && filter !== "new" ? <CategorySummary item={counts.find((item) => item.key === filter)} /> : null}
+          {/* SEKMELER */}
+          <SectionHeader title="Açık görevler" meta={`${weekly.active.length} görev · ${formatInt(pendingXp)} XP`} inset="flush" />
+          <CategoryTabs value={filter} onChange={setFilter} counts={counts} total={weekly.active.length} />
+          {selected ? <CategorySummary item={selected} /> : null}
 
           {active.length ? (
             active.map((quest, index) => (
@@ -334,10 +351,10 @@ export default function QuestsScreen() {
             ))
           ) : (
             <View style={styles.empty}>
-              <Ionicons name={weekly.active.length ? "funnel-outline" : "trophy"} size={22} color={colors.win} />
+              <Ionicons name={weekly.active.length ? "checkmark-done" : "trophy"} size={22} color={colors.win} />
               <Text style={styles.emptyText} {...textScale.long}>
                 {weekly.active.length
-                  ? "Bu süzgeçte açık görev kalmadı."
+                  ? `${QUEST_CATEGORY_LABEL[filter as QuestTab] ?? "Bu"} sekmesinde açık görev kalmadı. Diğer sekmelere göz at.`
                   : "Bu haftanın bütün görevleri bitti. Yeni görevler Pazartesi 00.00'da gelir."}
               </Text>
             </View>
@@ -349,6 +366,39 @@ export default function QuestsScreen() {
                 Bir görevi bitirince yerine yenisi açılır · sırada {weekly.locked} görev var.
               </Text>
             </View>
+          ) : null}
+
+          {/* TAMAMLANANLAR */}
+          {completed.length ? (
+            <>
+              <Touchable
+                onPress={() => {
+                  animateNextLayout();
+                  setShowDone((value) => !value);
+                }}
+                style={styles.foldHead}
+                accessibilityRole="button"
+                accessibilityState={{ expanded: showDone }}
+              >
+                <View style={[styles.foldIcon, { backgroundColor: colors.winDim }]}>
+                  <Ionicons name="checkmark-done" size={16} color={colors.win} />
+                </View>
+                <Text style={styles.foldTitle} {...textScale.dense}>
+                  Tamamlananlar
+                </Text>
+                <Text style={styles.foldMeta} {...textScale.badge}>
+                  {completed.length} görev · +{formatInt(earnedXp(weekly))} XP
+                  {earnedStars(weekly) ? ` · +${formatInt(earnedStars(weekly))}` : ""}
+                </Text>
+                {earnedStars(weekly) ? <Ionicons name="star" size={11} color={colors.warn} /> : null}
+                <Ionicons name={showDone ? "chevron-up" : "chevron-down"} size={16} color={colors.textTertiary} />
+              </Touchable>
+              {completed
+                .filter((quest) => showDone || fresh.has(quest.code))
+                .map((quest) => (
+                  <QuestCard key={quest.code} quest={quest} fresh={fresh.has(quest.code)} />
+                ))}
+            </>
           ) : null}
 
           {/* TAKIM GÖREVLERİ */}
@@ -414,37 +464,11 @@ export default function QuestsScreen() {
             </>
           ) : null}
 
-          {/* TAMAMLANANLAR */}
-          {weekly.completed.length ? (
-            <>
-              <Touchable
-                onPress={() => {
-                  animateNextLayout();
-                  setShowDone((value) => !value);
-                }}
-                style={styles.foldHead}
-                accessibilityRole="button"
-                accessibilityState={{ expanded: showDone }}
-              >
-                <Ionicons name="checkmark-done" size={18} color={colors.win} />
-                <Text style={styles.foldTitle} {...textScale.dense}>
-                  Tamamlananlar
-                </Text>
-                <Text style={styles.foldMeta} {...textScale.badge}>
-                  {weekly.completed.length} görev · +{formatInt(weekly.completed.reduce((sum, quest) => sum + quest.xp, 0))} XP
-                </Text>
-                <Ionicons name={showDone ? "chevron-up" : "chevron-down"} size={16} color={colors.textTertiary} />
-              </Touchable>
-              {showDone || fresh.size
-                ? weekly.completed
-                    .filter((quest) => showDone || fresh.has(quest.code))
-                    .map((quest) => <QuestCard key={quest.code} quest={quest} fresh={fresh.has(quest.code)} />)
-                : null}
-            </>
-          ) : null}
+          {/* XP ve YILDIZ */}
+          <EconomyCard onCity={() => router.push("/kulup-sehri")} onGames={() => router.push("/(tabs)/oyunlar")} />
 
-          {/* XP KURALLARI */}
-          {data.rules.standard?.length ? (
+          {/* XP KURALLARI (yalnız saha + tribün kuralları: oyunlar XP vermez) */}
+          {rules.length ? (
             <>
               <Touchable
                 onPress={() => {
@@ -455,22 +479,24 @@ export default function QuestsScreen() {
                 accessibilityRole="button"
                 accessibilityState={{ expanded: showRules }}
               >
-                <Ionicons name="help-circle-outline" size={18} color={colors.brandAccent} />
+                <View style={[styles.foldIcon, { backgroundColor: colors.brandDim }]}>
+                  <Ionicons name="list" size={16} color={colors.brandAccent} />
+                </View>
                 <Text style={styles.foldTitle} {...textScale.dense}>
-                  XP nasıl kazanılır
+                  Sahada XP tablosu
                 </Text>
                 <Ionicons name={showRules ? "chevron-up" : "chevron-down"} size={16} color={colors.textTertiary} />
               </Touchable>
               {showRules ? (
                 <View style={styles.rules}>
-                  {data.rules.standard.map((rule, index) => (
+                  {rules.map((rule, index) => (
                     <View key={`${rule.layer}-${index}`} style={[styles.rule, index ? styles.ruleBorder : null]}>
                       <Ionicons name={LAYER_ICON[rule.layer]} size={14} color={colors.textTertiary} />
                       <Text style={styles.ruleText} {...textScale.dense}>
                         {rule.label}
                       </Text>
                       <Text style={styles.ruleXp} {...textScale.badge}>
-                        +{rule.xp}
+                        +{rule.xp} XP
                       </Text>
                     </View>
                   ))}
@@ -497,16 +523,178 @@ export default function QuestsScreen() {
 
 /* ───────────────────────── Parçalar ───────────────────────── */
 
-function HeroStat({ label, value, unit }: { label: string; value: string; unit: string }) {
+type IconName = ComponentProps<typeof Ionicons>["name"];
+
+function HeroStat({ icon, label, value, onPress }: { icon: IconName; label: string; value: string; onPress?: () => void }) {
+  const body = (
+    <>
+      <View style={styles.heroStatHead}>
+        <Ionicons name={icon} size={12} color={icon === "star" || icon === "flash" ? colors.yellowCard : colors.brandOnDark} />
+        <Text style={styles.heroStatLabel} numberOfLines={1} {...textScale.badge}>
+          {upperTR(label)}
+        </Text>
+      </View>
+      <View style={styles.heroStatValueRow}>
+        <Text style={styles.heroStatValue} numberOfLines={1} {...textScale.badge}>
+          {value}
+        </Text>
+        {onPress ? <Ionicons name="chevron-forward" size={12} color={colors.onDarkMuted} /> : null}
+      </View>
+    </>
+  );
+  if (onPress) {
+    return (
+      <Touchable onPress={onPress} style={styles.heroStat} accessibilityRole="button" accessibilityLabel={`${label}: ${value}. Sıralamayı aç`} haptic="selection">
+        {body}
+      </Touchable>
+    );
+  }
   return (
-    <View style={styles.heroStat} accessible accessibilityLabel={`${label}: ${value} ${unit}`}>
-      <Text style={styles.heroStatValue} numberOfLines={1} {...textScale.badge}>
-        {value}
-        <Text style={styles.heroStatUnit}> {unit}</Text>
-      </Text>
-      <Text style={styles.heroStatLabel} {...textScale.badge}>
-        {upperTR(label)}
-      </Text>
+    <View style={styles.heroStat} accessible accessibilityLabel={`${label}: ${value}`}>
+      {body}
+    </View>
+  );
+}
+
+/** Hepsi · Saha · Oyun · Şehir · Tribün — açık görev sayılarıyla; seçili sekme kategori renginde dolar. */
+function CategoryTabs({
+  value,
+  onChange,
+  counts,
+  total,
+}: {
+  value: Filter;
+  onChange: (next: Filter) => void;
+  counts: CategoryCount[];
+  total: number;
+}) {
+  const items: { key: Filter; label: string; icon: IconName; open: number; done: number }[] = [
+    { key: "all", label: "Hepsi", icon: "apps", open: total, done: 0 },
+    ...QUEST_CATEGORY_ORDER.map((key) => {
+      const count = counts.find((item) => item.key === key);
+      return { key, label: QUEST_CATEGORY_LABEL[key], icon: QUEST_CATEGORY_ICON[key], open: count?.open ?? 0, done: count?.done ?? 0 };
+    }),
+  ];
+  return (
+    <View style={styles.tabs} accessibilityRole="tablist">
+      {items.map((item) => {
+        const selected = value === item.key;
+        const tone = item.key === "all" ? null : questTone(item.key);
+        const fill = tone ? tone.solid : colors.brand;
+        const ink = tone ? tone.onSolid : colors.textOnBrand;
+        const fg = tone ? tone.fg : colors.brandAccent;
+        const allDone = item.key !== "all" && item.open === 0 && item.done > 0;
+        const empty = item.key !== "all" && item.open === 0 && item.done === 0;
+        return (
+          <Touchable
+            key={item.key}
+            onPress={() => {
+              animateNextLayout();
+              onChange(item.key);
+            }}
+            style={[styles.tab, selected ? { backgroundColor: fill, borderColor: fill } : null, empty && !selected ? styles.tabEmpty : null]}
+            haptic="selection"
+            accessibilityRole="tab"
+            accessibilityState={{ selected }}
+            accessibilityLabel={`${item.label}: ${item.open} açık görev`}
+          >
+            <Ionicons name={allDone ? "checkmark-circle" : item.icon} size={18} color={selected ? ink : allDone ? colors.win : fg} />
+            <Text style={[styles.tabLabel, selected ? { color: ink } : null]} numberOfLines={1} {...textScale.badge}>
+              {item.label}
+            </Text>
+            <View style={[styles.tabCount, selected ? { backgroundColor: withAlpha(ink, 0.18) } : null]}>
+              <Text style={[styles.tabCountText, selected ? { color: ink } : null]} {...textScale.badge}>
+                {item.open}
+              </Text>
+            </View>
+          </Touchable>
+        );
+      })}
+    </View>
+  );
+}
+
+function CategorySummary({ item }: { item: CategoryCount }) {
+  const tone = questTone(item.key);
+  return (
+    <View style={[styles.catSummary, { backgroundColor: tone.bg }]}>
+      <View style={styles.flex}>
+        <Text style={[styles.catTitle, { color: tone.fg }]} {...textScale.dense}>
+          {QUEST_CATEGORY_LABEL[item.key]} · {item.done}/{item.total} tamamlandı
+        </Text>
+        <Text style={styles.catText} numberOfLines={1} {...textScale.dense}>
+          {QUEST_CATEGORY_BLURB[item.key]}
+        </Text>
+      </View>
+      <QuestBar value={item.total ? item.done / item.total : 0} color={tone.fg} track={withAlpha(tone.fg, 0.16)} style={styles.catBar} />
+    </View>
+  );
+}
+
+/** XP ile yıldızın ayrımı: nereden gelir, ne işe yarar, nasıl çevrilir. */
+function EconomyCard({ onCity, onGames }: { onCity: () => void; onGames: () => void }) {
+  const saha = questTone("saha");
+  const sehir = questTone("sehir");
+  return (
+    <View style={styles.eco}>
+      <View style={styles.ecoHead}>
+        <Ionicons name="information-circle" size={18} color={colors.brandAccent} />
+        <Text style={styles.ecoTitle} {...textScale.dense}>
+          XP ve Yıldız: iki ayrı yol
+        </Text>
+      </View>
+
+      <View style={styles.ecoRow}>
+        <View style={[styles.ecoIcon, { backgroundColor: saha.bg }]}>
+          <Ionicons name="flash" size={18} color={saha.fg} />
+        </View>
+        <View style={styles.flex}>
+          <Text style={styles.ecoLabel} {...textScale.dense}>
+            XP sahadan ve görevlerden gelir
+          </Text>
+          <Text style={styles.ecoText} {...textScale.long}>
+            Gerçek maçlardaki performansın ve haftalık görevler. Elit Seviye'ni ve XP sıralamandaki yerini belirler.
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.ecoRow}>
+        <View style={[styles.ecoIcon, { backgroundColor: sehir.bg }]}>
+          <Ionicons name="star" size={18} color={sehir.fg} />
+        </View>
+        <View style={styles.flex}>
+          <Text style={styles.ecoLabel} {...textScale.dense}>
+            Yıldız oyunlardan gelir
+          </Text>
+          <Text style={styles.ecoText} {...textScale.long}>
+            Bulmaca, arcade ve bilgi oyunları, Tahmin Ligi ve Fantezi. Kulüp Şehri yıldızla kurulur.
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.ecoConvert}>
+        <View style={styles.ecoPill}>
+          <Ionicons name="flash" size={12} color={colors.inkBlock} />
+          <Text style={styles.ecoPillText} {...textScale.badge}>
+            {XP_PER_STAR} XP
+          </Text>
+        </View>
+        <Ionicons name="arrow-forward" size={14} color={colors.textTertiary} />
+        <View style={[styles.ecoPill, { backgroundColor: sehir.bg }]}>
+          <Ionicons name="star" size={12} color={sehir.fg} />
+          <Text style={[styles.ecoPillText, { color: sehir.fg }]} {...textScale.badge}>
+            1 yıldız
+          </Text>
+        </View>
+        <Text style={styles.ecoConvertText} numberOfLines={2} {...textScale.dense}>
+          Kulüp Şehri'nde "Yıldızları topla"
+        </Text>
+      </View>
+
+      <View style={styles.ecoActions}>
+        <Button label="Kulüp Şehri" icon="business-outline" variant="secondary" size="sm" onPress={onCity} style={styles.flex} />
+        <Button label="Oyunlar" icon="game-controller-outline" variant="secondary" size="sm" onPress={onGames} style={styles.flex} />
+      </View>
     </View>
   );
 }
@@ -563,19 +751,6 @@ function BonusTrack({
   );
 }
 
-function CategorySummary({ item }: { item?: { key: QuestCategory; open: number; done: number; total: number } }) {
-  if (!item || !item.total) return null;
-  const tint = QUEST_CATEGORY_TINT[item.key];
-  return (
-    <View style={styles.catSummary}>
-      <Text style={styles.catText} {...textScale.dense}>
-        {QUEST_CATEGORY_LABEL[item.key]} · {item.done}/{item.total} tamamlandı
-      </Text>
-      <QuestBar value={item.done / item.total} color={tint} style={styles.catBar} />
-    </View>
-  );
-}
-
 function TeamQuestRow({ quest }: { quest: TeamQuest }) {
   const ratio = quest.target ? Math.min(1, quest.progress / quest.target) : 0;
   const tint = quest.done ? colors.win : colors.warn;
@@ -622,28 +797,34 @@ const styles = StyleSheet.create({
 
   /* — Sahne — */
   hero: { borderRadius: radius.xxl, overflow: "hidden", backgroundColor: colors.inkBlock, padding: space.lg, gap: space.md },
-  heroTop: { flexDirection: "row", alignItems: "center", gap: space.lg },
-  ringValue: { ...type.scoreMd, color: colors.onDark },
-  ringLabel: { ...type.nano, color: colors.onDarkMuted },
-  heroBadges: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: space.s, marginBottom: space.xs },
-  weekPill: { paddingHorizontal: space.sm, paddingVertical: space.xxs, borderRadius: radius.pill, backgroundColor: colors.inkPill, borderWidth: hairline, borderColor: colors.inkPillBorder },
+  heroBadges: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: space.s },
+  weekPill: { flexDirection: "row", alignItems: "center", gap: space.xxs, paddingHorizontal: space.sm, paddingVertical: space.xxs, borderRadius: radius.pill, backgroundColor: colors.inkPill, borderWidth: hairline, borderColor: colors.inkPillBorder },
   weekPillText: { ...type.micro, color: colors.brandOnDark },
   timePill: { flexDirection: "row", alignItems: "center", gap: space.xxs, paddingHorizontal: space.sm, paddingVertical: space.xxs, borderRadius: radius.pill, backgroundColor: colors.inkTile },
   timePillSoon: { borderWidth: hairline, borderColor: colors.yellowCard },
   timeText: { ...type.micro, color: colors.onDarkMuted },
   timeTextSoon: { color: colors.yellowCard },
-  heroTitle: { ...type.h1, color: colors.onDark },
-  heroSub: { ...type.bodySm, color: colors.onDarkMuted },
-  levelBar: { marginTop: space.sm },
-  heroStats: { flexDirection: "row", borderRadius: radius.lg, backgroundColor: colors.inkTile, borderWidth: hairline, borderColor: colors.inkTileBorder, paddingVertical: space.md },
-  heroStat: { flex: 1, alignItems: "center", gap: space.xxs },
-  heroStatValue: { ...type.metricSm, color: colors.onDark },
-  heroStatUnit: { ...type.caption, color: colors.onDarkMuted },
-  heroStatLabel: { ...type.overline, color: colors.onDarkMuted },
+  heroTop: { flexDirection: "row", alignItems: "center", gap: space.lg },
+  heroOverline: { ...type.overline, color: colors.onDarkMuted },
+  heroXp: { ...type.scoreLg, color: colors.yellowCard },
+  heroXpUnit: { ...type.h3, color: colors.yellowCard },
+  heroSub: { ...type.caption, color: colors.onDarkMuted },
+  ringValue: { ...type.scoreMd, color: colors.onDark },
+  ringLabel: { ...type.nano, color: colors.onDarkMuted },
+  levelRow: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.sm, borderRadius: radius.lg, backgroundColor: colors.inkTile, borderWidth: hairline, borderColor: colors.inkTileBorder },
+  levelBadge: { width: 46, height: 46, borderRadius: radius.md, alignItems: "center", justifyContent: "center", backgroundColor: colors.yellowCard },
+  levelBadgeLabel: { ...type.nano, color: colors.inkBlock },
+  levelBadgeValue: { ...type.metricSm, color: colors.inkBlock },
+  levelHead: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: space.sm, marginBottom: space.xs },
+  levelTitle: { ...type.h4, color: colors.onDark },
+  levelHint: { ...type.caption, color: colors.onDarkMuted, flexShrink: 1 },
+  heroStats: { flexDirection: "row", borderRadius: radius.lg, backgroundColor: colors.inkTile, borderWidth: hairline, borderColor: colors.inkTileBorder },
+  heroStat: { flex: 1, gap: space.xxs, paddingVertical: space.sm, paddingHorizontal: space.sm, minHeight: layout.minTouch },
+  heroStatHead: { flexDirection: "row", alignItems: "center", gap: space.xxs },
+  heroStatLabel: { ...type.nano, color: colors.onDarkMuted, flexShrink: 1 },
+  heroStatValueRow: { flexDirection: "row", alignItems: "center", gap: space.xxs },
+  heroStatValue: { ...type.h3, fontFamily: fonts.bold, color: colors.onDark, flexShrink: 1 },
   heroDivider: { width: hairline, alignSelf: "stretch", backgroundColor: colors.borderOnDark },
-  layerRow: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
-  layerChip: { flexDirection: "row", alignItems: "center", gap: space.xs, paddingHorizontal: space.sm, paddingVertical: space.xs, borderRadius: radius.pill, backgroundColor: colors.inkPill },
-  layerChipText: { ...type.micro, color: colors.onDark },
 
   /* — Bonus yolu — */
   bonusCard: { gap: space.sm, padding: space.md, borderRadius: radius.xl, backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border },
@@ -660,17 +841,37 @@ const styles = StyleSheet.create({
 
   /* — Haftanın oyunu — */
   featured: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderRadius: radius.xl, backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border },
-  featuredIcon: { width: 42, height: 42, borderRadius: radius.md, alignItems: "center", justifyContent: "center", backgroundColor: colors.warnDim },
-  featuredOverline: { ...type.overline, color: colors.warn },
+  featuredIcon: { width: 44, height: 44, borderRadius: radius.lg, alignItems: "center", justifyContent: "center" },
+  featuredOverline: { ...type.overline },
   featuredTitle: { ...type.h2, color: colors.textPrimary },
   featuredSub: { ...type.caption, color: colors.textSecondary },
-  featuredGo: { flexDirection: "row", alignItems: "center", gap: space.xs, paddingHorizontal: space.md, minHeight: 32, borderRadius: radius.pill, backgroundColor: colors.brand },
-  featuredGoText: { ...type.label, color: colors.textOnBrand },
+  featuredGo: { flexDirection: "row", alignItems: "center", gap: space.xs, paddingHorizontal: space.md, minHeight: 34, borderRadius: radius.pill },
+  featuredGoText: { ...type.label, fontFamily: fonts.bold },
+
+  /* — Sekmeler — */
+  tabs: { flexDirection: "row", gap: space.xs },
+  tab: {
+    flex: 1,
+    alignItems: "center",
+    gap: space.xxs,
+    paddingTop: space.sm,
+    paddingBottom: space.s,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    minHeight: layout.minTouch,
+  },
+  tabEmpty: { opacity: 0.55 },
+  tabLabel: { ...type.micro, fontFamily: fonts.bold, color: colors.textPrimary },
+  tabCount: { minWidth: 22, alignItems: "center", paddingHorizontal: space.xs, borderRadius: radius.pill, backgroundColor: colors.surface3 },
+  tabCountText: { ...type.micro, fontFamily: fonts.bold, color: colors.textSecondary },
+  catSummary: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.md, paddingVertical: space.sm, borderRadius: radius.lg },
+  catTitle: { ...type.label, fontFamily: fonts.bold },
+  catText: { ...type.caption, color: colors.textSecondary },
+  catBar: { width: 72, alignSelf: "center" },
 
   /* — Liste — */
-  catSummary: { flexDirection: "row", alignItems: "center", gap: space.md },
-  catText: { ...type.caption, color: colors.textSecondary },
-  catBar: { flex: 1 },
   empty: { flexDirection: "row", alignItems: "center", gap: space.sm, padding: space.lg, borderRadius: radius.xl, backgroundColor: colors.winDim },
   emptyText: { ...type.bodySm, color: colors.textPrimary, flex: 1 },
   lockedRow: { flexDirection: "row", alignItems: "center", gap: space.xs },
@@ -696,8 +897,23 @@ const styles = StyleSheet.create({
   teamPointsDone: { color: colors.win },
   teamXp: { ...type.caption, color: colors.textTertiary },
 
+  /* — XP ve yıldız — */
+  eco: { gap: space.md, padding: space.md, borderRadius: radius.xl, backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border },
+  ecoHead: { flexDirection: "row", alignItems: "center", gap: space.xs },
+  ecoTitle: { ...type.h3, color: colors.textPrimary },
+  ecoRow: { flexDirection: "row", alignItems: "flex-start", gap: space.md },
+  ecoIcon: { width: 36, height: 36, borderRadius: radius.md, alignItems: "center", justifyContent: "center" },
+  ecoLabel: { ...type.label, fontFamily: fonts.bold, color: colors.textPrimary },
+  ecoText: { ...type.bodySm, color: colors.textSecondary },
+  ecoConvert: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: space.xs, padding: space.sm, borderRadius: radius.lg, backgroundColor: colors.surface2 },
+  ecoPill: { flexDirection: "row", alignItems: "center", gap: space.xxs, paddingHorizontal: space.sm, paddingVertical: space.xxs, borderRadius: radius.pill, backgroundColor: colors.yellowCard },
+  ecoPillText: { ...type.label, fontFamily: fonts.bold, color: colors.inkBlock },
+  ecoConvertText: { ...type.caption, color: colors.textSecondary, flexShrink: 1 },
+  ecoActions: { flexDirection: "row", gap: space.sm },
+
   /* — Açılır bölümler — */
   foldHead: { flexDirection: "row", alignItems: "center", gap: space.sm, minHeight: layout.minTouch },
+  foldIcon: { width: 30, height: 30, borderRadius: radius.md, alignItems: "center", justifyContent: "center" },
   foldTitle: { ...type.h3, color: colors.textPrimary, flex: 1 },
   foldMeta: { ...type.caption, color: colors.textTertiary },
   rules: { borderRadius: radius.xl, backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border, paddingHorizontal: space.md },

@@ -3,15 +3,13 @@ import { get, put } from "../http";
 /**
  * Kariyer Modu — routes/career.js, routes/predictions.js (elitlig-server).
  *
- * Elit Seviye üç katmandan beslenir (iç anahtar → ekranda görünen ad):
- * saha → Saha (gerçek maçlar), tribun → Seyirci (maçları değerlendirmek: skor
- * ve golcü tahmini, maçın oyuncusu, Fantezi), arena → Oyunlar (doğrulanmış
- * mini oyunlar). Oyunlar
- * piyasa değerine dokunmaz; saha dışı XP seviyeyi en çok 30'a taşır.
- *
- * XP üç yoldan gelir: her maç / oyun / tahminin standart XP'si, haftalık
- * görevler (40 görevlik sıra, aynı anda 20 açık) ve tüm zamanlar kariyer
- * görevleri (kademeli) + rozetler.
+ * EKONOMİ (Kasım 2026): XP yalnız SAHADAN (gerçek maç performansı) ve
+ * GÖREVLERDEN (haftalık + kariyer görevleri, rozetler) gelir; Elit Seviye ve
+ * XP sıralaması bundan kurulur. Oyunlar, Tahmin Ligi ve Fantezi XP VERMEZ:
+ * Kulüp Şehri'ne YILDIZ verir. XP de yıldıza çevrilir (10 XP = 1 yıldız).
+ * Katmanlar (saha · tribun · arena) XP defterindeki eski ayrımdır; eski oyun
+ * ve tahmin XP'si geçmişte kalır, oyun görevlerinin XP'si arena katmanına
+ * yazılabilir.
  */
 
 export type CareerLayer = "saha" | "tribun" | "arena";
@@ -54,16 +52,41 @@ export interface CareerAchievement {
   unlocked_at: string | null;
 }
 
-/** Görev süzgeci (ekrandaki çipler). Eski sunucu göndermez: katmandan türetilir (lib/quests.ts). */
-export type QuestCategory = "saha" | "oyun" | "tribun" | "kesif";
+/**
+ * Görev kategorisi (ekrandaki sekmeler): saha (gerçek maç) · oyun (mini oyunlar,
+ * bulmacalar) · sehir (Kulüp Şehri) · tribun (Tahmin Ligi, Fantezi, maçın
+ * oyuncusu). Eski sunucu `kesif` (keşif / topluluk) da gönderebilir: ekranda
+ * Tribün sekmesine düşer. Hiç göndermezse katmandan türetilir (lib/quests.ts).
+ */
+export type QuestCategory = "saha" | "oyun" | "sehir" | "tribun" | "kesif";
 
+export type QuestDifficulty = "kolay" | "orta" | "zor";
+
+/** Görev ilerlemesi (yeni sözleşme). Eski sunucu `progress`i düz sayı gönderir. */
+export interface QuestProgressShape {
+  current: number;
+  target: number;
+  /** "maç", "gol", "bölüm", "tahmin"… */
+  unit?: string | null;
+}
+
+/**
+ * Ekranın kullandığı (normalize edilmiş) görev. Sunucudan gelen ham görev
+ * `normalizeQuest` ile bu biçime çevrilir: `progress` hep sayıdır, `xp` hep
+ * ödül XP'sidir (`rewardXp` varsa o), `stars` bonus yıldızdır (yoksa 0).
+ */
 export interface CareerQuest {
   code: string;
   /** XP'nin yazıldığı katman. */
   layer: CareerLayer;
   category?: QuestCategory;
   tier?: 1 | 2 | 3;
-  /** Görevi yapmak için açılacak yer (bkz. lib/quests.ts QUEST_ROUTES). */
+  difficulty?: QuestDifficulty;
+  /** Görevin kendi simgesi (Ionicons adı); yoksa kategori simgesi. */
+  icon?: string | null;
+  /** Görevi yapmak için açılacak uygulama içi bağlantı ("/savunma"…); yoksa `go`. */
+  route?: string | null;
+  /** Görevi yapmak için açılacak yer (eski anahtar; bkz. lib/quests.ts QUEST_ROUTES). */
   go?: string | null;
   /** Görev tek bir mini oyuna bağlıysa oyun anahtarı. */
   game?: string | null;
@@ -75,8 +98,53 @@ export interface CareerQuest {
   description: string;
   progress: number;
   target: number;
+  /** İlerlemenin birimi ("maç", "bölüm"…); yoksa yalnız sayı yazılır. */
+  unit?: string | null;
   done: boolean;
+  /** Ödül XP'si. */
   xp: number;
+  /** Ödülle gelen bonus yıldız (Kulüp Şehri); yoksa 0. */
+  stars?: number;
+}
+
+/** Sunucudan gelen ham görev (eski + yeni alanlar, hepsi isteğe bağlı olabilir). */
+type CareerQuestWire = Omit<CareerQuest, "progress" | "xp" | "stars" | "target"> & {
+  progress?: number | QuestProgressShape | null;
+  /** Sunucu `progress`i eski istemciler için sayı tutar; nesne biçimi buradadır. */
+  progress_detail?: QuestProgressShape | null;
+  target?: number | null;
+  xp?: number | null;
+  rewardXp?: number | null;
+  rewardStars?: number | null;
+  reward_xp?: number | null;
+  reward_stars?: number | null;
+};
+
+const finite = (value: unknown): number | null => (typeof value === "number" && Number.isFinite(value) ? value : null);
+const TIER_OF: Record<QuestDifficulty, 1 | 2 | 3> = { kolay: 1, orta: 2, zor: 3 };
+const DIFFICULTY_OF: Record<number, QuestDifficulty> = { 1: "kolay", 2: "orta", 3: "zor" };
+
+/** Ham görevi ekran biçimine çevirir; eksik yeni alanlar eski alanlardan doldurulur. */
+export function normalizeQuest(raw: CareerQuestWire): CareerQuest {
+  const shaped =
+    raw.progress_detail && typeof raw.progress_detail === "object"
+      ? raw.progress_detail
+      : raw.progress && typeof raw.progress === "object"
+        ? raw.progress
+        : null;
+  const target = Math.max(0, finite(shaped?.target) ?? finite(raw.target) ?? 1);
+  const current = Math.max(0, finite(shaped?.current) ?? finite(raw.progress) ?? 0);
+  const difficulty = raw.difficulty ?? (raw.tier ? DIFFICULTY_OF[raw.tier] : undefined);
+  return {
+    ...raw,
+    tier: raw.tier ?? (difficulty ? TIER_OF[difficulty] : undefined),
+    difficulty,
+    progress: raw.done ? Math.max(current, target) : Math.min(current, target || current),
+    target,
+    unit: shaped?.unit ?? raw.unit ?? null,
+    xp: Math.max(0, finite(raw.rewardXp) ?? finite(raw.reward_xp) ?? finite(raw.xp) ?? 0),
+    stars: Math.max(0, finite(raw.rewardStars) ?? finite(raw.reward_stars) ?? 0),
+  };
 }
 
 /** Haftanın 40 görevlik sırası: 20 açık, biten yerine sıradaki gelir. */
@@ -94,6 +162,8 @@ export interface WeeklyQuests {
   featured?: { game: string; title: string } | null;
   /** Açık ve bitmemiş "bu hafta yeni" görev sayısı. */
   new_count?: number;
+  /** Aynı anda açık görev sayısı (yeni sunucu). */
+  slots?: number;
 }
 
 /** Tüm zamanlar kariyer görevi: zincirin sıradaki kademesi. */
@@ -149,7 +219,25 @@ export interface PlayerCareer {
   achievements: { code: string; title: string; layer: CareerLayer; unlocked_at: string }[];
 }
 
-export const getMyCareer = () => get<CareerSummary>("/api/career/me", undefined, { retry: false });
+type CareerSummaryWire = Omit<CareerSummary, "quests" | "weekly_quests"> & {
+  quests?: CareerQuestWire[] | null;
+  weekly_quests?: (Omit<WeeklyQuests, "active" | "completed"> & { active?: CareerQuestWire[] | null; completed?: CareerQuestWire[] | null }) | null;
+};
+
+/** Görevler hep aynı biçimde gelsin diye yanıt burada normalize edilir (eski + yeni sunucu). */
+export function normalizeCareer(raw: CareerSummaryWire): CareerSummary {
+  const list = (items?: CareerQuestWire[] | null) => (Array.isArray(items) ? items.map(normalizeQuest) : []);
+  const weekly = raw.weekly_quests;
+  return {
+    ...raw,
+    quests: list(raw.quests),
+    weekly_quests: weekly
+      ? { ...weekly, active: list(weekly.active), completed: list(weekly.completed), bonuses: Array.isArray(weekly.bonuses) ? weekly.bonuses : [] }
+      : undefined,
+  };
+}
+
+export const getMyCareer = () => get<CareerSummaryWire>("/api/career/me", undefined, { retry: false }).then(normalizeCareer);
 
 export const getPlayerCareer = (playerId: number) => get<PlayerCareer>(`/api/career/players/${playerId}`);
 

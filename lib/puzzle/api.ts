@@ -170,6 +170,13 @@ export interface CityState {
   stars: {
     puzzle: number;
     arena: number;
+    /** Tahmin Ligi + Fantezi yıldızı (yeni sunucu; eskisinde yok). */
+    tribun?: number;
+    tribun_detail?: {
+      predictions: number;
+      fantasy: number;
+      week: { predictions: number; fantasy: number; cap_predictions: number; cap_fantasy: number };
+    };
     xp: number;
     total: number;
     spent: number;

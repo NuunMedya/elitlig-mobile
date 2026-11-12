@@ -83,6 +83,8 @@ export function useArenaScore(game: ArenaGame, bestKey: string) {
   const [stars, setStars] = useState(0);
   const bestRef = useRef(0);
   bestRef.current = best;
+  /** Bu turun bitiş istatistikleri (görev ilerlemesi için skorla gider). */
+  const statsRef = useRef<Record<string, number> | null>(null);
   /** Bu turun oyun oturumu (Kariyer Modu doğrulaması); açılamazsa null. */
   const sessionRef = useRef<Promise<string | null> | null>(null);
 
@@ -106,7 +108,7 @@ export function useArenaScore(game: ArenaGame, bestKey: string) {
       // "Tekrar dene" aynı oturumla gider ve skor yine doğrulanabilir.
       const pending = sessionRef.current;
       (pending ?? Promise.resolve(null))
-        .then((sessionId) => submitArenaScore(game, value, sessionId))
+        .then((sessionId) => submitArenaScore(game, value, sessionId, statsRef.current))
         .then((response) => {
           // Bu arada yeni tur başladıysa onun oturumuna dokunulmaz.
           if (sessionRef.current === pending) sessionRef.current = null;
@@ -137,7 +139,8 @@ export function useArenaScore(game: ArenaGame, bestKey: string) {
 
   /** Tur bitti: rekoru güncelle, skoru gönder. */
   const finish = useCallback(
-    (value: number) => {
+    (value: number, stats?: Record<string, number> | null) => {
+      statsRef.current = stats ?? null;
       setScore(value);
       setServerRecord(null);
       setStars(0);

@@ -142,13 +142,13 @@ export function ArenaGameScreen({ config }: { config: ArenaGameConfig }) {
     (payload: GameOverPayload) => {
       if (phaseRef.current !== "playing") return;
       if (levelGame) {
-        finish(payload.score);
+        finish(payload.score, payload.stats);
         reset();
         return;
       }
       setResult(payload);
       setPhaseBoth("over");
-      finish(payload.score);
+      finish(payload.score, payload.stats);
     },
     [finish, reset, levelGame],
   );

@@ -23,12 +23,12 @@ import React, { memo, useMemo } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { GradientFill, Skeleton, Touchable, withAlpha } from "@/components/ui";
-import { getMyCareer, type CareerLayer, type CareerQuest, type CareerSummary } from "@/lib/api/career";
-import { LAYER_ICON, LAYER_TITLES, openXp, questRoute, sortByCloseness, timeLeft, weekXp, weeklyOf } from "@/lib/quests";
+import { getMyCareer, type CareerQuest, type CareerSummary } from "@/lib/api/career";
+import { questTone } from "@/lib/questPalette";
+import { QUEST_CATEGORY_LABEL, categoryOf, openXp, questIcon, questRoute, sortByCloseness, timeLeft, weekXp, weeklyOf } from "@/lib/quests";
 import { useAuth } from "@/providers/AuthProvider";
 import { colors, fonts, hairline, radius, space, textScale, type, upperTR } from "@/theme";
 
-const LAYER_TINT: Record<CareerLayer, string> = { saha: colors.win, tribun: colors.yellowCard, arena: colors.brandOnDark };
 const RAIL_LIMIT = 8;
 
 export function QuestSpotlight() {
@@ -51,7 +51,7 @@ export function QuestSpotlight() {
           <View style={styles.flex}>
             <Text style={styles.title} {...textScale.dense}>Haftalık görevler</Text>
             <Text style={styles.sub} {...textScale.dense}>
-              Giriş yap; maç, tahmin ve oyun görevleriyle her hafta XP kazan, Elit Seviye'ni yükselt.
+              Giriş yap; saha, oyun, şehir ve tribün görevleriyle her hafta XP kazan, Elit Seviye'ni yükselt.
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color={colors.onDarkMuted} />
@@ -171,7 +171,8 @@ function Spotlight({
 const CARD_W = 196;
 
 const QuestCard = memo(function QuestCard({ quest, onOpen }: { quest: CareerQuest; onOpen: (href: string) => void }) {
-  const tint = LAYER_TINT[quest.layer];
+  const category = categoryOf(quest);
+  const tint = questTone(category).onDark;
   const route = questRoute(quest);
   const ratio = quest.target ? Math.min(1, quest.progress / quest.target) : 0;
   return (
@@ -184,9 +185,9 @@ const QuestCard = memo(function QuestCard({ quest, onOpen }: { quest: CareerQues
     >
       <View style={styles.cardTop}>
         <View style={[styles.cardIcon, { backgroundColor: withAlpha(tint, 0.18) }]}>
-          <Ionicons name={LAYER_ICON[quest.layer]} size={16} color={tint} />
+          <Ionicons name={questIcon(quest)} size={16} color={tint} />
         </View>
-        <Text style={[styles.cardLayer, { color: tint }]} {...textScale.badge}>{upperTR(LAYER_TITLES[quest.layer])}</Text>
+        <Text style={[styles.cardLayer, { color: tint }]} {...textScale.badge}>{upperTR(QUEST_CATEGORY_LABEL[category])}</Text>
         <View style={styles.xp}>
           <Text style={styles.xpText} {...textScale.badge}>+{quest.xp} XP</Text>
         </View>
