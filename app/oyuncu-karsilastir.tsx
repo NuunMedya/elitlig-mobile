@@ -522,16 +522,22 @@ const PlayerSlot = memo(function PlayerSlot({
       accessibilityLabel={filled ? `${name}, oyuncuyu değiştir` : "Oyuncu seç"}
       accessibilityHint={filled ? "Uzun bas: oyuncu sayfası" : undefined}
     >
-      <View style={[styles.sideDot, side === "a" ? styles.sideDotA : styles.sideDotB]} />
       {filled ? (
         <>
-          <Avatar name={name} image={image} size={layout.crestXl} />
+          <HaloFrame
+            size={64}
+            ring={side === "a" ? [DUEL_A, colors.gradientSignature[1]] : [DUEL_B, colors.gradientSignature[0]]}
+            thickness={3}
+            gap={3}
+          >
+            <Avatar name={name} image={image} size={64} />
+          </HaloFrame>
           <Text style={styles.slotName} numberOfLines={2} {...textScale.dense}>
             {name}
           </Text>
           {teamName ? (
             <View style={styles.slotTeam}>
-              <TeamLogo name={teamName} logo={teamLogo} size={14} />
+              <TeamLogo name={teamName} logo={teamLogo} size={14} plain onDark />
               <Text style={styles.slotMeta} numberOfLines={1} {...textScale.dense}>
                 {teamName}
               </Text>
@@ -542,14 +548,17 @@ const PlayerSlot = memo(function PlayerSlot({
               {position}
             </Text>
           ) : null}
-          <Text style={styles.slotChange} {...textScale.badge}>
-            {upperTR("Değiştir")}
-          </Text>
+          <View style={styles.slotChange}>
+            <Ionicons name="repeat" size={10} color={colors.onDarkMuted} />
+            <Text style={styles.slotChangeText} {...textScale.badge}>
+              {upperTR("Değiştir")}
+            </Text>
+          </View>
         </>
       ) : (
         <>
           <View style={styles.slotEmptyIcon}>
-            <Ionicons name={loading ? "hourglass-outline" : "add"} size={20} color={colors.textTertiary} />
+            <Ionicons name={loading ? "hourglass-outline" : "add"} size={24} color={colors.onDark} />
           </View>
           <Text style={styles.slotMeta} {...textScale.dense}>
             {loading ? "Yükleniyor" : "Oyuncu seç"}
@@ -787,39 +796,39 @@ const styles = StyleSheet.create({
     gap: space.md,
   },
 
-  /* — Seçim yuvaları — */
+  /* — Düello sahnesi — */
+  stage: {
+    borderRadius: radius.xxl,
+    paddingVertical: space.lg,
+    paddingHorizontal: space.sm,
+    gap: space.md,
+  },
+  stageClip: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: radius.xxl,
+    overflow: "hidden",
+    borderWidth: hairline,
+    borderColor: colors.inkTileBorder,
+  },
   slots: {
     flexDirection: "row",
     alignItems: "stretch",
-    gap: space.sm,
   },
   slot: {
     flex: 1,
     alignItems: "center",
     gap: space.xs,
-    paddingVertical: space.md,
-    paddingHorizontal: space.sm,
-    backgroundColor: colors.surface1,
-    borderWidth: hairline,
-    borderColor: colors.border,
+    paddingVertical: space.sm,
+    paddingHorizontal: space.xs,
     borderRadius: radius.xl,
-    minHeight: 150,
+    minHeight: 160,
     justifyContent: "center",
   },
-  sideDot: {
-    position: "absolute",
-    top: space.sm,
-    left: space.sm,
-    width: 8,
-    height: 8,
-    borderRadius: radius.pill,
-  },
-  sideDotA: { backgroundColor: colors.accent },
-  sideDotB: { backgroundColor: colors.slate },
   slotName: {
     ...type.h4,
-    color: colors.textPrimary,
+    color: colors.onDark,
     textAlign: "center",
+    marginTop: space.xs,
   },
   slotTeam: {
     flexDirection: "row",
@@ -829,29 +838,70 @@ const styles = StyleSheet.create({
   },
   slotMeta: {
     ...type.caption,
-    color: colors.textTertiary,
+    color: colors.onDarkMuted,
     textAlign: "center",
     flexShrink: 1,
   },
   slotChange: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xxs,
+    marginTop: space.xs,
+    paddingHorizontal: space.sm,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+    backgroundColor: colors.inkTile,
+  },
+  slotChangeText: {
     ...type.overline,
-    color: colors.textDisabled,
-    marginTop: space.xxs,
+    color: colors.onDarkMuted,
   },
   slotEmptyIcon: {
-    width: layout.crestXl,
-    height: layout.crestXl,
+    width: 72,
+    height: 72,
     borderRadius: radius.pill,
-    borderWidth: hairline,
-    borderColor: colors.border,
+    borderWidth: 1.5,
+    borderColor: colors.inkPillBorder,
     borderStyle: "dashed",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.surface2,
+    backgroundColor: colors.inkTile,
+  },
+  center: {
+    width: 84,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: space.sm,
+  },
+  vs: {
+    width: 48,
+    height: 48,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.inkPill,
+    borderWidth: hairline,
+    borderColor: colors.inkPillBorder,
+  },
+  vsText: {
+    ...type.scoreSm,
+    color: colors.onDark,
   },
   swap: {
-    alignSelf: "center",
-    padding: space.xs,
+    width: 32,
+    height: 32,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.inkTile,
+    borderWidth: hairline,
+    borderColor: colors.inkTileBorder,
+  },
+  verdict: {
+    ...type.labelSm,
+    color: colors.onDark,
+    textAlign: "center",
+    paddingHorizontal: space.lg,
   },
 
   /* — Kartlar — */
@@ -861,11 +911,72 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radius.xl,
     padding: space.lg,
-    gap: space.md,
+    gap: space.xs,
+  },
+  cardHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    marginBottom: space.xs,
   },
   cardTitle: {
-    ...type.overline,
+    ...type.h2,
+    color: colors.textPrimary,
+    flex: 1,
+  },
+  cardScore: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xxs,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface2,
+  },
+  cardScoreNum: {
+    ...type.scoreXs,
+    color: colors.textSecondary,
+  },
+  cardScoreA: {
+    color: colors.accentText,
+  },
+  cardScoreB: {
+    color: colors.brandAccent,
+  },
+  cardScoreDash: {
+    ...type.scoreXs,
     color: colors.textTertiary,
+  },
+  legend: {
+    flexDirection: "row",
+    gap: space.md,
+    paddingBottom: space.xs,
+    borderBottomWidth: hairline,
+    borderBottomColor: colors.separator,
+    marginBottom: space.xs,
+  },
+  legendItem: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+    minWidth: 0,
+  },
+  legendRight: {
+    justifyContent: "flex-end",
+  },
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: radius.pill,
+  },
+  legendText: {
+    ...type.caption,
+    color: colors.textSecondary,
+    flexShrink: 1,
+  },
+  legendTextRight: {
+    textAlign: "right",
   },
   footnote: {
     ...type.caption,

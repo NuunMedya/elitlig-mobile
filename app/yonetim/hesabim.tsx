@@ -25,7 +25,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import { AdminScreen, InfoLine, Panel, confirmAction } from "@/components/admin";
 import { Aurora, Avatar, Badge, Button, ErrorState, Input, SkeletonCard, Tabs, Touchable, useToast } from "@/components/ui";
 import { errorText } from "@/lib/admin/errors";
-import { formatDate } from "@/lib/admin/format";
 import { ROLE_LABELS } from "@/lib/api/admin";
 import {
   ACCOUNT_STATUS_LABELS,

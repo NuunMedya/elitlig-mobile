@@ -8,8 +8,9 @@
  *
  * SATIR ANATOMİSİ (ikinci tur):
  *   [bölge rayı 3px] [sıra: ilk üç madalya] [arma 20] [ad] [sayılar] [PUAN sütunu] [yıldız]
- *   · PUAN SÜTUNU kendi zeminiyle (surface2) tablonun boyunca uzanan bir
- *     şerittir: göz tabloda aşağı inerken puanı arar, sütun onu taşır.
+ *   · PUAN kendi hapındadır (ortak `TeamRow` ile aynı dil): sakin zemin,
+ *     Archivo kalın; takip edilen satırda dolu mor.
+ *   · Tam sütunlu görünümde dar ekranda ad kırpılmaz, iki satıra kırılır.
  *   · Takip edilen takım: `brandDim` zemin + solda imza degradesi (bölge
  *     rayının yerine); ad bir kademe kalın.
  *   · Averaj artıda nane, eksite kırmızı ve gerçek eksi işaretiyle.
@@ -24,7 +25,7 @@ import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-na
 import { FormChips, RankBadge, TeamLogo, Touchable } from "@/components/ui";
 /* Barrel yalnız TeamRowProps'u dışa aktarıyor; sütun kümesi tipi kaynağından. */
 import type { TeamRowColumns } from "@/components/ui/TeamRow";
-import { colors, fonts, hairline, space, textScale, type, upperTR } from "@/theme";
+import { colors, fonts, hairline, radius, space, textScale, type, upperTR } from "@/theme";
 import { SignatureStripe } from "./kit";
 
 /** Satır yüksekliği — 40px: 20px arma + madalya rahat sığar, tablo yine sıkı. */
@@ -33,10 +34,10 @@ export const STANDING_ROW_HEIGHT = 40;
 /* Sütun genişlikleri — satır ve başlık AYNI sabitleri kullanır. */
 const CREST = 20;
 const COL_RANK = 22;
-const COL_NUM = 17;
+const COL_NUM = 15;
 /* Averaj üç haneli olabilir (+121); 11px'te 30px yeter. */
-const COL_DIFF = 30;
-const COL_POINTS = 34;
+const COL_DIFF = 28;
+const COL_POINTS = 32;
 /** Beş xs form çipi (5 × 13 + 4 × 2) — çipler ortak bileşenden, ölçüsü sabit. */
 const COL_FORM = 74;
 
@@ -118,7 +119,8 @@ export const StandingsRow = React.memo(function StandingsRow({
       </View>
       <TeamLogo name={name} logo={logo ?? null} size={CREST} />
       <View style={styles.nameCell}>
-        <Text style={[styles.name, highlighted ? styles.nameStrong : null]} numberOfLines={1} {...textScale.dense}>
+        {/* Dar ekranda tam sütunlu görünümde ad kırpılmasın: iki satıra kırılır. */}
+        <Text style={[styles.name, highlighted ? styles.nameStrong : null]} numberOfLines={2} {...textScale.dense}>
           {name}
         </Text>
         {highlighted && !trailing ? <Ionicons name="star" size={9} color={colors.star} /> : null}
@@ -149,8 +151,8 @@ export const StandingsRow = React.memo(function StandingsRow({
           </Text>
         </>
       )}
-      <View style={styles.pointsCell}>
-        <Text style={styles.points} {...textScale.dense}>
+      <View style={[styles.pointsCell, highlighted ? styles.pointsCellOn : null]}>
+        <Text style={[styles.points, highlighted ? styles.pointsOn : null]} {...textScale.dense}>
           {points ?? "—"}
         </Text>
       </View>
@@ -260,6 +262,7 @@ const styles = StyleSheet.create({
   },
   name: {
     ...type.labelSm,
+    lineHeight: 15,
     color: colors.textPrimary,
     flexShrink: 1,
   },
@@ -282,24 +285,34 @@ const styles = StyleSheet.create({
   diffNegative: {
     color: colors.loss,
   },
-  /** Puan sütunu: satır boyu uzanan sönük şerit — tabloda puan tek bakışta. */
+  /** Puan hapı (ortak TeamRow ile aynı dil): sakin zemin, Archivo kalın;
+      takip edilen satırda dolu mor. */
   pointsCell: {
     width: COL_POINTS,
-    alignSelf: "stretch",
+    height: 26,
+    marginLeft: space.xxs,
+    borderRadius: radius.sm,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.surface2,
+    backgroundColor: colors.surface3,
+  },
+  pointsCellOn: {
+    backgroundColor: colors.brand,
   },
   pointsCellHead: {
-    borderTopLeftRadius: space.s,
-    borderTopRightRadius: space.s,
+    height: 18,
+    backgroundColor: "transparent",
   },
   points: {
-    ...type.tableNumStrong,
+    ...type.scoreXs,
     textAlign: "center",
     color: colors.textPrimary,
   },
+  pointsOn: {
+    color: colors.textOnBrand,
+  },
   pointsHead: {
+    textAlign: "center",
     color: colors.textSecondary,
   },
   form: {
