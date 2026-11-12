@@ -1,15 +1,14 @@
 /**
  * YAYIN GRAFİKLERİ — skorbordla aynı katmanda PNG'ye çekilip videoya gömülen
- * küçük parçalar: altyazı (lower third), GOL bandı, sponsor yuvası ve TEKRAR
- * rozeti.
+ * küçük parçalar: altyazı (lower third), GOL bandı, röportaj bandı, sponsor
+ * yuvası ve TEKRAR rozeti.
  *
  * Hepsi `scale` alır (1920 px sahneye göre çarpan) ve renklerini maçın yayın
  * paletinden (web "Yayın Tasarımı") okur; böylece skorbordla aynı kimliği taşır.
  *
  * BU PARÇALAR BİLEREK HAREKETSİZDİR. Katman yayına saniyede en çok bir-iki kez
  * gömülür; geçiş animasyonu olsaydı yayına animasyonun rastgele bir ara karesi
- * (yarı saydam, yarı kaymış) düşerdi. Hareket hissi "GOL" bandının iki aşamalı
- * kesmesiyle (büyük GOL → ayrıntı) verilir.
+ * (yarı saydam, yarı kaymış) düşerdi.
  */
 
 import { LinearGradient } from "expo-linear-gradient";
@@ -17,6 +16,7 @@ import React, { memo, useState } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
 
 import { DEFAULT_PALETTE, type BugPalette } from "@/lib/live/branding";
+import { guestLine, type Interview } from "@/lib/live/interview";
 import type { Caption, CaptionTone } from "@/lib/live/lowerThird";
 import { GFX } from "@/lib/live/scorebug";
 import { fonts } from "@/theme";
@@ -101,8 +101,6 @@ export const LowerThird = memo(function LowerThird({ caption, scale: s, palette,
 
 /* ═══════════════════════════ GOL BANDI ═══════════════════════════ */
 
-export type GoalFlashPhase = "burst" | "detail";
-
 export interface GoalFlashData {
   /** Golü kazanan takım (kendi kalesine golde rakip). */
   teamName: string;
@@ -117,22 +115,11 @@ export interface GoalFlashData {
   minute: number;
 }
 
-export const GoalFlash = memo(function GoalFlash({ phase, data, scale: s, palette, onAssetLoad }: Base & { phase: GoalFlashPhase; data: GoalFlashData }) {
+/** Golcü adı + takım · dakika + skor. Sahne ölçeğinin `GFX.goal.scale` katı. */
+export const GoalFlash = memo(function GoalFlash({ data, scale, palette, onAssetLoad }: Base & { data: GoalFlashData }) {
   const C = palette ?? DEFAULT_PALETTE;
   const logo = useImageOk(data.teamLogo);
-  if (phase === "burst") {
-    return (
-      <View style={{ flexDirection: "row", alignItems: "stretch", borderRadius: s * 16, overflow: "hidden" }}>
-        <View style={{ width: s * 14, backgroundColor: C.white }} />
-        <View style={{ backgroundColor: C.lowerGoal, paddingHorizontal: s * 70, paddingVertical: s * 10, alignItems: "center", justifyContent: "center" }}>
-          <Text allowFontScaling={false} style={{ fontFamily: fonts.bold, fontSize: s * 120, lineHeight: s * 132, letterSpacing: s * 10, color: C.white }}>
-            GOL!
-          </Text>
-        </View>
-        <View style={{ width: s * 14, backgroundColor: C.white }} />
-      </View>
-    );
-  }
+  const s = scale * GFX.goal.scale;
   const head = data.own ? "KENDİ KALESİNE" : data.penalty ? "PENALTI GOLÜ" : "GOL";
   return (
     <View style={{ flexDirection: "row", alignItems: "stretch", borderRadius: s * 14, overflow: "hidden" }}>
@@ -162,6 +149,47 @@ export const GoalFlash = memo(function GoalFlash({ phase, data, scale: s, palett
         <Text allowFontScaling={false} style={{ fontFamily: fonts.bold, fontSize: s * 44, lineHeight: s * 50, letterSpacing: -s * 1, color: C.white }}>
           {data.homeScore} – {data.awayScore}
         </Text>
+      </View>
+    </View>
+  );
+});
+
+/* ═══════════════════════════ RÖPORTAJ BANDI ═══════════════════════════ */
+
+/** Üstte başlık şeridi, altta arma + konuk adı + görev · takım. */
+export const InterviewBand = memo(function InterviewBand({ interview, scale: s, palette, onAssetLoad }: Base & { interview: Interview }) {
+  const C = palette ?? DEFAULT_PALETTE;
+  const g = interview.guest;
+  const logo = useImageOk(g.logoUrl);
+  const line = guestLine(g);
+  return (
+    <View style={{ maxWidth: s * GFX.interview.maxWidth, alignItems: "flex-start" }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: s * 10, backgroundColor: C.lowerGoal, paddingHorizontal: s * 18, height: s * 36, borderTopLeftRadius: s * 10, borderTopRightRadius: s * 10 }}>
+        <View style={{ width: s * 10, height: s * 10, borderRadius: s * 5, backgroundColor: C.white }} />
+        <Text allowFontScaling={false} numberOfLines={1} style={{ fontFamily: fonts.bold, fontSize: s * 17, lineHeight: s * 22, letterSpacing: s * 2, color: C.white }}>
+          {interview.title}
+        </Text>
+      </View>
+      <View style={{ flexDirection: "row", alignItems: "stretch", borderBottomLeftRadius: s * 10, borderBottomRightRadius: s * 10, borderTopRightRadius: s * 10, overflow: "hidden" }}>
+        {logo.ok && g.logoUrl ? (
+          <View style={{ backgroundColor: C.white, paddingHorizontal: s * 16, alignItems: "center", justifyContent: "center" }}>
+            <Image source={{ uri: g.logoUrl }} onError={logo.onError} onLoad={onAssetLoad} style={{ width: s * 56, height: s * 56 }} resizeMode="contain" />
+          </View>
+        ) : (
+          <View style={{ width: s * 8, backgroundColor: C.lowerGoal }} />
+        )}
+        <View style={{ flexShrink: 1, justifyContent: "center", paddingHorizontal: s * 26, paddingVertical: s * 14, minHeight: s * 96 }}>
+          <LinearGradient colors={[C.barTop, C.barBottom]} start={TOP} end={BOTTOM} style={StyleSheet.absoluteFill} />
+          <Text allowFontScaling={false} numberOfLines={1} style={{ fontFamily: fonts.bold, fontSize: s * 36, lineHeight: s * 44, letterSpacing: -s * 0.4, color: C.white }}>
+            {g.name.toLocaleUpperCase("tr-TR")}
+          </Text>
+          {line ? (
+            <Text allowFontScaling={false} numberOfLines={1} style={{ fontFamily: fonts.bold, fontSize: s * 20, lineHeight: s * 27, color: C.white, opacity: 0.82 }}>
+              {line}
+            </Text>
+          ) : null}
+        </View>
+        <View style={{ width: s * 6, backgroundColor: C.v400 }} />
       </View>
     </View>
   );

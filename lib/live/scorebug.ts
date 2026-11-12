@@ -68,8 +68,10 @@ export const GFX = {
   caption: { left: 56, bottom: 64, liftOverBoard: 244, maxWidth: 1100 },
   /** Sponsor yuvası: skorbordun karşı üst köşesi. */
   sponsor: { side: 56, top: 48, height: 64, maxWidth: 260 },
-  /** GOL bandı: alt üçte birde ortalı. */
-  goal: { bottom: 250, bottomOverBoard: 300 },
+  /** GOL bandı: yayının altına yakın, ortalı ve küçük (sahne ölçeğinin `scale` katı). */
+  goal: { bottom: 56, bottomOverBoard: 244, scale: 0.72 },
+  /** Röportaj bandı: altyazının yerinde (sol alt); açıkken altyazı üstüne kalkar. */
+  interview: { left: 56, bottom: 64, liftOverBoard: 244, maxWidth: 1100, height: 140 },
   /** TEKRAR rozeti (skorbord sağ üstteyken sol üste gömülür). */
   replay: { side: 56, top: 48 },
 } as const;

@@ -8,6 +8,7 @@
  *   Tekrar    anlık tekrar (son 6–13 sn), gol klipleri, ağır çekim (Android)
  *   Skorbord  göster / gizle, çeşit, köşe, saat, kısa kod / renk, GOL bandı, sponsor
  *   Altyazı   serbest metin + hazır şablonlar, kendiliğinden kalkma süresi
+ *   Röportaj  röportaj bandı: başlık + konuk (elle ya da kadrodan), kaldırılana dek ekranda
  *   Yayın     YouTube yayını aç → başlat → bitir, elle RTMP, yayın sağlığı
  *   Ayarlar   kamera, yakınlaştırma, fener, mikrofon, kalite
  *
@@ -35,12 +36,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { clientEventId } from "@/components/admin/matches/model";
 import { BottomBoard } from "@/components/live/BottomBoard";
-import { GoalFlash, LowerThird, ReplayBadge, SponsorBug, type GoalFlashData, type GoalFlashPhase } from "@/components/live/BroadcastGraphics";
+import { GoalFlash, InterviewBand, LowerThird, ReplayBadge, SponsorBug, type GoalFlashData } from "@/components/live/BroadcastGraphics";
 import { BroadcastPanel, Btn } from "@/components/live/BroadcastPanel";
 import { CaptionPanel, type CaptionTemplate } from "@/components/live/CaptionPanel";
 import { CompactBug } from "@/components/live/CompactBug";
 import { HealthCard, HealthHud, type RecordingHealth } from "@/components/live/HealthHud";
 import { LocalRecordPrompt } from "@/components/live/LocalRecordPrompt";
+import { InterviewPanel } from "@/components/live/InterviewPanel";
 import { PlayerPicker } from "@/components/live/PlayerPicker";
 import { RejiPanel } from "@/components/live/RejiPanel";
 import { REPLAY_RATE_SUPPORTED, ReplayPanel, type ReplayRate } from "@/components/live/ReplayPanel";
@@ -68,6 +70,7 @@ import {
   substitutionCaption,
   type Caption,
 } from "@/lib/live/lowerThird";
+import { INTERVIEW_TITLES, interviewKey, makeGuest, pushRecentGuest, type Interview, type InterviewGuest } from "@/lib/live/interview";
 import { fileNameOf, formatBytes, recordingFileName, saveLocationText } from "@/lib/live/localRecording";
 import { RIG, encoderMessageText, resolveEncoder } from "@/lib/live/rig";
 import { BUG, GFX, clockText, teamShortCode } from "@/lib/live/scorebug";
@@ -112,7 +115,7 @@ import {
   type StorageInfo,
 } from "@/modules/elitlig-live";
 
-type Tab = "reji" | "tekrar" | "skorbord" | "altyazi" | "yayin" | "ayarlar";
+type Tab = "reji" | "tekrar" | "skorbord" | "altyazi" | "roportaj" | "yayin" | "ayarlar";
 type Side = "home" | "away";
 
 const TABS: { key: Tab; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
@@ -120,14 +123,14 @@ const TABS: { key: Tab; label: string; icon: keyof typeof Ionicons.glyphMap }[] 
   { key: "tekrar", label: "Tekrar", icon: "repeat" },
   { key: "skorbord", label: "Skor", icon: "easel" },
   { key: "altyazi", label: "Altyazı", icon: "text" },
+  { key: "roportaj", label: "Röportaj", icon: "mic" },
   { key: "yayin", label: "Yayın", icon: "radio" },
   { key: "ayarlar", label: "Ayar", icon: "settings" },
 ];
 
 const ON_AIR: LiveState[] = ["connecting", "live", "reconnecting"];
 const KEEP_AWAKE_TAG = "elitlig-live";
-/** GOL bandı: önce büyük "GOL!" (kısa), sonra golcü + skor. */
-const GOAL_BURST_MS = 1800;
+/** GOL bandı (golcü + skor) ekranda kalma süresi. */
 const GOAL_FLASH_MS = 7500;
 
 /** Oyuncu seçici neyi soruyor. */
@@ -135,9 +138,10 @@ type PickerState =
   | { kind: "event"; side: Side; code: string; title: string; clipKey: string | null; clientId: string }
   | { kind: "subOut"; side: Side; clientId: string }
   | { kind: "subIn"; side: Side; outId: string | null; clientId: string }
-  | { kind: "caption"; side: Side };
+  | { kind: "caption"; side: Side }
+  | { kind: "interview"; side: Side };
 
-type SlotKey = "bug" | "caption" | "goal" | "sponsor" | "replay";
+type SlotKey = "bug" | "caption" | "goal" | "interview" | "sponsor" | "replay";
 
 /** Yayın başlatma isteği: "telefona da kaydedilsin mi?" istemi yanıtlanana kadar bekler. */
 type StartTarget = { kind: "youtube" } | { kind: "manual"; url: string };
@@ -694,6 +698,19 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
     const id = setTimeout(() => setCaption((c) => (c && c.item.id === caption.item.id ? null : c)), Math.max(0, caption.until - Date.now()));
     return () => clearTimeout(id);
   }, [caption]);
+  /* ───────── röportaj bandı ───────── */
+  const [interviewTitle, setInterviewTitle] = useState<string>(INTERVIEW_TITLES[0]);
+  const [interviewGuest, setInterviewGuest] = useState<InterviewGuest | null>(null);
+  const [interviewOn, setInterviewOn] = useState(false);
+  const [guestRecents, setGuestRecents] = useState<InterviewGuest[]>([]);
+  const interview: Interview | null = interviewOn && interviewGuest ? { title: interviewTitle, guest: interviewGuest } : null;
+  const showInterview = useCallback((guest: InterviewGuest) => {
+    setInterviewGuest(guest);
+    setInterviewOn(true);
+    setGuestRecents((list) => pushRecentGuest(list, guest));
+  }, []);
+  const hideInterview = useCallback(() => setInterviewOn(false), []);
+
   const captionRemaining = caption?.until ? Math.max(0, Math.ceil((caption.until - Date.now()) / 1000)) : null;
 
   /* ───────── sponsor yuvası ───────── */
@@ -715,7 +732,7 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
   /* ───────── GOL bandı ───────── */
   const goalSource = live.bannerSource && isGoalCode(live.bannerSource.event.olay_kodu) ? live.bannerSource : null;
   const goalAge = goalSource ? Date.now() - goalSource.since : Infinity;
-  const goalPhase: GoalFlashPhase | null = !settings.goalFlash || replaying || !goalSource || goalAge >= GOAL_FLASH_MS ? null : goalAge < GOAL_BURST_MS ? "burst" : "detail";
+  const goalOn = settings.goalFlash && !replaying && Boolean(goalSource) && goalAge < GOAL_FLASH_MS;
   const goalData: GoalFlashData | null = (() => {
     if (!goalSource) return null;
     const ev = goalSource.event;
@@ -764,7 +781,8 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
   const visible: Record<SlotKey, boolean> = {
     bug: overlayOn,
     caption: Boolean(caption),
-    goal: Boolean(goalPhase && goalData),
+    goal: Boolean(goalOn && goalData),
+    interview: Boolean(interview),
     sponsor: sponsorVisible,
     replay: replayBadge,
   };
@@ -780,7 +798,7 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
         label: replaying.code === "GOAL_OWN" ? "KENDİ KALESİNE" : "GOL",
         player: replaying.scorer ? replaying.scorer.toLocaleUpperCase("tr-TR") : null,
       }
-    : goalPhase
+    : goalOn
       ? null // GOL bandı ekrandayken skorbord altındaki küçük bant tekrar etmesin
       : live.bannerEvent;
   const clockVisible = settings.showClock && !finished;
@@ -808,8 +826,8 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
     branding?.logoUrl ?? "",
     branding ? JSON.stringify(branding.scoreboard) : "",
     caption?.item.id ?? "",
-    goalPhase ?? "",
-    goalPhase ? goalId : "",
+    goalOn ? goalId : "",
+    interview ? interviewKey(interview) : "",
     sponsorVisible ? activeSponsor?.id : "",
     replayBadge ? replayLabel : "",
     assetTick,
@@ -869,6 +887,21 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
       const player = (p.side === "home" ? live.squads.home : live.squads.away).find((x) => x.id === playerId);
       const item = player ? playerCaption(player.name, nameOfSide(p.side), player.number, logoOfSide(p.side)) : null;
       if (item) showCaption(item);
+      setPicker(null);
+      return;
+    }
+    if (p.kind === "interview") {
+      const player = (p.side === "home" ? live.squads.home : live.squads.away).find((x) => x.id === playerId);
+      const guest = player
+        ? makeGuest({
+            name: player.name,
+            role: [player.captain ? "Kaptan" : "Oyuncu", player.number].filter(Boolean).join(" · "),
+            teamName: nameOfSide(p.side),
+            logoUrl: logoOfSide(p.side),
+            side: p.side,
+          })
+        : null;
+      if (guest) showInterview(guest);
       setPicker(null);
       return;
     }
@@ -1061,8 +1094,12 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
   const padX = stageW * (BUG.left / BUG.stageW);
   const padTop = stageH * (BUG.top / BUG.stageH);
   const boardOn = overlayOn && settings.bugVariant === "bottom";
-  const captionBottom = stageH * ((boardOn ? GFX.caption.liftOverBoard : GFX.caption.bottom) / BUG.stageH);
-  const goalBottom = stageH * ((boardOn ? GFX.goal.bottomOverBoard : GFX.goal.bottom) / BUG.stageH) + (caption ? stageH * 0.12 : 0);
+  const interviewBottom = stageH * ((boardOn ? GFX.interview.liftOverBoard : GFX.interview.bottom) / BUG.stageH);
+  // Röportaj bandı açıkken altyazı onun üstüne, GOL bandı da ikisinin üstüne kalkar.
+  const interviewLift = interview ? stageH * ((GFX.interview.height * bugScale) / stageH + 16 / BUG.stageH) : 0;
+  const captionBottom = stageH * ((boardOn ? GFX.caption.liftOverBoard : GFX.caption.bottom) / BUG.stageH) + interviewLift;
+  const goalBottom =
+    stageH * ((boardOn ? GFX.goal.bottomOverBoard : GFX.goal.bottom) / BUG.stageH) + (caption ? stageH * 0.12 : 0) + interviewLift;
   // Çekilen kap `box` konumundadır; içindeki sahne boyu katman ters yönde kaydırılır,
   // böylece öğeler ekranda yerinden oynamaz.
   const frame = box ?? { x: 0, y: 0, w: stageW, h: stageH };
@@ -1154,10 +1191,17 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
                     </View>
                   )
                 ) : null}
-                {goalPhase && goalData ? (
+                {interview ? (
+                  <View style={[styles.slot, styles.slotBottom, { alignItems: "flex-start", paddingBottom: interviewBottom, paddingHorizontal: padX }]}>
+                    <View onLayout={measure("interview")} key={interviewKey(interview)}>
+                      <InterviewBand interview={interview} scale={bugScale} palette={palette} onAssetLoad={onAssetLoad} />
+                    </View>
+                  </View>
+                ) : null}
+                {goalOn && goalData ? (
                   <View style={[styles.slot, styles.slotBottom, { alignItems: "center", paddingBottom: goalBottom }]}>
-                    <View onLayout={measure("goal")} key={goalPhase}>
-                      <GoalFlash phase={goalPhase} data={goalData} scale={bugScale} palette={palette} onAssetLoad={onAssetLoad} />
+                    <View onLayout={measure("goal")} key={goalId}>
+                      <GoalFlash data={goalData} scale={bugScale} palette={palette} onAssetLoad={onAssetLoad} />
                     </View>
                   </View>
                 ) : null}
@@ -1203,6 +1247,11 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
                   <Ionicons name="play-back" size={20} color={RIG.text} />
                 </Touchable>
               )}
+              {interview ? (
+                <Touchable style={styles.stageBtn} onPress={hideInterview} accessibilityLabel="Röportaj bandını kaldır" haptic="light">
+                  <Ionicons name="mic-off-outline" size={20} color={RIG.text} />
+                </Touchable>
+              ) : null}
               {caption ? (
                 <Touchable style={styles.stageBtn} onPress={hideCaption} accessibilityLabel="Altyazıyı kaldır" haptic="light">
                   <Ionicons name="close" size={20} color={RIG.text} />
@@ -1315,6 +1364,20 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
                     headlines={headlines}
                     encoderOn={encoderOn}
                   />
+                ) : tab === "roportaj" ? (
+                  <InterviewPanel
+                    onAir={interview}
+                    title={interviewTitle}
+                    onTitle={setInterviewTitle}
+                    onShow={showInterview}
+                    onHide={hideInterview}
+                    recents={guestRecents}
+                    onForget={(g) => setGuestRecents((list) => list.filter((x) => x !== g))}
+                    homeName={homeName}
+                    awayName={awayName}
+                    onPickPlayer={(side) => setPicker({ kind: "interview", side })}
+                    encoderOn={encoderOn}
+                  />
                 ) : tab === "yayin" ? (
                   <BroadcastPanel
                     config={config.data}
@@ -1371,12 +1434,14 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
                 ? `${nameOfSide(picker.side)} — çıkan oyuncu`
                 : picker.kind === "subIn"
                   ? `${nameOfSide(picker.side)} — giren oyuncu`
-                  : `${nameOfSide(picker.side)} — altyazıya çıkacak oyuncu`
+                  : picker.kind === "interview"
+                    ? `${nameOfSide(picker.side)} — röportaj konuğu`
+                    : `${nameOfSide(picker.side)} — altyazıya çıkacak oyuncu`
           }
           subtitle={
             picker.kind === "event"
               ? `${eventLabel(picker.code)} · ${live.minute}'`
-              : picker.kind === "caption"
+              : picker.kind === "caption" || picker.kind === "interview"
                 ? "Oyuncu adı ve takımı alt bantta gösterilir"
                 : `Değişiklik · ${live.minute}'${picker.kind === "subIn" && picker.outId ? ` · çıkan: ${live.nameOf(picker.outId) ?? ""}` : ""}`
           }
@@ -1385,12 +1450,14 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
           busy={saving}
           onPick={onPick}
           onClose={cancelPicker}
-          skipLabel={picker.kind === "caption" ? null : picker.kind === "event" ? "Oyuncusuz kaydet" : picker.kind === "subOut" ? "Çıkanı atla" : "Gireni atla"}
+          skipLabel={picker.kind === "caption" || picker.kind === "interview" ? null : picker.kind === "event" ? "Oyuncusuz kaydet" : picker.kind === "subOut" ? "Çıkanı atla" : "Gireni atla"}
           starterLabel={picker.kind === "subOut" ? "SAHADA" : picker.kind === "subIn" ? "YEDEKLER" : "İLK 11"}
           otherLabel={picker.kind === "subOut" || picker.kind === "subIn" ? "DİĞER" : "YEDEKLER"}
           emptyText={
             picker.kind === "caption"
               ? "Bu takımın maç kadrosu girilmemiş. Oyuncu adını Altyazı sekmesinden elle yazabilirsin."
+              : picker.kind === "interview"
+                ? "Bu takımın maç kadrosu girilmemiş. Konuğun adını Röportaj sekmesinden elle yazabilirsin."
               : "Bu takımın maç kadrosu girilmemiş. Olayı oyuncusuz kaydedebilirsin."
           }
         />
