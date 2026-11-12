@@ -16,12 +16,14 @@
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { LinearGradient } from "expo-linear-gradient";
 import React from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import {
   colors,
   elevate,
   fonts,
+  glowStyle,
   hairline,
   radius,
   space,
@@ -73,8 +75,15 @@ export const EmptyState = React.memo(function EmptyState({
       ]}
     >
       {illustration ?? (
-        <View style={styles.iconTile}>
-          <Ionicons name={icon} size={22} color={colors.textSecondary} />
+        <View style={[styles.iconTile, glowStyle(colors.glow, 1)]}>
+          {/* Gece teması: ikon kutusu imza degradesiyle parlar. */}
+          <LinearGradient
+            colors={colors.gradientSignature}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[StyleSheet.absoluteFill, styles.iconFill]}
+          />
+          <Ionicons name={icon} size={24} color={colors.textOnBrand} />
         </View>
       )}
 
@@ -151,9 +160,12 @@ const styles = StyleSheet.create({
    * görünmüyordu; boş durumun TEK görseli olduğu için okunur olmalı ama renk
    * taşımamalı — renk yalnız bir şey söylediğinde kullanılır.
    */
+  iconFill: {
+    borderRadius: radius.lg,
+  },
   iconTile: {
-    width: 52,
-    height: 52,
+    width: 56,
+    height: 56,
     borderRadius: radius.lg,
     backgroundColor: colors.surface1,
     borderWidth: hairline,
