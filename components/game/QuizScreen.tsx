@@ -33,10 +33,10 @@ import { useQuery } from "@tanstack/react-query";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LinearGradient } from "expo-linear-gradient";
-import { Animated, AppState, Easing, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Animated, AppState, Easing, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { ConfettiBurst, SparkleBurst } from "@/components/game/Celebration";
+import { ConfettiBurst } from "@/components/game/Celebration";
 import { ArenaResultCard, ArenaShareSheet, formatCount, SCORE_UNIT, useArenaScore } from "@/components/game/ArenaResult";
 import { QuizCityPicker, type QuizCity } from "@/components/game/QuizCityPicker";
 import {
@@ -48,12 +48,20 @@ import {
   OUTLINE,
   PauseOverlay,
   QuizBackdrop,
+  breathStyle,
+  PopIn,
   Ribbon,
   RoundButton,
+  StarFlight,
+  SweepBanner,
+  useAmbient,
   useAnswerFx,
   useExitGame,
   useFlash,
   useHardwareBack,
+  useLoopClock,
+  useScreenShake,
+  useUrgency,
 } from "@/components/game/QuizKit";
 import { Avatar, TeamLogo, Touchable, useReduceMotion } from "@/components/ui";
 import type { ArenaGame } from "@/lib/api/arena";
@@ -73,7 +81,7 @@ import {
   type QuizQuestion,
 } from "@/lib/game/quiz/questions";
 import { CARTOON } from "@/lib/game/cartoon";
-import { QUIZ, QUIZ_LETTER_TONES, QUIZ_TRIPLE_TONES, type QuizToneName } from "@/lib/game/quizPalette";
+import { QUIZ, QUIZ_LETTER_TONES, QUIZ_TONES, QUIZ_TRIPLE_TONES, type QuizToneName } from "@/lib/game/quizPalette";
 import { useScope } from "@/providers/ScopeProvider";
 import { fonts, haptics, layout, radius, space, textScale, type, upperTR } from "@/theme";
 
@@ -107,7 +115,7 @@ const REVEAL_BAD_MS = 2000;
 const LETTERS = ["A", "B", "C", "D"];
 const TRIPLE_MARKS = ["1", "X", "2"];
 /** Giriş kartındaki oyun ikonu kabarcığının rengi (Oyun Merkezi ile aynı). */
-const GAME_TONE: Partial<Record<ArenaGame, QuizToneName>> = { kimbu: "purple", seri: "orange", tahmin: "teal" };
+const GAME_TONE: Partial<Record<ArenaGame, QuizToneName>> = { kimbu: "indigo", seri: "indigo", tahmin: "indigo" };
 const TOP = { x: 0.5, y: 0 } as const;
 const BOTTOM = { x: 0.5, y: 1 } as const;
 
@@ -179,6 +187,8 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
   /** Görsel şölen: doğru cevapta yıldız saçılımı, seviye/seri anında konfeti. */
   const [sparkTick, setSparkTick] = useState(0);
   const [confettiTick, setConfettiTick] = useState(0);
+  /** Seviye atlayınca ekranı süpüren afiş. */
+  const [levelTick, setLevelTick] = useState(0);
   const [bestStreak, setBestStreak] = useState(0);
   const [correct, setCorrect] = useState(0);
   const [asked, setAsked] = useState(0);
@@ -215,7 +225,7 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
   const optionAnims = useRef([0, 1, 2, 3].map(() => new Animated.Value(0))).current;
   const scoreBump = useRef(new Animated.Value(0)).current;
   const gainAnim = useRef(new Animated.Value(0)).current;
-  const shake = useRef(new Animated.Value(0)).current;
+  const screenShake = useScreenShake();
   const flash = useFlash();
   const [flashOk, setFlashOk] = useState(true);
 
@@ -261,14 +271,18 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
     timing.current = { startedAt: Date.now(), total: ms, left: ms, paused: false };
     runCountdown(1, ms);
 
+    if (reduceMotion) {
+      enter.setValue(1);
+      optionAnims.forEach((a) => a.setValue(1));
+      return;
+    }
+    // Kart sağdan dönerek süzülür; şıklar sırayla, hedefi aşıp yaylanarak oturur.
     enter.setValue(0);
     optionAnims.forEach((a) => a.setValue(0));
-    const optionIn = optionAnims.map((a) =>
-      Animated.timing(a, { toValue: 1, duration: reduceMotion ? 0 : 260, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-    );
+    const optionIn = optionAnims.map((a) => Animated.spring(a, { toValue: 1, friction: 5, tension: 130, useNativeDriver: true }));
     Animated.parallel([
-      Animated.spring(enter, { toValue: 1, useNativeDriver: true, friction: 8, tension: 70 }),
-      Animated.stagger(reduceMotion ? 0 : 70, optionIn),
+      Animated.spring(enter, { toValue: 1, useNativeDriver: true, friction: 6, tension: 75 }),
+      Animated.sequence([Animated.delay(140), Animated.stagger(85, optionIn)]),
     ]).start();
   };
 
@@ -310,7 +324,11 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
       setScore(s.score + points);
       setGain({ value: points, id: Date.now() });
       setSparkTick((n) => n + 1);
-      if (levelOf(correctAfter) > levelOf(s.correct) || nextStreak % 5 === 0) setConfettiTick((n) => n + 1);
+      // Konfeti yalnız büyük anda (seviye atlama); her doğru cevapta değil.
+      if (levelOf(correctAfter) > levelOf(s.correct)) {
+        setConfettiTick((n) => n + 1);
+        setLevelTick((n) => n + 1);
+      }
       gainAnim.setValue(0);
       Animated.timing(gainAnim, { toValue: 1, duration: 900, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
       scoreBump.setValue(1);
@@ -326,11 +344,7 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
       haptics.error();
       setFlashOk(false);
       if (!reduceMotion) flash.fire();
-      if (!reduceMotion) {
-        Animated.sequence(
-          [10, -8, 6, -3, 0].map((toValue) => Animated.timing(shake, { toValue, duration: 50, useNativeDriver: true })),
-        ).start();
-      }
+      screenShake.fire();
     }
 
     const poolNow = s.pool;
@@ -465,26 +479,39 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
   const accuracy = asked ? Math.round((correct / asked) * 100) : 0;
   const secondsLeft = question ? Math.max(0, Math.ceil(question.seconds - elapsed)) : 0;
 
+  /* — Canlılık: ortam saati, boşta nefes, son saniye nabzı, yıldız uçuşu — */
+  const { width: screenW, height: screenH } = useWindowDimensions();
+  const ambient = useAmbient(paused);
+  const breath = useLoopClock(2600, ambient && phase === "playing" && status === "asking");
+  const asking = phase === "playing" && status === "asking" && !paused;
+  const urgency = useUrgency(secondsLeft, asking && secondsLeft > 0 && secondsLeft <= 3);
+  const bumpScore = useCallback(() => {
+    if (reduceMotion) return;
+    scoreBump.setValue(1);
+    Animated.spring(scoreBump, { toValue: 0, useNativeDriver: true, friction: 3.5, tension: 160 }).start();
+  }, [reduceMotion, scoreBump]);
+  const scorePill = { x: layout.screenPadding + 40, y: insets.top + space.sm + 25 };
+
   return (
     <View style={styles.screen}>
-      <QuizBackdrop />
+      <QuizBackdrop paused={paused} />
       {phase === "playing" ? <FlashLayer value={flash.value} ok={flashOk} /> : null}
 
-      <View style={[styles.body, { paddingTop: insets.top + space.sm }]}>
+      <Animated.View style={[styles.body, { paddingTop: insets.top + space.sm }, screenShake.style]}>
         {/* — Üst şerit: HUD + duraklat (uygulama başlığı yok) — */}
         <View style={styles.topBar}>
           {phase !== "setup" && question ? (
             <Hud score={score} lives={lives} bump={scoreBump} />
           ) : (
             <NavyPill>
-              <Ionicons name="trophy" size={15} color={CARTOON.star} />
+              <Ionicons name="trophy" size={15} color={QUIZ.accent} />
               <Text style={styles.pillText} {...textScale.badge}>
                 {upperTR("Elitlig Arena")}
               </Text>
             </NavyPill>
           )}
           <View style={styles.flex} />
-          <RoundButton icon="pause" onPress={openPause} accessibilityLabel="Oyunu duraklat" />
+          <RoundButton icon="pause" onPress={openPause} accessibilityLabel="Oyunu duraklat" shine={ambient} />
         </View>
 
         <View style={styles.stage}>
@@ -505,16 +532,18 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
           {phase !== "setup" && question ? (
             <View style={styles.flex}>
               <View style={styles.subBar}>
-                <NavyPill style={styles.smallPill}>
+                <NavyPill style={styles.smallPill} bumpKey={level} glowKey={level}>
                   <Text style={styles.pillTextSm} {...textScale.badge}>{upperTR(`Seviye ${level}`)}</Text>
                 </NavyPill>
                 {streak >= 2 ? (
-                  <NavyPill style={styles.smallPill} hot={multiplierOf(streak) > 1}>
-                    <Ionicons name="flame" size={13} color={CARTOON.white} />
-                    <Text style={styles.pillTextSm} {...textScale.badge}>
-                      {multiplierOf(streak) > 1 ? `${streak} · ×${multiplierOf(streak)}` : `${streak}`}
-                    </Text>
-                  </NavyPill>
+                  <PopIn bouncy>
+                    <NavyPill style={styles.smallPill} hot={multiplierOf(streak) > 1} bumpKey={streak} glowKey={multiplierOf(streak)}>
+                      <Ionicons name="flame" size={13} color={CARTOON.white} />
+                      <Text style={styles.pillTextSm} {...textScale.badge}>
+                        {multiplierOf(streak) > 1 ? `${streak} · ×${multiplierOf(streak)}` : `${streak}`}
+                      </Text>
+                    </NavyPill>
+                  </PopIn>
                 ) : null}
                 <NavyPill style={[styles.smallPill, styles.shrink]}>
                   <Ionicons name={city ? "location" : "earth"} size={13} color={CARTOON.white} />
@@ -523,16 +552,25 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
                   </Text>
                 </NavyPill>
               </View>
-              <View style={styles.timerRow}>
-                <TimerBar timer={timer} />
-                <View style={[styles.seconds, secondsLeft <= 3 && status === "asking" && styles.secondsHot]}>
+              <Animated.View style={[styles.timerRow, urgency.style]}>
+                <View style={styles.timerWrap}>
+                  <Animated.View pointerEvents="none" style={[styles.timerGlow, { opacity: urgency.pulse }]} />
+                  <TimerBar timer={timer} />
+                </View>
+                <Animated.View
+                  style={[
+                    styles.seconds,
+                    secondsLeft <= 3 && status === "asking" && styles.secondsHot,
+                    { transform: [{ scale: urgency.pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.3] }) }] },
+                  ]}
+                >
                   <Text style={styles.secondsText} {...textScale.badge}>
                     {secondsLeft}
                   </Text>
-                </View>
-              </View>
+                </Animated.View>
+              </Animated.View>
 
-              <Animated.View style={[styles.flex, { transform: [{ translateX: shake }] }]}>
+              <View style={styles.flex}>
                 <ScrollView
                   contentContainerStyle={[styles.playScroll, { paddingBottom: insets.bottom + space.xxl }]}
                   showsVerticalScrollIndicator={false}
@@ -540,8 +578,12 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
                 >
                   <Animated.View
                     style={{
-                      opacity: enter,
-                      transform: [{ translateY: enter.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) }, { scale: enter.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1] }) }],
+                      opacity: enter.interpolate({ inputRange: [0, 0.4, 1], outputRange: [0, 1, 1], extrapolate: "clamp" }),
+                      transform: [
+                        { translateX: enter.interpolate({ inputRange: [0, 1], outputRange: [screenW * 0.6, 0] }) },
+                        { rotate: enter.interpolate({ inputRange: [0, 1], outputRange: ["8deg", "0deg"] }) },
+                        { scale: enter.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1] }) },
+                      ],
                     }}
                   >
                     <QuestionCard question={question} status={status} chosen={chosen} elapsed={elapsed} onPick={answer} />
@@ -553,14 +595,15 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
                         <Animated.View
                           key={option.key}
                           style={{
-                            opacity: optionAnims[index] ?? 1,
+                            opacity: (optionAnims[index] ?? enter).interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, 1, 1], extrapolate: "clamp" }),
                             transform: [
-                              { translateY: (optionAnims[index] ?? enter).interpolate({ inputRange: [0, 1], outputRange: [22, 0] }) },
-                              { scale: (optionAnims[index] ?? enter).interpolate({ inputRange: [0, 1], outputRange: [0.9, 1] }) },
+                              { translateY: (optionAnims[index] ?? enter).interpolate({ inputRange: [0, 1], outputRange: [40, 0] }) },
+                              { scale: (optionAnims[index] ?? enter).interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }) },
                             ],
                           }}
                         >
                           <OptionButton
+                            breath={status === "asking" && !removed.includes(option.key) ? breathStyle(breath, index) : undefined}
                             option={option}
                             mark={question.layout === "triple" ? TRIPLE_MARKS[index] : LETTERS[index]}
                             tone={(question.layout === "triple" ? QUIZ_TRIPLE_TONES[index] : QUIZ_LETTER_TONES[index]) ?? "blue"}
@@ -591,9 +634,8 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
                     </View>
                   )}
                 </ScrollView>
-              </Animated.View>
+              </View>
 
-              <SparkleBurst trigger={sparkTick} radius={90} />
               {gain ? (
                 <Animated.View
                   key={gain.id}
@@ -618,7 +660,7 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
             </View>
           ) : null}
 
-          <ConfettiBurst trigger={confettiTick} count={30} />
+          <ConfettiBurst trigger={confettiTick} count={22} />
           {phase === "over" ? (
             <ArenaResultCard
               game={config.game}
@@ -640,7 +682,14 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
             />
           ) : null}
         </View>
-      </View>
+      </Animated.View>
+
+      {phase === "playing" ? (
+        <>
+          <StarFlight trigger={sparkTick} from={{ x: screenW / 2, y: screenH * 0.48 }} to={scorePill} onArrive={bumpScore} />
+          <SweepBanner trigger={levelTick} label={`Seviye ${level}!`} icon="trending-up" />
+        </>
+      ) : null}
 
       <PauseOverlay
         visible={paused}
@@ -656,7 +705,7 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
           <CartoonButton
             label="Rekor tablosu"
             icon="trophy"
-            tone="gold"
+            tone="indigo"
             size="sm"
             onPress={() => {
               openBoard();
@@ -691,7 +740,7 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
 
 /* ═════════════════════════ KURULUM KARTI ═════════════════════════ */
 
-const RULE_TONES: QuizToneName[] = ["blue", "green", "pink", "orange", "purple"];
+const RULE_TONES: QuizToneName[] = ["indigo"];
 
 function SetupCard({
   config,
@@ -759,7 +808,7 @@ function SetupCard({
             accessibilityRole="button"
             accessibilityLabel={`Soru kapsamı: ${city ? city.label : "Tüm Türkiye"}. Değiştir`}
           >
-            <IconBubble icon={city ? "location" : "earth"} tone="blue" size={40} />
+            <IconBubble icon={city ? "location" : "earth"} tone="indigo" size={40} />
             <View style={styles.flex}>
               <Text style={styles.cityName} {...textScale.dense}>
                 {city ? city.label : "Tüm Türkiye"}
@@ -792,7 +841,7 @@ function SetupCard({
           ) : null}
 
           <NavyPill style={styles.bestPill}>
-            <Ionicons name="trophy" size={15} color={CARTOON.star} />
+            <Ionicons name="trophy" size={15} color={QUIZ.accent} />
             <Text style={styles.pillText} {...textScale.dense}>
               {best > 0 ? `Rekorun ${formatCount(best)} ${SCORE_UNIT}` : "Henüz rekorun yok"}
             </Text>
@@ -824,7 +873,7 @@ function Hud({ score, lives, bump }: { score: number; lives: number; bump: Anima
   return (
     <View style={styles.hud}>
       <NavyPill>
-        <Ionicons name="star" size={17} color={CARTOON.star} />
+        <Ionicons name="star" size={17} color={QUIZ.accent} />
         <Animated.Text
           style={[styles.hudScore, { transform: [{ scale: bump.interpolate({ inputRange: [0, 1], outputRange: [1, 1.3] }) }] }]}
           accessibilityLabel={`Puan ${score}`}
@@ -891,7 +940,6 @@ function QuestionCard({
   return (
     <CartoonPanel style={styles.qCard}>
       <View style={styles.qTag}>
-        <LinearGradient colors={CARTOON.purple} start={TOP} end={BOTTOM} style={StyleSheet.absoluteFill} />
         <Text style={styles.qTagText} numberOfLines={1} {...textScale.badge}>
           {upperTR(question.tag)}
         </Text>
@@ -946,7 +994,7 @@ function QuestionCard({
       ) : v.type === "mystery" ? (
         <View style={styles.mystery}>
           <View style={styles.mysteryAvatar}>
-            <LinearGradient colors={CARTOON.purple} start={TOP} end={BOTTOM} style={StyleSheet.absoluteFill} />
+            <LinearGradient colors={QUIZ_TONES.indigo.fill} start={TOP} end={BOTTOM} style={StyleSheet.absoluteFill} />
             {status === "revealed" ? (
               <Avatar name={v.player.name} image={v.player.image} size={76} />
             ) : (
@@ -1098,7 +1146,9 @@ function OptionButton({
   isChosen,
   removed,
   onPress,
+  breath,
 }: {
+  breath?: ReturnType<typeof breathStyle>;
   option: QuizOption;
   mark: string;
   tone: QuizToneName;
@@ -1116,6 +1166,7 @@ function OptionButton({
   const face = good ? "green" : bad ? "red" : faded ? "ghost" : tone;
   return (
     <Animated.View style={[fx.style, faded && styles.fadedOption]}>
+      <Animated.View style={breath}>
       <CartoonButton
         tone={face}
         keepTone
@@ -1128,9 +1179,9 @@ function OptionButton({
         <View style={styles.optionRow}>
           <View style={styles.mark}>
             {good ? (
-              <Ionicons name="checkmark" size={18} color={CARTOON.greenLip} />
+              <Ionicons name="checkmark" size={18} color={CARTOON.white} />
             ) : bad ? (
-              <Ionicons name="close" size={18} color={CARTOON.redLip} />
+              <Ionicons name="close" size={18} color={CARTOON.white} />
             ) : (
               <Text style={styles.markText} {...textScale.badge}>
                 {mark}
@@ -1154,6 +1205,7 @@ function OptionButton({
           </View>
         </View>
       </CartoonButton>
+      </Animated.View>
     </Animated.View>
   );
 }
@@ -1192,7 +1244,7 @@ function MissNote({ question }: { question: QuizQuestion }) {
 
 /* ═════════════════════════ STİLLER ═════════════════════════ */
 
-const shadow = { textShadowColor: CARTOON.textShadow, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 } as const;
+const shadow = { textShadowColor: QUIZ.textShadow, textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 } as const;
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: CARTOON.night[2] },
@@ -1228,16 +1280,16 @@ const styles = StyleSheet.create({
     padding: space.m,
     borderRadius: radius.xl,
     borderWidth: OUTLINE,
-    borderColor: CARTOON.outline,
+    borderColor: QUIZ.edge,
     backgroundColor: CARTOON.cardSoft,
   },
   cityName: { ...type.h2, color: CARTOON.cardInk },
   cityHint: { ...type.caption, letterSpacing: 0, color: CARTOON.cardMuted },
   cityChange: {
     borderRadius: radius.pill,
-    borderWidth: 2,
-    borderColor: CARTOON.outline,
-    backgroundColor: CARTOON.blue[1],
+    borderWidth: 1,
+    borderColor: QUIZ.edge,
+    backgroundColor: QUIZ.indigoInk,
     paddingHorizontal: space.sm,
     paddingVertical: space.xs,
   },
@@ -1250,12 +1302,12 @@ const styles = StyleSheet.create({
     padding: space.sm,
     borderRadius: radius.md,
     backgroundColor: QUIZ.hintOpen,
-    borderWidth: 2,
+    borderWidth: 1,
     borderColor: QUIZ.hintOpenBorder,
   },
   noticeBad: { backgroundColor: CARTOON.cardSoft, borderColor: CARTOON.red[1] },
   noticeText: { ...type.caption, fontFamily: fonts.semibold, letterSpacing: 0, color: CARTOON.cardInk, flex: 1 },
-  bestPill: { marginVertical: space.s },
+  bestPill: { marginVertical: space.s, backgroundColor: QUIZ.indigoInk },
 
   /* — HUD — */
   hud: { flexDirection: "row", alignItems: "center", gap: space.sm },
@@ -1265,17 +1317,18 @@ const styles = StyleSheet.create({
   subBar: { flexDirection: "row", alignItems: "center", gap: space.xs, paddingHorizontal: layout.screenPadding, marginTop: space.s },
 
   timerRow: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: layout.screenPadding, marginTop: space.sm },
+  timerWrap: { flex: 1, justifyContent: "center" },
+  timerGlow: { position: "absolute", left: -4, right: -4, top: -4, bottom: -4, borderRadius: radius.pill, backgroundColor: QUIZ.dangerGlow },
   timerTrack: {
-    flex: 1,
     height: 20,
     borderRadius: radius.pill,
     borderWidth: OUTLINE,
-    borderColor: CARTOON.outline,
-    backgroundColor: CARTOON.pill[1],
+    borderColor: QUIZ.edge,
+    backgroundColor: QUIZ.track,
     overflow: "hidden",
   },
   timerFill: { flex: 1, borderRadius: radius.pill, overflow: "hidden", transformOrigin: "left" },
-  timerShine: { position: "absolute", top: 2, left: 6, right: 6, height: 4, borderRadius: 2, backgroundColor: CARTOON.shine },
+  timerShine: { position: "absolute", top: 2, left: 6, right: 6, height: 4, borderRadius: 2, backgroundColor: QUIZ.shineSoft },
   seconds: {
     width: 40,
     height: 40,
@@ -1283,8 +1336,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: OUTLINE,
-    borderColor: CARTOON.outline,
-    backgroundColor: CARTOON.pill[0],
+    borderColor: QUIZ.edge,
+    backgroundColor: QUIZ.hudPill,
   },
   secondsHot: { backgroundColor: CARTOON.red[1] },
   secondsText: { ...type.scoreSm, color: CARTOON.white, ...shadow },
@@ -1298,15 +1351,14 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     paddingHorizontal: space.m,
     paddingVertical: 3,
-    borderWidth: 2,
-    borderColor: CARTOON.outline,
+    backgroundColor: QUIZ.indigoTint,
     overflow: "hidden",
     maxWidth: "100%",
   },
-  qTagText: { ...type.micro, fontFamily: fonts.bold, color: CARTOON.white },
+  qTagText: { ...type.micro, fontFamily: fonts.bold, color: QUIZ.indigoInk },
   qPrompt: { ...type.h1, fontFamily: fonts.heading, color: CARTOON.cardInk },
 
-  avatarRing: { borderRadius: radius.pill, borderWidth: OUTLINE, borderColor: CARTOON.outline, backgroundColor: CARTOON.white, padding: 2 },
+  avatarRing: { borderRadius: radius.pill, borderWidth: OUTLINE, borderColor: QUIZ.edge, backgroundColor: CARTOON.white, padding: 2 },
 
   duel: { flexDirection: "row", gap: space.m, marginTop: space.xs },
   duelCard: {
@@ -1316,11 +1368,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.s,
     borderRadius: radius.xl,
     borderWidth: OUTLINE,
-    borderColor: CARTOON.outline,
+    borderColor: QUIZ.edge,
     overflow: "hidden",
   },
   duelCardOk: { borderColor: CARTOON.greenLip },
-  duelShine: { position: "absolute", top: 3, left: 8, right: 8, height: 22, borderRadius: radius.md, backgroundColor: CARTOON.shine },
+  duelShine: { position: "absolute", top: 3, left: 8, right: 8, height: 22, borderRadius: radius.md, backgroundColor: QUIZ.shineSoft },
   duelName: { ...type.h3, fontFamily: fonts.heading, color: CARTOON.white, textAlign: "center", marginTop: space.xs, minHeight: 40, ...shadow },
   duelTeam: { ...type.caption, fontFamily: fonts.semibold, letterSpacing: 0, color: QUIZ.muted, textAlign: "center" },
   duelValue: {
@@ -1331,8 +1383,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.m,
     paddingVertical: 3,
     backgroundColor: CARTOON.white,
-    borderWidth: 2,
-    borderColor: CARTOON.outline,
+    borderWidth: 1,
+    borderColor: QUIZ.edge,
   },
   duelValueOk: { backgroundColor: CARTOON.green[1] },
   duelValueText: { ...type.scoreSm, color: CARTOON.cardInk },
@@ -1346,8 +1398,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 2,
-    borderColor: CARTOON.outline,
+    borderWidth: 1,
+    borderColor: QUIZ.edge,
   },
   badgeOk: { backgroundColor: CARTOON.correct },
   badgeBad: { backgroundColor: CARTOON.wrong },
@@ -1363,7 +1415,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: OUTLINE,
-    borderColor: CARTOON.outline,
+    borderColor: QUIZ.edge,
     overflow: "hidden",
   },
   vsText: { ...type.label, fontFamily: fonts.bold, color: CARTOON.goldInk },
@@ -1380,7 +1432,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: OUTLINE,
-    borderColor: CARTOON.outline,
+    borderColor: QUIZ.edge,
     overflow: "hidden",
   },
   hints: { flex: 1, gap: space.xs },
@@ -1392,8 +1444,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.sm,
     borderRadius: radius.md,
     backgroundColor: CARTOON.cardSoft,
-    borderWidth: 2,
-    borderColor: CARTOON.outlineSoft,
+    borderWidth: 1,
+    borderColor: QUIZ.edge,
   },
   hintOpen: { backgroundColor: QUIZ.hintOpen, borderColor: QUIZ.hintOpenBorder },
   hintText: { ...type.caption, fontFamily: fonts.semibold, letterSpacing: 0, color: CARTOON.cardInk, flex: 1 },
@@ -1411,7 +1463,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.sm,
     borderRadius: radius.lg,
     borderWidth: OUTLINE,
-    borderColor: CARTOON.outline,
+    borderColor: QUIZ.edge,
     overflow: "hidden",
   },
   matchScore: { ...type.scoreLg, color: CARTOON.white, ...shadow },
@@ -1428,12 +1480,10 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: CARTOON.white,
-    borderWidth: 2,
-    borderColor: CARTOON.outline,
+    backgroundColor: QUIZ.markBg,
   },
-  markText: { ...type.h2, fontFamily: fonts.bold, color: CARTOON.outline },
-  optionAvatar: { borderRadius: radius.pill, borderWidth: 2, borderColor: CARTOON.outline },
+  markText: { ...type.label, fontFamily: fonts.bold, color: CARTOON.white },
+  optionAvatar: { borderRadius: radius.pill },
   optionLabel: { ...type.h2, fontFamily: fonts.heading, color: CARTOON.white, ...shadow },
   optionStruck: { textDecorationLine: "line-through" },
   optionSub: { ...type.caption, fontFamily: fonts.semibold, letterSpacing: 0, color: QUIZ.muted },
@@ -1447,13 +1497,13 @@ const styles = StyleSheet.create({
     padding: space.md,
     borderRadius: radius.xl,
     borderWidth: OUTLINE,
-    borderColor: CARTOON.outline,
+    borderColor: QUIZ.edge,
     overflow: "hidden",
   },
   revealText: { ...type.body, fontFamily: fonts.heading, color: CARTOON.white, flex: 1, ...shadow },
 
   gain: { position: "absolute", top: 130, left: 0, right: 0, alignItems: "center" },
-  gainText: { ...type.scoreJumbo, color: CARTOON.star, textShadowColor: CARTOON.outline, textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0 },
+  gainText: { ...type.scoreJumbo, color: QUIZ.accent, textShadowColor: QUIZ.textShadow, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 4 },
   gainSub: { ...type.label, fontFamily: fonts.bold, color: CARTOON.white, ...shadow },
 
   miss: {
@@ -1462,8 +1512,8 @@ const styles = StyleSheet.create({
     padding: space.m,
     borderRadius: radius.lg,
     backgroundColor: CARTOON.cardSoft,
-    borderWidth: 2,
-    borderColor: CARTOON.outline,
+    borderWidth: 1,
+    borderColor: QUIZ.edge,
     gap: 2,
   },
   missLabel: { ...type.micro, fontFamily: fonts.bold, color: CARTOON.cardMuted },

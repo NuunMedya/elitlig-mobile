@@ -15,9 +15,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Animated, FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { IconBubble, OUTLINE, Ribbon, RoundButton } from "@/components/game/QuizKit";
+import { IconBubble, OUTLINE, PopIn, Ribbon, RoundButton } from "@/components/game/QuizKit";
 import { Touchable, useReduceMotion } from "@/components/ui";
 import { CARTOON } from "@/lib/game/cartoon";
+import { QUIZ } from "@/lib/game/quizPalette";
 import type { MetaOption } from "@/lib/types";
 import { fonts, radius, space, textScale, type } from "@/theme";
 
@@ -89,7 +90,7 @@ export function QuizCityPicker({
               <Text style={styles.title} numberOfLines={2} {...textScale.dense}>
                 Sorular nereden gelsin?
               </Text>
-              <RoundButton icon="close" tone="red" size={40} onPress={onClose} accessibilityLabel="Kapat" />
+              <RoundButton icon="close" tone="ghost" size={40} onPress={onClose} accessibilityLabel="Kapat" />
             </View>
 
             <View style={styles.search}>
@@ -117,9 +118,11 @@ export function QuizCityPicker({
               keyboardShouldPersistTaps="handled"
               style={styles.list}
               contentContainerStyle={styles.listContent}
-              renderItem={({ item }) => {
+              renderItem={({ item, index }) => {
                 const selected = (item.city?.id ?? null) === (value?.id ?? null);
                 return (
+                  /* İlk satırlar sırayla yaylanarak gelir; kaydırınca çizilenler doğrudan yerinde. */
+                  <PopIn delay={180 + index * 45} bouncy skip={index >= 9}>
                   <Touchable
                     feedback="card"
                     haptic="selection"
@@ -132,7 +135,7 @@ export function QuizCityPicker({
                     accessibilityState={{ selected }}
                     accessibilityLabel={item.city ? item.city.label : "Tüm Türkiye"}
                   >
-                    <IconBubble icon={item.city ? (item.home ? "home" : "location") : "earth"} tone={item.city ? (item.home ? "orange" : "blue") : "purple"} size={36} />
+                    <IconBubble icon={item.city ? (item.home ? "home" : "location") : "earth"} tone="indigo" size={36} />
                     <View style={styles.flex}>
                       <Text style={styles.label} {...textScale.dense}>
                         {item.city ? item.city.label : "Tüm Türkiye"}
@@ -148,11 +151,14 @@ export function QuizCityPicker({
                       ) : null}
                     </View>
                     {selected ? (
-                      <View style={styles.check}>
-                        <Ionicons name="checkmark" size={16} color={CARTOON.white} />
-                      </View>
+                      <PopIn bouncy delay={420}>
+                        <View style={styles.check}>
+                          <Ionicons name="checkmark" size={16} color={CARTOON.white} />
+                        </View>
+                      </PopIn>
                     ) : null}
                   </Touchable>
+                  </PopIn>
                 );
               }}
             />
@@ -176,7 +182,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: radius.xxl,
     borderWidth: OUTLINE,
     borderBottomWidth: 0,
-    borderColor: CARTOON.outline,
+    borderColor: QUIZ.edge,
     paddingHorizontal: space.lg,
     paddingTop: space.xxl,
     gap: space.md,
@@ -192,7 +198,7 @@ const styles = StyleSheet.create({
     minHeight: 46,
     borderRadius: radius.pill,
     borderWidth: OUTLINE,
-    borderColor: CARTOON.outline,
+    borderColor: QUIZ.edge,
     backgroundColor: CARTOON.cardSoft,
   },
   searchInput: { ...type.body, fontFamily: fonts.semibold, color: CARTOON.cardInk, flex: 1, paddingVertical: space.sm },
@@ -205,11 +211,11 @@ const styles = StyleSheet.create({
     paddingVertical: space.sm,
     paddingHorizontal: space.m,
     borderRadius: radius.xl,
-    borderWidth: 2,
-    borderColor: CARTOON.outlineSoft,
+    borderWidth: 1,
+    borderColor: QUIZ.edge,
     backgroundColor: CARTOON.card,
   },
-  rowSelected: { borderWidth: OUTLINE, borderColor: CARTOON.outline, backgroundColor: CARTOON.cardSoft },
+  rowSelected: { borderWidth: 1.5, borderColor: QUIZ.indigoInk, backgroundColor: CARTOON.cardSoft },
   label: { ...type.h3, fontFamily: fonts.heading, color: CARTOON.cardInk },
   sub: { ...type.caption, fontFamily: fonts.semibold, letterSpacing: 0, color: CARTOON.cardMuted },
   check: {
@@ -219,7 +225,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: CARTOON.correct,
-    borderWidth: 2,
-    borderColor: CARTOON.outline,
+    borderWidth: 1,
+    borderColor: QUIZ.edge,
   },
 });

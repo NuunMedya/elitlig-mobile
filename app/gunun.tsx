@@ -42,10 +42,12 @@ import { useQuery } from "@tanstack/react-query";
 import * as Sharing from "expo-sharing";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Animated, AppState, Easing, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Animated, AppState, Easing, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import ViewShot, { captureRef } from "react-native-view-shot";
+import { ConfettiBurst } from "@/components/game/Celebration";
 import {
+  breathStyle,
   CartoonButton,
   CartoonPanel,
   FlashLayer,
@@ -57,16 +59,22 @@ import {
   QuizBackdrop,
   Ribbon,
   RoundButton,
+  StarFlight,
+  SweepBanner,
+  useAmbient,
   useAnswerFx,
   useExitGame,
   useFlash,
   useHardwareBack,
+  useLoopClock,
+  useScreenShake,
+  useUrgency,
 } from "@/components/game/QuizKit";
 import { BottomSheet, useReduceMotion, useToast } from "@/components/ui";
 import { startArenaSession, submitArenaScore } from "@/lib/api/arena";
 import { getPlayerRankings } from "@/lib/api/players";
 import { CARTOON } from "@/lib/game/cartoon";
-import { QUIZ, QUIZ_LETTER_TONES, type QuizToneName } from "@/lib/game/quizPalette";
+import { QUIZ, QUIZ_LETTER_TONES, QUIZ_TONES, type QuizToneName } from "@/lib/game/quizPalette";
 import { ApiError, get } from "@/lib/http";
 import { queryKeys } from "@/lib/queryKeys";
 import { instagramUrl } from "@/lib/socials";
@@ -220,16 +228,14 @@ const StatCell = React.memo(function StatCell({
   label: string;
   tone: QuizToneName;
 }) {
-  const fill = tone === "gold" ? CARTOON.gold : tone === "purple" ? CARTOON.purple : tone === "green" ? CARTOON.green : CARTOON.blue;
-  const ink = tone === "gold" ? CARTOON.goldInk : CARTOON.white;
+  // Sade görünüm: üç karo aynı nötr zeminde; yalnız puan karosu vurgu renginde rakam taşır.
+  const ink = tone === "gold" ? QUIZ.indigoInk : CARTOON.cardInk;
   return (
     <View style={styles.statCell} accessible accessibilityLabel={`${label}: ${value}`}>
-      <LinearGradient colors={fill} start={TOP} end={BOTTOM} style={StyleSheet.absoluteFill} />
-      <View style={styles.statShine} />
-      <Text style={[styles.statValue, { color: ink }, ink === CARTOON.white && styles.shadow]} numberOfLines={1} {...textScale.dense}>
+      <Text style={[styles.statValue, { color: ink }]} numberOfLines={1} {...textScale.dense}>
         {value}
       </Text>
-      <Text style={[styles.statLabel, { color: ink }]} numberOfLines={1} {...textScale.badge}>
+      <Text style={[styles.statLabel, { color: CARTOON.cardMuted }]} numberOfLines={1} {...textScale.badge}>
         {upperTR(label)}
       </Text>
     </View>
@@ -248,7 +254,7 @@ const Fact = React.memo(function Fact({
 }) {
   return (
     <View style={styles.fact}>
-      <IconBubble icon={icon} tone={tone} size={26} />
+      <IconBubble icon={icon} tone="indigo" size={26} />
       <Text style={styles.factText} numberOfLines={1} {...textScale.badge}>
         {label}
       </Text>
@@ -286,7 +292,9 @@ function DailyOption({
   muted,
   disabled,
   onPress,
+  breath,
 }: {
+  breath?: ReturnType<typeof breathStyle>;
   label: string;
   tone: QuizToneName;
   right: boolean;
@@ -298,6 +306,7 @@ function DailyOption({
   const fx = useAnswerFx(right, wrong);
   return (
     <Animated.View style={[fx.style, muted && styles.faded]}>
+      <Animated.View style={breath}>
       <CartoonButton
         tone={right ? "green" : wrong ? "red" : muted ? "ghost" : tone}
         keepTone
@@ -320,6 +329,7 @@ function DailyOption({
           ) : null}
         </View>
       </CartoonButton>
+      </Animated.View>
     </Animated.View>
   );
 }
@@ -332,7 +342,7 @@ function GradeBadge({ correct }: { correct: number }) {
     if (reduceMotion) return;
     Animated.sequence([Animated.delay(150), Animated.spring(pop, { toValue: 1, friction: 4, tension: 110, useNativeDriver: true })]).start();
   }, [pop, reduceMotion]);
-  const fill = correct >= 8 ? CARTOON.green : correct >= 5 ? CARTOON.blue : CARTOON.orange;
+  const fill = correct >= 8 ? CARTOON.green : QUIZ_TONES.indigo.fill;
   return (
     <Animated.View style={[styles.grade, { transform: [{ scale: pop }] }]} accessible accessibilityLabel={`${correct} / ${ROUND} doğru`}>
       <LinearGradient colors={fill} start={TOP} end={BOTTOM} style={StyleSheet.absoluteFill} />
@@ -357,6 +367,10 @@ export default function DailyQuizScreen() {
   const reduceMotion = useReduceMotion();
   const flash = useFlash();
   const [flashOk, setFlashOk] = useState(true);
+  /* — Yalnız sunum (canlılık): yıldız uçuşu, konfeti, ekran sarsıntısı — */
+  const screenShake = useScreenShake();
+  const [correctTick, setCorrectTick] = useState(0);
+  const [landTick, setLandTick] = useState(0);
 
   /**
    * GÜN ANAHTARI: `toISOString()` (UTC) ile üretilir ve `(tabs)/oyunlar.tsx`
@@ -498,6 +512,8 @@ export default function DailyQuizScreen() {
     else haptics.error();
     setFlashOk(Boolean(isCorrect));
     if (!reduceMotion) flash.fire();
+    if (isCorrect) setCorrectTick((n) => n + 1);
+    else screenShake.fire();
     setMarks((prev) => [...prev, isCorrect ? "correct" : "wrong"]);
     if (isCorrect) {
       const bonus = Math.floor(secondsLeft / 2);
@@ -660,17 +676,24 @@ export default function DailyQuizScreen() {
     return false;
   });
 
+  /* — Canlılık: ortam saati, boşta nefes, son saniye nabzı — */
+  const { width: screenW, height: screenH } = useWindowDimensions();
+  const ambient = useAmbient(paused);
+  const breath = useLoopClock(2600, ambient && phase === "playing");
+  const urgency = useUrgency(secondsLeft, phase === "playing" && !paused && secondsLeft > 0 && secondsLeft <= 4);
+  const scorePill = { x: layout.screenPadding + 150, y: insets.top + space.sm + 25 };
+
   const topBar = (
     <View style={styles.topBar}>
       {inGame(phase) ? (
         <>
-          <NavyPill>
+          <NavyPill bumpKey={qIndex}>
             <Text style={styles.pillText} {...textScale.badge}>
               {upperTR(`Soru ${qIndex + 1}/${ROUND}`)}
             </Text>
           </NavyPill>
-          <NavyPill accessibilityLabel={`${score} puan`}>
-            <Ionicons name="star" size={16} color={CARTOON.star} />
+          <NavyPill accessibilityLabel={`${score} puan`} bumpKey={landTick} glowKey={landTick}>
+            <Ionicons name="star" size={16} color={QUIZ.accent} />
             <Text style={styles.pillScore} {...textScale.dense}>
               {formatCount(score)}
             </Text>
@@ -685,14 +708,14 @@ export default function DailyQuizScreen() {
         </>
       ) : (
         <NavyPill>
-          <Ionicons name="calendar" size={15} color={CARTOON.star} />
+          <Ionicons name="calendar" size={15} color={QUIZ.accent} />
           <Text style={styles.pillText} numberOfLines={1} {...textScale.badge}>
             {upperTR(dayLabel)}
           </Text>
         </NavyPill>
       )}
       <View style={styles.flex} />
-      <RoundButton icon="pause" onPress={openPause} accessibilityLabel="Oyunu duraklat" />
+      <RoundButton icon="pause" onPress={openPause} accessibilityLabel="Oyunu duraklat" shine={ambient} />
     </View>
   );
 
@@ -700,16 +723,16 @@ export default function DailyQuizScreen() {
 
   return (
     <View style={styles.screen}>
-      <QuizBackdrop />
+      <QuizBackdrop paused={paused} />
       {inGame(phase) ? <FlashLayer value={flash.value} ok={flashOk} /> : null}
 
-      <View style={[styles.body, { paddingTop: insets.top + space.sm }]}>
+      <Animated.View style={[styles.body, { paddingTop: insets.top + space.sm }, screenShake.style]}>
         {topBar}
 
         {query.isLoading ? (
           <View style={styles.center}>
             <CartoonPanel style={styles.stateCard}>
-              <ActivityIndicator color={CARTOON.purple[1]} size="large" />
+              <ActivityIndicator color={QUIZ.indigoInk} size="large" />
               <Text style={styles.stateTitle} {...textScale.dense}>
                 Sorular hazırlanıyor
               </Text>
@@ -727,7 +750,7 @@ export default function DailyQuizScreen() {
                   ? "Bağlantını kontrol edip tekrar dene."
                   : "Soru havuzu şu an yüklenemedi, birazdan tekrar dene."}
               </Text>
-              <CartoonButton label="Tekrar dene" icon="refresh" tone="blue" onPress={() => void query.refetch()} style={styles.stretch} />
+              <CartoonButton label="Tekrar dene" icon="refresh" tone="green" onPress={() => void query.refetch()} style={styles.stretch} />
             </CartoonPanel>
           </View>
         ) : phase === "intro" ? (
@@ -735,7 +758,7 @@ export default function DailyQuizScreen() {
           <ScrollView contentContainerStyle={[styles.pageContent, scrollPad]} showsVerticalScrollIndicator={false}>
             <PopIn style={styles.ribbonHost}>
               <CartoonPanel style={styles.hero}>
-                <IconBubble icon="bulb" tone="blue" size={64} />
+                <IconBubble icon="bulb" tone="indigo" size={56} />
                 <Text style={styles.heroTitle} {...textScale.dense}>
                   Bugünün 10 sorusu hazır
                 </Text>
@@ -803,7 +826,7 @@ export default function DailyQuizScreen() {
 
             {best > 0 ? (
               <NavyPill style={styles.centerPill}>
-                <Ionicons name="trophy" size={15} color={CARTOON.star} />
+                <Ionicons name="trophy" size={15} color={QUIZ.accent} />
                 <Text style={styles.pillText} {...textScale.badge}>
                   En iyi günün: {formatCount(best)} puan
                 </Text>
@@ -889,23 +912,29 @@ export default function DailyQuizScreen() {
               ))}
             </View>
 
-            <View style={styles.timerRow}>
-              <CountdownBar value={secondsLeft / SECONDS} tone={timeTone(secondsLeft)} />
-              <View
-                style={[styles.seconds, secondsLeft <= 4 && styles.secondsHot]}
+            <Animated.View style={[styles.timerRow, urgency.style]}>
+              <View style={styles.timerWrap}>
+                <Animated.View pointerEvents="none" style={[styles.timerGlow, { opacity: urgency.pulse }]} />
+                <CountdownBar value={secondsLeft / SECONDS} tone={timeTone(secondsLeft)} />
+              </View>
+              <Animated.View
+                style={[
+                  styles.seconds,
+                  secondsLeft <= 4 && styles.secondsHot,
+                  { transform: [{ scale: urgency.pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.3] }) }] },
+                ]}
                 accessible
                 accessibilityLabel={`${secondsLeft} saniye kaldı`}
               >
                 <Text style={styles.secondsText} {...textScale.badge}>
                   {secondsLeft}
                 </Text>
-              </View>
-            </View>
+              </Animated.View>
+            </Animated.View>
 
-            <PopIn key={`q${qIndex}`}>
+            <PopIn key={`q${qIndex}`} from="right">
               <CartoonPanel style={styles.questionCard}>
                 <View style={styles.qTag}>
-                  <LinearGradient colors={CARTOON.purple} start={TOP} end={BOTTOM} style={StyleSheet.absoluteFill} />
                   <Text style={styles.qTagText} {...textScale.badge}>
                     {upperTR(`Soru ${qIndex + 1}`)}
                   </Text>
@@ -923,8 +952,9 @@ export default function DailyQuizScreen() {
                 const right = revealed && option.correct;
                 const wrong = revealed && isChosen && !option.correct;
                 return (
-                  <PopIn key={`${qIndex}-${option.label}-${index}`} delay={80 + index * 70}>
+                  <PopIn key={`${qIndex}-${option.label}-${index}`} delay={160 + index * 85} bouncy>
                     <DailyOption
+                      breath={phase === "playing" ? breathStyle(breath, index) : undefined}
                       label={option.label}
                       tone={QUIZ_LETTER_TONES[index] ?? "blue"}
                       right={right}
@@ -939,7 +969,22 @@ export default function DailyQuizScreen() {
             </View>
           </ScrollView>
         )}
-      </View>
+      </Animated.View>
+
+      {inGame(phase) ? (
+        <>
+          <StarFlight
+            trigger={correctTick}
+            from={{ x: screenW / 2, y: screenH * 0.5 }}
+            to={scorePill}
+            onArrive={() => setLandTick((n) => n + 1)}
+          />
+          <SweepBanner trigger={qIndex === ROUND - 1 ? 1 : 0} label="Son soru!" icon="flag" fill={QUIZ.ribbon} />
+        </>
+      ) : null}
+
+      {/* Konfeti yalnız büyük sonuçta (8+ doğru), oyun içinde değil. */}
+      <ConfettiBurst trigger={phase === "done" && correctCount >= 8 ? 1 : 0} count={24} />
 
       <PauseOverlay
         visible={paused}
@@ -1006,12 +1051,12 @@ function ResultActions({
           label={retryLabel}
           accessibilityLabel={`${retryLabel} turu`}
           icon="refresh"
-          tone="blue"
+          tone="indigo"
           size="sm"
           onPress={onRetry}
           style={styles.actionButton}
         />
-        <CartoonButton label="Meydan oku" icon="share-social" tone="gold" size="sm" onPress={openShare} style={styles.actionButton} />
+        <CartoonButton label="Meydan oku" icon="share-social" tone="indigo" size="sm" onPress={openShare} style={styles.actionButton} />
       </View>
 
       <BottomSheet visible={shareOpen} onClose={closeShare} title="Sonucunu paylaş" snap="full">
@@ -1081,7 +1126,7 @@ function ResultActions({
 
 /* ═════════════════════════ STİLLER ═════════════════════════ */
 
-const shadow = { textShadowColor: CARTOON.textShadow, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 } as const;
+const shadow = { textShadowColor: QUIZ.textShadow, textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 } as const;
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: CARTOON.night[2] },
@@ -1122,8 +1167,8 @@ const styles = StyleSheet.create({
     gap: space.xs,
     backgroundColor: CARTOON.cardSoft,
     borderRadius: radius.pill,
-    borderWidth: 2,
-    borderColor: CARTOON.outline,
+    borderWidth: 1,
+    borderColor: QUIZ.edge,
     paddingLeft: space.xxs,
     paddingRight: space.m,
     paddingVertical: space.xxs,
@@ -1140,10 +1185,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 4,
-    borderColor: CARTOON.outline,
+    borderColor: QUIZ.edge,
     overflow: "hidden",
   },
-  gradeShine: { position: "absolute", top: 6, left: 24, right: 24, height: 26, borderRadius: radius.pill, backgroundColor: CARTOON.shine },
+  gradeShine: { position: "absolute", top: 6, left: 24, right: 24, height: 26, borderRadius: radius.pill, backgroundColor: QUIZ.shineSoft },
   gradeValue: { ...type.scoreLg, color: CARTOON.white, ...shadow },
   gradeLabel: { ...type.micro, fontFamily: fonts.bold, color: CARTOON.white, letterSpacing: 1 },
   resultScore: { ...type.scoreJumbo, color: CARTOON.cardInk },
@@ -1151,8 +1196,8 @@ const styles = StyleSheet.create({
   resultUnit: { ...type.label, fontFamily: fonts.bold, letterSpacing: 1.2, color: CARTOON.cardMuted },
   practiceChip: {
     borderRadius: radius.pill,
-    borderWidth: 2,
-    borderColor: CARTOON.outline,
+    borderWidth: 1,
+    borderColor: QUIZ.edge,
     backgroundColor: CARTOON.orange[1],
     paddingHorizontal: space.sm,
     paddingVertical: 2,
@@ -1167,11 +1212,10 @@ const styles = StyleSheet.create({
     gap: space.xxs,
     paddingVertical: space.m,
     borderRadius: radius.lg,
-    borderWidth: OUTLINE,
-    borderColor: CARTOON.outline,
+    backgroundColor: CARTOON.cardSoft,
     overflow: "hidden",
   },
-  statShine: { position: "absolute", top: 3, left: 6, right: 6, height: 14, borderRadius: radius.xs, backgroundColor: CARTOON.shine },
+  statShine: { position: "absolute", top: 3, left: 6, right: 6, height: 14, borderRadius: radius.xs, backgroundColor: QUIZ.shineSoft },
   statValue: { ...type.scoreSm },
   statLabel: { ...type.micro, fontFamily: fonts.bold },
 
@@ -1195,26 +1239,27 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 14,
     borderRadius: radius.pill,
-    borderWidth: 2,
-    borderColor: CARTOON.outline,
-    backgroundColor: CARTOON.pill[0],
+    borderWidth: 1,
+    borderColor: QUIZ.edge,
+    backgroundColor: QUIZ.hudPill,
   },
   stripCurrent: { backgroundColor: CARTOON.gold[0] },
   stripCorrect: { backgroundColor: CARTOON.correct },
   stripWrong: { backgroundColor: CARTOON.wrong },
 
   timerRow: { flexDirection: "row", alignItems: "center", gap: space.sm, marginTop: -space.xs },
+  timerWrap: { flex: 1, justifyContent: "center" },
+  timerGlow: { position: "absolute", left: -4, right: -4, top: -4, bottom: -4, borderRadius: radius.pill, backgroundColor: QUIZ.dangerGlow },
   timerTrack: {
-    flex: 1,
     height: 22,
     borderRadius: radius.pill,
     borderWidth: OUTLINE,
-    borderColor: CARTOON.outline,
-    backgroundColor: CARTOON.pill[1],
+    borderColor: QUIZ.edge,
+    backgroundColor: QUIZ.track,
     overflow: "hidden",
   },
   timerFill: { flex: 1, borderRadius: radius.pill, overflow: "hidden", transformOrigin: "left" },
-  timerShine: { position: "absolute", top: 2, left: 6, right: 6, height: 5, borderRadius: 3, backgroundColor: CARTOON.shine },
+  timerShine: { position: "absolute", top: 2, left: 6, right: 6, height: 5, borderRadius: 3, backgroundColor: QUIZ.shineSoft },
   seconds: {
     width: 46,
     height: 46,
@@ -1222,8 +1267,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: OUTLINE,
-    borderColor: CARTOON.outline,
-    backgroundColor: CARTOON.pill[0],
+    borderColor: QUIZ.edge,
+    backgroundColor: QUIZ.hudPill,
   },
   secondsHot: { backgroundColor: CARTOON.red[1] },
   secondsText: { ...type.scoreMd, color: CARTOON.white, ...shadow },
@@ -1240,11 +1285,10 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     paddingHorizontal: space.md,
     paddingVertical: 3,
-    borderWidth: 2,
-    borderColor: CARTOON.outline,
+    backgroundColor: QUIZ.indigoTint,
     overflow: "hidden",
   },
-  qTagText: { ...type.micro, fontFamily: fonts.bold, color: CARTOON.white, letterSpacing: 1 },
+  qTagText: { ...type.micro, fontFamily: fonts.bold, color: QUIZ.indigoInk, letterSpacing: 1 },
   prompt: { ...type.display, fontFamily: fonts.heading, color: CARTOON.cardInk, textAlign: "center" },
 
   /* — Şıklar — */
@@ -1264,7 +1308,7 @@ const styles = StyleSheet.create({
     height: 396,
     borderRadius: radius.xxl,
     borderWidth: OUTLINE,
-    borderColor: CARTOON.outline,
+    borderColor: QUIZ.edge,
     overflow: "hidden",
   },
   shareSkyline: { position: "absolute", left: 0, right: 0, bottom: 0, flexDirection: "row", alignItems: "flex-end", gap: 3 },
@@ -1276,8 +1320,8 @@ const styles = StyleSheet.create({
   shareBrand: { ...type.h2, fontFamily: fonts.bold, color: CARTOON.white, ...shadow },
   shareKicker: {
     borderRadius: radius.pill,
-    borderWidth: 2,
-    borderColor: CARTOON.outline,
+    borderWidth: 1,
+    borderColor: QUIZ.edge,
     backgroundColor: CARTOON.gold[0],
     paddingHorizontal: space.sm,
     paddingVertical: 2,
@@ -1291,7 +1335,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 4,
-    borderColor: CARTOON.outline,
+    borderColor: QUIZ.edge,
     overflow: "hidden",
     marginTop: space.sm,
   },
@@ -1300,7 +1344,7 @@ const styles = StyleSheet.create({
     marginTop: -space.lg,
     borderRadius: radius.pill,
     borderWidth: OUTLINE,
-    borderColor: CARTOON.outline,
+    borderColor: QUIZ.edge,
     backgroundColor: CARTOON.gold[1],
     paddingHorizontal: space.md,
     paddingVertical: space.xs,
