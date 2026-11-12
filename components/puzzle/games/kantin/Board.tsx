@@ -6,6 +6,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { memo, useEffect, useRef } from "react";
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from "react-native";
+import Svg, { Defs, Ellipse, Line, LinearGradient, Path, RadialGradient, Rect, Stop } from "react-native-svg";
 
 import { kantinScene as S } from "@/lib/puzzle/kantinPalette";
 import { KANTIN_PRODUCTS, type KantinItem, type KantinOrder } from "@/lib/puzzle/levels/kantin";
@@ -15,6 +16,63 @@ import { FanFigure, type FanMood } from "./Fan";
 import { CoinIcon, CrateIcon, ProductIcon } from "./ProductIcon";
 
 export const productName = (p: number) => KANTIN_PRODUCTS[p]?.name ?? "Ürün";
+
+/* ───────────────────────────── parlaklık katmanları ───────────────────────────── */
+
+/** Karo/kutu üstü cam parlaklığı: üstten ışık, altta gölge, kenar ışığı, parıltı. */
+const Gloss = memo(function Gloss({ w, h, r }: { w: number; h: number; r: number }) {
+  return (
+    <Svg width={w} height={h} style={StyleSheet.absoluteFill} pointerEvents="none">
+      <Defs>
+        <LinearGradient id="kgloss" x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor={S.white} stopOpacity={0.9} />
+          <Stop offset="0.45" stopColor={S.white} stopOpacity={0} />
+          <Stop offset="1" stopColor={S.ink} stopOpacity={0.14} />
+        </LinearGradient>
+      </Defs>
+      <Rect x={0} y={0} width={w} height={h} rx={r} fill="url(#kgloss)" />
+      <Rect x={1.2} y={1.2} width={w - 2.4} height={h - 2.4} rx={Math.max(1, r - 1)} fill="none" stroke={S.white} strokeOpacity={0.9} strokeWidth={1.2} />
+      <Ellipse cx={w * 0.27} cy={h * 0.16} rx={w * 0.15} ry={h * 0.06} fill={S.white} fillOpacity={0.9} transform={`rotate(-20 ${w * 0.27} ${h * 0.16})`} />
+    </Svg>
+  );
+});
+
+/** Ahşap damarı (tezgâh ve raf): soldan sağa ışık, ince damar çizgileri. */
+const WoodGrain = memo(function WoodGrain({ w, h, r, base, dark, light }: { w: number; h: number; r: number; base: string; dark: string; light: string }) {
+  const lines = [0.22, 0.48, 0.71];
+  return (
+    <Svg width={w} height={h} style={StyleSheet.absoluteFill} pointerEvents="none">
+      <Defs>
+        <LinearGradient id={`kwood${base}`} x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor={light} />
+          <Stop offset="0.35" stopColor={base} />
+          <Stop offset="1" stopColor={dark} />
+        </LinearGradient>
+      </Defs>
+      <Rect x={0} y={0} width={w} height={h} rx={r} fill={`url(#kwood${base})`} />
+      {lines.map((y) => (
+        <Path key={y} d={`M4 ${h * y} Q ${w * 0.3} ${h * y - 3} ${w * 0.55} ${h * y} T ${w - 4} ${h * y}`} stroke={dark} strokeOpacity={0.35} strokeWidth={1} fill="none" />
+      ))}
+      <Line x1={4} y1={1.5} x2={w - 4} y2={1.5} stroke={S.white} strokeOpacity={0.35} strokeWidth={1} />
+    </Svg>
+  );
+});
+
+/** Tabak parlaması: kenarda ışık yayı ve yumuşak iç gölge. */
+const PlateShine = memo(function PlateShine({ w, h }: { w: number; h: number }) {
+  return (
+    <Svg width={w} height={h} style={StyleSheet.absoluteFill} pointerEvents="none">
+      <Defs>
+        <RadialGradient id="kplate" cx="50%" cy="55%" r="60%">
+          <Stop offset="0.7" stopColor={S.ink} stopOpacity={0} />
+          <Stop offset="1" stopColor={S.ink} stopOpacity={0.1} />
+        </RadialGradient>
+      </Defs>
+      <Rect x={0} y={0} width={w} height={h} rx={h / 2} fill="url(#kplate)" />
+      <Path d={`M ${h * 0.45} ${h * 0.22} Q ${w * 0.5} ${h * 0.02} ${w - h * 0.45} ${h * 0.22}`} stroke={S.white} strokeOpacity={0.95} strokeWidth={2.5} strokeLinecap="round" fill="none" />
+    </Svg>
+  );
+});
 
 /* ───────────────────────────── HUD ───────────────────────────── */
 
@@ -216,6 +274,7 @@ export const PlateSpot = memo(function PlateSpot({
 }) {
   return (
     <View style={[styles.plateOuter, { width, height, borderRadius: height / 2 }, vip && styles.plateVip]}>
+      <PlateShine w={width - 4} h={height - 4} />
       <View style={[styles.plateInner, { borderRadius: (height - 10) / 2 }]}>
         {items.map((p, i) => (
           <View key={i} style={{ width: icon, height: icon, alignItems: "center", justifyContent: "center" }}>
@@ -292,6 +351,7 @@ export const HoldRow = memo(function HoldRow({
         ]}
         accessibilityLabel={`Bekleme tezgâhı ${hold.length} / ${cap}: ${hold.map((it) => productName(it.p)).join(", ") || "boş"}`}
       >
+        {!(danger || lost) ? <WoodGrain w={rowW + 12} h={Math.max(10, height - 22)} r={radius.md} base={S.wood} dark={S.woodDark} light={S.woodLight} /> : null}
         {Array.from({ length: cap }, (_, k) => (
           <View
             key={k}
@@ -374,7 +434,9 @@ export const StackColumn = memo(function StackColumn({
       accessibilityLabel={label}
       style={[styles.stackCol, { width, height }]}
     >
-      <View style={[styles.shelf, { width, height }]} />
+      <View style={[styles.shelf, { width, height }]}>
+        <WoodGrain w={width - 2} h={height - 2} r={radius.md} base={S.shelf} dark={S.counterEdge} light={S.counter} />
+      </View>
       {/* Ürünler sütunun kendi koordinatlarında konumlanır: sarmalayıcı
           sütunu tam kaplar (yoksa ortalanan sıfır genişlikli kap kartları
           yarım sütun sağa kaydırıyordu). */}
@@ -414,6 +476,7 @@ export const StackColumn = memo(function StackColumn({
                   hidden && styles.tileCrate,
                 ]}
               >
+                {isTop && !hidden ? <Gloss w={size - 2} h={size - 4} r={radius.sm} /> : null}
                 {hidden ? <CrateIcon size={size - 4} /> : <ProductIcon p={it.p} size={size - (isTop ? 10 : 12)} />}
                 {locked && !hidden ? (
                   <View style={[styles.lock, { borderRadius: radius.sm }]}>
@@ -633,6 +696,7 @@ const styles = StyleSheet.create({
     backgroundColor: S.shelf,
     borderWidth: 1,
     borderColor: S.counterEdge,
+    overflow: "hidden",
   },
   tile: {
     alignItems: "center",
