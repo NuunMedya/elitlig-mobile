@@ -135,7 +135,10 @@ export default function PasswordResetsScreen() {
             subtitle={[item.user.username ? `@${item.user.username}` : null, item.user.city].filter(Boolean).join(" · ") || null}
             meta={`${formatDateTime(item.created_at)} · ${timeAgo(item.created_at)}`}
             avatar={{ name: personName(item.user) }}
-            badges={[{ label: statusText(item), tone: item.expired ? "danger" : TONE[item.status] }]}
+            badges={[
+              { label: statusText(item), tone: item.expired ? "danger" : TONE[item.status] },
+              ...(item.channel === "sms" ? [{ label: "SMS", tone: "info" as const }] : []),
+            ]}
             onPress={() => {
               setSnapshot(item);
               setSelectedId(item.id);
@@ -208,6 +211,8 @@ export default function PasswordResetsScreen() {
               </Text>
               <InfoLine label="Talep tarihi" value={formatDateTime(selected.created_at)} />
               <InfoLine label="Talep IP" value={selected.requested_ip || "—"} />
+              <InfoLine label="Kod iletimi" value={selected.channel === "sms" ? "SMS (NetGSM, otomatik)" : "Yönetim"} />
+              {selected.attempts ? <InfoLine label="Hatalı deneme" value={String(selected.attempts)} /> : null}
               {selected.issued_by ? <InfoLine label="Kodu üreten" value={selected.issued_by.fullName || `@${selected.issued_by.username}`} /> : null}
               {selected.expires_at ? <InfoLine label="Kod geçerlilik sonu" value={formatDateTime(selected.expires_at)} /> : null}
               {selected.used_at ? <InfoLine label="Şifre yenilendi" value={formatDateTime(selected.used_at)} /> : null}
