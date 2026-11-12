@@ -25,6 +25,7 @@
  * içinde söylenir.
  */
 
+import { LinearGradient } from "expo-linear-gradient";
 import React, { useCallback, useMemo } from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import {
@@ -44,6 +45,7 @@ import {
 import { positionLine } from "@/lib/api/team";
 import { Avatar } from "./Avatar";
 import { withAlpha } from "./Badge";
+import { RankBadge } from "./NightKit";
 import { Touchable } from "./Pressable";
 
 /** Satır yüksekliği — ekranlar `getItemLayout` için bunu kullanır. */
@@ -69,6 +71,10 @@ export interface PlayerRowProps {
   meta?: (string | null | undefined)[];
   /** Sağdaki tek sayı. */
   metric?: string | number;
+  /** İsteğe bağlı: sayının altındaki küçük birim ("gol"). Başlık yoksa kullanılır. */
+  metricLabel?: string;
+  /** Kullanıcının kendisi / seçili oyuncu: marka tülü + imza şeridi. */
+  highlighted?: boolean;
   onPress: (playerId: number) => void;
   style?: StyleProp<ViewStyle>;
 }
@@ -82,6 +88,8 @@ function PlayerRowBase({
   shirtNumber,
   meta,
   metric,
+  metricLabel,
+  highlighted,
   onPress,
   style,
 }: PlayerRowProps) {
@@ -109,18 +117,31 @@ function PlayerRowBase({
 
   return (
     <Touchable
-      style={[styles.row, style]}
+      style={[styles.row, highlighted ? styles.rowHighlighted : null, style]}
       onPress={handlePress}
       feedback="row"
       haptic="selection"
       accessibilityLabel={accessibilityLabel}
     >
+      {highlighted ? (
+        <LinearGradient
+          colors={colors.gradientSignature}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={styles.signatureStrip}
+        />
+      ) : null}
+      {/* Sıra: ilk üç madalya, diğerleri sakin kutuda. */}
       {rank != null ? (
-        <View style={styles.rankBox}>
-          <Text style={styles.rankText} {...textScale.dense}>
-            {rank}
-          </Text>
-        </View>
+        rank <= 3 ? (
+          <RankBadge rank={rank} size={RANK_BOX + 2} />
+        ) : (
+          <View style={styles.rankBox}>
+            <Text style={styles.rankText} {...textScale.dense}>
+              {rank}
+            </Text>
+          </View>
+        )
       ) : null}
 
       {/* Halka avatarın DIŞINDA: `borderWidth` verilseydi avatarın görsel
@@ -161,9 +182,14 @@ function PlayerRowBase({
 
       {metric != null ? (
         <View style={styles.metricBox}>
-          <Text style={styles.metricValue} {...textScale.dense}>
+          <Text style={[styles.metricValue, rank === 1 ? styles.metricLeader : null]} {...textScale.dense}>
             {metric}
           </Text>
+          {metricLabel ? (
+            <Text style={styles.metricUnit} numberOfLines={1} {...textScale.badge}>
+              {upperTR(metricLabel)}
+            </Text>
+          ) : null}
         </View>
       ) : null}
     </Touchable>
@@ -208,6 +234,18 @@ const styles = StyleSheet.create({
      genişlikte olduğu için avatar sütunu satırdan satıra kayıyordu. Sabit
      bir kutu hem hizayı sabitler hem de sıralamayı takım listesiyle aynı
      dilde okutur. */
+  rowHighlighted: {
+    backgroundColor: colors.brandDim,
+  },
+  signatureStrip: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 3,
+    borderTopRightRadius: 3,
+    borderBottomRightRadius: 3,
+  },
   rankBox: {
     width: RANK_BOX,
     height: RANK_BOX,
@@ -267,8 +305,18 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
   },
   metricValue: {
-    ...type.metricSm,
+    ...type.scoreMd,
     color: colors.textPrimary,
+    textAlign: "right",
+  },
+  /** Lider: sayı marka metniyle bir kademe öne çıkar. */
+  metricLeader: {
+    color: colors.brandAccent,
+  },
+  metricUnit: {
+    ...type.overline,
+    color: colors.textTertiary,
+    marginTop: -2,
   },
   head: {
     flexDirection: "row",

@@ -403,6 +403,19 @@ export default function TeamDetailScreen() {
     [rankedPlayers],
   );
 
+  /** Genel sekmesinin istatistik liderleri — gol, asist, maç. */
+  const leaders = useMemo(() => {
+    const pick = (key: "goals" | "assists" | "matches") => {
+      let best: (typeof rankedPlayers)[number] | null = null;
+      for (const row of rankedPlayers) {
+        if (num(row[key]) <= 0) continue;
+        if (!best || num(row[key]) > num(best[key])) best = row;
+      }
+      return best;
+    };
+    return { goals: pick("goals"), assists: pick("assists"), matches: pick("matches") };
+  }, [rankedPlayers]);
+
   const records = useMemo(() => buildRecords(recent, teamId, teamName), [recent, teamId, teamName]);
 
   const discipline = useMemo(() => {
@@ -726,12 +739,14 @@ export default function TeamDetailScreen() {
           squadLoading={rosterQuery.isLoading && squad.length === 0}
           neighbours={neighbourRows}
           tableSize={standingsQuery.data?.length ?? 0}
+          leaderPoints={standingsQuery.data?.[0] ? num(standingsQuery.data[0].display_points) : null}
           scopeReady={scope.ready}
           /* Kapsam henüz çözülürken "Kapsam seçilmedi" demek yanlış olur: iskelet. */
           standingsLoading={scope.loading || standingsQuery.isLoading}
           standing={standing}
           leagueLabel={scope.leagueLabel}
           topScorers={topScorers}
+          leaders={leaders}
           analysis={analysis}
           logoFor={logos.logoFor}
           onOpenMatch={openMatch}

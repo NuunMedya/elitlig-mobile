@@ -34,9 +34,21 @@
  * bölgeleri statüden gelir: "1–8. sıra → Altın Kupa Son 16".
  *
  * YOĞUN ÖLÇÜ: satırlar ortak `TeamRow` değil, bu sekmeye özgü ince
- * `StandingsRow`dur (34px satır, 12px ad, 18px arma; gerekçe o dosyada).
+ * `StandingsRow`dur (40px satır, madalyalı ilk üç, puan sütunu şeridi).
+ *
+ * İKİNCİ TUR — SAYFA KURGUSU (yukarıdan aşağı):
+ *   1. LİDERLİK ÖZETİ (`StandingsPodium`): sahne kartında lider + 2./3. ve
+ *      lidere puan farkı. Tablonun bağlamı (takım · maç) onun üst satırında.
+ *   2. GOL KRALLIĞI kartı: sıralı ilk üç, gol sayısı iri.
+ *   3. TABLO ARAÇ ÇUBUĞU: başlık + Kısa/Tam/Form segmenti, altında BÖLGE
+ *      RENK ANAHTARI (çip şeridi). Anahtar artık tablonun ÜSTÜNDEDİR:
+ *      yüzlerce satırlık bir tablonun altı hiç görülmüyordu.
+ *   4. SABİT SÜTUN BAŞLIĞI: başlık listenin ilk öğesidir ve
+ *      `stickyHeaderIndices` ile kaydırırken tepede kalır — 200. satırdayken
+ *      "bu sütun neydi?" sorusu doğmaz.
  */
 
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
@@ -46,6 +58,7 @@ import {
   ChipGroup,
   EmptyState,
   ErrorState,
+  Reveal,
   SegmentedControl,
   SkeletonStandings,
   refreshControlProps,
@@ -59,6 +72,7 @@ import { FollowStar } from "@/components/FollowControls";
 import { getPlayerRankings } from "@/lib/api/players";
 import { getGroupStandings, getSeasonOverview, seasonGroupKeys } from "@/lib/api/seasonGroups";
 import { getStandings } from "@/lib/api/standings";
+import { formatNumber } from "@/lib/format";
 import { queryKeys } from "@/lib/queryKeys";
 import type { PlayerSort, StandingRow } from "@/lib/types";
 import { useFavorite } from "@/providers/FavoriteProvider";
@@ -69,6 +83,7 @@ import {
   hairline,
   layout,
   palette,
+  radius,
   space,
   textScale,
   type,
@@ -81,7 +96,9 @@ import {
 import { CupView } from "./CupView";
 import { buildQualification, buildStandingsTabs, looseStage, type QualificationLegend } from "./cups";
 import type { LeaderEntry } from "./Leaderboard";
+import { ZoneKey, type ZoneKeyItem } from "./kit";
 import { ScorersStrip } from "./ScorersStrip";
+import { StandingsPodium } from "./StandingsPodium";
 import { StandingsHead, StandingsRow } from "./StandingsRow";
 import {
   GROUP_RADIUS,
@@ -102,37 +119,6 @@ const VIEW_ITEMS: SegmentedItem<TeamRowColumns>[] = [
   { key: "form", label: "Form" },
 ];
 
-/** Ray renklerinin anahtarı — tablonun altında tek satır. */
-const ZoneLegend = React.memo(function ZoneLegend({ rules }: { rules: ZoneRule[] }) {
-  const zones = useMemo(() => {
-    const seen = new Set<StandingZone>();
-    return rules
-      .map((rule) => rule.zone)
-      .filter((zone) => {
-        if (zone === "none" || seen.has(zone)) return false;
-        seen.add(zone);
-        return true;
-      });
-  }, [rules]);
-
-  if (zones.length === 0) return null;
-
-  return (
-    <View style={styles.legend}>
-      {zones.map((zone) => (
-        <View key={zone} style={styles.legendItem}>
-          <View
-            style={[styles.legendSwatch, { backgroundColor: zoneColor(palette, zone) ?? colors.border }]}
-          />
-          <Text style={styles.legendLabel} {...textScale.dense}>
-            {zoneLabel(zone)}
-          </Text>
-        </View>
-      ))}
-    </View>
-  );
-});
-
 /**
  * Eleme bölgesi tonları (statüden gelen "kim nereye kalır"): tablo bölgelerinin
  * ray renkleri yeniden kullanılır — yeni renk icat edilmez.
@@ -144,29 +130,38 @@ const QUALIFICATION_COLORS = [
   colors.zoneRelegationPlayoff,
 ] as const;
 
-/** Statüden gelen bölgelerin açıklaması — her hedef kendi satırında. */
-const QualificationLegendList = React.memo(function QualificationLegendList({
-  items,
-}: {
-  items: QualificationLegend[];
-}) {
-  return (
-    <View style={styles.qualLegend}>
-      {items.map((item) => (
-        <View key={item.label} style={styles.legendItem}>
-          <View style={[styles.legendSwatch, { backgroundColor: QUALIFICATION_COLORS[item.tone] }]} />
-          <Text style={styles.legendLabel} numberOfLines={2} {...textScale.dense}>
-            {item.label}
-          </Text>
-        </View>
-      ))}
-    </View>
-  );
-});
+/** Varsayılan bölge kurallarından renk anahtarı: "Şampiyon 1." · "Play-off 2–3." … */
+function zoneKeyItems(rules: ZoneRule[]): ZoneKeyItem[] {
+  const seen = new Set<StandingZone>();
+  const out: ZoneKeyItem[] = [];
+  for (const rule of rules) {
+    if (rule.zone === "none" || seen.has(rule.zone)) continue;
+    const color = zoneColor(palette, rule.zone);
+    const label = zoneLabel(rule.zone);
+    if (!color || !label) continue;
+    seen.add(rule.zone);
+    out.push({
+      key: rule.zone,
+      color,
+      label,
+      range: rule.from === rule.to ? `${rule.from}.` : `${rule.from}–${rule.to}.`,
+    });
+  }
+  return out;
+}
+
+/** Sabit sütun başlığının liste içindeki yer tutucusu (verinin ilk öğesi). */
+const HEAD_ITEM = { __head: true } as const;
+type TableItem = StandingRow | typeof HEAD_ITEM;
+const isHead = (item: TableItem): item is typeof HEAD_ITEM => "__head" in item;
+
+/** Başlık ile ilk satır arasında ayraç yok (başlığın kendi alt çizgisi var). */
+const TableSeparator = ({ leadingItem }: { leadingItem?: TableItem }) =>
+  leadingItem && isHead(leadingItem) ? null : <GroupSeparator />;
 
 /** Satır sonundaki takip yıldızının genişliği (FollowStar kutusu = 32, ikon 14). */
 const STAR_SLOT = 32;
-/** Tablonun altındaki gol krallığı kapısında gösterilen golcü sayısı. */
+/** Gol krallığı kartında gösterilen golcü sayısı. */
 const SCORER_PREVIEW = 3;
 
 export interface StandingsPaneProps extends PaneProps {
@@ -271,6 +266,22 @@ export function StandingsPane({ scrollProps, onOpenPlayers }: StandingsPaneProps
     [activeGroupId, overviewQuery.data],
   );
   const hasQualification = qualification.legend.length > 0;
+  const keyItems = useMemo<ZoneKeyItem[]>(
+    () =>
+      hasQualification
+        ? qualification.legend.map((item) => ({
+            key: item.label,
+            color: QUALIFICATION_COLORS[item.tone] ?? colors.border,
+            label: item.label,
+          }))
+        : zoneKeyItems(zoneRules),
+    [hasQualification, qualification.legend, zoneRules],
+  );
+  /* Tablonun bağlamı — her maç iki takımın "O" sütununda sayılır: ΣO / 2. */
+  const matchCount = useMemo(
+    () => Math.round(rows.reduce((sum, row) => sum + num(row.played), 0) / 2),
+    [rows],
+  );
   const powerBalance = rows[0]?.standings_type === "gucdengesi";
   const followedCount = useMemo(
     () => rows.filter((row) => isFavorite(row.team_id)).length,
@@ -300,7 +311,23 @@ export function StandingsPane({ scrollProps, onOpenPlayers }: StandingsPaneProps
     ) : null;
 
   const renderItem = useCallback(
-    ({ item, index }: { item: StandingRow; index: number }) => {
+    ({ item, index: listIndex }: { item: TableItem; index: number }) => {
+      if (isHead(item)) {
+        /* Sütun başlığı kartın TEPESİDİR; yapışkan olduğu için arkasında
+           kâğıt zemini taşır ki altından kayan satırlar görünmesin. */
+        return (
+          <View style={styles.stickyHead}>
+            <View style={groupStyles.head}>
+              <StandingsHead
+                columns={columns}
+                pointsLabel={powerBalance ? "GP" : "Puan"}
+                trailingWidth={STAR_SLOT}
+              />
+            </View>
+          </View>
+        );
+      }
+      const index = listIndex - 1;
       const rank = index + 1;
       const favorite = isFavorite(item.team_id);
       return (
@@ -334,14 +361,17 @@ export function StandingsPane({ scrollProps, onOpenPlayers }: StandingsPaneProps
         />
       );
     },
-    [columns, hasQualification, isFavorite, openTeam, qualification, rows.length, zoneRules],
+    [columns, hasQualification, isFavorite, openTeam, powerBalance, qualification, rows.length, zoneRules],
   );
+
+  const tableData = useMemo<TableItem[]>(() => (rows.length > 0 ? [HEAD_ITEM, ...rows] : []), [rows]);
 
   if (!scope.ready && !scope.loading) return <ScopeMissing />;
   if (query.isLoading || overviewQuery.isLoading || scope.loading) {
     /* İskelet de kartta durur; yükleme bitince çerçeve zıplamaz. */
     return (
       <View style={paneStyles.skeleton}>
+        <View style={styles.skeletonStage} />
         <View style={styles.skeletonSegment} />
         <View style={styles.skeletonCard}>
           <SkeletonStandings density="table" />
@@ -380,13 +410,15 @@ export function StandingsPane({ scrollProps, onOpenPlayers }: StandingsPaneProps
   return (
     <FlatList
       {...scrollProps}
-      data={rows}
+      data={tableData}
       extraData={columns}
       /* Sekme değişince liste tepeden başlar; eski grubun kaydırma konumu kalmaz. */
       key={activeTab.key}
       keyExtractor={standingKey}
       renderItem={renderItem}
-      ItemSeparatorComponent={GroupSeparator}
+      ItemSeparatorComponent={TableSeparator}
+      /* 0 = ListHeaderComponent, 1 = sütun başlığı: kaydırırken tepede kalır. */
+      stickyHeaderIndices={rows.length > 0 ? [1] : undefined}
       initialNumToRender={20}
       windowSize={8}
       contentContainerStyle={paneStyles.content}
@@ -400,31 +432,41 @@ export function StandingsPane({ scrollProps, onOpenPlayers }: StandingsPaneProps
           <View style={styles.header}>
             {groupBar}
             {tableQuery.isError ? <ErrorState error={tableQuery.error} variant="banner" /> : null}
-            <ScorersStrip
-              entries={scorers}
-              onPressEntry={openPlayer}
-              onSeeAll={onOpenPlayers ? openScorers : undefined}
-            />
-            <View style={styles.toolbar}>
-              <Text style={styles.toolbarMeta} {...textScale.dense}>
-                {rows.length} takım
-                {followedCount > 0 ? ` · ${followedCount} takip` : ""}
-              </Text>
-              <SegmentedControl
-                items={VIEW_ITEMS}
-                value={columns}
-                onChange={setColumns}
-                size="sm"
-                stretch={false}
+            <Reveal index={0}>
+              <StandingsPodium
+                rows={rows}
+                caption={`${formatNumber(rows.length)} takım · ${formatNumber(matchCount)} maç`}
+                pointsLabel={powerBalance ? "Güç puanı" : "Puan"}
+                onPressTeam={openTeam}
               />
-            </View>
-            {/* Sütun başlığı kartın TEPESİDİR: üst kenarlık ve üst köşeler onda. */}
-            <View style={groupStyles.head}>
-              <StandingsHead
-                columns={columns}
-                pointsLabel={powerBalance ? "GP" : "Puan"}
-                trailingWidth={STAR_SLOT}
+            </Reveal>
+            <Reveal index={1}>
+              <ScorersStrip
+                entries={scorers}
+                onPressEntry={openPlayer}
+                onSeeAll={onOpenPlayers ? openScorers : undefined}
               />
+            </Reveal>
+            <View style={styles.tableIntro}>
+              <View style={styles.toolbar}>
+                <View style={styles.toolbarText}>
+                  <Text style={styles.toolbarTitle} {...textScale.dense}>
+                    Puan tablosu
+                  </Text>
+                  <Text style={styles.toolbarMeta} numberOfLines={1} {...textScale.dense}>
+                    {`${formatNumber(rows.length)} takım`}
+                    {followedCount > 0 ? ` · ${followedCount} takip` : ""}
+                  </Text>
+                </View>
+                <SegmentedControl
+                  items={VIEW_ITEMS}
+                  value={columns}
+                  onChange={setColumns}
+                  size="sm"
+                  stretch={false}
+                />
+              </View>
+              <ZoneKey items={keyItems} />
             </View>
           </View>
         )
@@ -449,19 +491,15 @@ export function StandingsPane({ scrollProps, onOpenPlayers }: StandingsPaneProps
         )
       }
       ListFooterComponent={
-        rows.length > 0 ? (
+        rows.length > 0 && powerBalance ? (
           <View style={styles.footer}>
-            {hasQualification ? (
-              <QualificationLegendList items={qualification.legend} />
-            ) : (
-              <ZoneLegend rules={zoneRules} />
-            )}
-            {powerBalance ? (
+            <View style={styles.footnoteCard}>
+              <Ionicons name="information-circle-outline" size={16} color={colors.brandAccent} />
               <Text style={styles.footnote} {...textScale.long}>
                 Bu sezon Güç Dengesi puanlaması kullanılıyor: bir maçtan alınan puan
                 rakibin güç endeksine göre değişir, toplam puan 0&apos;ın altına düşmez.
               </Text>
-            ) : null}
+            </View>
           </View>
         ) : null
       }
@@ -469,11 +507,12 @@ export function StandingsPane({ scrollProps, onOpenPlayers }: StandingsPaneProps
   );
 }
 
-const standingKey = (item: StandingRow) => String(item.team_id);
+const standingKey = (item: TableItem) => (isHead(item) ? "__head" : String(item.team_id));
 
 const styles = StyleSheet.create({
   header: {
-    gap: space.sm,
+    gap: space.md,
+    paddingBottom: space.sm,
   },
   /* Çip şeridi ekran kenarına kadar kayar (liste dolgusunu geri alır). */
   groupBar: {
@@ -482,9 +521,9 @@ const styles = StyleSheet.create({
   cupContent: {
     gap: space.md,
   },
-  qualLegend: {
-    gap: space.xs,
-    paddingHorizontal: space.xxs,
+  tableIntro: {
+    gap: space.m,
+    paddingTop: space.sm,
   },
   toolbar: {
     flexDirection: "row",
@@ -492,10 +531,26 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: space.sm,
   },
+  toolbarText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  toolbarTitle: {
+    ...type.h2,
+    color: colors.textPrimary,
+  },
   toolbarMeta: {
-    ...type.meta,
+    ...type.caption,
     color: colors.textTertiary,
-    paddingLeft: space.xxs,
+  },
+  /** Yapışkan başlığın arkası: kâğıt zemin (altından kayan satırlar görünmez). */
+  stickyHead: {
+    backgroundColor: colors.bg,
+  },
+  skeletonStage: {
+    height: 200,
+    borderRadius: radius.xxl,
+    backgroundColor: colors.skeletonBase,
   },
   skeletonSegment: {
     alignSelf: "flex-end",
@@ -512,24 +567,20 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   footer: {
-    paddingTop: space.sm,
-    gap: space.xs,
+    paddingTop: space.md,
   },
-  legend: {
+  footnoteCard: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    columnGap: space.md,
-    rowGap: space.xs,
-    paddingHorizontal: space.xxs,
+    gap: space.sm,
+    padding: space.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.brandDim,
+    borderWidth: hairline,
+    borderColor: colors.brandBorder,
   },
-  legendItem: { flexDirection: "row", alignItems: "center", gap: space.xs },
-  legendSwatch: { width: 2, height: 10, borderRadius: 1 },
-  legendLabel: { ...type.meta, color: colors.textSecondary },
   footnote: {
-    ...type.meta,
-    color: colors.textTertiary,
-    letterSpacing: 0,
-    lineHeight: 14,
-    paddingHorizontal: space.xxs,
+    ...type.caption,
+    color: colors.textSecondary,
+    flex: 1,
   },
 });

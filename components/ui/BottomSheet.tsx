@@ -44,9 +44,11 @@ import {
   View,
   type PanResponderInstance,
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, duration, easing, elevate, hairline, radius, space, spring, textScale, type } from "@/theme";
 import { useReduceMotion } from "./LiveBadge";
+import { withAlpha } from "./Badge";
 import { Touchable } from "./Pressable";
 
 export interface BottomSheetProps {
@@ -260,6 +262,23 @@ export function BottomSheet({
         </Animated.View>
 
         <Animated.View style={panelStyle}>
+          {/* CAM ÜST KENAR: panelin tepesinde mor bir ışık süzülür ve ortada
+              imza degradeli ince bir çizgi durur — sheet zeminin üstüne
+              "kalkan" bir cam levha gibi okunur. */}
+          <LinearGradient
+            pointerEvents="none"
+            colors={[colors.auroraViolet, withAlpha(colors.glow, 0)]}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+            style={styles.topGlow}
+          />
+          <LinearGradient
+            pointerEvents="none"
+            colors={[withAlpha(colors.glow, 0), colors.gradientSignature[0], colors.gradientSignature[1], withAlpha(colors.gradientSignature[1], 0)]}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={styles.topRim}
+          />
           {/* Tutamak bölgesi: hem sürükleme alanı hem de kapatma düğmesi. */}
           <View {...pan.panHandlers}>
             {handle ? (
@@ -324,6 +343,22 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 0,
     borderBottomRightRadius: 0,
     overflow: "hidden",
+    borderTopWidth: 1,
+    borderTopColor: colors.glassLine,
+  },
+  topGlow: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 140,
+  },
+  topRim: {
+    position: "absolute",
+    top: 0,
+    left: "18%",
+    right: "18%",
+    height: 1.5,
   },
   handleArea: {
     alignItems: "center",
@@ -331,8 +366,8 @@ const styles = StyleSheet.create({
     paddingBottom: space.s,
   },
   handle: {
-    width: 36,
-    height: 4,
+    width: 44,
+    height: 5,
     borderRadius: radius.pill,
     backgroundColor: colors.borderStrong,
   },
@@ -352,12 +387,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   closeButton: {
-    width: 32,
-    height: 32,
+    width: 34,
+    height: 34,
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.surface3,
+    backgroundColor: colors.glass,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
   },
   /** "content" snap'inde sheet içeriği kadar uzar; ekranı zorla doldurmaz. */
   scroll: {
@@ -387,6 +424,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg + space.xxs,
     paddingTop: space.md,
     borderTopWidth: hairline,
-    borderTopColor: colors.separator,
+    borderTopColor: colors.glassLine,
   },
 });

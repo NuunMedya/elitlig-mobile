@@ -30,14 +30,22 @@ import {
 } from "react-native";
 
 import { MatchPhotoSlider } from "@/components/MatchPhotoSlider";
+import { LinearGradient } from "expo-linear-gradient";
 import {
+  Aurora,
   EmptyState,
   FormChips,
+  GlowRim,
+  IconTile,
   MinuteRing,
+  Odometer,
+  RankBadge,
+  Reveal,
   SectionHeader,
   StatBar,
   TeamLogo,
   Touchable,
+  type IconTileTone,
 } from "@/components/ui";
 import { useLiveClock } from "@/hooks/useLiveMatch";
 import { formatDateLong, formatDateShort, formatTime } from "@/lib/format";
@@ -46,7 +54,7 @@ import { useMatchGoalClips } from "@/components/live/MatchGoalClips";
 import type { GoalClip } from "@/lib/live/clips";
 import { broadcastOf } from "@/lib/matchMedia";
 import { openLink } from "@/lib/links";
-import { matchState } from "@/lib/match";
+import { eventKind, matchState } from "@/lib/match";
 import { youtubeChannelUrl, youtubeLiveUrl } from "@/lib/youtube";
 import {
   colors,
@@ -258,7 +266,7 @@ export function SummaryTab({
       {scheduled ? null : (
         <SectionHeader
           title={live ? "Canlı akış" : "Maç akışı"}
-          meta={timeline.length > 1 ? undefined : timeline.length ? "1 olay" : undefined}
+          meta={flowSummary(timeline)}
           action={
             timeline.length > 1
               ? {
@@ -329,6 +337,26 @@ export function SummaryTab({
 }
 
 const EMPTY_ITEMS: TimelineItem[] = [];
+
+/** Akış başlığının yanındaki kısa döküm: "17 gol · 2 kart · 3 değişiklik". */
+function flowSummary(timeline: ApiMatchEvent[]): string | undefined {
+  if (!timeline.length) return undefined;
+  let goals = 0;
+  let cards = 0;
+  let subs = 0;
+  for (const event of timeline) {
+    const kind = eventKind(event);
+    if (kind === "goal" || kind === "ownGoal") goals += 1;
+    else if (kind === "yellow" || kind === "red") cards += 1;
+    else if (kind === "substitution") subs += 1;
+  }
+  const parts = [
+    goals ? `${goals} gol` : null,
+    cards ? `${cards} kart` : null,
+    subs ? `${subs} değişiklik` : null,
+  ].filter(Boolean);
+  return parts.length ? parts.join(" · ") : `${timeline.length} olay`;
+}
 const EMPTY_EVENTS: ApiMatchEvent[] = [];
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -361,6 +389,7 @@ const LivePanel = memo(function LivePanel({
 
   return (
     <PaperCard style={styles.liveCard}>
+      <GlowRim radius={radius.xl} />
       <View style={styles.liveHead}>
         <LiveClockRing snapshot={snapshot} />
         <View style={styles.liveTexts}>
@@ -380,6 +409,7 @@ const LivePanel = memo(function LivePanel({
       {liveUrl ? (
         <InfoRow
           icon="logo-youtube"
+          tone="red"
           label="Canlı yayını izle"
           onPress={() => void openLink(liveUrl)}
           accessory={<View style={styles.flex} />}
@@ -441,27 +471,37 @@ const PostMatchHeader = memo(function PostMatchHeader({
   return (
     <>
       {mvpId && mvpName ? (
-        <Touchable
-          feedback="card"
-          haptic="selection"
-          onPress={() => onOpenPlayer(mvpId)}
-          accessibilityRole="button"
-          accessibilityLabel={`Maçın yıldızı ${mvpName}`}
-          style={[partStyles.card, styles.mvp]}
-        >
-          <View style={styles.mvpIcon}>
-            <Ionicons name="star" size={18} color={colors.brandAccent} />
-          </View>
-          <View style={styles.flex}>
-            <Text style={styles.overline} {...textScale.badge}>
-              MAÇIN YILDIZI
-            </Text>
-            <Text style={styles.mvpName} numberOfLines={1} {...textScale.dense}>
-              {mvpName}
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
-        </Touchable>
+        <Reveal scaleFrom={0.97}>
+          <Touchable
+            feedback="card"
+            haptic="selection"
+            onPress={() => onOpenPlayer(mvpId)}
+            accessibilityRole="button"
+            accessibilityLabel={`Maçın yıldızı ${mvpName}`}
+            style={styles.mvp}
+          >
+            {/* Yıldız kartı sahnenin küçük bir yankısı: mürekkep zemin + aurora. */}
+            <LinearGradient
+              colors={colors.gradientInk}
+              start={{ x: 1, y: 0.5 }}
+              end={{ x: 0, y: 0.5 }}
+              style={StyleSheet.absoluteFill}
+            />
+            <Aurora variant="stage" style={StyleSheet.absoluteFill} />
+            <IconTile icon="star" tone="gold" size={44} />
+            <View style={styles.flex}>
+              <Text style={styles.mvpOverline} {...textScale.badge}>
+                MAÇIN YILDIZI
+              </Text>
+              <Text style={styles.mvpName} numberOfLines={1} {...textScale.dense}>
+                {mvpName}
+              </Text>
+            </View>
+            <View style={styles.mvpGo}>
+              <Ionicons name="chevron-forward" size={16} color={colors.onDark} />
+            </View>
+          </Touchable>
+        </Reveal>
       ) : null}
 
       {/*
@@ -567,12 +607,11 @@ const PreMatch = memo(function PreMatch({
           />
           <PaperCard>
             <View style={styles.tally}>
-              <TallyCell value={tally.homeWins} label={`${firstWord(match.first_team_name)} kazandı`} />
-              <View style={styles.tallyAxis} />
-              <TallyCell value={tally.draws} label="Berabere" />
-              <View style={styles.tallyAxis} />
-              <TallyCell value={tally.awayWins} label={`${firstWord(match.second_team_name)} kazandı`} />
+              <TallyCell value={tally.homeWins} label={`${firstWord(match.first_team_name)}`} tone="home" />
+              <TallyCell value={tally.draws} label="Berabere" tone="draw" />
+              <TallyCell value={tally.awayWins} label={`${firstWord(match.second_team_name)}`} tone="away" />
             </View>
+            <TallyStrip home={tally.homeWins} draws={tally.draws} away={tally.awayWins} />
             {last ? (
               <Touchable
                 feedback="row"
@@ -666,12 +705,21 @@ const FormRow = memo(function FormRow({
   );
 });
 
-const TallyCell = memo(function TallyCell({ value, label }: { value: number; label: string }) {
+const TallyCell = memo(function TallyCell({
+  value,
+  label,
+  tone,
+}: {
+  value: number;
+  label: string;
+  tone: "home" | "draw" | "away";
+}) {
   return (
     <View style={styles.tallyCell}>
-      <Text style={styles.tallyValue} {...textScale.dense}>
-        {value}
-      </Text>
+      <Odometer
+        value={value}
+        style={[styles.tallyValue, tone === "home" ? styles.tallyHome : tone === "away" ? styles.tallyAway : null]}
+      />
       <Text style={styles.tallyLabel} numberOfLines={1} {...textScale.dense}>
         {label}
       </Text>
@@ -679,13 +727,38 @@ const TallyCell = memo(function TallyCell({ value, label }: { value: number; lab
   );
 });
 
+/** Üç parçalı sonuç şeridi — parçalar gerçek oranlarla. */
+const TallyStrip = memo(function TallyStrip({ home, draws, away }: { home: number; draws: number; away: number }) {
+  if (home + draws + away === 0) return null;
+  return (
+    <View style={styles.tallyStrip}>
+      {home > 0 ? (
+        <LinearGradient
+          colors={colors.gradientSignature}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={[styles.tallyPart, { flex: home }]}
+        />
+      ) : null}
+      {draws > 0 ? <View style={[styles.tallyPart, styles.tallyDraw, { flex: draws }]} /> : null}
+      {away > 0 ? <View style={[styles.tallyPart, styles.tallyAwayPart, { flex: away }]} /> : null}
+    </View>
+  );
+});
+
 const MiniStandingRow = memo(function MiniStandingRow({ rank, row }: { rank: number; row: StandingRow }) {
   const diff = Number(row.goal_diff ?? 0);
   return (
-    <View style={[styles.miniRow, styles.ruled]}>
-      <Text style={[styles.miniCell, styles.miniRank]} {...textScale.dense}>
-        {rank}
-      </Text>
+    <View style={[styles.miniRow, styles.ruled, styles.miniRowMark]}>
+      <LinearGradient
+        colors={colors.gradientSignature}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+        style={styles.miniStripe}
+      />
+      <View style={styles.miniRank}>
+        <RankBadge rank={rank} size={22} />
+      </View>
       <TeamLogo name={row.team_name} logo={row.logo} size={layout.crestSm} />
       <Text style={[styles.miniName, styles.flex]} numberOfLines={1} {...textScale.dense}>
         {row.team_name}
@@ -772,24 +845,31 @@ const MatchFacts = memo(function MatchFacts({ match, state }: { match: ApiMatch;
   const note = rawNote && !isTrivialTitle(rawNote, match) ? rawNote : "";
   const league = [match.league_name, match.match_season].filter(Boolean).join(" · ");
 
-  const rows: { key: string; icon: keyof typeof Ionicons.glyphMap; label: string; value: string }[] = [];
-  if (league) rows.push({ key: "lig", icon: "trophy-outline", label: "Lig", value: league });
-  rows.push({ key: "tarih", icon: "calendar-outline", label: "Tarih", value: formatDateLong(match.date) || "—" });
-  rows.push({ key: "saat", icon: "time-outline", label: "Başlama", value: formatTime(match.time) || "—" });
-  if (match.match_field) rows.push({ key: "saha", icon: "location-outline", label: "Saha", value: match.match_field });
-  if (match.city) rows.push({ key: "sehir", icon: "map-outline", label: "Şehir", value: match.city });
-  if (referee) rows.push({ key: "hakem", icon: "person-outline", label: "Hakem", value: referee });
+  const rows: {
+    key: string;
+    icon: keyof typeof Ionicons.glyphMap;
+    tone: IconTileTone;
+    label: string;
+    value: string;
+  }[] = [];
+  if (league) rows.push({ key: "lig", icon: "trophy", tone: "gold", label: "Lig", value: league });
+  rows.push({ key: "tarih", icon: "calendar", tone: "violet", label: "Tarih", value: formatDateLong(match.date) || "—" });
+  rows.push({ key: "saat", icon: "time", tone: "cyan", label: "Başlama", value: formatTime(match.time) || "—" });
+  if (match.match_field) rows.push({ key: "saha", icon: "location", tone: "pink", label: "Saha", value: match.match_field });
+  if (match.city) rows.push({ key: "sehir", icon: "map", tone: "mint", label: "Şehir", value: match.city });
+  if (referee) rows.push({ key: "hakem", icon: "person", tone: "neutral", label: "Hakem", value: referee });
 
   return (
     <>
       <SectionHeader title={state === "scheduled" ? "Maç bilgileri" : "Künye"} />
       <PaperCard>
         {rows.map((row, index) => (
-          <InfoRow key={row.key} icon={row.icon} label={row.label} value={row.value} first={index === 0} />
+          <InfoRow key={row.key} icon={row.icon} tone={row.tone} label={row.label} value={row.value} first={index === 0} />
         ))}
         {channelUrl && !hasVideo ? (
           <InfoRow
             icon="logo-youtube"
+            tone="red"
             label="YouTube kanalı"
             value={state === "finished" ? "Video henüz yok" : undefined}
             onPress={() => void openLink(channelUrl)}
@@ -888,19 +968,31 @@ const styles = StyleSheet.create({
     gap: space.md,
     padding: space.lg,
     marginTop: space.lg,
+    marginHorizontal: layout.screenPadding,
+    borderRadius: radius.xl,
+    overflow: "hidden",
+    backgroundColor: colors.inkBlock,
+    borderWidth: hairline,
+    borderColor: colors.glassBorder,
   },
-  mvpIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.md,
-    backgroundColor: colors.brandDim,
-    alignItems: "center",
-    justifyContent: "center",
+  mvpOverline: {
+    ...type.overline,
+    color: colors.brandOnDark,
   },
   mvpName: {
-    ...type.h2,
-    color: colors.textPrimary,
+    ...type.h1,
+    color: colors.onDark,
     marginTop: 2,
+  },
+  mvpGo: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.inkPill,
+    borderWidth: hairline,
+    borderColor: colors.inkPillBorder,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   /* — Rapor — */
@@ -934,8 +1026,10 @@ const styles = StyleSheet.create({
   /* — Aralarındaki maçlar — */
   tally: {
     flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: space.lg,
+    alignItems: "flex-end",
+    paddingTop: space.lg,
+    paddingBottom: space.sm,
+    paddingHorizontal: space.sm,
   },
   tallyCell: {
     flex: 1,
@@ -944,19 +1038,37 @@ const styles = StyleSheet.create({
     gap: space.xxs,
     paddingHorizontal: space.xs,
   },
-  tallyAxis: {
-    width: hairline,
-    height: 32,
-    backgroundColor: colors.separator,
-  },
   tallyValue: {
-    ...type.metric,
-    color: colors.textPrimary,
+    ...type.scoreHero,
+    color: colors.textSecondary,
+  },
+  tallyHome: {
+    color: colors.brandAccent,
+  },
+  tallyAway: {
+    color: colors.accentText,
   },
   tallyLabel: {
     ...type.caption,
     color: colors.textTertiary,
     textAlign: "center",
+  },
+  tallyStrip: {
+    flexDirection: "row",
+    gap: space.xs,
+    height: 8,
+    marginHorizontal: space.lg,
+    marginBottom: space.lg,
+  },
+  tallyPart: {
+    height: 8,
+    borderRadius: radius.pill,
+  },
+  tallyDraw: {
+    backgroundColor: colors.slateSoft,
+  },
+  tallyAwayPart: {
+    backgroundColor: colors.accent,
   },
   lastMeeting: {
     flexDirection: "row",
@@ -1012,7 +1124,17 @@ const styles = StyleSheet.create({
   },
   miniRank: {
     width: 30,
-    textAlign: "center",
+    alignItems: "center",
+  },
+  miniRowMark: {
+    backgroundColor: colors.brandDim,
+  },
+  miniStripe: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 3,
   },
   miniName: {
     ...type.h4,

@@ -14,7 +14,18 @@
  * sekme, FAB ve özet için içe aktarır.
  *
  * HAREKET: simge pulu ve FAB ekrana 220 ms'lik tek bir yayla girer (yerel
- * sürücü); "hareketi azalt" açıksa hiçbir şey oynamaz. Döngü yoktur.
+ * sürücü); "hareketi azalt" açıksa hiçbir şey oynamaz. Döngü yoktur (başlığın
+ * arkasındaki Aurora kendi izinli bileşenidir).
+ *
+ * YÖNETİM TASARIM DİLİ (araç kimliği):
+ *   · Başlık: geri · 40 px degrade IconTile (uygulamanın kategori tonu,
+ *     components/admin/home/AppTiles `appTone`) · ad (h1) + canlı alt başlık ·
+ *     cam yuvarlak eylem düğmeleri (ikon aracın vurgu renginde). Arkada
+ *     başlık Aurora'sı; altında ince ayraç.
+ *   · Sekmeler: cam hap; seçili olan aracın vurgu rengiyle dolar, sayaç
+ *     Archivo; uyarı sayacı kırmızı.
+ *   · Özet şeridi: ayrık cam karolar, rakam Odometer ile döner.
+ *   · FAB: vurgu renginde, vurgu tonunda yumuşak parıltı.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -23,9 +34,11 @@ import React, { useEffect, useRef } from "react";
 import { Animated, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Badge, Touchable, useReduceMotion, type ScreenHeaderAction } from "@/components/ui";
+import { Aurora, Badge, IconTile, Odometer, Touchable, useReduceMotion, type ScreenHeaderAction } from "@/components/ui";
 import { TOOL_APPS, type ToolApp, type ToolAppKey } from "@/lib/admin/toolApps";
-import { colors, duration, easing, elevate, hairline, layout, radius, space, spring, textScale, touchSlop, type } from "@/theme";
+import { colors, duration, easing, elevate, glowStyle, hairline, layout, radius, space, spring, textScale, touchSlop, type, upperTR } from "@/theme";
+
+import { appTone } from "../home/AppTiles";
 
 /** Giriş hareketi: 0 → 1; hareket azaltılmışsa doğrudan 1. */
 function useEnter(delay = 0): Animated.Value {
@@ -74,6 +87,7 @@ export function ToolAppHeader({ app, title, subtitle, back = true, onBack, actio
 
   return (
     <View style={styles.header}>
+      <Aurora height={120} />
       <View style={styles.bar}>
         {back ? (
           <Touchable feedback="icon" onPress={handleBack} hitSlop={touchSlop(36)} accessibilityRole="button" accessibilityLabel="Geri" style={styles.back}>
@@ -81,13 +95,9 @@ export function ToolAppHeader({ app, title, subtitle, back = true, onBack, actio
           </Touchable>
         ) : null}
         <Animated.View
-          style={[
-            styles.tile,
-            { backgroundColor: identity.accent },
-            { opacity: enter, transform: [{ scale: enter.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1] }) }] },
-          ]}
+          style={{ opacity: enter, transform: [{ scale: enter.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1] }) }] }}
         >
-          <Ionicons name={identity.icon} size={18} color={identity.onAccent} />
+          <IconTile icon={identity.icon} tone={appTone(app)} size={40} />
         </Animated.View>
         <View style={styles.titles}>
           <Text style={styles.title} numberOfLines={1} accessibilityRole="header" {...textScale.dense}>
@@ -110,7 +120,7 @@ export function ToolAppHeader({ app, title, subtitle, back = true, onBack, actio
             accessibilityLabel={action.accessibilityLabel}
             style={styles.action}
           >
-            <Ionicons name={action.icon} size={21} color={action.tone === "danger" ? colors.danger : identity.accent} />
+            <Ionicons name={action.icon} size={19} color={action.tone === "danger" ? colors.danger : identity.accent} />
             {action.badge != null ? (
               <Badge
                 tone="brand"
@@ -259,7 +269,7 @@ export function ToolFab({
         onLongPress={onLongPress}
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
-        style={[styles.fab, elevate(3), { backgroundColor: identity.accent }, label ? styles.fabExtended : styles.fabRound]}
+        style={[styles.fab, elevate(3), glowStyle(identity.accent, 2), { backgroundColor: identity.accent }, label ? styles.fabExtended : styles.fabRound]}
       >
         <Ionicons name={icon} size={22} color={identity.onAccent} />
         {label ? (
@@ -287,31 +297,36 @@ export function ToolSummary({ app, stats, style }: { app: ToolAppKey; stats: Too
     tone === "danger" ? colors.danger : tone === "win" ? colors.win : tone === "warn" ? colors.warn : tone === "accent" ? identity.accent : colors.textPrimary;
   return (
     <View style={[styles.summary, style]}>
-      {stats.map((stat, index) => {
+      {stats.map((stat) => {
+        const color = toneColor(stat.tone);
         const body = (
           <>
-            <Text style={[styles.statValue, { color: toneColor(stat.tone) }]} numberOfLines={1} adjustsFontSizeToFit {...textScale.badge}>
-              {stat.value}
-            </Text>
+            {stat.tone ? <View style={[styles.statMark, { backgroundColor: color }]} /> : null}
+            {typeof stat.value === "number" ? (
+              <Odometer value={stat.value} style={[styles.statValue, { color }]} />
+            ) : (
+              <Text style={[styles.statValue, { color }]} numberOfLines={1} adjustsFontSizeToFit {...textScale.badge}>
+                {stat.value}
+              </Text>
+            )}
             <Text style={styles.statLabel} numberOfLines={1} {...textScale.badge}>
-              {stat.label}
+              {upperTR(stat.label)}
             </Text>
           </>
         );
-        const cell = [styles.stat, index > 0 ? styles.statDivided : null];
         return stat.onPress ? (
           <Touchable
             key={stat.label}
-            feedback="chip"
+            feedback="card"
             onPress={stat.onPress}
-            style={cell}
+            style={styles.stat}
             accessibilityRole="button"
             accessibilityLabel={`${stat.label}: ${stat.value}`}
           >
             {body}
           </Touchable>
         ) : (
-          <View key={stat.label} style={cell} accessible accessibilityLabel={`${stat.label}: ${stat.value}`}>
+          <View key={stat.label} style={styles.stat} accessible accessibilityLabel={`${stat.label}: ${stat.value}`}>
             {body}
           </View>
         );
@@ -331,15 +346,23 @@ export function ToolGlyph({ app, icon, size = 36 }: { app: ToolAppKey | ToolApp;
 }
 
 const styles = StyleSheet.create({
-  header: { backgroundColor: colors.bg },
-  bar: { flexDirection: "row", alignItems: "center", minHeight: 56, paddingHorizontal: space.sm, gap: space.sm },
-  back: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
-  tile: { width: 34, height: 34, borderRadius: radius.md, alignItems: "center", justifyContent: "center" },
-  titles: { flex: 1, minWidth: 0, paddingVertical: space.xs },
+  header: { backgroundColor: colors.bg, overflow: "hidden" },
+  bar: { flexDirection: "row", alignItems: "center", minHeight: 64, paddingHorizontal: space.sm, paddingVertical: space.xs, gap: space.md },
+  back: { width: 32, height: 36, alignItems: "center", justifyContent: "center", marginRight: -space.xs },
+  titles: { flex: 1, minWidth: 0, gap: 1 },
   title: { ...type.h1, color: colors.textPrimary },
   subtitle: { ...type.caption, color: colors.textSecondary },
-  action: { width: 38, height: 38, alignItems: "center", justifyContent: "center" },
-  actionBadge: { top: 2, right: 2 },
+  action: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.glass,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+  },
+  actionBadge: { top: -2, right: -2 },
   bottom: { paddingBottom: space.sm },
   rule: { height: hairline, backgroundColor: colors.separator },
   tabs: { flexDirection: "row", gap: space.xs, paddingHorizontal: layout.screenPadding, paddingBottom: space.sm, paddingTop: space.xxs },
@@ -351,8 +374,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.md,
     borderRadius: radius.pill,
     borderWidth: hairline,
-    borderColor: colors.border,
-    backgroundColor: colors.surface1,
+    borderColor: colors.glassLine,
+    backgroundColor: colors.glass,
   },
   tabLabel: { ...type.labelSm },
   tabCount: { ...type.numSmStrong },
@@ -363,15 +386,23 @@ const styles = StyleSheet.create({
   fabLabel: { ...type.label },
   summary: {
     flexDirection: "row",
-    paddingVertical: space.md,
-    borderRadius: radius.xl,
+    gap: space.sm,
+  },
+  stat: {
+    flex: 1,
+    minHeight: 72,
+    justifyContent: "flex-end",
+    gap: space.xxs,
+    paddingHorizontal: space.sm + space.xxs,
+    paddingVertical: space.sm + space.xxs,
+    borderRadius: radius.lg,
     borderWidth: hairline,
     borderColor: colors.border,
     backgroundColor: colors.surface1,
+    overflow: "hidden",
   },
-  stat: { flex: 1, alignItems: "center", gap: space.xxs, paddingHorizontal: space.xs },
-  statDivided: { borderLeftWidth: hairline, borderLeftColor: colors.separator },
-  statValue: { ...type.metricSm },
-  statLabel: { ...type.micro, color: colors.textTertiary },
+  statMark: { position: "absolute", top: space.sm + space.xxs, left: space.sm + space.xxs, width: 14, height: 3, borderRadius: radius.pill },
+  statValue: { ...type.metric },
+  statLabel: { ...type.nano, color: colors.textTertiary },
   glyph: { borderRadius: radius.md, alignItems: "center", justifyContent: "center" },
 });

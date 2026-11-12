@@ -3,15 +3,21 @@
  * `/yonetim` rotası.
  *
  * NE (yukarıdan aşağı):
- *   1. SAHNE — gece laciverti kimlik bloğu: kim olarak işlem yapıldığı, rol,
- *      "Üye gözünden gör" düğmesi ve dört sayaç (açık görev, canlı maç,
- *      bekleyen talep, saha talebi). Her sayaç kendi ekranını açar.
- *   2. UYGULAMALAR — sahibin en çok kullandığı altı uygulama büyük karolarla:
- *      Muhasebe · Yapılacaklar · Projeler · Mesajlar · Lig yönetimi · Yayın
- *      stüdyosu. Her karo canlı özetini taşır ("3 açık iş · 1 gecikmiş").
- *   3. DİĞER ARAÇLAR — yatay simge şeridi (Talepler, Maçlar, Sahalar, Ajanda…).
- *   4. BUGÜN — web /editor kontrol panelinin özeti (DashboardSummary).
- *   5. SON BİLDİRİMLER ve "Tüm yönetim sayfaları" kapısı.
+ *   1. SAHNE — gece laciverti kimlik bloğu (gradientAdminStage + Aurora,
+ *      üst kenarda altın ışık): monogram altın halkada, selam, rol hapı, gün;
+ *      altında "BUGÜNÜN ÖZETİ" dört cam sayaç (açık görev, canlı maç, bekleyen
+ *      talep, saha talebi). Rakamlar Odometer ile döner; her sayaç kendi
+ *      ekranını açar. Sağ üstte "Üye gözü" cam düğmesi.
+ *   2. SENİ BEKLEYENLER — öncelik sırasıyla dikkat isteyen işler: gecikmiş
+ *      görev (kırmızı), onay bekleyen talep kategorileri (altın), okunmamış
+ *      mesaj ve bugünkü işler (camgöbeği). Solda öncelik şeridi, IconTile,
+ *      sağda büyük sayı. Hiçbiri yoksa tek satır "Her şey yolunda".
+ *   3. HIZLI EYLEMLER — yetkiye göre dört sütunlu IconTile ızgarası.
+ *   4. SIK KULLANILANLAR — öne çıkan altı uygulama büyük karolarla; her karo
+ *      canlı özetini taşır ("3 açık iş · 1 gecikmiş").
+ *   5. DİĞER ARAÇLAR — yatay IconTile şeridi.
+ *   6. BUGÜN — günün maçları, talep dağılımı, yapılacaklarım (DashboardSummary).
+ *   7. SON BİLDİRİMLER ve hesap/ayar kapıları.
  *
  * NEDEN SAYAÇLAR AYRI SORGULAR: uçlar bağımsızdır; biri 403 dönse bile (rolün
  * o yetkisi yoksa) diğerleri çizilir. `retry: false` ile yetki hatası sayacı
@@ -31,14 +37,18 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { DashboardSummary } from "@/components/admin/dashboard/DashboardSummary";
 import { NotificationRow, useNotificationFeed } from "@/components/inbox/NotificationsPane";
 import {
+  Aurora,
   EmptyState,
+  IconTile,
   ListRow,
+  Odometer,
   ScreenHeader,
   SectionHeader,
   Skeleton,
   Touchable,
   useHeaderScroll,
   useRefresh,
+  type IconTileTone,
   type ScreenHeaderAction,
 } from "@/components/ui";
 import { useAdminCounters, type AdminCounters } from "@/hooks/useAdminCounters";
@@ -46,6 +56,7 @@ import { useAppActive } from "@/hooks/useLiveFavoriteCount";
 import { useNotificationBell } from "@/hooks/useNotificationBell";
 import { FEATURED_ADMIN_APPS, MORE_ADMIN_APPS, visibleAdminApps, type AdminApp } from "@/lib/adminApps";
 import { getAdminMatches, getAdminRequests, ROLE_LABELS } from "@/lib/api/admin";
+import { useAdminDashboard, type QuickAction } from "@/lib/api/admin/dashboard";
 import { useAdminMode } from "@/providers/AdminModeProvider";
 import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
@@ -56,8 +67,10 @@ import { AppCard, AppIconTile, Rise } from "./AppTiles";
 
 const POLL_MS = 30_000;
 
-const STAGE_START = { x: 1, y: 0.5 } as const;
-const STAGE_END = { x: 0, y: 0.5 } as const;
+const STAGE_START = { x: 1, y: 0 } as const;
+const STAGE_END = { x: 0, y: 1 } as const;
+const RIM_START = { x: 0, y: 0.5 } as const;
+const RIM_END = { x: 1, y: 0.5 } as const;
 
 const greeting = (hour: number) =>
   hour < 6 ? "İyi geceler" : hour < 12 ? "Günaydın" : hour < 18 ? "İyi günler" : "İyi akşamlar";
@@ -100,6 +113,36 @@ function appStatus(app: AdminApp, counters: AdminCounters, live: number | null):
   }
 }
 
+/* ─────────────── Dikkat listesi (öncelik → renk) ─────────────── */
+
+type Priority = "high" | "medium" | "low";
+
+const PRIORITY: Record<Priority, { stripe: string; tile: IconTileTone; count: string; label: string }> = {
+  high: { stripe: colors.danger, tile: "red", count: colors.danger, label: "Acil" },
+  medium: { stripe: colors.warn, tile: "gold", count: colors.warn, label: "Onay" },
+  low: { stripe: colors.accentText, tile: "cyan", count: colors.accentText, label: "Bilgi" },
+};
+
+interface AttentionItem {
+  key: string;
+  priority: Priority;
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  subtitle: string;
+  count: number;
+  route: string;
+}
+
+/** Talep kategorisi → ikon (sunucu anahtarları: roster, transfer, penalty…). */
+const CATEGORY_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
+  roster: "people-outline",
+  transfer: "swap-horizontal-outline",
+  penalty: "document-attach-outline",
+  match_request: "location-outline",
+  team_join: "person-add-outline",
+  contact: "mail-outline",
+};
+
 export function AdminHome({ asTab = false }: { asTab?: boolean }) {
   const auth = useAuth();
   const scope = useScope();
@@ -110,6 +153,7 @@ export function AdminHome({ asTab = false }: { asTab?: boolean }) {
   const { scrollY, scrollProps } = useHeaderScroll();
   const bell = useNotificationBell();
   const notifFeed = useNotificationFeed();
+  const dashboard = useAdminDashboard();
 
   const canQuery = Boolean(auth.user) && auth.isManagement;
   const poll = appActive ? POLL_MS : false;
@@ -168,6 +212,71 @@ export function AdminHome({ asTab = false }: { asTab?: boolean }) {
     return list;
   }, [bell, router]);
 
+  const liveMatches = liveQuery.data?.length ?? null;
+  const venueRequests = venueQuery.data?.items.length ?? null;
+
+  /* Öncelik sırasıyla dikkat isteyen işler (en çok beş). */
+  const attention = useMemo<AttentionItem[]>(() => {
+    const list: AttentionItem[] = [];
+    if (counters.overdueTodos > 0) {
+      list.push({
+        key: "overdue",
+        priority: "high",
+        icon: "alarm-outline",
+        title: "Gecikmiş görev",
+        subtitle: "Son tarihi geçti; ertele ya da bitir",
+        count: counters.overdueTodos,
+        route: "/yonetim/gorevler",
+      });
+    }
+    for (const category of dashboard.openCategories.slice(0, 3)) {
+      list.push({
+        key: `req-${category.key}`,
+        priority: "medium",
+        icon: CATEGORY_ICONS[category.key] ?? "file-tray-full-outline",
+        title: category.label,
+        subtitle: "Onayını bekliyor",
+        count: category.open,
+        route: `/yonetim/talepler?kategori=${encodeURIComponent(category.key)}`,
+      });
+    }
+    const hasVenueCategory = dashboard.openCategories.some((c) => c.key === "match_request");
+    if (!hasVenueCategory && venueRequests) {
+      list.push({
+        key: "venue",
+        priority: "medium",
+        icon: "location-outline",
+        title: "Saha talebi",
+        subtitle: "Takımlar maç saati istiyor",
+        count: venueRequests,
+        route: "/yonetim/sahalar",
+      });
+    }
+    if (counters.messages > 0) {
+      list.push({
+        key: "messages",
+        priority: "low",
+        icon: "chatbubbles-outline",
+        title: "Okunmamış mesaj",
+        subtitle: counters.memberUnread ? `${counters.memberUnread} üye yazışması dahil` : "Ekip sohbetleri",
+        count: counters.messages,
+        route: "/yonetim/mesajlar",
+      });
+    }
+    if (counters.todo?.today) {
+      list.push({
+        key: "today",
+        priority: "low",
+        icon: "today-outline",
+        title: "Bugün teslim",
+        subtitle: "Gün bitmeden kapanacak işler",
+        count: counters.todo.today,
+        route: "/yonetim/gorevler",
+      });
+    }
+    return list.slice(0, 5);
+  }, [counters, dashboard.openCategories, venueRequests]);
+
   /* — Kapı: misafir giriş ekranına, yetkisiz üye nazik uyarıya — */
 
   if (!auth.user) {
@@ -193,14 +302,14 @@ export function AdminHome({ asTab = false }: { asTab?: boolean }) {
   const displayName = user.fullName || user.username;
   const firstName = displayName.trim().split(/\s+/)[0] ?? displayName;
   const roleLabel = ROLE_LABELS[user.role] ?? user.role;
-  const liveMatches = liveQuery.data?.length ?? null;
-  const venueRequests = venueQuery.data?.items.length ?? null;
   const latestNotifs = notifFeed.items.slice(0, 3);
+  const today = new Date().toLocaleDateString("tr-TR", { weekday: "long", day: "numeric", month: "long" });
 
   const metrics: SummaryMetric[] = [
     {
       key: "gorevler",
       label: "Açık görev",
+      icon: "checkbox-outline",
       value: counters.openTodos,
       loading: counters.loading,
       alert: counters.overdueTodos > 0,
@@ -209,6 +318,7 @@ export function AdminHome({ asTab = false }: { asTab?: boolean }) {
     {
       key: "maclar",
       label: "Canlı maç",
+      icon: "radio-outline",
       value: liveMatches,
       loading: liveQuery.isLoading,
       live: (liveMatches ?? 0) > 0,
@@ -217,6 +327,7 @@ export function AdminHome({ asTab = false }: { asTab?: boolean }) {
     {
       key: "talepler",
       label: "Talep",
+      icon: "file-tray-full-outline",
       value: counters.requests,
       loading: counters.loading,
       route: "/yonetim/talepler",
@@ -224,6 +335,7 @@ export function AdminHome({ asTab = false }: { asTab?: boolean }) {
     {
       key: "sahalar",
       label: "Saha talebi",
+      icon: "location-outline",
       value: venueRequests,
       loading: venueQuery.isLoading,
       route: "/yonetim/sahalar",
@@ -233,6 +345,9 @@ export function AdminHome({ asTab = false }: { asTab?: boolean }) {
   /* Karolar ikişerli satırlara bölünür (tek kalan karo satırı tek başına doldurur). */
   const rows: AdminApp[][] = [];
   for (let i = 0; i < featured.length; i += 2) rows.push(featured.slice(i, i + 2));
+
+  const quick = dashboard.quickActions.slice(0, 8);
+  const attentionTotal = attention.reduce((sum, item) => sum + item.count, 0);
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
@@ -255,54 +370,120 @@ export function AdminHome({ asTab = false }: { asTab?: boolean }) {
               style={StyleSheet.absoluteFill}
               pointerEvents="none"
             />
+            <Aurora variant="stage" height={220} />
+            {/* Altın üst ışık — "yönetim modundasın" imzası. */}
+            <LinearGradient
+              colors={[colors.adminBar, colors.adminAccent, colors.adminBar]}
+              start={RIM_START}
+              end={RIM_END}
+              style={styles.stageRim}
+              pointerEvents="none"
+            />
+
             <View style={styles.identity}>
-              <View style={styles.monogram}>
-                <Text style={styles.monogramText} {...textScale.badge}>
-                  {initials(displayName)}
-                </Text>
-              </View>
+              <LinearGradient colors={colors.gradientAdminAccent} style={styles.monogramRing}>
+                <View style={styles.monogram}>
+                  <Text style={styles.monogramText} {...textScale.badge}>
+                    {initials(displayName)}
+                  </Text>
+                </View>
+              </LinearGradient>
               <View style={styles.identityBody}>
+                <Text style={styles.date} numberOfLines={1} {...textScale.badge}>
+                  {upperTR(today)}
+                </Text>
                 <Text style={styles.hello} numberOfLines={1} {...textScale.dense}>
                   {greeting(new Date().getHours())}, {firstName}
                 </Text>
-                <View style={styles.roleRow}>
-                  <Ionicons name="shield-checkmark" size={12} color={colors.adminAccent} />
+                <View style={styles.rolePill}>
+                  <Ionicons name="shield-checkmark" size={11} color={colors.adminAccent} />
                   <Text style={styles.roleText} numberOfLines={1} {...textScale.badge}>
-                    {upperTR(roleLabel)} · {upperTR("Yönetim modu")}
+                    {upperTR(roleLabel)}
                   </Text>
                 </View>
               </View>
+              <Touchable
+                feedback="button"
+                haptic="selection"
+                onPress={mode.enterMember}
+                style={styles.previewButton}
+                accessibilityRole="button"
+                accessibilityLabel="Üye gözünden gör"
+                accessibilityHint="Uygulamayı normal kullanıcının gördüğü hâle çevirir"
+                testID="admin-home-preview-member"
+              >
+                <Ionicons name="eye-outline" size={18} color={colors.adminAccent} />
+                <Text style={styles.previewText} numberOfLines={1} {...textScale.badge}>
+                  Üye gözü
+                </Text>
+              </Touchable>
             </View>
 
+            <Text style={styles.stageOverline} {...textScale.badge}>
+              {upperTR("Bugünün özeti")}
+            </Text>
             <View style={styles.metrics}>
-              {metrics.map((metric, index) => (
-                <SummaryCell key={metric.key} metric={metric} first={index === 0} onPress={go} />
+              {metrics.map((metric) => (
+                <SummaryCell key={metric.key} metric={metric} onPress={go} />
               ))}
             </View>
-
-            <Touchable
-              feedback="button"
-              haptic="selection"
-              onPress={mode.enterMember}
-              style={styles.previewButton}
-              accessibilityRole="button"
-              accessibilityHint="Uygulamayı normal kullanıcının gördüğü hâle çevirir"
-              testID="admin-home-preview-member"
-            >
-              <Ionicons name="eye-outline" size={16} color={colors.adminAccent} />
-              <Text style={styles.previewText} numberOfLines={1} {...textScale.dense}>
-                Üye gözünden gör
-              </Text>
-              <Ionicons name="swap-horizontal" size={14} color={colors.onDarkMuted} />
-            </Touchable>
           </View>
         </Rise>
 
-        {/* 2 · UYGULAMALAR */}
-        <SectionHeader title="Uygulamalar" style={styles.sectionHeader} />
+        {/* 2 · SENİ BEKLEYENLER */}
+        <Rise index={1}>
+          <SectionHeader
+            title="Seni bekleyenler"
+            meta={attentionTotal ? `${attentionTotal} iş` : undefined}
+            action={{ label: "Talepler", onPress: () => go("/yonetim/talepler") }}
+            inset="flush"
+            style={styles.sectionHeader}
+          />
+          {counters.loading && dashboard.loading && !attention.length ? (
+            <View style={styles.card}>
+              <View style={styles.skeletonPad}>
+                <Skeleton height={44} radius="md" />
+                <Skeleton height={44} radius="md" />
+              </View>
+            </View>
+          ) : attention.length ? (
+            <View style={styles.card}>
+              {attention.map((item, index) => (
+                <AttentionRow key={item.key} item={item} last={index === attention.length - 1} onPress={go} />
+              ))}
+            </View>
+          ) : (
+            <View style={[styles.card, styles.allClear]}>
+              <IconTile icon="checkmark-done" tone="mint" size={40} />
+              <View style={styles.flex}>
+                <Text style={styles.allClearTitle} {...textScale.dense}>
+                  Her şey yolunda
+                </Text>
+                <Text style={styles.allClearBody} {...textScale.dense}>
+                  Bekleyen onay, gecikmiş iş ya da okunmamış mesaj yok.
+                </Text>
+              </View>
+            </View>
+          )}
+        </Rise>
+
+        {/* 3 · HIZLI EYLEMLER */}
+        {quick.length ? (
+          <Rise index={2}>
+            <SectionHeader title="Hızlı eylemler" inset="flush" style={styles.sectionHeader} />
+            <View style={[styles.card, styles.quickGrid]}>
+              {quick.map((action) => (
+                <QuickCell key={action.key} action={action} onPress={go} />
+              ))}
+            </View>
+          </Rise>
+        ) : null}
+
+        {/* 4 · SIK KULLANILANLAR */}
+        <SectionHeader title="Sık kullanılanlar" inset="flush" style={styles.sectionHeader} />
         <View style={styles.cards}>
           {rows.map((row, rowIndex) => (
-            <Rise key={row.map((app) => app.key).join("-")} index={rowIndex + 1} style={styles.cardRow}>
+            <Rise key={row.map((app) => app.key).join("-")} index={rowIndex + 3} style={styles.cardRow}>
               {row.map((app) => {
                 const badge = app.key === "lig" ? liveMatches : appBadge(app.key, counters);
                 return (
@@ -320,33 +501,35 @@ export function AdminHome({ asTab = false }: { asTab?: boolean }) {
           ))}
         </View>
 
-        {/* 3 · DİĞER ARAÇLAR */}
+        {/* 5 · DİĞER ARAÇLAR */}
         {more.length ? (
           <>
             <SectionHeader
               title="Diğer araçlar"
               action={{ label: "Tüm sayfalar", onPress: () => go("/yonetim/tum") }}
+              inset="flush"
               style={styles.sectionHeader}
             />
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.strip} style={styles.stripBleed}>
               {more.map((app, index) => (
-                <Rise key={app.key} index={index + 3} style={styles.stripCell}>
-                  <AppIconTile app={app} badge={appBadge(app.key, counters)} onPress={openApp} />
+                <Rise key={app.key} index={index + 6} style={styles.stripCell}>
+                  <AppIconTile app={app} badge={appBadge(app.key, counters)} onPress={openApp} size={48} />
                 </Rise>
               ))}
             </ScrollView>
           </>
         ) : null}
 
-        {/* 4 · BUGÜN — web /editor özetinin yerel karşılığı. */}
-        <SectionHeader title="Bugün" style={styles.sectionHeader} />
-        <DashboardSummary onNavigate={go} showQuickActions={false} />
+        {/* 6 · BUGÜN — web /editor özetinin yerel karşılığı. */}
+        <SectionHeader title="Bugün" inset="flush" style={styles.sectionHeader} />
+        <DashboardSummary onNavigate={go} showQuickActions={false} showMetrics={false} />
 
-        {/* 5 · BİLDİRİMLER */}
+        {/* 7 · BİLDİRİMLER */}
         <SectionHeader
           title="Son bildirimler"
           meta={notifFeed.unread > 0 ? `${notifFeed.unread} okunmamış` : undefined}
           action={{ label: "Tümü", onPress: () => go("/bildirimler") }}
+          inset="flush"
           style={styles.sectionHeader}
         />
         {notifFeed.query.isLoading ? (
@@ -364,12 +547,16 @@ export function AdminHome({ asTab = false }: { asTab?: boolean }) {
             ))}
           </View>
         ) : (
-          <Text style={styles.footnote} {...textScale.long}>
-            Yeni bildirim yok.
-          </Text>
+          <View style={[styles.card, styles.allClear]}>
+            <Ionicons name="notifications-off-outline" size={20} color={colors.textTertiary} />
+            <Text style={[styles.allClearBody, styles.flex]} {...textScale.dense}>
+              Yeni bildirim yok.
+            </Text>
+          </View>
         )}
 
-        <View style={styles.links}>
+        <SectionHeader title="Hesap ve ayarlar" inset="flush" style={styles.sectionHeader} />
+        <View>
           <ListRow
             leading={{ icon: "apps-outline" }}
             title="Tüm yönetim sayfaları"
@@ -410,45 +597,119 @@ export function AdminHome({ asTab = false }: { asTab?: boolean }) {
 interface SummaryMetric {
   key: string;
   label: string;
+  icon: keyof typeof Ionicons.glyphMap;
   value: number | null;
   loading: boolean;
-  /** Gecikmiş iş var: rakamın yanında kırmızı nokta. */
+  /** Gecikmiş iş var: rakamın yanında pembe nokta. */
   alert?: boolean;
   /** Şu an oynanan maç var: rakam canlı rengine döner. */
   live?: boolean;
   route: string;
 }
 
-/** Özet hücresi — sahnede büyük rakam + küçük versal etiket. */
+/** Özet hücresi — sahnede cam karo: ikon, dönen rakam, versal etiket. */
 const SummaryCell = memo(function SummaryCell({
   metric,
-  first,
   onPress,
 }: {
   metric: SummaryMetric;
-  first: boolean;
   onPress: (route: string) => void;
 }) {
   const handlePress = useCallback(() => onPress(metric.route), [metric.route, onPress]);
-  const shown = metric.loading ? "·" : metric.value == null ? "—" : String(metric.value);
+  const accent = metric.live ? colors.liveOnDark : metric.alert ? colors.adminAccent : colors.onDarkMuted;
 
   return (
     <Touchable
-      feedback="icon"
+      feedback="card"
       haptic="selection"
       onPress={handlePress}
       accessibilityRole="button"
       accessibilityLabel={`${metric.label}: ${metric.value ?? "bilinmiyor"}`}
-      style={[styles.metric, first ? null : styles.metricDivided]}
+      style={[styles.metric, metric.live ? styles.metricLive : null]}
     >
-      <View style={styles.metricValueRow}>
-        <Text style={[styles.metricValue, metric.live ? styles.metricValueLive : null]} numberOfLines={1} {...textScale.badge}>
-          {shown}
-        </Text>
-        {metric.alert ? <View style={styles.metricAlert} /> : null}
+      <View style={styles.metricHead}>
+        <Ionicons name={metric.icon} size={13} color={accent} />
+        {metric.alert || metric.live ? <View style={[styles.metricDot, { backgroundColor: accent }]} /> : null}
       </View>
+      {metric.loading ? (
+        <View style={styles.metricSkeleton} />
+      ) : metric.value == null ? (
+        <Text style={styles.metricValue} {...textScale.badge}>
+          —
+        </Text>
+      ) : (
+        <Odometer value={metric.value} style={[styles.metricValue, metric.live ? styles.metricValueLive : null]} />
+      )}
       <Text style={styles.metricLabel} numberOfLines={1} {...textScale.badge}>
         {upperTR(metric.label)}
+      </Text>
+    </Touchable>
+  );
+});
+
+/** Dikkat satırı — solda öncelik şeridi, IconTile, başlık + alt metin, sağda sayı. */
+const AttentionRow = memo(function AttentionRow({
+  item,
+  last,
+  onPress,
+}: {
+  item: AttentionItem;
+  last: boolean;
+  onPress: (route: string) => void;
+}) {
+  const p = PRIORITY[item.priority];
+  return (
+    <Touchable
+      feedback="row"
+      haptic="selection"
+      onPress={() => onPress(item.route)}
+      style={[styles.attention, last ? null : styles.attentionDivided]}
+      accessibilityRole="button"
+      accessibilityLabel={`${p.label}: ${item.title}, ${item.count}. ${item.subtitle}`}
+    >
+      <View style={[styles.attentionStripe, { backgroundColor: p.stripe }]} />
+      <IconTile icon={item.icon} tone={p.tile} size={36} glow={false} />
+      <View style={styles.flex}>
+        <Text style={styles.attentionTitle} numberOfLines={1} {...textScale.dense}>
+          {item.title}
+        </Text>
+        <Text style={styles.attentionSub} numberOfLines={1} {...textScale.dense}>
+          {item.subtitle}
+        </Text>
+      </View>
+      <Text style={[styles.attentionCount, { color: p.count }]} {...textScale.badge}>
+        {item.count > 999 ? "999+" : item.count}
+      </Text>
+      <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
+    </Touchable>
+  );
+});
+
+/** Hızlı eylem — ızgarada küçük IconTile + iki satıra kadar etiket. */
+const QUICK_TONES: Record<string, IconTileTone> = {
+  "new-match": "mint",
+  "new-news": "pink",
+  "new-penalty": "red",
+  "bulk-staff": "cyan",
+  "run-draw": "gold",
+  "new-todo": "violet",
+  "open-requests": "gold",
+  account: "neutral",
+};
+
+const QuickCell = memo(function QuickCell({ action, onPress }: { action: QuickAction; onPress: (route: string) => void }) {
+  return (
+    <Touchable
+      feedback="card"
+      haptic="selection"
+      onPress={() => onPress(action.route)}
+      style={styles.quickCell}
+      accessibilityRole="button"
+      accessibilityLabel={action.label}
+    >
+      <IconTile icon={action.icon} tone={QUICK_TONES[action.key] ?? "violet"} size={42} glow={false} />
+      <Text style={styles.quickLabel} numberOfLines={2} {...textScale.dense}>
+        {action.label}
       </Text>
     </Touchable>
   );
@@ -459,12 +720,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.bg,
   },
+  flex: { flex: 1 },
   content: {
     paddingHorizontal: layout.screenPadding,
-    paddingBottom: space.giant,
+    paddingBottom: space.giant * 2,
   },
   sectionHeader: {
-    paddingHorizontal: 0,
+    marginTop: space.xl,
   },
 
   /* — Sahne — */
@@ -474,22 +736,36 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: colors.adminBar,
     padding: space.lg,
+    paddingTop: space.xl,
     gap: space.md,
+    borderWidth: hairline,
+    borderColor: colors.inkTileBorder,
+  },
+  stageRim: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 2,
+    opacity: 0.9,
   },
   identity: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.md,
   },
+  monogramRing: {
+    width: 56,
+    height: 56,
+    borderRadius: radius.pill,
+    padding: 2,
+  },
   monogram: {
-    width: 48,
-    height: 48,
+    flex: 1,
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.inkTile,
-    borderWidth: 1.5,
-    borderColor: colors.adminAccent,
+    backgroundColor: colors.adminBar,
   },
   monogramText: {
     ...type.h2,
@@ -498,43 +774,78 @@ const styles = StyleSheet.create({
   },
   identityBody: {
     flex: 1,
-    gap: 3,
+    gap: space.xxs,
+  },
+  date: {
+    ...type.micro,
+    color: colors.onDarkMuted,
   },
   hello: {
     ...type.h1,
     color: colors.onDark,
   },
-  roleRow: {
+  rolePill: {
+    alignSelf: "flex-start",
     flexDirection: "row",
     alignItems: "center",
     gap: space.xs,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xxs,
+    borderRadius: radius.pill,
+    backgroundColor: colors.inkTile,
+    borderWidth: hairline,
+    borderColor: colors.adminAccent,
   },
   roleText: {
     ...type.micro,
     color: colors.adminAccent,
     flexShrink: 1,
   },
+  previewButton: {
+    width: 64,
+    paddingVertical: space.sm,
+    alignItems: "center",
+    gap: space.xxs,
+    borderRadius: radius.lg,
+    backgroundColor: colors.inkPill,
+    borderWidth: hairline,
+    borderColor: colors.inkPillBorder,
+  },
+  previewText: {
+    ...type.micro,
+    color: colors.onDark,
+  },
+  stageOverline: {
+    ...type.overline,
+    color: colors.onDarkMuted,
+    marginTop: space.xs,
+  },
   metrics: {
     flexDirection: "row",
+    gap: space.sm,
+  },
+  metric: {
+    flex: 1,
+    minHeight: 86,
+    padding: space.sm,
+    gap: space.xxs,
     borderRadius: radius.lg,
     backgroundColor: colors.inkTile,
     borderWidth: hairline,
     borderColor: colors.inkTileBorder,
-    paddingVertical: space.md,
   },
-  metric: {
-    flex: 1,
-    alignItems: "center",
-    gap: space.xxs,
+  metricLive: {
+    borderColor: colors.liveOnDark,
   },
-  metricDivided: {
-    borderLeftWidth: hairline,
-    borderLeftColor: colors.borderOnDark,
-  },
-  metricValueRow: {
+  metricHead: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    gap: space.xxs,
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  metricDot: {
+    width: 6,
+    height: 6,
+    borderRadius: radius.pill,
   },
   metricValue: {
     ...type.scoreMd,
@@ -543,31 +854,95 @@ const styles = StyleSheet.create({
   metricValueLive: {
     color: colors.liveOnDark,
   },
-  metricAlert: {
-    width: 6,
-    height: 6,
-    marginTop: space.xs,
-    borderRadius: radius.pill,
-    backgroundColor: colors.liveOnDark,
+  metricSkeleton: {
+    width: 28,
+    height: 26,
+    borderRadius: radius.xs,
+    backgroundColor: colors.inkTile,
   },
   metricLabel: {
-    ...type.micro,
+    ...type.nano,
     color: colors.onDarkMuted,
   },
-  previewButton: {
-    minHeight: 42,
+
+  /* — Kartlar — */
+  card: {
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    overflow: "hidden",
+  },
+  skeletonPad: {
+    padding: space.md,
+    gap: space.sm,
+  },
+  attention: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: space.sm,
-    borderRadius: radius.md,
-    backgroundColor: colors.inkPill,
-    borderWidth: hairline,
-    borderColor: colors.inkPillBorder,
+    gap: space.md,
+    minHeight: 62,
+    paddingLeft: space.lg,
+    paddingRight: space.md,
+    paddingVertical: space.sm,
   },
-  previewText: {
-    ...type.labelSm,
-    color: colors.onDark,
+  attentionDivided: {
+    borderBottomWidth: hairline,
+    borderBottomColor: colors.separator,
+  },
+  attentionStripe: {
+    position: "absolute",
+    left: 0,
+    top: space.sm,
+    bottom: space.sm,
+    width: 3,
+    borderTopRightRadius: radius.pill,
+    borderBottomRightRadius: radius.pill,
+  },
+  attentionTitle: {
+    ...type.h4,
+    color: colors.textPrimary,
+  },
+  attentionSub: {
+    ...type.caption,
+    color: colors.textTertiary,
+  },
+  attentionCount: {
+    ...type.metricSm,
+    minWidth: 28,
+    textAlign: "right",
+  },
+  allClear: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    padding: space.md,
+  },
+  allClearTitle: {
+    ...type.h4,
+    color: colors.textPrimary,
+  },
+  allClearBody: {
+    ...type.caption,
+    color: colors.textSecondary,
+  },
+
+  quickGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    paddingVertical: space.sm,
+  },
+  quickCell: {
+    width: "25%",
+    alignItems: "center",
+    gap: space.s,
+    paddingVertical: space.sm,
+    paddingHorizontal: space.xxs,
+  },
+  quickLabel: {
+    ...type.caption,
+    color: colors.textPrimary,
+    textAlign: "center",
   },
 
   /* — Uygulamalar — */
@@ -583,17 +958,15 @@ const styles = StyleSheet.create({
   },
   strip: {
     paddingHorizontal: layout.screenPadding - space.xs,
+    paddingTop: space.xs,
   },
   stripCell: {
-    width: 76,
+    width: 78,
   },
 
   notifList: {
     borderRadius: radius.xl,
     overflow: "hidden",
-  },
-  links: {
-    marginTop: space.xl,
   },
   footnote: {
     ...type.caption,

@@ -11,10 +11,10 @@
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { memo } from "react";
-import { StyleSheet, Text } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
-import { Touchable } from "@/components/ui";
-import { colors, radius, space, textScale, touchSlop, type, upperTR } from "@/theme";
+import { IconTile, Reveal, Touchable } from "@/components/ui";
+import { colors, hairline, radius, space, textScale, touchSlop, type, upperTR } from "@/theme";
 import type { GoalNews } from "./scoreUtils";
 
 export interface GoalBandProps {
@@ -25,6 +25,7 @@ export interface GoalBandProps {
 
 export const GoalBand = memo(function GoalBand({ goal, onOpen, onDismiss }: GoalBandProps) {
   return (
+    <Reveal scaleFrom={0.94} distance={0} replayKey={goal.at}>
     <Touchable
       feedback="row"
       haptic="selection"
@@ -34,13 +35,15 @@ export const GoalBand = memo(function GoalBand({ goal, onOpen, onDismiss }: Goal
       accessibilityLabel={`Gol. ${goal.scoringTeam}. ${goal.homeTeam} ${goal.score} ${goal.awayTeam}. Maçı açmak için dokun.`}
       testID="goal-band"
     >
-      <Ionicons name="football" size={14} color={colors.live} />
-      <Text style={styles.title} {...textScale.badge}>
-        {upperTR("Gol")}
-      </Text>
-      <Text style={styles.text} numberOfLines={1} {...textScale.dense}>
-        {`${goal.scoringTeam} · ${goal.homeTeam} ${goal.score} ${goal.awayTeam}`}
-      </Text>
+      <IconTile icon="football" tone="pink" size={32} />
+      <View style={styles.body}>
+        <Text style={styles.title} numberOfLines={1} {...textScale.badge}>
+          {upperTR(`Gol · ${goal.scoringTeam}`)}
+        </Text>
+        <Text style={styles.text} numberOfLines={1} {...textScale.dense}>
+          {goal.homeTeam} <Text style={styles.score}>{goal.score.replace("-", " – ")}</Text> {goal.awayTeam}
+        </Text>
+      </View>
       <Touchable
         feedback="icon"
         onPress={onDismiss}
@@ -51,6 +54,7 @@ export const GoalBand = memo(function GoalBand({ goal, onOpen, onDismiss }: Goal
         <Ionicons name="close" size={16} color={colors.textSecondary} />
       </Touchable>
     </Touchable>
+    </Reveal>
   );
 });
 
@@ -60,9 +64,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: space.sm,
     backgroundColor: colors.liveDim,
-    borderRadius: radius.md,
-    paddingHorizontal: space.md,
-    paddingVertical: space.sm,
+    borderRadius: radius.lg,
+    borderWidth: hairline,
+    borderColor: colors.liveGlow,
+    paddingLeft: space.s,
+    paddingRight: space.md,
+    paddingVertical: space.s,
+  },
+  body: {
+    flex: 1,
+    minWidth: 0,
   },
   title: {
     ...type.micro,
@@ -71,6 +82,9 @@ const styles = StyleSheet.create({
   text: {
     ...type.bodySm,
     color: colors.textPrimary,
-    flex: 1,
+  },
+  score: {
+    ...type.numSmStrong,
+    color: colors.live,
   },
 });

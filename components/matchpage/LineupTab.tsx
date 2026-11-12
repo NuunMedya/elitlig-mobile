@@ -24,6 +24,7 @@
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { memo, useCallback, useMemo, useState } from "react";
 import {
@@ -42,15 +43,14 @@ import {
   EmptyState,
   ErrorState,
   EventIcon,
-  PitchView,
   RatingPill,
+  Reveal,
   SectionHeader,
   SegmentedControl,
   SkeletonListRow,
   TeamLogo,
   Touchable,
   type EventIconKind,
-  type PitchPlayerView,
   type SegmentedItem,
 } from "@/components/ui";
 import { positionLabel, positionLine } from "@/lib/api/team";
@@ -70,6 +70,7 @@ import {
 } from "@/theme";
 import type { ContribRow } from "@/lib/matchStats";
 import type { ApiMatch, KadroPlayer, KadroResponse } from "@/lib/types";
+import { MatchPitch, PositionLegend, type MatchPitchPlayer } from "./MatchPitch";
 import { PaperCard } from "./parts";
 import {
   formationOf,
@@ -82,11 +83,9 @@ import {
 
 type LineupSide = "home" | "away";
 
-/** Sahadaki iki takımın rengi — şerit noktası ve forma rozeti aynı rengi taşır. */
-const HOME_TINT = colors.brand;
-const HOME_INK = colors.textOnBrand;
-const AWAY_TINT = colors.onPitch;
-const AWAY_INK = colors.pitch;
+/** Sahadaki iki takımın forma degradesi — şerit ve forma rozeti aynı rengi taşır. */
+const HOME_KIT = colors.gradientBrand;
+const AWAY_KIT = colors.tileTones.cyan;
 
 export interface LineupTabProps {
   match: ApiMatch;
@@ -150,13 +149,12 @@ export function LineupTab({
 
   /* Sahadaki oyuncular: rozetler gerçek olaylardan, reyting kadro satırından. */
   const toPitch = useCallback(
-    (squad: KadroPlayer[], prefix: string, tint: string, ink: string): PitchPlayerView[] =>
+    (squad: KadroPlayer[], prefix: string): MatchPitchPlayer[] =>
       squad.map((row, index) => {
         const playerId = playerIdOf(row);
         const contrib = playerId ? contribById.get(playerId) : null;
         const sub = playerId ? substitutions.get(playerId) : null;
         const events: EventIconKind[] = [];
-        if (contrib?.goals) events.push("goal");
         if (contrib?.cards) events.push("yellow");
         if (sub?.out != null) events.push("substitution");
         const rating = row.puan != null ? Number(row.puan) : null;
@@ -165,12 +163,10 @@ export function LineupTab({
           // oyuncu olabilir ve React aynı anahtarı iki kez görürse birini çizmez.
           key: `${prefix}-${playerKey(row, index)}`,
           name: playerNameOf(row),
-          photo: row.playerImg,
           number: row.number,
           position: row.position,
+          goals: contrib?.goals ?? 0,
           events,
-          tint,
-          tintInk: ink,
           rating: rating != null && Number.isFinite(rating) && rating > 0 ? rating : null,
           captain: row.captain,
           onPress: () => setSheetPlayer(row),
@@ -179,8 +175,8 @@ export function LineupTab({
     [contribById, substitutions],
   );
 
-  const homePitch = useMemo(() => toPitch(homeStarters, "h", HOME_TINT, HOME_INK), [toPitch, homeStarters]);
-  const awayPitch = useMemo(() => toPitch(awayStarters, "a", AWAY_TINT, AWAY_INK), [toPitch, awayStarters]);
+  const homePitch = useMemo(() => toPitch(homeStarters, "h"), [toPitch, homeStarters]);
+  const awayPitch = useMemo(() => toPitch(awayStarters, "a"), [toPitch, awayStarters]);
   const homeFormation = useMemo(() => formationOf(homeStarters), [homeStarters]);
   const awayFormation = useMemo(() => formationOf(awayStarters), [awayStarters]);
 
@@ -218,17 +214,22 @@ export function LineupTab({
               name={match.second_team_name}
               logo={awayLogo}
               formation={awayFormation}
-              tint={AWAY_TINT}
+              kit={AWAY_KIT}
               label="Deplasman"
+              count={awayPitch.length}
             />
-            <PitchView players={homePitch} opponents={awayPitch} width={pitchWidth} />
+            <Reveal scaleFrom={0.98} distance={0}>
+              <MatchPitch home={homePitch} away={awayPitch} width={pitchWidth} />
+            </Reveal>
             <TeamStrip
               name={match.first_team_name}
               logo={homeLogo}
               formation={homeFormation}
-              tint={HOME_TINT}
+              kit={HOME_KIT}
               label="Ev sahibi"
+              count={homePitch.length}
             />
+            <PositionLegend />
           </View>
         ) : (
           <PaperCard style={styles.noPitch}>
@@ -321,27 +322,35 @@ function subFor(map: Map<number, SubInfo>, player: KadroPlayer): SubInfo | null 
   return id ? map.get(id) ?? null : null;
 }
 
-/** Sahanın üstündeki/altındaki takım şeridi: renk noktası · arma · ad · diziliş. */
+/** Sahanın üstündeki/altındaki takım şeridi: forma rengi · arma · ad/rol · diziliş. */
 const TeamStrip = memo(function TeamStrip({
   name,
   logo,
   formation,
-  tint,
+  kit,
   label,
+  count,
 }: {
   name: string;
   logo: string | null;
   formation: string | null;
-  tint: string;
+  kit: readonly [string, string];
   label: string;
+  count: number;
 }) {
   return (
     <View style={styles.strip} accessible accessibilityLabel={`${label}: ${name}${formation ? `, diziliş ${formation}` : ""}`}>
-      <View style={[styles.stripDot, { backgroundColor: tint }]} />
-      <TeamLogo name={name} logo={logo} size={layout.crestSm} />
-      <Text style={styles.stripName} numberOfLines={1} {...textScale.dense}>
-        {name}
-      </Text>
+      <LinearGradient colors={kit} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.stripKit} />
+      <TeamLogo name={name} logo={logo} size={layout.crestLg} />
+      <View style={styles.stripTexts}>
+        <Text style={styles.stripName} numberOfLines={1} {...textScale.dense}>
+          {name}
+        </Text>
+        <Text style={styles.stripRole} numberOfLines={1} {...textScale.badge}>
+          {upperTR(label)}
+          {count ? ` · ${count} İLK` : ""}
+        </Text>
+      </View>
       {formation ? (
         <View style={styles.formation}>
           <Text style={styles.formationText} {...textScale.badge}>

@@ -30,10 +30,12 @@
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { LinearGradient } from "expo-linear-gradient";
 import React, { useCallback } from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { colors, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
 import { FormChips } from "./FormChips";
+import { RankBadge } from "./NightKit";
 import { TeamLogo } from "./TeamLogo";
 import { Touchable } from "./Pressable";
 
@@ -105,6 +107,25 @@ export interface TeamRowProps {
   style?: StyleProp<ViewStyle>;
 }
 
+/**
+ * GECE TEMASI — SATIRIN SOL KENARI. Vurgulanan (takip edilen / sayfanın)
+ * takım imza degradeli 3px şeridi taşır; diğerlerinde bölge rayı durur.
+ * Vurgulu satırda bölge bilgisi kaybolmaz: sıra rozeti ve lejant onu söyler.
+ */
+function EdgeMark({ zone, highlighted }: { zone?: string | null; highlighted?: boolean }) {
+  if (highlighted) {
+    return (
+      <LinearGradient
+        colors={colors.gradientSignature}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+        style={styles.signatureStrip}
+      />
+    );
+  }
+  return <View style={[styles.rail, zone ? { backgroundColor: zone } : null]} />;
+}
+
 /** Averajı işaretiyle yazar: +21 / 0 / −5 (gerçek eksi işareti). */
 function formatDiff(value: number): string {
   if (value > 0) return `+${value}`;
@@ -163,10 +184,14 @@ function TeamRowBase({
         haptic="selection"
         accessibilityLabel={accessibilityLabel}
       >
-        <View style={[styles.rail, zone ? { backgroundColor: zone } : null]} />
-        <Text style={[styles.tableRank, zone ? styles.tableRankZone : null]} {...textScale.dense}>
-          {rank ?? "—"}
-        </Text>
+        <EdgeMark zone={zone} highlighted={highlighted} />
+        <View style={styles.tableRankCell}>
+          {rank != null ? (
+            <RankBadge rank={rank} size={20} />
+          ) : (
+            <Text style={styles.tableRank} {...textScale.dense}>—</Text>
+          )}
+        </View>
         <TeamLogo name={name} logo={logo ?? null} size={layout.crestSm} />
         <View style={styles.tableNameCell}>
           <Text
@@ -197,9 +222,12 @@ function TeamRowBase({
             </Text>
           </>
         )}
-        <Text style={[styles.tableNum, styles.tablePoints]} {...textScale.dense}>
-          {points ?? "—"}
-        </Text>
+        {/* PUAN SÜTUNU: tablonun asıl sorusu — kendi hapında, Archivo kalın. */}
+        <View style={[styles.tablePointsCell, highlighted ? styles.tablePointsCellOn : null]}>
+          <Text style={[styles.tablePoints, highlighted ? styles.tablePointsOn : null]} {...textScale.dense}>
+            {points ?? "—"}
+          </Text>
+        </View>
         {trailing}
       </Touchable>
     );
@@ -223,17 +251,20 @@ function TeamRowBase({
       haptic="selection"
       accessibilityLabel={accessibilityLabel}
     >
-      <View style={[styles.rail, zone ? { backgroundColor: zone } : null]} />
+      <EdgeMark zone={zone} highlighted={highlighted} />
 
-      {/* Sıra kutusu: bölge rengi ÇERÇEVEDE, rakam nötr. Rakamı da
-          renklendirmek zeminle birlikte iki sinyal üretir ve listeyi
-          alacalı gösterir. */}
+      {/* Sıra: ilk üç madalya (RankBadge), diğerleri sakin kutuda; bölge
+          rengi kutunun ÇERÇEVESİNDE. */}
       {rank != null ? (
-        <View style={[styles.rankBox, zone ? { borderColor: zone } : null]}>
-          <Text style={styles.rankText} {...textScale.dense}>
-            {rank}
-          </Text>
-        </View>
+        rank <= 3 ? (
+          <RankBadge rank={rank} size={COL_RANK + 2} />
+        ) : (
+          <View style={[styles.rankBox, zone ? { borderColor: zone } : null]}>
+            <Text style={styles.rankText} {...textScale.dense}>
+              {rank}
+            </Text>
+          </View>
+        )
       ) : null}
 
       <TeamLogo name={name} logo={logo ?? null} size={layout.crestLg} />
@@ -261,6 +292,9 @@ function TeamRowBase({
         <View style={styles.pointsBox}>
           <Text style={styles.pointsValue} {...textScale.dense}>
             {points}
+          </Text>
+          <Text style={styles.pointsUnit} {...textScale.badge}>
+            {upperTR("Puan")}
           </Text>
         </View>
       ) : null}
@@ -296,7 +330,7 @@ export const TeamRowHead = React.memo(function TeamRowHead({
     return (
       <View style={[styles.tableHead, trailingWidth ? styles.tableHeadTrailing : null]}>
         <View style={styles.rail} />
-        <Text style={[styles.tableRank, styles.headLabel]} {...textScale.badge}>#</Text>
+        <Text style={[styles.tableRankCell, styles.tableRankHead, styles.headLabel]} {...textScale.badge}>#</Text>
         <View style={{ width: layout.crestSm }} />
         <Text style={[styles.tableNameCell, styles.headLabel]} {...textScale.badge}>
           {upperTR("Takım")}
@@ -320,9 +354,11 @@ export const TeamRowHead = React.memo(function TeamRowHead({
             </Text>
           </>
         )}
-        <Text style={[styles.tableNum, styles.tablePointsHead, styles.headLabel]} {...textScale.badge}>
-          {upperTR(pointsLabel).slice(0, 2)}
-        </Text>
+        <View style={[styles.tablePointsCell, styles.tablePointsHeadCell]}>
+          <Text style={[styles.headLabel, styles.tablePointsHead]} {...textScale.badge}>
+            {upperTR(pointsLabel).slice(0, 2)}
+          </Text>
+        </View>
         {trailingWidth ? <View style={{ width: trailingWidth }} /> : null}
       </View>
     );
@@ -357,8 +393,18 @@ const styles = StyleSheet.create({
     ...type.overline,
     color: colors.textTertiary,
   },
+  /* Vurgulu satır: marka tülü (kural: kullanıcının takımı = brandDim + imza şeridi). */
   highlighted: {
-    backgroundColor: colors.accentDim,
+    backgroundColor: colors.brandDim,
+  },
+  signatureStrip: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 3,
+    borderTopRightRadius: 3,
+    borderBottomRightRadius: 3,
   },
 
   /* — Liste yoğunluğu — */
@@ -413,8 +459,13 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
   },
   pointsValue: {
-    ...type.metricSm,
+    ...type.scoreMd,
     color: colors.textPrimary,
+  },
+  pointsUnit: {
+    ...type.overline,
+    color: colors.textTertiary,
+    marginTop: -2,
   },
   listHead: {
     flexDirection: "row",
@@ -461,6 +512,14 @@ const styles = StyleSheet.create({
     ...type.tableNum,
     color: colors.textTertiary,
   },
+  tableRankCell: {
+    width: COL_RANK,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tableRankHead: {
+    textAlign: "center",
+  },
   /* Bölgedeki takımın sırası bir kademe koyu: ray rengi söyler, rakam onaylar. */
   tableRankZone: {
     ...type.tableNumStrong,
@@ -505,12 +564,32 @@ const styles = StyleSheet.create({
   diffNegative: {
     color: colors.loss,
   },
+  /* Puan hapı: sütun boyunca sakin bir zemin şeridi gibi okunur. */
+  tablePointsCell: {
+    width: COL_POINTS + space.sm,
+    height: 26,
+    marginLeft: space.xxs,
+    borderRadius: radius.sm,
+    backgroundColor: colors.surface3,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tablePointsCellOn: {
+    backgroundColor: colors.brand,
+  },
   tablePoints: {
-    width: COL_POINTS,
-    ...type.tableNumStrong,
+    ...type.scoreXs,
     color: colors.textPrimary,
+    textAlign: "center",
+  },
+  tablePointsOn: {
+    color: colors.textOnBrand,
+  },
+  tablePointsHeadCell: {
+    height: 18,
+    backgroundColor: "transparent",
   },
   tablePointsHead: {
-    width: COL_POINTS,
+    textAlign: "center",
   },
 });

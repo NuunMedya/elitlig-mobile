@@ -13,19 +13,27 @@
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
-import React, { memo, useMemo, useState } from "react";
-import { Image, StyleSheet, Text, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import React, { memo, useCallback, useMemo, useState } from "react";
+import { Image, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 
-import { MatchGoalClips, type ClipTeams } from "@/components/live/MatchGoalClips";
-import type { GoalClip } from "@/lib/live/clips";
+import type { ClipTeams } from "@/components/live/MatchGoalClips";
+import { clipLabel, type GoalClip } from "@/lib/live/clips";
 import { MatchHighlight } from "@/components/live/MatchHighlight";
 import { VideoCard } from "@/components/live/VideoCard";
-import { SectionHeader, TeamLogo, Touchable } from "@/components/ui";
+import { IconTile, Reveal, SectionHeader, TeamLogo, Touchable, withAlpha } from "@/components/ui";
 import { openLink, openYouTube } from "@/lib/links";
 import { RIG } from "@/lib/live/rig";
-import { broadcastOf, interviewOf, readAwardMoments, type AwardMoment, type BroadcastSource } from "@/lib/matchMedia";
+import {
+  broadcastOf,
+  formatDuration,
+  interviewOf,
+  readAwardMoments,
+  type AwardMoment,
+  type BroadcastSource,
+} from "@/lib/matchMedia";
 import type { ApiMatch, MatchState } from "@/lib/types";
-import { colors, fonts, radius, space, textScale, type } from "@/theme";
+import { colors, dark as darkPalette, fonts, glowStyle, hairline, layout, radius, space, textScale, type } from "@/theme";
 
 import { partStyles } from "./parts";
 import type { NameOf } from "./shared";
@@ -86,12 +94,10 @@ export const BroadcastCard = memo(function BroadcastCard({
               {live ? "CANLI" : "YAYIN KAYDI"}
             </Text>
           </View>
-          <View style={[styles.play, live ? styles.playLive : null]}>
-            <Ionicons name="play" size={22} color={colors.textOnBrand} />
-          </View>
+          <PlayButton live={live} />
         </View>
         <View style={styles.foot}>
-          <Ionicons name={youtube ? "logo-youtube" : "open-outline"} size={20} color={live ? colors.live : colors.textSecondary} />
+          <IconTile icon={youtube ? "logo-youtube" : "open-outline"} tone={youtube || live ? "red" : "violet"} size={36} glow={false} />
           <View style={styles.flex}>
             <Text style={styles.footTitle} numberOfLines={1} {...textScale.dense}>
               {title || heading}
@@ -106,6 +112,17 @@ export const BroadcastCard = memo(function BroadcastCard({
     </View>
   );
 });
+
+/** Oynat düğmesi: degrade daire + parıltı; canlıda pembe. */
+function PlayButton({ live = false }: { live?: boolean }) {
+  const pair = live ? colors.gradientLive : colors.gradientBrand;
+  return (
+    <View style={[styles.play, glowStyle(pair[0], 2)]}>
+      <LinearGradient colors={pair} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[StyleSheet.absoluteFill, styles.playFill]} />
+      <Ionicons name="play" size={24} color={colors.onDark} />
+    </View>
+  );
+}
 
 /** Kapak; yüklenemezse koyu sahne kalır. */
 function BroadcastThumb({ uri }: { uri: string | null }) {
@@ -247,12 +264,10 @@ function Interview({ match }: { match: ApiMatch }) {
               RÖPORTAJ
             </Text>
           </View>
-          <View style={styles.play}>
-            <Ionicons name="play" size={22} color={colors.textOnBrand} />
-          </View>
+          <PlayButton />
         </View>
         <View style={styles.foot}>
-          <Ionicons name="logo-youtube" size={20} color={colors.textSecondary} />
+          <IconTile icon="mic" tone="pink" size={36} glow={false} />
           <View style={styles.flex}>
             <Text style={styles.footTitle} numberOfLines={1} {...textScale.dense}>
               Maç sonu röportajı
@@ -314,9 +329,159 @@ export const MatchMedia = memo(function MatchMedia({
       {live ? null : <MatchHighlight highlight={match.highlight} />}
       {broadcast && !live ? <BroadcastCard source={broadcast} live={false} title={scoreTitle} /> : null}
       {live ? null : <MomentCards moments={moments} clipFor={clipFor} nameOf={nameOf} teams={teams} onOpenPlayer={onOpenPlayer} />}
-      <MatchGoalClips clips={clips} nameOf={nameOf} teams={teams} onOpen={onOpenClip} />
+      <GoalClipGrid clips={clips} nameOf={nameOf} teams={teams} onOpen={onOpenClip} />
       {live ? null : <Interview match={match} />}
     </>
+  );
+});
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Gol videoları — iki sütunlu ızgara
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/** İlk açılışta gösterilen kart sayısı; fazlası "Tümünü göster" ile açılır. */
+const GRID_PREVIEW = 6;
+
+/** Kapak perdesi — fotoğraf üstü yazı için iki temada da koyu. */
+const CLIP_SCRIM = [withAlpha(darkPalette.bg, 0), withAlpha(darkPalette.bg, 0.78)] as const;
+
+/**
+ * Gol videoları ızgarası. Eskiden yatay şeritti; 17 gollük bir maçta kullanıcı
+ * hangi golün nerede olduğunu görmek için şeridi sonuna kadar kaydırıyordu.
+ * Izgara ilk altı golü tek bakışta verir, kalanı tek dokunuşla açılır.
+ * Oynatıcı üst bileşendedir (SummaryTab) — kart yalnız `onOpen` çağırır.
+ */
+const GoalClipGrid = memo(function GoalClipGrid({
+  clips,
+  nameOf,
+  teams,
+  onOpen,
+}: {
+  clips: GoalClip[];
+  nameOf: NameOf;
+  teams: ClipTeams;
+  onOpen: (clipId: number) => void;
+}) {
+  const { width } = useWindowDimensions();
+  const [expanded, setExpanded] = useState(false);
+  const cardWidth = Math.floor((width - layout.screenPadding * 2 - space.sm) / 2);
+  if (!clips.length) return null;
+  const shown = expanded ? clips : clips.slice(0, GRID_PREVIEW);
+  const hidden = clips.length - shown.length;
+
+  const teamOf = (teamId: number | null) =>
+    teamId == null
+      ? null
+      : Number(teamId) === teams.homeTeamId
+        ? { name: teams.homeName ?? null, logo: teams.homeLogo ?? null }
+        : Number(teamId) === teams.awayTeamId
+          ? { name: teams.awayName ?? null, logo: teams.awayLogo ?? null }
+          : null;
+
+  return (
+    <View style={styles.block}>
+      <SectionHeader title="Gol videoları" meta={`${clips.length} gol`} />
+      <View style={styles.grid}>
+        {shown.map((clip, index) => (
+          <Reveal key={clip.id} index={Math.min(index, 7)} distance={8}>
+            <ClipTile
+              clip={clip}
+              width={cardWidth}
+              title={nameOf(clip.player_id) ?? clipLabel(clip)}
+              team={teamOf(clip.team_id)}
+              onOpen={onOpen}
+            />
+          </Reveal>
+        ))}
+      </View>
+      {hidden > 0 || expanded ? (
+        <Touchable
+          feedback="button"
+          haptic="selection"
+          onPress={() => setExpanded((value) => !value)}
+          accessibilityRole="button"
+          accessibilityLabel={expanded ? "Gol videolarını daralt" : `Tüm gol videolarını göster, ${clips.length}`}
+          style={styles.more}
+        >
+          <Text style={styles.moreText} {...textScale.dense}>
+            {expanded ? "Daha az göster" : `Tümünü göster · ${hidden} video daha`}
+          </Text>
+          <Ionicons name={expanded ? "chevron-up" : "chevron-down"} size={14} color={colors.brandAccent} />
+        </Touchable>
+      ) : null}
+    </View>
+  );
+});
+
+const ClipTile = memo(function ClipTile({
+  clip,
+  width,
+  title,
+  team,
+  onOpen,
+}: {
+  clip: GoalClip;
+  width: number;
+  title: string;
+  team: { name: string | null; logo: string | null } | null;
+  onOpen: (clipId: number) => void;
+}) {
+  const [posterFailed, setPosterFailed] = useState(false);
+  const duration = formatDuration(clip.duration_ms);
+  const open = useCallback(() => onOpen(clip.id), [onOpen, clip.id]);
+  return (
+    <Touchable
+      feedback="card"
+      haptic="light"
+      onPress={open}
+      style={[styles.tile, { width }]}
+      accessibilityRole="button"
+      accessibilityLabel={`${clip.minute != null ? `${clip.minute}. dakika, ` : ""}${title} golünü izle`}
+    >
+      <View style={styles.tileThumb}>
+        {clip.poster_url && !posterFailed ? (
+          <Image
+            source={{ uri: clip.poster_url }}
+            style={StyleSheet.absoluteFill}
+            resizeMode="cover"
+            resizeMethod="resize"
+            onError={() => setPosterFailed(true)}
+          />
+        ) : (
+          <LinearGradient colors={colors.gradientInk} start={{ x: 1, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} />
+        )}
+        <LinearGradient colors={CLIP_SCRIM} style={StyleSheet.absoluteFill} pointerEvents="none" />
+        <View style={styles.tilePlay}>
+          <Ionicons name="play" size={14} color={colors.onDark} />
+        </View>
+        {clip.minute != null ? (
+          <View style={styles.tileMinute}>
+            <LinearGradient
+              colors={colors.gradientSignature}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[StyleSheet.absoluteFill, styles.tileMinuteFill]}
+            />
+            <Text style={styles.tileMinuteText} {...textScale.badge}>
+              {`${clip.minute}'`}
+            </Text>
+          </View>
+        ) : null}
+        {duration ? (
+          <Text style={styles.tileDuration} {...textScale.badge}>
+            {duration}
+          </Text>
+        ) : null}
+      </View>
+      <View style={styles.tileBody}>
+        {team ? <TeamLogo name={team.name} logo={team.logo} size={20} /> : null}
+        <Text style={styles.tileTitle} numberOfLines={1} {...textScale.dense}>
+          {title}
+          {clip.own_goal ? " (k.k.)" : ""}
+        </Text>
+      </View>
+    </Touchable>
   );
 });
 
@@ -348,8 +513,79 @@ const styles = StyleSheet.create({
   badgeLive: { backgroundColor: RIG.live },
   liveDot: { width: 7, height: 7, borderRadius: radius.pill, backgroundColor: RIG.text },
   badgeText: { ...type.micro, fontFamily: fonts.bold, color: RIG.text, letterSpacing: 0.8 },
-  play: { width: 56, height: 56, borderRadius: radius.pill, backgroundColor: colors.brand, alignItems: "center", justifyContent: "center" },
-  playLive: { backgroundColor: colors.live },
+  play: { width: 60, height: 60, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: colors.inkPillBorder },
+  playFill: { borderRadius: radius.pill },
+  grid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: space.sm,
+    paddingHorizontal: layout.screenPadding,
+  },
+  tile: {
+    borderRadius: radius.lg,
+    overflow: "hidden",
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+  },
+  tileThumb: {
+    width: "100%",
+    aspectRatio: 16 / 10,
+    backgroundColor: colors.matchTint,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  tilePlay: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.pill,
+    backgroundColor: colors.inkPill,
+    borderWidth: hairline,
+    borderColor: colors.inkPillBorder,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tileMinute: {
+    position: "absolute",
+    top: space.xs,
+    left: space.xs,
+    height: 20,
+    minWidth: 32,
+    paddingHorizontal: space.xs,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tileMinuteFill: { borderRadius: radius.pill },
+  tileMinuteText: { ...type.numSmStrong, color: colors.onDark },
+  tileDuration: {
+    position: "absolute",
+    right: space.s,
+    bottom: space.xs,
+    ...type.micro,
+    color: colors.onDark,
+  },
+  tileBody: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.s,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.sm,
+  },
+  tileTitle: { ...type.labelSm, color: colors.textPrimary, flex: 1, minWidth: 0 },
+  more: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: space.xs,
+    height: 40,
+    marginHorizontal: layout.screenPadding,
+    borderRadius: radius.pill,
+    backgroundColor: colors.brandDim,
+    borderWidth: hairline,
+    borderColor: colors.brandBorder,
+  },
+  moreText: { ...type.label, color: colors.brandAccent },
   foot: { flexDirection: "row", alignItems: "center", gap: space.m, paddingHorizontal: space.lg, paddingVertical: space.md },
   footTitle: { ...type.body, fontFamily: fonts.semibold, color: colors.textPrimary },
   footSub: { ...type.caption, color: colors.textSecondary },

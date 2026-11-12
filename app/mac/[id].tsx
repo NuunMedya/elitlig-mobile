@@ -424,6 +424,7 @@ export default function MatchDetailScreen() {
                 onToggleFollow={toggleFollow}
                 onOpenNotifications={openNotifications}
                 onAddToCalendar={addToCalendar}
+                onShare={live ? shareText : () => setShareOpen(true)}
               />
             </View>
           }
