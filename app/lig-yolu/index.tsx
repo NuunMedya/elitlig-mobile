@@ -12,12 +12,11 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Redirect, useRouter } from "expo-router";
 import { useState } from "react";
-import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { tierOf } from "@/components/puzzle/LevelMap";
 import { DailySheet, ShopSheet } from "@/components/puzzle/sheets";
-import { StadiumScene } from "@/components/puzzle/StadiumScene";
 import { WalletBar } from "@/components/puzzle/WalletBar";
 import { ErrorState, ScreenHeader, SectionHeader, SkeletonCard, Touchable, toneColors, useHeaderScroll, useRefresh } from "@/components/ui";
 import { PUZZLE_GAMES } from "@/lib/puzzle/registry";
@@ -28,7 +27,6 @@ import { colors, fonts, hairline, layout, radius, space, textScale, type } from 
 export default function PuzzleHubScreen() {
   const auth = useAuth();
   const router = useRouter();
-  const { width } = useWindowDimensions();
   const { scrollY, scrollProps } = useHeaderScroll();
   const query = usePuzzleMe();
   const me = query.data;
@@ -38,13 +36,11 @@ export default function PuzzleHubScreen() {
 
   if (!auth.user) return <Redirect href="/giris" />;
 
-  const stadium = me?.profile.stadium;
-  const zone = stadium?.zones.find((z) => z.key === stadium.activeZone);
-  const nextItem = zone?.items.find((i) => !i.built);
+  const city = me?.city;
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      <ScreenHeader title="Lig Yolu" subtitle="Seviye seviye ilerle, stadyumunu kur" back scrollY={scrollY} />
+      <ScreenHeader title="Lig Yolu" subtitle="Seviye seviye ilerle, kulüp şehrini kur" back scrollY={scrollY} />
       <ScrollView {...scrollProps} contentContainerStyle={styles.content} refreshControl={refresh.control}>
         {query.isLoading ? (
           <SkeletonCard lines={5} />
@@ -52,7 +48,7 @@ export default function PuzzleHubScreen() {
           <ErrorState error={query.error} onRetry={() => query.refetch()} />
         ) : me ? (
           <>
-            <WalletBar profile={me.profile} onCoins={() => setShop("all")} onLives={() => setShop("lives")} onStars={() => router.push("/lig-yolu/stadyum")} />
+            <WalletBar profile={me.profile} onCoins={() => setShop("all")} onLives={() => setShop("lives")} onStars={() => router.push("/kulup-sehri")} />
 
             {me.profile.daily.available ? (
               <Touchable onPress={() => setDaily(true)} style={styles.daily} haptic="medium" accessibilityRole="button">
@@ -68,23 +64,25 @@ export default function PuzzleHubScreen() {
               </Touchable>
             ) : null}
 
-            {/* STADYUM KARTI */}
-            <Touchable onPress={() => router.push("/lig-yolu/stadyum")} style={styles.stadium} accessibilityRole="button" accessibilityLabel="Stadyumunu kur">
-              <StadiumScene built={stadium?.built ?? []} width={width - layout.screenPadding * 2 - 2} />
+            {/* KULÜP ŞEHRİ KARTI — yıldızlar burada harcanır */}
+            <Touchable onPress={() => router.push("/kulup-sehri")} style={styles.stadium} accessibilityRole="button" accessibilityLabel="Kulüp Şehrini kur">
               <View style={styles.stadiumBar}>
+                <View style={styles.cityIcon}>
+                  <Ionicons name="business" size={26} color={colors.yellowCard} />
+                </View>
                 <View style={styles.stadiumTexts}>
-                  <Text style={styles.stadiumTitle} {...textScale.dense}>Stadyumunu kur</Text>
-                  <Text style={styles.stadiumSub} numberOfLines={1} {...textScale.dense}>
-                    {nextItem ? `Sıradaki: ${nextItem.title} · ${nextItem.cost} yıldız` : "Stadyum tamamlandı!"}
+                  <Text style={styles.stadiumTitle} {...textScale.dense}>Kulüp Şehrini kur</Text>
+                  <Text style={styles.stadiumSub} numberOfLines={2} {...textScale.dense}>
+                    {city ? `${city.tier.title} · ${city.progress.built}/${city.progress.total} basamak` : "Okul bahçesinden Avrupa devine: yıldızlarını harca"}
                   </Text>
                 </View>
                 <View style={styles.starPill}>
                   <Ionicons name="star" size={16} color={colors.yellowCard} />
-                  <Text style={styles.starPillText} {...textScale.badge}>{stadium?.available ?? 0}</Text>
+                  <Text style={styles.starPillText} {...textScale.badge}>{city?.stars.available ?? me.profile.stars}</Text>
                 </View>
               </View>
               <View style={styles.progressTrack}>
-                <View style={[styles.progressFill, { width: `${stadium ? (stadium.progress.built / stadium.progress.total) * 100 : 0}%` }]} />
+                <View style={[styles.progressFill, { width: `${city ? (city.progress.built / city.progress.total) * 100 : 0}%` }]} />
               </View>
             </Touchable>
 
@@ -137,6 +135,7 @@ const styles = StyleSheet.create({
   dailyTexts: { flex: 1, gap: 2 },
   dailyTitle: { ...type.h3, color: colors.onDark },
   dailySub: { ...type.bodySm, color: colors.onDarkMuted },
+  cityIcon: { width: 48, height: 48, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.inkTileBorder },
   stadium: { borderRadius: radius.xl, overflow: "hidden", backgroundColor: colors.inkBlock, borderWidth: hairline, borderColor: colors.inkTileBorder },
   stadiumBar: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md },
   stadiumTexts: { flex: 1, gap: 2 },

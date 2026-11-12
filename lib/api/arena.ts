@@ -49,6 +49,8 @@ export interface ArenaScoreEntry {
   record?: boolean;
   /** Bu oyundaki ilk skor. */
   first?: boolean;
+  /** Kulüp Şehri'ne giden yıldız (doğrulanmış skor, günlük tavanlar içinde). */
+  stars?: number;
 }
 
 export const submitArenaScore = (game: ArenaGame, score: number, sessionId?: string | null) =>

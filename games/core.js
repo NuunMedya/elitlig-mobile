@@ -82,6 +82,9 @@
           if (A.game.setRoster) A.game.setRoster(cmd.roster);
         }
         break;
+      default:
+        // Oyuna özgü komutlar (Kulüp Şehri: city, focus, celebrate).
+        if (A.game.command) A.game.command(cmd);
     }
   };
 

@@ -25,6 +25,9 @@ export type GameCommand =
   | { type: "start" }
   | { type: "pause" }
   | { type: "resume" }
+  | { type: "city"; levels?: Record<string, number>; kit?: { primary: string; secondary: string }; marks?: Record<string, string>; tier?: string; focus?: string | null }
+  | { type: "focus"; key: string | null }
+  | { type: "celebrate" }
   | {
       type: "config";
       sound?: boolean;
@@ -46,7 +49,12 @@ export interface WebGameHandle {
 interface Props {
   game: WebGameKey;
   onReady?: () => void;
-  onOver: (payload: GameOverPayload) => void;
+  onOver?: (payload: GameOverPayload) => void;
+  /** Oyuna özgü diğer mesajlar (Kulüp Şehri: {type:"tap", key}). */
+  onEvent?: (message: Record<string, unknown>) => void;
+  /** Kabuğun arka planı (şehir gündüz gök mavisiyle açılır). */
+  background?: string;
+  accessibilityLabel?: string;
 }
 
 const HAPTIC: Record<string, () => void> = {
@@ -58,10 +66,10 @@ const HAPTIC: Record<string, () => void> = {
   error: haptics.error,
 };
 
-export const WebGame = forwardRef<WebGameHandle, Props>(function WebGame({ game, onReady, onOver }, ref) {
+export const WebGame = forwardRef<WebGameHandle, Props>(function WebGame({ game, onReady, onOver, onEvent, background, accessibilityLabel }, ref) {
   const web = useRef<WebView>(null);
-  const handlers = useRef({ onReady, onOver });
-  handlers.current = { onReady, onOver };
+  const handlers = useRef({ onReady, onOver, onEvent });
+  handlers.current = { onReady, onOver, onEvent };
 
   useImperativeHandle(
     ref,
@@ -99,9 +107,11 @@ export const WebGame = forwardRef<WebGameHandle, Props>(function WebGame({ game,
             if (Number.isFinite(n)) stats[key] = n;
           }
         }
-        handlers.current.onOver({ score, stats });
+        handlers.current.onOver?.({ score, stats });
         break;
       }
+      default:
+        handlers.current.onEvent?.(message as Record<string, unknown>);
     }
   };
 
@@ -112,7 +122,7 @@ export const WebGame = forwardRef<WebGameHandle, Props>(function WebGame({ game,
         source={source}
         originWhitelist={["*"]}
         onMessage={onMessage}
-        style={styles.web}
+        style={background ? [styles.web, { backgroundColor: background }] : styles.web}
         containerStyle={styles.fill}
         scrollEnabled={false}
         bounces={false}
@@ -126,7 +136,7 @@ export const WebGame = forwardRef<WebGameHandle, Props>(function WebGame({ game,
         setSupportMultipleWindows={false}
         textZoom={100}
         androidLayerType="hardware"
-        accessibilityLabel="Oyun alanı"
+        accessibilityLabel={accessibilityLabel ?? "Oyun alanı"}
       />
     </View>
   );

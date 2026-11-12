@@ -511,6 +511,8 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
             onSignIn={() => router.push("/giris")}
             onRestart={start}
             secondary={{ label: "İl değiştir", icon: "location-outline", onPress: () => setPhase("setup") }}
+            stars={run.stars}
+            onCity={() => router.push("/kulup-sehri")}
             onBoard={openBoard}
             onShare={() => setShareOpen(true)}
           />

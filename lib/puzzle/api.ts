@@ -71,6 +71,8 @@ export interface ShopItem {
 
 export interface PuzzleMe {
   profile: PuzzleProfile;
+  /** Kulüp Şehri (yeni sunucu); eski sunucuda yok. */
+  city?: CityState;
   games: Record<PuzzleGameKey, PuzzleGameProgress>;
   catalog: {
     boosters: Record<string, { game: PuzzleGameKey; title: string; price: number }>;
@@ -113,5 +115,76 @@ export const buildStadium = (id: string) =>
   post<{ item: StadiumItem; zone_done: boolean; bonus_coins: number; profile: PuzzleProfile }>("/api/puzzle/stadium/build", { id });
 export const claimDaily = () =>
   post<{ reward: DailyReward; streak: number; profile: PuzzleProfile }>("/api/puzzle/daily");
+/* ───────────────────────── KULÜP ŞEHRİ ───────────────────────── */
+
+/** Bir birim (saha, kafeterya, kamp oteli…) — sunucu services/puzzle/city.js. */
+export interface CityBuilding {
+  key: string;
+  title: string;
+  icon: string;
+  level: number;
+  max: number;
+  current: { title: string; desc: string | null } | null;
+  next: { level: number; title: string; desc: string | null; cost: number; dev: number } | null;
+  locked: { code: "TIER" | "REQ"; text: string; tier?: number; building?: string; level?: number } | null;
+  steps: { level: number; title: string; cost: number; tier: number; done: boolean }[];
+}
+
+export interface CityTier {
+  index: number;
+  key: string;
+  title: string;
+  min: number;
+}
+
+export interface CityState {
+  levels: Record<string, number>;
+  spent: number;
+  /** Gelişim puanı. */
+  dev: number;
+  tier: CityTier;
+  next_tier: CityTier | null;
+  stars: {
+    puzzle: number;
+    arena: number;
+    xp: number;
+    total: number;
+    spent: number;
+    available: number;
+    arena_today?: number;
+    arena_by_game?: Record<string, number>;
+  };
+  xp: { per_star: number; pending: number; claimable_stars: number; claimed: number };
+  buildings: CityBuilding[];
+  progress: { built: number; total: number };
+}
+
+export interface CityLeaderRow {
+  rank: number;
+  user_id: number;
+  name: string;
+  city: string | null;
+  dev: number;
+  tier: string;
+  levels: Record<string, number>;
+  me: boolean;
+}
+
+export const cityKeys = {
+  me: () => ["puzzle", "city"] as const,
+  leaderboard: (scope: string) => ["puzzle", "city", "leaderboard", scope] as const,
+};
+
+export const getCity = () => get<{ city: CityState; tiers: Omit<CityTier, "index">[] }>("/api/puzzle/city", undefined, { retry: false });
+export const upgradeCity = (building: string) =>
+  post<{ building: string; level: number; step: { title: string; desc: string | null; cost: number }; tier_up: { index: number; title: string } | null; city: CityState }>(
+    "/api/puzzle/city/upgrade",
+    { building },
+    { retry: false },
+  );
+export const collectCityStars = () => post<{ stars: number; xp: number; city: CityState }>("/api/puzzle/city/collect", undefined, { retry: false });
+export const getCityLeaderboard = (scope: "all" | "city") =>
+  get<{ scope: string; items: CityLeaderRow[] }>("/api/puzzle/city/leaderboard", { scope });
+
 export const getLeaderboard = (game: string, scope: "all" | "city") =>
   get<{ game: string; scope: string; items: LeaderboardRow[] }>("/api/puzzle/leaderboard", { game, scope });

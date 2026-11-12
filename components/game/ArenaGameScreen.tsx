@@ -43,7 +43,8 @@ export interface ArenaGameRule {
 }
 
 export interface ArenaGameConfig {
-  game: WebGameKey;
+  /** Arena oyunu (Kulüp Şehri sahnesi `sehir` bir oyun değildir). */
+  game: Exclude<WebGameKey, "sehir">;
   title: string;
   /** Başlığın altındaki tek satır. */
   subtitle: string;
@@ -208,6 +209,8 @@ export function ArenaGameScreen({ config }: { config: ArenaGameConfig }) {
             onBoard={openBoard}
             onShare={() => setShareOpen(true)}
             secondary={changeLabel ? { label: changeLabel, icon: "swap-horizontal", onPress: () => setPhaseBoth("ready") } : undefined}
+            stars={run.stars}
+            onCity={() => router.push("/kulup-sehri")}
           />
         ) : null}
       </View>
