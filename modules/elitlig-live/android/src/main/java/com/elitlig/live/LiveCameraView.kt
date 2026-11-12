@@ -44,7 +44,7 @@ import java.util.concurrent.Executors
  */
 @SuppressLint("ViewConstructor")
 class LiveCameraView(context: Context, appContext: AppContext) :
-  ExpoView(context, appContext), ConnectChecker, SurfaceHolder.Callback {
+  ExpoView(context, appContext), ConnectChecker, SurfaceHolder.Callback, LocalRecorder.Host {
 
   companion object {
     private const val TAG = "ElitligLive"
@@ -58,6 +58,7 @@ class LiveCameraView(context: Context, appContext: AppContext) :
   private val onStateChange by EventDispatcher()
   private val onStats by EventDispatcher()
   private val onReplayStateChange by EventDispatcher()
+  private val onRecordingStateChange by EventDispatcher()
 
   override val shouldUseAndroidLayout: Boolean = true
 
@@ -95,6 +96,9 @@ class LiveCameraView(context: Context, appContext: AppContext) :
   // Gol klibi: kodlanmış örneklerin halka tamponu (yeniden kodlama yok).
   private val clipBuffer = ClipRingBuffer()
   private val clipHandler = Handler(Looper.getMainLooper())
+
+  // Yayının tamamını telefona yazan kayıt (aynı kodlanmış örnekler; bkz. LocalRecorder).
+  private val localRecorder = LocalRecorder(context.applicationContext, this)
 
   // Tekrar (replay): filtre zinciri = [replay video, replay etiketi?, skorbord overlay?]
   private var replayPlayer: MediaPlayer? = null
@@ -140,6 +144,7 @@ class LiveCameraView(context: Context, appContext: AppContext) :
       }
     })
     camera.getStreamClient().setReTries(MAX_RETRIES)
+    clipBuffer.recorder = localRecorder
     camera.setRecordController(clipBuffer)
 
     ElitligLiveModule.setActiveView(this)
@@ -171,6 +176,8 @@ class LiveCameraView(context: Context, appContext: AppContext) :
   override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
     surfaceReady = true
     if (released) return
+    // Arka planda kapatılan yerel kayıt yeni parçayla sürer (duraklatılmadıysa etkisiz).
+    if (camera.isStreaming) localRecorder.resume()
     if (offscreen) {
       // Ön plana dönüldü: GL'i yeniden görünüme bağla (yayın sürüyorsa kesilmeden).
       val wasStreaming = camera.isStreaming
@@ -210,6 +217,8 @@ class LiveCameraView(context: Context, appContext: AppContext) :
       } catch (e: Exception) {
         Log.e(TAG, "replaceView(context) failed", e)
       }
+      // Arka planda süreç her an öldürülebilir: MP4'ü şimdi güvenle kapat.
+      localRecorder.pause("background")
     } else if (camera.isOnPreview) {
       camera.stopPreview()
       markGlCleared()
@@ -299,6 +308,8 @@ class LiveCameraView(context: Context, appContext: AppContext) :
     userStopped = true
     connected = false
     keepScreenOn = false
+    // Kodlayıcılar durmadan önce MP4'ü kapat (olay: saved / reason = stream_end).
+    localRecorder.stop("stream_end")
     if (camera.isStreaming) {
       camera.stopStream()
       emitState("stopped")
@@ -611,6 +622,50 @@ class LiveCameraView(context: Context, appContext: AppContext) :
     !released && camera.isStreaming && !userStopped && (state == "live" || state == "reconnecting")
 
   // ---------------------------------------------------------------------------
+  // Yerel kayıt (yayının tamamı → telefon hafızası)
+
+  /**
+   * Yayın sürerken çağrılır; yazım ilk anahtar karede başlar ("started" olayı).
+   * RTMP yeniden bağlanmaları kaydı kesmez. Dönen: { path, uri? }.
+   */
+  @Throws(Exception::class)
+  fun startLocalRecording(fileName: String): Map<String, Any> {
+    if (released) throw IllegalStateException("Görünüm kaldırıldı.")
+    if (!camera.isStreaming || userStopped) {
+      throw IllegalStateException("Yerel kayıt yalnız yayın sürerken başlatılabilir.")
+    }
+    val result = localRecorder.start(fileName)
+    // Uygulama o an arka plandaysa parça ön plana dönünce açılır.
+    if (offscreen) localRecorder.pause("background")
+    return result
+  }
+
+  /** Kaydı kapatır; özet { path, uri?, bytes, durationMs, parts } ya da null. */
+  fun stopLocalRecording(): Map<String, Any>? = localRecorder.stop("stopped")
+
+  fun localRecordingStatus(): Map<String, Any> = localRecorder.status()
+
+  // LocalRecorder.Host — kodlayıcı iş parçacıklarından da çağrılır.
+
+  override fun onLocalRecordingEvent(payload: Map<String, Any>) {
+    if (Looper.myLooper() == Looper.getMainLooper()) {
+      if (!released) onRecordingStateChange(payload)
+    } else {
+      main.post { if (!released) onRecordingStateChange(payload) }
+    }
+  }
+
+  override fun requestKeyFrameForRecording() {
+    main.post {
+      try {
+        if (!released && camera.isStreaming) camera.requestKeyFrame()
+      } catch (e: Exception) {
+        Log.w(TAG, "requestKeyFrame failed", e)
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // ConnectChecker
 
   override fun onConnectionStarted(url: String) {
@@ -636,6 +691,7 @@ class LiveCameraView(context: Context, appContext: AppContext) :
       } else {
         userStopped = true
         keepScreenOn = false
+        localRecorder.stop("stream_failed")
         if (camera.isStreaming) camera.stopStream()
         emitState("failed", reason)
       }
@@ -652,6 +708,7 @@ class LiveCameraView(context: Context, appContext: AppContext) :
       userStopped = true
       connected = false
       keepScreenOn = false
+      localRecorder.stop("stream_failed")
       if (camera.isStreaming) camera.stopStream()
       emitState("failed", "auth_error")
     }
@@ -694,6 +751,12 @@ class LiveCameraView(context: Context, appContext: AppContext) :
     userStopped = true
     main.removeCallbacksAndMessages(null)
     try {
+      // Ekrandan çıkış / uygulama kapanışı: MP4'ü düzgün kapat.
+      localRecorder.stop("released")
+    } catch (e: Exception) {
+      Log.e(TAG, "local recording stop on release failed", e)
+    }
+    try {
       if (camera.isStreaming) camera.stopStream()
     } catch (e: Exception) {
       Log.e(TAG, "stopStream on release failed", e)
@@ -710,6 +773,7 @@ class LiveCameraView(context: Context, appContext: AppContext) :
     glView.holder.removeCallback(this)
     overlayBitmap = null
     overlayFilter = null
+    clipBuffer.recorder = null
     ElitligLiveModule.clearActiveView(this)
   }
 }

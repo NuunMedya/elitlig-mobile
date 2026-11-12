@@ -23,6 +23,8 @@ export interface LiveCameraViewProps extends ViewProps {
   onStats?: (e: { nativeEvent: LiveStats }) => void;
   /** Tekrar (replay) yayına girdiğinde / bittiğinde. */
   onReplayStateChange?: (e: { nativeEvent: { playing: boolean; uri?: string } }) => void;
+  /** Yerel kayıt (yayının tamamı → telefon hafızası) olayları. Eski derlemede hiç gelmez. */
+  onRecordingStateChange?: (e: { nativeEvent: LocalRecordingEvent }) => void;
 }
 
 export interface StartStreamOptions {
@@ -83,6 +85,71 @@ export interface DeviceStatus {
   network: NetworkKind;
 }
 
+/** Telefonun depolama durumu (yerel kayıt istemi ve ön kontrol için). */
+export interface StorageInfo {
+  /** Kaydın yazılacağı birimde kullanılabilir alan. */
+  freeBytes: number;
+  /** Telefonun toplam depolaması; bilinmiyorsa 0. */
+  totalBytes: number;
+  /** Bu değerin altında yerel kayıt başlamaz / sürerken düzgünce kapatılır (300 MB). */
+  minFreeBytes: number;
+  /** Kullanıcıya gösterilecek kayıt yeri (ör. "Movies/ElitLig"). */
+  location: string;
+  /** Kayıt Galeri'de görünür mü (Android 10+ MediaStore). */
+  gallery: boolean;
+}
+
+export interface LocalRecordingOptions {
+  /** Uzantısız, ASCII dosya adı; yerel taraf yine de temizler. */
+  fileName: string;
+}
+
+export interface LocalRecordingStart {
+  path: string;
+  uri?: string;
+}
+
+export interface LocalRecordingResult {
+  /** Son parçanın yolu (kayıt bölündüyse diğer parçalar aynı klasörde `_p2`, `_p3`…). */
+  path: string;
+  uri?: string;
+  /** Bütün parçaların toplam boyutu. */
+  bytes: number;
+  durationMs: number;
+  parts: number;
+}
+
+export interface LocalRecordingStatus {
+  recording: boolean;
+  /** Uygulama arka planda: parça kapatıldı, ön plana dönünce yeni parça açılır. */
+  paused: boolean;
+  bytes: number;
+  durationMs: number;
+  parts: number;
+  path: string;
+  freeBytes: number;
+}
+
+/**
+ * - `started`: bir parça yazılmaya başladı.
+ * - `saved`: bir parça güvenle kapatıldı. `final` false ise kayıt sürüyor
+ *   (reason: "background" | "split"); true ise kayıt bitti
+ *   (reason: "stopped" | "stream_end" | "stream_failed" | "disk_full" | "error" | "released").
+ * - `error`: yazılamadı / kapatılamadı (reason: "disk_full" | "error" | "finalize_failed").
+ */
+export interface LocalRecordingEvent {
+  state: "started" | "saved" | "error";
+  reason?: string;
+  message?: string;
+  final?: boolean;
+  path?: string;
+  uri?: string;
+  part?: number;
+  parts?: number;
+  bytes?: number;
+  durationMs?: number;
+}
+
 /** Yerel modülün JS'e açtığı yüzey (Android: ElitligLiveModule.kt, iOS: ElitligLiveModule.swift). */
 export interface ElitligLiveNativeModule {
   requestPermissions(): Promise<boolean>;
@@ -103,4 +170,9 @@ export interface ElitligLiveNativeModule {
   setZoom?(level: number): Promise<number>;
   setTorch?(on: boolean): Promise<boolean>;
   getDeviceStatus?(): Promise<DeviceStatus>;
+  /* Yerel kayıt (yayının tamamı telefon hafızasına) — aynı kural: eski derlemede yok. */
+  getStorageInfo?(): Promise<StorageInfo>;
+  startLocalRecording?(options: LocalRecordingOptions): Promise<LocalRecordingStart>;
+  stopLocalRecording?(): Promise<LocalRecordingResult | null>;
+  getLocalRecordingStatus?(): Promise<LocalRecordingStatus | null>;
 }

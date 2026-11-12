@@ -12,6 +12,11 @@ export type {
   CameraCapabilities,
   DeviceStatus,
   NetworkKind,
+  StorageInfo,
+  LocalRecordingResult,
+  LocalRecordingStart,
+  LocalRecordingStatus,
+  LocalRecordingEvent,
 } from "./src/ElitligLive.types";
 
 export {
@@ -31,6 +36,12 @@ export {
   setZoom,
   setTorch,
   getDeviceStatus,
+  LOCAL_RECORDING_MIN_FREE_BYTES,
+  supportsLocalRecording,
+  getStorageInfo,
+  startLocalRecording,
+  stopLocalRecording,
+  getLocalRecordingStatus,
 } from "./src/ElitligLive";
 
 export { LiveCameraView } from "./src/LiveCameraView";

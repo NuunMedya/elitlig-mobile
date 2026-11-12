@@ -10,11 +10,12 @@ import { useQuery } from "@tanstack/react-query";
 import { memo, useMemo, useRef, useState } from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";
 
-import { Avatar, BottomSheet, Button, EmptyState, ErrorState, Input, SkeletonListRow, Touchable } from "@/components/ui";
+import { Avatar, BottomSheet, Button, EmptyState, ErrorState, Input, SkeletonListRow, Touchable } from "@/components/chat/kit";
 import { useConversations } from "@/hooks/useChat";
 import { getMessageInfo, type ChatConversation, type ChatMessage, type ChatParticipant } from "@/lib/api/chat";
 import { MORE_REACTIONS, QUICK_REACTIONS, clockTime, dayLabel, filterChats, isGroupChat, messageSummary } from "@/lib/chatUtils";
-import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
+import { avatarTone, colors } from "@/lib/chatPalette";
+import { hairline, layout, radius, space, textScale, type } from "@/theme";
 
 /**
  * Menü kapanırken (220 ms) açılan onay kutusu iOS'ta sayfayla birlikte
@@ -339,7 +340,7 @@ export const ChatAvatar = memo(function ChatAvatar({ conversation, size = 48, on
   if (icon && !image && !(conversation.type === "management" && conversation.entity)) {
     return (
       <View style={[styles.iconAvatar, { width: size, height: size }, isGroupChat(conversation) ? null : styles.iconAvatarBrand]}>
-        <Ionicons name={icon} size={Math.round(size * 0.48)} color={isGroupChat(conversation) ? colors.textSecondary : colors.textOnBrand} />
+        <Ionicons name={icon} size={Math.round(size * 0.5)} color={isGroupChat(conversation) ? avatarTone.glyph : colors.textOnBrand} />
       </View>
     );
   }
@@ -354,11 +355,11 @@ const styles = StyleSheet.create({
   quickMore: { borderWidth: hairline, borderColor: colors.border },
   emojiGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: space.xs, paddingHorizontal: layout.screenPadding, paddingBottom: space.sm },
   emojiCell: { width: 48, height: 44, borderRadius: radius.md, alignItems: "center", justifyContent: "center" },
-  emojiMine: { backgroundColor: colors.brandDim, borderWidth: 1, borderColor: colors.brandBorder },
+  emojiMine: { backgroundColor: colors.brandDim },
   emoji: { fontSize: type.display.fontSize, lineHeight: type.display.lineHeight + space.xs, color: colors.textPrimary },
   menu: { paddingBottom: space.sm },
-  menuRow: { flexDirection: "row", alignItems: "center", gap: space.lg, minHeight: 48, paddingHorizontal: layout.screenPadding + space.xs },
-  menuLabel: { ...type.h3, color: colors.textPrimary },
+  menuRow: { flexDirection: "row", alignItems: "center", gap: space.xl, minHeight: 52, paddingHorizontal: layout.screenPadding + space.xs },
+  menuLabel: { ...type.bodyLg, lineHeight: type.h2.lineHeight, color: colors.textPrimary },
   danger: { color: colors.danger },
 
   block: { paddingHorizontal: layout.screenPadding, paddingBottom: space.lg, gap: space.xs },
@@ -374,6 +375,6 @@ const styles = StyleSheet.create({
 
   search: { paddingHorizontal: layout.screenPadding, paddingBottom: space.sm },
   forwardRow: { flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 60, paddingHorizontal: layout.screenPadding },
-  iconAvatar: { borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface3 },
+  iconAvatar: { borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: avatarTone.bg },
   iconAvatarBrand: { backgroundColor: colors.brand },
 });

@@ -39,7 +39,8 @@ import { GoalFlash, LowerThird, ReplayBadge, SponsorBug, type GoalFlashData, typ
 import { BroadcastPanel, Btn } from "@/components/live/BroadcastPanel";
 import { CaptionPanel, type CaptionTemplate } from "@/components/live/CaptionPanel";
 import { CompactBug } from "@/components/live/CompactBug";
-import { HealthCard, HealthHud } from "@/components/live/HealthHud";
+import { HealthCard, HealthHud, type RecordingHealth } from "@/components/live/HealthHud";
+import { LocalRecordPrompt } from "@/components/live/LocalRecordPrompt";
 import { PlayerPicker } from "@/components/live/PlayerPicker";
 import { RejiPanel } from "@/components/live/RejiPanel";
 import { REPLAY_RATE_SUPPORTED, ReplayPanel, type ReplayRate } from "@/components/live/ReplayPanel";
@@ -67,6 +68,7 @@ import {
   substitutionCaption,
   type Caption,
 } from "@/lib/live/lowerThird";
+import { fileNameOf, formatBytes, recordingFileName, saveLocationText } from "@/lib/live/localRecording";
 import { RIG, encoderMessageText, resolveEncoder } from "@/lib/live/rig";
 import { BUG, GFX, clockText, teamShortCode } from "@/lib/live/scorebug";
 import { getBroadcastDesk, sponsorLogo } from "@/lib/live/studioApi";
@@ -86,6 +88,8 @@ import {
   LiveCameraView,
   getCameraCapabilities,
   getDeviceStatus,
+  getLocalRecordingStatus,
+  getStorageInfo,
   isLiveAvailable,
   playReplay,
   requestLivePermissions,
@@ -93,14 +97,19 @@ import {
   setOverlay,
   setTorch as nativeSetTorch,
   setZoom as nativeSetZoom,
+  startLocalRecording,
   startStream,
+  stopLocalRecording,
   stopReplay,
   stopStream,
   supportsCameraControls,
+  supportsLocalRecording,
   type CameraCapabilities,
   type DeviceStatus,
   type LiveState,
   type LiveStats,
+  type LocalRecordingEvent,
+  type StorageInfo,
 } from "@/modules/elitlig-live";
 
 type Tab = "reji" | "tekrar" | "skorbord" | "altyazi" | "yayin" | "ayarlar";
@@ -129,6 +138,9 @@ type PickerState =
   | { kind: "caption"; side: Side };
 
 type SlotKey = "bug" | "caption" | "goal" | "sponsor" | "replay";
+
+/** Yayın başlatma isteği: "telefona da kaydedilsin mi?" istemi yanıtlanana kadar bekler. */
+type StartTarget = { kind: "youtube" } | { kind: "manual"; url: string };
 
 export default function LiveBroadcastScreen() {
   const auth = useAuth();
@@ -285,6 +297,109 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
     };
   }, [nativeReady]);
 
+  /* ───────── telefona kayıt (yayının tamamı → telefon hafızası) ───────── */
+  const recordSupported = nativeReady && supportsLocalRecording();
+  // undefined → okunuyor, null → okunamadı / desteklenmiyor.
+  const [storage, setStorage] = useState<StorageInfo | null | undefined>(recordSupported ? undefined : null);
+  const storageRef = useRef<StorageInfo | null | undefined>(storage);
+  storageRef.current = storage;
+  const [recording, setRecording] = useState<RecordingHealth | null>(null);
+  const [startTarget, setStartTarget] = useState<StartTarget | null>(null);
+  const namesRef = useRef({ home: "", away: "" });
+  const refreshStorage = useCallback(() => {
+    if (!recordSupported) return;
+    void getStorageInfo().then(setStorage);
+  }, [recordSupported]);
+  useEffect(refreshStorage, [refreshStorage]);
+
+  /** "Yayın telefona kaydedildi (1,8 GB): Galeri ▸ Movies/ElitLig ▸ ElitLig_….mp4" */
+  const savedText = useCallback((saved: { path?: string; bytes?: number; parts?: number }) => {
+    const size = `${formatBytes(saved.bytes)}${(saved.parts ?? 1) > 1 ? `, ${saved.parts} parça` : ""}`;
+    const where = [saveLocationText(storageRef.current), fileNameOf(saved.path)].filter(Boolean).join(" ▸ ");
+    return `Yayın telefona kaydedildi (${size}): ${where}`;
+  }, []);
+  const showSaved = useCallback(
+    (message: string | null) => {
+      if (message) toast.show({ message, tone: "success", icon: "save", duration: 6000 });
+    },
+    [toast]
+  );
+
+  const startRecording = useCallback(async () => {
+    if (!recordSupported) return;
+    try {
+      await startLocalRecording(recordingFileName(namesRef.current.home, namesRef.current.away));
+      setRecording({ bytes: 0, freeBytes: storageRef.current?.freeBytes ?? -1, paused: false });
+    } catch (error) {
+      const reason = error instanceof Error && error.message ? ` (${error.message})` : "";
+      toast.show({ message: `Telefona kayıt başlatılamadı${reason}. Yayın kayıtsız sürüyor.`, tone: "danger", duration: 6000 });
+    }
+  }, [recordSupported, toast]);
+
+  /** Kaydı kapatır; kaydedildiyse gösterilecek metni döndürür (duyuruyu çağıran yapar). */
+  const stopRecording = useCallback(async (): Promise<string | null> => {
+    const saved = await stopLocalRecording().catch(() => null);
+    setRecording(null);
+    refreshStorage();
+    return saved ? savedText(saved) : null;
+  }, [refreshStorage, savedText]);
+
+  const onRecording = useCallback(
+    (e: { nativeEvent: LocalRecordingEvent }) => {
+      const ev = e.nativeEvent;
+      if (ev.state === "started") {
+        setRecording((r) => ({ bytes: r?.bytes ?? 0, freeBytes: r?.freeBytes ?? storageRef.current?.freeBytes ?? -1, paused: false }));
+      } else if (ev.state === "saved") {
+        if (ev.final) {
+          setRecording(null);
+          refreshStorage();
+          // "stopped": bu ekranın kendi isteği; sonucu stopRecording duyurur.
+          if (ev.reason === "disk_full") {
+            toast.show({ message: `Telefonda boş alan azaldı: kayıt durduruldu, o ana kadarki bölüm saklandı. ${savedText(ev)}`, tone: "warn", duration: 8000 });
+          } else if (ev.reason === "stream_failed") {
+            // Bağlantı hatası iletisi önce okunsun.
+            const message = savedText(ev);
+            setTimeout(() => showSaved(message), 3500);
+          } else if (ev.reason !== "stopped") {
+            showSaved(savedText(ev));
+          }
+        } else if (ev.reason === "background") {
+          setRecording((r) => (r ? { ...r, paused: true } : r));
+          toast.show({ message: "Uygulama arka plana geçti: kayıt güvenle kapatıldı. Ekrana dönünce yeni parça olarak sürer.", tone: "warn", duration: 6000 });
+        }
+      } else if (ev.state === "error") {
+        if (ev.final !== false) setRecording(null);
+        toast.show({
+          message:
+            ev.reason === "disk_full"
+              ? "Telefonda yer kalmadı: kayıt durdu ve dosya kurtarılamadı. Yayın sürüyor."
+              : "Telefona kayıt yazılamadı; kayıt durdu. Yayın sürüyor.",
+          tone: "danger",
+          duration: 8000,
+        });
+        refreshStorage();
+      }
+    },
+    [refreshStorage, savedText, showSaved, toast]
+  );
+
+  // Kayıt sürerken boyut ve kalan alan (5 sn'de bir; yalnız HUD için).
+  const recordingOn = recording != null;
+  useEffect(() => {
+    if (!recordingOn) return;
+    let alive = true;
+    const read = () =>
+      void getLocalRecordingStatus().then((s) => {
+        if (!alive || !s) return;
+        setRecording((r) => (r && s.recording ? { bytes: s.bytes, freeBytes: s.freeBytes, paused: s.paused } : r));
+      });
+    const id = setInterval(read, 5000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, [recordingOn]);
+
   const onState = useCallback(
     (e: { nativeEvent: { state: LiveState; message?: string } }) => {
       const next = e.nativeEvent;
@@ -327,7 +442,7 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
 
   const burnResetRef = useRef<() => void>(() => undefined);
   const begin = useCallback(
-    async (url: string) => {
+    async (url: string, record: boolean) => {
       if (!nativeReady) throw new Error("Kamera yayını bu uygulama sürümünde yok. Mağazadaki güncel sürümü kullan.");
       const ok = permissionRef.current === true ? true : await requestLivePermissions();
       setPermission(ok);
@@ -356,12 +471,31 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
         throw error;
       }
       burnResetRef.current();
+      // Kodlayıcı çalışıyor: yerel kayıt ilk anahtar karede başlar (bağlantı beklenmez).
+      if (record) void startRecording();
       return true;
     },
-    [nativeReady, encoderCfg]
+    [nativeReady, encoderCfg, startRecording]
   );
 
-  const startYoutube = async () => {
+  // Yayın başlatma düğmeleri önce istemi açar; asıl başlatma istemdeki seçimle yapılır.
+  const askStart = (target: StartTarget) => {
+    if (busy || encoderOn) return;
+    if (recordSupported) {
+      setStorage(undefined);
+      refreshStorage();
+    }
+    setStartTarget(target);
+  };
+  const confirmStart = (record: boolean) => {
+    const target = startTarget;
+    setStartTarget(null);
+    if (!target) return;
+    if (target.kind === "youtube") void startYoutube(record);
+    else void startManual(target.url, record);
+  };
+
+  const startYoutube = async (record: boolean) => {
     if (busy || encoderOn) return;
     setBusy(true);
     try {
@@ -369,7 +503,7 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
       setYt(open);
       const url = ingestUrl(open);
       if (!url) throw new Error("YouTube yayın adresi alınamadı. Birkaç saniye sonra yeniden dene.");
-      if (await begin(url)) {
+      if (await begin(url, record)) {
         void queryClient.invalidateQueries({ queryKey: ["admin", "matches", "detail", matchId] });
         toast.show({ message: "Görüntü YouTube'a gönderiliyor. Yayın 10–30 saniye içinde canlıya geçer.", tone: "success" });
       }
@@ -380,11 +514,11 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
     }
   };
 
-  const startManual = async (url: string) => {
+  const startManual = async (url: string, record: boolean) => {
     if (busy || encoderOn) return;
     setBusy(true);
     try {
-      if (await begin(url)) toast.show({ message: "Bağlanılıyor. Yayın birkaç saniye içinde başlar.", tone: "success" });
+      if (await begin(url, record)) toast.show({ message: "Bağlanılıyor. Yayın birkaç saniye içinde başlar.", tone: "success" });
     } catch (error) {
       toast.show({ message: liveErrorText(error, "Yayın başlatılamadı. Adresi ve anahtarı kontrol et."), tone: "danger" });
     } finally {
@@ -392,8 +526,12 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
     }
   };
 
-  const stopEncoder = useCallback(async () => {
+  /** Görüntüyü keser; yayın telefona kaydedildiyse duyurulacak metni döndürür. */
+  const stopEncoder = useCallback(async (): Promise<string | null> => {
+    let saved: string | null = null;
     try {
+      // Önce yerel kayıt: MP4, skorbord kaldırılmadan ve kodlayıcı durmadan kapanır.
+      saved = await stopRecording();
       await stopReplay().catch(() => undefined);
       await setOverlay(null).catch(() => undefined);
       await stopStream().catch(() => undefined);
@@ -403,7 +541,16 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
       setStats(null);
       setReplaying(null);
     }
-  }, []);
+    return saved;
+  }, [stopRecording]);
+
+  // Ayarlar'daki anahtar: tercih saklanır; yayın sürüyorsa kayıt hemen başlar / kapanır.
+  const toggleSaveLocal = (next: boolean) => {
+    change({ saveLocal: next });
+    if (!encoderOn || !recordSupported) return;
+    if (next && !recording) void startRecording();
+    else if (!next && recording) void stopRecording().then(showSaved);
+  };
 
   const endYoutube = () =>
     Alert.alert("Yayını bitir", "Telefonun görüntüsü kesilir ve YouTube yayını kapatılır. Kayıt kanalında kalır.", [
@@ -413,12 +560,14 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
         style: "destructive",
         onPress: async () => {
           setBusy(true);
+          let saved: string | null = null;
           try {
-            await stopEncoder();
+            saved = await stopEncoder();
             if (ytStream?.broadcast_id) setYt(await endMatchLiveStream(matchId));
-            toast.show({ message: "Yayın bitti.", tone: "success" });
+            toast.show({ message: saved ? `Yayın bitti. ${saved}` : "Yayın bitti.", tone: "success", duration: saved ? 6000 : undefined });
           } catch (error) {
-            toast.show({ message: liveErrorText(error, "Görüntü kesildi ama YouTube yayını kapatılamadı. Yeniden dene."), tone: "danger" });
+            const text = liveErrorText(error, "Görüntü kesildi ama YouTube yayını kapatılamadı. Yeniden dene.");
+            toast.show({ message: saved ? `${text} ${saved}` : text, tone: "danger", duration: saved ? 8000 : undefined });
           } finally {
             setBusy(false);
           }
@@ -434,13 +583,17 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
         text: "Görüntüyü kes ve çık",
         style: "destructive",
         onPress: () => {
-          void stopEncoder().finally(() => navigation.dispatch(data.action));
+          void stopEncoder()
+            .then(showSaved)
+            .finally(() => navigation.dispatch(data.action));
         },
       },
     ]);
   });
   useEffect(
     () => () => {
+      // Yerel modül ekran kapanırken de MP4'ü kapatır; bu çağrı onu öne alır.
+      void stopLocalRecording().catch(() => undefined);
       void stopReplay().catch(() => undefined);
       void stopStream().catch(() => undefined);
     },
@@ -450,6 +603,7 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
   /* ───────── takımlar ve görünüm ───────── */
   const homeName = match?.first_team_name || "Ev sahibi";
   const awayName = match?.second_team_name || "Deplasman";
+  namesRef.current = { home: homeName, away: awayName };
   const homeLogo = match ? teams.logoFor(match.home_team_id, match.first_team_name) : null;
   const awayLogo = match ? teams.logoFor(match.away_team_id, match.second_team_name) : null;
   const homeKey = String(live.homeTeamId ?? `h-${matchId}`);
@@ -758,6 +912,15 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
     });
     return () => sub.remove();
   }, [pickerOpen, cancelPicker]);
+  const promptOpen = startTarget != null;
+  useEffect(() => {
+    if (!promptOpen) return;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      setStartTarget(null);
+      return true;
+    });
+    return () => sub.remove();
+  }, [promptOpen]);
 
   const runControl = async (action: ControlAction) => {
     setSaving(true);
@@ -879,7 +1042,7 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
 
   /* ───────── çizim ───────── */
   const elapsed = onAirSince ? Date.now() - onAirSince : 0;
-  const healthProps = { state: encoder.state, message: encoder.message, stats, elapsedMs: elapsed, encoder: encoderCfg, device, muted, replaying: Boolean(replaying) };
+  const healthProps = { state: encoder.state, message: encoder.message, stats, elapsedMs: elapsed, encoder: encoderCfg, device, muted, replaying: Boolean(replaying), recording };
 
   if (live.loading) {
     return (
@@ -936,6 +1099,7 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
                 onReplayStateChange={(e) => {
                   if (!e.nativeEvent.playing) setReplaying(null);
                 }}
+                onRecordingStateChange={onRecording}
               />
             ) : (
               <View style={[StyleSheet.absoluteFill, styles.center, styles.noCam]}>
@@ -1161,9 +1325,9 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
                     nativeReady={nativeReady}
                     privacy={privacy}
                     onPrivacy={setPrivacy}
-                    onStartYoutube={() => void startYoutube()}
-                    onStartManual={(url) => void startManual(url)}
-                    onStop={() => void stopEncoder()}
+                    onStartYoutube={() => askStart({ kind: "youtube" })}
+                    onStartManual={(url) => askStart({ kind: "manual", url })}
+                    onStop={() => void stopEncoder().then(showSaved)}
                     onEndYoutube={endYoutube}
                     onToast={(m, tone) => toast.show({ message: m, tone: tone ?? "success" })}
                     health={nativeReady ? <HealthCard {...healthProps} /> : null}
@@ -1185,6 +1349,10 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
                     settings={settings}
                     onChange={change}
                     encoder={encoderCfg}
+                    recordSupported={recordSupported}
+                    storage={storage ?? null}
+                    recordingOn={recording != null}
+                    onSaveLocal={toggleSaveLocal}
                   />
                 )}
               </ScrollView>
@@ -1225,6 +1393,19 @@ function LiveBroadcast({ matchId, userId }: { matchId: number; userId: number | 
               ? "Bu takımın maç kadrosu girilmemiş. Oyuncu adını Altyazı sekmesinden elle yazabilirsin."
               : "Bu takımın maç kadrosu girilmemiş. Olayı oyuncusuz kaydedebilirsin."
           }
+        />
+      ) : null}
+
+      {startTarget ? (
+        <LocalRecordPrompt
+          supported={recordSupported}
+          storage={storage}
+          encoder={encoderCfg}
+          value={settings.saveLocal}
+          onChange={(saveLocal) => change({ saveLocal })}
+          onStart={confirmStart}
+          onCancel={() => setStartTarget(null)}
+          busy={busy}
         />
       ) : null}
     </View>

@@ -4,6 +4,7 @@
  *   Kamera   ön / arka, yakınlaştırma, fener (yerel modül destekliyorsa)
  *   Ses      mikrofon aç / kapa
  *   Kalite   çözünürlük ön ayarı, kare hızı, bit hızı (yayın sürerken kilitli)
+ *   Kayıt    yayını telefon hafızasına da kaydet (yayın sürerken de açılıp kapanır)
  *
  * Yakınlaştırma ve fener yerel modüle sonradan eklendi; mağazadaki eski
  * derlemede yoksa satırların yerine kısa bir açıklama görünür.
@@ -12,10 +13,11 @@
 import React from "react";
 import { StyleSheet, View } from "react-native";
 
+import { estimateStorage, estimateText, formatBytes, saveLocationText } from "@/lib/live/localRecording";
 import { BITRATE_OPTIONS, FPS_OPTIONS, QUALITY_PRESETS, type EncoderConfig } from "@/lib/live/rig";
 import type { StudioSettings } from "@/lib/live/studioSettings";
 import { space } from "@/theme";
-import type { CameraCapabilities } from "@/modules/elitlig-live";
+import type { CameraCapabilities, StorageInfo } from "@/modules/elitlig-live";
 
 import { Btn, GroupTitle, Hint, Note, OptionRow, SegRow, ToggleRow } from "./rigUi";
 
@@ -36,6 +38,12 @@ export interface SettingsPanelProps {
   settings: StudioSettings;
   onChange: (patch: Partial<StudioSettings>) => void;
   encoder: EncoderConfig;
+  /** Yerel modül yayını telefona kaydedebiliyor mu (yeni derleme). */
+  recordSupported: boolean;
+  storage: StorageInfo | null;
+  /** Şu an telefona kayıt yapılıyor mu. */
+  recordingOn: boolean;
+  onSaveLocal: (next: boolean) => void;
 }
 
 const ZOOM_STEPS = [1, 1.5, 2, 3, 4, 6, 8];
@@ -49,6 +57,7 @@ export function SettingsPanel(props: SettingsPanelProps) {
     .slice(0, 5)
     .map((z) => ({ value: z, label: zoomLabel(z) }));
   const nearest = zoomOptions.reduce((best, o) => (Math.abs(o.value - props.zoom) < Math.abs(best - props.zoom) ? o.value : best), 1);
+  const estimate = estimateStorage(props.encoder, props.storage?.freeBytes, props.storage?.minFreeBytes);
   const bitrateOptions = [{ value: 0, label: "Oto" }, ...BITRATE_OPTIONS.filter((b) => b !== 1000 && b !== 6000).map((b) => ({ value: b as number, label: `${b / 1000}`.replace(".", ",") }))];
 
   return (
@@ -90,6 +99,38 @@ export function SettingsPanel(props: SettingsPanelProps) {
         onChange={props.onMute}
         disabled={!props.nativeReady}
       />
+
+      <GroupTitle>TELEFONA KAYIT</GroupTitle>
+      {props.recordSupported ? (
+        <>
+          <ToggleRow
+            title="Telefona kaydet"
+            hint={
+              props.recordingOn
+                ? "Kayıt sürüyor; kapatırsan dosya şimdi kaydedilir"
+                : props.encoderOn
+                  ? "Açarsan kayıt bu andan itibaren başlar"
+                  : "Yayın başlarken sorulur; yayının tamamı MP4 olarak saklanır"
+            }
+            icon="save"
+            value={props.encoderOn ? props.recordingOn : settings.saveLocal}
+            onChange={props.onSaveLocal}
+            disabled={estimate.belowFloor && !props.recordingOn}
+          />
+          <Hint>
+            {props.storage
+              ? `Boş alan ${formatBytes(props.storage.freeBytes)}${props.storage.totalBytes > 0 ? ` / ${formatBytes(props.storage.totalBytes)}` : ""} · ${estimateText(estimate)}. Kayıt yeri: ${saveLocationText(props.storage)}.`
+              : "Telefonun boş alanı okunamadı."}
+          </Hint>
+          {estimate.belowFloor ? (
+            <Note tone="danger" icon="alert-circle" text="Boş alan 300 MB'ın altında: telefona kayıt yapılamaz. Önce telefonda yer aç." />
+          ) : estimate.tight ? (
+            <Note tone="warn" icon="warning" text="Boş alan 90 dakikalık maça yetmeyebilir. Alan 300 MB'ın altına inince kayıt kendiliğinden kapatılır." />
+          ) : null}
+        </>
+      ) : props.nativeReady ? (
+        <Hint>Yayını telefona kaydetme bir sonraki mağaza sürümüyle gelir; bu sürümde yok.</Hint>
+      ) : null}
 
       <GroupTitle>YAYIN KALİTESİ</GroupTitle>
       {QUALITY_PRESETS.map((q) => (

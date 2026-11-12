@@ -9,7 +9,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { Alert } from "react-native";
 
-import { errorMessage, useToast } from "@/components/ui";
+import { errorMessage } from "@/components/chat/kit";
+import { useToast } from "@/components/ui";
 import { patchConversationCache } from "@/hooks/useChat";
 import {
   blockUser,

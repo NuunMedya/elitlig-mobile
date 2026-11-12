@@ -31,7 +31,7 @@ import * as Clipboard from "expo-clipboard";
 import { Redirect, useRouter } from "expo-router";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AttachPreviewSheet, AttachSheet, type AttachMode, type AttachPick, type ContentKey } from "@/components/chat/AttachSheet";
 import { AttendanceCard, CallChip, MatchOfferBubble, NotificationCard, SystemChip } from "@/components/chat/ChatBubbles";
@@ -44,7 +44,8 @@ import { ActionMenu, ForwardSheet, MessageInfoSheet, MessageMenu, ReactionsSheet
 import { ReportSheet, type ReportTarget } from "@/components/chat/ReportSheet";
 import { AwardPollCard, MatchesCard, PollBubble, SignupCard } from "@/components/chat/RichBubbles";
 import { useConversationActions } from "@/components/chat/useConversationActions";
-import { BottomSheet, Button, EmptyState, ErrorState, SkeletonListRow, Touchable, errorMessage, useToast } from "@/components/ui";
+import { BottomSheet, Button, ChatStatusBar, EmptyState, ErrorState, SkeletonListRow, Touchable, errorMessage } from "@/components/chat/kit";
+import { useToast } from "@/components/ui";
 import {
   PAGE_SIZE,
   patchConversationCache,
@@ -94,7 +95,7 @@ import {
 import { addMatchAttendancePlayers, getTeamRoster, removeMatchAttendancePlayer, respondMatchAttendance, type AttendancePlayer } from "@/lib/api/team";
 import { chatDraftOwner, outboxAdd, outboxFor, outboxRemove, loadChatDrafts } from "@/lib/chatDrafts";
 import { pickFromLibrary, takePhoto, type PickedFile, type VoiceRecording } from "@/lib/chatMedia";
-import { chatPalette } from "@/lib/chatPalette";
+import { chatPalette, colors, elevate, wa } from "@/lib/chatPalette";
 import {
   applyReaction,
   buildRows,
@@ -113,7 +114,7 @@ import { ApiError } from "@/lib/http";
 import { queryKeys } from "@/lib/queryKeys";
 import { useAuth } from "@/providers/AuthProvider";
 import { useCall } from "@/providers/CallProvider";
-import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
+import { hairline, layout, radius, space, textScale, type } from "@/theme";
 
 const EMPTY_MESSAGES: ChatMessage[] = [];
 const EMPTY_PARTICIPANTS: ChatParticipant[] = [];
@@ -147,6 +148,7 @@ export interface ChatRoomProps {
 
 export function ChatRoom({ conversationId, admin = false, jumpTo = null }: ChatRoomProps) {
   const auth = useAuth();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const toast = useToast();
   const call = useCall();
@@ -1153,7 +1155,8 @@ export function ChatRoom({ conversationId, admin = false, jumpTo = null }: ChatR
 
   if (!conversation) {
     return (
-      <SafeAreaView style={styles.screen} edges={["top"]}>
+      <SafeAreaView style={styles.screenPlain} edges={["top"]}>
+        <ChatStatusBar />
         {header}
         {query.isLoading ? (
           <View style={styles.skeleton}><SkeletonListRow count={6} avatar={false} /></View>
@@ -1227,6 +1230,9 @@ export function ChatRoom({ conversationId, admin = false, jumpTo = null }: ChatR
 
   return (
     <SafeAreaView style={styles.screen} edges={["top", "bottom"]}>
+      <ChatStatusBar />
+      {/* Üst güvenli alan başlık rengindedir; alt güvenli alan yazma çubuğunun (duvarın) rengini alır. */}
+      <View pointerEvents="none" style={[styles.topInset, { height: insets.top }]} />
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         {header}
 
@@ -1238,6 +1244,8 @@ export function ChatRoom({ conversationId, admin = false, jumpTo = null }: ChatR
               onChangeText={setSearchText}
               placeholder="Bu sohbette ara"
               placeholderTextColor={colors.textTertiary}
+              selectionColor={colors.brand}
+              cursorColor={colors.brand}
               autoFocus
               returnKeyType="search"
               accessibilityLabel="Bu sohbette ara"
@@ -1319,8 +1327,8 @@ export function ChatRoom({ conversationId, admin = false, jumpTo = null }: ChatR
             </View>
           )}
           {!atBottom && rows.length ? (
-            <Touchable feedback="fab" haptic="light" onPress={() => scrollToBottom(true)} accessibilityRole="button" accessibilityLabel={newBelow ? `${newBelow} yeni mesaj. En alta git` : "En alta git"} style={styles.down}>
-              <Ionicons name="chevron-down" size={22} color={colors.textSecondary} />
+            <Touchable feedback="fab" haptic="light" onPress={() => scrollToBottom(true)} accessibilityRole="button" accessibilityLabel={newBelow ? `${newBelow} yeni mesaj. En alta git` : "En alta git"} style={[elevate(3), styles.down]}>
+              <Ionicons name="chevron-down" size={24} color={colors.textSecondary} />
               {newBelow ? (
                 <View style={styles.downBadge}>
                   <Text style={styles.downBadgeText} {...textScale.badge}>{newBelow > 99 ? "99+" : newBelow}</Text>
@@ -1353,6 +1361,7 @@ export function ChatRoom({ conversationId, admin = false, jumpTo = null }: ChatR
             onSendText={sendText}
             onSaveEdit={saveEdit}
             onAttach={() => setAttach("menu")}
+            onCamera={() => onPick("camera")}
             onVoice={sendVoice}
             noTyping={admin}
           />
@@ -1449,7 +1458,11 @@ const Wallpaper = memo(function Wallpaper() {
 });
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.surface1 },
+  /* Zemin yazma çubuğunun rengidir (alt güvenli alan onunla dolar); üst güvenli
+     alanı `topInset` başlık rengine boyar. */
+  screen: { flex: 1, backgroundColor: wa.composerBar },
+  screenPlain: { flex: 1, backgroundColor: colors.surface1 },
+  topInset: { position: "absolute", top: 0, left: 0, right: 0, backgroundColor: colors.surface1 },
   flex: { flex: 1 },
   skeleton: { paddingHorizontal: layout.screenPadding, paddingTop: space.sm },
   banner: { marginHorizontal: layout.screenPadding, marginVertical: space.xs },
@@ -1471,14 +1484,14 @@ const styles = StyleSheet.create({
   pinText: { ...type.bodySm, color: colors.textSecondary },
   pinClose: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
 
-  connecting: { flexDirection: "row", alignItems: "center", gap: space.xs, paddingHorizontal: space.md, paddingVertical: space.xs, backgroundColor: colors.surface2 },
+  connecting: { flexDirection: "row", alignItems: "center", gap: space.xs, paddingHorizontal: space.md, paddingVertical: space.xs, backgroundColor: colors.surface1, borderBottomWidth: hairline, borderBottomColor: colors.separator },
   connectingText: { ...type.caption, color: colors.textSecondary, flex: 1 },
 
-  down: { position: "absolute", right: space.md, bottom: space.md, width: 42, height: 42, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border },
-  downBadge: { position: "absolute", top: -space.s, right: -space.xs, minWidth: 20, height: 20, paddingHorizontal: space.xs, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.brand },
-  downBadgeText: { ...type.nano, color: colors.textOnBrand },
+  down: { position: "absolute", right: space.md, bottom: space.md, width: 42, height: 42, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: chatPalette.bubbleTheirs, borderWidth: 0 },
+  downBadge: { position: "absolute", top: -space.s, right: -space.xs, minWidth: 20, height: 20, paddingHorizontal: space.xs, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: wa.badge },
+  downBadgeText: { ...type.nano, color: wa.onBadge },
 
-  notice: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: layout.screenPadding, paddingVertical: space.md, borderTopWidth: hairline, borderTopColor: colors.border, backgroundColor: colors.surface1 },
+  notice: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: layout.screenPadding, paddingVertical: space.md, backgroundColor: wa.composerBar },
   noticeText: { ...type.caption, color: colors.textSecondary, flex: 1 },
 
   attendanceHint: { ...type.bodySm, color: colors.textSecondary, paddingVertical: space.xs },

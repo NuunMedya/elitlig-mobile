@@ -20,9 +20,17 @@ import { useQuery } from "@tanstack/react-query";
 import React, { memo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { Touchable } from "@/components/ui";
+import { Touchable } from "@/components/chat/kit";
 import { getAwardStatus, type ChatMessage } from "@/lib/api/chat";
-import { colors, hairline, radius, space, textScale, type } from "@/theme";
+import { chatPalette, colors } from "@/lib/chatPalette";
+import { hairline, radius, space, textScale, type } from "@/theme";
+
+/**
+ * Kartlar balon renklerinde durur (giden yeşil, gelen beyaz / gri). Vurgu rengi
+ * iki balonda da 4,5:1 okunan tondur; gömme zemin ve çizgiler yarı saydamdır,
+ * böylece aynı stil iki tarafta da çalışır.
+ */
+const ACCENT = chatPalette.bubbleAccentMine;
 
 const clock = (iso: string) => {
   const d = new Date(iso);
@@ -39,7 +47,7 @@ function Frame({ message, showSender, icon, label, children }: { message: ChatMe
   return (
     <View style={[styles.card, mine ? styles.mine : styles.theirs]}>
       <View style={styles.head}>
-        <Ionicons name={icon} size={14} color={colors.brandAccent} />
+        <Ionicons name={icon} size={14} color={ACCENT} />
         <Text style={styles.kind} numberOfLines={1} {...textScale.badge}>
           {label}
         </Text>
@@ -112,7 +120,7 @@ export const PollBubble = memo(function PollBubble({
               <Ionicons
                 name={selected ? (poll.multiple ? "checkbox" : "radio-button-on") : poll.multiple ? "square-outline" : "radio-button-off"}
                 size={18}
-                color={selected ? colors.brandAccent : colors.textTertiary}
+                color={selected ? ACCENT : chatPalette.bubbleMeta}
               />
               <Text style={styles.optionText} {...textScale.dense}>
                 {option.text}
@@ -130,7 +138,7 @@ export const PollBubble = memo(function PollBubble({
       </Text>
       {onVoters && total ? (
         <Touchable feedback="chip" haptic="selection" onPress={() => onVoters(message)} style={styles.slotBtn} accessibilityRole="button" accessibilityLabel="Oyları gör">
-          <Ionicons name="people-outline" size={14} color={colors.brandAccent} />
+          <Ionicons name="people-outline" size={14} color={ACCENT} />
           <Text style={styles.slotBtnText} {...textScale.badge}>
             Oyları gör
           </Text>
@@ -180,7 +188,7 @@ export const MatchesCard = memo(function MatchesCard({ message, showSender, onOp
                   </Text>
                 ) : null}
               </View>
-              <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
+              <Ionicons name="chevron-forward" size={16} color={chatPalette.bubbleMeta} />
             </Touchable>
           );
         })}
@@ -250,7 +258,7 @@ export const SignupCard = memo(function SignupCard({
                   accessibilityLabel={mine ? `${slot.duty_label} görevinden vazgeç` : `${slot.duty_label} görevine talip ol`}
                   style={[styles.slotBtn, mine ? styles.slotBtnOn : null, busySlot === slot.id ? styles.dim : null]}
                 >
-                  <Ionicons name={mine ? "checkmark" : "hand-left-outline"} size={14} color={mine ? colors.textOnBrand : colors.brandAccent} />
+                  <Ionicons name={mine ? "checkmark" : "hand-left-outline"} size={14} color={mine ? colors.textOnBrand : ACCENT} />
                   <Text style={[styles.slotBtnText, mine ? styles.slotBtnTextOn : null]} {...textScale.badge}>
                     {mine ? "Talibim" : "Talip ol"}
                   </Text>
@@ -266,7 +274,7 @@ export const SignupCard = memo(function SignupCard({
                   accessibilityLabel={assigned ? `${slot.duty_label} görevlisini değiştir` : `${slot.duty_label} için görevlendir`}
                   style={styles.slotIcon}
                 >
-                  <Ionicons name={assigned ? "person-circle" : "person-add-outline"} size={20} color={assigned ? colors.win : colors.brandAccent} />
+                  <Ionicons name={assigned ? "person-circle" : "person-add-outline"} size={20} color={assigned ? colors.win : ACCENT} />
                 </Touchable>
               ) : null}
             </View>
@@ -275,7 +283,7 @@ export const SignupCard = memo(function SignupCard({
       </View>
       {onCloseToggle && message.sender.is_me ? (
         <Touchable feedback="chip" haptic="selection" onPress={() => onCloseToggle(message, !signup.closed)} style={styles.slotBtn} accessibilityRole="button" accessibilityLabel={signup.closed ? "Anketi yeniden aç" : "Anketi kapat"}>
-          <Ionicons name={signup.closed ? "lock-open-outline" : "lock-closed-outline"} size={14} color={colors.brandAccent} />
+          <Ionicons name={signup.closed ? "lock-open-outline" : "lock-closed-outline"} size={14} color={ACCENT} />
           <Text style={styles.slotBtnText} {...textScale.badge}>
             {signup.closed ? "Anketi yeniden aç" : "Anketi kapat"}
           </Text>
@@ -332,7 +340,7 @@ export const AwardPollCard = memo(function AwardPollCard({ message, showSender, 
       </Text>
       {onOpenTodos ? (
         <Touchable feedback="chip" onPress={onOpenTodos} style={styles.slotBtn} accessibilityRole="button" accessibilityLabel="Yapılacaklar'ı aç">
-          <Ionicons name="checkbox-outline" size={14} color={colors.brandAccent} />
+          <Ionicons name="checkbox-outline" size={14} color={ACCENT} />
           <Text style={styles.slotBtnText} {...textScale.badge}>
             {coordinator ? "Önerileri topla" : mineTask ? "Adaylarını öner" : "Yapılacaklar'ı aç"}
           </Text>
@@ -345,26 +353,25 @@ export const AwardPollCard = memo(function AwardPollCard({ message, showSender, 
 const styles = StyleSheet.create({
   slotIcon: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
   progressBox: { gap: space.xs },
-  progressTrack: { height: 6, borderRadius: 3, backgroundColor: colors.surface3, overflow: "hidden" },
-  progressFill: { height: 6, borderRadius: 3, backgroundColor: colors.accent },
+  progressTrack: { height: 6, borderRadius: 3, backgroundColor: chatPalette.bubbleInset, overflow: "hidden" },
+  progressFill: { height: 6, borderRadius: 3, backgroundColor: colors.brand },
   flex: { flex: 1, minWidth: 0 },
   card: {
-    width: "88%",
+    width: "86%",
     gap: space.sm,
     padding: space.md,
-    borderRadius: radius.lg,
-    borderWidth: hairline,
-    borderColor: colors.border,
-    backgroundColor: colors.surface1,
+    borderRadius: radius.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: chatPalette.bubbleShade,
   },
-  mine: { alignSelf: "flex-end", borderColor: colors.brandBorder },
-  theirs: { alignSelf: "flex-start" },
+  mine: { alignSelf: "flex-end", backgroundColor: chatPalette.bubbleMine },
+  theirs: { alignSelf: "flex-start", backgroundColor: chatPalette.bubbleTheirs },
   head: { flexDirection: "row", alignItems: "center", gap: space.xs },
-  kind: { ...type.micro, color: colors.brandAccent, flex: 1 },
-  stamp: { ...type.micro, color: colors.textTertiary },
-  title: { ...type.h4, color: colors.textPrimary },
-  body: { ...type.bodySm, color: colors.textPrimary },
-  muted: { ...type.caption, color: colors.textTertiary },
+  kind: { ...type.micro, color: ACCENT, flex: 1 },
+  stamp: { ...type.meta, color: chatPalette.bubbleMeta },
+  title: { ...type.h3, color: chatPalette.bubbleText },
+  body: { ...type.bodySm, color: chatPalette.bubbleText },
+  muted: { ...type.caption, color: chatPalette.bubbleMeta },
   assigned: { color: colors.win },
   options: { gap: space.xs },
   option: {
@@ -373,21 +380,21 @@ const styles = StyleSheet.create({
     gap: space.sm,
     minHeight: 44,
     paddingHorizontal: space.md,
-    borderRadius: radius.md,
-    borderWidth: hairline,
-    borderColor: colors.border,
-    backgroundColor: colors.surface2,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: "transparent",
+    backgroundColor: chatPalette.bubbleInset,
     overflow: "hidden",
   },
-  optionSelected: { borderColor: colors.brandBorder },
-  optionFill: { position: "absolute", left: 0, top: 0, bottom: 0, backgroundColor: colors.brandDim },
-  optionText: { ...type.bodySm, color: colors.textPrimary, flex: 1, paddingVertical: space.sm },
-  optionCount: { ...type.numSmStrong, color: colors.textSecondary },
-  rows: { borderRadius: radius.md, borderWidth: hairline, borderColor: colors.border, overflow: "hidden" },
-  divided: { borderTopWidth: hairline, borderTopColor: colors.separator },
+  optionSelected: { borderColor: colors.brand },
+  optionFill: { position: "absolute", left: 0, top: 0, bottom: 0, backgroundColor: chatPalette.pollFill },
+  optionText: { ...type.body, color: chatPalette.bubbleText, flex: 1, paddingVertical: space.sm },
+  optionCount: { ...type.numSmStrong, color: chatPalette.bubbleText },
+  rows: { borderRadius: radius.sm, borderWidth: hairline, borderColor: chatPalette.bubbleLine, backgroundColor: chatPalette.bubbleInset, overflow: "hidden" },
+  divided: { borderTopWidth: hairline, borderTopColor: chatPalette.bubbleLine },
   matchRow: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.md, paddingVertical: space.sm, minHeight: 48 },
-  matchTime: { ...type.numSmStrong, color: colors.textPrimary, width: 44 },
-  matchTeams: { ...type.labelSm, color: colors.textPrimary },
+  matchTime: { ...type.numSmStrong, color: chatPalette.bubbleText, width: 44 },
+  matchTeams: { ...type.labelSm, color: chatPalette.bubbleText },
   slot: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.md, paddingVertical: space.sm },
   slotBtn: {
     flexDirection: "row",
@@ -397,12 +404,12 @@ const styles = StyleSheet.create({
     minHeight: 34,
     paddingHorizontal: space.md,
     borderRadius: radius.pill,
-    borderWidth: hairline,
-    borderColor: colors.brandBorder,
-    backgroundColor: colors.brandDim,
+    borderWidth: 1,
+    borderColor: chatPalette.bubbleLine,
+    backgroundColor: chatPalette.bubbleInset,
   },
   slotBtnOn: { backgroundColor: colors.brand, borderColor: colors.brand },
-  slotBtnText: { ...type.labelSm, color: colors.brandAccent },
+  slotBtnText: { ...type.labelSm, color: ACCENT },
   slotBtnTextOn: { color: colors.textOnBrand },
   dim: { opacity: 0.5 },
 });

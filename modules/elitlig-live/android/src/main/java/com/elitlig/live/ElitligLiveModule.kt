@@ -48,6 +48,10 @@ class ReplayOptions : Record {
   @Field val rate: Double = 1.0
 }
 
+class LocalRecordingOptions : Record {
+  @Field val fileName: String = ""
+}
+
 class LiveException(code: String, message: String, cause: Throwable? = null) :
   CodedException(code, message, cause)
 
@@ -192,7 +196,7 @@ class ElitligLiveModule : Module() {
     }
 
     View(LiveCameraView::class) {
-      Events("onStateChange", "onStats", "onReplayStateChange")
+      Events("onStateChange", "onStats", "onReplayStateChange", "onRecordingStateChange")
 
       Prop("facing") { view: LiveCameraView, facing: String? ->
         view.setFacing(facing)
@@ -253,6 +257,40 @@ class ElitligLiveModule : Module() {
       clipsDir().listFiles()?.forEach { it.delete() }
       Unit
     }
+
+    // ---- Yerel kayıt: yayının tamamı telefon hafızasına (JS varlığını denetleyerek çağırır) ----
+
+    AsyncFunction("getStorageInfo") {
+      val ctx = appContext.reactContext ?: throw LiveException("ERR_CONTEXT", "context yok")
+      mapOf<String, Any>(
+        "freeBytes" to LocalRecorder.freeBytes(ctx).toDouble(),
+        "totalBytes" to LocalRecorder.totalBytes(ctx).toDouble(),
+        "minFreeBytes" to LocalRecorder.MIN_FREE_BYTES.toDouble(),
+        "location" to LocalRecorder.locationLabel(ctx),
+        "gallery" to (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q)
+      )
+    }
+
+    AsyncFunction("startLocalRecording") { options: LocalRecordingOptions ->
+      val view = activeView ?: throw LiveException("NOT_STREAMING", "Ekranda LiveCameraView yok.")
+      try {
+        view.startLocalRecording(options.fileName)
+      } catch (e: CodedException) {
+        throw e
+      } catch (e: IllegalStateException) {
+        throw LiveException("NOT_STREAMING", e.message ?: "Yerel kayıt başlatılamadı.", e)
+      } catch (e: Exception) {
+        throw LiveException("ERR_RECORD", e.message ?: "Yerel kayıt başlatılamadı.", e)
+      }
+    }.runOnQueue(Queues.MAIN)
+
+    AsyncFunction("stopLocalRecording") {
+      activeView?.stopLocalRecording()
+    }.runOnQueue(Queues.MAIN)
+
+    AsyncFunction("getLocalRecordingStatus") {
+      activeView?.localRecordingStatus()
+    }.runOnQueue(Queues.MAIN)
 
     OnCreate {
       // 24 saatten eski klipleri temizle.

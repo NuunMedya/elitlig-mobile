@@ -26,7 +26,8 @@ import { ImageViewer, type ViewerImage } from "@/components/chat/ImageViewer";
 import { ActionMenu, ChatAvatar, type MessageMenuItem } from "@/components/chat/MessageSheets";
 import { ReportSheet, type ReportTarget } from "@/components/chat/ReportSheet";
 import { useConversationActions } from "@/components/chat/useConversationActions";
-import { Avatar, BottomSheet, Button, EmptyState, ErrorState, Input, ListRow, ScreenHeader, SegmentedControl, SkeletonListRow, Touchable, errorMessage, useToast } from "@/components/ui";
+import { Avatar, BottomSheet, Button, EmptyState, ErrorState, Input, ListRow, SegmentedControl, SkeletonListRow, Touchable, WaHeader, errorMessage } from "@/components/chat/kit";
+import { useToast } from "@/components/ui";
 import { patchConversationCache, useConversations, usePresence } from "@/hooks/useChat";
 import {
   addGroupMembers,
@@ -49,7 +50,8 @@ import { formatBytes, isGroupChat, lastSeenLabel, listTime, shortUrl } from "@/l
 import { queryKeys } from "@/lib/queryKeys";
 import { useAuth } from "@/providers/AuthProvider";
 import { useCall } from "@/providers/CallProvider";
-import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
+import { colors } from "@/lib/chatPalette";
+import { hairline, layout, radius, space, textScale, type } from "@/theme";
 
 type Section = "genel" | "medya" | "belgeler" | "baglantilar";
 const SECTIONS: { key: Section; label: string }[] = [
@@ -205,7 +207,7 @@ export function ChatInfo({ conversationId, initialSection }: ChatInfoProps) {
 
   if (!auth.user) return <Redirect href="/giris" />;
 
-  const header = <ScreenHeader title={grouped ? "Grup bilgisi" : "Kişi bilgisi"} back />;
+  const header = <WaHeader title={grouped ? "Grup bilgisi" : "Kişi bilgisi"} back />;
   if (!conversation) {
     return (
       <SafeAreaView style={styles.screen} edges={["top"]}>

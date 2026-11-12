@@ -11,12 +11,14 @@ import { memo, useCallback, useMemo } from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { EmptyState, ErrorState, ScreenHeader, SkeletonListRow, Touchable, errorMessage, useRefresh, useToast } from "@/components/ui";
+import { EmptyState, ErrorState, SkeletonListRow, Touchable, WaHeader, errorMessage, useRefresh } from "@/components/chat/kit";
+import { useToast } from "@/components/ui";
 import { patchMessageCache } from "@/hooks/useChat";
 import { getStarred, starMessage, type StarredMessage } from "@/lib/api/chat";
 import { listTime, messageSummary } from "@/lib/chatUtils";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, hairline, layout, space, textScale, type } from "@/theme";
+import { colors } from "@/lib/chatPalette";
+import { hairline, layout, space, textScale, type } from "@/theme";
 
 const KEY = ["chat", "starred"] as const;
 
@@ -50,7 +52,7 @@ export function StarredMessages({ conversationId }: { conversationId: number | n
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      <ScreenHeader title="Yıldızlı mesajlar" subtitle={items.length ? `${items.length} mesaj` : undefined} back />
+      <WaHeader title="Yıldızlı mesajlar" subtitle={items.length ? `${items.length} mesaj` : undefined} back />
       {query.isLoading ? (
         <View style={styles.pad}><SkeletonListRow count={6} avatar={false} /></View>
       ) : query.isError && !items.length ? (

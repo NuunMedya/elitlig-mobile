@@ -34,6 +34,8 @@ export interface StudioSettings {
   captionSeconds: CaptionSeconds;
   replaySeconds: ReplaySeconds;
   replayRate: number;
+  /** Yayın telefon hafızasına da kaydedilsin mi (yayın başlarken sorulur; son seçim hatırlanır). */
+  saveLocal: boolean;
   /** Takım kimliği → elle girilen kısa kod / şerit rengi. */
   teamCodes: Record<string, string>;
   teamColors: Record<string, string>;
@@ -52,6 +54,7 @@ export const DEFAULT_SETTINGS: StudioSettings = {
   captionSeconds: 10,
   replaySeconds: 10,
   replayRate: 0.5,
+  saveLocal: true,
   teamCodes: {},
   teamColors: {},
 };
@@ -90,6 +93,7 @@ export function normalizeSettings(input: unknown): StudioSettings {
     captionSeconds: pick<CaptionSeconds>(src.captionSeconds, [6, 10, 20, 0], d.captionSeconds),
     replaySeconds: pick<ReplaySeconds>(src.replaySeconds, [6, 10, 13], d.replaySeconds),
     replayRate: pick<number>(rate, [0.25, 0.5, 0.75, 1], d.replayRate),
+    saveLocal: src.saveLocal !== false,
     teamCodes: stringMap(src.teamCodes, (v) => v.length > 0 && v.length <= 4),
     teamColors: stringMap(src.teamColors, (v) => /^#[0-9a-f]{6}$/i.test(v)),
   };
