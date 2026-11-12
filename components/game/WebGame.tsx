@@ -35,6 +35,8 @@ export type GameCommand =
       perks?: { penalti?: { aimBonus: number } } | null;
       /** Oyun HUD'unun boş bırakacağı köşe (RN durdur düğmesi), CSS px. */
       hudInset?: { top: number; right: number };
+      /** Oyunun kalıcı verisi (oyun {type:"store", data} ile kaydettirir). */
+      store?: Record<string, unknown> | null;
       /** Oyuna özgü gerçek kadro (Penaltı: atıcı + kaleciler, Slalom: koşucu + savunmalar, Sektir: oyuncu + geçilecekler, Savunma Hattı / Kadro Koşusu: kaptan + rakip takımlar). */
       roster?: Record<string, unknown> | null;
     };

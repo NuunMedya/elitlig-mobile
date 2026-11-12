@@ -85,6 +85,12 @@
         break;
       case "config":
         if (cmd.reduceMotion != null) A.reduceMotion = !!cmd.reduceMotion;
+        // Oyunun kalıcı verisi (ör. Savunma Hattı açılan bölümler / yıldızlar):
+        // RN AsyncStorage'dan gelir; oyun {type:"store", data} ile kaydettirir.
+        if (cmd.store && typeof cmd.store === "object") {
+          A.store = cmd.store;
+          if (A.game && typeof A.game.storeLoaded === "function") A.game.storeLoaded(cmd.store);
+        }
         if (cmd.sound != null) A.soundOn = !!cmd.sound;
         // Kariyer avantajı (Elit Kart): oyunun okuduğu küçük oranlar, en çok 0.1.
         if (cmd.perks && typeof cmd.perks === "object") A.perks = cmd.perks;
@@ -564,6 +570,9 @@
   };
   /** Ses olayı → efekt. Konum bilinmediğinde ekranın ortası. */
   A.juiceFor = function (name) {
+    // Oyun bazı ses olaylarının efektini kapatabilir (ör. Top Sektir'de her
+    // golde donma + parlama akışı bozuyordu): A.juiceOff = { net: true }.
+    if (A.juiceOff && A.juiceOff[name]) return;
     var cx = A.W / 2, cy = A.H * 0.42;
     switch (name) {
       case "level":

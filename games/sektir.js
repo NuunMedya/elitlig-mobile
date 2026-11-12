@@ -266,6 +266,11 @@
     A.burst(p.x, p.y, 8, { angle: Math.PI / 2, spread: 1.4, speed: 160, gravity: 300, life: 0.4, size: 3, color: ["#FFFFFF", "#CFE8D6", P.gold], shape: "spark" });
   }
 
+  // Her baraj geçişinde oyun AKIŞTA kalır: "file" ve "jeton" seslerinin genel
+  // efekti (anlık donma, beyaz parlama, sarsıntı, halka) kapalı; yalnız küçük
+  // skor yazısı ve ağın dalgalanması kalır.
+  A.juiceOff = { net: true, coin: true };
+
   function scoreGate(g) {
     g.passed = true;
     g.netAt = A.time;
@@ -283,8 +288,7 @@
     A.floatText((center ? "TAM ORTA +" : "GOL +") + gain, sp.x, sp.y, center ? P.gold : "#FFFFFF", center ? 22 : 19);
     if (center && combo % 5 === 0) {
       A.floatText("ÇARPAN ×" + multiplier(), W / 2, H * 0.36, P.gold, 24);
-      A.sound("level");
-      flash = 1;
+      A.sound("coin");
     } else A.sound("net");
     A.haptic(center ? "medium" : "light");
     // geçtiğin oyuncular
@@ -295,7 +299,8 @@
       passedLine = { text: rv.short + " geçildi · " + rv.value + " gol+asist", age: 0, kit: kitOf(rv) };
       A.sound("coin");
       A.haptic("success");
-      bgKey = "";
+      // Fon oyun sırasında yeniden çizilmez (bütün katmanları aynı karede
+      // boyamak akışta takılma yapıyordu); tribün renkleri tur başında belirlenir.
     }
     var nl = levelAt(goals);
     if (nl > level) {
@@ -580,7 +585,7 @@
   var LY = { sky: null, city: null, stand: null, roof: null, glow: null };
 
   function paintLayers() {
-    var key = W + "x" + H + ":" + rosterSig + ":" + passedRivals;
+    var key = W + "x" + H + ":" + rosterSig;
     if (bgKey === key && LY.sky) return;
     bgKey = key;
     var mine = kitP(juggler), nr = nextRival(), rk = nr ? kitP(nr) : { p: "#E11D48", s: "#FFFFFF" };
