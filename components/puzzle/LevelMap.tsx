@@ -107,6 +107,7 @@ export function LevelMap({
       CellRendererComponent={RowCell}
       initialScrollIndex={Math.max(0, current - 3)}
       initialNumToRender={12}
+      removeClippedSubviews={false}
       windowSize={7}
       style={{ backgroundColor: zone.ground[1] }}
       contentContainerStyle={{ paddingTop: 0, paddingBottom: contentTop }}
@@ -191,14 +192,14 @@ const LevelRow = React.memo(function LevelRow({ row, width, current, onPlay }: {
         ))}
       </Svg>
       {tierStart ? <TierBanner level={row.level} zone={zone} /> : null}
-      <LevelNode row={row} x={xn} zone={zone} onPlay={onPlay} />
+      <LevelNode row={row} x={xn} zone={zone} onPlay={onPlay} pinLeft={xn > width / 2} />
     </View>
   );
 });
 
 /* ═══════════════════════ düğüm ═══════════════════════ */
 
-function LevelNode({ row, x, zone, onPlay }: { row: Row; x: number; zone: MapZone; onPlay: (level: number) => void }) {
+function LevelNode({ row, x, zone, onPlay, pinLeft }: { row: Row; x: number; zone: MapZone; onPlay: (level: number) => void; pinLeft: boolean }) {
   const reduce = useReduceMotion();
   const pulse = useRef(new Animated.Value(0)).current;
   const isCurrent = row.state === "current";
@@ -224,9 +225,15 @@ function LevelNode({ row, x, zone, onPlay }: { row: Row; x: number; zone: MapZon
   const gid = `n${row.level}`;
 
   return (
-    <View pointerEvents="box-none" style={[styles.nodeWrap, { left: x - 60, top: ROW / 2 - size / 2 }]}>
+    // Bulunduğun seviye: düğme + "OYNA" etiketi satırın İÇİNDE kalır, "SEN"
+    // iğnesi düğmenin yanında durur. Liste satırı dışına taşan çizim telefonda
+    // kesiliyordu (Android liste hücreleri taşanı kırpar).
+    <View pointerEvents="box-none" style={[styles.nodeWrap, { left: x - 60, top: isCurrent ? ROW / 2 - size / 2 - 8 : ROW / 2 - size / 2 }]}>
       {isCurrent ? (
-        <Animated.View pointerEvents="none" style={[styles.pin, { transform: [{ translateY: bob }] }]}>
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.pin, pinLeft ? { left: 60 - size / 2 - 50 } : { left: 60 + size / 2 + 4 }, { top: size / 2 - 30, transform: [{ translateY: bob }] }]}
+        >
           <Svg width={46} height={54}>
             <Path d="M23 52 C 16 40, 3 33, 3 21 A 20 20 0 1 1 43 21 C 43 33, 30 40, 23 52 Z" fill={M.shadowSoft} transform="translate(0 3)" />
             <Path d="M23 52 C 16 40, 3 33, 3 21 A 20 20 0 1 1 43 21 C 43 33, 30 40, 23 52 Z" fill={M.pin} />
@@ -521,10 +528,10 @@ const styles = StyleSheet.create({
   starArc: { position: "absolute", top: -22, flexDirection: "row", alignItems: "flex-end", gap: 1 },
   starMid: { marginBottom: 5 },
   starSide: {},
-  pin: { position: "absolute", top: -50, width: 46, height: 56, alignItems: "center" },
+  pin: { position: "absolute", width: 46, height: 56, alignItems: "center" },
   pinIcon: { position: "absolute", top: 10, width: 46, alignItems: "center" },
   playTag: {
-    marginTop: -12,
+    marginTop: -18,
     paddingHorizontal: space.md,
     paddingVertical: space.xs,
     borderRadius: radius.pill,
