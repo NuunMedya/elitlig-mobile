@@ -3,10 +3,10 @@
  * şerit değiştir, zıpla, kay. Topu ligin gerçek bir oyuncusu sürer; her
  * seviyede ligin bir takımının savunması (ve takım otobüsü) karşına çıkar.
  *
- * Oyunun kendisi `games/slalom.js` (three.js / WebGL, WebView içinde; arcade
- * motoru `games/arcade3d.js`). Kasım 2026'da kapı slalomundan sonsuz koşuya
- * dönüştü: kurallar ve puanlama orada belgelenmiştir. Bu ekran yalnız ortak
- * Arena kabuğunu oyuna bağlar.
+ * Oyunun kendisi `games/slalom.js` (WebView içinde Canvas 2D "sahte 3B";
+ * Savunma Hattı'nın düz vektör çizgi film diliyle çizilir, WebGL gerekmez).
+ * Kasım 2026'da kapı slalomundan sonsuz koşuya dönüştü: kurallar ve puanlama
+ * orada belgelenmiştir. Bu ekran yalnız ortak Arena kabuğunu oyuna bağlar.
  */
 
 import { ArenaGameScreen, type ArenaGameConfig } from "@/components/game/ArenaGameScreen";
