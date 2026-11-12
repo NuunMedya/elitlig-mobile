@@ -126,7 +126,7 @@ export default function PasswordResetsScreen() {
           <View style={styles.head}>
             <CountStrip
               items={[
-                { key: "requested", label: "Kod bekliyor", value: counts.requested ?? 0, tone: "warn", icon: "hourglass", selected: tab === "requested", onPress: () => setTab("requested") },
+                { key: "requested", label: "Bekleyen", value: counts.requested ?? 0, tone: "warn", icon: "hourglass", selected: tab === "requested", onPress: () => setTab("requested") },
                 { key: "issued", label: "Kod iletildi", value: counts.issued ?? 0, tone: "info", icon: "key", selected: tab === "issued", onPress: () => setTab("issued") },
                 { key: "used", label: "Yenilendi", value: counts.used ?? 0, tone: "win", icon: "checkmark-circle", selected: tab === "used", onPress: () => setTab("used") },
               ]}

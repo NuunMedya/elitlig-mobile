@@ -116,10 +116,19 @@ function PlayerWindow({ clips, initialId, onClose, nameFor, subtitle, isMine, do
   /* Sıra şeridinde seçili klip görünür alanda kalsın. */
   const stripRef = useRef<ScrollView>(null);
   const chipX = useRef(new Map<number, number>());
-  useEffect(() => {
-    const x = chipX.current.get(safeIndex);
-    if (x != null) stripRef.current?.scrollTo({ x: Math.max(0, x - space.xl * 2), animated: true });
-  }, [safeIndex]);
+  const scrollToChip = useCallback((at: number, animated: boolean) => {
+    const x = chipX.current.get(at);
+    if (x != null) stripRef.current?.scrollTo({ x: Math.max(0, x - space.xl * 2), animated });
+  }, []);
+  useEffect(() => scrollToChip(safeIndex, true), [safeIndex, scrollToChip]);
+  /* İlk açılışta çipler ölçülünce seçili olana atla (efekt ölçümden önce koşar). */
+  const onChipLayout = useCallback(
+    (at: number, x: number) => {
+      chipX.current.set(at, x);
+      if (at === safeIndex) scrollToChip(at, false);
+    },
+    [safeIndex, scrollToChip],
+  );
 
   const download = useCallback(() => void downloads.download(current), [downloads, current]);
 
@@ -283,7 +292,7 @@ function PlayerWindow({ clips, initialId, onClose, nameFor, subtitle, isMine, do
                     haptic="selection"
                     style={[styles.chip, on && styles.chipOn, clipMine && !on && styles.chipMine]}
                     onPress={() => go(i)}
-                    onLayout={(event: LayoutChangeEvent) => chipX.current.set(i, event.nativeEvent.layout.x)}
+                    onLayout={(event: LayoutChangeEvent) => onChipLayout(i, event.nativeEvent.layout.x)}
                     accessibilityRole="button"
                     accessibilityState={{ selected: on }}
                     accessibilityLabel={`${clipLabel(clip)}${who ? `, ${who}` : ""}`}

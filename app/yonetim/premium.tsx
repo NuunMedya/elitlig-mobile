@@ -102,7 +102,7 @@ export default function PremiumApprovalScreen() {
             </ChipGroup>
           </View>
         }
-        summary={query.data ? `${items.length} sipariş · kodu kopyalamak için karta basılı tut` : null}
+        summary={query.data ? `${items.length} sipariş · açıklama koduna dokununca kopyalanır` : null}
         keyExtractor={(o) => String(o.id)}
         emptyIcon="diamond-outline"
         emptyTitle="Bu durumda sipariş yok"

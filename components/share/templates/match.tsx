@@ -12,7 +12,7 @@ import React from "react";
 import { View } from "react-native";
 import Svg, { Defs, LinearGradient, Polygon, Stop } from "react-native-svg";
 
-import { clock, dayMonth, groupScorers, shortName, splitName, weekday, type ScorerGroup } from "@/lib/share/format";
+import { clock, dayMonth, groupScorers, shortName, splitName, upper, weekday, type ScorerGroup } from "@/lib/share/format";
 import { alpha } from "@/lib/share/palette";
 import { Poster, Spacer } from "../canvas/Layout";
 import {
@@ -81,15 +81,33 @@ function Side({ f, team, size, room, halo, dim }: { f: ShareFrame; team: ShareTe
 }
 
 /** "16 – 1" — iki basamaklı skorlarda punto düşer. */
-function ScoreText({ f, home, away, scale = 1, k = "mega" }: { f: ShareFrame; home: number | null; away: number | null; scale?: number; k?: "mega" | "score" }) {
+function ScoreText({
+  f,
+  home,
+  away,
+  scale = 1,
+  k = "mega",
+  maxWidth,
+}: {
+  f: ShareFrame;
+  home: number | null;
+  away: number | null;
+  scale?: number;
+  k?: "mega" | "score";
+  /** Sığması gereken genişlik (birim); verilirse punto buna göre iner. */
+  maxWidth?: number;
+}) {
   const digits = String(home ?? "-").length + String(away ?? "-").length;
-  const fit = digits <= 3 ? 1 : digits === 4 ? 0.8 : 0.66;
+  const base = k === "mega" ? 132 : 84;
+  // Archivo rakamı ~0.6 em; tire 0.62 ölçekte + iki yan boşluk.
+  const estimate = base * (digits * 0.6 + 0.4) + 24;
+  const fit = maxWidth ? Math.min(1, maxWidth / (estimate * scale)) : digits <= 3 ? 1 : digits === 4 ? 0.8 : 0.66;
   return (
     <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center" }}>
       <CText f={f} k={k} scale={scale * fit}>
         {home ?? "-"}
       </CText>
-      <CText f={f} k={k} scale={scale * fit * 0.62} color={f.t.accent} style={{ marginHorizontal: f.u(8 * scale) }}>
+      <CText f={f} k={k} scale={scale * fit * 0.62} color={f.t.accent} style={{ marginHorizontal: f.u(12 * scale * fit) }}>
         –
       </CText>
       <CText f={f} k={k} scale={scale * fit}>
@@ -148,7 +166,7 @@ function ScorerColumn({
             <FitName
               f={f}
               k="row"
-              text={`${shortName(group.name)}${group.ownGoal ? " (k.k.)" : ""}`}
+              text={`${upper(shortName(group.name))}${group.ownGoal ? " (K.K.)" : ""}`}
               room={compact ? 17 : 15}
               lines={1}
               align={align}
@@ -366,20 +384,23 @@ function ResultMinimal({ f, d }: { f: ShareFrame; d: MatchShareData }) {
 }
 
 /** Skor şeridi: arma · ad / skor / ad · arma (golcüler ve künye için). */
-function ScoreStrip({ f, d, crest, scale }: { f: ShareFrame; d: MatchShareData; crest: number; scale: number }) {
+function ScoreStrip({ f, d, crest, scale, inner = 324 }: { f: ShareFrame; d: MatchShareData; crest: number; scale: number; inner?: number }) {
   const { u } = f;
+  // Yan sütunlar sabit genişlikte: skor ne kadar büyük olursa olsun ad
+  // sütunu daralmaz; skor ortadaki boşluğa sığacak kadar küçülür.
+  const side = Math.max(crest + 16, 96);
   return (
-    <View style={{ flexDirection: "row", alignItems: "center" }}>
-      <View style={{ flex: 1, alignItems: "center", gap: u(6) }}>
+    <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
+      <View style={{ width: u(side), alignItems: "center", gap: u(6) }}>
         <Crest f={f} logo={d.home.logo} name={d.home.name} size={crest} />
-        <FitName f={f} text={d.home.name} room={12} caps scale={0.82} />
+        <FitName f={f} text={d.home.name} room={9.5} caps scale={0.8} />
       </View>
-      <View style={{ paddingHorizontal: u(4) }}>
-        <ScoreText f={f} home={d.homeScore} away={d.awayScore} k="score" scale={scale} />
+      <View style={{ flex: 1, height: u(crest), justifyContent: "center" }}>
+        <ScoreText f={f} home={d.homeScore} away={d.awayScore} k="score" scale={scale} maxWidth={inner - side * 2 - 8} />
       </View>
-      <View style={{ flex: 1, alignItems: "center", gap: u(6) }}>
+      <View style={{ width: u(side), alignItems: "center", gap: u(6) }}>
         <Crest f={f} logo={d.away.logo} name={d.away.name} size={crest} />
-        <FitName f={f} text={d.away.name} room={12} caps scale={0.82} />
+        <FitName f={f} text={d.away.name} room={9.5} caps scale={0.8} />
       </View>
     </View>
   );
@@ -462,9 +483,9 @@ function ResultDetail({ f, d }: { f: ShareFrame; d: MatchShareData }) {
     <Poster f={f} mood="low" title={d.league} meta={meta(d)} footer={d.footer}>
       <Glass f={f} radius={22} strong style={{ paddingVertical: u(story ? 14 : 10), paddingHorizontal: u(8) }}>
         <View style={{ alignItems: "center", marginBottom: u(story ? 8 : 4) }}>
-          <Overline f={f}>Maç sonu · {dayMonth(d.date)}</Overline>
+          <Overline f={f}>{`Maç sonu · ${dayMonth(d.date)}`}</Overline>
         </View>
-        <ScoreStrip f={f} d={d} crest={story ? 56 : 42} scale={story ? 0.82 : 0.62} />
+        <ScoreStrip f={f} d={d} crest={story ? 56 : 42} scale={story ? 0.82 : 0.62} inner={308} />
         {home.length || away.length ? (
           <View style={{ flexDirection: "row", gap: u(12), marginTop: u(story ? 12 : 8), paddingHorizontal: u(8), paddingTop: u(story ? 10 : 8), borderTopWidth: Math.max(1, u(0.7)), borderTopColor: t.line }}>
             <ScorerColumn f={f} groups={home} align="left" cap={scorerCap(f, true)} compact />
@@ -614,16 +635,20 @@ function ResultStar({ f, d }: { f: ShareFrame; d: MatchShareData }) {
       <View style={{ flexDirection: "row", gap: u(8), marginTop: u(story ? 22 : 14) }}>
         <StatTile f={f} value={mvp.goals} label="Gol" scale={story ? 1 : 0.8} />
         <StatTile f={f} value={mvp.assists} label="Asist" scale={story ? 1 : 0.8} />
-        <StatTile f={f} value={mvp.rating ? mvp.rating.toFixed(1) : "–"} label="Puan" accent={t.gold[0]} scale={story ? 1 : 0.8} />
+        {mvp.rating ? (
+          <StatTile f={f} value={mvp.rating.toFixed(1)} label="Puan" accent={t.gold[0]} scale={story ? 1 : 0.8} />
+        ) : (
+          <StatTile f={f} value={mvp.goals + mvp.assists} label="Gol + Asist" accent={t.gold[0]} scale={story ? 1 : 0.8} />
+        )}
       </View>
       <Spacer f={f} />
       <Glass f={f} radius={16} style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: u(12), paddingVertical: u(story ? 10 : 7), gap: u(8) }}>
         <Crest f={f} logo={d.home.logo} name={d.home.name} size={22} />
-        <FitName f={f} k="row" text={d.home.name} room={13} lines={1} align="right" style={{ flex: 1 }} />
+        <FitName f={f} k="row" text={d.home.name} room={13} lines={1} caps align="right" style={{ flex: 1 }} />
         <CText f={f} k="numStrong" scale={1.15}>
           {d.homeScore ?? "-"}–{d.awayScore ?? "-"}
         </CText>
-        <FitName f={f} k="row" text={d.away.name} room={13} lines={1} align="left" style={{ flex: 1 }} />
+        <FitName f={f} k="row" text={d.away.name} room={13} lines={1} caps align="left" style={{ flex: 1 }} />
         <Crest f={f} logo={d.away.logo} name={d.away.name} size={22} />
       </Glass>
     </Poster>

@@ -44,7 +44,7 @@ export const CANVAS_TYPE = {
   /** Dev skor (sade şablon). */
   mega: { size: 132, line: 0.9, family: fonts.bold, track: -6 },
   /** Afiş başlığı ("MAÇ GÜNÜ"). */
-  poster: { size: 64, line: 0.92, family: fonts.bold, track: -2.6 },
+  poster: { size: 64, line: 1.0, family: fonts.bold, track: -2.6 },
   /** Büyük skor / sayı. */
   score: { size: 84, line: 0.92, family: fonts.bold, track: -3.4 },
   /** Bölüm başlığı ("PUAN DURUMU"). */

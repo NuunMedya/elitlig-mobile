@@ -29,6 +29,12 @@ const OUT_W = 1280;
 const OUT_H = 720;
 /** Logolar en çok bu kadar beklenir; yüklenemeyen armanın yerine baş harf çizilir. */
 const ASSET_WAIT_MS = 3500;
+/**
+ * Yazı ölçüleri yayın grafiği gibi ÇIKTI pikseliyle (1280 genişlik) verilir;
+ * `PX` dp'ye çevirir. Arayüz yazısı değildir, tema tipografisine bağlanmaz
+ * (ScoreBug'daki `scale` ile aynı yaklaşım).
+ */
+const PX = W / OUT_W;
 
 export interface CoverData {
   /** "ELİTLİG ANKARA LİGİ" */
@@ -222,11 +228,11 @@ const styles = StyleSheet.create({
   glow: { position: "absolute", width: W * 0.9, height: W * 0.9, borderRadius: radius.pill, left: W * 0.05, top: H * 0.18, opacity: 0.28 },
   top: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 26, paddingTop: 22 },
   brandLogo: { width: 54, height: 54 },
-  headline: { fontFamily: fonts.bold, fontSize: 24, lineHeight: 28, color: RIG.text, letterSpacing: 0.4 },
-  season: { fontFamily: fonts.display, fontSize: 15, lineHeight: 19, letterSpacing: 1.2 },
+  headline: { fontFamily: fonts.bold, fontSize: PX * 48, lineHeight: PX * 56, color: RIG.text, letterSpacing: 0.4 },
+  season: { fontFamily: fonts.display, fontSize: PX * 30, lineHeight: PX * 38, letterSpacing: 1.2 },
   live: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, height: 30, borderRadius: radius.xs, backgroundColor: RIG.live },
   liveDot: { width: 8, height: 8, borderRadius: radius.pill, backgroundColor: RIG.text },
-  liveText: { fontFamily: fonts.bold, fontSize: 14, lineHeight: 18, color: RIG.text, letterSpacing: 1.5 },
+  liveText: { fontFamily: fonts.bold, fontSize: PX * 28, lineHeight: PX * 36, color: RIG.text, letterSpacing: 1.5 },
   teams: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", paddingHorizontal: 22, gap: 10 },
   team: { flex: 1, alignItems: "center", gap: 10 },
   crest: {
@@ -241,10 +247,10 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   crestImg: { width: 88, height: 88 },
-  crestText: { fontFamily: fonts.bold, fontSize: 38, lineHeight: 44, color: RIG.text },
-  teamName: { fontFamily: fonts.bold, fontSize: 22, lineHeight: 26, color: RIG.text, textAlign: "center" },
+  crestText: { fontFamily: fonts.bold, fontSize: PX * 76, lineHeight: PX * 88, color: RIG.text },
+  teamName: { fontFamily: fonts.bold, fontSize: PX * 44, lineHeight: PX * 52, color: RIG.text, textAlign: "center" },
   vs: { width: 58, height: 58, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
-  vsText: { fontFamily: fonts.bold, fontSize: 20, lineHeight: 24, color: RIG.text },
+  vsText: { fontFamily: fonts.bold, fontSize: PX * 40, lineHeight: PX * 48, color: RIG.text },
   bottom: { height: 46, alignItems: "center", justifyContent: "center", opacity: 0.92 },
-  when: { fontFamily: fonts.display, fontSize: 17, lineHeight: 21, color: RIG.text, letterSpacing: 0.6 },
+  when: { fontFamily: fonts.display, fontSize: PX * 34, lineHeight: PX * 42, color: RIG.text, letterSpacing: 0.6 },
 });

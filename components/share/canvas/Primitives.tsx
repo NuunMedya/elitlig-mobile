@@ -96,7 +96,9 @@ export function FitName({
   caps?: boolean;
 }) {
   const value = caps ? upper(text) : text;
-  const fit = fitScale(value, room, min, lines);
+  // `room` tam puntodaki karakter sayısıdır: küçültülmüş puntoda daha çok,
+  // büyük harfte (geniş glifler) daha az karakter sığar.
+  const fit = fitScale(value, (room / scale) * (caps ? 0.88 : 1), min, lines);
   return (
     <CText f={f} k={k} scale={scale * fit} lines={lines} color={color} align={align} style={style}>
       {value}

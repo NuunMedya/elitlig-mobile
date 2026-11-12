@@ -4,7 +4,11 @@
  *   <TrendChart labels series type="line|bar" />  çizgi ya da çubuk grafik
  *   <BarList rows />                                yatay çubuklu sıralı liste
  *   <WeekHourGrid grid />                           gün × saat yoğunluk ızgarası
- *   <KpiTile label value previous />                gösterge + önceki döneme göre değişim
+ *   <KpiTile label value previous icon? spark? />   gösterge (Archivo) + değişim hapı + mini seyir
+ *
+ * GÖRÜNÜM: çizgi grafik imza degradesiyle çizilir, altı degrade alanla dolar,
+ * seçili noktada halka; çubuklar dikey degrade; sıralı listede ilk üç vurgulu
+ * sıra numarası + GradientBar + pay hapı.
  *   <ShareCsvButton />                              tabloyu CSV metni olarak paylaşır
  *
  * NEDEN BASİT: web grafikleri fare üstü ipucu ve yakınlaştırma taşıyor;
@@ -16,9 +20,9 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { useMemo, useState } from "react";
 import { Share, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
-import Svg, { Line, Polyline, Rect } from "react-native-svg";
+import Svg, { Circle, Defs, Line, LinearGradient as SvgGradient, Polygon, Polyline, Rect, Stop } from "react-native-svg";
 
-import { Touchable, withAlpha } from "@/components/ui";
+import { GradientBar, Sparkline, Touchable, withAlpha } from "@/components/ui";
 import { deltaPct, fmtNum, toCsv } from "@/lib/api/admin/system";
 import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
@@ -69,20 +73,37 @@ export function TrendChart({
   return (
     <View style={styles.chart}>
       <View style={styles.readout}>
-        <Text style={styles.readoutLabel} {...textScale.dense}>
-          {labels[shown]}
-        </Text>
         <View style={styles.readoutValues}>
           {series.map((s, i) => (
-            <Text key={s.label} style={[styles.readoutValue, { color: s.color ?? SERIES_COLORS[i] }]} {...textScale.badge}>
+            <Text key={s.label} style={[i === 0 ? styles.readoutHero : styles.readoutValue, { color: i === 0 ? colors.textPrimary : s.color ?? SERIES_COLORS[i] }]} {...textScale.badge}>
               {format(Number(s.data[shown]) || 0)}
             </Text>
           ))}
+        </View>
+        <View style={styles.readoutPill}>
+          <Text style={styles.readoutLabel} {...textScale.dense}>
+            {labels[shown]}
+          </Text>
         </View>
       </View>
       <View onLayout={onLayout} style={{ height }}>
         {width > 0 ? (
           <Svg width={width} height={height}>
+            <Defs>
+              {series.map((s, si) => {
+                const c = s.color ?? SERIES_COLORS[si];
+                return (
+                  <SvgGradient key={s.label} id={`g${si}`} x1="0" y1="0" x2="0" y2="1">
+                    <Stop offset="0" stopColor={c} stopOpacity={kind === "bar" ? 1 : 0.32} />
+                    <Stop offset="1" stopColor={c} stopOpacity={kind === "bar" ? 0.45 : 0} />
+                  </SvgGradient>
+                );
+              })}
+              <SvgGradient id="stroke0" x1="0" y1="0" x2="1" y2="0">
+                <Stop offset="0" stopColor={colors.gradientSignature[0]} />
+                <Stop offset="1" stopColor={colors.gradientSignature[1]} />
+              </SvgGradient>
+            </Defs>
             {[0.25, 0.5, 0.75].map((f) => (
               <Line key={f} x1={0} x2={width} y1={pad + innerH * f} y2={pad + innerH * f} stroke={colors.separator} strokeWidth={hairline} />
             ))}
@@ -99,24 +120,32 @@ export function TrendChart({
                         y={top}
                         width={barW}
                         height={Math.max(0, pad + innerH - top)}
-                        rx={Math.min(3, barW / 2)}
-                        fill={s.color ?? SERIES_COLORS[si]}
+                        rx={Math.min(4, barW / 2)}
+                        fill={`url(#g${si})`}
                         opacity={picked == null || picked === i ? 1 : 0.45}
                       />
                     );
                   });
                 })
-              : series.map((s, si) => (
-                  <Polyline
-                    key={s.label}
-                    points={s.data.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ")}
-                    fill="none"
-                    stroke={s.color ?? SERIES_COLORS[si]}
-                    strokeWidth={2}
-                    strokeLinejoin="round"
-                    strokeLinecap="round"
-                  />
-                ))}
+              : series.map((s, si) => {
+                  const pts = s.data.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+                  const base = (pad + innerH).toFixed(1);
+                  return (
+                    <React.Fragment key={s.label}>
+                      {/* Alan dolgusu yalnız ilk seride: üst üste binen dolgular okunmaz. */}
+                      {si === 0 && count > 1 ? <Polygon points={`${x(0).toFixed(1)},${base} ${pts} ${x(count - 1).toFixed(1)},${base}`} fill={`url(#g${si})`} /> : null}
+                      <Polyline
+                        points={pts}
+                        fill="none"
+                        stroke={si === 0 && !s.color ? "url(#stroke0)" : s.color ?? SERIES_COLORS[si]}
+                        strokeWidth={si === 0 ? 2.5 : 2}
+                        strokeLinejoin="round"
+                        strokeLinecap="round"
+                      />
+                      <Circle cx={x(shown)} cy={y(Number(s.data[shown]) || 0)} r={4} fill={colors.surface1} stroke={s.color ?? SERIES_COLORS[si]} strokeWidth={2} />
+                    </React.Fragment>
+                  );
+                })}
             {kind === "line" ? (
               <Line x1={x(shown)} x2={x(shown)} y1={pad} y2={pad + innerH} stroke={colors.borderStrong} strokeWidth={1} strokeDasharray="3 3" />
             ) : null}
@@ -200,26 +229,33 @@ export function BarList({
   const shown = expanded ? rows : rows.slice(0, limit);
   return (
     <View style={styles.bars}>
-      {shown.map((row) => {
+      {shown.map((row, index) => {
         const body = (
           <>
             <View style={styles.barHead}>
+              <Text style={[styles.barRank, index < 3 ? styles.barRankTop : null]} {...textScale.badge}>
+                {index + 1}
+              </Text>
               <Text style={styles.barLabel} numberOfLines={1} {...textScale.dense}>
                 {row.label}
               </Text>
               <Text style={styles.barValue} {...textScale.badge}>
                 {format(row.value)}
-                {total ? <Text style={styles.barShare}>  %{Math.round(((Number(row.value) || 0) / total) * 100)}</Text> : null}
               </Text>
+              {total ? (
+                <View style={styles.barSharePill}>
+                  <Text style={styles.barShare} {...textScale.badge}>
+                    %{Math.round(((Number(row.value) || 0) / total) * 100)}
+                  </Text>
+                </View>
+              ) : null}
             </View>
-            <View style={styles.barTrack}>
-              <View
-                style={[
-                  styles.barFill,
-                  { width: `${Math.max(2, ((Number(row.value) || 0) / max) * 100)}%`, backgroundColor: row.color ?? colors.brandAccent },
-                ]}
-              />
-            </View>
+            <GradientBar
+              value={Math.max(0.02, (Number(row.value) || 0) / max)}
+              height={6}
+              gradient={row.color ? [row.color, withAlpha(row.color, 0.55)] : undefined}
+              style={styles.barTrack}
+            />
             {row.note ? (
               <Text style={styles.barNote} numberOfLines={1} {...textScale.dense}>
                 {row.note}
@@ -309,6 +345,8 @@ export function KpiTile({
   format = fmtNum,
   lowerIsBetter,
   hint,
+  icon,
+  spark,
 }: {
   label: string;
   value: unknown;
@@ -316,22 +354,35 @@ export function KpiTile({
   format?: (value: number) => string;
   lowerIsBetter?: boolean;
   hint?: string;
+  /** Etiketin önündeki küçük ikon (isteğe bağlı). */
+  icon?: keyof typeof Ionicons.glyphMap;
+  /** Karonun dibinde mini seyir çizgisi (isteğe bağlı). */
+  spark?: number[];
 }) {
+  const [w, setW] = useState(0);
   const change = previous === undefined ? null : deltaPct(value, previous);
   const good = change == null || Math.abs(change) < 0.5 ? null : lowerIsBetter ? change < 0 : change > 0;
   return (
     <View style={styles.kpi} accessible accessibilityLabel={`${label}: ${value == null ? "yok" : format(Number(value))}`}>
-      <Text style={styles.kpiLabel} numberOfLines={2} {...textScale.badge}>
-        {label}
-      </Text>
+      <View style={styles.kpiHead}>
+        {icon ? <Ionicons name={icon} size={11} color={colors.brandAccent} /> : <View style={styles.kpiDot} />}
+        <Text style={styles.kpiLabel} numberOfLines={2} {...textScale.badge}>
+          {label.toLocaleUpperCase("tr-TR")}
+        </Text>
+      </View>
       <Text style={styles.kpiValue} numberOfLines={1} adjustsFontSizeToFit {...textScale.badge}>
         {value == null ? "—" : format(Number(value))}
       </Text>
+      {spark && spark.length > 1 ? (
+        <View onLayout={(e) => setW(Math.round(e.nativeEvent.layout.width))} style={styles.kpiSpark}>
+          {w > 0 ? <Sparkline values={spark} width={w} height={22} color={colors.brandAccent} markLast /> : null}
+        </View>
+      ) : null}
       {change != null ? (
-        <View style={styles.kpiDelta}>
+        <View style={[styles.kpiDelta, { backgroundColor: good == null ? colors.surface3 : good ? colors.winDim : colors.dangerDim }]}>
           <Ionicons
-            name={Math.abs(change) < 0.5 ? "remove" : change > 0 ? "arrow-up" : "arrow-down"}
-            size={12}
+            name={Math.abs(change) < 0.5 ? "remove" : change > 0 ? "caret-up" : "caret-down"}
+            size={10}
             color={good == null ? colors.textTertiary : good ? colors.win : colors.danger}
           />
           <Text style={[styles.kpiDeltaText, { color: good == null ? colors.textTertiary : good ? colors.win : colors.danger }]} {...textScale.badge}>
@@ -381,9 +432,11 @@ export function ShareCsvButton({
 const styles = StyleSheet.create({
   chart: { gap: space.xs },
   empty: { ...type.bodySm, color: colors.textTertiary, paddingVertical: space.sm },
-  readout: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: space.sm },
-  readoutLabel: { ...type.caption, color: colors.textTertiary },
-  readoutValues: { flexDirection: "row", gap: space.md },
+  readout: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.sm },
+  readoutLabel: { ...type.labelXs, color: colors.textSecondary },
+  readoutPill: { paddingHorizontal: space.sm, paddingVertical: 2, borderRadius: radius.pill, backgroundColor: colors.surface3 },
+  readoutValues: { flexDirection: "row", alignItems: "baseline", gap: space.md },
+  readoutHero: { ...type.scoreMd },
   readoutValue: { ...type.numSmStrong },
   hitRow: { flex: 1, flexDirection: "row" },
   hit: { flex: 1 },
@@ -393,22 +446,24 @@ const styles = StyleSheet.create({
   legendItem: { flexDirection: "row", alignItems: "center", gap: space.xs },
   swatch: { width: 10, height: 10, borderRadius: radius.xs },
   legendText: { ...type.caption, color: colors.textSecondary },
-  bars: { gap: space.sm },
-  barRow: { gap: space.xxs },
-  barHead: { flexDirection: "row", justifyContent: "space-between", gap: space.sm },
+  bars: { gap: space.md },
+  barRow: { gap: space.xs },
+  barHead: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  barRank: { ...type.numSmStrong, color: colors.textTertiary, width: 18, textAlign: "center" },
+  barRankTop: { color: colors.brandAccent },
   barLabel: { ...type.bodySm, color: colors.textPrimary, flex: 1 },
   barValue: { ...type.numSmStrong, color: colors.textPrimary },
-  barShare: { ...type.micro, color: colors.textTertiary },
-  barTrack: { height: 6, borderRadius: radius.pill, backgroundColor: colors.surface3, overflow: "hidden" },
-  barFill: { height: 6, borderRadius: radius.pill },
-  barNote: { ...type.micro, color: colors.textTertiary },
+  barSharePill: { minWidth: 38, alignItems: "center", paddingHorizontal: 5, paddingVertical: 1, borderRadius: radius.pill, backgroundColor: colors.surface3 },
+  barShare: { ...type.nano, color: colors.textSecondary },
+  barTrack: { marginLeft: 26 },
+  barNote: { ...type.micro, color: colors.textTertiary, marginLeft: 26 },
   moreBtn: { alignSelf: "flex-start", paddingVertical: space.xs },
   moreText: { ...type.label, color: colors.brandAccent },
   week: { gap: 2 },
   weekReadout: { ...type.caption, color: colors.textSecondary, marginBottom: space.xs },
   weekRow: { flexDirection: "row", alignItems: "center", gap: 1 },
   weekDay: { ...type.micro, color: colors.textTertiary, width: 28 },
-  weekCell: { flex: 1, aspectRatio: 1, borderRadius: 2 },
+  weekCell: { flex: 1, aspectRatio: 1, borderRadius: 3 },
   weekCellOn: { borderWidth: 1, borderColor: colors.textPrimary },
   weekAxis: { flexDirection: "row", justifyContent: "space-between", paddingLeft: 28, marginTop: space.xxs },
   kpiGrid: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
@@ -416,15 +471,18 @@ const styles = StyleSheet.create({
     flexBasis: "47%",
     flexGrow: 1,
     padding: space.md,
-    gap: space.xxs,
-    borderRadius: radius.lg,
+    gap: space.xs,
+    borderRadius: radius.xl,
     backgroundColor: colors.surface1,
     borderWidth: hairline,
     borderColor: colors.border,
   },
-  kpiLabel: { ...type.micro, color: colors.textTertiary },
-  kpiValue: { ...type.metricSm, color: colors.textPrimary },
-  kpiDelta: { flexDirection: "row", alignItems: "center", gap: 2 },
+  kpiHead: { flexDirection: "row", alignItems: "center", gap: 5 },
+  kpiDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.brandAccent },
+  kpiLabel: { ...type.nano, color: colors.textTertiary, flexShrink: 1 },
+  kpiValue: { ...type.metric, color: colors.textPrimary },
+  kpiSpark: { height: 22 },
+  kpiDelta: { flexDirection: "row", alignItems: "center", gap: 2, alignSelf: "flex-start", paddingHorizontal: 6, paddingVertical: 1, borderRadius: radius.pill },
   kpiDeltaText: { ...type.micro },
   kpiHint: { ...type.micro, color: colors.textTertiary },
   share: { flexDirection: "row", alignItems: "center", gap: space.xs, paddingVertical: space.xs },
