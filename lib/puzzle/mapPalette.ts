@@ -2,7 +2,7 @@
  * LİG YOLU HARİTASI — bölge paleti (oyun verisi).
  *
  * Harita, her 20 seviyede bir değişen "lig bölgeleri"nden geçen renkli bir
- * yoldur: Amatör Lig'in güneşli parkı, mahallenin gün batımı, gölün kıyısı …
+ * yoldur (sade dil: bölge zeminleri canlı ama yumuşak, dekor seyrek): Amatör Lig'in güneşli parkı, mahallenin gün batımı, gölün kıyısı …
  * Şampiyonlar Gecesi'nin lacivert gökyüzü, Elit Lig'in altını. Renkler tema
  * tokenı değil oyun verisidir (iki temada aynı dünya); bileşenler bu dosyayı
  * içe aktarır, components/ altında çıplak hex yazılmaz.
@@ -36,7 +36,7 @@ export interface MapZone {
 export const MAP_ZONES: readonly MapZone[] = [
   // Amatör Lig — güneşli park
   {
-    ground: ["#63C93A", "#55B930"],
+    ground: ["#5FC243", "#57B53C"],
     road: "#F6DEAA",
     roadEdge: "#C9964F",
     roadLine: "#FFFFFF",
@@ -166,8 +166,12 @@ export const MAP_ZONES: readonly MapZone[] = [
 
 /** Bölgeden bağımsız ortak renkler. */
 export const MAP_COMMON = {
-  /** Sıradaki düğüm (oyna): parlak turuncu-kırmızı. */
-  current: ["#FFCF4A", "#FF6A13"] as [string, string],
+  /** Sıradaki düğüm (oyna): beyaz düğme, yeşil dudak ve numara (tek vurgu). */
+  current: ["#FFFFFF", "#EEF1F7"] as [string, string],
+  currentLip: "#13813B",
+  currentInk: "#17994A",
+  /** OYNA etiketi (birincil vurgu: yeşil). */
+  play: "#1FB257",
   /** Kilitli düğüm: taş. */
   locked: ["#C9CDD6", "#8D93A3"] as [string, string],
   lockedInk: "#5B6170",
@@ -177,14 +181,18 @@ export const MAP_COMMON = {
   /** Düğüm kenarı ve gölgesi. */
   rim: "#FFFFFF",
   shadow: "rgba(0, 0, 0, 0.28)",
+  /** Yumuşak düğüm / yol gölgesi. */
+  shadowSoft: "rgba(0, 0, 0, 0.16)",
+  clear: "rgba(0, 0, 0, 0)",
   /** Düğüm ve pankart yazısı. */
   ink: "#FFFFFF",
-  inkShadow: "rgba(0, 0, 0, 0.45)",
+  inkShadow: "rgba(0, 0, 0, 0.25)",
   star: "#FFD23F",
   starEdge: "#C98A00",
-  starEmpty: "rgba(0, 0, 0, 0.25)",
-  /** "SEN" iğnesi. */
-  pin: "#E63E7A",
+  starEmpty: "rgba(0, 0, 0, 0.18)",
+  /** "SEN" iğnesi: beyaz, yeşil top ikonu. */
+  pin: "#FFFFFF",
+  pinInk: "#17994A",
   pinDeep: "#9F1E50",
   /** Dekor ortakları. */
   white: "#FFFFFF",

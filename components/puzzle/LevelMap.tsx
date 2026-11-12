@@ -1,17 +1,16 @@
 /**
  * LİG YOLU HARİTASI — renkli bölgelerden geçen, aşağıdan yukarı kıvrılan yol.
  *
- * NE: her satır bir seviye. Kalın, kenarlı bir yol (kum, asfalt, gece
- * yolu…) düğümden düğüme S kıvrımlarla akar; geçilen kısmın orta çizgisi
- * ışıklıdır. Zemin biçilmiş saha gibi şeritlidir ve her 20 seviyede bölge
- * değişir (lib/puzzle/mapPalette): Amatör Lig'in güneşli parkı, mahallenin gün
- * batımı … Şampiyonlar Gecesi'nin yıldızlı göğü, Elit Lig'in altını. Yol
- * kenarında bölgeye göre ağaç, kale direği, tribün, projektör, bayrak gibi
- * dekorlar durur.
+ * NE: her satır bir seviye. İnce kenarlı yumuşak bir yol düğümden düğüme S
+ * kıvrımlarla akar; geçilen kısmın orta çizgisi ışıklıdır. Zemin biçilmiş
+ * saha gibi şeritlidir ve her 20 seviyede bölge değişir (lib/puzzle/
+ * mapPalette): Amatör Lig'in güneşli parkı … Elit Lig'in altını. "Canlı ama
+ * sade": yol kenarında seyrek (satır başına en çok bir) bölge dekoru.
  *
- * Düğümler parlak "şeker" düğmelerdir: geçilenler bölge renginde ve üstünde
- * üç yıldız yayı; sıradaki büyük, turuncu, üstünde "SEN" iğnesi ve altında
- * OYNA düğmesi; kilitliler taş. Her 10. seviye altın halkalı kupa düğümü.
+ * Düğümler temiz, konturu olmayan yuvarlak düğmelerdir (yumuşak gölge + ince
+ * alt dudak): geçilenler bölge renginde ve üstünde üç yıldız; sıradaki büyük,
+ * beyaz, yeşil numaralı, üstünde iğne ve altında yeşil OYNA; kilitliler gri.
+ * Her 10. seviye ince altın halkalı kupa düğümü.
  *
  * NEDEN TERS FLATLIST: yol aşağıdan yukarı okunur (seviye 1 en altta) ve
  * açılışta oyuncunun bulunduğu yere kaydırılır; sabit satır yüksekliği
@@ -31,7 +30,7 @@ import { fonts, radius, space, textScale, type } from "@/theme";
 
 const ROW = 118;
 const NODE = 62;
-const NODE_CURRENT = 84;
+const NODE_CURRENT = 76;
 const ROAD = 38;
 /** Bölge başlangıcındaki satırın altına eklenen pankart şeridi. */
 const BANNER = 44;
@@ -166,35 +165,27 @@ const LevelRow = React.memo(function LevelRow({ row, width, current, onPlay }: {
   const tierStart = (row.level - 1) % 20 === 0;
   const ground = zone.ground[row.level % 2];
 
-  // Dekor: yolun boş tarafına 1–2 parça, bazen karşı kenara küçük bir tane.
+  // Dekor: seyrek — satırların ancak üçte birinde, yolun boş tarafına tek parça.
   const decor = useMemo(() => {
     const r = rand(row.level * 31 + 7);
+    if (r() > 0.36) return [];
     const right = xn < width / 2;
-    const items: { kind: MapDecor; x: number; y: number; s: number }[] = [];
-    const n = 1 + (r() < 0.6 ? 1 : 0);
-    for (let i = 0; i < n; i += 1) {
-      const kind = zone.decor[Math.floor(r() * zone.decor.length)];
-      const span = right ? [width * 0.66, width * 0.94] : [width * 0.06, width * 0.34];
-      items.push({ kind, x: span[0] + r() * (span[1] - span[0]), y: ROW * (0.28 + r() * 0.5), s: 0.8 + r() * 0.45 });
-    }
-    if (r() < 0.45) {
-      const kind = zone.decor[Math.floor(r() * zone.decor.length)];
-      items.push({ kind, x: right ? width * (0.03 + r() * 0.08) : width * (0.89 + r() * 0.08), y: ROW * (0.2 + r() * 0.6), s: 0.55 + r() * 0.2 });
-    }
-    return items.sort((a, b) => a.y - b.y);
+    const kind = zone.decor[Math.floor(r() * zone.decor.length)];
+    const span = right ? [width * 0.7, width * 0.9] : [width * 0.1, width * 0.3];
+    return [{ kind, x: span[0] + r() * (span[1] - span[0]), y: ROW * (0.35 + r() * 0.35), s: 0.8 + r() * 0.25 }];
   }, [row.level, width, xn, zone]);
 
   return (
     <View style={[styles.row, { height: h, backgroundColor: ground }]}>
       <Svg width={width} height={h} style={StyleSheet.absoluteFill}>
         {tierStart ? <Rect x={0} y={ROW} width={width} height={BANNER} fill={zoneOf(Math.max(1, row.level - 1)).ground[(row.level - 1) % 2]} /> : null}
-        {zone.night ? <NightSky level={row.level} width={width} /> : <GrassTufts level={row.level} width={width} zone={zone} />}
-        {/* yol: gölge, kenar, dolgu, orta çizgi */}
-        <Path d={full} stroke={M.shadow} strokeWidth={ROAD + 10} fill="none" strokeLinecap="butt" transform="translate(0 4)" />
-        <Path d={full} stroke={zone.roadEdge} strokeWidth={ROAD + 8} fill="none" strokeLinecap="butt" />
+        {zone.night ? <NightSky level={row.level} width={width} /> : null}
+        {/* yol: yumuşak gölge, ince kenar, dolgu, orta çizgi */}
+        <Path d={full} stroke={M.shadowSoft} strokeWidth={ROAD + 4} fill="none" strokeLinecap="butt" transform="translate(0 3)" />
+        <Path d={full} stroke={zone.roadEdge} strokeWidth={ROAD + 3} fill="none" strokeLinecap="butt" />
         <Path d={full} stroke={zone.road} strokeWidth={ROAD} fill="none" strokeLinecap="butt" />
-        <Path d={lower} stroke={lowerDone ? zone.roadDone : zone.roadLine} strokeWidth={lowerDone ? 6 : 4} strokeDasharray={lowerDone ? "14 10" : "8 12"} fill="none" strokeLinecap="butt" opacity={lowerDone ? 1 : 0.7} />
-        <Path d={upper} stroke={upperDone ? zone.roadDone : zone.roadLine} strokeWidth={upperDone ? 6 : 4} strokeDasharray={upperDone ? "14 10" : "8 12"} fill="none" strokeLinecap="butt" opacity={upperDone ? 1 : 0.7} />
+        <Path d={lower} stroke={lowerDone ? zone.roadDone : zone.roadLine} strokeWidth={lowerDone ? 5 : 3} strokeDasharray={lowerDone ? "12 10" : "6 12"} fill="none" strokeLinecap="round" opacity={lowerDone ? 0.95 : 0.55} />
+        <Path d={upper} stroke={upperDone ? zone.roadDone : zone.roadLine} strokeWidth={upperDone ? 5 : 3} strokeDasharray={upperDone ? "12 10" : "6 12"} fill="none" strokeLinecap="round" opacity={upperDone ? 0.95 : 0.55} />
         {decor.map((d, i) => (
           <Decor key={i} kind={d.kind} x={d.x} y={d.y} s={d.s} zone={zone} />
         ))}
@@ -227,8 +218,8 @@ function LevelNode({ row, x, zone, onPlay }: { row: Row; x: number; zone: MapZon
   }, [isCurrent, pulse, reduce]);
 
   const size = isCurrent ? NODE_CURRENT : NODE;
-  const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] });
-  const bob = pulse.interpolate({ inputRange: [0, 1], outputRange: [0, -6] });
+  const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.04] });
+  const bob = pulse.interpolate({ inputRange: [0, 1], outputRange: [0, -4] });
   const fill = locked ? M.locked : isCurrent ? M.current : zone.node;
   const gid = `n${row.level}`;
 
@@ -237,11 +228,11 @@ function LevelNode({ row, x, zone, onPlay }: { row: Row; x: number; zone: MapZon
       {isCurrent ? (
         <Animated.View pointerEvents="none" style={[styles.pin, { transform: [{ translateY: bob }] }]}>
           <Svg width={46} height={54}>
-            <Path d="M23 52 C 16 40, 3 33, 3 21 A 20 20 0 1 1 43 21 C 43 33, 30 40, 23 52 Z" fill={M.pinDeep} transform="translate(0 2)" />
-            <Path d="M23 52 C 16 40, 3 33, 3 21 A 20 20 0 1 1 43 21 C 43 33, 30 40, 23 52 Z" fill={M.pin} stroke={M.rim} strokeWidth={3} />
+            <Path d="M23 52 C 16 40, 3 33, 3 21 A 20 20 0 1 1 43 21 C 43 33, 30 40, 23 52 Z" fill={M.shadowSoft} transform="translate(0 3)" />
+            <Path d="M23 52 C 16 40, 3 33, 3 21 A 20 20 0 1 1 43 21 C 43 33, 30 40, 23 52 Z" fill={M.pin} />
           </Svg>
           <View style={styles.pinIcon}>
-            <Ionicons name="football" size={20} color={M.white} />
+            <Ionicons name="football" size={22} color={M.pinInk} />
           </View>
         </Animated.View>
       ) : row.state === "done" ? (
@@ -269,17 +260,16 @@ function LevelNode({ row, x, zone, onPlay }: { row: Row; x: number; zone: MapZon
                 <Stop offset="1" stopColor={fill[1]} />
               </LinearGradient>
             </Defs>
-            <Circle cx={size / 2} cy={size / 2 + 6} r={size / 2 - 1} fill={M.shadow} />
-            <Circle cx={size / 2} cy={size / 2 + 3} r={size / 2 - 1} fill={cup && !locked ? M.cupDeep : fill[1]} />
-            <Circle cx={size / 2} cy={size / 2} r={size / 2 - 1} fill={cup && !locked ? M.cup : M.rim} />
-            <Circle cx={size / 2} cy={size / 2} r={size / 2 - (cup ? 6 : 5)} fill={`url(#${gid})`} />
-            <Ellipse cx={size / 2} cy={size * 0.3} rx={size * 0.3} ry={size * 0.13} fill={M.white} opacity={locked ? 0.25 : 0.38} />
+            <Circle cx={size / 2} cy={size / 2 + 5} r={size / 2 - 1} fill={M.shadowSoft} />
+            <Circle cx={size / 2} cy={size / 2 + 3} r={size / 2 - 1} fill={isCurrent ? M.currentLip : fill[1]} />
+            <Circle cx={size / 2} cy={size / 2} r={size / 2 - 1} fill={`url(#${gid})`} />
+            {cup && !locked ? <Circle cx={size / 2} cy={size / 2} r={size / 2 - 4} fill="none" stroke={M.cup} strokeWidth={2.5} /> : null}
           </Svg>
           <View style={[StyleSheet.absoluteFill, styles.nodeCenter, { height: size }]}>
             {locked ? (
               <Ionicons name={cup ? "trophy" : "lock-closed"} size={22} color={M.lockedInk} />
             ) : cup ? (
-              <Ionicons name="trophy" size={isCurrent ? 34 : 28} color={M.white} />
+              <Ionicons name="trophy" size={isCurrent ? 34 : 26} color={isCurrent ? M.currentInk : M.white} />
             ) : (
               <Text style={[styles.nodeText, isCurrent && styles.nodeTextCurrent]} {...textScale.badge}>
                 {row.level}
@@ -306,7 +296,7 @@ function StarShape({ size, lit }: { size: number; lit: boolean }) {
   }
   return (
     <Svg width={size} height={size + 2}>
-      <Polygon points={pts.join(" ")} fill={lit ? M.star : M.starEmpty} stroke={lit ? M.starEdge : M.white} strokeWidth={1.6} strokeLinejoin="round" />
+      <Polygon points={pts.join(" ")} fill={lit ? M.star : M.starEmpty} stroke={lit ? M.starEdge : M.starEmpty} strokeWidth={1} strokeLinejoin="round" />
     </Svg>
   );
 }
@@ -317,10 +307,8 @@ function TierBanner({ level, zone }: { level: number; zone: MapZone }) {
   const idx = Math.floor((level - 1) / 20);
   return (
     <View pointerEvents="none" style={styles.banner}>
-      <View style={[styles.bannerTail, styles.bannerTailL, { backgroundColor: zone.banner[1] }]} />
-      <View style={[styles.bannerTail, styles.bannerTailR, { backgroundColor: zone.banner[1] }]} />
-      <View style={[styles.bannerBody, { backgroundColor: zone.banner[0], borderColor: M.white }]}>
-        <Ionicons name={idx >= 6 ? "trophy" : idx >= 3 ? "shield" : "flag"} size={14} color={M.star} />
+      <View style={[styles.bannerBody, { backgroundColor: zone.banner[1] }]}>
+        <Ionicons name={idx >= 6 ? "trophy" : idx >= 3 ? "shield" : "flag"} size={13} color={M.star} />
         <Text style={styles.bannerText} numberOfLines={1} {...textScale.badge}>
           {tierOf(level).toLocaleUpperCase("tr-TR")}
         </Text>
@@ -338,16 +326,12 @@ function StartGate({ width }: { width: number }) {
   return (
     <View style={[styles.gate, { backgroundColor: zone.ground[0] }]}>
       <Svg width={width} height={96} style={StyleSheet.absoluteFill}>
-        <Rect x={x - ROAD / 2 - 4} y={0} width={ROAD + 8} height={40} fill={zone.roadEdge} />
+        <Rect x={x - ROAD / 2 - 1.5} y={0} width={ROAD + 3} height={40} fill={zone.roadEdge} />
         <Rect x={x - ROAD / 2} y={0} width={ROAD} height={40} fill={zone.road} />
         <Rect x={x - 70} y={40} width={140} height={10} rx={5} fill={zone.roadEdge} />
         <Rect x={x - 62} y={14} width={8} height={36} fill={M.white} />
         <Rect x={x + 54} y={14} width={8} height={36} fill={M.white} />
         <Rect x={x - 66} y={8} width={132} height={14} rx={7} fill={M.white} />
-        <G opacity={0.9}>
-          <Circle cx={width * 0.15} cy={60} r={14} fill={zone.leaf[0]} />
-          <Circle cx={width * 0.85} cy={56} r={12} fill={zone.leaf[1]} />
-        </G>
       </Svg>
       <View style={[styles.gateLabel, { left: x - 60 }]}>
         <Text style={styles.gateText} {...textScale.badge}>BAŞLANGIÇ</Text>
@@ -358,25 +342,13 @@ function StartGate({ width }: { width: number }) {
 
 /* ═══════════════════════ zemin ve dekor ═══════════════════════ */
 
-function GrassTufts({ level, width, zone }: { level: number; width: number; zone: MapZone }) {
-  const r = rand(level * 13 + 3);
-  const tufts = Array.from({ length: 5 }, () => ({ x: r() * width, y: r() * ROW }));
-  return (
-    <G opacity={0.5}>
-      {tufts.map((t, i) => (
-        <Path key={i} d={`M ${t.x - 5} ${t.y} l 3 -7 l 2 7 l 3 -9 l 2 9 l 3 -6 l 1 6`} stroke={zone.leaf[1]} strokeWidth={1.6} fill="none" strokeLinecap="round" />
-      ))}
-    </G>
-  );
-}
-
 function NightSky({ level, width }: { level: number; width: number }) {
   const r = rand(level * 17 + 11);
-  const stars = Array.from({ length: 7 }, () => ({ x: r() * width, y: r() * ROW, s: 0.6 + r() * 1.6 }));
+  const stars = Array.from({ length: 3 }, () => ({ x: r() * width, y: r() * ROW, s: 0.6 + r() * 1.1 }));
   return (
     <G>
       {stars.map((s, i) => (
-        <Circle key={i} cx={s.x} cy={s.y} r={s.s} fill={M.white} opacity={0.55} />
+        <Circle key={i} cx={s.x} cy={s.y} r={s.s} fill={M.white} opacity={0.4} />
       ))}
     </G>
   );
@@ -542,47 +514,35 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     color: M.ink,
     textShadowColor: M.inkShadow,
-    textShadowOffset: { width: 0, height: 2 },
+    textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
   },
-  nodeTextCurrent: { ...type.display, fontFamily: fonts.bold },
+  nodeTextCurrent: { ...type.display, fontFamily: fonts.bold, color: M.currentInk, textShadowColor: M.clear },
   starArc: { position: "absolute", top: -22, flexDirection: "row", alignItems: "flex-end", gap: 1 },
   starMid: { marginBottom: 5 },
   starSide: {},
   pin: { position: "absolute", top: -50, width: 46, height: 56, alignItems: "center" },
   pinIcon: { position: "absolute", top: 10, width: 46, alignItems: "center" },
   playTag: {
-    marginTop: -2,
+    marginTop: -12,
     paddingHorizontal: space.md,
     paddingVertical: space.xs,
     borderRadius: radius.pill,
-    backgroundColor: M.pin,
-    borderWidth: 3,
-    borderColor: M.white,
+    backgroundColor: M.play,
+    borderBottomWidth: 3,
+    borderBottomColor: M.currentLip,
   },
-  playText: { ...type.label, fontFamily: fonts.bold, color: M.white, letterSpacing: 1.5 },
-  banner: { position: "absolute", top: ROW + 6, left: 0, right: 0, alignItems: "center" },
+  playText: { ...type.label, fontFamily: fonts.bold, color: M.white, letterSpacing: 1.2 },
+  banner: { position: "absolute", top: ROW + 8, left: 0, right: 0, alignItems: "center" },
   bannerBody: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.xs,
     paddingHorizontal: space.lg,
     paddingVertical: space.xs,
-    borderRadius: radius.md,
-    borderWidth: 2,
+    borderRadius: radius.pill,
   },
-  bannerTail: { position: "absolute", top: 8, width: 26, height: 22, borderRadius: radius.xs },
-  bannerTailL: { left: "50%", marginLeft: -118 },
-  bannerTailR: { left: "50%", marginLeft: 92 },
-  bannerText: {
-    ...type.label,
-    fontFamily: fonts.bold,
-    color: M.ink,
-    letterSpacing: 1.2,
-    textShadowColor: M.inkShadow,
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
+  bannerText: { ...type.label, fontFamily: fonts.bold, color: M.ink, letterSpacing: 1.2 },
   bannerSub: { ...type.micro, color: M.ink, opacity: 0.8 },
   gate: { height: 96 },
   gateLabel: { position: "absolute", top: 6, width: 120, alignItems: "center" },

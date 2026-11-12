@@ -1,15 +1,19 @@
 /**
- * ÇİZGİ FİLM OYUN TEMASI — bütün oyunların ortak görsel dili (veri).
+ * OYUN TEMASI — bütün oyunların ortak görsel dili (veri). "Canlı ama sade".
  *
- * Arcade oyunları (games/*.js, Canvas 2D) bu dili çizer; React Native
- * oyunları (bilgi yarışmaları, Lig Yolu bulmacaları) aynı paleti buradan alır:
- *   · KALIN LACİVERT KONTUR: her şekil `CARTOON.outline` renginde 3 px kenarlı.
- *   · DOYGUN DÜZ DOLGU + üstte beyaz parlama şeridi + altta koyu "dudak"
- *     (3B basılabilir hissi: düğme basınca dudağa çöker).
- *   · GECE ŞEHRİ / STADYUM zemini: mor-lacivert gökyüzü, ışıklı pencereler.
- *   · METİN: kalın (fonts.bold), beyaz, lacivert gölgeli; büyük rakamlar.
- * Renkler iki temada da aynıdır (oyun dünyası). components/ ve app/ altında
- * çıplak hex yazılmaz: bu dosya içe aktarılır.
+ * Arcade oyunları (games/*.js, Canvas 2D) ve React Native oyunları (bilgi
+ * yarışmaları, Lig Yolu bulmacaları) aynı paleti buradan alır:
+ *   · ZEMİN: tek, sakin, derin lacivert geçiş (`night`); en çok bir yumuşak ışık.
+ *   · KARTLAR: beyaz / lacivert, yumuşak gölge; kalın kontur YOK (gerekirse
+ *     1–1.5 px, öğenin kendi renginin koyu tonu: `edge`, `hairline`).
+ *   · TEK VURGU: birincil eylem yeşil (`green` + `greenLip`), kırmızı yalnız
+ *     yıkıcı eylem. Çevre öğeleri (HUD, hap, çip) nötr: lacivert / beyaz /
+ *     yarı saydam (`glass`).
+ *   · Düğme derinliği: 3–4 px alt "dudak" + yumuşak gölge; parlama şeridi yok.
+ *   · METİN: kalın (fonts.bold); gölge en çok hafif (`textShadow`, yumuşak).
+ * Oyun taşları kendi ayırt edici renklerini korur (`outline` taş/karakter
+ * çizimi içindir, çerçeve için değil). Renkler iki temada da aynıdır (oyun
+ * dünyası). components/ ve app/ altında çıplak hex yazılmaz.
  */
 
 export const CARTOON = {
@@ -17,12 +21,23 @@ export const CARTOON = {
   outlineSoft: "rgba(27, 20, 70, 0.55)",
   white: "#FFFFFF",
   ink: "#1F2333",
-  textShadow: "rgba(27, 20, 70, 0.85)",
+  textShadow: "rgba(10, 14, 36, 0.35)",
   shadow: "rgba(8, 6, 30, 0.45)",
-  shine: "rgba(255, 255, 255, 0.35)",
+  shine: "rgba(255, 255, 255, 0.22)",
 
-  /** Ekran zemini (üst → alt). */
-  night: ["#3B1F9E", "#22125F", "#120A35"] as [string, string, string],
+  /** İnce kenar (kart / düğme üstünde 1 px), saydam gece mürekkebi. */
+  hairline: "rgba(20, 27, 66, 0.08)",
+  /** Koyu zemin üstünde cam yüzey (HUD hapı, yuvarlak düğme) ve kenarı. */
+  glass: "rgba(255, 255, 255, 0.12)",
+  glassEdge: "rgba(255, 255, 255, 0.18)",
+  glassDark: "rgba(10, 14, 36, 0.5)",
+  /** Kart altı yumuşak gölge rengi. */
+  softShadow: "rgba(10, 14, 36, 0.28)",
+  /** Lacivert yazı / ikon (beyaz kart üstünde). */
+  navy: "#18204A",
+
+  /** Ekran zemini (üst → alt): sakin, derin lacivert-çivit. */
+  night: ["#1E2A63", "#141C47", "#0B1030"] as [string, string, string],
   skyline: "#2A1A6E",
   skylineFar: "#4A2E9E",
   window: "#FFD86B",
@@ -30,14 +45,16 @@ export const CARTOON = {
 
   /** Paneller: beyaz kart (koyu metin) ve lacivert hap (beyaz metin). */
   card: "#FFFFFF",
-  cardSoft: "#F1F0FA",
+  cardSoft: "#F2F4F9",
   cardInk: "#1F2333",
   cardMuted: "#5B5F7A",
-  pill: ["#3A2E9E", "#1C1760"] as [string, string],
+  pill: ["#26316E", "#18204A"] as [string, string],
 
   /** Düğme dolguları (açık → koyu) ve dudakları. */
-  green: ["#7CF06A", "#22B33A"] as [string, string],
-  greenLip: "#127A26",
+  green: ["#3FD674", "#1DAA50"] as [string, string],
+  greenLip: "#13813B",
+  /** Yeşil yüzeyin açık zemini (simge baloncuğu, seçili satır). */
+  greenSoft: "#E6F8EC",
   gold: ["#FFE45C", "#F5A300"] as [string, string],
   goldLip: "#A86E00",
   goldInk: "#4A2E00",
@@ -61,5 +78,8 @@ export const CARTOON = {
   star: "#FFD23F",
   heart: "#FF4D6D",
   track: "rgba(255, 255, 255, 0.18)",
-  dim: "rgba(8, 6, 30, 0.7)",
+  dim: "rgba(8, 11, 30, 0.66)",
+  /** Yıkıcı ikincil düğmenin açık zemini ve yazısı. */
+  dangerSoft: "#FDECEE",
+  dangerInk: "#C8283A",
 } as const;

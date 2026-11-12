@@ -141,7 +141,33 @@ export function ArenaGameScreen({ config }: { config: ArenaGameConfig }) {
     [finish],
   );
 
+  /* Oyunun kalıcı verisi (Savunma Hattı: açılan bölümler ve yıldızlar).
+     WebView'in kendi depolaması kapalı; veri burada saklanır ve hazır olunca
+     oyuna geri gönderilir. */
+  const storeKey = `elitlig.arena.${config.game}.store.v1`;
+  const storeRef = useRef<Record<string, unknown> | null>(null);
+  useEffect(() => {
+    AsyncStorage.getItem(storeKey)
+      .then((raw) => {
+        if (!raw) return;
+        const data = JSON.parse(raw) as Record<string, unknown>;
+        storeRef.current = data;
+        game.current?.send({ type: "config", store: data });
+      })
+      .catch(() => undefined);
+  }, [storeKey]);
+  const onEvent = useCallback(
+    (message: Record<string, unknown>) => {
+      if (message.type === "store" && message.data && typeof message.data === "object") {
+        storeRef.current = message.data as Record<string, unknown>;
+        void AsyncStorage.setItem(storeKey, JSON.stringify(message.data)).catch(() => undefined);
+      }
+    },
+    [storeKey],
+  );
+
   const onReady = useCallback(() => {
+    if (storeRef.current) game.current?.send({ type: "config", store: storeRef.current });
     game.current?.send({ type: "config", sound, reduceMotion, perks, roster, hudInset: HUD_INSET });
     if (phaseRef.current === "loading") setPhaseBoth("ready");
   }, [sound, reduceMotion, perks, roster]);
@@ -199,7 +225,7 @@ export function ArenaGameScreen({ config }: { config: ArenaGameConfig }) {
     <SafeAreaView style={styles.screen} edges={["top"]}>
 
       <View style={styles.arena}>
-        <WebGame ref={game} game={config.game} onReady={onReady} onOver={onOver} />
+        <WebGame ref={game} game={config.game} onReady={onReady} onOver={onOver} onEvent={onEvent} />
 
         {phase === "loading" || phase === "ready" ? (
           <StartCard
@@ -232,23 +258,25 @@ export function ArenaGameScreen({ config }: { config: ArenaGameConfig }) {
           />
         ) : null}
         {/* Sağ üst: DURDUR — oyunun HUD'u bu köşeyi boş bırakır. */}
-        <Touchable onPress={openMenu} hitSlop={touchSlop(46)} style={styles.pauseBtn} accessibilityRole="button" accessibilityLabel="Oyunu durdur" haptic="light">
-          <View style={styles.pauseLip} />
-          <LinearGradient colors={CARTOON.purple} start={TOP} end={BOTTOM} style={styles.pauseFill}>
-            <Ionicons name="pause" size={22} color={CARTOON.white} />
-          </LinearGradient>
+        <Touchable onPress={openMenu} hitSlop={touchSlop(44)} style={styles.pauseBtn} accessibilityRole="button" accessibilityLabel="Oyunu durdur" haptic="light">
+          <Ionicons name="pause" size={20} color={CARTOON.white} />
         </Touchable>
 
         {menu ? (
           <View style={styles.menuLayer}>
             <View style={styles.menuWrap}>
-              <View style={styles.menuCard}>
-                <Text style={styles.menuGame} numberOfLines={1} {...textScale.badge}>
-                  {config.title}
-                </Text>
+              <View style={styles.menuCard} accessibilityViewIsModal>
+                <View style={styles.menuHead} accessibilityRole="header">
+                  <Text style={styles.menuOver} numberOfLines={1} {...textScale.badge}>
+                    {upperTR(config.title)}
+                  </Text>
+                  <Text style={styles.menuTitle} {...textScale.badge}>
+                    Mola
+                  </Text>
+                </View>
                 <View style={styles.menuRow}>
                   <Touchable onPress={toggleSound} style={styles.menuIcon} accessibilityRole="button" accessibilityLabel={sound ? "Sesi kapat" : "Sesi aç"} haptic="light">
-                    <Ionicons name={sound ? "volume-high" : "volume-mute"} size={24} color={CARTOON.outline} />
+                    <Ionicons name={sound ? "volume-high" : "volume-mute"} size={22} color={CARTOON.navy} />
                   </Touchable>
                   <Touchable
                     onPress={() => {
@@ -260,20 +288,13 @@ export function ArenaGameScreen({ config }: { config: ArenaGameConfig }) {
                     accessibilityLabel="Rekor tablosu"
                     haptic="light"
                   >
-                    <Ionicons name="trophy" size={24} color={CARTOON.outline} />
+                    <Ionicons name="trophy" size={22} color={CARTOON.navy} />
                   </Touchable>
                 </View>
                 <View style={styles.menuBtns}>
                   <GameButton label={phase === "playing" ? "DEVAM ET" : "KAPAT"} icon={phase === "playing" ? "play" : "close"} onPress={closeMenu} />
                   <GameButton label="OYUNDAN ÇIK" icon="exit-outline" tone="danger" small onPress={exitGame} />
                 </View>
-              </View>
-              <View pointerEvents="none" style={styles.menuRibbonLayer}>
-                <LinearGradient colors={CARTOON.orange} start={LEFT} end={RIGHT} style={styles.menuRibbon}>
-                  <Text style={styles.menuRibbonText} {...textScale.badge}>
-                    MOLA
-                  </Text>
-                </LinearGradient>
               </View>
             </View>
           </View>
@@ -317,11 +338,12 @@ function StartCard({
       <ScrollView style={styles.cardScroll} contentContainerStyle={styles.cardScrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.cardWrap}>
           <View style={styles.card}>
-            <View style={styles.startIcon}>
-              <LinearGradient colors={ARENA_CARD.icon} start={TOP} end={BOTTOM} style={styles.startIconFill}>
-                <Ionicons name={config.icon} size={34} color={ARENA_CARD.white} />
-              </LinearGradient>
-            </View>
+            <Text style={styles.overline} {...textScale.badge}>
+              {upperTR("Elitlig Arena")}
+            </Text>
+            <LinearGradient colors={ARENA_CARD.icon} start={TOP} end={BOTTOM} style={styles.startIcon}>
+              <Ionicons name={config.icon} size={30} color={ARENA_CARD.white} />
+            </LinearGradient>
             <Text style={styles.startTitle} {...textScale.dense}>
               {config.title}
             </Text>
@@ -330,10 +352,10 @@ function StartCard({
             </Text>
 
             <View style={styles.rules}>
-              {rules.map((rule, i) => (
+              {rules.map((rule) => (
                 <View key={rule.text} style={styles.rule}>
-                  <View style={[styles.ruleIcon, { backgroundColor: ARENA_CARD.chips[i % ARENA_CARD.chips.length] }]}>
-                    <Ionicons name={rule.icon} size={16} color={ARENA_CARD.white} />
+                  <View style={styles.ruleIcon}>
+                    <Ionicons name={rule.icon} size={16} color={colors.textPrimary} />
                   </View>
                   <Text style={styles.ruleText} {...textScale.long}>
                     {rule.text}
@@ -350,11 +372,11 @@ function StartCard({
               accessibilityRole="button"
               accessibilityLabel="Rekor tablosunu aç"
             >
-              <Ionicons name="trophy" size={16} color={ARENA_CARD.goldDeep} />
+              <Ionicons name="trophy" size={16} color={colors.star} />
               <Text style={styles.bestText} {...textScale.dense}>
                 {best > 0 ? `Rekorun ${formatCount(best)} ${SCORE_UNIT}` : "Henüz rekorun yok"}
               </Text>
-              <Ionicons name="chevron-forward" size={14} color={ARENA_CARD.goldDeep} />
+              <Ionicons name="chevron-forward" size={14} color={colors.textTertiary} />
             </Touchable>
 
             {setup}
@@ -362,13 +384,6 @@ function StartCard({
             <View style={styles.startBtn}>
               <GameButton label={loading ? "HAZIRLANIYOR…" : "BAŞLA"} icon="play" onPress={onStart} disabled={loading} accessibilityLabel={`${config.title} başla`} />
             </View>
-          </View>
-          <View pointerEvents="none" style={styles.ribbonLayer}>
-            <LinearGradient colors={ARENA_CARD.ribbon} start={LEFT} end={RIGHT} style={styles.ribbon}>
-              <Text style={styles.ribbonText} {...textScale.badge}>
-                {upperTR("Elitlig Arena")}
-              </Text>
-            </LinearGradient>
           </View>
         </View>
       </ScrollView>
@@ -382,8 +397,6 @@ function StartCard({
 const HUD_INSET = { top: 0, right: 64 };
 const TOP = { x: 0.5, y: 0 } as const;
 const BOTTOM = { x: 0.5, y: 1 } as const;
-const LEFT = { x: 0, y: 0.5 } as const;
-const RIGHT = { x: 1, y: 0.5 } as const;
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: CARTOON.night[2] },
@@ -395,29 +408,41 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: CARTOON.night[2],
   },
-  pauseBtn: { position: "absolute", top: space.md, right: space.md, width: 46, height: 50 },
-  pauseLip: { position: "absolute", top: 4, left: 0, width: 46, height: 46, borderRadius: radius.pill, backgroundColor: CARTOON.purpleLip },
-  pauseFill: { width: 46, height: 46, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", borderWidth: 3, borderColor: CARTOON.white },
+  pauseBtn: {
+    position: "absolute",
+    top: space.md,
+    right: space.md,
+    width: 44,
+    height: 44,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: CARTOON.glassDark,
+    borderWidth: 1,
+    borderColor: CARTOON.glassEdge,
+  },
   menuLayer: { ...StyleSheet.absoluteFillObject, backgroundColor: CARTOON.dim, alignItems: "center", justifyContent: "center", padding: space.lg },
   menuWrap: { width: "100%", maxWidth: 340 },
   menuCard: {
     alignItems: "center",
-    gap: space.md,
-    paddingTop: space.xxxl,
+    gap: space.lg,
+    paddingTop: space.xl,
     paddingBottom: space.lg,
     paddingHorizontal: space.lg,
     borderRadius: radius.xxl,
     backgroundColor: CARTOON.card,
-    borderWidth: 4,
-    borderColor: CARTOON.outline,
+    shadowColor: CARTOON.softShadow,
+    shadowOpacity: 1,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 12,
   },
-  menuGame: { ...type.h2, fontFamily: fonts.bold, color: CARTOON.cardInk },
+  menuHead: { alignItems: "center", gap: space.xxs },
+  menuOver: { ...type.micro, fontFamily: fonts.bold, color: CARTOON.cardMuted, letterSpacing: 1.5 },
+  menuTitle: { ...type.display, fontFamily: fonts.bold, color: CARTOON.navy },
   menuRow: { flexDirection: "row", gap: space.md },
-  menuIcon: { width: 54, height: 54, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: CARTOON.cardSoft, borderWidth: 3, borderColor: CARTOON.outline },
+  menuIcon: { width: 52, height: 52, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: CARTOON.cardSoft },
   menuBtns: { alignSelf: "stretch", gap: space.sm },
-  menuRibbonLayer: { position: "absolute", top: -22, left: 0, right: 0, alignItems: "center" },
-  menuRibbon: { paddingHorizontal: space.xxl, paddingVertical: space.xs, borderRadius: radius.md, borderWidth: 3, borderColor: CARTOON.outline },
-  menuRibbonText: { ...type.h2, fontFamily: fonts.bold, color: CARTOON.white, letterSpacing: 3, textShadowColor: CARTOON.textShadow, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 1 },
 
   overlay: {
     ...StyleSheet.absoluteFillObject,
@@ -427,43 +452,36 @@ const styles = StyleSheet.create({
   },
   cardScroll: { alignSelf: "stretch", flexGrow: 0 },
   cardScrollContent: { flexGrow: 1, justifyContent: "center", alignItems: "center" },
-  cardWrap: { alignSelf: "stretch", maxWidth: 380, width: "100%", marginTop: space.xl },
+  cardWrap: { alignSelf: "stretch", maxWidth: 380, width: "100%" },
   card: {
     borderRadius: radius.xxl,
     backgroundColor: colors.surface1,
-    borderWidth: 4,
-    borderColor: ARENA_CARD.white,
     ...elevate(4),
-    paddingTop: space.xxxl,
+    paddingTop: space.xl,
     paddingHorizontal: space.lg,
     paddingBottom: space.lg,
     gap: space.xs,
     alignItems: "center",
   },
-  ribbonLayer: { position: "absolute", top: -20, left: 0, right: 0, alignItems: "center" },
-  ribbon: { paddingHorizontal: space.xl, paddingVertical: space.xs, borderRadius: radius.md, borderWidth: 3, borderColor: ARENA_CARD.white },
-  ribbonText: { ...type.label, fontFamily: fonts.bold, color: ARENA_CARD.white, letterSpacing: 2 },
-  startIcon: { width: 72, height: 72, marginBottom: space.xs },
-  startIconFill: { width: 72, height: 72, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", borderWidth: 4, borderColor: ARENA_CARD.white },
+  overline: { ...type.micro, fontFamily: fonts.bold, color: colors.textTertiary, letterSpacing: 1.5, marginBottom: space.sm },
+  startIcon: { width: 64, height: 64, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", marginBottom: space.sm },
   startTitle: { ...type.display, fontFamily: fonts.bold, color: colors.textPrimary, textAlign: "center" },
   startSub: { ...type.bodySm, color: colors.textSecondary, textAlign: "center" },
-  rules: { alignSelf: "stretch", gap: space.sm, marginVertical: space.sm },
+  rules: { alignSelf: "stretch", gap: space.sm, marginVertical: space.md },
   rule: { flexDirection: "row", gap: space.sm, alignItems: "center" },
-  ruleIcon: { width: 32, height: 32, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
+  ruleIcon: { width: 32, height: 32, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface3 },
   ruleText: { ...type.bodySm, color: colors.textPrimary, flex: 1 },
   bestPill: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.xs,
-    backgroundColor: ARENA_CARD.gold,
+    backgroundColor: colors.surface2,
     borderRadius: radius.pill,
-    borderWidth: 2,
-    borderColor: ARENA_CARD.goldDeep,
     paddingHorizontal: space.md,
     paddingVertical: space.s,
     marginBottom: space.m,
   },
   startBtn: { alignSelf: "stretch", marginTop: space.sm },
-  bestText: { ...type.bodySm, fontFamily: fonts.bold, color: ARENA_CARD.ink },
+  bestText: { ...type.bodySm, fontFamily: fonts.bold, color: colors.textPrimary },
 
 });

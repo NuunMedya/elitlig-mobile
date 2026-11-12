@@ -1,15 +1,15 @@
 /**
  * Seviye pencereleri — Başlangıç ve Sonuç, oyunun İÇİNDE gibi.
  *
- * Uygulama alt sayfası değil, oyun kartı: karartılmış sahnenin ortasında
- * zıplayarak açılan kalın beyaz çerçeveli kart, tepesinde oyunun renginde
- * kurdele ("SEVİYE 12"), büyük renkli hedef baloncukları, şeker gibi yuvarlak
- * güçlendirici düğmeleri (stok rozeti, seçilince yeşil tik ve parlama), oyunun
- * kendi 5 canı ve alt dudaklı 3B "OYNA" düğmesi.
+ * Uygulama alt sayfası değil, oyun kartı ("canlı ama sade" dil): karartılmış
+ * sahnenin ortasında yumuşakça açılan beyaz kart, yumuşak gölge, kontur yok.
+ * Kurdele yerine kartın içinde temiz bir başlık (küçük üst satır + "Seviye
+ * 12"), oyunun koyu zemin tonunda hedef paneli, nötr güçlendirici baloncukları
+ * (seçilince yeşil ve tik), oyunun kendi canları ve TEK vurgu rengi yeşil olan
+ * "OYNA" düğmesi (4 px alt dudak).
  *
- * SONUÇ: kazanınca ışık hüzmeleri önünde yıldızların tek tek düşmesi (sonlu
- * yay animasyonu), jeton / XP / yıldız ödül hapları; kaybedince kırık kalp ve
- * "Tekrar dene".
+ * SONUÇ: kazanınca yıldızların tek tek yerine oturması (sonlu yay animasyonu),
+ * jeton / XP / yıldız ödül hapları; kaybedince kırık kalp ve "Tekrar dene".
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -28,8 +28,6 @@ import { colors, fonts, radius, space, textScale, touchSlop, type } from "@/them
 import { tierOf } from "./LevelMap";
 import { WatchAdForLife } from "./RewardedLife";
 
-const LEFT = { x: 0, y: 0.5 } as const;
-const RIGHT = { x: 1, y: 0.5 } as const;
 const TOP = { x: 0.5, y: 0 } as const;
 const BOTTOM = { x: 0.5, y: 1 } as const;
 
@@ -38,7 +36,6 @@ const BOTTOM = { x: 0.5, y: 1 } as const;
 function GameCard({
   visible,
   onClose,
-  game,
   ribbonTop,
   ribbon,
   children,
@@ -66,41 +63,35 @@ function GameCard({
     pop.setValue(0);
     Animated.spring(pop, { toValue: 1, friction: 6, tension: 90, useNativeDriver: true }).start();
   }, [pop, reduce, visible]);
-  const th = STAGE_THEMES[game];
   const cardW = Math.min(380, width - space.lg * 2);
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={closable ? onClose : () => undefined} statusBarTranslucent>
       <View style={styles.dim}>
-        <Animated.View style={[styles.cardWrap, { width: cardW, opacity: pop, transform: [{ scale: pop.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }) }] }]}>
-          <View style={[styles.card, { maxHeight: height - 120 }]}>
+        <Animated.View
+          style={[styles.cardWrap, { width: cardW, opacity: pop, transform: [{ scale: pop.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1] }) }] }]}
+          accessibilityViewIsModal
+        >
+          <View style={[styles.card, { maxHeight: height - 96 }]}>
             <LinearGradient colors={S.card} start={TOP} end={BOTTOM} style={StyleSheet.absoluteFill} />
             <ScrollView contentContainerStyle={styles.cardBody} showsVerticalScrollIndicator={false} bounces={false}>
+              {/* Temiz başlık: küçük üst satır + büyük başlık (kurdele yok). */}
+              <View style={styles.head} accessibilityRole="header">
+                {ribbonTop ? (
+                  <Text style={styles.headTop} numberOfLines={1} {...textScale.badge}>
+                    {ribbonTop}
+                  </Text>
+                ) : null}
+                <Text style={styles.headTitle} numberOfLines={1} {...textScale.badge}>
+                  {ribbon}
+                </Text>
+              </View>
               {children}
             </ScrollView>
             <View style={styles.cardFoot}>{footer}</View>
           </View>
-          {/* Kurdele kartın üst kenarına oturur */}
-          <View pointerEvents="none" style={styles.ribbonLayer}>
-            <View style={styles.ribbonTails}>
-              <View style={[styles.ribbonTail, { backgroundColor: th.ribbon[1] }]} />
-              <View style={[styles.ribbonTail, { backgroundColor: th.ribbon[1] }]} />
-            </View>
-            <LinearGradient colors={th.ribbon} start={LEFT} end={RIGHT} style={styles.ribbon}>
-              {ribbonTop ? (
-                <Text style={styles.ribbonTop} numberOfLines={1} {...textScale.badge}>
-                  {ribbonTop}
-                </Text>
-              ) : null}
-              <Text style={styles.ribbonText} numberOfLines={1} {...textScale.badge}>
-                {ribbon}
-              </Text>
-            </LinearGradient>
-          </View>
           {closable ? (
-            <Touchable onPress={onClose} hitSlop={touchSlop(36)} accessibilityLabel="Kapat" style={styles.close} haptic="light">
-              <LinearGradient colors={S.danger} start={TOP} end={BOTTOM} style={styles.closeFill}>
-                <Ionicons name="close" size={22} color={S.white} />
-              </LinearGradient>
+            <Touchable onPress={onClose} hitSlop={touchSlop(36)} accessibilityRole="button" accessibilityLabel="Kapat" style={styles.close} haptic="light">
+              <Ionicons name="close" size={20} color={S.cardInk} />
             </Touchable>
           ) : null}
         </Animated.View>
@@ -109,7 +100,10 @@ function GameCard({
   );
 }
 
-/** Alt dudaklı, basınca çöken 3B oyun düğmesi. */
+/**
+ * Oyun düğmesi. `play` (ve eski `game`): tek vurgu yeşil dolgu + 4 px alt
+ * dudak. `danger`: yıkıcı ikincil eylem — açık kırmızı zemin, kırmızı yazı.
+ */
 export function GameButton({
   label,
   icon,
@@ -128,9 +122,9 @@ export function GameButton({
   accessibilityLabel?: string;
   game?: PuzzleGameKey;
 }) {
-  const fill = tone === "danger" ? S.danger : S.play;
-  const lip = tone === "danger" ? S.dangerLip : S.playLip;
-  const h = small ? 50 : 62;
+  const danger = tone === "danger";
+  const h = small ? 48 : 56;
+  const lipH = danger ? 0 : 4;
   return (
     <Touchable
       onPress={onPress}
@@ -138,16 +132,27 @@ export function GameButton({
       haptic="medium"
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
-      style={[styles.gbtn, { height: h + 6, opacity: disabled ? 0.5 : 1 }]}
+      accessibilityState={{ disabled: Boolean(disabled) }}
+      style={[styles.gbtn, { height: h + lipH, opacity: disabled ? 0.5 : 1 }]}
     >
-      <View style={[styles.gbtnLip, { height: h, backgroundColor: lip }]} />
-      <LinearGradient colors={fill} start={TOP} end={BOTTOM} style={[styles.gbtnFill, { height: h }]}>
-        <View style={styles.gbtnShine} />
-        {icon ? <Ionicons name={icon} size={small ? 20 : 26} color={S.white} /> : null}
-        <Text style={[styles.gbtnText, small && styles.gbtnTextSmall]} numberOfLines={1} {...textScale.badge}>
-          {label}
-        </Text>
-      </LinearGradient>
+      {danger ? (
+        <View style={[styles.gbtnFill, styles.gbtnDanger, { height: h }]}>
+          {icon ? <Ionicons name={icon} size={small ? 18 : 22} color={S.dangerInk} /> : null}
+          <Text style={[styles.gbtnText, styles.gbtnTextDanger, small && styles.gbtnTextSmall]} numberOfLines={1} {...textScale.badge}>
+            {label}
+          </Text>
+        </View>
+      ) : (
+        <>
+          <View style={[styles.gbtnLip, { height: h }]} />
+          <LinearGradient colors={S.play} start={TOP} end={BOTTOM} style={[styles.gbtnFill, { height: h }]}>
+            {icon ? <Ionicons name={icon} size={small ? 18 : 22} color={S.white} /> : null}
+            <Text style={[styles.gbtnText, small && styles.gbtnTextSmall]} numberOfLines={1} {...textScale.badge}>
+              {label}
+            </Text>
+          </LinearGradient>
+        </>
+      )}
     </Touchable>
   );
 }
@@ -229,14 +234,14 @@ export function LevelStartSheet({
       ) : null}
 
       {/* Hedef paneli */}
-      <View style={[styles.goalPanel, { borderColor: th.button[0] }]}>
-        <LinearGradient colors={[th.sky[1], th.sky[0]]} start={TOP} end={BOTTOM} style={StyleSheet.absoluteFill} />
+      <View style={styles.goalPanel}>
+        <LinearGradient colors={[th.sky[0], th.sky[2]]} start={TOP} end={BOTTOM} style={StyleSheet.absoluteFill} />
         <Text style={styles.goalHead} {...textScale.badge}>HEDEF</Text>
         <View style={styles.goals}>
           {goal.goals.map((g, i) => (
             <View key={`${g.label}${i}`} style={styles.goal}>
-              <View style={[styles.goalBubble, { backgroundColor: th.button[0], borderColor: S.white }]}>
-                <Ionicons name={g.icon as keyof typeof Ionicons.glyphMap} size={30} color={S.white} />
+              <View style={styles.goalBubble}>
+                <Ionicons name={g.icon as keyof typeof Ionicons.glyphMap} size={28} color={S.white} />
                 {g.count != null ? (
                   <View style={styles.goalCount}>
                     <Text style={styles.goalCountText} {...textScale.badge}>{g.count}</Text>
@@ -248,16 +253,14 @@ export function LevelStartSheet({
           ))}
         </View>
         <View style={styles.limitPill}>
-          <Ionicons name="hourglass" size={16} color={S.cardInk} />
+          <Ionicons name="hourglass-outline" size={15} color={S.white} />
           <Text style={styles.limitText} {...textScale.badge}>{goal.limit}</Text>
         </View>
       </View>
 
       {goal.tip ? (
         <View style={styles.tip}>
-          <View style={styles.tipIcon}>
-            <Ionicons name="bulb" size={18} color={S.white} />
-          </View>
+          <Ionicons name="bulb-outline" size={18} color={S.goldDeep} />
           <Text style={styles.tipText} {...textScale.long}>{goal.tip}</Text>
         </View>
       ) : null}
@@ -272,7 +275,7 @@ export function LevelStartSheet({
                 booster={b}
                 count={stock[b.key] ?? 0}
                 selected={selected.includes(b.key)}
-                fill={th.button}
+                tint={th.tint}
                 onPress={() => onToggleBooster(b)}
               />
             ))}
@@ -291,13 +294,14 @@ function BoosterBubble({
   booster,
   count,
   selected,
-  fill,
+  tint,
   onPress,
 }: {
   booster: PuzzleBoosterDef;
   count: number;
   selected: boolean;
-  fill: [string, string];
+  /** Oyunun imza rengi: seçili değilken ikon bu renkte. */
+  tint: string;
   onPress: () => void;
 }) {
   const reduce = useReduceMotion();
@@ -321,14 +325,18 @@ function BoosterBubble({
       <Animated.View
         style={[
           styles.bubbleWrap,
-          { transform: [{ translateY: lift.interpolate({ inputRange: [0, 1], outputRange: [0, -6] }) }, { scale: lift.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] }) }] },
+          { transform: [{ translateY: lift.interpolate({ inputRange: [0, 1], outputRange: [0, -3] }) }, { scale: lift.interpolate({ inputRange: [0, 1], outputRange: [1, 1.05] }) }] },
         ]}
       >
-        <View style={[styles.bubbleLip, { backgroundColor: fill[1] }]} />
-        <LinearGradient colors={selected ? S.play : fill} start={TOP} end={BOTTOM} style={[styles.bubble, selected && styles.bubbleOn]}>
-          <View style={styles.bubbleShine} />
-          <Ionicons name={booster.icon as keyof typeof Ionicons.glyphMap} size={30} color={S.white} />
-        </LinearGradient>
+        {selected ? (
+          <LinearGradient colors={S.play} start={TOP} end={BOTTOM} style={[styles.bubble, styles.bubbleOn]}>
+            <Ionicons name={booster.icon as keyof typeof Ionicons.glyphMap} size={28} color={S.white} />
+          </LinearGradient>
+        ) : (
+          <View style={styles.bubble}>
+            <Ionicons name={booster.icon as keyof typeof Ionicons.glyphMap} size={28} color={count ? tint : S.cardSoft} />
+          </View>
+        )}
         <View style={[styles.stockBadge, selected ? styles.stockOn : count ? null : styles.stockZero]}>
           {selected ? (
             <Ionicons name="checkmark" size={14} color={S.white} />
@@ -393,7 +401,7 @@ export function ResultSheet({
             <GameButton label={livesLeft > 0 ? "TEKRAR DENE" : "CAN YOK"} icon="refresh" onPress={onRetry} disabled={livesLeft < 1} />
           )}
           <Touchable onPress={onMap} style={styles.mapLink} accessibilityRole="button" haptic="light">
-            <Ionicons name="map" size={16} color={S.cardSoft} />
+            <Ionicons name="map-outline" size={16} color={S.cardSoft} />
             <Text style={styles.mapLinkText} {...textScale.dense}>Haritaya dön</Text>
           </Touchable>
         </View>
@@ -403,7 +411,7 @@ export function ResultSheet({
         <>
           <View style={styles.starRow}>
             <View pointerEvents="none" style={styles.burstWrap}>
-              <Sunburst size={320} color={S.gold} opacity={0.5} />
+              <Sunburst size={260} color={S.gold} opacity={0.16} />
             </View>
             {[1, 2, 3].map((n) => (
               <BigStar key={n} index={n} lit={n <= stars} visible={visible} />
@@ -443,10 +451,10 @@ function BigStar({ index, lit, visible }: { index: number; lit: boolean; visible
     v.setValue(0);
     Animated.sequence([
       Animated.delay(300 + index * 300),
-      Animated.spring(v, { toValue: 1, friction: 4, tension: 120, useNativeDriver: true }),
+      Animated.spring(v, { toValue: 1, friction: 6, tension: 110, useNativeDriver: true }),
     ]).start();
   }, [index, reduce, v, visible]);
-  const scale = v.interpolate({ inputRange: [0, 1], outputRange: [2.2, 1] });
+  const scale = v.interpolate({ inputRange: [0, 1], outputRange: [1.6, 1] });
   const [spark, setSpark] = React.useState(0);
   useEffect(() => {
     if (!visible || !lit) return undefined;
@@ -458,12 +466,11 @@ function BigStar({ index, lit, visible }: { index: number; lit: boolean; visible
     <Animated.View
       style={[
         big ? styles.starBig : styles.starSide,
-        { opacity: v, transform: [{ scale }, { rotate: v.interpolate({ inputRange: [0, 1], outputRange: [index === 1 ? "-40deg" : "40deg", index === 1 ? "-12deg" : index === 3 ? "12deg" : "0deg"] }) }] },
+        { opacity: v, transform: [{ scale }, { rotate: v.interpolate({ inputRange: [0, 1], outputRange: [index === 1 ? "-24deg" : "24deg", index === 1 ? "-8deg" : index === 3 ? "8deg" : "0deg"] }) }] },
       ]}
     >
-      <Ionicons name="star" size={big ? 84 : 62} color={lit ? S.goldDeep : S.starEmpty} style={styles.starBack} />
-      <Ionicons name="star" size={big ? 84 : 62} color={lit ? S.gold : S.starEmpty} />
-      {lit ? <SparkleBurst trigger={spark} radius={big ? 70 : 52} color={S.gold} /> : null}
+      <Ionicons name="star" size={big ? 76 : 56} color={lit ? S.gold : S.starEmpty} />
+      {lit && big ? <SparkleBurst trigger={spark} radius={60} color={S.gold} /> : null}
     </Animated.View>
   );
 }
@@ -481,45 +488,33 @@ function Reward({ icon, tint, value, label }: { icon: keyof typeof Ionicons.glyp
 }
 
 const styles = StyleSheet.create({
-  dim: { flex: 1, backgroundColor: S.dim, alignItems: "center", justifyContent: "center", paddingTop: space.huge },
-  cardWrap: { marginTop: space.xl },
+  dim: { flex: 1, backgroundColor: S.dim, alignItems: "center", justifyContent: "center", paddingVertical: space.xl },
+  cardWrap: {},
   card: {
     borderRadius: radius.xxl,
-    borderWidth: 4,
-    borderColor: S.white,
     overflow: "hidden",
-    shadowColor: S.cardInk,
-    shadowOpacity: 0.35,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
+    shadowColor: S.cardShadow,
+    shadowOpacity: 0.3,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
     elevation: 12,
   },
-  cardBody: { paddingTop: space.giant, paddingHorizontal: space.lg, paddingBottom: space.md, gap: space.md },
+  cardBody: { paddingTop: space.xl, paddingHorizontal: space.lg, paddingBottom: space.md, gap: space.md },
   cardFoot: { paddingHorizontal: space.lg, paddingBottom: space.lg, paddingTop: space.xs },
-  ribbonLayer: { position: "absolute", top: -30, left: 0, right: 0, alignItems: "center" },
-  ribbonTails: { position: "absolute", top: 12, left: space.sm, right: space.sm, flexDirection: "row", justifyContent: "space-between" },
-  ribbonTail: { width: 36, height: 34, borderRadius: radius.xs },
-  ribbon: {
-    minWidth: 220,
+  head: { alignItems: "center", gap: space.xxs, paddingHorizontal: space.xl },
+  headTop: { ...type.micro, fontFamily: fonts.bold, color: S.cardSoft, letterSpacing: 1.5 },
+  headTitle: { ...type.display, fontFamily: fonts.bold, color: S.cardInk },
+  close: {
+    position: "absolute",
+    top: space.md,
+    right: space.md,
+    width: 36,
+    height: 36,
+    borderRadius: radius.pill,
     alignItems: "center",
-    paddingHorizontal: space.xl,
-    paddingVertical: space.xs,
-    borderRadius: radius.lg,
-    borderWidth: 4,
-    borderColor: S.white,
+    justifyContent: "center",
+    backgroundColor: S.panel,
   },
-  ribbonTop: { ...type.micro, fontFamily: fonts.bold, color: S.ink, letterSpacing: 1.5, opacity: 0.92 },
-  ribbonText: {
-    ...type.h1,
-    fontFamily: fonts.bold,
-    color: S.ink,
-    letterSpacing: 1.5,
-    textShadowColor: S.inkShadow,
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 3,
-  },
-  close: { position: "absolute", top: -14, right: -10 },
-  closeFill: { width: 42, height: 42, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", borderWidth: 3, borderColor: S.white },
   footCol: { gap: space.sm },
 
   cupBadge: {
@@ -530,114 +525,97 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.md,
     paddingVertical: space.xs,
     borderRadius: radius.pill,
-    backgroundColor: S.gold,
-    borderWidth: 2,
-    borderColor: S.goldDeep,
+    backgroundColor: S.goldSoft,
   },
-  cupText: { ...type.micro, fontFamily: fonts.bold, color: S.cardInk, letterSpacing: 1 },
-  goalPanel: { borderRadius: radius.xl, borderWidth: 3, overflow: "hidden", paddingVertical: space.md, paddingHorizontal: space.sm, alignItems: "center", gap: space.sm },
-  goalHead: { ...type.label, fontFamily: fonts.bold, color: S.ink, letterSpacing: 3, opacity: 0.9 },
+  cupText: { ...type.micro, fontFamily: fonts.bold, color: S.goldDeep, letterSpacing: 1 },
+  goalPanel: { borderRadius: radius.xl, overflow: "hidden", paddingVertical: space.md, paddingHorizontal: space.sm, alignItems: "center", gap: space.sm },
+  goalHead: { ...type.micro, fontFamily: fonts.bold, color: S.inkSoft, letterSpacing: 2 },
   goals: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: space.md },
   goal: { alignItems: "center", gap: space.xs, width: 86 },
-  goalBubble: { width: 62, height: 62, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", borderWidth: 3 },
+  goalBubble: {
+    width: 58,
+    height: 58,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: S.glassStrong,
+    borderWidth: 1,
+    borderColor: S.glassEdge,
+  },
   goalCount: {
     position: "absolute",
     bottom: -8,
-    minWidth: 30,
+    minWidth: 28,
     paddingHorizontal: space.xs,
-    height: 24,
+    height: 22,
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: S.white,
-    borderWidth: 2,
-    borderColor: S.cardInk,
   },
   goalCountText: { ...type.label, fontFamily: fonts.bold, color: S.cardInk },
-  goalLabel: {
-    ...type.caption,
-    fontFamily: fonts.semibold,
-    color: S.ink,
-    textAlign: "center",
-    marginTop: space.xs,
-    textShadowColor: S.inkShadow,
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
+  goalLabel: { ...type.caption, fontFamily: fonts.semibold, color: S.ink, textAlign: "center", marginTop: space.xs },
   limitPill: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.xs,
     paddingHorizontal: space.md,
-    paddingVertical: space.xs,
+    paddingVertical: space.xxs,
     borderRadius: radius.pill,
-    backgroundColor: S.white,
+    backgroundColor: S.glass,
   },
-  limitText: { ...type.h3, fontFamily: fonts.bold, color: S.cardInk },
-  tip: { flexDirection: "row", gap: space.sm, alignItems: "center", padding: space.sm, borderRadius: radius.lg, backgroundColor: S.tip },
-  tipIcon: { width: 32, height: 32, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: S.goldDeep },
+  limitText: { ...type.label, fontFamily: fonts.bold, color: S.white },
+  tip: { flexDirection: "row", gap: space.sm, alignItems: "center", paddingVertical: space.sm, paddingHorizontal: space.md, borderRadius: radius.lg, backgroundColor: S.tip },
   tipText: { ...type.bodySm, color: S.tipInk, flex: 1 },
-  section: { ...type.label, fontFamily: fonts.bold, color: S.cardSoft, letterSpacing: 2, textAlign: "center", marginTop: space.xs },
+  section: { ...type.micro, fontFamily: fonts.bold, color: S.cardSoft, letterSpacing: 1.5, textAlign: "center", marginTop: space.xs },
   boosters: { flexDirection: "row", justifyContent: "center", flexWrap: "wrap", gap: space.md },
-  booster: { alignItems: "center", gap: space.xs, width: 84 },
-  bubbleWrap: { width: 70, height: 76 },
-  bubbleLip: { position: "absolute", top: 6, width: 70, height: 70, borderRadius: radius.pill },
-  bubble: { width: 70, height: 70, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", borderWidth: 3, borderColor: S.white, overflow: "hidden" },
-  bubbleOn: { borderColor: S.gold },
-  bubbleShine: { position: "absolute", top: 6, left: 14, right: 14, height: 18, borderRadius: radius.pill, backgroundColor: S.white, opacity: 0.3 },
+  booster: { alignItems: "center", gap: space.xs, width: 80 },
+  bubbleWrap: { width: 64, height: 64 },
+  bubble: { width: 64, height: 64, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: S.panel, borderWidth: 1, borderColor: S.panelEdge },
+  bubbleOn: { borderColor: S.playLip },
   stockBadge: {
     position: "absolute",
-    top: -4,
-    right: -4,
-    minWidth: 26,
-    height: 26,
+    top: -2,
+    right: -2,
+    minWidth: 24,
+    height: 24,
     paddingHorizontal: space.xs,
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: S.badge,
+    backgroundColor: S.cardInk,
     borderWidth: 2,
     borderColor: S.white,
   },
   stockOn: { backgroundColor: S.check },
   stockZero: { backgroundColor: S.cardSoft },
-  stockText: { ...type.label, fontFamily: fonts.bold, color: S.white },
+  stockText: { ...type.micro, fontFamily: fonts.bold, color: S.white },
   boosterName: { ...type.micro, fontFamily: fonts.semibold, color: S.cardInk, textAlign: "center" },
-  livesBox: { alignItems: "center", paddingVertical: space.xs, borderRadius: radius.lg, backgroundColor: S.panel, borderWidth: 2, borderColor: S.panelEdge },
+  livesBox: { alignItems: "center", paddingVertical: space.xxs },
   heartsRow: { flexDirection: "row", alignItems: "center", gap: space.xxs, paddingVertical: space.xs },
   heartsTimer: { ...type.label, fontFamily: fonts.bold, color: S.cardSoft, marginLeft: space.sm },
 
   gbtn: { alignSelf: "stretch" },
-  gbtnLip: { position: "absolute", top: 6, left: 0, right: 0, borderRadius: radius.pill },
+  gbtnLip: { position: "absolute", top: 4, left: 0, right: 0, borderRadius: radius.xl, backgroundColor: S.playLip },
   gbtnFill: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: space.sm,
-    borderRadius: radius.pill,
-    borderWidth: 3,
-    borderColor: S.white,
+    borderRadius: radius.xl,
     overflow: "hidden",
   },
-  gbtnShine: { position: "absolute", top: 5, left: space.xl, right: space.xl, height: 14, borderRadius: radius.pill, backgroundColor: S.white, opacity: 0.28 },
-  gbtnText: {
-    ...type.h2,
-    fontFamily: fonts.bold,
-    color: S.white,
-    letterSpacing: 2,
-    textShadowColor: S.inkShadow,
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 2,
-  },
-  gbtnTextSmall: { ...type.h3, fontFamily: fonts.bold },
+  gbtnDanger: { backgroundColor: S.dangerSoft },
+  gbtnText: { ...type.h3, fontFamily: fonts.bold, color: S.white, letterSpacing: 1 },
+  gbtnTextDanger: { color: S.dangerInk },
+  gbtnTextSmall: { ...type.label, fontFamily: fonts.bold },
   mapLink: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.xs, paddingVertical: space.xs },
   mapLinkText: { ...type.label, color: S.cardSoft },
 
-  starRow: { flexDirection: "row", justifyContent: "center", alignItems: "flex-end", gap: space.xs, marginTop: space.sm, height: 120 },
+  starRow: { flexDirection: "row", justifyContent: "center", alignItems: "flex-end", gap: space.sm, height: 104 },
   burstWrap: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
-  starBig: { marginBottom: space.xl },
+  starBig: { marginBottom: space.lg },
   starSide: {},
-  starBack: { position: "absolute", top: 4 },
   rewards: { flexDirection: "row", justifyContent: "center", flexWrap: "wrap", gap: space.sm },
   reward: {
     flexDirection: "row",
@@ -645,15 +623,13 @@ const styles = StyleSheet.create({
     gap: space.xs,
     paddingHorizontal: space.md,
     paddingVertical: space.xs,
-    borderRadius: radius.pill,
+    borderRadius: radius.lg,
     backgroundColor: S.panel,
-    borderWidth: 2,
-    borderColor: S.panelEdge,
   },
   rewardValue: { ...type.h3, fontFamily: fonts.bold, color: S.cardInk },
   rewardLabel: { ...type.micro, color: S.cardSoft },
-  lost: { alignItems: "center", gap: space.md, paddingVertical: space.sm },
-  lostHeart: { width: 96, height: 96, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: S.panel },
+  lost: { alignItems: "center", gap: space.md, paddingVertical: space.xs },
+  lostHeart: { width: 88, height: 88, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: S.dangerSoft },
   lostText: { ...type.body, color: S.cardInk, textAlign: "center" },
   summary: { ...type.bodySm, color: S.cardSoft, textAlign: "center" },
 });
