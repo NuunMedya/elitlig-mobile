@@ -261,7 +261,7 @@ export default function OyunlarScreen() {
 
         {/* Yıldız kaynakları */}
         <View style={styles.sources}>
-          <Source icon="extension-puzzle" tint={HUB.ribbon.puzzle[0]} title="Bulmaca" text="seviye başı 1–3 yıldız" />
+          <Source icon="extension-puzzle" tint={HUB.ribbon.puzzle[0]} title="Bulmaca" text="1–3 yıldız / seviye" />
           <Source icon="game-controller" tint={HUB.ribbon.arcade[0]} title="Bilgi · Arcade" text={city ? `bugün +${city.stars.arena_today ?? 0}/45 yıldız` : "skora göre yıldız"} />
           <Source icon="ribbon" tint={HUB.ribbon.league[0]} title="Görev · Maç" text="10 XP = 1 yıldız" />
         </View>
