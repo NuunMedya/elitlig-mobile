@@ -36,9 +36,10 @@ const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.max(0, Math.floo
 const shadowText = { textShadowColor: UI.textShadow, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 } as const;
 
 /**
- * Üst panel: seviye rozeti, kalan karo sayacı + kalın ilerleme çubuğu,
- * kilit / zincir hedef çipleri ve süre çipi. Oyunun içinde duran,
- * kabartmalı bir skor tabelası gibi çizilir.
+ * Üst panel — arcade HUD'u gibi ÇİZGİ FİLM dili: kalın lacivert konturlu
+ * mor-lacivert hap, altın seviye rozeti, iri beyaz (lacivert gölgeli) kalan
+ * karo sayısı + konturlu ilerleme çubuğu, kilit / zincir hedef çipleri ve
+ * süre çipi. Hepsi altta koyu dudaklı, kabartmalı.
  */
 function HudBase(p: HudProps) {
   const bump = useRef(new Animated.Value(1)).current;
@@ -77,7 +78,7 @@ function HudBase(p: HudProps) {
         <View style={styles.mid}>
           <View style={styles.midRow}>
             <Animated.View style={[styles.countWrap, { transform: [{ scale: bump }] }]} accessibilityLabel={`Kalan karo ${p.remaining} / ${p.total}`}>
-              <Ionicons name="layers" size={p.compact ? 16 : 18} color={UI.gold} />
+              <Ionicons name="layers" size={p.compact ? 18 : 22} color={UI.gold} style={shadowText} />
               <Text style={[styles.count, p.compact && styles.countSm]} {...textScale.badge}>
                 {p.remaining}
               </Text>
@@ -102,7 +103,7 @@ function HudBase(p: HudProps) {
         {timed ? (
           <View style={[styles.timer, { backgroundColor: lowTime ? UI.redDeep : UI.blueDeep }]} accessibilityLabel={`Kalan süre ${fmt(p.timeLeft!)}`}>
             <View style={[styles.timerFace, { backgroundColor: lowTime ? UI.red : UI.blue }]}>
-              <Ionicons name="time" size={16} color={UI.text} />
+              <Ionicons name="time" size={16} color={UI.text} style={shadowText} />
               <Text style={styles.timerText} {...textScale.badge}>
                 {fmt(p.timeLeft!)}
               </Text>
@@ -123,7 +124,7 @@ function GoalChip({ icon, value, face, deep, label }: { icon: IonName; value: nu
   return (
     <View style={[styles.chip, { backgroundColor: deep }]} accessibilityLabel={`${label}: ${value}`}>
       <View style={[styles.chipFace, { backgroundColor: face }]}>
-        <Ionicons name={icon} size={14} color={UI.text} />
+        <Ionicons name={icon} size={15} color={UI.text} style={shadowText} />
         <Text style={styles.chipText} {...textScale.badge}>
           {value}
         </Text>
@@ -225,7 +226,7 @@ function BoosterButton({
       >
         <View style={styles.boostShine} />
         <View style={[styles.boostDisc, { width: disc, height: disc, borderRadius: disc / 2, backgroundColor: deep }]}>
-          <Ionicons name={icon} size={Math.round(disc * 0.62)} color={UI.text} />
+          <Ionicons name={icon} size={Math.round(disc * 0.62)} color={UI.text} style={shadowText} />
         </View>
         <Text style={styles.boostLabel} numberOfLines={1} {...textScale.badge}>
           {label}
@@ -245,53 +246,59 @@ function BoosterButton({
 }
 
 const styles = StyleSheet.create({
-  hud: { borderRadius: radius.xl, backgroundColor: UI.panelDeep },
+  hud: { borderRadius: radius.xl, backgroundColor: UI.panelDeep, borderWidth: 3, borderColor: UI.outline },
   hudFace: {
+    position: "absolute",
+    left: -3,
+    right: -3,
+    top: -3,
     flexDirection: "row",
     alignItems: "center",
     gap: space.s,
     paddingHorizontal: space.s,
     borderRadius: radius.xl,
     backgroundColor: UI.panel,
-    borderWidth: 2,
-    borderColor: UI.panelRim,
+    borderWidth: 3,
+    borderColor: UI.outline,
+    overflow: "hidden",
   },
   levelBadge: {
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: UI.gold,
     borderWidth: 3,
-    borderColor: UI.goldDeep,
+    borderBottomWidth: 5,
+    borderColor: UI.outline,
   },
   levelNum: { ...type.scoreMd, color: UI.goldInk },
   levelNumSm: { ...type.scoreXs },
   mid: { flex: 1, minWidth: 0, gap: space.xs },
   midRow: { flexDirection: "row", alignItems: "center", gap: space.s },
   countWrap: { flexDirection: "row", alignItems: "center", gap: space.xxs },
-  count: { ...type.scoreMd, color: UI.text, ...shadowText },
-  countSm: { ...type.scoreSm },
-  shape: { ...type.micro, color: UI.textSoft, flexShrink: 1 },
-  bar: { height: 10, borderRadius: radius.pill, backgroundColor: UI.barTrack, overflow: "hidden" },
-  barFill: { height: 10, borderRadius: radius.pill, backgroundColor: UI.green, borderBottomWidth: 3, borderBottomColor: UI.greenDeep },
-  barShine: { position: "absolute", left: space.xs, right: space.xs, top: 2, height: 2, borderRadius: 1, backgroundColor: UI.barShine },
-  chip: { borderRadius: radius.md, paddingBottom: 3 },
+  count: { ...type.scoreLg, color: UI.text, ...shadowText },
+  countSm: { ...type.scoreMd },
+  shape: { ...type.micro, fontFamily: fonts.bold, color: UI.text, flexShrink: 1, ...shadowText },
+  bar: { height: 12, borderRadius: radius.pill, backgroundColor: UI.barTrack, borderWidth: 2, borderColor: UI.outline, overflow: "hidden" },
+  barFill: { height: 8, borderRadius: radius.pill, backgroundColor: UI.green, borderBottomWidth: 2, borderBottomColor: UI.greenDeep },
+  barShine: { position: "absolute", left: space.xs, right: space.xs, top: 1, height: 2, borderRadius: 1, backgroundColor: UI.barShine },
+  chip: { borderRadius: radius.md, borderWidth: 2.5, borderColor: UI.outline, paddingBottom: 3 },
   chipFace: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.xxs,
     paddingHorizontal: space.s,
     height: 28,
-    borderRadius: radius.md,
+    borderRadius: radius.sm,
   },
-  chipText: { ...type.numSmStrong, color: UI.text, ...shadowText },
-  timer: { borderRadius: radius.md, paddingBottom: 3, overflow: "hidden" },
+  chipText: { ...type.scoreXs, color: UI.text, ...shadowText },
+  timer: { borderRadius: radius.md, borderWidth: 2.5, borderColor: UI.outline, paddingBottom: 3, overflow: "hidden" },
   timerFace: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.xxs,
     paddingHorizontal: space.s,
     height: 30,
-    borderRadius: radius.md,
+    borderRadius: radius.sm,
   },
   timerText: { ...type.scoreSm, color: UI.text, ...shadowText },
   timerBar: { position: "absolute", left: 0, right: 0, bottom: 0, height: 3, backgroundColor: UI.barTrack },
@@ -299,7 +306,7 @@ const styles = StyleSheet.create({
 
   boostBar: { flexDirection: "row", alignItems: "flex-end", justifyContent: "center", gap: space.md },
   boostOff: { opacity: 0.5 },
-  boostBase: { position: "absolute", left: 0, right: 0, borderRadius: radius.xl },
+  boostBase: { position: "absolute", left: 0, right: 0, borderRadius: radius.xl, borderWidth: 3, borderColor: UI.outline },
   boostFace: {
     position: "absolute",
     left: 0,
@@ -310,26 +317,26 @@ const styles = StyleSheet.create({
     gap: space.sm,
     paddingHorizontal: space.sm,
     borderRadius: radius.xl,
-    borderWidth: 2,
-    borderColor: UI.barShine,
+    borderWidth: 3,
+    borderColor: UI.outline,
   },
-  boostShine: { position: "absolute", left: space.md, right: space.md, top: 3, height: 5, borderRadius: radius.pill, backgroundColor: UI.barShine },
-  boostDisc: { alignItems: "center", justifyContent: "center" },
-  boostLabel: { ...type.label, fontFamily: fonts.heading, color: UI.text, letterSpacing: 0.6, flexShrink: 1, ...shadowText },
+  boostShine: { position: "absolute", left: space.lg, right: space.lg, top: 4, height: 5, borderRadius: radius.pill, backgroundColor: UI.shine },
+  boostDisc: { alignItems: "center", justifyContent: "center", borderWidth: 2.5, borderColor: UI.outline },
+  boostLabel: { ...type.h3, fontFamily: fonts.bold, color: UI.text, letterSpacing: 0.6, flexShrink: 1, ...shadowText },
   badge: {
     position: "absolute",
-    right: -8,
-    top: -10,
-    minWidth: 26,
-    height: 26,
+    right: -10,
+    top: -12,
+    minWidth: 28,
+    height: 28,
     paddingHorizontal: space.xs,
     borderRadius: radius.pill,
-    borderWidth: 2,
-    borderColor: UI.text,
+    borderWidth: 2.5,
+    borderColor: UI.outline,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: UI.red,
   },
   badgeEmpty: { backgroundColor: UI.greenDeep },
-  badgeText: { ...type.numSmStrong, color: UI.text },
+  badgeText: { ...type.scoreXs, color: UI.text, ...shadowText },
 });

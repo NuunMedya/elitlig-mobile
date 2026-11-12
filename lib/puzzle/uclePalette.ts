@@ -4,7 +4,27 @@
  * Karo renkleri OYUN VERİSİDİR (tema tokenı değil): her tür iki temada da
  * aynı renkle tanınmalı. Bu yüzden hex burada, lib/ altında durur;
  * components/ yalnız bu dosyayı içe aktarır.
+ *
+ * ÇİZGİ FİLM dili (lib/game/cartoon.ts, arcade oyunlarıyla ortak): karolar,
+ * raf, HUD ve düğmeler kalın lacivert `UCLE_OUTLINE` konturlu; dolgular düz
+ * ve doygun, üstte beyaz parlama şeridi, altta koyu "dudak"; saha arcade
+ * sahasıyla aynı parlak yeşil biçim şeritlerindedir.
  */
+
+/*
+ * Ortak çizgi film renkleri (lib/game/cartoon.ts → CARTOON ile birebir aynı).
+ * Burada içe aktarılmaz, kopyalanır: seviye denetleyicisi
+ * (scripts/check-puzzle-ucle.mjs) bu dosyayı düz Node ile yükler ve "@/"
+ * takma adını çözemez.
+ */
+const CARTOON = {
+  outline: "#1B1446",
+  textShadow: "rgba(27, 20, 70, 0.85)",
+  pill: ["#3A2E9E", "#1C1760"],
+} as const;
+
+/** Kalın lacivert kontur. */
+export const UCLE_OUTLINE = CARTOON.outline;
 
 export interface UcleKind {
   /** MaterialCommunityIcons adı. */
@@ -28,29 +48,32 @@ export const UCLE_KINDS: UcleKind[] = [
   { icon: "flag-variant", label: "Bayrak", face: "#16A3B8", deep: "#0C6A78", ink: "#FFFFFF" },
   { icon: "medal", label: "Madalya", face: "#D81B72", deep: "#8E0F49", ink: "#FFFFFF" },
   { icon: "soccer-field", label: "Kale", face: "#5E9E2F", deep: "#3B661A", ink: "#FFFFFF" },
-  { icon: "scoreboard", label: "Skorboard", face: "#455A64", deep: "#263238", ink: "#FFFFFF" },
+  { icon: "scoreboard", label: "Skorboard", face: "#4F6DA8", deep: "#2E4573", ink: "#FFFFFF" },
   { icon: "bullhorn", label: "Megafon", face: "#FF7A59", deep: "#B8452A", ink: "#FFFFFF" },
-  { icon: "ticket-confirmation", label: "Bilet", face: "#8D6E63", deep: "#5D4037", ink: "#FFFFFF" },
+  { icon: "ticket-confirmation", label: "Bilet", face: "#B5774A", deep: "#7A4A26", ink: "#FFFFFF" },
   { icon: "card", label: "Hakem kartı", face: "#FFE14D", deep: "#C7A600", ink: "#7A1010" },
   { icon: "timer-outline", label: "Kronometre", face: "#5C6BC0", deep: "#35408A", ink: "#FFFFFF" },
 ];
 
 export const UCLE_COLORS = {
   /** Ters karonun sırtı. */
-  back: "#3B2A6B",
-  backDeep: "#221846",
-  backInk: "#9C8BE0",
+  back: "#5A48D6",
+  backDeep: "#2E2380",
+  backInk: "#B9ACFF",
   /** Üstü kapalı karonun karartması. */
   shade: "rgba(12, 10, 28, 0.52)",
   /** Karo gölgesi. */
-  shadow: "rgba(0, 0, 0, 0.28)",
+  shadow: "rgba(8, 6, 30, 0.35)",
   /** Yüzün üst parlaklık şeridi. */
-  shine: "rgba(255, 255, 255, 0.22)",
+  shine: "rgba(255, 255, 255, 0.55)",
+  /** Karo yüzünün alt koyu bandı (düz iki ton). */
+  faceLow: "rgba(8, 6, 30, 0.16)",
+  outline: CARTOON.outline,
   /** Kilit grupları (anahtar rozeti ve kilit halkası aynı renk). */
   locks: ["#FFC21A", "#22D3EE", "#FF5CAA"],
-  lockInk: "#1B1530",
+  lockInk: "#1B1446",
   chain: "#C9CED6",
-  chainInk: "#2B2F36",
+  chainInk: "#1B1446",
   /** Patlama parçacıkları. */
   sparks: ["#FFD24A", "#FFFFFF", "#7CF29A", "#FF7AB6", "#6EC3FF"],
   /** İpucu parlaması. */
@@ -65,55 +88,58 @@ export const UCLE_COLORS = {
  */
 export const UCLE_UI = {
   /** HUD paneli — gece moru. */
-  panel: "#2A1E6E",
-  panelDeep: "#150E3F",
-  panelRim: "#4B3BB0",
+  panel: CARTOON.pill[0],
+  panelDeep: CARTOON.pill[1],
+  panelRim: CARTOON.outline,
+  outline: CARTOON.outline,
+  well: "#17114A",
   /** Seviye rozeti / kupa altını. */
-  gold: "#FFC531",
-  goldDeep: "#C47F00",
+  gold: "#FFD23F",
+  goldDeep: "#A86E00",
   goldInk: "#4A2E00",
   /** İlerleme yeşili. */
-  green: "#41E070",
-  greenDeep: "#1C9C43",
+  green: "#7CF06A",
+  greenDeep: "#22B33A",
   /** Uyarı kırmızısı (süre azaldı, raf doluyor). */
-  red: "#FF4D5E",
-  redDeep: "#B11C2C",
+  red: "#E02D3C",
+  redDeep: "#931422",
   /** Güçlendirici mavisi ve turuncusu. */
-  blue: "#3FA9FF",
-  blueDeep: "#1A63B8",
-  orange: "#FF9A2E",
-  orangeDeep: "#C25E00",
+  blue: "#2F80ED",
+  blueDeep: "#1A4FA6",
+  orange: "#F0601A",
+  orangeDeep: "#A33B08",
   /** Kilit / zincir çipleri. */
-  lockChip: "#FFB020",
-  lockChipDeep: "#B06F00",
+  lockChip: "#F5A300",
+  lockChipDeep: "#A86E00",
   chainChip: "#8C96A8",
   chainChipDeep: "#555E70",
-  barTrack: "rgba(0, 0, 0, 0.38)",
+  barTrack: "#17114A",
   barShine: "rgba(255, 255, 255, 0.35)",
   /** Tahta: çim keçe + ahşap çerçeve. */
-  felt: "#2FA352",
-  feltStripe: "#27904A",
-  feltDeep: "#1D6E37",
-  feltLine: "rgba(255, 255, 255, 0.16)",
-  rim: "#8A5528",
-  rimHi: "#B97A3E",
-  rimDeep: "#4C2A10",
+  felt: "#74DA64",
+  feltStripe: "#5BC24E",
+  feltDeep: "#2F8F2E",
+  feltLine: "rgba(255, 255, 255, 0.7)",
+  rim: "#3A2E9E",
+  rimHi: "#5A48D6",
+  rimDeep: "#1C1760",
   /** Raf tepsisi. */
-  tray: "#3B2416",
-  trayHi: "#5A3820",
-  trayDeep: "#1F1209",
-  cell: "rgba(0, 0, 0, 0.32)",
-  cellRim: "rgba(255, 255, 255, 0.12)",
+  tray: "#3A2E9E",
+  trayHi: "#5A48D6",
+  trayDeep: "#1C1760",
+  cell: "#17114A",
+  cellRim: "rgba(255, 255, 255, 0.16)",
   /** Metin. */
   text: "#FFFFFF",
   textSoft: "rgba(255, 255, 255, 0.72)",
-  textShadow: "rgba(0, 0, 0, 0.45)",
+  textShadow: CARTOON.textShadow,
   /** Pencere arka örtüsü ve kart. */
   scrim: "rgba(10, 6, 30, 0.62)",
-  card: "#33247F",
-  cardDeep: "#1A1150",
+  card: "#3A2E9E",
+  cardDeep: "#1C1760",
   /** İpucu balonu. */
-  tipFace: "#FFF3C4",
-  tipDeep: "#E2B93B",
-  tipInk: "#4A3500",
+  tipFace: "#FFFFFF",
+  tipDeep: CARTOON.outline,
+  tipInk: "#1F2333",
+  shine: "rgba(255, 255, 255, 0.4)",
 } as const;

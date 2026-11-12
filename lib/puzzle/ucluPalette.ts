@@ -9,9 +9,15 @@
  * Taş renkleri bilerek DOYGUN ve birbirinden UZAK seçildi (mavi, kırmızı,
  * limon yeşili, turuncu, mor, pembe); ayrıca her rengin kendi şekli vardır
  * (renk körlüğü). Her taşın dört tonu var: açık parıltı (hi), gövde (base),
- * gölge (lo) ve 3B kalınlığı veren koyu kenar (rim). Beyaz sembolün dış
- * çizgisi de `rim` rengidir.
+ * gölge (lo) ve 3B "dudak"ı veren koyu kenar (rim). ÇİZGİ FİLM dili
+ * (lib/game/cartoon.ts): her taşın ve beyaz sembolün dış çizgisi kalın
+ * lacivert `UCLU_OUTLINE`'dır; saha arcade sahasıyla aynı parlak yeşildir.
  */
+
+import { CARTOON } from "@/lib/game/cartoon";
+
+/** Kalın lacivert kontur (arcade oyunlarıyla ortak). */
+export const UCLU_OUTLINE = CARTOON.outline;
 
 export interface UcluPieceColors {
   base: string;
@@ -35,38 +41,38 @@ export const UCLU_PIECE_COLORS: readonly UcluPieceColors[] = [
 
 export const UCLU_BOARD = {
   /** Tahta çerçevesi ve zemini. */
-  frame: "#0B241B",
-  frameEdge: "#1E5A43",
+  frame: "#1B1446",
+  frameEdge: "#3A2E9E",
   /** Saha: yatay biçim şeritleri (A/B) + hafif dama (C: açık kare katmanı). */
-  cellA: "#1B7438",
-  cellA2: "#1F7C3E",
-  cellB: "#15632F",
-  cellB2: "#186A33",
-  cellLine: "rgba(255, 255, 255, 0.05)",
+  cellA: "#74DA64",
+  cellA2: "#79DE69",
+  cellB: "#58BE4B",
+  cellB2: "#5DC350",
+  cellLine: "rgba(255, 255, 255, 0.08)",
   /** Saha çizgileri (orta saha, orta yuvarlak, taç çizgisi). */
-  pitchLine: "rgba(255, 255, 255, 0.22)",
+  pitchLine: "rgba(255, 255, 255, 0.7)",
   /** Ahşap tahta çerçevesi. */
-  rimHi: "#D8955A",
-  rimMid: "#A2632E",
-  rimLo: "#5C3313",
-  rimInner: "#2B1707",
+  rimHi: "#5A48D6",
+  rimMid: "#3A2E9E",
+  rimLo: "#1C1760",
+  rimInner: "#1B1446",
   /** Seçim halkası ve ipucu ışığı. */
   select: "#FFFFFF",
   selectGlow: "rgba(255, 255, 255, 0.28)",
   /** Çamur. */
-  mud: "#7B5432",
-  mudDeep: "#563719",
-  mudSpot: "rgba(255, 220, 170, 0.16)",
+  mud: "#A0693A",
+  mudDeep: "#6E4220",
+  mudSpot: "rgba(255, 220, 170, 0.32)",
   /** Krampon kutusu. */
-  wood: "#B97A3E",
-  woodHi: "#D9A066",
-  woodLo: "#7A4A1C",
+  wood: "#D98C3F",
+  woodHi: "#F2B36A",
+  woodLo: "#9A5A1E",
   strap: "#C9CED6",
   strapLo: "#7D8590",
   /** Kar ve kale ağı. */
   snow: "rgba(226, 242, 255, 0.58)",
   snowEdge: "#FFFFFF",
-  snowInk: "#5C9BD6",
+  snowInk: "#2F80ED",
   net: "rgba(255, 255, 255, 0.88)",
   netShade: "rgba(10, 30, 22, 0.35)",
   /** Altın Top ve şampiyonluk kupası. */
@@ -93,40 +99,41 @@ export const UCLU_BOARD = {
   glowWarm: "#FFB938",
   /** Bonus anı ve kombo metni. */
   comboText: "#FFFFFF",
-  comboStroke: "#0B241B",
+  comboStroke: "#1B1446",
   comboWarm: "#FFD447",
   /** Skor tabelası (HUD). */
-  hudTop: "#24357A",
-  hudLow: "#111C49",
-  hudEdge: "#FFD447",
-  hudWell: "rgba(5, 10, 35, 0.55)",
+  hudTop: "#3A2E9E",
+  hudLow: "#1C1760",
+  hudEdge: "#1B1446",
+  hudWell: "#17114A",
   hudText: "#FFFFFF",
   hudMuted: "rgba(255, 255, 255, 0.72)",
-  movesHi: "#5FB8FF",
-  movesLo: "#1A4FD6",
-  movesRim: "#0A2475",
-  lowHi: "#FF8A8A",
-  lowLo: "#D81B2C",
-  lowRim: "#6E0414",
-  ribbon: "#FFD447",
-  ribbonLo: "#C98A00",
-  ribbonInk: "#3F2A00",
-  barTrack: "rgba(0, 0, 0, 0.45)",
-  barFill: "#4ADE6A",
+  movesHi: "#7EC8FF",
+  movesLo: "#2F80ED",
+  movesRim: "#1A4FA6",
+  lowHi: "#FF7A7A",
+  lowLo: "#E02D3C",
+  lowRim: "#931422",
+  ribbon: "#FFD23F",
+  ribbonLo: "#A86E00",
+  ribbonInk: "#4A2E00",
+  barTrack: "rgba(255, 255, 255, 0.18)",
+  barFill: "#7CF06A",
   barDone: "#FFD447",
   check: "#22C55E",
   /** Güçlendirici düğmeleri: Krampon Darbesi (turuncu), Taktik (camgöbeği). */
-  btnHammerHi: "#FFB648",
-  btnHammer: "#FF7A00",
-  btnHammerLo: "#A84500",
-  btnShuffleHi: "#5EEBFF",
-  btnShuffle: "#0BB4E0",
-  btnShuffleLo: "#05688A",
-  btnActiveHi: "#FFF3B0",
-  btnActive: "#FFD447",
-  btnActiveLo: "#B07D0B",
-  badge: "#FF2E45",
+  btnHammerHi: "#FFB547",
+  btnHammer: "#F0601A",
+  btnHammerLo: "#A33B08",
+  btnShuffleHi: "#7CF0E4",
+  btnShuffle: "#0EA89A",
+  btnShuffleLo: "#06665D",
+  btnActiveHi: "#FFE45C",
+  btnActive: "#F5A300",
+  btnActiveLo: "#A86E00",
+  badge: "#E02D3C",
   badgeEdge: "#FFFFFF",
   badgePlus: "#22C55E",
-  hintBg: "rgba(5, 10, 35, 0.72)",
+  hintBg: "#FFFFFF",
+  hintInk: "#1F2333",
 } as const;

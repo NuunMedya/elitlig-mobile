@@ -10,7 +10,7 @@ import React, { useEffect, useRef } from "react";
 import { Animated, Easing, StyleSheet, View } from "react-native";
 import Svg, { Circle, Defs, G, Line, LinearGradient, RadialGradient, Rect, Stop } from "react-native-svg";
 import { radius } from "@/theme";
-import { UCLU_BOARD } from "@/lib/puzzle/ucluPalette";
+import { UCLU_BOARD, UCLU_OUTLINE } from "@/lib/puzzle/ucluPalette";
 
 /* ───────────────────────────── zemin ───────────────────────────── */
 
@@ -25,7 +25,7 @@ export interface CellViewProps {
 function Mud({ size, layers }: { size: number; layers: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 100 100" style={StyleSheet.absoluteFill}>
-      <Rect x={3} y={3} width={94} height={94} rx={18} fill={layers >= 2 ? UCLU_BOARD.mudDeep : UCLU_BOARD.mud} />
+      <Rect x={5} y={5} width={90} height={90} rx={20} fill={layers >= 2 ? UCLU_BOARD.mudDeep : UCLU_BOARD.mud} stroke={UCLU_OUTLINE} strokeWidth={4} />
       <Circle cx={28} cy={30} r={9} fill={UCLU_BOARD.mudSpot} />
       <Circle cx={70} cy={66} r={12} fill={UCLU_BOARD.mudSpot} />
       <Circle cx={66} cy={24} r={5} fill={UCLU_BOARD.mudSpot} />
@@ -43,16 +43,18 @@ function Crate({ size, hp }: { size: number; hp: number }) {
           <Stop offset="1" stopColor={UCLU_BOARD.wood} />
         </LinearGradient>
       </Defs>
-      <Rect x={6} y={6} width={88} height={88} rx={12} fill="url(#uwood)" stroke={UCLU_BOARD.woodLo} strokeWidth={4} />
-      <Line x1={10} y1={36} x2={90} y2={36} stroke={UCLU_BOARD.woodLo} strokeWidth={3} opacity={0.6} />
-      <Line x1={10} y1={64} x2={90} y2={64} stroke={UCLU_BOARD.woodLo} strokeWidth={3} opacity={0.6} />
-      {hp >= 2 ? <Rect x={6} y={44} width={88} height={12} fill={UCLU_BOARD.strap} stroke={UCLU_BOARD.strapLo} strokeWidth={2} /> : null}
-      {hp >= 3 ? <Rect x={44} y={6} width={12} height={88} fill={UCLU_BOARD.strap} stroke={UCLU_BOARD.strapLo} strokeWidth={2} /> : null}
-      <G fill={UCLU_BOARD.woodLo}>
-        <Circle cx={16} cy={16} r={4} />
-        <Circle cx={84} cy={16} r={4} />
-        <Circle cx={16} cy={84} r={4} />
-        <Circle cx={84} cy={84} r={4} />
+      <Rect x={6} y={11} width={88} height={84} rx={14} fill={UCLU_BOARD.woodLo} stroke={UCLU_OUTLINE} strokeWidth={5} />
+      <Rect x={6} y={5} width={88} height={84} rx={14} fill="url(#uwood)" stroke={UCLU_OUTLINE} strokeWidth={5} />
+      <Rect x={14} y={10} width={50} height={7} rx={3.5} fill={UCLU_BOARD.beamCore} fillOpacity={0.55} />
+      <Line x1={10} y1={34} x2={90} y2={34} stroke={UCLU_BOARD.woodLo} strokeWidth={3.5} />
+      <Line x1={10} y1={62} x2={90} y2={62} stroke={UCLU_BOARD.woodLo} strokeWidth={3.5} />
+      {hp >= 2 ? <Rect x={6} y={41} width={88} height={13} fill={UCLU_BOARD.strap} stroke={UCLU_OUTLINE} strokeWidth={3} /> : null}
+      {hp >= 3 ? <Rect x={43.5} y={5} width={13} height={84} fill={UCLU_BOARD.strap} stroke={UCLU_OUTLINE} strokeWidth={3} /> : null}
+      <G fill={UCLU_OUTLINE}>
+        <Circle cx={17} cy={16} r={3.5} />
+        <Circle cx={83} cy={16} r={3.5} />
+        <Circle cx={17} cy={78} r={3.5} />
+        <Circle cx={83} cy={78} r={3.5} />
       </G>
     </Svg>
   );
@@ -119,17 +121,17 @@ export const BoardLight = React.memo(function BoardLight({ size }: { size: numbe
         </RadialGradient>
         <RadialGradient id="ubvig" cx="50%" cy="55%" r="75%">
           <Stop offset="0.6" stopColor={UCLU_BOARD.ink} stopOpacity={0} />
-          <Stop offset="1" stopColor={UCLU_BOARD.ink} stopOpacity={0.35} />
+          <Stop offset="1" stopColor={UCLU_BOARD.ink} stopOpacity={0.12} />
         </RadialGradient>
       </Defs>
-      <G fill="none" stroke={UCLU_BOARD.pitchLine} strokeWidth={0.6}>
+      <G fill="none" stroke={UCLU_BOARD.pitchLine} strokeWidth={0.8}>
         <Rect x={1.2} y={1.2} width={97.6} height={97.6} rx={1.5} />
         <Line x1={1.2} y1={50} x2={98.8} y2={50} />
         <Circle cx={50} cy={50} r={12} />
         <Rect x={30} y={1.2} width={40} height={12} />
         <Rect x={30} y={86.8} width={40} height={12} />
       </G>
-      <Circle cx={50} cy={50} r={1.2} fill={UCLU_BOARD.pitchLine} />
+      <Circle cx={50} cy={50} r={1.4} fill={UCLU_BOARD.pitchLine} />
       <Rect x={0} y={0} width={100} height={100} fill="url(#ublight)" />
       <Rect x={0} y={0} width={100} height={100} fill="url(#ubvig)" />
     </Svg>
@@ -137,44 +139,33 @@ export const BoardLight = React.memo(function BoardLight({ size }: { size: numbe
 });
 
 /**
- * Ahşap oyun çerçevesi: üstten ışık alan cilalı tahta, damarlar, köşelerde
- * altın perçinler, iç kenarda altın şerit ve tahtaya inen koyu oyuk.
- * Çekiç seçiliyken altın şerit kalınlaşır (hedef seçme kipi).
+ * Çizgi film tahta çerçevesi (arcade HUD panelleriyle aynı dil): kalın
+ * lacivert dış kontur, mor-lacivert dolgu bandı, üstte beyaz parlama şeridi,
+ * ve sahayı saran lacivert iç kenar. Çekiç seçiliyken iç kenar altın yanar (hedef seçme kipi).
  */
 export const FrameTrim = React.memo(function FrameTrim({ width, height, pad, hammer }: { width: number; height: number; pad: number; hammer: boolean }) {
-  const r = 18;
-  const bolt = Math.max(2.5, pad * 0.28);
-  const c = pad / 2;
+  const r = 20;
   return (
     <Svg width={width} height={height} style={StyleSheet.absoluteFill} pointerEvents="none">
       <Defs>
-        <LinearGradient id="ubwood" x1="0" y1="0" x2="0" y2="1">
+        <LinearGradient id="ubband" x1="0" y1="0" x2="0" y2="1">
           <Stop offset="0" stopColor={UCLU_BOARD.rimHi} />
-          <Stop offset="0.45" stopColor={UCLU_BOARD.rimMid} />
+          <Stop offset="0.5" stopColor={UCLU_BOARD.rimMid} />
           <Stop offset="1" stopColor={UCLU_BOARD.rimLo} />
         </LinearGradient>
-        <LinearGradient id="ubtrim" x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0" stopColor={UCLU_BOARD.trimHi} />
-          <Stop offset="0.5" stopColor={UCLU_BOARD.gold} />
-          <Stop offset="1" stopColor={UCLU_BOARD.trimLo} />
-        </LinearGradient>
       </Defs>
-      <Rect x={0} y={0} width={width} height={height} rx={r} fill="url(#ubwood)" />
-      <G stroke={UCLU_BOARD.rimLo} strokeOpacity={0.35} strokeWidth={1}>
-        <Line x1={r} y1={pad * 0.3} x2={width - r} y2={pad * 0.3} />
-        <Line x1={r} y1={height - pad * 0.35} x2={width - r} y2={height - pad * 0.35} />
-        <Line x1={pad * 0.3} y1={r} x2={pad * 0.3} y2={height - r} />
-        <Line x1={width - pad * 0.3} y1={r} x2={width - pad * 0.3} y2={height - r} />
-      </G>
-      <Rect x={1} y={1} width={width - 2} height={height - 2} rx={r - 1} fill="none" stroke={UCLU_BOARD.rimHi} strokeOpacity={0.6} strokeWidth={1.5} />
-      <Rect x={pad - 3} y={pad - 3} width={width - pad * 2 + 6} height={height - pad * 2 + 6} rx={8} fill={UCLU_BOARD.rimInner} stroke="url(#ubtrim)" strokeWidth={hammer ? 4 : 2.5} />
-      {[[c, c], [width - c, c], [c, height - c], [width - c, height - c]].map(([x, y], i) => (
-        <G key={i}>
-          <Circle cx={x} cy={y + 0.8} r={bolt} fill={UCLU_BOARD.rimInner} fillOpacity={0.6} />
-          <Circle cx={x} cy={y} r={bolt} fill={UCLU_BOARD.gold} stroke={UCLU_BOARD.trimLo} strokeWidth={1} />
-          <Circle cx={x - bolt * 0.3} cy={y - bolt * 0.3} r={bolt * 0.35} fill={UCLU_BOARD.goldHi} />
-        </G>
-      ))}
+      <Rect x={1.5} y={1.5} width={width - 3} height={height - 3} rx={r} fill="url(#ubband)" stroke={UCLU_OUTLINE} strokeWidth={3} />
+      <Rect x={r} y={4} width={width - r * 2} height={Math.max(2, pad * 0.28)} rx={pad * 0.14} fill={UCLU_BOARD.beamCore} fillOpacity={0.35} />
+      <Rect
+        x={pad - 3}
+        y={pad - 3}
+        width={width - pad * 2 + 6}
+        height={height - pad * 2 + 6}
+        rx={9}
+        fill={UCLU_OUTLINE}
+        stroke={hammer ? UCLU_BOARD.comboWarm : UCLU_OUTLINE}
+        strokeWidth={hammer ? 4 : 3}
+      />
     </Svg>
   );
 });
@@ -248,7 +239,8 @@ function LockViewBase({ row, col, cell, snow, net }: LockViewProps) {
         </View>
       ) : (
         <Svg width={cell} height={cell} viewBox="0 0 100 100">
-          <Rect x={4} y={4} width={92} height={92} rx={14} fill={UCLU_BOARD.netShade} stroke={UCLU_BOARD.net} strokeWidth={5} />
+          <Rect x={4} y={4} width={92} height={92} rx={14} fill={UCLU_BOARD.netShade} stroke={UCLU_OUTLINE} strokeWidth={8} />
+          <Rect x={4} y={4} width={92} height={92} rx={14} fill="none" stroke={UCLU_BOARD.net} strokeWidth={3.5} />
           <G stroke={UCLU_BOARD.net} strokeWidth={3}>
             {[22, 40, 58, 76].map((p) => (
               <React.Fragment key={p}>
@@ -272,8 +264,8 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: radius.md,
     backgroundColor: UCLU_BOARD.snow,
-    borderWidth: 2,
-    borderColor: UCLU_BOARD.snowEdge,
+    borderWidth: 3,
+    borderColor: UCLU_OUTLINE,
     overflow: "hidden",
   },
   snowBadge: { position: "absolute", right: 2, bottom: 1 },

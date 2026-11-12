@@ -11,7 +11,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { useEffect, useRef } from "react";
 import { Animated, Easing, StyleSheet, Text, View } from "react-native";
 import { radius, textScale, type } from "@/theme";
-import { UCLU_BOARD } from "@/lib/puzzle/ucluPalette";
+import { UCLU_BOARD, UCLU_OUTLINE } from "@/lib/puzzle/ucluPalette";
 import { PieceGlyph } from "./Piece";
 
 export type Fx =
@@ -269,7 +269,7 @@ export const FxLayer = React.memo(function FxLayer({ items }: { items: Fx[] }) {
 
 const styles = StyleSheet.create({
   abs: { position: "absolute" },
-  ring: { position: "absolute", borderWidth: 3 },
+  ring: { position: "absolute", borderWidth: 4 },
   ringFill: { position: "absolute", borderWidth: 6, backgroundColor: UCLU_BOARD.selectGlow },
   beam: {
     position: "absolute",
@@ -288,15 +288,15 @@ const styles = StyleSheet.create({
     ...type.scoreLg,
     color: UCLU_BOARD.comboText,
     textShadowColor: UCLU_BOARD.comboStroke,
-    textShadowRadius: 6,
-    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 1,
+    textShadowOffset: { width: 0, height: 3 },
   },
   comboBig: {
     ...type.scoreHero,
     color: UCLU_BOARD.comboWarm,
     textShadowColor: UCLU_BOARD.comboStroke,
-    textShadowRadius: 8,
-    textShadowOffset: { width: 0, height: 3 },
+    textShadowRadius: 1,
+    textShadowOffset: { width: 0, height: 4 },
   },
   banner: {
     position: "absolute",
@@ -305,10 +305,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    backgroundColor: UCLU_BOARD.frame,
-    borderColor: UCLU_BOARD.comboWarm,
-    borderWidth: 2,
+    backgroundColor: UCLU_BOARD.hudTop,
+    borderColor: UCLU_OUTLINE,
+    borderWidth: 3,
+    borderBottomWidth: 6,
     borderRadius: radius.pill,
   },
-  bannerText: { ...type.h1, color: UCLU_BOARD.comboText },
+  bannerText: {
+    ...type.h1,
+    color: UCLU_BOARD.comboText,
+    textShadowColor: UCLU_BOARD.comboStroke,
+    textShadowRadius: 0,
+    textShadowOffset: { width: 0, height: 2 },
+  },
 });

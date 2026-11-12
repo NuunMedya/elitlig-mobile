@@ -43,7 +43,7 @@ const LIVE_BOOSTERS = [
   { key: "cekic", title: "Krampon Darbesi", short: "DARBE", icon: "hammer" },
   { key: "karistir", title: "Taktik Değişikliği", short: "TAKTİK", icon: "shuffle" },
 ] as const;
-/** Ahşap çerçevenin bir kenarı (tahta bu kadar içeride başlar). */
+/** Çizgi film çerçevenin bir kenarı (tahta bu kadar içeride başlar). */
 const PAD = 12;
 /** HUD ve güçlendirici çubuğunun en küçük yükseklikleri; ekran uzunsa büyürler. */
 const HUD_MIN = 88;
@@ -662,15 +662,14 @@ const styles = StyleSheet.create({
   frame: {
     alignSelf: "center",
     padding: PAD,
-    borderRadius: radius.xl,
-    backgroundColor: UCLU_BOARD.rimInner,
+    borderRadius: radius.xxl,
   },
   clip: { overflow: "hidden" },
   selectRing: {
     position: "absolute",
     borderRadius: radius.md,
-    borderWidth: 3,
-    borderColor: UCLU_BOARD.comboWarm,
+    borderWidth: 4,
+    borderColor: UCLU_BOARD.select,
     backgroundColor: UCLU_BOARD.selectGlow,
   },
 });

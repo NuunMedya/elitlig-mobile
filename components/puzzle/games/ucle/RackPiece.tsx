@@ -34,6 +34,7 @@ function RackPieceBase({ id, kind, x, y, size, from, clearing, onCleared }: Prop
   const scale = useRef(new Animated.Value(from ? from.scale : 0.4)).current;
   const fade = useRef(new Animated.Value(1)).current;
   const boom = useRef(new Animated.Value(0)).current;
+  const squash = useRef(new Animated.Value(1)).current;
   const landed = useRef(false);
   const prevTarget = useRef({ x, y });
 
@@ -80,11 +81,16 @@ function RackPieceBase({ id, kind, x, y, size, from, clearing, onCleared }: Prop
           Animated.timing(scale, { toValue: 1.3, duration: 90, easing: Easing.out(Easing.quad), useNativeDriver: true }),
           Animated.timing(scale, { toValue: 0, duration: 170, easing: Easing.in(Easing.back(2)), useNativeDriver: true }),
         ]),
+        // Çizgi film "pop": yassılıp (squash) uzayarak söner.
+        Animated.sequence([
+          Animated.timing(squash, { toValue: 0.8, duration: 80, useNativeDriver: true }),
+          Animated.timing(squash, { toValue: 1.18, duration: 140, useNativeDriver: true }),
+        ]),
         Animated.timing(fade, { toValue: 0, duration: 260, delay: 90, useNativeDriver: true }),
         Animated.timing(boom, { toValue: 1, duration: 480, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
       ]),
     ]).start(() => onCleared(id));
-  }, [clearing, id, onCleared, scale, fade, boom]);
+  }, [clearing, id, onCleared, scale, squash, fade, boom]);
 
   const slab = Math.max(2, Math.round(size * 0.09));
   const color = UCLE_KINDS[kind].face;
@@ -134,7 +140,16 @@ function RackPieceBase({ id, kind, x, y, size, from, clearing, onCleared }: Prop
           })}
         </>
       ) : null}
-      <Animated.View style={{ opacity: fade, transform: [{ scale }] }}>
+      <Animated.View
+        style={{
+          opacity: fade,
+          transform: [
+            { scale },
+            { scaleY: squash },
+            { scaleX: squash.interpolate({ inputRange: [0.8, 1, 1.2], outputRange: [1.18, 1, 0.86], extrapolate: "clamp" }) },
+          ],
+        }}
+      >
         <TileFace kind={kind} w={size} h={size} slab={slab} />
       </Animated.View>
     </Animated.View>
@@ -145,7 +160,7 @@ export const RackPiece = memo(RackPieceBase);
 
 const styles = StyleSheet.create({
   root: { position: "absolute", left: 0, top: 0 },
-  ring: { position: "absolute", left: 0, top: 0, borderWidth: 3 },
+  ring: { position: "absolute", left: 0, top: 0, borderWidth: 4 },
   spark: { position: "absolute" },
 });
 

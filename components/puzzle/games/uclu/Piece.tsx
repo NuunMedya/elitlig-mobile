@@ -1,9 +1,10 @@
 /**
  * Elit Üçlü taşları: statik çizim (PieceGlyph) + konumu canlandırılan taş (TileView).
  *
- * Her taş parlak, hacimli bir "şeker / mücevher"dir: zemin gölgesi, koyu 3B
- * taban, ışığı sol üstten alan gradyan gövde, cam kubbe parlaması ve iri,
- * koyu dış çizgili BEYAZ bir futbol sembolü (top, forma, krampon, eldiven,
+ * Her taş ÇİZGİ FİLM dilindedir (arcade oyunlarıyla ortak): kalın lacivert
+ * kontur, doygun DÜZ dolgu (alt yarı bir ton koyu), altta koyu 3B "dudak",
+ * üstte beyaz parlama şeridi ve iri, lacivert dış çizgili BEYAZ bir futbol
+ * sembolü (top, forma, krampon, eldiven,
  * düdük, kupa). Her tür hem RENK hem ŞEKİL taşır (daire, yuvarlak kare,
  * altıgen, kalkan, karo, rozet) — renk körlüğünde de ayırt edilsin diye.
  *
@@ -18,7 +19,7 @@ import React, { useEffect, useRef } from "react";
 import { Animated, Easing, StyleSheet, View } from "react-native";
 import Svg, { Circle, ClipPath, Defs, Ellipse, G, LinearGradient, Path, Polygon, RadialGradient, Rect, Stop } from "react-native-svg";
 import { duration } from "@/theme";
-import { UCLU_BOARD, UCLU_PIECE_COLORS } from "@/lib/puzzle/ucluPalette";
+import { UCLU_BOARD, UCLU_OUTLINE, UCLU_PIECE_COLORS } from "@/lib/puzzle/ucluPalette";
 import type { Special, Tile } from "@/lib/puzzle/ucluEngine";
 
 /* ───────────────────────────── geometri ───────────────────────────── */
@@ -220,10 +221,10 @@ function Emblem({ index, ink }: { index: number; ink: Ink }) {
 function SymbolPair({ index, scale, fill, dark, accent }: { index: number; scale: number; fill: string; dark: string; accent: string }) {
   return (
     <G transform={inner(scale)}>
-      <G transform="translate(0 2.5)" opacity={0.35}>
-        <Emblem index={index} ink={{ outline: true, fill, dark: UCLU_BOARD.ink, accent }} />
+      <G transform="translate(0 3)" opacity={0.3}>
+        <Emblem index={index} ink={{ outline: true, fill, dark: UCLU_OUTLINE, accent }} />
       </G>
-      <Emblem index={index} ink={{ outline: true, fill, dark, accent }} />
+      <Emblem index={index} ink={{ outline: true, fill, dark: UCLU_OUTLINE, accent }} />
       <Emblem index={index} ink={{ outline: false, fill, dark, accent }} />
     </G>
   );
@@ -243,8 +244,8 @@ function RocketArrows({ vertical }: { vertical: boolean }) {
     <G transform={vertical ? "rotate(90 50 50)" : undefined}>
       {[undefined, "rotate(180 50 50)"].map((t, i) => (
         <G key={i} transform={t}>
-          <Path d={arrow} fill={UCLU_BOARD.goldDeep} stroke={UCLU_BOARD.goldDeep} strokeWidth={6} strokeLinejoin="round" />
-          <Path d={arrow} fill={UCLU_BOARD.gold} stroke={UCLU_BOARD.goldHi} strokeWidth={1.5} strokeLinejoin="round" />
+          <Path d={arrow} fill={UCLU_OUTLINE} stroke={UCLU_OUTLINE} strokeWidth={7} strokeLinejoin="round" />
+          <Path d={arrow} fill={UCLU_BOARD.gold} stroke={UCLU_BOARD.goldHi} strokeWidth={1.2} strokeLinejoin="round" />
         </G>
       ))}
     </G>
@@ -267,6 +268,22 @@ function RainbowRing({ r, w }: { r: number; w: number }) {
 
 /* ───────────────────────────── taş çizimi ───────────────────────────── */
 
+/** Lacivert kontur kalınlığı (100'lük kutuda; ~3 px görünür). */
+const STROKE = 6;
+/** Gövde, kontur + dudak kutuya sığsın diye biraz küçültülüp yukarı alınır. */
+const BODY = "translate(50 46) scale(0.88) translate(-50 -50)";
+const BOMB_STAR = ring(50, 50, 16, (i) => (i % 2 ? 23 : 37)).map((p) => p.join(",")).join(" ");
+/** Şekle göre parlama şeridi (sol üst kenara yaslanan kavisli şerit). */
+const SHINE: string[] = [
+  "M22 36 C24 24 34 15 46 13 C49 12.5 50 16 47 17.5 C37 21 30 28 28 37 C27 41 21.5 40 22 36 Z",
+  "M18 34 C18 22 23 17 35 17 L52 17 C56 17 56 23 52 23 L36 23 C27 23 24 27 24 34 C24 39 18 39 18 34 Z",
+  "M20 33 L45 18.5 C49 16.5 51 21.5 47.5 23.5 L26 36 C21.5 38.5 17 35.5 20 33 Z",
+  "M19 21 C29 21 38 19.5 47 15 C51 13 53 18.5 49 20.5 C40 25 31 26.5 23 26.5 C18 26.5 15 21 19 21 Z",
+  "M17 46 L43 20 C46 17 50 21 47 24 L22 49 C19 52 14 49 17 46 Z",
+  "M19 38 C20 27 28 17 40 14 C44 13 45 18.5 41.5 19.5 C32 22.5 27 29 26 38 C25.5 42.5 18.5 42.5 19 38 Z",
+];
+const SHINE_DOT: Pt[] = [[26, 45], [21, 44], [19, 42], [17, 30], [16, 54], [20, 47]];
+
 export interface PieceGlyphProps {
   kind: Tile["kind"];
   color: number;
@@ -284,21 +301,12 @@ export const PieceGlyph = React.memo(function PieceGlyph({ kind, color, special,
   const rocket = special === "h" || special === "v";
   const bomb = special === "bomb";
   // Karo şeklinin iç alanı dar: sembol biraz küçülür. Özel taşta işaretlere yer açılır.
-  const symScale = (shape === 4 ? 0.98 : 1.18) * (rocket ? 0.8 : bomb ? 0.86 : 1);
+  const symScale = (shape === 4 ? 0.84 : 1.0) * (rocket ? 0.84 : bomb ? 0.9 : 1);
   const id = `u${idx}${special}`;
   return (
     <View style={{ width: size, height: size }}>
       <Svg width={size} height={size} viewBox="0 0 100 100" style={StyleSheet.absoluteFill}>
         <Defs>
-          <RadialGradient id={`${id}b`} cx="34%" cy="26%" r="80%">
-            <Stop offset="0" stopColor={pal.hi} />
-            <Stop offset="0.42" stopColor={pal.base} />
-            <Stop offset="1" stopColor={pal.lo} />
-          </RadialGradient>
-          <LinearGradient id={`${id}g`} x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor={UCLU_BOARD.beamCore} stopOpacity={0.7} />
-            <Stop offset="1" stopColor={UCLU_BOARD.beamCore} stopOpacity={0.04} />
-          </LinearGradient>
           <ClipPath id={`${id}c`}>
             <Shape kind={shape} />
           </ClipPath>
@@ -310,37 +318,39 @@ export const PieceGlyph = React.memo(function PieceGlyph({ kind, color, special,
           ) : null}
         </Defs>
         {rocket || bomb ? <Circle cx={50} cy={50} r={50} fill={`url(#${id}h)`} /> : null}
-        <Ellipse cx={50} cy={93} rx={36} ry={5.5} fill={UCLU_BOARD.shadow} />
-        <G transform="translate(0 -1.5)">
-          {/* 3B taban: koyu kenar gövdenin altından görünür. */}
-          <Shape kind={shape} fill={pal.rim} transform="translate(0 5)" />
-          <Shape kind={shape} fill={`url(#${id}b)`} stroke={bomb ? UCLU_BOARD.gold : pal.rim} strokeWidth={bomb ? 5 : 2.5} />
+        <Ellipse cx={50} cy={93} rx={34} ry={5} fill={UCLU_BOARD.shadow} />
+        <G transform={BODY}>
+          {/* 3B dudak: koyu ton, lacivert konturlu, gövdenin altından görünür. */}
+          <Shape kind={shape} fill={pal.lo} stroke={UCLU_OUTLINE} strokeWidth={STROKE} transform="translate(0 7)" />
+          <Shape kind={shape} fill={pal.base} />
           <G clipPath={`url(#${id}c)`}>
+            {/* Düz iki ton: alt kısım bir ton koyu, üst kısım hafif açık. */}
+            <Ellipse cx={50} cy={112} rx={78} ry={46} fill={pal.lo} fillOpacity={0.55} />
+            <Ellipse cx={50} cy={-6} rx={70} ry={40} fill={pal.hi} fillOpacity={0.35} />
             {rocket ? (
               <G transform={special === "v" ? "rotate(90 50 50)" : undefined}>
                 {[24, 43, 62].map((y) => (
                   <G key={y}>
-                    <Rect x={0} y={y} width={100} height={13} fill={pal.rim} opacity={0.45} />
-                    <Rect x={0} y={y + 1.5} width={100} height={9} fill={UCLU_BOARD.beamCore} opacity={0.92} />
+                    <Rect x={0} y={y} width={100} height={12} fill={UCLU_OUTLINE} />
+                    <Rect x={0} y={y + 2.5} width={100} height={7} fill={UCLU_BOARD.beamCore} />
                   </G>
                 ))}
               </G>
             ) : null}
-            {/* Kubbe: üst yarıda cam parlaması, altta iç gölge. */}
-            <Ellipse cx={50} cy={24} rx={40} ry={22} fill={`url(#${id}g)`} />
-            <Shape kind={shape} fill="none" stroke={pal.lo} strokeOpacity={0.55} strokeWidth={6} transform="translate(0 3)" />
           </G>
-          <Shape kind={shape} fill="none" stroke={pal.hi} strokeOpacity={0.8} strokeWidth={2.2} transform={inner(0.9)} />
+          <Shape kind={shape} fill="none" stroke={bomb ? UCLU_BOARD.gold : UCLU_OUTLINE} strokeWidth={STROKE} />
+          {bomb ? <Shape kind={shape} fill="none" stroke={UCLU_OUTLINE} strokeWidth={2.5} transform={inner(1.06)} /> : null}
           {bomb ? (
             <G>
-              <Polygon points={ring(50, 50, 16, (i) => (i % 2 ? 22 : 37)).map((p) => p.join(",")).join(" ")} fill={UCLU_BOARD.goldDeep} stroke={UCLU_BOARD.goldDeep} strokeWidth={5} strokeLinejoin="round" />
-              <Polygon points={ring(50, 50, 16, (i) => (i % 2 ? 22 : 37)).map((p) => p.join(",")).join(" ")} fill={UCLU_BOARD.gold} stroke={UCLU_BOARD.goldHi} strokeWidth={1.5} strokeLinejoin="round" />
-              <Circle cx={50} cy={50} r={22} fill={pal.base} />
+              <Polygon points={BOMB_STAR} fill={UCLU_OUTLINE} stroke={UCLU_OUTLINE} strokeWidth={7} strokeLinejoin="round" />
+              <Polygon points={BOMB_STAR} fill={UCLU_BOARD.gold} stroke={UCLU_BOARD.goldHi} strokeWidth={1.2} strokeLinejoin="round" />
+              <Circle cx={50} cy={50} r={21} fill={pal.base} stroke={UCLU_OUTLINE} strokeWidth={3} />
             </G>
           ) : null}
-          <SymbolPair index={idx} scale={symScale * (bomb ? 0.78 : 1)} fill={pal.ink} dark={pal.rim} accent={pal.base} />
-          <Ellipse cx={30} cy={24} rx={10} ry={4.5} transform="rotate(-35 30 24)" fill={UCLU_BOARD.beamCore} fillOpacity={0.85} />
-          <Circle cx={22} cy={37} r={2.6} fill={UCLU_BOARD.beamCore} fillOpacity={0.8} />
+          <SymbolPair index={idx} scale={symScale * (bomb ? 0.74 : 1)} fill={pal.ink} dark={UCLU_OUTLINE} accent={pal.base} />
+          {/* Parlama: üst sol köşede beyaz şerit + nokta. */}
+          <Path d={SHINE[shape]} fill={UCLU_BOARD.beamCore} fillOpacity={0.85} />
+          <Circle cx={SHINE_DOT[shape][0]} cy={SHINE_DOT[shape][1]} r={3} fill={UCLU_BOARD.beamCore} fillOpacity={0.85} />
         </G>
         {rocket ? <RocketArrows vertical={special === "v"} /> : null}
         {bomb ? (
@@ -379,9 +389,10 @@ function GoldenBall({ size }: { size: number }) {
         </Defs>
         <Circle cx={50} cy={50} r={50} fill="url(#ugoldh)" />
         <Ellipse cx={50} cy={93} rx={30} ry={5} fill={UCLU_BOARD.shadow} />
+        <Circle cx={50} cy={50} r={46.5} fill="none" stroke={UCLU_OUTLINE} strokeWidth={4} />
         <RainbowRing r={43} w={7} />
-        <Circle cx={50} cy={54} r={36} fill={UCLU_BOARD.goldDeep} />
-        <Circle cx={50} cy={50} r={36} fill="url(#ugold)" stroke={UCLU_BOARD.goldDeep} strokeWidth={2.5} />
+        <Circle cx={50} cy={55} r={35} fill={UCLU_BOARD.goldDeep} stroke={UCLU_OUTLINE} strokeWidth={5} />
+        <Circle cx={50} cy={50} r={35} fill="url(#ugold)" stroke={UCLU_OUTLINE} strokeWidth={5} />
         <Polygon points={pent.map((p) => p.join(",")).join(" ")} fill={UCLU_BOARD.goldInk} stroke={UCLU_BOARD.goldInk} strokeWidth={2} strokeLinejoin="round" />
         {spokes.map((p, i) => (
           <G key={i}>
@@ -414,8 +425,8 @@ function TrophyGlyph({ size }: { size: number }) {
           <G transform="translate(0 2.5)" opacity={0.35}>
             <Emblem index={5} ink={{ outline: true, fill: UCLU_BOARD.gold, dark: UCLU_BOARD.ink, accent: UCLU_BOARD.goldHi }} />
           </G>
-          <Emblem index={5} ink={{ outline: true, fill: UCLU_BOARD.gold, dark: UCLU_BOARD.goldDeep, accent: UCLU_BOARD.goldHi }} />
-          <Emblem index={5} ink={{ outline: false, fill: UCLU_BOARD.gold, dark: UCLU_BOARD.goldDeep, accent: UCLU_BOARD.goldHi }} />
+          <Emblem index={5} ink={{ outline: true, fill: UCLU_BOARD.gold, dark: UCLU_OUTLINE, accent: UCLU_BOARD.goldHi }} />
+          <Emblem index={5} ink={{ outline: false, fill: UCLU_BOARD.gold, dark: UCLU_BOARD.goldDeep, accent: UCLU_BOARD.beamCore }} />
           <Ellipse cx={42} cy={32} rx={4} ry={8} fill={UCLU_BOARD.goldHi} fillOpacity={0.8} />
         </G>
         <Sparkle x={82} y={18} r={9} fill={UCLU_BOARD.beamCore} />
@@ -493,14 +504,19 @@ function TileViewBase({ tile, row, col, cell, spawnRow, dying, selected, hintDx,
 
   useEffect(() => {
     if (!dying) return;
+    // Çizgi film "pop": önce yassılıp şişer (squash), sonra uzayıp küçülerek söner.
     Animated.parallel([
       Animated.sequence([
-        Animated.timing(scale, { toValue: 1.18, duration: 70, useNativeDriver: true }),
-        Animated.timing(scale, { toValue: 0, duration: 120, easing: Easing.in(Easing.quad), useNativeDriver: true }),
+        Animated.timing(scale, { toValue: 1.26, duration: 80, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+        Animated.timing(scale, { toValue: 0, duration: 130, easing: Easing.in(Easing.back(2)), useNativeDriver: true }),
       ]),
-      Animated.timing(opacity, { toValue: 0, duration: 190, useNativeDriver: true }),
+      Animated.sequence([
+        Animated.timing(squash, { toValue: 0.82, duration: 70, useNativeDriver: true }),
+        Animated.timing(squash, { toValue: 1.14, duration: 110, useNativeDriver: true }),
+      ]),
+      Animated.timing(opacity, { toValue: 0, duration: 140, delay: 80, useNativeDriver: true }),
     ]).start();
-  }, [dying, scale, opacity]);
+  }, [dying, scale, squash, opacity]);
 
   useEffect(() => {
     if (dying) return;
@@ -536,9 +552,9 @@ function TileViewBase({ tile, row, col, cell, spawnRow, dying, selected, hintDx,
             { translateY: pos.y },
             { translateX: wiggle.interpolate({ inputRange: [0, 1], outputRange: [0, hintDx * amp] }) },
             { translateY: wiggle.interpolate({ inputRange: [0, 1], outputRange: [0, hintDy * amp] }) },
-            { translateY: squash.interpolate({ inputRange: [0.8, 1], outputRange: [cell * 0.06, 0] }) },
+            { translateY: squash.interpolate({ inputRange: [0.8, 1, 1.2], outputRange: [cell * 0.06, 0, 0], extrapolate: "clamp" }) },
             { scaleY: squash },
-            { scaleX: squash.interpolate({ inputRange: [0.8, 1], outputRange: [1.12, 1] }) },
+            { scaleX: squash.interpolate({ inputRange: [0.8, 1, 1.2], outputRange: [1.14, 1, 0.88], extrapolate: "clamp" }) },
             { scale },
           ],
         },
