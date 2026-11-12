@@ -40,14 +40,18 @@ import { useCallback, useEffect, useMemo, useState, type ComponentProps } from "
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { QuestCard } from "@/components/quests/QuestCard";
+import { LinearGradient } from "expo-linear-gradient";
+import { QUEST_TILE_TONE, QuestCard, questGradient } from "@/components/quests/QuestCard";
 import { QuestBar, QuestRing } from "@/components/quests/QuestProgress";
 import { useQuestCelebration } from "@/components/quests/useQuestCelebration";
 import {
+  Aurora,
   Button,
   EmptyState,
   ErrorState,
-  GradientFill,
+  GradientBar,
+  IconTile,
+  Odometer,
   Reveal,
   ScreenHeader,
   SectionHeader,
@@ -61,6 +65,7 @@ import {
 } from "@/components/ui";
 import { getMyCareer, getMyTeamQuests, getXpLeaderboard, type CareerQuest, type TeamQuest } from "@/lib/api/career";
 import { questTone } from "@/lib/questPalette";
+import type { QuestCategory } from "@/lib/api/career";
 import {
   LAYER_ICON,
   QUEST_CATEGORY_BLURB,
@@ -211,7 +216,8 @@ export default function QuestsScreen() {
           {/* SAHNE */}
           <Reveal index={0}>
             <View style={styles.hero}>
-              <GradientFill tone="ink" />
+              <LinearGradient colors={colors.gradientInk} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+              <Aurora variant="stage" style={StyleSheet.absoluteFill} />
               <View style={styles.heroBadges}>
                 <View style={styles.weekPill}>
                   <Ionicons name="calendar-outline" size={12} color={colors.brandOnDark} />
@@ -234,18 +240,21 @@ export default function QuestsScreen() {
                   <Text style={styles.heroOverline} {...textScale.badge}>
                     {upperTR("Bu haftaki XP'n")}
                   </Text>
-                  <Text style={styles.heroXp} numberOfLines={1} {...textScale.badge}>
-                    {thisWeek != null ? `+${formatInt(thisWeek)}` : `+${formatInt(earnedXp(weekly))}`}
-                    <Text style={styles.heroXpUnit}> XP</Text>
-                  </Text>
+                  <View style={styles.heroXpRow} accessible accessibilityLabel={`Bu hafta ${thisWeek ?? earnedXp(weekly)} XP`}>
+                    <Text style={styles.heroXp} {...textScale.badge}>
+                      +
+                    </Text>
+                    <Odometer value={formatInt(thisWeek ?? earnedXp(weekly))} style={styles.heroXp} />
+                    <Text style={styles.heroXpUnit} {...textScale.badge}>
+                      XP
+                    </Text>
+                  </View>
                   <Text style={styles.heroSub} {...textScale.dense}>
                     Saha + görevler
                   </Text>
                 </View>
-                <QuestRing value={weekly.total ? weekly.done_count / weekly.total : 0} size={88}>
-                  <Text style={styles.ringValue} {...textScale.badge}>
-                    {weekly.done_count}
-                  </Text>
+                <QuestRing value={weekly.total ? weekly.done_count / weekly.total : 0} size={92} thickness={8} gradient={colors.gradientSignature}>
+                  <Odometer value={weekly.done_count} style={styles.ringValue} />
                   <Text style={styles.ringLabel} {...textScale.badge}>
                     / {weekly.total} GÖREV
                   </Text>
@@ -259,6 +268,7 @@ export default function QuestsScreen() {
                 accessibilityLabel={`Elit Seviye ${data.level.level}. ${toNext != null ? `Sıradaki seviyeye ${toNext} XP` : "En üst seviye"}`}
               >
                 <View style={styles.levelBadge}>
+                  <LinearGradient colors={colors.medalGold} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
                   <Text style={styles.levelBadgeLabel} {...textScale.badge}>
                     SEVİYE
                   </Text>
@@ -275,8 +285,9 @@ export default function QuestsScreen() {
                       {toNext != null ? `${formatInt(toNext)} XP kaldı` : "En üst seviye"}
                     </Text>
                   </View>
-                  <QuestBar value={data.level.progress} color={colors.yellowCard} track={colors.inkTile} height={8} />
+                  <GradientBar value={data.level.progress} gradient={colors.medalGold} track={colors.inkTile} height={8} />
                 </View>
+                <Ionicons name="chevron-forward" size={16} color={colors.onDarkMuted} />
               </Touchable>
 
               <View style={styles.heroStats}>
@@ -341,17 +352,25 @@ export default function QuestsScreen() {
           ) : null}
 
           {/* SEKMELER */}
-          <SectionHeader title="Açık görevler" meta={`${weekly.active.length} görev · ${formatInt(pendingXp)} XP`} inset="flush" />
+          <SectionHeader
+            title="Açık görevler"
+            icon="flash"
+            iconTone="signature"
+            subtitle={`${weekly.active.length} görev · ${formatInt(pendingXp)} XP seni bekliyor`}
+            inset="flush"
+          />
           <CategoryTabs value={filter} onChange={setFilter} counts={counts} total={weekly.active.length} />
           {selected ? <CategorySummary item={selected} /> : null}
 
           {active.length ? (
             active.map((quest, index) => (
-              <QuestCard key={quest.code} quest={quest} index={index} onOpen={questRoute(quest) ? open : undefined} />
+              <Reveal key={quest.code} index={index} limit={8} replayKey={filter}>
+                <QuestCard quest={quest} index={index} onOpen={questRoute(quest) ? open : undefined} />
+              </Reveal>
             ))
           ) : (
             <View style={styles.empty}>
-              <Ionicons name={weekly.active.length ? "checkmark-done" : "trophy"} size={22} color={colors.win} />
+              <IconTile icon={weekly.active.length ? "checkmark-done" : "trophy"} tone="mint" size={40} />
               <Text style={styles.emptyText} {...textScale.long}>
                 {weekly.active.length
                   ? `${QUEST_CATEGORY_LABEL[filter as QuestTab] ?? "Bu"} sekmesinde açık görev kalmadı. Diğer sekmelere göz at.`
@@ -380,9 +399,7 @@ export default function QuestsScreen() {
                 accessibilityRole="button"
                 accessibilityState={{ expanded: showDone }}
               >
-                <View style={[styles.foldIcon, { backgroundColor: colors.winDim }]}>
-                  <Ionicons name="checkmark-done" size={16} color={colors.win} />
-                </View>
+                <IconTile icon="checkmark-done" tone="mint" size={32} glow={false} />
                 <Text style={styles.foldTitle} {...textScale.dense}>
                   Tamamlananlar
                 </Text>
@@ -413,7 +430,7 @@ export default function QuestsScreen() {
             </Touchable>
           ) : team.data?.team && team.data.periods ? (
             <>
-              <SectionHeader title="Takım görevleri" meta={team.data.team.name} inset="flush" />
+              <SectionHeader title="Takım görevleri" icon="people" iconTone="gold" subtitle={team.data.team.name} inset="flush" />
               <SegmentedControl
                 items={[
                   { key: "week", label: "Bu hafta" },
@@ -430,11 +447,10 @@ export default function QuestsScreen() {
                 const done = period.quests.filter((quest) => quest.done).length;
                 return (
                   <>
+                    <View style={styles.teamGroup}>
                     <View style={styles.teamScore}>
-                      <View>
-                        <Text style={styles.teamScoreValue} {...textScale.badge}>
-                          {formatInt(period.score)}
-                        </Text>
+                      <View style={styles.teamScoreBox}>
+                        <Odometer value={formatInt(period.score)} style={styles.teamScoreValue} />
                         <Text style={styles.teamScoreLabel} {...textScale.badge}>
                           {upperTR("Takım puanı")}
                         </Text>
@@ -445,6 +461,7 @@ export default function QuestsScreen() {
                           {period.rank?.city ? ` · ilde ${period.rank.city}.` : ""}
                           {period.rank?.turkey ? ` · Türkiye'de ${period.rank.turkey}.` : ""}
                         </Text>
+                        <GradientBar value={period.quests.length ? done / period.quests.length : 0} gradient={colors.tileTones.gold} height={6} />
                         <Text style={styles.note} {...textScale.dense}>
                           {timeLeft(period.ends_at, now) ? `${timeLeft(period.ends_at, now)} kaldı` : "Dönem bitti"}
                         </Text>
@@ -453,6 +470,7 @@ export default function QuestsScreen() {
                     {period.quests.map((quest) => (
                       <TeamQuestRow key={quest.code} quest={quest} />
                     ))}
+                    </View>
                     {!period.contributed ? (
                       <Text style={styles.note} {...textScale.long}>
                         Takım görevlerinin XP'si bu dönemde takımın bir maçında forma giyen oyunculara yazılır.
@@ -479,9 +497,7 @@ export default function QuestsScreen() {
                 accessibilityRole="button"
                 accessibilityState={{ expanded: showRules }}
               >
-                <View style={[styles.foldIcon, { backgroundColor: colors.brandDim }]}>
-                  <Ionicons name="list" size={16} color={colors.brandAccent} />
-                </View>
+                <IconTile icon="list" tone="violet" size={32} glow={false} />
                 <Text style={styles.foldTitle} {...textScale.dense}>
                   Sahada XP tablosu
                 </Text>
