@@ -18,7 +18,7 @@
  *      hız ve seviye artar; her sırada geçilebilir bir yol vardır ve sıralar
  *      tepki payı bırakır. Şerit değiştirme savrulmadan oturur, zıplama engeli
  *      aşar; güçler (KALKAN, TURBO, ×2) işini yapar; rakip adı sığmazsa kısalır.
- *      SAVUNMA HATTI: boş saha gol yer; kart ekonomisi (enerji, dolum, kilit);
+ *      SAVUNMA HATTI: boş saha gol yer; kart ekonomisi (güneş, dolum, kilit);
  *      forvet koridorunu korur, stoper oyalar, pres yavaşlatır, füze 3×3
  *      temizler; dalgalar ilerler, kaptan gelir.
  *      KADRO KOŞUSU: kapı aritmetiği; kötü kapılar kadroyu bitirir, iyi kapılar
@@ -437,15 +437,15 @@ const pilot = (A) => {
   check("savunma: boş saha gol yer ve biter", Boolean(end) && d.lives === 0 && d.conceded === 3, end ? `3 gol yenildi (${d.wave}. dalga)` : `maç bitmedi, hak ${d.lives}`);
 }
 {
-  // Kartlar: enerji düşer, dolum süresi ve dolu kare engeller; kurucu enerji üretir.
+  // Kartlar: güneş (enerji) düşer, dolum süresi ve dolu kare engeller; taraftar güneş üretir.
   const { A, run } = boot("savunma");
   A.game.start();
   const d = A.game.debug();
   const e0 = d.energy;
-  const ok1 = d.place("kurucu", 0, 0);
-  const again = d.place("kurucu", 1, 0); // dolum süresi
+  const ok1 = d.place("taraftar", 0, 0);
+  const again = d.place("taraftar", 1, 0); // dolum süresi
   const same = d.place("forvet", 0, 0); // dolu kare
-  const locked = d.place("cift", 3, 0); // 4. dalgada açılır
+  const locked = d.place("cift", 3, 0); // ilerideki bir dalgada açılır
   const e1 = A.game.debug().energy;
   d.clearQueue();
   let made = 0;
@@ -458,7 +458,7 @@ const pilot = (A) => {
   const e2 = A.game.debug().energy;
   check(
     "savunma: kart ekonomisi",
-    // (rakipsiz dalga "temiz" sayılır ve +75 enerji verir; üretim 25'in katıdır)
+    // (rakipsiz dalga "temiz" sayılır ve güneş verir; üretim 25'in katıdır)
     ok1 && !again && !same && !locked && e1 === e0 - 50 && made === 2 && e2 >= e1 + 50 && (e2 - e1) % 25 === 0,
     `enerji ${e0} → ${e1} → ${e2} (${made} üretim)`,
   );
@@ -473,7 +473,8 @@ const pilot = (A) => {
   d.place("forvet", 2, 0);
   const guarded = d.spawn("hucum", 2);
   const open = d.spawn("hucum", 4);
-  run(40);
+  // koşu yolu uzun: hücumcu ekran dışında doğar, kaleye ~44 sn'de ulaşır
+  run(50);
   const mid = A.game.debug();
   check(
     "savunma: forvet koridorunu korur, boş koridor gol yer",
