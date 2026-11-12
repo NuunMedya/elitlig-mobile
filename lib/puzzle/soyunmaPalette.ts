@@ -40,99 +40,84 @@ export const SOYUNMA_TEAMS: readonly SoyunmaTeam[] = [
 
 /** Gizli formanın ("?") renkleri. */
 export const SOYUNMA_HIDDEN = {
-  body: "#4A4560",
-  trim: "#6B6585",
-  ink: "#F2F0FA",
+  body: "#59607E",
+  trim: "#737A98",
+  ink: "#F2F3FA",
 } as const;
 
-/** Dolap / askı çizim renkleri (koyu ahşap dolap + metal askı). */
+/**
+ * Dolap / askı çizim renkleri — sade çelik dolap: açık gri-mavi gövde,
+ * aydınlık iç boşluk (formalar her tonda okunur), ince koyu kenar.
+ */
 export const SOYUNMA_LOCKER = {
-  wood: "#6E4B32",
-  woodDark: "#4F3422",
-  rail: "#B9BCC6",
-  railDark: "#7D8190",
-  lockBody: "#D9A62E",
-  lockDark: "#8C6A16",
+  rail: "#B7BDCE",
+  railDark: "#8C93A8",
+  railHi: "#EEF0F6",
+  lockBody: "#FFFFFF",
+  lockDark: "#3A4166",
   sparkle: "#FFD84D",
-  crest: "#FFD84D",
+  crest: "#FFC93C",
+  crestEdge: "#C99412",
   crestInk: "#5C3B00",
-  crestShine: "rgba(255, 255, 255, 0.7)",
-  /** Ahşap damarı, metal parlaklık ve iç gölge. */
-  woodHi: "#8C6343",
-  grain: "#3E2818",
-  railHi: "#F1F3F7",
-  inner: "#2E1E12",
-  /** Çizgi film metal dolap: parlak mavi gövde, lacivert iç boşluk. */
-  lockerHi: "#7CC4FF",
-  locker: "#3D8EF2",
-  lockerLo: "#2763C4",
-  cavity: "#D6E2FF",
-  cavityLo: "#A9BCEB",
-  vent: "#1D4FA8",
-  doorHi: "#FFB547",
-  door: "#F57F22",
-  doorLo: "#C9560C",
+  crestShine: "rgba(255, 255, 255, 0.6)",
+  /** Çelik gövde (soldan ışık) ve kenarı. */
+  lockerHi: "#E9EDF6",
+  locker: "#D5DBEA",
+  lockerLo: "#BCC4D9",
+  lockerEdge: "#A3ACC4",
+  cavity: "#F5F7FC",
+  cavityLo: "#E3E8F3",
+  vent: "#A7B0C7",
+  ghost: "#C3CADC",
+  /** Kilitli dolap kapısı: koyu arduvaz. */
+  door: "#4A5274",
+  doorHi: "#5A6386",
+  doorLo: "#3A4160",
 } as const;
 
 /** Kumaş ışığı ve gölgesi (formalar). */
 export const SOYUNMA_SHADE = {
   light: "#FFFFFF",
   dark: "#000000",
-  drop: "rgba(0, 0, 0, 0.35)",
+  drop: "rgba(20, 24, 60, 0.18)",
   inkEdgeDark: "rgba(0, 0, 0, 0.35)",
   inkEdgeLight: "rgba(255, 255, 255, 0.4)",
 } as const;
 
 /**
- * Oyun içi arayüz: HUD, soyunma odası duvarı / zemini, güçlendirici
- * butonları. Tema tokenından bağımsız: sahne iki temada da aynı renkli
- * "oyun içi" atmosferi taşır.
+ * Oyun içi arayüz: HUD, oda zemini, güçlendirici. Sade dil: nötr lacivert
+ * paneller, tek vurgu (yeşil ilerleme), yıldızlar altın, uyarı kırmızı.
  */
 export const SOYUNMA_UI = {
-  /** HUD paneli — lacivert gece. */
-  panel: "#3A2E9E",
-  panelDeep: "#1C1760",
-  panelRim: "#5A4BD0",
-  /** Hamle sayacı turuncusu. */
-  orange: "#FF9A2E",
-  orangeDeep: "#C25E00",
-  /** Hedef / ilerleme yeşili. */
-  green: "#41E070",
-  greenDeep: "#1C9C43",
+  /** HUD paneli. */
+  panel: "#232860",
+  panelDeep: "#1A1E4C",
+  /** İlerleme yeşili (tek vurgu). */
+  green: "#2FCB6E",
+  greenDeep: "#22B35E",
   /** Yıldız ve skor altını. */
-  gold: "#FFC531",
-  goldDeep: "#C47F00",
-  goldInk: "#4A2E00",
+  gold: "#FFC93C",
+  goldInk: "#4A3300",
   /** Uyarı (az hamle kaldı). */
-  red: "#FF4D5E",
-  redDeep: "#B11C2C",
-  /** Güçlendirici mavisi. */
-  blue: "#3FA9FF",
-  blueDeep: "#1A63B8",
-  /** Soyunma odası: krem fayans duvar + turuncu parke + lacivert çerçeve. */
-  wall: "#FFE2A8",
-  wallHi: "#FFF4D8",
-  wallDeep: "#F2B84B",
-  wallLine: "rgba(201, 135, 40, 0.35)",
-  floor: "#E8904A",
-  floorHi: "#FFB46A",
-  floorLine: "#B45E22",
-  rim: "#1B1446",
-  rimDeep: "#1B1446",
-  bench: "#C9772E",
-  benchHi: "#F0A250",
-  /** Duvardaki flama dizisi. */
-  flags: ["#FF4D6D", "#FFD23F", "#2F80ED", "#22C55E", "#7C4DFF"] as readonly string[],
-  starOff: "rgba(255, 255, 255, 0.28)",
-  barTrack: "#120A35",
-  shine: "rgba(255, 255, 255, 0.35)",
+  red: "#E5484D",
+  /** Oda: koyu lacivert, yumuşak üst ışık, ince zemin çizgisi. */
+  roomTop: "#262C66",
+  roomBottom: "#1A1E4A",
+  roomGlow: "#3A4290",
+  floor: "#151838",
+  floorLine: "rgba(255, 255, 255, 0.10)",
+  starOff: "rgba(255, 255, 255, 0.22)",
+  barTrack: "rgba(255, 255, 255, 0.14)",
   text: "#FFFFFF",
-  textSoft: "rgba(255, 255, 255, 0.75)",
-  textShadow: "rgba(27, 20, 70, 0.85)",
-  scrim: "rgba(5, 12, 30, 0.6)",
-  card: "#1F4A96",
-  cardDeep: "#0E2659",
-  tipFace: "#FFF3C4",
-  tipDeep: "#E2B93B",
-  tipInk: "#4A3500",
+  textSoft: "rgba(255, 255, 255, 0.68)",
+  textShadow: "rgba(8, 10, 35, 0.35)",
+  scrim: "rgba(10, 12, 36, 0.62)",
+  card: "#FFFFFF",
+  cardInk: "#1B1F3F",
+  cardMuted: "#6A6F8C",
+  selected: "#FFFFFF",
+  tipFace: "#FFFFFF",
+  tipInk: "#1B1F3F",
+  tipIcon: "#FFF4D0",
+  tipIconInk: "#9A6B00",
 } as const;

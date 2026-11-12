@@ -29,10 +29,9 @@ import {
   type KantinStep,
 } from "@/lib/puzzle/levels/kantin";
 import type { PuzzleGameProps } from "@/lib/puzzle/types";
-import { CARTOON } from "@/lib/game/cartoon";
 import { fonts, haptics, radius, space, textScale, type } from "@/theme";
 
-import { OUT, toonShadow, useIdleDriver } from "../soyunma/CartoonKit";
+import { softShadow, useIdleDriver } from "../soyunma/CartoonKit";
 
 import { BoosterDock, FanSpot, HoldRow, Hud, PlateSpot, STACK_VISIBLE, StackColumn, Stands } from "./Board";
 import { FxLayer, type Fx, type FxInput, type Pt } from "./Effects";
@@ -655,19 +654,18 @@ function TipBanner({ text, top, width }: { text: string; top: number; width: num
 }
 
 const styles = StyleSheet.create({
-  root: { alignSelf: "center", backgroundColor: S.wall, borderRadius: radius.xxl, overflow: "hidden" },
+  root: { alignSelf: "center", backgroundColor: S.base, borderRadius: radius.xxl, overflow: "hidden" },
   abs: { position: "absolute", left: 0 },
-  wallTiles: { backgroundColor: S.wallTile, borderTopWidth: OUT, borderColor: CARTOON.outline },
+  wallTiles: { backgroundColor: S.base },
   stands: {
     overflow: "hidden",
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
   },
   counter: {
-    backgroundColor: S.wood,
-    borderTopWidth: OUT,
-    borderBottomWidth: 6,
-    borderColor: CARTOON.outline,
+    backgroundColor: S.counterTop,
+    borderBottomWidth: 3,
+    borderColor: S.counterLip,
   },
   stacksRow: { flexDirection: "row" },
   tip: {
@@ -675,11 +673,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.md,
     paddingVertical: space.m,
     borderRadius: radius.xl,
-    backgroundColor: CARTOON.pill[1],
-    borderWidth: OUT,
-    borderBottomWidth: 6,
-    borderColor: CARTOON.outline,
+    backgroundColor: S.tipCard,
     zIndex: 20,
+    ...softShadow,
   },
-  tipText: { ...type.bodySm, fontFamily: fonts.semibold, color: CARTOON.white, textAlign: "center", ...toonShadow },
+  tipText: { ...type.bodySm, fontFamily: fonts.semibold, color: S.tipInk, textAlign: "center" },
 });

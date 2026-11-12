@@ -4,7 +4,6 @@
  */
 import { memo } from "react";
 import Svg, { ClipPath, Defs, G, Path, Polygon, Rect, Text as SvgText } from "react-native-svg";
-import { CARTOON } from "@/lib/game/cartoon";
 import { fonts, type } from "@/theme";
 import { SOYUNMA_HIDDEN, SOYUNMA_LOCKER, SOYUNMA_SHADE as SH, SOYUNMA_TEAMS } from "@/lib/puzzle/soyunmaPalette";
 
@@ -21,14 +20,17 @@ interface JerseyProps {
   height: number;
 }
 
-const OUTLINE_W = 2.6;
-/** Lacivert konturun üstünde koyu mürekkep okunmaz: koyu rakamlar beyaza döner. */
-function inkOn(t: { ink: string }) {
-  const n = parseInt(t.ink.slice(1), 16);
-  const lum = ((n >> 16) & 255) * 0.3 + ((n >> 8) & 255) * 0.59 + (n & 255) * 0.11;
-  return lum > 140 ? t.ink : SH.light;
+const EDGE_W = 1.2;
+/** Rengin koyu tonu (ince kenar çizgisi için): kendi renginden türetilir. */
+function shade(hex: string, k: number) {
+  const n = parseInt(hex.slice(1), 16);
+  const ch = (v: number) => Math.max(0, Math.min(255, Math.round(v * (1 - k))));
+  const r = ch((n >> 16) & 255);
+  const g = ch((n >> 8) & 255);
+  const b = ch(n & 255);
+  return `rgb(${r}, ${g}, ${b})`;
 }
-/** Omuz parlaması (sol üst): çizgi film "shine" şeridi. */
+/** Omuz parlaması (sol üst): yumuşak ışık. */
 const SHINE = "M7 9.5 L14.5 5.5 Q15.6 5 16 6.2 L16.3 7.4 Q16.4 8.4 15.4 8.9 L8.6 12.6 Q7.4 13.2 6.9 12 L6.6 10.9 Q6.4 10 7 9.5 Z";
 
 function JerseyBase({ team, width, height }: JerseyProps) {
@@ -36,18 +38,16 @@ function JerseyBase({ team, width, height }: JerseyProps) {
   if (team < 0) {
     return (
       <Svg width={width} height={height} viewBox="-3 -4 54 48">
-        <Path d={SHIRT} transform="translate(0 2.4)" fill={SH.drop} />
-        <Path d={SHIRT} fill={SOYUNMA_HIDDEN.body} stroke={CARTOON.outline} strokeWidth={OUTLINE_W} strokeLinejoin="round" />
-        <Path d={COLLAR} fill={SOYUNMA_HIDDEN.trim} stroke={CARTOON.outline} strokeWidth={1.4} strokeLinejoin="round" />
-        <Path d={SHINE} fill={SH.light} fillOpacity={0.22} />
+        <Path d={SHIRT} transform="translate(0 1.6)" fill={SH.drop} />
+        <Path d={SHIRT} fill={SOYUNMA_HIDDEN.body} stroke={shade(SOYUNMA_HIDDEN.body, 0.3)} strokeWidth={EDGE_W} strokeLinejoin="round" />
+        <Path d={COLLAR} fill={SOYUNMA_HIDDEN.trim} />
+        <Path d={SHINE} fill={SH.light} fillOpacity={0.14} />
         <SvgText
           x={24}
           y={31}
           fontSize={NUMBER_SIZE + 4}
           fontFamily={fonts.bold}
           fill={SOYUNMA_HIDDEN.ink}
-          stroke={CARTOON.outline}
-          strokeWidth={1.4}
           textAnchor="middle"
         >
           ?
@@ -56,9 +56,10 @@ function JerseyBase({ team, width, height }: JerseyProps) {
     );
   }
   const t = SOYUNMA_TEAMS[team % SOYUNMA_TEAMS.length];
-  const patch = t.pattern === "yarim" || t.pattern === "cizgili" || t.pattern === "bantli";
-  // Çizgi film forması: düz doygun dolgu + desen, sol omuzda parlama, alt
-  // kenarda koyu bant, kalın lacivert kontur; numara lacivert konturlu.
+  const patch = t.pattern === "yarim" || t.pattern === "cizgili" || t.pattern === "bantli" || t.pattern === "kusak";
+  // Sade forma: düz dolgu + desen, sol omuzda yumuşak ışık, sağda hafif
+  // gölge; kenar kendi renginin koyu tonunda ince çizgi.
+  const edge = shade(t.primary, 0.3);
   return (
     <Svg width={width} height={height} viewBox="-3 -4 54 48">
       <Defs>
@@ -66,7 +67,7 @@ function JerseyBase({ team, width, height }: JerseyProps) {
           <Path d={SHIRT} />
         </ClipPath>
       </Defs>
-      <Path d={SHIRT} transform="translate(0 2.4)" fill={SH.drop} />
+      <Path d={SHIRT} transform="translate(0 1.6)" fill={SH.drop} />
       <Path d={SHIRT} fill={t.primary} />
       <G clipPath={`url(#${clip})`}>
         {t.pattern === "cizgili" ? (
@@ -98,31 +99,15 @@ function JerseyBase({ team, width, height }: JerseyProps) {
           </G>
         ) : null}
         {/* Sağ kenar gölgesi + etek bandı (düz, çizgi film tonu). */}
-        <Path d="M37.5 15.5 L37.5 40 L33 40 Q35 26 33.5 9 Z" fill={SH.dark} fillOpacity={0.14} />
-        <Rect x={0} y={35} width={48} height={6} fill={SH.dark} fillOpacity={0.16} />
-        <Path d={SHINE} fill={SH.light} fillOpacity={0.55} />
+        <Path d="M37.5 15.5 L37.5 40 L33 40 Q35 26 33.5 9 Z" fill={SH.dark} fillOpacity={0.1} />
+        <Rect x={0} y={36} width={48} height={5} fill={SH.dark} fillOpacity={0.1} />
+        <Path d={SHINE} fill={SH.light} fillOpacity={0.3} />
       </G>
-      <Path d={SHIRT} fill="none" stroke={CARTOON.outline} strokeWidth={OUTLINE_W} strokeLinejoin="round" />
-      <Path d="M10.5 15.5 L10.5 22" stroke={CARTOON.outline} strokeWidth={1.3} strokeLinecap="round" />
-      <Path d="M37.5 15.5 L37.5 22" stroke={CARTOON.outline} strokeWidth={1.3} strokeLinecap="round" />
-      <Path d={COLLAR} fill={t.secondary} stroke={CARTOON.outline} strokeWidth={1.4} strokeLinejoin="round" />
+      <Path d={SHIRT} fill="none" stroke={edge} strokeWidth={EDGE_W} strokeLinejoin="round" />
+      <Path d={COLLAR} fill={t.secondary} stroke={edge} strokeWidth={0.8} strokeLinejoin="round" />
       {/* Numara yaması: iki renkli desende numara okunaklı kalsın. */}
-      {patch ? <Rect x={16} y={15} width={16} height={15} rx={4} fill={t.primary} stroke={CARTOON.outline} strokeWidth={1.2} /> : null}
-      {/* Önce kalın lacivert kontur, üstüne dolgu: rakam kalın ve okunaklı. */}
-      <SvgText
-        x={24}
-        y={28}
-        fontSize={t.number >= 10 ? NUMBER_SIZE - 2 : NUMBER_SIZE + 1}
-        fontFamily={fonts.bold}
-        fill={CARTOON.outline}
-        stroke={CARTOON.outline}
-        strokeWidth={3}
-        strokeLinejoin="round"
-        textAnchor="middle"
-      >
-        {String(t.number)}
-      </SvgText>
-      <SvgText x={24} y={28} fontSize={t.number >= 10 ? NUMBER_SIZE - 2 : NUMBER_SIZE + 1} fontFamily={fonts.bold} fill={inkOn(t)} textAnchor="middle">
+      {patch ? <Rect x={16.5} y={15.5} width={15} height={14} rx={4} fill={t.primary} /> : null}
+      <SvgText x={24} y={28} fontSize={t.number >= 10 ? NUMBER_SIZE - 2 : NUMBER_SIZE + 1} fontFamily={fonts.bold} fill={t.ink} textAnchor="middle">
         {String(t.number)}
       </SvgText>
     </Svg>
@@ -141,11 +126,11 @@ function CrestBase({ team, size }: CrestProps) {
   const t = SOYUNMA_TEAMS[team % SOYUNMA_TEAMS.length];
   return (
     <Svg width={size} height={size} viewBox="0 0 32 32">
-      <Path d="M16 1.6 L29 5.4 L29 15 Q29 25 16 30.6 Q3 25 3 15 L3 5.4 Z" fill={SOYUNMA_LOCKER.crest} stroke={CARTOON.outline} strokeWidth={2.2} strokeLinejoin="round" />
-      <Path d="M16 4.6 L26 7.6 L26 15 Q26 23 16 27.6 Q6 23 6 15 L6 7.6 Z" fill={t.primary} stroke={CARTOON.outline} strokeWidth={1.2} strokeLinejoin="round" />
-      <Path d="M16 4.6 L26 7.6 L26 11 L6 11 L6 7.6 Z" fill={t.secondary} stroke={CARTOON.outline} strokeWidth={1.2} strokeLinejoin="round" />
-      <Path d="M6.5 13 Q7 8.5 11 8.2" stroke={SOYUNMA_LOCKER.crestShine} strokeWidth={1.6} strokeLinecap="round" fill="none" />
-      <SvgText x={16} y={23} fontSize={type.caption.fontSize} fontFamily={fonts.bold} fill={t.ink} stroke={CARTOON.outline} strokeWidth={0.9} textAnchor="middle">
+      <Path d="M16 1.6 L29 5.4 L29 15 Q29 25 16 30.6 Q3 25 3 15 L3 5.4 Z" fill={SOYUNMA_LOCKER.crest} stroke={SOYUNMA_LOCKER.crestEdge} strokeWidth={1} strokeLinejoin="round" />
+      <Path d="M16 4.6 L26 7.6 L26 15 Q26 23 16 27.6 Q6 23 6 15 L6 7.6 Z" fill={t.primary} />
+      <Path d="M16 4.6 L26 7.6 L26 11 L6 11 L6 7.6 Z" fill={t.secondary} />
+      <Path d="M6.5 13 Q7 8.5 11 8.2" stroke={SOYUNMA_LOCKER.crestShine} strokeWidth={1.2} strokeLinecap="round" fill="none" />
+      <SvgText x={16} y={23} fontSize={type.caption.fontSize} fontFamily={fonts.bold} fill={t.ink} textAnchor="middle">
         {String(t.number)}
       </SvgText>
     </Svg>

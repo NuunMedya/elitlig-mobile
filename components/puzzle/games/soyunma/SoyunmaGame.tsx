@@ -9,9 +9,8 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { memo, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { Animated, Easing, InteractionManager, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
-import Svg, { Line, Path, Rect } from "react-native-svg";
+import Svg, { Defs, Line, LinearGradient, RadialGradient, Rect, Stop } from "react-native-svg";
 import { fonts, haptics, radius, space, textScale, type } from "@/theme";
-import { CARTOON } from "@/lib/game/cartoon";
 import { SOYUNMA_UI as UI } from "@/lib/puzzle/soyunmaPalette";
 import type { PuzzleGameProps } from "@/lib/puzzle/types";
 import {
@@ -30,7 +29,7 @@ import {
   type SoyunmaLevel,
   type SoyunmaRack,
 } from "@/lib/puzzle/levels/soyunma";
-import { BoosterButton3D, Button3D, CountBadge, IconDisc, OUT, useIdleDriver, usePop } from "./CartoonKit";
+import { BoosterButton3D, Button3D, CountBadge, IconDisc, softShadow, toonShadow, useIdleDriver, usePop } from "./CartoonKit";
 import { TextBurst } from "./Effects";
 import { bodyTop, computeGeometry, liftOffset, slotTop, type BoardGeometry } from "./geometry";
 import { Crest, Jersey } from "./Jersey";
@@ -200,7 +199,7 @@ const FlightLayer = memo(function FlightLayer({
                     outputRange: pts.map((p) => y0 + (y1 - y0) * p - arc * 4 * p * (1 - p)),
                   }),
                 },
-                { scale: t.interpolate({ inputRange: [0, 0.5, 1], outputRange: [1, 1.12, 1] }) },
+                { scale: t.interpolate({ inputRange: [0, 0.5, 1], outputRange: [1, 1.06, 1] }) },
                 { rotate: t.interpolate({ inputRange: [0, 0.5, 1], outputRange: ["0deg", x1 > x0 ? "8deg" : "-8deg", "0deg"] }) },
               ],
             }}
@@ -264,26 +263,23 @@ const CrestFly = memo(function CrestFly({ info, onArrive }: { info: CrestFlightI
 
 /* ────────────────────────────── HUD ────────────────────────────── */
 
-const shadowText = { textShadowColor: UI.textShadow, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 } as const;
+const shadowText = toonShadow;
 
-/** Kabartmalı (3D) sayaç: alt kalınlık + parlak yüz. */
+/** Hamle sayacı: koyu iç blok, iri beyaz rakam; azalınca kırmızı. */
 function MovesCounter({ label, value, warn, height }: { label: string; value: string; warn: boolean; height: number }) {
-  const pop = usePop(value, 1.22);
+  const pop = usePop(value, 1.1);
   return (
     <Animated.View
-      style={[styles.counter, { height, backgroundColor: warn ? UI.redDeep : UI.orangeDeep, transform: [{ scale: pop }] }]}
+      style={[styles.counter, { height, backgroundColor: warn ? UI.red : UI.panelDeep, transform: [{ scale: pop }] }]}
       accessible
       accessibilityLabel={`${label}: ${value}`}
     >
-      <View style={[styles.counterFace, { height: height - 5, backgroundColor: warn ? UI.red : UI.orange }]}>
-        <View style={styles.counterShine} />
-        <Text {...textScale.badge} style={styles.counterLabel}>
-          {label}
-        </Text>
-        <Text {...textScale.badge} style={styles.counterValue}>
-          {value}
-        </Text>
-      </View>
+      <Text {...textScale.badge} style={styles.counterLabel}>
+        {label}
+      </Text>
+      <Text {...textScale.badge} style={styles.counterValue}>
+        {value}
+      </Text>
     </Animated.View>
   );
 }
@@ -304,48 +300,25 @@ function StarMeter({ stars, size }: { stars: number; size: number }) {
   );
 }
 
-/** Soyunma odası zemini: fayans duvar + parke zemin (saf çizim). */
+/** Oda zemini: yumuşak lacivert gradyan, üstte tek sıcak ışık, ince zemin çizgisi. */
 const RoomBackdrop = memo(function RoomBackdrop({ width, height, floorH }: { width: number; height: number; floorH: number }) {
-  const tile = 30;
   const wallH = height - floorH;
-  const cols = Math.ceil(width / tile);
-  const rows = Math.ceil(wallH / tile);
-  const planks = Math.ceil(width / 46);
-  const flagN = Math.max(5, Math.round(width / 34));
   return (
     <Svg width={width} height={height} style={StyleSheet.absoluteFill} pointerEvents="none">
-      <Rect x={0} y={0} width={width} height={wallH} fill={UI.wall} />
-      <Rect x={0} y={0} width={width} height={wallH * 0.45} fill={UI.wallHi} opacity={0.35} />
-      {Array.from({ length: cols }, (_, i) => (
-        <Line key={`c${i}`} x1={(i + 1) * tile} y1={0} x2={(i + 1) * tile} y2={wallH} stroke={UI.wallLine} strokeWidth={1.5} />
-      ))}
-      {Array.from({ length: rows }, (_, i) => (
-        <Line key={`r${i}`} x1={0} y1={wallH - (i + 1) * tile} x2={width} y2={wallH - (i + 1) * tile} stroke={UI.wallLine} strokeWidth={1.5} />
-      ))}
-      {/* Flama dizisi: lacivert ip, konturlu üçgen bayraklar. */}
-      <Path d={`M0 6 Q${width / 2} 26 ${width} 6`} stroke={CARTOON.outline} strokeWidth={2} fill="none" />
-      {Array.from({ length: flagN }, (_, i) => {
-        const x = ((i + 0.5) / flagN) * width;
-        const u = x / width;
-        const y = 6 + 4 * 20 * u * (1 - u);
-        return (
-          <Path
-            key={`f${i}`}
-            d={`M${x - 8} ${y - 1} L${x + 8} ${y + 1} L${x} ${y + 17} Z`}
-            fill={UI.flags[i % UI.flags.length]}
-            stroke={CARTOON.outline}
-            strokeWidth={2}
-            strokeLinejoin="round"
-          />
-        );
-      })}
-      <Rect x={0} y={wallH - 10} width={width} height={10} fill={UI.wallDeep} stroke={CARTOON.outline} strokeWidth={2.5} />
+      <Defs>
+        <LinearGradient id="sroom" x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor={UI.roomTop} />
+          <Stop offset="1" stopColor={UI.roomBottom} />
+        </LinearGradient>
+        <RadialGradient id="sglow" cx="50%" cy="0%" r="70%">
+          <Stop offset="0" stopColor={UI.roomGlow} stopOpacity={0.9} />
+          <Stop offset="1" stopColor={UI.roomGlow} stopOpacity={0} />
+        </RadialGradient>
+      </Defs>
+      <Rect x={0} y={0} width={width} height={height} fill="url(#sroom)" />
+      <Rect x={0} y={0} width={width} height={wallH * 0.7} fill="url(#sglow)" />
       <Rect x={0} y={wallH} width={width} height={floorH} fill={UI.floor} />
-      <Rect x={0} y={wallH} width={width} height={Math.max(2, floorH * 0.3)} fill={UI.floorHi} />
-      <Line x1={0} y1={wallH} x2={width} y2={wallH} stroke={CARTOON.outline} strokeWidth={2.5} />
-      {Array.from({ length: planks }, (_, i) => (
-        <Line key={`p${i}`} x1={i * 46 + (i % 2) * 18} y1={wallH} x2={i * 46 + (i % 2) * 18} y2={height} stroke={UI.floorLine} strokeWidth={1.5} />
-      ))}
+      <Line x1={0} y1={wallH} x2={width} y2={wallH} stroke={UI.floorLine} strokeWidth={1} />
     </Svg>
   );
 });
@@ -616,7 +589,7 @@ function SoyunmaBoardView({ lvl, maxWidth, maxHeight, preBoosters, boosterStock,
     <View style={{ width: maxWidth, height: maxHeight }}>
       {/* HUD */}
       <View style={[styles.hud, { height: hudH }]} onLayout={onHudLayout}>
-        <View style={[styles.hudFace, { height: hudH - 4 }]}>
+        <View style={[styles.hudFace, { height: hudH }]}>
           <MovesCounter label={movesLabel} value={movesValue} warn={warn} height={hudH - 16} />
           <Animated.View
             onLayout={onGoalLayout}
@@ -627,7 +600,7 @@ function SoyunmaBoardView({ lvl, maxWidth, maxHeight, preBoosters, boosterStock,
             accessible
             accessibilityLabel={`Hazır takım: ${landedComplete} / ${lvl.colors}`}
           >
-            <Crest team={lvl.teamIds[0]} size={compact ? 26 : 32} />
+            <Crest team={lvl.teamIds[0]} size={compact ? 24 : 28} />
             <View style={styles.goalBody}>
               <View style={styles.goalRow}>
                 <Text {...textScale.badge} style={styles.goalLabel}>
@@ -693,7 +666,7 @@ function SoyunmaBoardView({ lvl, maxWidth, maxHeight, preBoosters, boosterStock,
         {showTip ? (
           <Pressable style={styles.tip} onPress={() => setTipOpen(false)} accessibilityRole="button" accessibilityLabel={`İpucu: ${lvl.tip}. Kapatmak için dokun`}>
             <View style={styles.tipIcon}>
-              <Ionicons name="bulb" size={16} color={UI.tipInk} />
+              <Ionicons name="bulb" size={15} color={UI.tipIconInk} />
             </View>
             <Text {...textScale.long} style={styles.tipText}>
               {lvl.tip}
@@ -706,7 +679,7 @@ function SoyunmaBoardView({ lvl, maxWidth, maxHeight, preBoosters, boosterStock,
           <View style={styles.blockedWrap}>
             <View style={styles.blockedBase} accessibilityRole="alert">
               <View style={styles.blocked}>
-                <IconDisc icon={s.blockReason === "limit" ? "hourglass" : "close"} size={56} tone="red" />
+                <IconDisc icon={s.blockReason === "limit" ? "hourglass" : "close"} size={52} tone="red" />
                 <Text {...textScale.dense} style={styles.blockedTitle}>
                   {s.blockReason === "limit" ? "Hamle hakkın bitti" : "Hamle kalmadı"}
                 </Text>
@@ -714,13 +687,13 @@ function SoyunmaBoardView({ lvl, maxWidth, maxHeight, preBoosters, boosterStock,
                   Son hamleyi geri alıp yeni bir yol deneyebilirsin.
                 </Text>
                 <View style={styles.blockedRow}>
-                  <Button3D tone="orange" height={46} onPress={onUndo} accessibilityLabel={`Geri al, stok ${geriStock}`} badge={<CountBadge value={geriStock} size={24} />}>
+                  <Button3D tone="green" height={46} onPress={onUndo} accessibilityLabel={`Geri al, stok ${geriStock}`} badge={<CountBadge value={geriStock} size={24} />}>
                     <Ionicons name="arrow-undo" size={18} color={UI.text} />
                     <Text {...textScale.dense} style={styles.btnText}>
                       GERİ AL
                     </Text>
                   </Button3D>
-                  <Button3D tone="red" height={46} onPress={giveUp} accessibilityLabel="Pes et">
+                  <Button3D tone="pill" height={46} onPress={giveUp} accessibilityLabel="Pes et">
                     <Text {...textScale.dense} style={styles.btnText}>
                       PES ET
                     </Text>
@@ -737,7 +710,7 @@ function SoyunmaBoardView({ lvl, maxWidth, maxHeight, preBoosters, boosterStock,
         <View style={styles.bottomInfo}>
           {lvl.cup ? (
             <View style={styles.cupTag}>
-              <Ionicons name="trophy" size={14} color={UI.goldInk} />
+              <Ionicons name="trophy" size={13} color={UI.gold} />
               <Text {...textScale.badge} style={styles.cupText}>
                 KUPA MAÇI
               </Text>
@@ -745,7 +718,7 @@ function SoyunmaBoardView({ lvl, maxWidth, maxHeight, preBoosters, boosterStock,
           ) : null}
           {nextStarText ? (
             <View style={styles.starHint}>
-              <Ionicons name="star" size={14} color={UI.gold} />
+              <Ionicons name="star" size={13} color={UI.gold} />
               <Text {...textScale.dense} style={styles.subText} numberOfLines={2}>
                 {nextStarText}
               </Text>
@@ -806,33 +779,20 @@ export default function SoyunmaGame(props: PuzzleGameProps) {
 
 /* ────────────────────────────── stiller ────────────────────────────── */
 
-const ROOM_RIM = 4;
+const ROOM_RIM = 0;
 
 const styles = StyleSheet.create({
-  hud: { borderRadius: radius.xl, backgroundColor: CARTOON.outline },
+  hud: { borderRadius: radius.xl, backgroundColor: UI.panel, ...softShadow },
   hudFace: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.sm,
     paddingHorizontal: space.sm,
     borderRadius: radius.xl,
-    backgroundColor: UI.panel,
-    borderWidth: OUT,
-    borderColor: CARTOON.outline,
   },
-  counter: { minWidth: 78, borderRadius: radius.lg, borderWidth: OUT, borderColor: CARTOON.outline },
-  counterFace: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: space.sm,
-    borderTopLeftRadius: radius.md,
-    borderTopRightRadius: radius.md,
-    borderBottomLeftRadius: radius.sm,
-    borderBottomRightRadius: radius.sm,
-  },
-  counterShine: { position: "absolute", left: space.sm, right: space.sm, top: 3, height: 5, borderRadius: radius.pill, backgroundColor: UI.shine },
-  counterLabel: { ...type.nano, fontFamily: fonts.bold, color: UI.text, letterSpacing: 0.6, ...shadowText },
-  counterValue: { ...type.scoreMd, color: UI.text, ...shadowText },
+  counter: { minWidth: 76, borderRadius: radius.lg, alignItems: "center", justifyContent: "center", paddingHorizontal: space.sm },
+  counterLabel: { ...type.nano, fontFamily: fonts.bold, color: UI.textSoft, letterSpacing: 0.6 },
+  counterValue: { ...type.scoreMd, color: UI.text },
   goal: {
     flex: 1,
     minWidth: 0,
@@ -841,20 +801,18 @@ const styles = StyleSheet.create({
     gap: space.s,
     paddingHorizontal: space.sm,
     paddingVertical: space.xs,
-    borderRadius: radius.pill,
+    borderRadius: radius.lg,
     backgroundColor: UI.panelDeep,
-    borderWidth: 2,
-    borderColor: CARTOON.outline,
   },
   goalBody: { flex: 1, minWidth: 0, gap: space.xxs },
   goalRow: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: space.xs },
   goalLabel: { ...type.micro, fontFamily: fonts.bold, color: UI.textSoft },
-  goalValue: { ...type.scoreSm, color: UI.text, ...shadowText },
-  bar: { height: 12, borderRadius: radius.pill, backgroundColor: UI.barTrack, overflow: "hidden", borderWidth: 2, borderColor: CARTOON.outline },
-  barFill: { height: 8, borderRadius: radius.pill, backgroundColor: UI.green, borderBottomWidth: 3, borderBottomColor: UI.greenDeep },
+  goalValue: { ...type.scoreSm, color: UI.text },
+  bar: { height: 8, borderRadius: radius.pill, backgroundColor: UI.barTrack, overflow: "hidden" },
+  barFill: { height: 8, borderRadius: radius.pill, backgroundColor: UI.green },
   score: { alignItems: "flex-end", minWidth: 64 },
-  scoreValue: { ...type.scoreMd, color: UI.gold, ...shadowText },
-  stars: { flexDirection: "row", alignItems: "flex-end" },
+  scoreValue: { ...type.scoreMd, color: UI.gold },
+  stars: { flexDirection: "row", alignItems: "flex-end", gap: 1 },
   starMid: { marginBottom: space.xxs },
   booster: { width: 150, marginBottom: space.xs },
   bottomBar: { flexDirection: "row", alignItems: "flex-end", gap: space.sm, paddingRight: space.xs },
@@ -869,10 +827,8 @@ const styles = StyleSheet.create({
     paddingVertical: space.xs,
     borderRadius: radius.pill,
     backgroundColor: UI.panel,
-    borderWidth: 2.5,
-    borderColor: CARTOON.outline,
   },
-  subText: { ...type.caption, fontFamily: fonts.bold, color: UI.text, flexShrink: 1, ...shadowText },
+  subText: { ...type.caption, fontFamily: fonts.semibold, color: UI.textSoft, flexShrink: 1 },
   cupTag: {
     flexDirection: "row",
     alignItems: "center",
@@ -881,12 +837,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.sm,
     paddingVertical: space.xxs,
     borderRadius: radius.pill,
-    backgroundColor: UI.gold,
-    borderWidth: 2.5,
-    borderBottomWidth: 4,
-    borderColor: CARTOON.outline,
+    backgroundColor: UI.panel,
   },
-  cupText: { ...type.micro, fontFamily: fonts.bold, color: UI.goldInk },
+  cupText: { ...type.micro, fontFamily: fonts.bold, color: UI.gold },
   tip: {
     position: "absolute",
     left: space.md,
@@ -899,9 +852,7 @@ const styles = StyleSheet.create({
     paddingVertical: space.sm,
     borderRadius: radius.xl,
     backgroundColor: UI.tipFace,
-    borderWidth: OUT,
-    borderBottomWidth: 6,
-    borderColor: CARTOON.outline,
+    ...softShadow,
   },
   tipIcon: {
     width: 28,
@@ -909,34 +860,27 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: UI.gold,
-    borderWidth: 2,
-    borderColor: CARTOON.outline,
+    backgroundColor: UI.tipIcon,
   },
   tipText: { ...type.bodySm, fontFamily: fonts.semibold, color: UI.tipInk, flex: 1 },
   room: {
     borderRadius: radius.xxl,
-    borderWidth: ROOM_RIM,
-    borderColor: UI.rim,
-    borderBottomColor: UI.rimDeep,
-    backgroundColor: UI.wall,
+    backgroundColor: UI.roomBottom,
     overflow: "hidden",
   },
   blockedWrap: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", backgroundColor: UI.scrim },
-  blockedBase: { width: "88%", maxWidth: 360, borderRadius: radius.xxl, backgroundColor: CARTOON.outline, paddingBottom: 6 },
+  blockedBase: { width: "88%", maxWidth: 360, borderRadius: radius.xxl, ...softShadow },
   blocked: {
     alignItems: "center",
     padding: space.lg,
     borderRadius: radius.xxl,
-    backgroundColor: CARTOON.card,
-    borderWidth: OUT,
-    borderColor: CARTOON.outline,
+    backgroundColor: UI.card,
     gap: space.s,
   },
-  blockedTitle: { ...type.h2, fontFamily: fonts.bold, color: CARTOON.cardInk },
-  blockedText: { ...type.bodySm, color: CARTOON.cardMuted, textAlign: "center" },
+  blockedTitle: { ...type.h2, fontFamily: fonts.bold, color: UI.cardInk },
+  blockedText: { ...type.bodySm, color: UI.cardMuted, textAlign: "center" },
   blockedRow: { flexDirection: "row", gap: space.sm, marginTop: space.s },
   btnText: { ...type.label, fontFamily: fonts.bold, color: UI.text, ...shadowText },
   loading: { alignItems: "center", justifyContent: "center", gap: space.sm },
-  loadingText: { ...type.label, color: UI.text, ...shadowText },
+  loadingText: { ...type.label, color: UI.text },
 });

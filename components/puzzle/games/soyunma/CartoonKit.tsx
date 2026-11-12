@@ -1,11 +1,11 @@
 /**
- * LİG YOLU ÇİZGİ FİLM KİTİ — Soyunma Odası, Stadyum Kantini ve Kariyer Yolu'nun
- * ortak oyun-içi parçaları (arcade oyunlarının dili):
- *   · kalın lacivert kontur (3 px), doygun gradyan dolgu, üstte beyaz parlama
- *   · altta koyu "dudak": düğme basınca dudağa çöker
- *   · lacivert HUD hapları, iri beyaz rakamlar (lacivert gölgeli)
- *   · stok rozetli tıknaz güçlendirici düğmesi
- * Renkler lib/game/cartoon.ts'ten gelir.
+ * LİG YOLU OYUN KİTİ — Soyunma Odası, Stadyum Kantini ve Kariyer Yolu'nun
+ * ortak oyun-içi parçaları ("canlı ama sade" dil):
+ *   · kalın kontur YOK: derinlik yumuşak gölge + ince alt "dudak" (2–4 px)
+ *   · nötr lacivert / yarı saydam paneller, TEK vurgu (yeşil = birincil eylem,
+ *     kırmızı = tehlike); diğer tonlar nötr panele düşer
+ *   · beyaz kalın metin, hafif gölge (sert ofset gölge yok)
+ * Renkler lib/puzzle/ligKitPalette.ts'ten gelir.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -14,29 +14,45 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { Animated, Easing, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 
 import { useReduceMotion } from "@/components/ui/useReduceMotion";
-import { CARTOON } from "@/lib/game/cartoon";
+import { KIT } from "@/lib/puzzle/ligKitPalette";
 import { fonts, haptics, radius, space, textScale, type } from "@/theme";
 
-export const OUT = 3;
+/** Eski kalın kontur kalınlığı — sade dilde kontur yok. */
+export const OUT = 0;
 const TOP = { x: 0.5, y: 0 } as const;
 const BOTTOM = { x: 0.5, y: 1 } as const;
 
 export type ToonTone = "pill" | "green" | "gold" | "red" | "blue" | "purple" | "pink" | "orange" | "teal";
 
-export const TONES: Record<ToonTone, { fill: readonly [string, string]; lip: string; ink: string }> = {
-  pill: { fill: CARTOON.pill, lip: CARTOON.outline, ink: CARTOON.white },
-  green: { fill: CARTOON.green, lip: CARTOON.greenLip, ink: CARTOON.white },
-  gold: { fill: CARTOON.gold, lip: CARTOON.goldLip, ink: CARTOON.goldInk },
-  red: { fill: CARTOON.red, lip: CARTOON.redLip, ink: CARTOON.white },
-  blue: { fill: CARTOON.blue, lip: CARTOON.blueLip, ink: CARTOON.white },
-  purple: { fill: CARTOON.purple, lip: CARTOON.purpleLip, ink: CARTOON.white },
-  pink: { fill: CARTOON.pink, lip: CARTOON.pinkLip, ink: CARTOON.white },
-  orange: { fill: CARTOON.orange, lip: CARTOON.orangeLip, ink: CARTOON.white },
-  teal: { fill: CARTOON.teal, lip: CARTOON.tealLip, ink: CARTOON.white },
+type Tone = { fill: readonly [string, string]; lip: string; ink: string };
+const NEUTRAL: Tone = { fill: [KIT.panelHi, KIT.panel], lip: KIT.panelLip, ink: KIT.text };
+const ACCENT: Tone = { fill: [KIT.accentHi, KIT.accentLo], lip: KIT.accentLip, ink: KIT.text };
+const DANGER: Tone = { fill: [KIT.dangerHi, KIT.danger], lip: KIT.dangerLip, ink: KIT.text };
+
+/** Çerçevede en çok üç renk: nötr panel, yeşil vurgu, kırmızı tehlike. */
+export const TONES: Record<ToonTone, Tone> = {
+  pill: NEUTRAL,
+  green: ACCENT,
+  gold: NEUTRAL,
+  red: DANGER,
+  blue: NEUTRAL,
+  purple: NEUTRAL,
+  pink: NEUTRAL,
+  orange: NEUTRAL,
+  teal: NEUTRAL,
 };
 
-/** Lacivert gölgeli beyaz metin (arcade rakamları). */
-export const toonShadow = { textShadowColor: CARTOON.textShadow, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 } as const;
+/** Hafif metin gölgesi (okunurluk için; sert ofset yok). */
+export const toonShadow = { textShadowColor: KIT.textShadow, textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 } as const;
+
+/** Yumuşak düşen gölge (kart, düğme). */
+export const softShadow = {
+  shadowColor: KIT.shadow,
+  shadowOpacity: 0.28,
+  shadowRadius: 10,
+  shadowOffset: { width: 0, height: 4 },
+  elevation: 4,
+} as const;
 
 /** Değer değişince ölçek "pop" (yay, sonlu). */
 export function usePop(value: unknown, peak = 1.3) {
@@ -88,21 +104,21 @@ function useWiggle(on: boolean) {
       v.setValue(0);
       return;
     }
-    const wiggleOnce = Animated.sequence([Animated.delay(2600), Animated.timing(v, { toValue: 1, duration: 560, easing: Easing.linear, useNativeDriver: true })]);
-    const loop = Animated.loop(wiggleOnce, { iterations: 300, resetBeforeIteration: true });
+    const wiggleOnce = Animated.sequence([Animated.delay(4200), Animated.timing(v, { toValue: 1, duration: 700, easing: Easing.linear, useNativeDriver: true })]);
+    const loop = Animated.loop(wiggleOnce, { iterations: 200, resetBeforeIteration: true });
     loop.start();
     return () => loop.stop();
   }, [on, reduce, v]);
   return v;
 }
 
-/** Gradyan yüz + parlama + kontur: hap, rozet, kart zemini. */
+/** Gradyan yüz + hafif üst ışık: hap, rozet, kart zemini (kontursuz). */
 export function ToonFace({
   tone = "pill",
   r,
   style,
   children,
-  shine = true,
+  shine = false,
 }: {
   tone?: ToonTone;
   r: number;
@@ -139,7 +155,7 @@ export function HudPill({
   accessibilityLabel?: string;
   scale?: Animated.Value;
 }) {
-  const lip = 3;
+  const lip = 2;
   return (
     <Animated.View
       style={[{ height: height + lip, justifyContent: "flex-start" }, style, scale ? { transform: [{ scale }] } : null]}
@@ -150,17 +166,17 @@ export function HudPill({
       <ToonFace tone={tone} r={height / 2} style={[styles.pillRow, { height, paddingLeft: disc ? height + space.xs : space.md }]}>
         {children}
       </ToonFace>
-      {disc ? <View style={[styles.disc, { width: height + 4, height: height + 4, top: -2, left: -4 }]}>{disc}</View> : null}
+      {disc ? <View style={[styles.disc, { width: height, height, top: 0, left: space.xxs }]}>{disc}</View> : null}
     </Animated.View>
   );
 }
 
-/** Yuvarlak, konturlu, gradyanlı ikon diski. */
+/** Yuvarlak, gradyanlı ikon diski (kontursuz). */
 export function IconDisc({ icon, size, tone = "orange", color }: { icon: keyof typeof Ionicons.glyphMap; size: number; tone?: ToonTone; color?: string }) {
   const t = TONES[tone];
   return (
-    <View style={{ width: size, height: size + 3 }}>
-      <View style={[styles.lip, { top: 3, height: size, borderRadius: size / 2, backgroundColor: t.lip }]} />
+    <View style={{ width: size, height: size + 2 }}>
+      <View style={[styles.lip, { top: 2, height: size, borderRadius: size / 2, backgroundColor: t.lip }]} />
       <ToonFace tone={tone} r={size / 2} style={[styles.center, { width: size, height: size }]}>
         <Ionicons name={icon} size={Math.round(size * 0.52)} color={color ?? t.ink} />
       </ToonFace>
@@ -168,23 +184,23 @@ export function IconDisc({ icon, size, tone = "orange", color }: { icon: keyof t
   );
 }
 
-/** Stok rozeti: kırmızı (stok) ya da yeşil "+" (mağaza). */
+/** Stok rozeti: beyaz (stok) ya da yeşil "+" (mağaza). */
 export function CountBadge({ value, size = 26, style }: { value: number; size?: number; style?: StyleProp<ViewStyle> }) {
   const has = value > 0;
   return (
-    <View style={[styles.badge, { minWidth: size, height: size, borderRadius: size / 2, backgroundColor: has ? CARTOON.red[1] : CARTOON.green[1] }, style]}>
+    <View style={[styles.badge, { minWidth: size, height: size, borderRadius: size / 2, backgroundColor: has ? KIT.white : KIT.accent }, style]}>
       {has ? (
         <Text {...textScale.badge} style={styles.badgeText}>
           {String(value)}
         </Text>
       ) : (
-        <Ionicons name="add" size={Math.round(size * 0.62)} color={CARTOON.white} />
+        <Ionicons name="add" size={Math.round(size * 0.62)} color={KIT.white} />
       )}
     </View>
   );
 }
 
-/** Kalın 3B düğme (yüz + dudak, basınca çöker). İçerik serbest. */
+/** 3B düğme (yüz + ince dudak, basınca çöker). İçerik serbest. */
 export function Button3D({
   tone = "green",
   height,
@@ -217,7 +233,7 @@ export function Button3D({
 }) {
   const sink = useRef(new Animated.Value(0)).current;
   const wig = useWiggle(wiggle && !disabled);
-  const lip = height >= 52 ? 6 : 5;
+  const lip = height >= 52 ? 4 : 3;
   const corner = r ?? Math.min(radius.xl, height / 2);
   const to = (v: number) => Animated.timing(sink, { toValue: v, duration: v ? 60 : 140, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
   return (
@@ -240,8 +256,8 @@ export function Button3D({
         style={{
           height: height + lip,
           transform: [
-            { rotate: wig.interpolate({ inputRange: [0, 0.15, 0.35, 0.55, 0.75, 1], outputRange: ["0deg", "-5deg", "4deg", "-3deg", "1.5deg", "0deg"] }) },
-            { scale: wig.interpolate({ inputRange: [0, 0.15, 0.5, 1], outputRange: [1, 1.08, 1.02, 1] }) },
+            { rotate: wig.interpolate({ inputRange: [0, 0.15, 0.35, 0.55, 0.75, 1], outputRange: ["0deg", "-2deg", "1.5deg", "-1deg", "0.5deg", "0deg"] }) },
+            { scale: wig.interpolate({ inputRange: [0, 0.15, 0.5, 1], outputRange: [1, 1.03, 1.01, 1] }) },
           ],
         }}
       >
@@ -294,29 +310,28 @@ export function BoosterButton3D({
       badge={<CountBadge value={stock} />}
     >
       <View style={[styles.boosterDisc, { width: disc, height: disc, borderRadius: disc / 2 }]}>
-        <Ionicons name={icon} size={Math.round(disc * 0.58)} color={t.lip} />
+        <Ionicons name={icon} size={Math.round(disc * 0.56)} color={KIT.text} />
       </View>
-      <Text {...textScale.badge} style={[styles.boosterText, { color: t.ink }, t.ink === CARTOON.white ? toonShadow : null]} numberOfLines={2}>
+      <Text {...textScale.badge} style={[styles.boosterText, { color: t.ink }, t.ink === KIT.text ? toonShadow : null]} numberOfLines={2}>
         {label.toLocaleUpperCase("tr-TR")}
       </Text>
     </Button3D>
   );
 }
 
-/** Beyaz çizgi film kartı (lacivert kontur + koyu alt dudak). */
+/** Beyaz kart (yumuşak gölge, kontursuz). */
 export function ToonCard({ children, style, r = radius.xxl }: { children: ReactNode; style?: StyleProp<ViewStyle>; r?: number }) {
   return (
     <View style={styles.cardWrap}>
-      <View style={[styles.cardLip, { borderRadius: r }]} />
       <View style={[styles.card, { borderRadius: r }, style]}>{children}</View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  face: { overflow: "hidden", borderWidth: OUT, borderColor: CARTOON.outline },
-  shine: { position: "absolute", top: 3, left: "10%", right: "10%", height: "18%", minHeight: 4, maxHeight: 8, backgroundColor: CARTOON.shine },
-  lip: { position: "absolute", left: 0, right: 0, borderWidth: OUT, borderColor: CARTOON.outline },
+  face: { overflow: "hidden" },
+  shine: { position: "absolute", top: 0, left: 0, right: 0, height: "45%", backgroundColor: KIT.shine },
+  lip: { position: "absolute", left: 0, right: 0 },
   pillRow: { flexDirection: "row", alignItems: "center", gap: space.xs, paddingRight: space.md },
   disc: { position: "absolute", alignItems: "center", justifyContent: "center" },
   center: { alignItems: "center", justifyContent: "center" },
@@ -324,23 +339,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.xs,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 2,
-    borderColor: CARTOON.white,
+    ...softShadow,
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
   },
-  badgeText: { ...type.numSmStrong, fontFamily: fonts.bold, color: CARTOON.white, ...toonShadow },
-  badgeHost: { position: "absolute", top: -10, right: -8 },
+  badgeText: { ...type.numSmStrong, fontFamily: fonts.bold, color: KIT.cardInk },
+  badgeHost: { position: "absolute", top: -8, right: -6 },
   btnRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.sm, paddingHorizontal: space.md },
-  off: { opacity: 0.5 },
+  off: { opacity: 0.45 },
   boosterFace: { justifyContent: "flex-start", paddingLeft: space.s, paddingRight: space.md },
   boosterDisc: {
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: CARTOON.white,
-    borderWidth: 2,
-    borderColor: CARTOON.outline,
+    backgroundColor: KIT.glass,
   },
-  boosterText: { ...type.label, fontFamily: fonts.bold, letterSpacing: 0.5, flexShrink: 1 },
+  boosterText: { ...type.label, fontFamily: fonts.bold, letterSpacing: 0.4, flexShrink: 1 },
   cardWrap: { alignSelf: "stretch" },
-  cardLip: { position: "absolute", left: 0, right: 0, top: 6, bottom: -6, backgroundColor: CARTOON.outline },
-  card: { backgroundColor: CARTOON.card, borderWidth: OUT, borderColor: CARTOON.outline, padding: space.lg },
+  card: { backgroundColor: KIT.card, padding: space.lg, ...softShadow },
 });

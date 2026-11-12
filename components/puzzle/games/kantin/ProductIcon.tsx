@@ -6,7 +6,6 @@
 import React, { memo } from "react";
 import Svg, { Circle, Ellipse, G, Path, Rect } from "react-native-svg";
 
-import { CARTOON } from "@/lib/game/cartoon";
 import { kantinFood as F, kantinScene as S } from "@/lib/puzzle/kantinPalette";
 import { KANTIN_PRODUCTS } from "@/lib/puzzle/levels/kantin";
 
@@ -216,10 +215,8 @@ export const ProductIcon = memo(function ProductIcon({ p, size }: { p: number; s
   const Draw = DRAW[KANTIN_PRODUCTS[p]?.id ?? "simit"];
   return (
     <Svg width={size} height={size} viewBox="-1 -1 42 42">
-      {/* Çizgi film konturu: kendi kenar rengi olmayan her parça lacivert konturlanır. */}
-      <G stroke={CARTOON.outline} strokeWidth={size < 26 ? 1.6 : 1.9} strokeLinejoin="round">
-        <Draw />
-      </G>
+      {/* Sade ikon: düz dolgu, yalnız açık renkli parçalar kendi ince kenarını taşır. */}
+      <Draw />
     </Svg>
   );
 });
@@ -228,9 +225,9 @@ export const ProductIcon = memo(function ProductIcon({ p, size }: { p: number; s
 export const CrateIcon = memo(function CrateIcon({ size }: { size: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 40 40">
-      <Rect x={5} y={8} width={30} height={26} rx={3} fill={S.crate} stroke={CARTOON.outline} strokeWidth={2.4} />
+      <Rect x={5} y={8} width={30} height={26} rx={3} fill={S.crate} />
       <Path d="M6.5 17 H33.5 M6.5 25 H33.5" stroke={S.crateDark} strokeWidth={1.4} />
-      <Rect x={17} y={8} width={6} height={26} fill={S.crateTape} stroke={CARTOON.outline} strokeWidth={1.4} />
+      <Rect x={17} y={8} width={6} height={26} fill={S.crateTape} />
       <Rect x={8} y={10.5} width={7} height={2.4} rx={1.2} fill={S.white} opacity={0.55} />
     </Svg>
   );
@@ -240,7 +237,7 @@ export const CrateIcon = memo(function CrateIcon({ size }: { size: number }) {
 export const CoinIcon = memo(function CoinIcon({ size }: { size: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 40 40">
-      <Circle cx={20} cy={20} r={17} fill={S.coin} stroke={CARTOON.outline} strokeWidth={3} />
+      <Circle cx={20} cy={20} r={17} fill={S.coin} stroke={S.coinEdge} strokeWidth={1.5} />
       <Circle cx={20} cy={20} r={11} fill="none" stroke={S.coinEdge} strokeWidth={1.6} opacity={0.6} />
       <Path d="M14 13 Q17 10 21 10.5" stroke={S.coinShine} strokeWidth={2.4} strokeLinecap="round" fill="none" />
       <Path d="M20 13 L22 18 L27 18.3 L23 21.4 L24.4 26.4 L20 23.6 L15.6 26.4 L17 21.4 L13 18.3 L18 18 Z" fill={S.coinEdge} opacity={0.75} />

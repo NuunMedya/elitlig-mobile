@@ -44,16 +44,16 @@ import {
   type Attrs,
   type TrainingCard,
 } from "@/lib/kariyer/levels";
-import { ATTR_COLORS, HUD, paletteForTier, uiForTier } from "@/lib/kariyer/palette";
+import { HUD, paletteForTier } from "@/lib/kariyer/palette";
 import { attrsOf, emptySave, identityOf, loadSave, storeSave, type KariyerSave } from "@/lib/kariyer/progress";
 import { OUTCOME_TEXT, PHASE_OVER, createMoment, drawMoment, emptyTouch, stepMoment, type MomentState } from "@/lib/kariyer/sim";
 import type { PuzzleGameProps } from "@/lib/puzzle/types";
 import { usePuzzleMe } from "@/lib/puzzle/usePuzzle";
 import { useAuth } from "@/providers/AuthProvider";
-import { CARTOON } from "@/lib/game/cartoon";
+import { KIT } from "@/lib/puzzle/ligKitPalette";
 import { fonts, haptics, radius, space, textScale, type } from "@/theme";
 
-import { Button3D, CountBadge, OUT, toonShadow, type ToonTone } from "../soyunma/CartoonKit";
+import { Button3D, CountBadge, softShadow, toonShadow } from "../soyunma/CartoonKit";
 
 type Stage = "loading" | "train" | "intro" | "play" | "result" | "done";
 
@@ -81,7 +81,6 @@ export default function KariyerGame({ level, maxWidth, maxHeight, preBoosters, b
 
   const def = useMemo(() => generateKariyerLevel(level, identity.line ?? "FWD"), [level, identity.line]);
   const pal = useMemo(() => paletteForTier(def.tier), [def.tier]);
-  const ui = uiForTier(def.tier);
 
   /* — Gelişim — */
   const [save, setSave] = useState<KariyerSave | null>(null);
@@ -295,14 +294,13 @@ export default function KariyerGame({ level, maxWidth, maxHeight, preBoosters, b
   const retryStock = boosterStock.ikinci_sans ?? 0;
   const tone = result?.tone ?? "ok";
   const toneFace = tone === "good" ? HUD.good : tone === "ok" ? HUD.ok : HUD.bad;
-  const tone3d: ToonTone = def.tier >= 2 ? "teal" : "orange";
 
   return (
     <View style={[styles.root, { width, height: maxHeight }]}>
       {/* ÜST ŞERİT: kimlik, anların durumu */}
-      <View style={[styles.hud, { height: ROW1_H, backgroundColor: ui.panel }]}>
-        <View style={[styles.avatar, { backgroundColor: ui.accent }]} accessibilityLabel={`Genel güç ${overallOf(attrs)}`}>
-          <Text style={[styles.avatarText, { color: ui.ink }]} {...textScale.badge}>
+      <View style={[styles.hud, { height: ROW1_H }]}>
+        <View style={styles.avatar} accessibilityLabel={`Genel güç ${overallOf(attrs)}`}>
+          <Text style={styles.avatarText} {...textScale.badge}>
             {overallOf(attrs)}
           </Text>
         </View>
@@ -320,28 +318,27 @@ export default function KariyerGame({ level, maxWidth, maxHeight, preBoosters, b
             const good = done && scores[i] >= 0.7;
             const ok = done && scores[i] >= RETRY_BELOW;
             const current = !done && i === index;
-            const face = done ? (good ? HUD.good : ok ? HUD.ok : HUD.bad) : current ? ui.accent : HUD.chip;
-            const edge = done ? (good ? HUD.goodEdge : ok ? HUD.okEdge : HUD.badEdge) : current ? ui.edge : HUD.shadow;
+            const face = done ? (good ? HUD.good : ok ? HUD.ok : HUD.bad) : current ? KIT.white : HUD.chip;
             return (
               <View
                 key={`${item.kind}-${item.minute}-${i}`}
-                style={[styles.dot, current && styles.dotCurrent, { backgroundColor: face, borderBottomColor: edge }]}
+                style={[styles.dot, current && styles.dotCurrent, { backgroundColor: face }]}
                 accessibilityLabel={`${i + 1}. an: ${MOMENT_LABELS[item.kind]}${done ? (good ? ", çok iyi" : ok ? ", idare eder" : ", kötü") : ""}`}
               >
-                <Ionicons name={glyph(done ? (good ? "checkmark" : ok ? "remove" : "close") : MOMENT_ICONS[item.kind])} size={current ? 15 : 12} color={HUD.text} />
+                <Ionicons name={glyph(done ? (good ? "checkmark" : ok ? "remove" : "close") : MOMENT_ICONS[item.kind])} size={current ? 15 : 12} color={current ? KIT.cardInk : HUD.text} />
               </View>
             );
           })}
         </View>
       </View>
 
-      {/* ÖZELLİKLER: renkli çipler + 99 üzerinden dolum çubuğu */}
+      {/* ÖZELLİKLER: nötr çipler + 99 üzerinden dolum çubuğu */}
       {!compact ? (
         <View style={[styles.attrs, { height: ROW2_H }]}>
           {ATTR_KEYS.map((key) => (
             <View key={key} style={styles.attr} accessibilityLabel={`${ATTR_LABELS[key]} ${attrs[key]}`}>
               <View style={styles.attrTop}>
-                <Ionicons name={glyph(ATTR_ICONS[key])} size={12} color={ATTR_COLORS[key]} />
+                <Ionicons name={glyph(ATTR_ICONS[key])} size={12} color={KIT.textSoft} />
                 {width >= 360 ? (
                   <Text style={styles.attrLabel} numberOfLines={1} {...textScale.badge}>
                     {ATTR_LABELS[key]}
@@ -352,13 +349,13 @@ export default function KariyerGame({ level, maxWidth, maxHeight, preBoosters, b
                 </Text>
               </View>
               <View style={styles.attrTrack}>
-                <View style={[styles.attrFill, { width: `${Math.max(4, Math.min(100, Math.round((attrs[key] / 99) * 100)))}%`, backgroundColor: ATTR_COLORS[key] }]} />
+                <View style={[styles.attrFill, { width: `${Math.max(4, Math.min(100, Math.round((attrs[key] / 99) * 100)))}%` }]} />
               </View>
             </View>
           ))}
           {liveRating != null || boots ? (
             <View style={styles.ratingChip} accessibilityLabel={liveRating != null ? `Reyting ${liveRating.toFixed(1)}` : "Yeni kramponlar etkin"}>
-              <Ionicons name={liveRating != null ? "star" : "flash"} size={13} color={HUD.cardInk} />
+              <Ionicons name={liveRating != null ? "star" : "flash"} size={13} color={KIT.star} />
               <Text style={styles.ratingText} {...textScale.badge}>
                 {liveRating != null ? liveRating.toFixed(1).replace(".", ",") : `+${BOOT_BONUS}`}
               </Text>
@@ -378,7 +375,7 @@ export default function KariyerGame({ level, maxWidth, maxHeight, preBoosters, b
         {/* Canlı güçlendirici stoğu (gösterim; kullanım kötü biten anda çıkar) */}
         {stage === "play" || stage === "intro" ? (
           <View pointerEvents="none" style={styles.boosterPeek} accessibilityLabel={`İkinci şans stoğu ${retryStock}`}>
-            <View style={[styles.peekIcon, { backgroundColor: ui.accent }]}>
+            <View style={styles.peekIcon}>
               <Ionicons name="refresh" size={18} color={HUD.text} />
             </View>
             <View style={[styles.countBadge, retryStock > 0 ? null : styles.countBadgeEmpty]}>
@@ -400,7 +397,7 @@ export default function KariyerGame({ level, maxWidth, maxHeight, preBoosters, b
         {stage === "train" ? (
           <View style={styles.overlay}>
             <View style={styles.pointsChip}>
-              <Ionicons name="barbell" size={14} color={HUD.cardInk} />
+              <Ionicons name="barbell" size={14} color={KIT.star} />
               <Text style={styles.pointsText} {...textScale.badge}>
                 ANTRENMAN · {points} PUAN
               </Text>
@@ -414,15 +411,15 @@ export default function KariyerGame({ level, maxWidth, maxHeight, preBoosters, b
             <View style={styles.cards}>
               {offer.map((card) => (
                 <Touchable key={card.key} feedback="card" onPress={() => chooseCard(card)} style={styles.card} accessibilityRole="button" accessibilityLabel={`${card.title}. ${card.description}`}>
-                  <View style={[styles.cardIcon, { backgroundColor: ui.accent }]}>
-                    <Ionicons name={glyph(card.icon)} size={22} color={HUD.text} />
+                  <View style={styles.cardIcon}>
+                    <Ionicons name={glyph(card.icon)} size={22} color={KIT.cardInk} />
                   </View>
                   <Text style={styles.cardTitle} numberOfLines={2} {...textScale.dense}>
                     {card.title}
                   </Text>
                   <View style={styles.gains}>
                     {ATTR_KEYS.filter((key) => card.gains[key]).map((key) => (
-                      <View key={key} style={[styles.gainPill, { backgroundColor: ATTR_COLORS[key] }]}>
+                      <View key={key} style={styles.gainPill}>
                         <Text style={styles.gain} {...textScale.badge}>
                           +{card.gains[key]} {ATTR_LABELS[key]}
                         </Text>
@@ -446,15 +443,12 @@ export default function KariyerGame({ level, maxWidth, maxHeight, preBoosters, b
               style={[
                 styles.minuteBadge,
                 {
-                  backgroundColor: ui.accent,
                   transform: [
-                    { scaleX: introPop.interpolate({ inputRange: [0, 0.6, 1, 2], outputRange: [0.2, 1.2, 1, 1] }) },
-                    { scaleY: introPop.interpolate({ inputRange: [0, 0.6, 1, 2], outputRange: [0.2, 0.88, 1, 1] }) },
+                    { scale: introPop.interpolate({ inputRange: [0, 0.6, 1, 2], outputRange: [0.6, 1.05, 1, 1] }) },
                   ],
                 },
               ]}
             >
-              <View style={styles.badgeShine} />
               <Text style={styles.minuteText} {...textScale.badge}>
                 {`${moment.minute}'`}
               </Text>
@@ -472,7 +466,7 @@ export default function KariyerGame({ level, maxWidth, maxHeight, preBoosters, b
             <Text style={styles.overlayHint} {...textScale.long}>
               {index === 0 && def.tip ? def.tip : MOMENT_HINTS[moment.kind]}
             </Text>
-            <Button3D tone={tone3d} height={58} wiggle onPress={() => startMoment(index)} style={styles.go} testID="kariyer-go" accessibilityLabel={index === 0 ? "Maça çık" : "Devam"} r={29}>
+            <Button3D tone="green" height={58} wiggle onPress={() => startMoment(index)} style={styles.go} testID="kariyer-go" accessibilityLabel={index === 0 ? "Maça çık" : "Devam"} r={29}>
               <Ionicons name="play" size={24} color={HUD.text} />
               <Text style={styles.goText} {...textScale.dense}>
                 {index === 0 ? "MAÇA ÇIK" : "DEVAM"}
@@ -485,7 +479,7 @@ export default function KariyerGame({ level, maxWidth, maxHeight, preBoosters, b
           <View style={styles.toastWrap} pointerEvents="box-none">
             {result.tone === "good" ? (
               <View pointerEvents="none" style={styles.toastBurst}>
-                <Sunburst size={Math.min(320, width * 0.9)} color={pal.good} opacity={0.4} />
+                <Sunburst size={Math.min(280, width * 0.8)} color={pal.good} opacity={0.18} />
                 <SparkleBurst trigger={index + 1} radius={Math.min(140, width * 0.36)} color={pal.trail} />
               </View>
             ) : null}
@@ -495,20 +489,17 @@ export default function KariyerGame({ level, maxWidth, maxHeight, preBoosters, b
                 {
                   backgroundColor: toneFace,
                   transform: [
-                    { rotate: "-3deg" },
-                    { scaleX: toastPop.interpolate({ inputRange: [0, 0.6, 1, 2], outputRange: [0.3, 1.18, 1, 1] }) },
-                    { scaleY: toastPop.interpolate({ inputRange: [0, 0.6, 1, 2], outputRange: [0.3, 0.86, 1, 1] }) },
+                    { scale: toastPop.interpolate({ inputRange: [0, 0.6, 1, 2], outputRange: [0.6, 1.06, 1, 1] }) },
                   ],
                 },
               ]}
             >
-              <View style={styles.toastShine} />
               <Text style={styles.toastText} {...textScale.dense}>
                 {result.title}
               </Text>
             </Animated.View>
             {canRetry ? (
-              <Button3D tone={tone3d} height={52} wiggle onPress={retry} accessibilityLabel={`İkinci şans, stok ${retryStock}`} badge={<CountBadge value={retryStock} size={24} />} r={26} faceStyle={styles.retryFace}>
+              <Button3D tone="green" height={52} wiggle onPress={retry} accessibilityLabel={`İkinci şans, stok ${retryStock}`} badge={<CountBadge value={retryStock} size={24} />} r={26} faceStyle={styles.retryFace}>
                 <Ionicons name="refresh" size={20} color={HUD.text} />
                 <Text style={styles.goText} {...textScale.dense}>
                   İKİNCİ ŞANS
@@ -532,97 +523,81 @@ const styles = StyleSheet.create({
     gap: space.sm,
     paddingHorizontal: space.sm,
     borderRadius: radius.xl,
-    borderWidth: OUT,
-    borderBottomWidth: 6,
-    borderColor: CARTOON.outline,
+    backgroundColor: KIT.panel,
+    ...softShadow,
   },
   avatar: {
-    width: 44,
-    height: 44,
+    width: 40,
+    height: 40,
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: OUT,
-    borderBottomWidth: 5,
-    borderColor: CARTOON.outline,
+    backgroundColor: KIT.white,
   },
-  avatarText: { ...type.scoreSm, color: HUD.text, ...toonShadow },
+  avatarText: { ...type.scoreSm, color: KIT.cardInk },
   hudBody: { flex: 1, minWidth: 0 },
-  name: { ...type.h3, fontFamily: fonts.bold, color: HUD.text, ...toonShadow },
+  name: { ...type.h3, fontFamily: fonts.bold, color: HUD.text },
   meta: { ...type.caption, fontFamily: fonts.semibold, color: HUD.muted },
   dots: { flexDirection: "row", gap: space.xs, alignItems: "center" },
   dot: {
-    width: 26,
-    height: 26,
+    width: 24,
+    height: 24,
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 2.5,
-    borderBottomWidth: 4,
-    borderColor: CARTOON.outline,
   },
-  dotCurrent: { width: 32, height: 32 },
+  dotCurrent: { width: 30, height: 30 },
 
   attrs: { flexDirection: "row", gap: space.xs },
   attr: {
     flex: 1,
     minWidth: 0,
     justifyContent: "center",
-    gap: 3,
+    gap: 4,
     paddingHorizontal: space.s,
     borderRadius: radius.md,
-    backgroundColor: CARTOON.pill[1],
-    borderWidth: 2.5,
-    borderBottomWidth: 4,
-    borderColor: CARTOON.outline,
+    backgroundColor: KIT.panel,
   },
   attrTop: { flexDirection: "row", alignItems: "center", gap: 3 },
-  attrLabel: { ...type.nano, fontFamily: fonts.bold, color: HUD.muted, flexShrink: 1 },
-  attrValue: { ...type.numSmStrong, fontFamily: fonts.bold, color: HUD.text, marginLeft: "auto", ...toonShadow },
-  attrTrack: { height: 7, borderRadius: radius.pill, backgroundColor: CARTOON.outline, overflow: "hidden", borderWidth: 1, borderColor: CARTOON.outline },
-  attrFill: { height: 5, borderRadius: radius.pill },
+  attrLabel: { ...type.nano, fontFamily: fonts.semibold, color: HUD.muted, flexShrink: 1 },
+  attrValue: { ...type.numSmStrong, fontFamily: fonts.bold, color: HUD.text, marginLeft: "auto" },
+  attrTrack: { height: 4, borderRadius: radius.pill, backgroundColor: KIT.track, overflow: "hidden" },
+  attrFill: { height: 4, borderRadius: radius.pill, backgroundColor: KIT.textSoft },
   ratingChip: {
     flexDirection: "row",
     alignItems: "center",
     gap: 3,
     paddingHorizontal: space.sm,
     borderRadius: radius.md,
-    backgroundColor: HUD.gold,
-    borderWidth: 2.5,
-    borderBottomWidth: 4,
-    borderColor: CARTOON.outline,
+    backgroundColor: KIT.panel,
   },
-  ratingText: { ...type.scoreXs, color: HUD.cardInk },
+  ratingText: { ...type.scoreXs, color: HUD.text },
 
   stage: { borderRadius: radius.xxl, overflow: "hidden", backgroundColor: HUD.scrim },
-  stageRim: { ...StyleSheet.absoluteFillObject, borderRadius: radius.xxl, borderWidth: OUT, borderColor: CARTOON.outline },
-  boosterPeek: { position: "absolute", right: space.sm, top: space.sm },
+  stageRim: { ...StyleSheet.absoluteFillObject, borderRadius: radius.xxl, borderWidth: 1, borderColor: KIT.panelEdge },
+  boosterPeek: { position: "absolute", right: space.sm, top: space.md },
   peekIcon: {
-    width: 40,
-    height: 40,
+    width: 36,
+    height: 36,
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: OUT,
-    borderBottomWidth: 5,
-    borderColor: CARTOON.outline,
+    backgroundColor: KIT.scrim,
   },
   countBadge: {
     position: "absolute",
-    right: -6,
-    top: -6,
-    minWidth: 22,
-    height: 22,
-    paddingHorizontal: 4,
+    right: -5,
+    top: -5,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 3,
     borderRadius: radius.pill,
-    backgroundColor: HUD.badge,
-    borderWidth: 2,
-    borderColor: HUD.text,
+    backgroundColor: KIT.white,
     alignItems: "center",
     justifyContent: "center",
   },
   countBadgeEmpty: { backgroundColor: HUD.cardMuted },
-  countText: { ...type.nano, fontFamily: fonts.bold, color: HUD.text },
+  countText: { ...type.nano, fontFamily: fonts.bold, color: KIT.cardInk },
 
   overlay: {
     ...StyleSheet.absoluteFillObject,
@@ -633,28 +608,23 @@ const styles = StyleSheet.create({
     backgroundColor: HUD.scrim,
   },
   minuteBadge: {
-    width: 78,
-    height: 78,
+    width: 72,
+    height: 72,
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: OUT,
-    borderBottomWidth: 7,
-    borderColor: CARTOON.outline,
-    overflow: "hidden",
+    backgroundColor: KIT.white,
+    ...softShadow,
   },
-  badgeShine: { position: "absolute", top: 5, left: "22%", right: "22%", height: 8, borderRadius: radius.pill, backgroundColor: CARTOON.shine },
-  minuteText: { ...type.scoreLg, color: HUD.text, ...toonShadow },
+  minuteText: { ...type.scoreLg, color: KIT.cardInk },
   kindChip: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.xs,
     paddingHorizontal: space.md,
-    height: 30,
+    height: 28,
     borderRadius: radius.pill,
-    backgroundColor: CARTOON.pill[1],
-    borderWidth: 2.5,
-    borderColor: CARTOON.outline,
+    backgroundColor: KIT.glass,
   },
   overline: { ...type.overline, fontFamily: fonts.bold, color: HUD.text },
   overlayTitle: { ...type.display, color: HUD.text, textAlign: "center", ...toonShadow },
@@ -664,14 +634,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: space.xs,
     paddingHorizontal: space.md,
-    height: 32,
+    height: 30,
     borderRadius: radius.pill,
-    backgroundColor: HUD.gold,
-    borderWidth: 2.5,
-    borderBottomWidth: 4,
-    borderColor: CARTOON.outline,
+    backgroundColor: KIT.glass,
   },
-  pointsText: { ...type.labelSm, fontFamily: fonts.bold, color: HUD.cardInk },
+  pointsText: { ...type.labelSm, fontFamily: fonts.bold, color: HUD.text },
 
   cards: { flexDirection: "row", gap: space.sm, marginTop: space.sm },
   card: {
@@ -682,24 +649,20 @@ const styles = StyleSheet.create({
     padding: space.sm,
     borderRadius: radius.xl,
     backgroundColor: HUD.card,
-    borderWidth: OUT,
-    borderBottomWidth: 7,
-    borderColor: CARTOON.outline,
+    ...softShadow,
   },
   cardIcon: {
-    width: 46,
-    height: 46,
+    width: 44,
+    height: 44,
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: OUT,
-    borderBottomWidth: 5,
-    borderColor: CARTOON.outline,
+    backgroundColor: KIT.cardSoft,
   },
   cardTitle: { ...type.labelSm, fontFamily: fonts.bold, color: HUD.cardInk, textAlign: "center" },
   gains: { alignItems: "center", gap: 3, marginTop: "auto" },
-  gainPill: { paddingHorizontal: space.s, paddingVertical: 1, borderRadius: radius.pill, borderWidth: 1.5, borderColor: CARTOON.outline },
-  gain: { ...type.micro, fontFamily: fonts.bold, letterSpacing: 0, color: HUD.cardInk },
+  gainPill: { paddingHorizontal: space.s, paddingVertical: 1, borderRadius: radius.pill, backgroundColor: KIT.cardSoft },
+  gain: { ...type.micro, fontFamily: fonts.bold, letterSpacing: 0, color: KIT.accentLip },
   skip: { paddingVertical: space.sm, paddingHorizontal: space.md },
   skipText: { ...type.caption, fontFamily: fonts.semibold, color: HUD.muted },
 
@@ -712,11 +675,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.xxl,
     paddingVertical: space.md,
     borderRadius: radius.xl,
-    borderWidth: OUT,
-    borderBottomWidth: 8,
-    borderColor: CARTOON.outline,
-    overflow: "hidden",
+    ...softShadow,
   },
-  toastShine: { position: "absolute", top: 4, left: space.md, right: space.md, height: 8, borderRadius: radius.pill, backgroundColor: CARTOON.shine },
   toastText: { ...type.scoreLg, color: HUD.text, ...toonShadow },
 });

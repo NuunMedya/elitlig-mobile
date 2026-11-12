@@ -8,9 +8,8 @@ import React, { memo, useEffect, useRef } from "react";
 import { Animated, Easing, StyleSheet, Text, View } from "react-native";
 
 import { kantinConfetti, kantinScene as S } from "@/lib/puzzle/kantinPalette";
-import { CARTOON } from "@/lib/game/cartoon";
 import { fonts, radius, space, textScale, type } from "@/theme";
-import { OUT, toonShadow } from "../soyunma/CartoonKit";
+import { softShadow, toonShadow } from "../soyunma/CartoonKit";
 
 import { FanFigure } from "./Fan";
 import { CoinIcon, ProductIcon } from "./ProductIcon";
@@ -55,7 +54,7 @@ const Flyer = memo(function Flyer({ fx, onDone }: { fx: Extract<Fx, { kind: "fly
     transform: [
       { translateX: t.interpolate({ inputRange: [0, 1], outputRange: [fx.from.x - half, fx.to.x - half] }) },
       { translateY: t.interpolate({ inputRange: [0, 0.5, 1], outputRange: [fx.from.y - half, lift - half, fx.to.y - half] }) },
-      { scale: t.interpolate({ inputRange: [0, 0.5, 1], outputRange: [1, 1.18, fx.toSize / fx.size] }) },
+      { scale: t.interpolate({ inputRange: [0, 0.5, 1], outputRange: [1, 1.08, fx.toSize / fx.size] }) },
     ],
     opacity: t.interpolate({ inputRange: [0, 0.02, 1], outputRange: [0, 1, 1] }),
   };
@@ -118,7 +117,7 @@ const CoinFly = memo(function CoinFly({ fx, onDone }: { fx: Extract<Fx, { kind: 
     transform: [
       { translateX: t.interpolate({ inputRange: [0, 1], outputRange: [fx.from.x - size / 2, fx.to.x - size / 2] }) },
       { translateY: t.interpolate({ inputRange: [0, 0.4, 1], outputRange: [fx.from.y - size / 2, peak, fx.to.y - size / 2] }) },
-      { scale: t.interpolate({ inputRange: [0, 0.15, 1], outputRange: [0.2, 1.3, 0.8] }) },
+      { scale: t.interpolate({ inputRange: [0, 0.15, 1], outputRange: [0.3, 1.1, 0.8] }) },
     ],
   };
   return (
@@ -128,11 +127,11 @@ const CoinFly = memo(function CoinFly({ fx, onDone }: { fx: Extract<Fx, { kind: 
   );
 });
 
-const BURST_N = 10;
+const BURST_N = 8;
 const BURST_DIRS = Array.from({ length: BURST_N }, (_, i) => {
   const a = (i / BURST_N) * Math.PI * 2;
-  const r = 30 + (i % 3) * 9;
-  return { dx: Math.cos(a) * r, dy: Math.sin(a) * r - 8, color: kantinConfetti[i % kantinConfetti.length], s: 5 + (i % 2) * 3 };
+  const r = 26 + (i % 3) * 6;
+  return { dx: Math.cos(a) * r, dy: Math.sin(a) * r - 8, color: kantinConfetti[i % kantinConfetti.length], s: 4 + (i % 2) * 2 };
 });
 
 const Burst = memo(function Burst({ fx, onDone }: { fx: Extract<Fx, { kind: "burst" }>; onDone: Done }) {
@@ -153,7 +152,7 @@ const Burst = memo(function Burst({ fx, onDone }: { fx: Extract<Fx, { kind: "bur
               transform: [
                 { translateX: t.interpolate({ inputRange: [0, 1], outputRange: [-d.s / 2, d.dx - d.s / 2] }) },
                 { translateY: t.interpolate({ inputRange: [0, 0.6, 1], outputRange: [-d.s / 2, d.dy, d.dy + 14] }) },
-                { rotate: t.interpolate({ inputRange: [0, 1], outputRange: ["0deg", `${(i % 2 ? 1 : -1) * 200}deg`] }) },
+                { rotate: t.interpolate({ inputRange: [0, 1], outputRange: ["0deg", `${(i % 2 ? 1 : -1) * 120}deg`] }) },
               ],
             },
           ]}
@@ -171,8 +170,8 @@ const FloatText = memo(function FloatText({ fx, onDone }: { fx: Extract<Fx, { ki
     transform: [
       { translateX: fx.at.x - 110 },
       { translateY: t.interpolate({ inputRange: [0, 1], outputRange: [fx.at.y - 14, fx.at.y - (fx.big ? 46 : 34)] }) },
-      { scaleX: t.interpolate({ inputRange: [0, 0.14, 0.22, 0.3, 1], outputRange: [0.4, fx.big ? 1.25 : 1.12, 0.95, 1, 1] }) },
-      { scaleY: t.interpolate({ inputRange: [0, 0.14, 0.22, 0.3, 1], outputRange: [0.4, 0.88, 1.08, 1, 1] }) },
+      { scaleX: t.interpolate({ inputRange: [0, 0.14, 0.22, 0.3, 1], outputRange: [0.6, fx.big ? 1.08 : 1.05, 0.98, 1, 1] }) },
+      { scaleY: t.interpolate({ inputRange: [0, 0.14, 0.22, 0.3, 1], outputRange: [0.6, 0.96, 1.03, 1, 1] }) },
     ],
   };
   return (
@@ -219,21 +218,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 2,
     backgroundColor: S.plate,
-    borderWidth: 2.5,
-    borderColor: CARTOON.outline,
+    ...softShadow,
   },
   textBox: { width: 220, alignItems: "center" },
   textPill: {
     paddingHorizontal: space.md,
     paddingVertical: space.xxs,
     borderRadius: radius.pill,
-    borderWidth: OUT,
-    borderBottomWidth: 5,
-    borderColor: CARTOON.outline,
     maxWidth: 220,
+    ...softShadow,
   },
-  textPillBig: { paddingHorizontal: space.lg, transform: [{ rotate: "-3deg" }] },
-  bigText: { ...type.scoreMd, color: S.white, ...toonShadow },
-  smallText: { ...type.h3, fontFamily: fonts.bold, color: S.white, ...toonShadow },
+  textPillBig: { paddingHorizontal: space.lg },
+  bigText: { ...type.scoreSm, color: S.white, ...toonShadow },
+  smallText: { ...type.label, fontFamily: fonts.bold, color: S.white, ...toonShadow },
 });
-

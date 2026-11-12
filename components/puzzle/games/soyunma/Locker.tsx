@@ -8,9 +8,8 @@ import { memo, useEffect, useRef, useState } from "react";
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from "react-native";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { fonts, radius, textScale, type } from "@/theme";
-import { CARTOON } from "@/lib/game/cartoon";
 import { SOYUNMA_LOCKER, SOYUNMA_TEAMS, SOYUNMA_UI } from "@/lib/puzzle/soyunmaPalette";
-import { OUT, wave } from "./CartoonKit";
+import { wave } from "./CartoonKit";
 import { SparkleBurst } from "./Effects";
 import { bodyTop, liftOffset, slotTop, type BoardGeometry } from "./geometry";
 import { Crest, Jersey } from "./Jersey";
@@ -121,37 +120,34 @@ function Door({ open, team, width, height, top }: { open: boolean; team: number;
 /* ───────────── dolap kabuğu (SVG) ───────────── */
 
 /**
- * Çizgi film metal dolap: parlak mavi gövde (soldan ışık), kalın lacivert
- * kontur, üstte havalandırma yarıkları + konturlu askı rayı, içeride
- * lacivert boşluk, sol kenarda parlama şeridi.
+ * Sade çelik dolap: açık gri-mavi gövde (soldan ışık), ince koyu kenar,
+ * üstte havalandırma yarıkları + askı rayı, içeride aydınlık boşluk.
  */
 const LockerShell = memo(function LockerShell({ w, h, headerH, r }: { w: number; h: number; headerH: number; r: number }) {
-  const o = OUT / 2;
-  const railH = Math.max(5, headerH * 0.3);
-  const railY = headerH * 0.52 - railH / 2;
+  const railH = Math.max(4, headerH * 0.22);
+  const railY = headerH * 0.56 - railH / 2;
   const ventW = Math.max(4, (w - 24) / 5);
   return (
     <Svg width={w} height={h} style={StyleSheet.absoluteFill} pointerEvents="none">
       <Defs>
         <LinearGradient id="slbody" x1="0" y1="0" x2="1" y2="0">
           <Stop offset="0" stopColor={SOYUNMA_LOCKER.lockerHi} />
-          <Stop offset="0.35" stopColor={SOYUNMA_LOCKER.locker} />
+          <Stop offset="0.4" stopColor={SOYUNMA_LOCKER.locker} />
           <Stop offset="1" stopColor={SOYUNMA_LOCKER.lockerLo} />
         </LinearGradient>
         <LinearGradient id="slcav" x1="0" y1="0" x2="0" y2="1">
           <Stop offset="0" stopColor={SOYUNMA_LOCKER.cavityLo} />
-          <Stop offset="0.2" stopColor={SOYUNMA_LOCKER.cavity} />
+          <Stop offset="0.15" stopColor={SOYUNMA_LOCKER.cavity} />
           <Stop offset="1" stopColor={SOYUNMA_LOCKER.cavity} />
         </LinearGradient>
       </Defs>
-      <Rect x={o} y={o} width={w - OUT} height={h - OUT} rx={r} fill="url(#slbody)" stroke={CARTOON.outline} strokeWidth={OUT} />
+      <Rect x={0.5} y={0.5} width={w - 1} height={h - 1} rx={r} fill="url(#slbody)" stroke={SOYUNMA_LOCKER.lockerEdge} strokeWidth={1} />
       {[0, 1, 2].map((k) => (
-        <Rect key={k} x={w / 2 - ventW * 1.5 - 3 + k * (ventW + 3)} y={Math.max(4, headerH * 0.12)} width={ventW} height={Math.max(2.5, headerH * 0.12)} rx={1.5} fill={SOYUNMA_LOCKER.vent} />
+        <Rect key={k} x={w / 2 - ventW * 1.5 - 3 + k * (ventW + 3)} y={Math.max(4, headerH * 0.16)} width={ventW} height={Math.max(2, headerH * 0.09)} rx={1} fill={SOYUNMA_LOCKER.vent} />
       ))}
-      <Rect x={5} y={railY} width={w - 10} height={railH} rx={railH / 2} fill={SOYUNMA_LOCKER.railHi} stroke={CARTOON.outline} strokeWidth={1.8} />
-      <Rect x={8} y={railY + railH * 0.55} width={w - 16} height={railH * 0.3} rx={railH * 0.15} fill={SOYUNMA_LOCKER.rail} />
-      <Rect x={5} y={headerH} width={w - 10} height={h - headerH - 6} rx={Math.max(3, r - 3)} fill="url(#slcav)" stroke={CARTOON.outline} strokeWidth={2} />
-      <Rect x={OUT + 1.5} y={r * 0.6 + 2} width={3} height={Math.max(0, headerH - r * 0.6 - 4)} rx={1.5} fill={CARTOON.white} fillOpacity={0.5} />
+      <Rect x={6} y={railY} width={w - 12} height={railH} rx={railH / 2} fill={SOYUNMA_LOCKER.rail} />
+      <Rect x={6} y={railY} width={w - 12} height={railH * 0.45} rx={railH * 0.22} fill={SOYUNMA_LOCKER.railHi} />
+      <Rect x={4} y={headerH} width={w - 8} height={h - headerH - 5} rx={Math.max(3, r - 3)} fill="url(#slcav)" />
     </Svg>
   );
 });
@@ -254,7 +250,7 @@ function LockerBase(p: LockerProps) {
         ? `Dolap ${p.index + 1}: boş, ${cap} forma alır`
         : `Dolap ${p.index + 1}: ${items.length}/${cap} forma, en üstte ${topTeam ?? "gizli forma"}`;
 
-  const ring = p.complete ? SOYUNMA_UI.green : lift > 0 ? SOYUNMA_UI.gold : null;
+  const ring = p.complete ? SOYUNMA_UI.green : lift > 0 ? SOYUNMA_UI.selected : null;
   const corner = Math.min(radius.lg, g.colW / 4);
 
   return (
@@ -296,7 +292,7 @@ function LockerBase(p: LockerProps) {
             StyleSheet.absoluteFill,
             {
               transform: [
-                { translateY: Animated.add(bumpV.interpolate({ inputRange: [0, 0.4, 1], outputRange: [0, 3, 0] }), wave(p.idle, p.index * 0.19, 1.6)) },
+                { translateY: Animated.add(bumpV.interpolate({ inputRange: [0, 0.4, 1], outputRange: [0, 2, 0] }), wave(p.idle, p.index * 0.19, 1)) },
               ],
             },
           ]}
@@ -336,7 +332,7 @@ function LockerBase(p: LockerProps) {
               left: g.colW * 0.2,
               width: g.colW * 0.6,
               height: g.colW * 0.6,
-              transform: [{ scale: crestV }, { rotate: crestV.interpolate({ inputRange: [0, 1], outputRange: ["-25deg", "0deg"] }) }],
+              transform: [{ scale: crestV }, { rotate: crestV.interpolate({ inputRange: [0, 1], outputRange: ["-12deg", "0deg"] }) }],
             },
           ]}
         >
@@ -354,12 +350,12 @@ function LockerBase(p: LockerProps) {
             {
               top: Math.max(0, top - 34),
               left: g.colW / 2 - 15,
-              transform: [{ translateY: hintV.interpolate({ inputRange: [0, 1], outputRange: [-4, 4] }) }],
+              transform: [{ translateY: hintV.interpolate({ inputRange: [0, 1], outputRange: [-3, 3] }) }],
             },
           ]}
         >
           <View style={styles.hintDisc}>
-            <Ionicons name="arrow-down" size={20} color={SOYUNMA_UI.goldInk} />
+            <Ionicons name="arrow-down" size={18} color={SOYUNMA_UI.cardInk} />
           </View>
         </Animated.View>
       ) : null}
@@ -374,57 +370,62 @@ const styles = StyleSheet.create({
   hook: {
     position: "absolute",
     width: 8,
-    height: 9,
+    height: 8,
     borderTopLeftRadius: 4,
     borderTopRightRadius: 4,
-    borderWidth: 2.5,
+    borderWidth: 2,
     borderBottomWidth: 0,
-    borderColor: CARTOON.outline,
+    borderColor: SOYUNMA_LOCKER.railDark,
   },
-  body: { position: "absolute", left: 0, right: 0, overflow: "hidden" },
-  ring: { position: "absolute", left: -4, right: -4, borderWidth: 3.5 },
+  body: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    backgroundColor: SOYUNMA_LOCKER.locker,
+    shadowColor: SOYUNMA_UI.roomBottom,
+    shadowOpacity: 0.45,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  ring: { position: "absolute", left: -4, right: -4, borderWidth: 2.5 },
   ghost: {
     position: "absolute",
     borderRadius: radius.xs,
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderStyle: "dashed",
-    borderColor: SOYUNMA_LOCKER.vent,
+    borderColor: SOYUNMA_LOCKER.ghost,
   },
   door: {
     position: "absolute",
     left: 0,
     backgroundColor: SOYUNMA_LOCKER.door,
-    borderWidth: OUT,
-    borderColor: CARTOON.outline,
-    borderBottomWidth: 6,
+    borderBottomWidth: 3,
+    borderColor: SOYUNMA_LOCKER.doorLo,
     borderRadius: radius.sm,
     alignItems: "center",
     justifyContent: "center",
     gap: 4,
     overflow: "hidden",
   },
-  doorShine: { position: "absolute", top: 4, left: 4, bottom: 8, width: 4, borderRadius: radius.pill, backgroundColor: CARTOON.shine },
+  doorShine: { position: "absolute", top: 0, left: 0, right: 0, height: "40%", backgroundColor: SOYUNMA_LOCKER.doorHi, opacity: 0.35 },
   lockBadge: {
     backgroundColor: SOYUNMA_LOCKER.lockBody,
-    borderWidth: 2.5,
-    borderColor: CARTOON.outline,
     alignItems: "center",
     justifyContent: "center",
   },
-  doorSlit: { width: "60%", height: 3, borderRadius: radius.pill, backgroundColor: SOYUNMA_LOCKER.doorLo },
+  doorSlit: { width: "56%", height: 2, borderRadius: radius.pill, backgroundColor: SOYUNMA_LOCKER.doorLo },
   capTag: {
     position: "absolute",
     minWidth: 18,
     height: 18,
     paddingHorizontal: 3,
     borderRadius: radius.pill,
-    backgroundColor: CARTOON.outline,
-    borderWidth: 1.5,
-    borderColor: CARTOON.white,
+    backgroundColor: SOYUNMA_UI.panel,
     alignItems: "center",
     justifyContent: "center",
   },
-  capText: { ...type.nano, fontFamily: fonts.bold, color: CARTOON.white },
+  capText: { ...type.nano, fontFamily: fonts.bold, color: SOYUNMA_UI.text },
   crest: { position: "absolute" },
   sparkleHost: { position: "absolute", left: 0, right: 0 },
   hint: { position: "absolute" },
@@ -434,8 +435,11 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: SOYUNMA_UI.gold,
-    borderWidth: OUT,
-    borderColor: CARTOON.outline,
+    backgroundColor: SOYUNMA_UI.selected,
+    shadowColor: SOYUNMA_UI.roomBottom,
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
 });
