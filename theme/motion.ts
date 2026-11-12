@@ -1,10 +1,15 @@
 /**
  * Hareket sabitleri ve dokunsal geri bildirim.
  *
- * react-native-reanimated KURULU DEĞİL: tüm hareket, RN çekirdeğindeki
- * `Animated` (mümkün olan her yerde `useNativeDriver: true`) ve
- * `LayoutAnimation` ile yazılır. Bu yüzden buradaki `spring` nesneleri doğrudan
- * `Animated.spring` yapılandırmasına serilebilecek biçimdedir.
+ * Arayüz hareketi RN çekirdeğindeki `Animated` (mümkün olan her yerde
+ * `useNativeDriver: true`) ve `LayoutAnimation` ile yazılır; buradaki `spring`
+ * nesneleri doğrudan `Animated.spring` yapılandırmasına serilebilir.
+ * (Reanimated yalnız oyunlarda kullanılır.)
+ *
+ * GECE TEMASI (2026-11): hareket dili "yaylı ve esnek"tir — seçim göstergeleri
+ * hedefe hafif aşarak oturur (`slide`), kayarken esner (`stretch`), basılan
+ * nesne çöker ve geri yaylanır (`press`). Değerler ui_motion_prompts
+ * örneklerindeki yay ayarlarından (ζ≈0.55–0.7, ω₀≈18–24) türetildi.
  *
  * Süreler kısa tutulur: skor uygulaması sürekli veri tazeleyen bir yüzeydir,
  * uzun geçişler "yavaş uygulama" hissi verir.
@@ -39,6 +44,21 @@ export const spring = {
   press:  { damping: 18, stiffness: 320, mass: 0.7, useNativeDriver: true },
   sheet:  { damping: 22, stiffness: 260, mass: 1,   useNativeDriver: true },
   bounce: { damping: 12, stiffness: 200, mass: 0.9, useNativeDriver: true },
+  /** Seçim göstergesi: alt menü kapsülü, segment başparmağı, solucan çizgi. */
+  slide:  { damping: 15, stiffness: 210, mass: 0.8, useNativeDriver: true },
+  /** Anahtar topu, rozet, ✓ — belirgin aşmalı yay. */
+  pop:    { damping: 10, stiffness: 260, mass: 0.7, useNativeDriver: true },
+} as const;
+
+/** Kayan göstergenin yolda ne kadar esneyeceği (yatay ölçek tepe değeri). */
+export const stretch = { peak: 1.45, squash: 0.86, ms: 520 } as const;
+
+/** Sürekli (döngüsel) atmosfer hareketleri — aurora, ışıklı kenar, parlama. */
+export const ambient = {
+  aurora: 9000,   // aurora lekelerinin bir yöne kayma süresi
+  rim: 4000,      // ışıklı kenarın bir tur dönüşü
+  shine: 3200,    // butondaki parlama aralığı
+  breathe: 2600,  // seçili günün halesi
 } as const;
 
 /**
@@ -46,8 +66,10 @@ export const spring = {
  * yalnız zemin `pressed` rengine geçer; kart, buton ve FAB farklı davranır.
  */
 export const press = {
-  cardScale: 0.985,
-  fabScale: 0.94,
+  cardScale: 0.975,
+  fabScale: 0.92,
+  buttonScale: 0.955,
+  chipScale: 0.94,
   iconOpacity: 0.55,
   chipOpacity: 0.7,
   buttonOpacity: 0.7,

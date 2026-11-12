@@ -14,8 +14,10 @@
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
-import React, { useCallback, useState } from "react";
+import { LinearGradient } from "expo-linear-gradient";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
+  Animated,
   StyleSheet,
   Text,
   TextInput,
@@ -24,8 +26,9 @@ import {
   type TextInputProps,
   type ViewStyle,
 } from "react-native";
-import { colors, radius, space, textScale, touchSlop, type } from "@/theme";
+import { colors, duration, easing, fonts, haptics, radius, space, spring, textScale, touchSlop, type } from "@/theme";
 import { Touchable } from "./Pressable";
+import { useReduceMotion } from "./useReduceMotion";
 
 export interface InputProps extends Omit<TextInputProps, "style"> {
   label?: string;
@@ -38,6 +41,12 @@ export interface InputProps extends Omit<TextInputProps, "style"> {
   /** Arama kutusu varyantı: hap biçimli, temizle düğmeli. */
   variant?: "default" | "search";
   containerStyle?: StyleProp<ViewStyle>;
+  /**
+   * FLOATING LABEL: etiket alanın İÇİNDE yer tutucu gibi durur; odaklanınca
+   * ya da değer girilince yukarı süzülür ve küçülür. Giriş/kayıt gibi
+   * kimlik ekranlarında kullanılır.
+   */
+  floating?: boolean;
 }
 
 /**
@@ -58,6 +67,7 @@ export const Input = React.memo(
       size = "md",
       variant = "default",
       containerStyle,
+      floating = false,
       onFocus,
       onBlur,
       onChangeText,
@@ -67,9 +77,53 @@ export const Input = React.memo(
     ref,
   ) {
     const [focused, setFocused] = useState(false);
-    const height = size === "sm" ? 36 : 44;
+    const reduceMotion = useReduceMotion();
+    const float = floating && Boolean(label) && !multiline;
+    const height = float ? 58 : size === "sm" ? 38 : 48;
     const icon = leadingIcon ?? (variant === "search" ? "search" : undefined);
     const hasValue = typeof rest.value === "string" && rest.value.length > 0;
+
+    /* GLOW BORDER: odakta kenar imza degradesine döner ve alanın etrafında
+       mor bir ışık yanar. */
+    const focusAnim = useRef(new Animated.Value(0)).current;
+    /* FLOATING LABEL: 0 = yer tutucu konumu, 1 = yukarıda küçük. */
+    const raised = focused || hasValue || Boolean(rest.defaultValue);
+    const labelAnim = useRef(new Animated.Value(raised ? 1 : 0)).current;
+    /* SHAKE INPUT: hata belirince alan iki yana sallanır. */
+    const shake = useRef(new Animated.Value(0)).current;
+    const lastError = useRef(error);
+
+    useEffect(() => {
+      const anim = Animated.timing(focusAnim, {
+        toValue: focused ? 1 : 0,
+        duration: reduceMotion ? 0 : duration.base,
+        easing: easing.standard,
+        useNativeDriver: true,
+      });
+      anim.start();
+    }, [focusAnim, focused, reduceMotion]);
+
+    useEffect(() => {
+      if (!float) return;
+      if (reduceMotion) {
+        labelAnim.setValue(raised ? 1 : 0);
+        return;
+      }
+      Animated.spring(labelAnim, { toValue: raised ? 1 : 0, ...spring.slide }).start();
+    }, [float, labelAnim, raised, reduceMotion]);
+
+    useEffect(() => {
+      if (error && error !== lastError.current && !reduceMotion) {
+        haptics.error();
+        shake.setValue(0);
+        Animated.sequence(
+          [10, -8, 6, -4, 2, 0].map((toValue) =>
+            Animated.timing(shake, { toValue, duration: 55, useNativeDriver: true }),
+          ),
+        ).start();
+      }
+      lastError.current = error;
+    }, [error, reduceMotion, shake]);
 
     const handleFocus = useCallback<FocusHandler>(
       (event) => {
@@ -92,8 +146,8 @@ export const Input = React.memo(
     }, [onChangeText]);
 
     return (
-      <View style={[styles.container, containerStyle]}>
-        {label ? (
+      <Animated.View style={[styles.container, containerStyle, { transform: [{ translateX: shake }] }]}>
+        {label && !float ? (
           <Text style={styles.label} numberOfLines={1} {...textScale.dense}>
             {label}
           </Text>
@@ -104,11 +158,44 @@ export const Input = React.memo(
             styles.field,
             variant === "search" ? styles.fieldSearch : null,
             multiline ? styles.fieldMultiline : { height },
-            focused ? styles.fieldFocused : null,
+            float ? styles.fieldFloat : null,
+            focused && !error ? styles.fieldFocused : null,
             error ? styles.fieldError : null,
             rest.editable === false ? styles.fieldDisabled : null,
           ]}
         >
+          {/* Işıklı kenar: alanın 1.5px dışında imza degradesi + parıltı. */}
+          {!error ? (
+            <Animated.View pointerEvents="none" style={[styles.glowRing, { opacity: focusAnim }]}>
+              <LinearGradient
+                colors={[colors.gradientSignature[0], colors.gradientSignature[1], colors.live]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={[StyleSheet.absoluteFill, styles.glowGradient]}
+              />
+              <View style={[styles.glowInner, variant === "search" ? styles.fieldSearch : null]} />
+            </Animated.View>
+          ) : null}
+          {float && label ? (
+            <Animated.Text
+              pointerEvents="none"
+              numberOfLines={1}
+              style={[
+                styles.floatLabel,
+                icon ? styles.floatLabelWithIcon : null,
+                {
+                  color: error ? colors.danger : focused ? colors.accentText : colors.textTertiary,
+                  transform: [
+                    { translateY: labelAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -11] }) },
+                    { scale: labelAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0.76] }) },
+                  ],
+                },
+              ]}
+              {...textScale.dense}
+            >
+              {label}
+            </Animated.Text>
+          ) : null}
           {icon ? (
             <Ionicons
               name={icon}
@@ -124,7 +211,8 @@ export const Input = React.memo(
             multiline={multiline}
             onFocus={handleFocus}
             onBlur={handleBlur}
-            style={[styles.input, multiline ? styles.inputMultiline : null]}
+            style={[styles.input, multiline ? styles.inputMultiline : null, float ? styles.inputFloat : null]}
+            placeholder={float && !focused ? undefined : rest.placeholder}
             placeholderTextColor={colors.textTertiary}
             selectionColor={colors.brandAccent}
             cursorColor={colors.brandAccent}
@@ -158,7 +246,7 @@ export const Input = React.memo(
             {hint}
           </Text>
         ) : null}
-      </View>
+      </Animated.View>
     );
   }),
 );
@@ -181,6 +269,46 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.surface1,
   },
+  fieldFloat: {
+    alignItems: "flex-end",
+    paddingBottom: space.sm + 1,
+  },
+  glowRing: {
+    position: "absolute",
+    top: -2,
+    left: -2,
+    right: -2,
+    bottom: -2,
+    borderRadius: radius.md + 2,
+    padding: 1.5,
+    shadowColor: colors.glow,
+    shadowOpacity: 0.55,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  glowGradient: {
+    borderRadius: radius.md + 2,
+  },
+  glowInner: {
+    flex: 1,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface1,
+  },
+  floatLabel: {
+    position: "absolute",
+    left: space.md + space.xxs,
+    top: 19,
+    ...type.bodyLg,
+    lineHeight: 20,
+    fontFamily: fonts.medium,
+    transformOrigin: "left center",
+  },
+  floatLabelWithIcon: {
+    left: space.md + space.xxs + 16 + space.sm,
+  },
+  inputFloat: {
+    alignSelf: "flex-end",
+  },
   fieldSearch: {
     borderRadius: radius.pill,
   },
@@ -190,7 +318,7 @@ const styles = StyleSheet.create({
     paddingVertical: space.md,
   },
   fieldFocused: {
-    borderColor: colors.brand,
+    borderColor: "transparent",
   },
   fieldError: {
     borderColor: colors.danger,

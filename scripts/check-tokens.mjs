@@ -578,10 +578,19 @@ for (const hit of grep("fontSize: *[0-9]", "app components")) {
   note(`çıplak punto · ${file}:${line} — fontSize sayı sabiti, \`type.*\` kullan`);
 }
 
-/* Sonsuz animasyon döngüsü — yalnız iskelet parıltısı meşru. */
+/* Sonsuz animasyon döngüsü — iskelet parıltısı ve GECE TEMASININ atmosfer
+   hareketleri (aurora, buton parlaması, ışıklı kenar, canlı nabız) meşru.
+   Hepsi "hareketi azalt" açıkken durur ve yerel sürücüde çalışır. */
+const AMBIENT_LOOP_ALLOWED = new Set([
+  "components/ui/Aurora.tsx",
+  "components/ui/Button.tsx",
+  "components/ui/GlowRim.tsx",
+  "components/ui/LiveBadge.tsx",
+]);
 for (const hit of grep("Animated.loop", "app components")) {
   const [file] = hit.split(":");
   if (file.endsWith("Skeleton.tsx")) continue;
+  if (AMBIENT_LOOP_ALLOWED.has(file)) continue;
   // `iterations` verilmişse döngü sonludur (gol parlaması gibi) — sorun değil.
   if (/iterations/.test(hit)) continue;
   note(`sonsuz animasyon · ${hit.trim()}`);

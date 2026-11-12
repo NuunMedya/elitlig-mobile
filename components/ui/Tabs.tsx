@@ -29,6 +29,7 @@
  */
 
 import { useHeaderTone } from "./HeaderTone";
+import { LinearGradient } from "expo-linear-gradient";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -50,6 +51,7 @@ import {
   layout,
   radius,
   space,
+  spring,
   textScale,
   type,
 } from "@/theme";
@@ -125,7 +127,12 @@ function TabsBase<T extends string>({
 }: TabsProps<T>) {
   const tone = useHeaderTone(toneProp ?? "paper");
   const scrollRef = useRef<ScrollView>(null);
-  const translate = useRef(new Animated.Value(0)).current;
+  /* WORM UNDERLINE: çizginin iki ucu ayrı yaylarla hareket eder. Gidilen
+     yöndeki uç önden fırlar, arkadaki uç bir an sonra yetişir; çizgi yolda
+     uzar ve hedefte toplanır — tırtıl gibi. */
+  const leftEdge = useRef(new Animated.Value(0)).current;
+  const rightEdge = useRef(new Animated.Value(0)).current;
+  const lastX = useRef(0);
   const firstRun = useRef(true);
 
   const [containerWidth, setContainerWidth] = useState(0);
@@ -205,18 +212,27 @@ function TabsBase<T extends string>({
 
   useEffect(() => {
     if (indicatorWidth <= 0) return;
+    const toLeft = indicatorX;
+    const toRight = indicatorX + indicatorWidth;
     if (firstRun.current) {
-      translate.setValue(indicatorX);
+      leftEdge.setValue(toLeft);
+      rightEdge.setValue(toRight);
+      lastX.current = indicatorX;
       firstRun.current = false;
       return;
     }
-    Animated.timing(translate, {
-      toValue: indicatorX,
-      duration: duration.base,
-      easing: easing.decelerate,
-      useNativeDriver: true,
-    }).start();
-  }, [indicatorWidth, indicatorX, translate]);
+    const forward = indicatorX >= lastX.current;
+    lastX.current = indicatorX;
+    const lead = { ...spring.slide, useNativeDriver: false };
+    const trail = { damping: 18, stiffness: 170, mass: 0.9, useNativeDriver: false };
+    Animated.parallel([
+      Animated.spring(forward ? rightEdge : leftEdge, { toValue: forward ? toRight : toLeft, ...lead }),
+      Animated.sequence([
+        Animated.delay(duration.fast * 0.75),
+        Animated.spring(forward ? leftEdge : rightEdge, { toValue: forward ? toLeft : toRight, ...trail }),
+      ]),
+    ]).start();
+  }, [indicatorWidth, indicatorX, leftEdge, rightEdge]);
 
   // Seçili sekmeyi görünür alanın ortasına getir (yalnız kaydırma kipinde).
   useEffect(() => {
@@ -290,10 +306,16 @@ function TabsBase<T extends string>({
             pointerEvents="none"
             style={[
               styles.indicator,
-              tone === "ink" ? styles.indicatorInk : null,
-              { width: indicatorWidth, transform: [{ translateX: translate }] },
+              { left: leftEdge, width: Animated.subtract(rightEdge, leftEdge) },
             ]}
-          />
+          >
+            <LinearGradient
+              colors={colors.gradientSignature}
+              start={{ x: 0, y: 0.5 }}
+              end={{ x: 1, y: 0.5 }}
+              style={styles.indicatorFill}
+            />
+          </Animated.View>
         ) : null}
 
         {items.map((item, i) => {
@@ -401,7 +423,8 @@ const styles = StyleSheet.create({
   /* Arena: seçili sekme MARKA rengindedir — sönük menekşe hap + menekşe
      metin tek bir sinyal olarak okunur. */
   labelActive: {
-    color: colors.brandAccent,
+    color: colors.textPrimary,
+    fontFamily: fonts.heading,
   },
   /* Mor blok üstünde: sönük etiket yarı saydam beyaz (AA'yı geçer, bkz.
      scripts/check-tokens.mjs), seçili etiket tam beyaz. */
@@ -419,13 +442,21 @@ const styles = StyleSheet.create({
    * görünmüyordu. Hap, seçili sekmenin ALTINDA değil ARKASINDA durur ve aynı
    * eğri ailesine katılır; etiket de marka rengine döner.
    */
+  /* GECE TEMASI — solucan çizgi: şeridin dibinde 3px, imza degradeli ve
+     parıltılı. Hap yerine çizgi: ui_motion_prompts "Worm Underline". */
   indicator: {
     position: "absolute",
-    left: 0,
-    top: 5,
-    bottom: 5,
+    bottom: 3,
+    height: 3,
     borderRadius: radius.pill,
-    backgroundColor: colors.brandDim,
+    shadowColor: colors.glow,
+    shadowOpacity: 0.8,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  indicatorFill: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: radius.pill,
   },
   /**
    * Mor blok üstündeki hap: dolgu, bloğun kendi ışığından bir tık daha

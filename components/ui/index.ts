@@ -38,6 +38,9 @@ export type { TouchableProps, PressFeedback, HapticKind } from "./Pressable";
 
 export { Surface } from "./Surface";
 
+/** Gece teması atmosferi: kayan mor/camgöbeği/pembe ışık. */
+export { Aurora, type AuroraProps } from "./Aurora";
+
 /** Kartların ışıklı mor gradyan katmanı. */
 export { Bloom, type BloomProps } from "./Bloom";
 export { GradientFill, type GradientTone } from "./GradientFill";

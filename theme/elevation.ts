@@ -126,3 +126,23 @@ export function createDividers(p: Palette): Dividers {
     section:     { height: 10, backgroundColor: p.bg },
   };
 }
+
+/**
+ * MARKA PARILTISI (Gece teması) — seçili kapsül, birincil buton, seçili gün
+ * gibi "ışık saçan" nesnelerin altındaki renkli yumuşak gölge. Gölge değil
+ * ışıktır: rengi nesnenin kendi rengidir (çoğunlukla `colors.glow`).
+ * Android'de renkli gölge desteklenmediği için hafif bir `elevation` verir.
+ */
+export function glowStyle(color: string, strength: 1 | 2 | 3 = 2): ViewStyle {
+  const o = strength === 1 ? 0.35 : strength === 2 ? 0.5 : 0.7;
+  const r = strength === 1 ? 10 : strength === 2 ? 16 : 22;
+  return Platform.select<ViewStyle>({
+    android: { elevation: strength * 2, shadowColor: color },
+    default: {
+      shadowColor: color,
+      shadowOpacity: o,
+      shadowRadius: r,
+      shadowOffset: { width: 0, height: Math.round(r / 2.5) },
+    },
+  }) as ViewStyle;
+}
