@@ -13,6 +13,10 @@
  *     Tahmin+Fantezi · Saha+Görev XP) ve "Yıldızları topla". Oyunlar ve lig
  *     yarışmaları YILDIZI doğrudan verir (XP vermez); XP yalnız sahadan ve
  *     görevlerden gelir ve burada yıldıza çevrilir (10 XP = 1 yıldız).
+ *     Ekonomi A: maç yıldızı (haftalık özet + döküm penceresi), günlük giriş
+ *     yıldızı, XP'nin 3 günlük kovaları (yanmaya kalan süre, "yarın X XP
+ *     yanacak") ve tek seferlik geçmiş XP aktarımı bildirimi.
+ *   · Günlük ödül + seri kartı (components/city/DailyReward).
  *   · Kulüp statüsü ve gelişim puanı.
  *   · Birim kartları: şimdiki hâl, sıradaki basamak, maliyet ya da kilit.
  *
@@ -29,6 +33,11 @@ import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-n
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useAdminMutation } from "@/components/admin";
+import { ChunkyButton } from "@/components/city/ChunkyButton";
+import { DailyRewardEntry } from "@/components/city/DailyReward";
+import { MatchStarsChip, MatchStarsSheet } from "@/components/city/MatchStars";
+import { XpBuckets } from "@/components/city/XpBuckets";
+import { XpTransferBanner } from "@/components/city/XpTransferBanner";
 import { WebGame, type WebGameHandle } from "@/components/game/WebGame";
 import { BottomSheet, Button, ErrorState, ScreenHeader, SkeletonCard, Touchable, useToast } from "@/components/ui";
 import { cityKeys, collectCityStars, getCity, puzzleKeys, upgradeCity, type CityBuilding, type CityState } from "@/lib/puzzle/api";
@@ -40,48 +49,6 @@ const fmt = (n: number) => n.toLocaleString("tr-TR");
 const TOP = { x: 0.5, y: 0 } as const;
 const BOTTOM = { x: 0.5, y: 1 } as const;
 const unitColors = (key: string) => CITY_UNIT_COLORS[key] ?? CITY_UNIT_COLORS.saha;
-
-/** Alt dudaklı 3B oyun düğmesi (altın: geliştir · yeşil: topla). */
-function ChunkyButton({
-  label,
-  icon,
-  onPress,
-  disabled,
-  tone = "gold",
-  small,
-  accessibilityLabel,
-}: {
-  label: string;
-  icon?: keyof typeof Ionicons.glyphMap;
-  onPress: () => void;
-  disabled?: boolean;
-  tone?: "gold" | "green";
-  small?: boolean;
-  accessibilityLabel?: string;
-}) {
-  const fill = tone === "green" ? CITY_UI.green : CITY_UI.gold;
-  const lip = tone === "green" ? CITY_UI.greenLip : CITY_UI.goldLip;
-  const ink = tone === "green" ? CITY_UI.white : CITY_UI.ink;
-  const h = small ? 38 : 52;
-  return (
-    <Touchable
-      onPress={onPress}
-      disabled={disabled}
-      haptic="success"
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel ?? label}
-      style={[small ? styles.chunkySmall : styles.chunky, { height: h + 4, opacity: disabled ? 0.45 : 1 }]}
-    >
-      <View style={[styles.chunkyLip, { height: h, backgroundColor: lip }]} />
-      <LinearGradient colors={fill} start={TOP} end={BOTTOM} style={[styles.chunkyFill, { height: h }]}>
-        {icon ? <Ionicons name={icon} size={small ? 15 : 20} color={ink} /> : null}
-        <Text style={[small ? styles.chunkyTextSmall : styles.chunkyText, { color: ink }]} numberOfLines={1} {...textScale.badge}>
-          {label}
-        </Text>
-      </LinearGradient>
-    </Touchable>
-  );
-}
 
 export default function ClubCityScreen() {
   const auth = useAuth();
@@ -95,6 +62,7 @@ export default function ClubCityScreen() {
   const [kit, setKit] = useState<ClubKit>(CLUB_KITS[0]);
   const [kitSheet, setKitSheet] = useState(false);
   const [howSheet, setHowSheet] = useState(false);
+  const [matchSheet, setMatchSheet] = useState(false);
 
   const query = useQuery({ queryKey: cityKeys.me(), queryFn: getCity, enabled: Boolean(auth.user), staleTime: 20_000, retry: false });
   const city = query.data?.city;
@@ -110,6 +78,7 @@ export default function ClubCityScreen() {
     (next: CityState) => {
       queryClient.setQueryData(cityKeys.me(), (current: { city: CityState; tiers: unknown[] } | undefined) => (current ? { ...current, city: next } : current));
       void queryClient.invalidateQueries({ queryKey: puzzleKeys.me() });
+      void queryClient.invalidateQueries({ queryKey: cityKeys.leaderboard("all").slice(0, 3) });
     },
     [queryClient],
   );
@@ -214,7 +183,15 @@ export default function ClubCityScreen() {
           <ErrorState error={query.error} onRetry={() => query.refetch()} />
         ) : (
           <>
-            <Wallet city={city} collecting={collect.isPending} onCollect={() => collect.mutate(undefined)} onHow={() => setHowSheet(true)} />
+            <XpTransferBanner transfer={city.xp.transfer} perStar={city.xp.per_star} />
+            <DailyRewardEntry />
+            <Wallet
+              city={city}
+              collecting={collect.isPending}
+              onCollect={() => collect.mutate(undefined)}
+              onHow={() => setHowSheet(true)}
+              onMatch={() => setMatchSheet(true)}
+            />
             <TierCard city={city} />
             <Text style={styles.sectionTitle} {...textScale.dense}>
               Birimler · {city.progress.built}/{city.progress.total} basamak
@@ -261,6 +238,7 @@ export default function ClubCityScreen() {
           ))}
         </View>
       </BottomSheet>
+      <MatchStarsSheet visible={matchSheet} onClose={() => setMatchSheet(false)} detail={city?.stars.match_detail} total={city?.stars.match ?? 0} />
       <HowSheet visible={howSheet} onClose={() => setHowSheet(false)} city={city} onGames={() => router.push("/(tabs)/oyunlar")} onQuests={() => router.push("/gorevler")} />
     </SafeAreaView>
   );
@@ -268,9 +246,10 @@ export default function ClubCityScreen() {
 
 /* ═════════════════════════ YILDIZ CÜZDANI ═════════════════════════ */
 
-function Wallet({ city, collecting, onCollect, onHow }: { city: CityState; collecting: boolean; onCollect: () => void; onHow: () => void }) {
+function Wallet({ city, collecting, onCollect, onHow, onMatch }: { city: CityState; collecting: boolean; onCollect: () => void; onHow: () => void; onMatch: () => void }) {
   const s = city.stars;
   const claim = city.xp.claimable_stars;
+  const v2 = Boolean(city.xp.buckets?.length);
   return (
     <View style={styles.wallet}>
       <LinearGradient colors={CITY_UI.panel} start={TOP} end={BOTTOM} style={StyleSheet.absoluteFill} />
@@ -293,9 +272,13 @@ function Wallet({ city, collecting, onCollect, onHow }: { city: CityState; colle
       <View style={styles.sources}>
         <Source icon="extension-puzzle" label="Lig Yolu" value={s.puzzle} tint={CITY_UI.sources[0]} />
         <Source icon="game-controller" label="Oyunlar" value={s.arena} extra={s.arena_today ? `bugün +${s.arena_today}` : null} tint={CITY_UI.sources[1]} />
+        {s.match != null ? <Source icon="football" label="Maç" value={s.match} tint={CITY_UI.sources[4]} /> : null}
         {s.tribun != null ? <Source icon="podium" label="Lig oyunları" value={s.tribun} tint={CITY_UI.sources[3]} /> : null}
+        {s.daily != null ? <Source icon="calendar" label="Giriş" value={s.daily} tint={CITY_UI.sources[5]} /> : null}
         <Source icon="flash" label="XP yıldızı" value={s.xp} tint={CITY_UI.sources[2]} />
       </View>
+      {s.match_detail ? <MatchStarsChip detail={s.match_detail} onPress={onMatch} /> : null}
+      <XpBuckets xp={city.xp} />
       <ChunkyButton
         label={collecting ? "TOPLANIYOR…" : claim > 0 ? `YILDIZLARI TOPLA · +${fmt(claim)}` : "TOPLANACAK YILDIZ YOK"}
         icon="sparkles"
@@ -306,10 +289,12 @@ function Wallet({ city, collecting, onCollect, onHow }: { city: CityState; colle
       />
       <Text style={styles.walletHint} {...textScale.dense}>
         {claim > 0
-          ? `${fmt(city.xp.pending)} XP bekliyor · ${city.xp.per_star} XP = 1 yıldız`
+          ? `${fmt(city.xp.pending)} XP bekliyor = ${fmt(claim)} yıldız · ${city.xp.per_star} XP = 1 yıldız`
           : city.xp.pending > 0
             ? `${fmt(city.xp.pending)} XP birikti · ${city.xp.per_star} XP'de bir yıldız`
-            : "XP sahadan ve haftalık görevlerden gelir; burada yıldıza çevir."}
+            : v2
+              ? "XP sahadan ve haftalık görevlerden gelir; 3 gün içinde burada yıldıza çevir."
+              : "XP sahadan ve haftalık görevlerden gelir; burada yıldıza çevir."}
       </Text>
     </View>
   );
@@ -325,8 +310,13 @@ function Source({ icon, label, value, extra, tint }: { icon: keyof typeof Ionico
         {fmt(value)}
       </Text>
       <Text style={styles.sourceLabel} numberOfLines={1} {...textScale.badge}>
-        {extra ? `${label} · ${extra}` : label}
+        {label}
       </Text>
+      {extra ? (
+        <Text style={styles.sourceExtra} numberOfLines={1} {...textScale.badge}>
+          {extra}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -513,7 +503,17 @@ function HowSheet({ visible, onClose, city, onGames, onQuests }: { visible: bool
         <HowRow
           icon="game-controller"
           title="Oyunlar"
-          text="Bölümlü oyunlarda (Penaltı, Savunma Hattı, Kadro Koşusu) geçtiğin her bölüm yaklaşık bir yıldız; puanlı oyunlarda (Slalom, Top Sektir, yarışmalar) puan eşikleri giderek uzar. Bir oyundan günde en çok 15, bütün oyunlardan 45 yıldız."
+          text="Bölümlü oyunlarda (Penaltı, Savunma Hattı, Kadro Koşusu) geçtiğin her bölüm yaklaşık bir yıldız; puanlı oyunlarda (Slalom, Top Sektir, yarışmalar) puan eşikleri giderek uzar. Bir oyundan günde en çok 15, bütün oyunlardan 30 yıldız."
+        />
+        <HowRow
+          icon="football"
+          title="Maç: gerçek maçlarda oyna"
+          text={`Yayınlanan her maçın ${city?.stars.match_detail?.rules.base ?? 25} yıldız + performans bonusu (gol, asist, reyting, galibiyet, gol yemeden, maçın oyuncusu; en çok +${city?.stars.match_detail?.rules.bonus_cap ?? 50}). Haftada en çok ${city?.stars.match_detail?.rules.week_matches ?? 2} maç sayılır.`}
+        />
+        <HowRow
+          icon="calendar"
+          title="Günlük giriş ve seri"
+          text="Her gün gir, günlük ödülünü al: 5'ten 25 yıldıza 7 günlük döngü, jeton, joker ve haftanın sandığı. 14, 30, 60 ve 100 günlük serilerde şehrine sembol yapılar açılır."
         />
         <HowRow
           icon="podium"
@@ -523,7 +523,7 @@ function HowSheet({ visible, onClose, city, onGames, onQuests }: { visible: bool
         <HowRow
           icon="flash"
           title="XP: saha ve görevler"
-          text={`Oyunlar XP vermez. XP gerçek maçlardaki performansından ve haftalık görevlerden gelir: ${city?.xp.per_star ?? 10} XP = 1 yıldız. "Yıldızları topla" ile havuza aktar.`}
+          text={`Oyunlar XP vermez. XP gerçek maçlardaki performansından ve haftalık görevlerden gelir: ${city?.xp.per_star ?? 10} XP = 1 yıldız. "Yıldızları topla" ile havuza aktar.${city?.xp.buckets?.length ? " Toplanmayan XP en çok 3 gün bekler; sonra yanar (yıldıza dönmez, XP sıralamasında sayılır)." : ""}`}
         />
         {byGame.length ? (
           <View style={styles.byGame}>
@@ -609,11 +609,12 @@ const styles = StyleSheet.create({
   walletSub: { ...type.bodySm, color: CITY_UI.muted },
   walletHow: { padding: space.xs },
   walletHint: { ...type.caption, color: CITY_UI.muted, textAlign: "center" },
-  sources: { flexDirection: "row", gap: space.sm },
-  source: { flex: 1, alignItems: "center", gap: 2, paddingVertical: space.sm, borderRadius: radius.lg, backgroundColor: CITY_UI.chip },
+  sources: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
+  source: { width: "30%", flexGrow: 1, alignItems: "center", gap: 2, paddingVertical: space.sm, borderRadius: radius.lg, backgroundColor: CITY_UI.chip },
   sourceIcon: { width: 28, height: 28, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
   sourceValue: { ...type.h3, fontFamily: fonts.bold, color: CITY_UI.white },
   sourceLabel: { ...type.caption, color: CITY_UI.muted },
+  sourceExtra: { ...type.micro, fontFamily: fonts.bold, color: CITY_UI.gold[0] },
 
   tier: { borderRadius: radius.xxl, padding: space.lg, gap: space.sm, backgroundColor: colors.surface1, borderWidth: 2, borderColor: CITY_UI.gold[1] },
   tierBadge: { width: 38, height: 38, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: CITY_UI.white },
@@ -652,12 +653,6 @@ const styles = StyleSheet.create({
   steps: { flexDirection: "row", gap: 3, marginVertical: 3 },
   step: { flex: 1, height: 9, borderRadius: radius.pill, backgroundColor: colors.surface3 },
   stepNext: { borderWidth: 2 },
-  chunky: { alignSelf: "stretch" },
-  chunkySmall: { minWidth: 76 },
-  chunkyLip: { position: "absolute", top: 4, left: 0, right: 0, borderRadius: radius.pill },
-  chunkyFill: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.xs, paddingHorizontal: space.md, borderRadius: radius.pill, borderWidth: 2, borderColor: CITY_UI.white },
-  chunkyText: { ...type.label, fontFamily: fonts.bold, letterSpacing: 1 },
-  chunkyTextSmall: { ...type.label, fontFamily: fonts.bold },
 
   sheetLead: { ...type.body, color: colors.textSecondary },
   ladder: { gap: space.xs },

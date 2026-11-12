@@ -2,7 +2,7 @@
  * LİG YOLU — seviyeli bulmaca oyunlarının merkezi (/lig-yolu).
  *
  * NE: tepede grafit sahne (cüzdan: can, jeton, harcanabilir yıldız; günlük
- * ödül düğmesi), altında stadyum kartı (son hâlinin küçük çizimi + ilerleme),
+ * ödül + seri kartı), altında stadyum kartı (son hâlinin küçük çizimi + ilerleme),
  * dört oyunun kartları (sıradaki seviye, lig basamağı, yıldız), sıralama.
  *
  * NEDEN TEK MERKEZ: dört oyun aynı cüzdanı, aynı canı ve aynı stadyumu
@@ -16,7 +16,8 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { tierOf } from "@/components/puzzle/LevelMap";
-import { DailySheet, ShopSheet } from "@/components/puzzle/sheets";
+import { DailyRewardEntry } from "@/components/city/DailyReward";
+import { ShopSheet } from "@/components/puzzle/sheets";
 import { WalletBar } from "@/components/puzzle/WalletBar";
 import { ErrorState, ScreenHeader, SectionHeader, SkeletonCard, Touchable, toneColors, useHeaderScroll, useRefresh } from "@/components/ui";
 import { PUZZLE_GAMES } from "@/lib/puzzle/registry";
@@ -32,7 +33,6 @@ export default function PuzzleHubScreen() {
   const me = query.data;
   const refresh = useRefresh(() => query.refetch(), { refreshing: query.isRefetching });
   const [shop, setShop] = useState<"lives" | "all" | null>(null);
-  const [daily, setDaily] = useState(false);
 
   if (!auth.user) return <Redirect href="/giris" />;
 
@@ -50,19 +50,8 @@ export default function PuzzleHubScreen() {
           <>
             <WalletBar profile={me.profile} hideLives={Boolean(me.profile.lives_by_game)} onCoins={() => setShop("all")} onLives={() => setShop("lives")} onStars={() => router.push("/kulup-sehri")} />
 
-            {me.profile.daily.available ? (
-              <Touchable onPress={() => setDaily(true)} style={styles.daily} haptic="medium" accessibilityRole="button">
-                <Ionicons name="gift" size={26} color={colors.yellowCard} />
-                <View style={styles.dailyTexts}>
-                  <Text style={styles.dailyTitle} {...textScale.dense}>Günlük ödülün hazır</Text>
-                  <Text style={styles.dailySub} {...textScale.dense}>
-                    {me.profile.daily.next_streak}. gün · {me.profile.daily.reward.coins} jeton
-                    {me.profile.daily.reward.boosters ? " + güçlendirici" : ""}
-                  </Text>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color={colors.onDarkMuted} />
-              </Touchable>
-            ) : null}
+            {/* Günlük giriş ödülü + seri (oyun merkezi ve Kulüp Şehri ile aynı) */}
+            <DailyRewardEntry />
 
             {/* KULÜP ŞEHRİ KARTI — yıldızlar burada harcanır */}
             <Touchable onPress={() => router.push("/kulup-sehri")} style={styles.stadium} accessibilityRole="button" accessibilityLabel="Kulüp Şehrini kur">
@@ -131,7 +120,6 @@ export default function PuzzleHubScreen() {
         ) : null}
       </ScrollView>
       <ShopSheet visible={shop != null} onClose={() => setShop(null)} me={me} focus={shop === "lives" ? "lives" : null} />
-      <DailySheet visible={daily} onClose={() => setDaily(false)} me={me} />
     </SafeAreaView>
   );
 }
@@ -140,10 +128,6 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { paddingHorizontal: layout.screenPadding, paddingBottom: space.giant * 2, gap: space.md, paddingTop: space.sm },
   section: { paddingHorizontal: 0 },
-  daily: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.lg, borderRadius: radius.xl, backgroundColor: colors.inkBlock },
-  dailyTexts: { flex: 1, gap: 2 },
-  dailyTitle: { ...type.h3, color: colors.onDark },
-  dailySub: { ...type.bodySm, color: colors.onDarkMuted },
   cityIcon: { width: 48, height: 48, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.inkTileBorder },
   stadium: { borderRadius: radius.xl, overflow: "hidden", backgroundColor: colors.inkBlock, borderWidth: hairline, borderColor: colors.inkTileBorder },
   stadiumBar: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md },
