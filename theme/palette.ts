@@ -358,6 +358,22 @@ export interface Palette {
   shineGradient: readonly [string, string, string];
   /** Anahtar topu ve kaydırıcı başparmağı — iki temada da beyaz. */
   knob: string;
+  /** Degrade ikon kutuları (IconTile) — iki temada aynı, üstünde beyaz ikon. */
+  tileTones: {
+    violet: readonly [string, string];
+    cyan: readonly [string, string];
+    pink: readonly [string, string];
+    mint: readonly [string, string];
+    gold: readonly [string, string];
+    red: readonly [string, string];
+    signature: readonly [string, string];
+    neutral: readonly [string, string];
+  };
+  /** Sıralama madalyaları (RankBadge) ve üstlerindeki rakam. */
+  medalGold: readonly [string, string];
+  medalSilver: readonly [string, string];
+  medalBronze: readonly [string, string];
+  medalInk: string;
 }
 
 /**
@@ -522,6 +538,20 @@ export const light: Palette = {
   glow:         "#5A46F0",
   shineGradient: ["rgba(255, 255, 255, 0)", "rgba(255, 255, 255, 0.45)", "rgba(255, 255, 255, 0)"],
   knob:         "#FFFFFF",
+  tileTones: {
+    violet: ["#8F7BFF", "#5A46F0"],
+    cyan: ["#38C6FF", "#1C7FD6"],
+    pink: ["#FF6FB0", "#C42A79"],
+    mint: ["#3DDBB0", "#0E9C78"],
+    gold: ["#FFD166", "#E0960E"],
+    red: ["#FF7A8A", "#D42A44"],
+    signature: ["#6E5BFF", "#38C6FF"],
+    neutral: ["#6D6B88", "#45435E"],
+  },
+  medalGold: ["#FFE08A", "#E7A91C"],
+  medalSilver: ["#F1F2F8", "#A9ADC4"],
+  medalBronze: ["#F3B98A", "#B86A2E"],
+  medalInk: "#2A1A05",
 };
 
 /**
@@ -670,6 +700,20 @@ export const dark: Palette = {
   glow:         "#6E5BFF",
   shineGradient: ["rgba(255, 255, 255, 0)", "rgba(255, 255, 255, 0.40)", "rgba(255, 255, 255, 0)"],
   knob:         "#FFFFFF",
+  tileTones: {
+    violet: ["#8F7BFF", "#5A46F0"],
+    cyan: ["#38C6FF", "#1C7FD6"],
+    pink: ["#FF6FB0", "#C42A79"],
+    mint: ["#3DDBB0", "#0E9C78"],
+    gold: ["#FFD166", "#E0960E"],
+    red: ["#FF7A8A", "#D42A44"],
+    signature: ["#6E5BFF", "#38C6FF"],
+    neutral: ["#6D6B88", "#45435E"],
+  },
+  medalGold: ["#FFE08A", "#E7A91C"],
+  medalSilver: ["#F1F2F8", "#A9ADC4"],
+  medalBronze: ["#F3B98A", "#B86A2E"],
+  medalInk: "#2A1A05",
 };
 
 /** Tema adı — depolanan tercih ve sistem ayarı bu iki değere indirgenir. */

@@ -81,3 +81,57 @@ görüntüsü alınır ve yeni tema, eski görüntünün altından büyüyerek a
   eylem düğmeleri `BlurView`'e geçirilebilir.
 - **Paylaşılan öğe geçişi** (maç kartından detaya büyüme) yerel yığın
   gezgininde desteklenmediği için yapılmadı; sayfa geçişleri yerel kaydırmadır.
+
+## Detay rehberi (ikinci tur)
+
+İlk tur renkleri ve ortak bileşenleri değiştirdi. İkinci turda her ekranın
+**içeriği ve kurgusu** bu kurallara göre yeniden düzenlenir.
+
+### Sayfa kurgusu
+1. `ScreenHeader` (aurora otomatik) → **özet bloğu** → gruplanmış bölümler.
+2. Özet bloğu: sayfanın en önemli 2-4 bilgisi. Kimlik sayfalarında (takım,
+   oyuncu, maç, lig) `gradientInk` + `<Aurora variant="stage" />` üzerinde
+   beyaz metin; liste/araç sayfalarında `MetricTile`/`MetricGrid` ya da
+   tek satır cam kart. Önemli sayılar `Odometer` ile döner.
+3. Bölümler: `SectionHeader` (başlık + sağda "Tümü ›" eylemi), aralarında
+   `space.xl`; ekran kenar boşluğu `layout.screenPadding`.
+4. İçerik kartları `Card`/`Surface` (radius `xl`). Aynı bölümde tek kart
+   içinde satırlar + iç ayraç; kart içinde kart yok.
+
+### Liste satırı anatomisi
+- Öndeki görsel: `TeamLogo` / `Avatar` / `IconTile` (36-40 px).
+- Başlık `type.h4`/semibold `textPrimary`; altında meta satırı `textTertiary`.
+- Sondaki değer: sayı (Archivo, `tabular-nums`), `Badge` ya da chevron.
+- Satır yüksekliği 56-64; ayraç `dividers.inset`.
+- Kullanıcının kendisi / takımı / seçili satır: `brandDim` zemin + solda
+  3 px `gradientSignature` şerit.
+- Sıralama listeleri: ilk üç `RankBadge`, bölge rengi solda 3 px şerit,
+  form `FormChips`.
+
+### Sayılar ve durum
+- Rakamlar `fonts.bold`/`fonts.display` (Archivo), tablo hizalı.
+- Artış/azalış: `win`/`loss` renginde ▲/▼ ya da `+`/`−`.
+- Durum hapları `Badge` (soft): canlı = live, tamam = win, bekliyor = warn,
+  iptal/ret = danger, taslak = neutral.
+- İlerleme: `GradientBar`; karşılaştırma: `StatBar`.
+
+### Etkileşim ve hareket
+- Basılabilir kart `Touchable feedback="card"`, satır `feedback="row"`.
+- İlk açılışta listenin ilk 6-8 öğesi `Reveal index={i}` ile sırayla gelir.
+- Filtre ≤4 seçenek: `SegmentedControl`; daha fazlası: yatay `Chip` şeridi;
+  sayfa bölümleri: `Tabs`.
+- Yükleniyor: içeriğin şeklinde `Skeleton`; boş: `EmptyState` (ikon + tek
+  cümle + eylem).
+- Kategori/araç menüleri: `IconTile` (tonlar: violet, cyan, pink, mint, gold,
+  red, signature, neutral) + başlık + kısa açıklama; ızgara `HubGrid`.
+
+### Formlar (yönetim dahil)
+- Alanlar gruplu kartlarda; grup başlığı `type.overline`.
+- Önemli formlarda `Input floating`; seçimler `OptionSheet`/`DateSheet`.
+- Birincil eylem altta tam genişlik `Button size="lg"`; yıkıcı eylem
+  `variant="danger"` ve onay ister.
+
+### Yasaklar
+- Çıplak hex, `fontSize` sayısı, `fontWeight` yok (`npm run check:tokens`).
+- Veri çekme, API çağrısı, gezinme ve yetki mantığı değişmez; yalnız sunum.
+- Erişilebilirlik etiketleri korunur.

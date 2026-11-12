@@ -40,6 +40,9 @@ export { Surface } from "./Surface";
 
 /** Gece teması atmosferi: kayan mor/camgöbeği/pembe ışık. */
 export { Aurora, type AuroraProps } from "./Aurora";
+/** Gece kiti: dönen sayaç, madalya, degrade ikon kutusu, degrade çubuk. */
+export { Odometer, RankBadge, IconTile, GradientBar, ICON_TILE_TONES } from "./NightKit";
+export type { OdometerProps, RankBadgeProps, IconTileProps, IconTileTone, GradientBarProps } from "./NightKit";
 /** Canlı kartın kenarında dolaşan neon ışık. */
 export { GlowRim, type GlowRimProps } from "./GlowRim";
 
