@@ -66,6 +66,12 @@ export interface ArenaGameConfig {
   overTitle: string;
   /** Paylaşım kartındaki meydan okuma. */
   taunt: string;
+  /**
+   * Bölümlü oyun (Savunma Hattı): bölüm sonu ekranı oyunun İÇİNDEDİR
+   * (sonraki bölüm / tekrar / bölümler). Her bölüm sonunda skor sessizce
+   * gönderilir ve yeni oturum açılır; kabuğun bitiş kartı açılmaz.
+   */
+  levelGame?: boolean;
 }
 
 type Phase = "loading" | "ready" | "playing" | "over";
@@ -130,15 +136,21 @@ export function ArenaGameScreen({ config }: { config: ArenaGameConfig }) {
     }, []),
   );
 
-  const { finish } = run;
+  const { finish, reset } = run;
+  const levelGame = Boolean(config.levelGame);
   const onOver = useCallback(
     (payload: GameOverPayload) => {
       if (phaseRef.current !== "playing") return;
+      if (levelGame) {
+        finish(payload.score);
+        reset();
+        return;
+      }
       setResult(payload);
       setPhaseBoth("over");
       finish(payload.score);
     },
-    [finish],
+    [finish, reset, levelGame],
   );
 
   /* Oyunun kalıcı verisi (Savunma Hattı: açılan bölümler ve yıldızlar).

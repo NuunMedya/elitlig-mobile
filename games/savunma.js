@@ -1,9 +1,30 @@
 /*
- * SAVUNMA HATTI — şeritli kale savunması (2B vektör çizim). Rakip hücumcular
- * SAĞDAN, ekranın dışından gelir; beş YATAY koridorda uzun bir koşu yolunu
- * yürüyüp SOLDAKİ kalene ulaşmaya çalışır. Sen koridorların sol yarısındaki
- * ızgaraya oyuncularını dizersin: TARAFTAR güneş üretir, FORVET şut atar,
- * STOPER duvar olur. Kalene ulaşan her rakip bir GOL: üç gol yersen maç biter.
+ * SAVUNMA HATTI — şeritli kale savunması (2B vektör çizim), BÖLÜM BÖLÜM.
+ * Rakip hücumcular SAĞDAN, ekranın dışından gelir; yatay koridorlarda uzun bir
+ * koşu yolunu yürüyüp SOLDAKİ kalene ulaşmaya çalışır. Sen koridorların sol
+ * yarısındaki ızgaraya oyuncularını dizersin: TARAFTAR güneş üretir, FORVET
+ * şut atar, STOPER duvar olur. Kalene ulaşan her rakip bir GOL: üç gol yersen
+ * bölüm kaybedilir ("TEKRAR DENE").
+ *
+ * BÖLÜMLER (20): her bölüm sabit, tohumlu bir dalga dizisidir ve SON HÜCUM ile
+ * (2. bölümden itibaren rakip KAPTAN'la) biter. Bitirince bölüm kazanılır:
+ * yenilen gole göre 1–3 yıldız (0 gol 3, 1 gol 2, 2 gol 1), sıradaki bölüm
+ * açılır. "start" komutu tuvalde BÖLÜM SEÇ ekranını açar (açılmış bölüm +1'den
+ * ötesi kilitli). Zorluk eğrisi, koridor sayısı (8. bölümden itibaren 6),
+ * yeni rakip ve yeni oyuncu kartlarının açıldığı bölümler `levelInfo()` ve
+ * FOE_INTRO / UNITS.unlock tablolarındadır; yeni bir şey açılınca bölüm
+ * başında "YENİ RAKİP: …" / "YENİ OYUNCU: …" kartı çıkar (oyun o sırada bekler).
+ *
+ * KALICILIK (RN üzerinden; WebView localStorage'ı güvenilmez): RN kaydı
+ * {type:"config", store:{unlocked, stars}} ile gönderir (core.js A.store'a
+ * yazar ve game.storeLoaded(store) çağırır; ready'den önce ya da sonra
+ * gelebilir). İlerleme değişince oyun RN'ye
+ *   {type:"store", data:{unlocked: 4, stars: {"1":3, "2":2, "3":1}}}
+ * yollar. Gelen kayıt yereldekiyle birleştirilir (en yüksek değer kalır).
+ *
+ * BİTİŞ: bölüm bitince (kazanılsa da kaybedilse de) RN'ye
+ *   {type:"over", score, stats:{wave, defeated, conceded, placed, teams, level, won, stars}}
+ * gider; score o bölümün puanıdır.
  *
  * MİMARİ: simülasyon (ızgara, dalgalar, hasar, güneş, puan) çizimden
  * bağımsızdır; başsız testler (scripts/check-games.mjs) yalnız onu koşturur.
@@ -13,35 +34,37 @@
  * konturlu, doygun renkli, yuvarlak hatlı "flat vector" futbolcular; gece
  * şehri + stadyum fonu; statik fon bir kez ekran dışı katmana çizilir.
  *
- * SAHA UZUNLUĞU: dikey telefonda 5 sütun (her biri ≥44 px dokunma alanı),
- * yatay ekranda 7 sütun. Izgaranın sağında uzun bir KOŞU YOLU vardır
- * (dikeyde 7,2 m, yatayda 12 m): rakip ekranın sağ kenarının dışında doğar
- * ve ızgaraya ulaşmadan önce görünür biçimde yürür.
+ * SAHA: dikey telefonda 7 sütun (her biri ≥42 px dokunma alanı), yatay
+ * ekranda 9 sütun. Izgaranın sağında bir KOŞU YOLU vardır: rakip ekranın sağ
+ * kenarının dışında doğar ve ızgaraya ulaşmadan önce görünür biçimde yürür.
  *
  * GERÇEK İÇERİK (RN'den {type:"config", roster:{captain, rivals}}): oyuncuların
- * seçtiğin oyuncunun kulübünün formasını giyer; her DALGA ligin bir takımıdır
- * (forma, ad). Dalganın sonunda o takımın KAPTANI gelir.
+ * seçtiğin oyuncunun kulübünün formasını giyer; her BÖLÜM ligin bir takımıdır
+ * (forma, ad). Son hücumda o takımın KAPTANI gelir.
  *
- * OYUNCULAR (kart · güneş · görev · açıldığı dalga):
- *   TARAFTAR 50   güneş bayrağı sallar; 6,5 sn'de bir +25 güneş (ilk 3 sn). 1
- *   FORVET   75   koridorunda rakip varsa 1,4 sn'de bir şut (25 hasar). 1
- *   STOPER   50   2400 can; rakibi oyalar. 1
- *   FÜZE     125  0,9 sn sonra 3×3 alanı temizler (1800 hasar). 2
- *   FISKİYE  25   tuzak: üstünden geçen rakip yarı hıza düşer, ıslanır. 3
- *   ÇİFT     175  her seferinde iki şut. 4
- *   KALECİ   150  ilk dokunan rakibi KAPAR (kaptana 500); 10 sn topu tutar. 5
- *   PRES     150  şutu rakibi 3,5 sn yarı hıza düşürür. 6
- *   ORTACI   175  kendi ve iki komşu koridora orta: 45 alan hasarı. 7
- *   HAKEM    100  anında: düdük, bütün rakipler 4 sn donar (+20 hasar). 8
- * Tepside yalnız AÇILMIŞ kartlar durur; yeni kart açılınca "YENİ OYUNCU!"
- * kartı çıkar. Gökten de güneş düşer (+25, arada altın +50): dokun, topla.
- * Üretilen güneş 6 sn içinde toplanmazsa kendiliğinden toplanır. ÇIKAR oyuncuyu kaldırır.
+ * OYUNCULAR (kart · güneş · görev · açıldığı bölüm):
+ *   TARAFTAR 50   7 sn'de bir +25 güneş (ilk 3 sn). 1
+ *   FORVET   100  koridorunda rakip varsa 1,4 sn'de bir şut (25 hasar). 1
+ *   STOPER   50   2400 can; rakibi oyalar, ZIPLAYAN üstünden atlayamaz. 2
+ *   FÜZE     125  0,9 sn sonra 3×3 alanı temizler (1800 hasar). 3
+ *   FISKİYE  25   tuzak: üstünden geçen rakip yarı hıza düşer, ıslanır. 4
+ *   ÇİFT     200  her seferinde iki şut. 5
+ *   KALECİ   150  ilk dokunan rakibi KAPAR (kaptana 500); 10 sn topu tutar. 6
+ *   PRES     150  şutu rakibi 3,5 sn yarı hıza düşürür. 8
+ *   ORTACI   175  kendi ve iki komşu koridora orta (havadan: kalkanı aşar). 10
+ *   HAKEM    100  anında: düdük, bütün rakipler 4 sn donar (+20 hasar). 13
+ * Gökten de güneş düşer (+25, arada altın +50): dokun, topla. Üretilen güneş
+ * 6 sn içinde toplanmazsa kendiliğinden toplanır. ÇIKAR oyuncuyu kaldırır.
  *
- * RAKİPLER: HÜCUMCU (200 can), KANAT (hızlı, 150; 3. dalga), SANTRFOR (480;
- * 4. dalga), KAPTAN (2. dalgadan itibaren dalga sonu, 1000+). Temas ettiği
- * oyuncuya saniyede 100 hasar verir.
+ * RAKİPLER (açıldığı bölüm): HÜCUMCU (200 can) 1 · HIZLI (140, çok hızlı) 3 ·
+ * TANK (700, yavaş) 5 · ZIPLAYAN (ilk temasta önündeki oyuncunun üstünden bir
+ * kare ileri atlar; STOPER'ı aşamaz) 7 · KALKANLI (önden gelen ilk 5+ şutu
+ * kalkanıyla keser) 10 · TOPÇU (menzile girince durur, koridorundaki en yakın
+ * oyuncuna top atar: 60 hasar) 12 · KAPTAN (son hücum, 1000+). Temas ettiği
+ * oyuncuya saniyede 100 hasar verir. Can bölümle %4,5 artar.
  *
- * PUAN: hücumcu 10, kanat 15, santrfor 25, kaptan 80; dalga bitince 50 × dalga.
+ * PUAN: rakip başına 10–30, kaptan 80; dalga bitince 50 × dalga; bölüm
+ * kazanılınca 100 + 20 × bölüm + 50 × yıldız.
  */
 (function () {
   "use strict";
@@ -102,8 +125,8 @@
     rivals = rv.length ? rv : DEFAULT_RIVALS;
     bg = null;
   }
-  function rivalAt(w) {
-    return rivals[(Math.max(1, w) - 1) % rivals.length];
+  function rivalAt(n) {
+    return rivals[(Math.max(1, n) - 1) % rivals.length];
   }
   function kitOf(person) {
     var k = person && person.team && person.team.kit ? person.team.kit : {};
@@ -116,44 +139,72 @@
   }
 
   /* ─────────────────────────── kurallar ─────────────────────────── */
-  var LANES = 5;
-  var ROWS = 5; // koridor boyunca sütun sayısı (dikey 5, yatay 7) — maç başında seçilir
+  var LANES = 5; // bölüme göre 5 ya da 6
+  var ROWS = 7; // koridor boyunca sütun sayısı (dikey 7, yatay 9) — bölüm başında seçilir
   var CD = 2.2, Z0 = 1.9, GOAL_Z = 0.8; // sütun uzunluğu, ilk sütunun başı, kale çizgisi
-  var RUN = 6.6; // ızgaranın sağındaki koşu yolu (m)
+  var RUN = 5.6; // ızgaranın sağındaki koşu yolu (m)
   var SPAWN_Z = Z0 + ROWS * CD + RUN;
   var LIVES = 3;
   var SHOT_V = 11, SHOT_DMG = 25;
-  var START_ENERGY = 300, SKY_V = 25, CLEAR_ENERGY = 100;
+  var SKY_V = 25, CLEAR_ENERGY = 50;
 
   var UNITS = {
     taraftar: { name: "TARAFTAR", cost: 50, hp: 300, recharge: 5, color: "#FFB21E", unlock: 1, desc: "Güneş üretir" },
-    forvet: { name: "FORVET", cost: 75, hp: 300, recharge: 4, color: "#7C5CFF", unlock: 1, desc: "Şut atar" },
-    stoper: { name: "STOPER", cost: 50, hp: 2400, recharge: 14, color: "#2F80ED", unlock: 1, desc: "Duvar olur" },
-    fuze: { name: "FÜZE", cost: 125, hp: 9999, recharge: 24, color: "#FF3B5C", unlock: 2, desc: "3×3 alanı temizler" },
-    fiskiye: { name: "FISKİYE", cost: 25, hp: 1, recharge: 8, color: "#14C8E8", unlock: 3, desc: "Çimi ıslatır, yavaşlatır", trap: true },
-    cift: { name: "ÇİFT", cost: 175, hp: 300, recharge: 7, color: "#FF8A1F", unlock: 4, desc: "İki şut birden" },
-    kaleci: { name: "KALECİ", cost: 150, hp: 1200, recharge: 14, color: "#7ED321", unlock: 5, desc: "Rakibi kapar" },
-    pres: { name: "PRES", cost: 150, hp: 300, recharge: 7, color: "#38BDF8", unlock: 6, desc: "Şutu yavaşlatır" },
-    ortaci: { name: "ORTACI", cost: 175, hp: 300, recharge: 8, color: "#D946EF", unlock: 7, desc: "Üç koridora orta" },
-    hakem: { name: "HAKEM", cost: 100, hp: 1, recharge: 35, color: "#FFD400", unlock: 8, desc: "Herkesi dondurur", instant: true },
+    forvet: { name: "FORVET", cost: 100, hp: 300, recharge: 4, color: "#7C5CFF", unlock: 1, desc: "Şut atar" },
+    stoper: { name: "STOPER", cost: 50, hp: 2400, recharge: 14, color: "#2F80ED", unlock: 2, desc: "Duvar olur, atlatmaz" },
+    fuze: { name: "FÜZE", cost: 125, hp: 9999, recharge: 26, color: "#FF3B5C", unlock: 3, desc: "3×3 alanı temizler" },
+    fiskiye: { name: "FISKİYE", cost: 25, hp: 1, recharge: 8, color: "#14C8E8", unlock: 4, desc: "Çimi ıslatır, yavaşlatır", trap: true },
+    cift: { name: "ÇİFT", cost: 200, hp: 300, recharge: 7, color: "#FF8A1F", unlock: 5, desc: "İki şut birden" },
+    kaleci: { name: "KALECİ", cost: 150, hp: 1200, recharge: 16, color: "#7ED321", unlock: 6, desc: "Rakibi kapar" },
+    pres: { name: "PRES", cost: 150, hp: 300, recharge: 7, color: "#38BDF8", unlock: 8, desc: "Şutu yavaşlatır" },
+    ortaci: { name: "ORTACI", cost: 175, hp: 300, recharge: 8, color: "#D946EF", unlock: 10, desc: "Üç koridora orta, kalkanı aşar" },
+    hakem: { name: "HAKEM", cost: 100, hp: 1, recharge: 35, color: "#FFD400", unlock: 13, desc: "Herkesi dondurur", instant: true },
   };
   var ORDER = ["taraftar", "forvet", "stoper", "fuze", "fiskiye", "cift", "kaleci", "pres", "ortaci", "hakem"];
   var FOES = {
-    hucum: { hp: 200, v: 0.43, pts: 10, k: 1, cost: 1 },
-    kanat: { hp: 150, v: 0.8, pts: 15, k: 0.94, cost: 1.5 },
-    santrfor: { hp: 480, v: 0.36, pts: 25, k: 1.2, cost: 3 },
-    kaptan: { hp: 1000, v: 0.3, pts: 80, k: 1.36, cost: 0 },
+    hucum: { name: "HÜCUMCU", hp: 200, v: 0.46, pts: 10, k: 1, cost: 1, color: "#FF4D6A", desc: "Kaleye yürür" },
+    kanat: { name: "HIZLI", hp: 140, v: 0.95, pts: 15, k: 0.94, cost: 1.4, color: "#FF8A1F", desc: "Çok hızlı koşar, canı az" },
+    santrfor: { name: "TANK", hp: 700, v: 0.34, pts: 30, k: 1.22, cost: 3.2, color: "#7C3AED", desc: "Yavaş ama çok sağlam" },
+    ziplayan: { name: "ZIPLAYAN", hp: 220, v: 0.55, pts: 20, k: 1, cost: 1.8, color: "#22C55E", desc: "Önündeki oyuncunun üstünden atlar · STOPER durdurur" },
+    kalkanli: { name: "KALKANLI", hp: 240, v: 0.42, pts: 20, k: 1.04, cost: 2, color: "#2F80ED", desc: "Kalkanı ilk şutları keser · ORTA havadan aşar" },
+    topcu: { name: "TOPÇU", hp: 240, v: 0.42, pts: 25, k: 1.02, cost: 2.2, color: "#E11D48", desc: "Uzaktan durup oyuncularına top atar" },
+    kaptan: { name: "KAPTAN", hp: 1000, v: 0.3, pts: 80, k: 1.36, cost: 0, color: "#FFD400", desc: "Son hücumu yönetir" },
   };
+  var FOE_ORDER = ["hucum", "kanat", "santrfor", "ziplayan", "kalkanli", "topcu"];
+  /** Rakip türlerinin ilk göründüğü bölüm. */
+  var FOE_INTRO = { kanat: 3, santrfor: 5, ziplayan: 7, kalkanli: 10, topcu: 12 };
+  var MAX_LEVEL = 20, LANE6_AT = 8;
   var EAT = 100; // temas hasarı / sn
-  var PRODUCE = 6.5, FIRST_PRODUCE = 3, AUTO_COLLECT = 6, FIRE = 1.4;
+  var PRODUCE = 7, FIRST_PRODUCE = 3, AUTO_COLLECT = 6, FIRE = 1.4;
   var LOB_EVERY = 2.6, LOB_DMG = 45, LOB_T = 0.75;
   var CHEW = 10, FREEZE = 4, WET_DPS = 12;
+  var LEAP_T = 0.8, TOPCU_R = 6.2, TOPCU_EVERY = 2.8, FBALL_V = 9, FBALL_DMG = 60;
+
+  /**
+   * Bölüm tasarımı (formülle "elle"): dalga sayısı, koridor, başlangıç güneşi,
+   * can çarpanı, bölümün yeni rakibi ve yeni kartları.
+   */
+  function levelInfo(n) {
+    var nf = null;
+    for (var k in FOE_INTRO) if (FOE_INTRO[k] === n) nf = k;
+    return {
+      n: n,
+      waves: n <= 2 ? 2 : n <= 6 ? 3 : n <= 13 ? 4 : 5,
+      lanes: n >= LANE6_AT ? 6 : 5,
+      start: 150 + 15 * Math.min(n - 1, 8),
+      hp: 1 + 0.05 * (n - 1),
+      boss: n >= 2,
+      newFoe: nf,
+      newCards: n > 1 ? ORDER.filter(function (k) { return UNITS[k].unlock === n; }) : [],
+    };
+  }
 
   var W = 0, H = 0;
-  var state = "attract"; // attract | play | dying | over
+  var state = "attract"; // attract | select | play | dying | won | lost
   var grid = []; // grid[lane][row] = unit | null
-  var units = [], foes = [], shots = [], lobs = [], orbs = [], blasts = [], refs = [];
-  var energy = START_ENERGY, points = 0, lives = LIVES, wave = 1, defeated = 0, placed = 0, conceded = 0;
+  var units = [], foes = [], shots = [], lobs = [], fballs = [], orbs = [], blasts = [], refs = [];
+  var level = 1, info = levelInfo(1);
+  var energy = 150, points = 0, lives = LIVES, wave = 1, defeated = 0, placed = 0, conceded = 0;
   var queue = []; // { t, type, lane }
   var waveT = 0, waveState = "run"; // run | rest
   var restT = 0, surgeAt = 0, surged = false;
@@ -163,18 +214,48 @@
   var sunBump = 0, flashRed = 0, stateT = 0, goalFlash = 0, goalLane = 2, lostAt = -9;
   var uid = 0;
   var zaps = []; // güneş sayacına uçan ışıklar (ekran)
-  var unlockPop = null; // { keys, at } — "YENİ OYUNCU!" kartı
+  var pops = [], popAt = 0; // bölüm başı tanıtım kartları: {kind:"unit"|"foe"|"lane", key}
   var press = {}; // kart basma anı (yaylı küçülme)
-  var shownPts = 0, shownSun = START_ENERGY;
+  var shownPts = 0, shownSun = 150;
+  var result = null; // { won, stars, points, sent }
+  var progress = { unlocked: 1, stars: {} };
+  var lastPicked = 1, lockShake = { n: 0, at: -9 };
+
+  /* ─────────────────────────── kalıcılık (RN) ─────────────────────────── */
+
+  /** RN'den gelen kaydı yereldekiyle birleştirir (en yüksek değer kalır). */
+  function storeLoaded(s) {
+    if (!s || typeof s !== "object") return;
+    var u = Math.floor(+s.unlocked);
+    if (isFinite(u)) progress.unlocked = A.clamp(Math.max(progress.unlocked, u), 1, MAX_LEVEL);
+    if (s.stars && typeof s.stars === "object") {
+      for (var k in s.stars) {
+        var n = Math.floor(+k), v = Math.floor(+s.stars[k]);
+        if (n >= 1 && n <= MAX_LEVEL && v >= 1) progress.stars[n] = Math.max(progress.stars[n] || 0, Math.min(3, v));
+      }
+    }
+    for (var key in progress.stars) progress.unlocked = Math.max(progress.unlocked, Math.min(MAX_LEVEL, +key + 1));
+    lastPicked = Math.min(lastPicked > 1 ? lastPicked : progress.unlocked, progress.unlocked);
+  }
+  function saveStore() {
+    var st = {};
+    for (var k in progress.stars) st[k] = progress.stars[k];
+    A.send("store", { data: { unlocked: progress.unlocked, stars: st } });
+  }
+  function totalStars() {
+    var t = 0;
+    for (var k in progress.stars) t += progress.stars[k];
+    return t;
+  }
 
   function wideScreen() {
     return W > H * 1.15 && W >= 560;
   }
-  /** Saha boyu ekran yönüne göre maç başında seçilir (dönerse yerleşim uyar, kurallar sabit). */
+  /** Saha boyu ekran yönüne göre bölüm başında seçilir (dönerse yerleşim uyar, kurallar sabit). */
   function configureField() {
     var wide = wideScreen();
-    ROWS = wide ? 7 : 5;
-    RUN = wide ? 12 : 7.2;
+    ROWS = wide ? 9 : 7;
+    RUN = wide ? 7 : 5.6;
     SPAWN_Z = Z0 + ROWS * CD + RUN;
     layoutKey = "";
   }
@@ -182,14 +263,18 @@
     return Z0 + row * CD + CD / 2;
   }
   function unlocked(type) {
-    return wave >= UNITS[type].unlock;
+    return level >= UNITS[type].unlock;
   }
   function canPlace(type, lane, row) {
     if (!UNITS[type] || lane < 0 || row < 0 || lane >= LANES || row >= ROWS) return false;
     return UNITS[type].instant ? true : !grid[lane][row];
   }
 
-  function resetWorld() {
+  /** Dünyayı n. bölüm için kurar (vitrin de 1. bölümün sahasını kullanır). */
+  function resetWorld(n) {
+    level = A.clamp(n || 1, 1, MAX_LEVEL);
+    info = levelInfo(level);
+    LANES = info.lanes;
     configureField();
     grid = [];
     for (var l = 0; l < LANES; l++) {
@@ -200,11 +285,12 @@
     foes = [];
     shots = [];
     lobs = [];
+    fballs = [];
     orbs = [];
     blasts = [];
     refs = [];
     zaps = [];
-    energy = START_ENERGY;
+    energy = info.start;
     shownSun = energy;
     points = 0;
     shownPts = 0;
@@ -218,72 +304,124 @@
     dragging = false;
     hover = null;
     removing = false;
-    unlockPop = null;
+    pops = [];
+    result = null;
     skyT = 2.5;
     skyN = 0;
+    bg = null;
     buildWave();
   }
 
-  /** Dalga planı: seyrek başlar, yavaş sıklaşır, BÜYÜK HÜCUM ve kaptanla biter. */
+  /**
+   * Dalga planı (bölüm + dalga tohumlu: her denemede aynı): seyrek başlar,
+   * sıklaşır; son dalga SON HÜCUM'dur ve kaptanla biter. Bütçe bölümle ve
+   * koridor sayısıyla büyür; yeni rakip ilk dalgada iki kez, erkenden gelir.
+   */
   function buildWave() {
     queue = [];
     waveT = 0;
     waveState = "run";
     surged = false;
-    var total = 3 + wave * 2.4 + Math.max(0, wave - 5) * 2;
-    var surge = total * 0.35;
-    var budget = total;
-    var t = wave === 1 ? 15 : 5;
-    var gap = Math.max(3, 10.5 - wave * 1.0);
-    var last = -1, streak = 0;
+    var rnd = A.seeded(level * 131 + wave * 17 + 5);
+    var last = wave === info.waves;
+    var base = (2.6 + level * 1.05 + Math.max(0, level - 9) * 0.7) * (LANES / 5);
+    var budget = base * (0.6 + (0.6 * (wave - 1)) / Math.max(1, info.waves - 1)) * (last ? 1.4 : 1);
+    var surge = budget * (last ? 0.45 : 0.25);
+    var t = wave === 1 ? 14 + Math.min(level, 10) * 0.6 : 6;
+    var gap = Math.max(2.4, 9.5 - level * 0.3 - (wave - 1) * 0.6);
+    var lastLane = -1, streak = 0, count = 0;
     function lane() {
-      var l = (Math.random() * LANES) | 0;
-      if (l === last && ++streak >= 2) l = (l + 1 + ((Math.random() * (LANES - 1)) | 0)) % LANES;
-      if (l !== last) streak = 0;
-      last = l;
+      var l = (rnd() * LANES) | 0;
+      if (l === lastLane && ++streak >= 2) l = (l + 1 + ((rnd() * (LANES - 1)) | 0)) % LANES;
+      if (l !== lastLane) streak = 0;
+      lastLane = l;
       return l;
     }
-    function pick() {
-      var r = Math.random();
-      if (wave >= 4 && r < Math.min(0.3, 0.1 + wave * 0.025) && budget >= 3) return "santrfor";
-      if (wave >= 3 && r < 0.42) return "kanat";
+    var pool = [["hucum", 1]], sum = 1;
+    for (var k in FOE_INTRO) {
+      if (level < FOE_INTRO[k]) continue;
+      var w = Math.min(0.55, 0.28 + 0.05 * (level - FOE_INTRO[k])) * (k === "santrfor" ? 0.6 : 1);
+      pool.push([k, w]);
+      sum += w;
+    }
+    function pick(left) {
+      count += 1;
+      if (info.newFoe && wave === 1 && (count === 2 || count === 4)) return info.newFoe;
+      var r = rnd() * sum;
+      for (var i = 0; i < pool.length; i++) {
+        r -= pool[i][1];
+        if (r <= 0) return FOES[pool[i][0]].cost <= left + 0.5 ? pool[i][0] : "hucum";
+      }
       return "hucum";
     }
     while (budget > surge) {
-      var ty = pick();
+      var ty = pick(budget - surge);
       queue.push({ t: t, type: ty, lane: lane() });
       budget -= FOES[ty].cost;
-      t += gap * A.rand(0.75, 1.15);
-      gap = Math.max(2.6, gap * 0.94);
+      t += gap * (0.75 + rnd() * 0.4);
+      gap = Math.max(2.0, gap * 0.94);
     }
     t += 4;
     surgeAt = t;
+    var span = last ? 7 : 5;
     while (budget > 0) {
-      var ty2 = pick();
-      queue.push({ t: t + Math.random() * 5, type: ty2, lane: lane() });
+      var ty2 = pick(budget);
+      queue.push({ t: t + rnd() * span, type: ty2, lane: lane() });
       budget -= FOES[ty2].cost;
     }
-    if (wave >= 2) queue.push({ t: t + 1.5, type: "kaptan", lane: 1 + ((Math.random() * 3) | 0) });
+    if (last && info.boss) queue.push({ t: t + span * 0.5, type: "kaptan", lane: ((LANES - 1) / 2) | 0 });
     queue.sort(function (a, b) {
       return a.t - b.t;
     });
   }
 
+  /** RN "start": tuvalde BÖLÜM SEÇ ekranı (arkada vitrin oynar). */
   function start() {
-    resetWorld();
+    if (A.store) storeLoaded(A.store);
+    goSelect();
+  }
+  function goSelect() {
+    resetWorld(1);
+    state = "select";
+    stateT = 0;
+    A.banner = null;
+    A.particles.length = 0;
+    A.floaters.length = 0;
+    lastPicked = Math.min(Math.max(lastPicked, 1), progress.unlocked);
+  }
+  /** n. bölümü başlatır (kilitli olsa da: testler ve "SONRAKİ BÖLÜM"). */
+  function play(n) {
+    resetWorld(n);
+    lastPicked = level;
     state = "play";
     stateT = 0;
     A.particles.length = 0;
     A.floaters.length = 0;
     A.banner = null;
     A.sound("whistle");
-    A.announce("SAVUNMA HATTI", "1. dalga · " + String(rivalAt(1).team.name || "Rakip"));
+    info.newFoe && pops.push({ kind: "foe", key: info.newFoe });
+    if (level === LANE6_AT) pops.push({ kind: "lane", key: "lane" });
+    info.newCards.forEach(function (k) {
+      pops.push({ kind: "unit", key: k });
+    });
+    popAt = A.time;
+    if (pops.length) {
+      A.sound("power");
+      A.haptic("success");
+    }
+    if (!pops.length) announceLevel();
+  }
+  function announceLevel() {
+    A.announce(level + ". BÖLÜM", String(rivalAt(level).team.name || "Rakip") + " · " + info.waves + " dalga");
   }
 
   function newFoe(type, lane, z, hp) {
     var F = FOES[type];
     hp = hp || F.hp;
-    return { id: ++uid, type: type, lane: lane, z: z, hp: hp, hp0: hp, v: F.v, slow: 0, frozen: 0, wet: 0, hitAt: -9, eating: null, phase: Math.random() * 6, dead: false, at: 0 };
+    return {
+      id: ++uid, type: type, lane: lane, z: z, hp: hp, hp0: hp, v: F.v, slow: 0, frozen: 0, wet: 0, hitAt: -9, eating: null, phase: Math.random() * 6, dead: false, at: 0,
+      shield: type === "kalkanli" ? 5 + Math.floor(level / 5) : 0, shield0: type === "kalkanli" ? 5 + Math.floor(level / 5) : 0, shieldHit: -9, jumped: false, leap: null, next: 0.8, kickAt: -9, aim: false,
+    };
   }
 
   /* ─────────────────────────── oyuncu koyma ─────────────────────────── */
@@ -387,6 +525,40 @@
     }
   }
 
+  function sendOver() {
+    if (!result || result.sent) return;
+    result.sent = true;
+    A.send("over", {
+      score: points,
+      stats: { wave: wave, defeated: defeated, conceded: conceded, placed: placed, teams: rivals.length, level: level, won: result.won ? 1 : 0, stars: result.stars },
+    });
+  }
+
+  /** Son dalga temizlendi: bölüm kazanıldı, yıldızlar, kayıt. */
+  function levelWon() {
+    var stars = Math.max(1, 3 - conceded);
+    var bonus = 100 + 20 * level + 50 * stars;
+    points += bonus;
+    result = { won: true, stars: stars, bonus: bonus, sent: false, best: (progress.stars[level] || 0) < stars };
+    progress.stars[level] = Math.max(progress.stars[level] || 0, stars);
+    progress.unlocked = Math.max(progress.unlocked, Math.min(MAX_LEVEL, level + 1));
+    lastPicked = Math.min(MAX_LEVEL, level + 1);
+    saveStore();
+    state = "won";
+    stateT = 0;
+    selected = null;
+    dragging = false;
+    removing = false;
+    A.banner = null;
+    A.sound("cheer");
+    A.sound("level");
+    A.haptic("success");
+    if (W) {
+      A.confetti(W * 0.25, H * 0.3, 50);
+      A.confetti(W * 0.75, H * 0.3, 50);
+    }
+  }
+
   function update(dt) {
     stateT += dt;
     sunBump = Math.max(0, sunBump - dt * 4);
@@ -394,37 +566,53 @@
     goalFlash = Math.max(0, goalFlash - dt * 1.2);
     if (state === "dying") {
       if (stateT > 1.6) {
-        state = "over";
+        state = "lost";
+        stateT = 0;
+        result = { won: false, stars: 0, bonus: 0, sent: false };
         A.sound("over");
-        A.send("over", { score: points, stats: { wave: wave, defeated: defeated, conceded: conceded, placed: placed, teams: rivals.length } });
       }
       return;
     }
-    if (state === "over") return;
+    if (state === "won" || state === "lost") {
+      if (stateT > 1.4) sendOver();
+      return;
+    }
     var playing = state === "play";
+    var demo = state === "attract" || state === "select";
+
+    /* Bölüm başı tanıtım kartları: kart açıkken oyun bekler. */
+    if (playing && pops.length) {
+      if (A.time - popAt > 3.6) {
+        pops.shift();
+        popAt = A.time;
+        if (pops.length) A.sound("power");
+        else announceLevel();
+      }
+      if (pops.length) return;
+    }
 
     /* Vitrin: hazır diziliş, bitmeyen hücum */
-    if (state === "attract") {
+    if (demo) {
       if (!units.length) {
-        var demo = [
+        var lay = [
           ["taraftar", "forvet", null, "stoper"],
           ["taraftar", "ortaci", "forvet", null, "fiskiye"],
           ["forvet", "cift", null, "kaleci"],
           ["taraftar", "pres", null, "stoper"],
           ["forvet", "forvet", null, "fiskiye"],
         ];
-        demo.forEach(function (row, l) {
+        lay.forEach(function (row, l) {
           row.forEach(function (ty, r) {
-            if (ty && r < ROWS) place(ty, l, r, true);
+            if (ty && r < ROWS && l < LANES) place(ty, l, r, true);
           });
         });
-        [[0, SPAWN_Z - 3, "hucum"], [2, SPAWN_Z - 1, "santrfor"], [3, SPAWN_Z - 5, "kanat"], [4, SPAWN_Z - 0.5, "hucum"], [1, cellZ(ROWS - 1) + 2.5, "hucum"]].forEach(function (q) {
+        [[0, SPAWN_Z - 3, "hucum"], [2, SPAWN_Z - 1, "santrfor"], [3, SPAWN_Z - 5, "kanat"], [4, SPAWN_Z - 0.5, "kalkanli"], [1, cellZ(ROWS - 1) + 2.5, "ziplayan"]].forEach(function (q) {
           foes.push(newFoe(q[2], q[0], q[1]));
         });
       }
       if (!queue.length && foes.length < 5) {
         waveT = 0;
-        for (var qd = 0; qd < 6; qd++) queue.push({ t: 0.5 + qd * 1.8, type: qd % 3 === 2 ? "kanat" : qd === 4 ? "santrfor" : "hucum", lane: (qd * 2 + 1) % LANES });
+        for (var qd = 0; qd < 6; qd++) queue.push({ t: 0.5 + qd * 1.8, type: FOE_ORDER[(qd + ((A.time | 0) % 3)) % FOE_ORDER.length], lane: (qd * 2 + 1) % LANES });
       }
     }
 
@@ -433,25 +621,30 @@
       waveT += dt;
       if (playing && !surged && waveT >= surgeAt && queue.length) {
         surged = true;
-        A.announce("BÜYÜK HÜCUM!", String(rivalAt(wave).team.name || "Rakip") + " yükleniyor", BAD);
+        var fin = wave === info.waves;
+        A.announce(fin ? "SON HÜCUM!" : "BÜYÜK HÜCUM!", String(rivalAt(level).team.name || "Rakip") + " yükleniyor", BAD);
         A.sound("whistle");
         A.haptic("warning");
       }
       while (queue.length && queue[0].t <= waveT) {
         var q = queue.shift();
+        if (q.lane >= LANES) q.lane = LANES - 1;
         var F = FOES[q.type];
-        var scale = wave > 5 ? 1 + 0.14 * (wave - 5) : 1;
-        var hp = Math.round((q.type === "kaptan" ? F.hp + 220 * (wave - 2) : F.hp) * scale);
+        var hp = Math.round(q.type === "kaptan" ? 800 + 100 * level : F.hp * (demo ? 1 : info.hp));
         var nf = newFoe(q.type, q.lane, SPAWN_Z + Math.random() * 0.8, hp);
         nf.v = F.v * A.rand(0.94, 1.06);
         foes.push(nf);
       }
       if (playing && !queue.length && !foes.some(function (f) { return !f.dead; })) {
+        if (wave >= info.waves) {
+          levelWon();
+          return;
+        }
         waveState = "rest";
         restT = 5;
         var bonus = 50 * wave;
         points += bonus;
-        addEnergy(CLEAR_ENERGY, cellZ(1), 2);
+        addEnergy(CLEAR_ENERGY, cellZ(1), (LANES / 2) | 0);
         A.announce(wave + ". DALGA TEMİZ", "+" + bonus + " puan · +" + CLEAR_ENERGY + " güneş");
         A.sound("level");
         A.haptic("success");
@@ -461,28 +654,19 @@
       if (restT <= 0) {
         wave += 1;
         buildWave();
-        var news = ORDER.filter(function (k) { return UNITS[k].unlock === wave; });
-        if (news.length && playing) {
-          unlockPop = { keys: news, at: A.time };
-          A.sound("power");
-          A.haptic("success");
-          if (W) {
-            A.confetti(W * 0.2, H * 0.35, 30);
-            A.confetti(W * 0.8, H * 0.35, 30);
-          }
-        } else {
-          A.announce(wave + ". DALGA", "Rakip: " + String(rivalAt(wave).team.name || "Rakip"));
+        if (playing) {
+          if (wave === info.waves) A.announce("SON DALGA", "Kaptan geliyor · " + String(rivalAt(level).team.name || "Rakip"), "#FFE14D");
+          else A.announce(wave + ". DALGA", wave + "/" + info.waves + " · " + String(rivalAt(level).team.name || "Rakip"));
           A.sound("whistle");
         }
       }
     }
-    if (unlockPop && A.time - unlockPop.at > 3.6) unlockPop = null;
 
     /* Gökten güneş */
     if (playing) {
       skyT -= dt;
       if (skyT <= 0) {
-        skyT = A.rand(4.5, 6.5);
+        skyT = A.rand(5.5, 7.5);
         skyN += 1;
         orbs.push({ id: ++uid, lane: ((Math.random() * LANES) | 0) + A.rand(-0.2, 0.2), z: cellZ((Math.random() * ROWS) | 0) + A.rand(-0.4, 0.4), y: 10, v: skyN % 5 === 0 ? SKY_V * 2 : SKY_V, born: A.time, taken: false, at: 0, sky: true });
       }
@@ -492,7 +676,7 @@
       if (!o.taken) {
         o.y = Math.max(0.9, o.y - (o.sky ? 2.4 : 5) * dt);
         if (o.sky && A.time - o.born > 16) orbs.splice(oi, 1);
-        else if (state === "attract" && A.time - o.born > 2.5) orbs.splice(oi, 1);
+        else if (demo && A.time - o.born > 2.5) orbs.splice(oi, 1);
         else if (playing && !o.sky && A.time - o.born > AUTO_COLLECT) collect(o);
       } else if (A.time - o.at > 0.45) orbs.splice(oi, 1);
     }
@@ -536,7 +720,7 @@
             if (!tgt || fo.z < tgt.z) tgt = fo;
           }
           if (tgt) {
-            var mv = tgt.eating || tgt.frozen > 0 ? 0 : tgt.v * (tgt.slow > 0 ? 0.5 : 1);
+            var mv = tgt.eating || tgt.frozen > 0 || tgt.aim ? 0 : tgt.v * (tgt.slow > 0 ? 0.5 : 1);
             lobs.push({ id: ++uid, lane: tgt.lane, z0: u.z + 0.4, l0: u.lane, z1: Math.max(GOAL_Z, tgt.z - mv * LOB_T), l1: tgt.lane, t: 0 });
             u.kickAt = A.time;
             u.next = LOB_EVERY;
@@ -569,19 +753,26 @@
       }
     }
 
-    /* Şutlar */
+    /* Şutlar (havadaki ZIPLAYAN'ın altından geçer; KALKANLI'nın kalkanı keser) */
     for (var si = shots.length - 1; si >= 0; si--) {
       var s = shots[si];
       s.z += SHOT_V * dt;
       var hit = null;
       for (var hf = 0; hf < foes.length; hf++) {
         var f2 = foes[hf];
-        if (f2.dead || f2.lane !== s.lane) continue;
+        if (f2.dead || f2.lane !== s.lane || f2.leap) continue;
         if (Math.abs(f2.z - s.z) < 0.5 && (!hit || f2.z < hit.z)) hit = f2;
       }
       if (hit) {
-        hurtFoe(hit, s.dmg, s.slow);
-        blast(s.slow ? "ice" : "hit", s.lane, hit.z - 0.3, s.kind);
+        if (hit.shield > 0) {
+          hit.shield -= 1;
+          hit.shieldHit = A.time;
+          blast(hit.shield > 0 ? "block" : "shieldbreak", s.lane, hit.z - 0.45);
+          if (playing && hit.shield === 0) A.sound("crash");
+        } else {
+          hurtFoe(hit, s.dmg, s.slow);
+          blast(s.slow ? "ice" : "hit", s.lane, hit.z - 0.3, s.kind);
+        }
         shots.splice(si, 1);
       } else if (s.z > SPAWN_Z + 3) shots.splice(si, 1);
     }
@@ -600,7 +791,27 @@
       }
     }
 
+    /* TOPÇU topları: koridorda sola uçar, ilk oyuncuya çarpar */
+    for (var bi2 = fballs.length - 1; bi2 >= 0; bi2--) {
+      var fb = fballs[bi2];
+      fb.z -= FBALL_V * dt;
+      var struck = null;
+      for (var ub = 0; ub < units.length; ub++) {
+        var uu = units[ub];
+        if (uu.lane !== fb.lane || uu.hp <= 0 || UNITS[uu.type].trap || uu.type === "fuze") continue;
+        if (fb.z - uu.z < 0.35 && fb.z - uu.z > -0.6 && (!struck || uu.z > struck.z)) struck = uu;
+      }
+      if (struck) {
+        if (!demo) struck.hp -= fb.dmg;
+        struck.hitAt = A.time;
+        blast("thump", fb.lane, struck.z + 0.3);
+        if (playing) A.sound("thud");
+        fballs.splice(bi2, 1);
+      } else if (fb.z < GOAL_Z - 0.5) fballs.splice(bi2, 1);
+    }
+
     /* Rakipler */
+    var fieldEnd = Z0 + ROWS * CD + 0.6;
     for (var fi = foes.length - 1; fi >= 0; fi--) {
       var f = foes[fi];
       if (f.dead) {
@@ -612,46 +823,103 @@
       if (f.frozen > 0) {
         f.frozen = Math.max(0, f.frozen - dt);
         f.eating = null;
+        if (f.leap) f.leap = null;
         continue;
       }
-      // önündeki oyuncu (aynı koridor, temas mesafesinde); fıskiye ıslatır
-      var victim = null;
-      for (var r = ROWS - 1; r >= 0; r--) {
-        var cand = grid[f.lane][r];
-        if (!cand) continue;
-        if (cand.type === "fiskiye") {
-          if (Math.abs(f.z - cand.z) < CD * 0.5) {
-            f.slow = Math.max(f.slow, 1.2);
-            f.wet = 0.4;
-            hurtFoe(f, WET_DPS * dt, false, true);
+      f.aim = false;
+      if (f.leap) {
+        // ZIPLAYAN havada: oyuncunun üstünden bir kare ileri
+        f.leap.t += dt / LEAP_T;
+        var lt = Math.min(1, f.leap.t);
+        f.z = f.leap.z0 + (f.leap.z1 - f.leap.z0) * A.smooth(lt);
+        f.phase += dt * 6;
+        if (lt >= 1) {
+          f.leap = null;
+          blast("land", f.lane, f.z);
+          if (playing) A.sound("thud");
+        }
+      } else {
+        // önündeki oyuncu (aynı koridor, temas mesafesinde); fıskiye ıslatır
+        var victim = null, jumpOver = null;
+        for (var r = ROWS - 1; r >= 0; r--) {
+          var cand = grid[f.lane][r];
+          if (!cand) continue;
+          if (cand.type === "fiskiye") {
+            if (Math.abs(f.z - cand.z) < CD * 0.5) {
+              f.slow = Math.max(f.slow, 1.2);
+              f.wet = 0.4;
+              hurtFoe(f, WET_DPS * dt, false, true);
+            }
+            continue;
           }
-          continue;
-        }
-        if (cand.type !== "fuze" && f.z - cand.z < 0.85 && f.z - cand.z > -0.4) {
-          victim = cand;
-          break;
-        }
-      }
-      if (f.dead) continue;
-      if (victim && victim.type === "kaleci" && victim.next <= 0) {
-        victim.next = CHEW;
-        victim.caught = A.time;
-        hurtFoe(f, f.type === "kaptan" ? 500 : 1e6, false);
-        blast("catch", victim.lane, victim.z);
-        if (playing) {
-          A.sound("pop");
-          A.haptic("medium");
-          floatAt("KURTARIŞ!", victim.z, victim.lane, 3, "#A3F04B", 18);
+          if (cand.type === "fuze") continue;
+          var gap2 = f.z - cand.z;
+          if (f.type === "ziplayan" && !f.jumped && gap2 < 1.3 && gap2 > -0.4) {
+            jumpOver = cand;
+            break;
+          }
+          if (gap2 < 0.85 && gap2 > -0.4) {
+            victim = cand;
+            break;
+          }
         }
         if (f.dead) continue;
-      }
-      f.eating = victim;
-      if (victim) {
-        if (state !== "attract") victim.hp -= EAT * dt * (f.type === "kaptan" ? 2 : 1);
-        victim.hitAt = A.time;
-      } else {
-        f.z -= f.v * (f.slow > 0 ? 0.5 : 1) * dt;
-        f.phase += dt * f.v * (f.slow > 0 ? 0.5 : 1) * 9;
+        if (jumpOver) {
+          f.jumped = true;
+          if (jumpOver.type === "stoper") {
+            // STOPER'ın üstünden atlanmaz: yaylar düşer, normal hücumcu olur
+            blast("bonk", f.lane, jumpOver.z + 0.4);
+            if (playing) {
+              A.sound("bad");
+              floatAt("BLOK!", jumpOver.z, f.lane, 3, "#8EC5FF", 18);
+            }
+          } else {
+            f.leap = { t: 0, z0: f.z, z1: Math.max(GOAL_Z - 0.2, jumpOver.z - CD * 0.95) };
+            f.eating = null;
+            if (playing) A.sound("jump");
+            continue;
+          }
+        }
+        if (victim && victim.type === "kaleci" && victim.next <= 0) {
+          victim.next = CHEW;
+          victim.caught = A.time;
+          hurtFoe(f, f.type === "kaptan" ? 500 : 1e6, false);
+          blast("catch", victim.lane, victim.z);
+          if (playing) {
+            A.sound("pop");
+            A.haptic("medium");
+            floatAt("KURTARIŞ!", victim.z, victim.lane, 3, "#A3F04B", 18);
+          }
+          if (f.dead) continue;
+        }
+        f.eating = victim;
+        if (victim) {
+          if (!demo) victim.hp -= EAT * dt * (f.type === "kaptan" ? 2 : f.type === "santrfor" ? 1.5 : 1);
+          victim.hitAt = A.time;
+        } else {
+          // TOPÇU: menzildeki en yakın oyuncuya durup top atar
+          var mark = null;
+          if (f.type === "topcu" && f.z < fieldEnd + CD) {
+            for (var ut = 0; ut < units.length; ut++) {
+              var cu = units[ut];
+              if (cu.lane !== f.lane || UNITS[cu.type].trap || cu.type === "fuze" || cu.z > f.z || f.z - cu.z > TOPCU_R) continue;
+              if (!mark || cu.z > mark.z) mark = cu;
+            }
+          }
+          if (mark) {
+            f.aim = true;
+            f.next -= dt;
+            if (f.next <= 0) {
+              f.next = TOPCU_EVERY;
+              f.kickAt = A.time;
+              fballs.push({ id: ++uid, lane: f.lane, z: f.z - 0.5, z0: f.z - 0.5, dmg: FBALL_DMG });
+              if (playing) A.sound("kick");
+            }
+          } else {
+            f.z -= f.v * (f.slow > 0 ? 0.5 : 1) * dt;
+            f.phase += dt * f.v * (f.slow > 0 ? 0.5 : 1) * 9;
+          }
+        }
       }
       if (f.z <= GOAL_Z) {
         foes.splice(fi, 1);
@@ -671,6 +939,8 @@
           if (lives <= 0) {
             state = "dying";
             stateT = 0;
+            selected = null;
+            dragging = false;
           }
         } else goalFlash = 0.6;
       }
@@ -687,14 +957,15 @@
     return ORDER.filter(unlocked);
   }
   /**
-   * Ekran yerleşimi: üstte HUD, altta kart tepsisi, arada beş koridorluk saha.
+   * Ekran yerleşimi: üstte HUD, altta kart tepsisi, arada 5–6 koridorluk saha.
    * Metre → piksel ölçeği (k): koşu yolu ekranın sağ kenarına kadar uzansın,
-   * ama bir sütun 44 px'ten dar olmasın (dokunma alanı).
+   * ama bir sütun 42 px'ten dar olmasın (dokunma alanı). Futbolcular kareye
+   * göre küçük çizilir (uzaktan bakış: daha çok saha görünür).
    */
   function layout() {
-    var att = state === "attract";
+    var att = state === "attract" || state === "select";
     var keys = att ? [] : unlockedKeys();
-    var key = W + "x" + H + ":" + att + ":" + keys.length + ":" + ROWS + ":" + SPAWN_Z + ":" + A.hudInset.top + "," + A.hudInset.right;
+    var key = W + "x" + H + ":" + att + ":" + keys.length + ":" + ROWS + ":" + LANES + ":" + SPAWN_Z + ":" + A.hudInset.top + "," + A.hudInset.right;
     if (key === layoutKey) return L;
     layoutKey = key;
     var wide = W > H * 1.15;
@@ -716,7 +987,7 @@
         o.shovel = { x: x, y: y, w: shW, h: ch };
         trayTop = y - 9;
       } else {
-        var per = 5, ch2 = 76;
+        var per = 5, ch2 = 70;
         var cw2 = Math.min(72, (W - 24 - (per - 1) * gap) / per);
         var rows = Math.max(1, Math.ceil(n / per));
         var yb = H - 10 - rows * ch2 - (rows - 1) * gap;
@@ -736,16 +1007,16 @@
     var hudB = att ? 12 : wide ? 46 : 86 + (hudBarY(wide) - 56);
     var fb = att ? H - 16 : trayTop - 10;
     var room = fb - (hudB + (wide ? 8 : 40));
-    var lh = A.clamp(room / LANES, 44, wide ? 74 : 78);
+    var lh = A.clamp(room / LANES, wide ? 36 : 40, wide ? 60 : 62);
     o.lh = lh;
     o.fb = fb;
     o.ft = fb - LANES * lh;
     o.gw = A.clamp(lh * (wide ? 0.5 : 0.34), 22, 44);
     o.gx = 10 + o.gw;
     var kfit = (W - o.gx) / (SPAWN_Z - 0.6 - GOAL_Z);
-    o.k = Math.max(kfit, 44 / CD);
+    o.k = Math.max(kfit, (wide ? 44 : 42) / CD);
     o.cw = o.k * CD;
-    o.cs = Math.min(lh / 74, o.cw / 38, 1.25); // futbolcu ölçeği
+    o.cs = Math.min(lh / (wide ? 66 : 78), o.cw / 44, 1.05); // futbolcu ölçeği
     o.hk = lh * 0.36; // yükseklik: piksel / metre
     o.gridR = sx0(o, Z0 + ROWS * CD);
     L = o;
@@ -809,6 +1080,17 @@
         A.fly(x, y - L.lh * 0.4, SUN, extra ? 6 : 1);
         if (extra) A.confetti(x, y - L.lh * 0.5, 50);
       }
+    } else if (kind === "block") {
+      A.burst(x, y, 8, { shape: "star", speed: 150, gravity: 250, life: 0.3, size: 4, color: ["#FFFFFF", "#BFDBFE", "#94A3B8"] });
+    } else if (kind === "shieldbreak") {
+      A.burst(x, y, 22, { speed: 260, gravity: 520, life: 0.6, size: 6, color: ["#93C5FD", "#FFFFFF", "#2F80ED", "#1B1648"] });
+      A.ring(x, y, "#93C5FD", L.cw * 0.9, 6);
+    } else if (kind === "thump") {
+      A.burst(x, y, 12, { shape: "star", speed: 190, gravity: 300, life: 0.4, size: 5, color: [BAD, "#FFFFFF", "#FFB4C0"] });
+    } else if (kind === "land") {
+      A.burst(x, y + L.lh * 0.28, 10, { speed: 120, gravity: 200, life: 0.45, size: 5, color: ["#D9F99D", "#FFFFFF", "#86EFAC"] });
+    } else if (kind === "bonk") {
+      A.burst(x, y - L.lh * 0.15, 12, { shape: "star", speed: 180, gravity: 260, life: 0.45, size: 5, color: ["#FFFFFF", "#8EC5FF", SUN] });
     } else if (kind === "goal") {
       A.burst(L.gx - 6, laneY(lane), 26, { speed: 260, gravity: 300, life: 0.6, size: 5, color: [BAD, "#FFFFFF", "#FF9FB0"] });
     }
@@ -845,13 +1127,78 @@
   function usable(type) {
     return unlocked(type) && energy >= UNITS[type].cost && (ready[type] || 0) <= A.time;
   }
+  /** BÖLÜM SEÇ ızgarası: dikeyde 4, yatayda 7 sütun; ekrana sığar (kaydırma gerekmez). */
+  function selectLayout() {
+    var wide = W > H * 1.15;
+    var cols = wide ? 7 : 4, rows = Math.ceil(MAX_LEVEL / cols);
+    var slot = A.hudSlot(14);
+    var top = wide ? 74 : Math.max(118, slot.top + 64);
+    var bottom = H - 16;
+    var cell = Math.min((W - 28) / cols, (bottom - top) / rows);
+    var bw = Math.min(cell - 10, wide ? 86 : 84), bh = Math.min(cell - 10, bw * 0.92);
+    var gx = (W - cols * cell) / 2, out = [];
+    for (var i = 0; i < MAX_LEVEL; i++) {
+      var c = i % cols, r = (i / cols) | 0;
+      out.push({ n: i + 1, x: gx + c * cell + (cell - bw) / 2, y: top + r * cell + (cell - bh) / 2, w: bw, h: bh });
+    }
+    out.top = top;
+    out.wide = wide;
+    return out;
+  }
+  /** Bölüm sonu kartı ve iki düğmesi. */
+  function resultLayout() {
+    var cw = Math.min(320, W - 40), ch = Math.min(300, H - 60);
+    var cx = W / 2, cy = Math.min(H / 2, H - ch / 2 - 20) + 10;
+    var bh = Math.min(48, ch * 0.17), bw = cw - 44;
+    var y2 = cy + ch / 2 - 22 - bh, y1 = y2 - 10 - bh;
+    var won = result && result.won, next = won && level < MAX_LEVEL;
+    return {
+      x: cx - cw / 2, y: cy - ch / 2, w: cw, h: ch, cx: cx, cy: cy,
+      main: { x: cx - bw / 2, y: y1, w: bw, h: bh, act: won ? (next ? "next" : "select") : "retry", label: won ? (next ? "SONRAKİ BÖLÜM" : "BÖLÜMLER") : "TEKRAR DENE" },
+      alt: { x: cx - bw / 2, y: y2, w: bw, h: bh, act: won && next ? "select" : won ? "retry" : "select", label: won && next ? "BÖLÜMLER" : won ? "TEKRAR OYNA" : "BÖLÜMLER" },
+    };
+  }
   function down(p) {
+    pointer = p;
+    if (state === "select") {
+      var bs = selectLayout();
+      for (var i = 0; i < bs.length; i++) {
+        if (!inside(p, bs[i], 4)) continue;
+        press["lv" + bs[i].n] = A.time;
+        if (bs[i].n <= progress.unlocked) {
+          A.sound("tap");
+          A.haptic("light");
+          play(bs[i].n);
+        } else {
+          lockShake = { n: bs[i].n, at: A.time };
+          A.sound("bad");
+          A.haptic("warning");
+        }
+        return;
+      }
+      return;
+    }
+    if (state === "won" || state === "lost") {
+      if (stateT < 0.6) return;
+      var R = resultLayout();
+      var hitB = inside(p, R.main, 4) ? R.main : inside(p, R.alt, 4) ? R.alt : null;
+      if (!hitB) return;
+      press[hitB.act] = A.time;
+      A.sound("tap");
+      A.haptic("light");
+      sendOver();
+      if (hitB.act === "next") play(level + 1);
+      else if (hitB.act === "retry") play(level);
+      else goSelect();
+      return;
+    }
     if (state !== "play") return;
     layout();
-    pointer = p;
-    if (unlockPop && A.time - unlockPop.at > 0.5) {
-      unlockPop.at = Math.min(unlockPop.at, A.time - 3.3); // kapanış animasyonu
-      A.sound("tap");
+    if (pops.length) {
+      if (A.time - popAt > 0.5) {
+        popAt = Math.min(popAt, A.time - 3.3); // kapanış animasyonu
+        A.sound("tap");
+      }
       return;
     }
     var card = cardAt(p);
@@ -927,7 +1274,7 @@
   function resize(w, h) {
     W = w;
     H = h;
-    if (!grid.length) resetWorld();
+    if (!grid.length) resetWorld(1);
     layoutKey = "";
     layout();
   }
@@ -936,14 +1283,14 @@
 
   var bg = null;
   function paintBackground() {
-    var key = layoutKey + ":" + rosterSig + ":" + wave;
+    var key = layoutKey + ":" + rosterSig + ":" + level;
     if (bg && bg.key === key) return bg;
     bg = A.layer(W, H);
     bg.key = key;
     var c = bg.ctx;
     var ft = L.ft, fb = L.fb;
     var top = ft - 8; // saha çerçevesi
-    var mine = kitOf(captain), rk = kitOf(rivalAt(wave));
+    var mine = kitOf(captain), rk = kitOf(rivalAt(level));
     var rnd = A.seeded(4242);
 
     // Gökyüzü
@@ -1290,6 +1637,14 @@
       mF = 2.1;
       mB = 2.9;
       by = -Math.abs(Math.sin(t * 6)) * 2;
+    } else if (pose === "leap") {
+      // ZIPLAYAN havada: kollar yukarı, bacaklar makas
+      mF = 2.7;
+      mB = -2.5;
+      aF = -1.0;
+      aB = 0.75;
+      lean = 0.12;
+      cr = -1;
     } else if (pose === "fall") {
       aF = 1.0;
       aB = 0.5;
@@ -1321,6 +1676,25 @@
       c.lineWidth = LW;
       c.strokeStyle = NAVY;
       c.stroke();
+      if (acc.springs) {
+        // yaylı krampon: botun altında zikzak yay + taban
+        c.beginPath();
+        c.moveTo(0, 3.4);
+        for (var zz = 1; zz <= 4; zz++) c.lineTo(zz % 2 ? 3.4 : -3.4, 3.4 + zz * 1.6);
+        c.lineTo(0, 3.4 + 5 * 1.6);
+        c.lineWidth = LW * 1.6;
+        c.strokeStyle = NAVY;
+        c.stroke();
+        c.lineWidth = LW * 0.7;
+        c.strokeStyle = back ? "#9BB0C8" : "#E2E8F0";
+        c.stroke();
+        A.roundRect(c, -5, 3.4 + 5 * 1.6 - 1, 10, 3, 1.5);
+        c.fillStyle = C(acc.springs);
+        c.fill();
+        c.lineWidth = LW * 0.8;
+        c.strokeStyle = NAVY;
+        c.stroke();
+      }
       c.restore();
     }
     var shX = 1.5, shY = -17;
@@ -1701,7 +2075,7 @@
   }
 
   function foeKit() {
-    var k = kitOf(rivalAt(wave));
+    var k = kitOf(rivalAt(level));
     return { p: k.p, s: k.s };
   }
 
@@ -1724,17 +2098,19 @@
     if (state === "play") drawIncoming(c);
     A.drawParticles(c);
     A.drawFloaters(c, dt);
-    if (state !== "attract") {
+    if (state !== "attract" && state !== "select") {
       drawHud(c);
       drawTray(c, dt);
       drawDragGhost(c);
       drawUnlock(c);
     }
-    A.drawBanner(c, W, L.ft + (L.fb - L.ft) * 0.36, dt);
+    if (state !== "select" && state !== "won" && state !== "lost") A.drawBanner(c, W, L.ft + (L.fb - L.ft) * 0.36, dt);
     if (flashRed > 0) {
       c.fillStyle = "rgba(255,77,106," + (0.28 * flashRed).toFixed(3) + ")";
       c.fillRect(0, 0, W, H);
     }
+    if (state === "select") drawSelect(c);
+    if (state === "won" || state === "lost") drawResult(c);
   }
 
   function drawGoalDanger(c) {
@@ -1926,18 +2302,105 @@
     });
   }
 
-  function drawFoe(c, f) {
-    var F = FOES[f.type];
-    var x = sx(f.z), y = footY(f.lane), s = L.cs * F.k;
-    var kit = foeKit();
-    var acc = { brow: true, boots: f.type === "kaptan" ? "#FFD400" : f.type === "kanat" ? "#FF4D6A" : NAVY };
-    if (f.type === "kaptan") {
+  /** Rakibin aksesuarları: her tür bir bakışta okunsun (silüet + renk). */
+  function foeAcc(f, kit) {
+    var ty = f.type;
+    var acc = { brow: true, boots: NAVY };
+    if (ty === "kaptan") {
       acc.armband = true;
       acc.big = 1.1;
+      acc.boots = "#FFD400";
+    } else if (ty === "santrfor") {
+      acc.big = 1.28; // TANK: geniş gövde + kask
+      acc.cap = "#475569";
+      acc.boots = "#334155";
+    } else if (ty === "kanat") {
+      acc.headband = kit.s; // HIZLI: bant, kırmızı krampon
+      acc.boots = "#FF4D6A";
+    } else if (ty === "ziplayan") {
+      acc.headband = "#A3E635";
+      acc.boots = "#65A30D";
+      if (!f.jumped || f.leap) acc.springs = "#A3E635";
+    } else if (ty === "topcu") {
+      acc.cap = "#E11D48";
+      acc.boots = "#E11D48";
+    } else if (ty === "kalkanli") {
+      acc.headband = "#2F80ED";
+    } else if (f.id % 2) acc.stripes = true;
+    return acc;
+  }
+
+  /** TOPÇU'nun sırtındaki top filesi (oyuncunun arkasında çizilir). */
+  function drawSack(c, x, y, s) {
+    var bx = x + 9 * s, by = y - 27 * s;
+    c.save();
+    c.lineWidth = 2 * s;
+    c.strokeStyle = NAVY;
+    c.beginPath();
+    c.moveTo(bx - 6 * s, by - 9 * s);
+    c.lineTo(x - 2 * s, y - 38 * s);
+    c.stroke();
+    flatBall(c, bx + 3 * s, by - 5 * s, 5 * s, 0.6);
+    flatBall(c, bx - 3 * s, by + 3 * s, 5 * s, 1.4);
+    flatBall(c, bx + 5 * s, by + 5 * s, 5 * s, 2.2);
+    c.strokeStyle = "rgba(27,22,72,0.75)";
+    c.lineWidth = 1.2 * s;
+    for (var i = -2; i <= 2; i++) {
+      c.beginPath();
+      c.moveTo(bx - 8 * s, by + i * 4 * s);
+      c.lineTo(bx + 11 * s, by + i * 4 * s + 3 * s);
+      c.stroke();
     }
-    if (f.type === "santrfor") acc.big = 1.15;
-    if (f.type === "kanat") acc.headband = kit.s;
-    if (f.type === "hucum" && f.id % 2) acc.stripes = true;
+    c.restore();
+  }
+
+  /** KALKANLI'nın kalkanı (önünde, takım renkli; vuruldukça çatlar). */
+  function drawShield(c, f, x, y, s, kit) {
+    var hitK = A.clamp(1 - (A.time - f.shieldHit) / 0.15, 0, 1);
+    var w = 13 * s, h = 36 * s;
+    var sx2 = x - 15 * s - hitK * 2 * s, sy = y - 42 * s;
+    c.save();
+    c.translate(sx2, sy + h / 2);
+    c.rotate(-0.08 + hitK * 0.12);
+    A.roundRect(c, -w / 2, -h / 2, w, h, 5 * s);
+    c.fillStyle = mixc(kit.p, "#FFFFFF", hitK * 0.6);
+    c.fill();
+    c.lineWidth = 2.4 * s;
+    c.strokeStyle = NAVY;
+    c.stroke();
+    A.roundRect(c, -w / 2 + 2.5 * s, -h / 2 + 2.5 * s, w - 5 * s, h - 5 * s, 3.5 * s);
+    c.lineWidth = 1.8 * s;
+    c.strokeStyle = kit.s;
+    c.stroke();
+    c.fillStyle = kit.s;
+    c.fillRect(-1.4 * s, -h / 2 + 4 * s, 2.8 * s, h - 8 * s);
+    c.fillStyle = "rgba(255,255,255,0.35)";
+    c.fillRect(-w / 2 + 3 * s, -h / 2 + 4 * s, 2 * s, h * 0.45);
+    // çatlaklar
+    var dmg = 1 - f.shield / Math.max(1, f.shield0);
+    if (dmg > 0.3) {
+      c.strokeStyle = NAVY;
+      c.lineWidth = 1.4 * s;
+      c.beginPath();
+      c.moveTo(-w / 2, -h * 0.1);
+      c.lineTo(-1 * s, -h * 0.02);
+      c.lineTo(-3 * s, h * 0.12);
+      c.lineTo(w / 2, h * 0.2);
+      if (dmg > 0.65) {
+        c.moveTo(-1 * s, -h * 0.02);
+        c.lineTo(3 * s, -h * 0.3);
+        c.lineTo(w / 2, -h * 0.34);
+      }
+      c.stroke();
+    }
+    c.restore();
+  }
+
+  function drawFoe(c, f, at) {
+    var F = FOES[f.type];
+    var x = at ? at.x : sx(f.z), y = at ? at.y : footY(f.lane), s = (at ? at.s : L.cs) * F.k;
+    var kit = foeKit();
+    var acc = foeAcc(f, kit);
     var tint = null, tk = 0;
     if (f.frozen > 0) {
       tint = "#E0F2FE";
@@ -1957,11 +2420,34 @@
     }
     var hurt = A.clamp(1 - (A.time - f.hitAt) / 0.13, 0, 1);
     var fr = f.frozen > 0;
-    var pose = fr ? "idle" : f.eating ? "tackle" : f.type === "kanat" ? "run" : "walk";
-    var t = fr ? 0 : f.eating ? A.time + f.id : f.phase;
+    var kt = (A.time - f.kickAt) / 0.42;
+    var pose = fr ? "idle" : f.leap ? "leap" : f.eating ? "tackle" : kt >= 0 && kt < 1 ? "kick" : f.aim ? "ready" : f.type === "kanat" ? "run" : "walk";
+    var t = fr ? 0 : pose === "kick" ? kt : f.eating || pose === "ready" ? A.time + f.id : f.phase;
     var sq = 1 - hurt * 0.1 + (pose === "walk" || pose === "run" ? Math.abs(Math.cos(f.phase)) * 0.03 : 0);
-    drawPlayer(c, x, y, s, { dir: -1, kit: kit, pose: pose, t: t, look: look, acc: acc, flash: hurt * 0.65, tint: tint, tintK: tk, sq: sq, rot: hurt * 0.1 });
-    if (!f.eating) flatBall(c, x - 13 * s, y - 4.6 * s, 4.6 * s, -f.phase * 1.3);
+    var lift = 0;
+    if (f.leap) lift = Math.sin(Math.min(1, f.leap.t) * Math.PI) * (at ? 40 * at.s : L.lh * 0.72);
+    else if (acc.springs) lift = 9 * s + Math.abs(Math.sin(f.phase)) * 3 * s;
+    if (f.type === "kanat" && !fr && !f.eating) {
+      // hız çizgileri
+      c.strokeStyle = "rgba(255,255,255,0.75)";
+      c.lineWidth = 2.2 * s;
+      c.lineCap = "round";
+      for (var sl = 0; sl < 3; sl++) {
+        var ly = y - (14 + sl * 11) * s, off = ((A.time * 60 + sl * 9) % 14) * s;
+        c.beginPath();
+        c.moveTo(x + 14 * s + off, ly);
+        c.lineTo(x + 30 * s + off, ly);
+        c.stroke();
+      }
+    }
+    if (f.type === "topcu") drawSack(c, x, y - lift, s);
+    drawPlayer(c, x, y - lift, s, { dir: -1, kit: kit, pose: pose, t: t, look: look, acc: acc, flash: hurt * 0.65, tint: tint, tintK: tk, sq: sq, rot: f.leap ? -0.25 * Math.sin(f.leap.t * Math.PI) : hurt * 0.1 });
+    if (f.shield > 0) drawShield(c, f, x, y, s, kit);
+    if (!f.eating && !f.leap && f.type !== "topcu" && f.shield <= 0) flatBall(c, x - 13 * s, y - 4.6 * s, 4.6 * s, -f.phase * 1.3);
+    if (f.aim && f.next < 0.5) {
+      // nişan: hedefe kırmızı ünlem
+      label(c, "!", x - 4 * s, y - 62 * s, 16, BAD);
+    }
     if (f.wet > 0) {
       c.fillStyle = "rgba(125,211,252,0.9)";
       for (var k = 0; k < 3; k++) {
@@ -1990,6 +2476,21 @@
       c.lineTo(x, y);
       c.stroke();
       flatBall(c, x, y, 5.4 * s, -A.time * 18 + sh.id, col);
+    });
+    fballs.forEach(function (fb) {
+      var x = sx(fb.z), y = footY(fb.lane) - 13 * s - Math.sin(A.clamp((fb.z0 - fb.z) / 3, 0, 1) * Math.PI) * 6 * s;
+      var trail = Math.min(30 * s, (fb.z0 - fb.z) * L.k);
+      var g = c.createLinearGradient(x, 0, x + trail, 0);
+      g.addColorStop(0, "rgba(255,77,106,0.85)");
+      g.addColorStop(1, "rgba(255,77,106,0)");
+      c.strokeStyle = g;
+      c.lineWidth = 7 * s;
+      c.lineCap = "round";
+      c.beginPath();
+      c.moveTo(x, y);
+      c.lineTo(x + trail, y);
+      c.stroke();
+      flatBall(c, x, y, 5.4 * s, A.time * 18 + fb.id, "#FFE4E6", "#BE123C");
     });
     lobs.forEach(function (lb) {
       var t = A.clamp(lb.t, 0, 1);
@@ -2046,10 +2547,10 @@
     }
     c.save();
     foes.forEach(function (f) {
-      if (f.dead) return;
+      if (f.dead || f.leap) return;
       var s = L.cs * FOES[f.type].k;
       var x = sx(f.z), top = footY(f.lane) - 50 * s;
-      if (f.type === "kaptan") bar(x, top - 4, f.hp / f.hp0, BAD, 60, "KAPTAN · " + bossName(wave));
+      if (f.type === "kaptan") bar(x, top - 4, f.hp / f.hp0, BAD, 60, "KAPTAN · " + bossName(level));
       else if (f.hp < f.hp0) bar(x, top - 4, f.hp / f.hp0, f.slow > 0 ? "#38BDF8" : BAD, 30);
       if (f.frozen > 0) {
         c.save();
@@ -2216,9 +2717,11 @@
       shield(c, slot.x1 - sr - (LIVES - 1 - i) * (sr * 2 + 6), y + h / 2, sr, on || br > 0, br);
     }
     // Dalga: başlık + rakip takım rozeti + ilerleme çubuğu
-    var rv = rivalAt(wave), rk = kitOf(rv);
+    var rv = rivalAt(level), rk = kitOf(rv);
     var total = Math.max(1, surgeAt + 6);
-    var prog = waveState === "rest" ? 1 : A.clamp(waveT / total, 0, 1);
+    var nW = info.waves;
+    var frac = waveState === "rest" || state === "won" ? 1 : A.clamp(waveT / total, 0, 1);
+    var prog = (wave - 1 + frac) / nW;
     var bx, bw, byy, bh;
     var name = String(rv.team.name || "Rakip");
     if (wide) {
@@ -2249,8 +2752,12 @@
     c.fillStyle = "rgba(255,255,255,0.25)";
     A.roundRect(c, bx + 4, byy + 2.5, Math.max(0, fw - 8), bh * 0.28, bh * 0.14);
     c.fill();
-    // büyük hücum işareti (bayrak)
-    var mx = bx + bw * A.clamp(surgeAt / total, 0, 1);
+    // dalga ayraçları
+    c.fillStyle = "rgba(255,255,255,0.45)";
+    for (var wi = 1; wi < nW; wi++) c.fillRect(bx + (bw * wi) / nW - 1, byy + 3, 2, bh - 6);
+    // son hücum işareti (bayrak)
+    var sf = wave === nW ? A.clamp(surgeAt / total, 0, 1) : 0.62;
+    var mx = bx + (bw * (nW - 1 + sf)) / nW;
     c.fillStyle = "#FFFFFF";
     c.fillRect(mx - 1, byy - 3, 2, bh + 6);
     c.fillStyle = BAD;
@@ -2260,7 +2767,7 @@
     c.lineTo(mx + 1, byy + 5);
     c.closePath();
     c.fill();
-    var lbl = wave + ". DALGA · " + name;
+    var lbl = level + ". BÖLÜM · " + wave + "/" + nW + " · " + name;
     c.font = A.font(bh * 0.58, 900);
     while (lbl.length > 8 && c.measureText(lbl).width > bw - 40) lbl = lbl.slice(0, -2) + "…";
     // takım rengi rozeti
@@ -2275,7 +2782,7 @@
     var cool = Math.max(0, (ready[b.key] || 0) - A.time) / U.recharge;
     var afford = energy >= U.cost;
     var on = selected === b.key;
-    var fresh = U.unlock > 1 && wave === U.unlock && waveT < 15 && waveState === "run";
+    var fresh = U.unlock > 1 && level === U.unlock && wave === 1 && waveT < 20;
     b.lift = A.damp(b.lift || 0, on ? -9 : 0, 18, dt);
     var pt = A.time - (press[b.key] || -9);
     var ps = pt < 0.35 ? 1 - 0.1 * Math.exp(-pt * 10) * Math.cos(pt * 18) : 1;
@@ -2477,7 +2984,7 @@
       }
     }
     // ilk kart: nabız gibi atan sarı hale (öğretici)
-    if (placed === 0 && !selected && L.cards[0] && unlockPop == null) {
+    if (placed === 0 && !selected && L.cards[0] && !pops.length) {
       var b0 = L.cards[0], k0 = 0.5 + 0.5 * Math.sin(A.time * 6);
       c.save();
       c.globalAlpha = 0.5 + 0.5 * k0;
@@ -2514,25 +3021,46 @@
     c.restore();
   }
 
-  /** "YENİ OYUNCU!" kartı: dönen ışınlar, zıplayan beyaz kart, oyuncu sanatı. */
+  /** Tanıtım ve bölüm seçme ekranları için sahte (sabit) rakip. */
+  function showFoe(type, x, y, s, extra) {
+    var f = newFoe(type, 0, 0);
+    f.id = 3;
+    f.phase = A.time * 4;
+    f.shield0 = f.shield = type === "kalkanli" ? 6 : 0;
+    if (extra) for (var k in extra) f[k] = extra[k];
+    drawFoe(c0, f, { x: x, y: y, s: s });
+  }
+  var c0 = null;
+
+  /**
+   * Bölüm başı tanıtım kartı: "YENİ OYUNCU!", "YENİ RAKİP!" ya da "YENİ
+   * KORİDOR!" — dönen ışınlar, zıplayan beyaz kart, sanat, kısa açıklama.
+   */
   function drawUnlock(c) {
-    if (!unlockPop) return;
-    var age = A.time - unlockPop.at, life = 3.6;
+    if (!pops.length || state !== "play") return;
+    var pop = pops[0];
+    var age = A.time - popAt, life = 3.6;
     var inT = A.easeOutBack(A.clamp(age / 0.45, 0, 1));
     var out = A.clamp((life - age) / 0.3, 0, 1);
-    var key = unlockPop.keys[0], U = UNITS[key];
+    var foe = pop.kind === "foe", lane = pop.kind === "lane";
+    var key = pop.key;
+    var name = foe ? FOES[key].name : lane ? "6. KORİDOR" : UNITS[key].name;
+    var desc = foe ? FOES[key].desc : lane ? "Saha genişledi: altı koridoru da koru" : UNITS[key].desc;
+    var color = foe ? FOES[key].color : lane ? "#22C55E" : UNITS[key].color;
+    var title = foe ? "YENİ RAKİP!" : lane ? "YENİ KORİDOR!" : "YENİ OYUNCU!";
     c.save();
     c.globalAlpha = out;
     c.fillStyle = "rgba(10,8,40,0.68)";
     c.fillRect(0, 0, W, H);
     var cx = W / 2, cy = Math.min(H * 0.46, L.ft + (L.fb - L.ft) * 0.5);
-    var cw = Math.min(230, W - 60), ch = Math.min(250, H * 0.5);
+    var cw = Math.min(240, W - 60), ch = Math.min(250, H * 0.5);
+    cy = Math.max(cy, ch / 2 + 70);
     // ışınlar
     c.save();
     c.translate(cx, cy);
     c.rotate(age * 0.5);
     c.globalAlpha = out * 0.16;
-    c.fillStyle = SUN;
+    c.fillStyle = foe ? BAD : SUN;
     for (var i = 0; i < 14; i++) {
       var a0 = (i / 14) * Math.PI * 2;
       c.beginPath();
@@ -2553,60 +3081,334 @@
     c.fillStyle = "#FFFFFF";
     c.fill();
     c.lineWidth = 4;
-    c.strokeStyle = U.color;
+    c.strokeStyle = color;
     c.stroke();
-    blob(c, 0, -ch * 0.08, ch * 0.28, rgba(U.color, 0.22), 0);
+    blob(c, 0, -ch * 0.08, ch * 0.28, rgba(color, 0.22), 0);
     var s = ch / 150;
-    drawUnitArt(c, key, 0, ch * 0.16, s * (key === "fuze" || key === "fiskiye" ? 2 : 1.25), { t: A.time });
+    if (foe) {
+      c0 = c;
+      var demoT = (age * 0.8) % 1.6;
+      var ex = key === "ziplayan" ? (demoT < 0.8 ? { leap: { t: demoT / 0.8, z0: 0, z1: 0 }, jumped: true } : null) : key === "topcu" ? { kickAt: A.time - ((age * 0.9) % 1.4) } : key === "santrfor" ? null : null;
+      showFoe(key, 0, ch * 0.2, s * (key === "santrfor" ? 0.82 : 0.95), ex);
+    } else if (lane) {
+      var lw = cw * 0.62, lh2 = ch * 0.07;
+      for (var li = 0; li < 6; li++) {
+        A.roundRect(c, -lw / 2, -ch * 0.3 + li * (lh2 + 4), lw, lh2, lh2 / 2);
+        c.fillStyle = li === 5 ? (Math.sin(A.time * 8) > 0 ? "#FFD43B" : "#A3F04B") : li % 2 ? "#4CC552" : "#5FD35F";
+        c.fill();
+        c.lineWidth = 2;
+        c.strokeStyle = NAVY;
+        c.stroke();
+      }
+      label(c, "+1", lw / 2 + 4, -ch * 0.3 + 5 * (lh2 + 4) + lh2 / 2, 18, SUN, "left");
+    } else drawUnitArt(c, key, 0, ch * 0.16, s * (key === "fuze" || key === "fiskiye" ? 2 : 1.25), { t: A.time });
     c.font = A.font(22, 900);
     c.textAlign = "center";
     c.textBaseline = "middle";
     c.fillStyle = NAVY;
-    c.fillText(U.name, 0, ch * 0.29);
-    c.font = A.font(13, 700);
+    c.fillText(name, 0, ch * 0.29);
+    c.font = A.font(12.5, 700);
     c.fillStyle = "#4B4790";
-    c.fillText(U.desc, 0, ch * 0.4, cw - 20);
-    // maliyet
-    A.roundRect(c, cw / 2 - 58, -ch / 2 - 12, 66, 28, 14);
-    c.fillStyle = "#FFC72C";
-    c.fill();
-    c.lineWidth = 2.5;
-    c.strokeStyle = NAVY;
-    c.stroke();
-    drawSunShape(c, cw / 2 - 42, -ch / 2 + 2, 7, A.time, 0);
-    c.font = A.font(15, 900);
-    c.fillStyle = NAVY;
-    c.fillText(String(U.cost), cw / 2 - 18, -ch / 2 + 2.5);
+    wrapText(c, desc, 0, ch * 0.4, cw - 24, 15);
+    if (!foe && !lane) {
+      // maliyet
+      var U = UNITS[key];
+      A.roundRect(c, cw / 2 - 58, -ch / 2 - 12, 66, 28, 14);
+      c.fillStyle = "#FFC72C";
+      c.fill();
+      c.lineWidth = 2.5;
+      c.strokeStyle = NAVY;
+      c.stroke();
+      drawSunShape(c, cw / 2 - 42, -ch / 2 + 2, 7, A.time, 0);
+      c.font = A.font(15, 900);
+      c.fillStyle = NAVY;
+      c.fillText(String(U.cost), cw / 2 - 18, -ch / 2 + 2.5);
+    }
     // başlık
     var tb = 1 + Math.sin(age * 6) * 0.04;
     c.save();
     c.translate(0, -ch / 2 - 34);
     c.scale(tb, tb);
-    A.bigText(c, "YENİ OYUNCU!", 0, 0, 30, SUN, { stroke: NAVY });
+    A.bigText(c, title, 0, 0, 30, foe ? "#FF6B81" : SUN, { stroke: NAVY });
     c.restore();
     c.restore();
     if (age > 0.8) {
       c.save();
       c.globalAlpha = out * (0.6 + 0.4 * Math.sin(A.time * 5));
-      label(c, "Dokun, devam et", cx, cy + ch * 0.5 + 26, 13, "#FFFFFF");
+      label(c, pops.length > 1 ? "Dokun, sıradaki" : "Dokun, başla", cx, cy + ch * 0.5 + 26, 13, "#FFFFFF");
       c.restore();
     }
+  }
+  /** Ortalanmış, en çok iki satır. */
+  function wrapText(c, text, x, y, maxW, lineH) {
+    if (c.measureText(text).width <= maxW) {
+      c.fillText(text, x, y);
+      return;
+    }
+    var words = text.split(" "), line = "", lines = [];
+    for (var i = 0; i < words.length; i++) {
+      var t = line ? line + " " + words[i] : words[i];
+      if (c.measureText(t).width > maxW && line) {
+        lines.push(line);
+        line = words[i];
+      } else line = t;
+    }
+    lines.push(line);
+    lines = lines.slice(0, 2);
+    for (var j = 0; j < lines.length; j++) c.fillText(lines[j], x, y + (j - (lines.length - 1) / 2) * lineH, maxW);
+  }
+
+  function star(c, x, y, r, on, k) {
+    c.save();
+    c.translate(x, y);
+    if (k != null) c.scale(k, k);
+    c.beginPath();
+    for (var i = 0; i < 10; i++) {
+      var a = -Math.PI / 2 + (i * Math.PI) / 5, rr = i % 2 ? r * 0.48 : r;
+      c.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+    }
+    c.closePath();
+    c.fillStyle = on ? SUN : "rgba(27,22,72,0.45)";
+    c.fill();
+    c.lineJoin = "round";
+    c.lineWidth = Math.max(1.5, r * 0.2);
+    c.strokeStyle = on ? "#C2560C" : "rgba(255,255,255,0.25)";
+    c.stroke();
+    if (on) {
+      c.fillStyle = "rgba(255,255,255,0.55)";
+      c.beginPath();
+      c.arc(-r * 0.2, -r * 0.25, r * 0.18, 0, Math.PI * 2);
+      c.fill();
+    }
+    c.restore();
+  }
+  function lockIcon(c, x, y, r) {
+    c.save();
+    c.lineWidth = r * 0.32;
+    c.strokeStyle = "rgba(255,255,255,0.55)";
+    c.beginPath();
+    c.arc(x, y - r * 0.35, r * 0.5, Math.PI, 0);
+    c.stroke();
+    A.roundRect(c, x - r * 0.8, y - r * 0.35, r * 1.6, r * 1.25, r * 0.3);
+    c.fillStyle = "rgba(255,255,255,0.55)";
+    c.fill();
+    c.fillStyle = "#2A2470";
+    c.beginPath();
+    c.arc(x, y + r * 0.2, r * 0.2, 0, Math.PI * 2);
+    c.fill();
+    c.restore();
+  }
+
+  /** BÖLÜM SEÇ: kararmış canlı saha üstünde yuvarlak bölüm düğmeleri, yıldızlar, kilitler. */
+  function drawSelect(c) {
+    var bs = selectLayout();
+    var fade = A.clamp(stateT / 0.3, 0, 1);
+    c.save();
+    c.globalAlpha = fade;
+    var g = c.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, "rgba(16,12,58,0.92)");
+    g.addColorStop(1, "rgba(16,12,58,0.8)");
+    c.fillStyle = g;
+    c.fillRect(0, 0, W, H);
+    var slot = A.hudSlot(14);
+    var ty = bs.wide ? 30 : Math.max(36, slot.top * 0.5 + 12);
+    A.bigText(c, "BÖLÜM SEÇ", bs.wide ? 24 : W / 2, ty, bs.wide ? 26 : 28, SUN, { stroke: NAVY, align: bs.wide ? "left" : "center" });
+    // toplam yıldız hapı
+    var tot = totalStars() + " / " + MAX_LEVEL * 3;
+    c.font = A.font(15, 900);
+    var pw = c.measureText(tot).width + 44, ph = 28;
+    var px = bs.wide ? Math.min(slot.x1 - pw - 8, W / 2 + 20) : W / 2 - pw / 2, py = bs.wide ? ty - ph / 2 : ty + 26;
+    navyPill(c, px, py, pw, ph);
+    star(c, px + 17, py + ph / 2, 9, true);
+    label(c, tot, px + 32, py + ph / 2 + 1, 15, "#FFFFFF", "left");
+    for (var i = 0; i < bs.length; i++) {
+      var b = bs[i], n = b.n;
+      var open = n <= progress.unlocked, st = progress.stars[n] || 0;
+      var cur = open && !st;
+      var pt = A.time - (press["lv" + n] || -9);
+      var ps = pt < 0.35 ? 1 - 0.1 * Math.exp(-pt * 10) * Math.cos(pt * 18) : 1;
+      var shake = lockShake.n === n ? Math.sin((A.time - lockShake.at) * 50) * 5 * A.clamp(1 - (A.time - lockShake.at) / 0.4, 0, 1) : 0;
+      var appear = A.easeOutBack(A.clamp((stateT - i * 0.02) / 0.35, 0, 1));
+      var bob = cur ? Math.sin(A.time * 4) * 2.5 : 0;
+      var cx = b.x + b.w / 2 + shake, cy = b.y + b.h / 2 + bob;
+      c.save();
+      c.translate(cx, cy);
+      c.scale(ps * appear, ps * appear);
+      var x = -b.w / 2, y = -b.h / 2, r = Math.min(18, b.w * 0.26);
+      var base = !open ? "#2A2470" : cur ? "#FFC72C" : "#22C55E";
+      var dark = !open ? "#171245" : cur ? "#C27C00" : "#15803D";
+      if (cur) {
+        c.save();
+        c.shadowColor = SUN;
+        c.shadowBlur = 16 + Math.sin(A.time * 5) * 6;
+        A.roundRect(c, x, y, b.w, b.h, r);
+        c.fillStyle = SUN;
+        c.fill();
+        c.restore();
+      }
+      A.roundRect(c, x, y + 5, b.w, b.h, r);
+      c.fillStyle = dark;
+      c.fill();
+      A.roundRect(c, x, y, b.w, b.h, r);
+      var bg2 = c.createLinearGradient(0, y, 0, y + b.h);
+      bg2.addColorStop(0, mixc(base, "#FFFFFF", 0.22));
+      bg2.addColorStop(1, base);
+      c.fillStyle = bg2;
+      c.fill();
+      c.lineWidth = 2.5;
+      c.strokeStyle = open ? "#FFFFFF" : "rgba(255,255,255,0.18)";
+      c.stroke();
+      c.fillStyle = "rgba(255,255,255,0.22)";
+      A.roundRect(c, x + 6, y + 4, b.w - 12, b.h * 0.22, b.h * 0.11);
+      c.fill();
+      if (open) label(c, String(n), 0, y + b.h * 0.42, b.h * 0.4, "#FFFFFF");
+      else lockIcon(c, 0, y + b.h * 0.42, b.h * 0.16);
+      // yıldızlar
+      var sr = Math.min(9, b.w * 0.12);
+      for (var k = 0; k < 3; k++) star(c, (k - 1) * sr * 2.15, y + b.h * 0.8 - (k === 1 ? 2 : 0), sr, k < st);
+      // yenilik rozetleri: yeni rakip / 6. koridor
+      var li2 = levelInfo(n), tag = li2.newFoe ? "YENİ" : n === LANE6_AT ? "6 KOR." : "";
+      if (tag) {
+        c.font = A.font(9, 900);
+        var tw = c.measureText(tag).width + 12;
+        A.roundRect(c, x - 6, y - 7, tw, 16, 8);
+        c.fillStyle = li2.newFoe ? BAD : "#14B8A6";
+        c.fill();
+        c.lineWidth = 2;
+        c.strokeStyle = "#FFFFFF";
+        c.stroke();
+        c.fillStyle = "#FFFFFF";
+        c.textAlign = "center";
+        c.textBaseline = "middle";
+        c.fillText(tag, x - 6 + tw / 2, y + 1.5);
+      }
+      c.restore();
+    }
+    c.restore();
+  }
+
+  /** Bölüm sonu: KAZANDIN (yıldızlar tek tek düşer) ya da KAYBETTİN; iki düğme. */
+  function drawResult(c) {
+    if (!result) return;
+    var R = resultLayout();
+    var won = result.won, t = stateT;
+    var fade = A.clamp(t / 0.35, 0, 1);
+    c.save();
+    c.globalAlpha = fade;
+    c.fillStyle = "rgba(10,8,40,0.66)";
+    c.fillRect(0, 0, W, H);
+    var inT = A.easeOutBack(A.clamp(t / 0.45, 0, 1));
+    c.translate(R.cx, R.cy);
+    c.scale(0.5 + 0.5 * inT, 0.5 + 0.5 * inT);
+    c.translate(-R.cx, -R.cy);
+    if (won) {
+      // ışınlar
+      c.save();
+      c.translate(R.cx, R.y + 30);
+      c.rotate(t * 0.4);
+      c.globalAlpha = fade * 0.18;
+      c.fillStyle = SUN;
+      for (var i = 0; i < 14; i++) {
+        var a0 = (i / 14) * Math.PI * 2;
+        c.beginPath();
+        c.moveTo(0, 0);
+        c.arc(0, 0, Math.max(W, H) * 0.7, a0, a0 + Math.PI / 14);
+        c.closePath();
+        c.fill();
+      }
+      c.restore();
+    }
+    A.roundRect(c, R.x, R.y + 7, R.w, R.h, 24);
+    c.fillStyle = "#B9BFE0";
+    c.fill();
+    A.roundRect(c, R.x, R.y, R.w, R.h, 24);
+    c.fillStyle = "#FFFFFF";
+    c.fill();
+    c.lineWidth = 4;
+    c.strokeStyle = won ? SUN : BAD;
+    c.stroke();
+    // başlık şeridi
+    var rib = won ? "#22C55E" : "#E11D48";
+    A.roundRect(c, R.x - 10, R.y - 22, R.w + 20, 46, 16);
+    c.fillStyle = mixc(rib, NAVY, 0.35);
+    c.fill();
+    A.roundRect(c, R.x - 10, R.y - 26, R.w + 20, 46, 16);
+    c.fillStyle = rib;
+    c.fill();
+    c.lineWidth = 3;
+    c.strokeStyle = NAVY;
+    c.stroke();
+    A.bigText(c, won ? "KAZANDIN!" : "YENİLDİN", R.cx, R.y - 3, 26, "#FFFFFF", { stroke: NAVY });
+    c.font = A.font(14, 900);
+    c.textAlign = "center";
+    c.textBaseline = "middle";
+    c.fillStyle = "#4B4790";
+    c.fillText(level + ". BÖLÜM · " + String(rivalAt(level).team.name || "Rakip"), R.cx, R.y + 38, R.w - 30);
+    var midY = R.y + 38 + (R.main.y - R.y - 38) * 0.5;
+    if (won) {
+      for (var k = 0; k < 3; k++) {
+        var at = 0.45 + k * 0.28;
+        var on = k < result.stars && t > at;
+        var pk = on ? A.easeOutBack(A.clamp((t - at) / 0.3, 0, 1)) : 1;
+        star(c, R.cx + (k - 1) * 58, midY - 10 - (k === 1 ? 8 : 0), k === 1 ? 26 : 22, on, on ? 0.4 + 0.6 * pk + 0.25 * Math.max(0, 1 - (t - at) / 0.3) : 1);
+      }
+      c.font = A.font(13, 800);
+      c.fillStyle = NAVY;
+      c.fillText(points + " puan · " + (conceded ? conceded + " gol yedin" : "kaleni gole kapattın"), R.cx, midY + 30, R.w - 30);
+    } else {
+      c0 = c;
+      showFoe("hucum", R.cx - 8, midY + 14, 0.95, { eating: true });
+      c.font = A.font(13, 800);
+      c.fillStyle = NAVY;
+      c.fillText("Savunma " + wave + ". dalgada çöktü (" + info.waves + " dalga)", R.cx, midY + 34, R.w - 30);
+    }
+    [R.main, R.alt].forEach(function (b, bi) {
+      var pt = A.time - (press[b.act] || -9);
+      var ps = pt < 0.35 ? 1 - 0.1 * Math.exp(-pt * 10) * Math.cos(pt * 18) : 1;
+      var primary = bi === 0;
+      c.save();
+      c.translate(b.x + b.w / 2, b.y + b.h / 2);
+      c.scale(ps, ps);
+      c.translate(-(b.x + b.w / 2), -(b.y + b.h / 2));
+      var col = primary ? (won ? "#22C55E" : "#FF8A1F") : "#2C2580";
+      A.roundRect(c, b.x, b.y + 4, b.w, b.h, b.h / 2);
+      c.fillStyle = mixc(col, NAVY, 0.4);
+      c.fill();
+      A.roundRect(c, b.x, b.y, b.w, b.h, b.h / 2);
+      c.fillStyle = col;
+      c.fill();
+      c.lineWidth = 2.5;
+      c.strokeStyle = NAVY;
+      c.stroke();
+      c.fillStyle = "rgba(255,255,255,0.22)";
+      A.roundRect(c, b.x + 10, b.y + 4, b.w - 20, b.h * 0.26, b.h * 0.13);
+      c.fill();
+      label(c, b.label, b.x + b.w / 2, b.y + b.h / 2 + 1, Math.min(18, b.h * 0.4), "#FFFFFF");
+      c.restore();
+    });
+    c.restore();
   }
 
   function debug() {
     layout();
     return {
-      state: state, energy: energy, points: points, lives: lives, wave: wave, defeated: defeated, conceded: conceded, placed: placed,
-      units: units, foes: foes, shots: shots, lobs: lobs, hover: hover, selected: selected, R: null, orbs: orbs, queue: queue, waveState: waveState, gl: false,
-      captain: captain.short, rival: rivalAt(wave).team.name, UNITS: UNITS, FOES: FOES, LANES: LANES, ROWS: ROWS, ORDER: ORDER,
-      SPAWN_Z: SPAWN_Z, GOAL_Z: GOAL_Z, layout: L, unlockPop: unlockPop,
-      place: place, collect: collect, usable: usable, cards: cards,
+      state: state, energy: energy, points: points, lives: lives, wave: wave, level: level, info: info, progress: progress, result: result,
+      defeated: defeated, conceded: conceded, placed: placed,
+      units: units, foes: foes, shots: shots, lobs: lobs, fballs: fballs, hover: hover, selected: selected, R: null, orbs: orbs, queue: queue, waveState: waveState, gl: false,
+      captain: captain.short, rival: rivalAt(level).team.name, UNITS: UNITS, FOES: FOES, LANES: LANES, ROWS: ROWS, ORDER: ORDER,
+      SPAWN_Z: SPAWN_Z, GOAL_Z: GOAL_Z, CD: CD, layout: L, pops: pops, levelInfo: levelInfo, MAX_LEVEL: MAX_LEVEL,
+      place: place, collect: collect, usable: usable, cards: cards, play: play, selectLayout: selectLayout, resultLayout: resultLayout,
       setEnergy: function (v) { energy = v; },
       setWave: function (w) {
         wave = w;
         buildWave();
       },
-      /** Dalga arasını atla: bir sonraki dalga hemen başlasın (açılış kartı görünür). */
+      /** Tanıtım kartlarını kapat. */
+      skipPops: function () {
+        pops.length = 0;
+        A.banner = null;
+      },
+      /** Dalga arasını atla: bir sonraki dalga hemen başlasın. */
       nextWave: function () {
         queue.length = 0;
         foes.length = 0;
@@ -2627,5 +3429,6 @@
     };
   }
 
-  A.register({ resize: resize, start: start, update: update, render: render, down: down, move: move, up: up, debug: debug, setRoster: setRoster });
+  A.register({ resize: resize, start: start, update: update, render: render, down: down, move: move, up: up, debug: debug, setRoster: setRoster, storeLoaded: storeLoaded });
+  if (A.store) storeLoaded(A.store);
 })();

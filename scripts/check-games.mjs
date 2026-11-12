@@ -430,22 +430,29 @@ const pilot = (A) => {
 {
   // Savunmasız kale: rakipler yürür, üç gol yenir, maç biter.
   const { A, run, over } = boot("savunma");
-  A.game.start();
+  A.game.start(); // tuvalde BÖLÜM SEÇ açılır
+  const sel = A.game.debug().state;
+  A.game.debug().play(1);
   run(170);
   const end = over();
   const d = A.game.debug();
-  check("savunma: boş saha gol yer ve biter", Boolean(end) && d.lives === 0 && d.conceded === 3, end ? `3 gol yenildi (${d.wave}. dalga)` : `maç bitmedi, hak ${d.lives}`);
+  check(
+    "savunma: bölüm seçilir; boş saha gol yer ve bölüm kaybedilir",
+    sel === "select" && Boolean(end) && d.lives === 0 && d.conceded === 3 && end.stats.level === 1 && end.stats.won === 0,
+    end ? `3 gol yenildi (${d.level}. bölüm, ${d.wave}. dalga)` : `bölüm bitmedi, hak ${d.lives}`,
+  );
 }
 {
   // Kartlar: güneş (enerji) düşer, dolum süresi ve dolu kare engeller; taraftar güneş üretir.
   const { A, run } = boot("savunma");
   A.game.start();
+  A.game.debug().play(1);
   const d = A.game.debug();
   const e0 = d.energy;
   const ok1 = d.place("taraftar", 0, 0);
   const again = d.place("taraftar", 1, 0); // dolum süresi
   const same = d.place("forvet", 0, 0); // dolu kare
-  const locked = d.place("cift", 3, 0); // ilerideki bir dalgada açılır
+  const locked = d.place("cift", 3, 0); // ilerideki bir bölümde açılır
   const e1 = A.game.debug().energy;
   d.clearQueue();
   let made = 0;
@@ -467,6 +474,7 @@ const pilot = (A) => {
   // Forvet koridorundaki rakibi durdurur; boş koridor gol yer. Pres yavaşlatır, stoper oyalar, füze temizler.
   const { A, run } = boot("savunma");
   A.game.start();
+  A.game.debug().play(1);
   const d = A.game.debug();
   d.clearQueue();
   d.setEnergy(5000);
@@ -481,8 +489,8 @@ const pilot = (A) => {
     guarded.dead && mid.defeated === 1 && mid.conceded === 1 && mid.points >= 10 && !open.dead,
     `korunan koridorda rakip ${guarded.dead ? "durduruldu" : "geçti"}, boş koridordan ${mid.conceded} gol`,
   );
-  // Stoper: 2400 can / 100 hasar ≈ 24 sn oyalar
-  d.place("stoper", 0, 2);
+  // Stoper: 2400 can / 100 hasar ≈ 24 sn oyalar (stoper 2. bölümde açılır: serbest yerleştirme)
+  d.place("stoper", 0, 2, true);
   const eater = d.spawn("hucum", 0, 9);
   let held = 0;
   run(34, (arena) => {
@@ -493,11 +501,11 @@ const pilot = (A) => {
   // Pres: yavaşlatılan rakip aynı sürede daha az yol alır
   const { A: B, run: runB } = boot("savunma");
   B.game.start();
+  B.game.debug().play(1);
   const db = B.game.debug();
   db.clearQueue();
   db.setEnergy(5000);
-  db.place("stoper", 3, 0); // 3. dalga gerekmeden pres'i sınamak için serbest yerleştirme
-  db.place("pres", 1, 0, true);
+  db.place("pres", 1, 0, true); // 8. bölüm gerekmeden pres'i sınamak için serbest yerleştirme
   const slowed = db.spawn("santrfor", 1);
   const free = db.spawn("santrfor", 3);
   runB(9);
@@ -514,10 +522,12 @@ const pilot = (A) => {
   check("savunma: füze 3×3 alanı temizler", near.every((f) => f.dead) && !farLane.dead && !db.units.some((u) => u.type === "fuze"), `${near.filter((f) => f.dead).length}/3 rakip, alan dışındaki ayakta`);
 }
 {
-  // Dalgalar: kurulu savunma ilk dalgayı temizler, ikinci dalgada yeni kart açılır ve kaptan gelir.
-  const { A, run } = boot("savunma");
+  // Bölüm: kurulu savunma 2. bölümün dalgalarını temizler, son hücumda kaptan gelir; bölüm
+  // kazanılır (yıldız + kayıt mesajı), sonraki bölümde yeni kart açılır.
+  const { A, run, log, over } = boot("savunma");
   A.game.start();
   const d = A.game.debug();
+  d.play(2);
   d.setEnergy(5000);
   for (let l = 0; l < 5; l += 1) {
     d.place("forvet", l, 0, true);
@@ -525,17 +535,33 @@ const pilot = (A) => {
     d.place("stoper", l, 4, true);
   }
   let sawBoss = false, maxWave = 1;
-  run(150, (arena) => {
+  run(240, (arena) => {
     const x = arena.game.debug();
     maxWave = Math.max(maxWave, x.wave);
     if (x.foes.some((f) => f.type === "kaptan")) sawBoss = true;
   });
   const x = A.game.debug();
+  const end = over();
+  const saved = log.filter((m) => m.type === "store").pop();
   check(
-    "savunma: dalgalar ilerler, kaptan gelir, kartlar açılır",
-    maxWave >= 2 && sawBoss && x.lives === 3 && x.points >= 50 + 10 * 5 && x.usable("fuze"),
-    `${maxWave}. dalga, ${x.defeated} rakip durduruldu, ${x.points} puan, hak ${x.lives}`,
+    "savunma: bölüm dalgaları ilerler, kaptan gelir, bölüm kazanılır",
+    maxWave >= 2 && sawBoss && x.lives === 3 && x.points >= 50 + 10 * 5 && x.state === "won" && end && end.stats.won === 1 && end.stats.level === 2 && end.stats.stars === 3,
+    `${maxWave}. dalga, ${x.defeated} rakip durduruldu, ${x.points} puan, hak ${x.lives}, ${end ? end.stats.stars + " yıldız" : "bitmedi"}`,
   );
+  check(
+    "savunma: ilerleme RN'ye kaydedilir ve geri yüklenir",
+    saved && saved.data.unlocked === 3 && saved.data.stars["2"] === 3 && (() => {
+      const { A: C } = boot("savunma");
+      C.game.storeLoaded({ unlocked: 5, stars: { 1: 3, 2: 1, 4: 2 } });
+      const p = C.game.debug().progress;
+      return p.unlocked === 5 && p.stars[4] === 2;
+    })(),
+    saved ? JSON.stringify(saved.data) : "store mesajı yok",
+  );
+  const lockedBefore = !x.usable("fuze");
+  d.play(3);
+  const y = A.game.debug();
+  check("savunma: sonraki bölümde yeni kart açılır", lockedBefore && y.usable("fuze") && y.pops.some((p) => p.key === "fuze"), `3. bölüm kartları: ${y.cards().map((c) => c.key).join(", ")}`);
   const team = (id, name) => ({ id, name, kit: { primary: "#dc2626", secondary: "#ffffff" } });
   A.game.setRoster({ captain: { id: 5, short: "K. Kaptan", team: team(9, "Bizimkiler") }, rivals: [{ team: team(1, "Birinci Rakip") }, { team: team(2, "İkinci Rakip") }] });
   const r = A.game.debug();
