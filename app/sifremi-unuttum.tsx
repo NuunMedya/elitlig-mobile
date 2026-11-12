@@ -2,9 +2,11 @@
  * ŞİFREMİ UNUTTUM — POST /api/users/password/forgot + /password/reset
  *
  * NEDEN VAR: giriş akışı tarayıcıya çıkmaz (App Store 4). İki adım:
- *   1. Kullanıcı adı veya e-posta → sunucu 202 döner; hesap kayıtlıysa lig
- *      yönetimi tek kullanımlık sıfırlama kodunu iletir (hesap sayımını
- *      önlemek için yanıt her koşulda aynıdır, ekran da öyle davranır).
+ *   1. Kullanıcı adı veya e-posta → sunucu 202 döner; hesap kayıtlıysa
+ *      6 haneli kod kayıtlı cep telefonuna NetGSM SMS'i ile gider (telefon
+ *      kayıtlı değilse kodu lig yönetimi iletir). Hesap sayımını önlemek
+ *      için yanıt her koşulda aynıdır, ekran da öyle davranır.
+ *      "Yeniden gönder" sunucudaki 60 sn beklemeyle uyumlu geri sayım taşır.
  *   2. Kod + yeni şifre → sunucu doğrular, şifreyi günceller. Sonra giriş
  *      ekranına dönülür.
  *
@@ -12,8 +14,8 @@
  */
 
 import { useRouter } from "expo-router";
-import { useCallback, useMemo, useRef, useState } from "react";
-import type { TextInput } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Platform, type TextInput } from "react-native";
 import {
   AuthCard,
   AuthLink,
@@ -28,6 +30,8 @@ import { forgotPassword, resetPassword } from "@/lib/api/auth";
 import { ApiError } from "@/lib/http";
 
 const PASSWORD_MIN = 8;
+/** Sunucudaki SMS_RESEND_SECONDS ile aynı. */
+const RESEND_SECONDS = 60;
 
 type Step = "identify" | "reset";
 
@@ -55,6 +59,13 @@ export default function ForgotPasswordScreen() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
+  const [cooldown, setCooldown] = useState(0);
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setTimeout(() => setCooldown((s) => s - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [cooldown]);
+
   const codeRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
   const repeatRef = useRef<TextInput>(null);
@@ -64,7 +75,7 @@ export default function ForgotPasswordScreen() {
   const pwError = useMemo(() => passwordError(password), [password]);
   const repeatError = repeat === password ? undefined : "Şifreler eşleşmiyor.";
 
-  const canRequest = !identifierError && !busy;
+  const canRequest = !identifierError && !busy && cooldown <= 0;
   const canReset = !identifierError && !codeError && !pwError && !repeatError && !busy;
 
   const show = (name: string, message?: string) => (touched[name] ? message : undefined);
@@ -87,7 +98,9 @@ export default function ForgotPasswordScreen() {
     try {
       const response = await forgotPassword(identifier.trim());
       setNotice(response.message || "Talebin alındı. Kod sana iletilince aşağıya gir.");
+      setCooldown(RESEND_SECONDS);
       setStep("reset");
+      setTimeout(() => codeRef.current?.focus(), 300);
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.userMessage : "Talep gönderilemedi.");
     } finally {
@@ -126,7 +139,7 @@ export default function ForgotPasswordScreen() {
       lede={
         step === "identify"
           ? "İki adım: önce kod iste, sonra kodla yeni şifreni belirle."
-          : "Lig yönetiminden aldığın kodu ve yeni şifreni gir."
+          : "Telefonuna SMS ile gelen kodu ve yeni şifreni gir."
       }
       icon="key-outline"
       onClose={close}
@@ -145,7 +158,7 @@ export default function ForgotPasswordScreen() {
               }}
               onBlur={blur("identifier")}
               error={show("identifier", identifierError)}
-              hint="Hesabın kayıtlıysa lig yönetimi sana tek kullanımlık bir sıfırlama kodu iletir."
+              hint="Hesabın kayıtlıysa kayıtlı cep telefonuna SMS ile 6 haneli bir kod gönderilir."
               leadingIcon="person-outline"
               autoCapitalize="none"
               autoCorrect={false}
@@ -159,7 +172,15 @@ export default function ForgotPasswordScreen() {
 
           {error ? <AuthNotice message={error} /> : null}
 
-          <Button label="Kod iste" icon="paper-plane-outline" onPress={request} loading={busy} size="lg" fullWidth />
+          <Button
+            label={cooldown > 0 ? `Yeni kod için ${cooldown} sn` : "SMS ile kod gönder"}
+            icon="paper-plane-outline"
+            onPress={request}
+            loading={busy}
+            disabled={cooldown > 0}
+            size="lg"
+            fullWidth
+          />
 
           <AuthLink prompt="Kodun zaten var mı?" action="Kodla devam et" onPress={() => setStep("reset")} disabled={busy} />
         </>
@@ -198,11 +219,13 @@ export default function ForgotPasswordScreen() {
               onBlur={blur("code")}
               error={show("code", codeError)}
               leadingIcon="keypad-outline"
+              hint="SMS kodu 10 dakika geçerlidir. Yönetimden aldığın kodu da buraya girebilirsin."
               autoCapitalize="characters"
               autoCorrect={false}
-              autoComplete="one-time-code"
+              autoComplete={Platform.OS === "android" ? "sms-otp" : "one-time-code"}
               textContentType="oneTimeCode"
-              placeholder="Örn. A7K2M9"
+              maxLength={12}
+              placeholder="Örn. 482913"
               returnKeyType="next"
               submitBehavior="submit"
               onSubmitEditing={() => passwordRef.current?.focus()}
@@ -262,7 +285,12 @@ export default function ForgotPasswordScreen() {
 
           <Button label="Şifreyi sıfırla" onPress={reset} loading={busy} size="lg" fullWidth />
 
-          <AuthLink prompt="Kod gelmedi mi?" action="Yeniden iste" onPress={() => setStep("identify")} disabled={busy} />
+          <AuthLink
+            prompt="Kod gelmedi mi?"
+            action={cooldown > 0 ? `${cooldown} sn sonra yeniden gönder` : "Yeniden gönder"}
+            onPress={request}
+            disabled={busy || cooldown > 0 || Boolean(identifierError)}
+          />
         </>
       )}
 

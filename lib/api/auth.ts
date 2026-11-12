@@ -55,7 +55,8 @@ export const changePassword = (currentPassword: string, newPassword: string) =>
     newPassword,
   });
 
-/** Şifremi unuttum, 1. adım: hesap kayıtlıysa yönetim tek kullanımlık kod iletir.
+/** Şifremi unuttum, 1. adım: hesap kayıtlıysa 6 haneli kod kayıtlı telefona SMS
+ *  (NetGSM) ile gider; telefon kayıtlı değilse yönetim tek kullanımlık kod iletir.
  *  Sunucu hesap sayımını önlemek için her koşulda 202 döner. */
 export const forgotPassword = (identifier: string) =>
   post<{ message: string }>("/api/users/password/forgot", { identifier });

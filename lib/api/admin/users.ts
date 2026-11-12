@@ -328,6 +328,10 @@ export interface PasswordReset {
   expired: boolean;
   used_at: string | null;
   requested_ip: string | null;
+  /** Kodun ulaştırılma yolu: "sms" NetGSM ile otomatik, "manual" yönetim iletti. Eski sunucuda yok. */
+  channel?: "sms" | "manual";
+  /** Hatalı kod denemesi sayısı. */
+  attempts?: number;
   issued_by: { id: number; username: string; fullName: string | null } | null;
   user: { id: number; username?: string; fullName?: string | null; email?: string | null; phone?: string | null; city?: string | null; role?: string; status?: string | null };
 }
