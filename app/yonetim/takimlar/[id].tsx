@@ -201,8 +201,8 @@ export default function TeamProfileScreen() {
             tone="paper"
             items={[
               { key: "profile", label: "Profil", badge: pendingCount ? "dot" : undefined },
-              { key: "players", label: "Oyuncular", badge: data.players.length || undefined },
-              { key: "seasons", label: "Sezonlar", badge: data.seasons.length || undefined },
+              { key: "players", label: "Oyuncular" },
+              { key: "seasons", label: "Sezonlar" },
               { key: "people", label: "Yetkililer" },
             ]}
             value={tab}

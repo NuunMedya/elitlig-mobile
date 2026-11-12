@@ -43,10 +43,16 @@ import { Redirect, router as appRouter, useLocalSearchParams, useRouter, type Hr
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 import {
+  Aurora,
   Badge,
   Chip,
   ChipGroup,
+  FormChips,
+  GradientBar,
+  Odometer,
+  Reveal,
   EmptyState,
   ErrorState,
   ListRow,
@@ -559,15 +565,17 @@ function MyMatchesTab({
   const closeReview = useCallback(() => setReviewing(null), []);
 
   const renderItem = useCallback(
-    ({ item }: { item: MyMatch }) => (
-      <MyMatchCard
-        match={item}
-        past={past}
-        onPress={() => router.push(`/mac/${item.id}`)}
-        onReview={past && item.can_review ? () => setReviewing(item) : undefined}
-      />
+    ({ item, index }: { item: MyMatch; index: number }) => (
+      <Reveal index={index} limit={8} replayKey={filter}>
+        <MyMatchCard
+          match={item}
+          past={past}
+          onPress={() => router.push(`/mac/${item.id}`)}
+          onReview={past && item.can_review ? () => setReviewing(item) : undefined}
+        />
+      </Reveal>
     ),
-    [past, router],
+    [filter, past, router],
   );
 
   const keyExtractor = useCallback((item: MyMatch) => String(item.id), []);
@@ -582,13 +590,22 @@ function MyMatchesTab({
     ];
   }, [query.data]);
 
+  /* Özet bloğu: yaklaşanda sıradaki maç sahnesi, oynananda form şeridi. */
+  const next = !past ? query.data?.upcoming?.[0] ?? null : null;
+  const form = useMemo<FormResult[]>(
+    () => (query.data?.past ?? []).map(resultOf).filter((item): item is FormResult => item != null).slice(0, 5),
+    [query.data?.past],
+  );
+
   const header = useMemo(
     () => (
       <View style={styles.filterBar}>
         <SegmentedControl items={filters} value={filter} onChange={changeFilter} />
+        {next ? <NextMatchHero match={next} onPress={() => router.push(`/mac/${next.id}`)} /> : null}
+        {past && form.length ? <FormSummary form={form} /> : null}
       </View>
     ),
-    [changeFilter, filter, filters],
+    [changeFilter, filter, filters, form, next, past, router],
   );
 
   if (query.isLoading) {
@@ -648,6 +665,119 @@ function MyMatchesTab({
   );
 }
 
+/** Maçın bizim açımızdan sonucu; skor yoksa null. */
+function resultOf(match: MyMatch): FormResult | null {
+  const ours = match.is_home ? match.first_team_score : match.second_team_score;
+  const theirs = match.is_home ? match.second_team_score : match.first_team_score;
+  if (ours == null || theirs == null) return null;
+  return ours > theirs ? "W" : ours < theirs ? "L" : "D";
+}
+
+/** Bugünden maç gününe kalan tam gün (0 = bugün). */
+function daysUntilDate(iso: string): number {
+  const target = new Date(String(iso).slice(0, 10) + "T00:00:00");
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.max(0, Math.round((target.getTime() - today.getTime()) / DAY_MS));
+}
+
+/**
+ * SIRADAKİ MAÇIN — koyu sahne: iki arma yan yana, ortada gün sayacı, altta
+ * saat ve saha. Kartın tamamı maç sayfasını açar.
+ */
+const NextMatchHero = React.memo(function NextMatchHero({ match, onPress }: { match: MyMatch; onPress: () => void }) {
+  const days = daysUntilDate(match.date);
+  return (
+    <Reveal>
+      <Touchable
+        feedback="card"
+        haptic="selection"
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={`Sıradaki maçın: ${match.first_team_name} – ${match.second_team_name}, ${formatDateShort(match.date)}`}
+        style={styles.nextHero}
+      >
+        <LinearGradient colors={colors.gradientInk} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+        <Aurora variant="stage" style={StyleSheet.absoluteFill} />
+        <View style={styles.nextHead}>
+          <Text style={styles.nextOverline} {...textScale.badge}>
+            {upperTR("Sıradaki maçın")}
+          </Text>
+          {match.in_squad ? <Badge label="Kadrodasın" tone="win" size="xs" icon="checkmark" /> : <Badge label="Kadro bekleniyor" tone="warn" size="xs" />}
+        </View>
+        <View style={styles.nextTeams}>
+          <View style={styles.nextTeam}>
+            <TeamLogo name={match.first_team_name} size={48} />
+            <Text style={styles.nextTeamName} numberOfLines={2} {...textScale.dense}>
+              {match.first_team_name}
+            </Text>
+          </View>
+          <View style={styles.nextCenter}>
+            {days > 0 ? (
+              <>
+                <Odometer value={days} style={styles.nextDays} />
+                <Text style={styles.nextDaysUnit} {...textScale.badge}>
+                  {upperTR("gün kaldı")}
+                </Text>
+              </>
+            ) : (
+              <Text style={styles.nextToday} {...textScale.badge}>
+                BUGÜN
+              </Text>
+            )}
+            {match.time ? (
+              <View style={styles.nextTime}>
+                <Text style={styles.nextTimeText} {...textScale.badge}>
+                  {formatTime(match.time)}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+          <View style={styles.nextTeam}>
+            <TeamLogo name={match.second_team_name} size={48} />
+            <Text style={styles.nextTeamName} numberOfLines={2} {...textScale.dense}>
+              {match.second_team_name}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.nextFoot}>
+          <Ionicons name="calendar-outline" size={13} color={colors.onDarkMuted} />
+          <Text style={styles.nextFootText} numberOfLines={1} {...textScale.dense}>
+            {[formatDateShort(match.date), match.match_field].filter(Boolean).join(" · ")}
+          </Text>
+        </View>
+      </Touchable>
+    </Reveal>
+  );
+});
+
+/** Oynanan maçların form özeti: son beş sonuç + G/B/M sayısı. */
+function FormSummary({ form }: { form: FormResult[] }) {
+  const count = (r: FormResult) => form.filter((item) => item === r).length;
+  return (
+    <View style={[surfaces.card, styles.formCard]}>
+      <View style={styles.formTexts}>
+        <Text style={styles.overline} {...textScale.badge}>
+          {upperTR("Son maçlar")}
+        </Text>
+        <FormChips form={form} />
+      </View>
+      <View style={styles.formCounts}>
+        {(["W", "D", "L"] as FormResult[]).map((r) => (
+          <View key={r} style={styles.formCount}>
+            <Text style={[styles.formCountValue, { color: RESULT_COLOR[r] }]} {...textScale.badge}>
+              {count(r)}
+            </Text>
+            <Text style={styles.formCountLabel} {...textScale.badge}>
+              {r === "W" ? "G" : r === "D" ? "B" : "M"}
+            </Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 const RESULT_COLOR: Record<FormResult, string> = { W: colors.win, D: colors.draw, L: colors.loss };
 const RESULT_DIM: Record<FormResult, string> = { W: colors.winDim, D: colors.drawDim, L: colors.lossDim };
 
@@ -693,6 +823,7 @@ const MyMatchCard = React.memo(function MyMatchCard({
         style={styles.matchRow}
       >
         <DateBlock date={match.date} />
+        <TeamLogo name={opponent ?? "?"} size={layout.crestLg} />
 
         <View style={styles.matchBody}>
           <View style={styles.matchTitleRow}>
@@ -1161,7 +1292,7 @@ function ContractTab({ scrollProps }: { scrollProps: ScrollChrome }) {
     <ScrollView {...scrollProps} contentContainerStyle={styles.content} refreshControl={refresh.control}>
       {active ? (
         <>
-          <SectionHeader style={styles.flushHeader} title="Yürürlükteki sözleşmem" />
+          <SectionHeader style={styles.flushHeader} title="Yürürlükteki sözleşmem" icon="document-text" iconTone="violet" />
           <ActiveContractCard contract={active} />
         </>
       ) : (
@@ -1176,7 +1307,7 @@ function ContractTab({ scrollProps }: { scrollProps: ScrollChrome }) {
 
       {others.length ? (
         <>
-          <SectionHeader style={styles.flushHeader} title="Geçmiş sözleşmelerim" meta={`${others.length} kayıt`} />
+          <SectionHeader style={styles.flushHeader} title="Diğer sözleşmelerim" icon="time" iconTone="neutral" meta={`${others.length} kayıt`} />
           <View>
             {others.map((contract, index) => (
               <ListRow
@@ -1193,7 +1324,7 @@ function ContractTab({ scrollProps }: { scrollProps: ScrollChrome }) {
                 badge={
                   <Badge
                     label={CONTRACT_STATUS_LABELS[contract.status] ?? contract.status}
-                    tone="neutral"
+                    tone={contract.status === "TERMINATED" ? "danger" : contract.status === "PENDING_ACTIVATION" ? "warn" : "neutral"}
                     size="xs"
                   />
                 }
@@ -1205,7 +1336,7 @@ function ContractTab({ scrollProps }: { scrollProps: ScrollChrome }) {
         </>
       ) : null}
 
-      <SectionHeader style={styles.flushHeader} title="Sözleşme işlemleri" />
+      <SectionHeader style={styles.flushHeader} title="Sözleşme işlemleri" icon="swap-horizontal" iconTone="cyan" />
       <View>
         <ListRow
           leading={{ icon: "documents", tone: "brand" }}
@@ -1275,8 +1406,11 @@ const ActiveContractCard = React.memo(function ActiveContractCard({
       onPress={open}
       accessibilityRole="button"
       accessibilityLabel={`${contract.team?.team_name ?? "Takım"} sözleşmesi${progress ? `, kalan ${progress.daysLeft} gün` : ""}`}
-      style={[surfaces.cardPadded, styles.contractCard]}
+      style={styles.contractCard}
     >
+      {/* Kimlik sahnesi: gradientInk + Aurora; kalan gün döner sayaçla. */}
+      <LinearGradient colors={colors.gradientInk} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+      <Aurora variant="stage" style={StyleSheet.absoluteFill} />
       <View style={styles.contractHead}>
         <TeamLogo
           name={contract.team?.team_name}
@@ -1284,34 +1418,47 @@ const ActiveContractCard = React.memo(function ActiveContractCard({
           size={layout.crestXl}
         />
         <View style={styles.contractHeadBody}>
+          <Text style={styles.contractOverline} {...textScale.badge}>
+            {upperTR("Kulübüm")}
+          </Text>
           <Text style={styles.contractTeam} numberOfLines={1} {...textScale.dense}>
             {contract.team?.team_name ?? "Takım"}
           </Text>
-          <Badge
-            label={CONTRACT_STATUS_LABELS[contract.status] ?? contract.status}
-            tone={contract.status === "ACTIVE" ? "win" : "warn"}
-            size="sm"
-          />
         </View>
-        <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
+        <Badge
+          label={CONTRACT_STATUS_LABELS[contract.status] ?? contract.status}
+          tone={contract.status === "ACTIVE" ? "win" : "warn"}
+          size="sm"
+        />
       </View>
 
       {progress ? (
         <View style={styles.contractProgress}>
-          <View style={styles.contractTrack}>
-            <View style={[styles.contractFill, { flex: progress.elapsed }]} />
-            <View style={{ flex: 1 - progress.elapsed }} />
+          <View style={styles.contractLeftRow}>
+            {progress.daysLeft > 0 ? (
+              <>
+                <Odometer value={progress.daysLeft} style={styles.contractDays} />
+                <Text style={styles.contractLeft} {...textScale.dense}>
+                  gün kaldı
+                </Text>
+              </>
+            ) : (
+              <Text style={styles.contractLeft} {...textScale.dense}>
+                Süre doldu
+              </Text>
+            )}
+            <Text style={styles.contractPct} {...textScale.badge}>
+              {`%${Math.round(progress.elapsed * 100)} geçti`}
+            </Text>
           </View>
-          <Text style={styles.contractLeft} {...textScale.dense}>
-            {progress.daysLeft > 0 ? `Kalan ${progress.daysLeft} gün` : "Süre doldu"}
-          </Text>
+          <GradientBar value={progress.elapsed} height={6} track={colors.inkTile} />
         </View>
       ) : null}
 
       <View style={styles.contractDates}>
         <ContractDate label="BAŞLANGIÇ" value={contract.contract_start_date} />
         <View style={styles.contractArrow}>
-          <Ionicons name="arrow-forward" size={14} color={colors.textTertiary} />
+          <Ionicons name="arrow-forward" size={14} color={colors.onDarkMuted} />
         </View>
         <ContractDate label="BİTİŞ" value={contract.contract_end_date} />
       </View>
@@ -1328,7 +1475,7 @@ const ContractDate = React.memo(function ContractDate({
 }) {
   return (
     <View style={styles.contractDate}>
-      <Text style={styles.overline} {...textScale.badge}>
+      <Text style={styles.contractDateLabel} {...textScale.badge}>
         {label}
       </Text>
       <Text style={styles.contractDateValue} {...textScale.dense}>
@@ -1547,9 +1694,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  /* — Sözleşme — */
+  /* — Sözleşme (koyu sahne) — */
   contractCard: {
-    gap: space.md,
+    gap: space.lg,
+    padding: space.lg,
+    borderRadius: radius.xxl,
+    overflow: "hidden",
+    backgroundColor: colors.inkBlock,
+    borderWidth: hairline,
+    borderColor: colors.borderOnDark,
   },
   contractHead: {
     flexDirection: "row",
@@ -1559,37 +1712,46 @@ const styles = StyleSheet.create({
   contractHeadBody: {
     flex: 1,
     minWidth: 0,
-    alignItems: "flex-start",
-    gap: space.s,
+    gap: space.xxs,
+  },
+  contractOverline: {
+    ...type.overline,
+    color: colors.onDarkMuted,
   },
   contractTeam: {
-    ...type.h2,
-    color: colors.textPrimary,
+    ...type.h1,
+    color: colors.onDark,
   },
   contractProgress: {
     gap: space.s,
   },
-  contractTrack: {
+  contractLeftRow: {
     flexDirection: "row",
-    height: 6,
-    borderRadius: radius.pill,
-    overflow: "hidden",
-    backgroundColor: colors.surface3,
+    alignItems: "flex-end",
+    gap: space.xs,
   },
-  contractFill: {
-    height: 6,
-    borderRadius: radius.pill,
-    backgroundColor: colors.accent,
+  contractDays: {
+    ...type.scoreLg,
+    color: colors.onDark,
   },
   contractLeft: {
-    ...type.caption,
-    color: colors.textSecondary,
+    ...type.label,
+    color: colors.onDarkMuted,
+    flex: 1,
+    marginBottom: space.xxs,
+  },
+  contractPct: {
+    ...type.numSmStrong,
+    color: colors.brandOnDark,
+    marginBottom: space.xxs,
   },
   contractDates: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.surface2,
-    borderRadius: radius.md,
+    backgroundColor: colors.inkTile,
+    borderWidth: hairline,
+    borderColor: colors.inkTileBorder,
+    borderRadius: radius.lg,
     padding: space.md,
   },
   contractDate: {
@@ -1597,11 +1759,47 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 2,
   },
+  contractDateLabel: {
+    ...type.overline,
+    color: colors.onDarkMuted,
+  },
   contractDateValue: {
     ...type.tableNumStrong,
-    color: colors.textPrimary,
+    color: colors.onDark,
   },
   contractArrow: {
     paddingHorizontal: space.sm,
   },
+
+  /* — Sıradaki maç (koyu sahne) — */
+  nextHero: {
+    gap: space.md,
+    padding: space.lg,
+    borderRadius: radius.xxl,
+    overflow: "hidden",
+    backgroundColor: colors.inkBlock,
+    borderWidth: hairline,
+    borderColor: colors.borderOnDark,
+  },
+  nextHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.sm },
+  nextOverline: { ...type.overline, color: colors.onDarkMuted },
+  nextTeams: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  nextTeam: { flex: 1, alignItems: "center", gap: space.s },
+  nextTeamName: { ...type.labelSm, color: colors.onDark, textAlign: "center" },
+  nextCenter: { alignItems: "center", gap: space.xxs, minWidth: 88 },
+  nextDays: { ...type.scoreHero, color: colors.onDark },
+  nextDaysUnit: { ...type.nano, color: colors.onDarkMuted, letterSpacing: 0.8 },
+  nextToday: { ...type.scoreSm, color: colors.live },
+  nextTime: { marginTop: space.xs, paddingHorizontal: space.sm, height: 22, justifyContent: "center", borderRadius: radius.pill, backgroundColor: colors.inkPill, borderWidth: hairline, borderColor: colors.inkPillBorder },
+  nextTimeText: { ...type.clock, color: colors.onDark },
+  nextFoot: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.xs },
+  nextFootText: { ...type.caption, color: colors.onDarkMuted, flexShrink: 1 },
+
+  /* — Form özeti — */
+  formCard: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md },
+  formTexts: { flex: 1, gap: space.s },
+  formCounts: { flexDirection: "row", gap: space.md },
+  formCount: { alignItems: "center", minWidth: 24 },
+  formCountValue: { ...type.scoreSm },
+  formCountLabel: { ...type.micro, color: colors.textTertiary },
 });

@@ -536,7 +536,7 @@ const styles = StyleSheet.create({
   themeCheck: {
     width: 16,
     height: 16,
-    borderRadius: 8,
+    borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.brand,

@@ -16,35 +16,35 @@ import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
+import Ionicons from "@expo/vector-icons/Ionicons";
+
 import {
   AdminList,
   AdminScreen,
   FormSheet,
   OptionSheet,
-  RecordCard,
   confirmAction,
   useAdminMutation,
   type FieldDef,
 } from "@/components/admin";
 import { payloadFrom, staffFields } from "@/components/admin/staff/staffForm";
 import { StaffAccountsBulkSheet } from "@/components/admin/staff/StaffAccountsBulkSheet";
-import { Button, Chip, ChipGroup, FAB, MetricGrid, MetricTile } from "@/components/ui";
+import { dutyIcon, StaffCard } from "@/components/admin/staff/StaffParts";
+import { SysStage, TaskCard, trNum } from "@/components/admin/system/SysKit";
+import { Chip, ChipGroup, FAB, IconTile, Touchable } from "@/components/ui";
 import { hasAnyPermission } from "@/lib/admin/access";
 import {
   createStaff,
   FALLBACK_DUTIES,
   filterStaff,
-  formatMatchWhen,
   getLinkableUsers,
   getManagementRoles,
   getManagementRoster,
   importManagementUsers,
   isNationwideUser,
   listStaff,
-  scoreTone,
   STAFF_SORTS,
   type StaffFilters,
-  type StaffMember,
   type StaffPayload,
 } from "@/lib/api/admin/staff";
 import { getCities } from "@/lib/api/meta";
@@ -148,49 +148,28 @@ export default function StaffListScreen() {
 
   const header = (
     <View style={styles.headerBlock}>
-      <MetricGrid columns={3}>
-        <MetricTile label="Aktif personel" value={String(stats.active)} icon="people-outline" />
-        <MetricTile label="Hesabı olan" value={String(stats.withAccount)} icon="key-outline" />
-        <MetricTile label="Yaklaşan görev" value={String(stats.upcoming)} icon="calendar-outline" tone="accent" />
-        <MetricTile label="Toplam görev" value={String(stats.totalDuties)} icon="football-outline" />
-        <MetricTile label="Ortalama puan" value={stats.average == null ? "—" : String(stats.average).replace(".", ",")} icon="star-outline" tone="brand" />
-        <MetricTile label="Pasif" value={String(stats.passive)} icon="pause-circle-outline" />
-      </MetricGrid>
+      <SysStage
+        eyebrow="Saha ekibi"
+        title="Maç günü personeli"
+        icon="people"
+        tone="signature"
+        value={stats.active}
+        valueLabel="aktif personel"
+        stats={[
+          { label: "Yaklaşan", value: stats.upcoming, icon: "calendar", tone: "info" },
+          { label: "Ort. puan", value: trNum(stats.average), icon: "star", tone: "warn" },
+          { label: "Hesaplı", value: stats.withAccount, icon: "key", tone: "win" },
+        ]}
+      />
 
-      {nationwide && canUpdate && withoutCity.length > 0 ? (
-        <TaskRow
-          text={`${withoutCity.length} aktif personelin ili belirtilmemiş. Görevlendirmede yalnız maçın ilinin personeli listelendiği için bu kişiler hiçbir maçta seçilemez.`}
-          action="Bu kişileri göster"
-          onPress={() => patch({ city: "none", status: "active" })}
-        />
-      ) : null}
-      {canCreate && missingStaff.length > 0 ? (
-        <TaskRow
-          text={`${missingStaff.length} yönetim kullanıcısı personel listesinde yok${missingStaff.length <= 3 ? `: ${missingStaff.map((e) => e.user.name).join(", ")}` : ""}.`}
-          action={`Personele ekle (${missingStaff.length})`}
-          busy={importUsers.isPending}
-          confirm="Yönetim kullanıcıları personel listesine eklensin mi?"
-          onPress={() => importUsers.mutate(undefined)}
-        />
-      ) : null}
-      {canOpenAccount && withoutAccount.length > 0 ? (
-        <TaskRow
-          text={`${withoutAccount.length} aktif personelin yönetim hesabı yok. Kullanıcı adı, şifre ve rol vererek panele giriş açabilirsin.`}
-          action="Hesap oluştur"
-          disabled={!roles.data?.length}
-          onPress={() => setAccountsOpen(true)}
-        />
-      ) : null}
-      {canAssign ? (
-        <Button label="Toplu personel atama" icon="people-outline" variant="secondary" onPress={() => router.push("/yonetim/toplu-atama")} />
-      ) : null}
-
+      {/* Görev dağılımı: her görev kendi tonunda; dokununca süzgeç olur. */}
       <ChipGroup scrollable contentPadding={0}>
-        <Chip label="Tüm görevler" size="sm" selected={!filters.duty} onPress={() => patch({ duty: "" })} />
+        <Chip label="Tüm görevler" size="sm" icon="apps-outline" selected={!filters.duty} onPress={() => patch({ duty: "" })} />
         {duties.map((d) => (
           <Chip
             key={d.key}
             size="sm"
+            icon={dutyIcon(d.key)}
             label={d.label}
             count={dutyCounts[d.key] || 0}
             selected={filters.duty === d.key}
@@ -198,6 +177,57 @@ export default function StaffListScreen() {
           />
         ))}
       </ChipGroup>
+
+      {nationwide && canUpdate && withoutCity.length > 0 ? (
+        <TaskCard
+          icon="location"
+          tone="warn"
+          title={`${withoutCity.length} aktif personelin ili belirtilmemiş`}
+          body="Görevlendirmede yalnız maçın ilinin personeli listelenir; bu kişiler hiçbir maçta seçilemez."
+          action="Bu kişileri göster"
+          onPress={() => patch({ city: "none", status: "active" })}
+        />
+      ) : null}
+      {canCreate && missingStaff.length > 0 ? (
+        <TaskCard
+          icon="person-add"
+          tone="info"
+          title={`${missingStaff.length} yönetim kullanıcısı personel listesinde yok`}
+          body={missingStaff.length <= 3 ? missingStaff.map((e) => e.user.name).join(", ") : undefined}
+          action={`Personele ekle (${missingStaff.length})`}
+          busy={importUsers.isPending}
+          onPress={async () => {
+            if (!(await confirmAction({ title: "Yönetim kullanıcıları personel listesine eklensin mi?", confirmLabel: "Onayla" }))) return;
+            importUsers.mutate(undefined);
+          }}
+        />
+      ) : null}
+      {canOpenAccount && withoutAccount.length > 0 ? (
+        <TaskCard
+          icon="key"
+          tone="brand"
+          title={`${withoutAccount.length} aktif personelin yönetim hesabı yok`}
+          body="Kullanıcı adı, şifre ve rol vererek panele giriş açabilirsin."
+          action="Toplu hesap oluştur"
+          disabled={!roles.data?.length}
+          onPress={() => setAccountsOpen(true)}
+        />
+      ) : null}
+      {canAssign ? (
+        <Touchable feedback="card" onPress={() => router.push("/yonetim/toplu-atama")} style={styles.assign} accessibilityRole="button" accessibilityLabel="Toplu personel atama">
+          <IconTile icon="git-network" tone="cyan" size={36} />
+          <View style={styles.flex}>
+            <Text style={styles.assignTitle} {...textScale.dense}>
+              Toplu personel atama
+            </Text>
+            <Text style={styles.assignBody} numberOfLines={1} {...textScale.dense}>
+              Yaklaşan maçlara spiker, reji, hakem dağıt
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
+        </Touchable>
+      ) : null}
+
       <ChipGroup scrollable contentPadding={0}>
         <Chip
           size="sm"
@@ -255,7 +285,7 @@ export default function StaffListScreen() {
         emptyIcon="briefcase-outline"
         emptyTitle={items.length ? "Süzgeçlerle eşleşen personel yok" : "Henüz personel eklenmedi"}
         keyExtractor={(item) => String(item.id)}
-        renderItem={({ item }) => <StaffRow item={item} onPress={() => router.push(`/yonetim/personel/${item.id}`)} />}
+        renderItem={({ item }) => <StaffCard item={item} onPress={() => router.push(`/yonetim/personel/${item.id}`)} />}
       />
 
       <FormSheet
@@ -321,79 +351,19 @@ export default function StaffListScreen() {
   );
 }
 
-function StaffRow({ item, onPress }: { item: StaffMember; onPress: () => void }) {
-  const passive = (item.status || "active") !== "active";
-  const when = item.nextMatch
-    ? `Sıradaki: ${formatMatchWhen(item.nextMatch)} · ${item.nextMatch.label}`
-    : item.lastMatch
-      ? `Son görev: ${formatMatchWhen(item.lastMatch)}`
-      : null;
-  return (
-    <RecordCard
-      title={item.fullName}
-      subtitle={item.dutyLabels?.length ? item.dutyLabels.join(", ") : "Görev seçilmedi"}
-      meta={when ?? ([item.phone, item.city].filter(Boolean).join(" · ") || "İletişim bilgisi yok")}
-      avatar={{ name: item.fullName }}
-      muted={passive}
-      value={item.average == null ? "—" : String(item.average).replace(".", ",")}
-      valueTone={scoreTone(item.average)}
-      badges={[
-        passive ? { label: "Pasif", tone: "neutral" } : null,
-        item.linkedUser
-          ? { label: item.linkedUser.username ? `@${item.linkedUser.username}` : item.linkedUser.name, tone: "brand", icon: "key-outline" }
-          : { label: "Hesap yok", tone: "neutral" },
-        { label: `${item.matchCount || 0} görev`, tone: "info" },
-        item.upcomingCount ? { label: `${item.upcomingCount} yaklaşan`, tone: "accent" } : null,
-      ]}
-      onPress={onPress}
-    />
-  );
-}
-
-function TaskRow({
-  text,
-  action,
-  onPress,
-  busy,
-  disabled,
-  confirm,
-}: {
-  confirm?: string;
-  text: string;
-  action: string;
-  onPress: () => void;
-  busy?: boolean;
-  disabled?: boolean;
-}) {
-  return (
-    <View style={styles.task}>
-      <Text style={styles.taskText} {...textScale.long}>
-        {text}
-      </Text>
-      <Button
-        label={action}
-        size="sm"
-        variant="secondary"
-        loading={busy}
-        disabled={disabled}
-        onPress={async () => {
-          if (confirm && !(await confirmAction({ title: confirm, confirmLabel: "Onayla" }))) return;
-          onPress();
-        }}
-      />
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   headerBlock: { gap: space.md },
-  task: {
-    gap: space.sm,
+  flex: { flex: 1, minWidth: 0 },
+  assign: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
     padding: space.md,
-    borderRadius: radius.lg,
-    backgroundColor: colors.warnDim,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
     borderWidth: hairline,
     borderColor: colors.border,
   },
-  taskText: { ...type.bodySm, color: colors.textPrimary },
+  assignTitle: { ...type.h4, color: colors.textPrimary },
+  assignBody: { ...type.caption, color: colors.textTertiary },
 });

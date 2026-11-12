@@ -38,6 +38,8 @@ import {
   type IconTileTone,
   type Tone,
 } from "@/components/ui";
+import Svg, { Circle, Defs, LinearGradient as SvgGradient, Path, Stop } from "react-native-svg";
+
 import { OptionSheet, type Option } from "@/components/admin/OptionSheet";
 import { positionLine } from "@/lib/api/team";
 import { colors, hairline, positionBadge, positionColor, radius, space, textScale, type, upperTR } from "@/theme";
@@ -858,6 +860,53 @@ export function QuotaBar({ label, used, cap, hint }: { label: string; used: numb
         <Text style={kit.quotaHint} numberOfLines={1} {...textScale.badge}>
           {hint}
         </Text>
+      ) : null}
+    </View>
+  );
+}
+
+/* ═══════════════════════════════ ÇİZGİ GRAFİK ═══════════════════════════════ */
+
+/**
+ * Küçük değer grafiği (piyasa değeri geçmişi): imza degradeli çizgi + altında
+ * soluk dolgu, son noktada parlak nokta. Değerler eskiden yeniye sıralı gelir.
+ */
+export function Sparkline({ values, height = 72, style }: { values: number[]; height?: number; style?: StyleProp<ViewStyle> }) {
+  const [width, setWidth] = React.useState(0);
+  const id = React.useId().replace(/:/g, "");
+  const pts = values.filter((v) => Number.isFinite(v));
+  if (pts.length < 2) return null;
+  const min = Math.min(...pts);
+  const max = Math.max(...pts);
+  const span = max - min || 1;
+  const pad = 6;
+  const xy = pts.map((v, i) => {
+    const x = pad + (i / (pts.length - 1)) * Math.max(0, width - pad * 2);
+    const y = pad + (1 - (v - min) / span) * (height - pad * 2);
+    return [x, y] as const;
+  });
+  const line = xy.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+  const area = `${line} L${xy[xy.length - 1][0].toFixed(1)},${height} L${xy[0][0].toFixed(1)},${height} Z`;
+  const last = xy[xy.length - 1];
+  return (
+    <View style={[{ height }, style]} onLayout={(e) => setWidth(e.nativeEvent.layout.width)} accessibilityLabel="Değer geçmişi grafiği">
+      {width ? (
+        <Svg width={width} height={height}>
+          <Defs>
+            <SvgGradient id={`l${id}`} x1="0" y1="0" x2="1" y2="0">
+              <Stop offset="0" stopColor={colors.gradientSignature[0]} />
+              <Stop offset="1" stopColor={colors.gradientSignature[1]} />
+            </SvgGradient>
+            <SvgGradient id={`a${id}`} x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor={colors.gradientSignature[1]} stopOpacity={0.28} />
+              <Stop offset="1" stopColor={colors.gradientSignature[1]} stopOpacity={0} />
+            </SvgGradient>
+          </Defs>
+          <Path d={area} fill={`url(#a${id})`} />
+          <Path d={line} stroke={`url(#l${id})`} strokeWidth={2.5} fill="none" strokeLinejoin="round" strokeLinecap="round" />
+          <Circle cx={last[0]} cy={last[1]} r={6} fill={colors.gradientSignature[1]} opacity={0.25} />
+          <Circle cx={last[0]} cy={last[1]} r={3.5} fill={colors.gradientSignature[1]} />
+        </Svg>
       ) : null}
     </View>
   );

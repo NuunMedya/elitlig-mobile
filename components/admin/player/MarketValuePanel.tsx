@@ -10,8 +10,9 @@ import { useQuery } from "@tanstack/react-query";
 import React, { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { FormSheet, InfoLine, Panel, useAdminMutation, type FormValues } from "@/components/admin";
-import { Button, EmptyState, SkeletonCard } from "@/components/ui";
+import { FormSheet, useAdminMutation, type FormValues } from "@/components/admin";
+import { GroupCard, Sparkline } from "@/components/admin/team/ManageKit";
+import { Button, EmptyState, GradientBar, Odometer, ProgressRing, SkeletonCard } from "@/components/ui";
 import { hasPermission } from "@/lib/admin/access";
 import { formatDate, formatDateTime } from "@/lib/admin/format";
 import {
@@ -28,7 +29,7 @@ import {
 } from "@/lib/api/admin/marketValue";
 import { ApiError } from "@/lib/http";
 import type { AuthUser } from "@/lib/types";
-import { colors, radius, space, textScale, type } from "@/theme";
+import { colors, hairline, radius, space, textScale, type, upperTR } from "@/theme";
 
 export function MarketValuePanel({ playerId, user }: { playerId: number; user: AuthUser | null }) {
   const canRecalc = hasPermission(user, "market_value.recalculate");
@@ -64,8 +65,19 @@ export function MarketValuePanel({ playerId, user }: { playerId: number; user: A
   );
 
   const mv = value.data;
+  /* Geçmiş en yeniden eskiye gelir; grafik eskiden yeniye çizilir. */
+  const series = [...(history.data ?? [])].reverse();
+  const points = series.length ? [series[0].old_value ?? series[0].new_value, ...series.map((h) => h.new_value)] : [];
+  const up = (mv?.changeAmount ?? 0) > 0;
+  const groupLabel = POSITION_GROUP_LABELS[mv?.positionGroup ?? ""] ?? mv?.positionGroup ?? "Mevki";
+
   return (
-    <Panel title="PİYASA DEĞERİ">
+    <GroupCard
+      title="Piyasa değeri"
+      icon="trending-up"
+      tone="mint"
+      action={canAdjust && mv ? { label: "Düzelt", onPress: () => setAdjusting(true) } : undefined}
+    >
       {value.isLoading ? (
         <SkeletonCard />
       ) : !mv ? (
@@ -79,44 +91,68 @@ export function MarketValuePanel({ playerId, user }: { playerId: number; user: A
         />
       ) : (
         <View style={styles.stack}>
-          <Text style={styles.value} {...textScale.dense}>
-            {formatEtl(mv.currentValue)}
-          </Text>
-          {mv.changeAmount ? (
-            <Text style={[styles.change, { color: mv.changeAmount > 0 ? colors.win : colors.danger }]} {...textScale.dense}>
-              {mv.changeAmount > 0 ? "Arttı" : "Düştü"}: {formatEtl(Math.abs(mv.changeAmount))} (%{Math.abs(mv.changePercentage)})
-            </Text>
-          ) : null}
-          <InfoLine label="Piyasa skoru" value={`${Number(mv.marketScore).toFixed(1)} / 100`} />
-          <InfoLine label="Genel sıra" value={mv.globalRank != null ? String(mv.globalRank) : "—"} />
-          <InfoLine label="İl sırası" value={mv.cityRank != null ? String(mv.cityRank) : "—"} />
-          <InfoLine
-            label={`Mevki sırası (${POSITION_GROUP_LABELS[mv.positionGroup ?? ""] ?? mv.positionGroup ?? "—"})`}
-            value={mv.positionRank != null ? String(mv.positionRank) : "—"}
-          />
-          <InfoLine label="Gelişim puanı" value={mv.growthPoints != null ? Number(mv.growthPoints).toFixed(1) : "—"} />
-          <InfoLine label="Son hesap" value={mv.lastCalculatedAt ? formatDateTime(mv.lastCalculatedAt) : "—"} />
+          {/* DEĞER BLOĞU — büyük rakam + değişim oku + skor çubuğu. */}
+          <View style={styles.hero}>
+            <View style={styles.flex}>
+              <View style={styles.valueRow}>
+                <Odometer value={Math.round(mv.currentValue).toLocaleString("tr-TR")} style={styles.value} />
+                <Text style={styles.unit} {...textScale.badge}>
+                  ETL
+                </Text>
+              </View>
+              {mv.changeAmount ? (
+                <View style={[styles.change, { backgroundColor: up ? colors.winDim : colors.lossDim }]}>
+                  <Text style={[styles.changeText, { color: up ? colors.win : colors.loss }]} {...textScale.badge}>
+                    {up ? "▲" : "▼"} {formatEtl(Math.abs(mv.changeAmount))} · %{Math.abs(mv.changePercentage)}
+                  </Text>
+                </View>
+              ) : (
+                <Text style={styles.caption} {...textScale.dense}>
+                  Son hesaptan beri değişmedi
+                </Text>
+              )}
+            </View>
+            <ProgressRing value={Math.min(1, Number(mv.marketScore) / 100)} size={64} thickness={6} tone="brand" label={Number(mv.marketScore).toFixed(0)} sublabel="skor" animate />
+          </View>
+
+          {points.length >= 2 ? <Sparkline values={points} height={76} /> : null}
+
+          <View style={styles.ranks}>
+            {[
+              { label: "Genel", value: mv.globalRank },
+              { label: "İl", value: mv.cityRank },
+              { label: groupLabel, value: mv.positionRank },
+            ].map((r, i) => (
+              <View key={r.label} style={[styles.rank, i ? styles.rankDivided : null]}>
+                <Text style={styles.rankValue} numberOfLines={1} {...textScale.badge}>
+                  {r.value != null ? `#${r.value}` : "—"}
+                </Text>
+                <Text style={styles.rankLabel} numberOfLines={1} {...textScale.badge}>
+                  {upperTR(r.label)}
+                </Text>
+              </View>
+            ))}
+          </View>
 
           {breakdown.data ? (
-            <View style={styles.stack}>
+            <View style={styles.block}>
               <Text style={styles.section} {...textScale.dense}>
                 DEĞER NASIL OLUŞTU?
               </Text>
               {Object.entries(BREAKDOWN_LABELS).map(([key, label]) => {
                 const score = breakdown.data?.[key];
                 if (typeof score !== "number") return null;
-                const pct = Math.min(100, Math.max(0, score));
                 return (
                   <View key={key} style={styles.bar} accessibilityLabel={`${label}: ${Math.round(score)}`}>
-                    <Text style={styles.barLabel} numberOfLines={1} {...textScale.dense}>
-                      {label}
-                    </Text>
-                    <View style={styles.track}>
-                      <View style={[styles.fill, { width: `${pct}%` }]} />
+                    <View style={styles.barHead}>
+                      <Text style={styles.barLabel} numberOfLines={1} {...textScale.dense}>
+                        {label}
+                      </Text>
+                      <Text style={styles.barValue} {...textScale.dense}>
+                        {Math.round(score)}
+                      </Text>
                     </View>
-                    <Text style={styles.barValue} {...textScale.dense}>
-                      {Math.round(score)}
-                    </Text>
+                    <GradientBar value={score / 100} height={5} />
                   </View>
                 );
               })}
@@ -124,26 +160,38 @@ export function MarketValuePanel({ playerId, user }: { playerId: number; user: A
           ) : null}
 
           {history.data?.length ? (
-            <View style={styles.stack}>
+            <View style={styles.block}>
               <Text style={styles.section} {...textScale.dense}>
                 DEĞİŞİM GEÇMİŞİ
               </Text>
-              {history.data.map((h) => (
-                <InfoLine
-                  key={h.id}
-                  label={`${formatDate(h.createdAt)} · ${CALC_REASON_LABELS[h.calculation_reason] ?? h.calculation_reason}`}
-                  value={`${h.old_value != null ? formatEtl(h.old_value) : "—"} → ${formatEtl(h.new_value)}`}
-                />
-              ))}
+              {history.data.map((h, i) => {
+                const diff = h.old_value != null ? h.new_value - h.old_value : 0;
+                return (
+                  <View key={h.id} style={[styles.hist, i ? styles.histDivided : null]}>
+                    <View style={styles.flex}>
+                      <Text style={styles.histTitle} numberOfLines={1} {...textScale.dense}>
+                        {CALC_REASON_LABELS[h.calculation_reason] ?? h.calculation_reason}
+                      </Text>
+                      <Text style={styles.caption} {...textScale.dense}>
+                        {formatDate(h.createdAt)} · {formatEtl(h.new_value)}
+                      </Text>
+                    </View>
+                    <Text style={[styles.histDiff, { color: diff > 0 ? colors.win : diff < 0 ? colors.loss : colors.textTertiary }]} {...textScale.badge}>
+                      {diff > 0 ? "+" : diff < 0 ? "−" : ""}
+                      {diff ? Math.abs(Math.round(diff)).toLocaleString("tr-TR") : "0"}
+                    </Text>
+                  </View>
+                );
+              })}
             </View>
           ) : null}
 
-          <View style={styles.row}>
-            {canRecalc ? (
-              <Button label="Yeniden hesapla" icon="refresh" size="sm" variant="secondary" loading={recalc.isPending} onPress={() => recalc.mutate(undefined)} />
-            ) : null}
-            {canAdjust ? <Button label="Değeri düzelt" icon="create-outline" size="sm" variant="ghost" onPress={() => setAdjusting(true)} /> : null}
-          </View>
+          <Text style={styles.caption} {...textScale.dense}>
+            Gelişim puanı {mv.growthPoints != null ? Number(mv.growthPoints).toFixed(1) : "—"} · son hesap {mv.lastCalculatedAt ? formatDateTime(mv.lastCalculatedAt) : "—"}
+          </Text>
+          {canRecalc ? (
+            <Button label="Yeniden hesapla" icon="refresh" variant="secondary" fullWidth loading={recalc.isPending} onPress={() => recalc.mutate(undefined)} />
+          ) : null}
         </View>
       )}
 
@@ -159,19 +207,33 @@ export function MarketValuePanel({ playerId, user }: { playerId: number; user: A
         submitLabel="Değeri kaydet"
         onSubmit={(v) => adjust.mutateAsync(v)}
       />
-    </Panel>
+    </GroupCard>
   );
 }
 
 const styles = StyleSheet.create({
-  stack: { gap: space.sm },
-  row: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
-  value: { ...type.metricSm, color: colors.textPrimary },
-  change: { ...type.bodySm },
-  section: { ...type.overline, color: colors.textTertiary, marginTop: space.sm },
-  bar: { flexDirection: "row", alignItems: "center", gap: space.sm },
-  barLabel: { ...type.caption, color: colors.textSecondary, width: 130 },
-  track: { flex: 1, height: 6, borderRadius: radius.pill, backgroundColor: colors.surface3, overflow: "hidden" },
-  fill: { height: 6, borderRadius: radius.pill, backgroundColor: colors.brandAccent },
-  barValue: { ...type.numSmStrong, color: colors.textPrimary, width: 28, textAlign: "right" },
+  stack: { gap: space.lg },
+  flex: { flex: 1, minWidth: 0 },
+  hero: { flexDirection: "row", alignItems: "center", gap: space.md },
+  valueRow: { flexDirection: "row", alignItems: "flex-end", gap: space.xs },
+  value: { ...type.scoreLg, color: colors.textPrimary },
+  unit: { ...type.labelSm, color: colors.textTertiary, marginBottom: space.xs },
+  change: { alignSelf: "flex-start", marginTop: space.xs, paddingHorizontal: space.sm, paddingVertical: space.xxs, borderRadius: radius.pill },
+  changeText: { ...type.numSmStrong },
+  caption: { ...type.caption, color: colors.textTertiary },
+  ranks: { flexDirection: "row", borderRadius: radius.lg, backgroundColor: colors.surface2, paddingVertical: space.md },
+  rank: { flex: 1, alignItems: "center", gap: 2, paddingHorizontal: space.xs },
+  rankDivided: { borderLeftWidth: hairline, borderLeftColor: colors.separator },
+  rankValue: { ...type.scoreSm, color: colors.textPrimary },
+  rankLabel: { ...type.micro, color: colors.textTertiary },
+  block: { gap: space.sm },
+  section: { ...type.overline, color: colors.textTertiary },
+  bar: { gap: space.xs },
+  barHead: { flexDirection: "row", justifyContent: "space-between", gap: space.sm },
+  barLabel: { ...type.labelSm, color: colors.textSecondary, flex: 1 },
+  barValue: { ...type.numSmStrong, color: colors.textPrimary },
+  hist: { flexDirection: "row", alignItems: "center", gap: space.md, paddingVertical: space.sm },
+  histDivided: { borderTopWidth: hairline, borderTopColor: colors.separator },
+  histTitle: { ...type.label, color: colors.textPrimary },
+  histDiff: { ...type.tableNumStrong },
 });

@@ -29,7 +29,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, FlatList, StyleSheet, Text, View } from "react-native";
+import { Alert, FlatList, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
@@ -41,7 +41,7 @@ import {
   EmptyState,
   ErrorState,
   Input,
-  ListRow,
+  IconTile,
   ScreenHeader,
   SegmentedControl,
   SkeletonCard,
@@ -57,6 +57,8 @@ import {
   type Tone,
 } from "@/components/ui";
 import { FormSheet, SelectField, confirmAction, type FieldDef, type FormValues, type Option } from "@/components/admin";
+import { InfoPill, StatusTiles, toneColor, upperTR } from "@/components/admin/matches/opsKit";
+import { LinearGradient } from "expo-linear-gradient";
 import { hasAnyPermission } from "@/lib/admin/access";
 import { errorText } from "@/lib/admin/errors";
 import { getTeamsForCity } from "@/lib/api/admin/matches";
@@ -83,7 +85,7 @@ import {
   type VenueGridDay,
   type VenueInput,
 } from "@/lib/api/admin";
-import { formatDateShort, mediaUrl } from "@/lib/format";
+import { formatDateShort, mediaUrl, timeAgo } from "@/lib/format";
 import { useAuth } from "@/providers/AuthProvider";
 import { colors, elevate, fonts, hairline, layout, radius, space, textScale, type } from "@/theme";
 
@@ -584,13 +586,6 @@ export default function AdminVenuesScreen() {
     [openVenue, venuesQuery.data?.items.length],
   );
 
-  const renderDay = useCallback(
-    ({ item }: { item: { day: VenueGridDay; cells: AdminBoardCell[] } }) => (
-      <DayRow day={item.day} cells={item.cells} onPressCell={openCell} />
-    ),
-    [openCell],
-  );
-
   if (!auth.user) {
     return <Redirect href="/giris" />;
   }
@@ -678,6 +673,23 @@ export default function AdminVenuesScreen() {
             refreshControl={requestRefresh.control}
             initialNumToRender={8}
             keyboardShouldPersistTaps="handled"
+            ListHeaderComponent={
+              requestFilter === null && requests.length > 0 ? (
+                /* Özet: tüm talepler yüklüyken durum sayaçları (dokununca süzgeç). */
+                <StatusTiles<RequestStatus>
+                  items={(["pending", "approved", "rejected"] as RequestStatus[]).map((key) => ({
+                    key,
+                    label: REQUEST_STATUS_LABELS[key],
+                    value: requests.filter((item) => item.status === key).length,
+                    tone: REQUEST_TONE[key],
+                    icon: key === "pending" ? "hourglass-outline" : key === "approved" ? "checkmark-circle-outline" : "close-circle-outline",
+                  }))}
+                  value={null}
+                  onChange={(key) => selectRequestFilter(key)}
+                  style={styles.summaryTiles}
+                />
+              ) : null
+            }
             ListEmptyComponent={
               <EmptyState
                 icon="calendar-outline"
@@ -755,26 +767,6 @@ export default function AdminVenuesScreen() {
             </Touchable>
           </View>
 
-          {/* Renk açıklaması — renk tek başına anlam taşımasın diye. */}
-          <View style={styles.legend}>
-            {LEGEND.map((item) => {
-              const tone = toneColors(SLOT_TONE[item]);
-              return (
-                <View key={item} style={styles.legendItem}>
-                  <View
-                    style={[
-                      styles.legendDot,
-                      { backgroundColor: tone.dim, borderColor: withAlpha(tone.fg, 0.6) },
-                    ]}
-                  />
-                  <Text style={styles.legendText} {...textScale.badge}>
-                    {SLOT_STATUS_LABELS[item]}
-                  </Text>
-                </View>
-              );
-            })}
-          </View>
-
           {boardQuery.isLoading ? (
             <View style={styles.skeleton}>
               <SkeletonCard lines={4} />
@@ -782,23 +774,44 @@ export default function AdminVenuesScreen() {
             </View>
           ) : boardQuery.isError && !board ? (
             <ErrorState error={boardQuery.error} onRetry={boardQuery.refetch} />
+          ) : days.length === 0 ? (
+            <EmptyState icon="calendar-outline" title="Program yok" body="Bu hafta için sahada açık gün bulunmuyor." />
           ) : (
-            <FlatList
+            <ScrollView
               {...scrollProps}
-              data={days}
-              keyExtractor={dayKey}
-              renderItem={renderDay}
-              contentContainerStyle={styles.list}
+              contentContainerStyle={styles.boardScroll}
               refreshControl={boardRefresh.control}
-              initialNumToRender={7}
-              ListEmptyComponent={
-                <EmptyState
-                  icon="calendar-outline"
-                  title="Program yok"
-                  body="Bu hafta için sahada açık gün bulunmuyor."
-                />
-              }
-            />
+            >
+              {/* Haftanın özeti: durum sayaçları — renk tek başına anlam taşımasın diye etiketli. */}
+              <StatusTiles<SlotStatus>
+                items={LEGEND.map((key) => ({
+                  key,
+                  label: key === "awaiting" ? "Rakip" : key === "booked" ? "Dolu" : SLOT_STATUS_LABELS[key],
+                  value: days.reduce((sum, d) => sum + d.cells.filter((c) => c.status === key).length, 0),
+                  tone: SLOT_TONE[key],
+                }))}
+              />
+              <WeekGrid days={days} onPressCell={openCell} />
+              <View style={styles.legend}>
+                {LEGEND.map((item) => {
+                  const tone = toneColors(SLOT_TONE[item]);
+                  return (
+                    <View key={item} style={styles.legendItem}>
+                      <View style={[styles.legendDot, { backgroundColor: tone.dim, borderColor: withAlpha(tone.fg, 0.6) }]} />
+                      <Text style={styles.legendText} {...textScale.badge}>
+                        {SLOT_STATUS_LABELS[item]}
+                      </Text>
+                    </View>
+                  );
+                })}
+                <View style={styles.legendItem}>
+                  <View style={styles.legendPending} />
+                  <Text style={styles.legendText} {...textScale.badge}>
+                    Bekleyen talep
+                  </Text>
+                </View>
+              </View>
+            </ScrollView>
           )}
         </View>
       ) : venuesQuery.isLoading ? (
@@ -816,6 +829,18 @@ export default function AdminVenuesScreen() {
           contentContainerStyle={[styles.list, styles.listGrouped]}
           refreshControl={venueRefresh.control}
           initialNumToRender={10}
+          ListHeaderComponent={
+            venues.length ? (
+              <StatusTiles
+                items={[
+                  { key: "active", label: "Aktif saha", value: venues.filter((v) => v.status !== "passive").length, tone: "win" as Tone, icon: "location-outline" as const },
+                  { key: "passive", label: "Pasif", value: venues.filter((v) => v.status === "passive").length, tone: "neutral" as Tone, icon: "pause-circle-outline" as const },
+                  { key: "days", label: "Açık gün", value: venues.reduce((sum, v) => sum + (v.status === "passive" ? 0 : v.active_days.length), 0), tone: "info" as Tone, icon: "calendar-outline" as const },
+                ]}
+                style={styles.summaryTilesGap}
+              />
+            ) : null
+          }
           ListEmptyComponent={
             <EmptyState
               icon="location-outline"
@@ -1060,11 +1085,11 @@ export default function AdminVenuesScreen() {
 
 const requestKey = (item: AdminMatchRequest) => item.public_id;
 const venueKey = (item: AdminVenue) => item.public_id;
-const dayKey = (item: { day: VenueGridDay }) => item.day.date;
 
 /* ═══════════════════════════════ ALT PARÇALAR ══════════════════════════════ */
 
-/** Talep kartı — takım, saha, istenen saatler, notlar ve karar düğmeleri. */
+/** Talep kartı — solda durum şeridi; takım kimliği, saha hapı, istenen saatler
+    bilet gibi (gün üstte, saat Archivo), alıntı notu ve karar düğmeleri. */
 const RequestCard = memo(function RequestCard({
   request,
   onReview,
@@ -1076,88 +1101,78 @@ const RequestCard = memo(function RequestCard({
 }) {
   const approve = useCallback(() => onReview(request, "approve"), [onReview, request]);
   const reject = useCallback(() => onReview(request, "reject"), [onReview, request]);
+  const tone = REQUEST_TONE[request.status] ?? "neutral";
 
   return (
     <View style={styles.card}>
+      <View style={[styles.cardRail, { backgroundColor: toneColor(tone) }]} />
       <View style={styles.cardTop}>
-        <TeamLogo name={request.team_name} logo={mediaUrl(request.team_logo)} size={28} />
+        <TeamLogo name={request.team_name} logo={mediaUrl(request.team_logo)} size={40} />
         <View style={styles.cardTitles}>
           <Text style={styles.cardTitle} numberOfLines={1} {...textScale.dense}>
             {request.team_name}
           </Text>
-          <Text style={styles.cardMeta} numberOfLines={1} {...textScale.dense}>
-            {request.venue_name} · {formatDateShort(request.created_at)}
-          </Text>
+          <View style={styles.cardMetaRow}>
+            <InfoPill icon="location-outline" label={request.venue_name} />
+            <Text style={styles.cardMeta} numberOfLines={1} {...textScale.dense}>
+              {timeAgo(request.created_at) || formatDateShort(request.created_at)}
+            </Text>
+          </View>
         </View>
-        <Badge
-          label={REQUEST_STATUS_LABELS[request.status] ?? request.status}
-          tone={REQUEST_TONE[request.status] ?? "neutral"}
-          size="xs"
-        />
+        <Badge label={REQUEST_STATUS_LABELS[request.status] ?? request.status} tone={tone} size="xs" />
       </View>
-
-      {request.note ? (
-        <Text style={styles.cardNote} numberOfLines={3} {...textScale.long}>
-          {request.note}
-        </Text>
-      ) : null}
 
       {/* İstenen saatler — her saatin kendi kararı olabilir. */}
       <View style={styles.slotWrap}>
         {request.slots.map((slot) => {
-          const tone = toneColors(
-            slot.status === "approved" ? "win" : slot.status === "rejected" ? "danger" : "neutral",
-          );
+          const t = toneColors(slot.status === "approved" ? "win" : slot.status === "rejected" ? "danger" : "brand");
           return (
-            <View
-              key={cellKey(slot)}
-              style={[
-                styles.slotStatic,
-                { backgroundColor: tone.dim },
-              ]}
-            >
-              <Text
-                style={[styles.slotStaticText, slot.status === "pending" ? null : { color: tone.fg }]}
-                {...textScale.badge}
-              >
-                {formatDateShort(slot.date)} · {slot.label}
+            <View key={cellKey(slot)} style={[styles.ticket, { borderColor: withAlpha(t.fg, 0.45), backgroundColor: t.dim }]}>
+              <Text style={[styles.ticketDay, { color: t.fg }]} {...textScale.badge}>
+                {upperTR(formatDateShort(slot.date))}
               </Text>
+              <Text style={styles.ticketTime} {...textScale.badge}>
+                {slot.label}
+              </Text>
+              {slot.status !== "pending" ? (
+                <Ionicons name={slot.status === "approved" ? "checkmark-circle" : "close-circle"} size={12} color={t.fg} style={styles.ticketMark} />
+              ) : null}
             </View>
           );
         })}
       </View>
 
+      {request.note ? (
+        <View style={styles.quote}>
+          <Ionicons name="chatbubble-ellipses-outline" size={13} color={colors.textTertiary} />
+          <Text style={styles.cardNote} numberOfLines={3} {...textScale.long}>
+            {request.note}
+          </Text>
+        </View>
+      ) : null}
+
       {request.admin_note ? (
-        <Text style={styles.cardAdminNote} {...textScale.long}>
-          Yönetici notu: {request.admin_note}
-        </Text>
+        <View style={styles.adminNote}>
+          <Ionicons name="shield-checkmark-outline" size={13} color={colors.brandAccent} />
+          <Text style={styles.cardAdminNote} {...textScale.long}>
+            {request.admin_note}
+          </Text>
+        </View>
       ) : null}
 
       {request.status === "pending" ? (
         <View style={styles.cardActions}>
-          <Button
-            label="Reddet"
-            variant="ghost"
-            size="sm"
-            disabled={busy}
-            onPress={reject}
-            style={styles.cardButton}
-          />
-          <Button
-            label="Onayla"
-            size="sm"
-            icon="checkmark"
-            disabled={busy}
-            onPress={approve}
-            style={styles.cardButton}
-          />
+          <Button label="Reddet" variant="secondary" icon="close" size="md" disabled={busy} onPress={reject} style={styles.cardButton} />
+          <Button label="Onayla" size="md" icon="checkmark" disabled={busy} onPress={approve} style={styles.cardButtonWide} haptic="light" />
         </View>
       ) : null}
     </View>
   );
 });
 
-/** Saha listesi satırı. */
+const WEEK_INITIALS = ["Pt", "Sa", "Ça", "Pe", "Cu", "Ct", "Pa"];
+
+/** Saha satırı — konum ikonu, ad, il/semt, açık saat aralığı ve 7 günlük açık gün şeridi. */
 const VenueRow = memo(function VenueRow({
   venue,
   position,
@@ -1168,96 +1183,142 @@ const VenueRow = memo(function VenueRow({
   onPress: (venue: AdminVenue) => void;
 }) {
   const handlePress = useCallback(() => onPress(venue), [onPress, venue]);
-  const leading = useMemo(() => ({ icon: "location" as const }), []);
-
+  const passive = venue.status === "passive";
+  const first = position === "single" || position === "first";
+  const last = position === "single" || position === "last";
   return (
-    <ListRow
-      leading={leading}
-      title={venue.name}
-      subtitle={[venue.city, venue.location].filter(Boolean).join(" · ") || "Konum belirtilmemiş"}
-      value={`${venue.open_label}–${venue.close_label}`}
-      badge={
-        venue.status === "passive" ? <Badge label="Pasif" tone="neutral" size="xs" /> : undefined
-      }
-      position={position}
+    <Touchable
+      feedback="row"
       onPress={handlePress}
-    />
+      style={[styles.venueRow, first ? styles.venueFirst : styles.venueDivider, last ? styles.venueLast : null]}
+      accessibilityRole="button"
+      accessibilityLabel={`${venue.name}, ${venue.open_label}–${venue.close_label}${passive ? ", pasif" : ""}`}
+    >
+      <IconTile icon="location" tone={passive ? "neutral" : "mint"} size={40} glow={false} />
+      <View style={styles.venueText}>
+        <View style={styles.venueTitleRow}>
+          <Text style={[styles.venueName, passive ? styles.venueNameOff : null]} numberOfLines={1} {...textScale.dense}>
+            {venue.name}
+          </Text>
+          {passive ? <Badge label="Pasif" tone="neutral" size="xs" /> : null}
+        </View>
+        <Text style={styles.venueMeta} numberOfLines={1} {...textScale.dense}>
+          {[venue.city, venue.location].filter(Boolean).join(" · ") || "Konum belirtilmemiş"} · {venue.slot_minutes} dk
+        </Text>
+        <View style={styles.venueDays}>
+          {WEEK_INITIALS.map((label, i) => {
+            const on = venue.active_days.includes(i + 1);
+            return (
+              <View key={label} style={[styles.venueDay, on ? styles.venueDayOn : null]}>
+                <Text style={[styles.venueDayText, on ? styles.venueDayTextOn : null]} {...textScale.badge}>
+                  {label}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+      </View>
+      <View style={styles.venueHours}>
+        <Text style={styles.venueHour} {...textScale.badge}>
+          {venue.open_label}
+        </Text>
+        <Text style={styles.venueHourTo} {...textScale.badge}>
+          {venue.close_label}
+        </Text>
+      </View>
+      <Ionicons name="chevron-forward" size={15} color={colors.textTertiary} />
+    </Touchable>
   );
 });
 
-/** Pano gün satırı — başlık + sarmalayan saat çipleri. */
-const DayRow = memo(function DayRow({
-  day,
-  cells,
+/**
+ * HAFTALIK TAKVİM IZGARASI — sütunlar gün, satırlar saat. Hücre rengi durumu
+ * taşır (açık · kapalı · rakip bekliyor · dolu); dolu hücrede ev sahibinin baş
+ * harfleri, bekleyen talepte köşede sarı nokta. Bugünün sütunu vurgulanır.
+ */
+const WeekGrid = memo(function WeekGrid({
+  days,
   onPressCell,
 }: {
-  day: VenueGridDay;
-  cells: AdminBoardCell[];
+  days: { day: VenueGridDay; cells: AdminBoardCell[] }[];
   onPressCell: (cell: AdminBoardCell) => void;
 }) {
-  return (
-    <View style={styles.dayCard}>
-      <View style={styles.dayHead}>
-        <Text style={styles.dayTitle} numberOfLines={1} {...textScale.dense}>
-          {day.label}
-        </Text>
-        <Text style={styles.dayDate} numberOfLines={1} {...textScale.dense}>
-          {day.date_label}
-        </Text>
-        {day.is_today ? <Badge label="Bugün" tone="brand" size="xs" /> : null}
-      </View>
+  const times = useMemo(() => {
+    const set = new Map<string, number>();
+    days.forEach((d) => d.cells.forEach((c) => set.set(c.label, c.hour * 60 + c.minute)));
+    return [...set.entries()].sort((a, b) => a[1] - b[1]).map(([label]) => label);
+  }, [days]);
+  const lookup = useMemo(() => {
+    const map = new Map<string, AdminBoardCell>();
+    days.forEach((d) => d.cells.forEach((c) => map.set(`${d.day.date}|${c.label}`, c)));
+    return map;
+  }, [days]);
 
-      {cells.length === 0 ? (
-        <Text style={styles.dayEmpty} {...textScale.dense}>
-          Bu gün sahada dilim yok.
-        </Text>
-      ) : (
-        <View style={styles.slotWrap}>
-          {cells.map((item) => (
-            <SlotCell key={cellKey(item)} cell={item} onPress={onPressCell} />
-          ))}
+  return (
+    <View style={styles.grid}>
+      <View style={styles.gridRow}>
+        <View style={styles.gridTimeCol} />
+        {days.map(({ day }) => (
+          <View key={day.date} style={[styles.gridHead, day.is_today ? styles.gridHeadToday : null]}>
+            {day.is_today ? <LinearGradient colors={colors.gradientSignature} style={[StyleSheet.absoluteFill, styles.gridHeadFill]} /> : null}
+            <Text style={[styles.gridHeadDay, day.is_today ? styles.gridHeadOn : null, day.is_past ? styles.gridPast : null]} {...textScale.badge}>
+              {upperTR(day.label.slice(0, 3))}
+            </Text>
+            <Text style={[styles.gridHeadNum, day.is_today ? styles.gridHeadOn : null, day.is_past ? styles.gridPast : null]} {...textScale.badge}>
+              {day.date.slice(8, 10).replace(/^0/, "")}
+            </Text>
+          </View>
+        ))}
+      </View>
+      {times.map((time) => (
+        <View key={time} style={styles.gridRow}>
+          <View style={styles.gridTimeCol}>
+            <Text style={styles.gridTime} {...textScale.badge}>
+              {time}
+            </Text>
+          </View>
+          {days.map(({ day }) => {
+            const cell = lookup.get(`${day.date}|${time}`);
+            if (!cell) return <View key={day.date} style={[styles.gridCell, styles.gridCellNone]} />;
+            return <GridCell key={day.date} cell={cell} onPress={onPressCell} />;
+          })}
         </View>
-      )}
+      ))}
     </View>
   );
 });
 
-/** Tek saat çipi. Renk durumdan, adet rozeti bekleyen talepten gelir. */
-const SlotCell = memo(function SlotCell({
-  cell,
-  onPress,
-}: {
-  cell: AdminBoardCell;
-  onPress: (cell: AdminBoardCell) => void;
-}) {
+const GridCell = memo(function GridCell({ cell, onPress }: { cell: AdminBoardCell; onPress: (cell: AdminBoardCell) => void }) {
   const handlePress = useCallback(() => onPress(cell), [cell, onPress]);
   const tone = toneColors(SLOT_TONE[cell.status]);
   const muted = cell.is_past || !cell.is_bookable;
-
+  const filled = cell.status === "booked" || cell.status === "awaiting";
+  const initials = cell.home?.team_name
+    ? cell.home.team_name.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toLocaleUpperCase("tr-TR")
+    : "";
   return (
     <Touchable
       feedback="chip"
       haptic="selection"
       onPress={handlePress}
       accessibilityRole="button"
-      accessibilityLabel={`${cell.label}, ${SLOT_STATUS_LABELS[cell.status] ?? cell.status}${
+      accessibilityLabel={`${cell.label}, ${SLOT_STATUS_LABELS[cell.status] ?? cell.status}${cell.home ? `, ${cell.home.team_name}` : ""}${
         cell.pending_count > 0 ? `, ${cell.pending_count} bekleyen talep` : ""
       }`}
       style={[
-        styles.slotCell,
-        { backgroundColor: tone.dim, borderColor: withAlpha(tone.fg, 0.45) },
+        styles.gridCell,
+        { backgroundColor: filled ? withAlpha(tone.fg, 0.85) : tone.dim, borderColor: withAlpha(tone.fg, 0.4) },
         muted ? styles.slotCellMuted : null,
       ]}
     >
-      <Text
-        style={[styles.slotCellText, { color: muted ? colors.textDisabled : tone.fg }]}
-        {...textScale.badge}
-      >
-        {cell.label}
-      </Text>
-      {cell.pending_count > 0 ? (
-        <Badge label={cell.pending_count} tone="warn" variant="solid" size="xs" />
+      {filled ? (
+        <Text style={styles.gridInitials} numberOfLines={1} {...textScale.badge}>
+          {initials || "•"}
+        </Text>
+      ) : cell.status === "closed" ? (
+        <Ionicons name="lock-closed" size={10} color={tone.fg} />
       ) : null}
+      {cell.pending_count > 0 ? <View style={styles.gridPending} /> : null}
     </Touchable>
   );
 });
@@ -1316,42 +1377,65 @@ const styles = StyleSheet.create({
     gap: 0,
   },
 
+  summaryTiles: { marginBottom: space.xs },
+  summaryTilesGap: { marginBottom: space.md },
+  boardScroll: {
+    paddingHorizontal: layout.screenPadding,
+    paddingTop: space.md,
+    paddingBottom: space.giant,
+    gap: space.md,
+  },
+
   /* Talep kartı */
   card: {
     gap: space.md,
-    padding: space.md + space.xxs,
+    padding: space.lg,
+    paddingLeft: space.lg + space.xxs,
     borderRadius: radius.xl,
-    ...elevate(1),
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+    overflow: "hidden",
   },
+  cardRail: { position: "absolute", left: 0, top: 0, bottom: 0, width: 3 },
   cardTop: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.sm,
+    gap: space.md,
   },
   cardTitles: {
     flex: 1,
-    gap: 2,
+    minWidth: 0,
+    gap: space.xs,
   },
   cardTitle: {
     ...type.h3,
     color: colors.textPrimary,
   },
+  cardMetaRow: { flexDirection: "row", alignItems: "center", gap: space.s },
   cardMeta: {
-    ...type.bodySm,
-    color: colors.textSecondary,
+    ...type.caption,
+    color: colors.textTertiary,
+    flexShrink: 1,
   },
-  /* Takımın notu alıntıdır: sol ince ray + ikincil mürekkep (italik yerine
-     ray — Inter'in italiği yüklü değil, tarayıcı eğik taklit çiziyordu). */
+  /* Takımın notu alıntıdır: ikon + ikincil mürekkep, cam zemin. */
+  quote: {
+    flexDirection: "row",
+    gap: space.sm,
+    padding: space.m,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface2,
+  },
   cardNote: {
     ...type.bodySm,
     color: colors.textSecondary,
-    paddingLeft: space.sm,
-    borderLeftWidth: 2,
-    borderLeftColor: colors.border,
+    flex: 1,
   },
+  adminNote: { flexDirection: "row", gap: space.sm, alignItems: "flex-start" },
   cardAdminNote: {
     ...type.caption,
-    color: colors.textTertiary,
+    color: colors.textSecondary,
+    flex: 1,
   },
   cardActions: {
     flexDirection: "row",
@@ -1360,6 +1444,89 @@ const styles = StyleSheet.create({
   cardButton: {
     flex: 1,
   },
+  cardButtonWide: { flex: 1.6 },
+  ticket: {
+    minWidth: 76,
+    paddingHorizontal: space.m,
+    paddingVertical: space.s,
+    borderRadius: radius.md,
+    borderWidth: hairline,
+    gap: space.xxs,
+  },
+  ticketDay: { ...type.overline },
+  ticketTime: { ...type.scoreXs, color: colors.textPrimary },
+  ticketMark: { position: "absolute", right: space.s, top: space.s },
+
+  /* Saha satırı */
+  venueRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    paddingHorizontal: layout.rowPaddingH,
+    paddingVertical: space.md,
+    backgroundColor: colors.surface1,
+    borderLeftWidth: hairline,
+    borderRightWidth: hairline,
+    borderColor: colors.glassLine,
+  },
+  venueFirst: { borderTopWidth: hairline, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl },
+  venueDivider: { borderTopWidth: hairline, borderTopColor: colors.separator },
+  venueLast: { borderBottomWidth: hairline, borderBottomLeftRadius: radius.xl, borderBottomRightRadius: radius.xl },
+  venueText: { flex: 1, minWidth: 0, gap: space.xxs },
+  venueTitleRow: { flexDirection: "row", alignItems: "center", gap: space.xs },
+  venueName: { ...type.h4, color: colors.textPrimary, flexShrink: 1 },
+  venueNameOff: { color: colors.textTertiary },
+  venueMeta: { ...type.caption, color: colors.textTertiary },
+  venueDays: { flexDirection: "row", gap: 3, marginTop: space.xxs },
+  venueDay: { width: 20, height: 16, borderRadius: radius.xs, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface3 },
+  venueDayOn: { backgroundColor: colors.winDim },
+  venueDayText: { ...type.nano, color: colors.textDisabled },
+  venueDayTextOn: { color: colors.win },
+  venueHours: { alignItems: "flex-end" },
+  venueHour: { ...type.numSmStrong, color: colors.textPrimary },
+  venueHourTo: { ...type.numSm, color: colors.textTertiary },
+
+  /* Haftalık ızgara */
+  grid: {
+    padding: space.sm,
+    gap: 4,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+  },
+  gridRow: { flexDirection: "row", gap: 4, alignItems: "center" },
+  gridTimeCol: { width: 38, alignItems: "flex-start" },
+  gridTime: { ...type.numSm, color: colors.textTertiary },
+  gridHead: { flex: 1, alignItems: "center", paddingVertical: space.xs, borderRadius: radius.sm, overflow: "hidden" },
+  gridHeadToday: {},
+  gridHeadFill: { borderRadius: radius.sm },
+  gridHeadDay: { ...type.overline, color: colors.textTertiary },
+  gridHeadNum: { ...type.numSmStrong, color: colors.textPrimary },
+  gridHeadOn: { color: colors.onDark },
+  gridPast: { opacity: 0.5 },
+  gridCell: {
+    flex: 1,
+    height: 34,
+    borderRadius: radius.sm,
+    borderWidth: hairline,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  gridCellNone: { backgroundColor: colors.surface2, borderColor: colors.separator },
+  gridInitials: { ...type.nano, color: colors.onDark },
+  gridPending: {
+    position: "absolute",
+    top: 3,
+    right: 3,
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: colors.warn,
+    borderWidth: 1,
+    borderColor: colors.surface1,
+  },
+  legendPending: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.warn },
 
   /* Saat çipleri */
   slotWrap: {
@@ -1455,8 +1622,7 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     alignItems: "center",
     gap: space.md,
-    paddingHorizontal: layout.screenPadding,
-    paddingVertical: space.sm,
+    paddingHorizontal: space.xs,
   },
   legendItem: {
     flexDirection: "row",

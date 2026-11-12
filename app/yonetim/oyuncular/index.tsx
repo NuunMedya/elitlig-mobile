@@ -16,14 +16,13 @@ import {
   AdminList,
   AdminScreen,
   FormSheet,
-  RecordCard,
-  SelectField,
   useAdminMutation,
   type FieldDef,
   type FormValues,
 } from "@/components/admin";
 import { pickImageFile } from "@/components/admin/team/ImageUpload";
-import { Avatar, Button, FAB } from "@/components/ui";
+import { CountStrip, EntityCard, PickerChip, PositionAvatar } from "@/components/admin/team/ManageKit";
+import { Avatar, Button, Chip, ChipGroup, FAB } from "@/components/ui";
 import { hasPermission } from "@/lib/admin/access";
 import { formatDate } from "@/lib/admin/format";
 import type { UploadFile } from "@/lib/api/admin/leagues";
@@ -129,86 +128,79 @@ export default function PlayersScreen() {
         search={q}
         onSearch={setQ}
         searchPlaceholder="Oyuncu ya da takım adı"
-        filters={[
-          { key: "", label: "Tümü", count: counts?.total },
-          { key: "active", label: "Aktif" },
-          { key: "passive", label: "Pasif", count: counts?.passive },
-          { key: "nophoto", label: "Fotoğrafsız", count: counts?.missingPhoto },
-        ]}
-        filter={status}
-        onFilter={(k) => setStatus(k as Status)}
         extraHeader={
-          <View style={styles.filters}>
-            <View style={styles.filter}>
-              <SelectField<number>
+          <View style={styles.head}>
+            <CountStrip
+              items={[
+                { key: "total", label: "Toplam", value: counts?.total ?? "—", icon: "people", selected: status === "", onPress: () => setStatus("") },
+                { key: "passive", label: "Pasif", value: counts?.passive ?? "—", icon: "pause-circle", selected: status === "passive", onPress: () => setStatus(status === "passive" ? "" : "passive") },
+                { key: "nophoto", label: "Fotoğrafsız", value: counts?.missingPhoto ?? "—", tone: "warn", icon: "camera-outline", selected: status === "nophoto", onPress: () => setStatus(status === "nophoto" ? "" : "nophoto") },
+              ]}
+            />
+            <ChipGroup scrollable contentPadding={0}>
+              <Chip label="Aktif" size="sm" icon="checkmark-circle-outline" selected={status === "active"} onPress={() => setStatus(status === "active" ? "" : "active")} />
+              <PickerChip<number>
+                icon="shield-half-outline"
+                placeholder="Takım"
+                title="Takım"
                 value={teamId}
                 onChange={setTeamId}
                 options={(facets?.teams ?? []).map((t) => ({ value: Number(t.id), label: t.team_name }))}
-                placeholder="Tüm takımlar"
-                icon="shield-half-outline"
-                clearable
-                sheetTitle="Takım"
               />
-            </View>
-            <View style={styles.filter}>
-              <SelectField<string>
+              <PickerChip<string>
+                icon="body-outline"
+                placeholder="Mevki"
+                title="Mevki"
                 value={position}
                 onChange={setPosition}
                 options={(facets?.positions ?? []).map((p) => ({ value: p, label: positionLabel(p) }))}
-                placeholder="Tüm mevkiler"
-                icon="body-outline"
-                clearable
-                sheetTitle="Mevki"
               />
-            </View>
-            {nationwide ? (
-              <View style={styles.filter}>
-                <SelectField<string>
+              {nationwide ? (
+                <PickerChip<string>
+                  icon="location-outline"
+                  placeholder="İl"
+                  title="İl"
                   value={city}
                   onChange={setCity}
                   options={(facets?.cities ?? []).map((c) => ({ value: c, label: c }))}
-                  placeholder="Tüm iller"
-                  icon="location-outline"
-                  clearable
-                  sheetTitle="İl"
                 />
-              </View>
-            ) : null}
-            <View style={styles.filter}>
-              <SelectField<string>
+              ) : null}
+              <PickerChip<string>
+                icon="swap-vertical"
+                placeholder="Sırala"
+                title="Sırala"
                 value={sort}
                 onChange={(v) => setSort(v ?? "recent")}
                 options={PLAYER_SORTS.map((s) => ({ value: s.key, label: s.label }))}
-                icon="swap-vertical"
-                sheetTitle="Sırala"
+                clearable={false}
+                highlight={false}
               />
-            </View>
+            </ChipGroup>
           </View>
         }
         summary={query.data ? `${total.toLocaleString("tr-TR")} sonuç` : null}
         keyExtractor={(p) => String(p.id)}
         emptyIcon="people-outline"
         emptyTitle={q ? "Aramaya uyan oyuncu yok" : "Oyuncu yok"}
+        emptyBody={q ? "Adın bir kısmını ya da takım adını dene." : "Süzgeçleri temizleyince tüm oyuncular görünür."}
         renderItem={({ item }) => {
           const age = ageOf(item.birth_date);
           const passive = item.active === false || item.active === 0;
           const noPhoto = !item.player_img || item.player_img === DEFAULT_PLAYER_IMG;
           return (
-            <RecordCard
+            <EntityCard
+              leading={<PositionAvatar name={item.player_name} image={noPhoto ? null : item.player_img} position={item.player_position} size={46} dimmed={passive} />}
+              overline={[nationwide ? item.city : null, `#${item.id}`].filter(Boolean).join(" · ")}
               title={item.player_name}
-              subtitle={[item.team_name || "Serbest", positionLabel(item.player_position) || null, age != null ? `${age} yaş` : null].filter(Boolean).join(" · ")}
-              meta={[
-                `${item.total_matches ?? 0} maç`,
-                `${item.total_goals ?? 0} gol`,
-                item.last_match_date ? `son: ${formatDate(item.last_match_date)}` : null,
-                nationwide ? item.city : null,
-                `#${item.id}`,
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-              avatar={{ name: item.player_name, image: noPhoto ? null : item.player_img }}
+              subtitle={[item.team_name || "Serbest oyuncu", positionLabel(item.player_position) || null, age != null ? `${age} yaş` : null].filter(Boolean).join(" · ")}
               muted={passive}
-              badges={[passive && { label: "Pasif" }, noPhoto && { label: "Fotoğraf yok", tone: "warn" }]}
+              pills={[passive && { label: "Pasif", icon: "pause" }, !item.team_name && { label: "Takımsız", tone: "warn" }]}
+              warning={noPhoto ? "Fotoğraf yok" : null}
+              stats={[
+                { label: "Maç", value: item.total_matches ?? 0 },
+                { label: "Gol", value: item.total_goals ?? 0, tone: item.total_goals ? "accent" : "neutral" },
+                { label: "Son maç", value: item.last_match_date ? formatDate(item.last_match_date, false) : "—" },
+              ]}
               onPress={() => router.push(`/yonetim/oyuncular/${item.id}`)}
             />
           );
@@ -245,7 +237,6 @@ export default function PlayersScreen() {
 }
 
 const styles = StyleSheet.create({
-  filters: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
-  filter: { flexGrow: 1, flexBasis: 140 },
+  head: { gap: space.md },
   photoRow: { flexDirection: "row", alignItems: "center", gap: space.md, marginTop: space.md },
 });

@@ -800,7 +800,7 @@ const styles = StyleSheet.create({
   iconMuted: {
     width: 38,
     height: 38,
-    borderRadius: 12,
+    borderRadius: radius.sm,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.surface3,

@@ -19,11 +19,8 @@ import { StyleSheet, Text, View } from "react-native";
 import {
   AdminScreen,
   FormSheet,
-  InfoLine,
-  Panel,
   RecordCard,
   SelectField,
-  StatRow,
   ToggleField,
   confirmAction,
   useAdminMutation,
@@ -31,8 +28,9 @@ import {
   type FormValues,
 } from "@/components/admin";
 import { MarketValuePanel } from "@/components/admin/player/MarketValuePanel";
-import { ImageUploadRow } from "@/components/admin/team/ImageUpload";
-import { Button, EmptyState, ErrorState, SegmentedControl, SkeletonCard } from "@/components/ui";
+import { ImageEditBadge } from "@/components/admin/team/ImageUpload";
+import { DangerNote, EntityCard, FactRow, GroupCard, IdentityStage, ListLine, PositionAvatar, StagePill } from "@/components/admin/team/ManageKit";
+import { Avatar, Button, EmptyState, ErrorState, IconTile, Odometer, Reveal, SkeletonCard, SkeletonHero, Tabs, TeamLogo } from "@/components/ui";
 import { hasPermission } from "@/lib/admin/access";
 import { formatDate, formatPhone } from "@/lib/admin/format";
 import { fetchScopedSeasons, isNationwide, loadCityOptions, teamOptionsLoader } from "@/lib/api/admin/lookups";
@@ -51,10 +49,18 @@ import {
 } from "@/lib/api/admin/players";
 import { MEMBERSHIP_STATUS_LABELS, addPlayerToTeam, removePlayerFromTeam } from "@/lib/api/admin/teams";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, space, textScale, type } from "@/theme";
+import { colors, radius, space, textScale, type } from "@/theme";
 
 const PERMS = ["players.update"];
 type Tab = "profile" | "teams" | "value" | "account";
+/** Sahne hücresine sığan kısa değer: 12.500 → "12,5B", 1.250.000 → "1,3M". */
+const compactEtl = (value: unknown) => {
+  const n = Number(value);
+  if (!value || !Number.isFinite(n)) return "—";
+  if (n >= 1e6) return `${(n / 1e6).toLocaleString("tr-TR", { maximumFractionDigits: 1 })}M`;
+  if (n >= 1e3) return `${(n / 1e3).toLocaleString("tr-TR", { maximumFractionDigits: 1 })}B`;
+  return String(Math.round(n));
+};
 const dateOnly = (v: unknown) => (v ? String(v).slice(0, 10) : null);
 
 export default function PlayerProfileScreen() {
@@ -187,197 +193,254 @@ export default function PlayerProfileScreen() {
 
   const age = ageOf(player?.birth_date);
 
+  const noPhoto = !player?.player_img || player.player_img === DEFAULT_PLAYER_IMG;
+  const jersey = player ? data?.teams.find((t) => Number(t.team_id) === Number(player.team_id))?.jersey_number ?? null : null;
+  const missing = player
+    ? [noPhoto && "fotoğraf", !player.player_position && "mevki", !player.birth_date && "doğum tarihi", !data?.team && "takım"].filter(Boolean)
+    : [];
+
   return (
     <AdminScreen
       title={player?.player_name ?? "Oyuncu"}
-      subtitle={player ? [positionLabel(player.player_position) || null, data?.team?.team_name || "Serbest oyuncu", player.city].filter(Boolean).join(" · ") : undefined}
+      subtitle={player ? `Oyuncu profili · #${player.id}` : undefined}
       permission={PERMS}
       onRefresh={query.refetch}
       refreshing={query.isRefetching}
-      bottom={
-        <SegmentedControl<Tab>
-          items={[
-            { key: "profile", label: "Profil", dot: pendingCount > 0 },
-            { key: "teams", label: "Takımlar" },
-            { key: "value", label: "Değer" },
-            { key: "account", label: "Hesap" },
-          ]}
-          value={tab}
-          onChange={setTab}
-          stretch
-          size="sm"
-        />
-      }
     >
       {query.isLoading ? (
-        <SkeletonCard />
+        <>
+          <SkeletonHero />
+          <SkeletonCard />
+        </>
       ) : query.error || !data || !player ? (
         <ErrorState error={query.error ?? new Error("Oyuncu bulunamadı.")} onRetry={query.refetch} variant="inline" />
-      ) : tab === "teams" ? (
-        <View style={styles.stack}>
-          <SelectField<number>
-            value={addTeam}
-            onChange={(v, option) => void askLink(v, option?.label)}
-            loadOptions={teamOptionsLoader(user, { exclude: data.teams.map((t) => Number(t.team_id)) })}
-            queryKey={["admin", "teams", "options", "player", playerId]}
-            placeholder="Takıma ekle: takım adı…"
-            icon="add-circle-outline"
-            sheetTitle="Takım kadrosuna ekle"
-          />
-          <Panel title="TAKIM KADROLARI">
-            {data.teams.length ? (
-              data.teams.map((link) => (
-                <RecordCard
-                  key={link.id}
-                  title={link.team?.team_name ?? `Takım #${link.team_id}`}
-                  subtitle={
-                    [link.jersey_number != null ? `Forma #${link.jersey_number}` : null, link.team_position ? positionLabel(link.team_position) : null, link.squad_role]
-                      .filter(Boolean)
-                      .join(" · ") || "Forma no / mevki yok"
-                  }
-                  avatar={{ name: link.team?.team_name, image: link.team?.logo }}
-                  badges={[Number(link.team_id) === Number(player.team_id) && { label: "Vitrin takımı", tone: "brand" }]}
-                  onPress={() => router.push(`/yonetim/takimlar/${link.team_id}`)}
-                  onLongPress={() => void askUnlink(link)}
-                />
-              ))
-            ) : (
-              <Text style={styles.muted} {...textScale.long}>
-                Kadro bağı yok; oyuncu serbest.
-              </Text>
-            )}
-            {data.teams.length ? (
-              <Text style={styles.muted} {...textScale.dense}>
-                Kadrodan çıkarmak için takıma basılı tut. Forma numarası ve takımdaki mevki takım yönetiminden girilir.
-              </Text>
-            ) : null}
-          </Panel>
-          <Panel title="SEZON KADROSU ÜYELİKLERİ">
-            {data.memberships.length ? (
-              data.memberships.map((m) => (
-                <RecordCard
-                  key={m.id}
-                  title={m.team?.team_name ?? `Takım #${m.team_id}`}
-                  subtitle={[m.season?.season_name, m.season?.league_name, m.joined_at ? formatDate(m.joined_at) : null].filter(Boolean).join(" · ")}
-                  avatar={{ name: m.team?.team_name, image: m.team?.logo }}
-                  badges={[
-                    m.is_licensed && { label: "Lisanslı", tone: "info" },
-                    m.membership_kind === "loan" && { label: "Kiralık", tone: "warn" },
-                    { label: MEMBERSHIP_STATUS_LABELS[m.membership_status] ?? m.membership_status },
-                  ]}
-                  onPress={m.team_id ? () => router.push(`/yonetim/takimlar/${m.team_id}`) : undefined}
-                />
-              ))
-            ) : (
-              <Text style={styles.muted} {...textScale.long}>
-                Sezon kadrosu üyeliği yok.
-              </Text>
-            )}
-          </Panel>
-          {data.loans.length || data.contracts.length ? (
-            <Panel title="KİRALIKLAR VE SÖZLEŞMELER">
-              {data.loans.map((l) => (
-                <RecordCard
-                  key={`loan-${l.id}`}
-                  title={`Kiralık · ${l.team?.team_name ?? "Takım"}`}
-                  subtitle={[l.from_team?.team_name ? `${l.from_team.team_name} takımından` : null, l.start_date ? formatDate(l.start_date) : null, l.end_date ? `→ ${formatDate(l.end_date)}` : null]
-                    .filter(Boolean)
-                    .join(" · ")}
-                  icon="swap-horizontal-outline"
-                  badges={[{ label: l.status === "active" ? "Aktif" : "Sona erdi", tone: l.status === "active" ? "warn" : "neutral" }]}
-                />
-              ))}
-              {data.contracts.map((c) => (
-                <RecordCard
-                  key={`contract-${c.id}`}
-                  title={`${c.transfer_type === "loan" ? "Kiralık sözleşme" : "Sözleşme"} · ${c.team?.team_name ?? "Takım"}`}
-                  subtitle={[c.start_date ? formatDate(c.start_date) : null, c.end_date ? `→ ${formatDate(c.end_date)}` : "Süresiz"].filter(Boolean).join(" ")}
-                  icon="document-text-outline"
-                  badges={[{ label: CONTRACT_STATUS_LABELS[c.status] ?? c.status }]}
-                  onPress={() => router.push("/yonetim/transfer-onaylari")}
-                />
-              ))}
-            </Panel>
-          ) : null}
-        </View>
-      ) : tab === "value" ? (
-        <View style={styles.stack}>
-          <MarketValuePanel playerId={playerId} user={user} />
-          <Panel title="VİTRİN İSTATİSTİKLERİ">
-            <StatRow
-              items={[
+      ) : (
+        <>
+          <Reveal scaleFrom={0.97}>
+            <IdentityStage
+              leading={
+                <ImageEditBadge kind="photo" prefix={`oyuncu-${player.id}`} upload={(file) => uploadPlayerImage(playerId, file)} onDone={() => void query.refetch()}>
+                  <PositionAvatar name={player.player_name} image={noPhoto ? null : player.player_img} position={player.player_position} size={68} jersey={jersey} dimmed={passive} />
+                </ImageEditBadge>
+              }
+              overline={[positionLabel(player.player_position) || "Mevki yok", player.city].filter(Boolean).join(" · ")}
+              title={player.player_name}
+              subtitle={[data.team?.team_name || "Serbest oyuncu", age != null ? `${age} yaş` : null, player.nationality].filter(Boolean).join(" · ")}
+              pills={
+                <>
+                  <StagePill label={passive ? "Pasif" : "Aktif"} tone={passive ? "warn" : "win"} />
+                  <StagePill label={data.owner ? "Üye hesabı var" : "Hesapsız"} icon={data.owner ? "person" : "person-outline"} />
+                  {pendingCount ? <StagePill label={`${pendingCount} talep`} icon="hourglass" tone="gold" /> : null}
+                </>
+              }
+              stats={[
                 { label: "Maç", value: player.total_matches ?? 0 },
                 { label: "Gol", value: player.total_goals ?? 0 },
-                { label: "Sarı", value: Number(player.total_yellow_cards ?? 0) },
-                { label: "Kırmızı", value: Number(player.total_red_cards ?? 0) },
+                { label: "Takım", value: data.teams.length },
+                { label: "Değer · ETL", value: compactEtl(player.value) },
               ]}
             />
-            <Text style={styles.muted} {...textScale.long}>
-              Maç, gol ve kart sayıları maç istatistiklerinden hesaplanır; elle değiştirilmez.
-            </Text>
-          </Panel>
-        </View>
-      ) : tab === "account" ? (
-        data.owner ? (
-          <Panel title="BAĞLI ÜYE HESABI">
-            <InfoLine label="Kullanıcı adı" value={data.owner.username ? `@${data.owner.username}` : "—"} />
-            <InfoLine label="Ad soyad" value={data.owner.full_name || "—"} />
-            <InfoLine label="E-posta" value={data.owner.email || "—"} />
-            <InfoLine label="Telefon" value={data.owner.phone ? formatPhone(data.owner.phone) : "—"} />
-            <InfoLine label="Rol / durum" value={[data.owner.role, data.owner.status].filter(Boolean).join(" · ") || "—"} />
-            <InfoLine label="Kayıt" value={data.owner.created_at ? formatDate(data.owner.created_at) : "—"} />
-          </Panel>
-        ) : (
-          <EmptyState icon="person-outline" variant="inline" title="Bağlı üye hesabı yok" body="Bu oyuncu profilini sahiplenmiş bir üye hesabı yok." />
-        )
-      ) : (
-        <View style={styles.stack}>
-          <Panel>
-            <ImageUploadRow
-              kind="photo"
-              name={player.player_name}
-              image={player.player_img && player.player_img !== DEFAULT_PLAYER_IMG ? player.player_img : null}
-              prefix={`oyuncu-${player.id}`}
-              upload={(file) => uploadPlayerImage(playerId, file)}
-              onDone={() => void query.refetch()}
-            />
-          </Panel>
-          <Panel title="KİŞİSEL BİLGİLER" action={{ label: "Düzenle", onPress: () => setEditing(true) }}>
-            <InfoLine label="Ad soyad" value={player.player_name} />
-            <InfoLine label="Mevki" value={positionLabel(player.player_position) || "—"} />
-            <InfoLine label="Takım (vitrin)" value={data.team?.team_name || "Serbest"} />
-            <InfoLine label="Forma" value={data.teams.find((t) => Number(t.team_id) === Number(player.team_id))?.jersey_number?.toString() ?? "—"} />
-            <InfoLine label="Uyruk" value={player.nationality || "—"} />
-            <InfoLine label="Doğum tarihi" value={player.birth_date ? `${formatDate(player.birth_date)}${age != null ? ` (${age})` : ""}` : "—"} />
-            <InfoLine label="Sezon (vitrin)" value={player.season || "—"} />
-            <InfoLine label="İl" value={player.city || "—"} />
-            <InfoLine label="Katılım" value={player.attendence_date ? formatDate(player.attendence_date) : "—"} />
-            <InfoLine label="Kayıt no" value={`#${player.id}`} />
-          </Panel>
-          {pendingCount ? (
-            <RecordCard
-              title={`${pendingCount} bekleyen talep`}
-              subtitle="Oyuncunun değişiklik, sahiplenme ve fotoğraf talepleri gelen kutusundan onaylanır."
-              icon="hourglass-outline"
-              iconTone="warn"
-              onPress={() => router.push("/yonetim/talepler")}
-            />
-          ) : null}
-          <Panel title="DURUM">
-            <ToggleField label="Oyuncu aktif" hint="Pasif oyuncu listelerde görünmez." value={!passive} onChange={(v) => void askToggle(v)} />
-          </Panel>
-          <View style={styles.row}>
-            {canMerge ? (
-              <Button
-                label="Birleştir"
-                icon="git-merge-outline"
-                variant="secondary"
-                onPress={() => router.push(`/yonetim/oyuncu-birlestirme?players=${playerId}`)}
+          </Reveal>
+
+          <Tabs<Tab>
+            tone="paper"
+            items={[
+              { key: "profile", label: "Profil", badge: pendingCount ? "dot" : undefined },
+              { key: "teams", label: "Takımlar" },
+              { key: "value", label: "Değer" },
+              { key: "account", label: "Hesap" },
+            ]}
+            value={tab}
+            onChange={setTab}
+          />
+
+          {tab === "teams" ? (
+            <View style={styles.stack}>
+              <SelectField<number>
+                value={addTeam}
+                onChange={(v, option) => void askLink(v, option?.label)}
+                loadOptions={teamOptionsLoader(user, { exclude: data.teams.map((t) => Number(t.team_id)) })}
+                queryKey={["admin", "teams", "options", "player", playerId]}
+                placeholder="Takıma ekle: takım adı…"
+                icon="add-circle-outline"
+                sheetTitle="Takım kadrosuna ekle"
               />
-            ) : null}
-            {canDelete ? <Button label="Oyuncuyu sil" icon="trash-outline" variant="danger" loading={remove.isPending} onPress={() => void askDelete()} /> : null}
-          </View>
-        </View>
+              <GroupCard title={`Takım kadroları · ${data.teams.length}`} icon="shield-half" tone="violet" padded={false}>
+                {data.teams.length ? (
+                  <View>
+                    {data.teams.map((link, i) => (
+                      <ListLine
+                        key={link.id}
+                        leading={<TeamLogo name={link.team?.team_name} logo={link.team?.logo} size={36} />}
+                        title={link.team?.team_name ?? `Takım #${link.team_id}`}
+                        subtitle={
+                          [link.jersey_number != null ? `Forma #${link.jersey_number}` : null, link.team_position ? positionLabel(link.team_position) : null, link.squad_role]
+                            .filter(Boolean)
+                            .join(" · ") || "Forma no / mevki yok"
+                        }
+                        pills={[Number(link.team_id) === Number(player.team_id) && { label: "Vitrin takımı", tone: "brand", icon: "star" }]}
+                        onPress={() => router.push(`/yonetim/takimlar/${link.team_id}`)}
+                        onLongPress={() => void askUnlink(link)}
+                        last={i === data.teams.length - 1}
+                      />
+                    ))}
+                  </View>
+                ) : (
+                  <Text style={[styles.muted, styles.inset]} {...textScale.long}>
+                    Kadro bağı yok; oyuncu serbest.
+                  </Text>
+                )}
+                <Text style={[styles.muted, styles.inset, styles.foot]} {...textScale.dense}>
+                  {data.teams.length ? "Kadrodan çıkarmak için takıma basılı tut. Forma no ve mevki takım yönetiminden girilir." : "Yukarıdan bir takıma ekle."}
+                </Text>
+              </GroupCard>
+
+              <GroupCard title={`Sezon kadroları · ${data.memberships.length}`} icon="calendar" tone="cyan" padded={false}>
+                {data.memberships.length ? (
+                  <View style={styles.foot}>
+                    {data.memberships.map((m, i) => (
+                      <ListLine
+                        key={m.id}
+                        leading={<TeamLogo name={m.team?.team_name} logo={m.team?.logo} size={36} />}
+                        title={m.team?.team_name ?? `Takım #${m.team_id}`}
+                        subtitle={[m.season?.season_name, m.season?.league_name, m.joined_at ? formatDate(m.joined_at) : null].filter(Boolean).join(" · ")}
+                        pills={[
+                          { label: MEMBERSHIP_STATUS_LABELS[m.membership_status] ?? m.membership_status, tone: m.membership_status === "active" ? "win" : "neutral" },
+                          m.is_licensed && { label: "Lisanslı", tone: "info", icon: "id-card" },
+                          m.membership_kind === "loan" && { label: "Kiralık", tone: "warn" },
+                        ]}
+                        onPress={m.team_id ? () => router.push(`/yonetim/takimlar/${m.team_id}`) : undefined}
+                        last={i === data.memberships.length - 1}
+                      />
+                    ))}
+                  </View>
+                ) : (
+                  <Text style={[styles.muted, styles.inset, styles.foot]} {...textScale.long}>
+                    Sezon kadrosu üyeliği yok.
+                  </Text>
+                )}
+              </GroupCard>
+
+              {data.loans.length || data.contracts.length ? (
+                <GroupCard title="Kiralıklar ve sözleşmeler" icon="document-text" tone="gold" padded={false}>
+                  <View style={styles.foot}>
+                    {data.loans.map((l, i) => (
+                      <ListLine
+                        key={`loan-${l.id}`}
+                        leading={<IconTile icon="swap-horizontal" tone="gold" size={36} glow={false} />}
+                        title={`Kiralık · ${l.team?.team_name ?? "Takım"}`}
+                        subtitle={[l.from_team?.team_name ? `${l.from_team.team_name} takımından` : null, l.start_date ? formatDate(l.start_date) : null, l.end_date ? `→ ${formatDate(l.end_date)}` : null]
+                          .filter(Boolean)
+                          .join(" · ")}
+                        pills={[{ label: l.status === "active" ? "Aktif" : "Sona erdi", tone: l.status === "active" ? "warn" : "neutral" }]}
+                        last={i === data.loans.length - 1 && !data.contracts.length}
+                      />
+                    ))}
+                    {data.contracts.map((c, i) => (
+                      <ListLine
+                        key={`contract-${c.id}`}
+                        leading={<IconTile icon="document-text" tone="violet" size={36} glow={false} />}
+                        title={`${c.transfer_type === "loan" ? "Kiralık sözleşme" : "Sözleşme"} · ${c.team?.team_name ?? "Takım"}`}
+                        subtitle={[c.start_date ? formatDate(c.start_date) : null, c.end_date ? `→ ${formatDate(c.end_date)}` : "Süresiz"].filter(Boolean).join(" ")}
+                        pills={[{ label: CONTRACT_STATUS_LABELS[c.status] ?? c.status, tone: c.status === "ACTIVE" ? "win" : c.status === "PENDING_ACTIVATION" ? "warn" : "neutral" }]}
+                        onPress={() => router.push("/yonetim/transfer-onaylari")}
+                        last={i === data.contracts.length - 1}
+                      />
+                    ))}
+                  </View>
+                </GroupCard>
+              ) : null}
+            </View>
+          ) : tab === "value" ? (
+            <View style={styles.stack}>
+              <MarketValuePanel playerId={playerId} user={user} />
+              <GroupCard title="Vitrin istatistikleri" icon="stats-chart" tone="mint">
+                <View style={styles.statGrid}>
+                  {[
+                    { label: "Maç", value: player.total_matches ?? 0, color: colors.textPrimary },
+                    { label: "Gol", value: player.total_goals ?? 0, color: colors.accentText },
+                    { label: "Sarı", value: Number(player.total_yellow_cards ?? 0), color: colors.warn },
+                    { label: "Kırmızı", value: Number(player.total_red_cards ?? 0), color: colors.danger },
+                  ].map((st) => (
+                    <View key={st.label} style={styles.statCell}>
+                      <Odometer value={st.value} style={[styles.statValue, { color: st.color }]} />
+                      <Text style={styles.statLabel} {...textScale.badge}>
+                        {st.label}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+                <Text style={styles.muted} {...textScale.long}>
+                  Maç, gol ve kart sayıları maç istatistiklerinden hesaplanır; elle değiştirilmez.
+                </Text>
+              </GroupCard>
+            </View>
+          ) : tab === "account" ? (
+            data.owner ? (
+              <EntityCard
+                leading={<Avatar name={data.owner.full_name || data.owner.username} size={52} ring="brand" />}
+                overline="Bağlı üye hesabı"
+                title={data.owner.full_name || data.owner.username || "—"}
+                subtitle={data.owner.username ? `@${data.owner.username}` : null}
+                pills={[!!data.owner.role && { label: data.owner.role, tone: "brand" }, !!data.owner.status && { label: data.owner.status, tone: data.owner.status === "active" ? "win" : "warn" }]}
+                footer={
+                  <View>
+                    <FactRow icon="mail-outline" label="E-posta" value={data.owner.email || null} />
+                    <FactRow icon="call-outline" label="Telefon" value={data.owner.phone ? formatPhone(data.owner.phone) : null} />
+                    <FactRow icon="calendar-outline" label="Kayıt" value={data.owner.created_at ? formatDate(data.owner.created_at) : null} last />
+                  </View>
+                }
+              />
+            ) : (
+              <EmptyState icon="person-outline" variant="inline" title="Bağlı üye hesabı yok" body="Bu oyuncu profilini sahiplenmiş bir üye hesabı yok." />
+            )
+          ) : (
+            <View style={styles.stack}>
+              {pendingCount ? (
+                <RecordCard
+                  title={`${pendingCount} bekleyen talep`}
+                  subtitle="Değişiklik, sahiplenme ve fotoğraf talepleri Talepler ekranından onaylanır."
+                  icon="hourglass-outline"
+                  iconTone="warn"
+                  accentColor={colors.warn}
+                  onPress={() => router.push("/yonetim/talepler")}
+                />
+              ) : null}
+              {missing.length ? <DangerNote tone="warn" title="Eksik bilgi" body={`Tamamlanmamış: ${missing.join(", ")}.`} /> : null}
+              <GroupCard title="Kişisel bilgiler" icon="person" tone="violet" action={{ label: "Düzenle", onPress: () => setEditing(true) }}>
+                <View>
+                  <FactRow icon="text-outline" label="Ad soyad" value={player.player_name} />
+                  <FactRow icon="body-outline" label="Mevki" value={positionLabel(player.player_position) || null} />
+                  <FactRow icon="shield-half-outline" label="Takım (vitrin)" value={data.team?.team_name || "Serbest"} />
+                  <FactRow icon="shirt-outline" label="Forma" value={jersey != null ? `#${jersey}` : null} />
+                  <FactRow icon="flag-outline" label="Uyruk" value={player.nationality || null} />
+                  <FactRow icon="gift-outline" label="Doğum tarihi" value={player.birth_date ? `${formatDate(player.birth_date)}${age != null ? ` · ${age} yaş` : ""}` : null} />
+                  <FactRow icon="calendar-outline" label="Sezon (vitrin)" value={player.season || null} />
+                  <FactRow icon="location-outline" label="İl" value={player.city || null} />
+                  <FactRow icon="enter-outline" label="Katılım" value={player.attendence_date ? formatDate(player.attendence_date) : null} last />
+                </View>
+              </GroupCard>
+              <GroupCard title="Durum ve tehlikeli bölge" icon="settings" tone="neutral">
+                <ToggleField label="Oyuncu aktif" hint="Pasif oyuncu listelerde görünmez." value={!passive} onChange={(v) => void askToggle(v)} />
+                {canMerge ? (
+                  <Button
+                    label="Mükerrer kayıtla birleştir"
+                    icon="git-merge-outline"
+                    variant="secondary"
+                    fullWidth
+                    onPress={() => router.push(`/yonetim/oyuncu-birlestirme?players=${playerId}`)}
+                  />
+                ) : null}
+                {canDelete ? (
+                  <>
+                    <DangerNote title="Oyuncuyu silmek" body="Takım bağları da silinir. Mükerrer kayıtsa silmek yerine birleştir; maç geçmişi korunur." />
+                    <Button label="Oyuncuyu sil" icon="trash-outline" variant="danger" fullWidth loading={remove.isPending} onPress={() => void askDelete()} />
+                  </>
+                ) : null}
+              </GroupCard>
+            </View>
+          )}
+        </>
       )}
 
       <FormSheet
@@ -408,6 +471,11 @@ export default function PlayerProfileScreen() {
 
 const styles = StyleSheet.create({
   stack: { gap: space.md },
-  row: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
   muted: { ...type.bodySm, color: colors.textTertiary },
+  inset: { paddingHorizontal: space.lg },
+  foot: { paddingBottom: space.md },
+  statGrid: { flexDirection: "row", borderRadius: radius.lg, backgroundColor: colors.surface2, paddingVertical: space.md },
+  statCell: { flex: 1, alignItems: "center", gap: space.xxs },
+  statValue: { ...type.metric },
+  statLabel: { ...type.micro, color: colors.textTertiary },
 });

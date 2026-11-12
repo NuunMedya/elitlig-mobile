@@ -1,6 +1,10 @@
 /**
  * ARAÇLAR MERKEZİ — kişisel çalışma araçlarının vitrini (web: /yonetim/araclar).
  *
+ * TASARIM: en üstte gece sahnesi (saat Odometer ile döner, selam, üç cam
+ * sayaç), hızlı kayıt, uygulama karoları (degrade IconTile + canlı özet),
+ * tarih karolu 7 günlük akış ve yatay renkli not kartları.
+ *
  * NE: selamlama ve saat, üç sayaç (açık iş, 7 günde etkinlik, bekleyen
  * alacak), her aracın CANLI özetini taşıyan kartlar (lib/adminModules.ts
  * TOOL_MODULES), önümüzdeki 7 gün, hızlı not kutusu (ilk satır başlık olur)
@@ -15,22 +19,24 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 
-import { AdminScreen, StatRow, type BadgeSpec } from "@/components/admin";
+import { AdminScreen, type BadgeSpec } from "@/components/admin";
+import { Pop, appTone } from "@/components/admin/home/AppTiles";
+import { LineRow, Lines, TileButton, ToolStage } from "@/components/admin/tools/ToolKit";
 import { QuickCapture } from "@/components/admin/tools/QuickCapture";
 import { formatClock, relativeDayLocal } from "@/components/admin/tools/agendaUtils";
 import { readTodayFocus, type FocusStats } from "@/components/admin/tools/focusUtils";
-import { Badge, EmptyState, SectionHeader, Skeleton, Touchable, withAlpha } from "@/components/ui";
+import { EmptyState, Reveal, SectionHeader, Skeleton, Touchable, withAlpha } from "@/components/ui";
 import { formatMoney } from "@/lib/admin/format";
 import { TOOL_APP_LIST, toolApp } from "@/lib/admin/toolApps";
 import { eventColor } from "@/lib/admin/toolPalette";
 import { getProjectSummaries, getToolsOverview, toolKeys } from "@/lib/api/admin/tools";
 import { getTodoSummary, todoKeys } from "@/lib/api/todos";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, hairline, radius, space, textScale, type } from "@/theme";
+import { colors, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
 
 
 const greeting = (hour: number) => (hour < 6 ? "İyi geceler" : hour < 12 ? "Günaydın" : hour < 18 ? "İyi günler" : "İyi akşamlar");
@@ -110,30 +116,25 @@ export default function ToolsHubScreen() {
   // Mesajlar ve Talepler de birer uygulamadır; sayıları kendi rozetlerinde (sekme çubuğu, zil) görünür.
   const tools = TOOL_APP_LIST;
 
+  const upcoming = data?.upcoming ?? [];
+  const notes = data?.notes ?? [];
+
   return (
     <AdminScreen title="Araçlar" subtitle="Her araç kendi uygulaması" onRefresh={refresh} refreshing={overview.isRefetching}>
-      <View style={styles.hero}>
-        <View style={styles.flex}>
-          <Text style={styles.hello} {...textScale.dense}>
-            {greeting(now.getHours())}
-            {name ? `, ${name}` : ""}
-          </Text>
-          <Text style={styles.date} {...textScale.dense}>
-            {now.toLocaleDateString("tr-TR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
-          </Text>
-        </View>
-        <Text style={styles.clock} accessibilityLabel={`Saat ${formatClock(now)}`} {...textScale.badge}>
-          {formatClock(now)}
-        </Text>
-      </View>
-
-      <StatRow
-        items={[
-          { label: "açık iş", value: summary ? String(summary.open ?? 0) : "–", tone: summary?.overdue ? "danger" : undefined, onPress: () => router.push(routeOf("gorevler") as never) },
-          { label: "7 günde etkinlik", value: data ? String(data.upcoming.length) : "–", onPress: () => router.push(routeOf("ajanda") as never) },
-          { label: "bekleyen alacak", value: ledger ? formatMoney(ledger.receivable, true) : "–", onPress: () => router.push(routeOf("muhasebe") as never) },
-        ]}
-      />
+      <Reveal index={0}>
+        <ToolStage
+          icon="apps"
+          tone="signature"
+          overline={now.toLocaleDateString("tr-TR", { weekday: "long", day: "numeric", month: "long" })}
+          value={formatClock(now)}
+          caption={`${greeting(now.getHours())}${name ? `, ${name}` : ""}. Bugün ne üzerinde çalışıyoruz?`}
+          stats={[
+            { label: "açık iş", value: summary ? Number(summary.open ?? 0) : "–", tone: summary?.overdue ? "danger" : undefined, onPress: () => router.push(routeOf("gorevler") as never) },
+            { label: "7 gün etkinlik", value: data ? upcoming.length : "–", tone: "accent", onPress: () => router.push(routeOf("ajanda") as never) },
+            { label: "alacak", value: ledger ? formatMoney(ledger.receivable, true) : "–", tone: ledger?.receivable ? "warn" : undefined, onPress: () => router.push(routeOf("muhasebe") as never) },
+          ]}
+        />
+      </Reveal>
 
       {overview.error ? (
         <Text style={styles.muted} {...textScale.long}>
@@ -141,108 +142,113 @@ export default function ToolsHubScreen() {
         </Text>
       ) : null}
 
-      <SectionHeader title="Hızlı kayıt" size="group" inset="flush" />
-      <QuickCapture />
-
-      <SectionHeader title="Uygulamalar" size="group" inset="flush" />
-      <View style={styles.grid}>
-        {tools.map((tool) => {
-          const preview = previews[tool.key] ?? { text: tool.tagline };
-          const badge = preview.badge;
-          return (
-            <Touchable
-              key={tool.key}
-              feedback="card"
-              haptic="light"
-              onPress={() => router.push(tool.route as never)}
-              style={styles.tile}
-              accessibilityRole="button"
-              accessibilityLabel={`${tool.title}. ${preview.text}${badge ? `. ${badge.label}` : ""}`}
-            >
-              <View style={styles.tileHead}>
-                <View style={[styles.tileIcon, { backgroundColor: tool.accent }]}>
-                  <Ionicons name={tool.icon} size={20} color={tool.onAccent} />
-                </View>
-                {badge ? <Badge label={badge.label} tone={badge.tone} size="xs" /> : null}
-              </View>
-              <Text style={styles.tileTitle} numberOfLines={1} {...textScale.dense}>
-                {tool.shortTitle}
-              </Text>
-              <Text style={styles.tileText} numberOfLines={2} {...textScale.dense}>
-                {preview.text}
-              </Text>
-            </Touchable>
-          );
-        })}
+      <View style={styles.section}>
+        <SectionHeader title="Hızlı kayıt" inset="flush" />
+        <QuickCapture />
       </View>
 
-      <SectionHeader title="Önümüzdeki 7 gün" size="group" inset="flush" action={{ label: "Ajandayı aç", onPress: () => router.push(routeOf("ajanda") as never) }} />
-      {overview.isLoading ? (
-        <View style={styles.gap}>
-          <Skeleton height={48} radius="md" />
-          <Skeleton height={48} radius="md" />
-        </View>
-      ) : data?.upcoming?.length ? (
-        <View style={styles.list}>
-          {data.upcoming.map((item, index) => (
-            <Touchable
-              key={item.occurrence_key}
-              feedback="row"
-              onPress={() => router.push(routeOf("ajanda") as never)}
-              style={[styles.upcoming, index ? styles.divided : null]}
-              accessibilityLabel={`${relativeDayLocal(item.occurrence_start)} ${item.all_day ? "tüm gün" : formatClock(item.occurrence_start)}: ${item.title}`}
-            >
-              <View style={[styles.bar, { backgroundColor: eventColor(item) }]} />
-              <View style={styles.when}>
-                <Text style={styles.whenDay} numberOfLines={1} {...textScale.dense}>
-                  {relativeDayLocal(item.occurrence_start)}
-                </Text>
-                <Text style={styles.whenTime} {...textScale.badge}>
-                  {item.all_day ? "Tüm gün" : formatClock(item.occurrence_start)}
-                </Text>
-              </View>
-              <View style={styles.flex}>
-                <Text style={styles.upTitle} numberOfLines={1} {...textScale.dense}>
-                  {item.title}
-                </Text>
-                {item.location ? (
-                  <Text style={styles.muted} numberOfLines={1} {...textScale.dense}>
-                    {item.location}
-                  </Text>
-                ) : null}
-              </View>
-            </Touchable>
-          ))}
-        </View>
-      ) : (
-        <EmptyState compact variant="inline" icon="calendar-clear-outline" title="Takvim boş" body="Maç, toplantı ya da ödeme günlerinizi ajandaya ekleyin." />
-      )}
-
-      {data?.notes?.length ? <SectionHeader title="Son notlar" size="group" inset="flush" action={{ label: "Tüm notlar", onPress: () => router.push(routeOf("not-defteri") as never) }} /> : null}
-      {data?.notes?.length ? (
-        <View style={styles.notes}>
-          {data.notes.map((note) => {
-            const preview = note.body ? note.body.slice(0, 90) : note.checklist.map((item) => `${item.done ? "[x]" : "[ ]"} ${item.text}`).join("  ");
+      <View style={styles.section}>
+        <SectionHeader title="Uygulamalar" meta={`${tools.length} araç`} inset="flush" />
+        <View style={styles.grid}>
+          {tools.map((tool, index) => {
+            const preview = previews[tool.key] ?? { text: tool.tagline };
             return (
-              <Touchable
-                key={note.id}
-                feedback="card"
-                onPress={() => router.push(routeOf("not-defteri") as never)}
-                style={[styles.note, note.color ? { backgroundColor: withAlpha(note.color, 0.22), borderLeftColor: note.color, borderLeftWidth: 4 } : null]}
-                accessibilityLabel={note.title || "Not"}
-              >
-                <Text style={styles.noteTitle} numberOfLines={1} {...textScale.dense}>
-                  {note.pinned ? "Sabit · " : ""}
-                  {note.title || (note.body || note.checklist?.[0]?.text || "Not").slice(0, 60)}
-                </Text>
-                {note.title && preview ? (
-                  <Text style={styles.muted} numberOfLines={2} {...textScale.dense}>
-                    {preview}
-                  </Text>
-                ) : null}
-              </Touchable>
+              <Pop key={tool.key} index={index} style={styles.cell}>
+                <TileButton
+                  icon={tool.icon}
+                  tone={appTone(tool.key)}
+                  title={tool.shortTitle}
+                  hint={preview.text}
+                  badge={preview.badge ? { label: preview.badge.label, tone: preview.badge.tone } : null}
+                  onPress={() => router.push(tool.route as never)}
+                  style={styles.tile}
+                />
+              </Pop>
             );
           })}
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <SectionHeader title="Önümüzdeki 7 gün" inset="flush" action={{ label: "Ajanda", onPress: () => router.push(routeOf("ajanda") as never) }} />
+        {overview.isLoading ? (
+          <View style={styles.gap}>
+            <Skeleton height={60} radius="lg" />
+            <Skeleton height={60} radius="lg" />
+            <Skeleton height={60} radius="lg" />
+          </View>
+        ) : upcoming.length ? (
+          <Lines inset={72}>
+            {upcoming.map((item, index) => {
+              const date = new Date(item.occurrence_start);
+              const color = eventColor(item);
+              return (
+                <Reveal key={item.occurrence_key} index={index}>
+                  <LineRow
+                    leading={
+                      <View style={[styles.dateTile, { borderColor: withAlpha(color, 0.55), backgroundColor: withAlpha(color, 0.16) }]}>
+                        <Text style={styles.dateNum} {...textScale.badge}>
+                          {date.getDate()}
+                        </Text>
+                        <Text style={[styles.dateMon, { color }]} {...textScale.badge}>
+                          {upperTR(date.toLocaleDateString("tr-TR", { month: "short" }))}
+                        </Text>
+                      </View>
+                    }
+                    title={item.title}
+                    meta={[relativeDayLocal(item.occurrence_start), item.all_day ? "Tüm gün" : formatClock(item.occurrence_start), item.location].filter(Boolean).join(" · ")}
+                    metaIcon="time-outline"
+                    stripe={color}
+                    chevron
+                    onPress={() => router.push(routeOf("ajanda") as never)}
+                    accessibilityLabel={`${relativeDayLocal(item.occurrence_start)} ${item.all_day ? "tüm gün" : formatClock(item.occurrence_start)}: ${item.title}`}
+                  />
+                </Reveal>
+              );
+            })}
+          </Lines>
+        ) : (
+          <EmptyState compact variant="inline" icon="calendar-clear-outline" title="Takvim boş" body="Maç, toplantı ya da ödeme günlerinizi ajandaya ekleyin." />
+        )}
+      </View>
+
+      {notes.length ? (
+        <View style={styles.section}>
+          <SectionHeader title="Son notlar" inset="flush" action={{ label: "Tümü", onPress: () => router.push(routeOf("not-defteri") as never) }} />
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.noteRail} style={styles.noteScroller}>
+            {notes.map((note, index) => {
+              const preview = note.body ? note.body.slice(0, 120) : note.checklist.map((item) => `${item.done ? "✓" : "○"} ${item.text}`).join("\n");
+              const tint = note.color || colors.brand;
+              return (
+                <Reveal key={note.id} index={index} axis="x">
+                  <Touchable
+                    feedback="card"
+                    onPress={() => router.push(routeOf("not-defteri") as never)}
+                    style={[styles.note, { backgroundColor: withAlpha(tint, 0.14), borderColor: withAlpha(tint, 0.4) }]}
+                    accessibilityLabel={note.title || "Not"}
+                  >
+                    <View style={styles.noteHead}>
+                      <View style={[styles.noteDot, { backgroundColor: tint }]} />
+                      {note.pinned ? <Ionicons name="pin" size={13} color={colors.textSecondary} /> : null}
+                    </View>
+                    <Text style={styles.noteTitle} numberOfLines={2} {...textScale.dense}>
+                      {note.title || (note.body || note.checklist?.[0]?.text || "Not").slice(0, 60)}
+                    </Text>
+                    {note.title && preview ? (
+                      <Text style={styles.noteBody} numberOfLines={4} {...textScale.dense}>
+                        {preview}
+                      </Text>
+                    ) : null}
+                    {note.tags?.length ? (
+                      <Text style={styles.noteTags} numberOfLines={1} {...textScale.dense}>
+                        {note.tags.map((tag) => `#${tag}`).join("  ")}
+                      </Text>
+                    ) : null}
+                  </Touchable>
+                </Reveal>
+              );
+            })}
+          </ScrollView>
         </View>
       ) : null}
     </AdminScreen>
@@ -250,52 +256,21 @@ export default function ToolsHubScreen() {
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
   gap: { gap: space.sm },
-  hero: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.md,
-    padding: space.lg,
-    borderRadius: radius.xl,
-    backgroundColor: colors.brandDim,
-  },
-  hello: { ...type.h1, color: colors.textPrimary },
-  date: { ...type.bodySm, color: colors.textSecondary, marginTop: 2 },
-  clock: { ...type.scoreLg, color: colors.brandAccent },
+  section: { gap: space.sm, marginTop: space.md },
   muted: { ...type.caption, color: colors.textTertiary },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
-  tile: {
-    flexBasis: "47%",
-    flexGrow: 1,
-    gap: space.xs,
-    padding: space.md,
-    borderRadius: radius.xl,
-    borderWidth: hairline,
-    borderColor: colors.border,
-    backgroundColor: colors.surface1,
-    minHeight: 112,
-  },
-  tileHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.xs, marginBottom: space.xxs },
-  tileIcon: { width: 38, height: 38, borderRadius: radius.md, alignItems: "center", justifyContent: "center" },
-  tileTitle: { ...type.h3, color: colors.textPrimary },
-  tileText: { ...type.caption, color: colors.textSecondary },
-  list: { borderRadius: radius.xl, borderWidth: hairline, borderColor: colors.border, backgroundColor: colors.surface1, overflow: "hidden" },
-  upcoming: { flexDirection: "row", alignItems: "center", gap: space.md, paddingVertical: space.m, paddingRight: space.md },
-  divided: { borderTopWidth: hairline, borderTopColor: colors.separator },
-  bar: { width: 4, alignSelf: "stretch" },
-  when: { width: 92 },
-  whenDay: { ...type.labelSm, color: colors.textPrimary },
-  whenTime: { ...type.numSm, color: colors.textTertiary },
-  upTitle: { ...type.h4, color: colors.textPrimary },
-  notes: { gap: space.sm },
-  note: {
-    gap: 2,
-    padding: space.md,
-    borderRadius: radius.lg,
-    borderWidth: hairline,
-    borderColor: colors.border,
-    backgroundColor: colors.surface1,
-  },
+  cell: { flexBasis: "47%", flexGrow: 1 },
+  tile: { flexBasis: "auto", minHeight: 124 },
+  dateTile: { width: 44, height: 46, borderRadius: radius.md, borderWidth: hairline, alignItems: "center", justifyContent: "center" },
+  dateNum: { ...type.metricSm, color: colors.textPrimary },
+  dateMon: { ...type.nano },
+  noteScroller: { marginHorizontal: -layout.screenPadding },
+  noteRail: { gap: space.sm, paddingHorizontal: layout.screenPadding },
+  note: { width: 200, minHeight: 150, gap: space.xs, padding: space.md, borderRadius: radius.xl, borderWidth: hairline },
+  noteHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: space.xxs },
+  noteDot: { width: 10, height: 10, borderRadius: radius.pill },
   noteTitle: { ...type.h4, color: colors.textPrimary },
+  noteBody: { ...type.caption, color: colors.textSecondary },
+  noteTags: { ...type.labelXs, color: colors.textTertiary, marginTop: "auto" },
 });
