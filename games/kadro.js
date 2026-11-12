@@ -1835,11 +1835,12 @@
     c.scale(1 + kick * 0.15, 1 + kick * 0.15);
     label(c, txt, 0, 0, h * 0.6, kick > 0.05 ? "#FFE58A" : "#FFFFFF", "left");
     c.restore();
-    // Sağ: gol hapı (kale simgesi + sayı)
+    // Sağ: gol hapı (kale simgesi + sayı) — RN duraklat düğmesi varsa onun solunda
+    var slot = A.hudSlot(12);
     var gtxt = String(goals);
     c.font = A.font(h * 0.6, 900);
     var gw = c.measureText(gtxt).width + h + 30;
-    var gx = W - 12 - gw;
+    var gx = slot.x1 - gw;
     navyPill(c, gx, y, gw, h);
     // kale simgesi
     var ix = gx + 8, iy = y + h * 0.26, iw = h * 0.85, ih = h * 0.5;
@@ -1872,7 +1873,8 @@
     } else {
       bx = 14;
       bw = W - 28;
-      byy = y + h + 12;
+      // düğme yuvası varsa çubuk (ve kaleci can çubuğu) onun altına iner
+      byy = Math.max(y + h + 12, slot.right > 0 ? slot.top + 6 : 0);
       bh = 22;
     }
     var total = boss ? boss.z - STOP - levelZ0 : 1;

@@ -12,7 +12,17 @@
  * KÖPRÜ — iki yönlü, küçük:
  *   Oyun → RN : {type:"ready"} · {type:"haptic",kind} · {type:"over",score,stats}
  *   RN → Oyun : window.ArenaCmd({type:"start"|"pause"|"resume"|"sound",on})
- *               window.ArenaCmd({type:"config", sound, reduceMotion, perks, roster})
+ *               window.ArenaCmd({type:"config", sound, reduceMotion, perks, roster, hudInset})
+ *
+ * HUD GÜVENLİ ALANI: RN kabuğu oyunun üstüne yuvarlak bir DURAKLAT düğmesi
+ * bindirir (sağ üst köşe, ~46×46 px, kenarlardan 12 px). Kabuk bunun payını
+ * {type:"config", hudInset:{top, right}} ile (CSS px) bildirir; varsayılan
+ * {top:0, right:0}. Oyunlar üst HUD satırını çizerken A.hudSlot() kullanır:
+ *   var s = A.hudSlot();   // {top, right, x0, x1, w} — x1 = W - right
+ * Üst satırdaki öğeler [x0, x1] aralığına sığdırılır; sağ köşedeki right×top
+ * (top 0 ise right×right) kare boş bırakılır. hudInset değişince
+ * game.resize(W, H) yeniden çağrılır (oyunlar yerleşimi orada yeniler) ve
+ * varsa game.hudInsetChanged(inset) haber alır.
  *
  * DÖNGÜ: değişken kare süresi, sabit üst sınırlı alt adımlar (≤1/120 sn).
  * 60 Hz'de de 120 Hz'de de aynı oyun; sekme arka plana geçince saat durur,
@@ -39,6 +49,8 @@
     reduceMotion: false,
     game: null,
     is3d: hud3d,
+    /** RN'nin oyunun üstüne bindirdiği düğmelerin payı (CSS px). */
+    hudInset: { top: 0, right: 0 },
     FONT: '-apple-system, "SF Pro Display", Roboto, "Helvetica Neue", Arial, sans-serif',
   });
 
@@ -76,6 +88,8 @@
         if (cmd.sound != null) A.soundOn = !!cmd.sound;
         // Kariyer avantajı (Elit Kart): oyunun okuduğu küçük oranlar, en çok 0.1.
         if (cmd.perks && typeof cmd.perks === "object") A.perks = cmd.perks;
+        // HUD güvenli alanı: sağ üstteki RN duraklat düğmesinin payı.
+        if (cmd.hudInset && typeof cmd.hudInset === "object") A.setHudInset(cmd.hudInset);
         // Oyuna özgü kadro (Penaltı: gerçek ligden atıcı + kaleci merdiveni).
         if (cmd.roster && typeof cmd.roster === "object") {
           A.roster = cmd.roster;
@@ -86,6 +100,36 @@
         // Oyuna özgü komutlar (Kulüp Şehri: city, focus, celebrate).
         if (A.game.command) A.game.command(cmd);
     }
+  };
+
+  /* ───────────────────────────── HUD güvenli alanı ───────────────────────────── */
+
+  function insetNum(v) {
+    v = +v;
+    return isFinite(v) && v > 0 ? Math.min(v, 400) : 0;
+  }
+  A.setHudInset = function (inset) {
+    var top = inset.top != null ? insetNum(inset.top) : A.hudInset.top;
+    var right = inset.right != null ? insetNum(inset.right) : A.hudInset.right;
+    if (top === A.hudInset.top && right === A.hudInset.right) return;
+    A.hudInset = { top: top, right: right };
+    if (A.game && A.W > 0) {
+      if (A.game.resize) A.game.resize(A.W, A.H);
+      if (A.game.hudInsetChanged) A.game.hudInsetChanged(A.hudInset);
+    }
+  };
+  /**
+   * Üst HUD satırının kullanılabilir yatay aralığı. pad: oyunun kendi kenar
+   * boşluğu (varsayılan 0). Sağdaki düğme payı varsa x1 = W - right olur
+   * (pad'den büyükse pad'in yerine geçer); top: düğme yuvasının yüksekliği
+   * (top 0 verildiyse right kadar kabul edilir — kare yuva).
+   */
+  A.hudSlot = function (pad) {
+    pad = pad || 0;
+    var r = A.hudInset.right;
+    var x1 = A.W - Math.max(pad, r);
+    var x0 = pad;
+    return { top: A.hudInset.top || r, right: r, x0: x0, x1: x1, w: Math.max(0, x1 - x0) };
   };
 
   /* ───────────────────────────── matematik ───────────────────────────── */

@@ -694,7 +694,7 @@
   function layout() {
     var att = state === "attract";
     var keys = att ? [] : unlockedKeys();
-    var key = W + "x" + H + ":" + att + ":" + keys.length + ":" + ROWS + ":" + SPAWN_Z;
+    var key = W + "x" + H + ":" + att + ":" + keys.length + ":" + ROWS + ":" + SPAWN_Z + ":" + A.hudInset.top + "," + A.hudInset.right;
     if (key === layoutKey) return L;
     layoutKey = key;
     var wide = W > H * 1.15;
@@ -732,7 +732,8 @@
       }
     }
     o.trayTop = trayTop;
-    var hudB = att ? 12 : wide ? 46 : 86;
+    // Dikeyde dalga çubuğu RN duraklat düğmesinin altına iner (hudBarY).
+    var hudB = att ? 12 : wide ? 46 : 86 + (hudBarY(wide) - 56);
     var fb = att ? H - 16 : trayTop - 10;
     var room = fb - (hudB + (wide ? 8 : 40));
     var lh = A.clamp(room / LANES, 44, wide ? 74 : 78);
@@ -2176,8 +2177,18 @@
     c.restore();
   }
 
+  /**
+   * Dikey düzende dalga çubuğunun üst kenarı: normalde puan hapının 12 px
+   * altı (56); sağ üstte RN düğmesi varsa onun yuvasının da altına iner.
+   */
+  function hudBarY(wide) {
+    var s = A.hudSlot(14);
+    return wide ? 12 : Math.max(56, s.right > 0 ? s.top + 6 : 0);
+  }
+
   function drawHud(c) {
     var wide = L.wide;
+    var slot = A.hudSlot(14);
     var y = wide ? 8 : 10, h = wide ? 30 : 34;
     // Puan hapı (sol)
     var kick = Math.max(A.scoreKick || 0, shownPts < points ? 0.3 : 0);
@@ -2202,7 +2213,7 @@
     for (var i = 0; i < LIVES; i++) {
       var on = i < lives;
       var br = !on && i === lives ? A.clamp(1 - (A.time - lostAt) / 0.5, 0, 1) : 0;
-      shield(c, W - 14 - sr - (LIVES - 1 - i) * (sr * 2 + 6), y + h / 2, sr, on || br > 0, br);
+      shield(c, slot.x1 - sr - (LIVES - 1 - i) * (sr * 2 + 6), y + h / 2, sr, on || br > 0, br);
     }
     // Dalga: başlık + rakip takım rozeti + ilerleme çubuğu
     var rv = rivalAt(wave), rk = kitOf(rv);
@@ -2218,7 +2229,7 @@
     } else {
       bx = 14;
       bw = W - 28;
-      byy = y + h + 12;
+      byy = hudBarY(false);
       bh = 22;
     }
     // ilerleme

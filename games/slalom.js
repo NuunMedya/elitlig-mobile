@@ -2567,6 +2567,11 @@
   function drawHud(c, dt) {
     var wide = W > H * 1.15;
     var y = wide ? 8 : 10, h = wide ? 30 : 34;
+    // Sağ üstteki RN duraklat düğmesinin yuvası: o satırdaki öğeler slot.x1'de biter.
+    var slot = A.hudSlot(14);
+    function rightEdge(top) {
+      return top < slot.top ? slot.x1 : W - 14;
+    }
     shownPts = shownPts < points ? Math.min(points, shownPts + Math.max(1, (points - shownPts) * 0.15)) : points;
     if (lives < livesSeen) lostAt = A.time;
     livesSeen = lives;
@@ -2591,7 +2596,7 @@
     for (var i = 0; i < LIVES; i++) {
       var on = i < lives;
       var br = !on && i === lives ? A.clamp(1 - (A.time - lostAt) / 0.5, 0, 1) : 0;
-      shieldIcon(c, W - 14 - sr - (LIVES - 1 - i) * (sr * 2 + 6), y + h / 2, sr, on || br > 0, br);
+      shieldIcon(c, rightEdge(y) - sr - (LIVES - 1 - i) * (sr * 2 + 6), y + h / 2, sr, on || br > 0, br);
     }
     // Seviye ilerlemesi: SEVİYE n · rakip takım
     var def = defenseAt(level), rk = kitHex(def);
@@ -2606,7 +2611,8 @@
     } else {
       bx = 14;
       bw = W - 28;
-      byy = y + h + 12;
+      // düğme yuvası varsa çubuk (ve altındaki satır) onun altına iner
+      byy = Math.max(y + h + 12, slot.right > 0 ? slot.top + 6 : 0);
       bh = 22;
     }
     A.roundRect(c, bx, byy + 2, bw, bh, bh / 2);
@@ -2667,7 +2673,7 @@
     var mt = "×" + m;
     c.font = A.font(rh * 0.56, 900);
     var mw = c.measureText(mt).width + rh + 20;
-    var mx0 = W - 14 - mw;
+    var mx0 = rightEdge(ry) - mw;
     navyPill(c, mx0, ry, mw, rh, m > 1 ? "#6D28D9" : null);
     var rcx = mx0 + rh / 2 + 2, rcy = ry + rh / 2, rr = rh * 0.32;
     c.lineWidth = 3.5;
