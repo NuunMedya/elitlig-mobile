@@ -22,7 +22,8 @@
  *      forvet koridorunu korur, stoper oyalar, pres yavaşlatır, füze 3×3
  *      temizler; dalgalar ilerler, kaptan gelir.
  *      KADRO KOŞUSU: kapı aritmetiği; kötü kapılar kadroyu bitirir, iyi kapılar
- *      büyütür; şut hasarı analitiktir; kaleci düşer, bölüm atlanır.
+ *      büyütür; rakip yalnız top değince düşer; temas kaybı bire bir görünür;
+ *      kaleci düşer, bölüm atlanır.
  *   4. PENALTI: seri penaltı kuralları (erken bitiş, ani ölüm) doğru; yalnız sen
  *      atarsın, rakibin atışı sırayla sayılır; köşeye vuruş gol olur, hep ortaya
  *      vuran okunur; kazanan sıradaki kulübe geçer, kaybeden turnuvayı bitirir.
@@ -617,7 +618,7 @@ const squadBot = (A) => {
   check("kadro: kaptan ve rakip takımlar kadrodan gelir", x.captain === "K. Kaptan" && first === "Birinci Rakip", `${x.captain} · ilk rakip ${first}`);
 }
 {
-  // Grup hasarı analitik: menzilde kadro × 1,1 / sn; temas bire bir götürür.
+  // Menzilde kadro × 1,1 / sn hasar (toplar değdikçe); temas bire bir götürür.
   const { A, run } = boot("kadro");
   A.game.start();
   const d = A.game.debug();
@@ -639,6 +640,73 @@ const squadBot = (A) => {
     "kadro: şut hasarı ve temas kaybı",
     n0 != null && n0.n === 20 && n0.hp < 500 - 20 && x.n === 0 && x.state !== "play",
     n0 ? `temasa kadar ${Math.round(500 - n0.hp)} hasar; kalabalık grup kadroyu bitirdi` : "temas olmadı",
+  );
+}
+{
+  // Rakip yalnız TOP DEĞİNCE düşer: ilk hasar ilk topun uçuşundan sonra gelir, her
+  // "ball" ölümü bir isabet karesinde olur; temas kaybı kadroda bire bir görünür.
+  const { A, run } = boot("kadro");
+  A.game.start();
+  const d = A.game.debug();
+  d.setN(30);
+  d.segs.forEach((s) => {
+    if (s.type === "gate") s.done = true;
+  });
+  d.pickups.forEach((p) => (p.gone = true)); // silahsız
+  const g = d.segs.find((s) => s.type === "rivals");
+  g.hp = g.hp0 = 90;
+  g.x0 = -4.4;
+  g.x1 = 4.4;
+  let firstShot = null, firstDmg = null, early = 0, offBeat = 0, hitsPrev = 0, deadPrev = 0, visBad = 0, contact = false;
+  run(8, (arena) => {
+    const x = arena.game.debug();
+    if (firstShot == null && x.shots.some((s) => s.tgt === g)) firstShot = arena.time;
+    const dead = g.men ? g.men.filter((m) => !m.alive && m.cause === "ball").length : 0;
+    if (firstDmg == null && g.hp < 90) {
+      firstDmg = arena.time;
+      if (g.hits === 0) early += 1;
+    }
+    if (g.hits === 0 && (dead > 0 || g.hp < 90)) early += 1;
+    if (dead > deadPrev && g.hits === hitsPrev) offBeat += 1; // isabetsiz ölüm
+    if (g.z - x.z < 1.3) contact = true;
+    if (x.members !== Math.min(x.n, 70)) visBad += 1;
+    hitsPrev = g.hits;
+    deadPrev = dead;
+  });
+  const flight = firstShot != null && firstDmg != null ? firstDmg - firstShot : -1;
+  check(
+    "kadro: rakip yalnız top değince düşer (görünen şutla eş zamanlı)",
+    firstShot != null && firstDmg != null && flight >= 0.15 && early === 0 && offBeat === 0 && visBad === 0,
+    `ilk top → ilk hasar ${flight.toFixed(2)} sn, isabetsiz düşüş ${offBeat}, erken hasar ${early}, ${g.hits} isabet${contact ? ", temas" : ""}`,
+  );
+}
+{
+  // Temas: kaybedilen her oyuncu kadrodan düşen bir figür olarak görünür, sayaç ile
+  // görünen kadro her karede aynı.
+  const { A, run } = boot("kadro");
+  A.game.start();
+  const d = A.game.debug();
+  d.setN(24);
+  d.segs.forEach((s) => {
+    if (s.type === "gate") s.done = true;
+  });
+  d.pickups.forEach((p) => (p.gone = true));
+  const g = d.segs.find((s) => s.type === "rivals");
+  g.hp = g.hp0 = 60;
+  g.x0 = -4.4;
+  g.x1 = 4.4;
+  let bad = 0, maxFallen = 0, meleeKills = 0;
+  run(8, (arena) => {
+    const x = arena.game.debug();
+    if (x.members !== Math.min(x.n, 70) || x.fallenTotal !== x.lostTotal) bad += 1;
+    maxFallen = Math.max(maxFallen, x.fallen);
+    meleeKills = g.men ? g.men.filter((m) => !m.alive && m.cause === "melee").length : 0;
+  });
+  const x = A.game.debug();
+  check(
+    "kadro: temas kaybı bire bir görünür (düşen figür = kaybedilen oyuncu)",
+    bad === 0 && x.lostTotal > 0 && x.fallenTotal === x.lostTotal && maxFallen > 0 && meleeKills > 0,
+    `${x.lostTotal} kayıp · ${x.fallenTotal} düşen figür · ${meleeKills} rakip temasla düştü · uyumsuz kare ${bad}`,
   );
 }
 
