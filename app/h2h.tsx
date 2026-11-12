@@ -19,7 +19,6 @@ import {
   SegmentedControl,
   SkeletonCard,
   SkeletonListRow,
-  StatBar,
   TeamLogo,
   Touchable,
   useHeaderScroll,
@@ -65,7 +64,7 @@ import type { ApiMatch, StandingRow } from "@/lib/types";
  *     Kaydırınca kapanır, başlıkta "A – B" kalır.
  *   · DAĞILIM ÇUBUĞU: galibiyet/beraberlik/galibiyet oranı tek yatay çubukta;
  *     ev sahibi zümrüt (veri), rakip kayrak, beraberlik nötr ray rengi
- *     (StatBar'ın taraf dili ile aynı).
+ *     (DuelBar'ın taraf dili ile aynı).
  *   · KARŞILAŞTIRMA: galibiyet, atılan gol, maç başı gol çubukları tek kartta.
  *   · FORM: iki satır — arma + ad + son beş maç.
  *   · GEÇMİŞ: tarih · ev – deplasman skoru tek kartta; sonuç çipi ev sahibi
@@ -779,7 +778,7 @@ const SplitLabel = memo(function SplitLabel({
       <Text
         style={[
           styles.splitValue,
-          tone === "home" ? styles.splitValueHome : tone === "draw" ? styles.splitValueDraw : null,
+          tone === "home" ? styles.splitValueHome : tone === "draw" ? styles.splitValueDraw : styles.splitValueAway,
         ]}
         {...textScale.dense}
       >
@@ -1172,7 +1171,26 @@ const styles = StyleSheet.create({
   },
   heroMeta: {
     ...type.caption,
-    color: colors.onDarkMuted,
+    color: colors.onDark,
+  },
+  heroMetaPill: {
+    paddingHorizontal: space.sm,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+    backgroundColor: colors.inkPill,
+    borderWidth: hairline,
+    borderColor: colors.inkPillBorder,
+  },
+  heroScoreRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.s,
+  },
+  heroScoreLeadA: {
+    color: colors.accent,
+  },
+  heroScoreLeadB: {
+    color: colors.brandOnDark,
   },
   heroMiddle: {
     alignItems: "center",
@@ -1236,7 +1254,10 @@ const styles = StyleSheet.create({
   },
   splitHome: { backgroundColor: colors.accent },
   splitDraw: { backgroundColor: colors.slateSoft },
-  splitAway: { backgroundColor: colors.slate },
+  splitAway: { backgroundColor: DUEL_B },
+  splitValueAway: {
+    color: colors.brandAccent,
+  },
   splitLegend: {
     flexDirection: "row",
     gap: space.sm,
@@ -1271,6 +1292,85 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     paddingVertical: space.md,
   },
+  formSide: {
+    width: 3,
+    height: 22,
+    borderRadius: 2,
+    marginLeft: -space.sm,
+  },
+  formPoints: {
+    ...type.numSmStrong,
+    color: colors.textSecondary,
+    minWidth: 26,
+    textAlign: "right",
+  },
+  duelCard: {
+    gap: space.xs,
+  },
+  duelHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    marginBottom: space.xs,
+  },
+  duelTitle: {
+    flex: 1,
+  },
+  duelScore: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xxs,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface2,
+  },
+  duelScoreNum: {
+    ...type.scoreXs,
+    color: colors.textSecondary,
+  },
+  duelScoreA: {
+    color: colors.accentText,
+  },
+  duelScoreB: {
+    color: colors.brandAccent,
+  },
+  duelScoreDash: {
+    ...type.scoreXs,
+    color: colors.textTertiary,
+  },
+  duelLegend: {
+    flexDirection: "row",
+    gap: space.md,
+    paddingBottom: space.xs,
+    marginBottom: space.xs,
+    borderBottomWidth: hairline,
+    borderBottomColor: colors.separator,
+  },
+  duelLegendItem: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+  },
+  duelLegendRight: {
+    justifyContent: "flex-end",
+  },
+  duelDot: {
+    width: 8,
+    height: 8,
+    borderRadius: radius.pill,
+  },
+  meetStripe: {
+    position: "absolute",
+    left: 0,
+    top: space.sm,
+    bottom: space.sm,
+    width: 3,
+    borderTopRightRadius: 3,
+    borderBottomRightRadius: 3,
+  },
   formName: {
     ...type.label,
     color: colors.textPrimary,
@@ -1301,6 +1401,7 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   meetRow: {
+    overflow: "hidden",
     flexDirection: "row",
     alignItems: "center",
     gap: space.sm,

@@ -396,8 +396,12 @@ export interface DuelBarProps {
 export const DuelBar = React.memo(function DuelBar({ label, a, b, unit, lowerIsBetter = false, neutral = false }: DuelBarProps) {
   const winner = neutral ? null : duelWinner(a, b, lowerIsBetter);
   const total = Math.max(0, a) + Math.max(0, b);
-  const shareA = total > 0 ? Math.max(0, a) / total : 0;
-  const shareB = total > 0 ? Math.max(0, b) / total : 0;
+  /* "Az olan iyi" metrikte çubuk payları yer değiştirir: uzun çubuk daima
+     iyi tarafı gösterir (sıra 1'e 2 → sol çubuk uzun). */
+  const rawA = total > 0 ? Math.max(0, a) / total : 0;
+  const rawB = total > 0 ? Math.max(0, b) / total : 0;
+  const shareA = lowerIsBetter ? rawB : rawA;
+  const shareB = lowerIsBetter ? rawA : rawB;
   return (
     <View
       style={styles.duel}

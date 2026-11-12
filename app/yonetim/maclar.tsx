@@ -43,22 +43,34 @@ import {
   Badge,
   BottomSheet,
   Button,
-  Chip,
-  ChipGroup,
   EmptyState,
   ErrorState,
+  IconTile,
   Input,
-  MatchRow,
   ScreenHeader,
-  SectionHeader,
-  SkeletonMatchRow,
+  Skeleton,
   Stepper,
-  matchRowHeight,
+  TeamLogo,
+  Touchable,
   useHeaderScroll,
   useRefresh,
   useToast,
+  type IconTileTone,
   type Tone,
 } from "@/components/ui";
+import {
+  DAY_HEADER_HEIGHT,
+  DayHeader,
+  InfoPill,
+  OPS_MATCH_CARD_HEIGHT,
+  OpsGroup,
+  OpsMatchCard,
+  OpsStage,
+  ScorePlate,
+  StatusTiles,
+  toneColor,
+  upperTR,
+} from "@/components/admin/matches/opsKit";
 import { useAppActive } from "@/hooks/useLiveFavoriteCount";
 import { useTeamLogos } from "@/hooks/useTeamLogos";
 import {
@@ -74,7 +86,7 @@ import { formatDayHeading, formatTime } from "@/lib/format";
 import type { ApiMatch, MacDurumu } from "@/lib/types";
 import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
-import { colors, layout, space, textScale, type } from "@/theme";
+import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
 
 /* ═══════════════════════════ SABİTLER VE YARDIMCILAR ═══════════════════════ */
 
@@ -102,13 +114,27 @@ const CONFIRM_STATUS: Partial<Record<MacDurumu, { title: string; body: string; a
   },
 };
 
-/** Satır ve başlık ölçüleri — `getItemLayout` yalnız bunlardan kurulur. */
-const ROW_HEIGHT = matchRowHeight("default", "none");
-/* Gün başlığı: 12 üst nefes + h3 satırı (20) + 8 alt nefes. Bölüm başlığı
-   listenin kendi kenar boşluğunun İÇİNDE durur; SectionHeader'ın ekran
-   kenarı dolgusu burada sıfırlanır (iki kez içeri kaçıyordu). */
-const SECTION_HEADER_HEIGHT = 40;
+/** Satır ve başlık ölçüleri — `getItemLayout` yalnız bunlardan kurulur.
+   Kart sabit yükseklikli (OpsMatchCard) + kartlar arası nefes. */
+const CARD_GAP = space.sm;
+const ROW_HEIGHT = OPS_MATCH_CARD_HEIGHT + CARD_GAP;
+/* Gün başlığı: takvim pulu + gün adı + durum hapı (DayHeader). */
+const SECTION_HEADER_HEIGHT = DAY_HEADER_HEIGHT + space.sm;
 const SECTION_GAP = space.md;
+
+/** Durum sayacı karolarındaki kısa adlar ve simgeler. */
+const STATUS_TILE: Record<MacDurumu, { label: string; icon: keyof typeof Ionicons.glyphMap }> = {
+  taslak: { label: "Taslak", icon: "document-outline" },
+  zamanlanmis: { label: "Planlı", icon: "calendar-outline" },
+  canli: { label: "Canlı", icon: "radio-outline" },
+  yayinlanmis: { label: "Bitti", icon: "checkmark-done-outline" },
+};
+
+/** Bugünün "YYYY-MM-DD" anahtarı (yerel saat) — "sonuç bekliyor" uyarısı için. */
+function todayKey(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 /**
  * Ekranı açabilen yetkiler. Menüdeki modül matches.view/create/update ister;
@@ -155,6 +181,10 @@ interface MatchSectionMeta {
   title: string;
   /** Meta: durum + adet ("Zamanlandı · 4 maç"). */
   meta: string;
+  /** Takvim pulu için gün ("2026-11-14"); canlı bölümde boş. */
+  day?: string;
+  /** Bölümün durum anahtarı (hap tonu). */
+  status: string;
 }
 
 type MatchSection = MatchSectionMeta & { data: ApiMatch[] };
@@ -267,7 +297,8 @@ export default function AdminMatchesScreen() {
     if (live.length) {
       result.push({
         key: "canli",
-        title: "Canlı",
+        status: "canli",
+        title: "Şu an sahada",
         meta: `${live.length} maç · otomatik yenileniyor`,
         data: [...live].sort((a, b) => startKey(a).localeCompare(startKey(b))),
       });
@@ -301,6 +332,8 @@ export default function AdminMatchesScreen() {
       const label = statusLabel(resolveStatus(bucketStatus));
       result.push({
         key,
+        status: bucketStatus,
+        day,
         title: formatDayHeading(day),
         meta: `${label} · ${data.length} maç`,
         data,
@@ -456,27 +489,37 @@ export default function AdminMatchesScreen() {
 
   /* ───────────────────────────── ÇİZİM ───────────────────────────── */
 
+  const today = todayKey();
+
   const renderItem = useCallback(
-    ({ item, index, section }: SectionListRenderItemInfo<ApiMatch, MatchSectionMeta>) => {
-      const last = index === section.data.length - 1;
-      const position = index === 0 ? (last ? "single" : "first") : last ? "last" : "middle";
-      return (
-        <AdminMatchRow
-          match={item}
-          homeLogo={teams.logoFor(item.home_team_id, item.first_team_name)}
-          awayLogo={teams.logoFor(item.away_team_id, item.second_team_name)}
-          position={position}
-          onOpen={openSheet}
-        />
-      );
-    },
-    [openSheet, teams],
+    ({ item }: SectionListRenderItemInfo<ApiMatch, MatchSectionMeta>) => (
+      <AdminMatchRow
+        match={item}
+        homeLogo={teams.logoFor(item.home_team_id, item.first_team_name)}
+        awayLogo={teams.logoFor(item.away_team_id, item.second_team_name)}
+        today={today}
+        onOpen={openSheet}
+      />
+    ),
+    [openSheet, teams, today],
   );
 
   const renderSectionHeader = useCallback(
-    ({ section }: { section: SectionListData<ApiMatch, MatchSectionMeta> }) => (
-      <SectionHeader title={section.title} meta={section.meta} size="group" style={styles.dayHeader} />
-    ),
+    ({ section }: { section: SectionListData<ApiMatch, MatchSectionMeta> }) => {
+      const known = resolveStatus(section.status);
+      return (
+        <View style={styles.dayHeader}>
+          <DayHeader
+            day={section.day}
+            title={section.title}
+            statusLabel={section.key === "canli" ? "Otomatik yenileniyor" : statusLabel(known)}
+            tone={known ? STATUS_TONE[known] : "neutral"}
+            count={section.data.length}
+            live={section.key === "canli"}
+          />
+        </View>
+      );
+    },
     [],
   );
 
@@ -544,6 +587,58 @@ export default function AdminMatchesScreen() {
   const loading = matchesQuery.isLoading || (!scope.ready && scope.loading);
   const failed = matchesQuery.isError && matches.length === 0;
 
+  /* Eksik bilgi sayısı: sahası/saati olmayan ve sonucu bekleyen maçlar — özet altında tek satır. */
+  const missing = searched.filter((m) => statusKey(m) !== "yayinlanmis" && (!m.match_field || !m.time)).length;
+  const overdue = searched.filter((m) => statusKey(m) === "zamanlanmis" && matchDay(m) && matchDay(m) < today).length;
+
+  const listHeader = (
+    <View style={styles.summary}>
+      <StatusTiles<MacDurumu>
+        items={STATUS_ORDER.map((key) => ({
+          key,
+          label: STATUS_TILE[key].label,
+          icon: STATUS_TILE[key].icon,
+          value: counts.get(key) ?? 0,
+          tone: STATUS_TONE[key],
+        }))}
+        value={status}
+        onChange={selectStatus}
+      />
+      <View style={styles.summaryLine}>
+        <Text style={styles.summaryText} numberOfLines={1} {...textScale.dense}>
+          {status ? `${MATCH_STATUS_LABELS[status]} · ${visible.length} maç` : `Toplam ${searched.length} maç`}
+          {search ? " · aramaya göre" : ""}
+        </Text>
+        {overdue ? <InfoPill icon="hourglass-outline" label={`${overdue} sonuç bekliyor`} tone="danger" /> : null}
+        {missing ? <InfoPill icon="alert-circle" label={`${missing} eksik bilgi`} tone="warn" /> : null}
+        {status ? (
+          <Touchable onPress={() => selectStatus(null)} feedback="none" style={styles.clear} accessibilityRole="button" accessibilityLabel="Durum süzgecini kaldır">
+            <Ionicons name="close-circle" size={14} color={colors.brandAccent} />
+            <Text style={styles.clearText} {...textScale.dense}>
+              Tümü
+            </Text>
+          </Touchable>
+        ) : null}
+      </View>
+      {matchesQuery.isError ? (
+        <ErrorState error={matchesQuery.error} onRetry={refetch} variant="banner" style={styles.banner} />
+      ) : null}
+    </View>
+  );
+
+  const selStatus = selected ? normalizeMatchStatus(selected.mac_durumu) : null;
+  const selScored = selected
+    ? (selStatus === "canli" || selStatus === "yayinlanmis") && selected.first_team_score != null && selected.second_team_score != null
+    : false;
+
+  /** Alt sayfadaki adım kısayolları — yetkisi olmayan adım gizlenir. */
+  const stepTiles: { key: string; label: string; icon: keyof typeof Ionicons.glyphMap; tone: IconTileTone; onPress: () => void; hint: string }[] = [
+    { key: "bilgiler", label: "Öncesi", icon: "clipboard-outline", tone: "violet", onPress: openWorkflow, hint: "Maç öncesi: tarih, saha, görevliler" },
+    ...(canLineup ? [{ key: "kadro", label: "Kadro", icon: "people-outline" as const, tone: "cyan" as const, onPress: () => openStep("kadro"), hint: "İki takımın ilk 11 ve yedeklerini gir" }] : []),
+    ...(canLive ? [{ key: "canli", label: "Canlı", icon: "radio-outline" as const, tone: "red" as const, onPress: () => openStep("canli"), hint: "Saat, devre, olaylar ve skor" }] : []),
+    ...(canPost ? [{ key: "mac-sonu", label: "Maç sonu", icon: "star-outline" as const, tone: "gold" as const, onPress: () => openStep("mac-sonu"), hint: "Sonuç tescili, puanlar, maçın enleri, içerik, istatistik ve olaylar" }] : []),
+  ];
+
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScreenHeader
@@ -554,25 +649,6 @@ export default function AdminMatchesScreen() {
         scrollY={scrollY}
         bottom={
           <View style={styles.controls}>
-            <ChipGroup>
-              <Chip
-                label="Tümü"
-                count={searched.length}
-                selected={status === null}
-                onPress={() => selectStatus(null)}
-              />
-              {STATUS_ORDER.map((item) => (
-                <Chip
-                  key={item}
-                  label={MATCH_STATUS_LABELS[item]}
-                  count={counts.get(item) ?? 0}
-                  tone={STATUS_TONE[item]}
-                  selected={status === item}
-                  onPress={() => selectStatus(status === item ? null : item)}
-                />
-              ))}
-            </ChipGroup>
-
             <Input
               variant="search"
               size="sm"
@@ -596,7 +672,15 @@ export default function AdminMatchesScreen() {
         />
       ) : loading ? (
         <View style={styles.skeleton}>
-          <SkeletonMatchRow count={7} variant="row" />
+          <View style={styles.skeletonTiles}>
+            {STATUS_ORDER.map((key) => (
+              <Skeleton key={key} height={68} radius="lg" style={styles.flex} />
+            ))}
+          </View>
+          <Skeleton height={20} width={160} radius="sm" />
+          {[0, 1, 2, 3].map((key) => (
+            <Skeleton key={key} height={OPS_MATCH_CARD_HEIGHT} radius="xl" />
+          ))}
         </View>
       ) : failed ? (
         <ErrorState error={matchesQuery.error} onRetry={refetch} />
@@ -612,21 +696,12 @@ export default function AdminMatchesScreen() {
           stickySectionHeadersEnabled={false}
           contentContainerStyle={styles.list}
           refreshControl={refresh.control}
-          initialNumToRender={12}
-          maxToRenderPerBatch={12}
+          initialNumToRender={8}
+          maxToRenderPerBatch={10}
           windowSize={8}
           removeClippedSubviews
           keyboardShouldPersistTaps="handled"
-          ListHeaderComponent={
-            matchesQuery.isError ? (
-              <ErrorState
-                error={matchesQuery.error}
-                onRetry={refetch}
-                variant="banner"
-                style={styles.banner}
-              />
-            ) : null
-          }
+          ListHeaderComponent={listHeader}
           ListEmptyComponent={
             <EmptyState
               icon="football-outline"
@@ -634,7 +709,7 @@ export default function AdminMatchesScreen() {
               body={
                 search
                   ? "Aramanızla eşleşen maç yok. Farklı bir takım adı deneyin."
-                  : "Bu kapsam ve durumda maç yok. Durum çipini değiştirmeyi deneyin."
+                  : "Bu kapsam ve durumda maç yok. Durum karosunu değiştirmeyi deneyin."
               }
               action={
                 status || search
@@ -652,7 +727,7 @@ export default function AdminMatchesScreen() {
         />
       )}
 
-      {/* Eylem alt sayfası: skor · durum · maç sayfası */}
+      {/* Eylem alt sayfası: maç sahnesi · iş akışı · skor · durum · maç sayfası */}
       <BottomSheet
         visible={selected !== null}
         onClose={closeSheet}
@@ -661,139 +736,171 @@ export default function AdminMatchesScreen() {
       >
         {selected ? (
           <View style={styles.sheet}>
-            <View style={styles.sheetMetaRow}>
-              <Badge
-                label={statusLabel(normalizeMatchStatus(selected.mac_durumu)).toLocaleUpperCase("tr-TR")}
-                tone={statusKey(selected) in STATUS_TONE ? STATUS_TONE[statusKey(selected) as MacDurumu] : "neutral"}
-                size="xs"
-              />
-              <Text style={styles.sheetMeta} numberOfLines={1} {...textScale.dense}>
-                {[
-                  formatDayHeading(matchDay(selected)),
-                  formatTime(selected.time),
-                  selected.match_field,
-                  selected.league_name,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </Text>
-            </View>
+            {/* Mini sahne: logolar, skor plakası, durum ve künye hapları. */}
+            <OpsStage height={170} style={styles.sheetStage}>
+              <View style={styles.stageRow}>
+                <View style={styles.stageTeam}>
+                  <TeamLogo name={selected.first_team_name} logo={teams.logoFor(selected.home_team_id, selected.first_team_name)} size={40} />
+                  <Text style={styles.stageName} numberOfLines={2} {...textScale.dense}>
+                    {selected.first_team_name}
+                  </Text>
+                </View>
+                <View style={styles.stageCenter}>
+                  <ScorePlate
+                    scored={selScored}
+                    home={Number(selected.first_team_score ?? 0)}
+                    away={Number(selected.second_team_score ?? 0)}
+                    time={selected.time ? formatTime(selected.time) : null}
+                    live={selStatus === "canli"}
+                    size="lg"
+                  />
+                  <Badge
+                    label={upperTR(statusLabel(selStatus))}
+                    tone={selStatus ? STATUS_TONE[selStatus] : "neutral"}
+                    size="xs"
+                    dot={selStatus === "canli"}
+                  />
+                </View>
+                <View style={styles.stageTeam}>
+                  <TeamLogo name={selected.second_team_name} logo={teams.logoFor(selected.away_team_id, selected.second_team_name)} size={40} />
+                  <Text style={styles.stageName} numberOfLines={2} {...textScale.dense}>
+                    {selected.second_team_name}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.stagePills}>
+                <InfoPill icon="calendar-outline" label={formatDayHeading(matchDay(selected))} onDark />
+                {selected.time ? <InfoPill icon="time-outline" label={formatTime(selected.time)} strong onDark /> : <InfoPill icon="time-outline" label="Saat yok" tone="warn" />}
+                {selected.match_field ? <InfoPill icon="location-outline" label={selected.match_field} onDark /> : <InfoPill icon="location-outline" label="Saha yok" tone="warn" />}
+              </View>
+            </OpsStage>
 
+            {/* İş akışı: dört adımın kısayol karoları + birincil eylem. */}
+            <View style={styles.stepGrid}>
+              {stepTiles.map((tile, index) => (
+                <Touchable
+                  key={tile.key}
+                  feedback="card"
+                  haptic="light"
+                  onPress={tile.onPress}
+                  style={styles.stepTile}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${index + 1}. adım: ${tile.label}`}
+                  accessibilityHint={tile.hint}
+                >
+                  <IconTile icon={tile.icon} tone={tile.tone} size={34} glow={false} />
+                  <Text style={styles.stepLabel} numberOfLines={1} {...textScale.badge}>
+                    {tile.label}
+                  </Text>
+                </Touchable>
+              ))}
+            </View>
             <Button
               label="Maç iş akışını aç"
               icon="git-branch-outline"
+              size="lg"
               onPress={openWorkflow}
               haptic="light"
               fullWidth
               accessibilityHint="Maç öncesi, kadro, canlı akış ve maç sonu adımları"
             />
 
-            {canLineup || canPost ? (
-              <View style={styles.quickRow}>
-                {canLineup ? (
-                  <Button
-                    label="Kadro gir"
-                    icon="people-outline"
-                    variant="secondary"
-                    onPress={() => openStep("kadro")}
-                    haptic="light"
-                    style={styles.quickBtn}
-                    accessibilityHint="İki takımın ilk 11 ve yedeklerini gir"
-                  />
-                ) : null}
-                {canPost ? (
-                  <Button
-                    label="Maç sonu"
-                    icon="star-outline"
-                    variant="secondary"
-                    onPress={() => openStep("mac-sonu")}
-                    haptic="light"
-                    style={styles.quickBtn}
-                    accessibilityHint="Sonuç tescili, puanlar, maçın enleri, içerik, istatistik ve olaylar"
-                  />
-                ) : null}
-              </View>
-            ) : null}
-
-            {/* Skor girişi — tabular Stepper, sabit genişlik, basılı tutunca hızlanır. */}
+            {/* Hızlı skor — iki takım yan yana, tabular Stepper, basılı tutunca hızlanır. */}
             {canScore ? (
-              <>
-            <Text style={styles.sheetLabel} {...textScale.dense}>
-              SKOR
-            </Text>
-            <View style={styles.scoreRow}>
-              <View style={styles.scoreSide}>
-                <Text style={styles.scoreTeam} numberOfLines={1} {...textScale.dense}>
-                  {selected.first_team_name}
-                </Text>
-                <Stepper
-                  value={homeScore}
-                  onChange={setHomeScore}
-                  min={0}
-                  max={99}
-                  repeatOnHold
-                  accessibilityLabel={`${selected.first_team_name} skoru`}
+              <OpsGroup title="Hızlı skor" icon="football-outline" tone="cyan" hint="Yalnız rakamı yazar; olay girilen maçta skor olaylardan hesaplanır. Kalıcı elle ya da hükmen sonuç için iş akışındaki “Sonucu tescil et”i kullan.">
+                <View style={styles.scoreRow}>
+                  <View style={styles.scoreSide}>
+                    <Text style={styles.scoreTeam} numberOfLines={1} {...textScale.dense}>
+                      {selected.first_team_name}
+                    </Text>
+                    <Stepper
+                      value={homeScore}
+                      onChange={setHomeScore}
+                      min={0}
+                      max={99}
+                      repeatOnHold
+                      accessibilityLabel={`${selected.first_team_name} skoru`}
+                    />
+                  </View>
+                  <Text style={styles.scoreDash} {...textScale.badge}>
+                    –
+                  </Text>
+                  <View style={styles.scoreSide}>
+                    <Text style={styles.scoreTeam} numberOfLines={1} {...textScale.dense}>
+                      {selected.second_team_name}
+                    </Text>
+                    <Stepper
+                      value={awayScore}
+                      onChange={setAwayScore}
+                      min={0}
+                      max={99}
+                      repeatOnHold
+                      accessibilityLabel={`${selected.second_team_name} skoru`}
+                    />
+                  </View>
+                </View>
+                <Button
+                  label="Skoru kaydet"
+                  icon="save-outline"
+                  variant="secondary"
+                  onPress={saveScore}
+                  loading={scoreMutation.isPending}
+                  disabled={
+                    homeScore === Number(selected.first_team_score ?? 0) &&
+                    awayScore === Number(selected.second_team_score ?? 0)
+                  }
+                  haptic="medium"
+                  fullWidth
                 />
-              </View>
-              <View style={styles.scoreSide}>
-                <Text style={styles.scoreTeam} numberOfLines={1} {...textScale.dense}>
-                  {selected.second_team_name}
-                </Text>
-                <Stepper
-                  value={awayScore}
-                  onChange={setAwayScore}
-                  min={0}
-                  max={99}
-                  repeatOnHold
-                  accessibilityLabel={`${selected.second_team_name} skoru`}
-                />
-              </View>
-            </View>
-
-            <Button
-              label="Skoru kaydet"
-              icon="save-outline"
-              onPress={saveScore}
-              loading={scoreMutation.isPending}
-              disabled={
-                homeScore === Number(selected.first_team_score ?? 0) &&
-                awayScore === Number(selected.second_team_score ?? 0)
-              }
-              haptic="medium"
-              fullWidth
-            />
-            <Text style={styles.sheetNote} {...textScale.long}>
-              Hızlı skor yalnız rakamı yazar. Canlı akışta olay girilen maçta skor olaylardan
-              hesaplanır; kalıcı elle ya da hükmen sonuç için iş akışındaki &quot;Sonucu tescil et&quot;i kullan.
-            </Text>
-              </>
+              </OpsGroup>
             ) : null}
 
-            {/* Durum değiştirme */}
-            <Text style={styles.sheetLabel} {...textScale.dense}>
-              DURUM
-            </Text>
-            <ChipGroup scrollable={false} contentPadding={0}>
-              {STATUS_ORDER.map((item) => (
-                <Chip
-                  key={item}
-                  label={MATCH_STATUS_LABELS[item]}
-                  tone={STATUS_TONE[item]}
-                  selected={statusKey(selected) === item}
-                  disabled={statusKey(selected) === item || statusMutation.isPending || !canSetStatus(item)}
-                  onPress={() => changeStatus(item)}
-                />
-              ))}
-            </ChipGroup>
-            <Text style={styles.sheetNote} {...textScale.long}>
-              {STATUS_ORDER.some(canSetStatus)
-                ? "“Canlı” durumu üyelere maç başladı bildirimi gönderir. “Yayınlandı” ve “Taslak” puan durumunu değiştirdiği için onay ister."
-                : "Maç durumunu değiştirmek için hesabında maç güncelleme, canlı akış ya da yayınlama yetkisi olmalı."}
-            </Text>
+            {/* Durum: dört durum karosu — mevcut durum seçili, yetkisiz geçiş soluk. */}
+            <OpsGroup
+              title="Durum"
+              icon="flag-outline"
+              tone="mint"
+              hint={
+                STATUS_ORDER.some(canSetStatus)
+                  ? "“Canlı” üyelere maç başladı bildirimi gönderir. “Yayınlandı” ve “Taslak” puan durumunu değiştirdiği için onay ister."
+                  : "Maç durumunu değiştirmek için hesabında maç güncelleme, canlı akış ya da yayınlama yetkisi olmalı."
+              }
+            >
+              <View style={styles.statusGrid}>
+                {STATUS_ORDER.map((item) => {
+                  const current = statusKey(selected) === item;
+                  const disabled = current || statusMutation.isPending || !canSetStatus(item);
+                  const fg = toneColor(STATUS_TONE[item]);
+                  return (
+                    <Touchable
+                      key={item}
+                      feedback="card"
+                      haptic="selection"
+                      onPress={() => changeStatus(item)}
+                      disabled={disabled}
+                      style={[styles.statusCell, current ? [styles.statusCellOn, { borderColor: fg }] : null, disabled && !current ? styles.statusCellOff : null]}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: current, disabled }}
+                      accessibilityLabel={`Durumu ${MATCH_STATUS_LABELS[item]} yap`}
+                    >
+                      <Ionicons name={current ? "radio-button-on" : STATUS_TILE[item].icon} size={16} color={fg} />
+                      <Text style={[styles.statusText, current ? { color: colors.textPrimary } : null]} numberOfLines={1} {...textScale.dense}>
+                        {MATCH_STATUS_LABELS[item]}
+                      </Text>
+                      {current ? (
+                        <Text style={[styles.statusNow, { color: fg }]} {...textScale.badge}>
+                          ŞU AN
+                        </Text>
+                      ) : null}
+                    </Touchable>
+                  );
+                })}
+              </View>
+            </OpsGroup>
 
             <Button
               label="Maç sayfasını aç"
-              variant="secondary"
+              variant="ghost"
               icon="open-outline"
               onPress={openMatchPage}
               fullWidth
@@ -810,36 +917,58 @@ const keyExtractor = (item: ApiMatch) => String(item.id);
 /* ═══════════════════════════════ ALT PARÇALAR ══════════════════════════════ */
 
 /**
- * Satır sarmalayıcı. `MatchRow` memo'lu; `onPress` her çizimde yeniden
- * üretilseydi memo işe yaramazdı. İşleyici maç id'sini burada bağlanır.
- * Yönetimde yıldız sütunu yoktur — favori üyeye ait bir kavramdır.
+ * Satır sarmalayıcı. Kart memo'lu; `onPress` her çizimde yeniden üretilseydi
+ * memo işe yaramazdı. İşleyici maç id'sini burada bağlanır. Eksik bilgi
+ * uyarıları (saha / saat / bekleyen sonuç) burada hesaplanır.
  */
 const AdminMatchRow = memo(function AdminMatchRow({
   match,
   homeLogo,
   awayLogo,
-  position,
+  today,
   onOpen,
 }: {
   match: ApiMatch;
   homeLogo: string | null;
   awayLogo: string | null;
-  position: "single" | "first" | "middle" | "last";
+  today: string;
   onOpen: (matchId: number) => void;
 }) {
   const matchId = Number(match.id);
   const handlePress = useCallback(() => onOpen(matchId), [matchId, onOpen]);
+  const key = statusKey(match);
+  const known = resolveStatus(key);
+  const scored =
+    (key === "canli" || key === "yayinlanmis") && match.first_team_score != null && match.second_team_score != null;
+
+  const warnings = useMemo(() => {
+    const list: { label: string; tone?: Tone; icon?: keyof typeof Ionicons.glyphMap }[] = [];
+    if (key === "zamanlanmis" && matchDay(match) && matchDay(match) < today) list.push({ label: "Sonuç bekliyor", tone: "danger", icon: "hourglass-outline" });
+    if (key !== "yayinlanmis" && !match.match_field) list.push({ label: "Saha yok", icon: "location-outline" });
+    if (key !== "yayinlanmis" && !match.time) list.push({ label: "Saat yok", icon: "time-outline" });
+    return list;
+  }, [key, match, today]);
 
   return (
-    <MatchRow
-      match={match}
-      homeLogo={homeLogo}
-      awayLogo={awayLogo}
-      position={position}
-      showFavorite={false}
-      onPress={handlePress}
-      flashOnScoreChange
-    />
+    <View style={styles.rowWrap}>
+      <OpsMatchCard
+        home={match.first_team_name}
+        away={match.second_team_name}
+        homeLogo={homeLogo}
+        awayLogo={awayLogo}
+        homeScore={match.first_team_score}
+        awayScore={match.second_team_score}
+        scored={scored}
+        time={match.time ? formatTime(match.time) : null}
+        field={match.match_field}
+        statusLabel={statusLabel(known)}
+        statusTone={known ? STATUS_TONE[known] : "neutral"}
+        live={key === "canli"}
+        warnings={warnings}
+        meta={[match.league_name, match.match_season].filter(Boolean).join(" · ") || null}
+        onPress={handlePress}
+      />
+    </View>
   );
 });
 
@@ -850,8 +979,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.bg,
   },
+  flex: { flex: 1 },
   controls: {
-    gap: space.sm,
     paddingBottom: space.sm,
   },
   search: {
@@ -859,24 +988,37 @@ const styles = StyleSheet.create({
   },
   skeleton: {
     paddingHorizontal: layout.screenPadding,
-    paddingTop: space.sm,
+    paddingTop: space.md,
+    gap: space.md,
   },
+  skeletonTiles: { flexDirection: "row", gap: space.sm },
   list: {
     paddingHorizontal: layout.screenPadding,
     paddingBottom: space.giant,
     flexGrow: 1,
   },
+  summary: {
+    gap: space.m,
+    paddingTop: space.md,
+    paddingBottom: space.xs,
+  },
+  summaryLine: { flexDirection: "row", alignItems: "center", gap: space.xs, flexWrap: "wrap" },
+  summaryText: { ...type.caption, color: colors.textSecondary, flexShrink: 1, marginRight: space.xs },
+  clear: { flexDirection: "row", alignItems: "center", gap: space.xxs, marginLeft: "auto", paddingVertical: space.xxs },
+  clearText: { ...type.labelXs, color: colors.brandAccent },
   banner: {
-    marginBottom: space.sm,
+    marginTop: space.xs,
   },
   sectionGap: {
     height: SECTION_GAP,
   },
   dayHeader: {
     height: SECTION_HEADER_HEIGHT,
-    paddingHorizontal: space.xxs,
-    paddingTop: space.md,
     paddingBottom: space.sm,
+  },
+  rowWrap: {
+    height: ROW_HEIGHT,
+    paddingBottom: CARD_GAP,
   },
 
   /* Eylem alt sayfası */
@@ -884,43 +1026,56 @@ const styles = StyleSheet.create({
     gap: space.md,
     paddingBottom: space.sm,
   },
-  quickRow: {
-    flexDirection: "row",
-    gap: space.sm,
-  },
-  quickBtn: {
+  sheetStage: { padding: space.md, gap: space.md },
+  stageRow: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  stageTeam: { flex: 1, alignItems: "center", gap: space.s },
+  stageName: { ...type.label, color: colors.onDark, textAlign: "center" },
+  stageCenter: { alignItems: "center", gap: space.s },
+  stagePills: { flexDirection: "row", flexWrap: "wrap", gap: space.xs, justifyContent: "center" },
+  stepGrid: { flexDirection: "row", gap: space.sm },
+  stepTile: {
     flex: 1,
-  },
-  sheetMetaRow: {
-    flexDirection: "row",
     alignItems: "center",
-    gap: space.sm,
+    gap: space.s,
+    paddingVertical: space.m,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface2,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
   },
-  sheetMeta: {
-    ...type.caption,
-    color: colors.textSecondary,
-    flex: 1,
-  },
-  sheetLabel: {
-    ...type.micro,
-    color: colors.textTertiary,
-  },
-  sheetNote: {
-    ...type.caption,
-    color: colors.textTertiary,
-  },
+  stepLabel: { ...type.labelXs, color: colors.textPrimary },
   scoreRow: {
     flexDirection: "row",
-    gap: space.md,
+    alignItems: "flex-end",
+    gap: space.sm,
   },
   scoreSide: {
     flex: 1,
     alignItems: "center",
     gap: space.sm,
   },
+  scoreDash: { ...type.scoreMd, color: colors.textTertiary, paddingBottom: space.xs },
   scoreTeam: {
     ...type.caption,
     color: colors.textSecondary,
     textAlign: "center",
   },
+  statusGrid: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
+  statusCell: {
+    flexBasis: "47%",
+    flexGrow: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    minHeight: 44,
+    paddingHorizontal: space.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface2,
+    borderWidth: hairline,
+    borderColor: colors.border,
+  },
+  statusCellOn: { backgroundColor: colors.brandDim, borderWidth: 1 },
+  statusCellOff: { opacity: 0.45 },
+  statusText: { ...type.label, color: colors.textSecondary, flex: 1 },
+  statusNow: { ...type.overline },
 });
