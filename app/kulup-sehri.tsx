@@ -23,6 +23,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Redirect, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { LinearGradient } from "expo-linear-gradient";
 import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -30,11 +31,56 @@ import { useAdminMutation } from "@/components/admin";
 import { WebGame, type WebGameHandle } from "@/components/game/WebGame";
 import { BottomSheet, Button, ErrorState, ScreenHeader, SkeletonCard, Touchable, useToast } from "@/components/ui";
 import { cityKeys, collectCityStars, getCity, puzzleKeys, upgradeCity, type CityBuilding, type CityState } from "@/lib/puzzle/api";
-import { ARENA_TITLES, CITY_ICONS, CITY_KIT_KEY, CITY_SKY, CLUB_KITS, type ClubKit } from "@/lib/puzzle/cityPalette";
+import { ARENA_TITLES, CITY_ICONS, CITY_KIT_KEY, CITY_SKY, CITY_UI, CITY_UNIT_COLORS, CLUB_KITS, type ClubKit } from "@/lib/puzzle/cityPalette";
 import { useAuth } from "@/providers/AuthProvider";
 import { colors, fonts, hairline, layout, radius, space, textScale, type } from "@/theme";
 
 const fmt = (n: number) => n.toLocaleString("tr-TR");
+const TOP = { x: 0.5, y: 0 } as const;
+const BOTTOM = { x: 0.5, y: 1 } as const;
+const unitColors = (key: string) => CITY_UNIT_COLORS[key] ?? CITY_UNIT_COLORS.saha;
+
+/** Alt dudaklı 3B oyun düğmesi (altın: geliştir · yeşil: topla). */
+function ChunkyButton({
+  label,
+  icon,
+  onPress,
+  disabled,
+  tone = "gold",
+  small,
+  accessibilityLabel,
+}: {
+  label: string;
+  icon?: keyof typeof Ionicons.glyphMap;
+  onPress: () => void;
+  disabled?: boolean;
+  tone?: "gold" | "green";
+  small?: boolean;
+  accessibilityLabel?: string;
+}) {
+  const fill = tone === "green" ? CITY_UI.green : CITY_UI.gold;
+  const lip = tone === "green" ? CITY_UI.greenLip : CITY_UI.goldLip;
+  const ink = tone === "green" ? CITY_UI.white : CITY_UI.ink;
+  const h = small ? 38 : 52;
+  return (
+    <Touchable
+      onPress={onPress}
+      disabled={disabled}
+      haptic="success"
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? label}
+      style={[small ? styles.chunkySmall : styles.chunky, { height: h + 4, opacity: disabled ? 0.45 : 1 }]}
+    >
+      <View style={[styles.chunkyLip, { height: h, backgroundColor: lip }]} />
+      <LinearGradient colors={fill} start={TOP} end={BOTTOM} style={[styles.chunkyFill, { height: h }]}>
+        {icon ? <Ionicons name={icon} size={small ? 15 : 20} color={ink} /> : null}
+        <Text style={[small ? styles.chunkyTextSmall : styles.chunkyText, { color: ink }]} numberOfLines={1} {...textScale.badge}>
+          {label}
+        </Text>
+      </LinearGradient>
+    </Touchable>
+  );
+}
 
 export default function ClubCityScreen() {
   const auth = useAuth();
@@ -226,10 +272,11 @@ function Wallet({ city, collecting, onCollect, onHow }: { city: CityState; colle
   const claim = city.xp.claimable_stars;
   return (
     <View style={styles.wallet}>
+      <LinearGradient colors={CITY_UI.panel} start={TOP} end={BOTTOM} style={StyleSheet.absoluteFill} />
       <View style={styles.walletTop}>
-        <View style={styles.walletStar}>
-          <Ionicons name="star" size={30} color={colors.yellowCard} />
-        </View>
+        <LinearGradient colors={CITY_UI.gold} start={TOP} end={BOTTOM} style={styles.walletStar}>
+          <Ionicons name="star" size={32} color={CITY_UI.white} />
+        </LinearGradient>
         <View style={styles.walletTexts}>
           <Text style={styles.walletBig} {...textScale.dense}>
             {fmt(s.available)}
@@ -239,23 +286,20 @@ function Wallet({ city, collecting, onCollect, onHow }: { city: CityState; colle
           </Text>
         </View>
         <Touchable onPress={onHow} style={styles.walletHow} accessibilityRole="button" accessibilityLabel="Yıldız nasıl kazanılır">
-          <Ionicons name="help-circle-outline" size={22} color={colors.onDarkMuted} />
+          <Ionicons name="help-circle" size={26} color={CITY_UI.muted} />
         </Touchable>
       </View>
       <View style={styles.sources}>
-        <Source icon="extension-puzzle" label="Lig Yolu" value={s.puzzle} />
-        <Source icon="game-controller" label="Oyunlar" value={s.arena} extra={s.arena_today ? `bugün +${s.arena_today}` : null} />
-        <Source icon="ribbon" label="Kariyer XP" value={s.xp} />
+        <Source icon="extension-puzzle" label="Lig Yolu" value={s.puzzle} tint={CITY_UI.sources[0]} />
+        <Source icon="game-controller" label="Oyunlar" value={s.arena} extra={s.arena_today ? `bugün +${s.arena_today}` : null} tint={CITY_UI.sources[1]} />
+        <Source icon="ribbon" label="Kariyer XP" value={s.xp} tint={CITY_UI.sources[2]} />
       </View>
-      <Button
-        label={claim > 0 ? `Yıldızları topla · +${fmt(claim)}` : "Toplanacak yıldız yok"}
+      <ChunkyButton
+        label={collecting ? "TOPLANIYOR…" : claim > 0 ? `YILDIZLARI TOPLA · +${fmt(claim)}` : "TOPLANACAK YILDIZ YOK"}
         icon="sparkles"
-        variant={claim > 0 ? "primary" : "secondary"}
-        disabled={claim < 1}
-        loading={collecting}
+        tone="green"
+        disabled={claim < 1 || collecting}
         onPress={onCollect}
-        fullWidth
-        haptic="success"
         accessibilityLabel={claim > 0 ? `Haftalık görev ve maç XP'sinden ${claim} yıldız topla` : "Toplanacak yıldız yok"}
       />
       <Text style={styles.walletHint} {...textScale.dense}>
@@ -269,10 +313,12 @@ function Wallet({ city, collecting, onCollect, onHow }: { city: CityState; colle
   );
 }
 
-function Source({ icon, label, value, extra }: { icon: keyof typeof Ionicons.glyphMap; label: string; value: number; extra?: string | null }) {
+function Source({ icon, label, value, extra, tint }: { icon: keyof typeof Ionicons.glyphMap; label: string; value: number; extra?: string | null; tint: string }) {
   return (
     <View style={styles.source}>
-      <Ionicons name={icon} size={16} color={colors.onDarkMuted} />
+      <View style={[styles.sourceIcon, { backgroundColor: tint }]}>
+        <Ionicons name={icon} size={15} color={CITY_UI.white} />
+      </View>
       <Text style={styles.sourceValue} {...textScale.dense}>
         {fmt(value)}
       </Text>
@@ -292,7 +338,9 @@ function TierCard({ city }: { city: CityState }) {
   return (
     <View style={styles.tier}>
       <View style={styles.tierHead}>
-        <Ionicons name="trophy" size={20} color={colors.brandAccent} />
+        <LinearGradient colors={CITY_UI.gold} start={TOP} end={BOTTOM} style={styles.tierBadge}>
+          <Ionicons name="trophy" size={20} color={CITY_UI.white} />
+        </LinearGradient>
         <Text style={styles.tierTitle} {...textScale.dense}>
           {city.tier.title}
         </Text>
@@ -301,7 +349,7 @@ function TierCard({ city }: { city: CityState }) {
         </Text>
       </View>
       <View style={styles.track}>
-        <View style={[styles.fill, { width: `${prog * 100}%` }]} />
+        <LinearGradient colors={CITY_UI.green} start={TOP} end={BOTTOM} style={[styles.fill, { width: `${prog * 100}%` }]} />
       </View>
       <Text style={styles.tierSub} {...textScale.dense}>
         {next ? `${next.title} için ${fmt(next.min - city.dev)} gelişim puanı daha` : "Zirvedesin: Avrupa devi!"}
@@ -314,10 +362,14 @@ function TierCard({ city }: { city: CityState }) {
 
 function Steps({ b }: { b: CityBuilding }) {
   const first = b.steps[0]?.cost === 0 && b.key !== "saha" ? 1 : 0;
+  const [, deep] = unitColors(b.key);
   return (
     <View style={styles.steps}>
       {b.steps.slice(first).map((s) => (
-        <View key={s.level} style={[styles.step, s.done ? styles.stepDone : null, s.level === b.level + 1 ? styles.stepNext : null]} />
+        <View
+          key={s.level}
+          style={[styles.step, s.done ? { backgroundColor: deep } : null, s.level === b.level + 1 ? [styles.stepNext, { borderColor: deep }] : null]}
+        />
       ))}
     </View>
   );
@@ -328,9 +380,18 @@ function BuildingCard({ b, available, busy, onOpen, onUpgrade }: { b: CityBuildi
   const affordable = Boolean(b.next && available >= b.next.cost);
   return (
     <Touchable onPress={onOpen} style={styles.card} haptic="selection" accessibilityRole="button" accessibilityLabel={`${b.title}, ${b.current?.title ?? "henüz yok"}`}>
-      <View style={[styles.cardIcon, b.level > 0 || b.key === "saha" ? styles.cardIconOn : null]}>
-        <Ionicons name={icon} size={24} color={b.level > 0 || b.key === "saha" ? colors.brandAccent : colors.textTertiary} />
-      </View>
+      {b.level > 0 || b.key === "saha" ? (
+        <LinearGradient colors={unitColors(b.key)} start={TOP} end={BOTTOM} style={styles.cardIcon}>
+          <Ionicons name={icon} size={28} color={CITY_UI.white} />
+          <View style={styles.levelBadge}>
+            <Text style={styles.levelBadgeText} {...textScale.badge}>{b.level}</Text>
+          </View>
+        </LinearGradient>
+      ) : (
+        <View style={[styles.cardIcon, styles.cardIconOff]}>
+          <Ionicons name={icon} size={28} color={CITY_UI.white} />
+        </View>
+      )}
       <View style={styles.cardTexts}>
         <Text style={styles.cardTitle} numberOfLines={1} {...textScale.dense}>
           {b.title}
@@ -350,20 +411,18 @@ function BuildingCard({ b, available, busy, onOpen, onUpgrade }: { b: CityBuildi
         )}
       </View>
       {b.next && !b.locked ? (
-        <Button
+        <ChunkyButton
           label={fmt(b.next.cost)}
           icon="star"
-          size="sm"
-          variant={affordable ? "primary" : "secondary"}
+          small
           disabled={!affordable || busy}
           onPress={onUpgrade}
-          haptic="success"
           accessibilityLabel={`${b.next.title}, ${b.next.cost} yıldız`}
         />
       ) : b.next ? (
         <Ionicons name="lock-closed" size={18} color={colors.textTertiary} />
       ) : (
-        <Ionicons name="checkmark-circle" size={22} color={colors.win} />
+        <Ionicons name="checkmark-circle" size={28} color={CITY_UI.done} />
       )}
     </Touchable>
   );
@@ -531,41 +590,63 @@ const styles = StyleSheet.create({
     backgroundColor: colors.overlay,
   },
 
-  wallet: { borderRadius: radius.xl, padding: space.lg, gap: space.md, backgroundColor: colors.inkBlock, borderWidth: hairline, borderColor: colors.inkTileBorder },
+  wallet: { borderRadius: radius.xxl, padding: space.lg, gap: space.md, overflow: "hidden", borderWidth: 3, borderColor: CITY_UI.panelEdge },
   walletTop: { flexDirection: "row", alignItems: "center", gap: space.md },
-  walletStar: { width: 52, height: 52, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.inkTileBorder },
+  walletStar: { width: 58, height: 58, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", borderWidth: 3, borderColor: CITY_UI.white },
   walletTexts: { flex: 1, gap: 2 },
-  walletBig: { ...type.display, color: colors.onDark },
-  walletSub: { ...type.bodySm, color: colors.onDarkMuted },
+  walletBig: { ...type.display, fontFamily: fonts.bold, color: CITY_UI.white, textShadowColor: CITY_UI.inkShadow, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 2 },
+  walletSub: { ...type.bodySm, color: CITY_UI.muted },
   walletHow: { padding: space.xs },
-  walletHint: { ...type.caption, color: colors.onDarkMuted, textAlign: "center" },
+  walletHint: { ...type.caption, color: CITY_UI.muted, textAlign: "center" },
   sources: { flexDirection: "row", gap: space.sm },
-  source: { flex: 1, alignItems: "center", gap: 2, paddingVertical: space.sm, borderRadius: radius.lg, backgroundColor: colors.inkTileBorder },
-  sourceValue: { ...type.h3, fontFamily: fonts.bold, color: colors.onDark },
-  sourceLabel: { ...type.caption, color: colors.onDarkMuted },
+  source: { flex: 1, alignItems: "center", gap: 2, paddingVertical: space.sm, borderRadius: radius.lg, backgroundColor: CITY_UI.chip },
+  sourceIcon: { width: 28, height: 28, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
+  sourceValue: { ...type.h3, fontFamily: fonts.bold, color: CITY_UI.white },
+  sourceLabel: { ...type.caption, color: CITY_UI.muted },
 
-  tier: { borderRadius: radius.xl, padding: space.lg, gap: space.sm, backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border },
+  tier: { borderRadius: radius.xxl, padding: space.lg, gap: space.sm, backgroundColor: colors.surface1, borderWidth: 2, borderColor: CITY_UI.gold[1] },
+  tierBadge: { width: 38, height: 38, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: CITY_UI.white },
   tierHead: { flexDirection: "row", alignItems: "center", gap: space.sm },
-  tierTitle: { ...type.h3, fontFamily: fonts.bold, color: colors.textPrimary, flex: 1 },
+  tierTitle: { ...type.h2, fontFamily: fonts.bold, color: colors.textPrimary, flex: 1 },
   tierStep: { ...type.label, color: colors.textSecondary },
   tierSub: { ...type.bodySm, color: colors.textSecondary },
-  track: { height: 8, borderRadius: radius.pill, backgroundColor: colors.surface3, overflow: "hidden" },
-  fill: { height: 8, borderRadius: radius.pill, backgroundColor: colors.brand },
+  track: { height: 14, borderRadius: radius.pill, backgroundColor: colors.surface3, overflow: "hidden" },
+  fill: { height: 14, borderRadius: radius.pill },
 
   sectionTitle: { ...type.label, color: colors.textSecondary, marginTop: space.xs },
-  card: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderRadius: radius.xl, backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border },
-  cardIcon: { width: 48, height: 48, borderRadius: radius.lg, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface3 },
-  cardIconOn: { backgroundColor: colors.brandDim },
+  card: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderRadius: radius.xxl, backgroundColor: colors.surface1, borderWidth: 2, borderColor: colors.border },
+  cardIcon: { width: 58, height: 58, borderRadius: radius.xl, alignItems: "center", justifyContent: "center", borderWidth: 3, borderColor: CITY_UI.white },
+  cardIconOff: { backgroundColor: CITY_UI.lockBg },
+  levelBadge: {
+    position: "absolute",
+    bottom: -6,
+    right: -6,
+    minWidth: 22,
+    height: 22,
+    paddingHorizontal: space.xxs,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: CITY_UI.ink,
+    borderWidth: 2,
+    borderColor: CITY_UI.white,
+  },
+  levelBadgeText: { ...type.micro, fontFamily: fonts.bold, color: CITY_UI.white },
   cardTexts: { flex: 1, gap: 3 },
-  cardTitle: { ...type.body, fontFamily: fonts.bold, color: colors.textPrimary },
+  cardTitle: { ...type.h3, fontFamily: fonts.bold, color: colors.textPrimary },
   cardSub: { ...type.bodySm, color: colors.textSecondary },
   cardNext: { ...type.caption, color: colors.brandAccent },
   cardLocked: { color: colors.textTertiary },
   cardMax: { ...type.caption, color: colors.win },
-  steps: { flexDirection: "row", gap: 3, marginVertical: 2 },
-  step: { flex: 1, height: 5, borderRadius: radius.pill, backgroundColor: colors.surface3 },
-  stepDone: { backgroundColor: colors.brand },
-  stepNext: { backgroundColor: colors.brandDim },
+  steps: { flexDirection: "row", gap: 3, marginVertical: 3 },
+  step: { flex: 1, height: 9, borderRadius: radius.pill, backgroundColor: colors.surface3 },
+  stepNext: { borderWidth: 2 },
+  chunky: { alignSelf: "stretch" },
+  chunkySmall: { minWidth: 76 },
+  chunkyLip: { position: "absolute", top: 4, left: 0, right: 0, borderRadius: radius.pill },
+  chunkyFill: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.xs, paddingHorizontal: space.md, borderRadius: radius.pill, borderWidth: 2, borderColor: CITY_UI.white },
+  chunkyText: { ...type.label, fontFamily: fonts.bold, letterSpacing: 1 },
+  chunkyTextSmall: { ...type.label, fontFamily: fonts.bold },
 
   sheetLead: { ...type.body, color: colors.textSecondary },
   ladder: { gap: space.xs },
