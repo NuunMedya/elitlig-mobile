@@ -3,7 +3,7 @@
  * sırayla skorborda işlenir. Her maç ligin bir sonraki kulübüne karşı (kaleci
  * merdiveni: en çok kurtarış yapan kaleci finalde). Kaybedince turnuva biter.
  *
- * Oyunun kendisi `games/penalti.js` (three.js, WebView içinde); kurallar,
+ * Oyunun kendisi `games/penalti.js` (Canvas 2D çizgi film, WebView içinde); kurallar,
  * kontroller ve puanlama orada belgelenmiştir. Bu ekran yalnız ortak Arena
  * kabuğunu oyuna bağlar: giriş/bitiş kartları, rekor tablosu, paylaşım.
  */
