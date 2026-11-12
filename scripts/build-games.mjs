@@ -25,13 +25,13 @@ const SHARED = ["core.js", "scenery.js"];
  * package.json'da sürümü SABİTLENMİŞ devDependency'dir (0.158.0, UMD derlemesi)
  * ve oyun HTML'ine satır içi gömülür: WebView çevrimdışı da açılır.
  */
-const THREE_D = new Set(["sehir"]);
+const THREE_D = new Set([]);
 /**
  * Arcade motorunu (games/arcade3d.js) kullanan oyunlar. Savunma Hattı ve Kadro
  * Koşusu yalnız örneklenmiş mini futbolcularla çizilir: iskeletli futbolcu
  * verisi (athlete-data.js, ~570 KB) onların HTML'ine GİRMEZ.
  */
-const ARCADE = new Set(["sehir"]);
+const ARCADE = new Set([]);
 // Kulüp Şehri (sehir) oyun değil, canlı şehir sahnesi; o da yalnız mini futbolcu kullanır.
 const NO_ATHLETE = new Set(["savunma", "kadro", "sehir"]);
 export const kitFiles = (game) => [
