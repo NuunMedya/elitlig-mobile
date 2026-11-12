@@ -266,29 +266,53 @@
     c.restore();
   };
 
-  /** Sol üst skor bloğu: küçük etiket + büyük rakam (vuruşta zıplar). */
+  /**
+   * Sol üst skor bloğu: küçük etiket + büyük rakam. Rakam YUVARLANARAK artar
+   * (sayaç gibi), artarken altın parlar ve zıplar; uçan altınlar buraya iner.
+   */
+  var shown = {};
   A.drawScore = function (c, x, y, label, value, bump, align) {
+    var key = label + ":" + x;
+    var v = Number(value) || 0;
+    var cur = shown[key] == null ? v : shown[key];
+    if (cur < v) cur = Math.min(v, cur + Math.max(1, (v - cur) * 0.18));
+    else cur = v;
+    shown[key] = cur;
+    var rolling = cur < v;
+    A.scoreAnchor = { x: x + 30, y: y + 34 };
     c.save();
     c.textAlign = align || "left";
     c.textBaseline = "alphabetic";
     c.font = A.font(11, 800);
     if ("letterSpacing" in c) c.letterSpacing = "1.5px";
-    c.fillStyle = "rgba(255,255,255,0.7)";
+    c.fillStyle = "rgba(255,255,255,0.75)";
     c.fillText(label, x, y + 12);
     if ("letterSpacing" in c) c.letterSpacing = "0px";
-    var s = 1 + 0.25 * (bump || 0);
+    var kick = Math.max(bump || 0, A.scoreKick || 0, rolling ? 0.35 : 0);
+    var s = 1 + 0.3 * kick;
     c.translate(x, y + 50);
     c.scale(s, s);
-    c.font = A.font(42, 900);
-    c.shadowColor = "rgba(0,0,0,0.5)";
-    c.shadowBlur = 10;
-    c.shadowOffsetY = 2;
-    c.fillStyle = "#FFFFFF";
-    c.fillText(String(value), 0, 0);
+    c.font = A.font(44, 900);
+    c.lineJoin = "round";
+    c.lineWidth = 7;
+    c.strokeStyle = "rgba(8,10,30,0.8)";
+    c.shadowColor = kick > 0.05 ? "rgba(255,210,74,0.9)" : "rgba(0,0,0,0.5)";
+    c.shadowBlur = kick > 0.05 ? 18 * kick + 6 : 10;
+    var txt = String(Math.round(cur));
+    c.strokeText(txt, 0, 0);
+    c.shadowBlur = 0;
+    var g = c.createLinearGradient(0, -40, 0, 4);
+    g.addColorStop(0, "#FFFFFF");
+    g.addColorStop(1, kick > 0.05 ? "#FFE58A" : "#DDE3F0");
+    c.fillStyle = g;
+    c.fillText(txt, 0, 0);
     c.restore();
   };
 
-  /** Seviye/duyuru bandı: ortada süzülerek girer, bekler, çıkar. */
+  /**
+   * Seviye/duyuru bandı: arkasında dönen ışık hüzmeleri, uçları katlanmış
+   * kurdele, başlık zıplayarak girer, üstünden parıltı geçer.
+   */
   A.banner = null;
   A.announce = function (title, sub, color) {
     A.banner = { title: title, sub: sub || "", color: color || P.gold, age: 0 };
@@ -297,7 +321,7 @@
     var b = A.banner;
     if (!b) return;
     b.age += dt;
-    var life = 1.8;
+    var life = 2.0;
     if (b.age > life) {
       A.banner = null;
       return;
@@ -307,24 +331,64 @@
     c.save();
     c.globalAlpha = outT;
     c.translate(w / 2, y);
+    // ışık hüzmeleri
+    c.save();
+    c.rotate(b.age * 0.6);
+    c.globalAlpha = outT * 0.22 * A.clamp(b.age / 0.25, 0, 1);
+    c.fillStyle = b.color;
+    var rays = 12, R = Math.min(w * 0.75, 340);
+    for (var i = 0; i < rays; i++) {
+      var a0 = (i / rays) * Math.PI * 2;
+      c.beginPath();
+      c.moveTo(0, 0);
+      c.arc(0, 0, R, a0, a0 + Math.PI / rays);
+      c.closePath();
+      c.fill();
+    }
+    c.restore();
     c.scale(0.6 + 0.4 * inT, 0.6 + 0.4 * inT);
-    var bw = Math.min(w - 32, 300);
-    var g = c.createLinearGradient(-bw / 2, 0, bw / 2, 0);
-    g.addColorStop(0, "rgba(91,61,245,0)");
-    g.addColorStop(0.2, "rgba(60,36,200,0.92)");
-    g.addColorStop(0.8, "rgba(60,36,200,0.92)");
-    g.addColorStop(1, "rgba(91,61,245,0)");
+    var bw = Math.min(w - 40, 300), bh = b.sub ? 66 : 50, top = -32;
+    // kurdele uçları (koyu, katlanmış)
+    c.fillStyle = "#2A1680";
+    [-1, 1].forEach(function (sd) {
+      c.beginPath();
+      c.moveTo(sd * (bw / 2 - 8), top + 10);
+      c.lineTo(sd * (bw / 2 + 26), top + 10);
+      c.lineTo(sd * (bw / 2 + 14), top + bh / 2 + 10);
+      c.lineTo(sd * (bw / 2 + 26), top + bh + 10);
+      c.lineTo(sd * (bw / 2 - 8), top + bh + 10);
+      c.closePath();
+      c.fill();
+    });
+    // ana kurdele
+    var g = c.createLinearGradient(0, top, 0, top + bh);
+    g.addColorStop(0, "#7C5CFF");
+    g.addColorStop(1, "#3B1FD1");
     c.fillStyle = g;
-    c.fillRect(-bw / 2, -30, bw, b.sub ? 64 : 48);
-    c.fillStyle = "rgba(255,255,255,0.35)";
-    c.fillRect(-bw / 2 + 20, -30, bw - 40, 1);
-    c.fillRect(-bw / 2 + 20, (b.sub ? 34 : 18) - 1, bw - 40, 1);
-    A.bigText(c, b.title, 0, -8, 26, b.color);
+    A.roundRect(c, -bw / 2, top, bw, bh, 12);
+    c.fill();
+    c.strokeStyle = "rgba(255,255,255,0.45)";
+    c.lineWidth = 2;
+    c.stroke();
+    // parıltı süpürmesi
+    c.save();
+    A.roundRect(c, -bw / 2, top, bw, bh, 12);
+    c.clip();
+    var sx = -bw / 2 - 60 + ((b.age * 420) % (bw + 160));
+    var sg = c.createLinearGradient(sx, 0, sx + 60, 0);
+    sg.addColorStop(0, "rgba(255,255,255,0)");
+    sg.addColorStop(0.5, "rgba(255,255,255,0.35)");
+    sg.addColorStop(1, "rgba(255,255,255,0)");
+    c.fillStyle = sg;
+    c.fillRect(-bw / 2, top, bw, bh);
+    c.restore();
+    A.bigText(c, b.title, 0, top + (b.sub ? 24 : bh / 2), 28, b.color);
     if (b.sub) {
       c.font = A.font(13, 700);
       c.textAlign = "center";
-      c.fillStyle = "rgba(255,255,255,0.9)";
-      c.fillText(b.sub, 0, 20);
+      c.textBaseline = "middle";
+      c.fillStyle = "rgba(255,255,255,0.95)";
+      c.fillText(b.sub, 0, top + 50);
     }
     c.restore();
   };

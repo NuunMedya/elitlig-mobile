@@ -439,6 +439,7 @@
           A.sound("coin");
           var sp = screenOf(s.x, s.y, 0);
           A.burst(sp.x, sp.y, 12, { speed: 180, gravity: 120, life: 0.5, size: 3, color: [P.gold, "#FFF"], shape: "spark" });
+          A.fly(sp.x, sp.y);
         }
       });
       boots.forEach(function (b) {

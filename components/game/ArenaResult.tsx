@@ -39,6 +39,7 @@ import {
   type ArenaEntry,
   type ArenaGame,
 } from "@/lib/api/arena";
+import { ConfettiBurst, Sunburst } from "@/components/game/Celebration";
 import { instagramUrl } from "@/lib/socials";
 import { useAuth } from "@/providers/AuthProvider";
 import { colors, dark as inkPalette, elevate, fonts, hairline, radius, space, textScale, type, upperTR } from "@/theme";
@@ -219,6 +220,11 @@ export function ArenaResultCard({
     <View style={styles.scrim}>
       <ScrollView contentContainerStyle={styles.scrimContent} showsVerticalScrollIndicator={false}>
         <View style={styles.card}>
+          {isRecord ? (
+            <View pointerEvents="none" style={styles.recordBurst}>
+              <Sunburst size={320} />
+            </View>
+          ) : null}
           {isRecord ? <Badge label={upperTR("Yeni rekor")} tone="warn" icon="trophy" variant="soft" /> : null}
           <Text style={styles.resultTitle} {...textScale.dense}>
             {isRecord ? "Rekorunu kırdın!" : overTitle}
@@ -282,6 +288,7 @@ export function ArenaResultCard({
           </View>
         </View>
       </ScrollView>
+      <ConfettiBurst trigger={isRecord ? Math.max(1, score) : 0} count={44} />
     </View>
   );
 }
@@ -580,6 +587,7 @@ const styles = StyleSheet.create({
   fact: { backgroundColor: colors.surface3, borderRadius: radius.pill, paddingHorizontal: space.m, paddingVertical: space.xxs + 1 },
   factText: { ...type.caption, fontFamily: fonts.bold, letterSpacing: 0, color: colors.textSecondary },
   resultBest: { ...type.bodySm, color: colors.textSecondary, marginTop: space.s },
+  recordBurst: { position: "absolute", top: -90, left: 0, right: 0, alignItems: "center" },
   cityStars: {
     flexDirection: "row",
     alignItems: "center",

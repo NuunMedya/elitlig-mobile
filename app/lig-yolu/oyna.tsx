@@ -22,6 +22,7 @@ import { confirmAction } from "@/components/admin";
 import { ResultSheet } from "@/components/puzzle/LevelSheets";
 import { ShopSheet } from "@/components/puzzle/sheets";
 import { StageBackdrop } from "@/components/puzzle/StageBackdrop";
+import { ConfettiBurst } from "@/components/game/Celebration";
 import { Touchable, useToast } from "@/components/ui";
 import { errorText } from "@/lib/admin/errors";
 import { finishLevel, type FinishResponse } from "@/lib/puzzle/api";
@@ -206,6 +207,7 @@ export default function PuzzlePlayScreen() {
         game={module.key}
       />
 
+      <ConfettiBurst trigger={result?.res.won ? level : 0} count={48} />
       {result ? (
         <ResultSheet
           visible
