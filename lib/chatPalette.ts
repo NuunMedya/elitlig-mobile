@@ -87,3 +87,12 @@ export const attachTones = {
   award: "#D97706",
   onTone: "#FFFFFF",
 } as const;
+
+/**
+ * Sohbet listesi: fotoğrafı olmayan avatarın yumuşak zemini ve harf / simge
+ * rengi. Renk sohbete göre SABİTTİR (aynı kişi her açılışta aynı tonda).
+ */
+export function avatarTint(id: number | string | null | undefined): { fg: string; bg: string } {
+  const fg = senderColor(id);
+  return { fg, bg: `${fg}${isDark ? "30" : "1F"}` };
+}

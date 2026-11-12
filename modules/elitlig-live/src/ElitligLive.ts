@@ -5,11 +5,15 @@ import type {
   CameraCapabilities,
   DeviceStatus,
   ElitligLiveNativeModule,
+  LocalRecordingResult,
+  LocalRecordingStart,
+  LocalRecordingStatus,
   OverlayFrame,
   ReplayOptions,
   SaveClipOptions,
   SavedClip,
   StartStreamOptions,
+  StorageInfo,
 } from "./ElitligLive.types";
 
 export const NATIVE_MODULE_NAME = "ElitligLive";
@@ -200,6 +204,97 @@ export async function getDeviceStatus(): Promise<DeviceStatus | null> {
       charging: Boolean(s?.charging),
       lowPower: Boolean(s?.lowPower),
       network: (["wifi", "cellular", "ethernet", "none"].includes(network) ? network : "unknown") as DeviceStatus["network"],
+    };
+  } catch {
+    return null;
+  }
+}
+
+/* ───────── yerel kayıt: yayının tamamı telefon hafızasına ─────────
+ * Modüle sonradan eklendi; mağazadaki eski derlemede yoktur. Varlık her
+ * çağrıda denetlenir (OTA ile giden JS eski yerel modülle de çalışır). */
+
+/** Güvenlik tabanı: bunun altında kayıt başlamaz, sürerken düzgünce kapatılır. */
+export const LOCAL_RECORDING_MIN_FREE_BYTES = 300 * 1024 * 1024;
+
+/** Yerel modül yayını telefona kaydedebiliyor mu (yeni derleme). */
+export function supportsLocalRecording(): boolean {
+  return (
+    typeof NativeLive?.startLocalRecording === "function" &&
+    typeof NativeLive?.stopLocalRecording === "function" &&
+    typeof NativeLive?.getStorageInfo === "function"
+  );
+}
+
+const bytes = (v: unknown) => {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+};
+
+/** Telefonun boş / toplam depolaması; desteklenmiyorsa ya da okunamazsa null. */
+export async function getStorageInfo(): Promise<StorageInfo | null> {
+  if (typeof NativeLive?.getStorageInfo !== "function") return null;
+  try {
+    const s = await NativeLive.getStorageInfo();
+    const free = Number(s?.freeBytes);
+    if (!Number.isFinite(free) || free < 0) return null;
+    return {
+      freeBytes: free,
+      totalBytes: Math.max(bytes(s?.totalBytes), free),
+      minFreeBytes: bytes(s?.minFreeBytes) || LOCAL_RECORDING_MIN_FREE_BYTES,
+      location: String(s?.location ?? ""),
+      gallery: Boolean(s?.gallery),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Yayın sürerken (startStream çözüldükten sonra) çağrılır: yayına giden görüntü
+ * (kamera + gömülü skorbord + ses) baştan sona MP4 olarak telefona yazılır.
+ * RTMP yeniden bağlanmaları kaydı kesmez. Yayın durunca, ekrandan çıkınca ya da
+ * boş alan tabanın altına inince dosya kendiliğinden düzgünce kapatılır;
+ * uygulama arka plana geçince parça kapatılıp dönüşte yeni parça açılır.
+ * Hata kodları: "NOT_STREAMING", "ERR_RECORD" (ör. boş alan yok), "UNSUPPORTED".
+ */
+export async function startLocalRecording(fileName: string): Promise<LocalRecordingStart> {
+  if (typeof NativeLive?.startLocalRecording !== "function") {
+    const e = new Error("Yerel kayıt bu uygulama sürümünde yok.") as Error & { code: string };
+    e.code = "UNSUPPORTED";
+    throw e;
+  }
+  const clean = String(fileName ?? "")
+    .replace(/\.mp4$/i, "")
+    .replace(/[^A-Za-z0-9._-]+/g, "_")
+    .replace(/^[_.-]+|[_.-]+$/g, "")
+    .slice(0, 96);
+  return NativeLive.startLocalRecording({ fileName: clean || `ElitLig_${Date.now()}` });
+}
+
+/** Kaydı kapatır; özet ya da (kayıt yoksa / hiçbir şey yazılmadıysa / desteklenmiyorsa) null. */
+export async function stopLocalRecording(): Promise<LocalRecordingResult | null> {
+  if (typeof NativeLive?.stopLocalRecording !== "function") return null;
+  const r = await NativeLive.stopLocalRecording();
+  if (!r || !r.path) return null;
+  return { path: String(r.path), uri: r.uri ? String(r.uri) : undefined, bytes: bytes(r.bytes), durationMs: bytes(r.durationMs), parts: Math.max(1, Math.round(bytes(r.parts))) };
+}
+
+/** Süren kaydın boyutu / süresi ve kalan boş alan; desteklenmiyorsa null. */
+export async function getLocalRecordingStatus(): Promise<LocalRecordingStatus | null> {
+  if (typeof NativeLive?.getLocalRecordingStatus !== "function") return null;
+  try {
+    const s = await NativeLive.getLocalRecordingStatus();
+    if (!s) return null;
+    const free = Number(s.freeBytes);
+    return {
+      recording: Boolean(s.recording),
+      paused: Boolean(s.paused),
+      bytes: bytes(s.bytes),
+      durationMs: bytes(s.durationMs),
+      parts: Math.round(bytes(s.parts)),
+      path: String(s.path ?? ""),
+      freeBytes: Number.isFinite(free) ? free : -1,
     };
   } catch {
     return null;

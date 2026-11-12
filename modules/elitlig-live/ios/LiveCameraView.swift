@@ -13,6 +13,7 @@ final class LiveCameraView: ExpoView {
   let onStateChange = EventDispatcher()
   let onStats = EventDispatcher()
   let onReplayStateChange = EventDispatcher()
+  let onRecordingStateChange = EventDispatcher()
 
   static let maxRetries = 5
 
@@ -23,6 +24,7 @@ final class LiveCameraView: ExpoView {
   // Yapılandırma
   private var position: AVCaptureDevice.Position = .back
   private var streamSize = CGSize(width: 1280, height: 720)
+  private var videoKbps = 2500
   private var muted = false
 
   // Durum
@@ -57,6 +59,16 @@ final class LiveCameraView: ExpoView {
   private var replayUri: String?
   private var replayTimer: Timer?
   private var overlaySource: CGImage?
+
+  // Yayının tamamını telefona yazan kayıt (bkz. LocalRecorder).
+  private lazy var localRecorder: LocalRecorder = {
+    let recorder = LocalRecorder()
+    recorder.onEvent = { [weak self] payload in
+      guard let self, !self.released else { return }
+      self.onRecordingStateChange(payload)
+    }
+    return recorder
+  }()
   private var overlayFrame = CGRect(x: 0, y: 0, width: 1, height: 1)
 
   required init(appContext: AppContext? = nil) {
@@ -211,6 +223,7 @@ final class LiveCameraView: ExpoView {
 
   private func configureEncoders(width: Int, height: Int, fps: Int, videoKbps: Int, audioKbps: Int) {
     streamSize = CGSize(width: width, height: height)
+    self.videoKbps = videoKbps
     stream.sessionPreset = (width > 1280 || height > 720) ? .hd1920x1080 : .hd1280x720
     stream.frameRate = Float64(fps)
     stream.screen.frameRate = fps
@@ -263,6 +276,8 @@ final class LiveCameraView: ExpoView {
     publishing = false
     stopStatsTimer()
     detachClipRecorder()
+    // Yerel kayıt açıksa MP4'ü kapat (olay: saved / reason = stream_end).
+    localRecorder.stop(reason: "stream_end")
     stream.close()
     connection.close()
     UIApplication.shared.isIdleTimerDisabled = false
@@ -447,6 +462,7 @@ final class LiveCameraView: ExpoView {
     publishing = false
     stopStatsTimer()
     detachClipRecorder()
+    localRecorder.stop(reason: "stream_failed")
     stream.close()
     connection.close()
     UIApplication.shared.isIdleTimerDisabled = false
@@ -457,6 +473,8 @@ final class LiveCameraView: ExpoView {
 
   @objc private func didEnterBackground() {
     inBackground = true
+    // Arka planda süreç askıya alınır / öldürülebilir: MP4'ü şimdi güvenle kapat.
+    localRecorder.pause(reason: "background")
     // iOS arka planda kamerayı keser (HaishinKit video yakalamayı durdurur).
     if !userStopped {
       emitState("reconnecting", message: "app_background")
@@ -466,6 +484,7 @@ final class LiveCameraView: ExpoView {
   @objc private func willEnterForeground() {
     inBackground = false
     guard !userStopped else { return }
+    localRecorder.resume() // arka planda kapatılan kayıt yeni parçayla sürer
     if publishing {
       emitState("live")
     } else if !retryPending {
@@ -641,6 +660,30 @@ final class LiveCameraView: ExpoView {
       (text as NSString).draw(at: CGPoint(x: padH, y: padV), withAttributes: attrs)
     }
     return image.cgImage
+  }
+
+  // MARK: - Yerel kayıt (yayının tamamı → telefon hafızası)
+
+  /// Yayın sürerken çağrılır. RTMP yeniden bağlanmaları kaydı kesmez. Dönen: { path, uri }.
+  func startLocalRecording(fileName: String) throws -> [String: Any] {
+    guard !released, !userStopped else {
+      throw LiveCodedException(code: "NOT_STREAMING", message: "Yerel kayıt yalnız yayın sürerken başlatılabilir.")
+    }
+    return try localRecorder.start(
+      stream: stream,
+      fileName: fileName,
+      videoBitrate: videoKbps * 1000,
+      startPaused: inBackground
+    )
+  }
+
+  /// Kaydı kapatır; özet { path, uri, bytes, durationMs, parts } ya da nil.
+  func stopLocalRecording(completion: @escaping ([String: Any]?) -> Void) {
+    localRecorder.stop(reason: "stopped", completion: completion)
+  }
+
+  func localRecordingStatus() -> [String: Any] {
+    localRecorder.status()
   }
 
   // MARK: - Gol klibi

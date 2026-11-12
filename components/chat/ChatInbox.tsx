@@ -1,87 +1,118 @@
 /**
  * SOHBETLER — WhatsApp düzeninde sohbet listesi (web ve masaüstü Mesajlar ile
- * aynı görünüm ve süzgeçler).
+ * aynı süzgeçler ve kurallar).
  *
- *   · Satır: avatar (birebirde çevrimiçi noktası), ad, saat; altta yazıyor… /
- *     Taslak: / tik + gönderen öneki + son mesaj; sağda sessiz, sabit, okunmamış
- *     sayacı (ya da "okunmadı" noktası).
- *   · Süzgeçler: Tümü · Okunmamış · Sabitlenen · Gruplar · Üye mesajları
- *     (messages.view) · Arşiv; "Arşivlenmiş" satırı listenin başında.
- *   · Arama: sohbet adlarında ve (2+ harf) tüm sohbetlerin MESAJLARINDA; mesaj
- *     sonucuna dokununca sohbet o mesajda açılır.
- *   · Uzun bas: sabitle, sessize al, arşivle, okundu / okunmadı, gruptan çık, sil.
- *     (Kaydırma hareketi yok: gesture-handler kurulu değil; aynı eylemler uzun
- *     basma menüsündedir.)
+ *   · BAŞLIK: büyük "Mesajlar", sağda çıplak eylemler (bildirim zili, yeni
+ *     sohbet, menü). Okunmamış özeti cümleyle değil hap sayaçları ve satır
+ *     rozetleriyle söylenir. Çizimi `InboxChrome.tsx` içindedir.
+ *   · ARAMA: başlığın altındaki alana dokununca ekranı devralır; sonuçlar
+ *     SOHBETLER (ad eşleşmesi, arşiv dahil) · KİŞİLER (rehberde olup henüz
+ *     sohbeti olmayanlar; dokununca sohbet açılır) · MESAJLAR (2+ harf, tüm
+ *     sohbetlerin mesajları; dokununca sohbet o mesajda açılır) diye gruplanır.
+ *   · SÜZGEÇLER: Tümü · Okunmamış · Sabitlenen · Gruplar · Üye mesajları
+ *     (messages.view) · Arşiv. Haplar listeyle birlikte kayar.
+ *   · SATIR: `InboxRow.tsx` — 54 px avatar, ad + saat, tik + önizleme, sağda
+ *     bahsetme / sessiz / sabit / okunmamış sayacı; ayraç avatardan sonra başlar.
+ *     Sabitlenenler üsttedir; arşiv varsa en üstte "Arşivlenmiş" satırı durur.
+ *   · UZUN BAS: sabitle, sessize al, arşivle, okundu / okunmadı, gruptan çık,
+ *     sil. (Kaydırma hareketi ve çoklu seçim yok: gesture-handler kurulu değil;
+ *     aynı eylemler uzun basma menüsündedir.)
  *   · Sağ altta yüzen "yeni sohbet" düğmesi; menüde yeni grup, yıldızlı
- *     mesajlar, tümünü okundu say, mesaj tercihleri, engellenenler.
+ *     mesajlar, tümünü okundu say, mesaj tercihleri, engellenenler, (yetkiyle)
+ *     arama kayıtları.
  *
  * ÜYE MESAJLARI: üyelerin "ElitLig Yönetimi" sohbetleri ortak gelen kutusudur
  * (/api/admin/chat); Takımlar / Oyuncular / Üyeler alt süzgeci. Eski talep
  * kartıyla biten ve ekip (staff) sohbetleri burada listelenmez — ekip
  * sohbetleri zaten kişisel listededir (masaüstü `inboxThreads` kuralı).
  *
- * PERFORMANS: satır `memo`dur; yazıyor… ve taslak durumunu satır KENDİ okur
- * (useSyncExternalStore), bir sohbette yazma olayı listeyi yeniden çizmez.
+ * PERFORMANS: liste sanaldır ve satır yükseklikleri sabittir (`getItemLayout`).
+ * Satır `memo`dur; yazıyor…, taslak ve çevrimiçi durumunu satır KENDİ okur
+ * (useSyncExternalStore) — bu olaylar listeyi yeniden çizmez. Satırlara giriş
+ * animasyonu yoktur; yalnız liste ilk çizimde bir kez belirir.
  */
 
-import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Redirect, useRouter } from "expo-router";
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import { FlatList, StyleSheet, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Animated, BackHandler, FlatList, Keyboard, StyleSheet, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { TypingLine } from "@/components/chat/ChatHeader";
 import { ChatPrefsSheet } from "@/components/chat/ChatPrefsSheet";
-import { Ticks } from "@/components/chat/MessageBubble";
-import { ActionMenu, ChatAvatar, type MessageMenuItem } from "@/components/chat/MessageSheets";
+import { FILTER_BAR_HEIGHT, FilterPills, InboxFab, InboxHeader, type FilterPillItem, type InboxHeaderAction } from "@/components/chat/InboxChrome";
+import { PresenceBridge } from "@/components/chat/inboxPresence";
+import {
+  ArchiveRow,
+  ConversationRow,
+  HitRow,
+  INBOX_ARCHIVE_HEIGHT,
+  INBOX_NOTE_HEIGHT,
+  INBOX_ROW_HEIGHT,
+  INBOX_SECTION_HEIGHT,
+  InboxNote,
+  InboxSection,
+  InboxSkeleton,
+  PersonRow,
+} from "@/components/chat/InboxRow";
+import { ActionMenu, type MessageMenuItem } from "@/components/chat/MessageSheets";
 import { useConversationActions } from "@/components/chat/useConversationActions";
-import { Chip, ChipGroup, EmptyState, ErrorState, FAB, Input, ScreenHeader, SkeletonListRow, Touchable, errorMessage, useFabAutoHide, useHeaderScroll, useRefresh, useToast } from "@/components/ui";
-import { useAdminConversations, useConversations, usePresence, useTypingNames } from "@/hooks/useChat";
+import { EmptyState, ErrorState, errorMessage, useFabAutoHide, useReduceMotion, useRefresh, useToast } from "@/components/ui";
+import { useAdminConversations, useConversations } from "@/hooks/useChat";
 import { hasAnyPermission } from "@/lib/admin/access";
-import { adminChat, searchMessages, type ChatConversation, type ChatSearchHit } from "@/lib/api/chat";
-import { useDraft } from "@/lib/chatDrafts";
-import { chatCounts, chatPreview, filterChats, isGroupChat, isUnread, listTime, messageSummary, tickStatus, type ChatFilter } from "@/lib/chatUtils";
+import { adminChat, getDirectory, openConversation, searchMessages, type ChatConversation, type ChatSearchHit, type ChatUser } from "@/lib/api/chat";
+import { chatCounts, filterChats, isUnread, sortChats, type ChatFilter } from "@/lib/chatUtils";
 import { queryKeys } from "@/lib/queryKeys";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
+import { colors, duration, easing, space, upperTR } from "@/theme";
 
 type Filter = ChatFilter | "inbox";
 type InboxKind = "all" | "team" | "player" | "member";
 
 const INBOX_KINDS: [InboxKind, string][] = [["all", "Tümü"], ["team", "Takımlar"], ["player", "Oyuncular"], ["member", "Üyeler"]];
-const KIND_LABEL: Record<string, string> = { team: "Takım", player: "Oyuncu", member: "Üye", general: "Genel", staff: "Yönetim ekibi" };
+const INBOX_SUB_HEIGHT = FILTER_BAR_HEIGHT - space.sm;
+const MAX_PEOPLE = 8;
+const MAX_HITS = 40;
 const normalize = (value: string) => value.toLocaleLowerCase("tr-TR");
 
 type Row =
   | { type: "archive"; key: string; count: number; unread: number }
   | { type: "chat"; key: string; conversation: ChatConversation; inbox: boolean }
-  | { type: "section"; key: string; title: string }
+  | { type: "section"; key: string; title: string; count?: number }
   | { type: "hit"; key: string; hit: ChatSearchHit }
+  | { type: "person"; key: string; user: ChatUser }
   | { type: "note"; key: string; text: string };
+
+const rowHeight = (row: Row): number =>
+  row.type === "archive" ? INBOX_ARCHIVE_HEIGHT : row.type === "section" ? INBOX_SECTION_HEIGHT : row.type === "note" ? INBOX_NOTE_HEIGHT : INBOX_ROW_HEIGHT;
 
 export interface ChatInboxProps {
   /** Açılışta "Üye mesajları" süzgeci seçili gelir (messages.view gerekir). */
   admin?: boolean;
-  /** Başka bir ekranın (Mesajlar sekmesi) içinde, başlıksız çizilir. */
+  /** Sekme kökünde çizilir: geri oku yoktur, güvenli alanı ekran verir. */
   embedded?: boolean;
-  /** Gömülüyken: ekranın daralan başlığına kaydırma bağlantısı. */
+  /** Başlıkta "yeni sohbet" ve menüden ÖNCE duran eylemler (ör. bildirim zili). */
+  headerActions?: InboxHeaderAction[];
+  /** Liste kaydırma olayı (isteğe bağlı dinleyici). */
   onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
 }
 
-export function ChatInbox({ admin = false, embedded = false, onScroll }: ChatInboxProps) {
+export function ChatInbox({ admin = false, embedded = false, headerActions, onScroll }: ChatInboxProps) {
   const auth = useAuth();
   const router = useRouter();
   const toast = useToast();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const actions = useConversationActions();
-  const { scrollY, scrollProps } = useHeaderScroll();
+  const reduceMotion = useReduceMotion();
   const fab = useFabAutoHide();
+  const listRef = useRef<FlatList<Row>>(null);
 
+  const meId = auth.user?.id ?? null;
   const canInbox = auth.isManagement && hasAnyPermission(auth.user, ["messages.view"]);
+  const canCalls = auth.isManagement && hasAnyPermission(auth.user, ["messages.calls_view"]);
   const [filter, setFilter] = useState<Filter>(admin && canInbox ? "inbox" : "all");
   const [inboxKind, setInboxKind] = useState<InboxKind>("all");
+  const [searching, setSearching] = useState(false);
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
   const [prefsOpen, setPrefsOpen] = useState(false);
@@ -96,6 +127,29 @@ export function ChatInbox({ admin = false, embedded = false, onScroll }: ChatInb
     return () => clearTimeout(timer);
   }, [search]);
 
+  /* ---------- arama kipi ---------- */
+  const openSearch = useCallback(() => {
+    setSearching(true);
+    listRef.current?.scrollToOffset({ offset: 0, animated: false });
+  }, []);
+  const closeSearch = useCallback(() => {
+    Keyboard.dismiss();
+    setSearching(false);
+    setSearch("");
+    setQuery("");
+    listRef.current?.scrollToOffset({ offset: 0, animated: false });
+  }, []);
+  // Android geri tuşu: önce aramayı kapatır.
+  useEffect(() => {
+    if (!searching) return undefined;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      closeSearch();
+      return true;
+    });
+    return () => sub.remove();
+  }, [closeSearch, searching]);
+
+  /* ---------- veri ---------- */
   const memberQuery = useConversations();
   const inboxQuery = useAdminConversations({ enabled: canInbox });
   const conversations = useMemo(() => memberQuery.data?.conversations ?? [], [memberQuery.data]);
@@ -112,40 +166,101 @@ export function ChatInbox({ admin = false, embedded = false, onScroll }: ChatInb
   );
   const counts = useMemo(() => chatCounts(conversations), [conversations]);
   const inboxUnread = useMemo(() => inboxList.filter(isUnread).length, [inboxList]);
+  const byId = useMemo(() => new Map(conversations.map((item) => [item.id, item])), [conversations]);
 
+  const deepSearch = Boolean(auth.user) && searching && query.length >= 2 && filter !== "inbox";
   const hits = useQuery({
     queryKey: ["chat", "search", query] as const,
     queryFn: () => searchMessages(query),
-    enabled: Boolean(auth.user) && query.length >= 2 && filter !== "inbox",
+    enabled: deepSearch,
     staleTime: 20_000,
+    retry: false,
+  });
+  const directory = useQuery({
+    queryKey: [...queryKeys.chatDirectory(query), "member"] as const,
+    queryFn: () => getDirectory(query),
+    enabled: deepSearch,
+    staleTime: 15_000,
     retry: false,
   });
 
   const presenceIds = useMemo(() => conversations.filter((item) => item.type === "direct" && item.other_user).map((item) => (item.other_user as NonNullable<ChatConversation["other_user"]>).user_id), [conversations]);
-  const presence = usePresence(presenceIds);
+
+  /** Rehberde adı eşleşen, henüz birebir sohbeti olmayan kişiler. */
+  const people = useMemo<ChatUser[]>(() => {
+    const data = directory.data;
+    if (!deepSearch || !data) return [];
+    const known = new Set(presenceIds);
+    const seen = new Set<number>();
+    const out: ChatUser[] = [];
+    [...(data.staff ?? []), ...data.managers, ...data.players, ...(data.members ?? [])].forEach((user) => {
+      if (user.user_id === meId || known.has(user.user_id) || seen.has(user.user_id)) return;
+      seen.add(user.user_id);
+      out.push(user);
+    });
+    return out.slice(0, MAX_PEOPLE);
+  }, [deepSearch, directory.data, meId, presenceIds]);
 
   const rows = useMemo<Row[]>(() => {
     const out: Row[] = [];
-    if (filter === "inbox") {
-      const needle = normalize(query);
+    const needle = normalize(query);
+    const inboxRows = () =>
       inboxList
         .filter((item) => inboxKind === "all" || (item.entity?.kind ?? "member") === inboxKind)
         .filter((item) => !needle || normalize(`${item.title} ${item.subtitle ?? ""} ${item.entity?.name ?? ""} ${item.last_message?.body ?? ""}`).includes(needle))
-        .sort((a, b) => Number(isUnread(b)) - Number(isUnread(a)) || new Date(b.last_message_at ?? 0).getTime() - new Date(a.last_message_at ?? 0).getTime())
-        .forEach((conversation) => out.push({ type: "chat", key: `i${conversation.id}`, conversation, inbox: true }));
+        .sort((a, b) => Number(isUnread(b)) - Number(isUnread(a)) || new Date(b.last_message_at ?? 0).getTime() - new Date(a.last_message_at ?? 0).getTime());
+
+    if (searching) {
+      if (!needle) return out;
+      if (filter === "inbox") {
+        const found = inboxRows();
+        if (found.length) out.push({ type: "section", key: "s-inbox", title: "Üye mesajları", count: found.length });
+        found.forEach((conversation) => out.push({ type: "chat", key: `i${conversation.id}`, conversation, inbox: true }));
+        return out;
+      }
+      const chats = sortChats(conversations).filter((item) => normalize(`${item.title} ${item.subtitle ?? ""} ${item.other_user?.team_name ?? ""} ${item.entity?.name ?? ""}`).includes(needle));
+      if (chats.length) {
+        out.push({ type: "section", key: "s-chats", title: "Sohbetler", count: chats.length });
+        chats.forEach((conversation) => out.push({ type: "chat", key: `p${conversation.id}`, conversation, inbox: false }));
+      }
+      if (people.length) {
+        out.push({ type: "section", key: "s-people", title: "Kişiler", count: people.length });
+        people.forEach((user) => out.push({ type: "person", key: `u${user.user_id}`, user }));
+      }
+      if (query.length >= 2) {
+        const found = (hits.data ?? []).slice(0, MAX_HITS);
+        if (found.length) {
+          out.push({ type: "section", key: "s-hits", title: "Mesajlar", count: found.length });
+          found.forEach((hit) => out.push({ type: "hit", key: `h${hit.id}`, hit }));
+        } else if (hits.isFetching) out.push({ type: "note", key: "n-hits", text: "Mesajlarda aranıyor…" });
+      }
       return out;
     }
-    if (filter === "all" && !query && counts.archive > 0) out.push({ type: "archive", key: "archive", count: counts.archive, unread: counts.archiveUnread });
-    filterChats(conversations, filter, query).forEach((conversation) => out.push({ type: "chat", key: `p${conversation.id}`, conversation, inbox: false }));
-    if (query.length >= 2) {
-      const found = hits.data ?? [];
-      if (found.length) {
-        out.push({ type: "section", key: "s-hits", title: "MESAJLAR" });
-        found.slice(0, 40).forEach((hit) => out.push({ type: "hit", key: `h${hit.id}`, hit }));
-      } else if (hits.isFetching) out.push({ type: "note", key: "n-hits", text: "Mesajlarda aranıyor…" });
+
+    if (filter === "inbox") {
+      inboxRows().forEach((conversation) => out.push({ type: "chat", key: `i${conversation.id}`, conversation, inbox: true }));
+      return out;
     }
+    if (filter === "all" && counts.archive > 0) out.push({ type: "archive", key: "archive", count: counts.archive, unread: counts.archiveUnread });
+    filterChats(conversations, filter, "").forEach((conversation) => out.push({ type: "chat", key: `p${conversation.id}`, conversation, inbox: false }));
     return out;
-  }, [conversations, counts.archive, counts.archiveUnread, filter, hits.data, hits.isFetching, inboxKind, inboxList, query]);
+  }, [conversations, counts.archive, counts.archiveUnread, filter, hits.data, hits.isFetching, inboxKind, inboxList, people, query, searching]);
+
+  /* Sabit yükseklikler: satırın konumu ölçmeden bilinir. */
+  const headerHeight = searching ? 0 : FILTER_BAR_HEIGHT + (filter === "inbox" ? INBOX_SUB_HEIGHT : 0);
+  const offsets = useMemo(() => {
+    const out = new Array<number>(rows.length);
+    let y = 0;
+    rows.forEach((row, index) => {
+      out[index] = y;
+      y += rowHeight(row);
+    });
+    return out;
+  }, [rows]);
+  const getItemLayout = useCallback(
+    (data: ArrayLike<Row> | null | undefined, index: number) => ({ length: data?.[index] ? rowHeight(data[index]) : INBOX_ROW_HEIGHT, offset: headerHeight + (offsets[index] ?? 0), index }),
+    [headerHeight, offsets],
+  );
 
   const activeQuery = filter === "inbox" ? inboxQuery : memberQuery;
   const refetch = useCallback(() => {
@@ -154,56 +269,63 @@ export function ChatInbox({ admin = false, embedded = false, onScroll }: ChatInb
   }, [canInbox, queryClient]);
   const refresh = useRefresh(refetch, { refreshing: activeQuery.isRefetching });
 
+  /* ---------- gezinme ---------- */
   const open = useCallback(
-    (conversation: ChatConversation, inbox: boolean, messageId?: number) => {
+    (conversation: ChatConversation, inbox: boolean) => {
       if (inbox) router.push(`/yonetim/sohbet/${conversation.id}` as never);
-      else router.push({ pathname: "/sohbet/[id]", params: messageId ? { id: String(conversation.id), mesaj: String(messageId) } : { id: String(conversation.id) } });
+      else router.push({ pathname: "/sohbet/[id]", params: { id: String(conversation.id) } });
     },
     [router],
   );
   const openHit = useCallback((hit: ChatSearchHit) => router.push({ pathname: "/sohbet/[id]", params: { id: String(hit.conversation_id), mesaj: String(hit.id) } }), [router]);
   const onLongPress = useCallback((conversation: ChatConversation, inbox: boolean) => setRowMenu({ conversation, inbox }), []);
   const compose = useCallback(() => router.push((filter === "inbox" ? "/yonetim/sohbet/yeni" : "/sohbet/yeni") as never), [filter, router]);
+  const showArchive = useCallback(() => setFilter("archive"), []);
+
+  const opening = useRef(false);
+  const openPerson = useCallback(
+    (user: ChatUser) => {
+      if (opening.current) return;
+      opening.current = true;
+      void openConversation({ type: "direct", user_id: user.user_id })
+        .then(({ conversation }) => {
+          void queryClient.invalidateQueries({ queryKey: queryKeys.chatConversations() });
+          router.push({ pathname: "/sohbet/[id]", params: { id: String(conversation.id) } });
+        })
+        .catch((error: unknown) => toast.show({ message: errorMessage(error), tone: "danger" }))
+        .finally(() => {
+          opening.current = false;
+        });
+    },
+    [queryClient, router, toast],
+  );
 
   const handleScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      if (embedded) onScroll?.(event);
-      else scrollProps.onScroll(event);
+      onScroll?.(event);
       fab.onScroll(event);
     },
-    [embedded, fab, onScroll, scrollProps],
+    [fab, onScroll],
   );
 
   const renderItem = useCallback(
     ({ item }: { item: Row }) => {
       switch (item.type) {
         case "archive":
-          return (
-            <Touchable feedback="row" haptic="selection" onPress={() => setFilter("archive")} accessibilityRole="button" accessibilityLabel={`Arşivlenmiş sohbetler, ${item.count} sohbet`} style={styles.archiveRow}>
-              <View style={styles.archiveIcon}><Ionicons name="archive-outline" size={20} color={colors.textSecondary} /></View>
-              <Text style={styles.archiveLabel} {...textScale.dense}>Arşivlenmiş</Text>
-              <Text style={[styles.archiveCount, item.unread ? styles.accent : null]} {...textScale.badge}>{item.unread || item.count}</Text>
-            </Touchable>
-          );
+          return <ArchiveRow count={item.count} unread={item.unread} onPress={showArchive} />;
         case "section":
-          return <Text style={styles.section} {...textScale.badge}>{item.title}</Text>;
+          return <InboxSection title={upperTR(item.title)} count={item.count} />;
         case "note":
-          return <Text style={styles.note} {...textScale.dense}>{item.text}</Text>;
+          return <InboxNote text={item.text} />;
         case "hit":
-          return <HitRow hit={item.hit} onPress={openHit} />;
+          return <HitRow hit={item.hit} conversation={byId.get(item.hit.conversation_id)} query={query} onPress={openHit} />;
+        case "person":
+          return <PersonRow user={item.user} query={query} onPress={openPerson} />;
         default:
-          return (
-            <ConversationRow
-              conversation={item.conversation}
-              inbox={item.inbox}
-              online={item.conversation.type === "direct" && Boolean(presence[String(item.conversation.other_user?.user_id)]?.online)}
-              onPress={open}
-              onLongPress={onLongPress}
-            />
-          );
+          return <ConversationRow conversation={item.conversation} inbox={item.inbox} meId={meId} onPress={open} onLongPress={onLongPress} />;
       }
     },
-    [onLongPress, open, openHit, presence],
+    [byId, meId, onLongPress, open, openHit, openPerson, query, showArchive],
   );
 
   /* ---------- menüler ---------- */
@@ -217,6 +339,7 @@ export function ChatInbox({ admin = false, embedded = false, onScroll }: ChatInb
     { key: "group", label: "Yeni grup", icon: "people-outline", onPress: () => router.push({ pathname: "/sohbet/yeni", params: { sekme: "grup" } }) },
     { key: "starred", label: "Yıldızlı mesajlar", icon: "star-outline", onPress: () => router.push("/sohbet/yildizli" as never) },
     { key: "read", label: "Tümünü okundu say", icon: "checkmark-done-outline", onPress: markAllRead },
+    ...(canCalls ? [{ key: "calls", label: "Arama kayıtları", icon: "recording-outline" as const, onPress: () => router.push("/yonetim/kayitlar") }] : []),
     ...(auth.isManagement ? [] : [{ key: "prefs", label: "Kimden mesaj kabul edeyim?", icon: "options-outline" as const, onPress: () => setPrefsOpen(true) }]),
     { key: "blocks", label: "Engellenenler", icon: "ban-outline", onPress: () => router.push("/engellenenler" as never) },
   ];
@@ -253,252 +376,182 @@ export function ChatInbox({ admin = false, embedded = false, onScroll }: ChatInb
     return items.filter(Boolean) as MessageMenuItem[];
   }, [actions, queryClient, rowMenu, toast]);
 
-  if (!auth.user && !embedded) return <Redirect href="/giris" />;
-
-  const controls = (
-    <View style={[styles.controls, embedded ? styles.controlsEmbedded : null]}>
-      <View style={styles.searchRow}>
-        <Input
-          value={search}
-          onChangeText={setSearch}
-          placeholder={filter === "inbox" ? "Takım, oyuncu ya da üye ara" : "Sohbetlerde ve mesajlarda ara"}
-          variant="search"
-          size="sm"
-          leadingIcon="search"
-          accessibilityLabel="Sohbetlerde ve mesajlarda ara"
-          containerStyle={styles.searchFlex}
-        />
-        <Touchable feedback="icon" haptic="selection" onPress={() => setMenuOpen(true)} accessibilityRole="button" accessibilityLabel="Mesajlar menüsü: yeni grup, yıldızlı mesajlar, ayarlar" style={styles.menuButton}>
-          <Ionicons name="ellipsis-vertical" size={20} color={colors.textSecondary} />
-        </Touchable>
-      </View>
-      <ChipGroup contentPadding={embedded ? 0 : undefined}>
-        <Chip label="Tümü" selected={filter === "all"} onPress={() => setFilter("all")} size="sm" />
-        <Chip label="Okunmamış" count={counts.unread || undefined} selected={filter === "unread"} onPress={() => setFilter("unread")} size="sm" />
-        {counts.pinned ? <Chip label="Sabitlenen" selected={filter === "pinned"} onPress={() => setFilter("pinned")} size="sm" /> : null}
-        <Chip label="Gruplar" selected={filter === "groups"} onPress={() => setFilter("groups")} size="sm" />
-        {canInbox ? <Chip label="Üye mesajları" icon="file-tray-full-outline" count={inboxUnread || undefined} selected={filter === "inbox"} onPress={() => setFilter("inbox")} size="sm" /> : null}
-        {counts.archive ? <Chip label="Arşiv" selected={filter === "archive"} onPress={() => setFilter("archive")} size="sm" /> : null}
-      </ChipGroup>
-      {filter === "inbox" ? (
-        <ChipGroup contentPadding={embedded ? 0 : undefined}>
-          {INBOX_KINDS.map(([key, label]) => {
-            const unread = key === "all" ? 0 : inboxList.filter((item) => (item.entity?.kind ?? "member") === key && isUnread(item)).length;
-            return <Chip key={key} label={label} count={unread || undefined} selected={inboxKind === key} onPress={() => setInboxKind(key)} size="sm" />;
-          })}
-        </ChipGroup>
-      ) : null}
-    </View>
+  /* ---------- başlık ve haplar ---------- */
+  const openMenu = useCallback(() => setMenuOpen(true), []);
+  const barActions = useMemo<InboxHeaderAction[]>(
+    () => [
+      ...(headerActions ?? []),
+      { icon: "create-outline", onPress: compose, accessibilityLabel: "Yeni sohbet" },
+      { icon: "ellipsis-vertical", onPress: openMenu, accessibilityLabel: "Mesajlar menüsü: yeni grup, yıldızlı mesajlar, ayarlar" },
+    ],
+    [compose, headerActions, openMenu],
   );
 
-  const emptyTitle = query
-    ? "Eşleşen sohbet yok"
+  const filterItems = useMemo<FilterPillItem<Filter>[]>(() => {
+    const items: (FilterPillItem<Filter> | false)[] = [
+      { key: "all", label: "Tümü" },
+      { key: "unread", label: "Okunmamış", count: counts.unread || undefined },
+      (counts.pinned > 0 || filter === "pinned") && { key: "pinned", label: "Sabitlenen", count: counts.pinned || undefined },
+      { key: "groups", label: "Gruplar", count: counts.groups || undefined },
+      canInbox && { key: "inbox", label: "Üye mesajları", icon: "file-tray-full-outline", count: inboxUnread || undefined },
+      (counts.archive > 0 || filter === "archive") && { key: "archive", label: "Arşiv", count: counts.archive || undefined },
+    ];
+    return items.filter(Boolean) as FilterPillItem<Filter>[];
+  }, [canInbox, counts.archive, counts.groups, counts.pinned, counts.unread, filter, inboxUnread]);
+
+  const kindItems = useMemo<FilterPillItem<InboxKind>[]>(
+    () =>
+      INBOX_KINDS.map(([key, label]) => ({
+        key,
+        label,
+        count: key === "all" ? undefined : inboxList.filter((item) => (item.entity?.kind ?? "member") === key && isUnread(item)).length || undefined,
+      })),
+    [inboxList],
+  );
+
+  const pickFilter = useCallback((next: Filter) => {
+    setFilter(next);
+    listRef.current?.scrollToOffset({ offset: 0, animated: false });
+  }, []);
+
+  const chips = useMemo(
+    () =>
+      searching ? null : (
+        <View>
+          <FilterPills items={filterItems} value={filter} onChange={pickFilter} accessibilityLabel="Sohbet süzgeçleri" />
+          {filter === "inbox" ? <FilterPills items={kindItems} value={inboxKind} onChange={setInboxKind} secondary accessibilityLabel="Üye mesajı türü" /> : null}
+        </View>
+      ),
+    [filter, filterItems, inboxKind, kindItems, pickFilter, searching],
+  );
+
+  /* ---------- ilk çizim: liste bir kez belirir ---------- */
+  const fade = useRef(new Animated.Value(0)).current;
+  const ready = !activeQuery.isLoading;
+  useEffect(() => {
+    if (!ready) return;
+    Animated.timing(fade, { toValue: 1, duration: reduceMotion ? duration.instant : duration.base, easing: easing.decelerate, useNativeDriver: true }).start();
+  }, [fade, ready, reduceMotion]);
+
+  /* ---------- misafir ---------- */
+  if (!auth.user) {
+    if (!embedded) return <Redirect href="/giris" />;
+    return (
+      <View style={styles.pane}>
+        <InboxHeader title="Mesajlar" actions={headerActions ?? []} searchable={false} searching={false} value="" placeholder="" onChangeText={setSearch} onOpenSearch={openSearch} onCloseSearch={closeSearch} />
+        <EmptyState
+          icon="chatbubbles-outline"
+          title="Mesajların hesabına bağlı"
+          body="Yönetimle, takımınla ve takım arkadaşlarınla yazışmak için giriş yap."
+          action={{ label: "Giriş yap", onPress: () => router.push("/giris") }}
+        />
+      </View>
+    );
+  }
+
+  const searchEmpty = searching && !query;
+  const searchBusy = searching && Boolean(query) && (search.trim() !== query || (deepSearch && (hits.isFetching || directory.isFetching)));
+  const emptyTitle = searching
+    ? "Sonuç bulunamadı"
     : filter === "inbox" ? "Üye mesajı yok"
       : filter === "archive" ? "Arşiv boş"
         : filter === "unread" ? "Okunmamış sohbet yok"
           : filter === "groups" ? "Henüz grup yok"
             : filter === "pinned" ? "Sabitlenen sohbet yok" : "Henüz sohbet yok";
-  const emptyBody = query
+  const emptyBody = searching
     ? "Başka bir ad ya da kelime dene."
     : filter === "inbox" ? "Takım, oyuncu ve üyelerin ElitLig Yönetimi'ne yazdığı mesajlar burada toplanır. Onay bekleyen talepler Talepler'dedir."
       : filter === "all" ? (auth.isManagement ? "Yönetimdeki arkadaşların, takım başkanları, oyuncular ve üyelerle yazışmaya başla." : "Yönetimle, takımınla ve takım arkadaşlarınla yazışmaya başla.")
         : "Bütün sohbetlerine dönmek için Tümü'ne dokun.";
 
-  const body = (
-    <>
+  const empty = searchEmpty ? (
+    <EmptyState
+      icon="search-outline"
+      title={filter === "inbox" ? "Üye mesajlarında ara" : "Sohbet, kişi ya da mesaj ara"}
+      body={filter === "inbox" ? "Takım, oyuncu ya da üye adını yaz." : "Ad yaz ya da bir mesajda geçen kelimeyi ara; sonuca dokununca sohbet o mesajda açılır."}
+      variant="inline"
+    />
+  ) : searchBusy ? (
+    <InboxNote text="Aranıyor…" />
+  ) : (
+    <EmptyState
+      icon={searching ? "search-outline" : filter === "inbox" ? "file-tray-outline" : filter === "archive" ? "archive-outline" : "chatbubbles-outline"}
+      title={emptyTitle}
+      body={emptyBody}
+      variant={searching ? "inline" : "screen"}
+      action={searching ? undefined : filter === "all" ? { label: "Yeni sohbet", onPress: compose } : filter === "inbox" ? undefined : { label: "Tümünü göster", onPress: () => setFilter("all") }}
+    />
+  );
+
+  const content = (
+    <View style={styles.pane}>
+      <PresenceBridge userIds={presenceIds} />
+      <InboxHeader
+        title="Mesajlar"
+        onBack={embedded ? undefined : router.back}
+        actions={barActions}
+        searching={searching}
+        value={search}
+        placeholder={filter === "inbox" ? "Takım, oyuncu ya da üye ara" : "Sohbetlerde ve mesajlarda ara"}
+        onChangeText={setSearch}
+        onOpenSearch={openSearch}
+        onCloseSearch={closeSearch}
+      />
+      {activeQuery.isError && rows.length > 0 ? <ErrorState error={activeQuery.error} onRetry={refetch} variant="banner" /> : null}
       {activeQuery.isLoading ? (
-        <View style={styles.skeleton}><SkeletonListRow count={8} avatar /></View>
-      ) : activeQuery.isError && rows.length === 0 ? (
-        <ErrorState error={activeQuery.error} onRetry={refetch} />
+        <View style={styles.pane}>
+          {chips}
+          <InboxSkeleton />
+        </View>
+      ) : activeQuery.isError && rows.length === 0 && !searching ? (
+        <View style={styles.pane}>
+          {chips}
+          <ErrorState error={activeQuery.error} onRetry={refetch} />
+        </View>
       ) : (
-        <FlatList
-          data={rows}
-          keyExtractor={(item) => item.key}
-          renderItem={renderItem}
-          onScroll={handleScroll}
-          scrollEventThrottle={scrollProps.scrollEventThrottle}
-          contentContainerStyle={styles.list}
-          refreshControl={refresh.control}
-          initialNumToRender={12}
-          maxToRenderPerBatch={10}
-          windowSize={9}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-          ListHeaderComponent={activeQuery.isError ? <ErrorState error={activeQuery.error} onRetry={refetch} variant="banner" /> : null}
-          ListEmptyComponent={
-            <EmptyState
-              icon={filter === "inbox" ? "file-tray-outline" : filter === "archive" ? "archive-outline" : "chatbubbles-outline"}
-              title={emptyTitle}
-              body={emptyBody}
-              action={query ? undefined : filter === "all" ? { label: "Yeni sohbet", onPress: compose } : filter === "inbox" ? undefined : { label: "Tümünü göster", onPress: () => setFilter("all") }}
-            />
-          }
-        />
+        <Animated.View style={[styles.pane, { opacity: fade }]}>
+          <FlatList
+            ref={listRef}
+            data={rows}
+            keyExtractor={keyOf}
+            renderItem={renderItem}
+            getItemLayout={getItemLayout}
+            onScroll={handleScroll}
+            scrollEventThrottle={32}
+            contentContainerStyle={styles.list}
+            refreshControl={searching ? undefined : refresh.control}
+            initialNumToRender={10}
+            maxToRenderPerBatch={8}
+            updateCellsBatchingPeriod={50}
+            windowSize={9}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            showsVerticalScrollIndicator={false}
+            ListHeaderComponent={chips}
+            ListEmptyComponent={empty}
+          />
+        </Animated.View>
       )}
-      <FAB icon="chatbubble-ellipses" visible={fab.visible} offsetBottom={insets.bottom + space.lg} onPress={compose} accessibilityLabel="Yeni sohbet" />
+      <InboxFab visible={fab.visible && !searching} bottom={(embedded ? 0 : insets.bottom) + space.lg} onPress={compose} />
       <ActionMenu visible={menuOpen} title="Mesajlar" items={listMenu} onClose={() => setMenuOpen(false)} />
       <ActionMenu visible={Boolean(rowMenu) && rowMenuItems.length > 0} title={rowMenu?.conversation.title} items={rowMenuItems} onClose={() => setRowMenu(null)} />
       {auth.isManagement ? null : <ChatPrefsSheet visible={prefsOpen} onClose={() => setPrefsOpen(false)} />}
-    </>
+    </View>
   );
 
-  if (embedded) {
-    return (
-      <View style={styles.pane}>
-        {controls}
-        {body}
-      </View>
-    );
-  }
-
+  if (embedded) return content;
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      <ScreenHeader title="Mesajlar" subtitle={counts.unread > 0 ? `${counts.unread} okunmamış sohbet` : undefined} back scrollY={scrollY} bottom={controls} />
-      {body}
+      {content}
     </SafeAreaView>
   );
 }
 
-/* ---------- sohbet satırı ---------- */
-
-const ConversationRow = memo(function ConversationRow({
-  conversation,
-  inbox,
-  online,
-  onPress,
-  onLongPress,
-}: {
-  conversation: ChatConversation;
-  inbox: boolean;
-  online: boolean;
-  onPress: (conversation: ChatConversation, inbox: boolean) => void;
-  onLongPress: (conversation: ChatConversation, inbox: boolean) => void;
-}) {
-  const draft = useDraft(inbox ? 0 : conversation.id);
-  const typing = useTypingNames(inbox ? 0 : conversation.id).length > 0;
-  const unread = isUnread(conversation);
-  const preview = chatPreview(conversation, { inbox });
-  const last = conversation.last_message;
-  const mineLast = Boolean(last && (last.sender.is_me || (inbox && last.sender.is_management)) && last.kind !== "system" && last.kind !== "call");
-  const team = !inbox && conversation.other_user?.team_name && conversation.other_user.team_name !== conversation.title ? conversation.other_user.team_name : null;
-  return (
-    <Touchable
-      feedback="row"
-      haptic="selection"
-      onPress={() => onPress(conversation, inbox)}
-      onLongPress={() => onLongPress(conversation, inbox)}
-      delayLongPress={280}
-      accessibilityRole="button"
-      accessibilityLabel={`${conversation.title}${conversation.unread > 0 ? `, ${conversation.unread} okunmamış mesaj` : conversation.marked_unread ? ", okunmadı olarak işaretli" : ""}. ${preview.prefix}${preview.text}`}
-      accessibilityHint="Sohbet seçenekleri için basılı tut"
-      style={styles.row}
-    >
-      <ChatAvatar conversation={conversation} size={52} online={online} />
-      <View style={styles.body}>
-        <View style={styles.line}>
-          <Text style={[styles.title, unread ? styles.titleUnread : null]} numberOfLines={1} {...textScale.dense}>{conversation.title}</Text>
-          <Text style={[styles.time, unread ? styles.accent : null]} {...textScale.badge}>{listTime(conversation.last_message_at)}</Text>
-        </View>
-        <View style={styles.line}>
-          {typing ? (
-            <TypingLine conversationId={conversation.id} group={isGroupChat(conversation)} fallback="" tone="row" />
-          ) : draft ? (
-            <Text style={styles.preview} numberOfLines={1} {...textScale.dense}>
-              <Text style={styles.draft}>Taslak: </Text>
-              {draft}
-            </Text>
-          ) : (
-            <View style={styles.previewRow}>
-              {mineLast && !inbox ? <Ticks status={tickStatus(last)} size={15} color={colors.textTertiary} /> : null}
-              {preview.icon ? <Ionicons name={preview.icon} size={14} color={colors.textTertiary} /> : null}
-              <Text style={[styles.preview, preview.deleted ? styles.previewDeleted : null, unread ? styles.previewUnread : null]} numberOfLines={1} {...textScale.dense}>
-                {preview.prefix}
-                {preview.text}
-              </Text>
-            </View>
-          )}
-          <View style={styles.marks}>
-            {conversation.muted ? <Ionicons name="notifications-off" size={14} color={colors.textTertiary} /> : null}
-            {conversation.pinned ? <Ionicons name="pin" size={14} color={colors.textTertiary} /> : null}
-            {conversation.unread > 0 ? (
-              <View style={[styles.badge, conversation.muted ? styles.badgeMuted : null]}>
-                <Text style={styles.badgeText} {...textScale.badge}>{conversation.unread > 99 ? "99+" : conversation.unread}</Text>
-              </View>
-            ) : conversation.marked_unread ? (
-              <View style={styles.dot} />
-            ) : null}
-          </View>
-        </View>
-        {inbox ? (
-          <Text style={styles.kind} numberOfLines={1} {...textScale.dense}>
-            {KIND_LABEL[conversation.entity?.kind ?? "member"] ?? "Üye"}
-            {conversation.subtitle ? ` · ${conversation.subtitle.replace(/^(Takım|Oyuncu|Üye)\s*·\s*/, "")}` : ""}
-          </Text>
-        ) : team ? (
-          <Text style={styles.kind} numberOfLines={1} {...textScale.dense}>{team}</Text>
-        ) : null}
-      </View>
-    </Touchable>
-  );
-});
-
-/* ---------- mesaj arama sonucu ---------- */
-
-const HitRow = memo(function HitRow({ hit, onPress }: { hit: ChatSearchHit; onPress: (hit: ChatSearchHit) => void }) {
-  const summary = messageSummary(hit);
-  return (
-    <Touchable feedback="row" haptic="selection" onPress={() => onPress(hit)} accessibilityRole="button" accessibilityLabel={`${hit.conversation_title ?? "Sohbet"}: ${summary.text}`} style={styles.hit}>
-      <View style={styles.line}>
-        <Text style={styles.hitTitle} numberOfLines={1} {...textScale.dense}>{hit.conversation_title ?? "Sohbet"}</Text>
-        <Text style={styles.time} {...textScale.badge}>{listTime(hit.created_at)}</Text>
-      </View>
-      <View style={styles.previewRow}>
-        {summary.icon ? <Ionicons name={summary.icon} size={14} color={colors.textTertiary} /> : null}
-        <Text style={styles.preview} numberOfLines={2} {...textScale.dense}>
-          {hit.sender.is_me ? "Sen: " : hit.sender.name ? `${hit.sender.name}: ` : ""}
-          {summary.text}
-        </Text>
-      </View>
-    </Touchable>
-  );
-});
+const keyOf = (item: Row) => item.key;
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   pane: { flex: 1 },
-  controls: { gap: space.sm, paddingHorizontal: layout.screenPadding, paddingBottom: space.sm },
-  controlsEmbedded: { paddingTop: space.xs },
-  searchRow: { flexDirection: "row", alignItems: "center", gap: space.xs },
-  searchFlex: { flex: 1 },
-  menuButton: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
-  skeleton: { paddingHorizontal: layout.screenPadding, paddingTop: space.sm },
+  /* Alt boşluk: son satır yüzen düğmenin altında kalmasın. */
   list: { paddingBottom: space.giant * 2, flexGrow: 1 },
-
-  row: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: layout.screenPadding, minHeight: 72, paddingVertical: space.sm },
-  body: { flex: 1, minWidth: 0, gap: space.xxs, paddingBottom: space.xxs, borderBottomWidth: hairline, borderBottomColor: colors.separator, alignSelf: "stretch", justifyContent: "center" },
-  line: { flexDirection: "row", alignItems: "center", gap: space.sm },
-  title: { ...type.h3, fontSize: type.bodyLg.fontSize, color: colors.textPrimary, flex: 1 },
-  titleUnread: { fontFamily: type.h2.fontFamily },
-  time: { ...type.numSm, color: colors.textTertiary },
-  accent: { color: colors.brandAccent },
-  previewRow: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: space.xs },
-  preview: { ...type.body, color: colors.textSecondary, flex: 1 },
-  previewUnread: { color: colors.textPrimary },
-  previewDeleted: { fontStyle: "italic" },
-  draft: { color: colors.danger, fontFamily: type.label.fontFamily },
-  marks: { flexDirection: "row", alignItems: "center", gap: space.xs },
-  badge: { minWidth: 22, height: 22, paddingHorizontal: space.s, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.brand },
-  badgeMuted: { backgroundColor: colors.textTertiary },
-  badgeText: { ...type.numSmStrong, color: colors.textOnBrand },
-  dot: { width: 12, height: 12, borderRadius: radius.pill, backgroundColor: colors.brand },
-  kind: { ...type.caption, color: colors.textTertiary },
-
-  archiveRow: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: layout.screenPadding, minHeight: 52 },
-  archiveIcon: { width: 52, alignItems: "center" },
-  archiveLabel: { ...type.h3, color: colors.textPrimary, flex: 1 },
-  archiveCount: { ...type.numSmStrong, color: colors.textTertiary },
-  section: { ...type.overline, color: colors.textTertiary, paddingHorizontal: layout.screenPadding, paddingTop: space.lg, paddingBottom: space.xs },
-  note: { ...type.bodySm, color: colors.textSecondary, paddingHorizontal: layout.screenPadding, paddingVertical: space.md },
-  hit: { paddingHorizontal: layout.screenPadding, paddingVertical: space.sm, gap: space.xxs, borderBottomWidth: hairline, borderBottomColor: colors.separator },
-  hitTitle: { ...type.label, color: colors.textPrimary, flex: 1 },
 });

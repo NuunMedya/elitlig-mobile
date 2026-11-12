@@ -43,6 +43,9 @@ class ClipRingBuffer(
   private var audioFormat: MediaFormat? = null
   @Volatile var enabled = true
 
+  /** Yayının tamamını telefona yazan kayıtçı (aynı kodlanmış örnekleri alır). */
+  @Volatile var recorder: LocalRecorder? = null
+
   // --- RecordController: dosyaya kayıt desteklenmiyor (yalnız halka tampon) ---
 
   @Throws(IOException::class)
@@ -58,31 +61,38 @@ class ClipRingBuffer(
   override fun stopRecord() {}
 
   override fun recordVideo(videoBuffer: ByteBuffer, videoInfo: MediaCodec.BufferInfo) {
-    if (!enabled) return
     if (videoInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0) return
     if (videoInfo.size <= 0) return
     val data = copy(videoBuffer, videoInfo)
     val key = (videoInfo.flags and MediaCodec.BUFFER_FLAG_KEY_FRAME) != 0 || isKeyFrame(ByteBuffer.wrap(data))
+    // Yerel kayıt, yayına giden tamponu kopyalamadan yazar (MediaMuxer konumu değiştirmez).
+    recorder?.onVideo(videoBuffer, videoInfo, key)
+    if (!enabled) return
     push(Sample(true, data, videoInfo.presentationTimeUs, key))
   }
 
   override fun recordAudio(audioBuffer: ByteBuffer, audioInfo: MediaCodec.BufferInfo) {
-    if (!enabled) return
     if (audioInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0) return
     if (audioInfo.size <= 0) return
+    recorder?.onAudio(audioBuffer, audioInfo)
+    if (!enabled) return
     push(Sample(false, copy(audioBuffer, audioInfo), audioInfo.presentationTimeUs, true))
   }
 
   override fun setVideoFormat(videoFormat: MediaFormat, isOnlyVideo: Boolean) {
     synchronized(lock) { this.videoFormat = videoFormat }
+    recorder?.setVideoFormat(videoFormat)
   }
 
   override fun setAudioFormat(audioFormat: MediaFormat, isOnlyAudio: Boolean) {
     synchronized(lock) { this.audioFormat = audioFormat }
+    recorder?.setAudioFormat(audioFormat)
   }
 
   /** Camera2Base.stopStream() çağırır: kodlayıcılar durdu, tampon geçersiz. */
   override fun resetFormats() {
+    // Açık yerel kayıt varsa MP4 burada kapanır (kodlayıcı biçimleri artık geçersiz).
+    recorder?.onEncodersStopped()
     synchronized(lock) {
       videoFormat = null
       audioFormat = null

@@ -1,6 +1,6 @@
 // ElitligLive config plugin
 // app.json → "plugins": [ ..., "./modules/elitlig-live/app.plugin.js" ]
-// İsteğe bağlı: ["./modules/elitlig-live/app.plugin.js", { "cameraPermission": "...", "microphonePermission": "..." }]
+// İsteğe bağlı: ["./modules/elitlig-live/app.plugin.js", { "cameraPermission": "...", "microphonePermission": "...", "exposeRecordings": true }]
 const {
   AndroidConfig,
   createRunOncePlugin,
@@ -72,6 +72,13 @@ const withElitligLiveIos = (config, props) => {
     cfg.modResults.NSCameraUsageDescription = camera;
     if (!cfg.modResults.NSMicrophoneUsageDescription) {
       cfg.modResults.NSMicrophoneUsageDescription = mic;
+    }
+    // Yerel yayın kaydı uygulamanın Belgeler klasörüne yazılır; kullanıcı dosyayı
+    // Dosyalar uygulamasında ("iPhone'umda ▸ ElitLig") bulabilsin.
+    // Kapatmak için: { "exposeRecordings": false }.
+    if (props.exposeRecordings !== false) {
+      cfg.modResults.UIFileSharingEnabled = true;
+      cfg.modResults.LSSupportsOpeningDocumentsInPlace = true;
     }
     // UIBackgroundModes'e bilinçli olarak dokunulmuyor.
     return cfg;

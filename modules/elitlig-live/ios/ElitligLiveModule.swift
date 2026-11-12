@@ -28,6 +28,10 @@ struct ReplayOptions: Record {
   @Field var rate: Double = 1
 }
 
+struct LocalRecordingOptions: Record {
+  @Field var fileName: String = ""
+}
+
 final class LiveException: GenericException<String> {
   override var reason: String { param }
 }
@@ -237,6 +241,43 @@ public class ElitligLiveModule: Module {
       }
     }
 
+    // MARK: Yerel kayıt: yayının tamamı telefon hafızasına (JS varlığını denetleyerek çağırır)
+
+    AsyncFunction("getStorageInfo") { () -> [String: Any] in
+      return [
+        "freeBytes": Double(LocalRecorder.freeBytes()),
+        "totalBytes": Double(LocalRecorder.totalBytes()),
+        "minFreeBytes": Double(LocalRecorder.minFreeBytes),
+        "location": "Dosyalar ▸ iPhone'umda ▸ ElitLig",
+        "gallery": false
+      ]
+    }
+
+    AsyncFunction("startLocalRecording") { (options: LocalRecordingOptions) throws -> [String: Any] in
+      guard let view = ElitligLiveModule.activeView else {
+        throw LiveCodedException(code: "NOT_STREAMING", message: "Ekranda LiveCameraView yok.")
+      }
+      return try view.startLocalRecording(fileName: options.fileName)
+    }.runOnQueue(.main)
+
+    AsyncFunction("stopLocalRecording") { (promise: Promise) in
+      DispatchQueue.main.async {
+        guard let view = ElitligLiveModule.activeView else {
+          promise.resolve(nil)
+          return
+        }
+        view.stopLocalRecording { summary in
+          promise.resolve(summary)
+        }
+      }
+    }
+
+    AsyncFunction("getLocalRecordingStatus") { (promise: Promise) in
+      DispatchQueue.main.async {
+        promise.resolve(ElitligLiveModule.activeView?.localRecordingStatus())
+      }
+    }
+
     OnCreate {
       // 24 saatten eski klipleri temizle.
       let fm = FileManager.default
@@ -250,7 +291,7 @@ public class ElitligLiveModule: Module {
     }
 
     View(LiveCameraView.self) {
-      Events("onStateChange", "onStats", "onReplayStateChange")
+      Events("onStateChange", "onStats", "onReplayStateChange", "onRecordingStateChange")
 
       Prop("facing") { (view: LiveCameraView, facing: String?) in
         view.setFacing(facing)
