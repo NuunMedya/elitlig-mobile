@@ -21,6 +21,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { confirmAction } from "@/components/admin";
 import { ResultSheet } from "@/components/puzzle/LevelSheets";
 import { ShopSheet } from "@/components/puzzle/sheets";
+import { StageBackdrop } from "@/components/puzzle/StageBackdrop";
 import { Touchable, useToast } from "@/components/ui";
 import { errorText } from "@/lib/admin/errors";
 import { finishLevel, type FinishResponse } from "@/lib/puzzle/api";
@@ -146,6 +147,7 @@ export default function PuzzlePlayScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={["top", "bottom"]}>
+      <StageBackdrop />
       <View style={styles.top}>
         <Touchable onPress={() => void leave()} hitSlop={touchSlop(28)} accessibilityLabel="Seviyeden çık" style={styles.close}>
           <Ionicons name="close" size={24} color={colors.textPrimary} />

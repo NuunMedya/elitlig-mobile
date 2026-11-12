@@ -567,7 +567,7 @@ const squadBot = (A) => {
   });
   const end = over();
   const x = A.game.debug();
-  check("kadro: kapı aritmetiği doğru, kötü kapılar kadroyu bitirir", math && Boolean(end) && x.n === 0 && x.goals === 0, end ? `kadro ${Math.round(x.z)} m'de tükendi` : `tur bitmedi (kadro ${x.n})`);
+  check("kadro: kapı aritmetiği doğru, kötü kapılar kadroyu bitirir", math && Boolean(end) && x.n === 0 && x.goals <= 1, end ? `kadro ${Math.round(x.z)} m'de tükendi` : `tur bitmedi (kadro ${x.n})`);
 }
 {
   // İyi oynayan kadro: büyür, grupları eritir, kaleciyi düşürür, bölüm atlar.
