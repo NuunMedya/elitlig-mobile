@@ -13,6 +13,8 @@
  *   <ResultPill result="W" text="3–1" />  → sonuç renginde skor hapı
  *   <MiniStat value="12" label="Maç" />   → kart içi küçük sayı hücresi
  *   <LeaderTile … />                       → istatistik lideri karosu
+ *   <DuelBar label="Gol" a={70} b={33} />  → iki taraflı kıyas, kazanan vurgulu
+ *   <DuelScore a={5} b={2} />              → kazanılan metrik sayısı (2 – 5)
  *
  * Hepsi renklerini temadan alır; hareket yalnız Odometer/Reveal üzerinden.
  */
@@ -352,9 +354,226 @@ export const LeaderTile = React.memo(function LeaderTile({
   );
 });
 
+/* ══════════════════════════════ DUEL BAR ══════════════════════════════ */
+
+/** Kıyas tarafları: A camgöbeği (veri), B mor (marka) — ikisi de "eşit" renk. */
+export const DUEL_A = colors.accent;
+export const DUEL_B = colors.brand;
+const DUEL_A_TEXT = colors.accentText;
+const DUEL_B_TEXT = colors.brandAccent;
+
+export type DuelWinner = "a" | "b" | "tie" | null;
+
+/** Kazanan taraf — `lowerIsBetter` kartlar gibi metrikler içindir. */
+export function duelWinner(a: number, b: number, lowerIsBetter = false): DuelWinner {
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+  if (a === b) return "tie";
+  return (a > b) !== lowerIsBetter ? "a" : "b";
+}
+
+function duelText(value: number, unit?: string): string {
+  if (!Number.isFinite(value)) return "—";
+  const text = Number.isInteger(value) ? String(value) : value.toFixed(1).replace(".", ",");
+  return unit ? `${text}${unit}` : text;
+}
+
+export interface DuelBarProps {
+  label: string;
+  a: number;
+  b: number;
+  unit?: string;
+  /** Küçük değer kazanır (kart, yenilen gol). */
+  lowerIsBetter?: boolean;
+  /** Bir tarafın verisi yok — iki taraf sönük, kazanan işaretlenmez. */
+  neutral?: boolean;
+}
+
+/**
+ * İKİ TARAFLI KIYAS SATIRI: değerler iki uçta, başlık ortada; iki yarım ray
+ * merkezden dışa dolar. Kazanan tarafın değeri kendi renginde dolu hapta,
+ * çubuğu tam renkte; kaybeden sönük. Beraberlikte iki taraf da nötr.
+ */
+export const DuelBar = React.memo(function DuelBar({ label, a, b, unit, lowerIsBetter = false, neutral = false }: DuelBarProps) {
+  const winner = neutral ? null : duelWinner(a, b, lowerIsBetter);
+  const total = Math.max(0, a) + Math.max(0, b);
+  const shareA = total > 0 ? Math.max(0, a) / total : 0;
+  const shareB = total > 0 ? Math.max(0, b) / total : 0;
+  return (
+    <View
+      style={styles.duel}
+      accessible
+      accessibilityLabel={`${label}: ${duelText(a, unit)} – ${duelText(b, unit)}${
+        winner === "a" ? ", sol taraf önde" : winner === "b" ? ", sağ taraf önde" : winner === "tie" ? ", eşit" : ""
+      }`}
+    >
+      <View style={styles.duelHead}>
+        <View style={[styles.duelValueBox, winner === "a" ? { backgroundColor: DUEL_A } : null]}>
+          <Text
+            style={[styles.duelValue, winner === "a" ? styles.duelValueWin : winner === "b" ? styles.duelValueLose : null]}
+            numberOfLines={1}
+            {...textScale.dense}
+          >
+            {duelText(a, unit)}
+          </Text>
+        </View>
+        <Text style={styles.duelLabel} numberOfLines={1} {...textScale.dense}>
+          {label}
+        </Text>
+        <View style={[styles.duelValueBox, styles.duelValueBoxRight, winner === "b" ? { backgroundColor: DUEL_B } : null]}>
+          <Text
+            style={[
+              styles.duelValue,
+              winner === "b" ? styles.duelValueWinB : winner === "a" ? styles.duelValueLose : null,
+            ]}
+            numberOfLines={1}
+            {...textScale.dense}
+          >
+            {duelText(b, unit)}
+          </Text>
+        </View>
+      </View>
+      <View style={styles.duelTrack}>
+        <View style={[styles.duelHalf, styles.duelHalfLeft]}>
+          <View
+            style={[
+              styles.duelFill,
+              {
+                width: `${Math.round(shareA * 100)}%`,
+                backgroundColor: neutral ? colors.slateSoft : DUEL_A,
+                opacity: winner === "b" ? 0.4 : 1,
+              },
+            ]}
+          />
+        </View>
+        <View style={styles.duelHalf}>
+          <View
+            style={[
+              styles.duelFill,
+              {
+                width: `${Math.round(shareB * 100)}%`,
+                backgroundColor: neutral ? colors.slateSoft : DUEL_B,
+                opacity: winner === "a" ? 0.4 : 1,
+              },
+            ]}
+          />
+        </View>
+      </View>
+    </View>
+  );
+});
+
+/* ══════════════════════════════ DUEL SCORE ══════════════════════════════ */
+
+export interface DuelScoreProps {
+  /** Her tarafın kazandığı metrik sayısı. */
+  a: number;
+  b: number;
+  /** Koyu sahne üstünde mi (beyaz metin). */
+  onDark?: boolean;
+  caption?: string;
+}
+
+/** Kıyasın skor tabelası: "5 – 2", kazanan tarafın sayısı kendi renginde. */
+export const DuelScore = React.memo(function DuelScore({ a, b, onDark = false, caption = "kazanılan metrik" }: DuelScoreProps) {
+  const base = onDark ? colors.onDark : colors.textPrimary;
+  const muted = onDark ? colors.onDarkMuted : colors.textTertiary;
+  return (
+    <View style={styles.duelScore} accessible accessibilityLabel={`Kazanılan metrik: sol ${a}, sağ ${b}`}>
+      <View style={styles.duelScoreRow}>
+        <Odometer value={a} style={[styles.duelScoreNum, { color: a > b ? (onDark ? colors.accent : DUEL_A_TEXT) : base }]} />
+        <Text style={[styles.duelScoreDash, { color: muted }]} {...textScale.badge}>
+          –
+        </Text>
+        <Odometer value={b} style={[styles.duelScoreNum, { color: b > a ? (onDark ? colors.brandOnDark : DUEL_B_TEXT) : base }]} />
+      </View>
+      <Text style={[styles.duelScoreCaption, { color: muted }]} numberOfLines={1} {...textScale.badge}>
+        {caption.toLocaleUpperCase("tr-TR")}
+      </Text>
+    </View>
+  );
+});
+
 /* ══════════════════════════════ STİLLER ══════════════════════════════ */
 
 const styles = StyleSheet.create({
+  duel: {
+    gap: space.s,
+    paddingVertical: space.s,
+  },
+  duelHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+  },
+  duelValueBox: {
+    minWidth: 48,
+    paddingHorizontal: space.sm,
+    height: 26,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    alignSelf: "flex-start",
+  },
+  duelValueBoxRight: {
+    alignSelf: "flex-end",
+  },
+  duelValue: {
+    ...type.tableNumStrong,
+    color: colors.textPrimary,
+  },
+  duelValueWin: {
+    color: colors.textOnAccent,
+  },
+  duelValueWinB: {
+    color: colors.textOnBrand,
+  },
+  duelValueLose: {
+    color: colors.textTertiary,
+  },
+  duelLabel: {
+    ...type.labelSm,
+    color: colors.textSecondary,
+    flex: 1,
+    textAlign: "center",
+  },
+  duelTrack: {
+    flexDirection: "row",
+    gap: space.xs,
+  },
+  duelHalf: {
+    flex: 1,
+    height: 6,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface3,
+    overflow: "hidden",
+    flexDirection: "row",
+  },
+  duelHalfLeft: {
+    flexDirection: "row-reverse",
+  },
+  duelFill: {
+    height: 6,
+    borderRadius: radius.pill,
+  },
+  duelScore: {
+    alignItems: "center",
+    gap: space.xxs,
+  },
+  duelScoreRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.s,
+  },
+  duelScoreNum: {
+    ...type.scoreLg,
+  },
+  duelScoreDash: {
+    ...type.scoreMd,
+  },
+  duelScoreCaption: {
+    ...type.overline,
+  },
+
   haloInner: {
     flex: 1,
     alignItems: "center",

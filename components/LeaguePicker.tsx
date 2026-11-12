@@ -257,7 +257,7 @@ const styles = StyleSheet.create({
   chevron: {
     width: 22,
     height: 22,
-    borderRadius: 11,
+    borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.brandDim,

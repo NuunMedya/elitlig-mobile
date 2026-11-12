@@ -26,12 +26,12 @@
  *
  * DÖRT DURUM:
  *   · Oynanmamış — ortada başlama saati; hap günü, altında geri sayım karoları.
- *   · Canlı      — hapın içinde dakika halkası (`MinuteRing`) + kendi kendine
- *                  ilerleyen dakika; devre arasında halka "İY"de durur.
+ *   · Canlı      — hapın içinde kendi kendine ilerleyen dakika halkası
+ *                  (`MinuteRing`) + "CANLI"; devre arasında halka "İY"de durur.
  *   · Bitti      — "MS" hapı (+ tutarlıysa ilk yarı skoru), kazanan vurgulu.
  *   · Yükleniyor — `ScoreboardSkeleton` (aynı kart, aynı ölçüler, içi boş).
  *
- * PERFORMANS: canlı sayaç saniyede bir tikler; tik yalnız `MatchClock`
+ * PERFORMANS: canlı sayaç saniyede bir tikler; tik yalnız `LiveRing`
  * bileşenini yeniden çizer, tabloyu değil. Geri sayım da kendi bileşenindedir.
  */
 
@@ -389,7 +389,10 @@ const StatusPill = memo(function StatusPill({
             DEVRE ARASI
           </Text>
         ) : (
-          <MatchClock snapshot={snapshot} />
+          /* Dakika halkanın içinde yazılı; hap yalnız "CANLI" der. */
+          <Text style={[styles.pillText, styles.pillTextLive]} {...textScale.badge}>
+            CANLI
+          </Text>
         )}
       </View>
     );
@@ -437,11 +440,19 @@ function weekdayOf(date: string | null | undefined): string {
   return parsed.toLocaleDateString("tr-TR", { weekday: "long" });
 }
 
-/** Hapın içindeki küçük dakika halkası — saniyelik tik yalnız burada. */
+/**
+ * Hapın içindeki dakika halkası. `useLiveClock` SANİYEDE BİR tikler; bu
+ * yüzden tablo gövdesinde değil burada çağrılır.
+ */
 const LiveRing = memo(function LiveRing({ snapshot }: { snapshot: LiveSnapshot | undefined }) {
   const clockMs = useLiveClock(snapshot);
   const { minute, added } = minuteParts(clockMs);
-  return <MinuteRing minute={minute} addedTime={added} halftime={isHalftime(snapshot)} size={24} thickness={2} onDark />;
+  const speech = isHalftime(snapshot) ? "Devre arası" : minute == null ? "Maç canlı" : `Canlı, ${minute}. dakika`;
+  return (
+    <View accessible accessibilityLabel={speech}>
+      <MinuteRing minute={minute} addedTime={added} halftime={isHalftime(snapshot)} size={24} thickness={2} onDark />
+    </View>
+  );
 });
 
 /** Canlı maçın yarısı — hapın altında ("2. YARI"); devre arasında boş. */
@@ -452,24 +463,6 @@ const LivePeriod = memo(function LivePeriod({ snapshot }: { snapshot: LiveSnapsh
   return (
     <Text style={styles.subline} {...textScale.badge}>
       {`${period}. YARI`}
-    </Text>
-  );
-});
-
-/**
- * Canlı dakika metni. `useLiveClock` SANİYEDE BİR tikler; bu yüzden tablo
- * gövdesinde değil burada çağrılır.
- */
-const MatchClock = memo(function MatchClock({ snapshot }: { snapshot: LiveSnapshot | undefined }) {
-  const clockMs = useLiveClock(snapshot);
-  const halftime = isHalftime(snapshot);
-  const { minute, added } = minuteParts(clockMs);
-
-  const label = halftime ? "DEVRE ARASI" : minute == null ? "CANLI" : added != null ? `90+${added}'` : `${minute}'`;
-  const speech = halftime ? "Devre arası" : minute == null ? "Maç canlı" : `Canlı, ${minute}. dakika`;
-  return (
-    <Text style={[styles.pillText, styles.pillTextLive]} accessibilityLabel={speech} {...textScale.badge}>
-      {label}
     </Text>
   );
 });
@@ -764,7 +757,7 @@ const styles = StyleSheet.create({
   pillCheck: {
     width: 16,
     height: 16,
-    borderRadius: 8,
+    borderRadius: radius.pill,
     backgroundColor: colors.win,
     alignItems: "center",
     justifyContent: "center",
@@ -826,7 +819,7 @@ const styles = StyleSheet.create({
     right: -2,
     width: 20,
     height: 20,
-    borderRadius: 10,
+    borderRadius: radius.pill,
     backgroundColor: colors.brand,
     borderWidth: 2,
     borderColor: colors.inkBlock,
@@ -1004,7 +997,7 @@ const styles = StyleSheet.create({
   factIcon: {
     width: 20,
     height: 20,
-    borderRadius: 10,
+    borderRadius: radius.pill,
     backgroundColor: colors.inkTile,
     alignItems: "center",
     justifyContent: "center",

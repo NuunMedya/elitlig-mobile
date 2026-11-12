@@ -450,7 +450,7 @@ const styles = StyleSheet.create({
   clipBtn: {
     width: 24,
     height: 24,
-    borderRadius: 12,
+    borderRadius: radius.pill,
     backgroundColor: colors.live,
     alignItems: "center",
     justifyContent: "center",
@@ -524,7 +524,7 @@ const styles = StyleSheet.create({
   icon: {
     width: 30,
     height: 30,
-    borderRadius: 15,
+    borderRadius: radius.pill,
     backgroundColor: colors.surface3,
     alignItems: "center",
     justifyContent: "center",

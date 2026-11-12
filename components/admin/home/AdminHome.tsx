@@ -67,8 +67,8 @@ import { AppCard, AppIconTile, Rise } from "./AppTiles";
 
 const POLL_MS = 30_000;
 
-const STAGE_START = { x: 1, y: 0 } as const;
-const STAGE_END = { x: 0, y: 1 } as const;
+const STAGE_START = { x: 1, y: 0.5 } as const;
+const STAGE_END = { x: 0, y: 0.5 } as const;
 const RIM_START = { x: 0, y: 0.5 } as const;
 const RIM_END = { x: 1, y: 0.5 } as const;
 
@@ -334,7 +334,7 @@ export function AdminHome({ asTab = false }: { asTab?: boolean }) {
     },
     {
       key: "sahalar",
-      label: "Saha talebi",
+      label: "Saha",
       icon: "location-outline",
       value: venueRequests,
       loading: venueQuery.isLoading,
@@ -640,7 +640,7 @@ const SummaryCell = memo(function SummaryCell({
       ) : (
         <Odometer value={metric.value} style={[styles.metricValue, metric.live ? styles.metricValueLive : null]} />
       )}
-      <Text style={styles.metricLabel} numberOfLines={1} {...textScale.badge}>
+      <Text style={styles.metricLabel} numberOfLines={2} {...textScale.badge}>
         {upperTR(metric.label)}
       </Text>
     </Touchable>

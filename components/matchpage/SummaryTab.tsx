@@ -734,7 +734,7 @@ const TallyStrip = memo(function TallyStrip({ home, draws, away }: { home: numbe
     <View style={styles.tallyStrip}>
       {home > 0 ? (
         <LinearGradient
-          colors={colors.gradientSignature}
+          colors={colors.gradientAccent}
           start={{ x: 0, y: 0.5 }}
           end={{ x: 1, y: 0.5 }}
           style={[styles.tallyPart, { flex: home }]}
@@ -987,7 +987,7 @@ const styles = StyleSheet.create({
   mvpGo: {
     width: 32,
     height: 32,
-    borderRadius: 16,
+    borderRadius: radius.pill,
     backgroundColor: colors.inkPill,
     borderWidth: hairline,
     borderColor: colors.inkPillBorder,
@@ -1043,10 +1043,10 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   tallyHome: {
-    color: colors.brandAccent,
+    color: colors.accentText,
   },
   tallyAway: {
-    color: colors.accentText,
+    color: colors.textPrimary,
   },
   tallyLabel: {
     ...type.caption,
@@ -1068,7 +1068,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.slateSoft,
   },
   tallyAwayPart: {
-    backgroundColor: colors.accent,
+    backgroundColor: colors.slate,
   },
   lastMeeting: {
     flexDirection: "row",

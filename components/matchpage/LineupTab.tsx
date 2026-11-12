@@ -405,11 +405,14 @@ const LineupPlayerRow = memo(function LineupPlayerRow({
       accessibilityRole="button"
       accessibilityLabel={`${name}${meta ? `, ${meta}` : ""}`}
     >
-      <Text style={[styles.pos, { color: tone }]} {...textScale.badge}>
-        {positionBadge(line)}
-      </Text>
-
-      <Avatar name={name} image={player.playerImg} size={36} />
+      <View style={[styles.avatarRing, { borderColor: tone }]}>
+        <Avatar name={name} image={player.playerImg} size={36} />
+        <View style={[styles.posPill, { backgroundColor: tone }]}>
+          <Text style={styles.posText} {...textScale.badge}>
+            {shirt ?? positionBadge(line)}
+          </Text>
+        </View>
+      </View>
 
       <View style={styles.playerTexts}>
         <Text style={styles.playerName} numberOfLines={1} {...textScale.dense}>
@@ -603,34 +606,39 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: space.sm,
-    height: 44,
+    minHeight: 56,
     paddingHorizontal: space.xs,
   },
-  stripDot: {
-    width: 8,
-    height: 8,
+  stripKit: {
+    width: 4,
+    height: 32,
     borderRadius: radius.pill,
-    borderWidth: hairline,
-    borderColor: colors.borderStrong,
   },
-  stripName: {
-    ...type.h4,
-    color: colors.textPrimary,
+  stripTexts: {
     flex: 1,
     minWidth: 0,
+    gap: 1,
+  },
+  stripName: {
+    ...type.h3,
+    color: colors.textPrimary,
+  },
+  stripRole: {
+    ...type.overline,
+    color: colors.textTertiary,
   },
   formation: {
-    height: 24,
+    height: 28,
     paddingHorizontal: space.m,
     borderRadius: radius.pill,
-    backgroundColor: colors.surface1,
+    backgroundColor: colors.brandDim,
     borderWidth: hairline,
-    borderColor: colors.border,
+    borderColor: colors.brandBorder,
     justifyContent: "center",
   },
   formationText: {
-    ...type.numSmStrong,
-    color: colors.textPrimary,
+    ...type.tableNumStrong,
+    color: colors.brandAccent,
   },
 
   segment: {
@@ -647,9 +655,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     paddingVertical: space.sm,
   },
-  pos: {
-    ...type.micro,
-    width: 26,
+  /* Avatar mevki renginde halkada; altında forma numarası (yoksa mevki). */
+  avatarRing: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.pill,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: space.xs,
+  },
+  posPill: {
+    position: "absolute",
+    bottom: -7,
+    minWidth: 26,
+    height: 15,
+    paddingHorizontal: space.xs,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1.5,
+    borderColor: colors.surface1,
+  },
+  posText: {
+    ...type.nano,
+    color: colors.onDark,
   },
   playerTexts: {
     flex: 1,

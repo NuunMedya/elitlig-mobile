@@ -51,6 +51,7 @@ import {
   fonts,
   hairline,
   layout,
+  radius,
   space,
   textScale,
   type,
@@ -299,7 +300,7 @@ const styles = StyleSheet.create({
   metaPill: {
     height: 20,
     paddingHorizontal: space.sm,
-    borderRadius: 10,
+    borderRadius: radius.pill,
     backgroundColor: colors.surface3,
     justifyContent: "center",
   },
@@ -335,7 +336,7 @@ const styles = StyleSheet.create({
     height: 28,
     paddingLeft: space.m,
     paddingRight: space.sm,
-    borderRadius: 14,
+    borderRadius: radius.pill,
     backgroundColor: colors.brandDim,
   },
   actionLabel: {

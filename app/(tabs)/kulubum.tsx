@@ -26,17 +26,22 @@
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { JoinFlow } from "@/components/club/JoinFlow";
-import { PanelCard, PanelRow, PanelSection, ToolGrid, type PanelTool } from "@/components/club/Panel";
+import { QuickGrid, type QuickItem } from "@/components/account/MenuBlocks";
+import { PanelCard, PanelRow } from "@/components/club/Panel";
 import { CHANGE_LABELS, useClubSignals, type AttentionItem } from "@/components/club/useClubSignals";
 import {
   BottomSheet,
+  IconTile,
+  Reveal,
   ScreenHeader,
+  SectionHeader,
   SkeletonCard,
   Tabs,
   Touchable,
@@ -52,7 +57,7 @@ import { useNotificationBell } from "@/hooks/useNotificationBell";
 import { formatDateShort } from "@/lib/format";
 import { useAdminMode } from "@/providers/AdminModeProvider";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, layout, radius, space, textScale, type } from "@/theme";
+import { colors, elevate, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
 
 type RoleTab = "takim" | "oyuncu" | "lig";
 
@@ -205,50 +210,72 @@ export default function ClubHubScreen() {
 /**
  * LİG (yönetici, ÜYE GÖRÜNÜMÜNDE): yönetim araçları burada yaşamaz — yönetim
  * modunun kendi ana ekranı, alt menüsü ve uygulamaları vardır. Bu bölüm o moda
- * geri dönen kapıdır; altta en sık açılan üç kısayol durur.
+ * geri dönen kapıdır (altın sahne kartı); altta en sık açılan üç kısayol
+ * renkli karolar hâlinde durur.
  */
-const LEAGUE_TOOLS: PanelTool[] = [
-  { key: "gorevler", icon: "checkbox", label: "Yapılacaklar", href: "/yonetim/gorevler" },
-  { key: "talepler", icon: "file-tray-full", label: "Talepler", href: "/yonetim/talepler", tone: "warn" },
-  { key: "maclar", icon: "football", label: "Maçlar", href: "/yonetim/maclar", tone: "live" },
-];
+const LEAGUE_MODULES = ["Muhasebe", "Yapılacaklar", "Projeler", "Lig yönetimi", "Yayın stüdyosu"];
 
 function LeagueSection({ go }: { go: (href: string) => void }) {
   const mode = useAdminMode();
+  const shortcuts = useMemo<QuickItem[]>(
+    () => [
+      { key: "gorevler", icon: "checkbox", label: "Yapılacaklar", hint: "Görevlerin", tone: "violet", onPress: () => go("/yonetim/gorevler") },
+      { key: "talepler", icon: "file-tray-full", label: "Talepler", hint: "Onay kuyruğu", tone: "gold", onPress: () => go("/yonetim/talepler") },
+      { key: "maclar", icon: "football", label: "Maçlar", hint: "Fikstür", tone: "pink", onPress: () => go("/yonetim/maclar") },
+    ],
+    [go],
+  );
   return (
-    <>
-      <View style={styles.adminGate}>
-        <View style={styles.adminGateHead}>
-          <View style={styles.adminGateIcon}>
-            <Ionicons name="shield-checkmark" size={20} color={colors.adminAccent} />
+    <View style={styles.league}>
+      <Reveal>
+        <View style={styles.adminGate}>
+          <LinearGradient
+            colors={colors.gradientAdminStage}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
+          <View style={styles.adminGateHead}>
+            <IconTile icon="shield-checkmark" tone="gold" size={44} />
+            <View style={styles.flex}>
+              <Text style={styles.adminGateOverline} {...textScale.badge}>
+                {upperTR("Üye gözündesin")}
+              </Text>
+              <Text style={styles.adminGateTitle} {...textScale.dense}>
+                Yönetim modu
+              </Text>
+            </View>
           </View>
-          <View style={styles.flex}>
-            <Text style={styles.adminGateTitle} {...textScale.dense}>
-              Yönetim modu
-            </Text>
-            <Text style={styles.adminGateBody} {...textScale.long}>
-              Şu an uygulamaya üye gözünden bakıyorsun. Muhasebe, yapılacaklar, projeler, lig yönetimi ve yayın stüdyosu yönetim modunda.
-            </Text>
-          </View>
-        </View>
-        <Touchable
-          feedback="button"
-          haptic="selection"
-          onPress={mode.enterAdmin}
-          style={styles.adminGateButton}
-          accessibilityRole="button"
-          testID="kulubum-enter-admin"
-        >
-          <Text style={styles.adminGateButtonText} {...textScale.dense}>
-            Yönetim moduna geç
+          <Text style={styles.adminGateBody} {...textScale.long}>
+            Lig araçlarının hepsi yönetim modunda; buradan tek dokunuşla dönersin.
           </Text>
-          <Ionicons name="arrow-forward" size={16} color={colors.adminAccentInk} />
-        </Touchable>
-      </View>
-      <PanelSection title="Kısayollar">
-        <ToolGrid tools={LEAGUE_TOOLS} go={go} />
-      </PanelSection>
-    </>
+          <View style={styles.moduleRow}>
+            {LEAGUE_MODULES.map((label) => (
+              <View key={label} style={styles.modulePill}>
+                <Text style={styles.moduleText} {...textScale.badge}>
+                  {label}
+                </Text>
+              </View>
+            ))}
+          </View>
+          <Touchable
+            feedback="button"
+            haptic="selection"
+            onPress={mode.enterAdmin}
+            style={styles.adminGateButton}
+            accessibilityRole="button"
+            testID="kulubum-enter-admin"
+          >
+            <Text style={styles.adminGateButtonText} {...textScale.dense}>
+              Yönetim moduna geç
+            </Text>
+            <Ionicons name="arrow-forward" size={16} color={colors.adminAccentInk} />
+          </Touchable>
+        </View>
+      </Reveal>
+      <SectionHeader title="Kısayollar" icon="flash" iconTone="gold" inset="flush" style={styles.leagueHeader} />
+      <QuickGrid items={shortcuts} />
+    </View>
   );
 }
 
@@ -265,35 +292,42 @@ const styles = StyleSheet.create({
   top: { paddingHorizontal: layout.screenPadding, paddingTop: space.xs },
   firstSection: { marginTop: space.sm },
 
+  league: { paddingHorizontal: layout.screenPadding, marginTop: space.md },
+  leagueHeader: { marginTop: space.lg },
   adminGate: {
-    marginHorizontal: layout.screenPadding,
-    marginTop: space.sm,
     padding: space.lg,
     gap: space.md,
     borderRadius: radius.xxl,
+    overflow: "hidden",
     backgroundColor: colors.adminBar,
+    borderWidth: hairline,
+    borderColor: colors.adminBarBorder,
+    ...elevate(2),
   },
-  adminGateHead: { flexDirection: "row", alignItems: "flex-start", gap: space.md },
-  adminGateIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.md,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.adminCapsule,
+  adminGateHead: { flexDirection: "row", alignItems: "center", gap: space.md },
+  adminGateOverline: { ...type.overline, color: colors.adminAccent },
+  adminGateTitle: { ...type.display, color: colors.onDark, marginTop: 2 },
+  adminGateBody: { ...type.bodySm, color: colors.onDarkMuted },
+  moduleRow: { flexDirection: "row", flexWrap: "wrap", gap: space.xs },
+  modulePill: {
+    paddingHorizontal: space.sm,
+    paddingVertical: 3,
+    borderRadius: radius.pill,
+    backgroundColor: colors.inkPill,
+    borderWidth: hairline,
+    borderColor: colors.inkPillBorder,
   },
-  adminGateTitle: { ...type.h2, color: colors.onDark },
-  adminGateBody: { ...type.bodySm, color: colors.onDarkMuted, marginTop: 2 },
+  moduleText: { ...type.micro, color: colors.onDark },
   adminGateButton: {
-    minHeight: 44,
+    minHeight: 46,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: space.sm,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     backgroundColor: colors.adminAccent,
   },
-  adminGateButtonText: { ...type.labelSm, color: colors.adminAccentInk },
+  adminGateButtonText: { ...type.label, color: colors.adminAccentInk },
 
   matchHead: { flexDirection: "row", alignItems: "flex-start", gap: space.m },
   matchSide: { ...type.micro, color: colors.brandAccent },

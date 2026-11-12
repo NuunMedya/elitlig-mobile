@@ -19,7 +19,8 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import React from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
-import { colors, elevate, hairline, radius as radiusScale, space, textScale, type } from "@/theme";
+import { colors, elevate, fonts, hairline, radius as radiusScale, space, textScale, type } from "@/theme";
+import { IconTile, type IconTileTone } from "./NightKit";
 import { Touchable } from "./Pressable";
 import { Surface, type SurfaceProps } from "./Surface";
 
@@ -34,6 +35,11 @@ export interface CardProps extends SurfaceProps {
   /** Kartın tamamı basılabilirse: ölçek 0.985 + surface2 zemin (§5.2). */
   onPress?: () => void;
   contentStyle?: StyleProp<ViewStyle>;
+  /** İsteğe bağlı: başlığın solunda degrade ikon kutusu. */
+  icon?: React.ComponentProps<typeof Ionicons>["name"];
+  iconTone?: IconTileTone;
+  /** İsteğe bağlı: başlık ile gövde arasına saç teli ayraç. */
+  headerDivider?: boolean;
 }
 
 export const Card = React.memo(function Card({
@@ -50,6 +56,9 @@ export const Card = React.memo(function Card({
   style,
   contentStyle,
   testID,
+  icon,
+  iconTone = "violet",
+  headerDivider = false,
   ...rest
 }: CardProps) {
   const pad = space[padding];
@@ -57,7 +66,14 @@ export const Card = React.memo(function Card({
   const inner = (
     <>
       {title || action ? (
-        <View style={[styles.header, { paddingHorizontal: pad, paddingTop: pad }]}>
+        <View
+          style={[
+            styles.header,
+            { paddingHorizontal: pad, paddingTop: pad },
+            headerDivider ? [styles.headerDivided, { paddingBottom: space.md }] : null,
+          ]}
+        >
+          {icon ? <IconTile icon={icon} tone={iconTone} size={30} glow={false} /> : null}
           <View style={styles.headerTexts}>
             <Text style={styles.title} numberOfLines={1} {...textScale.dense}>
               {title}
@@ -78,10 +94,12 @@ export const Card = React.memo(function Card({
               accessibilityLabel={action.label}
               style={styles.action}
             >
-              <Text style={styles.actionLabel} numberOfLines={1} {...textScale.dense}>
-                {action.label}
-              </Text>
-              <Ionicons name="chevron-forward" size={12} color={colors.brandAccent} />
+              <View style={styles.actionPill}>
+                <Text style={styles.actionLabel} numberOfLines={1} {...textScale.dense}>
+                  {action.label}
+                </Text>
+                <Ionicons name="chevron-forward" size={12} color={colors.brandAccent} />
+              </View>
             </Touchable>
           ) : null}
         </View>
@@ -94,7 +112,7 @@ export const Card = React.memo(function Card({
               paddingHorizontal: pad,
               paddingBottom: pad,
               // Başlık varsa gövdeyle arasında 8px nefes boşluğu kalır (§4.2).
-              paddingTop: title || action ? space.sm : pad,
+              paddingTop: title || action ? (headerDivider ? space.md : space.sm) : pad,
             },
             contentStyle,
           ]}
@@ -147,12 +165,17 @@ const styles = StyleSheet.create({
     gap: space.sm,
     minHeight: 36,
   },
+  headerDivided: {
+    borderBottomWidth: hairline,
+    borderBottomColor: colors.separator,
+  },
   headerTexts: {
     flex: 1,
     gap: 2,
   },
   title: {
     ...type.h2,
+    fontFamily: fonts.heading,
     flexShrink: 1,
     color: colors.textPrimary,
   },
@@ -167,8 +190,18 @@ const styles = StyleSheet.create({
     paddingVertical: space.xs,
     paddingLeft: space.sm,
   },
+  actionPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xxs,
+    height: 26,
+    paddingLeft: space.m,
+    paddingRight: space.sm,
+    borderRadius: radiusScale.pill,
+    backgroundColor: colors.brandDim,
+  },
   actionLabel: {
-    ...type.label,
+    ...type.labelSm,
     color: colors.brandAccent,
   },
   footer: {
@@ -181,6 +214,7 @@ const styles = StyleSheet.create({
    */
   pressableSurface: {
     ...elevate(1),
+    borderColor: colors.glassLine,
   },
   noBorder: {
     borderWidth: 0,

@@ -10,16 +10,21 @@
  * NEDEN ÇİZELGE: transfer bir OLAYDIR ve sırası anlamlıdır. Eski liste
  * ayar satırlarıyla aynı görünüyordu (ikon · başlık · sağda "3 gün önce");
  * çizelgede tarih sol rayda, olay sağda durur ve göz yukarıdan aşağı zamanı
- * takip eder. Kart yok — hiyerarşi tipografiyle kurulur (Arena §1.3).
+ * takip eder.
+ *
+ * İKİNCİ TUR: düğümler degrade ikon karosu (en yenisi imza degradesi ve
+ * parıltılı), olaylar rayın sağında cam kartlarda; kartın tepesinde tarih
+ * hapı + "x gün önce", altında başlık ve özet. Üstte kayıt sayısını veren
+ * özet şeridi.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { useCallback } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
-import { EmptyState, ErrorState, SectionHeader, SkeletonListRow, Touchable } from "@/components/ui";
+import { EmptyState, ErrorState, IconTile, Reveal, SectionHeader, SkeletonListRow, Touchable } from "@/components/ui";
 import { formatDateShort, timeAgo } from "@/lib/format";
 import type { NewsItem } from "@/lib/types";
-import { colors, layout, radius, space, textScale, type } from "@/theme";
+import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
 import type { TabShell } from "./model";
 
 export interface TransfersTabProps extends TabShell {
@@ -62,8 +67,8 @@ export function TransfersTab({
       ) : (
         <View style={styles.timeline}>
           {items.map((item, index) => (
+            <Reveal key={item.id} index={index}>
             <TimelineItem
-              key={item.id}
               newsId={item.id}
               title={item.title}
               summary={item.summary ?? null}
@@ -72,6 +77,7 @@ export function TransfersTab({
               last={index === items.length - 1}
               onPress={onOpenNews}
             />
+            </Reveal>
           ))}
         </View>
       )}
@@ -112,18 +118,25 @@ const TimelineItem = React.memo(function TimelineItem({
       {/* Ray: düğüm + üst/alt çizgi. İlk öğenin üstü, son öğenin altı boş. */}
       <View style={styles.rail}>
         <View style={[styles.line, first ? styles.lineHidden : null]} />
-        <View style={[styles.node, first ? styles.nodeFirst : null]}>
-          <Ionicons name="swap-horizontal" size={12} color={first ? colors.textOnBrand : colors.brandAccent} />
-        </View>
+        <IconTile icon="swap-horizontal" tone={first ? "signature" : "violet"} size={NODE} glow={first} />
         <View style={[styles.line, styles.lineGrow, last ? styles.lineHidden : null]} />
       </View>
 
       <View style={styles.body}>
         {date ? (
-          <Text style={styles.date} {...textScale.badge}>
-            {date.toLocaleUpperCase("tr-TR")}
-            {ago ? <Text style={styles.ago}>{`  ·  ${ago}`}</Text> : null}
-          </Text>
+          <View style={styles.dateRow}>
+            <View style={styles.datePill}>
+              <Text style={styles.date} {...textScale.badge}>
+                {date.toLocaleUpperCase("tr-TR")}
+              </Text>
+            </View>
+            {ago ? (
+              <Text style={styles.ago} {...textScale.dense}>
+                {ago}
+              </Text>
+            ) : null}
+            <Ionicons name="chevron-forward" size={14} color={colors.textTertiary} style={styles.chev} />
+          </View>
         ) : null}
         <Text style={styles.title} numberOfLines={2} {...textScale.dense}>
           {title}
@@ -138,7 +151,7 @@ const TimelineItem = React.memo(function TimelineItem({
   );
 });
 
-const NODE = 26;
+const NODE = 30;
 
 const styles = StyleSheet.create({
   content: {
@@ -159,7 +172,7 @@ const styles = StyleSheet.create({
   },
   line: {
     width: 2,
-    height: space.md,
+    height: space.md + space.xs,
     backgroundColor: colors.border,
   },
   lineGrow: {
@@ -168,30 +181,35 @@ const styles = StyleSheet.create({
   lineHidden: {
     backgroundColor: "transparent",
   },
-  node: {
-    width: NODE,
-    height: NODE,
-    borderRadius: radius.pill,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.brandDim,
-    borderWidth: 1,
-    borderColor: colors.brandBorder,
-  },
-  nodeFirst: {
-    backgroundColor: colors.brand,
-    borderColor: colors.brand,
-  },
   body: {
     flex: 1,
     minWidth: 0,
     gap: space.xs,
-    paddingTop: space.md + space.xxs,
-    paddingBottom: space.xl,
+    marginTop: space.s,
+    marginBottom: space.md,
+    padding: space.md,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+  },
+  dateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+  },
+  datePill: {
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xxs,
+    borderRadius: radius.pill,
+    backgroundColor: colors.brandDim,
   },
   date: {
     ...type.overline,
-    color: colors.textTertiary,
+    color: colors.brandAccent,
+  },
+  chev: {
+    marginLeft: "auto",
   },
   ago: {
     ...type.caption,

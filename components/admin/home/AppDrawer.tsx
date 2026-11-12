@@ -146,7 +146,7 @@ export function AppDrawer({
             <View style={styles.grid}>
               {featured.map((app, index) => (
                 <Pop key={app.key} index={index} style={styles.cell}>
-                  <AppIconTile app={app} badge={appBadge(app.key, counters)} onPress={open} />
+                  <AppIconTile app={app} badge={appBadge(app.key, counters)} onPress={open} size={60} />
                 </Pop>
               ))}
             </View>
@@ -221,9 +221,9 @@ const styles = StyleSheet.create({
     rowGap: space.lg,
     paddingTop: space.xs,
   },
-  /** Dört sütun: 360px telefonda simge + kısa ad rahat sığar. */
+  /** Üç sütun: öne çıkan altı uygulama iki tam satır. */
   cell: {
-    width: "25%",
+    width: "33.333%",
   },
   group: {
     borderRadius: radius.xl,

@@ -200,7 +200,7 @@ const styles = StyleSheet.create({
   leaderCrest: {
     width: 60,
     height: 60,
-    borderRadius: 30,
+    borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.inkTile,

@@ -20,8 +20,10 @@ import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
+import { LinearGradient } from "expo-linear-gradient";
+
 import { AdminScreen, InfoLine, Panel, confirmAction } from "@/components/admin";
-import { Avatar, Badge, Button, ErrorState, Input, SkeletonCard, Tabs, Touchable, useToast } from "@/components/ui";
+import { Aurora, Avatar, Badge, Button, ErrorState, Input, SkeletonCard, Tabs, Touchable, useToast } from "@/components/ui";
 import { errorText } from "@/lib/admin/errors";
 import { formatDate } from "@/lib/admin/format";
 import { ROLE_LABELS } from "@/lib/api/admin";
@@ -36,7 +38,7 @@ import {
 } from "@/lib/api/admin/system";
 import { ApiError } from "@/lib/http";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, hairline, radius, space, textScale, type } from "@/theme";
+import { colors, hairline, radius, space, textScale, type, upperTR } from "@/theme";
 
 type Tab = "profil" | "guvenlik" | "yetkiler";
 const PROFILE_FIELDS = ["fullName", "username", "email", "phone"] as const;
@@ -72,34 +74,49 @@ export default function AdminAccountScreen() {
         />
       }
     >
-      <Panel>
+      {/* KİMLİK SAHNESİ — yönetim ana ekranıyla aynı gece laciverti + Aurora, altın halka. */}
+      <View style={styles.stage}>
+        <LinearGradient colors={colors.gradientAdminStage} start={{ x: 1, y: 0.5 }} end={{ x: 0, y: 0.5 }} style={StyleSheet.absoluteFill} />
+        <Aurora variant="stage" height={200} />
         <View style={styles.hero}>
-          <Avatar name={account.fullName || account.username} size={56} />
+          <LinearGradient colors={colors.gradientAdminAccent} style={styles.ring}>
+            <Avatar name={account.fullName || account.username} size={58} />
+          </LinearGradient>
           <View style={styles.flex}>
-            <Text style={styles.name} {...textScale.dense}>
+            <Text style={styles.name} numberOfLines={1} {...textScale.dense}>
               {account.fullName || account.username || "Yönetici"}
             </Text>
+            <Text style={styles.handle} numberOfLines={1} {...textScale.dense}>
+              @{account.username || "—"}
+              {account.title ? ` · ${account.title}` : ""}
+            </Text>
             <View style={styles.badges}>
-              <Badge label={ROLE_LABELS[account.role] ?? account.role ?? "Yönetici"} tone="brand" icon="shield-checkmark-outline" size="xs" />
-              {account.title ? <Badge label={account.title} size="xs" /> : null}
-              <Badge label={account.city || "—"} icon="location-outline" size="xs" />
+              <View style={styles.rolePill}>
+                <Ionicons name="shield-checkmark" size={11} color={colors.adminAccent} />
+                <Text style={styles.roleText} numberOfLines={1} {...textScale.badge}>
+                  {upperTR(ROLE_LABELS[account.role] ?? account.role ?? "Yönetici")}
+                </Text>
+              </View>
               <Badge
                 label={ACCOUNT_STATUS_LABELS[account.status ?? "active"] ?? "Aktif"}
                 tone={["active", "approved"].includes(account.status ?? "active") ? "win" : "warn"}
                 size="xs"
+                dot
               />
             </View>
           </View>
         </View>
-        <InfoLine label="Kullanıcı adı" value={`@${account.username || "—"}`} />
-        <InfoLine label="Hesap açılışı" value={formatDate(query.data?.account.createdAt)} />
-        <InfoLine label="Yetki" value={isAdmin ? "Tam yetki" : permissionCount != null ? `${permissionCount} yetki` : "—"} />
-      </Panel>
+        <View style={styles.tiles}>
+          <StageTile icon="location-outline" label="İl" value={account.city || "—"} />
+          <StageTile icon="calendar-outline" label="Açılış" value={query.data?.account?.createdAt ? new Date(query.data.account.createdAt).toLocaleDateString("tr-TR", { month: "short", year: "numeric" }) : "—"} />
+          <StageTile icon="key-outline" label="Yetki" value={isAdmin ? "Tam" : permissionCount != null ? String(permissionCount) : "—"} />
+        </View>
+      </View>
 
       {query.error ? <ErrorState error={query.error} onRetry={query.refetch} variant="banner" /> : null}
 
       {tab === "profil" ? (
-        <ProfileTab account={account} cityLocked={query.data?.account.cityLocked ?? true} />
+        <ProfileTab account={account} cityLocked={query.data?.account?.cityLocked ?? true} />
       ) : tab === "guvenlik" ? (
         <SecurityTab />
       ) : query.isLoading ? (
@@ -108,6 +125,21 @@ export default function AdminAccountScreen() {
         <PermissionsTab account={account} groups={query.data?.permissionGroups} />
       )}
     </AdminScreen>
+  );
+}
+
+/** Sahnedeki cam bilgi karosu. */
+function StageTile({ icon, label, value }: { icon: keyof typeof Ionicons.glyphMap; label: string; value: string }) {
+  return (
+    <View style={styles.tile} accessible accessibilityLabel={`${label}: ${value}`}>
+      <Ionicons name={icon} size={13} color={colors.onDarkMuted} />
+      <Text style={styles.tileValue} numberOfLines={1} adjustsFontSizeToFit {...textScale.badge}>
+        {value}
+      </Text>
+      <Text style={styles.tileLabel} numberOfLines={1} {...textScale.badge}>
+        {upperTR(label)}
+      </Text>
+    </View>
   );
 }
 
@@ -161,8 +193,9 @@ function ProfileTab({ account, cityLocked }: { account: AccountSummary["user"]; 
     <>
       <Panel title="Kişisel bilgiler">
         <View style={styles.fields}>
-          <Input label="Ad soyad" value={form.fullName} onChangeText={set("fullName")} placeholder="Adın ve soyadın" autoComplete="name" error={fieldErrors.fullName || undefined} />
+          <Input floating label="Ad soyad" value={form.fullName} onChangeText={set("fullName")} placeholder="Adın ve soyadın" autoComplete="name" error={fieldErrors.fullName || undefined} />
           <Input
+            floating
             label="Kullanıcı adı *"
             value={form.username}
             onChangeText={set("username")}
@@ -172,6 +205,7 @@ function ProfileTab({ account, cityLocked }: { account: AccountSummary["user"]; 
             error={usernameMissing ? "Kullanıcı adı gerekli." : fieldErrors.username || undefined}
           />
           <Input
+            floating
             label="E-posta"
             value={form.email}
             onChangeText={set("email")}
@@ -182,6 +216,7 @@ function ProfileTab({ account, cityLocked }: { account: AccountSummary["user"]; 
             error={fieldErrors.email || undefined}
           />
           <Input
+            floating
             label="Telefon"
             value={form.phone}
             onChangeText={set("phone")}
@@ -191,6 +226,7 @@ function ProfileTab({ account, cityLocked }: { account: AccountSummary["user"]; 
             error={fieldErrors.phone || undefined}
           />
           <Input
+            floating
             label="İl"
             value={account.city || ""}
             editable={false}
@@ -243,6 +279,7 @@ function PasswordInput({ label, value, onChangeText, autoComplete, error }: { la
   const [visible, setVisible] = useState(false);
   return (
     <Input
+      floating
       label={label}
       value={value}
       onChangeText={onChangeText}
@@ -423,9 +460,44 @@ function PermissionsTab({ account, groups }: { account: AccountSummary["user"]; 
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  hero: { flexDirection: "row", gap: space.md, alignItems: "center", marginBottom: space.xs },
-  name: { ...type.h3, color: colors.textPrimary },
-  badges: { flexDirection: "row", flexWrap: "wrap", gap: space.xs, marginTop: space.xs },
+  stage: {
+    borderRadius: radius.xxl,
+    overflow: "hidden",
+    backgroundColor: colors.adminBar,
+    padding: space.lg,
+    gap: space.lg,
+    borderWidth: hairline,
+    borderColor: colors.inkTileBorder,
+  },
+  hero: { flexDirection: "row", gap: space.md, alignItems: "center" },
+  ring: { padding: 2, borderRadius: radius.pill },
+  name: { ...type.h1, color: colors.onDark },
+  handle: { ...type.caption, color: colors.onDarkMuted },
+  badges: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.xs, marginTop: space.s },
+  rolePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xxs,
+    borderRadius: radius.pill,
+    backgroundColor: colors.inkTile,
+    borderWidth: hairline,
+    borderColor: colors.adminAccent,
+  },
+  roleText: { ...type.micro, color: colors.adminAccent },
+  tiles: { flexDirection: "row", gap: space.sm },
+  tile: {
+    flex: 1,
+    gap: space.xxs,
+    padding: space.sm + space.xxs,
+    borderRadius: radius.lg,
+    backgroundColor: colors.inkTile,
+    borderWidth: hairline,
+    borderColor: colors.inkTileBorder,
+  },
+  tileValue: { ...type.metricSm, color: colors.onDark },
+  tileLabel: { ...type.nano, color: colors.onDarkMuted },
   fields: { gap: space.md },
   actions: { flexDirection: "row", gap: space.sm, marginTop: space.sm },
   hint: { ...type.caption, color: colors.textTertiary },

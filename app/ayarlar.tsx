@@ -20,9 +20,12 @@
  *                         (bkz. app/hesap-sil.tsx). Hesabım ▸ Hesabı sil yolu
  *                         da yerinde durur.
  *
- * NEDEN GÖRÜNÜM SEÇİMİ BİR SATIR + ALT SAYFA: renk paleti açılışta donuyor
- * (bkz. @/theme); tema değişimi sonucu anlatılabilen bir ayar satırıyla
- * yapılır, seçim gerekiyorsa uygulamayı bir kez tazeler (ayrıntı chooseTheme).
+ * KURGU (Gece teması · ikinci tur): en üstte hesap kartı (misafirde giriş
+ * çağrısı); her grup ikonlu başlık + tek kart (components/account/MenuBlocks).
+ * Görünüm, ekran maketli ÜÇ KARO ile seçilir (Açık · Koyu · Sistem); renk
+ * paleti açılışta donduğu için seçim etkin temayı değiştiriyorsa uygulama bir
+ * kez tazelenir (ayrıntı chooseTheme). Oturum grubu (çıkış, hesabı sil)
+ * kırmızı ikonlarla en altta, ayrı karttadır.
  *
  * MİSAFİR: bildirim ve hesap satırları giriş ister; görünüm ve lig seçimi
  * cihazda saklandığı için misafirde de çalışır. Hesap grubu yerine tek
@@ -38,14 +41,18 @@ import { Alert, Appearance, ScrollView, StyleSheet, Text, View } from "react-nat
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { shortLeague, shortSeason } from "@/components/LeaguePicker";
+import { MenuGroup, type MenuItemSpec } from "@/components/account/MenuBlocks";
 import {
+  Avatar,
   BottomSheet,
-  ListRow,
+  Button,
+  IconTile,
+  Reveal,
   ScreenHeader,
   SectionHeader,
+  Touchable,
   useHeaderScroll,
   useToast,
-  type Tone,
 } from "@/components/ui";
 import { THEME_STORAGE_KEY, getStoredTheme, setStoredTheme } from "@/constants/themePreference";
 import { reloadForTheme } from "@/lib/themeTransition";
@@ -53,7 +60,7 @@ import { useFollowSettings } from "@/hooks/useFollowSettings";
 import { formatNumber } from "@/lib/format";
 import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
-import { colors, isDark, layout, space, textScale, type } from "@/theme";
+import { colors, elevate, glowStyle, hairline, isDark, layout, paletteFor, radius, space, textScale, type } from "@/theme";
 
 /* ============================ GÖRÜNÜM SEÇİMİ ============================ */
 
@@ -77,16 +84,6 @@ const THEME_LABELS: Record<ThemeChoice, string> = {
   system: "Sistem",
 };
 
-type RowPosition = "single" | "first" | "middle" | "last";
-
-/** Grup içi konum — ListRow köşe yuvarlamasını ve ayracı buradan alır. */
-function rowPosition(index: number, total: number): RowPosition {
-  if (total <= 1) return "single";
-  if (index === 0) return "first";
-  if (index === total - 1) return "last";
-  return "middle";
-}
-
 /** Cihazda saklı tema tercihi → üç durumlu seçim (null = seçilmemiş). */
 function storedThemeChoice(): ThemeChoice {
   return getStoredTheme() ?? "system";
@@ -104,19 +101,6 @@ function versionLabel(): string {
   const build = Constants.nativeBuildVersion;
   if (!version) return "ElitLig Mobil";
   return build ? `ElitLig Mobil v${version} (${build})` : `ElitLig Mobil v${version}`;
-}
-
-/* ================================ SATIR ================================= */
-
-interface SettingRow {
-  key: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  title: string;
-  subtitle?: string;
-  value?: string;
-  tone?: Tone;
-  destructive?: boolean;
-  onPress: () => void;
 }
 
 /* ================================= EKRAN ================================ */
@@ -221,126 +205,99 @@ export default function SettingsScreen() {
     .join(" · ");
   const pinnedCount = scope.pinnedLeagues.length;
 
-  const groups = useMemo<{ key: string; title?: string; rows: SettingRow[] }[]>(() => {
-    const result: { key: string; title?: string; rows: SettingRow[] }[] = [];
+  const notifyItems = useMemo<MenuItemSpec[]>(
+    () => [
+      {
+        key: "turler",
+        icon: "notifications",
+        tone: "violet",
+        title: "Bildirim türleri",
+        subtitle: "Gol, maç başlangıcı, sonuç, haber ve panel",
+        onPress: () => go("/bildirim-tercihleri"),
+      },
+      {
+        key: "takip",
+        icon: "options",
+        tone: "cyan",
+        title: "Takip ettiklerim için",
+        subtitle: "Her takım, lig ve maç için ayrı aç/kapat",
+        value: user ? followSummary : undefined,
+        onPress: () => go("/takip-bildirimleri"),
+      },
+    ],
+    [followSummary, go, user]
+  );
 
-    result.push({
-      key: "bildirim",
-      title: "Bildirimler",
-      rows: [
-        {
-          key: "turler",
-          icon: "notifications",
-          title: "Bildirim türleri",
-          subtitle: "Gol, maç başlangıcı, sonuç, haber ve panel",
-          tone: "brand",
-          onPress: () => go("/bildirim-tercihleri"),
-        },
-        {
-          key: "takip",
-          icon: "options",
-          title: "Takip ettiklerim için",
-          subtitle: "Her takım, lig ve maç için ayrı aç/kapat",
-          value: user ? followSummary : undefined,
-          onPress: () => go("/takip-bildirimleri"),
-        },
-      ],
-    });
+  const leagueItems = useMemo<MenuItemSpec[]>(
+    () => [
+      {
+        key: "lig-sezon",
+        icon: "trophy",
+        tone: "gold",
+        title: "Lig ve sezon",
+        subtitle: [leagueValue || "Seç", pinnedCount > 0 ? `${formatNumber(pinnedCount, 0)} sabit lig` : ""]
+          .filter(Boolean)
+          .join(" · "),
+        onPress: () => scope.openScopeSheet("league"),
+      },
+      {
+        key: "sehir",
+        icon: "location",
+        tone: "cyan",
+        title: "Şehir",
+        value: scope.cityLabel || "Seç",
+        onPress: () => scope.openScopeSheet("city"),
+      },
+    ],
+    [leagueValue, pinnedCount, scope]
+  );
 
-    result.push({
-      key: "gorunum",
-      title: "Görünüm",
-      rows: [
-        {
-          key: "tema",
-          icon: "contrast",
-          title: "Tema",
-          value: THEME_LABELS[themeChoice],
-          onPress: () => setThemeSheetOpen(true),
-        },
-      ],
-    });
+  /* Şifre, engellenenler ve profil talepleri Hesabım'da (tek kapı). */
+  const accountItems = useMemo<MenuItemSpec[]>(
+    () =>
+      user
+        ? [
+            {
+              key: "hesabim",
+              icon: "person",
+              tone: "violet",
+              title: "Hesabım",
+              subtitle: "Bilgiler, şifre, profil talepleri",
+              onPress: () => go("/hesabim"),
+            },
+            {
+              key: "engel",
+              icon: "ban",
+              tone: "neutral",
+              title: "Engellediğim üyeler",
+              subtitle: "Mesaj ve yorumlarını görmediğin kişiler",
+              onPress: () => go("/engellenenler"),
+            },
+          ]
+        : [],
+    [go, user]
+  );
 
-    result.push({
-      key: "lig",
-      title: "Lig",
-      rows: [
-        {
-          key: "lig-sezon",
-          icon: "trophy",
-          title: "Lig ve sezon",
-          subtitle:
-            [leagueValue || "Seç", pinnedCount > 0 ? `${formatNumber(pinnedCount, 0)} sabit lig` : ""]
-              .filter(Boolean)
-              .join(" · "),
-          onPress: () => scope.openScopeSheet("league"),
-        },
-        {
-          key: "sehir",
-          icon: "location",
-          title: "Şehir",
-          value: scope.cityLabel || "Seç",
-          onPress: () => scope.openScopeSheet("city"),
-        },
-      ],
-    });
+  /* Oturum — yıkıcı eylemler ayrı kartta, en altta. */
+  const sessionItems = useMemo<MenuItemSpec[]>(
+    () =>
+      user
+        ? [
+            { key: "cikis", icon: "log-out", title: "Çıkış yap", subtitle: "Bu cihazdaki oturumu kapat", destructive: true, onPress: confirmSignOut },
+            {
+              key: "hesap-sil",
+              icon: "trash",
+              title: "Hesabı sil",
+              subtitle: "Kalıcı olarak silinir, geri alınamaz",
+              destructive: true,
+              onPress: () => go("/hesap-sil"),
+            },
+          ]
+        : [],
+    [confirmSignOut, go, user]
+  );
 
-    if (user) {
-      result.push({
-        key: "hesap",
-        title: "Hesap ve güvenlik",
-        /* Şifre, engellenenler ve profil talepleri Hesabım'da (tek kapı). */
-        rows: [
-          {
-            key: "hesabim",
-            icon: "person",
-            title: "Hesabım",
-            subtitle: "Bilgiler, şifre, engellenenler, profil talepleri",
-            onPress: () => go("/hesabim"),
-          },
-        ],
-      });
-      result.push({
-        key: "oturum",
-        rows: [
-          {
-            key: "cikis",
-            icon: "log-out",
-            title: "Çıkış yap",
-            tone: "danger",
-            destructive: true,
-            onPress: confirmSignOut,
-          },
-          {
-            key: "hesap-sil",
-            icon: "trash",
-            title: "Hesabı sil",
-            subtitle: "Kalıcı olarak silinir, geri alınamaz",
-            tone: "danger",
-            destructive: true,
-            onPress: () => go("/hesap-sil"),
-          },
-        ],
-      });
-    } else {
-      result.push({
-        key: "hesap",
-        title: "Hesap",
-        rows: [
-          {
-            key: "giris",
-            icon: "log-in",
-            title: "Giriş yap",
-            subtitle: "Bildirim türleri ve hesap ayarları için",
-            tone: "brand",
-            onPress: () => go("/giris"),
-          },
-        ],
-      });
-    }
-
-    return result;
-  }, [confirmSignOut, followSummary, go, leagueValue, pinnedCount, scope, themeChoice, user]);
+  const displayName = user ? (user.fullName ?? user.username) : "";
 
   /* -------------------------------- ÇİZİM ------------------------------- */
 
@@ -349,35 +306,95 @@ export default function SettingsScreen() {
       <ScreenHeader title="Ayarlar" back scrollY={scrollY} />
 
       <ScrollView {...scrollProps} contentContainerStyle={styles.content}>
-        {groups.map((group) => (
-          <View key={group.key} style={styles.group}>
-            {group.title ? <SectionHeader title={group.title} inset="flush" /> : null}
-            {group.rows.map((row, index) => (
-              <SettingListRow key={row.key} row={row} position={rowPosition(index, group.rows.length)} />
+        {/* ÖZET — kim olarak ayarlıyorsun? Girişlide hesap kartı, misafirde çağrı. */}
+        <Reveal>
+          {user ? (
+            <Touchable
+              feedback="card"
+              haptic="selection"
+              onPress={() => go("/hesabim")}
+              accessibilityRole="button"
+              accessibilityLabel={`${displayName}. Hesabım`}
+              style={styles.account}
+            >
+              <Avatar name={displayName} size={48} ring="brand" />
+              <View style={styles.flex}>
+                <Text style={styles.accountName} numberOfLines={1} {...textScale.dense}>
+                  {displayName}
+                </Text>
+                <Text style={styles.accountMeta} numberOfLines={1} {...textScale.dense}>
+                  {user.email ?? `@${user.username}`}
+                </Text>
+              </View>
+              <View style={styles.accountChip}>
+                <Text style={styles.accountChipText} {...textScale.badge}>
+                  Hesabım
+                </Text>
+                <Ionicons name="chevron-forward" size={12} color={colors.brandAccent} />
+              </View>
+            </Touchable>
+          ) : (
+            <View style={styles.account}>
+              <IconTile icon="person" tone="signature" size={44} />
+              <View style={styles.flex}>
+                <Text style={styles.accountName} {...textScale.dense}>
+                  Misafir
+                </Text>
+                <Text style={styles.accountMeta} {...textScale.long}>
+                  Görünüm ve lig seçimi bu cihazda saklanır.
+                </Text>
+              </View>
+              <Button label="Giriş yap" size="sm" onPress={() => go("/giris")} />
+            </View>
+          )}
+        </Reveal>
+
+        <MenuGroup title="Bildirimler" icon="notifications" tone="violet" items={notifyItems} style={styles.group} />
+
+        {/* GÖRÜNÜM — üç önizleme karosu; seçim anında uygulanır. */}
+        <View style={styles.group}>
+          <SectionHeader
+            title="Görünüm"
+            icon="color-palette"
+            iconTone="pink"
+            subtitle="Seçimde uygulama bir kez tazelenir"
+            inset="flush"
+          />
+          <View style={styles.themeRow}>
+            {THEME_OPTIONS.map((option) => (
+              <ThemeTile
+                key={option.value}
+                option={option}
+                selected={option.value === themeChoice}
+                onSelect={chooseTheme}
+              />
             ))}
           </View>
-        ))}
+        </View>
 
-        <Text style={styles.version} {...textScale.dense}>
-          {versionLabel()}
-        </Text>
+        <MenuGroup title="Lig" icon="trophy" tone="gold" items={leagueItems} style={styles.group} />
+
+        {user ? (
+          <>
+            <MenuGroup title="Hesap ve güvenlik" icon="shield-checkmark" tone="cyan" items={accountItems} style={styles.group} />
+            <MenuGroup title="Oturum" icon="power" tone="red" items={sessionItems} style={styles.group} />
+          </>
+        ) : null}
+
+        <View style={styles.footer}>
+          <Ionicons name="football" size={14} color={colors.textDisabled} />
+          <Text style={styles.version} {...textScale.dense}>
+            {versionLabel()}
+          </Text>
+        </View>
       </ScrollView>
 
+      {/* Eski alt sayfa durumu korunur (başka bir kapıdan açılırsa). */}
       <BottomSheet visible={themeSheetOpen} onClose={() => setThemeSheetOpen(false)} title="Görünüm" snap="content">
-        {/* Üç sabit seçenek — veri listesi değil, bu yüzden map yeterli. */}
-        <View style={styles.sheetBody}>
-          {THEME_OPTIONS.map((option, index) => (
-            <ThemeOptionRow
-              key={option.value}
-              option={option}
-              selected={option.value === themeChoice}
-              position={rowPosition(index, THEME_OPTIONS.length)}
-              onSelect={chooseTheme}
-            />
+        <View style={styles.sheetRow}>
+          {THEME_OPTIONS.map((option) => (
+            <ThemeTile key={option.value} option={option} selected={option.value === themeChoice} onSelect={chooseTheme} />
           ))}
-          <Text style={styles.sheetNote} {...textScale.dense}>
-            Renkler uygulama açılırken sabitlendiği için tema değişiminde uygulama bir kez tazelenir.
-          </Text>
         </View>
       </BottomSheet>
     </SafeAreaView>
@@ -386,54 +403,59 @@ export default function SettingsScreen() {
 
 /* ============================== ALT BİLEŞENLER ============================ */
 
-const SettingListRow = React.memo(function SettingListRow({
-  row,
-  position,
-}: {
-  row: SettingRow;
-  position: RowPosition;
-}) {
-  const leading = useMemo(() => ({ icon: row.icon, tone: row.tone }), [row.icon, row.tone]);
-  return (
-    <ListRow
-      leading={leading}
-      title={row.title}
-      subtitle={row.subtitle}
-      value={row.value}
-      destructive={row.destructive}
-      position={position}
-      onPress={row.onPress}
-    />
-  );
-});
+/**
+ * Görünüm karosu — küçük bir ekran maketi (zemin + kart + mor şerit) ve ad.
+ * "Sistem" karosu ikiye bölünür: yarısı açık, yarısı koyu.
+ */
+const SWATCH = {
+  light: { bg: paletteFor("light").bg, card: paletteFor("light").surface1, line: paletteFor("light").brand },
+  dark: { bg: paletteFor("dark").bg, card: paletteFor("dark").surface1, line: paletteFor("dark").brand },
+};
 
-/** Görünüm alt sayfasının tek seçeneği. */
-const ThemeOptionRow = React.memo(function ThemeOptionRow({
+const ThemeTile = React.memo(function ThemeTile({
   option,
   selected,
-  position,
   onSelect,
 }: {
   option: ThemeOption;
   selected: boolean;
-  position: RowPosition;
   onSelect: (choice: ThemeChoice) => void;
 }) {
   const handlePress = useCallback(() => onSelect(option.value), [onSelect, option.value]);
-  const leading = useMemo(
-    () => ({ icon: option.icon, tone: selected ? ("brand" as Tone) : undefined }),
-    [option.icon, selected]
-  );
-
+  const halves: ("light" | "dark")[] =
+    option.value === "system" ? ["light", "dark"] : [option.value === "dark" ? "dark" : "light"];
   return (
-    <ListRow
-      leading={leading}
-      title={option.label}
-      position={position}
-      chevron={false}
-      trailing={selected ? <Ionicons name="checkmark" size={18} color={colors.brandAccent} /> : undefined}
+    <Touchable
+      feedback="card"
+      haptic="selection"
       onPress={handlePress}
-    />
+      accessibilityRole="radio"
+      accessibilityState={{ selected }}
+      accessibilityLabel={`Görünüm: ${option.label}`}
+      style={[styles.themeTile, selected && styles.themeTileOn]}
+    >
+      <View style={styles.mock}>
+        {halves.map((half) => (
+          <View key={half} style={[styles.mockHalf, { backgroundColor: SWATCH[half].bg }]}>
+            <View style={[styles.mockCard, { backgroundColor: SWATCH[half].card }]}>
+              <View style={[styles.mockLine, { backgroundColor: SWATCH[half].line }]} />
+              <View style={[styles.mockLineShort, { backgroundColor: SWATCH[half].line }]} />
+            </View>
+          </View>
+        ))}
+      </View>
+      <View style={styles.themeFoot}>
+        <Ionicons name={option.icon} size={13} color={selected ? colors.brandAccent : colors.textTertiary} />
+        <Text style={[styles.themeLabel, selected && styles.themeLabelOn]} numberOfLines={1} {...textScale.dense}>
+          {option.label}
+        </Text>
+        {selected ? (
+          <View style={styles.themeCheck}>
+            <Ionicons name="checkmark" size={10} color={colors.textOnBrand} />
+          </View>
+        ) : null}
+      </View>
+    </Touchable>
   );
 });
 
@@ -446,24 +468,90 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: layout.screenPadding,
+    paddingTop: space.sm,
     paddingBottom: space.giant,
   },
+  flex: { flex: 1, minWidth: 0 },
   group: {
-    marginBottom: layout.sectionGap,
+    marginTop: space.xl,
+  },
+
+  account: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    padding: space.md,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    ...elevate(1),
+  },
+  accountName: { ...type.h2, color: colors.textPrimary },
+  accountMeta: { ...type.bodySm, color: colors.textTertiary, marginTop: 1 },
+  accountChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xs,
+    borderRadius: radius.pill,
+    backgroundColor: colors.brandDim,
+    borderWidth: hairline,
+    borderColor: colors.brandBorder,
+  },
+  accountChipText: { ...type.labelXs, color: colors.brandAccent },
+
+  themeRow: { flexDirection: "row", gap: space.sm },
+  sheetRow: { flexDirection: "row", gap: space.sm, paddingBottom: space.md },
+  themeTile: {
+    flex: 1,
+    padding: space.s,
+    gap: space.s,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface1,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+  },
+  themeTileOn: {
+    borderColor: colors.brand,
+    backgroundColor: colors.brandDim,
+    ...glowStyle(colors.glow, 1),
+  },
+  mock: {
+    height: 64,
+    flexDirection: "row",
+    borderRadius: radius.sm,
+    overflow: "hidden",
+    borderWidth: hairline,
+    borderColor: colors.border,
+  },
+  mockHalf: { flex: 1, padding: space.s, justifyContent: "flex-end" },
+  mockCard: { borderRadius: radius.xs, padding: space.s, gap: 3 },
+  mockLine: { height: 4, borderRadius: 2, width: "80%" },
+  mockLineShort: { height: 4, borderRadius: 2, width: "45%", opacity: 0.5 },
+  themeFoot: { flexDirection: "row", alignItems: "center", gap: space.xs, paddingHorizontal: space.xxs },
+  themeLabel: { ...type.labelSm, color: colors.textSecondary, flex: 1 },
+  themeLabelOn: { color: colors.textPrimary },
+  themeCheck: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.brand,
+  },
+
+  footer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: space.xs,
+    marginTop: space.xxl,
   },
   version: {
     ...type.caption,
     color: colors.textTertiary,
     textAlign: "center",
-  },
-  sheetBody: {
-    gap: space.xs,
-    paddingBottom: space.sm,
-  },
-  sheetNote: {
-    ...type.caption,
-    color: colors.textTertiary,
-    paddingHorizontal: layout.rowPaddingH,
-    paddingTop: space.sm,
   },
 });

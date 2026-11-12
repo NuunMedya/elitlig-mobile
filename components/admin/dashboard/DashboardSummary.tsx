@@ -310,7 +310,7 @@ const MatchLine = memo(function MatchLine({
         </Text>
         <View style={styles.phaseRow}>
           <View style={[styles.phaseDot, { backgroundColor: PHASE_DOT[match.phase] }]} />
-          <Text style={[styles.phaseText, { color: PHASE_DOT[match.phase] }]} numberOfLines={1} {...textScale.badge}>
+          <Text style={[styles.phaseText, { color: PHASE_DOT[match.phase] }]} numberOfLines={2} {...textScale.badge}>
             {MATCH_PHASE_LABELS[match.phase]}
           </Text>
         </View>
@@ -371,11 +371,12 @@ const styles = StyleSheet.create({
   matchBorder: { borderTopWidth: hairline, borderTopColor: colors.separator },
   matchLive: { backgroundColor: colors.liveDim },
   matchLiveStripe: { position: "absolute", left: 0, top: 0, bottom: 0, width: 3, backgroundColor: colors.live },
-  matchTime: { width: 64, gap: space.xxs, paddingTop: space.xxs },
+  matchTime: { width: 72, gap: space.xxs, paddingTop: space.xxs },
   time: { ...type.metricSm, color: colors.textPrimary },
   timeLive: { color: colors.live },
-  phaseRow: { flexDirection: "row", alignItems: "center", gap: space.xs },
-  phaseDot: { width: 6, height: 6, borderRadius: radius.pill },
+  phaseRow: { flexDirection: "row", alignItems: "flex-start", gap: space.xs },
+
+  phaseDot: { width: 6, height: 6, borderRadius: radius.pill, marginTop: 4 },
   phaseText: { ...type.micro, flexShrink: 1 },
   matchMain: { flex: 1, gap: space.xxs },
   teamRow: { flexDirection: "row", alignItems: "center", gap: space.sm },

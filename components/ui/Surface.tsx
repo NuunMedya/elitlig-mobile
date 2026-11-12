@@ -12,7 +12,7 @@
 
 import React, { useMemo } from "react";
 import { View, type ViewProps, type ViewStyle } from "react-native";
-import { elevate, layout, radius as radiusScale, type ElevationLevel } from "@/theme";
+import { colors, elevate, layout, radius as radiusScale, type ElevationLevel } from "@/theme";
 
 export interface SurfaceProps extends ViewProps {
   /** Yükselti katmanı — varsayılan 1 (satır/kart). */
@@ -36,7 +36,9 @@ export const Surface = React.memo(function Surface({
   ...rest
 }: SurfaceProps) {
   const surfaceStyle = useMemo<ViewStyle>(() => {
-    const base = elevate(level);
+    /* Gece teması: kart kenarı mat lavanta değil CAM çizgisidir (`glassLine`);
+       koyu temada üst kenardaki ışık (`elevate`) korunur. */
+    const base = level >= 1 ? { ...elevate(level), borderColor: colors.glassLine, borderTopColor: elevate(level).borderTopColor } : elevate(level);
     const withBorder = (bordered ?? level >= 1) ? base : { ...base, borderWidth: 0 };
     return {
       ...withBorder,

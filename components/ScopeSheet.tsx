@@ -672,7 +672,7 @@ const styles = StyleSheet.create({
     top: -4,
     width: 15,
     height: 15,
-    borderRadius: 8,
+    borderRadius: radius.pill,
     backgroundColor: colors.elevated,
     alignItems: "center",
     justifyContent: "center",
@@ -680,7 +680,7 @@ const styles = StyleSheet.create({
   check: {
     width: 22,
     height: 22,
-    borderRadius: 11,
+    borderRadius: radius.pill,
     backgroundColor: colors.brand,
     alignItems: "center",
     justifyContent: "center",

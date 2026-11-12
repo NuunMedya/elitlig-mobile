@@ -7,17 +7,26 @@
  *
  * PANO KARTI (web TodoBoard BoardCard): sürükle-bırak yerine "Taşı" menüsü
  * (ekranda ⋯): önceki/sonraki sütun, sütunda yukarı/aşağı, en üste.
+ *
+ * ANATOMİ (ikinci tur): kartın solunda 3 px ÖNCELİK ŞERİDİ (gecikmiş =
+ * kırmızı, yüksek = altın, sürüyor = camgöbeği, diğerleri yok); bitirme
+ * halkası önceliğin renginde; başlığın altında SON TARİH HAPI (ikonlu, gecikti
+ * kırmızı / bugün altın / ileri nötr) ve tür/ilerleme hapları; sağ sütunda
+ * ATANAN AVATARI ve Başla/Duraklat düğmesi. Bağlam (maç, oyuncu, takım)
+ * ikonlu tek satır.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { memo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { Badge, Touchable, withAlpha } from "@/components/ui";
+import { LinearGradient } from "expo-linear-gradient";
+
+import { Badge, GradientBar, Touchable, withAlpha } from "@/components/ui";
 import { initialsOf } from "@/lib/admin/format";
 import { avatarTone, todoLabelHex } from "@/lib/admin/toolPalette";
 import type { TodoStatus, TodoTask } from "@/lib/api/todos";
-import { colors, hairline, radius, space, textScale, touchSlop, type } from "@/theme";
+import { colors, glowStyle, hairline, radius, space, textScale, touchSlop, type } from "@/theme";
 
 import { KIND_ICONS, SOURCES, dueOf, formatDue, isLate, personOf, progressOf } from "./boardUtils";
 
@@ -54,14 +63,29 @@ export function ProgressBar({ done, total }: { done: number; total: number }) {
   const share = total ? done / total : 0;
   return (
     <View style={styles.progressRow} accessibilityLabel={`${total} aşamadan ${done} tanesi tamam`}>
-      <View style={styles.progress}>
-        <View style={[styles.progressFill, { width: `${share * 100}%` }, done === total ? styles.progressFull : null]} />
-      </View>
+      <GradientBar value={share} height={5} gradient={done === total ? colors.tileTones.mint : undefined} style={styles.progress} />
       <Text style={styles.progressText} {...textScale.badge}>
         {done}/{total}
       </Text>
     </View>
   );
+}
+
+/** Kartın öncelik şeridi rengi (yoksa null). */
+function stripeOf(task: TodoTask): string | null {
+  if (task.status === "done") return null;
+  if (isLate(task)) return colors.danger;
+  if (task.priority === "high") return colors.warn;
+  if (task.status === "in_progress") return colors.accentText;
+  return null;
+}
+
+/** Son tarih hapının tonu: gecikti kırmızı, bugün altın, ileri nötr. */
+function dueTone(task: TodoTask, iso: string): "danger" | "warn" | "neutral" {
+  if (isLate(task)) return "danger";
+  const d = new Date(iso);
+  const n = new Date();
+  return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate() ? "warn" : "neutral";
 }
 
 /* ═══════════════════════════ LİSTE SATIRI ═══════════════════════════ */
@@ -88,23 +112,36 @@ export const TodoRow = memo(function TodoRow({
   const person = hidePerson ? null : personOf(task);
   const high = task.priority === "high" && !done;
 
+  const stripe = stripeOf(task);
+  const ring = done ? colors.win : late ? colors.danger : high ? colors.warn : task.status === "in_progress" ? colors.accentText : colors.textTertiary;
+  const ctx =
+    task.match && task.kind !== "match_duty"
+      ? { icon: "football-outline" as const, text: task.match.label }
+      : task.kind === "match_duty" && task.match?.field
+        ? { icon: "location-outline" as const, text: task.match.field }
+        : task.player || task.team
+          ? { icon: "people-outline" as const, text: [task.player?.name, task.team?.name].filter(Boolean).join(" · ") }
+          : null;
+
   return (
-    <View style={[styles.row, late ? styles.rowLate : null, task.status === "in_progress" ? styles.rowActive : null]}>
+    <View style={[styles.row, done ? styles.rowDone : null]}>
+      {stripe ? <View style={[styles.stripe, { backgroundColor: stripe }]} /> : null}
       {canMove ? (
         <Touchable
           feedback="icon"
           haptic={done ? "light" : "success"}
           onPress={() => onStatus(task, done ? "open" : "done")}
-          hitSlop={touchSlop(24)}
+          hitSlop={touchSlop(26)}
+          style={[styles.check, { borderColor: ring }, done ? styles.checkDone : null]}
           accessibilityRole="checkbox"
           accessibilityState={{ checked: done }}
           accessibilityLabel={done ? `${task.title} yeniden aç` : `${task.title} tamamlandı`}
         >
-          <Ionicons name={done ? "checkmark-circle" : "ellipse-outline"} size={24} color={done ? colors.win : late ? colors.danger : colors.textTertiary} />
+          {done ? <Ionicons name="checkmark" size={16} color={colors.onDark} /> : null}
         </Touchable>
       ) : (
-        <View accessibilityLabel={`${task.owner?.name} yürütüyor; sen izliyorsun`}>
-          <Ionicons name={done ? "checkmark" : "eye-outline"} size={22} color={colors.textTertiary} />
+        <View style={[styles.check, styles.checkWatch]} accessibilityLabel={`${task.owner?.name} yürütüyor; sen izliyorsun`}>
+          <Ionicons name={done ? "checkmark" : "eye-outline"} size={14} color={colors.textTertiary} />
         </View>
       )}
 
@@ -118,64 +155,61 @@ export const TodoRow = memo(function TodoRow({
         accessibilityHint={onMenu ? "Hızlı eylemler için basılı tut" : undefined}
       >
         <View style={styles.titleRow}>
+          {task.pinned ? <Ionicons name="pin" size={13} color={colors.brandAccent} /> : null}
           <Text style={[styles.title, done ? styles.doneText : null]} numberOfLines={2} {...textScale.dense}>
             {task.title}
           </Text>
-          {high ? <Ionicons name="flag" size={14} color={colors.warn} /> : null}
-          {task.pinned ? <Ionicons name="pin" size={14} color={colors.brandAccent} /> : null}
         </View>
         <View style={styles.meta}>
-          {task.status === "in_progress" ? <Badge label="Sürüyor" tone="info" size="xs" /> : null}
           {due ? (
             <Badge
               label={`${late ? (task.kind === "match_duty" ? "Maç saati geçti · " : "Gecikti · ") : ""}${formatDue(due)}`}
-              tone={late ? "danger" : "neutral"}
+              tone={dueTone(task, due)}
               size="xs"
               icon={task.kind === "match_duty" ? "time-outline" : "calendar-outline"}
             />
           ) : null}
+          {high ? <Badge label="Yüksek" tone="warn" size="xs" icon="flag" /> : null}
+          {task.status === "in_progress" ? <Badge label="Sürüyor" tone="info" size="xs" icon="play" /> : null}
           {task.kind !== "task" ? <Badge label={task.dutyLabel || task.kindLabel} size="xs" icon={KIND_ICONS[task.kind]} /> : null}
           {progress ? <Badge label={`${progress.done}/${progress.total}`} size="xs" icon="checkbox-outline" tone={progress.done === progress.total ? "win" : "neutral"} /> : null}
           {task.body ? <Ionicons name="reorder-three-outline" size={14} color={colors.textTertiary} accessibilityLabel="Açıklama var" /> : null}
         </View>
-        {task.match && task.kind !== "match_duty" ? (
-          <Text style={styles.ctx} numberOfLines={1} {...textScale.dense}>
-            {task.match.label}
-          </Text>
-        ) : task.kind === "match_duty" && task.match?.field ? (
-          <Text style={styles.ctx} numberOfLines={1} {...textScale.dense}>
-            {task.match.field}
-          </Text>
-        ) : null}
-        {task.player || task.team ? (
-          <Text style={styles.ctx} numberOfLines={1} {...textScale.dense}>
-            {[task.player?.name, task.team?.name].filter(Boolean).join(" · ")}
-          </Text>
-        ) : null}
-        <LabelChips labels={task.labels} />
-        {person ? (
-          <View style={styles.person}>
-            <PersonDot person={person} size={16} />
+        {ctx ? (
+          <View style={styles.ctxRow}>
+            <Ionicons name={ctx.icon} size={12} color={colors.textTertiary} />
             <Text style={styles.ctx} numberOfLines={1} {...textScale.dense}>
-              {task.source === "assigned_by_me" ? `→ ${person.name}` : `${person.name} atadı`}
+              {ctx.text}
             </Text>
           </View>
         ) : null}
+        <LabelChips labels={task.labels} />
+        {person ? (
+          <Text style={styles.ctx} numberOfLines={1} {...textScale.dense}>
+            {task.source === "assigned_by_me" ? `→ ${person.name} yürütüyor` : `${person.name} atadı`}
+          </Text>
+        ) : null}
       </Touchable>
 
-      {canMove && !done ? (
-        <Touchable
-          feedback="icon"
-          haptic="selection"
-          onPress={() => onStatus(task, task.status === "in_progress" ? "open" : "in_progress")}
-          style={[styles.step, task.status === "in_progress" ? styles.stepOn : null]}
-          accessibilityLabel={task.status === "in_progress" ? `${task.title} duraklat` : `${task.title} başla`}
-        >
-          <Ionicons name={task.status === "in_progress" ? "pause" : "play"} size={16} color={task.status === "in_progress" ? colors.textOnBrand : colors.brandAccent} />
-        </Touchable>
-      ) : !canMove ? (
-        <Badge label={task.statusLabel} size="xs" tone={done ? "win" : task.status === "in_progress" ? "info" : "neutral"} />
-      ) : null}
+      <View style={styles.side}>
+        {person ? <PersonDot person={person} size={26} /> : null}
+        {canMove && !done ? (
+          <Touchable
+            feedback="icon"
+            haptic="selection"
+            onPress={() => onStatus(task, task.status === "in_progress" ? "open" : "in_progress")}
+            style={[styles.step, task.status === "in_progress" ? styles.stepOn : null]}
+            accessibilityLabel={task.status === "in_progress" ? `${task.title} duraklat` : `${task.title} başla`}
+          >
+            {task.status === "in_progress" ? (
+              <LinearGradient colors={colors.gradientBrand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[StyleSheet.absoluteFill, styles.stepFill]} />
+            ) : null}
+            <Ionicons name={task.status === "in_progress" ? "pause" : "play"} size={15} color={task.status === "in_progress" ? colors.textOnBrand : colors.brandAccent} />
+          </Touchable>
+        ) : !canMove ? (
+          <Badge label={task.statusLabel} size="xs" tone={done ? "win" : task.status === "in_progress" ? "info" : "neutral"} />
+        ) : null}
+      </View>
     </View>
   );
 });
@@ -201,11 +235,12 @@ export const BoardCard = memo(function BoardCard({
       feedback="card"
       onPress={() => onOpen(task)}
       onLongPress={canMove ? () => onMove(task) : undefined}
-      style={[styles.card, late ? styles.cardLate : null]}
+      style={styles.card}
       accessibilityRole="button"
       accessibilityLabel={`${task.title} kartını aç`}
       accessibilityHint={canMove ? "Taşımak için basılı tut" : undefined}
     >
+      {stripeOf(task) ? <View style={[styles.stripe, { backgroundColor: stripeOf(task) ?? undefined }]} /> : null}
       <View style={styles.cardTop}>
         <Badge label={source.short} tone={source.tone} size="xs" />
         <View style={styles.kind}>
@@ -242,7 +277,7 @@ export const BoardCard = memo(function BoardCard({
         ) : null}
         {task.body ? <Ionicons name="reorder-three-outline" size={14} color={colors.textTertiary} /> : null}
         <View style={styles.flex} />
-        <PersonDot person={person} />
+        <PersonDot person={person} size={24} />
       </View>
       {progress && task.workflow ? <ProgressBar done={progress.done} total={progress.total} /> : null}
       {!canMove ? (
@@ -256,56 +291,71 @@ export const BoardCard = memo(function BoardCard({
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  ava: { borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
+  ava: { borderRadius: radius.pill, alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderColor: colors.surface1 },
   avaText: { ...type.nano, color: colors.onDark },
   labels: { flexDirection: "row", flexWrap: "wrap", gap: space.xs },
-  label: { paddingHorizontal: space.s, paddingVertical: 1, borderRadius: radius.xs, borderWidth: hairline, maxWidth: 160 },
+  label: { paddingHorizontal: space.s, paddingVertical: 1, borderRadius: radius.pill, borderWidth: hairline, maxWidth: 160 },
   labelText: { ...type.micro, color: colors.textPrimary },
   progressRow: { flexDirection: "row", alignItems: "center", gap: space.sm },
-  progress: { flex: 1, height: 4, borderRadius: radius.pill, backgroundColor: colors.surface3, overflow: "hidden" },
-  progressFill: { height: 4, backgroundColor: colors.brandAccent },
-  progressFull: { backgroundColor: colors.win },
+  progress: { flex: 1 },
   progressText: { ...type.numSm, color: colors.textTertiary },
 
   row: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: space.md,
+    minHeight: 64,
     paddingVertical: space.md,
-    paddingHorizontal: space.md,
-    borderRadius: radius.lg,
+    paddingLeft: space.lg,
+    paddingRight: space.md,
+    borderRadius: radius.xl,
     backgroundColor: colors.surface1,
     borderWidth: hairline,
     borderColor: colors.border,
+    overflow: "hidden",
   },
-  rowLate: { borderLeftWidth: 3, borderLeftColor: colors.danger },
-  rowActive: { borderLeftWidth: 3, borderLeftColor: colors.info },
-  rowMain: { flex: 1, gap: space.xs },
+  rowDone: { backgroundColor: colors.surface2 },
+  stripe: { position: "absolute", left: 0, top: space.md, bottom: space.md, width: 3, borderTopRightRadius: radius.pill, borderBottomRightRadius: radius.pill },
+  check: {
+    width: 24,
+    height: 24,
+    marginTop: 1,
+    borderRadius: radius.pill,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checkDone: { backgroundColor: colors.win, borderColor: colors.win },
+  checkWatch: { borderWidth: hairline, borderColor: colors.border, backgroundColor: colors.surface3 },
+  rowMain: { flex: 1, gap: space.s },
   titleRow: { flexDirection: "row", alignItems: "center", gap: space.xs },
   title: { flex: 1, ...type.h4, color: colors.textPrimary },
   doneText: { textDecorationLine: "line-through", color: colors.textTertiary },
   meta: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.xs },
-  ctx: { ...type.caption, color: colors.textSecondary },
-  person: { flexDirection: "row", alignItems: "center", gap: space.xs },
+  ctxRow: { flexDirection: "row", alignItems: "center", gap: space.xs },
+  ctx: { ...type.caption, color: colors.textSecondary, flexShrink: 1 },
+  side: { alignItems: "center", gap: space.sm },
   step: {
-    width: 32,
-    height: 32,
+    width: 34,
+    height: 34,
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.brandDim,
   },
-  stepOn: { backgroundColor: colors.brand },
+  stepOn: { ...glowStyle(colors.glow, 1) },
+  stepFill: { borderRadius: radius.pill },
 
   card: {
     gap: space.s,
     padding: space.md,
-    borderRadius: radius.lg,
+    paddingLeft: space.lg,
+    borderRadius: radius.xl,
     backgroundColor: colors.surface1,
     borderWidth: hairline,
     borderColor: colors.border,
+    overflow: "hidden",
   },
-  cardLate: { borderLeftWidth: 3, borderLeftColor: colors.danger },
   cardTop: { flexDirection: "row", alignItems: "center", gap: space.sm },
   kind: { flex: 1, flexDirection: "row", alignItems: "center", gap: space.xxs },
   kindText: { ...type.caption, color: colors.textTertiary },

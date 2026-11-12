@@ -41,31 +41,32 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import {
-  Linking,
-  RefreshControl,
-  SectionList,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
-import type { SectionListRenderItemInfo } from "react-native";
+import { Linking, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { MenuGroup } from "@/components/account/MenuBlocks";
 import {
+  Aurora,
   Button,
   EmptyState,
   ErrorState,
-  ListRow,
+  GradientBar,
+  IconTile,
+  Odometer,
+  Reveal,
   ScreenHeader,
   SectionHeader,
+  Skeleton,
   SkeletonListRow,
+  Toggle,
   Touchable,
   refreshControlProps,
   toneColors,
   useHeaderScroll,
   useRefresh,
   useToast,
+  type IconTileTone,
 } from "@/components/ui";
 import {
   getNotificationPreferences,
@@ -84,7 +85,7 @@ import {
 } from "@/hooks/usePushStatus";
 import { queryKeys } from "@/lib/queryKeys";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, elevate, hairline, layout, radius, space, textScale, type } from "@/theme";
+import { colors, elevate, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
 
 /** Aynı anda giden tercih isteklerini tanımak için (bkz. onSettled). */
 const PREFERENCE_MUTATION_KEY = ["notifications", "preference-toggle"] as const;
@@ -96,13 +97,11 @@ const PREFERENCE_MUTATION_KEY = ["notifications", "preference-toggle"] as const;
  */
 type PermissionState = "unknown" | "granted" | "undetermined" | "blocked";
 
-/** SectionList'in beklediği biçim (`items` → `data`). */
+/** Grup + satırları (`items` → `data`). */
 interface PreferenceSectionData {
   group: NotificationGroup;
   data: NotificationPreferenceItem[];
 }
-
-const keyExtractor = (item: NotificationPreferenceItem) => item.key;
 
 /* ═════════════════════════════ EKRAN ═════════════════════════════ */
 
@@ -332,52 +331,6 @@ export default function NotificationPreferencesScreen() {
     }));
   }, [query.data]);
 
-  const renderItem = useCallback(
-    ({ item, index, section }: SectionListRenderItemInfo<NotificationPreferenceItem, PreferenceSectionData>) => (
-      <PreferenceRow
-        item={item}
-        position={
-          section.data.length === 1
-            ? "single"
-            : index === 0
-              ? "first"
-              : index === section.data.length - 1
-                ? "last"
-                : "middle"
-        }
-        onChange={togglePreference}
-      />
-    ),
-    [togglePreference],
-  );
-
-  const renderSectionHeader = useCallback(
-    ({ section }: { section: PreferenceSectionData }) => {
-      const on = section.data.filter((item) => item.value).length;
-      const all = on === section.data.length;
-      return (
-        <View>
-          <SectionHeader
-            title={section.group.label}
-            meta={`${on}/${section.data.length} açık`}
-            action={
-              section.data.length > 1
-                ? { label: all ? "Tümünü kapat" : "Tümünü aç", onPress: () => toggleGroup(section.data) }
-                : undefined
-            }
-            style={styles.sectionHeader}
-          />
-          {section.group.description ? (
-            <Text style={styles.groupDescription} {...textScale.long}>
-              {section.group.description}
-            </Text>
-          ) : null}
-        </View>
-      );
-    },
-    [toggleGroup],
-  );
-
   const totals = useMemo(() => {
     let on = 0;
     let all = 0;
@@ -421,205 +374,285 @@ export default function NotificationPreferencesScreen() {
         : push.state === "hazir"
           ? "Cihaz kaydı tamamlanmadı"
           : "Bildirimler hazır değil";
+  const statusIcon: keyof typeof Ionicons.glyphMap = push.busy
+    ? "sync-outline"
+    : deviceOk
+      ? "checkmark-circle"
+      : push.state === "izin-yok"
+        ? "notifications-off"
+        : "alert-circle";
 
-  const listHeader = (
-    <View style={styles.intro}>
-      {/* Liste doluyken hata bant olur: tercihleri ekrandan silmek yanlış (§5.6). */}
-      {query.error && sections.length > 0 ? (
-        <ErrorState error={query.error} onRetry={query.refetch} variant="banner" />
-      ) : null}
-
-      {/* 1) CİHAZ DURUMU — üç kapı (izin, cihaz kimliği, sunucu kaydı) tek
-          başlıkta özetlenir; ayrıntı ve test bildirimi katlanır. */}
-      <View style={styles.status}>
-        <View style={styles.statusRow}>
-          <View style={[styles.statusIcon, { backgroundColor: toneColors(statusTone).dim }]}>
-            <Ionicons
-              name={
-                push.busy
-                  ? "sync-outline"
-                  : deviceOk
-                    ? "checkmark-circle"
-                    : push.state === "izin-yok"
-                      ? "notifications-off"
-                      : "alert-circle"
-              }
-              size={20}
-              color={toneColors(statusTone).fg}
-            />
-          </View>
-          <View style={styles.statusCopy}>
-            <Text style={styles.statusTitle} {...textScale.dense}>
-              {statusTitle}
-            </Text>
-            <Text style={styles.statusBody} {...textScale.long}>
-              {push.busy ? "Birkaç saniye sürebilir." : push.message}
-            </Text>
-          </View>
-        </View>
-
-        {!push.busy && push.state !== "hazir" ? (
-          <Button
-            label={permissionBlocked || push.state === "izin-yok" ? "Ayarları aç" : "Tekrar dene"}
-            onPress={permissionBlocked || push.state === "izin-yok" ? openSystemSettings : askPermission}
-            loading={asking}
-            size="sm"
-            variant="primary"
-            fullWidth
-          />
-        ) : push.server === "hata" ? (
-          <Button
-            label="Cihazı yeniden kaydet"
-            onPress={askPermission}
-            loading={asking}
-            size="sm"
-            variant="secondary"
-            fullWidth
-          />
-        ) : null}
-
-        <Touchable
-          feedback="chip"
-          onPress={() => setDiagnosticsOpen((open) => !open)}
-          accessibilityRole="button"
-          accessibilityState={{ expanded: diagnosticsOpen }}
-          style={styles.disclosure}
-        >
-          <Text style={styles.disclosureText} {...textScale.dense}>
-            Sorun mu var?
-          </Text>
-          <Ionicons
-            name={diagnosticsOpen ? "chevron-up" : "chevron-down"}
-            size={14}
-            color={colors.brandAccent}
-          />
-        </Touchable>
-
-        {diagnosticsOpen ? (
-          <View style={styles.diagnostics}>
-            {!push.busy && push.state === "hazir" ? (
-              <Text style={styles.statusSub} {...textScale.long}>
-                {serverSyncMessage(push)}
-              </Text>
-            ) : null}
-            {/* Yerel köprü: push zinciri kurulu olmasa bile bildirimlerin
-                görünmesini sağlayan yedek yol (hooks/useNotificationBridge.ts). */}
-            <Text style={styles.statusSub} {...textScale.long}>
-              Uygulama açıkken bildirimler yedek yoldan da gelir: bildirim merkezine düşen her yeni
-              kayıt telefonda gösterilir. Uygulama tamamen kapalıyken yalnız push bildirimi çalışır.
-            </Text>
-            <Button
-              label="Test bildirimi gönder"
-              onPress={sendTestNotification}
-              loading={testing}
-              size="sm"
-              variant="secondary"
-              icon="notifications-outline"
-              fullWidth
-            />
-          </View>
-        ) : null}
-      </View>
-
-      {/* 2) KİMİN İÇİN — takip başına ayrıntılı ayar ayrı ekranda. */}
-      <ListRow
-        leading={{ icon: "star", tone: "brand" }}
-        title="Takip ettiklerim için"
-        subtitle="Her takım, lig ve maç için ayrı aç/kapat"
-        position="single"
-        chevron
-        onPress={openFollowSettings}
-        testID="open-follow-settings"
-      />
-
-      {/* 3) ÖZET — kaç tür açık, tek cümle. */}
-      {totals.all > 0 ? (
-        <Text style={styles.summary} {...textScale.long}>
-          <Text style={styles.summaryStrong}>{`${totals.on} / ${totals.all} tür açık.`}</Text>
-          {" Anahtarlar bu hesaba hangi bildirimlerin gönderileceğini belirler; bildirimler takip ettiklerine göre gelir."}
-        </Text>
-      ) : null}
-    </View>
-  );
-
-  const listEmpty = query.isLoading ? (
-    <SkeletonListRow count={8} avatar={false} />
-  ) : query.error ? (
-    <ErrorState error={query.error} onRetry={query.refetch} />
-  ) : (
-    <EmptyState
-      icon="notifications-outline"
-      title="Tercih listesi boş"
-      body="Sunucu şu an bildirim türü döndürmedi. Biraz sonra tekrar dene."
-      variant="inline"
-    />
-  );
-
-  /**
-   * `refresh.control` hazır düğüm döndürür ama tipi `ReactElement<unknown>`;
-   * RN'in `refreshControl` prop'u `ReactElement<RefreshControlProps>` bekler.
-   */
-  const refreshControl = (
-    <RefreshControl {...refreshControlProps(refresh.refreshing, refresh.onRefresh)} />
-  );
+  const ratio = totals.all > 0 ? totals.on / totals.all : 0;
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       {header}
 
-      <SectionList
+      <ScrollView
         {...scrollProps}
-        sections={sections}
-        keyExtractor={keyExtractor}
-        renderItem={renderItem}
-        renderSectionHeader={renderSectionHeader}
-        stickySectionHeadersEnabled={false}
-        ListHeaderComponent={listHeader}
-        ListEmptyComponent={listEmpty}
         contentContainerStyle={styles.list}
-        refreshControl={refreshControl}
-        initialNumToRender={14}
-        windowSize={7}
-      />
+        refreshControl={<RefreshControl {...refreshControlProps(refresh.refreshing, refresh.onRefresh)} />}
+      >
+        {/* Liste doluyken hata bant olur: tercihleri ekrandan silmek yanlış (§5.6). */}
+        {query.error && sections.length > 0 ? (
+          <ErrorState error={query.error} onRetry={query.refetch} variant="banner" />
+        ) : null}
+
+        {/* 1) ÖZET SAHNESİ — kaç tür açık (dönen sayaç + degrade çubuk) ve
+            cihazın durumu tek bakışta. */}
+        <Reveal>
+          <View style={styles.hero}>
+            <LinearGradient
+              colors={colors.gradientInk}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+            <Aurora variant="stage" style={StyleSheet.absoluteFill} />
+            <Text style={styles.heroOverline} {...textScale.badge}>
+              {upperTR("Bu hesaba gelenler")}
+            </Text>
+            <View style={styles.heroCount}>
+              {query.isLoading ? (
+                <Skeleton width={96} height={34} radius="sm" />
+              ) : (
+                <>
+                  <Odometer value={totals.on} style={styles.heroValue} />
+                  <Text style={styles.heroTotal} {...textScale.badge}>
+                    /{totals.all}
+                  </Text>
+                  <Text style={styles.heroUnit} {...textScale.dense}>
+                    tür açık
+                  </Text>
+                </>
+              )}
+            </View>
+            <GradientBar value={ratio} height={6} track={colors.inkTile} />
+            <View style={styles.heroStatus}>
+              <View style={[styles.heroDot, { backgroundColor: toneColors(statusTone).fg }]} />
+              <Text style={styles.heroStatusText} numberOfLines={1} {...textScale.dense}>
+                {statusTitle}
+              </Text>
+            </View>
+          </View>
+        </Reveal>
+
+        {/* 2) CİHAZ DURUMU — üç kapı (izin, cihaz kimliği, sunucu kaydı) tek
+            başlıkta özetlenir; ayrıntı ve test bildirimi katlanır. */}
+        <View style={styles.status}>
+          <View style={styles.statusRow}>
+            <IconTile icon={statusIcon} tone={TONE_TILE[statusTone]} size={40} glow={false} />
+            <View style={styles.statusCopy}>
+              <Text style={styles.statusTitle} {...textScale.dense}>
+                Telefon izni
+              </Text>
+              <Text style={styles.statusBody} {...textScale.long}>
+                {push.busy ? "Birkaç saniye sürebilir." : push.message}
+              </Text>
+            </View>
+          </View>
+
+          {!push.busy && push.state !== "hazir" ? (
+            <Button
+              label={permissionBlocked || push.state === "izin-yok" ? "Ayarları aç" : "Tekrar dene"}
+              onPress={permissionBlocked || push.state === "izin-yok" ? openSystemSettings : askPermission}
+              loading={asking}
+              size="sm"
+              variant="primary"
+              fullWidth
+            />
+          ) : push.server === "hata" ? (
+            <Button
+              label="Cihazı yeniden kaydet"
+              onPress={askPermission}
+              loading={asking}
+              size="sm"
+              variant="secondary"
+              fullWidth
+            />
+          ) : null}
+
+          <Touchable
+            feedback="chip"
+            onPress={() => setDiagnosticsOpen((open) => !open)}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: diagnosticsOpen }}
+            style={styles.disclosure}
+          >
+            <Ionicons name="medkit-outline" size={13} color={colors.brandAccent} />
+            <Text style={styles.disclosureText} {...textScale.dense}>
+              Sorun mu var?
+            </Text>
+            <Ionicons name={diagnosticsOpen ? "chevron-up" : "chevron-down"} size={14} color={colors.brandAccent} />
+          </Touchable>
+
+          {diagnosticsOpen ? (
+            <View style={styles.diagnostics}>
+              {!push.busy && push.state === "hazir" ? (
+                <Text style={styles.statusSub} {...textScale.long}>
+                  {serverSyncMessage(push)}
+                </Text>
+              ) : null}
+              {/* Yerel köprü: push zinciri kurulu olmasa bile bildirimlerin
+                  görünmesini sağlayan yedek yol (hooks/useNotificationBridge.ts). */}
+              <Text style={styles.statusSub} {...textScale.long}>
+                Uygulama açıkken bildirimler yedek yoldan da gelir: bildirim merkezine düşen her yeni
+                kayıt telefonda gösterilir. Uygulama tamamen kapalıyken yalnız push bildirimi çalışır.
+              </Text>
+              <Button
+                label="Test bildirimi gönder"
+                onPress={sendTestNotification}
+                loading={testing}
+                size="sm"
+                variant="secondary"
+                icon="notifications-outline"
+                fullWidth
+              />
+            </View>
+          ) : null}
+        </View>
+
+        {/* 3) KİMİN İÇİN — takip başına ayrıntılı ayar ayrı ekranda. */}
+        <MenuGroup
+          items={[
+            {
+              key: "takip",
+              icon: "star",
+              tone: "violet",
+              title: "Takip ettiklerim için",
+              subtitle: "Her takım, lig ve maç için ayrı aç/kapat",
+              onPress: openFollowSettings,
+              testID: "open-follow-settings",
+            },
+          ]}
+        />
+
+        {/* 4) GRUPLAR — ikonlu başlık, sayaç, "Tümünü aç/kapat"; tek kart. */}
+        {query.isLoading ? (
+          <View style={styles.groupBlock}>
+            <SkeletonListRow count={8} avatar={false} />
+          </View>
+        ) : query.error && sections.length === 0 ? (
+          <ErrorState error={query.error} onRetry={query.refetch} />
+        ) : sections.length === 0 ? (
+          <EmptyState
+            icon="notifications-outline"
+            title="Tercih listesi boş"
+            body="Sunucu şu an bildirim türü döndürmedi. Biraz sonra tekrar dene."
+            variant="inline"
+          />
+        ) : (
+          sections.map((section, sectionIndex) => {
+            const on = section.data.filter((item) => item.value).length;
+            const all = on === section.data.length;
+            const look = groupLook(section.group.key);
+            return (
+              <Reveal key={section.group.key} index={sectionIndex + 1} style={styles.groupBlock}>
+                <SectionHeader
+                  title={section.group.label}
+                  icon={look.icon}
+                  iconTone={look.tone}
+                  subtitle={section.group.description}
+                  meta={`${on}/${section.data.length}`}
+                  action={
+                    section.data.length > 1
+                      ? { label: all ? "Tümünü kapat" : "Tümünü aç", onPress: () => toggleGroup(section.data) }
+                      : undefined
+                  }
+                  inset="flush"
+                />
+                <View style={styles.card}>
+                  {section.data.map((item, index) => (
+                    <PreferenceRow
+                      key={item.key}
+                      item={item}
+                      last={index === section.data.length - 1}
+                      onChange={togglePreference}
+                    />
+                  ))}
+                </View>
+              </Reveal>
+            );
+          })
+        )}
+
+        {totals.all > 0 ? (
+          <Text style={styles.summary} {...textScale.long}>
+            Anahtarlar bu hesaba hangi bildirimlerin gönderileceğini belirler; bildirimler takip ettiklerine göre gelir.
+          </Text>
+        ) : null}
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 /* ═══════════════════════════ LİSTE PARÇALARI ═══════════════════════════ */
 
+/** Durum tonu → ikon kutusu tonu. */
+const TONE_TILE: Record<"win" | "warn" | "danger" | "neutral", IconTileTone> = {
+  win: "mint",
+  warn: "gold",
+  danger: "red",
+  neutral: "neutral",
+};
+
+/** Sunucu grup anahtarı → başlık ikonu ve tonu (tanınmayan grup nötr). */
+function groupLook(key: string): { icon: keyof typeof Ionicons.glyphMap; tone: IconTileTone } {
+  switch (key) {
+    case "mac":
+      return { icon: "football", tone: "pink" };
+    case "panel":
+      return { icon: "shield-half", tone: "violet" };
+    case "oyun":
+      return { icon: "game-controller", tone: "cyan" };
+    case "haber":
+      return { icon: "newspaper", tone: "gold" };
+    default:
+      return { icon: "notifications", tone: "neutral" };
+  }
+}
+
 /**
- * Tek tercih satırı. VARLIK NEDENİ: `ListRow` memo'lu ama `toggle` nesnesi her
- * render'da yeniden kurulursa memo işe yaramaz — 14 satırlık listede her
- * dokunuşta hepsi yeniden çizilir. Nesne burada, anahtarı bağlayan
- * `useCallback` üstünde kurulur.
+ * Tek tercih satırı — kartın içinde hafif satır: başlık + açıklama, sağda
+ * sıvı anahtar. Satırın tamamı basılabilir; anahtar nesnesi memo'lu kurulur
+ * (14 satırlık listede her dokunuşta hepsi yeniden çizilmesin).
  */
 const PreferenceRow = memo(function PreferenceRow({
   item,
-  position,
+  last,
   onChange,
 }: {
   item: NotificationPreferenceItem;
-  position: "single" | "first" | "middle" | "last";
+  last: boolean;
   onChange: (key: string, value: boolean) => void;
 }) {
-  const handleChange = useCallback(
-    (value: boolean) => onChange(item.key, value),
-    [onChange, item.key],
-  );
-
-  const toggle = useMemo(
-    () => ({ value: item.value, onValueChange: handleChange }),
-    [item.value, handleChange],
-  );
+  const handleChange = useCallback((value: boolean) => onChange(item.key, value), [onChange, item.key]);
+  const handlePress = useCallback(() => onChange(item.key, !item.value), [onChange, item.key, item.value]);
 
   return (
-    <ListRow
-      title={item.label}
-      subtitle={item.description}
-      position={position}
-      toggle={toggle}
+    <Touchable
+      feedback="row"
+      haptic="selection"
+      onPress={handlePress}
+      accessibilityRole="switch"
+      accessibilityState={{ checked: item.value }}
+      accessibilityLabel={[item.label, item.description].filter(Boolean).join(". ")}
       testID={`pref-${item.key}`}
-    />
+      style={[styles.prefRow, !last && styles.prefDivider]}
+    >
+      <View style={[styles.prefDot, item.value && styles.prefDotOn]} />
+      <View style={styles.prefText}>
+        <Text style={[styles.prefTitle, !item.value && styles.prefTitleOff]} numberOfLines={1} {...textScale.dense}>
+          {item.label}
+        </Text>
+        {item.description ? (
+          <Text style={styles.prefSub} numberOfLines={2} {...textScale.dense}>
+            {item.description}
+          </Text>
+        ) : null}
+      </View>
+      <Toggle value={item.value} onValueChange={handleChange} accessibilityLabel={item.label} />
+    </Touchable>
   );
 });
 
@@ -630,19 +663,35 @@ const styles = StyleSheet.create({
 
   list: {
     paddingHorizontal: layout.screenPadding,
+    paddingTop: space.sm,
     paddingBottom: space.giant,
+    gap: space.md,
     flexGrow: 1,
   },
 
-  intro: {
-    paddingTop: space.md,
-    gap: space.md,
+  hero: {
+    borderRadius: radius.xxl,
+    overflow: "hidden",
+    padding: space.lg,
+    gap: space.sm,
+    backgroundColor: colors.inkBlock,
+    borderWidth: hairline,
+    borderColor: colors.inkTileBorder,
+    ...elevate(2),
   },
+  heroOverline: { ...type.overline, color: colors.brandOnDark },
+  heroCount: { flexDirection: "row", alignItems: "flex-end", gap: space.xs, minHeight: 34 },
+  heroValue: { ...type.scoreLg, color: colors.onDark },
+  heroTotal: { ...type.scoreSm, color: colors.onDarkMuted, marginBottom: 3 },
+  heroUnit: { ...type.bodySm, color: colors.onDarkMuted, marginBottom: 5, marginLeft: space.xs },
+  heroStatus: { flexDirection: "row", alignItems: "center", gap: space.s, marginTop: space.xxs },
+  heroDot: { width: 8, height: 8, borderRadius: 4 },
+  heroStatusText: { ...type.labelSm, color: colors.onDark, flex: 1 },
 
   status: {
     gap: space.md,
     padding: space.lg,
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     backgroundColor: colors.surface1,
     borderWidth: hairline,
     borderColor: colors.border,
@@ -653,17 +702,10 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     gap: space.md,
   },
-  statusIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.md,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   statusCopy: { flex: 1, gap: 2 },
   statusTitle: { ...type.h3, color: colors.textPrimary },
   statusBody: { ...type.bodySm, color: colors.textSecondary },
-  statusSub: { ...type.caption, color: colors.textSecondary, lineHeight: 16 },
+  statusSub: { ...type.caption, color: colors.textSecondary },
   disclosure: {
     flexDirection: "row",
     alignItems: "center",
@@ -680,24 +722,36 @@ const styles = StyleSheet.create({
     borderTopColor: colors.separator,
   },
 
+  groupBlock: { marginTop: space.sm },
+  card: {
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    overflow: "hidden",
+    ...elevate(1),
+  },
+  prefRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    minHeight: 60,
+    paddingHorizontal: space.md,
+    paddingVertical: space.m,
+  },
+  prefDivider: { borderBottomWidth: hairline, borderBottomColor: colors.separator },
+  prefDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.surface3 },
+  prefDotOn: { backgroundColor: colors.accent },
+  prefText: { flex: 1, minWidth: 0, gap: 1 },
+  prefTitle: { ...type.h3, color: colors.textPrimary },
+  prefTitleOff: { color: colors.textSecondary },
+  prefSub: { ...type.bodySm, color: colors.textTertiary },
+
   summary: {
-    ...type.bodySm,
-    color: colors.textSecondary,
-    paddingHorizontal: space.xxs,
-  },
-  summaryStrong: {
-    fontFamily: type.h4.fontFamily,
-    color: colors.textPrimary,
-  },
-  groupDescription: {
     ...type.caption,
     color: colors.textTertiary,
-    marginTop: -space.xs,
-    marginBottom: space.sm,
-  },
-
-  sectionHeader: {
-    paddingTop: space.xl,
-    paddingHorizontal: 0,
+    textAlign: "center",
+    paddingHorizontal: space.lg,
+    marginTop: space.sm,
   },
 });

@@ -32,6 +32,7 @@ import {
 } from "@/theme";
 import { ApiError } from "@/lib/http";
 import { EmptyState } from "./EmptyState";
+import { IconTile } from "./NightKit";
 import { Touchable } from "./Pressable";
 
 export interface ErrorStateProps {
@@ -95,7 +96,7 @@ export const ErrorState = React.memo(function ErrorState({
         accessibilityLabel={message}
         style={[styles.banner, style]}
       >
-        <Ionicons name="alert-circle-outline" size={15} color={colors.danger} />
+        <IconTile icon="alert-circle" tone="red" size={24} glow={false} />
         <Text style={styles.bannerText} numberOfLines={1} {...textScale.dense}>
           {message}
         </Text>
@@ -123,8 +124,11 @@ export const ErrorState = React.memo(function ErrorState({
       title={errorTitle(error, offline)}
       body={errorBody(error, offline)}
       illustration={
-        <View style={styles.iconCircle}>
-          <Ionicons name={offline ? "cloud-offline-outline" : "alert-circle-outline"} size={22} color={colors.danger} />
+        /* Boş durumla aynı yörünge, ama kırmızı tonda: hata "boşluk" değil
+           bir sorundur ve renginden ayırt edilir. */
+        <View style={styles.orbit}>
+          <View style={styles.ring} />
+          <IconTile icon={offline ? "cloud-offline" : "alert-circle"} tone="red" size={56} />
         </View>
       }
       action={onRetry ? { label: "Tekrar dene", onPress: onRetry, haptic: "light" } : undefined}
@@ -135,6 +139,22 @@ export const ErrorState = React.memo(function ErrorState({
 
 const styles = StyleSheet.create({
   /** İkon karosu boş durumla AYNI ölçü ve biçimde, tonu `danger` — hata olduğu belli. */
+  orbit: {
+    width: 96,
+    height: 96,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: space.xs,
+  },
+  ring: {
+    position: "absolute",
+    width: 92,
+    height: 92,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.dangerDim,
+    backgroundColor: colors.dangerDim,
+  },
   iconCircle: {
     width: 52,
     height: 52,
@@ -148,12 +168,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: space.sm,
-    minHeight: 38,
+    minHeight: 44,
     paddingVertical: space.s,
     paddingHorizontal: space.md,
+    marginHorizontal: space.xs,
+    borderRadius: radius.lg,
     backgroundColor: colors.dangerDim,
-    borderBottomWidth: hairline,
-    borderBottomColor: colors.border,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
   },
   bannerText: {
     ...type.bodySm,

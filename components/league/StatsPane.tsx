@@ -388,22 +388,24 @@ export function StatsPane({ scrollProps, onOpenPlayers, onOpenStandings }: Stats
           {summary.matches > 0 ? (
             <Reveal index={0}>
               <MetricGrid columns={3}>
-                <MetricTile label="Maç" value={formatNumber(summary.matches)} icon="football-outline" />
-                <MetricTile label="Gol" value={formatNumber(summary.goals)} icon="flame-outline" tone="brand" />
+                <MetricTile label="Maç" value={formatNumber(summary.matches)} hint="oynandı" icon="football-outline" />
+                <MetricTile label="Gol" value={formatNumber(summary.goals)} hint="takım golü" icon="flame-outline" tone="brand" />
                 <MetricTile
-                  label="Gol/Maç"
+                  label="Ort."
                   value={formatDecimal(summary.perMatch, 2)}
+                  hint="gol / maç"
                   icon="trending-up-outline"
                   tone="accent"
                 />
-                <MetricTile label="Asist" value={formatNumber(playerTotals.assists)} icon="git-pull-request-outline" />
+                <MetricTile label="Asist" value={formatNumber(playerTotals.assists)} hint="oyuncu toplamı" icon="git-pull-request-outline" />
                 <MetricTile
                   label="Kart"
                   value={formatNumber(playerTotals.yellow + playerTotals.red)}
+                  hint={`${formatNumber(playerTotals.red)} kırmızı`}
                   icon="albums-outline"
                   tone="warn"
                 />
-                <MetricTile label="Takım" value={formatNumber(summary.teams)} icon="shield-outline" />
+                <MetricTile label="Takım" value={formatNumber(summary.teams)} hint="tabloda" icon="shield-outline" />
               </MetricGrid>
             </Reveal>
           ) : null}

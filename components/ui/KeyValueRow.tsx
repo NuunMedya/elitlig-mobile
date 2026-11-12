@@ -35,6 +35,7 @@ import {
   type,
 } from "@/theme";
 import { toneColors, type Tone } from "./Badge";
+import { IconTile, type IconTileTone } from "./NightKit";
 import { Touchable } from "./Pressable";
 
 export interface KeyValueRowProps {
@@ -60,6 +61,9 @@ export interface KeyValueRowProps {
   position?: "single" | "first" | "middle" | "last";
   /** Değer monospace/tabular (para, tarih, ID). */
   numeric?: boolean;
+  /** İsteğe bağlı: etiketin solunda küçük degrade ikon kutusu. */
+  icon?: React.ComponentProps<typeof Ionicons>["name"];
+  iconTone?: IconTileTone;
   style?: StyleProp<ViewStyle>;
   testID?: string;
 }
@@ -74,6 +78,8 @@ export const KeyValueRow = React.memo(function KeyValueRow({
   onCopy,
   position = "single",
   numeric,
+  icon,
+  iconTone = "violet",
   style,
   testID,
 }: KeyValueRowProps) {
@@ -96,6 +102,7 @@ export const KeyValueRow = React.memo(function KeyValueRow({
   const body = (
     <>
       <View style={styles.labelBox}>
+        {icon ? <IconTile icon={icon} tone={iconTone} size={28} glow={false} style={styles.icon} /> : null}
         <Text style={styles.label} numberOfLines={1} {...textScale.dense}>
           {label}
         </Text>
@@ -171,7 +178,7 @@ export const KeyValueRow = React.memo(function KeyValueRow({
 /** Grup kabuğu — ListRow ile aynı: yüzey + hairline kenarlık, konuma göre kesilir. */
 const GROUP_SHELL = {
   borderWidth: hairline,
-  borderColor: colors.border,
+  borderColor: colors.glassLine,
 } as const;
 
 const styles = StyleSheet.create({
@@ -180,8 +187,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: space.md,
-    minHeight: 44,
-    paddingVertical: space.s,
+    minHeight: 48,
+    paddingVertical: space.sm,
     paddingHorizontal: layout.rowPaddingH,
     backgroundColor: colors.surface1,
   },
@@ -224,8 +231,14 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     maxWidth: "62%",
   },
+  /* Sayısal değer Archivo'da, tablo hizalı — rakam metinden ayrışır. */
   valueNumeric: {
-    fontVariant: ["tabular-nums"],
+    ...type.tableNumStrong,
+    fontSize: type.scoreXs.fontSize,
+    lineHeight: type.scoreXs.lineHeight,
+  },
+  icon: {
+    marginRight: space.xs,
   },
   valueNode: {
     flexShrink: 0,

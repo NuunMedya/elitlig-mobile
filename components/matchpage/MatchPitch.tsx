@@ -276,7 +276,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     width: 120,
     height: 120,
-    borderRadius: 60,
+    borderRadius: radius.pill,
     backgroundColor: colors.chalk,
     opacity: 0.08,
   },
@@ -320,7 +320,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     minWidth: 16,
     height: 16,
-    borderRadius: 8,
+    borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 2,
@@ -386,7 +386,7 @@ const styles = StyleSheet.create({
   legendDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
+    borderRadius: radius.pill,
   },
   legendText: {
     ...type.overline,

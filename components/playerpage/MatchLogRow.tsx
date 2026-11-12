@@ -15,14 +15,19 @@
  * unutuyordu. Sonuç artık skorun kendi zemini — tek bakışta "6-4, kazandı".
  * Kutunun metni nötr mürekkeptir: renkli zemin üstünde renkli metin AA'yı
  * geçmez; renk zemine ve kenara, okunurluk metne aittir.
+ *
+ * İKİNCİ TUR: satırın solunda sonuç renginde ince şerit, skor sonuç renginde
+ * DOLU hap (ResultPill), reyting orta boy hap; gol/asist işaretleri sayılı
+ * küçük kapsüller. Satır anatomisi ve yüksekliği aynı kaldı (64).
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { useCallback } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { RatingPill, TeamLogo, Touchable, withAlpha, type FormResult } from "@/components/ui";
+import { RatingPill, TeamLogo, Touchable, type FormResult } from "@/components/ui";
 import { mediaUrl } from "@/lib/format";
 import { colors, hairline, radius, ratingLabel, space, textScale, type, upperTR } from "@/theme";
+import { ResultPill, resultColor } from "@/components/teampage/ProfileKit";
 import type { RowPosition } from "./shared";
 
 /** Satır yüksekliği sabittir; sanal liste `getItemLayout`'u bundan kurar. */
@@ -65,16 +70,6 @@ export function splitDate(raw: string | null): { day: string; month: string } | 
   return month ? { day: match[3], month } : null;
 }
 
-const RESULT_COLOR: Record<FormResult, string> = {
-  W: colors.win,
-  D: colors.draw,
-  L: colors.loss,
-};
-const RESULT_DIM: Record<FormResult, string> = {
-  W: colors.winDim,
-  D: colors.drawDim,
-  L: colors.lossDim,
-};
 const RESULT_SPEECH: Record<FormResult, string> = {
   W: "galibiyet",
   D: "beraberlik",
@@ -133,6 +128,7 @@ export const MatchLogRow = React.memo(function MatchLogRow({
         position !== "last" && position !== "single" && styles.divider,
       ]}
     >
+      {result ? <View style={[styles.stripe, { backgroundColor: resultColor(result) }]} /> : null}
       <DateBlock date={date} />
 
       <TeamLogo name={name} logo={mediaUrl(opponentLogo ?? null)} size={28} />
@@ -181,21 +177,10 @@ export const MatchLogRow = React.memo(function MatchLogRow({
         </Touchable>
       ) : null}
 
-      <View
-        style={[
-          styles.score,
-          result
-            ? { backgroundColor: RESULT_DIM[result], borderColor: withAlpha(RESULT_COLOR[result], 0.4) }
-            : null,
-        ]}
-      >
-        <Text style={styles.scoreText} numberOfLines={1} {...textScale.badge}>
-          {score ?? "–"}
-        </Text>
-      </View>
+      <ResultPill result={result} text={score ?? "–"} size="md" />
 
       <View style={styles.rating}>
-        <RatingPill value={rating} size="sm" hideEmpty />
+        <RatingPill value={rating} size="md" hideEmpty />
       </View>
     </Touchable>
   );
@@ -232,7 +217,7 @@ function Mark({
   count: number;
 }) {
   return (
-    <View style={styles.mark}>
+    <View style={[styles.mark, styles.markPill]}>
       <Ionicons name={icon} size={11} color={color} />
       {count > 1 ? (
         <Text style={[styles.markCount, { color }]} {...textScale.badge}>
@@ -268,10 +253,26 @@ const styles = StyleSheet.create({
     backgroundColor: colors.live,
   },
   clipText: { ...type.micro, color: colors.textOnBrand },
+  stripe: {
+    position: "absolute",
+    left: 0,
+    top: space.md,
+    bottom: space.md,
+    width: 3,
+    borderTopRightRadius: 3,
+    borderBottomRightRadius: 3,
+  },
+  markPill: {
+    paddingHorizontal: space.xs,
+    paddingVertical: 1,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface3,
+  },
   row: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.m,
+    overflow: "hidden",
     height: MATCH_LOG_ROW_HEIGHT,
     paddingHorizontal: space.md,
     backgroundColor: colors.surface1,
@@ -351,25 +352,10 @@ const styles = StyleSheet.create({
     height: 10,
     borderRadius: 1,
   },
-  score: {
-    minWidth: 46,
-    height: 26,
-    paddingHorizontal: space.s,
-    borderRadius: radius.xs,
-    borderWidth: hairline,
-    borderColor: colors.border,
-    backgroundColor: colors.surface2,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  scoreText: {
-    ...type.tableNumStrong,
-    color: colors.textPrimary,
-  },
   /* Reyting sütunu sabit genişlikte: puanı olmayan satırda da skor kutuları
      aynı hizada kalır. */
   rating: {
-    width: 36,
+    width: 40,
     alignItems: "flex-end",
   },
 });

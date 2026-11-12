@@ -309,7 +309,7 @@ export function ToolSummary({ app, stats, style }: { app: ToolAppKey; stats: Too
                 {stat.value}
               </Text>
             )}
-            <Text style={styles.statLabel} numberOfLines={1} {...textScale.badge}>
+            <Text style={styles.statLabel} numberOfLines={2} {...textScale.badge}>
               {upperTR(stat.label)}
             </Text>
           </>

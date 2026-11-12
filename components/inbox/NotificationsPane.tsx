@@ -65,14 +65,18 @@ import {
   Chip,
   ChipGroup,
   SectionHeader,
+  IconTile,
+  Reveal,
   SkeletonListRow,
   Touchable,
   errorMessage,
   toneColors,
   useRefresh,
   useToast,
+  type IconTileTone,
   type Tone,
 } from "@/components/ui";
+import { LinearGradient } from "expo-linear-gradient";
 import { useAppActive } from "@/hooks/useLiveFavoriteCount";
 import { useScreenFocused } from "@/hooks/useScreenFocused";
 import {
@@ -486,19 +490,29 @@ export function NotificationsPane({
 
   const renderItem = useCallback(
     ({ item, index, section }: SectionListRenderItemInfo<PanelNotification, NotifSection>) => (
-      <NotificationRow
-        notif={item}
-        onPress={openNotif}
-        first={index === 0}
-        last={index === section.data.length - 1}
-      />
+      /* İlk açılışta ilk satırlar sırayla gelir; kaydırmayla gelenler oynamaz. */
+      <Reveal index={index} limit={8} distance={8}>
+        <NotificationRow
+          notif={item}
+          onPress={openNotif}
+          first={index === 0}
+          last={index === section.data.length - 1}
+        />
+      </Reveal>
     ),
     [openNotif],
   );
 
   const renderSectionHeader = useCallback(
     ({ section }: { section: NotifSection }) => (
-      <SectionHeader title={section.title} meta={`${section.data.length}`} inset="flush" />
+      <SectionHeader
+        title={section.title}
+        meta={`${section.data.length}`}
+        icon={section.key === dayKey(new Date().toISOString()) ? "today" : "calendar-clear"}
+        iconTone={section.key === dayKey(new Date().toISOString()) ? "violet" : "neutral"}
+        size="group"
+        inset="flush"
+      />
     ),
     [],
   );
@@ -635,7 +649,6 @@ export const NotificationRow = memo(function NotificationRow({
 }) {
   const handlePress = useCallback(() => onPress(notif), [notif, onPress]);
   const look = notifLook(notif);
-  const palette = toneColors(look.tone);
   const unread = !notif.is_read;
 
   return (
@@ -647,15 +660,28 @@ export const NotificationRow = memo(function NotificationRow({
       accessibilityLabel={`${unread ? "Okunmadı. " : ""}${notif.title}${notif.description ? `. ${notif.description}` : ""}. ${relativeTime(notif.createdAt)}`}
       style={[
         styles.row,
+        unread ? styles.rowUnread : null,
         first ? styles.rowFirst : null,
         last ? styles.rowLast : styles.rowDivided,
       ]}
     >
-      {unread ? <View style={[styles.rail, first ? styles.railFirst : null, last ? styles.railLast : null]} /> : null}
+      {unread ? (
+        <LinearGradient
+          colors={colors.gradientSignature}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={[styles.rail, first ? styles.railFirst : null, last ? styles.railLast : null]}
+        />
+      ) : null}
 
-      <View style={[styles.icon, { backgroundColor: unread ? palette.dim : colors.surface2 }]}>
-        <Ionicons name={look.icon} size={18} color={unread ? palette.fg : colors.textTertiary} />
-      </View>
+      {/* İkon kutusu: okunmamışta türünün degradesi + parıltı; okunmuşta sönük. */}
+      {unread ? (
+        <IconTile icon={look.icon} tone={TILE_TONE[look.tone]} size={38} />
+      ) : (
+        <View style={styles.iconMuted}>
+          <Ionicons name={look.icon} size={17} color={toneColors(look.tone).fg} />
+        </View>
+      )}
 
       <View style={styles.rowBody}>
         <View style={styles.titleRow}>
@@ -666,12 +692,14 @@ export const NotificationRow = memo(function NotificationRow({
           >
             {notif.title}
           </Text>
-          <Text style={[styles.time, unread ? styles.timeUnread : null]} numberOfLines={1} {...textScale.dense}>
-            {relativeTime(notif.createdAt)}
-          </Text>
+          <View style={[styles.timePill, unread ? styles.timePillUnread : null]}>
+            <Text style={[styles.time, unread ? styles.timeUnread : null]} numberOfLines={1} {...textScale.dense}>
+              {relativeTime(notif.createdAt)}
+            </Text>
+          </View>
         </View>
         {notif.description ? (
-          <Text style={styles.description} numberOfLines={2} {...textScale.dense}>
+          <Text style={[styles.description, unread ? null : styles.descriptionRead]} numberOfLines={2} {...textScale.dense}>
             {notif.description}
           </Text>
         ) : null}
@@ -681,6 +709,18 @@ export const NotificationRow = memo(function NotificationRow({
     </Touchable>
   );
 });
+
+/** Rozet tonu → ikon kutusu degradesi. */
+const TILE_TONE: Record<Tone, IconTileTone> = {
+  brand: "violet",
+  accent: "cyan",
+  info: "cyan",
+  live: "pink",
+  win: "mint",
+  warn: "gold",
+  danger: "red",
+  neutral: "neutral",
+};
 
 /* ═════════════════════════════════ STİLLER ════════════════════════════════ */
 
@@ -723,15 +763,18 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     overflow: "hidden",
   },
+  rowUnread: {
+    backgroundColor: colors.brandDim,
+  },
   rowFirst: {
     borderTopWidth: hairline,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
   },
   rowLast: {
     borderBottomWidth: hairline,
-    borderBottomLeftRadius: radius.lg,
-    borderBottomRightRadius: radius.lg,
+    borderBottomLeftRadius: radius.xl,
+    borderBottomRightRadius: radius.xl,
   },
   rowDivided: {
     borderBottomWidth: hairline,
@@ -743,24 +786,26 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: 3,
-    backgroundColor: colors.brand,
   },
   railFirst: {
-    borderTopLeftRadius: radius.lg,
+    borderTopLeftRadius: radius.xl,
   },
   railLast: {
-    borderBottomLeftRadius: radius.lg,
+    borderBottomLeftRadius: radius.xl,
   },
-  icon: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.pill,
+  iconMuted: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: colors.surface3,
+    opacity: 0.85,
   },
   rowBody: {
     flex: 1,
-    gap: 2,
+    minWidth: 0,
+    gap: 3,
   },
   titleRow: {
     flexDirection: "row",
@@ -769,20 +814,35 @@ const styles = StyleSheet.create({
   },
   title: {
     ...type.body,
-    color: colors.textPrimary,
+    color: colors.textSecondary,
     flex: 1,
   },
   titleUnread: {
     ...type.h3,
+    color: colors.textPrimary,
   },
   description: {
     ...type.bodySm,
     color: colors.textSecondary,
   },
+  descriptionRead: {
+    color: colors.textTertiary,
+  },
+  timePill: {
+    paddingHorizontal: space.s,
+    paddingVertical: 1,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface3,
+    marginTop: 1,
+  },
+  timePillUnread: {
+    backgroundColor: colors.brandDim,
+    borderWidth: hairline,
+    borderColor: colors.brandBorder,
+  },
   time: {
     ...type.caption,
     color: colors.textTertiary,
-    paddingTop: 2,
   },
   timeUnread: {
     color: colors.brandAccent,
