@@ -8,7 +8,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { useEffect, useRef } from "react";
 import { Animated, Easing, StyleSheet, View } from "react-native";
-import Svg, { Circle, Defs, G, Line, LinearGradient, Rect, Stop } from "react-native-svg";
+import Svg, { Circle, Defs, G, Line, LinearGradient, RadialGradient, Rect, Stop } from "react-native-svg";
 import { radius } from "@/theme";
 import { UCLU_BOARD } from "@/lib/puzzle/ucluPalette";
 
@@ -99,6 +99,80 @@ function CellViewBase({ row, col, cell, mud, crate }: CellViewProps) {
 
 export const CellView = React.memo(CellViewBase);
 
+/* ───────────────────────────── ışık ve çerçeve ───────────────────────────── */
+
+/**
+ * Tahtanın üstüne düşen projektör ışığı: üstten yayılan yumuşak parlaklık,
+ * köşelerde gölge. Hücrelerin üstünde, taşların altında; tek SVG.
+ */
+export const BoardLight = React.memo(function BoardLight({ size }: { size: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 100 100" style={StyleSheet.absoluteFill} pointerEvents="none">
+      <Defs>
+        <RadialGradient id="ublight" cx="50%" cy="-10%" r="95%">
+          <Stop offset="0" stopColor={UCLU_BOARD.floodlight} stopOpacity={0.22} />
+          <Stop offset="0.55" stopColor={UCLU_BOARD.floodlight} stopOpacity={0.05} />
+          <Stop offset="1" stopColor={UCLU_BOARD.floodlight} stopOpacity={0} />
+        </RadialGradient>
+        <RadialGradient id="ubvig" cx="50%" cy="55%" r="75%">
+          <Stop offset="0.6" stopColor={UCLU_BOARD.ink} stopOpacity={0} />
+          <Stop offset="1" stopColor={UCLU_BOARD.ink} stopOpacity={0.35} />
+        </RadialGradient>
+      </Defs>
+      <Rect x={0} y={0} width={100} height={100} fill="url(#ublight)" />
+      <Rect x={0} y={0} width={100} height={100} fill="url(#ubvig)" />
+    </Svg>
+  );
+});
+
+/** Altın çerçeve: tahtanın kenarında parlak üst, koyu alt kenarlı şerit. */
+export const FrameTrim = React.memo(function FrameTrim({ width, height, hammer }: { width: number; height: number; hammer: boolean }) {
+  return (
+    <Svg width={width} height={height} style={StyleSheet.absoluteFill} pointerEvents="none">
+      <Defs>
+        <LinearGradient id="ubtrim" x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor={UCLU_BOARD.trimHi} />
+          <Stop offset="0.5" stopColor={UCLU_BOARD.gold} />
+          <Stop offset="1" stopColor={UCLU_BOARD.trimLo} />
+        </LinearGradient>
+      </Defs>
+      <Rect x={1.5} y={1.5} width={width - 3} height={height - 3} rx={18} fill="none" stroke="url(#ubtrim)" strokeWidth={hammer ? 4 : 3} />
+      <Rect x={5} y={5} width={width - 10} height={height - 10} rx={15} fill="none" stroke={UCLU_BOARD.ink} strokeOpacity={0.35} strokeWidth={1.5} />
+    </Svg>
+  );
+});
+
+/**
+ * Seviye açılışında tahtanın üstünden BİR KEZ geçen ışık süpürmesi (sonlu
+ * animasyon): eğik, yumuşak bir parıltı soldan sağa akar.
+ */
+export function ShineSweep({ size, tick }: { size: number; tick: number }) {
+  const t = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    t.setValue(0);
+    Animated.timing(t, { toValue: 1, duration: 1100, delay: 250, easing: Easing.inOut(Easing.quad), useNativeDriver: true }).start();
+  }, [tick, t]);
+  const band = size * 0.42;
+  const x = t.interpolate({ inputRange: [0, 1], outputRange: [-band * 1.6, size + band * 0.6] });
+  const opacity = t.interpolate({ inputRange: [0, 0.1, 0.85, 1], outputRange: [0, 1, 1, 0] });
+  return (
+    <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.sweepClip]}>
+      <Animated.View style={{ position: "absolute", top: -size * 0.2, width: band, height: size * 1.4, opacity, transform: [{ translateX: x }, { rotate: "18deg" }] }}>
+        <Svg width="100%" height="100%" viewBox="0 0 10 10" preserveAspectRatio="none">
+          <Defs>
+            <LinearGradient id="ubsweep" x1="0" y1="0" x2="1" y2="0">
+              <Stop offset="0" stopColor={UCLU_BOARD.floodlight} stopOpacity={0} />
+              <Stop offset="0.5" stopColor={UCLU_BOARD.floodlight} stopOpacity={0.28} />
+              <Stop offset="1" stopColor={UCLU_BOARD.floodlight} stopOpacity={0} />
+            </LinearGradient>
+          </Defs>
+          <Rect x={0} y={0} width={10} height={10} fill="url(#ubsweep)" />
+        </Svg>
+      </Animated.View>
+    </View>
+  );
+}
+
 /* ───────────────────────────── kilit katmanı ───────────────────────────── */
 
 export interface LockViewProps {
@@ -166,4 +240,5 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   snowBadge: { position: "absolute", right: 2, bottom: 1 },
+  sweepClip: { overflow: "hidden" },
 });

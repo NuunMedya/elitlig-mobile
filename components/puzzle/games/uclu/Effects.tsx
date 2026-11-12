@@ -29,18 +29,41 @@ export type FxInput = Fx extends infer T ? (T extends Fx ? Omit<T, "id"> : never
 export type FlyGlyph = { piece: number } | { trophy: true } | { icon: IconName; color: string };
 
 const ANGLES = [0, 60, 120, 180, 240, 300].map((a) => (a * Math.PI) / 180);
+/** İkinci halka kıvılcımlar: ilk halkanın arasına, daha uzağa savrulan yıldızlar. */
+const SPARKS = [30, 90, 150, 210, 270, 330].map((a) => (a * Math.PI) / 180);
 
+/**
+ * Patlama: parlak çekirdek, genişleyen halka, renkli toplar ve dönerek
+ * savrulan yıldız kıvılcımları. Hepsi tek değerle sürülür (yerel sürücü).
+ */
 function Burst({ x, y, color, size, big }: { x: number; y: number; color: string; size: number; big?: boolean }) {
   const t = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    Animated.timing(t, { toValue: 1, duration: big ? 520 : 420, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+    Animated.timing(t, { toValue: 1, duration: big ? 620 : 500, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
   }, [t, big]);
   const reach = size * (big ? 0.95 : 0.7);
   const dot = Math.max(4, Math.round(size * 0.16));
-  const ringScale = t.interpolate({ inputRange: [0, 1], outputRange: [0.3, big ? 1.8 : 1.3] });
+  const star = Math.max(9, Math.round(size * (big ? 0.3 : 0.24)));
+  const ringScale = t.interpolate({ inputRange: [0, 1], outputRange: [0.3, big ? 1.9 : 1.35] });
   const fade = t.interpolate({ inputRange: [0, 0.6, 1], outputRange: [1, 0.7, 0] });
+  const core = size * 0.9;
   return (
     <View pointerEvents="none" style={[styles.abs, { left: x, top: y }]}>
+      <Animated.View
+        style={[
+          styles.abs,
+          {
+            width: core,
+            height: core,
+            left: -core / 2,
+            top: -core / 2,
+            borderRadius: core / 2,
+            backgroundColor: UCLU_BOARD.flash,
+            opacity: t.interpolate({ inputRange: [0, 0.12, 0.4], outputRange: [0.9, 0.55, 0], extrapolate: "clamp" }),
+            transform: [{ scale: t.interpolate({ inputRange: [0, 0.4], outputRange: [0.4, 1.1], extrapolate: "clamp" }) }],
+          },
+        ]}
+      />
       <Animated.View
         style={[
           styles.ring,
@@ -68,6 +91,27 @@ function Burst({ x, y, color, size, big }: { x: number; y: number; color: string
             },
           ]}
         />
+      ))}
+      {SPARKS.map((a, i) => (
+        <Animated.View
+          key={`s${i}`}
+          style={[
+            styles.abs,
+            {
+              left: -star / 2,
+              top: -star / 2,
+              opacity: t.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0, 1, 0] }),
+              transform: [
+                { translateX: t.interpolate({ inputRange: [0, 1], outputRange: [0, Math.cos(a) * reach * 1.35] }) },
+                { translateY: t.interpolate({ inputRange: [0, 1], outputRange: [0, Math.sin(a) * reach * 1.35 + reach * 0.45] }) },
+                { rotate: t.interpolate({ inputRange: [0, 1], outputRange: ["0deg", i % 2 ? "220deg" : "-220deg"] }) },
+                { scale: t.interpolate({ inputRange: [0, 0.25, 1], outputRange: [0.2, 1, 0.4] }) },
+              ],
+            },
+          ]}
+        >
+          <Ionicons name="star" size={star} color={i % 3 === 0 ? UCLU_BOARD.comboWarm : i % 3 === 1 ? UCLU_BOARD.beamCore : color} />
+        </Animated.View>
       ))}
     </View>
   );

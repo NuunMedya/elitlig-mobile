@@ -134,6 +134,7 @@ export default function PuzzleMapScreen() {
           onPlay={play}
           busy={busy}
           lives={me.profile.lives}
+          profile={me.profile}
         />
       ) : null}
       <ShopSheet visible={shop != null} onClose={() => setShop(null)} me={me} game={module.key} focus={shop === "lives" ? "lives" : null} />

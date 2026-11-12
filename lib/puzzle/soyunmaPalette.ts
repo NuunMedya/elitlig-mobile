@@ -56,4 +56,18 @@ export const SOYUNMA_LOCKER = {
   sparkle: "#FFD84D",
   crest: "#FFD84D",
   crestInk: "#5C3B00",
+  /** Ahşap damarı, metal parlaklık ve iç gölge. */
+  woodHi: "#8C6343",
+  grain: "#3E2818",
+  railHi: "#F1F3F7",
+  inner: "#2E1E12",
+} as const;
+
+/** Kumaş ışığı ve gölgesi (formalar). */
+export const SOYUNMA_SHADE = {
+  light: "#FFFFFF",
+  dark: "#000000",
+  drop: "rgba(0, 0, 0, 0.35)",
+  inkEdgeDark: "rgba(0, 0, 0, 0.35)",
+  inkEdgeLight: "rgba(255, 255, 255, 0.4)",
 } as const;

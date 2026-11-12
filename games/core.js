@@ -82,6 +82,9 @@
           if (A.game.setRoster) A.game.setRoster(cmd.roster);
         }
         break;
+      default:
+        // Oyuna özgü komutlar (Kulüp Şehri: city, focus, celebrate).
+        if (A.game.command) A.game.command(cmd);
     }
   };
 
@@ -167,13 +170,30 @@
     c.shadowColor = "rgba(0,0,0,0.45)";
     c.shadowBlur = size * 0.25;
     c.shadowOffsetY = size * 0.06;
-    c.lineWidth = Math.max(2, size * 0.12);
+    c.lineWidth = Math.max(3, size * 0.17);
     c.strokeStyle = opts.stroke || "rgba(8,10,30,0.85)";
     c.strokeText(text, x, y);
     c.shadowColor = "transparent";
-    c.fillStyle = fill;
+    var fillStyle = fill;
+    if (typeof fill === "string" && fill.charAt(0) === "#" && fill.length === 7 && c.createLinearGradient) {
+      var g = c.createLinearGradient(0, y - size * 0.55, 0, y + size * 0.5);
+      g.addColorStop(0, A.mix(fill, "#FFFFFF", 0.55));
+      g.addColorStop(0.5, fill);
+      g.addColorStop(1, A.mix(fill, "#000000", 0.18));
+      fillStyle = g;
+    }
+    c.fillStyle = fillStyle;
     c.fillText(text, x, y);
     c.restore();
+  };
+
+  /** İki hex rengi karıştırır (t: 0 → a, 1 → b). */
+  A.mix = function (a, b, t) {
+    var pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16);
+    var r = Math.round(((pa >> 16) & 255) * (1 - t) + ((pb >> 16) & 255) * t);
+    var g = Math.round(((pa >> 8) & 255) * (1 - t) + ((pb >> 8) & 255) * t);
+    var bl = Math.round((pa & 255) * (1 - t) + (pb & 255) * t);
+    return "rgb(" + r + "," + g + "," + bl + ")";
   };
 
   /** Ekran dışı tuval — statik katmanlar bir kez buraya çizilir. */
@@ -364,6 +384,7 @@
     }
   };
   A.stepParticles = function (dt) {
+    if (A.particles.length > 450) A.particles.splice(0, A.particles.length - 450);
     var list = A.particles;
     for (var i = list.length - 1; i >= 0; i--) {
       var p = list[i];
@@ -391,6 +412,20 @@
         c.rotate(p.rot);
         c.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2);
         c.restore();
+      } else if (p.shape === "star") {
+        c.save();
+        c.globalCompositeOperation = "lighter";
+        c.translate(p.x, p.y);
+        c.rotate(p.rot);
+        var R5 = p.size * (0.6 + 0.6 * a), r5 = R5 * 0.45;
+        c.beginPath();
+        for (var k5 = 0; k5 < 10; k5++) {
+          var rr5 = k5 % 2 ? r5 : R5, aa5 = (k5 * Math.PI) / 5 - Math.PI / 2;
+          c.lineTo(Math.cos(aa5) * rr5, Math.sin(aa5) * rr5);
+        }
+        c.closePath();
+        c.fill();
+        c.restore();
       } else if (p.shape === "spark") {
         c.strokeStyle = p.color;
         c.lineWidth = p.size * 0.5;
@@ -408,24 +443,203 @@
     c.globalAlpha = 1;
   };
 
-  /* Yükselen puan yazıları. */
+  /* Yükselen puan yazıları: zıplayarak doğar (aşırı büyüme → otur), hafif
+     sallanır, yükselirken söner; doğduğu yerde küçük yıldız kıvılcımı. */
   A.floaters = [];
   A.floatText = function (text, x, y, color, size) {
-    A.floaters.push({ text: text, x: x, y: y, color: color || "#FFD24A", size: size || 22, age: 0 });
+    A.floaters.push({ text: text, x: x, y: y, color: color || "#FFD24A", size: (size || 22) * 1.12, age: 0, tilt: (Math.random() - 0.5) * 0.16 });
+    if (A.floaters.length > 14) A.floaters.shift();
+    A.burst(x, y, 5, { shape: "star", speed: 160, gravity: 260, life: 0.55, size: 5, color: [color || "#FFD24A", "#FFFFFF"] });
   };
   A.drawFloaters = function (c, dt) {
     for (var i = A.floaters.length - 1; i >= 0; i--) {
       var f = A.floaters[i];
       f.age += dt;
-      if (f.age > 1.1) {
+      if (f.age > 1.2) {
         A.floaters.splice(i, 1);
         continue;
       }
-      var pop = A.easeOutBack(f.age / 0.25);
-      c.globalAlpha = A.clamp((1.1 - f.age) / 0.4, 0, 1);
-      A.bigText(c, f.text, f.x, f.y - f.age * 55, f.size * (0.6 + 0.4 * pop), f.color);
-      c.globalAlpha = 1;
+      var pop = f.age < 0.12 ? A.easeOutBack(f.age / 0.12) * 1.25 : 1.25 - 0.25 * A.easeOut((f.age - 0.12) / 0.2);
+      var rise = A.easeOut(f.age / 1.2) * 70;
+      c.save();
+      c.globalAlpha = A.clamp((1.2 - f.age) / 0.35, 0, 1);
+      c.translate(f.x, f.y - rise);
+      c.rotate(f.tilt * Math.sin(f.age * 9) * Math.exp(-f.age * 3));
+      A.bigText(c, f.text, 0, 0, f.size * Math.max(0.2, pop), f.color);
+      c.restore();
     }
+  };
+
+  /* ───────────────────────────── JUICE (görsel şölen) ─────────────────────────────
+   * Bütün oyunların ortak "hyper casual" efektleri:
+   *   flash(renk, güç)     tam ekran renk patlaması (gol, seviye, çarpışma)
+   *   punch(güç)           ekran bir an büyüyüp yerine oturur (CSS; 3B ve 2B birlikte)
+   *   hitstop(sn)          vuruş anında oyun bir an yavaşlar (darbe hissi)
+   *   ring(x, y, renk)     genişleyen şok dalgası halkası
+   *   confetti(x, y, n)    renkli konfeti yağmuru
+   *   sparkle(x, y, n)     yıldız kıvılcımları
+   *   fly(x, y)            altın, puan sayacına uçar; varınca sayaç zıplar
+   * juiceFor(ses): oyunların zaten çaldığı ses olayları efekte bağlanır; her
+   * oyun ayrıca doğrudan çağırabilir. "Hareketi azalt" açıkken yumuşatılır.
+   */
+  var CONFETTI = ["#FFD24A", "#F43F5E", "#38BDF8", "#34D399", "#A78BFA", "#FB923C", "#FFFFFF"];
+  A.flashes = [];
+  A.rings = [];
+  A.flyers = [];
+  A.punchAmt = 0;
+  A.hitstopT = 0;
+  A.scoreAnchor = { x: 40, y: 50 };
+  A.scoreKick = 0;
+  A.flash = function (color, amount) {
+    A.flashes.push({ color: color || "#FFFFFF", a: (amount || 0.3) * (A.reduceMotion ? 0.4 : 1) });
+    if (A.flashes.length > 4) A.flashes.shift();
+  };
+  A.punch = function (k) {
+    if (A.reduceMotion) return;
+    A.punchAmt = Math.min(1.4, Math.max(A.punchAmt, k));
+  };
+  A.hitstop = function (sec) {
+    if (A.reduceMotion) return;
+    A.hitstopT = Math.max(A.hitstopT, sec);
+  };
+  A.ring = function (x, y, color, maxR, width) {
+    A.rings.push({ x: x, y: y, color: color || "#FFFFFF", r: maxR || 120, w: width || 10, age: 0 });
+    if (A.rings.length > 8) A.rings.shift();
+  };
+  A.confetti = function (x, y, n, colors) {
+    A.burst(x, y, n || 40, { shape: "confetti", angle: -Math.PI / 2, spread: 2.4, speed: 560, gravity: 760, life: 1.7, size: 10, drag: 1.3, color: colors || CONFETTI });
+  };
+  A.sparkle = function (x, y, n, color) {
+    A.burst(x, y, n || 10, { shape: "star", speed: 240, gravity: 120, life: 0.7, size: 7, color: [color || "#FFD24A", "#FFFFFF"] });
+  };
+  A.fly = function (x, y, color, n) {
+    for (var i = 0; i < (n || 1); i++) {
+      A.flyers.push({ x: x + (Math.random() - 0.5) * 30, y: y + (Math.random() - 0.5) * 20, sx: x, sy: y, t: -i * 0.05, color: color || "#FFD24A", bend: (Math.random() - 0.5) * 160 });
+    }
+    if (A.flyers.length > 30) A.flyers.splice(0, A.flyers.length - 30);
+  };
+  /** Ses olayı → efekt. Konum bilinmediğinde ekranın ortası. */
+  A.juiceFor = function (name) {
+    var cx = A.W / 2, cy = A.H * 0.42;
+    switch (name) {
+      case "level":
+        A.flash("#FFE58A", 0.32);
+        A.punch(0.7);
+        A.ring(cx, cy, "#FFD24A", Math.max(A.W, A.H) * 0.6, 14);
+        A.confetti(A.W * 0.15, A.H * 0.3, 26);
+        A.confetti(A.W * 0.85, A.H * 0.3, 26);
+        break;
+      case "cheer":
+        A.confetti(cx, A.H * 0.25, 60);
+        A.flash("#FFFFFF", 0.22);
+        break;
+      case "net":
+        A.flash("#FFFFFF", 0.3);
+        A.punch(1);
+        A.hitstop(0.09);
+        A.ring(cx, cy, "#FFFFFF", Math.max(A.W, A.H) * 0.7, 18);
+        break;
+      case "power":
+        A.flash("#A78BFA", 0.3);
+        A.punch(0.6);
+        A.ring(cx, A.H * 0.6, "#C4B5FD", A.W * 0.8, 12);
+        break;
+      case "crash":
+      case "boom":
+        A.flash("#FB7185", 0.38);
+        A.punch(0.9);
+        A.hitstop(0.07);
+        break;
+      case "thud":
+        A.punch(0.45);
+        A.hitstop(0.04);
+        break;
+      case "groan":
+      case "bad":
+        A.flash("#FB7185", 0.2);
+        break;
+      case "gate":
+      case "pop":
+      case "place":
+        A.punch(0.28);
+        break;
+      case "coin":
+        A.scoreKick = Math.max(A.scoreKick, 0.6);
+        break;
+      case "kick":
+      case "shoot":
+      case "jump":
+        A.punch(0.12);
+        break;
+      case "over":
+        A.flash("#0A0E24", 0.35);
+        break;
+    }
+  };
+  var glCanvas = typeof document !== "undefined" && document.getElementById ? document.getElementById("gl") : null;
+  /** Kare sonu: halkalar, uçan altınlar, flaşlar; punch (CSS ölçek) uygulanır. */
+  A.drawJuice = function (c, dt) {
+    for (var i = A.rings.length - 1; i >= 0; i--) {
+      var rg = A.rings[i];
+      rg.age += dt;
+      var t = rg.age / 0.55;
+      if (t >= 1) {
+        A.rings.splice(i, 1);
+        continue;
+      }
+      c.save();
+      c.globalAlpha = (1 - t) * 0.9;
+      c.strokeStyle = rg.color;
+      c.lineWidth = rg.w * (1 - t) + 1;
+      c.beginPath();
+      c.arc(rg.x, rg.y, 10 + A.easeOut(t) * rg.r, 0, Math.PI * 2);
+      c.stroke();
+      c.restore();
+    }
+    for (var f = A.flyers.length - 1; f >= 0; f--) {
+      var fl = A.flyers[f];
+      fl.t += dt / 0.6;
+      if (fl.t < 0) continue;
+      if (fl.t >= 1) {
+        A.flyers.splice(f, 1);
+        A.scoreKick = 1;
+        continue;
+      }
+      var u = A.easeOut(fl.t) * 0.3 + fl.t * fl.t * 0.7;
+      var tx = A.scoreAnchor.x, ty = A.scoreAnchor.y;
+      var mx = (fl.x + tx) / 2 + fl.bend, my = Math.min(fl.y, ty) - 60;
+      var px = (1 - u) * (1 - u) * fl.x + 2 * (1 - u) * u * mx + u * u * tx;
+      var py = (1 - u) * (1 - u) * fl.y + 2 * (1 - u) * u * my + u * u * ty;
+      c.save();
+      c.globalCompositeOperation = "lighter";
+      var g = c.createRadialGradient(px, py, 0, px, py, 14);
+      g.addColorStop(0, "#FFFFFF");
+      g.addColorStop(0.35, fl.color);
+      g.addColorStop(1, "rgba(0,0,0,0)");
+      c.fillStyle = g;
+      c.beginPath();
+      c.arc(px, py, 14, 0, Math.PI * 2);
+      c.fill();
+      c.restore();
+    }
+    for (var k = A.flashes.length - 1; k >= 0; k--) {
+      var fx = A.flashes[k];
+      c.save();
+      c.globalAlpha = Math.max(0, fx.a);
+      c.fillStyle = fx.color;
+      c.fillRect(0, 0, A.W, A.H);
+      c.restore();
+      fx.a -= dt * 2.6;
+      if (fx.a <= 0) A.flashes.splice(k, 1);
+    }
+    A.scoreKick = Math.max(0, A.scoreKick - dt * 4);
+    // punch: iki tuval birlikte bir an büyür (yaylı geri dönüş)
+    var p = A.punchAmt;
+    A.punchAmt = p > 0.002 ? p * Math.exp(-11 * dt) : 0;
+    var scale = 1 + 0.045 * p;
+    var tr = p > 0.002 ? "scale(" + scale.toFixed(4) + ")" : "";
+    if (canvas.style && canvas.style.transform !== tr) canvas.style.transform = tr;
+    if (glCanvas && glCanvas.style && glCanvas.style.transform !== tr) glCanvas.style.transform = tr;
   };
 
   /* ───────────────────────────── ekran sarsıntısı ───────────────────────────── */
@@ -599,6 +813,11 @@
     },
   };
   A.sound = function (name) {
+    try {
+      A.juiceFor(name);
+    } catch (e) {
+      /* efekt asla oyunu durdurmaz */
+    }
     if (!A.soundOn) return;
     if (!ensureAudio()) return;
     try {
@@ -669,6 +888,11 @@
     last = now;
     if (document.hidden) dt = 0;
     if (A.paused) dt = 0;
+    var realDt = dt;
+    if (A.hitstopT > 0) {
+      A.hitstopT -= dt;
+      dt *= 0.12;
+    }
 
     if (dt > 0) {
       var n = Math.max(1, Math.ceil(dt / MAX_STEP));
@@ -687,6 +911,7 @@
       A.shakeAmt *= Math.exp(-14 * dt);
     } else A.shakeAmt = 0;
     A.game.render(ctx, dt);
+    A.drawJuice(ctx, realDt);
   }
   document.addEventListener("visibilitychange", function () {
     last = 0;

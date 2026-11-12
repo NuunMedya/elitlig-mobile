@@ -6,6 +6,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { memo, useEffect, useRef, useState } from "react";
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from "react-native";
+import Svg, { Defs, Line, LinearGradient, Rect, Stop } from "react-native-svg";
 import { colors, radius, textScale, type } from "@/theme";
 import { SOYUNMA_LOCKER, SOYUNMA_TEAMS } from "@/lib/puzzle/soyunmaPalette";
 import { SparkleBurst } from "./Effects";
@@ -111,6 +112,45 @@ function Door({ open, team, width, height, top }: { open: boolean; team: number;
     </Animated.View>
   );
 }
+
+/* ───────────── dolap kabuğu (SVG) ───────────── */
+
+/**
+ * Dolabın ahşap gövdesi: yukarıdan ışık alan damarlı ahşap, üstte parlak
+ * metal ray, içeride derinlik gölgesi ve havalandırma yarıkları.
+ */
+const LockerShell = memo(function LockerShell({ w, h, headerH, r }: { w: number; h: number; headerH: number; r: number }) {
+  const grain = [0.18, 0.37, 0.58, 0.79];
+  return (
+    <Svg width={w} height={h} style={StyleSheet.absoluteFill} pointerEvents="none">
+      <Defs>
+        <LinearGradient id="slwood" x1="0" y1="0" x2="1" y2="0">
+          <Stop offset="0" stopColor={SOYUNMA_LOCKER.woodDark} />
+          <Stop offset="0.25" stopColor={SOYUNMA_LOCKER.woodHi} />
+          <Stop offset="0.7" stopColor={SOYUNMA_LOCKER.wood} />
+          <Stop offset="1" stopColor={SOYUNMA_LOCKER.woodDark} />
+        </LinearGradient>
+        <LinearGradient id="slrail" x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor={SOYUNMA_LOCKER.railHi} />
+          <Stop offset="1" stopColor={SOYUNMA_LOCKER.railDark} />
+        </LinearGradient>
+        <LinearGradient id="slin" x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor={SOYUNMA_LOCKER.inner} />
+          <Stop offset="0.25" stopColor={SOYUNMA_LOCKER.woodDark} />
+          <Stop offset="1" stopColor={SOYUNMA_LOCKER.inner} />
+        </LinearGradient>
+      </Defs>
+      <Rect x={0} y={0} width={w} height={h} rx={r} fill="url(#slwood)" />
+      {grain.map((g) => (
+        <Line key={g} x1={w * g} y1={2} x2={w * g + 1.5} y2={headerH - 2} stroke={SOYUNMA_LOCKER.grain} strokeOpacity={0.35} strokeWidth={0.8} />
+      ))}
+      <Rect x={4} y={headerH * 0.3} width={w - 8} height={Math.max(4, headerH * 0.28)} rx={2} fill="url(#slrail)" />
+      <Rect x={3} y={headerH} width={w - 6} height={h - headerH - 2} rx={Math.max(2, r - 2)} fill="url(#slin)" />
+      <Rect x={w * 0.3} y={h - 7} width={w * 0.4} height={1.6} rx={0.8} fill={SOYUNMA_LOCKER.grain} />
+      <Rect x={w * 0.3} y={h - 4} width={w * 0.4} height={1.6} rx={0.8} fill={SOYUNMA_LOCKER.grain} />
+    </Svg>
+  );
+});
 
 /* ───────────── dolap ───────────── */
 
@@ -253,9 +293,8 @@ function LockerBase(p: LockerProps) {
             },
           ]}
         >
-          <View style={[styles.rail, { height: Math.max(4, g.headerH * 0.28), marginTop: g.headerH * 0.3 }]} />
+          <LockerShell w={g.colW - (lift > 0 || p.complete ? 4 : 2)} h={g.rowH - top - (lift > 0 || p.complete ? 4 : 2)} headerH={g.headerH} r={Math.min(radius.md, g.colW / 5)} />
         </View>
-        <View style={[styles.interior, { top: top + g.headerH, height: g.rowH - top - g.headerH - 2, borderRadius: Math.min(radius.sm, g.colW / 7) }]} />
         {ghosts}
         <Animated.View
           style={[StyleSheet.absoluteFill, { transform: [{ translateY: bumpV.interpolate({ inputRange: [0, 0.4, 1], outputRange: [0, 3, 0] }) }] }]}
@@ -343,19 +382,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: SOYUNMA_LOCKER.wood,
-    paddingHorizontal: 4,
-  },
-  rail: {
-    backgroundColor: SOYUNMA_LOCKER.rail,
-    borderRadius: 2,
-    borderBottomWidth: 1,
-    borderBottomColor: SOYUNMA_LOCKER.railDark,
-  },
-  interior: {
-    position: "absolute",
-    left: 3,
-    right: 3,
-    backgroundColor: SOYUNMA_LOCKER.woodDark,
+    overflow: "hidden",
   },
   ghost: {
     position: "absolute",

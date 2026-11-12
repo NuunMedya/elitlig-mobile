@@ -20,7 +20,7 @@ import {
   hammerCell, hasSpecials, H, placeSpecial, shuffleBoard, starsFor, trySwap, W,
   type Cell, type ClearedTile, type GameState, type Special, type Step,
 } from "@/lib/puzzle/ucluEngine";
-import { CellView, LockView } from "./BoardLayers";
+import { BoardLight, CellView, FrameTrim, LockView, ShineSweep } from "./BoardLayers";
 import { FxLayer, type Fx, type FlyGlyph, type FxInput } from "./Effects";
 import { BoosterBar, Hud, type HudGoal, type LiveBooster } from "./Hud";
 import { TileView } from "./Piece";
@@ -576,6 +576,7 @@ export default function UcluGame(props: PuzzleGameProps) {
         onLayout={onBoardLayout}
         style={[styles.frame, { width: boardPx + PAD * 2, height: boardPx + PAD * 2 }, hammer && styles.frameHammer]}
       >
+        <FrameTrim width={boardPx + PAD * 2} height={boardPx + PAD * 2} hammer={hammer} />
         <View
           style={{ width: boardPx, height: boardPx }}
           {...pan.panHandlers}
@@ -587,6 +588,7 @@ export default function UcluGame(props: PuzzleGameProps) {
             {board.cells.map((c, i) =>
               c.hole ? null : <CellView key={i} row={Math.floor(i / W)} col={i % W} cell={cell} mud={c.mud} crate={c.crate} />,
             )}
+            <BoardLight size={boardPx} />
           </View>
           <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.clip]}>
             {tiles.map(({ tile, i, dying }) => {
@@ -612,6 +614,7 @@ export default function UcluGame(props: PuzzleGameProps) {
             {lockCells.map((i) => (
               <LockView key={i} row={Math.floor(i / W)} col={i % W} cell={cell} snow={board.cells[i].snow} net={board.cells[i].net} />
             ))}
+            <ShineSweep size={boardPx} tick={def.level} />
             {selected >= 0 ? (
               <View
                 style={[
@@ -639,7 +642,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.xl,
     backgroundColor: UCLU_BOARD.frame,
     borderWidth: BORDER,
-    borderColor: UCLU_BOARD.frameEdge,
+    borderColor: UCLU_BOARD.frame,
   },
   frameHammer: { borderColor: UCLU_BOARD.gold },
   clip: { overflow: "hidden" },

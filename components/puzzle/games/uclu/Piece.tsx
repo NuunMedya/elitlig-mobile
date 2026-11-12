@@ -9,7 +9,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { useEffect, useRef } from "react";
 import { Animated, Easing, StyleSheet, View } from "react-native";
-import Svg, { Circle, Defs, G, LinearGradient, Path, Polygon, RadialGradient, Rect, Stop } from "react-native-svg";
+import Svg, { Circle, Defs, Ellipse, G, LinearGradient, Path, Polygon, RadialGradient, Rect, Stop } from "react-native-svg";
 import { duration } from "@/theme";
 import { UCLU_BOARD, UCLU_PIECE_COLORS } from "@/lib/puzzle/ucluPalette";
 import type { Special, Tile } from "@/lib/puzzle/ucluEngine";
@@ -18,22 +18,37 @@ type IconName = keyof typeof Ionicons.glyphMap;
 
 const ICONS: (IconName | null)[] = ["football", "shirt", "footsteps", "hand-left", null, "trophy"];
 
-/** Şekiller 100×100 görünüm kutusunda. */
-function Shape({ kind, fill, stroke }: { kind: number; fill: string; stroke: string }) {
-  const common = { fill, stroke, strokeWidth: 3, strokeLinejoin: "round" as const };
+/** Şekiller 100×100 görünüm kutusunda (alt kenarda 3B taban payı bırakılır). */
+function Shape({
+  kind,
+  fill,
+  stroke,
+  strokeWidth = 2,
+  strokeOpacity,
+  transform,
+}: {
+  kind: number;
+  fill: string;
+  stroke?: string;
+  strokeWidth?: number;
+  strokeOpacity?: number;
+  transform?: string;
+}) {
+  const common = { fill, stroke, strokeWidth: stroke ? strokeWidth : 0, strokeOpacity, strokeLinejoin: "round" as const };
+  const g = (el: React.ReactElement) => (transform ? <G transform={transform}>{el}</G> : el);
   switch (kind) {
     case 0:
-      return <Circle cx={50} cy={50} r={44} {...common} />;
+      return g(<Circle cx={50} cy={50} r={42} {...common} />);
     case 1:
-      return <Rect x={7} y={7} width={86} height={86} rx={24} {...common} />;
+      return g(<Rect x={9} y={9} width={82} height={82} rx={24} {...common} />);
     case 2:
-      return <Polygon points="50,5 91,28 91,72 50,95 9,72 9,28" {...common} />;
+      return g(<Polygon points="50,7 89,29 89,71 50,93 11,71 11,29" {...common} />);
     case 3:
-      return <Path d="M50 6 L89 17 Q92 62 50 95 Q8 62 11 17 Z" {...common} />;
+      return g(<Path d="M50 8 L87 18 Q90 61 50 93 Q10 61 13 18 Z" {...common} />);
     case 4:
-      return <Rect x={17} y={17} width={66} height={66} rx={14} transform="rotate(45 50 50)" {...common} />;
+      return g(<Rect x={19} y={19} width={62} height={62} rx={14} transform="rotate(45 50 50)" {...common} />);
     default:
-      return <Polygon points="31,6 69,6 94,31 94,69 69,94 31,94 6,69 6,31" {...common} />;
+      return g(<Polygon points="32,8 68,8 92,32 92,68 68,92 32,92 8,68 8,32" {...common} />);
   }
 }
 
@@ -88,20 +103,36 @@ export const PieceGlyph = React.memo(function PieceGlyph({ kind, color, special,
   const shape = Math.max(0, color);
   const iconSize = Math.round(size * (shape === 4 ? 0.44 : special === "bomb" ? 0.4 : 0.5));
   const gid = `ug${color}`;
+  // Parlak, hacimli "mücevher": zemin gölgesi, koyu taban (3B kalınlık),
+  // ışığı sol üstten alan gövde, cam gibi kubbe, iç kenar parlaması, parıltı.
   return (
     <View style={{ width: size, height: size }}>
       <Svg width={size} height={size} viewBox="0 0 100 100" style={StyleSheet.absoluteFill}>
         <Defs>
-          <LinearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+          <RadialGradient id={gid} cx="36%" cy="28%" r="78%">
             <Stop offset="0" stopColor={pal.hi} />
-            <Stop offset="0.55" stopColor={pal.base} />
+            <Stop offset="0.5" stopColor={pal.base} />
             <Stop offset="1" stopColor={pal.lo} />
+          </RadialGradient>
+          <LinearGradient id="ugdome" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor={UCLU_BOARD.beamCore} stopOpacity={0.42} />
+            <Stop offset="0.45" stopColor={UCLU_BOARD.beamCore} stopOpacity={0.04} />
+            <Stop offset="0.7" stopColor={UCLU_BOARD.ink} stopOpacity={0} />
+            <Stop offset="1" stopColor={UCLU_BOARD.ink} stopOpacity={0.18} />
           </LinearGradient>
         </Defs>
+        <Ellipse cx={50} cy={92} rx={34} ry={5} fill={UCLU_BOARD.shadow} />
+        <Shape kind={shape} fill={pal.lo} transform="translate(0 4)" />
         <Shape kind={shape} fill={`url(#${gid})`} stroke={pal.lo} />
-        <Path d="M24 26 Q50 10 76 26 Q50 22 24 34 Z" fill={UCLU_BOARD.shine} />
+        <Shape kind={shape} fill="url(#ugdome)" transform="translate(50 50) scale(0.8) translate(-50 -50)" />
+        <Shape kind={shape} fill="none" stroke={pal.hi} strokeOpacity={0.75} strokeWidth={2.5} transform="translate(50 50) scale(0.9) translate(-50 -50)" />
+        <Ellipse cx={37} cy={27} rx={15} ry={7} transform="rotate(-28 37 27)" fill={UCLU_BOARD.beamCore} fillOpacity={0.55} />
+        <Circle cx={69} cy={23} r={3.2} fill={UCLU_BOARD.beamCore} fillOpacity={0.85} />
         <SpecialMarks special={special} />
       </Svg>
+      <View style={[styles.center, styles.iconShadow]} pointerEvents="none">
+        {icon ? <Ionicons name={icon} size={iconSize} color={UCLU_BOARD.iconShadow} /> : <Whistle size={iconSize * 1.05} color={UCLU_BOARD.iconShadow} />}
+      </View>
       <View style={styles.center} pointerEvents="none">
         {icon ? <Ionicons name={icon} size={iconSize} color={pal.ink} /> : <Whistle size={iconSize * 1.05} color={pal.ink} />}
       </View>
@@ -120,8 +151,11 @@ function GoldenBall({ size }: { size: number }) {
             <Stop offset="1" stopColor={UCLU_BOARD.goldLo} />
           </RadialGradient>
         </Defs>
-        <Circle cx={50} cy={50} r={46} fill={UCLU_BOARD.flash} opacity={0.35} />
+        <Circle cx={50} cy={50} r={47} fill={UCLU_BOARD.flash} opacity={0.35} />
+        <Ellipse cx={50} cy={92} rx={30} ry={5} fill={UCLU_BOARD.shadow} />
+        <Circle cx={50} cy={54} r={40} fill={UCLU_BOARD.goldLo} />
         <Circle cx={50} cy={50} r={40} fill="url(#ugold)" stroke={UCLU_BOARD.goldLo} strokeWidth={3} />
+        <Ellipse cx={37} cy={30} rx={14} ry={7} transform="rotate(-28 37 30)" fill={UCLU_BOARD.beamCore} fillOpacity={0.6} />
         <Path d="M78 14 L81 22 L89 25 L81 28 L78 36 L75 28 L67 25 L75 22 Z" fill={UCLU_BOARD.beamCore} />
       </Svg>
       <View style={styles.center} pointerEvents="none">
@@ -283,4 +317,5 @@ export const TileView = React.memo(TileViewBase, (a, b) =>
 const styles = StyleSheet.create({
   tile: { position: "absolute", left: 0, top: 0 },
   center: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
+  iconShadow: { transform: [{ translateX: 0.8 }, { translateY: 1.6 }] },
 });

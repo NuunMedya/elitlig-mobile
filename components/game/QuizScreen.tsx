@@ -31,6 +31,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, AppState, Easing, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { ConfettiBurst, SparkleBurst } from "@/components/game/Celebration";
 import { ArenaResultCard, ArenaShareSheet, formatCount, SCORE_UNIT, useArenaScore } from "@/components/game/ArenaResult";
 import { QuizCityPicker, type QuizCity } from "@/components/game/QuizCityPicker";
 import { Avatar, Button, GradientFill, ScreenHeader, TeamLogo, Touchable, useReduceMotion, withAlpha } from "@/components/ui";
@@ -146,6 +147,9 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
   const [score, setScore] = useState(0);
   const [lives, setLives] = useState(QUIZ_LIVES);
   const [streak, setStreak] = useState(0);
+  /** Görsel şölen: doğru cevapta yıldız saçılımı, seviye/seri anında konfeti. */
+  const [sparkTick, setSparkTick] = useState(0);
+  const [confettiTick, setConfettiTick] = useState(0);
   const [bestStreak, setBestStreak] = useState(0);
   const [correct, setCorrect] = useState(0);
   const [asked, setAsked] = useState(0);
@@ -271,6 +275,8 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
       setCorrect(correctAfter);
       setScore(s.score + points);
       setGain({ value: points, id: Date.now() });
+      setSparkTick((n) => n + 1);
+      if (levelOf(correctAfter) > levelOf(s.correct) || nextStreak % 5 === 0) setConfettiTick((n) => n + 1);
       gainAnim.setValue(0);
       Animated.timing(gainAnim, { toValue: 1, duration: 900, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
       scoreBump.setValue(1);
@@ -473,6 +479,7 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
               </ScrollView>
             </Animated.View>
 
+            <SparkleBurst trigger={sparkTick} radius={90} />
             {gain ? (
               <Animated.View
                 key={gain.id}
@@ -497,6 +504,7 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
           </View>
         ) : null}
 
+        <ConfettiBurst trigger={confettiTick} count={30} />
         {phase === "over" ? (
           <ArenaResultCard
             game={config.game}
@@ -511,6 +519,8 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
             onSignIn={() => router.push("/giris")}
             onRestart={start}
             secondary={{ label: "İl değiştir", icon: "location-outline", onPress: () => setPhase("setup") }}
+            stars={run.stars}
+            onCity={() => router.push("/kulup-sehri")}
             onBoard={openBoard}
             onShare={() => setShareOpen(true)}
           />

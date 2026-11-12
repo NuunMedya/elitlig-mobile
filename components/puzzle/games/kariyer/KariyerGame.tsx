@@ -25,6 +25,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { PanResponder, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { runOnJS, useDerivedValue, useFrameCallback, useSharedValue } from "react-native-reanimated";
 
+import { SparkleBurst, Sunburst } from "@/components/game/Celebration";
 import { Touchable } from "@/components/ui";
 import { getPanelMe } from "@/lib/api/panel";
 import {
@@ -396,6 +397,12 @@ export default function KariyerGame({ level, maxWidth, preBoosters, boosterStock
 
         {stage === "result" && result ? (
           <View style={styles.toastWrap} pointerEvents="box-none">
+            {result.tone === "good" ? (
+              <View pointerEvents="none" style={styles.toastBurst}>
+                <Sunburst size={260} color={pal.good} opacity={0.4} />
+                <SparkleBurst trigger={index + 1} radius={110} color={pal.trail} />
+              </View>
+            ) : null}
             <View style={[styles.toast, { borderColor: result.tone === "good" ? pal.good : result.tone === "ok" ? pal.trail : pal.bad }]}>
               <Text style={[styles.toastText, { color: result.tone === "good" ? pal.good : HUD.text }]} {...textScale.dense}>
                 {result.title}
@@ -418,6 +425,7 @@ export default function KariyerGame({ level, maxWidth, preBoosters, boosterStock
 
 const styles = StyleSheet.create({
   root: { alignSelf: "center", gap: space.sm },
+  toastBurst: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
 
   hud: {
     flexDirection: "row",

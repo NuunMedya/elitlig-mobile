@@ -39,6 +39,7 @@ import {
   type ArenaEntry,
   type ArenaGame,
 } from "@/lib/api/arena";
+import { ConfettiBurst, Sunburst } from "@/components/game/Celebration";
 import { instagramUrl } from "@/lib/socials";
 import { useAuth } from "@/providers/AuthProvider";
 import { colors, dark as inkPalette, elevate, fonts, hairline, radius, space, textScale, type, upperTR } from "@/theme";
@@ -76,6 +77,8 @@ export function useArenaScore(game: ArenaGame, bestKey: string) {
   const [score, setScore] = useState<number | null>(null);
   /** Sunucunun rekor hükmü (yanıt gelince); null: henüz bilinmiyor, cihaza bakılır. */
   const [serverRecord, setServerRecord] = useState<boolean | null>(null);
+  /** Bu turun Kulüp Şehri'ne getirdiği yıldız (sunucu; doğrulanmamış skorda 0). */
+  const [stars, setStars] = useState(0);
   const bestRef = useRef(0);
   bestRef.current = best;
   /** Bu turun oyun oturumu (Kariyer Modu doğrulaması); açılamazsa null. */
@@ -114,6 +117,8 @@ export function useArenaScore(game: ArenaGame, bestKey: string) {
             void AsyncStorage.setItem(bestKey, String(entry.best));
           }
           if (entry && typeof entry.record === "boolean") setServerRecord(Boolean(entry.record || entry.first));
+          if (entry && typeof entry.stars === "number") setStars(entry.stars);
+          if (entry && entry.stars) void queryClient.invalidateQueries({ queryKey: ["puzzle"] });
           void queryClient.invalidateQueries({ queryKey: ["arena"] });
           // Oyun görevleri ve XP: Görevler / Kariyer bir sonraki açılışta tazelensin.
           void queryClient.invalidateQueries({ queryKey: ["career"] });
@@ -133,6 +138,7 @@ export function useArenaScore(game: ArenaGame, bestKey: string) {
     (value: number) => {
       setScore(value);
       setServerRecord(null);
+      setStars(0);
       setPrevBest(bestRef.current);
       if (value > bestRef.current) {
         setBest(value);
@@ -148,6 +154,7 @@ export function useArenaScore(game: ArenaGame, bestKey: string) {
     setScore(null);
     setSubmit("idle");
     setServerRecord(null);
+    setStars(0);
     sessionRef.current = auth.user
       ? startArenaSession(game)
           .then((data) => data.sessionId)
@@ -160,6 +167,7 @@ export function useArenaScore(game: ArenaGame, bestKey: string) {
     score: score ?? 0,
     isRecord: serverRecord ?? (score != null && score > 0 && score > prevBest),
     submit,
+    stars,
     finish,
     retry: () => send(score ?? 0),
     reset,
@@ -185,6 +193,9 @@ export interface ArenaResultCardProps {
   extra?: ReactNode;
   /** "Tekrar oyna"nın yanında ikinci eylem (ör. il değiştir). */
   secondary?: { label: string; icon: keyof typeof Ionicons.glyphMap; onPress: () => void };
+  /** Kulüp Şehri'ne giden yıldız (0: gösterilmez) ve şehre geçiş. */
+  stars?: number;
+  onCity?: () => void;
 }
 
 export function ArenaResultCard({
@@ -202,11 +213,18 @@ export function ArenaResultCard({
   onShare,
   extra,
   secondary,
+  stars = 0,
+  onCity,
 }: ArenaResultCardProps) {
   return (
     <View style={styles.scrim}>
       <ScrollView contentContainerStyle={styles.scrimContent} showsVerticalScrollIndicator={false}>
         <View style={styles.card}>
+          {isRecord ? (
+            <View pointerEvents="none" style={styles.recordBurst}>
+              <Sunburst size={320} />
+            </View>
+          ) : null}
           {isRecord ? <Badge label={upperTR("Yeni rekor")} tone="warn" icon="trophy" variant="soft" /> : null}
           <Text style={styles.resultTitle} {...textScale.dense}>
             {isRecord ? "Rekorunu kırdın!" : overTitle}
@@ -232,6 +250,23 @@ export function ArenaResultCard({
 
           {extra}
 
+          {stars > 0 ? (
+            <Touchable
+              feedback="button"
+              haptic="light"
+              onPress={onCity}
+              style={styles.cityStars}
+              accessibilityRole="button"
+              accessibilityLabel={`${stars} yıldız Kulüp Şehri'ne eklendi, şehre git`}
+            >
+              <Ionicons name="star" size={16} color={colors.yellowCard} />
+              <Text style={styles.cityStarsText} {...textScale.dense}>
+                +{stars} yıldız · Kulüp Şehri'ne
+              </Text>
+              <Ionicons name="chevron-forward" size={14} color={colors.textTertiary} />
+            </Touchable>
+          ) : null}
+
           <Text style={styles.resultBest} {...textScale.dense}>
             {`Kişisel rekorun ${formatCount(best)} ${SCORE_UNIT}`}
           </Text>
@@ -253,6 +288,7 @@ export function ArenaResultCard({
           </View>
         </View>
       </ScrollView>
+      <ConfettiBurst trigger={isRecord ? Math.max(1, score) : 0} count={44} />
     </View>
   );
 }
@@ -551,6 +587,18 @@ const styles = StyleSheet.create({
   fact: { backgroundColor: colors.surface3, borderRadius: radius.pill, paddingHorizontal: space.m, paddingVertical: space.xxs + 1 },
   factText: { ...type.caption, fontFamily: fonts.bold, letterSpacing: 0, color: colors.textSecondary },
   resultBest: { ...type.bodySm, color: colors.textSecondary, marginTop: space.s },
+  recordBurst: { position: "absolute", top: -90, left: 0, right: 0, alignItems: "center" },
+  cityStars: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+    marginTop: space.sm,
+    paddingHorizontal: space.md,
+    paddingVertical: space.s,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface3,
+  },
+  cityStarsText: { ...type.bodySm, fontFamily: fonts.bold, color: colors.textPrimary },
   replayRow: { flexDirection: "row", gap: space.m, alignSelf: "stretch", marginTop: space.md },
   resultRow: { flexDirection: "row", gap: space.m, alignSelf: "stretch", marginTop: space.sm },
 

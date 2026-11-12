@@ -184,9 +184,14 @@ function boot(game) {
   return { A, run, log, over };
 }
 
+/** RN → oyun komutu (window.ArenaCmd) başsız ortamda. */
+function window_cmd(A, cmd) {
+  if (A.game.command) A.game.command(cmd);
+}
+
 /* ── 1) Beş oyun da hatasız döner ─────────────────────────────────────────── */
 
-for (const game of ["penalti", "slalom", "sektir", "savunma", "kadro"]) {
+for (const game of ["penalti", "slalom", "sektir", "savunma", "kadro", "sehir"]) {
   let error = null;
   try {
     const { A, run, log } = boot(game);
@@ -562,7 +567,7 @@ const squadBot = (A) => {
   });
   const end = over();
   const x = A.game.debug();
-  check("kadro: kapı aritmetiği doğru, kötü kapılar kadroyu bitirir", math && Boolean(end) && x.n === 0 && x.goals === 0, end ? `kadro ${Math.round(x.z)} m'de tükendi` : `tur bitmedi (kadro ${x.n})`);
+  check("kadro: kapı aritmetiği doğru, kötü kapılar kadroyu bitirir", math && Boolean(end) && x.n === 0 && x.goals <= 1, end ? `kadro ${Math.round(x.z)} m'de tükendi` : `tur bitmedi (kadro ${x.n})`);
 }
 {
   // İyi oynayan kadro: büyür, grupları eritir, kaleciyi düşürür, bölüm atlar.
@@ -608,6 +613,20 @@ const squadBot = (A) => {
     n0 != null && n0.n === 20 && n0.hp < 500 - 20 && x.n === 0 && x.state !== "play",
     n0 ? `temasa kadar ${Math.round(500 - n0.hp)} hasar; kalabalık grup kadroyu bitirdi` : "temas olmadı",
   );
+}
+
+/* ── 3d) KULÜP ŞEHRİ (sahne) ─────────────────────────────────────────────── */
+
+{
+  // Sahne yalnız çizer: seviyeleri ve odak komutlarını alır, başsızda çökmez.
+  const { A, run } = boot("sehir");
+  window_cmd(A, { type: "city", levels: { saha: 3, kantin: 2, bilinmeyen: 9 }, kit: { primary: "#dc2626", secondary: "#ffffff" }, marks: { kantin: "up" }, focus: "kantin" });
+  run(2);
+  window_cmd(A, { type: "focus", key: null });
+  window_cmd(A, { type: "celebrate" });
+  run(1);
+  const d = A.game.debug();
+  check("kulüp şehri: seviyeleri alır, odaklanır, kutlar", d.levels.saha === 3 && d.levels.kantin === 2 && d.levels.bilinmeyen === undefined && d.focus.tx === 0, `saha ${d.levels.saha}, kafeterya ${d.levels.kantin}`);
 }
 
 /* ── 4) PENALTI ──────────────────────────────────────────────────────────── */

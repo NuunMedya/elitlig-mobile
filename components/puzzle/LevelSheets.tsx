@@ -12,10 +12,13 @@ import React, { useEffect, useRef } from "react";
 import { Animated, StyleSheet, Text, View } from "react-native";
 
 import { BottomSheet, Button, useReduceMotion } from "@/components/ui";
+import type { PuzzleProfile } from "@/lib/puzzle/api";
 import type { PuzzleBoosterDef, PuzzleGameModule } from "@/lib/puzzle/types";
 import { colors, fonts, hairline, radius, space, textScale, type } from "@/theme";
 
 import { tierOf } from "./LevelMap";
+import { SparkleBurst, Sunburst } from "@/components/game/Celebration";
+import { WatchAdForLife } from "./RewardedLife";
 import { BoosterChip } from "./sheets";
 
 export function LevelStartSheet({
@@ -29,6 +32,7 @@ export function LevelStartSheet({
   onPlay,
   busy,
   lives,
+  profile,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -40,6 +44,8 @@ export function LevelStartSheet({
   onPlay: () => void;
   busy?: boolean;
   lives: number;
+  /** Reklamla can düğmesi için (can bitince gösterilir). */
+  profile?: PuzzleProfile;
 }) {
   const goal = module.goalSummary(level);
   const pre = module.boosters.filter((b) => b.kind === "pre");
@@ -49,16 +55,20 @@ export function LevelStartSheet({
       onClose={onClose}
       title={`${level}. seviye`}
       footer={
-        <Button
-          label={lives > 0 ? "Oyna" : "Canın kalmadı"}
-          icon={lives > 0 ? "play" : "heart-dislike"}
-          onPress={onPlay}
-          loading={busy}
-          disabled={lives < 1}
-          fullWidth
-          size="lg"
-          haptic="medium"
-        />
+        lives < 1 && profile?.ad_lives ? (
+          <WatchAdForLife profile={profile} size="lg" />
+        ) : (
+          <Button
+            label={lives > 0 ? "Oyna" : "Canın kalmadı"}
+            icon={lives > 0 ? "play" : "heart-dislike"}
+            onPress={onPlay}
+            loading={busy}
+            disabled={lives < 1}
+            fullWidth
+            size="lg"
+            haptic="medium"
+          />
+        )
       }
     >
       <View style={styles.headRow}>
@@ -118,6 +128,7 @@ export function ResultSheet({
   onRetry,
   onMap,
   livesLeft,
+  profile,
 }: {
   visible: boolean;
   won: boolean;
@@ -131,6 +142,8 @@ export function ResultSheet({
   onRetry: () => void;
   onMap: () => void;
   livesLeft: number;
+  /** Kaybedip canı biten oyuncuya "Reklam izle · +1 can". */
+  profile?: PuzzleProfile;
 }) {
   return (
     <BottomSheet
@@ -139,6 +152,8 @@ export function ResultSheet({
       dismissible={false}
       title={won ? (level % 10 === 0 ? "Kupa senin!" : "Seviye geçildi!") : "Bu sefer olmadı"}
       footer={
+        <View style={styles.footerCol}>
+          {!won && livesLeft < 1 && profile?.ad_lives ? <WatchAdForLife profile={profile} /> : null}
         <View style={styles.footer}>
           <Button label="Harita" variant="secondary" onPress={onMap} />
           {won ? (
@@ -147,11 +162,15 @@ export function ResultSheet({
             <Button label={livesLeft > 0 ? "Tekrar dene" : "Can yok"} icon="refresh" onPress={onRetry} disabled={livesLeft < 1} style={styles.grow} />
           )}
         </View>
+        </View>
       }
     >
       {won ? (
         <>
           <View style={styles.starRow}>
+            <View pointerEvents="none" style={styles.burstWrap}>
+              <Sunburst size={300} />
+            </View>
             {[1, 2, 3].map((n) => (
               <BigStar key={n} index={n} lit={n <= stars} visible={visible} />
             ))}
@@ -191,9 +210,16 @@ function BigStar({ index, lit, visible }: { index: number; lit: boolean; visible
     ]).start();
   }, [index, reduce, v, visible]);
   const scale = v.interpolate({ inputRange: [0, 1], outputRange: [0.2, 1] });
+  const [spark, setSpark] = React.useState(0);
+  useEffect(() => {
+    if (!visible || !lit) return undefined;
+    const id = setTimeout(() => setSpark((n) => n + 1), 250 + index * 280 + 160);
+    return () => clearTimeout(id);
+  }, [visible, lit, index]);
   return (
-    <Animated.View style={[index === 2 ? styles.starBig : styles.starSide, { opacity: v, transform: [{ scale }] }]}>
+    <Animated.View style={[index === 2 ? styles.starBig : styles.starSide, { opacity: v, transform: [{ scale }, { rotate: v.interpolate({ inputRange: [0, 1], outputRange: ["-35deg", "0deg"] }) }] }]}>
       <Ionicons name="star" size={index === 2 ? 64 : 48} color={lit ? colors.yellowCard : colors.starEmpty} />
+      {lit ? <SparkleBurst trigger={spark} radius={index === 2 ? 64 : 48} /> : null}
     </Animated.View>
   );
 }
@@ -226,8 +252,10 @@ const styles = StyleSheet.create({
   booster: { alignItems: "center", gap: space.xs, width: 72 },
   boosterName: { ...type.micro, color: colors.textSecondary, textAlign: "center" },
   footer: { flexDirection: "row", gap: space.sm },
+  footerCol: { gap: space.sm },
   grow: { flex: 1 },
   starRow: { flexDirection: "row", justifyContent: "center", alignItems: "flex-end", gap: space.md, marginVertical: space.md },
+  burstWrap: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
   starBig: { marginBottom: space.md },
   starSide: {},
   rewards: { flexDirection: "row", justifyContent: "center", gap: space.xl, marginTop: space.sm },

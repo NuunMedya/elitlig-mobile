@@ -251,6 +251,10 @@
     o.taken = true;
     o.at = A.time;
     addEnergy(o.v, o.x, o.z);
+    if (R) {
+      var es = G3.project(R, o.x, o.y, -o.z);
+      A.sparkle(es.x, es.y, 12, "#FDE047");
+    }
     A.sound("coin");
     A.haptic("light");
   }

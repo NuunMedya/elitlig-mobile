@@ -609,15 +609,36 @@ function glow(color: string, sigma: number, alpha = 1) {
   return paint;
 }
 
-/** Oyuncu pulu: zemin gölgesi + parıltı + gövde + üst ışık. */
+/**
+ * Oyuncu (kuşbakışı mini futbolcu): zemin gölgesi, parıltı, formalı omuzlar
+ * (sol üstten ışık alan radyal gradyan), beyaz kenar, ten rengi baş ve saç.
+ * `pulse` (top sende): genişleyip sönen halka.
+ */
 function drawPlayer(canvas: SkCanvas, x: number, y: number, r: number, color: string, halo: string, t: number, pulse: boolean) {
   "worklet";
-  canvas.drawOval(Skia.XYWHRect(x - r * 0.9, y + r * 0.55, r * 1.8, r * 0.6), fill("#000000", 0.22));
+  canvas.drawOval(Skia.XYWHRect(x - r * 1.05, y + r * 0.45, r * 2.1, r * 0.75), fill("#000000", 0.25));
   const breathe = pulse ? 1 + Math.sin(t * 5) * 0.08 : 1;
-  canvas.drawCircle(x, y, r * 1.25 * breathe, glow(halo, r * 0.7, 0.55));
-  canvas.drawCircle(x, y, r, fill(color));
-  canvas.drawCircle(x, y, r, stroke("#FFFFFF", r * 0.16, 0.9));
-  canvas.drawCircle(x - r * 0.3, y - r * 0.32, r * 0.32, fill("#FFFFFF", 0.35));
+  canvas.drawCircle(x, y, r * 1.35 * breathe, glow(halo, r * 0.8, 0.55));
+  if (pulse) {
+    const k = (t * 1.4) % 1;
+    canvas.drawCircle(x, y, r * (1.1 + k * 1.2), stroke(halo, r * 0.14 * (1 - k), 0.8 * (1 - k)));
+  }
+  // omuzlar / forma
+  const body = Skia.Paint();
+  body.setAntiAlias(true);
+  body.setShader(
+    Skia.Shader.MakeRadialGradient({ x: x - r * 0.35, y: y - r * 0.35 }, r * 1.6, [Skia.Color("#FFFFFF"), Skia.Color(color), Skia.Color(color)], [0, 0.32, 1], TileMode.Clamp),
+  );
+  const shoulders = Skia.XYWHRect(x - r, y - r * 0.62, r * 2, r * 1.3);
+  canvas.drawOval(shoulders, body);
+  canvas.drawOval(shoulders, stroke("#FFFFFF", r * 0.13, 0.95));
+  canvas.drawOval(shoulders, fill("#000000", 0.08));
+  // baş (ten) + saç
+  const hr = r * 0.42;
+  canvas.drawCircle(x, y - r * 0.02, hr * 1.08, fill("#000000", 0.25));
+  canvas.drawCircle(x, y - r * 0.08, hr, fill("#F1C7A0"));
+  canvas.drawOval(Skia.XYWHRect(x - hr * 0.95, y - r * 0.08 - hr, hr * 1.9, hr * 1.25), fill("#2A1B12", 0.92));
+  canvas.drawCircle(x - hr * 0.35, y - r * 0.08 - hr * 0.45, hr * 0.28, fill("#FFFFFF", 0.35));
 }
 
 /** Zemin: gökyüzü, şeritli çim, çizgiler, köşelerde karartma. */
@@ -630,6 +651,15 @@ function drawPitch(canvas: SkCanvas, s: MomentState, pal: KariyerPalette) {
     Skia.Shader.MakeLinearGradient({ x: 0, y: 0 }, { x: 0, y: h * 0.5 }, [Skia.Color(pal.sky[0]), Skia.Color(pal.sky[1])], null, TileMode.Clamp),
   );
   canvas.drawRect(Skia.XYWHRect(0, 0, w, h), sky);
+  // uzak tribün: kalabalığın flaşları ve iki projektör parlaması
+  for (let i = 0; i < 28; i += 1) {
+    const fx = ((i * 37) % 100) / 100 * w;
+    const fy = h * (0.02 + ((i * 13) % 10) / 100);
+    const tw = 0.35 + 0.35 * Math.sin(s.t * 3 + i * 1.7);
+    canvas.drawCircle(fx, fy, w * 0.006, fill("#FFFFFF", tw));
+  }
+  canvas.drawCircle(w * 0.08, h * 0.015, w * 0.12, glow("#FFF6D8", w * 0.06, 0.55));
+  canvas.drawCircle(w * 0.92, h * 0.015, w * 0.12, glow("#FFF6D8", w * 0.06, 0.55));
 
   // Çim: çalımda şeritler aşağı akar (koşu hissi).
   const top = s.kind === KIND_SHOT ? s.goalY - h * 0.02 : 0;
@@ -641,7 +671,15 @@ function drawPitch(canvas: SkCanvas, s: MomentState, pal: KariyerPalette) {
   for (let i = -2; i < stripes + 2; i += 1) {
     const y = top + i * band + scroll;
     canvas.drawRect(Skia.XYWHRect(0, y, w, band + 1), fill(pal.pitch[(i + 400) % 2]));
+    // dama biçme: yarım sütunlarda hafif koyulaşma
+    for (let c = 0; c < 6; c += 2) canvas.drawRect(Skia.XYWHRect((w / 6) * c, y, w / 6, band + 1), fill("#000000", 0.035));
   }
+  // projektör ışığı: sahanın ortasına düşen yumuşak aydınlık
+  const spot = Skia.Paint();
+  spot.setShader(
+    Skia.Shader.MakeRadialGradient({ x: w / 2, y: h * 0.45 }, h * 0.6, [Skia.Color("#FFFFFF2E"), Skia.Color("#FFFFFF00")], [0, 1], TileMode.Clamp),
+  );
+  canvas.drawRect(Skia.XYWHRect(0, top, w, h - top), spot);
   canvas.restore();
 
   const line = stroke(pal.line, Math.max(1.5, w * 0.006), 0.7);
@@ -758,9 +796,23 @@ export function drawMoment(canvas: SkCanvas, s: MomentState, touch: TouchInput, 
   // Top.
   const b = s.ball;
   canvas.drawOval(Skia.XYWHRect(b.x - b.r * 0.9, b.y + b.r * 0.7, b.r * 1.8, b.r * 0.5), fill("#000000", 0.25));
-  canvas.drawCircle(b.x, b.y, b.r * 1.5, glow(pal.trail, b.r * 0.9, 0.6));
-  canvas.drawCircle(b.x, b.y, b.r, fill(pal.ball));
-  canvas.drawCircle(b.x + Math.cos(s.t * 8) * b.r * 0.35, b.y + Math.sin(s.t * 8) * b.r * 0.35, b.r * 0.32, fill("#1B1B2F", 0.85));
+  canvas.drawCircle(b.x, b.y, b.r * 1.6, glow(pal.trail, b.r * 0.9, 0.6));
+  const ballPaint = Skia.Paint();
+  ballPaint.setAntiAlias(true);
+  ballPaint.setShader(
+    Skia.Shader.MakeRadialGradient({ x: b.x - b.r * 0.35, y: b.y - b.r * 0.4 }, b.r * 1.5, [Skia.Color("#FFFFFF"), Skia.Color(pal.ball), Skia.Color("#B8C2D3")], [0, 0.55, 1], TileMode.Clamp),
+  );
+  canvas.drawCircle(b.x, b.y, b.r, ballPaint);
+  // dönen beşgenler (top yuvarlanıyor)
+  canvas.save();
+  canvas.clipRRect(Skia.RRectXY(Skia.XYWHRect(b.x - b.r, b.y - b.r, b.r * 2, b.r * 2), b.r, b.r), 1, true);
+  for (let i = 0; i < 4; i += 1) {
+    const a = s.t * 7 + (i * Math.PI) / 2;
+    canvas.drawCircle(b.x + Math.cos(a) * b.r * 0.62, b.y + Math.sin(a * 0.8) * b.r * 0.5, b.r * 0.26, fill("#1B1B2F", 0.85));
+  }
+  canvas.drawCircle(b.x + Math.cos(s.t * 3) * b.r * 0.1, b.y, b.r * 0.24, fill("#1B1B2F", 0.85));
+  canvas.restore();
+  canvas.drawCircle(b.x - b.r * 0.35, b.y - b.r * 0.4, b.r * 0.28, fill("#FFFFFF", 0.7));
 
   // Parçacıklar (konfeti): dönen küçük dikdörtgenler.
   for (let i = 0; i < s.particles.length; i += 1) {
@@ -768,7 +820,20 @@ export function drawMoment(canvas: SkCanvas, s: MomentState, touch: TouchInput, 
     const alpha = Math.min(1, (p.life / p.max) * 1.6);
     canvas.save();
     canvas.rotate((p.spin * (p.max - p.life) * 180) / Math.PI, p.x, p.y);
-    canvas.drawRect(Skia.XYWHRect(p.x - p.size, p.y - p.size * 0.5, p.size * 2, p.size), fill(pal.confetti[p.color % pal.confetti.length], alpha));
+    const col = pal.confetti[p.color % pal.confetti.length];
+    if (i % 3 === 0) {
+      // yıldız kıvılcımı (parlak)
+      const star = Skia.Path.Make();
+      for (let k = 0; k < 10; k += 1) {
+        const rr = k % 2 ? p.size * 0.6 : p.size * 1.5;
+        const aa = (k * Math.PI) / 5 - Math.PI / 2;
+        if (k === 0) star.moveTo(p.x + Math.cos(aa) * rr, p.y + Math.sin(aa) * rr);
+        else star.lineTo(p.x + Math.cos(aa) * rr, p.y + Math.sin(aa) * rr);
+      }
+      star.close();
+      canvas.drawPath(star, glow(col, p.size * 0.6, alpha));
+      canvas.drawPath(star, fill(col, alpha));
+    } else canvas.drawRect(Skia.XYWHRect(p.x - p.size, p.y - p.size * 0.5, p.size * 2, p.size), fill(col, alpha));
     canvas.restore();
   }
 

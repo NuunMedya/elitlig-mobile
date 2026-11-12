@@ -56,6 +56,7 @@ import {
 } from "@/components/ui";
 import type { Tone } from "@/components/ui";
 import { getMyArenaSummary, type ArenaGame } from "@/lib/api/arena";
+import { cityKeys, getCity } from "@/lib/puzzle/api";
 import { formatNumber } from "@/lib/format";
 import { ARENA_BEST_KEYS } from "@/lib/game/arenaKeys";
 import { get } from "@/lib/http";
@@ -63,6 +64,7 @@ import { useAuth } from "@/providers/AuthProvider";
 import {
   colors,
   elevate,
+  fonts,
   hairline,
   layout,
   radius,
@@ -512,6 +514,9 @@ export default function OyunlarScreen() {
   const { scrollY, scrollProps } = useHeaderScroll();
 
   const signedIn = Boolean(auth.user);
+  // Kulüp Şehri: bütün oyunların yıldızı burada harcanır (kart: statü + yıldız).
+  const cityQuery = useQuery({ queryKey: cityKeys.me(), queryFn: getCity, enabled: signedIn, staleTime: 60_000, retry: false });
+  const city = cityQuery.data?.city;
 
   /* Gün anahtarı app/gunun.tsx ile aynı biçimde üretilir (bkz. dosya başı). */
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
@@ -686,6 +691,31 @@ export default function OyunlarScreen() {
           onSignIn={openSignIn}
         />
 
+        {/* KULÜP ŞEHRİ — bütün oyunların yıldızlarıyla kurulan futbol şehri. */}
+        <Touchable
+          feedback="card"
+          haptic="light"
+          onPress={() => router.push(signedIn ? "/kulup-sehri" : "/giris")}
+          style={styles.city}
+          accessibilityRole="button"
+          accessibilityLabel="Kulüp Şehrin"
+        >
+          <View style={styles.cityIcon}>
+            <Ionicons name="business" size={28} color={colors.yellowCard} />
+          </View>
+          <View style={styles.cityTexts}>
+            <Text style={styles.cityTitle} {...textScale.dense}>
+              Kulüp Şehrin
+            </Text>
+            <Text style={styles.citySub} numberOfLines={2} {...textScale.dense}>
+              {city
+                ? `${city.tier.title} · ${city.stars.available.toLocaleString("tr-TR")} yıldız harcanabilir${city.xp.claimable_stars ? ` · +${city.xp.claimable_stars} toplanmayı bekliyor` : ""}`
+                : "Okulun beton bahçesinden Avrupa devine: oyunlardan ve görevlerden kazandığın yıldızlarla kulübünü kur."}
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.onDarkMuted} />
+        </Touchable>
+
         {/* LİG YOLU — seviyeli bulmacalar (Elit Üçlü, Üçle Kazan, Soyunma
             Odası, Stadyum Kantini) ve Stadyumunu Kur. Uzun soluklu ilerleme
             burada; mini oyunlar rekor odaklıdır. */}
@@ -694,7 +724,7 @@ export default function OyunlarScreen() {
           <ListRow
             leading={{ icon: "trophy", tone: "warn" }}
             title="Lig Yolu"
-            subtitle="Elit Üçlü, Üçle Kazan, Soyunma Odası, Stadyum Kantini · stadyumunu kur"
+            subtitle="Elit Üçlü, Üçle Kazan, Soyunma Odası, Stadyum Kantini · her seviye şehrine yıldız"
             position="single"
             chevron
             onPress={() => router.push(signedIn ? "/lig-yolu" : "/giris")}
@@ -795,6 +825,22 @@ export default function OyunlarScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
+  city: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    marginHorizontal: layout.screenPadding,
+    marginTop: space.lg,
+    padding: space.lg,
+    borderRadius: radius.xl,
+    backgroundColor: colors.inkBlock,
+    borderWidth: hairline,
+    borderColor: colors.inkTileBorder,
+  },
+  cityIcon: { width: 54, height: 54, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.inkTileBorder },
+  cityTexts: { flex: 1, gap: 2 },
+  cityTitle: { ...type.h3, fontFamily: fonts.bold, color: colors.onDark },
+  citySub: { ...type.bodySm, color: colors.onDarkMuted },
   flex: { flex: 1 },
 
   content: {

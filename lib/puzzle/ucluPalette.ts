@@ -61,7 +61,14 @@ export const UCLU_BOARD = {
   beamCore: "#FFFFFF",
   flash: "rgba(255, 255, 255, 0.85)",
   shine: "rgba(255, 255, 255, 0.32)",
-  shadow: "rgba(0, 0, 0, 0.28)",
+  shadow: "rgba(0, 0, 0, 0.32)",
+  /** Taş ikonunun gölgesi ve kubbenin koyu ucu. */
+  iconShadow: "rgba(0, 0, 0, 0.28)",
+  ink: "#000000",
+  /** Tahta: altın çerçeve ve projektör ışığı. */
+  trimHi: "#FFE9A3",
+  trimLo: "#A87410",
+  floodlight: "#FFFFFF",
   /** Bonus anı ve kombo metni. */
   comboText: "#FFFFFF",
   comboStroke: "#0B241B",

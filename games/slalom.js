@@ -532,6 +532,10 @@
           A.sound("coin");
         }
         pushFx({ kind: "coin", x: co.x, y: co.y, z: co.z });
+        if (R && playing) {
+          var cs = G3.project(R, co.x, co.y, wz(co.z));
+          A.fly(cs.x, cs.y);
+        }
       }
     }
 
