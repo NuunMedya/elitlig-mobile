@@ -27,13 +27,12 @@ import { StyleSheet, Text, type TextInput } from "react-native";
 import {
   AuthCard,
   AuthDivider,
-  AuthLink,
   AuthNotice,
   AuthShell,
   PasswordEye,
   authStyles,
 } from "@/components/account/AuthShell";
-import { Button, Input, Touchable } from "@/components/ui";
+import { Button, Input, SegmentedControl, Touchable } from "@/components/ui";
 import { ApiError } from "@/lib/http";
 import { openLink } from "@/lib/links";
 import { useAuth } from "@/providers/AuthProvider";
@@ -123,8 +122,22 @@ export default function LoginScreen() {
       icon={managementMode ? "shield-checkmark-outline" : undefined}
       onClose={close}
     >
+      {/* Üye / yönetim girişi: kayan başparmaklı segment (Sliding Thumb). */}
+      <SegmentedControl<"member" | "admin">
+        items={[
+          { key: "member", label: "Üye girişi" },
+          { key: "admin", label: "Yönetim girişi", icon: "shield-checkmark-outline" },
+        ]}
+        value={managementMode ? "admin" : "member"}
+        onChange={(key) => {
+          if ((key === "admin") !== managementMode) toggleMode();
+        }}
+        testID="toggle-management-login"
+      />
+
       <AuthCard>
         <Input
+          floating
           label="Kullanıcı adı"
           value={username}
           onChangeText={changeUsername}
@@ -140,6 +153,7 @@ export default function LoginScreen() {
         />
 
         <Input
+          floating
           ref={passwordRef}
           label="Şifre"
           value={password}
@@ -200,13 +214,6 @@ export default function LoginScreen() {
         </>
       )}
 
-      <AuthLink
-        prompt={managementMode ? "Üye misin?" : "Yönetim hesabın mı var?"}
-        action={managementMode ? "Üye girişi" : "Yönetim girişi"}
-        onPress={toggleMode}
-        disabled={signingIn}
-        testID="toggle-management-login"
-      />
 
       {/* Mağaza şartı (App Store 1.2): kullanıcı içeriği olan uygulama,
           hakaret ve taciz için hoşgörü olmadığını kullanıcıya kabul

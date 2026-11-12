@@ -64,6 +64,7 @@ import { formatScore, formatTime } from "@/lib/format";
 import { matchState } from "@/lib/match";
 import type { ApiMatch } from "@/lib/types";
 import { GradientFill } from "./GradientFill";
+import { GlowRim } from "./GlowRim";
 import { LiveBadge } from "./LiveBadge";
 import { ScoreFlash } from "./Motion";
 import { TeamLogo } from "./TeamLogo";
@@ -564,7 +565,8 @@ export const MatchCard = memo(function MatchCard({
       style={[styles.card, footer ? null : { height }, style]}
     >
       <GradientFill radius="xl" />
-      {live ? <View style={styles.liveLine} /> : null}
+      {/* Canlı kart: kenarında dolaşan neon ışık (GlowRim). */}
+      {live ? <GlowRim radius={radius.xl} /> : null}
 
       {showHead ? (
         <View style={styles.head}>

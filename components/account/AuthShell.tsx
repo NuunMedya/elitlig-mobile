@@ -21,8 +21,10 @@
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
-import React from "react";
+import { LinearGradient } from "expo-linear-gradient";
+import React, { useEffect, useRef } from "react";
 import {
+  Animated,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -46,6 +48,7 @@ import {
   colors,
   elevate,
   hairline,
+  spring,
   layout,
   radius,
   space,
@@ -297,7 +300,19 @@ export const PasswordRules = React.memo(function PasswordRules({
     { key: "letter", label: "Bir harf", ok: /[A-Za-zğüşıöçĞÜŞİÖÇ]/.test(value) },
     { key: "digit", label: "Bir rakam", ok: /[0-9]/.test(value) },
   ];
+  const score = rules.filter((rule) => rule.ok).length;
+  const strength = score === 0 ? "" : score === 1 ? "Zayıf" : score === 2 ? "Orta" : "Güçlü";
   return (
+    <View style={styles.strengthWrap}>
+      {/* FLOW FILL: şifre güçlendikçe üç bölmeli çubuk soldan dolar. */}
+      <View style={styles.strengthRow} accessibilityLabel={strength ? `Şifre gücü: ${strength}` : undefined}>
+        {[0, 1, 2].map((i) => (
+          <StrengthCell key={i} on={score > i} />
+        ))}
+        <Text style={[styles.strengthText, score === 3 ? styles.ruleOk : null]} {...textScale.dense}>
+          {strength}
+        </Text>
+      </View>
     <View style={styles.rules} accessibilityRole="summary">
       {rules.map((rule) => (
         <View
@@ -316,8 +331,34 @@ export const PasswordRules = React.memo(function PasswordRules({
         </View>
       ))}
     </View>
+    </View>
   );
 });
+
+function StrengthCell({ on }: { on: boolean }) {
+  const fill = useRef(new Animated.Value(on ? 1 : 0)).current;
+  useEffect(() => {
+    Animated.spring(fill, { toValue: on ? 1 : 0, ...spring.slide }).start();
+  }, [fill, on]);
+  return (
+    <View style={styles.strengthCell}>
+      <Animated.View
+        style={[
+          StyleSheet.absoluteFill,
+          styles.strengthFill,
+          { transform: [{ scaleX: fill }], opacity: fill },
+        ]}
+      >
+        <LinearGradient
+          colors={colors.gradientSignature}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={StyleSheet.absoluteFill}
+        />
+      </Animated.View>
+    </View>
+  );
+}
 
 /* ================================ ADIMLAR ================================ */
 
@@ -492,7 +533,7 @@ const styles = StyleSheet.create({
   card: {
     padding: space.lg,
     gap: space.md,
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     backgroundColor: colors.surface1,
     borderWidth: hairline,
     borderColor: colors.border,
@@ -519,6 +560,32 @@ const styles = StyleSheet.create({
     lineHeight: 19,
   },
 
+  strengthWrap: {
+    gap: space.sm,
+    marginTop: -space.xs,
+  },
+  strengthRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+  },
+  strengthCell: {
+    flex: 1,
+    height: 5,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface3,
+    overflow: "hidden",
+  },
+  strengthFill: {
+    borderRadius: radius.pill,
+    transformOrigin: "left center",
+  },
+  strengthText: {
+    ...type.caption,
+    color: colors.textTertiary,
+    minWidth: 44,
+    textAlign: "right",
+  },
   rules: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -557,7 +624,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.border,
   },
   stepLineOn: {
-    backgroundColor: colors.brand,
+    backgroundColor: colors.accent,
   },
   stepDot: {
     width: 22,

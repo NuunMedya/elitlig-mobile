@@ -40,6 +40,8 @@ export { Surface } from "./Surface";
 
 /** Gece teması atmosferi: kayan mor/camgöbeği/pembe ışık. */
 export { Aurora, type AuroraProps } from "./Aurora";
+/** Canlı kartın kenarında dolaşan neon ışık. */
+export { GlowRim, type GlowRimProps } from "./GlowRim";
 
 /** Kartların ışıklı mor gradyan katmanı. */
 export { Bloom, type BloomProps } from "./Bloom";

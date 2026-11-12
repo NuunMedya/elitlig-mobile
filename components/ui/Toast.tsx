@@ -50,6 +50,7 @@ import {
   layout,
   radius,
   space,
+  spring,
   textScale,
   type,
 } from "@/theme";
@@ -135,6 +136,8 @@ export function ToastProvider({
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const translateY = useRef(new Animated.Value(40)).current;
   const opacity = useRef(new Animated.Value(0)).current;
+  /* GECE TEMASI — ISLAND POP: toast küçük bir haptan yaylanarak büyür. */
+  const scale = useRef(new Animated.Value(0.86)).current;
   /** Çıkış animasyonu bitmeden ikinci kez tetiklenmesin. */
   const leaving = useRef(false);
 
@@ -197,6 +200,7 @@ export function ToastProvider({
     fireHaptic(hapticFor(current.haptic));
     translateY.setValue(40);
     opacity.setValue(0);
+    scale.setValue(0.86);
     Animated.parallel([
       Animated.timing(opacity, {
         toValue: 1,
@@ -204,19 +208,15 @@ export function ToastProvider({
         easing: easing.decelerate,
         useNativeDriver: true,
       }),
-      Animated.timing(translateY, {
-        toValue: 0,
-        duration: ENTER_MS,
-        easing: easing.decelerate,
-        useNativeDriver: true,
-      }),
+      Animated.spring(translateY, { toValue: 0, ...spring.slide }),
+      Animated.spring(scale, { toValue: 1, ...spring.pop }),
     ]).start();
 
     if (current.duration === "sticky") return;
     const ms = current.duration ?? DEFAULT_DURATION;
     timer.current = setTimeout(() => dismiss(EXIT_MS), ms);
     return clearTimer;
-  }, [clearTimer, current, dismiss, opacity, translateY]);
+  }, [clearTimer, current, dismiss, opacity, scale, translateY]);
 
   useEffect(() => clearTimer, [clearTimer]);
 
@@ -264,7 +264,7 @@ export function ToastProvider({
           style={[
             styles.wrapper,
             { bottom: insets.bottom + offsetBottom },
-            { opacity, transform: [{ translateY }] },
+            { opacity, transform: [{ translateY }, { scale }] },
           ]}
         >
           <View

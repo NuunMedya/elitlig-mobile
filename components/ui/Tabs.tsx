@@ -28,9 +28,9 @@
  * ortalanır — kullanıcı hangi sekmede olduğunu daima görür.
  */
 
-import { useHeaderTone } from "./HeaderTone";
+import { HeaderToneContext, useHeaderTone } from "./HeaderTone";
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useContext, useEffect, useRef, useState } from "react";
 import {
   Animated,
   ScrollView,
@@ -126,6 +126,9 @@ function TabsBase<T extends string>({
   testID,
 }: TabsProps<T>) {
   const tone = useHeaderTone(toneProp ?? "paper");
+  /* Başlığın İÇİNDE (ScreenHeader `tabs`/`bottom`) şerit kendi zeminini
+     basmaz: arkasındaki aurora ışığı kesintisiz görünsün. */
+  const inHeader = useContext(HeaderToneContext) != null;
   const scrollRef = useRef<ScrollView>(null);
   /* WORM UNDERLINE: çizginin iki ucu ayrı yaylarla hareket eder. Gidilen
      yöndeki uç önden fırlar, arkadaki uç bir an sonra yetişir; çizgi yolda
@@ -284,6 +287,7 @@ function TabsBase<T extends string>({
         sticky && tone === "paper" && surface && surface !== "transparent"
           ? { backgroundColor: surface }
           : null,
+        sticky && inHeader && !surface ? styles.inHeader : null,
         style,
       ]}
       onLayout={(event) => setContainerWidth(event.nativeEvent.layout.width)}
@@ -383,6 +387,9 @@ const styles = StyleSheet.create({
   /* Şerit, yuvarlak köşeli bir yüzeyin İÇİNDEYSE kendi zeminini ve alt
      ayracını basmamalı: köşesiz bir dikdörtgen olarak yüzeyin köşelerinin
      üstünde görünürdü. `surface="transparent"` bunu söyler. */
+  inHeader: {
+    backgroundColor: "transparent",
+  },
   stickyBare: {
     backgroundColor: "transparent",
     borderBottomWidth: 0,

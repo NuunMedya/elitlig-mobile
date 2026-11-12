@@ -34,7 +34,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import { useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
-import { Alert, Appearance, DevSettings, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Appearance, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { shortLeague, shortSeason } from "@/components/LeaguePicker";
@@ -48,6 +48,7 @@ import {
   type Tone,
 } from "@/components/ui";
 import { THEME_STORAGE_KEY, getStoredTheme, setStoredTheme } from "@/constants/themePreference";
+import { reloadForTheme } from "@/lib/themeTransition";
 import { useFollowSettings } from "@/hooks/useFollowSettings";
 import { formatNumber } from "@/lib/format";
 import { useAuth } from "@/providers/AuthProvider";
@@ -169,9 +170,9 @@ export default function SettingsScreen() {
    * yazılır.
    * NEDEN YENİDEN YÜKLEME: palet modül yüklenirken donuyor; seçim etkin temayı
    * DEĞİŞTİRİYORSA JS bir kez tazelenir, değiştirmiyorsa hiç tazelenmez.
-   * NEDEN `__DEV__`: `DevSettings.reload()` yayın derlemesinde hata ATMAZ,
-   * sessizce hiçbir şey yapmaz (RN DevSettings.js: `reload() {}`). Yayında
-   * kullanıcıya ne yapması gerektiği dürüstçe söylenir.
+   * NASIL TAZELENİR: `lib/themeTransition.ts` — geliştirmede
+   * `DevSettings.reload()`, yayında `expo-updates` `reloadAsync()`. Yeniden
+   * yükleme mümkün değilse kullanıcıya ne yapması gerektiği dürüstçe söylenir.
    */
   const chooseTheme = useCallback(
     (choice: ThemeChoice) => {
@@ -190,14 +191,16 @@ export default function SettingsScreen() {
             toast.show({ message: `Görünüm: ${THEME_LABELS[choice]}`, tone: "success" });
             return;
           }
-          if (__DEV__) {
-            DevSettings.reload();
-            return;
-          }
-          toast.show({
+          /* PORTAL OPEN: ekranın görüntüsü alınır, uygulama yeniden yüklenir
+             ve yeni tema eski görüntünün altından açılır (yayında da çalışır:
+             expo-updates reloadAsync). */
+          return reloadForTheme().then((reloaded) => {
+            if (reloaded) return;
+            toast.show({
             message: `Görünüm: ${THEME_LABELS[choice]}. Uygulamayı tamamen kapatıp yeniden açınca uygulanacak.`,
             tone: "warn",
             duration: 5000,
+            });
           });
         })
         .catch(() => {

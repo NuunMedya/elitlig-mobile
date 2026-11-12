@@ -270,8 +270,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface1,
   },
   fieldFloat: {
-    alignItems: "flex-end",
-    paddingBottom: space.sm + 1,
+    alignItems: "center",
   },
   glowRing: {
     position: "absolute",
@@ -306,8 +305,9 @@ const styles = StyleSheet.create({
   floatLabelWithIcon: {
     left: space.md + space.xxs + 16 + space.sm,
   },
+  /* Değer, yukarı süzülen etiketin altında durur. */
   inputFloat: {
-    alignSelf: "flex-end",
+    paddingTop: 16,
   },
   fieldSearch: {
     borderRadius: radius.pill,

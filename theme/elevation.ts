@@ -34,10 +34,12 @@ export type ElevationLevel = 0 | 1 | 2 | 3 | 4;
 /** Verilen seviyenin zemin + kenarlık (+ yüzen katmanlarda gölge) stilini üretir. */
 /** Seviye başına gölge reçetesi: opaklık · yarıçap · y ofseti · android kotu. */
 const SHADOW: Record<Exclude<ElevationLevel, 0>, { o: number; r: number; y: number; e: number } | null> = {
-  1: null,
-  2: { o: 0.06, r: 14, y: 3, e: 2 },
-  3: { o: 0.10, r: 22, y: 8, e: 6 },
-  4: { o: 0.16, r: 32, y: 14, e: 12 },
+  /* GECE TEMASI: açık temada kart da lavanta zeminden çok hafif mor bir
+     gölgeyle kalkar (beyaz kart + mor gölge = "Lavanta Sis"). */
+  1: { o: 0.05, r: 14, y: 4, e: 1 },
+  2: { o: 0.08, r: 18, y: 6, e: 3 },
+  3: { o: 0.12, r: 24, y: 10, e: 6 },
+  4: { o: 0.18, r: 32, y: 14, e: 12 },
 };
 
 /** Koyu temada yalnız gerçekten yüzen katmanlar gölge alır; kart almaz. */
@@ -63,9 +65,10 @@ export function elevation(level: ElevationLevel, p: Palette, isDarkTheme: boolea
     borderColor: isDarkTheme && level >= 3 ? p.borderStrong : p.border,
   };
 
-  // Koyu temada yüzen katmanın üst kenarına 1px iç ışık: katmanı "kalınlaştırır".
-  if (isDarkTheme && level >= 3) {
-    base.borderTopColor = "rgba(255,255,255,0.08)";
+  // Koyu temada her yüzeyin üst kenarına ince bir ışık: kart gece zemininden
+  // "cam" gibi kalkar; yüzen katmanlarda biraz daha parlak.
+  if (isDarkTheme) {
+    base.borderTopColor = level >= 3 ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.06)";
   }
 
   if (!shadow) return base;
