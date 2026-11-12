@@ -31,7 +31,7 @@ function TileFaceBase({ kind, w, h, slab, back }: Props) {
   const deepColor = back ? UCLE_COLORS.backDeep : k.deep;
   const gid = `uk${back ? "b" : kind % UCLE_KINDS.length}`;
   const iconName = (back ? "shield-half-full" : k.icon) as IconName;
-  const iconSize = Math.round(w * (back ? 0.46 : 0.56));
+  const iconSize = Math.round(w * (back ? 0.5 : 0.62));
   return (
     <View style={{ width: w, height: h }} pointerEvents="none">
       <View style={[styles.abs, { top: slab, height: faceH, borderRadius: r, backgroundColor: deepColor }]} />

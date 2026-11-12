@@ -57,3 +57,37 @@ export const ARENA_TITLES: Record<string, string> = {
   tahmin: "Skor Tahmini",
   gunun: "Günün Testi",
 };
+
+/** Birim kartlarının oyun-içi renkleri: ikon baloncuğu ve basamak çubuğu (açık → koyu). */
+export const CITY_UNIT_COLORS: Record<string, [string, string]> = {
+  saha: ["#5BE36B", "#1FA83A"],
+  tribun: ["#FF7AA8", "#D9306E"],
+  soyunma: ["#7EC8FF", "#2F80ED"],
+  kantin: ["#FFB547", "#E8650C"],
+  magaza: ["#C9A2FF", "#7C4DFF"],
+  kulup: ["#5EE6D8", "#0E9E92"],
+  saglik: ["#FF8A8A", "#E02D3C"],
+  medya: ["#FFD23F", "#C98A00"],
+  antrenman: ["#9BE15D", "#4C9A1A"],
+  akademi: ["#8FB4FF", "#3D5AFE"],
+  kamp: ["#FFA77A", "#D9541E"],
+  ulasim: ["#7FD6FF", "#0B8BC4"],
+};
+
+/** Kulüp Şehri ekranının oyun-içi panelleri (iki temada aynı). */
+export const CITY_UI = {
+  white: "#FFFFFF",
+  ink: "#1F2333",
+  inkShadow: "rgba(0, 0, 0, 0.4)",
+  panel: ["#3A22A8", "#1A1050"] as [string, string],
+  panelEdge: "#6C55F0",
+  chip: "rgba(255, 255, 255, 0.12)",
+  muted: "rgba(255, 255, 255, 0.75)",
+  gold: ["#FFE45C", "#F5A300"] as [string, string],
+  goldLip: "#B07800",
+  green: ["#6BEA62", "#22B33A"] as [string, string],
+  greenLip: "#147A26",
+  sources: ["#FF7AA8", "#7EC8FF", "#FFD23F"] as [string, string, string],
+  lockBg: "#C9CDD6",
+  done: "#22C55E",
+} as const;

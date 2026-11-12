@@ -57,3 +57,63 @@ export const UCLE_COLORS = {
   glow: "#FFE066",
   white: "#FFFFFF",
 };
+
+/**
+ * Oyun içi arayüz (HUD, tahta çerçevesi, raf, güçlendiriciler). Tema
+ * tokenından bağımsız: oyun sahnesi iki temada da aynı "stadyum gecesi"
+ * atmosferini taşır.
+ */
+export const UCLE_UI = {
+  /** HUD paneli — gece moru. */
+  panel: "#2A1E6E",
+  panelDeep: "#150E3F",
+  panelRim: "#4B3BB0",
+  /** Seviye rozeti / kupa altını. */
+  gold: "#FFC531",
+  goldDeep: "#C47F00",
+  goldInk: "#4A2E00",
+  /** İlerleme yeşili. */
+  green: "#41E070",
+  greenDeep: "#1C9C43",
+  /** Uyarı kırmızısı (süre azaldı, raf doluyor). */
+  red: "#FF4D5E",
+  redDeep: "#B11C2C",
+  /** Güçlendirici mavisi ve turuncusu. */
+  blue: "#3FA9FF",
+  blueDeep: "#1A63B8",
+  orange: "#FF9A2E",
+  orangeDeep: "#C25E00",
+  /** Kilit / zincir çipleri. */
+  lockChip: "#FFB020",
+  lockChipDeep: "#B06F00",
+  chainChip: "#8C96A8",
+  chainChipDeep: "#555E70",
+  barTrack: "rgba(0, 0, 0, 0.38)",
+  barShine: "rgba(255, 255, 255, 0.35)",
+  /** Tahta: çim keçe + ahşap çerçeve. */
+  felt: "#2FA352",
+  feltStripe: "#27904A",
+  feltDeep: "#1D6E37",
+  feltLine: "rgba(255, 255, 255, 0.16)",
+  rim: "#8A5528",
+  rimHi: "#B97A3E",
+  rimDeep: "#4C2A10",
+  /** Raf tepsisi. */
+  tray: "#3B2416",
+  trayHi: "#5A3820",
+  trayDeep: "#1F1209",
+  cell: "rgba(0, 0, 0, 0.32)",
+  cellRim: "rgba(255, 255, 255, 0.12)",
+  /** Metin. */
+  text: "#FFFFFF",
+  textSoft: "rgba(255, 255, 255, 0.72)",
+  textShadow: "rgba(0, 0, 0, 0.45)",
+  /** Pencere arka örtüsü ve kart. */
+  scrim: "rgba(10, 6, 30, 0.62)",
+  card: "#33247F",
+  cardDeep: "#1A1150",
+  /** İpucu balonu. */
+  tipFace: "#FFF3C4",
+  tipDeep: "#E2B93B",
+  tipInk: "#4A3500",
+} as const;

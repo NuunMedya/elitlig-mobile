@@ -22,7 +22,7 @@ import {
 } from "@/lib/puzzle/ucluEngine";
 import { BoardLight, CellView, FrameTrim, LockView, ShineSweep } from "./BoardLayers";
 import { FxLayer, type Fx, type FlyGlyph, type FxInput } from "./Effects";
-import { BoosterBar, Hud, type HudGoal, type LiveBooster } from "./Hud";
+import { BoosterBar, HintBubble, Hud, type HudGoal, type LiveBooster } from "./Hud";
 import { TileView } from "./Piece";
 
 interface BoardView {
@@ -40,20 +40,39 @@ interface Hint {
 const COMBO_WORDS = ["", "", "Güzel!", "Harika!", "Süper!", "Muhteşem!", "Efsane!"];
 const SPECIAL_NAMES: Record<Special, string> = { none: "", h: "Füze Şut!", v: "Füze Şut!", bomb: "Röveşata!", ball: "Altın Top!" };
 const LIVE_BOOSTERS = [
-  { key: "cekic", title: "Krampon Darbesi", icon: "hammer" },
-  { key: "karistir", title: "Taktik Değişikliği", icon: "shuffle" },
+  { key: "cekic", title: "Krampon Darbesi", short: "DARBE", icon: "hammer" },
+  { key: "karistir", title: "Taktik Değişikliği", short: "TAKTİK", icon: "shuffle" },
 ] as const;
-const FRAME = 6;
-const BORDER = 2;
-/** Çerçevenin bir kenarı: dolgu + kenarlık (tahta bu kadar içeride başlar). */
-const PAD = FRAME + BORDER;
+/** Ahşap çerçevenin bir kenarı (tahta bu kadar içeride başlar). */
+const PAD = 12;
+/** HUD ve güçlendirici çubuğunun en küçük yükseklikleri; ekran uzunsa büyürler. */
+const HUD_MIN = 88;
+const HUD_MAX = 116;
+const BAR_MIN = 70;
+const BAR_MAX = 92;
+/** Bölümler arası en küçük boşluk. */
+const GAP = space.sm;
 const BONUS_MAX = 15;
 
 export default function UcluGame(props: PuzzleGameProps) {
   const { level, maxWidth, preBoosters, boosterStock, onFinish, paused } = props;
   const def = useMemo(() => ucluLevel(level), [level]);
-  const cell = Math.max(30, Math.floor((Math.min(maxWidth, 460) - PAD * 2) / W));
+  /*
+   * TAM EKRAN YERLEŞİM: hücre boyu hem genişlikten hem yükseklikten
+   * hesaplanır (en küçük HUD + çubuk + boşluklar düşülür), tahta ikisine de
+   * sığan en büyük kare olur. Artan dikey alan HUD'a ve güçlendirici
+   * çubuğuna paylaştırılır (iri sayaçlar / düğmeler); kalan, üç bölüm
+   * arasında eşit boşluk olur — ekranın altı boş kalmaz.
+   */
+  const maxHeight = Number.isFinite(props.maxHeight) && props.maxHeight > 0 ? props.maxHeight : maxWidth * 1.7;
+  const cellW = (maxWidth - PAD * 2) / W;
+  const cellH = (maxHeight - HUD_MIN - BAR_MIN - GAP * 2 - PAD * 2) / H;
+  const cell = Math.max(26, Math.floor(Math.min(cellW, cellH)));
   const boardPx = cell * W;
+  const framePx = boardPx + PAD * 2;
+  const spare = Math.max(0, maxHeight - framePx - HUD_MIN - BAR_MIN - GAP * 2);
+  const hudH = Math.min(HUD_MAX, HUD_MIN + Math.round(spare * 0.35));
+  const barH = Math.min(BAR_MAX, BAR_MIN + Math.round(spare * 0.25));
 
   /* ── motor durumu (ref) + ilk tahta ── */
   const engine = useRef<GameState | null>(null);
@@ -148,7 +167,8 @@ export default function UcluGame(props: PuzzleGameProps) {
     const bx = hudPos.current.x + rightPos.current.x + rowPos.current.x;
     const by = hudPos.current.y + rightPos.current.y + rowPos.current.y;
     if (!slot) return { x: bx + 20, y: by + 20 };
-    return { x: bx + slot.x + 22, y: by + slot.y + slot.h / 2 };
+    // Çipin solundaki simgenin merkezi (simge çip yüksekliğinde kare).
+    return { x: bx + slot.x + Math.min(slot.w, slot.h) / 2, y: by + slot.y + slot.h / 2 };
   }, []);
 
   /* ── efekt listesi: toplu ekle, toplu kaldır ── */
@@ -552,6 +572,7 @@ export default function UcluGame(props: PuzzleGameProps) {
   const liveBoosters: LiveBooster[] = LIVE_BOOSTERS.map((b) => ({
     key: b.key,
     title: b.title,
+    short: b.short,
     icon: b.icon,
     stock: boosterStock[b.key] ?? 0,
     active: b.key === "cekic" && hammer,
@@ -564,19 +585,17 @@ export default function UcluGame(props: PuzzleGameProps) {
     return { dx: (other % W) - (i % W), dy: Math.floor(other / W) - Math.floor(i / W), tick: hint.tick };
   };
 
+  const bubbleW = Math.min(maxWidth - space.md * 2, framePx - PAD);
   const barHint = hammer ? "Kırmak istediğin taşa ya da engele dokun." : tip;
 
   return (
-    <View style={[styles.root, { width: Math.min(maxWidth, boardPx + PAD * 2) }]}>
+    <View style={[styles.root, { width: maxWidth, height: maxHeight }]}>
       <View onLayout={onHudLayout}>
-        <Hud level={def.level} cup={def.cup} moves={moves} goals={goals} score={score} onGoalsPart={onGoalsPart} onGoalSlot={onGoalSlot} />
+        <Hud level={def.level} cup={def.cup} moves={moves} goals={goals} width={maxWidth} height={hudH} onGoalsPart={onGoalsPart} onGoalSlot={onGoalSlot} />
       </View>
 
-      <View
-        onLayout={onBoardLayout}
-        style={[styles.frame, { width: boardPx + PAD * 2, height: boardPx + PAD * 2 }, hammer && styles.frameHammer]}
-      >
-        <FrameTrim width={boardPx + PAD * 2} height={boardPx + PAD * 2} hammer={hammer} />
+      <View onLayout={onBoardLayout} style={[styles.frame, { width: framePx, height: framePx }]}>
+        <FrameTrim width={framePx} height={framePx} pad={PAD} hammer={hammer} />
         <View
           style={{ width: boardPx, height: boardPx }}
           {...pan.panHandlers}
@@ -627,7 +646,11 @@ export default function UcluGame(props: PuzzleGameProps) {
         </View>
       </View>
 
-      <BoosterBar boosters={liveBoosters} disabled={busy} onPress={onBooster} hint={barHint} />
+      <BoosterBar boosters={liveBoosters} disabled={busy} onPress={onBooster} score={score} width={maxWidth} height={barH} />
+
+      {barHint ? (
+        <HintBubble text={barHint} bottom={barH + Math.max(0, (maxHeight - hudH - framePx - barH) / 2) + PAD + space.xs} left={(maxWidth - bubbleW) / 2} width={bubbleW} />
+      ) : null}
 
       <FxLayer items={fx} />
     </View>
@@ -635,22 +658,19 @@ export default function UcluGame(props: PuzzleGameProps) {
 }
 
 const styles = StyleSheet.create({
-  root: { alignSelf: "center", gap: space.md },
+  root: { alignSelf: "center", justifyContent: "space-between" },
   frame: {
     alignSelf: "center",
-    padding: FRAME,
+    padding: PAD,
     borderRadius: radius.xl,
-    backgroundColor: UCLU_BOARD.frame,
-    borderWidth: BORDER,
-    borderColor: UCLU_BOARD.frame,
+    backgroundColor: UCLU_BOARD.rimInner,
   },
-  frameHammer: { borderColor: UCLU_BOARD.gold },
   clip: { overflow: "hidden" },
   selectRing: {
     position: "absolute",
     borderRadius: radius.md,
     borderWidth: 3,
-    borderColor: UCLU_BOARD.select,
+    borderColor: UCLU_BOARD.comboWarm,
     backgroundColor: UCLU_BOARD.selectGlow,
   },
 });

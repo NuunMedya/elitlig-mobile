@@ -1,91 +1,271 @@
 /**
  * Elit Üçlü taşları: statik çizim (PieceGlyph) + konumu canlandırılan taş (TileView).
  *
- * Her tür hem RENK hem ŞEKİL taşır (daire, kare, altıgen, kalkan, karo,
- * sekizgen) — renk körlüğünde de ayırt edilsin diye. İkonlar Ionicons; düdük
- * Ionicons'ta olmadığı için SVG ile çizilir.
+ * Her taş parlak, hacimli bir "şeker / mücevher"dir: zemin gölgesi, koyu 3B
+ * taban, ışığı sol üstten alan gradyan gövde, cam kubbe parlaması ve iri,
+ * koyu dış çizgili BEYAZ bir futbol sembolü (top, forma, krampon, eldiven,
+ * düdük, kupa). Her tür hem RENK hem ŞEKİL taşır (daire, yuvarlak kare,
+ * altıgen, kalkan, karo, rozet) — renk körlüğünde de ayırt edilsin diye.
+ *
+ * Özel taşlar tek bakışta seçilir:
+ *   · Füze Şut (h / v): kalın beyaz şeritler + iki uçta altın oklar + soğuk ışıma.
+ *   · Röveşata (bomb): altın patlama yıldızı, altın kenar, köşe kıvılcımları + sıcak ışıma.
+ *   · Altın Top (ball): altın küre, altı renkli gökkuşağı halkası, kıvılcımlar.
+ * Hepsi tek SVG; ikon fontu kullanılmaz (çizgi kalınlığı ölçekle birlikte büyür).
  */
 
-import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { useEffect, useRef } from "react";
 import { Animated, Easing, StyleSheet, View } from "react-native";
-import Svg, { Circle, Defs, Ellipse, G, LinearGradient, Path, Polygon, RadialGradient, Rect, Stop } from "react-native-svg";
+import Svg, { Circle, ClipPath, Defs, Ellipse, G, LinearGradient, Path, Polygon, RadialGradient, Rect, Stop } from "react-native-svg";
 import { duration } from "@/theme";
 import { UCLU_BOARD, UCLU_PIECE_COLORS } from "@/lib/puzzle/ucluPalette";
 import type { Special, Tile } from "@/lib/puzzle/ucluEngine";
 
-type IconName = keyof typeof Ionicons.glyphMap;
+/* ───────────────────────────── geometri ───────────────────────────── */
 
-const ICONS: (IconName | null)[] = ["football", "shirt", "footsteps", "hand-left", null, "trophy"];
+type Pt = readonly [number, number];
 
-/** Şekiller 100×100 görünüm kutusunda (alt kenarda 3B taban payı bırakılır). */
-function Shape({
-  kind,
-  fill,
-  stroke,
-  strokeWidth = 2,
-  strokeOpacity,
-  transform,
-}: {
-  kind: number;
-  fill: string;
-  stroke?: string;
-  strokeWidth?: number;
-  strokeOpacity?: number;
-  transform?: string;
-}) {
-  const common = { fill, stroke, strokeWidth: stroke ? strokeWidth : 0, strokeOpacity, strokeLinejoin: "round" as const };
-  const g = (el: React.ReactElement) => (transform ? <G transform={transform}>{el}</G> : el);
+/** Köşeleri yuvarlatılmış çokgen yolu (her köşe `r` kadar içeriden kavislenir). */
+function roundedPoly(points: readonly Pt[], r: number): string {
+  const n = points.length;
+  let d = "";
+  for (let i = 0; i < n; i++) {
+    const p = points[i];
+    const prev = points[(i - 1 + n) % n];
+    const next = points[(i + 1) % n];
+    const toPrev = [prev[0] - p[0], prev[1] - p[1]];
+    const toNext = [next[0] - p[0], next[1] - p[1]];
+    const lp = Math.hypot(toPrev[0], toPrev[1]);
+    const ln = Math.hypot(toNext[0], toNext[1]);
+    const k = Math.min(r, lp / 2, ln / 2);
+    const a = [p[0] + (toPrev[0] / lp) * k, p[1] + (toPrev[1] / lp) * k];
+    const b = [p[0] + (toNext[0] / ln) * k, p[1] + (toNext[1] / ln) * k];
+    d += `${i === 0 ? "M" : "L"}${a[0].toFixed(2)} ${a[1].toFixed(2)} Q${p[0]} ${p[1]} ${b[0].toFixed(2)} ${b[1].toFixed(2)} `;
+  }
+  return `${d}Z`;
+}
+
+function ring(cx: number, cy: number, count: number, r: (i: number) => number, start = -90): Pt[] {
+  return Array.from({ length: count }, (_, i) => {
+    const a = ((start + (360 / count) * i) * Math.PI) / 180;
+    return [cx + Math.cos(a) * r(i), cy + Math.sin(a) * r(i)] as const;
+  });
+}
+
+const HEX = roundedPoly([[50, 6], [89, 28], [89, 72], [50, 94], [11, 72], [11, 28]], 9);
+const DIAMOND = roundedPoly([[50, 3], [97, 50], [50, 97], [3, 50]], 12);
+const ROSETTE = roundedPoly(ring(50, 50, 16, (i) => (i % 2 ? 39 : 46.5)), 5);
+const SHIELD = "M50 6 C63 12 75 13 88 12 C91 51 79 78 50 94 C21 78 9 51 12 12 C25 13 37 12 50 6 Z";
+
+/** Gövde şekilleri 100×100 kutuda (alt kenarda 3B taban payı bırakılır). */
+function Shape({ kind, ...rest }: { kind: number; fill?: string; stroke?: string; strokeWidth?: number; strokeOpacity?: number; fillOpacity?: number; transform?: string }) {
+  const common = { strokeLinejoin: "round" as const, ...rest };
   switch (kind) {
     case 0:
-      return g(<Circle cx={50} cy={50} r={42} {...common} />);
+      return <Circle cx={50} cy={50} r={43} {...common} />;
     case 1:
-      return g(<Rect x={9} y={9} width={82} height={82} rx={24} {...common} />);
+      return <Rect x={8} y={8} width={84} height={84} rx={24} {...common} />;
     case 2:
-      return g(<Polygon points="50,7 89,29 89,71 50,93 11,71 11,29" {...common} />);
+      return <Path d={HEX} {...common} />;
     case 3:
-      return g(<Path d="M50 8 L87 18 Q90 61 50 93 Q10 61 13 18 Z" {...common} />);
+      return <Path d={SHIELD} {...common} />;
     case 4:
-      return g(<Rect x={19} y={19} width={62} height={62} rx={14} transform="rotate(45 50 50)" {...common} />);
+      return <Path d={DIAMOND} {...common} />;
     default:
-      return g(<Polygon points="32,8 68,8 92,32 92,68 68,92 32,92 8,68 8,32" {...common} />);
+      return <Path d={ROSETTE} {...common} />;
   }
 }
 
-/** Düdük: gövde + ağızlık + halka. */
-function Whistle({ size, color }: { size: number; color: string }) {
+/** Kubbe içi ölçek: şeklin merkezine göre küçültür. */
+const inner = (s: number) => `translate(50 50) scale(${s}) translate(-50 -50)`;
+
+/* ───────────────────────────── semboller ───────────────────────────── */
+
+/**
+ * Her sembol İKİ geçişte çizilir: önce koyu dış çizgi (kalın kontur), sonra
+ * beyaz dolgu ve renkli ayrıntılar. Böylece sembol hangi zeminde olursa olsun
+ * küçük boyda da net okunur.
+ */
+interface Ink {
+  outline: boolean;
+  /** Dolgu (beyaz). */
+  fill: string;
+  /** Dış çizgi ve koyu ayrıntı. */
+  dark: string;
+  /** Renkli ayrıntı (formadaki şerit, kupadaki yıldız). */
+  accent: string;
+}
+
+const OUT = 8;
+
+function solid(ink: Ink) {
+  return ink.outline
+    ? { fill: ink.dark, stroke: ink.dark, strokeWidth: OUT, strokeLinejoin: "round" as const }
+    : { fill: ink.fill };
+}
+function line(ink: Ink, w: number) {
+  return ink.outline
+    ? { fill: "none", stroke: ink.dark, strokeWidth: w + OUT, strokeLinecap: "round" as const }
+    : { fill: "none", stroke: ink.fill, strokeWidth: w, strokeLinecap: "round" as const };
+}
+
+const BALL_PENT = ring(50, 50, 5, () => 10);
+const BALL_SPOKE = ring(50, 50, 5, () => 25);
+const SHIRT = "M38 23 L44 20 C46 27 54 27 56 20 L62 23 L79 33 L72 48 L65 44.5 L65 79 L35 79 L35 44.5 L28 48 L21 33 Z";
+const BOOT = "M21 35 C21 29 25 26 31 26 L44 26 C46 26 47.5 27.5 47.6 29.5 L48.5 41 C59 42 70 45 77.5 50 C82 53 82 60 78 63 L22 63 C20 63 18.5 61.5 18.5 59.5 Z";
+const CUP = "M32 23 L68 23 L67 39 C66 51 59 59 50 59 C41 59 34 51 33 39 Z";
+const STAR5 = (cx: number, cy: number, r: number) => ring(cx, cy, 10, (i) => (i % 2 ? r * 0.45 : r)).map((p) => p.join(",")).join(" ");
+
+function Emblem({ index, ink }: { index: number; ink: Ink }) {
+  const s = solid(ink);
+  switch (index) {
+    case 0: // top
+      return (
+        <G>
+          <Circle cx={50} cy={50} r={26} {...s} />
+          {ink.outline ? null : (
+            <G>
+              <Polygon points={BALL_PENT.map((p) => p.join(",")).join(" ")} fill={ink.dark} stroke={ink.dark} strokeWidth={2} strokeLinejoin="round" />
+              {BALL_SPOKE.map((p, i) => (
+                <Path key={i} d={`M${BALL_PENT[i][0]} ${BALL_PENT[i][1]} L${p[0]} ${p[1]}`} stroke={ink.dark} strokeWidth={3.2} strokeLinecap="round" />
+              ))}
+              {BALL_SPOKE.map((p, i) => (
+                <Circle key={`c${i}`} cx={p[0]} cy={p[1]} r={5.5} fill={ink.dark} />
+              ))}
+              <Circle cx={50} cy={50} r={26} fill="none" stroke={ink.dark} strokeWidth={1.5} />
+            </G>
+          )}
+        </G>
+      );
+    case 1: // forma
+      return (
+        <G>
+          <Path d={SHIRT} {...s} />
+          {ink.outline ? null : (
+            <G>
+              <Rect x={45.5} y={27} width={9} height={52} fill={ink.accent} />
+              <Path d="M44 20 C46 27 54 27 56 20" fill="none" stroke={ink.dark} strokeWidth={2.4} strokeLinecap="round" />
+            </G>
+          )}
+        </G>
+      );
+    case 2: // krampon
+      return (
+        <G>
+          <Path d={BOOT} {...s} />
+          {[24, 33, 55, 64.5, 73].map((x) => (
+            <Path key={x} d={`M${x} 62 L${x + 6} 62 L${x + 4.5} 70 L${x + 1.5} 70 Z`} {...s} />
+          ))}
+          {ink.outline ? null : (
+            <G>
+              <Rect x={19} y={60.5} width={61} height={3} fill={ink.dark} />
+              <Path d="M24 52 C38 55 56 52 72 54" fill="none" stroke={ink.accent} strokeWidth={5} strokeLinecap="round" />
+              <Path d="M51 42 L55 47 M58 43.5 L61.5 48.5 M65 45.5 L67.5 50" fill="none" stroke={ink.dark} strokeWidth={2.6} strokeLinecap="round" />
+            </G>
+          )}
+        </G>
+      );
+    case 3: // eldiven
+      return (
+        <G>
+          <Rect x={34} y={26} width={9.5} height={26} rx={4.75} {...s} />
+          <Rect x={44.5} y={20} width={9.5} height={30} rx={4.75} {...s} />
+          <Rect x={55} y={22} width={9.5} height={28} rx={4.75} {...s} />
+          <Rect x={65.5} y={29} width={8.5} height={22} rx={4.25} {...s} />
+          <Ellipse cx={29} cy={51} rx={5.5} ry={12} transform="rotate(-32 29 51)" {...s} />
+          <Rect x={33} y={40} width={41} height={28} rx={11} {...s} />
+          <Rect x={35} y={66} width={37} height={13} rx={3} {...s} />
+          {ink.outline ? null : (
+            <G>
+              <Rect x={35} y={69.5} width={37} height={5} fill={ink.accent} />
+              <Path d="M39 41 L39 51 M49.2 39 L49.2 50 M59.7 39 L59.7 50" stroke={ink.dark} strokeWidth={1.8} strokeLinecap="round" opacity={0.55} />
+            </G>
+          )}
+        </G>
+      );
+    case 4: // düdük
+      return (
+        <G>
+          <Circle cx={26} cy={33} r={6.5} {...line(ink, 4.5)} />
+          <Circle cx={42} cy={56} r={18} {...s} />
+          <Rect x={40} y={38} width={40} height={15} rx={4} {...s} />
+          {ink.outline ? null : (
+            <G>
+              <Circle cx={42} cy={56} r={6.5} fill={ink.dark} />
+              <Rect x={48} y={38} width={8} height={5} fill={ink.dark} />
+              <Rect x={73} y={41} width={4} height={9} rx={2} fill={ink.accent} />
+            </G>
+          )}
+        </G>
+      );
+    default: // kupa
+      return (
+        <G>
+          <Path d="M34 28 C23 28 21 34 22.5 39 C24 45 30 48 36 48" {...line(ink, 5)} />
+          <Path d="M66 28 C77 28 79 34 77.5 39 C76 45 70 48 64 48" {...line(ink, 5)} />
+          <Path d={CUP} {...s} />
+          <Rect x={45.5} y={57} width={9} height={11} {...s} />
+          <Rect x={35} y={67} width={30} height={10} rx={3} {...s} />
+          {ink.outline ? null : (
+            <G>
+              <Polygon points={STAR5(50, 39, 9)} fill={ink.accent} />
+              <Rect x={35} y={67} width={30} height={3} fill={ink.dark} opacity={0.35} />
+            </G>
+          )}
+        </G>
+      );
+  }
+}
+
+function SymbolPair({ index, scale, fill, dark, accent }: { index: number; scale: number; fill: string; dark: string; accent: string }) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 100 100">
-      <Circle cx={40} cy={58} r={26} fill={color} />
-      <Rect x={40} y={32} width={50} height={18} rx={6} fill={color} />
-      <Circle cx={40} cy={58} r={9} fill={UCLU_BOARD.shadow} />
-      <Circle cx={22} cy={24} r={9} fill="none" stroke={color} strokeWidth={6} />
-    </Svg>
+    <G transform={inner(scale)}>
+      <G transform="translate(0 2.5)" opacity={0.35}>
+        <Emblem index={index} ink={{ outline: true, fill, dark: UCLU_BOARD.ink, accent }} />
+      </G>
+      <Emblem index={index} ink={{ outline: true, fill, dark, accent }} />
+      <Emblem index={index} ink={{ outline: false, fill, dark, accent }} />
+    </G>
   );
 }
 
-function SpecialMarks({ special }: { special: Special }) {
-  if (special === "h" || special === "v") {
-    const rot = special === "v" ? "rotate(90 50 50)" : undefined;
-    return (
-      <G transform={rot}>
-        <Rect x={4} y={36} width={92} height={7} rx={3} fill={UCLU_BOARD.beamCore} opacity={0.85} />
-        <Rect x={4} y={57} width={92} height={7} rx={3} fill={UCLU_BOARD.beamCore} opacity={0.85} />
-        <Polygon points="2,50 15,40 15,60" fill={UCLU_BOARD.beamCore} />
-        <Polygon points="98,50 85,40 85,60" fill={UCLU_BOARD.beamCore} />
-      </G>
-    );
-  }
-  if (special === "bomb") {
-    return (
-      <G>
-        <Circle cx={50} cy={50} r={36} fill="none" stroke={UCLU_BOARD.beamCore} strokeWidth={6} strokeDasharray="10 7" />
-        <Circle cx={50} cy={50} r={44} fill="none" stroke={UCLU_BOARD.goldHi} strokeWidth={3} opacity={0.9} />
-      </G>
-    );
-  }
-  return null;
+/* ───────────────────────────── özel işaretler ───────────────────────────── */
+
+function Sparkle({ x, y, r, fill }: { x: number; y: number; r: number; fill: string }) {
+  const k = r * 0.28;
+  return <Path d={`M${x} ${y - r} Q${x + k} ${y - k} ${x + r} ${y} Q${x + k} ${y + k} ${x} ${y + r} Q${x - k} ${y + k} ${x - r} ${y} Q${x - k} ${y - k} ${x} ${y - r} Z`} fill={fill} />;
 }
+
+/** Füze okları: iki uçta dışa bakan altın oklar (v için 90° döner). */
+function RocketArrows({ vertical }: { vertical: boolean }) {
+  const arrow = "M1 50 L15 36 L15 44 L22 44 L22 56 L15 56 L15 64 Z";
+  return (
+    <G transform={vertical ? "rotate(90 50 50)" : undefined}>
+      {[undefined, "rotate(180 50 50)"].map((t, i) => (
+        <G key={i} transform={t}>
+          <Path d={arrow} fill={UCLU_BOARD.goldDeep} stroke={UCLU_BOARD.goldDeep} strokeWidth={6} strokeLinejoin="round" />
+          <Path d={arrow} fill={UCLU_BOARD.gold} stroke={UCLU_BOARD.goldHi} strokeWidth={1.5} strokeLinejoin="round" />
+        </G>
+      ))}
+    </G>
+  );
+}
+
+/** Altı renkli gökkuşağı halkası (Altın Top: "her renge vurur"). */
+function RainbowRing({ r, w }: { r: number; w: number }) {
+  return (
+    <G>
+      {UCLU_PIECE_COLORS.map((c, i) => {
+        const a0 = ((-90 + i * 60 + 4) * Math.PI) / 180;
+        const a1 = ((-90 + (i + 1) * 60 - 4) * Math.PI) / 180;
+        const d = `M${50 + Math.cos(a0) * r} ${50 + Math.sin(a0) * r} A${r} ${r} 0 0 1 ${50 + Math.cos(a1) * r} ${50 + Math.sin(a1) * r}`;
+        return <Path key={i} d={d} fill="none" stroke={c.base} strokeWidth={w} strokeLinecap="round" />;
+      })}
+    </G>
+  );
+}
+
+/* ───────────────────────────── taş çizimi ───────────────────────────── */
 
 export interface PieceGlyphProps {
   kind: Tile["kind"];
@@ -94,73 +274,126 @@ export interface PieceGlyphProps {
   size: number;
 }
 
-/** Statik taş çizimi — HUD hedeflerinde de kullanılır. */
+/** Statik taş çizimi — HUD hedeflerinde ve uçan simgelerde de kullanılır. */
 export const PieceGlyph = React.memo(function PieceGlyph({ kind, color, special, size }: PieceGlyphProps) {
   if (kind === "trophy") return <TrophyGlyph size={size} />;
   if (special === "ball") return <GoldenBall size={size} />;
-  const pal = UCLU_PIECE_COLORS[Math.max(0, color) % UCLU_PIECE_COLORS.length];
-  const icon = ICONS[color] ?? null;
-  const shape = Math.max(0, color);
-  const iconSize = Math.round(size * (shape === 4 ? 0.44 : special === "bomb" ? 0.4 : 0.5));
-  const gid = `ug${color}`;
-  // Parlak, hacimli "mücevher": zemin gölgesi, koyu taban (3B kalınlık),
-  // ışığı sol üstten alan gövde, cam gibi kubbe, iç kenar parlaması, parıltı.
+  const idx = Math.max(0, color) % UCLU_PIECE_COLORS.length;
+  const pal = UCLU_PIECE_COLORS[idx];
+  const shape = idx;
+  const rocket = special === "h" || special === "v";
+  const bomb = special === "bomb";
+  // Karo şeklinin iç alanı dar: sembol biraz küçülür. Özel taşta işaretlere yer açılır.
+  const symScale = (shape === 4 ? 0.98 : 1.18) * (rocket ? 0.8 : bomb ? 0.86 : 1);
+  const id = `u${idx}${special}`;
   return (
     <View style={{ width: size, height: size }}>
       <Svg width={size} height={size} viewBox="0 0 100 100" style={StyleSheet.absoluteFill}>
         <Defs>
-          <RadialGradient id={gid} cx="36%" cy="28%" r="78%">
+          <RadialGradient id={`${id}b`} cx="34%" cy="26%" r="80%">
             <Stop offset="0" stopColor={pal.hi} />
-            <Stop offset="0.5" stopColor={pal.base} />
+            <Stop offset="0.42" stopColor={pal.base} />
             <Stop offset="1" stopColor={pal.lo} />
           </RadialGradient>
-          <LinearGradient id="ugdome" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor={UCLU_BOARD.beamCore} stopOpacity={0.42} />
-            <Stop offset="0.45" stopColor={UCLU_BOARD.beamCore} stopOpacity={0.04} />
-            <Stop offset="0.7" stopColor={UCLU_BOARD.ink} stopOpacity={0} />
-            <Stop offset="1" stopColor={UCLU_BOARD.ink} stopOpacity={0.18} />
+          <LinearGradient id={`${id}g`} x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor={UCLU_BOARD.beamCore} stopOpacity={0.7} />
+            <Stop offset="1" stopColor={UCLU_BOARD.beamCore} stopOpacity={0.04} />
           </LinearGradient>
+          <ClipPath id={`${id}c`}>
+            <Shape kind={shape} />
+          </ClipPath>
+          {rocket || bomb ? (
+            <RadialGradient id={`${id}h`} cx="50%" cy="50%" r="50%">
+              <Stop offset="0.55" stopColor={rocket ? UCLU_BOARD.glowCool : UCLU_BOARD.glowWarm} stopOpacity={0.9} />
+              <Stop offset="1" stopColor={rocket ? UCLU_BOARD.glowCool : UCLU_BOARD.glowWarm} stopOpacity={0} />
+            </RadialGradient>
+          ) : null}
         </Defs>
-        <Ellipse cx={50} cy={92} rx={34} ry={5} fill={UCLU_BOARD.shadow} />
-        <Shape kind={shape} fill={pal.lo} transform="translate(0 4)" />
-        <Shape kind={shape} fill={`url(#${gid})`} stroke={pal.lo} />
-        <Shape kind={shape} fill="url(#ugdome)" transform="translate(50 50) scale(0.8) translate(-50 -50)" />
-        <Shape kind={shape} fill="none" stroke={pal.hi} strokeOpacity={0.75} strokeWidth={2.5} transform="translate(50 50) scale(0.9) translate(-50 -50)" />
-        <Ellipse cx={37} cy={27} rx={15} ry={7} transform="rotate(-28 37 27)" fill={UCLU_BOARD.beamCore} fillOpacity={0.55} />
-        <Circle cx={69} cy={23} r={3.2} fill={UCLU_BOARD.beamCore} fillOpacity={0.85} />
-        <SpecialMarks special={special} />
+        {rocket || bomb ? <Circle cx={50} cy={50} r={50} fill={`url(#${id}h)`} /> : null}
+        <Ellipse cx={50} cy={93} rx={36} ry={5.5} fill={UCLU_BOARD.shadow} />
+        <G transform="translate(0 -1.5)">
+          {/* 3B taban: koyu kenar gövdenin altından görünür. */}
+          <Shape kind={shape} fill={pal.rim} transform="translate(0 5)" />
+          <Shape kind={shape} fill={`url(#${id}b)`} stroke={bomb ? UCLU_BOARD.gold : pal.rim} strokeWidth={bomb ? 5 : 2.5} />
+          <G clipPath={`url(#${id}c)`}>
+            {rocket ? (
+              <G transform={special === "v" ? "rotate(90 50 50)" : undefined}>
+                {[24, 43, 62].map((y) => (
+                  <G key={y}>
+                    <Rect x={0} y={y} width={100} height={13} fill={pal.rim} opacity={0.45} />
+                    <Rect x={0} y={y + 1.5} width={100} height={9} fill={UCLU_BOARD.beamCore} opacity={0.92} />
+                  </G>
+                ))}
+              </G>
+            ) : null}
+            {/* Kubbe: üst yarıda cam parlaması, altta iç gölge. */}
+            <Ellipse cx={50} cy={24} rx={40} ry={22} fill={`url(#${id}g)`} />
+            <Shape kind={shape} fill="none" stroke={pal.lo} strokeOpacity={0.55} strokeWidth={6} transform="translate(0 3)" />
+          </G>
+          <Shape kind={shape} fill="none" stroke={pal.hi} strokeOpacity={0.8} strokeWidth={2.2} transform={inner(0.9)} />
+          {bomb ? (
+            <G>
+              <Polygon points={ring(50, 50, 16, (i) => (i % 2 ? 22 : 37)).map((p) => p.join(",")).join(" ")} fill={UCLU_BOARD.goldDeep} stroke={UCLU_BOARD.goldDeep} strokeWidth={5} strokeLinejoin="round" />
+              <Polygon points={ring(50, 50, 16, (i) => (i % 2 ? 22 : 37)).map((p) => p.join(",")).join(" ")} fill={UCLU_BOARD.gold} stroke={UCLU_BOARD.goldHi} strokeWidth={1.5} strokeLinejoin="round" />
+              <Circle cx={50} cy={50} r={22} fill={pal.base} />
+            </G>
+          ) : null}
+          <SymbolPair index={idx} scale={symScale * (bomb ? 0.78 : 1)} fill={pal.ink} dark={pal.rim} accent={pal.base} />
+          <Ellipse cx={30} cy={24} rx={10} ry={4.5} transform="rotate(-35 30 24)" fill={UCLU_BOARD.beamCore} fillOpacity={0.85} />
+          <Circle cx={22} cy={37} r={2.6} fill={UCLU_BOARD.beamCore} fillOpacity={0.8} />
+        </G>
+        {rocket ? <RocketArrows vertical={special === "v"} /> : null}
+        {bomb ? (
+          <G>
+            <Sparkle x={12} y={12} r={10} fill={UCLU_BOARD.goldHi} />
+            <Sparkle x={88} y={14} r={8} fill={UCLU_BOARD.beamCore} />
+            <Sparkle x={86} y={86} r={10} fill={UCLU_BOARD.goldHi} />
+            <Sparkle x={13} y={84} r={7} fill={UCLU_BOARD.beamCore} />
+          </G>
+        ) : null}
       </Svg>
-      <View style={[styles.center, styles.iconShadow]} pointerEvents="none">
-        {icon ? <Ionicons name={icon} size={iconSize} color={UCLU_BOARD.iconShadow} /> : <Whistle size={iconSize * 1.05} color={UCLU_BOARD.iconShadow} />}
-      </View>
-      <View style={styles.center} pointerEvents="none">
-        {icon ? <Ionicons name={icon} size={iconSize} color={pal.ink} /> : <Whistle size={iconSize * 1.05} color={pal.ink} />}
-      </View>
     </View>
   );
 });
 
 function GoldenBall({ size }: { size: number }) {
+  const pent = ring(50, 50, 5, () => 11);
+  const spokes = ring(50, 50, 5, () => 30);
   return (
     <View style={{ width: size, height: size }}>
       <Svg width={size} height={size} viewBox="0 0 100 100" style={StyleSheet.absoluteFill}>
         <Defs>
-          <RadialGradient id="ugold" cx="38%" cy="32%" r="70%">
+          <RadialGradient id="ugold" cx="36%" cy="30%" r="72%">
             <Stop offset="0" stopColor={UCLU_BOARD.goldHi} />
-            <Stop offset="0.5" stopColor={UCLU_BOARD.gold} />
+            <Stop offset="0.45" stopColor={UCLU_BOARD.gold} />
             <Stop offset="1" stopColor={UCLU_BOARD.goldLo} />
           </RadialGradient>
+          <RadialGradient id="ugoldh" cx="50%" cy="50%" r="50%">
+            <Stop offset="0.6" stopColor={UCLU_BOARD.goldHi} stopOpacity={0.95} />
+            <Stop offset="1" stopColor={UCLU_BOARD.goldHi} stopOpacity={0} />
+          </RadialGradient>
+          <LinearGradient id="ugoldg" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor={UCLU_BOARD.beamCore} stopOpacity={0.75} />
+            <Stop offset="1" stopColor={UCLU_BOARD.beamCore} stopOpacity={0} />
+          </LinearGradient>
         </Defs>
-        <Circle cx={50} cy={50} r={47} fill={UCLU_BOARD.flash} opacity={0.35} />
-        <Ellipse cx={50} cy={92} rx={30} ry={5} fill={UCLU_BOARD.shadow} />
-        <Circle cx={50} cy={54} r={40} fill={UCLU_BOARD.goldLo} />
-        <Circle cx={50} cy={50} r={40} fill="url(#ugold)" stroke={UCLU_BOARD.goldLo} strokeWidth={3} />
-        <Ellipse cx={37} cy={30} rx={14} ry={7} transform="rotate(-28 37 30)" fill={UCLU_BOARD.beamCore} fillOpacity={0.6} />
-        <Path d="M78 14 L81 22 L89 25 L81 28 L78 36 L75 28 L67 25 L75 22 Z" fill={UCLU_BOARD.beamCore} />
+        <Circle cx={50} cy={50} r={50} fill="url(#ugoldh)" />
+        <Ellipse cx={50} cy={93} rx={30} ry={5} fill={UCLU_BOARD.shadow} />
+        <RainbowRing r={43} w={7} />
+        <Circle cx={50} cy={54} r={36} fill={UCLU_BOARD.goldDeep} />
+        <Circle cx={50} cy={50} r={36} fill="url(#ugold)" stroke={UCLU_BOARD.goldDeep} strokeWidth={2.5} />
+        <Polygon points={pent.map((p) => p.join(",")).join(" ")} fill={UCLU_BOARD.goldInk} stroke={UCLU_BOARD.goldInk} strokeWidth={2} strokeLinejoin="round" />
+        {spokes.map((p, i) => (
+          <G key={i}>
+            <Path d={`M${pent[i][0]} ${pent[i][1]} L${p[0]} ${p[1]}`} stroke={UCLU_BOARD.goldInk} strokeWidth={3.5} strokeLinecap="round" />
+            <Circle cx={p[0]} cy={p[1]} r={6} fill={UCLU_BOARD.goldInk} />
+          </G>
+        ))}
+        <Ellipse cx={50} cy={30} rx={26} ry={13} fill="url(#ugoldg)" />
+        <Ellipse cx={34} cy={28} rx={9} ry={4} transform="rotate(-35 34 28)" fill={UCLU_BOARD.beamCore} />
+        <Sparkle x={84} y={16} r={11} fill={UCLU_BOARD.beamCore} />
+        <Sparkle x={15} y={82} r={8} fill={UCLU_BOARD.beamCore} />
       </Svg>
-      <View style={styles.center} pointerEvents="none">
-        <Ionicons name="football" size={Math.round(size * 0.54)} color={UCLU_BOARD.goldInk} />
-      </View>
     </View>
   );
 }
@@ -170,17 +403,23 @@ function TrophyGlyph({ size }: { size: number }) {
     <View style={{ width: size, height: size }}>
       <Svg width={size} height={size} viewBox="0 0 100 100" style={StyleSheet.absoluteFill}>
         <Defs>
-          <RadialGradient id="ucup" cx="50%" cy="45%" r="55%">
-            <Stop offset="0" stopColor={UCLU_BOARD.goldHi} stopOpacity={0.7} />
+          <RadialGradient id="ucuph" cx="50%" cy="45%" r="52%">
+            <Stop offset="0" stopColor={UCLU_BOARD.goldHi} stopOpacity={0.85} />
             <Stop offset="1" stopColor={UCLU_BOARD.gold} stopOpacity={0} />
           </RadialGradient>
         </Defs>
-        <Circle cx={50} cy={50} r={48} fill="url(#ucup)" />
-        <Rect x={28} y={80} width={44} height={10} rx={4} fill={UCLU_BOARD.goldLo} />
+        <Circle cx={50} cy={48} r={50} fill="url(#ucuph)" />
+        <Ellipse cx={50} cy={92} rx={28} ry={5} fill={UCLU_BOARD.shadow} />
+        <G transform="translate(50 50) scale(1.32) translate(-50 -50)">
+          <G transform="translate(0 2.5)" opacity={0.35}>
+            <Emblem index={5} ink={{ outline: true, fill: UCLU_BOARD.gold, dark: UCLU_BOARD.ink, accent: UCLU_BOARD.goldHi }} />
+          </G>
+          <Emblem index={5} ink={{ outline: true, fill: UCLU_BOARD.gold, dark: UCLU_BOARD.goldDeep, accent: UCLU_BOARD.goldHi }} />
+          <Emblem index={5} ink={{ outline: false, fill: UCLU_BOARD.gold, dark: UCLU_BOARD.goldDeep, accent: UCLU_BOARD.goldHi }} />
+          <Ellipse cx={42} cy={32} rx={4} ry={8} fill={UCLU_BOARD.goldHi} fillOpacity={0.8} />
+        </G>
+        <Sparkle x={82} y={18} r={9} fill={UCLU_BOARD.beamCore} />
       </Svg>
-      <View style={styles.center} pointerEvents="none">
-        <Ionicons name="trophy" size={Math.round(size * 0.8)} color={UCLU_BOARD.gold} />
-      </View>
     </View>
   );
 }
@@ -244,6 +483,14 @@ function TileViewBase({ tile, row, col, cell, spawnRow, dying, selected, hintDx,
     }
   }, [row, col, cell, pos, squash]);
 
+  // Hücre boyu değişirse (ekran döndü / alan ölçüldü) taş yerine oturur.
+  const lastCell = useRef(cell);
+  useEffect(() => {
+    if (lastCell.current === cell) return;
+    lastCell.current = cell;
+    pos.setValue({ x: last.current.col * cell, y: last.current.row * cell });
+  }, [cell, pos]);
+
   useEffect(() => {
     if (!dying) return;
     Animated.parallel([
@@ -271,7 +518,8 @@ function TileViewBase({ tile, row, col, cell, spawnRow, dying, selected, hintDx,
     Animated.loop(swing, { iterations: 3 }).start();
   }, [hintTick, wiggle]);
 
-  const inset = Math.round(cell * 0.06);
+  // Taşlar hücreyi neredeyse doldurur: iri ve kolay okunur.
+  const inset = Math.round(cell * 0.035);
   const amp = cell * 0.14;
   return (
     <Animated.View
@@ -316,6 +564,4 @@ export const TileView = React.memo(TileViewBase, (a, b) =>
 
 const styles = StyleSheet.create({
   tile: { position: "absolute", left: 0, top: 0 },
-  center: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
-  iconShadow: { transform: [{ translateX: 0.8 }, { translateY: 1.6 }] },
 });

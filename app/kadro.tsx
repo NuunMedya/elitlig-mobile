@@ -4,8 +4,9 @@
  * sonunda rakibin kalecisini düşür, gol at. Kadron seçtiğin kaptanın kulübünün
  * formasını giyer; her bölüm ligin bir takımına karşıdır.
  *
- * Oyunun kendisi `games/kadro.js` (three.js / WebGL, WebView içinde; arcade
- * motoru `games/arcade3d.js`): kapılar, hasar ve puanlama orada belgelenmiştir.
+ * Oyunun kendisi `games/kadro.js` (Canvas 2D, sözde 3B koşu yolu; Savunma
+ * Hattı ile aynı çizgi film görünümü, WebView içinde): kapılar, hasar ve
+ * puanlama orada belgelenmiştir.
  * Bu ekran yalnız ortak Arena kabuğunu oyuna bağlar.
  */
 

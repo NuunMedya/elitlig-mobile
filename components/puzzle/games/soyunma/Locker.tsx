@@ -7,8 +7,8 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { memo, useEffect, useRef, useState } from "react";
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from "react-native";
 import Svg, { Defs, Line, LinearGradient, Rect, Stop } from "react-native-svg";
-import { colors, radius, textScale, type } from "@/theme";
-import { SOYUNMA_LOCKER, SOYUNMA_TEAMS } from "@/lib/puzzle/soyunmaPalette";
+import { radius, textScale, type } from "@/theme";
+import { SOYUNMA_LOCKER, SOYUNMA_TEAMS, SOYUNMA_UI } from "@/lib/puzzle/soyunmaPalette";
 import { SparkleBurst } from "./Effects";
 import { bodyTop, liftOffset, slotTop, type BoardGeometry } from "./geometry";
 import { Crest, Jersey } from "./Jersey";
@@ -250,7 +250,7 @@ function LockerBase(p: LockerProps) {
         ? `Dolap ${p.index + 1}: boş, ${cap} forma alır`
         : `Dolap ${p.index + 1}: ${items.length}/${cap} forma, en üstte ${topTeam ?? "gizli forma"}`;
 
-  const borderColor = p.complete ? colors.win : lift > 0 ? colors.brand : SOYUNMA_LOCKER.woodDark;
+  const borderColor = p.complete ? SOYUNMA_UI.green : lift > 0 ? SOYUNMA_UI.gold : SOYUNMA_LOCKER.woodDark;
 
   return (
     <Animated.View
@@ -351,12 +351,12 @@ function LockerBase(p: LockerProps) {
             styles.hint,
             {
               top: Math.max(0, top - 30),
-              left: g.colW / 2 - 12,
+              left: g.colW / 2 - 14,
               transform: [{ translateY: hintV.interpolate({ inputRange: [0, 1], outputRange: [-4, 4] }) }],
             },
           ]}
         >
-          <Ionicons name="arrow-down" size={24} color={colors.brandAccent} />
+          <Ionicons name="arrow-down-circle" size={28} color={SOYUNMA_UI.gold} />
         </Animated.View>
       ) : null}
     </Animated.View>

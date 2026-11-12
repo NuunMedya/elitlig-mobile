@@ -1,12 +1,14 @@
 /*
- * PENALTI 3B — SERİ PENALTI DÜELLOSU. Gerçek ligin golcüsüyle atarsın, gerçek
+ * PENALTI — SERİ PENALTI DÜELLOSU. Gerçek ligin golcüsüyle atarsın, gerçek
  * ligin kalecisiyle kurtarırsın; her maç ligin bir sonraki kulübüne karşı.
  *
  * MİMARİ: oyun iki katmandır.
  *   SİMÜLASYON  kurallar, top fiziği (yerçekimi, direk/üst direk sekmesi, file),
  *               kaleci gövdesi ve yapay zekâsı, puanlama. Çizimden bağımsızdır;
  *               başsız testler (scripts/check-games.mjs) yalnız bunu koşturur.
- *   ÇİZİM       three.js gece stadyumu (#gl) + saydam 2B HUD (#c).
+ *   ÇİZİM       düz Canvas 2D "flat vector" çizgi film (Savunma Hattı ailesi):
+ *               atıcının arkasından kale, gece şehri + takım renkli tribün,
+ *               lacivert konturlu futbolcular, HUD hapları ve beyaz kartlar.
  *
  * MAÇ: klasik seri penaltı. Sırayla beşer atış: sen atarsın, rakibin atışı
  * kısa bir kartla gösterilir (rakip kulübün gerçek atıcıları; isabetleri
@@ -62,7 +64,6 @@
   "use strict";
   var A = window.Arena;
   var P = A.PAL;
-  var T = window.THREE || (typeof THREE !== "undefined" ? THREE : null); // eslint-disable-line no-undef
 
   /* ═══════════════════════════ SİMÜLASYON ═══════════════════════════ */
 
@@ -147,7 +148,7 @@
     takers = tk;
     if (state !== "attract" && state !== "over") return; // maç ortasında kadro değişmez
     opp = opponentOf(0);
-    if (R) rebuildCast();
+    castSig = "";
   }
   function attr(obj, key, fallback) {
     var v = obj && obj.attrs ? Number(obj.attrs[key]) : NaN;
@@ -618,7 +619,7 @@
         var backAt = NET_D - BALL_R - 0.05;
         if (depth > backAt) {
           b.z = -backAt;
-          netHit((b.x * S3.HALF) / HALF, (b.y * S3.GOAL_H) / GOAL_H, Math.abs(b.vz));
+          netHit(b.x, b.y, Math.abs(b.vz));
           b.vz = Math.abs(b.vz) * 0.08;
         }
         if (Math.abs(b.x) > HALF - BALL_R) {
@@ -666,7 +667,7 @@
     match = { me: [], op: [], opDirs: [], sudden: false, turn: "shoot" };
     matchRain = opp.diff >= 0.55 && Math.random() < 0.3 + 0.45 * opp.diff;
     resetKick();
-    if (R) rebuildCast();
+    castSig = "";
     setState("intro");
   }
 
@@ -998,7 +999,7 @@
     say(result);
     // Tekrar: golün yandan alçak açıyla
     resultLen = 1.7;
-    if (scored && !A.reduceMotion && R && recording.length > 10) {
+    if (scored && !A.reduceMotion && VIS && recording.length > 10) {
       replay = { frames: recording, mine: true };
       resultLen = REPLAY_AT + REPLAY_LEN + 0.2;
     }
@@ -1007,8 +1008,7 @@
   }
 
   function confetti(kit) {
-    if (!R) return;
-    var p = screenOf(ball.x, ball.y, ball.z);
+    var p = proj(ball.x, ball.y, ball.z);
     A.burst(p.x, p.y, 70, {
       angle: -Math.PI / 2,
       spread: Math.PI * 1.3,
@@ -1154,9 +1154,8 @@
     kickDust();
   }
   function kickDust() {
-    if (!R) return;
-    var sp = screenOf(0, 0.05, SPOT_Z);
-    A.burst(sp.x, sp.y, 12, { angle: -Math.PI / 2, spread: 1.6, speed: 130, gravity: 520, life: 0.5, size: 3, color: ["#1F7A3D", "#2E9B53", "#6B4E2E"] });
+    var sp = proj(0, 0.05, SPOT_Z);
+    A.burst(sp.x, sp.y, 14, { angle: -Math.PI / 2, spread: 1.8, speed: 170, gravity: 560, life: 0.55, size: 4, color: ["#2FA544", "#5FD35F", "#8BE36B", "#FFFFFF"] });
   }
 
   /** Tekrar için kayıt (60 Hz). */
@@ -1172,6 +1171,12 @@
 
   /** Vuruş türü düğmeleri (HUD ile ortak yerleşim). */
   function typeRects() {
+    if (W > H * 1.15) {
+      // yatay ekran: sol altta dikey sütun (atıcı ve kale ortada kalır)
+      return TYPE_KEYS.map(function (k, i) {
+        return { key: k, x: 12, y: H - 3 * 48 - 2 + i * 48, w: 104, h: 40 };
+      });
+    }
     var bw = Math.min(104, (W - 48) / 3), bh = 40, gap = 8;
     var total = bw * 3 + gap * 2;
     var x0 = W / 2 - total / 2, y = H - 64;
@@ -1181,7 +1186,7 @@
   }
   /** Joker düğmeleri: sağ kenarda dikey üç daire. */
   function jokerButtons() {
-    var r = 21, x = W - 32, y0 = Math.max(250, H * 0.5);
+    var r = 21, x = W - 32, y0 = Math.min(Math.max(250, H * 0.5), H - 164);
     return JOKER_KEYS.map(function (k, i) {
       return { key: k, x: x, y: y0 + i * 62, r: r };
     });
@@ -1239,801 +1244,1384 @@
     }
   }
 
-  /* ═══════════════════════════ 3B ÇİZİM ═══════════════════════════ */
-
-  var K = A.T3;
-  var R = null; // { renderer, scene, camera, ... }
-  var glFailed = false;
-  var tmpV = null;
-
-  /** Dünya noktasının ekran konumu (HUD için); s = metre başına piksel. */
-  function screenOf(x, y, z) {
-    if (!R) return { x: W / 2, y: H * 0.6, s: 40 };
-    tmpV.set(x, y, z);
-    var dist = R.camera.position.distanceTo(tmpV);
-    tmpV.project(R.camera);
-    var s = H / (2 * Math.tan((R.camera.fov * Math.PI) / 360) * Math.max(0.3, dist));
-    return { x: (tmpV.x * 0.5 + 0.5) * W, y: (-tmpV.y * 0.5 + 0.5) * H, s: s };
-  }
-
-  function hasWebGL() {
-    try {
-      var cv = document.getElementById("gl");
-      if (!cv || !T || !cv.getContext) return false;
-      var gl = cv.getContext("webgl2") || cv.getContext("webgl");
-      if (!gl || typeof gl.getParameter !== "function") return false;
-      var v = gl.getParameter(gl.VERSION);
-      return typeof v === "string" && v.length > 0;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  function initGL() {
-    if (R || glFailed) return;
-    if (!hasWebGL()) {
-      glFailed = true;
-      return;
-    }
-    try {
-      var cv = document.getElementById("gl");
-      var renderer = new T.WebGLRenderer({ canvas: cv, antialias: true, powerPreference: "high-performance", stencil: false });
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-      renderer.shadowMap.enabled = true;
-      renderer.shadowMap.type = T.PCFSoftShadowMap;
-      renderer.toneMapping = T.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 1.14;
-      renderer.outputColorSpace = T.SRGBColorSpace;
-      K.init(renderer);
-      var scene = new T.Scene();
-      scene.background = new T.Color(0x040714);
-      scene.fog = new T.FogExp2(0x0b1230, 0.0065);
-      var camera = new T.PerspectiveCamera(40, 1, 0.1, 500);
-      tmpV = new T.Vector3();
-      R = { renderer: renderer, scene: scene, camera: camera, U: { time: { value: 0 }, excite: { value: 0 } }, cast: {} };
-      S3.build(R);
-      buildWeather();
-      rebuildCast();
-      resizeGL();
-    } catch (e) {
-      R = null;
-      glFailed = true;
-    }
-  }
-
-  function resizeGL() {
-    if (!R) return;
-    R.renderer.setSize(W, H, false);
-    var cv = R.renderer.domElement;
-    if (cv && cv.style) {
-      cv.style.width = W + "px";
-      cv.style.height = H + "px";
-    }
-    R.camera.aspect = W / Math.max(1, H);
-    R.camera.updateProjectionMatrix();
-  }
-  /** Belirli bir genişliği (m) belirli uzaklıkta ekrana sığdıran dikey görüş açısı. */
-  function fitFov(width, dist, lo, hi) {
-    var aspect = W / Math.max(1, H);
-    var v = (2 * Math.atan(width / 2 / dist / aspect) * 180) / Math.PI;
-    return A.clamp(v, lo || 22, hi || 72);
-  }
-
-  var std = K.std, mesh = K.mesh, canvasTex = K.canvasTex, glowTexture = K.glowTexture;
-
-  /* Stadyum, çim, kale + file, seyirci, top ve gölgeler: games/stadium3d.js (A.S3). */
-  var S3 = A.S3;
-  function blob(size, opacity) {
-    return S3.blob(size, opacity);
-  }
-  function shadowSet() {
-    return S3.shadowSet();
-  }
-  function placeShadows(set, a, visible) {
-    S3.placeShadows(set, a, visible);
-  }
-  function asKeeper(person, avoid) {
-    return S3.asKeeper(person, avoid);
-  }
-  function netReset() {
-    S3.netReset();
-  }
-  function netHit(x, y, speed) {
-    S3.netHit(x, y, speed);
-  }
-  function netStep(dt) {
-    S3.netStep(dt);
-  }
-  function paintCrowd() {
-    if (R) S3.paintCrowd(kitOf(shooter), kitOf(opp.keeper));
-  }
-  function paintBoards(text) {
-    S3.paintBoards(text);
-  }
-  function paintLed(a, b) {
-    S3.paintLed(a, b);
-  }
-  var screenSig = "";
-  function paintScreen() {
-    var gm = match ? goalsOf(match.me) : 0, go = match ? goalsOf(shownOp()) : 0;
-    var sig = gm + ":" + go + ":" + teamName(shooter) + ":" + teamName(opp.keeper) + ":" + (match && match.sudden);
-    if (sig === screenSig) return;
-    screenSig = sig;
-    var c = R.screenTex.userData.ctx, cw = 512, ch = 192;
-    c.fillStyle = "#04060f";
-    c.fillRect(0, 0, cw, ch);
-    var g = c.createLinearGradient(0, 0, 0, ch);
-    g.addColorStop(0, "rgba(91,61,245,0.35)");
-    g.addColorStop(1, "rgba(10,12,40,0.0)");
-    c.fillStyle = g;
-    c.fillRect(0, 0, cw, ch);
-    c.textAlign = "center";
-    c.textBaseline = "middle";
-    c.fillStyle = "#FFD24A";
-    c.font = "900 22px " + A.FONT;
-    c.fillText(match && match.sudden ? "ANİ ÖLÜM" : "SERİ PENALTILAR", cw / 2, 30);
-    c.fillStyle = "#FFFFFF";
-    c.font = "900 76px " + A.FONT;
-    c.fillText(gm + " – " + go, cw / 2, 106);
-    c.font = "800 24px " + A.FONT;
-    c.fillStyle = kitOf(shooter).primary;
-    c.fillRect(20, 150, 8, 26);
-    c.fillStyle = kitOf(opp.keeper).primary;
-    c.fillRect(cw - 28, 150, 8, 26);
-    c.fillStyle = "#FFFFFF";
-    c.textAlign = "left";
-    c.fillText(fitText(c, upperTR(teamName(shooter)), 210), 36, 164);
-    c.textAlign = "right";
-    c.fillText(fitText(c, upperTR(teamName(opp.keeper)), 210), cw - 36, 164);
-    c.fillStyle = "rgba(0,0,0,0.25)";
-    for (var y = 1; y < ch; y += 3) c.fillRect(0, y, cw, 1);
-    R.screenTex.needsUpdate = true;
-  }
-  function fitText(c, text, max) {
-    var t = text;
-    while (c.measureText(t).width > max && t.length > 3) t = t.slice(0, -1);
-    return t === text ? t : t + "…";
-  }
-
-  /* ─────────────── hava: yağmur, rüzgâr bayrakları, füze ışıması ─────────────── */
-
-  function buildWeather() {
-    var N = 1500;
-    var g = new T.BufferGeometry();
-    g.setAttribute("position", new T.BufferAttribute(new Float32Array(N * 6), 3));
-    var rain = new T.LineSegments(g, new T.LineBasicMaterial({ color: 0xc8dcff, transparent: true, opacity: 0.5, depthWrite: false }));
-    rain.frustumCulled = false;
-    rain.visible = false;
-    R.scene.add(rain);
-    var rnd = A.seeded(77), drops = [];
-    for (var i = 0; i < N; i++) drops.push({ x: -13 + rnd() * 26, y: rnd() * 14, z: -3 + rnd() * 25, v: 10 + rnd() * 4 });
-    R.rain = { mesh: rain, drops: drops };
-    // kale arkasında iki bayrak direği: rüzgârın yönü ve şiddeti
-    var poleMat = std(0xe2e8f0, 0.4, 0.6);
-    R.flags = [-1, 1].map(function (side) {
-      var pole = mesh(new T.CylinderGeometry(0.035, 0.045, 4.4, 10), poleMat, true, false);
-      pole.position.set(side * 5.9, 2.2, -5.3);
-      R.scene.add(pole);
-      var geo = new T.PlaneGeometry(1.3, 0.8, 10, 5);
-      var flag = mesh(geo, new T.MeshStandardMaterial({ color: 0xffffff, side: T.DoubleSide, roughness: 0.8 }), false, false);
-      flag.frustumCulled = false;
-      R.scene.add(flag);
-      return { side: side, flag: flag, base: Float32Array.from(geo.attributes.position.array) };
-    });
-    // füze ışıması (topun etrafında)
-    var glow = new T.Sprite(new T.SpriteMaterial({ map: glowTexture(), color: 0xff8a3d, transparent: true, depthWrite: false, blending: T.AdditiveBlending, opacity: 0.9 }));
-    glow.scale.set(0.9, 0.9, 1);
-    glow.visible = false;
-    R.scene.add(glow);
-    R.rocketGlow = glow;
-    R.goalVis = { x: 1, y: 1 };
-  }
-  function syncWeather(dt) {
-    var rain = R.rain, on = cond.rain && state !== "attract";
-    rain.mesh.visible = on;
-    if (on) {
-      var arr = rain.mesh.geometry.attributes.position.array;
-      var wx = cond.wind * 0.35;
-      for (var i = 0; i < rain.drops.length; i++) {
-        var d = rain.drops[i];
-        d.y -= d.v * dt;
-        d.x += wx * dt;
-        if (d.y < 0) {
-          d.y += 14;
-          d.x = -13 + Math.random() * 26;
-        }
-        if (d.x > 13) d.x -= 26;
-        if (d.x < -13) d.x += 26;
-        var o = i * 6;
-        arr[o] = d.x;
-        arr[o + 1] = d.y;
-        arr[o + 2] = d.z;
-        arr[o + 3] = d.x - wx * 0.03;
-        arr[o + 4] = d.y + 0.38;
-        arr[o + 5] = d.z;
-      }
-      rain.mesh.geometry.attributes.position.needsUpdate = true;
-    }
-    R.scene.fog.density = on ? 0.012 : 0.0065;
-    R.renderer.toneMappingExposure = on ? 1.0 : 1.14;
-    // bayraklar: rüzgâr yönünde dalgalanır; rüzgâr yoksa sarkar
-    var str = A.clamp(Math.abs(cond.wind) / 6, 0, 1), dir = cond.wind >= 0 ? 1 : -1;
-    var kit = kitOf(opp.keeper);
-    R.flags.forEach(function (f, fi) {
-      f.flag.material.color.set(fi ? kit.primary : kitOf(shooter).primary);
-      var pos = f.flag.geometry.attributes.position, b = f.base;
-      for (var v = 0; v < pos.count; v++) {
-        var u = (b[v * 3] + 0.65) / 1.3, h = (0.4 - b[v * 3 + 1]) / 0.8;
-        var reach = u * 1.3 * (0.25 + 0.75 * str);
-        var droop = u * (1 - str) * 0.9;
-        pos.setXYZ(v, f.side * 5.9 + dir * reach, 4.3 - h * 0.8 - droop, -5.3 + Math.sin(A.time * (5 + 6 * str) - u * 7 + fi) * 0.14 * u * (0.25 + str));
-      }
-      pos.needsUpdate = true;
-      f.flag.geometry.computeVertexNormals();
-    });
-    // DEV KALE: kale yaylanarak büyür / küçülür
-    var gv = R.goalVis, k2 = Math.min(1, dt * 7);
-    gv.x += (gHalf / HALF - gv.x) * k2;
-    gv.y += (gTop / GOAL_H - gv.y) * k2;
-    R.goalRoot.scale.set(gv.x, gv.y, 1);
-  }
-
-  var REFEREE = makePerson(-900, "Hakem", { id: -900, name: "Hakem", kit: { primary: "#111827", secondary: "#FACC15" } }, { shirt: "" });
-
-  function athlete(key, person, opts) {
-    var cur = R.cast[key];
-    var sig = person.id + ":" + (person.team && person.team.kit ? person.team.kit.primary : "") + ":" + (opts.keeper ? 1 : 0);
-    if (cur && cur.sig === sig) return cur.a;
-    if (cur) {
-      R.scene.remove(cur.a.root);
-      K.disposeTree(cur.a.root);
-    }
-    var a = K.makeAthlete(person, opts);
-    R.scene.add(a.root);
-    if (!cur) R.cast[key] = { shadows: shadowSet() };
-    R.cast[key].a = a;
-    R.cast[key].sig = sig;
-    return a;
-  }
-  function rebuildCast() {
-    if (!R) return;
-    athlete("shooter", shooter, { keeper: false });
-    athlete("oppKeeper", asKeeper(opp.keeper, kitOf(shooter).primary), { keeper: true });
-    athlete("ref", REFEREE, { keeper: false, detail: "lo" });
-    paintCrowd();
-    screenSig = "";
-  }
-
-  /* ─────────────── pozlar ─────────────── */
-
-  /*
-   * ATICI HAREKETİ (sağ ayaklı). Ölçüler iskeletten ölçülmüştür (model +z'ye
-   * bakar, sol +x): temas anında vuran ayağın iç yüzü topun arkasında, destek
-   * (sol) ayağı topun ~30 cm solunda ve hizasında.
-   *   1. Bekleyiş: koşu çizgisinin başında, topa dönük, nefes alır.
-   *   2. Koşu: duruştan hızlanır; koşu klibi YERE GÖRE hızla oynar (ayak kaymaz).
-   *   3. Son uzun adım (−0,32 sn): sağ ayakla itiş, havada uzun adım, vuran
-   *      bacak dizden bükülerek geri savrulur, sol kol dengeye açılır.
-   *   4. Destek ayağı basar (−0,08 sn), bacak aşağı-öne kamçılanır, temas (0).
-   *   5. Takip: bacak yukarı uzanır, destek ayağında parmak ucuna yükselir,
-   *      gövde topla birlikte öne gider; bacak iner, toparlanır.
+  /* ═══════════════════════════ 2B ÇİZİM ═══════════════════════════
+   * Savunma Hattı ile aynı aile: koyu lacivert konturlu, doygun renkli,
+   * yuvarlak hatlı "flat vector" çizim. Sahne basit bir iğne deliği
+   * kamerasıyla çizilir (atıcının arkasından kale): dünya (x, y, z) →
+   * ekran. Statik parçalar (gökyüzü + şehir, tribün) ekran dışı katmanlara
+   * bir kez çizilir; kamera yaklaşınca tribün katmanı ölçeklenir.
    */
-  var KROOT = { x: 0.04, z: SPOT_Z + 0.5 }; // destek ayağı bastığında kök (yön −z)
-  var RDIR = { x: 0.375, z: -0.927 }; // koşu yönü (sol arkadan topa)
-  var STRIDE = 0.85, JOG_LEN = 2.6;
-  var PRP = { x: KROOT.x - RDIR.x * STRIDE, z: KROOT.z - RDIR.z * STRIDE }; // son adımın başı
-  var START = { x: PRP.x - RDIR.x * JOG_LEN, z: PRP.z - RDIR.z * JOG_LEN };
-  var T_STRIDE = 0.32, T_PLANT = 0.08; // temastan önce: son adım başı, destek ayağı
-  var JOG_V1 = 5.8; // koşu klibinin 1× hızdaki yer hızı (m/sn)
-  var JOG_PUSH = 0.47; // klipte sağ ayağın basıp itmeye başladığı an
-  var RUN_HEAD = Math.atan2(RDIR.x, RDIR.z), FACE = Math.PI;
-  /** Koşu: duruştan hızlanan yol (m) ve hız, t ∈ [0, T1]. */
-  var ACC_T = 0.3;
-  function runDist(t, T1) {
-    var vmax = JOG_LEN / (T1 - ACC_T / 2);
-    if (t < ACC_T) return { d: (vmax * t * t) / (2 * ACC_T), v: (vmax * t) / ACC_T };
-    return { d: vmax * (t - ACC_T / 2), v: vmax };
-  }
-  /** Temas sonrası kökün öne kayışı (destek ayağı yerde sabit kalsın diye). */
-  function followOff(tk) {
-    var K2 = [[-0.08, 0], [0, 0.08], [0.08, 0.17], [0.16, 0.28], [0.5, 0.3], [1, 0.42]];
-    if (tk <= K2[0][0]) return 0;
-    for (var i = 1; i < K2.length; i++)
-      if (tk <= K2[i][0]) return A.lerp(K2[i - 1][1], K2[i][1], (tk - K2[i - 1][0]) / (K2[i][0] - K2[i - 1][0]));
-    return K2[K2.length - 1][1];
-  }
-  /** Vuruş eklemleri — tk: temasa göre zaman (sn); w: katman ağırlığı. */
-  function kickJ(J, tk, w, lofted) {
-    var L = A.lerp, S = A.smooth, C = A.clamp;
-    function seg(t0, t1) {
-      return S(C((tk - t0) / (t1 - t0), 0, 1));
-    }
-    var stride = seg(-0.32, -0.08), back = seg(-0.3, -0.07), down = seg(-0.07, 0), thru = seg(0, 0.16), land = seg(0.16, 0.5), rec = seg(0.5, 0.95);
-    var lift = lofted ? 0.15 : 0;
-    // destek (sol) bacak: öne uzanır, basar, dizden yumuşar, parmak ucuna yükselir
-    J.hpa.rotation.x = w * L(L(L(0.45, -0.38, stride), -0.18, thru), 0.0, land);
-    J.kna.rotation.x = w * L(L(L(1.1, 0.28, stride), 0.42, down), 0.15, land);
-    J.hpa.rotation.z = w * 0.14;
-    J.fta.rotation.x = w * L(0, 0.25, thru) * (1 - land);
-    // vuran (sağ) bacak
-    var hip = L(L(L(L(-0.15, 0.62, back), -0.82, down), -1.4 - lift, thru), -0.25, land);
-    J.hpb.rotation.x = w * L(hip, 0, rec);
-    var knee = L(L(L(L(0.5, 1.6, back), 0.28, down), 0.06, thru), 0.35, land);
-    J.knb.rotation.x = w * L(knee, 0.1, rec);
-    J.hpb.rotation.z = w * L(0, 0.12, down) * (1 - land);
-    J.hpb.rotation.y = w * L(0, -0.5, back) * (1 - land);
-    J.ftb.rotation.x = w * L(0.2, 0.45, back) * (1 - land);
-    // gövde: adımda geri ve destek tarafına yatar, omuzlar açılır; temasta öne
-    J.spine.rotation.x = w * (L(L(L(0.12, -0.12 - lift, back), 0.08, down), 0.18, thru) * (1 - rec) + 0.05 * rec);
-    J.spine.rotation.z = w * L(0, -0.22, stride) * (1 - land);
-    J.spine.rotation.y = w * L(L(0, 0.35, back), -0.25, thru) * (1 - land);
-    // kollar: sol kol yana-yukarı (denge), sağ kol öne çapraz
-    J.sha.rotation.z = w * (L(L(0.25, 1.25, back), 0.9, thru) * (1 - rec) + 0.25 * rec);
-    J.sha.rotation.x = w * L(0, -0.35, back) * (1 - rec);
-    J.ela.rotation.x = -0.35 * w;
-    J.shb.rotation.z = w * (L(-0.25, -0.55, back) * (1 - rec) - 0.25 * rec);
-    J.shb.rotation.x = w * L(L(0.2, -0.75, back), 0.35, thru) * (1 - rec);
-    J.elb.rotation.x = -0.5 * w;
-    J.head.rotation.x = w * (L(0.3, 0.45, back) * (1 - land) + 0.1);
-    J.hips.position.y = 0.94 + w * L(L(0.04, -0.05, stride), 0.02, thru) * (1 - rec);
-  }
-  /** Kök: konum + yön (kökün yerel +z'si ileri). */
-  function setRoot(a, x, z, yaw) {
-    a.root.position.set(x, 0, z);
-    a.root.rotation.y = yaw;
-  }
-  /** Temas sonrası kökün dünyadaki yeri (yön −z). */
-  function afterRoot(tk) {
-    var off = followOff(tk);
-    return { x: KROOT.x, z: KROOT.z - off };
-  }
 
-  /**
-   * Atıcının pozu. phase: 'wait' | 'run' (t: koşu başından sn) | 'kick' (k:
-   * temastan sn) | 'celebrate' | 'sad'.
-   */
-  function poseShooter(a, phase, t) {
-    var J = a.J;
-    K.rest(a);
-    var lofted = shot && (shot.lob || shot.ty > 1.7);
-    if (phase === "wait") {
-      setRoot(a, START.x, START.z, RUN_HEAD + 0.1);
-      var ready = state === "power" ? 1 : 0;
-      J.spine.rotation.x = 0.06 + 0.06 * ready + Math.sin(A.time * 2.1) * 0.015;
-      J.head.rotation.x = 0.1;
-      J.head.rotation.y = -0.12;
-      J.hips.position.y = 0.94 - 0.03 * ready + (ready ? Math.max(0, Math.sin(A.time * 5)) * 0.02 : 0);
-      J.kna.rotation.x = J.knb.rotation.x = 0.12 * ready;
-      J.sha.rotation.z = 0.12;
-      J.shb.rotation.z = -0.12;
-      return;
-    }
-    if (phase === "run") {
-      var T1 = RUNUP - T_STRIDE;
-      var tk = t - RUNUP;
-      if (t < T1) {
-        var rd = runDist(t, T1);
-        setRoot(a, START.x + RDIR.x * rd.d, START.z + RDIR.z * rd.d, RUN_HEAD);
-        var end = runDist(T1, T1).d;
-        var clipT = JOG_PUSH + 4 * K.clipDur("jog") - (end - rd.d) / JOG_V1;
-        var wj = A.smooth(A.clamp(t / 0.22, 0, 1));
-        K.play(a, "jog", clipT, wj);
-        J.spine.rotation.x = 0.1 * wj + 0.12 * (1 - A.clamp(t / 0.35, 0, 1)) * wj; // ilk adımlarda öne eğik
-        var wk0 = A.smooth(A.clamp((t - (T1 - 0.06)) / 0.1, 0, 1));
-        if (wk0 > 0) kickJ(J, tk, wk0, lofted);
-        return;
-      }
-      if (tk < -T_PLANT) {
-        // son uzun adım: havada, yön topa döner
-        var u = (tk + T_STRIDE) / (T_STRIDE - T_PLANT);
-        setRoot(a, A.lerp(PRP.x, KROOT.x, u), A.lerp(PRP.z, KROOT.z, u), A.lerp(RUN_HEAD, FACE, A.smooth(u)));
-        var wj2 = 1 - A.smooth(A.clamp((tk + T_STRIDE) / 0.1, 0, 1));
-        if (wj2 > 0) K.play(a, "jog", JOG_PUSH + (tk + T_STRIDE) * (3.2 / JOG_V1), wj2);
-        kickJ(J, tk, A.smooth(A.clamp((tk + T_STRIDE + 0.06) / 0.1, 0, 1)), lofted);
-        a.root.position.y = Math.sin(Math.PI * u) * 0.05;
-        return;
-      }
-      var ar = afterRoot(tk);
-      setRoot(a, ar.x, ar.z, FACE);
-      kickJ(J, tk, 1, lofted);
-      return;
-    }
-    if (phase === "kick") {
-      var r2 = afterRoot(t);
-      setRoot(a, r2.x, r2.z, FACE);
-      kickJ(J, t, 1, lofted);
-      // gözler topta
-      J.head.rotation.x += -0.15 * A.clamp(t / 0.4, 0, 1);
-      return;
-    }
-    var base = afterRoot(1);
-    if (phase === "celebrate") {
-      // köşe bayrağına koşu, kollar açık; sonra diz kayışı ve yumruk
-      var c = A.clamp(t / 2.0, 0, 1);
-      var tx = 6.5, tz = SPOT_Z + 4.5;
-      var e = A.smooth(c);
-      setRoot(a, A.lerp(base.x, tx, e), A.lerp(base.z, tz, e), Math.atan2(tx - base.x, tz - base.z));
-      if (c < 0.85) {
-        var amp = A.clamp(0.6 + t * 0.8, 0.6, 1.1);
-        K.runCycle(a, t * 9.5, amp);
-        J.sha.rotation.z = 1.35 * A.clamp(t / 0.4, 0, 1);
-        J.shb.rotation.z = -1.35 * A.clamp(t / 0.4, 0, 1);
-        J.ela.rotation.x = -0.1;
-        J.elb.rotation.x = -0.1;
-        J.spine.rotation.z = Math.sin(t * 2.2) * 0.15;
-        J.head.rotation.x = -0.25;
-      } else {
-        // dizlerin üstünde kayış, kollar havada
-        var sl = A.clamp((c - 0.85) / 0.15, 0, 1);
-        a.root.rotation.y = Math.atan2(0 - tx, 30 - tz);
-        J.hpa.rotation.x = J.hpb.rotation.x = -0.2 * sl;
-        J.kna.rotation.x = J.knb.rotation.x = 1.9 * sl;
-        J.hips.position.y = 0.94 - 0.42 * sl;
-        J.spine.rotation.x = -0.35 * sl;
-        J.sha.rotation.x = -2.7 * sl;
-        J.shb.rotation.x = -2.7 * sl;
-        J.sha.rotation.z = 0.35;
-        J.shb.rotation.z = -0.35;
-        J.ela.rotation.x = J.elb.rotation.x = -0.4 * sl;
-        J.head.rotation.x = -0.45 * sl;
-      }
-      return;
-    }
-    if (phase === "sad") {
-      // eller başta, sonra dizlere eğilir
-      setRoot(a, base.x, base.z, FACE);
-      var d = A.clamp(t / 0.5, 0, 1), d2 = A.smooth(A.clamp((t - 1.1) / 0.6, 0, 1));
-      J.sha.rotation.x = -2.5 * d * (1 - d2) + -0.6 * d2;
-      J.shb.rotation.x = -2.5 * d * (1 - d2) + -0.6 * d2;
-      J.sha.rotation.z = 0.7 * d * (1 - d2) + 0.15 * d2;
-      J.shb.rotation.z = -0.7 * d * (1 - d2) - 0.15 * d2;
-      J.ela.rotation.x = -2.1 * d * (1 - d2) - 0.3 * d2;
-      J.elb.rotation.x = -2.1 * d * (1 - d2) - 0.3 * d2;
-      J.head.rotation.x = 0.35 * d + 0.25 * d2;
-      J.spine.rotation.x = 0.18 * d + 0.55 * d2;
-      J.kna.rotation.x = J.knb.rotation.x = 0.45 * d2;
-      J.hpa.rotation.x = J.hpb.rotation.x = -0.35 * d2;
-      J.hips.position.y = 0.94 - 0.1 * d2;
-      return;
-    }
-  }
+  // Yuvarlak, kalın oyun yazısı (iOS'ta SF Pro Rounded); yoksa sistem fontu.
+  A.FONT = '"SF Pro Rounded", ui-rounded, "Nunito", "Arial Rounded MT Bold", -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif';
+  /** Gerçek tuval var mı (başsız testte yok: tekrar gösterimi kapalı kalır). */
+  var VIS = !!(A.canvas && A.canvas.style);
 
-  /**
-   * Kaleci pozu, simülasyondaki gövdeden: merkez + eksen. Kök ayak hizasındadır;
-   * gövde merkezi (kalça ≈ 0,95 m) simülasyon merkezine oturtulur.
-   *   Hazır: geniş duruş, dizler bükülü, eller önde-aşağıda, avuçlar açık;
-   *     çizgide yan adımlarla gezinir, hafifçe yaylanır (zorlukla daha hareketli).
-   *   Sıçrama adımı (split step): atıcı topa varmadan küçük bir zıplama,
-   *     temasta yere yüklenmiş iner.
-   *   Uçuş: yakın bacakla yüklenir, uzak bacakla iter; gövde yana yatar,
-   *     kollar uçuş yönünde uzanır (üstteki kol başın üstünden geçer); alçak
-   *     topta gövde yere kapanır, eller çimden süpürür.
-   *   İniş: kalça ve omuz yere değer, dizler toplanır, kollar topu sarar.
-   */
-  function poseKeeper(a, k, now, extra) {
-    var J = a.J;
-    K.rest(a);
-    var root = a.root;
-    var b = keeperBody(k, now);
-    extra = extra || {};
-    root.rotation.y = 0; // kaleci sahaya (+z) bakar
-    if (!b.diving) {
-      var cr = k.stay ? 1 : k.crouch;
-      var hop = extra.hop || 0;
-      var load = 1 - 0.55 * hop;
-      J.hips.position.y = 0.94 - cr * 0.18 * load + (extra.bob || 0);
-      J.hpa.rotation.x = -0.55 * cr * load;
-      J.hpb.rotation.x = -0.55 * cr * load;
-      J.kna.rotation.x = 1.08 * cr * load;
-      J.knb.rotation.x = 1.08 * cr * load;
-      J.fta.rotation.x = J.ftb.rotation.x = -0.45 * cr * load + 0.35 * hop;
-      J.hpa.rotation.z = 0.27;
-      J.hpb.rotation.z = -0.27;
-      J.spine.rotation.x = 0.34 * cr;
-      J.spine.rotation.z = extra.lean || 0;
-      var wave = extra.wave || 0;
-      J.sha.rotation.z = 0.6 + k.set * 0.3 + wave;
-      J.shb.rotation.z = -0.6 - k.set * 0.3 - wave;
-      J.sha.rotation.x = -0.7 + wave * 0.4;
-      J.shb.rotation.x = -0.7 + wave * 0.4;
-      J.ela.rotation.x = -0.55;
-      J.elb.rotation.x = -0.55;
-      J.head.rotation.x = -0.28 * cr;
-      root.position.set(b.cx, hop * 0.09, KEEPER_Z);
-      if (extra.caught) {
-        // topu göğse alır
-        J.sha.rotation.x = -1.25;
-        J.shb.rotation.x = -1.25;
-        J.sha.rotation.z = 0.15;
-        J.shb.rotation.z = -0.15;
-        J.ela.rotation.x = -1.6;
-        J.elb.rotation.x = -1.6;
-        J.spine.rotation.x = 0.45;
-        J.head.rotation.x = 0.1;
-      }
-      if (extra.cheer > 0) {
-        var ch = extra.cheer;
-        J.sha.rotation.x = -2.9 * ch;
-        J.sha.rotation.z = 0.25;
-        J.ela.rotation.x = -0.5 * ch;
-        J.shb.rotation.x = -2.6 * ch;
-        J.shb.rotation.z = -0.25;
-        J.hips.position.y = 0.94 + Math.max(0, Math.sin(A.time * 10)) * 0.06 * ch;
-        J.hpa.rotation.x = J.hpb.rotation.x = J.kna.rotation.x = J.knb.rotation.x = 0;
-        J.fta.rotation.x = J.ftb.rotation.x = 0;
-        J.spine.rotation.x = -0.12 * ch;
-        J.head.rotation.x = -0.3 * ch;
-      }
-      return;
-    }
-    // uçuş: gövde ekseni (ax, ay); kök = merkez − eksen × kalça yüksekliği
-    var d = k.dive;
-    var side = b.ax >= 0 ? 1 : -1;
-    var low = d.dy < -0.12;
-    var e = b.e;
-    var land = extra.land || 0;
-    var cy = b.cy;
-    var phi = Math.atan2(-b.ax, b.ay);
-    if (land > 0) {
-      // yere iniş: gövde yataylaşır, merkez yere oturur
-      var flat = side * Math.PI / 2;
-      phi = A.lerp(phi, -flat * 0.96, land);
-      cy = A.lerp(cy, 0.2, land);
-    }
-    root.rotation.z = phi;
-    var axx = -Math.sin(phi), axy = Math.cos(phi);
-    root.position.set(b.cx - axx * 0.95, cy - axy * 0.95, KEEPER_Z);
-    var push = 1 - A.smooth(A.clamp(e / 0.35, 0, 1));
-    var nearH = side > 0 ? J.hpa : J.hpb, farH = side > 0 ? J.hpb : J.hpa;
-    var nearK = side > 0 ? J.kna : J.knb, farK = side > 0 ? J.knb : J.kna;
-    // itiş: yakın bacak bükülü (yük), uzak bacak itip uzanır; uçuşta makas
-    nearH.rotation.x = A.lerp(-0.1, -0.7, push) - 0.25 * land;
-    nearK.rotation.x = A.lerp(0.3, 1.25, push) + 0.9 * land;
-    farH.rotation.x = A.lerp(0.25, 0.1, push) - 0.5 * land;
-    farK.rotation.x = A.lerp(0.5, 0.15, push) + 0.7 * land;
-    J.hpa.rotation.z = 0.12 + (side > 0 ? 0.1 : 0.25) * (1 - e);
-    J.hpb.rotation.z = -0.12 - (side > 0 ? 0.25 : 0.1) * (1 - e);
-    J.fta.rotation.x = J.ftb.rotation.x = 0.5 * e;
-    // kollar: uçuş yönünde başın üstünde; üstteki kol başın üstünden geçer
-    var reachA = low ? 2.55 : 2.95;
-    var nearArmZ = side > 0 ? J.sha : J.shb, farArmZ = side > 0 ? J.shb : J.sha;
-    var nearEl = side > 0 ? J.ela : J.elb, farEl = side > 0 ? J.elb : J.ela;
-    nearArmZ.rotation.z = side * A.lerp(0.65, reachA, e);
-    farArmZ.rotation.z = -side * A.lerp(0.65, reachA - 0.15, e);
-    farArmZ.rotation.x = A.lerp(-0.6, low ? -0.9 : -0.55, e);
-    nearArmZ.rotation.x = A.lerp(-0.6, -0.12, e);
-    nearEl.rotation.x = -0.12;
-    farEl.rotation.x = A.lerp(-0.5, -0.25, e);
-    if (extra.caught && land > 0) {
-      // yerde topu sarar
-      nearArmZ.rotation.z = side * A.lerp(reachA, 1.6, land);
-      farArmZ.rotation.z = -side * A.lerp(reachA, 1.2, land);
-      nearEl.rotation.x = farEl.rotation.x = -1.3 * land;
-    }
-    J.spine.rotation.z = side * (0.14 * e - 0.1 * land);
-    J.spine.rotation.x = low ? 0.25 * e : -0.08 * e;
-    J.spine.rotation.y = -side * 0.18 * e; // göğüs topa döner
-    J.head.rotation.z = side * 0.22 * e;
-    J.head.rotation.x = -0.12;
-    J.hips.position.y = 0.94;
-  }
+  var NAVY = "#1B1648", INK = "#141043", GOLD = "#FFD43B", GOOD = "#22C55E", BAD = "#FF4D6A";
 
-  function poseReferee(a) {
-    K.rest(a);
-    a.root.position.set(8.6, 0, 5.2);
-    a.root.rotation.y = -1.35;
-    a.J.sha.rotation.z = 0.12;
-    a.J.shb.rotation.z = -0.12;
+  function rgbOf(h) {
+    var n = parseInt(String(h).slice(1), 16) || 0;
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+  function mixc(a, b, t) {
+    if (t <= 0) return a;
+    if (t >= 1) return b;
+    var p = rgbOf(a), q = rgbOf(b);
+    var r = Math.round(p[0] + (q[0] - p[0]) * t), g = Math.round(p[1] + (q[1] - p[1]) * t), bl = Math.round(p[2] + (q[2] - p[2]) * t);
+    return "#" + ((1 << 24) | (r << 16) | (g << 8) | bl).toString(16).slice(1);
+  }
+  function hex(c, fb) {
+    if (typeof c !== "string") return fb;
+    if (/^#[0-9a-f]{6}$/i.test(c)) return c.toUpperCase();
+    if (/^#[0-9a-f]{3}$/i.test(c)) return ("#" + c[1] + c[1] + c[2] + c[2] + c[3] + c[3]).toUpperCase();
+    return fb;
+  }
+  function rgba(h, a) {
+    var p = rgbOf(h);
+    return "rgba(" + p[0] + "," + p[1] + "," + p[2] + "," + a + ")";
+  }
+  function lum(h) {
+    var p = rgbOf(h);
+    return (0.299 * p[0] + 0.587 * p[1] + 0.114 * p[2]) / 255;
+  }
+  function colDist(a, b) {
+    var p = rgbOf(a), q = rgbOf(b);
+    return Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
+  }
+  function kit2(person) {
+    var k = kitOf(person);
+    return { p: hex(k.primary, "#5B3DF5"), s: hex(k.secondary, "#FFFFFF") };
   }
 
   /* ─────────────── kamera ─────────────── */
 
-  var camPos = null, camLook = null, camFov = 40, lastShot = "";
-  function camShoot() {
-    // yayın penaltı kamerası: atıcının koşu çizgisinin arkası, biraz yüksek —
-    // atıcı alt solda, kale ekranın üst yarısını doldurur
-    var d = SPOT_Z + 9.4;
-    return { pos: [-0.8, 2.35, d], look: [0.1, 1.05, 0], fov: fitFov(GOAL_W * 1.3, d, 18, 60) };
-  }
-  function placeCamera(dt) {
-    var cam = R.camera;
-    var t = A.time;
-    var view = null, follow = 5, cut = false;
-    if (state === "attract") {
-      var a = t * 0.12;
-      view = { pos: [Math.sin(a) * 16, 6 + Math.sin(t * 0.2), 14 + Math.cos(a) * 10], look: [0, 1, 2], fov: 50 };
-      follow = 2;
-    } else if (state === "intro") {
-      var e = A.smooth(stateT / (INTRO * 0.92));
-      var s = camShoot();
-      view = {
-        pos: [A.lerp(-14, s.pos[0], e), A.lerp(15, s.pos[1], e), A.lerp(46, s.pos[2], e)],
-        look: [0, A.lerp(4, s.look[1], e), A.lerp(10, 0, e)],
-        fov: A.lerp(55, s.fov, e),
-      };
-      follow = 30;
-    } else if (state === "matchEnd") {
-      var hero = endResult === "won" ? R.cast.shooter.a.root.position : R.cast.oppKeeper.a.root.position;
-      var o = 0.6 + Math.sin(t * 0.3) * 0.35;
-      view = { pos: [hero.x - Math.sin(o) * 4.2, 1.5, hero.z + Math.cos(o) * 4.2], look: [hero.x, 0.75, hero.z], fov: 46 };
-      follow = 3;
-    } else if (inReplay()) {
-      var rp = A.clamp((stateT - REPLAY_AT) / REPLAY_LEN, 0, 1);
-      // yandan, kale ağzına alçak açı: top kameraya doğru gelen tarafta
-      var side = (replay.frames[replay.frames.length - 1].bx || 0) >= 0 ? 1 : -1;
-      view = { pos: [side * (7.2 - rp * 0.8), 1.25, 3.6 - rp * 0.6], look: [side * 0.6, 1.0, 0.2], fov: 46 };
-      cut = lastShot !== "replay";
-      lastShot = "replay";
-      follow = 4;
-    } else {
-      view = camShoot();
-      if (state === "power") {
-        var pf = A.smooth(Math.min(1, stateT / 1.2));
-        view.pos[2] -= pf * 0.6;
-      }
-      if (state === "flight" || state === "result") {
-        var fz = A.clamp((SPOT_Z - ball.z) / SPOT_Z, 0, 1);
-        view.pos[2] -= 2.4 * A.smooth(fz);
-        view.pos[0] += ball.x * 0.15;
-        view.look[0] = ball.x * 0.35;
-        view.look[1] = 1.05;
-        follow = 4;
-      }
-      cut = lastShot !== "shoot" && state !== "intro";
-      lastShot = "shoot";
-    }
-    if (state === "runup") view.pos[2] -= 0.9 * A.smooth(A.clamp(stateT / RUNUP, 0, 1));
-    if (window.__cam) {
-      // test/laboratuvar kamerası
-      view = window.__cam;
-      cut = true;
-    }
-    if (state === "intro" || state === "attract" || state === "matchEnd") lastShot = state;
-    var want = new T.Vector3(view.pos[0], view.pos[1], view.pos[2]);
-    var look = new T.Vector3(view.look[0], view.look[1], view.look[2]);
-    want.x += Math.sin(t * 0.9) * 0.025;
-    want.y += Math.sin(t * 1.3) * 0.018;
-    if (A.shakeAmt > 0.2) {
-      want.x += (Math.random() - 0.5) * A.shakeAmt * 0.01;
-      want.y += (Math.random() - 0.5) * A.shakeAmt * 0.01;
-    }
-    if (cut || !camPos) {
-      camPos = want.clone();
-      camLook = look.clone();
-      camFov = view.fov;
-    } else {
-      var k = 1 - Math.exp(-follow * dt);
-      camPos.lerp(want, k);
-      camLook.lerp(look, k);
-      camFov += (view.fov - camFov) * k;
-    }
-    cam.position.copy(camPos);
-    cam.lookAt(camLook);
-    if (Math.abs(cam.fov - camFov) > 0.01) {
-      cam.fov = camFov;
-      cam.updateProjectionMatrix();
-    }
-  }
+  var CAM_Z = SPOT_Z + 11, CAM_Y = 3.2;
+  var WAIT = { x: -1.15, z: SPOT_Z + 2.1 }; // atıcının bekleyiş yeri
+  var PLANT = { x: -0.34, z: SPOT_Z + 0.32 }; // destek ayağı
+  var STAND_Z = -9, STAND_H = 5.2, STAND_W = 40; // tribün (tek düzlem)
+  var BOARD_Z = -4, BOARD_H = 0.9;
+  var cam = { x: 0, y: CAM_Y, z: CAM_Z };
+  var camCut = true, camMode = "";
+  var L = { f: 900, hz: 200, key: "", wide: false };
 
-  /* ─────────────── sahne güncellemesi ─────────────── */
+  function layout() {
+    var key = W + "x" + H;
+    if (L.key === key) return;
+    L.key = key;
+    var wide = W > H * 1.15;
+    var kTop = (CAM_Y - GOAL_H) / CAM_Z, kFeet = CAM_Y / (CAM_Z - WAIT.z);
+    var bottomPad = wide ? 4 : 96;
+    var topMin = wide ? Math.max(78, H * 0.24) : Math.max(118, H * 0.27);
+    var f0 = (wide ? 0.44 : 0.84) * W * CAM_Z / GOAL_W;
+    var room = Math.max(60, H - bottomPad - topMin);
+    var f = Math.min(f0, room / (kFeet - kTop));
+    var slack = room - f * (kFeet - kTop);
+    L.f = f;
+    L.hz = topMin - kTop * f + slack * 0.4;
+    L.wide = wide;
+    skyLayer = null;
+    standLayers = null;
+  }
+  /** Dünya noktasının ekran konumu; s = metre başına piksel. */
+  function proj(x, y, z) {
+    var d = Math.max(0.3, cam.z - z), s = L.f / d;
+    return { x: W / 2 + (x - cam.x) * s, y: L.hz + (cam.y - y) * s, s: s };
+  }
 
   function inReplay() {
     return state === "result" && !!replay && stateT > REPLAY_AT && stateT < REPLAY_AT + REPLAY_LEN;
   }
 
-  function sync(dt) {
-    var U = R.U;
-    U.time.value = A.time;
-    var cheering = state === "result" && lastKick && lastKick.good;
-    U.excite.value = state === "attract" ? 0 : Math.max(excite, cheering ? 1 : 0, state === "matchEnd" && endResult === "won" ? 1 : 0);
-    var mk = kitOf(shooter), ok = kitOf(opp.keeper);
-    paintLed(mk.primary, ok.primary);
-    paintScreen();
-    paintBoards(
-      state === "result" && lastKick && lastKick.result === "gol"
-        ? "GOOOL!  " + upperTR(shooter.back || shooter.short) + "   •   "
-        : "ELİTLİG ARENA   •   " + upperTR(teamName(shooter)) + "  vs  " + upperTR(teamName(opp.keeper)) + "   •   ",
-    );
-    R.boardTex.offset.x = (A.time * 0.04) % 1;
-    R.ledTex.offset.x = (A.time * 0.02) % 1;
+  function placeCamera(dt) {
+    var t = A.time, v = { x: 0, y: CAM_Y, z: CAM_Z }, k = 5, mode = "shoot";
+    if (state === "attract" || state === "over") {
+      v = { x: Math.sin(t * 0.21) * 1.1, y: CAM_Y + 0.4 + Math.sin(t * 0.33) * 0.3, z: CAM_Z + 1.5 + Math.sin(t * 0.17) * 1.5 };
+      k = 2;
+      mode = "attract";
+    } else if (state === "intro") {
+      var e = A.smooth(A.clamp(stateT / (INTRO * 0.85), 0, 1));
+      v = { x: A.lerp(-3.5, 0, e), y: A.lerp(6, CAM_Y, e), z: A.lerp(46, CAM_Z, e) };
+      k = 40;
+      mode = "intro";
+    } else if (state === "matchEnd") {
+      var won = endResult === "won";
+      v = { x: won ? -0.3 : gk.x * 0.5, y: CAM_Y + 1.1, z: CAM_Z - 2.6 };
+      k = 2.5;
+      mode = "end";
+    } else if (inReplay()) {
+      var rp = A.clamp((stateT - REPLAY_AT) / REPLAY_LEN, 0, 1);
+      var fr = replay.frames[replay.frames.length - 1];
+      var side = (fr.bx || 0) >= 0 ? 1 : -1;
+      v = { x: A.clamp(fr.bx || 0, -3, 3) * 0.45 + side * rp * 0.3, y: (L.wide ? 2.6 : 4.0) - rp * 0.2, z: 15 - rp * 2.2 };
+      mode = "replay";
+      k = 3;
+    } else {
+      if (state === "power") v.z -= 0.45 * A.smooth(Math.min(1, stateT / 1.2));
+      if (state === "runup") v.z -= 0.45 + 0.6 * A.smooth(A.clamp(stateT / RUNUP, 0, 1));
+      if (state === "flight" || state === "result") {
+        var fz = A.smooth(A.clamp((SPOT_Z - ball.z) / SPOT_Z, 0, 1));
+        // yükselen yayın açısı: atıcı kadrajın altına iner, kaleci açıkta kalır
+        v.z = CAM_Z - 1.0 - 1.5 * fz;
+        v.x = ball.x * 0.16 * fz;
+        v.y = CAM_Y + 1.2 * fz;
+        k = 4;
+      }
+    }
+    if (window.__cam) v = window.__cam;
+    var cut = camCut || (mode !== camMode && (mode === "intro" || mode === "replay" || camMode === "replay"));
+    camMode = mode;
+    camCut = false;
+    if (cut) {
+      cam.x = v.x;
+      cam.y = v.y;
+      cam.z = v.z;
+    } else {
+      var a = 1 - Math.exp(-k * dt);
+      cam.x += (v.x - cam.x) * a;
+      cam.y += (v.y - cam.y) * a;
+      cam.z += (v.z - cam.z) * a;
+    }
+    // el kamerası nefesi
+    cam.x += Math.sin(t * 0.9) * 0.002;
+    cam.y += Math.sin(t * 1.3) * 0.0015;
+  }
 
-    var cast = R.cast;
-    var shooterA = cast.shooter.a;
-    var keeperA = cast.oppKeeper.a;
+  /* ─────────────── ağ (file) ─────────────── */
+
+  var net = { x: 0, y: 1, amp: 0, t: 0 };
+  function netReset() {
+    net.amp = 0;
+  }
+  function netHit(x, y, speed) {
+    net.x = x;
+    net.y = y;
+    net.amp = A.clamp(speed / 18, 0.25, 1) * 0.75;
+    net.t = 0;
+  }
+  function netStep(dt) {
+    net.t += dt;
+    net.amp *= Math.exp(-2.6 * dt);
+    if (net.amp < 0.002) net.amp = 0;
+  }
+  /** Ağın geriye şişmesi (m): darbe noktasında en büyük, sönümlü salınım. */
+  function bulge(x, y) {
+    if (!net.amp) return 0;
+    var d2 = (x - net.x) * (x - net.x) + (y - net.y) * (y - net.y);
+    return net.amp * Math.exp(-d2 / 0.9) * Math.cos(net.t * 14) * 0.9;
+  }
+
+  /* ─────────────── fon: gökyüzü + şehir ─────────────── */
+
+  var skyLayer = null, standLayers = null, castSig = "";
+  function standTopBase() {
+    return L.hz + (CAM_Y - STAND_H) * (L.f / (CAM_Z - STAND_Z));
+  }
+  function paintSky() {
+    var pad = 60;
+    var lw = W + pad * 2, lh = H;
+    var layer = A.layer(lw, lh);
+    var c = layer.ctx;
+    var rnd = A.seeded(4242);
+    var base = standTopBase() + 18; // şehir taban çizgisi (tribünün arkası)
+    var g = c.createLinearGradient(0, 0, 0, base);
+    g.addColorStop(0, "#15114A");
+    g.addColorStop(0.55, "#2A1C6E");
+    g.addColorStop(1, "#5E2B8C");
+    c.fillStyle = g;
+    c.fillRect(0, 0, lw, Math.max(1, base));
+    c.fillStyle = "#211A5A";
+    c.fillRect(0, base, lw, lh - base);
+    c.fillStyle = "#FFFFFF";
+    for (var i = 0; i < 34; i++) {
+      c.globalAlpha = 0.35 + rnd() * 0.5;
+      c.beginPath();
+      c.arc(rnd() * lw, rnd() * base * 0.7, rnd() < 0.2 ? 2 : 1.2, 0, Math.PI * 2);
+      c.fill();
+    }
+    c.globalAlpha = 1;
+    // ay
+    var mr = A.clamp(Math.min(W, base) * 0.2, 22, 70), mx = pad + W * 0.76, my = base - mr * 1.05;
+    var mg = c.createRadialGradient(mx, my, mr * 0.8, mx, my, mr * 2.2);
+    mg.addColorStop(0, "rgba(255,225,150,0.3)");
+    mg.addColorStop(1, "rgba(255,225,150,0)");
+    c.fillStyle = mg;
+    c.fillRect(mx - mr * 2.3, my - mr * 2.3, mr * 4.6, mr * 4.6);
+    c.fillStyle = "#F7DA94";
+    c.beginPath();
+    c.arc(mx, my, mr, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = "rgba(214,170,90,0.35)";
+    [[-0.3, -0.25, 0.18], [0.25, 0.1, 0.13], [-0.05, 0.38, 0.1]].forEach(function (q) {
+      c.beginPath();
+      c.arc(mx + q[0] * mr, my + q[1] * mr, q[2] * mr, 0, Math.PI * 2);
+      c.fill();
+    });
+    // şehir: üç kat bina, yanan pencereler
+    function buildings(color, cap, hMin, hMax, wMin, wMax, lit, seed) {
+      var r2 = A.seeded(seed);
+      var x = -r2() * 30;
+      while (x < lw) {
+        var bw = wMin + r2() * (wMax - wMin);
+        var bh = Math.min(base - 4, (hMin + r2() * (hMax - hMin)) * Math.max(90, base));
+        var by = base - bh;
+        c.fillStyle = color;
+        c.fillRect(x, by, bw, bh + 2);
+        c.fillStyle = cap;
+        c.fillRect(x - 3, by - 5, bw + 6, 7);
+        c.fillStyle = rgba(NAVY, 0.25);
+        c.fillRect(x + bw * 0.88, by, bw * 0.12, bh);
+        var ww = Math.max(5, bw * 0.15), wh = ww * 1.25, gx = ww * 0.9, gy = wh * 0.75;
+        for (var wy = by + 10; wy < base - wh - 2; wy += wh + gy)
+          for (var wx = x + ww * 0.8; wx < x + bw - ww * 1.6; wx += ww + gx) {
+            c.fillStyle = r2() < lit ? "#FFD98A" : rgba(NAVY, 0.45);
+            A.roundRect(c, wx, wy, ww, wh, 1.5);
+            c.fill();
+          }
+        x += bw + 4 + r2() * 14;
+      }
+    }
+    if (base > 30) {
+      buildings("#3A2A80", "#2C2068", 0.5, 0.95, 46, 86, 0.25, 7);
+      buildings("#4B3399", "#33267A", 0.3, 0.7, 40, 70, 0.45, 19);
+      buildings("#2E3A8F", "#232C70", 0.18, 0.45, 50, 90, 0.5, 31);
+    }
+    // projektör kuleleri
+    [pad + W * 0.04, pad + W * 0.96].forEach(function (px) {
+      var py = Math.max(18, base * 0.18);
+      c.fillStyle = "#231B5E";
+      c.fillRect(px - 3, py, 6, base - py);
+      var lg = c.createRadialGradient(px, py, 2, px, py, 80);
+      lg.addColorStop(0, "rgba(255,250,220,0.6)");
+      lg.addColorStop(1, "rgba(255,250,220,0)");
+      c.fillStyle = lg;
+      c.fillRect(px - 80, py - 80, 160, 160);
+      c.fillStyle = "#2B2268";
+      A.roundRect(c, px - 18, py - 11, 36, 20, 5);
+      c.fill();
+      c.fillStyle = "#FFF6D0";
+      for (var r = 0; r < 2; r++)
+        for (var li = 0; li < 4; li++) {
+          c.beginPath();
+          c.arc(px - 12 + li * 8, py - 5 + r * 8, 2.8, 0, Math.PI * 2);
+          c.fill();
+        }
+    });
+    layer.pad = pad;
+    return layer;
+  }
+
+  /* ─────────────── tribün (takım renkli seyirci) ─────────────── */
+
+  /** İki kare: oturan ve zıplayan (kollar havada) seyirci. Sol yarı senin, sağ yarı rakibin renkleri. */
+  function paintStands() {
+    var sc = Math.min(48, L.f / (CAM_Z - STAND_Z)) * 1.25;
+    var lw = STAND_W * sc, lh = STAND_H * sc;
+    var mine = kit2(shooter), rk = kit2(opp.keeper);
+    return [0, 1].map(function (jump) {
+      var layer = A.layer(lw, lh);
+      var c = layer.ctx;
+      var rnd = A.seeded(9001);
+      c.fillStyle = "#231C63";
+      c.fillRect(0, 0, lw, lh);
+      // çatı saçağı + ışıklar
+      var roofH = 0.55 * sc;
+      c.fillStyle = "#17123F";
+      c.fillRect(0, 0, lw, roofH);
+      c.fillStyle = "#2B2272";
+      c.fillRect(0, roofH - 3, lw, 3);
+      c.fillStyle = "#FFF3C4";
+      for (var lx = sc * 0.7; lx < lw; lx += sc * 2.2) {
+        c.beginPath();
+        c.arc(lx, roofH * 0.45, Math.max(1.5, sc * 0.07), 0, Math.PI * 2);
+        c.fill();
+      }
+      var rowH = 0.6 * sc, top = roofH + 0.15 * sc, bottom = lh - 0.75 * sc;
+      var rows = Math.max(3, Math.floor((bottom - top) / rowH));
+      for (var r = 0; r < rows; r++) {
+        var ry = top + r * rowH;
+        c.fillStyle = r % 2 ? "#2A2275" : "#251E68";
+        c.fillRect(0, ry, lw, rowH);
+        var step = 0.44 * sc, off = (r % 2) * step * 0.5;
+        for (var x = off + step * 0.4; x < lw; x += step) {
+          var u = x / lw; // 0 sol .. 1 sağ
+          var home = u < 0.5;
+          var k = home ? mine : rk;
+          var q = rnd();
+          var col = q < 0.62 ? k.p : q < 0.86 ? k.s : rnd() < 0.5 ? "#FFFFFF" : mixc(k.p, NAVY, 0.35);
+          if (Math.abs(u - 0.5) < 0.02) col = "#3A2F8C";
+          var hr = 0.13 * sc * (0.9 + rnd() * 0.2);
+          var lift = jump ? (0.08 + rnd() * 0.08) * sc : rnd() * 0.03 * sc;
+          var cx = x + (rnd() - 0.5) * step * 0.25, cy = ry + rowH * 0.62 - lift;
+          var skin = ["#F6C9A4", "#E9B08A", "#C98D63", "#8E5B3C"][(rnd() * 4) | 0];
+          var arms = jump && rnd() < 0.85;
+          if (arms) {
+            c.strokeStyle = col;
+            c.lineCap = "round";
+            c.lineWidth = hr * 0.7;
+            c.beginPath();
+            c.moveTo(cx - hr, cy + hr * 1.2);
+            c.lineTo(cx - hr * 1.6, cy - hr * 1.3);
+            c.moveTo(cx + hr, cy + hr * 1.2);
+            c.lineTo(cx + hr * 1.6, cy - hr * 1.3);
+            c.stroke();
+          }
+          c.fillStyle = col;
+          c.beginPath();
+          c.ellipse(cx, cy + hr * 2.0, hr * 1.45, hr * 1.25, 0, Math.PI, Math.PI * 2);
+          c.fill();
+          c.fillStyle = skin;
+          c.beginPath();
+          c.arc(cx, cy, hr, 0, Math.PI * 2);
+          c.fill();
+          if (rnd() < 0.3) {
+            // bere / saç
+            c.fillStyle = rnd() < 0.5 ? k.s : "#2B1B12";
+            c.beginPath();
+            c.arc(cx, cy - hr * 0.2, hr * 0.95, Math.PI, Math.PI * 2);
+            c.fill();
+          }
+          if (jump && rnd() < 0.08) {
+            // atkı
+            c.fillStyle = k.s;
+            c.fillRect(cx - hr * 2.2, cy - hr * 2.6, hr * 4.4, hr * 0.9);
+            c.fillStyle = k.p;
+            c.fillRect(cx - hr * 0.9, cy - hr * 2.6, hr * 1.8, hr * 0.9);
+          }
+        }
+      }
+      // ön duvar
+      c.fillStyle = "#1C1650";
+      c.fillRect(0, bottom, lw, lh - bottom);
+      c.fillStyle = "#3A2F8C";
+      c.fillRect(0, bottom, lw, Math.max(2, sc * 0.06));
+      // iki taraf: dev bayrak şeritleri
+      [[0.2, mine], [0.8, rk]].forEach(function (b) {
+        var bx = lw * b[0], bw = sc * 3.4, bh = sc * 0.5;
+        c.fillStyle = b[1].p;
+        c.fillRect(bx - bw / 2, bottom - bh * 0.15, bw, bh);
+        c.fillStyle = b[1].s;
+        c.fillRect(bx - bw / 2, bottom + bh * 0.25, bw, bh * 0.2);
+      });
+      layer.sc = sc;
+      return layer;
+    });
+  }
+
+  function drawBackdrop(c) {
+    if (!skyLayer) skyLayer = paintSky();
+    var px = -skyLayer.pad - A.clamp(cam.x * 6, -skyLayer.pad, skyLayer.pad);
+    // şehir tribünün tepesini izler (yakınlaşmada hafif paralaks)
+    var py = A.clamp((proj(0, STAND_H, STAND_Z).y - standTopBase()) * 0.85, -40, 160);
+    c.drawImage(skyLayer.canvas, px, py, skyLayer.w, skyLayer.h);
+    if (py > 0) {
+      c.fillStyle = "#15114A";
+      c.fillRect(0, 0, W, py + 1);
+    }
+    var sig = kit2(shooter).p + kit2(opp.keeper).p + ":" + L.key;
+    if (!standLayers || castSig !== sig) {
+      standLayers = paintStands();
+      castSig = sig;
+    }
+    var p = proj(-STAND_W / 2, STAND_H, STAND_Z);
+    var sw = STAND_W * p.s, sh = STAND_H * p.s;
+    // tribünün altı (zemine kadar) koyu yapı
+    var gy = proj(0, 0, STAND_Z).y;
+    c.fillStyle = "#1C1650";
+    c.fillRect(0, p.y + sh - 2, W, Math.max(0, gy - p.y - sh + 40));
+    c.drawImage(standLayers[0].canvas, p.x, p.y, sw, sh);
+    var ex = state === "attract" ? 0.15 + 0.15 * Math.max(0, Math.sin(A.time * 0.7)) : Math.max(excite, state === "result" && lastKick && lastKick.good ? 1 : 0, state === "matchEnd" && endResult === "won" ? 1 : 0);
+    if (ex > 0.05) {
+      var bounce = Math.abs(Math.sin(A.time * 9)) * 0.06 * p.s;
+      c.save();
+      c.globalAlpha = Math.min(1, ex * 1.2) * (0.55 + 0.45 * Math.abs(Math.sin(A.time * 9)));
+      c.drawImage(standLayers[1].canvas, p.x, p.y - bounce, sw, sh);
+      c.restore();
+      // flaşlar
+      var r = A.seeded(((A.time * 12) | 0) + 3);
+      c.fillStyle = "#FFFFFF";
+      for (var i = 0; i < 7 * ex; i++) {
+        var fx = p.x + r() * sw, fy = p.y + sh * (0.15 + r() * 0.7);
+        c.globalAlpha = 0.8;
+        c.beginPath();
+        c.arc(fx, fy, 1.5 + r() * 2, 0, Math.PI * 2);
+        c.fill();
+      }
+      c.globalAlpha = 1;
+    }
+  }
+
+  /* ─────────────── reklam panoları ─────────────── */
+
+  var BOARD_COLS = [["#DB2777", "#9333EA"], ["#7C3AED", "#4F46E5"], ["#0EA5E9", "#2563EB"]];
+  function drawBoards(c) {
+    var goalNow = state === "result" && lastKick && lastKick.result === "gol";
+    var seg = 4.5, x0 = -18;
+    var a = proj(x0, BOARD_H, BOARD_Z), fs = BOARD_H * a.s * 0.56;
+    c.save();
+    c.font = A.font(fs, 900);
+    c.textAlign = "center";
+    c.textBaseline = "middle";
+    var texts = ["ELİTLİG", "SERİ PENALTI", upperTR(teamName(shooter)), "ELİTLİG ARENA", upperTR(teamName(opp.keeper))];
+    for (var i = 0; x0 + i * seg < 18; i++) {
+      var p0 = proj(x0 + i * seg, BOARD_H, BOARD_Z), p1 = proj(x0 + (i + 1) * seg, 0, BOARD_Z);
+      if (p1.x < -10 || p0.x > W + 10) continue;
+      var cols = BOARD_COLS[i % 3];
+      if (goalNow && Math.sin(A.time * 14 + i) > 0) cols = ["#FFD43B", "#F59E0B"];
+      var g = c.createLinearGradient(p0.x, 0, p1.x, 0);
+      g.addColorStop(0, cols[0]);
+      g.addColorStop(1, cols[1]);
+      c.fillStyle = g;
+      c.fillRect(p0.x, p0.y, p1.x - p0.x - 1.5, p1.y - p0.y);
+      c.fillStyle = "rgba(255,255,255,0.18)";
+      c.fillRect(p0.x, p0.y, p1.x - p0.x - 1.5, (p1.y - p0.y) * 0.3);
+      c.fillStyle = goalNow ? NAVY : "#FFFFFF";
+      var txt = goalNow ? "GOOOL!" : texts[i % texts.length];
+      c.fillText(fit(c, txt, p1.x - p0.x - 8), (p0.x + p1.x) / 2, (p0.y + p1.y) / 2 + 1);
+    }
+    var t0 = proj(0, BOARD_H, BOARD_Z), t1 = proj(0, 0, BOARD_Z);
+    c.fillStyle = NAVY;
+    c.fillRect(0, t0.y - 2, W, 2.5);
+    c.fillRect(0, t1.y - 1, W, 2.5);
+    c.restore();
+  }
+
+  /* ─────────────── saha ─────────────── */
+
+  function groundQuad(c, x0, z0, x1, z1, w) {
+    var zmax = cam.z - 0.4;
+    if (z0 > zmax && z1 > zmax) return;
+    if (z0 > zmax) {
+      x0 = x1 + ((x0 - x1) * (zmax - z1)) / (z0 - z1);
+      z0 = zmax;
+    }
+    if (z1 > zmax) {
+      x1 = x0 + ((x1 - x0) * (zmax - z0)) / (z1 - z0);
+      z1 = zmax;
+    }
+    var dx = x1 - x0, dz = z1 - z0, len = Math.hypot(dx, dz) || 1;
+    var nx = (-dz / len) * w * 0.5, nz = (dx / len) * w * 0.5;
+    var a = proj(x0 + nx, 0, z0 + nz), b = proj(x1 + nx, 0, z1 + nz), d = proj(x1 - nx, 0, z1 - nz), e = proj(x0 - nx, 0, z0 - nz);
+    c.moveTo(a.x, a.y);
+    c.lineTo(b.x, b.y);
+    c.lineTo(d.x, d.y);
+    c.lineTo(e.x, e.y);
+    c.closePath();
+  }
+  function drawPitch(c) {
+    var top = proj(0, 0, BOARD_Z).y;
+    c.fillStyle = "#3BB54A";
+    c.fillRect(0, top, W, H - top + 2);
+    // biçme şeritleri (kale çizgisine paralel bantlar)
+    var bandW = 2.2;
+    for (var i = 0, z = BOARD_Z; z < cam.z - 0.3; z += bandW, i++) {
+      var y0 = proj(0, 0, z).y, y1 = proj(0, 0, Math.min(cam.z - 0.3, z + bandW)).y;
+      if (y0 > H) break;
+      c.fillStyle = i % 2 ? "#4CC552" : "#5FD35F";
+      c.fillRect(0, y0, W, Math.min(H, y1) - y0 + 0.5);
+    }
+    // uzak kısım hafif koyu (derinlik)
+    var g = c.createLinearGradient(0, top, 0, top + (H - top) * 0.5);
+    g.addColorStop(0, "rgba(20,60,40,0.28)");
+    g.addColorStop(1, "rgba(20,60,40,0)");
+    c.fillStyle = g;
+    c.fillRect(0, top, W, (H - top) * 0.5);
+    // tebeşir çizgileri
+    var lw = 0.12;
+    c.fillStyle = "rgba(255,255,255,0.92)";
+    c.beginPath();
+    groundQuad(c, -26, 0, 26, 0, lw);
+    [-1, 1].forEach(function (sd) {
+      groundQuad(c, sd * 9.16, 0, sd * 9.16, 5.5, lw);
+      groundQuad(c, sd * 20.16, 0, sd * 20.16, 16.5, lw);
+    });
+    groundQuad(c, -9.16, 5.5, 9.16, 5.5, lw);
+    groundQuad(c, -20.16, 16.5, 20.16, 16.5, lw);
+    c.fill();
+    // ceza yayı
+    c.beginPath();
+    var arcPts = [];
+    for (var a = -0.92; a <= 0.921; a += 0.08) arcPts.push([Math.sin(a) * 9.15, SPOT_Z + Math.cos(a) * 9.15]);
+    for (var j = 0; j < arcPts.length - 1; j++) if (arcPts[j][1] > 16.5 || arcPts[j + 1][1] > 16.5) groundQuad(c, arcPts[j][0], Math.max(16.5, arcPts[j][1]), arcPts[j + 1][0], Math.max(16.5, arcPts[j + 1][1]), lw);
+    c.fill();
+    // penaltı noktası
+    var sp = proj(0, 0, SPOT_Z);
+    c.beginPath();
+    c.ellipse(sp.x, sp.y, 0.16 * sp.s, Math.max(1.5, (0.16 * sp.s * cam.y) / (cam.z - SPOT_Z)), 0, 0, Math.PI * 2);
+    c.fill();
+  }
+
+  /* ─────────────── kale ─────────────── */
+
+  var gv = { x: 1, y: 1 };
+  function drawNet(c) {
+    var hw = HALF * gv.x, top = GOAL_H * gv.y, back = NET_BACK_H * gv.y, D = NET_D;
+    // iç gölge (file arkası): kale ağzı
+    var a = proj(-hw, top, 0), b = proj(hw, 0, 0);
+    c.fillStyle = "rgba(20,16,67,0.3)";
+    c.fillRect(a.x, a.y, b.x - a.x, b.y - a.y);
+    // ağ örgüsü
+    var st = 0.26;
+    c.strokeStyle = "rgba(255,255,255,0.62)";
+    c.lineWidth = Math.max(0.8, 0.022 * a.s);
+    c.beginPath();
+    var x, y, p, i;
+    var nx = Math.ceil((hw * 2) / st), ny = Math.ceil(back / st);
+    // arka yüz: dikeyler
+    for (i = 0; i <= nx; i++) {
+      x = -hw + (i * hw * 2) / nx;
+      for (var j = 0; j <= ny; j++) {
+        y = (j * back) / ny;
+        p = proj(x, y, -D - bulge(x, y));
+        if (j) c.lineTo(p.x, p.y);
+        else c.moveTo(p.x, p.y);
+      }
+    }
+    // arka yüz: yataylar
+    for (j = 0; j <= ny; j++) {
+      y = (j * back) / ny;
+      for (i = 0; i <= nx; i++) {
+        x = -hw + (i * hw * 2) / nx;
+        p = proj(x, y, -D - bulge(x, y));
+        if (i) c.lineTo(p.x, p.y);
+        else c.moveTo(p.x, p.y);
+      }
+    }
+    // üst yüz: üst direkten arka üste
+    for (i = 0; i <= nx; i++) {
+      x = -hw + (i * hw * 2) / nx;
+      p = proj(x, top, 0);
+      c.moveTo(p.x, p.y);
+      p = proj(x, back, -D - bulge(x, back));
+      c.lineTo(p.x, p.y);
+    }
+    var nd = Math.ceil(D / st);
+    for (var k = 1; k < nd; k++) {
+      var zz = -(k * D) / nd, yy = top + ((back - top) * k) / nd;
+      p = proj(-hw, yy, zz);
+      c.moveTo(p.x, p.y);
+      p = proj(hw, yy, zz);
+      c.lineTo(p.x, p.y);
+    }
+    // yan yüzler
+    [-hw, hw].forEach(function (sx) {
+      for (var k2 = 0; k2 <= nd; k2++) {
+        var z2 = -(k2 * D) / nd, y2 = top + ((back - top) * k2) / nd;
+        var q = proj(sx, y2, z2);
+        c.moveTo(q.x, q.y);
+        q = proj(sx, 0, z2);
+        c.lineTo(q.x, q.y);
+      }
+      for (var j2 = 1; j2 < ny; j2++) {
+        var y3 = (j2 * back) / ny;
+        var q2 = proj(sx, Math.min(y3, top), 0);
+        c.moveTo(q2.x, q2.y);
+        q2 = proj(sx, y3, -D);
+        c.lineTo(q2.x, q2.y);
+      }
+    });
+    c.stroke();
+    // arka direkler (gergi)
+    c.strokeStyle = "#C9C6E8";
+    c.lineWidth = Math.max(1.5, 0.05 * a.s);
+    c.beginPath();
+    [-hw, hw].forEach(function (sx) {
+      var q = proj(sx, top, 0);
+      c.moveTo(q.x, q.y);
+      q = proj(sx, back, -D);
+      c.lineTo(q.x, q.y);
+      q = proj(sx, 0, -D);
+      c.lineTo(q.x, q.y);
+    });
+    c.stroke();
+  }
+  function drawGoalFrame(c) {
+    var hw = HALF * gv.x + POST_R, top = GOAL_H * gv.y + POST_R;
+    var l0 = proj(-hw, 0, 0), l1 = proj(-hw, top, 0), r1 = proj(hw, top, 0), r0 = proj(hw, 0, 0);
+    var w = Math.max(5, POST_R * 2.6 * l0.s);
+    c.save();
+    c.lineCap = "round";
+    c.lineJoin = "round";
+    c.beginPath();
+    c.moveTo(l0.x, l0.y);
+    c.lineTo(l1.x, l1.y);
+    c.lineTo(r1.x, r1.y);
+    c.lineTo(r0.x, r0.y);
+    c.strokeStyle = NAVY;
+    c.lineWidth = w + 5;
+    c.stroke();
+    c.strokeStyle = gv.x > 1.02 ? "#B9F5D8" : "#FFFFFF";
+    c.lineWidth = w;
+    c.stroke();
+    // gölge şeridi
+    c.strokeStyle = "rgba(27,22,72,0.18)";
+    c.lineWidth = w * 0.35;
+    c.beginPath();
+    c.moveTo(l0.x + w * 0.22, l0.y);
+    c.lineTo(l1.x + w * 0.22, l1.y + w * 0.22);
+    c.lineTo(r1.x - w * 0.22, r1.y + w * 0.22);
+    c.lineTo(r0.x - w * 0.22, r0.y);
+    c.stroke();
+    // direk dibi gölgesi
+    c.fillStyle = "rgba(20,16,67,0.25)";
+    [l0, r0].forEach(function (q) {
+      c.beginPath();
+      c.ellipse(q.x, q.y, w * 1.2, w * 0.4, 0, 0, Math.PI * 2);
+      c.fill();
+    });
+    c.restore();
+  }
+
+  /** Rüzgâr bayrakları: kalenin iki yanında, rüzgârın yönünde ve şiddetinde dalgalanır. */
+  function drawFlags(c) {
+    var str = A.clamp(Math.abs(cond.wind) / 6, 0, 1), dir = cond.wind >= 0 ? 1 : -1;
+    var cols = [kit2(shooter), kit2(opp.keeper)];
+    [-1, 1].forEach(function (side, fi) {
+      var px = side * (HALF * gv.x + 0.95), pz = -3.3;
+      var b = proj(px, 0, pz), t = proj(px, 3.6, pz);
+      c.lineCap = "round";
+      c.strokeStyle = NAVY;
+      c.lineWidth = Math.max(3, 0.1 * b.s) + 2.5;
+      c.beginPath();
+      c.moveTo(b.x, b.y);
+      c.lineTo(t.x, t.y);
+      c.stroke();
+      c.strokeStyle = "#E2E8F0";
+      c.lineWidth -= 2.5;
+      c.stroke();
+      var len = 1.25 * t.s, hgt = 0.75 * t.s;
+      var reach = len * (0.3 + 0.7 * str), droop = (1 - str) * hgt * 0.9;
+      var ph = A.time * (4 + 6 * str) + fi;
+      c.beginPath();
+      c.moveTo(t.x, t.y);
+      var N = 8, pts = [];
+      for (var i = 0; i <= N; i++) {
+        var u = i / N;
+        pts.push([t.x + dir * reach * u, t.y + droop * u * u + Math.sin(ph - u * 5) * hgt * 0.12 * u * (0.4 + str)]);
+      }
+      pts.forEach(function (q) {
+        c.lineTo(q[0], q[1]);
+      });
+      for (var j = N; j >= 0; j--) c.lineTo(pts[j][0] - (droop ? 0 : 0), pts[j][1] + hgt * (1 - 0.15 * (j / N)));
+      c.closePath();
+      c.fillStyle = cols[fi].p;
+      c.fill();
+      c.lineWidth = 2;
+      c.strokeStyle = NAVY;
+      c.lineJoin = "round";
+      c.stroke();
+      c.beginPath();
+      c.arc(t.x, t.y - 2, 3.5, 0, Math.PI * 2);
+      c.fillStyle = GOLD;
+      c.fill();
+      c.lineWidth = 1.5;
+      c.stroke();
+    });
+  }
+
+  /* ─────────────── karakterler ─────────────── */
+
+  var SKINS = ["#F6C9A4", "#E9B08A", "#C98D63", "#8E5B3C", "#F3D3B8"];
+  var HAIRS = ["#2B1B12", "#5A3418", "#141414", "#8A5426", "#E2B04A"];
+  function lookOf(person) {
+    var h = hashStr((person && person.id) + ":" + (person && person.name));
+    return { skin: SKINS[h % SKINS.length], hair: HAIRS[(h >>> 4) % HAIRS.length] };
+  }
+  /** Kalın lacivert konturlu uzuv (birim: metre, ölçek dışarıda). */
+  function limb(c, x1, y1, x2, y2, w, col, lw) {
+    c.strokeStyle = NAVY;
+    c.lineWidth = w + lw * 2;
+    c.beginPath();
+    c.moveTo(x1, y1);
+    c.lineTo(x2, y2);
+    c.stroke();
+    c.strokeStyle = col;
+    c.lineWidth = w;
+    c.beginPath();
+    c.moveTo(x1, y1);
+    c.lineTo(x2, y2);
+    c.stroke();
+  }
+  function limb3(c, x1, y1, x2, y2, x3, y3, w, col, lw) {
+    c.strokeStyle = NAVY;
+    c.lineWidth = w + lw * 2;
+    c.beginPath();
+    c.moveTo(x1, y1);
+    c.lineTo(x2, y2);
+    c.lineTo(x3, y3);
+    c.stroke();
+    c.strokeStyle = col;
+    c.lineWidth = w;
+    c.stroke();
+  }
+  /** Metre ölçeğindeki çizimde piksel fontla yazı (küçük kesirli font boyutlarından kaçınır). */
+  function textM(c, txt, x, y, sizeM, s, fill, stroke) {
+    c.save();
+    c.scale(1 / s, 1 / s);
+    c.font = A.font(Math.max(5, sizeM * s), 900);
+    c.textAlign = "center";
+    c.textBaseline = "middle";
+    if (stroke) {
+      c.lineJoin = "round";
+      c.lineWidth = Math.max(2, sizeM * s * 0.14);
+      c.strokeStyle = stroke;
+      c.strokeText(txt, x * s, y * s);
+    }
+    c.fillStyle = fill;
+    c.fillText(txt, x * s, y * s);
+    c.restore();
+  }
+  function disc(c, x, y, r, fill, lw) {
+    c.beginPath();
+    c.arc(x, y, r, 0, Math.PI * 2);
+    c.fillStyle = fill;
+    c.fill();
+    if (lw) {
+      c.lineWidth = lw;
+      c.strokeStyle = NAVY;
+      c.stroke();
+    }
+  }
+  function shadowAt(c, x, z, rx, a) {
+    var p = proj(x, 0, z);
+    c.fillStyle = "rgba(20,16,67," + (a == null ? 0.28 : a) + ")";
+    c.beginPath();
+    c.ellipse(p.x, p.y, rx * p.s, Math.max(1.5, (rx * p.s * cam.y) / Math.max(0.5, cam.z - z)) * 0.9, 0, 0, Math.PI * 2);
+    c.fill();
+  }
+
+  /** Kalecinin forması: iki takımın renklerinden en uzak canlı renk. */
+  var GK_COLS = ["#22C55E", "#F97316", "#FACC15", "#EC4899", "#06B6D4", "#A3E635", "#F43F5E"];
+  var gkKitCache = { sig: "", kit: null };
+  function keeperKit() {
+    var tp = kit2(opp.keeper).p, sp = kit2(shooter).p;
+    var sig = tp + sp;
+    if (gkKitCache.sig === sig) return gkKitCache.kit;
+    var best = GK_COLS[0], bd = -1;
+    GK_COLS.forEach(function (c) {
+      var d = Math.min(colDist(c, tp), colDist(c, sp));
+      if (d > bd) {
+        bd = d;
+        best = c;
+      }
+    });
+    gkKitCache = { sig: sig, kit: { p: best, s: tp, short: mixc(best, NAVY, 0.55) } };
+    return gkKitCache.kit;
+  }
+
+  /**
+   * KALECİ (önden). Gövde simülasyonun kapsülüyle aynı yerde: merkez
+   * (cx, cy), eksen (ax, ay); uçuşta tüm figür eksene döner, ortasında esner
+   * (squash & stretch), yere inişte yassılır.
+   */
+  function drawKeeper(c, k, now, ex, bxw) {
+    var b = keeperBody(k, now);
+    var kit = keeperKit(), look = lookOf(opp.keeper);
+    var cx = b.cx, cy = b.cy, ang = 0, sx = 1, sy = 1, diving = b.diving;
+    var land = ex.land || 0;
+    if (diving) {
+      ang = Math.atan2(b.ax, b.ay);
+      var str = Math.sin(Math.min(1, b.e) * Math.PI * 0.9);
+      sx = 1 - 0.1 * str;
+      sy = 1 + 0.14 * str;
+      if (land > 0) {
+        if (Math.abs(ang) > 0.35) {
+          ang = A.lerp(ang, Math.sign(ang) * Math.PI / 2, land);
+          cy = A.lerp(cy, 0.3, land);
+        } else {
+          ang *= 1 - land;
+          cy = A.lerp(cy, 0.98, land);
+        }
+        var imp = Math.sin(A.clamp((land - 0.55) / 0.45, 0, 1) * Math.PI);
+        sx *= 1 + 0.14 * imp;
+        sy *= 1 - 0.14 * imp;
+      }
+    }
+    var hop = ex.hop || 0;
+    if (!diving) {
+      cy += hop * 0.16 + (ex.bob || 0);
+      sy *= 1 + 0.08 * hop - 0.05 * (k.crouch || 0) * (1 - hop);
+      sx *= 1 - 0.04 * hop + 0.03 * (k.crouch || 0);
+    }
+    var p = proj(cx, cy, KEEPER_Z);
+    var s = p.s;
+    // gölge
+    shadowAt(c, cx, KEEPER_Z, diving ? 0.55 + 0.4 * Math.abs(Math.sin(ang)) : 0.45, 0.3 * (1 - A.clamp((cy - 1.2) / 1.5, 0, 0.7)));
+    c.save();
+    c.translate(p.x, p.y);
+    c.rotate(ang + (ex.lean || 0) * 0.3);
+    c.scale(s * sx, s * sy);
+    c.lineJoin = "round";
+    c.lineCap = "round";
+    var LW = 2.4 / s;
+    var sock = kit.p, shorts = kit.short;
+    var hipY = 0.1, shY = -0.42, headY = -0.76, HR = 0.28;
+    var gloveR = 0.12;
+    var hands, feet, knees;
+    if (diving) {
+      hands = [[-0.14, -1.0], [0.14, -1.02]];
+      knees = [[-0.13, 0.5], [0.24, 0.42]];
+      feet = [[-0.17, 0.92], [0.12, 0.8]];
+      headY = -0.66;
+    } else {
+      var fy = cy; // ayaklar yerde
+      var cr = k.crouch || 0;
+      var spread = 0.42 + (k.set || 0) * 0.12;
+      var handY = -(1.12 + (k.set || 0) * 0.25 - cy);
+      var wave = ex.wave || 0;
+      hands = [[-spread - 0.04, handY - wave * 0.2], [spread + 0.04, handY - wave * 0.2 * Math.sin(A.time * 9)]];
+      if (ex.cheer) {
+        var ch = ex.cheer;
+        hands = [[A.lerp(hands[0][0], -0.5, ch), A.lerp(hands[0][1], -1.12 - 0.08 * Math.sin(A.time * 10), ch)], [A.lerp(hands[1][0], 0.5, ch), A.lerp(hands[1][1], -1.12 - 0.08 * Math.cos(A.time * 10), ch)]];
+      }
+      if (ex.caught) hands = [[-0.17, -0.12], [0.17, -0.12]];
+      knees = [[-0.2 - cr * 0.09, (hipY + fy) * 0.5], [0.2 + cr * 0.09, (hipY + fy) * 0.5]];
+      feet = [[-0.22 - cr * 0.05, fy], [0.22 + cr * 0.05, fy]];
+    }
+    // bacaklar
+    for (var i = 0; i < 2; i++) {
+      var hx = i ? 0.11 : -0.11;
+      limb3(c, hx, hipY, knees[i][0], knees[i][1], feet[i][0], feet[i][1] - 0.06, 0.15, look.skin, LW);
+      limb(c, knees[i][0] + (feet[i][0] - knees[i][0]) * 0.15, knees[i][1] + (feet[i][1] - knees[i][1]) * 0.15, feet[i][0], feet[i][1] - 0.06, 0.16, sock, LW);
+      c.save();
+      c.translate(feet[i][0] + (i ? 0.03 : -0.03), feet[i][1] - 0.03);
+      c.beginPath();
+      c.ellipse(0, 0, 0.12, 0.065, 0, 0, Math.PI * 2);
+      c.fillStyle = NAVY;
+      c.fill();
+      c.fillStyle = "#FFFFFF";
+      c.fillRect(-0.06, -0.03, 0.12, 0.018);
+      c.restore();
+    }
+    // şort
+    A.roundRect(c, -0.26, -0.04, 0.52, 0.3, 0.09);
+    c.fillStyle = shorts;
+    c.fill();
+    c.lineWidth = LW;
+    c.strokeStyle = NAVY;
+    c.stroke();
+    // kollar (gövdenin arkasından çıkar)
+    for (var j = 0; j < 2; j++) {
+      var shx = j ? 0.24 : -0.24;
+      var hx2 = hands[j][0], hy2 = hands[j][1];
+      var mx = shx + (hx2 - shx) * 0.45 + (j ? 0.05 : -0.05), my = shY + (hy2 - shY) * 0.45;
+      limb3(c, shx, shY + 0.04, mx, my, hx2, hy2, 0.13, kit.p, LW);
+    }
+    // gövde
+    A.roundRect(c, -0.27, shY - 0.06, 0.54, hipY - shY + 0.08, 0.13);
+    c.fillStyle = kit.p;
+    c.fill();
+    c.save();
+    c.clip();
+    c.fillStyle = kit.s;
+    c.fillRect(-0.27, shY - 0.06, 0.54, 0.07);
+    c.fillStyle = rgba(mixc(kit.p, NAVY, 0.4), 0.6);
+    for (var st = -0.2; st < 0.3; st += 0.13) c.fillRect(st, shY + 0.05, 0.035, 0.5);
+    c.fillStyle = "rgba(255,255,255,0.3)";
+    A.roundRect(c, -0.2, shY + 0.02, 0.09, 0.2, 0.04);
+    c.fill();
+    c.restore();
+    A.roundRect(c, -0.27, shY - 0.06, 0.54, hipY - shY + 0.08, 0.13);
+    c.lineWidth = LW;
+    c.strokeStyle = NAVY;
+    c.stroke();
+    // göğüste 1 numara
+    textM(c, String(opp.keeper.shirt || 1), 0.1, shY + 0.19, 0.2, s, lum(kit.p) > 0.6 ? NAVY : "#FFFFFF");
+    // eldivenler
+    hands.forEach(function (h) {
+      disc(c, h[0], h[1], gloveR, "#FFFFFF", LW);
+      c.fillStyle = kit.s;
+      c.beginPath();
+      c.arc(h[0], h[1] + gloveR * 0.35, gloveR * 0.55, 0, Math.PI);
+      c.fill();
+    });
+    // kafa
+    var hdx = 0;
+    disc(c, hdx, headY, HR, look.skin, 0);
+    c.save();
+    c.beginPath();
+    c.arc(hdx, headY, HR, 0, Math.PI * 2);
+    c.clip();
+    c.fillStyle = look.hair;
+    c.beginPath();
+    c.ellipse(hdx, headY - HR * 0.72, HR * 1.15, HR * 0.62, 0, 0, Math.PI * 2);
+    c.fill();
+    c.restore();
+    c.beginPath();
+    c.arc(hdx, headY, HR, 0, Math.PI * 2);
+    c.lineWidth = LW;
+    c.strokeStyle = NAVY;
+    c.stroke();
+    disc(c, -HR, headY + 0.02, 0.06, look.skin, LW * 0.8);
+    disc(c, HR, headY + 0.02, 0.06, look.skin, LW * 0.8);
+    // yüz: topa bakan gözler
+    var lookX = A.clamp(((bxw == null ? 0 : bxw) - cx) * 0.03, -0.035, 0.035);
+    c.fillStyle = NAVY;
+    [-0.085, 0.085].forEach(function (ex2) {
+      c.beginPath();
+      c.ellipse(hdx + ex2 + lookX, headY + 0.0, 0.035, 0.05, 0, 0, Math.PI * 2);
+      c.fill();
+    });
+    c.fillStyle = "#FFFFFF";
+    [-0.085, 0.085].forEach(function (ex2) {
+      c.beginPath();
+      c.arc(hdx + ex2 + lookX + 0.012, headY - 0.02, 0.013, 0, Math.PI * 2);
+      c.fill();
+    });
+    c.strokeStyle = NAVY;
+    c.lineWidth = 1.8 / s;
+    c.beginPath();
+    c.moveTo(hdx - 0.14, headY - 0.09);
+    c.lineTo(hdx - 0.04, headY - 0.065);
+    c.moveTo(hdx + 0.14, headY - 0.09);
+    c.lineTo(hdx + 0.04, headY - 0.065);
+    c.stroke();
+    c.fillStyle = "rgba(255,90,110,0.35)";
+    disc(c, hdx - 0.14, headY + 0.08, 0.04, "rgba(255,90,110,0.35)", 0);
+    disc(c, hdx + 0.14, headY + 0.08, 0.04, "rgba(255,90,110,0.35)", 0);
+    c.beginPath();
+    if (ex.cheer || ex.caught) c.arc(hdx, headY + 0.1, 0.06, 0.15, Math.PI - 0.15);
+    else if (diving) c.ellipse(hdx, headY + 0.12, 0.04, 0.05, 0, 0, Math.PI * 2);
+    else {
+      c.moveTo(hdx - 0.05, headY + 0.13);
+      c.lineTo(hdx + 0.05, headY + 0.13);
+    }
+    c.lineWidth = 1.6 / s;
+    c.stroke();
+    c.restore();
+  }
+
+  /**
+   * ATICI (arkadan). o: { x, z, run (adım fazı), runK, kick (−1 geri
+   * savrulma … 0 temas … 1 takip), arms ('run'|'kick'|'up'|'head'),
+   * jump, lean }. Formanın sırtında soyadı ve numara.
+   */
+  function drawShooter(c, o) {
+    var p = proj(o.x, 0, o.z);
+    if (cam.z - o.z < 1.2) return;
+    var s = p.s;
+    var kit = kit2(shooter), look = lookOf(shooter);
+    var shortsCol = lum(kit.s) > 0.85 && lum(kit.p) > 0.7 ? NAVY : kit.s === kit.p ? NAVY : kit.s;
+    shadowAt(c, o.x, o.z, 0.42, 0.3);
+    c.save();
+    c.translate(p.x, p.y - (o.jump || 0) * s);
+    c.rotate(o.lean || 0);
+    var sq = o.sq || 1;
+    c.scale(s * (2 - sq), -s * sq); // y yukarı: metre
+    c.lineJoin = "round";
+    c.lineCap = "round";
+    var LW = 2.6 / s;
+    var ph = o.run || 0, rk = o.runK || 0;
+    var bob = Math.abs(Math.cos(ph)) * 0.05 * rk;
+    var hip = 0.9 + bob, sh = 1.44 + bob, head = 1.74 + bob, HR = 0.27;
+    // bacaklar: [x, kalça, diz, ayak]
+    function legPts(side, lift, back) {
+      var hx = side * 0.12;
+      var fx = side * 0.16, fy = 0.03 + lift * 0.42;
+      var kx = side * 0.15, ky = 0.48 + lift * 0.12;
+      if (back) {
+        // geri savrulma: ayak kalçaya doğru kalkar ve kameraya yaklaşır
+        fx = side * 0.1 + back * 0.05;
+        fy = 0.03 + back * 0.62;
+        ky = 0.42 + back * 0.12;
+      }
+      return [hx, hip, kx, ky, fx, fy];
+    }
+    var lL = Math.max(0, Math.sin(ph)) * rk, lR = Math.max(0, -Math.sin(ph)) * rk;
+    var kick = o.kick, sock = kit.p;
+    var bu = kick != null && kick < 0 ? 1 + kick : -1;
+    var backAmt = bu < 0 ? 0 : bu < 0.75 ? A.smooth(bu / 0.75) : 1 - A.smooth((bu - 0.75) / 0.25);
+    var thru = kick != null && kick >= 0 ? kick : -1;
+    function drawLeg(side, lift, back, scaleK) {
+      var q = legPts(side, lift, back);
+      limb3(c, q[0], q[1], q[2], q[3], q[4], q[5] + 0.06, 0.16, side > 0 ? look.skin : mixc(look.skin, NAVY, 0.12), LW);
+      var kx = q[2] + (q[4] - q[2]) * 0.18, ky = q[3] + (q[5] - q[3]) * 0.18;
+      limb(c, kx, ky, q[4], q[5] + 0.06, 0.17, side > 0 ? sock : mixc(sock, NAVY, 0.12), LW);
+      c.strokeStyle = kit.s;
+      c.lineWidth = 0.05;
+      c.beginPath();
+      c.moveTo(kx + (q[4] - kx) * 0.12 - 0.07, ky + (q[5] - ky) * 0.12);
+      c.lineTo(kx + (q[4] - kx) * 0.12 + 0.07, ky + (q[5] - ky) * 0.12);
+      c.stroke();
+      // krampon tabanı (arkadan görünen)
+      c.save();
+      c.translate(q[4], q[5] + 0.03);
+      var bs = scaleK || 1;
+      c.beginPath();
+      c.ellipse(0, 0, 0.1 * bs, 0.07 * bs, 0, 0, Math.PI * 2);
+      c.fillStyle = NAVY;
+      c.fill();
+      c.fillStyle = "#FFFFFF";
+      c.beginPath();
+      c.ellipse(0, 0.02 * bs, 0.05 * bs, 0.025 * bs, 0, 0, Math.PI * 2);
+      c.fill();
+      c.restore();
+    }
+    // vuran bacak takipte gövdenin arkasında (kameradan uzak)
+    if (thru >= 0) {
+      var u = Math.min(1, thru / 0.18), dn = A.clamp((thru - 0.25) / 0.4, 0, 1);
+      var fy2 = A.lerp(0.15, 0.95, A.easeOut(u)) * (1 - dn) + 0.04 * dn;
+      var kny = A.lerp(0.5, 0.95, u * (1 - dn));
+      limb(c, 0.12, hip, 0.2, kny, 0.15, look.skin, LW);
+      limb(c, 0.2, kny, 0.18, fy2, 0.16, sock, LW);
+      c.beginPath();
+      c.ellipse(0.18, fy2 + 0.04, 0.08, 0.05, 0, 0, Math.PI * 2);
+      c.fillStyle = NAVY;
+      c.fill();
+    }
+    drawLeg(-1, kick != null ? 0 : lL, 0);
+    if (thru < 0) drawLeg(1, kick != null ? 0 : lR, backAmt, 1 + backAmt * 0.35);
+    // şort
+    A.roundRect(c, -0.28, hip - 0.28, 0.56, 0.36, 0.1);
+    c.fillStyle = shortsCol;
+    c.fill();
+    c.lineWidth = LW;
+    c.strokeStyle = NAVY;
+    c.stroke();
+    // kollar
+    var arms = o.arms || "run", hands;
+    var swing = Math.sin(ph) * 0.22 * rk;
+    if (arms === "up") {
+      var w = Math.sin(A.time * 10) * 0.08;
+      hands = [[-0.5, 2.25 + w], [0.5, 2.25 - w]];
+    } else if (arms === "head") hands = [[-0.18, 1.98], [0.18, 1.98]];
+    else if (arms === "kick") {
+      var kk = A.clamp(1 - Math.abs(kick || 0) * 1.2, 0, 1);
+      hands = [[-0.62 - 0.1 * kk, 1.25 + 0.3 * kk], [0.4, 1.0 + 0.15 * kk]];
+    } else hands = [[-0.36, 1.0 + swing], [0.36, 1.0 - swing]];
+    for (var j = 0; j < 2; j++) {
+      var sx = j ? 0.27 : -0.27, hx = hands[j][0], hy = hands[j][1];
+      var mx = sx + (hx - sx) * 0.5 + (j ? 0.06 : -0.06), my = sh - 0.06 + (hy - sh) * 0.5;
+      limb3(c, sx, sh - 0.06, mx, my, hx, hy, 0.12, look.skin, LW);
+      limb(c, sx, sh - 0.06, sx + (mx - sx) * 0.75, sh - 0.06 + (my - sh + 0.06) * 0.75, 0.16, kit.p, LW);
+      disc(c, hx, hy, 0.075, look.skin, LW * 0.9);
+    }
+    // gövde (sırt)
+    A.roundRect(c, -0.3, hip - 0.04, 0.6, sh - hip + 0.1, 0.14);
+    c.fillStyle = kit.p;
+    c.fill();
+    c.save();
+    c.clip();
+    c.fillStyle = rgba(NAVY, 0.15);
+    c.fillRect(0.18, hip - 0.04, 0.12, sh - hip + 0.1);
+    c.fillStyle = "rgba(255,255,255,0.22)";
+    A.roundRect(c, -0.24, sh - 0.3, 0.08, 0.24, 0.04);
+    c.fill();
+    c.fillStyle = kit.s;
+    c.fillRect(-0.3, sh, 0.6, 0.06);
+    c.restore();
+    A.roundRect(c, -0.3, hip - 0.04, 0.6, sh - hip + 0.1, 0.14);
+    c.lineWidth = LW;
+    c.strokeStyle = NAVY;
+    c.stroke();
+    // sırt: soyadı + numara (y yukarı ölçekte yazı ters çıkmasın)
+    c.save();
+    c.scale(1, -1);
+    var numCol = colDist(kit.s, kit.p) > 90 ? kit.s : lum(kit.p) > 0.6 ? NAVY : "#FFFFFF";
+    var nm = upperTR(shooter.back || shooter.short || "");
+    if (nm.length > 10) nm = nm.slice(0, 9) + ".";
+    textM(c, nm, 0, -(sh - 0.1), 0.085, s, numCol);
+    textM(c, String(shooter.shirt || 10), 0, -(hip + 0.25), 0.3, s, numCol, NAVY);
+    c.restore();
+    // boyun + kafa (arkadan: saç)
+    limb(c, 0, sh, 0, head - 0.1, 0.12, look.skin, LW);
+    disc(c, -HR * 0.96, head - 0.02, 0.065, look.skin, LW * 0.8);
+    disc(c, HR * 0.96, head - 0.02, 0.065, look.skin, LW * 0.8);
+    disc(c, 0, head, HR, look.skin, 0);
+    c.save();
+    c.beginPath();
+    c.arc(0, head, HR, 0, Math.PI * 2);
+    c.clip();
+    c.fillStyle = look.hair;
+    c.beginPath();
+    c.ellipse(0, head + 0.08, HR * 1.1, HR * 0.95, 0, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = "rgba(255,255,255,0.14)";
+    c.beginPath();
+    c.ellipse(-0.08, head + 0.14, 0.08, 0.05, -0.4, 0, Math.PI * 2);
+    c.fill();
+    c.restore();
+    c.beginPath();
+    c.arc(0, head, HR, 0, Math.PI * 2);
+    c.lineWidth = LW;
+    c.strokeStyle = NAVY;
+    c.stroke();
+    c.restore();
+  }
+
+  /** Atıcının o anki pozu (durum makinesinden). */
+  function shooterPose(phase, t) {
+    var o = { x: WAIT.x, z: WAIT.z, run: 0, runK: 0, kick: null, arms: "run" };
+    if (phase === "wait") {
+      o.run = A.time * 1.4;
+      o.runK = 0.12;
+      o.sq = 1 + Math.sin(A.time * 2.6) * 0.012;
+      return o;
+    }
+    if (phase === "run") {
+      var tReach = RUNUP - 0.1;
+      var u = A.clamp(t / tReach, 0, 1);
+      var e = u * u * (2 - u); // hızlanan
+      var d = Math.hypot(PLANT.x - WAIT.x, PLANT.z - WAIT.z);
+      o.x = A.lerp(WAIT.x, PLANT.x, e);
+      o.z = A.lerp(WAIT.z, PLANT.z, e);
+      o.run = e * d * 5.2;
+      o.runK = Math.min(1, t / 0.25);
+      o.lean = 0.04;
+      if (t > RUNUP - 0.34) {
+        o.kick = -A.clamp((RUNUP - t) / 0.34, 0, 1) * 1 - 0.0001;
+        o.arms = "kick";
+        o.runK = 0;
+        o.lean = -0.05;
+      }
+      return o;
+    }
+    if (phase === "kick") {
+      o.x = PLANT.x + Math.min(0.3, t * 0.6) * 0.15;
+      o.z = PLANT.z - Math.min(0.35, t * 0.9);
+      o.kick = t;
+      o.arms = "kick";
+      o.lean = 0.06 * Math.min(1, t * 4);
+      o.jump = Math.max(0, Math.sin(Math.min(1, t / 0.3) * Math.PI)) * 0.08;
+      return o;
+    }
+    o.x = PLANT.x + 0.04;
+    o.z = PLANT.z - 0.35;
+    if (phase === "celebrate") {
+      o.arms = "up";
+      o.jump = Math.abs(Math.sin(t * 6)) * 0.28;
+      o.sq = 1 + Math.sin(t * 12) * 0.05;
+      return o;
+    }
+    // üzgün: eller başta, omuzlar düşük
+    o.arms = "head";
+    o.sq = 0.97;
+    o.lean = Math.sin(t * 1.5) * 0.03;
+    return o;
+  }
+
+  /* ─────────────── top ─────────────── */
+
+  function flatBall(c, x, y, r, rot) {
+    c.save();
+    c.translate(x, y);
+    c.beginPath();
+    c.arc(0, 0, r, 0, Math.PI * 2);
+    c.fillStyle = "#FFFFFF";
+    c.fill();
+    c.save();
+    c.clip();
+    c.fillStyle = NAVY;
+    c.rotate(rot || 0);
+    function pent(px, py, pr) {
+      c.beginPath();
+      for (var i = 0; i < 5; i++) {
+        var a = (i / 5) * Math.PI * 2 - Math.PI / 2;
+        c.lineTo(px + Math.cos(a) * pr, py + Math.sin(a) * pr);
+      }
+      c.closePath();
+      c.fill();
+    }
+    pent(0, 0, r * 0.36);
+    for (var k = 0; k < 5; k++) {
+      var a = (k / 5) * Math.PI * 2 + Math.PI / 2;
+      pent(Math.cos(a) * r * 0.95, Math.sin(a) * r * 0.95, r * 0.3);
+    }
+    c.restore();
+    c.fillStyle = "rgba(20,16,67,0.16)";
+    c.beginPath();
+    c.arc(0, 0, r, 0.2, Math.PI - 0.2);
+    c.fill();
+    c.beginPath();
+    c.arc(0, 0, r, 0, Math.PI * 2);
+    c.lineWidth = Math.max(1.4, r * 0.2);
+    c.strokeStyle = NAVY;
+    c.stroke();
+    c.fillStyle = "rgba(255,255,255,0.85)";
+    c.beginPath();
+    c.ellipse(-r * 0.35, -r * 0.42, r * 0.22, r * 0.14, -0.6, 0, Math.PI * 2);
+    c.fill();
+    c.restore();
+  }
+
+  var trail = [];
+  function drawBallShadow(c, bx, by, bz) {
+    var a = 0.38 * Math.max(0.15, 1 - by / 2.8);
+    shadowAt(c, bx, bz, BALL_R * (1.5 + by * 0.25), a);
+  }
+  function drawTrail(c, rocket) {
+    if (trail.length < 2) return;
+    var r0 = proj(trail[trail.length - 1][0], trail[trail.length - 1][1], trail[trail.length - 1][2]);
+    c.save();
+    c.lineCap = "round";
+    if (rocket) c.globalCompositeOperation = "lighter";
+    for (var i = 1; i < trail.length; i++) {
+      var a = proj(trail[i - 1][0], trail[i - 1][1], trail[i - 1][2]), b = proj(trail[i][0], trail[i][1], trail[i][2]);
+      var f = i / trail.length;
+      c.strokeStyle = rocket ? "rgba(255," + Math.round(120 + 100 * f) + ",60," + (0.85 * f) + ")" : "rgba(255,255,255," + (0.55 * f) + ")";
+      c.lineWidth = Math.max(1, BALL_R * 2.6 * b.s * f * (rocket ? 1.5 : 1));
+      c.beginPath();
+      c.moveTo(a.x, a.y);
+      c.lineTo(b.x, b.y);
+      c.stroke();
+    }
+    c.restore();
+    return r0;
+  }
+  function drawBall(c, bx, by, bz, rocket) {
+    var p = proj(bx, by, bz);
+    var r = Math.max(4, BALL_R * 1.45 * p.s);
+    if (rocket) {
+      c.save();
+      c.globalCompositeOperation = "lighter";
+      var g = c.createRadialGradient(p.x, p.y, r * 0.5, p.x, p.y, r * 3.2);
+      g.addColorStop(0, "rgba(255,170,70,0.9)");
+      g.addColorStop(1, "rgba(255,90,30,0)");
+      c.fillStyle = g;
+      c.beginPath();
+      c.arc(p.x, p.y, r * 3.2, 0, Math.PI * 2);
+      c.fill();
+      c.restore();
+    }
+    flatBall(c, p.x, p.y, r, ball.wx * 0.6 + ball.wy * 0.3);
+  }
+
+  /* ─────────────── yağmur ─────────────── */
+
+  var drops = null;
+  function drawRain(c, dt) {
+    if (!cond.rain || state === "attract") return;
+    if (!drops) {
+      var r = A.seeded(77);
+      drops = [];
+      for (var i = 0; i < 110; i++) drops.push({ x: r(), y: r(), v: 0.9 + r() * 0.5, l: 10 + r() * 10 });
+    }
+    var wx = cond.wind * 0.012;
+    c.save();
+    c.strokeStyle = "rgba(200,220,255,0.45)";
+    c.lineWidth = 1.4;
+    c.beginPath();
+    drops.forEach(function (d) {
+      d.y += d.v * dt * 1.4;
+      d.x += wx * dt * 3;
+      if (d.y > 1) {
+        d.y -= 1;
+        d.x = Math.random();
+      }
+      d.x = ((d.x % 1) + 1) % 1;
+      var x = d.x * W, y = d.y * H;
+      c.moveTo(x, y);
+      c.lineTo(x - wx * d.l * 30, y - d.l);
+    });
+    c.stroke();
+    c.fillStyle = "rgba(30,40,90,0.12)";
+    c.fillRect(0, 0, W, H);
+    c.restore();
+  }
+
+  /* ─────────────── sahne ─────────────── */
+
+  function drawScene(c, dt) {
+    // DEV KALE: kale yaylanarak büyür / küçülür
+    var k2 = Math.min(1, dt * 7);
+    gv.x += (gHalf / HALF - gv.x) * k2;
+    gv.y += (gTop / GOAL_H - gv.y) * k2;
 
     // top ve kaleci: tekrarda kayıttan
     var bx = ball.x, by = ball.y, bz = ball.z, kstate = gk, know = simTime, keepExtra = {};
-    var rframe = null;
-    if (inReplay()) {
+    var replayOn = inReplay();
+    if (replayOn) {
       var fr = replay.frames;
       var t0 = fr[0].t, t1 = fr[fr.length - 1].t;
       var rt = t0 + (stateT - REPLAY_AT) * 0.45 * ((t1 - t0 + 0.4) / Math.max(0.5, t1 - t0 + 0.4)) - 0.25;
       var i = 0;
       while (i < fr.length - 1 && fr[i + 1].t < rt) i++;
-      rframe = fr[i];
-      bx = rframe.bx;
-      by = rframe.by;
-      bz = rframe.bz;
-      kstate = rframe.k;
+      var rf = fr[i];
+      bx = rf.bx;
+      by = rf.by;
+      bz = rf.bz;
+      kstate = rf.k;
       know = rt;
     } else if (state === "result" || state === "matchEnd") {
       keepExtra = { caught: ball.caught, cheer: lastKick && lastKick.result !== "gol" && !gk.dive && !ball.caught ? Math.min(1, stateT * 2) : 0 };
     }
-    // uçuş bitince yere iniş (tekrarda da)
     if (kstate.dive) keepExtra.land = A.smooth(A.clamp((know - kstate.dive.t0 - kstate.dive.dur) / 0.28, 0, 1));
-    if (state === "aim" || state === "power" || state === "turn" || state === "oppKick" || state === "intro" || state === "runup") {
+    var idle = state === "aim" || state === "power" || state === "turn" || state === "oppKick" || state === "intro" || state === "runup" || state === "attract" || state === "over";
+    if (idle) {
       bx = 0;
       by = BALL_R;
       bz = SPOT_Z;
     }
-    if (ball.caught && !inReplay()) {
+    if (ball.caught && !replayOn && !idle) {
       var kb = keeperBody(gk, simTime);
       bx = kb.cx;
-      by = kb.cy + 0.15;
-      bz = KEEPER_Z + 0.32;
+      by = kb.cy + 0.12;
+      bz = KEEPER_Z + 0.3;
     }
-    R.ball.position.set(bx, by, bz);
-    syncWeather(dt);
-    var rocketOn = shot && shot.rocket && (state === "flight" || inReplay()) && bz < SPOT_Z - 0.2;
-    R.rocketGlow.visible = !!rocketOn;
-    if (rocketOn) {
-      R.rocketGlow.position.set(bx, by, bz);
-      var gsz = 0.75 + Math.random() * 0.25;
-      R.rocketGlow.scale.set(gsz, gsz, 1);
+    if (replayOn) {
+      /* tekrar: kayıttaki kaleci */
+    } else if (state === "aim" || state === "power" || state === "turn" || state === "attract" || state === "intro" || state === "oppKick" || state === "over") {
+      var dz2 = opp.diff;
+      keepExtra.bob = Math.sin(A.time * (5 + 2 * dz2)) * 0.015;
+      keepExtra.lean = Math.sin(A.time * 1.3) * 0.06;
+      keepExtra.wave = dz2 > 0.4 && state === "power" ? Math.max(0, Math.sin(A.time * (3 + 2 * dz2))) * 0.5 * dz2 : 0;
+    } else if (state === "runup") {
+      var hu = (stateT - (RUNUP - 0.3)) / 0.26;
+      keepExtra.hop = hu > 0 && hu < 1 ? Math.sin(Math.PI * hu) : 0;
     }
-    R.trail.line.material.color.set(shot && shot.rocket ? 0xff9a4d : 0xffffff);
-    R.trail.line.material.opacity = shot && shot.rocket ? 0.75 : 0.28;
-    R.ball.rotation.set(ball.wx, ball.wy, 0);
-    R.ballShadow.position.set(bx, 0.006, bz);
-    R.ballShadow.material.opacity = 0.55 * Math.max(0.15, 1 - by * 0.6);
-    var trail = R.trail;
-    var flying = (state === "flight" || inReplay()) && bz < SPOT_Z - 0.3;
-    if (flying) {
-      trail.pts.push(bx, by, bz);
-      if (trail.pts.length > 30 * 3) trail.pts.splice(0, 3);
-    } else if (trail.pts.length) trail.pts.splice(0, 3);
-    var arr = trail.line.geometry.attributes.position.array;
-    var n = trail.pts.length / 3;
-    for (var j = 0; j < trail.pts.length; j++) arr[j] = trail.pts[j];
-    trail.line.geometry.attributes.position.needsUpdate = true;
-    trail.line.geometry.setDrawRange(0, n);
-    trail.line.visible = n > 2;
 
+    // iz
+    var flying = (state === "flight" || replayOn) && bz < SPOT_Z - 0.3;
+    if (flying) {
+      trail.push([bx, by, bz]);
+      if (trail.length > 14) trail.shift();
+    } else if (trail.length) trail.shift();
+    var rocket = !!(shot && shot.rocket && (state === "flight" || replayOn) && bz < SPOT_Z - 0.2);
+
+    drawBackdrop(c);
+    drawBoards(c);
+    drawPitch(c);
+    drawFlags(c);
+    drawNet(c);
+    // derinlik sırası: file içi top → çerçeve → kaleci önü/arkası → atıcı
+    drawBallShadow(c, bx, by, bz);
+    if (bz < 0) {
+      drawTrail(c, rocket);
+      drawBall(c, bx, by, bz, rocket);
+    }
+    drawGoalFrame(c);
+    if (bz >= 0 && bz < KEEPER_Z) {
+      drawTrail(c, rocket);
+      drawBall(c, bx, by, bz, rocket);
+    }
+    drawKeeper(c, kstate, know, keepExtra, bx);
+    if (bz >= KEEPER_Z) {
+      drawTrail(c, rocket);
+      drawBall(c, bx, by, bz, rocket);
+    }
     // atıcı
-    var sh = shooterA;
-    if (state === "attract" || state === "intro" || state === "turn" || state === "aim" || state === "power" || state === "oppKick") poseShooter(sh, "wait");
-    else if (state === "runup") poseShooter(sh, "run", Math.min(stateT, RUNUP));
-    else if (inReplay()) poseShooter(sh, "kick", Math.max(0, know - kickAt + 0.05));
-    else if (state === "flight") poseShooter(sh, "kick", simTime - kickAt);
+    var po;
+    if (state === "attract" || state === "intro" || state === "turn" || state === "aim" || state === "power" || state === "oppKick" || state === "over") po = shooterPose("wait");
+    else if (state === "runup") po = shooterPose("run", Math.min(stateT, RUNUP));
+    else if (replayOn) po = shooterPose("kick", Math.max(0, know - kickAt));
+    else if (state === "flight") po = shooterPose("kick", simTime - kickAt);
     else if (state === "result") {
       var mineGoal = lastKick && lastKick.result === "gol";
-      if (mineGoal && stateT > 0.5) poseShooter(sh, "celebrate", stateT - 0.5);
-      else if (!mineGoal && stateT > 0.35) poseShooter(sh, "sad", stateT - 0.35);
-      else poseShooter(sh, "kick", simTime - kickAt);
-    } else if (state === "matchEnd") {
-      if (endResult === "won") poseShooter(cast.shooter.a, "celebrate", 2.3 + stateT);
-      else poseShooter(cast.shooter.a, "sad", 1);
-    }
-    if (!inReplay()) {
-      var dz = opp.diff;
-      if (state === "aim" || state === "power" || state === "turn") {
-        keepExtra.bob = Math.sin(A.time * (5 + 2 * dz)) * 0.012;
-        keepExtra.lean = Math.sin(A.time * 1.3) * 0.06;
-        keepExtra.wave = dz > 0.4 && state === "power" ? Math.max(0, Math.sin(A.time * (3 + 2 * dz))) * 0.5 * dz : 0;
-      } else if (state === "runup") {
-        // sıçrama adımı: temastan hemen önce küçük zıplama, temasta yüklenmiş iniş
-        var hu = (stateT - (RUNUP - 0.3)) / 0.26;
-        keepExtra.hop = hu > 0 && hu < 1 ? Math.sin(Math.PI * hu) : 0;
-      }
-    }
-    poseKeeper(keeperA, kstate, know, keepExtra);
-    poseReferee(cast.ref.a);
-    Object.keys(cast).forEach(function (key) {
-      var c = cast[key];
-      placeShadows(c.shadows, c.a, c.a.root.visible);
-    });
+      if (mineGoal && stateT > 0.45) po = shooterPose("celebrate", stateT - 0.45);
+      else if (!mineGoal && stateT > 0.4) po = shooterPose("sad", stateT - 0.4);
+      else po = shooterPose("kick", simTime - kickAt);
+    } else if (state === "matchEnd") po = shooterPose(endResult === "won" ? "celebrate" : "sad", stateT);
+    else po = shooterPose("wait");
+    drawShooter(c, po);
+    drawRain(c, dt);
+    if (replayOn) drawLetterbox(c);
+  }
 
-    placeCamera(dt);
+  function drawLetterbox(c) {
+    var k = A.smooth(A.clamp((stateT - REPLAY_AT) / 0.25, 0, 1)) * A.smooth(A.clamp((REPLAY_AT + REPLAY_LEN - stateT) / 0.25, 0, 1));
+    var h = 46 * k;
+    c.fillStyle = INK;
+    c.fillRect(0, 0, W, h);
+    c.fillRect(0, H - h, W, h);
   }
 
   /* ═══════════════════════════ ÇİZİM GİRİŞİ ═══════════════════════════ */
@@ -2041,88 +2629,82 @@
   function resize(w, h) {
     W = w;
     H = h;
-    initGL();
-    resizeGL();
-  }
-
-  /**
-   * Uyarlanır kalite: kare süresi uzun süre 24 ms'yi aşarsa önce çözünürlük
-   * 1×'e iner, sürerse gölgeler kapanır. Akıcılık görüntüden önce gelir.
-   */
-  var perf = { acc: 0, n: 0, step: 0 };
-  function adaptQuality(dt) {
-    if (!dt || perf.step >= 2 || state === "attract") return;
-    perf.acc += dt;
-    perf.n += 1;
-    if (perf.acc < 2) return;
-    var avg = perf.acc / perf.n;
-    perf.acc = 0;
-    perf.n = 0;
-    if (avg < 0.024) return;
-    perf.step += 1;
-    if (perf.step === 1) {
-      R.renderer.setPixelRatio(1);
-      resizeGL();
-    } else {
-      R.renderer.shadowMap.enabled = false;
-      R.scene.traverse(function (o) {
-        if (o.material) o.material.needsUpdate = true;
-      });
-    }
+    layout();
+    camCut = true;
   }
 
   function render(c, dt) {
-    if (R) {
-      try {
-        adaptQuality(dt);
-        sync(dt);
-        K.syncAll();
-        R.renderer.render(R.scene, R.camera);
-      } catch (e) {
-        glFailed = true;
-        R = null;
-      }
-    }
-    if (glFailed && !R && A.is3d) drawNoGL(c);
-    drawHUD(c, dt);
+    layout();
+    placeCamera(dt || 0);
+    drawScene(c, dt || 0);
+    drawHUD(c, dt || 0);
   }
 
   /* ═══════════════════════════ HUD ═══════════════════════════ */
 
-  var GOLD = "#FFD24A", BRAND = "#5B3DF5", GLASS = "rgba(9,11,32,0.8)", LINE = "rgba(255,255,255,0.12)";
-
-  function drawNoGL(c) {
-    c.save();
-    c.fillStyle = "#0A0E24";
-    c.fillRect(0, 0, W, H);
-    c.fillStyle = "rgba(255,255,255,0.8)";
-    c.font = A.font(14, 700);
-    c.textAlign = "center";
-    c.fillText("3B grafik bu cihazda açılamadı.", W / 2, H / 2);
-    c.restore();
-  }
-
-  var vignetteLayer = null;
-  function drawVignette(c) {
-    if (!vignetteLayer || vignetteLayer.w !== W || vignetteLayer.h !== H) {
-      vignetteLayer = A.layer(W, H);
-      var v = vignetteLayer.ctx;
-      A.paintVignette(v, W, H, 0.38);
-      var g = v.createLinearGradient(0, 0, 0, 150);
-      g.addColorStop(0, "rgba(3,5,16,0.72)");
-      g.addColorStop(1, "rgba(3,5,16,0)");
-      v.fillStyle = g;
-      v.fillRect(0, 0, W, 150);
-      var g2 = v.createLinearGradient(0, H - 170, 0, H);
-      g2.addColorStop(0, "rgba(3,5,16,0)");
-      g2.addColorStop(1, "rgba(3,5,16,0.62)");
-      v.fillStyle = g2;
-      v.fillRect(0, H - 170, W, 170);
+  function label(c, text, x, y, size, color, align, stroke) {
+    c.font = A.font(size, 900);
+    c.textAlign = align || "center";
+    c.textBaseline = "middle";
+    c.lineJoin = "round";
+    if (stroke !== false) {
+      c.lineWidth = Math.max(3, size * 0.24);
+      c.strokeStyle = stroke || NAVY;
+      c.strokeText(text, x, y);
     }
-    A.blit(vignetteLayer);
+    c.fillStyle = color;
+    c.fillText(text, x, y);
   }
-
-  /* ── küçük yapı taşları ── */
+  /** Koyu lacivert, alt kenarı gölgeli yuvarlak hap (Savunma Hattı HUD'u). */
+  function navyPill(c, x, y, w, h, fill, r) {
+    r = r == null ? h / 2 : r;
+    A.roundRect(c, x, y + 3, w, h, r);
+    c.fillStyle = "rgba(8,6,30,0.55)";
+    c.fill();
+    A.roundRect(c, x, y, w, h, r);
+    var g = c.createLinearGradient(0, y, 0, y + h);
+    g.addColorStop(0, fill ? mixc(fill, "#FFFFFF", 0.12) : "#2C2580");
+    g.addColorStop(1, fill || "#1C1760");
+    c.fillStyle = g;
+    c.fill();
+    c.lineWidth = 1.5;
+    c.strokeStyle = "rgba(255,255,255,0.14)";
+    c.stroke();
+  }
+  /** Beyaz kart (Savunma Hattı tepsi kartları gibi): lacivert gölge, yumuşak kenar. */
+  function whiteCard(c, x, y, w, h, r) {
+    A.roundRect(c, x, y + 6, w, h, r);
+    c.fillStyle = "rgba(8,6,30,0.5)";
+    c.fill();
+    A.roundRect(c, x, y, w, h, r);
+    c.fillStyle = "#FFFFFF";
+    c.fill();
+    c.lineWidth = 3;
+    c.strokeStyle = NAVY;
+    c.stroke();
+  }
+  /** Sarı rozet (kart başlığı / maliyet rozeti gibi). */
+  function yellowBadge(c, text, cx, cy, size) {
+    c.font = A.font(size, 900);
+    var w = c.measureText(text).width + size * 1.6, h = size * 1.9;
+    A.roundRect(c, cx - w / 2, cy - h / 2 + 2.5, w, h, h / 2);
+    c.fillStyle = "rgba(8,6,30,0.45)";
+    c.fill();
+    A.roundRect(c, cx - w / 2, cy - h / 2, w, h, h / 2);
+    var g = c.createLinearGradient(0, cy - h / 2, 0, cy + h / 2);
+    g.addColorStop(0, "#FFE066");
+    g.addColorStop(1, "#F5B700");
+    c.fillStyle = g;
+    c.fill();
+    c.lineWidth = 2.2;
+    c.strokeStyle = NAVY;
+    c.stroke();
+    c.fillStyle = NAVY;
+    c.textAlign = "center";
+    c.textBaseline = "middle";
+    c.fillText(text, cx, cy + 0.5);
+    return w;
+  }
 
   function initials(name) {
     return upperTR(
@@ -2136,51 +2718,55 @@
         .join(""),
     );
   }
-  /** Kulüp arması: kalkan, iki renk, baş harfler. */
+  /** Kulüp arması: kalkan, iki renk, baş harfler, lacivert kontur. */
   function badge(c, x, y, size, person) {
-    var kit = kitOf(person);
+    var kit = kit2(person);
     var w = size, h = size * 1.15;
     c.save();
     c.translate(x, y);
-    c.beginPath();
-    c.moveTo(-w / 2, -h / 2);
-    c.lineTo(w / 2, -h / 2);
-    c.lineTo(w / 2, h * 0.08);
-    c.quadraticCurveTo(w / 2, h * 0.42, 0, h / 2);
-    c.quadraticCurveTo(-w / 2, h * 0.42, -w / 2, h * 0.08);
-    c.closePath();
-    c.fillStyle = kit.primary;
+    function shape() {
+      c.beginPath();
+      c.moveTo(-w / 2, -h / 2);
+      c.lineTo(w / 2, -h / 2);
+      c.lineTo(w / 2, h * 0.08);
+      c.quadraticCurveTo(w / 2, h * 0.42, 0, h / 2);
+      c.quadraticCurveTo(-w / 2, h * 0.42, -w / 2, h * 0.08);
+      c.closePath();
+    }
+    c.translate(0, 2);
+    shape();
+    c.fillStyle = "rgba(8,6,30,0.45)";
+    c.fill();
+    c.translate(0, -2);
+    shape();
+    c.fillStyle = kit.p;
     c.fill();
     c.save();
     c.clip();
-    c.fillStyle = kit.secondary;
-    c.globalAlpha = 0.9;
+    c.fillStyle = kit.s;
     c.fillRect(-w / 2, -h / 2 + h * 0.62, w, h * 0.14);
+    c.fillStyle = "rgba(255,255,255,0.25)";
+    c.fillRect(-w / 2, -h / 2, w / 2, h);
     c.restore();
-    c.lineWidth = Math.max(1.5, size * 0.06);
-    c.strokeStyle = "rgba(255,255,255,0.85)";
+    shape();
+    c.lineWidth = Math.max(2, size * 0.08);
+    c.strokeStyle = NAVY;
     c.stroke();
-    c.fillStyle = lum(kit.primary) > 0.6 ? "#0B1020" : "#FFFFFF";
-    c.font = A.font(size * 0.36, 900);
+    c.fillStyle = lum(kit.p) > 0.6 ? NAVY : "#FFFFFF";
+    c.font = A.font(size * 0.38, 900);
     c.textAlign = "center";
     c.textBaseline = "middle";
     c.fillText(initials(teamName(person)), 0, -h * 0.06);
     c.restore();
   }
-  function lum(hex) {
-    var h = String(hex).replace("#", "");
-    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
-    var v = parseInt(h, 16) || 0;
-    return (0.299 * ((v >> 16) & 255) + 0.587 * ((v >> 8) & 255) + 0.114 * (v & 255)) / 255;
-  }
   var imgCache = {};
-  /** Oyuncu fotoğrafı (yoksa baş harfler), daire içinde. */
+  /** Oyuncu fotoğrafı (yoksa baş harfler), lacivert konturlu daire içinde. */
   function avatar(c, x, y, r, person) {
-    var kit = kitOf(person);
+    var kit = kit2(person);
     c.save();
     c.beginPath();
     c.arc(x, y, r, 0, Math.PI * 2);
-    c.fillStyle = kit.primary;
+    c.fillStyle = kit.p;
     c.fill();
     var url = person && person.image;
     var im = url ? imgCache[url] : null;
@@ -2197,14 +2783,16 @@
       c.drawImage(im, x - r, y - r, r * 2, r * 2);
       c.restore();
     } else {
-      c.fillStyle = lum(kit.primary) > 0.6 ? "#0B1020" : "#FFFFFF";
+      c.fillStyle = lum(kit.p) > 0.6 ? NAVY : "#FFFFFF";
       c.font = A.font(r * 0.8, 900);
       c.textAlign = "center";
       c.textBaseline = "middle";
       c.fillText(initials(person && (person.name || person.short)), x, y + 1);
     }
-    c.lineWidth = 2;
-    c.strokeStyle = kit.secondary;
+    c.beginPath();
+    c.arc(x, y, r, 0, Math.PI * 2);
+    c.lineWidth = 2.5;
+    c.strokeStyle = NAVY;
     c.stroke();
     c.restore();
   }
@@ -2213,14 +2801,6 @@
     if (c.measureText(t).width <= max) return t;
     while (c.measureText(t + "…").width > max && t.length > 2) t = t.slice(0, -1);
     return t + "…";
-  }
-  function glass(c, x, y, w, h, r, fill) {
-    A.roundRect(c, x, y, w, h, r);
-    c.fillStyle = fill || GLASS;
-    c.fill();
-    c.strokeStyle = LINE;
-    c.lineWidth = 1;
-    c.stroke();
   }
 
   /** Aşama adı: merdivenin sonundan geriye final, yarı final, çeyrek final. */
@@ -2236,49 +2816,40 @@
   /* ── skorbord ── */
 
   function drawScoreboard(c) {
-    var w = Math.min(W - 20, 384), h = 62, x = W / 2 - w / 2, y = 10;
+    var w = Math.min(W - 20, 384), h = 58, x = W / 2 - w / 2, y = 10;
     c.save();
-    glass(c, x, y, w, h, 14);
-    var mk = kitOf(shooter), ok = kitOf(opp.keeper);
-    c.fillStyle = mk.primary;
-    c.fillRect(x, y + 10, 4, h - 20);
-    c.fillStyle = ok.primary;
-    c.fillRect(x + w - 4, y + 10, 4, h - 20);
+    navyPill(c, x, y, w, h, null, 20);
     var gm = match ? goalsOf(match.me) : 0, go = match ? goalsOf(shownOp()) : 0;
-    // skor
-    var sw = 74;
-    A.roundRect(c, W / 2 - sw / 2, y + 8, sw, 30, 8);
-    c.fillStyle = "rgba(255,255,255,0.1)";
+    // skor kutusu
+    var sw = 78, sx = W / 2 - sw / 2;
+    A.roundRect(c, sx, y + 6, sw, 30, 12);
+    c.fillStyle = INK;
     c.fill();
-    c.font = A.font(22, 900);
-    c.fillStyle = "#FFFFFF";
-    c.textAlign = "center";
-    c.textBaseline = "middle";
-    var bump = 1 + 0.18 * scoreBump;
+    var bump = 1 + 0.2 * scoreBump;
     c.save();
-    c.translate(W / 2, y + 24);
+    c.translate(W / 2, y + 21.5);
     c.scale(bump, bump);
-    c.fillText(gm + "  –  " + go, 0, 1);
+    label(c, gm + " – " + go, 0, 0, 22, scoreBump > 0.1 ? "#FFE58A" : "#FFFFFF");
     c.restore();
-    // armalar ve adlar
-    badge(c, x + 24, y + 24, 22, shooter);
-    badge(c, x + w - 24, y + 24, 22, opp.keeper);
-    var half = w / 2 - sw / 2 - 48;
-    c.font = A.font(12, 800);
+    badge(c, x + 24, y + 22, 24, shooter);
+    badge(c, x + w - 24, y + 22, 24, opp.keeper);
+    var half = w / 2 - sw / 2 - 50;
+    c.font = A.font(12, 900);
+    c.fillStyle = "#FFFFFF";
     c.textAlign = "left";
-    c.fillText(fit(c, upperTR(teamName(shooter)), half), x + 42, y + 24);
+    c.textBaseline = "middle";
+    c.fillText(fit(c, upperTR(teamName(shooter)), half), x + 43, y + 20);
     c.textAlign = "right";
-    c.fillText(fit(c, upperTR(teamName(opp.keeper)), half), x + w - 42, y + 24);
-    // atış noktaları
+    c.fillText(fit(c, upperTR(teamName(opp.keeper)), half), x + w - 43, y + 20);
     if (match) {
-      dots(c, x + 42, y + 47, match.me, isLive(), 1);
-      dots(c, x + w - 42, y + 47, shownOp(), oppPending(), -1);
+      dots(c, x + 43, y + 41, match.me, isLive(), 1);
+      dots(c, x + w - 43, y + 41, shownOp(), oppPending(), -1);
     }
-    c.font = A.font(9, 900);
-    c.fillStyle = match && match.sudden ? P.bad : "rgba(255,255,255,0.55)";
+    c.font = A.font(9.5, 900);
+    c.fillStyle = match && match.sudden ? BAD : GOLD;
     c.textAlign = "center";
     if ("letterSpacing" in c) c.letterSpacing = "1px";
-    c.fillText(match && match.sudden ? "ANİ ÖLÜM" : stageName(matchIdx), W / 2, y + 49);
+    c.fillText(match && match.sudden ? "ANİ ÖLÜM" : stageName(matchIdx), W / 2, y + 46);
     if ("letterSpacing" in c) c.letterSpacing = "0px";
     c.restore();
   }
@@ -2292,61 +2863,70 @@
   function isLive() {
     return ["turn", "aim", "power", "runup", "flight"].indexOf(state) >= 0;
   }
-  /** Beş atış noktası (ani ölümde son beşi): gol yeşil ✓, kaçan kırmızı ×, sıradaki nabız. */
+  /** Beş atış noktası: gol yeşil ✓, kaçan kırmızı ×, sıradaki sarı nabız. */
   function dots(c, x, y, list, next, dir) {
     var n = Math.max(KICKS, list.length + (next ? 1 : 0));
     var from = Math.max(0, n - KICKS);
-    var r = 5.5, gap = 15;
+    var r = 6.2, gap = 16;
+    c.lineCap = "round";
+    c.lineJoin = "round";
     for (var i = 0; i < KICKS; i++) {
       var k = from + i;
       var cx = x + dir * (i * gap + r);
       var v = list[k];
       c.beginPath();
       c.arc(cx, y, r, 0, Math.PI * 2);
-      if (v === "g") {
-        c.fillStyle = P.good;
+      if (v === "g" || v === "x") {
+        c.fillStyle = v === "g" ? GOOD : BAD;
         c.fill();
-        c.strokeStyle = "#063D26";
         c.lineWidth = 1.6;
-        c.beginPath();
-        c.moveTo(cx - 2.6, y + 0.2);
-        c.lineTo(cx - 0.6, y + 2.2);
-        c.lineTo(cx + 2.8, y - 2);
+        c.strokeStyle = "#FFFFFF";
         c.stroke();
-      } else if (v === "x") {
-        c.fillStyle = P.bad;
-        c.fill();
-        c.strokeStyle = "#4A0A18";
-        c.lineWidth = 1.6;
+        c.lineWidth = 2;
         c.beginPath();
-        c.moveTo(cx - 2.2, y - 2.2);
-        c.lineTo(cx + 2.2, y + 2.2);
-        c.moveTo(cx + 2.2, y - 2.2);
-        c.lineTo(cx - 2.2, y + 2.2);
+        if (v === "g") {
+          c.moveTo(cx - 2.8, y + 0.2);
+          c.lineTo(cx - 0.7, y + 2.3);
+          c.lineTo(cx + 3, y - 2.2);
+        } else {
+          c.moveTo(cx - 2.3, y - 2.3);
+          c.lineTo(cx + 2.3, y + 2.3);
+          c.moveTo(cx + 2.3, y - 2.3);
+          c.lineTo(cx - 2.3, y + 2.3);
+        }
         c.stroke();
       } else {
         var live = next && k === list.length;
-        c.lineWidth = live ? 2 : 1.3;
-        c.strokeStyle = live ? "rgba(255,210,74," + (0.55 + 0.45 * Math.sin(A.time * 6)) + ")" : "rgba(255,255,255,0.35)";
+        c.fillStyle = INK;
+        c.fill();
+        c.lineWidth = live ? 2.4 : 1.4;
+        c.strokeStyle = live ? "rgba(255,212,59," + (0.55 + 0.45 * Math.sin(A.time * 6)) + ")" : "rgba(255,255,255,0.28)";
         c.stroke();
       }
     }
   }
 
-  function drawPoints(c) {
+  var shownPts = 0;
+  function drawPoints(c, dt) {
+    shownPts = shownPts < points ? Math.min(points, shownPts + Math.max(1, (points - shownPts) * 0.15)) : points;
+    var y = 76, h = 30;
+    var kick = Math.max(A.scoreKick || 0, scoreBump * 0.6);
+    var txt = Math.round(shownPts).toLocaleString("tr-TR");
     c.save();
-    var y = 82;
-    var label = "PUAN " + points.toLocaleString("tr-TR");
-    c.font = A.font(12, 900);
-    var w = c.measureText(label).width + 22;
-    var s = 1 + 0.15 * scoreBump;
-    c.translate(16 + w / 2, y + 12);
-    c.scale(s, s);
-    A.pill(c, -w / 2, -12, w, 24, "rgba(9,11,32,0.7)");
-    c.fillStyle = scoreBump > 0.1 ? GOLD : "#FFFFFF";
-    c.textAlign = "center";
-    c.textBaseline = "middle";
-    c.fillText(label, 0, 0.5);
+    c.font = A.font(h * 0.56, 900);
+    var pw = Math.max(76, c.measureText(txt).width + h + 22);
+    navyPill(c, 10 + h * 0.4, y, pw, h);
+    c.save();
+    c.translate(10 + h / 2, y + h / 2);
+    c.scale(1 + kick * 0.25, 1 + kick * 0.25);
+    flatBall(c, 0, 0, h * 0.5, A.time * 0.6);
+    c.restore();
+    A.scoreAnchor = { x: 10 + h / 2, y: y + h / 2 };
+    c.save();
+    c.translate(10 + h + 8, y + h / 2 + 1);
+    c.scale(1 + kick * 0.15, 1 + kick * 0.15);
+    label(c, txt, 0, 0, h * 0.56, kick > 0.05 ? "#FFE58A" : "#FFFFFF", "left");
+    c.restore();
     c.restore();
   }
 
@@ -2376,69 +2956,104 @@
     var type = shotType;
     var ae = aimNow();
     var tx = type === "kasik" ? A.clamp(ae.x, -2.6, 2.6) : ae.x, ty = type === "kasik" ? Math.max(0.9, ae.y) : ae.y;
-    var p = screenOf(tx, ty, 0);
-    // risk: çerçeve dışı (aut) ya da direğe/üst direğe yakın (güç hatası affetmez)
+    var p = proj(tx, ty, 0);
     var out = Math.abs(tx) > gHalf - 0.04 || ty > gTop - 0.04;
     var near = !out && (Math.abs(tx) > gHalf - 0.4 || ty > gTop - 0.35);
-    var col = out ? P.bad : near ? "#FBBF24" : "#FFFFFF";
+    var col = out ? BAD : near ? "#FFB020" : GOLD;
     c.save();
+    c.lineCap = "round";
     if (!locked || state === "power") {
       var pts = previewPath(type, tx, ty);
       for (var i = 0; i < pts.length; i++) {
-        var sp = screenOf(pts[i][0], pts[i][1], pts[i][2]);
+        var sp = proj(pts[i][0], pts[i][1], pts[i][2]);
         var f = i / pts.length;
-        c.fillStyle = armed.rocket ? "rgba(251,146,60," + (0.25 + 0.5 * (1 - f)) + ")" : "rgba(255,255,255," + (0.15 + 0.45 * (1 - f)) + ")";
+        var rr = Math.max(1.8, 4.2 - f * 2.2);
         c.beginPath();
-        c.arc(sp.x, sp.y, Math.max(1.4, 3.2 - f * 1.8), 0, Math.PI * 2);
+        c.arc(sp.x, sp.y, rr + 1.4, 0, Math.PI * 2);
+        c.fillStyle = "rgba(27,22,72," + (0.35 * (1 - f * 0.5)) + ")";
+        c.fill();
+        c.beginPath();
+        c.arc(sp.x, sp.y, rr, 0, Math.PI * 2);
+        c.fillStyle = armed.rocket ? "rgba(255,150,60," + (0.5 + 0.5 * (1 - f)) + ")" : "rgba(255,255,255," + (0.45 + 0.5 * (1 - f)) + ")";
         c.fill();
       }
     }
-    // nişangâh
-    var r = Math.max(10, p.s * 0.17);
-    c.strokeStyle = col;
-    c.lineWidth = 2.5;
-    c.shadowColor = "rgba(0,0,0,0.55)";
-    c.shadowBlur = 6;
+    // parlayan nişangâh
+    var r = Math.max(13, p.s * 0.2);
+    var pulse = 1 + 0.06 * Math.sin(A.time * 7);
+    c.save();
+    c.globalCompositeOperation = "lighter";
+    var g = c.createRadialGradient(p.x, p.y, r * 0.3, p.x, p.y, r * 2.3);
+    g.addColorStop(0, rgba(col, 0.55));
+    g.addColorStop(1, rgba(col, 0));
+    c.fillStyle = g;
     c.beginPath();
-    c.arc(p.x, p.y, r, 0, Math.PI * 2);
+    c.arc(p.x, p.y, r * 2.3, 0, Math.PI * 2);
+    c.fill();
+    c.restore();
+    // halka: lacivert kontur + renk
+    c.lineWidth = 6.5;
+    c.strokeStyle = NAVY;
+    c.beginPath();
+    c.arc(p.x, p.y, r * pulse, 0, Math.PI * 2);
     c.stroke();
+    c.lineWidth = 3.5;
+    c.strokeStyle = col;
+    c.stroke();
+    // dönen kesik dış halka
+    c.save();
+    c.translate(p.x, p.y);
+    c.rotate(A.time * 1.6);
+    c.lineWidth = 2.5;
+    c.strokeStyle = "rgba(255,255,255,0.85)";
+    for (var q = 0; q < 4; q++) {
+      c.beginPath();
+      c.arc(0, 0, r * 1.45, q * Math.PI * 0.5 + 0.25, q * Math.PI * 0.5 + 1.0);
+      c.stroke();
+    }
+    c.restore();
+    // artı çizgileri
     c.beginPath();
     [[-1, 0], [1, 0], [0, -1], [0, 1]].forEach(function (d) {
-      c.moveTo(p.x + d[0] * r * 0.45, p.y + d[1] * r * 0.45);
-      c.lineTo(p.x + d[0] * r * 1.55, p.y + d[1] * r * 1.55);
+      c.moveTo(p.x + d[0] * r * 0.4, p.y + d[1] * r * 0.4);
+      c.lineTo(p.x + d[0] * r * 0.78, p.y + d[1] * r * 0.78);
     });
+    c.lineWidth = 4.5;
+    c.strokeStyle = NAVY;
     c.stroke();
-    c.shadowBlur = 0;
-    c.fillStyle = col;
-    c.beginPath();
-    c.arc(p.x, p.y, 2.6, 0, Math.PI * 2);
-    c.fill();
-    // rüzgâr: nişandan sürüklenme yönü (kesikli ok, boyu rüzgârla)
+    c.lineWidth = 2.2;
+    c.strokeStyle = col;
+    c.stroke();
+    disc(c, p.x, p.y, 3.4, col, 2);
+    // rüzgâr: nişandan sürüklenme yönü
     if (Math.abs(cond.wind) > 0.3 && !armed.rocket) {
-      var len = A.clamp(Math.abs(cond.wind) * 7, 12, 58) * Math.sign(cond.wind);
-      var y0 = p.y + r + 10;
-      c.strokeStyle = "rgba(125,211,252,0.9)";
-      c.fillStyle = "rgba(125,211,252,0.9)";
-      c.lineWidth = 2;
-      c.setLineDash([4, 4]);
-      c.lineDashOffset = -A.time * 20 * Math.sign(cond.wind);
+      var len = A.clamp(Math.abs(cond.wind) * 7, 14, 60) * Math.sign(cond.wind);
+      var y0 = p.y + r + 14;
+      c.lineWidth = 3;
+      c.strokeStyle = "#7DD3FC";
+      c.fillStyle = "#7DD3FC";
+      c.setLineDash([5, 5]);
+      c.lineDashOffset = -A.time * 22 * Math.sign(cond.wind);
       c.beginPath();
       c.moveTo(p.x, y0);
       c.lineTo(p.x + len, y0);
       c.stroke();
       c.setLineDash([]);
       c.beginPath();
-      c.moveTo(p.x + len + Math.sign(len) * 6, y0);
-      c.lineTo(p.x + len, y0 - 4);
-      c.lineTo(p.x + len, y0 + 4);
+      c.moveTo(p.x + len + Math.sign(len) * 8, y0);
+      c.lineTo(p.x + len, y0 - 5);
+      c.lineTo(p.x + len, y0 + 5);
       c.closePath();
       c.fill();
+      c.lineWidth = 1.5;
+      c.strokeStyle = NAVY;
+      c.stroke();
     }
     if ((out || near) && !locked) {
-      c.font = A.font(10, 900);
-      c.textAlign = "center";
-      c.fillStyle = col;
-      c.fillText(out ? "ÇERÇEVE DIŞI" : "DİREK RİSKİ", p.x, p.y - r * 1.6 - 6);
+      c.font = A.font(11, 900);
+      var tw = c.measureText(out ? "ÇERÇEVE DIŞI" : "DİREK RİSKİ").width + 18;
+      navyPill(c, p.x - tw / 2, p.y - r * 1.5 - 30, tw, 22, out ? "#B4123A" : "#9A5B00");
+      label(c, out ? "ÇERÇEVE DIŞI" : "DİREK RİSKİ", p.x, p.y - r * 1.5 - 19, 11, "#FFFFFF", "center", false);
     }
     c.restore();
   }
@@ -2446,7 +3061,7 @@
   /* ── koşullar: rüzgâr, yağmur, zorluk ── */
 
   function drawConditions(c) {
-    var x = W - 14, y = 82;
+    var x = W - 10, y = 79;
     c.save();
     c.textBaseline = "middle";
     var chips = [];
@@ -2455,47 +3070,47 @@
     chips.push({ kind: "diff", text: "ZORLUK" });
     chips.forEach(function (ch) {
       c.font = A.font(11, 900);
-      var extra = ch.kind === "diff" ? 34 : 22;
+      var extra = ch.kind === "diff" ? 36 : 24;
       var w = c.measureText(ch.text).width + 18 + extra;
-      A.pill(c, x - w, y, w, 24, "rgba(9,11,32,0.72)");
+      navyPill(c, x - w, y, w, 25);
       c.fillStyle = "#FFFFFF";
       c.textAlign = "left";
       var ix = x - w + 10;
       if (ch.kind === "wind") {
-        // rüzgâr oku
         var dir = Math.sign(cond.wind);
         c.strokeStyle = "#7DD3FC";
         c.fillStyle = "#7DD3FC";
-        c.lineWidth = 2;
+        c.lineWidth = 2.4;
+        c.lineCap = "round";
         c.beginPath();
-        c.moveTo(ix + 7 - dir * 7, y + 12);
-        c.lineTo(ix + 7 + dir * 5, y + 12);
+        c.moveTo(ix + 8 - dir * 7, y + 12.5);
+        c.lineTo(ix + 8 + dir * 4, y + 12.5);
         c.stroke();
         c.beginPath();
-        c.moveTo(ix + 7 + dir * 9, y + 12);
-        c.lineTo(ix + 7 + dir * 4, y + 8);
-        c.lineTo(ix + 7 + dir * 4, y + 16);
+        c.moveTo(ix + 8 + dir * 9, y + 12.5);
+        c.lineTo(ix + 8 + dir * 3, y + 8);
+        c.lineTo(ix + 8 + dir * 3, y + 17);
         c.closePath();
         c.fill();
         c.fillStyle = "#FFFFFF";
-        c.fillText(ch.text, ix + 20, y + 12.5);
+        c.fillText(ch.text, ix + 22, y + 13);
       } else if (ch.kind === "rain") {
-        c.strokeStyle = "#93C5FD";
-        c.lineWidth = 1.6;
+        c.fillStyle = "#93C5FD";
         for (var k = 0; k < 3; k++) {
           c.beginPath();
-          c.moveTo(ix + 3 + k * 5, y + 7);
-          c.lineTo(ix + k * 5, y + 17);
-          c.stroke();
+          c.ellipse(ix + 3 + k * 6, y + 10 + (k % 2) * 4, 2, 3, 0.2, 0, Math.PI * 2);
+          c.fill();
         }
-        c.fillText(ch.text, ix + 20, y + 12.5);
+        c.fillStyle = "#FFFFFF";
+        c.fillText(ch.text, ix + 22, y + 13);
       } else {
-        c.fillStyle = "rgba(255,255,255,0.8)";
-        c.fillText(ch.text, ix, y + 12.5);
+        c.fillStyle = "rgba(255,255,255,0.85)";
+        c.fillText(ch.text, ix, y + 13);
         var lv = 1 + Math.round(opp.diff * 4);
         for (var j = 0; j < 5; j++) {
-          c.fillStyle = j < lv ? (lv >= 4 ? P.bad : GOLD) : "rgba(255,255,255,0.2)";
-          c.fillRect(x - 10 - (5 - j) * 6, y + 15 - j * 2, 4, 4 + j * 2);
+          c.fillStyle = j < lv ? (lv >= 4 ? BAD : GOLD) : "rgba(255,255,255,0.2)";
+          A.roundRect(c, x - 12 - (5 - j) * 6, y + 16 - j * 2.2, 4, 4 + j * 2.2, 1.5);
+          c.fill();
         }
       }
       x -= w + 6;
@@ -2509,44 +3124,56 @@
     c.save();
     c.strokeStyle = col;
     c.fillStyle = col;
-    c.lineWidth = r * 0.16;
+    c.lineWidth = r * 0.2;
     c.lineCap = "round";
     c.lineJoin = "round";
     if (key === "eye") {
       c.beginPath();
       c.moveTo(x - r, y);
-      c.quadraticCurveTo(x, y - r * 0.9, x + r, y);
-      c.quadraticCurveTo(x, y + r * 0.9, x - r, y);
+      c.quadraticCurveTo(x, y - r * 0.95, x + r, y);
+      c.quadraticCurveTo(x, y + r * 0.95, x - r, y);
       c.stroke();
       c.beginPath();
-      c.arc(x, y, r * 0.32, 0, Math.PI * 2);
+      c.arc(x, y, r * 0.34, 0, Math.PI * 2);
       c.fill();
     } else if (key === "rocket") {
-      // ateşli top: daire + arkada alev çizgileri
+      // alevli top: arkasında üç alev dili
+      var bx0 = x + r * 0.28, by0 = y - r * 0.28;
       c.beginPath();
-      c.arc(x + r * 0.3, y - r * 0.3, r * 0.42, 0, Math.PI * 2);
+      c.moveTo(bx0 - r * 0.38, by0 - r * 0.22);
+      c.quadraticCurveTo(x - r * 0.5, y + r * 0.1, x - r * 1.05, y + r * 1.05);
+      c.quadraticCurveTo(x + r * 0.1, y + r * 0.5, bx0 + r * 0.22, by0 + r * 0.38);
+      c.closePath();
+      c.fillStyle = col === "#FFFFFF" ? "#FFFFFF" : "#FB923C";
       c.fill();
-      for (var i = -1; i <= 1; i++) {
-        c.beginPath();
-        c.moveTo(x - r * 0.05 + i * r * 0.22, y + r * 0.05 + i * r * -0.22);
-        c.lineTo(x - r * 0.75 + i * r * 0.22, y + r * 0.75 + i * r * -0.22);
-        c.stroke();
-      }
-    } else {
-      // kale çerçevesi + dışa oklar
       c.beginPath();
-      c.moveTo(x - r * 0.6, y + r * 0.5);
+      c.moveTo(bx0 - r * 0.3, by0 + r * 0.05);
+      c.quadraticCurveTo(x - r * 0.2, y + r * 0.3, x - r * 0.65, y + r * 0.65);
+      c.quadraticCurveTo(x + r * 0.0, y + r * 0.2, bx0 + r * 0.0, by0 + r * 0.3);
+      c.closePath();
+      c.fillStyle = col === "#FFFFFF" ? "rgba(255,255,255,0.7)" : "#FACC15";
+      c.fill();
+      c.beginPath();
+      c.arc(bx0, by0, r * 0.48, 0, Math.PI * 2);
+      c.fillStyle = col;
+      c.fill();
+      c.lineWidth = r * 0.14;
+      c.strokeStyle = NAVY;
+      c.stroke();
+    } else {
+      c.beginPath();
+      c.moveTo(x - r * 0.6, y + r * 0.55);
       c.lineTo(x - r * 0.6, y - r * 0.35);
       c.lineTo(x + r * 0.6, y - r * 0.35);
-      c.lineTo(x + r * 0.6, y + r * 0.5);
+      c.lineTo(x + r * 0.6, y + r * 0.55);
       c.stroke();
       [-1, 1].forEach(function (sd) {
         c.beginPath();
-        c.moveTo(x + sd * r * 0.75, y + r * 0.1);
-        c.lineTo(x + sd * r * 1.05, y + r * 0.1);
-        c.moveTo(x + sd * r * 0.95, y - r * 0.05);
-        c.lineTo(x + sd * r * 1.08, y + r * 0.1);
-        c.lineTo(x + sd * r * 0.95, y + r * 0.25);
+        c.moveTo(x + sd * r * 0.78, y + r * 0.12);
+        c.lineTo(x + sd * r * 1.1, y + r * 0.12);
+        c.moveTo(x + sd * r * 0.96, y - r * 0.05);
+        c.lineTo(x + sd * r * 1.12, y + r * 0.12);
+        c.lineTo(x + sd * r * 0.96, y + r * 0.29);
         c.stroke();
       });
     }
@@ -2561,34 +3188,42 @@
     bs.forEach(function (b) {
       var J = JOKERS[b.key], n = jokers[b.key], on = armed[b.key];
       if (!live && !on) return;
-      c.globalAlpha = on || n > 0 ? 1 : 0.38;
+      c.globalAlpha = on || n > 0 ? 1 : 0.45;
+      var pop = on ? 1 + 0.06 * Math.sin(A.time * 8) : 1;
       c.save();
+      c.translate(b.x, b.y);
+      c.scale(pop, pop);
       if (on) {
-        c.shadowColor = J.color;
-        c.shadowBlur = 16 + 4 * Math.sin(A.time * 8);
+        c.save();
+        c.globalCompositeOperation = "lighter";
+        var g = c.createRadialGradient(0, 0, b.r * 0.6, 0, 0, b.r * 2);
+        g.addColorStop(0, rgba(J.color, 0.6));
+        g.addColorStop(1, rgba(J.color, 0));
+        c.fillStyle = g;
+        c.beginPath();
+        c.arc(0, 0, b.r * 2, 0, Math.PI * 2);
+        c.fill();
+        c.restore();
       }
       c.beginPath();
-      c.arc(b.x, b.y, b.r, 0, Math.PI * 2);
-      c.fillStyle = on ? J.color : "rgba(9,11,32,0.78)";
+      c.arc(0, 3, b.r, 0, Math.PI * 2);
+      c.fillStyle = "rgba(8,6,30,0.5)";
       c.fill();
-      c.restore();
-      c.lineWidth = 2;
-      c.strokeStyle = on ? "#FFFFFF" : J.color;
       c.beginPath();
-      c.arc(b.x, b.y, b.r - 1, 0, Math.PI * 2);
+      c.arc(0, 0, b.r, 0, Math.PI * 2);
+      c.fillStyle = on ? J.color : "#FFFFFF";
+      c.fill();
+      c.lineWidth = 3;
+      c.strokeStyle = NAVY;
       c.stroke();
-      drawJokerIcon(c, b.key, b.x, b.y, b.r * 0.5, on ? "#0B1030" : J.color);
-      c.font = A.font(8.5, 900);
-      c.fillStyle = "rgba(255,255,255,0.9)";
-      c.fillText(J.short, b.x, b.y + b.r + 9);
+      drawJokerIcon(c, b.key, 0, 0, b.r * 0.5, on ? "#FFFFFF" : mixc(J.color, NAVY, 0.25));
+      c.restore();
+      label(c, J.short, b.x, b.y + b.r + 10, 9.5, "#FFFFFF");
       if (!on) {
-        var bx = b.x - b.r * 0.75, by = b.y - b.r * 0.75;
-        c.beginPath();
-        c.arc(bx, by, 8, 0, Math.PI * 2);
-        c.fillStyle = n > 0 ? J.color : "#334155";
-        c.fill();
-        c.font = A.font(10, 900);
-        c.fillStyle = "#0B1030";
+        var bx = b.x - b.r * 0.78, by = b.y - b.r * 0.78;
+        disc(c, bx, by, 9, n > 0 ? GOLD : "#4B4880", 2.2);
+        c.font = A.font(11, 900);
+        c.fillStyle = n > 0 ? NAVY : "#FFFFFF";
         c.fillText(String(n), bx, by + 0.5);
       }
     });
@@ -2599,39 +3234,40 @@
     if (!armed.eye || !kplan) return;
     var p = kplan;
     c.save();
-    var x0, x1, label;
+    var x0, x1, labelT;
     if (p.mode === "commit") {
       x0 = p.side < 0 ? -gHalf : 0.6;
       x1 = p.side < 0 ? -0.6 : gHalf;
-      label = p.side < 0 ? "KALECİ SOLA ATLAYACAK" : "KALECİ SAĞA ATLAYACAK";
+      labelT = p.side < 0 ? "KALECİ SOLA ATLAYACAK" : "KALECİ SAĞA ATLAYACAK";
     } else if (p.mode === "stay") {
       x0 = -0.9;
       x1 = 0.9;
-      label = "KALECİ ORTADA BEKLEYECEK";
+      labelT = "KALECİ ORTADA BEKLEYECEK";
     } else {
       x0 = x1 = null;
-      label = "KALECİ SON ANDA OKUYACAK · SERT VE KÖŞEYE";
+      labelT = "SON ANDA OKUYACAK · SERT VE KÖŞEYE";
     }
     if (x0 != null) {
-      var a = screenOf(x0, 0, 0), b2 = screenOf(x1, gTop, 0);
-      var pulse = 0.18 + 0.1 * Math.sin(A.time * 6);
+      var a = proj(x0, 0, 0), b2 = proj(x1, gTop, 0);
+      var pulse = 0.2 + 0.1 * Math.sin(A.time * 6);
       c.fillStyle = "rgba(56,189,248," + pulse + ")";
       c.fillRect(Math.min(a.x, b2.x), b2.y, Math.abs(b2.x - a.x), a.y - b2.y);
-      c.strokeStyle = "rgba(56,189,248,0.9)";
-      c.lineWidth = 2;
-      c.setLineDash([6, 4]);
+      c.strokeStyle = "#38BDF8";
+      c.lineWidth = 2.5;
+      c.setLineDash([7, 5]);
+      c.lineDashOffset = -A.time * 20;
       c.strokeRect(Math.min(a.x, b2.x), b2.y, Math.abs(b2.x - a.x), a.y - b2.y);
       c.setLineDash([]);
     }
-    var top = screenOf(0, gTop + 0.55, 0);
+    var top = proj(0, gTop + 0.6, 0);
     c.font = A.font(11, 900);
-    var w = c.measureText(label).width + 40;
-    A.pill(c, W / 2 - w / 2, top.y - 13, w, 26, "rgba(9,11,32,0.85)");
-    drawJokerIcon(c, "eye", W / 2 - w / 2 + 16, top.y, 8, JOKERS.eye.color);
+    var w = Math.min(W - 16, c.measureText(labelT).width + 44);
+    navyPill(c, W / 2 - w / 2, top.y - 14, w, 28);
+    drawJokerIcon(c, "eye", W / 2 - w / 2 + 17, top.y, 8, JOKERS.eye.color);
     c.fillStyle = "#FFFFFF";
     c.textAlign = "left";
     c.textBaseline = "middle";
-    c.fillText(label, W / 2 - w / 2 + 30, top.y + 0.5);
+    c.fillText(fit(c, labelT, w - 40), W / 2 - w / 2 + 31, top.y + 0.5);
     c.restore();
   }
 
@@ -2641,37 +3277,39 @@
     c.save();
     rs.forEach(function (r) {
       var on = r.key === shotType;
-      c.globalAlpha = dim && !on ? 0.35 : 1;
-      A.roundRect(c, r.x, r.y, r.w, r.h, 12);
-      if (on) {
-        var g = c.createLinearGradient(r.x, r.y, r.x, r.y + r.h);
-        g.addColorStop(0, "#7B61FF");
-        g.addColorStop(1, "#4527D6");
-        c.fillStyle = g;
-      } else c.fillStyle = "rgba(9,11,32,0.72)";
+      c.globalAlpha = dim && !on ? 0.45 : 1;
+      var lift = on ? -4 : 0;
+      A.roundRect(c, r.x, r.y + 4, r.w, r.h, 13);
+      c.fillStyle = "rgba(8,6,30,0.5)";
       c.fill();
-      c.strokeStyle = on ? "rgba(255,255,255,0.55)" : LINE;
-      c.lineWidth = 1;
+      A.roundRect(c, r.x, r.y + lift, r.w, r.h, 13);
+      if (on) {
+        var g = c.createLinearGradient(0, r.y + lift, 0, r.y + lift + r.h);
+        g.addColorStop(0, "#FFE066");
+        g.addColorStop(1, "#F5B700");
+        c.fillStyle = g;
+      } else c.fillStyle = "#FFFFFF";
+      c.fill();
+      c.lineWidth = on ? 3 : 2;
+      c.strokeStyle = NAVY;
       c.stroke();
       c.textAlign = "center";
       c.textBaseline = "middle";
-      c.font = A.font(12, 900);
-      c.fillStyle = "#FFFFFF";
-      c.fillText(TYPES[r.key].label, r.x + r.w / 2, r.y + 15);
-      c.font = A.font(9.5, 700);
-      c.fillStyle = on ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.55)";
-      c.fillText(sub[r.key], r.x + r.w / 2, r.y + 29);
+      c.font = A.font(13, 900);
+      c.fillStyle = NAVY;
+      c.fillText(TYPES[r.key].label, r.x + r.w / 2, r.y + lift + 15);
+      c.font = A.font(9.5, 800);
+      c.fillStyle = on ? rgba(NAVY, 0.8) : "#6B6894";
+      c.fillText(sub[r.key], r.x + r.w / 2, r.y + lift + 29);
     });
     c.restore();
   }
 
   function drawHint(c, text, y) {
     c.save();
-    c.font = A.font(12, 800);
-    var w = c.measureText(text).width + 30;
-    var a = 0.75 + 0.25 * Math.sin(A.time * 3);
-    c.globalAlpha = a;
-    A.pill(c, W / 2 - w / 2, y - 14, w, 28, "rgba(9,11,32,0.72)");
+    c.font = A.font(12.5, 900);
+    var w = c.measureText(text).width + 32;
+    navyPill(c, W / 2 - w / 2, y - 14, w, 28);
     c.fillStyle = "#FFFFFF";
     c.textAlign = "center";
     c.textBaseline = "middle";
@@ -2685,106 +3323,118 @@
     var e = A.smooth(Math.min(1, t / 1.2));
     var x = W / 2 - 40 + 80 * (t < 1.2 ? e : 1 - A.smooth((t - 1.2) / 1.2));
     c.save();
-    c.globalAlpha = 0.8;
-    c.strokeStyle = "rgba(255,255,255,0.35)";
-    c.lineWidth = 2;
-    c.setLineDash([3, 5]);
+    c.strokeStyle = "rgba(255,255,255,0.55)";
+    c.lineWidth = 3;
+    c.lineCap = "round";
+    c.setLineDash([2, 7]);
     c.beginPath();
     c.moveTo(W / 2 - 46, y);
     c.lineTo(W / 2 + 46, y);
     c.stroke();
     c.setLineDash([]);
-    c.fillStyle = "#FFFFFF";
-    c.beginPath();
-    c.arc(x, y, 9, 0, Math.PI * 2);
-    c.fill();
-    c.strokeStyle = "rgba(255,255,255,0.4)";
-    c.lineWidth = 6;
-    c.beginPath();
-    c.arc(x, y, 15, 0, Math.PI * 2);
-    c.stroke();
+    c.globalAlpha = 0.5;
+    disc(c, x, y, 16, "rgba(255,255,255,0.35)", 0);
+    c.globalAlpha = 1;
+    disc(c, x, y, 9, "#FFFFFF", 2.5);
     c.restore();
-    drawHint(c, "Sürükle: nişan al · Bırak: güç", y - 30);
+    drawHint(c, "Sürükle: nişan al · Bırak: güç", y - 32);
   }
 
   /* ── güç ── */
 
   function drawPower(c) {
-    var w = Math.min(W - 70, 300), h = 16, x = W / 2 - w / 2, y = H - 98;
+    var w = Math.min(W - 70, 300), h = 20, x = W / 2 - w / 2, y = H - 100;
     var z = zoneOf(shotType);
     c.save();
-    c.font = A.font(11, 900);
-    c.textAlign = "left";
-    c.textBaseline = "alphabetic";
-    c.fillStyle = "rgba(255,255,255,0.7)";
-    c.fillText("ZAYIF", x, y - 8);
-    c.textAlign = "right";
-    c.fillText("YÜKSEK", x + w, y - 8);
-    c.textAlign = "center";
-    c.fillStyle = GOLD;
-    var pulse = 1 + 0.06 * Math.sin(A.time * 10);
+    var pulse = 1 + 0.07 * Math.sin(A.time * 10);
     c.save();
-    c.translate(W / 2, y - 24);
+    c.translate(W / 2, y - 26);
     c.scale(pulse, pulse);
-    c.font = A.font(18, 900);
-    c.fillText("DOKUN!", 0, 0);
+    label(c, "DOKUN!", 0, 0, 22, GOLD);
     c.restore();
-    A.roundRect(c, x - 3, y - 3, w + 6, h + 6, 11);
-    c.fillStyle = "rgba(9,11,32,0.8)";
+    label(c, "ZAYIF", x + 2, y - 10, 10, "rgba(255,255,255,0.9)", "left");
+    label(c, "YÜKSEK", x + w - 2, y - 10, 10, "rgba(255,255,255,0.9)", "right");
+    // kalın lacivert hazne
+    A.roundRect(c, x - 5, y - 5 + 3, w + 10, h + 10, (h + 10) / 2);
+    c.fillStyle = "rgba(8,6,30,0.55)";
     c.fill();
+    A.roundRect(c, x - 5, y - 5, w + 10, h + 10, (h + 10) / 2);
+    c.fillStyle = INK;
+    c.fill();
+    c.lineWidth = 2;
+    c.strokeStyle = "rgba(255,255,255,0.2)";
+    c.stroke();
+    // dolum (ibreye kadar)
+    var v = powerV;
     var g = c.createLinearGradient(x, 0, x + w, 0);
-    g.addColorStop(0, "rgba(148,163,184,0.45)");
-    g.addColorStop(z[0], "rgba(148,163,184,0.45)");
-    g.addColorStop(Math.min(1, z[1] + 0.02), "rgba(251,191,36,0.55)");
-    g.addColorStop(1, "rgba(244,63,94,0.85)");
-    A.roundRect(c, x, y, w, h, 8);
+    g.addColorStop(0, "#38BDF8");
+    g.addColorStop(Math.max(0.01, z[0]), "#4ADE6E");
+    g.addColorStop(Math.min(0.99, z[1]), "#FACC15");
+    g.addColorStop(1, "#FF4D6A");
+    c.save();
+    A.roundRect(c, x, y, w, h, h / 2);
+    c.clip();
+    c.fillStyle = "#2A2470";
+    c.fillRect(x, y, w, h);
     c.fillStyle = g;
-    c.fill();
+    c.fillRect(x, y, w * v, h);
+    c.fillStyle = "rgba(255,255,255,0.28)";
+    c.fillRect(x, y + 2, w * v, h * 0.3);
+    c.restore();
     // yeşil bölge
-    A.roundRect(c, x + w * z[0], y - 1, w * (z[1] - z[0]), h + 2, 5);
-    c.fillStyle = "rgba(52,211,153,0.95)";
+    A.roundRect(c, x + w * z[0], y - 3, w * (z[1] - z[0]), h + 6, 6);
+    c.fillStyle = "rgba(34,197,94,0.35)";
     c.fill();
-    c.strokeStyle = "rgba(255,255,255,0.8)";
-    c.lineWidth = 1.5;
+    c.lineWidth = 2.5;
+    c.strokeStyle = "#5CF08A";
     c.stroke();
     // ibre
-    var nx = x + w * powerV;
-    var good = powerQuality(shotType, powerV) >= 1;
-    c.shadowColor = good ? "rgba(52,211,153,0.9)" : "rgba(255,255,255,0.6)";
-    c.shadowBlur = 10;
+    var nx = x + w * v;
+    var good = powerQuality(shotType, v) >= 1;
+    if (good) {
+      c.save();
+      c.globalCompositeOperation = "lighter";
+      var gg = c.createRadialGradient(nx, y + h / 2, 2, nx, y + h / 2, 26);
+      gg.addColorStop(0, "rgba(92,240,138,0.8)");
+      gg.addColorStop(1, "rgba(92,240,138,0)");
+      c.fillStyle = gg;
+      c.fillRect(nx - 26, y + h / 2 - 26, 52, 52);
+      c.restore();
+    }
+    A.roundRect(c, nx - 4.5, y - 9, 9, h + 18, 4.5);
     c.fillStyle = "#FFFFFF";
-    A.roundRect(c, nx - 3, y - 7, 6, h + 14, 3);
     c.fill();
+    c.lineWidth = 2.5;
+    c.strokeStyle = NAVY;
+    c.stroke();
     c.restore();
   }
 
-  /* ── kalecilik ── */
-
-
-  /* ── atış kartı (sol alt) ── */
+  /* ── atıcı kartı ── */
 
   function drawShooterCard(c) {
-    var x = 14, y = 112, w = 168, h = 46;
+    var x = 10, y = 114, w = 176, h = 46;
     c.save();
-    glass(c, x, y, w, h, 12, "rgba(9,11,32,0.6)");
-    avatar(c, x + 23, y + h / 2, 16, shooter);
+    navyPill(c, x, y, w, h, null, 16);
+    avatar(c, x + 24, y + h / 2, 16, shooter);
     c.textAlign = "left";
     c.textBaseline = "middle";
     c.font = A.font(12, 900);
     c.fillStyle = "#FFFFFF";
-    c.fillText(fit(c, (shooter.shirt ? shooter.shirt + " · " : "") + shooter.short, w - 50), x + 46, y + 16);
-    // isabet / şut / falso küçük çubuklar
+    c.fillText(fit(c, (shooter.shirt ? shooter.shirt + " · " : "") + shooter.short, w - 54), x + 47, y + 15);
     var keys = [["accuracy", "İSB"], ["power", "ŞUT"], ["curve", "FLS"]];
     keys.forEach(function (k, i) {
       var v = attr(shooter, k[0], 78);
-      var bx = x + 46 + i * 39, by = y + 31;
+      var bx = x + 47 + i * 40, by = y + 29;
       c.font = A.font(8, 900);
-      c.fillStyle = "rgba(255,255,255,0.55)";
+      c.fillStyle = "rgba(255,255,255,0.6)";
       c.fillText(k[1], bx, by);
+      A.roundRect(c, bx, by + 5, 33, 4, 2);
       c.fillStyle = "rgba(255,255,255,0.15)";
-      c.fillRect(bx, by + 6, 32, 3);
-      c.fillStyle = v >= 85 ? GOLD : P.good;
-      c.fillRect(bx, by + 6, 32 * ((v - 50) / 49), 3);
+      c.fill();
+      A.roundRect(c, bx, by + 5, Math.max(4, 33 * ((v - 50) / 49)), 4, 2);
+      c.fillStyle = v >= 85 ? GOLD : GOOD;
+      c.fill();
     });
     c.restore();
   }
@@ -2798,119 +3448,100 @@
     var end = replay ? REPLAY_AT : resultLen;
     var fade = A.clamp((end - t) / 0.3, 0, 1);
     if (fade <= 0) return;
-    var pop = A.easeOutBack(t / 0.35);
+    var pop = A.easeOutBack(Math.min(1, t / 0.35));
     var good = lastKick.good;
-    var label = LABELS[lastKick.result] || "";
-    if (lastKick.who === "op" && lastKick.result === "gol") label = "GOL";
+    var lbl = LABELS[lastKick.result] || "";
     c.save();
     c.globalAlpha = fade;
-    var y = H * 0.44;
-    A.bigText(c, label, W / 2, y, (good ? 56 : 44) * (0.5 + 0.5 * pop), good ? GOLD : "#FFFFFF", {
-      stroke: good ? "rgba(60,36,200,0.95)" : "rgba(160,20,50,0.9)",
-    });
-    if (lastKick.gain) A.bigText(c, "+" + lastKick.gain, W / 2, y + 46, 24 * pop, "#FFFFFF");
+    var y = Math.max(L.wide ? 96 : 168, proj(0, gTop, 0).y - 44);
+    var size = (good ? 62 : 46) * (0.4 + 0.6 * pop);
+    c.save();
+    c.translate(W / 2, y);
+    c.rotate(-0.06 * (1 - pop) + (good ? -0.04 : 0.03));
+    A.bigText(c, lbl, 0, 0, size, good ? GOLD : "#FFFFFF", { stroke: good ? NAVY : "#7A0F2B" });
+    c.restore();
+    if (lastKick.gain) A.bigText(c, "+" + lastKick.gain, W / 2, y + 48, 26 * pop, "#FFFFFF", { stroke: NAVY });
     if (lastKick.tags.length) {
-      c.font = A.font(12, 900);
-      c.textAlign = "center";
       var tags = lastKick.tags.join("  ·  ");
-      var tw = c.measureText(tags).width + 26;
-      A.pill(c, W / 2 - tw / 2, y + 66, tw, 26, "rgba(69,39,214,0.9)");
-      c.fillStyle = "#FFFFFF";
-      c.textBaseline = "middle";
-      c.fillText(tags, W / 2, y + 79.5);
+      yellowBadge(c, tags, W / 2, y + 82, 12);
     }
     c.restore();
   }
   function drawReplayBadge(c) {
     c.save();
-    var x = W - 104, y = 84;
-    A.pill(c, x, y, 90, 26, "rgba(9,11,32,0.78)");
+    var x = W - 112, y = 54;
+    navyPill(c, x, y, 98, 28);
     c.fillStyle = Math.sin(A.time * 6) > 0 ? "#EF4444" : "rgba(239,68,68,0.4)";
     c.beginPath();
-    c.arc(x + 15, y + 13, 4.5, 0, Math.PI * 2);
+    c.arc(x + 16, y + 14, 5, 0, Math.PI * 2);
     c.fill();
-    c.font = A.font(11, 900);
-    c.fillStyle = "#FFFFFF";
-    c.textAlign = "left";
-    c.textBaseline = "middle";
-    c.fillText("TEKRAR", x + 27, y + 13.5);
-    c.font = A.font(10, 700);
-    c.fillStyle = "rgba(255,255,255,0.6)";
-    c.textAlign = "center";
-    c.fillText("Geçmek için dokun", W / 2, H - 40);
+    label(c, "TEKRAR", x + 28, y + 14.5, 12, "#FFFFFF", "left", false);
+    label(c, "Geçmek için dokun", W / 2, H - 23, 11, "rgba(255,255,255,0.85)", "center", false);
     c.restore();
   }
 
   /* ── tanıtım, sıra, maç sonu ── */
 
+  function popIn(c, cx, cy, k) {
+    c.translate(cx, cy);
+    c.scale(k, k);
+    c.translate(-cx, -cy);
+  }
+
   function drawIntro(c) {
     var t = stateT;
-    var inT = A.easeOutBack(t / 0.45);
+    var inT = A.easeOutBack(Math.min(1, t / 0.45));
     var out = A.clamp((INTRO - t) / 0.3, 0, 1);
     var kp = opp.keeper;
     c.save();
     c.globalAlpha = out;
-    var cw = Math.min(W - 28, 350), ch = 210;
-    var x = W / 2 - cw / 2, y = H * 0.5 - ch / 2;
-    c.translate(W / 2, y + ch / 2);
-    c.scale(0.88 + 0.12 * inT, 0.88 + 0.12 * inT);
-    c.translate(-W / 2, -(y + ch / 2));
-    glass(c, x, y, cw, ch, 20, "rgba(9,11,32,0.88)");
-    var g = c.createLinearGradient(x, y, x + cw, y);
-    g.addColorStop(0, kitOf(shooter).primary);
-    g.addColorStop(1, kitOf(kp).primary);
-    c.fillStyle = g;
-    c.globalAlpha = out * 0.9;
-    c.fillRect(x + 20, y + 44, cw - 40, 2);
-    c.globalAlpha = out;
+    var cw = Math.min(W - 28, 340), ch = 212;
+    var x = W / 2 - cw / 2, y = H * 0.52 - ch / 2;
+    popIn(c, W / 2, y + ch / 2, 0.8 + 0.2 * inT);
+    whiteCard(c, x, y, cw, ch, 24);
+    yellowBadge(c, "SERİ PENALTI · " + stageName(matchIdx), W / 2, y, 12);
+    var bob = Math.sin(A.time * 3) * 2;
+    badge(c, x + cw * 0.22, y + 78 + bob, 50, shooter);
+    badge(c, x + cw * 0.78, y + 78 - bob, 50, kp);
+    disc(c, W / 2, y + 78, 21, NAVY, 0);
+    label(c, "VS", W / 2, y + 79, 16, GOLD, "center", false);
+    c.font = A.font(14, 900);
+    c.fillStyle = NAVY;
     c.textAlign = "center";
     c.textBaseline = "middle";
-    c.font = A.font(11, 900);
-    c.fillStyle = GOLD;
-    if ("letterSpacing" in c) c.letterSpacing = "2px";
-    c.fillText("SERİ PENALTI · " + stageName(matchIdx), W / 2, y + 26);
-    if ("letterSpacing" in c) c.letterSpacing = "0px";
-    badge(c, x + cw * 0.22, y + 92, 46, shooter);
-    badge(c, x + cw * 0.78, y + 92, 46, kp);
-    c.font = A.font(20, 900);
-    c.fillStyle = "rgba(255,255,255,0.6)";
-    c.fillText("VS", W / 2, y + 92);
-    c.font = A.font(13, 900);
-    c.fillStyle = "#FFFFFF";
-    c.fillText(fit(c, teamName(shooter), cw * 0.42), x + cw * 0.22, y + 136);
-    c.fillText(fit(c, teamName(kp), cw * 0.42), x + cw * 0.78, y + 136);
-    c.font = A.font(11, 700);
-    c.fillStyle = "rgba(255,255,255,0.7)";
-    c.fillText(fit(c, "Atıcı: " + shooter.short, cw * 0.44), x + cw * 0.22, y + 156);
-    c.fillText(fit(c, "Kaleci: " + kp.short, cw * 0.44), x + cw * 0.78, y + 156);
+    c.fillText(fit(c, teamName(shooter), cw * 0.42), x + cw * 0.22, y + 124);
+    c.fillText(fit(c, teamName(kp), cw * 0.42), x + cw * 0.78, y + 124);
+    c.font = A.font(11, 800);
+    c.fillStyle = "#6B6894";
+    c.fillText(fit(c, "Atıcı: " + shooter.short, cw * 0.44), x + cw * 0.22, y + 143);
+    c.fillText(fit(c, "Kaleci: " + kp.short, cw * 0.44), x + cw * 0.78, y + 143);
     var saves = kp.stats && kp.stats.saves ? kp.stats.saves + " kurtarış · " : "";
-    c.fillStyle = "rgba(255,255,255,0.55)";
-    c.fillText(saves + "Refleks " + attr(kp, "reflex", 75) + "  ·  Maç " + (matchIdx + 1) + "/" + keepers.length, W / 2, y + 186);
+    var info = saves + "Refleks " + attr(kp, "reflex", 75) + "  ·  Maç " + (matchIdx + 1) + "/" + keepers.length;
+    c.font = A.font(11, 900);
+    var iw = Math.min(cw - 24, c.measureText(info).width + 26);
+    navyPill(c, W / 2 - iw / 2, y + 166, iw, 26);
+    c.fillStyle = "#FFFFFF";
+    c.fillText(fit(c, info, iw - 16), W / 2, y + 179.5);
     c.restore();
   }
 
   function drawTurn(c) {
     var t = stateT;
-    var inT = A.easeOut(t / 0.3);
+    var inT = A.easeOutBack(Math.min(1, t / 0.35));
     var out = A.clamp((TURN - t) / 0.25, 0, 1);
     c.save();
     c.globalAlpha = out;
-    var y = H * 0.58;
-    var bw = W;
-    var g = c.createLinearGradient(0, 0, bw, 0);
-    g.addColorStop(0, "rgba(69,39,214,0)");
-    g.addColorStop(0.18, "rgba(69,39,214,0.9)");
-    g.addColorStop(0.82, "rgba(69,39,214,0.9)");
-    g.addColorStop(1, "rgba(69,39,214,0)");
-    c.fillStyle = g;
-    c.fillRect((1 - inT) * -W * 0.3, y - 34, bw, 68);
+    var y = Math.min(H * 0.6, proj(0, 0, SPOT_Z * 0.55).y);
+    var bw = Math.min(W - 40, 300), bh = 62;
+    popIn(c, W / 2, y, 0.7 + 0.3 * inT);
+    navyPill(c, W / 2 - bw / 2, y - bh / 2, bw, bh, null, 22);
+    A.bigText(c, "SIRA SENDE", W / 2, y - 8, 26, GOLD, { stroke: NAVY });
+    c.font = A.font(12, 800);
+    c.fillStyle = "rgba(255,255,255,0.9)";
     c.textAlign = "center";
     c.textBaseline = "middle";
-    A.bigText(c, "SIRA SENDE", W / 2, y - 6, 28, "#FFFFFF");
-    c.font = A.font(12, 800);
-    c.fillStyle = "rgba(255,255,255,0.85)";
     var n = match.me.length + 1;
-    c.fillText((match.sudden ? "Ani ölüm · " : n + ". atış · ") + "Atıcın " + shooter.short, W / 2, y + 20);
+    c.fillText(fit(c, (match.sudden ? "Ani ölüm · " : n + ". atış · ") + "Atıcın " + shooter.short, bw - 24), W / 2, y + 17);
     c.restore();
   }
 
@@ -2920,86 +3551,76 @@
     var inT = A.easeOutBack(Math.min(1, t / 0.35));
     var out = A.clamp((OPP_KICK - t) / 0.3, 0, 1);
     var pk = oppShot.taker;
-    var kit = kitOf(pk);
-    var cw = Math.min(W - 28, 330), ch = 132;
+    var cw = Math.min(W - 28, 330), ch = 138;
     var x = W / 2 - cw / 2, y = H * 0.56 - ch / 2;
     c.save();
     c.globalAlpha = out;
-    c.translate(W / 2, y + ch / 2);
-    c.scale(0.88 + 0.12 * inT, 0.88 + 0.12 * inT);
-    c.translate(-W / 2, -(y + ch / 2));
-    glass(c, x, y, cw, ch, 18, "rgba(9,11,32,0.88)");
-    c.fillStyle = kit.primary;
-    c.fillRect(x, y + 14, 5, ch - 28);
-    avatar(c, x + 42, y + 50, 24, pk);
+    popIn(c, W / 2, y + ch / 2, 0.82 + 0.18 * inT);
+    whiteCard(c, x, y, cw, ch, 22);
+    yellowBadge(c, "RAKİP ATIŞI · " + (match.sudden ? "ANİ ÖLÜM" : match.op.length + ". ATIŞ"), W / 2, y, 11);
+    avatar(c, x + 44, y + 54, 25, pk);
+    badge(c, x + 62, y + 72, 18, pk);
     c.textAlign = "left";
     c.textBaseline = "middle";
-    c.font = A.font(10, 900);
-    c.fillStyle = GOLD;
-    if ("letterSpacing" in c) c.letterSpacing = "1.5px";
-    c.fillText("RAKİP ATIŞI · " + (match.sudden ? "ANİ ÖLÜM" : match.op.length + ". ATIŞ"), x + 78, y + 30);
-    if ("letterSpacing" in c) c.letterSpacing = "0px";
     c.font = A.font(16, 900);
-    c.fillStyle = "#FFFFFF";
-    c.fillText(fit(c, (pk.shirt ? pk.shirt + " · " : "") + (pk.short || pk.name), cw - 96), x + 78, y + 52);
-    c.font = A.font(11, 700);
-    c.fillStyle = "rgba(255,255,255,0.6)";
-    c.fillText(fit(c, teamName(pk), cw - 96), x + 78, y + 70);
-    // sonuç: kısa bekleyişten sonra açılır
+    c.fillStyle = NAVY;
+    c.fillText(fit(c, (pk.shirt ? pk.shirt + " · " : "") + (pk.short || pk.name), cw - 100), x + 84, y + 46);
+    c.font = A.font(11.5, 800);
+    c.fillStyle = "#6B6894";
+    c.fillText(fit(c, teamName(pk), cw - 100), x + 84, y + 66);
     var rv = A.clamp((t - 0.75) / 0.25, 0, 1);
     var gol = oppShot.result === "gol";
     if (rv <= 0) {
       for (var i = 0; i < 3; i++) {
-        c.fillStyle = "rgba(255,255,255," + (0.3 + 0.7 * Math.max(0, Math.sin(A.time * 8 - i))) + ")";
-        c.beginPath();
-        c.arc(W / 2 - 12 + i * 12, y + 104, 3.5, 0, Math.PI * 2);
-        c.fill();
+        var a = 0.3 + 0.7 * Math.max(0, Math.sin(A.time * 8 - i));
+        disc(c, W / 2 - 14 + i * 14, y + 108, 4.5, rgba(NAVY, a), 0);
       }
     } else {
+      var lbl = gol ? "GOL" : oppShot.result === "kurtaris" ? "KALECİMİZ KURTARDI!" : oppShot.result === "direk" ? "DİREK!" : "KAÇIRDI!";
+      var k = A.easeOutBack(rv);
+      c.save();
       c.globalAlpha = out * rv;
-      var label = gol ? "GOL" : oppShot.result === "kurtaris" ? "KALECİMİZ KURTARDI!" : oppShot.result === "direk" ? "DİREK!" : "KAÇIRDI!";
-      c.font = A.font(gol ? 20 : 17, 900);
+      popIn(c, W / 2, y + 108, 0.6 + 0.4 * k);
+      var txt = lbl + (gol ? "" : "  +25");
+      c.font = A.font(15, 900);
+      var tw = c.measureText(txt).width + 30;
+      navyPill(c, W / 2 - tw / 2, y + 94, tw, 28, gol ? "#C81E45" : "#15A34A");
+      c.fillStyle = "#FFFFFF";
       c.textAlign = "center";
-      c.fillStyle = gol ? P.bad : P.good;
-      c.fillText(label + (gol ? "" : "  +25"), W / 2, y + 104);
+      c.fillText(txt, W / 2, y + 108.5);
+      c.restore();
     }
     c.restore();
   }
 
   function drawMatchEnd(c) {
     var t = stateT;
-    var inT = A.easeOutBack(t / 0.5);
+    var inT = A.easeOutBack(Math.min(1, t / 0.5));
     var won = endResult === "won";
     var gm = goalsOf(match.me), go = goalsOf(match.op);
     c.save();
-    var cw = Math.min(W - 28, 340), ch = 196;
-    var x = W / 2 - cw / 2, y = H - ch - 28;
-    c.translate(W / 2, y + ch / 2);
-    c.scale(0.85 + 0.15 * inT, 0.85 + 0.15 * inT);
-    c.translate(-W / 2, -(y + ch / 2));
-    glass(c, x, y, cw, ch, 20, "rgba(9,11,32,0.88)");
+    var cw = Math.min(W - 28, 340), ch = won && endGain ? 190 : 156;
+    var x = W / 2 - cw / 2, y = H - ch - 26;
+    popIn(c, W / 2, y + ch / 2, 0.8 + 0.2 * inT);
+    whiteCard(c, x, y, cw, ch, 24);
+    var title = champion ? "ŞAMPİYON!" : won ? "KAZANDIN!" : "ELENDİN";
+    c.save();
+    c.translate(W / 2, y + 2);
+    c.rotate(-0.03);
+    A.bigText(c, title, 0, 0, champion ? 38 : 34, won ? GOLD : "#FF8FA3", { stroke: NAVY });
+    c.restore();
+    badge(c, x + 58, y + 70, 38, shooter);
+    badge(c, x + cw - 58, y + 70, 38, opp.keeper);
+    label(c, gm + " – " + go, W / 2, y + 70, 36, NAVY, "center", false);
+    c.font = A.font(11, 800);
+    c.fillStyle = "#6B6894";
     c.textAlign = "center";
-    c.textBaseline = "middle";
-    A.bigText(c, champion ? "ŞAMPİYON!" : won ? "KAZANDIN!" : "ELENDİN", W / 2, y + 40, champion ? 36 : 34, won ? GOLD : "#FFFFFF", {
-      stroke: won ? "rgba(60,36,200,0.95)" : "rgba(160,20,50,0.9)",
-    });
-    badge(c, x + 60, y + 96, 34, shooter);
-    badge(c, x + cw - 60, y + 96, 34, opp.keeper);
-    c.font = A.font(34, 900);
-    c.fillStyle = "#FFFFFF";
-    c.fillText(gm + " – " + go, W / 2, y + 98);
-    c.font = A.font(11, 700);
-    c.fillStyle = "rgba(255,255,255,0.6)";
-    c.fillText(match.sudden ? "ani ölümde" : "seri penaltılarda", W / 2, y + 126);
-    if (won && endGain) {
-      c.font = A.font(16, 900);
-      c.fillStyle = GOLD;
-      c.fillText("+" + endGain.toLocaleString("tr-TR") + " puan", W / 2, y + 150);
-    }
-    c.font = A.font(11.5, 800);
-    c.fillStyle = "rgba(255,255,255,0.8)";
+    c.fillText(match.sudden ? "ani ölümde" : "seri penaltılarda", W / 2, y + 100);
+    if (won && endGain) yellowBadge(c, "+" + endGain.toLocaleString("tr-TR") + " puan", W / 2, y + 128, 13);
+    c.font = A.font(12, 900);
+    c.fillStyle = NAVY;
     var nextLine = won && !champion ? "Sıradaki: " + teamName(keepers[Math.min(matchIdx + 1, keepers.length - 1)]) + " · " + stageName(matchIdx + 1) : champion ? "Ligin bütün kalecilerini geçtin" : "Rakip: " + teamName(opp.keeper);
-    c.fillText(fit(c, nextLine, cw - 30), W / 2, y + 176);
+    c.fillText(fit(c, nextLine, cw - 30), W / 2, y + ch - 27);
     c.restore();
   }
 
@@ -3007,34 +3628,35 @@
     if (!line || state === "attract") return;
     var life = 2.8;
     if (lineT > life) return;
-    var inT = A.easeOut(lineT / 0.25);
+    var inT = A.easeOut(Math.min(1, lineT / 0.25));
     var out = A.clamp((life - lineT) / 0.35, 0, 1);
     c.save();
     c.globalAlpha = out;
-    c.font = A.font(12.5, 700);
+    c.font = A.font(12.5, 800);
     var maxW = W - 32;
-    var text = fit(c, line.text, maxW - 34);
-    var tw = Math.min(maxW, c.measureText(text).width + 34);
-    var x = W / 2 - tw / 2, y = 112 - (1 - inT) * 10;
-    A.roundRect(c, x, y, tw, 30, 10);
-    c.fillStyle = "rgba(9,11,32,0.82)";
-    c.fill();
-    c.fillStyle = line.good ? P.good : P.bad;
-    c.fillRect(x, y + 6, 4, 18);
+    var text = fit(c, line.text, maxW - 40);
+    var tw = Math.min(maxW, c.measureText(text).width + 40);
+    var x = W / 2 - tw / 2, y = (L.wide ? H - 44 : 114) - (1 - inT) * 10;
+    navyPill(c, x, y, tw, 30);
+    disc(c, x + 16, y + 15, 5, line.good ? GOOD : BAD, 0);
     c.fillStyle = "#FFFFFF";
     c.textAlign = "left";
     c.textBaseline = "middle";
-    c.fillText(text, x + 16, y + 15.5);
+    c.fillText(text, x + 28, y + 15.5);
     c.restore();
   }
 
   function drawHUD(c, dt) {
-    drawVignette(c);
     A.drawParticles(c);
     A.drawFloaters(c, dt);
     if (state === "attract" || state === "over") return;
+    if (inReplay()) {
+      drawReplayBadge(c);
+      A.drawBanner(c, W, H * 0.34, dt);
+      return;
+    }
     drawScoreboard(c);
-    if (state !== "intro") drawPoints(c);
+    if (state !== "intro") drawPoints(c, dt);
     if (state === "intro") drawIntro(c);
     else if (state === "turn") drawTurn(c);
     else if (state === "aim") {
@@ -3052,12 +3674,11 @@
       drawTypeChips(c, true);
       drawConditions(c);
       drawJokers(c);
-    } else if (state === "runup") drawKeeperEye(c); else if (state === "oppKick") drawOppKick(c);
-    else if (state === "result") {
-      if (inReplay()) drawReplayBadge(c);
-      else drawResult(c);
-    } else if (state === "matchEnd") drawMatchEnd(c);
-    if (state !== "intro" && state !== "matchEnd" && !inReplay()) drawLine(c);
+    } else if (state === "runup") drawKeeperEye(c);
+    else if (state === "oppKick") drawOppKick(c);
+    else if (state === "result") drawResult(c);
+    else if (state === "matchEnd") drawMatchEnd(c);
+    if (state !== "intro" && state !== "matchEnd") drawLine(c);
     A.drawBanner(c, W, H * 0.34, dt);
   }
 
@@ -3093,7 +3714,8 @@
       oppShot: oppShot,
       lastKick: lastKick,
       decide: decide,
-      gl: !!R,
+      gl: false,
+      canvas2d: true,
     };
   }
 

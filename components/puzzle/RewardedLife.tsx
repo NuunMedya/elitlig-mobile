@@ -25,6 +25,7 @@ import { errorText } from "@/lib/admin/errors";
 import { getAdmob, unitFor } from "@/lib/ads/admob";
 import { adImage, resolveAppZone, trackAd, type AdSponsor } from "@/lib/ads/api";
 import { claimAdLife, startAdLife, type PuzzleProfile } from "@/lib/puzzle/api";
+import type { PuzzleGameKey } from "@/lib/puzzle/types";
 import { usePuzzleCache } from "@/lib/puzzle/usePuzzle";
 import { colors, fonts, radius, space, textScale, type } from "@/theme";
 
@@ -73,6 +74,7 @@ export function WatchAdForLife({
       />
       <RewardedAdModal
         visible={open}
+        game={profile.life_game}
         onClose={() => setOpen(false)}
         onRewarded={(next) => {
           cache(next);
@@ -85,7 +87,18 @@ export function WatchAdForLife({
 
 type Source = { kind: "sponsor"; sponsor: AdSponsor } | { kind: "house"; index: number } | { kind: "google" };
 
-export function RewardedAdModal({ visible, onClose, onRewarded }: { visible: boolean; onClose: () => void; onRewarded: (profile: PuzzleProfile) => void }) {
+export function RewardedAdModal({
+  visible,
+  onClose,
+  onRewarded,
+  game,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onRewarded: (profile: PuzzleProfile) => void;
+  /** Canın ekleneceği oyun (her oyunun kendi canı var). */
+  game?: PuzzleGameKey | null;
+}) {
   const ads = useAppAds();
   const toast = useToast();
   const { width, height } = useWindowDimensions();
@@ -147,7 +160,7 @@ export function RewardedAdModal({ visible, onClose, onRewarded }: { visible: boo
     (async () => {
       let seconds = 15;
       try {
-        const res = await startAdLife();
+        const res = await startAdLife(game);
         token.current = res.token;
         seconds = Math.max(12, res.seconds || 15);
         startedAt.current = Date.now();

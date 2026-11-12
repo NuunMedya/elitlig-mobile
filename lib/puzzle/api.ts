@@ -52,6 +52,21 @@ export interface PuzzleProfile {
   daily: { available: boolean; streak: number; next_streak: number; reward: DailyReward; rewards: DailyReward[] };
   /** Reklamla can: bugün kalan hak (eski sunucuda yok). */
   ad_lives?: { left: number; per_day: number; seconds: number };
+  /** Oyun başına can (her oyunun kendi 5 canı; eski sunucuda yok). */
+  lives_by_game?: Partial<Record<PuzzleGameKey, { lives: number; next_life_at: string | null }>>;
+  /** `livesFor` ile üretilen görünümde: canların ait olduğu oyun. */
+  life_game?: PuzzleGameKey;
+}
+
+/**
+ * Profilin bir oyuna göre görünümü: `lives` / `next_life_at` o oyunun canı olur.
+ * Cüzdan, can doldurma ve reklamla can bu görünümle çalışır. Eski sunucu
+ * (tek havuz) için profil olduğu gibi döner.
+ */
+export function livesFor<T extends PuzzleProfile | undefined>(profile: T, game: PuzzleGameKey | null | undefined): T {
+  if (!profile || !game) return profile;
+  const g = profile.lives_by_game?.[game];
+  return (g ? { ...profile, lives: g.lives, next_life_at: g.next_life_at, life_game: game } : { ...profile, life_game: game }) as T;
 }
 
 export interface PuzzleGameProgress {
@@ -112,11 +127,13 @@ export const finishLevel = (
   game: PuzzleGameKey,
   body: { level: number; won: boolean; stars: number; boosters_used: Record<string, number> }
 ) => post<FinishResponse>(`/api/puzzle/${game}/finish`, body, { retry: false });
-export const buyItem = (item: string) => post<{ item: string; profile: PuzzleProfile }>("/api/puzzle/shop", { item });
+export const buyItem = (item: string, game?: PuzzleGameKey | null) =>
+  post<{ item: string; profile: PuzzleProfile }>("/api/puzzle/shop", game ? { item, game } : { item });
 export const buildStadium = (id: string) =>
   post<{ item: StadiumItem; zone_done: boolean; bonus_coins: number; profile: PuzzleProfile }>("/api/puzzle/stadium/build", { id });
 /** Ödüllü reklam: başlat (jeton) → reklam biter → ödülü iste (+1 can). */
-export const startAdLife = () => post<{ token: string; seconds: number; left: number }>("/api/puzzle/ad-life/start", undefined, { retry: false });
+export const startAdLife = (game?: PuzzleGameKey | null) =>
+  post<{ token: string; seconds: number; left: number }>("/api/puzzle/ad-life/start", game ? { game } : undefined, { retry: false });
 export const claimAdLife = (token: string) =>
   post<{ lives_added: number; profile: PuzzleProfile }>("/api/puzzle/ad-life/claim", { token }, { retry: false });
 export const claimDaily = () =>

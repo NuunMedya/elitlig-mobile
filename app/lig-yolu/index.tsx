@@ -48,7 +48,7 @@ export default function PuzzleHubScreen() {
           <ErrorState error={query.error} onRetry={() => query.refetch()} />
         ) : me ? (
           <>
-            <WalletBar profile={me.profile} onCoins={() => setShop("all")} onLives={() => setShop("lives")} onStars={() => router.push("/kulup-sehri")} />
+            <WalletBar profile={me.profile} hideLives={Boolean(me.profile.lives_by_game)} onCoins={() => setShop("all")} onLives={() => setShop("lives")} onStars={() => router.push("/kulup-sehri")} />
 
             {me.profile.daily.available ? (
               <Touchable onPress={() => setDaily(true)} style={styles.daily} haptic="medium" accessibilityRole="button">
@@ -91,6 +91,7 @@ export default function PuzzleHubScreen() {
               const progress = me.games[game.key];
               const next = nextLevelOf(progress);
               const tone = toneColors(game.tone);
+              const gameLives = me.profile.lives_by_game?.[game.key];
               return (
                 <Touchable key={game.key} onPress={() => router.push({ pathname: "/lig-yolu/[oyun]", params: { oyun: game.key } })} style={styles.card} haptic="selection" accessibilityRole="button" accessibilityLabel={`${game.title}, ${next}. seviye`}>
                   <View style={[styles.cardIcon, { backgroundColor: tone.dim }]}>
@@ -103,6 +104,14 @@ export default function PuzzleHubScreen() {
                       <Text style={[styles.cardTier, { color: tone.fg }]} {...textScale.badge}>{tierOf(next)}</Text>
                       <Ionicons name="star" size={12} color={colors.yellowCard} />
                       <Text style={styles.cardStars} {...textScale.badge}>{progress?.total_stars ?? 0}</Text>
+                      {gameLives ? (
+                        <>
+                          <Ionicons name="heart" size={12} color={colors.live} style={styles.cardHeart} />
+                          <Text style={styles.cardStars} {...textScale.badge}>
+                            {gameLives.lives}/{me.profile.max_lives}
+                          </Text>
+                        </>
+                      ) : null}
                     </View>
                   </View>
                   <View style={[styles.levelBadge, { backgroundColor: tone.fg }]}>
@@ -153,6 +162,7 @@ const styles = StyleSheet.create({
   cardMeta: { flexDirection: "row", alignItems: "center", gap: space.xs, marginTop: 2 },
   cardTier: { ...type.micro, marginRight: space.sm },
   cardStars: { ...type.micro, color: colors.textSecondary },
+  cardHeart: { marginLeft: space.sm },
   levelBadge: { width: 58, paddingVertical: space.sm, borderRadius: radius.lg, alignItems: "center" },
   levelNum: { ...type.h2, fontFamily: fonts.bold, color: colors.textOnBrand },
   levelLabel: { ...type.micro, color: colors.textOnBrand },

@@ -1,6 +1,7 @@
 import React, { memo, useEffect, useRef } from "react";
 import { Animated, Easing, StyleSheet, Text, View } from "react-native";
-import { colors, radius, space, textScale, type } from "@/theme";
+import { fonts, radius, space, textScale, type } from "@/theme";
+import { UCLE_UI as UI } from "@/lib/puzzle/uclePalette";
 
 interface PopProps {
   text: string;
@@ -84,28 +85,37 @@ export const Confetti = memo(function Confetti({ width, height, palette }: { wid
   );
 });
 
+const shadowText = { textShadowColor: UI.textShadow, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 } as const;
+
 const styles = StyleSheet.create({
   wrap: { position: "absolute", left: 0, right: 0, alignItems: "center" },
   combo: {
+    paddingHorizontal: space.xl,
+    paddingVertical: space.sm,
+    borderRadius: radius.pill,
+    backgroundColor: UI.gold,
+    borderWidth: 3,
+    borderBottomWidth: 6,
+    borderColor: UI.goldDeep,
+  },
+  info: {
     paddingHorizontal: space.lg,
     paddingVertical: space.s,
     borderRadius: radius.pill,
-    backgroundColor: colors.brand,
+    backgroundColor: UI.panel,
     borderWidth: 2,
-    borderColor: colors.onDark,
-  },
-  info: {
-    paddingHorizontal: space.md,
-    paddingVertical: space.xs,
-    borderRadius: radius.pill,
-    backgroundColor: colors.inkBlock,
+    borderBottomWidth: 4,
+    borderColor: UI.panelRim,
   },
   warn: {
-    paddingHorizontal: space.md,
-    paddingVertical: space.xs,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.s,
     borderRadius: radius.pill,
-    backgroundColor: colors.danger,
+    backgroundColor: UI.red,
+    borderWidth: 2,
+    borderBottomWidth: 4,
+    borderColor: UI.redDeep,
   },
-  comboText: { ...type.scoreMd, color: colors.textOnBrand },
-  infoText: { ...type.label, color: colors.onDark },
+  comboText: { ...type.scoreLg, color: UI.goldInk },
+  infoText: { ...type.label, fontFamily: fonts.heading, color: UI.text, ...shadowText },
 });

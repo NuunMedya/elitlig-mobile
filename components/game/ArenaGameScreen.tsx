@@ -22,18 +22,21 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQuery } from "@tanstack/react-query";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { LinearGradient } from "expo-linear-gradient";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ArenaResultCard, ArenaShareSheet, formatCount, SCORE_UNIT, useArenaScore } from "@/components/game/ArenaResult";
 import { useGameRoster } from "@/components/game/useGameRoster";
 import { WebGame, type GameOverPayload, type WebGameHandle } from "@/components/game/WebGame";
-import { Button, ScreenHeader, Touchable, useReduceMotion } from "@/components/ui";
+import { GameButton } from "@/components/puzzle/LevelSheets";
+import { ScreenHeader, Touchable, useReduceMotion } from "@/components/ui";
+import { ARENA_CARD } from "@/lib/game/arenaPalette";
 import { getPlayerCareer } from "@/lib/api/career";
 import type { WebGameKey } from "@/lib/game/web/games.generated";
 import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
-import { colors, elevate, fonts, layout, radius, space, textScale, type, upperTR } from "@/theme";
+import { colors, elevate, fonts, radius, space, textScale, type, upperTR } from "@/theme";
 
 /* ============================ SÖZLEŞME ============================ */
 
@@ -250,46 +253,61 @@ function StartCard({
   return (
     <View style={styles.overlay} pointerEvents="box-none">
       <ScrollView style={styles.cardScroll} contentContainerStyle={styles.cardScrollContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.card}>
-          <View style={styles.startIcon}>
-            <Ionicons name={config.icon} size={22} color={colors.brandAccent} />
-          </View>
-          <Text style={styles.overline} {...textScale.badge}>
-            {upperTR("Elitlig Arena")}
-          </Text>
-          <Text style={styles.startTitle} {...textScale.dense}>
-            {config.title}
-          </Text>
-
-          <View style={styles.rules}>
-            {rules.map((rule) => (
-              <View key={rule.text} style={styles.rule}>
-                <Ionicons name={rule.icon} size={15} color={colors.brandAccent} style={styles.ruleIcon} />
-                <Text style={styles.ruleText} {...textScale.long}>
-                  {rule.text}
-                </Text>
-              </View>
-            ))}
-          </View>
-
-          <Touchable
-            feedback="button"
-            haptic="light"
-            onPress={onBoard}
-            style={styles.bestPill}
-            accessibilityRole="button"
-            accessibilityLabel="Rekor tablosunu aç"
-          >
-            <Ionicons name="trophy" size={13} color={colors.star} />
-            <Text style={styles.bestText} {...textScale.dense}>
-              {best > 0 ? `Rekorun ${formatCount(best)} ${SCORE_UNIT}` : "Henüz rekorun yok"}
+        <View style={styles.cardWrap}>
+          <View style={styles.card}>
+            <View style={styles.startIcon}>
+              <LinearGradient colors={ARENA_CARD.icon} start={TOP} end={BOTTOM} style={styles.startIconFill}>
+                <Ionicons name={config.icon} size={34} color={ARENA_CARD.white} />
+              </LinearGradient>
+            </View>
+            <Text style={styles.startTitle} {...textScale.dense}>
+              {config.title}
             </Text>
-            <Ionicons name="chevron-forward" size={13} color={colors.textTertiary} />
-          </Touchable>
+            <Text style={styles.startSub} {...textScale.dense}>
+              {config.subtitle}
+            </Text>
 
-          {setup}
+            <View style={styles.rules}>
+              {rules.map((rule, i) => (
+                <View key={rule.text} style={styles.rule}>
+                  <View style={[styles.ruleIcon, { backgroundColor: ARENA_CARD.chips[i % ARENA_CARD.chips.length] }]}>
+                    <Ionicons name={rule.icon} size={16} color={ARENA_CARD.white} />
+                  </View>
+                  <Text style={styles.ruleText} {...textScale.long}>
+                    {rule.text}
+                  </Text>
+                </View>
+              ))}
+            </View>
 
-          <Button label={loading ? "Hazırlanıyor" : "Başla"} icon="play" size="lg" fullWidth loading={loading} onPress={onStart} />
+            <Touchable
+              feedback="button"
+              haptic="light"
+              onPress={onBoard}
+              style={styles.bestPill}
+              accessibilityRole="button"
+              accessibilityLabel="Rekor tablosunu aç"
+            >
+              <Ionicons name="trophy" size={16} color={ARENA_CARD.goldDeep} />
+              <Text style={styles.bestText} {...textScale.dense}>
+                {best > 0 ? `Rekorun ${formatCount(best)} ${SCORE_UNIT}` : "Henüz rekorun yok"}
+              </Text>
+              <Ionicons name="chevron-forward" size={14} color={ARENA_CARD.goldDeep} />
+            </Touchable>
+
+            {setup}
+
+            <View style={styles.startBtn}>
+              <GameButton label={loading ? "HAZIRLANIYOR…" : "BAŞLA"} icon="play" onPress={onStart} disabled={loading} accessibilityLabel={`${config.title} başla`} />
+            </View>
+          </View>
+          <View pointerEvents="none" style={styles.ribbonLayer}>
+            <LinearGradient colors={ARENA_CARD.ribbon} start={LEFT} end={RIGHT} style={styles.ribbon}>
+              <Text style={styles.ribbonText} {...textScale.badge}>
+                {upperTR("Elitlig Arena")}
+              </Text>
+            </LinearGradient>
+          </View>
         </View>
       </ScrollView>
     </View>
@@ -298,21 +316,21 @@ function StartCard({
 
 /* ================================ STİLLER ================================ */
 
+const TOP = { x: 0.5, y: 0 } as const;
+const BOTTOM = { x: 0.5, y: 1 } as const;
+const LEFT = { x: 0, y: 0.5 } as const;
+const RIGHT = { x: 1, y: 0.5 } as const;
+
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   flex: { flex: 1 },
 
+  // Oyun ekranı kenardan kenara (tam ekran); yüklenirken koyu sahne.
   arena: {
     flex: 1,
-    marginHorizontal: layout.screenPadding,
-    marginBottom: layout.screenPadding,
     marginTop: space.xs,
-    borderRadius: radius.xl,
     overflow: "hidden",
-    // Oyun yüklenirken görünen zemin: iki temada da koyu sahne.
     backgroundColor: colors.inkBlock,
-    ...elevate(2),
-    borderWidth: 0,
   },
 
   overlay: {
@@ -323,41 +341,43 @@ const styles = StyleSheet.create({
   },
   cardScroll: { alignSelf: "stretch", flexGrow: 0 },
   cardScrollContent: { flexGrow: 1, justifyContent: "center", alignItems: "center" },
+  cardWrap: { alignSelf: "stretch", maxWidth: 380, width: "100%", marginTop: space.xl },
   card: {
-    alignSelf: "stretch",
-    maxWidth: 380,
-    width: "100%",
-    borderRadius: radius.xl,
+    borderRadius: radius.xxl,
+    backgroundColor: colors.surface1,
+    borderWidth: 4,
+    borderColor: ARENA_CARD.white,
     ...elevate(4),
-    padding: space.xl,
+    paddingTop: space.xxxl,
+    paddingHorizontal: space.lg,
+    paddingBottom: space.lg,
     gap: space.xs,
     alignItems: "center",
   },
-  startIcon: {
-    width: 46,
-    height: 46,
-    borderRadius: radius.pill,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.brandDim,
-    marginBottom: space.xxs,
-  },
-  overline: { ...type.micro, color: colors.brandAccent },
-  startTitle: { ...type.display, color: colors.textPrimary },
-  rules: { alignSelf: "stretch", gap: space.s, marginVertical: space.sm },
-  rule: { flexDirection: "row", gap: space.s, alignItems: "flex-start" },
-  ruleIcon: { marginTop: 2 },
-  ruleText: { ...type.bodySm, color: colors.textSecondary, flex: 1 },
+  ribbonLayer: { position: "absolute", top: -20, left: 0, right: 0, alignItems: "center" },
+  ribbon: { paddingHorizontal: space.xl, paddingVertical: space.xs, borderRadius: radius.md, borderWidth: 3, borderColor: ARENA_CARD.white },
+  ribbonText: { ...type.label, fontFamily: fonts.bold, color: ARENA_CARD.white, letterSpacing: 2 },
+  startIcon: { width: 72, height: 72, marginBottom: space.xs },
+  startIconFill: { width: 72, height: 72, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", borderWidth: 4, borderColor: ARENA_CARD.white },
+  startTitle: { ...type.display, fontFamily: fonts.bold, color: colors.textPrimary, textAlign: "center" },
+  startSub: { ...type.bodySm, color: colors.textSecondary, textAlign: "center" },
+  rules: { alignSelf: "stretch", gap: space.sm, marginVertical: space.sm },
+  rule: { flexDirection: "row", gap: space.sm, alignItems: "center" },
+  ruleIcon: { width: 32, height: 32, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
+  ruleText: { ...type.bodySm, color: colors.textPrimary, flex: 1 },
   bestPill: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.xs,
-    backgroundColor: colors.surface3,
+    backgroundColor: ARENA_CARD.gold,
     borderRadius: radius.pill,
+    borderWidth: 2,
+    borderColor: ARENA_CARD.goldDeep,
     paddingHorizontal: space.md,
     paddingVertical: space.s,
     marginBottom: space.m,
   },
-  bestText: { ...type.bodySm, fontFamily: fonts.bold, color: colors.textPrimary },
+  startBtn: { alignSelf: "stretch", marginTop: space.sm },
+  bestText: { ...type.bodySm, fontFamily: fonts.bold, color: ARENA_CARD.ink },
 
 });

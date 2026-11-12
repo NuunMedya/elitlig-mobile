@@ -20,8 +20,11 @@ export function WalletBar({
   onLives,
   onStars,
   onDark,
+  hideLives,
 }: {
   profile: PuzzleProfile | undefined;
+  /** Lig Yolu ana sayfası: canlar oyun başına olduğundan oyun kartlarında gösterilir. */
+  hideLives?: boolean;
   onCoins?: () => void;
   onLives?: () => void;
   onStars?: () => void;
@@ -30,7 +33,7 @@ export function WalletBar({
   const life = useLifeCountdown(profile);
   return (
     <View style={styles.row}>
-      <Pill
+      {hideLives ? null : <Pill
         icon="heart"
         tint={colors.live}
         value={profile ? String(life.lives) : "–"}
@@ -39,7 +42,7 @@ export function WalletBar({
         label={`Can ${life.lives}${life.label && life.label !== "Dolu" ? `, sıradaki ${life.label}` : ""}`}
         onDark={onDark}
         plus={Boolean(profile && life.lives < profile.max_lives)}
-      />
+      />}
       <Pill
         icon="disc"
         tint={colors.yellowCard}
