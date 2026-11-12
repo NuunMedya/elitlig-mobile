@@ -4,7 +4,7 @@
  * kalelerin altından geç; her geçiş bir gol. Gol sayın ligin oyuncularının
  * sezon gol + asist sayısını geçtikçe onları geride bırakırsın.
  *
- * Oyunun kendisi `games/sektir.js` (three.js / WebGL, WebView içinde): mekanizma,
+ * Oyunun kendisi `games/sektir.js` (Canvas 2D çizgi film çizim, WebView içinde): mekanizma,
  * zorluk eğrisi ve puanlama orada belgelenmiştir. Bu ekran yalnız ortak Arena
  * kabuğunu oyuna bağlar.
  */

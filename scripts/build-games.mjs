@@ -25,7 +25,7 @@ const SHARED = ["core.js", "scenery.js"];
  * package.json'da sürümü SABİTLENMİŞ devDependency'dir (0.158.0, UMD derlemesi)
  * ve oyun HTML'ine satır içi gömülür: WebView çevrimdışı da açılır.
  */
-const THREE_D = new Set(["penalti", "slalom", "sektir", "kadro", "sehir"]);
+const THREE_D = new Set(["penalti", "slalom", "kadro", "sehir"]);
 /**
  * Arcade motorunu (games/arcade3d.js) kullanan oyunlar. Savunma Hattı ve Kadro
  * Koşusu yalnız örneklenmiş mini futbolcularla çizilir: iskeletli futbolcu
