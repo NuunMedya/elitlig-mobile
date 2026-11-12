@@ -100,13 +100,13 @@ function AuroraBlob({ blob, height, reduceMotion }: { blob: Blob; height: number
           toValue: 1,
           duration: ambient.aurora * blob.speed,
           easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
+          useNativeDriver: true, isInteraction: false,
         }),
         Animated.timing(t, {
           toValue: 0,
           duration: ambient.aurora * blob.speed,
           easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
+          useNativeDriver: true, isInteraction: false,
         }),
       ]),
     );

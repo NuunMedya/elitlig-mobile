@@ -32,7 +32,7 @@ import { formatDateShort } from "@/lib/format";
 import { matchState } from "@/lib/match";
 import { queryKeys } from "@/lib/queryKeys";
 import { useScope } from "@/providers/ScopeProvider";
-import { colors, fonts, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
+import { colors, dark, fonts, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
 import { DUEL_A, DUEL_B, DuelBar, HaloFrame, duelWinner } from "@/components/teampage/ProfileKit";
 import type { ApiMatch, StandingRow } from "@/lib/types";
 
@@ -1187,7 +1187,7 @@ const styles = StyleSheet.create({
     gap: space.s,
   },
   heroScoreLeadA: {
-    color: colors.accent,
+    color: dark.accent,
   },
   heroScoreLeadB: {
     color: colors.brandOnDark,

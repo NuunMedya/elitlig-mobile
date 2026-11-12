@@ -24,7 +24,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import React, { useMemo } from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { Avatar, IconTile, Odometer, Touchable, type IconTileTone } from "@/components/ui";
-import { colors, fonts, glowStyle, hairline, radius, space, textScale, type } from "@/theme";
+import { colors, dark, fonts, glowStyle, hairline, radius, space, textScale, type } from "@/theme";
 
 /* ══════════════════════════════ HALO FRAME ══════════════════════════════ */
 
@@ -484,7 +484,7 @@ export const DuelScore = React.memo(function DuelScore({ a, b, onDark = false, c
   return (
     <View style={styles.duelScore} accessible accessibilityLabel={`Kazanılan metrik: sol ${a}, sağ ${b}`}>
       <View style={styles.duelScoreRow}>
-        <Odometer value={a} style={[styles.duelScoreNum, { color: a > b ? (onDark ? colors.accent : DUEL_A_TEXT) : base }]} />
+        <Odometer value={a} style={[styles.duelScoreNum, { color: a > b ? (onDark ? dark.accent : DUEL_A_TEXT) : base }]} />
         <Text style={[styles.duelScoreDash, { color: muted }]} {...textScale.badge}>
           –
         </Text>

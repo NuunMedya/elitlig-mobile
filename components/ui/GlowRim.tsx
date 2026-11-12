@@ -34,7 +34,7 @@ export const GlowRim = React.memo(function GlowRim({ radius = radiusScale.xl, co
   useEffect(() => {
     if (reduceMotion || width <= 0) return;
     const loop = Animated.loop(
-      Animated.timing(t, { toValue: 1, duration: ambient.rim, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      Animated.timing(t, { toValue: 1, duration: ambient.rim, easing: Easing.inOut(Easing.quad), useNativeDriver: true, isInteraction: false }),
     );
     loop.start();
     return () => loop.stop();

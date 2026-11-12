@@ -256,7 +256,8 @@ export const OpsMatchCard = memo(function OpsMatchCard({
       <View style={styles.cardBody}>
         <View style={styles.cardTop}>
           <Badge label={upperTR(statusLabel)} tone={statusTone} size="xs" dot={live} />
-          {time ? <InfoPill icon="time-outline" label={time} strong /> : null}
+          {/* Saat, oynanmamış maçta plakada durur; burada yalnız skorlu maçta. */}
+          {time && scored ? <InfoPill icon="time-outline" label={time} strong /> : null}
           {field ? (
             <View style={styles.flexShrink}>
               <InfoPill icon="location-outline" label={field} />
@@ -394,11 +395,13 @@ export function DayHeader({
         <Text style={styles.dayTitle} numberOfLines={1} {...textScale.dense}>
           {title}
         </Text>
-        <Text style={styles.dayMeta} numberOfLines={1} {...textScale.dense}>
-          {count} maç
-        </Text>
+        <View style={styles.dayMetaRow}>
+          {statusLabel ? <View style={[styles.dayDot, { backgroundColor: toneColor(tone) }]} /> : null}
+          <Text style={styles.dayMeta} numberOfLines={1} {...textScale.dense}>
+            {[statusLabel, `${count} maç`].filter(Boolean).join(" · ")}
+          </Text>
+        </View>
       </View>
-      {statusLabel ? <Badge label={statusLabel} tone={tone ?? "neutral"} size="xs" /> : null}
     </View>
   );
 }
@@ -435,7 +438,7 @@ export function OpsGroup({
             {upperTR(title)}
           </Text>
           {hint ? (
-            <Text style={styles.groupHint} numberOfLines={2} {...textScale.long}>
+            <Text style={styles.groupHint} {...textScale.long}>
               {hint}
             </Text>
           ) : null}
@@ -643,7 +646,9 @@ const styles = StyleSheet.create({
   dayNum: { ...type.scoreXs, color: colors.textPrimary, lineHeight: 17 },
   dayMonth: { ...type.overline, color: colors.brandAccent, lineHeight: 11 },
   dayTitle: { ...type.h3, color: colors.textPrimary },
-  dayMeta: { ...type.caption, color: colors.textTertiary },
+  dayMeta: { ...type.caption, color: colors.textTertiary, flexShrink: 1 },
+  dayMetaRow: { flexDirection: "row", alignItems: "center", gap: space.xs },
+  dayDot: { width: 6, height: 6, borderRadius: 3 },
 
   group: {
     borderRadius: radius.xl,

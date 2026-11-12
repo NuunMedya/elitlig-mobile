@@ -35,9 +35,11 @@ import {
   EmptyState,
   Input,
   SkeletonListRow,
+  GradientBar,
   Touchable,
   useToast,
 } from "@/components/ui";
+import { LinearGradient } from "expo-linear-gradient";
 import { hasAnyPermission } from "@/lib/admin/access";
 import { errorText } from "@/lib/admin/errors";
 import {
@@ -58,7 +60,7 @@ import { useAuth } from "@/providers/AuthProvider";
 import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
 import { POSITIONS, dayOf, shortDay, type Side } from "./model";
-import { Note, SidePicker, StepSaveBar } from "./parts";
+import { Note, StepSaveBar } from "./parts";
 
 type Role = "" | "starter" | "bench";
 
@@ -452,20 +454,70 @@ export function LineupStep({ match, onDirtyChange }: { match: AdminMatch; onDirt
         <Note tone="warn" text="Maçın takım kimlikleri eksik. Kadro girmek için Maç öncesi adımında iki takımı da seç." />
       ) : null}
 
-      <SidePicker
-        value={side}
-        onChange={(s) => {
-          setSide(s);
-          setQ("");
-        }}
-        homeName={`${match.first_team_name || "Ev sahibi"} (${counts.home.starters}+${counts.home.bench})`}
-        awayName={`${match.second_team_name || "Deplasman"} (${counts.away.starters}+${counts.away.bench})`}
-      />
+      {/* Takım seçici: iki takım kartı — İlk 11 doluluğu (n/11) degrade çubukla, yedek sayısı ve kaptan durumu. */}
+      <View style={styles.sides} accessibilityRole="radiogroup">
+        {(["home", "away"] as const).map((key) => {
+          const on = side === key;
+          const name = key === "home" ? match.first_team_name || "Ev sahibi" : match.second_team_name || "Deplasman";
+          const c = counts[key];
+          return (
+            <Touchable
+              key={key}
+              feedback="card"
+              haptic="selection"
+              onPress={() => {
+                setSide(key);
+                setQ("");
+              }}
+              style={[styles.sideCard, on ? styles.sideCardOn : null]}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: on }}
+              accessibilityLabel={`${name}: İlk 11 ${c.starters}, yedek ${c.bench}`}
+            >
+              <View style={styles.sideHead}>
+                <Text style={styles.sideTag} {...textScale.badge}>
+                  {key === "home" ? "EV SAHİBİ" : "DEPLASMAN"}
+                </Text>
+                {on ? <Ionicons name="checkmark-circle" size={14} color={colors.brandAccent} /> : null}
+              </View>
+              <Text style={[styles.sideName, on ? styles.sideNameOn : null]} numberOfLines={1} {...textScale.dense}>
+                {name}
+              </Text>
+              <View style={styles.sideNums}>
+                <Text style={styles.sideBig} {...textScale.badge}>
+                  {c.starters}
+                  <Text style={styles.sideOf}>/11</Text>
+                </Text>
+                <Text style={styles.sideBench} {...textScale.badge}>
+                  +{c.bench} yedek
+                </Text>
+              </View>
+              <GradientBar value={Math.min(1, c.starters / 11)} height={4} gradient={c.starters >= 11 ? [colors.win, colors.win] : undefined} />
+            </Touchable>
+          );
+        })}
+      </View>
 
-      <Text style={styles.summary} {...textScale.dense}>
-        {teamName}: İlk 11 {counts[side].starters} · Yedek {counts[side].bench} · Diziliş {lines.formation}
-        {counts[side].starters && !captains ? " · Kaptan seçilmedi" : ""}
-      </Text>
+      {/* Seçili takımın özeti: diziliş, kaptan ve seçili toplam. */}
+      <View style={styles.summaryRow}>
+        <View style={styles.summaryCell}>
+          <Text style={styles.summaryLabel} {...textScale.badge}>DİZİLİŞ</Text>
+          <Text style={styles.summaryValue} numberOfLines={1} {...textScale.badge}>{lines.formation}</Text>
+        </View>
+        <View style={[styles.summaryCell, styles.summaryDivided]}>
+          <Text style={styles.summaryLabel} {...textScale.badge}>KAPTAN</Text>
+          <View style={styles.summaryInline}>
+            <Ionicons name={captains ? "checkmark-circle" : counts[side].starters ? "alert-circle" : "remove-circle-outline"} size={14} color={captains ? colors.win : counts[side].starters ? colors.warn : colors.textTertiary} />
+            <Text style={[styles.summaryValueSm, captains ? null : counts[side].starters ? { color: colors.warn } : null]} numberOfLines={1} {...textScale.dense}>
+              {captains ? "Seçildi" : counts[side].starters ? "Seçilmedi" : "—"}
+            </Text>
+          </View>
+        </View>
+        <View style={[styles.summaryCell, styles.summaryDivided]}>
+          <Text style={styles.summaryLabel} {...textScale.badge}>KADRODA</Text>
+          <Text style={styles.summaryValue} numberOfLines={1} {...textScale.badge}>{counts[side].starters + counts[side].bench}</Text>
+        </View>
+      </View>
 
       <Input variant="search" leadingIcon="search" value={q} onChangeText={setQ} placeholder="Kadroda ara (ad, forma no)" autoCorrect={false} />
       <ChipGroup scrollable={false} contentPadding={0}>
@@ -482,39 +534,49 @@ export function LineupStep({ match, onDirtyChange }: { match: AdminMatch; onDirt
 
       {preview ? (
         <View style={styles.pitch} accessibilityLabel={`${teamName} ilk 11 saha önizlemesi, diziliş ${lines.formation}`}>
+          <LinearGradient colors={colors.gradientPitch} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} style={StyleSheet.absoluteFill} />
+          {/* Tebeşir çizgileri: orta saha çizgisi ve yuvarlak, ceza sahası. */}
+          <View style={styles.chalkMid} pointerEvents="none" />
+          <View style={styles.chalkCircle} pointerEvents="none" />
+          <View style={styles.chalkBox} pointerEvents="none" />
           <View style={styles.pitchHead}>
             <Text style={styles.pitchTitle} {...textScale.dense}>
               SAHA ÖNİZLEME
             </Text>
-            <Text style={styles.pitchFormation} {...textScale.badge}>
-              {lines.formation}
-            </Text>
+            <View style={styles.pitchFormationPill}>
+              <Text style={styles.pitchFormation} {...textScale.badge}>
+                {lines.formation}
+              </Text>
+            </View>
             <Text style={styles.pitchCount} {...textScale.dense}>
-              {starters.length} oyuncu
+              {starters.length}/11
             </Text>
           </View>
           {(["Forvet", "Orta Saha", "Defans", "Kaleci"] as const).map((line) => (
             <View key={line} style={styles.pitchLine}>
-              <Text style={styles.pitchLabel} {...textScale.dense}>
-                {POS_SHORT[line]}
-              </Text>
-              <View style={styles.pitchPlayers}>
-                {lines.groups[line].length ? (
-                  lines.groups[line].map((p) => (
-                    <View key={p.id} style={styles.pitchChip}>
-                      <Text style={styles.pitchChipText} numberOfLines={1} {...textScale.dense}>
-                        {p.number ? `${p.number} ` : ""}
-                        {shortName(p.name)}
-                        {p.captain ? " (K)" : ""}
+              {lines.groups[line].length ? (
+                lines.groups[line].map((p) => (
+                  <View key={p.id} style={styles.pitchMan}>
+                    <View style={[styles.pitchShirt, line === "Kaleci" ? styles.pitchShirtKeeper : null]}>
+                      <Text style={styles.pitchShirtNo} {...textScale.badge}>
+                        {p.number || "–"}
                       </Text>
+                      {p.captain ? (
+                        <View style={styles.pitchCaptain}>
+                          <Text style={styles.pitchCaptainText} {...textScale.badge}>K</Text>
+                        </View>
+                      ) : null}
                     </View>
-                  ))
-                ) : (
-                  <Text style={styles.pitchEmpty} {...textScale.dense}>
-                    –
-                  </Text>
-                )}
-              </View>
+                    <Text style={styles.pitchChipText} numberOfLines={1} {...textScale.dense}>
+                      {shortName(p.name)}
+                    </Text>
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.pitchEmpty} {...textScale.dense}>
+                  {POS_SHORT[line]} · boş
+                </Text>
+              )}
             </View>
           ))}
           {lines.groups[""].length ? (
@@ -537,9 +599,10 @@ export function LineupStep({ match, onDirtyChange }: { match: AdminMatch; onDirt
         />
       ) : (
         <View style={styles.list}>
-          {list.map((p) => (
+          {list.map((p, index) => (
             <PlayerLine
               key={p.id}
+              first={index === 0}
               player={p}
               guest={isGuestOf(p, teamId)}
               disabled={!canEdit}
@@ -600,6 +663,7 @@ const PlayerLine = React.memo(function PlayerLine({
   player,
   guest,
   disabled,
+  first,
   onRole,
   onPosition,
   onCaptain,
@@ -608,14 +672,17 @@ const PlayerLine = React.memo(function PlayerLine({
   player: Pick;
   guest: boolean;
   disabled?: boolean;
+  first?: boolean;
   onRole: (role: "starter" | "bench") => void;
   onPosition: (position: string) => void;
   onCaptain: () => void;
   onOpen: () => void;
 }) {
   const picked = player.role !== "";
+  const starter = player.role === "starter";
   return (
-    <View style={[styles.row, picked ? styles.rowOn : null]}>
+    <View style={[styles.row, !first ? styles.rowDivider : null, picked ? styles.rowOn : null]}>
+      {picked ? <LinearGradient colors={starter ? colors.gradientSignature : [colors.info, colors.info]} style={styles.rowRail} /> : null}
       <View style={styles.rowTop}>
         <Touchable
           onPress={onOpen}
@@ -624,8 +691,10 @@ const PlayerLine = React.memo(function PlayerLine({
           accessibilityRole="button"
           accessibilityLabel={`${player.name} ayrıntıları: forma no, fotoğraf`}
         >
-          <View style={styles.number}>
-            <Text style={styles.numberText} {...textScale.badge}>
+          {/* Forma pulu: numara Archivo; İlk 11'de imza degradesi, yedekte camgöbeği çerçeve. */}
+          <View style={[styles.number, starter ? styles.numberStarter : player.role === "bench" ? styles.numberBench : null]}>
+            {starter ? <LinearGradient colors={colors.gradientSignature} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[StyleSheet.absoluteFill, styles.numberFill]} /> : null}
+            <Text style={[styles.numberText, starter ? styles.numberTextOn : null]} {...textScale.badge}>
               {player.number || "–"}
             </Text>
           </View>
@@ -637,14 +706,33 @@ const PlayerLine = React.memo(function PlayerLine({
               {player.captain ? <Badge label="K" tone="warn" size="xs" dot={false} accessibilityLabel="Kaptan" /> : null}
               {guest ? <Badge label="Misafir" tone="info" size="xs" dot={false} /> : null}
             </View>
-            <Text style={styles.meta} numberOfLines={1} {...textScale.dense}>
+            <Text style={[styles.meta, !player.position && picked ? { color: colors.warn } : null]} numberOfLines={1} {...textScale.dense}>
               {[player.position || "Mevki yok", player.extra ? "Sonradan eklendi" : null].filter(Boolean).join(" · ")}
             </Text>
           </View>
         </Touchable>
-        <View style={styles.roles}>
-          <Chip label="İlk 11" tone="brand" selected={player.role === "starter"} onPress={() => onRole("starter")} disabled={disabled} />
-          <Chip label="Yedek" tone="info" selected={player.role === "bench"} onPress={() => onRole("bench")} disabled={disabled} />
+        {/* Rol anahtarı: iki parçalı kapsül — İlk 11 / Yedek. */}
+        <View style={styles.roles} accessibilityRole="radiogroup">
+          {(["starter", "bench"] as const).map((role) => {
+            const on = player.role === role;
+            return (
+              <Touchable
+                key={role}
+                onPress={() => onRole(role)}
+                disabled={disabled}
+                haptic="selection"
+                feedback="none"
+                style={[styles.roleBtn, on ? (role === "starter" ? styles.roleStarter : styles.roleBench) : null]}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: on, disabled }}
+                accessibilityLabel={role === "starter" ? "İlk 11" : "Yedek"}
+              >
+                <Text style={[styles.roleText, on ? styles.roleTextOn : null]} {...textScale.badge}>
+                  {role === "starter" ? "İlk 11" : "Yedek"}
+                </Text>
+              </Touchable>
+            );
+          })}
         </View>
       </View>
       {picked ? (
@@ -672,11 +760,12 @@ const PlayerLine = React.memo(function PlayerLine({
             onPress={onCaptain}
             disabled={disabled}
             haptic="selection"
-            style={[styles.quickBtn, player.captain ? styles.quickCaptain : null]}
+            style={[styles.quickBtn, styles.quickWide, player.captain ? styles.quickCaptain : null]}
             accessibilityRole="button"
             accessibilityState={{ selected: player.captain }}
             accessibilityLabel="Kaptan"
           >
+            <Ionicons name={player.captain ? "star" : "star-outline"} size={12} color={player.captain ? colors.warn : colors.textTertiary} />
             <Text style={[styles.quickText, player.captain ? styles.quickTextOn : null]} {...textScale.badge}>
               Kaptan
             </Text>
@@ -871,68 +960,171 @@ function AddPlayerSheet({
 
 const styles = StyleSheet.create({
   stack: { gap: space.md },
-  summary: { ...type.caption, color: colors.textTertiary },
-  list: { gap: space.sm },
-  row: {
-    gap: space.sm,
-    padding: space.sm,
-    borderRadius: radius.lg,
+  sides: { flexDirection: "row", gap: space.sm },
+  sideCard: {
+    flex: 1,
+    minWidth: 0,
+    gap: space.xs,
+    padding: space.md,
+    borderRadius: radius.xl,
     backgroundColor: colors.surface1,
     borderWidth: hairline,
-    borderColor: colors.border,
+    borderColor: colors.glassLine,
   },
-  rowOn: { borderColor: colors.brandBorder },
+  sideCardOn: { backgroundColor: colors.brandDim, borderColor: colors.brandBorder, borderWidth: 1 },
+  sideHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  sideTag: { ...type.overline, color: colors.textTertiary },
+  sideName: { ...type.h4, color: colors.textSecondary },
+  sideNameOn: { color: colors.textPrimary },
+  sideNums: { flexDirection: "row", alignItems: "baseline", gap: space.s, marginBottom: space.xxs },
+  sideBig: { ...type.metricSm, color: colors.textPrimary },
+  sideOf: { ...type.numSm, color: colors.textTertiary },
+  sideBench: { ...type.numSm, color: colors.textSecondary },
+  summaryRow: {
+    flexDirection: "row",
+    borderRadius: radius.lg,
+    backgroundColor: colors.glass,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+    paddingVertical: space.sm,
+  },
+  summaryCell: { flex: 1, alignItems: "center", gap: space.xxs },
+  summaryDivided: { borderLeftWidth: hairline, borderLeftColor: colors.separator },
+  summaryLabel: { ...type.overline, color: colors.textTertiary },
+  summaryValue: { ...type.scoreXs, color: colors.textPrimary },
+  summaryValueSm: { ...type.labelSm, color: colors.textPrimary },
+  summaryInline: { flexDirection: "row", alignItems: "center", gap: space.xs, height: 19 },
+  list: {
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+    overflow: "hidden",
+  },
+  row: {
+    gap: space.sm,
+    paddingVertical: space.m,
+    paddingHorizontal: space.md,
+  },
+  rowDivider: { borderTopWidth: hairline, borderTopColor: colors.separator },
+  rowOn: { backgroundColor: colors.brandDim },
+  rowRail: { position: "absolute", left: 0, top: 0, bottom: 0, width: 3 },
   rowTop: { flexDirection: "row", alignItems: "center", gap: space.sm },
   nameLine: { flexDirection: "row", alignItems: "center", gap: space.xs },
-  quick: { flexDirection: "row", gap: space.xs },
+  quick: { flexDirection: "row", gap: space.xs, paddingLeft: 44 },
   quickBtn: {
     flex: 1,
-    minHeight: 44,
+    flexDirection: "row",
+    gap: space.xxs,
+    minHeight: 36,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: radius.md,
+    borderRadius: radius.pill,
     borderWidth: hairline,
     borderColor: colors.border,
     backgroundColor: colors.surface2,
   },
-  quickOn: { backgroundColor: colors.brandDim, borderColor: colors.brandBorder },
+  quickWide: { flex: 1.4 },
+  quickOn: { backgroundColor: colors.brand, borderColor: colors.brand },
   quickCaptain: { backgroundColor: colors.warnDim, borderColor: colors.warn },
-  quickText: { ...type.labelSm, color: colors.textSecondary },
+  quickText: { ...type.labelXs, color: colors.textSecondary },
   quickTextOn: { color: colors.textPrimary },
   photoRow: { flexDirection: "row", alignItems: "center", gap: space.md },
   pitch: {
-    gap: space.sm,
+    gap: space.md,
     padding: space.md,
-    borderRadius: radius.lg,
-    backgroundColor: colors.surface1,
-    borderWidth: hairline,
-    borderColor: colors.border,
+    paddingBottom: space.lg,
+    borderRadius: radius.xxl,
+    overflow: "hidden",
+    backgroundColor: colors.pitch,
+  },
+  chalkMid: { position: "absolute", left: 0, right: 0, top: "50%", height: 1, backgroundColor: colors.chalk, opacity: 0.25 },
+  chalkCircle: {
+    position: "absolute",
+    alignSelf: "center",
+    top: "50%",
+    marginTop: -36,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    borderWidth: 1,
+    borderColor: colors.chalk,
+    opacity: 0.25,
+  },
+  chalkBox: {
+    position: "absolute",
+    bottom: 0,
+    left: "25%",
+    right: "25%",
+    height: 54,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    borderColor: colors.chalk,
+    opacity: 0.25,
   },
   pitchHead: { flexDirection: "row", alignItems: "center", gap: space.sm },
-  pitchTitle: { ...type.overline, color: colors.textTertiary, flex: 1 },
-  pitchFormation: { ...type.tableNumStrong, color: colors.textPrimary },
-  pitchCount: { ...type.caption, color: colors.textSecondary },
-  pitchLine: { flexDirection: "row", alignItems: "center", gap: space.sm },
-  pitchLabel: { ...type.labelXs, color: colors.textTertiary, width: 32 },
-  pitchPlayers: { flex: 1, flexDirection: "row", flexWrap: "wrap", gap: space.xs },
-  pitchChip: { paddingHorizontal: space.sm, paddingVertical: space.xs, borderRadius: radius.pill, backgroundColor: colors.surface3 },
-  pitchChipText: { ...type.labelXs, color: colors.textPrimary },
-  pitchEmpty: { ...type.caption, color: colors.textTertiary },
-  pitchLoose: { ...type.caption, color: colors.warn },
-  rowMain: { flex: 1, flexDirection: "row", alignItems: "center", gap: space.sm },
-  number: {
+  pitchTitle: { ...type.overline, color: colors.onPitch, flex: 1 },
+  pitchFormationPill: { paddingHorizontal: space.sm, paddingVertical: space.xxs, borderRadius: radius.pill, backgroundColor: colors.inkPill },
+  pitchFormation: { ...type.tableNumStrong, color: colors.onDark },
+  pitchCount: { ...type.numSmStrong, color: colors.onPitch },
+  pitchLine: { flexDirection: "row", justifyContent: "space-evenly", alignItems: "flex-start", minHeight: 52 },
+  pitchMan: { alignItems: "center", gap: space.xxs, width: 62 },
+  pitchShirt: {
     width: 32,
     height: 32,
-    borderRadius: radius.sm,
-    backgroundColor: colors.surface3,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.brand,
+    borderWidth: 2,
+    borderColor: colors.chalk,
+  },
+  pitchShirtKeeper: { backgroundColor: colors.warn },
+  pitchShirtNo: { ...type.numSmStrong, color: colors.onDark },
+  pitchCaptain: {
+    position: "absolute",
+    right: -6,
+    top: -4,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: colors.warn,
     alignItems: "center",
     justifyContent: "center",
   },
-  numberText: { ...type.labelSm, color: colors.textPrimary },
+  pitchCaptainText: { ...type.nano, color: colors.textOnStatus },
+  pitchChipText: { ...type.meta, color: colors.onPitch, textAlign: "center" },
+  pitchEmpty: { ...type.caption, color: colors.onPitch, opacity: 0.6, alignSelf: "center" },
+  pitchLoose: { ...type.caption, color: colors.onPitch },
+  rowMain: { flex: 1, flexDirection: "row", alignItems: "center", gap: space.m },
+  number: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.surface3,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  numberStarter: {},
+  numberFill: { borderRadius: 17 },
+  numberBench: { borderWidth: 1.5, borderColor: colors.info },
+  numberText: { ...type.numSmStrong, color: colors.textPrimary },
+  numberTextOn: { color: colors.onDark },
   rowText: { flex: 1, gap: 2 },
-  name: { ...type.label, color: colors.textPrimary },
+  name: { ...type.h4, color: colors.textPrimary, flexShrink: 1 },
   meta: { ...type.caption, color: colors.textTertiary },
-  roles: { flexDirection: "row", gap: space.xs },
+  roles: {
+    flexDirection: "row",
+    padding: 2,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface3,
+  },
+  roleBtn: { minHeight: 32, paddingHorizontal: space.m, alignItems: "center", justifyContent: "center", borderRadius: radius.pill },
+  roleStarter: { backgroundColor: colors.brand },
+  roleBench: { backgroundColor: colors.info },
+  roleText: { ...type.labelXs, color: colors.textSecondary },
+  roleTextOn: { color: colors.textOnBrand },
   sheetBody: { flex: 1, gap: space.sm },
   createRow: {
     flexDirection: "row",

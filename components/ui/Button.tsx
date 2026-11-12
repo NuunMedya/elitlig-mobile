@@ -214,8 +214,8 @@ function Shine() {
     const loop = Animated.loop(
       Animated.sequence([
         Animated.delay(ambient.shine * 0.55),
-        Animated.timing(x, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.cubic), useNativeDriver: true }),
-        Animated.timing(x, { toValue: 0, duration: 0, useNativeDriver: true }),
+        Animated.timing(x, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.cubic), useNativeDriver: true, isInteraction: false }),
+        Animated.timing(x, { toValue: 0, duration: 0, useNativeDriver: true, isInteraction: false }),
       ]),
     );
     loop.start();

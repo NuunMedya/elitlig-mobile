@@ -12,9 +12,10 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import React, { useMemo, useState } from "react";
+import { StyleSheet, Text, View } from "react-native";
 
-import { FormSheet, InfoLine, Panel, type FieldDef, type FormValues } from "@/components/admin";
-import { ErrorState, Skeleton, useToast } from "@/components/ui";
+import { FormSheet, type FieldDef, type FormValues } from "@/components/admin";
+import { ErrorState, GradientBar, Skeleton, useToast } from "@/components/ui";
 import { errorText } from "@/lib/admin/errors";
 import { formatDate } from "@/lib/admin/format";
 import {
@@ -25,6 +26,9 @@ import {
   type TeamPlayerRow,
 } from "@/lib/api/admin/teams";
 import { ApiError } from "@/lib/http";
+import { colors, space, textScale, type } from "@/theme";
+
+import { FactRow, GroupCard } from "./ManageKit";
 
 /** Doğrulama hatasında alan alan gerekçe (fieldErrors) tek cümleye iner. */
 function detailsErrorText(error: unknown): string {
@@ -104,26 +108,49 @@ export function TeamDetailsPanel({ teamId, players }: { teamId: number; players:
   const socialCount = details ? TEAM_SOCIAL_FIELDS.filter((f) => details.social?.[f.key]).length : 0;
   const hidden = details ? TEAM_HOMEPAGE_FIELDS.filter((f) => details.homepage?.[f.key] === false).map((f) => f.label) : [];
 
+  /* Doluluk: slogan, tarihçe, kaptan, gol müziği, sosyal medya, başarılar. */
+  const filled = details
+    ? [details.motto, details.history, query.data?.captain, details.goal_music_title || details.goal_music_url, socialCount, details.achievements?.length].filter(Boolean).length
+    : 0;
+
   return (
     <>
-      <Panel title="KULÜP SAYFASI" action={details ? { label: "Düzenle", onPress: () => setEditing(true) } : undefined}>
+      <GroupCard title="Kulüp sayfası" icon="globe-outline" tone="cyan" action={details ? { label: "Düzenle", onPress: () => setEditing(true) } : undefined}>
         {query.isLoading ? (
-          <Skeleton height={72} radius="md" />
+          <Skeleton height={120} radius="md" />
         ) : query.isError || !details ? (
           <ErrorState error={query.error} onRetry={() => void query.refetch()} variant="inline" />
         ) : (
           <>
-            <InfoLine label="Slogan" value={details.motto || "—"} />
-            <InfoLine label="Tarihçe" value={details.history ? `${details.history.length} karakter` : "Yazılmadı"} />
-            <InfoLine label="Kaptan" value={query.data?.captain?.name || "Seçilmedi"} />
-            <InfoLine label="Gol müziği" value={details.goal_music_title || (details.goal_music_url ? "Bağlantı var" : "—")} />
-            <InfoLine label="Sosyal medya" value={socialCount ? `${socialCount} hesap` : "—"} />
-            <InfoLine label="Başarılar" value={details.achievements?.length ? `${details.achievements.length} kayıt` : "—"} />
-            <InfoLine label="Gizlenen bölümler" value={hidden.length ? hidden.join(", ") : "Yok"} />
-            {details.updated_at ? <InfoLine label="Son güncelleme" value={formatDate(details.updated_at)} /> : null}
+            <View style={styles.fill}>
+              <View style={styles.fillHead}>
+                <Text style={styles.fillLabel} {...textScale.dense}>
+                  Sayfa doluluğu
+                </Text>
+                <Text style={styles.fillValue} {...textScale.badge}>
+                  {filled}
+                  <Text style={styles.fillOf}> / 6</Text>
+                </Text>
+              </View>
+              <GradientBar value={filled / 6} />
+            </View>
+            {details.motto ? (
+              <Text style={styles.motto} numberOfLines={2} {...textScale.long}>
+                “{details.motto}”
+              </Text>
+            ) : null}
+            <View>
+              <FactRow icon="book-outline" label="Tarihçe" value={details.history ? `${details.history.length} karakter` : null} />
+              <FactRow icon="ribbon-outline" label="Kaptan" value={query.data?.captain?.name || null} />
+              <FactRow icon="musical-notes-outline" label="Gol müziği" value={details.goal_music_title || (details.goal_music_url ? "Bağlantı var" : null)} />
+              <FactRow icon="share-social-outline" label="Sosyal medya" value={socialCount ? `${socialCount} hesap` : null} />
+              <FactRow icon="trophy-outline" label="Başarılar" value={details.achievements?.length ? `${details.achievements.length} kayıt` : null} />
+              <FactRow icon="eye-off-outline" label="Gizlenen" value={hidden.length ? hidden.join(", ") : "Yok"} last={!details.updated_at} />
+              {details.updated_at ? <FactRow icon="time-outline" label="Son güncelleme" value={formatDate(details.updated_at)} last /> : null}
+            </View>
           </>
         )}
-      </Panel>
+      </GroupCard>
 
       <FormSheet
         visible={editing}
@@ -137,3 +164,12 @@ export function TeamDetailsPanel({ teamId, players }: { teamId: number; players:
     </>
   );
 }
+
+const styles = StyleSheet.create({
+  fill: { gap: space.s },
+  fillHead: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between" },
+  fillLabel: { ...type.labelSm, color: colors.textSecondary },
+  fillValue: { ...type.scoreXs, color: colors.textPrimary },
+  fillOf: { ...type.numSm, color: colors.textTertiary },
+  motto: { ...type.bodyLg, color: colors.textPrimary, fontFamily: type.h3.fontFamily },
+});

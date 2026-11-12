@@ -33,6 +33,7 @@ import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 import { TurkeyMap } from "@/components/TurkeyMap";
 import {
   Badge,
@@ -54,6 +55,7 @@ import { useScope } from "@/providers/ScopeProvider";
 import {
   colors,
   fonts,
+  glowStyle,
   hairline,
   haptics,
   layout,
@@ -93,8 +95,9 @@ const CityRow = React.memo(function CityRow({
 
   return (
     <ListRow
-      leading={{ icon: selected ? "location" : "location-outline", tone: selected ? "brand" : "neutral" }}
+      leading={<CityMonogram label={label} selected={selected} />}
       title={label}
+      subtitle={selected ? "Seçili şehir" : undefined}
       badge={active ? undefined : <Badge label="Arşiv" tone="neutral" size="xs" />}
       trailing={
         selected ? (
@@ -106,6 +109,29 @@ const CityRow = React.memo(function CityRow({
       position={position}
       onPress={press}
     />
+  );
+});
+
+/**
+ * Şehir pulu — adın ilk iki harfi Archivo ile, plaka gibi. Seçili şehirde
+ * imza degradesi + parıltı, diğerlerinde sönük yüzey.
+ */
+const CityMonogram = React.memo(function CityMonogram({ label, selected }: { label: string; selected: boolean }) {
+  const letters = label.replace(/[^A-Za-zÇĞİÖŞÜçğıöşü]/g, "").slice(0, 2).toLocaleUpperCase("tr-TR");
+  return (
+    <View style={[styles.mono, selected ? glowStyle(colors.glow, 1) : null]}>
+      {selected ? (
+        <LinearGradient
+          colors={colors.gradientSignature}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[StyleSheet.absoluteFill, styles.monoFill]}
+        />
+      ) : null}
+      <Text style={[styles.monoText, selected ? styles.monoTextOn : null]} {...textScale.badge}>
+        {letters}
+      </Text>
+    </View>
   );
 });
 
@@ -218,13 +244,29 @@ export default function CityIntroScreen() {
       {/* Harita: illere dokunmak da seçim yapar, liste ile aynı durumu yazar. */}
       <Reveal style={styles.mapCard} scaleFrom={0.97}>
         <TurkeyMap cities={cities} selectedId={selectedId} onSelect={select} />
-        <Text style={styles.mapHint} {...textScale.dense}>
-          Renkli illerde lig var — haritadan ya da listeden seç
-        </Text>
+        <View style={styles.legend}>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, styles.legendDotLeague]} />
+            <Text style={styles.mapHint} {...textScale.dense}>
+              Lig var
+            </Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, styles.legendDotOn]} />
+            <Text style={styles.mapHint} {...textScale.dense}>
+              Seçili
+            </Text>
+          </View>
+          <Text style={[styles.mapHint, styles.legendHint]} numberOfLines={1} {...textScale.dense}>
+            Haritaya ya da listeye dokun
+          </Text>
+        </View>
       </Reveal>
 
       <SectionHeader
         title="Şehirler"
+        icon="location"
+        iconTone="cyan"
         meta={
           query
             ? `${filtered.length} sonuç`
@@ -330,9 +372,26 @@ const styles = StyleSheet.create({
     paddingTop: space.md,
   },
 
+  mono: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface3,
+  },
+  monoFill: { borderRadius: 12 },
+  monoText: { ...type.label, fontFamily: fonts.bold, color: colors.textSecondary, letterSpacing: 0.5 },
+  monoTextOn: { color: colors.onDark },
+  legend: { flexDirection: "row", alignItems: "center", gap: space.md, marginTop: space.sm },
+  legendItem: { flexDirection: "row", alignItems: "center", gap: space.xs },
+  legendDot: { width: 8, height: 8, borderRadius: 4 },
+  legendDotLeague: { backgroundColor: colors.brandAccent },
+  legendDotOn: { backgroundColor: colors.brandStrong },
+  legendHint: { flex: 1, textAlign: "right" },
   mapCard: {
     backgroundColor: colors.surface1,
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     borderWidth: hairline,
     borderColor: colors.border,
     padding: space.md,
@@ -342,8 +401,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.semibold,
     letterSpacing: 0,
     color: colors.textTertiary,
-    textAlign: "center",
-    marginTop: space.sm,
   },
 
   footer: {

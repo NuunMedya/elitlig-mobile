@@ -31,6 +31,7 @@ import {
   Badge,
   Button,
   Chip,
+  GradientBar,
   IconTile,
   Odometer,
   Touchable,
@@ -326,7 +327,7 @@ export function EntityCard({
   overline?: string | null;
   subtitle?: string | null;
   meta?: string | null;
-  pills?: (EntityPill | null | false | undefined)[];
+  pills?: (EntityPill | null | false | undefined | "" | 0)[];
   /** Eksik bilgi uyarısı ("Logo yok · lig atanmamış"). */
   warning?: string | null;
   stats?: EntityStat[];
@@ -769,7 +770,113 @@ export function FactRow({
   );
 }
 
+/** Grup kartı içinde satır (kart içinde kart yok): görsel + ad + meta + haplar + sağ uç. */
+export function ListLine({
+  leading,
+  title,
+  subtitle,
+  pills,
+  trailing,
+  onPress,
+  onLongPress,
+  last,
+  selected,
+  muted,
+}: {
+  leading?: React.ReactNode;
+  title: string;
+  subtitle?: string | null;
+  pills?: (EntityPill | null | false | undefined | "" | 0)[];
+  trailing?: React.ReactNode;
+  onPress?: () => void;
+  onLongPress?: () => void;
+  last?: boolean;
+  selected?: boolean;
+  muted?: boolean;
+}) {
+  const shown = (pills ?? []).filter(Boolean) as EntityPill[];
+  const body = (
+    <>
+      {selected ? (
+        <LinearGradient colors={colors.gradientSignature} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} style={kit.lineRail} />
+      ) : null}
+      {leading}
+      <View style={kit.flex}>
+        <Text style={[kit.lineTitle, muted ? kit.mutedText : null]} numberOfLines={1} {...textScale.dense}>
+          {title}
+        </Text>
+        {subtitle ? (
+          <Text style={kit.lineSub} numberOfLines={1} {...textScale.dense}>
+            {subtitle}
+          </Text>
+        ) : null}
+        {shown.length ? (
+          <View style={kit.linePills}>
+            {shown.map((p) => (
+              <Badge key={p.label} label={p.label} tone={p.tone ?? "neutral"} icon={p.icon} size="xs" />
+            ))}
+          </View>
+        ) : null}
+      </View>
+      {trailing ?? (onPress ? <Ionicons name="chevron-forward" size={14} color={colors.textTertiary} /> : null)}
+    </>
+  );
+  const rowStyle = [kit.line, last ? null : kit.lineDivided, selected ? kit.lineSelected : null];
+  if (!onPress && !onLongPress) return <View style={rowStyle}>{body}</View>;
+  return (
+    <Touchable
+      feedback="row"
+      onPress={onPress}
+      onLongPress={onLongPress}
+      style={rowStyle}
+      accessibilityRole="button"
+      accessibilityState={{ selected: !!selected }}
+      accessibilityLabel={[title, subtitle].filter(Boolean).join(", ")}
+    >
+      {body}
+    </Touchable>
+  );
+}
+
+/** Kota çubuğu: "Kadroda 18 / 25" + degrade doluluk. Sınırsızsa çubuk yarı saydam. */
+export function QuotaBar({ label, used, cap, hint }: { label: string; used: number; cap: number | null; hint?: string | null }) {
+  const ratio = cap ? used / cap : 0;
+  const full = cap != null && used >= cap;
+  return (
+    <View style={kit.quota}>
+      <View style={kit.quotaHead}>
+        <Text style={kit.quotaLabel} numberOfLines={1} {...textScale.badge}>
+          {upperTR(label)}
+        </Text>
+        <Text style={[kit.quotaValue, full ? { color: colors.warn } : null]} {...textScale.badge}>
+          {used}
+          <Text style={kit.quotaCap}>{cap != null ? ` / ${cap}` : " · sınırsız"}</Text>
+        </Text>
+      </View>
+      <GradientBar value={cap ? ratio : 0.08} height={6} gradient={full ? colors.tileTones.gold : undefined} />
+      {hint ? (
+        <Text style={kit.quotaHint} numberOfLines={1} {...textScale.badge}>
+          {hint}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
 const kit = StyleSheet.create({
+  line: { flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 60, paddingVertical: space.sm, paddingHorizontal: space.lg },
+  lineDivided: { borderBottomWidth: hairline, borderBottomColor: colors.separator },
+  lineSelected: { backgroundColor: colors.brandDim },
+  lineRail: { position: "absolute", left: 0, top: 0, bottom: 0, width: 3 },
+  lineTitle: { ...type.h4, color: colors.textPrimary },
+  lineSub: { ...type.caption, color: colors.textTertiary, marginTop: 1 },
+  linePills: { flexDirection: "row", flexWrap: "wrap", gap: space.xs, marginTop: space.xs },
+  quota: { gap: space.s },
+  quotaHead: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: space.sm },
+  quotaLabel: { ...type.micro, color: colors.textTertiary },
+  quotaValue: { ...type.scoreXs, color: colors.textPrimary },
+  quotaCap: { ...type.numSm, color: colors.textTertiary },
+  quotaHint: { ...type.meta, color: colors.textTertiary },
   flex: { flex: 1, minWidth: 0 },
   mutedText: { color: colors.textTertiary },
 

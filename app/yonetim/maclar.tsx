@@ -120,7 +120,7 @@ const CARD_GAP = space.sm;
 const ROW_HEIGHT = OPS_MATCH_CARD_HEIGHT + CARD_GAP;
 /* Gün başlığı: takvim pulu + gün adı + durum hapı (DayHeader). */
 const SECTION_HEADER_HEIGHT = DAY_HEADER_HEIGHT + space.sm;
-const SECTION_GAP = space.md;
+const SECTION_GAP = space.xs;
 
 /** Durum sayacı karolarındaki kısa adlar ve simgeler. */
 const STATUS_TILE: Record<MacDurumu, { label: string; icon: keyof typeof Ionicons.glyphMap }> = {
@@ -731,7 +731,7 @@ export default function AdminMatchesScreen() {
       <BottomSheet
         visible={selected !== null}
         onClose={closeSheet}
-        title={selected ? `${selected.first_team_name} – ${selected.second_team_name}` : undefined}
+        title={selected ? "Maç işlemleri" : undefined}
         snap="content"
       >
         {selected ? (

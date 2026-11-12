@@ -114,7 +114,7 @@ function LivePulse({ color }: { color: string }) {
   useEffect(() => {
     if (reduceMotion) return;
     const loop = Animated.loop(
-      Animated.timing(t, { toValue: 1, duration: duration.pulse, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(t, { toValue: 1, duration: duration.pulse, easing: Easing.out(Easing.cubic), useNativeDriver: true, isInteraction: false }),
     );
     loop.start();
     return () => loop.stop();

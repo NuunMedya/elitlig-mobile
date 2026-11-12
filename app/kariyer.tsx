@@ -37,10 +37,17 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { EliteCard } from "@/components/career/EliteCard";
 import {
+  Aurora,
   Button,
   Chip,
   ChipGroup,
   ErrorState,
+  GradientBar,
+  IconTile,
+  Odometer,
+  Reveal,
+  SectionHeader,
+  type IconTileTone,
   ScreenHeader,
   SegmentedControl,
   SkeletonCard,
@@ -67,11 +74,14 @@ import {
 import { questRoute } from "@/lib/quests";
 import { formatDateShort } from "@/lib/format";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
+import { colors, glowStyle, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
 
 const LAYER_ORDER: CareerLayer[] = ["saha", "tribun", "arena"];
 const LAYER_ICONS: Record<CareerLayer, keyof typeof Ionicons.glyphMap> = { saha: "football", tribun: "analytics", arena: "game-controller" };
 const LAYER_COLORS: Record<CareerLayer, string> = { saha: colors.win, tribun: colors.info, arena: colors.accent };
+/** Katman → degrade karo tonu (Gece teması). */
+const LAYER_TILE: Record<CareerLayer, IconTileTone> = { saha: "mint", tribun: "cyan", arena: "violet" };
+const layerGradient = (layer: CareerLayer) => colors.tileTones[LAYER_TILE[layer]];
 const CHAIN_PREVIEW = 5;
 
 type Tab = "gorevler" | "takim" | "kariyer" | "rozetler";
@@ -149,56 +159,76 @@ export default function CareerScreen() {
 function LevelHero({ data }: { data: CareerSummary }) {
   const { level } = data;
   const remaining = level.next ? level.next - level.xp : 0;
+  const weekTotal = data.layers_week ? LAYER_ORDER.reduce((sum, layer) => sum + (data.layers_week?.[layer] ?? 0), 0) : null;
   return (
-    <LinearGradient colors={colors.gradientInk} style={styles.hero}>
-      <View style={styles.heroTop}>
-        <View style={styles.levelBadge}>
-          <Text style={styles.levelSmall} {...textScale.badge}>
-            {upperTR("Sv")}
-          </Text>
-          <Text style={styles.levelNumber} {...textScale.dense}>
-            {level.level}
-          </Text>
-        </View>
-        <View style={styles.flex}>
-          <Text style={styles.heroOver} {...textScale.badge}>
-            {upperTR("Elit Seviye")}
-          </Text>
-          <Text style={styles.heroTitle} {...textScale.dense}>
-            {`${level.xp.toLocaleString("tr-TR")} XP`}
-          </Text>
-          <Text style={styles.heroSub} {...textScale.dense}>
-            {level.next ? `Seviye ${level.level + 1} için ${remaining.toLocaleString("tr-TR")} XP` : "En üst seviyedesin"}
-          </Text>
-        </View>
-      </View>
-      <Bar value={level.progress} color={colors.accent} track={withAlpha(colors.onDark, 0.15)} />
-      <View style={styles.layers}>
-        {LAYER_ORDER.map((layer) => (
-          <View key={layer} style={styles.layer}>
-            <View style={styles.layerHead}>
-              <Ionicons name={LAYER_ICONS[layer]} size={14} color={LAYER_COLORS[layer]} />
-              <Text style={styles.layerName} {...textScale.badge}>
-                {upperTR(LAYER_LABELS[layer])}
+    <Reveal>
+      <View style={styles.hero}>
+        <LinearGradient colors={colors.gradientInk} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+        <Aurora variant="stage" style={StyleSheet.absoluteFill} />
+        <View style={styles.heroTop}>
+          {/* Seviye madalyonu: imza degradeli halka + koyu çekirdek. */}
+          <View style={styles.levelRing} accessible accessibilityLabel={`Elit Seviye ${level.level}`}>
+            <LinearGradient colors={colors.gradientSignature} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+            <View style={styles.levelCore}>
+              <Text style={styles.levelSmall} {...textScale.badge}>
+                {upperTR("Seviye")}
+              </Text>
+              <Odometer value={level.level} style={styles.levelNumber} />
+            </View>
+          </View>
+          <View style={styles.flex}>
+            <Text style={styles.heroOver} {...textScale.badge}>
+              {upperTR("Elit Seviye")}
+            </Text>
+            <View style={styles.heroXpRow}>
+              <Odometer value={level.xp.toLocaleString("tr-TR")} style={styles.heroTitle} />
+              <Text style={styles.heroUnit} {...textScale.badge}>
+                XP
               </Text>
             </View>
-            <Text style={styles.layerXp} {...textScale.dense}>
-              {(data.layers[layer] ?? 0).toLocaleString("tr-TR")}
-            </Text>
-            {data.layers_week ? (
-              <Text style={styles.layerWeek} {...textScale.dense}>
-                {`+${(data.layers_week[layer] ?? 0).toLocaleString("tr-TR")} bu hafta`}
+            {weekTotal != null ? (
+              <Text style={styles.heroWeek} {...textScale.dense}>
+                {`▲ +${weekTotal.toLocaleString("tr-TR")} bu hafta`}
               </Text>
             ) : null}
           </View>
-        ))}
+        </View>
+        <View style={styles.heroBar}>
+          <View style={styles.heroBarHead}>
+            <Text style={styles.heroSub} {...textScale.dense}>
+              {level.next ? `Seviye ${level.level + 1}` : "En üst seviye"}
+            </Text>
+            <Text style={styles.heroSubStrong} {...textScale.badge}>
+              {level.next ? `${remaining.toLocaleString("tr-TR")} XP kaldı` : "Tamam"}
+            </Text>
+          </View>
+          <GradientBar value={level.progress} height={8} track={colors.inkTile} />
+        </View>
+        <View style={styles.layers}>
+          {LAYER_ORDER.map((layer) => (
+            <View key={layer} style={styles.layer}>
+              <View style={styles.layerHead}>
+                <IconTile icon={LAYER_ICONS[layer]} tone={LAYER_TILE[layer]} size={22} glow={false} />
+                <Text style={styles.layerName} numberOfLines={1} {...textScale.badge}>
+                  {upperTR(LAYER_LABELS[layer])}
+                </Text>
+              </View>
+              <Odometer value={(data.layers[layer] ?? 0).toLocaleString("tr-TR")} style={styles.layerXp} />
+              {data.layers_week ? (
+                <Text style={[styles.layerWeek, (data.layers_week[layer] ?? 0) > 0 ? styles.layerWeekUp : null]} {...textScale.dense}>
+                  {(data.layers_week[layer] ?? 0) > 0 ? `▲ +${(data.layers_week[layer] ?? 0).toLocaleString("tr-TR")}` : "—"}
+                </Text>
+              ) : null}
+            </View>
+          ))}
+        </View>
+        {level.fan_capped ? (
+          <Text style={styles.heroNote} {...textScale.long}>
+            {`Saha dışı XP (görevler, tribün) seviye ${level.fan_level_cap}'a kadar sayılır; daha yukarısı sahadaki maçlarınla açılır.`}
+          </Text>
+        ) : null}
       </View>
-      {level.fan_capped ? (
-        <Text style={styles.heroNote} {...textScale.long}>
-          {`Saha dışı XP (görevler, tribün) seviye ${level.fan_level_cap}'a kadar sayılır; daha yukarısı sahadaki maçlarınla açılır.`}
-        </Text>
-      ) : null}
-    </LinearGradient>
+    </Reveal>
   );
 }
 
@@ -282,8 +312,8 @@ function QuestsTab({ data }: { data: CareerSummary }) {
       ) : null}
 
       <View style={styles.shortcuts}>
-        <Shortcut icon="game-controller-outline" label="Oyun merkezi" onPress={() => router.push("/(tabs)/oyunlar")} />
-        <Shortcut icon="podium-outline" label="XP sıralaması" onPress={() => router.push("/saha-siralamasi?type=xp")} />
+        <Shortcut icon="game-controller-outline" tone="violet" label="Oyun merkezi" onPress={() => router.push("/(tabs)/oyunlar")} />
+        <Shortcut icon="podium-outline" tone="cyan" label="XP sıralaması" onPress={() => router.push("/saha-siralamasi?type=xp")} />
       </View>
 
       {data.rules.standard?.length ? (
@@ -314,9 +344,7 @@ function QuestRow({ quest, first, onPress }: { quest: CareerQuest; first?: boole
   const color = quest.done ? colors.win : LAYER_COLORS[quest.layer];
   const body = (
     <View style={[styles.row, !first && styles.rowBorder]}>
-      <View style={[styles.rowIcon, { backgroundColor: withAlpha(color, 0.14) }]}>
-        <Ionicons name={quest.done ? "checkmark" : LAYER_ICONS[quest.layer]} size={18} color={color} />
-      </View>
+      <IconTile icon={quest.done ? "checkmark" : LAYER_ICONS[quest.layer]} tone={quest.done ? "mint" : LAYER_TILE[quest.layer]} size={36} glow={false} />
       <View style={styles.flex}>
         <Text style={[styles.rowTitle, quest.done && styles.rowTitleDone]} numberOfLines={2} {...textScale.dense}>
           {quest.title}
@@ -324,7 +352,7 @@ function QuestRow({ quest, first, onPress }: { quest: CareerQuest; first?: boole
         <Text style={styles.caption} numberOfLines={1} {...textScale.dense}>
           {quest.done ? `${LAYER_LABELS[quest.layer]} · tamamlandı` : `${LAYER_LABELS[quest.layer]} · ${quest.progress.toLocaleString("tr-TR")}/${quest.target.toLocaleString("tr-TR")} · ${quest.description}`}
         </Text>
-        {!quest.done && quest.target > 1 ? <Bar value={quest.progress / quest.target} color={color} /> : null}
+        {!quest.done && quest.target > 1 ? <Bar value={quest.progress / quest.target} color={color} gradient={layerGradient(quest.layer)} /> : null}
       </View>
       <View style={styles.rowEnd}>
         <Text style={[styles.xpPill, quest.done && styles.xpPillDone]} {...textScale.dense}>
@@ -470,9 +498,9 @@ function TeamTab() {
         {`Takım puanı: maç başına ${data.rules?.match_points ?? 10}, galibiyet başına ${data.rules?.win_points ?? 5} puan + biten görevler.`}
       </Text>
       <View style={styles.shortcuts}>
-        <Shortcut icon="calendar-outline" label="Maç al" onPress={() => router.push("/takimim/mac-al")} />
-        <Shortcut icon="hand-left-outline" label="Katılım bildir" onPress={() => router.push("/(tabs)/kulubum")} />
-        <Shortcut icon="podium-outline" label="Sıralama" onPress={() => router.push("/saha-siralamasi?type=teams")} />
+        <Shortcut icon="calendar-outline" tone="mint" label="Maç al" onPress={() => router.push("/takimim/mac-al")} />
+        <Shortcut icon="hand-left-outline" tone="pink" label="Katılım bildir" onPress={() => router.push("/(tabs)/kulubum")} />
+        <Shortcut icon="podium-outline" tone="gold" label="Sıralama" onPress={() => router.push("/saha-siralamasi?type=teams")} />
       </View>
     </>
   );
@@ -496,9 +524,7 @@ function TeamQuestRow({ quest, first }: { quest: TeamQuest; first?: boolean }) {
   const color = quest.done ? colors.win : colors.info;
   return (
     <View style={[styles.row, !first && styles.rowBorder]}>
-      <View style={[styles.rowIcon, { backgroundColor: withAlpha(color, 0.14) }]}>
-        <Ionicons name={quest.done ? "checkmark" : "people"} size={18} color={color} />
-      </View>
+      <IconTile icon={quest.done ? "checkmark" : "people"} tone={quest.done ? "mint" : "gold"} size={36} glow={false} />
       <View style={styles.flex}>
         <Text style={[styles.rowTitle, quest.done && styles.rowTitleDone]} numberOfLines={2} {...textScale.dense}>
           {quest.title}
@@ -506,7 +532,7 @@ function TeamQuestRow({ quest, first }: { quest: TeamQuest; first?: boolean }) {
         <Text style={styles.caption} numberOfLines={2} {...textScale.dense}>
           {quest.done ? `Tamamlandı · +${quest.points} takım puanı` : `${quest.progress}/${quest.target} · ${quest.description}`}
         </Text>
-        {!quest.done && quest.target > 1 ? <Bar value={quest.progress / quest.target} color={color} /> : null}
+        {!quest.done && quest.target > 1 ? <Bar value={quest.progress / quest.target} color={color} gradient={colors.tileTones.gold} /> : null}
       </View>
       <View style={styles.teamReward}>
         <Text style={[styles.xpPill, quest.done && styles.xpPillDone]} {...textScale.dense}>
@@ -532,6 +558,7 @@ function CareerTab({ data }: { data: CareerSummary }) {
   );
   const visible = showAll ? chains : chains.slice(0, CHAIN_PREVIEW);
   const tiersDone = chains.reduce((sum, chain) => sum + chain.completed_tiers, 0);
+  const milestones = useMemo(() => buildMilestones(data), [data]);
 
   return (
     <>
@@ -542,10 +569,10 @@ function CareerTab({ data }: { data: CareerSummary }) {
           {/* Elit Kariyer ↔ Kariyerim köprüsü: kartın arkasındaki gerçek maçlar,
               teklifler ve profil Yönetim ▸ Kariyerim'de. */}
           <View style={styles.shortcuts}>
-            <Shortcut icon="briefcase-outline" label="Kariyerim" onPress={() => router.push("/kulubum?rol=oyuncu" as Href)} />
-            <Shortcut icon="football-outline" label="Maçlarım" onPress={() => router.push("/oyuncum?tab=maclarim" as Href)} />
-            <Shortcut icon="stats-chart-outline" label="İstatistik" onPress={() => router.push("/oyuncum?tab=istatistik" as Href)} />
-            <Shortcut icon="person-circle-outline" label="Profilim" onPress={() => router.push("/oyuncum/profil" as Href)} />
+            <Shortcut icon="briefcase-outline" tone="violet" label="Kariyerim" onPress={() => router.push("/kulubum?rol=oyuncu" as Href)} />
+            <Shortcut icon="football-outline" tone="mint" label="Maçlarım" onPress={() => router.push("/oyuncum?tab=maclarim" as Href)} />
+            <Shortcut icon="stats-chart-outline" tone="cyan" label="İstatistik" onPress={() => router.push("/oyuncum?tab=istatistik" as Href)} />
+            <Shortcut icon="person-circle-outline" tone="pink" label="Profilim" onPress={() => router.push("/oyuncum/profil" as Href)} />
           </View>
         </>
       ) : (
@@ -562,7 +589,7 @@ function CareerTab({ data }: { data: CareerSummary }) {
 
       {chains.length ? (
         <>
-          <SectionTitle title="Kariyer görevleri" meta={`Tüm zamanlar · ${tiersDone} kademe`} />
+          <SectionTitle title="Kariyer görevleri" icon="ribbon" tone="gold" meta={`Tüm zamanlar · ${tiersDone} kademe tamam`} />
           <View style={styles.list}>
             {visible.map((chain, index) => (
               <ChainRow key={chain.code} chain={chain} first={index === 0} />
@@ -574,20 +601,31 @@ function CareerTab({ data }: { data: CareerSummary }) {
         </>
       ) : null}
 
-      {data.recent.length ? (
+      {milestones.length ? (
         <>
-          <SectionTitle title="Son XP hareketleri" />
-          <View style={styles.list}>
-            {data.recent.slice(0, 8).map((row, index) => (
-              <View key={`${row.source}-${index}`} style={[styles.recent, index > 0 && styles.rowBorder]}>
-                <Ionicons name={LAYER_ICONS[row.layer]} size={14} color={LAYER_COLORS[row.layer]} />
-                <Text style={[styles.flex, styles.recentLabel]} numberOfLines={1} {...textScale.dense}>
-                  {row.label ?? row.source}
-                </Text>
-                <Text style={styles.ruleXp} {...textScale.dense}>
-                  {`+${row.xp}`}
-                </Text>
-              </View>
+          <SectionTitle title="Kilometre taşları" icon="flag" tone="signature" meta="Açtığın rozetler ve son XP hareketlerin" />
+          <View style={styles.timeline}>
+            {milestones.map((item, index) => (
+              <Reveal key={item.key} index={index} limit={8}>
+                <View style={styles.tlRow}>
+                  {/* Sol: tarih ekseni — nokta + dikey çizgi (son öğede çizgi yok). */}
+                  <View style={styles.tlAxis}>
+                    <IconTile icon={item.icon} tone={item.tone} size={30} glow={item.kind === "badge"} />
+                    {index < milestones.length - 1 ? <View style={styles.tlLine} /> : null}
+                  </View>
+                  <View style={styles.tlBody}>
+                    <Text style={styles.tlDate} {...textScale.badge}>
+                      {upperTR(`${formatDateShort(item.date)} · ${item.kind === "badge" ? "Rozet" : LAYER_LABELS[item.layer]}`)}
+                    </Text>
+                    <Text style={styles.tlTitle} numberOfLines={2} {...textScale.dense}>
+                      {item.title}
+                    </Text>
+                  </View>
+                  <Text style={[styles.tlXp, item.kind === "badge" ? styles.tlXpBadge : null]} {...textScale.badge}>
+                    {`+${item.xp}`}
+                  </Text>
+                </View>
+              </Reveal>
             ))}
           </View>
         </>
@@ -596,13 +634,49 @@ function CareerTab({ data }: { data: CareerSummary }) {
   );
 }
 
+/** Zaman çizelgesi öğesi: açılan rozet ya da XP hareketi. */
+interface Milestone {
+  key: string;
+  kind: "badge" | "xp";
+  layer: CareerLayer;
+  title: string;
+  date: string;
+  xp: number;
+  icon: keyof typeof Ionicons.glyphMap;
+  tone: IconTileTone;
+}
+
+function buildMilestones(data: CareerSummary): Milestone[] {
+  const badges: Milestone[] = data.achievements
+    .filter((item) => item.unlocked && item.unlocked_at)
+    .map((item) => ({
+      key: `b-${item.code}`,
+      kind: "badge",
+      layer: item.layer,
+      title: `${item.title} rozeti açıldı`,
+      date: item.unlocked_at as string,
+      xp: item.xp,
+      icon: "trophy",
+      tone: "gold",
+    }));
+  const moves: Milestone[] = data.recent.slice(0, 8).map((row, index) => ({
+    key: `x-${row.source}-${index}`,
+    kind: "xp",
+    layer: row.layer,
+    title: row.label ?? row.source,
+    date: row.created_at,
+    xp: row.xp,
+    icon: LAYER_ICONS[row.layer],
+    tone: LAYER_TILE[row.layer],
+  }));
+  return [...badges, ...moves].sort((a, b) => String(b.date).localeCompare(String(a.date))).slice(0, 10);
+}
+
 function ChainRow({ chain, first }: { chain: CareerChain; first?: boolean }) {
   const color = chain.done ? colors.win : LAYER_COLORS[chain.layer];
   return (
     <View style={[styles.row, !first && styles.rowBorder]}>
-      <View style={[styles.rowIcon, { backgroundColor: withAlpha(color, 0.14) }]}>
-        <Ionicons name={chain.done ? "medal" : LAYER_ICONS[chain.layer]} size={18} color={color} />
-      </View>
+      <IconTile icon={chain.done ? "medal" : LAYER_ICONS[chain.layer]} tone={chain.done ? "gold" : LAYER_TILE[chain.layer]} size={36} glow={false} />
       <View style={styles.flex}>
         <View style={styles.chainHead}>
           <Text style={[styles.rowTitle, styles.flex]} numberOfLines={1} {...textScale.dense}>
@@ -615,7 +689,7 @@ function ChainRow({ chain, first }: { chain: CareerChain; first?: boolean }) {
             ? `Bütün kademeler tamam · ${chain.value.toLocaleString("tr-TR")}`
             : `${chain.progress.toLocaleString("tr-TR")}/${chain.description}`}
         </Text>
-        {!chain.done ? <Bar value={chain.progress / chain.target} color={color} /> : null}
+        {!chain.done ? <Bar value={chain.progress / chain.target} color={color} gradient={layerGradient(chain.layer)} /> : null}
       </View>
       {!chain.done ? (
         <Text style={styles.xpPill} {...textScale.dense}>
@@ -653,8 +727,22 @@ function BadgesTab({ data }: { data: CareerSummary }) {
     const list = data.achievements.filter((item) => layer === "all" || item.layer === layer);
     return `${list.filter((item) => item.unlocked).length}/${list.length}`;
   };
+  const unlocked = data.achievements.filter((item) => item.unlocked).length;
   return (
     <>
+      <View style={styles.badgeSummary}>
+        <IconTile icon="trophy" tone="gold" size={44} />
+        <View style={styles.flex}>
+          <Text style={styles.cardTitle} {...textScale.dense}>
+            Kupa Dolabı
+          </Text>
+          <GradientBar value={data.achievements.length ? unlocked / data.achievements.length : 0} gradient={colors.medalGold} height={6} style={styles.badgeSummaryBar} />
+        </View>
+        <Text style={styles.badgeSummaryCount} {...textScale.badge}>
+          {unlocked}
+          <Text style={styles.badgeSummaryOf}>{`/${data.achievements.length}`}</Text>
+        </Text>
+      </View>
       <ChipGroup contentPadding={0}>
         <Chip size="sm" label={`Tümü ${count("all")}`} selected={filter === "all"} onPress={() => setFilter("all")} />
         {LAYER_ORDER.map((layer) => (
@@ -662,8 +750,10 @@ function BadgesTab({ data }: { data: CareerSummary }) {
         ))}
       </ChipGroup>
       <View style={styles.grid}>
-        {achievements.map((item) => (
-          <Badge key={item.code} item={item} />
+        {achievements.map((item, index) => (
+          <Reveal key={item.code} index={index} limit={9} replayKey={filter} style={styles.badgeCell}>
+            <Badge item={item} />
+          </Reveal>
         ))}
       </View>
     </>
@@ -671,49 +761,59 @@ function BadgesTab({ data }: { data: CareerSummary }) {
 }
 
 const Badge = React.memo(function Badge({ item }: { item: CareerAchievement }) {
-  const color = item.unlocked ? LAYER_COLORS[item.layer] : colors.textTertiary;
+  const ratio = item.target ? Math.min(1, item.progress / item.target) : 0;
   return (
     <View
-      style={[styles.badge, item.unlocked && { borderColor: withAlpha(color, 0.5), backgroundColor: withAlpha(color, 0.08) }]}
+      style={[styles.badge, item.unlocked ? styles.badgeOn : null]}
       accessible
       accessibilityLabel={`${item.title}: ${item.description} ${item.unlocked ? "açıldı" : `${item.progress}/${item.target}`}`}
     >
-      <Ionicons name={item.unlocked ? "trophy" : "lock-closed-outline"} size={20} color={color} />
+      <View style={!item.unlocked ? styles.badgeLocked : null}>
+        <IconTile icon={item.unlocked ? "trophy" : LAYER_ICONS[item.layer]} tone={item.unlocked ? LAYER_TILE[item.layer] : "neutral"} size={44} glow={item.unlocked} />
+        {!item.unlocked ? (
+          <View style={styles.lockPip}>
+            <Ionicons name="lock-closed" size={10} color={colors.textSecondary} />
+          </View>
+        ) : null}
+      </View>
       <Text style={[styles.badgeTitle, !item.unlocked && styles.locked]} numberOfLines={2} {...textScale.dense}>
         {item.title}
       </Text>
-      <Text style={styles.badgeMeta} numberOfLines={3} {...textScale.dense}>
-        {item.unlocked ? `+${item.xp} XP` : item.description}
+      {item.unlocked ? (
+        <Text style={styles.badgeXp} {...textScale.badge}>
+          {`+${item.xp} XP`}
+        </Text>
+      ) : (
+        <View style={styles.badgeProgress}>
+          <GradientBar value={ratio} height={4} gradient={layerGradient(item.layer)} style={styles.flex} />
+          <Text style={styles.badgeCount} {...textScale.badge}>
+            {`${item.progress.toLocaleString("tr-TR")}/${item.target.toLocaleString("tr-TR")}`}
+          </Text>
+        </View>
+      )}
+      <Text style={styles.badgeMeta} numberOfLines={2} {...textScale.dense}>
+        {item.description}
       </Text>
-      {!item.unlocked && item.target > 1 ? <Bar value={item.progress / item.target} color={colors.textTertiary} /> : null}
     </View>
   );
 });
 
 /* ═══════════════════════════ ORTAK ═══════════════════════════ */
 
-function Bar({ value, color, track }: { value: number; color: string; track?: string }) {
-  const pct = Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
+function Bar({ value, color, track, gradient }: { value: number; color: string; track?: string; gradient?: readonly [string, string] }) {
   return (
-    <View style={[styles.bar, track ? { backgroundColor: track } : null]}>
-      <View style={[styles.barFill, { width: `${Math.round(pct * 100)}%`, backgroundColor: color }]} />
-    </View>
+    <GradientBar
+      value={value}
+      height={5}
+      gradient={gradient ?? [withAlpha(color, 0.55), color]}
+      track={track ?? colors.surface3}
+      style={styles.bar}
+    />
   );
 }
 
-function SectionTitle({ title, meta }: { title: string; meta?: string }) {
-  return (
-    <View style={styles.sectionRow}>
-      <Text style={styles.section} {...textScale.badge}>
-        {upperTR(title)}
-      </Text>
-      {meta ? (
-        <Text style={styles.sectionMeta} {...textScale.badge}>
-          {meta}
-        </Text>
-      ) : null}
-    </View>
-  );
+function SectionTitle({ title, meta, icon, tone }: { title: string; meta?: string; icon?: keyof typeof Ionicons.glyphMap; tone?: IconTileTone }) {
+  return <SectionHeader title={title} subtitle={meta} icon={icon} iconTone={tone} inset="flush" />;
 }
 
 function Toggle({ open, label, icon, onPress }: { open: boolean; label: string; icon?: keyof typeof Ionicons.glyphMap; onPress: () => void }) {
@@ -730,11 +830,11 @@ function Toggle({ open, label, icon, onPress }: { open: boolean; label: string; 
   );
 }
 
-function Shortcut({ icon, label, onPress }: { icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void }) {
+function Shortcut({ icon, label, onPress, tone = "violet" }: { icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void; tone?: IconTileTone }) {
   return (
-    <Touchable onPress={onPress} style={styles.flex} accessibilityRole="button" accessibilityLabel={label}>
+    <Touchable onPress={onPress} style={styles.flex} feedback="card" accessibilityRole="button" accessibilityLabel={label}>
       <View style={styles.shortcut}>
-        <Ionicons name={icon} size={18} color={colors.accentText} />
+        <IconTile icon={icon} tone={tone} size={34} glow={false} />
         <Text style={styles.shortcutText} numberOfLines={1} {...textScale.dense}>
           {label}
         </Text>
@@ -749,53 +849,49 @@ const styles = StyleSheet.create({
   pad: { padding: layout.screenPadding, gap: space.md },
   content: { paddingHorizontal: layout.screenPadding, paddingTop: space.md, paddingBottom: space.giant, gap: space.md },
 
-  hero: { borderRadius: radius.xl, padding: space.lg, gap: space.md },
-  heroTop: { flexDirection: "row", alignItems: "center", gap: space.md },
-  levelBadge: {
-    width: 60,
-    height: 60,
-    borderRadius: radius.pill,
-    backgroundColor: colors.accent,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  levelSmall: { ...type.overline, color: colors.onDark },
-  levelNumber: { ...type.scoreLg, color: colors.onDark, marginTop: -space.xxs },
+  hero: { borderRadius: radius.xxl, padding: space.lg, gap: space.lg, overflow: "hidden", backgroundColor: colors.inkBlock, borderWidth: hairline, borderColor: colors.borderOnDark },
+  heroTop: { flexDirection: "row", alignItems: "center", gap: space.lg },
+  levelRing: { width: 76, height: 76, borderRadius: radius.pill, padding: 3, overflow: "hidden", ...glowStyle(colors.glow, 2) },
+  levelCore: { flex: 1, borderRadius: radius.pill, backgroundColor: colors.inkBlock, alignItems: "center", justifyContent: "center" },
+  levelSmall: { ...type.nano, color: colors.onDarkMuted, letterSpacing: 0.8 },
+  levelNumber: { ...type.scoreLg, color: colors.onDark },
   heroOver: { ...type.overline, color: colors.onDarkMuted },
-  heroTitle: { ...type.h2, color: colors.onDark },
+  heroXpRow: { flexDirection: "row", alignItems: "flex-end", gap: space.xs },
+  heroTitle: { ...type.scoreLg, color: colors.onDark },
+  heroUnit: { ...type.h3, color: colors.brandOnDark, marginBottom: space.xxs },
+  heroWeek: { ...type.labelSm, color: colors.win },
+  heroBar: { gap: space.xs },
+  heroBarHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" },
   heroSub: { ...type.caption, color: colors.onDarkMuted },
+  heroSubStrong: { ...type.numSmStrong, color: colors.onDark },
   heroNote: { ...type.caption, color: colors.onDarkMuted },
   layers: { flexDirection: "row", gap: space.s },
   layer: {
     flex: 1,
-    gap: space.xxs,
-    padding: space.s,
-    borderRadius: radius.md,
-    backgroundColor: withAlpha(colors.onDark, 0.08),
+    gap: space.xs,
+    padding: space.sm,
+    borderRadius: radius.lg,
+    backgroundColor: colors.inkTile,
+    borderWidth: hairline,
+    borderColor: colors.inkTileBorder,
   },
   layerHead: { flexDirection: "row", alignItems: "center", gap: space.xs },
-  layerName: { ...type.overline, color: colors.onDarkMuted },
-  layerXp: { ...type.h3, color: colors.onDark },
+  layerName: { ...type.nano, color: colors.onDarkMuted, flexShrink: 1 },
+  layerXp: { ...type.metricSm, color: colors.onDark },
   layerWeek: { ...type.caption, color: colors.onDarkMuted },
+  layerWeekUp: { color: colors.win },
 
-  card: {
-    gap: space.s,
-    padding: space.md,
-    borderRadius: radius.lg,
-    borderWidth: hairline,
-    borderColor: colors.border,
-    backgroundColor: colors.surface1,
-  },
+  card: { gap: space.s, padding: space.md, borderRadius: radius.xl, borderWidth: hairline, borderColor: colors.glassLine, backgroundColor: colors.surface1 },
   cardHead: { flexDirection: "row", alignItems: "center", gap: space.s },
   cardTitle: { ...type.h3, color: colors.textPrimary },
-  counter: { ...type.h2, color: colors.textPrimary },
+  counter: { ...type.scoreMd, color: colors.textPrimary },
   caption: { ...type.caption, color: colors.textSecondary },
   note: { ...type.caption, color: colors.textTertiary, textAlign: "center", marginTop: -space.xs },
 
   segments: { flexDirection: "row", gap: space.xxs },
   segment: { flex: 1, height: 8, borderRadius: radius.pill, backgroundColor: colors.surface2 },
-  segmentDone: { backgroundColor: colors.win },
-  segmentGoal: { borderWidth: hairline, borderColor: colors.win },
+  segmentDone: { backgroundColor: colors.brand },
+  segmentGoal: { borderWidth: 1, borderColor: colors.warn },
   bonusRow: { flexDirection: "row", flexWrap: "wrap", gap: space.s },
   bonus: {
     flexDirection: "row",
@@ -811,35 +907,21 @@ const styles = StyleSheet.create({
   bonusText: { ...type.caption, color: colors.textTertiary },
   bonusTextEarned: { color: colors.win },
 
-  list: {
-    borderRadius: radius.lg,
-    borderWidth: hairline,
-    borderColor: colors.border,
-    backgroundColor: colors.surface1,
-    overflow: "hidden",
-  },
-  row: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.md, paddingVertical: space.sm },
+  list: { borderRadius: radius.xl, borderWidth: hairline, borderColor: colors.glassLine, backgroundColor: colors.surface1, overflow: "hidden" },
+  row: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.md, paddingVertical: space.md, minHeight: 60 },
   rowBorder: { borderTopWidth: hairline, borderTopColor: colors.separator },
   rowIcon: { width: 36, height: 36, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
-  rowTitle: { ...type.label, color: colors.textPrimary },
+  rowTitle: { ...type.h4, color: colors.textPrimary },
   rowTitleDone: { color: colors.textSecondary },
   rowEnd: { flexDirection: "row", alignItems: "center", gap: space.xs },
-  xpPill: {
-    ...type.label,
-    color: colors.accentText,
-    paddingHorizontal: space.s,
-    paddingVertical: space.xxs,
-    borderRadius: radius.pill,
-    backgroundColor: withAlpha(colors.accent, 0.12),
-    overflow: "hidden",
-  },
+  xpPill: { ...type.numSmStrong, color: colors.medalInk, paddingHorizontal: space.sm, paddingVertical: space.xxs, borderRadius: radius.pill, backgroundColor: colors.yellowCard, overflow: "hidden" },
   xpPillDone: { color: colors.win, backgroundColor: withAlpha(colors.win, 0.12) },
   emptyRow: { flexDirection: "row", alignItems: "center", gap: space.s, padding: space.md },
   chainHead: { flexDirection: "row", alignItems: "center", gap: space.s },
   teamScore: { alignItems: "flex-end" },
   teamStats: { flexDirection: "row", gap: space.s },
-  teamStat: { flex: 1, alignItems: "center", gap: space.xxs, paddingVertical: space.s, borderRadius: radius.md, backgroundColor: colors.surface2 },
-  teamStatValue: { ...type.h3, color: colors.textPrimary },
+  teamStat: { flex: 1, alignItems: "center", gap: space.xxs, paddingVertical: space.sm, borderRadius: radius.lg, backgroundColor: colors.surface2 },
+  teamStatValue: { ...type.metricSm, color: colors.textPrimary },
   rankRow: { flexDirection: "row", alignItems: "center", gap: space.s, paddingVertical: space.xs },
   rankText: { ...type.label, color: colors.textPrimary },
   contribOk: { color: colors.win },
@@ -848,28 +930,10 @@ const styles = StyleSheet.create({
   dot: { width: 6, height: 6, borderRadius: radius.pill, backgroundColor: colors.surface2 },
 
   shortcuts: { flexDirection: "row", gap: space.s },
-  shortcut: {
-    alignItems: "center",
-    gap: space.xxs,
-    paddingVertical: space.sm,
-    borderRadius: radius.lg,
-    borderWidth: hairline,
-    borderColor: colors.border,
-    backgroundColor: colors.surface1,
-  },
-  shortcutText: { ...type.caption, color: colors.textPrimary },
+  shortcut: { alignItems: "center", gap: space.s, paddingVertical: space.md, borderRadius: radius.xl, borderWidth: hairline, borderColor: colors.glassLine, backgroundColor: colors.surface1 },
+  shortcutText: { ...type.labelXs, color: colors.textPrimary },
 
-  toggle: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.s,
-    paddingHorizontal: space.md,
-    paddingVertical: space.sm,
-    borderRadius: radius.lg,
-    borderWidth: hairline,
-    borderColor: colors.border,
-    backgroundColor: colors.surface1,
-  },
+  toggle: { flexDirection: "row", alignItems: "center", gap: space.s, paddingHorizontal: space.md, paddingVertical: space.sm, minHeight: layout.minTouch, borderRadius: radius.xl, borderWidth: hairline, borderColor: colors.glassLine, backgroundColor: colors.surface1 },
   toggleText: { ...type.label, color: colors.textPrimary },
 
   rules: { gap: space.xs, paddingBottom: space.s },
@@ -884,22 +948,55 @@ const styles = StyleSheet.create({
   recent: { flexDirection: "row", alignItems: "center", gap: space.s, paddingHorizontal: space.md, paddingVertical: space.s },
   recentLabel: { ...type.caption, color: colors.textSecondary },
 
-  bar: { height: 5, borderRadius: radius.pill, backgroundColor: colors.surface2, overflow: "hidden", marginTop: space.xs, alignSelf: "stretch" },
-  barFill: { height: 5, borderRadius: radius.pill },
+  bar: { marginTop: space.xs, alignSelf: "stretch" },
+  barFill: { height: 5 },
 
   grid: { flexDirection: "row", flexWrap: "wrap", gap: space.s },
   badge: {
-    width: "31.5%",
-    minHeight: 112,
+    flex: 1,
+    minHeight: 168,
     alignItems: "center",
-    gap: space.xs,
-    padding: space.s,
-    borderRadius: radius.lg,
+    gap: space.s,
+    paddingHorizontal: space.s,
+    paddingVertical: space.md,
+    borderRadius: radius.xl,
     borderWidth: hairline,
-    borderColor: colors.border,
+    borderColor: colors.glassLine,
     backgroundColor: colors.surface1,
   },
-  badgeTitle: { ...type.label, color: colors.textPrimary, textAlign: "center" },
+  badgeTitle: { ...type.labelSm, color: colors.textPrimary, textAlign: "center" },
   locked: { color: colors.textSecondary },
-  badgeMeta: { ...type.caption, color: colors.textTertiary, textAlign: "center" },
+  badgeCell: { width: "31.8%" },
+  badgeOn: { backgroundColor: colors.brandDim, borderColor: colors.brandBorder },
+  badgeLocked: { opacity: 0.7 },
+  lockPip: {
+    position: "absolute",
+    right: -4,
+    bottom: -4,
+    width: 18,
+    height: 18,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface3,
+    borderWidth: 2,
+    borderColor: colors.surface1,
+  },
+  badgeXp: { ...type.numSmStrong, color: colors.win },
+  badgeProgress: { flexDirection: "row", alignItems: "center", gap: space.xs, alignSelf: "stretch" },
+  badgeCount: { ...type.nano, color: colors.textSecondary },
+  badgeSummary: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderRadius: radius.xl, borderWidth: hairline, borderColor: colors.glassLine, backgroundColor: colors.surface1 },
+  badgeSummaryBar: { marginTop: space.s },
+  badgeSummaryCount: { ...type.scoreMd, color: colors.textPrimary },
+  badgeSummaryOf: { ...type.tableNum, color: colors.textTertiary },
+  timeline: { borderRadius: radius.xl, borderWidth: hairline, borderColor: colors.glassLine, backgroundColor: colors.surface1, paddingHorizontal: space.md, paddingTop: space.md },
+  tlRow: { flexDirection: "row", gap: space.md, minHeight: 58 },
+  tlAxis: { width: 30, alignItems: "center" },
+  tlLine: { flex: 1, width: 2, marginVertical: space.xs, borderRadius: radius.pill, backgroundColor: colors.separator },
+  tlBody: { flex: 1, gap: space.xxs, paddingBottom: space.md },
+  tlDate: { ...type.overline, color: colors.textTertiary },
+  tlTitle: { ...type.h4, color: colors.textPrimary },
+  tlXp: { ...type.numSmStrong, color: colors.brandAccent, paddingTop: space.xs },
+  tlXpBadge: { color: colors.warn },
+  badgeMeta: { ...type.meta, color: colors.textTertiary, textAlign: "center" },
 });
