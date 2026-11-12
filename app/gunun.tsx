@@ -18,6 +18,14 @@
  *   • Paylaşım kartı tema tokenlarıyla yeniden çizildi ve modal yerine
  *     `BottomSheet` içine taşındı; hata artık Alert değil toast.
  *
+ * ÇİZGİ FİLM TEMASI (2026-11): uygulama başlığı kaldırıldı; test bütün ekranı
+ * kaplayan gece stadyumu zemininde oynanır (arcade oyunlarının dili: kalın
+ * lacivert kontur, 3B düğmeler, lacivert HUD hapları). Köşedeki yuvarlak
+ * DURAKLAT düğmesi ve Android geri tuşu "MOLA" kartını açar: soru sayacı ve
+ * sıradaki soruya geçiş donar; "Devam et" kaldığı yerden sürdürür, "Oyundan
+ * çık" ekranı kapatır. Uygulama arka plana geçerse de MOLA açılır. Süre
+ * halkası yerine kalın geri sayım çubuğu + saniye rozeti kullanılır.
+ *
  * SUNUM İÇİN EKLENEN İKİ DURUM — SKORA ETKİSİ YOKTUR:
  *   `marks`     → soru başına doğru/yanlış işareti, yalnız ilerleme şeridi için.
  *   `elapsedMs` → turun süresi; `start()` anındaki damgadan hesaplanır.
@@ -32,42 +40,40 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQuery } from "@tanstack/react-query";
 import * as Sharing from "expo-sharing";
+import { LinearGradient } from "expo-linear-gradient";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { ActivityIndicator, Animated, AppState, Easing, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import ViewShot, { captureRef } from "react-native-view-shot";
 import {
-  Badge,
-  BottomSheet,
-  Button,
-  EmptyState,
-  ErrorState,
-  ProgressRing,
-  ScreenHeader,
-  Skeleton,
-  Touchable,
-  useToast,
-} from "@/components/ui";
+  CartoonButton,
+  CartoonPanel,
+  FlashLayer,
+  IconBubble,
+  NavyPill,
+  OUTLINE,
+  PauseOverlay,
+  PopIn,
+  QuizBackdrop,
+  Ribbon,
+  RoundButton,
+  useAnswerFx,
+  useExitGame,
+  useFlash,
+  useHardwareBack,
+} from "@/components/game/QuizKit";
+import { BottomSheet, useReduceMotion, useToast } from "@/components/ui";
 import { startArenaSession, submitArenaScore } from "@/lib/api/arena";
 import { getPlayerRankings } from "@/lib/api/players";
+import { CARTOON } from "@/lib/game/cartoon";
+import { QUIZ, QUIZ_LETTER_TONES, type QuizToneName } from "@/lib/game/quizPalette";
 import { ApiError, get } from "@/lib/http";
 import { queryKeys } from "@/lib/queryKeys";
 import { instagramUrl } from "@/lib/socials";
 import type { PlayerRankRow } from "@/lib/types";
 import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
-import {
-  colors,
-  fonts,
-  hairline,
-  haptics,
-  layout,
-  radius,
-  space,
-  textScale,
-  type,
-  upperTR,
-} from "@/theme";
+import { fonts, haptics, layout, radius, space, textScale, type, upperTR } from "@/theme";
 
 /* ═════════════════════════ OYUN SABİTLERİ (değişmedi) ═════════════════════ */
 
@@ -188,37 +194,43 @@ function formatDuration(ms: number): string {
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
 }
 
-/** Kalan süreye göre halka tonu — son 4 saniye kırmızı. */
-function timeTone(secondsLeft: number): "brand" | "warn" | "danger" {
-  if (secondsLeft <= 4) return "danger";
-  if (secondsLeft <= 7) return "warn";
-  return "brand";
+/** Kalan süreye göre çubuk tonu — son 4 saniye kırmızı. */
+function timeTone(secondsLeft: number): "green" | "gold" | "red" {
+  if (secondsLeft <= 4) return "red";
+  if (secondsLeft <= 7) return "gold";
+  return "green";
 }
+
+const TOP = { x: 0.5, y: 0 } as const;
+const BOTTOM = { x: 0.5, y: 1 } as const;
 
 /* ═════════════════════════ KÜÇÜK PARÇALAR ═════════════════════════ */
 
 /**
- * Sonuç sayısı — üçlü şeritte tek hücre.
+ * Sonuç sayısı — üçlü şeritte tek renkli karo.
  * NEDEN İLKEL PROP: hücre memo'lu; nesne geçilseydi her render yeni referans
  * alır ve memo hiçbir şey kazandırmazdı.
  */
 const StatCell = React.memo(function StatCell({
   value,
   label,
-  accent,
+  tone,
 }: {
   value: string;
   label: string;
-  /** Öne çıkan sayı (puan, sıralama) mor okunur. */
-  accent?: boolean;
+  tone: QuizToneName;
 }) {
+  const fill = tone === "gold" ? CARTOON.gold : tone === "purple" ? CARTOON.purple : tone === "green" ? CARTOON.green : CARTOON.blue;
+  const ink = tone === "gold" ? CARTOON.goldInk : CARTOON.white;
   return (
-    <View style={styles.statCell}>
-      <Text style={accent ? styles.statValueAccent : styles.statValue} {...textScale.dense}>
+    <View style={styles.statCell} accessible accessibilityLabel={`${label}: ${value}`}>
+      <LinearGradient colors={fill} start={TOP} end={BOTTOM} style={StyleSheet.absoluteFill} />
+      <View style={styles.statShine} />
+      <Text style={[styles.statValue, { color: ink }, ink === CARTOON.white && styles.shadow]} numberOfLines={1} {...textScale.dense}>
         {value}
       </Text>
-      <Text style={styles.statLabel} numberOfLines={1} {...textScale.badge}>
-        {label}
+      <Text style={[styles.statLabel, { color: ink }]} numberOfLines={1} {...textScale.badge}>
+        {upperTR(label)}
       </Text>
     </View>
   );
@@ -228,13 +240,15 @@ const StatCell = React.memo(function StatCell({
 const Fact = React.memo(function Fact({
   icon,
   label,
+  tone,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
+  tone: QuizToneName;
 }) {
   return (
     <View style={styles.fact}>
-      <Ionicons name={icon} size={12} color={colors.brandAccent} />
+      <IconBubble icon={icon} tone={tone} size={26} />
       <Text style={styles.factText} numberOfLines={1} {...textScale.badge}>
         {label}
       </Text>
@@ -242,11 +256,107 @@ const Fact = React.memo(function Fact({
   );
 });
 
+/** Kalın geri sayım çubuğu — saniyede bir yumuşakça kısalır. */
+function CountdownBar({ value, tone }: { value: number; tone: "green" | "gold" | "red" }) {
+  const v = useRef(new Animated.Value(value)).current;
+  useEffect(() => {
+    Animated.timing(v, {
+      toValue: value,
+      duration: value >= 0.999 ? 180 : 950,
+      easing: Easing.linear,
+      useNativeDriver: true,
+    }).start();
+  }, [value, v]);
+  return (
+    <View style={styles.timerTrack} accessibilityRole="progressbar" accessibilityLabel="Kalan süre">
+      <Animated.View style={[styles.timerFill, { transform: [{ scaleX: v }] }]}>
+        <LinearGradient colors={CARTOON[tone]} start={TOP} end={BOTTOM} style={StyleSheet.absoluteFill} />
+        <View style={styles.timerShine} />
+      </Animated.View>
+    </View>
+  );
+}
+
+/** Şık düğmesi: renkli 3B düğme; doğru zıplar, yanlış sallanır. */
+function DailyOption({
+  label,
+  tone,
+  right,
+  wrong,
+  muted,
+  disabled,
+  onPress,
+}: {
+  label: string;
+  tone: QuizToneName;
+  right: boolean;
+  wrong: boolean;
+  muted: boolean;
+  disabled: boolean;
+  onPress: () => void;
+}) {
+  const fx = useAnswerFx(right, wrong);
+  return (
+    <Animated.View style={[fx.style, muted && styles.faded]}>
+      <CartoonButton
+        tone={right ? "green" : wrong ? "red" : muted ? "ghost" : tone}
+        keepTone
+        /* Titreşim şıkta değil `answer()` içinde: doğru/yanlış ayrı ton
+           çalar ve süre dolduğunda da tetiklenir. */
+        haptic={false}
+        disabled={disabled}
+        onPress={onPress}
+        accessibilityLabel={label}
+        faceStyle={styles.optionFace}
+      >
+        <View style={styles.optionRow}>
+          <Text style={styles.optionText} numberOfLines={2} {...textScale.dense}>
+            {label}
+          </Text>
+          {right ? (
+            <Ionicons name="checkmark-circle" size={22} color={CARTOON.white} />
+          ) : wrong ? (
+            <Ionicons name="close-circle" size={22} color={CARTOON.white} />
+          ) : null}
+        </View>
+      </CartoonButton>
+    </Animated.View>
+  );
+}
+
+/** Sonuç ekranının dev "7/10" rozeti. */
+function GradeBadge({ correct }: { correct: number }) {
+  const reduceMotion = useReduceMotion();
+  const pop = useRef(new Animated.Value(reduceMotion ? 1 : 0)).current;
+  useEffect(() => {
+    if (reduceMotion) return;
+    Animated.sequence([Animated.delay(150), Animated.spring(pop, { toValue: 1, friction: 4, tension: 110, useNativeDriver: true })]).start();
+  }, [pop, reduceMotion]);
+  const fill = correct >= 8 ? CARTOON.green : correct >= 5 ? CARTOON.blue : CARTOON.orange;
+  return (
+    <Animated.View style={[styles.grade, { transform: [{ scale: pop }] }]} accessible accessibilityLabel={`${correct} / ${ROUND} doğru`}>
+      <LinearGradient colors={fill} start={TOP} end={BOTTOM} style={StyleSheet.absoluteFill} />
+      <View style={styles.gradeShine} />
+      <Text style={styles.gradeValue} {...textScale.badge}>
+        {`${correct}/${ROUND}`}
+      </Text>
+      <Text style={styles.gradeLabel} {...textScale.badge}>
+        {upperTR("doğru")}
+      </Text>
+    </Animated.View>
+  );
+}
+
 /* ═════════════════════════ EKRAN ═════════════════════════ */
 
 export default function DailyQuizScreen() {
   const scope = useScope();
   const auth = useAuth();
+  const insets = useSafeAreaInsets();
+  const exitGame = useExitGame();
+  const reduceMotion = useReduceMotion();
+  const flash = useFlash();
+  const [flashOk, setFlashOk] = useState(true);
 
   /**
    * GÜN ANAHTARI: `toISOString()` (UTC) ile üretilir ve `(tabs)/oyunlar.tsx`
@@ -329,10 +439,8 @@ export default function DailyQuizScreen() {
     };
   }, [day]);
 
-  const startTimer = () => {
-    if (timer.current) clearInterval(timer.current);
-    setSecondsLeft(SECONDS);
-    timer.current = setInterval(() => {
+  const tick = () =>
+    setInterval(() => {
       setSecondsLeft((s) => {
         if (s <= 1) {
           answerRef.current(null);
@@ -341,7 +449,21 @@ export default function DailyQuizScreen() {
         return s - 1;
       });
     }, 1000);
+
+  const startTimer = () => {
+    if (timer.current) clearInterval(timer.current);
+    setSecondsLeft(SECONDS);
+    timer.current = tick();
   };
+
+  /** MOLA dönüşü: kalan saniyeden sürer (sayaç sıfırlanmaz). */
+  const resumeTimer = () => {
+    if (timer.current) clearInterval(timer.current);
+    timer.current = tick();
+  };
+
+  /** Cevap sonrası sıradaki soruya geçiş — MOLA'da bekletilip devamda çalışır. */
+  const pendingAdvance = useRef<(() => void) | null>(null);
 
   /** Resmî denemenin oyun oturumu (Kariyer Modu doğrulaması). */
   const dailySession = useRef<Promise<string | null> | null>(null);
@@ -374,13 +496,17 @@ export default function DailyQuizScreen() {
     /* Yalnız geri bildirim: titreşim ve ilerleme şeridi işareti. */
     if (isCorrect) haptics.success();
     else haptics.error();
+    setFlashOk(Boolean(isCorrect));
+    if (!reduceMotion) flash.fire();
     setMarks((prev) => [...prev, isCorrect ? "correct" : "wrong"]);
     if (isCorrect) {
       const bonus = Math.floor(secondsLeft / 2);
       setScore((s) => s + 10 + bonus);
       setCorrectCount((c) => c + 1);
     }
-    advanceTimer.current = setTimeout(() => {
+    const advance = () => {
+      advanceTimer.current = null;
+      pendingAdvance.current = null;
       if (qIndex + 1 >= questions.length) {
         finish(isCorrect ? 10 + Math.floor(secondsLeft / 2) : 0);
       } else {
@@ -389,7 +515,9 @@ export default function DailyQuizScreen() {
         setPhase("playing");
         startTimer();
       }
-    }, 900);
+    };
+    pendingAdvance.current = advance;
+    advanceTimer.current = setTimeout(advance, 900);
   };
 
   /* Bağımlılık listesi YOK: sayaç her zaman en son `answer`'ı görsün. */
@@ -473,254 +601,353 @@ export default function DailyQuizScreen() {
     return null;
   };
 
-  return (
-    <SafeAreaView style={styles.screen} edges={["top"]}>
-      <ScreenHeader
-        title="Günün Testi"
-        overline={upperTR(dayLabel)}
-        subtitle="Herkese aynı 10 soru"
-        back
-      />
 
-      {query.isLoading ? (
-        <View style={styles.loading}>
-          <Skeleton width="100%" height={72} radius="lg" />
-          <Skeleton width="100%" height={104} radius="lg" />
-          <Skeleton width="100%" height={52} radius="md" />
-          <Skeleton width="100%" height={52} radius="md" />
-          <Skeleton width="100%" height={52} radius="md" />
-        </View>
-      ) : query.isError ? (
-        <ErrorState error={query.error} onRetry={query.refetch} />
-      ) : questions.length < ROUND ? (
-        <EmptyState
-          icon="calendar-outline"
-          title="Test hazırlanamadı"
-          body="Soru havuzu şu an yüklenemedi, birazdan tekrar dene."
-          action={{ label: "Tekrar dene", onPress: () => query.refetch(), haptic: "light" }}
-        />
-      ) : phase === "intro" ? (
-        /* ——— 1) GİRİŞ ——— */
-        <ScrollView contentContainerStyle={styles.pageContent} showsVerticalScrollIndicator={false}>
-          <View style={styles.hero}>
-            <View style={styles.heroIcon}>
-              <Ionicons name="bulb" size={22} color={colors.brandAccent} />
-            </View>
-            <Text style={styles.heroTitle} {...textScale.dense}>
-              Bugünün 10 sorusu hazır
+  /* — MOLA: duraklat düğmesi, Android geri tuşu, arka plan — */
+  const [paused, setPaused] = useState(false);
+  const pausedRef = useRef(false);
+  const phaseRef = useRef<Phase>(phase);
+  phaseRef.current = phase;
+  const inGame = (p: Phase) => p === "playing" || p === "reveal";
+
+  const openPause = () => {
+    if (pausedRef.current) return;
+    pausedRef.current = true;
+    if (phaseRef.current === "playing" && timer.current) {
+      clearInterval(timer.current);
+      timer.current = null;
+    }
+    if (phaseRef.current === "reveal" && advanceTimer.current) {
+      clearTimeout(advanceTimer.current);
+      advanceTimer.current = null;
+    }
+    setPaused(true);
+  };
+  const closePause = () => {
+    pausedRef.current = false;
+    setPaused(false);
+    if (phaseRef.current === "playing") resumeTimer();
+    else if (phaseRef.current === "reveal" && pendingAdvance.current && !advanceTimer.current) {
+      advanceTimer.current = setTimeout(pendingAdvance.current, 400);
+    }
+  };
+  const leave = () => {
+    pausedRef.current = false;
+    setPaused(false);
+    if (timer.current) clearInterval(timer.current);
+    if (advanceTimer.current) clearTimeout(advanceTimer.current);
+    pendingAdvance.current = null;
+    exitGame();
+  };
+  const openPauseRef = useRef(openPause);
+  openPauseRef.current = openPause;
+
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state !== "active" && inGame(phaseRef.current)) openPauseRef.current();
+    });
+    return () => sub.remove();
+  }, []);
+
+  useHardwareBack(() => {
+    if (pausedRef.current) {
+      closePause();
+      return true;
+    }
+    if (inGame(phaseRef.current)) {
+      openPause();
+      return true;
+    }
+    return false;
+  });
+
+  const topBar = (
+    <View style={styles.topBar}>
+      {inGame(phase) ? (
+        <>
+          <NavyPill>
+            <Text style={styles.pillText} {...textScale.badge}>
+              {upperTR(`Soru ${qIndex + 1}/${ROUND}`)}
             </Text>
-            <Text style={styles.heroBody} {...textScale.long}>
-              Testi bugün çözen herkes aynı sorularla yarışır. Soru başına {SECONDS} saniye; her
-              doğru 10 puan, kalan süreden hız bonusu eklenir.
-            </Text>
-            <View style={styles.heroFacts}>
-              <Fact icon="help-circle" label={`${ROUND} soru`} />
-              <Fact icon="time" label={`${SECONDS} sn/soru`} />
-              <Fact icon="flash" label="Hız bonusu" />
-            </View>
-          </View>
-
-          {todayResult ? (
-            <>
-              <View style={styles.resultCard}>
-                <View style={styles.todayHead}>
-                  <Ionicons name="checkmark-circle" size={13} color={colors.win} />
-                  <Text style={styles.todayLabel} {...textScale.badge}>
-                    {upperTR("Bugünkü sonucun")}
-                  </Text>
-                </View>
-                <View style={styles.statRow}>
-                  <StatCell value={`${todayResult.correct}/${ROUND}`} label="doğru" />
-                  <View style={styles.statDivider} />
-                  <StatCell value={formatCount(todayResult.score)} label="puan" accent />
-                  <View style={styles.statDivider} />
-                  <StatCell value={myRank != null ? `#${myRank}` : "—"} label="sıralama" />
-                </View>
-              </View>
-
-              <ResultActions
-                score={todayResult.score}
-                correct={todayResult.correct}
-                dayLabel={dayLabel}
-                scopeCity={scope.cityLabel}
-                onRetry={() => start(false)}
-                retryLabel="Antrenman Turu"
-              />
-
-              <Text style={styles.hint} {...textScale.long}>
-                Antrenman skoru güne yazılmaz — resmî hak günde bir.
-              </Text>
-            </>
-          ) : (
-            <Button
-              label="Bugünün testine başla"
-              icon="play"
-              size="lg"
-              fullWidth
-              haptic="medium"
-              onPress={() => start(true)}
-            />
-          )}
-
-          {best > 0 ? (
-            <View style={styles.bestRow}>
-              <Ionicons name="trophy" size={12} color={colors.star} />
-              <Text style={styles.bestText} {...textScale.badge}>
-                En iyi günün: {formatCount(best)} puan
-              </Text>
-            </View>
-          ) : null}
-
-          {!auth.user ? (
-            <Text style={styles.hint} {...textScale.long}>
-              Skorun rekor tablosuna yazılsın diye giriş yapabilirsin.
-            </Text>
-          ) : null}
-        </ScrollView>
-      ) : phase === "done" ? (
-        /* ——— 3) SONUÇ ——— */
-        <ScrollView contentContainerStyle={styles.pageContent} showsVerticalScrollIndicator={false}>
-          <View style={styles.resultCard}>
-            <ProgressRing
-              value={correctCount / ROUND}
-              size={96}
-              thickness={7}
-              tone={correctCount >= 8 ? "win" : correctCount >= 5 ? "brand" : "warn"}
-              label={`${correctCount}/${ROUND}`}
-              sublabel="doğru"
-            />
-
-            <Text style={styles.resultScore} {...textScale.dense}>
+          </NavyPill>
+          <NavyPill accessibilityLabel={`${score} puan`}>
+            <Ionicons name="star" size={16} color={CARTOON.star} />
+            <Text style={styles.pillScore} {...textScale.dense}>
               {formatCount(score)}
             </Text>
-            <View style={styles.resultUnitRow}>
-              <Text style={styles.resultUnit} {...textScale.badge}>
-                {upperTR("puan")}
+          </NavyPill>
+          {!official ? (
+            <NavyPill hot style={styles.smallPill}>
+              <Text style={styles.pillTextSm} {...textScale.badge}>
+                {upperTR("Antrenman")}
               </Text>
-              {!official ? <Badge label="Antrenman" tone="warn" size="xs" /> : null}
-            </View>
+            </NavyPill>
+          ) : null}
+        </>
+      ) : (
+        <NavyPill>
+          <Ionicons name="calendar" size={15} color={CARTOON.star} />
+          <Text style={styles.pillText} numberOfLines={1} {...textScale.badge}>
+            {upperTR(dayLabel)}
+          </Text>
+        </NavyPill>
+      )}
+      <View style={styles.flex} />
+      <RoundButton icon="pause" onPress={openPause} accessibilityLabel="Oyunu duraklat" />
+    </View>
+  );
 
-            {/* Doğru sayısı halkanın ortasında yazıyor; şerit onu tekrarlamaz. */}
-            <View style={styles.statRow}>
-              <StatCell value={formatDuration(elapsedMs)} label="süre" />
-              <View style={styles.statDivider} />
-              <StatCell value={formatCount(score)} label="puan" />
-              <View style={styles.statDivider} />
-              <StatCell value={myRank != null ? `#${myRank}` : "—"} label="sıralama" accent />
-            </View>
+  const scrollPad = { paddingBottom: insets.bottom + space.giant };
+
+  return (
+    <View style={styles.screen}>
+      <QuizBackdrop />
+      {inGame(phase) ? <FlashLayer value={flash.value} ok={flashOk} /> : null}
+
+      <View style={[styles.body, { paddingTop: insets.top + space.sm }]}>
+        {topBar}
+
+        {query.isLoading ? (
+          <View style={styles.center}>
+            <CartoonPanel style={styles.stateCard}>
+              <ActivityIndicator color={CARTOON.purple[1]} size="large" />
+              <Text style={styles.stateTitle} {...textScale.dense}>
+                Sorular hazırlanıyor
+              </Text>
+            </CartoonPanel>
+          </View>
+        ) : query.isError || questions.length < ROUND ? (
+          <View style={styles.center}>
+            <CartoonPanel style={styles.stateCard}>
+              <IconBubble icon={query.isError ? "cloud-offline" : "calendar"} tone="red" size={60} />
+              <Text style={styles.stateTitle} {...textScale.dense}>
+                {query.isError ? "Sorular yüklenemedi" : "Test hazırlanamadı"}
+              </Text>
+              <Text style={styles.stateBody} {...textScale.long}>
+                {query.isError
+                  ? "Bağlantını kontrol edip tekrar dene."
+                  : "Soru havuzu şu an yüklenemedi, birazdan tekrar dene."}
+              </Text>
+              <CartoonButton label="Tekrar dene" icon="refresh" tone="blue" onPress={() => void query.refetch()} style={styles.stretch} />
+            </CartoonPanel>
+          </View>
+        ) : phase === "intro" ? (
+          /* ——— 1) GİRİŞ ——— */
+          <ScrollView contentContainerStyle={[styles.pageContent, scrollPad]} showsVerticalScrollIndicator={false}>
+            <PopIn style={styles.ribbonHost}>
+              <CartoonPanel style={styles.hero}>
+                <IconBubble icon="bulb" tone="blue" size={64} />
+                <Text style={styles.heroTitle} {...textScale.dense}>
+                  Bugünün 10 sorusu hazır
+                </Text>
+                <Text style={styles.heroBody} {...textScale.long}>
+                  Testi bugün çözen herkes aynı sorularla yarışır. Soru başına {SECONDS} saniye; her
+                  doğru 10 puan, kalan süreden hız bonusu eklenir.
+                </Text>
+                <View style={styles.heroFacts}>
+                  <Fact icon="help" label={`${ROUND} soru`} tone="blue" />
+                  <Fact icon="time" label={`${SECONDS} sn/soru`} tone="orange" />
+                  <Fact icon="flash" label="Hız bonusu" tone="gold" />
+                </View>
+                {!todayResult ? (
+                  <CartoonButton
+                    label="Teste başla"
+                    accessibilityLabel="Bugünün testine başla"
+                    icon="play"
+                    tone="green"
+                    size="lg"
+                    haptic={false}
+                    onPress={() => {
+                      haptics.medium();
+                      start(true);
+                    }}
+                    style={styles.stretch}
+                  />
+                ) : null}
+              </CartoonPanel>
+              <View style={styles.ribbonTop} pointerEvents="none">
+                <Ribbon label="Günün Testi" icon="calendar" />
+              </View>
+            </PopIn>
+
+            {todayResult ? (
+              <>
+                <PopIn style={styles.ribbonHost} delay={120}>
+                  <CartoonPanel style={styles.resultCard}>
+                    <Text style={styles.todayLabel} {...textScale.badge}>
+                      Bugünkü hakkını kullandın. Yarın yeni 10 soru!
+                    </Text>
+                    <View style={styles.statRow}>
+                      <StatCell value={`${todayResult.correct}/${ROUND}`} label="doğru" tone="blue" />
+                      <StatCell value={formatCount(todayResult.score)} label="puan" tone="gold" />
+                      <StatCell value={myRank != null ? `#${myRank}` : "—"} label="sıralama" tone="purple" />
+                    </View>
+                    <ResultActions
+                      score={todayResult.score}
+                      correct={todayResult.correct}
+                      dayLabel={dayLabel}
+                      scopeCity={scope.cityLabel}
+                      onRetry={() => start(false)}
+                      retryLabel="Antrenman"
+                    />
+                  </CartoonPanel>
+                  <View style={styles.ribbonTop} pointerEvents="none">
+                    <Ribbon label="Bugün oynadın" icon="checkmark-circle" fill={QUIZ.ribbonGreen} />
+                  </View>
+                </PopIn>
+
+                <Text style={styles.hint} {...textScale.long}>
+                  Antrenman skoru güne yazılmaz — resmî hak günde bir.
+                </Text>
+              </>
+            ) : null}
+
+            {best > 0 ? (
+              <NavyPill style={styles.centerPill}>
+                <Ionicons name="trophy" size={15} color={CARTOON.star} />
+                <Text style={styles.pillText} {...textScale.badge}>
+                  En iyi günün: {formatCount(best)} puan
+                </Text>
+              </NavyPill>
+            ) : null}
 
             {!auth.user ? (
-              <Text style={styles.resultMeta} numberOfLines={2} {...textScale.dense}>
-                Sıralamaya girmek için giriş yapman yeterli.
-              </Text>
-            ) : players != null ? (
-              <Text style={styles.resultMeta} numberOfLines={2} {...textScale.dense}>
-                Bu hafta {formatCount(players)} kişi Günün Testi'nde yarıştı.
+              <Text style={styles.hint} {...textScale.long}>
+                Skorun rekor tablosuna yazılsın diye giriş yapabilirsin.
               </Text>
             ) : null}
-          </View>
+          </ScrollView>
+        ) : phase === "done" ? (
+          /* ——— 3) SONUÇ ——— */
+          <ScrollView contentContainerStyle={[styles.pageContent, scrollPad]} showsVerticalScrollIndicator={false}>
+            <PopIn style={styles.ribbonHost}>
+              <CartoonPanel style={styles.resultCard}>
+                <GradeBadge correct={correctCount} />
 
-          <ResultActions
-            score={score}
-            correct={correctCount}
-            dayLabel={dayLabel}
-            scopeCity={scope.cityLabel}
-            onRetry={() => start(false)}
-            retryLabel="Antrenman Turu"
-          />
-
-          {!official ? (
-            <Text style={styles.hint} {...textScale.long}>
-              Antrenman skoru güne yazılmaz.
-            </Text>
-          ) : null}
-        </ScrollView>
-      ) : (
-        /* ——— 2) OYUN ——— */
-        <ScrollView contentContainerStyle={styles.pageContent} showsVerticalScrollIndicator={false}>
-          <View style={styles.hud}>
-            <ProgressRing
-              value={secondsLeft / SECONDS}
-              size={58}
-              thickness={5}
-              tone={timeTone(secondsLeft)}
-              label={String(secondsLeft)}
-              sublabel="sn"
-              /* Saniyede bir tıkladığı için yay animasyonu kapalı: değer
-                 doğrudan yerine oturur, hem daha doğru hem daha ucuz. */
-              animate={false}
-            />
-
-            <View style={styles.hudBody}>
-              <View style={styles.hudTop}>
-                <Text style={styles.hudLabel} {...textScale.badge}>
-                  {upperTR(`Soru ${qIndex + 1}/${ROUND}`)}
+                <Text style={styles.resultScore} {...textScale.dense}>
+                  {formatCount(score)}
                 </Text>
-                {!official ? <Badge label="Antrenman" tone="warn" size="xs" /> : null}
-                <View style={styles.flex} />
-                <Text style={styles.hudScore} {...textScale.dense}>
-                  {formatCount(score)} puan
-                </Text>
+                <View style={styles.resultUnitRow}>
+                  <Text style={styles.resultUnit} {...textScale.badge}>
+                    {upperTR("puan")}
+                  </Text>
+                  {!official ? (
+                    <View style={styles.practiceChip}>
+                      <Text style={styles.practiceText} {...textScale.badge}>
+                        {upperTR("Antrenman")}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+
+                {/* Doğru sayısı rozetin içinde yazıyor; şerit onu tekrarlamaz. */}
+                <View style={styles.statRow}>
+                  <StatCell value={formatDuration(elapsedMs)} label="süre" tone="blue" />
+                  <StatCell value={formatCount(score)} label="puan" tone="gold" />
+                  <StatCell value={myRank != null ? `#${myRank}` : "—"} label="sıralama" tone="purple" />
+                </View>
+
+                {!auth.user ? (
+                  <Text style={styles.resultMeta} numberOfLines={2} {...textScale.dense}>
+                    Sıralamaya girmek için giriş yapman yeterli.
+                  </Text>
+                ) : players != null ? (
+                  <Text style={styles.resultMeta} numberOfLines={2} {...textScale.dense}>
+                    Bu hafta {formatCount(players)} kişi Günün Testi'nde yarıştı.
+                  </Text>
+                ) : null}
+
+                <ResultActions
+                  score={score}
+                  correct={correctCount}
+                  dayLabel={dayLabel}
+                  scopeCity={scope.cityLabel}
+                  onRetry={() => start(false)}
+                  retryLabel="Antrenman"
+                />
+              </CartoonPanel>
+              <View style={styles.ribbonTop} pointerEvents="none">
+                {official ? (
+                  <Ribbon label="Test bitti" icon="trophy" fill={QUIZ.ribbonGold} />
+                ) : (
+                  <Ribbon label="Antrenman bitti" icon="barbell" />
+                )}
               </View>
+            </PopIn>
 
-              <View style={styles.strip}>
-                {questions.map((item, index) => (
-                  <View key={`${item.prompt}-${index}`} style={[styles.stripCell, stripStyle(index)]} />
-                ))}
+            {!official ? (
+              <Text style={styles.hint} {...textScale.long}>
+                Antrenman skoru güne yazılmaz.
+              </Text>
+            ) : null}
+          </ScrollView>
+        ) : (
+          /* ——— 2) OYUN ——— */
+          <ScrollView contentContainerStyle={[styles.pageContent, scrollPad]} showsVerticalScrollIndicator={false}>
+            <View style={styles.strip}>
+              {questions.map((item, index) => (
+                <View key={`${item.prompt}-${index}`} style={[styles.stripCell, stripStyle(index)]} />
+              ))}
+            </View>
+
+            <View style={styles.timerRow}>
+              <CountdownBar value={secondsLeft / SECONDS} tone={timeTone(secondsLeft)} />
+              <View
+                style={[styles.seconds, secondsLeft <= 4 && styles.secondsHot]}
+                accessible
+                accessibilityLabel={`${secondsLeft} saniye kaldı`}
+              >
+                <Text style={styles.secondsText} {...textScale.badge}>
+                  {secondsLeft}
+                </Text>
               </View>
             </View>
-          </View>
 
-          <View style={styles.questionCard}>
-            <Text style={styles.prompt} {...textScale.long}>
-              {question.prompt}
-            </Text>
-          </View>
-
-          <View style={styles.options}>
-            {question.options.map((option, index) => {
-              const revealed = phase === "reveal";
-              const isChosen = chosen === index;
-              const right = revealed && option.correct;
-              const wrong = revealed && isChosen && !option.correct;
-              return (
-                <Touchable
-                  key={`${option.label}-${index}`}
-                  feedback="button"
-                  /* Titreşim şıkta değil `answer()` içinde: doğru/yanlış ayrı
-                     ton çalar ve süre dolduğunda da tetiklenir. */
-                  haptic="none"
-                  onPress={() => phase === "playing" && answer(index)}
-                  disabled={phase !== "playing"}
-                  accessibilityRole="button"
-                  accessibilityLabel={option.label}
-                  accessibilityState={{ disabled: phase !== "playing" }}
-                  style={[
-                    styles.option,
-                    right ? styles.optionRight : null,
-                    wrong ? styles.optionWrong : null,
-                    revealed && !right && !wrong ? styles.optionMuted : null,
-                  ]}
-                >
-                  <Text
-                    style={[styles.optionText, right || wrong ? styles.optionTextOn : null]}
-                    numberOfLines={2}
-                    {...textScale.dense}
-                  >
-                    {option.label}
+            <PopIn key={`q${qIndex}`}>
+              <CartoonPanel style={styles.questionCard}>
+                <View style={styles.qTag}>
+                  <LinearGradient colors={CARTOON.purple} start={TOP} end={BOTTOM} style={StyleSheet.absoluteFill} />
+                  <Text style={styles.qTagText} {...textScale.badge}>
+                    {upperTR(`Soru ${qIndex + 1}`)}
                   </Text>
-                  {right ? (
-                    <Ionicons name="checkmark-circle" size={18} color={colors.textOnStatus} />
-                  ) : wrong ? (
-                    <Ionicons name="close-circle" size={18} color={colors.textOnStatus} />
-                  ) : null}
-                </Touchable>
-              );
-            })}
-          </View>
-        </ScrollView>
-      )}
-    </SafeAreaView>
+                </View>
+                <Text style={styles.prompt} {...textScale.long}>
+                  {question.prompt}
+                </Text>
+              </CartoonPanel>
+            </PopIn>
+
+            <View style={styles.options}>
+              {question.options.map((option, index) => {
+                const revealed = phase === "reveal";
+                const isChosen = chosen === index;
+                const right = revealed && option.correct;
+                const wrong = revealed && isChosen && !option.correct;
+                return (
+                  <PopIn key={`${qIndex}-${option.label}-${index}`} delay={80 + index * 70}>
+                    <DailyOption
+                      label={option.label}
+                      tone={QUIZ_LETTER_TONES[index] ?? "blue"}
+                      right={right}
+                      wrong={wrong}
+                      muted={revealed && !right && !wrong}
+                      disabled={phase !== "playing"}
+                      onPress={() => phase === "playing" && answer(index)}
+                    />
+                  </PopIn>
+                );
+              })}
+            </View>
+          </ScrollView>
+        )}
+      </View>
+
+      <PauseOverlay
+        visible={paused}
+        onResume={closePause}
+        onExit={leave}
+        note={inGame(phase) ? "Süre durdu. Hazır olduğunda kaldığın yerden devam et." : undefined}
+      />
+    </View>
   );
 }
 
@@ -775,49 +1002,59 @@ function ResultActions({
   return (
     <>
       <View style={styles.actionRow}>
-        <Button
+        <CartoonButton
           label={retryLabel}
+          accessibilityLabel={`${retryLabel} turu`}
           icon="refresh"
-          variant="secondary"
+          tone="blue"
+          size="sm"
           onPress={onRetry}
           style={styles.actionButton}
         />
-        <Button
-          label="Meydan Oku"
-          icon="share-social"
-          onPress={openShare}
-          style={styles.actionButton}
-        />
+        <CartoonButton label="Meydan oku" icon="share-social" tone="gold" size="sm" onPress={openShare} style={styles.actionButton} />
       </View>
 
       <BottomSheet visible={shareOpen} onClose={closeShare} title="Sonucunu paylaş" snap="full">
         <View style={styles.shareWrap}>
           <ViewShot ref={shotRef} options={{ format: "png", quality: 1 }}>
             <View style={styles.shareCard}>
-              <View style={styles.shareStrip} />
+              <LinearGradient colors={CARTOON.night} start={TOP} end={BOTTOM} style={StyleSheet.absoluteFill} />
+              <View style={styles.shareSkyline} pointerEvents="none">
+                {[54, 86, 40, 70, 96, 50, 78].map((h, i) => (
+                  <View key={i} style={[styles.shareTower, { height: h }]}>
+                    <View style={styles.shareWindow} />
+                    <View style={[styles.shareWindow, i % 2 === 0 && styles.shareWindowOff]} />
+                  </View>
+                ))}
+              </View>
 
               <View style={styles.shareBody}>
                 <View style={styles.shareTop}>
                   <Text style={styles.shareBrand} {...textScale.badge}>
                     elitlig
                   </Text>
-                  <Text style={styles.shareKicker} {...textScale.badge}>
-                    {upperTR("Günün Testi")}
-                  </Text>
+                  <View style={styles.shareKicker}>
+                    <Text style={styles.shareKickerText} {...textScale.badge}>
+                      {upperTR("Günün Testi")}
+                    </Text>
+                  </View>
                 </View>
 
                 <Text style={styles.shareDay} {...textScale.badge}>
                   {upperTR(dayLabel)}
                 </Text>
 
-                <Text style={styles.shareScore} {...textScale.badge}>
-                  {correct}/{ROUND}
-                </Text>
-                <Text style={styles.shareUnit} {...textScale.badge}>
-                  {upperTR(`${formatCount(score)} puan`)}
-                </Text>
-
-                <View style={styles.shareDivider} />
+                <View style={styles.shareBadge}>
+                  <LinearGradient colors={CARTOON.green} start={TOP} end={BOTTOM} style={StyleSheet.absoluteFill} />
+                  <Text style={styles.shareScore} {...textScale.badge}>
+                    {correct}/{ROUND}
+                  </Text>
+                </View>
+                <View style={styles.shareUnit}>
+                  <Text style={styles.shareUnitText} {...textScale.badge}>
+                    {upperTR(`${formatCount(score)} puan`)}
+                  </Text>
+                </View>
 
                 <Text style={styles.shareChallenge} {...textScale.badge}>
                   Aynı sorular seni bekliyor
@@ -833,13 +1070,7 @@ function ResultActions({
           </ViewShot>
         </View>
 
-        <Button
-          label={busy ? "Hazırlanıyor" : "Paylaş"}
-          icon="share-social"
-          onPress={share}
-          loading={busy}
-          fullWidth
-        />
+        <CartoonButton label={busy ? "Hazırlanıyor" : "Paylaş"} icon="share-social" tone="green" onPress={share} loading={busy} />
         <Text style={styles.shareHint} {...textScale.dense}>
           İndirmek için: Paylaş → Görüntüyü Kaydet
         </Text>
@@ -850,330 +1081,232 @@ function ResultActions({
 
 /* ═════════════════════════ STİLLER ═════════════════════════ */
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  flex: { flex: 1 },
+const shadow = { textShadowColor: CARTOON.textShadow, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 } as const;
 
-  loading: {
-    padding: layout.screenPadding,
-    gap: space.md,
-  },
+const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: CARTOON.night[2] },
+  body: { flex: 1 },
+  flex: { flex: 1 },
+  stretch: { alignSelf: "stretch" },
+  faded: { opacity: 0.7 },
+  shadow,
+
+  topBar: { flexDirection: "row", alignItems: "center", gap: space.xs, paddingHorizontal: layout.screenPadding, minHeight: 50 },
+  pillText: { ...type.label, fontFamily: fonts.bold, color: CARTOON.white, letterSpacing: 0.6, ...shadow },
+  pillTextSm: { ...type.labelXs, fontFamily: fonts.bold, color: CARTOON.white, letterSpacing: 0.4 },
+  pillScore: { ...type.scoreSm, color: CARTOON.white, ...shadow },
+  smallPill: { paddingHorizontal: space.sm },
+  centerPill: { alignSelf: "center" },
+
+  center: { flex: 1, justifyContent: "center", padding: layout.screenPadding },
+  stateCard: { alignItems: "center", gap: space.md, paddingVertical: space.xxl },
+  stateTitle: { ...type.h1, fontFamily: fonts.heading, color: CARTOON.cardInk, textAlign: "center" },
+  stateBody: { ...type.body, fontFamily: fonts.semibold, color: CARTOON.cardMuted, textAlign: "center" },
+
   pageContent: {
     padding: layout.screenPadding,
-    paddingBottom: space.giant,
-    gap: space.md,
+    paddingTop: space.lg,
+    gap: space.lg,
   },
+  ribbonHost: { paddingTop: 20 },
+  ribbonTop: { position: "absolute", top: 0, left: 0, right: 0, alignItems: "center" },
 
   /* — Giriş kartı — */
-  hero: {
-    backgroundColor: colors.surface1,
-    borderRadius: radius.lg,
-    borderWidth: hairline,
-    borderColor: colors.brandBorder,
-    padding: space.lg,
-    gap: space.sm,
-    alignItems: "center",
-  },
-  heroIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.pill,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.brandDim,
-  },
-  heroTitle: {
-    ...type.h1,
-    color: colors.textPrimary,
-    textAlign: "center",
-  },
-  heroBody: {
-    ...type.body,
-    color: colors.textSecondary,
-    textAlign: "center",
-  },
-  heroFacts: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "center",
-    gap: space.sm,
-    marginTop: space.xxs,
-  },
+  hero: { gap: space.md, alignItems: "center", paddingTop: space.xxxl },
+  heroTitle: { ...type.display, fontFamily: fonts.heading, color: CARTOON.cardInk, textAlign: "center" },
+  heroBody: { ...type.body, fontFamily: fonts.semibold, color: CARTOON.cardMuted, textAlign: "center" },
+  heroFacts: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: space.sm },
   fact: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.xs,
-    backgroundColor: colors.surface3,
+    backgroundColor: CARTOON.cardSoft,
     borderRadius: radius.pill,
-    paddingHorizontal: space.m,
-    paddingVertical: space.s,
+    borderWidth: 2,
+    borderColor: CARTOON.outline,
+    paddingLeft: space.xxs,
+    paddingRight: space.m,
+    paddingVertical: space.xxs,
   },
-  factText: {
-    ...type.caption,
-    color: colors.textSecondary,
-  },
+  factText: { ...type.caption, fontFamily: fonts.bold, letterSpacing: 0, color: CARTOON.cardInk },
 
   /* — Sonuç / bugünkü sonuç kartı — */
-  resultCard: {
-    backgroundColor: colors.surface1,
-    borderRadius: radius.lg,
-    borderWidth: hairline,
-    borderColor: colors.border,
-    padding: space.lg,
-    gap: space.md,
+  resultCard: { gap: space.md, alignItems: "center", paddingTop: space.xxxl },
+  todayLabel: { ...type.label, fontFamily: fonts.heading, color: CARTOON.cardInk, textAlign: "center" },
+  grade: {
+    width: 118,
+    height: 118,
+    borderRadius: radius.pill,
     alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 4,
+    borderColor: CARTOON.outline,
+    overflow: "hidden",
   },
-  todayHead: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.xs,
+  gradeShine: { position: "absolute", top: 6, left: 24, right: 24, height: 26, borderRadius: radius.pill, backgroundColor: CARTOON.shine },
+  gradeValue: { ...type.scoreLg, color: CARTOON.white, ...shadow },
+  gradeLabel: { ...type.micro, fontFamily: fonts.bold, color: CARTOON.white, letterSpacing: 1 },
+  resultScore: { ...type.scoreJumbo, color: CARTOON.cardInk },
+  resultUnitRow: { flexDirection: "row", alignItems: "center", gap: space.sm, marginTop: -space.sm },
+  resultUnit: { ...type.label, fontFamily: fonts.bold, letterSpacing: 1.2, color: CARTOON.cardMuted },
+  practiceChip: {
+    borderRadius: radius.pill,
+    borderWidth: 2,
+    borderColor: CARTOON.outline,
+    backgroundColor: CARTOON.orange[1],
+    paddingHorizontal: space.sm,
+    paddingVertical: 2,
   },
-  todayLabel: {
-    ...type.micro,
-    color: colors.win,
-  },
-  resultScore: {
-    ...type.scoreHero,
-    color: colors.brandAccent,
-  },
-  resultUnitRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.sm,
-    marginTop: -space.sm,
-  },
-  resultUnit: {
-    ...type.micro,
-    color: colors.textTertiary,
-  },
-  resultMeta: {
-    ...type.caption,
-    fontFamily: fonts.semibold,
-    letterSpacing: 0,
-    color: colors.textTertiary,
-    textAlign: "center",
-  },
+  practiceText: { ...type.micro, fontFamily: fonts.bold, color: CARTOON.white },
+  resultMeta: { ...type.caption, fontFamily: fonts.semibold, letterSpacing: 0, color: CARTOON.cardMuted, textAlign: "center" },
 
-  statRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    alignSelf: "stretch",
-  },
+  statRow: { flexDirection: "row", alignItems: "stretch", alignSelf: "stretch", gap: space.sm },
   statCell: {
     flex: 1,
     alignItems: "center",
     gap: space.xxs,
+    paddingVertical: space.m,
+    borderRadius: radius.lg,
+    borderWidth: OUTLINE,
+    borderColor: CARTOON.outline,
+    overflow: "hidden",
   },
-  statDivider: {
-    width: hairline,
-    alignSelf: "stretch",
-    backgroundColor: colors.separator,
-  },
-  statValue: {
-    ...type.scoreSm,
-    color: colors.textPrimary,
-  },
-  statValueAccent: {
-    ...type.scoreSm,
-    color: colors.brandAccent,
-  },
-  statLabel: {
-    ...type.caption,
-    fontFamily: fonts.semibold,
-    letterSpacing: 0,
-    color: colors.textTertiary,
-  },
+  statShine: { position: "absolute", top: 3, left: 6, right: 6, height: 14, borderRadius: radius.xs, backgroundColor: CARTOON.shine },
+  statValue: { ...type.scoreSm },
+  statLabel: { ...type.micro, fontFamily: fonts.bold },
 
   hint: {
     ...type.caption,
     fontFamily: fonts.semibold,
     letterSpacing: 0,
-    color: colors.textTertiary,
+    color: CARTOON.white,
     textAlign: "center",
-  },
-  bestRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: space.xs,
-  },
-  bestText: {
-    ...type.caption,
-    color: colors.textSecondary,
+    alignSelf: "center",
+    overflow: "hidden",
+    backgroundColor: QUIZ.navyGlass,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.md,
+    paddingVertical: space.xs,
   },
 
-  /* — Oyun başlığı (süre halkası + ilerleme) — */
-  hud: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.md,
-    backgroundColor: colors.surface1,
-    borderRadius: radius.lg,
-    borderWidth: hairline,
-    borderColor: colors.border,
-    padding: space.md,
-  },
-  hudBody: { flex: 1, gap: space.sm },
-  hudTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.sm,
-  },
-  hudLabel: {
-    ...type.micro,
-    color: colors.textSecondary,
-  },
-  hudScore: {
-    ...type.tableNumStrong,
-    color: colors.brandAccent,
-  },
-  strip: {
-    flexDirection: "row",
-    gap: space.xxs,
-  },
+  /* — Oyun: ilerleme şeridi + süre — */
+  strip: { flexDirection: "row", gap: space.xs },
   stripCell: {
     flex: 1,
-    height: 4,
+    height: 14,
     borderRadius: radius.pill,
-    backgroundColor: colors.surface3,
+    borderWidth: 2,
+    borderColor: CARTOON.outline,
+    backgroundColor: CARTOON.pill[0],
   },
-  stripCurrent: { backgroundColor: colors.brandAccent },
-  stripCorrect: { backgroundColor: colors.win },
-  stripWrong: { backgroundColor: colors.loss },
+  stripCurrent: { backgroundColor: CARTOON.gold[0] },
+  stripCorrect: { backgroundColor: CARTOON.correct },
+  stripWrong: { backgroundColor: CARTOON.wrong },
+
+  timerRow: { flexDirection: "row", alignItems: "center", gap: space.sm, marginTop: -space.xs },
+  timerTrack: {
+    flex: 1,
+    height: 22,
+    borderRadius: radius.pill,
+    borderWidth: OUTLINE,
+    borderColor: CARTOON.outline,
+    backgroundColor: CARTOON.pill[1],
+    overflow: "hidden",
+  },
+  timerFill: { flex: 1, borderRadius: radius.pill, overflow: "hidden", transformOrigin: "left" },
+  timerShine: { position: "absolute", top: 2, left: 6, right: 6, height: 5, borderRadius: 3, backgroundColor: CARTOON.shine },
+  seconds: {
+    width: 46,
+    height: 46,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: OUTLINE,
+    borderColor: CARTOON.outline,
+    backgroundColor: CARTOON.pill[0],
+  },
+  secondsHot: { backgroundColor: CARTOON.red[1] },
+  secondsText: { ...type.scoreMd, color: CARTOON.white, ...shadow },
 
   /* — Soru kartı — */
   questionCard: {
-    backgroundColor: colors.surface1,
-    borderRadius: radius.lg,
-    borderWidth: hairline,
-    borderColor: colors.border,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.xl,
-    minHeight: 108,
+    minHeight: 132,
     alignItems: "center",
     justifyContent: "center",
+    gap: space.md,
+    paddingVertical: space.xl,
   },
-  prompt: {
-    ...type.display,
-    color: colors.textPrimary,
-    textAlign: "center",
+  qTag: {
+    borderRadius: radius.pill,
+    paddingHorizontal: space.md,
+    paddingVertical: 3,
+    borderWidth: 2,
+    borderColor: CARTOON.outline,
+    overflow: "hidden",
   },
+  qTagText: { ...type.micro, fontFamily: fonts.bold, color: CARTOON.white, letterSpacing: 1 },
+  prompt: { ...type.display, fontFamily: fonts.heading, color: CARTOON.cardInk, textAlign: "center" },
 
   /* — Şıklar — */
-  options: { gap: space.m },
-  option: {
-    minHeight: 54,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: space.sm,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.md,
-    borderRadius: radius.md,
-    borderWidth: hairline,
-    borderColor: colors.brandBorder,
-    backgroundColor: colors.surface1,
-  },
-  optionRight: {
-    backgroundColor: colors.win,
-    borderColor: colors.win,
-  },
-  optionWrong: {
-    backgroundColor: colors.loss,
-    borderColor: colors.loss,
-  },
-  /* Cevap açıldığında seçilmeyen şıklar geri çekilir. */
-  optionMuted: {
-    opacity: 0.5,
-    borderColor: colors.border,
-  },
-  optionText: {
-    ...type.h3,
-    color: colors.textPrimary,
-    textAlign: "center",
-    flexShrink: 1,
-  },
-  optionTextOn: { color: colors.textOnStatus },
+  options: { gap: space.md },
+  optionFace: { minHeight: 62, paddingVertical: space.md, paddingHorizontal: space.lg },
+  optionRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.sm },
+  optionText: { ...type.h1, fontFamily: fonts.heading, color: CARTOON.white, textAlign: "center", flexShrink: 1, ...shadow },
 
   /* — Eylemler — */
-  actionRow: {
-    flexDirection: "row",
-    gap: space.sm,
-  },
+  actionRow: { flexDirection: "row", gap: space.sm, alignSelf: "stretch" },
   actionButton: { flex: 1 },
 
   /* — Paylaşım kartı — */
-  shareWrap: {
-    alignItems: "center",
-    paddingVertical: space.md,
-  },
+  shareWrap: { alignItems: "center", paddingVertical: space.md },
   shareCard: {
     width: 264,
     height: 396,
-    backgroundColor: colors.surface1,
-    borderRadius: radius.lg,
+    borderRadius: radius.xxl,
+    borderWidth: OUTLINE,
+    borderColor: CARTOON.outline,
     overflow: "hidden",
   },
-  shareStrip: {
-    height: 6,
-    backgroundColor: colors.brand,
-  },
-  shareBody: {
-    flex: 1,
-    padding: space.md,
-    alignItems: "center",
-    gap: space.xs,
-  },
-  shareTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    alignSelf: "stretch",
-  },
-  shareBrand: {
-    ...type.label,
-    color: colors.brand,
-  },
+  shareSkyline: { position: "absolute", left: 0, right: 0, bottom: 0, flexDirection: "row", alignItems: "flex-end", gap: 3 },
+  shareTower: { flex: 1, backgroundColor: CARTOON.skyline, alignItems: "center", paddingTop: space.sm, gap: space.sm },
+  shareWindow: { width: 7, height: 9, borderRadius: 1, backgroundColor: CARTOON.window },
+  shareWindowOff: { opacity: 0.2 },
+  shareBody: { flex: 1, padding: space.lg, alignItems: "center", gap: space.sm },
+  shareTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", alignSelf: "stretch" },
+  shareBrand: { ...type.h2, fontFamily: fonts.bold, color: CARTOON.white, ...shadow },
   shareKicker: {
-    ...type.micro,
-    color: colors.textTertiary,
+    borderRadius: radius.pill,
+    borderWidth: 2,
+    borderColor: CARTOON.outline,
+    backgroundColor: CARTOON.gold[0],
+    paddingHorizontal: space.sm,
+    paddingVertical: 2,
   },
-  shareDay: {
-    ...type.micro,
-    color: colors.textSecondary,
+  shareKickerText: { ...type.micro, fontFamily: fonts.bold, color: CARTOON.goldInk },
+  shareDay: { ...type.micro, fontFamily: fonts.bold, color: QUIZ.muted, marginTop: space.xs, letterSpacing: 1 },
+  shareBadge: {
+    width: 132,
+    height: 132,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 4,
+    borderColor: CARTOON.outline,
+    overflow: "hidden",
     marginTop: space.sm,
   },
-  shareScore: {
-    ...type.scoreJumbo,
-    color: colors.brandAccent,
-    marginTop: space.sm,
-  },
+  shareScore: { ...type.scoreJumbo, color: CARTOON.white, ...shadow },
   shareUnit: {
-    ...type.label,
-    color: colors.textPrimary,
+    marginTop: -space.lg,
+    borderRadius: radius.pill,
+    borderWidth: OUTLINE,
+    borderColor: CARTOON.outline,
+    backgroundColor: CARTOON.gold[1],
+    paddingHorizontal: space.md,
+    paddingVertical: space.xs,
   },
-  shareDivider: {
-    alignSelf: "stretch",
-    height: hairline,
-    backgroundColor: colors.separator,
-    marginVertical: space.md,
-  },
-  shareChallenge: {
-    ...type.caption,
-    fontFamily: fonts.bold,
-    letterSpacing: 0,
-    color: colors.textSecondary,
-    textAlign: "center",
-  },
-  shareFooter: {
-    ...type.micro,
-    color: colors.textTertiary,
-    textAlign: "center",
-  },
-  shareHint: {
-    ...type.caption,
-    color: colors.textTertiary,
-    textAlign: "center",
-    marginTop: space.sm,
-  },
+  shareUnitText: { ...type.label, fontFamily: fonts.bold, color: CARTOON.goldInk },
+  shareChallenge: { ...type.label, fontFamily: fonts.heading, color: CARTOON.white, textAlign: "center", marginTop: space.sm, ...shadow },
+  shareFooter: { ...type.micro, fontFamily: fonts.bold, color: CARTOON.white, textAlign: "center", ...shadow },
+  shareHint: { ...type.caption, color: CARTOON.cardMuted, textAlign: "center", marginTop: space.sm },
 });

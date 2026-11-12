@@ -5,8 +5,9 @@
  *   1. KURULUM: "Sorular nereden gelsin?" — Tüm Türkiye ya da bir il. Seçim
  *      oyun başına cihazda saklanır; veri seçim anında arka planda yüklenir,
  *      ilde yeterli veri yoksa "Başla" yerine açık bir uyarı çıkar.
- *   2. YARIŞMA: koyu sahnede üstte puan, canlar (3), seri çarpanı ve seviye;
- *      altında geri sayım çubuğu. Soru kartı yaylı bir girişle gelir, şıklar
+ *   2. YARIŞMA: gece stadyumu zemininde (çizgi film teması, uygulama başlığı
+ *      YOK — oyun bütün ekranı kaplar) üstte lacivert HUD hapları: puan,
+ *      canlar (3), seri çarpanı ve seviye; altında kalın geri sayım çubuğu. Soru kartı yaylı bir girişle gelir, şıklar
  *      sırayla süzülür. Cevap anında doğru şık yeşil, yanlış seçim kırmızı
  *      yanar; kazanılan puan yukarı süzülür. Oyun başına bir "Yarı yarıya"
  *      jokeri.
@@ -19,8 +20,11 @@
  * sürücüde (`useNativeDriver`) koşar; JS iş parçacığı yalnız saniyede dört
  * kez (ipucu açılışı ve kalan saniye için) uyanır.
  *
- * DURAKLAMA: ekran odaktan çıkarsa ya da uygulama arka plana geçerse soru
- * süresi durur, dönünce kaldığı yerden sürer — telefon çaldı diye can gitmez.
+ * DURAKLAMA: köşedeki yuvarlak düğme (ve Android geri tuşu) "MOLA" kartını
+ * açar: soru süresi ve sıradaki soruya geçiş donar; "Devam et" kaldığı yerden
+ * sürdürür, "Oyundan çık" ekranı kapatır. Ekran odaktan çıkarsa süre durur,
+ * dönünce sürer; uygulama arka plana geçerse MOLA kartı açılır — telefon
+ * çaldı diye can gitmez.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -28,13 +32,30 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQuery } from "@tanstack/react-query";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { LinearGradient } from "expo-linear-gradient";
 import { Animated, AppState, Easing, ScrollView, StyleSheet, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ConfettiBurst, SparkleBurst } from "@/components/game/Celebration";
 import { ArenaResultCard, ArenaShareSheet, formatCount, SCORE_UNIT, useArenaScore } from "@/components/game/ArenaResult";
 import { QuizCityPicker, type QuizCity } from "@/components/game/QuizCityPicker";
-import { Avatar, Button, GradientFill, ScreenHeader, TeamLogo, Touchable, useReduceMotion, withAlpha } from "@/components/ui";
+import {
+  CartoonButton,
+  CartoonPanel,
+  FlashLayer,
+  IconBubble,
+  NavyPill,
+  OUTLINE,
+  PauseOverlay,
+  QuizBackdrop,
+  Ribbon,
+  RoundButton,
+  useAnswerFx,
+  useExitGame,
+  useFlash,
+  useHardwareBack,
+} from "@/components/game/QuizKit";
+import { Avatar, TeamLogo, Touchable, useReduceMotion } from "@/components/ui";
 import type { ArenaGame } from "@/lib/api/arena";
 import { getMatches } from "@/lib/api/matches";
 import { getPlayerRankings } from "@/lib/api/players";
@@ -51,8 +72,10 @@ import {
   type QuizPlayer,
   type QuizQuestion,
 } from "@/lib/game/quiz/questions";
+import { CARTOON } from "@/lib/game/cartoon";
+import { QUIZ, QUIZ_LETTER_TONES, QUIZ_TRIPLE_TONES, type QuizToneName } from "@/lib/game/quizPalette";
 import { useScope } from "@/providers/ScopeProvider";
-import { colors, elevate, fonts, haptics, layout, radius, space, textScale, type, upperTR } from "@/theme";
+import { fonts, haptics, layout, radius, space, textScale, type, upperTR } from "@/theme";
 
 /* ═════════════════════════ SÖZLEŞME ═════════════════════════ */
 
@@ -83,6 +106,10 @@ const REVEAL_OK_MS = 1150;
 const REVEAL_BAD_MS = 2000;
 const LETTERS = ["A", "B", "C", "D"];
 const TRIPLE_MARKS = ["1", "X", "2"];
+/** Giriş kartındaki oyun ikonu kabarcığının rengi (Oyun Merkezi ile aynı). */
+const GAME_TONE: Partial<Record<ArenaGame, QuizToneName>> = { kimbu: "purple", seri: "orange", tahmin: "teal" };
+const TOP = { x: 0.5, y: 0 } as const;
+const BOTTOM = { x: 0.5, y: 1 } as const;
 
 /* ═════════════════════════ VERİ ═════════════════════════ */
 
@@ -109,6 +136,8 @@ const poolSize = (pool: QuizPool | undefined) => (!pool ? 0 : pool.kind === "pla
 
 export function QuizScreen({ config }: { config: QuizConfig }) {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const exitGame = useExitGame();
   const scope = useScope();
   const reduceMotion = useReduceMotion();
   const run = useArenaScore(config.game, config.bestKey);
@@ -169,12 +198,15 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
   const timing = useRef<{ startedAt: number; total: number; left: number; paused: boolean }>({ startedAt: 0, total: 0, left: 0, paused: false });
   const timeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Cevap sonrası sıradaki soruya geçiş — MOLA'da bekletilip devamda çalışır. */
+  const pendingAdvance = useRef<(() => void) | null>(null);
 
   const clearTimers = () => {
     if (timeout.current) clearTimeout(timeout.current);
     if (advanceTimer.current) clearTimeout(advanceTimer.current);
     timeout.current = null;
     advanceTimer.current = null;
+    pendingAdvance.current = null;
   };
   useEffect(() => clearTimers, []);
 
@@ -184,6 +216,8 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
   const scoreBump = useRef(new Animated.Value(0)).current;
   const gainAnim = useRef(new Animated.Value(0)).current;
   const shake = useRef(new Animated.Value(0)).current;
+  const flash = useFlash();
+  const [flashOk, setFlashOk] = useState(true);
 
   const remainingFraction = () => {
     const t = timing.current;
@@ -282,12 +316,16 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
       scoreBump.setValue(1);
       Animated.spring(scoreBump, { toValue: 0, useNativeDriver: true, friction: 4 }).start();
       haptics.success();
+      setFlashOk(true);
+      if (!reduceMotion) flash.fire();
     } else {
       livesAfter -= 1;
       setLives(livesAfter);
       setStreak(0);
       setLastMiss(q);
       haptics.error();
+      setFlashOk(false);
+      if (!reduceMotion) flash.fire();
       if (!reduceMotion) {
         Animated.sequence(
           [10, -8, 6, -3, 0].map((toValue) => Animated.timing(shake, { toValue, duration: 50, useNativeDriver: true })),
@@ -296,16 +334,17 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
     }
 
     const poolNow = s.pool;
-    advanceTimer.current = setTimeout(
-      () => {
-        if (livesAfter <= 0) {
-          finish();
-          return;
-        }
-        ask(poolNow, levelOf(correctAfter));
-      },
-      ok ? REVEAL_OK_MS : REVEAL_BAD_MS,
-    );
+    const advance = () => {
+      advanceTimer.current = null;
+      pendingAdvance.current = null;
+      if (livesAfter <= 0) {
+        finish();
+        return;
+      }
+      ask(poolNow, levelOf(correctAfter));
+    };
+    pendingAdvance.current = advance;
+    advanceTimer.current = setTimeout(advance, ok ? REVEAL_OK_MS : REVEAL_BAD_MS);
   }
 
   /* Tur bittiğinde skor bir kez gönderilir. */
@@ -346,7 +385,13 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
     haptics.light();
   };
 
-  /* — Duraklatma: odak ve arka plan — */
+  /* — Duraklatma: odak, arka plan ve MOLA kartı — */
+  const [paused, setPaused] = useState(false);
+  const pausedRef = useRef(false);
+  pausedRef.current = paused;
+  const phaseRef = useRef<Phase>("setup");
+  phaseRef.current = phase;
+
   const pause = useCallback(() => {
     const t = timing.current;
     if (statusRef.current !== "asking" || t.paused || !t.total) return;
@@ -357,12 +402,36 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
   }, [timer]);
   const resume = useCallback(() => {
     const t = timing.current;
+    // MOLA kartı açıkken odak/ön plan dönüşü süreyi başlatmaz; "Devam et" başlatır.
+    if (pausedRef.current) return;
     if (statusRef.current !== "asking" || !t.paused || !t.total || t.left <= 0) return;
     t.paused = false;
     t.startedAt = Date.now();
     runCountdown(t.left / t.total, t.left);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const openPause = useCallback(() => {
+    if (pausedRef.current) return;
+    pausedRef.current = true;
+    if (phaseRef.current === "playing") {
+      pause();
+      // Cevap açıklanırken sıradaki soruya geçiş de bekler.
+      if (advanceTimer.current) {
+        clearTimeout(advanceTimer.current);
+        advanceTimer.current = null;
+      }
+    }
+    setPaused(true);
+  }, [pause]);
+  const closePause = useCallback(() => {
+    pausedRef.current = false;
+    setPaused(false);
+    if (phaseRef.current !== "playing") return;
+    if (pendingAdvance.current && !advanceTimer.current) advanceTimer.current = setTimeout(pendingAdvance.current, 450);
+    else resume();
+  }, [resume]);
+
   useFocusEffect(
     useCallback(() => {
       resume();
@@ -370,162 +439,232 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
     }, [pause, resume]),
   );
   useEffect(() => {
-    const sub = AppState.addEventListener("change", (state) => (state === "active" ? resume() : pause()));
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") resume();
+      else if (phaseRef.current === "playing") openPause();
+      else pause();
+    });
     return () => sub.remove();
-  }, [pause, resume]);
+  }, [pause, resume, openPause]);
+
+  /* Android geri tuşu oyun sırasında ekranı kapatmaz, MOLA kartını açar. */
+  useHardwareBack(() => {
+    if (pausedRef.current) {
+      closePause();
+      return true;
+    }
+    if (phaseRef.current === "playing") {
+      openPause();
+      return true;
+    }
+    return false;
+  });
 
   const openBoard = useCallback(() => router.push({ pathname: "/siralama", params: { game: config.game } }), [router, config.game]);
-  const headerActions = useMemo(
-    () => [{ icon: "trophy-outline" as const, onPress: openBoard, accessibilityLabel: "Rekor tablosu" }],
-    [openBoard],
-  );
 
   const accuracy = asked ? Math.round((correct / asked) * 100) : 0;
+  const secondsLeft = question ? Math.max(0, Math.ceil(question.seconds - elapsed)) : 0;
 
   return (
-    <SafeAreaView style={styles.screen} edges={["top"]}>
-      <ScreenHeader title={config.title} overline={upperTR("Elitlig Arena")} subtitle={config.subtitle} back actions={headerActions} />
+    <View style={styles.screen}>
+      <QuizBackdrop />
+      {phase === "playing" ? <FlashLayer value={flash.value} ok={flashOk} /> : null}
 
-      <View style={styles.stage}>
-        <GradientFill tone="ink" radius="xl" />
-        <View style={styles.glow} pointerEvents="none" />
+      <View style={[styles.body, { paddingTop: insets.top + space.sm }]}>
+        {/* — Üst şerit: HUD + duraklat (uygulama başlığı yok) — */}
+        <View style={styles.topBar}>
+          {phase !== "setup" && question ? (
+            <Hud score={score} lives={lives} bump={scoreBump} />
+          ) : (
+            <NavyPill>
+              <Ionicons name="trophy" size={15} color={CARTOON.star} />
+              <Text style={styles.pillText} {...textScale.badge}>
+                {upperTR("Elitlig Arena")}
+              </Text>
+            </NavyPill>
+          )}
+          <View style={styles.flex} />
+          <RoundButton icon="pause" onPress={openPause} accessibilityLabel="Oyunu duraklat" />
+        </View>
 
-        {phase === "setup" ? (
-          <SetupCard
-            config={config}
-            best={run.best}
-            city={city}
-            onPickCity={() => setPickerOpen(true)}
-            loading={!cityLoaded || poolQuery.isLoading}
-            error={poolQuery.isError}
-            enough={enough}
-            onRetry={() => void poolQuery.refetch()}
-            onStart={start}
-          />
-        ) : null}
+        <View style={styles.stage}>
+          {phase === "setup" ? (
+            <SetupCard
+              config={config}
+              best={run.best}
+              city={city}
+              onPickCity={() => setPickerOpen(true)}
+              loading={!cityLoaded || poolQuery.isLoading}
+              error={poolQuery.isError}
+              enough={enough}
+              onRetry={() => void poolQuery.refetch()}
+              onStart={start}
+            />
+          ) : null}
 
-        {phase !== "setup" && question ? (
-          <View style={styles.flex}>
-            <Hud score={score} lives={lives} streak={streak} level={level} scopeLabel={scopeLabel} bump={scoreBump} />
-            <TimerBar timer={timer} />
+          {phase !== "setup" && question ? (
+            <View style={styles.flex}>
+              <View style={styles.subBar}>
+                <NavyPill style={styles.smallPill}>
+                  <Text style={styles.pillTextSm} {...textScale.badge}>{upperTR(`Seviye ${level}`)}</Text>
+                </NavyPill>
+                {streak >= 2 ? (
+                  <NavyPill style={styles.smallPill} hot={multiplierOf(streak) > 1}>
+                    <Ionicons name="flame" size={13} color={CARTOON.white} />
+                    <Text style={styles.pillTextSm} {...textScale.badge}>
+                      {multiplierOf(streak) > 1 ? `${streak} · ×${multiplierOf(streak)}` : `${streak}`}
+                    </Text>
+                  </NavyPill>
+                ) : null}
+                <NavyPill style={[styles.smallPill, styles.shrink]}>
+                  <Ionicons name={city ? "location" : "earth"} size={13} color={CARTOON.white} />
+                  <Text style={styles.pillTextSm} numberOfLines={1} {...textScale.badge}>
+                    {scopeLabel}
+                  </Text>
+                </NavyPill>
+              </View>
+              <View style={styles.timerRow}>
+                <TimerBar timer={timer} />
+                <View style={[styles.seconds, secondsLeft <= 3 && status === "asking" && styles.secondsHot]}>
+                  <Text style={styles.secondsText} {...textScale.badge}>
+                    {secondsLeft}
+                  </Text>
+                </View>
+              </View>
 
-            <Animated.View style={[styles.flex, { transform: [{ translateX: shake }] }]}>
-              <ScrollView contentContainerStyle={styles.playScroll} showsVerticalScrollIndicator={false} bounces={false}>
-                <Animated.View
-                  style={{
-                    opacity: enter,
-                    transform: [{ translateY: enter.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) }, { scale: enter.interpolate({ inputRange: [0, 1], outputRange: [0.97, 1] }) }],
-                  }}
+              <Animated.View style={[styles.flex, { transform: [{ translateX: shake }] }]}>
+                <ScrollView
+                  contentContainerStyle={[styles.playScroll, { paddingBottom: insets.bottom + space.xxl }]}
+                  showsVerticalScrollIndicator={false}
+                  bounces={false}
                 >
-                  <QuestionCard question={question} status={status} chosen={chosen} elapsed={elapsed} onPick={answer} />
-                </Animated.View>
+                  <Animated.View
+                    style={{
+                      opacity: enter,
+                      transform: [{ translateY: enter.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) }, { scale: enter.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1] }) }],
+                    }}
+                  >
+                    <QuestionCard question={question} status={status} chosen={chosen} elapsed={elapsed} onPick={answer} />
+                  </Animated.View>
 
-                {question.layout !== "duel" ? (
-                  <View style={styles.options}>
-                    {question.options.map((option, index) => (
-                      <Animated.View
-                        key={option.key}
-                        style={{
-                          opacity: optionAnims[index] ?? 1,
-                          transform: [{ translateY: (optionAnims[index] ?? enter).interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }],
-                        }}
-                      >
-                        <OptionButton
-                          option={option}
-                          mark={question.layout === "triple" ? TRIPLE_MARKS[index] : LETTERS[index]}
-                          status={status}
-                          isAnswer={option.key === question.answer}
-                          isChosen={option.key === chosen}
-                          removed={removed.includes(option.key)}
-                          onPress={() => answer(option.key)}
-                        />
-                      </Animated.View>
-                    ))}
-                  </View>
-                ) : null}
+                  {question.layout !== "duel" ? (
+                    <View style={styles.options}>
+                      {question.options.map((option, index) => (
+                        <Animated.View
+                          key={option.key}
+                          style={{
+                            opacity: optionAnims[index] ?? 1,
+                            transform: [
+                              { translateY: (optionAnims[index] ?? enter).interpolate({ inputRange: [0, 1], outputRange: [22, 0] }) },
+                              { scale: (optionAnims[index] ?? enter).interpolate({ inputRange: [0, 1], outputRange: [0.9, 1] }) },
+                            ],
+                          }}
+                        >
+                          <OptionButton
+                            option={option}
+                            mark={question.layout === "triple" ? TRIPLE_MARKS[index] : LETTERS[index]}
+                            tone={(question.layout === "triple" ? QUIZ_TRIPLE_TONES[index] : QUIZ_LETTER_TONES[index]) ?? "blue"}
+                            status={status}
+                            isAnswer={option.key === question.answer}
+                            isChosen={option.key === chosen}
+                            removed={removed.includes(option.key)}
+                            onPress={() => answer(option.key)}
+                          />
+                        </Animated.View>
+                      ))}
+                    </View>
+                  ) : null}
 
-                {status === "revealed" ? (
-                  <View style={[styles.revealLine, chosen === question.answer ? styles.revealOk : styles.revealBad]}>
-                    <Ionicons
-                      name={chosen === question.answer ? "checkmark-circle" : chosen == null ? "time" : "close-circle"}
-                      size={16}
-                      color={chosen === question.answer ? colors.win : colors.danger}
-                    />
-                    <Text style={styles.revealText} numberOfLines={2} {...textScale.dense}>
-                      {chosen == null ? `Süre doldu · ${question.reveal}` : question.reveal}
-                    </Text>
-                  </View>
-                ) : (
-                  <View style={styles.tools}>
-                    <Touchable
-                      feedback="chip"
-                      haptic="light"
-                      onPress={applyJoker}
-                      disabled={jokerUsed || question.options.length < 3}
-                      style={[styles.joker, (jokerUsed || question.options.length < 3) && styles.jokerUsed]}
-                      accessibilityRole="button"
-                      accessibilityLabel="Yarı yarıya jokeri"
-                    >
-                      <Ionicons name="color-wand" size={14} color={jokerUsed ? colors.onDarkMuted : colors.star} />
-                      <Text style={[styles.jokerText, jokerUsed && styles.jokerTextUsed]} {...textScale.badge}>
-                        {jokerUsed ? "Joker kullanıldı" : "Yarı yarıya"}
-                      </Text>
-                    </Touchable>
-                    <Text style={styles.secondsLeft} {...textScale.badge}>
-                      {`${Math.max(0, Math.ceil(question.seconds - elapsed))} sn`}
-                    </Text>
-                  </View>
-                )}
-              </ScrollView>
-            </Animated.View>
-
-            <SparkleBurst trigger={sparkTick} radius={90} />
-            {gain ? (
-              <Animated.View
-                key={gain.id}
-                pointerEvents="none"
-                style={[
-                  styles.gain,
-                  {
-                    opacity: gainAnim.interpolate({ inputRange: [0, 0.15, 0.75, 1], outputRange: [0, 1, 1, 0] }),
-                    transform: [
-                      { translateY: gainAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -60] }) },
-                      { scale: gainAnim.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0.6, 1.15, 1] }) },
-                    ],
-                  },
-                ]}
-              >
-                <Text style={styles.gainText} {...textScale.badge}>{`+${gain.value}`}</Text>
-                {multiplierOf(streak) > 1 ? (
-                  <Text style={styles.gainSub} {...textScale.badge}>{`${streak} seri · ×${multiplierOf(streak)}`}</Text>
-                ) : null}
+                  {status === "revealed" ? (
+                    <RevealLine ok={chosen === question.answer} timedOut={chosen == null} text={chosen == null ? `Süre doldu · ${question.reveal}` : question.reveal} />
+                  ) : (
+                    <View style={styles.tools}>
+                      <CartoonButton
+                        label={jokerUsed ? "Joker kullanıldı" : "Yarı yarıya"}
+                        icon="color-wand"
+                        tone="gold"
+                        size="sm"
+                        onPress={applyJoker}
+                        disabled={jokerUsed || question.options.length < 3}
+                        accessibilityLabel="Yarı yarıya jokeri"
+                      />
+                    </View>
+                  )}
+                </ScrollView>
               </Animated.View>
-            ) : null}
-          </View>
-        ) : null}
 
-        <ConfettiBurst trigger={confettiTick} count={30} />
-        {phase === "over" ? (
-          <ArenaResultCard
-            game={config.game}
-            score={run.score}
-            best={run.best}
-            isRecord={run.isRecord}
-            overTitle={config.overTitle}
-            facts={[`${correct} doğru`, `%${accuracy} isabet`, `Seviye ${level}`, bestStreak > 1 ? `En uzun seri ${bestStreak}` : "", `Sorular: ${scopeLabel}`].filter(Boolean)}
-            extra={lastMiss ? <MissNote question={lastMiss} /> : null}
-            submit={run.submit}
-            onRetrySubmit={run.retry}
-            onSignIn={() => router.push("/giris")}
-            onRestart={start}
-            secondary={{ label: "İl değiştir", icon: "location-outline", onPress: () => setPhase("setup") }}
-            stars={run.stars}
-            onCity={() => router.push("/kulup-sehri")}
-            onBoard={openBoard}
-            onShare={() => setShareOpen(true)}
-          />
-        ) : null}
+              <SparkleBurst trigger={sparkTick} radius={90} />
+              {gain ? (
+                <Animated.View
+                  key={gain.id}
+                  pointerEvents="none"
+                  style={[
+                    styles.gain,
+                    {
+                      opacity: gainAnim.interpolate({ inputRange: [0, 0.15, 0.75, 1], outputRange: [0, 1, 1, 0] }),
+                      transform: [
+                        { translateY: gainAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -70] }) },
+                        { scale: gainAnim.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0.5, 1.25, 1] }) },
+                      ],
+                    },
+                  ]}
+                >
+                  <Text style={styles.gainText} {...textScale.badge}>{`+${gain.value}`}</Text>
+                  {multiplierOf(streak) > 1 ? (
+                    <Text style={styles.gainSub} {...textScale.badge}>{`${streak} seri · ×${multiplierOf(streak)}`}</Text>
+                  ) : null}
+                </Animated.View>
+              ) : null}
+            </View>
+          ) : null}
+
+          <ConfettiBurst trigger={confettiTick} count={30} />
+          {phase === "over" ? (
+            <ArenaResultCard
+              game={config.game}
+              score={run.score}
+              best={run.best}
+              isRecord={run.isRecord}
+              overTitle={config.overTitle}
+              facts={[`${correct} doğru`, `%${accuracy} isabet`, `Seviye ${level}`, bestStreak > 1 ? `En uzun seri ${bestStreak}` : "", `Sorular: ${scopeLabel}`].filter(Boolean)}
+              extra={lastMiss ? <MissNote question={lastMiss} /> : null}
+              submit={run.submit}
+              onRetrySubmit={run.retry}
+              onSignIn={() => router.push("/giris")}
+              onRestart={start}
+              secondary={{ label: "İl değiştir", icon: "location-outline", onPress: () => setPhase("setup") }}
+              stars={run.stars}
+              onCity={() => router.push("/kulup-sehri")}
+              onBoard={openBoard}
+              onShare={() => setShareOpen(true)}
+            />
+          ) : null}
+        </View>
       </View>
+
+      <PauseOverlay
+        visible={paused}
+        onResume={closePause}
+        onExit={() => {
+          pausedRef.current = false;
+          setPaused(false);
+          clearTimers();
+          exitGame();
+        }}
+        note={phase === "playing" ? "Süre durdu. Hazır olduğunda kaldığın yerden devam et." : undefined}
+        extra={
+          <CartoonButton
+            label="Rekor tablosu"
+            icon="trophy"
+            tone="gold"
+            size="sm"
+            onPress={() => {
+              openBoard();
+            }}
+            style={styles.flex}
+          />
+        }
+      />
 
       <QuizCityPicker
         visible={pickerOpen}
@@ -546,11 +685,13 @@ export function QuizScreen({ config }: { config: QuizConfig }) {
         cityLabel={scope.cityLabel}
         subline={`${correct} doğru · Sorular: ${scopeLabel}`}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
 /* ═════════════════════════ KURULUM KARTI ═════════════════════════ */
+
+const RULE_TONES: QuizToneName[] = ["blue", "green", "pink", "orange", "purple"];
 
 function SetupCard({
   config,
@@ -573,156 +714,159 @@ function SetupCard({
   onRetry: () => void;
   onStart: () => void;
 }) {
+  const insets = useSafeAreaInsets();
+  const reduceMotion = useReduceMotion();
+  const pop = useRef(new Animated.Value(reduceMotion ? 1 : 0)).current;
+  useEffect(() => {
+    if (!reduceMotion) Animated.spring(pop, { toValue: 1, friction: 7, tension: 80, useNativeDriver: true }).start();
+  }, [pop, reduceMotion]);
   return (
-    <ScrollView contentContainerStyle={styles.setupScroll} showsVerticalScrollIndicator={false}>
-      <View style={styles.card}>
-        <View style={styles.setupIcon}>
-          <Ionicons name={config.icon} size={24} color={colors.brandAccent} />
-        </View>
-        <Text style={styles.overline} {...textScale.badge}>
-          {upperTR("Elitlig Arena · Bilgi Yarışması")}
-        </Text>
-        <Text style={styles.setupTitle} {...textScale.dense}>
-          {config.title}
-        </Text>
+    <ScrollView contentContainerStyle={[styles.setupScroll, { paddingBottom: insets.bottom + space.xl }]} showsVerticalScrollIndicator={false}>
+      <Animated.View
+        style={[
+          styles.setupWrap,
+          { opacity: pop, transform: [{ scale: pop.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) }] },
+        ]}
+      >
+        <CartoonPanel style={styles.card}>
+          <IconBubble icon={config.icon} tone={GAME_TONE[config.game] ?? "blue"} size={64} />
+          <Text style={styles.setupTitle} {...textScale.dense}>
+            {config.title}
+          </Text>
+          <Text style={styles.setupSub} {...textScale.dense}>
+            {config.subtitle}
+          </Text>
 
-        <View style={styles.rules}>
-          {config.rules.map((rule) => (
-            <View key={rule.text} style={styles.rule}>
-              <Ionicons name={rule.icon} size={15} color={colors.brandAccent} style={styles.ruleIcon} />
-              <Text style={styles.ruleText} {...textScale.long}>
-                {rule.text}
+          <View style={styles.rules}>
+            {config.rules.map((rule, i) => (
+              <View key={rule.text} style={styles.rule}>
+                <IconBubble icon={rule.icon} tone={RULE_TONES[i % RULE_TONES.length]} size={30} />
+                <Text style={styles.ruleText} {...textScale.long}>
+                  {rule.text}
+                </Text>
+              </View>
+            ))}
+          </View>
+
+          <Text style={styles.cityLabel} {...textScale.badge}>
+            {upperTR("Sorular nereden gelsin?")}
+          </Text>
+          <Touchable
+            feedback="card"
+            haptic="light"
+            onPress={onPickCity}
+            style={styles.cityPick}
+            accessibilityRole="button"
+            accessibilityLabel={`Soru kapsamı: ${city ? city.label : "Tüm Türkiye"}. Değiştir`}
+          >
+            <IconBubble icon={city ? "location" : "earth"} tone="blue" size={40} />
+            <View style={styles.flex}>
+              <Text style={styles.cityName} {...textScale.dense}>
+                {city ? city.label : "Tüm Türkiye"}
+              </Text>
+              <Text style={styles.cityHint} {...textScale.dense}>
+                {city ? "Yalnız bu ilin oyuncu ve maçları" : "Bütün illerden karışık"}
               </Text>
             </View>
-          ))}
-        </View>
-
-        <Text style={styles.cityLabel} {...textScale.badge}>
-          {upperTR("Sorular nereden gelsin?")}
-        </Text>
-        <Touchable
-          feedback="card"
-          haptic="light"
-          onPress={onPickCity}
-          style={styles.cityPick}
-          accessibilityRole="button"
-          accessibilityLabel={`Soru kapsamı: ${city ? city.label : "Tüm Türkiye"}. Değiştir`}
-        >
-          <View style={styles.cityIcon}>
-            <Ionicons name={city ? "location" : "earth"} size={18} color={colors.brandAccent} />
-          </View>
-          <View style={styles.flex}>
-            <Text style={styles.cityName} {...textScale.dense}>
-              {city ? city.label : "Tüm Türkiye"}
-            </Text>
-            <Text style={styles.cityHint} {...textScale.dense}>
-              {city ? "Yalnız bu ilin oyuncu ve maçları" : "Bütün illerden karışık"}
-            </Text>
-          </View>
-          <Text style={styles.cityChange} {...textScale.badge}>
-            Değiştir
-          </Text>
-        </Touchable>
-
-        {error ? (
-          <Touchable feedback="button" onPress={onRetry} style={styles.notice} accessibilityRole="button" accessibilityLabel="Tekrar dene">
-            <Ionicons name="cloud-offline-outline" size={15} color={colors.danger} />
-            <Text style={styles.noticeText} {...textScale.dense}>
-              Sorular yüklenemedi · tekrar dene
-            </Text>
+            <View style={styles.cityChange}>
+              <Text style={styles.cityChangeText} {...textScale.badge}>
+                {upperTR("Değiştir")}
+              </Text>
+            </View>
           </Touchable>
-        ) : !loading && !enough ? (
-          <View style={styles.notice}>
-            <Ionicons name="information-circle-outline" size={15} color={colors.warn} />
-            <Text style={styles.noticeText} {...textScale.dense}>
-              Bu ilde henüz yeterli veri yok. Başka bir il ya da Tüm Türkiye'yi seç.
+
+          {error ? (
+            <Touchable feedback="button" onPress={onRetry} style={[styles.notice, styles.noticeBad]} accessibilityRole="button" accessibilityLabel="Tekrar dene">
+              <Ionicons name="cloud-offline" size={16} color={CARTOON.redLip} />
+              <Text style={styles.noticeText} {...textScale.dense}>
+                Sorular yüklenemedi · tekrar dene
+              </Text>
+            </Touchable>
+          ) : !loading && !enough ? (
+            <View style={styles.notice}>
+              <Ionicons name="information-circle" size={16} color={CARTOON.goldLip} />
+              <Text style={styles.noticeText} {...textScale.dense}>
+                Bu ilde henüz yeterli veri yok. Başka bir il ya da Tüm Türkiye'yi seç.
+              </Text>
+            </View>
+          ) : null}
+
+          <NavyPill style={styles.bestPill}>
+            <Ionicons name="trophy" size={15} color={CARTOON.star} />
+            <Text style={styles.pillText} {...textScale.dense}>
+              {best > 0 ? `Rekorun ${formatCount(best)} ${SCORE_UNIT}` : "Henüz rekorun yok"}
             </Text>
-          </View>
-        ) : null}
+          </NavyPill>
 
-        <View style={styles.bestPill}>
-          <Ionicons name="trophy" size={13} color={colors.star} />
-          <Text style={styles.bestText} {...textScale.dense}>
-            {best > 0 ? `Rekorun ${formatCount(best)} ${SCORE_UNIT}` : "Henüz rekorun yok"}
-          </Text>
+          <CartoonButton
+            label={loading ? "Sorular hazırlanıyor" : "Başla"}
+            icon="play"
+            tone="green"
+            size="lg"
+            loading={loading}
+            disabled={!enough || error}
+            onPress={() => onStart()}
+            style={styles.stretch}
+            accessibilityLabel={loading ? "Sorular hazırlanıyor" : "Başla"}
+          />
+        </CartoonPanel>
+        <View style={styles.setupRibbon} pointerEvents="none">
+          <Ribbon label="Bilgi yarışması" icon="bulb" />
         </View>
-
-        <Button
-          label={loading ? "Sorular hazırlanıyor" : "Başla"}
-          icon="play"
-          size="lg"
-          fullWidth
-          loading={loading}
-          disabled={!enough || error}
-          onPress={onStart}
-        />
-      </View>
+      </Animated.View>
     </ScrollView>
   );
 }
 
 /* ═════════════════════════ HUD ═════════════════════════ */
 
-function Hud({
-  score,
-  lives,
-  streak,
-  level,
-  scopeLabel,
-  bump,
-}: {
-  score: number;
-  lives: number;
-  streak: number;
-  level: number;
-  scopeLabel: string;
-  bump: Animated.Value;
-}) {
-  const mult = multiplierOf(streak);
+function Hud({ score, lives, bump }: { score: number; lives: number; bump: Animated.Value }) {
   return (
     <View style={styles.hud}>
-      <View style={styles.flex}>
-        <Text style={styles.hudLabel} {...textScale.badge}>
-          {upperTR(`Puan · ${scopeLabel}`)}
-        </Text>
+      <NavyPill>
+        <Ionicons name="star" size={17} color={CARTOON.star} />
         <Animated.Text
-          style={[styles.hudScore, { transform: [{ scale: bump.interpolate({ inputRange: [0, 1], outputRange: [1, 1.25] }) }] }]}
+          style={[styles.hudScore, { transform: [{ scale: bump.interpolate({ inputRange: [0, 1], outputRange: [1, 1.3] }) }] }]}
+          accessibilityLabel={`Puan ${score}`}
           {...textScale.dense}
         >
           {formatCount(score)}
         </Animated.Text>
-      </View>
-      <View style={styles.hudRight}>
-        <View style={styles.hearts}>
-          {Array.from({ length: QUIZ_LIVES }, (_, i) => (
-            <Ionicons key={i} name={i < lives ? "heart" : "heart-outline"} size={18} color={i < lives ? colors.live : colors.onDarkMuted} />
-          ))}
-        </View>
-        <View style={styles.hudPills}>
-          {streak >= 2 ? (
-            <View style={[styles.pill, mult > 1 && styles.pillHot]}>
-              <Ionicons name="flame" size={12} color={mult > 1 ? colors.star : colors.onDarkMuted} />
-              <Text style={[styles.pillText, mult > 1 && styles.pillTextHot]} {...textScale.badge}>
-                {mult > 1 ? `${streak} · ×${mult}` : `${streak}`}
-              </Text>
-            </View>
-          ) : null}
-          <View style={[styles.pill, styles.pillLevel]}>
-            <Text style={styles.pillText} {...textScale.badge}>{`Seviye ${level}`}</Text>
-          </View>
-        </View>
-      </View>
+      </NavyPill>
+      <NavyPill accessibilityLabel={`${lives} can`}>
+        {Array.from({ length: QUIZ_LIVES }, (_, i) => (
+          <Heart key={i} full={i < lives} />
+        ))}
+      </NavyPill>
+    </View>
+  );
+}
+
+/** Can kalbi: kaybedildiği an küçülüp söner (sonlu yay). */
+function Heart({ full }: { full: boolean }) {
+  const v = useRef(new Animated.Value(full ? 1 : 0)).current;
+  useEffect(() => {
+    Animated.spring(v, { toValue: full ? 1 : 0, friction: 5, tension: 140, useNativeDriver: true }).start();
+  }, [full, v]);
+  return (
+    <View style={styles.heartBox}>
+      <Ionicons name="heart" size={20} color={QUIZ.faint} style={styles.heartGhost} />
+      <Animated.View style={{ transform: [{ scale: v }], opacity: v }}>
+        <Ionicons name="heart" size={20} color={CARTOON.heart} />
+      </Animated.View>
     </View>
   );
 }
 
 function TimerBar({ timer }: { timer: Animated.Value }) {
   return (
-    <View style={styles.timerTrack}>
+    <View style={styles.timerTrack} accessibilityRole="progressbar" accessibilityLabel="Kalan süre">
       <Animated.View style={[styles.timerFill, { transform: [{ scaleX: timer }] }]}>
-        <Animated.View
-          style={[StyleSheet.absoluteFill, styles.timerDanger, { opacity: timer.interpolate({ inputRange: [0, 0.3, 0.45, 1], outputRange: [1, 1, 0, 0] }) }]}
-        />
+        <LinearGradient colors={CARTOON.green} start={TOP} end={BOTTOM} style={StyleSheet.absoluteFill} />
+        <Animated.View style={[StyleSheet.absoluteFill, { opacity: timer.interpolate({ inputRange: [0, 0.3, 0.45, 1], outputRange: [1, 1, 0, 0] }) }]}>
+          <LinearGradient colors={CARTOON.red} start={TOP} end={BOTTOM} style={StyleSheet.absoluteFill} />
+        </Animated.View>
+        <View style={styles.timerShine} />
       </Animated.View>
     </View>
   );
@@ -745,10 +889,11 @@ function QuestionCard({
 }) {
   const v = question.visual;
   return (
-    <View style={styles.qCard}>
+    <CartoonPanel style={styles.qCard}>
       <View style={styles.qTag}>
+        <LinearGradient colors={CARTOON.purple} start={TOP} end={BOTTOM} style={StyleSheet.absoluteFill} />
         <Text style={styles.qTagText} numberOfLines={1} {...textScale.badge}>
-          {question.tag}
+          {upperTR(question.tag)}
         </Text>
       </View>
       <Text style={styles.qPrompt} {...textScale.dense}>
@@ -763,32 +908,22 @@ function QuestionCard({
             const isChosen = key === chosen;
             const revealed = status === "revealed";
             return (
-              <Touchable
+              <DuelCard
                 key={p.id}
-                feedback="card"
-                haptic="none"
-                disabled={revealed}
+                name={p.name}
+                image={p.image}
+                team={p.team}
+                value={revealed ? String(v.values[i]) : "?"}
+                tone={i === 0 ? "blue" : "red"}
+                revealed={revealed}
+                isAnswer={isAnswer}
+                isChosen={isChosen}
                 onPress={() => key && onPick(key)}
-                style={[styles.duelCard, revealed && isAnswer && styles.cardOk, revealed && isChosen && !isAnswer && styles.cardBad]}
-                accessibilityRole="button"
-                accessibilityLabel={p.name}
-              >
-                <Avatar name={p.name} image={p.image} size={64} ring={revealed && isAnswer ? "brand" : "none"} />
-                <Text style={styles.duelName} numberOfLines={2} {...textScale.dense}>
-                  {p.name}
-                </Text>
-                <Text style={styles.duelTeam} numberOfLines={1} {...textScale.dense}>
-                  {p.team || " "}
-                </Text>
-                <View style={[styles.duelValue, revealed && isAnswer && styles.duelValueOk]}>
-                  <Text style={[styles.duelValueText, revealed && isAnswer && styles.duelValueTextOk]} {...textScale.badge}>
-                    {revealed ? v.values[i] : "?"}
-                  </Text>
-                </View>
-              </Touchable>
+              />
             );
           })}
           <View style={styles.vs} pointerEvents="none">
+            <LinearGradient colors={CARTOON.gold} start={TOP} end={BOTTOM} style={StyleSheet.absoluteFill} />
             <Text style={styles.vsText} {...textScale.badge}>
               VS
             </Text>
@@ -796,7 +931,9 @@ function QuestionCard({
         </View>
       ) : v.type === "spotlight" ? (
         <View style={styles.spot}>
-          <Avatar name={v.player.name} image={v.player.image} size={72} ring="brand" />
+          <View style={styles.avatarRing}>
+            <Avatar name={v.player.name} image={v.player.image} size={68} />
+          </View>
           <View style={styles.flex}>
             <Text style={styles.spotName} numberOfLines={2} {...textScale.dense}>
               {v.player.name}
@@ -809,10 +946,11 @@ function QuestionCard({
       ) : v.type === "mystery" ? (
         <View style={styles.mystery}>
           <View style={styles.mysteryAvatar}>
+            <LinearGradient colors={CARTOON.purple} start={TOP} end={BOTTOM} style={StyleSheet.absoluteFill} />
             {status === "revealed" ? (
-              <Avatar name={v.player.name} image={v.player.image} size={76} ring="brand" />
+              <Avatar name={v.player.name} image={v.player.image} size={76} />
             ) : (
-              <Ionicons name="help" size={44} color={colors.onDark} />
+              <Ionicons name="help" size={48} color={CARTOON.white} />
             )}
           </View>
           <View style={styles.hints}>
@@ -821,7 +959,7 @@ function QuestionCard({
               const open = status === "revealed" || elapsed >= at;
               return (
                 <View key={hint} style={[styles.hint, open && styles.hintOpen]}>
-                  <Ionicons name={open ? "bulb" : "lock-closed"} size={13} color={open ? colors.star : colors.onDarkMuted} />
+                  <Ionicons name={open ? "bulb" : "lock-closed"} size={14} color={open ? CARTOON.goldLip : CARTOON.cardMuted} />
                   <Text style={[styles.hintText, !open && styles.hintLocked]} numberOfLines={2} {...textScale.dense}>
                     {open ? hint : `${Math.max(1, Math.ceil(at - elapsed))} sn sonra açılır`}
                   </Text>
@@ -833,7 +971,67 @@ function QuestionCard({
       ) : v.type === "match" ? (
         <MatchBoard match={v.match} revealed={status === "revealed"} />
       ) : null}
-    </View>
+    </CartoonPanel>
+  );
+}
+
+function DuelCard({
+  name,
+  image,
+  team,
+  value,
+  tone,
+  revealed,
+  isAnswer,
+  isChosen,
+  onPress,
+}: {
+  name: string;
+  image?: string | null;
+  team?: string | null;
+  value: string;
+  tone: QuizToneName;
+  revealed: boolean;
+  isAnswer: boolean;
+  isChosen: boolean;
+  onPress: () => void;
+}) {
+  const fx = useAnswerFx(revealed && isAnswer, revealed && isChosen && !isAnswer);
+  const fill = tone === "blue" ? CARTOON.blue : CARTOON.red;
+  return (
+    <Animated.View style={[styles.flex, fx.style, revealed && !isAnswer && styles.faded]}>
+      <Touchable
+        feedback="card"
+        haptic="none"
+        disabled={revealed}
+        onPress={onPress}
+        style={[styles.duelCard, revealed && isAnswer && styles.duelCardOk]}
+        accessibilityRole="button"
+        accessibilityLabel={name}
+      >
+        <LinearGradient colors={fill} start={TOP} end={BOTTOM} style={StyleSheet.absoluteFill} />
+        <View style={styles.duelShine} />
+        <View style={styles.avatarRing}>
+          <Avatar name={name} image={image ?? undefined} size={60} />
+        </View>
+        <Text style={styles.duelName} numberOfLines={2} {...textScale.dense}>
+          {name}
+        </Text>
+        <Text style={styles.duelTeam} numberOfLines={1} {...textScale.dense}>
+          {team || " "}
+        </Text>
+        <View style={[styles.duelValue, revealed && isAnswer && styles.duelValueOk]}>
+          <Text style={[styles.duelValueText, revealed && isAnswer && styles.duelValueTextOk]} {...textScale.badge}>
+            {value}
+          </Text>
+        </View>
+        {revealed && (isAnswer || isChosen) ? (
+          <View style={[styles.cornerBadge, isAnswer ? styles.badgeOk : styles.badgeBad]}>
+            <Ionicons name={isAnswer ? "checkmark" : "close"} size={16} color={CARTOON.white} />
+          </View>
+        ) : null}
+      </Touchable>
+    </Animated.View>
   );
 }
 
@@ -861,6 +1059,7 @@ function MatchBoard({ match, revealed }: { match: QuizMatch; revealed: boolean }
           </Text>
         </View>
         <View style={styles.matchScoreBox}>
+          <LinearGradient colors={CARTOON.pill} start={TOP} end={BOTTOM} style={StyleSheet.absoluteFill} />
           {revealed ? (
             <Animated.Text
               style={[styles.matchScore, { transform: [{ scale: pop.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] }) }] }]}
@@ -893,6 +1092,7 @@ function MatchBoard({ match, revealed }: { match: QuizMatch; revealed: boolean }
 function OptionButton({
   option,
   mark,
+  tone,
   status,
   isAnswer,
   isChosen,
@@ -901,6 +1101,7 @@ function OptionButton({
 }: {
   option: QuizOption;
   mark: string;
+  tone: QuizToneName;
   status: Status;
   isAnswer: boolean;
   isChosen: boolean;
@@ -911,40 +1112,65 @@ function OptionButton({
   const good = revealed && isAnswer;
   const bad = revealed && isChosen && !isAnswer;
   const faded = removed || (revealed && !isAnswer && !isChosen);
+  const fx = useAnswerFx(good, bad);
+  const face = good ? "green" : bad ? "red" : faded ? "ghost" : tone;
   return (
-    <Touchable
-      feedback="button"
-      haptic="none"
-      disabled={revealed || removed}
-      onPress={onPress}
-      style={[styles.option, good && styles.cardOk, bad && styles.cardBad, faded && styles.optionFaded]}
-      accessibilityRole="button"
-      accessibilityLabel={option.label}
-      accessibilityState={{ disabled: revealed || removed }}
-    >
-      <View style={[styles.mark, good && styles.markOk, bad && styles.markBad]}>
-        {good ? (
-          <Ionicons name="checkmark" size={15} color={colors.onDark} />
-        ) : bad ? (
-          <Ionicons name="close" size={15} color={colors.onDark} />
-        ) : (
-          <Text style={styles.markText} {...textScale.badge}>
-            {mark}
-          </Text>
-        )}
-      </View>
-      {option.avatar ? <Avatar name={option.avatar.name} image={option.avatar.image} size={34} /> : null}
-      <View style={styles.flex}>
-        <Text style={[styles.optionLabel, removed && styles.optionStruck]} numberOfLines={2} {...textScale.dense}>
-          {option.label}
-        </Text>
-        {option.sub ? (
-          <Text style={styles.optionSub} numberOfLines={1} {...textScale.dense}>
-            {option.sub}
-          </Text>
-        ) : null}
-      </View>
-    </Touchable>
+    <Animated.View style={[fx.style, faded && styles.fadedOption]}>
+      <CartoonButton
+        tone={face}
+        keepTone
+        haptic={false}
+        disabled={revealed || removed}
+        onPress={onPress}
+        accessibilityLabel={option.label}
+        faceStyle={styles.optionFace}
+      >
+        <View style={styles.optionRow}>
+          <View style={styles.mark}>
+            {good ? (
+              <Ionicons name="checkmark" size={18} color={CARTOON.greenLip} />
+            ) : bad ? (
+              <Ionicons name="close" size={18} color={CARTOON.redLip} />
+            ) : (
+              <Text style={styles.markText} {...textScale.badge}>
+                {mark}
+              </Text>
+            )}
+          </View>
+          {option.avatar ? (
+            <View style={styles.optionAvatar}>
+              <Avatar name={option.avatar.name} image={option.avatar.image} size={34} />
+            </View>
+          ) : null}
+          <View style={styles.flex}>
+            <Text style={[styles.optionLabel, removed && styles.optionStruck]} numberOfLines={2} {...textScale.dense}>
+              {option.label}
+            </Text>
+            {option.sub ? (
+              <Text style={styles.optionSub} numberOfLines={1} {...textScale.dense}>
+                {option.sub}
+              </Text>
+            ) : null}
+          </View>
+        </View>
+      </CartoonButton>
+    </Animated.View>
+  );
+}
+
+function RevealLine({ ok, timedOut, text }: { ok: boolean; timedOut: boolean; text: string }) {
+  const pop = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.spring(pop, { toValue: 1, friction: 6, tension: 140, useNativeDriver: true }).start();
+  }, [pop]);
+  return (
+    <Animated.View style={[styles.revealLine, { opacity: pop, transform: [{ scale: pop.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1] }) }] }]}>
+      <LinearGradient colors={ok ? CARTOON.green : CARTOON.red} start={TOP} end={BOTTOM} style={StyleSheet.absoluteFill} />
+      <Ionicons name={ok ? "checkmark-circle" : timedOut ? "time" : "close-circle"} size={22} color={CARTOON.white} />
+      <Text style={styles.revealText} numberOfLines={2} {...textScale.dense}>
+        {text}
+      </Text>
+    </Animated.View>
   );
 }
 
@@ -966,280 +1192,281 @@ function MissNote({ question }: { question: QuizQuestion }) {
 
 /* ═════════════════════════ STİLLER ═════════════════════════ */
 
-const tile = withAlpha(colors.onDark, 0.07);
-const tileBorder = withAlpha(colors.onDark, 0.14);
+const shadow = { textShadowColor: CARTOON.textShadow, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 } as const;
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
+  screen: { flex: 1, backgroundColor: CARTOON.night[2] },
+  body: { flex: 1 },
   flex: { flex: 1 },
+  shrink: { flexShrink: 1 },
+  stretch: { alignSelf: "stretch" },
+  faded: { opacity: 0.4 },
+  fadedOption: { opacity: 0.7 },
 
-  stage: {
-    flex: 1,
-    marginHorizontal: layout.screenPadding,
-    marginBottom: layout.screenPadding,
-    marginTop: space.xs,
-    borderRadius: radius.xl,
-    overflow: "hidden",
-    backgroundColor: colors.inkBlock,
-    ...elevate(2),
-    borderWidth: 0,
-  },
-  glow: {
-    position: "absolute",
-    top: -120,
-    left: -60,
-    right: -60,
-    height: 260,
-    borderRadius: radius.pill,
-    backgroundColor: withAlpha(colors.brand, 0.28),
-  },
+  topBar: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: layout.screenPadding, minHeight: 50 },
+  stage: { flex: 1 },
+  pillText: { ...type.label, fontFamily: fonts.bold, color: CARTOON.white, letterSpacing: 0.6, ...shadow },
+  pillTextSm: { ...type.labelXs, fontFamily: fonts.bold, color: CARTOON.white, letterSpacing: 0.5, flexShrink: 1 },
+  smallPill: { minHeight: 28, paddingHorizontal: space.sm },
 
   /* — Kurulum — */
-  setupScroll: { flexGrow: 1, justifyContent: "center", padding: space.md },
-  card: {
-    alignSelf: "center",
-    maxWidth: 400,
-    width: "100%",
-    borderRadius: radius.xl,
-    ...elevate(4),
-    padding: space.xl,
-    gap: space.xs,
-    alignItems: "center",
-  },
-  setupIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: radius.pill,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.brandDim,
-    marginBottom: space.xxs,
-  },
-  overline: { ...type.micro, color: colors.brandAccent, textAlign: "center" },
-  setupTitle: { ...type.display, color: colors.textPrimary },
-  rules: { alignSelf: "stretch", gap: space.s, marginVertical: space.sm },
-  rule: { flexDirection: "row", gap: space.s, alignItems: "flex-start" },
-  ruleIcon: { marginTop: 2 },
-  ruleText: { ...type.bodySm, color: colors.textSecondary, flex: 1 },
-  cityLabel: { ...type.micro, color: colors.textTertiary, alignSelf: "flex-start", marginTop: space.xs },
+  setupScroll: { flexGrow: 1, justifyContent: "center", paddingHorizontal: layout.screenPadding, paddingTop: space.lg },
+  setupWrap: { alignSelf: "center", maxWidth: 420, width: "100%", paddingTop: 20 },
+  setupRibbon: { position: "absolute", top: 0, left: 0, right: 0, alignItems: "center" },
+  card: { alignItems: "center", gap: space.s, paddingTop: space.xxxl },
+  setupTitle: { ...type.largeTitle, fontFamily: fonts.heading, color: CARTOON.cardInk, textAlign: "center", marginTop: space.xs },
+  setupSub: { ...type.bodySm, fontFamily: fonts.semibold, color: CARTOON.cardMuted, textAlign: "center" },
+  rules: { alignSelf: "stretch", gap: space.sm, marginVertical: space.sm },
+  rule: { flexDirection: "row", gap: space.m, alignItems: "center" },
+  ruleText: { ...type.bodySm, fontFamily: fonts.semibold, color: CARTOON.cardInk, flex: 1 },
+  cityLabel: { ...type.micro, fontFamily: fonts.bold, color: CARTOON.cardMuted, alignSelf: "flex-start", marginTop: space.xs },
   cityPick: {
     alignSelf: "stretch",
     flexDirection: "row",
     alignItems: "center",
     gap: space.m,
     padding: space.m,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.brandBorder,
-    backgroundColor: colors.brandDim,
+    borderRadius: radius.xl,
+    borderWidth: OUTLINE,
+    borderColor: CARTOON.outline,
+    backgroundColor: CARTOON.cardSoft,
   },
-  cityIcon: {
-    width: 36,
-    height: 36,
+  cityName: { ...type.h2, color: CARTOON.cardInk },
+  cityHint: { ...type.caption, letterSpacing: 0, color: CARTOON.cardMuted },
+  cityChange: {
+    borderRadius: radius.pill,
+    borderWidth: 2,
+    borderColor: CARTOON.outline,
+    backgroundColor: CARTOON.blue[1],
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xs,
+  },
+  cityChangeText: { ...type.micro, fontFamily: fonts.bold, color: CARTOON.white },
+  notice: {
+    alignSelf: "stretch",
+    flexDirection: "row",
+    gap: space.xs,
+    alignItems: "center",
+    padding: space.sm,
+    borderRadius: radius.md,
+    backgroundColor: QUIZ.hintOpen,
+    borderWidth: 2,
+    borderColor: QUIZ.hintOpenBorder,
+  },
+  noticeBad: { backgroundColor: CARTOON.cardSoft, borderColor: CARTOON.red[1] },
+  noticeText: { ...type.caption, fontFamily: fonts.semibold, letterSpacing: 0, color: CARTOON.cardInk, flex: 1 },
+  bestPill: { marginVertical: space.s },
+
+  /* — HUD — */
+  hud: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  hudScore: { ...type.scoreSm, color: CARTOON.white, ...shadow, minWidth: 28 },
+  heartBox: { width: 20, height: 20 },
+  heartGhost: { position: "absolute" },
+  subBar: { flexDirection: "row", alignItems: "center", gap: space.xs, paddingHorizontal: layout.screenPadding, marginTop: space.s },
+
+  timerRow: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: layout.screenPadding, marginTop: space.sm },
+  timerTrack: {
+    flex: 1,
+    height: 20,
+    borderRadius: radius.pill,
+    borderWidth: OUTLINE,
+    borderColor: CARTOON.outline,
+    backgroundColor: CARTOON.pill[1],
+    overflow: "hidden",
+  },
+  timerFill: { flex: 1, borderRadius: radius.pill, overflow: "hidden", transformOrigin: "left" },
+  timerShine: { position: "absolute", top: 2, left: 6, right: 6, height: 4, borderRadius: 2, backgroundColor: CARTOON.shine },
+  seconds: {
+    width: 40,
+    height: 40,
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.surface1,
+    borderWidth: OUTLINE,
+    borderColor: CARTOON.outline,
+    backgroundColor: CARTOON.pill[0],
   },
-  cityName: { ...type.h4, color: colors.textPrimary },
-  cityHint: { ...type.caption, letterSpacing: 0, color: colors.textSecondary },
-  cityChange: { ...type.caption, fontFamily: fonts.bold, letterSpacing: 0, color: colors.brandAccent },
-  notice: { alignSelf: "stretch", flexDirection: "row", gap: space.xs, alignItems: "center", paddingVertical: space.xs },
-  noticeText: { ...type.caption, letterSpacing: 0, color: colors.textSecondary, flex: 1 },
-  bestPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.xs,
-    backgroundColor: colors.surface3,
-    borderRadius: radius.pill,
-    paddingHorizontal: space.md,
-    paddingVertical: space.s,
-    marginVertical: space.s,
-  },
-  bestText: { ...type.bodySm, fontFamily: fonts.bold, color: colors.textPrimary },
+  secondsHot: { backgroundColor: CARTOON.red[1] },
+  secondsText: { ...type.scoreSm, color: CARTOON.white, ...shadow },
 
-  /* — HUD — */
-  hud: { flexDirection: "row", alignItems: "flex-start", paddingHorizontal: space.md, paddingTop: space.md, paddingBottom: space.s },
-  hudLabel: { ...type.micro, color: colors.onDarkMuted },
-  hudScore: { ...type.scoreMd, color: colors.onDark, alignSelf: "flex-start" },
-  hudRight: { alignItems: "flex-end", gap: space.xs },
-  hearts: { flexDirection: "row", gap: 2 },
-  hudPills: { flexDirection: "row", gap: space.xs },
-  pill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-    borderRadius: radius.pill,
-    paddingHorizontal: space.s,
-    paddingVertical: 3,
-    backgroundColor: tile,
-    borderWidth: 1,
-    borderColor: tileBorder,
-  },
-  pillHot: { backgroundColor: withAlpha(colors.star, 0.16), borderColor: withAlpha(colors.star, 0.45) },
-  pillLevel: { backgroundColor: withAlpha(colors.brand, 0.55), borderColor: withAlpha(colors.brandOnDark, 0.5) },
-  pillText: { ...type.caption, fontFamily: fonts.bold, letterSpacing: 0, color: colors.onDark },
-  pillTextHot: { color: colors.star },
-
-  timerTrack: { height: 6, marginHorizontal: space.md, borderRadius: 3, backgroundColor: tile, overflow: "hidden" },
-  timerFill: { flex: 1, borderRadius: 3, backgroundColor: colors.brandOnDark, transformOrigin: "left" },
-  timerDanger: { backgroundColor: colors.live, borderRadius: 3 },
-
-  playScroll: { padding: space.md, gap: space.md, paddingBottom: space.xxl },
+  playScroll: { padding: layout.screenPadding, gap: space.md },
 
   /* — Soru — */
-  qCard: {
-    borderRadius: radius.lg,
-    padding: space.md,
-    gap: space.sm,
-    backgroundColor: tile,
-    borderWidth: 1,
-    borderColor: tileBorder,
-  },
+  qCard: { gap: space.m, padding: space.lg },
   qTag: {
     alignSelf: "flex-start",
     borderRadius: radius.pill,
-    paddingHorizontal: space.s,
-    paddingVertical: 2,
-    backgroundColor: withAlpha(colors.brand, 0.5),
+    paddingHorizontal: space.m,
+    paddingVertical: 3,
+    borderWidth: 2,
+    borderColor: CARTOON.outline,
+    overflow: "hidden",
     maxWidth: "100%",
   },
-  qTagText: { ...type.micro, color: colors.onDark },
-  qPrompt: { ...type.h2, color: colors.onDark },
+  qTagText: { ...type.micro, fontFamily: fonts.bold, color: CARTOON.white },
+  qPrompt: { ...type.h1, fontFamily: fonts.heading, color: CARTOON.cardInk },
 
-  duel: { flexDirection: "row", gap: space.sm, marginTop: space.xs },
+  avatarRing: { borderRadius: radius.pill, borderWidth: OUTLINE, borderColor: CARTOON.outline, backgroundColor: CARTOON.white, padding: 2 },
+
+  duel: { flexDirection: "row", gap: space.m, marginTop: space.xs },
   duelCard: {
-    flex: 1,
     alignItems: "center",
     gap: space.xxs,
     paddingVertical: space.md,
     paddingHorizontal: space.s,
-    borderRadius: radius.lg,
-    backgroundColor: tile,
-    borderWidth: 1.5,
-    borderColor: tileBorder,
+    borderRadius: radius.xl,
+    borderWidth: OUTLINE,
+    borderColor: CARTOON.outline,
+    overflow: "hidden",
   },
-  duelName: { ...type.h4, color: colors.onDark, textAlign: "center", marginTop: space.xs, minHeight: 40 },
-  duelTeam: { ...type.caption, letterSpacing: 0, color: colors.onDarkMuted, textAlign: "center" },
-  duelValue: { marginTop: space.xs, borderRadius: radius.pill, paddingHorizontal: space.m, paddingVertical: 3, backgroundColor: tile },
-  duelValueOk: { backgroundColor: withAlpha(colors.win, 0.25) },
-  duelValueText: { ...type.tableNumStrong, color: colors.onDarkMuted },
-  duelValueTextOk: { color: colors.onDark },
+  duelCardOk: { borderColor: CARTOON.greenLip },
+  duelShine: { position: "absolute", top: 3, left: 8, right: 8, height: 22, borderRadius: radius.md, backgroundColor: CARTOON.shine },
+  duelName: { ...type.h3, fontFamily: fonts.heading, color: CARTOON.white, textAlign: "center", marginTop: space.xs, minHeight: 40, ...shadow },
+  duelTeam: { ...type.caption, fontFamily: fonts.semibold, letterSpacing: 0, color: QUIZ.muted, textAlign: "center" },
+  duelValue: {
+    marginTop: space.xs,
+    minWidth: 52,
+    alignItems: "center",
+    borderRadius: radius.pill,
+    paddingHorizontal: space.m,
+    paddingVertical: 3,
+    backgroundColor: CARTOON.white,
+    borderWidth: 2,
+    borderColor: CARTOON.outline,
+  },
+  duelValueOk: { backgroundColor: CARTOON.green[1] },
+  duelValueText: { ...type.scoreSm, color: CARTOON.cardInk },
+  duelValueTextOk: { color: CARTOON.white },
+  cornerBadge: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    width: 26,
+    height: 26,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: CARTOON.outline,
+  },
+  badgeOk: { backgroundColor: CARTOON.correct },
+  badgeBad: { backgroundColor: CARTOON.wrong },
   vs: {
     position: "absolute",
     alignSelf: "center",
     left: "50%",
-    top: 48,
-    marginLeft: -18,
-    width: 36,
-    height: 36,
+    top: 40,
+    marginLeft: -22,
+    width: 44,
+    height: 44,
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.brand,
-    borderWidth: 2,
-    borderColor: colors.inkBlock,
+    borderWidth: OUTLINE,
+    borderColor: CARTOON.outline,
+    overflow: "hidden",
   },
-  vsText: { ...type.caption, fontFamily: fonts.bold, letterSpacing: 0, color: colors.onDark },
+  vsText: { ...type.label, fontFamily: fonts.bold, color: CARTOON.goldInk },
 
   spot: { flexDirection: "row", alignItems: "center", gap: space.md, marginTop: space.xs },
-  spotName: { ...type.h3, color: colors.onDark },
-  spotCaption: { ...type.caption, letterSpacing: 0, color: colors.onDarkMuted, marginTop: 2 },
+  spotName: { ...type.h1, fontFamily: fonts.heading, color: CARTOON.cardInk },
+  spotCaption: { ...type.caption, fontFamily: fonts.semibold, letterSpacing: 0, color: CARTOON.cardMuted, marginTop: 2 },
 
   mystery: { flexDirection: "row", gap: space.md, alignItems: "center", marginTop: space.xs },
   mysteryAvatar: {
-    width: 84,
-    height: 84,
+    width: 86,
+    height: 86,
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: withAlpha(colors.brand, 0.35),
-    borderWidth: 2,
-    borderColor: withAlpha(colors.brandOnDark, 0.6),
+    borderWidth: OUTLINE,
+    borderColor: CARTOON.outline,
+    overflow: "hidden",
   },
   hints: { flex: 1, gap: space.xs },
-  hint: { flexDirection: "row", alignItems: "center", gap: space.xs, paddingVertical: 4, paddingHorizontal: space.s, borderRadius: radius.md, backgroundColor: tile },
-  hintOpen: { backgroundColor: withAlpha(colors.star, 0.12) },
-  hintText: { ...type.caption, letterSpacing: 0, color: colors.onDark, flex: 1 },
-  hintLocked: { color: colors.onDarkMuted },
-
-  match: { gap: space.sm, marginTop: space.xs },
-  matchMeta: { ...type.micro, color: colors.onDarkMuted, textAlign: "center" },
-  matchRow: { flexDirection: "row", alignItems: "center", gap: space.s },
-  matchTeam: { flex: 1, alignItems: "center", gap: space.xs },
-  matchName: { ...type.h4, color: colors.onDark, textAlign: "center" },
-  matchScoreBox: { alignItems: "center", minWidth: 88 },
-  matchScore: { ...type.scoreMd, color: colors.onDark },
-  matchScoreHidden: { ...type.scoreMd, color: colors.onDarkMuted },
-  matchFt: { ...type.micro, color: colors.onDarkMuted, marginTop: 2 },
-
-  /* — Şıklar — */
-  options: { gap: space.s },
-  option: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.m,
-    minHeight: 56,
-    paddingVertical: space.s,
-    paddingHorizontal: space.m,
-    borderRadius: radius.lg,
-    backgroundColor: tile,
-    borderWidth: 1.5,
-    borderColor: tileBorder,
-  },
-  optionFaded: { opacity: 0.35 },
-  cardOk: { backgroundColor: withAlpha(colors.win, 0.22), borderColor: colors.win },
-  cardBad: { backgroundColor: withAlpha(colors.danger, 0.22), borderColor: colors.danger },
-  mark: {
-    width: 28,
-    height: 28,
-    borderRadius: radius.pill,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: withAlpha(colors.onDark, 0.12),
-  },
-  markOk: { backgroundColor: colors.win },
-  markBad: { backgroundColor: colors.danger },
-  markText: { ...type.caption, fontFamily: fonts.bold, letterSpacing: 0, color: colors.onDark },
-  optionLabel: { ...type.body, fontFamily: fonts.semibold, color: colors.onDark },
-  optionStruck: { textDecorationLine: "line-through" },
-  optionSub: { ...type.caption, letterSpacing: 0, color: colors.onDarkMuted },
-
-  tools: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  joker: {
+  hint: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.xs,
-    borderRadius: radius.pill,
-    paddingHorizontal: space.md,
-    paddingVertical: space.s,
-    backgroundColor: withAlpha(colors.star, 0.14),
-    borderWidth: 1,
-    borderColor: withAlpha(colors.star, 0.4),
+    paddingVertical: space.xs,
+    paddingHorizontal: space.sm,
+    borderRadius: radius.md,
+    backgroundColor: CARTOON.cardSoft,
+    borderWidth: 2,
+    borderColor: CARTOON.outlineSoft,
   },
-  jokerUsed: { backgroundColor: tile, borderColor: tileBorder },
-  jokerText: { ...type.caption, fontFamily: fonts.bold, letterSpacing: 0, color: colors.star },
-  jokerTextUsed: { color: colors.onDarkMuted },
-  secondsLeft: { ...type.tableNumStrong, color: colors.onDarkMuted },
+  hintOpen: { backgroundColor: QUIZ.hintOpen, borderColor: QUIZ.hintOpenBorder },
+  hintText: { ...type.caption, fontFamily: fonts.semibold, letterSpacing: 0, color: CARTOON.cardInk, flex: 1 },
+  hintLocked: { color: CARTOON.cardMuted },
 
-  revealLine: { flexDirection: "row", alignItems: "center", gap: space.xs, padding: space.m, borderRadius: radius.lg, borderWidth: 1 },
-  revealOk: { backgroundColor: withAlpha(colors.win, 0.14), borderColor: withAlpha(colors.win, 0.5) },
-  revealBad: { backgroundColor: withAlpha(colors.danger, 0.14), borderColor: withAlpha(colors.danger, 0.5) },
-  revealText: { ...type.bodySm, fontFamily: fonts.semibold, color: colors.onDark, flex: 1 },
+  match: { gap: space.sm, marginTop: space.xs },
+  matchMeta: { ...type.micro, color: CARTOON.cardMuted, textAlign: "center" },
+  matchRow: { flexDirection: "row", alignItems: "center", gap: space.s },
+  matchTeam: { flex: 1, alignItems: "center", gap: space.xs },
+  matchName: { ...type.h4, fontFamily: fonts.heading, color: CARTOON.cardInk, textAlign: "center" },
+  matchScoreBox: {
+    alignItems: "center",
+    minWidth: 96,
+    paddingVertical: space.s,
+    paddingHorizontal: space.sm,
+    borderRadius: radius.lg,
+    borderWidth: OUTLINE,
+    borderColor: CARTOON.outline,
+    overflow: "hidden",
+  },
+  matchScore: { ...type.scoreLg, color: CARTOON.white, ...shadow },
+  matchScoreHidden: { ...type.scoreLg, color: CARTOON.star, ...shadow },
+  matchFt: { ...type.micro, fontFamily: fonts.bold, color: QUIZ.muted, marginTop: 2 },
 
-  gain: { position: "absolute", top: 70, left: 0, right: 0, alignItems: "center" },
-  gainText: { ...type.scoreMd, color: colors.star },
-  gainSub: { ...type.caption, fontFamily: fonts.bold, letterSpacing: 0, color: colors.onDark },
+  /* — Şıklar — */
+  options: { gap: space.sm },
+  optionFace: { paddingVertical: space.sm, paddingHorizontal: space.m, minHeight: 58 },
+  optionRow: { flexDirection: "row", alignItems: "center", gap: space.m },
+  mark: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: CARTOON.white,
+    borderWidth: 2,
+    borderColor: CARTOON.outline,
+  },
+  markText: { ...type.h2, fontFamily: fonts.bold, color: CARTOON.outline },
+  optionAvatar: { borderRadius: radius.pill, borderWidth: 2, borderColor: CARTOON.outline },
+  optionLabel: { ...type.h2, fontFamily: fonts.heading, color: CARTOON.white, ...shadow },
+  optionStruck: { textDecorationLine: "line-through" },
+  optionSub: { ...type.caption, fontFamily: fonts.semibold, letterSpacing: 0, color: QUIZ.muted },
+
+  tools: { flexDirection: "row", alignItems: "center", justifyContent: "flex-start", marginTop: space.xs },
+
+  revealLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    padding: space.md,
+    borderRadius: radius.xl,
+    borderWidth: OUTLINE,
+    borderColor: CARTOON.outline,
+    overflow: "hidden",
+  },
+  revealText: { ...type.body, fontFamily: fonts.heading, color: CARTOON.white, flex: 1, ...shadow },
+
+  gain: { position: "absolute", top: 130, left: 0, right: 0, alignItems: "center" },
+  gainText: { ...type.scoreJumbo, color: CARTOON.star, textShadowColor: CARTOON.outline, textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0 },
+  gainSub: { ...type.label, fontFamily: fonts.bold, color: CARTOON.white, ...shadow },
 
   miss: {
     alignSelf: "stretch",
     marginTop: space.sm,
     padding: space.m,
     borderRadius: radius.lg,
-    backgroundColor: colors.surface2,
+    backgroundColor: CARTOON.cardSoft,
+    borderWidth: 2,
+    borderColor: CARTOON.outline,
     gap: 2,
   },
-  missLabel: { ...type.micro, color: colors.textTertiary },
-  missPrompt: { ...type.bodySm, color: colors.textSecondary },
-  missAnswer: { ...type.bodySm, fontFamily: fonts.bold, color: colors.textPrimary },
+  missLabel: { ...type.micro, fontFamily: fonts.bold, color: CARTOON.cardMuted },
+  missPrompt: { ...type.bodySm, color: CARTOON.cardMuted },
+  missAnswer: { ...type.bodySm, fontFamily: fonts.bold, color: CARTOON.cardInk },
 });
