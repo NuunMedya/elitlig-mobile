@@ -55,16 +55,17 @@ function zoneOf(f: ShareFrame, rank: number, total: number): string | null {
 /* ══════════════════════════ TABLO ══════════════════════════ */
 
 const COLS = ["O", "G", "B", "M", "AV"] as const;
+/** Sütun genişlikleri (birim): averaj "+146" sığsın diye geniş. */
+const colWidth = (label: string, compact: boolean) => (label === "AV" ? (compact ? 27 : 29) : compact ? 17 : 18);
 
 function HeadRow({ f, compact }: { f: ShareFrame; compact: boolean }) {
   const { u, t } = f;
-  const col = compact ? 19 : 20;
   return (
     <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: u(10), paddingBottom: u(6) }}>
       <CText f={f} k="micro" color={t.inkMuted} style={{ width: u(compact ? 46 : 54) }}>#</CText>
       <CText f={f} k="micro" color={t.inkMuted} style={{ flex: 1 }}>TAKIM</CText>
       {COLS.map((label) => (
-        <CText key={label} f={f} k="micro" color={t.inkMuted} align="center" style={{ width: u(col) }}>
+        <CText key={label} f={f} k="micro" color={t.inkMuted} align="center" style={{ width: u(colWidth(label, compact)) }}>
           {label}
         </CText>
       ))}
@@ -89,8 +90,8 @@ function TableLine({
   compact: boolean;
 }) {
   const { u, t } = f;
-  const h = compact ? 25 : 43;
-  const col = compact ? 19 : 20;
+  const h = compact ? 25 : 38;
+  const col = colWidth("O", compact);
   const zone = zoneOf(f, rank, total);
   const inner = (
     <View style={{ flexDirection: "row", alignItems: "center", height: u(h), paddingHorizontal: u(10) }}>
@@ -127,7 +128,7 @@ function TableLine({
           {num(value)}
         </CText>
       ))}
-      <CText f={f} k="num" scale={compact ? 0.88 : 0.95} color={t.inkMuted} align="center" style={{ width: u(col) }}>
+      <CText f={f} k="num" scale={compact ? 0.88 : 0.95} color={t.inkMuted} align="center" style={{ width: u(colWidth("AV", compact)) }}>
         {signed(num(row.goal_diff))}
       </CText>
       <CText f={f} k="numStrong" scale={compact ? 1 : 1.12} color={focus ? t.accent : t.ink} align="right" style={{ width: u(28) }}>
@@ -225,35 +226,25 @@ function StandingsFocus({ f, d }: { f: ShareFrame; d: TableShareData }) {
   return (
     <Poster f={f} mood="center" title={d.league} meta={[d.city, d.season].filter(Boolean).join(" · ")} footer={d.footer}>
       <FillBox f={f} radius={24} tone="soft" style={{ padding: u(story ? 16 : 11), borderWidth: Math.max(1, u(0.7)), borderColor: t.glassLine, marginTop: u(story ? 8 : 0) }}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: u(12) }}>
-          <View style={{ alignItems: "center", width: u(story ? 70 : 52) }}>
-            <CText f={f} k="score" scale={story ? 0.82 : 0.6} color={t.ink}>
-              {rank}
-              <CText f={f} k="score" scale={story ? 0.4 : 0.3} color={t.accent}>.</CText>
-            </CText>
-            <Overline f={f} color={t.inkMuted} scale={0.9}>Sıra</Overline>
-          </View>
-          <Crest f={f} logo={hero.logo} name={hero.team_name} size={story ? 62 : 44} />
+        <View style={{ flexDirection: "row", alignItems: "center", gap: u(story ? 14 : 10) }}>
+          <Crest f={f} logo={hero.logo} name={hero.team_name} size={story ? 64 : 40} />
           <View style={{ flex: 1 }}>
             <Overline f={f}>{caption}</Overline>
-            <FitName f={f} k="hero" text={hero.team_name} room={11} lines={2} align="left" scale={story ? 0.85 : 0.68} min={0.6} style={{ marginTop: u(2) }} />
-          </View>
-          <View style={{ alignItems: "flex-end" }}>
-            <CText f={f} k="score" scale={story ? 0.5 : 0.38} color={t.accent}>{num(hero.display_points)}</CText>
-            <Overline f={f} color={t.inkMuted} scale={0.9}>Puan</Overline>
+            <FitName f={f} k="hero" text={hero.team_name} width={story ? 205 : 230} lines={2} align="left" scale={story ? 0.95 : 0.72} min={0.55} style={{ marginTop: u(2) }} />
           </View>
         </View>
-        {story ? (
-          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: u(14), paddingTop: u(12), borderTopWidth: Math.max(1, u(0.7)), borderTopColor: t.line }}>
-            <Fact f={f} label="Maç" value={num(hero.played)} />
-            <Fact f={f} label="G-B-M" value={`${num(hero.wins)}-${num(hero.draws)}-${num(hero.losses)}`} />
-            <Fact f={f} label="Averaj" value={signed(num(hero.goal_diff))} />
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: u(story ? 14 : 8), paddingTop: u(story ? 12 : 8), borderTopWidth: Math.max(1, u(0.7)), borderTopColor: t.line }}>
+          <Fact f={f} label="Sıra" value={`${rank}.`} big />
+          <Fact f={f} label="Puan" value={num(hero.display_points)} big accent />
+          <Fact f={f} label="G-B-M" value={`${num(hero.wins)}-${num(hero.draws)}-${num(hero.losses)}`} />
+          <Fact f={f} label="Averaj" value={signed(num(hero.goal_diff))} />
+          {story ? (
             <View style={{ alignItems: "center", gap: u(4) }}>
-              <FormRow f={f} last5={hero.last5} size={11} />
+              <FormRow f={f} last5={hero.last5} size={10} />
               <Overline f={f} color={t.inkMuted} scale={0.85}>Form</Overline>
             </View>
-          </View>
-        ) : null}
+          ) : null}
+        </View>
       </FillBox>
 
       <Spacer f={f} grow={0.4} min={story ? 14 : 8} />
@@ -268,7 +259,7 @@ function StandingsFocus({ f, d }: { f: ShareFrame; d: TableShareData }) {
               style={{
                 flexDirection: "row",
                 alignItems: "center",
-                height: u(story ? 30 : 22),
+                height: u(story ? 30 : 21),
                 paddingHorizontal: u(10),
                 borderRadius: u(10),
                 backgroundColor: isHero ? f.t.glassStrong : "transparent",
@@ -296,10 +287,10 @@ function StandingsFocus({ f, d }: { f: ShareFrame; d: TableShareData }) {
   );
 }
 
-function Fact({ f, label, value }: { f: ShareFrame; label: string; value: string | number }) {
+function Fact({ f, label, value, big, accent }: { f: ShareFrame; label: string; value: string | number; big?: boolean; accent?: boolean }) {
   return (
     <View style={{ alignItems: "center", gap: f.u(3) }}>
-      <CText f={f} k="numStrong" scale={1.2}>{value}</CText>
+      <CText f={f} k="numStrong" scale={(big ? 2 : 1.2) * (f.story ? 1 : 0.8)} color={accent ? f.t.accent : f.t.ink}>{value}</CText>
       <Overline f={f} color={f.t.inkMuted} scale={0.85}>{label}</Overline>
     </View>
   );

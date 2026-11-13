@@ -170,7 +170,7 @@ export function SysStage({
             </View>
           ) : null}
           {stats?.length ? (
-            <View style={[styles.stageStats, (stats?.length ?? 0) > 2 ? styles.stageStatsFull : null]}>
+            <View style={[styles.stageStats, (stats?.length ?? 0) > 2 ? null : styles.stageStatsSide]}>
               {stats.map((s) => (
                 <StageStat key={s.label} {...s} />
               ))}
@@ -536,8 +536,8 @@ const styles = StyleSheet.create({
   stageHeroRow: { flexDirection: "row", alignItems: "flex-end", gap: space.sm },
   stageValue: { ...type.scoreHero, color: colors.onDark },
   stageValueLabel: { ...type.micro, color: colors.onDarkMuted, paddingBottom: 6, flexShrink: 1 },
-  stageStats: { flex: 1, flexDirection: "row", gap: space.sm },
-  stageStatsFull: { flex: 0 },
+  stageStats: { flexDirection: "row", gap: space.sm },
+  stageStatsSide: { flex: 1 },
   stageStat: {
     flex: 1,
     minWidth: 0,

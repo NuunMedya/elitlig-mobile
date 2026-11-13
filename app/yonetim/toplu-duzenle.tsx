@@ -17,12 +17,14 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import React, { useMemo, useState } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
 
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { LinearGradient } from "expo-linear-gradient";
+
 import {
   AdminList,
   AdminScreen,
   FieldBox,
   FormSheet,
-  RecordCard,
   confirmAction,
   type FieldDef,
   type FormValues,
@@ -30,7 +32,8 @@ import {
 import { ScopeFields, useInitialScope, type AdminScope } from "@/components/admin/matches/ScopeFields";
 import { dayOf, hhmm, shortDay } from "@/components/admin/matches/model";
 import { Note, statusTone } from "@/components/admin/matches/parts";
-import { BottomSheet, Button, Chip, ChipGroup, SegmentedControl, useToast } from "@/components/ui";
+import { SelectionBar } from "@/components/admin/team/ManageKit";
+import { Badge, BottomSheet, Button, Chip, ChipGroup, GradientBar, SegmentedControl, Touchable, useToast } from "@/components/ui";
 import { hasAnyPermission } from "@/lib/admin/access";
 import { errorText } from "@/lib/admin/errors";
 import { isoDay } from "@/lib/admin/format";
@@ -49,7 +52,7 @@ import {
 } from "@/lib/api/admin/matches";
 import type { ApiMatch } from "@/lib/types";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, layout, space, textScale, type } from "@/theme";
+import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
 
 const PERMS = ["matches.bulk_edit"] as const;
 
@@ -264,12 +267,16 @@ export default function BulkEditScreen() {
     mode === "schedule" ? (
       selected.size ? (
         <View style={styles.bar}>
-          <Button label={`Seçilenleri düzenle (${selected.size})`} icon="create-outline" onPress={() => setFormOpen(true)} fullWidth />
+          <SelectionBar count={selected.size} noun="maç seçildi" onClear={() => setSelected(new Set())}>
+            <Button label="Seçilenleri düzenle" icon="create-outline" onPress={() => setFormOpen(true)} fullWidth />
+          </SelectionBar>
         </View>
       ) : null
     ) : changes.count ? (
       <View style={styles.bar}>
-        <Button label={`Tümünü kaydet (${changes.count} değişiklik)`} icon="save-outline" onPress={saveContent} loading={saving} fullWidth haptic="success" />
+        <SelectionBar count={changes.count} noun={`değişiklik · ${changes.items.length} maç taslakta`}>
+          <Button label="Tümünü kaydet" icon="save-outline" onPress={saveContent} loading={saving} fullWidth haptic="success" />
+        </SelectionBar>
       </View>
     ) : null;
 
@@ -349,19 +356,53 @@ export default function BulkEditScreen() {
             ? (Object.entries(draft) as [BulkContentKey, string][]).filter(([k, v]) => v.trim() !== readBulkValue(item, k)).length
             : 0;
           const filled = BULK_CONTENT_FIELDS.filter((f) => (draft?.[f.key] ?? readBulkValue(item, f.key)) !== "").length;
+          const on = mode === "schedule" && selected.has(id);
           return (
-            <RecordCard
-              title={`${item.first_team_name} – ${item.second_team_name}`}
-              subtitle={[shortDay(item.date), hhmm(item.time), item.match_field].filter(Boolean).join(" · ")}
-              meta={mode === "content" ? `${filled} / ${BULK_CONTENT_FIELDS.length} bağlantı dolu` : null}
-              icon={mode === "schedule" ? (selected.has(id) ? "checkbox" : "square-outline") : "link-outline"}
-              iconTone={selected.has(id) ? "brand" : "neutral"}
-              badges={[
-                { label: statusLabelOf(item.mac_durumu), tone: statusTone(item.mac_durumu) },
-                changedCount ? { label: `${changedCount} değişiklik`, tone: "warn" } : null,
-              ]}
+            <Touchable
+              feedback="card"
+              haptic="selection"
               onPress={() => (mode === "schedule" ? toggle(id) : setContentFor(item))}
-            />
+              style={[styles.row, on ? styles.rowOn : null, changedCount ? styles.rowChanged : null]}
+              accessibilityRole={mode === "schedule" ? "checkbox" : "button"}
+              accessibilityState={mode === "schedule" ? { checked: on } : undefined}
+              accessibilityLabel={`${item.first_team_name} – ${item.second_team_name}, ${shortDay(item.date)} ${hhmm(item.time)}`}
+            >
+              {on ? <LinearGradient colors={colors.gradientSignature} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} style={styles.rail} /> : null}
+              <View style={styles.when}>
+                <Text style={styles.whenDay} numberOfLines={1} {...textScale.badge}>
+                  {shortDay(item.date) || "—"}
+                </Text>
+                <Text style={styles.whenTime} {...textScale.badge}>
+                  {hhmm(item.time) || "--:--"}
+                </Text>
+              </View>
+              <View style={styles.rowMain}>
+                <Text style={styles.team} numberOfLines={1} {...textScale.dense}>
+                  {item.first_team_name}
+                </Text>
+                <Text style={styles.team} numberOfLines={1} {...textScale.dense}>
+                  {item.second_team_name}
+                </Text>
+                <View style={styles.rowPills}>
+                  <Badge label={statusLabelOf(item.mac_durumu)} tone={statusTone(item.mac_durumu)} size="xs" />
+                  {item.match_field ? <Badge label={item.match_field} icon="location-outline" size="xs" /> : null}
+                  {changedCount ? <Badge label={`${changedCount} değişiklik`} tone="warn" size="xs" /> : null}
+                </View>
+                {mode === "content" ? (
+                  <View style={styles.fillRow}>
+                    <GradientBar value={filled / BULK_CONTENT_FIELDS.length} height={4} style={styles.flex} />
+                    <Text style={styles.fillText} {...textScale.badge}>
+                      {filled}/{BULK_CONTENT_FIELDS.length}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+              {mode === "schedule" ? (
+                <View style={[styles.check, on ? styles.checkOn : null]}>{on ? <Ionicons name="checkmark" size={14} color={colors.textOnBrand} /> : null}</View>
+              ) : (
+                <Ionicons name="link" size={18} color={changedCount ? colors.warn : colors.textTertiary} />
+              )}
+            </Touchable>
           );
         }}
         ListFooterComponent={<View style={styles.footer} />}
@@ -452,6 +493,31 @@ const styles = StyleSheet.create({
     right: layout.screenPadding,
     bottom: space.xl,
   },
-  footer: { height: space.giant * 2 },
+  footer: { height: space.giant * 3 },
+  flex: { flex: 1, minWidth: 0 },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    padding: space.md,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    overflow: "hidden",
+  },
+  rowOn: { backgroundColor: colors.brandDim, borderColor: colors.brandBorder },
+  rowChanged: { borderColor: colors.warn },
+  rail: { position: "absolute", left: 0, top: 0, bottom: 0, width: 3 },
+  when: { width: 58, alignItems: "center", paddingVertical: space.s, borderRadius: radius.md, backgroundColor: colors.surface2, gap: 1 },
+  whenDay: { ...type.micro, color: colors.textTertiary },
+  whenTime: { ...type.scoreXs, color: colors.textPrimary },
+  rowMain: { flex: 1, minWidth: 0, gap: 1 },
+  team: { ...type.h4, color: colors.textPrimary },
+  rowPills: { flexDirection: "row", flexWrap: "wrap", gap: space.xs, marginTop: space.xs },
+  fillRow: { flexDirection: "row", alignItems: "center", gap: space.sm, marginTop: space.xs },
+  fillText: { ...type.numSm, color: colors.textTertiary },
+  check: { width: 24, height: 24, borderRadius: radius.sm, borderWidth: 2, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center" },
+  checkOn: { backgroundColor: colors.brand, borderColor: colors.brand },
   hint: { ...type.caption, color: colors.textTertiary },
 });

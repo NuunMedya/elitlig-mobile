@@ -15,7 +15,7 @@ import React, { useRef, useState } from "react";
 import { Image, StyleSheet, Text, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import Svg, { Circle, Defs, LinearGradient, Path, RadialGradient, Rect, Stop } from "react-native-svg";
 
-import { font, fitScale, type CanvasTypeKey } from "@/lib/share/canvas";
+import { CANVAS_TYPE, font, fitScale, type CanvasTypeKey } from "@/lib/share/canvas";
 import { formLetters, upper } from "@/lib/share/format";
 import { alpha } from "@/lib/share/palette";
 import { initials, mediaUrl } from "@/lib/format";
@@ -75,6 +75,7 @@ export function FitName({
   k = "name",
   text,
   room,
+  width,
   lines = 2,
   scale = 1,
   min,
@@ -86,7 +87,10 @@ export function FitName({
   f: ShareFrame;
   k?: CanvasTypeKey;
   text: string;
-  room: number;
+  /** Tam puntoda bir satıra sığan karakter sayısı (yaklaşık). */
+  room?: number;
+  /** Ya da kutunun genişliği (birim) — karakter sayısı puntodan hesaplanır. */
+  width?: number;
   lines?: number;
   scale?: number;
   min?: number;
@@ -96,9 +100,16 @@ export function FitName({
   caps?: boolean;
 }) {
   const value = caps ? upper(text) : text;
+  // Büyük harf glifleri geniştir: ad zaten büyük harfle girilmişse de öyle sayılır.
+  const isCaps = value === upper(value);
   // `room` tam puntodaki karakter sayısıdır: küçültülmüş puntoda daha çok,
-  // büyük harfte (geniş glifler) daha az karakter sığar.
-  const fit = fitScale(value, (room / scale) * (caps ? 0.88 : 1), min, lines);
+  // büyük harfte daha az karakter sığar. `width` verilirse ortalama glif
+  // genişliğinden (büyük harf ~0.7 em, karışık ~0.58 em) hesaplanır.
+  const chars =
+    width != null
+      ? width / (CANVAS_TYPE[k].size * scale * (isCaps ? 0.7 : 0.58))
+      : ((room ?? 12) / scale) * (isCaps ? 0.88 : 1);
+  const fit = fitScale(value, chars, min, lines);
   return (
     <CText f={f} k={k} scale={scale * fit} lines={lines} color={color} align={align} style={style}>
       {value}

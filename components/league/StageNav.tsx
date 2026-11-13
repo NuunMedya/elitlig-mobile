@@ -37,7 +37,15 @@ import {
 } from "@/components/ui";
 import type { SeasonGroup } from "@/lib/api/seasonGroups";
 import { formatNumber } from "@/lib/format";
-import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
+import {
+  colors,
+  hairline,
+  layout,
+  radius,
+  space,
+  textScale,
+  type,
+} from "@/theme";
 
 import type { StandingsTab } from "./cups";
 
@@ -60,25 +68,36 @@ function buildSections(tabs: StandingsTab[]): Section[] {
   let groupsAdded = false;
   let stagesAdded = false;
   for (const tab of tabs) {
-    if (tab.kind === "overall") out.push({ key: tab.key, label: tab.label, tabs: [tab] });
-    else if (tab.kind === "cup") out.push({ key: tab.key, label: tab.label, tabs: [tab] });
+    if (tab.kind === "overall")
+      out.push({ key: tab.key, label: tab.label, tabs: [tab] });
+    else if (tab.kind === "cup")
+      out.push({ key: tab.key, label: tab.label, tabs: [tab] });
     else if (tab.kind === "group" && !groupsAdded) {
       groupsAdded = true;
-      out.push({ key: GROUPS_KEY, label: groups.length === 1 ? tab.label : "Gruplar", tabs: groups });
+      out.push({
+        key: GROUPS_KEY,
+        label: groups.length === 1 ? tab.label : "Gruplar",
+        tabs: groups,
+      });
     } else if (tab.kind === "stage" && !stagesAdded) {
       stagesAdded = true;
-      out.push({ key: STAGES_KEY, label: stages.length === 1 ? tab.label : "Etaplar", tabs: stages });
+      out.push({
+        key: STAGES_KEY,
+        label: stages.length === 1 ? tab.label : "Etaplar",
+        tabs: stages,
+      });
     }
   }
   return out;
 }
 
-const KIND_ICON: Record<StandingsTab["kind"], keyof typeof Ionicons.glyphMap> = {
-  overall: "podium-outline",
-  group: "grid-outline",
-  cup: "trophy-outline",
-  stage: "git-network-outline",
-};
+const KIND_ICON: Record<StandingsTab["kind"], keyof typeof Ionicons.glyphMap> =
+  {
+    overall: "podium-outline",
+    group: "grid-outline",
+    cup: "trophy-outline",
+    stage: "git-network-outline",
+  };
 
 const KIND_TONE: Record<StandingsTab["kind"], IconTileTone> = {
   overall: "violet",
@@ -90,7 +109,8 @@ const KIND_TONE: Record<StandingsTab["kind"], IconTileTone> = {
 /** Etabın oynanmış eşleşme sayısı (skoru girilmiş maç). */
 function playedCount(group: SeasonGroup): number {
   return (group.matchups ?? []).filter(
-    (matchup) => matchup.match?.home_score != null && matchup.match?.away_score != null,
+    (matchup) =>
+      matchup.match?.home_score != null && matchup.match?.away_score != null,
   ).length;
 }
 
@@ -99,7 +119,11 @@ function teamCount(group: SeasonGroup): number {
 }
 
 /** Bağlam kartının alt satırı. */
-function contextMeta(tab: StandingsTab, groupCount: number, cupCount: number): string {
+function contextMeta(
+  tab: StandingsTab,
+  groupCount: number,
+  cupCount: number,
+): string {
   switch (tab.kind) {
     case "overall":
       return [
@@ -111,15 +135,24 @@ function contextMeta(tab: StandingsTab, groupCount: number, cupCount: number): s
         .join(" · ");
     case "group": {
       const teams = teamCount(tab.group);
-      return [teams ? `${formatNumber(teams)} takım` : null, "lig usulü", tab.group.double_round ? "çift devre" : null]
+      return [
+        teams ? `${formatNumber(teams)} takım` : null,
+        "lig usulü",
+        tab.group.double_round ? "çift devre" : null,
+      ]
         .filter(Boolean)
         .join(" · ");
     }
     case "cup":
-      return tab.cup.stages.map((stage) => stage.label).join(" → ") || "Eleme turları";
+      return (
+        tab.cup.stages.map((stage) => stage.label).join(" → ") ||
+        "Eleme turları"
+      );
     case "stage": {
       const total = tab.group.matchups?.length ?? 0;
-      return total ? `${total} eşleşme · ${playedCount(tab.group)} oynandı` : "Eşleşmeler belirlenmedi";
+      return total
+        ? `${total} eşleşme · ${playedCount(tab.group)} oynandı`
+        : "Eşleşmeler belirlenmedi";
     }
   }
 }
@@ -136,22 +169,36 @@ export const StageNav = memo(function StageNav({
   onChange: (key: string) => void;
 }) {
   const sections = useMemo(() => buildSections(tabs), [tabs]);
-  const activeSection = sections.find((section) => section.tabs.some((tab) => tab.key === activeKey)) ?? sections[0];
-  const activeTab = activeSection?.tabs.find((tab) => tab.key === activeKey) ?? activeSection?.tabs[0];
+  const activeSection =
+    sections.find((section) =>
+      section.tabs.some((tab) => tab.key === activeKey),
+    ) ?? sections[0];
+  const activeTab =
+    activeSection?.tabs.find((tab) => tab.key === activeKey) ??
+    activeSection?.tabs[0];
   if (!activeSection || !activeTab || tabs.length <= 1) return null;
 
-  const groupCount = tabs.filter((tab) => tab.kind === "group" || tab.kind === "stage").length;
+  const groupCount = tabs.filter(
+    (tab) => tab.kind === "group" || tab.kind === "stage",
+  ).length;
   const cupCount = tabs.filter((tab) => tab.kind === "cup").length;
   const inner = activeSection.tabs;
-  const position = inner.length > 1 ? inner.findIndex((tab) => tab.key === activeTab.key) + 1 : 0;
+  const position =
+    inner.length > 1
+      ? inner.findIndex((tab) => tab.key === activeTab.key) + 1
+      : 0;
   /* Kısa ve az sekme → kayan başparmaklı segment; aksi hâlde kayan çip şeridi. */
-  const segmented = inner.length > 1 && inner.length <= 4 && inner.every((tab) => tab.label.length <= 12);
+  const segmented =
+    inner.length > 1 &&
+    inner.length <= 4 &&
+    inner.every((tab) => tab.label.length <= 12);
 
   /* Bölüm değişince bölümün İLK sekmesine geçilir (web'de de sekme listesinin
      o bölümdeki ilk öğesi). */
   const selectSection = (key: string) => {
     const section = sections.find((item) => item.key === key);
-    if (section && section.key !== activeSection.key) onChange(section.tabs[0].key);
+    if (section && section.key !== activeSection.key)
+      onChange(section.tabs[0].key);
   };
 
   return (
@@ -160,7 +207,10 @@ export const StageNav = memo(function StageNav({
         <View style={styles.tabsWrap}>
           <Tabs
             tone="paper"
-            items={sections.map((section) => ({ key: section.key, label: section.label }))}
+            items={sections.map((section) => ({
+              key: section.key,
+              label: section.label,
+            }))}
             value={activeSection.key}
             onChange={selectSection}
           />
@@ -191,25 +241,43 @@ export const StageNav = memo(function StageNav({
         )
       ) : null}
 
-      {/* Bağlam kartı: seçili tablonun ne olduğu tek satırda. */}
-      <View style={styles.context}>
-        <IconTile icon={KIND_ICON[activeTab.kind]} tone={KIND_TONE[activeTab.kind]} size={36} glow={false} />
-        <View style={styles.contextText}>
-          <Text style={styles.contextTitle} numberOfLines={1} {...textScale.dense}>
-            {activeTab.kind === "overall" ? "Genel puan durumu" : activeTab.label}
-          </Text>
-          <Text style={styles.contextMeta} numberOfLines={2} {...textScale.dense}>
-            {contextMeta(activeTab, groupCount, cupCount)}
-          </Text>
-        </View>
-        {position > 0 ? (
-          <View style={styles.counter}>
-            <Text style={styles.counterText} {...textScale.badge}>
-              {`${position}/${inner.length}`}
+      {/* Bağlam kartı: seçili tablonun ne olduğu tek satırda. Kupa sekmesinde
+          çizilmez — kupa görünümünün (CupView) kendi başlık kartı var. */}
+      {activeTab.kind === "cup" ? null : (
+        <View style={styles.context}>
+          <IconTile
+            icon={KIND_ICON[activeTab.kind]}
+            tone={KIND_TONE[activeTab.kind]}
+            size={36}
+            glow={false}
+          />
+          <View style={styles.contextText}>
+            <Text
+              style={styles.contextTitle}
+              numberOfLines={1}
+              {...textScale.dense}
+            >
+              {activeTab.kind === "overall"
+                ? "Genel puan durumu"
+                : activeTab.label}
+            </Text>
+            <Text
+              style={styles.contextMeta}
+              numberOfLines={2}
+              {...textScale.dense}
+            >
+              {contextMeta(activeTab, groupCount, cupCount)}
             </Text>
           </View>
-        ) : null}
-      </View>
+          {position > 0 ? (
+            <View style={styles.counter}>
+              <Text style={styles.counterText} {...textScale.badge}>
+                {`${position}/${inner.length}`}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      )}
     </View>
   );
 });
@@ -231,20 +299,29 @@ export const StageFlow = memo(function StageFlow({
   onOpenTab: (key: string) => void;
 }) {
   const steps = useMemo(() => {
-    const visible = groups.filter((group) => group.show_in_bracket !== false && !group.is_default);
+    const visible = groups.filter(
+      (group) => group.show_in_bracket !== false && !group.is_default,
+    );
     const byDepth = new Map<number, SeasonGroup[]>();
     for (const group of visible) {
       const depth = Number(group.depth ?? 0) || 0;
       byDepth.set(depth, [...(byDepth.get(depth) ?? []), group]);
     }
-    return [...byDepth.entries()].sort((a, b) => a[0] - b[0]).map(([, list]) => list);
+    return [...byDepth.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([, list]) => list);
   }, [groups]);
 
   /* Grup → sekme anahtarı. */
   const tabFor = (group: SeasonGroup): string | null => {
     for (const tab of tabs) {
-      if ((tab.kind === "group" || tab.kind === "stage") && Number(tab.group.id) === Number(group.id)) return tab.key;
-      if (tab.kind === "cup" && tab.cup.groupIds.includes(Number(group.id))) return tab.key;
+      if (
+        (tab.kind === "group" || tab.kind === "stage") &&
+        Number(tab.group.id) === Number(group.id)
+      )
+        return tab.key;
+      if (tab.kind === "cup" && tab.cup.groupIds.includes(Number(group.id)))
+        return tab.key;
     }
     return null;
   };
@@ -259,7 +336,11 @@ export const StageFlow = memo(function StageFlow({
           <Text style={styles.flowTitle} {...textScale.dense}>
             Turnuva yolu
           </Text>
-          <Text style={styles.contextMeta} numberOfLines={1} {...textScale.dense}>
+          <Text
+            style={styles.contextMeta}
+            numberOfLines={1}
+            {...textScale.dense}
+          >
             {`${steps.length} aşama · adıma dokununca açılır`}
           </Text>
         </View>
@@ -307,14 +388,28 @@ export const StageFlow = memo(function StageFlow({
                     color={stage ? colors.accentText : colors.brandAccent}
                   />
                   <View style={styles.contextText}>
-                    <Text style={styles.stepName} numberOfLines={1} {...textScale.dense}>
+                    <Text
+                      style={styles.stepName}
+                      numberOfLines={1}
+                      {...textScale.dense}
+                    >
                       {group.group_name}
                     </Text>
-                    <Text style={styles.stepMeta} numberOfLines={1} {...textScale.dense}>
+                    <Text
+                      style={styles.stepMeta}
+                      numberOfLines={1}
+                      {...textScale.dense}
+                    >
                       {meta}
                     </Text>
                   </View>
-                  {key ? <Ionicons name="chevron-forward" size={14} color={colors.textTertiary} /> : null}
+                  {key ? (
+                    <Ionicons
+                      name="chevron-forward"
+                      size={14}
+                      color={colors.textTertiary}
+                    />
+                  ) : null}
                 </Touchable>
               );
             })}
@@ -365,7 +460,12 @@ const styles = StyleSheet.create({
     borderWidth: hairline,
     borderColor: colors.border,
   },
-  flowHead: { flexDirection: "row", alignItems: "center", gap: space.m, paddingBottom: space.xs },
+  flowHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.m,
+    paddingBottom: space.xs,
+  },
   flowTitle: { ...type.h3, color: colors.textPrimary },
   step: { flexDirection: "row", gap: space.sm },
   rail: { width: NODE, alignItems: "center", paddingTop: space.sm },
