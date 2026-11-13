@@ -1,13 +1,19 @@
 /**
- * StandingsRow — puan tablosunun Lig sekmesine özgü İNCE satırı ve başlığı.
+ * StandingsRow — puan tablosunun Lig sekmesine özgü satırı ve başlığı.
  *
- * NEDEN ORTAK `TeamRow` DEĞİL: `TeamRow` tablo yoğunluğunda 44px satır, 14px
- * takım adı ve 22px arma taşır; takım sayfasındaki mini tablo ve diğer
- * ekranlar onu bu ölçülerle kullanır. Lig sekmesi ise TABLONUN KENDİSİDİR —
- * yirmi takımlık bir ligde kullanıcı kaydırmadan olabildiğince çok satır
- * görmek ister. Ortak bileşeni küçültmek diğer ekranları da küçültürdü; bu
- * yüzden aynı anatomi (ray · sıra · arma · ad · sayılar · yuva) burada daha
- * küçük ölçüyle yeniden çizilir: satır 34px, ad 12px, rakam 11px, arma 18px.
+ * NEDEN ORTAK `TeamRow` DEĞİL: Lig sekmesi TABLONUN KENDİSİDİR; yüzlerce
+ * takımlık bir ligde kullanıcı kaydırmadan olabildiğince çok satır görmek
+ * ister. Ortak bileşeni küçültmek diğer ekranları da küçültürdü; bu yüzden
+ * aynı anatomi burada kendi ölçüsüyle çizilir.
+ *
+ * SATIR ANATOMİSİ (ikinci tur):
+ *   [bölge rayı 3px] [sıra: ilk üç madalya] [arma 20] [ad] [sayılar] [PUAN sütunu] [yıldız]
+ *   · PUAN kendi hapındadır (ortak `TeamRow` ile aynı dil): sakin zemin,
+ *     Archivo kalın; takip edilen satırda dolu mor.
+ *   · Tam sütunlu görünümde dar ekranda ad kırpılmaz, iki satıra kırılır.
+ *   · Takip edilen takım: `brandDim` zemin + solda imza degradesi (bölge
+ *     rayının yerine); ad bir kademe kalın.
+ *   · Averaj artıda nane, eksite kırmızı ve gerçek eksi işaretiyle.
  *
  * Sütun genişlikleri satır ve başlıkta AYNI sabitlerden gelir; başlık
  * altındaki rakamların üstüne oturması bu yüzden garanti.
@@ -16,21 +22,22 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { useCallback } from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
-import { FormChips, TeamLogo, Touchable } from "@/components/ui";
+import { FormChips, RankBadge, TeamLogo, Touchable } from "@/components/ui";
 /* Barrel yalnız TeamRowProps'u dışa aktarıyor; sütun kümesi tipi kaynağından. */
 import type { TeamRowColumns } from "@/components/ui/TeamRow";
-import { colors, fonts, hairline, space, textScale, type, upperTR } from "@/theme";
+import { colors, fonts, hairline, radius, space, textScale, type, upperTR } from "@/theme";
+import { SignatureStripe } from "./kit";
 
-/** Satır yüksekliği — 34px: 12px ad + 18px arma rahat sığar, tablo sıkı durur. */
-export const STANDING_ROW_HEIGHT = 34;
+/** Satır yüksekliği — 40px: 20px arma + madalya rahat sığar, tablo yine sıkı. */
+export const STANDING_ROW_HEIGHT = 40;
 
 /* Sütun genişlikleri — satır ve başlık AYNI sabitleri kullanır. */
-const CREST = 18;
-const COL_RANK = 18;
-const COL_NUM = 16;
+const CREST = 20;
+const COL_RANK = 22;
+const COL_NUM = 15;
 /* Averaj üç haneli olabilir (+121); 11px'te 30px yeter. */
-const COL_DIFF = 30;
-const COL_POINTS = 24;
+const COL_DIFF = 28;
+const COL_POINTS = 32;
 /** Beş xs form çipi (5 × 13 + 4 × 2) — çipler ortak bileşenden, ölçüsü sabit. */
 const COL_FORM = 74;
 
@@ -96,13 +103,24 @@ export const StandingsRow = React.memo(function StandingsRow({
       haptic="selection"
       accessibilityLabel={accessibilityLabel}
     >
-      <View style={[styles.rail, zone ? { backgroundColor: zone } : null]} />
-      <Text style={[styles.rank, zone ? styles.rankZone : null]} {...textScale.dense}>
-        {rank}
-      </Text>
+      {highlighted ? (
+        <SignatureStripe inset={space.s} />
+      ) : (
+        <View style={[styles.rail, zone ? { backgroundColor: zone } : null]} />
+      )}
+      <View style={styles.rankCell}>
+        {rank <= 3 ? (
+          <RankBadge rank={rank} size={20} />
+        ) : (
+          <Text style={[styles.rank, zone ? styles.rankZone : null]} {...textScale.dense}>
+            {rank}
+          </Text>
+        )}
+      </View>
       <TeamLogo name={name} logo={logo ?? null} size={CREST} />
       <View style={styles.nameCell}>
-        <Text style={[styles.name, highlighted ? styles.nameStrong : null]} numberOfLines={1} {...textScale.dense}>
+        {/* Dar ekranda tam sütunlu görünümde ad kırpılmasın: iki satıra kırılır. */}
+        <Text style={[styles.name, highlighted ? styles.nameStrong : null]} numberOfLines={2} {...textScale.dense}>
           {name}
         </Text>
         {highlighted && !trailing ? <Ionicons name="star" size={9} color={colors.star} /> : null}
@@ -133,9 +151,11 @@ export const StandingsRow = React.memo(function StandingsRow({
           </Text>
         </>
       )}
-      <Text style={[styles.num, styles.points]} {...textScale.dense}>
-        {points ?? "—"}
-      </Text>
+      <View style={[styles.pointsCell, highlighted ? styles.pointsCellOn : null]}>
+        <Text style={[styles.points, highlighted ? styles.pointsOn : null]} {...textScale.dense}>
+          {points ?? "—"}
+        </Text>
+      </View>
       {trailing}
     </Touchable>
   );
@@ -155,7 +175,7 @@ export const StandingsHead = React.memo(function StandingsHead({
 }) {
   return (
     <View style={[styles.head, trailingWidth ? styles.rowTrailing : null]}>
-      <Text style={[styles.rank, styles.headLabel]} {...textScale.badge}>#</Text>
+      <Text style={[styles.rankCell, styles.headLabel, styles.rankHead]} {...textScale.badge}>#</Text>
       <View style={{ width: CREST }} />
       <Text style={[styles.nameCell, styles.headLabel]} {...textScale.badge}>
         {upperTR("Takım")}
@@ -177,9 +197,11 @@ export const StandingsHead = React.memo(function StandingsHead({
           <Text style={[styles.num, styles.diff, styles.headLabel]} {...textScale.badge}>AV</Text>
         </>
       )}
-      <Text style={[styles.num, styles.points, styles.headLabel]} {...textScale.badge}>
-        {upperTR(pointsLabel).slice(0, 2)}
-      </Text>
+      <View style={[styles.pointsCell, styles.pointsCellHead]}>
+        <Text style={[styles.headLabel, styles.pointsHead]} {...textScale.badge}>
+          {upperTR(pointsLabel).slice(0, 2)}
+        </Text>
+      </View>
       {trailingWidth ? <View style={{ width: trailingWidth }} /> : null}
     </View>
   );
@@ -199,7 +221,7 @@ const styles = StyleSheet.create({
     paddingRight: 0,
   },
   highlighted: {
-    backgroundColor: colors.accentDim,
+    backgroundColor: colors.brandDim,
   },
   /** Bölge rayı: satırın sol kenarında, dikeyde satırdan bir tık kısa. */
   rail: {
@@ -207,14 +229,21 @@ const styles = StyleSheet.create({
     left: 0,
     top: space.s,
     bottom: space.s,
-    width: 2,
-    borderTopRightRadius: 2,
-    borderBottomRightRadius: 2,
+    width: 3,
+    borderTopRightRadius: 3,
+    borderBottomRightRadius: 3,
     backgroundColor: "transparent",
+  },
+  rankCell: {
+    width: COL_RANK,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  rankHead: {
+    textAlign: "center",
   },
   rank: {
     ...type.numSm,
-    width: COL_RANK,
     textAlign: "center",
     color: colors.textTertiary,
   },
@@ -229,16 +258,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: space.xxs,
-    marginLeft: space.xxs,
+    marginLeft: space.xs,
   },
   name: {
-    ...type.bodySm,
-    lineHeight: 16,
+    ...type.labelSm,
+    lineHeight: 15,
     color: colors.textPrimary,
     flexShrink: 1,
   },
   nameStrong: {
-    fontFamily: fonts.semibold,
+    fontFamily: fonts.bold,
+    color: colors.brandAccent,
   },
   num: {
     ...type.numSm,
@@ -255,11 +285,35 @@ const styles = StyleSheet.create({
   diffNegative: {
     color: colors.loss,
   },
-  points: {
-    ...type.numSmStrong,
+  /** Puan hapı (ortak TeamRow ile aynı dil): sakin zemin, Archivo kalın;
+      takip edilen satırda dolu mor. */
+  pointsCell: {
     width: COL_POINTS,
+    height: 26,
+    marginLeft: space.xxs,
+    borderRadius: radius.sm,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface3,
+  },
+  pointsCellOn: {
+    backgroundColor: colors.brand,
+  },
+  pointsCellHead: {
+    height: 18,
+    backgroundColor: "transparent",
+  },
+  points: {
+    ...type.scoreXs,
     textAlign: "center",
     color: colors.textPrimary,
+  },
+  pointsOn: {
+    color: colors.textOnBrand,
+  },
+  pointsHead: {
+    textAlign: "center",
+    color: colors.textSecondary,
   },
   form: {
     width: COL_FORM,
@@ -269,12 +323,12 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
   head: {
+    height: 32,
     flexDirection: "row",
     alignItems: "center",
     gap: space.xs,
     paddingLeft: space.s,
     paddingRight: space.m,
-    paddingVertical: space.s,
     backgroundColor: colors.surface1,
     borderBottomWidth: hairline,
     borderBottomColor: colors.separator,

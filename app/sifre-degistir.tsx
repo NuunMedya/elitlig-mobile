@@ -125,6 +125,7 @@ export default function ChangePasswordScreen() {
     >
       <AuthCard title="Mevcut şifre">
         <Input
+          floating
           label="Mevcut şifre"
           value={current}
           onChangeText={(v) => {
@@ -150,6 +151,7 @@ export default function ChangePasswordScreen() {
 
       <AuthCard title="Yeni şifre">
         <Input
+          floating
           ref={nextRef}
           label="Yeni şifre"
           value={next}
@@ -173,6 +175,7 @@ export default function ChangePasswordScreen() {
         />
         <PasswordRules value={next} minLength={PASSWORD_MIN} />
         <Input
+          floating
           ref={repeatRef}
           label="Yeni şifre (tekrar)"
           value={repeat}

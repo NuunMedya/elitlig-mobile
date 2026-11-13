@@ -29,6 +29,7 @@
 
 import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { memo, useCallback, useEffect, useRef } from "react";
+import { LinearGradient } from "expo-linear-gradient";
 import { Animated, StyleSheet, Text, View, type ViewStyle } from "react-native";
 
 import { EventIcon, Touchable, useReduceMotion } from "@/components/ui";
@@ -38,6 +39,7 @@ import {
   duration,
   easing,
   fonts,
+  glowStyle,
   hairline,
   layout,
   radius,
@@ -48,7 +50,7 @@ import {
 } from "@/theme";
 import type { Reaction } from "@/lib/api/community";
 import type { ApiMatchEvent } from "@/lib/types";
-import { compactName, isGoalKind, type NameOf } from "./shared";
+import { anonymousGoalLabel, compactName, isGoalKind, type NameOf } from "./shared";
 
 /** Ortadaki ray sütununun genişliği — dakika hapı (34px) rahat sığar. */
 const RAIL_WIDTH = 52;
@@ -83,6 +85,8 @@ export const TimelineRow = memo(function TimelineRow({
   onReact,
   hasClip = false,
   onClip,
+  mine = false,
+  teamName = null,
 }: {
   event: ApiMatchEvent;
   home: boolean;
@@ -100,13 +104,23 @@ export const TimelineRow = memo(function TimelineRow({
   /** Bu golün videosu var mı (canlı yayında kaydedilen klip). */
   hasClip?: boolean;
   onClip?: (eventId: number) => void;
+  /** Oturumdaki üyenin golü — satır vurgulanır, "Senin golün" rozeti. */
+  mine?: boolean;
+  /** Olayın takımının adı — oyuncusuz golde ad yerine "Gol · TAKIM". */
+  teamName?: string | null;
 }) {
   const kind = eventKind(event);
   const goal = isGoalKind(kind);
   const sub = kind === "substitution";
 
-  const playerName = nameOf(event.oyuncu_id);
-  const name = playerName ? compactName(playerName) : event.aciklama || EVENT_LABEL[kind] || "Olay";
+  const playerName = event.oyuncu_id != null ? nameOf(event.oyuncu_id) : null;
+  /* İsimsiz gol (oyuncu_id = null): ad yerine olay + takım. */
+  const anonymous = (kind === "goal" || kind === "ownGoal") && event.oyuncu_id == null;
+  const name = playerName
+    ? compactName(playerName)
+    : anonymous
+      ? anonymousGoalLabel(kind === "ownGoal", teamName)
+      : event.aciklama || EVENT_LABEL[kind] || "Olay";
   const inName = sub ? nameOf(event.oyuncu_giren_id) : null;
   const outName = sub ? nameOf(event.oyuncu_cikan_id) : null;
 
@@ -116,7 +130,7 @@ export const TimelineRow = memo(function TimelineRow({
   const detail =
     kind === "goal"
       ? goalDetail(event)
-      : kind === "ownGoal"
+      : kind === "ownGoal" && !anonymous
         ? "Kendi kalesine"
         : kind === "yellow" || kind === "red"
           ? EVENT_LABEL[kind]
@@ -134,19 +148,15 @@ export const TimelineRow = memo(function TimelineRow({
   const glow = useFlash(flash);
   const eventId = Number(event.id);
   const watch = useCallback(() => onClip?.(eventId), [onClip, eventId]);
+  const clip = hasClip && Boolean(onClip);
+  const own = mine && goal;
 
   const content = (
     <View style={[styles.side, home ? styles.sideHome : styles.sideAway]}>
       {/* İkon rayın dibinde, ad dışa doğru. */}
-      <View style={[styles.icon, goal ? styles.iconGoal : null]}>
-        <EventIcon kind={kind} size={14} />
+      <View style={[styles.icon, iconTone(kind)]}>
+        <EventIcon kind={kind} size={goal ? 16 : 14} />
       </View>
-
-      {score ? (
-        <Text style={styles.score} {...textScale.badge}>
-          {score}
-        </Text>
-      ) : null}
 
       <View style={[styles.texts, home ? styles.textsHome : null]}>
         {sub ? (
@@ -163,10 +173,26 @@ export const TimelineRow = memo(function TimelineRow({
             >
               {name}
             </Text>
-            {detail ? (
-              <Text style={[styles.detail, home ? styles.alignRight : null]} numberOfLines={1} {...textScale.dense}>
-                {upperTR(detail.slice(0, 1)) + detail.slice(1)}
-              </Text>
+            {/* Alt satır: koşan skor hapı + olayın nasıl olduğu. */}
+            {score || detail || clip ? (
+              <View style={[styles.metaLine, home ? styles.metaLineHome : null]}>
+                {score ? (
+                  <View style={styles.scoreChip}>
+                    <Text style={styles.score} {...textScale.badge}>
+                      {score}
+                    </Text>
+                  </View>
+                ) : null}
+                {/* "▶ Golü izle" — videosu olan golün açık işareti, skorun
+                    hemen yanında. Satırın kendisi de oynatıcıyı açar; hap,
+                    dokunulacak yeri söyler. */}
+                {clip ? <WatchPill minute={event.dakika} onPress={watch} /> : null}
+                {detail ? (
+                  <Text style={[styles.detail, styles.detailFlex, home ? styles.alignRight : null]} numberOfLines={1} {...textScale.dense}>
+                    {upperTR(detail.slice(0, 1)) + detail.slice(1)}
+                  </Text>
+                ) : null}
+              </View>
             ) : null}
           </>
         )}
@@ -174,54 +200,123 @@ export const TimelineRow = memo(function TimelineRow({
     </View>
   );
 
+  const reactable = Boolean(onReact) && (goal || kind === "yellow" || kind === "red");
+  /* Eylemler ("Senin golün" + tepkiler) olayın KENDİ tarafında, adın altında
+     durur; eskiden ortada iki ayrı satır rayı kesiyor ve her golü üç satıra
+     çıkarıyordu. */
+  const actions =
+    reactable || own ? (
+      <View style={[styles.actions, home ? styles.actionsHome : null]}>
+        {own ? (
+          <View style={styles.mineBadge}>
+            <Ionicons name="star" size={10} color={colors.star} />
+            <Text style={styles.mineText} {...textScale.badge}>
+              Senin golün
+            </Text>
+          </View>
+        ) : null}
+        {reactable && onReact ? (
+          <ReactionBar eventId={Number(event.id)} counts={reactions} mine={myReaction} onReact={onReact} />
+        ) : null}
+      </View>
+    ) : null;
+
+  /* Videosu olan golde satıra dokunmak videoyu açar ("golüme tıklayıp
+     izleyeyim"); oyuncu profili uzun basışta ve erişilebilirlik eyleminde. */
+  const rowPress = clip ? watch : open;
   return (
     <View style={sliceStyle(index, total)}>
+      {own ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.mineWash]} /> : null}
+      {own ? (
+        <LinearGradient
+          pointerEvents="none"
+          colors={colors.gradientSignature}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          style={styles.mineStripe}
+        />
+      ) : null}
       {glow ? (
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.flash, { opacity: glow }]} />
       ) : null}
       <Touchable
         feedback="row"
         haptic="selection"
-        disabled={!playerId}
-        onPress={open}
+        disabled={!playerId && !clip}
+        onPress={rowPress}
+        onLongPress={clip && playerId ? open : undefined}
         style={styles.row}
-        accessibilityRole={playerId ? "button" : "text"}
-        accessibilityLabel={speech}
+        accessibilityRole={playerId || clip ? "button" : "text"}
+        accessibilityLabel={`${speech}${own ? ", senin golün" : ""}`}
+        accessibilityHint={clip ? "Golün videosunu açar" : undefined}
+        accessibilityActions={clip && playerId ? [{ name: "longpress", label: "Oyuncu profilini aç" }] : undefined}
+        onAccessibilityAction={clip && playerId ? open : undefined}
       >
         <View style={styles.half}>{home ? content : null}</View>
 
         <View style={styles.center}>
           <View style={railStyle(index, total)} pointerEvents="none" />
-          <View style={[styles.minute, goal ? styles.minuteGoal : null]}>
-            <Text style={[styles.minuteText, goal ? styles.minuteTextGoal : null]} {...textScale.badge}>
-              {event.dakika != null ? `${event.dakika}'` : "—"}
-            </Text>
-          </View>
+          {goal ? (
+            /* Gol düğümü: imza degradeli hap + mor parıltı — çizelgenin
+               ritmini goller kurar. */
+            <View style={[styles.minute, styles.minuteGoal]}>
+              <LinearGradient
+                colors={colors.gradientSignature}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={[StyleSheet.absoluteFill, styles.minuteFill]}
+              />
+              <Text style={[styles.minuteText, styles.minuteTextGoal]} {...textScale.badge}>
+                {event.dakika != null ? `${event.dakika}'` : "—"}
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.minute}>
+              <Text style={styles.minuteText} {...textScale.badge}>
+                {event.dakika != null ? `${event.dakika}'` : "—"}
+              </Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.half}>{home ? null : content}</View>
       </Touchable>
-      {hasClip && onClip ? (
-        <View style={styles.clipRow}>
-          <Touchable
-            style={styles.clipBtn}
-            onPress={watch}
-            hitSlop={8}
-            haptic="light"
-            accessibilityRole="button"
-            accessibilityLabel={`${event.dakika ?? "?"}. dakikadaki golün videosunu izle`}
-          >
-            <Ionicons name="play" size={11} color={colors.textOnBrand} />
-            <Text style={styles.clipText} {...textScale.badge}>
-              GOLÜ İZLE
-            </Text>
-          </Touchable>
+      {actions ? (
+        <View style={styles.footer}>
+          <View style={styles.half}>{home ? actions : null}</View>
+          <View style={styles.center}>
+            {index < total - 1 ? <View style={styles.rail} pointerEvents="none" /> : null}
+          </View>
+          <View style={styles.half}>{home ? null : actions}</View>
         </View>
       ) : null}
-      {onReact && (goal || kind === "yellow" || kind === "red") ? (
-        <ReactionBar eventId={Number(event.id)} counts={reactions} mine={myReaction} onReact={onReact} />
-      ) : null}
     </View>
+  );
+});
+
+/** "▶ Golü izle" hapı — canlı pembe degrade, mor gecede ilk bakışta seçilir. */
+const WatchPill = memo(function WatchPill({ minute, onPress }: { minute: number | null; onPress: () => void }) {
+  return (
+    <Touchable
+      feedback="button"
+      style={styles.clipBtn}
+      onPress={onPress}
+      hitSlop={6}
+      haptic="light"
+      accessibilityRole="button"
+      accessibilityLabel={`${minute ?? "?"}. dakikadaki golün videosunu izle`}
+    >
+      <LinearGradient
+        colors={colors.gradientLive}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[StyleSheet.absoluteFill, styles.clipFill]}
+      />
+      <Ionicons name="play" size={10} color={colors.onDark} />
+      <Text style={styles.clipText} {...textScale.badge}>
+        Golü izle
+      </Text>
+    </Touchable>
   );
 });
 
@@ -261,7 +356,7 @@ const ReactionBar = memo(function ReactionBar({
             accessibilityState={{ selected }}
             accessibilityLabel={`${item.label}${count ? `, ${count}` : ""}`}
           >
-            <Ionicons name={item.icon} size={13} color={selected ? colors.accent : colors.textTertiary} />
+            <Ionicons name={item.icon} size={12} color={selected ? colors.accent : colors.textTertiary} />
             {count ? (
               <Text style={[styles.reactionCount, selected && styles.reactionCountOn]} {...textScale.badge}>
                 {count}
@@ -319,16 +414,53 @@ export const TimelineBreak = memo(function TimelineBreak({
     <View style={sliceStyle(index, total)}>
       <View style={styles.breakRow} accessibilityRole="header">
         <View style={railStyle(index, total)} pointerEvents="none" />
+        <LinearGradient
+          colors={[colors.surface1, colors.brandBorder]}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={[styles.breakLine, styles.breakLineLeft]}
+          pointerEvents="none"
+        />
+        <LinearGradient
+          colors={[colors.brandBorder, colors.surface1]}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={[styles.breakLine, styles.breakLineRight]}
+          pointerEvents="none"
+        />
         <View style={styles.breakPill}>
+          <Ionicons name={/sonu/i.test(label) ? "flag" : "cafe"} size={11} color={colors.brandAccent} />
           <Text style={styles.breakText} {...textScale.badge}>
             {upperTR(label)}
-            {score ? `  ·  ${score}` : ""}
           </Text>
+          {score ? (
+            <Text style={styles.breakScore} {...textScale.badge}>
+              {score}
+            </Text>
+          ) : null}
         </View>
       </View>
     </View>
   );
 });
+
+/** Olay ikonunun renkli karosu — EventIcon'un rengini taşıyan soluk zemin. */
+function iconTone(kind: string): ViewStyle | null {
+  switch (kind) {
+    case "goal":
+      return styles.iconGoal;
+    case "ownGoal":
+      return styles.iconOwn;
+    case "yellow":
+      return styles.iconYellow;
+    case "red":
+      return styles.iconRed;
+    case "substitution":
+      return styles.iconSub;
+    default:
+      return null;
+  }
+}
 
 /**
  * Yeni gol parlaması — üç kısa darbe. "Hareketi azalt" açıksa çalmaz; vurgu
@@ -356,34 +488,83 @@ function useFlash(active: boolean): Animated.Value | null {
 }
 
 const styles = StyleSheet.create({
-  clipRow: { alignItems: "center", paddingBottom: space.s },
+  footer: {
+    flexDirection: "row",
+    alignItems: "stretch",
+  },
+  actions: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: space.xxs,
+    paddingBottom: space.sm,
+  },
+  /* Ev sahibinde eylemler sağa, ikon sütununun soluna hizalı. */
+  actionsHome: {
+    justifyContent: "flex-end",
+  },
   clipBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.xs,
-    height: 28,
-    paddingHorizontal: space.md,
+    gap: space.xxs,
+    height: 20,
+    paddingLeft: space.s,
+    paddingRight: space.s,
     borderRadius: radius.pill,
-    backgroundColor: colors.live,
+    ...glowStyle(colors.live, 1),
   },
-  clipText: { ...type.micro, color: colors.textOnBrand },
+  clipFill: {
+    borderRadius: radius.pill,
+  },
+  clipText: {
+    ...type.labelXs,
+    fontFamily: fonts.bold,
+    color: colors.onDark,
+  },
+  /* — Üyenin kendi golü — */
+  mineWash: {
+    backgroundColor: colors.brandDim,
+  },
+  mineStripe: {
+    position: "absolute",
+    left: 0,
+    top: space.xs,
+    bottom: space.xs,
+    width: 3,
+    borderRadius: radius.pill,
+  },
+  mineBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xxs,
+    height: 24,
+    paddingHorizontal: space.s,
+    borderRadius: radius.pill,
+    backgroundColor: colors.warnDim,
+    borderWidth: hairline,
+    borderColor: colors.star,
+  },
+  mineText: {
+    ...type.labelXs,
+    fontFamily: fonts.bold,
+    color: colors.textPrimary,
+  },
   reactions: {
     flexDirection: "row",
-    justifyContent: "center",
-    gap: space.s,
-    paddingBottom: space.s,
+    gap: space.xxs,
   },
   reaction: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: space.xxs,
-    minHeight: 26,
-    paddingHorizontal: space.s,
+    minWidth: 24,
+    height: 24,
+    paddingHorizontal: space.xs,
     borderRadius: radius.pill,
-    borderWidth: hairline,
-    borderColor: colors.border,
+    backgroundColor: colors.surface2,
   },
-  reactionOn: { borderColor: colors.accent },
+  reactionOn: { backgroundColor: colors.accentDim },
   reactionCount: { ...type.caption, color: colors.textTertiary },
   reactionCountOn: { color: colors.accentText },
   /* — Kart dilimi — */
@@ -434,21 +615,41 @@ const styles = StyleSheet.create({
   },
   sideAway: {},
   icon: {
-    width: 28,
-    height: 28,
-    borderRadius: radius.sm,
+    width: 30,
+    height: 30,
+    borderRadius: radius.pill,
     backgroundColor: colors.surface3,
     alignItems: "center",
     justifyContent: "center",
   },
   iconGoal: {
+    backgroundColor: colors.winDim,
+    borderWidth: 1,
+    borderColor: colors.win,
+  },
+  iconOwn: {
+    backgroundColor: colors.lossDim,
+  },
+  iconYellow: {
+    backgroundColor: colors.warnDim,
+  },
+  iconRed: {
+    backgroundColor: colors.dangerDim,
+  },
+  iconSub: {
     backgroundColor: colors.accentDim,
   },
-  /* Koşan skor: hapsız, kalın rakam. Her golde ikinci bir siyah hap,
-     dakika hapıyla yan yana ağır bir şerit oluşturuyordu. */
+  /* Koşan skor: soluk marka hapında kalın rakam. */
+  scoreChip: {
+    height: 20,
+    paddingHorizontal: space.s,
+    borderRadius: radius.pill,
+    backgroundColor: colors.brandDim,
+    justifyContent: "center",
+  },
   score: {
-    ...type.tableNumStrong,
-    color: colors.textPrimary,
+    ...type.numSmStrong,
+    color: colors.brandAccent,
   },
   texts: {
     flex: 1,
@@ -464,11 +665,24 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
   nameGoal: {
+    ...type.h3,
     fontFamily: fonts.semibold,
   },
   detail: {
     ...type.caption,
     color: colors.textTertiary,
+  },
+  detailFlex: {
+    flexShrink: 1,
+  },
+  metaLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+    marginTop: 2,
+  },
+  metaLineHome: {
+    flexDirection: "row-reverse",
   },
   alignRight: {
     textAlign: "right",
@@ -496,9 +710,9 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     left: "50%",
-    width: 1,
-    marginLeft: -0.5,
-    backgroundColor: colors.border,
+    width: 2,
+    marginLeft: -1,
+    backgroundColor: colors.brandBorder,
   },
   railFromMiddle: {
     top: "50%",
@@ -507,43 +721,68 @@ const styles = StyleSheet.create({
     bottom: "50%",
   },
   minute: {
-    minWidth: 36,
-    height: 22,
+    minWidth: 38,
+    height: 24,
     paddingHorizontal: space.s,
     borderRadius: radius.pill,
     backgroundColor: colors.surface1,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.brandBorder,
     alignItems: "center",
     justifyContent: "center",
   },
   minuteGoal: {
-    backgroundColor: colors.textPrimary,
-    borderColor: colors.textPrimary,
+    height: 28,
+    minWidth: 42,
+    borderWidth: 0,
+    ...glowStyle(colors.glow, 1),
+  },
+  minuteFill: {
+    borderRadius: radius.pill,
   },
   minuteText: {
     ...type.numSmStrong,
     color: colors.textSecondary,
   },
   minuteTextGoal: {
-    color: colors.surface1,
+    color: colors.onDark,
   },
 
   /* — Ayraç — */
   breakRow: {
-    height: 44,
+    height: 48,
     alignItems: "center",
     justifyContent: "center",
   },
+  breakLine: {
+    position: "absolute",
+    top: "50%",
+    height: 1,
+    width: "38%",
+  },
+  breakLineLeft: {
+    left: 0,
+  },
+  breakLineRight: {
+    right: 0,
+  },
   breakPill: {
-    height: 24,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+    height: 26,
     paddingHorizontal: space.m,
     borderRadius: radius.pill,
-    backgroundColor: colors.surface3,
-    justifyContent: "center",
+    backgroundColor: colors.brandDim,
+    borderWidth: hairline,
+    borderColor: colors.brandBorder,
   },
   breakText: {
     ...type.overline,
-    color: colors.textSecondary,
+    color: colors.brandAccent,
+  },
+  breakScore: {
+    ...type.numSmStrong,
+    color: colors.textPrimary,
   },
 });

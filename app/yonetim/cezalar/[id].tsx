@@ -16,10 +16,13 @@ import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import React, { useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { AdminScreen, InfoLine, Panel, RecordCard, useAdminMutation } from "@/components/admin";
-import { durationBody, penaltyBadges, PenaltyDecisionFields, PenaltyTimeline, type DecisionValue } from "@/components/admin/penalties/PenaltyBits";
+import Ionicons from "@expo/vector-icons/Ionicons";
+
+import { AdminScreen, useAdminMutation } from "@/components/admin";
+import { durationBody, PenaltyDecisionFields, PenaltyTimeline, STATUS_ICON, type DecisionValue } from "@/components/admin/penalties/PenaltyBits";
+import { FactRow, GroupCard, IdentityStage, ListLine, StagePill } from "@/components/admin/team/ManageKit";
 import { SubmissionReviewSheet } from "@/components/admin/penalties/SubmissionReviewSheet";
-import { Avatar, Badge, BottomSheet, Button, ErrorState, Input, SegmentedControl, SkeletonCard, type Tone } from "@/components/ui";
+import { Avatar, BottomSheet, Button, ErrorState, IconTile, Input, Reveal, SegmentedControl, SkeletonCard, SkeletonHero, type Tone } from "@/components/ui";
 import { hasAnyPermission } from "@/lib/admin/access";
 import { formatDate, formatDateTime } from "@/lib/admin/format";
 import {
@@ -28,6 +31,8 @@ import {
   durationText,
   getPenalty,
   PENALTY_STATUS_LABELS,
+  PENALTY_STATUS_ORDER,
+  PENALTY_STATUS_SHORT,
   SIDE_LABELS,
   SUBMISSION_TYPE_LABELS,
   updatePenalty,
@@ -35,7 +40,7 @@ import {
   type PenaltyEvent,
 } from "@/lib/api/admin/penalties";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, radius, space, textScale, type } from "@/theme";
+import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
 const REVIEW_TONE: Record<string, Tone> = { pending: "warn", accepted: "win", rejected: "danger", noted: "info" };
 
@@ -73,89 +78,130 @@ export default function PenaltyDetailScreen() {
     >
       {query.isLoading ? (
         <>
+          <SkeletonHero />
           <SkeletonCard lines={4} />
-          <SkeletonCard lines={3} />
         </>
       ) : query.error || !penalty ? (
         <ErrorState error={query.error ?? new Error("Ceza kaydı bulunamadı.")} onRetry={query.refetch} variant="inline" />
       ) : (
         <>
-          <View style={styles.hero}>
-            <Avatar name={penalty.player_name} image={penalty.player_img} size={56} />
-            <View style={styles.heroText}>
-              <Text style={styles.heroTitle} {...textScale.dense}>
-                {penalty.player_name || "Oyuncu"}
-              </Text>
-              <Text style={styles.heroSub} {...textScale.dense}>
-                {penalty.team_name || "Takım belirtilmedi"}
-              </Text>
-              <View style={styles.badges}>
-                {penaltyBadges(penalty, false).map((b) => (
-                  <Badge key={b.label} label={b.label} tone={b.tone} icon={b.icon} size="xs" />
-                ))}
-              </View>
-            </View>
+          {/* KİMLİK SAHNESİ — oyuncu, aşama, ceza ilerlemesi. */}
+          <Reveal scaleFrom={0.97}>
+            <IdentityStage
+              leading={
+                <View style={[styles.ring, { borderColor: penalty.ban_state?.active ? colors.danger : colors.inkTileBorder }]}>
+                  <Avatar name={penalty.player_name} image={penalty.player_img} size={64} />
+                </View>
+              }
+              overline={PENALTY_STATUS_SHORT[penalty.status] ?? penalty.status}
+              title={penalty.player_name || "Oyuncu"}
+              subtitle={[penalty.team_name || "Takım belirtilmedi", penalty.match_label].filter(Boolean).join(" · ")}
+              pills={
+                <>
+                  {penalty.ban_state?.active != null ? (
+                    <StagePill label={penalty.ban_state.active ? "Cezalı" : "Ceza sona erdi"} tone={penalty.ban_state.active ? "danger" : "win"} icon={penalty.ban_state.active ? "alert-circle" : "checkmark-circle"} />
+                  ) : null}
+                  <StagePill label={durationText(penalty)} icon={penalty.duration_type === "suresiz" ? "ban" : "football"} />
+                  {penalty.submission_summary?.pending ? <StagePill label={`${penalty.submission_summary.pending} başvuru`} icon="document-attach" tone="gold" /> : null}
+                </>
+              }
+              stats={
+                penalty.ban_state?.duration_type === "mac"
+                  ? [
+                      { label: "Ceza", value: penalty.ban_state.matches_required ?? penalty.match_count ?? 0 },
+                      { label: "Oynandı", value: penalty.ban_state.matches_played ?? 0 },
+                      { label: "Kalan", value: penalty.ban_state.matches_remaining ?? 0, tone: (penalty.ban_state.matches_remaining ?? 0) > 0 ? "danger" : "win" },
+                    ]
+                  : [
+                      { label: "Başlangıç", value: penalty.ban_start_at ? formatDate(penalty.ban_start_at, false) : "—" },
+                      { label: "Tavan", value: penalty.ban_end_at ? formatDate(penalty.ban_end_at, false) : "—" },
+                      { label: "Başvuru", value: submissions.length },
+                    ]
+              }
+            />
+          </Reveal>
+
+          {/* AŞAMA ÇİZGİSİ — dört disiplin aşaması, şu anki vurgulu. */}
+          <View style={styles.steps} accessible accessibilityLabel={`Aşama: ${PENALTY_STATUS_LABELS[penalty.status]}`}>
+            {PENALTY_STATUS_ORDER.map((st, i) => {
+              const at = PENALTY_STATUS_ORDER.indexOf(penalty.status);
+              const done = i < at;
+              const now = i === at;
+              return (
+                <View key={st} style={styles.step}>
+                  <View style={styles.stepTrack}>
+                    {i ? <View style={[styles.stepLine, i <= at ? styles.stepLineOn : null]} /> : <View style={styles.stepLineGhost} />}
+                    <View style={[styles.stepDot, done ? styles.stepDone : null, now ? styles.stepNow : null]}>
+                      {done ? <Ionicons name="checkmark" size={11} color={colors.textOnBrand} /> : <Ionicons name={STATUS_ICON[st]} size={11} color={now ? colors.textOnBrand : colors.textTertiary} />}
+                    </View>
+                    {i < PENALTY_STATUS_ORDER.length - 1 ? <View style={[styles.stepLine, i < at ? styles.stepLineOn : null]} /> : <View style={styles.stepLineGhost} />}
+                  </View>
+                  <Text style={[styles.stepLabel, now ? styles.stepLabelNow : null]} numberOfLines={2} {...textScale.badge}>
+                    {PENALTY_STATUS_SHORT[st]}
+                  </Text>
+                </View>
+              );
+            })}
           </View>
 
-          <Panel title="Ceza özeti">
-            <InfoLine label="Durum" value={PENALTY_STATUS_LABELS[penalty.status] ?? penalty.status} />
-            <InfoLine label="Ceza süresi" value={durationText(penalty)} />
-            <InfoLine label="Maç" value={penalty.match_label || "—"} />
-            <InfoLine label="Maç tarihi" value={penalty.match_date ? formatDate(penalty.match_date) : "—"} />
-            <InfoLine label="Ceza başlangıcı" value={penalty.ban_start_at ? formatDate(penalty.ban_start_at) : "—"} />
-            <InfoLine label="Zaman tavanı" value={penalty.ban_end_at ? formatDate(penalty.ban_end_at) : "—"} />
-            {penalty.defense_deadline_at ? <InfoLine label="Savunma süresi" value={formatDateTime(penalty.defense_deadline_at)} /> : null}
-            {penalty.objection_deadline_at ? <InfoLine label="İtiraz süresi" value={formatDateTime(penalty.objection_deadline_at)} /> : null}
+          <GroupCard title="Ceza özeti" icon="hammer" tone="red" action={canUpdate ? { label: "Güncelle", onPress: () => setEditing(true) } : undefined}>
             <Text style={styles.summary} {...textScale.long}>
               {banSummary(penalty)}
             </Text>
-          </Panel>
+            <View>
+              <FactRow icon="flag-outline" label="Aşama" value={PENALTY_STATUS_LABELS[penalty.status] ?? penalty.status} />
+              <FactRow icon="timer-outline" label="Ceza süresi" value={durationText(penalty)} />
+              <FactRow icon="football-outline" label="Maç" value={penalty.match_label || null} />
+              <FactRow icon="calendar-outline" label="Maç tarihi" value={penalty.match_date ? formatDate(penalty.match_date) : null} />
+              <FactRow icon="play-outline" label="Ceza başlangıcı" value={penalty.ban_start_at ? formatDate(penalty.ban_start_at) : null} />
+              <FactRow icon="hourglass-outline" label="Zaman tavanı" value={penalty.ban_end_at ? formatDate(penalty.ban_end_at) : null} last={!penalty.defense_deadline_at && !penalty.objection_deadline_at} />
+              {penalty.defense_deadline_at ? <FactRow icon="shield-outline" label="Savunma süresi" value={formatDateTime(penalty.defense_deadline_at)} tone="warn" last={!penalty.objection_deadline_at} /> : null}
+              {penalty.objection_deadline_at ? <FactRow icon="git-pull-request-outline" label="İtiraz süresi" value={formatDateTime(penalty.objection_deadline_at)} tone="warn" last /> : null}
+            </View>
+          </GroupCard>
 
           {penalty.disiplin_karari ? (
-            <Panel title="Disiplin kararı">
-              <Text style={styles.body} selectable {...textScale.long}>
-                {penalty.disiplin_karari}
-              </Text>
-            </Panel>
+            <GroupCard title="Disiplin kararı" icon="document-text" tone="violet">
+              <View style={styles.quoteBox}>
+                <Text style={styles.body} selectable {...textScale.long}>
+                  {penalty.disiplin_karari}
+                </Text>
+              </View>
+            </GroupCard>
           ) : null}
 
-          <Panel
-            title={`Savunma ve itirazlar${submissions.length ? ` (${submissions.length})` : ""}`}
+          <GroupCard
+            title={`Savunma ve itirazlar · ${submissions.length}`}
+            icon="document-attach"
+            tone="cyan"
+            padded={false}
             action={canReview ? { label: "Kutuyu aç", onPress: () => router.push("/yonetim/savunmalar" as Href) } : undefined}
           >
-            {submissions.length ? (
-              <View style={styles.list}>
-                {submissions.map((s) => {
-                  const status = s.review_status ?? "pending";
+            <View style={styles.foot}>
+              {submissions.length ? (
+                submissions.map((sub, i) => {
+                  const status = sub.review_status ?? "pending";
                   return (
-                    <RecordCard
-                      key={s.id}
-                      title={`${SUBMISSION_TYPE_LABELS[s.event_type as "defense"] ?? "Başvuru"} · ${SIDE_LABELS[s.submitted_by_side ?? ""] ?? "Taraf"}`}
-                      subtitle={s.description}
-                      meta={formatDateTime(s.createdAt)}
-                      icon={s.event_type === "objection" ? "git-pull-request-outline" : "document-text-outline"}
-                      iconTone={status === "pending" ? "warn" : "neutral"}
-                      badges={[{ label: s.review_status_label ?? "Değerlendirme bekliyor", tone: REVIEW_TONE[status] }]}
-                      numberOfLines={4}
-                      onPress={canReview && status === "pending" ? () => setReviewing(s) : undefined}
-                    >
-                      {s.review_note ? (
-                        <Text style={styles.reviewNote} {...textScale.dense}>
-                          Kurul notu: {s.review_note}
-                        </Text>
-                      ) : null}
-                    </RecordCard>
+                    <ListLine
+                      key={sub.id}
+                      leading={<IconTile icon={sub.event_type === "objection" ? "git-pull-request" : "document-text"} tone={status === "pending" ? "gold" : "neutral"} size={36} glow={false} />}
+                      title={`${SUBMISSION_TYPE_LABELS[sub.event_type as "defense"] ?? "Başvuru"} · ${SIDE_LABELS[sub.submitted_by_side ?? ""] ?? "Taraf"}`}
+                      subtitle={[formatDateTime(sub.createdAt), sub.review_note ? `Kurul: ${sub.review_note}` : sub.description].filter(Boolean).join(" · ")}
+                      pills={[{ label: sub.review_status_label ?? "Değerlendirme bekliyor", tone: REVIEW_TONE[status] }]}
+                      onPress={canReview && status === "pending" ? () => setReviewing(sub) : undefined}
+                      last={i === submissions.length - 1}
+                    />
                   );
-                })}
-              </View>
-            ) : (
-              <Text style={styles.summary} {...textScale.dense}>
-                Bu dosyaya savunma ya da itiraz gönderilmedi.
-              </Text>
-            )}
-          </Panel>
+                })
+              ) : (
+                <Text style={[styles.summary, styles.inset]} {...textScale.dense}>
+                  Bu dosyaya savunma ya da itiraz gönderilmedi.
+                </Text>
+              )}
+            </View>
+          </GroupCard>
 
-          <Panel title="Sürecin tamamı">
+          <GroupCard title="Sürecin tamamı" icon="git-commit" tone="neutral">
             <SegmentedControl<"ozet" | "tumu">
               items={[
                 { key: "ozet", label: "Aşamalar" },
@@ -165,10 +211,8 @@ export default function PenaltyDetailScreen() {
               onChange={setTimelineMode}
               size="sm"
             />
-            <View style={styles.timeline}>
-              <PenaltyTimeline events={timeline} />
-            </View>
-          </Panel>
+            <PenaltyTimeline events={timeline} />
+          </GroupCard>
 
           <View style={styles.actions}>
             {penalty.player_id ? (
@@ -178,7 +222,7 @@ export default function PenaltyDetailScreen() {
               <Button label="Maçı aç" icon="football-outline" variant="secondary" onPress={() => router.push(`/mac/${penalty.match_id}` as Href)} style={styles.grow} />
             ) : null}
           </View>
-          {canUpdate ? <Button label="Kararı güncelle" icon="create-outline" onPress={() => setEditing(true)} fullWidth /> : null}
+          {canUpdate ? <Button label="Kararı güncelle" icon="create-outline" size="lg" onPress={() => setEditing(true)} fullWidth /> : null}
         </>
       )}
 
@@ -232,26 +276,53 @@ function UpdateSheet({
       footer={<Button label="Güncelle ve kaydet" onPress={() => save.mutate(undefined)} loading={save.isPending} haptic="success" fullWidth />}
     >
       <View style={styles.form}>
-        <PenaltyDecisionFields value={decision} onChange={setDecision} />
-        <Input label="Disiplin kararı" value={karar} onChangeText={setKarar} multiline numberOfLines={5} placeholder="Disiplin kararı / gerekçe metni" />
-        <Input label="Süreç notu (isteğe bağlı)" value={note} onChangeText={setNote} placeholder="Bu güncellemeyle ilgili kısa not" />
+        <GroupCard title="Aşama ve süre" step={1}>
+          <PenaltyDecisionFields value={decision} onChange={setDecision} />
+        </GroupCard>
+        <GroupCard title="Karar metni" step={2}>
+          <Input label="Disiplin kararı" value={karar} onChangeText={setKarar} multiline numberOfLines={5} placeholder="Disiplin kararı / gerekçe metni" />
+          <Input label="Süreç notu (isteğe bağlı)" value={note} onChangeText={setNote} placeholder="Bu güncellemeyle ilgili kısa not" />
+        </GroupCard>
       </View>
     </BottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  hero: { flexDirection: "row", alignItems: "center", gap: space.md },
-  heroText: { flex: 1, gap: 2 },
-  heroTitle: { ...type.h2, color: colors.textPrimary },
-  heroSub: { ...type.bodySm, color: colors.textSecondary },
-  badges: { flexDirection: "row", flexWrap: "wrap", gap: space.xs, marginTop: space.xs },
+  ring: { borderWidth: 2, borderRadius: radius.pill, padding: 2 },
   summary: { ...type.bodySm, color: colors.textSecondary },
   body: { ...type.body, color: colors.textPrimary },
-  list: { gap: space.sm },
-  reviewNote: { ...type.caption, color: colors.textSecondary, marginTop: space.xs, padding: space.sm, borderRadius: radius.sm, backgroundColor: colors.surface2 },
-  timeline: { marginTop: space.md },
+  quoteBox: { padding: space.md, borderRadius: radius.md, backgroundColor: colors.surface2, borderLeftWidth: 3, borderLeftColor: colors.brandAccent },
+  inset: { paddingHorizontal: space.lg },
+  foot: { paddingBottom: space.sm },
   actions: { flexDirection: "row", gap: space.sm },
   grow: { flex: 1 },
-  form: { gap: space.lg },
+  form: { gap: space.md },
+  steps: {
+    flexDirection: "row",
+    paddingVertical: space.md,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+  },
+  step: { flex: 1, alignItems: "center", gap: space.xs },
+  stepTrack: { flexDirection: "row", alignItems: "center", alignSelf: "stretch" },
+  stepLine: { flex: 1, height: 2, backgroundColor: colors.separator },
+  stepLineOn: { backgroundColor: colors.brandAccent },
+  stepLineGhost: { flex: 1 },
+  stepDot: {
+    width: 24,
+    height: 24,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface2,
+    borderWidth: hairline,
+    borderColor: colors.border,
+  },
+  stepDone: { backgroundColor: colors.brandAccent, borderColor: colors.brandAccent },
+  stepNow: { backgroundColor: colors.danger, borderColor: colors.danger },
+  stepLabel: { ...type.micro, color: colors.textTertiary, textAlign: "center", paddingHorizontal: space.xxs },
+  stepLabelNow: { color: colors.textPrimary },
 });

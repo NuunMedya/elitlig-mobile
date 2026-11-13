@@ -18,9 +18,13 @@ import { useRouter } from "expo-router";
 import React, { memo, useCallback } from "react";
 import { FlatList, StyleSheet, Text, View, type RefreshControlProps } from "react-native";
 
+import { LinearGradient } from "expo-linear-gradient";
 import {
+  Aurora,
   EmptyState,
   FormChips,
+  Odometer,
+  Reveal,
   SectionHeader,
   SkeletonCard,
   SkeletonListRow,
@@ -105,37 +109,51 @@ export function HeadToHeadTab({
 
   const header = (
     <View>
-      <PaperCard>
-        <View style={styles.idRow}>
-          <TeamSide name={match.first_team_name} logo={homeLogo} form={homeForm} />
-          <View style={styles.count}>
-            <Text style={styles.countValue} {...textScale.dense}>
-              {total}
-            </Text>
-            <Text style={styles.countLabel} {...textScale.badge}>
-              KARŞILAŞMA
-            </Text>
-          </View>
-          <TeamSide name={match.second_team_name} logo={awayLogo} form={awayForm} />
-        </View>
-
-        {total > 0 ? (
-          <View style={styles.split}>
-            <View style={styles.splitNumbers}>
-              <SplitNumber value={tally.homeWins} label="Galibiyet" align="left" />
-              <SplitNumber value={tally.draws} label="Beraberlik" align="center" />
-              <SplitNumber value={tally.awayWins} label="Galibiyet" align="right" />
+      {/* — Kahraman: mürekkep sahne, iki arma, karşılaşma sayısı — */}
+      <Reveal scaleFrom={0.98}>
+        <View style={styles.hero}>
+          <LinearGradient
+            colors={colors.gradientInk}
+            start={{ x: 1, y: 0.5 }}
+            end={{ x: 0, y: 0.5 }}
+            style={StyleSheet.absoluteFill}
+          />
+          <Aurora variant="stage" style={StyleSheet.absoluteFill} />
+          <View style={styles.idRow}>
+            <TeamSide name={match.first_team_name} logo={homeLogo} form={homeForm} />
+            <View style={styles.count}>
+              <Odometer value={total} style={styles.countValue} />
+              <Text style={styles.countLabel} {...textScale.badge}>
+                KARŞILAŞMA
+              </Text>
             </View>
-            <ResultStrip home={tally.homeWins} draws={tally.draws} away={tally.awayWins} />
+            <TeamSide name={match.second_team_name} logo={awayLogo} form={awayForm} />
           </View>
-        ) : null}
 
-        {total > 0 ? (
+          {total > 0 ? (
+            <View style={styles.split}>
+              <ResultStrip home={tally.homeWins} draws={tally.draws} away={tally.awayWins} />
+            </View>
+          ) : null}
+        </View>
+      </Reveal>
+
+      {/* — G / B / M: ev sahibi gözünden, büyük rakamlar — */}
+      {total > 0 ? (
+        <View style={styles.tiles}>
+          <ResultTile value={tally.homeWins} letter="G" label={`${shortName(match.first_team_name)} kazandı`} tone="win" index={0} />
+          <ResultTile value={tally.draws} letter="B" label="Berabere" tone="draw" index={1} />
+          <ResultTile value={tally.awayWins} letter="M" label={`${shortName(match.second_team_name)} kazandı`} tone="loss" index={2} />
+        </View>
+      ) : null}
+
+      {total > 0 ? (
+        <PaperCard style={styles.goalsCard}>
           <View style={styles.goals}>
             <StatBar label="Atılan gol" home={tally.homeGoals} away={tally.awayGoals} />
           </View>
-        ) : null}
-      </PaperCard>
+        </PaperCard>
+      ) : null}
 
       {total > 0 ? <SectionHeader title="Son karşılaşmalar" meta="sonuç ev sahibi gözünden" /> : null}
     </View>
@@ -174,7 +192,9 @@ const TeamSide = memo(function TeamSide({
 }) {
   return (
     <View style={styles.side}>
-      <TeamLogo name={name} logo={logo} size={layout.crestXl - 8} />
+      <View style={styles.crestHalo}>
+        <TeamLogo name={name} logo={logo} size={layout.crestXl - 8} />
+      </View>
       <Text style={styles.sideName} numberOfLines={2} {...textScale.dense}>
         {name}
       </Text>
@@ -183,25 +203,46 @@ const TeamSide = memo(function TeamSide({
   );
 });
 
-const SplitNumber = memo(function SplitNumber({
+/** "ÖZMEN PETROL SPOR" → "ÖZMEN" — karo etiketi tek kelimeye sığmalı. */
+function shortName(name: string): string {
+  return String(name ?? "").trim().split(/\s+/)[0] ?? name;
+}
+
+const TILE_TONES = {
+  win: { bg: colors.winDim, fg: colors.win },
+  draw: { bg: colors.drawDim, fg: colors.draw },
+  loss: { bg: colors.lossDim, fg: colors.loss },
+} as const;
+
+/** Büyük sonuç karosu: harf rozeti · Odometer sayı · etiket. */
+const ResultTile = memo(function ResultTile({
   value,
+  letter,
   label,
-  align,
+  tone,
+  index,
 }: {
   value: number;
+  letter: string;
   label: string;
-  align: "left" | "center" | "right";
+  tone: keyof typeof TILE_TONES;
+  index: number;
 }) {
-  const alignItems = align === "left" ? "flex-start" : align === "right" ? "flex-end" : "center";
+  const t = TILE_TONES[tone];
   return (
-    <View style={[styles.splitCell, { alignItems }]}>
-      <Text style={styles.splitValue} {...textScale.dense}>
-        {value}
-      </Text>
-      <Text style={styles.splitLabel} {...textScale.dense}>
-        {label}
-      </Text>
-    </View>
+    <Reveal index={index} style={styles.tileWrap}>
+      <View style={styles.tile} accessible accessibilityLabel={`${label}: ${value}`}>
+        <View style={[styles.tileLetter, { backgroundColor: t.bg }]}>
+          <Text style={[styles.tileLetterText, { color: t.fg }]} {...textScale.badge}>
+            {letter}
+          </Text>
+        </View>
+        <Odometer value={value} style={[styles.tileValue, { color: t.fg }]} />
+        <Text style={styles.tileLabel} numberOfLines={2} {...textScale.dense}>
+          {label}
+        </Text>
+      </View>
+    </Reveal>
   );
 });
 
@@ -213,7 +254,14 @@ const SplitNumber = memo(function SplitNumber({
 const ResultStrip = memo(function ResultStrip({ home, draws, away }: { home: number; draws: number; away: number }) {
   return (
     <View style={styles.strip}>
-      {home > 0 ? <View style={[styles.stripPart, styles.stripHome, { flex: home }]} /> : null}
+      {home > 0 ? (
+        <LinearGradient
+          colors={colors.gradientSignature}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={[styles.stripPart, { flex: home }]}
+        />
+      ) : null}
       {draws > 0 ? <View style={[styles.stripPart, styles.stripDraw, { flex: draws }]} /> : null}
       {away > 0 ? <View style={[styles.stripPart, styles.stripAway, { flex: away }]} /> : null}
     </View>
@@ -254,6 +302,12 @@ const MeetingRow = memo(function MeetingRow({
       accessibilityRole="button"
       accessibilityLabel={`${formatDateShort(meeting.date)} ${year}: ${meeting.first_team_name} ${first ?? "-"}, ${meeting.second_team_name} ${second ?? "-"}`}
     >
+      <View
+        style={[
+          styles.resultStripe,
+          result === "G" ? styles.chipTextWinBg : result === "M" ? styles.chipTextLossBg : styles.chipTextDrawBg,
+        ]}
+      />
       <View style={styles.date}>
         <Text style={styles.dateDay} {...textScale.dense}>
           {formatDateShort(meeting.date)}
@@ -316,12 +370,20 @@ const styles = StyleSheet.create({
     borderTopColor: colors.separator,
   },
 
-  /* — Kimlik kartı — */
+  /* — Kahraman — */
+  hero: {
+    marginHorizontal: layout.screenPadding,
+    borderRadius: radius.xxl,
+    overflow: "hidden",
+    backgroundColor: colors.inkBlock,
+    borderWidth: hairline,
+    borderColor: colors.glassBorder,
+  },
   idRow: {
     flexDirection: "row",
     alignItems: "flex-start",
     paddingHorizontal: space.lg,
-    paddingTop: space.lg,
+    paddingTop: space.xl,
     paddingBottom: space.md,
   },
   side: {
@@ -330,50 +392,41 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: space.sm,
   },
+  crestHalo: {
+    width: layout.crestXl + 8,
+    height: layout.crestXl + 8,
+    borderRadius: (layout.crestXl + 8) / 2,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.inkTile,
+    borderWidth: 1.5,
+    borderColor: colors.inkPillBorder,
+  },
   sideName: {
     ...type.h4,
-    color: colors.textPrimary,
+    color: colors.onDark,
     textAlign: "center",
   },
   noForm: {
     ...type.caption,
-    color: colors.textTertiary,
+    color: colors.onDarkMuted,
   },
   count: {
-    width: 88,
+    width: 96,
     alignItems: "center",
-    paddingTop: space.xs,
+    paddingTop: space.sm,
   },
   countValue: {
-    ...type.scoreLg,
-    color: colors.textPrimary,
+    ...type.scoreJumbo,
+    color: colors.onDark,
   },
   countLabel: {
     ...type.overline,
-    color: colors.textTertiary,
+    color: colors.brandOnDark,
   },
-
   split: {
     paddingHorizontal: space.lg,
-    paddingTop: space.md,
     paddingBottom: space.lg,
-    gap: space.sm,
-    borderTopWidth: hairline,
-    borderTopColor: colors.separator,
-  },
-  splitNumbers: {
-    flexDirection: "row",
-  },
-  splitCell: {
-    flex: 1,
-  },
-  splitValue: {
-    ...type.metricSm,
-    color: colors.textPrimary,
-  },
-  splitLabel: {
-    ...type.caption,
-    color: colors.textTertiary,
   },
   strip: {
     flexDirection: "row",
@@ -384,20 +437,58 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: radius.pill,
   },
-  stripHome: {
-    backgroundColor: colors.accent,
-  },
   stripDraw: {
-    backgroundColor: colors.slateSoft,
+    backgroundColor: colors.onDarkMuted,
   },
   stripAway: {
-    backgroundColor: colors.slate,
+    backgroundColor: colors.liveOnDark,
+  },
+
+  /* — G / B / M karoları — */
+  tiles: {
+    flexDirection: "row",
+    gap: space.sm,
+    paddingHorizontal: layout.screenPadding,
+    paddingTop: space.md,
+  },
+  tileWrap: {
+    flex: 1,
+  },
+  tile: {
+    alignItems: "center",
+    gap: space.xxs,
+    paddingVertical: space.md,
+    paddingHorizontal: space.xs,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+  },
+  tileLetter: {
+    width: 26,
+    height: 26,
+    borderRadius: radius.sm,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tileLetterText: {
+    ...type.label,
+    fontFamily: fonts.bold,
+  },
+  tileValue: {
+    ...type.scoreHero,
+  },
+  tileLabel: {
+    ...type.caption,
+    color: colors.textTertiary,
+    textAlign: "center",
+  },
+  goalsCard: {
+    marginTop: space.md,
   },
   goals: {
     paddingHorizontal: space.lg,
-    paddingBottom: space.sm,
-    borderTopWidth: hairline,
-    borderTopColor: colors.separator,
+    paddingVertical: space.xs,
   },
 
   /* — Geçmiş maç satırı (kart dilimi) — */
@@ -487,4 +578,16 @@ const styles = StyleSheet.create({
   chipTextWin: { color: colors.win },
   chipTextDraw: { color: colors.draw },
   chipTextLoss: { color: colors.loss },
+  resultStripe: {
+    position: "absolute",
+    left: 0,
+    top: space.md,
+    bottom: space.md,
+    width: 3,
+    borderTopRightRadius: 2,
+    borderBottomRightRadius: 2,
+  },
+  chipTextWinBg: { backgroundColor: colors.win },
+  chipTextDrawBg: { backgroundColor: colors.draw },
+  chipTextLossBg: { backgroundColor: colors.loss },
 });

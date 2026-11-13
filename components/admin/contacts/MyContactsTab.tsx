@@ -30,7 +30,7 @@ import {
   type MemberSort,
   type PersonalContact,
 } from "@/lib/api/admin/contacts";
-import { colors, radius, space, textScale, type } from "@/theme";
+import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
 import { shareCsv, shareVcard } from "../sheets/shareFile";
 import { ContactButtons } from "./ContactButtons";
@@ -208,30 +208,67 @@ export const MyContactsTab = forwardRef<
   );
 });
 
+/** Kişi kartı: favori halkalı avatar, ad, unvan · kurum, etiketler; sağda Ara / WhatsApp. */
 const ContactRow = React.memo(function ContactRow({ contact, actions, onPress }: { contact: PersonalContact; actions: ContactActions; onPress: () => void }) {
   const sub = contact.member_user_id
     ? "Üyeye eklenmiş kişisel not"
     : [contact.title, contact.company].filter(Boolean).join(" · ") || prettyPhone(contact.phone) || contact.email || null;
-  const badges: BadgeSpec[] = [
-    ...(contact.member_user_id ? [{ label: "Üye", tone: "info" as const, icon: "person-outline" as const }] : []),
-    ...(contact.favorite ? [{ label: "Favori", tone: "accent" as const, icon: "star" as const }] : []),
-    ...(contact.tags || []).slice(0, 3).map((t) => ({ label: t, tone: "neutral" as const })),
-  ];
+  const tags = (contact.tags || []).slice(0, 3);
   return (
-    <RecordCard
-      title={contact.name}
-      subtitle={sub}
-      meta={contact.city}
-      avatar={{ name: contact.name }}
-      badges={badges}
-      onPress={onPress}
-      trailing={
-        contact.member_user_id ? undefined : (
-          <ContactButtons name={contact.name} phone={contact.phone} email={contact.email} actions={actions} only={["tel", "wa"]} />
-        )
-      }
-    />
+    <Touchable feedback="card" onPress={onPress} style={rowStyles.card} accessibilityRole="button" accessibilityLabel={[contact.name, sub, contact.city, contact.favorite ? "favori" : null].filter(Boolean).join(", ")}>
+      <View>
+        <Avatar name={contact.name} size={44} ring={contact.favorite ? "brand" : "none"} />
+        {contact.favorite ? (
+          <View style={rowStyles.star}>
+            <Ionicons name="star" size={10} color={colors.onDark} />
+          </View>
+        ) : null}
+      </View>
+      <View style={rowStyles.body}>
+        <Text style={rowStyles.name} numberOfLines={1} {...textScale.dense}>
+          {contact.name}
+        </Text>
+        {sub ? (
+          <Text style={rowStyles.sub} numberOfLines={1} {...textScale.dense}>
+            {sub}
+          </Text>
+        ) : null}
+        <View style={rowStyles.tags}>
+          {contact.member_user_id ? <Badge label="Üye" tone="info" icon="person-outline" size="xs" /> : null}
+          {contact.city ? (
+            <View style={rowStyles.city}>
+              <Ionicons name="location-outline" size={11} color={colors.textTertiary} />
+              <Text style={rowStyles.cityText} {...textScale.badge}>
+                {contact.city}
+              </Text>
+            </View>
+          ) : null}
+          {tags.map((t) => (
+            <Text key={t} style={rowStyles.tag} numberOfLines={1} {...textScale.badge}>
+              #{t}
+            </Text>
+          ))}
+        </View>
+      </View>
+      {contact.member_user_id ? (
+        <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
+      ) : (
+        <ContactButtons name={contact.name} phone={contact.phone} email={contact.email} actions={actions} only={["tel", "wa"]} />
+      )}
+    </Touchable>
   );
+});
+
+const rowStyles = StyleSheet.create({
+  card: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderRadius: radius.xl, borderWidth: hairline, borderColor: colors.border, backgroundColor: colors.surface1 },
+  star: { position: "absolute", right: -2, bottom: -2, width: 18, height: 18, borderRadius: radius.pill, backgroundColor: colors.warn, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: colors.surface1 },
+  body: { flex: 1, minWidth: 0, gap: 2 },
+  name: { ...type.h4, color: colors.textPrimary },
+  sub: { ...type.bodySm, color: colors.textSecondary },
+  tags: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.xs, marginTop: space.xxs },
+  city: { flexDirection: "row", alignItems: "center", gap: 2 },
+  cityText: { ...type.caption, color: colors.textTertiary },
+  tag: { ...type.labelXs, color: colors.brandAccent },
 });
 
 function ContactDetailSheet({

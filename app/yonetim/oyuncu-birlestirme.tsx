@@ -23,16 +23,16 @@ import { StyleSheet, Text, View } from "react-native";
 import {
   AdminList,
   AdminScreen,
-  InfoLine,
-  Panel,
-  RecordCard,
   SelectField,
   confirmAction,
   useAdminMutation,
   type Option,
 } from "@/components/admin";
+import Ionicons from "@expo/vector-icons/Ionicons";
+
+import { CountStrip, DangerNote, EntityCard, GroupCard, PickerChip, SelectionBar } from "@/components/admin/team/ManageKit";
 import { ConflictList, MergeHistory, confirmUndo } from "@/components/admin/team/MergeParts";
-import { BottomSheet, Button, Chip, ChipGroup, EmptyState, ErrorState, SegmentedControl, SkeletonCard } from "@/components/ui";
+import { Avatar, BottomSheet, Button, Chip, ChipGroup, EmptyState, ErrorState, IconTile, SegmentedControl, SkeletonCard } from "@/components/ui";
 import { formatDate } from "@/lib/admin/format";
 import { teamOptionsLoader } from "@/lib/api/admin/lookups";
 import { getPlayerOverview } from "@/lib/api/admin/players";
@@ -52,7 +52,7 @@ import {
   type PlayerMergeChoices,
 } from "@/lib/api/admin/merge";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, space, textScale, type } from "@/theme";
+import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
 const PERMS = ["players.merge"];
 const KEY = ["admin", "player-merge"] as const;
@@ -252,7 +252,23 @@ export default function PlayerMergeScreen() {
           searchPlaceholder="Oyuncu adında ara"
           extraHeader={
             <View style={styles.stack}>
+              <CountStrip
+                items={[
+                  { key: "groups", label: "Grup", value: groups.data?.length ?? "—", icon: "git-merge", tone: "brand" },
+                  { key: "records", label: "Kayıt", value: (groups.data ?? []).reduce((n, g) => n + g.players.length, 0), icon: "people" },
+                ]}
+              />
               <ChipGroup scrollable contentPadding={0}>
+                <Chip label="Elle karşılaştır" icon="add" size="sm" tone="warn" selected onPress={() => openWorkspace([])} />
+                <PickerChip<number>
+                  icon="shield-half-outline"
+                  placeholder="Takım"
+                  title="Takım"
+                  value={teamId}
+                  onChange={setTeamId}
+                  loadOptions={teamOptionsLoader(user)}
+                  queryKey={["admin", "teams", "options"]}
+                />
                 {PLAYER_MERGE_RULES.map((r) => (
                   <Chip
                     key={r.key}
@@ -268,17 +284,6 @@ export default function PlayerMergeScreen() {
                   />
                 ))}
               </ChipGroup>
-              <SelectField<number>
-                value={teamId}
-                onChange={setTeamId}
-                loadOptions={teamOptionsLoader(user)}
-                queryKey={["admin", "teams", "options"]}
-                placeholder="Tüm takımlar"
-                icon="shield-half-outline"
-                clearable
-                sheetTitle="Takım"
-              />
-              <Button label="Elle karşılaştır" icon="add" variant="secondary" size="sm" onPress={() => openWorkspace([])} />
             </View>
           }
           summary={groups.data ? `${groups.data.length} ilişkili grup` : null}
@@ -287,16 +292,28 @@ export default function PlayerMergeScreen() {
           emptyTitle="İlişkili oyuncu grubu yok"
           emptyBody="Süzgeçleri değiştir ya da elle karşılaştır."
           renderItem={({ item }) => (
-            <RecordCard
-              title={item.players.map((p) => p.player_name).slice(0, 3).join(" · ")}
-              subtitle={item.players
-                .slice(0, 3)
-                .map((p) => [p.teams?.map((t) => t.team_name).join("/") || "Takımsız", `${p.total_matches ?? 0} maç`, p.birth_year].filter(Boolean).join(", "))
-                .join(" | ")}
-              meta={`${item.players.length} kayıt${item.players.length > 3 ? ` · +${item.players.length - 3}` : ""}`}
-              icon="git-merge-outline"
-              iconTone="brand"
-              badges={item.reasons.map((r) => ({ label: PLAYER_MERGE_RULES.find((x) => x.key === r)?.label ?? r }))}
+            <EntityCard
+              leading={<AvatarStack players={item.players} />}
+              title={item.players[0]?.player_name ?? "Oyuncu"}
+              subtitle={`${item.players.length} kayıt${item.players.length > 3 ? ` · +${item.players.length - 3}` : ""}`}
+              pills={item.reasons.map((r) => ({ label: PLAYER_MERGE_RULES.find((x) => x.key === r)?.label ?? r, tone: "brand" as const }))}
+              footer={
+                <View style={styles.compare}>
+                  {item.players.slice(0, 3).map((p, i) => (
+                    <View key={p.id} style={[styles.compareCol, i ? styles.compareDivided : null]}>
+                      <Text style={styles.compareId} numberOfLines={1} {...textScale.badge}>
+                        #{p.id}
+                      </Text>
+                      <Text style={styles.compareTeam} numberOfLines={1} {...textScale.dense}>
+                        {p.teams?.map((t) => t.team_name).join("/") || "Takımsız"}
+                      </Text>
+                      <Text style={styles.compareStat} numberOfLines={1} {...textScale.badge}>
+                        {p.total_matches ?? 0} maç{p.birth_year ? ` · ${p.birth_year}` : ""}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              }
               onPress={() => openWorkspace(item.players)}
             />
           )}
@@ -311,11 +328,12 @@ export default function PlayerMergeScreen() {
         footer={
           view ? (
             <View style={styles.footer}>
-              <Button label="Farklı kişiler" variant="secondary" onPress={() => void askDistinct()} loading={distinct.isPending} />
+              <Button label="Farklı kişiler" variant="secondary" size="lg" onPress={() => void askDistinct()} loading={distinct.isPending} />
               <Button
                 label={footerLabel}
                 icon="git-merge-outline"
                 variant="danger"
+                size="lg"
                 onPress={() => void askMerge()}
                 disabled={unresolved.length > 0 || missingUser || !target}
                 loading={merge.isPending}
@@ -326,19 +344,25 @@ export default function PlayerMergeScreen() {
         }
       >
         <View style={styles.stack}>
+          <SelectionBar count={included.length} noun={included.length >= 2 ? "kayıt karşılaştırılıyor" : "kayıt seçili · en az 2 gerekli"} onClear={() => setIncluded([])} />
           <Text style={styles.note} {...textScale.long}>
-            Aynı kişi olduğunu düşündüğün kayıtları işaretle (dokun). İkiden fazla da olabilir; hiçbiri seçili gelmez.
+            Aynı kişi olduğunu düşündüğün kayıtları işaretle (dokun). İkiden fazla da olabilir; hiçbiri seçili gelmez. Çıkarmak için basılı tut.
           </Text>
           {(workspace ?? []).map((p) => {
             const on = included.includes(p.id);
             return (
-              <RecordCard
+              <EntityCard
                 key={p.id}
+                selected={on}
+                leading={<Avatar name={p.player_name} image={p.player_img} size={44} />}
+                overline={[`#${p.id}`, p.city, p.birth_year].filter(Boolean).join(" · ")}
                 title={p.player_name}
-                subtitle={[`#${p.id}`, p.teams?.map((t) => t.team_name).join(", ") || "Takımsız", p.birth_year, p.city].filter(Boolean).join(" · ")}
-                meta={`${p.total_matches ?? 0} maç · ${p.total_goals ?? 0} gol`}
-                avatar={{ name: p.player_name, image: p.player_img }}
-                badges={[on ? { label: "Birleştirmeye dahil", tone: "brand", icon: "checkmark" } : { label: "Dahil değil" }]}
+                subtitle={p.teams?.map((t) => t.team_name).join(", ") || "Takımsız"}
+                stats={[
+                  { label: "Maç", value: p.total_matches ?? 0 },
+                  { label: "Gol", value: p.total_goals ?? 0 },
+                ]}
+                trailing={<Ionicons name={on ? "checkmark-circle" : "ellipse-outline"} size={24} color={on ? colors.brandAccent : colors.textTertiary} />}
                 onPress={() => setIncluded((list) => (on ? list.filter((x) => x !== p.id) : [...list, p.id]))}
                 onLongPress={() => {
                   setWorkspace((w) => (w ?? []).filter((x) => x.id !== p.id));
@@ -370,47 +394,42 @@ export default function PlayerMergeScreen() {
           ) : view ? (
             <>
               {view.shared_matches?.length ? (
-                <Panel title="DİKKAT">
-                  <Text style={styles.danger} {...textScale.long}>
-                    Aynı maçta birlikte oynamışlar: {view.shared_matches.map((s) => `${nameOf(s.a)} ile ${nameOf(s.b)} ${s.count} maçta aynı kadroda`).join("; ")}.
-                    Aynı maçta iki ayrı kayıt olarak yer alan oyuncular büyük ihtimalle farklı kişilerdir.
-                  </Text>
-                </Panel>
+                <DangerNote
+                  icon="people"
+                  title="Büyük ihtimalle farklı kişiler"
+                  body={`Aynı maçta birlikte oynamışlar: ${view.shared_matches.map((x) => `${nameOf(x.a)} ile ${nameOf(x.b)} ${x.count} maçta aynı kadroda`).join("; ")}. Aynı maçta iki ayrı kayıt olarak yer alan oyuncular büyük ihtimalle farklı kişilerdir.`}
+                />
               ) : null}
 
-              <Panel title="1 · ASIL KAYIT">
+              <GroupCard title="Asıl kayıt" step={1}>
                 <Text style={styles.note} {...textScale.long}>
                   Diğer kayıtlar bunun içine birleştirilir; profil bağlantısı (kayıt no) bu kaydınki olur.
                 </Text>
-                <ChipGroup>
-                  {view.profiles.map((p) => (
-                    <Chip
-                      key={p.id}
-                      label={`${p.fields.player_name} #${p.id}`}
-                      icon={choices.targetId === p.id ? "star" : undefined}
-                      size="sm"
-                      selected={choices.targetId === p.id}
-                      onPress={() => setChoices((c) => ({ ...c, targetId: p.id }))}
-                    />
-                  ))}
-                </ChipGroup>
-                {view.profiles.map((p) => (
-                  <InfoLine
-                    key={p.id}
-                    label={`#${p.id}`}
-                    value={[
-                      `${p.stats.recorded_matches ?? p.stats.matches} maç · ${p.stats.goals} gol`,
-                      p.stats.first_match ? `${formatDate(p.stats.first_match)} – ${formatDate(p.stats.last_match)}` : null,
-                      p.teams.map((t) => t.team_name).join(", ") || "Takımsız",
-                      p.user ? `@${p.user.username}` : "Hesapsız",
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  />
-                ))}
-              </Panel>
+                <View style={styles.targets}>
+                  {view.profiles.map((p) => {
+                    const on = choices.targetId === p.id;
+                    return (
+                      <EntityCard
+                        key={p.id}
+                        selected={on}
+                        leading={<IconTile icon={on ? "star" : "person-outline"} tone={on ? "gold" : "neutral"} size={36} glow={on} />}
+                        overline={`#${p.id}${on ? " · kalacak" : " · silinecek"}`}
+                        title={p.fields.player_name}
+                        subtitle={p.teams.map((t) => t.team_name).join(", ") || "Takımsız"}
+                        meta={[p.stats.first_match ? `${formatDate(p.stats.first_match)} – ${formatDate(p.stats.last_match)}` : null, p.user ? `@${p.user.username}` : "Hesapsız"].filter(Boolean).join(" · ")}
+                        stats={[
+                          { label: "Maç", value: p.stats.recorded_matches ?? p.stats.matches },
+                          { label: "Gol", value: p.stats.goals },
+                        ]}
+                        trailing={<Ionicons name={on ? "radio-button-on" : "radio-button-off"} size={22} color={on ? colors.adminAccent : colors.textTertiary} />}
+                        onPress={() => setChoices((c) => ({ ...c, targetId: p.id }))}
+                      />
+                    );
+                  })}
+                </View>
+              </GroupCard>
 
-              <Panel title="2 · PROFİL BİLGİLERİ">
+              <GroupCard title={`Profil bilgileri${unresolved.length ? ` · ${unresolved.length} seçim` : ""}`} step={2}>
                 <ConflictList
                   conflicts={view.conflicts}
                   idKey="player_id"
@@ -419,9 +438,9 @@ export default function PlayerMergeScreen() {
                   canBlank={(f) => f !== "player_name" && f !== "city"}
                   onPick={(field, id) => setChoices((c) => ({ ...c, fields: { ...c.fields, [field]: id } }))}
                 />
-              </Panel>
+              </GroupCard>
 
-              <Panel title="3 · TAKIMLAR">
+              <GroupCard title="Takımlar" step={3}>
                 {view.teams.length ? (
                   <>
                     <Text style={styles.note} {...textScale.long}>
@@ -433,13 +452,13 @@ export default function PlayerMergeScreen() {
                       ))}
                     </ChipGroup>
                     <Text style={styles.label} {...textScale.dense}>
-                      Ana takım
+                      ANA TAKIM
                     </Text>
                     <ChipGroup>
                       {view.teams
                         .filter((t) => keep.has(t.id))
                         .map((t) => (
-                          <Chip key={t.id} label={t.team_name} size="sm" selected={choices.primaryTeamId === t.id} onPress={() => setChoices((c) => ({ ...c, primaryTeamId: t.id }))} />
+                          <Chip key={t.id} label={t.team_name} icon="star" size="sm" tone="warn" selected={choices.primaryTeamId === t.id} onPress={() => setChoices((c) => ({ ...c, primaryTeamId: t.id }))} />
                         ))}
                       <Chip label="Ana takım yok (serbest)" size="sm" selected={choices.primaryTeamId === null} onPress={() => setChoices((c) => ({ ...c, primaryTeamId: null }))} />
                     </ChipGroup>
@@ -447,9 +466,9 @@ export default function PlayerMergeScreen() {
                 ) : (
                   <Text style={styles.note}>Bu kayıtların takım bağı yok.</Text>
                 )}
-              </Panel>
+              </GroupCard>
 
-              <Panel title="4 · BAĞLI ÜYE HESABI">
+              <GroupCard title="Bağlı üye hesabı" step={4}>
                 {view.users.length === 0 ? (
                   <Text style={styles.note}>Hiçbir kayıt bir üye hesabına bağlı değil.</Text>
                 ) : view.users.length === 1 ? (
@@ -458,9 +477,7 @@ export default function PlayerMergeScreen() {
                   </Text>
                 ) : (
                   <>
-                    <Text style={styles.note} {...textScale.long}>
-                      Birden fazla üye bu kayıtlara bağlı. Bir profil yalnız bir üyeye bağlı olabilir: kalacak hesabı seç, diğerlerinin bağı kaldırılır.
-                    </Text>
+                    <DangerNote tone="warn" title="Birden fazla üye bağlı" body="Bir profil yalnız bir üyeye bağlı olabilir: kalacak hesabı seç, diğerlerinin bağı kaldırılır." />
                     <ChipGroup>
                       {view.users.map((u) => (
                         <Chip
@@ -475,17 +492,14 @@ export default function PlayerMergeScreen() {
                     </ChipGroup>
                   </>
                 )}
-              </Panel>
+              </GroupCard>
 
               {target ? (
-                <Panel title="SONUÇ">
-                  <Text style={styles.note} {...textScale.long}>
-                    Kayıt #{target.id} kalır. Ana takım: {view.teams.find((t) => t.id === choices.primaryTeamId)?.team_name ?? "yok"}. Korunan takımlar:{" "}
-                    {view.teams.filter((t) => keep.has(t.id)).map((t) => t.team_name).join(", ") || "yok"}. Toplam{" "}
-                    {view.profiles.reduce((n, p) => n + (p.stats.recorded_matches ?? p.stats.matches ?? 0), 0)} maç kaydı ve{" "}
-                    {view.profiles.reduce((n, p) => n + p.stats.goals, 0)} gol (birleşince yeniden hesaplanır).
-                  </Text>
-                </Panel>
+                <DangerNote
+                  icon="git-merge"
+                  title="Sonuç · geri alınabilir"
+                  body={`Kayıt #${target.id} kalır, diğer ${others.length} kayıt SİLİNİR. Ana takım: ${view.teams.find((t) => t.id === choices.primaryTeamId)?.team_name ?? "yok"}. Korunan takımlar: ${view.teams.filter((t) => keep.has(t.id)).map((t) => t.team_name).join(", ") || "yok"}. Toplam ${view.profiles.reduce((n, p) => n + (p.stats.recorded_matches ?? p.stats.matches ?? 0), 0)} maç kaydı ve ${view.profiles.reduce((n, p) => n + p.stats.goals, 0)} gol (birleşince yeniden hesaplanır).`}
+                />
               ) : null}
             </>
           ) : null}
@@ -495,11 +509,33 @@ export default function PlayerMergeScreen() {
   );
 }
 
+/** Üst üste binen avatar yığını (ilişkili oyuncu kayıtları). */
+function AvatarStack({ players }: { players: { id: number; player_name: string; player_img?: string | null }[] }) {
+  const shown = players.slice(0, 3);
+  return (
+    <View style={[styles.avStack, { width: 36 + (shown.length - 1) * 20 }]}>
+      {shown.map((p, i) => (
+        <View key={p.id} style={[styles.avItem, { left: i * 20, zIndex: 3 - i }]}>
+          <Avatar name={p.player_name} image={p.player_img} size={36} />
+        </View>
+      ))}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   stack: { gap: space.md },
+  targets: { gap: space.sm },
+  avStack: { height: 40, justifyContent: "center" },
+  avItem: { position: "absolute", top: 0, borderRadius: radius.pill, borderWidth: 2, borderColor: colors.surface1 },
+  compare: { flexDirection: "row", borderRadius: radius.md, backgroundColor: colors.surface2, paddingVertical: space.sm },
+  compareCol: { flex: 1, paddingHorizontal: space.sm, gap: 1 },
+  compareDivided: { borderLeftWidth: hairline, borderLeftColor: colors.separator },
+  compareId: { ...type.micro, color: colors.textTertiary },
+  compareTeam: { ...type.labelSm, color: colors.textPrimary },
+  compareStat: { ...type.numSm, color: colors.textSecondary },
   footer: { flexDirection: "row", gap: space.sm },
   grow: { flex: 1 },
   note: { ...type.bodySm, color: colors.textSecondary },
-  danger: { ...type.bodySm, color: colors.danger },
-  label: { ...type.label, color: colors.textSecondary },
+  label: { ...type.overline, color: colors.textTertiary },
 });

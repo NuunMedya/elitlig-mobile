@@ -246,6 +246,7 @@ export default function RegisterScreen() {
       {/* 1) HESAP — kim olduğun ve sana nasıl ulaşılacağı. */}
       <AuthCard title="Hesap">
         <Input
+          floating
           label="Ad soyad"
           value={form.fullName}
           onChangeText={change("fullName")}
@@ -262,6 +263,7 @@ export default function RegisterScreen() {
         />
 
         <Input
+          floating
           ref={usernameRef}
           label="Kullanıcı adı"
           value={form.username}
@@ -282,6 +284,7 @@ export default function RegisterScreen() {
         />
 
         <Input
+          floating
           ref={emailRef}
           label="E-posta"
           value={form.email}
@@ -302,6 +305,7 @@ export default function RegisterScreen() {
         />
 
         <Input
+          floating
           ref={phoneRef}
           label="Telefon (isteğe bağlı)"
           value={form.phone}
@@ -359,6 +363,7 @@ export default function RegisterScreen() {
       {/* 3) ŞİFRE — kurallar alanın altında canlı işaretlenir. */}
       <AuthCard title="Şifre">
         <Input
+          floating
           ref={passwordRef}
           label="Şifre"
           value={form.password}
@@ -381,6 +386,7 @@ export default function RegisterScreen() {
         <PasswordRules value={form.password} minLength={PASSWORD_MIN} />
 
         <Input
+          floating
           ref={passwordRepeatRef}
           label="Şifre (tekrar)"
           value={form.passwordRepeat}

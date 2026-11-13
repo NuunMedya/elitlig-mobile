@@ -37,7 +37,9 @@ import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 import {
+  Aurora,
   Badge,
   BottomSheet,
   Button,
@@ -927,7 +929,9 @@ const DocumentTab = React.memo(function DocumentTab({
   return (
     <>
       {/* Künye: takım, durum ve kalan süre tek yüzeyde. */}
-      <Surface level={1} radius="lg" style={styles.hero}>
+      <View style={styles.hero}>
+              <LinearGradient colors={colors.gradientInk} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+              <Aurora variant="stage" style={StyleSheet.absoluteFill} />
         <TeamLogo
           name={offer.team?.team_name ?? "?"}
           logo={mediaUrl(offer.team?.logo ?? null)}
@@ -948,7 +952,7 @@ const DocumentTab = React.memo(function DocumentTab({
             ) : null}
           </View>
         </View>
-      </Surface>
+      </View>
 
       {offer.status === "SENT" ? (
         remaining ? (
@@ -972,7 +976,7 @@ const DocumentTab = React.memo(function DocumentTab({
       ) : null}
 
       {/* Şartlar */}
-      <SectionHeader style={styles.flushHeader} title="Sözleşme şartları" meta={terms ? `${terms.version_number}. sürüm` : undefined} />
+      <SectionHeader style={styles.flushHeader} title="Sözleşme şartları" icon="document-text" iconTone="mint" meta={terms ? `${terms.version_number}. sürüm` : undefined} />
       {clauses.length === 0 ? (
         <EmptyState
           icon="document-text-outline"
@@ -997,7 +1001,7 @@ const DocumentTab = React.memo(function DocumentTab({
       {/* Ek maddeler */}
       {additional.length > 0 ? (
         <>
-          <SectionHeader style={styles.flushHeader} title="Ek maddeler" meta={String(additional.length)} />
+          <SectionHeader style={styles.flushHeader} title="Ek maddeler" icon="add-circle" iconTone="gold" meta={String(additional.length)} />
           {/* Ek madde metinleri uzun olabilir; tek satırlık KeyValueRow yerine
               paragraf yüzeyinde tam gösterilir (kırpılan madde okunmaz madde). */}
           {additional.map((item, index) => (
@@ -1016,7 +1020,7 @@ const DocumentTab = React.memo(function DocumentTab({
       {/* Takımın mesajı */}
       {terms?.message ? (
         <>
-          <SectionHeader style={styles.flushHeader} title="Takımın notu" />
+          <SectionHeader style={styles.flushHeader} title="Takımın notu" icon="chatbubble-ellipses" iconTone="cyan" />
           <Surface level={1} radius="lg" style={styles.quote}>
             <Ionicons name="chatbubble-ellipses-outline" size={16} color={colors.brandAccent} />
             <Text style={styles.quoteText} {...textScale.long}>
@@ -1027,7 +1031,7 @@ const DocumentTab = React.memo(function DocumentTab({
       ) : null}
 
       {/* Künye satırları */}
-      <SectionHeader style={styles.flushHeader} title="Teklif künyesi" />
+      <SectionHeader style={styles.flushHeader} title="Teklif künyesi" icon="finger-print" iconTone="neutral" />
       <KeyValueRow
         label="Teklif no"
         value={offer.public_id}
@@ -1099,7 +1103,7 @@ const VersionsTab = React.memo(function VersionsTab({ offer }: { offer: OfferDoc
 
   return (
     <>
-      <SectionHeader style={styles.flushHeader} title="Teklif sürümleri" meta={String(versions.length)} />
+      <SectionHeader style={styles.flushHeader} title="Teklif sürümleri" icon="layers" iconTone="violet" meta={String(versions.length)} />
       {versions.map((version) => (
         <VersionCard
           key={version.id}
@@ -1110,7 +1114,7 @@ const VersionsTab = React.memo(function VersionsTab({ offer }: { offer: OfferDoc
 
       {revisions.length > 0 ? (
         <>
-          <SectionHeader style={styles.flushHeader} title="Düzenleme isteklerim" meta={String(revisions.length)} />
+          <SectionHeader style={styles.flushHeader} title="Düzenleme isteklerim" icon="create" iconTone="pink" meta={String(revisions.length)} />
           {revisions.map((request) => (
             <RevisionCard key={request.id} request={request} />
           ))}
@@ -1251,7 +1255,7 @@ const TimelineTab = React.memo(function TimelineTab({ offer }: { offer: OfferDoc
 
   return (
     <>
-      <SectionHeader style={styles.flushHeader} title="Süreç akışı" meta={String(events.length)} />
+      <SectionHeader style={styles.flushHeader} title="Süreç akışı" icon="git-commit" iconTone="signature" meta={String(events.length)} />
       {events.map((event, index) => (
         <View key={event.id} style={styles.timelineRow}>
           <View style={styles.timelineRail}>
@@ -1396,20 +1400,25 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: space.md,
-    padding: space.md,
+    padding: space.lg,
     marginTop: space.md,
+    borderRadius: radius.xxl,
+    overflow: "hidden",
+    backgroundColor: colors.inkBlock,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderOnDark,
   },
   heroBody: {
     flex: 1,
     gap: space.xs,
   },
   heroTitle: {
-    ...type.h2,
-    color: colors.textPrimary,
+    ...type.h1,
+    color: colors.onDark,
   },
   heroMeta: {
     ...type.caption,
-    color: colors.textSecondary,
+    color: colors.onDarkMuted,
     letterSpacing: 0,
   },
   heroBadges: {

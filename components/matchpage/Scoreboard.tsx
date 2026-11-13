@@ -1,39 +1,37 @@
 /**
- * Scoreboard — MAÇIN SKOR TABLOSU. Sayfanın tek sahne nesnesi.
+ * Scoreboard — MAÇIN SKOR KAHRAMANI. Sayfanın tek sahne nesnesi.
  *
- * NE: atmosferin (`MatchAtmosphere`) ortasında duran grafit bir kart. Üst
- * yarısı koyu sahnenin, alt yarısı kâğıdın üstündedir; kart sahneyle kâğıt
- * arasındaki köprüdür. Zemini `gradientInk` (yatay, sağdan sola), kenarı
- * ince `glassBorder` — yarı saydam zemin DENENDİ ve okunmadı: sayfanın en
- * önemli tek bilgisi arkasındaki dokunun insafına bırakılamaz.
+ * NE: atmosferin (`MatchAtmosphere`) ortasında duran gece kartı. Zemin
+ * `gradientInk`, üstünde kayan `Aurora` ışığı; canlı maçta kenarda dolaşan
+ * `GlowRim`. Kart sahneyle kâğıt arasındaki köprüdür.
  *
  * DİZİLİŞ (yukarıdan aşağı, tek bakışta okunma sırası):
  *
- *            FREELİG · 15. SEZON            ← yarışma (lavanta versal)
- *    [arma]      2 – 1       [arma]         ← skor kahramandır (Archivo 40)
- *    EV ADI   ( ● 67' )      DEP ADI        ← durum hapı skorun altında
- *               2. YARI                     ← yarı / İY skoru / geri sayım
- *   ────────────── ⚽ ──────────────
- *       A. YILMAZ 12'  ·  K. DEMİR 55'      ← "kim attı": en çok sorulan soru
- *   ─────────────────────────────────
- *    📅 15 Ekim · 20:30   📍 Ostim 1         ← künye çipleri
- *    [ ★ Takip et ]  [ Takvime ekle ]       ← takip + o maçın bildirimleri
+ *            [🏆 FREELİG · 15. SEZON]          ← yarışma, cam hap
+ *    ◎arma◎      16 – 1        ◎arma◎          ← parlak halkalı armalar, Odometer skor
+ *    EV ADI    ( ✓ MS · İY 6–0 )   DEP ADI     ← durum hapı (MS / İY / canlı halka)
+ *   ┌───────────── ⚽ GOLLER ──────────────┐
+ *   │  F. KAAN 1'  ⚽  │  ⚽  Y. MUMCU 46'  │    ← iki sütun, ikonlu
+ *   └──────────────────────────────────────┘
+ *    [📅 Bugün · 20:00]  [📍 Ostim 1]          ← künye cam hapları
+ *    [ ★ Takip et ]  [ ⤴ Paylaş ]              ← takip + paylaşım
  *
- * GOLCÜLER YENİDEN TABLODA, AMA SINIRLI: eski sürüm 9-5 biten bir maçta
- * tabloyu dokuz satırlık bir dökümle yaran golcüleri Özet'e taşımıştı. Oysa
- * "kim attı", skorun hemen ardından gelen sorudur; Apple Sports ve FotMob da
- * golcüyü skorun altında verir. Çözüm: her tarafta EN FAZLA DÖRT oyuncu,
- * üç golden fazlası "×7" olarak toplanır, taşan "+2 golcü" diye özetlenir.
- * Tam döküm Özet'in zaman tünelindedir.
+ * KAZANAN PARLAR: biten maçta kazananın armasını imza degradeli halka ve mor
+ * parıltı sarar; kaybedenin adı ve rakamı sönükleşir. Canlı maçta iki taraf
+ * da tam parlaklıktadır.
+ *
+ * GOLCÜLER SINIRLI: her tarafta EN FAZLA DÖRT satır, üç golden fazlası "×7"
+ * olarak toplanır, taşan "+2 golcü" diye özetlenir. Tam döküm Özet'in zaman
+ * tünelindedir.
  *
  * DÖRT DURUM:
- *   · Oynanmamış — ortada başlama saati; hap günü, altındaki satır geri sayımı.
- *   · Canlı      — kırmızı çerçeveli hapta kendi kendine ilerleyen dakika;
- *                  devre arasında hap söner.
- *   · Bitti      — "MAÇ SONU" hapı, kazanan vurgulu, (tutarlıysa) ilk yarı skoru.
+ *   · Oynanmamış — ortada başlama saati; hap günü, altında geri sayım karoları.
+ *   · Canlı      — hapın içinde kendi kendine ilerleyen dakika halkası
+ *                  (`MinuteRing`) + "CANLI"; devre arasında halka "İY"de durur.
+ *   · Bitti      — "MS" hapı (+ tutarlıysa ilk yarı skoru), kazanan vurgulu.
  *   · Yükleniyor — `ScoreboardSkeleton` (aynı kart, aynı ölçüler, içi boş).
  *
- * PERFORMANS: canlı sayaç saniyede bir tikler; tik yalnız `MatchClock`
+ * PERFORMANS: canlı sayaç saniyede bir tikler; tik yalnız `LiveRing`
  * bileşenini yeniden çizer, tabloyu değil. Geri sayım da kendi bileşenindedir.
  */
 
@@ -44,11 +42,21 @@ import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { FollowActions, type FollowExtraAction } from "@/components/FollowActions";
-import { EventIcon, HeaderToneContext, TeamLogo, Touchable } from "@/components/ui";
+import {
+  Aurora,
+  EventIcon,
+  GlowRim,
+  HeaderToneContext,
+  MinuteRing,
+  Odometer,
+  Reveal,
+  TeamLogo,
+  Touchable,
+} from "@/components/ui";
 import { useLiveClock } from "@/hooks/useLiveMatch";
 import { formatDateLong, formatDateShort, formatDayHeading, formatTime } from "@/lib/format";
 import { scoreDelta } from "@/lib/match";
-import { colors, fonts, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
+import { colors, fonts, glowStyle, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
 import type { ApiMatch, ApiMatchEvent, LiveSnapshot, MatchState } from "@/lib/types";
 import {
   groupScorers,
@@ -69,6 +77,10 @@ const MAX_SCORER_ROWS = 4;
 /** Bir oyuncunun dakikaları bu sayıyı geçerse "×N" olarak toplanır. */
 const MAX_MINUTES_INLINE = 3;
 
+/** Arma halkası: arma + 3px halka + 4px nefes. */
+const CREST = layout.crestXl;
+const HALO = CREST + 16;
+
 export interface ScoreboardProps {
   match: ApiMatch;
   state: MatchState;
@@ -86,6 +98,8 @@ export interface ScoreboardProps {
   onToggleFollow: () => void;
   onOpenNotifications: () => void;
   onAddToCalendar: () => void;
+  /** Verilirse eylem şeridinde "Paylaş" düğmesi çizilir (başlıktaki ikonla aynı iş). */
+  onShare?: () => void;
 }
 
 export const Scoreboard = memo(function Scoreboard({
@@ -104,6 +118,7 @@ export const Scoreboard = memo(function Scoreboard({
   onToggleFollow,
   onOpenNotifications,
   onAddToCalendar,
+  onShare,
 }: ScoreboardProps) {
   const router = useRouter();
   const live = state === "live";
@@ -118,8 +133,7 @@ export const Scoreboard = memo(function Scoreboard({
 
   /*
    * KAZANANI VURGULA. Bir skor tablosunun ilk işi "kim kazandı"yı bir bakışta
-   * söylemektir: kaybeden tarafın adı ve rakamı sönükleşir. Canlı maçta
-   * sonuç henüz yoktur — iki taraf da tam parlaklıkta kalır.
+   * söylemektir: kazananın arması parlar, kaybedenin adı ve rakamı sönükleşir.
    */
   const decided = state === "finished" && homeScore != null && awayScore != null;
   const homeWon = decided && (homeScore as number) > (awayScore as number);
@@ -127,20 +141,19 @@ export const Scoreboard = memo(function Scoreboard({
 
   const halftimeScore = useHalftimeScore(timeline, homeTeamId, awayTeamId, homeScore, awayScore, state);
 
-  const extra = useMemo<FollowExtraAction[]>(
-    () =>
-      state === "scheduled"
-        ? [{ icon: "calendar-outline", label: "Takvime ekle", onPress: onAddToCalendar }]
-        : [],
-    [onAddToCalendar, state],
-  );
+  const extra = useMemo<FollowExtraAction[]>(() => {
+    const list: FollowExtraAction[] = [];
+    if (state === "scheduled") list.push({ icon: "calendar-outline", label: "Takvime ekle", onPress: onAddToCalendar });
+    if (onShare) list.push({ icon: "share-social-outline", label: "Paylaş", onPress: onShare });
+    return list;
+  }, [onAddToCalendar, onShare, state]);
 
   const hasScorers = played && (scorers.home.length > 0 || scorers.away.length > 0);
   const league = upperTR([match.league_name, match.match_season].filter(Boolean).join(" · "));
   const kickoff = formatTime(match.time);
 
-  /* Künye çipleri: tarih (oynanmış maçta saatle birlikte) ve saha. Oynanmamış
-     maçta saat zaten tablonun ortasında kocaman yazılı; çipte yalnız gün. */
+  /* Künye hapları: tarih (oynanmış maçta saatle birlikte) ve saha. Oynanmamış
+     maçta saat zaten kartın ortasında kocaman yazılı; hapta yalnız gün. */
   const heading = formatDayHeading(match.date);
   const relativeDay = heading === "Bugün" || heading === "Dün" || heading === "Yarın";
   const dateChip = played
@@ -155,7 +168,7 @@ export const Scoreboard = memo(function Scoreboard({
 
   return (
     <HeaderToneContext.Provider value="ink">
-      <View style={styles.card}>
+      <View style={[styles.card, live ? styles.cardLive : null]}>
         <LinearGradient
           colors={colors.gradientInk}
           start={INK_START}
@@ -163,21 +176,28 @@ export const Scoreboard = memo(function Scoreboard({
           style={StyleSheet.absoluteFill}
           pointerEvents="none"
         />
+        <Aurora variant="stage" style={StyleSheet.absoluteFill} />
+        {live ? <GlowRim radius={radius.xxl} color={colors.liveOnDark} /> : null}
 
-        {/* — Lig · sezon: tablonun künye satırı. Başlık satırında da durabilirdi
-            ama orada geri okunun üstünde asılı kalıyordu; kartın tepesinde
-            maçın hangi yarışmaya ait olduğunu skorla aynı nesnede söyler. — */}
+        {/* — Yarışma: kartın tepesinde cam hap — */}
         {league ? (
-          <Text style={styles.league} numberOfLines={1} {...textScale.badge}>
-            {league}
-          </Text>
+          <View style={styles.leagueRow}>
+            <View style={styles.leaguePill}>
+              <Ionicons name="trophy" size={11} color={colors.brandOnDark} />
+              <Text style={styles.league} numberOfLines={1} {...textScale.badge}>
+                {league}
+              </Text>
+            </View>
+          </View>
         ) : null}
 
         {/* — Takımlar ve skor — */}
         <View style={styles.teams}>
           <TeamColumn
             name={match.first_team_name}
+            role="EV SAHİBİ"
             logo={homeLogo}
+            winner={homeWon}
             dimmed={awayWon}
             onPress={homeTeamId ? openHome : undefined}
           />
@@ -185,15 +205,11 @@ export const Scoreboard = memo(function Scoreboard({
           <View style={styles.middle} accessible accessibilityLabel={scoreSpeech}>
             {played ? (
               <View style={styles.scoreRow}>
-                <Text style={[styles.score, awayWon ? styles.scoreDim : null]} {...textScale.dense}>
-                  {homeScore ?? 0}
-                </Text>
-                <Text style={styles.scoreDash} {...textScale.dense}>
+                <Odometer value={homeScore ?? 0} style={[styles.score, awayWon ? styles.scoreDim : null]} />
+                <Text style={styles.scoreDash} {...textScale.badge}>
                   –
                 </Text>
-                <Text style={[styles.score, homeWon ? styles.scoreDim : null]} {...textScale.dense}>
-                  {awayScore ?? 0}
-                </Text>
+                <Odometer value={awayScore ?? 0} style={[styles.score, homeWon ? styles.scoreDim : null]} />
               </View>
             ) : (
               <Text style={styles.kickoff} {...textScale.dense}>
@@ -201,55 +217,55 @@ export const Scoreboard = memo(function Scoreboard({
               </Text>
             )}
 
-            {/* Durum hapı skorun ALTINDA (FotMob'un "FT" yeri): göz önce skoru,
-                sonra onun ne zamana ait olduğunu okur. */}
-            <StatusPill state={state} snapshot={snapshot} date={match.date} />
+            {/* Durum hapı skorun ALTINDA: göz önce skoru, sonra onun ne
+                zamana ait olduğunu okur. */}
+            <StatusPill state={state} snapshot={snapshot} date={match.date} halftimeScore={halftimeScore} />
 
             {live ? (
               <LivePeriod snapshot={snapshot} />
             ) : state === "scheduled" ? (
               <Countdown target={kickoffAt(match)} />
-            ) : halftimeScore ? (
-              <Text style={styles.subline} {...textScale.badge}>
-                {`İY ${halftimeScore}`}
-              </Text>
             ) : null}
           </View>
 
           <TeamColumn
             name={match.second_team_name}
+            role="DEPLASMAN"
             logo={awayLogo}
+            winner={awayWon}
             dimmed={homeWon}
             onPress={awayTeamId ? openAway : undefined}
           />
         </View>
 
-        {/* — Golcüler — */}
+        {/* — Golcüler: cam panelde iki sütun — */}
         {hasScorers ? (
-          <>
-            <View style={styles.rule}>
-              <View style={styles.ruleLine} />
-              <EventIcon kind="goal" size={12} onDark />
-              <View style={styles.ruleLine} />
+          <Reveal index={1} distance={6}>
+            <View style={styles.scorersPanel}>
+              <View style={styles.scorersHead}>
+                <View style={styles.headLine} />
+                <EventIcon kind="goal" size={12} onDark />
+                <Text style={styles.scorersTitle} {...textScale.badge}>
+                  GOLLER
+                </Text>
+                <View style={styles.headLine} />
+              </View>
+              <View style={styles.scorers}>
+                <ScorerColumn lines={scorers.home} side="home" />
+                <View style={styles.scorersAxis} />
+                <ScorerColumn lines={scorers.away} side="away" />
+              </View>
             </View>
-            <View style={styles.scorers}>
-              <ScorerColumn lines={scorers.home} side="home" />
-              <View style={styles.scorersAxis} />
-              <ScorerColumn lines={scorers.away} side="away" />
-            </View>
-          </>
+          </Reveal>
         ) : null}
 
         {/* — Künye — */}
-        <View style={[styles.facts, hasScorers ? styles.factsRuled : null]}>
-          {dateChip ? <FactChip icon="calendar-outline" label={dateChip} /> : null}
-          {match.match_field ? <FactChip icon="location-outline" label={match.match_field} /> : null}
+        <View style={styles.facts}>
+          {dateChip ? <FactChip icon="calendar-clear" label={dateChip} /> : null}
+          {match.match_field ? <FactChip icon="location" label={match.match_field} /> : null}
         </View>
 
-        {/* Bağlantı durumu tabloda değil, Canlı sekmesinin panelinde: tablo her
-            sekmede aynı yüksekliği korur, uyarı kendi bağlamında okunur. */}
-
-        {/* — Takip — */}
+        {/* — Takip + paylaşım — */}
         <View style={styles.follow}>
           <FollowActions
             following={following}
@@ -267,15 +283,22 @@ export const Scoreboard = memo(function Scoreboard({
    Parçalar
    ══════════════════════════════════════════════════════════════════════════ */
 
-/** Arma + ad. Dokununca takım sayfası. */
+/**
+ * Arma halkası + ad. Kazananın halkası imza degradesi ve parıltı taşır;
+ * diğerleri ince cam halka. Dokununca takım sayfası.
+ */
 const TeamColumn = memo(function TeamColumn({
   name,
+  role,
   logo,
+  winner,
   dimmed,
   onPress,
 }: {
   name: string;
+  role: string;
   logo: string | null;
+  winner: boolean;
   dimmed: boolean;
   onPress?: () => void;
 }) {
@@ -289,7 +312,24 @@ const TeamColumn = memo(function TeamColumn({
       accessibilityRole={onPress ? "button" : "text"}
       accessibilityLabel={onPress ? `${name} takım sayfası` : name}
     >
-      <TeamLogo name={name} logo={logo} size={layout.crestXl} />
+      <Reveal scaleFrom={0.86} distance={0}>
+        <View style={[styles.halo, winner ? glowStyle(colors.glow, 3) : null]}>
+          <LinearGradient
+            colors={winner ? colors.gradientSignature : colors.rimDark}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[StyleSheet.absoluteFill, styles.haloRing]}
+          />
+          <View style={styles.haloInner}>
+            <TeamLogo name={name} logo={logo} size={CREST} dimmed={dimmed} />
+          </View>
+          {winner ? (
+            <View style={styles.crown}>
+              <Ionicons name="trophy" size={10} color={colors.onDark} />
+            </View>
+          ) : null}
+        </View>
+      </Reveal>
       <Text
         style={[styles.teamName, nameFit(name), dimmed ? styles.teamNameDim : null]}
         numberOfLines={2}
@@ -297,14 +337,16 @@ const TeamColumn = memo(function TeamColumn({
       >
         {name}
       </Text>
+      <Text style={styles.teamRole} {...textScale.badge}>
+        {role}
+      </Text>
     </Touchable>
   );
 });
 
 /**
- * Uzun TEK KELİMELİ adlar ("MENDERESGÜCÜ") 107px'lik sütuna sığmayıp hece
- * ortasından kırılıyordu ("MENDERESGÜC / Ü"). Satır kırılmaz; en uzun kelimeye
- * göre punto bir-iki kademe iner.
+ * Uzun TEK KELİMELİ adlar ("MENDERESGÜCÜ") sütuna sığmayıp hece ortasından
+ * kırılıyordu. Satır kırılmaz; en uzun kelimeye göre punto bir-iki kademe iner.
  */
 function nameFit(name: string) {
   const longest = String(name ?? "")
@@ -318,49 +360,74 @@ function nameFit(name: string) {
 /**
  * Durum hapı — skorun altında, ortada.
  *
- *   oynanmamış → "BUGÜN" / "YARIN" / "15 EKİ" — maçın günü (saat üstte)
- *   canlı      → kırmızı çerçeve + nokta + kendi kendine ilerleyen dakika
- *   bitti      → "MAÇ SONU"
+ *   oynanmamış → "BUGÜN" / "YARIN" / "PERŞEMBE" — maçın günü (saat üstte)
+ *   canlı      → pembe çerçeve + dakika halkası + ilerleyen dakika
+ *   devre arası→ halka "İY"de durur, hap söner
+ *   bitti      → "✓ MS" (+ "İY 6–0")
  */
 const StatusPill = memo(function StatusPill({
   state,
   snapshot,
   date,
+  halftimeScore,
 }: {
   state: MatchState;
   snapshot: LiveSnapshot | undefined;
   date: string | null | undefined;
+  halftimeScore: string | null;
 }) {
   if (state === "live") {
-    /* Devre arasında hap SÖNER: sayaç durmuştur, kırmızı "şu an oluyor"
-       demek olurdu. Nokta kalır — maç hâlâ canlı yayındadır. */
-    if (isHalftime(snapshot)) {
-      return (
-        <View style={styles.pill} accessibilityLabel="Devre arası">
-          <View style={[styles.pillDot, styles.pillDotPaused]} />
+    const halftime = isHalftime(snapshot);
+    return (
+      <View
+        style={[styles.pill, styles.pillRing, halftime ? null : styles.pillLive]}
+        accessibilityLabel={halftime ? "Devre arası" : undefined}
+      >
+        <LiveRing snapshot={snapshot} />
+        {halftime ? (
           <Text style={styles.pillText} {...textScale.badge}>
             DEVRE ARASI
           </Text>
-        </View>
-      );
-    }
-    return (
-      <View style={[styles.pill, styles.pillLive]}>
-        <View style={styles.pillDot} />
-        <MatchClock snapshot={snapshot} />
+        ) : (
+          /* Dakika halkanın içinde yazılı; hap yalnız "CANLI" der. */
+          <Text style={[styles.pillText, styles.pillTextLive]} {...textScale.badge}>
+            CANLI
+          </Text>
+        )}
       </View>
     );
   }
 
-  /* Oynanmamış maçta tarih zaten künye çipinde yazılı; hap GÜNÜ söyler:
-     "BUGÜN", "YARIN" ya da haftanın günü. */
+  if (state === "finished") {
+    return (
+      <View style={styles.pill} accessibilityLabel={halftimeScore ? `Maç sonu, ilk yarı ${halftimeScore}` : "Maç sonu"}>
+        <View style={styles.pillCheck}>
+          <Ionicons name="checkmark" size={10} color={colors.onDark} />
+        </View>
+        <Text style={[styles.pillText, styles.pillTextStrong]} {...textScale.badge}>
+          MS
+        </Text>
+        {halftimeScore ? (
+          <>
+            <View style={styles.pillSep} />
+            <Text style={styles.pillText} {...textScale.badge}>
+              {`İY ${halftimeScore}`}
+            </Text>
+          </>
+        ) : null}
+      </View>
+    );
+  }
+
+  /* Oynanmamış maçta tarih zaten künye hapında yazılı; hap GÜNÜ söyler. */
   const heading = formatDayHeading(date);
   const relative = heading === "Bugün" || heading === "Yarın" || heading === "Dün";
-  const label = state === "finished" ? "MAÇ SONU" : upperTR(relative ? heading : weekdayOf(date));
+  const label = upperTR(relative ? heading : weekdayOf(date));
   return (
     <View style={styles.pill}>
+      <Ionicons name="time" size={11} color={colors.brandOnDark} />
       <Text style={styles.pillText} numberOfLines={1} {...textScale.badge}>
-        {label}
+        {label || "YAKLAŞAN"}
       </Text>
     </View>
   );
@@ -372,6 +439,21 @@ function weekdayOf(date: string | null | undefined): string {
   if (!parsed || Number.isNaN(parsed.getTime())) return "";
   return parsed.toLocaleDateString("tr-TR", { weekday: "long" });
 }
+
+/**
+ * Hapın içindeki dakika halkası. `useLiveClock` SANİYEDE BİR tikler; bu
+ * yüzden tablo gövdesinde değil burada çağrılır.
+ */
+const LiveRing = memo(function LiveRing({ snapshot }: { snapshot: LiveSnapshot | undefined }) {
+  const clockMs = useLiveClock(snapshot);
+  const { minute, added } = minuteParts(clockMs);
+  const speech = isHalftime(snapshot) ? "Devre arası" : minute == null ? "Maç canlı" : `Canlı, ${minute}. dakika`;
+  return (
+    <View accessible accessibilityLabel={speech}>
+      <MinuteRing minute={minute} addedTime={added} halftime={isHalftime(snapshot)} size={24} thickness={2} onDark />
+    </View>
+  );
+});
 
 /** Canlı maçın yarısı — hapın altında ("2. YARI"); devre arasında boş. */
 const LivePeriod = memo(function LivePeriod({ snapshot }: { snapshot: LiveSnapshot | undefined }) {
@@ -386,30 +468,15 @@ const LivePeriod = memo(function LivePeriod({ snapshot }: { snapshot: LiveSnapsh
 });
 
 /**
- * Canlı dakika — skorun altında. `useLiveClock` SANİYEDE BİR tikler; bu yüzden
- * tablo gövdesinde değil burada çağrılır.
+ * Geri sayım — oynanmamış maçta hapın altında üç küçük cam karo:
+ * [2 GÜN] [04 SA] [12 DK]; son saatte [DK] [SN]. Kendi bileşeninde tikler.
  */
-const MatchClock = memo(function MatchClock({ snapshot }: { snapshot: LiveSnapshot | undefined }) {
-  const clockMs = useLiveClock(snapshot);
-  const halftime = isHalftime(snapshot);
-  const { minute, added } = minuteParts(clockMs);
-
-  const label = halftime ? "DEVRE ARASI" : minute == null ? "CANLI" : added != null ? `90+${added}'` : `${minute}'`;
-  const speech = halftime ? "Devre arası" : minute == null ? "Maç canlı" : `Canlı, ${minute}. dakika`;
-  return (
-    <Text style={[styles.pillText, styles.pillTextLive]} accessibilityLabel={speech} {...textScale.badge}>
-      {label}
-    </Text>
-  );
-});
-
-/** Geri sayım — oynanmamış maçta başlama saatinin altında, kendi bileşeninde tikler. */
 const Countdown = memo(function Countdown({ target }: { target: number }) {
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     if (!target) return;
-    // Bir saatten uzaksa dakikada bir tik yeter; son saatte saniyelik.
+    // Bir saatten uzaksa yarım dakikada bir tik yeter; son saatte saniyelik.
     const far = target - Date.now() > 3_600_000;
     const timer = setInterval(() => setNow(Date.now()), far ? 30_000 : 1_000);
     return () => clearInterval(timer);
@@ -430,23 +497,41 @@ const Countdown = memo(function Countdown({ target }: { target: number }) {
   const minutes = Math.floor((diff % 3_600_000) / 60_000);
   const seconds = Math.floor((diff % 60_000) / 1_000);
 
-  const label =
+  const cells: { value: string; unit: string }[] =
     days > 0
-      ? `${days} gün ${hours} sa sonra`
+      ? [
+          { value: String(days), unit: "GÜN" },
+          { value: pad2(hours), unit: "SA" },
+          { value: pad2(minutes), unit: "DK" },
+        ]
       : hours > 0
-        ? `${hours} sa ${pad2(minutes)} dk sonra`
-        : `${pad2(minutes)}:${pad2(seconds)}`;
+        ? [
+            { value: String(hours), unit: "SA" },
+            { value: pad2(minutes), unit: "DK" },
+          ]
+        : [
+            { value: pad2(minutes), unit: "DK" },
+            { value: pad2(seconds), unit: "SN" },
+          ];
 
+  const speech = cells.map((cell) => `${cell.value} ${cell.unit.toLocaleLowerCase("tr-TR")}`).join(" ") + " sonra";
   return (
-    <Text style={styles.subline} {...textScale.dense}>
-      {upperTR(label)}
-    </Text>
+    <View style={styles.countdown} accessible accessibilityLabel={speech}>
+      {cells.map((cell) => (
+        <View key={cell.unit} style={styles.countCell}>
+          <Odometer value={cell.value} style={styles.countValue} />
+          <Text style={styles.countUnit} {...textScale.badge}>
+            {cell.unit}
+          </Text>
+        </View>
+      ))}
+    </View>
   );
 });
 
 /**
  * Bir tarafın golcüleri. Ev sahibi sütunu sağa (eksene), deplasman sola
- * yaslıdır; göz ortadaki tek bir dikey çizgiyi takip eder.
+ * yaslıdır; top ikonu eksenin dibinde durur, göz ortadaki çizgiyi takip eder.
  */
 const ScorerColumn = memo(function ScorerColumn({
   lines,
@@ -463,16 +548,17 @@ const ScorerColumn = memo(function ScorerColumn({
   return (
     <View style={[styles.scorerCol, home ? styles.scorerColHome : null]}>
       {shown.map((group) => (
-        <Text
-          key={group.key}
-          style={[styles.scorer, home ? styles.alignRight : null]}
-          numberOfLines={1}
-          {...textScale.dense}
-        >
-          {group.name}
-          {group.ownGoal ? " (k.k.)" : ""}
-          <Text style={styles.scorerMinutes}>{` ${minutesLabel(group)}`}</Text>
-        </Text>
+        <View key={group.key} style={styles.scorerRow}>
+          {home ? null : <EventIcon kind={group.ownGoal ? "ownGoal" : "goal"} size={11} onDark />}
+          <Text style={[styles.scorer, home ? styles.alignRight : null]} numberOfLines={1} {...textScale.dense}>
+            {group.name}
+            {group.ownGoal && !group.anonymous ? " (k.k.)" : ""}
+          </Text>
+          <Text style={styles.scorerMinutes} numberOfLines={1} {...textScale.badge}>
+            {minutesLabel(group)}
+          </Text>
+          {home ? <EventIcon kind={group.ownGoal ? "ownGoal" : "goal"} size={11} onDark /> : null}
+        </View>
       ))}
       {hidden > 0 ? (
         <Text style={[styles.scorerMore, home ? styles.alignRight : null]} {...textScale.badge}>
@@ -489,7 +575,7 @@ function minutesLabel(group: GoalGroup): string {
   return group.minutes.map((minute) => `${minute}'`).join(" ");
 }
 
-/** Künye çipi — ikon + tek satır metin, cam dolgu. */
+/** Künye hapı — ikon karosu + tek satır metin, cam dolgu. */
 const FactChip = memo(function FactChip({
   icon,
   label,
@@ -499,7 +585,9 @@ const FactChip = memo(function FactChip({
 }) {
   return (
     <View style={styles.fact}>
-      <Ionicons name={icon} size={12} color={colors.onDarkMuted} />
+      <View style={styles.factIcon}>
+        <Ionicons name={icon} size={10} color={colors.onDark} />
+      </View>
       <Text style={styles.factText} numberOfLines={1} {...textScale.dense}>
         {label}
       </Text>
@@ -600,8 +688,8 @@ export const ScoreboardSkeleton = memo(function ScoreboardSkeleton() {
    Stiller
    ══════════════════════════════════════════════════════════════════════════ */
 
-/** Orta sütun: "13 – 9" ve "22:30" rahat sığar, iki takım sütunu eşit kalır. */
-const MIDDLE_WIDTH = 124;
+/** Orta sütun: "16 – 1" ve "22:30" rahat sığar, iki takım sütunu eşit kalır. */
+const MIDDLE_WIDTH = 132;
 
 const styles = StyleSheet.create({
   card: {
@@ -614,13 +702,32 @@ const styles = StyleSheet.create({
     paddingTop: space.md,
     paddingBottom: space.lg,
   },
+  cardLive: {
+    borderColor: colors.liveOnDark,
+  },
 
+  /* — Yarışma hapı — */
+  leagueRow: {
+    alignItems: "center",
+    marginBottom: space.md,
+    paddingHorizontal: space.lg,
+  },
+  leaguePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+    maxWidth: "100%",
+    height: 22,
+    paddingHorizontal: space.m,
+    borderRadius: radius.pill,
+    backgroundColor: colors.inkTile,
+    borderWidth: hairline,
+    borderColor: colors.inkTileBorder,
+  },
   league: {
     ...type.overline,
     color: colors.brandOnDark,
-    textAlign: "center",
-    paddingHorizontal: space.lg,
-    marginBottom: space.md,
+    flexShrink: 1,
   },
   ghostRow: {
     alignItems: "center",
@@ -632,47 +739,92 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: space.s,
-    height: 22,
-    marginTop: space.xs,
+    height: 26,
+    marginTop: space.sm,
     paddingHorizontal: space.m,
     borderRadius: radius.pill,
     backgroundColor: colors.inkPill,
     borderWidth: hairline,
     borderColor: colors.inkPillBorder,
   },
+  pillRing: {
+    height: 32,
+    paddingLeft: space.xs,
+  },
   pillLive: {
     borderColor: colors.liveOnDark,
   },
-  pillDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.liveOnDark,
+  pillCheck: {
+    width: 16,
+    height: 16,
+    borderRadius: radius.pill,
+    backgroundColor: colors.win,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  pillDotPaused: {
-    backgroundColor: colors.onDarkMuted,
+  pillSep: {
+    width: hairline,
+    height: 12,
+    backgroundColor: colors.inkPillBorder,
   },
   pillText: {
     ...type.overline,
     color: colors.onDarkMuted,
   },
+  pillTextStrong: {
+    color: colors.onDark,
+    fontFamily: fonts.bold,
+  },
   pillTextLive: {
     color: colors.liveOnDark,
+    fontFamily: fonts.bold,
   },
 
   /* — Takımlar + skor — */
   teams: {
     flexDirection: "row",
     alignItems: "flex-start",
-    paddingHorizontal: space.md,
+    paddingHorizontal: space.sm,
   },
   team: {
     flex: 1,
     minWidth: 0,
     alignItems: "center",
-    gap: space.sm,
+    gap: space.xs,
     paddingVertical: space.xxs,
     borderRadius: radius.md,
+  },
+  halo: {
+    width: HALO,
+    height: HALO,
+    borderRadius: HALO / 2,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: space.xs,
+  },
+  haloRing: {
+    borderRadius: HALO / 2,
+  },
+  haloInner: {
+    width: HALO - 6,
+    height: HALO - 6,
+    borderRadius: (HALO - 6) / 2,
+    backgroundColor: colors.inkBlock,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  crown: {
+    position: "absolute",
+    top: -2,
+    right: -2,
+    width: 20,
+    height: 20,
+    borderRadius: radius.pill,
+    backgroundColor: colors.brand,
+    borderWidth: 2,
+    borderColor: colors.inkBlock,
+    alignItems: "center",
+    justifyContent: "center",
   },
   teamName: {
     ...type.h4,
@@ -689,13 +841,17 @@ const styles = StyleSheet.create({
   teamNameDim: {
     color: colors.onDarkMuted,
   },
+  teamRole: {
+    ...type.overline,
+    color: colors.onDarkMuted,
+    opacity: 0.8,
+  },
   middle: {
     width: MIDDLE_WIDTH,
     alignItems: "center",
-    // Skor, armanın (52px) dikey ortasına otursun.
-    minHeight: layout.crestXl,
+    minHeight: HALO,
     justifyContent: "center",
-    gap: space.xxs,
+    paddingTop: space.xs,
   },
   scoreRow: {
     flexDirection: "row",
@@ -703,7 +859,7 @@ const styles = StyleSheet.create({
     gap: space.sm,
   },
   score: {
-    ...type.scoreHero,
+    ...type.scoreJumbo,
     color: colors.onDark,
   },
   scoreDim: {
@@ -720,26 +876,65 @@ const styles = StyleSheet.create({
   subline: {
     ...type.overline,
     color: colors.onDarkMuted,
+    marginTop: space.xs,
+  },
+
+  /* — Geri sayım — */
+  countdown: {
+    flexDirection: "row",
+    gap: space.xs,
+    marginTop: space.sm,
+  },
+  countCell: {
+    minWidth: 36,
+    alignItems: "center",
+    paddingVertical: space.xxs,
+    paddingHorizontal: space.xs,
+    borderRadius: radius.sm,
+    backgroundColor: colors.inkTile,
+    borderWidth: hairline,
+    borderColor: colors.inkTileBorder,
+  },
+  countValue: {
+    ...type.scoreXs,
+    color: colors.onDark,
+  },
+  countUnit: {
+    ...type.overline,
+    color: colors.onDarkMuted,
   },
 
   /* — Golcüler — */
-  rule: {
+  scorersPanel: {
+    marginTop: space.lg,
+    marginHorizontal: space.md,
+    paddingTop: space.sm,
+    paddingBottom: space.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.inkTile,
+    borderWidth: hairline,
+    borderColor: colors.inkTileBorder,
+  },
+  scorersHead: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.sm,
-    marginTop: space.md,
+    gap: space.xs,
+    paddingHorizontal: space.md,
     marginBottom: space.sm,
-    paddingHorizontal: space.lg,
   },
-  ruleLine: {
+  headLine: {
     flex: 1,
     height: hairline,
     backgroundColor: colors.borderOnDark,
   },
+  scorersTitle: {
+    ...type.overline,
+    color: colors.onDarkMuted,
+  },
   scorers: {
     flexDirection: "row",
-    paddingHorizontal: space.lg,
-    gap: space.md,
+    paddingHorizontal: space.md,
+    gap: space.sm,
   },
   scorersAxis: {
     width: hairline,
@@ -754,15 +949,20 @@ const styles = StyleSheet.create({
   scorerColHome: {
     alignItems: "flex-end",
   },
+  scorerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+    maxWidth: "100%",
+  },
   scorer: {
-    ...type.bodySm,
-    fontFamily: fonts.medium,
+    ...type.labelSm,
     color: colors.onDark,
+    flexShrink: 1,
   },
   scorerMinutes: {
-    ...type.bodySm,
-    fontVariant: ["tabular-nums"],
-    color: colors.onDarkMuted,
+    ...type.numSm,
+    color: colors.brandOnDark,
   },
   scorerMore: {
     ...type.micro,
@@ -781,24 +981,30 @@ const styles = StyleSheet.create({
     marginTop: space.md,
     paddingHorizontal: space.md,
   },
-  factsRuled: {
-    marginTop: space.md,
-  },
   fact: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.xs,
     maxWidth: "100%",
-    height: 26,
-    paddingHorizontal: space.m,
+    height: 28,
+    paddingLeft: space.xs,
+    paddingRight: space.m,
+    borderRadius: radius.pill,
+    backgroundColor: colors.inkPill,
+    borderWidth: hairline,
+    borderColor: colors.inkPillBorder,
+  },
+  factIcon: {
+    width: 20,
+    height: 20,
     borderRadius: radius.pill,
     backgroundColor: colors.inkTile,
-    borderWidth: hairline,
-    borderColor: colors.inkTileBorder,
+    alignItems: "center",
+    justifyContent: "center",
   },
   factText: {
     ...type.caption,
-    color: colors.onDarkMuted,
+    color: colors.onDark,
     flexShrink: 1,
   },
 
@@ -813,10 +1019,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.inkTile,
     borderRadius: radius.pill,
   },
-  ghostPill: { width: 96, height: 24 },
-  ghostCrest: { width: layout.crestXl, height: layout.crestXl, borderRadius: radius.md },
+  ghostPill: { width: 120, height: 22 },
+  ghostCrest: { width: HALO, height: HALO, borderRadius: HALO / 2 },
   ghostLine: { width: 84, height: 12, marginTop: space.xs },
-  ghostScore: { width: 92, height: 40, borderRadius: radius.md },
-  ghostChip: { width: 120, height: 26 },
+  ghostScore: { width: 104, height: 48, borderRadius: radius.md },
+  ghostChip: { width: 120, height: 28 },
   ghostButton: { height: 40 },
 });

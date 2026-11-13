@@ -26,7 +26,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { useCallback, useMemo } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
-import { Chip, Touchable, useHeaderTone } from "@/components/ui";
+import { Chip, IconTile, Touchable, useHeaderTone } from "@/components/ui";
 import { useScope, type PinnedLeague, type ScopeStep } from "@/providers/ScopeProvider";
 import { colors, elevate, fonts, hairline, layout, radius, space, textScale, type } from "@/theme";
 
@@ -126,6 +126,7 @@ export const LeaguePicker = React.memo(function LeaguePicker({
   );
 
   const chips = showPinned ? pinnedLeagues : [];
+  const parts = useMemo(() => label.split(" · "), [label]);
 
   const pill = (
     <Touchable
@@ -138,19 +139,33 @@ export const LeaguePicker = React.memo(function LeaguePicker({
       accessibilityHint="İl, lig ve sezon seçmek için dokunun"
       testID={testID ?? "league-picker"}
     >
-      <Ionicons
-        name={wide ? "earth" : "trophy-outline"}
-        size={13}
-        color={ink ? colors.brandOnDark : colors.brandAccent}
-      />
+      {/* Degrade ikon kutusu: hapın "kapsam" olduğunu ilk bakışta söyler. */}
+      <IconTile icon={wide ? "earth" : "trophy"} tone="signature" size={24} glow={false} />
+      {/* Etiket parçalı okunur: il sönük · LİG kalın · sezon ikincil. */}
       <Text
         style={[styles.pillLabel, ink ? styles.pillLabelInk : null]}
         numberOfLines={1}
         {...textScale.dense}
       >
-        {label}
+        {parts.map((part, i) => (
+          <Text
+            key={`${i}-${part}`}
+            style={
+              i === parts.length - 1 && parts.length > 1
+                ? ink ? styles.partMutedInk : styles.partMuted
+                : i === 0 && parts.length > 2
+                  ? ink ? styles.partMutedInk : styles.partMuted
+                  : null
+            }
+          >
+            {i > 0 ? <Text style={ink ? styles.sepInk : styles.sep}>{" · "}</Text> : null}
+            {part}
+          </Text>
+        ))}
       </Text>
-      <Ionicons name="chevron-down" size={14} color={ink ? colors.onDarkMuted : colors.textSecondary} />
+      <View style={[styles.chevron, ink ? styles.chevronInk : null]}>
+        <Ionicons name="chevron-down" size={12} color={ink ? colors.onDark : colors.brandAccent} />
+      </View>
     </Touchable>
   );
 
@@ -178,7 +193,7 @@ export const LeaguePicker = React.memo(function LeaguePicker({
   );
 });
 
-const PILL_HEIGHT = 34;
+const PILL_HEIGHT = 36;
 
 const styles = StyleSheet.create({
   single: {
@@ -200,15 +215,16 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: space.xs,
-    paddingHorizontal: space.md,
+    gap: space.sm,
+    paddingLeft: space.s,
+    paddingRight: space.s,
     borderRadius: radius.pill,
   },
   pillPaper: {
     ...elevate(1),
-    backgroundColor: colors.surface1,
+    backgroundColor: colors.glass,
     borderWidth: hairline,
-    borderColor: colors.border,
+    borderColor: colors.glassLine,
   },
   pillInk: {
     backgroundColor: colors.inkPill,
@@ -223,5 +239,30 @@ const styles = StyleSheet.create({
   },
   pillLabelInk: {
     color: colors.onDark,
+  },
+  partMuted: {
+    fontFamily: fonts.medium,
+    color: colors.textSecondary,
+  },
+  partMutedInk: {
+    fontFamily: fonts.medium,
+    color: colors.onDarkMuted,
+  },
+  sep: {
+    color: colors.textTertiary,
+  },
+  sepInk: {
+    color: colors.onDarkMuted,
+  },
+  chevron: {
+    width: 22,
+    height: 22,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.brandDim,
+  },
+  chevronInk: {
+    backgroundColor: colors.inkTile,
   },
 });

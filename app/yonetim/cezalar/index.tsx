@@ -16,9 +16,10 @@ import React, { useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { AdminList, AdminScreen, SelectField, ToggleField, type FilterOption } from "@/components/admin";
+import { CountStrip } from "@/components/admin/team/ManageKit";
 import { PenaltyCard } from "@/components/admin/penalties/PenaltyBits";
 import { ScopeSelects, type ScopeValue } from "@/components/admin/penalties/ScopeSelects";
-import { BottomSheet, Button, FAB } from "@/components/ui";
+import { BottomSheet, Button, Chip, ChipGroup, FAB } from "@/components/ui";
 import { hasAnyPermission } from "@/lib/admin/access";
 import {
   listPenalties,
@@ -111,9 +112,29 @@ export default function PenaltiesScreen() {
         search={q}
         onSearch={setQ}
         searchPlaceholder="Oyuncu, takım ya da maç ara"
-        filters={filters}
-        filter={status}
-        onFilter={(key) => setStatus(key as PenaltyStatus | "")}
+        extraHeader={
+          <View style={styles.head}>
+            <CountStrip
+              items={[
+                { key: "active", label: "Cezalı", value: base.filter((p) => p.ban_state?.active).length, tone: "danger", icon: "alert-circle", selected: activeOnly, onPress: () => setActiveOnly((v) => !v) },
+                { key: "sevk", label: "Sevk", value: base.filter((p) => p.status === "sevk").length, tone: "warn", icon: "paper-plane", selected: status === "sevk", onPress: () => setStatus(status === "sevk" ? "" : "sevk") },
+                { key: "subs", label: "Başvuru", value: base.reduce((n, p) => n + (p.submission_summary?.pending ?? 0), 0), tone: "info", icon: "document-attach" },
+              ]}
+            />
+            <ChipGroup scrollable contentPadding={0}>
+              {filters.map((f) => (
+                <Chip key={f.key || "all"} label={f.label} count={f.count} size="sm" selected={status === f.key} onPress={() => setStatus(f.key as PenaltyStatus | "")} />
+              ))}
+              <Chip
+                label={activeFilterCount ? `Süzgeç · ${activeFilterCount}` : "Süzgeç"}
+                icon="options-outline"
+                size="sm"
+                selected={activeFilterCount > 0}
+                onPress={() => setFiltersOpen(true)}
+              />
+            </ChipGroup>
+          </View>
+        }
         summary={query.data ? `${items.length} ceza dosyası` : null}
         keyExtractor={(p) => p.public_id}
         emptyIcon="hammer-outline"
@@ -164,6 +185,7 @@ export default function PenaltiesScreen() {
 }
 
 const styles = StyleSheet.create({
+  head: { gap: space.md },
   sheet: { gap: space.md },
   footer: { flexDirection: "row", gap: space.sm },
   grow: { flex: 1 },

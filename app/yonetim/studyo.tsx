@@ -24,11 +24,12 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { LinearGradient } from "expo-linear-gradient";
 import { AppState, Linking, StyleSheet, Text, View } from "react-native";
 
 import { AdminScreen } from "@/components/admin";
 import { dayOf, hhmm, shortDay } from "@/components/admin/matches/model";
-import { Badge, Button, EmptyState, ErrorState, GradientFill, Input, SectionHeader, Touchable, useToast } from "@/components/ui";
+import { Aurora, Button, EmptyState, ErrorState, GlowRim, GradientBar, IconTile, Input, LiveBadge, ProgressRing, SectionHeader, Touchable, useToast } from "@/components/ui";
 import { hasAnyPermission } from "@/lib/admin/access";
 import { takeStudioMatch } from "@/lib/admin/studioHandoff";
 import { normalizeMatchStatus } from "@/lib/api/admin/matches";
@@ -241,6 +242,7 @@ export default function StudioHomeScreen() {
     });
   }
   const blocking = checks.filter((c) => c.tone === "bad").length;
+  const ready = checks.filter((c) => c.tone === "ok").length;
 
   const row = (m: StudioMatch, mode: "pick" | "recent") => {
     const status = normalizeMatchStatus(m.mac_durumu);
@@ -251,13 +253,15 @@ export default function StudioHomeScreen() {
     return (
       <React.Fragment key={`${mode}-${m.id}`}>
       <Touchable
+        feedback="row"
         style={[styles.match, on && styles.matchOn]}
         onPress={() => (mode === "recent" ? void Linking.openURL(video).catch(() => toast.show({ message: "Yayın bağlantısı açılamadı.", tone: "danger" })) : setPickedId(m.id))}
         accessibilityLabel={`${m.first_team_name ?? "Ev sahibi"} – ${m.second_team_name ?? "Deplasman"}${mode === "recent" ? ", yayını aç" : ", seç"}`}
         accessibilityState={mode === "pick" ? { selected: on } : undefined}
         haptic="selection"
       >
-        <View style={styles.matchTime}>
+        {on ? <LinearGradient colors={colors.gradientSignature} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.matchStripe} /> : null}
+        <View style={[styles.matchTime, isLive ? styles.matchTimeLive : null]}>
           <Text style={[styles.time, isLive && styles.timeLive]} numberOfLines={1}>
             {isLive ? "CANLI" : mode === "recent" || dayOf(m.date) !== today ? shortDay(m.date).split(" ").slice(0, 2).join(" ") : hhmm(m.time) || "–"}
           </Text>
@@ -312,13 +316,19 @@ export default function StudioHomeScreen() {
     >
       {/* ═════════ SAHNE KARTI ═════════ */}
       <View style={styles.stage}>
-        <GradientFill tone="ink" radius="xxl" />
+        <LinearGradient colors={colors.gradientAdminStage} start={{ x: 1, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} />
+        <Aurora variant="stage" height={220} />
+        {selected && normalizeMatchStatus(selected.mac_durumu) === "canli" ? <GlowRim radius={radius.xxl} /> : null}
         <View style={styles.stageHead}>
-          <View style={styles.stageIcon}>
-            <Ionicons name="videocam" size={18} color={colors.onDark} />
+          <IconTile icon="videocam" tone="red" size={34} />
+          <View style={styles.flex}>
+            <Text style={styles.stageBrand}>STÜDYO</Text>
+            <Text style={styles.stageReady} numberOfLines={1}>
+              {ready}/{checks.length} kontrol hazır
+            </Text>
           </View>
-          <Text style={styles.stageBrand}>STÜDYO</Text>
-          {selected && normalizeMatchStatus(selected.mac_durumu) === "canli" ? <Badge label="Maç canlı" tone="live" variant="solid" /> : null}
+          {selected && normalizeMatchStatus(selected.mac_durumu) === "canli" ? <LiveBadge size="sm" /> : null}
+          <ProgressRing value={checks.length ? ready / checks.length : 0} size={40} thickness={4} tone={blocking ? "danger" : ready === checks.length ? "win" : "warn"} label={String(ready)} />
         </View>
         {selected ? (
           <>
@@ -350,13 +360,15 @@ export default function StudioHomeScreen() {
       </View>
 
       {/* ═════════ ÖN KONTROL ═════════ */}
-      <SectionHeader title="Yayın öncesi kontrol" inset="flush" />
+      <SectionHeader title="Yayın öncesi kontrol" meta={`${ready}/${checks.length} hazır`} icon="shield-checkmark" iconTone={blocking ? "red" : "mint"} inset="flush" />
       <View style={styles.card}>
+        <View style={styles.readyBar}>
+          <GradientBar value={checks.length ? ready / checks.length : 0} height={6} style={styles.flex} />
+          <Text style={styles.readyText}>{blocking ? `${blocking} engel` : ready === checks.length ? "Hazır" : "Kontrol ediliyor"}</Text>
+        </View>
         {checks.map((c, i) => (
-          <View key={c.key} style={[styles.check, i > 0 && styles.checkBorder]}>
-            <View style={[styles.checkIcon, { backgroundColor: c.tone === "ok" ? colors.winDim : c.tone === "bad" ? colors.dangerDim : c.tone === "warn" ? colors.warnDim : colors.surface2 }]}>
-              <Ionicons name={c.icon} size={16} color={c.tone === "ok" ? colors.win : c.tone === "bad" ? colors.danger : c.tone === "warn" ? colors.warn : colors.textSecondary} />
-            </View>
+          <View key={c.key} style={[styles.check, styles.checkBorder]}>
+            <IconTile icon={c.icon} tone={c.tone === "ok" ? "mint" : c.tone === "bad" ? "red" : c.tone === "warn" ? "gold" : "neutral"} size={34} glow={false} />
             <View style={styles.flex}>
               <Text style={styles.checkTitle}>{c.title}</Text>
               <Text style={styles.meta}>{c.detail}</Text>
@@ -449,8 +461,8 @@ const styles = StyleSheet.create({
 
   stage: { borderRadius: radius.xxl, overflow: "hidden", padding: space.lg, gap: space.sm },
   stageHead: { flexDirection: "row", alignItems: "center", gap: space.sm },
-  stageIcon: { width: 32, height: 32, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: colors.inkPill },
-  stageBrand: { ...type.overline, color: colors.brandOnDark, flex: 1 },
+  stageBrand: { ...type.overline, color: colors.adminAccent },
+  stageReady: { ...type.caption, color: colors.onDarkMuted },
   stageTeams: { ...type.display, color: colors.onDark },
   stageMeta: { ...type.bodySm, color: colors.onDarkMuted, marginBottom: space.xs },
   stageHint: { ...type.caption, color: colors.onDarkMuted, textAlign: "center" },
@@ -458,14 +470,17 @@ const styles = StyleSheet.create({
   card: { borderRadius: radius.xl, backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border, overflow: "hidden" },
   check: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.md, paddingVertical: space.md },
   checkBorder: { borderTopWidth: hairline, borderTopColor: colors.border },
-  checkIcon: { width: 32, height: 32, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
+  readyBar: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.md, paddingVertical: space.md },
+  readyText: { ...type.labelSm, color: colors.textSecondary },
   checkTitle: { ...type.h4, color: colors.textPrimary },
   meta: { ...type.caption, color: colors.textSecondary },
 
   match: { flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 56, paddingHorizontal: space.md, paddingVertical: space.sm },
   matchOn: { backgroundColor: colors.brandDim },
   quick: { flexDirection: "row", gap: space.sm, paddingHorizontal: space.md, paddingBottom: space.md, backgroundColor: colors.brandDim },
-  matchTime: { width: 56 },
+  matchStripe: { position: "absolute", left: 0, top: space.sm, bottom: space.sm, width: 3, borderTopRightRadius: 3, borderBottomRightRadius: 3 },
+  matchTime: { width: 58, alignItems: "center", paddingVertical: space.xs, borderRadius: radius.md, backgroundColor: colors.surface2 },
+  matchTimeLive: { backgroundColor: colors.liveDim },
   time: { ...type.tableNumStrong, color: colors.textPrimary },
   timeLive: { color: colors.live },
   teams: { ...type.h4, color: colors.textPrimary },

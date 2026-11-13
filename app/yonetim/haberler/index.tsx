@@ -14,10 +14,11 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useRouter, type Href } from "expo-router";
 import React, { useMemo, useState } from "react";
-import { Share } from "react-native";
+import { Share, StyleSheet, View } from "react-native";
 
 import { ActionSheet, AdminList, AdminScreen, confirmAction, useAdminMutation, type FilterOption } from "@/components/admin";
-import { NewsCard, useNewsScope } from "@/components/admin/news/NewsParts";
+import { NewsCard, newsCategoryTile, useNewsScope } from "@/components/admin/news/NewsParts";
+import { CountTiles } from "@/components/admin/system/SysKit";
 import { Chip, ChipGroup, FAB } from "@/components/ui";
 import { hasAnyPermission } from "@/lib/admin/access";
 import {
@@ -30,6 +31,7 @@ import {
 } from "@/lib/api/admin/news";
 import { webNewsUrl } from "@/lib/links";
 import { useAuth } from "@/providers/AuthProvider";
+import { space } from "@/theme";
 
 type StatusFilter = "" | "published" | "draft" | "pinned";
 
@@ -126,12 +128,25 @@ export default function NewsListScreen() {
         filter={status}
         onFilter={(key) => setStatus(key as StatusFilter)}
         extraHeader={
-          <ChipGroup scrollable contentPadding={0}>
-            <Chip label="Tüm kategoriler" selected={!category} onPress={() => setCategory("")} size="sm" tone="info" />
-            {(Object.keys(NEWS_CATEGORY_LABELS) as NewsCategory[]).map((key) => (
-              <Chip key={key} label={NEWS_CATEGORY_LABELS[key]} selected={category === key} onPress={() => setCategory(key)} size="sm" tone="info" />
-            ))}
-          </ChipGroup>
+          <View style={styles.header}>
+            {canUpdate && query.data ? (
+              <CountTiles<StatusFilter>
+                value={status || null}
+                onChange={(key) => setStatus(key ?? "")}
+                items={[
+                  { key: "published", label: "Yayında", value: items.filter((n) => n.status === "published").length, icon: "radio-button-on", tone: "win" },
+                  { key: "draft", label: "Taslak", value: items.filter((n) => n.status !== "published").length, icon: "document-outline", tone: "neutral" },
+                  { key: "pinned", label: "Sabit", value: items.filter((n) => n.pinned).length, icon: "pin", tone: "brand" },
+                ]}
+              />
+            ) : null}
+            <ChipGroup scrollable contentPadding={0}>
+              <Chip label="Tüm kategoriler" icon="apps-outline" selected={!category} onPress={() => setCategory("")} size="sm" />
+              {(Object.keys(NEWS_CATEGORY_LABELS) as NewsCategory[]).map((key) => (
+                <Chip key={key} label={NEWS_CATEGORY_LABELS[key]} icon={newsCategoryTile(key).icon} selected={category === key} onPress={() => setCategory(key)} size="sm" />
+              ))}
+            </ChipGroup>
+          </View>
         }
         summary={total != null && status !== "pinned" ? `${total} haber` : status === "pinned" && query.data ? `${items.length} sabit haber` : null}
         keyExtractor={(n) => n.id}
@@ -185,3 +200,7 @@ export default function NewsListScreen() {
     </AdminScreen>
   );
 }
+
+const styles = StyleSheet.create({
+  header: { gap: space.md },
+});

@@ -8,6 +8,12 @@
  *   2. Elle RTMP — sunucuda YouTube bağlantısı kurulmamışsa (ya da başka bir
  *      platform kullanılacaksa) YouTube Studio ▸ Canlı yayın ▸ Yayın anahtarı
  *      buraya yapıştırılır.
+ *
+ * BAŞLIK VE KAPAK (masaüstü stüdyo ile aynı): başlık otomatik yazılır
+ * (`ELİTLİG {LİG ADI} - {SEZON} | {EV} - {DEPLASMAN}`; lig adı yayın
+ * görünümünün marka yazısından) ve düzenlenebilir. Yayın açılınca 1280×720
+ * kapak görseli otomatik üretilip YouTube'a yüklenir; açık yayında elle de
+ * yeniden yüklenebilir.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -42,6 +48,15 @@ export interface BroadcastPanelProps {
   onStop: () => void;
   onEndYoutube: () => void;
   onToast: (message: string, tone?: "success" | "danger") => void;
+  /** YouTube yayın başlığı (otomatik ya da düzenlenmiş). */
+  title: string;
+  titleEdited: boolean;
+  /** null → otomatik başlığa dön. */
+  onTitle: (next: string | null) => void;
+  /** Açık yayının başlığını YouTube'da güncelle. */
+  onApplyTitle: () => void;
+  coverBusy: boolean;
+  onUploadCover: () => void;
   /** Durum kartının altına eklenen içerik (yayın sağlığı). */
   health?: React.ReactNode;
 }
@@ -180,6 +195,53 @@ export function BroadcastPanel(props: BroadcastPanelProps) {
                   ))}
                 </View>
               ) : null}
+              <View style={styles.titleBox}>
+                <View style={styles.titleHead}>
+                  <Text style={styles.manualTitle} allowFontScaling={false}>
+                    YouTube başlığı{props.titleEdited ? " (düzenlendi)" : " (otomatik)"}
+                  </Text>
+                  {props.titleEdited ? (
+                    <Touchable onPress={() => props.onTitle(null)} accessibilityLabel="Otomatik başlığa dön" hitSlop={8}>
+                      <Text style={styles.titleReset} allowFontScaling={false}>
+                        Otomatiğe dön
+                      </Text>
+                    </Touchable>
+                  ) : null}
+                </View>
+                <TextInput
+                  value={props.title}
+                  onChangeText={(t) => props.onTitle(t)}
+                  maxLength={100}
+                  multiline
+                  autoCorrect={false}
+                  disableFullscreenUI
+                  style={[styles.input, styles.titleInput]}
+                  accessibilityLabel="YouTube yayın başlığı"
+                />
+                {ytOpen ? (
+                  <View style={styles.keyRow}>
+                    {props.titleEdited ? (
+                      <View style={styles.flex}>
+                        <Btn label="Başlığı güncelle" icon="create-outline" tone="soft" compact onPress={props.onApplyTitle} disabled={busy} />
+                      </View>
+                    ) : null}
+                    <View style={styles.flex}>
+                      <Btn
+                        label={props.coverBusy ? "Kapak hazırlanıyor…" : "Kapağı yeniden yükle"}
+                        icon="image-outline"
+                        tone="soft"
+                        compact
+                        onPress={props.onUploadCover}
+                        disabled={props.coverBusy}
+                      />
+                    </View>
+                  </View>
+                ) : (
+                  <Text style={styles.muted} allowFontScaling={false}>
+                    Kapak görseli (takımlar, lig, tarih) yayın açılınca otomatik yüklenir.
+                  </Text>
+                )}
+              </View>
               <Btn
                 label={ytOpen ? "Yayına devam et" : "YouTube'da canlı yayını başlat"}
                 icon="logo-youtube"
@@ -354,6 +416,10 @@ const styles = StyleSheet.create({
   manualHead: { flexDirection: "row", alignItems: "center", gap: space.xs, paddingVertical: space.xs, marginTop: space.xs },
   manualTitle: { ...type.caption, color: RIG.textSoft },
   keyRow: { flexDirection: "row", alignItems: "center", gap: space.xs },
+  titleBox: { gap: space.xs },
+  titleHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.sm },
+  titleReset: { ...type.caption, color: RIG.brand },
+  titleInput: { height: undefined, minHeight: 44, paddingVertical: space.sm, textAlignVertical: "top" },
   remember: { flexDirection: "row", alignItems: "center", gap: space.sm, minHeight: 36 },
   input: {
     ...type.bodySm,

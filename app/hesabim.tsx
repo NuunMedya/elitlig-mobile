@@ -46,6 +46,7 @@ import {
   Badge,
   EmptyState,
   ErrorState,
+  IconTile,
   KeyValueRow,
   ListRow,
   ScreenHeader,
@@ -59,15 +60,17 @@ import {
   useHeaderScroll,
   useRefresh,
   useToast,
+  type IconTileTone,
   type Tone,
 } from "@/components/ui";
+import { LinearGradient } from "expo-linear-gradient";
 import { AccountEditSheet } from "@/components/account/AccountEditSheet";
 import { ApiError } from "@/lib/http";
 import { getPanelMe, type PanelPendingChange } from "@/lib/api/panel";
 import { formatDateShort, mediaUrl } from "@/lib/format";
 import { openLink } from "@/lib/links";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, hairline, layout, radius, ratingLabel, space, textScale, type, upperTR } from "@/theme";
+import { colors, glowStyle, hairline, layout, radius, ratingLabel, space, textScale, type, upperTR } from "@/theme";
 
 /* ============================ SABİTLER / TİPLER ============================ */
 
@@ -473,7 +476,14 @@ export default function AccountScreen() {
   const renderSectionHeader = useCallback(
     ({ section }: { section: AccountSection }) =>
       section.title ? (
-        <SectionHeader title={section.title} meta={section.meta} style={styles.flushHeader} />
+        <SectionHeader
+          title={section.title}
+          meta={section.meta}
+          icon={SECTION_LOOK[section.key]?.icon}
+          iconTone={SECTION_LOOK[section.key]?.tone}
+          inset="flush"
+          style={styles.flushHeader}
+        />
       ) : null,
     []
   );
@@ -646,7 +656,17 @@ const IdentityHero = React.memo(function IdentityHero({
 
   const body = (
     <>
-      <Avatar name={name} image={avatar} size={64} ring="brand" />
+      <View style={[styles.heroRing, glowStyle(colors.glow, 2)]}>
+        <LinearGradient
+          colors={colors.gradientSignature}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[StyleSheet.absoluteFill, styles.heroRingFill]}
+        />
+        <View style={styles.heroRingGap}>
+          <Avatar name={name} image={avatar} size={60} />
+        </View>
+      </View>
 
       <View style={styles.heroBody}>
         <Text style={styles.heroName} numberOfLines={1} {...textScale.dense}>
@@ -727,6 +747,25 @@ const StatCell = React.memo(function StatCell({
   );
 });
 
+/** Bölüm başlığının ikonu ve tonu (bölüm anahtarına göre). */
+const SECTION_LOOK: Record<string, { icon: keyof typeof Ionicons.glyphMap; tone: IconTileTone }> = {
+  talepler: { icon: "hourglass", tone: "gold" },
+  bilgiler: { icon: "person", tone: "violet" },
+  guvenlik: { icon: "shield-checkmark", tone: "cyan" },
+  profil: { icon: "football", tone: "pink" },
+};
+
+/** Satırın ikon kutusu tonu — satır anahtarına göre; yoksa nötr. */
+const ROW_TONE: Record<string, IconTileTone> = {
+  duzenle: "violet",
+  modlar: "neutral",
+  sifre: "gold",
+  engellenenler: "neutral",
+  gizlilik: "cyan",
+  foto: "pink",
+  "oyuncu-bagla": "mint",
+};
+
 /** Hesap eylemi satırı. */
 const ActionRow = React.memo(function ActionRow({
   row,
@@ -738,7 +777,11 @@ const ActionRow = React.memo(function ActionRow({
   onPress: (action: AccountAction) => void;
 }) {
   const handlePress = useCallback(() => onPress(row.action), [onPress, row.action]);
-  const leading = useMemo(() => ({ icon: row.icon, tone: row.tone }), [row.icon, row.tone]);
+  const tileTone: IconTileTone = row.destructive ? "red" : (ROW_TONE[row.key] ?? "neutral");
+  const leading = useMemo(
+    () => <IconTile icon={row.icon} tone={tileTone} size={36} glow={false} />,
+    [row.icon, tileTone]
+  );
 
   return (
     <ListRow
@@ -767,7 +810,7 @@ const PendingRow = React.memo(function PendingRow({
     () => pendingLabel(row.change.type, row.change.target_type),
     [row.change.target_type, row.change.type]
   );
-  const leading = useMemo(() => ({ icon: label.icon, tone: "warn" as Tone }), [label.icon]);
+  const leading = useMemo(() => <IconTile icon={label.icon} tone="gold" size={36} glow={false} />, [label.icon]);
 
   return (
     <ListRow
@@ -834,8 +877,18 @@ const styles = StyleSheet.create({
   },
   heroBody: {
     flex: 1,
+    minWidth: 0,
     gap: 2,
   },
+  heroRing: {
+    width: 70,
+    height: 70,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  heroRingFill: { borderRadius: radius.pill },
+  heroRingGap: { padding: 2, borderRadius: radius.pill, backgroundColor: colors.inkBlock },
   heroName: {
     ...type.display,
     color: colors.onDark,

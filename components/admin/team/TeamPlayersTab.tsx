@@ -14,8 +14,6 @@ import { StyleSheet, Text, View } from "react-native";
 import {
   ActionSheet,
   OptionSheet,
-  Panel,
-  RecordCard,
   SelectField,
   confirmAction,
   useAdminMutation,
@@ -34,8 +32,11 @@ import {
   type TeamOverview,
   type TeamPlayerRow,
 } from "@/lib/api/admin/teams";
+import { positionLine } from "@/lib/api/team";
 import type { AuthUser } from "@/lib/types";
-import { colors, space, textScale, type } from "@/theme";
+import { colors, hairline, positionBadge, positionColor, radius, space, textScale, type, type PositionLine } from "@/theme";
+
+import { GroupCard, ListLine, PositionAvatar, SelectionBar } from "./ManageKit";
 
 type Sort = "matches" | "name" | "jersey" | "last";
 
@@ -137,11 +138,22 @@ export function TeamPlayersTab({
   const historyText = (p: TeamPlayerRow) => {
     const h = p.history;
     if (!h) return null;
-    if (!h.matches) return "Kayıtlı maçı yok";
-    return [`${h.matches} maç`, `${h.team_matches ?? 0} bu takımda`, `${h.goals ?? 0} gol`, h.last_match_date ? `son: ${formatDate(h.last_match_date)}` : null]
+    if (!h.matches) return "maçı yok";
+    return [`${h.matches} maç`, `${h.goals ?? 0} gol`, h.last_match_date ? `son ${formatDate(h.last_match_date, false)}` : null]
       .filter(Boolean)
       .join(" · ");
   };
+
+  /* Hat dağılımı: KAL / DEF / ORT / FOR sayıları (mevki rengiyle). */
+  const lines = useMemo(() => {
+    const count: Record<PositionLine, number> = { GK: 0, DEF: 0, MID: 0, FWD: 0 };
+    let unknown = 0;
+    for (const p of data.players) {
+      if (!p.position) unknown += 1;
+      else count[positionLine(p.position)] += 1;
+    }
+    return { count, unknown };
+  }, [data.players]);
 
   return (
     <View style={styles.stack}>
@@ -154,6 +166,34 @@ export function TeamPlayersTab({
         icon="person-add-outline"
         sheetTitle="Kadroya oyuncu ekle"
       />
+
+      {data.players.length ? (
+        <View style={styles.lines} accessible accessibilityLabel={`Kaleci ${lines.count.GK}, defans ${lines.count.DEF}, orta saha ${lines.count.MID}, forvet ${lines.count.FWD}`}>
+          {(["GK", "DEF", "MID", "FWD"] as PositionLine[]).map((line) => (
+            <View key={line} style={styles.lineCell}>
+              <View style={[styles.lineMark, { backgroundColor: positionColor(colors, line) }]} />
+              <Text style={styles.lineValue} {...textScale.badge}>
+                {lines.count[line]}
+              </Text>
+              <Text style={styles.lineLabel} {...textScale.badge}>
+                {positionBadge(line)}
+              </Text>
+            </View>
+          ))}
+          {lines.unknown ? (
+            <View style={styles.lineCell}>
+              <View style={[styles.lineMark, { backgroundColor: colors.posUnknown }]} />
+              <Text style={styles.lineValue} {...textScale.badge}>
+                {lines.unknown}
+              </Text>
+              <Text style={styles.lineLabel} {...textScale.badge}>
+                ?
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+
       <ChipGroup scrollable contentPadding={0}>
         {(
           [
@@ -168,54 +208,57 @@ export function TeamPlayersTab({
       </ChipGroup>
 
       {selected.size ? (
-        <Panel title={`${selected.size} OYUNCU SEÇİLDİ`} action={{ label: "Seçimi temizle", onPress: () => setSelected(new Set()) }}>
-          <View style={styles.bulk}>
-            <Button label="Seçilenleri çıkar" icon="person-remove-outline" variant="danger" size="sm" onPress={() => void askRemoveMany()} />
-            {canMerge ? (
-              <Button
-                label="Birleştir"
-                icon="git-merge-outline"
-                variant="secondary"
-                size="sm"
-                disabled={selected.size < 2}
-                onPress={() => router.push(`/yonetim/oyuncu-birlestirme?players=${[...selected].join(",")}`)}
-              />
-            ) : null}
-          </View>
-        </Panel>
+        <SelectionBar count={selected.size} noun="oyuncu seçildi" onClear={() => setSelected(new Set())}>
+          <Button label="Seçilenleri çıkar" icon="person-remove-outline" variant="danger" size="sm" onPress={() => void askRemoveMany()} />
+          {canMerge ? (
+            <Button
+              label="Birleştir"
+              icon="git-merge-outline"
+              variant="secondary"
+              size="sm"
+              disabled={selected.size < 2}
+              onPress={() => router.push(`/yonetim/oyuncu-birlestirme?players=${[...selected].join(",")}`)}
+            />
+          ) : null}
+        </SelectionBar>
+      ) : null}
+
+      {!data.players.length ? (
+        <EmptyState icon="people-outline" variant="inline" title="Takımda oyuncu yok" body="Yukarıdaki aramayla kadroya oyuncu ekle." />
       ) : (
+        <GroupCard title={`Kalıcı kadro · ${data.players.length}`} icon="people" tone="violet" padded={false}>
+          <View style={styles.listFoot}>
+            {sorted.map((p, i) => {
+              const age = ageOf(p.birth_date);
+              const on = selected.has(p.id);
+              return (
+                <ListLine
+                  key={p.id}
+                  leading={<PositionAvatar name={p.name} image={p.image} position={p.position} jersey={p.jersey_number} size={38} dimmed={p.active === false} />}
+                  title={p.name}
+                  subtitle={[positionLabel(p.position) || "Mevki yok", age != null ? `${age} yaş` : null, historyText(p)].filter(Boolean).join(" · ")}
+                  muted={p.active === false}
+                  selected={on}
+                  pills={[
+                    on && { label: "Seçili", tone: "brand", icon: "checkmark" },
+                    p.is_loan && { label: "Kiralık", tone: "warn" },
+                    p.linked_user_id ? { label: "Üye", tone: "info", icon: "person" } : { label: "Hesapsız" },
+                    memberIds.has(p.id) && { label: "Sezon kadrosunda", tone: "win" },
+                  ]}
+                  onPress={() => (selected.size && !p.is_loan ? toggle(p.id) : setMenu(p))}
+                  onLongPress={p.is_loan ? undefined : () => toggle(p.id)}
+                  last={i === sorted.length - 1}
+                />
+              );
+            })}
+          </View>
+        </GroupCard>
+      )}
+      {!selected.size && data.players.length ? (
         <Text style={styles.hint} {...textScale.dense}>
           Toplu işlem için oyuncuya basılı tut.
         </Text>
-      )}
-
-      {!data.players.length ? (
-        <EmptyState icon="people-outline" variant="inline" title="Takımda oyuncu yok" body="Yukarıdaki aramayla oyuncu ekle." />
-      ) : (
-        sorted.map((p) => {
-          const age = ageOf(p.birth_date);
-          const on = selected.has(p.id);
-          return (
-            <RecordCard
-              key={p.id}
-              title={`${p.jersey_number != null ? `#${p.jersey_number} ` : ""}${p.name}`}
-              subtitle={[positionLabel(p.position) || "Mevki yok", age != null ? `${age} yaş` : null, p.nationality].filter(Boolean).join(" · ")}
-              meta={historyText(p)}
-              avatar={{ name: p.name, image: p.image }}
-              muted={p.active === false}
-              style={on ? styles.selected : undefined}
-              badges={[
-                on && { label: "Seçili", tone: "brand", icon: "checkmark" },
-                p.is_loan && { label: "Kiralık", tone: "warn" },
-                p.linked_user_id ? { label: "Üye hesabı var", tone: "info" } : { label: "Hesapsız" },
-                memberIds.has(p.id) && { label: "Sezon kadrosunda", tone: "win" },
-              ]}
-              onPress={() => (selected.size && !p.is_loan ? toggle(p.id) : setMenu(p))}
-              onLongPress={p.is_loan ? undefined : () => toggle(p.id)}
-            />
-          );
-        })
-      )}
+      ) : null}
 
       <ActionSheet
         visible={menu != null}
@@ -281,8 +324,19 @@ export function TeamPlayersTab({
 }
 
 const styles = StyleSheet.create({
-  stack: { gap: space.sm },
-  bulk: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
-  hint: { ...type.caption, color: colors.textTertiary },
-  selected: { borderColor: colors.brandAccent },
+  stack: { gap: space.md },
+  hint: { ...type.caption, color: colors.textTertiary, textAlign: "center" },
+  listFoot: { paddingBottom: space.xs },
+  lines: {
+    flexDirection: "row",
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    paddingVertical: space.sm,
+  },
+  lineCell: { flex: 1, alignItems: "center", gap: 2 },
+  lineMark: { width: 18, height: 3, borderRadius: radius.pill, marginBottom: 2 },
+  lineValue: { ...type.scoreSm, color: colors.textPrimary },
+  lineLabel: { ...type.micro, color: colors.textTertiary },
 });

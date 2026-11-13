@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
+import { Platform } from "react-native";
 
 /**
  * Oturum jetonu cihazın güvenli deposunda (iOS Keychain / Android Keystore)
@@ -10,6 +11,21 @@ import * as SecureStore from "expo-secure-store";
 const TOKEN_KEY = "elitlig.authToken";
 
 let memoryFallback: string | null = null;
+
+/**
+ * WEB: güvenli depo yok. Anahtar yalnız bellekte kalırsa sayfa her
+ * yenilendiğinde oturum düşüyordu; web'de SEKME ömrü boyunca `sessionStorage`
+ * kullanılır (sekme kapanınca silinir). Telefonlarda SecureStore kullanılır,
+ * bu yol hiç çalışmaz.
+ */
+const webSession = (): Storage | null => {
+  if (Platform.OS !== "web") return null;
+  try {
+    return typeof sessionStorage === "undefined" ? null : sessionStorage;
+  } catch {
+    return null;
+  }
+};
 
 const available = async () => {
   try {
@@ -25,13 +41,14 @@ export async function saveToken(token: string): Promise<void> {
     return;
   }
   memoryFallback = token;
+  webSession()?.setItem(TOKEN_KEY, token);
 }
 
 export async function loadToken(): Promise<string | null> {
   if (await available()) {
     return SecureStore.getItemAsync(TOKEN_KEY);
   }
-  return memoryFallback;
+  return memoryFallback ?? webSession()?.getItem(TOKEN_KEY) ?? null;
 }
 
 export async function clearToken(): Promise<void> {
@@ -40,6 +57,7 @@ export async function clearToken(): Promise<void> {
     return;
   }
   memoryFallback = null;
+  webSession()?.removeItem(TOKEN_KEY);
 }
 
 /* ───────────── KALICI OTURUM YARDIMCILARI ─────────────

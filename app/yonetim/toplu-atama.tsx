@@ -19,6 +19,7 @@ import { useNavigation } from "expo-router";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RefreshControl, SectionList, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 
 import { AdminScreen, OptionSheet, SelectField, confirmAction, useAdminMutation } from "@/components/admin";
 import { StaffPickerSheet } from "@/components/admin/staff/StaffPickerSheet";
@@ -30,6 +31,7 @@ import {
   ChipGroup,
   EmptyState,
   ErrorState,
+  GradientBar,
   Input,
   SegmentedControl,
   SkeletonListRow,
@@ -38,7 +40,7 @@ import {
   useToast,
   type SegmentedItem,
 } from "@/components/ui";
-import { StatRow } from "@/components/admin";
+import { CountStrip, DangerNote, SelectionBar } from "@/components/admin/team/ManageKit";
 import { hasAnyPermission } from "@/lib/admin/access";
 import { formatLongDay } from "@/lib/admin/format";
 import {
@@ -62,7 +64,7 @@ import {
   type StaffMember,
 } from "@/lib/api/admin/staff";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
+import { colors, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
 
 const PERMS = ["staff.assign"] as const;
 
@@ -282,18 +284,35 @@ export default function StaffBulkAssignScreen() {
   const header = (
     <View style={styles.header}>
       <SegmentedControl<RangeKey> items={RANGES} value={range} onChange={(k) => void changeRange(k)} size="sm" />
-      <StatRow
+      <CountStrip
         items={[
-          { label: "Maç", value: stats.total },
-          { label: "Kadro tamam", value: stats.full, tone: "win" },
-          { label: "Boş görev", value: stats.missing, tone: stats.missing ? "warn" : undefined },
-          { label: "Çakışan maç", value: stats.conflictMatches, tone: stats.conflictMatches ? "danger" : undefined },
+          { key: "total", label: "Maç", value: stats.total, icon: "football" },
+          { key: "full", label: "Tamam", value: stats.full, tone: "win", icon: "checkmark-circle" },
+          { key: "missing", label: "Boş görev", value: stats.missing, tone: stats.missing ? "warn" : "neutral", icon: "person-add", selected: onlyMissing, onPress: () => setOnlyMissing((v) => !v) },
         ]}
       />
+      {stats.total ? (
+        <View style={styles.progress}>
+          <View style={styles.progressHead}>
+            <Text style={styles.progressLabel} {...textScale.dense}>
+              Kadrosu tamamlanan maç
+            </Text>
+            <Text style={styles.progressValue} {...textScale.badge}>
+              %{Math.round((stats.full / stats.total) * 100)}
+            </Text>
+          </View>
+          <GradientBar value={stats.full / stats.total} />
+        </View>
+      ) : null}
+      {stats.conflictMatches ? (
+        <DangerNote
+          icon="time"
+          title={`${stats.conflictMatches} maçta saat çakışması`}
+          body="Aynı kişi aynı gün ve saatte iki maça atanmış. Kırmızı işaretli görevleri düzelt."
+        />
+      ) : null}
       {canAssign && !staffQuery.isLoading && staff.length === 0 ? (
-        <Text style={styles.warnText} {...textScale.long}>
-          Personel listesi boş. Önce Personel ekranından kişi ekle.
-        </Text>
+        <DangerNote tone="warn" title="Personel listesi boş" body="Önce Personel ekranından kişi ekle." />
       ) : null}
       <Input
         variant="search"
@@ -304,6 +323,7 @@ export default function StaffBulkAssignScreen() {
         autoCorrect={false}
       />
       <ChipGroup scrollable contentPadding={0}>
+        {canAssign && staff.length > 0 ? <Chip size="sm" icon="flash" label="Hızlı doldur" tone="warn" selected onPress={() => setSheet("fill")} /> : null}
         <Chip
           size="sm"
           icon="trophy-outline"
@@ -321,12 +341,8 @@ export default function StaffBulkAssignScreen() {
           onDismiss={season ? () => setSeason(null) : undefined}
         />
         <Chip size="sm" icon={sort === "asc" ? "arrow-up" : "arrow-down"} label={sort === "asc" ? "Eskiden yeniye" : "Yeniden eskiye"} onPress={() => setSort(sort === "asc" ? "desc" : "asc")} />
-        <Chip size="sm" label="Eksik görevli" selected={onlyMissing} onPress={() => setOnlyMissing((v) => !v)} />
         <Chip size="sm" label="Değiştirilenler" selected={onlyChanged} onPress={() => setOnlyChanged((v) => !v)} />
       </ChipGroup>
-      {canAssign && staff.length > 0 ? (
-        <Button label="Hızlı doldur" icon="flash-outline" size="sm" variant="secondary" onPress={() => setSheet("fill")} />
-      ) : null}
     </View>
   );
 
@@ -341,7 +357,7 @@ export default function StaffBulkAssignScreen() {
         keyExtractor={(m) => String(m.id)}
         ListHeaderComponent={header}
         stickySectionHeadersEnabled={false}
-        contentContainerStyle={[styles.content, { paddingBottom: dirty ? 140 + insets.bottom : space.giant * 2 }]}
+        contentContainerStyle={[styles.content, { paddingBottom: dirty ? 170 + insets.bottom : space.giant * 2 }]}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         refreshControl={
@@ -355,9 +371,15 @@ export default function StaffBulkAssignScreen() {
           />
         }
         renderSectionHeader={({ section }) => (
-          <Text style={styles.day} {...textScale.dense}>
-            {section.day ? formatLongDay(`${section.day}T12:00:00`) : "Tarihi belirsiz"}
-          </Text>
+          <View style={styles.dayRow}>
+            <LinearGradient colors={colors.gradientSignature} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} style={styles.dayRail} />
+            <Text style={styles.day} {...textScale.dense}>
+              {section.day ? upperTR(formatLongDay(`${section.day}T12:00:00`)) : "TARİHİ BELİRSİZ"}
+            </Text>
+            <Text style={styles.dayCount} {...textScale.dense}>
+              {section.data.length} maç
+            </Text>
+          </View>
         )}
         renderItem={({ item }) => (
           <MatchAssignCard
@@ -386,14 +408,10 @@ export default function StaffBulkAssignScreen() {
       />
 
       {dirty ? (
-        <View style={[styles.saveBar, { paddingBottom: space.md + insets.bottom }]}>
-          <Text style={styles.saveText} {...textScale.dense}>
-            {changeCount} değişiklik · {changes.length} maç
-          </Text>
-          <View style={styles.saveActions}>
-            <Button label="Vazgeç" variant="ghost" size="sm" onPress={() => void discardAll()} disabled={save.isPending} />
-            <Button label="Tümünü kaydet" icon="save-outline" size="sm" loading={save.isPending} onPress={() => save.mutate(undefined)} haptic="success" />
-          </View>
+        <View style={[styles.saveBar, { bottom: space.md + insets.bottom }]}>
+          <SelectionBar count={changeCount} noun={`değişiklik · ${changes.length} maç taslakta`} onClear={() => void discardAll()}>
+            <Button label="Tümünü kaydet" icon="save-outline" loading={save.isPending} onPress={() => save.mutate(undefined)} haptic="success" fullWidth />
+          </SelectionBar>
         </View>
       ) : null}
 
@@ -498,65 +516,72 @@ const MatchAssignCard = memo(function MatchAssignCard({
 }) {
   const changed = isMatchChanged(match, duties, drafts);
   const missing = missingCount(match, duties, drafts);
+  const filled = duties.length - missing;
   return (
     <View style={[styles.card, changed ? styles.cardChanged : null, error ? styles.cardError : null]}>
       <View style={styles.cardHead}>
-        <Text style={styles.time} {...textScale.dense}>
-          {match.time || "--:--"}
-        </Text>
+        <View style={styles.timeBox}>
+          <Text style={styles.time} {...textScale.badge}>
+            {match.time || "--:--"}
+          </Text>
+        </View>
         <View style={styles.flex}>
           <Text style={styles.teams} numberOfLines={2} {...textScale.dense}>
             {match.label}
           </Text>
           <Text style={styles.meta} numberOfLines={1} {...textScale.dense}>
-            {[match.league, match.season, match.field, match.city].filter(Boolean).join(" · ")}
+            {[match.league, match.field, match.city].filter(Boolean).join(" · ")}
           </Text>
         </View>
-        <Badge
-          label={missing ? `${duties.length - missing}/${duties.length}` : "Tamam"}
-          tone={missing ? "warn" : "win"}
-          size="xs"
-        />
+        <Badge label={missing ? `${filled}/${duties.length}` : "Tamam"} tone={missing ? "warn" : "win"} icon={missing ? undefined : "checkmark"} size="xs" />
       </View>
-      {error ? (
-        <Text style={styles.errorText} {...textScale.long}>
-          {error}
-        </Text>
-      ) : null}
-      {duties.map((d) => {
-        const value = currentStaffId(match, d.key, drafts);
-        const dutyChanged = isDutyChanged(match, d.key, drafts);
-        const conflict = conflicts.get(`${match.id}:${d.key}`);
-        const saved = match.crew?.[d.key];
-        const name = value ? staffById.get(value)?.fullName || (saved && String(saved.staffId) === value ? saved.name : `Personel #${value}`) : null;
-        return (
-          <Touchable
-            key={d.key}
-            onPress={() => onPick(d)}
-            disabled={disabled}
-            style={styles.duty}
-            accessibilityRole="button"
-            accessibilityLabel={`${d.label}: ${name || "seçilmedi"}`}
-          >
-            <Text style={styles.dutyLabel} {...textScale.dense}>
-              {d.label}
-            </Text>
-            <View style={styles.flex}>
-              <Text style={[styles.dutyValue, !name ? styles.placeholder : null, dutyChanged ? styles.changed : null]} numberOfLines={1} {...textScale.dense}>
-                {name || "Seçilmedi"}
-              </Text>
+      <GradientBar value={duties.length ? filled / duties.length : 0} height={3} gradient={missing ? undefined : colors.tileTones.mint} />
+      {error ? <DangerNote title="Kaydedilemedi" body={error} /> : null}
+      <View style={styles.slots}>
+        {duties.map((d) => {
+          const value = currentStaffId(match, d.key, drafts);
+          const dutyChanged = isDutyChanged(match, d.key, drafts);
+          const conflict = conflicts.get(`${match.id}:${d.key}`);
+          const saved = match.crew?.[d.key];
+          const name = value ? staffById.get(value)?.fullName || (saved && String(saved.staffId) === value ? saved.name : `Personel #${value}`) : null;
+          return (
+            <Touchable
+              key={d.key}
+              feedback="card"
+              onPress={() => onPick(d)}
+              disabled={disabled}
+              style={[styles.slot, !name ? styles.slotEmpty : null, dutyChanged ? styles.slotChanged : null, conflict ? styles.slotConflict : null]}
+              accessibilityRole="button"
+              accessibilityLabel={`${d.label}: ${name || "seçilmedi"}${conflict ? ", saat çakışması" : ""}`}
+            >
+              <View style={styles.slotHead}>
+                <Ionicons name={DUTY_ICON[d.key] ?? "person"} size={12} color={conflict ? colors.danger : dutyChanged ? colors.brandAccent : colors.textTertiary} />
+                <Text style={[styles.slotLabel, conflict ? { color: colors.danger } : null]} numberOfLines={1} {...textScale.badge}>
+                  {upperTR(d.label)}
+                </Text>
+                {dutyChanged ? <View style={styles.dot} /> : null}
+              </View>
+              {name ? (
+                <Text style={[styles.slotName, dutyChanged ? styles.changed : null]} numberOfLines={1} {...textScale.dense}>
+                  {name}
+                </Text>
+              ) : (
+                <View style={styles.slotAdd}>
+                  <Ionicons name="add" size={14} color={colors.textTertiary} />
+                  <Text style={styles.placeholder} {...textScale.dense}>
+                    Ata
+                  </Text>
+                </View>
+              )}
               {conflict ? (
-                <Text style={styles.conflict} numberOfLines={2} {...textScale.dense}>
+                <Text style={styles.conflict} numberOfLines={2} {...textScale.badge}>
                   Aynı saatte: {conflict.join(", ")}
                 </Text>
               ) : null}
-            </View>
-            {conflict ? <Ionicons name="time-outline" size={16} color={colors.danger} /> : null}
-            {dutyChanged ? <Ionicons name="ellipse" size={8} color={colors.brandAccent} /> : null}
-            <Ionicons name="chevron-forward" size={14} color={colors.textTertiary} />
-          </Touchable>
-        );
-      })}
+            </Touchable>
+          );
+        })}
+      </View>
       {changed ? (
         <Button label="Bu maçı geri al" variant="ghost" size="sm" icon="arrow-undo-outline" onPress={onReset} disabled={disabled} />
       ) : null}
@@ -564,56 +589,72 @@ const MatchAssignCard = memo(function MatchAssignCard({
   );
 });
 
+/** Görev simgesi (spiker mikrofon, reji kamera…). */
+const DUTY_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
+  spiker: "mic",
+  reji: "videocam",
+  hakem: "flag",
+  fotografci: "camera",
+  saglikci: "medkit",
+};
+
 const styles = StyleSheet.create({
   content: { paddingHorizontal: layout.screenPadding },
-  header: { gap: space.sm, paddingTop: space.sm, paddingBottom: space.sm },
-  day: { ...type.overline, color: colors.textTertiary, paddingTop: space.lg, paddingBottom: space.sm },
+  header: { gap: space.md, paddingTop: space.sm, paddingBottom: space.sm },
+  progress: { gap: space.s },
+  progressHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" },
+  progressLabel: { ...type.labelSm, color: colors.textSecondary },
+  progressValue: { ...type.scoreXs, color: colors.textPrimary },
+  dayRow: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingTop: space.lg, paddingBottom: space.sm },
+  dayRail: { width: 3, height: 13, borderRadius: radius.pill },
+  day: { ...type.overline, color: colors.textSecondary, flex: 1 },
+  dayCount: { ...type.caption, color: colors.textTertiary },
   card: {
-    gap: space.xs,
+    gap: space.sm,
     padding: space.md,
     marginBottom: space.sm,
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     backgroundColor: colors.surface1,
     borderWidth: hairline,
     borderColor: colors.border,
   },
   cardChanged: { borderColor: colors.brandBorder },
   cardError: { borderColor: colors.danger },
-  cardHead: { flexDirection: "row", alignItems: "center", gap: space.md, paddingBottom: space.xs },
-  time: { ...type.tableNumStrong, color: colors.textPrimary, width: 44 },
-  flex: { flex: 1 },
+  cardHead: { flexDirection: "row", alignItems: "center", gap: space.md },
+  timeBox: { paddingHorizontal: space.sm, paddingVertical: space.s, borderRadius: radius.md, backgroundColor: colors.surface2, minWidth: 56, alignItems: "center" },
+  time: { ...type.scoreXs, color: colors.textPrimary },
+  flex: { flex: 1, minWidth: 0 },
   teams: { ...type.h4, color: colors.textPrimary },
-  meta: { ...type.caption, color: colors.textTertiary },
-  duty: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.sm,
-    paddingVertical: space.sm,
-    borderTopWidth: hairline,
-    borderTopColor: colors.separator,
-    minHeight: layout.minTouch,
+  meta: { ...type.caption, color: colors.textTertiary, marginTop: 1 },
+  slots: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
+  slot: {
+    flexGrow: 1,
+    flexBasis: "46%",
+    minHeight: 54,
+    gap: 2,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.s,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface2,
+    borderWidth: hairline,
+    borderColor: colors.border,
   },
-  dutyLabel: { ...type.caption, color: colors.textTertiary, width: 76 },
-  dutyValue: { ...type.bodySm, color: colors.textPrimary },
-  placeholder: { color: colors.textDisabled },
+  slotEmpty: { backgroundColor: colors.surface1, borderStyle: "dashed", borderColor: colors.borderStrong },
+  slotChanged: { borderColor: colors.brandBorder, backgroundColor: colors.brandDim },
+  slotConflict: { borderColor: colors.danger, backgroundColor: colors.dangerDim },
+  slotHead: { flexDirection: "row", alignItems: "center", gap: space.xs },
+  slotLabel: { ...type.micro, color: colors.textTertiary, flex: 1 },
+  slotName: { ...type.label, color: colors.textPrimary },
+  slotAdd: { flexDirection: "row", alignItems: "center", gap: 2 },
+  dot: { width: 6, height: 6, borderRadius: radius.pill, backgroundColor: colors.brandAccent },
+  placeholder: { ...type.labelSm, color: colors.textTertiary },
   changed: { color: colors.brandAccent },
-  conflict: { ...type.micro, color: colors.danger },
-  errorText: { ...type.caption, color: colors.danger },
-  warnText: { ...type.bodySm, color: colors.warn },
+  conflict: { ...type.meta, color: colors.danger },
   muted: { ...type.bodySm, color: colors.textSecondary },
   fill: { gap: space.md },
   saveBar: {
     position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    paddingHorizontal: layout.screenPadding,
-    paddingTop: space.md,
-    gap: space.sm,
-    backgroundColor: colors.elevated,
-    borderTopWidth: hairline,
-    borderTopColor: colors.border,
+    left: layout.screenPadding,
+    right: layout.screenPadding,
   },
-  saveText: { ...type.label, color: colors.textPrimary },
-  saveActions: { flexDirection: "row", justifyContent: "flex-end", gap: space.sm },
 });

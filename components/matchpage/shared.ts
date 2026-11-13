@@ -46,6 +46,8 @@ export interface ScorerLine {
   minute: number | null;
   /** Kendi kalesine — adın yanında (k.k.) notu çıkar. */
   ownGoal: boolean;
+  /** Oyuncu belirtilmeden girilen gol (oyuncu_id = null) — ad yerine "Gol". */
+  anonymous?: boolean;
 }
 
 /** Aynı oyuncunun golleri tek satırda toplanmış hâli. */
@@ -55,6 +57,8 @@ export interface GoalGroup {
   /** Dakikalar, artan sırada. */
   minutes: number[];
   ownGoal: boolean;
+  /** Oyuncusuz gol(ler) — adın yanına (k.k.) eklenmez, ad zaten olayı söyler. */
+  anonymous?: boolean;
 }
 
 /** Oyuncu değişikliği bilgisi: kaçıncı dakikada girdi / çıktı. */
@@ -143,6 +147,16 @@ export function kickoffAt(match: Pick<ApiMatch, "date" | "time">): number {
  * Televizyon grafiklerinin biçimi budur ve bir gol satırında ayırt edici olan
  * da soyadıdır. Tek kelimelik adlar olduğu gibi kalır.
  */
+/**
+ * İSİMSİZ GOL — sunucu oyuncu belirtilmeden (oyuncu_id = null, takim_id dolu)
+ * gol kabul eder. Ad yerine olayın kendisi ve takımı yazılır:
+ * "Gol · HÜKÜM FK" · "Kendi kalesine · HÜKÜM FK".
+ */
+export function anonymousGoalLabel(ownGoal: boolean, teamName?: string | null): string {
+  const head = ownGoal ? "Kendi kalesine" : "Gol";
+  return teamName ? `${head} · ${teamName}` : head;
+}
+
 export function compactName(full: string): string {
   const parts = full.trim().split(/\s+/).filter(Boolean);
   if (parts.length < 2) return full.trim();
@@ -294,11 +308,11 @@ export function groupScorers(lines: ScorerLine[]): GoalGroup[] {
   const byKey = new Map<string, GoalGroup>();
 
   for (const line of lines) {
-    const name = compactName(line.name);
-    const key = `${name}|${line.ownGoal ? "kk" : "gol"}`;
+    const name = line.anonymous ? line.name : compactName(line.name);
+    const key = `${line.anonymous ? "isimsiz" : name}|${line.ownGoal ? "kk" : "gol"}`;
     let group = byKey.get(key);
     if (!group) {
-      group = { key, name, minutes: [], ownGoal: line.ownGoal };
+      group = { key, name, minutes: [], ownGoal: line.ownGoal, anonymous: line.anonymous };
       byKey.set(key, group);
       order.push(key);
     }
@@ -370,11 +384,15 @@ export function useGoalScorers(
       const creditedHome = own ? scoredBy !== Number(homeTeamId) : scoredBy === Number(homeTeamId);
       const creditedAway = own ? scoredBy !== Number(awayTeamId) : scoredBy === Number(awayTeamId);
 
+      /* Oyuncusuz gol: sütun zaten takımı söyler, satırda yalnız "Gol"
+         (kendi kalesine ise "Kendi kalesine"). */
+      const named = event.oyuncu_id != null ? nameOf(event.oyuncu_id) : null;
       const line: ScorerLine = {
         key: String(event.id),
-        name: nameOf(event.oyuncu_id) ?? "Bilinmeyen oyuncu",
+        name: named ?? (event.oyuncu_id == null ? (own ? "Kendi kalesine" : "Gol") : "Bilinmeyen oyuncu"),
         minute: event.dakika ?? null,
         ownGoal: own,
+        anonymous: event.oyuncu_id == null,
       };
 
       if (creditedHome) home.push(line);

@@ -231,7 +231,9 @@ final class LiveCameraView: ExpoView {
     stream.videoSettings = VideoCodecSettings(
       videoSize: streamSize,
       bitRate: videoKbps * 1000,
-      profileLevel: kVTProfileLevel_H264_Main_AutoLevel as String,
+      // High profil: aynı bit hızında Main'den daha temiz (çim / hızlı hareket).
+      // Tüm A-serisi donanım kodlayıcıları destekler.
+      profileLevel: kVTProfileLevel_H264_High_AutoLevel as String,
       scalingMode: .trim,
       bitRateMode: .average,
       maxKeyFrameIntervalDuration: 2 // YouTube: keyframe ≤ 2 sn

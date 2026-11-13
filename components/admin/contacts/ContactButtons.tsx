@@ -36,12 +36,12 @@ export interface ContactButtonsProps {
 
 export type ContactButtonKey = "tel" | "wa" | "sms" | "mail" | "chat" | "copy";
 
-type Item = { key: string; icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void; tone?: "wa" | "brand"; busy?: boolean };
+type Item = { key: string; icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void; tone?: "wa" | "brand" | "call"; busy?: boolean };
 
 export function ContactButtons({ name, phone, email, userId, staff, actions, size = "compact", copyable, only }: ContactButtonsProps) {
   let items: Item[] = [];
   if (phone) {
-    items.push({ key: "tel", icon: "call", label: "Ara", onPress: () => actions.call(phone) });
+    items.push({ key: "tel", icon: "call", label: "Ara", onPress: () => actions.call(phone), tone: "call" });
     items.push({ key: "wa", icon: "logo-whatsapp", label: "WhatsApp", onPress: () => actions.whatsapp(phone), tone: "wa" });
     items.push({ key: "sms", icon: "chatbox-ellipses-outline", label: "SMS", onPress: () => actions.sms(phone) });
   }
@@ -71,8 +71,9 @@ export function ContactButtons({ name, phone, email, userId, staff, actions, siz
   return (
     <View style={[styles.row, size === "large" ? styles.rowLarge : null]}>
       {items.map((item) => {
-        const fg = item.tone === "wa" ? colors.win : item.tone === "brand" ? colors.brandAccent : colors.textSecondary;
-        const bg = item.tone === "wa" ? colors.winDim : item.tone === "brand" ? colors.brandDim : colors.surface3;
+        // Ara: imza moru dolgu (birincil eylem); WhatsApp yeşil; diğerleri cam.
+        const fg = item.tone === "call" ? colors.textOnBrand : item.tone === "wa" ? colors.win : item.tone === "brand" ? colors.brandAccent : colors.textSecondary;
+        const bg = item.tone === "call" ? colors.brand : item.tone === "wa" ? colors.winDim : item.tone === "brand" ? colors.brandDim : colors.surface3;
         return (
           <Touchable
             key={item.key}
@@ -102,8 +103,8 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: space.s },
   rowLarge: { justifyContent: "center", flexWrap: "wrap", gap: space.md },
   icon: {
-    width: 32,
-    height: 32,
+    width: 36,
+    height: 36,
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
@@ -111,7 +112,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   large: { alignItems: "center", gap: space.xs, minWidth: 56 },
-  iconLarge: { width: 46, height: 46, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
+  iconLarge: { width: 52, height: 52, borderRadius: radius.lg, alignItems: "center", justifyContent: "center" },
   label: { ...type.micro, color: colors.textSecondary },
   none: { ...type.bodySm, color: colors.textTertiary, textAlign: "center" },
 });

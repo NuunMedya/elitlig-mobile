@@ -17,6 +17,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams } from "expo-router";
+import { LinearGradient } from "expo-linear-gradient";
 import { useMemo, useState } from "react";
 import { Linking, StyleSheet, Text, View } from "react-native";
 
@@ -25,14 +26,13 @@ import {
   AdminList,
   AdminScreen,
   FormSheet,
-  RecordCard,
   SelectField,
   confirmAction,
   useAdminMutation,
   type FieldDef,
   type FormValues,
 } from "@/components/admin";
-import { BottomSheet, Button, FAB, Tabs } from "@/components/ui";
+import { Avatar, Badge, BottomSheet, Button, FAB, IconTile, Tabs, Touchable } from "@/components/ui";
 import { formatDateTime, intlPhone } from "@/lib/admin/format";
 import {
   CONTACT_REQUEST_STATUS_LABELS,
@@ -53,7 +53,7 @@ import {
   type ContactSectionInput,
 } from "@/lib/api/admin/system";
 import { openLink } from "@/lib/links";
-import { colors, space, textScale, type } from "@/theme";
+import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
 const PERMS = ["city_pages.contacts"];
 type Tab = "sections" | "requests";
@@ -207,22 +207,39 @@ function SectionsTab({ cityId, onCity, cityOptions, cityName }: TabProps) {
         emptyBody="Bir şehir için iletişim kanallarını ekle."
         emptyAction={{ label: "Yeni iletişim alanı", onPress: () => setEditing("new") }}
         renderItem={({ item }) => (
-          <RecordCard
-            title={item.label || "Merkez"}
-            subtitle={cityName(item.city_id)}
-            meta={[item.phone, item.whatsapp ? `WhatsApp ${item.whatsapp}` : null, item.email].filter(Boolean).join(" · ") || "İletişim bilgisi girilmemiş"}
-            icon="call-outline"
-            iconTone={item.is_active ? "brand" : "neutral"}
-            muted={!item.is_active}
-            badges={[
-              { label: item.is_active ? "Aktif" : "Pasif", tone: item.is_active ? "win" : "neutral" },
-              item.facebook_url ? { label: "Facebook", icon: "logo-facebook" } : null,
-              item.instagram_url ? { label: "Instagram", icon: "logo-instagram" } : null,
-              item.youtube_url ? { label: "YouTube", icon: "logo-youtube" } : null,
-              item.tiktok_url ? { label: "TikTok", icon: "logo-tiktok" } : null,
-            ]}
-            onPress={() => setActive(item)}
-          />
+          <Touchable feedback="card" onPress={() => setActive(item)} style={[styles.sectionCard, !item.is_active ? styles.muted : null]} accessibilityRole="button" accessibilityLabel={`${cityName(item.city_id)} ${item.label || "Merkez"}`}>
+            <View style={styles.sectionHead}>
+              <IconTile icon="business" tone={item.is_active ? "cyan" : "neutral"} size={42} />
+              <View style={styles.flex}>
+                <Text style={styles.kicker} numberOfLines={1} {...textScale.badge}>
+                  {(cityName(item.city_id) || "İl").toLocaleUpperCase("tr-TR")}
+                </Text>
+                <Text style={styles.cardTitle} numberOfLines={1} {...textScale.dense}>
+                  {item.label || "Merkez"}
+                </Text>
+                {item.address ? (
+                  <Text style={styles.cardMeta} numberOfLines={1} {...textScale.dense}>
+                    {item.address}
+                  </Text>
+                ) : null}
+              </View>
+              <Badge label={item.is_active ? "Yayında" : "Pasif"} tone={item.is_active ? "win" : "neutral"} dot={item.is_active} size="xs" />
+            </View>
+            {/* Kanal ızgarası: dolu kanal renkli, boş kanal soluk. */}
+            <View style={styles.channels}>
+              {CHANNELS.map((c) => {
+                const on = Boolean(item[c.key]);
+                return (
+                  <View key={c.key} style={[styles.channel, on ? styles.channelOn : null]} accessible accessibilityLabel={`${c.label}: ${on ? "var" : "yok"}`}>
+                    <Ionicons name={c.icon} size={15} color={on ? colors.brandAccent : colors.textDisabled} />
+                  </View>
+                );
+              })}
+            </View>
+            <Text style={styles.cardMeta} numberOfLines={1} {...textScale.dense}>
+              {[item.phone, item.email].filter(Boolean).join(" · ") || "İletişim bilgisi girilmemiş"}
+            </Text>
+          </Touchable>
         )}
       />
       <FAB icon="add" label="Yeni alan" extended onPress={() => setEditing("new")} accessibilityLabel="Yeni iletişim alanı" />
@@ -353,15 +370,34 @@ function RequestsTab({ cityId, onCity, cityOptions, cityName }: TabProps) {
         emptyIcon="mail-open-outline"
         emptyTitle="İletişim talebi bulunamadı"
         renderItem={({ item }) => (
-          <RecordCard
-            title={item.name}
-            subtitle={item.subject || item.message}
-            meta={[cityName(item.city_id), item.section_label, formatDateTime(item.createdAt)].filter(Boolean).join(" · ")}
-            icon={item.is_read ? "mail-open-outline" : "mail-unread-outline"}
-            iconTone={item.is_read ? "neutral" : "warn"}
-            badges={[{ label: CONTACT_REQUEST_STATUS_LABELS[item.status] ?? item.status, tone: STATUS_TONE[item.status] ?? "neutral" }]}
-            onPress={() => openRequest(item)}
-          />
+          <Touchable feedback="card" onPress={() => openRequest(item)} style={[styles.reqCard, !item.is_read ? styles.reqUnread : null]} accessibilityRole="button" accessibilityLabel={`${item.name}${item.is_read ? "" : ", okunmadı"}: ${item.subject || item.message}`}>
+            {!item.is_read ? <LinearGradient colors={colors.gradientSignature} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.reqStripe} /> : null}
+            <Avatar name={item.name} size={40} />
+            <View style={styles.flex}>
+              <View style={styles.reqTop}>
+                <Text style={[styles.reqName, !item.is_read ? styles.reqNameUnread : null]} numberOfLines={1} {...textScale.dense}>
+                  {item.name}
+                </Text>
+                <Text style={styles.reqTime} {...textScale.badge}>
+                  {formatDateTime(item.createdAt)}
+                </Text>
+              </View>
+              {item.subject ? (
+                <Text style={styles.reqSubject} numberOfLines={1} {...textScale.dense}>
+                  {item.subject}
+                </Text>
+              ) : null}
+              <Text style={styles.cardMeta} numberOfLines={2} {...textScale.dense}>
+                {item.message}
+              </Text>
+              <View style={styles.reqFoot}>
+                <Badge label={CONTACT_REQUEST_STATUS_LABELS[item.status] ?? item.status} tone={STATUS_TONE[item.status] ?? "neutral"} size="xs" />
+                <Text style={styles.reqTime} numberOfLines={1} {...textScale.badge}>
+                  {[cityName(item.city_id), item.section_label].filter(Boolean).join(" · ")}
+                </Text>
+              </View>
+            </View>
+          </Touchable>
         )}
       />
 
@@ -432,7 +468,38 @@ function RequestsTab({ cityId, onCity, cityOptions, cityName }: TabProps) {
   );
 }
 
+/** İletişim alanının kanalları — kartta dolu/boş ikon ızgarası. */
+const CHANNELS: { key: keyof ContactSection; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { key: "phone", label: "Telefon", icon: "call" },
+  { key: "whatsapp", label: "WhatsApp", icon: "logo-whatsapp" },
+  { key: "email", label: "E-posta", icon: "mail" },
+  { key: "map_embed_url", label: "Harita", icon: "map" },
+  { key: "instagram_url", label: "Instagram", icon: "logo-instagram" },
+  { key: "facebook_url", label: "Facebook", icon: "logo-facebook" },
+  { key: "youtube_url", label: "YouTube", icon: "logo-youtube" },
+  { key: "tiktok_url", label: "TikTok", icon: "logo-tiktok" },
+];
+
 const styles = StyleSheet.create({
+  flex: { flex: 1, minWidth: 0, gap: 2 },
+  muted: { opacity: 0.7 },
+  sectionCard: { gap: space.md, padding: space.md, borderRadius: radius.xl, backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border },
+  sectionHead: { flexDirection: "row", alignItems: "center", gap: space.md },
+  kicker: { ...type.overline, color: colors.textTertiary },
+  cardTitle: { ...type.h4, color: colors.textPrimary },
+  cardMeta: { ...type.caption, color: colors.textTertiary },
+  channels: { flexDirection: "row", gap: space.xs },
+  channel: { flex: 1, height: 34, borderRadius: radius.md, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface2 },
+  channelOn: { backgroundColor: colors.brandDim },
+  reqCard: { flexDirection: "row", gap: space.md, padding: space.md, borderRadius: radius.xl, backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border, overflow: "hidden" },
+  reqUnread: { borderColor: colors.brand },
+  reqStripe: { position: "absolute", left: 0, top: space.md, bottom: space.md, width: 3, borderTopRightRadius: 3, borderBottomRightRadius: 3 },
+  reqTop: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  reqName: { ...type.label, color: colors.textSecondary, flex: 1 },
+  reqNameUnread: { ...type.h4, color: colors.textPrimary },
+  reqSubject: { ...type.labelSm, color: colors.textPrimary },
+  reqTime: { ...type.micro, color: colors.textTertiary, flexShrink: 1 },
+  reqFoot: { flexDirection: "row", alignItems: "center", gap: space.sm, marginTop: 2 },
   footer: { flexDirection: "row", gap: space.sm, flexWrap: "wrap" },
   grow: { flexGrow: 1 },
   detail: { gap: space.md },

@@ -41,14 +41,17 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, StyleSheet, Text, View, type ListRenderItemInfo } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import {
   Badge,
   BottomSheet,
   Button,
   EmptyState,
+  IconTile,
   Input,
   SkeletonListRow,
   Touchable,
+  type IconTileTone,
 } from "@/components/ui";
 import { useFavorite } from "@/providers/FavoriteProvider";
 import { useScope, type ScopeStep } from "@/providers/ScopeProvider";
@@ -60,10 +63,10 @@ const ALL_ID = 0;
 /** Arama kutusunun görüneceği eşik — altında kutu gereksiz yer kaplar. */
 const SEARCH_THRESHOLD = 12;
 
-const STEPS: { key: ScopeStep; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-  { key: "city", label: "Şehir", icon: "location-outline" },
-  { key: "league", label: "Lig", icon: "trophy-outline" },
-  { key: "season", label: "Sezon", icon: "calendar-outline" },
+const STEPS: { key: ScopeStep; label: string; icon: keyof typeof Ionicons.glyphMap; tone: IconTileTone }[] = [
+  { key: "city", label: "Şehir", icon: "location", tone: "cyan" },
+  { key: "league", label: "Lig", icon: "trophy", tone: "violet" },
+  { key: "season", label: "Sezon", icon: "calendar", tone: "pink" },
 ];
 
 interface ScopeOption {
@@ -92,10 +95,13 @@ const OptionRow = React.memo(function OptionRow({
   pinned,
   onSelect,
   onTogglePin,
+  leading = "letter",
 }: {
   option: ScopeOption;
   selected: boolean;
   favorite: boolean;
+  /** Öndeki işaret: harf pulu (il/lig) ya da takvim (sezon). */
+  leading?: "letter" | "calendar";
   /** undefined → raptiye çizilmez (il ve sezon adımı). */
   pinned?: boolean;
   onSelect: (option: ScopeOption) => void;
@@ -110,6 +116,7 @@ const OptionRow = React.memo(function OptionRow({
         <Text style={styles.groupLabel} {...textScale.badge}>
           {upperTR(option.label)}
         </Text>
+        <View style={styles.groupRule} />
       </View>
     );
   }
@@ -124,12 +131,33 @@ const OptionRow = React.memo(function OptionRow({
       accessibilityState={{ selected }}
       accessibilityLabel={option.label}
     >
-      {option.all ? (
-        <View style={[styles.allIcon, selected && styles.allIconOn]}>
-          <Ionicons name="earth" size={15} color={selected ? colors.textOnBrand : colors.brandAccent} />
-        </View>
+      {/* Seçili satır: solda imza degradeli 3px şerit. */}
+      {selected ? (
+        <LinearGradient
+          colors={colors.gradientSignature}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={styles.selectedStrip}
+        />
       ) : null}
-      {favorite ? <Ionicons name="star" size={13} color={colors.star} /> : null}
+      {option.all ? (
+        <IconTile icon="earth" tone={selected ? "signature" : "cyan"} size={32} glow={false} />
+      ) : (
+        <View style={[styles.mono, selected && styles.monoOn]}>
+          {leading === "calendar" ? (
+            <Ionicons name="calendar-outline" size={15} color={selected ? colors.textOnBrand : colors.textSecondary} />
+          ) : (
+            <Text style={[styles.monoText, selected && styles.monoTextOn]} {...textScale.badge}>
+              {option.label.trim().charAt(0).toLocaleUpperCase("tr")}
+            </Text>
+          )}
+          {favorite ? (
+            <View style={styles.monoStar}>
+              <Ionicons name="star" size={9} color={colors.star} />
+            </View>
+          ) : null}
+        </View>
+      )}
       <View style={styles.rowText}>
         <Text
           style={[styles.rowLabel, selected && styles.rowLabelSelected]}
@@ -147,7 +175,9 @@ const OptionRow = React.memo(function OptionRow({
       {option.archived ? <Badge label="Arşiv" tone="neutral" size="xs" /> : null}
       <View style={styles.rowSpacer} />
       {selected ? (
-        <Ionicons name="checkmark-circle" size={20} color={colors.brand} />
+        <View style={styles.check}>
+          <Ionicons name="checkmark" size={14} color={colors.textOnBrand} />
+        </View>
       ) : (
         <Ionicons name="chevron-forward" size={16} color={colors.textDisabled} />
       )}
@@ -181,6 +211,8 @@ const StepCard = React.memo(function StepCard({
   step,
   label,
   icon,
+  tone,
+  index,
   value,
   active,
   disabled,
@@ -189,6 +221,8 @@ const StepCard = React.memo(function StepCard({
   step: ScopeStep;
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
+  tone: IconTileTone;
+  index: number;
   value: string;
   active: boolean;
   disabled: boolean;
@@ -207,9 +241,9 @@ const StepCard = React.memo(function StepCard({
       accessibilityLabel={`${label}: ${value || "seçilmedi"}`}
     >
       <View style={styles.stepHead}>
-        <Ionicons name={icon} size={11} color={active ? colors.brandAccent : colors.textTertiary} />
-        <Text style={[styles.stepLabel, active && styles.stepLabelActive]} {...textScale.badge}>
-          {upperTR(label)}
+        <IconTile icon={icon} tone={disabled ? "neutral" : tone} size={22} glow={active} />
+        <Text style={[styles.stepLabel, active && styles.stepLabelActive]} numberOfLines={1} {...textScale.badge}>
+          {index}. {upperTR(label)}
         </Text>
       </View>
       <Text
@@ -219,7 +253,14 @@ const StepCard = React.memo(function StepCard({
       >
         {value || "Seç"}
       </Text>
-      {active ? <View style={styles.stepBeam} /> : null}
+      {active ? (
+        <LinearGradient
+          colors={colors.gradientSignature}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={styles.stepBeam}
+        />
+      ) : null}
     </Touchable>
   );
 });
@@ -411,6 +452,7 @@ export function ScopeSheet() {
         option={item}
         selected={item.kind === "option" && item.id === selectedId}
         favorite={step === "league" && isFavoriteLeague(item.id)}
+        leading={step === "season" ? "calendar" : "letter"}
         pinned={step === "league" && cityId && !item.all ? isPinnedLeague(item.id) : undefined}
         onSelect={handleSelect}
         onTogglePin={handleTogglePin}
@@ -457,12 +499,14 @@ export function ScopeSheet() {
     >
       <View style={styles.body}>
         <View style={styles.steps} accessibilityRole="tablist">
-          {STEPS.map((item) => (
+          {STEPS.map((item, i) => (
             <StepCard
               key={item.key}
               step={item.key}
               label={item.label}
               icon={item.icon}
+              tone={item.tone}
+              index={i + 1}
               value={values[item.key]}
               active={item.key === step}
               disabled={(item.key === "league" && !cityId) || (item.key === "season" && !leagueId)}
@@ -525,13 +569,13 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     paddingHorizontal: space.m,
-    paddingTop: space.sm,
-    paddingBottom: space.m,
-    borderRadius: radius.md,
+    paddingTop: space.m,
+    paddingBottom: space.md,
+    borderRadius: radius.lg,
     backgroundColor: colors.surface2,
     borderWidth: hairline,
-    borderColor: colors.border,
-    gap: space.xxs,
+    borderColor: colors.glassLine,
+    gap: space.s,
     overflow: "hidden",
   },
   stepActive: {
@@ -541,7 +585,7 @@ const styles = StyleSheet.create({
   stepHead: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.xs,
+    gap: space.s,
   },
   stepLabel: {
     ...type.overline,
@@ -566,7 +610,6 @@ const styles = StyleSheet.create({
     height: 3,
     borderTopLeftRadius: 3,
     borderTopRightRadius: 3,
-    backgroundColor: colors.brand,
   },
   search: {
     marginBottom: space.sm,
@@ -579,16 +622,68 @@ const styles = StyleSheet.create({
   },
   /* — Seçenek satırı — */
   row: {
-    height: layout.listRowHeight,
+    height: layout.listRowHeight + space.xs,
     marginBottom: ROW_GAP,
     flexDirection: "row",
     alignItems: "center",
-    gap: space.sm,
+    gap: space.m,
     paddingHorizontal: space.md,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
+    overflow: "hidden",
   },
   rowSelected: {
     backgroundColor: colors.brandDim,
+  },
+  selectedStrip: {
+    position: "absolute",
+    left: 0,
+    top: space.sm,
+    bottom: space.sm,
+    width: 3,
+    borderTopRightRadius: 3,
+    borderBottomRightRadius: 3,
+  },
+  /** Harf pulu — il/lig adının baş harfi; seçiliyken marka dolgusu. */
+  mono: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.sm,
+    backgroundColor: colors.surface3,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  monoOn: {
+    backgroundColor: colors.brand,
+    borderColor: colors.brand,
+  },
+  monoText: {
+    ...type.label,
+    fontFamily: fonts.heading,
+    color: colors.textSecondary,
+  },
+  monoTextOn: {
+    color: colors.textOnBrand,
+  },
+  monoStar: {
+    position: "absolute",
+    right: -4,
+    top: -4,
+    width: 15,
+    height: 15,
+    borderRadius: radius.pill,
+    backgroundColor: colors.elevated,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  check: {
+    width: 22,
+    height: 22,
+    borderRadius: radius.pill,
+    backgroundColor: colors.brand,
+    alignItems: "center",
+    justifyContent: "center",
   },
   rowSpacer: {
     flex: 1,
@@ -621,16 +716,24 @@ const styles = StyleSheet.create({
     backgroundColor: colors.brandDim,
   },
   groupHead: {
-    paddingTop: space.md,
-    paddingBottom: space.xs,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    paddingTop: space.lg,
+    paddingBottom: space.s,
     paddingHorizontal: space.xs,
+  },
+  groupRule: {
+    flex: 1,
+    height: hairline,
+    backgroundColor: colors.separator,
   },
   groupLabel: {
     ...type.overline,
     color: colors.textTertiary,
   },
   rowLabel: {
-    ...type.body,
+    ...type.h3,
     color: colors.textPrimary,
     flexShrink: 1,
   },

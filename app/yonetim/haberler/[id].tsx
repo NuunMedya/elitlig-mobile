@@ -14,11 +14,15 @@
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Image, StyleSheet, Text, View } from "react-native";
 
-import { AdminScreen, ChipsField, confirmAction, Panel, ToggleField, useAdminMutation } from "@/components/admin";
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { LinearGradient } from "expo-linear-gradient";
+
+import { AdminScreen, ChipsField, confirmAction, ToggleField, useAdminMutation } from "@/components/admin";
+import { SysGroup } from "@/components/admin/system/SysKit";
 import { BodyEditor, type BodyMode } from "@/components/admin/news/BodyEditor";
-import { CoverField, useNewsScope } from "@/components/admin/news/NewsParts";
+import { CoverField, newsCategoryTile, useNewsScope } from "@/components/admin/news/NewsParts";
 import { ScopeSelects } from "@/components/admin/penalties/ScopeSelects";
 import { Button, ErrorState, Input, SegmentedControl, SkeletonCard } from "@/components/ui";
 import { hasAnyPermission } from "@/lib/admin/access";
@@ -40,7 +44,7 @@ import {
   type NewsStatus,
 } from "@/lib/api/admin/news";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, space, textScale, type } from "@/theme";
+import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
 interface Draft {
   title: string;
@@ -196,7 +200,46 @@ export default function NewsEditorScreen() {
         <ErrorState error={new Error("Türkiye geneli haberleri yalnız Türkiye geneli yetkililer düzenler.")} variant="inline" />
       ) : (
         <>
-          <Panel>
+          {/* Canlı önizleme: kapak (yoksa kategori degradesi), durum hapı, başlık. */}
+          <View style={styles.preview}>
+            {draft.cover ? (
+              <Image source={{ uri: draft.cover }} style={StyleSheet.absoluteFill} resizeMode="cover" accessibilityIgnoresInvertColors />
+            ) : (
+              <LinearGradient colors={colors.tileTones[newsCategoryTile(draft.category).tone]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+            )}
+            <LinearGradient colors={["transparent", colors.overlay]} start={{ x: 0, y: 0.2 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} />
+            {!draft.cover ? (
+              <View style={styles.previewIcon}>
+                <Ionicons name={newsCategoryTile(draft.category).icon} size={40} color={colors.onDark} />
+              </View>
+            ) : null}
+            <View style={styles.previewTop}>
+              <View style={[styles.previewPill, published ? styles.previewPillLive : null]}>
+                <View style={[styles.previewDot, { backgroundColor: published ? colors.win : colors.onDarkMuted }]} />
+                <Text style={styles.previewPillText} {...textScale.badge}>
+                  {published ? "YAYINDA" : isNew ? "YENİ TASLAK" : "TASLAK"}
+                </Text>
+              </View>
+              {draft.pinned ? (
+                <View style={styles.previewPill}>
+                  <Ionicons name="pin" size={11} color={colors.onDark} />
+                  <Text style={styles.previewPillText} {...textScale.badge}>
+                    SABİT
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+            <View style={styles.previewBottom}>
+              <Text style={styles.previewKicker} {...textScale.badge}>
+                {NEWS_CATEGORY_LABELS[draft.category].toLocaleUpperCase("tr-TR")}
+              </Text>
+              <Text style={styles.previewTitle} numberOfLines={3} {...textScale.dense}>
+                {draft.title.trim() || "Başlık burada görünecek"}
+              </Text>
+            </View>
+          </View>
+
+          <SysGroup title="Başlık ve özet" icon="text" tone="violet">
             <Input label="Başlık *" value={draft.title} onChangeText={(title) => set({ title })} placeholder="Haber başlığı" maxLength={300} />
             <Input
               label="Özet"
@@ -208,9 +251,9 @@ export default function NewsEditorScreen() {
               numberOfLines={2}
               maxLength={500}
             />
-          </Panel>
+          </SysGroup>
 
-          <Panel>
+          <SysGroup title="Gövde" icon="document-text" tone="cyan">
             <BodyEditor
               mode={draft.mode}
               modeLocked={draft.modeLocked}
@@ -218,13 +261,13 @@ export default function NewsEditorScreen() {
               onChange={(body) => set({ body })}
               onModeChange={(mode) => set({ mode, body: mode === "html" ? textToHtml(draft.body) : htmlToText(draft.body) })}
             />
-          </Panel>
+          </SysGroup>
 
-          <Panel>
+          <SysGroup title="Kapak" icon="image" tone="pink">
             <CoverField value={draft.cover} onChange={(cover) => set({ cover })} />
-          </Panel>
+          </SysGroup>
 
-          <Panel title="Yayın">
+          <SysGroup title="Yayın" icon="megaphone" tone="gold">
             <ChipsField<NewsCategory>
               label="Kategori"
               value={draft.category}
@@ -232,9 +275,9 @@ export default function NewsEditorScreen() {
               onChange={(value) => set({ category: (value as NewsCategory) ?? "genel" })}
             />
             <ToggleField label="Listenin başına sabitle" value={draft.pinned} onChange={(pinned) => set({ pinned })} />
-          </Panel>
+          </SysGroup>
 
-          <Panel title="Yayın kapsamı">
+          <SysGroup title="Yayın kapsamı" icon="globe" tone="mint">
             {scope.nationwide ? (
               <SegmentedControl<"national" | "city">
                 items={[
@@ -262,7 +305,7 @@ export default function NewsEditorScreen() {
                 allLabels={{ city: "İl seç", league: "Bu ildeki tüm ligler", season: "Bu ligdeki tüm sezonlar" }}
               />
             )}
-          </Panel>
+          </SysGroup>
 
           {error ? (
             <Text style={styles.error} {...textScale.long}>
@@ -301,6 +344,16 @@ export default function NewsEditorScreen() {
 }
 
 const styles = StyleSheet.create({
+  preview: { height: 196, borderRadius: radius.xl, overflow: "hidden", justifyContent: "space-between", padding: space.md, backgroundColor: colors.surface2 },
+  previewIcon: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", opacity: 0.5 },
+  previewTop: { flexDirection: "row", gap: space.xs },
+  previewPill: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: space.sm, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: colors.inkPill, borderWidth: hairline, borderColor: colors.inkPillBorder },
+  previewPillLive: { borderColor: colors.win },
+  previewDot: { width: 6, height: 6, borderRadius: 3 },
+  previewPillText: { ...type.micro, color: colors.onDark },
+  previewBottom: { gap: 2 },
+  previewKicker: { ...type.overline, color: colors.adminAccent },
+  previewTitle: { ...type.h2, color: colors.onDark },
   note: { ...type.bodySm, color: colors.textSecondary },
   error: { ...type.bodySm, color: colors.danger },
   actions: { flexDirection: "row", gap: space.sm },

@@ -1,23 +1,20 @@
 /**
- * MENÜ sekmesi — uygulamanın her köşesine giden tek liste (eski Profil).
+ * MENÜ sekmesi — uygulamanın her köşesine giden kapı (eski Profil).
  *
- * DÜZEN (yukarıdan aşağı):
- *   1. ÜYE PROFİLİ — kimlik sahnesi (ProfileHero): ad, roller, takip
- *      sayıları (her sayı Takip ettiklerin ekranını açar). Misafirde giriş /
- *      üyelik çağrısı.
- *   2. Oyun karoları — Günün Testi ve Oyun merkezi (Fantezi, Tahmin Ligi,
- *      mini oyunlar, Elit Kariyer, sıralamalar — hepsi tek merkezde).
- *   3. Takip · Lig ve istatistik · Destek · Hesap (tek Ayarlar kapısı).
+ * KURGU (Gece teması · ikinci tur — uzun tekdüze liste yerine hiyerarşi):
+ *   1. KİMLİK SAHNESİ (ProfileHero) — girişlide avatar + imza halkası, rol /
+ *      takım hapları, ELİT SEVİYE şeridi (XP + GradientBar) ve takip
+ *      sayıları; misafirde davet + giriş / üye ol.
+ *   2. HIZLI ERİŞİM — dört renkli karo: Oyun merkezi · Tahmin Ligi ·
+ *      Fantezi · Görevler. Altında Günün Testi şeridi (bugün oynandı mı).
+ *   3. GRUPLAR — her biri ikonlu başlık + TEK kart:
+ *        Takip · Görevler ve ödüller · Lig ve istatistik (karşılaştırma
+ *        çifti + liste) · Destek · Ayarlar (tema anahtarı burada).
  *   4. Dipte sosyal hesaplar ve sürüm.
  *
- * Takip ettiklerin artık alt menüde değil (yer Mesajlar'a açıldı); burada
- * ilk grupta durur. Rol araçları (Takım paneli, oyuncu paneli, yönetim)
- * YÖNETİM sekmesindedir.
+ * Rol araçları (Takım paneli, oyuncu paneli, yönetim) YÖNETİM sekmesindedir.
  *
- * NEDEN SectionList: satırların sayısı role göre değişir; SectionList +
- * memo'lu satır rozet güncellemelerinde daha az yeniden çizer.
- *
- * GİRİŞSİZ: kimlik kartı yerine giriş çağrısı çizilir; Mesajlar satırı hiç
+ * GİRİŞSİZ: kimlik kartı yerine davet çizilir; Hesabım / Oturumu kapat satırları
  * üretilmez. Takip sayıları ve Günün Testi cihazda saklandığı için misafirde
  * de gerçektir.
  */
@@ -28,97 +25,55 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Constants from "expo-constants";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
-import {
-  RefreshControl,
-  SectionList,
-  StyleSheet,
-  Text,
-  View,
-  type SectionListRenderItemInfo,
-} from "react-native";
+import { Alert, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
-  Badge,
-  HubGrid,
-  HubTile,
-  ListRow,
+  IconTile,
+  Reveal,
   ScreenHeader,
-  SectionHeader,
   Skeleton,
   Touchable,
   refreshControlProps,
   useHeaderScroll,
   useRefresh,
-  type Tone,
+  useToast,
 } from "@/components/ui";
-import { ProfileHero, type ProfileHeroStat } from "@/components/account/ProfileHero";
+import { MenuGroup, MenuItemRow as MenuGroupRow, QuickGrid, type MenuItemSpec, type QuickItem } from "@/components/account/MenuBlocks";
+import { ProfileHero, type ProfileHeroLevel, type ProfileHeroStat } from "@/components/account/ProfileHero";
+import { THEME_STORAGE_KEY, setStoredTheme } from "@/constants/themePreference";
 import { useNotificationBell } from "@/hooks/useNotificationBell";
+import { getMyCareer } from "@/lib/api/career";
 import { resolveProfileType, scopesForProfileType } from "@/lib/api/member/player";
 import { getPanelMe } from "@/lib/api/panel";
 import { formatNumber, mediaUrl } from "@/lib/format";
 import { openLink } from "@/lib/links";
 import { instagramUrl } from "@/lib/socials";
+import { reloadForTheme } from "@/lib/themeTransition";
 import { youtubeChannelUrl } from "@/lib/youtube";
 import { queryKeys } from "@/lib/queryKeys";
 import { useAdminMode } from "@/providers/AdminModeProvider";
 import { useAuth } from "@/providers/AuthProvider";
 import { useFavorite } from "@/providers/FavoriteProvider";
 import { useScope } from "@/providers/ScopeProvider";
-import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
+import { colors, elevate, fonts, hairline, isDark, layout, radius, space, textScale, type } from "@/theme";
 
 /* ============================ SABİTLER / TİPLER ============================ */
 
 /** Web sitesi — üyelik, şifre sıfırlama ve kurumsal sayfalar orada yaşıyor. */
 const SITE_URL = "https://elitlig.com";
 
-
-/** Satırın dokunulduğunda ne yapacağı — hepsi tek `onSelect` içinde çözülür. */
-type MenuAction =
-  | { kind: "route"; route: string }
-  | { kind: "link"; url: string };
-
-interface MenuItem {
-  key: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  title: string;
-  subtitle?: string;
-  /** Sağda gri metin (şehir adı, görünüm tercihi, favori sayısı). */
-  value?: string;
-  /** Sağda menekşe sayaç rozeti (okunmamış bildirim + mesaj). */
-  badge?: string;
-  /** Sol ikonun tonu — varsayılan nötr gri. */
-  tone?: Tone;
-  destructive?: boolean;
-  action: MenuAction;
-}
-
-interface MenuSection {
-  key: string;
-  /** Başlıksız grup (çıkış satırı) için boş bırakılır. */
-  title?: string;
-  data: MenuItem[];
-}
-
 /** Günün Testi'nin o güne ait sonucu — app/gunun.tsx ile AYNI anahtar (UTC gün). */
 const dailyResultKey = (day: string) => `elitlig.gunun.${day}.v1`;
 
 /* ============================== SAF YARDIMCILAR ============================= */
 
-/** Grup içi konum — ListRow köşe yuvarlamasını ve ayracı buradan alır. */
-function rowPosition(index: number, total: number): "single" | "first" | "middle" | "last" {
-  if (total <= 1) return "single";
-  if (index === 0) return "first";
-  if (index === total - 1) return "last";
-  return "middle";
-}
-
-/** Günün Testi sonucu → "7/10 doğru"; bozuk ya da yoksa null. */
-function parseDaily(raw: string | null): string | null {
+/** Günün Testi sonucu → doğru sayısı; bozuk ya da yoksa null. */
+function parseDaily(raw: string | null): number | null {
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as { correct?: unknown };
     const correct = Number(parsed.correct);
-    return Number.isFinite(correct) ? `${formatNumber(correct)}/10 doğru` : null;
+    return Number.isFinite(correct) ? correct : null;
   } catch {
     return null;
   }
@@ -144,6 +99,7 @@ export default function MenuTabScreen() {
   const scope = useScope();
   const favorite = useFavorite();
   const router = useRouter();
+  const toast = useToast();
   const queryClient = useQueryClient();
   const { scrollY, scrollProps } = useHeaderScroll();
   const bell = useNotificationBell();
@@ -164,17 +120,29 @@ export default function MenuTabScreen() {
   });
 
   /**
-   * Günün Testi'nin bugünkü sonucu — cihazdan (app/gunun.tsx yazar). Odakta
-   * yeniden okunur: oyundan dönünce karo "oynadın" demeli.
+   * Elit Seviye şeridi — Görevler / Elit Kariyer ile AYNI önbellek
+   * (`["career","me"]`); ikinci istek atılmaz. Gelmezse şerit çizilmez.
    */
-  const [dailyDone, setDailyDone] = useState<string | null>(null);
+  const careerQuery = useQuery({
+    queryKey: ["career", "me"],
+    queryFn: getMyCareer,
+    enabled: Boolean(user),
+    staleTime: 30_000,
+    retry: false,
+  });
+
+  /**
+   * Günün Testi'nin bugünkü sonucu — cihazdan (app/gunun.tsx yazar). Odakta
+   * yeniden okunur: oyundan dönünce şerit "oynadın" demeli.
+   */
+  const [dailyCorrect, setDailyCorrect] = useState<number | null>(null);
   useFocusEffect(
     useCallback(() => {
       const today = new Date().toISOString().slice(0, 10);
       let alive = true;
       AsyncStorage.getItem(dailyResultKey(today))
         .then((raw) => {
-          if (alive) setDailyDone(parseDaily(raw));
+          if (alive) setDailyCorrect(parseDaily(raw));
         })
         .catch(() => undefined);
       return () => {
@@ -191,17 +159,10 @@ export default function MenuTabScreen() {
     void queryClient.invalidateQueries({ queryKey: queryKeys.unreadNotifCount() });
     void queryClient.invalidateQueries({ queryKey: queryKeys.chatUnread() });
     void meQuery.refetch();
-  }, [meQuery, queryClient]);
+    void careerQuery.refetch();
+  }, [careerQuery, meQuery, queryClient]);
 
   const refresh = useRefresh(refreshAll, { refreshing: meQuery.isRefetching });
-  /**
-   * `refresh.control` düğümünün tipi `ReactElement<unknown>`; RN'in
-   * `refreshControl` prop'u `ReactElement<RefreshControlProps>` bekler. Aynı
-   * davranış kancanın alanlarıyla ve ortak renk sözlüğüyle kurulur.
-   */
-  const refreshControl = (
-    <RefreshControl {...refreshControlProps(refresh.refreshing, refresh.onRefresh)} />
-  );
 
   const me = meQuery.data;
   const teamCard = me?.team ?? me?.playerTeam ?? null;
@@ -215,202 +176,51 @@ export default function MenuTabScreen() {
 
   /* ------------------------------ EYLEMLER ------------------------------- */
 
-  const onSelect = useCallback(
-    (item: MenuItem) => {
-      switch (item.action.kind) {
-        case "route":
-          router.push(item.action.route as never);
-          return;
-        case "link":
-          void openLink(item.action.url);
-      }
-    },
-    [router]
-  );
-
+  const go = useCallback((route: string) => router.push(route as never), [router]);
   const openAccount = useCallback(() => router.push("/hesabim"), [router]);
   const openSignIn = useCallback(() => router.push("/giris"), [router]);
   // App Store 4 (Design): üyelik tarayıcıda değil, uygulama içindeki
   // /kayit ekranında açılır.
   const openRegister = useCallback(() => router.push("/kayit"), [router]);
-  const openGames = useCallback(() => router.push("/(tabs)/oyunlar"), [router]);
 
-  /* ------------------------------ SATIRLAR ------------------------------- */
+  /**
+   * TEMA ANAHTARI — Ayarlar'daki Görünüm seçiminin ikili kısayolu. Aynı
+   * depolama anahtarına yazar; palet açılışta donduğu için uygulama bir kez
+   * tazelenir (Portal Open — lib/themeTransition.ts). Üç durumlu seçim
+   * (Sistem dahil) Ayarlar ▸ Görünüm'de kalır.
+   */
+  const [darkOn, setDarkOn] = useState(isDark);
+  const toggleTheme = useCallback(
+    (next: boolean) => {
+      setDarkOn(next);
+      const choice = next ? "dark" : "light";
+      void AsyncStorage.setItem(THEME_STORAGE_KEY, choice)
+        .then(() => {
+          setStoredTheme(choice);
+          return reloadForTheme().then((reloaded) => {
+            if (reloaded) return;
+            toast.show({
+              message: `Görünüm: ${next ? "Koyu" : "Açık"}. Uygulamayı yeniden açınca uygulanacak.`,
+              tone: "warn",
+              duration: 5000,
+            });
+          });
+        })
+        .catch(() => {
+          setDarkOn(isDark);
+          toast.show({ message: "Tema tercihi kaydedilemedi.", tone: "danger" });
+        });
+    },
+    [toast]
+  );
+
+  /* ------------------------------ SAYILAR -------------------------------- */
 
   const favoriteScopeCount = favorite.favoriteLeagues.length + favorite.favoriteSeasons.length;
   const followCount = favorite.favorites.length + favoriteScopeCount + favorite.favoriteMatches.length;
 
   const igUrl = instagramUrl(scope.cityLabel);
   const channelUrl = youtubeChannelUrl(scope.cityLabel);
-
-  /**
-   * MENÜ BÖLÜMLERİ — her grup tek bir soruya yanıt verir:
-   *   Takip            → "Neyi izliyorum?"
-   *   Lig ve istatistik→ "Ligin geneline dair ne var?" (karşılaştırma, borsa,
-   *                      haftanın enleri, Türkiye sıralaması, kurul kararları)
-   *   Destek           → kurallar, iletişim
-   *   Hesap            → tek Ayarlar kapısı (bildirimler, görünüm, şifre…
-   *                      hepsi orada) + mağaza kuralı gereği Hesabı sil.
-   *
-   * KALDIRILAN TEKRARLAR: Oyun/yarışma satırları (Fantezi, Tahmin Ligi,
-   * Kariyer, rekorlar) Oyun merkezinde; "Canlı maçlar" Maçlar ▸ Canlı'da;
-   * "Ara" her sekme başlığında; "Bildirim türleri", "Takip bildirimleri" ve
-   * "Hesabım" Ayarlar'da / kimlik kartında; Mesajlar alt menüde.
-   */
-  const sections = useMemo<MenuSection[]>(() => {
-    const result: MenuSection[] = [];
-
-    result.push({
-      key: "takip",
-      title: "Takip",
-      data: [
-        {
-          key: "takip",
-          icon: "star",
-          title: "Takip ettiklerin",
-          subtitle: "Takımların, liglerin ve maçların",
-          value: followCount ? formatNumber(followCount) : undefined,
-          tone: "brand",
-          action: { kind: "route", route: "/(tabs)/takip" },
-        },
-      ],
-    });
-
-    result.push({
-      key: "gorev",
-      title: "Görevler ve ödüller",
-      data: [
-        {
-          key: "gorevler",
-          icon: "flag",
-          title: "Haftalık görevler",
-          subtitle: "Görevleri tamamla, XP ve rozet kazan",
-          tone: "accent",
-          action: { kind: "route", route: "/gorevler" },
-        },
-      ],
-    });
-
-    result.push({
-      key: "lig",
-      title: "Lig ve istatistik",
-      data: [
-        {
-          key: "haftanin-enleri",
-          icon: "medal",
-          title: "Haftanın enleri",
-          subtitle: "Haftanın kadrosu ve ödülleri",
-          tone: "accent",
-          action: { kind: "route", route: "/haftanin-enleri" },
-        },
-        {
-          key: "turkiye",
-          icon: "earth",
-          title: "Türkiye sıralaması",
-          subtitle: "Tüm şehirlerin gol, asist ve takım liderleri",
-          action: { kind: "route", route: "/turkiye" },
-        },
-        {
-          key: "h2h",
-          icon: "git-compare",
-          title: "Takım karşılaştır",
-          subtitle: "İki takımı yan yana koy",
-          action: { kind: "route", route: "/h2h" },
-        },
-        {
-          key: "oyuncu-karsilastir",
-          icon: "people",
-          title: "Oyuncu karşılaştır",
-          subtitle: "Gol, maç, kart, piyasa değeri",
-          action: { kind: "route", route: "/oyuncu-karsilastir" },
-        },
-        {
-          key: "borsa",
-          icon: "storefront",
-          title: "Transfer borsası",
-          subtitle: "Satılık ve kiralık oyuncular",
-          action: { kind: "route", route: "/takimim/borsa" },
-        },
-        {
-          key: "cezalar",
-          icon: "hammer",
-          title: "Kurul kararları",
-          subtitle: "Disiplin talimatı ve verilen cezalar",
-          action: { kind: "route", route: "/cezalar" },
-        },
-      ],
-    });
-
-    /* Sosyal hesaplar ve site liste satırı değil, listenin dibinde
-       yuvarlak düğmelerdir (bkz. `listFooter`). */
-    result.push({
-      key: "destek",
-      title: "Destek",
-      data: [
-        { key: "kurallar", icon: "book", title: "Lig kuralları", action: { kind: "route", route: "/kurallar" } },
-        {
-          key: "iletisim",
-          icon: "call",
-          title: "İletişim",
-          subtitle: "Telefon, WhatsApp, e-posta",
-          action: { kind: "route", route: "/iletisim" },
-        },
-      ],
-    });
-
-    /* HESAP — tek Ayarlar kapısı (app/ayarlar.tsx). Hesabı sil oradaki
-       "Oturum" grubunda da durur; App Store 5.1.1-v için girişli üyede
-       Menü'nün en altında da doğrudan kapı olarak kalır
-       (docs/magaza-inceleme.md §1). */
-    result.push({
-      key: "hesap",
-      title: "Hesap",
-      data: [
-        {
-          key: "ayarlar",
-          icon: "settings",
-          title: "Ayarlar",
-          subtitle: user
-            ? "Bildirimler, görünüm, lig, hesap ve güvenlik"
-            : "Görünüm, lig ve bildirim seçimi",
-          action: { kind: "route", route: "/ayarlar" },
-        },
-        ...(user
-          ? [
-              {
-                key: "hesap-sil",
-                icon: "trash",
-                title: "Hesabı sil",
-                subtitle: "Hesabını ve kişisel verilerini kalıcı olarak sil",
-                tone: "danger",
-                destructive: true,
-                action: { kind: "route", route: "/hesap-sil" },
-              } satisfies MenuItem,
-            ]
-          : []),
-      ],
-    });
-
-    return result;
-  }, [user, followCount]);
-
-  /* ------------------------------ ÇİZİM ---------------------------------- */
-
-  const renderItem = useCallback(
-    ({ item, index, section }: SectionListRenderItemInfo<MenuItem, MenuSection>) => (
-      <MenuRow item={item} position={rowPosition(index, section.data.length)} onSelect={onSelect} />
-    ),
-    [onSelect]
-  );
-
-  const renderSectionHeader = useCallback(
-    ({ section }: { section: MenuSection }) =>
-      /* İçerik kabı zaten 14px dolgu basıyor; başlık kendi dolgusunu basmaz. */
-      section.title ? <SectionHeader title={section.title} inset="flush" /> : null,
-    []
-  );
-
-  const renderSectionFooter = useCallback(() => <View style={styles.sectionGap} />, []);
 
   /**
    * KİMLİK SAHNESİNİN ÜÇ SAYISI — takip edilen takım · lig/sezon · maç.
@@ -457,19 +267,237 @@ export default function MenuTabScreen() {
     };
   }, [auth.isManagement, isPlayer, isPresident, me?.player?.player_img, teamCard?.logo, teamName, user]);
 
-  const listHeader = useMemo(
-    () => (
-      <>
+  const career = careerQuery.data;
+  const heroLevel = useMemo<ProfileHeroLevel | null>(() => {
+    const lv = career?.level;
+    if (!lv) return null;
+    return {
+      level: lv.level,
+      xp: lv.xp,
+      progress: lv.progress,
+      toNext: lv.next != null ? Math.max(0, lv.next - lv.xp) : null,
+      onPress: () => router.push("/gorevler"),
+    };
+  }, [career?.level, router]);
+
+  /** Haftalık görev özeti: "4/20 · +120 XP" — karo ve satır izi. */
+  const weekly = career?.weekly_quests;
+  const questHint = weekly ? `${formatNumber(weekly.done_count)}/${formatNumber(weekly.total)}` : undefined;
+  const weekXp = career?.layers_week
+    ? Object.values(career.layers_week).reduce((sum, value) => sum + (Number(value) || 0), 0)
+    : null;
+
+  /* ------------------------------ İÇERİK --------------------------------- */
+
+  const quick = useMemo<QuickItem[]>(
+    () => [
+      { key: "oyun", icon: "game-controller", label: "Oyunlar", hint: "Merkez", tone: "violet", onPress: () => go("/(tabs)/oyunlar") },
+      { key: "tahmin", icon: "podium", label: "Tahmin", hint: "Skor bil", tone: "cyan", onPress: () => go("/tahmin-ligi") },
+      { key: "fantezi", icon: "people-circle", label: "Fantezi", hint: "Kadro kur", tone: "pink", onPress: () => go("/fantezi") },
+      { key: "gorev", icon: "flag", label: "Görevler", hint: questHint ?? "XP kazan", tone: "gold", onPress: () => go("/gorevler") },
+    ],
+    [go, questHint]
+  );
+
+  const followItems = useMemo<MenuItemSpec[]>(
+    () => [
+      {
+        key: "takip",
+        icon: "star",
+        tone: "violet",
+        title: "Takip ettiklerin",
+        subtitle: "Takımların, liglerin ve maçların",
+        value: followCount ? formatNumber(followCount) : undefined,
+        onPress: () => go("/(tabs)/takip"),
+      },
+      {
+        key: "takip-bildirim",
+        icon: "notifications",
+        tone: "cyan",
+        title: "Takip bildirimleri",
+        subtitle: "Her takım ve maç için ayrı aç/kapat",
+        onPress: () => go("/takip-bildirimleri"),
+      },
+    ],
+    [followCount, go]
+  );
+
+  const rewardItems = useMemo<MenuItemSpec[]>(
+    () => [
+      {
+        key: "gorevler",
+        icon: "flag",
+        tone: "gold",
+        title: "Haftalık görevler",
+        subtitle:
+          weekXp != null && weekXp > 0
+            ? `Bu hafta +${formatNumber(weekXp)} XP kazandın`
+            : "Görevleri tamamla, XP ve rozet kazan",
+        value: questHint,
+        onPress: () => go("/gorevler"),
+      },
+      {
+        key: "haftanin-enleri",
+        icon: "medal",
+        tone: "pink",
+        title: "Haftanın enleri",
+        subtitle: "Haftanın kadrosu ve ödülleri",
+        onPress: () => go("/haftanin-enleri"),
+      },
+    ],
+    [go, questHint, weekXp]
+  );
+
+  const leagueItems = useMemo<MenuItemSpec[]>(
+    () => [
+      {
+        key: "turkiye",
+        icon: "earth",
+        tone: "cyan",
+        title: "Türkiye sıralaması",
+        subtitle: "Tüm şehirlerin gol, asist ve takım liderleri",
+        onPress: () => go("/turkiye"),
+      },
+      {
+        key: "borsa",
+        icon: "storefront",
+        tone: "mint",
+        title: "Transfer borsası",
+        subtitle: "Satılık ve kiralık oyuncular",
+        onPress: () => go("/takimim/borsa"),
+      },
+      {
+        key: "cezalar",
+        icon: "hammer",
+        tone: "red",
+        title: "Kurul kararları",
+        subtitle: "Disiplin talimatı ve verilen cezalar",
+        onPress: () => go("/cezalar"),
+      },
+    ],
+    [go]
+  );
+
+  const supportItems = useMemo<MenuItemSpec[]>(
+    () => [
+      { key: "kurallar", icon: "book", tone: "neutral", title: "Lig kuralları", subtitle: "Talimatlar ve oyun kuralları", onPress: () => go("/kurallar") },
+      { key: "iletisim", icon: "chatbubbles", tone: "mint", title: "İletişim", subtitle: "Telefon, WhatsApp, e-posta", onPress: () => go("/iletisim") },
+    ],
+    [go]
+  );
+
+  /* AYARLAR — tema anahtarı + tek Ayarlar kapısı. Hesabı sil (App Store
+     5.1.1-v) profil ayarlarında durur: Hesabım ▸ Hesabı sil ve Ayarlar ▸
+     Oturum. Menünün en altında yalnız "Oturumu kapat" vardır. */
+  const settingsItems = useMemo<MenuItemSpec[]>(() => {
+    const list: MenuItemSpec[] = [
+      {
+        key: "tema",
+        icon: darkOn ? "moon" : "sunny",
+        tone: "violet",
+        title: "Koyu tema",
+        subtitle: darkOn ? "Gece moru açık" : "Lavanta sis açık",
+        toggle: { value: darkOn, onValueChange: toggleTheme },
+        testID: "menu-theme-toggle",
+      },
+      {
+        key: "ayarlar",
+        icon: "settings",
+        tone: "neutral",
+        title: "Ayarlar",
+        subtitle: user ? "Bildirimler, lig, hesap ve güvenlik" : "Görünüm, lig ve bildirim seçimi",
+        onPress: () => go("/ayarlar"),
+      },
+      {
+        key: "sehir",
+        icon: "location",
+        tone: "cyan",
+        title: "Şehir",
+        value: scope.cityLabel || "Seç",
+        onPress: () => scope.openScopeSheet("city"),
+      },
+    ];
+    if (user) {
+      list.push({
+        key: "hesabim",
+        icon: "person",
+        tone: "violet",
+        title: "Hesabım",
+        subtitle: "Bilgiler, şifre, engellenenler, hesabı sil",
+        onPress: openAccount,
+      });
+    }
+    return list;
+  }, [darkOn, go, openAccount, scope, toggleTheme, user]);
+
+  /* Oturumu kapat — onaylı; Ayarlar'daki çıkışla aynı akış. */
+  const confirmSignOut = useCallback(() => {
+    Alert.alert("Oturumu kapat", "Bu cihazdaki oturumu kapatmak istediğine emin misin?", [
+      { text: "Vazgeç", style: "cancel" },
+      {
+        text: "Oturumu kapat",
+        style: "destructive",
+        onPress: () => {
+          void auth.signOut().then(() => {
+            toast.show({ message: "Oturum kapatıldı.", tone: "neutral" });
+          });
+        },
+      },
+    ]);
+  }, [auth, toast]);
+
+  const dangerItems = useMemo<MenuItemSpec[]>(
+    () =>
+      user
+        ? [
+            {
+              key: "cikis",
+              icon: "log-out",
+              title: "Oturumu kapat",
+              subtitle: "Bu cihazdaki oturumdan çık",
+              destructive: true,
+              onPress: confirmSignOut,
+              testID: "menu-sign-out",
+            },
+          ]
+        : [],
+    [confirmSignOut, user]
+  );
+
+  const socials = useMemo(() => {
+    const list: { key: string; icon: keyof typeof Ionicons.glyphMap; label: string; url: string }[] = [];
+    if (igUrl) list.push({ key: "ig", icon: "logo-instagram", label: `Instagram, ${scope.cityLabel} hesabı`, url: igUrl });
+    if (channelUrl) list.push({ key: "yt", icon: "logo-youtube", label: "YouTube kanalı", url: channelUrl });
+    list.push({ key: "site", icon: "globe-outline", label: "elitlig.com", url: SITE_URL });
+    return list;
+  }, [channelUrl, igUrl, scope.cityLabel]);
+
+  /* ------------------------------ ÇİZİM ---------------------------------- */
+
+  return (
+    <SafeAreaView style={styles.screen} edges={["top"]}>
+      <ScreenHeader title="Menü" scrollY={scrollY} actions={bell ? [bell] : undefined} />
+
+      <ScrollView
+        {...scrollProps}
+        contentContainerStyle={styles.content}
+        refreshControl={
+          user ? <RefreshControl {...refreshControlProps(refresh.refreshing, refresh.onRefresh)} /> : undefined
+        }
+      >
         {auth.initializing ? (
-          <Skeleton height={196} radius="xxl" style={styles.heroSkeleton} />
+          <Skeleton height={232} radius="xxl" style={styles.heroSkeleton} />
         ) : (
-          <ProfileHero
-            user={heroUser}
-            stats={heroStats}
-            onAccount={openAccount}
-            onSignIn={openSignIn}
-            onRegister={openRegister}
-          />
+          <Reveal distance={12}>
+            <ProfileHero
+              user={heroUser}
+              stats={heroStats}
+              level={heroLevel}
+              onAccount={openAccount}
+              onSignIn={openSignIn}
+              onRegister={openRegister}
+            />
+          </Reveal>
         )}
 
         {/* Yönetici üye görünümünde: yönetim moduna tek dokunuşla dönüş. */}
@@ -498,125 +526,179 @@ export default function MenuTabScreen() {
           </Touchable>
         ) : null}
 
-        {/* Oyunlar: bütün oyunlar, Günün Testi ve oyun sıralamaları yalnız Oyun
-            merkezinde. Menüde tek kapı vardır. */}
-        <HubGrid inset="flush" style={styles.games}>
-          <HubTile
-            icon="game-controller"
-            title="Oyun merkezi"
-            subtitle={dailyDone ? `Kulüp Şehri, bütün oyunlar · Günün Testi ${dailyDone}` : "Kulüp Şehri, bütün oyunlar ve sıralamalar"}
-            tone="accent"
-            onPress={openGames}
-          />
-        </HubGrid>
-
-        <View style={styles.sectionGap} />
-      </>
-    ),
-    [
-      adminMode.enterAdmin,
-      adminMode.memberPreview,
-      auth.initializing,
-      dailyDone,
-      heroStats,
-      heroUser,
-      openAccount,
-      openGames,
-      openRegister,
-      openSignIn,
-    ]
-  );
-
-  const listFooter = useMemo(() => {
-    const socials: { key: string; icon: keyof typeof Ionicons.glyphMap; label: string; url: string }[] = [];
-    if (igUrl) socials.push({ key: "ig", icon: "logo-instagram", label: `Instagram, ${scope.cityLabel} hesabı`, url: igUrl });
-    if (channelUrl) socials.push({ key: "yt", icon: "logo-youtube", label: "YouTube kanalı", url: channelUrl });
-    socials.push({ key: "site", icon: "globe-outline", label: "elitlig.com", url: SITE_URL });
-    return (
-      <View style={styles.footer}>
-        <View style={styles.socialRow}>
-          {socials.map((item) => (
-            <Touchable
-              key={item.key}
-              feedback="icon"
-              haptic="selection"
-              onPress={() => void openLink(item.url)}
-              accessibilityRole="link"
-              accessibilityLabel={item.label}
-              style={styles.socialButton}
-            >
-              <Ionicons name={item.icon} size={20} color={colors.textSecondary} />
-            </Touchable>
-          ))}
+        {/* HIZLI ERİŞİM — dört karo + Günün Testi şeridi. */}
+        <View style={styles.section}>
+          <QuickGrid items={quick} />
+          <DailyStrip correct={dailyCorrect} onPress={() => go("/gunun")} />
         </View>
-        <Text style={styles.version} {...textScale.dense}>
-          {versionLabel()}
-        </Text>
-      </View>
-    );
-  }, [channelUrl, igUrl, scope.cityLabel]);
 
-  return (
-    <SafeAreaView style={styles.screen} edges={["top"]}>
-      <ScreenHeader
-        title="Menü"
-        scrollY={scrollY}
-        actions={bell ? [bell] : undefined}
-      />
+        <MenuGroup title="Takip" icon="star" tone="violet" items={followItems} style={styles.section} />
 
-      <SectionList
-        {...scrollProps}
-        sections={sections}
-        keyExtractor={(item) => item.key}
-        renderItem={renderItem}
-        renderSectionHeader={renderSectionHeader}
-        renderSectionFooter={renderSectionFooter}
-        stickySectionHeadersEnabled={false}
-        ListHeaderComponent={listHeader}
-        ListFooterComponent={listFooter}
-        contentContainerStyle={styles.content}
-        refreshControl={user ? refreshControl : undefined}
-        initialNumToRender={14}
-      />
+        <MenuGroup
+          title="Görevler ve ödüller"
+          icon="trophy"
+          tone="gold"
+          items={rewardItems}
+          style={styles.section}
+        />
+
+        <MenuGroup title="Lig ve istatistik" icon="stats-chart" tone="cyan" style={styles.section}>
+          {/* Karşılaştırma çifti — iki araç yan yana; kartın üst bandı. */}
+          <View style={styles.comparePair}>
+            <CompareTile
+              icon="git-compare"
+              title="Takım karşılaştır"
+              hint="İki takım yan yana"
+              onPress={() => go("/h2h")}
+            />
+            <View style={styles.compareDivider} />
+            <CompareTile
+              icon="people"
+              title="Oyuncu karşılaştır"
+              hint="Gol, maç, değer"
+              onPress={() => go("/oyuncu-karsilastir")}
+            />
+          </View>
+          <View style={styles.compareRule} />
+          {leagueItems.map((item, index) => (
+            <MenuGroupRow key={item.key} item={item} last={index === leagueItems.length - 1} />
+          ))}
+        </MenuGroup>
+
+        <MenuGroup title="Destek" icon="help-buoy" tone="mint" items={supportItems} style={styles.section} />
+
+        <MenuGroup title="Ayarlar" icon="settings" tone="neutral" items={settingsItems} style={styles.section} />
+
+        {dangerItems.length ? <MenuGroup items={dangerItems} style={styles.dangerGroup} /> : null}
+
+        <View style={styles.footer}>
+          <View style={styles.socialRow}>
+            {socials.map((item) => (
+              <Touchable
+                key={item.key}
+                feedback="icon"
+                haptic="selection"
+                onPress={() => void openLink(item.url)}
+                accessibilityRole="link"
+                accessibilityLabel={item.label}
+                style={styles.socialButton}
+              >
+                <Ionicons name={item.icon} size={20} color={colors.textSecondary} />
+              </Touchable>
+            ))}
+          </View>
+          <Text style={styles.version} {...textScale.dense}>
+            {versionLabel()}
+          </Text>
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 /* ============================== ALT BİLEŞENLER ============================= */
 
-/**
- * Menü satırı — `item` nesnesi useMemo'lu bölümlerden geldiği için referansı
- * sabittir; memo bu sayede yalnız rozet/değer değişince yeniden çizer.
- */
-const MenuRow = React.memo(function MenuRow({
-  item,
-  position,
-  onSelect,
+/** Günün Testi şeridi — bugün oynandıysa skor, oynanmadıysa çağrı. */
+const DailyStrip = React.memo(function DailyStrip({
+  correct,
+  onPress,
 }: {
-  item: MenuItem;
-  position: "single" | "first" | "middle" | "last";
-  onSelect: (item: MenuItem) => void;
+  correct: number | null;
+  onPress: () => void;
 }) {
-  const handlePress = useCallback(() => onSelect(item), [item, onSelect]);
-  const leading = useMemo(() => ({ icon: item.icon, tone: item.tone }), [item.icon, item.tone]);
-
+  const played = correct != null;
   return (
-    <ListRow
-      leading={leading}
-      title={item.title}
-      subtitle={item.subtitle}
-      value={item.value}
-      badge={item.badge ? <Badge label={item.badge} tone="brand" variant="solid" size="xs" /> : undefined}
-      destructive={item.destructive}
-      position={position}
-      onPress={handlePress}
-    />
+    <Touchable
+      feedback="card"
+      haptic="selection"
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={played ? `Günün Testi: bugün ${correct}/10 doğru` : "Günün Testi: bugünün 10 sorusu seni bekliyor"}
+      style={styles.daily}
+    >
+      <IconTile icon={played ? "checkmark-done" : "bulb"} tone="mint" size={36} glow={false} />
+      <View style={styles.dailyBody}>
+        <Text style={styles.dailyTitle} numberOfLines={1} {...textScale.dense}>
+          Günün Testi
+        </Text>
+        <Text style={styles.dailyHint} numberOfLines={1} {...textScale.dense}>
+          {played ? "Bugünkü testi bitirdin · yarın yeni sorular" : "Herkese aynı 10 soru, günde bir kez"}
+        </Text>
+      </View>
+      {played ? (
+        <View style={styles.dailyScore}>
+          <Text style={styles.dailyScoreValue} {...textScale.badge}>
+            {correct}
+          </Text>
+          <Text style={styles.dailyScoreUnit} {...textScale.badge}>
+            /10
+          </Text>
+        </View>
+      ) : (
+        <View style={styles.dailyCta}>
+          <Text style={styles.dailyCtaText} {...textScale.badge}>
+            Oyna
+          </Text>
+          <Ionicons name="play" size={11} color={colors.brandAccent} />
+        </View>
+      )}
+    </Touchable>
+  );
+});
+
+/** Lig ve istatistik kartının üst bandındaki karşılaştırma aracı. */
+const CompareTile = React.memo(function CompareTile({
+  icon,
+  title,
+  hint,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  hint: string;
+  onPress: () => void;
+}) {
+  return (
+    <Touchable
+      feedback="row"
+      haptic="selection"
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${title}. ${hint}`}
+      style={styles.compareTile}
+    >
+      <IconTile icon={icon} tone="signature" size={32} glow={false} />
+      <Text style={styles.compareTitle} numberOfLines={2} {...textScale.dense}>
+        {title}
+      </Text>
+      <Text style={styles.compareHint} numberOfLines={1} {...textScale.dense}>
+        {hint}
+      </Text>
+    </Touchable>
   );
 });
 
 /* ================================ STİLLER ================================= */
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: colors.bg,
+  },
+  content: {
+    paddingHorizontal: layout.screenPadding,
+    paddingBottom: space.huge,
+  },
+  section: {
+    marginTop: space.xl,
+  },
+  dangerGroup: {
+    marginTop: space.md,
+  },
+  heroSkeleton: {
+    marginTop: space.sm,
+  },
+
   adminGate: {
     flexDirection: "row",
     alignItems: "center",
@@ -640,29 +722,56 @@ const styles = StyleSheet.create({
   adminGateTitle: { ...type.h3, color: colors.onDark },
   adminGateHint: { ...type.caption, color: colors.onDarkMuted, marginTop: 1 },
 
-  screen: {
-    flex: 1,
-    backgroundColor: colors.bg,
+  daily: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    marginTop: space.sm,
+    paddingHorizontal: space.md,
+    paddingVertical: space.m,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    ...elevate(1),
   },
-  content: {
-    paddingHorizontal: layout.screenPadding,
-    paddingBottom: space.xxl,
+  dailyBody: { flex: 1, minWidth: 0, gap: 1 },
+  dailyTitle: { ...type.h4, color: colors.textPrimary },
+  dailyHint: { ...type.caption, color: colors.textTertiary },
+  dailyScore: { flexDirection: "row", alignItems: "baseline" },
+  dailyScoreValue: { ...type.scoreSm, color: colors.win },
+  dailyScoreUnit: { ...type.numSm, color: colors.textTertiary },
+  dailyCta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+    paddingHorizontal: space.m,
+    paddingVertical: space.xs,
+    borderRadius: radius.pill,
+    backgroundColor: colors.brandDim,
+    borderWidth: hairline,
+    borderColor: colors.brandBorder,
   },
-  sectionGap: {
-    height: layout.sectionGap,
-  },
+  dailyCtaText: { ...type.labelXs, color: colors.brandAccent },
 
-  heroSkeleton: {
-    marginTop: space.xs,
+  comparePair: {
+    flexDirection: "row",
+    alignItems: "stretch",
   },
-  games: {
-    marginTop: space.md,
+  compareTile: {
+    flex: 1,
+    gap: space.xs,
+    padding: space.md,
   },
+  compareTitle: { ...type.h4, color: colors.textPrimary, marginTop: space.xs },
+  compareHint: { ...type.caption, color: colors.textTertiary },
+  compareDivider: { width: hairline, backgroundColor: colors.separator, marginVertical: space.md },
+  compareRule: { height: hairline, backgroundColor: colors.separator },
 
   footer: {
     alignItems: "center",
     gap: space.md,
-    marginTop: space.xs,
+    marginTop: space.xxl,
   },
   socialRow: {
     flexDirection: "row",
@@ -680,6 +789,7 @@ const styles = StyleSheet.create({
   },
   version: {
     ...type.caption,
+    fontFamily: fonts.medium,
     color: colors.textTertiary,
     textAlign: "center",
   },

@@ -10,7 +10,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 
-import { ActionSheet, AdminList, AdminScreen, RecordCard, confirmAction, useAdminMutation } from "@/components/admin";
+import { ActionSheet, AdminList, AdminScreen, confirmAction, useAdminMutation } from "@/components/admin";
+import { OpsRecord, StatusTiles } from "@/components/admin/matches/opsKit";
 import { FAB } from "@/components/ui";
 import { hasPermission } from "@/lib/admin/access";
 import { formatDateTime } from "@/lib/admin/format";
@@ -100,27 +101,37 @@ export default function RuleBooksScreen() {
         ]}
         filter={status}
         onFilter={setStatus}
+        extraHeader={
+          status === "" && (query.data?.length ?? 0) > 0 ? (
+            <StatusTiles
+              items={[
+                { key: "published", label: "Yayında", value: (query.data ?? []).filter((b) => b.status === "published").length, tone: "win", icon: "checkmark-circle-outline" },
+                { key: "draft", label: "Taslak", value: (query.data ?? []).filter((b) => b.status !== "published").length, tone: "warn", icon: "create-outline" },
+                { key: "seasons", label: "Sezonda", value: (query.data ?? []).reduce((n, b) => n + (b.seasons ?? []).filter((x) => !x.archived).length, 0), tone: "info", icon: "calendar-outline" },
+              ]}
+              value={null}
+              onChange={(k) => k && k !== "seasons" && setStatus(k)}
+            />
+          ) : null
+        }
         summary={`${rows.length} kitapçık · hangi sezonda geçerli olacağı Sezonlar ekranından seçilir`}
         keyExtractor={(b) => b.id}
         emptyIcon="book-outline"
         emptyTitle="Henüz kural kitapçığı yok"
         emptyBody={can.create ? "“Yeni kitapçık” ile ilkini ekle." : undefined}
         renderItem={({ item }) => (
-          <RecordCard
+          <OpsRecord
             title={item.title}
             subtitle={usage(item)}
-            meta={[
-              item.manage_summary ? scoringSummary(item.manage_summary.scoring) : null,
-              item.manage_summary?.roster ? "kadro kuralları" : null,
-              formatDateTime(item.updated_at || item.created_at),
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-            icon="book-outline"
-            iconTone={item.status === "published" ? "win" : "neutral"}
-            badges={[
-              { label: RULE_BOOK_STATUS_LABELS[item.status] ?? item.status, tone: item.status === "published" ? "win" : "warn" },
-              { label: RULE_BOOK_KIND_LABELS[item.kind] ?? item.kind },
+            icon={item.kind === "rich" ? "document-text" : "book"}
+            tone={item.status === "published" ? "mint" : "gold"}
+            rail={item.status === "published" ? "win" : "warn"}
+            status={{ label: RULE_BOOK_STATUS_LABELS[item.status] ?? item.status, tone: item.status === "published" ? "win" : "warn" }}
+            specs={[
+              { icon: item.kind === "rich" ? "text-outline" : "list-outline", label: RULE_BOOK_KIND_LABELS[item.kind] ?? item.kind },
+              item.manage_summary?.scoring ? { icon: "calculator-outline", label: scoringSummary(item.manage_summary.scoring) } : null,
+              item.manage_summary?.roster ? { icon: "people-outline", label: "Kadro kuralları", tone: "info" } : null,
+              { icon: "time-outline", label: formatDateTime(item.updated_at || item.created_at) },
             ]}
             onPress={() => setSelected(item)}
           />

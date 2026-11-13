@@ -11,6 +11,12 @@
  * uygulamadaki yerel yönetim ekranını açar. "Kapat" talebi elle sonuçlandırır
  * ve isteğe bağlı not yazdırır (sonuç etiketi olarak saklanır).
  *
+ * GÖRÜNÜM (ikinci tur): satır önünde kategori renginde IconTile (transfer
+ * camgöbeği, kadro mor, disiplin kırmızı, maç talebi altın…); onay bekleyen
+ * talebin solunda altın öncelik şeridi. Ayrıntı sayfası kimlik başlığıyla
+ * (IconTile + başlık + durum hapı) açılır, bilgiler tek kartta, eylemler
+ * büyük tam genişlik düğmeler.
+ *
  * PARAMETRELER: ?durum=open|info|resolved, ?kategori=profile|transfer|…
  * (bildirimden ya da başka ekrandan doğrudan bir başlığa gelinir).
  */
@@ -21,7 +27,7 @@ import React, { useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { AdminList, AdminScreen, confirmAction, FormSheet, InfoLine, RecordCard, useAdminMutation, type FilterOption } from "@/components/admin";
-import { Badge, BottomSheet, Button, SegmentedControl, useToast } from "@/components/ui";
+import { Badge, BottomSheet, Button, IconTile, SegmentedControl, useToast, type IconTileTone, type Tone } from "@/components/ui";
 import { errorText } from "@/lib/admin/errors";
 import { formatDateTime, timeAgo } from "@/lib/admin/format";
 import {
@@ -39,9 +45,34 @@ import {
   type RequestAction,
   type RequestStatus,
 } from "@/lib/api/admin/requests";
-import { colors, space, textScale, type } from "@/theme";
+import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
 const STATUSES: RequestStatus[] = ["open", "info", "resolved"];
+
+/** Kategori → satır karosunun tonu (RecordCard `iconTone`) ve ayrıntı karosu. */
+const CATEGORY_TONE: Record<string, Tone> = {
+  profile: "brand",
+  account: "info",
+  registration: "win",
+  transfer: "accent",
+  roster: "brand",
+  match_request: "warn",
+  match: "win",
+  penalty: "danger",
+  availability: "info",
+  message: "live",
+  general: "neutral",
+};
+const TILE_OF: Record<Tone, IconTileTone> = {
+  neutral: "neutral",
+  brand: "violet",
+  accent: "cyan",
+  live: "pink",
+  win: "mint",
+  warn: "gold",
+  danger: "red",
+  info: "cyan",
+};
 const PAGE = 30;
 const POLL_MS = 60_000;
 
@@ -176,8 +207,9 @@ export default function RequestsScreen() {
             subtitle={item.description || null}
             meta={[item.actor?.name, item.city, timeAgo(item.created_at)].filter(Boolean).join(" · ")}
             icon={CATEGORY_ICONS[item.category] ?? "notifications-outline"}
-            iconTone={item.status === "open" ? "brand" : "neutral"}
+            iconTone={item.status === "resolved" ? "neutral" : CATEGORY_TONE[item.category] ?? "brand"}
             muted={item.status === "resolved"}
+            accentColor={item.status === "open" && item.actions?.some((a) => a.api) ? colors.warn : null}
             badges={[
               !category ? { label: byKey[item.category]?.label ?? item.category } : null,
               item.status === "info" ? { label: "Bilgilendirme", tone: "info", icon: "information-circle" } : null,
@@ -248,19 +280,29 @@ function RequestDetail({
 
   return (
     <View style={styles.detail}>
-      <Text style={styles.title} {...textScale.dense}>
-        {item.title || "Talep"}
-      </Text>
+      <View style={styles.head}>
+        <IconTile
+          icon={CATEGORY_ICONS[item.category] ?? "notifications-outline"}
+          tone={resolved ? "neutral" : TILE_OF[CATEGORY_TONE[item.category] ?? "brand"]}
+          size={48}
+        />
+        <View style={styles.headText}>
+          <Text style={styles.title} {...textScale.dense}>
+            {item.title || "Talep"}
+          </Text>
+          <View style={styles.badges}>
+            {item.status === "open" ? <Badge label="Onay bekliyor" tone="warn" size="xs" dot /> : null}
+            {item.status === "info" ? <Badge label="Bilgilendirme" tone="info" size="xs" /> : null}
+            {resolved ? <Badge label={item.resolved_label || "Sonuçlandı"} tone="win" size="xs" icon="checkmark" /> : null}
+          </View>
+        </View>
+      </View>
       {item.description ? (
         <Text style={styles.body} selectable {...textScale.long}>
           {item.description}
         </Text>
       ) : null}
-      <View style={styles.badges}>
-        {item.status === "info" ? <Badge label="Bilgilendirme" tone="info" size="xs" /> : null}
-        {resolved ? <Badge label={item.resolved_label || "Sonuçlandı"} tone="win" size="xs" /> : null}
-      </View>
-      <View>
+      <View style={styles.infoCard}>
         {item.actor?.name ? <InfoLine label="Talep eden" value={item.actor.name} /> : null}
         {item.city ? <InfoLine label="İl" value={item.city} /> : null}
         <InfoLine label="Tarih" value={formatDateTime(item.created_at)} />
@@ -279,6 +321,7 @@ function RequestDetail({
               disabled={busy}
               onPress={() => onAction(action)}
               fullWidth
+              size="lg"
             />
           ))}
         </View>
@@ -305,8 +348,18 @@ function RequestDetail({
 
 const styles = StyleSheet.create({
   segment: { paddingHorizontal: space.lg, paddingBottom: space.sm },
-  detail: { gap: space.md },
-  title: { ...type.h3, color: colors.textPrimary },
+  detail: { gap: space.lg },
+  head: { flexDirection: "row", alignItems: "flex-start", gap: space.md },
+  headText: { flex: 1, gap: space.s },
+  title: { ...type.h2, color: colors.textPrimary },
+  infoCard: {
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface2,
+    borderWidth: hairline,
+    borderColor: colors.border,
+  },
   body: { ...type.body, color: colors.textSecondary },
   badges: { flexDirection: "row", gap: space.xs, flexWrap: "wrap" },
   actions: { gap: space.sm },

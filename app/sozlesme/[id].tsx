@@ -31,9 +31,14 @@ import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useMemo } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 import {
+  Aurora,
   Avatar,
   Badge,
+  GradientBar,
+  Odometer,
+  Reveal,
   EmptyState,
   ErrorState,
   KeyValueRow,
@@ -56,11 +61,13 @@ import { useAuth } from "@/providers/AuthProvider";
 import {
   colors,
   fonts,
+  hairline,
   layout,
   radius,
   space,
   textScale,
   type,
+  upperTR,
 } from "@/theme";
 
 /* ============================ SUNUCU BİÇİMLERİ ============================= */
@@ -205,6 +212,13 @@ export default function ContractDetailScreen() {
   const currency = contract?.currency ?? "TRY";
   const meta = contract ? statusMeta(contract.status) : null;
   const left = daysLeft(contract?.contract_end_date);
+  /** Sözleşme süresinin geçen payı (0–1); tarih yoksa çizilmez. */
+  const termProgress = useMemo(() => {
+    const start = contract?.contract_start_date ? new Date(contract.contract_start_date).getTime() : NaN;
+    const end = contract?.contract_end_date ? new Date(contract.contract_end_date).getTime() : NaN;
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
+    return Math.max(0, Math.min(1, (Date.now() - start) / (end - start)));
+  }, [contract?.contract_start_date, contract?.contract_end_date]);
 
   const additional = useMemo(
     () => parseAdditionalTerms(contract?.additional_terms),
@@ -364,33 +378,65 @@ export default function ContractDetailScreen() {
           refreshControl={refresh.control}
         >
           {/* Künye */}
-          <Surface level={1} radius="lg" style={styles.hero}>
-            <TeamLogo
-              name={contract.team?.team_name ?? "?"}
-              logo={mediaUrl(contract.team?.logo ?? null)}
-              size={layout.crestXl}
-            />
-            <View style={styles.heroBody}>
-              <Text style={styles.heroTitle} numberOfLines={2} {...textScale.dense}>
-                {contract.team?.team_name ?? "Takım"}
-              </Text>
-              <Text style={styles.heroMeta} {...textScale.dense}>
-                {contract.contract_start_date
-                  ? formatDateWithYear(contract.contract_start_date)
-                  : "?"}
-                {"  →  "}
-                {contract.contract_end_date
-                  ? formatDateWithYear(contract.contract_end_date)
-                  : "Süresiz"}
-              </Text>
-              <View style={styles.heroBadges}>
-                <Badge label={meta?.label ?? contract.status} tone={meta?.tone ?? "neutral"} size="sm" />
-                {left !== null && left <= 30 && contract.status === "ACTIVE" ? (
-                  <Badge label={`${left} GÜN KALDI`} tone="warn" size="xs" />
-                ) : null}
+          <Reveal>
+            <View style={styles.hero}>
+              <LinearGradient colors={colors.gradientInk} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+              <Aurora variant="stage" style={StyleSheet.absoluteFill} />
+              <View style={styles.heroTop}>
+                <TeamLogo
+                  name={contract.team?.team_name ?? "?"}
+                  logo={mediaUrl(contract.team?.logo ?? null)}
+                  size={layout.crestXl}
+                />
+                <View style={styles.heroBody}>
+                  <Text style={styles.heroOverline} {...textScale.badge}>
+                    {upperTR("Oyuncu sözleşmesi")}
+                  </Text>
+                  <Text style={styles.heroTitle} numberOfLines={2} {...textScale.dense}>
+                    {contract.team?.team_name ?? "Takım"}
+                  </Text>
+                  <View style={styles.heroBadges}>
+                    <Badge label={meta?.label ?? contract.status} tone={meta?.tone ?? "neutral"} size="sm" />
+                    {left !== null && left <= 30 && contract.status === "ACTIVE" ? (
+                      <Badge label={`${left} gün kaldı`} tone="warn" size="xs" />
+                    ) : null}
+                  </View>
+                </View>
               </View>
+              {/* Süre şeridi: başlangıç → bitiş, ortada kalan gün. */}
+              <View style={styles.heroTerm}>
+                <View style={styles.heroDate}>
+                  <Text style={styles.heroLabel} {...textScale.badge}>
+                    BAŞLANGIÇ
+                  </Text>
+                  <Text style={styles.heroDateValue} {...textScale.dense}>
+                    {contract.contract_start_date ? formatDateWithYear(contract.contract_start_date) : "?"}
+                  </Text>
+                </View>
+                <View style={styles.heroLeft}>
+                  {left !== null && left >= 0 && contract.status === "ACTIVE" ? (
+                    <>
+                      <Odometer value={left} style={styles.heroLeftValue} />
+                      <Text style={styles.heroLabel} {...textScale.badge}>
+                        GÜN KALDI
+                      </Text>
+                    </>
+                  ) : (
+                    <Ionicons name="arrow-forward" size={18} color={colors.onDarkMuted} />
+                  )}
+                </View>
+                <View style={[styles.heroDate, styles.heroDateEnd]}>
+                  <Text style={styles.heroLabel} {...textScale.badge}>
+                    BİTİŞ
+                  </Text>
+                  <Text style={styles.heroDateValue} {...textScale.dense}>
+                    {contract.contract_end_date ? formatDateWithYear(contract.contract_end_date) : "Süresiz"}
+                  </Text>
+                </View>
+              </View>
+              {termProgress != null ? <GradientBar value={termProgress} height={6} track={colors.inkTile} /> : null}
             </View>
-          </Surface>
+          </Reveal>
 
           {contract.status === "PENDING_ACTIVATION" ? (
             <Text style={[styles.note, styles.noteWarn]} {...textScale.long}>
@@ -400,7 +446,7 @@ export default function ContractDetailScreen() {
           ) : null}
 
           {/* Taraflar */}
-          <SectionHeader style={styles.flushHeader} title="Taraflar" />
+          <SectionHeader style={styles.flushHeader} title="Taraflar" icon="people" iconTone="violet" />
           <ListRow
             leading={
               <TeamLogo
@@ -429,7 +475,7 @@ export default function ContractDetailScreen() {
           />
 
           {/* Süre */}
-          <SectionHeader style={styles.flushHeader} title="Süre ve tarihler" />
+          <SectionHeader style={styles.flushHeader} title="Süre ve tarihler" icon="calendar" iconTone="cyan" />
           {dates.map((row, index) => (
             <KeyValueRow
               key={row.key}
@@ -441,7 +487,7 @@ export default function ContractDetailScreen() {
           ))}
 
           {/* Maddeler */}
-          <SectionHeader style={styles.flushHeader} title="Sözleşme maddeleri" />
+          <SectionHeader style={styles.flushHeader} title="Sözleşme maddeleri" icon="document-text" iconTone="mint" />
           {clauses.map((row, index) => (
             <KeyValueRow
               key={row.key}
@@ -455,7 +501,7 @@ export default function ContractDetailScreen() {
 
           {additional.length > 0 ? (
             <>
-              <SectionHeader style={styles.flushHeader} title="Ek maddeler" meta={String(additional.length)} />
+              <SectionHeader style={styles.flushHeader} title="Ek maddeler" icon="add-circle" iconTone="gold" meta={String(additional.length)} />
               {/* Uzun madde metinleri kırpılmasın diye paragraf yüzeyi. */}
               {additional.map((item, index) => (
                 <Surface
@@ -476,7 +522,7 @@ export default function ContractDetailScreen() {
           ) : null}
 
           {/* Kaynak teklif ve künye */}
-          <SectionHeader style={styles.flushHeader} title="Belge künyesi" />
+          <SectionHeader style={styles.flushHeader} title="Belge künyesi" icon="finger-print" iconTone="neutral" />
           <KeyValueRow label="Sözleşme no" value={contract.public_id} numeric position="first" />
           <KeyValueRow
             label="Durum"
@@ -497,7 +543,7 @@ export default function ContractDetailScreen() {
           {/* Kısa süreç akışı */}
           {events.length > 0 ? (
             <>
-              <SectionHeader style={styles.flushHeader} title="Nasıl buraya geldi" meta={String(events.length)} />
+              <SectionHeader style={styles.flushHeader} title="Nasıl buraya geldi" icon="git-commit" iconTone="signature" meta={String(events.length)} />
               {events.map((event, index) => (
                 <View key={event.id} style={styles.timelineRow}>
                   <View style={styles.timelineRail}>
@@ -572,25 +618,31 @@ const styles = StyleSheet.create({
     gap: space.md,
   },
   hero: {
+    gap: space.lg,
+    padding: space.lg,
+    marginTop: space.md,
+    borderRadius: radius.xxl,
+    overflow: "hidden",
+    backgroundColor: colors.inkBlock,
+    borderWidth: hairline,
+    borderColor: colors.borderOnDark,
+  },
+  heroTop: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.md,
-    padding: space.md,
-    marginTop: space.md,
   },
   heroBody: {
     flex: 1,
     gap: space.xs,
   },
-  heroTitle: {
-    ...type.h2,
-    color: colors.textPrimary,
+  heroOverline: {
+    ...type.overline,
+    color: colors.onDarkMuted,
   },
-  heroMeta: {
-    ...type.caption,
-    color: colors.textSecondary,
-    letterSpacing: 0,
-    fontVariant: ["tabular-nums"],
+  heroTitle: {
+    ...type.h1,
+    color: colors.onDark,
   },
   heroBadges: {
     flexDirection: "row",
@@ -598,6 +650,22 @@ const styles = StyleSheet.create({
     gap: space.xs,
     marginTop: space.xxs,
   },
+  heroTerm: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    padding: space.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.inkTile,
+    borderWidth: hairline,
+    borderColor: colors.inkTileBorder,
+  },
+  heroDate: { flex: 1, gap: space.xxs },
+  heroDateEnd: { alignItems: "flex-end" },
+  heroLabel: { ...type.nano, color: colors.onDarkMuted, letterSpacing: 0.6 },
+  heroDateValue: { ...type.tableNumStrong, color: colors.onDark },
+  heroLeft: { alignItems: "center", minWidth: 64 },
+  heroLeftValue: { ...type.scoreMd, color: colors.onDark },
   note: {
     ...type.caption,
     letterSpacing: 0,

@@ -12,11 +12,13 @@ import {
   EmptyState,
   ErrorState,
   FormChips,
+  IconTile,
+  Odometer,
+  Reveal,
   ScreenHeader,
   SegmentedControl,
   SkeletonCard,
   SkeletonListRow,
-  StatBar,
   TeamLogo,
   Touchable,
   useHeaderScroll,
@@ -30,7 +32,8 @@ import { formatDateShort } from "@/lib/format";
 import { matchState } from "@/lib/match";
 import { queryKeys } from "@/lib/queryKeys";
 import { useScope } from "@/providers/ScopeProvider";
-import { colors, fonts, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
+import { colors, dark, fonts, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
+import { DUEL_A, DUEL_B, DuelBar, HaloFrame, duelWinner } from "@/components/teampage/ProfileKit";
 import type { ApiMatch, StandingRow } from "@/lib/types";
 
 /**
@@ -61,11 +64,20 @@ import type { ApiMatch, StandingRow } from "@/lib/types";
  *     Kaydırınca kapanır, başlıkta "A – B" kalır.
  *   · DAĞILIM ÇUBUĞU: galibiyet/beraberlik/galibiyet oranı tek yatay çubukta;
  *     ev sahibi zümrüt (veri), rakip kayrak, beraberlik nötr ray rengi
- *     (StatBar'ın taraf dili ile aynı).
+ *     (DuelBar'ın taraf dili ile aynı).
  *   · KARŞILAŞTIRMA: galibiyet, atılan gol, maç başı gol çubukları tek kartta.
  *   · FORM: iki satır — arma + ad + son beş maç.
  *   · GEÇMİŞ: tarih · ev – deplasman skoru tek kartta; sonuç çipi ev sahibi
  *     gözünden.
+ *
+ * İKİNCİ TUR — DÜELLO DÜZENİ: sahnede iki arma taraf renginde degrade
+ * halkalı (ev camgöbeği, rakip mor), ortada Odometer'lı galibiyet skoru.
+ * Dağılım çubuğu iki taraf rengini kullanır (rakip artık sönük kayrak değil).
+ * Yeni "Kafa kafaya" kartı: karşılaşmalardan (galibiyet, gol, maç başı gol)
+ * ve puan tablosundan (sıra — küçük olan iyi —, puan, averaj, form puanı)
+ * `DuelBar` satırları; kazanan taraf kendi renginde hapta, kartın başlığında
+ * metrik skoru. Form satırları kendi form puanını da yazar. Karşılaşma
+ * satırının solunda sonuç renginde şerit.
  */
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -288,9 +300,43 @@ export default function H2HScreen() {
   const homeRank = rankOf(rows, homeStanding);
   const awayRank = rankOf(rows, awayStanding);
 
+  /* ---- Kafa kafaya satırları: karşılaşmalar + puan tablosu + form ---- */
+  const duel = useMemo(() => {
+    const list: { key: string; label: string; a: number; b: number; lowerIsBetter?: boolean }[] = [];
+    if (meetings.length > 0) {
+      list.push({ key: "w", label: "Galibiyet", a: tally.homeWins, b: tally.awayWins });
+      list.push({ key: "g", label: "Atılan gol", a: tally.homeGoals, b: tally.awayGoals });
+      list.push({
+        key: "gpm",
+        label: "Maç başı gol",
+        a: Math.round((tally.homeGoals / meetings.length) * 10) / 10,
+        b: Math.round((tally.awayGoals / meetings.length) * 10) / 10,
+      });
+    }
+    if (homeRank != null && awayRank != null) {
+      list.push({ key: "rank", label: "Sıra", a: homeRank, b: awayRank, lowerIsBetter: true });
+    }
+    if (homeStanding && awayStanding) {
+      list.push({ key: "pts", label: "Puan", a: Number(homeStanding.display_points) || 0, b: Number(awayStanding.display_points) || 0 });
+      list.push({ key: "av", label: "Averaj", a: Number(homeStanding.goal_diff) || 0, b: Number(awayStanding.goal_diff) || 0 });
+    }
+    if (homeForm && awayForm) {
+      list.push({ key: "form", label: "Form puanı (son 5)", a: formPoints(homeForm), b: formPoints(awayForm) });
+    }
+    let a = 0;
+    let b = 0;
+    for (const m of list) {
+      const w = duelWinner(m.a, m.b, m.lowerIsBetter);
+      if (w === "a") a += 1;
+      else if (w === "b") b += 1;
+    }
+    return { list, a, b };
+  }, [awayForm, awayRank, awayStanding, homeForm, homeRank, homeStanding, meetings.length, tally]);
+
   const hero = hasTargets ? (
     <View style={styles.hero}>
       <HeroTeam
+        side="a"
         name={homeName}
         logo={homeStanding?.logo ?? null}
         rank={homeRank}
@@ -299,11 +345,19 @@ export default function H2HScreen() {
       />
       <View style={styles.heroMiddle}>
         {meetings.length > 0 ? (
-          <Text style={styles.heroScore} {...textScale.dense}>
-            {tally.homeWins}
-            <Text style={styles.heroScoreDim}>{"  –  "}</Text>
-            {tally.awayWins}
-          </Text>
+          <View style={styles.heroScoreRow} accessible accessibilityLabel={`${tally.homeWins} – ${tally.awayWins}`}>
+            <Odometer
+              value={tally.homeWins}
+              style={[styles.heroScore, tally.homeWins > tally.awayWins ? styles.heroScoreLeadA : null]}
+            />
+            <Text style={[styles.heroScore, styles.heroScoreDim]} {...textScale.badge}>
+              –
+            </Text>
+            <Odometer
+              value={tally.awayWins}
+              style={[styles.heroScore, tally.awayWins > tally.homeWins ? styles.heroScoreLeadB : null]}
+            />
+          </View>
         ) : (
           <Text style={[styles.heroScore, styles.heroVs]} {...textScale.dense}>
             VS
@@ -316,6 +370,7 @@ export default function H2HScreen() {
         </Text>
       </View>
       <HeroTeam
+        side="b"
         name={awayName}
         logo={awayStanding?.logo ?? null}
         rank={awayRank}
@@ -439,16 +494,49 @@ export default function H2HScreen() {
                     <SplitLabel value={tally.draws} label="Beraberlik" tone="draw" />
                     <SplitLabel value={tally.awayWins} label={awayName} tone="away" align="right" />
                   </View>
-                  <View style={styles.cardDivider} />
-                  <View style={styles.bars}>
-                    <StatBar label="Atılan gol" home={tally.homeGoals} away={tally.awayGoals} />
-                    <StatBar
-                      label="Maç başı gol"
-                      home={Math.round((tally.homeGoals / meetings.length) * 10) / 10}
-                      away={Math.round((tally.awayGoals / meetings.length) * 10) / 10}
-                    />
-                  </View>
                 </View>
+              ) : null}
+
+              {/* ————— Kafa kafaya: iki taraflı düello satırları ————— */}
+              {duel.list.length > 0 ? (
+                <Reveal index={1}>
+                  <View style={[styles.card, styles.cardPad, styles.duelCard]}>
+                    <View style={styles.duelHead}>
+                      <IconTile icon="git-compare" tone="signature" size={32} glow={false} />
+                      <Text style={[styles.cardTitle, styles.duelTitle]} {...textScale.dense}>
+                        Kafa kafaya
+                      </Text>
+                      <View style={styles.duelScore}>
+                        <Text style={[styles.duelScoreNum, duel.a > duel.b ? styles.duelScoreA : null]} {...textScale.badge}>
+                          {duel.a}
+                        </Text>
+                        <Text style={styles.duelScoreDash} {...textScale.badge}>
+                          –
+                        </Text>
+                        <Text style={[styles.duelScoreNum, duel.b > duel.a ? styles.duelScoreB : null]} {...textScale.badge}>
+                          {duel.b}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.duelLegend}>
+                      <View style={styles.duelLegendItem}>
+                        <View style={[styles.duelDot, { backgroundColor: DUEL_A }]} />
+                        <Text style={styles.splitName} numberOfLines={1} {...textScale.dense}>
+                          {homeName}
+                        </Text>
+                      </View>
+                      <View style={[styles.duelLegendItem, styles.duelLegendRight]}>
+                        <Text style={[styles.splitName, styles.textRight]} numberOfLines={1} {...textScale.dense}>
+                          {awayName}
+                        </Text>
+                        <View style={[styles.duelDot, { backgroundColor: DUEL_B }]} />
+                      </View>
+                    </View>
+                    {duel.list.map((m) => (
+                      <DuelBar key={m.key} label={m.label} a={m.a} b={m.b} lowerIsBetter={m.lowerIsBetter} />
+                    ))}
+                  </View>
+                </Reveal>
               ) : null}
 
               {/* ————— Form ————— */}
@@ -457,9 +545,9 @@ export default function H2HScreen() {
                   <Text style={[styles.cardTitle, styles.cardTitlePad]} {...textScale.dense}>
                     Son 5 maç
                   </Text>
-                  <FormLine name={homeName} logo={homeStanding?.logo ?? null} form={homeForm} />
+                  <FormLine side="a" name={homeName} logo={homeStanding?.logo ?? null} form={homeForm} />
                   <View style={styles.formDivider} />
-                  <FormLine name={awayName} logo={awayStanding?.logo ?? null} form={awayForm} />
+                  <FormLine side="b" name={awayName} logo={awayStanding?.logo ?? null} form={awayForm} />
                 </View>
               ) : null}
 
@@ -503,6 +591,16 @@ export default function H2HScreen() {
       />
     </SafeAreaView>
   );
+}
+
+/** Form dizisinin puanı: G=3, B=1, M=0 (son beş maç). */
+function formPoints(form: string): number {
+  let total = 0;
+  for (const ch of form) {
+    if (ch === "G" || ch === "W") total += 3;
+    else if (ch === "B" || ch === "D") total += 1;
+  }
+  return total;
 }
 
 /** Puan tablosunda takımın satırı — kimlik yoksa ada göre bulunur. */
@@ -600,12 +698,14 @@ function TeamPicker({
 
 /** Sahnedeki takım sütunu: arma, ad, sıra · puan. */
 const HeroTeam = memo(function HeroTeam({
+  side,
   name,
   logo,
   rank,
   points,
   onPress,
 }: {
+  side: "a" | "b";
   name: string;
   logo: string | null;
   rank: number | null;
@@ -614,14 +714,24 @@ const HeroTeam = memo(function HeroTeam({
 }) {
   const body = (
     <>
-      <TeamLogo name={name} logo={logo} size={layout.crestXl} onDark />
+      <HaloFrame
+        size={layout.crestXl}
+        shape="rounded"
+        ring={side === "a" ? [DUEL_A, colors.gradientSignature[1]] : [DUEL_B, colors.gradientSignature[0]]}
+        thickness={2}
+        gap={4}
+      >
+        <TeamLogo name={name} logo={logo} size={layout.crestXl} plain onDark />
+      </HaloFrame>
       <Text style={styles.heroName} numberOfLines={2} {...textScale.dense}>
         {name}
       </Text>
       {rank != null ? (
-        <Text style={styles.heroMeta} numberOfLines={1} {...textScale.dense}>
-          {rank}. sıra{points != null ? ` · ${points} P` : ""}
-        </Text>
+        <View style={styles.heroMetaPill}>
+          <Text style={styles.heroMeta} numberOfLines={1} {...textScale.dense}>
+            {rank}. sıra{points != null ? ` · ${points} P` : ""}
+          </Text>
+        </View>
       ) : null}
     </>
   );
@@ -668,7 +778,7 @@ const SplitLabel = memo(function SplitLabel({
       <Text
         style={[
           styles.splitValue,
-          tone === "home" ? styles.splitValueHome : tone === "draw" ? styles.splitValueDraw : null,
+          tone === "home" ? styles.splitValueHome : tone === "draw" ? styles.splitValueDraw : styles.splitValueAway,
         ]}
         {...textScale.dense}
       >
@@ -682,22 +792,30 @@ const SplitLabel = memo(function SplitLabel({
 });
 
 const FormLine = memo(function FormLine({
+  side,
   name,
   logo,
   form,
 }: {
+  side: "a" | "b";
   name: string;
   logo: string | null;
   form: string;
 }) {
   return (
     <View style={styles.formLine}>
-      <TeamLogo name={name} logo={logo} size={layout.crestSm} />
+      <View style={[styles.formSide, { backgroundColor: side === "a" ? DUEL_A : DUEL_B }]} />
+      <TeamLogo name={name} logo={logo} size={layout.crestMd} />
       <Text style={styles.formName} numberOfLines={1} {...textScale.dense}>
         {name}
       </Text>
       {form ? (
-        <FormChips form={form} size="sm" />
+        <>
+          <FormChips form={form} size="sm" />
+          <Text style={styles.formPoints} {...textScale.badge}>
+            {formPoints(form)}P
+          </Text>
+        </>
       ) : (
         <Text style={styles.formEmpty} {...textScale.dense}>
           maç yok
@@ -738,6 +856,12 @@ const MeetingRow = memo(function MeetingRow({
       accessibilityRole="button"
       accessibilityLabel={`${meeting.first_team_name} ${homeScore ?? "-"} ${awayScore ?? "-"} ${meeting.second_team_name}`}
     >
+      <View
+        style={[
+          styles.meetStripe,
+          { backgroundColor: result === "G" ? colors.win : result === "M" ? colors.loss : colors.draw },
+        ]}
+      />
       <Text style={styles.meetDate} {...textScale.dense}>
         {formatDateShort(meeting.date)}
       </Text>
@@ -1047,7 +1171,26 @@ const styles = StyleSheet.create({
   },
   heroMeta: {
     ...type.caption,
-    color: colors.onDarkMuted,
+    color: colors.onDark,
+  },
+  heroMetaPill: {
+    paddingHorizontal: space.sm,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+    backgroundColor: colors.inkPill,
+    borderWidth: hairline,
+    borderColor: colors.inkPillBorder,
+  },
+  heroScoreRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.s,
+  },
+  heroScoreLeadA: {
+    color: dark.accent,
+  },
+  heroScoreLeadB: {
+    color: colors.brandOnDark,
   },
   heroMiddle: {
     alignItems: "center",
@@ -1111,7 +1254,10 @@ const styles = StyleSheet.create({
   },
   splitHome: { backgroundColor: colors.accent },
   splitDraw: { backgroundColor: colors.slateSoft },
-  splitAway: { backgroundColor: colors.slate },
+  splitAway: { backgroundColor: DUEL_B },
+  splitValueAway: {
+    color: colors.brandAccent,
+  },
   splitLegend: {
     flexDirection: "row",
     gap: space.sm,
@@ -1146,6 +1292,85 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     paddingVertical: space.md,
   },
+  formSide: {
+    width: 3,
+    height: 22,
+    borderRadius: 2,
+    marginLeft: -space.sm,
+  },
+  formPoints: {
+    ...type.numSmStrong,
+    color: colors.textSecondary,
+    minWidth: 26,
+    textAlign: "right",
+  },
+  duelCard: {
+    gap: space.xs,
+  },
+  duelHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    marginBottom: space.xs,
+  },
+  duelTitle: {
+    flex: 1,
+  },
+  duelScore: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xxs,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface2,
+  },
+  duelScoreNum: {
+    ...type.scoreXs,
+    color: colors.textSecondary,
+  },
+  duelScoreA: {
+    color: colors.accentText,
+  },
+  duelScoreB: {
+    color: colors.brandAccent,
+  },
+  duelScoreDash: {
+    ...type.scoreXs,
+    color: colors.textTertiary,
+  },
+  duelLegend: {
+    flexDirection: "row",
+    gap: space.md,
+    paddingBottom: space.xs,
+    marginBottom: space.xs,
+    borderBottomWidth: hairline,
+    borderBottomColor: colors.separator,
+  },
+  duelLegendItem: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+  },
+  duelLegendRight: {
+    justifyContent: "flex-end",
+  },
+  duelDot: {
+    width: 8,
+    height: 8,
+    borderRadius: radius.pill,
+  },
+  meetStripe: {
+    position: "absolute",
+    left: 0,
+    top: space.sm,
+    bottom: space.sm,
+    width: 3,
+    borderTopRightRadius: 3,
+    borderBottomRightRadius: 3,
+  },
   formName: {
     ...type.label,
     color: colors.textPrimary,
@@ -1176,6 +1401,7 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   meetRow: {
+    overflow: "hidden",
     flexDirection: "row",
     alignItems: "center",
     gap: space.sm,

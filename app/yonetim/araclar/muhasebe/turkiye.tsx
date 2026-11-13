@@ -21,12 +21,13 @@ import { useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { AdminScreen, Panel, RecordCard, StatRow, confirmAction, useAdminMutation } from "@/components/admin";
+import { LineRow, Lines, ToolStage } from "@/components/admin/tools/ToolKit";
 import { AccountingNav } from "@/components/admin/accounting/AccountingNav";
 import { CityDetail, MonthRangeFields, NaEntrySheet, NaRateSheet, NationalWarnings, type NaEntryDialog } from "@/components/admin/accounting/national";
 import { AccountStrip, Muted, Note } from "@/components/admin/accounting/parts";
 import { TransferSheet } from "@/components/admin/accounting/financeSheets";
 import { shareCsv } from "@/components/admin/accounting/share";
-import { Button, Chip, ChipGroup, EmptyState, Input, SegmentedControl, SkeletonCard, Tabs, Touchable } from "@/components/ui";
+import { Button, Chip, ChipGroup, EmptyState, GradientBar, Input, Reveal, SegmentedControl, SkeletonCard, Tabs, Touchable } from "@/components/ui";
 import { hasAnyPermission } from "@/lib/admin/access";
 import { errorText } from "@/lib/admin/errors";
 import { formatDate } from "@/lib/admin/format";
@@ -38,6 +39,7 @@ import {
   createTransfer,
   isNationwideRole,
   listAccounts,
+  compactMoney,
   monthLabel,
   money,
   naCreateEntry,
@@ -209,19 +211,24 @@ export default function NationalAccountingScreen() {
             />
           ) : (
             <>
-              <StatRow
-                items={[
-                  { label: `Toplam alacak · ${totals.debtorCount} il borçlu`, value: money(totals.balance), tone: balanceTone(totals.balance) },
-                  { label: "Dönem tahakkuku", value: money(totals.due) },
-                ]}
-              />
-              <StatRow
-                items={[
-                  { label: `Tahsilat · ${data.payments.length} ödeme`, value: money(totals.paid), tone: "win" },
-                  { label: `Maç · ${totals.cityCount} il`, value: totals.matchCount.toLocaleString("tr-TR") },
-                  { label: "Devreden", value: money(totals.opening), tone: balanceTone(totals.opening) },
-                ]}
-              />
+              <Reveal index={0}>
+                <ToolStage
+                  icon="earth"
+                  tone="gold"
+                  overline={`Toplam alacak · ${totals.debtorCount} il borçlu`}
+                  value={money(totals.balance)}
+                  valueTone={totals.balance > 0 ? "danger" : undefined}
+                  caption={`${monthLabel(data.range.from)} – ${monthLabel(data.range.to)} · ${totals.cityCount} il`}
+                  stats={[
+                    { label: "Tahakkuk", value: compactMoney(totals.due) },
+                    { label: "Tahsilat", value: compactMoney(totals.paid), tone: "win" },
+                    { label: "Maç", value: totals.matchCount },
+                    { label: "Devreden", value: compactMoney(totals.opening) },
+                  ]}
+                >
+                  {totals.due ? <GradientBar value={totals.paid / Math.max(1, totals.due + totals.opening)} height={6} gradient={[colors.tileTones.mint[1], colors.tileTones.mint[0]]} track={colors.inkTile} /> : null}
+                </ToolStage>
+              </Reveal>
               {totals.adjustment ? <Muted>{`Hesaplanan ${money(totals.calculated)} · düzeltme ${money(totals.adjustment, { signed: true })}`}</Muted> : <Muted>{`${monthLabel(data.range.from)} – ${monthLabel(data.range.to)}`}</Muted>}
               <NationalWarnings unassigned={data.unassignedMatches} noRates={!rates.isLoading && !rateList.length} canManage={canManage} onRates={() => setTab("rates")} />
 
@@ -230,19 +237,26 @@ export default function NationalAccountingScreen() {
                   <Input variant="search" leadingIcon="search" value={search} onChangeText={setSearch} placeholder="İl ara" autoCapitalize="none" />
                   <Button label="Sezon satırları CSV" icon="share-outline" size="sm" variant="ghost" onPress={() => void shareCsv(`turkiye-muhasebe-satirlar-${data.range.from}-${data.range.to}.csv`, nationalLinesCsv(data))} />
                   {visibleCities.length ? (
-                    visibleCities.map((c) => (
-                      <RecordCard
-                        key={c.cityId}
-                        title={c.name}
-                        subtitle={c.seasons.map((x) => x.seasonName).slice(0, 3).join(", ") || "—"}
-                        meta={`Devreden ${money(c.opening)} · ${c.matchCount} maç · tahakkuk ${money(c.due)}${c.adjustment ? ` (düzeltme ${money(c.adjustment, { signed: true })})` : ""} · tahsilat ${money(c.paid)}`}
-                        icon="location-outline"
-                        value={money(c.balance)}
-                        valueTone={balanceTone(c.balance)}
-                        badges={[c.lastPayment ? { label: `Son ödeme ${formatDate(c.lastPayment.date)} · ${money(c.lastPayment.amount)}`, tone: "neutral" } : null]}
-                        onPress={() => setCityId(c.cityId)}
-                      />
-                    ))
+                    <Lines>
+                      {visibleCities.map((c) => (
+                        <LineRow
+                          key={c.cityId}
+                          icon="location"
+                          tone={c.balance > 0 ? "red" : "mint"}
+                          title={c.name}
+                          sub={`${c.matchCount} maç · tahakkuk ${compactMoney(c.due)} · tahsilat ${compactMoney(c.paid)}`}
+                          meta={c.lastPayment ? `Son ödeme ${formatDate(c.lastPayment.date)} · ${money(c.lastPayment.amount)}` : "Ödeme yok"}
+                          metaIcon="time-outline"
+                          value={money(c.balance)}
+                          valueTone={balanceTone(c.balance)}
+                          valueSub={c.balance > 0 ? "borç" : c.balance < 0 ? "fazla ödeme" : "kapalı"}
+                          stripe={c.balance > 0 ? colors.danger : null}
+                          onPress={() => setCityId(c.cityId)}
+                        >
+                          {c.due ? <GradientBar value={c.paid / Math.max(1, c.due + c.opening)} height={4} gradient={[colors.tileTones.mint[1], colors.tileTones.mint[0]]} style={styles.cityBar} /> : null}
+                        </LineRow>
+                      ))}
+                    </Lines>
                   ) : (
                     <Muted>Bu dönemde maçı ya da hesabı olan il yok.</Muted>
                   )}
@@ -390,6 +404,7 @@ export default function NationalAccountingScreen() {
 }
 
 const styles = StyleSheet.create({
+  cityBar: { marginTop: space.xs },
   row: { flexDirection: "row", gap: space.sm },
   flex: { flex: 1 },
   strong: { ...type.label, color: colors.textPrimary },

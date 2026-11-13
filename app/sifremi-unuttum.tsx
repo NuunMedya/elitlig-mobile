@@ -150,6 +150,7 @@ export default function ForgotPasswordScreen() {
         <>
           <AuthCard>
             <Input
+              floating
               label="Kullanıcı adı veya e-posta"
               value={identifier}
               onChangeText={(v) => {
@@ -190,6 +191,7 @@ export default function ForgotPasswordScreen() {
 
           <AuthCard>
             <Input
+              floating
               label="Kullanıcı adı veya e-posta"
               value={identifier}
               onChangeText={(v) => {
@@ -209,6 +211,7 @@ export default function ForgotPasswordScreen() {
               editable={!busy}
             />
             <Input
+              floating
               ref={codeRef}
               label="Sıfırlama kodu"
               value={code}
@@ -235,6 +238,7 @@ export default function ForgotPasswordScreen() {
 
           <AuthCard title="Yeni şifre">
             <Input
+              floating
               ref={passwordRef}
               label="Yeni şifre"
               value={password}
@@ -259,6 +263,7 @@ export default function ForgotPasswordScreen() {
             />
             <PasswordRules value={password} minLength={PASSWORD_MIN} />
             <Input
+              floating
               ref={repeatRef}
               label="Yeni şifre (tekrar)"
               value={repeat}

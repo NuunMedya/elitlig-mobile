@@ -38,6 +38,7 @@ import { Redirect, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 import {
   Badge,
   BottomSheet,
@@ -46,7 +47,14 @@ import {
   Chip,
   EmptyState,
   ErrorState,
+  IconTile,
   Input,
+  MetricGrid,
+  MetricTile,
+  Odometer,
+  Reveal,
+  toneColors,
+  type IconTileTone,
   ScreenHeader,
   SkeletonCard,
   Tabs,
@@ -70,7 +78,7 @@ import {
 import { ApiError } from "@/lib/http";
 import { useAuth } from "@/providers/AuthProvider";
 import { useTeamAccess } from "@/components/club/team/useTeamAccess";
-import { colors, elevate, hairline, haptics, layout, radius, space, textScale, type } from "@/theme";
+import { colors, elevate, hairline, haptics, layout, radius, space, textScale, type, upperTR } from "@/theme";
 
 type Tab = "pano" | "taleplerim";
 
@@ -457,9 +465,16 @@ export default function MacAlScreen() {
                     variant="inline"
                   />
                 ) : (
-                  days.map((day) => (
-                    <Card key={day.date} padding="md" style={styles.dayCard}>
-                      <Text style={styles.dayTitle}>{dayLabel(day.date)}</Text>
+                  days.map((day, dayIndex) => (
+                    <Reveal key={day.date} index={dayIndex} limit={7}>
+                    <Card padding="md" style={styles.dayCard}>
+                      <View style={styles.dayHead}>
+                        <IconTile icon="calendar" tone="violet" size={28} glow={false} />
+                        <Text style={styles.dayTitle}>{dayLabel(day.date)}</Text>
+                        <Text style={styles.dayCount} {...textScale.badge}>
+                          {`${day.cells.filter((cell) => cell.status === "open" || cell.status === "awaiting").length} boş saat`}
+                        </Text>
+                      </View>
                       <View style={styles.slotWrap}>
                         {day.cells.map((cell) => (
                           <SlotCell
@@ -472,6 +487,7 @@ export default function MacAlScreen() {
                         ))}
                       </View>
                     </Card>
+                    </Reveal>
                   ))
                 )}
 
@@ -493,15 +509,24 @@ export default function MacAlScreen() {
                 variant="inline"
               />
             ) : (
-              requestsQuery.data.items.map((request) => (
-                <RequestCard
-                  key={request.public_id}
-                  request={request}
-                  highlighted={request.public_id === highlightId}
-                  onWithdraw={() => withdraw.mutate(request.public_id)}
-                  withdrawing={withdraw.isPending}
-                />
-              ))
+              <>
+                {/* ÖZET: bekleyen · onaylanan · toplam talep. */}
+                <MetricGrid columns={3}>
+                  <MetricTile label="Bekleyen" value={String(requestsQuery.data.items.filter((r) => r.status === "pending").length)} hint="yanıt bekliyor" tone="warn" />
+                  <MetricTile label="Onaylı" value={String(requestsQuery.data.items.filter((r) => r.status === "approved").length)} hint="maça döndü" tone="win" />
+                  <MetricTile label="Toplam" value={String(requestsQuery.data.items.length)} hint="tüm talepler" tone="brand" />
+                </MetricGrid>
+                {requestsQuery.data.items.map((request, index) => (
+                  <Reveal key={request.public_id} index={index} limit={8}>
+                    <RequestCard
+                      request={request}
+                      highlighted={request.public_id === highlightId}
+                      onWithdraw={() => withdraw.mutate(request.public_id)}
+                      withdrawing={withdraw.isPending}
+                    />
+                  </Reveal>
+                ))}
+              </>
             )}
           </>
         )}
@@ -511,9 +536,12 @@ export default function MacAlScreen() {
       {tab === "pano" && selected.size > 0 ? (
         <View style={[styles.bar, { paddingBottom: space.md + insets.bottom }]}>
           <View style={styles.barTexts}>
-            <Text style={styles.barTitle} {...textScale.dense}>
-              {selected.size} saat seçildi
-            </Text>
+            <View style={styles.barCount}>
+              <Odometer value={selected.size} style={styles.barNumber} />
+              <Text style={styles.barTitle} {...textScale.dense}>
+                saat seçildi
+              </Text>
+            </View>
             <Touchable feedback="none" onPress={() => setSelected(new Set())} accessibilityRole="button" accessibilityLabel="Seçimi temizle">
               <Text style={styles.barClear} {...textScale.dense}>
                 Seçimi temizle
@@ -613,12 +641,17 @@ const SlotCell = React.memo(function SlotCell({
         selected && styles.slotSelected,
       ]}
     >
-      <Text
-        style={[styles.slotText, selected && styles.slotTextSelected]}
-        allowFontScaling={false}
-      >
-        {cell.label}
-      </Text>
+      {selected ? <LinearGradient colors={colors.gradientBrand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} /> : null}
+      <View style={styles.slotTop}>
+        <View style={[styles.slotDot, { backgroundColor: selected ? colors.textOnBrand : view.tone }]} />
+        <Text
+          style={[styles.slotText, selected && styles.slotTextSelected]}
+          allowFontScaling={false}
+        >
+          {cell.label}
+        </Text>
+        {selected ? <Ionicons name="checkmark-circle" size={14} color={colors.textOnBrand} style={styles.slotCheck} /> : null}
+      </View>
       {view.hint ? (
         <Text
           style={[styles.slotHint, selected && styles.slotHintSelected]}
@@ -634,6 +667,8 @@ const SlotCell = React.memo(function SlotCell({
 
 /* ═══════════════════════════ TALEP KARTI ═══════════════════════════ */
 
+const REQUEST_TILE: Record<string, IconTileTone> = { pending: "gold", approved: "mint", rejected: "red", cancelled: "neutral" };
+
 function RequestCard({
   request,
   highlighted,
@@ -646,42 +681,67 @@ function RequestCard({
   onWithdraw: () => void;
   withdrawing: boolean;
 }) {
+  const tone = REQUEST_TONE[request.status] ?? "neutral";
   return (
     <Card padding="md" style={[styles.requestCard, highlighted ? styles.requestCardActive : null]}>
+      {/* Sol kenar: durum şeridi (bekliyor sarı · onay yeşil · ret kırmızı). */}
+      <View style={[styles.requestStrip, { backgroundColor: toneColors(tone).fg }]} />
       <View style={styles.requestHead}>
-        <Text style={styles.requestVenue} numberOfLines={1}>
-          {request.venue_name}
-        </Text>
-        <Badge
-          label={MATCH_REQUEST_STATUS_LABELS[request.status] ?? request.status}
-          tone={REQUEST_TONE[request.status] ?? "neutral"}
-          size="xs"
-        />
+        <IconTile icon="location" tone={REQUEST_TILE[request.status] ?? "neutral"} size={36} glow={false} />
+        <View style={styles.requestTitles}>
+          <Text style={styles.requestVenue} numberOfLines={1}>
+            {request.venue_name}
+          </Text>
+          {request.venue_location ? (
+            <Text style={styles.requestMeta} numberOfLines={1}>
+              {request.venue_location}
+            </Text>
+          ) : null}
+        </View>
+        <Badge label={MATCH_REQUEST_STATUS_LABELS[request.status] ?? request.status} tone={tone} size="xs" />
       </View>
-
-      {request.venue_location ? (
-        <Text style={styles.requestMeta} numberOfLines={1}>
-          {request.venue_location}
-        </Text>
-      ) : null}
 
       <View style={styles.slotWrap}>
         {(request.slots ?? []).map((slot, index) => (
           <View key={`${slot.date}-${slot.hour}-${slot.minute}-${index}`} style={styles.requestSlot}>
+            <Ionicons name="time-outline" size={12} color={colors.textTertiary} />
             <Text style={styles.requestSlotText} allowFontScaling={false}>
-              {dayLabel(slot.date)} · {slot.label ?? `${String(slot.hour).padStart(2, "0")}:${String(slot.minute).padStart(2, "0")}`}
+              {dayLabel(slot.date)}
+            </Text>
+            <Text style={styles.requestSlotTime} allowFontScaling={false}>
+              {slot.label ?? `${String(slot.hour).padStart(2, "0")}:${String(slot.minute).padStart(2, "0")}`}
             </Text>
           </View>
         ))}
       </View>
 
-      {request.note ? <Text style={styles.requestNote} {...textScale.long}>Notun: {request.note}</Text> : null}
-      {request.admin_note ? (
-        <Text style={styles.requestNote} {...textScale.long}>Yönetici notu: {request.admin_note}</Text>
+      {request.note || request.admin_note ? (
+        <View style={styles.requestNotes}>
+          {request.note ? (
+            <View style={styles.requestNoteRow}>
+              <Text style={styles.requestNoteLabel} {...textScale.badge}>
+                {upperTR("Notun")}
+              </Text>
+              <Text style={styles.requestNote} {...textScale.long}>
+                {request.note}
+              </Text>
+            </View>
+          ) : null}
+          {request.admin_note ? (
+            <View style={styles.requestNoteRow}>
+              <Text style={styles.requestNoteLabel} {...textScale.badge}>
+                {upperTR("Yönetici")}
+              </Text>
+              <Text style={styles.requestNote} {...textScale.long}>
+                {request.admin_note}
+              </Text>
+            </View>
+          ) : null}
+        </View>
       ) : null}
 
       {request.status === "pending" ? (
-        <Button label="Talebi geri çek" variant="ghost" size="sm" onPress={onWithdraw} loading={withdrawing} />
+        <Button label="Talebi geri çek" variant="ghost" size="sm" icon="arrow-undo-outline" onPress={onWithdraw} loading={withdrawing} />
       ) : null}
     </Card>
   );
@@ -712,7 +772,9 @@ const styles = StyleSheet.create({
     borderTopColor: colors.border,
   },
   barTexts: { flex: 1, gap: 2 },
-  barTitle: { ...type.h3, color: colors.textPrimary },
+  barCount: { flexDirection: "row", alignItems: "flex-end", gap: space.xs },
+  barNumber: { ...type.scoreMd, color: colors.brandAccent },
+  barTitle: { ...type.h4, color: colors.textPrimary, marginBottom: space.xxs },
   barClear: { ...type.caption, color: colors.brandAccent },
   sheetBody: { gap: space.md, paddingBottom: space.md },
   sheetLabel: { ...type.overline, color: colors.textTertiary },
@@ -737,8 +799,10 @@ const styles = StyleSheet.create({
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendText: { ...type.caption, color: colors.textSecondary },
 
-  dayCard: { gap: space.sm },
-  dayTitle: { ...type.h3, color: colors.textPrimary },
+  dayCard: { gap: space.md },
+  dayHead: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  dayTitle: { ...type.h3, color: colors.textPrimary, flex: 1 },
+  dayCount: { ...type.numSmStrong, color: colors.textTertiary },
   slotWrap: { flexDirection: "row", flexWrap: "wrap", gap: space.s },
   /* Hücre iki satırlı (saat + açıklama) ve İKİ EŞİT SÜTUNDA durur: içerik
      genişliğine göre boyutlanan hücreler (96–168px) her günü farklı bir
@@ -752,29 +816,44 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     gap: 1,
     backgroundColor: colors.surface2,
+    overflow: "hidden",
   },
+  slotTop: { flexDirection: "row", alignItems: "center", gap: space.s },
+  slotDot: { width: 6, height: 6, borderRadius: radius.pill },
+  slotCheck: { marginLeft: "auto" },
   slotDisabled: { opacity: 0.5 },
   /** Kendi takımını ilgilendiren hücre: sönük değil, hafif dolgulu. */
   slotMine: { opacity: 1, backgroundColor: colors.surface3 },
   slotSelected: { backgroundColor: colors.brand, borderColor: colors.brand, opacity: 1 },
-  slotText: { ...type.label, color: colors.textPrimary },
+  slotText: { ...type.scoreXs, color: colors.textPrimary },
   slotTextSelected: { color: colors.textOnBrand },
   slotHint: { ...type.micro, color: colors.textTertiary, letterSpacing: 0 },
   slotHintSelected: { color: colors.textOnBrand },
 
   submitHint: { ...type.bodySm, color: colors.textSecondary, lineHeight: 19 },
 
-  requestCard: { gap: space.sm },
+  requestCard: { gap: space.md, overflow: "hidden" },
+  requestStrip: { position: "absolute", left: 0, top: 0, bottom: 0, width: 3 },
+  requestTitles: { flex: 1, gap: space.xxs },
+  requestSlotTime: { ...type.numSmStrong, color: colors.textPrimary },
+  requestNotes: { gap: space.s, padding: space.sm, borderRadius: radius.md, backgroundColor: colors.surface2 },
+  requestNoteRow: { gap: space.xxs },
+  requestNoteLabel: { ...type.overline, color: colors.textTertiary },
   /** Bildirimden gelinen kart: "aradığın bu" demek için mor çerçeve. */
   requestCardActive: { borderColor: colors.brandBorder, borderWidth: 1 },
   requestHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.sm },
-  requestVenue: { ...type.h3, color: colors.textPrimary, flex: 1 },
+  requestVenue: { ...type.h3, color: colors.textPrimary },
   requestMeta: { ...type.caption, color: colors.textTertiary },
   requestSlot: {
-    backgroundColor: colors.surface3,
-    borderRadius: radius.sm,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+    backgroundColor: colors.surface2,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+    borderRadius: radius.pill,
     paddingHorizontal: space.sm,
-    paddingVertical: space.xs,
+    height: 28,
   },
   requestSlotText: { ...type.caption, color: colors.textSecondary },
   requestNote: { ...type.bodySm, color: colors.textSecondary, lineHeight: 19 },

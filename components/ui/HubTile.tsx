@@ -17,6 +17,8 @@ import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import type { StyleProp, ViewStyle } from "react-native";
 import { colors, elevate, layout, radius, space, textScale, type } from "@/theme";
+import { GradientFill } from "./GradientFill";
+import { IconTile, type IconTileTone } from "./NightKit";
 import { Touchable } from "./Pressable";
 
 export type HubTone = "brand" | "accent" | "live" | "warn" | "win" | "info" | "neutral" | "danger";
@@ -30,6 +32,18 @@ const TONE: Record<HubTone, { fg: string; bg: string }> = {
   info: { fg: colors.info, bg: colors.infoDim },
   neutral: { fg: colors.textSecondary, bg: colors.surface3 },
   danger: { fg: colors.danger, bg: colors.dangerDim },
+};
+
+/** Tonun degrade ikon kutusu karşılığı (Gece teması: renkli kutu + beyaz ikon). */
+const TILE_TONE: Record<HubTone, IconTileTone> = {
+  brand: "violet",
+  accent: "cyan",
+  live: "pink",
+  warn: "gold",
+  win: "mint",
+  info: "cyan",
+  neutral: "neutral",
+  danger: "red",
 };
 
 export interface HubTileProps {
@@ -53,6 +67,7 @@ export const HubTile = React.memo(function HubTile({
   style,
 }: HubTileProps) {
   const palette = TONE[tone];
+  const tileTone = TILE_TONE[tone];
   return (
     <Touchable
       feedback="card"
@@ -62,10 +77,11 @@ export const HubTile = React.memo(function HubTile({
       accessibilityLabel={`${title}${subtitle ? `, ${subtitle}` : ""}${badge ? `, ${badge} bekleyen` : ""}`}
       style={[styles.tile, style]}
     >
+      <GradientFill radius="xl" />
+      {/* Köşedeki tonlu ışık: karonun kimliği renginden de okunur. */}
+      <View style={[styles.corner, { backgroundColor: palette.bg }]} pointerEvents="none" />
       <View style={styles.top}>
-        <View style={[styles.icon, { backgroundColor: palette.bg }]}>
-          <Ionicons name={icon} size={19} color={palette.fg} />
-        </View>
+        <IconTile icon={icon} tone={tileTone} size={40} />
         {badge ? (
           <View style={styles.badge}>
             <Text style={styles.badgeText} {...textScale.badge}>
@@ -73,7 +89,9 @@ export const HubTile = React.memo(function HubTile({
             </Text>
           </View>
         ) : (
-          <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
+          <View style={styles.arrow}>
+            <Ionicons name="arrow-forward" size={13} color={palette.fg} />
+          </View>
         )}
       </View>
       <Text style={styles.title} numberOfLines={1} {...textScale.dense}>
@@ -146,13 +164,31 @@ const styles = StyleSheet.create({
     borderRadius: radius.xl,
     backgroundColor: colors.surface1,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    borderColor: colors.glassLine,
+    overflow: "hidden",
+  },
+  corner: {
+    position: "absolute",
+    right: -40,
+    top: -40,
+    width: 110,
+    height: 110,
+    borderRadius: radius.pill,
+    opacity: 0.7,
+  },
+  arrow: {
+    width: 26,
+    height: 26,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface3,
   },
   top: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
-    marginBottom: space.xs,
+    marginBottom: space.s,
   },
   icon: {
     width: 36,

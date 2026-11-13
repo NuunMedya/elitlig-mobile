@@ -1,8 +1,17 @@
 /**
  * YÖNETİM FORM ALANLARI — Input'un yanında seçim, tarih, anahtar ve renk.
  *
- * Her alan aynı anatomiyi taşır: üstte etiket, altta ipucu/hata. Seçim ve
- * tarih alanları dokununca kendi alt sayfasını açar (OptionSheet/DateSheet).
+ * YÖNETİM TASARIM DİLİ (form):
+ *   · Metin alanları `Input floating` (58 px, etiket alanın içinde süzülür).
+ *   · Seçim ve tarih alanı (`FieldBox`) AYNI ölçüde ve AYNI anatomide durur:
+ *     etiket kutunun içinde küçük, değer altında büyük; boşken etiket yer
+ *     tutucu gibi ortalanır. Solda ikon, sağda aşağı ok. Böylece metin alanı
+ *     ile seçim alanı yan yana geldiğinde form tek bir ritimle okunur.
+ *   · Anahtar (`ToggleField`) kendi kutusunda satırdır: başlık + ipucu, sağda
+ *     anahtar. Segment/çip/renk alanlarının etiketi kutunun üstünde küçük
+ *     etikettir (`FieldLabel`).
+ *   · Hata: kenarlık kırmızı + altında cümle (yalnız renge güvenilmez).
+ * Seçim ve tarih alanları dokununca kendi alt sayfasını açar (OptionSheet/DateSheet).
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -11,7 +20,7 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { Chip, ChipGroup, Input, SegmentedControl, Toggle, Touchable } from "@/components/ui";
 import { formatDate, formatDateTime } from "@/lib/admin/format";
-import { colors, hairline, radius, space, textScale, type } from "@/theme";
+import { colors, glowStyle, radius, space, textScale, type } from "@/theme";
 
 import { DateSheet } from "./DateSheet";
 import { OptionSheet, type Option } from "./OptionSheet";
@@ -56,24 +65,43 @@ export function FieldBox({
   error?: string;
   disabled?: boolean;
 }) {
+  const filled = Boolean(value);
   return (
     <View style={styles.field}>
-      {label ? <FieldLabel label={label} required={required} /> : null}
       <Touchable
         onPress={onPress}
         disabled={disabled}
+        feedback="row"
+        haptic="selection"
         style={[styles.box, error ? styles.boxError : null, disabled ? styles.boxDisabled : null]}
         accessibilityRole="button"
         accessibilityLabel={label ? `${label}: ${value || placeholder || "seçilmedi"}` : undefined}
       >
-        {icon ? <Ionicons name={icon} size={18} color={colors.textSecondary} /> : null}
-        <Text
-          style={[styles.boxText, value ? null : styles.placeholder]}
-          numberOfLines={1}
-          {...textScale.dense}
-        >
-          {value || placeholder || "Seç"}
-        </Text>
+        {icon ? (
+          <View style={[styles.boxIcon, filled ? styles.boxIconOn : null]}>
+            <Ionicons name={icon} size={16} color={filled ? colors.brandAccent : colors.textTertiary} />
+          </View>
+        ) : null}
+        <View style={styles.boxTexts}>
+          {label && filled ? (
+            <Text style={styles.boxLabel} numberOfLines={1} {...textScale.dense}>
+              {label}
+              {required ? <Text style={styles.required}> *</Text> : null}
+            </Text>
+          ) : null}
+          <Text
+            style={[styles.boxText, filled ? null : styles.placeholder]}
+            numberOfLines={1}
+            {...textScale.dense}
+          >
+            {filled ? value : label ? `${label}${required ? " *" : ""}` : placeholder || "Seç"}
+          </Text>
+          {!filled && label && placeholder ? (
+            <Text style={styles.boxHintInline} numberOfLines={1} {...textScale.dense}>
+              {placeholder}
+            </Text>
+          ) : null}
+        </View>
         <Ionicons name="chevron-down" size={16} color={colors.textTertiary} />
       </Touchable>
       <FieldHint hint={hint} error={error} />
@@ -279,7 +307,7 @@ export function ToggleField({
   disabled?: boolean;
 }) {
   return (
-    <View style={styles.toggleRow}>
+    <View style={[styles.toggleRow, value ? styles.toggleRowOn : null, disabled ? styles.boxDisabled : null]}>
       <View style={styles.toggleText}>
         <Text style={styles.toggleLabel} {...textScale.dense}>
           {label}
@@ -370,7 +398,7 @@ export function ColorField({
           <Touchable
             key={color}
             onPress={() => onChange(value === color ? null : color)}
-            style={[styles.swatch, { backgroundColor: color }, value === color ? styles.swatchOn : null]}
+            style={[styles.swatch, { backgroundColor: color }, value === color ? [styles.swatchOn, glowStyle(color, 1)] : null]}
             accessibilityLabel={`Renk ${color}`}
             accessibilityState={{ selected: value === color }}
           >
@@ -387,29 +415,55 @@ export const TextField = Input;
 
 const styles = StyleSheet.create({
   field: { gap: space.xs },
-  label: { ...type.label, color: colors.textSecondary },
+  label: { ...type.labelSm, color: colors.textSecondary, paddingHorizontal: space.xxs },
   required: { color: colors.danger },
-  hint: { ...type.caption, color: colors.textTertiary },
+  hint: { ...type.caption, color: colors.textTertiary, paddingHorizontal: space.xxs },
   error: { color: colors.danger },
+  /* Seçim kutusu — Input floating ile aynı ölçü (58 px, radius md, 1 px kenar). */
   box: {
-    minHeight: 46,
+    minHeight: 58,
     flexDirection: "row",
     alignItems: "center",
-    gap: space.sm,
-    paddingHorizontal: space.md,
+    gap: space.md,
+    paddingHorizontal: space.md + space.xxs,
+    paddingVertical: space.sm,
     borderRadius: radius.md,
-    borderWidth: hairline,
+    borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.surface2,
+    backgroundColor: colors.surface1,
   },
   boxError: { borderColor: colors.danger },
   boxDisabled: { opacity: 0.5 },
-  boxText: { ...type.body, color: colors.textPrimary, flex: 1 },
+  boxIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: radius.sm,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface3,
+  },
+  boxIconOn: { backgroundColor: colors.brandDim },
+  boxTexts: { flex: 1, gap: 1 },
+  boxLabel: { ...type.caption, color: colors.textTertiary },
+  boxText: { ...type.bodyLg, color: colors.textPrimary },
+  boxHintInline: { ...type.caption, color: colors.textTertiary },
   placeholder: { color: colors.textTertiary },
-  toggleRow: { flexDirection: "row", alignItems: "center", gap: space.md, paddingVertical: space.xs },
+  toggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    minHeight: 58,
+    paddingHorizontal: space.md + space.xxs,
+    paddingVertical: space.sm,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface1,
+  },
+  toggleRowOn: { borderColor: colors.brandBorder, backgroundColor: colors.brandDim },
   toggleText: { flex: 1, gap: 2 },
-  toggleLabel: { ...type.body, color: colors.textPrimary },
-  swatches: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
-  swatch: { width: 32, height: 32, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
-  swatchOn: { borderWidth: 2, borderColor: colors.textPrimary },
+  toggleLabel: { ...type.h4, color: colors.textPrimary },
+  swatches: { flexDirection: "row", flexWrap: "wrap", gap: space.md },
+  swatch: { width: 36, height: 36, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
+  swatchOn: { borderWidth: 3, borderColor: colors.surface1, transform: [{ scale: 1.08 }] },
 });

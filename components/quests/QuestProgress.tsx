@@ -14,7 +14,8 @@
 
 import { memo, useEffect, useRef, useState, type ReactNode } from "react";
 import { Animated, StyleSheet, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from "react-native";
-import Svg, { Circle } from "react-native-svg";
+import { LinearGradient } from "expo-linear-gradient";
+import Svg, { Circle, Defs, LinearGradient as SvgGradient, Stop } from "react-native-svg";
 
 import { useReduceMotion } from "@/components/ui";
 import { colors, duration, easing, radius } from "@/theme";
@@ -29,11 +30,14 @@ export const QuestBar = memo(function QuestBar({
   track = colors.surface3,
   height = 6,
   delay = 0,
+  gradient,
   style,
 }: {
   /** 0–1 */
   value: number;
   color: string;
+  /** Verilirse dolgu soldan sağa bu degradeyle boyanır (Gece teması); `color` yedek kalır. */
+  gradient?: readonly [string, string];
   /** Ray rengi — sahnede `colors.inkPill`. */
   track?: string;
   height?: number;
@@ -86,7 +90,16 @@ export const QuestBar = memo(function QuestBar({
               transform: [{ translateX: progress.interpolate({ inputRange: [0, 1], outputRange: [-width, 0] }) }],
             },
           ]}
-        />
+        >
+          {gradient ? (
+            <LinearGradient
+              colors={gradient}
+              start={{ x: 0, y: 0.5 }}
+              end={{ x: 1, y: 0.5 }}
+              style={[StyleSheet.absoluteFill, styles.fill]}
+            />
+          ) : null}
+        </Animated.View>
       ) : null}
     </View>
   );
@@ -102,8 +115,11 @@ export const QuestRing = memo(function QuestRing({
   thickness = 7,
   color = colors.yellowCard,
   track = colors.inkTile,
+  gradient,
   children,
 }: {
+  /** Verilirse halka bu iki renk arasında degrade çizilir. */
+  gradient?: readonly [string, string];
   /** 0–1 */
   value: number;
   size?: number;
@@ -144,12 +160,20 @@ export const QuestRing = memo(function QuestRing({
       accessibilityValue={{ min: 0, max: 100, now: Math.round(ratio * 100) }}
     >
       <Svg width={size} height={size} style={styles.ringSvg}>
+        {gradient ? (
+          <Defs>
+            <SvgGradient id="questRing" x1="0" y1="0" x2="1" y2="1">
+              <Stop offset="0" stopColor={gradient[0]} />
+              <Stop offset="1" stopColor={gradient[1]} />
+            </SvgGradient>
+          </Defs>
+        ) : null}
         <Circle cx={size / 2} cy={size / 2} r={r} stroke={track} strokeWidth={thickness} fill="none" />
         <AnimatedCircle
           cx={size / 2}
           cy={size / 2}
           r={r}
-          stroke={color}
+          stroke={gradient ? "url(#questRing)" : color}
           strokeWidth={thickness}
           strokeLinecap="round"
           strokeDasharray={`${circumference} ${circumference}`}
@@ -166,7 +190,7 @@ export const QuestRing = memo(function QuestRing({
 
 const styles = StyleSheet.create({
   track: { alignSelf: "stretch", borderRadius: radius.pill, overflow: "hidden" },
-  fill: { borderRadius: radius.pill },
+  fill: { borderRadius: radius.pill, overflow: "hidden" },
   ring: { alignItems: "center", justifyContent: "center" },
   ringSvg: { position: "absolute", left: 0, top: 0 },
 });

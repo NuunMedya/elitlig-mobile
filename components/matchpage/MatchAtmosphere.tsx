@@ -23,6 +23,7 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { memo } from "react";
 import { Image, StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
+import { Aurora } from "@/components/ui";
 import { colors } from "@/theme";
 
 /** Doku opaklığı — fotoğraf resim değil, tabanı boyayan bir doku olur. */
@@ -57,6 +58,8 @@ export const MatchAtmosphere = memo(function MatchAtmosphere({ photo, wash = tru
           accessibilityIgnoresInvertColors
         />
       ) : null}
+      {/* Gece ışığı: sahnenin arkasında kayan mor/camgöbeği lekeler. */}
+      <Aurora variant="stage" />
       {wash ? (
       <LinearGradient
         colors={colors.matchWash}

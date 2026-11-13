@@ -20,10 +20,11 @@ import * as Clipboard from "expo-clipboard";
 import * as Linking from "expo-linking";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import React, { useEffect, useMemo, useState } from "react";
+import { LinearGradient } from "expo-linear-gradient";
 import { StyleSheet, Text, View } from "react-native";
 
 import { DateField, InfoLine, Panel, SelectField, ToggleField, confirmAction, useAdminMutation } from "@/components/admin";
-import { Badge, Button, Chip, ChipGroup, Input, SegmentedControl, Stepper, useToast } from "@/components/ui";
+import { Aurora, Badge, Button, Chip, ChipGroup, GlowRim, Input, LiveBadge, SectionHeader, SegmentedControl, Stepper, Touchable, useToast } from "@/components/ui";
 import { hasAnyPermission } from "@/lib/admin/access";
 import { formatDate, timeAgo } from "@/lib/admin/format";
 import { WEB_BASE_URL } from "@/lib/config";
@@ -52,6 +53,7 @@ import {
 import { useAuth } from "@/providers/AuthProvider";
 import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
+import { SysGroup } from "../system/SysKit";
 import { ImageUploadField } from "./ImageUploadField";
 
 type Section = "reji" | "kurulum" | "linkler";
@@ -221,15 +223,27 @@ function Director({
 
   return (
     <View style={styles.wrap}>
-      <Panel title="Yayında">
+      {/* Yayın monitörü: o an ekranda olan sahne. Yayın açıkken pembe sahne + neon kenar. */}
+      <View style={styles.monitor}>
+        <LinearGradient colors={b.isLive ? colors.gradientLive : colors.gradientAdminStage} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+        <Aurora variant="stage" height={160} />
+        {b.isLive ? <GlowRim radius={radius.xl} color={colors.onDark} /> : null}
+        <View style={styles.rowBetween}>
+          {b.isLive ? <LiveBadge size="sm" /> : <Text style={styles.offAir} {...textScale.badge}>YAYIN KAPALI</Text>}
+          <Text style={styles.monitorSeq} {...textScale.badge}>
+            SAHNE #{b.scene.sequence}
+          </Text>
+        </View>
         <View style={styles.rowBetween}>
           <View style={styles.flex}>
-            <Text style={styles.onAir} {...textScale.dense}>
+            <Text style={styles.monitorEyebrow} {...textScale.badge}>
+              EKRANDA
+            </Text>
+            <Text style={styles.onAirStage} numberOfLines={2} {...textScale.dense}>
               {onAir?.label ?? b.scene.type}
             </Text>
-            <Text style={styles.hint} {...textScale.dense}>
-              #{b.scene.sequence}
-              {b.scene.updatedAt ? ` · ${timeAgo(b.scene.updatedAt)}` : ""}
+            <Text style={styles.monitorMeta} {...textScale.dense}>
+              {b.scene.updatedAt ? timeAgo(b.scene.updatedAt) : "—"}
             </Text>
           </View>
           {canAir ? (
@@ -246,35 +260,58 @@ function Director({
         {canAir && b.scene.type !== "bos" ? (
           <Button label="Temiz ekran" icon="eye-off-outline" size="sm" variant="ghost" onPress={() => air.mutate({ type: "bos", params: {} })} />
         ) : null}
-      </Panel>
+      </View>
 
       {canUpdate ? (
-        <Panel title="Hızlı ayarlar">
+        <SysGroup title="Hızlı ayarlar" icon="options" tone="cyan">
           <ToggleField label="Yayın açık" hint="Kapalıyken kaplama içerik göstermez." value={b.isLive} onChange={(v) => void patch({ isLive: v })} />
           <ToggleField label="Alt bant görünsün" value={b.tickerVisible} onChange={(v) => void patch({ tickerVisible: v })} />
           <Input label="Alt bant yazısı" value={ticker} onChangeText={setTicker} multiline maxLength={1000} />
           {ticker !== (b.tickerText ?? "") ? <Button label="Alt bandı kaydet" size="sm" onPress={() => void patch({ tickerText: ticker })} /> : null}
-        </Panel>
+        </SysGroup>
       ) : null}
 
-      <Text style={styles.section} {...textScale.dense}>
-        Sahne seç
-      </Text>
+      <SectionHeader title="Sahne seç" icon="albums" iconTone="violet" meta={`${catalog.scenes.length} sahne`} />
       <ChipGroup scrollable contentPadding={0}>
         {groups.map((g) => (
           <Chip key={g} size="sm" label={g} selected={group === g} onPress={() => setGroup(g)} />
         ))}
       </ChipGroup>
-      <ChipGroup>
+      <View style={styles.sceneGrid}>
         {catalog.scenes
           .filter((s) => s.group === group)
-          .map((s) => (
-            <Chip key={s.key} size="sm" label={s.label} selected={sceneKey === s.key} tone={b.scene.type === s.key ? "live" : undefined} onPress={() => setSceneKey(s.key)} />
-          ))}
-      </ChipGroup>
+          .map((s) => {
+            const on = sceneKey === s.key;
+            const live = b.scene.type === s.key;
+            return (
+              <Touchable
+                key={s.key}
+                feedback="card"
+                haptic="selection"
+                onPress={() => setSceneKey(s.key)}
+                style={[styles.sceneTile, on ? styles.sceneTileOn : null, live ? styles.sceneTileLive : null]}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: on }}
+                accessibilityLabel={`${s.label}${live ? ", ekranda" : ""}`}
+              >
+                <View style={styles.rowBetween}>
+                  <Ionicons name={live ? "radio" : on ? "radio-button-on" : "radio-button-off"} size={14} color={live ? colors.live : on ? colors.brandAccent : colors.textTertiary} />
+                  {live ? (
+                    <Text style={styles.sceneLive} {...textScale.badge}>
+                      EKRANDA
+                    </Text>
+                  ) : null}
+                </View>
+                <Text style={styles.sceneLabel} numberOfLines={2} {...textScale.dense}>
+                  {s.label}
+                </Text>
+              </Touchable>
+            );
+          })}
+      </View>
 
       {scene ? (
-        <Panel title={scene.label}>
+        <SysGroup title={scene.label} icon="film" tone="red">
           <Text style={styles.hint} {...textScale.long}>
             {scene.hint}
           </Text>
@@ -423,7 +460,7 @@ function Director({
               Sahneyi yayına vermek için panorama.broadcast yetkisi gerekir.
             </Text>
           )}
-        </Panel>
+        </SysGroup>
       ) : null}
     </View>
   );
@@ -609,6 +646,18 @@ const styles = StyleSheet.create({
   hint: { ...type.caption, color: colors.textSecondary },
   section: { ...type.overline, color: colors.textTertiary },
   onAir: { ...type.h3, color: colors.live },
+  monitor: { gap: space.md, padding: space.lg, borderRadius: radius.xl, overflow: "hidden", minHeight: 170 },
+  offAir: { ...type.micro, color: colors.onDarkMuted, paddingHorizontal: space.sm, paddingVertical: 2, borderRadius: radius.pill, backgroundColor: colors.inkPill },
+  monitorSeq: { ...type.micro, color: colors.onDarkMuted },
+  monitorEyebrow: { ...type.overline, color: colors.adminAccent },
+  onAirStage: { ...type.h1, color: colors.onDark },
+  monitorMeta: { ...type.caption, color: colors.onDarkMuted },
+  sceneGrid: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
+  sceneTile: { width: "48%", flexGrow: 1, minHeight: 72, gap: space.xs, padding: space.md, borderRadius: radius.xl, backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border },
+  sceneTileOn: { backgroundColor: colors.brandDim, borderColor: colors.brand },
+  sceneTileLive: { borderColor: colors.live },
+  sceneLive: { ...type.nano, color: colors.live },
+  sceneLabel: { ...type.label, color: colors.textPrimary },
   preview: {
     flexDirection: "row",
     gap: space.sm,

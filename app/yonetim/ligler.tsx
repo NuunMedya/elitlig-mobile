@@ -17,7 +17,6 @@ import {
   AdminList,
   AdminScreen,
   FormSheet,
-  RecordCard,
   SelectField,
   confirmAction,
   useAdminMutation,
@@ -25,7 +24,9 @@ import {
   type FormValues,
 } from "@/components/admin";
 import { pickImageFile } from "@/components/admin/team/ImageUpload";
-import { FAB, useToast } from "@/components/ui";
+import { FAB, TeamLogo, useToast } from "@/components/ui";
+import { OpsRecord, StatusTiles } from "@/components/admin/matches/opsKit";
+import { mediaUrl } from "@/lib/format";
 import { hasAnyPermission } from "@/lib/admin/access";
 import { errorText } from "@/lib/admin/errors";
 import {
@@ -178,18 +179,27 @@ export default function LeaguesScreen() {
         filter={filter}
         onFilter={(k) => setFilter(k as Filter)}
         extraHeader={
-          nationwide ? (
-            <SelectField<string>
-              value={city}
-              onChange={(v) => setCity(v)}
-              loadOptions={loadCityOptions}
-              queryKey={["admin", "cities"]}
-              placeholder="Tüm iller"
-              icon="location-outline"
-              clearable
-              sheetTitle="İl seç"
+          <>
+            <StatusTiles
+              items={[
+                { key: "active", label: "Aktif lig", value: counts.active, tone: "brand", icon: "trophy-outline" },
+                { key: "logo", label: "Logosuz", value: all.filter((l) => !l.league_logo && !isArchived(l)).length, tone: "warn", icon: "image-outline" },
+                { key: "archived", label: "Arşivde", value: counts.archived, tone: "neutral", icon: "archive-outline" },
+              ]}
             />
-          ) : null
+            {nationwide ? (
+              <SelectField<string>
+                value={city}
+                onChange={(v) => setCity(v)}
+                loadOptions={loadCityOptions}
+                queryKey={["admin", "cities"]}
+                placeholder="Tüm iller"
+                icon="location-outline"
+                clearable
+                sheetTitle="İl seç"
+              />
+            ) : null}
+          </>
         }
         summary={`${rows.length} lig`}
         keyExtractor={(l) => String(l.id)}
@@ -197,12 +207,19 @@ export default function LeaguesScreen() {
         emptyTitle={q ? "Aramaya uyan lig yok" : "Lig yok"}
         emptyBody={can.create && !q ? "Sağ alttaki düğmeyle ilk ligi oluştur." : undefined}
         renderItem={({ item }) => (
-          <RecordCard
+          <OpsRecord
             title={item.league_name}
-            subtitle={[nationwide ? item.city : null, `Öncelik: ${item.league_priority ?? "—"}`].filter(Boolean).join(" · ")}
-            avatar={{ name: item.league_name, image: item.league_logo }}
+            subtitle={nationwide ? item.city ?? null : isArchived(item) ? "Sezonlarıyla arşivde" : "Aktif lig"}
+            leading={<TeamLogo name={item.league_name} logo={mediaUrl(item.league_logo)} size={42} dimmed={isArchived(item)} />}
             muted={isArchived(item)}
-            badges={[isArchived(item) && { label: "Arşivde", tone: "neutral", icon: "archive-outline" }]}
+            rail={isArchived(item) ? null : "brand"}
+            value={item.league_priority != null ? `#${item.league_priority}` : "—"}
+            valueLabel="öncelik"
+            status={isArchived(item) ? { label: "Arşivde", tone: "neutral" } : null}
+            specs={[
+              !item.league_logo && { icon: "image-outline", label: "Logo yok", tone: "warn" },
+              nationwide && item.city ? { icon: "location-outline", label: item.city } : null,
+            ]}
             onPress={() => setSelected(item)}
           />
         )}

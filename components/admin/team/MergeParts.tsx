@@ -13,12 +13,37 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { useMemo, useState } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
 
-import { FieldLabel, RecordCard, confirmAction } from "@/components/admin";
-import { Badge, Chip, ChipGroup, EmptyState, ErrorState, Input, SkeletonListRow } from "@/components/ui";
+import { LinearGradient } from "expo-linear-gradient";
+
+import { FieldLabel, confirmAction } from "@/components/admin";
+import { Badge, Button, Chip, ChipGroup, EmptyState, ErrorState, IconTile, Input, SkeletonListRow, TeamLogo, Touchable } from "@/components/ui";
 import { formatDateTime } from "@/lib/admin/format";
 import { foldText } from "@/lib/api/admin/lookups";
 import { conflictValueText, type MergeConflict, type MergeHistoryRow } from "@/lib/api/admin/merge";
 import { colors, hairline, radius, space, textScale, type } from "@/theme";
+
+import { EntityCard } from "./ManageKit";
+
+/** Üst üste binen küçük arma yığını (birleştirme grubu). */
+export function LogoStack({ teams, size = 34, max = 3 }: { teams: { id: number; team_name: string; logo?: string | null }[]; size?: number; max?: number }) {
+  const shown = teams.slice(0, max);
+  return (
+    <View style={[styles.stackRow, { width: size + (shown.length - 1) * (size * 0.55) + (teams.length > max ? size * 0.55 : 0) }]}>
+      {shown.map((t, i) => (
+        <View key={t.id} style={[styles.stackItem, { left: i * size * 0.55, zIndex: max - i }]}>
+          <TeamLogo name={t.team_name} logo={t.logo} size={size} />
+        </View>
+      ))}
+      {teams.length > max ? (
+        <View style={[styles.stackMore, { left: shown.length * size * 0.55, width: size, height: size }]}>
+          <Text style={styles.stackMoreText} {...textScale.badge}>
+            +{teams.length - max}
+          </Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
 
 export function ConflictList<K extends "team_id" | "player_id">({
   conflicts,
@@ -66,26 +91,53 @@ export function ConflictList<K extends "team_id" | "player_id">({
               <FieldLabel label={c.label} />
               <Badge label={chosen === undefined ? "seçim gerekli" : "seçildi"} tone={chosen === undefined ? "warn" : "win"} size="xs" />
             </View>
-            <ChipGroup>
+            {/* SEÇENEK KAROLARI — değer büyük, kaynağı altında; seçili karo imza şeritli. */}
+            <View style={styles.options}>
               {c.options.map((o) => {
                 const id = (o as Record<string, number>)[idKey];
-                const text = c.kind === "image" ? `Görsel · ${nameOf(id)}` : `${conflictValueText(c.kind, o.value)} · #${id}`;
-                return <Chip key={id} label={text} size="sm" selected={chosen === id} onPress={() => onPick(c.field, id)} />;
-              })}
-              {canBlank(c.field) ? <Chip label="Boş bırak" size="sm" selected={chosen === null} onPress={() => onPick(c.field, null)} /> : null}
-            </ChipGroup>
-            {c.kind === "image" ? (
-              <View style={styles.images}>
-                {c.options.map((o) => {
-                  const id = (o as Record<string, number>)[idKey];
-                  return (
-                    <View key={id} style={[styles.thumbWrap, chosen === id ? styles.thumbOn : null]}>
+                const on = chosen === id;
+                return (
+                  <Touchable
+                    key={id}
+                    feedback="card"
+                    haptic="selection"
+                    onPress={() => onPick(c.field, id)}
+                    style={[styles.option, on ? styles.optionOn : null]}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: on }}
+                    accessibilityLabel={`${c.label}: ${c.kind === "image" ? "görsel" : conflictValueText(c.kind, o.value)}, ${nameOf(id)}`}
+                  >
+                    {on ? <LinearGradient colors={colors.gradientSignature} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={styles.optionRail} /> : null}
+                    {c.kind === "image" ? (
                       <Image source={{ uri: String(o.value) }} style={styles.thumb} accessibilityLabel={`${nameOf(id)} görseli`} />
+                    ) : (
+                      <Text style={[styles.optionValue, on ? styles.optionValueOn : null]} numberOfLines={2} {...textScale.dense}>
+                        {conflictValueText(c.kind, o.value)}
+                      </Text>
+                    )}
+                    <View style={styles.optionFoot}>
+                      <Text style={styles.optionSource} numberOfLines={1} {...textScale.badge}>
+                        {nameOf(id)} · #{id}
+                      </Text>
+                      <Ionicons name={on ? "checkmark-circle" : "ellipse-outline"} size={16} color={on ? colors.brandAccent : colors.textTertiary} />
                     </View>
-                  );
-                })}
-              </View>
-            ) : null}
+                  </Touchable>
+                );
+              })}
+              {canBlank(c.field) ? (
+                <Touchable
+                  feedback="card"
+                  onPress={() => onPick(c.field, null)}
+                  style={[styles.option, styles.optionBlank, chosen === null ? styles.optionOn : null]}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: chosen === null }}
+                >
+                  <Text style={styles.optionSource} {...textScale.dense}>
+                    Boş bırak
+                  </Text>
+                </Touchable>
+              ) : null}
+            </View>
           </View>
         );
       })}
@@ -157,27 +209,28 @@ export function MergeHistory({
       ) : (
         list.map((m) => {
           const undone = m.status === "undone";
-          const counts = Object.entries(m.summary ?? {})
-            .filter(([k, n]) => countLabels[k] && n)
-            .slice(0, 5)
-            .map(([k, n]) => `${n} ${countLabels[k]}`);
+          const counts = Object.entries(m.summary ?? {}).filter(([k, n]) => countLabels[k] && n) as [string, number][];
           const targetId = kind === "team" ? m.target_team_id : m.target_player_id;
           return (
-            <RecordCard
+            <EntityCard
               key={m.id}
-              title={`${m.sources.map((s) => nameOf(s) || `#${s.id}`).join(", ")} → ${nameOf(m.target) || m.target_name || "?"}`}
-              subtitle={[formatDateTime(m.created_at), m.created_by?.name, targetId ? `#${targetId}${m.target ? "" : " · artık yok"}` : null].filter(Boolean).join(" · ")}
-              meta={counts.join(" · ") || null}
-              icon={undone ? "arrow-undo-outline" : "git-merge-outline"}
-              iconTone={undone ? "neutral" : "brand"}
               muted={undone}
-              badges={[
+              leading={<IconTile icon={undone ? "arrow-undo" : "git-merge"} tone={undone ? "neutral" : "violet"} size={40} glow={false} />}
+              overline={[formatDateTime(m.created_at), m.created_by?.name].filter(Boolean).join(" · ")}
+              title={nameOf(m.target) || m.target_name || "?"}
+              subtitle={`← ${m.sources.map((x) => nameOf(x) || `#${x.id}`).join(", ")}`}
+              meta={targetId ? `#${targetId}${m.target ? "" : " · artık yok"}` : null}
+              pills={[
                 undone
                   ? { label: `Geri alındı${m.undone_at ? ` · ${formatDateTime(m.undone_at)}` : ""}`, icon: "arrow-undo-outline" }
                   : { label: "Yürürlükte", tone: "win" },
               ]}
-              onPress={undone || busy ? undefined : () => onUndo(m)}
-              trailing={undone ? undefined : <Ionicons name="arrow-undo-outline" size={18} color={colors.textSecondary} />}
+              stats={counts.length ? counts.slice(0, 3).map(([k, n]) => ({ label: countLabels[k], value: n })) : undefined}
+              trailing={
+                undone ? null : (
+                  <Button label="Geri al" icon="arrow-undo-outline" size="sm" variant="secondary" disabled={busy} onPress={() => onUndo(m)} />
+                )
+              }
             />
           );
         })
@@ -203,15 +256,36 @@ const styles = StyleSheet.create({
   field: { gap: space.xs },
   needs: {
     padding: space.sm,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     borderWidth: hairline,
     borderColor: colors.warn,
+    backgroundColor: colors.warnDim,
   },
   sameRow: { flexDirection: "row", alignItems: "center", gap: space.sm, justifyContent: "space-between" },
   value: { ...type.body, color: colors.textPrimary, flex: 1 },
   muted: { ...type.caption, color: colors.textTertiary },
-  images: { flexDirection: "row", gap: space.sm, flexWrap: "wrap" },
-  thumbWrap: { borderRadius: radius.sm, borderWidth: 2, borderColor: colors.border, overflow: "hidden" },
-  thumbOn: { borderColor: colors.brandAccent },
+  options: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
+  option: {
+    flexGrow: 1,
+    flexBasis: "46%",
+    gap: space.xs,
+    padding: space.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface2,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    overflow: "hidden",
+  },
+  optionOn: { backgroundColor: colors.brandDim, borderColor: colors.brandBorder },
+  optionBlank: { justifyContent: "center", alignItems: "center", borderStyle: "dashed" },
+  optionRail: { position: "absolute", left: 0, right: 0, top: 0, height: 3 },
+  optionValue: { ...type.label, color: colors.textSecondary },
+  optionValueOn: { color: colors.textPrimary },
+  optionFoot: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.xs },
+  optionSource: { ...type.caption, color: colors.textTertiary, flexShrink: 1 },
+  stackRow: { height: 40, justifyContent: "center" },
+  stackItem: { position: "absolute", top: 0, borderRadius: radius.sm, borderWidth: 2, borderColor: colors.surface1 },
+  stackMore: { position: "absolute", top: 2, borderRadius: radius.sm, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface3 },
+  stackMoreText: { ...type.numSmStrong, color: colors.textSecondary },
   thumb: { width: 48, height: 48, borderRadius: radius.sm, backgroundColor: colors.surface2 },
 });

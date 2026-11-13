@@ -22,14 +22,20 @@ import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useMemo } from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 import {
+  Aurora,
   Badge,
   Chip,
   ChipGroup,
   EmptyState,
   ErrorState,
+  GradientBar,
   ListRow,
+  Odometer,
+  Reveal,
   ScreenHeader,
+  Touchable,
   SkeletonListRow,
   TeamLogo,
   useHeaderScroll,
@@ -40,7 +46,7 @@ import { getMyContracts, type Contract } from "@/lib/api/panel";
 import { mediaUrl } from "@/lib/format";
 import { formatDateWithYear } from "@/components/club/dates";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, layout, space, textScale, type } from "@/theme";
+import { colors, fonts, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
 
 /* ============================ SABİTLER / TİPLER ============================ */
 
@@ -162,18 +168,22 @@ export default function ContractsScreen() {
 
   const renderItem = useCallback(
     ({ item, index }: { item: Contract; index: number }) => (
-      <ContractRow
-        contract={item}
-        position={rowPosition(index, visible.length)}
-        onPress={openContract}
-      />
+      <Reveal index={index} limit={8} replayKey={filter}>
+        <ContractRow
+          contract={item}
+          position={rowPosition(index, visible.length)}
+          onPress={openContract}
+        />
+      </Reveal>
     ),
-    [openContract, visible.length],
+    [filter, openContract, visible.length],
   );
 
   const listHeader = useMemo(
     () => (
       <View style={styles.headerBlock}>
+        {/* ÖZET: yürürlükteki sözleşme koyu sahnede — kulüp, süre, kalan gün. */}
+        {live ? <LiveContractCard contract={live} onPress={() => openContract(live.public_id)} /> : null}
         <ChipGroup style={styles.chips}>
           {/* Boş durum çipi gösterilmez (Tekliflerim / Cezalarım ile aynı kural). */}
           {FILTERS.filter((def) => def.key === "tumu" || def.key === filter || counts[def.key] > 0).map((def) => (
@@ -187,22 +197,12 @@ export default function ContractsScreen() {
           ))}
         </ChipGroup>
 
-        {live ? (
-          <Text style={styles.summary} {...textScale.long}>
-            Yürürlükteki sözleşmen: {live.team?.team_name ?? "takımın"}
-            {live.contract_end_date
-              ? ` · bitiş ${formatDateWithYear(live.contract_end_date)}`
-              : " · süresiz"}
-            .
-          </Text>
-        ) : null}
-
         {query.isError && items.length > 0 ? (
           <ErrorState error={query.error} onRetry={query.refetch} variant="banner" />
         ) : null}
       </View>
     ),
-    [counts, filter, items.length, live, query.error, query.isError, query.refetch, selectFilter],
+    [counts, filter, items.length, live, openContract, query.error, query.isError, query.refetch, selectFilter],
   );
 
   if (!auth.user) {
@@ -318,12 +318,15 @@ const ContractRow = React.memo(function ContractRow({
       leading={leading}
       title={contract.team?.team_name ?? "Takım"}
       subtitle={subtitle}
-      badge={
-        <Badge
-          label={expiring ? `${left} GÜN KALDI` : meta.label}
-          tone={expiring ? "warn" : meta.tone}
-          size="xs"
-        />
+      trailing={
+        <View style={styles.trail}>
+          <Badge label={expiring ? "Bitiyor" : meta.label} tone={expiring ? "warn" : meta.tone} size="xs" />
+          {LIVE_STATUSES.has(contract.status) && left !== null && left >= 0 ? (
+            <Text style={[styles.days, expiring ? styles.daysWarn : null]} {...textScale.badge}>
+              {`${left} gün`}
+            </Text>
+          ) : null}
+        </View>
       }
       highlighted={LIVE_STATUSES.has(contract.status)}
       position={position}
@@ -331,6 +334,74 @@ const ContractRow = React.memo(function ContractRow({
     />
   );
 });
+
+/**
+ * Yürürlükteki sözleşme kartı — kimlik sahnesi (gradientInk + Aurora).
+ * Süre çubuğu başlangıçtan bugüne geçen payı gösterir; kalan gün döner sayaçla.
+ */
+function LiveContractCard({ contract, onPress }: { contract: Contract; onPress: () => void }) {
+  const meta = statusMeta(contract.status);
+  const start = contract.contract_start_date ? new Date(contract.contract_start_date).getTime() : null;
+  const end = contract.contract_end_date ? new Date(contract.contract_end_date).getTime() : null;
+  const elapsed = start != null && end != null && end > start ? (Date.now() - start) / (end - start) : null;
+  const left = daysLeft(contract.contract_end_date);
+  return (
+    <Reveal>
+      <Touchable onPress={onPress} feedback="card" style={styles.live} accessibilityRole="button" accessibilityLabel={`Yürürlükteki sözleşme: ${contract.team?.team_name ?? "takım"}. ${meta.label}`}>
+        <LinearGradient colors={colors.gradientInk} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+        <Aurora variant="stage" style={StyleSheet.absoluteFill} />
+        <View style={styles.liveTop}>
+          <TeamLogo name={contract.team?.team_name ?? "?"} logo={mediaUrl(contract.team?.logo ?? null)} size={48} />
+          <View style={styles.liveTexts}>
+            <Text style={styles.liveOverline} {...textScale.badge}>
+              {upperTR("Yürürlükteki sözleşmen")}
+            </Text>
+            <Text style={styles.liveTeam} numberOfLines={1} {...textScale.dense}>
+              {contract.team?.team_name ?? "Takım"}
+            </Text>
+          </View>
+          <Badge label={meta.label} tone={meta.tone} size="sm" />
+        </View>
+        <View style={styles.liveStats}>
+          <View style={styles.liveStat}>
+            <Text style={styles.liveLabel} {...textScale.badge}>
+              {upperTR("Başlangıç")}
+            </Text>
+            <Text style={styles.liveValue} numberOfLines={1} {...textScale.dense}>
+              {contract.contract_start_date ? formatDateWithYear(contract.contract_start_date) : "—"}
+            </Text>
+          </View>
+          <View style={styles.liveStat}>
+            <Text style={styles.liveLabel} {...textScale.badge}>
+              {upperTR("Bitiş")}
+            </Text>
+            <Text style={styles.liveValue} numberOfLines={1} {...textScale.dense}>
+              {contract.contract_end_date ? formatDateWithYear(contract.contract_end_date) : "Süresiz"}
+            </Text>
+          </View>
+          <View style={[styles.liveStat, styles.liveStatEnd]}>
+            <Text style={styles.liveLabel} {...textScale.badge}>
+              {upperTR("Kalan")}
+            </Text>
+            {left != null && left >= 0 ? (
+              <View style={styles.liveDays}>
+                <Odometer value={left} style={styles.liveDaysValue} />
+                <Text style={styles.liveDaysUnit} {...textScale.badge}>
+                  gün
+                </Text>
+              </View>
+            ) : (
+              <Text style={styles.liveValue} {...textScale.dense}>
+                —
+              </Text>
+            )}
+          </View>
+        </View>
+        {elapsed != null ? <GradientBar value={Math.max(0, Math.min(1, elapsed))} height={6} track={colors.inkTile} /> : null}
+      </Touchable>
+    </Reveal>
+  );
+}
 
 /* ================================ STİLLER ================================= */
 
@@ -358,10 +429,28 @@ const styles = StyleSheet.create({
   chips: {
     marginHorizontal: -layout.screenPadding,
   },
-  summary: {
-    ...type.caption,
-    color: colors.textSecondary,
-    letterSpacing: 0,
-    lineHeight: 16,
+  trail: { alignItems: "flex-end", gap: space.xxs, marginLeft: space.sm },
+  days: { ...type.numSmStrong, color: colors.textSecondary },
+  daysWarn: { color: colors.warn },
+  live: {
+    gap: space.md,
+    padding: space.lg,
+    borderRadius: radius.xxl,
+    overflow: "hidden",
+    backgroundColor: colors.inkBlock,
+    borderWidth: hairline,
+    borderColor: colors.borderOnDark,
   },
+  liveTop: { flexDirection: "row", alignItems: "center", gap: space.md },
+  liveTexts: { flex: 1, gap: space.xxs },
+  liveOverline: { ...type.overline, color: colors.onDarkMuted },
+  liveTeam: { ...type.h1, color: colors.onDark },
+  liveStats: { flexDirection: "row", gap: space.sm },
+  liveStat: { flex: 1, gap: space.xxs, padding: space.sm, borderRadius: radius.md, backgroundColor: colors.inkTile, borderWidth: hairline, borderColor: colors.inkTileBorder },
+  liveStatEnd: { alignItems: "flex-start" },
+  liveLabel: { ...type.nano, color: colors.onDarkMuted, letterSpacing: 0.6 },
+  liveValue: { ...type.labelSm, fontFamily: fonts.bold, color: colors.onDark },
+  liveDays: { flexDirection: "row", alignItems: "flex-end", gap: space.xxs },
+  liveDaysValue: { ...type.scoreSm, color: colors.onDark },
+  liveDaysUnit: { ...type.caption, color: colors.onDarkMuted, marginBottom: space.px },
 });

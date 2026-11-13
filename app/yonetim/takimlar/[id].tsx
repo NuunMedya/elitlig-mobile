@@ -19,27 +19,25 @@ import { StyleSheet, View } from "react-native";
 import {
   AdminScreen,
   FormSheet,
-  InfoLine,
-  Panel,
   RecordCard,
-  StatRow,
   ToggleField,
   confirmAction,
   useAdminMutation,
   type FieldDef,
   type FormValues,
 } from "@/components/admin";
-import { ImageUploadRow } from "@/components/admin/team/ImageUpload";
+import { ImageEditBadge } from "@/components/admin/team/ImageUpload";
+import { DangerNote, EntityCard, FactRow, GroupCard, IdentityStage, StagePill } from "@/components/admin/team/ManageKit";
 import { TeamDetailsPanel } from "@/components/admin/team/TeamDetailsPanel";
 import { TeamPlayersTab } from "@/components/admin/team/TeamPlayersTab";
 import { TeamSeasonsTab } from "@/components/admin/team/TeamSeasonsTab";
-import { Button, EmptyState, ErrorState, SegmentedControl, SkeletonCard } from "@/components/ui";
+import { Avatar, Button, EmptyState, ErrorState, Reveal, SkeletonCard, SkeletonHero, Tabs, TeamLogo } from "@/components/ui";
 import { hasPermission } from "@/lib/admin/access";
 import { formatDate, formatPhone } from "@/lib/admin/format";
 import { fetchScopedLeagues, fetchScopedSeasons, isArchived, isNationwide, loadCityOptions, seasonBelongsToLeague } from "@/lib/api/admin/lookups";
 import { cleanLabel, deleteTeam, getTeamOverview, hasRealLogo, updateTeam, uploadTeamLogo, type TeamPatch } from "@/lib/api/admin/teams";
 import { useAuth } from "@/providers/AuthProvider";
-import { space } from "@/theme";
+import { colors, space } from "@/theme";
 
 const PERMS = ["teams.update"];
 type Tab = "profile" | "players" | "seasons" | "people";
@@ -151,128 +149,181 @@ export default function TeamProfileScreen() {
     { key: "attendence_date", label: "Katılım tarihi", kind: "date" },
   ];
 
+  const missing = team
+    ? [!hasRealLogo(team) && "logo", !cleanLabel(team.current_league) && "vitrin ligi", !cleanLabel(team.current_season) && "vitrin sezonu", !data?.managers.length && "yetkili hesap"].filter(Boolean)
+    : [];
+
   return (
     <AdminScreen
       title={team?.team_name ?? "Takım"}
-      subtitle={team ? [team.city, cleanLabel(team.current_league), cleanLabel(team.current_season)].filter(Boolean).join(" · ") : undefined}
+      subtitle={team ? `Takım profili · #${team.id}` : undefined}
       permission={PERMS}
       onRefresh={query.refetch}
       refreshing={query.isRefetching}
-      bottom={
-        <SegmentedControl<Tab>
-          items={[
-            { key: "profile", label: "Profil", dot: pendingCount > 0 },
-            { key: "players", label: `Oyuncular${data ? ` ${data.players.length}` : ""}` },
-            { key: "seasons", label: "Sezonlar" },
-            { key: "people", label: "Yetkililer" },
-          ]}
-          value={tab}
-          onChange={setTab}
-          stretch
-          size="sm"
-        />
-      }
     >
       {query.isLoading ? (
-        <SkeletonCard />
+        <>
+          <SkeletonHero />
+          <SkeletonCard />
+        </>
       ) : query.error || !data || !team ? (
         <ErrorState error={query.error ?? new Error("Takım bulunamadı.")} onRetry={query.refetch} variant="inline" />
-      ) : tab === "players" ? (
-        <TeamPlayersTab data={data} user={user} invalidate={invalidate} />
-      ) : tab === "seasons" ? (
-        <TeamSeasonsTab data={data} user={user} invalidate={invalidate} />
-      ) : tab === "people" ? (
-        <View style={styles.stack}>
-          {data.managers.length ? (
-            data.managers.map((m) => (
-              <Panel key={m.id} title={m.id === data.manager?.id ? "TAKIM BAŞKANI" : "YETKİLİ"}>
-                <InfoLine label="Ad soyad" value={m.full_name || "—"} />
-                <InfoLine label="Kullanıcı adı" value={m.username ? `@${m.username}` : "—"} />
-                <InfoLine label="Telefon" value={m.phone ? formatPhone(m.phone) : "—"} />
-                <InfoLine label="E-posta" value={m.email || "—"} />
-                <InfoLine label="Rol / durum" value={[m.role, m.status].filter(Boolean).join(" · ") || "—"} />
-                <View style={styles.row}>
-                  {m.phone ? <Button label="Ara" icon="call-outline" size="sm" variant="secondary" onPress={() => void Linking.openURL(`tel:${m.phone}`)} /> : null}
-                  {m.email ? <Button label="E-posta" icon="mail-outline" size="sm" variant="ghost" onPress={() => void Linking.openURL(`mailto:${m.email}`)} /> : null}
-                </View>
-              </Panel>
-            ))
-          ) : (
-            <EmptyState
-              icon="person-outline"
-              variant="inline"
-              title="Yetkili hesap yok"
-              body="Bu takımı yöneten bir üye hesabı bağlı değil. Hesap bağlamak için takım başkanı panelden takımını sahiplenir; talep Talepler ekranına düşer."
-            />
-          )}
-          {data.inbox?.conversation_id ? (
-            <RecordCard
-              title="Sohbeti aç"
-              subtitle="Takım yetkilisiyle yönetim sohbeti"
-              icon="chatbubbles-outline"
-              onPress={() => router.push(`/yonetim/sohbet/${data.inbox!.conversation_id}`)}
-            />
-          ) : null}
-        </View>
       ) : (
-        <View style={styles.stack}>
-          <Panel>
-            <ImageUploadRow
-              kind="logo"
-              name={team.team_name}
-              image={hasRealLogo(team) ? team.logo : null}
-              prefix={`takim-${team.id}-logo`}
-              upload={(file) => uploadTeamLogo(teamId, file)}
-              onDone={() => void query.refetch()}
+        <>
+          {/* KİMLİK SAHNESİ — logo büyük; dokununca logo değişir. */}
+          <Reveal scaleFrom={0.97}>
+            <IdentityStage
+              leading={
+                <ImageEditBadge kind="logo" prefix={`takim-${team.id}-logo`} upload={(file) => uploadTeamLogo(teamId, file)} onDone={() => void query.refetch()}>
+                  <TeamLogo name={team.team_name} logo={hasRealLogo(team) ? team.logo : null} size={76} dimmed={team.active === false} />
+                </ImageEditBadge>
+              }
+              overline={[team.city, `#${team.id}`].filter(Boolean).join(" · ")}
+              title={team.team_name}
+              subtitle={[cleanLabel(team.current_league), cleanLabel(team.current_season)].filter(Boolean).join(" · ") || "Vitrin ligi / sezonu atanmamış"}
+              pills={
+                <>
+                  <StagePill label={team.active === false ? "Pasif" : "Aktif"} tone={team.active === false ? "warn" : "win"} />
+                  {data.manager?.full_name ? <StagePill label={data.manager.full_name} icon="person" /> : null}
+                  {pendingCount ? <StagePill label={`${pendingCount} talep`} icon="hourglass" tone="gold" /> : null}
+                </>
+              }
+              stats={[
+                { label: "Oyuncu", value: data.players.length },
+                { label: "Sezon", value: data.seasons.length },
+                { label: "Yetkili", value: data.managers.length },
+                { label: "Bekleyen", value: pendingCount, tone: pendingCount ? "warn" : undefined },
+              ]}
             />
-          </Panel>
-          <StatRow
+          </Reveal>
+
+          <Tabs<Tab>
+            tone="paper"
             items={[
-              { label: "Oyuncu", value: data.players.length },
-              { label: "Sezon", value: data.seasons.length },
-              { label: "Yetkili", value: data.managers.length },
-              { label: "Bekleyen talep", value: pendingCount, tone: pendingCount ? "warn" : undefined },
+              { key: "profile", label: "Profil", badge: pendingCount ? "dot" : undefined },
+              { key: "players", label: "Oyuncular" },
+              { key: "seasons", label: "Sezonlar" },
+              { key: "people", label: "Yetkililer" },
             ]}
+            value={tab}
+            onChange={setTab}
           />
-          <Panel
-            title="TAKIM BİLGİLERİ"
-            action={{
-              label: "Düzenle",
-              onPress: () => {
-                setFormLeague(cleanLabel(team.current_league) || null);
-                setEditing(true);
-              },
-            }}
-          >
-            <InfoLine label="Takım adı" value={team.team_name} />
-            <InfoLine label="İl" value={team.city || "—"} />
-            <InfoLine label="Lig (vitrin)" value={cleanLabel(team.current_league) || "—"} />
-            <InfoLine label="Sezon (vitrin)" value={cleanLabel(team.current_season) || "—"} />
-            <InfoLine label="Kuruluş" value={team.founded_at ? formatDate(team.founded_at) : "—"} />
-            <InfoLine label="Kulüp renkleri" value={team.colors || "—"} />
-            <InfoLine label="Katılım" value={team.attendence_date ? formatDate(team.attendence_date) : "—"} />
-            <InfoLine label="Kayıt no" value={`#${team.id}`} />
-          </Panel>
-          <TeamDetailsPanel teamId={teamId} players={data.players} />
-          {pendingCount ? (
-            <RecordCard
-              title={`${pendingCount} bekleyen talep`}
-              subtitle="Takım yetkilisinin değişiklik ve hesap talepleri gelen kutusundan onaylanır."
-              icon="hourglass-outline"
-              iconTone="warn"
-              onPress={() => router.push("/yonetim/talepler")}
-            />
-          ) : null}
-          <Panel title="DURUM">
-            <ToggleField
-              label="Takım aktif"
-              hint="Pasife alınan takım listelerde görünmez."
-              value={team.active !== false}
-              onChange={(v) => void askToggle(v)}
-            />
-          </Panel>
-          {canDelete ? <Button label="Takımı sil" icon="trash-outline" variant="danger" onPress={() => void askDelete()} loading={remove.isPending} /> : null}
-        </View>
+
+          {tab === "players" ? (
+            <TeamPlayersTab data={data} user={user} invalidate={invalidate} />
+          ) : tab === "seasons" ? (
+            <TeamSeasonsTab data={data} user={user} invalidate={invalidate} />
+          ) : tab === "people" ? (
+            <View style={styles.stack}>
+              {data.managers.length ? (
+                data.managers.map((m, i) => {
+                  const head = m.id === data.manager?.id;
+                  return (
+                    <Reveal key={m.id} index={i}>
+                      <EntityCard
+                        leading={<Avatar name={m.full_name || m.username} size={48} ring={head ? "brand" : "none"} />}
+                        overline={head ? "Takım başkanı" : "Yetkili"}
+                        title={m.full_name || m.username || "—"}
+                        subtitle={m.username ? `@${m.username}` : null}
+                        meta={[m.phone ? formatPhone(m.phone) : null, m.email].filter(Boolean).join(" · ") || "İletişim bilgisi yok"}
+                        pills={[m.role && { label: m.role, tone: "brand" }, m.status && { label: m.status, tone: m.status === "active" ? "win" : "warn" }]}
+                        footer={
+                          m.phone || m.email ? (
+                            <View style={styles.contactRow}>
+                              {m.phone ? (
+                                <Button label="Ara" icon="call" size="sm" variant="secondary" onPress={() => void Linking.openURL(`tel:${m.phone}`)} style={styles.flex} />
+                              ) : null}
+                              {m.email ? (
+                                <Button label="E-posta" icon="mail" size="sm" variant="secondary" onPress={() => void Linking.openURL(`mailto:${m.email}`)} style={styles.flex} />
+                              ) : null}
+                            </View>
+                          ) : null
+                        }
+                      />
+                    </Reveal>
+                  );
+                })
+              ) : (
+                <EmptyState
+                  icon="person-outline"
+                  variant="inline"
+                  title="Yetkili hesap yok"
+                  body="Bu takımı yöneten bir üye hesabı bağlı değil. Takım başkanı panelden takımını sahiplenince talep Talepler ekranına düşer."
+                />
+              )}
+              {data.inbox?.conversation_id ? (
+                <RecordCard
+                  title="Sohbeti aç"
+                  subtitle="Takım yetkilisiyle yönetim sohbeti"
+                  icon="chatbubbles-outline"
+                  iconTone="brand"
+                  onPress={() => router.push(`/yonetim/sohbet/${data.inbox!.conversation_id}`)}
+                />
+              ) : null}
+            </View>
+          ) : (
+            <View style={styles.stack}>
+              {pendingCount ? (
+                <RecordCard
+                  title={`${pendingCount} bekleyen talep`}
+                  subtitle="Takım yetkilisinin değişiklik ve hesap talepleri Talepler ekranından onaylanır."
+                  icon="hourglass-outline"
+                  iconTone="warn"
+                  accentColor={colors.warn}
+                  onPress={() => router.push("/yonetim/talepler")}
+                />
+              ) : null}
+              {missing.length ? <DangerNote tone="warn" title="Eksik bilgi" body={`Tamamlanmamış: ${missing.join(", ")}.`} /> : null}
+
+              <GroupCard
+                title="Takım bilgileri"
+                icon="shield-half"
+                tone="violet"
+                action={{
+                  label: "Düzenle",
+                  onPress: () => {
+                    setFormLeague(cleanLabel(team.current_league) || null);
+                    setEditing(true);
+                  },
+                }}
+              >
+                <View>
+                  <FactRow icon="text-outline" label="Takım adı" value={team.team_name} />
+                  <FactRow icon="location-outline" label="İl" value={team.city || null} />
+                  <FactRow icon="trophy-outline" label="Lig (vitrin)" value={cleanLabel(team.current_league) || null} />
+                  <FactRow icon="calendar-outline" label="Sezon (vitrin)" value={cleanLabel(team.current_season) || null} />
+                  <FactRow icon="flag-outline" label="Kuruluş" value={team.founded_at ? formatDate(team.founded_at) : null} />
+                  <FactRow icon="color-palette-outline" label="Kulüp renkleri" value={team.colors || null} />
+                  <FactRow icon="enter-outline" label="Katılım" value={team.attendence_date ? formatDate(team.attendence_date) : null} last />
+                </View>
+              </GroupCard>
+
+              <TeamDetailsPanel teamId={teamId} players={data.players} />
+
+              <GroupCard title="Durum ve tehlikeli bölge" icon="settings" tone="neutral">
+                <ToggleField
+                  label="Takım aktif"
+                  hint="Pasife alınan takım listelerde görünmez; kayıtları silinmez."
+                  value={team.active !== false}
+                  onChange={(v) => void askToggle(v)}
+                />
+                {canDelete ? (
+                  <>
+                    <DangerNote
+                      title="Takımı silmek"
+                      body={
+                        data.players.length
+                          ? `${data.players.length} oyuncunun kadro bağı da silinir. Maç oynamış takımı silmek yerine pasife almayı ya da birleştirmeyi düşün.`
+                          : "Silinen takım çöp kutusuna taşınır ve oradan geri alınabilir."
+                      }
+                    />
+                    <Button label="Takımı sil" icon="trash-outline" variant="danger" onPress={() => void askDelete()} loading={remove.isPending} fullWidth />
+                  </>
+                ) : null}
+              </GroupCard>
+            </View>
+          )}
+        </>
       )}
 
       <FormSheet
@@ -301,5 +352,6 @@ export default function TeamProfileScreen() {
 
 const styles = StyleSheet.create({
   stack: { gap: space.md },
-  row: { flexDirection: "row", gap: space.sm, marginTop: space.xs },
+  flex: { flex: 1 },
+  contactRow: { flexDirection: "row", gap: space.sm },
 });

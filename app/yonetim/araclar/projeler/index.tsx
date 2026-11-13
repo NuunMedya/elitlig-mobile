@@ -9,6 +9,9 @@
  *   Takip     tüm projelerde aranacak kişiler (tek dokunuş ara / WhatsApp),
  *             bana atanan ve son tarihi yaklaşan adımlar, açık sorular.
  *   Portföy   tüm projelerin + projeden bağımsız portföy kayıtları.
+ * TASARIM: gece sahnesinde aktif proje sayısı + bugün aranacak / geciken
+ * adım / kazanılan; proje kartı proje renginde degrade baş, yüzde halkası,
+ * dört rakamlı gövde ve degrade ilerleme çubuğu.
  * "Yeni proje" şablondan (Organizasyon sezonu öne çıkar) ya da boş açılır.
  */
 
@@ -17,22 +20,29 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { LinearGradient } from "expo-linear-gradient";
+
 import { ActionSheet, AdminScreen, RecordCard, ToggleField, confirmAction, type SheetAction } from "@/components/admin";
+import { ToolStage } from "@/components/admin/tools/ToolKit";
 import { ToolFab } from "@/components/admin/tools/ToolApp";
 import { GlobalPortfolio } from "@/components/admin/projects/Portfolio";
 import { NewProjectSheet } from "@/components/admin/projects/NewProjectSheet";
 import { ContactActions, Pill, ProgressBar, SubHead } from "@/components/admin/projects/ui";
 import {
+  Badge,
   Chip,
   ChipGroup,
   EmptyState,
   ErrorState,
   Input,
-  MetricGrid,
-  MetricTile,
+  ProgressRing,
+  Reveal,
   SegmentedControl,
   SkeletonCard,
+  Touchable,
   useToast,
+  withAlpha,
 } from "@/components/ui";
 import { errorText } from "@/lib/admin/errors";
 import { formatMoney } from "@/lib/admin/format";
@@ -58,7 +68,7 @@ import {
   type Project,
   type ProjectStatus,
 } from "@/lib/api/admin/projects";
-import { colors, radius, space, textScale, type } from "@/theme";
+import { colors, hairline, radius, space, textScale, type, upperTR } from "@/theme";
 
 type View3 = "projeler" | "takip" | "portfoy";
 const VIEWS: { key: View3; label: string }[] = [
@@ -190,19 +200,25 @@ export default function ProjectsHome() {
       bottom={<SegmentedControl items={VIEWS} value={view} onChange={setView} />}
       overlay={<ToolFab app="projeler" label="Yeni proje" onPress={() => setCreating(true)} accessibilityLabel="Yeni proje" />}
     >
-      <MetricGrid columns={2}>
-        <MetricTile label="Aktif proje" value={items ? String(totals.active) : "—"} icon="git-branch-outline" tone="brand" onPress={() => setView("projeler")} />
-        <MetricTile
-          label="Bugünkü aramalar"
-          value={follow.data ? String((follow.data.leads || []).filter((l) => new Date(l.next_action_at || 0) <= endOfDay()).length) : "—"}
-          hint={overdueCalls ? `${overdueCalls} gecikmiş` : "gecikmiş yok"}
-          icon="call-outline"
-          tone={overdueCalls ? "warn" : "neutral"}
-          onPress={() => { setDays("0"); setView("takip"); }}
+      <Reveal index={0}>
+        <ToolStage
+          icon="git-branch"
+          tone="cyan"
+          overline="Aktif proje"
+          value={items ? totals.active : "–"}
+          caption={items ? `${(items || []).filter((p) => !p.archived).length} proje · kazanılan ${formatMoney(totals.won, true)}` : "Projeler yükleniyor"}
+          stats={[
+            {
+              label: "Bugün ara",
+              value: follow.data ? (follow.data.leads || []).filter((l) => new Date(l.next_action_at || 0) <= endOfDay()).length : "–",
+              tone: overdueCalls ? "warn" : undefined,
+              onPress: () => { setDays("0"); setView("takip"); },
+            },
+            { label: "Geciken adım", value: items ? totals.overdue : "–", tone: totals.overdue ? "danger" : undefined, onPress: () => setView("takip") },
+            { label: "Kazanılan", value: items ? formatMoney(totals.won, true) : "–", tone: "win", onPress: () => setView("portfoy") },
+          ]}
         />
-        <MetricTile label="Geciken adım" value={items ? String(totals.overdue) : "—"} icon="warning-outline" tone={totals.overdue ? "danger" : "neutral"} onPress={() => setView("takip")} />
-        <MetricTile label="Kazanılan" value={items ? formatMoney(totals.won, true) : "—"} icon="trophy-outline" tone="win" onPress={() => setView("portfoy")} />
-      </MetricGrid>
+      </Reveal>
 
       {view === "projeler" ? (
         <>
@@ -227,7 +243,11 @@ export default function ProjectsHome() {
               action={items?.length ? undefined : { label: "Yeni proje", onPress: () => setCreating(true) }}
             />
           ) : (
-            shown.map((p) => <ProjectCard key={p.id} p={p} onPress={() => open(p.id)} onLongPress={() => setMenuFor(p)} />)
+            shown.map((p, i) => (
+              <Reveal key={p.id} index={i}>
+                <ProjectCard p={p} onPress={() => open(p.id)} onLongPress={() => setMenuFor(p)} />
+              </Reveal>
+            ))
           )}
           {totals.overdue > 0 || totals.due > 0 ? (
             <Text style={styles.footHint} {...textScale.long}>
@@ -315,51 +335,107 @@ function endOfDay() {
   return d;
 }
 
+/** Portföy kartı: proje renginde degrade baş (simge, ad, durum, yüzde halkası),
+    gövdede dört rakam (adım · kişi · soru · bütçe), sıradaki iş ve ilerleme çubuğu. */
 function ProjectCard({ p, onPress, onLongPress }: { p: Project; onPress: () => void; onLongPress: () => void }) {
   const s = p.stats;
   const st = PROJECT_STATUS_META[p.status] || PROJECT_STATUS_META.active;
   const steps = s?.steps || { total: 0, done: 0, progress: 0, overdue: 0 };
   const calls = (s?.leads?.due || 0) + (s?.suppliers?.due || 0);
-  const badges = [
-    steps.overdue > 0 ? { label: `${steps.overdue} geciken`, tone: "danger" as const, icon: "warning-outline" as const } : null,
-    calls > 0 ? { label: `${calls} arama`, tone: "warn" as const, icon: "call-outline" as const } : null,
-    s?.open_questions ? { label: `${s.open_questions} soru`, tone: "neutral" as const, icon: "help-circle-outline" as const } : null,
-    s?.leads?.total ? { label: `${s.leads.total} kişi`, tone: "neutral" as const, icon: "people-outline" as const } : null,
-    s?.portfolio ? { label: `${s.portfolio} portföy`, tone: "neutral" as const, icon: "briefcase-outline" as const } : null,
-    s?.mine ? { label: `${s.mine} bende`, tone: "brand" as const, icon: "person-outline" as const } : null,
-    p.archived ? { label: "Arşiv", tone: "neutral" as const } : null,
-    p.access?.role === "viewer" ? { label: "İzleyici", tone: "info" as const } : null,
-  ];
+  const net = s?.finance ? s.finance.estimate_net : null;
+  const tint = p.color || colors.brand;
   return (
-    <RecordCard
-      icon={projectIcon(p.icon)}
-      accentColor={p.color}
-      title={p.name}
-      subtitle={p.description || null}
-      meta={
-        s?.next_due
-          ? `${dueLabel(s.next_due.due_date)} · ${s.next_due.title}`
-          : `Tarihli adım yok${p.owner_name ? ` · ${p.owner_name}${p.member_count ? ` + ${p.member_count} üye` : ""}` : ""}`
-      }
-      value={`%${steps.progress}`}
-      valueTone={steps.progress >= 100 ? "win" : "brand"}
-      badges={badges}
-      muted={p.archived}
+    <Touchable
+      feedback="card"
       onPress={onPress}
       onLongPress={onLongPress}
+      style={[styles.card, p.archived ? styles.cardMuted : null]}
+      accessibilityRole="button"
+      accessibilityLabel={`${p.name}. ${st.label}. İlerleme yüzde ${steps.progress}. ${steps.done}/${steps.total} adım`}
     >
-      <View style={styles.cardRow}>
-        <Pill label={st.label} color={st.color} icon={st.icon} />
-        <Text style={styles.muted} {...textScale.dense}>{steps.done}/{steps.total} adım</Text>
+      <LinearGradient colors={[withAlpha(tint, 0.34), withAlpha(tint, 0.04)]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.cardHead}>
+        <View style={[styles.cardIcon, { backgroundColor: tint }]}>
+          <Ionicons name={projectIcon(p.icon)} size={20} color={colors.onDark} />
+        </View>
+        <View style={styles.flex}>
+          <Text style={styles.cardTitle} numberOfLines={1} {...textScale.dense}>
+            {p.name}
+          </Text>
+          {p.description ? (
+            <Text style={styles.cardDesc} numberOfLines={1} {...textScale.dense}>
+              {p.description}
+            </Text>
+          ) : null}
+          <View style={styles.cardPills}>
+            <Pill label={st.label} color={st.color} icon={st.icon} />
+            {p.archived ? <Badge label="Arşiv" size="xs" /> : null}
+            {p.access?.role === "viewer" ? <Badge label="İzleyici" tone="info" size="xs" /> : null}
+          </View>
+        </View>
+        <ProgressRing value={steps.progress / 100} size={52} thickness={5} tone={steps.progress >= 100 ? "win" : "brand"} label={`%${steps.progress}`} animate />
+      </LinearGradient>
+      <View style={styles.cardBody}>
+        <View style={styles.figures}>
+          <Figure icon="git-commit-outline" label="Adım" value={`${steps.done}/${steps.total}`} />
+          <Figure icon="people-outline" label="Kişi" value={String(s?.leads?.total ?? 0)} alert={calls ? `${calls} ara` : null} />
+          <Figure icon="help-circle-outline" label="Soru" value={String(s?.open_questions ?? 0)} />
+          <Figure icon="cash-outline" label="Bütçe" value={net == null ? "—" : formatMoney(net, true)} tone={net == null ? undefined : net >= 0 ? colors.win : colors.danger} />
+        </View>
+        <ProgressBar value={steps.progress} color={tint} thin />
+        <View style={styles.nextRow}>
+          <Ionicons name={s?.next_due?.overdue ? "alert-circle" : "flag-outline"} size={14} color={s?.next_due?.overdue ? colors.danger : colors.textTertiary} />
+          <Text style={[styles.nextText, s?.next_due?.overdue ? { color: colors.danger } : null]} numberOfLines={1} {...textScale.dense}>
+            {s?.next_due
+              ? `${dueLabel(s.next_due.due_date)} · ${s.next_due.title}`
+              : `Tarihli adım yok${p.owner_name ? ` · ${p.owner_name}${p.member_count ? ` + ${p.member_count} üye` : ""}` : ""}`}
+          </Text>
+          {steps.overdue > 0 ? <Badge label={`${steps.overdue} geciken`} tone="danger" size="xs" /> : null}
+          {s?.mine ? <Badge label={`${s.mine} bende`} tone="brand" size="xs" /> : null}
+        </View>
       </View>
-      <ProgressBar value={steps.progress} color={p.color} thin style={styles.bar} />
-    </RecordCard>
+    </Touchable>
+  );
+}
+
+function Figure({ icon, label, value, tone, alert }: { icon: keyof typeof Ionicons.glyphMap; label: string; value: string; tone?: string; alert?: string | null }) {
+  return (
+    <View style={styles.figure}>
+      <View style={styles.figureHead}>
+        <Ionicons name={icon} size={11} color={colors.textTertiary} />
+        <Text style={styles.figureLabel} numberOfLines={1} {...textScale.badge}>
+          {upperTR(label)}
+        </Text>
+      </View>
+      <Text style={[styles.figureValue, tone ? { color: tone } : null]} numberOfLines={1} adjustsFontSizeToFit {...textScale.badge}>
+        {value}
+      </Text>
+      {alert ? (
+        <Text style={styles.figureAlert} numberOfLines={1} {...textScale.badge}>
+          {alert}
+        </Text>
+      ) : null}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1, minWidth: 0 },
   muted: { ...type.bodySm, color: colors.textTertiary },
   footHint: { ...type.caption, color: colors.textTertiary, textAlign: "center" },
-  cardRow: { flexDirection: "row", alignItems: "center", gap: space.sm, marginTop: space.s },
-  bar: { marginTop: space.s, borderRadius: radius.pill },
+  card: { borderRadius: radius.xl, borderWidth: hairline, borderColor: colors.border, backgroundColor: colors.surface1, overflow: "hidden" },
+  cardMuted: { opacity: 0.7 },
+  cardHead: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md },
+  cardIcon: { width: 44, height: 44, borderRadius: radius.md, alignItems: "center", justifyContent: "center" },
+  cardTitle: { ...type.h3, color: colors.textPrimary },
+  cardDesc: { ...type.caption, color: colors.textSecondary, marginTop: 1 },
+  cardPills: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.xs, marginTop: space.xs },
+  cardBody: { gap: space.sm, padding: space.md, paddingTop: space.sm },
+  figures: { flexDirection: "row", gap: space.xs },
+  figure: { flex: 1, gap: 2, paddingVertical: space.xs, paddingHorizontal: space.sm, borderRadius: radius.md, backgroundColor: colors.surface2 },
+  figureHead: { flexDirection: "row", alignItems: "center", gap: 3 },
+  figureLabel: { ...type.nano, color: colors.textTertiary },
+  figureValue: { ...type.tableNumStrong, color: colors.textPrimary },
+  figureAlert: { ...type.nano, color: colors.warn },
+  nextRow: { flexDirection: "row", alignItems: "center", gap: space.xs },
+  nextText: { ...type.caption, color: colors.textSecondary, flex: 1 },
 });

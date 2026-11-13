@@ -14,8 +14,11 @@ import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { AdminList, AdminScreen, DateField, InfoLine, Panel, RecordCard } from "@/components/admin";
-import { BottomSheet, Button, Chip, ChipGroup, Tabs, Toggle } from "@/components/ui";
+import Ionicons from "@expo/vector-icons/Ionicons";
+
+import { AdminList, AdminScreen, DateField, InfoLine, Panel } from "@/components/admin";
+import { CountTiles, toneBg, toneFg, toneTile } from "@/components/admin/system/SysKit";
+import { Avatar, Badge, BottomSheet, Button, Chip, ChipGroup, IconTile, Tabs, Toggle, Touchable } from "@/components/ui";
 import { formatDateTime, formatLongDay, formatTime, isoDay } from "@/lib/admin/format";
 import { ROLE_LABELS } from "@/lib/api/admin";
 import {
@@ -36,7 +39,7 @@ import {
   type LogKind,
   type LogMethod,
 } from "@/lib/api/admin/system";
-import { colors, space, textScale, type } from "@/theme";
+import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
 const PERMS = ["activity_logs.view"];
 
@@ -107,6 +110,15 @@ export default function ActivityLogsScreen() {
         onFilter={(key) => set({ kind: (key === "all" ? "" : key) as LogKind })}
         extraHeader={
           <View style={styles.gap}>
+            {stats ? (
+              <CountTiles
+                items={[
+                  { key: "count", label: "Son 24 saat", value: stats.count, icon: "pulse", tone: "brand" },
+                  { key: "users", label: "Kullanıcı", value: stats.users, icon: "people", tone: "accent" },
+                  { key: "fail", label: "Hata (liste)", value: items.filter(isFailedLog).length, icon: "alert-circle", tone: "danger" },
+                ]}
+              />
+            ) : null}
             <ChipGroup scrollable contentPadding={0}>
               {filters.userId ? (
                 <Chip label={`Kullanıcı: ${filters.userName}`} size="sm" selected onDismiss={() => set({ userId: "", userName: "" })} />
@@ -145,7 +157,8 @@ export default function ActivityLogsScreen() {
             ) : null}
           </View>
         }
-        summary={stats ? `Son 24 saat: ${stats.count.toLocaleString("tr-TR")} kayıt · ${stats.users.toLocaleString("tr-TR")} kullanıcı` : null}
+        summary={items.length ? `${items.length} kayıt yüklendi` : null}
+        gap={0}
         keyExtractor={(e) => String(e.id)}
         emptyIcon="list-outline"
         emptyTitle={hasFilters ? "Süzgeçlere uyan kayıt yok" : "Henüz kayıt yok"}
@@ -153,25 +166,47 @@ export default function ActivityLogsScreen() {
           const meta = logKindMeta(item);
           const failed = isFailedLog(item);
           const newDay = index === 0 || isoDay(items[index - 1]?.createdAt) !== isoDay(item.createdAt);
+          const lastOfDay = index === items.length - 1 || isoDay(items[index + 1]?.createdAt) !== isoDay(item.createdAt);
+          const tone = failed ? "danger" : meta.tone;
           return (
-            <View style={styles.gap}>
+            <View>
               {newDay ? (
-                <Text style={styles.day} {...textScale.dense}>
-                  {dayLabel(item.createdAt)}
-                </Text>
+                <View style={styles.dayRow}>
+                  <IconTile icon="calendar" tone="neutral" size={22} glow={false} />
+                  <Text style={styles.day} accessibilityRole="header" {...textScale.dense}>
+                    {dayLabel(item.createdAt)}
+                  </Text>
+                </View>
               ) : null}
-              <RecordCard
-                title={item.action || item.url || item.route || "—"}
-                subtitle={item.url || item.route}
-                meta={[formatTime(item.createdAt), item.username || `#${item.user_id ?? "—"}`, ROLE_LABELS[item.user_role ?? ""] ?? item.user_role, item.city]
-                  .filter(Boolean)
-                  .join(" · ")}
-                icon={item.kind === "page_view" ? "document-outline" : item.kind === "auth" ? "log-in-outline" : "flash-outline"}
-                iconTone={failed ? "danger" : meta.tone}
-                badges={[{ label: meta.label, tone: meta.tone }, failed ? { label: String(item.status_code), tone: "danger" } : null]}
-                numberOfLines={1}
-                onPress={() => setOpen(item)}
-              />
+              {/* Zaman çizelgesi: saat · eksen üstünde tür pulu · kart. */}
+              <Touchable feedback="row" onPress={() => setOpen(item)} style={styles.tl} accessibilityRole="button" accessibilityLabel={`${formatTime(item.createdAt)}, ${item.action || item.url}, ${item.username ?? ""}`}>
+                <Text style={[styles.time, failed ? { color: colors.danger } : null]} {...textScale.badge}>
+                  {formatTime(item.createdAt)}
+                </Text>
+                <View style={styles.axis}>
+                  <View style={[styles.axisLine, newDay ? styles.axisTopGap : null, lastOfDay ? styles.axisBottomGap : null]} />
+                  <View style={[styles.pul, { backgroundColor: toneBg(tone), borderColor: toneFg(tone) }]}>
+                    <Ionicons name={logIcon(item)} size={13} color={toneFg(tone)} />
+                  </View>
+                </View>
+                <View style={[styles.card, failed ? styles.cardFailed : null]}>
+                  <Text style={styles.cardTitle} numberOfLines={2} {...textScale.dense}>
+                    {item.action || item.url || item.route || "—"}
+                  </Text>
+                  {item.url || item.route ? (
+                    <Text style={styles.route} numberOfLines={1} {...textScale.badge}>
+                      {[item.method && item.method !== "GET" ? item.method : null, item.url || item.route].filter(Boolean).join(" ")}
+                    </Text>
+                  ) : null}
+                  <View style={styles.who}>
+                    <Avatar name={item.username || "?"} size={18} />
+                    <Text style={styles.whoText} numberOfLines={1} {...textScale.dense}>
+                      {[item.username || `#${item.user_id ?? "—"}`, ROLE_LABELS[item.user_role ?? ""] ?? item.user_role, item.city].filter(Boolean).join(" · ")}
+                    </Text>
+                    <Badge label={failed ? String(item.status_code) : meta.label} tone={tone} size="xs" />
+                  </View>
+                </View>
+              </Touchable>
             </View>
           );
         }}
@@ -180,6 +215,19 @@ export default function ActivityLogsScreen() {
       <BottomSheet visible={open != null} onClose={() => setOpen(null)} title={open?.action || "Kayıt ayrıntısı"} snap="half">
         {open ? (
           <View style={styles.gap}>
+            <View style={styles.sheetHead}>
+              <IconTile icon={logIcon(open)} tone={toneTile(isFailedLog(open) ? "danger" : logKindMeta(open).tone)} size={44} />
+              <View style={styles.flex}>
+                <Text style={styles.sheetTitle} numberOfLines={3} {...textScale.dense}>
+                  {open.action || open.url || "—"}
+                </Text>
+                <View style={styles.sheetBadges}>
+                  <Badge label={logKindMeta(open).label} tone={logKindMeta(open).tone} size="xs" />
+                  <Badge label={`${open.status_code || "—"}`} tone={isFailedLog(open) ? "danger" : "win"} icon={isFailedLog(open) ? "close-circle" : "checkmark-circle"} size="xs" />
+                  {open.duration_ms != null ? <Badge label={`${open.duration_ms} ms`} size="xs" /> : null}
+                </View>
+              </View>
+            </View>
             <InfoLine label="Zaman" value={formatDateTime(open.createdAt)} />
             <InfoLine
               label="Kullanıcı"
@@ -221,11 +269,38 @@ export default function ActivityLogsScreen() {
   );
 }
 
+/** Kayıt türü → zaman çizelgesi pulu. */
+function logIcon(item: ActivityLog): keyof typeof Ionicons.glyphMap {
+  if (item.kind === "page_view") return "eye";
+  if (item.kind === "auth") return isFailedLog(item) ? "lock-closed" : "log-in";
+  const m = String(item.method || "").toUpperCase();
+  if (m === "DELETE") return "trash";
+  if (m === "POST") return "add";
+  return "create";
+}
+
 const styles = StyleSheet.create({
   gap: { gap: space.sm },
+  dayRow: { flexDirection: "row", alignItems: "center", gap: space.sm, marginTop: space.md, marginBottom: space.xs },
+  tl: { flexDirection: "row", alignItems: "stretch", gap: space.sm },
+  time: { ...type.tableNumStrong, color: colors.textSecondary, width: 40, paddingTop: space.md, textAlign: "right" },
+  axis: { width: 26, alignItems: "center" },
+  axisLine: { position: "absolute", top: 0, bottom: 0, width: 2, backgroundColor: colors.separator },
+  axisTopGap: { top: space.md },
+  axisBottomGap: { bottom: "60%" },
+  pul: { width: 26, height: 26, borderRadius: 13, marginTop: space.sm + 2, alignItems: "center", justifyContent: "center", borderWidth: 1 },
+  card: { flex: 1, minWidth: 0, gap: 3, padding: space.md, marginBottom: space.sm, borderRadius: radius.xl, backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border },
+  cardFailed: { borderColor: colors.danger, backgroundColor: colors.dangerDim },
+  cardTitle: { ...type.label, color: colors.textPrimary },
+  route: { ...type.micro, color: colors.textTertiary },
+  who: { flexDirection: "row", alignItems: "center", gap: space.xs, marginTop: 2 },
+  whoText: { ...type.caption, color: colors.textSecondary, flex: 1 },
+  sheetHead: { flexDirection: "row", alignItems: "center", gap: space.md, paddingBottom: space.sm },
+  sheetTitle: { ...type.h3, color: colors.textPrimary },
+  sheetBadges: { flexDirection: "row", flexWrap: "wrap", gap: space.xs, marginTop: space.xs },
   flex: { flex: 1 },
   dates: { flexDirection: "row", gap: space.sm },
-  day: { ...type.overline, color: colors.textTertiary, marginTop: space.sm },
+  day: { ...type.overline, color: colors.textSecondary },
   toggleRow: { flexDirection: "row", alignItems: "center", gap: space.md },
   toggleLabel: { ...type.bodySm, color: colors.textPrimary, flex: 1 },
 });

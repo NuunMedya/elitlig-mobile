@@ -32,6 +32,9 @@ import {
   EmptyState,
   ErrorState,
   ListRow,
+  MetricGrid,
+  MetricTile,
+  Reveal,
   ScreenHeader,
   SkeletonListRow,
   TeamLogo,
@@ -43,7 +46,7 @@ import { DeadlineBanner, remainingShort } from "@/components/club/DeadlineBanner
 import { getOfferInbox, type TransferOffer } from "@/lib/api/panel";
 import { formatDateShort, mediaUrl } from "@/lib/format";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, layout, space, textScale, type } from "@/theme";
+import { colors, fonts, layout, space, textScale, type } from "@/theme";
 
 /* ============================ SABİTLER / TİPLER ============================ */
 
@@ -183,30 +186,35 @@ export default function OffersScreen() {
 
   const renderItem = useCallback(
     ({ item, index }: { item: TransferOffer; index: number }) => (
-      <OfferRow
-        offer={item}
-        position={rowPosition(index, visible.length)}
-        onPress={openOffer}
-      />
+      <Reveal index={index} limit={8} replayKey={filter}>
+        <OfferRow
+          offer={item}
+          position={rowPosition(index, visible.length)}
+          onPress={openOffer}
+        />
+      </Reveal>
     ),
-    [openOffer, visible.length],
+    [filter, openOffer, visible.length],
   );
 
   const listHeader = useMemo(
     () => (
       <View style={styles.headerBlock}>
-        <ChipGroup style={styles.chips}>
-          {/* Boş durum çipi gösterilmez: "Ret 0" bir seçenek değil, gürültü. */}
-          {FILTERS.filter((def) => def.key === "tumu" || def.key === filter || counts[def.key] > 0).map((def) => (
-            <FilterChip
-              key={def.key}
-              def={def}
-              count={counts[def.key]}
-              selected={def.key === filter}
-              onSelect={selectFilter}
+        {/* ÖZET: üç sayı — yanıt bekleyen, kabul edilen, toplam. Kutuya dokununca süzgeç. */}
+        <Reveal>
+          <MetricGrid columns={3}>
+            <MetricTile
+              label="Bekleyen"
+              value={String(waiting)}
+              hint={waiting ? "yanıt bekliyor" : "hepsi yanıtlandı"}
+              tone={waiting ? "warn" : "neutral"}
+             
+              onPress={() => selectFilter("bekleyen")}
             />
-          ))}
-        </ChipGroup>
+            <MetricTile label="Kabul" value={String(counts.kabul)} hint="sözleşmeli" tone="win" onPress={() => selectFilter("kabul")} />
+            <MetricTile label="Toplam" value={String(counts.tumu)} hint="tüm teklifler" tone="brand" onPress={() => selectFilter("tumu")} />
+          </MetricGrid>
+        </Reveal>
 
         {/* Süresi en yakın bekleyen teklif bant olarak; yoksa tek cümle. */}
         {nextExpiring ? (
@@ -223,6 +231,19 @@ export default function OffersScreen() {
             aç: kabul, ret ve revizyon istekleri orada.
           </Text>
         ) : null}
+
+        <ChipGroup style={styles.chips}>
+          {/* Boş durum çipi gösterilmez: "Ret 0" bir seçenek değil, gürültü. */}
+          {FILTERS.filter((def) => def.key === "tumu" || def.key === filter || counts[def.key] > 0).map((def) => (
+            <FilterChip
+              key={def.key}
+              def={def}
+              count={counts[def.key]}
+              selected={def.key === filter}
+              onSelect={selectFilter}
+            />
+          ))}
+        </ChipGroup>
 
         {/* Liste dolu ama sorgu hata verdiyse veri silinmez, hata şerit olur. */}
         {query.isError && items.length > 0 ? (
@@ -331,14 +352,11 @@ const OfferRow = React.memo(function OfferRow({
   const urgent = isUrgent(offer);
   const needsAction = Boolean(offer.actions?.accept || offer.actions?.reject);
 
+  const left = offer.status === "SENT" ? remainingShort(offer.expires_at) : null;
   const subtitle = [
     offer.sent_at ? `Gönderildi ${formatDateShort(offer.sent_at)}` : null,
-    offer.expires_at
-      ? offer.status === "SENT" && remainingShort(offer.expires_at)
-        ? `${remainingShort(offer.expires_at)} kaldı`
-        : `Son gün ${formatDateShort(offer.expires_at)}`
-      : null,
-    offer.awaiting_admin_approval ? "Yönetici onayı bekliyor" : null,
+    offer.expires_at && !left ? `Son gün ${formatDateShort(offer.expires_at)}` : null,
+    offer.awaiting_admin_approval || offer.requires_admin_approval ? "Yönetici onaylı" : null,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -354,12 +372,20 @@ const OfferRow = React.memo(function OfferRow({
     [offer.team?.logo, offer.team?.team_name],
   );
 
-  const badge = (
-    <Badge
-      label={urgent ? "SON GÜN" : meta.label}
-      tone={urgent ? "danger" : meta.tone}
-      size="xs"
-    />
+  /* Sağ sütun: durum hapı üstte, işleyen süre altta (rakam tipinde). */
+  const trailing = (
+    <View style={styles.trail}>
+      <Badge label={urgent ? "Son gün" : meta.label} tone={urgent ? "danger" : meta.tone} size="xs" />
+      {left ? (
+        <Text style={[styles.left, urgent ? styles.leftUrgent : null]} numberOfLines={1} {...textScale.badge}>
+          {left}
+        </Text>
+      ) : !offer.viewed_at ? (
+        <Text style={styles.fresh} {...textScale.badge}>
+          Yeni
+        </Text>
+      ) : null}
+    </View>
   );
 
   return (
@@ -367,7 +393,7 @@ const OfferRow = React.memo(function OfferRow({
       leading={leading}
       title={offer.team?.team_name ?? "Takım"}
       subtitle={subtitle || undefined}
-      badge={badge}
+      trailing={trailing}
       highlighted={needsAction || !offer.viewed_at}
       position={position}
       onPress={handlePress}
@@ -400,6 +426,23 @@ const styles = StyleSheet.create({
    */
   chips: {
     marginHorizontal: -layout.screenPadding,
+  },
+  trail: {
+    alignItems: "flex-end",
+    gap: space.xxs,
+    marginLeft: space.sm,
+  },
+  left: {
+    ...type.numSmStrong,
+    color: colors.warn,
+  },
+  leftUrgent: {
+    color: colors.danger,
+  },
+  fresh: {
+    ...type.micro,
+    fontFamily: fonts.bold,
+    color: colors.brandAccent,
   },
   summary: {
     ...type.caption,

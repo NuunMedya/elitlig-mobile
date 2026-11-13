@@ -14,6 +14,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Clipboard from "expo-clipboard";
+import { LinearGradient } from "expo-linear-gradient";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 
@@ -341,12 +342,13 @@ function Calculator() {
   return (
     <CalcCard title="Hesap makinesi" subtitle="+ − × ÷, yüzde ve parantez">
       <View style={styles.screen}>
+        <LinearGradient colors={colors.gradientAdminStage} start={{ x: 1, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} />
         <View style={styles.screenTop}>
           <TextInput
             value={expr}
             onChangeText={(t) => setExpr(t.replace(/[^0-9+\-*/().,%×÷−\s]/g, ""))}
             placeholder="0"
-            placeholderTextColor={colors.textTertiary}
+            placeholderTextColor={colors.onDarkMuted}
             style={styles.expr}
             keyboardType="numbers-and-punctuation"
             onSubmitEditing={() => press("=")}
@@ -358,7 +360,7 @@ function Calculator() {
             accessibilityLabel="Son karakteri sil"
             disabled={!expr}
           >
-            <Ionicons name="backspace-outline" size={22} color={colors.textSecondary} />
+            <Ionicons name="backspace-outline" size={22} color={colors.onDarkMuted} />
           </Touchable>
         </View>
         <Touchable
@@ -388,6 +390,7 @@ function Calculator() {
               accessibilityRole="button"
               accessibilityLabel={key === "C" ? "Temizle" : key === "=" ? "Hesapla" : key}
             >
+              {key === "=" ? <LinearGradient colors={colors.gradientSignature} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[StyleSheet.absoluteFill, styles.keyFill]} /> : null}
               <Text style={[styles.keyText, key === "=" ? styles.keyEqText : null, op ? styles.keyOpText : null]} {...textScale.badge}>
                 {key}
               </Text>
@@ -583,25 +586,29 @@ const styles = StyleSheet.create({
   win: { color: colors.win },
   danger: { color: colors.danger },
 
-  screen: { padding: space.md, borderRadius: radius.md, backgroundColor: colors.surface2, gap: space.xs },
+  screen: { padding: space.lg, minHeight: 112, justifyContent: "flex-end", borderRadius: radius.xl, overflow: "hidden", backgroundColor: colors.adminBar, gap: space.xs },
   screenTop: { flexDirection: "row", alignItems: "center", gap: space.sm },
-  expr: { flex: 1, ...type.scoreMd, color: colors.textPrimary, textAlign: "right" },
-  preview: { ...type.scoreXs, color: colors.textTertiary, textAlign: "right" },
+  expr: { flex: 1, ...type.scoreHero, color: colors.onDark, textAlign: "right" },
+  preview: { ...type.scoreSm, color: colors.tileTones.cyan[0], textAlign: "right" },
   keys: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", rowGap: space.sm },
   key: {
     width: "23%",
-    height: 54,
-    borderRadius: radius.md,
+    height: 58,
+    borderRadius: radius.lg,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.surface2,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    overflow: "hidden",
   },
+  keyFill: { borderRadius: radius.lg },
   keyOp: { backgroundColor: colors.brandDim },
-  keyEq: { backgroundColor: colors.brand },
+  keyEq: { backgroundColor: colors.brand, borderColor: colors.brand },
   keyClear: { backgroundColor: colors.dangerDim },
   keyText: { ...type.scoreSm, color: colors.textPrimary },
   keyOpText: { color: colors.brandAccent },
-  keyEqText: { color: colors.textOnBrand },
+  keyEqText: { color: colors.onDark },
   history: { gap: space.xxs },
   historyHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: space.xs },
   historyRow: { flexDirection: "row", gap: space.md, paddingVertical: space.s, borderTopWidth: hairline, borderTopColor: colors.separator },

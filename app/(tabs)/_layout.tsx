@@ -159,7 +159,9 @@ export default function TabsLayout() {
   return (
     <>
       <Tabs
-        screenOptions={{ headerShown: false }}
+        /* GECE TEMASI: sekme değişince içerik kapsülle aynı yöne hafifçe
+           kayarak gelir (PUSH SLIDE); alt menünün hareketiyle tek cümle. */
+        screenOptions={{ headerShown: false, animation: "shift" }}
         tabBar={(props) =>
           mode.adminActive ? (
             <GlowTabBar {...props} tabs={adminTabs} variant="admin" center={adminCenter} />

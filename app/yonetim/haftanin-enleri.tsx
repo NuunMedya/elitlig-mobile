@@ -11,9 +11,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { ActionSheet, AdminList, AdminScreen, RecordCard, confirmAction, useAdminMutation } from "@/components/admin";
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { StyleSheet, Text, View } from "react-native";
+
+import { ActionSheet, AdminList, AdminScreen, confirmAction, useAdminMutation } from "@/components/admin";
+import { StatusTiles, toneColor } from "@/components/admin/matches/opsKit";
 import { AwardSetEditor } from "@/components/admin/weeklyAwards/AwardSetEditor";
-import { FAB, useToast } from "@/components/ui";
+import { Badge, FAB, GradientBar, Touchable, useToast, type Tone } from "@/components/ui";
+import { colors, hairline, radius, space, textScale, type } from "@/theme";
 import { hasAnyPermission } from "@/lib/admin/access";
 import { errorText } from "@/lib/admin/errors";
 import { formatDate } from "@/lib/admin/format";
@@ -107,17 +112,21 @@ export default function WeeklyAwardsAdminScreen() {
         emptyTitle="Ödül seti yok"
         emptyBody="Haftanın oyuncusunu, mevki enlerini ve kadroyu seçip yayınla."
         keyExtractor={(s) => String(s.id)}
+        extraHeader={
+          list.data?.length ? (
+            <StatusTiles
+              items={[
+                { key: "DRAFT", label: "Taslak", value: list.data.filter((s) => s.status === "DRAFT").length, tone: "neutral", icon: "create-outline" },
+                { key: "PUBLISHED", label: "Yayında", value: list.data.filter((s) => s.status === "PUBLISHED").length, tone: "win", icon: "megaphone-outline" },
+                { key: "UNPUBLISHED", label: "Alındı", value: list.data.filter((s) => s.status === "UNPUBLISHED").length, tone: "warn", icon: "eye-off-outline" },
+              ]}
+              value={status === "ALL" ? null : (status as "DRAFT")}
+              onChange={(k) => setStatus(k ?? "ALL")}
+            />
+          ) : null
+        }
         renderItem={({ item }) => (
-          <RecordCard
-            title={nameOf(item)}
-            subtitle={`${formatDate(item.start_date)} – ${formatDate(item.end_date)}`}
-            meta={`${(item.items ?? []).length} ödül${item.formation ? ` · ${item.formation}` : ""}`}
-            icon="ribbon-outline"
-            iconTone={item.status === "PUBLISHED" ? "win" : item.status === "UNPUBLISHED" ? "warn" : "neutral"}
-            badges={[{ label: SET_STATUS_LABELS[item.status] ?? item.status, tone: item.status === "PUBLISHED" ? "win" : item.status === "UNPUBLISHED" ? "warn" : "neutral" }]}
-            onPress={() => void open(item.id)}
-            onLongPress={() => setMenu(item)}
-          />
+          <AwardCard set={item} name={nameOf(item)} onPress={() => void open(item.id)} onLongPress={() => setMenu(item)} />
         )}
       />
       <ActionSheet
@@ -153,3 +162,134 @@ export default function WeeklyAwardsAdminScreen() {
     </AdminScreen>
   );
 }
+
+const STATUS_TONE: Record<string, Tone> = { DRAFT: "neutral", PUBLISHED: "win", UNPUBLISHED: "warn", ARCHIVED: "neutral" };
+
+/** Ödül rafı: yedi kategori pulu (dolu = seçildi) + 11 kişilik kadro. */
+const SHELF: { type: string; icon: keyof typeof Ionicons.glyphMap; label: string }[] = [
+  { type: "WEEKLY_PLAYER", icon: "star", label: "Oyuncu" },
+  { type: "WEEKLY_GOALKEEPER", icon: "hand-left", label: "Kaleci" },
+  { type: "WEEKLY_DEFENDER", icon: "shield", label: "Defans" },
+  { type: "WEEKLY_MIDFIELDER", icon: "swap-horizontal", label: "Orta" },
+  { type: "WEEKLY_FORWARD", icon: "football", label: "Forvet" },
+  { type: "WEEKLY_FAIR_PLAY", icon: "heart", label: "Fair play" },
+  { type: "WEEKLY_TEAM", icon: "people", label: "Takım" },
+];
+
+/**
+ * Ödül seti kartı: solda hafta pulu (başlık numarası + tarih aralığı), sağda
+ * durum; altında ödül rafı ve kadro doluluk çubuğu. Basılı tutunca eylemler.
+ */
+function AwardCard({ set, name, onPress, onLongPress }: { set: AdminAwardSet; name: string; onPress: () => void; onLongPress: () => void }) {
+  const items = set.items ?? [];
+  const has = (t: string) => items.some((i) => i.award_type === t && (i.player_id || i.team_id));
+  const squad = items.filter((i) => i.award_type === "WEEKLY_SQUAD_PLAYER" && i.player_id).length;
+  const filled = SHELF.filter((x) => has(x.type)).length;
+  const tone = STATUS_TONE[set.status] ?? "neutral";
+  const week = (set.title ?? "").match(/\d+/)?.[0];
+  return (
+    <Touchable
+      feedback="card"
+      onPress={onPress}
+      onLongPress={onLongPress}
+      style={styles.card}
+      accessibilityRole="button"
+      accessibilityLabel={`${name}, ${SET_STATUS_LABELS[set.status] ?? set.status}, ${filled} ödül, kadroda ${squad} oyuncu`}
+      accessibilityHint="Eylemler için basılı tut"
+    >
+      <View style={[styles.rail, { backgroundColor: toneColor(tone) }]} />
+      <View style={styles.head}>
+        <View style={styles.week}>
+          <Text style={styles.weekNo} {...textScale.badge}>
+            {week ?? "—"}
+          </Text>
+          <Text style={styles.weekLabel} {...textScale.badge}>
+            HAFTA
+          </Text>
+        </View>
+        <View style={styles.flex}>
+          <Text style={styles.title} numberOfLines={1} {...textScale.dense}>
+            {name}
+          </Text>
+          <Text style={styles.meta} numberOfLines={1} {...textScale.dense}>
+            {formatDate(set.start_date)} – {formatDate(set.end_date)}
+            {set.formation ? ` · ${set.formation}` : ""}
+          </Text>
+        </View>
+        <Badge label={SET_STATUS_LABELS[set.status] ?? set.status} tone={tone} size="xs" dot={set.status === "PUBLISHED"} />
+      </View>
+      <View style={styles.shelf}>
+        {SHELF.map((x) => {
+          const on = has(x.type);
+          return (
+            <View key={x.type} style={styles.award} accessibilityLabel={`${x.label}: ${on ? "seçildi" : "boş"}`}>
+              <View style={[styles.medal, on ? styles.medalOn : null]}>
+                <Ionicons name={on ? x.icon : (`${x.icon}-outline` as keyof typeof Ionicons.glyphMap)} size={14} color={on ? colors.onDark : colors.textDisabled} />
+              </View>
+              <Text style={[styles.awardLabel, on ? styles.awardLabelOn : null]} numberOfLines={1} {...textScale.badge}>
+                {x.label}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
+      <View style={styles.squad}>
+        <Text style={styles.squadLabel} {...textScale.badge}>
+          KADRO
+        </Text>
+        <GradientBar value={squad / 11} height={5} style={styles.flex} />
+        <Text style={styles.squadValue} {...textScale.badge}>
+          {squad}/11
+        </Text>
+      </View>
+    </Touchable>
+  );
+}
+
+const styles = StyleSheet.create({
+  flex: { flex: 1, minWidth: 0 },
+  card: {
+    gap: space.md,
+    padding: space.lg,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+    overflow: "hidden",
+  },
+  rail: { position: "absolute", left: 0, top: 0, bottom: 0, width: 3 },
+  head: { flexDirection: "row", alignItems: "center", gap: space.md },
+  week: {
+    width: 46,
+    height: 46,
+    borderRadius: radius.lg,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.brandDim,
+    borderWidth: hairline,
+    borderColor: colors.brandBorder,
+  },
+  weekNo: { ...type.scoreSm, color: colors.brandAccent },
+  weekLabel: { ...type.nano, color: colors.textTertiary },
+  title: { ...type.h3, color: colors.textPrimary },
+  meta: { ...type.caption, color: colors.textTertiary, marginTop: space.xxs },
+  shelf: { flexDirection: "row", justifyContent: "space-between" },
+  award: { alignItems: "center", gap: space.xxs, width: 44 },
+  medal: {
+    width: 30,
+    height: 30,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface3,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: colors.border,
+  },
+  medalOn: { backgroundColor: colors.brand, borderStyle: "solid", borderColor: colors.brandBorder },
+  awardLabel: { ...type.nano, color: colors.textDisabled },
+  awardLabelOn: { color: colors.textSecondary },
+  squad: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  squadLabel: { ...type.overline, color: colors.textTertiary },
+  squadValue: { ...type.numSmStrong, color: colors.textPrimary },
+});

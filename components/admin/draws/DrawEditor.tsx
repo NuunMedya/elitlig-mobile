@@ -22,7 +22,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { StyleSheet, Text, View } from "react-native";
 
 import { OptionSheet, Panel, SelectField, ToggleField, confirmAction, useAdminMutation } from "@/components/admin";
-import { Badge, Button, Chip, ChipGroup, Input, SegmentedControl, Stepper, Touchable, useReduceMotion, useToast } from "@/components/ui";
+import { Badge, Button, Chip, ChipGroup, GradientBar, Input, Reveal, SegmentedControl, Stepper, TeamLogo, Touchable, useReduceMotion, useToast } from "@/components/ui";
+import { OpsStage, StepRail } from "@/components/admin/matches/opsKit";
+import { mediaUrl } from "@/lib/format";
 import { hasAnyPermission } from "@/lib/admin/access";
 import { WEB_BASE_URL } from "@/lib/config";
 import {
@@ -278,6 +280,22 @@ export function DrawEditor({ initial, onClose }: { initial: Draw | null; onClose
   const revealedIds = useMemo(() => (current?.result ? new Set(order.slice(0, revealed).map((o) => Number(o.teamId))) : null), [current, order, revealed]);
   const lastTeamId = revealed > 0 ? order[revealed - 1]?.teamId : null;
   const isRevealing = Boolean(current?.result && revealed < order.length);
+  /** Son çekilen takım ve düştüğü yer (grup adı ya da eşleşme no) — çekiliş sahnesi için. */
+  const lastTeam = useMemo(() => {
+    const res = current?.result;
+    if (!res || lastTeamId == null) return null;
+    for (const g of res.groups ?? []) {
+      const t = g.teams.find((x) => Number(x.teamId) === Number(lastTeamId));
+      if (t) return { team: t, place: `${g.name} Grubu` };
+    }
+    for (const r of res.rounds ?? []) {
+      for (const m of r.matches) {
+        const t = [m.home, m.away].find((x) => x && Number(x.teamId) === Number(lastTeamId));
+        if (t) return { team: t, place: `${m.matchNo}. maç` };
+      }
+    }
+    return null;
+  }, [current, lastTeamId]);
   const overlayUrl = current ? `${WEB_BASE_URL}/kura-overlay/${current.id}` : "";
   const editable = current ? canUpdate : canCreate;
 
@@ -290,18 +308,17 @@ export function DrawEditor({ initial, onClose }: { initial: Draw | null; onClose
         <Button label="Kura listesi" icon="chevron-back" variant="ghost" size="sm" onPress={onClose} disabled={isRevealing} />
         {current ? <Badge label={DRAW_STATUS_LABELS[current.status] || current.status} tone={current.status === "COMPLETED" ? "win" : current.status === "READY" ? "accent" : "neutral"} /> : null}
       </View>
-      <SegmentedControl<Step>
+      <StepRail<Step>
         items={[
-          { key: "setup", label: "1 · Kurulum" },
-          { key: "pots", label: "2 · Torbalar" },
-          { key: "draw", label: "3 · Çekiliş" },
+          { key: "setup", label: "Kurulum", icon: "construct-outline", done: Boolean(current) },
+          { key: "pots", label: "Torbalar", icon: "basket-outline", done: Boolean(current?.isRosterComplete), meta: current ? `${current.selectedTeamCount}/${current.teamCount}` : undefined },
+          { key: "draw", label: "Çekiliş", icon: "shuffle-outline", done: current?.status === "COMPLETED" },
         ]}
         value={step}
         onChange={(s) => {
-          if (s !== "setup" && !current) return toast.show({ message: "Önce kurulumu kaydet.", tone: "warn" });
+          if (s !== "setup" && !current) return void toast.show({ message: "Önce kurulumu kaydet.", tone: "warn" });
           setStep(s);
         }}
-        size="sm"
       />
 
       {step === "setup" ? (
@@ -451,12 +468,45 @@ export function DrawEditor({ initial, onClose }: { initial: Draw | null; onClose
             </Panel>
           ) : (
             <>
-              <View style={styles.row}>
-                <Text style={styles.hint} {...textScale.dense}>
-                  {isRevealing ? `${revealed}/${order.length} takım çekildi` : `${order.length} takım yerleşti`}
-                </Text>
-                {isRevealing ? <Button label="Sonucu göster" size="sm" variant="secondary" onPress={skipReveal} /> : <Button label="Çekilişi yeniden oynat" icon="play" size="sm" variant="ghost" onPress={() => startReveal(current)} />}
-              </View>
+              {/* ÇEKİLİŞ SAHNESİ — son çekilen takım topun içinde yaylanarak belirir; altında ilerleme. */}
+              <OpsStage height={200}>
+                <View style={styles.row}>
+                  <Text style={styles.stageLabel} {...textScale.badge}>
+                    {isRevealing ? "KURA ÇEKİLİYOR" : "KURA TAMAMLANDI"}
+                  </Text>
+                  <Text style={styles.stageCount} {...textScale.badge}>
+                    {revealed}/{order.length}
+                  </Text>
+                </View>
+                {lastTeam ? (
+                  <Reveal key={`${lastTeamId}-${revealed}`} scaleFrom={0.6} distance={0}>
+                    <View style={styles.spot}>
+                      <View style={styles.ball}>
+                        <TeamLogo name={lastTeam.team.teamName} logo={mediaUrl(lastTeam.team.teamLogo)} size={44} />
+                      </View>
+                      <View style={styles.flexOne}>
+                        <Text style={styles.spotName} numberOfLines={1} {...textScale.dense}>
+                          {lastTeam.team.teamName}
+                        </Text>
+                        <Text style={styles.spotMeta} numberOfLines={1} {...textScale.dense}>
+                          {[lastTeam.team.potNumber ? `${lastTeam.team.potNumber}. torba` : null, lastTeam.place].filter(Boolean).join(" → ")}
+                        </Text>
+                      </View>
+                      {isRevealing ? <Ionicons name="sparkles" size={18} color={colors.adminAccent} /> : <Ionicons name="checkmark-circle" size={20} color={colors.win} />}
+                    </View>
+                  </Reveal>
+                ) : (
+                  <Text style={styles.spotMeta} {...textScale.dense}>
+                    Toplar karıştırılıyor…
+                  </Text>
+                )}
+                <GradientBar value={order.length ? revealed / order.length : 0} height={5} track={colors.inkPill} />
+                {isRevealing ? (
+                  <Button label="Sonucu göster" size="sm" variant="secondary" onDark onPress={skipReveal} />
+                ) : (
+                  <Button label="Çekilişi yeniden oynat" icon="play" size="sm" variant="secondary" onDark onPress={() => startReveal(current)} />
+                )}
+              </OpsStage>
               <DrawResultView result={current.result} revealedIds={isRevealing ? revealedIds : null} lastTeamId={isRevealing ? lastTeamId : null} />
               {!isRevealing && current.fixture ? (
                 <Panel title="Fikstür">
@@ -557,6 +607,22 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.sm, flexWrap: "wrap" },
   topRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   hint: { ...type.caption, color: colors.textSecondary },
+  flexOne: { flex: 1, minWidth: 0 },
+  stageLabel: { ...type.overline, color: colors.adminAccent },
+  stageCount: { ...type.scoreSm, color: colors.onDark },
+  spot: { flexDirection: "row", alignItems: "center", gap: space.md },
+  ball: {
+    width: 64,
+    height: 64,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.inkTile,
+    borderWidth: 2,
+    borderColor: colors.adminAccent,
+  },
+  spotName: { ...type.h2, color: colors.onDark },
+  spotMeta: { ...type.caption, color: colors.onDarkMuted, marginTop: space.xxs },
   problem: { ...type.bodySm, color: colors.danger },
   warn: { ...type.bodySm, color: colors.warn },
   groupNames: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },

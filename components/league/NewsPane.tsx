@@ -14,6 +14,17 @@
  *     oyuncunun 32px yuvarlak fotoğrafını ve (varsa) yeni takımının armasını
  *     taşır — bir duyuru portre değil, "kim → nereye" bilgisidir.
  *
+ * İKİNCİ TUR:
+ *   · MANŞET KAPAKLI SAHNE: kapak 16:10, altında koyu scrim degradesi;
+ *     kategori rozeti, zaman, başlık (beyaz, h1) ve özet görselin ÜSTÜNDE.
+ *     Scrim iki temada da koyudur, metin `onDark` — açık temada okunmayan
+ *     siyah başlık sorunu bu yüzden doğmaz.
+ *   · AKIŞ BAŞLIĞI: "Son gelişmeler · 16" — manşetle akış ayrışır.
+ *   · SATIR: tür rozeti (`Badge` soft: haber mor, transfer camgöbeği, disiplin
+ *     kırmızı) + zaman; başlık 13px yarı kalın, iki satır. Editör haberi
+ *     solda 64px kare kapak; duyuru solda 40px oyuncu fotoğrafı + yeni
+ *     takımın arması. Satırlar ilk açılışta sırayla gelir.
+ *
  * DOKUNMA: editör haberi detay sayfasına gider. Üretilmiş duyurunun detay
  * sayfası yoktur; sunucu `meta` alanında oyuncu kimliği gönderiyorsa satır
  * oyuncu sayfasını açar, göndermiyorsa satır basılamaz (uydurma bağlantı yok).
@@ -24,13 +35,16 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
+import { LinearGradient } from "expo-linear-gradient";
 import { FlatList, Image, RefreshControl, StyleSheet, Text, View } from "react-native";
 import {
   Avatar,
+  Badge,
   Chip,
   ChipGroup,
   EmptyState,
   ErrorState,
+  Reveal,
   Skeleton,
   SkeletonListRow,
   TeamLogo,
@@ -43,7 +57,7 @@ import { mediaUrl, timeAgo } from "@/lib/format";
 import { queryKeys } from "@/lib/queryKeys";
 import type { NewsItem } from "@/lib/types";
 import { colors, layout, radius, space, textScale, type, upperTR } from "@/theme";
-import { GroupSeparator, groupRowStyle, groupStyles, paneStyles, useScopeKey, type PaneProps } from "./shared";
+import { GroupSeparator, groupRowStyle, paneStyles, useScopeKey, type PaneProps } from "./shared";
 
 type NewsFilter = "all" | NewsItem["kind"];
 
@@ -58,6 +72,18 @@ const KIND_LABEL: Record<NewsItem["kind"], string> = {
   news: "Haber",
   transfer: "Transfer",
   penalty: "Disiplin",
+};
+
+const KIND_TONE: Record<NewsItem["kind"], "brand" | "accent" | "danger"> = {
+  news: "brand",
+  transfer: "accent",
+  penalty: "danger",
+};
+
+const KIND_ICON: Record<NewsItem["kind"], "newspaper-outline" | "swap-horizontal" | "warning-outline"> = {
+  news: "newspaper-outline",
+  transfer: "swap-horizontal",
+  penalty: "warning-outline",
 };
 
 /** Üretilmiş duyuruların taşıdığı ilişki bilgisi — tipte yok, savunmacı okunur. */
@@ -92,28 +118,38 @@ const FeaturedCard = React.memo(function FeaturedCard({
       feedback="card"
       haptic="selection"
       onPress={open}
-      style={[groupStyles.card, styles.featured]}
+      style={styles.featured}
       accessibilityRole="button"
       accessibilityLabel={item.title}
     >
-      {cover ? (
-        <View style={styles.featuredCover}>
+      <View style={styles.featuredCover}>
+        {cover ? (
           <Image source={{ uri: cover }} style={StyleSheet.absoluteFill} resizeMode="cover" resizeMethod="resize" />
-        </View>
-      ) : null}
-      <View style={styles.featuredBody}>
-        <Text style={styles.kicker} {...textScale.badge}>
-          {upperTR(item.category_label || "Manşet")}
-          <Text style={styles.kickerTime}>{`  ·  ${timeAgo(item.published_at)}`}</Text>
-        </Text>
-        <Text style={styles.featuredTitle} numberOfLines={3} {...textScale.dense}>
-          {item.title}
-        </Text>
-        {item.summary ? (
-          <Text style={styles.featuredSummary} numberOfLines={2} {...textScale.long}>
-            {item.summary.trim()}
-          </Text>
         ) : null}
+        <LinearGradient
+          colors={[colors.scrimGradientTop, colors.scrimGradientBottom]}
+          locations={[0.25, 1]}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={styles.featuredTopRow}>
+          <Badge label="Manşet" tone="brand" variant="solid" size="xs" icon="flash" />
+        </View>
+        <View style={styles.featuredBody}>
+          <Text style={styles.kicker} numberOfLines={1} {...textScale.badge}>
+            {upperTR(item.category_label || "Haber")}
+            <Text style={styles.kickerTime}>{`  ·  ${timeAgo(item.published_at)}`}</Text>
+          </Text>
+          <Text style={styles.featuredTitle} numberOfLines={3} {...textScale.dense}>
+            {item.title}
+          </Text>
+          {item.summary ? (
+            <Text style={styles.featuredSummary} numberOfLines={2} {...textScale.dense}>
+              {item.summary.trim()}
+            </Text>
+          ) : null}
+        </View>
       </View>
     </Touchable>
   );
@@ -147,35 +183,31 @@ const FeedRow = React.memo(function FeedRow({
 
   const content = (
     <>
-      {!editorial ? (
+      {editorial ? (
+        <View style={styles.thumb}>
+          {cover ? (
+            <Image source={{ uri: cover }} style={StyleSheet.absoluteFill} resizeMode="cover" resizeMethod="resize" />
+          ) : (
+            <View style={styles.thumbEmpty}>
+              <Ionicons name="newspaper-outline" size={22} color={colors.textTertiary} />
+            </View>
+          )}
+        </View>
+      ) : (
         <Avatar
           name={meta?.player_name ?? item.title}
           image={cover}
-          size={32}
+          size={44}
           badge={
             meta?.team_name ? (
-              <TeamLogo name={meta.team_name} logo={meta.team_logo ?? null} size={14} />
+              <TeamLogo name={meta.team_name} logo={meta.team_logo ?? null} size={18} />
             ) : undefined
           }
         />
-      ) : null}
+      )}
       <View style={styles.rowBody}>
         <View style={styles.rowKicker}>
-          {item.kind === "penalty" ? (
-            <Ionicons name="warning" size={10} color={colors.danger} />
-          ) : item.kind === "transfer" ? (
-            <Ionicons name="swap-horizontal" size={10} color={colors.accentText} />
-          ) : null}
-          <Text
-            style={[
-              styles.rowKind,
-              item.kind === "penalty" ? styles.rowKindPenalty : null,
-              item.kind === "transfer" ? styles.rowKindTransfer : null,
-            ]}
-            {...textScale.badge}
-          >
-            {upperTR(KIND_LABEL[item.kind])}
-          </Text>
+          <Badge label={KIND_LABEL[item.kind]} tone={KIND_TONE[item.kind]} size="xs" icon={KIND_ICON[item.kind]} />
           <Text style={styles.rowTime} numberOfLines={1} {...textScale.badge}>
             {timeAgo(item.published_at)}
           </Text>
@@ -189,11 +221,7 @@ const FeedRow = React.memo(function FeedRow({
           </Text>
         ) : null}
       </View>
-      {editorial && cover ? (
-        <View style={styles.thumb}>
-          <Image source={{ uri: cover }} style={StyleSheet.absoluteFill} resizeMode="cover" resizeMethod="resize" />
-        </View>
-      ) : null}
+      {pressable ? <Ionicons name="chevron-forward" size={16} color={colors.textDisabled} /> : null}
     </>
   );
 
@@ -253,12 +281,14 @@ export function NewsPane({ scrollProps }: PaneProps) {
 
   const renderItem = useCallback(
     ({ item, index }: { item: NewsItem; index: number }) => (
-      <FeedRow
-        item={item}
-        style={groupRowStyle(index, feed.length, false)}
-        onOpenNews={openNews}
-        onOpenPlayer={openPlayer}
-      />
+      <Reveal index={index} limit={8} distance={8}>
+        <FeedRow
+          item={item}
+          style={groupRowStyle(index, feed.length, false)}
+          onOpenNews={openNews}
+          onOpenPlayer={openPlayer}
+        />
+      </Reveal>
     ),
     [feed.length, openNews, openPlayer],
   );
@@ -267,7 +297,7 @@ export function NewsPane({ scrollProps }: PaneProps) {
     return (
       <View style={paneStyles.skeleton}>
         <Skeleton height={28} width="70%" radius="pill" />
-        <Skeleton height={150} radius="lg" />
+        <Skeleton height={220} radius="xl" />
         <SkeletonListRow count={5} />
       </View>
     );
@@ -305,7 +335,21 @@ export function NewsPane({ scrollProps }: PaneProps) {
             ))}
           </ChipGroup>
           {query.isError ? <ErrorState error={query.error} variant="banner" /> : null}
-          {featured ? <FeaturedCard item={featured} onOpen={openNews} /> : null}
+          {featured ? (
+            <Reveal index={0} scaleFrom={0.97}>
+              <FeaturedCard item={featured} onOpen={openNews} />
+            </Reveal>
+          ) : null}
+          {feed.length > 0 ? (
+            <View style={styles.feedHead}>
+              <Text style={styles.feedTitle} {...textScale.dense}>
+                Son gelişmeler
+              </Text>
+              <Text style={styles.feedMeta} {...textScale.dense}>
+                {`${feed.length} içerik`}
+              </Text>
+            </View>
+          ) : null}
         </View>
       }
       ListEmptyComponent={
@@ -325,11 +369,11 @@ export function NewsPane({ scrollProps }: PaneProps) {
 
 const newsKey = (item: NewsItem) => `${item.kind}-${item.id}`;
 
-const THUMB = 48;
+const THUMB = 64;
 
 const styles = StyleSheet.create({
   header: {
-    gap: space.sm,
+    gap: space.md,
     paddingBottom: space.sm,
   },
   chips: {
@@ -337,85 +381,99 @@ const styles = StyleSheet.create({
   },
   /* — Manşet — */
   featured: {
+    borderRadius: radius.xl,
     overflow: "hidden",
+    backgroundColor: colors.inkBlock,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
   },
-  /* 16:9 → 2:1: kapak, manşeti öne çıkarmaya yeter; ekranın yarısını yemez. */
+  /* 16:10 — kapak manşeti taşır; metin scrim'in üstünde. */
   featuredCover: {
-    aspectRatio: 2,
-    backgroundColor: colors.surface3,
+    aspectRatio: 1.6,
+    justifyContent: "space-between",
+    backgroundColor: colors.inkBlock,
+  },
+  featuredTopRow: {
+    flexDirection: "row",
+    padding: space.md,
   },
   featuredBody: {
-    paddingHorizontal: space.md,
-    paddingVertical: space.sm,
-    gap: space.xxs,
+    paddingHorizontal: space.lg,
+    paddingBottom: space.lg,
+    gap: space.xs,
   },
   kicker: {
     ...type.overline,
-    letterSpacing: 1,
-    color: colors.brandAccent,
+    color: colors.brandOnDark,
   },
   kickerTime: {
-    color: colors.textTertiary,
+    color: colors.onDarkMuted,
   },
   featuredTitle: {
-    ...type.h3,
-    letterSpacing: -0.2,
-    color: colors.textPrimary,
+    ...type.h1,
+    color: colors.onDark,
   },
   featuredSummary: {
     ...type.bodySm,
-    lineHeight: 16,
-    color: colors.textSecondary,
+    color: colors.onDarkMuted,
+  },
+  feedHead: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    paddingTop: space.md,
+    paddingHorizontal: space.xxs,
+  },
+  feedTitle: {
+    ...type.h2,
+    color: colors.textPrimary,
+  },
+  feedMeta: {
+    ...type.caption,
+    color: colors.textTertiary,
   },
   /* — Akış satırı — */
   row: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.sm,
-    paddingHorizontal: space.m,
-    paddingVertical: space.sm,
-    minHeight: 56,
+    gap: space.m,
+    paddingHorizontal: space.md,
+    paddingVertical: space.m,
+    minHeight: 72,
   },
   rowBody: {
     flex: 1,
     minWidth: 0,
-    gap: space.xxs,
+    gap: space.xs,
   },
   rowKicker: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.xxs,
-  },
-  rowKind: {
-    ...type.overline,
-    letterSpacing: 0.8,
-    color: colors.brandAccent,
-  },
-  rowKindTransfer: {
-    color: colors.accentText,
-  },
-  rowKindPenalty: {
-    color: colors.danger,
+    gap: space.sm,
   },
   rowTime: {
-    ...type.meta,
+    ...type.caption,
     color: colors.textTertiary,
-    marginLeft: space.xs,
     flexShrink: 1,
   },
   rowTitle: {
-    ...type.labelSm,
+    ...type.h4,
     color: colors.textPrimary,
   },
   rowSummary: {
-    ...type.meta,
+    ...type.caption,
     color: colors.textTertiary,
   },
   thumb: {
     width: THUMB,
     height: THUMB,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
     overflow: "hidden",
     backgroundColor: colors.surface3,
+  },
+  thumbEmpty: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

@@ -10,6 +10,8 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 
+import { LinearGradient } from "expo-linear-gradient";
+
 import { Touchable } from "@/components/ui";
 import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
@@ -45,11 +47,12 @@ export function RadioGroup<V extends string>({
             accessibilityState={{ selected, disabled }}
             accessibilityLabel={option.hint ? `${option.label}. ${option.hint}` : option.label}
           >
-            <Ionicons
-              name={selected ? "radio-button-on" : "radio-button-off"}
-              size={20}
-              color={selected ? colors.brandAccent : colors.textTertiary}
-            />
+            {selected ? (
+              <LinearGradient colors={colors.gradientSignature} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} style={styles.rail} />
+            ) : null}
+            <View style={[styles.knob, selected ? styles.knobOn : null]}>
+              {selected ? <Ionicons name="checkmark" size={13} color={colors.textOnBrand} /> : null}
+            </View>
             <View style={styles.texts}>
               <Text style={styles.label} {...textScale.dense}>
                 {option.label}
@@ -74,12 +77,25 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     gap: space.md,
     padding: space.md,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     borderWidth: hairline,
     borderColor: colors.border,
-    backgroundColor: colors.surface1,
+    backgroundColor: colors.surface2,
+    overflow: "hidden",
   },
-  rowSelected: { borderColor: colors.brandAccent, backgroundColor: colors.brandDim },
+  rowSelected: { borderColor: colors.brandBorder, backgroundColor: colors.brandDim },
+  rail: { position: "absolute", left: 0, top: 0, bottom: 0, width: 3 },
+  knob: {
+    width: 20,
+    height: 20,
+    marginTop: 1,
+    borderRadius: radius.pill,
+    borderWidth: 2,
+    borderColor: colors.borderStrong,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  knobOn: { backgroundColor: colors.brand, borderColor: colors.brand },
   texts: { flex: 1, gap: 2 },
   label: { ...type.label, color: colors.textPrimary },
   hint: { ...type.caption, color: colors.textSecondary },

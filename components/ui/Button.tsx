@@ -27,9 +27,12 @@
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
-import React from "react";
+import { LinearGradient } from "expo-linear-gradient";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
+  Easing,
   StyleSheet,
   Text,
   View,
@@ -38,7 +41,9 @@ import {
   type ViewStyle,
 } from "react-native";
 import {
+  ambient,
   colors,
+  glowStyle,
   hairline,
   radius,
   space,
@@ -47,6 +52,7 @@ import {
   type,
 } from "@/theme";
 import { Touchable, type HapticKind } from "./Pressable";
+import { useReduceMotion } from "./useReduceMotion";
 
 export interface ButtonProps {
   label: string;
@@ -73,7 +79,8 @@ export interface ButtonProps {
   testID?: string;
 }
 
-const HEIGHTS = { sm: 38, md: 44, lg: 52 } as const;
+const HEIGHTS = { sm: 38, md: 46, lg: 54 } as const;
+const SHINE_WIDTH = 64;
 
 export const Button = React.memo(function Button({
   label,
@@ -95,9 +102,10 @@ export const Button = React.memo(function Button({
   const height = HEIGHTS[size];
   const isDisabled = Boolean(disabled || loading);
 
+  const primary = variant === "primary";
   const boxStyle: ViewStyle =
-    variant === "primary"
-      ? { backgroundColor: colors.brand }
+    primary
+      ? { backgroundColor: colors.brand, ...glowStyle(colors.glow, size === "sm" ? 1 : 2) }
       : variant === "secondary"
         ? onDark
           ? { backgroundColor: colors.inkPill, borderWidth: hairline, borderColor: colors.inkPillBorder }
@@ -109,8 +117,8 @@ export const Button = React.memo(function Button({
   /* Basılı zemin: dolu varyantlar bir kademe koyulaşır; opaklık sönmesi
      (Touchable "button") bunun üstüne biner. */
   const pressedBox: ViewStyle | undefined =
-    variant === "primary"
-      ? { backgroundColor: colors.brandStrong }
+    primary
+      ? undefined
       : variant === "secondary" && !onDark
         ? { backgroundColor: colors.pressed }
         : undefined;
@@ -168,6 +176,18 @@ export const Button = React.memo(function Button({
         style,
       ]}
     >
+      {primary ? (
+        /* İmza dolgu + SHINE SWEEP: birkaç saniyede bir çapraz ışık geçer. */
+        <View pointerEvents="none" style={styles.fillClip}>
+          <LinearGradient
+            colors={colors.gradientBrand}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={StyleSheet.absoluteFill}
+          />
+          {!isDisabled && size !== "sm" ? <Shine /> : null}
+        </View>
+      ) : null}
       {iconPosition === "left" ? iconNode : null}
       <Text style={labelStyle} numberOfLines={1} {...textScale.dense}>
         {label}
@@ -183,13 +203,68 @@ export const Button = React.memo(function Button({
   );
 });
 
+/** Butonun üstünden geçen çapraz parlama — `ambient.shine` aralıkla. */
+function Shine() {
+  const reduceMotion = useReduceMotion();
+  const [width, setWidth] = useState(0);
+  const x = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (reduceMotion || width <= 0) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.delay(ambient.shine * 0.55),
+        Animated.timing(x, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.cubic), useNativeDriver: true, isInteraction: false }),
+        Animated.timing(x, { toValue: 0, duration: 0, useNativeDriver: true, isInteraction: false }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [reduceMotion, width, x]);
+
+  if (reduceMotion) return null;
+  return (
+    <View style={StyleSheet.absoluteFill} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
+      <Animated.View
+        style={[
+          styles.shine,
+          {
+            transform: [
+              { translateX: x.interpolate({ inputRange: [0, 1], outputRange: [-SHINE_WIDTH * 1.5, width + SHINE_WIDTH] }) },
+              { skewX: "-20deg" },
+            ],
+          },
+        ]}
+      >
+        <LinearGradient
+          colors={colors.shineGradient}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={StyleSheet.absoluteFill}
+        />
+      </Animated.View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  fillClip: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: radius.lg,
+    overflow: "hidden",
+  },
+  shine: {
+    position: "absolute",
+    top: -10,
+    bottom: -10,
+    width: SHINE_WIDTH,
+  },
   base: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: space.s,
-    borderRadius: radius.pill,
+    borderRadius: radius.lg,
     alignSelf: "flex-start",
   },
   fullWidth: {

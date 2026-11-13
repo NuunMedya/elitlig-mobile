@@ -1,6 +1,10 @@
 /**
  * Süreç: aşamalara göre adımlar.
  *
+ * TASARIM: her aşama kendi renginde cam kart (numaralı dolu pul, üstte renk
+ * ışığı, degrade ilerleme); adımlar dikey ZAMAN ÇİZELGESİ — durum dairesi
+ * rayın üstünde, aralarında ince bağlantı çizgisi (tamamlananlarda renkli).
+ *
  * Web'deki sürükle-bırak sıralama telefonda "taşı" menüsüne çevrildi: adıma
  * basılı tutunca Yukarı / Aşağı / Başka aşamaya taşı, durum değiştir ve sil
  * gelir; aşama başlığındaki menüde düzenle, adım ekle, yukarı / aşağı taşı ve
@@ -10,6 +14,7 @@
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { LinearGradient } from "expo-linear-gradient";
 import React, { useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
@@ -32,7 +37,7 @@ import {
   todayIso,
 } from "@/lib/admin/projectUtils";
 import type { Phase, Step, StepStatus } from "@/lib/api/admin/projects";
-import { colors, radius, space, textScale, type } from "@/theme";
+import { colors, hairline, radius, space, textScale, type } from "@/theme";
 
 import { ImportStepsSheet } from "./ImportSheets";
 import { useProject } from "./ProjectContext";
@@ -282,12 +287,13 @@ export function Process() {
         const isCollapsed = collapsed.has(key) && !(filtering && shown.length);
         const color = phase?.color || NEUTRAL_COLOR;
         return (
-          <View key={key} style={[styles.phase, { borderLeftColor: color }]}>
+          <View key={key} style={[styles.phase, { borderColor: withAlpha(color, 0.35) }]}>
+            <LinearGradient colors={[withAlpha(color, 0.18), withAlpha(color, 0)]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.phaseGlow} pointerEvents="none" />
             <View style={styles.phaseHead}>
               <Touchable onPress={() => toggle(key)} style={styles.phaseToggle} accessibilityRole="button" accessibilityState={{ expanded: !isCollapsed }}>
                 <Ionicons name={isCollapsed ? "chevron-forward" : "chevron-down"} size={16} color={colors.textSecondary} />
-                <View style={[styles.phaseNum, { backgroundColor: withAlpha(color, 0.16) }]}>
-                  <Text style={[styles.phaseNumText, { color }]} {...textScale.badge}>{phase ? gi + 1 : "–"}</Text>
+                <View style={[styles.phaseNum, { backgroundColor: color }]}>
+                  <Text style={styles.phaseNumText} {...textScale.badge}>{phase ? gi + 1 : "–"}</Text>
                 </View>
                 <View style={styles.flex}>
                   <Text style={styles.phaseName} numberOfLines={2} {...textScale.dense}>{phase?.name || "Aşamasız adımlar"}</Text>
@@ -387,19 +393,22 @@ function StepRow({ step, questionCount, today, onMenu, onStatus }: { step: Step;
 
   return (
     <View style={[styles.step, step.status === "skipped" ? styles.dim : null]}>
+      <View style={styles.rail}>
       <Touchable
-        feedback="icon"
-        haptic="light"
-        disabled={!canEdit}
-        onPress={() => void ops.saveStep(step.id, { status: done ? "todo" : "done" })}
-        style={[styles.check, { borderColor: meta.color, backgroundColor: done ? meta.color : "transparent" }]}
-        accessibilityRole="checkbox"
-        accessibilityState={{ checked: done }}
-        accessibilityLabel={done ? `${step.title}: tamamlanmadı olarak işaretle` : `${step.title}: tamamlandı olarak işaretle`}
-        hitSlop={8}
-      >
-        <Ionicons name={done ? "checkmark" : meta.icon} size={done ? 16 : 14} color={done ? colors.onDark : meta.color} />
-      </Touchable>
+          feedback="icon"
+          haptic="light"
+          disabled={!canEdit}
+          onPress={() => void ops.saveStep(step.id, { status: done ? "todo" : "done" })}
+          style={[styles.check, { borderColor: meta.color, backgroundColor: done ? meta.color : "transparent" }]}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: done }}
+          accessibilityLabel={done ? `${step.title}: tamamlanmadı olarak işaretle` : `${step.title}: tamamlandı olarak işaretle`}
+          hitSlop={8}
+        >
+          <Ionicons name={done ? "checkmark" : meta.icon} size={done ? 16 : 14} color={done ? colors.onDark : meta.color} />
+        </Touchable>
+        <View style={[styles.railLine, done ? { backgroundColor: withAlpha(meta.color, 0.5) } : null]} />
+      </View>
       <Touchable onPress={() => nav.openStep(step.id)} onLongPress={onMenu} style={styles.stepMain} accessibilityRole="button" accessibilityLabel={step.title}>
         <Text style={[styles.stepTitle, done ? styles.strike : null]} numberOfLines={3} {...textScale.dense}>{step.title}</Text>
         <View style={styles.metaRow}>
@@ -509,30 +518,31 @@ const styles = StyleSheet.create({
   phase: {
     backgroundColor: colors.surface1,
     borderRadius: radius.xl,
-    borderLeftWidth: 4,
+    borderWidth: hairline,
     padding: space.md,
     gap: space.sm,
+    overflow: "hidden",
   },
+  phaseGlow: { position: "absolute", left: 0, right: 0, top: 0, height: 90 },
   phaseHead: { flexDirection: "row", alignItems: "center", gap: space.sm },
   phaseToggle: { flex: 1, flexDirection: "row", alignItems: "center", gap: space.sm },
-  phaseNum: { width: 26, height: 26, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
-  phaseNumText: { ...type.labelXs },
-  phaseName: { ...type.label, color: colors.textPrimary },
+  phaseNum: { width: 34, height: 34, borderRadius: radius.md, alignItems: "center", justifyContent: "center" },
+  phaseNumText: { ...type.metricSm, color: colors.onDark },
+  phaseName: { ...type.h3, color: colors.textPrimary },
   phaseStats: { flexDirection: "row", alignItems: "center", gap: space.s, marginTop: space.xxs },
   phaseNote: { ...type.bodySm, color: colors.textSecondary },
   more: { padding: space.xs },
-  steps: { gap: space.s },
+  steps: { gap: 0, marginTop: space.xs },
   step: {
     flexDirection: "row",
-    gap: space.sm,
-    paddingVertical: space.s,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.separator,
+    gap: space.md,
   },
+  rail: { alignItems: "center", width: 30 },
+  railLine: { flex: 1, width: 2, minHeight: space.sm, marginVertical: space.xxs, borderRadius: radius.pill, backgroundColor: colors.separator },
   dim: { opacity: 0.55 },
-  check: { width: 28, height: 28, borderRadius: radius.pill, borderWidth: 2, alignItems: "center", justifyContent: "center", marginTop: space.xxs },
-  stepMain: { flex: 1, gap: space.xs },
-  stepTitle: { ...type.body, color: colors.textPrimary },
+  check: { width: 30, height: 30, borderRadius: radius.pill, borderWidth: 2, alignItems: "center", justifyContent: "center" },
+  stepMain: { flex: 1, gap: space.xs, paddingBottom: space.md },
+  stepTitle: { ...type.h4, color: colors.textPrimary },
   strike: { textDecorationLine: "line-through", color: colors.textTertiary },
   metaRow: { flexDirection: "row", flexWrap: "wrap", gap: space.xs },
   sideRow: { flexDirection: "row", alignItems: "center", gap: space.s },

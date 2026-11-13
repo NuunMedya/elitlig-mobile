@@ -9,24 +9,35 @@
  *   - "Disiplin"    → seçili sezonun oyuncu sıralaması.
  *   - "Kulüp kaydı" → takım kaydının kendi toplamları (sunucu tutar).
  *
+ * İKİNCİ TUR: her bölüm kendi kart anatomisine kavuştu — denge kartında
+ * halka + dört renkli sayı karosu, gol kartında Odometer'lı iki dev sayı ve
+ * degrade trend çubukları, iç saha/deplasman iki taraflı başlık + StatBar,
+ * rekorlar ikon karolu satırlar + sonuç hapı, disiplin kart biçimli
+ * karolar, kulüp kaydı 3×2 sayı ızgarası.
+ *
  * DÜZELTME: galibiyet halkası (`ProgressRing`) 0–1 arası değer bekler; eski
  * sürüm yüzde (81) veriyordu ve halka her takımda TAM doluydu.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { LinearGradient } from "expo-linear-gradient";
 import React, { useCallback } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import {
   Card,
   EmptyState,
+  IconTile,
+  Odometer,
   ProgressRing,
+  Reveal,
   SectionHeader,
   SkeletonCard,
   StatBar,
   Touchable,
+  type IconTileTone,
 } from "@/components/ui";
 import { formatDateShort, formatPercent } from "@/lib/format";
-import { colors, elevate, layout, radius, space, textScale, type, upperTR } from "@/theme";
+import { colors, elevate, hairline, layout, radius, space, textScale, type, upperTR } from "@/theme";
 import {
   decimal,
   signed,
@@ -37,6 +48,7 @@ import {
   type TabShell,
   type TeamRecords,
 } from "./model";
+import { MiniStat, ResultPill } from "./ProfileKit";
 import { StackedBar } from "./StackedBar";
 
 export interface StatsTabProps extends TabShell {
@@ -63,6 +75,7 @@ export function StatsTab({
 }: StatsTabProps) {
   const { total, home, away } = records;
   const winRate = total.played ? total.wins / total.played : 0;
+  const diff = total.goalsFor - total.goalsAgainst;
 
   return (
     <ScrollView
@@ -75,6 +88,8 @@ export function StatsTab({
         <>
           <SectionHeader title="Genel denge" />
           <SkeletonCard lines={4} style={styles.inset} />
+          <SectionHeader title="Gol" />
+          <SkeletonCard lines={3} style={styles.inset} />
         </>
       ) : total.played === 0 ? (
         <EmptyState
@@ -87,32 +102,43 @@ export function StatsTab({
         <>
           {/* — Genel denge — */}
           <SectionHeader title="Genel denge" meta={`Tüm maçlar · ${total.played}`} />
-          <Card padding="lg" style={styles.inset} contentStyle={styles.stack}>
-            <View style={styles.ringRow}>
-              <ProgressRing
-                value={winRate}
-                size={88}
-                thickness={7}
-                tone="win"
-                label={formatPercent(winRate, { ratio: true })}
-                sublabel="galibiyet"
-                animate
-              />
-              <View style={styles.legend}>
-                <LegendItem label="Galibiyet" value={String(total.wins)} color={colors.win} />
-                <LegendItem label="Beraberlik" value={String(total.draws)} color={colors.draw} />
-                <LegendItem label="Mağlubiyet" value={String(total.losses)} color={colors.loss} />
-                <LegendItem label="Averaj" value={signed(total.goalsFor - total.goalsAgainst)} />
+          <Reveal>
+            <Card padding="lg" style={styles.inset} contentStyle={styles.stack}>
+              <View style={styles.ringRow}>
+                <ProgressRing
+                  value={winRate}
+                  size={96}
+                  thickness={8}
+                  tone="win"
+                  label={formatPercent(winRate, { ratio: true })}
+                  sublabel="galibiyet"
+                  animate
+                />
+                <View style={styles.balanceGrid}>
+                  <View style={styles.balanceRow}>
+                    <BalanceTile label="Galibiyet" value={total.wins} color={colors.win} bg={colors.winDim} />
+                    <BalanceTile label="Beraberlik" value={total.draws} color={colors.draw} bg={colors.drawDim} />
+                  </View>
+                  <View style={styles.balanceRow}>
+                    <BalanceTile label="Mağlubiyet" value={total.losses} color={colors.loss} bg={colors.lossDim} />
+                    <BalanceTile
+                      label="Averaj"
+                      value={signed(diff)}
+                      color={diff > 0 ? colors.win : diff < 0 ? colors.loss : colors.textPrimary}
+                      bg={colors.surface2}
+                    />
+                  </View>
+                </View>
               </View>
-            </View>
-            <StackedBar
-              segments={[
-                { key: "w", value: total.wins, color: colors.win },
-                { key: "d", value: total.draws, color: colors.draw },
-                { key: "l", value: total.losses, color: colors.loss },
-              ]}
-            />
-          </Card>
+              <StackedBar
+                segments={[
+                  { key: "w", value: total.wins, color: colors.win },
+                  { key: "d", value: total.draws, color: colors.draw },
+                  { key: "l", value: total.losses, color: colors.loss },
+                ]}
+              />
+            </Card>
+          </Reveal>
 
           {/* — Gol — */}
           <SectionHeader title="Gol" />
@@ -123,12 +149,15 @@ export function StatsTab({
                 value={total.goalsFor}
                 hint={`maç başı ${decimal(total.played ? total.goalsFor / total.played : 0)}`}
                 color={colors.accentText}
+                icon="arrow-up-circle"
               />
               <View style={styles.goalDivider} />
               <BigNumber
                 label="Yediği"
                 value={total.goalsAgainst}
                 hint={`maç başı ${decimal(total.played ? total.goalsAgainst / total.played : 0)}`}
+                icon="arrow-down-circle"
+                alignRight
               />
             </View>
 
@@ -137,24 +166,38 @@ export function StatsTab({
             ) : null}
 
             <View style={styles.factRow}>
-              <SmallFact icon="shield-checkmark-outline" label="Gol yemeden" value={records.cleanSheets} />
-              <SmallFact icon="remove-circle-outline" label="Gol atamadan" value={records.blankGames} />
-              <SmallFact icon="flame-outline" label="Galibiyet serisi" value={records.longestWinRun} />
+              <SmallFact icon="shield-checkmark" tone="mint" label="Gol yemeden" value={records.cleanSheets} />
+              <SmallFact icon="remove-circle" tone="neutral" label="Gol atamadan" value={records.blankGames} />
+              <SmallFact icon="flame" tone="pink" label="En uzun seri" value={records.longestWinRun} />
             </View>
           </Card>
 
           {/* — İç saha / deplasman — */}
           <SectionHeader title="İç saha · Deplasman" />
-          <Card padding="lg" style={styles.inset}>
+          <Card padding="lg" style={styles.inset} contentStyle={styles.stack}>
             <View style={styles.sidesHead}>
-              <SideHead label="İç saha" rate={pct(home.wins, home.played)} played={home.played} />
-              <SideHead label="Deplasman" rate={pct(away.wins, away.played)} played={away.played} alignRight />
+              <SideHead icon="home" label="İç saha" rate={pct(home.wins, home.played)} played={home.played} tone="cyan" />
+              <View style={styles.vs}>
+                <Text style={styles.vsText} {...textScale.badge}>
+                  VS
+                </Text>
+              </View>
+              <SideHead
+                icon="airplane"
+                label="Deplasman"
+                rate={pct(away.wins, away.played)}
+                played={away.played}
+                tone="neutral"
+                alignRight
+              />
             </View>
-            <StatBar label="Galibiyet" home={home.wins} away={away.wins} />
-            <StatBar label="Beraberlik" home={home.draws} away={away.draws} />
-            <StatBar label="Mağlubiyet" home={home.losses} away={away.losses} />
-            <StatBar label="Atılan gol" home={home.goalsFor} away={away.goalsFor} />
-            <StatBar label="Yenilen gol" home={home.goalsAgainst} away={away.goalsAgainst} />
+            <View style={styles.bars}>
+              <StatBar label="Galibiyet" home={home.wins} away={away.wins} animate={false} />
+              <StatBar label="Beraberlik" home={home.draws} away={away.draws} animate={false} />
+              <StatBar label="Mağlubiyet" home={home.losses} away={away.losses} animate={false} />
+              <StatBar label="Atılan gol" home={home.goalsFor} away={away.goalsFor} animate={false} />
+              <StatBar label="Yenilen gol" home={home.goalsAgainst} away={away.goalsAgainst} animate={false} />
+            </View>
           </Card>
 
           {/* — Rekorlar — */}
@@ -163,15 +206,17 @@ export function StatsTab({
               <SectionHeader title="Rekorlar" />
               <View style={styles.group}>
                 {[
-                  { key: "best", label: "En farklı galibiyet", item: records.bestWin },
-                  { key: "most", label: "En gollü maç", item: records.mostGoals },
-                  { key: "worst", label: "En ağır yenilgi", item: records.worstLoss },
+                  { key: "best", label: "En farklı galibiyet", item: records.bestWin, icon: "trophy" as const, tone: "gold" as const },
+                  { key: "most", label: "En gollü maç", item: records.mostGoals, icon: "flame" as const, tone: "pink" as const },
+                  { key: "worst", label: "En ağır yenilgi", item: records.worstLoss, icon: "trending-down" as const, tone: "red" as const },
                 ]
                   .filter((entry) => entry.item)
                   .map((entry, index) => (
                     <RecordRow
                       key={entry.key}
                       label={entry.label}
+                      icon={entry.icon}
+                      tone={entry.tone}
                       item={entry.item as MatchHighlight}
                       divided={index > 0}
                       onOpen={onOpenMatch}
@@ -188,8 +233,8 @@ export function StatsTab({
         <>
           <SectionHeader title="Disiplin" meta={seasonLabel || undefined} />
           <View style={[styles.inset, styles.cardPair]}>
-            <CardCount label="Sarı kart" value={discipline.yellow} tone={colors.yellowCard} />
-            <CardCount label="Kırmızı kart" value={discipline.red} tone={colors.redCard} />
+            <CardCount label="Sarı kart" value={discipline.yellow} tone={colors.yellowCard} players={discipline.players} />
+            <CardCount label="Kırmızı kart" value={discipline.red} tone={colors.redCard} players={discipline.players} />
           </View>
         </>
       ) : null}
@@ -198,15 +243,18 @@ export function StatsTab({
           kapsam tutmasa da her zaman gösterilir. */}
       {career.matches > 0 ? (
         <>
-          <SectionHeader title="Kulüp kaydı" meta={`${career.matches} maç`} />
-          <Card padding="lg" style={styles.inset}>
+          <SectionHeader title="Kulüp kaydı" meta="Tüm zamanlar" />
+          <Card padding="md" style={styles.inset} contentStyle={styles.careerGrid}>
             <View style={styles.careerRow}>
-              <CareerCell label="Maç" value={career.matches} />
-              <CareerCell label="G" value={career.wins} color={colors.win} />
-              <CareerCell label="B" value={career.draws} color={colors.draw} />
-              <CareerCell label="M" value={career.losses} color={colors.loss} />
-              <CareerCell label="Atılan" value={career.goalsFor} />
-              <CareerCell label="Yenilen" value={career.goalsAgainst} />
+              <MiniStat label="Maç" value={career.matches} roll />
+              <MiniStat label="Atılan" value={career.goalsFor} color={colors.accentText} roll />
+              <MiniStat label="Yenilen" value={career.goalsAgainst} roll />
+            </View>
+            <View style={styles.careerDivider} />
+            <View style={styles.careerRow}>
+              <MiniStat label="Galibiyet" value={career.wins} color={colors.win} roll />
+              <MiniStat label="Beraberlik" value={career.draws} color={colors.draw} roll />
+              <MiniStat label="Mağlubiyet" value={career.losses} color={colors.loss} roll />
             </View>
           </Card>
         </>
@@ -219,24 +267,22 @@ export function StatsTab({
    Parçalar
    ══════════════════════════════════════════════════════════════════════════ */
 
-const LegendItem = React.memo(function LegendItem({
+const BalanceTile = React.memo(function BalanceTile({
   label,
   value,
   color,
+  bg,
 }: {
   label: string;
-  value: string;
-  color?: string;
+  value: number | string;
+  color: string;
+  bg: string;
 }) {
   return (
-    <View style={styles.legendItem}>
-      {/* Rengi olmayan satır (averaj) hizayı korur, nokta çizmez. */}
-      <View style={[styles.dot, { backgroundColor: color ?? "transparent" }]} />
-      <Text style={styles.legendLabel} numberOfLines={1} {...textScale.dense}>
-        {label}
-      </Text>
-      <Text style={styles.legendValue} {...textScale.dense}>
-        {value}
+    <View style={[styles.balanceTile, { backgroundColor: bg }]} accessible accessibilityLabel={`${label} ${value}`}>
+      <Odometer value={value} style={[styles.balanceValue, { color }]} />
+      <Text style={styles.balanceLabel} numberOfLines={1} {...textScale.badge}>
+        {upperTR(label)}
       </Text>
     </View>
   );
@@ -247,20 +293,29 @@ const BigNumber = React.memo(function BigNumber({
   value,
   hint,
   color,
+  icon,
+  alignRight = false,
 }: {
   label: string;
   value: number;
   hint: string;
   color?: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  alignRight?: boolean;
 }) {
   return (
-    <View style={styles.big} accessible accessibilityLabel={`${label} ${value} gol, ${hint}`}>
-      <Text style={styles.bigLabel} {...textScale.badge}>
-        {upperTR(label)}
-      </Text>
-      <Text style={[styles.bigValue, color ? { color } : null]} {...textScale.dense}>
-        {value}
-      </Text>
+    <View
+      style={[styles.big, alignRight ? styles.bigRight : null]}
+      accessible
+      accessibilityLabel={`${label} ${value} gol, ${hint}`}
+    >
+      <View style={styles.bigLabelRow}>
+        <Ionicons name={icon} size={13} color={color ?? colors.textTertiary} />
+        <Text style={styles.bigLabel} {...textScale.badge}>
+          {upperTR(label)}
+        </Text>
+      </View>
+      <Odometer value={value} style={[styles.bigValue, color ? { color } : null]} />
       <Text style={styles.bigHint} {...textScale.dense}>
         {hint}
       </Text>
@@ -269,14 +324,13 @@ const BigNumber = React.memo(function BigNumber({
 });
 
 /** Çubuğun bir yarısının en büyük yüksekliği. */
-const TREND_HALF = 34;
+const TREND_HALF = 38;
 
 /**
  * GOL TRENDİ — son maçlar, ıraksak çubuk.
  *
- * Üstte atılan (veri rengi), altta yenilen (nötr) gol; iki yarı AYNI ölçeği
- * paylaşır. İki ayrı çizgi (Sparkline) denendi: her çizgi kendi min/maks'ına
- * ölçeklendiği için 2 golün bir çizgide tepe, ötekinde dip görünüyordu.
+ * Üstte atılan (imza degradesi), altta yenilen (nötr) gol; iki yarı AYNI
+ * ölçeği paylaşır. Her çubuğun ucunda değeri yazar.
  */
 const GoalTrend = React.memo(function GoalTrend({
   scored,
@@ -308,36 +362,41 @@ const GoalTrend = React.memo(function GoalTrend({
         </View>
       </View>
       <View style={styles.trendBars}>
-        {scored.map((goals, index) => (
-          <View key={index} style={styles.trendCol}>
-            <View style={styles.trendTop}>
-              <View
-                style={[
-                  styles.trendBar,
-                  styles.trendBarUp,
-                  { height: Math.max(goals > 0 ? 3 : 0, (goals / max) * TREND_HALF) },
-                ]}
-              />
+        {scored.map((goals, index) => {
+          const up = Math.max(goals > 0 ? 4 : 0, (goals / max) * TREND_HALF);
+          const down = Math.max(conceded[index] > 0 ? 4 : 0, (conceded[index] / max) * TREND_HALF);
+          return (
+            <View key={index} style={styles.trendCol}>
+              <View style={styles.trendTop}>
+                <Text style={styles.trendNum} {...textScale.badge}>
+                  {goals}
+                </Text>
+                <View style={[styles.trendBar, { height: up }]}>
+                  <LinearGradient
+                    colors={colors.gradientSignature}
+                    start={{ x: 0.5, y: 1 }}
+                    end={{ x: 0.5, y: 0 }}
+                    style={StyleSheet.absoluteFill}
+                  />
+                </View>
+              </View>
+              <View style={styles.trendBase} />
+              <View style={styles.trendBottom}>
+                <View style={[styles.trendBar, styles.trendBarDown, { height: down }]} />
+                <Text style={styles.trendNum} {...textScale.badge}>
+                  {conceded[index]}
+                </Text>
+              </View>
             </View>
-            <View style={styles.trendBase} />
-            <View style={styles.trendBottom}>
-              <View
-                style={[
-                  styles.trendBar,
-                  styles.trendBarDown,
-                  { height: Math.max(conceded[index] > 0 ? 3 : 0, (conceded[index] / max) * TREND_HALF) },
-                ]}
-              />
-            </View>
-          </View>
-        ))}
+          );
+        })}
       </View>
       <View style={styles.trendAxis}>
         <Text style={styles.trendAxisText} {...textScale.badge}>
-          Eski
+          ← Eski
         </Text>
         <Text style={styles.trendAxisText} {...textScale.badge}>
-          Yeni
+          Yeni →
         </Text>
       </View>
     </View>
@@ -346,16 +405,18 @@ const GoalTrend = React.memo(function GoalTrend({
 
 const SmallFact = React.memo(function SmallFact({
   icon,
+  tone,
   label,
   value,
 }: {
-  icon: React.ComponentProps<typeof Ionicons>["name"];
+  icon: keyof typeof Ionicons.glyphMap;
+  tone: IconTileTone;
   label: string;
   value: number;
 }) {
   return (
     <View style={styles.smallFact} accessible accessibilityLabel={`${label}: ${value} maç`}>
-      <Ionicons name={icon} size={16} color={colors.textTertiary} />
+      <IconTile icon={icon} tone={tone} size={30} glow={false} />
       <Text style={styles.smallValue} {...textScale.dense}>
         {value}
       </Text>
@@ -367,21 +428,28 @@ const SmallFact = React.memo(function SmallFact({
 });
 
 const SideHead = React.memo(function SideHead({
+  icon,
   label,
   rate,
   played,
+  tone,
   alignRight = false,
 }: {
+  icon: keyof typeof Ionicons.glyphMap;
   label: string;
   rate: number;
   played: number;
+  tone: IconTileTone;
   alignRight?: boolean;
 }) {
   return (
     <View style={[styles.side, alignRight ? styles.sideRight : null]}>
-      <Text style={styles.sideLabel} {...textScale.badge}>
-        {upperTR(label)}
-      </Text>
+      <View style={[styles.sideTop, alignRight ? styles.sideTopRight : null]}>
+        <IconTile icon={icon} tone={tone} size={26} glow={false} />
+        <Text style={styles.sideLabel} {...textScale.badge}>
+          {upperTR(label)}
+        </Text>
+      </View>
       <Text style={styles.sideRate} {...textScale.dense}>
         %{rate}
       </Text>
@@ -394,18 +462,21 @@ const SideHead = React.memo(function SideHead({
 
 const RecordRow = React.memo(function RecordRow({
   label,
+  icon,
+  tone,
   item,
   divided,
   onOpen,
 }: {
   label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  tone: IconTileTone;
   item: MatchHighlight;
   divided: boolean;
   onOpen: (matchId: number) => void;
 }) {
   const handlePress = useCallback(() => onOpen(Number(item.match.id)), [onOpen, item.match.id]);
   const result = item.ours > item.theirs ? "W" : item.ours < item.theirs ? "L" : "D";
-  const bg = result === "W" ? colors.win : result === "L" ? colors.loss : colors.draw;
 
   return (
     <Touchable
@@ -416,6 +487,7 @@ const RecordRow = React.memo(function RecordRow({
       accessibilityLabel={`${label}: ${item.ours}-${item.theirs}, ${item.opponent}, ${formatDateShort(item.match.date)}`}
       style={[styles.record, divided ? styles.divided : null]}
     >
+      <IconTile icon={icon} tone={tone} size={38} glow={false} />
       <View style={styles.recordBody}>
         <Text style={styles.recordLabel} {...textScale.badge}>
           {upperTR(label)}
@@ -429,11 +501,7 @@ const RecordRow = React.memo(function RecordRow({
             .join(" · ")}
         </Text>
       </View>
-      <View style={[styles.recordScore, { backgroundColor: bg }]}>
-        <Text style={styles.recordScoreText} {...textScale.badge}>
-          {item.ours}–{item.theirs}
-        </Text>
-      </View>
+      <ResultPill result={result} text={`${item.ours}–${item.theirs}`} />
       <Ionicons name="chevron-forward" size={14} color={colors.textTertiary} />
     </Touchable>
   );
@@ -443,47 +511,26 @@ const CardCount = React.memo(function CardCount({
   label,
   value,
   tone,
+  players,
 }: {
   label: string;
   value: number;
   tone: string;
+  players: number;
 }) {
   return (
     <Card padding="lg" style={styles.cardHalf} contentStyle={styles.cardCount}>
       <View style={[styles.cardChip, { backgroundColor: tone }]} />
-      <View>
-        <Text style={styles.cardValue} {...textScale.dense}>
-          {value}
-        </Text>
+      <View style={styles.cardBody}>
+        <Odometer value={value} style={styles.cardValue} />
         <Text style={styles.cardLabel} numberOfLines={1} {...textScale.badge}>
           {upperTR(label)}
         </Text>
-      </View>
-    </Card>
-  );
-});
-
-const CareerCell = React.memo(function CareerCell({
-  label,
-  value,
-  color,
-}: {
-  label: string;
-  value: number;
-  color?: string;
-}) {
-  return (
-    <View style={styles.careerCell}>
-      <Text style={styles.careerValue} {...textScale.dense}>
-        {value}
-      </Text>
-      <View style={styles.careerLabelRow}>
-        {color ? <View style={[styles.dotSm, { backgroundColor: color }]} /> : null}
-        <Text style={styles.careerLabel} numberOfLines={1} {...textScale.badge}>
-          {upperTR(label)}
+        <Text style={styles.cardHint} numberOfLines={1} {...textScale.dense}>
+          oyuncu başı {decimal(players ? value / players : 0, 2)}
         </Text>
       </View>
-    </View>
+    </Card>
   );
 });
 
@@ -503,12 +550,12 @@ const styles = StyleSheet.create({
     borderRadius: radius.xl,
     overflow: "hidden",
     backgroundColor: colors.surface1,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: hairline,
     borderColor: colors.border,
     ...elevate(1),
   },
   divided: {
-    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopWidth: hairline,
     borderTopColor: colors.separator,
   },
   dot: {
@@ -516,35 +563,34 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: radius.pill,
   },
-  dotSm: {
-    width: 6,
-    height: 6,
-    borderRadius: radius.pill,
-  },
 
-  /* — Genel denge — */
+  /* — Denge — */
   ringRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.xl,
+    gap: space.lg,
   },
-  legend: {
+  balanceGrid: {
     flex: 1,
     gap: space.sm,
   },
-  legendItem: {
+  balanceRow: {
     flexDirection: "row",
-    alignItems: "center",
     gap: space.sm,
   },
-  legendLabel: {
-    ...type.bodySm,
-    color: colors.textSecondary,
+  balanceTile: {
     flex: 1,
+    paddingVertical: space.sm,
+    paddingHorizontal: space.sm,
+    borderRadius: radius.md,
+    gap: space.xxs,
   },
-  legendValue: {
-    ...type.tableNumStrong,
-    color: colors.textPrimary,
+  balanceValue: {
+    ...type.metricSm,
+  },
+  balanceLabel: {
+    ...type.overline,
+    color: colors.textTertiary,
   },
 
   /* — Gol — */
@@ -553,7 +599,7 @@ const styles = StyleSheet.create({
     alignItems: "stretch",
   },
   goalDivider: {
-    width: StyleSheet.hairlineWidth,
+    width: hairline,
     backgroundColor: colors.separator,
     marginHorizontal: space.lg,
   },
@@ -561,12 +607,20 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: space.xxs,
   },
+  bigRight: {
+    alignItems: "flex-end",
+  },
+  bigLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+  },
   bigLabel: {
     ...type.overline,
     color: colors.textTertiary,
   },
   bigValue: {
-    ...type.metric,
+    ...type.scoreHero,
     color: colors.textPrimary,
   },
   bigHint: {
@@ -575,9 +629,9 @@ const styles = StyleSheet.create({
   },
   trend: {
     gap: space.sm,
-    paddingTop: space.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.separator,
+    padding: space.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface2,
   },
   trendHead: {
     flexDirection: "row",
@@ -596,54 +650,52 @@ const styles = StyleSheet.create({
   trendLegendText: {
     ...type.caption,
     color: colors.textTertiary,
-    marginRight: space.sm,
+    marginRight: space.s,
   },
   trendBars: {
     flexDirection: "row",
-    gap: space.s,
+    gap: space.xs,
   },
   trendCol: {
     flex: 1,
     alignItems: "center",
   },
   trendTop: {
-    height: TREND_HALF,
-    width: "100%",
+    height: TREND_HALF + 14,
     justifyContent: "flex-end",
     alignItems: "center",
+    alignSelf: "stretch",
   },
   trendBottom: {
-    height: TREND_HALF,
-    width: "100%",
+    height: TREND_HALF + 14,
     justifyContent: "flex-start",
     alignItems: "center",
+    alignSelf: "stretch",
   },
   trendBase: {
+    alignSelf: "stretch",
     height: 1,
-    width: "100%",
     backgroundColor: colors.border,
   },
   trendBar: {
     width: "70%",
     maxWidth: 16,
-  },
-  trendBarUp: {
-    backgroundColor: colors.accent,
-    borderTopLeftRadius: 3,
-    borderTopRightRadius: 3,
+    borderRadius: 3,
+    overflow: "hidden",
   },
   trendBarDown: {
     backgroundColor: colors.slate,
-    borderBottomLeftRadius: 3,
-    borderBottomRightRadius: 3,
+  },
+  trendNum: {
+    ...type.nano,
+    color: colors.textTertiary,
   },
   trendAxis: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: -space.xs,
   },
   trendAxisText: {
-    ...type.caption,
+    ...type.meta,
     color: colors.textTertiary,
   },
   factRow: {
@@ -652,9 +704,11 @@ const styles = StyleSheet.create({
   },
   smallFact: {
     flex: 1,
-    gap: space.xxs,
-    padding: space.md,
-    borderRadius: radius.md,
+    alignItems: "center",
+    gap: space.xs,
+    paddingVertical: space.md,
+    paddingHorizontal: space.xs,
+    borderRadius: radius.lg,
     backgroundColor: colors.surface2,
   },
   smallValue: {
@@ -664,31 +718,55 @@ const styles = StyleSheet.create({
   smallLabel: {
     ...type.caption,
     color: colors.textTertiary,
+    textAlign: "center",
   },
 
   /* — İç saha / deplasman — */
   sidesHead: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: space.md,
+    alignItems: "center",
   },
   side: {
-    gap: 1,
+    flex: 1,
+    gap: space.xxs,
   },
   sideRight: {
     alignItems: "flex-end",
+  },
+  sideTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.s,
+  },
+  sideTopRight: {
+    flexDirection: "row-reverse",
   },
   sideLabel: {
     ...type.overline,
     color: colors.textTertiary,
   },
   sideRate: {
-    ...type.metricSm,
+    ...type.scoreMd,
     color: colors.textPrimary,
   },
   sideHint: {
     ...type.caption,
     color: colors.textTertiary,
+  },
+  vs: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface2,
+  },
+  vsText: {
+    ...type.micro,
+    color: colors.textTertiary,
+  },
+  bars: {
+    gap: space.xs,
   },
 
   /* — Rekorlar — */
@@ -696,9 +774,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: space.md,
-    paddingVertical: space.md,
-    paddingHorizontal: space.lg,
-    minHeight: 72,
+    minHeight: 68,
+    paddingVertical: space.sm,
+    paddingHorizontal: space.md,
   },
   recordBody: {
     flex: 1,
@@ -717,22 +795,11 @@ const styles = StyleSheet.create({
     ...type.caption,
     color: colors.textTertiary,
   },
-  recordScore: {
-    minWidth: 56,
-    alignItems: "center",
-    paddingVertical: space.xs,
-    paddingHorizontal: space.sm,
-    borderRadius: radius.sm,
-  },
-  recordScoreText: {
-    ...type.scoreSm,
-    color: colors.textOnStatus,
-  },
 
   /* — Disiplin — */
   cardPair: {
     flexDirection: "row",
-    gap: space.md,
+    gap: space.sm,
   },
   cardHalf: {
     flex: 1,
@@ -743,41 +810,37 @@ const styles = StyleSheet.create({
     gap: space.md,
   },
   cardChip: {
-    width: 18,
-    height: 26,
+    width: 22,
+    height: 30,
     borderRadius: radius.xs,
     transform: [{ rotate: "-8deg" }],
+  },
+  cardBody: {
+    flex: 1,
+    minWidth: 0,
   },
   cardValue: {
     ...type.metric,
     color: colors.textPrimary,
   },
   cardLabel: {
-    ...type.micro,
+    ...type.overline,
+    color: colors.textTertiary,
+  },
+  cardHint: {
+    ...type.caption,
     color: colors.textTertiary,
   },
 
   /* — Kulüp kaydı — */
+  careerGrid: {
+    gap: space.md,
+  },
   careerRow: {
     flexDirection: "row",
-    alignItems: "center",
   },
-  careerCell: {
-    flex: 1,
-    alignItems: "center",
-    gap: space.xxs,
-  },
-  careerValue: {
-    ...type.scoreSm,
-    color: colors.textPrimary,
-  },
-  careerLabelRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-  },
-  careerLabel: {
-    ...type.micro,
-    color: colors.textTertiary,
+  careerDivider: {
+    height: hairline,
+    backgroundColor: colors.separator,
   },
 });

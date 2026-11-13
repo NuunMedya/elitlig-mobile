@@ -58,9 +58,12 @@ import { useFollowNews } from "@/components/follow/useFollowNews";
 import {
   Button,
   ErrorState,
+  IconTile,
   ListRow,
   MatchCard,
   MatchCardRail,
+  MetricGrid,
+  MetricTile,
   Reveal,
   ScreenHeader,
   SectionHeader,
@@ -72,7 +75,7 @@ import {
   useRefresh,
   useToast,
 } from "@/components/ui";
-import type { LeadingIcon } from "@/components/ui";
+import type { IconTileTone, LeadingIcon } from "@/components/ui";
 import { useLiveFavoriteCount } from "@/hooks/useLiveFavoriteCount";
 import { useTeamLogos } from "@/hooks/useTeamLogos";
 import { getMatch, getTeamMatches } from "@/lib/api/matches";
@@ -85,7 +88,7 @@ import { useAuth } from "@/providers/AuthProvider";
 import { useFavorite, type FavoriteScope, type FavoriteTeam, type FollowTarget } from "@/providers/FavoriteProvider";
 import { useFollowFlow } from "@/providers/FollowFlowProvider";
 import { useScope } from "@/providers/ScopeProvider";
-import { colors, layout, radius, space, textScale, type } from "@/theme";
+import { colors, elevate, hairline, layout, radius, space, textScale, type } from "@/theme";
 
 type Position = "single" | "first" | "middle" | "last";
 
@@ -97,11 +100,23 @@ function rowPosition(index: number, total: number): Position {
 }
 
 /** Akış satırının ikonu — kaydın türü (`kind`) ne olduğunu söyler. */
-const NEWS_ICON: Record<NewsItem["kind"], LeadingIcon> = {
-  news: { icon: "newspaper-outline", tone: "neutral" },
-  transfer: { icon: "swap-horizontal-outline", tone: "brand" },
-  penalty: { icon: "alert-circle-outline", tone: "warn" },
+const NEWS_ICON: Record<NewsItem["kind"], { icon: keyof typeof Ionicons.glyphMap; tone: IconTileTone }> = {
+  news: { icon: "newspaper", tone: "cyan" },
+  transfer: { icon: "swap-horizontal", tone: "violet" },
+  penalty: { icon: "alert-circle", tone: "gold" },
 };
+
+function NewsTile({ kind }: { kind: NewsItem["kind"] }) {
+  const look = NEWS_ICON[kind] ?? NEWS_ICON.news;
+  return <IconTile icon={look.icon} tone={look.tone} size={36} glow={false} />;
+}
+
+/** Boş durum kartının üç kazanımı. */
+const INTRO_PERKS: { icon: keyof typeof Ionicons.glyphMap; label: string }[] = [
+  { icon: "football", label: "Maçlar" },
+  { icon: "pulse", label: "Form" },
+  { icon: "notifications", label: "Gol bildirimi" },
+];
 
 const NEWS_KIND_LABEL: Record<NewsItem["kind"], string> = {
   news: "Haber",
@@ -115,9 +130,7 @@ const NEWS_KIND_LABEL: Record<NewsItem["kind"], string> = {
 const GuestBanner = React.memo(function GuestBanner({ onSignIn }: { onSignIn: () => void }) {
   return (
     <Surface level={1} radius="xl" style={styles.banner}>
-      <View style={styles.bannerIcon}>
-        <Ionicons name="notifications" size={17} color={colors.brandAccent} />
-      </View>
+      <IconTile icon="notifications" tone="violet" size={36} glow={false} />
       <Text style={styles.bannerText} {...textScale.dense}>
         Takiplerin bu cihazda. Giriş yap, gol ve sonuç bildirimi al.
       </Text>
@@ -423,12 +436,30 @@ export default function TakipScreen() {
           </Reveal>
         )}
 
+        {/* ── ÖZET — kaç takım, maç ve lig takipte. ── */}
+        {hasTeams || favoriteMatches.length || scopeRows.length ? (
+          <Reveal style={[styles.pad, styles.summary]}>
+            <MetricGrid columns={3}>
+              <MetricTile label="Takım" value={String(favorites.length)} icon="shield-half" tone="brand" />
+              <MetricTile
+                label="Maç"
+                value={String(teamMatches.length + followedMatches.length)}
+                icon="football"
+                tone="live"
+              />
+              <MetricTile label="Lig" value={String(scopeRows.length)} icon="trophy" tone="warn" />
+            </MetricGrid>
+          </Reveal>
+        ) : null}
+
         {/* ── 1) TAKIMLARIM ── */}
         {hasTeams ? (
           <>
             <SectionHeader
               title="Takımlarım"
-              meta={`${favorites.length} takım`}
+              icon="shield-half"
+              iconTone="violet"
+              meta={`${favorites.length}`}
               action={{ label: "Takip et", onPress: openTeamSearch }}
             />
             <FollowedTeamsStrip
@@ -440,7 +471,13 @@ export default function TakipScreen() {
             />
 
             {/* ── 2) MAÇLAR ── */}
-            <SectionHeader title="Maçlar" meta={teamMatches.length ? `${teamMatches.length} maç` : undefined} />
+            <SectionHeader
+              title="Maçlar"
+              icon="football"
+              iconTone="pink"
+              subtitle="Her takımın en güncel maçı"
+              meta={teamMatches.length ? `${teamMatches.length}` : undefined}
+            />
             {teamsLoading && !teamMatches.length ? (
               <View style={styles.pad}>
                 <SkeletonMatchRow count={2} />
@@ -459,10 +496,31 @@ export default function TakipScreen() {
           </>
         ) : (
           <>
-            <SectionHeader title="Takımını seç" />
-            <Text style={[styles.pad, styles.lead]} {...textScale.long}>
-              Takip ettiğin takımların maçları, formu ve haberleri burada toplanır; gol ve sonuç bildirimi gelir.
-            </Text>
+            {/* BOŞ DURUM KARTI — takip neyi getirir, üç hapla. */}
+            <Reveal style={styles.pad}>
+              <View style={styles.intro}>
+                <IconTile icon="star" tone="signature" size={44} />
+                <View style={styles.introBody}>
+                  <Text style={styles.introTitle} {...textScale.dense}>
+                    Takımını seç
+                  </Text>
+                  <Text style={styles.lead} {...textScale.long}>
+                    Maçları, formu ve haberleri burada toplanır; gol ve sonuç bildirimi gelir.
+                  </Text>
+                  <View style={styles.introPerks}>
+                    {INTRO_PERKS.map((perk) => (
+                      <View key={perk.label} style={styles.introPerk}>
+                        <Ionicons name={perk.icon} size={12} color={colors.accentText} />
+                        <Text style={styles.introPerkText} {...textScale.badge}>
+                          {perk.label}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              </View>
+            </Reveal>
+            <SectionHeader title="Ligin takımları" icon="trophy" iconTone="gold" subtitle="Puan sırasıyla; dokun, takip et" />
             <View style={styles.picker}>
               <LeaguePicker pinned={false} step="league" />
             </View>
@@ -483,7 +541,12 @@ export default function TakipScreen() {
         {/* ── 3) TAKİP ETTİĞİN MAÇLAR ── */}
         {favoriteMatches.length ? (
           <>
-            <SectionHeader title="Takip ettiğin maçlar" meta={`${favoriteMatches.length} maç`} />
+            <SectionHeader
+              title="Takip ettiğin maçlar"
+              icon="star"
+              iconTone="gold"
+              meta={`${favoriteMatches.length}`}
+            />
             <View style={[styles.pad, styles.stack]}>
               {matchesLoading && !followedMatches.length ? (
                 <SkeletonMatchRow count={Math.min(favoriteMatches.length, 2)} />
@@ -513,7 +576,13 @@ export default function TakipScreen() {
         {/* ── 4) AKIŞ: haber / transfer / disiplin ── */}
         {hasTeams || scopeRows.length ? (
           <>
-            <SectionHeader title="Akış" meta={news.items.length ? `${news.items.length} kayıt` : undefined} />
+            <SectionHeader
+              title="Akış"
+              icon="newspaper"
+              iconTone="cyan"
+              subtitle="Haber, transfer ve disiplin"
+              meta={news.items.length ? `${news.items.length}` : undefined}
+            />
             <View style={styles.pad}>
               {news.loading && !news.items.length ? (
                 <SkeletonListRow count={3} />
@@ -523,7 +592,7 @@ export default function TakipScreen() {
                 news.items.map(({ item, reason, href }, index) => (
                   <ListRow
                     key={`${item.kind}:${item.id}`}
-                    leading={NEWS_ICON[item.kind] ?? NEWS_ICON.news}
+                    leading={<NewsTile kind={item.kind} />}
                     title={item.title}
                     subtitle={[item.category_label ?? NEWS_KIND_LABEL[item.kind], reason, timeAgo(item.published_at)]
                       .filter(Boolean)
@@ -545,7 +614,7 @@ export default function TakipScreen() {
         {/* ── 5) LİGLER ── */}
         {scopeRows.length ? (
           <>
-            <SectionHeader title="Ligler" meta={`${scopeRows.length} takip`} />
+            <SectionHeader title="Ligler" icon="trophy" iconTone="gold" meta={`${scopeRows.length}`} />
             <View style={styles.pad}>
               {scopeRows.map(({ item, kind }, index) => (
                 <ScopeFollowRow
@@ -606,14 +675,36 @@ const styles = StyleSheet.create({
     marginTop: space.sm,
     borderRadius: radius.xl,
   },
-  bannerIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.md,
-    backgroundColor: colors.brandDim,
-    alignItems: "center",
-    justifyContent: "center",
+  summary: {
+    marginTop: space.sm,
   },
+  intro: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: space.md,
+    marginTop: space.sm,
+    padding: space.lg,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+    ...elevate(1),
+  },
+  introBody: { flex: 1, minWidth: 0, gap: space.xs },
+  introTitle: { ...type.h2, color: colors.textPrimary },
+  introPerks: { flexDirection: "row", flexWrap: "wrap", gap: space.xs, marginTop: space.xs },
+  introPerk: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: space.sm,
+    paddingVertical: 3,
+    borderRadius: radius.pill,
+    backgroundColor: colors.accentDim,
+    borderWidth: hairline,
+    borderColor: colors.accentBorder,
+  },
+  introPerkText: { ...type.micro, color: colors.accentText },
   bannerText: {
     ...type.bodySm,
     color: colors.textSecondary,

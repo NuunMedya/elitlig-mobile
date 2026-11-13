@@ -19,6 +19,12 @@
  * İLK ÜÇ NEDEN AYRI: sıralama ekranında asıl soru "kim birinci"dir; podyum
  * bunu tek bakışta verir, kalan 47 satır ise yoğun liste olarak akar.
  *
+ * GECE TEMASI (2026-11, ikinci tur): podyumun yerini KİMLİK SAHNESİ aldı —
+ * `gradientInk` + `<Aurora variant="stage">` üstünde Türkiye'nin 1 numarası
+ * (halkalı büyük avatar, dönen rakam), altında 2. ve 3. için iki cam karo.
+ * Sahnenin altında listeden türetilen üç rakam (oyuncu · şehir · takım) ve
+ * "Sıralama 4–50" bölüm başlığı gelir; satırlar aynı `PlayerRow`'dur.
+ *
  * ESKİ KAPILAR KAPATILDI: `components/ScreenHeader` → `components/ui`
  * `ScreenHeader`, `components/States` → `components/ui`, `components/TeamCrest`
  * `PlayerAvatar` → `components/ui` `Avatar`, `constants/theme` → `@/theme`,
@@ -26,6 +32,7 @@
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
@@ -34,16 +41,25 @@ import { FlatList, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import ViewShot, { captureRef } from "react-native-view-shot";
 import {
+  Aurora,
   Avatar,
   BottomSheet,
   Button,
   EmptyState,
   ErrorState,
+  MetricGrid,
+  MetricTile,
+  Odometer,
   PlayerRow,
   PlayerRowHead,
+  RankBadge,
+  Reveal,
   ScreenHeader,
+  SectionHeader,
   SegmentedControl,
+  Skeleton,
   SkeletonListRow,
+  Touchable,
   Tabs,
   refreshControlProps,
   useHeaderScroll,
@@ -54,12 +70,12 @@ import {
 } from "@/components/ui";
 import { getPlayerRankings } from "@/lib/api/players";
 import type { PlayerRankRow, PlayerSort } from "@/lib/types";
-import { Podium } from "@/components/league/Podium";
 import { GroupSeparator, groupRowStyle, groupStyles } from "@/components/league/shared";
 import { formatDecimal } from "@/lib/format";
 import {
   colors,
   fonts,
+  glowStyle,
   hairline,
   layout,
   radius,
@@ -176,6 +192,17 @@ export default function TurkeyRankingsScreen() {
   const podium = useMemo(() => (players.length >= 3 ? players.slice(0, 3) : []), [players]);
   const rest = useMemo(() => (players.length >= 3 ? players.slice(3) : players), [players]);
 
+  /** Listenin yayılımı — sahnenin altındaki üç rakamdan ikisi. */
+  const spread = useMemo(() => {
+    const cities = new Set<string>();
+    const teams = new Set<string>();
+    for (const player of players) {
+      if (player.city) cities.add(String(player.city).toLocaleLowerCase("tr"));
+      if (player.teamName) teams.add(String(player.teamName).toLocaleLowerCase("tr"));
+    }
+    return { cities: cities.size, teams: teams.size };
+  }, [players]);
+
   const refresh = useRefresh(query.refetch, { refreshing: query.isRefetching });
   const refreshControl = useMemo(
     () => <RefreshControl {...refreshControlProps(refresh.refreshing, refresh.onRefresh)} />,
@@ -239,21 +266,37 @@ export default function TurkeyRankingsScreen() {
       <SegmentedControl items={PERIOD_ITEMS} value={period} onChange={setPeriod} size="sm" />
 
       {podium.length >= 3 ? (
-        <Podium
+        <LeaderStage
           players={podium}
-          metricOf={category.display}
+          categoryLabel={category.label}
           unit={category.unit}
-          metaOf={metaOf}
+          display={category.display}
           onPress={openPlayer}
         />
+      ) : null}
+
+      {players.length > 0 ? (
+        <MetricGrid columns={3}>
+          <MetricTile label="Oyuncu" value={String(players.length)} icon="people-outline" />
+          <MetricTile label="Şehir" value={String(spread.cities)} icon="map-outline" tone="brand" />
+          <MetricTile label="Takım" value={String(spread.teams)} icon="shield-outline" />
+        </MetricGrid>
       ) : null}
 
       {/* Sütun başlığı kartın TEPESİDİR. Podyum yoksa (üçten az oyuncu) liste
           birinciden başlar. */}
       {rest.length > 0 ? (
-        <View style={[groupStyles.head, styles.groupHead]}>
-          <PlayerRowHead unit={category.unit} />
-        </View>
+        <>
+          <SectionHeader
+            title="Sıralama"
+            meta={podium.length >= 3 ? `4–${players.length}. sıralar` : `${players.length} oyuncu`}
+            inset="flush"
+            style={styles.rankTitle}
+          />
+          <View style={[groupStyles.head, styles.groupHead]}>
+            <PlayerRowHead unit={category.unit} />
+          </View>
+        </>
       ) : null}
     </View>
   );
@@ -272,7 +315,9 @@ export default function TurkeyRankingsScreen() {
 
       {query.isLoading ? (
         <View style={styles.loading}>
-          <SkeletonListRow count={8} />
+          <Skeleton height={36} radius="pill" />
+          <Skeleton height={236} radius="xxl" />
+          <SkeletonListRow count={5} />
         </View>
       ) : query.isError && players.length === 0 ? (
         <ErrorState error={query.error} onRetry={query.refetch} />
@@ -312,6 +357,121 @@ export default function TurkeyRankingsScreen() {
     </SafeAreaView>
   );
 }
+
+/* ═════════════════════════ LİDER SAHNESİ ═════════════════════════ */
+
+/**
+ * İlk üç, koyu mor sahnede. Birinci büyük ve ortada (halkalı avatar, dönen
+ * rakam); ikinci ve üçüncü altta iki cam karo. Her biri oyuncu profilini açar.
+ */
+const LeaderStage = React.memo(function LeaderStage({
+  players,
+  categoryLabel,
+  unit,
+  display,
+  onPress,
+}: {
+  players: PlayerRankRow[];
+  categoryLabel: string;
+  unit: string;
+  display: (player: PlayerRankRow) => string;
+  onPress: (playerId: number) => void;
+}) {
+  const [leader, second, third] = players;
+  return (
+    <Reveal distance={14} scaleFrom={0.97} replayKey={`${categoryLabel}-${leader.id}`}>
+      <View style={styles.stage}>
+        <LinearGradient
+          colors={colors.gradientInk}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <Aurora variant="stage" height={260} />
+
+        <View style={styles.stageHead}>
+          <Ionicons name="trophy" size={13} color={colors.medalGold[0]} />
+          <Text style={styles.stageOverline} numberOfLines={1} {...textScale.badge}>
+            {upperTR("Türkiye'nin 1 numarası")}
+          </Text>
+          <View style={styles.stagePill}>
+            <Text style={styles.stagePillText} numberOfLines={1} {...textScale.badge}>
+              {upperTR(categoryLabel)}
+            </Text>
+          </View>
+        </View>
+
+        <Touchable
+          feedback="card"
+          haptic="selection"
+          onPress={() => onPress(leader.id)}
+          accessibilityRole="button"
+          accessibilityLabel={`1. ${leader.name}, ${display(leader)} ${unit}`}
+          style={styles.leaderRow}
+        >
+          <View style={[styles.leaderRing, glowStyle(colors.glow, 2)]}>
+            <LinearGradient
+              colors={colors.gradientSignature}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[StyleSheet.absoluteFill, styles.leaderRingFill]}
+            />
+            <View style={styles.leaderInner}>
+              <Avatar name={leader.name} image={leader.image ?? null} size={68} />
+            </View>
+            <RankBadge rank={1} size={24} style={styles.leaderBadge} />
+          </View>
+          <View style={styles.leaderText}>
+            <Text style={styles.leaderName} numberOfLines={2} {...textScale.dense}>
+              {leader.name}
+            </Text>
+            <Text style={styles.leaderMeta} numberOfLines={1} {...textScale.dense}>
+              {metaOf(leader)}
+            </Text>
+            <View style={styles.leaderValueRow}>
+              <Odometer value={display(leader)} style={styles.leaderValue} />
+              <Text style={styles.leaderUnit} {...textScale.badge}>
+                {unit}
+              </Text>
+            </View>
+          </View>
+        </Touchable>
+
+        <View style={styles.runners}>
+          {[second, third].map((player, i) => (
+            <Touchable
+              key={player.id}
+              feedback="card"
+              haptic="selection"
+              onPress={() => onPress(player.id)}
+              accessibilityRole="button"
+              accessibilityLabel={`${i + 2}. ${player.name}, ${display(player)} ${unit}`}
+              style={styles.runner}
+            >
+              <View>
+                <Avatar name={player.name} image={player.image ?? null} size={36} />
+                <RankBadge rank={i + 2} size={18} style={styles.runnerBadge} />
+              </View>
+              <View style={styles.flex}>
+                <Text style={styles.runnerName} numberOfLines={1} {...textScale.dense}>
+                  {player.name}
+                </Text>
+                <View style={styles.runnerValueRow}>
+                  <Text style={styles.runnerValue} {...textScale.badge}>
+                    {display(player)}
+                  </Text>
+                  <Text style={styles.runnerMeta} numberOfLines={1} {...textScale.badge}>
+                    {upperTR(unit)}
+                  </Text>
+                </View>
+              </View>
+            </Touchable>
+          ))}
+        </View>
+      </View>
+    </Reveal>
+  );
+});
 
 /* ═════════════════════════ PAYLAŞIM KARTI ═════════════════════════ */
 
@@ -454,6 +614,134 @@ const styles = StyleSheet.create({
   },
   loading: {
     padding: layout.screenPadding,
+    gap: space.md,
+  },
+  rankTitle: {
+    marginTop: space.sm,
+  },
+
+  /* — Lider sahnesi — */
+  stage: {
+    borderRadius: radius.xxl,
+    overflow: "hidden",
+    padding: space.lg,
+    gap: space.lg,
+    borderWidth: hairline,
+    borderColor: colors.borderOnDark,
+  },
+  stageHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.s,
+  },
+  stageOverline: {
+    ...type.overline,
+    color: colors.onDarkMuted,
+    flex: 1,
+  },
+  stagePill: {
+    paddingHorizontal: space.sm,
+    height: 20,
+    justifyContent: "center",
+    borderRadius: radius.pill,
+    backgroundColor: colors.inkPill,
+    borderWidth: hairline,
+    borderColor: colors.inkPillBorder,
+  },
+  stagePillText: {
+    ...type.micro,
+    color: colors.onDark,
+  },
+  leaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.lg,
+  },
+  leaderRing: {
+    width: 80,
+    height: 80,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  leaderRingFill: {
+    borderRadius: radius.pill,
+  },
+  leaderInner: {
+    padding: space.xxs,
+    borderRadius: radius.pill,
+    backgroundColor: colors.inkBlock,
+  },
+  leaderBadge: {
+    position: "absolute",
+    right: -2,
+    bottom: -2,
+  },
+  leaderText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  leaderName: {
+    ...type.h1,
+    color: colors.onDark,
+  },
+  leaderMeta: {
+    ...type.caption,
+    color: colors.onDarkMuted,
+    marginTop: space.xxs,
+  },
+  leaderValueRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: space.xs,
+    marginTop: space.sm,
+  },
+  leaderValue: {
+    ...type.scoreLg,
+    color: colors.onDark,
+  },
+  leaderUnit: {
+    ...type.micro,
+    color: colors.brandOnDark,
+    marginBottom: space.xs,
+  },
+  runners: {
+    flexDirection: "row",
+    gap: space.sm,
+  },
+  runner: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    padding: space.sm,
+    borderRadius: radius.lg,
+    backgroundColor: colors.inkTile,
+    borderWidth: hairline,
+    borderColor: colors.inkTileBorder,
+  },
+  runnerBadge: {
+    position: "absolute",
+    right: -4,
+    bottom: -4,
+  },
+  runnerName: {
+    ...type.labelSm,
+    color: colors.onDark,
+  },
+  runnerMeta: {
+    ...type.meta,
+    color: colors.onDarkMuted,
+  },
+  runnerValueRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: space.xs,
+  },
+  runnerValue: {
+    ...type.scoreXs,
+    color: colors.onDark,
   },
   list: {
     paddingHorizontal: layout.screenPadding,

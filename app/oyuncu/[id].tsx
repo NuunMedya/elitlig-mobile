@@ -12,7 +12,7 @@
  *
  * EYLEMLER (detay sayfalarının ortak sözleşmesi):
  *   - PAYLAŞ başlığın SAĞ ÜSTÜNDE tek ikon ("share-outline" → oyuncu kartı
- *     alt sayfası, ViewShot + expo-sharing). Kimlik şeridinde tekrarı yok.
+ *     paylaşım stüdyosu `PlayerShare`). Kimlik şeridinde tekrarı yok.
  *   - TAKİP: oyuncu takibi sunucuda yok; şerit oyuncunun TAKIMINI takip eder
  *     ("Takımını takip et") ve `useFollowFlow` ile bildirim türleri alt
  *     sayfasını açar; zil aynı alt sayfayı yeniden açar.
@@ -75,7 +75,10 @@ import {
   Chip,
   EmptyState,
   ErrorState,
+  GradientBar,
+  IconTile,
   ListRow,
+  ProgressRing,
   ScreenHeader,
   SectionHeader,
   SkeletonCard,
@@ -124,12 +127,14 @@ import { formatAge, formatDateShort, mediaUrl } from "@/lib/format";
 import { ApiError, get } from "@/lib/http";
 import { openLink } from "@/lib/links";
 import { queryKeys } from "@/lib/queryKeys";
+import { PlayerShare } from "@/components/share/ProfileShare";
 import { useFavorite } from "@/providers/FavoriteProvider";
 import { useFollowFlow } from "@/providers/FollowFlowProvider";
 import { useScope } from "@/providers/ScopeProvider";
 import { EliteCard } from "@/components/career/EliteCard";
 import { OfferCta } from "@/components/club/team/OfferCta";
 import { FollowActions } from "@/components/FollowActions";
+import { HaloFrame, MiniStat } from "@/components/teampage/ProfileKit";
 import {
   colors,
   dark,
@@ -911,19 +916,24 @@ export default function PlayerDetailScreen() {
         />
       )}
 
-      <ShareSheet
+      {/* Paylaşım stüdyosu: oyuncu kartı ve poster (components/share). */}
+      <PlayerShare
         visible={shareOpen}
         onClose={closeShare}
-        playerName={playerName}
-        playerImage={player.player_img ?? null}
-        position={position}
+        name={playerName}
+        image={player.player_img ?? null}
+        position={position || null}
+        jersey={lineup.jersey}
         teamName={team?.team_name ?? null}
+        teamLogo={team?.logo ?? null}
         matches={totalMatches}
         goals={num(player.total_goals)}
+        assists={assists}
         average={careerAverage}
         wins={num(player.wins)}
         draws={num(player.draws)}
         losses={num(player.losses)}
+        city={team?.city ?? null}
       />
     </SafeAreaView>
   );
@@ -1088,6 +1098,12 @@ function GeneralTab({
     [profileQuery.data],
   );
 
+  /* SON MAÇLAR — yeniden eskiye beş maç; satır skor + reyting haplarıyla. */
+  const recentRows = useMemo(
+    () => playedAppearances(profileQuery.data?.appearances).slice(0, 5),
+    [profileQuery.data],
+  );
+
   const marketSeries = useMemo(
     () =>
       [...(historyQuery.data?.items ?? [])]
@@ -1167,6 +1183,38 @@ function GeneralTab({
         />
       ) : null}
 
+      {/* ————— Performans: reyting halkası + sezon özet sayıları ————— */}
+      {totalMatches > 0 ? (
+        <PerformanceCard
+          careerAverage={careerAverage}
+          matches={totalMatches}
+          goals={totalGoals}
+          winRate={winRate}
+        />
+      ) : null}
+
+      {/* ————— Son maçlar: skor + reyting hapları ————— */}
+      {recentRows.length ? (
+        <>
+          <SectionHeader
+            style={styles.flushHeader}
+            title="Son maçlar"
+            action={{ label: "Tümü", onPress: seeAllMatches }}
+          />
+          <View>
+            {recentRows.map((row, index) => (
+              <MatchLogRow
+                key={row.match_id}
+                {...logRowProps(row)}
+                venue={row.season?.name ?? row.match?.season_name ?? null}
+                position={rowPosition(index, recentRows.length)}
+                onPress={openMatch}
+              />
+            ))}
+          </View>
+        </>
+      ) : null}
+
       {/* ————— Gol videoları (şerit kenardan kenara) ————— */}
       {clipItems.length ? (
         <View style={styles.bleed}>
@@ -1203,10 +1251,23 @@ function GeneralTab({
       {careerQuery.data?.achievements.length ? (
         <>
           <SectionHeader style={styles.flushHeader} title="Kupa dolabı" meta={`${careerQuery.data.achievements.length} kariyer rozeti`} />
-          <View style={styles.trophies}>
-            {careerQuery.data.achievements.map((item) => (
-              <Badge key={item.code} label={item.title} tone={item.layer === "saha" ? "win" : item.layer === "tribun" ? "info" : "brand"} size="sm" />
-            ))}
+          <View style={[surfaces.cardPadded, styles.cabinet]}>
+            <View style={styles.cabinetHead}>
+              <IconTile icon="trophy" tone="gold" size={36} />
+              <View style={styles.cabinetText}>
+                <Text style={styles.cabinetTitle} {...textScale.dense}>
+                  {careerQuery.data.achievements.length} rozet kazanıldı
+                </Text>
+                <Text style={styles.cabinetMeta} numberOfLines={1} {...textScale.dense}>
+                  Saha · Tribün · Kariyer katmanları
+                </Text>
+              </View>
+            </View>
+            <View style={styles.trophies}>
+              {careerQuery.data.achievements.map((item) => (
+                <Badge key={item.code} label={item.title} tone={item.layer === "saha" ? "win" : item.layer === "tribun" ? "info" : "brand"} size="sm" />
+              ))}
+            </View>
           </View>
         </>
       ) : null}
@@ -1251,6 +1312,55 @@ function GeneralTab({
     </>
   );
 }
+
+/**
+ * PERFORMANS KARTI — reyting halkası (kariyer ortalaması, reyting tonunda)
+ * + maç, gol, gol/maç, galibiyet oranı. Sayılar Odometer ile döner.
+ */
+const PerformanceCard = React.memo(function PerformanceCard({
+  careerAverage,
+  matches,
+  goals,
+  winRate,
+}: {
+  careerAverage: number | null;
+  matches: number;
+  goals: number;
+  winRate: number | null;
+}) {
+  return (
+    <View style={[surfaces.cardPadded, styles.perf]}>
+      <View style={styles.perfRing}>
+        <ProgressRing
+          value={careerAverage != null ? careerAverage / 10 : 0}
+          size={96}
+          thickness={8}
+          tone="rating"
+          ratingValue={careerAverage ?? undefined}
+          label={careerAverage != null ? ratingLabel(careerAverage) : "—"}
+          sublabel="ort. puan"
+          animate
+        />
+      </View>
+      <View style={styles.perfGrid}>
+        <View style={styles.perfRow}>
+          <MiniStat label="Maç" value={matches} roll align="left" />
+          <MiniStat label="Gol" value={goals} roll align="left" color={colors.accentText} />
+        </View>
+        <View style={styles.perfDivider} />
+        <View style={styles.perfRow}>
+          <MiniStat label="Gol / maç" value={decimalTR(matches ? goals / matches : 0, 2)} align="left" />
+          <MiniStat
+            label="Galibiyet"
+            value={winRate != null ? `%${Math.round(winRate * 100)}` : "—"}
+            align="left"
+            color={colors.win}
+          />
+        </View>
+      </View>
+    </View>
+  );
+});
 
 /* ══════════════════════════════════════════════════════════════════════════
    6) İSTATİSTİK — vurgu şeridi, sezon tablosu, gol kırılımı, ayrıntılı kayıt
@@ -1977,9 +2087,15 @@ const TimelineTeam = React.memo(function TimelineTeam({
     >
       <View style={styles.timelineRail}>
         <View style={[styles.timelineLine, first && styles.timelineLineHidden]} />
-        <View style={[styles.timelineCrest, current && styles.timelineCrestCurrent]}>
-          <TeamLogo name={team.name} logo={mediaUrl(team.logo)} size={30} />
-        </View>
+        {current ? (
+          <HaloFrame size={30} thickness={2} gap={2} gapColor={colors.surface1}>
+            <TeamLogo name={team.name} logo={mediaUrl(team.logo)} size={30} />
+          </HaloFrame>
+        ) : (
+          <View style={styles.timelineCrest}>
+            <TeamLogo name={team.name} logo={mediaUrl(team.logo)} size={30} />
+          </View>
+        )}
         <View style={[styles.timelineLine, last && styles.timelineLineHidden]} />
       </View>
 
@@ -2007,10 +2123,7 @@ const TimelineTeam = React.memo(function TimelineTeam({
             </Text>
           </View>
         </View>
-        <View style={styles.timelineShare}>
-          <View style={[styles.timelineShareFill, { flex: Math.max(0.02, share) }]} />
-          <View style={{ flex: 1 - Math.max(0.02, share) }} />
-        </View>
+        <GradientBar value={Math.max(0.02, share)} height={4} />
       </View>
     </Touchable>
   );
@@ -2281,6 +2394,47 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: space.s,
   },
+  cabinet: {
+    gap: space.md,
+  },
+  cabinetHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+  },
+  cabinetText: {
+    flex: 1,
+    minWidth: 0,
+    gap: 1,
+  },
+  cabinetTitle: {
+    ...type.h3,
+    color: colors.textPrimary,
+  },
+  cabinetMeta: {
+    ...type.caption,
+    color: colors.textTertiary,
+  },
+  perf: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.lg,
+  },
+  perfRing: {
+    alignItems: "center",
+  },
+  perfGrid: {
+    flex: 1,
+    gap: space.md,
+  },
+  perfRow: {
+    flexDirection: "row",
+    gap: space.md,
+  },
+  perfDivider: {
+    height: hairline,
+    backgroundColor: colors.separator,
+  },
   content: {
     paddingHorizontal: layout.screenPadding,
     paddingTop: space.md,
@@ -2369,19 +2523,15 @@ const styles = StyleSheet.create({
   timelineLine: {
     flex: 1,
     width: 2,
-    backgroundColor: colors.border,
+    backgroundColor: colors.brandBorder,
   },
   timelineLineHidden: {
     backgroundColor: "transparent",
   },
   timelineCrest: {
-    padding: 2,
+    padding: 4,
     borderRadius: radius.pill,
-    borderWidth: 2,
-    borderColor: "transparent",
-  },
-  timelineCrestCurrent: {
-    borderColor: colors.brand,
+    backgroundColor: colors.surface2,
   },
   timelineBody: {
     flex: 1,
@@ -2423,7 +2573,7 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
   },
   timelineCountValue: {
-    ...type.scoreSm,
+    ...type.scoreMd,
     color: colors.textPrimary,
   },
   timelineCountLabel: {

@@ -11,19 +11,18 @@
  * services/chat/safetyService.js).
  */
 
-import Ionicons from "@expo/vector-icons/Ionicons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { Alert, FlatList, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { Avatar, Button, EmptyState, ErrorState, ListRow, ScreenHeader, SkeletonListRow, errorMessage, useToast } from "@/components/ui";
+import { Avatar, Button, EmptyState, ErrorState, IconTile, Reveal, ScreenHeader, SkeletonListRow, errorMessage, useToast } from "@/components/ui";
 import { getBlockedUsers, unblockUser, type BlockedUser } from "@/lib/api/chat";
 import { formatDateShort, mediaUrl } from "@/lib/format";
 import { queryKeys } from "@/lib/queryKeys";
 import { useAuth } from "@/providers/AuthProvider";
-import { colors, layout, radius, space, textScale, type } from "@/theme";
+import { colors, hairline, layout, radius, space, textScale, type } from "@/theme";
 
 export default function BlockedUsersScreen() {
   const auth = useAuth();
@@ -95,20 +94,51 @@ export default function BlockedUsersScreen() {
           contentContainerStyle={styles.content}
           ListHeaderComponent={
             <View style={styles.info}>
-              <Ionicons name="ban" size={18} color={colors.textSecondary} />
-              <Text style={styles.lede} {...textScale.long}>
-                Engellenen üye sana mesaj yazamaz ve seni arayamaz; sen de ona yazamazsın. Takım ve grup sohbetleri etkilenmez.
-              </Text>
+              <IconTile icon="ban" tone="red" size={44} />
+              <View style={styles.infoBody}>
+                <View style={styles.infoHead}>
+                  <Text style={styles.infoCount} {...textScale.badge}>
+                    {count}
+                  </Text>
+                  <Text style={styles.infoTitle} {...textScale.dense}>
+                    üye engelli
+                  </Text>
+                </View>
+                <Text style={styles.lede} {...textScale.long}>
+                  Engellenen üye sana yazamaz ve seni arayamaz; sen de ona yazamazsın. Takım ve grup sohbetleri etkilenmez.
+                </Text>
+              </View>
             </View>
           }
           renderItem={({ item, index }) => (
-            <ListRow
-              title={item.name}
-              subtitle={[item.subtitle, item.blocked_at ? `Engellendi: ${formatDateShort(item.blocked_at)}` : null].filter(Boolean).join(" · ")}
-              leading={<Avatar name={item.name} image={mediaUrl(item.avatar)} size={40} />}
-              position={blocks.length === 1 ? "single" : index === 0 ? "first" : index === blocks.length - 1 ? "last" : "middle"}
-              trailing={<Button label="Engeli kaldır" variant="secondary" size="sm" onPress={() => confirmUnblock(item)} loading={busyId === item.user_id} />}
-            />
+            <Reveal index={index} limit={8} distance={8}>
+              <View
+                style={[
+                  styles.row,
+                  index === 0 ? styles.rowFirst : null,
+                  index === blocks.length - 1 ? styles.rowLast : styles.rowDivided,
+                ]}
+              >
+                <Avatar name={item.name} image={mediaUrl(item.avatar)} size={40} />
+                <View style={styles.rowBody}>
+                  <Text style={styles.rowTitle} numberOfLines={1} {...textScale.dense}>
+                    {item.name}
+                  </Text>
+                  <Text style={styles.rowMeta} numberOfLines={1} {...textScale.dense}>
+                    {[item.subtitle, item.blocked_at ? formatDateShort(item.blocked_at) : null].filter(Boolean).join(" · ")}
+                  </Text>
+                </View>
+                <Button
+                  label="Kaldır"
+                  icon="lock-open-outline"
+                  variant="secondary"
+                  size="sm"
+                  onPress={() => confirmUnblock(item)}
+                  loading={busyId === item.user_id}
+                  accessibilityLabel={`${item.name} için engeli kaldır`}
+                />
+              </View>
+            </Reveal>
           )}
         />
       )}
@@ -122,11 +152,35 @@ const styles = StyleSheet.create({
   info: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: space.sm,
-    padding: space.md,
-    marginBottom: space.md,
-    borderRadius: radius.lg,
-    backgroundColor: colors.surface2,
+    gap: space.md,
+    padding: space.lg,
+    marginBottom: space.lg,
+    borderRadius: radius.xl,
+    backgroundColor: colors.dangerDim,
+    borderWidth: hairline,
+    borderColor: colors.border,
   },
-  lede: { ...type.bodySm, color: colors.textSecondary, lineHeight: 19, flex: 1 },
+  infoBody: { flex: 1, minWidth: 0, gap: space.xs },
+  infoHead: { flexDirection: "row", alignItems: "baseline", gap: space.xs },
+  infoCount: { ...type.scoreMd, color: colors.textPrimary },
+  infoTitle: { ...type.h3, color: colors.textPrimary },
+  lede: { ...type.bodySm, color: colors.textSecondary, flex: 1 },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    minHeight: 64,
+    paddingHorizontal: space.md,
+    paddingVertical: space.m,
+    backgroundColor: colors.surface1,
+    borderLeftWidth: hairline,
+    borderRightWidth: hairline,
+    borderColor: colors.border,
+  },
+  rowFirst: { borderTopWidth: hairline, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl },
+  rowLast: { borderBottomWidth: hairline, borderBottomLeftRadius: radius.xl, borderBottomRightRadius: radius.xl },
+  rowDivided: { borderBottomWidth: hairline, borderBottomColor: colors.separator },
+  rowBody: { flex: 1, minWidth: 0, gap: 1 },
+  rowTitle: { ...type.h3, color: colors.textPrimary },
+  rowMeta: { ...type.bodySm, color: colors.textTertiary },
 });

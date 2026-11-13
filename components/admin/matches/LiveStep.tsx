@@ -29,10 +29,11 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { LinearGradient } from "expo-linear-gradient";
 import { StyleSheet, Text, View } from "react-native";
 
 import { ActionSheet, Panel, SegmentField, confirmAction, useAdminMutation } from "@/components/admin";
-import { BottomSheet, Button, Chip, ChipGroup, EmptyState, SkeletonListRow, Stepper, Touchable, fireHaptic, useToast } from "@/components/ui";
+import { BottomSheet, Button, Chip, ChipGroup, EmptyState, Odometer, SkeletonListRow, Stepper, Touchable, fireHaptic, useToast } from "@/components/ui";
 import { hasAnyPermission } from "@/lib/admin/access";
 import { errorText } from "@/lib/admin/errors";
 import {
@@ -592,23 +593,37 @@ export function LiveStep({ match, onScore }: { match: AdminMatch; onScore?: (sco
       ) : null}
 
       {/* Skor ve saat */}
+      {/* SKORBORD — koyu sahne: iki takım, Archivo skor, saat kapsülü. */}
       <View style={styles.board}>
+        <LinearGradient colors={colors.gradientInk} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
         <View style={styles.boardRow}>
-          <Text style={styles.boardTeam} numberOfLines={2} {...textScale.dense}>
-            {homeName}
-          </Text>
-          <Text style={styles.boardScore} {...textScale.badge}>
-            {score.home} – {score.away}
-          </Text>
-          <Text style={[styles.boardTeam, styles.right]} numberOfLines={2} {...textScale.dense}>
-            {awayName}
-          </Text>
+          <View style={styles.boardSide}>
+            <View style={[styles.sideTag, styles.sideHome]} />
+            <Text style={styles.boardTeam} numberOfLines={2} {...textScale.dense}>
+              {homeName}
+            </Text>
+          </View>
+          <View style={styles.boardDigits}>
+            <Odometer value={score.home} style={styles.boardScore} />
+            <Text style={styles.boardDash} {...textScale.badge}>
+              –
+            </Text>
+            <Odometer value={score.away} style={styles.boardScore} />
+          </View>
+          <View style={[styles.boardSide, styles.boardSideAway]}>
+            <Text style={[styles.boardTeam, styles.right]} numberOfLines={2} {...textScale.dense}>
+              {awayName}
+            </Text>
+            <View style={[styles.sideTag, styles.sideAway]} />
+          </View>
         </View>
         <View style={styles.clockRow}>
-          <Ionicons name={running ? "timer-outline" : "pause-circle-outline"} size={18} color={running ? colors.live : colors.textTertiary} />
-          <Text style={[styles.clock, running ? styles.clockLive : null]} {...textScale.badge}>
-            {clockText(nowMs)}
-          </Text>
+          <View style={[styles.clockPill, running ? styles.clockPillLive : null]}>
+            <Ionicons name={running ? "timer-outline" : "pause-circle-outline"} size={15} color={running ? colors.live : colors.onDarkMuted} />
+            <Text style={[styles.clock, running ? styles.clockLive : null]} {...textScale.badge}>
+              {clockText(nowMs)}
+            </Text>
+          </View>
           <Text style={styles.phase} {...textScale.dense}>
             {PHASE_LABEL[phase]} · {period === 3 ? "Uzatma" : `${period}. devre`}
           </Text>
@@ -653,11 +668,12 @@ export function LiveStep({ match, onScore }: { match: AdminMatch; onScore?: (sco
                   label={running ? "Saati durdur" : "Saati başlat"}
                   icon={running ? "pause" : "play"}
                   variant="secondary"
+                  onDark
                   onPress={() => control.mutate(running ? "pause" : "resume")}
                   disabled={busy}
                   style={styles.flex}
                 />
-                <Button label="Süre / devre" icon="create-outline" variant="secondary" onPress={openClock} style={styles.flex} />
+                <Button label="Süre / devre" icon="create-outline" variant="secondary" onDark onPress={openClock} style={styles.flex} />
               </View>
             ) : null}
           </View>
@@ -669,9 +685,12 @@ export function LiveStep({ match, onScore }: { match: AdminMatch; onScore?: (sco
         <View style={styles.quick}>
           {(["home", "away"] as const).map((side) => (
             <View key={side} style={styles.quickSide}>
-              <Text style={styles.quickTeam} numberOfLines={1} {...textScale.dense}>
-                {side === "home" ? homeName : awayName}
-              </Text>
+              <View style={styles.quickHead}>
+                <View style={[styles.sideTag, side === "home" ? styles.sideHome : styles.sideAway]} />
+                <Text style={styles.quickTeam} numberOfLines={1} {...textScale.dense}>
+                  {(side === "home" ? homeName : awayName).toLocaleUpperCase("tr-TR")}
+                </Text>
+              </View>
               <View style={styles.quickRow}>
                 {QUICK_EVENTS.map((q) => (
                   <Touchable
@@ -948,20 +967,40 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   right: { textAlign: "right" },
   board: {
-    borderRadius: radius.xl,
-    backgroundColor: colors.surface1,
+    borderRadius: radius.xxl,
+    overflow: "hidden",
+    backgroundColor: colors.inkBlock,
     borderWidth: hairline,
-    borderColor: colors.border,
+    borderColor: colors.inkTileBorder,
     padding: space.lg,
     gap: space.md,
   },
   boardRow: { flexDirection: "row", alignItems: "center", gap: space.sm },
-  boardTeam: { ...type.label, color: colors.textPrimary, flex: 1 },
-  boardScore: { ...type.scoreLg, color: colors.textPrimary },
+  boardSide: { flex: 1, flexDirection: "row", alignItems: "center", gap: space.s },
+  boardSideAway: { justifyContent: "flex-end" },
+  sideTag: { width: 4, height: 28, borderRadius: 2 },
+  sideHome: { backgroundColor: colors.brand },
+  sideAway: { backgroundColor: colors.accent },
+  boardTeam: { ...type.h4, color: colors.onDark, flexShrink: 1 },
+  boardDigits: { flexDirection: "row", alignItems: "center", gap: space.s },
+  boardScore: { ...type.scoreHero, color: colors.onDark },
+  boardDash: { ...type.scoreLg, color: colors.onDarkMuted },
   clockRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.sm },
-  clock: { ...type.clock, color: colors.textPrimary },
-  clockLive: { color: colors.live },
-  phase: { ...type.caption, color: colors.textSecondary },
+  clockPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+    paddingHorizontal: space.m,
+    height: 28,
+    borderRadius: radius.pill,
+    backgroundColor: colors.inkPill,
+    borderWidth: hairline,
+    borderColor: colors.inkPillBorder,
+  },
+  clockPillLive: { borderColor: colors.live },
+  clock: { ...type.scoreXs, color: colors.onDark },
+  clockLive: { color: colors.liveOnDark },
+  phase: { ...type.caption, color: colors.onDarkMuted },
   controls: { gap: space.sm },
   controlRow: { flexDirection: "row", gap: space.sm },
   event: {
@@ -976,7 +1015,7 @@ const styles = StyleSheet.create({
   pendingActions: { flexDirection: "row", gap: space.xs },
   pendingBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
   syncRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.xs, minHeight: 20 },
-  syncText: { ...type.caption, color: colors.textTertiary, flexShrink: 1 },
+  syncText: { ...type.caption, color: colors.onDarkMuted, flexShrink: 1 },
   syncBad: { color: colors.danger },
   syncAction: { ...type.labelSm, color: colors.brandAccent, marginLeft: space.sm },
   quick: {
@@ -988,7 +1027,8 @@ const styles = StyleSheet.create({
     gap: space.md,
   },
   quickSide: { gap: space.sm },
-  quickTeam: { ...type.overline, color: colors.textTertiary },
+  quickTeam: { ...type.overline, color: colors.textSecondary, flex: 1 },
+  quickHead: { flexDirection: "row", alignItems: "center", gap: space.sm },
   quickRow: { flexDirection: "row", gap: space.xs },
   quickBtn: {
     flex: 1,

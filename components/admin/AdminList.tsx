@@ -12,6 +12,11 @@
  *
  * Arama metni ekran tarafından tutulur (sorgu anahtarına girer); bileşen
  * yalnız 300ms gecikmeli bildirir — her tuşta istek atılmaz.
+ *
+ * GÖRÜNÜM (yönetim tasarım dili): başlık bandı = hap arama kutusu → yatay
+ * filtre çipleri (sayaçlı) → ek süzgeç → özet satırı ("124 kayıt", solda
+ * küçük degrade ray). İlk sekiz satır `Reveal` ile sırayla süzülerek girer;
+ * satırlar arası boşluk space.sm, her satır kendi kartıdır (RecordCard).
  */
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -32,11 +37,14 @@ import {
   EmptyState,
   ErrorState,
   Input,
+  Reveal,
   SkeletonListFooter,
   SkeletonListRow,
   refreshControlProps,
 } from "@/components/ui";
-import { colors, layout, space, textScale, type } from "@/theme";
+import { LinearGradient } from "expo-linear-gradient";
+
+import { colors, layout, radius, space, textScale, type } from "@/theme";
 
 export interface FilterOption<T extends string = string> {
   key: T;
@@ -164,9 +172,12 @@ export function AdminList<T>({
       ) : null}
       {extraHeader}
       {summary ? (
-        <Text style={styles.summary} {...textScale.dense}>
-          {summary}
-        </Text>
+        <View style={styles.summaryRow}>
+          <LinearGradient colors={colors.gradientSignature} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} style={styles.summaryRail} />
+          <Text style={styles.summary} numberOfLines={1} {...textScale.dense}>
+            {summary}
+          </Text>
+        </View>
       ) : null}
       {error && data?.length ? <ErrorState error={error} onRetry={onRetry} variant="banner" /> : null}
     </View>
@@ -188,10 +199,19 @@ export function AdminList<T>({
 
   const Separator = useCallback(() => <View style={{ height: gap }} />, [gap]);
 
+  /* İlk sekiz satır sırayla süzülür; sonrakiler (kaydırınca gelenler) doğrudan. */
+  const renderRow = useCallback<ListRenderItem<T>>(
+    (info) => {
+      const node = renderItem(info);
+      return info.index < 8 ? <Reveal index={info.index}>{node}</Reveal> : node;
+    },
+    [renderItem]
+  );
+
   return (
     <FlatList
       data={data ?? []}
-      renderItem={renderItem}
+      renderItem={renderRow}
       keyExtractor={keyExtractor}
       ListHeaderComponent={header}
       ListEmptyComponent={empty}
@@ -222,9 +242,17 @@ const styles = StyleSheet.create({
     paddingTop: space.sm,
     paddingBottom: space.md,
   },
+  summaryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    paddingTop: space.xs,
+  },
+  summaryRail: { width: 3, height: 12, borderRadius: radius.pill },
   summary: {
-    ...type.caption,
-    color: colors.textTertiary,
+    ...type.labelSm,
+    color: colors.textSecondary,
+    flexShrink: 1,
   },
   footerSpace: { height: space.xl },
 });

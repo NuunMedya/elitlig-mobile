@@ -12,6 +12,11 @@
  * diğerleri tablo rakamı; sıra kutusu yoktur, sıra sönük bir rakamdır —
  * vurgu sayıdadır. Yoğun ölçü: satır 38px, arma/avatar 20–22px, ad 12px.
  *
+ * İKİNCİ TUR: başlıkta degrade ikon karosu (`IconTile`, ton kategoriye
+ * göre); ilk üç sırada kitin madalya rozeti; çubuk `GradientBar` (birincide
+ * imza degradesi, diğerlerinde sönük) ve yaylanarak dolar; birincinin
+ * satırı iri rakamla ve ince sönük zeminle öne çıkar.
+ *
  * "Ters" ölçüt (en az gol yiyen): çubuk yine değeri gösterir ama oran
  * EN İYİYE göre ters kurulur (`invert`): az olan uzun çubuk alır. Aksi hâlde
  * birinci sıradaki takım en kısa çubukla dururdu.
@@ -20,12 +25,19 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { useCallback } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { Avatar, TeamLogo, Touchable } from "@/components/ui";
-import { colors, radius, space, textScale, type, upperTR } from "@/theme";
-import { groupStyles } from "./shared";
+import {
+  Avatar,
+  GradientBar,
+  IconTile,
+  RankBadge,
+  TeamLogo,
+  Touchable,
+  type IconTileTone,
+} from "@/components/ui";
+import { colors, hairline, radius, space, textScale, type, upperTR } from "@/theme";
 
 /** Satırdaki arma ölçüsü (oyuncu avatarı 2px büyük — yuvarlak, gözde küçük kalır). */
-const CREST = 20;
+const CREST = 28;
 
 export interface LeaderEntry {
   id: number;
@@ -43,6 +55,8 @@ export interface LeaderboardProps {
   /** Sağ üst köşede birim: "GOL", "KART". */
   unit: string;
   icon: keyof typeof Ionicons.glyphMap;
+  /** Başlık karosunun tonu (varsayılan camgöbeği). */
+  tone?: IconTileTone;
   kind: "team" | "player";
   entries: LeaderEntry[];
   /** Az olan iyi: çubuk oranı tersine kurulur. */
@@ -74,17 +88,15 @@ const LeaderRow = React.memo(function LeaderRow({
       feedback="row"
       haptic="selection"
       onPress={handlePress}
-      style={styles.row}
+      style={[styles.row, first ? styles.rowFirst : null]}
       accessibilityRole="button"
       accessibilityLabel={`${rank}. ${entry.name}, ${display}`}
     >
-      <Text style={[styles.rank, first && styles.rankFirst]} {...textScale.dense}>
-        {rank}
-      </Text>
+      <RankBadge rank={rank} size={22} />
       {kind === "team" ? (
         <TeamLogo name={entry.name} logo={entry.image ?? null} size={CREST} />
       ) : (
-        <Avatar name={entry.name} image={entry.image ?? null} size={CREST + 2} />
+        <Avatar name={entry.name} image={entry.image ?? null} size={CREST + 4} />
       )}
       <View style={styles.body}>
         <View style={styles.titleLine}>
@@ -97,15 +109,11 @@ const LeaderRow = React.memo(function LeaderRow({
             </Text>
           ) : null}
         </View>
-        <View style={styles.track}>
-          <View
-            style={[
-              styles.fill,
-              first ? styles.fillFirst : null,
-              { width: `${Math.max(4, Math.round(ratio * 100))}%` },
-            ]}
-          />
-        </View>
+        <GradientBar
+          value={Math.max(0.04, ratio)}
+          height={first ? 5 : 4}
+          gradient={first ? undefined : [colors.accentBorder, colors.accentBorder]}
+        />
       </View>
       <Text style={first ? styles.valueFirst : styles.value} {...textScale.dense}>
         {display}
@@ -118,6 +126,7 @@ export const Leaderboard = React.memo(function Leaderboard({
   title,
   unit,
   icon,
+  tone = "cyan",
   kind,
   entries,
   invert = false,
@@ -137,11 +146,9 @@ export const Leaderboard = React.memo(function Leaderboard({
   };
 
   return (
-    <View style={[groupStyles.card, styles.card]}>
+    <View style={styles.card}>
       <View style={styles.head}>
-        <View style={styles.headIcon}>
-          <Ionicons name={icon} size={11} color={colors.accentText} />
-        </View>
+        <IconTile icon={icon} tone={tone} size={28} glow={false} />
         <Text style={styles.title} numberOfLines={1} {...textScale.dense}>
           {title}
         </Text>
@@ -183,26 +190,22 @@ export const Leaderboard = React.memo(function Leaderboard({
 
 const styles = StyleSheet.create({
   card: {
+    backgroundColor: colors.surface1,
+    borderRadius: radius.xl,
+    borderWidth: hairline,
+    borderColor: colors.border,
     overflow: "hidden",
   },
   head: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.s,
-    paddingHorizontal: space.m,
-    paddingTop: space.sm,
-    paddingBottom: space.xxs,
-  },
-  headIcon: {
-    width: 18,
-    height: 18,
-    borderRadius: radius.xs,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.accentDim,
+    gap: space.m,
+    paddingHorizontal: space.md,
+    paddingTop: space.md,
+    paddingBottom: space.s,
   },
   title: {
-    ...type.labelSm,
+    ...type.h3,
     color: colors.textPrimary,
     flex: 1,
   },
@@ -212,27 +215,21 @@ const styles = StyleSheet.create({
     color: colors.textTertiary,
   },
   row: {
-    minHeight: 38,
+    minHeight: 52,
     flexDirection: "row",
     alignItems: "center",
-    gap: space.sm,
-    paddingHorizontal: space.m,
-    paddingVertical: space.xs,
+    gap: space.m,
+    paddingHorizontal: space.md,
+    paddingVertical: space.s,
   },
-  rank: {
-    ...type.numSm,
-    color: colors.textTertiary,
-    width: 12,
-    textAlign: "center",
-  },
-  rankFirst: {
-    ...type.numSmStrong,
-    color: colors.textPrimary,
+  /* Birincinin satırı: sönük mor zemin — kim önde, tek bakışta. */
+  rowFirst: {
+    backgroundColor: colors.brandDim,
   },
   body: {
     flex: 1,
     minWidth: 0,
-    gap: space.xs,
+    gap: space.s,
   },
   titleLine: {
     flexDirection: "row",
@@ -240,40 +237,25 @@ const styles = StyleSheet.create({
     gap: space.xs,
   },
   name: {
-    ...type.labelSm,
+    ...type.h4,
     color: colors.textPrimary,
     flexShrink: 1,
   },
   meta: {
-    ...type.meta,
+    ...type.caption,
     color: colors.textTertiary,
     flexShrink: 2,
   },
-  track: {
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: colors.surface3,
-    overflow: "hidden",
-  },
-  fill: {
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: colors.accentBorder,
-  },
-  fillFirst: {
-    backgroundColor: colors.accent,
-  },
   value: {
-    ...type.numSmStrong,
+    ...type.scoreXs,
     color: colors.textPrimary,
-    minWidth: 26,
+    minWidth: 32,
     textAlign: "right",
   },
   valueFirst: {
-    ...type.scoreXs,
-    letterSpacing: -0.2,
+    ...type.scoreMd,
     color: colors.textPrimary,
-    minWidth: 26,
+    minWidth: 32,
     textAlign: "right",
   },
   more: {
@@ -281,12 +263,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: space.xxs,
-    minHeight: 32,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    minHeight: 40,
+    borderTopWidth: hairline,
     borderTopColor: colors.separator,
   },
   moreText: {
-    ...type.labelXs,
+    ...type.label,
     color: colors.brandAccent,
   },
 });

@@ -14,7 +14,7 @@ import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { BottomSheet, Touchable } from "@/components/ui";
-import { colors, fonts, radius, space, textScale, touchSlop, type } from "@/theme";
+import { colors, fonts, glowStyle, hairline, radius, space, textScale, touchSlop, type } from "@/theme";
 import { MONTHS_TR, pad2 } from "./scoreUtils";
 
 /** Haftanın ilk günü Pazartesi — takvim ızgarası bu sırayı izler. */
@@ -170,7 +170,12 @@ const CalendarDay = memo(function CalendarDay({
         onPress={handlePress}
         accessibilityLabel={`${day} ${MONTHS_TR[Number(iso.slice(5, 7)) - 1]}`}
         accessibilityState={{ selected }}
-        style={[styles.calDay, selected && styles.calDaySelected]}
+        style={[
+          styles.calDay,
+          marker && !selected ? styles.calDayHas : null,
+          today && !selected ? styles.calDayTodayRing : null,
+          selected && styles.calDaySelected,
+        ]}
       >
         <Text
           style={[
@@ -234,8 +239,17 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     gap: space.xxs,
   },
+  /** Maçlı gün hafif dolgulu: ay ızgarasında yoğunluk tek bakışta okunur. */
+  calDayHas: {
+    backgroundColor: colors.surface2,
+  },
+  calDayTodayRing: {
+    borderWidth: hairline,
+    borderColor: colors.brandBorder,
+  },
   calDaySelected: {
     backgroundColor: colors.brand,
+    ...glowStyle(colors.glow, 1),
   },
   calDayText: {
     ...type.tableNum,

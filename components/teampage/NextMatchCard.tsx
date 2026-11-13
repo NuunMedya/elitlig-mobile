@@ -14,21 +14,29 @@
  * bekleniyor (saati geçmiş, skor girilmemiş — geri sayım YOK; eskiden bu
  * maç için "Başlamak üzere" yazıyordu).
  *
+ * İKİNCİ TUR: kart bir "maç bileti"dir — koyu mürekkep zemin + aurora
+ * ışığı, iri armalar, ortada dev saat; geri sayım kutuları cam karolarda
+ * `Odometer` ile döner. Canlı maçta kenarda `GlowRim` dolaşır.
+ *
  * GERİ SAYIM kendi küçük bileşeninde tıklar; saniyede bir bütün ekranı değil
  * yalnız o üç kutuyu yeniler.
  */
 
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { LinearGradient } from "expo-linear-gradient";
 import React, { useCallback, useEffect, useState } from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
-import { Badge, Card, LiveBadge, TeamLogo, Touchable, matchDayLabel } from "@/components/ui";
+import { Aurora, GlowRim, LiveBadge, Odometer, TeamLogo, Touchable, matchDayLabel } from "@/components/ui";
 import { formatTime } from "@/lib/format";
 import { matchState } from "@/lib/match";
 import type { ApiMatch } from "@/lib/types";
-import { colors, radius, space, textScale, type, upperTR } from "@/theme";
+import { colors, dark, hairline, radius, space, textScale, type, upperTR } from "@/theme";
 import { matchTime, type LogoFor } from "./model";
 
-const CREST = 48;
+const CREST = 56;
+/* Yüzey gradyanı yatay, sağdan sola (bkz. scripts/check-tokens.mjs). */
+const INK_START = { x: 1, y: 0.5 };
+const INK_END = { x: 0, y: 0.5 };
 
 const pad = (value: number) => String(value).padStart(2, "0");
 
@@ -71,8 +79,9 @@ const Countdown = React.memo(function Countdown({ targetMs }: { targetMs: number
   const diff = targetMs - now;
   if (diff <= 0) {
     return (
-      <View style={styles.countdownSoon}>
-        <Text style={styles.soonText} {...textScale.dense}>
+      <View style={styles.notice}>
+        <Ionicons name="flash" size={14} color={colors.brandOnDark} />
+        <Text style={styles.noticeText} {...textScale.dense}>
           Başlamak üzere
         </Text>
       </View>
@@ -86,15 +95,20 @@ const Countdown = React.memo(function Countdown({ targetMs }: { targetMs: number
       accessible
       accessibilityLabel={`Maça kalan: ${units.map((unit) => `${unit.value} ${unit.label.toLocaleLowerCase("tr-TR")}`).join(" ")}`}
     >
-      {units.map((unit) => (
-        <View key={unit.label} style={styles.unit}>
-          <Text style={styles.unitValue} {...textScale.badge}>
-            {unit.value}
-          </Text>
-          <Text style={styles.unitLabel} {...textScale.badge}>
-            {unit.label}
-          </Text>
-        </View>
+      {units.map((unit, index) => (
+        <React.Fragment key={unit.label}>
+          {index > 0 ? (
+            <Text style={styles.colon} {...textScale.badge}>
+              :
+            </Text>
+          ) : null}
+          <View style={styles.unit}>
+            <Odometer value={unit.value} style={styles.unitValue} />
+            <Text style={styles.unitLabel} {...textScale.badge}>
+              {unit.label}
+            </Text>
+          </View>
+        </React.Fragment>
       ))}
     </View>
   );
@@ -131,86 +145,120 @@ export const NextMatchCard = React.memo(function NextMatchCard({
   const day = matchDayLabel(match.date);
 
   return (
-    <Card padding="lg" onPress={handleOpen} style={style} contentStyle={styles.card}>
-      <View style={styles.head}>
-        <Text style={styles.league} numberOfLines={1} {...textScale.badge}>
-          {upperTR(match.league_name || "Maç")}
-        </Text>
-        <Badge label={home ? "İÇ SAHA" : "DEPLASMAN"} tone="neutral" size="xs" />
+    <Touchable
+      feedback="card"
+      haptic="selection"
+      onPress={handleOpen}
+      accessibilityRole="button"
+      accessibilityLabel={`${match.first_team_name} – ${match.second_team_name}, ${day} ${time}`}
+      style={[styles.ticket, style]}
+    >
+      <View style={styles.clip}>
+        <LinearGradient colors={colors.gradientInk} start={INK_START} end={INK_END} style={StyleSheet.absoluteFill} />
+        <Aurora variant="stage" style={StyleSheet.absoluteFill} />
       </View>
+      {live ? <GlowRim radius={radius.xxl} /> : null}
 
-      <View style={styles.teams}>
-        <TeamSide
-          name={match.first_team_name}
-          logo={logoFor(match.home_team_id, match.first_team_name)}
-          focus={home}
-        />
-        <View style={styles.center}>
-          {live ? (
-            <>
-              <LiveBadge />
-              <Text style={styles.score} {...textScale.badge}>
-                {match.first_team_score ?? 0}–{match.second_team_score ?? 0}
+      <View style={styles.content}>
+        <View style={styles.head}>
+          <View style={styles.leaguePill}>
+            <Ionicons name="trophy" size={10} color={colors.brandOnDark} />
+            <Text style={styles.league} numberOfLines={1} {...textScale.badge}>
+              {upperTR(match.league_name || "Maç")}
+            </Text>
+          </View>
+          <View style={[styles.sidePill, home ? styles.sidePillHome : null]}>
+            <Ionicons name={home ? "home" : "airplane"} size={10} color={colors.onDark} />
+            <Text style={styles.sidePillText} {...textScale.badge}>
+              {home ? "İÇ SAHA" : "DEPLASMAN"}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.teams}>
+          <TeamSide
+            name={match.first_team_name}
+            logo={logoFor(match.home_team_id, match.first_team_name)}
+            focus={home}
+          />
+          <View style={styles.center}>
+            {live ? (
+              <>
+                <LiveBadge />
+                <Text style={styles.kickoff} {...textScale.badge}>
+                  {match.first_team_score ?? 0}–{match.second_team_score ?? 0}
+                </Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.kickoff} {...textScale.badge}>
+                  {time || "—"}
+                </Text>
+                <View style={styles.dayPill}>
+                  <Text style={styles.day} numberOfLines={1} {...textScale.dense}>
+                    {day}
+                  </Text>
+                </View>
+              </>
+            )}
+          </View>
+          <TeamSide
+            name={match.second_team_name}
+            logo={logoFor(match.away_team_id, match.second_team_name)}
+            focus={!home}
+          />
+        </View>
+
+        {live ? null : awaiting ? (
+          <View style={[styles.notice, styles.noticeWarn]}>
+            <Ionicons name="hourglass" size={14} color={dark.warn} />
+            <Text style={[styles.noticeText, { color: dark.warn }]} {...textScale.dense}>
+              Maç oynandı, sonucu henüz girilmedi
+            </Text>
+          </View>
+        ) : Number.isFinite(target) ? (
+          <Countdown targetMs={target} />
+        ) : null}
+
+        <View style={styles.perforation} />
+
+        <View style={styles.foot}>
+          <View style={styles.venue}>
+            {match.match_field ? (
+              <>
+                <Ionicons name="location" size={13} color={colors.onDarkMuted} />
+                <Text style={styles.venueText} numberOfLines={1} {...textScale.dense}>
+                  {match.match_field}
+                </Text>
+              </>
+            ) : null}
+          </View>
+          {live || awaiting ? (
+            <View style={styles.openHint}>
+              <Text style={styles.openHintText} {...textScale.dense}>
+                Maça git
               </Text>
-            </>
+              <Ionicons name="chevron-forward" size={13} color={colors.onDarkMuted} />
+            </View>
           ) : (
-            <>
-              <Text style={styles.kickoff} {...textScale.badge}>
-                {time || "—"}
+            <Touchable
+              onPress={handleCalendar}
+              feedback="chip"
+              haptic="light"
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Maçı takvime ekle"
+              style={styles.calendar}
+            >
+              <Ionicons name="calendar" size={13} color={colors.onDark} />
+              <Text style={styles.calendarText} {...textScale.dense}>
+                Takvime ekle
               </Text>
-              <Text style={styles.day} numberOfLines={1} {...textScale.dense}>
-                {day}
-              </Text>
-            </>
+            </Touchable>
           )}
         </View>
-        <TeamSide
-          name={match.second_team_name}
-          logo={logoFor(match.away_team_id, match.second_team_name)}
-          focus={!home}
-        />
       </View>
-
-      {live ? null : awaiting ? (
-        <View style={styles.awaiting}>
-          <Ionicons name="hourglass-outline" size={14} color={colors.warn} />
-          <Text style={styles.awaitingText} {...textScale.dense}>
-            Maç oynandı, sonucu henüz girilmedi
-          </Text>
-        </View>
-      ) : Number.isFinite(target) ? (
-        <Countdown targetMs={target} />
-      ) : null}
-
-      <View style={styles.foot}>
-        <View style={styles.venue}>
-          {match.match_field ? (
-            <>
-              <Ionicons name="location-outline" size={14} color={colors.textTertiary} />
-              <Text style={styles.venueText} numberOfLines={1} {...textScale.dense}>
-                {match.match_field}
-              </Text>
-            </>
-          ) : null}
-        </View>
-        {live || awaiting ? null : (
-          <Touchable
-            onPress={handleCalendar}
-            feedback="icon"
-            haptic="light"
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Maçı takvime ekle"
-            style={styles.calendar}
-          >
-            <Ionicons name="calendar-outline" size={15} color={colors.brandAccent} />
-            <Text style={styles.calendarText} {...textScale.dense}>
-              Takvime ekle
-            </Text>
-          </Touchable>
-        )}
-      </View>
-    </Card>
+    </Touchable>
   );
 });
 
@@ -221,17 +269,15 @@ const TeamSide = React.memo(function TeamSide({
 }: {
   name: string;
   logo: string | null;
-  /** Bu sayfanın takımı mı — adı tam mürekkep, rakip ikincil. */
+  /** Bu sayfanın takımı mı — adı tam beyaz ve altında imza çizgisi. */
   focus: boolean;
 }) {
   return (
     <View style={styles.side}>
-      <TeamLogo name={name} logo={logo} size={CREST} />
-      <Text
-        style={[styles.sideName, focus ? null : styles.sideNameMuted]}
-        numberOfLines={2}
-        {...textScale.dense}
-      >
+      <View style={[styles.crestWrap, focus ? styles.crestFocus : null]}>
+        <TeamLogo name={name} logo={logo} size={CREST} plain onDark />
+      </View>
+      <Text style={[styles.sideName, focus ? null : styles.sideNameMuted]} numberOfLines={2} {...textScale.dense}>
         {name}
       </Text>
     </View>
@@ -239,7 +285,18 @@ const TeamSide = React.memo(function TeamSide({
 });
 
 const styles = StyleSheet.create({
-  card: {
+  ticket: {
+    borderRadius: radius.xxl,
+  },
+  clip: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: radius.xxl,
+    overflow: "hidden",
+    borderWidth: hairline,
+    borderColor: colors.inkTileBorder,
+  },
+  content: {
+    padding: space.lg,
     gap: space.lg,
   },
   head: {
@@ -248,10 +305,38 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: space.sm,
   },
+  leaguePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+    flexShrink: 1,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xxs,
+    borderRadius: radius.pill,
+    backgroundColor: colors.inkPill,
+    borderWidth: hairline,
+    borderColor: colors.inkPillBorder,
+  },
   league: {
     ...type.overline,
-    color: colors.textTertiary,
+    color: colors.brandOnDark,
     flexShrink: 1,
+  },
+  sidePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xxs,
+    borderRadius: radius.pill,
+    backgroundColor: colors.inkTile,
+  },
+  sidePillHome: {
+    backgroundColor: colors.inkPill,
+  },
+  sidePillText: {
+    ...type.overline,
+    color: colors.onDark,
   },
   teams: {
     flexDirection: "row",
@@ -262,78 +347,100 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: space.sm,
   },
+  crestWrap: {
+    padding: space.s,
+    borderRadius: radius.xl,
+    backgroundColor: colors.inkTile,
+  },
+  crestFocus: {
+    backgroundColor: colors.inkPill,
+    borderWidth: 1,
+    borderColor: colors.inkPillBorder,
+  },
   sideName: {
     ...type.h4,
-    color: colors.textPrimary,
+    color: colors.onDark,
     textAlign: "center",
   },
   sideNameMuted: {
-    color: colors.textSecondary,
+    color: colors.onDarkMuted,
   },
   center: {
-    width: 104,
+    width: 100,
     alignItems: "center",
     justifyContent: "center",
-    minHeight: CREST,
-    gap: space.xxs,
+    minHeight: CREST + space.s * 2,
+    gap: space.xs,
   },
   kickoff: {
-    ...type.scoreMd,
-    color: colors.textPrimary,
+    ...type.scoreLg,
+    color: colors.onDark,
+  },
+  dayPill: {
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xxs,
+    borderRadius: radius.pill,
+    backgroundColor: colors.inkTile,
   },
   day: {
     ...type.caption,
-    color: colors.textTertiary,
-  },
-  score: {
-    ...type.scoreMd,
-    color: colors.textPrimary,
+    color: colors.onDark,
   },
 
   countdown: {
     flexDirection: "row",
-    gap: space.sm,
+    alignItems: "center",
+    gap: space.xs,
+  },
+  colon: {
+    ...type.metricSm,
+    color: colors.onDarkMuted,
   },
   unit: {
     flex: 1,
     alignItems: "center",
     paddingVertical: space.sm,
     borderRadius: radius.md,
-    backgroundColor: colors.surface3,
+    backgroundColor: colors.inkTile,
+    borderWidth: hairline,
+    borderColor: colors.inkTileBorder,
     gap: 1,
   },
   unitValue: {
-    ...type.metricSm,
-    color: colors.textPrimary,
+    ...type.metric,
+    color: colors.onDark,
   },
   unitLabel: {
     ...type.overline,
-    color: colors.textTertiary,
+    color: colors.onDarkMuted,
   },
-  countdownSoon: {
-    alignItems: "center",
-    paddingVertical: space.m,
-    borderRadius: radius.md,
-    backgroundColor: colors.brandDim,
-  },
-  soonText: {
-    ...type.label,
-    color: colors.brandAccent,
-  },
-  awaiting: {
+  notice: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: space.s,
     paddingVertical: space.m,
     borderRadius: radius.md,
-    backgroundColor: colors.warnDim,
+    backgroundColor: colors.inkTile,
+    borderWidth: hairline,
+    borderColor: colors.inkTileBorder,
   },
-  awaitingText: {
+  noticeWarn: {
+    borderColor: colors.inkPillBorder,
+  },
+  noticeText: {
     ...type.label,
-    color: colors.warn,
+    color: colors.brandOnDark,
   },
 
+  /* Bilet koçanı: kesik çizgi. */
+  perforation: {
+    height: 0,
+    borderTopWidth: 1,
+    borderStyle: "dashed",
+    borderColor: colors.inkPillBorder,
+    marginHorizontal: -space.xs,
+  },
   foot: {
     flexDirection: "row",
     alignItems: "center",
@@ -349,17 +456,31 @@ const styles = StyleSheet.create({
   },
   venueText: {
     ...type.caption,
-    color: colors.textTertiary,
+    color: colors.onDarkMuted,
     flexShrink: 1,
   },
   calendar: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.xs,
-    minHeight: 28,
+    paddingHorizontal: space.md,
+    height: 30,
+    borderRadius: radius.pill,
+    backgroundColor: colors.inkPill,
+    borderWidth: hairline,
+    borderColor: colors.inkPillBorder,
   },
   calendarText: {
-    ...type.label,
-    color: colors.brandAccent,
+    ...type.labelSm,
+    color: colors.onDark,
+  },
+  openHint: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xxs,
+  },
+  openHintText: {
+    ...type.labelSm,
+    color: colors.onDarkMuted,
   },
 });

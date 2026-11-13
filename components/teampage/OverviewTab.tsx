@@ -13,6 +13,12 @@
  * düz metindi ve asıl soru (sıradaki maç) kaydırmanın altında kalıyordu.
  * Paragraf artık sezon özeti kartının dipnotu; sayılar önce, yorum sonra.
  *
+ * İKİNCİ TUR: sıradaki maç bir "bilet" kartı, form raylı zaman çizelgesi,
+ * puan durumu kesitinin üstünde takımın konum kartı (sıra madalyası, lidere
+ * ve komşulara puan farkı), sezon özeti halka + G/B/M çubukları + gol
+ * karşılaştırması, golcülerin üstünde üç İSTATİSTİK LİDERİ karosu, kadro
+ * dağılımı mevki renkli dört karo.
+ *
  * "H2H karşılaştır" düğmesi buradan KALKTI: aynı eylem kimlik şeridinde
  * ("Karşılaştır") zaten var; iki yerde iki ayrı düğme, iki ayrı iş sanılıyordu.
  */
@@ -23,10 +29,14 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 import {
   Card,
   EmptyState,
+  GradientBar,
   PlayerRow,
   ProgressRing,
+  RankBadge,
+  Reveal,
   SectionHeader,
   SkeletonCard,
+  StatBar,
   TeamRow,
   TeamRowHead,
 } from "@/components/ui";
@@ -36,6 +46,7 @@ import {
   colors,
   defaultZoneRules,
   elevate,
+  hairline,
   layout,
   palette,
   positionColor,
@@ -53,12 +64,21 @@ import {
   LINE_ORDER,
   LINE_SHORT,
   num,
+  perspective,
   type LogoFor,
   type PosLine,
   type TabShell,
 } from "./model";
 import { NextMatchCard } from "./NextMatchCard";
+import { LeaderTile, MiniStat } from "./ProfileKit";
 import { StackedBar } from "./StackedBar";
+
+/** Genel sekmesinin üç istatistik lideri — sezonun sıralama listesinden. */
+export interface TeamLeaders {
+  goals: PlayerRankRow | null;
+  assists: PlayerRankRow | null;
+  matches: PlayerRankRow | null;
+}
 
 export interface OverviewTabProps extends TabShell {
   teamId: number;
@@ -74,11 +94,15 @@ export interface OverviewTabProps extends TabShell {
   neighbours: { row: StandingRow; rank: number }[];
   /** Puan durumundaki toplam takım sayısı — bölge rengi için. */
   tableSize: number;
+  /** Liderin puanı — konum kartındaki "lidere fark" için; yoksa çizilmez. */
+  leaderPoints?: number | null;
   scopeReady: boolean;
   standingsLoading: boolean;
   standing: { row: StandingRow; position: number } | null;
   leagueLabel: string;
   topScorers: PlayerRankRow[];
+  /** İstatistik liderleri (gol / asist / maç); verilmezse bölüm çizilmez. */
+  leaders?: TeamLeaders;
   /** Otomatik Türkçe sezon yorumu; kapsam tutmuyorsa null. */
   analysis: string | null;
   logoFor: LogoFor;
@@ -108,11 +132,13 @@ export function OverviewTab({
   squadLoading,
   neighbours,
   tableSize,
+  leaderPoints,
   scopeReady,
   standingsLoading,
   standing,
   leagueLabel,
   topScorers,
+  leaders,
   analysis,
   logoFor,
   onOpenMatch,
@@ -126,6 +152,26 @@ export function OverviewTab({
   onOpenSquad,
 }: OverviewTabProps) {
   const zoneRules = useMemo(() => defaultZoneRules(tableSize), [tableSize]);
+
+  /** Son beş maçın kısa karnesi — form kartının dipnotu. */
+  const formFacts = useMemo(() => {
+    let w = 0;
+    let d = 0;
+    let l = 0;
+    let gf = 0;
+    let ga = 0;
+    for (const match of recent.slice(0, 5)) {
+      const view = perspective(match, teamId, teamName);
+      if (view.result === "W") w += 1;
+      else if (view.result === "D") d += 1;
+      else if (view.result === "L") l += 1;
+      gf += view.ours ?? 0;
+      ga += view.theirs ?? 0;
+    }
+    return { w, d, l, gf, ga, points: w * 3 + d };
+  }, [recent, teamId, teamName]);
+
+  const hasLeaders = Boolean(leaders && (leaders.goals || leaders.assists || leaders.matches));
 
   return (
     <ScrollView
@@ -156,15 +202,17 @@ export function OverviewTab({
           {matchesLoading ? (
             <SkeletonCard lines={4} style={styles.inset} />
           ) : nextMatch ? (
-            <NextMatchCard
-              match={nextMatch}
-              teamId={teamId}
-              teamName={teamName}
-              logoFor={logoFor}
-              onOpen={onOpenMatch}
-              onAddCalendar={onAddCalendar}
-              style={styles.inset}
-            />
+            <Reveal scaleFrom={0.97}>
+              <NextMatchCard
+                match={nextMatch}
+                teamId={teamId}
+                teamName={teamName}
+                logoFor={logoFor}
+                onOpen={onOpenMatch}
+                onAddCalendar={onAddCalendar}
+                style={styles.inset}
+              />
+            </Reveal>
           ) : (
             <EmptyState
               icon="calendar-outline"
@@ -177,12 +225,13 @@ export function OverviewTab({
 
           <SectionHeader
             title="Form"
+            meta={recent.length ? `Son ${Math.min(5, recent.length)} maç` : undefined}
             action={recent.length ? { label: "Sonuçlar", onPress: onOpenResults } : undefined}
           />
           {matchesLoading ? (
             <SkeletonCard lines={2} style={styles.inset} />
           ) : recent.length ? (
-            <Card padding="md" style={styles.inset}>
+            <Card padding="md" style={styles.inset} contentStyle={styles.formCard}>
               <FormStrip
                 matches={recent}
                 teamId={teamId}
@@ -190,6 +239,18 @@ export function OverviewTab({
                 logoFor={logoFor}
                 onOpen={onOpenMatch}
               />
+              <View style={styles.formFoot}>
+                <FormFact label="Puan" value={`${formFacts.points}/${Math.min(5, recent.length) * 3}`} />
+                <View style={styles.formFootDivider} />
+                <FormFact label="Atılan" value={String(formFacts.gf)} color={colors.accentText} />
+                <View style={styles.formFootDivider} />
+                <FormFact label="Yenilen" value={String(formFacts.ga)} />
+                <View style={styles.formFootDivider} />
+                <FormFact
+                  label="Karne"
+                  value={`${formFacts.w}G ${formFacts.d}B ${formFacts.l}M`}
+                />
+              </View>
             </Card>
           ) : (
             <EmptyState
@@ -203,7 +264,7 @@ export function OverviewTab({
         </>
       )}
 
-      {/* 3 — Puan durumu */}
+      {/* 3 — Puan durumu: konum kartı + takım vurgulu kesit */}
       <SectionHeader
         title="Puan durumu"
         meta={standing ? undefined : leagueLabel || undefined}
@@ -231,14 +292,13 @@ export function OverviewTab({
         />
       ) : (
         <View style={styles.table}>
-          {leagueLabel ? (
-            <View style={styles.tableCaption}>
-              <Ionicons name="trophy-outline" size={13} color={colors.textTertiary} />
-              <Text style={styles.tableCaptionText} numberOfLines={1} {...textScale.dense}>
-                {leagueLabel}
-              </Text>
-            </View>
-          ) : null}
+          <PositionBanner
+            standing={standing}
+            neighbours={neighbours}
+            tableSize={tableSize}
+            leaderPoints={leaderPoints ?? null}
+            leagueLabel={leagueLabel}
+          />
           <TeamRowHead density="table" columns="short" />
           {neighbours.map(({ row, rank }) => (
             <TeamRow
@@ -266,15 +326,62 @@ export function OverviewTab({
       {/* 4 — Sezon özeti */}
       {standing && standing.row.played > 0 ? (
         <>
-          <SectionHeader title="Sezon özeti" />
+          <SectionHeader title="Sezon özeti" meta={`${num(standing.row.played)} maç`} />
           <SeasonSummary row={standing.row} analysis={analysis} />
         </>
       ) : null}
 
-      {/* 5 — Golcüler */}
+      {/* 5 — İstatistik liderleri + golcüler */}
+      {hasLeaders && leaders ? (
+        <>
+          <SectionHeader title="İstatistik liderleri" action={{ label: "Kadro", onPress: onOpenSquad }} />
+          <View style={[styles.inset, styles.leaders]}>
+            {leaders.goals ? (
+              <Reveal index={0} style={styles.leaderCell}>
+                <LeaderTile
+                  icon="football"
+                  tone="pink"
+                  category="Gol"
+                  name={leaders.goals.name}
+                  image={leaders.goals.image ?? null}
+                  value={num(leaders.goals.goals)}
+                  onPress={() => onOpenPlayer(Number(leaders.goals?.id))}
+                />
+              </Reveal>
+            ) : null}
+            {leaders.assists ? (
+              <Reveal index={1} style={styles.leaderCell}>
+                <LeaderTile
+                  icon="git-branch"
+                  tone="cyan"
+                  category="Asist"
+                  name={leaders.assists.name}
+                  image={leaders.assists.image ?? null}
+                  value={num(leaders.assists.assists)}
+                  onPress={() => onOpenPlayer(Number(leaders.assists?.id))}
+                />
+              </Reveal>
+            ) : null}
+            {leaders.matches ? (
+              <Reveal index={2} style={styles.leaderCell}>
+                <LeaderTile
+                  icon="shirt"
+                  tone="violet"
+                  category="Maç"
+                  name={leaders.matches.name}
+                  image={leaders.matches.image ?? null}
+                  value={num(leaders.matches.matches)}
+                  onPress={() => onOpenPlayer(Number(leaders.matches?.id))}
+                />
+              </Reveal>
+            ) : null}
+          </View>
+        </>
+      ) : null}
+
       <SectionHeader
         title="Golcüler"
-        action={topScorers.length ? { label: "Kadro", onPress: onOpenSquad } : undefined}
+        action={topScorers.length && !hasLeaders ? { label: "Kadro", onPress: onOpenSquad } : undefined}
       />
       {topScorers.length ? (
         <View style={styles.group}>
@@ -327,8 +434,107 @@ export function OverviewTab({
   );
 }
 
+const FormFact = React.memo(function FormFact({
+  label,
+  value,
+  color,
+}: {
+  label: string;
+  value: string;
+  color?: string;
+}) {
+  return (
+    <View style={styles.formFact} accessible accessibilityLabel={`${label} ${value}`}>
+      <Text style={[styles.formFactValue, color ? { color } : null]} numberOfLines={1} {...textScale.dense}>
+        {value}
+      </Text>
+      <Text style={styles.formFactLabel} numberOfLines={1} {...textScale.badge}>
+        {label.toLocaleUpperCase("tr-TR")}
+      </Text>
+    </View>
+  );
+});
+
 /* ══════════════════════════════════════════════════════════════════════════
-   Sezon özeti — halka + G/B/M çubuğu + gol üçlüsü + yorum
+   Konum kartı — madalya, sıra, komşulara ve lidere puan farkı
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const PositionBanner = React.memo(function PositionBanner({
+  standing,
+  neighbours,
+  tableSize,
+  leaderPoints,
+  leagueLabel,
+}: {
+  standing: { row: StandingRow; position: number };
+  neighbours: { row: StandingRow; rank: number }[];
+  tableSize: number;
+  leaderPoints: number | null;
+  leagueLabel: string;
+}) {
+  const points = num(standing.row.display_points);
+  const above = neighbours.find((entry) => entry.rank === standing.position - 1);
+  const below = neighbours.find((entry) => entry.rank === standing.position + 1);
+  const leaderGap = leaderPoints != null && standing.position > 1 ? leaderPoints - points : null;
+  const aboveGap = above ? num(above.row.display_points) - points : null;
+  const belowGap = below ? points - num(below.row.display_points) : null;
+  const progress = tableSize > 1 ? (tableSize - standing.position) / (tableSize - 1) : 1;
+
+  return (
+    <View style={styles.banner}>
+      <View style={styles.bannerTop}>
+        <RankBadge rank={standing.position} size={40} />
+        <View style={styles.bannerBody}>
+          <Text style={styles.bannerTitle} numberOfLines={1} {...textScale.dense}>
+            {standing.position === 1 ? "Zirvede" : `${standing.position}. sırada`}
+            {tableSize ? <Text style={styles.bannerOf}> / {tableSize} takım</Text> : null}
+          </Text>
+          {leagueLabel ? (
+            <View style={styles.bannerLeague}>
+              <Ionicons name="trophy-outline" size={11} color={colors.textTertiary} />
+              <Text style={styles.bannerLeagueText} numberOfLines={1} {...textScale.dense}>
+                {leagueLabel}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+        <View style={styles.bannerPoints}>
+          <Text style={styles.bannerPointsValue} {...textScale.dense}>
+            {points}
+          </Text>
+          <Text style={styles.bannerPointsLabel} {...textScale.badge}>
+            PUAN
+          </Text>
+        </View>
+      </View>
+      <GradientBar value={progress} height={5} />
+      <View style={styles.bannerGaps}>
+        {leaderGap != null ? <GapChip label="Lidere" value={-leaderGap} /> : null}
+        {aboveGap != null ? <GapChip label="Bir üste" value={-aboveGap} /> : null}
+        {belowGap != null ? <GapChip label="Bir alta" value={belowGap} /> : null}
+      </View>
+    </View>
+  );
+});
+
+function GapChip({ label, value }: { label: string; value: number }) {
+  const color = value > 0 ? colors.win : value < 0 ? colors.loss : colors.textSecondary;
+  const text = value > 0 ? `+${value}` : value < 0 ? `−${Math.abs(value)}` : "0";
+  return (
+    <View style={styles.gapChip} accessible accessibilityLabel={`${label} fark ${text} puan`}>
+      <Text style={styles.gapLabel} {...textScale.badge}>
+        {label}
+      </Text>
+      <Text style={[styles.gapValue, { color }]} {...textScale.badge}>
+        {value > 0 ? "▲ " : value < 0 ? "▼ " : ""}
+        {text}
+      </Text>
+    </View>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Sezon özeti — halka + G/B/M çubukları + gol karşılaştırması + yorum
    ══════════════════════════════════════════════════════════════════════════ */
 
 const SeasonSummary = React.memo(function SeasonSummary({
@@ -345,92 +551,81 @@ const SeasonSummary = React.memo(function SeasonSummary({
   const goalsFor = num(row.goals_for);
   const goalsAgainst = num(row.goals_against);
   const winRate = played ? wins / played : 0;
+  const points = num(row.display_points);
 
   return (
     <Card padding="lg" style={styles.inset} contentStyle={styles.seasonCard}>
       <View style={styles.seasonTop}>
         <ProgressRing
           value={winRate}
-          size={76}
-          thickness={6}
+          size={92}
+          thickness={8}
           tone="win"
           label={formatPercent(winRate, { ratio: true })}
           sublabel="galibiyet"
           animate
         />
         <View style={styles.seasonRight}>
-          <View style={styles.wdl}>
-            <WdlCell label="Galibiyet" value={wins} color={colors.win} />
-            <WdlCell label="Beraberlik" value={draws} color={colors.draw} />
-            <WdlCell label="Mağlubiyet" value={losses} color={colors.loss} />
-          </View>
-          <StackedBar
-            segments={[
-              { key: "w", value: wins, color: colors.win },
-              { key: "d", value: draws, color: colors.draw },
-              { key: "l", value: losses, color: colors.loss },
-            ]}
-          />
-          <Text style={styles.seasonPlayed} {...textScale.dense}>
-            {played} maç oynandı
-          </Text>
+          <WdlBar label="Galibiyet" value={wins} total={played} color={colors.win} />
+          <WdlBar label="Beraberlik" value={draws} total={played} color={colors.draw} />
+          <WdlBar label="Mağlubiyet" value={losses} total={played} color={colors.loss} />
         </View>
       </View>
 
+      <View style={styles.goalBox}>
+        <StatBar label="Atılan · Yenilen gol" home={goalsFor} away={goalsAgainst} animate={false} />
+      </View>
+
       <View style={styles.goalRow}>
-        <GoalCell label="Attığı" value={String(goalsFor)} />
-        <GoalCell label="Yediği" value={String(goalsAgainst)} />
-        <GoalCell label="Maç başı gol" value={decimal(played ? goalsFor / played : 0)} />
+        <MiniStat label="Maç başı gol" value={decimal(played ? goalsFor / played : 0)} color={colors.accentText} />
+        <View style={styles.vDivider} />
+        <MiniStat label="Maç başı yenilen" value={decimal(played ? goalsAgainst / played : 0)} />
+        <View style={styles.vDivider} />
+        <MiniStat label="Maç başı puan" value={decimal(played ? points / played : 0, 2)} color={colors.brandAccent} />
       </View>
 
       {analysis ? (
-        <Text style={styles.analysis} {...textScale.long}>
-          {analysis}
-        </Text>
+        <View style={styles.analysisBox}>
+          <Ionicons name="sparkles" size={14} color={colors.brandAccent} style={styles.analysisIcon} />
+          <Text style={styles.analysis} {...textScale.long}>
+            {analysis}
+          </Text>
+        </View>
       ) : null}
     </Card>
   );
 });
 
-const WdlCell = React.memo(function WdlCell({
+/** G/B/M satırı: renk noktası, etiket, sayı ve oranına göre dolan çubuk. */
+const WdlBar = React.memo(function WdlBar({
   label,
   value,
+  total,
   color,
 }: {
   label: string;
   value: number;
+  total: number;
   color: string;
 }) {
   return (
-    <View style={styles.wdlCell} accessible accessibilityLabel={`${value} ${label.toLocaleLowerCase("tr-TR")}`}>
-      <View style={styles.wdlLabelRow}>
+    <View style={styles.wdlRow} accessible accessibilityLabel={`${value} ${label.toLocaleLowerCase("tr-TR")}`}>
+      <View style={styles.wdlHead}>
         <View style={[styles.dot, { backgroundColor: color }]} />
+        <Text style={styles.wdlLabel} numberOfLines={1} {...textScale.dense}>
+          {label}
+        </Text>
         <Text style={styles.wdlValue} {...textScale.dense}>
           {value}
         </Text>
       </View>
-      <Text style={styles.wdlLabel} numberOfLines={1} {...textScale.badge}>
-        {label.toLocaleUpperCase("tr-TR")}
-      </Text>
-    </View>
-  );
-});
-
-const GoalCell = React.memo(function GoalCell({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.goalCell} accessible accessibilityLabel={`${label} ${value}`}>
-      <Text style={styles.goalValue} {...textScale.dense}>
-        {value}
-      </Text>
-      <Text style={styles.goalLabel} numberOfLines={1} {...textScale.badge}>
-        {label.toLocaleUpperCase("tr-TR")}
-      </Text>
+      <GradientBar value={total ? value / total : 0} height={4} gradient={[color, color]} />
     </View>
   );
 });
 
 /* ══════════════════════════════════════════════════════════════════════════
-   Kadro dağılımı — mevki renkleriyle tek çubuk
+   Kadro dağılımı — mevki renkli dört karo + tek çubuk
    ══════════════════════════════════════════════════════════════════════════ */
 
 export const SquadComposition = React.memo(function SquadComposition({
@@ -444,6 +639,7 @@ export const SquadComposition = React.memo(function SquadComposition({
   hideChevron?: boolean;
 }) {
   const lines = LINE_ORDER.filter((line) => counts[line] > 0);
+  const known = LINE_ORDER.filter((line) => line !== "OTHER");
 
   return (
     <>
@@ -452,11 +648,29 @@ export const SquadComposition = React.memo(function SquadComposition({
           {total}
         </Text>
         <Text style={styles.squadUnit} {...textScale.dense}>
-          oyuncu
+          kayıtlı oyuncu
         </Text>
         {hideChevron ? null : (
           <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} style={styles.squadChevron} />
         )}
+      </View>
+      <View style={styles.lineTiles}>
+        {known.map((line) => (
+          <View
+            key={line}
+            style={[styles.lineTile, counts[line] > 0 ? null : styles.lineTileEmpty]}
+            accessible
+            accessibilityLabel={`${LINE_LABEL[line]} ${counts[line]}`}
+          >
+            <View style={[styles.lineTileBar, { backgroundColor: lineColor(line) }]} />
+            <Text style={[styles.lineTileValue, { color: counts[line] > 0 ? lineColor(line) : colors.textTertiary }]} {...textScale.dense}>
+              {counts[line]}
+            </Text>
+            <Text style={styles.lineTileLabel} {...textScale.badge}>
+              {LINE_SHORT[line]}
+            </Text>
+          </View>
+        ))}
       </View>
       <StackedBar
         segments={lines.map((line) => ({
@@ -464,26 +678,13 @@ export const SquadComposition = React.memo(function SquadComposition({
           value: counts[line],
           color: lineColor(line),
         }))}
-        height={10}
+        height={6}
       />
-      <View style={styles.legend}>
-        {lines.map((line) => (
-          <View
-            key={line}
-            style={styles.legendItem}
-            accessible
-            accessibilityLabel={`${LINE_LABEL[line]} ${counts[line]}`}
-          >
-            <View style={[styles.dot, { backgroundColor: lineColor(line) }]} />
-            <Text style={styles.legendLabel} {...textScale.badge}>
-              {line === "OTHER" ? "Belirtilmemiş" : LINE_SHORT[line]}
-            </Text>
-            <Text style={styles.legendValue} {...textScale.dense}>
-              {counts[line]}
-            </Text>
-          </View>
-        ))}
-      </View>
+      {counts.OTHER > 0 ? (
+        <Text style={styles.squadNote} {...textScale.dense}>
+          {counts.OTHER} oyuncunun mevkisi girilmemiş.
+        </Text>
+      ) : null}
     </>
   );
 });
@@ -506,37 +707,124 @@ const styles = StyleSheet.create({
     borderRadius: radius.xl,
     overflow: "hidden",
     backgroundColor: colors.surface1,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: hairline,
     borderColor: colors.border,
     ...elevate(1),
   },
   divided: {
-    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopWidth: hairline,
     borderTopColor: colors.separator,
   },
 
-  /* — Mini tablo — */
+  /* — Form kartı — */
+  formCard: {
+    gap: space.md,
+  },
+  formFoot: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingTop: space.md,
+    borderTopWidth: hairline,
+    borderTopColor: colors.separator,
+  },
+  formFootDivider: {
+    width: hairline,
+    alignSelf: "stretch",
+    backgroundColor: colors.separator,
+  },
+  formFact: {
+    flex: 1,
+    alignItems: "center",
+    gap: space.xxs,
+  },
+  formFactValue: {
+    ...type.tableNumStrong,
+    color: colors.textPrimary,
+  },
+  formFactLabel: {
+    ...type.overline,
+    color: colors.textTertiary,
+  },
+
+  /* — Mini tablo + konum kartı — */
   table: {
     marginHorizontal: layout.screenPadding,
     borderRadius: radius.xl,
     overflow: "hidden",
     backgroundColor: colors.surface1,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: hairline,
     borderColor: colors.border,
     paddingBottom: space.xs,
     ...elevate(1),
   },
-  tableCaption: {
+  banner: {
+    padding: space.md,
+    gap: space.m,
+    backgroundColor: colors.brandDim,
+    borderBottomWidth: hairline,
+    borderBottomColor: colors.separator,
+  },
+  bannerTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+  },
+  bannerBody: {
+    flex: 1,
+    minWidth: 0,
+    gap: space.xxs,
+  },
+  bannerTitle: {
+    ...type.h3,
+    color: colors.textPrimary,
+  },
+  bannerOf: {
+    ...type.bodySm,
+    color: colors.textTertiary,
+  },
+  bannerLeague: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.xs,
-    paddingHorizontal: space.md,
-    paddingTop: space.md,
   },
-  tableCaptionText: {
+  bannerLeagueText: {
     ...type.caption,
     color: colors.textTertiary,
     flexShrink: 1,
+  },
+  bannerPoints: {
+    alignItems: "flex-end",
+  },
+  bannerPointsValue: {
+    ...type.scoreMd,
+    color: colors.brandAccent,
+  },
+  bannerPointsLabel: {
+    ...type.overline,
+    color: colors.textTertiary,
+  },
+  bannerGaps: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: space.s,
+  },
+  gapChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xs,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xxs,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface1,
+    borderWidth: hairline,
+    borderColor: colors.border,
+  },
+  gapLabel: {
+    ...type.caption,
+    color: colors.textTertiary,
+  },
+  gapValue: {
+    ...type.numSmStrong,
   },
 
   /* — Sezon özeti — */
@@ -550,63 +838,71 @@ const styles = StyleSheet.create({
   },
   seasonRight: {
     flex: 1,
-    gap: space.sm,
+    gap: space.m,
   },
-  wdl: {
-    flexDirection: "row",
+  wdlRow: {
+    gap: space.xs,
   },
-  wdlCell: {
-    flex: 1,
-    gap: 1,
-  },
-  wdlValue: {
-    ...type.metricSm,
-    color: colors.textPrimary,
-  },
-  wdlLabelRow: {
+  wdlHead: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.s,
   },
   wdlLabel: {
-    ...type.micro,
-    color: colors.textTertiary,
-    flexShrink: 1,
+    ...type.labelSm,
+    color: colors.textSecondary,
+    flex: 1,
+  },
+  wdlValue: {
+    ...type.tableNumStrong,
+    color: colors.textPrimary,
   },
   dot: {
     width: 8,
     height: 8,
     borderRadius: radius.pill,
   },
-  seasonPlayed: {
-    ...type.caption,
-    color: colors.textTertiary,
+  goalBox: {
+    paddingTop: space.md,
+    borderTopWidth: hairline,
+    borderTopColor: colors.separator,
   },
   goalRow: {
     flexDirection: "row",
-    paddingTop: space.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.separator,
-  },
-  goalCell: {
-    flex: 1,
     alignItems: "center",
-    gap: space.xxs,
+    paddingVertical: space.sm,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface2,
   },
-  goalValue: {
-    ...type.scoreSm,
-    color: colors.textPrimary,
+  vDivider: {
+    width: hairline,
+    alignSelf: "stretch",
+    backgroundColor: colors.separator,
   },
-  goalLabel: {
-    ...type.micro,
-    color: colors.textTertiary,
+  analysisBox: {
+    flexDirection: "row",
+    gap: space.sm,
+    padding: space.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.brandDim,
+  },
+  analysisIcon: {
+    marginTop: space.xxs,
   },
   analysis: {
     ...type.bodySm,
     color: colors.textSecondary,
-    paddingTop: space.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.separator,
+    flex: 1,
+  },
+
+  /* — Liderler — */
+  leaders: {
+    flexDirection: "row",
+    gap: space.sm,
+  },
+  leaderCell: {
+    flex: 1,
+    minWidth: 0,
   },
 
   /* — Kadro — */
@@ -630,23 +926,39 @@ const styles = StyleSheet.create({
     marginLeft: "auto",
     alignSelf: "center",
   },
-  legend: {
+  lineTiles: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    columnGap: space.lg,
-    rowGap: space.s,
+    gap: space.sm,
   },
-  legendItem: {
-    flexDirection: "row",
+  lineTile: {
+    flex: 1,
     alignItems: "center",
-    gap: space.xs,
+    paddingTop: space.m,
+    paddingBottom: space.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface2,
+    overflow: "hidden",
+    gap: space.xxs,
   },
-  legendLabel: {
-    ...type.micro,
+  lineTileEmpty: {
+    opacity: 0.6,
+  },
+  lineTileBar: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 3,
+  },
+  lineTileValue: {
+    ...type.metricSm,
+  },
+  lineTileLabel: {
+    ...type.overline,
     color: colors.textTertiary,
   },
-  legendValue: {
-    ...type.tableNumStrong,
-    color: colors.textPrimary,
+  squadNote: {
+    ...type.caption,
+    color: colors.textTertiary,
   },
 });

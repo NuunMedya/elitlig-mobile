@@ -63,7 +63,9 @@ import { haptics } from "@/lib/haptics";
 import { formatScore, formatTime } from "@/lib/format";
 import { matchState } from "@/lib/match";
 import type { ApiMatch } from "@/lib/types";
+import { withAlpha } from "./Badge";
 import { GradientFill } from "./GradientFill";
+import { GlowRim } from "./GlowRim";
 import { LiveBadge } from "./LiveBadge";
 import { ScoreFlash } from "./Motion";
 import { TeamLogo } from "./TeamLogo";
@@ -280,6 +282,21 @@ function CompactSide({
   );
 }
 
+/**
+ * DURUM HAPI — skorun altındaki küçük kapsül: "MS" (tamam, nane), gün
+ * (nötr). Canlıda yerini LiveBadge alır. Düz metin yerine hap: göz satırı
+ * tararken durum bir "etiket" olarak ayrışır, skorla karışmaz.
+ */
+function StatePill({ label, tone }: { label: string; tone: "done" | "day" }) {
+  return (
+    <View style={[styles.pill, tone === "done" ? styles.pillDone : styles.pillDay]}>
+      <Text style={[styles.pillText, tone === "done" ? styles.pillTextDone : null]} numberOfLines={1} {...textScale.badge}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
 /* ───────────────────────────── BİLEŞEN ───────────────────────────── */
 
 export const MatchCard = memo(function MatchCard({
@@ -357,11 +374,14 @@ export const MatchCard = memo(function MatchCard({
 
   const scoreText = (
     <>
-      <Text style={awayWon ? styles.scoreDim : null}>{formatScore(match.first_team_score)}</Text>
-      <Text style={styles.scoreDash}>{compact ? "–" : " – "}</Text>
-      <Text style={homeWon ? styles.scoreDim : null}>{formatScore(match.second_team_score)}</Text>
+      <Text style={awayWon ? styles.scoreDim : homeWon ? styles.scoreWin : null}>{formatScore(match.first_team_score)}</Text>
+      <Text style={styles.scoreDash}>{compact ? "\u2009–\u2009" : " – "}</Text>
+      <Text style={homeWon ? styles.scoreDim : awayWon ? styles.scoreWin : null}>{formatScore(match.second_team_score)}</Text>
     </>
   );
+  /* Plaka zemini: canlıda pembe tül, bitmişte sakin yüzey. */
+  const plateStyle = live ? styles.plateLive : styles.plateDone;
+  const timeLabel = formatTime(match.time) || "--:--";
 
   /* ══════════════════════════ YOĞUN SATIR ══════════════════════════ */
   if (compact && dense) {
@@ -387,7 +407,14 @@ export const MatchCard = memo(function MatchCard({
           style,
         ]}
       >
-        {live ? <View style={styles.dLiveEdge} /> : null}
+        <GradientFill />
+        {live ? (
+          <>
+            <View style={styles.liveTint} pointerEvents="none" />
+            <GlowRim radius={position == null || position === "single" ? radius.xl : 0} />
+            <View style={styles.dLiveEdge} />
+          </>
+        ) : null}
 
         <View style={styles.dMain}>
           {/* Sol boş sütun yıldız sütununun eşidir: skor ekseni ortada kalır. */}
@@ -405,25 +432,25 @@ export const MatchCard = memo(function MatchCard({
           <View style={styles.dCenter}>
             {played ? (
               <ScoreFlash value={scoreKey} active={live}>
-                <Text style={[styles.dScore, live && styles.scoreLive]} numberOfLines={1} {...textScale.badge}>
-                  {scoreText}
-                </Text>
+                <View style={[styles.plate, styles.dPlate, plateStyle]}>
+                  <Text style={[styles.dScore, live && styles.scoreLive]} numberOfLines={1} {...textScale.badge}>
+                    {scoreText}
+                  </Text>
+                </View>
               </ScoreFlash>
             ) : (
-              <Text style={styles.dTime} numberOfLines={1} {...textScale.badge}>
-                {formatTime(match.time) || "--:--"}
-              </Text>
+              <View style={[styles.plate, styles.dPlate, styles.plateTime]}>
+                <Text style={styles.dTime} numberOfLines={1} {...textScale.badge}>
+                  {timeLabel}
+                </Text>
+              </View>
             )}
             {live ? (
               <LiveBadge minute={minute} addedTime={addedTime} halftime={halftime} />
             ) : finished ? (
-              <Text style={styles.dState} numberOfLines={1} {...textScale.badge}>
-                {shortDay ? `MS · ${shortDay}` : "MS"}
-              </Text>
+              <StatePill label={shortDay ? `MS · ${shortDay}` : "MS"} tone="done" />
             ) : shortDay ? (
-              <Text style={styles.dState} numberOfLines={1} {...textScale.badge}>
-                {shortDay}
-              </Text>
+              <StatePill label={shortDay} tone="day" />
             ) : null}
           </View>
 
@@ -474,7 +501,14 @@ export const MatchCard = memo(function MatchCard({
       >
         {/* Canlı satırın sol kenarında ince kırmızı çizgi — kırmızı skorla
             birlikte göz listede canlı maçı ilk taramada bulur. */}
-        {live ? <View style={styles.cLiveEdge} /> : null}
+        <GradientFill />
+        {live ? (
+          <>
+            <View style={styles.liveTint} pointerEvents="none" />
+            <GlowRim radius={position == null || position === "single" ? radius.xl : 0} />
+            <View style={styles.cLiveEdge} />
+          </>
+        ) : null}
 
         <View style={[styles.cMain, hasMeta ? styles.cMainWithMeta : null]}>
           <CompactSide
@@ -490,25 +524,25 @@ export const MatchCard = memo(function MatchCard({
           <View style={styles.cCenter}>
             {played ? (
               <ScoreFlash value={scoreKey} active={live}>
-                <Text style={[styles.cScore, live && styles.scoreLive]} numberOfLines={1} {...textScale.badge}>
-                  {scoreText}
-                </Text>
+                <View style={[styles.plate, plateStyle]}>
+                  <Text style={[styles.cScore, live && styles.scoreLive]} numberOfLines={1} {...textScale.badge}>
+                    {scoreText}
+                  </Text>
+                </View>
               </ScoreFlash>
             ) : (
-              <Text style={styles.cTime} numberOfLines={1} {...textScale.badge}>
-                {formatTime(match.time) || "--:--"}
-              </Text>
+              <View style={[styles.plate, styles.plateTime]}>
+                <Text style={styles.cTime} numberOfLines={1} {...textScale.badge}>
+                  {timeLabel}
+                </Text>
+              </View>
             )}
             {live ? (
               <LiveBadge minute={minute} addedTime={addedTime} halftime={halftime} />
             ) : finished ? (
-              <Text style={styles.cState} numberOfLines={1} {...textScale.badge}>
-                {shortDay ? `MS · ${shortDay}` : "MS"}
-              </Text>
+              <StatePill label={shortDay ? `MS · ${shortDay}` : "MS"} tone="done" />
             ) : shortDay ? (
-              <Text style={styles.cDay} numberOfLines={1} {...textScale.badge}>
-                {shortDay}
-              </Text>
+              <StatePill label={shortDay} tone="day" />
             ) : null}
           </View>
 
@@ -564,22 +598,29 @@ export const MatchCard = memo(function MatchCard({
       style={[styles.card, footer ? null : { height }, style]}
     >
       <GradientFill radius="xl" />
-      {live ? <View style={styles.liveLine} /> : null}
+      {/* Canlı kart: kenarında dolaşan neon ışık (GlowRim). */}
+      {live ? <GlowRim radius={radius.xl} /> : null}
 
       {showHead ? (
         <View style={styles.head}>
           {meta === "field" && match.match_field ? (
             <Ionicons name="location-outline" size={12} color={colors.textTertiary} />
+          ) : meta === "league" && match.league_name ? (
+            <Ionicons name="trophy" size={11} color={colors.brandAccent} />
           ) : null}
           <Text style={styles.league} numberOfLines={1} {...textScale.badge}>
             {meta === "league" ? match.league_name : meta === "field" ? match.match_field ?? "" : ""}
           </Text>
           {showDate && day ? (
-            <Text style={styles.day} numberOfLines={1} {...textScale.badge}>
-              {day}
-            </Text>
+            <View style={styles.dayChip}>
+              <Text style={styles.day} numberOfLines={1} {...textScale.badge}>
+                {day}
+              </Text>
+            </View>
           ) : null}
           {star}
+          {/* Kart içi ayraç: başlık şeridi ile sahne ayrışır (yükseklik hesabına girmez). */}
+          <View style={styles.headRule} pointerEvents="none" />
         </View>
       ) : null}
 
@@ -589,31 +630,31 @@ export const MatchCard = memo(function MatchCard({
         <View style={styles.center}>
           {played ? (
             <ScoreFlash value={scoreKey} active={live}>
-              <Text style={[styles.score, live && styles.scoreLive]} numberOfLines={1} {...textScale.badge}>
-                {scoreText}
-              </Text>
+              <View style={[styles.plate, styles.cardPlate, plateStyle]}>
+                <Text style={[styles.score, live && styles.scoreLive]} numberOfLines={1} {...textScale.badge}>
+                  {scoreText}
+                </Text>
+              </View>
             </ScoreFlash>
           ) : (
-            <Text style={styles.time} numberOfLines={1} {...textScale.badge}>
-              {formatTime(match.time) || "--:--"}
-            </Text>
+            <View style={[styles.plate, styles.cardPlate, styles.plateTime]}>
+              <Text style={styles.time} numberOfLines={1} {...textScale.badge}>
+                {timeLabel}
+              </Text>
+            </View>
           )}
 
           <View style={styles.stateRow}>
             {live ? (
-              <LiveBadge minute={minute} addedTime={addedTime} halftime={halftime} />
-            ) : played ? (
-              <View style={styles.statePill}>
-                <Text style={styles.stateText} {...textScale.badge}>
-                  MS
-                </Text>
+              <View style={styles.livePill}>
+                <LiveBadge minute={minute} addedTime={addedTime} halftime={halftime} />
               </View>
+            ) : played ? (
+              <StatePill label="MS" tone="done" />
             ) : !showDate && day ? (
               /* Gün üst şeritte yazmıyorsa saatin altına düşer; yazıyorsa
                  tekrarlanmaz — saat tek başına, daha sakin durur. */
-              <Text style={styles.dayUnder} numberOfLines={1} {...textScale.badge}>
-                {day}
-              </Text>
+              <StatePill label={day} tone="day" />
             ) : null}
           </View>
         </View>
@@ -663,7 +704,23 @@ const styles = StyleSheet.create({
     marginBottom: space.md,
     flexDirection: "row",
     alignItems: "center",
-    gap: space.sm,
+    gap: space.s,
+  },
+  /** Başlık şeridinin altındaki saç teli: kartın iki kenarına kadar uzanır. */
+  headRule: {
+    position: "absolute",
+    left: -space.lg,
+    right: -space.lg,
+    bottom: -space.md / 2 - 1,
+    height: hairline,
+    backgroundColor: colors.separator,
+  },
+  dayChip: {
+    height: HEAD_H,
+    paddingHorizontal: space.sm,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface3,
+    justifyContent: "center",
   },
   league: {
     ...type.overline,
@@ -712,7 +769,7 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     textAlign: "center",
   },
-  nameWon: { fontFamily: fonts.semibold },
+  nameWon: { fontFamily: fonts.heading },
   nameLost: { color: colors.textTertiary },
   nameMine: { color: colors.accentText, fontFamily: fonts.semibold },
   center: {
@@ -727,11 +784,80 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
   scoreLive: { color: colors.live },
-  scoreDim: { color: colors.textTertiary },
-  scoreDash: { color: colors.textTertiary },
+  scoreDim: { color: colors.textTertiary, fontFamily: fonts.display },
+  scoreWin: { color: colors.textPrimary },
+  scoreDash: { color: colors.textTertiary, fontFamily: fonts.display },
+
+  /* ─────────── SKOR PLAKASI + DURUM HAPI ───────────
+   * Skor çıplak rakam değil, kendi plakasında durur: listenin her satırında
+   * göz önce plakaya düşer (kim kaç attı), sonra iki yana (kimler). Saat de
+   * aynı plakada ama mor tülde — "henüz oynanmadı" rengiyle okunur. */
+  plate: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xxs,
+    borderRadius: radius.sm,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+  },
+  dPlate: {
+    paddingHorizontal: space.s,
+    paddingVertical: 1,
+    borderRadius: radius.xs,
+  },
+  cardPlate: {
+    paddingHorizontal: space.md,
+    paddingVertical: space.xs,
+    borderRadius: radius.md,
+  },
+  plateDone: {
+    backgroundColor: colors.surface3,
+  },
+  plateLive: {
+    backgroundColor: colors.liveDim,
+    borderColor: withAlpha(colors.live, 0.35),
+  },
+  plateTime: {
+    backgroundColor: colors.brandDim,
+    borderColor: colors.brandBorder,
+  },
+  pill: {
+    height: 14,
+    paddingHorizontal: space.s,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pillDone: {
+    backgroundColor: colors.winDim,
+  },
+  pillDay: {
+    backgroundColor: colors.surface3,
+  },
+  pillText: {
+    ...type.nano,
+    color: colors.textSecondary,
+    letterSpacing: 0.4,
+  },
+  pillTextDone: {
+    color: colors.win,
+  },
+  livePill: {
+    height: 20,
+    paddingHorizontal: space.sm,
+    borderRadius: radius.pill,
+    backgroundColor: colors.liveDim,
+    justifyContent: "center",
+  },
+  /** Canlı satırın zemininde çok hafif pembe tül. */
+  liveTint: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: withAlpha(colors.live, 0.06),
+  },
   time: {
     ...type.scoreMd,
-    color: colors.textPrimary,
+    color: colors.brandAccent,
   },
   stateRow: {
     minHeight: 20,
@@ -851,22 +977,22 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
   cNameWon: {
-    fontFamily: fonts.semibold,
+    fontFamily: fonts.heading,
   },
   cCenter: {
     width: COMPACT_CENTER_W,
     alignItems: "center",
     justifyContent: "center",
-    gap: 1,
+    gap: space.xxs,
   },
   cScore: {
     ...type.scoreSm,
     color: colors.textPrimary,
   },
   cTime: {
-    ...type.scoreSm,
+    ...type.scoreXs,
     fontFamily: fonts.display,
-    color: colors.textPrimary,
+    color: colors.brandAccent,
   },
   cState: {
     ...type.micro,
@@ -945,16 +1071,15 @@ const styles = StyleSheet.create({
     width: DENSE_CENTER_W,
     alignItems: "center",
     justifyContent: "center",
-    gap: 0,
+    gap: space.xxs,
   },
   dScore: {
     ...type.scoreXs,
     color: colors.textPrimary,
   },
   dTime: {
-    ...type.scoreXs,
-    fontFamily: fonts.display,
-    color: colors.textPrimary,
+    ...type.numSmStrong,
+    color: colors.brandAccent,
   },
   dState: {
     ...type.micro,
@@ -962,8 +1087,8 @@ const styles = StyleSheet.create({
   },
   cDivider: {
     position: "absolute",
-    left: space.md,
-    right: space.md,
+    left: DENSE_SIDE_W,
+    right: DENSE_SIDE_W,
     bottom: 0,
     height: hairline,
     backgroundColor: colors.separator,

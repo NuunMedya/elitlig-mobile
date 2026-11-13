@@ -1,6 +1,10 @@
 /**
  * Muhasebe ekranlarının küçük görsel parçaları.
  *
+ * GECE TEMASI: oran çubukları degrade (GradientBar, yaylı dolum), trend
+ * sütunları degrade + seçili ay vurgusu ve altında üç rakam kutusu; hesap
+ * şeridi renk bantlı mini kartlar; Not solda ton şeridiyle cam kutu.
+ *
  *   BarRow       — etiket + tutar + oran çubuğu (kategori, saha, bütçe, yaşlandırma)
  *   TrendBars    — ay/gün başına gelir-gider çift çubuğu; dokununca ayrıntı
  *   SuggestChips — "seçin ya da yazın" alanlarının öneri çipleri
@@ -18,7 +22,9 @@ import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 
-import { Button, Chip, ChipGroup, Touchable, toneColors, type Tone } from "@/components/ui";
+import { LinearGradient } from "expo-linear-gradient";
+
+import { Button, Chip, ChipGroup, GradientBar, Touchable, toneColors, withAlpha, type Tone } from "@/components/ui";
 import {
   KIND_ICON,
   canManageAccount,
@@ -27,9 +33,19 @@ import {
   type AccountScope,
   type FinanceAccount,
 } from "@/lib/api/admin/accounting";
-import { colors, hairline, radius, space, textScale, type } from "@/theme";
+import { colors, hairline, radius, space, textScale, type, upperTR } from "@/theme";
 
 /* ------------------------------- BarRow ------------------------------- */
+
+/** Çubuk tonu → degrade (tamam nane, gider kırmızı, bekleyen altın…). */
+const BAR_GRADIENT: Partial<Record<Tone, readonly [string, string]>> = {
+  win: [colors.tileTones.mint[1], colors.tileTones.mint[0]],
+  danger: [colors.tileTones.red[1], colors.tileTones.red[0]],
+  warn: [colors.tileTones.gold[1], colors.tileTones.gold[0]],
+  info: [colors.tileTones.cyan[1], colors.tileTones.cyan[0]],
+  accent: [colors.tileTones.cyan[1], colors.tileTones.cyan[0]],
+  brand: colors.gradientSignature,
+};
 
 export function BarRow({
   label,
@@ -57,9 +73,7 @@ export function BarRow({
           {value}
         </Text>
       </View>
-      <View style={styles.track}>
-        <View style={[styles.fill, { width: `${pct * 100}%`, backgroundColor: toneColors(tone).fg }]} />
-      </View>
+      <GradientBar value={pct} height={8} gradient={BAR_GRADIENT[tone] ?? colors.gradientSignature} />
       {sub ? (
         <Text style={styles.barSub} numberOfLines={1} {...textScale.dense}>
           {sub}
@@ -110,10 +124,16 @@ export function TrendBars({ rows, emptyText = "Kayıt eklendikçe grafik dolacak
             accessibilityLabel={`${r.title || r.label}: gelir ${money(r.income)}, gider ${money(r.expense)}`}
           >
             <View style={styles.trendBars}>
-              <View style={[styles.trendBar, { height: `${(r.income / max) * 100}%`, backgroundColor: colors.win }]} />
-              <View style={[styles.trendBar, { height: `${(r.expense / max) * 100}%`, backgroundColor: colors.danger }]} />
+              <LinearGradient
+                colors={[colors.tileTones.mint[0], colors.tileTones.mint[1]]}
+                style={[styles.trendBar, { height: `${Math.max(2, (r.income / max) * 100)}%` }, active === i ? null : styles.trendDim]}
+              />
+              <LinearGradient
+                colors={[colors.tileTones.red[0], colors.tileTones.red[1]]}
+                style={[styles.trendBar, { height: `${Math.max(2, (r.expense / max) * 100)}%` }, active === i ? null : styles.trendDim]}
+              />
             </View>
-            <Text style={styles.trendLabel} numberOfLines={1} {...textScale.badge}>
+            <Text style={[styles.trendLabel, active === i ? styles.trendLabelOn : null]} numberOfLines={1} {...textScale.badge}>
               {r.label}
             </Text>
           </Touchable>
@@ -124,12 +144,10 @@ export function TrendBars({ rows, emptyText = "Kayıt eklendikçe grafik dolacak
           <Text style={styles.trendTitle} {...textScale.dense}>
             {current.title || current.label}
           </Text>
-          <View style={styles.legendRow}>
-            <Legend color={colors.win} text={`Gelir ${compactMoney(current.income)}`} />
-            <Legend color={colors.danger} text={`Gider ${compactMoney(current.expense)}`} />
-            <Text style={[styles.legendText, { color: current.net >= 0 ? colors.win : colors.danger }]} {...textScale.dense}>
-              Net {money(current.net, { signed: true })}
-            </Text>
+          <View style={styles.trendFigures}>
+            <TrendFigure color={colors.win} label="Gelir" value={compactMoney(current.income)} />
+            <TrendFigure color={colors.danger} label="Gider" value={compactMoney(current.expense)} />
+            <TrendFigure color={current.net >= 0 ? colors.win : colors.danger} label="Net" value={money(current.net, { signed: true })} strong />
           </View>
         </View>
       ) : null}
@@ -137,12 +155,17 @@ export function TrendBars({ rows, emptyText = "Kayıt eklendikçe grafik dolacak
   );
 }
 
-function Legend({ color, text }: { color: string; text: string }) {
+function TrendFigure({ color, label, value, strong }: { color: string; label: string; value: string; strong?: boolean }) {
   return (
-    <View style={styles.legend}>
-      <View style={[styles.legendDot, { backgroundColor: color }]} />
-      <Text style={styles.legendText} {...textScale.dense}>
-        {text}
+    <View style={styles.figure}>
+      <View style={styles.legend}>
+        <View style={[styles.legendDot, { backgroundColor: color }]} />
+        <Text style={styles.legendText} {...textScale.badge}>
+          {upperTR(label)}
+        </Text>
+      </View>
+      <Text style={[styles.figureValue, strong ? { color } : null]} numberOfLines={1} adjustsFontSizeToFit {...textScale.badge}>
+        {value}
       </Text>
     </View>
   );
@@ -216,21 +239,29 @@ export function AccountStrip({
         {list.map((a) => (
           <Touchable
             key={a.id}
+            feedback="card"
             onPress={() => router.push({ pathname: "/yonetim/araclar/muhasebe/hesap/[id]", params: { id: String(a.id) } } as never)}
-            style={[styles.stripChip, { borderLeftColor: a.color || colors.brand }]}
+            style={styles.stripCard}
             accessibilityRole="button"
             accessibilityLabel={`${a.name}: ${money(a.balance)}`}
           >
-            <Ionicons name={KIND_ICON[a.kind] || "wallet-outline"} size={14} color={colors.textSecondary} />
-            <View>
+            <View style={[styles.stripBand, { backgroundColor: a.color || colors.brand }]} />
+            <View style={styles.stripHead}>
+              <View style={[styles.stripIcon, { backgroundColor: withAlpha(a.color || colors.brand, 0.2) }]}>
+                <Ionicons name={KIND_ICON[a.kind] || "wallet-outline"} size={14} color={a.color || colors.brandAccent} />
+              </View>
               <Text style={styles.stripName} numberOfLines={1} {...textScale.dense}>
                 {a.name}
-                {a.linked_method ? " · bağlı" : ""}
-              </Text>
-              <Text style={[styles.stripValue, a.balance < 0 ? { color: colors.danger } : null]} {...textScale.dense}>
-                {money(a.balance)}
               </Text>
             </View>
+            <Text style={[styles.stripValue, a.balance < 0 ? { color: colors.danger } : null]} numberOfLines={1} adjustsFontSizeToFit {...textScale.badge}>
+              {money(a.balance)}
+            </Text>
+            {a.linked_method ? (
+              <Text style={styles.stripMeta} numberOfLines={1} {...textScale.badge}>
+                Defterle bağlı
+              </Text>
+            ) : null}
           </Touchable>
         ))}
         {!list.length ? (
@@ -251,13 +282,14 @@ export function AccountStrip({
 
 export function Note({ text, tone = "info", icon = "information-circle-outline", action }: { text: string; tone?: Tone; icon?: keyof typeof Ionicons.glyphMap; action?: { label: string; onPress: () => void } }) {
   return (
-    <View style={[styles.note, { backgroundColor: toneColors(tone).dim }]}>
-      <Ionicons name={icon} size={16} color={toneColors(tone).fg} />
-      <Text style={[styles.noteText, { color: toneColors(tone).fg }]} {...textScale.long}>
+    <View style={[styles.note, { backgroundColor: toneColors(tone).dim, borderColor: withAlpha(toneColors(tone).fg, 0.28) }]}>
+      <View style={[styles.noteRail, { backgroundColor: toneColors(tone).fg }]} />
+      <Ionicons name={icon} size={18} color={toneColors(tone).fg} />
+      <Text style={[styles.noteText, { color: colors.textPrimary }]} {...textScale.long}>
         {text}
       </Text>
       {action ? (
-        <Touchable onPress={action.onPress} accessibilityRole="button">
+        <Touchable onPress={action.onPress} accessibilityRole="button" feedback="chip" style={[styles.noteActionBox, { borderColor: withAlpha(toneColors(tone).fg, 0.4) }]}>
           <Text style={[styles.noteAction, { color: toneColors(tone).fg }]} {...textScale.dense}>
             {action.label}
           </Text>
@@ -281,76 +313,86 @@ export function Muted({ children }: { children: React.ReactNode }) {
 }
 
 const styles = StyleSheet.create({
-  bar: { gap: space.xs, paddingVertical: space.xs },
+  bar: { gap: space.xs + 2, paddingVertical: space.xs + 2 },
   barHead: { flexDirection: "row", justifyContent: "space-between", gap: space.sm },
   barLabel: { ...type.bodySm, color: colors.textPrimary, flex: 1 },
-  barValue: { ...type.numSmStrong },
+  barValue: { ...type.tableNumStrong },
   barSub: { ...type.caption, color: colors.textTertiary },
-  track: { height: 6, borderRadius: 3, backgroundColor: colors.surface3, overflow: "hidden" },
-  fill: { height: 6, borderRadius: 3 },
 
-  trend: { gap: space.sm },
+  trend: { gap: space.md },
   trendRow: { gap: space.xs, alignItems: "flex-end" },
-  trendCol: { width: 40, alignItems: "center", gap: space.xs, paddingVertical: space.xs, borderRadius: radius.sm },
-  trendColOn: { backgroundColor: colors.surface3 },
-  trendBars: { height: 96, flexDirection: "row", alignItems: "flex-end", gap: 3 },
-  trendBar: { width: 10, minHeight: 2, borderRadius: 2 },
+  trendCol: { width: 42, alignItems: "center", gap: space.xs, paddingVertical: space.sm, borderRadius: radius.md },
+  trendColOn: { backgroundColor: colors.brandDim },
+  trendBars: { height: 120, flexDirection: "row", alignItems: "flex-end", gap: 3 },
+  trendBar: { width: 11, borderTopLeftRadius: 4, borderTopRightRadius: 4, borderBottomLeftRadius: 1, borderBottomRightRadius: 1 },
+  trendDim: { opacity: 0.55 },
   trendLabel: { ...type.micro, color: colors.textTertiary },
+  trendLabelOn: { color: colors.textPrimary },
+  trendFigures: { flexDirection: "row", gap: space.sm },
+  figure: { flex: 1, gap: space.xxs, padding: space.sm, borderRadius: radius.md, backgroundColor: colors.surface2 },
+  figureValue: { ...type.tableNumStrong, color: colors.textPrimary },
   trendInfo: { gap: space.xs },
-  trendTitle: { ...type.label, color: colors.textPrimary },
+  trendTitle: { ...type.h4, color: colors.textPrimary },
   legendRow: { flexDirection: "row", flexWrap: "wrap", gap: space.md, alignItems: "center" },
   legend: { flexDirection: "row", alignItems: "center", gap: space.xs },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
-  legendText: { ...type.caption, color: colors.textSecondary },
+  legendText: { ...type.nano, color: colors.textTertiary },
 
   suggest: { gap: space.xs },
   suggestLabel: { ...type.caption, color: colors.textTertiary },
 
   range: { flexDirection: "row", alignItems: "center", gap: space.sm },
   rangeBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.md,
+    width: 42,
+    height: 42,
+    borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.surface2,
+    backgroundColor: colors.glass,
     borderWidth: hairline,
-    borderColor: colors.border,
+    borderColor: colors.glassLine,
   },
   rangeLabel: {
     flex: 1,
-    height: 40,
+    height: 42,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: space.xs,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface2,
+    borderRadius: radius.pill,
+    backgroundColor: colors.glass,
+    borderWidth: hairline,
+    borderColor: colors.glassLine,
+    paddingHorizontal: space.md,
+  },
+  rangeText: { ...type.h4, color: colors.textPrimary },
+
+  strip: { gap: space.sm },
+  stripRow: { gap: space.sm, alignItems: "center" },
+  stripCard: {
+    width: 168,
+    gap: space.xs,
+    padding: space.md,
+    paddingTop: space.md + 2,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface1,
     borderWidth: hairline,
     borderColor: colors.border,
-    paddingHorizontal: space.sm,
+    overflow: "hidden",
   },
-  rangeText: { ...type.label, color: colors.textPrimary },
-
-  strip: { gap: space.sm, padding: space.md, borderRadius: radius.lg, backgroundColor: colors.surface1, borderWidth: hairline, borderColor: colors.border },
-  stripRow: { gap: space.sm, alignItems: "center" },
-  stripChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.sm,
-    paddingVertical: space.xs,
-    paddingHorizontal: space.sm,
-    borderRadius: radius.sm,
-    backgroundColor: colors.surface2,
-    borderLeftWidth: 3,
-  },
-  stripName: { ...type.caption, color: colors.textSecondary, maxWidth: 160 },
-  stripValue: { ...type.numSmStrong, color: colors.textPrimary },
+  stripBand: { position: "absolute", top: 0, left: 0, right: 0, height: 3 },
+  stripHead: { flexDirection: "row", alignItems: "center", gap: space.xs },
+  stripIcon: { width: 24, height: 24, borderRadius: radius.xs, alignItems: "center", justifyContent: "center" },
+  stripName: { ...type.labelSm, color: colors.textSecondary, flex: 1 },
+  stripValue: { ...type.metricSm, color: colors.textPrimary },
+  stripMeta: { ...type.nano, color: colors.textTertiary },
   stripActions: { flexDirection: "row", gap: space.sm },
 
-  note: { flexDirection: "row", alignItems: "flex-start", gap: space.sm, padding: space.md, borderRadius: radius.md },
+  note: { flexDirection: "row", alignItems: "center", gap: space.sm, padding: space.md, paddingLeft: space.md + 2, borderRadius: radius.lg, borderWidth: hairline, overflow: "hidden" },
+  noteRail: { position: "absolute", left: 0, top: 0, bottom: 0, width: 3 },
   noteText: { ...type.bodySm, flex: 1 },
-  noteAction: { ...type.label },
+  noteActionBox: { paddingHorizontal: space.sm, paddingVertical: space.xs, borderRadius: radius.pill, borderWidth: hairline },
+  noteAction: { ...type.labelSm },
 
   rows: { gap: space.sm },
   muted: { ...type.bodySm, color: colors.textTertiary },

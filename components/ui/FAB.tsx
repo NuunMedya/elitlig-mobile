@@ -16,6 +16,7 @@
  * bilgisidir ve yön değişimi saniyede birkaç kez olur.
  */
 
+import { LinearGradient } from "expo-linear-gradient";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -33,6 +34,7 @@ import {
   easing,
   elevate,
   fonts,
+  glowStyle,
   layout,
   radius,
   space,
@@ -102,9 +104,20 @@ export const FAB = React.memo(function FAB({
           styles.fab,
           elevate(3),
           { backgroundColor: background },
+          glowStyle(tone === "live" ? colors.live : colors.glow, 2),
           showLabel ? styles.extended : styles.round,
         ]}
       >
+        {/* Gece teması: imza dolgusu (marka) — canlı FAB düz pembe kalır. */}
+        {tone === "live" ? null : (
+          <LinearGradient
+            colors={colors.gradientBrand}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[StyleSheet.absoluteFill, styles.fill]}
+            pointerEvents="none"
+          />
+        )}
         <Ionicons name={icon} size={22} color={foreground} />
         {showLabel ? (
           <Text style={[styles.label, { color: foreground }]} numberOfLines={1} {...textScale.badge}>
@@ -168,5 +181,8 @@ const styles = StyleSheet.create({
   label: {
     ...type.label,
     fontFamily: fonts.bold,
+  },
+  fill: {
+    borderRadius: radius.pill,
   },
 });
