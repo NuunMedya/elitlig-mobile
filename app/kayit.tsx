@@ -430,7 +430,7 @@ export default function RegisterScreen() {
         <Text style={authStyles.inlineLink} onPress={() => void openLink(PRIVACY_URL)} accessibilityRole="link">
           Gizlilik Politikası
         </Text>
-        {"'nı kabul etmiş olursun. Sohbet ve aramalarda hakaret, taciz ve uygunsuz içeriğe hoşgörü yoktur. Hesabını dilediğin zaman Profil → Hesabı sil ile kalıcı olarak silebilirsin."}
+        {"'nı kabul etmiş olursun. Sohbet ve aramalarda hakaret, taciz ve uygunsuz içeriğe hoşgörü yoktur. Hesabını dilediğin zaman Menü → Hesabım → Hesabı sil ile kalıcı olarak silebilirsin."}
       </Text>
     </AuthShell>
   );

@@ -107,14 +107,14 @@ const CATEGORIES: { key: Category; title: string; hint: string; icon: keyof type
   { key: "quiz", title: "BİLGİ YARIŞMALARI", hint: "Skoruna göre şehrine yıldız", icon: "bulb" },
   { key: "puzzle", title: "BULMACALAR", hint: "Her seviye 1–3 yıldız · oyun başına 5 can", icon: "extension-puzzle" },
   { key: "arcade", title: "ARCADE", hint: "Skoruna göre şehrine yıldız", icon: "game-controller" },
-  { key: "league", title: "LİG YARIŞMALARI", hint: "Gerçek maçlarla puan · puana göre yıldız", icon: "trophy" },
+  { key: "league", title: "LİG YARIŞMALARI", hint: "Gerçek maçlarla puan · Fantezi ve Tahmin yıldız verir", icon: "trophy" },
 ];
 
 /** Lig yarışmalarının satır alt yazısı (oyunlar XP vermez; puan yıldıza döner). */
 const LEAGUE_LINE: Record<string, string> = {
   fantezi: "Haftalık puanına göre yıldız",
   tahminLigi: "Tahmin puanına göre yıldız",
-  kulupArenasi: "Takımının haftalık yarışı",
+  kulupArenasi: "Takımının haftalık yarışı · yıldız vermez",
 };
 
 /** Cihazdaki rekor anahtarları (oyun ekranlarıyla birebir). */

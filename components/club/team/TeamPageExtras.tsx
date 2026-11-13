@@ -123,7 +123,8 @@ export function CaptainHomepageCard() {
 export function TeamAuthorityCard() {
   const toast = useToast();
   const queryClient = useQueryClient();
-  const requests = useQuery({ queryKey: ["club", "account-requests"], queryFn: getAccountRequests, staleTime: 60_000, retry: false });
+  // Oyuncu ekranlarıyla (oyuncum/bagla, JoinFlow, CareerHome) aynı önbellek anahtarı.
+  const requests = useQuery({ queryKey: ["account-requests"], queryFn: getAccountRequests, staleTime: 60_000, retry: false });
   const [mode, setMode] = useState<null | "transfer">(null);
   const [term, setTerm] = useState("");
   const [debounced, setDebounced] = useState("");
@@ -147,8 +148,6 @@ export function TeamAuthorityCard() {
     setMode(null);
     setTerm("");
     setPicked(null);
-    void queryClient.invalidateQueries({ queryKey: ["club", "account-requests"] });
-    // Aynı uç oyuncu ekranlarında ["account-requests"] anahtarıyla durur.
     void queryClient.invalidateQueries({ queryKey: ["account-requests"] });
   };
   const resign = useMutation({

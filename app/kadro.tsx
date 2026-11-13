@@ -23,7 +23,7 @@ const CONFIG: ArenaGameConfig = {
     { icon: "swap-horizontal-outline", text: "Parmağını sağa sola kaydır; kadron parmağını izler." },
     { icon: "add-circle-outline", text: "Çift kapılardan birini seç: mavi kapılar (+, ×) kadronu büyütür, kırmızılar (−, ÷) küçültür." },
     { icon: "football-outline", text: "Kadron rakip gruplarına kendiliğinden şut atar; rakip ancak top değince düşer. Grup erimeden temas edersen bire bir oyuncu kaybedersin; yarım sahadaki büyük gruplardan kaçabilirsin." },
-    { icon: "flame-outline", text: "Yoldaki silahların içinden geç: TOP ÇUVALI (2 kat şut), ATEŞLİ TOP (3 kat hasar, deler), ÜÇLÜ TOP, FALSOLU TOP (rakipten rakibe seker), DEV TOP (grubu biçer), KRAMPON (hız + omuz şarjı). İleri bölümlerde silahsız geçmek zor." },
+    { icon: "flame-outline", text: "Yoldaki silahların içinden geç: TOP ÇUVALI (2 kat şut), ATEŞLİ TOP (2,6 kat hasar, deler), ÜÇLÜ TOP, FALSOLU TOP (rakipten rakibe seker), DEV TOP (grubu biçer), KRAMPON (hız + omuz şarjı). İleri bölümlerde silahsız geçmek zor." },
     { icon: "trophy-outline", text: "Bölüm sonunda kaleciyi şutla düşür. Kalecinin sert şutu yerdeki kırmızı halkaya düşer: kaç!" },
     { icon: "trending-up-outline", text: "Her bölüm ligin bir takımı; kadron sıfırlanırsa oyun biter." },
   ],

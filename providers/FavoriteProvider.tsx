@@ -34,6 +34,10 @@ import { useAuth } from "@/providers/AuthProvider";
 const STORAGE_KEY = "elitlig.favoriteTeams.v2";
 const SCOPE_STORAGE_KEY = "elitlig.favoriteScopes.v1";
 const MATCH_STORAGE_KEY = "elitlig.favoriteMatches.v1";
+/** Cihazdaki takip listesinin hangi hesaba ait olduğu (misafirde yok). Çıkışta
+ * ve başka bir hesap girişinde liste temizlenir: önceki hesabın takipleri yeni
+ * hesaba sunucuda yazılmaz. */
+const OWNER_STORAGE_KEY = "elitlig.favoriteOwner.v1";
 
 export interface FavoriteTeam {
   id: number;
@@ -135,14 +139,18 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
   const [matches, setMatches] = useState<number[]>([]);
   const [restored, setRestored] = useState(false);
   const syncedUserRef = useRef<string | null>(null);
+  const ownerRef = useRef<string | null>(null);
+  const wasSignedIn = useRef(signedIn);
 
   useEffect(() => {
     Promise.all([
       AsyncStorage.getItem(STORAGE_KEY),
       AsyncStorage.getItem(SCOPE_STORAGE_KEY),
       AsyncStorage.getItem(MATCH_STORAGE_KEY),
+      AsyncStorage.getItem(OWNER_STORAGE_KEY),
     ])
-      .then(([teamsRaw, scopesRaw, matchesRaw]) => {
+      .then(([teamsRaw, scopesRaw, matchesRaw, ownerRaw]) => {
+        ownerRef.current = ownerRaw || null;
         if (teamsRaw) {
           try {
             const stored = JSON.parse(teamsRaw);
@@ -180,6 +188,31 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
     AsyncStorage.setItem(MATCH_STORAGE_KEY, JSON.stringify(matches)).catch(() => {});
   }, [matches, restored]);
 
+  /** Cihazdaki listeyi boşaltır (sunucuya dokunmaz). */
+  const resetLocal = useCallback(() => {
+    setFavorites([]);
+    setLeagues([]);
+    setSeasons([]);
+    setCities([]);
+    setMatches([]);
+  }, []);
+
+  const setOwner = useCallback((owner: string | null) => {
+    ownerRef.current = owner;
+    (owner ? AsyncStorage.setItem(OWNER_STORAGE_KEY, owner) : AsyncStorage.removeItem(OWNER_STORAGE_KEY)).catch(() => {});
+  }, []);
+
+  // Çıkış: önceki hesabın takipleri cihazda kalmaz (aynı telefonda giriş yapan
+  // başka biri bunları devralmasın, bildirimini almasın).
+  useEffect(() => {
+    if (!restored) return;
+    if (wasSignedIn.current && !signedIn) {
+      resetLocal();
+      setOwner(null);
+    }
+    wasSignedIn.current = signedIn;
+  }, [restored, signedIn, resetLocal, setOwner]);
+
   // Girişte bir kez: cihazdaki favorileri sunucuya taşı (sunucuda olmayanlar
   // eklenir), böylece push hedeflemesi cihaz listesiyle örtüşür.
   useEffect(() => {
@@ -187,13 +220,22 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
       if (!signedIn) syncedUserRef.current = null;
       return;
     }
-    const userKey = auth.user?.username ?? "user";
+    const userKey = String(auth.user?.id ?? auth.user?.username ?? "user");
     if (syncedUserRef.current === userKey) return;
     syncedUserRef.current = userKey;
+    // Liste başka bir hesaba aitse sunucuya taşınmaz: önce temizlenir. Misafir
+    // listesi (sahibi yok) girişte bu hesaba taşınır.
+    const foreign = ownerRef.current != null && ownerRef.current !== userKey;
+    if (foreign) resetLocal();
+    setOwner(userKey);
 
     (async () => {
       try {
         const server = await getMyFavorites();
+        if (foreign) {
+          if (server.matchIds.length) setMatches(Array.from(new Set(server.matchIds)));
+          return;
+        }
         const serverTeams = new Set(server.teamIds);
         const serverLeagues = new Set(server.leagueIds);
         const serverSeasons = new Set(server.seasonIds);

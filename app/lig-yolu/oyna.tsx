@@ -242,6 +242,7 @@ export default function PuzzlePlayScreen() {
           level={level}
           coins={result.server?.reward?.coins ?? 0}
           firstClear={Boolean(result.server?.reward?.firstClear)}
+          starsGained={result.server?.reward ? result.server.reward.starsGained : null}
           summary={result.res.summary}
           livesLeft={lives}
           profile={gameProfile}

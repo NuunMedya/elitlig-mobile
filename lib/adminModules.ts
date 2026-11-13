@@ -73,7 +73,7 @@ export const ADMIN_MODULE_GROUPS: AdminModuleGroup[] = [
       { key: "mesajlar", title: "Mesajlar", description: "WhatsApp gibi doğrudan yazışma; üyelerin ElitLig Yönetimi mesajları", icon: "chatbubbles-outline", route: "/mesajlar", keywords: "sohbet chat üye mesajları" },
       { key: "bildirimler", title: "Bildirimler", description: "Transfer, disiplin, maç, istek ve hesap bildirimleri", icon: "notifications-outline", route: "/bildirimler", keywords: "bildirim zil uyarı" },
       { key: "gorevler", title: "Yapılacaklar", description: "Görevlerin, hatırlatmaların ve maç görevlerin", icon: "checkbox-outline", route: "/yonetim/gorevler" },
-      { key: "kayitlar", title: "Arama kayıtları", description: "Yönetimle yapılan sesli aramaların kayıtları", icon: "recording-outline", route: "/yonetim/kayitlar" },
+      { key: "kayitlar", title: "Arama kayıtları", description: "Yönetimle yapılan sesli aramaların kayıtları", icon: "recording-outline", route: "/yonetim/kayitlar", permission: ["messages.calls_view"] },
     ],
   },
   {

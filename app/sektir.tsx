@@ -22,7 +22,7 @@ const CONFIG: ArenaGameConfig = {
     { icon: "finger-print-outline", text: "Ekrana dokun: top havalanır. İlk dokunuş başlama vuruşu." },
     { icon: "shield-outline", text: "Alttan rakip savunmacıların barajı, üstten ters asılı kale gelir. Aradaki boşluktan geçmek bir gol." },
     { icon: "star-outline", text: "Boşluğun tam ortası çarpanı büyütür; altın yıldızlar bonus, altın krampon bir çarpışmayı affeder." },
-    { icon: "people-outline", text: "Gol sayın bir oyuncunun sezon gol + asist sayısını geçince onu geride bırakırsın." },
+    { icon: "people-outline", text: "Gol sayın bir oyuncunun sezon gol + asist sayısını geçince onu geride bırakırsın: +15 puan." },
     { icon: "trending-up-outline", text: "Top hızlanır, boşluk daralır; baraj zıplar, kapılar kayar. Top çime, baraja ya da direğe değerse biter." },
   ],
   describe: (stats) =>

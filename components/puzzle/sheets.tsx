@@ -42,6 +42,8 @@ export function ShopSheet({
   // Oyun içindeyken canlar o oyunun; Lig Yolu ana sayfasında "can doldur" bütün oyunları doldurur.
   const profile = livesFor(me.profile, game);
   const allFull = !game && profile.lives_by_game ? Object.values(profile.lives_by_game).every((g) => g && g.lives >= profile.max_lives) : null;
+  // Merkezden can doldurma oyun başına ücretlidir: canı eksik her oyun için bir fiyat.
+  const missingGames = !game && profile.lives_by_game ? Object.values(profile.lives_by_game).filter((g) => g && g.lives < profile.max_lives).length : 1;
   const coins = me.profile.coins;
   const entries = Object.entries(me.catalog.shop).filter(([key, item]) => {
     if (item.lives) return true;
@@ -67,6 +69,7 @@ export function ShopSheet({
       {[...(focus === "lives" ? lives : []), ...(focus === "lives" ? packs : [...lives, ...packs])].map(([key, item]) => {
         const stock = item.booster ? me.profile.boosters[item.booster] ?? 0 : null;
         const full = Boolean(item.lives && (allFull ?? profile.lives >= profile.max_lives));
+        const price = item.lives ? item.price * Math.max(1, missingGames) : item.price;
         return (
           <View key={key} style={styles.row}>
             <View style={[styles.icon, item.lives ? styles.iconLive : null]}>
@@ -80,18 +83,18 @@ export function ShopSheet({
                     ? "Canların dolu"
                     : game
                       ? `Bu oyunda ${profile.lives}/${profile.max_lives} can`
-                      : "Bütün oyunların canını doldurur"
+                      : `Canı eksik ${missingGames} oyunu doldurur (oyun başına ${item.price})`
                   : `Elinde ${stock}`}
               </Text>
             </View>
             <Button
-              label={`${item.price}`}
+              label={`${price}`}
               icon="disc"
               size="sm"
-              variant={coins >= item.price && !full ? "primary" : "secondary"}
-              disabled={coins < item.price || full || buy.isPending}
+              variant={coins >= price && !full ? "primary" : "secondary"}
+              disabled={coins < price || full || buy.isPending}
               onPress={() => buy.mutate(key)}
-              accessibilityLabel={`${item.title}, ${item.price} jeton`}
+              accessibilityLabel={`${item.title}, ${price} jeton`}
             />
           </View>
         );
