@@ -158,3 +158,23 @@ export const CITY2_UI = {
   star: "#FFC233",
   go: "#15803D",
 } as const;
+
+/**
+ * Faz 2 · Elit Lira (EL): oyun içi kulüp kasasının tek rengi (camgöbeği
+ * jeton). Yıldızın altınından ve "ilerle" yeşilinden ayrı okunur; iki temada
+ * aynıdır (koyu panel üstünde çizilir).
+ */
+export const CITY2_EL = {
+  coin: ["#5EEAD4", "#0D9488"] as [string, string],
+  coinEdge: "rgba(255, 255, 255, 0.55)",
+  /** Koyu panel üstünde artı tutarlar ve dolum çubuğu. */
+  gain: "#5EEAD4",
+  /** Koyu panel üstünde gider (eksi) tutarları. */
+  cost: "#FDA4AF",
+  /** Dolu depo uyarısı (koyu panel üstünde). */
+  full: "#FCD34D",
+  track: "rgba(255, 255, 255, 0.14)",
+  /** Açık kartlarda EL vurgusu (metin ve çubuk). */
+  ink: "#0F766E",
+  inkDark: "#5EEAD4",
+} as const;

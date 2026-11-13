@@ -13,9 +13,10 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { ChunkyButton } from "@/components/city/ChunkyButton";
 import { BottomSheet, Touchable } from "@/components/ui";
-import { rungOpensText, type City2Building, type City2Ladder, type City2Lock, type City2Stage } from "@/lib/puzzle/city2";
+import { incomeOf, rungOpensText, type City2Building, type City2El, type City2Ladder, type City2Lock, type City2Stage, type City2UpgradeKind } from "@/lib/puzzle/city2";
 import { colors, fonts, hairline, radius, space, textScale, type } from "@/theme";
 
+import { IncomeChip, IncomeSection, SupportSection } from "./ElitLira";
 import { BuildingIcon, CostButton, StarCost, cardStyle, fmt } from "./shared";
 
 const upper = (s: string) => s.toLocaleUpperCase("tr-TR");
@@ -70,9 +71,12 @@ export function BuildingRow({ b, available, ladder, onPress }: { b: City2Buildin
     <Touchable onPress={onPress} feedback="card" haptic="selection" style={styles.row} accessibilityRole="button" accessibilityLabel={`${b.title}, ${sub}`}>
       <BuildingIcon buildingKey={b.key} icon={b.icon} off={!b.open} stage={b.stage} />
       <View style={styles.rowTexts}>
-        <Text style={styles.rowTitle} numberOfLines={1} {...textScale.dense}>
-          {b.title}
-        </Text>
+        <View style={styles.rowTitleLine}>
+          <Text style={styles.rowTitle} numberOfLines={1} {...textScale.dense}>
+            {b.title}
+          </Text>
+          {b.open && incomeOf(b) ? <IncomeChip inc={incomeOf(b)!} /> : null}
+        </View>
         <Text style={styles.rowSub} numberOfLines={1} {...textScale.dense}>
           {sub}
         </Text>
@@ -150,6 +154,11 @@ export function BuildingSheet({
   onClose,
   onLock,
   onStage,
+  el,
+  titles,
+  collecting,
+  onCollect,
+  onUpgrade,
 }: {
   b: City2Building | null;
   ladder: City2Ladder | null;
@@ -158,7 +167,15 @@ export function BuildingSheet({
   onClose: () => void;
   onLock: (building: string, lock: string) => void;
   onStage: (building: string) => void;
+  /** Faz 2 (EL). Eski sunucuda yok → gelir bölümü çizilmez. */
+  el?: City2El | null;
+  titles?: Record<string, string>;
+  collecting?: boolean;
+  onCollect?: (building: string) => void;
+  onUpgrade?: (building: string, kind: City2UpgradeKind) => void;
 }) {
+  const inc = el ? incomeOf(b) : null;
+  const effect = el && b?.income && !b.income.has_income ? b.income.effect : null;
   const current = b?.stages.find((s) => s.state === "current") ?? null;
   const next = b?.stages.find((s) => s.state === "next") ?? null;
   const a = b?.next_action;
@@ -225,6 +242,20 @@ export function BuildingSheet({
               ) : null}
             </View>
           </View>
+
+          {inc && b ? (
+            <IncomeSection
+              b={b}
+              inc={inc}
+              el={el ?? null}
+              busy={busy}
+              collecting={Boolean(collecting)}
+              onCollect={() => onCollect?.(b.key)}
+              onUpgrade={(kind) => onUpgrade?.(b.key, kind)}
+            />
+          ) : effect ? (
+            <SupportSection effect={effect} open={b.open} titles={titles ?? {}} />
+          ) : null}
 
           {current && current.locks.length ? (
             <View style={styles.block}>
@@ -293,7 +324,8 @@ export function BuildingSheet({
 const styles = StyleSheet.create({
   row: { ...cardStyle, flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md },
   rowTexts: { flex: 1, gap: 2 },
-  rowTitle: { ...type.h3, color: colors.textPrimary },
+  rowTitleLine: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  rowTitle: { ...type.h3, color: colors.textPrimary, flexShrink: 1 },
   rowSub: { ...type.caption, color: colors.textSecondary },
   pips: { flexDirection: "row", gap: 3, marginTop: space.xxs },
   pip: { flex: 1, maxWidth: 18, height: 5, borderRadius: radius.pill, backgroundColor: colors.surface3 },

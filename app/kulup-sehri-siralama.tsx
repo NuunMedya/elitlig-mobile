@@ -12,7 +12,9 @@
  *     varsayılan bu hafta.
  *   • Toplam yıldız   — bugüne kadar kazanılan bütün yıldızlar (metric=stars);
  *     tarih aralığı seçilirse o aralıkta kazanılanlar.
- * Yıldız tablolarında dönem şeridi: Bu hafta · Bu ay · Tüm zamanlar · Tarih
+ *   • Elit Lira       — dönemde KAZANILAN EL (metric=el; Faz 2), altta net
+ *     (kazanılan − gider). Varsayılan bu hafta.
+ * Yıldız ve EL tablolarında dönem şeridi: Bu hafta · Bu ay · Tüm zamanlar · Tarih
  * aralığı. Kapsam: Türkiye / kendi ilin.
  *
  * BÜTÜN OYUNCULAR: liste 50'şer satırlık sayfalarla sonuna kadar iner
@@ -30,6 +32,7 @@ import React, { useCallback, useMemo, useRef, useState } from "react";
 import { FlatList, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { ElCoin } from "@/components/city2/ElitLira";
 import { BoardFooter, PeriodBar, PinnedMe, RankBadge, useBoardPages, useRowVisibility } from "@/components/leaderboards";
 import {
   Avatar,
@@ -55,12 +58,13 @@ import { cityKeys, getCityLeaderboard, type CityBoardMetric, type CityLeaderRow,
 import { useAuth } from "@/providers/AuthProvider";
 import { colors, fonts, hairline, layout, radius, space, textScale, type } from "@/theme";
 
-type Tab = "step" | "beauty" | "dev" | "week" | "total";
+type Tab = "step" | "beauty" | "el" | "dev" | "week" | "total";
 type Scope = "all" | "city";
 
 const TABS: SegmentedItem<Tab>[] = [
   { key: "step", label: "Basamak" },
   { key: "beauty", label: "Güzellik" },
+  { key: "el", label: "Elit Lira" },
   { key: "dev", label: "Gelişim" },
   { key: "week", label: "Haftalık" },
   { key: "total", label: "Toplam" },
@@ -69,6 +73,7 @@ const TABS: SegmentedItem<Tab>[] = [
 const SUBTITLE: Record<Tab, string> = {
   step: "Kariyer merdiveninde basamak",
   beauty: "Şehrin güzellik puanı",
+  el: "Dönemde kazanılan Elit Lira",
   dev: "Gelişim puanı ve kulüp statüsü",
   week: "Dönemde kazanılan yıldız",
   total: "Toplanan bütün yıldızlar",
@@ -77,6 +82,10 @@ const SUBTITLE: Record<Tab, string> = {
 /** Sekme + dönem → sunucu isteği. */
 function boardRequest(tab: Tab, pv: PeriodValue) {
   if (tab === "dev" || tab === "step" || tab === "beauty") return { metric: tab as CityBoardMetric };
+  if (tab === "el") {
+    if (pv.period === "range" && pv.range) return { metric: "el" as CityBoardMetric, from: pv.range.from, to: pv.range.to };
+    return { metric: "el" as CityBoardMetric, period: pv.period === "range" ? ("week" as const) : pv.period };
+  }
   if (pv.period === "alltime") return { metric: "stars" as CityBoardMetric };
   if (pv.period === "range" && pv.range) return { metric: "period_stars" as CityBoardMetric, from: pv.range.from, to: pv.range.to };
   return { metric: "period_stars" as CityBoardMetric, period: pv.period === "month" ? ("month" as const) : ("week" as const) };
@@ -85,12 +94,13 @@ function boardRequest(tab: Tab, pv: PeriodValue) {
 /** Tablonun yalnız seçili döneme bağlı olmayan (dönem şeridi olmayan) sekmeleri. */
 const STATIC_TABS: ReadonlySet<Tab> = new Set(["step", "beauty", "dev"]);
 
-const UNIT: Record<CityBoardMetric, string> = { dev: "gelişim", stars: "yıldız", period_stars: "yıldız", step: "basamak", beauty: "güzellik" };
+const UNIT: Record<CityBoardMetric, string> = { dev: "gelişim", stars: "yıldız", period_stars: "yıldız", step: "basamak", beauty: "güzellik", el: "EL" };
 
 function rowValue(row: CityLeaderRow, metric: CityBoardMetric): number {
   if (metric === "dev") return row.dev;
   if (metric === "step") return Number(row.rung ?? 0);
   if (metric === "beauty") return Number(row.beauty ?? 0);
+  if (metric === "el") return Number(row.el ?? 0);
   if (metric === "stars") return Number(row.stars_total ?? 0);
   return Number(row.stars_period ?? 0);
 }
@@ -128,7 +138,23 @@ const CityRow = React.memo(function CityRow({ row, metric }: { row: CityLeaderRo
         <Text style={styles.name} numberOfLines={1} {...textScale.dense}>
           {row.me ? `${row.name} (sen)` : row.name}
         </Text>
-        {metric === "step" || metric === "beauty" ? (
+        {metric === "el" ? (
+          <View style={styles.devLine}>
+            {row.step_title ? (
+              <View style={styles.tierPill}>
+                <Ionicons name="trending-up" size={10} color={colors.brandAccent} />
+                <Text style={styles.tierText} numberOfLines={1} {...textScale.badge}>
+                  {row.step_label ? `${row.step_label} · ${row.step_title}` : row.step_title}
+                </Text>
+              </View>
+            ) : null}
+            {row.el_net != null ? (
+              <Text style={styles.sub} numberOfLines={1} {...textScale.dense}>
+                {`net ${formatCount(Number(row.el_net))}`}
+              </Text>
+            ) : null}
+          </View>
+        ) : metric === "step" || metric === "beauty" ? (
           <View style={styles.devLine}>
             {row.step_title ? (
               <View style={styles.tierPill}>
@@ -167,11 +193,15 @@ const CityRow = React.memo(function CityRow({ row, metric }: { row: CityLeaderRo
       </View>
       <View style={styles.valueBox}>
         <View style={styles.valueLine}>
-          <Ionicons
-            name={metric === "dev" || metric === "step" ? "trending-up" : metric === "beauty" ? "sparkles" : "star"}
-            size={13}
-            color={metric === "dev" || metric === "step" || metric === "beauty" ? colors.brandAccent : colors.star}
-          />
+          {metric === "el" ? (
+            <ElCoin size={14} />
+          ) : (
+            <Ionicons
+              name={metric === "dev" || metric === "step" ? "trending-up" : metric === "beauty" ? "sparkles" : "star"}
+              size={13}
+              color={metric === "dev" || metric === "step" || metric === "beauty" ? colors.brandAccent : colors.star}
+            />
+          )}
           <Text style={styles.value} {...textScale.badge}>
             {metric === "step" ? row.step_label ?? formatCount(value) : formatCount(value)}
           </Text>
@@ -192,10 +222,11 @@ export default function ClubCityLeaderboardScreen() {
   const [scope, setScope] = useState<Scope>("all");
   const [weekPeriod, setWeekPeriod] = useState<PeriodValue>({ period: "week" });
   const [totalPeriod, setTotalPeriod] = useState<PeriodValue>({ period: "alltime" });
+  const [elPeriod, setElPeriod] = useState<PeriodValue>({ period: "week" });
   const listRef = useRef<FlatList<CityLeaderRow>>(null);
 
-  const pv = tab === "week" ? weekPeriod : totalPeriod;
-  const setPv = tab === "week" ? setWeekPeriod : setTotalPeriod;
+  const pv = tab === "week" ? weekPeriod : tab === "el" ? elPeriod : totalPeriod;
+  const setPv = tab === "week" ? setWeekPeriod : tab === "el" ? setElPeriod : setTotalPeriod;
   const req = boardRequest(tab, pv);
   const metric = req.metric;
 
@@ -220,13 +251,15 @@ export default function ClubCityLeaderboardScreen() {
   const unsupported =
     metric !== "dev" &&
     ((first != null && first.metric !== metric) ||
-      (query.isError && rows.length === 0 && (metric === "step" || metric === "beauty") && query.error instanceof ApiError && query.error.status === 400));
+      (query.isError && rows.length === 0 && (metric === "step" || metric === "beauty" || metric === "el") && query.error instanceof ApiError && query.error.status === 400));
 
   const meRow = useMemo(() => rows.find((row) => row.me) ?? null, [rows]);
   const meIndex = meRow ? rows.indexOf(meRow) : -1;
   const meRank = first?.me?.rank ?? meRow?.rank ?? null;
   const meValue =
-    metric === "step"
+    metric === "el"
+      ? first?.me?.el ?? meRow?.el ?? null
+      : metric === "step"
       ? first?.me?.step ?? meRow?.step ?? null
       : metric === "beauty"
         ? first?.me?.beauty ?? meRow?.beauty ?? null
@@ -262,7 +295,7 @@ export default function ClubCityLeaderboardScreen() {
 
   const total = first?.total ?? null;
   const caption =
-    tab === "step" ? "kariyer merdiveni" : tab === "beauty" ? "şehrin güzelliği" : tab === "dev" ? "şu anki gelişim" : metric === "stars" ? "tüm zamanlar" : periodCaption(pv);
+    tab === "step" ? "kariyer merdiveni" : tab === "beauty" ? "şehrin güzelliği" : tab === "el" ? `kazanılan EL · ${periodCaption(pv)}` : tab === "dev" ? "şu anki gelişim" : metric === "stars" ? "tüm zamanlar" : periodCaption(pv);
   const showPinned =
     !unsupported && !query.isLoading && !visibility.visible && (meRank != null || meRow != null) && rows.length > 0;
 
@@ -316,10 +349,10 @@ export default function ClubCityLeaderboardScreen() {
           ListEmptyComponent={
             unsupported ? (
               <EmptyState
-                icon={tab === "step" || tab === "beauty" ? "trending-up-outline" : "star-outline"}
-                title={tab === "step" ? "Basamak tablosu yakında" : tab === "beauty" ? "Güzellik tablosu yakında" : "Yıldız tablosu yakında"}
+                icon={tab === "step" || tab === "beauty" ? "trending-up-outline" : tab === "el" ? "wallet-outline" : "star-outline"}
+                title={tab === "step" ? "Basamak tablosu yakında" : tab === "beauty" ? "Güzellik tablosu yakında" : tab === "el" ? "Elit Lira tablosu yakında" : "Yıldız tablosu yakında"}
                 body={
-                  tab === "step" || tab === "beauty"
+                  tab === "step" || tab === "beauty" || tab === "el"
                     ? "Kulüp Şehri 2.0 sıralamaları sunucu güncellemesiyle açılacak. Şimdilik Gelişim tablosuna bakabilirsin."
                     : "Dönemlik ve toplam yıldız sıralaması sunucu güncellemesiyle açılacak. Şimdilik Gelişim tablosuna bakabilirsin."
                 }
@@ -328,10 +361,12 @@ export default function ClubCityLeaderboardScreen() {
               />
             ) : (
               <EmptyState
-                icon={tab === "beauty" ? "sparkles-outline" : tab === "dev" || tab === "step" ? "business-outline" : "star-outline"}
-                title={tab === "beauty" ? "Henüz güzel şehir yok" : tab === "dev" || tab === "step" ? "Henüz şehir yok" : "Bu dönemde yıldız yok"}
+                icon={tab === "el" ? "wallet-outline" : tab === "beauty" ? "sparkles-outline" : tab === "dev" || tab === "step" ? "business-outline" : "star-outline"}
+                title={tab === "el" ? "Bu dönemde EL kazanılmadı" : tab === "beauty" ? "Henüz güzel şehir yok" : tab === "dev" || tab === "step" ? "Henüz şehir yok" : "Bu dönemde yıldız yok"}
                 body={
-                  tab === "beauty"
+                  tab === "el"
+                    ? "Binalarının depolarını topla, tabloya ilk sen gir."
+                    : tab === "beauty"
                     ? "Meydanına ilk sembol yapıyı sen yerleştir."
                     : tab === "dev" || tab === "step"
                       ? "İlk binayı sen kur."

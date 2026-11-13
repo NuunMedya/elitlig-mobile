@@ -14,6 +14,8 @@
  *     bina aşamaları, gerçek hayat kilidi) ve koşullar tamamsa "Basamak atla".
  *   · Binalar: her binanın aşaması ve sıradaki eylemi (iç kilit / aşama).
  *   · Sembol yapılar: güzellik puanı, mağaza, depo ve yerleşim.
+ *   · Elit Lira (Faz 2): EL kasası (bakiye, NET gelir, depolar, "Topla"),
+ *     gerçek hayat form çarpanı, EL geçmişi. Eski sunucuda (el yok) gizli.
  *   · Günlük ödül ve yıldız cüzdanı (Ekonomi A).
  *
  * Kurallar, adlar ve maliyetler sunucudadır (elitlig-server services/city2).
@@ -35,6 +37,7 @@ import { MatchStarsSheet } from "@/components/city/MatchStars";
 import { HowSheet, StarWallet, type WalletStars } from "@/components/city/StarWallet";
 import { XpTransferBanner } from "@/components/city/XpTransferBanner";
 import { BuildingRow, BuildingSheet } from "@/components/city2/Building";
+import { ElHistorySheet, ElHowSheet, ElWallet, FormCard } from "@/components/city2/ElitLira";
 import { LandmarkSheet, type LandmarkTab, type Placing } from "@/components/city2/Landmarks";
 import { MigrationNotice, StepCelebration, type StepResult } from "@/components/city2/Notices";
 import { BuildingIcon, LandmarkIcon, SectionTitle, cardStyle, fmt } from "@/components/city2/shared";
@@ -42,7 +45,7 @@ import { StepCard } from "@/components/city2/StepCard";
 import { WebGame, type WebGameHandle } from "@/components/game/WebGame";
 import { BottomSheet, Button, ErrorState, ScreenHeader, SkeletonCard, Touchable, refreshControlProps, useRefresh, useToast } from "@/components/ui";
 import { collectCityStars } from "@/lib/puzzle/api";
-import { buildingMark, rungLabel, type City2OwnedLandmark, type City2State } from "@/lib/puzzle/city2";
+import { buildingMark, rungLabel, type City2CollectResult, type City2OwnedLandmark, type City2State } from "@/lib/puzzle/city2";
 import { CITY_KIT_KEY, CITY_SKY, CLUB_KITS, type ClubKit } from "@/lib/puzzle/cityPalette";
 import { useCity2, useCity2Actions } from "@/lib/puzzle/useCity2";
 import { useAuth } from "@/providers/AuthProvider";
@@ -78,6 +81,9 @@ function City2Screen({ query, city2 }: { query: ReturnType<typeof useCity2>["que
   const [placing, setPlacing] = useState<Placing | null>(null);
   const [picked, setPicked] = useState<City2OwnedLandmark | null>(null);
   const [stepResult, setStepResult] = useState<StepResult | null>(null);
+  const [elHistory, setElHistory] = useState(false);
+  const [elHow, setElHow] = useState(false);
+  const [collected, setCollected] = useState<{ res: City2CollectResult; key: number } | null>(null);
   const slotsBefore = useRef(0);
   const params = useLocalSearchParams<{ bina?: string }>();
 
@@ -112,6 +118,9 @@ function City2Screen({ query, city2 }: { query: ReturnType<typeof useCity2>["que
     },
     onPlace: () => {
       setPlacing(null);
+    },
+    onCollect: (res) => {
+      if (res.collected > 0) setCollected((c) => ({ res, key: (c?.key ?? 0) + 1 }));
     },
   });
   const collect = useAdminMutation(() => collectCityStars(), {
@@ -201,6 +210,7 @@ function City2Screen({ query, city2 }: { query: ReturnType<typeof useCity2>["que
   const closedBuildings = city2?.buildings.filter((b) => !b.open) ?? [];
   const unplaced = city2?.landmarks.owned.filter((l) => !l.slot) ?? [];
   const placedCount = (city2?.landmarks.owned.length ?? 0) - unplaced.length;
+  const titles = useMemo(() => Object.fromEntries((city2?.buildings ?? []).map((b) => [b.key, b.title])), [city2?.buildings]);
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
@@ -290,6 +300,26 @@ function City2Screen({ query, city2 }: { query: ReturnType<typeof useCity2>["que
                 scene.current?.send({ type: "focus", key });
               }}
             />
+            {city2.el ? (
+              <>
+                <SectionTitle title="Elit Lira" meta="kulübünün işletme geliri" />
+                <ElWallet
+                  el={city2.el}
+                  buildings={city2.buildings}
+                  collecting={actions.collect.isPending && actions.collect.variables == null}
+                  result={collected?.res ?? null}
+                  burstKey={collected?.key ?? 0}
+                  onCollect={() => actions.collect.mutate(null)}
+                  onHistory={() => setElHistory(true)}
+                  onHow={() => setElHow(true)}
+                  onBuilding={(key) => {
+                    setOpen(key);
+                    scene.current?.send({ type: "focus", key });
+                  }}
+                />
+                <FormCard form={city2.el.form} />
+              </>
+            ) : null}
             <DailyRewardEntry />
 
             <SectionTitle title="Binalar" meta={`${fmt(city2.stages_built)} aşama · ${fmt(city2.dev)} gelişim puanı`} />
@@ -392,7 +422,14 @@ function City2Screen({ query, city2 }: { query: ReturnType<typeof useCity2>["que
         onClose={() => setOpen(null)}
         onLock={(building, lock) => actions.lock.mutate({ building, lock })}
         onStage={(building) => actions.stage.mutate(building)}
+        el={city2?.el ?? null}
+        titles={titles}
+        collecting={actions.collect.isPending && actions.collect.variables === selected?.key}
+        onCollect={(building) => actions.collect.mutate(building)}
+        onUpgrade={(building, kind) => actions.upgrade.mutate({ building, kind })}
       />
+      <ElHistorySheet visible={elHistory} onClose={() => setElHistory(false)} el={city2?.el ?? null} />
+      <ElHowSheet visible={elHow} onClose={() => setElHow(false)} el={city2?.el ?? null} />
       <LandmarkSheet
         visible={marksSheet}
         onClose={() => setMarksSheet(false)}
