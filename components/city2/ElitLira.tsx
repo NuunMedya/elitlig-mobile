@@ -116,7 +116,7 @@ export function ElCost({ value, muted }: { value: number; muted?: boolean }) {
 }
 
 /** Hedefe yumuşakça sayan sayı (bir kez; "hareketi azalt"ta doğrudan). */
-function useCountUp(target: number) {
+export function useCountUp(target: number) {
   const reduce = useReduceMotion();
   const [shown, setShown] = useState(target);
   const from = useRef(target);

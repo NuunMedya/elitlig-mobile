@@ -13,9 +13,10 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { ChunkyButton } from "@/components/city/ChunkyButton";
 import { BottomSheet, Touchable } from "@/components/ui";
-import { incomeOf, rungOpensText, type City2Building, type City2El, type City2Ladder, type City2Lock, type City2Stage, type City2UpgradeKind } from "@/lib/puzzle/city2";
+import { incomeOf, rungOpensText, type City2Academy, type City2Building, type City2El, type City2Ladder, type City2Lock, type City2Stage, type City2UpgradeKind } from "@/lib/puzzle/city2";
 import { colors, fonts, hairline, radius, space, textScale, type } from "@/theme";
 
+import { AcademyBuildingSection } from "./Academy";
 import { IncomeChip, IncomeSection, SupportSection } from "./ElitLira";
 import { BuildingIcon, CostButton, StarCost, cardStyle, fmt } from "./shared";
 
@@ -159,6 +160,8 @@ export function BuildingSheet({
   collecting,
   onCollect,
   onUpgrade,
+  academy,
+  onAcademy,
 }: {
   b: City2Building | null;
   ladder: City2Ladder | null;
@@ -173,6 +176,9 @@ export function BuildingSheet({
   collecting?: boolean;
   onCollect?: (building: string) => void;
   onUpgrade?: (building: string, kind: City2UpgradeKind) => void;
+  /** Faz 3: akademi durumu (`undefined` = eski sunucu → bölüm çizilmez; `null` = kurulmadı). */
+  academy?: City2Academy | null;
+  onAcademy?: () => void;
 }) {
   const inc = el ? incomeOf(b) : null;
   const effect = el && b?.income && !b.income.has_income ? b.income.effect : null;
@@ -256,6 +262,8 @@ export function BuildingSheet({
           ) : effect ? (
             <SupportSection effect={effect} open={b.open} titles={titles ?? {}} />
           ) : null}
+
+          {b.key === "akademi" && academy !== undefined ? <AcademyBuildingSection academy={academy} onOpen={() => onAcademy?.()} /> : null}
 
           {current && current.locks.length ? (
             <View style={styles.block}>

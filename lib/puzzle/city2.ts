@@ -1,4 +1,4 @@
-import { get, post } from "../http";
+import { get, post, put } from "../http";
 import { cityKeys, type CityState, type CityXp, type DailyStatus } from "./api";
 
 /**
@@ -262,6 +262,11 @@ export interface City2State {
   gate_metrics: Record<string, { label: string; path: "player" | "fan" }>;
   /** Faz 2 · Elit Lira. Eski sunucuda yok → EL arayüzü gizlenir. */
   el?: City2El;
+  /**
+   * Faz 3 · Altyapı akademisi. `null`: akademi binası kurulmadı.
+   * `undefined` (alan yok): eski sunucu → akademi arayüzü hiç çizilmez.
+   */
+  academy?: City2Academy | null;
 }
 
 export interface City2Response {
@@ -441,6 +446,8 @@ export const city2Keys = {
   /** ["puzzle","city"] önekinin altında: eski şehir tazelenince bu da tazelenir. */
   me: () => [...cityKeys.me(), "v2"] as const,
   elHistory: () => [...cityKeys.me(), "v2", "el-history"] as const,
+  /** Faz 3: üyenin gizlilik tercihleri (akademide adının kullanılmaması). */
+  privacy: () => ["users", "me", "privacy-preferences"] as const,
 };
 
 export const getCity2 = () => get<City2Response>("/api/puzzle/city2", undefined, { retry: false });
@@ -491,6 +498,199 @@ export const upgradeCity2El = (building: string, kind: City2UpgradeKind) =>
 export const getCity2ElHistory = (before?: number | null, limit = 50) =>
   get<City2ElHistory>("/api/puzzle/city2/el/history", { limit, before: before ?? undefined }, { retry: false });
 
+/* ───────────────────────── Faz 3 · Altyapı akademisi ───────────────────────── */
+
+export type City2NameStage = "minik" | "genc" | "profesyonel" | "tecrubeli";
+export type City2PlayerSource = "self" | "team" | "city" | "generated";
+
+export interface City2YouthPlayer {
+  id: string;
+  /** Sunucunun verdiği görünen ad (yaşa göre "Minik Ali", "Genç Ali", "Ali Yılmaz", "Tecrübeli Ali"). */
+  name: string;
+  first: string;
+  last: string | null;
+  source: City2PlayerSource;
+  age: number;
+  age_exact: number;
+  name_stage: City2NameStage | string;
+  next_birthday_at: string | null;
+  retires_at: string | null;
+  pos: string | null;
+  pos_title: string | null;
+  ovr: number;
+  pot: number;
+  value: number;
+  team: "academy" | "a";
+  listed: boolean;
+  injured: boolean;
+  injury_until: string | null;
+  joined_at: string | null;
+  promoted_at: string | null;
+  offers: string[];
+  can_list: boolean;
+  can_promote: boolean;
+}
+
+export interface City2Offer {
+  id: string;
+  player_id: string;
+  player_name: string | null;
+  club: { key: string; name: string; tier: string; tier_title: string };
+  amount: number;
+  value: number | null;
+  at: string;
+  expires_at: string;
+}
+
+export type City2AcademyHistoryKind = "joined" | "sold" | "released" | "retired" | "promoted" | "injured";
+
+export interface City2AcademyHistory {
+  kind: City2AcademyHistoryKind | string;
+  at: string;
+  player_id: string | null;
+  name: string;
+  age: number | null;
+  amount: number | null;
+  club: { key: string; name: string | null } | null;
+  hours: number | null;
+}
+
+export interface City2AcademyEffects {
+  akademi: {
+    stage: number;
+    slots: number;
+    intake_hours: number | null;
+    potential_base: number | null;
+    next: { stage: number; slots: number; intake_hours: number; potential_base: number } | null;
+  };
+  universite: { stage: number; growth_pct: number; peak_bonus: number; text: string };
+  saglik: { stage: number; injury_pct: number; injury_reduction: number; recovery_reduction: number; text: string };
+  scout: { stage: number; europe: boolean };
+}
+
+export interface City2Academy {
+  built: boolean;
+  stage: number;
+  intro: string;
+  time: { year_hours: number; text: string };
+  names_text: string;
+  name_stages: { key: string; title: string; min: number; max: number | null }[];
+  slots: { used: number; max: number; by_stage: number[]; full: boolean };
+  next_intake_at: string | null;
+  intake_hours: number | null;
+  full_text: string | null;
+  squad: City2YouthPlayer[];
+  a_team: { players: City2YouthPlayer[]; max: number; text: string };
+  offers: City2Offer[];
+  effects: City2AcademyEffects;
+  sales: { today: number; daily_cap: number; left_today: number };
+  totals: { income: number; sold: number; released: number; retired: number; promoted: number; injuries: number; intakes: number; skipped: number; best: number };
+  history: City2AcademyHistory[];
+  privacy: { opt_out: boolean; label: string; help: string };
+  started_at: string | null;
+}
+
+/** Akademi yazma uçlarının ortak yanıtı. */
+interface City2AcademyWrite {
+  academy: City2Academy | null;
+  city2: City2State;
+}
+
+export type City2AcceptResult = City2AcademyWrite & { player: string; amount: number; club: string; balance: number };
+
+export const acceptAcademyOffer = (offer: string) =>
+  post<City2AcceptResult>("/api/puzzle/city2/academy/offer/accept", { offer }, { retry: false });
+
+export const rejectAcademyOffer = (offer: string) =>
+  post<City2AcademyWrite & { offer: string; player: string }>("/api/puzzle/city2/academy/offer/reject", { offer }, { retry: false });
+
+export const releaseAcademyPlayer = (player: string) =>
+  post<City2AcademyWrite & { player: string }>("/api/puzzle/city2/academy/release", { player }, { retry: false });
+
+export const promoteAcademyPlayer = (player: string) =>
+  post<City2AcademyWrite & { player: string }>("/api/puzzle/city2/academy/promote", { player }, { retry: false });
+
+export const listAcademyPlayer = (player: string, listed: boolean) =>
+  post<City2AcademyWrite & { player: string; listed: boolean }>("/api/puzzle/city2/academy/list", { player, listed }, { retry: false });
+
+/** "Altyapı oyunlarında adım kullanılmasın" (eski sunucuda 404 → ayar gizlenir). */
+export interface PrivacyPreferences {
+  preferences: { academy_name_opt_out: boolean };
+  labels?: { academy_name_opt_out?: string };
+  help?: { academy_name_opt_out?: string };
+  message?: string;
+  /** Hemen yeniden adlandırılan akademi sayısı. */
+  renamed?: number;
+}
+
+export const getPrivacyPreferences = () => get<PrivacyPreferences>("/api/users/me/privacy-preferences", undefined, { retry: false });
+
+export const setPrivacyPreferences = (academyNameOptOut: boolean) =>
+  put<PrivacyPreferences>("/api/users/me/privacy-preferences", { academy_name_opt_out: academyNameOptOut }, { retry: false });
+
+/* ───────────── Akademi yardımcıları ───────────── */
+
+/**
+ * Yaş → değer eğrisi (tahmini). Sunucu yalnız bugünkü değeri yollar; eğrinin
+ * BİÇİMİ sunucudaki tablolarla aynıdır (constants/city2academy.js: GROWTH,
+ * AGE_VALUE, POT_WEIGHT, VALUE_EXP) ve eğri oyuncunun bugünkü değerinden
+ * geçecek biçimde ölçeklenir. Böylece sunucu katsayıları değişse de bugünkü
+ * nokta hep doğrudur; diğer yaşlar "yaklaşık" gösterilir.
+ */
+const CURVE = {
+  ovrStart: 25,
+  growthPeak: 26,
+  exp: 3,
+  growth: [[8, 0], [12, 0.2], [15, 0.42], [18, 0.64], [21, 0.82], [24, 0.94], [26, 1], [29, 1], [31, 0.95], [33, 0.87], [35, 0.78], [37, 0.7]] as [number, number][],
+  ageValue: [[8, 0.12], [12, 0.25], [15, 0.45], [18, 0.65], [21, 0.82], [24, 0.94], [26, 1], [29, 1], [31, 0.78], [33, 0.52], [35, 0.3], [36, 0.2]] as [number, number][],
+  potWeight: [[8, 0.6], [18, 0.6], [24, 0.2], [26, 0]] as [number, number][],
+};
+
+function interp(table: [number, number][], x: number): number {
+  if (x <= table[0][0]) return table[0][1];
+  for (let i = 1; i < table.length; i += 1) {
+    const [x1, y1] = table[i];
+    if (x <= x1) {
+      const [x0, y0] = table[i - 1];
+      return y0 + ((y1 - y0) * (x - x0)) / (x1 - x0);
+    }
+  }
+  return table[table.length - 1][1];
+}
+
+function rawValue(peak: number, age: number, uniGrowth: number): number {
+  let g = interp(CURVE.growth, age);
+  if (age < CURVE.growthPeak) g = Math.min(1, g * (1 + uniGrowth));
+  const ovr = CURVE.ovrStart + (peak - CURVE.ovrStart) * g;
+  const quality = ovr + (peak - ovr) * interp(CURVE.potWeight, age);
+  return (quality / 60) ** CURVE.exp * interp(CURVE.ageValue, age);
+}
+
+export interface ValuePoint {
+  age: number;
+  value: number;
+}
+
+/** 8..35 yaş için tahmini değer noktaları ve zirve aralığı. */
+export function valueCurve(p: Pick<City2YouthPlayer, "pot" | "value" | "age_exact">, uniGrowth = 0): { points: ValuePoint[]; peak: { from: number; to: number; value: number } } {
+  const ageNow = Math.max(8, Math.min(35.99, p.age_exact));
+  const now = rawValue(p.pot, ageNow, uniGrowth);
+  const scale = now > 0 && p.value > 0 ? p.value / now : 1500;
+  const points: ValuePoint[] = [];
+  for (let age = 8; age <= 35; age += 1) points.push({ age, value: Math.max(10, Math.round((rawValue(p.pot, age, uniGrowth) * scale) / 10) * 10) });
+  const best = Math.max(...points.map((x) => x.value));
+  const top = points.filter((x) => x.value >= best * 0.985);
+  return { points, peak: { from: top[0].age, to: top[top.length - 1].age, value: best } };
+}
+
+/** Adın kaynağı → kısa açıklama (oyuncu penceresinde). */
+export const ACADEMY_SOURCE_TEXT: Record<string, string> = {
+  self: "Senin adın",
+  team: "Takım arkadaşın",
+  city: "İlinden bir oyuncu",
+  generated: "Akademinin adı",
+};
+
 /* ───────────────────────── Yardımcılar ───────────────────────── */
 
 /** Gelir binası mı (yeni sunucu)? */
@@ -524,6 +724,17 @@ export function untilText(iso: string | null | undefined, now = Date.now()): str
   const m = min % 60;
   if (h <= 0) return `${m} dk`;
   return m ? `${h} sa ${m} dk` : `${h} sa`;
+}
+
+/** Uzun süreler: "3 gün 4 sa" · "17 sa 25 dk" · "40 dk" · "az sonra". */
+export function spanText(iso: string | null | undefined, now = Date.now()): string | null {
+  if (!iso) return null;
+  const ms = new Date(iso).getTime() - now;
+  if (!Number.isFinite(ms)) return null;
+  if (ms < 48 * 3_600_000) return untilText(iso, now);
+  const h = Math.floor(ms / 3_600_000);
+  const d = Math.floor(h / 24);
+  return h % 24 ? `${d} gün ${h % 24} sa` : `${d} gün`;
 }
 
 /** Bütün gelir binaları içinde en erken dolacak depo. */
