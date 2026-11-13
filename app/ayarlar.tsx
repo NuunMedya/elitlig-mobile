@@ -14,6 +14,10 @@
  *   3. Lig              — lig/sezon ve şehir: kapsam alt sayfası (tek örnek,
  *                         app/_layout.tsx) `openScopeSheet()` ile açılır.
  *   4. Hesap ve güvenlik — Hesabım, Şifre değiştir, Engellediğim üyeler.
+ *   4b. Gizlilik        — "Altyapı oyunlarında adım kullanılmasın" (Kulüp
+ *                         Şehri akademisi; GET/PUT /api/users/me/privacy-
+ *                         preferences). Sunucu tanımıyorsa (404) grup çizilmez.
+ *                         Aynı anahtar akademinin bilgi penceresinde de var.
  *   5. Oturum           — Çıkış yap ve Hesabı sil. Hesap silme AYRI ve görünür
  *                         bir satırdır: App Store (5.1.1-v) ve Google Play
  *                         silme kapısının "kolayca bulunur" olmasını ister
@@ -48,6 +52,7 @@ import {
   Button,
   IconTile,
   Reveal,
+  Toggle,
   ScreenHeader,
   SectionHeader,
   Touchable,
@@ -57,6 +62,7 @@ import {
 import { THEME_STORAGE_KEY, getStoredTheme, setStoredTheme } from "@/constants/themePreference";
 import { reloadForTheme } from "@/lib/themeTransition";
 import { useFollowSettings } from "@/hooks/useFollowSettings";
+import { usePrivacyPreferences } from "@/lib/puzzle/useCity2";
 import { formatNumber } from "@/lib/format";
 import { useAuth } from "@/providers/AuthProvider";
 import { useScope } from "@/providers/ScopeProvider";
@@ -126,6 +132,9 @@ export default function SettingsScreen() {
     const base = `${formatNumber(follows.length, 0)} takip`;
     return muted > 0 ? `${base} · ${formatNumber(muted, 0)} sessiz` : base;
   }, [follow.data]);
+
+  /** Gizlilik tercihleri (akademi adı); eski sunucuda 404 → grup gizli. */
+  const privacy = usePrivacyPreferences(Boolean(user));
 
   /* ------------------------------ EYLEMLER ------------------------------ */
 
@@ -377,6 +386,29 @@ export default function SettingsScreen() {
         {user ? (
           <>
             <MenuGroup title="Hesap ve güvenlik" icon="shield-checkmark" tone="cyan" items={accountItems} style={styles.group} />
+            {privacy.supported ? (
+              <MenuGroup title="Gizlilik" icon="eye-off" tone="violet" style={styles.group}>
+                <Touchable
+                  feedback="row"
+                  onPress={() => !privacy.saving && privacy.set(!privacy.value)}
+                  accessibilityRole="switch"
+                  accessibilityState={{ checked: privacy.value, disabled: privacy.saving }}
+                  accessibilityLabel={`${privacy.label}. ${privacy.value ? "açık" : "kapalı"}`}
+                  style={styles.privacyRow}
+                >
+                  <IconTile icon="school" tone="violet" size={36} glow={false} />
+                  <View style={styles.flex}>
+                    <Text style={styles.privacyTitle} {...textScale.dense}>
+                      {privacy.label}
+                    </Text>
+                    <Text style={styles.privacyHelp} {...textScale.long}>
+                      {privacy.help ?? "Açarsan adın Kulüp Şehri akademilerinde oyuncu adı olarak kullanılmaz."}
+                    </Text>
+                  </View>
+                  <Toggle value={privacy.value} onValueChange={privacy.set} disabled={privacy.saving} accessibilityLabel={privacy.label} />
+                </Touchable>
+              </MenuGroup>
+            ) : null}
             <MenuGroup title="Oturum" icon="power" tone="red" items={sessionItems} style={styles.group} />
           </>
         ) : null}
@@ -503,6 +535,9 @@ const styles = StyleSheet.create({
   accountChipText: { ...type.labelXs, color: colors.brandAccent },
 
   themeRow: { flexDirection: "row", gap: space.sm },
+  privacyRow: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.md, paddingVertical: space.m },
+  privacyTitle: { ...type.h3, color: colors.textPrimary },
+  privacyHelp: { ...type.bodySm, color: colors.textTertiary, marginTop: 1 },
   sheetRow: { flexDirection: "row", gap: space.sm, paddingBottom: space.md },
   themeTile: {
     flex: 1,

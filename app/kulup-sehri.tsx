@@ -36,6 +36,7 @@ import { DailyRewardEntry } from "@/components/city/DailyReward";
 import { MatchStarsSheet } from "@/components/city/MatchStars";
 import { HowSheet, StarWallet, type WalletStars } from "@/components/city/StarWallet";
 import { XpTransferBanner } from "@/components/city/XpTransferBanner";
+import { AcademyCityCard } from "@/components/city2/Academy";
 import { BuildingRow, BuildingSheet } from "@/components/city2/Building";
 import { ElHistorySheet, ElHowSheet, ElWallet, FormCard } from "@/components/city2/ElitLira";
 import { LandmarkSheet, type LandmarkTab, type Placing } from "@/components/city2/Landmarks";
@@ -248,6 +249,20 @@ function City2Screen({ query, city2 }: { query: ReturnType<typeof useCity2>["que
               </View>
             </View>
           ) : null}
+          {city2?.academy?.offers.length ? (
+            <Touchable
+              feedback="chip"
+              onPress={() => router.push("/kulup-sehri-akademi")}
+              style={styles.sceneOffer}
+              accessibilityRole="button"
+              accessibilityLabel={`${city2.academy.offers.length} bekleyen transfer teklifi`}
+            >
+              <Ionicons name="mail-unread" size={13} color={colors.textOnBrand} />
+              <Text style={styles.sceneBadgeText} {...textScale.badge}>
+                {city2.academy.offers.length} teklif
+              </Text>
+            </Touchable>
+          ) : null}
           <Touchable onPress={() => scene.current?.send({ type: "focus", key: null })} style={styles.sceneHome} accessibilityRole="button" accessibilityLabel="Bütün şehri göster">
             <Ionicons name="scan-outline" size={18} color={colors.onDark} />
           </Touchable>
@@ -318,6 +333,12 @@ function City2Screen({ query, city2 }: { query: ReturnType<typeof useCity2>["que
                   }}
                 />
                 <FormCard form={city2.el.form} />
+              </>
+            ) : null}
+            {city2.academy ? (
+              <>
+                <SectionTitle title="Altyapı" meta="oyuncu yetiştir, transferden EL kazan" />
+                <AcademyCityCard academy={city2.academy} onPress={() => router.push("/kulup-sehri-akademi")} />
               </>
             ) : null}
             <DailyRewardEntry />
@@ -427,6 +448,11 @@ function City2Screen({ query, city2 }: { query: ReturnType<typeof useCity2>["que
         collecting={actions.collect.isPending && actions.collect.variables === selected?.key}
         onCollect={(building) => actions.collect.mutate(building)}
         onUpgrade={(building, kind) => actions.upgrade.mutate({ building, kind })}
+        academy={city2?.academy}
+        onAcademy={() => {
+          setOpen(null);
+          router.push("/kulup-sehri-akademi");
+        }}
       />
       <ElHistorySheet visible={elHistory} onClose={() => setElHistory(false)} el={city2?.el ?? null} />
       <ElHowSheet visible={elHow} onClose={() => setElHow(false)} el={city2?.el ?? null} />
@@ -509,6 +535,18 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
   },
   sceneBadgeText: { ...type.label, fontFamily: fonts.bold, color: colors.onDark },
+  sceneOffer: {
+    position: "absolute",
+    top: space.sm + 34,
+    left: space.sm,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.xxs,
+    backgroundColor: colors.brandAccent,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xxs,
+    borderRadius: radius.pill,
+  },
   sceneHome: {
     position: "absolute",
     top: space.sm,
