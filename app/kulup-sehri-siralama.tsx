@@ -1,8 +1,12 @@
 /**
  * KULÜP ŞEHRİ SIRALAMASI — /kulup-sehri-siralama
  *
- * Üç tablo, tek ekran:
- *   • Şehir seviyesi  — gelişim puanı (metric=dev): kulüp statüsü rozeti,
+ * Beş tablo, tek ekran:
+ *   • Basamak         — Kulüp Şehri 2.0 kariyer merdiveni (metric=step):
+ *     basamak etiketi ("16a") ve adı; eşitlikte 2.0 gelişim puanı.
+ *   • Güzellik        — yerleşik sembol yapılar + kurulan aşamalar
+ *     (metric=beauty); güzelliği 0 olanlar listede yok.
+ *   • Gelişim         — eski gelişim puanı (metric=dev): kulüp statüsü rozeti,
  *     puan ve 12 birimin mini seviye çubukları.
  *   • Haftalık yıldız — seçili dönemde kazanılan yıldız (metric=period_stars),
  *     varsayılan bu hafta.
@@ -46,20 +50,25 @@ import {
   periodCaption,
   type PeriodValue,
 } from "@/lib/leaderboard";
+import { ApiError } from "@/lib/http";
 import { cityKeys, getCityLeaderboard, type CityBoardMetric, type CityLeaderRow, type CityLeaderboard } from "@/lib/puzzle/api";
 import { useAuth } from "@/providers/AuthProvider";
 import { colors, fonts, hairline, layout, radius, space, textScale, type } from "@/theme";
 
-type Tab = "dev" | "week" | "total";
+type Tab = "step" | "beauty" | "dev" | "week" | "total";
 type Scope = "all" | "city";
 
 const TABS: SegmentedItem<Tab>[] = [
-  { key: "dev", label: "Şehir seviyesi" },
-  { key: "week", label: "Haftalık yıldız" },
-  { key: "total", label: "Toplam yıldız" },
+  { key: "step", label: "Basamak" },
+  { key: "beauty", label: "Güzellik" },
+  { key: "dev", label: "Gelişim" },
+  { key: "week", label: "Haftalık" },
+  { key: "total", label: "Toplam" },
 ];
 
 const SUBTITLE: Record<Tab, string> = {
+  step: "Kariyer merdiveninde basamak",
+  beauty: "Şehrin güzellik puanı",
   dev: "Gelişim puanı ve kulüp statüsü",
   week: "Dönemde kazanılan yıldız",
   total: "Toplanan bütün yıldızlar",
@@ -67,14 +76,21 @@ const SUBTITLE: Record<Tab, string> = {
 
 /** Sekme + dönem → sunucu isteği. */
 function boardRequest(tab: Tab, pv: PeriodValue) {
-  if (tab === "dev") return { metric: "dev" as CityBoardMetric };
+  if (tab === "dev" || tab === "step" || tab === "beauty") return { metric: tab as CityBoardMetric };
   if (pv.period === "alltime") return { metric: "stars" as CityBoardMetric };
   if (pv.period === "range" && pv.range) return { metric: "period_stars" as CityBoardMetric, from: pv.range.from, to: pv.range.to };
   return { metric: "period_stars" as CityBoardMetric, period: pv.period === "month" ? ("month" as const) : ("week" as const) };
 }
 
+/** Tablonun yalnız seçili döneme bağlı olmayan (dönem şeridi olmayan) sekmeleri. */
+const STATIC_TABS: ReadonlySet<Tab> = new Set(["step", "beauty", "dev"]);
+
+const UNIT: Record<CityBoardMetric, string> = { dev: "gelişim", stars: "yıldız", period_stars: "yıldız", step: "basamak", beauty: "güzellik" };
+
 function rowValue(row: CityLeaderRow, metric: CityBoardMetric): number {
   if (metric === "dev") return row.dev;
+  if (metric === "step") return Number(row.rung ?? 0);
+  if (metric === "beauty") return Number(row.beauty ?? 0);
   if (metric === "stars") return Number(row.stars_total ?? 0);
   return Number(row.stars_period ?? 0);
 }
@@ -112,7 +128,23 @@ const CityRow = React.memo(function CityRow({ row, metric }: { row: CityLeaderRo
         <Text style={styles.name} numberOfLines={1} {...textScale.dense}>
           {row.me ? `${row.name} (sen)` : row.name}
         </Text>
-        {metric === "dev" ? (
+        {metric === "step" || metric === "beauty" ? (
+          <View style={styles.devLine}>
+            {row.step_title ? (
+              <View style={styles.tierPill}>
+                <Ionicons name="trending-up" size={10} color={colors.brandAccent} />
+                <Text style={styles.tierText} numberOfLines={1} {...textScale.badge}>
+                  {metric === "beauty" && row.step_label ? `${row.step_label} · ${row.step_title}` : row.step_title}
+                </Text>
+              </View>
+            ) : null}
+            {row.city ? (
+              <Text style={styles.sub} numberOfLines={1} {...textScale.dense}>
+                {row.city}
+              </Text>
+            ) : null}
+          </View>
+        ) : metric === "dev" ? (
           <View style={styles.devLine}>
             <View style={styles.tierPill}>
               <Ionicons name="shield" size={10} color={colors.brandAccent} />
@@ -136,16 +168,16 @@ const CityRow = React.memo(function CityRow({ row, metric }: { row: CityLeaderRo
       <View style={styles.valueBox}>
         <View style={styles.valueLine}>
           <Ionicons
-            name={metric === "dev" ? "trending-up" : "star"}
+            name={metric === "dev" || metric === "step" ? "trending-up" : metric === "beauty" ? "sparkles" : "star"}
             size={13}
-            color={metric === "dev" ? colors.brandAccent : colors.star}
+            color={metric === "dev" || metric === "step" || metric === "beauty" ? colors.brandAccent : colors.star}
           />
           <Text style={styles.value} {...textScale.badge}>
-            {formatCount(value)}
+            {metric === "step" ? row.step_label ?? formatCount(value) : formatCount(value)}
           </Text>
         </View>
         <Text style={styles.unit} {...textScale.badge}>
-          {metric === "dev" ? "gelişim" : "yıldız"}
+          {UNIT[metric]}
         </Text>
       </View>
     </View>
@@ -156,7 +188,7 @@ const CityRow = React.memo(function CityRow({ row, metric }: { row: CityLeaderRo
 
 export default function ClubCityLeaderboardScreen() {
   const auth = useAuth();
-  const [tab, setTab] = useState<Tab>("dev");
+  const [tab, setTab] = useState<Tab>("step");
   const [scope, setScope] = useState<Scope>("all");
   const [weekPeriod, setWeekPeriod] = useState<PeriodValue>({ period: "week" });
   const [totalPeriod, setTotalPeriod] = useState<PeriodValue>({ period: "alltime" });
@@ -181,14 +213,24 @@ export default function ClubCityLeaderboardScreen() {
     keyOf,
   });
 
-  /** Eski sunucu `metric`'i tanımıyor: yıldız sekmesine gelişim listesi gelir. */
-  const unsupported = metric !== "dev" && first != null && first.metric == null;
+  /**
+   * Eski sunucu `metric`'i tanımıyor: yanıtta `metric` yok ya da başka bir
+   * tablo (gelişim) geliyor. Yanlış etiketli liste yerine "yakında" çizilir.
+   */
+  const unsupported =
+    metric !== "dev" &&
+    ((first != null && first.metric !== metric) ||
+      (query.isError && rows.length === 0 && (metric === "step" || metric === "beauty") && query.error instanceof ApiError && query.error.status === 400));
 
   const meRow = useMemo(() => rows.find((row) => row.me) ?? null, [rows]);
   const meIndex = meRow ? rows.indexOf(meRow) : -1;
   const meRank = first?.me?.rank ?? meRow?.rank ?? null;
   const meValue =
-    metric === "dev"
+    metric === "step"
+      ? first?.me?.step ?? meRow?.step ?? null
+      : metric === "beauty"
+        ? first?.me?.beauty ?? meRow?.beauty ?? null
+        : metric === "dev"
       ? first?.me?.dev ?? meRow?.dev ?? null
       : metric === "stars"
         ? first?.me?.stars_total ?? meRow?.stars_total ?? null
@@ -219,13 +261,14 @@ export default function ClubCityLeaderboardScreen() {
   if (!auth.user) return <Redirect href="/giris" />;
 
   const total = first?.total ?? null;
-  const caption = tab === "dev" ? "şu anki gelişim" : metric === "stars" ? "tüm zamanlar" : periodCaption(pv);
+  const caption =
+    tab === "step" ? "kariyer merdiveni" : tab === "beauty" ? "şehrin güzelliği" : tab === "dev" ? "şu anki gelişim" : metric === "stars" ? "tüm zamanlar" : periodCaption(pv);
   const showPinned =
     !unsupported && !query.isLoading && !visibility.visible && (meRank != null || meRow != null) && rows.length > 0;
 
   const header = (
     <View style={styles.listHeader}>
-      {tab !== "dev" ? <PeriodBar value={pv} onChange={setPv} /> : null}
+      {!STATIC_TABS.has(tab) ? <PeriodBar value={pv} onChange={setPv} /> : null}
       {rows.length > 0 && !unsupported ? (
         <View style={styles.metaLine}>
           <Ionicons name="people-outline" size={14} color={colors.textTertiary} />
@@ -255,7 +298,7 @@ export default function ClubCityLeaderboardScreen() {
           {header}
           <SkeletonListRow count={8} avatar />
         </View>
-      ) : query.isError && rows.length === 0 ? (
+      ) : query.isError && rows.length === 0 && !unsupported ? (
         <ErrorState error={query.error} onRetry={() => query.refetch()} />
       ) : (
         <FlatList
@@ -273,17 +316,27 @@ export default function ClubCityLeaderboardScreen() {
           ListEmptyComponent={
             unsupported ? (
               <EmptyState
-                icon="star-outline"
-                title="Yıldız tablosu yakında"
-                body="Dönemlik ve toplam yıldız sıralaması sunucu güncellemesiyle açılacak. Şimdilik Şehir seviyesi tablosuna bakabilirsin."
+                icon={tab === "step" || tab === "beauty" ? "trending-up-outline" : "star-outline"}
+                title={tab === "step" ? "Basamak tablosu yakında" : tab === "beauty" ? "Güzellik tablosu yakında" : "Yıldız tablosu yakında"}
+                body={
+                  tab === "step" || tab === "beauty"
+                    ? "Kulüp Şehri 2.0 sıralamaları sunucu güncellemesiyle açılacak. Şimdilik Gelişim tablosuna bakabilirsin."
+                    : "Dönemlik ve toplam yıldız sıralaması sunucu güncellemesiyle açılacak. Şimdilik Gelişim tablosuna bakabilirsin."
+                }
                 variant="inline"
-                action={{ label: "Şehir seviyesi", onPress: () => setTab("dev"), haptic: "light" }}
+                action={{ label: "Gelişim", onPress: () => setTab("dev"), haptic: "light" }}
               />
             ) : (
               <EmptyState
-                icon={tab === "dev" ? "business-outline" : "star-outline"}
-                title={tab === "dev" ? "Henüz şehir yok" : "Bu dönemde yıldız yok"}
-                body={tab === "dev" ? "İlk binayı sen kur." : "Bulmaca ve oyunlardan yıldız topla, tabloya ilk sen gir."}
+                icon={tab === "beauty" ? "sparkles-outline" : tab === "dev" || tab === "step" ? "business-outline" : "star-outline"}
+                title={tab === "beauty" ? "Henüz güzel şehir yok" : tab === "dev" || tab === "step" ? "Henüz şehir yok" : "Bu dönemde yıldız yok"}
+                body={
+                  tab === "beauty"
+                    ? "Meydanına ilk sembol yapıyı sen yerleştir."
+                    : tab === "dev" || tab === "step"
+                      ? "İlk binayı sen kur."
+                      : "Bulmaca ve oyunlardan yıldız topla, tabloya ilk sen gir."
+                }
                 variant="inline"
               />
             )
@@ -304,7 +357,7 @@ export default function ClubCityLeaderboardScreen() {
           name={meRow?.name ?? auth.user.fullName ?? auth.user.username}
           rank={meRank}
           value={meValue}
-          unit={metric === "dev" ? "gelişim" : "yıldız"}
+          unit={UNIT[metric]}
           caption={caption}
           onPress={meIndex >= 0 ? jumpToMe : undefined}
         />

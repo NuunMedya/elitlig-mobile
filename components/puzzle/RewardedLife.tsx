@@ -87,18 +87,48 @@ export function WatchAdForLife({
 
 type Source = { kind: "sponsor"; sponsor: AdSponsor } | { kind: "house"; index: number } | { kind: "google" };
 
-export function RewardedAdModal({
+/**
+ * Ödüllü reklamın sunucu akışı: başlat (tek kullanımlık jeton) → reklam biter
+ * → ödülü iste. Varsayılan: reklamla can. Seri koruyucu da aynı modalı kendi
+ * akışıyla kullanır (POST /daily/save-streak/start → /save-streak).
+ */
+export interface RewardedFlow<R> {
+  start: () => Promise<{ token: string; seconds: number }>;
+  claim: (token: string) => Promise<R>;
+  /** Ödülün kısa adı: "+1 can", "seri kurtarma". */
+  reward: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  /** Ödül istenirken düğme metni. */
+  claiming: string;
+  /** Başarı bildirimi. */
+  success: string;
+}
+
+const lifeFlow = (game: PuzzleGameKey | null | undefined): RewardedFlow<PuzzleProfile> => ({
+  start: () => startAdLife(game),
+  claim: (t) => claimAdLife(t).then((res) => res.profile),
+  reward: "+1 can",
+  icon: "heart",
+  claiming: "Can ekleniyor",
+  success: "+1 can kazandın!",
+});
+
+export function RewardedAdModal<R = PuzzleProfile>({
   visible,
   onClose,
   onRewarded,
   game,
+  flow: customFlow,
 }: {
   visible: boolean;
   onClose: () => void;
-  onRewarded: (profile: PuzzleProfile) => void;
+  onRewarded: (result: R) => void;
   /** Canın ekleneceği oyun (her oyunun kendi canı var). */
   game?: PuzzleGameKey | null;
+  /** Başka bir ödül akışı (yoksa reklamla can). */
+  flow?: RewardedFlow<R>;
 }) {
+  const flow = (customFlow ?? lifeFlow(game)) as RewardedFlow<R>;
   const ads = useAppAds();
   const toast = useToast();
   const { width, height } = useWindowDimensions();
@@ -117,16 +147,17 @@ export function RewardedAdModal({
     const wait = MIN_WATCH_MS - (Date.now() - startedAt.current);
     if (wait > 0) await new Promise((r) => setTimeout(r, wait));
     try {
-      const res = await claimAdLife(t);
+      const res = await flow.claim(t);
       token.current = null;
       if (!alive.current) return;
-      onRewarded(res.profile);
-      toast.show({ message: "+1 can kazandın!", tone: "success" });
+      onRewarded(res);
+      toast.show({ message: flow.success, tone: "success" });
       onClose();
     } catch (error) {
       toast.show({ message: errorText(error), tone: "danger" });
       onClose();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onClose, onRewarded, toast]);
 
   /** Geri sayımlı reklam (sponsor ya da ElitLig tanıtımı). */
@@ -160,7 +191,7 @@ export function RewardedAdModal({
     (async () => {
       let seconds = 15;
       try {
-        const res = await startAdLife(game);
+        const res = await flow.start();
         token.current = res.token;
         seconds = Math.max(12, res.seconds || 15);
         startedAt.current = Date.now();
@@ -234,9 +265,9 @@ export function RewardedAdModal({
       <View style={styles.scrim}>
         <View style={[styles.head, { width: cardW }]}>
           <View style={styles.reward}>
-            <Ionicons name="heart" size={16} color={colors.live} />
+            <Ionicons name={flow.icon} size={16} color={colors.live} />
             <Text style={styles.rewardText} {...textScale.dense}>
-              {phase === "ready" || phase === "claiming" ? "Ödülün hazır: +1 can" : phase === "watching" ? `Ödül ${left} sn sonra: +1 can` : "Reklam hazırlanıyor…"}
+              {phase === "ready" || phase === "claiming" ? `Ödülün hazır: ${flow.reward}` : phase === "watching" ? `Ödül ${left} sn sonra: ${flow.reward}` : "Reklam hazırlanıyor…"}
             </Text>
           </View>
           <Touchable feedback="icon" onPress={onClose} accessibilityRole="button" accessibilityLabel="Reklamı kapat, ödül alınmaz" hitSlop={12} style={styles.close}>
@@ -282,8 +313,8 @@ export function RewardedAdModal({
         ) : null}
         <View style={{ width: cardW }}>
           <Button
-            label={phase === "ready" ? "Ödülü al · +1 can" : phase === "claiming" ? "Can ekleniyor" : `${left} sn`}
-            icon="heart"
+            label={phase === "ready" ? `Ödülü al · ${flow.reward}` : phase === "claiming" ? flow.claiming : `${left} sn`}
+            icon={flow.icon}
             size="lg"
             fullWidth
             disabled={phase !== "ready"}
